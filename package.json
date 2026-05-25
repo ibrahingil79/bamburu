@@ -1,0 +1,21 @@
+{
+  "name": "bamburu-erp",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "reset-admin": "node scripts/reset-admin.js"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.11.0",
+    "bcrypt": "^6.0.0",
+    "better-sqlite3": "^9.4.3",
+    "hono": "^4.1.0",
+    "otplib": "^13.4.0",
+    "qrcode": "^1.5.4",
+    "resend": "^6.12.3",
+    "zod": "^4.4.3"
+  }
+}

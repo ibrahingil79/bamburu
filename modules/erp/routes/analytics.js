@@ -1,0 +1,157 @@
+import { Hono } from 'hono';
+import { adminLayout } from '../layout.js';
+import { requirePerm } from '../../../core/auth.js';
+
+export function createAnalyticsRoutes(db, cfg = {}) {
+  const sym = cfg.sym || '€';
+  const api = new Hono();
+  const views = new Hono();
+
+  api.get('/overview', requirePerm('analytics.read'), c => {
+    try {
+      return c.json({
+        totalRevenue: db.prepare("SELECT COALESCE(SUM(total),0) as v FROM sales_orders WHERE status NOT IN ('cancelado','reembolsado','borrador')").get().v,
+        totalOrders: db.prepare("SELECT COUNT(*) as v FROM sales_orders WHERE status NOT IN ('cancelado','reembolsado','borrador')").get().v,
+        avgOrder: db.prepare("SELECT COALESCE(AVG(total),0) as v FROM sales_orders WHERE status NOT IN ('cancelado','reembolsado','borrador')").get().v,
+        totalClients: db.prepare("SELECT COUNT(*) as v FROM clients").get().v,
+        totalProducts: db.prepare("SELECT COUNT(*) as v FROM products WHERE status='active'").get().v,
+        lowStock: db.prepare("SELECT COUNT(*) as v FROM products WHERE stock<5 AND status='active'").get().v,
+      });
+    } catch(e) { return c.json({error:e.message},500); }
+  });
+
+  api.get('/sales-by-period', requirePerm('analytics.read'), c => {
+    try {
+      const days = parseInt(c.req.query('days') || '30');
+      const rows = db.prepare(`SELECT date(created_at) as date, COALESCE(SUM(total),0) as total, COUNT(*) as orders FROM sales_orders WHERE created_at >= date('now', '-' || ? || ' days') AND status NOT IN ('cancelado','reembolsado','borrador') GROUP BY date(created_at) ORDER BY date`).all(days);
+      return c.json(rows);
+    } catch(e) { return c.json({error:e.message},500); }
+  });
+
+  api.get('/best-sellers', requirePerm('analytics.read'), c => {
+    try {
+      const limit = parseInt(c.req.query('limit') || '10');
+      return c.json(db.prepare('SELECT product_name, SUM(quantity) as total_qty, SUM(total) as total_val FROM sales_items GROUP BY product_id ORDER BY total_val DESC LIMIT ?').all(limit));
+    } catch(e) { return c.json({error:e.message},500); }
+  });
+
+  api.get('/stock-report', requirePerm('analytics.read'), c => {
+    try {
+      return c.json(db.prepare("SELECT p.name, p.sku, p.stock, p.price, (p.stock*p.price) as inventory_value, c.name as category FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.status='active' ORDER BY p.stock ASC").all());
+    } catch(e) { return c.json({error:e.message},500); }
+  });
+
+  // CSV exports
+  api.get('/export/sales', requirePerm('analytics.read'), c => {
+    try {
+      const rows = db.prepare('SELECT o.order_number,o.created_at,o.status,o.source,c.name as client,i.product_name,i.quantity,i.unit_price,i.total FROM sales_items i JOIN sales_orders o ON i.order_id=o.id LEFT JOIN clients c ON o.client_id=c.id ORDER BY o.created_at DESC').all();
+      const q = v => '"'+String(v??'').replace(/"/g,'""')+'"';
+      const h = ['Orden','Fecha','Estado','Origen','Cliente','Producto','Cantidad','Precio_Unitario','Total'];
+      const r = rows.map(x => [q(x.order_number),q(x.created_at),q(x.status),q(x.source),q(x.client),q(x.product_name),x.quantity,x.unit_price,x.total].join(','));
+      return c.body([h.join(','),...r].join('\n'), 200, {'Content-Type':'text/csv','Content-Disposition':'attachment; filename="ventas.csv"'});
+    } catch(e) { return c.json({error:e.message},500); }
+  });
+
+  api.get('/export/products', requirePerm('analytics.read'), c => {
+    try {
+      const rows = db.prepare('SELECT p.name,p.sku,p.price,p.stock,p.status,p.type,c.name as category FROM products p LEFT JOIN categories c ON p.category_id=c.id ORDER BY p.name').all();
+      const q = v => '"'+String(v??'').replace(/"/g,'""')+'"';
+      const h = ['Nombre','SKU','Precio','Stock','Estado','Tipo','Categoria'];
+      const r = rows.map(x => [q(x.name),q(x.sku),x.price,x.stock,q(x.status),q(x.type),q(x.category)].join(','));
+      return c.body([h.join(','),...r].join('\n'), 200, {'Content-Type':'text/csv','Content-Disposition':'attachment; filename="productos.csv"'});
+    } catch(e) { return c.json({error:e.message},500); }
+  });
+
+  api.get('/export/clients', requirePerm('analytics.read'), c => {
+    try {
+      const rows = db.prepare('SELECT c.name,c.fiscal_id,c.email,c.phone,c.city,c.country,g.name as grupo,c.total_spent FROM clients c LEFT JOIN client_groups g ON c.group_id=g.id ORDER BY c.total_spent DESC').all();
+      const q = v => '"'+String(v??'').replace(/"/g,'""')+'"';
+      const h = ['Nombre','ID_Fiscal','Email','Teléfono','Ciudad','País','Grupo','Total_Gastado'];
+      const r = rows.map(x => [q(x.name),q(x.fiscal_id),q(x.email),q(x.phone),q(x.city),q(x.country),q(x.grupo),x.total_spent].join(','));
+      return c.body([h.join(','),...r].join('\n'), 200, {'Content-Type':'text/csv','Content-Disposition':'attachment; filename="clientes.csv"'});
+    } catch(e) { return c.json({error:e.message},500); }
+  });
+
+  views.get('/', c => {
+    const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
+    const content = `
+      <div class="ph"><h2>Analítica</h2>
+        <div style="display:flex;gap:.5rem">
+          <select class="form-control" id="periodSel" style="width:auto" onchange="loadCharts()">
+            <option value="7">Últimos 7 días</option>
+            <option value="30" selected>Últimos 30 días</option>
+            <option value="90">Últimos 90 días</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid ga" style="margin-bottom:1.5rem" id="kpiRow">
+        <div class="kpi"><div class="kpi-label">Ingresos</div><div class="kpi-val" id="kRev" style="color:#10b981">-</div></div>
+        <div class="kpi"><div class="kpi-label">Pedidos</div><div class="kpi-val" id="kOrd">-</div></div>
+        <div class="kpi"><div class="kpi-label">Ticket medio</div><div class="kpi-val" id="kAvg">-</div></div>
+        <div class="kpi"><div class="kpi-label">Clientes</div><div class="kpi-val" id="kCli">-</div></div>
+      </div>
+
+      <div class="grid g2" style="margin-bottom:1.5rem">
+        <div class="card">
+          <div class="card-head"><h3>Ventas por período</h3></div>
+          <div class="card-body" style="height:240px"><canvas id="salesChart"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Productos más vendidos</h3></div>
+          <div class="card-body" style="height:240px"><canvas id="topChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:1.5rem">
+        <div class="card-head"><h3>Informe de stock</h3>
+          <div style="display:flex;gap:.5rem">
+            <a href="/api/erp/analytics/export/products" class="btn btn-secondary btn-sm">CSV Productos</a>
+            <a href="/api/erp/analytics/export/sales" class="btn btn-secondary btn-sm">CSV Ventas</a>
+            <a href="/api/erp/analytics/export/clients" class="btn btn-secondary btn-sm">CSV Clientes</a>
+          </div>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Producto</th><th>SKU</th><th>Categoría</th><th>Stock</th><th>Precio</th><th>Valor en inventario</th></tr></thead>
+          <tbody id="stockBody"><tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--muted)">Cargando...</td></tr></tbody>
+        </table></div>
+      </div>
+
+      <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+      <script>
+      let salesChartInst=null,topChartInst=null;
+      async function loadCharts(){
+        const days=document.getElementById('periodSel').value;
+        const [ov,period,top,stock]=await Promise.all([
+          api('GET','/api/erp/analytics/overview').catch(()=>({})),
+          api('GET','/api/erp/analytics/sales-by-period?days='+days).catch(()=>[]),
+          api('GET','/api/erp/analytics/best-sellers?limit=8').catch(()=>[]),
+          api('GET','/api/erp/analytics/stock-report').catch(()=>[])
+        ]);
+        document.getElementById('kRev').textContent='${sym}'+Number(ov.totalRevenue||0).toFixed(2);
+        document.getElementById('kOrd').textContent=ov.totalOrders||0;
+        document.getElementById('kAvg').textContent='${sym}'+Number(ov.avgOrder||0).toFixed(2);
+        document.getElementById('kCli').textContent=ov.totalClients||0;
+
+        if(salesChartInst)salesChartInst.destroy();
+        salesChartInst=new Chart(document.getElementById('salesChart').getContext('2d'),{type:'bar',data:{labels:period.map(d=>d.date),datasets:[{label:'${sym}',data:period.map(d=>d.total),backgroundColor:'rgba(16,185,129,.6)',borderColor:'#10b981',borderWidth:1,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'${sym}'+v}}}}});
+
+        if(topChartInst)topChartInst.destroy();
+        topChartInst=new Chart(document.getElementById('topChart').getContext('2d'),{type:'bar',data:{labels:top.map(p=>p.product_name.substring(0,15)),datasets:[{label:'Ingresos',data:top.map(p=>p.total_val),backgroundColor:'rgba(14,165,233,.6)',borderColor:'#0ea5e9',borderWidth:1,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{callback:v=>'${sym}'+v}}}}});
+
+        document.getElementById('stockBody').innerHTML=stock.length?stock.map(p=>'<tr>'+
+          '<td><strong>'+p.name+'</strong></td>'+
+          '<td style="color:var(--muted)">'+(p.sku||'-')+'</td>'+
+          '<td>'+(p.category||'-')+'</td>'+
+          '<td><strong style="color:'+(p.stock<5?'#ef4444':'inherit')+'">'+p.stock+'</strong></td>'+
+          '<td>${sym}'+Number(p.price).toFixed(2)+'</td>'+
+          '<td style="color:#10b981;font-weight:600">${sym}'+Number(p.inventory_value||0).toFixed(2)+'</td>'+
+          '</tr>').join(''):'<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin productos</td></tr>';
+      }
+      loadCharts();
+      </script>`;
+    return c.html(adminLayout('Analítica', content, 'analytics', c.get('session')?.csrfToken || '', c));
+  });
+
+  return { api, views };
+}

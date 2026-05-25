@@ -1,0 +1,197 @@
+import { Hono } from 'hono';
+import { adminLayout } from '../layout.js';
+import { requirePerm } from '../../../core/auth.js';
+import { validate } from '../../../core/validate.js';
+import { companySchema, storeSettingsSchema } from '../schemas.js';
+import { getCountryConfig } from '../../../core/control-db.js';
+
+export function createSettingsRoutes(db, cfg = {}) {
+  const sym = cfg.sym || '€';
+  const api = new Hono();
+  const views = new Hono();
+  const storeViews = new Hono();
+
+  // ── API: COMPANY ───────────────────────────────────────────────
+  api.get('/company', requirePerm('company.read'), c => {
+    try { return c.json(db.prepare('SELECT * FROM company_config WHERE id=1').get()); }
+    catch(e) { return c.json({error:e.message},500); }
+  });
+
+  api.put('/company', requirePerm('company.update'), validate(companySchema), async c => {
+    try {
+      const d = c.get('validated');
+      db.prepare('UPDATE company_config SET company_name=?,fiscal_id=?,tax_rate=?,logo_url=?,address=?,phone=?,email=?,website=?,country=?,currency=?,currency_symbol=?,tax_name=?,fiscal_id_label=?,document_name=? WHERE id=1').run(d.company_name||'', d.fiscal_id||'', parseFloat(d.tax_rate)||0, d.logo_url||'', d.address||'', d.phone||'', d.email||'', d.website||'', d.country||'ES', d.currency||'EUR', d.currency_symbol||sym, d.tax_name||'IVA', d.fiscal_id_label||'NIF/CIF', d.document_name||'Factura');
+      return c.json({message:'Guardado'});
+    } catch(e) { return c.json({error:e.message},500); }
+  });
+
+  // ── API: STORE ─────────────────────────────────────────────────
+  api.get('/store', requirePerm('store_settings.read'), c => {
+    try { return c.json(db.prepare('SELECT * FROM store_settings WHERE id=1').get()); }
+    catch(e) { return c.json({error:e.message},500); }
+  });
+
+  api.put('/store', requirePerm('store_settings.update'), validate(storeSettingsSchema), async c => {
+    try {
+      const d = c.get('validated');
+      db.prepare('UPDATE store_settings SET store_name=?,tagline=?,logo_url=?,banner_url=?,primary_color=?,announcement=?,facebook_url=?,instagram_url=?,twitter_url=?,terms_html=?,privacy_html=?,returns_html=?,seo_title=?,seo_description=? WHERE id=1').run(d.store_name||'', d.tagline||'', d.logo_url||'', d.banner_url||'', d.primary_color||'#10b981', d.announcement||'', d.facebook_url||'', d.instagram_url||'', d.twitter_url||'', d.terms_html||'', d.privacy_html||'', d.returns_html||'', d.seo_title||'', d.seo_description||'');
+      return c.json({message:'Guardado'});
+    } catch(e) { return c.json({error:e.message},500); }
+  });
+
+  // ── VIEW: COMPANY SETTINGS ─────────────────────────────────────
+  views.get('/', c => {
+    const config = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
+    const sym = config.currency_symbol || '€';
+    const countryInfo = getCountryConfig(config.country || 'ES');
+    const countryName = countryInfo ? countryInfo.name : (config.country || 'España');
+    const content = `
+      <div class="ph"><h2>Configuración Empresa</h2></div>
+      <div class="card" style="max-width:700px">
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Nombre de la empresa</label><input class="form-control" id="cName"></div>
+            <div class="form-group"><label class="form-label">NIF / ID Fiscal</label><input class="form-control" id="cFiscal"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">País</label>
+            <input type="text" class="form-control" value="${countryName}" disabled style="background:#f8fafc;color:#64748b;cursor:not-allowed">
+            <input type="hidden" id="countryCode" value="${config.country || 'ES'}">
+            <small style="color:#94a3b8;font-size:12px;margin-top:4px;display:block">El país se configura al crear el negocio y no puede cambiarse.</small>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Moneda (código)</label><input class="form-control" id="currencyCode"></div>
+            <div class="form-group"><label class="form-label">Símbolo de moneda</label><input class="form-control" id="currencySymbol" style="max-width:120px"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Nombre del impuesto</label><input class="form-control" id="taxName"></div>
+            <div class="form-group"><label class="form-label">Etiqueta ID fiscal</label><input class="form-control" id="fiscalIdLabel"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Nombre documento fiscal</label><input class="form-control" id="documentName"></div>
+            <div class="form-group"><label class="form-label">Impuesto por defecto (%)</label><input class="form-control" type="number" id="cTax" min="0" max="100" step="0.1"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Email</label><input class="form-control" type="email" id="cEmail"></div>
+            <div class="form-group"><label class="form-label">Teléfono</label><input class="form-control" id="cPhone"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Web</label><input class="form-control" id="cWeb"></div>
+          </div>
+          <div class="form-group"><label class="form-label">Dirección fiscal</label><input class="form-control" id="cAddr"></div>
+          <div class="form-group"><label class="form-label">URL Logo empresa</label><input class="form-control" id="cLogo"></div>
+          <button class="btn btn-primary" onclick="saveCompany()">Guardar cambios</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:24px;padding:1.5rem 2rem">
+        <h3 style="font-size:16px;font-weight:600;color:#1e293b;margin-bottom:4px">Seguridad de tu cuenta</h3>
+        <p style="font-size:13px;color:#64748b;margin-bottom:16px">Configura la autenticación de dos factores (2FA) para proteger tu cuenta.</p>
+        <a href="/admin/setup-2fa" class="btn btn-primary">Configurar autenticación 2FA</a>
+      </div>
+
+      <script>
+      api('GET','/api/erp/settings/company').then(d=>{
+        document.getElementById('cName').value=d.company_name||'';
+        document.getElementById('cFiscal').value=d.fiscal_id||'';
+        document.getElementById('currencyCode').value=d.currency||'EUR';
+        document.getElementById('currencySymbol').value=d.currency_symbol||'${sym}';
+        document.getElementById('taxName').value=d.tax_name||'IVA';
+        document.getElementById('fiscalIdLabel').value=d.fiscal_id_label||'NIF/CIF';
+        document.getElementById('documentName').value=d.document_name||'Factura';
+        document.getElementById('cTax').value=d.tax_rate||21;
+        document.getElementById('cEmail').value=d.email||'';
+        document.getElementById('cPhone').value=d.phone||'';
+        document.getElementById('cWeb').value=d.website||'';
+        document.getElementById('cAddr').value=d.address||'';
+        document.getElementById('cLogo').value=d.logo_url||'';
+      });
+      async function saveCompany(){
+        try{await api('PUT','/api/erp/settings/company',{company_name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,country:document.getElementById('countryCode').value,currency:document.getElementById('currencyCode').value,currency_symbol:document.getElementById('currencySymbol').value,tax_name:document.getElementById('taxName').value,fiscal_id_label:document.getElementById('fiscalIdLabel').value,document_name:document.getElementById('documentName').value,tax_rate:document.getElementById('cTax').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,website:document.getElementById('cWeb').value,address:document.getElementById('cAddr').value,logo_url:document.getElementById('cLogo').value});toast('Guardado ✓');}catch(e){toast(e.message,'err')}
+      }
+      </script>`;
+    return c.html(adminLayout('Configuración Empresa', content, 'settings', c.get('session')?.csrfToken || '', c.get('session')?.role || ''));
+  });
+
+  // ── VIEW: STORE SETTINGS ───────────────────────────────────────
+  storeViews.get('/', c => {
+    const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
+    const content = `
+      <div class="ph"><h2>Personalización de Tienda</h2></div>
+      <div class="tabs" style="margin-bottom:1.5rem">
+        <div class="tab active" data-tab-group="ss" data-tab-key="appearance" onclick="switchTab('ss','appearance')">Apariencia</div>
+        <div class="tab" data-tab-group="ss" data-tab-key="social" onclick="switchTab('ss','social')">Redes sociales</div>
+        <div class="tab" data-tab-group="ss" data-tab-key="legal" onclick="switchTab('ss','legal')">Páginas legales</div>
+        <div class="tab" data-tab-group="ss" data-tab-key="seo" onclick="switchTab('ss','seo')">SEO</div>
+      </div>
+
+      <div class="tab-pane active" data-pane-group="ss" data-pane-key="appearance">
+        <div class="card" style="max-width:700px"><div class="card-body">
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Nombre de la tienda</label><input class="form-control" id="ssName"></div>
+            <div class="form-group"><label class="form-label">Eslogan</label><input class="form-control" id="ssTagline"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">URL Logo</label><input class="form-control" id="ssLogo"></div>
+            <div class="form-group"><label class="form-label">URL Banner principal</label><input class="form-control" id="ssBanner"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Color principal</label><input class="form-control" type="color" id="ssColor" style="height:40px;padding:.25rem"></div>
+          </div>
+          <div class="form-group"><label class="form-label">Barra de anuncio</label><input class="form-control" id="ssAnnounce" placeholder="Ej: Envío gratis en pedidos +${sym}50"></div>
+          <button class="btn btn-primary" onclick="saveStore()">Guardar</button>
+        </div></div>
+      </div>
+
+      <div class="tab-pane" data-pane-group="ss" data-pane-key="social">
+        <div class="card" style="max-width:500px"><div class="card-body">
+          <div class="form-group"><label class="form-label">Facebook URL</label><input class="form-control" id="ssFB" placeholder="https://facebook.com/..."></div>
+          <div class="form-group"><label class="form-label">Instagram URL</label><input class="form-control" id="ssIG" placeholder="https://instagram.com/..."></div>
+          <div class="form-group"><label class="form-label">Twitter / X URL</label><input class="form-control" id="ssTW" placeholder="https://twitter.com/..."></div>
+          <button class="btn btn-primary" onclick="saveStore()">Guardar</button>
+        </div></div>
+      </div>
+
+      <div class="tab-pane" data-pane-group="ss" data-pane-key="legal">
+        <div class="card" style="max-width:700px"><div class="card-body">
+          <div class="form-group"><label class="form-label">Términos y Condiciones (HTML)</label><textarea class="form-control" id="ssTerms" rows="6"></textarea></div>
+          <div class="form-group"><label class="form-label">Política de Privacidad (HTML)</label><textarea class="form-control" id="ssPrivacy" rows="6"></textarea></div>
+          <div class="form-group"><label class="form-label">Política de Devoluciones (HTML)</label><textarea class="form-control" id="ssReturns" rows="6"></textarea></div>
+          <button class="btn btn-primary" onclick="saveStore()">Guardar</button>
+        </div></div>
+      </div>
+
+      <div class="tab-pane" data-pane-group="ss" data-pane-key="seo">
+        <div class="card" style="max-width:600px"><div class="card-body">
+          <div class="form-group"><label class="form-label">Título SEO (meta title)</label><input class="form-control" id="ssSeoTitle" maxlength="60"></div>
+          <div class="form-group"><label class="form-label">Descripción SEO (meta description)</label><textarea class="form-control" id="ssSeoDesc" rows="3" maxlength="160"></textarea></div>
+          <button class="btn btn-primary" onclick="saveStore()">Guardar</button>
+        </div></div>
+      </div>
+
+      <script>
+      api('GET','/api/erp/settings/store').then(d=>{
+        document.getElementById('ssName').value=d.store_name||'';
+        document.getElementById('ssTagline').value=d.tagline||'';
+        document.getElementById('ssLogo').value=d.logo_url||'';
+        document.getElementById('ssBanner').value=d.banner_url||'';
+        document.getElementById('ssColor').value=d.primary_color||'#10b981';
+        document.getElementById('ssAnnounce').value=d.announcement||'';
+        document.getElementById('ssFB').value=d.facebook_url||'';
+        document.getElementById('ssIG').value=d.instagram_url||'';
+        document.getElementById('ssTW').value=d.twitter_url||'';
+        document.getElementById('ssTerms').value=d.terms_html||'';
+        document.getElementById('ssPrivacy').value=d.privacy_html||'';
+        document.getElementById('ssReturns').value=d.returns_html||'';
+        document.getElementById('ssSeoTitle').value=d.seo_title||'';
+        document.getElementById('ssSeoDesc').value=d.seo_description||'';
+      });
+      async function saveStore(){
+        try{await api('PUT','/api/erp/settings/store',{store_name:document.getElementById('ssName').value,tagline:document.getElementById('ssTagline').value,logo_url:document.getElementById('ssLogo').value,banner_url:document.getElementById('ssBanner').value,primary_color:document.getElementById('ssColor').value,announcement:document.getElementById('ssAnnounce').value,facebook_url:document.getElementById('ssFB').value,instagram_url:document.getElementById('ssIG').value,twitter_url:document.getElementById('ssTW').value,terms_html:document.getElementById('ssTerms').value,privacy_html:document.getElementById('ssPrivacy').value,returns_html:document.getElementById('ssReturns').value,seo_title:document.getElementById('ssSeoTitle').value,seo_description:document.getElementById('ssSeoDesc').value});toast('Guardado ✓');}catch(e){toast(e.message,'err')}
+      }
+      </script>`;
+    return c.html(adminLayout('Personalización de Tienda', content, 'store-settings', c.get('session')?.csrfToken || '', c.get('session')?.role || ''));
+  });
+
+  return { api, views, storeViews };
+}

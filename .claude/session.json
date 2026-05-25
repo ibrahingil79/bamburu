@@ -1,0 +1,27 @@
+{
+  "sprint": "SPRINT_2A_COMPLETADO",
+  "date": "2026-05-23",
+  "previous_completed": [
+    "SPRINT 1: Seguridad + 2FA + Roles",
+    "SPRINT 2 intento 1: Multi-agentes (FALLIDO, revertido)",
+    "SPRINT 2A: DISA Sidebar + Estética (COMPLETADO)"
+  ],
+  "sprint_2a_changes": {
+    "widget.js": "Reescrito: sidebar derecho permanente (272px) con métricas, cards de alertas, chat colapsable",
+    "layout.js": "--disa-w: 272px, margin-right en .wrap, mobile hide, sidebar en todas las páginas",
+    "index.js": "GET /api/disa/summary — métricas + alertas sin Claude (4 reglas: stock, pedidos >3d, inactivos, sin descripción)"
+  },
+  "current_focus": "SPRINT 2B: Vigilante de Negocio (7 reglas completas)",
+  "vision_approved": "DISA como CTO virtual: 3 cerebros (Negocio + Plataforma + Constructor Web)",
+  "next_sprints": [
+    "SPRINT 2B: Vigilante de negocio (7 reglas + auto-refresh) (3 días)",
+    "SPRINT 2C: Vigilante de plataforma (3 días)",
+    "SPRINT 2D: Ejecutor (catálogo acciones) (3 días)",
+    "SPRINT 3: Constructor web (5-7 días)"
+  ],
+  "tables_ready_to_remove_or_keep": [
+    "disa_agents (creada en intento fallido — DECIDIR si borrar)",
+    "disa_agent_instructions (idem)"
+  ],
+  "last_updated": "2026-05-23T20:00Z"
+}

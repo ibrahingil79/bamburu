@@ -1,0 +1,259 @@
+import { Hono } from 'hono';
+import { createHash } from 'crypto';
+import { requirePerm } from '../../../core/auth.js';
+import { adminLayout } from '../layout.js';
+
+function getNextSeq(db, series, year) {
+  db.prepare(`INSERT INTO invoice_sequences (series,year,last_seq) VALUES (?,?,0) ON CONFLICT(series,year) DO NOTHING`).run(series, year);
+  db.prepare(`UPDATE invoice_sequences SET last_seq=last_seq+1 WHERE series=? AND year=?`).run(series, year);
+  return db.prepare(`SELECT last_seq FROM invoice_sequences WHERE series=? AND year=?`).get(series, year).last_seq;
+}
+
+function getPrevHash(db, series, year) {
+  const prev = db.prepare(`SELECT verifactu_hash FROM invoices WHERE series=? AND year=? ORDER BY sequence DESC LIMIT 1`).get(series, year);
+  return prev?.verifactu_hash || '';
+}
+
+function calcHash(inv) {
+  const data = [inv.invoice_number, inv.issue_date, inv.company_fiscal_id, inv.client_fiscal_id || '', inv.total.toFixed(2), inv.prev_hash].join('|');
+  return createHash('sha256').update(data).digest('hex');
+}
+
+export function generateInvoice(db, orderId) {
+  // prevent duplicate
+  const existing = db.prepare('SELECT id, invoice_number FROM invoices WHERE order_id=?').get(orderId);
+  if (existing) return { id: existing.id, invoice_number: existing.invoice_number, already: true };
+
+  const order = db.prepare('SELECT * FROM sales_orders WHERE id=?').get(orderId);
+  if (!order) throw new Error('Pedido no encontrado');
+  if (order.status !== 'completado') throw new Error('Solo se pueden facturar pedidos completados');
+
+  const cfg = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
+  const client = order.client_id ? db.prepare('SELECT * FROM clients WHERE id=?').get(order.client_id) : null;
+  const items = db.prepare('SELECT * FROM sales_items WHERE order_id=?').all(orderId);
+
+  const series = cfg.invoice_series || 'F';
+  const year = new Date().getFullYear();
+  const seq = getNextSeq(db, series, year);
+  const invoice_number = `${series}${year}-${String(seq).padStart(4, '0')}`;
+  const issue_date = new Date().toISOString().slice(0, 10);
+
+  const subtotal = parseFloat((order.total / (1 + (cfg.tax_rate || 21) / 100)).toFixed(2));
+  const tax_amount = parseFloat((order.total - subtotal).toFixed(2));
+  const prev_hash = getPrevHash(db, series, year);
+
+  const inv = {
+    invoice_number,
+    order_id: orderId,
+    client_id: order.client_id || null,
+    series,
+    year,
+    sequence: seq,
+    issue_date,
+    company_name: cfg.name || 'Mi empresa',
+    company_fiscal_id: cfg.fiscal_id || '',
+    company_address: cfg.address || '',
+    client_name: client ? client.name : (order.client_name || ''),
+    client_fiscal_id: client ? (client.fiscal_id || '') : '',
+    client_address: client ? (client.address || '') : '',
+    client_email: client ? (client.email || '') : '',
+    subtotal,
+    tax_rate: cfg.tax_rate || 21,
+    tax_name: cfg.tax_name || 'IVA',
+    tax_amount,
+    total: order.total,
+    currency: cfg.currency || 'EUR',
+    currency_symbol: cfg.currency_symbol || '€',
+    document_name: cfg.document_name || 'Factura',
+    prev_hash,
+  };
+  inv.verifactu_hash = calcHash(inv);
+
+  const result = db.prepare(`INSERT INTO invoices
+    (invoice_number,order_id,client_id,series,year,sequence,issue_date,
+     company_name,company_fiscal_id,company_address,
+     client_name,client_fiscal_id,client_address,client_email,
+     subtotal,tax_rate,tax_name,tax_amount,total,
+     currency,currency_symbol,document_name,
+     verifactu_hash,prev_hash)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).run(
+    inv.invoice_number, inv.order_id, inv.client_id, inv.series, inv.year, inv.sequence, inv.issue_date,
+    inv.company_name, inv.company_fiscal_id, inv.company_address,
+    inv.client_name, inv.client_fiscal_id, inv.client_address, inv.client_email,
+    inv.subtotal, inv.tax_rate, inv.tax_name, inv.tax_amount, inv.total,
+    inv.currency, inv.currency_symbol, inv.document_name,
+    inv.verifactu_hash, inv.prev_hash
+  );
+  const invoiceId = result.lastInsertRowid;
+
+  const insItem = db.prepare('INSERT INTO invoice_items (invoice_id,description,quantity,unit_price,total_price) VALUES (?,?,?,?,?)');
+  for (const it of items) {
+    insItem.run(invoiceId, it.product_name, it.quantity, it.unit_price, it.total);
+  }
+
+  return { id: invoiceId, invoice_number };
+}
+
+export function createInvoiceRoutes(db) {
+  const api = new Hono();
+  const views = new Hono();
+
+  // GET /api/erp/invoices — list
+  api.get('/', requirePerm('orders.read'), c => {
+    try {
+      const rows = db.prepare(`SELECT i.*, o.reference as order_ref FROM invoices i LEFT JOIN sales_orders o ON o.id=i.order_id ORDER BY i.created_at DESC LIMIT 200`).all();
+      return c.json(rows);
+    } catch (e) { return c.json({ error: e.message }, 500); }
+  });
+
+  // GET /api/erp/invoices/:id — single invoice JSON
+  api.get('/:id', requirePerm('orders.read'), c => {
+    try {
+      const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(c.req.param('id'));
+      if (!inv) return c.json({ error: 'No encontrada' }, 404);
+      const items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id=? ORDER BY id').all(inv.id);
+      return c.json({ ...inv, items });
+    } catch (e) { return c.json({ error: e.message }, 500); }
+  });
+
+  // POST /api/erp/invoices/from-order/:orderId — generate invoice from order
+  api.post('/from-order/:orderId', requirePerm('orders.edit'), c => {
+    try {
+      const orderId = parseInt(c.req.param('orderId'));
+      const res = generateInvoice(db, orderId);
+      return c.json(res);
+    } catch (e) {
+      let code = 500;
+      if (e.message === 'Pedido no encontrado') code = 404;
+      else if (e.message === 'Solo se pueden facturar pedidos completados') code = 400;
+      return c.json({ error: e.message }, code);
+    }
+  });
+
+  // GET /admin/invoices — list view
+  views.get('/', requirePerm('orders.read'), c => {
+    const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
+    const content = `
+      <div class="ph"><h2>Facturas</h2></div>
+      <div class="card">
+        <div class="card-head"><h3>Todas las facturas</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="filterTable()"></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Número</th><th>Pedido</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="invBody"></tbody>
+        </table></div>
+      </div>
+      <script>
+      let rows=[];
+      async function loadInvoices(){
+        rows=await api('GET','/api/erp/invoices').catch(()=>[]);
+        filterTable();
+      }
+      function filterTable(){
+        const q=document.getElementById('searchBox').value.toLowerCase();
+        const f=q?rows.filter(r=>r.invoice_number.toLowerCase().includes(q)||(r.client_name||'').toLowerCase().includes(q)):rows;
+        const stBadge={emitida:'b-green',rectificada:'b-yellow',anulada:'b-red'};
+        document.getElementById('invBody').innerHTML=f.length?f.map(r=>\`<tr>
+          <td><strong>\${r.invoice_number}</strong></td>
+          <td><a href="/admin/orders/\${r.order_id}">\${r.order_ref||r.order_id}</a></td>
+          <td>\${r.client_name||'-'}</td>
+          <td style="color:var(--muted);font-size:.85rem">\${r.issue_date||'-'}</td>
+          <td><strong>${sym}\${r.total?.toFixed(2)||'0.00'}</strong></td>
+          <td><span class="badge \${stBadge[r.status]||''}"\>\${r.status}</span></td>
+          <td><a href="/admin/invoices/\${r.id}" target="_blank" class="btn btn-secondary btn-sm">Ver</a></td>
+        </tr>\`).join(''):'<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">Sin facturas</td></tr>';
+      }
+      loadInvoices();
+      </script>`;
+    return c.html(adminLayout('Facturas', content, 'invoices', c.get('session')?.csrfToken || '', c));
+  });
+
+  // GET /admin/invoices/:id — printable invoice
+  views.get('/:id', requirePerm('orders.read'), c => {
+    try {
+      const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(c.req.param('id'));
+      if (!inv) return c.text('Factura no encontrada', 404);
+      const items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id=? ORDER BY id').all(inv.id);
+      const sym = inv.currency_symbol || '€';
+
+      const rows = items.map(it => `
+        <tr>
+          <td>${it.description}</td>
+          <td style="text-align:right">${it.quantity}</td>
+          <td style="text-align:right">${sym}${it.unit_price.toFixed(2)}</td>
+          <td style="text-align:right">${sym}${it.total_price.toFixed(2)}</td>
+        </tr>`).join('');
+
+      const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>${inv.document_name} ${inv.invoice_number}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,sans-serif;font-size:13px;color:#1e293b;padding:40px;max-width:800px;margin:auto}
+  h1{font-size:24px;font-weight:700;margin-bottom:4px}
+  .sub{color:#64748b;font-size:12px;margin-bottom:32px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:32px}
+  .label{font-size:11px;text-transform:uppercase;color:#64748b;font-weight:600;margin-bottom:4px}
+  table{width:100%;border-collapse:collapse;margin-bottom:24px}
+  th{background:#f8fafc;padding:8px 12px;text-align:left;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0}
+  td{padding:8px 12px;border-bottom:1px solid #f1f5f9}
+  .totals{margin-left:auto;width:280px}
+  .totals tr td:first-child{color:#64748b}
+  .totals tr td:last-child{text-align:right;font-weight:600}
+  .totals tr.grand td{font-size:15px;border-top:2px solid #1e293b;padding-top:10px}
+  .hash{margin-top:32px;padding:12px;background:#f8fafc;border-radius:6px;font-family:monospace;font-size:10px;color:#94a3b8;word-break:break-all}
+  @media print{body{padding:20px}.hash{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px">
+  <div>
+    <h1>${inv.document_name}</h1>
+    <div class="sub">${inv.invoice_number} &nbsp;·&nbsp; ${inv.issue_date}</div>
+  </div>
+  <button onclick="window.print()" style="padding:8px 16px;background:#1e293b;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">Imprimir</button>
+</div>
+
+<div class="cols">
+  <div>
+    <div class="label">Emisor</div>
+    <div><strong>${inv.company_name}</strong></div>
+    ${inv.company_fiscal_id ? `<div>${inv.company_fiscal_id}</div>` : ''}
+    ${inv.company_address ? `<div style="color:#64748b">${inv.company_address}</div>` : ''}
+  </div>
+  <div>
+    <div class="label">Cliente</div>
+    <div><strong>${inv.client_name || 'Cliente general'}</strong></div>
+    ${inv.client_fiscal_id ? `<div>${inv.client_fiscal_id}</div>` : ''}
+    ${inv.client_address ? `<div style="color:#64748b">${inv.client_address}</div>` : ''}
+    ${inv.client_email ? `<div style="color:#64748b">${inv.client_email}</div>` : ''}
+  </div>
+</div>
+
+<table>
+  <thead><tr><th>Descripción</th><th style="text-align:right">Cant.</th><th style="text-align:right">P. unitario</th><th style="text-align:right">Total</th></tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+
+<table class="totals">
+  <tr><td>Base imponible</td><td>${sym}${inv.subtotal.toFixed(2)}</td></tr>
+  <tr><td>${inv.tax_name} (${inv.tax_rate}%)</td><td>${sym}${inv.tax_amount.toFixed(2)}</td></tr>
+  <tr class="grand"><td>TOTAL</td><td>${sym}${inv.total.toFixed(2)}</td></tr>
+</table>
+
+${inv.notes ? `<div style="margin-top:16px;color:#64748b">${inv.notes}</div>` : ''}
+
+<div class="hash">
+  <strong>Hash Verifactu:</strong> ${inv.verifactu_hash}<br>
+  <strong>Hash anterior:</strong> ${inv.prev_hash || '(primera factura)'}
+</div>
+</body>
+</html>`;
+      return c.html(html);
+    } catch (e) { return c.text(e.message, 500); }
+  });
+
+  return { api, views };
+}

@@ -1,0 +1,103 @@
+import { Hono } from 'hono';
+import { adminAuth } from '../../../core/auth.js';
+import { csrfProtect } from '../../../core/csrf.js';
+import { createAuthRoutes } from './auth.js';
+import { createDashboardRoutes } from './dashboard.js';
+import { createProductRoutes } from './products.js';
+import { createCategoryRoutes } from './categories.js';
+import { createClientRoutes } from './clients.js';
+import { createOrderRoutes } from './orders.js';
+import { createInventoryRoutes } from './inventory.js';
+import { createDiscountRoutes } from './discounts.js';
+import { createShippingRoutes } from './shipping.js';
+import { createAnalyticsRoutes } from './analytics.js';
+import { createSettingsRoutes } from './settings.js';
+import { createUserRoutes } from './users.js';
+import { createNewsletterRoutes } from './newsletter.js';
+import { createReviewRoutes } from './reviews.js';
+import { createChangePasswordRoutes } from './change-password.js';
+import { createSupplierRoutes } from './suppliers.js';
+import { createPurchaseRoutes } from './purchases.js';
+import { createFeedbackRoutes } from './feedback.js';
+import { createInvoiceRoutes } from './invoices.js';
+import { createSecurityRoutes } from './security.js';
+
+export function mountRoutes(app, db) {
+  const auth = adminAuth(db);
+  const csrf = csrfProtect();
+
+  // ── Public auth routes ─────────────────────────────────────────
+  const authRoutes = createAuthRoutes(db);
+  app.route('/admin', authRoutes);
+
+  // ── Build all route handlers ───────────────────────────────────
+  const dashboard = createDashboardRoutes(db);
+  const { api: prodApi, views: prodViews, tagsViews } = createProductRoutes(db);
+  const { api: catApi, views: catViews } = createCategoryRoutes(db);
+  const { api: clientApi, views: clientViews } = createClientRoutes(db);
+  const { api: orderApi, views: orderViews } = createOrderRoutes(db);
+  const { api: invApi, views: invViews } = createInventoryRoutes(db);
+  const { api: discApi, views: discViews } = createDiscountRoutes(db);
+  const { api: shipApi, views: shipViews } = createShippingRoutes(db);
+  const { api: analytApi, views: analytViews } = createAnalyticsRoutes(db);
+  const { api: settApi, views: settViews, storeViews: storeSettViews } = createSettingsRoutes(db);
+  const { api: userApi, views: userViews, activityViews } = createUserRoutes(db);
+  const { api: nlApi, views: nlViews } = createNewsletterRoutes(db);
+  const { api: revApi, views: revViews } = createReviewRoutes(db);
+  const changePasswordRoutes = createChangePasswordRoutes(db);
+  const securityRoutes = createSecurityRoutes(db);
+  const { api: supplierApi, views: supplierViews } = createSupplierRoutes(db);
+  const { api: purchaseApi, views: purchaseViews } = createPurchaseRoutes(db);
+  const { api: feedbackApi, views: feedbackViews } = createFeedbackRoutes(db);
+  const { api: invoiceApi, views: invoiceViews } = createInvoiceRoutes(db);
+
+  // ── Protected admin views ──────────────────────────────────────
+  const admin = new Hono();
+  admin.use('*', auth);
+  admin.use('*', csrf);
+  admin.route('/', dashboard);
+  admin.route('/products', prodViews);
+  admin.route('/tags', tagsViews);
+  admin.route('/categories', catViews);
+  admin.route('/clients', clientViews);
+  admin.route('/orders', orderViews);
+  admin.route('/inventory', invViews);
+  admin.route('/discounts', discViews);
+  admin.route('/shipping', shipViews);
+  admin.route('/analytics', analytViews);
+  admin.route('/settings', settViews);
+  admin.route('/store-settings', storeSettViews);
+  admin.route('/users', userViews);
+  admin.route('/activity', activityViews);
+  admin.route('/newsletter', nlViews);
+  admin.route('/reviews', revViews);
+  admin.route('/change-password', changePasswordRoutes);
+  admin.route('/security', securityRoutes);
+  admin.route('/suppliers', supplierViews);
+  admin.route('/purchases', purchaseViews);
+  admin.route('/feedback', feedbackViews);
+  admin.route('/invoices', invoiceViews);
+  app.route('/admin', admin);
+
+  // ── Protected API ──────────────────────────────────────────────
+  const apiApp = new Hono();
+  apiApp.use('*', auth);
+  apiApp.use('*', csrf);
+  apiApp.route('/products', prodApi);
+  apiApp.route('/categories', catApi);
+  apiApp.route('/clients', clientApi);
+  apiApp.route('/orders', orderApi);
+  apiApp.route('/inventory', invApi);
+  apiApp.route('/discounts', discApi);
+  apiApp.route('/shipping', shipApi);
+  apiApp.route('/analytics', analytApi);
+  apiApp.route('/settings', settApi);
+  apiApp.route('/users', userApi);
+  apiApp.route('/newsletter', nlApi);
+  apiApp.route('/reviews', revApi);
+  apiApp.route('/suppliers', supplierApi);
+  apiApp.route('/purchases', purchaseApi);
+  apiApp.route('/feedback', feedbackApi);
+  apiApp.route('/invoices', invoiceApi);
+  app.route('/api/erp', apiApp);
+}

@@ -1,0 +1,271 @@
+================================================================================
+  BAMBURU — Plataforma de E-commerce y ERP
+  Versión: 1.0.0 MVP
+  Fecha:   2026-05-13
+================================================================================
+
+DESCRIPCIÓN
+-----------
+Bamburu es una plataforma de comercio electrónico y gestión empresarial de código
+abierto, diseñada como alternativa gratuita a Shopify. Incluye un panel de
+administración (ERP) completo y una tienda pública para clientes.
+
+TECNOLOGÍA
+----------
+  Runtime:       Node.js 20+ (ES Modules)
+  Framework:     Hono v4 + @hono/node-server
+  Base de datos: SQLite (better-sqlite3 v9) — modo WAL, foreign keys ON
+  Frontend:      SSR puro (template literals HTML, sin framework JS)
+  Gráficas:      Chart.js v4 via CDN
+  Autenticación: Sesiones en memoria (Map), cookies HttpOnly, SHA-256
+
+INICIAR EL SERVIDOR
+-------------------
+  npm start          → node index.js  (puerto 3000)
+  npm run dev        → node --watch index.js (recarga automática)
+
+  Admin:   http://localhost:3000/admin
+  Tienda:  http://localhost:3000/store
+
+  Credenciales por defecto:
+    Email:      admin@bamburu.com
+    Contraseña: Admin1234
+  (cambiarlas en /admin/users tras el primer acceso)
+
+ESTRUCTURA DE ARCHIVOS
+----------------------
+  bamburu/
+  ├── index.js                   Punto de entrada, servidor Hono, redirige / → /admin
+  ├── package.json
+  ├── core/
+  │   ├── auth.js                Sesiones admin (asess) y cliente (csess), hashPassword,
+  │   │                          adminAuth middleware, logActivity
+  │   ├── db.js                  Conexión SQLite, helpers getSetting/setSetting
+  │   └── loader.js              Carga módulos en orden: ['erp', 'store']
+  ├── modules/
+  │   ├── erp/
+  │   │   ├── index.js           Registra migraciones y rutas ERP
+  │   │   ├── models.js          Schema completo + migraciones + seed admin
+  │   │   ├── layout.js          adminLayout(title, content, active) — HTML base del panel
+  │   │   └── routes/
+  │   │       ├── index.js       Monta todas las rutas bajo /admin y /api/erp
+  │   │       ├── auth.js        GET/POST /admin/login, GET /admin/logout
+  │   │       ├── dashboard.js   GET /admin — KPIs, gráfica ventas, pedidos recientes
+  │   │       ├── products.js    CRUD productos, imágenes, variantes, etiquetas
+  │   │       ├── categories.js  CRUD categorías
+  │   │       ├── clients.js     CRUD clientes, grupos de clientes, sync newsletter
+  │   │       ├── orders.js      Pedidos, POS, devoluciones, factura, cambio estado
+  │   │       ├── inventory.js   Stock, movimientos (entrada/salida/ajuste)
+  │   │       ├── discounts.js   Códigos de descuento, descuentos automáticos
+  │   │       ├── shipping.js    Métodos de envío con umbral gratuito
+  │   │       ├── analytics.js   KPIs, gráficas, exports CSV, stock report
+  │   │       ├── settings.js    Configuración empresa y personalización de tienda
+  │   │       ├── users.js       Usuarios admin, roles, backup BD
+  │   │       ├── newsletter.js  Lista suscriptores, export CSV
+  │   │       └── reviews.js     Moderación de reseñas (aprobar/rechazar)
+  │   └── store/
+  │       ├── index.js           Registra módulo tienda
+  │       ├── models.js          Verifica tablas ERP disponibles
+  │       └── routes.js          Tienda pública completa (vistas + API)
+  ├── data/
+  │   └── bamburu.db             Base de datos SQLite
+  └── public/
+      └── uploads/               Directorio para archivos subidos (futuro uso)
+
+MÓDULO ERP — PANEL DE ADMINISTRACIÓN (/admin)
+---------------------------------------------
+  SECCIÓN          RUTA                      DESCRIPCIÓN
+  ─────────────────────────────────────────────────────────────────────────
+  Dashboard        /admin                    Ventas totales, pedidos, productos,
+                                             clientes, alertas stock, gráfica 30 días
+  Productos        /admin/products           Lista, crear, editar, archivar.
+                                             Tabs: General, Imágenes, Variantes, Avanzado
+  Etiquetas        /admin/tags               Gestión de etiquetas de producto
+  Categorías       /admin/categories         CRUD categorías con conteo de productos
+  Pedidos          /admin/orders             Lista con filtro por estado
+  Detalle pedido   /admin/orders/:id         Info completa, cambiar estado, tracking,
+                                             nota interna, reembolso, imprimir factura
+  Punto de Venta   /admin/orders/pos         POS: buscar producto → carrito → cobrar.
+                                             Crear nuevo cliente desde el POS
+  Devoluciones     /admin/orders/refunds     Historial de reembolsos registrados
+  Inventario       /admin/inventory          Stock actual, KPIs, ajustar stock,
+                                             historial de movimientos
+  Clientes         /admin/clients            CRUD clientes, filtro, detalle con historial
+  Grupos           /admin/clients/groups     Segmentación de clientes en grupos
+  Descuentos       /admin/discounts          Códigos de cupón (% o fijo) + descuentos auto
+  Envíos           /admin/shipping           Métodos con precio y umbral gratuito
+  Analítica        /admin/analytics          Gráficas ventas y top productos,
+                                             exports CSV (ventas, productos, clientes)
+  Empresa          /admin/settings           Nombre, NIF, IVA, email, dirección, logo
+  Personalización  /admin/store-settings     Nombre tienda, colores, logo, banner,
+                                             redes sociales, páginas legales, SEO
+  Usuarios Admin   /admin/users              CRUD usuarios con roles:
+                                             owner / admin / employee / readonly
+  Actividad        /admin/activity           Log de auditoría de todas las acciones
+  Newsletter       /admin/newsletter         Lista suscriptores, export CSV
+  Reseñas          /admin/reviews            Moderar reseñas: aprobar / rechazar / borrar
+
+API ERP (/api/erp) — Requiere cookie asess (sesión admin)
+----------------------------------------------------------
+  GET    /api/erp/products                   Lista productos
+  GET    /api/erp/products/:id               Detalle + imágenes + variantes + etiquetas
+  POST   /api/erp/products                   Crear producto
+  PUT    /api/erp/products/:id               Editar producto
+  DELETE /api/erp/products/:id               Eliminar producto
+  POST   /api/erp/products/:id/images        Añadir imagen
+  DELETE /api/erp/products/:id/images/:imgId Eliminar imagen
+  GET/POST/DELETE /api/erp/products/tags/*   CRUD etiquetas
+
+  GET    /api/erp/categories                 Lista categorías con conteo
+  POST   /api/erp/categories                 Crear
+  PUT    /api/erp/categories/:id             Editar
+  DELETE /api/erp/categories/:id             Eliminar
+
+  GET    /api/erp/clients                    Lista clientes
+  POST   /api/erp/clients                    Crear (sincroniza newsletter)
+  PUT    /api/erp/clients/:id                Editar (sincroniza newsletter)
+  DELETE /api/erp/clients/:id                Eliminar
+  GET    /api/erp/clients/:id/orders         Pedidos del cliente
+  GET/POST/DELETE /api/erp/clients/groups/*  CRUD grupos de clientes
+
+  GET    /api/erp/orders                     Lista pedidos (query: ?status=)
+  GET    /api/erp/orders/:id                 Detalle + items + historial + reembolsos
+  POST   /api/erp/orders/sales               Crear venta POS
+  POST   /api/erp/orders/:id/status          Cambiar estado
+  POST   /api/erp/orders/:id/tracking        Guardar número seguimiento
+  POST   /api/erp/orders/:id/notes           Guardar nota interna
+  POST   /api/erp/orders/:id/refund          Registrar reembolso
+
+  GET    /api/erp/inventory/movements        Historial movimientos stock
+  POST   /api/erp/inventory/movements        Ajustar stock (in/out/adjust)
+
+  GET/POST/PUT/DELETE /api/erp/discounts/*   CRUD códigos de descuento
+  GET/POST/PUT/DELETE /api/erp/shipping/*    CRUD métodos de envío
+
+  GET    /api/erp/analytics/overview         KPIs generales
+  GET    /api/erp/analytics/sales-by-period  Ventas por día (?days=N)
+  GET    /api/erp/analytics/best-sellers     Top productos (?limit=N)
+  GET    /api/erp/analytics/stock-report     Informe de inventario
+  GET    /api/erp/analytics/export/sales     CSV ventas
+  GET    /api/erp/analytics/export/products  CSV productos
+  GET    /api/erp/analytics/export/clients   CSV clientes
+
+  GET/PUT /api/erp/settings/company          Config empresa
+  GET/PUT /api/erp/settings/store            Config tienda
+
+  GET    /api/erp/users                      Lista usuarios admin
+  POST   /api/erp/users                      Crear usuario
+  PUT    /api/erp/users/:id                  Editar usuario
+  DELETE /api/erp/users/:id                  Eliminar (no permite borrar el último activo)
+  GET    /api/erp/users/activity             Log de actividad (últimas 200 entradas)
+  GET    /api/erp/users/backup               Descarga backup bamburu.db
+
+  GET    /api/erp/newsletter                 Lista suscriptores
+  DELETE /api/erp/newsletter/:id             Eliminar suscriptor
+
+  GET    /api/erp/reviews                    Lista reseñas (query: ?status=)
+  POST   /api/erp/reviews/:id/approve        Aprobar reseña
+  POST   /api/erp/reviews/:id/reject         Rechazar reseña
+  DELETE /api/erp/reviews/:id                Eliminar reseña
+
+MÓDULO STORE — TIENDA PÚBLICA (/store)
+--------------------------------------
+  PÁGINA              RUTA                         DESCRIPCIÓN
+  ─────────────────────────────────────────────────────────────────────────
+  Inicio              /store                        Banner, productos destacados,
+                                                    formulario newsletter
+  Catálogo            /store/catalog                Lista todos los productos.
+                                                    Filtros: búsqueda, categoría, orden
+  Producto            /store/product/:id            Galería, variantes, precio,
+                                                    añadir al carrito, wishlist,
+                                                    reseñas de clientes
+  Carrito             /store/cart                   Resumen carrito (localStorage)
+  Checkout            /store/checkout               Formulario datos cliente (pre-relleno
+                                                    si hay sesión), envío, cupón,
+                                                    resumen pedido, confirmar
+  Confirmación        /store/order-confirmation/:n  Número de pedido + CTA cuenta
+  Mi cuenta           /store/account                Perfil, historial pedidos, wishlist
+  Login               /store/account/login          Inicio de sesión cliente
+  Registro            /store/account/register       Crear cuenta (vincula historial prev.)
+  Términos            /store/legal/terms            Página términos (configurable)
+  Privacidad          /store/legal/privacy          Política privacidad (configurable)
+  Devoluciones        /store/legal/returns          Política devoluciones (configurable)
+
+API STORE (/api/store) — Pública salvo rutas de cuenta
+-------------------------------------------------------
+  GET    /api/store/products                 Productos activos (query: ?category, ?search)
+  GET    /api/store/products/:id             Detalle producto + variantes + reseñas
+  GET    /api/store/categories               Categorías con productos activos
+  GET    /api/store/shipping                 Métodos de envío activos
+  POST   /api/store/validate-coupon          Validar código cupón
+  POST   /api/store/checkout                 Crear pedido online
+  POST   /api/store/newsletter/subscribe     Suscribirse al newsletter
+  POST   /api/store/reviews                  Enviar reseña de producto
+  POST   /api/store/account/register         Registrar cuenta cliente
+  POST   /api/store/account/login            Login cliente
+  POST   /api/store/account/logout           Logout cliente
+  GET    /api/store/account/orders           Pedidos del cliente (requiere csess)
+  GET    /api/store/account/wishlist         Lista deseos (requiere csess)
+  POST   /api/store/account/wishlist         Añadir a lista deseos
+  DELETE /api/store/account/wishlist/:pid    Quitar de lista deseos
+
+BASE DE DATOS — TABLAS SQLite
+------------------------------
+  TABLA                  DESCRIPCIÓN
+  ──────────────────────────────────────────────────────────────────────────
+  admin_users            Usuarios del panel admin (roles: owner/admin/employee/readonly)
+  activity_logs          Auditoría de todas las acciones admin
+  settings               Pares clave-valor configuración general
+  company_config         Datos empresa (nombre, NIF, IVA, dirección, logo)
+  store_settings         Config tienda (colores, redes, legales, SEO, banner)
+  categories             Categorías de productos
+  tags                   Etiquetas de productos
+  products               Productos (precio, stock, slug, tipo físico/digital, variantes)
+  product_images         Galería de imágenes por producto
+  product_tags           Relación producto ↔ etiqueta (M:N)
+  product_variants       Variantes (talla, color, etc.) con precio y stock propio
+  product_reviews        Reseñas de clientes (pendiente/aprobada/rechazada)
+  clients                Clientes (datos, grupo, total_gastado, acepta_newsletter)
+  client_groups          Grupos de segmentación de clientes
+  customer_accounts      Cuentas online de clientes (vinculadas a clients)
+  sales_orders           Pedidos (subtotal, IVA, envío, descuento, estado, origen)
+  sales_items            Líneas de pedido (producto, cantidad, precio unitario)
+  order_status_history   Historial de cambios de estado por pedido
+  refunds                Reembolsos registrados
+  inventory_movements    Entradas/salidas/ajustes de stock
+  discount_codes         Cupones (% o importe fijo, uso máximo, expiración)
+  auto_discounts         Descuentos automáticos por condición
+  shipping_methods       Métodos de envío con umbral de envío gratuito
+  newsletter_subscribers Suscriptores al boletín (sincronizado con clients)
+  wishlist               Lista de deseos por cuenta de cliente
+
+FLUJO DE PEDIDO
+---------------
+  ONLINE (tienda):
+    pending → processing → shipped → delivered → completed
+                                               ↘ cancelled
+    Cualquier estado → refunded (al registrar reembolso)
+
+  POS (admin):
+    Se crea directamente como "completed" (venta presencial cobrada en caja)
+
+SESIONES Y AUTENTICACIÓN
+-------------------------
+  Admin:    Cookie "asess" (HttpOnly, SameSite=Lax, 24h)
+            Middleware adminAuth aplicado a todas las rutas /admin y /api/erp
+  Cliente:  Cookie "csess" (HttpOnly, SameSite=Lax, 7 días)
+            Gestionado manualmente en rutas de cuenta de la tienda
+  Passwords: SHA-256 con prefijo "bamburu_2026_" (función hashPassword en core/auth.js)
+
+FUNCIONALIDADES PENDIENTES / FUTURAS
+-------------------------------------
+  - Integración con pasarelas de pago (Stripe, Redsys, MercadoPago)
+  - Subida de imágenes directa (directorio public/uploads/ preparado)
+  - Envío de emails transaccionales (confirmación pedido, reset password)
+  - Multi-idioma / multi-moneda (base en config/regions.js eliminada del MVP)
+  - API pública con JWT para integraciones externas
+  - App móvil para gestión de pedidos
+
+================================================================================
+  Generado automáticamente — Bamburu MVP 2026
+================================================================================

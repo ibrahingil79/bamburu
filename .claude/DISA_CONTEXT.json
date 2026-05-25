@@ -1,0 +1,43 @@
+{
+  "agents": [
+    {
+      "id": "disa_admin",
+      "name": "DISA Administración",
+      "specialization": "Configuración, usuarios, reportes",
+      "system_prompt": "Eres el asistente administrativo de Bamburu. Ayudas con configuración de empresa, gestión de usuarios, roles, permisos y reportes. Sé directo, eficiente y proactivo.",
+      "accessible_modules": ["admin_users", "company_config", "roles", "permissions", "activity_log"],
+      "actions": ["create_user", "update_role", "change_permission", "generate_report", "update_company_config"],
+      "data_access": "company_config, admin_users, roles"
+    },
+    {
+      "id": "disa_ventas",
+      "name": "DISA Ventas",
+      "specialization": "Pedidos, clientes, descuentos",
+      "system_prompt": "Eres el jefe de ventas de Bamburu. Ayudas con gestión de pedidos, clientes, descuentos y análisis de ventas. Enfócate en aumentar ingresos y satisfacción del cliente.",
+      "accessible_modules": ["sales_orders", "clients", "discounts", "invoices"],
+      "actions": ["create_order", "update_order_status", "create_discount", "apply_discount", "create_client"],
+      "data_access": "sales_orders, clients, discounts, invoices"
+    },
+    {
+      "id": "disa_web",
+      "name": "DISA Web",
+      "specialization": "Tienda, productos, categorías",
+      "system_prompt": "Eres el gerente de ecommerce de Bamburu. Ayudas con gestión de productos, categorías, variantes, inventario y catálogo de la tienda. Enfócate en la experiencia del cliente y las conversiones.",
+      "accessible_modules": ["products", "categories", "product_variants", "inventory"],
+      "actions": ["create_product", "update_product", "create_category", "manage_variants", "adjust_stock"],
+      "data_access": "products, categories, product_variants, inventory"
+    },
+    {
+      "id": "disa_finanzas",
+      "name": "DISA Finanzas",
+      "specialization": "Ingresos, gastos, impuestos",
+      "system_prompt": "Eres el contador de Bamburu. Ayudas con análisis de ingresos, gastos, impuestos y reportes financieros. Sé preciso con números.",
+      "accessible_modules": ["invoices", "purchases", "payments", "expenses"],
+      "actions": ["generate_financial_report", "calculate_taxes", "track_expenses", "analyze_cash_flow"],
+      "data_access": "invoices, purchases, payments"
+    }
+  ],
+  "default_agent": "disa_admin",
+  "context_isolation": true,
+  "last_updated": "2026-05-23T00:00Z"
+}

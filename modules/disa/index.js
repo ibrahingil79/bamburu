@@ -1,0 +1,1865 @@
+import { Hono } from 'hono';
+import { adminAuth, getCsrfToken } from '../../core/auth.js';
+import { adminLayout } from '../erp/layout.js';
+
+export function register(app, db) {
+  const router = new Hono();
+
+  // ── Helpers ──────────────────────────────────────────────
+
+  function getUsage(db) {
+    const month = new Date().toISOString().slice(0, 7);
+    const row = db.prepare('SELECT count FROM disa_usage WHERE month=?').get(month);
+    return row?.count || 0;
+  }
+
+  function incrementUsage(db) {
+    const month = new Date().toISOString().slice(0, 7);
+    db.prepare(`
+      INSERT INTO disa_usage (month, count) VALUES (?, 1)
+      ON CONFLICT(month) DO UPDATE SET count = count + 1
+    `).run(month);
+  }
+
+  function generateThreadTitle(firstMessage) {
+    const words = firstMessage.trim().split(/\s+/).slice(0, 7);
+    let title = words.join(' ');
+    if (title.length > 50) title = title.substring(0, 47) + '...';
+    if (firstMessage.split(/\s+/).length > 7) title += '...';
+    return title || 'Nueva conversación';
+  }
+
+  function getOrCreateActiveThread(db, userId) {
+    let thread = db.prepare(
+      'SELECT * FROM disa_conversation_threads WHERE is_active=1 ORDER BY updated_at DESC LIMIT 1'
+    ).get();
+    if (!thread) {
+      const r = db.prepare('INSERT INTO disa_conversation_threads (user_id) VALUES (?)').run(userId || null);
+      thread = db.prepare('SELECT * FROM disa_conversation_threads WHERE id=?').get(r.lastInsertRowid);
+    }
+    return thread;
+  }
+
+  function getConversationForThread(db, threadId) {
+    let conv = db.prepare(
+      'SELECT * FROM disa_conversations WHERE thread_id=? ORDER BY id DESC LIMIT 1'
+    ).get(threadId);
+    if (!conv) {
+      const r = db.prepare('INSERT INTO disa_conversations (messages, thread_id) VALUES (?, ?)').run('[]', threadId);
+      conv = db.prepare('SELECT * FROM disa_conversations WHERE id=?').get(r.lastInsertRowid);
+    }
+    return conv;
+  }
+
+  function getProfile(db) {
+    return db.prepare('SELECT * FROM disa_profile WHERE id=1').get() || {};
+  }
+
+  function updateProfile(db, updates) {
+    const fields = Object.keys(updates).map(k => k + '=?').join(',');
+    db.prepare(
+      'UPDATE disa_profile SET ' + fields + ', updated_at=CURRENT_TIMESTAMP WHERE id=1'
+    ).run(...Object.values(updates));
+  }
+
+  function logActivity(db, action, entity, entityId, details, session) {
+    try {
+      db.prepare(`
+        INSERT INTO activity_logs (user_id, user_name, action, entity, entity_id, details)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(session?.userId || null, session?.userName || 'DISA', action, entity, entityId, details);
+    } catch {}
+  }
+
+  const WRITABLE_TABLES = new Set([
+    'categories', 'tags', 'product_tags',
+    'products', 'product_variants', 'product_images',
+    'clients', 'client_groups', 'suppliers',
+    'sales_orders', 'sales_items',
+    'invoices', 'invoice_items',
+    'inventory_movements',
+    'discount_codes', 'auto_discounts',
+    'shipping_methods',
+    'company_config', 'settings', 'store_settings', 'disa_profile',
+    'purchases', 'purchase_items',
+  ]);
+
+  const SECURITY_ACTIONS = new Set(['disable_2fa_user']);
+
+  const ADMIN_ONLY_ACTIONS = new Set([
+    'insert_record', 'update_record', 'delete_record',
+    'create_order', 'edit_order', 'update_order_status', 'cancel_order',
+    'create_invoice_from_order', 'adjust_stock', 'reset_stock',
+    'update_company_config', 'disable_2fa_user', 'list_users_security',
+  ]);
+
+  function isAdminUser(session) {
+    return session?.role === 'owner' || session?.role === 'admin';
+  }
+
+  function isValidColumnName(col) {
+    if (typeof col !== 'string') return false;
+    if (col.length === 0 || col.length > 64) return false;
+    return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(col);
+  }
+
+  function getDbSchema(db) {
+    const excluded = new Set([
+      'admin_users', 'admin_sessions', 'sqlite_sequence',
+      'disa_conversations', 'disa_usage', 'activity_logs',
+      'customer_accounts', 'customer_sessions', 'invoice_sequences',
+      'feedback', 'wishlist', 'product_reviews', 'newsletter_subscribers',
+    ]);
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all();
+    return tables
+      .filter(t => !excluded.has(t.name))
+      .map(t => {
+        const cols = db.prepare('PRAGMA table_info(' + t.name + ')').all();
+        return t.name + ': ' + cols.map(c => c.name + (c.notnull && !c.dflt_value ? '*' : '')).join(', ');
+      })
+      .join('\n');
+  }
+
+  async function executeAction(db, action, session) {
+    try {
+      switch (action.type) {
+
+        // ── Operaciones genéricas (cualquier tabla) ──────────
+
+        case 'insert_record': {
+          const { table, data } = action.params || {};
+          if (!table || !WRITABLE_TABLES.has(table))
+            return { ok: false, message: 'Tabla no permitida: ' + table };
+          if (!data || typeof data !== 'object' || Object.keys(data).length === 0)
+            return { ok: false, message: 'Se requiere data con al menos un campo.' };
+          const colNames = Object.keys(data);
+          const invalidCols = colNames.filter(c => !isValidColumnName(c));
+          if (invalidCols.length > 0)
+            return { ok: false, message: 'Nombre de columna inválido: ' + invalidCols.join(', ') };
+          const cols = colNames.join(', ');
+          const placeholders = colNames.map(() => '?').join(', ');
+          const res = db.prepare('INSERT INTO ' + table + ' (' + cols + ') VALUES (' + placeholders + ')')
+            .run(...Object.values(data));
+          logActivity(db, 'create', table, res.lastInsertRowid, 'Creado por DISA', session);
+          return { ok: true, message: 'Registro creado en ' + table + ' (id: ' + res.lastInsertRowid + ').' };
+        }
+
+        case 'update_record': {
+          const { table, id, data } = action.params || {};
+          if (!table || !WRITABLE_TABLES.has(table))
+            return { ok: false, message: 'Tabla no permitida: ' + table };
+          if (!id) return { ok: false, message: 'Se requiere id.' };
+          if (!data || Object.keys(data).length === 0)
+            return { ok: false, message: 'Se requiere data con al menos un campo.' };
+          const colNames = Object.keys(data);
+          const invalidCols = colNames.filter(c => !isValidColumnName(c));
+          if (invalidCols.length > 0)
+            return { ok: false, message: 'Nombre de columna inválido: ' + invalidCols.join(', ') };
+          const fields = colNames.map(k => k + '=?').join(', ');
+          const info = db.prepare('UPDATE ' + table + ' SET ' + fields + ' WHERE id=?')
+            .run(...Object.values(data), id);
+          if (info.changes === 0) return { ok: false, message: 'No se encontró el registro con id ' + id + ' en ' + table + '.' };
+          logActivity(db, 'edit', table, id, 'Editado por DISA', session);
+          return { ok: true, message: 'Registro ' + id + ' en ' + table + ' actualizado.' };
+        }
+
+        case 'delete_record': {
+          const { table, id } = action.params || {};
+          if (!table || !WRITABLE_TABLES.has(table))
+            return { ok: false, message: 'Tabla no permitida: ' + table };
+          if (!id) return { ok: false, message: 'Se requiere id.' };
+          const info = db.prepare('DELETE FROM ' + table + ' WHERE id=?').run(id);
+          if (info.changes === 0) return { ok: false, message: 'No se encontró el registro con id ' + id + ' en ' + table + '.' };
+          logActivity(db, 'delete', table, id, 'Eliminado por DISA', session);
+          return { ok: true, message: 'Registro ' + id + ' eliminado de ' + table + '.' };
+        }
+
+        // ── Descuentos ──────────────────────────────────────
+
+        case 'create_discount': {
+          const p = action.params;
+          const r = db.prepare(`
+            INSERT INTO discount_codes (code, type, value, min_order, active)
+            VALUES (?, ?, ?, ?, 1)
+          `).run(
+            p.name || 'DISA-' + Date.now(),
+            p.type || 'percentage',
+            Number(p.value) || 10,
+            Number(p.min_order) || 0
+          );
+          logActivity(db, 'create', 'discount_codes', r.lastInsertRowid,
+            'Descuento creado por DISA: ' + p.name, session);
+          return { ok: true, message: 'Descuento "' + (p.name || 'DISA-' + r.lastInsertRowid) + '" creado.' };
+        }
+
+        case 'delete_discount': {
+          const p = action.params;
+          const r = db.prepare('UPDATE discount_codes SET active=0 WHERE code=?').run(p.code);
+          if (r.changes === 0) return { ok: false, message: 'Descuento "' + p.code + '" no encontrado.' };
+          logActivity(db, 'delete', 'discount_codes', 0, 'Descuento desactivado por DISA: ' + p.code, session);
+          return { ok: true, message: 'Descuento "' + p.code + '" desactivado.' };
+        }
+
+        case 'edit_discount': {
+          const p = action.params;
+          const disc = db.prepare('SELECT * FROM discount_codes WHERE code=?').get(p.code);
+          if (!disc) return { ok: false, message: 'Descuento "' + p.code + '" no encontrado.' };
+          db.prepare(`
+            UPDATE discount_codes SET
+              value=?, type=?, min_order=?, active=?
+            WHERE code=?
+          `).run(
+            p.value !== undefined ? Number(p.value) : disc.value,
+            p.type !== undefined ? p.type : disc.type,
+            p.min_order !== undefined ? Number(p.min_order) : disc.min_order,
+            p.active !== undefined ? (p.active ? 1 : 0) : disc.active,
+            p.code
+          );
+          logActivity(db, 'edit', 'discount_codes', disc.id, 'Descuento editado por DISA: ' + p.code, session);
+          return { ok: true, message: 'Descuento "' + p.code + '" actualizado.' };
+        }
+
+        // ── Pedidos ──────────────────────────────────────────
+
+        case 'create_order': {
+          const p = action.params;
+          const product = p.product_id
+            ? db.prepare('SELECT * FROM products WHERE id=?').get(p.product_id)
+            : db.prepare("SELECT * FROM products WHERE LOWER(name) LIKE ? AND status='active' LIMIT 1")
+                .get('%' + (p.product_name || '').toLowerCase() + '%');
+          if (!product) return { ok: false, message: 'Producto no encontrado.' };
+
+          const qty = Number(p.quantity) || 1;
+          const price = p.price != null ? Number(p.price) : product.price;
+          const cfg = db.prepare('SELECT tax_rate, currency_symbol FROM company_config WHERE id=1').get() || {};
+          const taxRate = cfg.tax_rate || 21;
+          const subtotal = price * qty;
+          const taxAmount = subtotal * (taxRate / 100);
+          const total = subtotal + taxAmount;
+
+          const tx = db.transaction(() => {
+            const orderNumber = 'DISA-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+            const r = db.prepare(`
+              INSERT INTO sales_orders
+                (order_number, status, subtotal, tax_amount, total, admin_notes)
+              VALUES (?, 'completado', ?, ?, ?, ?)
+            `).run(orderNumber, subtotal, taxAmount, total, p.notes || 'Creado por DISA');
+            const orderId = r.lastInsertRowid;
+            db.prepare(`
+              INSERT INTO sales_items (order_id, product_id, product_name, quantity, unit_price, total)
+              VALUES (?, ?, ?, ?, ?, ?)
+            `).run(orderId, product.id, product.name, qty, price, price * qty);
+            db.prepare('UPDATE products SET stock = stock - ? WHERE id=?').run(qty, product.id);
+            logActivity(db, 'create', 'sales_orders', orderId,
+              'Pedido ' + orderNumber + ' creado por DISA', session);
+            return { orderId, orderNumber };
+          });
+
+          const { orderNumber } = tx();
+          const sym = cfg.currency_symbol || '€';
+          return { ok: true, message: 'Pedido ' + orderNumber + ' creado: ' +
+            qty + 'x ' + product.name + ' por ' + sym + total.toFixed(2) + '.' };
+        }
+
+        case 'update_order_status': {
+          const p = action.params;
+          const order = db.prepare('SELECT status FROM sales_orders WHERE id=?').get(p.order_id);
+          if (!order) return { ok: false, message: 'Pedido no encontrado.' };
+          db.prepare('UPDATE sales_orders SET status=? WHERE id=?').run(p.status, p.order_id);
+          db.prepare(`
+            INSERT INTO order_status_history (order_id, status, comment, user_name)
+            VALUES (?, ?, ?, ?)
+          `).run(p.order_id, p.status, 'Actualizado por DISA', session?.userName || 'DISA');
+          logActivity(db, 'edit', 'sales_orders', p.order_id,
+            'Estado cambiado a ' + p.status + ' por DISA', session);
+          return { ok: true, message: 'Pedido #' + p.order_id + ' actualizado a "' + p.status + '".' };
+        }
+
+        case 'cancel_order': {
+          const p = action.params;
+          const order = db.prepare('SELECT status FROM sales_orders WHERE id=?').get(p.order_id);
+          if (!order) return { ok: false, message: 'Pedido no encontrado.' };
+          if (order.status === 'cancelado') return { ok: false, message: 'El pedido ya estaba cancelado.' };
+          db.prepare('UPDATE sales_orders SET status=? WHERE id=?').run('cancelado', p.order_id);
+          db.prepare(`
+            INSERT INTO order_status_history (order_id, status, comment, user_name)
+            VALUES (?, ?, ?, ?)
+          `).run(p.order_id, 'cancelado', p.reason || 'Cancelado por DISA', session?.userName || 'DISA');
+          logActivity(db, 'delete', 'sales_orders', p.order_id, 'Pedido cancelado por DISA', session);
+          return { ok: true, message: 'Pedido #' + p.order_id + ' cancelado.' };
+        }
+
+        case 'edit_order': {
+          const p = action.params;
+          const order = db.prepare('SELECT * FROM sales_orders WHERE id=?').get(p.order_id);
+          if (!order) return { ok: false, message: 'Pedido no encontrado.' };
+          db.prepare(`
+            UPDATE sales_orders SET
+              admin_notes=?, tracking_number=?
+            WHERE id=?
+          `).run(
+            p.admin_notes !== undefined ? p.admin_notes : order.admin_notes,
+            p.tracking_number !== undefined ? p.tracking_number : order.tracking_number,
+            p.order_id
+          );
+          logActivity(db, 'edit', 'sales_orders', p.order_id, 'Pedido editado por DISA', session);
+          return { ok: true, message: 'Pedido #' + p.order_id + ' actualizado.' };
+        }
+
+        case 'create_invoice_from_order': {
+          const p = action.params;
+          const order = db.prepare('SELECT * FROM sales_orders WHERE id=?').get(p.order_id);
+          if (!order) return { ok: false, message: 'Pedido #' + p.order_id + ' no encontrado.' };
+          const existing = db.prepare('SELECT id FROM invoices WHERE order_id=?').get(p.order_id);
+          if (existing) return { ok: false, message: 'El pedido #' + p.order_id + ' ya tiene una factura.' };
+
+          const cfg = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
+          const client = order.client_id
+            ? db.prepare('SELECT * FROM clients WHERE id=?').get(order.client_id)
+            : null;
+          const items = db.prepare('SELECT * FROM sales_items WHERE order_id=?').all(p.order_id);
+
+          const series = cfg.invoice_series || 'F';
+          const year = new Date().getFullYear();
+
+          const tx = db.transaction(() => {
+            db.prepare(`
+              INSERT INTO invoice_sequences (series, year, last_seq) VALUES (?, ?, 1)
+              ON CONFLICT(series, year) DO UPDATE SET last_seq = last_seq + 1
+            `).run(series, year);
+            const seq = db.prepare(
+              'SELECT last_seq FROM invoice_sequences WHERE series=? AND year=?'
+            ).get(series, year).last_seq;
+            const invoiceNumber = series + year + '-' + String(seq).padStart(4, '0');
+
+            const r = db.prepare(`
+              INSERT INTO invoices (
+                invoice_number, order_id, client_id, series, year, sequence, issue_date,
+                company_name, company_fiscal_id, company_address,
+                client_name, client_fiscal_id, client_address, client_email,
+                subtotal, tax_rate, tax_name, tax_amount, total,
+                currency, currency_symbol, document_name
+              ) VALUES (?, ?, ?, ?, ?, ?, date('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+              invoiceNumber, p.order_id, order.client_id || null,
+              series, year, seq,
+              cfg.company_name || 'Mi Empresa', cfg.fiscal_id || '', cfg.address || '',
+              client?.name || '', client?.fiscal_id || '', client?.address || '', client?.email || '',
+              order.subtotal || 0, cfg.tax_rate || 21, cfg.tax_name || 'IVA',
+              order.tax_amount || 0, order.total || 0,
+              cfg.currency || 'EUR', cfg.currency_symbol || '€', cfg.document_name || 'Factura'
+            );
+            const invoiceId = r.lastInsertRowid;
+
+            for (const item of items) {
+              db.prepare(`
+                INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price)
+                VALUES (?, ?, ?, ?, ?)
+              `).run(invoiceId, item.product_name, item.quantity, item.unit_price, item.total);
+            }
+
+            logActivity(db, 'create', 'invoices', invoiceId,
+              'Factura ' + invoiceNumber + ' generada por DISA', session);
+            return invoiceNumber;
+          });
+
+          const invoiceNumber = tx();
+          return { ok: true, message: 'Factura ' + invoiceNumber + ' generada para el pedido #' + p.order_id + '.' };
+        }
+
+        // ── Productos ─────────────────────────────────────────
+
+        case 'create_product': {
+          const p = action.params;
+          const r = db.prepare(`
+            INSERT INTO products (name, price, stock, status, type)
+            VALUES (?, ?, ?, 'active', 'physical')
+          `).run(p.name || '', Number(p.price) || 0, Number(p.stock) || 0);
+          logActivity(db, 'create', 'products', r.lastInsertRowid,
+            'Producto "' + p.name + '" creado por DISA', session);
+          return { ok: true, message: 'Producto "' + (p.name || 'nuevo') + '" creado.' };
+        }
+
+        case 'edit_product': {
+          const p = action.params;
+          const existing = db.prepare('SELECT * FROM products WHERE id=?').get(p.product_id);
+          if (!existing) return { ok: false, message: 'Producto no encontrado.' };
+          db.prepare(`
+            UPDATE products SET name=?, price=?, stock=? WHERE id=?
+          `).run(
+            p.name !== undefined ? p.name : existing.name,
+            p.price !== undefined ? Number(p.price) : existing.price,
+            p.stock !== undefined ? Number(p.stock) : existing.stock,
+            p.product_id
+          );
+          logActivity(db, 'edit', 'products', p.product_id, 'Producto editado por DISA', session);
+          return { ok: true, message: 'Producto "' + (p.name || existing.name) + '" actualizado.' };
+        }
+
+        case 'delete_product': {
+          const p = action.params;
+          const r = db.prepare("UPDATE products SET status='inactive' WHERE id=?").run(p.product_id);
+          if (r.changes === 0) return { ok: false, message: 'Producto no encontrado.' };
+          logActivity(db, 'delete', 'products', p.product_id, 'Producto eliminado por DISA', session);
+          return { ok: true, message: 'Producto #' + p.product_id + ' eliminado (desactivado).' };
+        }
+
+        case 'deactivate_product': {
+          const p = action.params;
+          const r = db.prepare("UPDATE products SET status='inactive' WHERE id=?").run(p.product_id);
+          if (r.changes === 0) return { ok: false, message: 'Producto no encontrado.' };
+          return { ok: true, message: 'Producto #' + p.product_id + ' desactivado.' };
+        }
+
+        case 'activate_product': {
+          const p = action.params;
+          const r = db.prepare("UPDATE products SET status='active' WHERE id=?").run(p.product_id);
+          if (r.changes === 0) return { ok: false, message: 'Producto no encontrado.' };
+          return { ok: true, message: 'Producto #' + p.product_id + ' activado.' };
+        }
+
+        case 'create_variant': {
+          const p = action.params;
+          const product = db.prepare('SELECT id, name FROM products WHERE id=?').get(p.product_id);
+          if (!product) return { ok: false, message: 'Producto no encontrado.' };
+          const r = db.prepare(`
+            INSERT INTO product_variants
+              (product_id, name, option1_name, option1_value, sku, price, stock)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            p.product_id,
+            p.name || '',
+            p.option1_name || '',
+            p.option1_value || '',
+            p.sku || '',
+            p.price != null ? Number(p.price) : null,
+            Number(p.stock) || 0
+          );
+          logActivity(db, 'create', 'product_variants', r.lastInsertRowid,
+            'Variante creada por DISA en ' + product.name, session);
+          return { ok: true, message: 'Variante "' + (p.name || 'nueva') + '" creada en ' + product.name + '.' };
+        }
+
+        case 'edit_variant': {
+          const p = action.params;
+          const variant = db.prepare('SELECT * FROM product_variants WHERE id=?').get(p.variant_id);
+          if (!variant) return { ok: false, message: 'Variante no encontrada.' };
+          db.prepare(`
+            UPDATE product_variants SET name=?, price=?, stock=?, sku=? WHERE id=?
+          `).run(
+            p.name !== undefined ? p.name : variant.name,
+            p.price !== undefined ? Number(p.price) : variant.price,
+            p.stock !== undefined ? Number(p.stock) : variant.stock,
+            p.sku !== undefined ? p.sku : variant.sku,
+            p.variant_id
+          );
+          logActivity(db, 'edit', 'product_variants', p.variant_id, 'Variante editada por DISA', session);
+          return { ok: true, message: 'Variante #' + p.variant_id + ' actualizada.' };
+        }
+
+        case 'delete_variant': {
+          const p = action.params;
+          const r = db.prepare('DELETE FROM product_variants WHERE id=?').run(p.variant_id);
+          if (r.changes === 0) return { ok: false, message: 'Variante no encontrada.' };
+          logActivity(db, 'delete', 'product_variants', p.variant_id, 'Variante eliminada por DISA', session);
+          return { ok: true, message: 'Variante #' + p.variant_id + ' eliminada.' };
+        }
+
+        // ── Inventario ────────────────────────────────────────
+
+        case 'adjust_stock': {
+          const p = action.params;
+          const prod = db.prepare('SELECT name FROM products WHERE id=?').get(p.product_id);
+          if (!prod) return { ok: false, message: 'Producto no encontrado.' };
+          db.prepare('UPDATE products SET stock = stock + ? WHERE id=?').run(p.quantity, p.product_id);
+          db.prepare(`
+            INSERT INTO inventory_movements (product_id, type, quantity, reason)
+            VALUES (?, ?, ?, ?)
+          `).run(p.product_id, p.quantity > 0 ? 'in' : 'out',
+            Math.abs(p.quantity), p.reason || 'Ajuste por DISA');
+          logActivity(db, 'edit', 'products', p.product_id,
+            'Stock ajustado ' + (p.quantity > 0 ? '+' : '') + p.quantity + ' por DISA', session);
+          return { ok: true, message: 'Stock de "' + prod.name + '" ajustado en ' + p.quantity + ' unidades.' };
+        }
+
+        case 'reset_stock': {
+          const p = action.params;
+          const product = db.prepare('SELECT name, stock FROM products WHERE id=?').get(p.product_id);
+          if (!product) return { ok: false, message: 'Producto no encontrado.' };
+          db.prepare('UPDATE products SET stock=0 WHERE id=?').run(p.product_id);
+          if (product.stock !== 0) {
+            db.prepare(`
+              INSERT INTO inventory_movements (product_id, type, quantity, reason)
+              VALUES (?, 'adjust', ?, ?)
+            `).run(p.product_id, Math.abs(product.stock), p.reason || 'Reset por DISA');
+          }
+          logActivity(db, 'edit', 'products', p.product_id, 'Stock reseteado a 0 por DISA', session);
+          return { ok: true, message: 'Stock de "' + product.name + '" puesto a 0.' };
+        }
+
+        // ── Clientes ──────────────────────────────────────────
+
+        case 'create_client': {
+          const p = action.params;
+          const r = db.prepare(`
+            INSERT INTO clients (name, email, phone, address, city, fiscal_id, notes, active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+          `).run(
+            p.name || '', p.email || '', p.phone || '',
+            p.address || '', p.city || '', p.fiscal_id || '', p.notes || ''
+          );
+          logActivity(db, 'create', 'clients', r.lastInsertRowid,
+            'Cliente "' + p.name + '" creado por DISA', session);
+          return { ok: true, message: 'Cliente "' + (p.name || 'nuevo') + '" creado.' };
+        }
+
+        case 'edit_client': {
+          const p = action.params;
+          const client = db.prepare('SELECT * FROM clients WHERE id=?').get(p.client_id);
+          if (!client) return { ok: false, message: 'Cliente no encontrado.' };
+          db.prepare(`
+            UPDATE clients SET name=?, email=?, phone=?, address=?, city=?, fiscal_id=?, notes=?
+            WHERE id=?
+          `).run(
+            p.name !== undefined ? p.name : client.name,
+            p.email !== undefined ? p.email : client.email,
+            p.phone !== undefined ? p.phone : client.phone,
+            p.address !== undefined ? p.address : client.address,
+            p.city !== undefined ? p.city : client.city,
+            p.fiscal_id !== undefined ? p.fiscal_id : client.fiscal_id,
+            p.notes !== undefined ? p.notes : client.notes,
+            p.client_id
+          );
+          logActivity(db, 'edit', 'clients', p.client_id, 'Cliente editado por DISA', session);
+          return { ok: true, message: 'Cliente #' + p.client_id + ' actualizado.' };
+        }
+
+        case 'deactivate_client': {
+          const p = action.params;
+          const r = db.prepare('UPDATE clients SET active=0 WHERE id=?').run(p.client_id);
+          if (r.changes === 0) return { ok: false, message: 'Cliente no encontrado.' };
+          return { ok: true, message: 'Cliente #' + p.client_id + ' desactivado.' };
+        }
+
+        case 'activate_client': {
+          const p = action.params;
+          const r = db.prepare('UPDATE clients SET active=1 WHERE id=?').run(p.client_id);
+          if (r.changes === 0) return { ok: false, message: 'Cliente no encontrado.' };
+          return { ok: true, message: 'Cliente #' + p.client_id + ' activado.' };
+        }
+
+        // ── Proveedores ───────────────────────────────────────
+
+        case 'create_supplier': {
+          const p = action.params;
+          const r = db.prepare(`
+            INSERT INTO suppliers (name, contact, email, phone, notes)
+            VALUES (?, ?, ?, ?, ?)
+          `).run(p.name || '', p.contact || '', p.email || '', p.phone || '', p.notes || '');
+          logActivity(db, 'create', 'suppliers', r.lastInsertRowid,
+            'Proveedor "' + p.name + '" creado por DISA', session);
+          return { ok: true, message: 'Proveedor "' + (p.name || 'nuevo') + '" creado.' };
+        }
+
+        case 'edit_supplier': {
+          const p = action.params;
+          const supplier = db.prepare('SELECT * FROM suppliers WHERE id=?').get(p.supplier_id);
+          if (!supplier) return { ok: false, message: 'Proveedor no encontrado.' };
+          db.prepare(`
+            UPDATE suppliers SET name=?, contact=?, email=?, phone=?, notes=? WHERE id=?
+          `).run(
+            p.name !== undefined ? p.name : supplier.name,
+            p.contact !== undefined ? p.contact : supplier.contact,
+            p.email !== undefined ? p.email : supplier.email,
+            p.phone !== undefined ? p.phone : supplier.phone,
+            p.notes !== undefined ? p.notes : supplier.notes,
+            p.supplier_id
+          );
+          logActivity(db, 'edit', 'suppliers', p.supplier_id, 'Proveedor editado por DISA', session);
+          return { ok: true, message: 'Proveedor #' + p.supplier_id + ' actualizado.' };
+        }
+
+        case 'delete_supplier': {
+          const p = action.params;
+          const purchases = db.prepare(
+            'SELECT COUNT(*) as c FROM purchases WHERE supplier_id=?'
+          ).get(p.supplier_id);
+          if (purchases?.c > 0) return {
+            ok: false,
+            message: 'No se puede eliminar: el proveedor tiene ' + purchases.c + ' compras asociadas.'
+          };
+          const r = db.prepare('DELETE FROM suppliers WHERE id=?').run(p.supplier_id);
+          if (r.changes === 0) return { ok: false, message: 'Proveedor no encontrado.' };
+          logActivity(db, 'delete', 'suppliers', p.supplier_id, 'Proveedor eliminado por DISA', session);
+          return { ok: true, message: 'Proveedor #' + p.supplier_id + ' eliminado.' };
+        }
+
+        // ── Perfil DISA ───────────────────────────────────────
+
+        case 'update_profile': {
+          const p = action.params;
+          updateProfile(db, { [p.field]: p.value });
+          return { ok: true, message: 'He actualizado mi conocimiento sobre tu negocio.' };
+        }
+
+        // ── Configuración ─────────────────────────────────────
+
+        case 'update_company_config': {
+          const p = action.params;
+          const allowed = [
+            'company_name', 'fiscal_id', 'tax_rate', 'address', 'phone',
+            'email', 'website', 'country', 'currency', 'currency_symbol',
+            'tax_name', 'invoice_series'
+          ];
+          const updates = {};
+          for (const key of allowed) {
+            if (p[key] !== undefined) updates[key] = p[key];
+          }
+          if (Object.keys(updates).length === 0) {
+            return { ok: false, message: 'No se especificó ningún campo a actualizar.' };
+          }
+          const fields = Object.keys(updates).map(k => k + '=?').join(', ');
+          db.prepare('UPDATE company_config SET ' + fields + ' WHERE id=1')
+            .run(...Object.values(updates));
+          logActivity(db, 'edit', 'company_config', 1,
+            'Config actualizada por DISA: ' + Object.keys(updates).join(', '), session);
+          return { ok: true, message: 'Configuración actualizada: ' + Object.keys(updates).join(', ') + '.' };
+        }
+
+        case 'create_category': {
+          const p = action.params;
+          if (!p?.name) return { ok: false, message: 'Se requiere el nombre de la categoría.' };
+          const existing = db.prepare('SELECT id FROM categories WHERE name=?').get(p.name);
+          if (existing) return { ok: false, message: 'Ya existe una categoría con ese nombre.' };
+          const res = db.prepare(
+            'INSERT INTO categories (name, description) VALUES (?,?)'
+          ).run(p.name, p.description || '');
+          logActivity(db, 'create', 'category', res.lastInsertRowid,
+            'Categoría creada por DISA: ' + p.name, session);
+          return { ok: true, message: 'Categoría "' + p.name + '" creada correctamente (id: ' + res.lastInsertRowid + ').' };
+        }
+
+        case 'edit_category': {
+          const p = action.params;
+          if (!p?.id) return { ok: false, message: 'Se requiere el id de la categoría.' };
+          const updates = {};
+          if (p.name !== undefined) updates.name = p.name;
+          if (p.description !== undefined) updates.description = p.description;
+          if (Object.keys(updates).length === 0) return { ok: false, message: 'No se especificó ningún campo a actualizar.' };
+          const fields = Object.keys(updates).map(k => k + '=?').join(', ');
+          db.prepare('UPDATE categories SET ' + fields + ' WHERE id=?')
+            .run(...Object.values(updates), p.id);
+          logActivity(db, 'edit', 'category', p.id,
+            'Categoría editada por DISA', session);
+          return { ok: true, message: 'Categoría actualizada.' };
+        }
+
+        case 'delete_category': {
+          const p = action.params;
+          if (!p?.id) return { ok: false, message: 'Se requiere el id de la categoría.' };
+          const cat = db.prepare('SELECT name FROM categories WHERE id=?').get(p.id);
+          if (!cat) return { ok: false, message: 'Categoría no encontrada.' };
+          const inUse = db.prepare('SELECT COUNT(*) as c FROM products WHERE category_id=?').get(p.id);
+          if (inUse.c > 0) return { ok: false, message: 'No se puede eliminar "' + cat.name + '" porque tiene ' + inUse.c + ' productos asignados.' };
+          db.prepare('DELETE FROM categories WHERE id=?').run(p.id);
+          logActivity(db, 'delete', 'category', p.id,
+            'Categoría eliminada por DISA: ' + cat.name, session);
+          return { ok: true, message: 'Categoría "' + cat.name + '" eliminada.' };
+        }
+
+        // ── Seguridad ───────────────────────────────────────────
+
+        case 'check_2fa_status': {
+          const p = action.params || {};
+          let targetUser;
+          if (p.user_id) {
+            if (session.role !== 'owner' && session.role !== 'admin')
+              return { ok: false, message: 'Solo administradores pueden consultar otros usuarios.' };
+            targetUser = db.prepare('SELECT name, email, totp_enabled FROM admin_users WHERE id=?').get(p.user_id);
+            if (!targetUser) return { ok: false, message: 'Usuario no encontrado.' };
+          } else {
+            targetUser = db.prepare('SELECT name, email, totp_enabled FROM admin_users WHERE id=?').get(session.userId);
+          }
+          const estado = targetUser.totp_enabled ? 'ACTIVADA' : 'DESACTIVADA';
+          const msg = p.user_id
+            ? `El usuario "${targetUser.name}" (${targetUser.email}) tiene 2FA ${estado}.`
+            : `Tu cuenta tiene 2FA ${estado}.`;
+          return { ok: true, message: msg };
+        }
+
+        case 'disable_2fa_user': {
+          const p = action.params || {};
+          let targetId = session.userId;
+          let targetName = session.userName;
+          if (p.user_id && p.user_id !== session.userId) {
+            if (session.role !== 'owner' && session.role !== 'admin')
+              return { ok: false, message: 'Solo administradores pueden modificar otros usuarios.' };
+            const u = db.prepare('SELECT name FROM admin_users WHERE id=?').get(p.user_id);
+            if (!u) return { ok: false, message: 'Usuario no encontrado.' };
+            targetId = p.user_id;
+            targetName = u.name;
+          }
+          const current = db.prepare('SELECT totp_enabled FROM admin_users WHERE id=?').get(targetId);
+          if (!current?.totp_enabled)
+            return { ok: false, message: `El usuario "${targetName}" no tiene 2FA activo.` };
+          db.prepare('UPDATE admin_users SET totp_secret=NULL, totp_enabled=0 WHERE id=?').run(targetId);
+          logActivity(db, 'security', 'admin_users', targetId, `2FA desactivado por DISA`, session);
+          return { ok: true, message: `2FA desactivado para "${targetName}". Ya puede acceder solo con contraseña.` };
+        }
+
+        case 'list_users_security': {
+          if (session.role !== 'owner' && session.role !== 'admin')
+            return { ok: false, message: 'Solo administradores pueden ver esta información.' };
+          const users = db.prepare(
+            'SELECT id, name, email, role, totp_enabled, active FROM admin_users ORDER BY name'
+          ).all();
+          const maskEmail = e => {
+            if (!e || !e.includes('@')) return '***';
+            const [local, domain] = e.split('@');
+            return local.slice(0, 3).padEnd(local.length, '*') + '@' + domain;
+          };
+          const resumen = users.map(u =>
+            `${u.name} (${maskEmail(u.email)}) — rol: ${u.role} — 2FA: ${u.totp_enabled ? 'SI' : 'NO'} — activo: ${u.active ? 'SI' : 'NO'}`
+          ).join('\n');
+          return { ok: true, message: `Usuarios del sistema:\n${resumen}` };
+        }
+
+        default:
+          return { ok: false, message: 'Accion no reconocida: ' + action.type };
+      }
+    } catch (err) {
+      console.error('[DISA] executeAction error:', err);
+      return { ok: false, message: 'Error al ejecutar la accion: ' + err.message };
+    }
+  }
+
+  function buildBusinessContext(db, currentPage = '', session = null) {
+    try {
+      const _dbCheck = db.prepare("SELECT name FROM sqlite_master LIMIT 1").get();
+      console.log('[DISA] Usando BD:', _dbCheck ? 'OK' : 'VACIA');
+      const _products = db.prepare('SELECT COUNT(*) as c FROM products').get();
+      console.log('[DISA] Productos encontrados:', _products?.c ?? 0);
+      const _orders = db.prepare("SELECT COUNT(*) as c FROM sales_orders WHERE status='completado'").get();
+      console.log('[DISA] Pedidos completados:', _orders?.c ?? 0);
+
+      const _userPerms = session ? (() => {
+        try {
+          return db.prepare(`SELECT p.module, p.action FROM user_permissions up JOIN permissions p ON up.permission_id=p.id WHERE up.admin_user_id=?`).all(session.userId).map(p => p.module+'.'+p.action);
+        } catch { return []; }
+      })() : [];
+      const userContext = session
+        ? [
+            'USUARIO ACTUAL:',
+            '- Nombre: ' + (session.userName || 'desconocido'),
+            '- Rol: ' + (session.role || 'sin rol'),
+            '- Puede modificar datos: ' + (isAdminUser(session) ? 'SI' : 'NO'),
+            '- Permisos: ' + (_userPerms.length ? _userPerms.join(', ') : 'ninguno especifico (usa rol base)'),
+          ].join('\n')
+        : 'USUARIO ACTUAL:\n- Rol: desconocido\n- Puede modificar datos: NO';
+
+      const profile = getProfile(db);
+      const profileContext = profile.business_type ? [
+        'PERFIL DEL NEGOCIO:',
+        '- Tipo: ' + profile.business_type,
+        '- Sector: ' + profile.sector,
+        '- Descripcion: ' + profile.description,
+        '- Objetivos: ' + profile.goals,
+        '- Preferencias: ' + profile.preferences,
+        '- Decisiones tomadas: ' + profile.decisions,
+      ].join('\n') : 'PERFIL: Sin configurar todavia.';
+
+      const cfg = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
+      const sym = cfg.currency_symbol || '€';
+
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+
+      const sales = db.prepare(`
+        SELECT COUNT(*) as orders,
+               COALESCE(SUM(subtotal),0) as revenue,
+               COALESCE(SUM(tax_amount),0) as iva,
+               COALESCE(SUM(total),0) as gross_revenue
+        FROM sales_orders
+        WHERE status NOT IN ('cancelado','reembolsado','borrador')
+        AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+      `).get() || {};
+
+      const pending = db.prepare(`
+        SELECT COUNT(*) as count FROM sales_orders
+        WHERE status IN ('en_preparacion','enviado')
+      `).get() || {};
+
+      const lowStock = db.prepare(`
+        SELECT name, stock FROM products
+        WHERE status='active' AND stock <= 5 ORDER BY stock ASC LIMIT 5
+      `).all() || [];
+
+      let inactiveClients = { count: 0 };
+      try {
+        inactiveClients = db.prepare(`
+          SELECT COUNT(*) as count FROM clients c
+          WHERE c.active = 1
+          AND NOT EXISTS (
+            SELECT 1 FROM sales_orders so
+            WHERE so.client_id = c.id
+            AND so.created_at >= date('now', '-30 days')
+            AND so.status = 'completado'
+          )
+        `).get() || {};
+      } catch {}
+
+      const topProducts = db.prepare(`
+        SELECT p.name, SUM(si.quantity) as sold
+        FROM sales_items si
+        JOIN products p ON p.id = si.product_id
+        JOIN sales_orders so ON so.id = si.order_id
+        WHERE so.status NOT IN ('cancelado','reembolsado','borrador')
+        AND so.created_at >= ?
+        GROUP BY p.id ORDER BY sold DESC LIMIT 5
+      `).all(monthStart) || [];
+
+      const topProductsAllTime = db.prepare(`
+        SELECT p.name, SUM(si.quantity) as sold, ROUND(SUM(si.total),2) as revenue
+        FROM sales_items si
+        JOIN products p ON p.id = si.product_id
+        JOIN sales_orders so ON so.id = si.order_id
+        WHERE so.status NOT IN ('cancelado','reembolsado','borrador')
+        GROUP BY p.id ORDER BY sold DESC LIMIT 5
+      `).all() || [];
+
+      const lines = [
+        userContext,
+        '',
+        profileContext,
+        '',
+        'Negocio: ' + (cfg.company_name || 'Sin nombre'),
+        'Pais: ' + (cfg.country || 'ES'),
+        'Moneda: ' + sym,
+        '',
+        'VENTAS ESTE MES (' + (sales.orders || 0) + ' pedidos):',
+        '- Venta neta (sin IVA): ' + sym + Number(sales.revenue || 0).toFixed(2),
+        '- IVA recaudado: ' + sym + Number(sales.iva || 0).toFixed(2),
+        '- Total cobrado (con IVA): ' + sym + Number(sales.gross_revenue || 0).toFixed(2),
+        '- Pedidos pendientes de entrega: ' + (pending.count || 0),
+        '',
+        'ATENCION:',
+        '- Productos con stock bajo (<=5 unidades): ' +
+          (lowStock.length > 0
+            ? lowStock.map(p => p.name + ' (' + p.stock + ')').join(', ')
+            : 'ninguno'),
+        '- Clientes sin compra en >30 dias: ' + (inactiveClients.count || 0),
+        '',
+        'PRODUCTOS MAS VENDIDOS ESTE MES:',
+        topProducts.length > 0
+          ? topProducts.map((p, i) => (i + 1) + '. ' + p.name + ' (' + p.sold + ' uds)').join('\n')
+          : 'Sin ventas completadas este mes todavia',
+        '',
+        'PRODUCTOS MAS VENDIDOS (historico total):',
+        topProductsAllTime.length > 0
+          ? topProductsAllTime.map((p, i) => (i + 1) + '. ' + p.name + ' (' + p.sold + ' uds, ' + sym + p.revenue + ')').join('\n')
+          : 'Sin datos',
+      ];
+
+      if (currentPage === 'products') {
+        const recent = db.prepare(
+          "SELECT id, name, price, stock FROM products WHERE status='active' ORDER BY id DESC LIMIT 5"
+        ).all();
+        lines.push('', 'PAGINA ACTUAL: Productos');
+        lines.push('Productos recientes (id, nombre, precio, stock):');
+        lines.push(recent.map(p => '#' + p.id + ' ' + p.name + ' ' + sym + p.price + ' stock:' + p.stock).join(', ') || 'ninguno');
+      } else if (currentPage === 'orders') {
+        const recentOrders = db.prepare(
+          "SELECT id, order_number, total, status FROM sales_orders ORDER BY id DESC LIMIT 5"
+        ).all();
+        lines.push('', 'PAGINA ACTUAL: Pedidos');
+        lines.push('Pedidos recientes: ' + recentOrders.map(
+          o => '#' + o.id + ' ' + o.order_number + ' ' + sym + o.total + ' [' + o.status + ']'
+        ).join(', '));
+      } else if (currentPage === 'inventory') {
+        const lowStockAll = db.prepare(
+          "SELECT id, name, stock FROM products WHERE stock <= 10 AND status='active' ORDER BY stock ASC LIMIT 10"
+        ).all();
+        lines.push('', 'PAGINA ACTUAL: Inventario');
+        lines.push('Productos stock bajo (id, nombre, stock):');
+        lines.push(lowStockAll.map(p => '#' + p.id + ' ' + p.name + ' (' + p.stock + ')').join(', ') || 'ninguno');
+      } else if (currentPage === 'clients') {
+        const totalClients = db.prepare('SELECT COUNT(*) as c FROM clients WHERE active=1').get();
+        const recentClients = db.prepare(
+          'SELECT id, name, email FROM clients WHERE active=1 ORDER BY id DESC LIMIT 5'
+        ).all();
+        lines.push('', 'PAGINA ACTUAL: Clientes');
+        lines.push('Total clientes activos: ' + (totalClients?.c || 0));
+        lines.push('Clientes recientes: ' + recentClients.map(
+          c => '#' + c.id + ' ' + c.name + (c.email ? ' <' + c.email + '>' : '')
+        ).join(', '));
+      } else if (currentPage === 'suppliers') {
+        const suppliers = db.prepare(
+          'SELECT id, name, email, phone FROM suppliers ORDER BY id DESC LIMIT 8'
+        ).all();
+        lines.push('', 'PAGINA ACTUAL: Proveedores');
+        lines.push('Proveedores (id, nombre):');
+        lines.push(suppliers.map(s => '#' + s.id + ' ' + s.name).join(', ') || 'ninguno');
+      } else if (currentPage === 'analytics') {
+        const last3months = db.prepare(`
+          SELECT strftime('%Y-%m', created_at) as month, COALESCE(SUM(total),0) as revenue, COUNT(*) as orders
+          FROM sales_orders WHERE status='completado'
+          AND created_at >= date('now', '-90 days')
+          GROUP BY month ORDER BY month DESC
+        `).all();
+        lines.push('', 'PAGINA ACTUAL: Analitica');
+        lines.push('Ventas ultimos 3 meses: ' + (last3months.map(
+          m => m.month + ': ' + sym + Number(m.revenue).toFixed(2) + ' (' + m.orders + ' ped.)'
+        ).join(' | ') || 'sin datos'));
+      } else if (currentPage === 'dashboard' || currentPage === 'admin') {
+        lines.push('', 'PAGINA ACTUAL: Dashboard principal');
+      } else if (currentPage === 'discounts') {
+        const activeDisco = db.prepare(
+          "SELECT code, type, value, uses_count FROM discount_codes WHERE active=1 ORDER BY id DESC LIMIT 5"
+        ).all();
+        lines.push('', 'PAGINA ACTUAL: Descuentos');
+        lines.push('Descuentos activos: ' + (activeDisco.map(
+          d => d.code + ' (' + d.type + ':' + d.value + ', usos:' + d.uses_count + ')'
+        ).join(', ') || 'ninguno'));
+      } else if (currentPage === 'invoices') {
+        const recentInv = db.prepare(
+          "SELECT invoice_number, total, status FROM invoices ORDER BY id DESC LIMIT 5"
+        ).all();
+        lines.push('', 'PAGINA ACTUAL: Facturas');
+        lines.push('Facturas recientes: ' + (recentInv.map(
+          i => i.invoice_number + ' ' + sym + i.total + ' [' + i.status + ']'
+        ).join(', ') || 'ninguna'));
+      }
+
+      return lines.join('\n');
+    } catch (err) {
+      console.error('[DISA] buildBusinessContext ERROR:', err.message, err.stack?.split('\n')[1]);
+      return 'No hay datos disponibles aun.';
+    }
+  }
+
+  // ── Summary (métricas + alertas sin llamada a Claude) ─────
+
+  router.get('/summary', adminAuth(db), c => {
+    try {
+      const cfg = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get() || {};
+      const sym = cfg.currency_symbol || '€';
+
+      const sales = db.prepare(`
+        SELECT COUNT(*) as orders,
+               COALESCE(SUM(subtotal),0) as revenue
+        FROM sales_orders
+        WHERE status NOT IN ('cancelado','reembolsado','borrador')
+        AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+      `).get() || {};
+
+      const pending = db.prepare(`
+        SELECT COUNT(*) as count FROM sales_orders
+        WHERE status IN ('en_preparacion','enviado')
+      `).get() || {};
+
+      const alerts = [];
+
+      const lowStock = db.prepare(`
+        SELECT name, stock FROM products
+        WHERE status='active' AND stock <= 5
+        ORDER BY stock ASC LIMIT 5
+      `).all();
+      if (lowStock.length > 0) {
+        const critical = lowStock.filter(p => p.stock === 0).length;
+        alerts.push({
+          type: critical > 0 ? 'danger' : 'warn',
+          title: 'Stock bajo',
+          body: lowStock.map(p => p.name + ' (' + p.stock + ' uds)').join(', '),
+          href: '/admin/inventory',
+          action: 'Ver inventario'
+        });
+      }
+
+      const stale = db.prepare(`
+        SELECT COUNT(*) as count FROM sales_orders
+        WHERE status='en_preparacion'
+        AND created_at < date('now', '-3 days')
+      `).get() || {};
+      if ((stale.count || 0) > 0) {
+        alerts.push({
+          type: 'warn',
+          title: 'Pedidos bloqueados',
+          body: stale.count + ' pedido' + (stale.count > 1 ? 's llevan' : ' lleva') + ' más de 3 días sin enviar',
+          href: '/admin/orders',
+          action: 'Ver pedidos'
+        });
+      }
+
+      let inactiveCount = 0;
+      try {
+        const row = db.prepare(`
+          SELECT COUNT(*) as count FROM clients
+          WHERE active=1
+          AND NOT EXISTS (
+            SELECT 1 FROM sales_orders so
+            WHERE so.client_id = clients.id
+            AND so.created_at >= date('now', '-30 days')
+            AND so.status = 'completado'
+          )
+        `).get();
+        inactiveCount = row?.count || 0;
+      } catch {}
+      if (inactiveCount > 0) {
+        alerts.push({
+          type: 'info',
+          title: 'Clientes inactivos',
+          body: inactiveCount + ' cliente' + (inactiveCount > 1 ? 's' : '') + ' sin compra en 30 días',
+          href: '/admin/clients',
+          action: 'Ver clientes'
+        });
+      }
+
+      const noDesc = db.prepare(`
+        SELECT COUNT(*) as count FROM products
+        WHERE status='active' AND (description IS NULL OR description='')
+      `).get() || {};
+      if ((noDesc.count || 0) > 0) {
+        alerts.push({
+          type: 'info',
+          title: 'Sin descripción',
+          body: noDesc.count + ' producto' + (noDesc.count > 1 ? 's' : '') + ' sin descripción',
+          href: '/admin/products',
+          action: 'Ver productos'
+        });
+      }
+
+      return c.json({
+        metrics: {
+          revenue: Number(sales.revenue || 0),
+          orders: sales.orders || 0,
+          pending: pending.count || 0,
+          currency: sym
+        },
+        alerts
+      });
+    } catch (err) {
+      console.error('[DISA] summary error:', err);
+      return c.json({ metrics: { revenue: 0, orders: 0, pending: 0, currency: '€' }, alerts: [] });
+    }
+  });
+
+  // ── Vista ─────────────────────────────────────────────────
+
+  router.get('/', adminAuth(db), c => {
+    const session = c.get('session');
+    const prefill = c.req.query('q') || '';
+    const usage = getUsage(db);
+    const limit = 50;
+    const tenantSlugView = c.get('tenant')?.slug;
+    const isDevView = process.env.NODE_ENV !== 'production' || tenantSlugView === 'dev';
+    const thread = getOrCreateActiveThread(db, session?.userId);
+    const conv = getConversationForThread(db, thread.id);
+    const messages = JSON.parse(conv.messages || '[]');
+    const csrf = getCsrfToken(c);
+
+    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const renderMsgHtml = m => {
+      const isUser = m.role === 'user';
+      return '<div style="display:flex;justify-content:' + (isUser ? 'flex-end' : 'flex-start') + '">'
+        + '<div style="max-width:80%;padding:10px 14px;border-radius:12px;font-size:13px;line-height:1.6;'
+        + (isUser
+          ? 'background:#0D9488;color:white;border-bottom-right-radius:3px'
+          : 'background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);color:#e2e8f0;border-bottom-left-radius:3px')
+        + '">' + esc(m.content).replace(/\\n/g, '<br>') + '</div></div>';
+    };
+
+    const usagePct = Math.min(100, (usage / limit) * 100).toFixed(1);
+    const threadTitle = esc(thread.title || 'Nueva conversación');
+    const csrfJson = JSON.stringify(csrf);
+    const prefillCode = prefill
+      ? 'var inp=document.getElementById("msgInput");if(inp){inp.value=' + JSON.stringify(prefill) + ';inp.focus();}'
+      : '';
+
+    const emptyState = '<div id="emptyState" style="text-align:center;padding:40px 24px;color:#475569">'
+      + '<div style="font-size:30px;margin-bottom:10px;color:#0D9488;opacity:.5">✦</div>'
+      + '<div style="font-size:15px;font-weight:600;color:#64748b;margin-bottom:6px">Hola, soy DISA</div>'
+      + '<div style="font-size:13px">Pregúntame lo que necesites sobre tu negocio</div>'
+      + '</div>';
+
+    const inputHTML = '<div style="display:flex;gap:8px">'
+      + '<textarea id="msgInput" rows="2" placeholder="Escribe tu mensaje..." '
+      + 'style="flex:1;padding:10px 14px;border:1px solid rgba(255,255,255,0.09);border-radius:10px;'
+      + 'font-size:13px;font-family:inherit;resize:none;outline:none;background:rgba(255,255,255,0.04);'
+      + 'color:#f1f5f9;transition:border-color .15s;scrollbar-width:thin" '
+      + 'onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();disaSend()}" '
+      + 'onfocus="this.style.borderColor=\'#0D9488\'" onblur="this.style.borderColor=\'rgba(255,255,255,0.09)\'"></textarea>'
+      + '<button onclick="disaSend()" style="background:#0D9488;color:white;border:none;border-radius:10px;'
+      + 'padding:0 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;align-self:stretch;'
+      + 'white-space:nowrap">Enviar</button>'
+      + '</div>'
+      + '<div style="font-size:11px;color:#475569;margin-top:6px">Shift+Enter para nueva línea</div>';
+
+    const limitHTML = '<div style="background:rgba(239,68,68,0.08);color:#fca5a5;padding:10px 14px;'
+      + 'border-radius:8px;font-size:13px;text-align:center;border:1px solid rgba(239,68,68,0.15)">'
+      + 'Límite de ' + limit + ' mensajes alcanzado este mes.</div>';
+
+    const body = `
+<style>
+  .dt-panel{width:240px;background:rgba(5,8,15,0.5);border-right:1px solid rgba(255,255,255,0.06);
+    display:flex;flex-direction:column;flex-shrink:0;transition:transform .22s}
+  .dt-item{position:relative;padding:8px 10px;border-radius:7px;cursor:pointer;margin:0 4px;
+    border:1px solid transparent;transition:background .12s}
+  .dt-item:hover{background:rgba(255,255,255,0.04)}
+  .dt-item.dt-active{background:rgba(13,148,136,0.12);border-color:rgba(13,148,136,0.25)}
+  .dt-title{font-size:12px;font-weight:500;color:#c8d6e5;white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis;padding-right:20px}
+  .dt-item.dt-active .dt-title{color:#2dd4bf}
+  .dt-meta{font-size:10px;color:rgba(255,255,255,0.3);margin-top:1px}
+  .dt-del{position:absolute;top:50%;right:6px;transform:translateY(-50%);opacity:0;background:none;
+    border:none;cursor:pointer;color:rgba(255,255,255,0.35);padding:3px;border-radius:4px;
+    line-height:1;transition:all .12s;display:flex;align-items:center;justify-content:center}
+  .dt-item:hover .dt-del{opacity:1}
+  .dt-del:hover{color:#ef4444;background:rgba(239,68,68,0.1)}
+  @keyframes tdot{0%,60%,100%{opacity:.25;transform:scale(.8)}30%{opacity:1;transform:scale(1.1)}}
+  @media(max-width:900px){
+    .dt-panel{position:fixed;top:0;left:240px;height:100vh;z-index:95;
+      transform:translateX(-101%);box-shadow:4px 0 20px rgba(0,0,0,0.4)}
+    .dt-panel.dt-open{transform:translateX(0)}
+    #dtMobileBtn{display:flex!important}
+  }
+</style>
+
+<div style="display:flex;height:calc(100vh - 52px);margin:-1.5rem;overflow:hidden">
+
+  <div class="dt-panel" id="dtPanel">
+    <div style="padding:12px 10px;border-bottom:1px solid rgba(255,255,255,0.06);flex-shrink:0">
+      <button onclick="dtNewThread()"
+        style="width:100%;background:#0D9488;color:#fff;border:none;border-radius:8px;padding:8px;
+               font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;
+               align-items:center;justify-content:center;gap:5px;transition:opacity .15s">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        Nueva conversación
+      </button>
+    </div>
+    <div id="dtList" style="flex:1;overflow-y:auto;padding:6px 4px;display:flex;flex-direction:column;
+      gap:1px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.05) transparent"></div>
+  </div>
+
+  <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;padding:1rem 1.5rem">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-shrink:0">
+      <button id="dtMobileBtn" onclick="dtTogglePanel()"
+        style="display:none;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);
+               border-radius:7px;padding:5px 8px;cursor:pointer;color:#94a3b8;align-items:center;
+               gap:5px;font-size:12px;font-family:inherit">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+      <div style="flex:1;min-width:0">
+        <div id="dtCurrentTitle" style="font-size:13px;font-weight:600;color:#f1f5f9;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${threadTitle}</div>
+      </div>
+      <span style="font-size:11px;color:#475569;flex-shrink:0">${usage}/${limit}</span>
+    </div>
+
+    <div style="height:2px;background:rgba(255,255,255,0.05);margin-bottom:12px;flex-shrink:0;
+      border-radius:2px;overflow:hidden">
+      <div style="height:100%;width:${usagePct}%;background:#0D9488;transition:width .3s"></div>
+    </div>
+
+    <div id="chatArea" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;
+      padding:0 2px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.06) transparent">
+      ${messages.length === 0 ? emptyState : messages.map(renderMsgHtml).join('')}
+      <div id="typingIndicator" style="display:none">
+        <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.07);
+          padding:10px 14px;border-radius:12px;border-bottom-left-radius:3px;
+          display:inline-flex;gap:4px;align-items:center">
+          <span style="width:5px;height:5px;border-radius:50%;background:#94a3b8;animation:tdot 1.4s infinite"></span>
+          <span style="width:5px;height:5px;border-radius:50%;background:#94a3b8;animation:tdot 1.4s infinite .2s"></span>
+          <span style="width:5px;height:5px;border-radius:50%;background:#94a3b8;animation:tdot 1.4s infinite .4s"></span>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex-shrink:0;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);margin-top:10px">
+      ${(!isDevView && usage >= limit) ? limitHTML : inputHTML}
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var csrf = ${csrfJson};
+  window.disaActiveThreadId = ${thread.id};
+
+  function relTime(s) {
+    if (!s) return '';
+    var d = new Date(s.indexOf('T') !== -1 ? s : s + 'Z');
+    var diff = Date.now() - d.getTime();
+    if (diff < 60000) return 'ahora';
+    if (diff < 3600000) return 'hace ' + Math.floor(diff/60000) + 'm';
+    if (diff < 86400000) return 'hace ' + Math.floor(diff/3600000) + 'h';
+    return 'hace ' + Math.floor(diff/86400000) + 'd';
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function clearChatArea() {
+    var area = document.getElementById('chatArea');
+    var typing = document.getElementById('typingIndicator');
+    var kids = Array.from(area.childNodes).filter(function(n){ return n !== typing; });
+    kids.forEach(function(n){ n.remove(); });
+  }
+
+  function showEmpty(line1, line2) {
+    var area = document.getElementById('chatArea');
+    var typing = document.getElementById('typingIndicator');
+    clearChatArea();
+    var el = document.createElement('div');
+    el.id = 'emptyState';
+    el.style.cssText = 'text-align:center;padding:40px 24px;color:#475569';
+    el.innerHTML = '<div style="font-size:30px;margin-bottom:10px;color:#0D9488;opacity:.5">✦</div>'
+      + '<div style="font-size:15px;font-weight:600;color:#64748b;margin-bottom:6px">' + esc(line1) + '</div>'
+      + '<div style="font-size:13px;color:#475569">' + esc(line2) + '</div>';
+    area.insertBefore(el, typing);
+  }
+
+  function addMsgDOM(role, content) {
+    var area = document.getElementById('chatArea');
+    var typing = document.getElementById('typingIndicator');
+    var div = document.createElement('div');
+    div.style.cssText = 'display:flex;justify-content:' + (role === 'user' ? 'flex-end' : 'flex-start');
+    div.innerHTML = '<div style="max-width:80%;padding:10px 14px;border-radius:12px;font-size:13px;line-height:1.6;'
+      + (role === 'user'
+        ? 'background:#0D9488;color:white;border-bottom-right-radius:3px'
+        : 'background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);color:#e2e8f0;border-bottom-left-radius:3px')
+      + '">' + esc(content).replace(/\\n/g,'<br>') + '</div>';
+    area.insertBefore(div, typing);
+    area.scrollTop = area.scrollHeight;
+  }
+
+  function showTyping(show) {
+    var t = document.getElementById('typingIndicator');
+    if (t) t.style.display = show ? 'block' : 'none';
+    if (show) document.getElementById('chatArea').scrollTop = 9999;
+  }
+
+  async function loadThreads() {
+    try {
+      var res = await fetch('/api/disa/threads', { headers: { 'x-csrf-token': csrf } });
+      if (!res.ok) return;
+      var threads = await res.json();
+      var list = document.getElementById('dtList');
+      if (!list) return;
+      if (!threads.length) {
+        list.innerHTML = '<div style="padding:14px 10px;font-size:11px;color:rgba(255,255,255,.28);text-align:center">Sin conversaciones</div>';
+        return;
+      }
+      list.innerHTML = threads.map(function(t) {
+        var cls = t.id === window.disaActiveThreadId ? ' dt-active' : '';
+        return '<div class="dt-item' + cls + '" onclick="dtLoad(' + t.id + ')">'
+          + '<div class="dt-title">' + esc(t.title || 'Nueva conversación') + '</div>'
+          + '<div class="dt-meta">' + esc(relTime(t.updated_at)) + '</div>'
+          + '<button class="dt-del" onclick="event.stopPropagation();dtDelete(' + t.id + ')" title="Eliminar">'
+          + '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">'
+          + '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>'
+          + '</svg></button></div>';
+      }).join('');
+    } catch(e) { console.error('[DISA] loadThreads', e); }
+  }
+
+  window.dtLoad = async function(id) {
+    if (window.disaActiveThreadId === id) { dtClosePanel(); return; }
+    window.disaActiveThreadId = id;
+    try {
+      var res = await fetch('/api/disa/threads/' + id, { headers: { 'x-csrf-token': csrf } });
+      var data = await res.json();
+      clearChatArea();
+      if (!data.messages || !data.messages.length) {
+        showEmpty('Nueva conversación', 'Haz tu primera pregunta');
+      } else {
+        data.messages.forEach(function(m){ addMsgDOM(m.role, m.content); });
+      }
+      var titleEl = document.getElementById('dtCurrentTitle');
+      if (titleEl) titleEl.textContent = data.title || 'Nueva conversación';
+      document.getElementById('chatArea').scrollTop = 9999;
+      loadThreads();
+      dtClosePanel();
+    } catch(e) { console.error('[DISA] dtLoad', e); }
+  };
+
+  window.dtNewThread = async function() {
+    try {
+      var res = await fetch('/api/disa/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf }
+      });
+      var t = await res.json();
+      window.disaActiveThreadId = t.id;
+      showEmpty('Nueva conversación', 'Haz tu primera pregunta');
+      var titleEl = document.getElementById('dtCurrentTitle');
+      if (titleEl) titleEl.textContent = 'Nueva conversación';
+      await loadThreads();
+      dtClosePanel();
+      var inp = document.getElementById('msgInput');
+      if (inp) inp.focus();
+    } catch(e) { console.error('[DISA] dtNewThread', e); }
+  };
+
+  window.dtDelete = async function(id) {
+    try {
+      await fetch('/api/disa/threads/' + id, { method: 'DELETE', headers: { 'x-csrf-token': csrf } });
+      if (window.disaActiveThreadId === id) {
+        await dtNewThread();
+      } else {
+        await loadThreads();
+      }
+    } catch(e) { console.error('[DISA] dtDelete', e); }
+  };
+
+  function dtClosePanel() {
+    var p = document.getElementById('dtPanel');
+    if (p) p.classList.remove('dt-open');
+  }
+
+  window.dtTogglePanel = function() {
+    var p = document.getElementById('dtPanel');
+    if (p) p.classList.toggle('dt-open');
+  };
+
+  window.disaSend = async function() {
+    var input = document.getElementById('msgInput');
+    if (!input) return;
+    var msg = input.value.trim();
+    if (!msg) return;
+    input.value = '';
+    var empty = document.getElementById('emptyState');
+    if (empty) empty.remove();
+    addMsgDOM('user', msg);
+    showTyping(true);
+    try {
+      var res = await fetch('/api/disa/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf },
+        body: JSON.stringify({ message: msg, agent_id: 1, thread_id: window.disaActiveThreadId })
+      });
+      var data = await res.json();
+      showTyping(false);
+      addMsgDOM('assistant', res.ok ? (data.reply || 'Sin respuesta.') : (data.error || 'Error.'));
+      if (data.thread_id) window.disaActiveThreadId = data.thread_id;
+      loadThreads();
+    } catch {
+      showTyping(false);
+      addMsgDOM('assistant', 'Error de conexión. Inténtalo de nuevo.');
+    }
+  };
+
+  window.addEventListener('load', function() {
+    loadThreads();
+    document.getElementById('chatArea').scrollTop = 9999;
+    ${prefillCode}
+  });
+})();
+</script>`;
+
+    return c.html(adminLayout('DISA', body, 'disa', session?.csrfToken || '', c, true));
+  });
+
+  // ── API ──────────────────────────────────────────────────
+
+  router.post('/select-agent', adminAuth(db), async c => {
+    let b;
+    try { b = await c.req.json(); } catch { return c.json({ ok: false }, 400); }
+    const agentId = parseInt(b?.agent_id) || 1;
+    try {
+      db.prepare('UPDATE disa_conversations SET agent_id=? WHERE id=(SELECT MIN(id) FROM disa_conversations)')
+        .run(agentId);
+    } catch {}
+    return c.json({ ok: true });
+  });
+
+  router.get('/agents', adminAuth(db), c => {
+    let agents = [];
+    try {
+      agents = db.prepare('SELECT id, name, icon, slug FROM disa_agents WHERE active=1 ORDER BY id').all();
+    } catch {}
+    let currentAgentId = 1;
+    try {
+      const conv = db.prepare('SELECT agent_id FROM disa_conversations ORDER BY id ASC LIMIT 1').get();
+      if (conv?.agent_id) currentAgentId = conv.agent_id;
+    } catch {}
+    return c.json({ agents, current_agent_id: currentAgentId });
+  });
+
+  // ── Thread endpoints ─────────────────────────────────────
+
+  router.get('/threads', adminAuth(db), c => {
+    const threads = db.prepare(`
+      SELECT t.id, t.title, t.created_at, t.updated_at
+      FROM disa_conversation_threads t
+      WHERE t.is_active = 1
+      ORDER BY t.updated_at DESC
+    `).all();
+    return c.json(threads);
+  });
+
+  router.get('/threads/:id', adminAuth(db), c => {
+    const threadId = parseInt(c.req.param('id'));
+    const thread = db.prepare('SELECT * FROM disa_conversation_threads WHERE id=? AND is_active=1').get(threadId);
+    if (!thread) return c.json({ error: 'Thread no encontrado' }, 404);
+    const convRows = db.prepare(
+      'SELECT messages FROM disa_conversations WHERE thread_id=? ORDER BY id ASC'
+    ).all(threadId);
+    const messages = convRows.flatMap(row => {
+      try { return JSON.parse(row.messages || '[]'); } catch { return []; }
+    });
+    return c.json({ id: thread.id, title: thread.title, created_at: thread.created_at, updated_at: thread.updated_at, messages });
+  });
+
+  router.post('/threads', adminAuth(db), c => {
+    const session = c.get('session');
+    const r = db.prepare('INSERT INTO disa_conversation_threads (user_id) VALUES (?)').run(session?.userId || null);
+    const thread = db.prepare('SELECT * FROM disa_conversation_threads WHERE id=?').get(r.lastInsertRowid);
+    return c.json({ id: thread.id, title: thread.title });
+  });
+
+  router.delete('/threads/:id', adminAuth(db), c => {
+    const threadId = parseInt(c.req.param('id'));
+    db.prepare('UPDATE disa_conversation_threads SET is_active=0, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(threadId);
+    return c.json({ ok: true });
+  });
+
+  router.post('/threads/:id/title', adminAuth(db), async c => {
+    const threadId = parseInt(c.req.param('id'));
+    let body;
+    try { body = await c.req.json(); } catch { return c.json({ ok: false }, 400); }
+    const title = (body?.title || '').trim().substring(0, 100);
+    if (!title) return c.json({ ok: false, error: 'Título vacío' }, 400);
+    db.prepare('UPDATE disa_conversation_threads SET title=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(title, threadId);
+    return c.json({ ok: true });
+  });
+
+  router.post('/message', adminAuth(db), async c => {
+    const usage = getUsage(db);
+    const limit = 50;
+    const tenantSlug = c.get('tenant')?.slug;
+    const isDev = process.env.NODE_ENV !== 'production' || tenantSlug === 'dev';
+    if (!isDev && usage >= limit)
+      return c.json({ error: 'Has alcanzado el limite de mensajes este mes.' }, 429);
+
+    let body;
+    try { body = await c.req.json(); } catch {
+      return c.json({ error: 'Cuerpo de la peticion invalido.' }, 400);
+    }
+
+    const message = body?.message?.trim();
+    if (!message) return c.json({ error: 'Mensaje vacio.' }, 400);
+
+    const agentId = parseInt(body?.agent_id) || 1;
+    let agent = null;
+    try {
+      agent = db.prepare('SELECT * FROM disa_agents WHERE id=? AND active=1').get(agentId);
+    } catch {}
+
+    const currentPage = (c.req.header('x-current-page') || '').replace(/[^a-z0-9_-]/gi, '');
+    const session = c.get('session');
+    const threadIdParam = parseInt(body?.thread_id) || null;
+    let thread;
+    if (threadIdParam) {
+      thread = db.prepare('SELECT * FROM disa_conversation_threads WHERE id=? AND is_active=1').get(threadIdParam);
+      if (!thread) return c.json({ error: 'Thread no encontrado.' }, 404);
+    } else {
+      thread = getOrCreateActiveThread(db, session?.userId);
+    }
+    const conv = getConversationForThread(db, thread.id);
+    const isFirstMessage = JSON.parse(conv.messages || '[]').length === 0;
+    const history = JSON.parse(conv.messages || '[]');
+    const context = buildBusinessContext(db, currentPage, session);
+    const dbSchema = getDbSchema(db);
+
+    const agentIdentity = agent?.system_prompt || [
+      'Eres DISA, asistente de inteligencia artificial del ERP Bamburu.',
+      'Bamburu es un sistema de gestion para autonomos y pequenos negocios hispanohablantes.',
+      'Hablas en espanol, eres directa, profesional y honesta. Sin emojis. Vas al grano.',
+    ].join('\n');
+
+    const systemPrompt = [
+      agentIdentity,
+      '',
+      '## CAPACIDADES Y LIMITES',
+      '',
+      'PUEDES HACER:',
+      '- Leer cualquier dato del negocio (productos, pedidos, clientes, inventario, ventas, facturas).',
+      '- Mostrar respuestas visuales con artifacts (KPIs, listas, numeros).',
+      '- Si el usuario es admin/owner: ejecutar cambios (crear, editar, eliminar registros,',
+      '  ajustar stock, generar facturas) SIEMPRE pidiendo confirmacion previa.',
+      '',
+      'NO PUEDES HACER:',
+      '- Acceder a datos de otros negocios.',
+      '- Modificar usuarios admin, sesiones ni la BD central del sistema.',
+      '- Enviar emails, SMS o notificaciones (capacidad futura).',
+      '- Inventar datos, URLs o capacidades. Si no sabes algo, dilo.',
+      '',
+      'REGLA DE ORO:',
+      'Si tienes dudas si algo es real o inventado, NO lo digas.',
+      '"No tengo ese dato" y "no puedo hacer eso aun" son respuestas validas y honestas.',
+      '',
+      '## TERMINOLOGIA DE VENTAS',
+      '',
+      '- "Ventas" o "ingresos" = venta neta (subtotal, SIN IVA).',
+      '- "IVA" = impuesto recaudado (tax_amount).',
+      '- "Total cobrado" = subtotal + IVA (gross_revenue).',
+      '- Al responder sobre ventas o dinero, da SIEMPRE el desglose: neta + IVA + total cobrado.',
+      '- Nunca mezcles neto y bruto.',
+      '- Interpreta la intencion: "cuanto gane" = venta neta, "monto IVA cobrado" = tax_amount, etc.',
+      '- Si entiendes lo que pregunta el usuario, responde directo. Solo pide aclaracion si es genuinamente ambiguo.',
+      '',
+      '## FORMATO DE RESPUESTA — REGLA CRITICA',
+      '',
+      'Tienes DOS modos. Usa UNO solo por mensaje. NUNCA los mezcles.',
+      '',
+      'MODO 1 — TEXTO PLANO',
+      'Usalo para: saludos, conversacion, preguntas ambiguas, o cuando vas a ejecutar una accion.',
+      'Formato: texto normal en espanol. Si ejecutas algo, incluye [ACCION:...] solo al final.',
+      '',
+      'MODO 2 — JSON CON ARTIFACT',
+      'Usalo para: mostrar metricas (kpi_dashboard), listas de items (action_list), una cifra (big_number).',
+      'Formato: empieza con { y termina con }. JSON puro, sin preambulo ni markdown.',
+      '{"text":"frase breve de contexto","artifact":{"type":"...","data":{...}}}',
+      '',
+      'REGLA: datos visuales → MODO 2 | ejecutar accion → MODO 1 | conversacion → MODO 1',
+      'NUNCA combines [ACCION:...] dentro de un JSON de artifact.',
+      '',
+      '## ARTIFACTS — TIPOS Y EJEMPLOS',
+      '',
+      'kpi_dashboard — resumenes con varias metricas:',
+      '{"text":"Las ventas del mes van bien","artifact":{"type":"kpi_dashboard","data":{"title":"Ventas del mes","kpis":[{"label":"Ventas","value":"€320","delta":"+12%","tone":"positive"},{"label":"Pedidos","value":"8","delta":null,"tone":"neutral"}],"chart":{"type":"bars","data":[{"label":"Lun","value":320},{"label":"Mar","value":450}]},"link":{"label":"Ver Analitica","url":"/admin/analytics"}}}}',
+      '',
+      'action_list — listas de items. SIN campo "actions" (read-only):',
+      '{"text":"2 clientes sin compras recientes","artifact":{"type":"action_list","data":{"title":"Clientes inactivos","items":[{"title":"Maria Garcia","subtitle":"45 dias sin comprar","meta":"LTV €0","tone":"warn"}],"link":{"label":"Ver clientes","url":"/admin/clients"}}}}',
+      '',
+      'big_number — una cifra destacada:',
+      '{"text":"Ayer vendiste bien","artifact":{"type":"big_number","data":{"value":"€450","label":"Ventas de ayer","context":"6 pedidos","tone":"positive","link":{"label":"Ver pedidos","url":"/admin/orders"}}}}',
+      '',
+      '## URLs PERMITIDAS EN ARTIFACTS',
+      '',
+      'Solo estas rutas exactas (sin variaciones):',
+      '/admin/products /admin/categories /admin/tags /admin/orders',
+      '/admin/orders/pos /admin/orders/refunds /admin/orders/draft/new /admin/discounts',
+      '/admin/inventory /admin/suppliers /admin/purchases /admin/purchases/new',
+      '/admin/invoices /admin/clients /admin/clients/groups /admin/analytics',
+      '/admin/store-settings /admin/settings /admin/users /admin/activity',
+      '/admin/security /admin/disa /admin/newsletter /admin/reviews /admin/feedback',
+      '',
+      'Detalle solo con ID numerico real existente:',
+      '/admin/orders/:id  /admin/orders/:id/invoice  /admin/purchases/:id  /admin/invoices/:id',
+      '',
+      'NO existen rutas de detalle para productos, clientes, categorias, stock ni proveedores.',
+      'Para esos, enlaza siempre a la lista. Si dudas de una URL, NO la incluyas.',
+      '',
+      '## ACCIONES DISPONIBLES',
+      '',
+      'IMPORTANTE: Solo si "Puede modificar datos: SI" en USUARIO ACTUAL (ver contexto).',
+      'Si el usuario NO puede modificar datos, no ofrezcas ni ejecutes acciones de cambio.',
+      '',
+      'Formato (siempre al FINAL del mensaje, nunca dentro de JSON):',
+      '[ACCION:{"type":"nombre_accion","params":{...},"confirm":"descripcion para confirmar"}]',
+      '',
+      'Operaciones genericas:',
+      '- insert_record: {"table":"tabla","data":{"campo":"valor",...}}',
+      '- update_record: {"table":"tabla","id":0,"data":{"campo":"nuevo_valor"}}',
+      '- delete_record: {"table":"tabla","id":0}',
+      '  Los nombres de tabla y campo deben coincidir con el schema.',
+      '',
+      'Pedidos y facturacion:',
+      '- create_order: {"product_id":0,"product_name":"","quantity":1,"price":null,"notes":""}',
+      '- edit_order: {"order_id":0,"admin_notes":"","tracking_number":""}',
+      '- update_order_status: {"order_id":0,"status":"en_preparacion|enviado|completado|cancelado"}',
+      '- cancel_order: {"order_id":0,"reason":""}',
+      '- create_invoice_from_order: {"order_id":0}',
+      '',
+      'Inventario:',
+      '- adjust_stock: {"product_id":0,"quantity":0,"reason":""}  (positivo=entrada, negativo=salida)',
+      '- reset_stock: {"product_id":0,"reason":""}',
+      '',
+      'Configuracion:',
+      '- update_company_config: {"campo":"valor",...}',
+      '  (company_name, fiscal_id, tax_rate, address, phone, email, website, country,',
+      '  currency, currency_symbol, tax_name, invoice_series)',
+      '- update_profile: {"field":"business_type|sector|description|goals|preferences","value":""}',
+      '',
+      'Seguridad (confirmacion con frase literal exacta):',
+      '- check_2fa_status: {} o {"user_id":0}',
+      '- disable_2fa_user: {} o {"user_id":0}  (solo admin/owner para otros usuarios)',
+      '- list_users_security: {}  (solo admin/owner)',
+      '',
+      'Para ACTIVAR 2FA el usuario debe ir a /admin/security y escanear el QR. No es posible por chat.',
+      '',
+      'Reglas:',
+      '- Una sola accion por mensaje. Si necesitas varias, hazlas una a una esperando confirmacion.',
+      '- Explica siempre que vas a hacer ANTES del bloque [ACCION:...].',
+      '- Para acciones de seguridad, el campo "confirm" debe ser una frase unica que el usuario',
+      '  tiene que escribir literalmente (ej: "DESACTIVAR 2FA DE usuario@dominio.com").',
+      '',
+      '## CONTEXTO DEL NEGOCIO',
+      '',
+      context,
+      '',
+      '## SCHEMA DE LA BASE DE DATOS',
+      '(columnas disponibles por tabla, * = obligatorio)',
+      '',
+      dbSchema,
+    ].join('\n');
+
+    // ── URL whitelist + artifact sanitizer ───────────────────────────
+    const DISA_ALLOWED_URLS = new Set([
+      '/admin/products','/admin/categories','/admin/tags','/admin/orders',
+      '/admin/orders/pos','/admin/orders/refunds','/admin/orders/draft/new',
+      '/admin/discounts','/admin/inventory','/admin/suppliers','/admin/purchases',
+      '/admin/purchases/new','/admin/invoices','/admin/clients','/admin/clients/groups',
+      '/admin/analytics','/admin/store-settings','/admin/settings','/admin/users',
+      '/admin/activity','/admin/security','/admin/disa','/admin/newsletter',
+      '/admin/reviews','/admin/feedback',
+    ]);
+    const DISA_DETAIL_PATTERNS = [
+      /^\/admin\/orders\/\d+$/,
+      /^\/admin\/orders\/\d+\/invoice$/,
+      /^\/admin\/purchases\/\d+$/,
+      /^\/admin\/invoices\/\d+$/,
+    ];
+    function isValidDisaUrl(url) {
+      if (!url || typeof url !== 'string') return false;
+      if (DISA_ALLOWED_URLS.has(url)) return true;
+      return DISA_DETAIL_PATTERNS.some(re => re.test(url));
+    }
+    function sanitizeArtifact(art) {
+      if (!art || typeof art !== 'object') return null;
+      const d = art.data;
+      if (d) {
+        if (d.link && !isValidDisaUrl(d.link.url)) {
+          console.log('[DISA] URL bloqueada:', d.link.url);
+          delete d.link;
+        }
+        if (Array.isArray(d.items)) {
+          d.items.forEach(item => { if (item.actions) item.actions = []; });
+        }
+      }
+      return art;
+    }
+    // ─────────────────────────────────────────────────────────────────
+
+    const recentHistory = history.slice(-10).map(m => ({ role: m.role, content: m.content }));
+
+    try {
+      let apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) {
+        try {
+          const fs = await import('fs');
+          const env = fs.default.readFileSync('/etc/bamburu.env', 'utf8');
+          const match = env.match(/ANTHROPIC_API_KEY=(.+)/);
+          if (match) apiKey = match[1].trim();
+        } catch {}
+      }
+      if (!apiKey) return c.json({ error: 'DISA no esta configurada. Contacta con soporte.' }, 500);
+
+      const PROTECTED_TABLES = new Set([
+        'admin_users', 'admin_sessions', 'customer_accounts', 'customer_sessions',
+        'disa_conversations', 'disa_usage', 'sqlite_sequence',
+        'activity_logs', 'password_reset_tokens',
+      ]);
+
+      function runQueryTool(sql) {
+        if (!/^\s*SELECT\b/i.test(sql.trim()))
+          return { error: 'Solo se permiten consultas SELECT.' };
+        const forbidden = [...PROTECTED_TABLES].find(t =>
+          new RegExp('\\b' + t + '\\b', 'i').test(sql)
+        );
+        if (forbidden)
+          return { error: 'Tabla protegida: ' + forbidden };
+        try {
+          const rows = db.prepare(sql).all();
+          return { rows, count: rows.length };
+        } catch (e) {
+          return { error: e.message };
+        }
+      }
+
+      const tools = [{
+        name: 'query_database',
+        description: 'Ejecuta una consulta SQL SELECT para obtener datos especificos del negocio. Usala cuando necesites datos que no estan en el contexto inicial: clientes por gasto, productos por ventas, pedidos por periodo, etc. Solo lectura. Usa LIMIT 20 como maximo.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            sql: { type: 'string', description: 'Query SELECT valido. Referencia las tablas por su nombre exacto del schema.' }
+          },
+          required: ['sql']
+        }
+      }];
+
+      let apiMessages = [...recentHistory, { role: 'user', content: message }];
+      let reply = '';
+      let toolCalls = 0;
+
+      while (toolCalls <= 4) {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-6',
+            max_tokens: 1024,
+            system: systemPrompt,
+            messages: apiMessages,
+            tools
+          })
+        });
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          console.error('[DISA] API error:', JSON.stringify(err));
+          return c.json({ error: 'Error al contactar con DISA. Intentalo de nuevo.' }, 500);
+        }
+
+        const data = await response.json();
+
+        if (data.stop_reason === 'tool_use') {
+          const toolUse = data.content.find(b => b.type === 'tool_use');
+          if (!toolUse) break;
+          const result = runQueryTool(toolUse.input?.sql || '');
+          console.log('[DISA] query_database:', toolUse.input?.sql, '→', result.count ?? result.error);
+          apiMessages.push({ role: 'assistant', content: data.content });
+          apiMessages.push({
+            role: 'user',
+            content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(result) }]
+          });
+          toolCalls++;
+        } else {
+          reply = data.content?.find(b => b.type === 'text')?.text || '';
+          break;
+        }
+      }
+
+      const lastAssistantMsg = history.slice().reverse().find(m => m.role === 'assistant');
+      const pendingAction = lastAssistantMsg?.pending_action || null;
+      let isConfirming = false;
+      if (pendingAction) {
+        if (SECURITY_ACTIONS.has(pendingAction.type)) {
+          const secPhrase = pendingAction._securityPhrase || '';
+          isConfirming = secPhrase.length > 0 && message.trim() === secPhrase;
+        } else {
+          isConfirming = /^(sí|si|confirmo|adelante|ok|dale|hazlo|procede|yes|correcto|exacto)/i
+            .test(message.trim());
+        }
+      }
+
+      let cleanReply = reply;
+      let newPendingAction = null;
+      let executionResult = null;
+      let artifact = null;
+
+      if (isConfirming && pendingAction) {
+        const session = c.get('session');
+        if (ADMIN_ONLY_ACTIONS.has(pendingAction.type) && !isAdminUser(session)) {
+          cleanReply = 'No tienes permisos para ejecutar esta accion. Solo administradores pueden hacer cambios. Contacta al admin de tu cuenta.';
+        } else {
+          executionResult = await executeAction(db, pendingAction, session);
+          cleanReply = executionResult.message;
+        }
+      } else {
+        // Try artifact JSON response — robust extractor
+        let parsedAsArtifact = false;
+        try {
+          let stripped = reply
+            .replace(/^```json\s*/i, '')
+            .replace(/^```\s*/i, '')
+            .replace(/```\s*$/i, '')
+            .trim();
+
+          // Find the JSON object even if there's preamble text before it
+          const firstBrace = stripped.indexOf('{');
+          const lastBrace = stripped.lastIndexOf('}');
+          if (firstBrace !== -1 && lastBrace > firstBrace) {
+            const jsonOnly = stripped.substring(firstBrace, lastBrace + 1);
+            const parsed = JSON.parse(jsonOnly);
+            if (parsed && typeof parsed === 'object' && typeof parsed.text === 'string') {
+              cleanReply = parsed.text;
+              artifact = parsed.artifact || null;
+              parsedAsArtifact = true;
+              if (firstBrace > 0) {
+                console.log('[DISA] artifact: stripped preamble of', firstBrace, 'chars');
+              }
+            }
+          }
+        } catch (e) {
+          console.log('[DISA] artifact parse failed:', e.message.substring(0, 80));
+        }
+
+        // Fall back to action block parsing only if not an artifact response
+        if (!parsedAsArtifact) {
+          const actionMatch = reply.match(/\[ACCION:(\{[\s\S]*?\})\]/);
+          if (actionMatch) {
+            try {
+              newPendingAction = JSON.parse(actionMatch[1]);
+              cleanReply = reply.replace(/\[ACCION:[\s\S]*?\]/, '').trim();
+              if (SECURITY_ACTIONS.has(newPendingAction.type)) {
+                const confirmPhrase = (newPendingAction.confirm || newPendingAction.type).toUpperCase();
+                newPendingAction._securityPhrase = confirmPhrase;
+                cleanReply += '\n\n⚠️ Accion de seguridad. Para confirmar, escribe exactamente:\n' + confirmPhrase;
+              } else {
+                cleanReply += '\n\n¿Confirmas esta accion? Responde "si" para ejecutarla.';
+              }
+            } catch {
+              cleanReply = reply.replace(/\[ACCION:[\s\S]*?\]/, '').trim();
+            }
+          }
+        }
+      }
+
+      history.push({ role: 'user', content: message });
+      history.push({
+        role: 'assistant',
+        content: cleanReply,
+        ...(newPendingAction ? { pending_action: newPendingAction } : {})
+      });
+
+      db.prepare(
+        'UPDATE disa_conversations SET messages=?, agent_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?'
+      ).run(JSON.stringify(history), agentId, conv.id);
+
+      if (isFirstMessage) {
+        const title = generateThreadTitle(message);
+        db.prepare('UPDATE disa_conversation_threads SET title=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(title, thread.id);
+      } else {
+        db.prepare('UPDATE disa_conversation_threads SET updated_at=CURRENT_TIMESTAMP WHERE id=?').run(thread.id);
+      }
+
+      incrementUsage(db);
+
+      return c.json({
+        reply: cleanReply,
+        artifact: sanitizeArtifact(artifact),
+        thread_id: thread.id,
+        usage: getUsage(db),
+        limit,
+        action_executed: executionResult?.ok || false
+      });
+
+    } catch (err) {
+      console.error('[DISA] Error:', err);
+      return c.json({ error: 'Error interno. Intentalo de nuevo.' }, 500);
+    }
+  });
+
+  router.post('/clear', adminAuth(db), c => {
+    db.prepare('DELETE FROM disa_conversations').run();
+    return c.json({ ok: true });
+  });
+
+  app.route('/admin/disa', router);
+  app.route('/api/disa', router);
+}
