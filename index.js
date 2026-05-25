@@ -9,6 +9,7 @@ import { securityHeaders } from './core/security-headers.js';
 import { initControlDb } from './core/control-db.js';
 import { tenantMiddleware } from './core/tenant-middleware.js';
 import { register as registerRegistro } from './modules/registro/index.js';
+import { docsHtml } from './docs.html.js';
 
 initControlDb();
 
@@ -337,6 +338,7 @@ footer a:hover{text-decoration:underline}
   <div class="nav-links">
     <a href="#demo">Cómo funciona</a>
     <a href="#features">Características</a>
+    <a href="/docs">Documentación</a>
     <a href="/acceso">Acceso</a>
     <a href="/registro" class="nav-btn">Probar gratis</a>
   </div>
@@ -1284,6 +1286,8 @@ input[readonly]{color:rgba(255,255,255,0.5);cursor:default}
 </script>
 </body>
 </html>`));
+
+app.get('/docs', c => c.html(docsHtml()));
 
 registerRegistro(app);
 app.use('*', tenantMiddleware);
