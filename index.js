@@ -211,7 +211,116 @@ footer a:hover{text-decoration:underline}
   .demo-stats{flex-direction:column;gap:16px}
   .hero h1{font-size:36px}
 }
+.panel-section{background:var(--bg);position:relative}
+.panel-inner{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1fr 1.2fr;gap:80px;align-items:center}
+.panel-list{list-style:none;margin-top:28px;display:flex;flex-direction:column;gap:12px}
+.panel-list li{display:flex;align-items:center;gap:10px;font-size:15px;color:var(--text2)}
+.pm-window{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;overflow:hidden;box-shadow:0 30px 80px -20px rgba(0,0,0,0.6)}
+.pm-bar{height:36px;background:rgba(255,255,255,0.02);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 12px;gap:6px}
+.pm-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.pm-url{margin-left:8px;font-size:10px;color:var(--text4);flex:1;text-align:center}
+.pm-layout{display:grid;grid-template-columns:140px 1fr}
+.pm-sidebar{background:var(--bg4);padding:12px 8px;border-right:1px solid var(--border)}
+.pm-logo{padding:8px;font-size:13px;font-weight:800;color:#fff;margin-bottom:8px}
+.pm-logo span{color:var(--teal-l)}
+.pm-nav-section{font-size:9px;color:var(--text4);text-transform:uppercase;letter-spacing:0.08em;padding:8px 8px 4px;font-weight:600}
+.pm-nav-item{display:flex;align-items:center;gap:6px;padding:6px 8px;font-size:11px;color:var(--text3);border-radius:6px;cursor:default;margin-bottom:2px}
+.pm-nav-active{background:rgba(13,148,136,0.1);color:var(--teal-l);font-weight:600}
+.pm-content{padding:14px}
+.pm-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.pm-title{font-size:13px;font-weight:700;color:#fff}
+.pm-btn{background:var(--teal);color:#fff;border:none;padding:4px 10px;border-radius:6px;font-size:10px;font-weight:600;cursor:default}
+.pm-table{display:flex;flex-direction:column;gap:1px}
+.pm-thead{display:grid;grid-template-columns:1.5fr 0.7fr 0.5fr 0.7fr;padding:6px 8px;font-size:9px;color:var(--text4);text-transform:uppercase;letter-spacing:0.06em}
+.pm-row{display:grid;grid-template-columns:1.5fr 0.7fr 0.5fr 0.7fr;padding:8px;border-radius:6px;font-size:11px;color:var(--text2);background:rgba(255,255,255,0.02);margin-bottom:3px;align-items:center}
+.pm-name{color:#fff;font-weight:500}
+.pm-price{color:var(--teal-l);font-weight:600}
+.pm-stock{color:var(--text2)}
+.pm-stock-warn{color:#F59E0B;font-weight:700}
+.pm-stock-empty{color:#EF4444;font-weight:700}
+.pm-badge{font-size:9px;font-weight:700;padding:2px 8px;border-radius:10px}
+.pm-badge-ok{background:rgba(16,185,129,0.12);color:#34D399}
+.pm-badge-warn{background:rgba(239,68,68,0.12);color:#F87171}
+.roles-section{background:var(--bg2);position:relative}
+.roles-section::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--border-t),transparent)}
+.roles-inner{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center}
+.rm-card{background:var(--bg3);border:1px solid var(--border);border-radius:14px;padding:18px}
+.rm-header{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.rm-avatar{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0}
+.rm-name{font-size:13px;font-weight:600;color:#fff}
+.rm-role{font-size:11px;color:var(--text4)}
+.rm-badge{margin-left:auto;background:rgba(16,185,129,0.12);color:#34D399;font-size:10px;font-weight:700;padding:3px 10px;border-radius:10px}
+.rm-perms-title{font-size:10px;color:var(--text4);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;font-weight:600}
+.rm-perms{display:flex;flex-wrap:wrap;gap:6px}
+.rm-perm{font-size:11px;padding:4px 10px;border-radius:8px;font-weight:500}
+.rm-perm-on{background:rgba(13,148,136,0.12);color:var(--teal-l);border:1px solid rgba(13,148,136,0.2)}
+.rm-perm-off{background:rgba(255,255,255,0.03);color:var(--text4);border:1px solid var(--border)}
+@media(max-width:1024px){
+  .panel-inner,.roles-inner{grid-template-columns:1fr;gap:48px}
+}
+.countries-section{background:var(--bg);position:relative}
+.countries-inner{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center}
+.country-cards{display:flex;flex-direction:column;gap:12px}
+.country-card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:16px 20px;display:flex;align-items:center;gap:16px;transition:all 0.3s}
+.country-card:hover{border-color:var(--border-t);transform:translateX(6px)}
+.country-flag{font-size:28px;flex-shrink:0}
+.country-name{font-size:14px;font-weight:700;color:#fff;margin-bottom:2px}
+.country-details{font-size:12px;color:var(--text4);display:flex;gap:10px;flex-wrap:wrap}
+.country-tag{background:rgba(13,148,136,0.08);color:var(--teal-l);padding:2px 8px;border-radius:6px;font-size:10px;font-weight:600;border:1px solid rgba(13,148,136,0.15)}
+.invoice-section{background:var(--bg2);position:relative}
+.invoice-section::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--border-t),transparent)}
+.invoice-inner{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1.2fr 1fr;gap:80px;align-items:center}
+.inv-mockup{background:var(--bg3);border:1px solid var(--border);border-radius:16px;padding:24px;position:relative}
+.inv-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+.inv-logo{font-size:16px;font-weight:800;color:#fff}
+.inv-logo span{color:var(--teal-l)}
+.inv-num{text-align:right}
+.inv-num-label{font-size:10px;color:var(--text4);text-transform:uppercase;letter-spacing:0.06em}
+.inv-num-val{font-size:18px;font-weight:700;color:var(--teal-l)}
+.inv-info{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+.inv-field-label{font-size:10px;color:var(--text4);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px}
+.inv-field-val{font-size:13px;color:var(--text2);font-weight:500}
+.inv-table{width:100%;margin-bottom:16px}
+.inv-table-head{display:grid;grid-template-columns:2fr 0.5fr 0.8fr 0.8fr;padding:6px 8px;font-size:9px;color:var(--text4);text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid var(--border)}
+.inv-table-row{display:grid;grid-template-columns:2fr 0.5fr 0.8fr 0.8fr;padding:8px;font-size:11px;color:var(--text2);border-bottom:1px solid rgba(255,255,255,0.03)}
+.inv-total{display:flex;justify-content:flex-end;gap:40px;font-size:12px;color:var(--text3);margin-bottom:12px}
+.inv-total strong{color:#fff;font-size:14px}
+.inv-hash{background:rgba(13,148,136,0.06);border:1px solid rgba(13,148,136,0.12);border-radius:8px;padding:8px 12px;font-size:9px;color:var(--text4);word-break:break-all;font-family:monospace}
+.inv-hash span{color:var(--teal-l);font-weight:600}
+.web-section{background:var(--bg);position:relative}
+.web-inner{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1fr 1.2fr;gap:80px;align-items:center}
+.web-preview{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;overflow:hidden;box-shadow:0 30px 80px -20px rgba(0,0,0,0.6)}
+.web-bar{height:32px;background:rgba(255,255,255,0.02);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 10px;gap:5px}
+.web-dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+.web-url{margin-left:8px;font-size:9px;color:var(--text4);flex:1;text-align:center}
+.web-body{padding:16px}
+.web-shop-hero{background:linear-gradient(135deg,rgba(13,148,136,0.15),rgba(13,148,136,0.05));border-radius:10px;padding:16px;text-align:center;margin-bottom:12px}
+.web-shop-name{font-size:14px;font-weight:800;color:#fff;margin-bottom:4px}
+.web-shop-sub{font-size:11px;color:var(--text4)}
+.web-products{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.web-product{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center}
+.web-product-img{width:100%;height:48px;background:linear-gradient(135deg,rgba(13,148,136,0.1),rgba(13,148,136,0.03));border-radius:6px;margin-bottom:6px;display:flex;align-items:center;justify-content:center}
+.web-product-name{font-size:9px;color:var(--text2);font-weight:600;margin-bottom:2px}
+.web-product-price{font-size:10px;color:var(--teal-l);font-weight:700}
+.telegram-section{background:var(--bg2);position:relative}
+.telegram-section::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--border-t),transparent)}
+.telegram-inner{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center}
+.tg-phone{width:260px;margin:0 auto;background:#0E1420;border:2px solid var(--border2);border-radius:36px;overflow:hidden;box-shadow:0 30px 80px -20px rgba(0,0,0,0.7);padding:12px 0}
+.tg-header{padding:10px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)}
+.tg-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--teal),var(--teal-d));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff}
+.tg-name{font-size:12px;font-weight:600;color:#fff}
+.tg-online{font-size:10px;color:var(--teal-l)}
+.tg-messages{padding:12px;display:flex;flex-direction:column;gap:8px}
+.tg-msg{padding:8px 12px;border-radius:12px;font-size:11px;line-height:1.5;max-width:85%}
+.tg-msg-user{align-self:flex-end;background:var(--teal-d);color:#fff;border-bottom-right-radius:3px}
+.tg-msg-disa{align-self:flex-start;background:rgba(255,255,255,0.06);color:var(--text2);border-bottom-left-radius:3px}
+.tg-msg-disa strong{color:var(--teal-l)}
+@media(max-width:1024px){
+  .countries-inner,.invoice-inner,.web-inner,.telegram-inner{grid-template-columns:1fr;gap:48px}
+}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
 </head>
 <body>
 
@@ -444,6 +553,361 @@ footer a:hover{text-decoration:underline}
   </div>
 </section>
 
+<section class="panel-section" id="panel">
+  <div class="panel-inner">
+    <div class="panel-text reveal">
+      <div class="sec-label">Panel de control</div>
+      <h2 class="sec-title">Todo tu negocio en un solo lugar</h2>
+      <p class="sec-desc">Gestiona productos, pedidos, clientes e inventario desde un panel diseñado para que cualquier persona de tu equipo lo use sin formación.</p>
+      <ul class="panel-list">
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Control de stock en tiempo real</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Pedidos con estados personalizables</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Facturación automática Verifactu</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Múltiples usuarios con permisos</li>
+      </ul>
+    </div>
+    <div class="panel-mockup reveal">
+      <div class="pm-window">
+        <div class="pm-bar">
+          <span class="pm-dot" style="background:#EF4444"></span>
+          <span class="pm-dot" style="background:#F59E0B"></span>
+          <span class="pm-dot" style="background:#22C55E"></span>
+          <span class="pm-url">negocio.bamburu.com/admin/products</span>
+        </div>
+        <div class="pm-layout">
+          <div class="pm-sidebar">
+            <div class="pm-logo">Bam<span>buru</span></div>
+            <div class="pm-nav-section">General</div>
+            <div class="pm-nav-item pm-nav-active">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7l-8-4-8 4M20 7l-8 4M20 7v10l-8 4M12 11v10"/></svg>
+              Productos
+            </div>
+            <div class="pm-nav-item">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11H5a2 2 0 0 0-2 2v7h14v-7a2 2 0 0 0-2-2h-4"/></svg>
+              Pedidos
+            </div>
+            <div class="pm-nav-item">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+              Clientes
+            </div>
+            <div class="pm-nav-section">Inventario</div>
+            <div class="pm-nav-item">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8"/></svg>
+              Stock
+            </div>
+          </div>
+          <div class="pm-content">
+            <div class="pm-header">
+              <span class="pm-title">Productos</span>
+              <button class="pm-btn">+ Nuevo</button>
+            </div>
+            <div class="pm-table">
+              <div class="pm-thead">
+                <span>Nombre</span><span>Precio</span><span>Stock</span><span>Estado</span>
+              </div>
+              <div class="pm-row">
+                <span class="pm-name">Vela Lavanda 200g</span>
+                <span class="pm-price">€18.50</span>
+                <span class="pm-stock">45</span>
+                <span class="pm-badge pm-badge-ok">Activo</span>
+              </div>
+              <div class="pm-row">
+                <span class="pm-name">Set Romántico 3 velas</span>
+                <span class="pm-price">€48.00</span>
+                <span class="pm-stock pm-stock-warn">4</span>
+                <span class="pm-badge pm-badge-ok">Activo</span>
+              </div>
+              <div class="pm-row">
+                <span class="pm-name">Cesta Relax Premium</span>
+                <span class="pm-price">€75.00</span>
+                <span class="pm-stock">8</span>
+                <span class="pm-badge pm-badge-ok">Activo</span>
+              </div>
+              <div class="pm-row">
+                <span class="pm-name">Aceite Bergamota 30ml</span>
+                <span class="pm-price">€14.00</span>
+                <span class="pm-stock pm-stock-empty">0</span>
+                <span class="pm-badge pm-badge-warn">Sin stock</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="roles-section" id="roles">
+  <div class="roles-inner">
+    <div class="roles-mockup reveal">
+      <div class="rm-card">
+        <div class="rm-header">
+          <div class="rm-avatar" style="background:linear-gradient(135deg,#6366f1,#4338ca)">MG</div>
+          <div>
+            <div class="rm-name">María García</div>
+            <div class="rm-role">Empleado</div>
+          </div>
+          <span class="rm-badge">Activo</span>
+        </div>
+        <div class="rm-perms-title">Permisos asignados</div>
+        <div class="rm-perms">
+          <span class="rm-perm rm-perm-on">Ver productos</span>
+          <span class="rm-perm rm-perm-off">Editar productos</span>
+          <span class="rm-perm rm-perm-on">Ver pedidos</span>
+          <span class="rm-perm rm-perm-off">Crear pedidos</span>
+          <span class="rm-perm rm-perm-on">Ver clientes</span>
+          <span class="rm-perm rm-perm-off">Ver facturas</span>
+        </div>
+      </div>
+      <div class="rm-card" style="margin-top:16px">
+        <div class="rm-header">
+          <div class="rm-avatar" style="background:linear-gradient(135deg,#f59e0b,#d97706)">CR</div>
+          <div>
+            <div class="rm-name">Carlos Ruiz</div>
+            <div class="rm-role">Vendedor</div>
+          </div>
+          <span class="rm-badge">Activo</span>
+        </div>
+        <div class="rm-perms-title">Permisos asignados</div>
+        <div class="rm-perms">
+          <span class="rm-perm rm-perm-on">Ver productos</span>
+          <span class="rm-perm rm-perm-on">Ver pedidos</span>
+          <span class="rm-perm rm-perm-on">Crear pedidos</span>
+          <span class="rm-perm rm-perm-on">Ver clientes</span>
+          <span class="rm-perm rm-perm-on">Crear clientes</span>
+          <span class="rm-perm rm-perm-off">Ver facturas</span>
+        </div>
+      </div>
+    </div>
+    <div class="roles-text reveal">
+      <div class="sec-label">Control de acceso</div>
+      <h2 class="sec-title">Cada persona ve solo lo que necesita</h2>
+      <p class="sec-desc">Define permisos granulares por usuario. Tu equipo accede exactamente a lo que necesita, sin poner en riesgo datos sensibles del negocio.</p>
+      <ul class="panel-list">
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Permisos por módulo y acción</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Roles predefinidos o personalizados</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>2FA obligatorio por usuario</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Registro de actividad completo</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- SECCIÓN E: Multi-país -->
+<section class="countries-section" id="paises">
+  <div class="countries-inner">
+    <div class="reveal">
+      <div class="sec-label">Multi-país</div>
+      <h2 class="sec-title">Hecho para el mundo hispanohablante</h2>
+      <p class="sec-desc">España, México, Colombia y toda Latinoamérica. Cada país con su moneda, impuestos y normativa fiscal. Sin configuraciones complicadas.</p>
+      <ul class="panel-list" style="margin-top:28px">
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>IVA 21% España · 16% México · 19% Colombia</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>NIF/CIF · RFC · NIT según el país</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Moneda local en cada operación</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Más países añadiéndose constantemente</li>
+      </ul>
+    </div>
+    <div class="country-cards reveal">
+      <div class="country-card">
+        <span class="country-flag">🇪🇸</span>
+        <div>
+          <div class="country-name">España</div>
+          <div class="country-details">
+            <span class="country-tag">EUR €</span>
+            <span class="country-tag">IVA 21%</span>
+            <span class="country-tag">NIF/CIF</span>
+            <span class="country-tag">Verifactu</span>
+          </div>
+        </div>
+      </div>
+      <div class="country-card">
+        <span class="country-flag">🇲🇽</span>
+        <div>
+          <div class="country-name">México</div>
+          <div class="country-details">
+            <span class="country-tag">MXN $</span>
+            <span class="country-tag">IVA 16%</span>
+            <span class="country-tag">RFC</span>
+            <span class="country-tag">CFDI</span>
+          </div>
+        </div>
+      </div>
+      <div class="country-card">
+        <span class="country-flag">🇨🇴</span>
+        <div>
+          <div class="country-name">Colombia</div>
+          <div class="country-details">
+            <span class="country-tag">COP $</span>
+            <span class="country-tag">IVA 19%</span>
+            <span class="country-tag">NIT</span>
+            <span class="country-tag">DIAN</span>
+          </div>
+        </div>
+      </div>
+      <div class="country-card" style="border-style:dashed;opacity:0.6">
+        <span class="country-flag">🌎</span>
+        <div>
+          <div class="country-name">Más países</div>
+          <div class="country-details">
+            <span class="country-tag">Argentina · Chile · Perú · Venezuela...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECCIÓN F: Facturación -->
+<section class="invoice-section" id="facturacion">
+  <div class="invoice-inner">
+    <div class="inv-mockup reveal">
+      <div class="inv-header">
+        <div>
+          <div class="inv-logo">Bam<span>buru</span></div>
+          <div style="font-size:11px;color:var(--text4);margin-top:4px">Factura electrónica</div>
+        </div>
+        <div class="inv-num">
+          <div class="inv-num-label">Número</div>
+          <div class="inv-num-val">F-2026-0042</div>
+          <div style="font-size:10px;color:var(--text4);margin-top:2px">25/05/2026</div>
+        </div>
+      </div>
+      <div class="inv-info">
+        <div>
+          <div class="inv-field-label">Emisor</div>
+          <div class="inv-field-val">Velas Aroma SL</div>
+          <div style="font-size:11px;color:var(--text4)">B-12345678</div>
+        </div>
+        <div>
+          <div class="inv-field-label">Cliente</div>
+          <div class="inv-field-val">María García López</div>
+          <div style="font-size:11px;color:var(--text4)">45678901-A</div>
+        </div>
+      </div>
+      <div class="inv-table">
+        <div class="inv-table-head">
+          <span>Concepto</span><span>Cant.</span><span>Precio</span><span>Total</span>
+        </div>
+        <div class="inv-table-row">
+          <span>Vela Lavanda 200g</span><span>2</span><span>€18.50</span><span>€37.00</span>
+        </div>
+        <div class="inv-table-row">
+          <span>Set Romántico 3 velas</span><span>1</span><span>€48.00</span><span>€48.00</span>
+        </div>
+      </div>
+      <div class="inv-total">
+        <span>Base imponible: €85.00</span>
+        <span>IVA 21%: €17.85</span>
+        <strong>Total: €102.85</strong>
+      </div>
+      <div class="inv-hash">
+        <span>Huella Verifactu:</span> a3f8c2d1e9b4...7f2a1c8e3d9b · <span style="color:#34D399">✓ Válida</span>
+      </div>
+    </div>
+    <div class="reveal">
+      <div class="sec-label">Facturación automática</div>
+      <h2 class="sec-title">De pedido a factura en un clic</h2>
+      <p class="sec-desc">Genera facturas con numeración correlativa, cumplimiento Verifactu para España y formatos locales para cada país. Todo automatizado.</p>
+      <ul class="panel-list" style="margin-top:28px">
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Numeración automática correlativa</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Hash SHA-256 Verifactu encadenado</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>PDF descargable e imprimible</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Datos fiscales completos por país</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- SECCIÓN G: Constructor Web -->
+<section class="web-section" id="tienda">
+  <div class="web-inner">
+    <div class="reveal">
+      <div class="sec-label">Constructor web</div>
+      <h2 class="sec-title">Tu tienda online<br>en minutos</h2>
+      <p class="sec-desc">DISA construye tu tienda conversacionalmente. Le dices el estilo, conecta tus productos y despliega automáticamente con dominio propio.</p>
+      <ul class="panel-list" style="margin-top:28px">
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Sin código, sin complicaciones</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Productos sincronizados con el ERP</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Dominio propio con hosting incluido</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>SEO automático y diseño responsive</li>
+      </ul>
+    </div>
+    <div class="web-preview reveal">
+      <div class="web-bar">
+        <span class="web-dot" style="background:#EF4444"></span>
+        <span class="web-dot" style="background:#F59E0B"></span>
+        <span class="web-dot" style="background:#22C55E"></span>
+        <span class="web-url">velasaroma.com</span>
+      </div>
+      <div class="web-body">
+        <div class="web-shop-hero">
+          <div class="web-shop-name">Velas Aroma</div>
+          <div class="web-shop-sub">Aromas naturales para tu hogar</div>
+          <button style="background:var(--teal);color:#fff;border:none;padding:6px 16px;border-radius:8px;font-size:11px;font-weight:600;margin-top:8px;cursor:default">Ver catálogo</button>
+        </div>
+        <div style="font-size:10px;color:var(--text4);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em">Productos destacados</div>
+        <div class="web-products">
+          <div class="web-product">
+            <div class="web-product-img">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="1.5"><path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7z"/></svg>
+            </div>
+            <div class="web-product-name">Vela Lavanda</div>
+            <div class="web-product-price">€18.50</div>
+          </div>
+          <div class="web-product">
+            <div class="web-product-img">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="1.5"><path d="M20 7l-8-4-8 4M20 7l-8 4M20 7v10l-8 4"/></svg>
+            </div>
+            <div class="web-product-name">Set Romántico</div>
+            <div class="web-product-price">€48.00</div>
+          </div>
+          <div class="web-product">
+            <div class="web-product-img">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 3"/></svg>
+            </div>
+            <div class="web-product-name">Cesta Relax</div>
+            <div class="web-product-price">€75.00</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECCIÓN H: Telegram -->
+<section class="telegram-section" id="movil">
+  <div class="telegram-inner">
+    <div class="tg-phone reveal">
+      <div class="tg-header">
+        <div class="tg-avatar">D</div>
+        <div>
+          <div class="tg-name">DISA · Bamburu</div>
+          <div class="tg-online">en línea</div>
+        </div>
+      </div>
+      <div class="tg-messages">
+        <div class="tg-msg tg-msg-user">¿Cuánto vendí esta semana?</div>
+        <div class="tg-msg tg-msg-disa">Esta semana llevas <strong>€1.243</strong> en ventas netas. Tu mejor día fue el martes con €420. Tienes 3 pedidos pendientes de enviar.</div>
+        <div class="tg-msg tg-msg-user">Ajusta el stock de Vela Lavanda a 50</div>
+        <div class="tg-msg tg-msg-disa">Hecho. Stock de <strong>Vela Lavanda 200g</strong> actualizado a 50 unidades. ¿Quieres que avise cuando baje de 10?</div>
+        <div class="tg-msg tg-msg-user">Sí, activa esa alerta</div>
+        <div class="tg-msg tg-msg-disa">Alerta activada. Te avisaré cuando el stock baje de 10 unidades.</div>
+      </div>
+    </div>
+    <div class="reveal">
+      <div class="sec-label">Gestión móvil</div>
+      <h2 class="sec-title">Tu ERP en el<br>bolsillo</h2>
+      <p class="sec-desc">Conecta Bamburu con Telegram y gestiona tu negocio desde el móvil. Consulta ventas, ajusta stock y recibe alertas sin abrir el navegador.</p>
+      <ul class="panel-list" style="margin-top:28px">
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Consultas en lenguaje natural</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Ajusta stock y crea pedidos</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Alertas automáticas de stock bajo</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal-l)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>OCR de facturas por foto</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
 <section class="cta-section" id="cta">
   <div class="cta-bg-shape cta-bg-shape-1"></div>
   <div class="cta-bg-shape cta-bg-shape-2"></div>
@@ -567,6 +1031,123 @@ function showToast(msg,type='info'){
   setTimeout(()=>t.classList.remove('show'),3500);
 }
 
+</script>
+<script>
+gsap.registerPlugin(ScrollTrigger);
+
+// Hero mockup — parallax pronunciado
+gsap.to('.mockup-window', {
+  yPercent: -25,
+  ease: 'none',
+  scrollTrigger: {
+    trigger: '.hero',
+    start: 'top top',
+    end: 'bottom top',
+    scrub: 1
+  }
+});
+
+// Floating cards — movimiento opuesto al scroll
+gsap.to('.mockup-float-1', {
+  y: -60, x: 20,
+  ease: 'none',
+  scrollTrigger: {
+    trigger: '.hero',
+    start: 'top top',
+    end: 'bottom top',
+    scrub: 1
+  }
+});
+
+gsap.to('.mockup-float-2', {
+  y: 50, x: -20,
+  ease: 'none',
+  scrollTrigger: {
+    trigger: '.hero',
+    start: 'top top',
+    end: 'bottom top',
+    scrub: 1
+  }
+});
+
+// Secciones — entrada desde abajo con escala
+gsap.utils.toArray('section').forEach(section => {
+  gsap.fromTo(section,
+    { opacity: 0, y: 100, scale: 0.95 },
+    {
+      opacity: 1, y: 0, scale: 1,
+      duration: 1.2,
+      ease: 'power3.out',
+      scrollTrigger: {
+        trigger: section,
+        start: 'top 80%',
+        toggleActions: 'play none none none'
+      }
+    }
+  );
+});
+
+// Títulos — entrada lateral
+gsap.utils.toArray('.sec-title').forEach(el => {
+  gsap.fromTo(el,
+    { opacity: 0, x: -60 },
+    {
+      opacity: 1, x: 0,
+      duration: 1,
+      ease: 'power3.out',
+      scrollTrigger: {
+        trigger: el,
+        start: 'top 85%',
+        toggleActions: 'play none none none'
+      }
+    }
+  );
+});
+
+// Hero text — animación inicial al cargar
+gsap.fromTo('.hero-badge',
+  { opacity: 0, y: 30 },
+  { opacity: 1, y: 0, duration: 0.8, delay: 0.2, ease: 'power3.out' }
+);
+gsap.fromTo('.hero h1',
+  { opacity: 0, y: 50 },
+  { opacity: 1, y: 0, duration: 1, delay: 0.4, ease: 'power3.out' }
+);
+gsap.fromTo('.hero-sub',
+  { opacity: 0, y: 30 },
+  { opacity: 1, y: 0, duration: 0.8, delay: 0.6, ease: 'power3.out' }
+);
+gsap.fromTo('.hero-buttons',
+  { opacity: 0, y: 30 },
+  { opacity: 1, y: 0, duration: 0.8, delay: 0.8, ease: 'power3.out' }
+);
+gsap.fromTo('.mockup',
+  { opacity: 0, y: 80, scale: 0.9 },
+  { opacity: 1, y: 0, scale: 1, duration: 1.2, delay: 0.5, ease: 'power3.out' }
+);
+
+// Glow parallax
+gsap.to('.hero-glow1', {
+  y: 150, x: -50,
+  ease: 'none',
+  scrollTrigger: {
+    trigger: '.hero',
+    start: 'top top',
+    end: 'bottom top',
+    scrub: 2
+  }
+});
+
+gsap.to('.hero-glow2', {
+  y: -100, x: 30,
+  ease: 'none',
+  scrollTrigger: {
+    trigger: '.hero',
+    start: 'top top',
+    end: 'bottom top',
+    scrub: 3
+  }
+});
 </script>
 </body>
 </html>`));
