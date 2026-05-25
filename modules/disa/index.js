@@ -34,8 +34,8 @@ export function register(app, db) {
 
   function getOrCreateActiveThread(db, userId) {
     let thread = db.prepare(
-      'SELECT * FROM disa_conversation_threads WHERE is_active=1 ORDER BY updated_at DESC LIMIT 1'
-    ).get();
+      'SELECT * FROM disa_conversation_threads WHERE is_active=1 AND user_id=? ORDER BY updated_at DESC LIMIT 1'
+    ).get(userId || null);
     if (!thread) {
       const r = db.prepare('INSERT INTO disa_conversation_threads (user_id) VALUES (?)').run(userId || null);
       thread = db.prepare('SELECT * FROM disa_conversation_threads WHERE id=?').get(r.lastInsertRowid);
@@ -1055,7 +1055,7 @@ export function register(app, db) {
     const limit = 50;
     const tenantSlugView = c.get('tenant')?.slug;
     const isDevView = process.env.NODE_ENV !== 'production' || tenantSlugView === 'dev';
-    const thread = db.prepare('SELECT * FROM disa_conversation_threads WHERE is_active=1 ORDER BY updated_at DESC LIMIT 1').get() || null;
+    const thread = db.prepare('SELECT * FROM disa_conversation_threads WHERE is_active=1 AND user_id=? ORDER BY updated_at DESC LIMIT 1').get(session?.userId || null) || null;
     const conv = thread ? getConversationForThread(db, thread.id) : null;
     const messages = conv ? JSON.parse(conv.messages || '[]') : [];
     const csrf = getCsrfToken(c);
@@ -1473,18 +1473,21 @@ export function register(app, db) {
   // ── Thread endpoints ─────────────────────────────────────
 
   router.get('/threads', adminAuth(db), c => {
+    const session = c.get('session');
+    console.log('[DISA THREADS] userId:', session?.userId, 'role:', session?.role);
     const threads = db.prepare(`
       SELECT t.id, t.title, t.pinned, t.created_at, t.updated_at
       FROM disa_conversation_threads t
-      WHERE t.is_active = 1
+      WHERE t.is_active = 1 AND t.user_id = ?
       ORDER BY t.pinned DESC, t.updated_at DESC
-    `).all();
+    `).all(session?.userId || null);
     return c.json(threads);
   });
 
   router.get('/threads/:id', adminAuth(db), c => {
     const threadId = parseInt(c.req.param('id'));
-    const thread = db.prepare('SELECT * FROM disa_conversation_threads WHERE id=? AND is_active=1').get(threadId);
+    const session = c.get('session');
+    const thread = db.prepare('SELECT * FROM disa_conversation_threads WHERE id=? AND is_active=1 AND user_id=?').get(threadId, session?.userId || null);
     if (!thread) return c.json({ error: 'Thread no encontrado' }, 404);
     const convRows = db.prepare(
       'SELECT messages FROM disa_conversations WHERE thread_id=? ORDER BY id ASC'
@@ -1504,23 +1507,26 @@ export function register(app, db) {
 
   router.delete('/threads/:id', adminAuth(db), c => {
     const threadId = parseInt(c.req.param('id'));
-    db.prepare('UPDATE disa_conversation_threads SET is_active=0, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(threadId);
+    const session = c.get('session');
+    db.prepare('UPDATE disa_conversation_threads SET is_active=0, updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?').run(threadId, session?.userId || null);
     return c.json({ ok: true });
   });
 
   router.post('/threads/:id/title', adminAuth(db), async c => {
     const threadId = parseInt(c.req.param('id'));
+    const session = c.get('session');
     let body;
     try { body = await c.req.json(); } catch { return c.json({ ok: false }, 400); }
     const title = (body?.title || '').trim().substring(0, 100);
     if (!title) return c.json({ ok: false, error: 'Título vacío' }, 400);
-    db.prepare('UPDATE disa_conversation_threads SET title=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(title, threadId);
+    db.prepare('UPDATE disa_conversation_threads SET title=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?').run(title, threadId, session?.userId || null);
     return c.json({ ok: true });
   });
 
   router.post('/threads/:id/pin', adminAuth(db), c => {
     const threadId = parseInt(c.req.param('id'));
-    const row = db.prepare('SELECT pinned FROM disa_conversation_threads WHERE id=? AND is_active=1').get(threadId);
+    const session = c.get('session');
+    const row = db.prepare('SELECT pinned FROM disa_conversation_threads WHERE id=? AND is_active=1 AND user_id=?').get(threadId, session?.userId || null);
     if (!row) return c.json({ ok: false }, 404);
     const newPinned = row.pinned ? 0 : 1;
     db.prepare('UPDATE disa_conversation_threads SET pinned=? WHERE id=?').run(newPinned, threadId);
@@ -1575,7 +1581,7 @@ export function register(app, db) {
     const threadIdParam = parseInt(body?.thread_id) || null;
     let thread;
     if (threadIdParam) {
-      thread = db.prepare('SELECT * FROM disa_conversation_threads WHERE id=? AND is_active=1').get(threadIdParam);
+      thread = db.prepare('SELECT * FROM disa_conversation_threads WHERE id=? AND is_active=1 AND user_id=?').get(threadIdParam, session?.userId || null);
       if (!thread) return c.json({ error: 'Thread no encontrado.' }, 404);
     } else {
       thread = getOrCreateActiveThread(db, session?.userId);
