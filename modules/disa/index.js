@@ -5,6 +5,9 @@ import { adminLayout } from '../erp/layout.js';
 export function register(app, db) {
   const router = new Hono();
 
+  // ── Schema migrations ─────────────────────────────────────
+  try { db.prepare('ALTER TABLE disa_conversation_threads ADD COLUMN pinned INTEGER DEFAULT 0').run(); } catch {}
+
   // ── Helpers ──────────────────────────────────────────────
 
   function getUsage(db) {
@@ -1107,14 +1110,23 @@ export function register(app, db) {
   .dt-item:hover{background:rgba(255,255,255,0.04)}
   .dt-item.dt-active{background:rgba(13,148,136,0.12);border-color:rgba(13,148,136,0.25)}
   .dt-title{font-size:12px;font-weight:500;color:#c8d6e5;white-space:nowrap;overflow:hidden;
-    text-overflow:ellipsis;padding-right:20px}
+    text-overflow:ellipsis;padding-right:44px}
   .dt-item.dt-active .dt-title{color:#2dd4bf}
+  .dt-title-input{font-size:12px;font-weight:500;color:#c8d6e5;background:rgba(255,255,255,0.06);
+    border:1px solid #14B8A6;border-radius:4px;padding:1px 5px;width:calc(100% - 48px);
+    outline:none;font-family:inherit}
   .dt-meta{font-size:10px;color:rgba(255,255,255,0.3);margin-top:1px}
-  .dt-del{position:absolute;top:50%;right:6px;transform:translateY(-50%);opacity:0;background:none;
-    border:none;cursor:pointer;color:rgba(255,255,255,0.35);padding:3px;border-radius:4px;
-    line-height:1;transition:all .12s;display:flex;align-items:center;justify-content:center}
-  .dt-item:hover .dt-del{opacity:1}
+  .dt-actions{position:absolute;top:50%;right:6px;transform:translateY(-50%);display:flex;
+    align-items:center;gap:1px;opacity:0;transition:opacity .12s}
+  .dt-item:hover .dt-actions{opacity:1}
+  .dt-pin,.dt-del{background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.35);
+    padding:3px;border-radius:4px;line-height:1;display:flex;align-items:center;justify-content:center}
+  .dt-pin:hover{color:#14B8A6;background:rgba(20,184,166,0.12)}
+  .dt-pin.pinned{color:#14B8A6;opacity:1!important}
   .dt-del:hover{color:#ef4444;background:rgba(239,68,68,0.1)}
+  .dt-actions.has-pinned{opacity:1}
+  .dt-sep{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    color:rgba(255,255,255,0.22);padding:8px 12px 3px;flex-shrink:0}
   @keyframes tdot{0%,60%,100%{opacity:.25;transform:scale(.8)}30%{opacity:1;transform:scale(1.1)}}
   @media(max-width:900px){
     .dt-panel{position:fixed;top:0;left:240px;height:100vh;z-index:95;
@@ -1246,6 +1258,24 @@ export function register(app, db) {
     if (show) document.getElementById('chatArea').scrollTop = 9999;
   }
 
+  function dtItemHTML(t) {
+    var cls = t.id === window.disaActiveThreadId ? ' dt-active' : '';
+    var pinCls = t.pinned ? ' pinned' : '';
+    var actionsCls = t.pinned ? ' has-pinned' : '';
+    var title = esc(t.title || 'Nueva conversación');
+    return '<div class="dt-item' + cls + '" id="dti-' + t.id + '" onclick="dtLoad(' + t.id + ')" ondblclick="event.stopPropagation();dtStartRename(' + t.id + ')">'
+      + '<div class="dt-title" id="dtt-' + t.id + '">' + title + '</div>'
+      + '<div class="dt-meta">' + esc(relTime(t.updated_at)) + '</div>'
+      + '<div class="dt-actions' + actionsCls + '">'
+      + '<button class="dt-pin' + pinCls + '" onclick="event.stopPropagation();dtPin(' + t.id + ')" title="' + (t.pinned ? 'Desfijar' : 'Fijar') + '">'
+      + '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>'
+      + '</button>'
+      + '<button class="dt-del" onclick="event.stopPropagation();dtDelete(' + t.id + ')" title="Eliminar">'
+      + '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">'
+      + '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>'
+      + '</svg></button></div></div>';
+  }
+
   async function loadThreads() {
     try {
       var res = await fetch('/api/disa/threads', { headers: { 'x-csrf-token': csrf } });
@@ -1257,16 +1287,15 @@ export function register(app, db) {
         list.innerHTML = '<div style="padding:14px 10px;font-size:11px;color:rgba(255,255,255,.28);text-align:center">Sin conversaciones</div>';
         return;
       }
-      list.innerHTML = threads.map(function(t) {
-        var cls = t.id === window.disaActiveThreadId ? ' dt-active' : '';
-        return '<div class="dt-item' + cls + '" onclick="dtLoad(' + t.id + ')">'
-          + '<div class="dt-title">' + esc(t.title || 'Nueva conversación') + '</div>'
-          + '<div class="dt-meta">' + esc(relTime(t.updated_at)) + '</div>'
-          + '<button class="dt-del" onclick="event.stopPropagation();dtDelete(' + t.id + ')" title="Eliminar">'
-          + '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">'
-          + '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>'
-          + '</svg></button></div>';
-      }).join('');
+      var pinned = threads.filter(function(t){ return t.pinned; });
+      var recent = threads.filter(function(t){ return !t.pinned; });
+      var html = '';
+      if (pinned.length) {
+        html += '<div class="dt-sep">Fijadas</div>' + pinned.map(dtItemHTML).join('');
+        if (recent.length) html += '<div class="dt-sep">Recientes</div>';
+      }
+      html += recent.map(dtItemHTML).join('');
+      list.innerHTML = html;
     } catch(e) { console.error('[DISA] loadThreads', e); }
   }
 
@@ -1320,6 +1349,51 @@ export function register(app, db) {
       }
       await loadThreads();
     } catch(e) { console.error('[DISA] dtDelete', e); }
+  };
+
+  window.dtPin = async function(id) {
+    try {
+      await fetch('/api/disa/threads/' + id + '/pin', { method: 'POST', headers: { 'x-csrf-token': csrf } });
+      await loadThreads();
+    } catch(e) { console.error('[DISA] dtPin', e); }
+  };
+
+  window.dtStartRename = function(id) {
+    var titleEl = document.getElementById('dtt-' + id);
+    if (!titleEl || titleEl.querySelector('input')) return;
+    var current = titleEl.textContent.trim();
+    var input = document.createElement('input');
+    input.className = 'dt-title-input';
+    input.value = current;
+    titleEl.innerHTML = '';
+    titleEl.appendChild(input);
+    input.focus();
+    input.select();
+    var done = false;
+    async function commit() {
+      if (done) return; done = true;
+      var val = input.value.trim();
+      if (val && val !== current) {
+        try {
+          await fetch('/api/disa/threads/' + id + '/title', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf },
+            body: JSON.stringify({ title: val })
+          });
+          if (window.disaActiveThreadId === id) {
+            var hdr = document.getElementById('dtCurrentTitle');
+            if (hdr) hdr.textContent = val;
+          }
+        } catch(e) { console.error('[DISA] rename', e); }
+      }
+      await loadThreads();
+    }
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      if (e.key === 'Escape') { done = true; loadThreads(); }
+    });
+    input.addEventListener('blur', commit);
+    input.addEventListener('click', function(e){ e.stopPropagation(); });
   };
 
   function dtClosePanel() {
@@ -1400,10 +1474,10 @@ export function register(app, db) {
 
   router.get('/threads', adminAuth(db), c => {
     const threads = db.prepare(`
-      SELECT t.id, t.title, t.created_at, t.updated_at
+      SELECT t.id, t.title, t.pinned, t.created_at, t.updated_at
       FROM disa_conversation_threads t
       WHERE t.is_active = 1
-      ORDER BY t.updated_at DESC
+      ORDER BY t.pinned DESC, t.updated_at DESC
     `).all();
     return c.json(threads);
   });
@@ -1442,6 +1516,15 @@ export function register(app, db) {
     if (!title) return c.json({ ok: false, error: 'Título vacío' }, 400);
     db.prepare('UPDATE disa_conversation_threads SET title=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(title, threadId);
     return c.json({ ok: true });
+  });
+
+  router.post('/threads/:id/pin', adminAuth(db), c => {
+    const threadId = parseInt(c.req.param('id'));
+    const row = db.prepare('SELECT pinned FROM disa_conversation_threads WHERE id=? AND is_active=1').get(threadId);
+    if (!row) return c.json({ ok: false }, 404);
+    const newPinned = row.pinned ? 0 : 1;
+    db.prepare('UPDATE disa_conversation_threads SET pinned=? WHERE id=?').run(newPinned, threadId);
+    return c.json({ ok: true, pinned: newPinned });
   });
 
   router.get('/chips', adminAuth(db), c => {
