@@ -737,6 +737,14 @@ export function runMigrations(db) {
       ON disa_conversation_threads(updated_at DESC);
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS disa_quick_chips (
+      user_id INTEGER PRIMARY KEY,
+      chips TEXT NOT NULL DEFAULT '[]',
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   addCol(db, 'disa_conversations', 'thread_id', 'INTEGER');
 
   // Migrar mensajes sin thread → thread histórico

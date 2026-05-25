@@ -350,10 +350,16 @@ export function disaHomeHtml({ userName, alertCount, kpis }) {
 
         <!-- Input -->
         <div class="disa-input-area" id="dh-input-area">
-          <div class="disa-chips" id="dh-chips">
-            <button class="disa-chip" onclick="disaQuickSend('Resumen del día')">Resumen del día</button>
-            <button class="disa-chip" onclick="disaQuickSend('Top productos del mes')">Top productos</button>
-            <button class="disa-chip" onclick="disaQuickSend('Clientes inactivos')">Clientes inactivos</button>
+          <div style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+            <div class="disa-chips" id="dh-chips" style="margin-bottom:0"></div>
+            <button onclick="disaEditChips()" title="Editar accesos rápidos"
+              style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.2);padding:3px;border-radius:4px;line-height:1;transition:color 0.15s;flex-shrink:0"
+              onmouseover="this.style.color='rgba(255,255,255,0.5)'" onmouseout="this.style.color='rgba(255,255,255,0.2)'">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
           </div>
           <form onsubmit="event.preventDefault(); disaSubmitHome();">
             <div class="disa-input-box">
@@ -689,6 +695,78 @@ export function disaHomeHtml({ userName, alertCount, kpis }) {
       }
 
       document.getElementById('dh-input')?.focus();
+
+      const DH_DEFAULT_CHIPS = ['Resumen del día', 'Top productos', 'Clientes inactivos'];
+
+      function dhGetCsrf() {
+        return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || window.CSRF_TOKEN || '';
+      }
+
+      function dhRenderChips(chips) {
+        const el = document.getElementById('dh-chips');
+        if (!el) return;
+        el.innerHTML = chips.map(function(c) {
+          return '<button class="disa-chip" onclick="disaQuickSend(' + JSON.stringify(c).replace(/"/g, '&quot;') + ')">'
+            + c.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</button>';
+        }).join('');
+      }
+
+      async function dhLoadChips() {
+        try {
+          const res = await fetch('/api/disa/chips', { headers: { 'x-csrf-token': dhGetCsrf() } });
+          const chips = res.ok ? await res.json() : DH_DEFAULT_CHIPS;
+          dhRenderChips(Array.isArray(chips) && chips.length ? chips : DH_DEFAULT_CHIPS);
+        } catch { dhRenderChips(DH_DEFAULT_CHIPS); }
+      }
+
+      window.disaEditChips = async function() {
+        let chips = DH_DEFAULT_CHIPS;
+        try {
+          const res = await fetch('/api/disa/chips', { headers: { 'x-csrf-token': dhGetCsrf() } });
+          if (res.ok) { const d = await res.json(); if (Array.isArray(d) && d.length) chips = d; }
+        } catch {}
+        for (var i = 0; i < 3; i++) {
+          var inp = document.getElementById('dh-chip-' + i);
+          if (inp) inp.value = chips[i] || '';
+        }
+        document.getElementById('dh-chips-modal').style.display = 'flex';
+      };
+
+      window.disaSaveChips = async function() {
+        var chips = [0,1,2].map(function(i){ return (document.getElementById('dh-chip-'+i)?.value||'').trim(); }).filter(Boolean);
+        if (!chips.length) return;
+        try {
+          var res = await fetch('/api/disa/chips', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': dhGetCsrf() },
+            body: JSON.stringify({ chips: chips })
+          });
+          if (res.ok) {
+            dhRenderChips(chips);
+            document.getElementById('dh-chips-modal').style.display = 'none';
+          }
+        } catch {}
+      };
+
+      dhLoadChips();
     </script>
+
+    <div id="dh-chips-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center">
+      <div style="background:#0f1420;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:24px;width:360px;max-width:90vw">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <div style="color:#fff;font-weight:600;font-size:14px">Accesos rápidos</div>
+          <button onclick="document.getElementById('dh-chips-modal').style.display='none'" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:18px;line-height:1;padding:0">✕</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">
+          <input id="dh-chip-0" placeholder="Chip 1" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 12px;font-size:13px;color:#f1f5f9;font-family:inherit;outline:none;width:100%;box-sizing:border-box">
+          <input id="dh-chip-1" placeholder="Chip 2" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 12px;font-size:13px;color:#f1f5f9;font-family:inherit;outline:none;width:100%;box-sizing:border-box">
+          <input id="dh-chip-2" placeholder="Chip 3" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 12px;font-size:13px;color:#f1f5f9;font-family:inherit;outline:none;width:100%;box-sizing:border-box">
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button onclick="document.getElementById('dh-chips-modal').style.display='none'" style="padding:7px 14px;border:1px solid rgba(255,255,255,0.1);border-radius:7px;background:none;color:#94a3b8;cursor:pointer;font-size:13px;font-family:inherit">Cancelar</button>
+          <button onclick="disaSaveChips()" style="padding:7px 14px;background:#0D9488;border:none;border-radius:7px;color:#fff;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit">Guardar</button>
+        </div>
+      </div>
+    </div>
   `;
 }

@@ -1444,6 +1444,27 @@ export function register(app, db) {
     return c.json({ ok: true });
   });
 
+  router.get('/chips', adminAuth(db), c => {
+    const session = c.get('session');
+    const row = db.prepare('SELECT chips FROM disa_quick_chips WHERE user_id=?').get(session?.userId);
+    const defaults = ['Resumen del día', 'Top productos', 'Clientes inactivos'];
+    if (!row) return c.json(defaults);
+    try { const chips = JSON.parse(row.chips); return c.json(Array.isArray(chips) && chips.length ? chips : defaults); }
+    catch { return c.json(defaults); }
+  });
+
+  router.post('/chips', adminAuth(db), async c => {
+    let body;
+    try { body = await c.req.json(); } catch { return c.json({ ok: false }, 400); }
+    const chips = Array.isArray(body?.chips)
+      ? body.chips.slice(0, 3).map(s => String(s).trim().substring(0, 60)).filter(Boolean)
+      : [];
+    if (!chips.length) return c.json({ ok: false, error: 'Chips vacíos' }, 400);
+    const session = c.get('session');
+    db.prepare('INSERT OR REPLACE INTO disa_quick_chips (user_id, chips, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)').run(session?.userId, JSON.stringify(chips));
+    return c.json({ ok: true });
+  });
+
   router.post('/message', adminAuth(db), async c => {
     const usage = getUsage(db);
     const limit = 50;
