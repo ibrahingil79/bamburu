@@ -1052,9 +1052,9 @@ export function register(app, db) {
     const limit = 50;
     const tenantSlugView = c.get('tenant')?.slug;
     const isDevView = process.env.NODE_ENV !== 'production' || tenantSlugView === 'dev';
-    const thread = getOrCreateActiveThread(db, session?.userId);
-    const conv = getConversationForThread(db, thread.id);
-    const messages = JSON.parse(conv.messages || '[]');
+    const thread = db.prepare('SELECT * FROM disa_conversation_threads WHERE is_active=1 ORDER BY updated_at DESC LIMIT 1').get() || null;
+    const conv = thread ? getConversationForThread(db, thread.id) : null;
+    const messages = conv ? JSON.parse(conv.messages || '[]') : [];
     const csrf = getCsrfToken(c);
 
     const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -1069,7 +1069,7 @@ export function register(app, db) {
     };
 
     const usagePct = Math.min(100, (usage / limit) * 100).toFixed(1);
-    const threadTitle = esc(thread.title || 'Nueva conversación');
+    const threadTitle = thread ? esc(thread.title || 'Nueva conversación') : '';
     const csrfJson = JSON.stringify(csrf);
     const prefillCode = prefill
       ? 'var inp=document.getElementById("msgInput");if(inp){inp.value=' + JSON.stringify(prefill) + ';inp.focus();}'
@@ -1189,7 +1189,7 @@ export function register(app, db) {
 <script>
 (function(){
   var csrf = ${csrfJson};
-  window.disaActiveThreadId = ${thread.id};
+  window.disaActiveThreadId = ${thread ? thread.id : 'null'};
 
   function relTime(s) {
     if (!s) return '';
@@ -1312,10 +1312,13 @@ export function register(app, db) {
     try {
       await fetch('/api/disa/threads/' + id, { method: 'DELETE', headers: { 'x-csrf-token': csrf } });
       if (window.disaActiveThreadId === id) {
-        await dtNewThread();
-      } else {
-        await loadThreads();
+        window.disaActiveThreadId = null;
+        clearChatArea();
+        showEmpty('DISA', 'Selecciona o crea una conversación');
+        var titleEl = document.getElementById('dtCurrentTitle');
+        if (titleEl) titleEl.textContent = '';
       }
+      await loadThreads();
     } catch(e) { console.error('[DISA] dtDelete', e); }
   };
 
