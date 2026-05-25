@@ -190,7 +190,7 @@ export function createUserRoutes(db) {
 
       <script>
       const SYSTEM_ROLES={owner:'Propietario',admin:'Administrador',employee:'Empleado',readonly:'Solo lectura'};
-      const MODULE_LABELS={products:'Productos',orders:'Pedidos',clients:'Clientes',invoices:'Facturas',admin:'Administración'};
+      const MODULE_LABELS={activity:'Actividad',admin:'Administración',analytics:'Analítica',categories:'Categorías',clients:'Clientes',discounts:'Descuentos',inventory:'Inventario',invoices:'Facturas',orders:'Pedidos',products:'Productos',purchases:'Compras',suppliers:'Proveedores',tags:'Etiquetas'};
       const ALL_PERMS=${permsJson};
       let users=[], selectedPermIds=new Set();
 
