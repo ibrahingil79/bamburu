@@ -49,10 +49,32 @@ export function getDisaWidget() {
 <script>
 (function(){
   var csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')||'';
+  window.disaWidgetThreadId = null;
+  var widgetLoaded = false;
+
+  async function loadActiveThread() {
+    try {
+      var r = await fetch('/api/disa/threads', { headers: { 'x-csrf-token': csrf } });
+      if (!r.ok) return;
+      var threads = await r.json();
+      if (!Array.isArray(threads) || !threads.length) return;
+      var thread = threads[0];
+      window.disaWidgetThreadId = thread.id;
+      var r2 = await fetch('/api/disa/threads/' + thread.id, { headers: { 'x-csrf-token': csrf } });
+      if (!r2.ok) return;
+      var t = await r2.json();
+      if (t.messages && t.messages.length > 0) {
+        var msgs = document.getElementById('dpMsgs');
+        msgs.innerHTML = '';
+        t.messages.forEach(function(m) { dpAppend(m.role, m.content); });
+      }
+    } catch(e) { console.error('[Widget] Error cargando historial:', e); }
+  }
 
   window.disaOpen = function(){
     document.getElementById('disaModal').classList.add('open');
     document.getElementById('dpInput').focus();
+    if (!widgetLoaded) { widgetLoaded = true; loadActiveThread(); }
   };
   window.disaClose = function(){
     document.getElementById('disaModal').classList.remove('open');
@@ -91,10 +113,11 @@ export function getDisaWidget() {
     try{
       var r=await fetch('/api/disa/message',{
         method:'POST',
-        headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},
-        body:JSON.stringify({message:msg})
+        headers:{'Content-Type':'application/json','x-csrf-token':csrf},
+        body:JSON.stringify({message:msg, thread_id:window.disaWidgetThreadId||null})
       });
       var d=await r.json();
+      if(d.thread_id) window.disaWidgetThreadId=d.thread_id;
       dpAppend('assistant', d.reply||'Sin respuesta');
     }catch(e){
       dpAppend('assistant','Error al conectar con DISA');
