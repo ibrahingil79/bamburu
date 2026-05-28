@@ -1,3 +1,9 @@
+> 🔮 **VISIÓN FUTURA — Capa 3 (CONGELADA).**
+> Los "3 cerebros" descritos aquí son la visión a largo plazo. Para Capa 1
+> (lo que se construye AHORA) solo entra la parte proactiva de DISA sobre
+> el núcleo del autónomo (facturar / cobrar / gastos / panel). Ver
+> **CANON.md** secciones 5 y 9.
+
 # DISA — Visión Definitiva
 
 ## Filosofía

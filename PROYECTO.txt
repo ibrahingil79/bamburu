@@ -1,4 +1,12 @@
 ================================================================================
+  *** DOCUMENTO OBSOLETO — NO USAR COMO REFERENCIA ***
+
+  Describe el viejo MVP single-tenant (bamburu.db, login admin/Admin1234,
+  passwords SHA-256, estados de pedido en inglés). El producto actual es
+  multi-tenant con bcrypt y estados en español. Fuente de verdad: CANON.md.
+================================================================================
+
+================================================================================
   BAMBURU — Plataforma de E-commerce y ERP
   Versión: 1.0.0 MVP
   Fecha:   2026-05-13

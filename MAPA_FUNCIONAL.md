@@ -1,6 +1,12 @@
 # Mapa Funcional — Bamburu ERP/Store
 
-> Generado el 2026-05-14. Refleja el estado actual del código.
+> ⚠️ **DESACTUALIZADO PARCIALMENTE.**
+> La sección de Facturación ya no refleja el código (hoy hay numeración
+> correlativa + hash encadenado — ver **CANON.md** sección 9).
+> Los módulos de tienda/e-commerce descritos aquí son **Capa 2, congelada**
+> (CANON sección 5). Útil como inventario funcional, NO como plan.
+>
+> Generado el 2026-05-14. Refleja el estado del código en esa fecha.
 
 ---
 

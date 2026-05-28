@@ -1,3 +1,7 @@
+> ⚠️ **HISTÓRICO — NO ES EL PLAN ACTUAL.**
+> Roadmap viejo de 6 sprints. La fuente de verdad estratégica es **CANON.md**
+> y el plan de trabajo activo es **TABLERO.md**. Este archivo se conserva como
+> registro de lo hecho, no como guía de lo siguiente.
 
 # TAREAS BAMBURU — Roadmap Estratégico
 
