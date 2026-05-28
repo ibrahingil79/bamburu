@@ -10,10 +10,6 @@
 
 ### Bloque A — Motor de facturación (el corazón, lo más urgente)
 
-**A1. Desacoplar la factura del pedido**
-- Hoy la factura solo nace de un pedido/POS. Hay que poder crear una factura desde cero.
-- HECHO CUANDO: puedo crear una factura nueva sin que exista ningún pedido, con cliente, fecha y líneas.
-
 **A2. Líneas de factura con IVA múltiple + IRPF**
 - Hoy hay un solo tipo de IVA y no hay IRPF.
 - HECHO CUANDO: una factura puede tener líneas con distinto IVA, aplica retención de IRPF, y el total se calcula correcto.
@@ -66,7 +62,12 @@ _(vacío — coger la primera de POR HACER)_
 
 ## 🟢 HECHO
 
-_(se irá llenando)_
+- **A1. Desacoplar la factura del pedido** — 2026-05-28
+  - Se puede crear factura sin pedido desde `/admin/invoices/new` (cliente obligatorio, líneas libres, fecha editable).
+  - Numeración correlativa (F2026-NNNN) y hash SHA-256 encadenado funcionando.
+  - `POST /api/erp/invoices` con permiso `invoices.create`.
+  - `generateInvoice` (flujo POS) intacto, sin regresión.
+  - Commit `6f26587`.
 
 ---
 

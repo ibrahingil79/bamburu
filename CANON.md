@@ -170,7 +170,7 @@ producto hacia él (vocabulario, plantillas) y dominarlo.
 | Autenticación | ✅ Funciona | bcrypt, 2FA TOTP, recuperación por email (Resend), onboarding conversacional. |
 | Clientes | ✅ Funciona | CRUD completo, campos fiscales (fiscal_id, dirección…), grupos. |
 | Numeración + hash | ✅ Funciona | Correlativo por serie/año (F2026-0001), hash SHA-256 encadenado. |
-| **Crear factura sin pedido** | ❌ Falta | Hoy la factura solo nace de un pedido/POS. El autónomo de servicios factura directo. **Hueco de fondo de Capa 1.** |
+| **Crear factura sin pedido** | ✅ Funciona | `/admin/invoices/new` emite factura directa con cliente, fecha y líneas libres. Correlativo + hash encadenado. POS intacto. (A1 cerrado 2026-05-28) |
 | **IRPF + múltiples IVA** | ❌ Falta | Hoy un solo IVA, sin IRPF. Imprescindible para autónomo de servicios. |
 | **PDF real** | ❌ Falta | Hoy solo HTML imprimible del navegador. |
 | **Enviar factura por email** | ❌ Falta | Resend ya configurado; falta endpoint + acción. |
