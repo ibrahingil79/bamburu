@@ -100,6 +100,20 @@ export const refundSchema = z.object({
   reason: strOpt(500),
 });
 
+// ── Invoices ───────────────────────────────────────────────────
+const invoiceLineSchema = z.object({
+  description: str(500),
+  quantity:    z.coerce.number().positive().max(1_000_000),
+  unit_price:  z.coerce.number().nonnegative().max(1_000_000),
+});
+
+export const invoiceCreateSchema = z.object({
+  client_id:  intPos,
+  lines:      z.array(invoiceLineSchema).min(1, 'Al menos una línea requerida'),
+  issue_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  notes:      strOpt(2000),
+});
+
 // ── Discounts ──────────────────────────────────────────────────
 export const discountCodeSchema = z.object({
   code: z.string().trim().min(3).max(50).regex(/^[A-Z0-9_-]+$/i),

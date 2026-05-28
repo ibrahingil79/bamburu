@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import { createHash } from 'crypto';
-import { requirePerm } from '../../../core/auth.js';
+import { requirePerm, logActivity } from '../../../core/auth.js';
+import { validate } from '../../../core/validate.js';
+import { invoiceCreateSchema } from '../schemas.js';
 import { adminLayout } from '../layout.js';
 
 function getNextSeq(db, series, year) {
@@ -95,6 +97,73 @@ export function generateInvoice(db, orderId) {
   return { id: invoiceId, invoice_number };
 }
 
+// A1: crear factura directa (sin pedido). Recibe datos de cliente + líneas libres,
+// asigna correlativo y hash encadenado igual que generateInvoice, pero sin tocar
+// sales_orders. order_id queda NULL.
+export function createInvoice(db, invoiceData) {
+  const { client_id, lines, issue_date, notes = '' } = invoiceData;
+  if (!Array.isArray(lines) || lines.length === 0) throw new Error('Al menos una línea requerida');
+
+  const client = db.prepare('SELECT id, name, fiscal_id, address, email FROM clients WHERE id=?').get(client_id);
+  if (!client) throw new Error('Cliente no existe');
+
+  const cfg = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
+  const series = cfg.invoice_series || 'F';
+  const year = new Date().getFullYear();
+  const issueDate = issue_date || new Date().toISOString().slice(0, 10);
+  const tax_rate = cfg.tax_rate || 21;
+
+  let subtotal = 0;
+  for (const line of lines) subtotal += Number(line.quantity) * Number(line.unit_price);
+  subtotal = parseFloat(subtotal.toFixed(2));
+  const tax_amount = parseFloat((subtotal * (tax_rate / 100)).toFixed(2));
+  const total = parseFloat((subtotal + tax_amount).toFixed(2));
+
+  const create = db.transaction(() => {
+    const seq = getNextSeq(db, series, year);
+    const invoice_number = `${series}${year}-${String(seq).padStart(4, '0')}`;
+    const prev_hash = getPrevHash(db, series, year);
+    const verifactu_hash = calcHash({
+      invoice_number,
+      issue_date: issueDate,
+      company_fiscal_id: cfg.fiscal_id || '',
+      client_fiscal_id: client.fiscal_id || '',
+      total,
+      prev_hash,
+    });
+
+    const result = db.prepare(`INSERT INTO invoices
+      (invoice_number, order_id, client_id, series, year, sequence, issue_date,
+       company_name, company_fiscal_id, company_address,
+       client_name, client_fiscal_id, client_address, client_email,
+       subtotal, tax_rate, tax_name, tax_amount, total,
+       currency, currency_symbol, document_name,
+       verifactu_hash, prev_hash, notes)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).run(
+      invoice_number, null, client_id,
+      series, year, seq, issueDate,
+      cfg.company_name || 'Mi empresa', cfg.fiscal_id || '', cfg.address || '',
+      client.name, client.fiscal_id || '', client.address || '', client.email || '',
+      subtotal, tax_rate, cfg.tax_name || 'IVA', tax_amount, total,
+      cfg.currency || 'EUR', cfg.currency_symbol || '€', cfg.document_name || 'Factura',
+      verifactu_hash, prev_hash, notes
+    );
+    const invoiceId = result.lastInsertRowid;
+
+    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price) VALUES (?,?,?,?,?)');
+    for (const line of lines) {
+      const qty = Number(line.quantity);
+      const price = Number(line.unit_price);
+      const total_price = parseFloat((qty * price).toFixed(2));
+      insItem.run(invoiceId, line.description, qty, price, total_price);
+    }
+    return { id: invoiceId, invoice_number };
+  });
+
+  return create();
+}
+
 export function createInvoiceRoutes(db) {
   const api = new Hono();
   const views = new Hono();
@@ -131,11 +200,28 @@ export function createInvoiceRoutes(db) {
     }
   });
 
+  // A1: POST /api/erp/invoices — crear factura directa (sin pedido)
+  api.post('/', requirePerm('invoices.create'), validate(invoiceCreateSchema), c => {
+    try {
+      const data = c.get('validated');
+      const result = createInvoice(db, data);
+      logActivity(db, c.get('session'), 'Creó factura', 'invoice', result.id, result.invoice_number);
+      return c.json(result, 201);
+    } catch (e) {
+      let code = 400;
+      if (e.message === 'Cliente no existe') code = 404;
+      return c.json({ error: e.message }, code);
+    }
+  });
+
   // GET /admin/invoices — list view
   views.get('/', requirePerm('orders.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const content = `
-      <div class="ph"><h2>Facturas</h2></div>
+      <div class="ph">
+        <h2>Facturas</h2>
+        <a href="/admin/invoices/new" class="btn btn-primary">Nueva factura</a>
+      </div>
       <div class="card">
         <div class="card-head"><h3>Todas las facturas</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="filterTable()"></div>
         <div class="table-wrap"><table>
@@ -166,6 +252,167 @@ export function createInvoiceRoutes(db) {
       loadInvoices();
       </script>`;
     return c.html(adminLayout('Facturas', content, 'invoices', c.get('session')?.csrfToken || '', c));
+  });
+
+  // A1: GET /admin/invoices/new — formulario para crear factura sin pedido
+  views.get('/new', requirePerm('invoices.create'), c => {
+    const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
+    const today = new Date().toISOString().slice(0, 10);
+    const content = `
+      <div class="ph">
+        <h2>Nueva factura</h2>
+        <a href="/admin/invoices" class="btn btn-secondary">Cancelar</a>
+      </div>
+
+      <div class="card" style="max-width:820px">
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Cliente *</label>
+              <select id="f-client" class="form-control">
+                <option value="">— Selecciona cliente —</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Fecha emisión</label>
+              <input type="date" id="f-date" class="form-control" value="${today}">
+            </div>
+          </div>
+
+          <hr style="margin:1.25rem 0;border:none;border-top:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+            <h3 style="font-size:.9rem;font-weight:600;margin:0">Líneas</h3>
+            <button class="btn btn-secondary btn-sm" onclick="addLine()">+ Añadir línea</button>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Descripción</th>
+                  <th style="width:90px">Cantidad</th>
+                  <th style="width:130px">Precio unit.</th>
+                  <th style="width:110px;text-align:right">Subtotal</th>
+                  <th style="width:36px"></th>
+                </tr>
+              </thead>
+              <tbody id="lines-body"></tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="3" style="text-align:right;font-weight:600;padding:.7rem 1rem">Base imponible</td>
+                  <td style="text-align:right;padding:.7rem 1rem"><span id="t-subtotal">${sym}0.00</span></td>
+                  <td></td>
+                </tr>
+                <tr>
+                  <td colspan="3" style="text-align:right;color:var(--muted);padding:.4rem 1rem">IVA (<span id="t-rate">21</span>%)</td>
+                  <td style="text-align:right;color:var(--muted);padding:.4rem 1rem"><span id="t-tax">${sym}0.00</span></td>
+                  <td></td>
+                </tr>
+                <tr>
+                  <td colspan="3" style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">Total</td>
+                  <td style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem"><span id="t-total">${sym}0.00</span></td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div class="form-group" style="margin-top:1.25rem">
+            <label class="form-label">Notas (opcional)</label>
+            <textarea id="f-notes" class="form-control" rows="2"></textarea>
+          </div>
+
+          <div style="text-align:right;margin-top:1rem">
+            <button class="btn btn-primary" id="btn-emit" onclick="emitInvoice()">Emitir factura</button>
+          </div>
+        </div>
+      </div>
+
+      <script>
+      const SYM = '${sym}';
+      let TAX_RATE = 21;
+      let clients = [];
+
+      async function loadAll(){
+        try {
+          const [cs, cfg] = await Promise.all([
+            api('GET','/api/erp/clients').catch(()=>[]),
+            api('GET','/api/erp/settings/company').catch(()=>null),
+          ]);
+          clients = cs;
+          if (cfg && cfg.tax_rate) { TAX_RATE = Number(cfg.tax_rate) || 21; }
+          document.getElementById('t-rate').textContent = TAX_RATE;
+          const sel = document.getElementById('f-client');
+          for (const cl of clients) {
+            const o = document.createElement('option');
+            o.value = cl.id; o.textContent = cl.name + (cl.fiscal_id ? ' — ' + cl.fiscal_id : '');
+            sel.appendChild(o);
+          }
+        } catch(e){ toast(e.message||'Error cargando datos','err'); }
+        addLine();
+      }
+
+      function addLine(){
+        const tbody = document.getElementById('lines-body');
+        const row = document.createElement('tr');
+        row.innerHTML =
+          '<td><input type="text" class="form-control line-desc" placeholder="Descripción del servicio o producto"></td>' +
+          '<td><input type="number" class="form-control line-qty" step="0.01" min="0.01" value="1"></td>' +
+          '<td><input type="number" class="form-control line-price" step="0.01" min="0" value="0"></td>' +
+          '<td style="text-align:right;padding:.7rem 1rem"><span class="line-subtotal">' + SYM + '0.00</span></td>' +
+          '<td><button class="btn btn-danger btn-sm" onclick="this.closest(\\'tr\\').remove();recalc()">✕</button></td>';
+        tbody.appendChild(row);
+        row.querySelectorAll('.line-qty, .line-price').forEach(inp => inp.addEventListener('input', recalc));
+        recalc();
+      }
+
+      function recalc(){
+        let sub = 0;
+        document.querySelectorAll('#lines-body tr').forEach(r => {
+          const q = parseFloat(r.querySelector('.line-qty').value) || 0;
+          const p = parseFloat(r.querySelector('.line-price').value) || 0;
+          const st = q * p;
+          r.querySelector('.line-subtotal').textContent = SYM + st.toFixed(2);
+          sub += st;
+        });
+        const tax = sub * (TAX_RATE/100);
+        const tot = sub + tax;
+        document.getElementById('t-subtotal').textContent = SYM + sub.toFixed(2);
+        document.getElementById('t-tax').textContent = SYM + tax.toFixed(2);
+        document.getElementById('t-total').textContent = SYM + tot.toFixed(2);
+      }
+
+      async function emitInvoice(){
+        const client_id = parseInt(document.getElementById('f-client').value);
+        if (!client_id) { toast('Selecciona un cliente','err'); return; }
+        const issue_date = document.getElementById('f-date').value || undefined;
+        const notes = document.getElementById('f-notes').value || '';
+        const lines = [];
+        for (const r of document.querySelectorAll('#lines-body tr')) {
+          const desc = r.querySelector('.line-desc').value.trim();
+          const qty = parseFloat(r.querySelector('.line-qty').value);
+          const price = parseFloat(r.querySelector('.line-price').value);
+          if (!desc) { toast('Falta descripción en una línea','err'); return; }
+          if (!(qty > 0)) { toast('Cantidad debe ser > 0','err'); return; }
+          if (!(price >= 0)) { toast('Precio inválido','err'); return; }
+          lines.push({ description: desc, quantity: qty, unit_price: price });
+        }
+        if (lines.length === 0) { toast('Añade al menos una línea','err'); return; }
+        const btn = document.getElementById('btn-emit');
+        btn.disabled = true;
+        try {
+          const res = await api('POST','/api/erp/invoices',{ client_id, lines, issue_date, notes });
+          toast('Factura ' + res.invoice_number + ' emitida');
+          window.location.href = '/admin/invoices/' + res.id;
+        } catch(e) {
+          toast(e.message || 'Error emitiendo factura','err');
+          btn.disabled = false;
+        }
+      }
+
+      loadAll();
+      </script>`;
+    return c.html(adminLayout('Nueva factura', content, 'invoices', c.get('session')?.csrfToken || '', c));
   });
 
   // GET /admin/invoices/:id — printable invoice

@@ -491,7 +491,7 @@ export function runMigrations(db) {
   db.exec(`CREATE TABLE IF NOT EXISTS invoices (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     invoice_number TEXT UNIQUE NOT NULL,
-    order_id INTEGER NOT NULL,
+    order_id INTEGER,
     client_id INTEGER,
     series TEXT DEFAULT 'F',
     year INTEGER NOT NULL,
@@ -520,6 +520,60 @@ export function runMigrations(db) {
     FOREIGN KEY (order_id) REFERENCES sales_orders(id),
     FOREIGN KEY (client_id) REFERENCES clients(id)
   )`);
+
+  // A1: migración idempotente — hace nullable invoices.order_id en tenants antiguos.
+  // SQLite no soporta DROP NOT NULL directamente; hay que recrear la tabla.
+  {
+    const cols = db.prepare("PRAGMA table_info(invoices)").all();
+    const orderIdCol = cols.find(c => c.name === 'order_id');
+    if (orderIdCol && orderIdCol.notnull === 1) {
+      db.exec("PRAGMA foreign_keys = OFF");
+      db.exec("BEGIN");
+      try {
+        db.exec(`CREATE TABLE invoices_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          invoice_number TEXT UNIQUE NOT NULL,
+          order_id INTEGER,
+          client_id INTEGER,
+          series TEXT DEFAULT 'F',
+          year INTEGER NOT NULL,
+          sequence INTEGER NOT NULL,
+          issue_date DATE NOT NULL,
+          company_name TEXT NOT NULL,
+          company_fiscal_id TEXT NOT NULL,
+          company_address TEXT DEFAULT '',
+          client_name TEXT DEFAULT '',
+          client_fiscal_id TEXT DEFAULT '',
+          client_address TEXT DEFAULT '',
+          client_email TEXT DEFAULT '',
+          subtotal REAL NOT NULL DEFAULT 0,
+          tax_rate REAL NOT NULL DEFAULT 21,
+          tax_name TEXT NOT NULL DEFAULT 'IVA',
+          tax_amount REAL NOT NULL DEFAULT 0,
+          total REAL NOT NULL DEFAULT 0,
+          currency TEXT DEFAULT 'EUR',
+          currency_symbol TEXT DEFAULT '€',
+          document_name TEXT DEFAULT 'Factura',
+          verifactu_hash TEXT DEFAULT '',
+          prev_hash TEXT DEFAULT '',
+          status TEXT DEFAULT 'emitida' CHECK(status IN ('emitida','rectificada','anulada')),
+          notes TEXT DEFAULT '',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (order_id) REFERENCES sales_orders(id),
+          FOREIGN KEY (client_id) REFERENCES clients(id)
+        )`);
+        db.exec("INSERT INTO invoices_new SELECT * FROM invoices");
+        db.exec("DROP TABLE invoices");
+        db.exec("ALTER TABLE invoices_new RENAME TO invoices");
+        db.exec("COMMIT");
+      } catch (e) {
+        db.exec("ROLLBACK");
+        throw e;
+      } finally {
+        db.exec("PRAGMA foreign_keys = ON");
+      }
+    }
+  }
 
   db.exec(`CREATE TABLE IF NOT EXISTS invoice_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
