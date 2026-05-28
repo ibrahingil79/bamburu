@@ -10,10 +10,6 @@
 
 ### Bloque A — Motor de facturación (el corazón, lo más urgente)
 
-**A2. Líneas de factura con IVA múltiple + IRPF**
-- Hoy hay un solo tipo de IVA y no hay IRPF.
-- HECHO CUANDO: una factura puede tener líneas con distinto IVA, aplica retención de IRPF, y el total se calcula correcto.
-
 **A3. Catálogo mixto de servicios**
 - Decidir primero: ¿reutilizar tabla de productos (filtrando tipo "servicio") o tabla nueva? (decisión técnica).
 - HECHO CUANDO: puedo guardar servicios repetidos (nombre+precio+IVA+IRPF) y elegirlos al facturar, Y escribir una línea libre suelta sin guardarla.
@@ -52,6 +48,12 @@
 **C2. DISA proactiva (avisos)**
 - HECHO CUANDO: DISA avisa sola de al menos: cobros vencidos, trimestre de IVA cercano, y caída de facturación respecto al mes anterior.
 
+### Bloque D — Settings del autónomo (NO urgente, va al final)
+
+**D1. Settings del autónomo**
+- Hoy `/admin/settings` está pensado para una empresa con tienda online (currency_symbol, document_name, country deshabilitado…). Hay que orientarlo al autónomo de servicios.
+- HECHO CUANDO: el autónomo puede ajustar desde una pantalla simple: datos del negocio (nombre, NIF, dirección), logo, IVA por defecto, IRPF por defecto (si ES), y preferencias de impresora (tamaño, márgenes, copias). Cambios efectivos inmediatamente en las facturas nuevas.
+
 ---
 
 ## 🟡 HACIENDO (máximo UNA)
@@ -68,6 +70,14 @@ _(vacío — coger la primera de POR HACER)_
   - `POST /api/erp/invoices` con permiso `invoices.create`.
   - `generateInvoice` (flujo POS) intacto, sin regresión.
   - Commit `6f26587`.
+
+- **A2. Líneas de factura con IVA múltiple + IRPF** — 2026-05-28
+  - Dropdown IVA por línea (21/10/4/Exento) en `/admin/invoices/new`, dropdown IRPF global (0/7/15) solo si `country='ES'`.
+  - Motor único `computeTotals(lines, irpfRate)` (helper puro exportado) + endpoint `POST /api/erp/invoices/compute-totals` para preview en vivo (debounce 300 ms).
+  - Vista imprimible con desglose por tasa, "Exento de IVA", IRPF como deducción, badge "Emitida el …" y botón "Volver al listado".
+  - Fixes incluidos: DISA emite con `verifactu_hash` intacto (delega en `generateInvoice`); listado `/admin/invoices` ya muestra facturas (bug pre-A1 con `o.reference`).
+  - POS intacto, cadena de hashes intacta.
+  - Commit `143176e`.
 
 ---
 

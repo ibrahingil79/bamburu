@@ -87,7 +87,11 @@ El núcleo, todo accionable hablando con DISA y con DISA avisando de forma proac
    de consultoría": nombre + precio + IVA + IRPF) Y permite escribir líneas libres
    sueltas para lo irrepetible, sin guardarlas. No es el módulo de productos del
    e-commerce (eso es Capa 2).
-7. **DISA proactiva** como forma principal de usar todo lo anterior. INNEGOCIABLE.
+7. **Configuración del autónomo (Settings)** — impresora, IVA/IRPF por defecto,
+   logo, datos del negocio. No urgente (va después de gastos/cobros/panel), pero
+   pieza del núcleo de Capa 1: el autónomo necesita poder ajustar sus defaults
+   sin tocar BD.
+8. **DISA proactiva** como forma principal de usar todo lo anterior. INNEGOCIABLE.
 
 **Cómo se siente:** el autónomo se registra y DISA ya le habla y propone. Le dice
 "factúrale 300 € a María por la sesión de ayer", DISA propone la factura estructurada,
@@ -171,12 +175,13 @@ producto hacia él (vocabulario, plantillas) y dominarlo.
 | Clientes | ✅ Funciona | CRUD completo, campos fiscales (fiscal_id, dirección…), grupos. |
 | Numeración + hash | ✅ Funciona | Correlativo por serie/año (F2026-0001), hash SHA-256 encadenado. |
 | **Crear factura sin pedido** | ✅ Funciona | `/admin/invoices/new` emite factura directa con cliente, fecha y líneas libres. Correlativo + hash encadenado. POS intacto. (A1 cerrado 2026-05-28) |
-| **IRPF + múltiples IVA** | ❌ Falta | Hoy un solo IVA, sin IRPF. Imprescindible para autónomo de servicios. |
+| **IRPF + múltiples IVA** | ✅ Funciona | IVA por línea (21/10/4/Exento) + IRPF global (0/7/15, solo ES). Desglose en la imprimible. POS intacto. (A2 cerrado 2026-05-28) |
 | **PDF real** | ❌ Falta | Hoy solo HTML imprimible del navegador. |
 | **Enviar factura por email** | ❌ Falta | Resend ya configurado; falta endpoint + acción. |
 | **QR + leyenda VERI*FACTU** | ❌ Falta | El hash ya existe; faltan QR y leyenda. |
 | **Cobros (qué me deben)** | ❌ Falta | No hay estado de cobro de facturas. |
 | **Gastos** | ❌ Falta | No existe (las "compras a proveedores" son coste de mercancía, no gastos del autónomo). |
+| **Settings del autónomo** | ⏳ Parcial | `/admin/settings` existe con empresa/IVA/logo, pero no expone IRPF por defecto ni impresora. Necesita un rediseño orientado al autónomo. No urgente. |
 | **Catálogo de servicios** | ⏳ A decidir | Existe tabla de productos del e-commerce; decidir si el catálogo de servicios la reutiliza (filtrando tipo "servicio") o es tabla nueva. Decisión técnica para Claude Code. |
 | **DISA proactiva sobre el core** | ⏳ Parcial | DISA existe (chat, threads, query_database, acciones con confirmación) pero opera sobre el ERP-tienda. Falta enfocarla en facturar/cobrar/gastos y darle la capa proactiva de avisos. |
 
