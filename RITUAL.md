@@ -18,28 +18,49 @@
    ¿ayuda al autónomo de servicios a gestionar su negocio? Si no → no se toca ahora.
    Si es buena pero no es de ahora → anotarla, no construirla.
 
-## Al TERMINAR (aunque la tarea quede a medias)
-8. Actualizar `TABLERO.md`: mover a HECHO, o anotar en HACIENDO dónde quedó.
-9. Si se terminó una pieza, actualizar la tabla de estado del `CANON.md` (sección 9).
-10. Anotar en `session.json` dónde se quedó, para la próxima sesión.
-11. **Cierre de sesión** — pegar a Claude Code este encargo:
+## Al TERMINAR — rutina de cierre (siempre, en este orden)
 
-    > Cierra la sesión de hoy:
-    > 1. Calcula cuánto duró: hora actual menos "sesion_inicio" de session.json.
-    > 2. Resume en 2-4 líneas qué hicimos hoy y qué tareas del TABLERO se completaron.
-    > 3. Actualiza mi Notion en la página "Control de Proyecto — Bamburu"
-    >    (ID `36e18b04-bb1f-812f-99ee-f96789ac2909`, token en `/etc/bamburu.env`
-    >    como `NOTION_TOKEN`). Tres updates concretos:
-    >    a) Bloque **"Dónde lo dejé / Dónde sigo"** → escribe la última tarea
-    >       terminada, la siguiente a empezar, y el contador `X de 11` (Capa 1
-    >       completadas / total).
-    >    b) Bloque **"Registro de tiempo"** → añade UNA línea nueva con fecha
-    >       (AAAA-MM-DD), horas y resumen corto (1 frase).
-    >    c) Si hay KPIs en la página (Verifactu, GitHub, clientes de pago, MRR…)
-    >       cuyo valor ha cambiado hoy, actualízalos también.
-    > NO repliques el detalle de las tareas en Notion — eso vive en TABLERO.md.
-    > Notion es solo el panel ejecutivo: dónde estoy, cuánto avanzo, cuánto tiempo.
-    > NO midas líneas de código (métrica engañosa). Mide tareas completadas y tiempo.
+Esta rutina se ejecuta SIEMPRE al final de la sesión. Es la única forma de que
+Notion quede al día sin que el fundador toque nada. Cuatro pasos, a/b/c/d:
+
+**a) Actualizar `TABLERO.md`**
+- Mover a `🟢 HECHO` las tareas completadas hoy (con fecha + commit).
+- Si la sesión terminó en mitad de una tarea, dejar la nota en `🟡 HACIENDO`.
+- La siguiente queda como primera en `🔵 POR HACER`.
+
+**b) Actualizar `CANON.md` si se cerró una pieza**
+- En la tabla de estado (sección 9), cambiar la fila de `❌ Falta` a `✅ Funciona`.
+- Si se descubrió algo no previsto del producto (decisión, hueco, dependencia),
+  añadirlo al CANON antes de cerrar.
+
+**c) Actualizar Notion** — página "Control de Proyecto — Bamburu"
+(ID `36e18b04-bb1f-812f-99ee-f96789ac2909`, token en `/etc/bamburu.env`
+como `NOTION_TOKEN`). Tres bloques:
+
+  1. **"Dónde lo dejé / Dónde sigo"** (sección `📍 Dónde estoy`):
+     - "Hecho y funcionando" → última tarea terminada (más las anteriores).
+     - "Siguiente tarea" → la primera de POR HACER en el TABLERO.
+  2. **KPI "Tareas de Capa 1 completadas"** → `X / 11`.
+  3. **"Registro de tiempo"** → AÑADIR una línea nueva con
+     `AAAA-MM-DD · ~Xh · resumen de 1 línea`. (No editar líneas previas.)
+
+**d) Commit + push** (SSH, sin tokens)
+- `git add` los archivos de docs y código modificados.
+- Mensaje claro: qué se cerró, qué commits incluye.
+- `git push origin master`.
+
+---
+
+### Reglas que protegen el panel
+- **El detalle de tareas vive SOLO en `TABLERO.md`.** En Notion va el panel
+  ejecutivo (KPIs + registro de tiempo + "dónde sigo"). No duplicar la tabla
+  de tareas en Notion.
+- **No se mide en líneas de código.** La métrica de progreso es tareas
+  completadas y tiempo invertido.
+- **Idempotencia.** Si la rutina se ejecuta dos veces seguidas, no debe
+  duplicar nada: el bloque "Dónde estoy" y el KPI se sobreescriben con el
+  mismo valor; al Registro de tiempo solo se añade entrada cuando hay
+  trabajo nuevo que reportar.
 
 ---
 
