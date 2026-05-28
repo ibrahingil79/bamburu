@@ -55,6 +55,11 @@ como `NOTION_TOKEN`). Tres bloques:
 - **El detalle de tareas vive SOLO en `TABLERO.md`.** En Notion va el panel
   ejecutivo (KPIs + registro de tiempo + "dónde sigo"). No duplicar la tabla
   de tareas en Notion.
+- **Código + nombre, siempre.** En cualquier referencia a una tarea dentro
+  de Notion (KPI, "Hecho y funcionando", "Siguiente tarea", entradas del
+  Registro de tiempo) escribir SIEMPRE el código y el nombre real:
+  `A3 — Catálogo mixto de servicios`, no `A3` a secas. Esto permite que un
+  chat sin contexto lea Notion y entienda qué es cada tarea sin inventar.
 - **No se mide en líneas de código.** La métrica de progreso es tareas
   completadas y tiempo invertido.
 - **Idempotencia.** Si la rutina se ejecuta dos veces seguidas, no debe
