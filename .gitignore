@@ -1,7 +1,27 @@
+# Dependencias
 node_modules/
+
+# Datos (BD de tenants y control)
 data/
 *.db
 *.db-shm
 *.db-wal
+
+# Secretos / variables de entorno
 .env
+.env.*
+
+# Backups y copias antiguas
+*.bak
+*.bak2
+modules/*.backup.*/
+
+# Estado local de Claude Code (no compartir)
+.claude/settings.local.json
+.claude/session.json
+
+# Temporales / sistema
 /tmp
+.DS_Store
+*.swp
+Thumbs.db

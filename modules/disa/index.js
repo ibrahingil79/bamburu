@@ -1533,6 +1533,81 @@ export function register(app, db) {
     return c.json({ ok: true, pinned: newPinned });
   });
 
+  // ── Store Builder chat ────────────────────────────────────
+  router.post('/store-message', adminAuth(db), async c => {
+    let body;
+    try { body = await c.req.json(); } catch { return c.json({ ok: false }, 400); }
+    const message = (body?.message || '').trim().substring(0, 2000);
+    if (!message) return c.json({ reply: 'Mensaje vacío.', action: null });
+    const history = Array.isArray(body?.history) ? body.history.slice(-8) : [];
+    const ss = body?.store_state || {};
+
+    let apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      try {
+        const { readFileSync } = await import('fs');
+        const env = readFileSync('.env', 'utf8');
+        const match = env.match(/ANTHROPIC_API_KEY=(.+)/);
+        if (match) apiKey = match[1].trim();
+      } catch {}
+    }
+    if (!apiKey) return c.json({ reply: 'DISA no está configurada (sin API key).', action: null });
+
+    const systemPrompt = [
+      'Eres el constructor web de Bamburu. Ayudas a crear y personalizar tiendas online para pequeñas empresas hispanohablantes.',
+      '',
+      'Temas disponibles: minimal_light, minimal_dark, nordic_forest, bold_tech, vintage_warm.',
+      'Secciones disponibles: hero, featured_products, features, testimonials, newsletter.',
+      '',
+      'Estado actual de la tienda:',
+      '- Nombre: ' + (ss.store_name || 'Sin nombre'),
+      '- Tema: ' + (ss.theme || 'minimal_light'),
+      '- Color: ' + (ss.primary_color || '#10b981'),
+      '- Secciones: ' + ((ss.sections || []).map(s => s.type).join(', ') || 'ninguna'),
+      '',
+      'Reglas:',
+      '1. Responde en español, de forma concisa y amigable.',
+      '2. Cuando el usuario pide un cambio, incluye [ACCION:{...}] AL FINAL de tu respuesta.',
+      '3. Solo UN bloque [ACCION:...] por respuesta.',
+      '4. Si el usuario está empezando, guíale paso a paso preguntando qué vende, nombre, y estilo.',
+      '',
+      'Acciones disponibles:',
+      '[ACCION:{"type":"update_store_theme","params":{"theme":"nordic_forest"}}]',
+      '[ACCION:{"type":"update_store_color","params":{"primary_color":"#1a365d"}}]',
+      '[ACCION:{"type":"update_store_text","params":{"field":"store_name","value":"Mi Tienda"}}]',
+      '[ACCION:{"type":"add_section","params":{"type":"testimonials"}}]',
+      '[ACCION:{"type":"remove_section","params":{"type":"newsletter"}}]',
+      '[ACCION:{"type":"update_section","params":{"type":"hero","settings":{"title":"Nuevo título","subtitle":"Subtítulo"}}}]',
+      '[ACCION:{"type":"apply_template","params":{"template":"nordic_forest"}}]',
+      '[ACCION:{"type":"reorder_sections","params":{"order":[1,0,2,3]}}]',
+    ].join('\n');
+
+    const messages = [
+      ...history.map(m => ({ role: m.role, content: m.content })),
+      { role: 'user', content: message }
+    ];
+
+    try {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 800, system: systemPrompt, messages })
+      });
+      if (!resp.ok) return c.json({ reply: 'Error al conectar con DISA.', action: null });
+      const data = await resp.json();
+      const raw = data.content?.[0]?.text || 'Sin respuesta.';
+      let action = null;
+      let reply = raw;
+      const match = raw.match(/\[ACCION:(\{[\s\S]*?\})\]/);
+      if (match) {
+        try { action = JSON.parse(match[1]); reply = raw.replace(/\[ACCION:[\s\S]*?\]/, '').trim(); } catch {}
+      }
+      return c.json({ reply, action });
+    } catch(e) {
+      return c.json({ reply: 'Error al conectar con DISA.', action: null });
+    }
+  });
+
   router.get('/chips', adminAuth(db), c => {
     const session = c.get('session');
     const row = db.prepare('SELECT chips FROM disa_quick_chips WHERE user_id=?').get(session?.userId);
