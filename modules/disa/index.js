@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { adminAuth, getCsrfToken } from '../../core/auth.js';
 import { adminLayout } from '../erp/layout.js';
+import { generateInvoice } from '../erp/routes/invoices.js';
 
 export function register(app, db) {
   const router = new Hono();
@@ -310,64 +311,22 @@ export function register(app, db) {
         }
 
         case 'create_invoice_from_order': {
+          // A2: delega en generateInvoice de invoices.js para que la factura quede
+          // con verifactu_hash y prev_hash correctos (antes DISA escribía sin hash).
           const p = action.params;
-          const order = db.prepare('SELECT * FROM sales_orders WHERE id=?').get(p.order_id);
-          if (!order) return { ok: false, message: 'Pedido #' + p.order_id + ' no encontrado.' };
-          const existing = db.prepare('SELECT id FROM invoices WHERE order_id=?').get(p.order_id);
-          if (existing) return { ok: false, message: 'El pedido #' + p.order_id + ' ya tiene una factura.' };
-
-          const cfg = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
-          const client = order.client_id
-            ? db.prepare('SELECT * FROM clients WHERE id=?').get(order.client_id)
-            : null;
-          const items = db.prepare('SELECT * FROM sales_items WHERE order_id=?').all(p.order_id);
-
-          const series = cfg.invoice_series || 'F';
-          const year = new Date().getFullYear();
-
-          const tx = db.transaction(() => {
-            db.prepare(`
-              INSERT INTO invoice_sequences (series, year, last_seq) VALUES (?, ?, 1)
-              ON CONFLICT(series, year) DO UPDATE SET last_seq = last_seq + 1
-            `).run(series, year);
-            const seq = db.prepare(
-              'SELECT last_seq FROM invoice_sequences WHERE series=? AND year=?'
-            ).get(series, year).last_seq;
-            const invoiceNumber = series + year + '-' + String(seq).padStart(4, '0');
-
-            const r = db.prepare(`
-              INSERT INTO invoices (
-                invoice_number, order_id, client_id, series, year, sequence, issue_date,
-                company_name, company_fiscal_id, company_address,
-                client_name, client_fiscal_id, client_address, client_email,
-                subtotal, tax_rate, tax_name, tax_amount, total,
-                currency, currency_symbol, document_name
-              ) VALUES (?, ?, ?, ?, ?, ?, date('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(
-              invoiceNumber, p.order_id, order.client_id || null,
-              series, year, seq,
-              cfg.company_name || 'Mi Empresa', cfg.fiscal_id || '', cfg.address || '',
-              client?.name || '', client?.fiscal_id || '', client?.address || '', client?.email || '',
-              order.subtotal || 0, cfg.tax_rate || 21, cfg.tax_name || 'IVA',
-              order.tax_amount || 0, order.total || 0,
-              cfg.currency || 'EUR', cfg.currency_symbol || '€', cfg.document_name || 'Factura'
-            );
-            const invoiceId = r.lastInsertRowid;
-
-            for (const item of items) {
-              db.prepare(`
-                INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price)
-                VALUES (?, ?, ?, ?, ?)
-              `).run(invoiceId, item.product_name, item.quantity, item.unit_price, item.total);
+          try {
+            const res = generateInvoice(db, p.order_id);
+            if (res.already) {
+              return { ok: false, message: 'El pedido #' + p.order_id + ' ya tiene la factura ' + res.invoice_number + '.' };
             }
-
-            logActivity(db, 'create', 'invoices', invoiceId,
-              'Factura ' + invoiceNumber + ' generada por DISA', session);
-            return invoiceNumber;
-          });
-
-          const invoiceNumber = tx();
-          return { ok: true, message: 'Factura ' + invoiceNumber + ' generada para el pedido #' + p.order_id + '.' };
+            logActivity(db, 'create', 'invoices', res.id,
+              'Factura ' + res.invoice_number + ' generada por DISA', session);
+            return { ok: true, message: 'Factura ' + res.invoice_number + ' generada para el pedido #' + p.order_id + '.' };
+          } catch (e) {
+            if (e.message === 'Pedido no encontrado') return { ok: false, message: 'Pedido #' + p.order_id + ' no encontrado.' };
+            if (e.message === 'Solo se pueden facturar pedidos completados') return { ok: false, message: 'Solo se pueden facturar pedidos completados.' };
+            return { ok: false, message: 'Error al generar la factura: ' + e.message };
+          }
         }
 
         // ── Productos ─────────────────────────────────────────

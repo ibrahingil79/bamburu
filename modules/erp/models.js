@@ -585,6 +585,14 @@ export function runMigrations(db) {
     FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
   )`);
 
+  // A2: IVA por línea + IRPF global. Columnas con DEFAULT 0 → cero regresión:
+  // facturas viejas tienen invoice_items.tax_rate=0 pero invoices.tax_amount
+  // global intacto, así que la vista imprimible sigue cuadrando.
+  addCol(db, 'invoice_items', 'tax_rate',   'REAL NOT NULL DEFAULT 0');
+  addCol(db, 'invoice_items', 'tax_amount', 'REAL NOT NULL DEFAULT 0');
+  addCol(db, 'invoices',      'irpf_rate',   'REAL NOT NULL DEFAULT 0');
+  addCol(db, 'invoices',      'irpf_amount', 'REAL NOT NULL DEFAULT 0');
+
   db.exec(`CREATE TABLE IF NOT EXISTS invoice_sequences (
     series TEXT NOT NULL,
     year INTEGER NOT NULL,

@@ -105,6 +105,7 @@ const invoiceLineSchema = z.object({
   description: str(500),
   quantity:    z.coerce.number().positive().max(1_000_000),
   unit_price:  z.coerce.number().nonnegative().max(1_000_000),
+  tax_rate:    z.coerce.number().min(0).max(50).optional().default(0),  // A2: IVA por línea
 });
 
 export const invoiceCreateSchema = z.object({
@@ -112,6 +113,13 @@ export const invoiceCreateSchema = z.object({
   lines:      z.array(invoiceLineSchema).min(1, 'Al menos una línea requerida'),
   issue_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   notes:      strOpt(2000),
+  irpf_rate:  z.coerce.number().min(0).max(50).optional().default(0),   // A2: IRPF global
+});
+
+// A2: payload para POST /api/erp/invoices/compute-totals (preview en vivo)
+export const invoiceComputeSchema = z.object({
+  lines:     z.array(invoiceLineSchema).min(1, 'Al menos una línea requerida'),
+  irpf_rate: z.coerce.number().min(0).max(50).optional().default(0),
 });
 
 // ── Discounts ──────────────────────────────────────────────────
@@ -168,7 +176,11 @@ export const userUpdateSchema = z.object({
 });
 
 // ── Settings ───────────────────────────────────────────────────
-export const companySchema = z.object({}).passthrough();
+// A2: companySchema deja de ser passthrough puro para validar tax_rate.
+// El resto de campos siguen pasando libres (passthrough).
+export const companySchema = z.object({
+  tax_rate: z.coerce.number().min(0).max(50).optional(),
+}).passthrough();
 export const storeSettingsSchema = z.object({}).passthrough();
 
 // ── Reviews ────────────────────────────────────────────────────
