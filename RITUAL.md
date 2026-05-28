@@ -27,9 +27,18 @@
     > Cierra la sesión de hoy:
     > 1. Calcula cuánto duró: hora actual menos "sesion_inicio" de session.json.
     > 2. Resume en 2-4 líneas qué hicimos hoy y qué tareas del TABLERO se completaron.
-    > 3. Actualiza mi Notion: en la página "Control de Proyecto — Bamburu", añade una
-    >    fila a la tabla "Registro de tiempo" con fecha, horas y el resumen. Y actualiza
-    >    el KPI "Tareas de Capa 1 completadas" con el número nuevo.
+    > 3. Actualiza mi Notion en la página "Control de Proyecto — Bamburu"
+    >    (ID `36e18b04-bb1f-812f-99ee-f96789ac2909`, token en `/etc/bamburu.env`
+    >    como `NOTION_TOKEN`). Tres updates concretos:
+    >    a) Bloque **"Dónde lo dejé / Dónde sigo"** → escribe la última tarea
+    >       terminada, la siguiente a empezar, y el contador `X de 11` (Capa 1
+    >       completadas / total).
+    >    b) Bloque **"Registro de tiempo"** → añade UNA línea nueva con fecha
+    >       (AAAA-MM-DD), horas y resumen corto (1 frase).
+    >    c) Si hay KPIs en la página (Verifactu, GitHub, clientes de pago, MRR…)
+    >       cuyo valor ha cambiado hoy, actualízalos también.
+    > NO repliques el detalle de las tareas en Notion — eso vive en TABLERO.md.
+    > Notion es solo el panel ejecutivo: dónde estoy, cuánto avanzo, cuánto tiempo.
     > NO midas líneas de código (métrica engañosa). Mide tareas completadas y tiempo.
 
 ---
