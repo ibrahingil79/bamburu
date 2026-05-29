@@ -32,7 +32,8 @@ galería de imágenes, SEO, coste/margen, unidad por hora/sesión.
 - "IVA (banda)" → **"Tipo de IVA"**; el selector muestra solo el monto (21/10/4/0%) y arranca en blanco (elección explícita).
 - **API endurecida**: crear/editar un producto sin banda válida → 400. Sin "General" por defecto silencioso (el IVA es dato fiscal).
 - Ficha limpiada (ocultos, sin borrar código): pestañas **Imágenes** y **Avanzado/SEO**; campos Descripción, Etiquetas, Precio antes, Producto destacado, URL archivo digital, URL imagen principal. Reordenada (Tipo, Nombre, SKU primero). **Variantes se mantiene**.
-- Verificado con tests de integración/render. Commits del día (último `f164900`).
+- Menú: ocultada **"Etiquetas"** de Catálogo (e-commerce); ruta `/admin/tags` intacta. Catálogo queda con Productos · Categorías.
+- Verificado con tests de integración/render. Commits del día (último `8540e5d`).
 
 ### ▶ P3. Unificar catálogo (absorber los servicios de A3) — SIGUIENTE
 - **Hoy:** los servicios viven en una tabla/pantalla/API aparte (`services`, `/admin/services`), separada de los productos.
