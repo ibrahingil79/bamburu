@@ -202,8 +202,9 @@ export function createProductRoutes(db, cfg = {}) {
             <input type="hidden" id="prodId">
             <div class="tabs">
               <div class="tab active" data-tab-group="prod" data-tab-key="basic" onclick="switchTab('prod','basic')">General</div>
-              <div class="tab" data-tab-group="prod" data-tab-key="images" onclick="switchTab('prod','images')">Imágenes</div>
-              <div class="tab" data-tab-group="prod" data-tab-key="variants" onclick="switchTab('prod','variants')">Variantes</div>
+              <!-- OCULTAS de la vista (e-commerce). Botones con display:none; los paneles siguen en el DOM para no romper el JS de editar. -->
+              <div class="tab" data-tab-group="prod" data-tab-key="images" onclick="switchTab('prod','images')" style="display:none">Imágenes</div>
+              <div class="tab" data-tab-group="prod" data-tab-key="variants" onclick="switchTab('prod','variants')" style="display:none">Variantes</div>
               <!-- OCULTO de la vista (e-commerce SEO, no aplica a gestión/facturación). Código conservado:
               <div class="tab" data-tab-group="prod" data-tab-key="seo" onclick="switchTab('prod','seo')">Avanzado</div>
               -->
@@ -217,7 +218,7 @@ export function createProductRoutes(db, cfg = {}) {
               <div class="form-row">
                 <div class="form-group"><label class="form-label">Precio *</label><input class="form-control" type="number" id="pPrice" step="0.01"></div>
                 <div class="form-group"><label class="form-label">IVA (banda)</label><select class="form-control" id="pTaxBand"></select></div>
-                <div class="form-group"><label class="form-label">Precio antes (tachado)</label><input class="form-control" type="number" id="pCompare" step="0.01"></div>
+                <div class="form-group" style="display:none"><label class="form-label">Precio antes (tachado)</label><input class="form-control" type="number" id="pCompare" step="0.01"></div><!-- OCULTO: promoción de tienda online -->
                 <div class="form-group" id="pStockWrap"><label class="form-label">Stock</label><input class="form-control" type="number" id="pStock" value="0"></div>
               </div>
               <div style="font-size:.72rem;color:var(--muted);margin:-.5rem 0 .25rem">
@@ -231,7 +232,7 @@ export function createProductRoutes(db, cfg = {}) {
               </div>
               <div class="form-group"><label class="form-label">URL imagen principal</label><input class="form-control" id="pImage" placeholder="https://..."></div>
               <div class="form-group" id="pDigitalWrap" style="display:none"><label class="form-label">URL archivo digital</label><input class="form-control" id="pDigital"></div>
-              <div class="form-group">
+              <div class="form-group" style="display:none"><!-- OCULTO: destacado es escaparate de tienda -->
                 <label class="form-label"><input type="checkbox" id="pFeatured"> Producto destacado (aparece primero en la tienda)</label>
               </div>
               <div class="form-group">
@@ -348,7 +349,8 @@ export function createProductRoutes(db, cfg = {}) {
       // P1+P2: el tipo decide qué campos aplican. Digital → muestra URL de archivo.
       // Servicio y digital → no llevan stock (CANON §2), se oculta el campo Stock.
       function applyTypeUI(t){
-        document.getElementById('pDigitalWrap').style.display = t==='digital' ? '' : 'none';
+        // URL archivo digital OCULTA de la vista (entrega de tienda online). El campo
+        // sigue en el DOM (#pDigitalWrap, display:none de base); no se muestra para ningún tipo.
         document.getElementById('pStockWrap').style.display = (t==='service' || t==='digital') ? 'none' : '';
       }
       document.getElementById('pType').addEventListener('change',e=>applyTypeUI(e.target.value));
