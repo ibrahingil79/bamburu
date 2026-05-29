@@ -230,7 +230,7 @@ export function createProductRoutes(db, cfg = {}) {
                 <div class="form-group"><label class="form-label">Tipo</label><select class="form-control" id="pType"><option value="physical">Físico</option><option value="digital">Digital</option><option value="service">Servicio</option></select></div>
                 <div class="form-group"><label class="form-label">Estado</label><select class="form-control" id="pStatus"><option value="active">Activo</option><option value="draft">Borrador</option><option value="archived">Archivado</option></select></div>
               </div>
-              <div class="form-group"><label class="form-label">URL imagen principal</label><input class="form-control" id="pImage" placeholder="https://..."></div>
+              <div class="form-group" style="display:none"><!-- OCULTO: imagen es escaparate de tienda --><label class="form-label">URL imagen principal</label><input class="form-control" id="pImage" placeholder="https://..."></div>
               <div class="form-group" id="pDigitalWrap" style="display:none"><label class="form-label">URL archivo digital</label><input class="form-control" id="pDigital"></div>
               <div class="form-group" style="display:none"><!-- OCULTO: destacado es escaparate de tienda -->
                 <label class="form-label"><input type="checkbox" id="pFeatured"> Producto destacado (aparece primero en la tienda)</label>
