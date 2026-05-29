@@ -306,9 +306,8 @@ export function createProductRoutes(db, cfg = {}) {
       (function initVatBands(){
         const sel=document.getElementById('pTaxBand');
         sel.innerHTML=VAT_BANDS.map(b=>{
-          const pct=b.rate>0?(' — '+b.rate+'%'):' — sin IVA';
-          const ex=b.example?(' ('+b.example+')'):'';
-          return '<option value="'+b.code+'">'+b.label+pct+ex+'</option>';
+          // Solo el monto (%); sin etiqueta de banda ni ejemplo. El value sigue siendo la banda.
+          return '<option value="'+b.code+'">'+b.rate+'%</option>';
         }).join('');
       })();
       function bandRate(code){const b=VAT_BANDS.find(x=>x.code===code);return b?b.rate:null;}
