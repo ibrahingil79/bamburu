@@ -59,7 +59,8 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     { section: 'Catálogo', items: [
       { href: '/admin/products', label: 'Productos', key: 'products', icon: '<path d="M20 7l-8-4-8 4M20 7l-8 4M20 7v10l-8 4M12 11v10M12 11L4 7M4 7v10l8 4"/>' },
       { href: '/admin/categories', label: 'Categorías', key: 'categories', icon: '<path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/>' },
-      { href: '/admin/tags', label: 'Etiquetas', key: 'tags', icon: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>' },
+      // OCULTO del menú (e-commerce, tienda online). Ruta /admin/tags sigue montada:
+      // { href: '/admin/tags', label: 'Etiquetas', key: 'tags', icon: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>' },
     ]},
     // OCULTOS del menú (no borrados — rutas siguen montadas): 'pos' (Punto de Venta),
     // 'services' (ítem suelto A3, pasa a ser tipo de producto), 'store-settings' (Tienda Online).
