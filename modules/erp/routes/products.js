@@ -215,7 +215,7 @@ export function createProductRoutes(db, cfg = {}) {
                 <div class="form-group"><label class="form-label">Nombre *</label><input class="form-control" id="pName"></div>
                 <div class="form-group"><label class="form-label">SKU</label><input class="form-control" id="pSku"></div>
               </div>
-              <div class="form-group"><label class="form-label">Descripción</label><textarea class="form-control" id="pDesc" rows="3"></textarea></div>
+              <div class="form-group" style="display:none"><!-- OCULTO: pensada para la tienda online --><label class="form-label">Descripción</label><textarea class="form-control" id="pDesc" rows="3"></textarea></div>
               <div class="form-row">
                 <div class="form-group"><label class="form-label">Precio *</label><input class="form-control" type="number" id="pPrice" step="0.01"></div>
                 <div class="form-group"><label class="form-label">IVA (banda)</label><select class="form-control" id="pTaxBand"></select></div>
