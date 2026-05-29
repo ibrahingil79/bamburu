@@ -204,7 +204,9 @@ export function createProductRoutes(db, cfg = {}) {
               <div class="tab active" data-tab-group="prod" data-tab-key="basic" onclick="switchTab('prod','basic')">General</div>
               <div class="tab" data-tab-group="prod" data-tab-key="images" onclick="switchTab('prod','images')">Imágenes</div>
               <div class="tab" data-tab-group="prod" data-tab-key="variants" onclick="switchTab('prod','variants')">Variantes</div>
+              <!-- OCULTO de la vista (e-commerce SEO, no aplica a gestión/facturación). Código conservado:
               <div class="tab" data-tab-group="prod" data-tab-key="seo" onclick="switchTab('prod','seo')">Avanzado</div>
+              -->
             </div>
             <div class="tab-pane active" data-pane-group="prod" data-pane-key="basic">
               <div class="form-row">
@@ -280,10 +282,12 @@ export function createProductRoutes(db, cfg = {}) {
               </div>
               <div id="variantList"></div>
             </div>
+            <!-- OCULTO de la vista (e-commerce SEO, no aplica a gestión/facturación). Código y campos conservados:
             <div class="tab-pane" data-pane-group="prod" data-pane-key="seo">
               <div class="form-group"><label class="form-label">SEO: Título de página</label><input class="form-control" id="pSeoTitle" placeholder="Título para buscadores..."></div>
               <div class="form-group"><label class="form-label">SEO: Meta descripción</label><textarea class="form-control" id="pSeoDesc" rows="2" placeholder="Descripción para buscadores..."></textarea></div>
             </div>
+            -->
           </div>
           <div class="modal-foot">
             <button class="btn btn-secondary" onclick="closeModal('productModal')">Cancelar</button>
