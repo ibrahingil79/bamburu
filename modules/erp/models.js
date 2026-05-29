@@ -206,9 +206,6 @@ export function runMigrations(db) {
     db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(prodBandMigKey, 'done');
   }
 
-  // Código de barras EAN-13 del producto (opcional; se puede generar desde la ficha).
-  addCol(db, 'products', 'barcode', "TEXT DEFAULT ''");
-
   // Product images
   db.exec(`CREATE TABLE IF NOT EXISTS product_images (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
