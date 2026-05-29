@@ -14,12 +14,13 @@ El producto es la raíz de la que parte todo (CANON §2). Objetivo de este pilar
 catálogo en su versión mínima sólida. Fuera de este primer paso (más adelante): variantes,
 galería de imágenes, SEO, coste/margen, unidad por hora/sesión.
 
-### ▶ P1+P2. Tipo "servicio" en el producto + IVA por producto — SIGUIENTE (se hacen juntas)
-- **Hoy:** el producto solo puede ser físico/digital y NO guarda su propio IVA (el IVA se decide fuera).
-- **Qué se hace:** el tipo de producto pasa a ser físico / digital / **servicio**, y cada producto guarda su **IVA propio**.
-- **HECHO CUANDO:** puedo crear un producto de tipo "servicio" con su IVA, y los productos que ya existían siguen funcionando igual — sin romper POS, pedidos ni facturas.
+### ✅ P1+P2. Tipo "servicio" en el producto + IVA por producto — HECHO (2026-05-29)
+- El tipo de producto es físico / digital / **servicio**, y cada producto guarda su **IVA propio** (`products.tax_rate`).
+- Al elegir "servicio" se oculta el Stock (CANON §2) y el servidor lo fuerza a 0.
+- Migración aditiva: productos previos quedaron con el IVA por defecto del negocio; `type` intacto; POS/pedidos/factura sin tocar.
+- Verificado con test de integración (12/12). Commit `679aa63`.
 
-### P3. Unificar catálogo (absorber los servicios de A3)
+### ▶ P3. Unificar catálogo (absorber los servicios de A3) — SIGUIENTE
 - **Hoy:** los servicios viven en una tabla/pantalla/API aparte (`services`, `/admin/services`), separada de los productos.
 - **Qué se hace:** migrar esos servicios a productos de tipo "servicio" y **eliminar** la tabla, la pantalla y la API de servicios sueltos. El autofill al facturar pasa a leer del catálogo de productos.
 - **HECHO CUANDO:** hay un único catálogo; los servicios viejos aparecen como productos tipo "servicio" y nada en el código apunta ya a `services`.
@@ -52,5 +53,5 @@ La era previa ("facturación de servicios") dejó código que funciona y no se t
 ---
 
 ## Notas
-- Una tarea "EN CURSO" a la vez (RITUAL). Ahora arranca P1+P2 del Pilar 1.
+- Una tarea "EN CURSO" a la vez (RITUAL). P1+P2 hecha; sigue P3 del Pilar 1.
 - Este orden y alcances no son sagrados (CANON §3): si al construir algo no cuadra, se cambia.
