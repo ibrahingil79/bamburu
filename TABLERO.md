@@ -1,90 +1,56 @@
-# TABLERO — Bamburu (Capa 1)
+# TABLERO — Bamburu
 
-> Tablero de trabajo. Fuente de verdad de estrategia: CANON.md. Ritual: RITUAL.md.
-> REGLA DE ORO: solo UNA tarea en "Haciendo" a la vez. Terminar antes de empezar otra.
-> Orden de las tareas: los MOTORES antes que la CARA de DISA (ver CANON sección 9).
-
----
-
-## 🔵 POR HACER (en orden — coger siempre la de más arriba)
-
-### Bloque A — Motor de facturación (el corazón, lo más urgente)
-
-**A4. Generar PDF real de la factura**
-- Hoy solo hay HTML imprimible del navegador.
-- HECHO CUANDO: la factura se descarga como PDF bien formado.
-
-**A5. QR + leyenda VERI*FACTU en la factura**
-- El hash encadenado ya existe; faltan el QR y la leyenda.
-- HECHO CUANDO: la factura impresa/PDF muestra la leyenda VERI*FACTU y un QR verificable.
-
-**A6. Enviar factura por email al cliente**
-- Resend ya está configurado; falta endpoint + acción.
-- HECHO CUANDO: desde una factura puedo enviarla por email al cliente con el PDF adjunto.
-
-### Bloque B — Las otras piezas del núcleo
-
-**B1. Gastos**
-- No existe. (Las "compras a proveedores" son coste de mercancía, no gastos del autónomo.)
-- HECHO CUANDO: puedo registrar un gasto (concepto, importe, fecha, categoría) y verlo en una lista.
-
-**B2. Cobros (qué me deben)**
-- No hay estado de cobro de las facturas.
-- HECHO CUANDO: cada factura tiene estado (pendiente/cobrada/vencida) y hay una vista de "qué me deben".
-
-**B3. Panel "cómo va mi negocio"**
-- HECHO CUANDO: una pantalla muestra cuánto llevo facturado, qué me deben y mis gastos del periodo.
-
-### Bloque C — La cara de DISA (SOLO cuando A y B funcionen)
-
-**C1. Enfocar DISA en el núcleo del autónomo**
-- DISA hoy opera sobre el ERP-tienda. Reorientarla a facturar/cobrar/gastos/panel.
-- HECHO CUANDO: puedo decirle a DISA "factúrale 300€ a María por la sesión" y propone la factura correcta para que yo confirme.
-
-**C2. DISA proactiva (avisos)**
-- HECHO CUANDO: DISA avisa sola de al menos: cobros vencidos, trimestre de IVA cercano, y caída de facturación respecto al mes anterior.
-
-### Bloque D — Settings del autónomo (NO urgente, va al final)
-
-**D1. Settings del autónomo**
-- Hoy `/admin/settings` está pensado para una empresa con tienda online (currency_symbol, document_name, country deshabilitado…). Hay que orientarlo al autónomo de servicios.
-- HECHO CUANDO: el autónomo puede ajustar desde una pantalla simple: datos del negocio (nombre, NIF, dirección), logo, IVA por defecto, IRPF por defecto (si ES), y preferencias de impresora (tamaño, márgenes, copias). Cambios efectivos inmediatamente en las facturas nuevas.
+> Plan de trabajo. La estrategia manda desde CANON.md; el ritual desde RITUAL.md.
+> Estructura: 4 pilares en ORDEN DE CONSTRUCCIÓN — Producto → Cliente → Inventario → Ventas
+> (Ventas necesita los otros tres ya hechos; ver CANON §3).
+> REGLA DE ORO: una sola tarea "EN CURSO" a la vez. Terminar antes de empezar otra.
+> Última actualización: 2026-05-29
 
 ---
 
-## 🟡 HACIENDO (máximo UNA)
+## PILAR 1 — PRODUCTO (Catálogo) — 🟢 EN CURSO
 
-_(vacío — coger la primera de POR HACER)_
+El producto es la raíz de la que parte todo (CANON §2). Objetivo de este pilar: dejar el
+catálogo en su versión mínima sólida. Fuera de este primer paso (más adelante): variantes,
+galería de imágenes, SEO, coste/margen, unidad por hora/sesión.
+
+### ▶ P1+P2. Tipo "servicio" en el producto + IVA por producto — SIGUIENTE (se hacen juntas)
+- **Hoy:** el producto solo puede ser físico/digital y NO guarda su propio IVA (el IVA se decide fuera).
+- **Qué se hace:** el tipo de producto pasa a ser físico / digital / **servicio**, y cada producto guarda su **IVA propio**.
+- **HECHO CUANDO:** puedo crear un producto de tipo "servicio" con su IVA, y los productos que ya existían siguen funcionando igual — sin romper POS, pedidos ni facturas.
+
+### P3. Unificar catálogo (absorber los servicios de A3)
+- **Hoy:** los servicios viven en una tabla/pantalla/API aparte (`services`, `/admin/services`), separada de los productos.
+- **Qué se hace:** migrar esos servicios a productos de tipo "servicio" y **eliminar** la tabla, la pantalla y la API de servicios sueltos. El autofill al facturar pasa a leer del catálogo de productos.
+- **HECHO CUANDO:** hay un único catálogo; los servicios viejos aparecen como productos tipo "servicio" y nada en el código apunta ya a `services`.
+
+### P4. Buscador y filtros en la lista de productos
+- **Hoy:** solo hay un buscador en el navegador por nombre/código, sin filtros y cargando todos los productos de golpe.
+- **Qué se hace:** búsqueda por nombre y código, filtro por categoría y paginación.
+- **HECHO CUANDO:** encuentro un producto por nombre o código, filtro por categoría, y la lista no carga todo de una vez.
 
 ---
 
-## 🟢 HECHO
+## PILAR 2 — CLIENTE
+_(por detallar)_ — Clientes, Grupos, CRM. A quién vendes.
 
-- **A3. Catálogo mixto de servicios** — 2026-05-29
-  - Tabla NUEVA `services` (id, name, base_price, tax_rate, irpf_rate) — NO reutiliza `products` del e-commerce. Migración lazy idempotente.
-  - CRUD completo: API `/api/erp/services` (read/create/edit/delete, permisos `services.*`) + pantalla `/admin/services` (listar/crear/editar/borrar, estilo modal). Ítem de menú en "Ventas".
-  - Integrado en `/admin/invoices/new`: selector "servicio guardado / línea libre" por fila que rellena descripción+precio+IVA y ajusta el IRPF global. Cantidad editable. Las líneas libres siguen sin guardarse.
-  - Borrar un servicio no afecta a facturas emitidas (la factura copia los valores en `invoice_items`).
-  - POS, e-commerce y `generateInvoice` intactos. Verificado con test de integración (CRUD + aislamiento de línea libre + `products` intacto).
-  - Commit `9b2c9cb`.
+## PILAR 3 — INVENTARIO
+_(por detallar)_ — Compras, Stock, Proveedores, Devoluciones, Descuentos. Qué tienes y de dónde sale. Incluye **multi-almacén** como pieza de peso (CANON §6): se aborda al construir Stock, no antes.
 
-- **A1. Desacoplar la factura del pedido** — 2026-05-28
-  - Se puede crear factura sin pedido desde `/admin/invoices/new` (cliente obligatorio, líneas libres, fecha editable).
-  - Numeración correlativa (F2026-NNNN) y hash SHA-256 encadenado funcionando.
-  - `POST /api/erp/invoices` con permiso `invoices.create`.
-  - `generateInvoice` (flujo POS) intacto, sin regresión.
-  - Commit `6f26587`.
+## PILAR 4 — VENTAS
+_(por detallar)_ — Pedido → Albarán / nota de entrega → Factura. Usa los tres pilares anteriores. Aquí entran: **PDF real de la factura**, **enviar factura por email** y **sello Verifactu (QR + leyenda)**.
 
-- **A2. Líneas de factura con IVA múltiple + IRPF** — 2026-05-28
-  - Dropdown IVA por línea (21/10/4/Exento) en `/admin/invoices/new`, dropdown IRPF global (0/7/15) solo si `country='ES'`.
-  - Motor único `computeTotals(lines, irpfRate)` (helper puro exportado) + endpoint `POST /api/erp/invoices/compute-totals` para preview en vivo (debounce 300 ms).
-  - Vista imprimible con desglose por tasa, "Exento de IVA", IRPF como deducción, badge "Emitida el …" y botón "Volver al listado".
-  - Fixes incluidos: DISA emite con `verifactu_hash` intacto (delega en `generateInvoice`); listado `/admin/invoices` ya muestra facturas (bug pre-A1 con `o.reference`).
-  - POS intacto, cadena de hashes intacta.
-  - Commit `143176e`.
+---
+
+## Contexto heredado (era anterior — código que SE QUEDA)
+
+La era previa ("facturación de servicios") dejó código que funciona y no se tira; solo se retira su plan:
+- **Hecho y vivo:** crear factura sin pedido (A1), IVA múltiple por línea + IRPF (A2), y el catálogo de servicios suelto (A3).
+- **A3 será absorbido por P3:** los servicios pasan a ser un tipo de producto; su tabla/pantalla/API se eliminan.
+- **Lo que quedaba pendiente de esa era no se pierde, se reubica en el PILAR 4 (Ventas):** PDF real de la factura, envío por email y Verifactu (QR + leyenda).
 
 ---
 
 ## Notas
-- Las piezas ya funcionando (multi-tenant, auth, clientes, numeración+hash) NO están aquí: ya están hechas.
-- Capa 2 (e-commerce) y Capa 3 (DISA 3 cerebros, Telegram…) NO entran aquí. Congeladas. Ver CANON sección 5.
+- Una tarea "EN CURSO" a la vez (RITUAL). Ahora arranca P1+P2 del Pilar 1.
+- Este orden y alcances no son sagrados (CANON §3): si al construir algo no cuadra, se cambia.
