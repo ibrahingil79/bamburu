@@ -61,23 +61,24 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       { href: '/admin/categories', label: 'Categorías', key: 'categories', icon: '<path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/>' },
       { href: '/admin/tags', label: 'Etiquetas', key: 'tags', icon: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>' },
     ]},
+    // OCULTOS del menú (no borrados — rutas siguen montadas): 'pos' (Punto de Venta),
+    // 'services' (ítem suelto A3, pasa a ser tipo de producto), 'store-settings' (Tienda Online).
     { section: 'Ventas', items: [
       { href: '/admin/orders', label: 'Pedidos', key: 'orders', icon: '<path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4"/><path d="M9 11V7a3 3 0 0 1 6 0v4"/>' },
-      { href: '/admin/orders/pos', label: 'Punto de Venta', key: 'pos', icon: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/>' },
-      { href: '/admin/services', label: 'Servicios', key: 'services', icon: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>' },
-      { href: '/admin/store-settings', label: 'Tienda Online', key: 'store-settings', icon: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>' },
-      { href: '/admin/orders/refunds', label: 'Devoluciones', key: 'refunds', icon: '<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>' },
-      { href: '/admin/discounts', label: 'Descuentos', key: 'discounts', icon: '<line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>' },
-    ]},
-    { section: 'Inventario', items: [
-      { href: '/admin/inventory', label: 'Stock', key: 'inventory', icon: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>' },
-      { href: '/admin/suppliers', label: 'Proveedores', key: 'suppliers', icon: '<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>' },
-      { href: '/admin/purchases', label: 'Compras', key: 'purchases', icon: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>' },
+      { label: 'Albaranes', key: 'albaranes', disabled: true, icon: '<path d="M9 2h6a1 1 0 0 1 1 1v1h1a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1V3a1 1 0 0 1 1-1z"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/>' },
       { href: '/admin/invoices', label: 'Facturas', key: 'invoices', icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>' },
     ]},
     { section: 'Clientes', items: [
       { href: '/admin/clients', label: 'Clientes', key: 'clients', icon: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' },
       { href: '/admin/clients/groups', label: 'Grupos', key: 'client-groups', icon: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>' },
+      { label: 'CRM', key: 'crm', disabled: true, icon: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="10" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/>' },
+    ]},
+    { section: 'Inventario', items: [
+      { href: '/admin/purchases', label: 'Compras', key: 'purchases', icon: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>' },
+      { href: '/admin/inventory', label: 'Stock', key: 'inventory', icon: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>' },
+      { href: '/admin/suppliers', label: 'Proveedores', key: 'suppliers', icon: '<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>' },
+      { href: '/admin/orders/refunds', label: 'Devoluciones', key: 'refunds', icon: '<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>' },
+      { href: '/admin/discounts', label: 'Descuentos', key: 'discounts', icon: '<line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>' },
     ]},
     { section: 'Analítica', items: [
       { href: '/admin/analytics', label: 'Analítica', key: 'analytics', icon: '<path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/>' },
@@ -110,7 +111,10 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   const navHTML = filteredNav.map(s => `
     <div class="nav-section">
       <div class="nav-title">${s.section}</div>
-      ${s.items.map(i => `<a href="${i.href}" class="nav-item${active === i.key ? ' active' : ''}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${i.icon}</svg><span>${i.label}</span></a>`).join('')}
+      ${s.items.map(i => i.disabled
+        ? `<span class="nav-item nav-item-disabled" title="Pendiente — aún no disponible"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${i.icon}</svg><span>${i.label}</span><span class="nav-pending">pendiente</span></span>`
+        : `<a href="${i.href}" class="nav-item${active === i.key ? ' active' : ''}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${i.icon}</svg><span>${i.label}</span></a>`
+      ).join('')}
     </div>`).join('');
 
   return `<!DOCTYPE html>
@@ -205,6 +209,9 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     .nav-item.active{background:var(--teal-soft);color:var(--teal);border-left-color:var(--teal);font-weight:600}
     .nav-item svg{flex-shrink:0;opacity:.75}
     .nav-item:hover svg,.nav-item.active svg{opacity:1}
+    .nav-item-disabled{color:var(--text3);cursor:default;opacity:.55}
+    .nav-item-disabled:hover{background:none;color:var(--text3)}
+    .nav-pending{margin-left:auto;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);border:1px solid var(--border);border-radius:6px;padding:1px 5px}
     .sb-foot{padding:.875rem 1rem;border-top:1px solid var(--border)}
     .sb-foot a{display:flex;align-items:center;gap:8px;color:var(--text3);text-decoration:none;font-size:.8rem;transition:color .15s}
     .sb-foot a:hover{color:var(--teal)}
