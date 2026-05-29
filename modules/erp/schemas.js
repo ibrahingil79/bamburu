@@ -7,7 +7,8 @@ const priceOpt = z.union([z.null(), z.coerce.number().nonnegative().max(1_000_00
 // ── Products ───────────────────────────────────────────────────
 export const productSchema = z.object({
   name: str(200),
-  sku: strOpt(100),
+  sku: str(100),                 // obligatorio
+  barcode: strOpt(20),           // EAN-13 (opcional; generable desde la ficha)
   description: strOpt(5000),
   price,
   compare_price: priceOpt,

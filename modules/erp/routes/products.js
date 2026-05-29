@@ -51,8 +51,8 @@ export function createProductRoutes(db, cfg = {}) {
       const fallbackRate = cfg.tax_rate != null ? cfg.tax_rate : 21;
       const { band, rate } = resolveVatRate(country, d.tax_band, fallbackRate);
       const stock = (d.type === 'service' || d.type === 'digital') ? 0 : d.stock;
-      const r = db.prepare(`INSERT INTO products (name,slug,sku,description,price,compare_price,image_url,category_id,status,type,digital_file_url,featured,stock,supplier_id,tax_rate,tax_band) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(d.name, slug, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', d.type||'physical', d.digital_file_url||'', d.featured?1:0, stock, d.supplier_id||null, rate, band);
+      const r = db.prepare(`INSERT INTO products (name,slug,sku,description,price,compare_price,image_url,category_id,status,type,digital_file_url,featured,stock,supplier_id,tax_rate,tax_band,barcode) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(d.name, slug, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', d.type||'physical', d.digital_file_url||'', d.featured?1:0, stock, d.supplier_id||null, rate, band, d.barcode||'');
       if (d.tags?.length) {
         for (const tid of d.tags) {
           try { db.prepare('INSERT OR IGNORE INTO product_tags (product_id,tag_id) VALUES (?,?)').run(r.lastInsertRowid, tid); } catch(_){}
@@ -80,8 +80,8 @@ export function createProductRoutes(db, cfg = {}) {
         band = cur?.tax_band || 'general';
         rate = cur?.tax_rate ?? fallbackRate;
       }
-      db.prepare(`UPDATE products SET name=?,sku=?,description=?,price=?,compare_price=?,image_url=?,category_id=?,status=?,type=?,digital_file_url=?,featured=?,supplier_id=?,tax_rate=?,tax_band=? WHERE id=?`)
-        .run(d.name, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', d.type||'physical', d.digital_file_url||'', d.featured?1:0, d.supplier_id||null, rate, band, id);
+      db.prepare(`UPDATE products SET name=?,sku=?,description=?,price=?,compare_price=?,image_url=?,category_id=?,status=?,type=?,digital_file_url=?,featured=?,supplier_id=?,tax_rate=?,tax_band=?,barcode=? WHERE id=?`)
+        .run(d.name, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', d.type||'physical', d.digital_file_url||'', d.featured?1:0, d.supplier_id||null, rate, band, d.barcode||'', id);
       if (d.tags !== undefined) {
         db.prepare('DELETE FROM product_tags WHERE product_id=?').run(id);
         for (const tid of (d.tags||[])) {
@@ -211,14 +211,21 @@ export function createProductRoutes(db, cfg = {}) {
             </div>
             <div class="tab-pane active" data-pane-group="prod" data-pane-key="basic">
               <div class="form-row">
-                <div class="form-group"><label class="form-label">Tipo</label><select class="form-control" id="pType"><option value="physical">Físico</option><option value="digital">Digital</option><option value="service">Servicio</option></select></div>
+                <div class="form-group"><label class="form-label">Tipo *</label><select class="form-control" id="pType"><option value="physical">Físico</option><option value="digital">Digital</option><option value="service">Servicio</option></select></div>
                 <div class="form-group"><label class="form-label">Nombre *</label><input class="form-control" id="pName"></div>
-                <div class="form-group"><label class="form-label">SKU</label><input class="form-control" id="pSku"></div>
+                <div class="form-group"><label class="form-label">SKU *</label><input class="form-control" id="pSku"></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Código de barras (EAN-13)</label>
+                <div style="display:flex;gap:.5rem">
+                  <input class="form-control" id="pBarcode" placeholder="13 dígitos" inputmode="numeric">
+                  <button type="button" class="btn btn-secondary btn-sm" style="white-space:nowrap" onclick="generarEAN()">Generar EAN</button>
+                </div>
               </div>
               <div class="form-group" style="display:none"><!-- OCULTO: pensada para la tienda online --><label class="form-label">Descripción</label><textarea class="form-control" id="pDesc" rows="3"></textarea></div>
               <div class="form-row">
                 <div class="form-group"><label class="form-label">Precio *</label><input class="form-control" type="number" id="pPrice" step="0.01"></div>
-                <div class="form-group"><label class="form-label">IVA (banda)</label><select class="form-control" id="pTaxBand"></select></div>
+                <div class="form-group"><label class="form-label">Tipo de IVA *</label><select class="form-control" id="pTaxBand"></select></div>
                 <div class="form-group" style="display:none"><label class="form-label">Precio antes (tachado)</label><input class="form-control" type="number" id="pCompare" step="0.01"></div><!-- OCULTO: promoción de tienda online -->
                 <div class="form-group" id="pStockWrap"><label class="form-label">Stock</label><input class="form-control" type="number" id="pStock" value="0"></div>
               </div>
@@ -305,12 +312,23 @@ export function createProductRoutes(db, cfg = {}) {
       // Rellena el selector de banda de IVA. Etiqueta clara + % + ejemplo corto.
       (function initVatBands(){
         const sel=document.getElementById('pTaxBand');
-        sel.innerHTML=VAT_BANDS.map(b=>{
+        // Opción en blanco al inicio: el IVA es obligatorio, hay que elegirlo.
+        sel.innerHTML='<option value="">— Selecciona —</option>'+VAT_BANDS.map(b=>{
           // Solo el monto (%); sin etiqueta de banda ni ejemplo. El value sigue siendo la banda.
           return '<option value="'+b.code+'">'+b.rate+'%</option>';
         }).join('');
       })();
       function bandRate(code){const b=VAT_BANDS.find(x=>x.code===code);return b?b.rate:null;}
+
+      // Genera un EAN-13 válido para uso interno (prefijo 2) con dígito de control correcto.
+      function generarEAN(){
+        let base='2';
+        for(let i=0;i<11;i++) base+=Math.floor(Math.random()*10);
+        let sum=0;
+        for(let i=0;i<12;i++) sum += (+base[i]) * (i%2===0?1:3);
+        const check=(10-(sum%10))%10;
+        document.getElementById('pBarcode').value=base+String(check);
+      }
 
       async function loadAll(){
         [allProds, allTags, allCats, allSuppliers]=await Promise.all([
@@ -357,9 +375,9 @@ export function createProductRoutes(db, cfg = {}) {
       function openNewProduct(){
         currentProdId=null; selTags=[];
         document.getElementById('modalTitle').textContent='Nuevo Producto';
-        ['pName','pSku','pDesc','pPrice','pCompare','pImage','pDigital'].forEach(id=>document.getElementById(id).value='');
+        ['pName','pSku','pBarcode','pDesc','pPrice','pCompare','pImage','pDigital'].forEach(id=>document.getElementById(id).value='');
         document.getElementById('pStock').value='0';
-        document.getElementById('pTaxBand').value='general';
+        document.getElementById('pTaxBand').value='';
         document.getElementById('pStatus').value='active';
         document.getElementById('pType').value='physical';
         document.getElementById('pFeatured').checked=false;
@@ -381,6 +399,7 @@ export function createProductRoutes(db, cfg = {}) {
         document.getElementById('prodId').value=id;
         document.getElementById('pName').value=p.name;
         document.getElementById('pSku').value=p.sku||'';
+        document.getElementById('pBarcode').value=p.barcode||'';
         document.getElementById('pDesc').value=p.description||'';
         document.getElementById('pPrice').value=p.price;
         document.getElementById('pCompare').value=p.compare_price||'';
@@ -402,9 +421,21 @@ export function createProductRoutes(db, cfg = {}) {
 
       async function saveProduct(){
         const isEdit=!!currentProdId;
+        // Obligatorios: tipo, nombre, SKU, precio y tipo de IVA.
+        const _type=document.getElementById('pType').value;
+        const _name=document.getElementById('pName').value.trim();
+        const _sku=document.getElementById('pSku').value.trim();
+        const _priceRaw=document.getElementById('pPrice').value.trim();
+        const _band=document.getElementById('pTaxBand').value;
+        if(!_type){toast('El tipo de producto es obligatorio','err');return;}
+        if(!_name){toast('El nombre es obligatorio','err');return;}
+        if(!_sku){toast('El SKU es obligatorio','err');return;}
+        if(_priceRaw===''||isNaN(parseFloat(_priceRaw))||parseFloat(_priceRaw)<0){toast('El precio es obligatorio','err');return;}
+        if(!_band){toast('El tipo de IVA es obligatorio','err');return;}
         const body={
           name:document.getElementById('pName').value,
           sku:document.getElementById('pSku').value,
+          barcode:document.getElementById('pBarcode').value.trim(),
           description:document.getElementById('pDesc').value,
           price:parseFloat(document.getElementById('pPrice').value)||0,
           compare_price:parseFloat(document.getElementById('pCompare').value)||null,
