@@ -35,12 +35,13 @@ galería de imágenes, SEO, coste/margen, unidad por hora/sesión.
 - Menú: ocultada **"Etiquetas"** de Catálogo (e-commerce); ruta `/admin/tags` intacta. Catálogo queda con Productos · Categorías.
 - Verificado con tests de integración/render. Commits del día (último `8540e5d`).
 
-### ▶ P3. Unificar catálogo (absorber los servicios de A3) — SIGUIENTE
-- **Hoy:** los servicios viven en una tabla/pantalla/API aparte (`services`, `/admin/services`), separada de los productos.
-- **Qué se hace:** migrar esos servicios a productos de tipo "servicio" y **eliminar** la tabla, la pantalla y la API de servicios sueltos. El autofill al facturar pasa a leer del catálogo de productos.
-- **HECHO CUANDO:** hay un único catálogo; los servicios viejos aparecen como productos tipo "servicio" y nada en el código apunta ya a `services`.
+### ✅ P3. Unificar catálogo (absorber los servicios de A3) — HECHO (2026-05-29)
+- Migración guardada: las filas de `services` pasan a productos de tipo "servicio" (precio, IVA→banda legal, SKU autogenerado `SVC-NNNN`, stock 0) y se hace `DROP TABLE services`. El IRPF del servicio se descarta (CANON). Idempotente.
+- Eliminado el módulo de servicios sueltos: `routes/services.js`, `serviceSchema`, mounts `/admin/services` y `/api/erp/services`, permisos `services.*` y restos de nav.
+- El autofill al facturar (`/admin/invoices/new`) lee ahora productos tipo "servicio" (precio + IVA); ya no fija el IRPF (se elige a mano). Línea libre intacta.
+- Hay un único catálogo y nada en el código operativo apunta ya a `services`. Verificado (14/14). Commit `5147cc6`.
 
-### P4. Buscador y filtros en la lista de productos
+### ▶ P4. Buscador y filtros en la lista de productos — SIGUIENTE
 - **Hoy:** solo hay un buscador en el navegador por nombre/código, sin filtros y cargando todos los productos de golpe.
 - **Qué se hace:** búsqueda por nombre y código, filtro por categoría y paginación.
 - **HECHO CUANDO:** encuentro un producto por nombre o código, filtro por categoría, y la lista no carga todo de una vez.
@@ -62,7 +63,7 @@ _(por detallar)_ — Pedido → Albarán / nota de entrega → Factura. Usa los 
 
 La era previa ("facturación de servicios") dejó código que funciona y no se tira; solo se retira su plan:
 - **Hecho y vivo:** crear factura sin pedido (A1), IVA múltiple por línea + IRPF (A2), y el catálogo de servicios suelto (A3).
-- **A3 será absorbido por P3:** los servicios pasan a ser un tipo de producto; su tabla/pantalla/API se eliminan.
+- **A3 absorbido en P3 (hecho):** los servicios son ahora productos de tipo "servicio"; su tabla/pantalla/API se eliminaron.
 - **Lo que quedaba pendiente de esa era no se pierde, se reubica en el PILAR 4 (Ventas):** PDF real de la factura, envío por email y Verifactu (QR + leyenda).
 
 ---
@@ -73,5 +74,5 @@ La era previa ("facturación de servicios") dejó código que funciona y no se t
 ---
 
 ## Notas
-- Una tarea "EN CURSO" a la vez (RITUAL). Producto: P1+P2 y refinamientos (P2.1, P2.2) hechos; sigue **P3**.
+- Una tarea "EN CURSO" a la vez (RITUAL). Producto: P1+P2, P2.1, P2.2 y P3 hechos; sigue **P4** (último del Pilar 1).
 - Este orden y alcances no son sagrados (CANON §3): si al construir algo no cuadra, se cambia.
