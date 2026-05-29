@@ -69,6 +69,11 @@ estado `errored` y no es la instancia productiva — ignorarla.
 ## Convenciones (de CONTEXT_ENGINEERING.md)
 
 - Migraciones: lazy, vía `runMigrations(db)` en tenant-middleware.
+- **REGLA PERMANENTE — nunca destruir datos de un tenant.** Cualquier migración que toque
+  datos de un tenant **archiva, no borra**: renombra la tabla (p. ej. `tabla` → `tabla_archived`),
+  **NUNCA** hace `DROP TABLE` (ni `DROP COLUMN` con datos). Aunque el TABLERO (u otra tarea) diga
+  "eliminar", **eliminar = sacarlo del sistema vivo** (desmontar rutas/UI, dejar de leerlo), **no
+  destruir los datos**. Si una tarea pide explícitamente borrar datos de verdad, se para y se pregunta.
 - Estados de pedido en ESPAÑOL: borrador, en_preparacion, enviado, completado, cancelado, reembolsado.
   (NO en inglés — fue causa de bugs de analítica.)
 - better-sqlite3 version mismatch se arregla con:
