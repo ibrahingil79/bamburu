@@ -20,6 +20,13 @@ galería de imágenes, SEO, coste/margen, unidad por hora/sesión.
 - Migración aditiva: productos previos quedaron con el IVA por defecto del negocio; `type` intacto; POS/pedidos/factura sin tocar.
 - Verificado con test de integración (12/12). Commit `679aa63`.
 
+### ✅ P2.1. IVA por bandas legales + multi-país + stock digital + ayuda — HECHO (2026-05-29)
+- IVA por **banda** (general/reducido/superreducido/exento), no número libre. El producto guarda `tax_band`; el % lo resuelve el servidor desde `core/vat-bands.js` (bandas por país; hoy ES). Añadir país = añadir su entrada, sin tocar el producto.
+- Stock oculto/forzado a 0 también para **digital** (antes solo servicio).
+- Selector con etiqueta+%+ejemplo, enlace a la AEAT y nota "¿Dudas? Pregunta a DISA" (sin lógica de DISA).
+- CANON §4 ampliado con el modelo fiscal (IVA producto×país; IRPF en Settings/Ventas; responsabilidad del usuario).
+- Aditivo (IRPF/POS/pedidos/factura intactos). Verificado (15/15). Commit `6efa619`.
+
 ### ▶ P3. Unificar catálogo (absorber los servicios de A3) — SIGUIENTE
 - **Hoy:** los servicios viven en una tabla/pantalla/API aparte (`services`, `/admin/services`), separada de los productos.
 - **Qué se hace:** migrar esos servicios a productos de tipo "servicio" y **eliminar** la tabla, la pantalla y la API de servicios sueltos. El autofill al facturar pasa a leer del catálogo de productos.
