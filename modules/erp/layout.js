@@ -30,6 +30,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     'store-settings': null,
     refunds:          'orders.edit',
     discounts:        'discounts.read',
+    services:         'services.read',
     invoices:         'invoices.read',
     inventory:        'inventory.read',
     suppliers:        'suppliers.read',
@@ -63,6 +64,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     { section: 'Ventas', items: [
       { href: '/admin/orders', label: 'Pedidos', key: 'orders', icon: '<path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4"/><path d="M9 11V7a3 3 0 0 1 6 0v4"/>' },
       { href: '/admin/orders/pos', label: 'Punto de Venta', key: 'pos', icon: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/>' },
+      { href: '/admin/services', label: 'Servicios', key: 'services', icon: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>' },
       { href: '/admin/store-settings', label: 'Tienda Online', key: 'store-settings', icon: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>' },
       { href: '/admin/orders/refunds', label: 'Devoluciones', key: 'refunds', icon: '<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>' },
       { href: '/admin/discounts', label: 'Descuentos', key: 'discounts', icon: '<line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>' },

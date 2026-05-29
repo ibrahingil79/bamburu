@@ -600,6 +600,20 @@ export function runMigrations(db) {
     PRIMARY KEY (series, year)
   )`);
 
+  // A3: catálogo de servicios del autónomo. Tabla NUEVA e independiente de
+  // `products` (e-commerce, Capa 2 congelada). El autónomo guarda lo que repite
+  // (nombre + precio + IVA + IRPF) y lo reutiliza al facturar. Las líneas de
+  // factura COPIAN estos valores en invoice_items, así que borrar un servicio
+  // NO afecta a facturas ya emitidas.
+  db.exec(`CREATE TABLE IF NOT EXISTS services (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    base_price REAL NOT NULL DEFAULT 0,
+    tax_rate REAL NOT NULL DEFAULT 0,
+    irpf_rate REAL NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS disa_conversations (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -702,6 +716,10 @@ export function runMigrations(db) {
     { module: 'clients',   action: 'edit',           description: 'Editar clientes' },
     { module: 'invoices',  action: 'read',           description: 'Ver facturas' },
     { module: 'invoices',  action: 'create',         description: 'Generar facturas' },
+    { module: 'services',  action: 'read',           description: 'Ver servicios' },
+    { module: 'services',  action: 'create',         description: 'Crear servicios' },
+    { module: 'services',  action: 'edit',           description: 'Editar servicios' },
+    { module: 'services',  action: 'delete',         description: 'Eliminar servicios' },
     { module: 'admin',     action: 'manage_users',   description: 'Gestionar usuarios' },
     { module: 'admin',     action: 'manage_roles',   description: 'Gestionar roles' },
     { module: 'admin',     action: 'settings',       description: 'Configuración empresa' },
@@ -740,13 +758,15 @@ export function runMigrations(db) {
                  'orders.read','orders.create','orders.edit','orders.update_status',
                  'clients.read','clients.create','clients.edit',
                  'invoices.read','invoices.create',
+                 'services.read','services.create','services.edit','services.delete',
                  'admin.manage_users','admin.manage_roles','admin.settings'],
     Seller:     ['products.read',
                  'orders.read','orders.create','orders.edit','orders.update_status',
                  'clients.read','clients.create','clients.edit',
-                 'invoices.read'],
-    Accountant: ['orders.read','clients.read','invoices.read','invoices.create','admin.settings'],
-    Viewer:     ['products.read','orders.read','clients.read','invoices.read'],
+                 'invoices.read',
+                 'services.read','services.create','services.edit'],
+    Accountant: ['orders.read','clients.read','invoices.read','invoices.create','services.read','admin.settings'],
+    Viewer:     ['products.read','orders.read','clients.read','invoices.read','services.read'],
   };
   for (const [roleName, perms] of Object.entries(rolePermissions)) {
     const role = db.prepare('SELECT id FROM roles WHERE name=?').get(roleName);

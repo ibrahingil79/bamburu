@@ -122,6 +122,14 @@ export const invoiceComputeSchema = z.object({
   irpf_rate: z.coerce.number().min(0).max(50).optional().default(0),
 });
 
+// ── Services (A3) — catálogo de servicios repetibles del autónomo ──
+export const serviceSchema = z.object({
+  name:       str(200),
+  base_price: z.coerce.number().nonnegative().max(1_000_000),
+  tax_rate:   z.coerce.number().min(0).max(50).optional().default(0),
+  irpf_rate:  z.coerce.number().min(0).max(50).optional().default(0),
+});
+
 // ── Discounts ──────────────────────────────────────────────────
 export const discountCodeSchema = z.object({
   code: z.string().trim().min(3).max(50).regex(/^[A-Z0-9_-]+$/i),

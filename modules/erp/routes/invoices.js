@@ -439,11 +439,15 @@ export function createInvoiceRoutes(db) {
       const DEFAULT_RATE = ${defaultRate};
       const SHOW_IRPF = ${showIrpf};
       let clients = [];
+      let services = [];                       // A3: catálogo de servicios para autofill
       let recalcTimer = null;
 
       async function loadAll(){
         try {
-          clients = await api('GET','/api/erp/clients').catch(()=>[]);
+          [clients, services] = await Promise.all([
+            api('GET','/api/erp/clients').catch(()=>[]),
+            api('GET','/api/erp/services').catch(()=>[]),
+          ]);
           const sel = document.getElementById('f-client');
           for (const cl of clients) {
             const o = document.createElement('option');
@@ -467,8 +471,13 @@ export function createInvoiceRoutes(db) {
         ).join('');
         const exemptOpt = '<option value="0">Exento (0%)</option>';
         const opts = normalOpts + exemptOpt;
+        // A3: selector de servicio guardado. "" = línea libre (escrita a mano, no se guarda).
+        const svcOpts = '<option value="">— Línea libre —</option>' +
+          services.map(s => '<option value="'+s.id+'">'+escHtml(s.name)+' ('+SYM+Number(s.base_price||0).toFixed(2)+')</option>').join('');
         row.innerHTML =
-          '<td><input type="text" class="form-control line-desc" placeholder="Descripción del servicio o producto"></td>' +
+          '<td>' +
+            (services.length ? '<select class="form-control line-service" style="margin-bottom:.35rem" onchange="applyService(this)">'+svcOpts+'</select>' : '') +
+            '<input type="text" class="form-control line-desc" placeholder="Descripción del servicio o producto"></td>' +
           '<td><input type="number" class="form-control line-qty" step="0.01" min="0.01" value="1"></td>' +
           '<td><input type="number" class="form-control line-price" step="0.01" min="0" value="0"></td>' +
           '<td><select class="form-control line-tax">'+opts+'</select></td>' +
@@ -476,6 +485,34 @@ export function createInvoiceRoutes(db) {
           '<td><button class="btn btn-danger btn-sm" onclick="this.closest(\\'tr\\').remove();scheduleRecalc()">✕</button></td>';
         tbody.appendChild(row);
         row.querySelectorAll('.line-qty, .line-price, .line-tax').forEach(inp => inp.addEventListener('input', scheduleRecalc));
+        scheduleRecalc();
+      }
+
+      // A3: al elegir un servicio guardado, rellena la línea (descripción, precio, IVA)
+      // y ajusta el IRPF global. La cantidad NO se toca (queda editable). Elegir
+      // "Línea libre" no borra nada: deja lo escrito tal cual.
+      function applyService(sel){
+        const id = parseInt(sel.value);
+        if (!id) return;
+        const svc = services.find(s => s.id === id);
+        if (!svc) return;
+        const row = sel.closest('tr');
+        row.querySelector('.line-desc').value  = svc.name;
+        row.querySelector('.line-price').value = Number(svc.base_price || 0).toFixed(2);
+        const taxSel = row.querySelector('.line-tax');
+        const rate = String(Number(svc.tax_rate) || 0);
+        if (![...taxSel.options].some(o => o.value === rate)) {
+          const o = document.createElement('option');
+          o.value = rate; o.textContent = (rate === '0' ? 'Exento (0%)' : rate + '%');
+          taxSel.appendChild(o);
+        }
+        taxSel.value = rate;
+        // IRPF es global en la factura: si el servicio trae IRPF y la opción existe, lo fija.
+        if (SHOW_IRPF && Number(svc.irpf_rate) > 0) {
+          const irpfSel = document.getElementById('f-irpf');
+          const ir = String(Number(svc.irpf_rate));
+          if ([...irpfSel.options].some(o => o.value === ir)) irpfSel.value = ir;
+        }
         scheduleRecalc();
       }
 
