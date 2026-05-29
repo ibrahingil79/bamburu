@@ -202,9 +202,9 @@ export function createProductRoutes(db, cfg = {}) {
             <input type="hidden" id="prodId">
             <div class="tabs">
               <div class="tab active" data-tab-group="prod" data-tab-key="basic" onclick="switchTab('prod','basic')">General</div>
-              <!-- OCULTAS de la vista (e-commerce). Botones con display:none; los paneles siguen en el DOM para no romper el JS de editar. -->
+              <!-- Imágenes OCULTA de la vista (e-commerce); botón con display:none, panel sigue en el DOM para no romper el JS de editar. Variantes SÍ se mantiene (necesaria). -->
               <div class="tab" data-tab-group="prod" data-tab-key="images" onclick="switchTab('prod','images')" style="display:none">Imágenes</div>
-              <div class="tab" data-tab-group="prod" data-tab-key="variants" onclick="switchTab('prod','variants')" style="display:none">Variantes</div>
+              <div class="tab" data-tab-group="prod" data-tab-key="variants" onclick="switchTab('prod','variants')">Variantes</div>
               <!-- OCULTO de la vista (e-commerce SEO, no aplica a gestión/facturación). Código conservado:
               <div class="tab" data-tab-group="prod" data-tab-key="seo" onclick="switchTab('prod','seo')">Avanzado</div>
               -->
