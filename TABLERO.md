@@ -27,6 +27,13 @@ galería de imágenes, SEO, coste/margen, unidad por hora/sesión.
 - CANON §4 ampliado con el modelo fiscal (IVA producto×país; IRPF en Settings/Ventas; responsabilidad del usuario).
 - Aditivo (IRPF/POS/pedidos/factura intactos). Verificado (15/15). Commit `6efa619`.
 
+### ✅ P2.2. IVA obligatorio (formulario + API) + ficha de producto orientada a gestión — HECHO (2026-05-29)
+- Campos obligatorios (con * y validación): **Tipo, Nombre, SKU, Precio, Tipo de IVA**. SKU obligatorio también en el servidor.
+- "IVA (banda)" → **"Tipo de IVA"**; el selector muestra solo el monto (21/10/4/0%) y arranca en blanco (elección explícita).
+- **API endurecida**: crear/editar un producto sin banda válida → 400. Sin "General" por defecto silencioso (el IVA es dato fiscal).
+- Ficha limpiada (ocultos, sin borrar código): pestañas **Imágenes** y **Avanzado/SEO**; campos Descripción, Etiquetas, Precio antes, Producto destacado, URL archivo digital, URL imagen principal. Reordenada (Tipo, Nombre, SKU primero). **Variantes se mantiene**.
+- Verificado con tests de integración/render. Commits del día (último `f164900`).
+
 ### ▶ P3. Unificar catálogo (absorber los servicios de A3) — SIGUIENTE
 - **Hoy:** los servicios viven en una tabla/pantalla/API aparte (`services`, `/admin/services`), separada de los productos.
 - **Qué se hace:** migrar esos servicios a productos de tipo "servicio" y **eliminar** la tabla, la pantalla y la API de servicios sueltos. El autofill al facturar pasa a leer del catálogo de productos.
@@ -59,6 +66,11 @@ La era previa ("facturación de servicios") dejó código que funciona y no se t
 
 ---
 
+## Pendientes técnicos (deuda rastreable)
+- **DISA `create_product`: exigir banda de IVA.** Hoy hace `INSERT INTO products` directo (NO vía API) sin banda → el producto nace en **General/21 por el DEFAULT de la columna, sin elección explícita**. La API ya lo exige; DISA no. **Cerrar al reenfocar DISA** (no se parchea ahora: esa acción se reescribe entonces y el parche se tiraría). Ref: `modules/disa/index.js`, acción `create_product`.
+
+---
+
 ## Notas
-- Una tarea "EN CURSO" a la vez (RITUAL). P1+P2 hecha; sigue P3 del Pilar 1.
+- Una tarea "EN CURSO" a la vez (RITUAL). Producto: P1+P2 y refinamientos (P2.1, P2.2) hechos; sigue **P3**.
 - Este orden y alcances no son sagrados (CANON §3): si al construir algo no cuadra, se cambia.
