@@ -16,7 +16,7 @@ export const productSchema = z.object({
   category_id: optId,
   status: z.enum(['active', 'draft', 'archived']).default('active'),
   type: z.enum(['physical', 'digital', 'service']).default('physical'),  // P1+P2: + servicio
-  tax_band: z.string().max(40).optional(),                               // P1+P2 refinamiento: banda de IVA; el % (tax_rate) lo resuelve el servidor desde la banda+país
+  tax_band: str(40),                                                     // OBLIGATORIO (dato fiscal): banda de IVA; el % lo resuelve el servidor desde banda+país
   featured: z.coerce.boolean().default(false),
   tags: z.array(intPos).optional().default([]),
   stock: z.coerce.number().int().min(0).default(0),

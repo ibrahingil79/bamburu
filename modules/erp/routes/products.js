@@ -3,7 +3,7 @@ import { adminLayout, can } from '../layout.js';
 import { logActivity, requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { productSchema, productImageSchema, variantSchema, tagSchema } from '../schemas.js';
-import { getVatBands, resolveVatRate } from '../../../core/vat-bands.js';
+import { getVatBands } from '../../../core/vat-bands.js';
 
 function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now();
@@ -49,7 +49,11 @@ export function createProductRoutes(db, cfg = {}) {
       const cfg = db.prepare('SELECT country, tax_rate FROM company_config WHERE id=1').get() || {};
       const country = (cfg.country || 'ES').toUpperCase();
       const fallbackRate = cfg.tax_rate != null ? cfg.tax_rate : 21;
-      const { band, rate } = resolveVatRate(country, d.tax_band, fallbackRate);
+      // IVA OBLIGATORIO (dato fiscal): la banda debe venir y ser válida para el país.
+      // No se aplica ningún valor por defecto silencioso.
+      const chosen = getVatBands(country, fallbackRate).find(b => b.code === d.tax_band);
+      if (!chosen) return c.json({ error: 'La banda de IVA es obligatoria y debe ser válida' }, 400);
+      const band = chosen.code, rate = chosen.rate;
       const stock = (d.type === 'service' || d.type === 'digital') ? 0 : d.stock;
       const r = db.prepare(`INSERT INTO products (name,slug,sku,description,price,compare_price,image_url,category_id,status,type,digital_file_url,featured,stock,supplier_id,tax_rate,tax_band) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
         .run(d.name, slug, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', d.type||'physical', d.digital_file_url||'', d.featured?1:0, stock, d.supplier_id||null, rate, band);
@@ -67,19 +71,13 @@ export function createProductRoutes(db, cfg = {}) {
     try {
       const id = c.req.param('id');
       const d = c.get('validated');
-      // P1+P2 refinamiento: el % se resuelve desde la banda + país. Si la API omite la
-      // banda, se conserva la actual del producto.
-      const cur = db.prepare('SELECT tax_band, tax_rate FROM products WHERE id=?').get(id);
+      // IVA OBLIGATORIO también al editar: la banda debe venir y ser válida (sin defecto silencioso).
       const cfg = db.prepare('SELECT country, tax_rate FROM company_config WHERE id=1').get() || {};
       const country = (cfg.country || 'ES').toUpperCase();
       const fallbackRate = cfg.tax_rate != null ? cfg.tax_rate : 21;
-      let band, rate;
-      if (d.tax_band != null) {
-        ({ band, rate } = resolveVatRate(country, d.tax_band, fallbackRate));
-      } else {
-        band = cur?.tax_band || 'general';
-        rate = cur?.tax_rate ?? fallbackRate;
-      }
+      const chosen = getVatBands(country, fallbackRate).find(b => b.code === d.tax_band);
+      if (!chosen) return c.json({ error: 'La banda de IVA es obligatoria y debe ser válida' }, 400);
+      const band = chosen.code, rate = chosen.rate;
       db.prepare(`UPDATE products SET name=?,sku=?,description=?,price=?,compare_price=?,image_url=?,category_id=?,status=?,type=?,digital_file_url=?,featured=?,supplier_id=?,tax_rate=?,tax_band=? WHERE id=?`)
         .run(d.name, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', d.type||'physical', d.digital_file_url||'', d.featured?1:0, d.supplier_id||null, rate, band, id);
       if (d.tags !== undefined) {
