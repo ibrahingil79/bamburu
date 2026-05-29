@@ -182,7 +182,7 @@ producto hacia él (vocabulario, plantillas) y dominarlo.
 | **Cobros (qué me deben)** | ❌ Falta | No hay estado de cobro de facturas. |
 | **Gastos** | ❌ Falta | No existe (las "compras a proveedores" son coste de mercancía, no gastos del autónomo). |
 | **Settings del autónomo** | ⏳ Parcial | `/admin/settings` existe con empresa/IVA/logo, pero no expone IRPF por defecto ni impresora. Necesita un rediseño orientado al autónomo. No urgente. |
-| **Catálogo de servicios** | ⏳ A decidir | Existe tabla de productos del e-commerce; decidir si el catálogo de servicios la reutiliza (filtrando tipo "servicio") o es tabla nueva. Decisión técnica para Claude Code. |
+| **Catálogo de servicios** | ✅ Funciona — tabla nueva `services`, no reutiliza productos | CRUD en `/admin/services` + autofill al crear factura (`/admin/invoices/new`). Las líneas libres no se guardan. (A3 cerrado 2026-05-29) |
 | **DISA proactiva sobre el core** | ⏳ Parcial | DISA existe (chat, threads, query_database, acciones con confirmación) pero opera sobre el ERP-tienda. Falta enfocarla en facturar/cobrar/gastos y darle la capa proactiva de avisos. |
 
 **Regla de oro de construcción:** los motores (facturación, cobros, gastos) se terminan

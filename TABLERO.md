@@ -10,10 +10,6 @@
 
 ### Bloque A — Motor de facturación (el corazón, lo más urgente)
 
-**A3. Catálogo mixto de servicios**
-- Decidir primero: ¿reutilizar tabla de productos (filtrando tipo "servicio") o tabla nueva? (decisión técnica).
-- HECHO CUANDO: puedo guardar servicios repetidos (nombre+precio+IVA+IRPF) y elegirlos al facturar, Y escribir una línea libre suelta sin guardarla.
-
 **A4. Generar PDF real de la factura**
 - Hoy solo hay HTML imprimible del navegador.
 - HECHO CUANDO: la factura se descarga como PDF bien formado.
@@ -63,6 +59,14 @@ _(vacío — coger la primera de POR HACER)_
 ---
 
 ## 🟢 HECHO
+
+- **A3. Catálogo mixto de servicios** — 2026-05-29
+  - Tabla NUEVA `services` (id, name, base_price, tax_rate, irpf_rate) — NO reutiliza `products` del e-commerce. Migración lazy idempotente.
+  - CRUD completo: API `/api/erp/services` (read/create/edit/delete, permisos `services.*`) + pantalla `/admin/services` (listar/crear/editar/borrar, estilo modal). Ítem de menú en "Ventas".
+  - Integrado en `/admin/invoices/new`: selector "servicio guardado / línea libre" por fila que rellena descripción+precio+IVA y ajusta el IRPF global. Cantidad editable. Las líneas libres siguen sin guardarse.
+  - Borrar un servicio no afecta a facturas emitidas (la factura copia los valores en `invoice_items`).
+  - POS, e-commerce y `generateInvoice` intactos. Verificado con test de integración (CRUD + aislamiento de línea libre + `products` intacto).
+  - Commit `9b2c9cb`.
 
 - **A1. Desacoplar la factura del pedido** — 2026-05-28
   - Se puede crear factura sin pedido desde `/admin/invoices/new` (cliente obligatorio, líneas libres, fecha editable).
