@@ -30,7 +30,6 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     'store-settings': null,
     refunds:          'orders.edit',
     discounts:        'discounts.read',
-    services:         'services.read',
     invoices:         'invoices.read',
     inventory:        'inventory.read',
     suppliers:        'suppliers.read',
@@ -63,7 +62,8 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       // { href: '/admin/tags', label: 'Etiquetas', key: 'tags', icon: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>' },
     ]},
     // OCULTOS del menú (no borrados — rutas siguen montadas): 'pos' (Punto de Venta),
-    // 'services' (ítem suelto A3, pasa a ser tipo de producto), 'store-settings' (Tienda Online).
+    // 'store-settings' (Tienda Online). [El módulo 'services' de A3 se eliminó en P3:
+    // los servicios son ahora productos de tipo 'servicio'.]
     { section: 'Ventas', items: [
       { href: '/admin/orders', label: 'Pedidos', key: 'orders', icon: '<path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4"/><path d="M9 11V7a3 3 0 0 1 6 0v4"/>' },
       { label: 'Albaranes', key: 'albaranes', disabled: true, icon: '<path d="M9 2h6a1 1 0 0 1 1 1v1h1a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1V3a1 1 0 0 1 1-1z"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/>' },

@@ -634,14 +634,30 @@ export function runMigrations(db) {
   // (nombre + precio + IVA + IRPF) y lo reutiliza al facturar. Las líneas de
   // factura COPIAN estos valores en invoice_items, así que borrar un servicio
   // NO afecta a facturas ya emitidas.
-  db.exec(`CREATE TABLE IF NOT EXISTS services (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    base_price REAL NOT NULL DEFAULT 0,
-    tax_rate REAL NOT NULL DEFAULT 0,
-    irpf_rate REAL NOT NULL DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
+  // P3: unificar catálogo. La tabla suelta `services` (A3) se migra a productos de
+  // tipo 'servicio' y se elimina. El IVA (número) se mapea a banda legal; el IRPF del
+  // servicio se descarta (CANON: el IRPF no es del producto). SKU autogenerado SVC-NNNN.
+  // No se recrea la tabla: tenants nuevos nunca la tienen → se salta.
+  const svcMigKey = 'migration_services_to_products_2026_v1';
+  const hasServicesTable = db.prepare("SELECT count(*) n FROM sqlite_master WHERE type='table' AND name='services'").get().n;
+  if (hasServicesTable && !db.prepare('SELECT value FROM settings WHERE key=?').get(svcMigKey)) {
+    const rateToBand = { 21: 'general', 10: 'reducido', 4: 'superreducido', 0: 'exento' };
+    const rows = db.prepare('SELECT * FROM services ORDER BY id').all();
+    const ins = db.prepare(`INSERT INTO products (name,slug,sku,price,stock,status,type,tax_rate,tax_band) VALUES (?,?,?,?,?,?,?,?,?)`);
+    const migrate = db.transaction(() => {
+      for (const s of rows) {
+        let band = rateToBand[Math.round(Number(s.tax_rate))];
+        let rate;
+        if (band) { rate = Number(s.tax_rate); } else { band = 'general'; rate = 21; }  // tasa rara → General
+        const baseSlug = String(s.name || 'servicio').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'servicio';
+        ins.run(s.name || 'Servicio', baseSlug + '-svc-' + s.id, 'SVC-' + String(s.id).padStart(4, '0'),
+                Number(s.base_price) || 0, 0, 'active', 'service', rate, band);
+      }
+      db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(svcMigKey, 'done');
+      db.exec('DROP TABLE services');
+    });
+    migrate();
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS disa_conversations (
@@ -745,10 +761,6 @@ export function runMigrations(db) {
     { module: 'clients',   action: 'edit',           description: 'Editar clientes' },
     { module: 'invoices',  action: 'read',           description: 'Ver facturas' },
     { module: 'invoices',  action: 'create',         description: 'Generar facturas' },
-    { module: 'services',  action: 'read',           description: 'Ver servicios' },
-    { module: 'services',  action: 'create',         description: 'Crear servicios' },
-    { module: 'services',  action: 'edit',           description: 'Editar servicios' },
-    { module: 'services',  action: 'delete',         description: 'Eliminar servicios' },
     { module: 'admin',     action: 'manage_users',   description: 'Gestionar usuarios' },
     { module: 'admin',     action: 'manage_roles',   description: 'Gestionar roles' },
     { module: 'admin',     action: 'settings',       description: 'Configuración empresa' },
@@ -787,15 +799,13 @@ export function runMigrations(db) {
                  'orders.read','orders.create','orders.edit','orders.update_status',
                  'clients.read','clients.create','clients.edit',
                  'invoices.read','invoices.create',
-                 'services.read','services.create','services.edit','services.delete',
                  'admin.manage_users','admin.manage_roles','admin.settings'],
     Seller:     ['products.read',
                  'orders.read','orders.create','orders.edit','orders.update_status',
                  'clients.read','clients.create','clients.edit',
-                 'invoices.read',
-                 'services.read','services.create','services.edit'],
-    Accountant: ['orders.read','clients.read','invoices.read','invoices.create','services.read','admin.settings'],
-    Viewer:     ['products.read','orders.read','clients.read','invoices.read','services.read'],
+                 'invoices.read'],
+    Accountant: ['orders.read','clients.read','invoices.read','invoices.create','admin.settings'],
+    Viewer:     ['products.read','orders.read','clients.read','invoices.read'],
   };
   for (const [roleName, perms] of Object.entries(rolePermissions)) {
     const role = db.prepare('SELECT id FROM roles WHERE name=?').get(roleName);
