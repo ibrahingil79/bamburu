@@ -211,6 +211,7 @@ export function createProductRoutes(db, cfg = {}) {
             </div>
             <div class="tab-pane active" data-pane-group="prod" data-pane-key="basic">
               <div class="form-row">
+                <div class="form-group"><label class="form-label">Tipo</label><select class="form-control" id="pType"><option value="physical">Físico</option><option value="digital">Digital</option><option value="service">Servicio</option></select></div>
                 <div class="form-group"><label class="form-label">Nombre *</label><input class="form-control" id="pName"></div>
                 <div class="form-group"><label class="form-label">SKU</label><input class="form-control" id="pSku"></div>
               </div>
@@ -227,7 +228,6 @@ export function createProductRoutes(db, cfg = {}) {
               </div>
               <div class="form-row">
                 <div class="form-group"><label class="form-label">Categoría</label><select class="form-control" id="pCategory"><option value="">Sin categoría</option></select></div>
-                <div class="form-group"><label class="form-label">Tipo</label><select class="form-control" id="pType"><option value="physical">Físico</option><option value="digital">Digital</option><option value="service">Servicio</option></select></div>
                 <div class="form-group"><label class="form-label">Estado</label><select class="form-control" id="pStatus"><option value="active">Activo</option><option value="draft">Borrador</option><option value="archived">Archivado</option></select></div>
               </div>
               <div class="form-group" style="display:none"><!-- OCULTO: imagen es escaparate de tienda --><label class="form-label">URL imagen principal</label><input class="form-control" id="pImage" placeholder="https://..."></div>
@@ -239,7 +239,7 @@ export function createProductRoutes(db, cfg = {}) {
                 <label class="form-label">Proveedor</label>
                 <select class="form-control" id="pSupplier"><option value="">Sin proveedor</option></select>
               </div>
-              <div class="form-group">
+              <div class="form-group" style="display:none"><!-- OCULTO: etiquetas pensadas para la tienda online -->
                 <label class="form-label">Etiquetas</label>
                 <div id="tagSelector" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.5rem"></div>
                 <div style="display:flex;gap:.5rem">
