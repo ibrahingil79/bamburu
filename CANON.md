@@ -93,6 +93,27 @@ venta en factura legal del país. Cada país es un enchufe independiente:
 Se diseña como enchufes desde el principio: añadir un país = conectar un módulo, no
 reescribir el producto.
 
+### El modelo fiscal: IVA vs IRPF (crítico — no modelarlo mal)
+
+Son dos cosas distintas y se modelan en sitios distintos:
+
+- **IVA → depende del PRODUCTO y del PAÍS.** Cada país tiene sus **bandas** de IVA;
+  España = General 21 % / Reducido 10 % / Superreducido 4 % / Exento. **El producto
+  guarda su banda** (no un número tecleado), y el % se resuelve desde la tabla de
+  bandas del país (`core/vat-bands.js`; hoy solo ES). Añadir un país = añadir su tabla
+  de bandas, sin tocar el producto.
+
+- **IRPF / retención → NO es del producto ni del servicio.** Depende de **QUIÉN
+  factura** (régimen del negocio: profesional con retención 15 % — o 7 % los primeros
+  años de nuevo autónomo —; empresarial no retiene) y de **A QUIÉN** (si el cliente es
+  particular, no hay retención). Por eso el IRPF se decide en **Settings (datos del
+  negocio)** + en la **factura según el cliente**, y se construye en **Ventas**, no en
+  el producto ni antes.
+
+- **Responsabilidad fiscal.** La responsabilidad final del tipo aplicado es del usuario.
+  Bamburu **ayuda** (bandas legales, enlaces a la AEAT, DISA) pero **no garantiza** el
+  tipo correcto en casos dudosos.
+
 ---
 
 ## 5. Diferenciación y disciplina de construcción

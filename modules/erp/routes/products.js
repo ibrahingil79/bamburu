@@ -3,6 +3,7 @@ import { adminLayout, can } from '../layout.js';
 import { logActivity, requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { productSchema, productImageSchema, variantSchema, tagSchema } from '../schemas.js';
+import { getVatBands, resolveVatRate } from '../../../core/vat-bands.js';
 
 function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now();
@@ -42,12 +43,16 @@ export function createProductRoutes(db, cfg = {}) {
       const d = c.get('validated');
       if (!d.name || d.price === undefined) return c.json({error:'Nombre y precio requeridos'},400);
       const slug = slugify(d.name);
-      // P1+P2: IVA propio. Si no llega, usa el IVA por defecto del negocio. Un servicio no lleva stock.
-      const defRate = db.prepare('SELECT tax_rate FROM company_config WHERE id=1').get()?.tax_rate ?? 21;
-      const taxRate = d.tax_rate != null ? d.tax_rate : defRate;
-      const stock = d.type === 'service' ? 0 : d.stock;
-      const r = db.prepare(`INSERT INTO products (name,slug,sku,description,price,compare_price,image_url,category_id,status,type,digital_file_url,featured,stock,supplier_id,tax_rate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(d.name, slug, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', d.type||'physical', d.digital_file_url||'', d.featured?1:0, stock, d.supplier_id||null, taxRate);
+      // P1+P2 refinamiento: el % de IVA lo resuelve el servidor desde la banda elegida
+      // y el país del negocio (nunca se confía en un número del cliente). Servicio y
+      // digital no llevan stock (CANON §2).
+      const cfg = db.prepare('SELECT country, tax_rate FROM company_config WHERE id=1').get() || {};
+      const country = (cfg.country || 'ES').toUpperCase();
+      const fallbackRate = cfg.tax_rate != null ? cfg.tax_rate : 21;
+      const { band, rate } = resolveVatRate(country, d.tax_band, fallbackRate);
+      const stock = (d.type === 'service' || d.type === 'digital') ? 0 : d.stock;
+      const r = db.prepare(`INSERT INTO products (name,slug,sku,description,price,compare_price,image_url,category_id,status,type,digital_file_url,featured,stock,supplier_id,tax_rate,tax_band) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(d.name, slug, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', d.type||'physical', d.digital_file_url||'', d.featured?1:0, stock, d.supplier_id||null, rate, band);
       if (d.tags?.length) {
         for (const tid of d.tags) {
           try { db.prepare('INSERT OR IGNORE INTO product_tags (product_id,tag_id) VALUES (?,?)').run(r.lastInsertRowid, tid); } catch(_){}
@@ -62,12 +67,21 @@ export function createProductRoutes(db, cfg = {}) {
     try {
       const id = c.req.param('id');
       const d = c.get('validated');
-      // P1+P2: si la API omite tax_rate, conserva el actual (o el IVA por defecto del negocio).
-      const cur = db.prepare('SELECT tax_rate FROM products WHERE id=?').get(id);
-      const defRate = db.prepare('SELECT tax_rate FROM company_config WHERE id=1').get()?.tax_rate ?? 21;
-      const taxRate = d.tax_rate != null ? d.tax_rate : (cur?.tax_rate ?? defRate);
-      db.prepare(`UPDATE products SET name=?,sku=?,description=?,price=?,compare_price=?,image_url=?,category_id=?,status=?,type=?,digital_file_url=?,featured=?,supplier_id=?,tax_rate=? WHERE id=?`)
-        .run(d.name, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', d.type||'physical', d.digital_file_url||'', d.featured?1:0, d.supplier_id||null, taxRate, id);
+      // P1+P2 refinamiento: el % se resuelve desde la banda + país. Si la API omite la
+      // banda, se conserva la actual del producto.
+      const cur = db.prepare('SELECT tax_band, tax_rate FROM products WHERE id=?').get(id);
+      const cfg = db.prepare('SELECT country, tax_rate FROM company_config WHERE id=1').get() || {};
+      const country = (cfg.country || 'ES').toUpperCase();
+      const fallbackRate = cfg.tax_rate != null ? cfg.tax_rate : 21;
+      let band, rate;
+      if (d.tax_band != null) {
+        ({ band, rate } = resolveVatRate(country, d.tax_band, fallbackRate));
+      } else {
+        band = cur?.tax_band || 'general';
+        rate = cur?.tax_rate ?? fallbackRate;
+      }
+      db.prepare(`UPDATE products SET name=?,sku=?,description=?,price=?,compare_price=?,image_url=?,category_id=?,status=?,type=?,digital_file_url=?,featured=?,supplier_id=?,tax_rate=?,tax_band=? WHERE id=?`)
+        .run(d.name, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', d.type||'physical', d.digital_file_url||'', d.featured?1:0, d.supplier_id||null, rate, band, id);
       if (d.tags !== undefined) {
         db.prepare('DELETE FROM product_tags WHERE product_id=?').run(id);
         for (const tid of (d.tags||[])) {
@@ -156,9 +170,12 @@ export function createProductRoutes(db, cfg = {}) {
 
   // ── VIEWS ──────────────────────────────────────────────────────
   views.get('/', c => {
-    const cfgRow = db.prepare('SELECT currency_symbol, tax_rate FROM company_config WHERE id=1').get() || {};
+    const cfgRow = db.prepare('SELECT currency_symbol, tax_rate, country FROM company_config WHERE id=1').get() || {};
     const sym = cfgRow.currency_symbol || '€';
-    const taxDefault = cfgRow.tax_rate != null ? cfgRow.tax_rate : 21;
+    const country = (cfgRow.country || 'ES').toUpperCase();
+    const fallbackRate = cfgRow.tax_rate != null ? cfgRow.tax_rate : 21;
+    const vatBands = getVatBands(country, fallbackRate);   // bandas del país (hoy ES); no quemadas en la pantalla
+    const vatBandsJson = JSON.stringify(vatBands);
     const content = `
       <div class="ph">
         <h2>Productos</h2>
@@ -197,9 +214,13 @@ export function createProductRoutes(db, cfg = {}) {
               <div class="form-group"><label class="form-label">Descripción</label><textarea class="form-control" id="pDesc" rows="3"></textarea></div>
               <div class="form-row">
                 <div class="form-group"><label class="form-label">Precio *</label><input class="form-control" type="number" id="pPrice" step="0.01"></div>
-                <div class="form-group"><label class="form-label">IVA (%)</label><input class="form-control" type="number" id="pTax" step="0.01" min="0" max="50"></div>
+                <div class="form-group"><label class="form-label">IVA (banda)</label><select class="form-control" id="pTaxBand"></select></div>
                 <div class="form-group"><label class="form-label">Precio antes (tachado)</label><input class="form-control" type="number" id="pCompare" step="0.01"></div>
                 <div class="form-group" id="pStockWrap"><label class="form-label">Stock</label><input class="form-control" type="number" id="pStock" value="0"></div>
+              </div>
+              <div style="font-size:.72rem;color:var(--muted);margin:-.5rem 0 .25rem">
+                <a href="https://sede.agenciatributaria.gob.es/Sede/iva.html" target="_blank" rel="noopener" style="color:var(--teal)">Tipos de IVA oficiales (AEAT) ↗</a>
+                &nbsp;·&nbsp; ¿Dudas sobre qué IVA aplicar? Pregunta a DISA.
               </div>
               <div class="form-row">
                 <div class="form-group"><label class="form-label">Categoría</label><select class="form-control" id="pCategory"><option value="">Sin categoría</option></select></div>
@@ -273,8 +294,19 @@ export function createProductRoutes(db, cfg = {}) {
 
       <script>
       const A='/api/erp';
-      const TAX_DEFAULT=${taxDefault};
+      const VAT_BANDS=${vatBandsJson};   // bandas de IVA del país (P1+P2 refinamiento)
       let allProds=[], allTags=[], allCats=[], allSuppliers=[], selTags=[], currentProdId=null;
+
+      // Rellena el selector de banda de IVA. Etiqueta clara + % + ejemplo corto.
+      (function initVatBands(){
+        const sel=document.getElementById('pTaxBand');
+        sel.innerHTML=VAT_BANDS.map(b=>{
+          const pct=b.rate>0?(' — '+b.rate+'%'):' — sin IVA';
+          const ex=b.example?(' ('+b.example+')'):'';
+          return '<option value="'+b.code+'">'+b.label+pct+ex+'</option>';
+        }).join('');
+      })();
+      function bandRate(code){const b=VAT_BANDS.find(x=>x.code===code);return b?b.rate:null;}
 
       async function loadAll(){
         [allProds, allTags, allCats, allSuppliers]=await Promise.all([
@@ -298,7 +330,7 @@ export function createProductRoutes(db, cfg = {}) {
           '<td>'+(p.image_url?'<img class="thumb" src="'+p.image_url+'" alt="">':'<span style="font-size:1.2rem"></span>')+'</td>'+
           '<td><strong>'+escHtml(p.name)+'</strong>'+(p.featured?'  <span class="badge b-purple">Destacado</span>':'')+'<br><span style="color:var(--muted);font-size:.75rem">SKU: '+(p.sku||'-')+'</span></td>'+
           '<td>'+(p.category_name||'-')+'</td>'+
-          '<td><strong>${sym}'+p.price.toFixed(2)+'</strong>'+(p.compare_price?'<br><span style="text-decoration:line-through;color:var(--muted);font-size:.75rem">${sym}'+p.compare_price.toFixed(2)+'</span>':'')+'</td>'+
+          '<td><strong>${sym}'+p.price.toFixed(2)+'</strong>'+(p.compare_price?'<br><span style="text-decoration:line-through;color:var(--muted);font-size:.75rem">${sym}'+p.compare_price.toFixed(2)+'</span>':'')+'<br><span style="color:var(--muted);font-size:.72rem">'+(Number(p.tax_rate)>0?('IVA '+p.tax_rate+'%'):'Exento')+'</span></td>'+
           '<td>'+(p.type==='service'?'<span style="color:var(--muted)">—</span>':(p.stock<5?'<span style="color:#ef4444;font-weight:600">'+p.stock+'</span>':p.stock))+'</td>'+
           '<td>'+(statusB[p.status]||p.status)+'</td>'+
           '<td><span class="badge b-gray">'+(p.type==='digital'?'Digital':p.type==='service'?'Servicio':'Físico')+'</span></td>'+
@@ -310,10 +342,10 @@ export function createProductRoutes(db, cfg = {}) {
 
       document.getElementById('searchBox').addEventListener('input',()=>renderProds(allProds));
       // P1+P2: el tipo decide qué campos aplican. Digital → muestra URL de archivo.
-      // Servicio → no lleva stock (CANON §2), se oculta el campo Stock.
+      // Servicio y digital → no llevan stock (CANON §2), se oculta el campo Stock.
       function applyTypeUI(t){
         document.getElementById('pDigitalWrap').style.display = t==='digital' ? '' : 'none';
-        document.getElementById('pStockWrap').style.display = t==='service' ? 'none' : '';
+        document.getElementById('pStockWrap').style.display = (t==='service' || t==='digital') ? 'none' : '';
       }
       document.getElementById('pType').addEventListener('change',e=>applyTypeUI(e.target.value));
 
@@ -322,7 +354,7 @@ export function createProductRoutes(db, cfg = {}) {
         document.getElementById('modalTitle').textContent='Nuevo Producto';
         ['pName','pSku','pDesc','pPrice','pCompare','pImage','pDigital'].forEach(id=>document.getElementById(id).value='');
         document.getElementById('pStock').value='0';
-        document.getElementById('pTax').value=TAX_DEFAULT;
+        document.getElementById('pTaxBand').value='general';
         document.getElementById('pStatus').value='active';
         document.getElementById('pType').value='physical';
         document.getElementById('pFeatured').checked=false;
@@ -348,7 +380,7 @@ export function createProductRoutes(db, cfg = {}) {
         document.getElementById('pPrice').value=p.price;
         document.getElementById('pCompare').value=p.compare_price||'';
         document.getElementById('pStock').value=p.stock;
-        document.getElementById('pTax').value=p.tax_rate!=null?p.tax_rate:TAX_DEFAULT;
+        document.getElementById('pTaxBand').value=p.tax_band||'general';
         document.getElementById('pImage').value=p.image_url||'';
         document.getElementById('pDigital').value=p.digital_file_url||'';
         document.getElementById('pStatus').value=p.status||'active';
@@ -377,10 +409,10 @@ export function createProductRoutes(db, cfg = {}) {
           supplier_id:document.getElementById('pSupplier').value?+document.getElementById('pSupplier').value:null,
           status:document.getElementById('pStatus').value,
           type:document.getElementById('pType').value,
-          tax_rate:parseFloat(document.getElementById('pTax').value)||0,
+          tax_band:document.getElementById('pTaxBand').value,
           featured:document.getElementById('pFeatured').checked,
           tags:selTags,
-          stock:document.getElementById('pType').value==='service'?0:(parseInt(document.getElementById('pStock').value)||0)
+          stock:(document.getElementById('pType').value==='service'||document.getElementById('pType').value==='digital')?0:(parseInt(document.getElementById('pStock').value)||0)
         };
         try{
           if(isEdit) await api('PUT',A+'/products/'+currentProdId,body);

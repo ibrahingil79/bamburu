@@ -190,6 +190,22 @@ export function runMigrations(db) {
     db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(prodTaxMigKey, 'done');
   }
 
+  // P1+P2 (refinamiento): IVA por BANDA legal en vez de número libre. El producto
+  // guarda la banda (general/reducido/superreducido/exento) y el % se resuelve desde
+  // core/vat-bands.js. Backfill (una vez) mapea los productos existentes por su tipo.
+  addCol(db, 'products', 'tax_band', "TEXT NOT NULL DEFAULT 'general'");
+  const prodBandMigKey = 'migration_products_tax_band_2026_v1';
+  if (!db.prepare('SELECT value FROM settings WHERE key=?').get(prodBandMigKey)) {
+    const upd = db.prepare('UPDATE products SET tax_band=? WHERE tax_rate=?');
+    upd.run('general', 21);
+    upd.run('reducido', 10);
+    upd.run('superreducido', 4);
+    upd.run('exento', 0);
+    // Cualquier tipo fuera de las bandas legales ES → General (no se pierde nada).
+    db.prepare("UPDATE products SET tax_band='general' WHERE tax_band NOT IN ('general','reducido','superreducido','exento')").run();
+    db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(prodBandMigKey, 'done');
+  }
+
   // Product images
   db.exec(`CREATE TABLE IF NOT EXISTS product_images (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
