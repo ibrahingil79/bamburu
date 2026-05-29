@@ -177,6 +177,19 @@ export function runMigrations(db) {
   addCol(db, 'products', 'featured', 'INTEGER DEFAULT 0');
   addCol(db, 'products', 'supplier_id', 'INTEGER DEFAULT NULL');
 
+  // P1+P2: IVA propio por producto. Las filas existentes quedan con DEFAULT 21;
+  // el backfill (una sola vez) las alinea al IVA por defecto del negocio por si
+  // el tenant no usa 21. El tipo 'service' es solo un valor más de la columna
+  // 'type' (texto libre) → no requiere migración: cero impacto en filas previas.
+  addCol(db, 'products', 'tax_rate', 'REAL NOT NULL DEFAULT 21');
+  const prodTaxMigKey = 'migration_products_tax_rate_2026_v1';
+  if (!db.prepare('SELECT value FROM settings WHERE key=?').get(prodTaxMigKey)) {
+    const cfg = db.prepare('SELECT tax_rate FROM company_config WHERE id=1').get();
+    const defaultRate = cfg && cfg.tax_rate != null ? cfg.tax_rate : 21;
+    db.prepare('UPDATE products SET tax_rate=?').run(defaultRate);
+    db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(prodTaxMigKey, 'done');
+  }
+
   // Product images
   db.exec(`CREATE TABLE IF NOT EXISTS product_images (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

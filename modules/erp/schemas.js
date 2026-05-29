@@ -15,7 +15,8 @@ export const productSchema = z.object({
   digital_file_url: strOpt(500),
   category_id: optId,
   status: z.enum(['active', 'draft', 'archived']).default('active'),
-  type: z.enum(['physical', 'digital']).default('physical'),
+  type: z.enum(['physical', 'digital', 'service']).default('physical'),  // P1+P2: + servicio
+  tax_rate: z.coerce.number().min(0).max(50).optional(),                 // P1+P2: IVA propio del producto
   featured: z.coerce.boolean().default(false),
   tags: z.array(intPos).optional().default([]),
   stock: z.coerce.number().int().min(0).default(0),

@@ -42,8 +42,12 @@ export function createProductRoutes(db, cfg = {}) {
       const d = c.get('validated');
       if (!d.name || d.price === undefined) return c.json({error:'Nombre y precio requeridos'},400);
       const slug = slugify(d.name);
-      const r = db.prepare(`INSERT INTO products (name,slug,sku,description,price,compare_price,image_url,category_id,status,type,digital_file_url,featured,stock,supplier_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(d.name, slug, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', d.type||'physical', d.digital_file_url||'', d.featured?1:0, d.stock, d.supplier_id||null);
+      // P1+P2: IVA propio. Si no llega, usa el IVA por defecto del negocio. Un servicio no lleva stock.
+      const defRate = db.prepare('SELECT tax_rate FROM company_config WHERE id=1').get()?.tax_rate ?? 21;
+      const taxRate = d.tax_rate != null ? d.tax_rate : defRate;
+      const stock = d.type === 'service' ? 0 : d.stock;
+      const r = db.prepare(`INSERT INTO products (name,slug,sku,description,price,compare_price,image_url,category_id,status,type,digital_file_url,featured,stock,supplier_id,tax_rate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(d.name, slug, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', d.type||'physical', d.digital_file_url||'', d.featured?1:0, stock, d.supplier_id||null, taxRate);
       if (d.tags?.length) {
         for (const tid of d.tags) {
           try { db.prepare('INSERT OR IGNORE INTO product_tags (product_id,tag_id) VALUES (?,?)').run(r.lastInsertRowid, tid); } catch(_){}
@@ -58,8 +62,12 @@ export function createProductRoutes(db, cfg = {}) {
     try {
       const id = c.req.param('id');
       const d = c.get('validated');
-      db.prepare(`UPDATE products SET name=?,sku=?,description=?,price=?,compare_price=?,image_url=?,category_id=?,status=?,type=?,digital_file_url=?,featured=?,supplier_id=? WHERE id=?`)
-        .run(d.name, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', d.type||'physical', d.digital_file_url||'', d.featured?1:0, d.supplier_id||null, id);
+      // P1+P2: si la API omite tax_rate, conserva el actual (o el IVA por defecto del negocio).
+      const cur = db.prepare('SELECT tax_rate FROM products WHERE id=?').get(id);
+      const defRate = db.prepare('SELECT tax_rate FROM company_config WHERE id=1').get()?.tax_rate ?? 21;
+      const taxRate = d.tax_rate != null ? d.tax_rate : (cur?.tax_rate ?? defRate);
+      db.prepare(`UPDATE products SET name=?,sku=?,description=?,price=?,compare_price=?,image_url=?,category_id=?,status=?,type=?,digital_file_url=?,featured=?,supplier_id=?,tax_rate=? WHERE id=?`)
+        .run(d.name, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', d.type||'physical', d.digital_file_url||'', d.featured?1:0, d.supplier_id||null, taxRate, id);
       if (d.tags !== undefined) {
         db.prepare('DELETE FROM product_tags WHERE product_id=?').run(id);
         for (const tid of (d.tags||[])) {
@@ -148,7 +156,9 @@ export function createProductRoutes(db, cfg = {}) {
 
   // ── VIEWS ──────────────────────────────────────────────────────
   views.get('/', c => {
-    const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
+    const cfgRow = db.prepare('SELECT currency_symbol, tax_rate FROM company_config WHERE id=1').get() || {};
+    const sym = cfgRow.currency_symbol || '€';
+    const taxDefault = cfgRow.tax_rate != null ? cfgRow.tax_rate : 21;
     const content = `
       <div class="ph">
         <h2>Productos</h2>
@@ -187,12 +197,13 @@ export function createProductRoutes(db, cfg = {}) {
               <div class="form-group"><label class="form-label">Descripción</label><textarea class="form-control" id="pDesc" rows="3"></textarea></div>
               <div class="form-row">
                 <div class="form-group"><label class="form-label">Precio *</label><input class="form-control" type="number" id="pPrice" step="0.01"></div>
+                <div class="form-group"><label class="form-label">IVA (%)</label><input class="form-control" type="number" id="pTax" step="0.01" min="0" max="50"></div>
                 <div class="form-group"><label class="form-label">Precio antes (tachado)</label><input class="form-control" type="number" id="pCompare" step="0.01"></div>
-                <div class="form-group"><label class="form-label">Stock</label><input class="form-control" type="number" id="pStock" value="0"></div>
+                <div class="form-group" id="pStockWrap"><label class="form-label">Stock</label><input class="form-control" type="number" id="pStock" value="0"></div>
               </div>
               <div class="form-row">
                 <div class="form-group"><label class="form-label">Categoría</label><select class="form-control" id="pCategory"><option value="">Sin categoría</option></select></div>
-                <div class="form-group"><label class="form-label">Tipo</label><select class="form-control" id="pType"><option value="physical">Físico</option><option value="digital">Digital</option></select></div>
+                <div class="form-group"><label class="form-label">Tipo</label><select class="form-control" id="pType"><option value="physical">Físico</option><option value="digital">Digital</option><option value="service">Servicio</option></select></div>
                 <div class="form-group"><label class="form-label">Estado</label><select class="form-control" id="pStatus"><option value="active">Activo</option><option value="draft">Borrador</option><option value="archived">Archivado</option></select></div>
               </div>
               <div class="form-group"><label class="form-label">URL imagen principal</label><input class="form-control" id="pImage" placeholder="https://..."></div>
@@ -262,6 +273,7 @@ export function createProductRoutes(db, cfg = {}) {
 
       <script>
       const A='/api/erp';
+      const TAX_DEFAULT=${taxDefault};
       let allProds=[], allTags=[], allCats=[], allSuppliers=[], selTags=[], currentProdId=null;
 
       async function loadAll(){
@@ -287,9 +299,9 @@ export function createProductRoutes(db, cfg = {}) {
           '<td><strong>'+escHtml(p.name)+'</strong>'+(p.featured?'  <span class="badge b-purple">Destacado</span>':'')+'<br><span style="color:var(--muted);font-size:.75rem">SKU: '+(p.sku||'-')+'</span></td>'+
           '<td>'+(p.category_name||'-')+'</td>'+
           '<td><strong>${sym}'+p.price.toFixed(2)+'</strong>'+(p.compare_price?'<br><span style="text-decoration:line-through;color:var(--muted);font-size:.75rem">${sym}'+p.compare_price.toFixed(2)+'</span>':'')+'</td>'+
-          '<td>'+(p.stock<5?'<span style="color:#ef4444;font-weight:600">'+p.stock+'</span>':p.stock)+'</td>'+
+          '<td>'+(p.type==='service'?'<span style="color:var(--muted)">—</span>':(p.stock<5?'<span style="color:#ef4444;font-weight:600">'+p.stock+'</span>':p.stock))+'</td>'+
           '<td>'+(statusB[p.status]||p.status)+'</td>'+
-          '<td><span class="badge b-gray">'+(p.type==='digital'?'Digital':'Físico')+'</span></td>'+
+          '<td><span class="badge b-gray">'+(p.type==='digital'?'Digital':p.type==='service'?'Servicio':'Físico')+'</span></td>'+
           '<td style="white-space:nowrap">'+(window.canDo('products.edit')?'<button class="btn btn-secondary btn-sm" onclick="editProd('+p.id+')">Editar</button> ':'')+( window.canDo('products.delete')?'<button class="btn btn-danger btn-sm" onclick="delProd('+p.id+')">Eliminar</button>':'')+'</td>'+
           '</tr>').join(''):'<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--muted)">No hay productos</td></tr>';
       }
@@ -297,17 +309,24 @@ export function createProductRoutes(db, cfg = {}) {
       function escHtml(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
       document.getElementById('searchBox').addEventListener('input',()=>renderProds(allProds));
-      document.getElementById('pType').addEventListener('change',e=>{document.getElementById('pDigitalWrap').style.display=e.target.value==='digital'?'':'none'});
+      // P1+P2: el tipo decide qué campos aplican. Digital → muestra URL de archivo.
+      // Servicio → no lleva stock (CANON §2), se oculta el campo Stock.
+      function applyTypeUI(t){
+        document.getElementById('pDigitalWrap').style.display = t==='digital' ? '' : 'none';
+        document.getElementById('pStockWrap').style.display = t==='service' ? 'none' : '';
+      }
+      document.getElementById('pType').addEventListener('change',e=>applyTypeUI(e.target.value));
 
       function openNewProduct(){
         currentProdId=null; selTags=[];
         document.getElementById('modalTitle').textContent='Nuevo Producto';
         ['pName','pSku','pDesc','pPrice','pCompare','pImage','pDigital'].forEach(id=>document.getElementById(id).value='');
         document.getElementById('pStock').value='0';
+        document.getElementById('pTax').value=TAX_DEFAULT;
         document.getElementById('pStatus').value='active';
         document.getElementById('pType').value='physical';
         document.getElementById('pFeatured').checked=false;
-        document.getElementById('pDigitalWrap').style.display='none';
+        applyTypeUI('physical');
         document.getElementById('pCategory').value='';
         document.getElementById('pSupplier').value='';
         document.getElementById('imageGallery').innerHTML='';
@@ -329,6 +348,7 @@ export function createProductRoutes(db, cfg = {}) {
         document.getElementById('pPrice').value=p.price;
         document.getElementById('pCompare').value=p.compare_price||'';
         document.getElementById('pStock').value=p.stock;
+        document.getElementById('pTax').value=p.tax_rate!=null?p.tax_rate:TAX_DEFAULT;
         document.getElementById('pImage').value=p.image_url||'';
         document.getElementById('pDigital').value=p.digital_file_url||'';
         document.getElementById('pStatus').value=p.status||'active';
@@ -336,7 +356,7 @@ export function createProductRoutes(db, cfg = {}) {
         document.getElementById('pFeatured').checked=!!p.featured;
         document.getElementById('pCategory').value=p.category_id||'';
         document.getElementById('pSupplier').value=p.supplier_id||'';
-        document.getElementById('pDigitalWrap').style.display=p.type==='digital'?'':'none';
+        applyTypeUI(p.type||'physical');
         renderTagSelector();
         renderGallery(p.images||[]);
         renderVariantList(p.variants||[]);
@@ -357,9 +377,10 @@ export function createProductRoutes(db, cfg = {}) {
           supplier_id:document.getElementById('pSupplier').value?+document.getElementById('pSupplier').value:null,
           status:document.getElementById('pStatus').value,
           type:document.getElementById('pType').value,
+          tax_rate:parseFloat(document.getElementById('pTax').value)||0,
           featured:document.getElementById('pFeatured').checked,
           tags:selTags,
-          stock:parseInt(document.getElementById('pStock').value)||0
+          stock:document.getElementById('pType').value==='service'?0:(parseInt(document.getElementById('pStock').value)||0)
         };
         try{
           if(isEdit) await api('PUT',A+'/products/'+currentProdId,body);
