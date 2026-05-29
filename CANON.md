@@ -41,7 +41,7 @@ entra en Compras y Stock como **material del negocio** (lo que usas para trabaja
 distinto del producto que revendes.
 
 **Los 4 pilares:**
-- **CATÁLOGO** — Productos (tipo: físico / digital / servicio), Categorías, Etiquetas.
+- **CATÁLOGO** — Productos (tipo: físico / digital / servicio), Categorías.
 - **VENTAS** — Pedidos → Albaranes / notas de entrega → Facturas.
 - **CLIENTES** — Clientes, Grupos, CRM.
 - **INVENTARIO** — Compras, Stock, Proveedores, Devoluciones, Descuentos.
