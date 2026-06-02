@@ -1165,7 +1165,10 @@ app.post('/find-tenant', async c => {
     if (!tenant) {
       return c.json({ error: 'No encontramos ningún negocio con ese email' }, 404);
     }
-    return c.json({ slug: tenant.slug, url: 'https://' + tenant.slug + '.bamburu.com/admin/login' });
+    // Ruta RELATIVA a propósito: el POST de la contraseña se queda en el mismo host
+    // por el que entró el usuario (localhost / Tailscale / <slug>.bamburu.com), que ya
+    // es el subdominio del tenant. No hardcodear el dominio base.
+    return c.json({ slug: tenant.slug, url: '/admin/login' });
   } catch(e) {
     return c.json({ error: 'Error interno' }, 500);
   }
@@ -1238,6 +1241,9 @@ input[readonly]{color:rgba(255,255,255,0.5);cursor:default}
       <button type="submit" class="btn" id="btnLogin">Entrar al panel</button>
       <p class="err" id="err2"></p>
     </form>
+    <p style="text-align:center;font-size:13px;color:rgba(255,255,255,0.4);margin-top:16px">
+      <a href="/admin/forgot-password" style="color:rgba(255,255,255,0.4);text-decoration:none" onmouseover="this.style.color='#14B8A6'" onmouseout="this.style.color='rgba(255,255,255,0.4)'">¿Olvidaste tu contraseña?</a>
+    </p>
   </div>
 </div>
 <script>
