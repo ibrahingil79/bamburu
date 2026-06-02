@@ -1,0 +1,14 @@
+[Unit]
+Description=Bamburu — disparador diario de la copia a Backblaze B2
+
+[Timer]
+# Diario a las 03:30 hora local. La BD es diminuta: diario no cuesta nada
+# y es más seguro que semanal.
+OnCalendar=*-*-* 03:30:00
+# Si el servidor estaba apagado a esa hora, ejecuta en el siguiente arranque.
+Persistent=true
+# Pequeño desfase aleatorio para no clavar siempre el mismo segundo.
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

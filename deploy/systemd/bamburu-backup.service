@@ -1,0 +1,13 @@
+[Unit]
+Description=Bamburu — copia diaria de las BD SQLite a Backblaze B2
+Documentation=file:///home/ibrahin/bamburu/deploy/systemd/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ibrahin
+Group=ibrahin
+WorkingDirectory=/home/ibrahin/bamburu
+ExecStart=/home/ibrahin/bamburu/scripts/bamburu-backup.sh
+SyslogIdentifier=bamburu-backup
