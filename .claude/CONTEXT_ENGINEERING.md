@@ -37,7 +37,7 @@
 
 | Error | Causa | Fix |
 |-------|-------|-----|
-| better-sqlite3 version mismatch | npm del sistema usa Node v10 | `sudo bash -c "source /home/bamburu/.nvm/nvm.sh && PYTHON=/usr/bin/python3.11 npm rebuild better-sqlite3"` |
+| better-sqlite3 version mismatch | npm del sistema usa Node v10 | `sudo bash -c "PYTHON=/usr/bin/python3.11 npm rebuild better-sqlite3"` (desde `/home/ibrahin/bamburu`) |
 | Resend no lanza errores | SDK retorna `{ data, error }` | Destructurar y checkear `error` |
 | Columnas 2FA faltantes en tenants | Lazy migration | `curl -H "Host: {slug}.bamburu.com" http://localhost:3000/admin/login` |
 | reset-password "Negocio no encontrado" | Host hardcodeado | `c.req.header('host')` para construir URL |

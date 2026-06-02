@@ -31,7 +31,7 @@ no un bug.
 
 ## Stack técnico
 
-- **Runtime:** Node.js v22 (`/usr/local/bin/node-bamburu`, vía NVM del usuario bamburu)
+- **Runtime:** Node.js v22 (`/usr/bin/node`, usuario del sistema `ibrahin`)
 - **Framework:** Hono 4 (ESM). Usa `c.req`, `c.get('session')`, `c.html()`, `c.redirect()`
 - **Base de datos:** SQLite con better-sqlite3 (SÍNCRONO — no uses await en queries)
 - **Arquitectura:** multi-tenant por subdominio. BD central de routing (`data/control.db`)
@@ -54,7 +54,7 @@ no un bug.
 
 El servicio corre bajo **systemd** como `bamburu.service` (unit en
 `/etc/systemd/system/bamburu.service`), ejecutando
-`/usr/local/bin/node-bamburu /home/bamburu/bamburu/index.js`.
+`/usr/bin/node /home/ibrahin/bamburu/index.js` (WorkingDirectory `/home/ibrahin/bamburu`).
 
 - Reiniciar tras un cambio: `sudo systemctl restart bamburu`
 - Estado: `systemctl status bamburu --no-pager`
@@ -77,7 +77,7 @@ estado `errored` y no es la instancia productiva — ignorarla.
 - Estados de pedido en ESPAÑOL: borrador, en_preparacion, enviado, completado, cancelado, reembolsado.
   (NO en inglés — fue causa de bugs de analítica.)
 - better-sqlite3 version mismatch se arregla con:
-  `sudo bash -c "source /home/bamburu/.nvm/nvm.sh && PYTHON=/usr/bin/python3.11 npm rebuild better-sqlite3"`
+  `sudo bash -c "PYTHON=/usr/bin/python3.11 npm rebuild better-sqlite3"` (ejecutar desde `/home/ibrahin/bamburu`)
 
 ---
 
