@@ -61,12 +61,12 @@ ya hechos (vendes un producto, a un cliente, desde un almacén):
 3. **Almacén (Inventario)** — qué tienes y de dónde sale.
 4. **Ventas** — pedido → albarán → factura; usa los tres anteriores.
 
-**Primer paso — Producto, mínimo para darlo por listo:**
-- Tipo de producto: físico / digital / servicio.
-- IVA por producto.
+**Primer paso — Producto, mínimo para darlo por listo:** ✅ COMPLETO (2026-06-03)
+- Tipo de producto: físico / digital / servicio. ✅
+- IVA por producto. ✅
 - Un solo catálogo: unificar Productos + Servicios (eliminar la tabla suelta de
-  servicios de A3).
-- Buscador y filtros usables: por nombre, código y categoría.
+  servicios de A3). ✅
+- Buscador y filtros usables: por nombre, código y categoría. ✅ (P4: búsqueda nombre/SKU + filtro categoría + paginación por URL)
 
 **Fuera de este primer paso (más adelante):** variantes, galería de imágenes, SEO,
 coste/margen, unidad (por hora/sesión), multi-almacén.

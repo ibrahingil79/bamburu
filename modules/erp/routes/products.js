@@ -9,6 +9,12 @@ function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now();
 }
 
+// P4: escape server-side para la lista de productos renderizada en el servidor.
+function escHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 export function createProductRoutes(db, cfg = {}) {
   const sym = cfg.sym || '€';
   const api = new Hono();
@@ -167,30 +173,94 @@ export function createProductRoutes(db, cfg = {}) {
   });
 
   // ── VIEWS ──────────────────────────────────────────────────────
-  views.get('/', c => {
+  views.get('/', requirePerm('products.read'), c => {
     const cfgRow = db.prepare('SELECT currency_symbol, tax_rate, country FROM company_config WHERE id=1').get() || {};
     const sym = cfgRow.currency_symbol || '€';
     const country = (cfgRow.country || 'ES').toUpperCase();
     const fallbackRate = cfgRow.tax_rate != null ? cfgRow.tax_rate : 21;
     const vatBands = getVatBands(country, fallbackRate);   // bandas del país (hoy ES); no quemadas en la pantalla
     const vatBandsJson = JSON.stringify(vatBands);
+
+    // P4: búsqueda (nombre/SKU), filtro por categoría y paginación, todo por URL (GET).
+    const q = (c.req.query('q') || '').trim();
+    const categoria = (c.req.query('categoria') || '').trim();
+    const perPage = 25;
+    let page = parseInt(c.req.query('page') || '1', 10);
+    if (!Number.isFinite(page) || page < 1) page = 1;
+
+    // WHERE combinando búsqueda parcial (LIKE %q%, insensible a mayúsculas en ASCII) y categoría.
+    const where = [];
+    const params = [];
+    if (q) { where.push('(p.name LIKE ? OR p.sku LIKE ?)'); params.push('%' + q + '%', '%' + q + '%'); }
+    if (categoria) { where.push('p.category_id = ?'); params.push(categoria); }
+    const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+
+    // COUNT aparte para el total de páginas; SELECT con LIMIT/OFFSET para la página actual.
+    const total = db.prepare('SELECT COUNT(*) AS n FROM products p ' + whereSql).get(...params).n;
+    const totalPages = Math.max(1, Math.ceil(total / perPage));
+    if (page > totalPages) page = totalPages;
+    const offset = (page - 1) * perPage;
+    const products = db.prepare(
+      'SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id '
+      + whereSql + ' ORDER BY p.name LIMIT ? OFFSET ?'
+    ).all(...params, perPage, offset);
+
+    const categories = db.prepare('SELECT id, name FROM categories ORDER BY name').all();
+    const catOptions = categories.map(cat =>
+      '<option value="' + cat.id + '"' + (String(cat.id) === categoria ? ' selected' : '') + '>' + escHtml(cat.name) + '</option>'
+    ).join('');
+
+    // Conserva q y categoria al cambiar de página.
+    const buildQs = (p) => {
+      const u = new URLSearchParams();
+      if (q) u.set('q', q);
+      if (categoria) u.set('categoria', categoria);
+      u.set('page', String(p));
+      return u.toString();
+    };
+
+    const statusB = { active:'<span class="badge b-green">Activo</span>', draft:'<span class="badge b-yellow">Borrador</span>', archived:'<span class="badge b-gray">Archivado</span>' };
+    const rowsHtml = products.map(p => '<tr>'+
+      '<td>'+(p.image_url?'<img class="thumb" src="'+escHtml(p.image_url)+'" alt="">':'<span style="font-size:1.2rem"></span>')+'</td>'+
+      '<td><strong>'+escHtml(p.name)+'</strong>'+(p.featured?'  <span class="badge b-purple">Destacado</span>':'')+'<br><span style="color:var(--muted);font-size:.75rem">SKU: '+escHtml(p.sku||'-')+'</span></td>'+
+      '<td>'+escHtml(p.category_name||'-')+'</td>'+
+      '<td><strong>'+sym+p.price.toFixed(2)+'</strong>'+(p.compare_price?'<br><span style="text-decoration:line-through;color:var(--muted);font-size:.75rem">'+sym+p.compare_price.toFixed(2)+'</span>':'')+'<br><span style="color:var(--muted);font-size:.72rem">'+(Number(p.tax_rate)>0?('IVA '+p.tax_rate+'%'):'Exento')+'</span></td>'+
+      '<td>'+(p.type==='service'?'<span style="color:var(--muted)">—</span>':(p.stock<5?'<span style="color:#ef4444;font-weight:600">'+p.stock+'</span>':p.stock))+'</td>'+
+      '<td>'+(statusB[p.status]||escHtml(p.status))+'</td>'+
+      '<td><span class="badge b-gray">'+(p.type==='digital'?'Digital':p.type==='service'?'Servicio':'Físico')+'</span></td>'+
+      '<td style="white-space:nowrap">'+(can(c,'products.edit')?'<button class="btn btn-secondary btn-sm" onclick="editProd('+p.id+')">Editar</button> ':'')+(can(c,'products.delete')?'<button class="btn btn-danger btn-sm" onclick="delProd('+p.id+')">Eliminar</button>':'')+'</td>'+
+      '</tr>').join('');
+
     const content = `
       <div class="ph">
         <h2>Productos</h2>
-        <div style="display:flex;gap:.5rem">
-          <input class="search" id="searchBox" placeholder="Buscar...">
-          ${can(c, 'products.create') ? '<button class="btn btn-primary" id="btnNuevoProd">Nuevo producto</button>' : ''}
-        </div>
+        <form method="get" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+          <input class="search" type="text" name="q" value="${escHtml(q)}" placeholder="Buscar por nombre o código...">
+          <select class="form-control" name="categoria" style="width:auto;min-width:180px">
+            <option value="">Todas las categorías</option>
+            ${catOptions}
+          </select>
+          <button class="btn btn-secondary" type="submit">Buscar</button>
+          ${can(c, 'products.create') ? '<button type="button" class="btn btn-primary" id="btnNuevoProd">Nuevo producto</button>' : ''}
+        </form>
       </div>
 
       <div class="card">
         <div class="table-wrap">
           <table>
             <thead><tr><th>Imagen</th><th>Nombre</th><th>Categoría</th><th>Precio</th><th>Stock</th><th>Estado</th><th>Tipo</th><th></th></tr></thead>
-            <tbody id="prodBody"><tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--muted)">Cargando...</td></tr></tbody>
+            <tbody id="prodBody">${total === 0 ? '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--muted)">No se encontraron productos</td></tr>' : rowsHtml}</tbody>
           </table>
         </div>
       </div>
+
+      ${total > 0 ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem;flex-wrap:wrap;gap:.5rem">
+        <span style="color:var(--muted);font-size:.85rem">Página ${page} de ${totalPages} · ${total} producto${total === 1 ? '' : 's'}</span>
+        <div style="display:flex;gap:.5rem">
+          ${page > 1 ? `<a class="btn btn-secondary btn-sm" href="?${buildQs(page - 1)}">← Anterior</a>` : '<span class="btn btn-secondary btn-sm" style="opacity:.4;pointer-events:none">← Anterior</span>'}
+          ${page < totalPages ? `<a class="btn btn-secondary btn-sm" href="?${buildQs(page + 1)}">Siguiente →</a>` : '<span class="btn btn-secondary btn-sm" style="opacity:.4;pointer-events:none">Siguiente →</span>'}
+        </div>
+      </div>` : ''}
 
       <!-- Modal Producto -->
       <div class="modal-overlay" id="productModal">
@@ -298,7 +368,7 @@ export function createProductRoutes(db, cfg = {}) {
       <script>
       const A='/api/erp';
       const VAT_BANDS=${vatBandsJson};   // bandas de IVA del país (P1+P2 refinamiento)
-      let allProds=[], allTags=[], allCats=[], allSuppliers=[], selTags=[], currentProdId=null;
+      let allTags=[], allCats=[], allSuppliers=[], selTags=[], currentProdId=null;
 
       // Rellena el selector de banda de IVA. Etiqueta clara + % + ejemplo corto.
       (function initVatBands(){
@@ -311,39 +381,21 @@ export function createProductRoutes(db, cfg = {}) {
       })();
       function bandRate(code){const b=VAT_BANDS.find(x=>x.code===code);return b?b.rate:null;}
 
+      // P4: la lista la renderiza el servidor (búsqueda/filtro/paginación por URL).
+      // Aquí solo se cargan las categorías/proveedores/etiquetas que necesita el modal.
       async function loadAll(){
-        [allProds, allTags, allCats, allSuppliers]=await Promise.all([
-          api('GET',A+'/products').catch(()=>[]),
+        [allTags, allCats, allSuppliers]=await Promise.all([
           api('GET',A+'/products/tags/all').catch(()=>[]),
           api('GET',A+'/categories').catch(()=>[]),
           api('GET',A+'/suppliers').catch(()=>[])
         ]);
-        renderProds(allProds);
         const catSel=document.getElementById('pCategory');
         catSel.innerHTML='<option value="">Sin categoría</option>'+allCats.map(c=>'<option value="'+c.id+'">'+c.name+'</option>').join('');
         const supSel=document.getElementById('pSupplier');
         supSel.innerHTML='<option value="">Sin proveedor</option>'+allSuppliers.map(s=>'<option value="'+s.id+'">'+s.name+'</option>').join('');
       }
 
-      function renderProds(prods){
-        const q=document.getElementById('searchBox').value.toLowerCase();
-        const filtered=q?prods.filter(p=>p.name.toLowerCase().includes(q)||(p.sku||'').toLowerCase().includes(q)):prods;
-        const statusB={active:'<span class="badge b-green">Activo</span>',draft:'<span class="badge b-yellow">Borrador</span>',archived:'<span class="badge b-gray">Archivado</span>'};
-        document.getElementById('prodBody').innerHTML=filtered.length?filtered.map(p=>'<tr>'+
-          '<td>'+(p.image_url?'<img class="thumb" src="'+p.image_url+'" alt="">':'<span style="font-size:1.2rem"></span>')+'</td>'+
-          '<td><strong>'+escHtml(p.name)+'</strong>'+(p.featured?'  <span class="badge b-purple">Destacado</span>':'')+'<br><span style="color:var(--muted);font-size:.75rem">SKU: '+(p.sku||'-')+'</span></td>'+
-          '<td>'+(p.category_name||'-')+'</td>'+
-          '<td><strong>${sym}'+p.price.toFixed(2)+'</strong>'+(p.compare_price?'<br><span style="text-decoration:line-through;color:var(--muted);font-size:.75rem">${sym}'+p.compare_price.toFixed(2)+'</span>':'')+'<br><span style="color:var(--muted);font-size:.72rem">'+(Number(p.tax_rate)>0?('IVA '+p.tax_rate+'%'):'Exento')+'</span></td>'+
-          '<td>'+(p.type==='service'?'<span style="color:var(--muted)">—</span>':(p.stock<5?'<span style="color:#ef4444;font-weight:600">'+p.stock+'</span>':p.stock))+'</td>'+
-          '<td>'+(statusB[p.status]||p.status)+'</td>'+
-          '<td><span class="badge b-gray">'+(p.type==='digital'?'Digital':p.type==='service'?'Servicio':'Físico')+'</span></td>'+
-          '<td style="white-space:nowrap">'+(window.canDo('products.edit')?'<button class="btn btn-secondary btn-sm" onclick="editProd('+p.id+')">Editar</button> ':'')+( window.canDo('products.delete')?'<button class="btn btn-danger btn-sm" onclick="delProd('+p.id+')">Eliminar</button>':'')+'</td>'+
-          '</tr>').join(''):'<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--muted)">No hay productos</td></tr>';
-      }
-
       function escHtml(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
-
-      document.getElementById('searchBox').addEventListener('input',()=>renderProds(allProds));
       // P1+P2: el tipo decide qué campos aplican. Digital → muestra URL de archivo.
       // Servicio y digital → no llevan stock (CANON §2), se oculta el campo Stock.
       function applyTypeUI(t){
@@ -434,13 +486,13 @@ export function createProductRoutes(db, cfg = {}) {
           else await api('POST',A+'/products',body);
           closeModal('productModal');
           toast(isEdit?'Producto actualizado':'Producto creado');
-          loadAll();
+          location.reload();   // P4: refresca la lista server-rendered manteniendo búsqueda/filtro/página
         }catch(e){toast(e.message,'err')}
       }
 
       async function delProd(id){
         if(!confirm('¿Eliminar producto?'))return;
-        try{await api('DELETE',A+'/products/'+id);toast('Eliminado');loadAll();}catch(e){toast(e.message,'err')}
+        try{await api('DELETE',A+'/products/'+id);toast('Eliminado');location.reload();}catch(e){toast(e.message,'err')}
       }
 
       // Tags

@@ -4,11 +4,11 @@
 > Estructura: 4 pilares en ORDEN DE CONSTRUCCIÓN — Producto → Cliente → Inventario → Ventas
 > (Ventas necesita los otros tres ya hechos; ver CANON §3).
 > REGLA DE ORO: una sola tarea "EN CURSO" a la vez. Terminar antes de empezar otra.
-> Última actualización: 2026-05-29
+> Última actualización: 2026-06-03
 
 ---
 
-## PILAR 1 — PRODUCTO (Catálogo) — 🟢 EN CURSO
+## PILAR 1 — PRODUCTO (Catálogo) — ✅ CERRADO (2026-06-03)
 
 El producto es la raíz de la que parte todo (CANON §2). Objetivo de este pilar: dejar el
 catálogo en su versión mínima sólida. Fuera de este primer paso (más adelante): variantes,
@@ -41,10 +41,14 @@ galería de imágenes, SEO, coste/margen, unidad por hora/sesión.
 - El autofill al facturar (`/admin/invoices/new`) lee ahora productos tipo "servicio" (precio + IVA); ya no fija el IRPF (se elige a mano). Línea libre intacta.
 - Hay un único catálogo y nada en el código operativo apunta ya a `services`. Verificado (14/14). Commit `5147cc6`.
 
-### ▶ P4. Buscador y filtros en la lista de productos — SIGUIENTE
-- **Hoy:** solo hay un buscador en el navegador por nombre/código, sin filtros y cargando todos los productos de golpe.
-- **Qué se hace:** búsqueda por nombre y código, filtro por categoría y paginación.
-- **HECHO CUANDO:** encuentro un producto por nombre o código, filtro por categoría, y la lista no carga todo de una vez.
+### ✅ P4. Buscador y filtros en la lista de productos — HECHO (2026-06-03)
+- La lista de productos (`/admin/products`) pasa de cargar todo en el navegador a **renderizarse en el servidor** con parámetros en la URL (GET): `?q=...&categoria=...&page=...`. La búsqueda/filtro/página se mantienen al recargar y al navegar.
+- **Búsqueda** por nombre **o** SKU (LIKE `%q%`, insensible a mayúsculas), **filtro por categoría** (poblado desde categorías existentes; opción "Todas") y **paginación de 25/pág** con "← Anterior / Siguiente →" + indicador "Página X de Y · N productos". Búsqueda y categoría **se combinan**.
+- SQL: `WHERE` con LIKE sobre nombre/SKU + filtro de categoría, `LIMIT/OFFSET` para la página y `COUNT(*)` aparte para el total de páginas. Sin resultados → "No se encontraron productos" (no rompe).
+- Cambio quirúrgico, solo `modules/erp/routes/products.js`: el modal de crear/editar y la API quedan intactos; tras guardar/eliminar la lista se refresca con `location.reload()` (conserva filtros). **POS y facturación NO se tocan** (consumen la API `/api/erp/products`, sin cambios).
+- Verificado con test de integración (18/18): búsqueda nombre/SKU, filtro categoría, combinado, paginación con navegación que conserva filtros, y mensaje sin resultados. Commit `__COMMIT__`.
+
+**Con P4 cerrado, el PILAR 1 — PRODUCTO queda completo.**
 
 ---
 
@@ -74,5 +78,5 @@ La era previa ("facturación de servicios") dejó código que funciona y no se t
 ---
 
 ## Notas
-- Una tarea "EN CURSO" a la vez (RITUAL). Producto: P1+P2, P2.1, P2.2 y P3 hechos; sigue **P4** (último del Pilar 1).
+- Una tarea "EN CURSO" a la vez (RITUAL). **Pilar 1 — Producto: CERRADO** (P1+P2, P2.1, P2.2, P3 y P4 hechos). Siguiente: arrancar **Pilar 2 — Cliente** (por detallar).
 - Este orden y alcances no son sagrados (CANON §3): si al construir algo no cuadra, se cambia.
