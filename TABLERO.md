@@ -46,7 +46,7 @@ galería de imágenes, SEO, coste/margen, unidad por hora/sesión.
 - **Búsqueda** por nombre **o** SKU (LIKE `%q%`, insensible a mayúsculas), **filtro por categoría** (poblado desde categorías existentes; opción "Todas") y **paginación de 25/pág** con "← Anterior / Siguiente →" + indicador "Página X de Y · N productos". Búsqueda y categoría **se combinan**.
 - SQL: `WHERE` con LIKE sobre nombre/SKU + filtro de categoría, `LIMIT/OFFSET` para la página y `COUNT(*)` aparte para el total de páginas. Sin resultados → "No se encontraron productos" (no rompe).
 - Cambio quirúrgico, solo `modules/erp/routes/products.js`: el modal de crear/editar y la API quedan intactos; tras guardar/eliminar la lista se refresca con `location.reload()` (conserva filtros). **POS y facturación NO se tocan** (consumen la API `/api/erp/products`, sin cambios).
-- Verificado con test de integración (18/18): búsqueda nombre/SKU, filtro categoría, combinado, paginación con navegación que conserva filtros, y mensaje sin resultados. Commit `__COMMIT__`.
+- Verificado con test de integración (18/18): búsqueda nombre/SKU, filtro categoría, combinado, paginación con navegación que conserva filtros, y mensaje sin resultados. Commit `7860637`.
 
 **Con P4 cerrado, el PILAR 1 — PRODUCTO queda completo.**
 
