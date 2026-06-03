@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { adminLayout, can } from '../layout.js';
 import { logActivity, requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
+import { escHtml } from '../../../core/escape.js';
 import { clientSchema, clientGroupSchema } from '../schemas.js';
 
 // Comprobación reutilizable de NIF duplicado (regla de integridad — sin duplicados).
@@ -86,6 +87,21 @@ export function createClientRoutes(db, cfg = {}) {
     } catch(e) { return c.json({error:e.message},500); }
   });
 
+  // Restaurar un cliente archivado (inverso de archivar, T1). Guarda: archivar libera
+  // el NIF, así que restaurar puede chocar con otro cliente activo que lo tenga — se
+  // bloquea reutilizando el helper de NIF único (CANON §5, sin duplicados).
+  api.post('/:id/restore', requirePerm('clients.edit'), c => {
+    try {
+      const id = c.req.param('id');
+      const cl = db.prepare('SELECT id, name, fiscal_id FROM clients WHERE id=?').get(id);
+      if (!cl) return c.json({error:'No encontrado'},404);
+      if (fiscalIdConflict(db, cl.fiscal_id, id)) return c.json({error:'Ya existe un cliente activo con este NIF'},409);
+      db.prepare('UPDATE clients SET active=1 WHERE id=?').run(id);
+      logActivity(db, c.get('session'), 'Restauró cliente', 'client', id, cl.name||'');
+      return c.json({message:'Restaurado'});
+    } catch(e) { return c.json({error:e.message},500); }
+  });
+
   // ── API: CLIENT GROUPS ─────────────────────────────────────────
   api.get('/groups/all', requirePerm('clients.read'), c => {
     try { return c.json(db.prepare('SELECT g.*, COUNT(c.id) as member_count FROM client_groups g LEFT JOIN clients c ON c.group_id=g.id GROUP BY g.id ORDER BY g.name').all()); }
@@ -116,21 +132,88 @@ export function createClientRoutes(db, cfg = {}) {
   // ── VIEWS ──────────────────────────────────────────────────────
   views.get('/', c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
+
+    // T2: búsqueda (nombre/NIF), filtro por estado (activos/archivados) y paginación, todo por URL (GET).
+    const q = (c.req.query('q') || '').trim();
+    const verArchivados = c.req.query('archivados') === '1';
+    const activeVal = verArchivados ? 0 : 1;
+    const perPage = 25;
+    let page = parseInt(c.req.query('page') || '1', 10);
+    if (!Number.isFinite(page) || page < 1) page = 1;
+
+    // WHERE: estado + búsqueda parcial (LIKE %q% sobre nombre y NIF, insensible a mayúsculas en ASCII).
+    const where = ['c.active = ?'];
+    const params = [activeVal];
+    if (q) { where.push('(c.name LIKE ? OR c.fiscal_id LIKE ?)'); params.push('%' + q + '%', '%' + q + '%'); }
+    const whereSql = 'WHERE ' + where.join(' AND ');
+
+    // COUNT aparte para el total de páginas; SELECT con LIMIT/OFFSET para la página actual.
+    const total = db.prepare('SELECT COUNT(*) AS n FROM clients c ' + whereSql).get(...params).n;
+    const totalPages = Math.max(1, Math.ceil(total / perPage));
+    if (page > totalPages) page = totalPages;
+    const offset = (page - 1) * perPage;
+    const clientsList = db.prepare(
+      'SELECT c.*, g.name as group_name FROM clients c LEFT JOIN client_groups g ON c.group_id=g.id '
+      + whereSql + ' ORDER BY c.total_spent DESC LIMIT ? OFFSET ?'
+    ).all(...params, perPage, offset);
+
+    // Opciones de grupo para el modal (server-render, sin fetch en cliente).
+    const groupOptions = db.prepare('SELECT id, name FROM client_groups ORDER BY name').all()
+      .map(g => '<option value="' + g.id + '">' + escHtml(g.name) + '</option>').join('');
+
+    // Conserva q y archivados al cambiar de página.
+    const buildQs = (p) => {
+      const u = new URLSearchParams();
+      if (q) u.set('q', q);
+      if (verArchivados) u.set('archivados', '1');
+      u.set('page', String(p));
+      return u.toString();
+    };
+
+    const rowsHtml = clientsList.map(cl => '<tr>'+
+      '<td><strong>'+escHtml(cl.name)+'</strong>'+(cl.fiscal_id?'<br><span style="color:var(--muted);font-size:.75rem">'+escHtml(cl.fiscal_id)+'</span>':'')+'</td>'+
+      '<td style="color:var(--muted)">'+escHtml(cl.email||'-')+'</td>'+
+      '<td style="color:var(--muted)">'+escHtml(cl.phone||'-')+'</td>'+
+      '<td>'+(cl.group_name?'<span class="badge b-purple">'+escHtml(cl.group_name)+'</span>':'-')+'</td>'+
+      '<td><strong>'+sym+Number(cl.total_spent||0).toFixed(2)+'</strong></td>'+
+      '<td style="color:var(--muted);font-size:.8rem">'+((cl.created_at||'').split(' ')[0]||'-')+'</td>'+
+      '<td style="white-space:nowrap">'+
+        '<button class="btn btn-secondary btn-sm" onclick="viewDetail('+cl.id+')">Ver</button> '+
+        (verArchivados
+          ? (can(c,'clients.edit')?'<button class="btn btn-primary btn-sm" onclick="restoreClient('+cl.id+')">Restaurar</button>':'')
+          : (can(c,'clients.edit')?'<button class="btn btn-secondary btn-sm" onclick="editClient('+cl.id+')">Editar</button> ':'')+
+            (can(c,'clients.delete')?'<button class="btn btn-danger btn-sm" onclick="delClient('+cl.id+')">Archivar</button>':''))+
+      '</td>'+
+      '</tr>').join('');
+
     const content = `
       <div class="ph">
         <h2>Clientes</h2>
-        <div style="display:flex;gap:.5rem">
-          <input class="search" id="searchBox" placeholder="Buscar...">
-          ${can(c, 'clients.create') ? '<button class="btn btn-primary" onclick="openNewClient()">Nuevo cliente</button>' : ''}
-        </div>
+        <form method="get" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+          <input class="search" type="text" name="q" value="${escHtml(q)}" placeholder="Buscar por nombre o NIF...">
+          <select class="form-control" name="archivados" style="width:auto;min-width:150px" onchange="this.form.submit()">
+            <option value=""${verArchivados ? '' : ' selected'}>Activos</option>
+            <option value="1"${verArchivados ? ' selected' : ''}>Archivados</option>
+          </select>
+          <button class="btn btn-secondary" type="submit">Buscar</button>
+          ${can(c, 'clients.create') ? '<button type="button" class="btn btn-primary" onclick="openNewClient()">Nuevo cliente</button>' : ''}
+        </form>
       </div>
 
       <div class="card">
         <div class="table-wrap"><table>
           <thead><tr><th>Nombre</th><th>Email</th><th>Teléfono</th><th>Grupo</th><th>Total gastado</th><th>Registrado</th><th></th></tr></thead>
-          <tbody id="clientBody"></tbody>
+          <tbody>${total === 0 ? '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">No se encontraron clientes</td></tr>' : rowsHtml}</tbody>
         </table></div>
       </div>
+
+      ${total > 0 ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem;flex-wrap:wrap;gap:.5rem">
+        <span style="color:var(--muted);font-size:.85rem">Página ${page} de ${totalPages} · ${total} cliente${total === 1 ? '' : 's'}</span>
+        <div style="display:flex;gap:.5rem">
+          ${page > 1 ? `<a class="btn btn-secondary btn-sm" href="?${buildQs(page - 1)}">← Anterior</a>` : '<span class="btn btn-secondary btn-sm" style="opacity:.4;pointer-events:none">← Anterior</span>'}
+          ${page < totalPages ? `<a class="btn btn-secondary btn-sm" href="?${buildQs(page + 1)}">Siguiente →</a>` : '<span class="btn btn-secondary btn-sm" style="opacity:.4;pointer-events:none">Siguiente →</span>'}
+        </div>
+      </div>` : ''}
 
       <div class="modal-overlay" id="clientModal">
         <div class="modal" style="max-width:640px">
@@ -149,7 +232,7 @@ export function createClientRoutes(db, cfg = {}) {
             <div class="form-row">
               <div class="form-group"><label class="form-label">Ciudad</label><input class="form-control" id="cCity"></div>
               <div class="form-group"><label class="form-label">País</label><input class="form-control" id="cCountry"></div>
-              <div class="form-group"><label class="form-label">Grupo</label><select class="form-control" id="cGroup"><option value="">Sin grupo</option></select></div>
+              <div class="form-group"><label class="form-label">Grupo</label><select class="form-control" id="cGroup"><option value="">Sin grupo</option>${groupOptions}</select></div>
             </div>
             <div class="form-group"><label class="form-label">Notas internas</label><textarea class="form-control" id="cNotes" rows="2"></textarea></div>
           </div>
@@ -166,43 +249,18 @@ export function createClientRoutes(db, cfg = {}) {
       </div>
 
       <script>
-      let clients=[], groups=[];
-      async function loadAll(){
-        [clients, groups]=await Promise.all([
-          api('GET','/api/erp/clients').catch(()=>[]),
-          api('GET','/api/erp/clients/groups/all').catch(()=>[])
-        ]);
-        const gSel=document.getElementById('cGroup');
-        gSel.innerHTML='<option value="">Sin grupo</option>'+groups.map(g=>'<option value="'+g.id+'">'+g.name+'</option>').join('');
-        renderClients(clients);
-      }
-      function renderClients(list){
-        const q=document.getElementById('searchBox').value.toLowerCase();
-        const f=q?list.filter(c=>c.name.toLowerCase().includes(q)||(c.email||'').toLowerCase().includes(q)):list;
-        document.getElementById('clientBody').innerHTML=f.length?f.map(c=>'<tr>'+
-          '<td><strong>'+c.name+'</strong></td>'+
-          '<td style="color:var(--muted)">'+(c.email||'-')+'</td>'+
-          '<td style="color:var(--muted)">'+(c.phone||'-')+'</td>'+
-          '<td>'+(c.group_name?'<span class="badge b-purple">'+c.group_name+'</span>':'-')+'</td>'+
-          '<td><strong>${sym}'+Number(c.total_spent||0).toFixed(2)+'</strong></td>'+
-          '<td style="color:var(--muted);font-size:.8rem">'+(c.created_at?.split(' ')[0]||'-')+'</td>'+
-          '<td style="white-space:nowrap">'+
-          '<button class="btn btn-secondary btn-sm" onclick="viewDetail('+c.id+')">Ver</button> '+
-          (window.canDo('clients.edit')?'<button class="btn btn-secondary btn-sm" onclick="editClient('+c.id+')">Editar</button> ':'')+
-          (window.canDo('clients.delete')?'<button class="btn btn-danger btn-sm" onclick="delClient('+c.id+')">Archivar</button>':'')+
-          '</td>'+
-          '</tr>').join(''):'<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">Sin clientes</td></tr>';
-      }
-      document.getElementById('searchBox').addEventListener('input',()=>renderClients(clients));
+      let currentClient=null;   // cliente en edición (conserva accepts_newsletter sin tocar la API)
       function openNewClient(){
+        currentClient=null;
         document.getElementById('clientModalTitle').textContent='Nuevo Cliente';
         document.getElementById('clientId').value='';
         ['cName','cFiscal','cEmail','cPhone','cAddress','cCity','cCountry','cNotes'].forEach(id=>document.getElementById(id).value='');
         document.getElementById('cGroup').value='';
         openModal('clientModal');
       }
-      function editClient(id){
-        const c=clients.find(x=>x.id===id);if(!c)return;
+      async function editClient(id){
+        const c=await api('GET','/api/erp/clients/'+id);
+        currentClient=c;
         document.getElementById('clientModalTitle').textContent='Editar Cliente';
         document.getElementById('clientId').value=id;
         document.getElementById('cName').value=c.name;
@@ -218,10 +276,11 @@ export function createClientRoutes(db, cfg = {}) {
       }
       async function saveClient(){
         const id=document.getElementById('clientId').value;
-        const body={name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,address:document.getElementById('cAddress').value,city:document.getElementById('cCity').value,country:document.getElementById('cCountry').value,group_id:document.getElementById('cGroup').value||null,notes:document.getElementById('cNotes').value,accepts_newsletter: id ? !!(clients.find(x=>x.id===+id)||{}).accepts_newsletter : false};
-        try{if(id)await api('PUT','/api/erp/clients/'+id,body);else await api('POST','/api/erp/clients',body);closeModal('clientModal');toast(id?'Actualizado':'Creado');loadAll();}catch(e){toast(e.message,'err')}
+        const body={name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,address:document.getElementById('cAddress').value,city:document.getElementById('cCity').value,country:document.getElementById('cCountry').value,group_id:document.getElementById('cGroup').value||null,notes:document.getElementById('cNotes').value,accepts_newsletter: id ? !!(currentClient&&currentClient.accepts_newsletter) : false};
+        try{if(id)await api('PUT','/api/erp/clients/'+id,body);else await api('POST','/api/erp/clients',body);closeModal('clientModal');toast(id?'Actualizado':'Creado');location.reload();}catch(e){toast(e.message,'err')}
       }
-      async function delClient(id){if(!confirm('¿Archivar este cliente? Dejará de aparecer en la lista, pero no se borra.'))return;await api('DELETE','/api/erp/clients/'+id);toast('Archivado');loadAll();}
+      async function delClient(id){if(!confirm('¿Archivar este cliente? Dejará de aparecer en la lista, pero no se borra.'))return;try{await api('DELETE','/api/erp/clients/'+id);toast('Archivado');location.reload();}catch(e){toast(e.message,'err')}}
+      async function restoreClient(id){try{await api('POST','/api/erp/clients/'+id+'/restore');toast('Restaurado');location.reload();}catch(e){toast(e.message,'err')}}
       async function viewDetail(id){
         const c=await api('GET','/api/erp/clients/'+id);
         document.getElementById('detailName').textContent=c.name;
@@ -238,7 +297,6 @@ export function createClientRoutes(db, cfg = {}) {
           '<div class="table-wrap"><table><thead><tr><th>Orden</th><th>Total</th><th>Estado</th><th>Fecha</th></tr></thead><tbody>'+ordRows+'</tbody></table></div>';
         openModal('detailModal');
       }
-      loadAll();
       </script>`;
     return c.html(adminLayout('Clientes', content, 'clients', c.get('session')?.csrfToken || '', c));
   });
