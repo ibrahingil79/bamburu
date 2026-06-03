@@ -149,6 +149,12 @@ export function runMigrations(db) {
   addCol(db, 'clients', 'notes', 'TEXT DEFAULT ""');
   addCol(db, 'clients', 'accepts_newsletter', 'INTEGER DEFAULT 0');
   addCol(db, 'clients', 'active', 'INTEGER DEFAULT 1');
+  // T3 — datos de gestión del cliente (el cálculo de IRPF es de Ventas; aquí solo se guarda).
+  // Defaults seguros: particular / 0 / contado / sin especificar → nunca aplica retención por sorpresa.
+  addCol(db, 'clients', 'client_type', "TEXT DEFAULT 'particular'");   // particular | empresa
+  addCol(db, 'clients', 'irpf_rate', 'REAL DEFAULT 0');                // % retención por defecto (0 si particular)
+  addCol(db, 'clients', 'payment_term_days', 'INTEGER DEFAULT 0');     // plazo de pago en días (0 = contado)
+  addCol(db, 'clients', 'payment_method', "TEXT DEFAULT ''");          // transferencia | efectivo | tarjeta | domiciliacion
 
   // Products (extended)
   db.exec(`CREATE TABLE IF NOT EXISTS products (

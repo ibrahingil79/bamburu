@@ -59,6 +59,11 @@ export const clientSchema = z.object({
   group_id: optId,
   notes: strOpt(2000),
   accepts_newsletter: z.coerce.boolean().optional().default(false),
+  // T3 — datos de gestión (solo se guardan; el cálculo de IRPF es de Ventas).
+  client_type: z.enum(['particular', 'empresa']).optional().default('particular'),
+  irpf_rate: z.coerce.number().min(0).max(100).optional().default(0),
+  payment_term_days: z.coerce.number().int().min(0).optional().default(0),
+  payment_method: z.enum(['', 'transferencia', 'efectivo', 'tarjeta', 'domiciliacion']).optional().default(''),
 });
 
 export const clientGroupSchema = z.object({

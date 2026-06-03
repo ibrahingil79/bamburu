@@ -53,7 +53,8 @@ export function createClientRoutes(db, cfg = {}) {
       const d = c.get('validated');
       if (!d.name) return c.json({error:'Nombre requerido'},400);
       if (fiscalIdConflict(db, d.fiscal_id)) return c.json({error:'Ya existe un cliente con ese NIF'},409);
-      const r = db.prepare('INSERT INTO clients (name,fiscal_id,email,phone,address,city,country,group_id,notes,accepts_newsletter) VALUES (?,?,?,?,?,?,?,?,?,?)').run(d.name, d.fiscal_id||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.country||'', d.group_id||null, d.notes||'', d.accepts_newsletter?1:0);
+      const irpf = d.client_type === 'empresa' ? (d.irpf_rate||0) : 0;   // T3: el particular nunca lleva retención
+      const r = db.prepare('INSERT INTO clients (name,fiscal_id,email,phone,address,city,country,group_id,notes,accepts_newsletter,client_type,irpf_rate,payment_term_days,payment_method) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(d.name, d.fiscal_id||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.country||'', d.group_id||null, d.notes||'', d.accepts_newsletter?1:0, d.client_type||'particular', irpf, d.payment_term_days||0, d.payment_method||'');
       syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
       logActivity(db, c.get('session'), 'Creó cliente', 'client', r.lastInsertRowid, d.name);
       return c.json({id:r.lastInsertRowid, message:'Creado'});
@@ -64,7 +65,8 @@ export function createClientRoutes(db, cfg = {}) {
     try {
       const d = c.get('validated');
       if (fiscalIdConflict(db, d.fiscal_id, c.req.param('id'))) return c.json({error:'Ya existe un cliente con ese NIF'},409);
-      db.prepare('UPDATE clients SET name=?,fiscal_id=?,email=?,phone=?,address=?,city=?,country=?,group_id=?,notes=?,accepts_newsletter=? WHERE id=?').run(d.name, d.fiscal_id||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.country||'', d.group_id||null, d.notes||'', d.accepts_newsletter?1:0, c.req.param('id'));
+      const irpf = d.client_type === 'empresa' ? (d.irpf_rate||0) : 0;   // T3: el particular nunca lleva retención
+      db.prepare('UPDATE clients SET name=?,fiscal_id=?,email=?,phone=?,address=?,city=?,country=?,group_id=?,notes=?,accepts_newsletter=?,client_type=?,irpf_rate=?,payment_term_days=?,payment_method=? WHERE id=?').run(d.name, d.fiscal_id||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.country||'', d.group_id||null, d.notes||'', d.accepts_newsletter?1:0, d.client_type||'particular', irpf, d.payment_term_days||0, d.payment_method||'', c.req.param('id'));
       syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
       return c.json({message:'Actualizado'});
     } catch(e) { return c.json({error:e.message},500); }
@@ -154,7 +156,7 @@ export function createClientRoutes(db, cfg = {}) {
     const offset = (page - 1) * perPage;
     const clientsList = db.prepare(
       'SELECT c.*, g.name as group_name FROM clients c LEFT JOIN client_groups g ON c.group_id=g.id '
-      + whereSql + ' ORDER BY c.total_spent DESC LIMIT ? OFFSET ?'
+      + whereSql + ' ORDER BY c.name LIMIT ? OFFSET ?'
     ).all(...params, perPage, offset);
 
     // Opciones de grupo para el modal (server-render, sin fetch en cliente).
@@ -175,7 +177,6 @@ export function createClientRoutes(db, cfg = {}) {
       '<td style="color:var(--muted)">'+escHtml(cl.email||'-')+'</td>'+
       '<td style="color:var(--muted)">'+escHtml(cl.phone||'-')+'</td>'+
       '<td>'+(cl.group_name?'<span class="badge b-purple">'+escHtml(cl.group_name)+'</span>':'-')+'</td>'+
-      '<td><strong>'+sym+Number(cl.total_spent||0).toFixed(2)+'</strong></td>'+
       '<td style="color:var(--muted);font-size:.8rem">'+((cl.created_at||'').split(' ')[0]||'-')+'</td>'+
       '<td style="white-space:nowrap">'+
         '<button class="btn btn-secondary btn-sm" onclick="viewDetail('+cl.id+')">Ver</button> '+
@@ -202,8 +203,8 @@ export function createClientRoutes(db, cfg = {}) {
 
       <div class="card">
         <div class="table-wrap"><table>
-          <thead><tr><th>Nombre</th><th>Email</th><th>Teléfono</th><th>Grupo</th><th>Total gastado</th><th>Registrado</th><th></th></tr></thead>
-          <tbody>${total === 0 ? '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">No se encontraron clientes</td></tr>' : rowsHtml}</tbody>
+          <thead><tr><th>Nombre</th><th>Email</th><th>Teléfono</th><th>Grupo</th><th>Registrado</th><th></th></tr></thead>
+          <tbody>${total === 0 ? '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--muted)">No se encontraron clientes</td></tr>' : rowsHtml}</tbody>
         </table></div>
       </div>
 
@@ -234,6 +235,33 @@ export function createClientRoutes(db, cfg = {}) {
               <div class="form-group"><label class="form-label">País</label><input class="form-control" id="cCountry"></div>
               <div class="form-group"><label class="form-label">Grupo</label><select class="form-control" id="cGroup"><option value="">Sin grupo</option>${groupOptions}</select></div>
             </div>
+            <hr style="margin:1rem 0;border:none;border-top:1px solid var(--border)">
+            <h4 style="font-size:.85rem;font-weight:600;margin:.25rem 0 .75rem">Gestión / Datos fiscales</h4>
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">Tipo de cliente</label>
+                <select class="form-control" id="cType" onchange="toggleIrpf()">
+                  <option value="particular">Particular</option>
+                  <option value="empresa">Empresa o profesional</option>
+                </select>
+              </div>
+              <div class="form-group" id="cIrpfWrap"><label class="form-label">% IRPF por defecto</label>
+                <input class="form-control" id="cIrpf" type="number" min="0" max="100" step="0.01" value="0">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">Plazo de pago (días)</label>
+                <input class="form-control" id="cTermDays" type="number" min="0" step="1" value="0">
+              </div>
+              <div class="form-group"><label class="form-label">Forma de pago preferida</label>
+                <select class="form-control" id="cPayMethod">
+                  <option value="">— Sin especificar —</option>
+                  <option value="transferencia">Transferencia</option>
+                  <option value="efectivo">Efectivo</option>
+                  <option value="tarjeta">Tarjeta</option>
+                  <option value="domiciliacion">Domiciliación</option>
+                </select>
+              </div>
+            </div>
             <div class="form-group"><label class="form-label">Notas internas</label><textarea class="form-control" id="cNotes" rows="2"></textarea></div>
           </div>
           <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('clientModal')">Cancelar</button><button class="btn btn-primary" onclick="saveClient()">Guardar</button></div>
@@ -250,12 +278,23 @@ export function createClientRoutes(db, cfg = {}) {
 
       <script>
       let currentClient=null;   // cliente en edición (conserva accepts_newsletter sin tocar la API)
+      // T3: el % IRPF solo aplica a empresa/profesional; en particular se oculta y se fuerza a 0.
+      function toggleIrpf(){
+        const empresa=document.getElementById('cType').value==='empresa';
+        document.getElementById('cIrpfWrap').style.display=empresa?'':'none';
+        if(!empresa)document.getElementById('cIrpf').value=0;
+      }
       function openNewClient(){
         currentClient=null;
         document.getElementById('clientModalTitle').textContent='Nuevo Cliente';
         document.getElementById('clientId').value='';
         ['cName','cFiscal','cEmail','cPhone','cAddress','cCity','cCountry','cNotes'].forEach(id=>document.getElementById(id).value='');
         document.getElementById('cGroup').value='';
+        document.getElementById('cType').value='particular';
+        document.getElementById('cIrpf').value=0;
+        document.getElementById('cTermDays').value=0;
+        document.getElementById('cPayMethod').value='';
+        toggleIrpf();
         openModal('clientModal');
       }
       async function editClient(id){
@@ -272,11 +311,16 @@ export function createClientRoutes(db, cfg = {}) {
         document.getElementById('cCountry').value=c.country||'';
         document.getElementById('cGroup').value=c.group_id||'';
         document.getElementById('cNotes').value=c.notes||'';
+        document.getElementById('cType').value=c.client_type||'particular';
+        document.getElementById('cIrpf').value=Number(c.irpf_rate||0);
+        document.getElementById('cTermDays').value=Number(c.payment_term_days||0);
+        document.getElementById('cPayMethod').value=c.payment_method||'';
+        toggleIrpf();
         openModal('clientModal');
       }
       async function saveClient(){
         const id=document.getElementById('clientId').value;
-        const body={name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,address:document.getElementById('cAddress').value,city:document.getElementById('cCity').value,country:document.getElementById('cCountry').value,group_id:document.getElementById('cGroup').value||null,notes:document.getElementById('cNotes').value,accepts_newsletter: id ? !!(currentClient&&currentClient.accepts_newsletter) : false};
+        const body={name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,address:document.getElementById('cAddress').value,city:document.getElementById('cCity').value,country:document.getElementById('cCountry').value,group_id:document.getElementById('cGroup').value||null,notes:document.getElementById('cNotes').value,accepts_newsletter: id ? !!(currentClient&&currentClient.accepts_newsletter) : false,client_type:document.getElementById('cType').value,irpf_rate:parseFloat(document.getElementById('cIrpf').value)||0,payment_term_days:parseInt(document.getElementById('cTermDays').value)||0,payment_method:document.getElementById('cPayMethod').value};
         try{if(id)await api('PUT','/api/erp/clients/'+id,body);else await api('POST','/api/erp/clients',body);closeModal('clientModal');toast(id?'Actualizado':'Creado');location.reload();}catch(e){toast(e.message,'err')}
       }
       async function delClient(id){if(!confirm('¿Archivar este cliente? Dejará de aparecer en la lista, pero no se borra.'))return;try{await api('DELETE','/api/erp/clients/'+id);toast('Archivado');location.reload();}catch(e){toast(e.message,'err')}}
@@ -290,7 +334,11 @@ export function createClientRoutes(db, cfg = {}) {
           '<div><div class="form-label">Email</div><div>'+escHtml(c.email||'-')+'</div></div>'+
           '<div><div class="form-label">Teléfono</div><div>'+escHtml(c.phone||'-')+'</div></div>'+
           '<div><div class="form-label">Dirección</div><div>'+escHtml(c.address||'-')+(c.city?' · '+escHtml(c.city):'')+'</div></div>'+
-          '<div><div class="form-label">Total gastado</div><div style="color:#10b981;font-weight:700;font-size:1.2rem">${sym}'+Number(c.total_spent||0).toFixed(2)+'</div></div>'+
+          '<div><div class="form-label">NIF</div><div>'+escHtml(c.fiscal_id||'-')+'</div></div>'+
+          '<div><div class="form-label">Tipo de cliente</div><div>'+(c.client_type==='empresa'?'Empresa o profesional':'Particular')+'</div></div>'+
+          (c.client_type==='empresa'?'<div><div class="form-label">% IRPF por defecto</div><div>'+Number(c.irpf_rate||0)+'%</div></div>':'')+
+          '<div><div class="form-label">Plazo de pago</div><div>'+(Number(c.payment_term_days||0)>0?Number(c.payment_term_days)+' días':'Contado')+'</div></div>'+
+          '<div><div class="form-label">Forma de pago</div><div>'+({transferencia:"Transferencia",efectivo:"Efectivo",tarjeta:"Tarjeta",domiciliacion:"Domiciliación"}[c.payment_method]||'—')+'</div></div>'+
           '</div>'+
           (c.notes?'<div class="alert alert-ok" style="margin-bottom:1rem">'+c.notes+'</div>':'')+
           '<h4 style="margin-bottom:.75rem">Historial de pedidos</h4>'+

@@ -465,12 +465,16 @@ export function register(app, db) {
         case 'create_client': {
           const p = action.params;
           if (fiscalIdConflict(db, p.fiscal_id)) return { ok: false, message: 'Ya existe un cliente con ese NIF' };
+          // T3: datos de gestión. Particular nunca lleva IRPF (se fuerza a 0).
+          const ctype = p.client_type === 'empresa' ? 'empresa' : 'particular';
+          const irpf = ctype === 'empresa' ? (Number(p.irpf_rate) || 0) : 0;
           const r = db.prepare(`
-            INSERT INTO clients (name, email, phone, address, city, fiscal_id, notes, active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+            INSERT INTO clients (name, email, phone, address, city, fiscal_id, notes, active, client_type, irpf_rate, payment_term_days, payment_method)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
           `).run(
             p.name || '', p.email || '', p.phone || '',
-            p.address || '', p.city || '', p.fiscal_id || '', p.notes || ''
+            p.address || '', p.city || '', p.fiscal_id || '', p.notes || '',
+            ctype, irpf, Number(p.payment_term_days) || 0, p.payment_method || ''
           );
           logActivity(db, 'create', 'clients', r.lastInsertRowid,
             'Cliente "' + p.name + '" creado por DISA', session);
@@ -483,8 +487,14 @@ export function register(app, db) {
           if (!client) return { ok: false, message: 'Cliente no encontrado.' };
           const newFiscal = p.fiscal_id !== undefined ? p.fiscal_id : client.fiscal_id;
           if (fiscalIdConflict(db, newFiscal, p.client_id)) return { ok: false, message: 'Ya existe un cliente con ese NIF' };
+          // T3: datos de gestión (conserva el actual si no llega en params). Particular fuerza IRPF 0.
+          const ctype = p.client_type !== undefined
+            ? (p.client_type === 'empresa' ? 'empresa' : 'particular')
+            : (client.client_type || 'particular');
+          const irpfRaw = p.irpf_rate !== undefined ? (Number(p.irpf_rate) || 0) : (client.irpf_rate || 0);
+          const irpf = ctype === 'empresa' ? irpfRaw : 0;
           db.prepare(`
-            UPDATE clients SET name=?, email=?, phone=?, address=?, city=?, fiscal_id=?, notes=?
+            UPDATE clients SET name=?, email=?, phone=?, address=?, city=?, fiscal_id=?, notes=?, client_type=?, irpf_rate=?, payment_term_days=?, payment_method=?
             WHERE id=?
           `).run(
             p.name !== undefined ? p.name : client.name,
@@ -494,6 +504,9 @@ export function register(app, db) {
             p.city !== undefined ? p.city : client.city,
             p.fiscal_id !== undefined ? p.fiscal_id : client.fiscal_id,
             p.notes !== undefined ? p.notes : client.notes,
+            ctype, irpf,
+            p.payment_term_days !== undefined ? (Number(p.payment_term_days) || 0) : (client.payment_term_days || 0),
+            p.payment_method !== undefined ? p.payment_method : (client.payment_method || ''),
             p.client_id
           );
           logActivity(db, 'edit', 'clients', p.client_id, 'Cliente editado por DISA', session);
