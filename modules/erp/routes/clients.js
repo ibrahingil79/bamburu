@@ -4,6 +4,19 @@ import { logActivity, requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { clientSchema, clientGroupSchema } from '../schemas.js';
 
+// Comprobación reutilizable de NIF duplicado (regla de integridad — sin duplicados).
+// Devuelve el cliente ACTIVO en conflicto (otro id con el mismo fiscal_id normalizado)
+// o null. fiscal_id vacío nunca bloquea (puede haber varios clientes sin NIF). En
+// edición, excludeId excluye al propio cliente. La usan la API (POST/PUT) y DISA.
+export function fiscalIdConflict(db, fiscalId, excludeId = null) {
+  const norm = String(fiscalId || '').trim().toUpperCase();
+  if (!norm) return null;
+  const ex = Number(excludeId);
+  return db.prepare(
+    'SELECT id, name FROM clients WHERE active=1 AND UPPER(TRIM(fiscal_id))=? AND id<>?'
+  ).get(norm, Number.isFinite(ex) ? ex : -1) || null;
+}
+
 export function createClientRoutes(db, cfg = {}) {
   const sym = cfg.sym || '€';
   const api = new Hono();
@@ -12,7 +25,7 @@ export function createClientRoutes(db, cfg = {}) {
   // ── API: CLIENTS ───────────────────────────────────────────────
   api.get('/', requirePerm('clients.read'), c => {
     try {
-      return c.json(db.prepare('SELECT c.*, g.name as group_name FROM clients c LEFT JOIN client_groups g ON c.group_id=g.id ORDER BY c.total_spent DESC').all());
+      return c.json(db.prepare('SELECT c.*, g.name as group_name FROM clients c LEFT JOIN client_groups g ON c.group_id=g.id WHERE c.active=1 ORDER BY c.total_spent DESC').all());
     } catch(e) { return c.json({error:e.message},500); }
   });
 
@@ -38,6 +51,7 @@ export function createClientRoutes(db, cfg = {}) {
     try {
       const d = c.get('validated');
       if (!d.name) return c.json({error:'Nombre requerido'},400);
+      if (fiscalIdConflict(db, d.fiscal_id)) return c.json({error:'Ya existe un cliente con ese NIF'},409);
       const r = db.prepare('INSERT INTO clients (name,fiscal_id,email,phone,address,city,country,group_id,notes,accepts_newsletter) VALUES (?,?,?,?,?,?,?,?,?,?)').run(d.name, d.fiscal_id||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.country||'', d.group_id||null, d.notes||'', d.accepts_newsletter?1:0);
       syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
       logActivity(db, c.get('session'), 'Creó cliente', 'client', r.lastInsertRowid, d.name);
@@ -48,6 +62,7 @@ export function createClientRoutes(db, cfg = {}) {
   api.put('/:id', requirePerm('clients.edit'), validate(clientSchema), async c => {
     try {
       const d = c.get('validated');
+      if (fiscalIdConflict(db, d.fiscal_id, c.req.param('id'))) return c.json({error:'Ya existe un cliente con ese NIF'},409);
       db.prepare('UPDATE clients SET name=?,fiscal_id=?,email=?,phone=?,address=?,city=?,country=?,group_id=?,notes=?,accepts_newsletter=? WHERE id=?').run(d.name, d.fiscal_id||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.country||'', d.group_id||null, d.notes||'', d.accepts_newsletter?1:0, c.req.param('id'));
       syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
       return c.json({message:'Actualizado'});
@@ -57,9 +72,11 @@ export function createClientRoutes(db, cfg = {}) {
   api.delete('/:id', requirePerm('clients.edit'), c => {
     try {
       const cl = db.prepare('SELECT name FROM clients WHERE id=?').get(c.req.param('id'));
-      db.prepare('DELETE FROM clients WHERE id=?').run(c.req.param('id'));
-      logActivity(db, c.get('session'), 'Eliminó cliente', 'client', c.req.param('id'), cl?.name||'');
-      return c.json({message:'Eliminado'});
+      // Archivar, no borrar (regla permanente). Soft-delete: la fila se conserva y su
+      // cuenta de tienda (customer_accounts) no se arrastra por ON DELETE CASCADE.
+      db.prepare('UPDATE clients SET active=0 WHERE id=?').run(c.req.param('id'));
+      logActivity(db, c.get('session'), 'Archivó cliente', 'client', c.req.param('id'), cl?.name||'');
+      return c.json({message:'Archivado'});
     } catch(e) { return c.json({error:e.message},500); }
   });
 
@@ -135,7 +152,6 @@ export function createClientRoutes(db, cfg = {}) {
               <div class="form-group"><label class="form-label">Grupo</label><select class="form-control" id="cGroup"><option value="">Sin grupo</option></select></div>
             </div>
             <div class="form-group"><label class="form-label">Notas internas</label><textarea class="form-control" id="cNotes" rows="2"></textarea></div>
-            <div class="form-group"><label class="form-label"><input type="checkbox" id="cNewsletter"> Acepta newsletter</label></div>
           </div>
           <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('clientModal')">Cancelar</button><button class="btn btn-primary" onclick="saveClient()">Guardar</button></div>
         </div>
@@ -157,7 +173,7 @@ export function createClientRoutes(db, cfg = {}) {
           api('GET','/api/erp/clients/groups/all').catch(()=>[])
         ]);
         const gSel=document.getElementById('cGroup');
-        gSel.innerHTML='<option value="">Sin grupo</option>'+groups.map(g=>'<option value="'+g.id+'">'+g.name+(g.discount_pct>0?' (-'+g.discount_pct+'%)':'')+'</option>').join('');
+        gSel.innerHTML='<option value="">Sin grupo</option>'+groups.map(g=>'<option value="'+g.id+'">'+g.name+'</option>').join('');
         renderClients(clients);
       }
       function renderClients(list){
@@ -173,7 +189,7 @@ export function createClientRoutes(db, cfg = {}) {
           '<td style="white-space:nowrap">'+
           '<button class="btn btn-secondary btn-sm" onclick="viewDetail('+c.id+')">Ver</button> '+
           (window.canDo('clients.edit')?'<button class="btn btn-secondary btn-sm" onclick="editClient('+c.id+')">Editar</button> ':'')+
-          (window.canDo('clients.delete')?'<button class="btn btn-danger btn-sm" onclick="delClient('+c.id+')">Eliminar</button>':'')+
+          (window.canDo('clients.delete')?'<button class="btn btn-danger btn-sm" onclick="delClient('+c.id+')">Archivar</button>':'')+
           '</td>'+
           '</tr>').join(''):'<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">Sin clientes</td></tr>';
       }
@@ -183,7 +199,6 @@ export function createClientRoutes(db, cfg = {}) {
         document.getElementById('clientId').value='';
         ['cName','cFiscal','cEmail','cPhone','cAddress','cCity','cCountry','cNotes'].forEach(id=>document.getElementById(id).value='');
         document.getElementById('cGroup').value='';
-        document.getElementById('cNewsletter').checked=false;
         openModal('clientModal');
       }
       function editClient(id){
@@ -199,15 +214,14 @@ export function createClientRoutes(db, cfg = {}) {
         document.getElementById('cCountry').value=c.country||'';
         document.getElementById('cGroup').value=c.group_id||'';
         document.getElementById('cNotes').value=c.notes||'';
-        document.getElementById('cNewsletter').checked=!!c.accepts_newsletter;
         openModal('clientModal');
       }
       async function saveClient(){
         const id=document.getElementById('clientId').value;
-        const body={name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,address:document.getElementById('cAddress').value,city:document.getElementById('cCity').value,country:document.getElementById('cCountry').value,group_id:document.getElementById('cGroup').value||null,notes:document.getElementById('cNotes').value,accepts_newsletter:document.getElementById('cNewsletter').checked};
+        const body={name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,address:document.getElementById('cAddress').value,city:document.getElementById('cCity').value,country:document.getElementById('cCountry').value,group_id:document.getElementById('cGroup').value||null,notes:document.getElementById('cNotes').value,accepts_newsletter: id ? !!(clients.find(x=>x.id===+id)||{}).accepts_newsletter : false};
         try{if(id)await api('PUT','/api/erp/clients/'+id,body);else await api('POST','/api/erp/clients',body);closeModal('clientModal');toast(id?'Actualizado':'Creado');loadAll();}catch(e){toast(e.message,'err')}
       }
-      async function delClient(id){if(!confirm('¿Eliminar cliente?'))return;await api('DELETE','/api/erp/clients/'+id);toast('Eliminado');loadAll();}
+      async function delClient(id){if(!confirm('¿Archivar este cliente? Dejará de aparecer en la lista, pero no se borra.'))return;await api('DELETE','/api/erp/clients/'+id);toast('Archivado');loadAll();}
       async function viewDetail(id){
         const c=await api('GET','/api/erp/clients/'+id);
         document.getElementById('detailName').textContent=c.name;
@@ -236,7 +250,7 @@ export function createClientRoutes(db, cfg = {}) {
       <div class="card">
         <div class="card-head"><h3>Lista de grupos</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="renderGroups()"></div>
         <div class="table-wrap"><table>
-          <thead><tr><th>Nombre</th><th>Descripción</th><th>Descuento</th><th>Miembros</th><th></th></tr></thead>
+          <thead><tr><th>Nombre</th><th>Descripción</th><th>Miembros</th><th></th></tr></thead>
           <tbody id="groupBody"></tbody>
         </table></div>
       </div>
@@ -247,7 +261,6 @@ export function createClientRoutes(db, cfg = {}) {
             <input type="hidden" id="groupId">
             <div class="form-group"><label class="form-label">Nombre *</label><input class="form-control" id="gName"></div>
             <div class="form-group"><label class="form-label">Descripción</label><input class="form-control" id="gDesc"></div>
-            <div class="form-group"><label class="form-label">Descuento automático (%)</label><input class="form-control" type="number" id="gDiscount" min="0" max="100" value="0"></div>
           </div>
           <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('groupModal')">Cancelar</button><button class="btn btn-primary" onclick="saveGroup()">Guardar</button></div>
         </div>
@@ -261,12 +274,12 @@ export function createClientRoutes(db, cfg = {}) {
       function renderGroups(){
         const q=(document.getElementById('searchBox').value||'').toLowerCase();
         const f=q?groups.filter(g=>(g.name||'').toLowerCase().includes(q)||(g.description||'').toLowerCase().includes(q)):groups;
-        document.getElementById('groupBody').innerHTML=f.length?f.map(g=>'<tr><td><strong>'+g.name+'</strong></td><td style="color:var(--muted)">'+(g.description||'-')+'</td><td>'+(g.discount_pct>0?'<span class="badge b-green">-'+g.discount_pct+'%</span>':'-')+'</td><td><span class="badge b-blue">'+g.member_count+'</span></td><td><button class="btn btn-secondary btn-sm" onclick="editGroup('+g.id+')">Editar</button> <button class="btn btn-danger btn-sm" onclick="delGroup('+g.id+')">Eliminar</button></td></tr>').join(''):'<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">'+(q?'Sin coincidencias':'Sin grupos')+'</td></tr>';
+        document.getElementById('groupBody').innerHTML=f.length?f.map(g=>'<tr><td><strong>'+g.name+'</strong></td><td style="color:var(--muted)">'+(g.description||'-')+'</td><td><span class="badge b-blue">'+g.member_count+'</span></td><td><button class="btn btn-secondary btn-sm" onclick="editGroup('+g.id+')">Editar</button> <button class="btn btn-danger btn-sm" onclick="delGroup('+g.id+')">Eliminar</button></td></tr>').join(''):'<tr><td colspan="4" style="text-align:center;padding:1.5rem;color:var(--muted)">'+(q?'Sin coincidencias':'Sin grupos')+'</td></tr>';
       }
-      function editGroup(id){const g=groups.find(x=>x.id===id);if(!g)return;document.getElementById('groupModalTitle').textContent='Editar Grupo';document.getElementById('groupId').value=id;document.getElementById('gName').value=g.name;document.getElementById('gDesc').value=g.description||'';document.getElementById('gDiscount').value=g.discount_pct||0;openModal('groupModal');}
+      function editGroup(id){const g=groups.find(x=>x.id===id);if(!g)return;document.getElementById('groupModalTitle').textContent='Editar Grupo';document.getElementById('groupId').value=id;document.getElementById('gName').value=g.name;document.getElementById('gDesc').value=g.description||'';openModal('groupModal');}
       async function saveGroup(){
         const id=document.getElementById('groupId').value;
-        const body={name:document.getElementById('gName').value,description:document.getElementById('gDesc').value,discount_pct:parseFloat(document.getElementById('gDiscount').value)||0};
+        const body={name:document.getElementById('gName').value,description:document.getElementById('gDesc').value,discount_pct: id ? ((groups.find(x=>x.id===+id)||{}).discount_pct||0) : 0};
         try{if(id)await api('PUT','/api/erp/clients/groups/'+id,body);else await api('POST','/api/erp/clients/groups/create',body);closeModal('groupModal');document.getElementById('groupId').value='';toast('Guardado');load();}catch(e){toast(e.message,'err')}
       }
       async function delGroup(id){if(!confirm('¿Eliminar?'))return;await api('DELETE','/api/erp/clients/groups/'+id);toast('Eliminado');load();}

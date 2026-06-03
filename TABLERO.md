@@ -97,8 +97,18 @@ Archivos: `CANON.md`, `views/line-search.js`, `routes/{invoices,purchases,catego
 
 ---
 
-## PILAR 2 — CLIENTE
-_(por detallar)_ — Clientes, Grupos, CRM. A quién vendes.
+## PILAR 2 — CLIENTE — 🟡 EN CURSO
+
+A quién vendes (CANON §2). Se construye sobre lo que ya existe (auditoría hecha 2026-06-03):
+el cliente está bien enganchado a pedidos/facturas, pero arrastra herencia e-commerce, no
+cumple las reglas de diseño aplicadas a Productos, borraba en duro, y le falta la pieza
+nuclear para un autónomo (cobros / pendiente de pago). Desglose en 5 tareas:
+
+- **T1 — Sanear el módulo. ✅ HECHO (2026-06-03).** Archivar en vez de borrar (soft-delete + lista `active=1`; selector de cliente en factura/POS/borrador no ofrece archivados); quitado el opt-in de newsletter del formulario (solo UI; columna y `newsletter_subscribers` intactas); ocultado el % de descuento de grupos (solo UI; columna `discount_pct` y join de analítica intactos); NIF de cliente único (helper reutilizable `fiscalIdConflict` en API POST/PUT y DISA create/edit_client, normaliza trim+UPPER, vacío no bloquea). + Regla de integridad "sin duplicados" añadida a CANON §5. Verificado: lógica (1 y 4) por test 13/13 + SQL; visuales (2 y 3) en navegador.
+- **T2 — Lista con buscador + filtro + paginación** (server-rendered con `?q=&...&page=`, al nivel de Productos tras P4). Buscar por **nombre y NIF** (hoy solo nombre/email, client-side). Incluye filtro **"archivados"** + acción de **restaurar/reactivar** un cliente archivado desde la UI (apuntado en T1).
+- **T3 — Campos de gestión del cliente** (lo que de verdad necesita un autónomo/pyme: p. ej. tipo de IRPF/retención por defecto, particular vs empresa, condiciones de pago; retirar/replantear lo de e-commerce: `total_spent`, `accepts_newsletter`).
+- **T4 — Ficha útil con facturas reales** (histórico por cliente: facturado y **pendiente de cobro**; hoy la ficha solo muestra pedidos y `total_spent`, y NO existe tabla de cobros/pagos — pieza a crear).
+- **T5 — DISA sobre clientes** (que sus acciones de cliente pasen por la API validada en vez de INSERT/UPDATE directo; añadir consulta/búsqueda de clientes; enlazar `client_id` en los pedidos que crea DISA — hoy quedan huérfanos de cliente). Mismo antipatrón ya fichado para `create_product`.
 
 ## PILAR 3 — INVENTARIO
 _(por detallar)_ — Compras, Stock, Proveedores, Devoluciones, Descuentos. Qué tienes y de dónde sale. Incluye **multi-almacén** como pieza de peso (CANON §6): se aborda al construir Stock, no antes.
@@ -123,5 +133,5 @@ La era previa ("facturación de servicios") dejó código que funciona y no se t
 ---
 
 ## Notas
-- Una tarea "EN CURSO" a la vez (RITUAL). **Pilar 1 — Producto: CERRADO** (P1+P2, P2.1, P2.2, P3 y P4 hechos). Hecha además la **corrección transversal de buscadores/filtros** (2026-06-03). Siguiente: arrancar **Pilar 2 — Cliente** (por detallar).
+- Una tarea "EN CURSO" a la vez (RITUAL). **Pilar 1 — Producto: CERRADO** (P1+P2, P2.1, P2.2, P3 y P4 hechos). Hecha además la **corrección transversal de buscadores/filtros** (2026-06-03). **Pilar 2 — Cliente: EN CURSO** — T1 (saneamiento) ✅ hecha; siguiente: **T2 — lista con buscador (nombre+NIF) + filtro + paginación**.
 - Este orden y alcances no son sagrados (CANON §3): si al construir algo no cuadra, se cambia.

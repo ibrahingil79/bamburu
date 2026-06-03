@@ -800,7 +800,7 @@ export function createOrderRoutes(db, cfg = {}) {
   views.get('/draft/new', c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const session  = c.get('session');
-    const clients  = db.prepare('SELECT id, name FROM clients ORDER BY name').all();
+    const clients  = db.prepare('SELECT id, name FROM clients WHERE active=1 ORDER BY name').all();
     const rawProds = db.prepare("SELECT id, name, sku, price FROM products WHERE status='active' ORDER BY name").all();
     const products = rawProds.map(p => ({ ...p, variants: db.prepare('SELECT * FROM product_variants WHERE product_id=? ORDER BY id').all(p.id) }));
 

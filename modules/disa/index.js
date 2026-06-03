@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { adminAuth, getCsrfToken } from '../../core/auth.js';
 import { adminLayout } from '../erp/layout.js';
 import { generateInvoice } from '../erp/routes/invoices.js';
+import { fiscalIdConflict } from '../erp/routes/clients.js';
 
 export function register(app, db) {
   const router = new Hono();
@@ -463,6 +464,7 @@ export function register(app, db) {
 
         case 'create_client': {
           const p = action.params;
+          if (fiscalIdConflict(db, p.fiscal_id)) return { ok: false, message: 'Ya existe un cliente con ese NIF' };
           const r = db.prepare(`
             INSERT INTO clients (name, email, phone, address, city, fiscal_id, notes, active)
             VALUES (?, ?, ?, ?, ?, ?, ?, 1)
@@ -479,6 +481,8 @@ export function register(app, db) {
           const p = action.params;
           const client = db.prepare('SELECT * FROM clients WHERE id=?').get(p.client_id);
           if (!client) return { ok: false, message: 'Cliente no encontrado.' };
+          const newFiscal = p.fiscal_id !== undefined ? p.fiscal_id : client.fiscal_id;
+          if (fiscalIdConflict(db, newFiscal, p.client_id)) return { ok: false, message: 'Ya existe un cliente con ese NIF' };
           db.prepare(`
             UPDATE clients SET name=?, email=?, phone=?, address=?, city=?, fiscal_id=?, notes=?
             WHERE id=?

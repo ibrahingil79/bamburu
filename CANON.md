@@ -138,11 +138,16 @@ PERO lo que aún no existe no es "corrección": es construcción, y respeta el o
 pilares (Producto → Cliente → Inventario → Ventas). No se usa esta regla para adelantar
 funciones de pilares futuros.
 
-**Dos reglas de diseño permanentes:**
+**Reglas de diseño permanentes:**
 - Toda sección con lista (productos, clientes, facturas, pedidos, etc.) lleva filtro de
   búsqueda desde que se construye.
 - Todo proceso que añade un producto a un documento (pedido, factura, albarán, compra)
   lleva buscador de producto que rellena la línea; nunca solo entrada manual.
+- **Regla de integridad — sin duplicados.** Toda entidad con identidad única (cliente→NIF,
+  producto→SKU, categoría/grupo/proveedor→nombre) debe impedir o avisar de duplicados en sus
+  puntos de entrada: formulario, API y acciones de DISA. Las facturas ya lo cumplen vía
+  numeración correlativa + hash encadenado. Cada pilar aplica esta regla a sus entidades
+  cuando se construye.
 
 ---
 
