@@ -234,6 +234,7 @@ export function createClientRoutes(db, cfg = {}) {
     const content = `
       <div class="ph"><h2>Grupos de Clientes</h2><button class="btn btn-primary" onclick="openModal('groupModal')">Nuevo grupo</button></div>
       <div class="card">
+        <div class="card-head"><h3>Lista de grupos</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="renderGroups()"></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Nombre</th><th>Descripción</th><th>Descuento</th><th>Miembros</th><th></th></tr></thead>
           <tbody id="groupBody"></tbody>
@@ -255,7 +256,12 @@ export function createClientRoutes(db, cfg = {}) {
       let groups=[];
       async function load(){
         groups=await api('GET','/api/erp/clients/groups/all').catch(()=>[]);
-        document.getElementById('groupBody').innerHTML=groups.length?groups.map(g=>'<tr><td><strong>'+g.name+'</strong></td><td style="color:var(--muted)">'+(g.description||'-')+'</td><td>'+(g.discount_pct>0?'<span class="badge b-green">-'+g.discount_pct+'%</span>':'-')+'</td><td><span class="badge b-blue">'+g.member_count+'</span></td><td><button class="btn btn-secondary btn-sm" onclick="editGroup('+g.id+')">Editar</button> <button class="btn btn-danger btn-sm" onclick="delGroup('+g.id+')">Eliminar</button></td></tr>').join(''):'<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin grupos</td></tr>';
+        renderGroups();
+      }
+      function renderGroups(){
+        const q=(document.getElementById('searchBox').value||'').toLowerCase();
+        const f=q?groups.filter(g=>(g.name||'').toLowerCase().includes(q)||(g.description||'').toLowerCase().includes(q)):groups;
+        document.getElementById('groupBody').innerHTML=f.length?f.map(g=>'<tr><td><strong>'+g.name+'</strong></td><td style="color:var(--muted)">'+(g.description||'-')+'</td><td>'+(g.discount_pct>0?'<span class="badge b-green">-'+g.discount_pct+'%</span>':'-')+'</td><td><span class="badge b-blue">'+g.member_count+'</span></td><td><button class="btn btn-secondary btn-sm" onclick="editGroup('+g.id+')">Editar</button> <button class="btn btn-danger btn-sm" onclick="delGroup('+g.id+')">Eliminar</button></td></tr>').join(''):'<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">'+(q?'Sin coincidencias':'Sin grupos')+'</td></tr>';
       }
       function editGroup(id){const g=groups.find(x=>x.id===id);if(!g)return;document.getElementById('groupModalTitle').textContent='Editar Grupo';document.getElementById('groupId').value=id;document.getElementById('gName').value=g.name;document.getElementById('gDesc').value=g.description||'';document.getElementById('gDiscount').value=g.discount_pct||0;openModal('groupModal');}
       async function saveGroup(){

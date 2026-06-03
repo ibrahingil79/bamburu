@@ -53,20 +53,30 @@ export function createPurchaseRoutes(db, cfg = {}) {
     const content = `
       <div class="ph"><h2>Compras</h2>${can(c,'purchases.create')?'<a href="/admin/purchases/new" class="btn btn-primary">Nueva compra</a>':''}</div>
       <div class="card">
-        <div class="card-head"><h3>Registro de compras</h3></div>
+        <div class="card-head"><h3>Registro de compras</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="renderPurchases()"></div>
         <div class="table-wrap"><table>
           <thead><tr><th>#</th><th>Proveedor</th><th>Referencia</th><th>Fecha</th><th>Estado</th><th>Total</th><th></th></tr></thead>
           <tbody id="purchBody"></tbody>
         </table></div>
       </div>
       <script>
+      var PURCHASES=[];
+      var STATUS_MAP={pending:'Pendiente',received:'Recibida',cancelled:'Cancelada'};
+      var BADGE_MAP={pending:'b-yellow',received:'b-green',cancelled:'b-red'};
       async function loadPurchases(){
-        var rows=await api('GET','/api/erp/purchases').catch(function(){return[];});
-        var statusMap={pending:'Pendiente',received:'Recibida',cancelled:'Cancelada'};
-        var badgeMap={pending:'b-yellow',received:'b-green',cancelled:'b-red'};
+        PURCHASES=await api('GET','/api/erp/purchases').catch(function(){return[];});
+        renderPurchases();
+      }
+      function renderPurchases(){
+        var q=(document.getElementById('searchBox').value||'').toLowerCase();
+        var rows=q?PURCHASES.filter(function(r){
+          return (r.supplier_name||'').toLowerCase().indexOf(q)>=0
+            ||(r.reference||'').toLowerCase().indexOf(q)>=0
+            ||(STATUS_MAP[r.status]||r.status||'').toLowerCase().indexOf(q)>=0;
+        }):PURCHASES;
         document.getElementById('purchBody').innerHTML=rows.length?rows.map(function(r){
-          return '<tr><td style="color:var(--muted)">#'+r.id+'</td><td><strong>'+escHtml(r.supplier_name)+'</strong></td><td>'+escHtml(r.reference||'-')+'</td><td>'+escHtml(r.date)+'</td><td><span class="badge '+(badgeMap[r.status]||'b-gray')+'">'+escHtml(statusMap[r.status]||r.status)+'</span></td><td><strong>'+parseFloat(r.total).toFixed(2)+' ${sym}</strong></td><td style="text-align:right"><a href="/admin/purchases/'+r.id+'" class="btn btn-secondary btn-sm">Ver</a></td></tr>';
-        }).join(''):'<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">Sin compras registradas</td></tr>';
+          return '<tr><td style="color:var(--muted)">#'+r.id+'</td><td><strong>'+escHtml(r.supplier_name)+'</strong></td><td>'+escHtml(r.reference||'-')+'</td><td>'+escHtml(r.date)+'</td><td><span class="badge '+(BADGE_MAP[r.status]||'b-gray')+'">'+escHtml(STATUS_MAP[r.status]||r.status)+'</span></td><td><strong>'+parseFloat(r.total).toFixed(2)+' ${sym}</strong></td><td style="text-align:right"><a href="/admin/purchases/'+r.id+'" class="btn btn-secondary btn-sm">Ver</a></td></tr>';
+        }).join(''):'<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">'+(q?'Sin coincidencias':'Sin compras registradas')+'</td></tr>';
       }
       loadPurchases();
       </script>`;
@@ -129,44 +139,80 @@ export function createPurchaseRoutes(db, cfg = {}) {
       </div>
       <script>
       var PRODUCTS=${productsJson};
-      var lines=[];
       var lineCounter=0;
+      // IDs de las líneas vivas (filas en el DOM), sin estado paralelo que se desincronice.
+      function lineIds(){
+        return Array.prototype.slice.call(document.querySelectorAll('#linesBody tr[id^="line-"]'))
+          .map(function(tr){return parseInt(tr.id.replace('line-',''));});
+      }
       function addLine(){
         lineCounter++;
         var id=lineCounter;
-        lines.push({id:id});
-        renderLines();
+        var empty=document.getElementById('emptyRow');
+        if(empty)empty.remove();
+        var html='<tr id="line-'+id+'">'
+          +'<td style="position:relative">'
+            +'<input class="form-control" type="text" id="prodsearch-'+id+'" autocomplete="off" placeholder="Buscar producto..." oninput="onProdInput('+id+')" onfocus="onProdInput('+id+')" onblur="hideProdSuggest('+id+')" style="min-width:200px">'
+            +'<input type="hidden" id="prod-'+id+'">'
+            +'<div id="suggest-'+id+'" style="display:none;position:absolute;z-index:30;left:0;right:0;top:100%;background:var(--card,#1e1e1e);border:1px solid var(--border);border-radius:6px;max-height:240px;overflow:auto;box-shadow:0 6px 16px rgba(0,0,0,.25)"></div>'
+          +'</td>'
+          +'<td><input class="form-control" type="number" id="qty-'+id+'" min="1" value="1" style="width:80px" oninput="calcTotal()"></td>'
+          +'<td><input class="form-control" type="number" id="cost-'+id+'" min="0" step="0.01" value="0.00" style="width:110px" oninput="calcTotal()"></td>'
+          +'<td id="sub-'+id+'" style="font-weight:600">0.00 ${sym}</td>'
+          +'<td><button class="btn btn-danger btn-sm" onclick="removeLine('+id+')">Eliminar</button></td>'
+          +'</tr>';
+        document.getElementById('linesBody').insertAdjacentHTML('beforeend',html);
+        calcTotal();
       }
       function removeLine(id){
-        lines=lines.filter(function(l){return l.id!==id;});
-        renderLines();
-      }
-      function renderLines(){
-        var prodOpts=PRODUCTS.map(function(p){return '<option value="'+p.id+'">'+(p.sku?'['+escHtml(p.sku)+'] ':'')+escHtml(p.name)+'</option>';}).join('');
-        document.getElementById('linesBody').innerHTML=lines.length?lines.map(function(l){
-          return '<tr id="line-'+l.id+'">'
-            +'<td><select class="form-control" id="prod-'+l.id+'" onchange="updateCost('+l.id+')" style="min-width:200px"><option value="">Seleccionar producto...</option>'+prodOpts+'</select></td>'
-            +'<td><input class="form-control" type="number" id="qty-'+l.id+'" min="1" value="1" style="width:80px" oninput="calcTotal()"></td>'
-            +'<td><input class="form-control" type="number" id="cost-'+l.id+'" min="0" step="0.01" value="0.00" style="width:110px" oninput="calcTotal()"></td>'
-            +'<td id="sub-'+l.id+'" style="font-weight:600">0.00 ${sym}</td>'
-            +'<td><button class="btn btn-danger btn-sm" onclick="removeLine('+l.id+')">Eliminar</button></td>'
-            +'</tr>';
-        }).join(''):'<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">Usa &ldquo;+ Añadir línea&rdquo; para agregar productos</td></tr>';
+        var tr=document.getElementById('line-'+id);
+        if(tr)tr.remove();
+        if(!lineIds().length){
+          document.getElementById('linesBody').innerHTML='<tr id="emptyRow"><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">Usa &ldquo;+ Añadir línea&rdquo; para agregar productos</td></tr>';
+        }
         calcTotal();
       }
-      function updateCost(id){
-        var prodId=parseInt(document.getElementById('prod-'+id).value)||0;
-        if(!prodId)return;
+      // Buscador de producto: al teclear, ofrece coincidencias del catálogo (nombre o SKU).
+      // En una compra la línea SIEMPRE es un producto del catálogo (mueve stock): no hay
+      // línea libre; hasta elegir una sugerencia, prod-id queda vacío y la validación lo exige.
+      function onProdInput(id){
+        var box=document.getElementById('suggest-'+id);
+        var q=(document.getElementById('prodsearch-'+id).value||'').trim().toLowerCase();
+        document.getElementById('prod-'+id).value='';   // cambiar el texto invalida la selección previa
+        if(!q){box.style.display='none';box.innerHTML='';return;}
+        var matches=PRODUCTS.filter(function(p){
+          return (p.name&&p.name.toLowerCase().indexOf(q)>=0)||(p.sku&&p.sku.toLowerCase().indexOf(q)>=0);
+        }).slice(0,8);
+        if(!matches.length){box.style.display='none';box.innerHTML='';return;}
+        box.innerHTML=matches.map(function(p){
+          return '<div style="padding:.5rem .7rem;cursor:pointer;border-bottom:1px solid var(--border)" onmousedown="event.preventDefault();pickProd('+id+','+p.id+')">'
+            +'<strong>'+escHtml(p.name)+'</strong>'
+            +(p.sku?' <span style="color:var(--muted);font-size:.8rem">['+escHtml(p.sku)+']</span>':'')
+            +' <span style="float:right;color:var(--muted)">'+Number(p.price||0).toFixed(2)+' ${sym}</span>'
+            +'</div>';
+        }).join('');
+        box.style.display='';
+      }
+      function pickProd(lineId,prodId){
         var p=PRODUCTS.find(function(x){return x.id===prodId;});
-        if(p){document.getElementById('cost-'+id).value=p.price.toFixed(2);}
+        if(!p)return;
+        document.getElementById('prod-'+lineId).value=prodId;
+        document.getElementById('prodsearch-'+lineId).value=(p.sku?'['+p.sku+'] ':'')+p.name;
+        document.getElementById('cost-'+lineId).value=Number(p.price||0).toFixed(2);
+        var box=document.getElementById('suggest-'+lineId);
+        if(box){box.style.display='none';box.innerHTML='';}
         calcTotal();
+      }
+      function hideProdSuggest(id){
+        var box=document.getElementById('suggest-'+id);
+        setTimeout(function(){box.style.display='none';},150);
       }
       function calcTotal(){
         var total=0;
-        lines.forEach(function(l){
-          var qtyEl=document.getElementById('qty-'+l.id);
-          var costEl=document.getElementById('cost-'+l.id);
-          var subEl=document.getElementById('sub-'+l.id);
+        lineIds().forEach(function(id){
+          var qtyEl=document.getElementById('qty-'+id);
+          var costEl=document.getElementById('cost-'+id);
+          var subEl=document.getElementById('sub-'+id);
           if(!qtyEl||!costEl)return;
           var qty=parseFloat(qtyEl.value)||0;
           var cost=parseFloat(costEl.value)||0;
@@ -177,16 +223,17 @@ export function createPurchaseRoutes(db, cfg = {}) {
         document.getElementById('totalDisplay').textContent=total.toFixed(2)+' ${sym}';
       }
       async function submitPurchase(){
-        if(!lines.length){toast('Añade al menos una línea','err');return;}
-        var items=lines.map(function(l){
+        var ids=lineIds();
+        if(!ids.length){toast('Añade al menos una línea','err');return;}
+        var items=ids.map(function(id){
           return{
-            product_id:parseInt(document.getElementById('prod-'+l.id).value)||0,
-            quantity:parseInt(document.getElementById('qty-'+l.id).value)||0,
-            unit_cost:parseFloat(document.getElementById('cost-'+l.id).value)||0
+            product_id:parseInt(document.getElementById('prod-'+id).value)||0,
+            quantity:parseInt(document.getElementById('qty-'+id).value)||0,
+            unit_cost:parseFloat(document.getElementById('cost-'+id).value)||0
           };
         });
         var invalid=items.filter(function(i){return !i.product_id||i.quantity<1;});
-        if(invalid.length){toast('Revisa las líneas: selecciona producto y cantidad','err');return;}
+        if(invalid.length){toast('Revisa las líneas: busca y elige un producto del catálogo y la cantidad','err');return;}
         var body={
           supplier_id:parseInt(document.getElementById('fSupplier').value),
           reference:document.getElementById('fReference').value.trim(),

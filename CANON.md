@@ -132,6 +132,18 @@ el motor que tiene debajo. Si DISA dice "te he facturado" y la factura sale ileg
 magia se rompe — y en facturación eso es una multa, no un bug. La fiabilidad del núcleo
 sostiene el protagonismo de la IA.
 
+**Corrección inmediata de lo construido.** Lo que YA está construido y funciona se corrige
+en el momento, no se posterga — la deuda sobre lo hecho se acumula y degrada el producto.
+PERO lo que aún no existe no es "corrección": es construcción, y respeta el orden de
+pilares (Producto → Cliente → Inventario → Ventas). No se usa esta regla para adelantar
+funciones de pilares futuros.
+
+**Dos reglas de diseño permanentes:**
+- Toda sección con lista (productos, clientes, facturas, pedidos, etc.) lleva filtro de
+  búsqueda desde que se construye.
+- Todo proceso que añade un producto a un documento (pedido, factura, albarán, compra)
+  lleva buscador de producto que rellena la línea; nunca solo entrada manual.
+
 ---
 
 ## 6. Pendientes apuntados (para no olvidar)

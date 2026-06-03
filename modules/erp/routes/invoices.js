@@ -5,6 +5,7 @@ import { validate } from '../../../core/validate.js';
 import { invoiceCreateSchema, invoiceComputeSchema } from '../schemas.js';
 import { getCountryConfig } from '../../../core/control-db.js';
 import { adminLayout } from '../layout.js';
+import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 
 // A2: helper puro de cálculo de totales (IVA múltiple por línea + IRPF global).
 // Devuelve subtotal, agrupado por tasa, IVA total, base de IRPF, importe IRPF
@@ -438,8 +439,9 @@ export function createInvoiceRoutes(db) {
       const RATES = ${ratesJson};            // [21, 10, 4, ...]
       const DEFAULT_RATE = ${defaultRate};
       const SHOW_IRPF = ${showIrpf};
+      const LINE_CELL = ${JSON.stringify(lineSearchCellHtml())};  // celda buscador (componente compartido)
       let clients = [];
-      let services = [];                       // P3: productos de tipo 'servicio' para autofill
+      let catalog = [];                        // catálogo completo activo para el buscador de línea
       let recalcTimer = null;
 
       async function loadAll(){
@@ -449,8 +451,8 @@ export function createInvoiceRoutes(db) {
             api('GET','/api/erp/products').catch(()=>[]),
           ]);
           clients = cl;
-          // Solo productos de tipo servicio activos: son los que tiene sentido autorrellenar.
-          services = (prods || []).filter(p => p.type === 'service' && p.status === 'active');
+          // Catálogo completo activo (físico/digital/servicio): el buscador de línea ofrece todos.
+          catalog = (prods || []).filter(p => p.status === 'active');
           const sel = document.getElementById('f-client');
           for (const cl of clients) {
             const o = document.createElement('option');
@@ -474,13 +476,11 @@ export function createInvoiceRoutes(db) {
         ).join('');
         const exemptOpt = '<option value="0">Exento (0%)</option>';
         const opts = normalOpts + exemptOpt;
-        // A3: selector de servicio guardado. "" = línea libre (escrita a mano, no se guarda).
-        const svcOpts = '<option value="">— Línea libre —</option>' +
-          services.map(s => '<option value="'+s.id+'">'+escHtml(s.name)+' ('+SYM+Number(s.price||0).toFixed(2)+')</option>').join('');
+        // Línea única: un solo campo de descripción que ES el buscador de catálogo
+        // (componente compartido con el pedido). Escribes libre (línea libre) o eliges
+        // una sugerencia (rellena precio + IVA por banda, vía applyLinePick).
         row.innerHTML =
-          '<td>' +
-            (services.length ? '<select class="form-control line-service" style="margin-bottom:.35rem" onchange="applyService(this)">'+svcOpts+'</select>' : '') +
-            '<input type="text" class="form-control line-desc" placeholder="Descripción del servicio o producto"></td>' +
+          LINE_CELL +
           '<td><input type="number" class="form-control line-qty" step="0.01" min="0.01" value="1"></td>' +
           '<td><input type="number" class="form-control line-price" step="0.01" min="0" value="0"></td>' +
           '<td><select class="form-control line-tax">'+opts+'</select></td>' +
@@ -491,20 +491,17 @@ export function createInvoiceRoutes(db) {
         scheduleRecalc();
       }
 
-      // P3: al elegir un producto de tipo "servicio" del catálogo, rellena la línea
-      // (descripción, precio, IVA). La cantidad NO se toca (queda editable). El IRPF NO
-      // lo fija el producto: se elige a mano (CANON: el IRPF no es del producto). Elegir
-      // "Línea libre" no borra nada: deja lo escrito tal cual.
-      function applyService(sel){
-        const id = parseInt(sel.value);
-        if (!id) return;
-        const svc = services.find(s => s.id === id);
-        if (!svc) return;
-        const row = sel.closest('tr');
-        row.querySelector('.line-desc').value  = svc.name;
-        row.querySelector('.line-price').value = Number(svc.price || 0).toFixed(2);
+      ${lineSearchScript()}
+
+      // Al elegir un producto del catálogo: rellena descripción, precio e IVA. El IVA se
+      // toma del producto (p.tax_rate ya resuelto desde su BANDA en core/vat-bands.js):
+      // coherente con el catálogo, nunca un IVA suelto. La cantidad y el IRPF quedan
+      // editables (CANON: el IRPF no es del producto).
+      function applyLinePick(row, p){
+        row.querySelector('.line-desc').value  = p.name;
+        row.querySelector('.line-price').value = Number(p.price || 0).toFixed(2);
         const taxSel = row.querySelector('.line-tax');
-        const rate = String(Number(svc.tax_rate) || 0);
+        const rate = String(Number(p.tax_rate) || 0);
         if (![...taxSel.options].some(o => o.value === rate)) {
           const o = document.createElement('option');
           o.value = rate; o.textContent = (rate === '0' ? 'Exento (0%)' : rate + '%');

@@ -52,6 +52,51 @@ galería de imágenes, SEO, coste/margen, unidad por hora/sesión.
 
 ---
 
+## CORRECCIÓN TRANSVERSAL — Buscadores y filtros en lo ya construido (2026-06-03)
+
+No es un pilar nuevo: es **corrección de lo construido** (CANON §5) aplicando las dos reglas
+de diseño permanentes que se añadieron al CANON (toda lista lleva filtro de búsqueda; todo
+proceso que añade un producto a un documento lleva buscador de producto que rellena la línea).
+Solo se tocó lo que ya existía y funcionaba; lo inexistente (Albaranes) NO se tocó.
+
+### ✅ Filtro de búsqueda añadido a las listas que no lo tenían — HECHO (2026-06-03)
+- **Categorías**, **Grupos de clientes**, **Compras (registro)** y **Descuentos** (cupones y
+  automáticos, una caja por tabla): filtro cliente sobre el array ya cargado, mismo patrón que
+  stock/proveedores/facturas.
+- **Devoluciones**: la lista es server-rendered → filtro DOM sobre las filas (`tr.frow`).
+- (Ya tenían buscador y se dejan intactos: Productos, Pedidos, Facturas, Clientes, Stock, Proveedores.)
+
+### ✅ Buscador de producto en creación de documento — HECHO (2026-06-03)
+- **Factura** (`/admin/invoices/new`): se elimina el doble campo (select de servicios + input).
+  Ahora **un solo campo** de línea que es buscador del **catálogo completo** (físico/digital/servicio,
+  por nombre o SKU) o texto libre. Al elegir un producto rellena descripción, precio e **IVA según
+  su BANDA** (`p.tax_rate`, resuelto desde `core/vat-bands.js`); cantidad e IRPF quedan editables (CANON).
+- **Compra** (`/admin/purchases/new`): el `<select>` de producto pasa a **buscador-autocompletado**
+  que rellena la línea (y el coste con el precio del producto). La línea de compra siempre es un
+  producto del catálogo (mueve stock): no hay línea libre. Refactor a alta/baja por fila (append-only)
+  para no resetear líneas previas; el cuerpo del POST (`product_id`/`quantity`/`unit_cost`) y el
+  movimiento de stock quedan idénticos.
+
+### ✅ Pedido (Borrador) = mismo campo que la factura + componente compartido — HECHO (2026-06-03)
+- **Corrige una afirmación falsa de esta misma corrección:** se había dado por hecho que "Pedido/POS
+  ya tenía buscador". El **POS** sí (tiles que filtran el catálogo, se deja intacto), pero el
+  **Borrador de pedido** (`/admin/orders/draft/new`) usaba un `<select>` desplegable de todos los
+  productos — no el campo único de la factura.
+- Ahora el Borrador usa el **mismo campo único** que la factura: buscar en el catálogo completo
+  (físico/digital/servicio, por nombre o SKU) y, al elegir, rellena nombre + precio + `product_id`
+  oculto + selector de variante. Cantidad editable. "Solo buscador": cada línea debe resolver a un
+  producto real (el pedido exige `product_id` y mueve stock); no hay línea libre.
+- **Componente compartido nuevo** `modules/erp/views/line-search.js` (`lineSearchCellHtml` +
+  `lineSearchScript` + punto de extensión `applyLinePick`): factura y pedido usan el MISMO buscador,
+  sin dos implementaciones. La factura se refactorizó a este componente **sin cambiar comportamiento**
+  (búsqueda, autorrelleno de IVA por banda, línea libre y totales idénticos — regresión verificada).
+- **No se tocó** `posItemSchema`, `/api/erp/orders/draft`, totales ni el movimiento de stock del pedido.
+- (Albarán no existe → se hará con su pilar.)
+
+Archivos: `CANON.md`, `views/line-search.js`, `routes/{invoices,purchases,categories,clients,orders,discounts}.js`.
+
+---
+
 ## PILAR 2 — CLIENTE
 _(por detallar)_ — Clientes, Grupos, CRM. A quién vendes.
 
@@ -78,5 +123,5 @@ La era previa ("facturación de servicios") dejó código que funciona y no se t
 ---
 
 ## Notas
-- Una tarea "EN CURSO" a la vez (RITUAL). **Pilar 1 — Producto: CERRADO** (P1+P2, P2.1, P2.2, P3 y P4 hechos). Siguiente: arrancar **Pilar 2 — Cliente** (por detallar).
+- Una tarea "EN CURSO" a la vez (RITUAL). **Pilar 1 — Producto: CERRADO** (P1+P2, P2.1, P2.2, P3 y P4 hechos). Hecha además la **corrección transversal de buscadores/filtros** (2026-06-03). Siguiente: arrancar **Pilar 2 — Cliente** (por detallar).
 - Este orden y alcances no son sagrados (CANON §3): si al construir algo no cuadra, se cambia.

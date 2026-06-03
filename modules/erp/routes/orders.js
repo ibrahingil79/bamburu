@@ -5,6 +5,7 @@ import { validate } from '../../../core/validate.js';
 import { posSchema, orderStatusSchema, orderNotesSchema, orderTrackingSchema, refundSchema, draftOrderSchema } from '../schemas.js';
 import { escHtml } from '../../../core/escape.js';
 import { generateInvoice } from './invoices.js';
+import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 
 const ORDER_STATUSES = [
   'borrador', 'en_preparacion', 'enviado',
@@ -676,7 +677,7 @@ export function createOrderRoutes(db, cfg = {}) {
   views.get('/refunds', c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const refunds = db.prepare('SELECT r.*,so.order_number,c.name as client_name FROM refunds r JOIN sales_orders so ON r.order_id=so.id LEFT JOIN clients c ON so.client_id=c.id ORDER BY r.id DESC').all();
-    const rows = refunds.map(r => `<tr>
+    const rows = refunds.map(r => `<tr class="frow">
       <td><a href="/admin/orders/${r.order_id}" style="color:var(--p);font-weight:600">${escHtml(r.order_number)}</a></td>
       <td>${escHtml(r.client_name||'Anónimo')}</td>
       <td><strong>${sym}${Number(r.amount).toFixed(2)}</strong></td>
@@ -688,11 +689,20 @@ export function createOrderRoutes(db, cfg = {}) {
       <div class="ph"><h2>Devoluciones</h2></div>
       <div class="kpi" style="margin-bottom:1rem;max-width:250px"><div class="kpi-label">Total reembolsado</div><div class="kpi-val" style="color:#ef4444">${sym}${total.toFixed(2)}</div></div>
       <div class="card">
+        <div class="card-head"><h3>Listado de devoluciones</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="filterRefunds()"></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Pedido</th><th>Cliente</th><th>Monto</th><th>Motivo</th><th>Fecha</th></tr></thead>
-          <tbody>${rows||'<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--muted)">Sin devoluciones</td></tr>'}</tbody>
+          <tbody id="refBody">${rows||'<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--muted)">Sin devoluciones</td></tr>'}</tbody>
         </table></div>
-      </div>`;
+      </div>
+      <script>
+      function filterRefunds(){
+        var q=(document.getElementById('searchBox').value||'').toLowerCase();
+        document.querySelectorAll('#refBody tr.frow').forEach(function(tr){
+          tr.style.display=tr.textContent.toLowerCase().indexOf(q)>=0?'':'none';
+        });
+      }
+      </script>`;
     return c.html(adminLayout('Devoluciones', content, 'refunds', c.get('session')?.csrfToken || '', c));
   });
 
@@ -859,87 +869,121 @@ export function createOrderRoutes(db, cfg = {}) {
 
       <script>
         const PRODUCTS = ${JSON.stringify(products)};
-        window._sym = '${sym}';
-        let lines = [];
+        const catalog = PRODUCTS;          // el buscador compartido ofrece el catálogo completo
+        const SYM = '${sym}';
+        // Celda con el buscador compartido + campos ocultos propios del pedido
+        // (product_id y variante) para resolver la línea a un producto real.
+        const LINE_CELL = ${JSON.stringify(lineSearchCellHtml(
+          '<input type="hidden" class="line-pid">' +
+          '<input type="hidden" class="line-vid">' +
+          '<div class="line-variant"></div>'
+        ))};
 
-        function getVariantSelect(l){
-          const p=PRODUCTS.find(function(x){return x.id===l.product_id;});
-          if(!p||!p.variants||!p.variants.length)return '';
-          const sym=window._sym||'€';
-          const opts=p.variants.map(function(v){
-            const lbl=[v.option1_value,v.option2_value,v.name].filter(Boolean).join(' · ');
-            const pr=v.price!==null?v.price:p.price;
-            return '<option value="'+v.id+'"'+(l.variant_id===v.id?' selected':'')+'>'+lbl+' ('+sym+pr.toFixed(2)+')</option>';
+        ${lineSearchScript()}
+
+        // Al elegir un producto del catálogo: rellena nombre, precio, product_id oculto y
+        // (si tiene) el selector de variante. No se toca stock/total/guardado del pedido.
+        function applyLinePick(row, p){
+          row.querySelector('.line-desc').value  = p.name;
+          row.querySelector('.line-pid').value   = p.id;
+          row.querySelector('.line-vid').value   = '';
+          row.querySelector('.line-price').value = Number(p.price || 0).toFixed(2);
+          row.querySelector('.line-variant').innerHTML = variantSelectHtml(p);
+          recalc();
+        }
+
+        function variantSelectHtml(p){
+          if (!p.variants || !p.variants.length) return '';
+          const opts = p.variants.map(function(v){
+            const lbl = [v.option1_value, v.option2_value, v.name].filter(Boolean).join(' · ');
+            const pr  = v.price !== null ? v.price : p.price;
+            return '<option value="'+v.id+'" data-price="'+pr+'">'+escHtml(lbl)+' ('+SYM+pr.toFixed(2)+')</option>';
           }).join('');
-          return '<select class="form-control" style="margin-top:6px" onchange="updateLine('+l.uid+',\\'variant_id\\',this.value)"><option value="">Sin variante</option>'+opts+'</select>';
+          return '<select class="form-control" style="margin-top:6px" onchange="onVariantChange(this)"><option value="">Sin variante</option>'+opts+'</select>';
         }
 
-        function addLine() {
-          const p = PRODUCTS[0] || { id: 0, name: '', price: 0, sku: '' };
-          lines.push({ uid: Date.now(), product_id: p.id, name: p.name, price: p.price, qty: 1 });
-          renderLines();
-        }
-
-        function removeLine(uid) {
-          lines = lines.filter(l => l.uid !== uid);
-          renderLines();
-        }
-
-        function updateLine(uid, field, value) {
-          const l = lines.find(l => l.uid === uid);
-          if (!l) return;
-          if (field === 'product_id') {
-            const p = PRODUCTS.find(p => p.id === +value);
-            if (p) { l.product_id = p.id; l.name = p.name; l.price = p.price; l.variant_id = null; }
-          } else if (field === 'variant_id') {
-            const p = PRODUCTS.find(p => p.id === l.product_id);
-            const v = p?.variants?.find(v => v.id === +value);
-            if (v) {
-              l.variant_id = v.id;
-              const lbl = [v.option1_value, v.option2_value, v.name].filter(Boolean).join(' · ');
-              l.name = p.name + (lbl ? ' (' + lbl + ')' : '');
-              l.price = v.price !== null ? v.price : p.price;
-            }
+        function onVariantChange(sel){
+          const row = sel.closest('tr');
+          const pid = +row.querySelector('.line-pid').value;
+          const p = catalog.find(x => x.id === pid);
+          if (!p) return;
+          if (sel.value){
+            const opt = sel.options[sel.selectedIndex];
+            row.querySelector('.line-vid').value   = sel.value;
+            row.querySelector('.line-price').value = Number(opt.dataset.price || p.price).toFixed(2);
           } else {
-            l[field] = +value;
+            row.querySelector('.line-vid').value   = '';
+            row.querySelector('.line-price').value = Number(p.price || 0).toFixed(2);
           }
-          renderLines();
+          recalc();
         }
 
-        function renderLines() {
-          document.getElementById('lines-body').innerHTML = lines.map(l => \`
-            <tr>
-              <td>
-                <select class="form-control" onchange="updateLine(\${l.uid},'product_id',this.value)">
-                  \${PRODUCTS.map(p => \`<option value="\${p.id}" \${p.id===l.product_id?'selected':''}>\${p.name}\${p.sku?' ('+p.sku+')':''}</option>\`).join('')}
-                </select>
-                \${getVariantSelect(l)}
-              </td>
-              <td><input type="number" class="form-control" value="\${l.qty}" min="1"
-                onchange="updateLine(\${l.uid},'qty',this.value)"></td>
-              <td><input type="number" class="form-control" value="\${l.price}" min="0" step="0.01"
-                onchange="updateLine(\${l.uid},'price',this.value)"></td>
-              <td style="text-align:right;padding:.7rem 1rem">${sym}\${(l.qty*l.price).toFixed(2)}</td>
-              <td><button class="btn btn-sm btn-danger" onclick="removeLine(\${l.uid})">×</button></td>
-            </tr>
-          \`).join('');
-          const total = lines.reduce((s, l) => s + l.qty * l.price, 0);
-          document.getElementById('total-display').textContent = '${sym}' + total.toFixed(2);
+        function addLine(){
+          const tbody = document.getElementById('lines-body');
+          const row = document.createElement('tr');
+          row.innerHTML =
+            LINE_CELL +
+            '<td><input type="number" class="form-control line-qty" min="1" value="1"></td>' +
+            '<td><input type="number" class="form-control line-price" min="0" step="0.01" value="0"></td>' +
+            '<td style="text-align:right;padding:.7rem 1rem"><span class="line-subtotal">'+SYM+'0.00</span></td>' +
+            '<td><button class="btn btn-sm btn-danger" onclick="this.closest(\\'tr\\').remove();recalc()">×</button></td>';
+          tbody.appendChild(row);
+          row.querySelectorAll('.line-qty, .line-price').forEach(function(i){ i.addEventListener('input', recalc); });
+          recalc();
         }
 
-        async function saveDraft() {
-          if (!lines.length) { alert('Añade al menos un producto'); return; }
+        function recalc(){
+          let total = 0;
+          document.querySelectorAll('#lines-body tr').forEach(function(r){
+            const qty   = parseFloat(r.querySelector('.line-qty').value)   || 0;
+            const price = parseFloat(r.querySelector('.line-price').value) || 0;
+            r.querySelector('.line-subtotal').textContent = SYM + (qty * price).toFixed(2);
+            total += qty * price;
+          });
+          document.getElementById('total-display').textContent = SYM + total.toFixed(2);
+        }
+
+        // Recoge las líneas en el MISMO formato que esperaba el guardado (id, variant_id,
+        // name, price, qty). "Solo buscador": cada línea debe resolver a un producto real.
+        function collectItems(){
+          const items = [];
+          for (const r of document.querySelectorAll('#lines-body tr')){
+            const pid = parseInt(r.querySelector('.line-pid').value) || 0;
+            if (!pid) return { error: true };
+            const p = catalog.find(x => x.id === pid);
+            const vidRaw = r.querySelector('.line-vid').value;
+            const vid = vidRaw ? parseInt(vidRaw) : null;
+            let name = p ? p.name : '';
+            if (vid && p){
+              const v = (p.variants || []).find(x => x.id === vid);
+              if (v){
+                const lbl = [v.option1_value, v.option2_value, v.name].filter(Boolean).join(' · ');
+                name = p.name + (lbl ? ' (' + lbl + ')' : '');
+              }
+            }
+            const qty   = parseInt(r.querySelector('.line-qty').value)   || 1;
+            const price = parseFloat(r.querySelector('.line-price').value) || 0;
+            items.push({ id: pid, variant_id: vid, name, price, qty });
+          }
+          return { items };
+        }
+
+        async function saveDraft(){
+          const rows = document.querySelectorAll('#lines-body tr');
+          if (!rows.length){ toast('Añade al menos un producto', 'err'); return; }
+          const res = collectItems();
+          if (res.error){ toast('Busca y elige un producto del catálogo en cada línea', 'err'); return; }
           const payload = {
             client_id: document.getElementById('f-client').value
                        ? +document.getElementById('f-client').value : null,
-            items: lines.map(l => ({ id: l.product_id, variant_id: l.variant_id || null, name: l.name, price: l.price, qty: l.qty })),
+            items: res.items,
             customer_notes: document.getElementById('f-customer-notes').value,
             admin_notes:    document.getElementById('f-admin-notes').value,
           };
           try {
             await api('POST', '/api/erp/orders/draft', payload);
             window.location.href = '/admin/orders';
-          } catch(e) { toast(e.message || 'Error al guardar', 'err'); }
+          } catch(e){ toast(e.message || 'Error al guardar', 'err'); }
         }
 
         addLine();

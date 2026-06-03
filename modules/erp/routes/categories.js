@@ -39,6 +39,7 @@ export function createCategoryRoutes(db) {
     const content = `
       <div class="ph"><h2>Categorías</h2>${can(c,'categories.create')?'<button class="btn btn-primary" onclick="openModal(\'catModal\')">Nueva categoría</button>':''}</div>
       <div class="card">
+        <div class="card-head"><h3>Todas las categorías</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="renderCats()"></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Nombre</th><th>Descripción</th><th>Productos</th><th></th></tr></thead>
           <tbody id="catBody"><tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--muted)">Cargando...</td></tr></tbody>
@@ -61,7 +62,12 @@ export function createCategoryRoutes(db) {
       let cats=[];
       async function loadCats(){
         cats=await api('GET','/api/erp/categories').catch(()=>[]);
-        document.getElementById('catBody').innerHTML=cats.length?cats.map(c=>'<tr><td><strong>'+c.name+'</strong></td><td style="color:var(--muted);font-size:.85rem">'+(c.description||'-')+'</td><td><span class="badge b-blue">'+c.product_count+'</span></td><td>'+(window.canDo('categories.edit')?'<button class="btn btn-secondary btn-sm" onclick="editCat('+c.id+')">Editar</button> ':'')+( window.canDo('categories.delete')?'<button class="btn btn-danger btn-sm" onclick="delCat('+c.id+')">Eliminar</button>':'')+'</td></tr>').join(''):'<tr><td colspan="4" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin categorías</td></tr>';
+        renderCats();
+      }
+      function renderCats(){
+        const q=(document.getElementById('searchBox').value||'').toLowerCase();
+        const f=q?cats.filter(c=>(c.name||'').toLowerCase().includes(q)||(c.description||'').toLowerCase().includes(q)):cats;
+        document.getElementById('catBody').innerHTML=f.length?f.map(c=>'<tr><td><strong>'+c.name+'</strong></td><td style="color:var(--muted);font-size:.85rem">'+(c.description||'-')+'</td><td><span class="badge b-blue">'+c.product_count+'</span></td><td>'+(window.canDo('categories.edit')?'<button class="btn btn-secondary btn-sm" onclick="editCat('+c.id+')">Editar</button> ':'')+( window.canDo('categories.delete')?'<button class="btn btn-danger btn-sm" onclick="delCat('+c.id+')">Eliminar</button>':'')+'</td></tr>').join(''):'<tr><td colspan="4" style="text-align:center;padding:1.5rem;color:var(--muted)">'+(q?'Sin coincidencias':'Sin categorías')+'</td></tr>';
       }
       function editCat(id){const c=cats.find(x=>x.id===id);if(!c)return;document.getElementById('catModalTitle').textContent='Editar Categoría';document.getElementById('catId').value=id;document.getElementById('catName').value=c.name;document.getElementById('catDesc').value=c.description||'';openModal('catModal');}
       async function saveCat(){

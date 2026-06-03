@@ -72,6 +72,7 @@ export function createDiscountRoutes(db, cfg = {}) {
           ${can(c,'discounts.create')?'<button class="btn btn-primary" onclick="openModal(\'codeModal\')">Nuevo cupón</button>':''}
         </div>
         <div class="card">
+          <div class="card-head"><h3>Cupones</h3><input class="search" id="codesSearch" placeholder="Buscar..." oninput="renderCodes()"></div>
           <div class="table-wrap"><table>
             <thead><tr><th>Código</th><th>Tipo</th><th>Valor</th><th>Mín. pedido</th><th>Usos</th><th>Vence</th><th>Estado</th><th></th></tr></thead>
             <tbody id="codesBody"></tbody>
@@ -85,6 +86,7 @@ export function createDiscountRoutes(db, cfg = {}) {
           ${can(c,'discounts.create')?'<button class="btn btn-primary" onclick="openModal(\'autoModal\')">Nuevo descuento automático</button>':''}
         </div>
         <div class="card">
+          <div class="card-head"><h3>Descuentos automáticos</h3><input class="search" id="autoSearch" placeholder="Buscar..." oninput="renderAuto()"></div>
           <div class="table-wrap"><table>
             <thead><tr><th>Nombre</th><th>Tipo</th><th>Valor</th><th>Condición</th><th>Estado</th><th></th></tr></thead>
             <tbody id="autoBody"></tbody>
@@ -132,8 +134,15 @@ export function createDiscountRoutes(db, cfg = {}) {
       </div>
 
       <script>
+      let _codes=[];
+      let _autos=[];
       async function loadCodes(){
-        const codes=await api('GET','/api/erp/discounts').catch(()=>[]);
+        _codes=await api('GET','/api/erp/discounts').catch(()=>[]);
+        renderCodes();
+      }
+      function renderCodes(){
+        const q=(document.getElementById('codesSearch').value||'').toLowerCase();
+        const codes=q?_codes.filter(c=>(c.code||'').toLowerCase().includes(q)):_codes;
         document.getElementById('codesBody').innerHTML=codes.length?codes.map(c=>{
           const used=c.max_uses?c.uses_count+'/'+c.max_uses:(c.uses_count+' usos');
           return '<tr><td><code style="background:#f1f5f9;padding:.2rem .5rem;border-radius:4px;font-weight:600">'+c.code+'</code></td>'+
@@ -144,17 +153,22 @@ export function createDiscountRoutes(db, cfg = {}) {
             '<td style="color:var(--muted)">'+(c.expires_at?.split(' ')[0]||'Sin límite')+'</td>'+
             '<td>'+(c.active?'<span class="badge b-green">Activo</span>':'<span class="badge b-red">Inactivo</span>')+'</td>'+
             '<td>'+(window.canDo('discounts.delete')?'<button class="btn btn-danger btn-sm" onclick="delCode('+c.id+')">Eliminar</button>':'')+'</td></tr>';
-        }).join(''):'<tr><td colspan="8" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin cupones</td></tr>';
+        }).join(''):'<tr><td colspan="8" style="text-align:center;padding:1.5rem;color:var(--muted)">'+(q?'Sin coincidencias':'Sin cupones')+'</td></tr>';
       }
       async function loadAuto(){
-        const autos=await api('GET','/api/erp/discounts/auto').catch(()=>[]);
+        _autos=await api('GET','/api/erp/discounts/auto').catch(()=>[]);
+        renderAuto();
+      }
+      function renderAuto(){
+        const q=(document.getElementById('autoSearch').value||'').toLowerCase();
+        const autos=q?_autos.filter(a=>(a.name||'').toLowerCase().includes(q)):_autos;
         document.getElementById('autoBody').innerHTML=autos.length?autos.map(a=>'<tr>'+
           '<td><strong>'+a.name+'</strong></td>'+
           '<td>'+(a.type==='percentage'?'Porcentaje':'Fijo')+'</td>'+
           '<td><strong>'+(a.type==='percentage'?a.value+'%':'${sym}'+a.value)+'</strong></td>'+
           '<td style="color:var(--muted)">'+(a.condition_type==='min_order'?'Pedido ≥ ${sym}'+a.condition_value:'Categoría: '+a.condition_value)+'</td>'+
           '<td>'+(a.active?'<span class="badge b-green">Activo</span>':'<span class="badge b-red">Inactivo</span>')+'</td>'+
-          '<td>'+(window.canDo('discounts.delete')?'<button class="btn btn-danger btn-sm" onclick="delAuto('+a.id+')">Eliminar</button>':'')+'</td></tr>').join(''):'<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin descuentos automáticos</td></tr>';
+          '<td>'+(window.canDo('discounts.delete')?'<button class="btn btn-danger btn-sm" onclick="delAuto('+a.id+')">Eliminar</button>':'')+'</td></tr>').join(''):'<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--muted)">'+(q?'Sin coincidencias':'Sin descuentos automáticos')+'</td></tr>';
       }
       async function saveCode(){
         const exp=document.getElementById('dcExpires').value;
