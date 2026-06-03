@@ -59,6 +59,9 @@ export function runMigrations(db) {
   addCol(db, 'company_config', 'fiscal_id_label', "TEXT DEFAULT 'NIF/CIF'");
   addCol(db, 'company_config', 'document_name',   "TEXT DEFAULT 'Factura'");
   addCol(db, 'company_config', 'invoice_series',  "TEXT DEFAULT 'F'");
+  // Retención de IRPF por defecto del negocio (% del autónomo). Precarga la factura
+  // según el tipo de cliente; el dato legal es el de la factura. Default 0.
+  addCol(db, 'company_config', 'irpf_default',    'REAL DEFAULT 0');
 
   // Store settings
   db.exec(`CREATE TABLE IF NOT EXISTS store_settings (

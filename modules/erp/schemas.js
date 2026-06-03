@@ -59,9 +59,9 @@ export const clientSchema = z.object({
   group_id: optId,
   notes: strOpt(2000),
   accepts_newsletter: z.coerce.boolean().optional().default(false),
-  // T3 — datos de gestión (solo se guardan; el cálculo de IRPF es de Ventas).
+  // T3 — datos de gestión. El IRPF NO es del cliente (es del autónomo): el cliente solo
+  // aporta el tipo (particular/empresa); el % vive en la config del negocio y en la factura.
   client_type: z.enum(['particular', 'empresa']).optional().default('particular'),
-  irpf_rate: z.coerce.number().min(0).max(100).optional().default(0),
   payment_term_days: z.coerce.number().int().min(0).optional().default(0),
   payment_method: z.enum(['', 'transferencia', 'efectivo', 'tarjeta', 'domiciliacion']).optional().default(''),
 });
@@ -186,6 +186,7 @@ export const userUpdateSchema = z.object({
 // El resto de campos siguen pasando libres (passthrough).
 export const companySchema = z.object({
   tax_rate: z.coerce.number().min(0).max(50).optional(),
+  irpf_default: z.coerce.number().min(0).max(100).optional(),
 }).passthrough();
 export const storeSettingsSchema = z.object({}).passthrough();
 

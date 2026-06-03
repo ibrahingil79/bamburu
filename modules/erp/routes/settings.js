@@ -20,7 +20,7 @@ export function createSettingsRoutes(db, cfg = {}) {
   api.put('/company', requirePerm('company.update'), validate(companySchema), async c => {
     try {
       const d = c.get('validated');
-      db.prepare('UPDATE company_config SET company_name=?,fiscal_id=?,tax_rate=?,logo_url=?,address=?,phone=?,email=?,website=?,country=?,currency=?,currency_symbol=?,tax_name=?,fiscal_id_label=?,document_name=? WHERE id=1').run(d.company_name||'', d.fiscal_id||'', parseFloat(d.tax_rate)||0, d.logo_url||'', d.address||'', d.phone||'', d.email||'', d.website||'', d.country||'ES', d.currency||'EUR', d.currency_symbol||sym, d.tax_name||'IVA', d.fiscal_id_label||'NIF/CIF', d.document_name||'Factura');
+      db.prepare('UPDATE company_config SET company_name=?,fiscal_id=?,tax_rate=?,logo_url=?,address=?,phone=?,email=?,website=?,country=?,currency=?,currency_symbol=?,tax_name=?,fiscal_id_label=?,document_name=?,irpf_default=? WHERE id=1').run(d.company_name||'', d.fiscal_id||'', parseFloat(d.tax_rate)||0, d.logo_url||'', d.address||'', d.phone||'', d.email||'', d.website||'', d.country||'ES', d.currency||'EUR', d.currency_symbol||sym, d.tax_name||'IVA', d.fiscal_id_label||'NIF/CIF', d.document_name||'Factura', parseFloat(d.irpf_default)||0);
       return c.json({message:'Guardado'});
     } catch(e) { return c.json({error:e.message},500); }
   });
@@ -72,6 +72,9 @@ export function createSettingsRoutes(db, cfg = {}) {
             <div class="form-group"><label class="form-label">Impuesto por defecto (%)</label><input class="form-control" type="number" id="cTax" min="0" max="100" step="0.1"></div>
           </div>
           <div class="form-row">
+            <div class="form-group"><label class="form-label">Retención de IRPF por defecto (%)</label><input class="form-control" type="number" id="cIrpfDefault" min="0" max="100" step="0.1"><small style="color:#94a3b8;font-size:12px;margin-top:4px;display:block">Es tu retención como autónomo. Precarga la factura: clientes empresa/profesional la aplican; particulares, no. Puedes cambiarla en cada factura.</small></div>
+          </div>
+          <div class="form-row">
             <div class="form-group"><label class="form-label">Email</label><input class="form-control" type="email" id="cEmail"></div>
             <div class="form-group"><label class="form-label">Teléfono</label><input class="form-control" id="cPhone"></div>
           </div>
@@ -100,6 +103,7 @@ export function createSettingsRoutes(db, cfg = {}) {
         document.getElementById('fiscalIdLabel').value=d.fiscal_id_label||'NIF/CIF';
         document.getElementById('documentName').value=d.document_name||'Factura';
         document.getElementById('cTax').value=d.tax_rate||21;
+        document.getElementById('cIrpfDefault').value=d.irpf_default||0;
         document.getElementById('cEmail').value=d.email||'';
         document.getElementById('cPhone').value=d.phone||'';
         document.getElementById('cWeb').value=d.website||'';
@@ -107,7 +111,7 @@ export function createSettingsRoutes(db, cfg = {}) {
         document.getElementById('cLogo').value=d.logo_url||'';
       });
       async function saveCompany(){
-        try{await api('PUT','/api/erp/settings/company',{company_name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,country:document.getElementById('countryCode').value,currency:document.getElementById('currencyCode').value,currency_symbol:document.getElementById('currencySymbol').value,tax_name:document.getElementById('taxName').value,fiscal_id_label:document.getElementById('fiscalIdLabel').value,document_name:document.getElementById('documentName').value,tax_rate:document.getElementById('cTax').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,website:document.getElementById('cWeb').value,address:document.getElementById('cAddr').value,logo_url:document.getElementById('cLogo').value});toast('Guardado ✓');}catch(e){toast(e.message,'err')}
+        try{await api('PUT','/api/erp/settings/company',{company_name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,country:document.getElementById('countryCode').value,currency:document.getElementById('currencyCode').value,currency_symbol:document.getElementById('currencySymbol').value,tax_name:document.getElementById('taxName').value,fiscal_id_label:document.getElementById('fiscalIdLabel').value,document_name:document.getElementById('documentName').value,tax_rate:document.getElementById('cTax').value,irpf_default:document.getElementById('cIrpfDefault').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,website:document.getElementById('cWeb').value,address:document.getElementById('cAddr').value,logo_url:document.getElementById('cLogo').value});toast('Guardado ✓');}catch(e){toast(e.message,'err')}
       }
       </script>`;
     return c.html(adminLayout('Configuración Empresa', content, 'settings', c.get('session')?.csrfToken || '', c));

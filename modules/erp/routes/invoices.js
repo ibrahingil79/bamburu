@@ -336,7 +336,8 @@ export function createInvoiceRoutes(db) {
 
   // A1+A2: GET /admin/invoices/new — formulario para crear factura sin pedido
   views.get('/new', requirePerm('invoices.create'), c => {
-    const cfg = db.prepare('SELECT currency_symbol, country, tax_rate, tax_name FROM company_config WHERE id=1').get() || {};
+    const cfg = db.prepare('SELECT currency_symbol, country, tax_rate, tax_name, irpf_default FROM company_config WHERE id=1').get() || {};
+    const irpfDefault = Number(cfg.irpf_default) || 0;   // retención del negocio; precarga la factura según el cliente
     const sym = cfg.currency_symbol || '€';
     const country = (cfg.country || 'ES').toUpperCase();
     const cc = getCountryConfig(country) || { tax_rates: '21,10,4', tax_default: 21 };
@@ -382,46 +383,15 @@ export function createInvoiceRoutes(db) {
                   <th>Descripción</th>
                   <th style="width:80px">Cant.</th>
                   <th style="width:120px">P. unit.</th>
-                  <th style="width:90px">IVA</th>
                   <th style="width:100px;text-align:right">Subtotal</th>
                   <th style="width:36px"></th>
                 </tr>
               </thead>
               <tbody id="lines-body"></tbody>
-              <tfoot id="totals-foot">
-                <tr><td colspan="4" style="text-align:right;font-weight:600;padding:.7rem 1rem">Base imponible</td>
-                    <td style="text-align:right;padding:.7rem 1rem"><span id="t-subtotal">${sym}0.00</span></td>
-                    <td></td></tr>
-                <tr id="t-breakdown-row" style="display:none">
-                    <td colspan="6" style="padding:.4rem 1rem">
-                      <div id="t-breakdown" style="color:var(--muted);font-size:.85rem"></div>
-                    </td></tr>
-                <tr><td colspan="4" style="text-align:right;color:var(--muted);padding:.4rem 1rem">IVA total</td>
-                    <td style="text-align:right;color:var(--muted);padding:.4rem 1rem"><span id="t-tax">${sym}0.00</span></td>
-                    <td></td></tr>
-                ${showIrpf ? `
-                <tr id="t-irpf-row" style="display:none">
-                    <td colspan="4" style="text-align:right;color:#e879f9;padding:.4rem 1rem">IRPF <span id="t-irpf-rate"></span>%</td>
-                    <td style="text-align:right;color:#e879f9;padding:.4rem 1rem">−<span id="t-irpf">${sym}0.00</span></td>
-                    <td></td></tr>
-                ` : ''}
-                <tr><td colspan="4" style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">Total</td>
-                    <td style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem"><span id="t-total">${sym}0.00</span></td>
-                    <td></td></tr>
-              </tfoot>
+              <!-- El pie lo pinta doRecalc en vivo: Base + IVA por tasa + IRPF (si >0) + Total. -->
+              <tfoot id="totals-foot"></tfoot>
             </table>
           </div>
-
-          ${showIrpf ? `
-          <div class="form-group" style="margin-top:1.25rem;max-width:280px">
-            <label class="form-label">IRPF (%) — retención profesional</label>
-            <select id="f-irpf" class="form-control">
-              <option value="0">Sin IRPF</option>
-              <option value="7">7% — primeros 3 años</option>
-              <option value="15">15% — general</option>
-            </select>
-          </div>
-          ` : ''}
 
           <div class="form-group" style="margin-top:1.25rem">
             <label class="form-label">Notas (opcional)</label>
@@ -439,6 +409,7 @@ export function createInvoiceRoutes(db) {
       const RATES = ${ratesJson};            // [21, 10, 4, ...]
       const DEFAULT_RATE = ${defaultRate};
       const SHOW_IRPF = ${showIrpf};
+      const IRPF_DEFAULT = ${irpfDefault};   // retención del negocio (precarga; empresa la aplica, particular no)
       const LINE_CELL = ${JSON.stringify(lineSearchCellHtml())};  // celda buscador (componente compartido)
       let clients = [];
       let catalog = [];                        // catálogo completo activo para el buscador de línea
@@ -461,53 +432,49 @@ export function createInvoiceRoutes(db) {
           }
         } catch(e){ toast(e.message||'Error cargando datos','err'); }
         addLine();
-        if (SHOW_IRPF) {
-          document.getElementById('f-irpf').addEventListener('change', scheduleRecalc);
-        }
+        // Al cambiar de cliente recalcula: el IRPF del pie depende de su tipo (empresa/particular).
+        document.getElementById('f-client').addEventListener('change', scheduleRecalc);
+      }
+
+      // IRPF de la factura: NO se elige aquí. Es la retención del negocio (IRPF_DEFAULT) y
+      // solo se aplica si el cliente es empresa/profesional; particular → 0. Si el autónomo
+      // necesita otro %, lo cambia en su configuración de empresa, no en la factura.
+      function currentIrpfRate(){
+        if (!SHOW_IRPF) return 0;
+        const id = parseInt(document.getElementById('f-client').value);
+        const cl = clients.find(x => x.id === id);
+        return (cl && cl.client_type === 'empresa') ? IRPF_DEFAULT : 0;
       }
 
       function addLine(){
         const tbody = document.getElementById('lines-body');
         const row = document.createElement('tr');
-        // Tasas positivas del país + opción "Exento (0%)" al final.
-        // (Filtramos el 0 que viniera del CSV de country_configs para no duplicar.)
-        const normalOpts = RATES.filter(r => r > 0).map(r =>
-          '<option value="'+r+'"'+(r===DEFAULT_RATE?' selected':'')+'>'+r+'%</option>'
-        ).join('');
-        const exemptOpt = '<option value="0">Exento (0%)</option>';
-        const opts = normalOpts + exemptOpt;
         // Línea única: un solo campo de descripción que ES el buscador de catálogo
         // (componente compartido con el pedido). Escribes libre (línea libre) o eliges
         // una sugerencia (rellena precio + IVA por banda, vía applyLinePick).
+        // El IVA de la línea NO se elige nunca: va en un campo OCULTO (.line-tax). Producto →
+        // hereda su banda (applyLinePick); línea libre (texto sin producto) → 21% FIJO.
         row.innerHTML =
           LINE_CELL +
           '<td><input type="number" class="form-control line-qty" step="0.01" min="0.01" value="1"></td>' +
           '<td><input type="number" class="form-control line-price" step="0.01" min="0" value="0"></td>' +
-          '<td><select class="form-control line-tax">'+opts+'</select></td>' +
           '<td style="text-align:right;padding:.7rem 1rem"><span class="line-subtotal">' + SYM + '0.00</span></td>' +
           '<td><button class="btn btn-danger btn-sm" onclick="this.closest(\\'tr\\').remove();scheduleRecalc()">✕</button></td>';
+        row.cells[0].insertAdjacentHTML('beforeend', '<input type="hidden" class="line-tax" value="21">');
         tbody.appendChild(row);
-        row.querySelectorAll('.line-qty, .line-price, .line-tax').forEach(inp => inp.addEventListener('input', scheduleRecalc));
+        row.querySelectorAll('.line-qty, .line-price').forEach(inp => inp.addEventListener('input', scheduleRecalc));
         scheduleRecalc();
       }
 
       ${lineSearchScript()}
 
-      // Al elegir un producto del catálogo: rellena descripción, precio e IVA. El IVA se
-      // toma del producto (p.tax_rate ya resuelto desde su BANDA en core/vat-bands.js):
-      // coherente con el catálogo, nunca un IVA suelto. La cantidad y el IRPF quedan
-      // editables (CANON: el IRPF no es del producto).
+      // Al elegir un producto del catálogo: rellena descripción y precio, y hereda el IVA
+      // de su BANDA (p.tax_rate, resuelto en core/vat-bands.js) en el campo oculto,
+      // sobrescribiendo el 21% por defecto de la línea libre. El IRPF no es del producto.
       function applyLinePick(row, p){
         row.querySelector('.line-desc').value  = p.name;
         row.querySelector('.line-price').value = Number(p.price || 0).toFixed(2);
-        const taxSel = row.querySelector('.line-tax');
-        const rate = String(Number(p.tax_rate) || 0);
-        if (![...taxSel.options].some(o => o.value === rate)) {
-          const o = document.createElement('option');
-          o.value = rate; o.textContent = (rate === '0' ? 'Exento (0%)' : rate + '%');
-          taxSel.appendChild(o);
-        }
-        taxSel.value = rate;
+        row.querySelector('.line-tax').value   = String(Number(p.tax_rate) || 0);
         scheduleRecalc();
       }
 
@@ -533,40 +500,37 @@ export function createInvoiceRoutes(db) {
       async function doRecalc(){
         const lines = collectLines();
         if (lines.length === 0) return;
-        const irpf_rate = SHOW_IRPF ? (parseFloat(document.getElementById('f-irpf').value) || 0) : 0;
+        const irpf_rate = currentIrpfRate();
         try {
           const t = await api('POST','/api/erp/invoices/compute-totals', { lines, irpf_rate });
-          document.getElementById('t-subtotal').textContent = SYM + t.subtotal.toFixed(2);
-          document.getElementById('t-tax').textContent      = SYM + t.taxAmount.toFixed(2);
-          document.getElementById('t-total').textContent    = SYM + t.total.toFixed(2);
-
-          // Desglose por tasa: solo si hay más de una.
-          const rates = Object.values(t.taxByRate);
-          const breakRow = document.getElementById('t-breakdown-row');
-          if (rates.length > 1) {
-            document.getElementById('t-breakdown').innerHTML =
-              'Desglose IVA: ' + rates.map(x =>
-                'al ' + x.rate + '% sobre ' + SYM + x.base.toFixed(2) + ' = ' + SYM + x.amount.toFixed(2)
-              ).join(' &nbsp;·&nbsp; ');
-            breakRow.style.display = '';
-          } else {
-            breakRow.style.display = 'none';
-          }
-
-          // IRPF
-          if (SHOW_IRPF) {
-            const irpfRow = document.getElementById('t-irpf-row');
-            if (t.irpfAmount > 0) {
-              document.getElementById('t-irpf-rate').textContent = irpf_rate;
-              document.getElementById('t-irpf').textContent = SYM + t.irpfAmount.toFixed(2);
-              irpfRow.style.display = '';
-            } else {
-              irpfRow.style.display = 'none';
-            }
-          }
+          renderTotals(t, irpf_rate);
         } catch(e) {
           // Silencioso: si la línea está incompleta (precio 0, etc.) no spameamos toasts.
         }
+      }
+
+      // Pie de la factura: Base imponible → IVA AGRUPADO POR TASA (base + cuota por tipo) →
+      // IRPF (tipo + cuota, restando) solo si >0 → Total. Todo ya calculado por el servidor.
+      function renderTotals(t, irpfRate){
+        const labelTd = (txt, color) => '<td colspan="3" style="text-align:right;padding:.45rem 1rem'+(color?';color:'+color:'')+'">'+txt+'</td>';
+        const valTd   = (txt, color) => '<td style="text-align:right;padding:.45rem 1rem'+(color?';color:'+color:'')+'">'+txt+'</td><td></td>';
+        let html = '<tr><td colspan="3" style="text-align:right;font-weight:600;padding:.7rem 1rem">Base imponible</td>' +
+                   '<td style="text-align:right;padding:.7rem 1rem">'+SYM+t.subtotal.toFixed(2)+'</td><td></td></tr>';
+        const rates = Object.values(t.taxByRate || {});
+        if (rates.length === 0) {
+          html += '<tr>'+labelTd('IVA','var(--muted)')+valTd(SYM+'0.00','var(--muted)')+'</tr>';
+        } else {
+          for (const x of rates) {
+            const lbl = (Number(x.rate) > 0 ? 'IVA '+x.rate+'%' : 'Exento (0%)') + ' (sobre '+SYM+Number(x.base).toFixed(2)+')';
+            html += '<tr>'+labelTd(lbl,'var(--muted)')+valTd(SYM+Number(x.amount).toFixed(2),'var(--muted)')+'</tr>';
+          }
+        }
+        if (SHOW_IRPF && t.irpfAmount > 0) {
+          html += '<tr>'+labelTd('IRPF '+irpfRate+'%','#e879f9')+valTd('−'+SYM+t.irpfAmount.toFixed(2),'#e879f9')+'</tr>';
+        }
+        html += '<tr><td colspan="3" style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">Total</td>' +
+                '<td style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">'+SYM+t.total.toFixed(2)+'</td><td></td></tr>';
+        document.getElementById('totals-foot').innerHTML = html;
       }
 
       async function emitInvoice(){
@@ -574,7 +538,7 @@ export function createInvoiceRoutes(db) {
         if (!client_id) { toast('Selecciona un cliente','err'); return; }
         const issue_date = document.getElementById('f-date').value || undefined;
         const notes = document.getElementById('f-notes').value || '';
-        const irpf_rate = SHOW_IRPF ? (parseFloat(document.getElementById('f-irpf').value) || 0) : 0;
+        const irpf_rate = currentIrpfRate();
         const lines = [];
         for (const r of document.querySelectorAll('#lines-body tr')) {
           const desc = r.querySelector('.line-desc').value.trim();
