@@ -125,7 +125,7 @@ Núcleo del hash (`calcHash`/`getPrevHash`/`getNextSeq`) intacto: solo se añade
 - Verificado: migración aditiva sobre BD real (12 facturas intactas, filas previas `record_type='alta'`),
   `node --check`, reinicio + logs limpios, y **test de lógica 25/25** (anular: original byte-idéntica salvo
   status + cadena válida + no re-anulable; rectificativa por diferencias: serie R, referencia, original
-  rectificada; abono negativo: −300/−63/−363; nada borrado). Gate de navegador ✅. Commit `cbc74b6`.
+  rectificada; abono negativo: −300/−63/−363; nada borrado). Gate de navegador ✅. Commit `37609f7`.
 
 Archivos: `models.js`, `schemas.js`, `routes/invoices.js`, `CANON.md`, `TABLERO.md`.
 
