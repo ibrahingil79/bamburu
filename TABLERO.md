@@ -4,7 +4,7 @@
 > Estructura: 4 pilares en ORDEN DE CONSTRUCCIÓN — Producto → Cliente → Inventario → Ventas
 > (Ventas necesita los otros tres ya hechos; ver CANON §3).
 > REGLA DE ORO: una sola tarea "EN CURSO" a la vez. Terminar antes de empezar otra.
-> Última actualización: 2026-06-03
+> Última actualización: 2026-06-04
 
 ---
 
@@ -97,7 +97,41 @@ Archivos: `CANON.md`, `views/line-search.js`, `routes/{invoices,purchases,catego
 
 ---
 
-## PILAR 2 — CLIENTE — 🟡 EN CURSO
+## ADELANTO FISCAL (fuera del orden de pilares) — Ciclo de vida de la factura: ANULAR y RECTIFICAR — ✅ HECHO (2026-06-04)
+
+Adelanto fiscal necesario: en España no se puede vender software de facturación si una
+factura emitida no se puede ni anular ni corregir (bloqueo legal). No entra en el orden de
+pilares; Cliente/Pilar 2 (T4) y Cobros quedan en pausa. El flujo pedido→albarán→factura es
+Ventas/Pilar 4 y NO entra aquí. En España el único mecanismo legal de corrección es la
+**FACTURA RECTIFICATIVA** (nada de notas de crédito/débito: eso es LATAM, vía proveedor externo).
+
+**Regla de oro fiscal respetada:** una factura emitida NUNCA se edita ni se borra (rompería la
+cadena de hash). Anular y rectificar son **asientos nuevos enlazados** en la cadena; la original
+solo cambia su `status` (campo fuera del hash, así que marcarla no altera su `verifactu_hash`).
+Núcleo del hash (`calcHash`/`getPrevHash`/`getNextSeq`) intacto: solo se añaden asientos.
+
+- **ANULAR** (factura que nunca debió existir): asiento nuevo en tabla `invoice_anulaciones`,
+  hash-enlazado al hash de la original (`prev_hash = original.verifactu_hash`); pide motivo; marca
+  la original `anulada`. No consume número de factura. La fila original queda intacta.
+- **RECTIFICATIVA** (operación real con datos/importes mal): factura NUEVA en **serie propia 'R'**
+  (`company_config.rectificative_series`, R2026-NNNN) con su propia numeración y cadena de hash, que
+  referencia a la original (`rectifies_invoice_id`) y registra **tipo R1–R5** + **modalidad S/I**.
+  Marca la original `rectificada`. **Soporta importes negativos (abono)** para devoluciones.
+- **UI**: en listado y ficha, botones **Anular** (pide motivo) y **Crear rectificativa**; el
+  formulario de rectificativa va precargado desde la original (líneas, tipo R, modalidad, botón
+  "invertir signos" para abono) con numeración propia; estado (emitida/rectificada/anulada) visible.
+- **Fuera de alcance (Verifactu, tarea aparte pendiente):** QR + leyenda VERI*FACTU y envío a la AEAT.
+  Aquí solo lógica local de documentos + estados + enlace en la cadena de hash.
+- Verificado: migración aditiva sobre BD real (12 facturas intactas, filas previas `record_type='alta'`),
+  `node --check`, reinicio + logs limpios, y **test de lógica 25/25** (anular: original byte-idéntica salvo
+  status + cadena válida + no re-anulable; rectificativa por diferencias: serie R, referencia, original
+  rectificada; abono negativo: −300/−63/−363; nada borrado). Gate de navegador ✅. Commit `cbc74b6`.
+
+Archivos: `models.js`, `schemas.js`, `routes/invoices.js`, `CANON.md`, `TABLERO.md`.
+
+---
+
+## PILAR 2 — CLIENTE — 🟡 EN CURSO (EN PAUSA durante el adelanto fiscal)
 
 A quién vendes (CANON §2). Se construye sobre lo que ya existe (auditoría hecha 2026-06-03):
 el cliente está bien enganchado a pedidos/facturas, pero arrastra herencia e-commerce, no

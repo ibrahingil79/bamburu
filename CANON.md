@@ -114,6 +114,22 @@ Son dos cosas distintas y se modelan en sitios distintos:
   Bamburu **ayuda** (bandas legales, enlaces a la AEAT, DISA) pero **no garantiza** el
   tipo correcto en casos dudosos.
 
+### Ciclo de vida de la factura (ES) — anular y rectificar (HECHO 2026-06-04)
+
+Una factura emitida **nunca se edita ni se borra** (rompería la cadena de hash; es infracción).
+Las dos únicas operaciones legales son **asientos nuevos enlazados** en la cadena; la original solo
+cambia su `status` (campo fuera del hash):
+
+- **Anular** (factura que nunca debió existir: error/duplicado/operación no realizada): asiento de
+  anulación nuevo (`invoice_anulaciones`) hash-enlazado a la original; pide motivo; original → `anulada`.
+- **Rectificativa** (operación real con datos/importes mal): es el **único** mecanismo de corrección en
+  España — **no existen notas de crédito/débito** (eso es LATAM, vía proveedor externo). Factura nueva en
+  **serie propia 'R'** con numeración y cadena propias, que referencia a la original (→ `rectificada`),
+  con **tipo R1–R5** y **modalidad sustitución (S) / diferencias (I)**; admite **importe negativo (abono)**.
+
+Pendiente aparte (Verifactu, Pilar 4): QR + leyenda VERI*FACTU y envío a la AEAT. El ciclo de vida local
+(documentos + estados + enlace en la cadena de hash) ya está construido.
+
 ---
 
 ## 5. Diferenciación y disciplina de construcción

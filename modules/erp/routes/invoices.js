@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { createHash } from 'crypto';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
-import { invoiceCreateSchema, invoiceComputeSchema } from '../schemas.js';
+import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema } from '../schemas.js';
 import { getCountryConfig } from '../../../core/control-db.js';
 import { adminLayout } from '../layout.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
@@ -223,6 +223,127 @@ export function createInvoice(db, invoiceData) {
   return create();
 }
 
+// ── Ciclo de vida: ANULAR ────────────────────────────────────────────────────
+// Hash del registro de anulación. Familia del calcHash de facturas pero con un
+// prefijo 'ANULACION' (no colisiona con un hash de factura) y enlazado al hash de
+// la factura original (prev_hash = original.verifactu_hash).
+function calcAnulacionHash(an) {
+  const data = ['ANULACION', an.invoice_number, an.issue_date, an.company_fiscal_id, an.motivo, an.prev_hash].join('|');
+  return createHash('sha256').update(data).digest('hex');
+}
+
+// Anula una factura: crea un asiento de anulación NUEVO (tabla invoice_anulaciones)
+// hash-enlazado al hash de la original, y marca la original como 'anulada'. La fila
+// original NO se edita (salvo el campo status, que está fuera del hash) ni se borra.
+export function anularInvoice(db, invoiceId, motivo) {
+  const motivoClean = String(motivo || '').trim();
+  if (!motivoClean) throw new Error('Se requiere un motivo de anulación');
+
+  const original = db.prepare('SELECT * FROM invoices WHERE id=?').get(invoiceId);
+  if (!original) throw new Error('Factura no encontrada');
+  if (original.status !== 'emitida') throw new Error('Solo se puede anular una factura emitida');
+
+  const cfg = db.prepare('SELECT fiscal_id FROM company_config WHERE id=1').get() || {};
+  const issue_date = new Date().toISOString().slice(0, 10);
+  const company_fiscal_id = original.company_fiscal_id || cfg.fiscal_id || '';
+
+  const run = db.transaction(() => {
+    const prev_hash = original.verifactu_hash || '';
+    const verifactu_hash = calcAnulacionHash({
+      invoice_number: original.invoice_number,
+      issue_date,
+      company_fiscal_id,
+      motivo: motivoClean,
+      prev_hash,
+    });
+    const res = db.prepare(`INSERT INTO invoice_anulaciones
+      (invoice_id, invoice_number, motivo, issue_date, company_fiscal_id, prev_hash, verifactu_hash)
+      VALUES (?,?,?,?,?,?,?)`
+    ).run(original.id, original.invoice_number, motivoClean, issue_date, company_fiscal_id, prev_hash, verifactu_hash);
+
+    db.prepare("UPDATE invoices SET status='anulada' WHERE id=?").run(original.id);
+    return { id: res.lastInsertRowid, invoice_id: original.id, invoice_number: original.invoice_number };
+  });
+  return run();
+}
+
+// ── Ciclo de vida: RECTIFICAR ────────────────────────────────────────────────
+// Crea una FACTURA rectificativa: documento nuevo con numeración propia (serie 'R'),
+// su propia cadena de hash, que referencia a la original (rectifies_invoice_id) y
+// registra tipo R1–R5 y modalidad S/I. Marca la original como 'rectificada'. Admite
+// importes NEGATIVOS (abono). La original no se edita (salvo status) ni se borra.
+export function createRectificativa(db, data) {
+  const { original_id, lines, rectification_type, rectification_mode,
+          irpf_rate = 0, notes = '', issue_date } = data;
+
+  if (!['R1', 'R2', 'R3', 'R4', 'R5'].includes(rectification_type)) throw new Error('Tipo de rectificativa inválido (R1–R5)');
+  if (!['S', 'I'].includes(rectification_mode)) throw new Error('Modalidad inválida (S o I)');
+
+  const original = db.prepare('SELECT * FROM invoices WHERE id=?').get(original_id);
+  if (!original) throw new Error('Factura original no encontrada');
+  if (original.status !== 'emitida') throw new Error('Solo se puede rectificar una factura emitida');
+
+  const cfg = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
+  const country = (cfg.country || 'ES').toUpperCase();
+  const appliedIrpfRate = country === 'ES' ? (Number(irpf_rate) || 0) : 0;
+
+  // computeTotals es sign-agnostic → soporta líneas negativas (abono).
+  const totals = computeTotals(lines, appliedIrpfRate);
+  const headerTaxRate = mainTaxRate(totals.taxByRate);
+
+  const series    = cfg.rectificative_series || 'R';
+  const year      = new Date().getFullYear();
+  const issueDate = issue_date || new Date().toISOString().slice(0, 10);
+
+  const run = db.transaction(() => {
+    const seq = getNextSeq(db, series, year);
+    const invoice_number = `${series}${year}-${String(seq).padStart(4, '0')}`;
+    const prev_hash = getPrevHash(db, series, year);
+    const verifactu_hash = calcHash({
+      invoice_number,
+      issue_date: issueDate,
+      company_fiscal_id: original.company_fiscal_id || cfg.fiscal_id || '',
+      client_fiscal_id: original.client_fiscal_id || '',
+      total: totals.total,
+      prev_hash,
+    });
+
+    const result = db.prepare(`INSERT INTO invoices
+      (invoice_number, order_id, client_id, series, year, sequence, issue_date,
+       company_name, company_fiscal_id, company_address,
+       client_name, client_fiscal_id, client_address, client_email,
+       subtotal, tax_rate, tax_name, tax_amount, total,
+       currency, currency_symbol, document_name,
+       verifactu_hash, prev_hash, notes, irpf_rate, irpf_amount,
+       record_type, rectifies_invoice_id, rectification_type, rectification_mode, status)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).run(
+      invoice_number, null, original.client_id || null, series, year, seq, issueDate,
+      original.company_name, original.company_fiscal_id, original.company_address,
+      original.client_name, original.client_fiscal_id, original.client_address, original.client_email,
+      totals.subtotal, headerTaxRate, original.tax_name || cfg.tax_name || 'IVA', totals.taxAmount, totals.total,
+      original.currency || 'EUR', original.currency_symbol || '€', original.document_name || 'Factura',
+      verifactu_hash, prev_hash, notes, appliedIrpfRate, totals.irpfAmount,
+      'rectificativa', original.id, rectification_type, rectification_mode, 'emitida'
+    );
+    const invoiceId = result.lastInsertRowid;
+
+    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price, tax_rate, tax_amount) VALUES (?,?,?,?,?,?,?)');
+    for (const line of lines) {
+      const qty   = Number(line.quantity);
+      const price = Number(line.unit_price);
+      const rate  = Number(line.tax_rate) || 0;
+      const base  = Math.round(qty * price * 100) / 100;
+      const tax   = Math.round(base * rate / 100 * 100) / 100;
+      insItem.run(invoiceId, line.description, qty, price, base, rate, tax);
+    }
+
+    db.prepare("UPDATE invoices SET status='rectificada' WHERE id=?").run(original.id);
+    return { id: invoiceId, invoice_number, rectifies: original.invoice_number };
+  });
+  return run();
+}
+
 export function createInvoiceRoutes(db) {
   const api = new Hono();
   const views = new Hono();
@@ -237,13 +358,20 @@ export function createInvoiceRoutes(db) {
     } catch (e) { return c.json({ error: e.message }, 500); }
   });
 
-  // GET /api/erp/invoices/:id — single invoice JSON
+  // GET /api/erp/invoices/:id — single invoice JSON (+ enlaces de ciclo de vida)
   api.get('/:id', requirePerm('orders.read'), c => {
     try {
       const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(c.req.param('id'));
       if (!inv) return c.json({ error: 'No encontrada' }, 404);
       const items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id=? ORDER BY id').all(inv.id);
-      return c.json({ ...inv, items });
+      // Enlaces: registro de anulación (si anulada), la rectificativa que la rectifica
+      // (si rectificada) y la factura original (si esta es una rectificativa).
+      const anulacion = db.prepare('SELECT * FROM invoice_anulaciones WHERE invoice_id=? ORDER BY id DESC LIMIT 1').get(inv.id) || null;
+      const rectifiedBy = db.prepare('SELECT id, invoice_number FROM invoices WHERE rectifies_invoice_id=? ORDER BY id DESC LIMIT 1').get(inv.id) || null;
+      const rectifiesOriginal = inv.rectifies_invoice_id
+        ? (db.prepare('SELECT id, invoice_number FROM invoices WHERE id=?').get(inv.rectifies_invoice_id) || null)
+        : null;
+      return c.json({ ...inv, items, anulacion, rectifiedBy, rectifiesOriginal });
     } catch (e) { return c.json({ error: e.message }, 500); }
   });
 
@@ -289,6 +417,32 @@ export function createInvoiceRoutes(db) {
     }
   });
 
+  // POST /api/erp/invoices/:id/anular — anula una factura (asiento nuevo; original intacta)
+  api.post('/:id/anular', requirePerm('invoices.create'), validate(invoiceAnularSchema), c => {
+    try {
+      const { motivo } = c.get('validated');
+      const res = anularInvoice(db, parseInt(c.req.param('id')), motivo);
+      logActivity(db, c.get('session'), 'Anuló factura', 'invoice', res.invoice_id, `${res.invoice_number} — ${motivo}`);
+      return c.json(res);
+    } catch (e) {
+      const code = e.message === 'Factura no encontrada' ? 404 : 400;
+      return c.json({ error: e.message }, code);
+    }
+  });
+
+  // POST /api/erp/invoices/:id/rectificativa — crea factura rectificativa (serie R)
+  api.post('/:id/rectificativa', requirePerm('invoices.create'), validate(invoiceRectificativaSchema), c => {
+    try {
+      const data = c.get('validated');
+      const res = createRectificativa(db, { ...data, original_id: parseInt(c.req.param('id')) });
+      logActivity(db, c.get('session'), 'Creó rectificativa', 'invoice', res.id, `${res.invoice_number} (rectifica ${res.rectifies})`);
+      return c.json(res, 201);
+    } catch (e) {
+      const code = e.message === 'Factura original no encontrada' ? 404 : 400;
+      return c.json({ error: e.message }, code);
+    }
+  });
+
   // GET /admin/invoices — list view
   views.get('/', requirePerm('orders.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
@@ -319,6 +473,12 @@ export function createInvoiceRoutes(db) {
           const pedidoCell = r.order_id
             ? '<a href="/admin/orders/'+r.order_id+'">'+(r.order_ref||r.order_id)+'</a>'
             : '<span style="color:var(--muted)">—</span>';
+          // Acciones de ciclo de vida: solo una factura "emitida" se puede anular o rectificar.
+          let acts = '<a href="/admin/invoices/'+r.id+'" target="_blank" class="btn btn-secondary btn-sm">Ver</a>';
+          if (r.status === 'emitida') {
+            acts += ' <button class="btn btn-secondary btn-sm" onclick="anular('+r.id+',\\''+(r.invoice_number||'')+'\\')">Anular</button>'
+                  + ' <a href="/admin/invoices/'+r.id+'/rectificativa/new" class="btn btn-secondary btn-sm">Rectificar</a>';
+          }
           return \`<tr>
           <td><strong>\${r.invoice_number}</strong></td>
           <td>\${pedidoCell}</td>
@@ -326,8 +486,18 @@ export function createInvoiceRoutes(db) {
           <td style="color:var(--muted);font-size:.85rem">\${r.issue_date||'-'}</td>
           <td><strong>${sym}\${r.total?.toFixed(2)||'0.00'}</strong></td>
           <td><span class="badge \${stBadge[r.status]||''}"\>\${r.status}</span></td>
-          <td><a href="/admin/invoices/\${r.id}" target="_blank" class="btn btn-secondary btn-sm">Ver</a></td>
+          <td style="white-space:nowrap">\${acts}</td>
         </tr>\`}).join(''):'<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">Sin facturas</td></tr>';
+      }
+      async function anular(id, num){
+        const motivo = prompt('Motivo de anulación de la factura '+num+':');
+        if (motivo === null) return;                 // cancelado
+        if (!motivo.trim()){ toast('El motivo es obligatorio','err'); return; }
+        try {
+          await api('POST','/api/erp/invoices/'+id+'/anular',{ motivo: motivo.trim() });
+          toast('Factura '+num+' anulada');
+          loadInvoices();
+        } catch(e){ toast(e.message||'Error anulando','err'); }
       }
       loadInvoices();
       </script>`;
@@ -568,6 +738,269 @@ export function createInvoiceRoutes(db) {
     return c.html(adminLayout('Nueva factura', content, 'invoices', c.get('session')?.csrfToken || '', c));
   });
 
+  // GET /admin/invoices/:id/rectificativa/new — formulario de rectificativa
+  // precargado desde la original. (Va ANTES de '/:id' para no ser capturada por él.)
+  views.get('/:id/rectificativa/new', requirePerm('invoices.create'), c => {
+    const original = db.prepare('SELECT * FROM invoices WHERE id=?').get(c.req.param('id'));
+    if (!original) return c.text('Factura no encontrada', 404);
+    if (original.status !== 'emitida') {
+      return c.html(adminLayout('Rectificativa',
+        `<div class="ph"><h2>Rectificativa</h2><a href="/admin/invoices/${original.id}" class="btn btn-secondary">Volver</a></div>
+         <div class="card"><div class="card-body">Solo se puede rectificar una factura <strong>emitida</strong>. Esta está <strong>${original.status}</strong>.</div></div>`,
+        'invoices', c.get('session')?.csrfToken || '', c));
+    }
+    const items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id=? ORDER BY id').all(original.id);
+
+    const cfg = db.prepare('SELECT currency_symbol, country, rectificative_series FROM company_config WHERE id=1').get() || {};
+    const sym = cfg.currency_symbol || '€';
+    const country = (cfg.country || 'ES').toUpperCase();
+    const cc = getCountryConfig(country) || { tax_rates: '21,10,4', tax_default: 21 };
+    const rates = cc.tax_rates.split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+    const today = new Date().toISOString().slice(0, 10);
+    const rSeries = cfg.rectificative_series || 'R';
+
+    // Líneas precargadas desde la original (descripción, cantidad, precio, IVA por línea).
+    const seedLines = items.map(it => ({
+      description: it.description,
+      quantity: Number(it.quantity),
+      unit_price: Number(it.unit_price),
+      tax_rate: Number(it.tax_rate) || 0,
+    }));
+
+    const content = `
+      <div class="ph">
+        <h2>Rectificativa de ${original.invoice_number}</h2>
+        <a href="/admin/invoices/${original.id}" class="btn btn-secondary">Cancelar</a>
+      </div>
+
+      <div class="card" style="max-width:900px">
+        <div class="card-body">
+          <div style="background:#e0f2fe;color:#075985;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:1rem">
+            Rectifica a <strong>${original.invoice_number}</strong> · Cliente: <strong>${(original.client_name || 'Cliente general').replace(/</g,'&lt;')}</strong>.
+            Se emitirá en serie <strong>${rSeries}</strong> con numeración propia. Admite importes negativos (abono).
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Tipo de rectificativa *</label>
+              <select id="f-rtype" class="form-control">
+                <option value="R1">R1 · error fundado en derecho</option>
+                <option value="R2">R2 · concurso/impago (art.80.3)</option>
+                <option value="R3">R3 · impago (art.80.4)</option>
+                <option value="R4" selected>R4 · resto de causas</option>
+                <option value="R5">R5 · simplificada/ticket</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Modalidad *</label>
+              <select id="f-rmode" class="form-control">
+                <option value="I" selected>Por diferencias (I)</option>
+                <option value="S">Por sustitución (S)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Fecha emisión</label>
+              <input type="date" id="f-date" class="form-control" value="${today}">
+            </div>
+          </div>
+          <p style="font-size:12px;color:var(--muted);margin:-.25rem 0 .5rem">
+            <strong>Diferencias (I):</strong> indica solo el delta (usa importes negativos para un abono).
+            <strong>Sustitución (S):</strong> indica la factura corregida completa.
+          </p>
+
+          <hr style="margin:1.25rem 0;border:none;border-top:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+            <h3 style="font-size:.9rem;font-weight:600;margin:0">Líneas</h3>
+            <div style="display:flex;gap:.5rem">
+              <button class="btn btn-secondary btn-sm" onclick="negarTodo()" title="Invierte el signo de todas las líneas (abono total)">± Invertir signos</button>
+              <button class="btn btn-secondary btn-sm" onclick="addLine()">+ Añadir línea</button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Descripción</th>
+                  <th style="width:90px">Cant.</th>
+                  <th style="width:120px">P. unit.</th>
+                  <th style="width:100px;text-align:right">Subtotal</th>
+                  <th style="width:36px"></th>
+                </tr>
+              </thead>
+              <tbody id="lines-body"></tbody>
+              <tfoot id="totals-foot"></tfoot>
+            </table>
+          </div>
+
+          <div class="form-group" style="margin-top:1.25rem">
+            <label class="form-label">Notas (opcional)</label>
+            <textarea id="f-notes" class="form-control" rows="2"></textarea>
+          </div>
+
+          <div style="text-align:right;margin-top:1rem">
+            <button class="btn btn-primary" id="btn-emit" onclick="emitRectificativa()">Emitir rectificativa</button>
+          </div>
+        </div>
+      </div>
+
+      <script>
+      const SYM = '${sym}';
+      const RATES = ${JSON.stringify(rates)};
+      const SEED_LINES = ${JSON.stringify(seedLines)};
+      const IRPF_RATE = ${Number(original.irpf_rate) || 0};   // se mantiene el IRPF de la original
+      const ORIGINAL_ID = ${original.id};
+      const LINE_CELL = ${JSON.stringify(lineSearchCellHtml())};
+      let catalog = [];
+      let recalcTimer = null;
+
+      async function loadAll(){
+        try {
+          const prods = await api('GET','/api/erp/products').catch(()=>[]);
+          catalog = (prods || []).filter(p => p.status === 'active');
+        } catch(e){}
+        if (SEED_LINES.length) { for (const l of SEED_LINES) addLine(l); }
+        else addLine();
+        scheduleRecalc();
+      }
+
+      function addLine(seed){
+        const tbody = document.getElementById('lines-body');
+        const row = document.createElement('tr');
+        // Línea de rectificativa: admite cantidad y precio NEGATIVOS (abono) → sin min.
+        row.innerHTML =
+          LINE_CELL +
+          '<td><input type="number" class="form-control line-qty" step="0.01" value="1"></td>' +
+          '<td><input type="number" class="form-control line-price" step="0.01" value="0"></td>' +
+          '<td style="text-align:right;padding:.7rem 1rem"><span class="line-subtotal">' + SYM + '0.00</span></td>' +
+          '<td><button class="btn btn-danger btn-sm" onclick="this.closest(\\'tr\\').remove();scheduleRecalc()">✕</button></td>';
+        row.cells[0].insertAdjacentHTML('beforeend', '<input type="hidden" class="line-tax" value="21">');
+        tbody.appendChild(row);
+        if (seed) {
+          row.querySelector('.line-desc').value  = seed.description || '';
+          row.querySelector('.line-qty').value   = seed.quantity;
+          row.querySelector('.line-price').value = Number(seed.unit_price || 0).toFixed(2);
+          row.querySelector('.line-tax').value   = String(Number(seed.tax_rate) || 0);
+        }
+        row.querySelectorAll('.line-qty, .line-price').forEach(inp => inp.addEventListener('input', scheduleRecalc));
+        scheduleRecalc();
+      }
+
+      ${lineSearchScript()}
+
+      // Al elegir un producto del catálogo: rellena descripción, precio e IVA por banda.
+      function applyLinePick(row, p){
+        row.querySelector('.line-desc').value  = p.name;
+        row.querySelector('.line-price').value = Number(p.price || 0).toFixed(2);
+        row.querySelector('.line-tax').value   = String(Number(p.tax_rate) || 0);
+        scheduleRecalc();
+      }
+
+      function negarTodo(){
+        for (const r of document.querySelectorAll('#lines-body tr')) {
+          const q = r.querySelector('.line-qty');
+          q.value = String(-(parseFloat(q.value) || 0));
+        }
+        scheduleRecalc();
+      }
+
+      function scheduleRecalc(){
+        if (recalcTimer) clearTimeout(recalcTimer);
+        recalcTimer = setTimeout(doRecalc, 200);
+      }
+
+      // Cálculo de totales en cliente (idéntico al servidor) — soporta importes NEGATIVOS,
+      // por eso no usamos /compute-totals (su validación exige cantidad positiva).
+      function computeTotals(lines, irpfRate){
+        const r2 = n => Math.round(n * 100) / 100;
+        let subtotal = 0; const taxByRate = {};
+        for (const l of lines) {
+          const base = r2((Number(l.quantity)||0) * (Number(l.unit_price)||0));
+          const rate = Number(l.tax_rate) || 0;
+          const tax  = r2(base * rate / 100);
+          subtotal += base;
+          const k = String(rate);
+          if (!taxByRate[k]) taxByRate[k] = { rate, base: 0, amount: 0 };
+          taxByRate[k].base += base; taxByRate[k].amount += tax;
+        }
+        for (const k of Object.keys(taxByRate)) { taxByRate[k].base = r2(taxByRate[k].base); taxByRate[k].amount = r2(taxByRate[k].amount); }
+        subtotal = r2(subtotal);
+        const taxAmount  = r2(Object.values(taxByRate).reduce((s,t)=>s+t.amount,0));
+        const irpfAmount = r2(subtotal * (Number(irpfRate)||0) / 100);
+        const total = r2(subtotal + taxAmount - irpfAmount);
+        return { subtotal, taxByRate, taxAmount, irpfAmount, total };
+      }
+
+      function collectLines(){
+        const lines = [];
+        for (const r of document.querySelectorAll('#lines-body tr')) {
+          const desc  = r.querySelector('.line-desc').value || '_';
+          const qty   = parseFloat(r.querySelector('.line-qty').value)   || 0;
+          const price = parseFloat(r.querySelector('.line-price').value) || 0;
+          const rate  = parseFloat(r.querySelector('.line-tax').value)   || 0;
+          lines.push({ description: desc, quantity: qty, unit_price: price, tax_rate: rate });
+          r.querySelector('.line-subtotal').textContent = SYM + (qty * price).toFixed(2);
+        }
+        return lines;
+      }
+
+      function doRecalc(){
+        const t = computeTotals(collectLines(), IRPF_RATE);
+        renderTotals(t);
+      }
+
+      function renderTotals(t){
+        const labelTd = (txt,color) => '<td colspan="3" style="text-align:right;padding:.45rem 1rem'+(color?';color:'+color:'')+'">'+txt+'</td>';
+        const valTd   = (txt,color) => '<td style="text-align:right;padding:.45rem 1rem'+(color?';color:'+color:'')+'">'+txt+'</td><td></td>';
+        let html = '<tr><td colspan="3" style="text-align:right;font-weight:600;padding:.7rem 1rem">Base imponible</td>' +
+                   '<td style="text-align:right;padding:.7rem 1rem">'+SYM+t.subtotal.toFixed(2)+'</td><td></td></tr>';
+        const rs = Object.values(t.taxByRate || {});
+        if (!rs.length) html += '<tr>'+labelTd('IVA','var(--muted)')+valTd(SYM+'0.00','var(--muted)')+'</tr>';
+        else for (const x of rs) {
+          const lbl = (Number(x.rate) > 0 ? 'IVA '+x.rate+'%' : 'Exento (0%)') + ' (sobre '+SYM+Number(x.base).toFixed(2)+')';
+          html += '<tr>'+labelTd(lbl,'var(--muted)')+valTd(SYM+Number(x.amount).toFixed(2),'var(--muted)')+'</tr>';
+        }
+        if (Math.abs(t.irpfAmount) > 0) html += '<tr>'+labelTd('IRPF '+IRPF_RATE+'%','#e879f9')+valTd('−'+SYM+t.irpfAmount.toFixed(2),'#e879f9')+'</tr>';
+        html += '<tr><td colspan="3" style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">Total</td>' +
+                '<td style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">'+SYM+t.total.toFixed(2)+'</td><td></td></tr>';
+        document.getElementById('totals-foot').innerHTML = html;
+      }
+
+      async function emitRectificativa(){
+        const rectification_type = document.getElementById('f-rtype').value;
+        const rectification_mode = document.getElementById('f-rmode').value;
+        const issue_date = document.getElementById('f-date').value || undefined;
+        const notes = document.getElementById('f-notes').value || '';
+        const lines = [];
+        for (const r of document.querySelectorAll('#lines-body tr')) {
+          const desc  = r.querySelector('.line-desc').value.trim();
+          const qty   = parseFloat(r.querySelector('.line-qty').value);
+          const price = parseFloat(r.querySelector('.line-price').value);
+          const rate  = parseFloat(r.querySelector('.line-tax').value) || 0;
+          if (!desc) { toast('Falta descripción en una línea','err'); return; }
+          if (!Number.isFinite(qty) || qty === 0) { toast('Cantidad no puede ser 0','err'); return; }
+          if (!Number.isFinite(price)) { toast('Precio inválido','err'); return; }
+          lines.push({ description: desc, quantity: qty, unit_price: price, tax_rate: rate });
+        }
+        if (!lines.length) { toast('Añade al menos una línea','err'); return; }
+        const btn = document.getElementById('btn-emit');
+        btn.disabled = true;
+        try {
+          const res = await api('POST','/api/erp/invoices/'+ORIGINAL_ID+'/rectificativa',
+            { rectification_type, rectification_mode, lines, issue_date, notes });
+          toast('Rectificativa ' + res.invoice_number + ' emitida');
+          window.location.href = '/admin/invoices/' + res.id;
+        } catch(e) {
+          toast(e.message || 'Error emitiendo rectificativa','err');
+          btn.disabled = false;
+        }
+      }
+
+      loadAll();
+      </script>`;
+    return c.html(adminLayout('Rectificativa', content, 'invoices', c.get('session')?.csrfToken || '', c));
+  });
+
   // GET /admin/invoices/:id — printable invoice
   views.get('/:id', requirePerm('orders.read'), c => {
     try {
@@ -575,6 +1008,16 @@ export function createInvoiceRoutes(db) {
       if (!inv) return c.text('Factura no encontrada', 404);
       const items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id=? ORDER BY id').all(inv.id);
       const sym = inv.currency_symbol || '€';
+
+      // Enlaces de ciclo de vida para el banner de estado.
+      const anulacion = db.prepare('SELECT * FROM invoice_anulaciones WHERE invoice_id=? ORDER BY id DESC LIMIT 1').get(inv.id) || null;
+      const rectifiedBy = db.prepare('SELECT id, invoice_number FROM invoices WHERE rectifies_invoice_id=? ORDER BY id DESC LIMIT 1').get(inv.id) || null;
+      const rectifiesOriginal = inv.rectifies_invoice_id
+        ? (db.prepare('SELECT id, invoice_number FROM invoices WHERE id=?').get(inv.rectifies_invoice_id) || null)
+        : null;
+      const csrfToken = c.get('session')?.csrfToken || '';
+      const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const rTypeLabels = { R1: 'R1 · error fundado en derecho', R2: 'R2 · concurso/impago (art.80.3)', R3: 'R3 · impago (art.80.4)', R4: 'R4 · resto de causas', R5: 'R5 · simplificada/ticket' };
 
       const rows = items.map(it => `
         <tr>
@@ -611,6 +1054,11 @@ export function createInvoiceRoutes(db) {
   .actions{display:flex;gap:8px}
   .btn-primary{padding:8px 16px;background:#1e293b;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;text-decoration:none}
   .btn-secondary{padding:8px 16px;background:#fff;color:#1e293b;border:1px solid #cbd5e1;border-radius:6px;cursor:pointer;font-size:13px;text-decoration:none}
+  .lifecycle{margin:0 0 24px;padding:12px 16px;border-radius:6px;font-size:13px}
+  .lifecycle a{color:inherit;font-weight:600}
+  .lc-anulada{background:#fee2e2;color:#991b1b}
+  .lc-rectificada{background:#fef3c7;color:#92400e}
+  .lc-rectificativa{background:#e0f2fe;color:#075985}
   @media print{body{padding:20px}.hash{break-inside:avoid}.actions{display:none}.status-pill{display:none}}
 </style>
 </head>
@@ -623,9 +1071,36 @@ export function createInvoiceRoutes(db) {
   </div>
   <div class="actions">
     <a href="/admin/invoices" class="btn-secondary">← Volver al listado</a>
+    ${inv.status === 'emitida' ? `<button onclick="anularFactura()" class="btn-secondary">Anular</button>
+    <a href="/admin/invoices/${inv.id}/rectificativa/new" class="btn-secondary">Crear rectificativa</a>` : ''}
     <button onclick="window.print()" class="btn-primary">Imprimir</button>
   </div>
 </div>
+
+${(() => {
+  // Banner de ciclo de vida: explica el estado y enlaza los documentos relacionados.
+  if (inv.status === 'anulada' && anulacion) {
+    return `<div class="lifecycle lc-anulada">
+      <strong>Factura anulada</strong> el ${esc(anulacion.issue_date)}.
+      Motivo: ${esc(anulacion.motivo)}.
+      <div style="font-size:11px;color:#94a3b8;margin-top:4px;font-family:monospace;word-break:break-all">Asiento de anulación · hash ${esc(anulacion.verifactu_hash)}</div>
+    </div>`;
+  }
+  if (inv.status === 'rectificada' && rectifiedBy) {
+    return `<div class="lifecycle lc-rectificada">
+      <strong>Factura rectificada</strong> por
+      <a href="/admin/invoices/${rectifiedBy.id}">${esc(rectifiedBy.invoice_number)}</a>.
+    </div>`;
+  }
+  if (inv.record_type === 'rectificativa' && rectifiesOriginal) {
+    return `<div class="lifecycle lc-rectificativa">
+      <strong>Factura rectificativa</strong> ${esc(rTypeLabels[inv.rectification_type] || inv.rectification_type || '')}
+      · ${inv.rectification_mode === 'S' ? 'por sustitución' : 'por diferencias'}.
+      Rectifica a <a href="/admin/invoices/${rectifiesOriginal.id}">${esc(rectifiesOriginal.invoice_number)}</a>.
+    </div>`;
+  }
+  return '';
+})()}
 
 <div class="cols">
   <div>
@@ -700,6 +1175,24 @@ ${inv.notes ? `<div style="margin-top:16px;color:#64748b">${inv.notes}</div>` : 
   <strong>Hash Verifactu:</strong> ${inv.verifactu_hash}<br>
   <strong>Hash anterior:</strong> ${inv.prev_hash || '(primera factura)'}
 </div>
+<script>
+  const CSRF = ${JSON.stringify(csrfToken)};
+  async function anularFactura(){
+    const motivo = prompt('Motivo de anulación de la factura ${inv.invoice_number}:');
+    if (motivo === null) return;
+    if (!motivo.trim()){ alert('El motivo es obligatorio'); return; }
+    try {
+      const r = await fetch('/api/erp/invoices/${inv.id}/anular', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-csrf-token':CSRF},
+        body: JSON.stringify({ motivo: motivo.trim() })
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      location.reload();
+    } catch(e){ alert(e.message || 'Error anulando la factura'); }
+  }
+</script>
 </body>
 </html>`;
       return c.html(html);

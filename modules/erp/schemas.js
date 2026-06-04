@@ -128,6 +128,30 @@ export const invoiceComputeSchema = z.object({
   irpf_rate: z.coerce.number().min(0).max(50).optional().default(0),
 });
 
+// Ciclo de vida — ANULAR: solo requiere un motivo. La original no se toca salvo el status.
+export const invoiceAnularSchema = z.object({
+  motivo: z.string().trim().min(3, 'Indica el motivo de la anulación').max(500),
+});
+
+// Ciclo de vida — RECTIFICATIVA: factura nueva (serie propia) que referencia a la
+// original. ADMITE IMPORTES NEGATIVOS (abono): a diferencia de la factura ordinaria,
+// quantity y unit_price pueden ser negativos para devoluciones/anulación de operación.
+const rectificativeLineSchema = z.object({
+  description: str(500),
+  quantity:    z.coerce.number().gte(-1_000_000).lte(1_000_000).refine(n => n !== 0, 'La cantidad no puede ser 0'),
+  unit_price:  z.coerce.number().gte(-1_000_000).lte(1_000_000),
+  tax_rate:    z.coerce.number().min(0).max(50).optional().default(0),
+});
+
+export const invoiceRectificativaSchema = z.object({
+  rectification_type: z.enum(['R1', 'R2', 'R3', 'R4', 'R5']),   // tipo legal R1–R5
+  rectification_mode: z.enum(['S', 'I']),                        // S sustitución | I diferencias
+  lines:      z.array(rectificativeLineSchema).min(1, 'Al menos una línea requerida'),
+  issue_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  notes:      strOpt(2000),
+  irpf_rate:  z.coerce.number().min(0).max(50).optional().default(0),
+});
+
 // ── Discounts ──────────────────────────────────────────────────
 export const discountCodeSchema = z.object({
   code: z.string().trim().min(3).max(50).regex(/^[A-Z0-9_-]+$/i),

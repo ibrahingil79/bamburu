@@ -631,6 +631,39 @@ export function runMigrations(db) {
   addCol(db, 'invoices',      'irpf_rate',   'REAL NOT NULL DEFAULT 0');
   addCol(db, 'invoices',      'irpf_amount', 'REAL NOT NULL DEFAULT 0');
 
+  // ── Ciclo de vida de la factura (ES): ANULAR y RECTIFICAR ──────────────────
+  // Regla de oro fiscal: una factura emitida NUNCA se edita ni se borra (rompería
+  // la cadena de hash). Anular y rectificar son ASIENTOS NUEVOS enlazados en la
+  // cadena; la original solo cambia su `status` (campo FUERA del hash, así que
+  // marcarla no altera su verifactu_hash ni rompe la cadena).
+  //
+  // Columnas aditivas en invoices para la rectificativa (es una factura real con
+  // numeración propia que referencia a la original):
+  addCol(db, 'invoices', 'record_type',          "TEXT NOT NULL DEFAULT 'alta'"); // 'alta' | 'rectificativa'
+  addCol(db, 'invoices', 'rectifies_invoice_id', 'INTEGER');                       // FK a la factura original
+  addCol(db, 'invoices', 'rectification_type',   "TEXT DEFAULT ''");               // R1..R5
+  addCol(db, 'invoices', 'rectification_mode',   "TEXT DEFAULT ''");               // 'S' sustitución | 'I' diferencias
+
+  // Serie propia para rectificativas (estándar legal ES). No mete huecos en la
+  // numeración F de facturas ordinarias; tiene su propia cadena de hash.
+  addCol(db, 'company_config', 'rectificative_series', "TEXT DEFAULT 'R'");
+
+  // Registros de ANULACIÓN: asiento nuevo hash-enlazado al hash de la factura
+  // original (prev_hash = verifactu_hash de la original). La original se marca
+  // 'anulada' pero su fila queda intacta. NO consume número de factura.
+  db.exec(`CREATE TABLE IF NOT EXISTS invoice_anulaciones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_id INTEGER NOT NULL,
+    invoice_number TEXT NOT NULL,
+    motivo TEXT NOT NULL,
+    issue_date DATE NOT NULL,
+    company_fiscal_id TEXT DEFAULT '',
+    prev_hash TEXT DEFAULT '',
+    verifactu_hash TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+  )`);
+
   db.exec(`CREATE TABLE IF NOT EXISTS invoice_sequences (
     series TEXT NOT NULL,
     year INTEGER NOT NULL,
