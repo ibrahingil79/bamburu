@@ -2,10 +2,26 @@ import { Hono } from 'hono';
 import { createHash } from 'crypto';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
-import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema } from '../schemas.js';
+import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema, invoicePaymentSchema } from '../schemas.js';
 import { getCountryConfig } from '../../../core/control-db.js';
 import { adminLayout } from '../layout.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
+import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
+import { paymentsSum, invoiceCobro, cobroState, isCobrable, ESTADO_LABEL } from '../cobros.js';
+
+// T4 Paso 1 — fecha de vencimiento de una factura = fecha de emisión + plazo de pago
+// del cliente (días). Se guarda en la factura al emitir; cada factura conserva el suyo.
+function computeDueDate(db, issueDate, clientId) {
+  let term = 0;
+  if (clientId) {
+    const cl = db.prepare('SELECT payment_term_days FROM clients WHERE id=?').get(clientId);
+    term = (cl && Number(cl.payment_term_days)) || 0;
+  }
+  if (!term) return issueDate;
+  const d = new Date(issueDate + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + term);
+  return d.toISOString().slice(0, 10);
+}
 
 // A2: helper puro de cálculo de totales (IVA múltiple por línea + IRPF global).
 // Devuelve subtotal, agrupado por tasa, IVA total, base de IRPF, importe IRPF
@@ -126,21 +142,22 @@ export function generateInvoice(db, orderId) {
   };
   inv.verifactu_hash = calcHash(inv);
 
+  const due_date = computeDueDate(db, issue_date, order.client_id || null);
   const result = db.prepare(`INSERT INTO invoices
     (invoice_number,order_id,client_id,series,year,sequence,issue_date,
      company_name,company_fiscal_id,company_address,
      client_name,client_fiscal_id,client_address,client_email,
      subtotal,tax_rate,tax_name,tax_amount,total,
      currency,currency_symbol,document_name,
-     verifactu_hash,prev_hash)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+     verifactu_hash,prev_hash,due_date)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     inv.invoice_number, inv.order_id, inv.client_id, inv.series, inv.year, inv.sequence, inv.issue_date,
     inv.company_name, inv.company_fiscal_id, inv.company_address,
     inv.client_name, inv.client_fiscal_id, inv.client_address, inv.client_email,
     inv.subtotal, inv.tax_rate, inv.tax_name, inv.tax_amount, inv.total,
     inv.currency, inv.currency_symbol, inv.document_name,
-    inv.verifactu_hash, inv.prev_hash
+    inv.verifactu_hash, inv.prev_hash, due_date
   );
   const invoiceId = result.lastInsertRowid;
 
@@ -187,6 +204,7 @@ export function createInvoice(db, invoiceData) {
       prev_hash,
     });
 
+    const due_date = computeDueDate(db, issueDate, client_id);
     const result = db.prepare(`INSERT INTO invoices
       (invoice_number, order_id, client_id, series, year, sequence, issue_date,
        company_name, company_fiscal_id, company_address,
@@ -194,8 +212,8 @@ export function createInvoice(db, invoiceData) {
        subtotal, tax_rate, tax_name, tax_amount, total,
        currency, currency_symbol, document_name,
        verifactu_hash, prev_hash, notes,
-       irpf_rate, irpf_amount)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       irpf_rate, irpf_amount, due_date)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       invoice_number, null, client_id,
       series, year, seq, issueDate,
@@ -204,7 +222,7 @@ export function createInvoice(db, invoiceData) {
       totals.subtotal, headerTaxRate, cfg.tax_name || 'IVA', totals.taxAmount, totals.total,
       cfg.currency || 'EUR', cfg.currency_symbol || '€', cfg.document_name || 'Factura',
       verifactu_hash, prev_hash, notes,
-      appliedIrpfRate, totals.irpfAmount
+      appliedIrpfRate, totals.irpfAmount, due_date
     );
     const invoiceId = result.lastInsertRowid;
 
@@ -308,6 +326,7 @@ export function createRectificativa(db, data) {
       prev_hash,
     });
 
+    const due_date = computeDueDate(db, issueDate, original.client_id || null);
     const result = db.prepare(`INSERT INTO invoices
       (invoice_number, order_id, client_id, series, year, sequence, issue_date,
        company_name, company_fiscal_id, company_address,
@@ -315,8 +334,8 @@ export function createRectificativa(db, data) {
        subtotal, tax_rate, tax_name, tax_amount, total,
        currency, currency_symbol, document_name,
        verifactu_hash, prev_hash, notes, irpf_rate, irpf_amount,
-       record_type, rectifies_invoice_id, rectification_type, rectification_mode, status)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       record_type, rectifies_invoice_id, rectification_type, rectification_mode, status, due_date)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       invoice_number, null, original.client_id || null, series, year, seq, issueDate,
       original.company_name, original.company_fiscal_id, original.company_address,
@@ -324,7 +343,7 @@ export function createRectificativa(db, data) {
       totals.subtotal, headerTaxRate, original.tax_name || cfg.tax_name || 'IVA', totals.taxAmount, totals.total,
       original.currency || 'EUR', original.currency_symbol || '€', original.document_name || 'Factura',
       verifactu_hash, prev_hash, notes, appliedIrpfRate, totals.irpfAmount,
-      'rectificativa', original.id, rectification_type, rectification_mode, 'emitida'
+      'rectificativa', original.id, rectification_type, rectification_mode, 'emitida', due_date
     );
     const invoiceId = result.lastInsertRowid;
 
@@ -348,12 +367,23 @@ export function createInvoiceRoutes(db) {
   const api = new Hono();
   const views = new Hono();
 
-  // GET /api/erp/invoices — list
+  // GET /api/erp/invoices — list (+ estado de cobro en vivo por factura)
   api.get('/', requirePerm('orders.read'), c => {
     try {
       // Bug fix: la columna real en sales_orders es order_number, no reference.
       // Antes de A1 nunca había facturas en BD así que el error 500 no se notaba.
-      const rows = db.prepare(`SELECT i.*, o.order_number as order_ref FROM invoices i LEFT JOIN sales_orders o ON o.id=i.order_id ORDER BY i.created_at DESC LIMIT 200`).all();
+      // cobrado se suma con subconsulta (una sola query) y el estado se deriva en vivo.
+      const rows = db.prepare(`SELECT i.*, o.order_number as order_ref,
+          (SELECT COALESCE(SUM(p.amount),0) FROM invoice_payments p WHERE p.invoice_id=i.id) AS cobrado
+        FROM invoices i LEFT JOIN sales_orders o ON o.id=i.order_id ORDER BY i.created_at DESC LIMIT 200`).all();
+      const today = new Date().toISOString().slice(0, 10);
+      for (const r of rows) {
+        const st = cobroState(r, r.cobrado, today);
+        r.cobrado = st.cobrado; r.pendiente = st.pendiente;
+        r.cobro_estado = st.estado; r.cobro_estado_label = ESTADO_LABEL[st.estado] || st.estado;
+        r.dias_vencida = st.dias_vencida;
+        r.cobrable = isCobrable(db, r);   // gate del botón/modal de cobro en el listado
+      }
       return c.json(rows);
     } catch (e) { return c.json({ error: e.message }, 500); }
   });
@@ -371,7 +401,11 @@ export function createInvoiceRoutes(db) {
       const rectifiesOriginal = inv.rectifies_invoice_id
         ? (db.prepare('SELECT id, invoice_number FROM invoices WHERE id=?').get(inv.rectifies_invoice_id) || null)
         : null;
-      return c.json({ ...inv, items, anulacion, rectifiedBy, rectifiesOriginal });
+      // Cobros registrados + estado de cobro en vivo + si admite cobro.
+      const payments = db.prepare('SELECT * FROM invoice_payments WHERE invoice_id=? ORDER BY paid_date, id').all(inv.id);
+      const cobro = invoiceCobro(db, inv, new Date().toISOString().slice(0, 10));
+      const cobrable = isCobrable(db, inv);
+      return c.json({ ...inv, items, anulacion, rectifiedBy, rectifiesOriginal, payments, cobro, cobrable });
     } catch (e) { return c.json({ error: e.message }, 500); }
   });
 
@@ -443,6 +477,24 @@ export function createInvoiceRoutes(db) {
     }
   });
 
+  // POST /api/erp/invoices/:id/payments — registrar un cobro (total o parcial)
+  api.post('/:id/payments', requirePerm('invoices.create'), validate(invoicePaymentSchema), c => {
+    try {
+      const id = parseInt(c.req.param('id'));
+      const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(id);
+      if (!inv) return c.json({ error: 'Factura no encontrada' }, 404);
+      // Protección real (no solo ocultar el botón): solo facturas vivas admiten cobro.
+      // No cobrable = anulada, abono (total<0) o sustituida por una rectificativa (S).
+      if (!isCobrable(db, inv)) return c.json({ error: 'Esta factura no admite cobro (anulada, abono o sustituida por una rectificativa)' }, 400);
+      const { amount, paid_date, payment_method, note } = c.get('validated');
+      const today = new Date().toISOString().slice(0, 10);
+      const res = db.prepare('INSERT INTO invoice_payments (invoice_id, amount, paid_date, payment_method, note) VALUES (?,?,?,?,?)')
+        .run(id, amount, paid_date || today, payment_method || '', note || '');
+      logActivity(db, c.get('session'), 'Registró cobro', 'invoice', id, `${inv.invoice_number} · ${amount}`);
+      return c.json({ id: res.lastInsertRowid, cobro: invoiceCobro(db, inv, today) }, 201);
+    } catch (e) { return c.json({ error: e.message }, 400); }
+  });
+
   // GET /admin/invoices — list view
   views.get('/', requirePerm('orders.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
@@ -454,11 +506,16 @@ export function createInvoiceRoutes(db) {
       <div class="card">
         <div class="card-head"><h3>Todas las facturas</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="filterTable()"></div>
         <div class="table-wrap"><table>
-          <thead><tr><th>Número</th><th>Pedido</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Estado</th><th></th></tr></thead>
+          <thead><tr><th>Número</th><th>Pedido</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Pendiente</th><th>Cobro</th><th>Estado</th><th></th></tr></thead>
           <tbody id="invBody"></tbody>
         </table></div>
       </div>
+
+      <!-- Gestión de cobro (solo en el panel, nunca en el documento/PDF de la factura). -->
+      ${cobroModalHtml()}
       <script>
+      ${cobroModalScript(sym)}
+      window.cobroOnSaved = function(id){ loadInvoices(); };   // refresca la tabla tras un cobro
       let rows=[];
       async function loadInvoices(){
         rows=await api('GET','/api/erp/invoices').catch(()=>[]);
@@ -468,6 +525,7 @@ export function createInvoiceRoutes(db) {
         const q=document.getElementById('searchBox').value.toLowerCase();
         const f=q?rows.filter(r=>r.invoice_number.toLowerCase().includes(q)||(r.client_name||'').toLowerCase().includes(q)):rows;
         const stBadge={emitida:'b-green',rectificada:'b-yellow',anulada:'b-red'};
+        const cobroBadge={pendiente:'b-yellow',parcial:'b-blue',cobrada:'b-green',vencida:'b-red',abono:'b-gray'};
         document.getElementById('invBody').innerHTML=f.length?f.map(r=>{
           // Facturas sin pedido (A1/A2 directas): order_id = NULL → mostrar "—" sin enlace roto.
           const pedidoCell = r.order_id
@@ -475,19 +533,32 @@ export function createInvoiceRoutes(db) {
             : '<span style="color:var(--muted)">—</span>';
           // Acciones de ciclo de vida: solo una factura "emitida" se puede anular o rectificar.
           let acts = '<a href="/admin/invoices/'+r.id+'" target="_blank" class="btn btn-secondary btn-sm">Ver</a>';
+          // Cobro: solo facturas vivas (no anulada, no abono, no sustituida) — gestión en el panel.
+          if (r.cobrable) {
+            acts += ' <button class="btn btn-secondary btn-sm" onclick="openCobros('+r.id+')">Cobros</button>';
+          }
           if (r.status === 'emitida') {
             acts += ' <button class="btn btn-secondary btn-sm" onclick="anular('+r.id+',\\''+(r.invoice_number||'')+'\\')">Anular</button>'
                   + ' <a href="/admin/invoices/'+r.id+'/rectificativa/new" class="btn btn-secondary btn-sm">Rectificar</a>';
           }
+          // Cobro: para anuladas no aplica (no son deuda); para el resto, pendiente + badge en vivo.
+          const cobroCell = (r.status==='anulada')
+            ? '<span style="color:var(--muted)">—</span>'
+            : '<span class="badge '+(cobroBadge[r.cobro_estado]||'')+'">'+(r.cobro_estado_label||'')+(r.cobro_estado==='vencida'&&r.dias_vencida?' '+r.dias_vencida+'d':'')+'</span>';
+          const pendienteCell = (r.status==='anulada')
+            ? '<span style="color:var(--muted)">—</span>'
+            : '${sym}'+Number(r.pendiente||0).toFixed(2);
           return \`<tr>
           <td><strong>\${r.invoice_number}</strong></td>
           <td>\${pedidoCell}</td>
           <td>\${r.client_name||'-'}</td>
           <td style="color:var(--muted);font-size:.85rem">\${r.issue_date||'-'}</td>
           <td><strong>${sym}\${r.total?.toFixed(2)||'0.00'}</strong></td>
+          <td>\${pendienteCell}</td>
+          <td>\${cobroCell}</td>
           <td><span class="badge \${stBadge[r.status]||''}"\>\${r.status}</span></td>
           <td style="white-space:nowrap">\${acts}</td>
-        </tr>\`}).join(''):'<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">Sin facturas</td></tr>';
+        </tr>\`}).join(''):'<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--muted)">Sin facturas</td></tr>';
       }
       async function anular(id, num){
         const motivo = prompt('Motivo de anulación de la factura '+num+':');
@@ -499,6 +570,7 @@ export function createInvoiceRoutes(db) {
           loadInvoices();
         } catch(e){ toast(e.message||'Error anulando','err'); }
       }
+
       loadInvoices();
       </script>`;
     return c.html(adminLayout('Facturas', content, 'invoices', c.get('session')?.csrfToken || '', c));

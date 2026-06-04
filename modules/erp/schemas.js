@@ -152,6 +152,15 @@ export const invoiceRectificativaSchema = z.object({
   irpf_rate:  z.coerce.number().min(0).max(50).optional().default(0),
 });
 
+// T4 Paso 1 — registrar un cobro de una factura (total o parcial). El importe es
+// positivo (dinero recibido); el estado de cobro se calcula en vivo, no se guarda.
+export const invoicePaymentSchema = z.object({
+  amount:         z.coerce.number().positive('El importe debe ser mayor que 0').max(1_000_000),
+  paid_date:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  payment_method: z.string().trim().max(40).optional().default(''),
+  note:           strOpt(500),
+});
+
 // ── Discounts ──────────────────────────────────────────────────
 export const discountCodeSchema = z.object({
   code: z.string().trim().min(3).max(50).regex(/^[A-Z0-9_-]+$/i),

@@ -31,6 +31,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     refunds:          'orders.edit',
     discounts:        'discounts.read',
     invoices:         'invoices.read',
+    cobros:           'invoices.read',
     inventory:        'inventory.read',
     suppliers:        'suppliers.read',
     purchases:        'purchases.read',
@@ -73,6 +74,9 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       { href: '/admin/clients', label: 'Clientes', key: 'clients', icon: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' },
       { href: '/admin/clients/groups', label: 'Grupos', key: 'client-groups', icon: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>' },
       { label: 'CRM', key: 'crm', disabled: true, icon: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="10" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/>' },
+    ]},
+    { section: 'Cobros', items: [
+      { href: '/admin/cobros', label: 'Cobros', key: 'cobros', icon: '<rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>' },
     ]},
     { section: 'Inventario', items: [
       { href: '/admin/purchases', label: 'Compras', key: 'purchases', icon: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>' },

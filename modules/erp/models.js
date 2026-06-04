@@ -664,6 +664,39 @@ export function runMigrations(db) {
     FOREIGN KEY (invoice_id) REFERENCES invoices(id)
   )`);
 
+  // ── T4 Paso 1: motor de cobros (estado de cobro de la factura) ─────────────
+  // Cobros (totales o parciales) de una factura. Una factura puede tener varios.
+  // El ESTADO de cobro NO se guarda: se calcula siempre en vivo (modules/erp/cobros.js)
+  // desde la suma de cobros y la fecha de vencimiento, para que nunca quede viejo.
+  db.exec(`CREATE TABLE IF NOT EXISTS invoice_payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_id INTEGER NOT NULL,
+    amount REAL NOT NULL,
+    paid_date DATE NOT NULL,
+    payment_method TEXT DEFAULT '',
+    note TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_invoice_payments_invoice ON invoice_payments(invoice_id)`);
+
+  // Fecha de vencimiento GUARDADA en la factura (no calculada al vuelo): el plazo del
+  // cliente puede cambiar y cada factura debe conservar el suyo. Al emitir se fija
+  // = issue_date + payment_term_days del cliente. due_date NO entra en el hash
+  // (calcHash usa number|issue_date|fiscal_ids|total|prev_hash) → cadena intacta.
+  addCol(db, 'invoices', 'due_date', 'DATE');
+  const dueMigKey = 'migration_invoices_due_date_2026_v1';
+  if (!db.prepare('SELECT value FROM settings WHERE key=?').get(dueMigKey)) {
+    // Backfill una vez: facturas existentes → issue_date + plazo ACTUAL del cliente,
+    // o issue_date si no hay cliente/plazo. Aditivo; ninguna factura se borra.
+    db.prepare(`UPDATE invoices SET due_date = COALESCE(
+        (SELECT date(invoices.issue_date, '+' || COALESCE(c.payment_term_days,0) || ' days')
+           FROM clients c WHERE c.id = invoices.client_id),
+        invoices.issue_date)
+      WHERE due_date IS NULL OR due_date = ''`).run();
+    db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(dueMigKey, 'done');
+  }
+
   db.exec(`CREATE TABLE IF NOT EXISTS invoice_sequences (
     series TEXT NOT NULL,
     year INTEGER NOT NULL,

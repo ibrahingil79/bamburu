@@ -20,6 +20,7 @@ import { createSupplierRoutes } from './suppliers.js';
 import { createPurchaseRoutes } from './purchases.js';
 import { createFeedbackRoutes } from './feedback.js';
 import { createInvoiceRoutes } from './invoices.js';
+import { createCobrosRoutes } from './cobros.js';
 import { createSecurityRoutes } from './security.js';
 
 export function mountRoutes(app, db) {
@@ -50,6 +51,7 @@ export function mountRoutes(app, db) {
   const { api: purchaseApi, views: purchaseViews } = createPurchaseRoutes(db);
   const { api: feedbackApi, views: feedbackViews } = createFeedbackRoutes(db);
   const { api: invoiceApi, views: invoiceViews } = createInvoiceRoutes(db);
+  const { api: cobrosApi, views: cobrosViews } = createCobrosRoutes(db);
 
   // ── Protected admin views ──────────────────────────────────────
   const admin = new Hono();
@@ -77,6 +79,7 @@ export function mountRoutes(app, db) {
   admin.route('/purchases', purchaseViews);
   admin.route('/feedback', feedbackViews);
   admin.route('/invoices', invoiceViews);
+  admin.route('/cobros', cobrosViews);
   app.route('/admin', admin);
 
   // ── Protected API ──────────────────────────────────────────────
@@ -99,5 +102,6 @@ export function mountRoutes(app, db) {
   apiApp.route('/purchases', purchaseApi);
   apiApp.route('/feedback', feedbackApi);
   apiApp.route('/invoices', invoiceApi);
+  apiApp.route('/cobros', cobrosApi);
   app.route('/api/erp', apiApp);
 }

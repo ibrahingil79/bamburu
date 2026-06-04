@@ -130,6 +130,18 @@ cambia su `status` (campo fuera del hash):
 Pendiente aparte (Verifactu, Pilar 4): QR + leyenda VERI*FACTU y envío a la AEAT. El ciclo de vida local
 (documentos + estados + enlace en la cadena de hash) ya está construido.
 
+### Cobros / pendiente de pago (HECHO 2026-06-04, T4 Paso 1)
+
+El estado de cobro de una factura **nunca se guarda**: se calcula siempre en vivo (`modules/erp/cobros.js`)
+desde los cobros (`invoice_payments`, totales o parciales) y la fecha de vencimiento (`invoices.due_date`,
+guardada al emitir = emisión + plazo del cliente). Estado = pendiente / cobrada en parte / cobrada / vencida
+(+ días vencida y tramo 0–30/30–60/+60). **Qué cuenta como deuda del cliente:** anulada no; rectificada por
+**sustitución** no (la cobra su rectificativa), por **diferencias** sí; abono (negativo) resta. El registro de
+cobro tiene **un único punto de escritura** (`POST /api/erp/invoices/:id/payments`, guard `isCobrable`) y se
+usa desde tres sitios (factura, sección Cobros, ficha de cliente) con un modal compartido. **El PDF/documento
+de la factura no incluye nada de cobros** (es control interno, no documento legal). Pendiente (Paso 2): perfiles
+de cobro, próxima acción y voz de DISA sobre cobros.
+
 ---
 
 ## 5. Diferenciación y disciplina de construcción

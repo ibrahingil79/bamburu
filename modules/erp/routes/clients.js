@@ -4,6 +4,8 @@ import { logActivity, requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { escHtml } from '../../../core/escape.js';
 import { clientSchema, clientGroupSchema } from '../schemas.js';
+import { clientDebt, isCobrable } from '../cobros.js';
+import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
 
 // Comprobación reutilizable de NIF duplicado (regla de integridad — sin duplicados).
 // Devuelve el cliente ACTIVO en conflicto (otro id con el mismo fiscal_id normalizado)
@@ -84,6 +86,20 @@ export function createClientRoutes(db, cfg = {}) {
   api.get('/:id/orders', requirePerm('clients.read'), c => {
     try {
       return c.json(db.prepare('SELECT * FROM sales_orders WHERE client_id=? ORDER BY id DESC').all(c.req.param('id')));
+    } catch(e) { return c.json({error:e.message},500); }
+  });
+
+  // T4 Paso 1 — facturas del cliente con su estado de cobro en vivo + total que debe
+  // y deuda más antigua. La regla de qué cuenta como deuda (anuladas/rectificativas)
+  // vive en cobros.js (clientDebt). Es el dato nuclear de la ficha del cliente.
+  api.get('/:id/invoices', requirePerm('clients.read'), c => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const debt = clientDebt(db, c.req.param('id'), today);
+      // Marca cada factura con el MISMO flag que usa el guard del backend (isCobrable),
+      // para que el botón "Registrar cobro" de la ficha no pueda divergir de la regla.
+      debt.invoices = debt.invoices.map(inv => ({ ...inv, cobrable: isCobrable(db, inv) }));
+      return c.json(debt);
     } catch(e) { return c.json({error:e.message},500); }
   });
 
@@ -269,7 +285,13 @@ export function createClientRoutes(db, cfg = {}) {
         </div>
       </div>
 
+      ${cobroModalHtml()}
       <script>
+      ${cobroModalScript(sym)}
+      let currentDetailClientId=null;   // cliente abierto en la ficha (para refrescar tras un cobro)
+      // Punto de extensión del modal compartido: tras un cobro, refresca la ficha del cliente
+      // (su "Te debe X €", deuda más antigua y la tabla de facturas).
+      window.cobroOnSaved = function(id){ if(currentDetailClientId) viewDetail(currentDetailClientId); };
       let currentClient=null;   // cliente en edición (conserva accepts_newsletter sin tocar la API)
       function openNewClient(){
         currentClient=null;
@@ -309,9 +331,35 @@ export function createClientRoutes(db, cfg = {}) {
       async function delClient(id){if(!confirm('¿Archivar este cliente? Dejará de aparecer en la lista, pero no se borra.'))return;try{await api('DELETE','/api/erp/clients/'+id);toast('Archivado');location.reload();}catch(e){toast(e.message,'err')}}
       async function restoreClient(id){try{await api('POST','/api/erp/clients/'+id+'/restore');toast('Restaurado');location.reload();}catch(e){toast(e.message,'err')}}
       async function viewDetail(id){
+        currentDetailClientId=id;   // para que cobroOnSaved refresque esta misma ficha
         const c=await api('GET','/api/erp/clients/'+id);
+        const deb=await api('GET','/api/erp/clients/'+id+'/invoices').catch(()=>({total:0,oldest:null,invoices:[]}));
         document.getElementById('detailName').textContent=c.name;
         const ordRows=c.orders?.length?c.orders.map(o=>'<tr><td>'+o.order_number+'</td><td>${sym}'+Number(o.total||0).toFixed(2)+'</td><td><span class="badge b-gray">'+o.status+'</span></td><td style="color:var(--muted);font-size:.8rem">'+(o.created_at?.split(' ')[0]||'-')+'</td></tr>').join(''):'<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:1rem">Sin pedidos</td></tr>';
+        // Facturas del cliente con estado de cobro en vivo (T4).
+        const cobroBadge={pendiente:'b-yellow',parcial:'b-blue',cobrada:'b-green',vencida:'b-red',abono:'b-gray'};
+        const cobroLabel={pendiente:'Pendiente',parcial:'Cobrada en parte',cobrada:'Cobrada',vencida:'Vencida',abono:'Abono'};
+        const invRows=deb.invoices?.length?deb.invoices.map(f=>{
+          const estadoCell=!f.counts
+            ?'<span class="badge b-gray" title="No computa como deuda (anulada o rectificada por sustitución)">no computa</span>'
+            :'<span class="badge '+(cobroBadge[f.estado]||'')+'">'+(cobroLabel[f.estado]||f.estado)+(f.estado==='vencida'&&f.dias_vencida?' '+f.dias_vencida+'d':'')+'</span>';
+          // Botón "Registrar cobro" usando el MISMO flag del motor (f.cobrable = isCobrable);
+          // solo si además queda pendiente. Abre el modal compartido (mismo endpoint único).
+          const cobrarCell = (f.cobrable && Number(f.pendiente)>0.0049)
+            ? '<button class="btn btn-secondary btn-sm" onclick="openCobros('+f.id+')">Registrar cobro</button>'
+            : '';
+          return '<tr><td><a href="/admin/invoices/'+f.id+'" target="_blank">'+f.invoice_number+'</a></td>'+
+            '<td style="color:var(--muted);font-size:.8rem">'+(f.due_date||f.issue_date||'-')+'</td>'+
+            '<td>${sym}'+Number(f.total||0).toFixed(2)+'</td>'+
+            '<td>'+(f.counts?'${sym}'+Number(f.pendiente||0).toFixed(2):'—')+'</td>'+
+            '<td>'+estadoCell+'</td>'+
+            '<td style="text-align:right">'+cobrarCell+'</td></tr>';
+        }).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:1rem">Sin facturas</td></tr>';
+        const o=deb.oldest;
+        const debtBlock='<div class="alert '+(Number(deb.total||0)>0?'alert-warn':'alert-ok')+'" style="margin-bottom:1rem">'+
+          'Te debe <strong>${sym}'+Number(deb.total||0).toFixed(2)+'</strong>'+
+          (o?' · Deuda más antigua: <a href="/admin/invoices/'+o.invoice_id+'" target="_blank">'+o.invoice_number+'</a> (${sym}'+Number(o.pendiente||0).toFixed(2)+', vence '+(o.due_date||'-')+(o.dias_vencida>0?' · '+o.dias_vencida+' días vencida':'')+')':' · sin deuda pendiente')+
+          '</div>';
         document.getElementById('detailBody').innerHTML=
           '<div class="grid g2" style="margin-bottom:1rem">'+
           '<div><div class="form-label">Email</div><div>'+escHtml(c.email||'-')+'</div></div>'+
@@ -323,6 +371,9 @@ export function createClientRoutes(db, cfg = {}) {
           '<div><div class="form-label">Forma de pago</div><div>'+({transferencia:"Transferencia",efectivo:"Efectivo",tarjeta:"Tarjeta",domiciliacion:"Domiciliación"}[c.payment_method]||'—')+'</div></div>'+
           '</div>'+
           (c.notes?'<div class="alert alert-ok" style="margin-bottom:1rem">'+c.notes+'</div>':'')+
+          '<h4 style="margin-bottom:.75rem">Facturas y cobro</h4>'+
+          debtBlock+
+          '<div class="table-wrap" style="margin-bottom:1.25rem"><table><thead><tr><th>Factura</th><th>Vence</th><th>Total</th><th>Pendiente</th><th>Cobro</th><th></th></tr></thead><tbody>'+invRows+'</tbody></table></div>'+
           '<h4 style="margin-bottom:.75rem">Historial de pedidos</h4>'+
           '<div class="table-wrap"><table><thead><tr><th>Orden</th><th>Total</th><th>Estado</th><th>Fecha</th></tr></thead><tbody>'+ordRows+'</tbody></table></div>';
         openModal('detailModal');
