@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { adminAuth, getCsrfToken } from '../../core/auth.js';
 import { adminLayout } from '../erp/layout.js';
 import { generateInvoice } from '../erp/routes/invoices.js';
-import { fiscalIdConflict } from '../erp/routes/clients.js';
+import { createClientSvc, updateClientSvc, archiveClientSvc, restoreClientSvc, searchClients } from '../erp/routes/clients.js';
+import { clientFieldOptions } from '../erp/schemas.js';
 import { collectionsWorklist, registerCollectionAction, accountsSummary, registerAccountAction } from '../erp/cobros.js';
 import { sendEmail } from '../../core/mailer.js';
 
@@ -78,10 +79,14 @@ export function register(app, db) {
     } catch {}
   }
 
+  // T5 — 'clients' SALE de aquí a propósito: DISA no puede escribir clientes con el
+  // genérico insert_record/update_record (eludiría validación y guarda de NIF). Los
+  // clientes SOLO por create_client/edit_client/deactivate_client/activate_client,
+  // que pasan por el servicio validado compartido.
   const WRITABLE_TABLES = new Set([
     'categories', 'tags', 'product_tags',
     'products', 'product_variants', 'product_images',
-    'clients', 'client_groups', 'suppliers',
+    'client_groups', 'suppliers',
     'sales_orders', 'sales_items',
     'invoices', 'invoice_items',
     'inventory_movements',
@@ -99,6 +104,7 @@ export function register(app, db) {
     'create_invoice_from_order', 'adjust_stock', 'reset_stock',
     'update_company_config', 'disable_2fa_user', 'list_users_security',
     'register_collection_action', 'register_account_action',
+    'create_client', 'edit_client', 'deactivate_client', 'activate_client',
   ]);
 
   function isAdminUser(session) {
@@ -231,6 +237,9 @@ export function register(app, db) {
 
         case 'create_order': {
           const p = action.params;
+          // T5 — sin cliente identificado NO se crea el pedido (cero pedidos huérfanos).
+          const client = p.client_id ? db.prepare('SELECT id, name FROM clients WHERE id=? AND active=1').get(p.client_id) : null;
+          if (!client) return { ok: false, message: 'Identifica primero al cliente (client_id de un cliente activo) antes de crear el pedido.' };
           const product = p.product_id
             ? db.prepare('SELECT * FROM products WHERE id=?').get(p.product_id)
             : db.prepare("SELECT * FROM products WHERE LOWER(name) LIKE ? AND status='active' LIMIT 1")
@@ -249,9 +258,9 @@ export function register(app, db) {
             const orderNumber = 'DISA-' + Math.random().toString(36).substr(2, 9).toUpperCase();
             const r = db.prepare(`
               INSERT INTO sales_orders
-                (order_number, status, subtotal, tax_amount, total, admin_notes)
-              VALUES (?, 'completado', ?, ?, ?, ?)
-            `).run(orderNumber, subtotal, taxAmount, total, p.notes || 'Creado por DISA');
+                (order_number, client_id, status, subtotal, tax_amount, total, admin_notes)
+              VALUES (?, ?, 'completado', ?, ?, ?, ?)
+            `).run(orderNumber, client.id, subtotal, taxAmount, total, p.notes || 'Creado por DISA');
             const orderId = r.lastInsertRowid;
             db.prepare(`
               INSERT INTO sales_items (order_id, product_id, product_name, quantity, unit_price, total)
@@ -265,7 +274,7 @@ export function register(app, db) {
 
           const { orderNumber } = tx();
           const sym = cfg.currency_symbol || '€';
-          return { ok: true, message: 'Pedido ' + orderNumber + ' creado: ' +
+          return { ok: true, message: 'Pedido ' + orderNumber + ' creado para ' + client.name + ': ' +
             qty + 'x ' + product.name + ' por ' + sym + total.toFixed(2) + '.' };
         }
 
@@ -465,59 +474,64 @@ export function register(app, db) {
 
         // ── Clientes ──────────────────────────────────────────
 
+        // T5 — DISA escribe clientes SOLO por el servicio validado compartido (mismo que
+        // usa el formulario): misma validación de esquema + misma guarda de NIF único.
+        // Nada de INSERT/UPDATE directo. Los errores del servicio (400/404/409) se reportan.
         case 'create_client': {
-          const p = action.params;
-          if (fiscalIdConflict(db, p.fiscal_id)) return { ok: false, message: 'Ya existe un cliente con ese NIF' };
-          // Datos de gestión. El IRPF NO es del cliente (es del autónomo): solo el tipo.
-          const ctype = p.client_type === 'empresa' ? 'empresa' : 'particular';
-          const r = db.prepare(`
-            INSERT INTO clients (name, email, phone, address, city, fiscal_id, notes, active, client_type, payment_term_days, payment_method)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
-          `).run(
-            p.name || '', p.email || '', p.phone || '',
-            p.address || '', p.city || '', p.fiscal_id || '', p.notes || '',
-            ctype, Number(p.payment_term_days) || 0, p.payment_method || ''
-          );
-          logActivity(db, 'create', 'clients', r.lastInsertRowid,
-            'Cliente "' + p.name + '" creado por DISA', session);
-          return { ok: true, message: 'Cliente "' + (p.name || 'nuevo') + '" creado.' };
+          const p = action.params || {};
+          try {
+            const r = createClientSvc(db, {
+              name: p.name, fiscal_id: p.fiscal_id, email: p.email, phone: p.phone,
+              address: p.address, city: p.city, country: p.country, notes: p.notes,
+              client_type: p.client_type, payment_term_days: p.payment_term_days, payment_method: p.payment_method,
+            });
+            logActivity(db, 'create', 'clients', r.id, 'Cliente "' + (r.name || '') + '" creado por DISA', session);
+            return { ok: true, message: 'Cliente "' + (r.name || 'nuevo') + '" creado (#' + r.id + ').' };
+          } catch (e) {
+            return { ok: false, message: 'No se pudo crear el cliente: ' + e.message };
+          }
         }
 
         case 'edit_client': {
-          const p = action.params;
+          const p = action.params || {};
           const client = db.prepare('SELECT * FROM clients WHERE id=?').get(p.client_id);
           if (!client) return { ok: false, message: 'Cliente no encontrado.' };
-          const newFiscal = p.fiscal_id !== undefined ? p.fiscal_id : client.fiscal_id;
-          if (fiscalIdConflict(db, newFiscal, p.client_id)) return { ok: false, message: 'Ya existe un cliente con ese NIF' };
-          // Datos de gestión (conserva el actual si no llega en params). El IRPF no es del cliente.
-          const ctype = p.client_type !== undefined
-            ? (p.client_type === 'empresa' ? 'empresa' : 'particular')
-            : (client.client_type || 'particular');
-          db.prepare(`
-            UPDATE clients SET name=?, email=?, phone=?, address=?, city=?, fiscal_id=?, notes=?, client_type=?, payment_term_days=?, payment_method=?
-            WHERE id=?
-          `).run(
-            p.name !== undefined ? p.name : client.name,
-            p.email !== undefined ? p.email : client.email,
-            p.phone !== undefined ? p.phone : client.phone,
-            p.address !== undefined ? p.address : client.address,
-            p.city !== undefined ? p.city : client.city,
-            p.fiscal_id !== undefined ? p.fiscal_id : client.fiscal_id,
-            p.notes !== undefined ? p.notes : client.notes,
-            ctype,
-            p.payment_term_days !== undefined ? (Number(p.payment_term_days) || 0) : (client.payment_term_days || 0),
-            p.payment_method !== undefined ? p.payment_method : (client.payment_method || ''),
-            p.client_id
-          );
-          logActivity(db, 'edit', 'clients', p.client_id, 'Cliente editado por DISA', session);
-          return { ok: true, message: 'Cliente #' + p.client_id + ' actualizado.' };
+          // DISA puede mandar campos parciales: se fusionan con los actuales y se manda el
+          // objeto COMPLETO al servicio (que hace replace validado). Strings nunca null.
+          const keep = (v, cur) => (v !== undefined ? v : cur);
+          try {
+            const r = updateClientSvc(db, p.client_id, {
+              name:               keep(p.name, client.name) || '',
+              fiscal_id:          keep(p.fiscal_id, client.fiscal_id) || '',
+              email:              keep(p.email, client.email) || '',
+              phone:              keep(p.phone, client.phone) || '',
+              address:            keep(p.address, client.address) || '',
+              city:               keep(p.city, client.city) || '',
+              country:            keep(p.country, client.country) || '',
+              group_id:           keep(p.group_id, client.group_id) || null,
+              notes:              keep(p.notes, client.notes) || '',
+              accepts_newsletter: !!client.accepts_newsletter,
+              client_type:        keep(p.client_type, client.client_type) || 'particular',
+              payment_term_days:  Number(keep(p.payment_term_days, client.payment_term_days)) || 0,
+              payment_method:     keep(p.payment_method, client.payment_method) || '',
+              collections_profile: keep(p.collections_profile, client.collections_profile) || 'estandar',
+            });
+            logActivity(db, 'edit', 'clients', r.id, 'Cliente editado por DISA', session);
+            return { ok: true, message: 'Cliente #' + r.id + ' actualizado.' };
+          } catch (e) {
+            return { ok: false, message: 'No se pudo editar el cliente: ' + e.message };
+          }
         }
 
         case 'deactivate_client': {
-          const p = action.params;
-          const r = db.prepare('UPDATE clients SET active=0 WHERE id=?').run(p.client_id);
-          if (r.changes === 0) return { ok: false, message: 'Cliente no encontrado.' };
-          return { ok: true, message: 'Cliente #' + p.client_id + ' desactivado.' };
+          const p = action.params || {};
+          try {
+            const r = archiveClientSvc(db, p.client_id);
+            logActivity(db, 'archive', 'clients', r.id, 'Cliente archivado por DISA', session);
+            return { ok: true, message: 'Cliente #' + r.id + ' archivado.' };
+          } catch (e) {
+            return { ok: false, message: 'No se pudo archivar el cliente: ' + e.message };
+          }
         }
 
         // T4 Paso 2 — DISA registra una acción de cobro SIEMPRE por el servicio validado
@@ -567,10 +581,14 @@ export function register(app, db) {
         }
 
         case 'activate_client': {
-          const p = action.params;
-          const r = db.prepare('UPDATE clients SET active=1 WHERE id=?').run(p.client_id);
-          if (r.changes === 0) return { ok: false, message: 'Cliente no encontrado.' };
-          return { ok: true, message: 'Cliente #' + p.client_id + ' activado.' };
+          const p = action.params || {};
+          try {
+            const r = restoreClientSvc(db, p.client_id);   // reusa la guarda de NIF al restaurar
+            logActivity(db, 'restore', 'clients', r.id, 'Cliente restaurado por DISA', session);
+            return { ok: true, message: 'Cliente #' + r.id + ' restaurado.' };
+          } catch (e) {
+            return { ok: false, message: 'No se pudo restaurar el cliente: ' + e.message };
+          }
         }
 
         // ── Proveedores ───────────────────────────────────────
@@ -914,6 +932,24 @@ export function register(app, db) {
                 + ' · perfil ' + (r.perfilCuenta || 'estandar') + ' · CUENTA: ' + accion;
             });
             return ['COBROS POR CUENTA (cliente entero):', lines.join('\n'), ''];
+          } catch { return []; }
+        })(),
+        // T5 — índice de clientes activos: la vía de lectura para IDENTIFICAR un cliente
+        // por nombre (resolver a su id antes de actuar) y para responder consultas.
+        ...(() => {
+          try {
+            const totalCl = db.prepare('SELECT COUNT(*) n FROM clients WHERE active=1').get().n;
+            if (!totalCl) return [];
+            const cls = searchClients(db, { limit: 40 });
+            const list = cls.map(cl => '#' + cl.id + ' ' + cl.name
+              + (cl.fiscal_id ? ' [' + cl.fiscal_id + ']' : '')
+              + (cl.city ? ' · ' + cl.city : '')).join('\n');
+            return [
+              'CLIENTES ACTIVOS (' + totalCl + (totalCl > cls.length ? '; muestro los ' + cls.length + ' primeros por nombre' : '') + ') — id, nombre, [NIF], ciudad:',
+              list,
+              'Usa esta lista para resolver un nombre a su client_id antes de cualquier accion. Varios que encajen → pregunta cual. Ninguno → propon crearlo (create_client, con confirmacion).',
+              '',
+            ];
           } catch { return []; }
         })(),
         'PRODUCTOS MAS VENDIDOS ESTE MES:',
@@ -1737,6 +1773,11 @@ export function register(app, db) {
       'Hablas en espanol, eres directa, profesional y honesta. Sin emojis. Vas al grano.',
     ].join('\n');
 
+    // T5 — valores EXACTOS de los campos de lista cerrada del cliente, desde el esquema real
+    // (no escritos a mano → no se desincronizan). DISA debe usar solo estos, nunca inventar.
+    const ctVals = (clientFieldOptions.client_type || []).join(' | ');
+    const pmVals = (clientFieldOptions.payment_method || []).map(v => v === '' ? '"" (en blanco)' : v).join(' | ');
+
     const systemPrompt = [
       agentIdentity,
       '',
@@ -1744,6 +1785,8 @@ export function register(app, db) {
       '',
       'PUEDES HACER:',
       '- Leer cualquier dato del negocio (productos, pedidos, clientes, inventario, ventas, facturas).',
+      '- Buscar y consultar clientes, e identificarlos por nombre antes de actuar (ver CLIENTES ACTIVOS).',
+      '- Gestionar clientes (crear, editar, archivar, restaurar) por la via validada, con confirmacion.',
       '- Mostrar respuestas visuales con artifacts (KPIs, listas, numeros).',
       '- Si el usuario es admin/owner: ejecutar cambios (crear, editar, eliminar registros,',
       '  ajustar stock, generar facturas) SIEMPRE pidiendo confirmacion previa.',
@@ -1826,8 +1869,27 @@ export function register(app, db) {
       '- delete_record: {"table":"tabla","id":0}',
       '  Los nombres de tabla y campo deben coincidir con el schema.',
       '',
+      'Clientes (ver seccion CLIENTES ACTIVOS del contexto para el id):',
+      '- create_client: {"name":"","fiscal_id":"","email":"","phone":"","address":"","city":"","client_type":"...","payment_term_days":0,"payment_method":"..."}',
+      '- edit_client: {"client_id":0, ...campos a cambiar...}',
+      '- deactivate_client: {"client_id":0}   (archiva; no borra)',
+      '- activate_client: {"client_id":0}     (restaura un archivado)',
+      '  CAMPOS DE LISTA CERRADA — usa EXACTAMENTE uno de estos valores, nunca inventes otro:',
+      '    client_type: ' + ctVals,
+      '    payment_method: ' + pmVals,
+      '  Si lo que dice el usuario no encaja claramente con uno de la lista, deja el campo en BLANCO',
+      '  (es opcional) y sigue, mencionandolo: p.ej. "no he reconocido la forma de pago, la dejo sin marcar".',
+      '  Ojo: "contado"/"al contado" es un PLAZO de pago (payment_term_days=0), NO una forma de pago:',
+      '  deja payment_method en blanco; no lo metas como metodo.',
+      '  IDENTIFICACION OBLIGATORIA antes de cualquier accion de cliente o pedido: resuelve el',
+      '  nombre a un client_id concreto con la lista CLIENTES ACTIVOS. Si hay UNO, sigue. Si hay',
+      '  VARIOS que encajan, muestralos y pregunta cual. Si NO existe ninguno, ofrece crearlo con',
+      '  create_client (confirmacion) y, una vez creado, continua con la accion original.',
+      '  Para responder consultas de clientes ("cuales tengo en Madrid", "ficha de X") usa esa lista.',
+      '',
       'Pedidos y facturacion:',
-      '- create_order: {"product_id":0,"product_name":"","quantity":1,"price":null,"notes":""}',
+      '- create_order: {"client_id":0,"product_id":0,"product_name":"","quantity":1,"price":null,"notes":""}',
+      '  client_id es OBLIGATORIO (identifica al cliente primero). Sin cliente, NO se crea el pedido.',
       '- edit_order: {"order_id":0,"admin_notes":"","tracking_number":""}',
       '- update_order_status: {"order_id":0,"status":"en_preparacion|enviado|completado|cancelado"}',
       '- cancel_order: {"order_id":0,"reason":""}',

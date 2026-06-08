@@ -1,7 +1,7 @@
 {
   "sesion_inicio": "2026-06-08",
-  "ultima_tarea": "T4 Paso 2 (perfiles + próxima acción + DISA) y Paso 2.1 (gestión de cuenta) — HECHO",
-  "estado": "Pilar 2 — Cliente EN CURSO. T1, T2, T3 y T4 (Paso 1, 2, 2.1) hechos.",
-  "donde_sigo": "T5 — DISA sobre clientes (acciones por API validada, búsqueda de clientes, enlazar client_id en pedidos de DISA).",
-  "notas": "Cobros con perfil por cliente + pipeline priorizado + próxima acción + plantillas email (Resend, core/mailer.js) + gestión a nivel de cuenta (recordatorio/promesa/cobro con reparto auto/manual). Migraciones aditivas: clients.collections_profile, tabla collection_actions, invoice_payments.account_batch_id + collection_actions.account_batch_id. Tests: scripts/test-cobros-paso2.mjs (47) y scripts/test-cobros-paso2-1.mjs (46). Reiniciar: sudo systemctl restart bamburu"
+  "ultima_tarea": "T5 — DISA sobre clientes (servicio validado + identificación + pedidos con cliente) — HECHO. Cierra Pilar 2.",
+  "estado": "Pilar 2 — Cliente CERRADO (T1–T5). Pilar 1 cerrado. Siguiente: Pilar 3 — Inventario.",
+  "donde_sigo": "Pilar 3 — Inventario (por detallar: Compras, Stock, Proveedores, Devoluciones, Descuentos; multi-almacén).",
+  "notas": "T5: createClientSvc/updateClientSvc/archiveClientSvc/restoreClientSvc en clients.js (servicio validado compartido form+DISA), searchClients + GET /api/erp/clients/search, índice de clientes + protocolo de identificación en DISA, create_order exige client_id, clientFieldOptions (enums desde clientSchema) inyectados en el prompt para no inventar valores. Cero migración. Tests: scripts/test-disa-clientes-t5.mjs (32). Pendiente Pilar 4: create_order multi-línea. Pendiente transversal NO iniciado: sistema de diseño + saneamiento visual. Reiniciar: sudo systemctl restart bamburu"
 }

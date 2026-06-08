@@ -68,6 +68,24 @@ export const clientSchema = z.object({
   collections_profile: z.enum(['suave', 'estandar', 'firme', 'manual']).optional().default('estandar'),
 });
 
+// T5 — valores EXACTOS permitidos en los campos de lista cerrada del cliente, extraídos del
+// propio clientSchema (fuente única: no se escriben a mano → no se desincronizan). Los usa
+// DISA para no inventar valores. Desenvuelve los wrappers default/optional hasta el enum.
+function enumOptions(schema) {
+  let s = schema;
+  // Desenvuelve default/optional/nullable/effects hasta llegar al enum (compatible zod v3/v4).
+  for (let i = 0; i < 8 && s && s._def; i++) {
+    if (Array.isArray(s.options)) return s.options.slice();   // ZodEnum.options (público)
+    s = s._def.innerType || s._def.schema || null;
+  }
+  return (s && Array.isArray(s.options)) ? s.options.slice() : null;
+}
+export const clientFieldOptions = {
+  client_type: enumOptions(clientSchema.shape.client_type),
+  payment_method: enumOptions(clientSchema.shape.payment_method),
+  collections_profile: enumOptions(clientSchema.shape.collections_profile),
+};
+
 export const clientGroupSchema = z.object({
   name: str(100),
   description: strOpt(500),

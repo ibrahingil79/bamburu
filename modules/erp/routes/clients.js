@@ -22,6 +22,82 @@ export function fiscalIdConflict(db, fiscalId, excludeId = null) {
   ).get(norm, Number.isFinite(ex) ? ex : -1) || null;
 }
 
+// Sincroniza la suscripción a newsletter al crear/editar un cliente (parte de la
+// semántica de "guardar cliente"; a nivel de módulo para que el servicio compartido
+// y las rutas usen exactamente la misma lógica).
+function syncNewsletter(db, email, name, accepts) {
+  if (!email) return;
+  if (accepts) {
+    db.prepare('INSERT OR IGNORE INTO newsletter_subscribers (email,name) VALUES (?,?)').run(email, name || '');
+  } else {
+    db.prepare('DELETE FROM newsletter_subscribers WHERE email=?').run(email);
+  }
+}
+
+// ── T5: SERVICIO VALIDADO COMPARTIDO DE CLIENTE — ÚNICA fuente de verdad de escritura ──
+// La usan TANTO las rutas del formulario (POST/PUT/DELETE/restore) COMO DISA. Misma
+// validación (clientSchema) y misma guarda de NIF único (fiscalIdConflict, T1). DISA NO
+// escribe nunca directo en la base: pasa por aquí. Errores con .status (400/404/409).
+function parseClient(input) {
+  const res = clientSchema.safeParse(input);
+  if (!res.success) {
+    const msg = res.error.issues.map(i => (i.path?.length ? i.path.join('.') + ': ' : '') + i.message).join('; ');
+    const e = new Error(msg || 'Datos de cliente inválidos'); e.status = 400; throw e;
+  }
+  return res.data;
+}
+
+export function createClientSvc(db, input) {
+  const d = parseClient(input);
+  if (fiscalIdConflict(db, d.fiscal_id)) { const e = new Error('Ya existe un cliente con ese NIF'); e.status = 409; throw e; }
+  const r = db.prepare('INSERT INTO clients (name,fiscal_id,email,phone,address,city,country,group_id,notes,accepts_newsletter,client_type,payment_term_days,payment_method,collections_profile) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(d.name, d.fiscal_id || '', d.email || '', d.phone || '', d.address || '', d.city || '', d.country || '', d.group_id || null, d.notes || '', d.accepts_newsletter ? 1 : 0, d.client_type || 'particular', d.payment_term_days || 0, d.payment_method || '', d.collections_profile || 'estandar');
+  syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
+  return { id: r.lastInsertRowid, name: d.name };
+}
+
+export function updateClientSvc(db, id, input) {
+  const exists = db.prepare('SELECT id FROM clients WHERE id=?').get(id);
+  if (!exists) { const e = new Error('Cliente no encontrado'); e.status = 404; throw e; }
+  const d = parseClient(input);
+  if (fiscalIdConflict(db, d.fiscal_id, id)) { const e = new Error('Ya existe un cliente con ese NIF'); e.status = 409; throw e; }
+  db.prepare('UPDATE clients SET name=?,fiscal_id=?,email=?,phone=?,address=?,city=?,country=?,group_id=?,notes=?,accepts_newsletter=?,client_type=?,payment_term_days=?,payment_method=?,collections_profile=? WHERE id=?')
+    .run(d.name, d.fiscal_id || '', d.email || '', d.phone || '', d.address || '', d.city || '', d.country || '', d.group_id || null, d.notes || '', d.accepts_newsletter ? 1 : 0, d.client_type || 'particular', d.payment_term_days || 0, d.payment_method || '', d.collections_profile || 'estandar', id);
+  syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
+  return { id: Number(id), name: d.name };
+}
+
+export function archiveClientSvc(db, id) {
+  const cl = db.prepare('SELECT id, name FROM clients WHERE id=?').get(id);
+  if (!cl) { const e = new Error('Cliente no encontrado'); e.status = 404; throw e; }
+  // Archivar, no borrar (regla permanente). Archivar libera el NIF (no choca con nadie).
+  db.prepare('UPDATE clients SET active=0 WHERE id=?').run(id);
+  return { id: Number(id), name: cl.name };
+}
+
+export function restoreClientSvc(db, id) {
+  const cl = db.prepare('SELECT id, name, fiscal_id FROM clients WHERE id=?').get(id);
+  if (!cl) { const e = new Error('Cliente no encontrado'); e.status = 404; throw e; }
+  // Restaurar puede chocar con un activo que tenga el mismo NIF (archivar lo liberó).
+  if (fiscalIdConflict(db, cl.fiscal_id, id)) { const e = new Error('Ya existe un cliente activo con este NIF'); e.status = 409; throw e; }
+  db.prepare('UPDATE clients SET active=1 WHERE id=?').run(id);
+  return { id: Number(id), name: cl.name };
+}
+
+// ── T5: lectura/búsqueda compartida de clientes (la usan el endpoint JSON y DISA) ──
+// Solo clientes activos. Coincidencia parcial sobre nombre o NIF, filtro opcional por
+// ciudad. Es la ÚNICA vía de lectura para identificar y para responder consultas.
+export function searchClients(db, { q = '', city = '', limit = 20 } = {}) {
+  const where = ['active=1'];
+  const params = [];
+  if (q)    { where.push('(name LIKE ? OR fiscal_id LIKE ?)'); params.push('%' + q + '%', '%' + q + '%'); }
+  if (city) { where.push('city LIKE ?'); params.push('%' + city + '%'); }
+  const lim = Math.min(Math.max(Number(limit) || 20, 1), 100);
+  return db.prepare(
+    'SELECT id, name, fiscal_id, email, city, active FROM clients WHERE ' + where.join(' AND ') + ' ORDER BY name LIMIT ?'
+  ).all(...params, lim);
+}
+
 export function createClientRoutes(db, cfg = {}) {
   const sym = cfg.sym || '€';
   const api = new Hono();
@@ -34,6 +110,13 @@ export function createClientRoutes(db, cfg = {}) {
     } catch(e) { return c.json({error:e.message},500); }
   });
 
+  // T5 — búsqueda de clientes (JSON). ANTES de '/:id' para que no la capture como id.
+  api.get('/search', requirePerm('clients.read'), c => {
+    try {
+      return c.json(searchClients(db, { q: c.req.query('q') || '', city: c.req.query('city') || '', limit: c.req.query('limit') }));
+    } catch(e) { return c.json({error:e.message},500); }
+  });
+
   api.get('/:id', requirePerm('clients.read'), c => {
     try {
       const client = db.prepare('SELECT c.*, g.name as group_name FROM clients c LEFT JOIN client_groups g ON c.group_id=g.id WHERE c.id=?').get(c.req.param('id'));
@@ -43,46 +126,30 @@ export function createClientRoutes(db, cfg = {}) {
     } catch(e) { return c.json({error:e.message},500); }
   });
 
-  function syncNewsletter(db, email, name, accepts) {
-    if (!email) return;
-    if (accepts) {
-      db.prepare('INSERT OR IGNORE INTO newsletter_subscribers (email,name) VALUES (?,?)').run(email, name||'');
-    } else {
-      db.prepare('DELETE FROM newsletter_subscribers WHERE email=?').run(email);
-    }
-  }
-
+  // Las 4 escrituras pasan por el SERVICIO compartido (misma validación + guarda de NIF
+  // que usa DISA). La ruta solo añade permisos, log con la sesión real y el código HTTP.
   api.post('/', requirePerm('clients.create'), validate(clientSchema), async c => {
     try {
-      const d = c.get('validated');
-      if (!d.name) return c.json({error:'Nombre requerido'},400);
-      if (fiscalIdConflict(db, d.fiscal_id)) return c.json({error:'Ya existe un cliente con ese NIF'},409);
-      const r = db.prepare('INSERT INTO clients (name,fiscal_id,email,phone,address,city,country,group_id,notes,accepts_newsletter,client_type,payment_term_days,payment_method,collections_profile) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(d.name, d.fiscal_id||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.country||'', d.group_id||null, d.notes||'', d.accepts_newsletter?1:0, d.client_type||'particular', d.payment_term_days||0, d.payment_method||'', d.collections_profile||'estandar');
-      syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
-      logActivity(db, c.get('session'), 'Creó cliente', 'client', r.lastInsertRowid, d.name);
-      return c.json({id:r.lastInsertRowid, message:'Creado'});
-    } catch(e) { return c.json({error:e.message},500); }
+      const r = createClientSvc(db, c.get('validated'));
+      logActivity(db, c.get('session'), 'Creó cliente', 'client', r.id, r.name);
+      return c.json({id:r.id, message:'Creado'});
+    } catch(e) { return c.json({error:e.message}, e.status||500); }
   });
 
   api.put('/:id', requirePerm('clients.edit'), validate(clientSchema), async c => {
     try {
-      const d = c.get('validated');
-      if (fiscalIdConflict(db, d.fiscal_id, c.req.param('id'))) return c.json({error:'Ya existe un cliente con ese NIF'},409);
-      db.prepare('UPDATE clients SET name=?,fiscal_id=?,email=?,phone=?,address=?,city=?,country=?,group_id=?,notes=?,accepts_newsletter=?,client_type=?,payment_term_days=?,payment_method=?,collections_profile=? WHERE id=?').run(d.name, d.fiscal_id||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.country||'', d.group_id||null, d.notes||'', d.accepts_newsletter?1:0, d.client_type||'particular', d.payment_term_days||0, d.payment_method||'', d.collections_profile||'estandar', c.req.param('id'));
-      syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
+      const r = updateClientSvc(db, c.req.param('id'), c.get('validated'));
+      logActivity(db, c.get('session'), 'Editó cliente', 'client', r.id, r.name);
       return c.json({message:'Actualizado'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:e.message}, e.status||500); }
   });
 
   api.delete('/:id', requirePerm('clients.edit'), c => {
     try {
-      const cl = db.prepare('SELECT name FROM clients WHERE id=?').get(c.req.param('id'));
-      // Archivar, no borrar (regla permanente). Soft-delete: la fila se conserva y su
-      // cuenta de tienda (customer_accounts) no se arrastra por ON DELETE CASCADE.
-      db.prepare('UPDATE clients SET active=0 WHERE id=?').run(c.req.param('id'));
-      logActivity(db, c.get('session'), 'Archivó cliente', 'client', c.req.param('id'), cl?.name||'');
+      const r = archiveClientSvc(db, c.req.param('id'));
+      logActivity(db, c.get('session'), 'Archivó cliente', 'client', r.id, r.name||'');
       return c.json({message:'Archivado'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:e.message}, e.status||500); }
   });
 
   api.get('/:id/orders', requirePerm('clients.read'), c => {
@@ -156,14 +223,10 @@ export function createClientRoutes(db, cfg = {}) {
   // bloquea reutilizando el helper de NIF único (CANON §5, sin duplicados).
   api.post('/:id/restore', requirePerm('clients.edit'), c => {
     try {
-      const id = c.req.param('id');
-      const cl = db.prepare('SELECT id, name, fiscal_id FROM clients WHERE id=?').get(id);
-      if (!cl) return c.json({error:'No encontrado'},404);
-      if (fiscalIdConflict(db, cl.fiscal_id, id)) return c.json({error:'Ya existe un cliente activo con este NIF'},409);
-      db.prepare('UPDATE clients SET active=1 WHERE id=?').run(id);
-      logActivity(db, c.get('session'), 'Restauró cliente', 'client', id, cl.name||'');
+      const r = restoreClientSvc(db, c.req.param('id'));
+      logActivity(db, c.get('session'), 'Restauró cliente', 'client', r.id, r.name||'');
       return c.json({message:'Restaurado'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:e.message}, e.status||500); }
   });
 
   // ── API: CLIENT GROUPS ─────────────────────────────────────────
