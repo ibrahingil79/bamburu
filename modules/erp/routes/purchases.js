@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { adminLayout, can } from '../layout.js';
 import { validate } from '../../../core/validate.js';
 import { purchaseSchema } from '../schemas.js';
+import { recordMovement } from '../stock.js';
 
 export function createPurchaseRoutes(db, cfg = {}) {
   const sym = cfg.sym || '€';
@@ -34,11 +35,9 @@ export function createPurchaseRoutes(db, cfg = {}) {
         const insItem = db.prepare('INSERT INTO purchase_items (purchase_id,product_id,quantity,unit_cost) VALUES (?,?,?,?)');
         for (const item of d.items) insItem.run(pid, item.product_id, item.quantity, item.unit_cost);
         if (d.status === 'received') {
-          const upd = db.prepare('UPDATE products SET stock=stock+? WHERE id=?');
-          const insMov = db.prepare('INSERT INTO inventory_movements (product_id,type,quantity,reason) VALUES (?,?,?,?)');
+          // Recepción de compra: entra al libro (caché vía recomputeStock), no por UPDATE directo.
           for (const item of d.items) {
-            upd.run(item.quantity, item.product_id);
-            insMov.run(item.product_id, 'in', item.quantity, 'Compra #'+pid+(d.reference?' ref:'+d.reference:''));
+            recordMovement(db, { product_id: item.product_id, type: 'entrada', quantity: item.quantity, origin_type: 'purchase', origin_id: pid, note: 'Compra #'+pid+(d.reference?' ref:'+d.reference:'') });
           }
         }
         return pid;

@@ -1,7 +1,7 @@
 {
   "sesion_inicio": "2026-06-08",
-  "ultima_tarea": "T5 — DISA sobre clientes (servicio validado + identificación + pedidos con cliente) — HECHO. Cierra Pilar 2.",
-  "estado": "Pilar 2 — Cliente CERRADO (T1–T5). Pilar 1 cerrado. Siguiente: Pilar 3 — Inventario.",
-  "donde_sigo": "Pilar 3 — Inventario (por detallar: Compras, Stock, Proveedores, Devoluciones, Descuentos; multi-almacén).",
-  "notas": "T5: createClientSvc/updateClientSvc/archiveClientSvc/restoreClientSvc en clients.js (servicio validado compartido form+DISA), searchClients + GET /api/erp/clients/search, índice de clientes + protocolo de identificación en DISA, create_order exige client_id, clientFieldOptions (enums desde clientSchema) inyectados en el prompt para no inventar valores. Cero migración. Tests: scripts/test-disa-clientes-t5.mjs (32). Pendiente Pilar 4: create_order multi-línea. Pendiente transversal NO iniciado: sistema de diseño + saneamiento visual. Reiniciar: sudo systemctl restart bamburu"
+  "ultima_tarea": "Pilar 3 (Inventario) · Paso 1 — cimiento de stock unificado (libro de movimientos + caché derivada + reenrutado POS/Compras) — HECHO.",
+  "estado": "Pilar 1 y Pilar 2 CERRADOS. Pilar 3 — Inventario EN CURSO (Paso 1 hecho).",
+  "donde_sigo": "Pilar 3 — Paso 2+ (Compras/Proveedores como motor, valoración/coste, reservado vs. disponible, multi-almacén UI + transferencias, DISA sobre stock).",
+  "notas": "Stock = SUMA de stock_movements (append-only, signo); products.stock = caché derivada (recomputeStock). Motor modules/erp/stock.js; migración unificadora en models.js (warehouses + stock_movements + import 9 legacy + aperturas baseline + rename inventory_movements→_legacy). Endpoints: POST /products/:id/stock/adjust, GET /products/:id/stock, POST /stock/movements/:id/reverse. Reenrutados POS/borrador/cancelación/compra. UI: /admin/inventory + sección Stock en ficha (views/stock-modal.js). POS reintegrado al menú (Ventas). Tests: scripts/test-stock-pilar3.mjs (34). Pendiente transversal NO iniciado: sistema de diseño. Reiniciar: sudo systemctl restart bamburu"
 }

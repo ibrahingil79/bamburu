@@ -3,7 +3,7 @@
 > Este es el único documento que manda. Si cualquier otro archivo (TABLERO.md,
 > CLAUDE.md, etc.) dice algo distinto de lo que está aquí, gana este documento.
 > Al empezar cualquier sesión (con Ibrahin o con Claude Code) se lee este archivo primero.
-> Última actualización: 2026-05-29
+> Última actualización: 2026-06-08
 
 ---
 
@@ -40,11 +40,11 @@ Vender servicios no impide comprar: el fotógrafo compra cámara, papel, materia
 entra en Compras y Stock como **material del negocio** (lo que usas para trabajar),
 distinto del producto que revendes.
 
-**Los 4 pilares:**
-- **CATÁLOGO** — Productos (tipo: físico / digital / servicio), Categorías.
-- **VENTAS** — Pedidos → Albaranes / notas de entrega → Facturas.
-- **CLIENTES** — Clientes, Grupos, CRM.
-- **INVENTARIO** — Compras, Stock, Proveedores, Devoluciones, Descuentos.
+**Los 4 pilares (estado):**
+- **CATÁLOGO** — ✅ CERRADO. Productos (tipo: físico / digital / servicio), Categorías.
+- **CLIENTES** — ✅ CERRADO. Clientes, Grupos, CRM (+ cobros y voz de DISA sobre clientes).
+- **INVENTARIO** — 🟡 EN CURSO. Compras, Stock, Proveedores, Devoluciones, Descuentos.
+- **VENTAS** — pendiente. Pedidos → Albaranes / notas de entrega → Facturas.
 
 No se añaden piezas salvo que se detecte que falta algo real. Lo que existe, se lleva a
 su mejor versión.
@@ -56,10 +56,10 @@ su mejor versión.
 Se construye un pilar cada vez, en este orden, porque Ventas necesita a los otros tres
 ya hechos (vendes un producto, a un cliente, desde un almacén):
 
-1. **Producto (Catálogo)** — la raíz.
-2. **Cliente** — a quién vendes.
-3. **Almacén (Inventario)** — qué tienes y de dónde sale.
-4. **Ventas** — pedido → albarán → factura; usa los tres anteriores.
+1. **Producto (Catálogo)** — la raíz. ✅ CERRADO (2026-06-03).
+2. **Cliente** — a quién vendes. ✅ CERRADO (2026-06-08).
+3. **Almacén (Inventario)** — qué tienes y de dónde sale. 🟡 EN CURSO (2026-06-08).
+4. **Ventas** — pedido → albarán → factura; usa los tres anteriores. Pendiente.
 
 **Primer paso — Producto, mínimo para darlo por listo:** ✅ COMPLETO (2026-06-03)
 - Tipo de producto: físico / digital / servicio. ✅
@@ -70,6 +70,19 @@ ya hechos (vendes un producto, a un cliente, desde un almacén):
 
 **Fuera de este primer paso (más adelante):** variantes, galería de imágenes, SEO,
 coste/margen, unidad (por hora/sesión), multi-almacén.
+
+### Inventario (Pilar 3) — modelo de stock (Paso 1 HECHO 2026-06-08)
+
+Se copia el modelo de los ERP grandes: **el stock NO se guarda y se pisa**; es la **SUMA de
+un libro de movimientos** (`stock_movements`, append-only, delta con signo). `products.stock`
+es solo una **caché derivada** (siempre = suma del libro; se mantiene tras cada movimiento)
+para que el POS siga rápido. Un movimiento contabilizado es **inmutable**: nunca se edita ni
+se borra; para corregir se crea otro que lo **revierte** — misma filosofía que el ciclo de vida
+de la factura (original intacta, asiento nuevo enlazado). Solo los productos **físicos** llevan
+stock/kardex (servicio y digital no). **Multi-almacén** preparado en datos (cada movimiento lleva
+`warehouse_id`) pero la UI usa un almacén por defecto; transferencias y selección de almacén,
+más adelante. Todo escritor de stock (POS, Compras, ajustes) pasa por el mismo libro: una sola
+fuente de verdad.
 
 **Regla viva:** este orden y estos alcances no son sagrados. Si al construir algo no
 cuadra, se cambia, se quita o se mejora. La realidad del producto manda sobre el plan.
@@ -183,8 +196,9 @@ funciones de pilares futuros.
 
 - **Multi-almacén** — soportar varios almacenes por ubicación (ej. Madrid, Málaga) y por
   función (producto terminado vs. materias primas). Define de dónde sale lo que se vende
-  y de dónde se consume el material de trabajo. Es funcionalidad de peso: se aborda al
-  construir Stock, no antes.
+  y de dónde se consume el material de trabajo. **Preparado en datos** (Pilar 3 Paso 1: cada
+  `stock_movement` lleva `warehouse_id` y hay un "Almacén principal" sembrado); falta la **UI**
+  multi-almacén + **transferencias** (`type='transferencia'` ya definido, sin uso). Pieza de peso.
 - **A quién vender primero** — la misión apunta a autónomos + pequeñas + medianas. Sigue
   siendo amplio; decidir por cuál arrancar a vender de verdad cuando toque estrategia
   comercial.

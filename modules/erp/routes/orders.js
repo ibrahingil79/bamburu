@@ -6,6 +6,7 @@ import { posSchema, orderStatusSchema, orderNotesSchema, orderTrackingSchema, re
 import { escHtml } from '../../../core/escape.js';
 import { generateInvoice } from './invoices.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
+import { recordMovement } from '../stock.js';
 
 const ORDER_STATUSES = [
   'borrador', 'en_preparacion', 'enviado',
@@ -87,11 +88,11 @@ export function createOrderRoutes(db, cfg = {}) {
         const orderId = ord.lastInsertRowid;
         items.forEach(it => {
           db.prepare('INSERT INTO sales_items (order_id,product_id,variant_id,product_name,quantity,unit_price,total) VALUES (?,?,?,?,?,?,?)').run(orderId, it.id, it.variant_id || null, it.name, parseInt(it.qty), parseFloat(it.price), parseFloat(it.price)*parseInt(it.qty));
-          db.prepare('UPDATE products SET stock=stock-? WHERE id=?').run(parseInt(it.qty), it.id);
+          // Pilar 3: el stock sale al libro (caché derivada vía recomputeStock), no por UPDATE directo.
+          recordMovement(db, { product_id: it.id, type: 'salida', quantity: -parseInt(it.qty), origin_type: 'order', origin_id: orderId, note: `Venta POS (Pedido #${num})` });
           if (it.variant_id) {
             db.prepare('UPDATE product_variants SET stock=stock-? WHERE id=? AND product_id=?').run(parseInt(it.qty), it.variant_id, it.id);
           }
-          db.prepare('INSERT INTO inventory_movements (product_id,variant_id,type,quantity,reason) VALUES (?,?,?,?,?)').run(it.id, it.variant_id || null, 'out', parseInt(it.qty), `Venta POS (Pedido #${num})`);
         });
         if (client_id) {
           db.prepare('UPDATE clients SET total_spent=total_spent+? WHERE id=?').run(total, client_id);
@@ -167,11 +168,11 @@ export function createOrderRoutes(db, cfg = {}) {
       if (status === 'cancelado' && order.status === 'borrador') {
         const items = db.prepare('SELECT * FROM sales_items WHERE order_id=?').all(c.req.param('id'));
         for (const item of items) {
-          db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?').run(item.quantity, item.product_id);
+          // Devuelve al libro lo reservado por el borrador (entrada, mismo pedido; no es reversión).
+          recordMovement(db, { product_id: item.product_id, type: 'entrada', quantity: item.quantity, origin_type: 'order', origin_id: order.id, note: `Cancelación de borrador (Pedido #${order.order_number})` });
           if (item.variant_id) {
             db.prepare('UPDATE product_variants SET stock = stock + ? WHERE id = ? AND product_id = ?').run(item.quantity, item.variant_id, item.product_id);
           }
-          db.prepare('INSERT INTO inventory_movements (product_id,variant_id,type,quantity,reason) VALUES (?,?,?,?,?)').run(item.product_id, item.variant_id || null, 'in', item.quantity, `Cancelación de borrador (Pedido #${order.order_number})`);
         }
       }
 
@@ -741,11 +742,11 @@ export function createOrderRoutes(db, cfg = {}) {
             VALUES (?, ?, ?, ?, ?, ?, ?)
           `).run(orderId, item.id, item.variant_id || null, item.name, item.qty, item.price,
                  item.price * item.qty);
-          db.prepare('UPDATE products SET stock = stock - ? WHERE id = ?').run(item.qty, item.id);
+          // Reserva de borrador: mismo comportamiento (sale stock), ahora al libro.
+          recordMovement(db, { product_id: item.id, type: 'salida', quantity: -parseInt(item.qty), origin_type: 'order', origin_id: orderId, note: `Reserva de borrador (Pedido #${orderNumber})` });
           if (item.variant_id) {
             db.prepare('UPDATE product_variants SET stock = stock - ? WHERE id = ? AND product_id = ?').run(item.qty, item.variant_id, item.id);
           }
-          db.prepare('INSERT INTO inventory_movements (product_id,variant_id,type,quantity,reason) VALUES (?,?,?,?,?)').run(item.id, item.variant_id || null, 'out', item.qty, `Reserva de borrador (Pedido #${orderNumber})`);
         }
         return orderId;
       });
@@ -780,11 +781,11 @@ export function createOrderRoutes(db, cfg = {}) {
         if (order.status === 'borrador') {
           const items = db.prepare('SELECT * FROM sales_items WHERE order_id=?').all(id);
           for (const item of items) {
-            db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?').run(item.quantity, item.product_id);
+            // Devuelve al libro lo reservado (entrada, mismo pedido).
+            recordMovement(db, { product_id: item.product_id, type: 'entrada', quantity: item.quantity, origin_type: 'order', origin_id: order.id, note: `Cancelación de pedido (Pedido #${order.order_number})` });
             if (item.variant_id) {
               db.prepare('UPDATE product_variants SET stock = stock + ? WHERE id = ? AND product_id = ?').run(item.quantity, item.variant_id, item.product_id);
             }
-            db.prepare('INSERT INTO inventory_movements (product_id,variant_id,type,quantity,reason) VALUES (?,?,?,?,?)').run(item.product_id, item.variant_id || null, 'in', item.quantity, `Cancelación de pedido (Pedido #${order.order_number})`);
           }
         }
         db.prepare("UPDATE sales_orders SET status='cancelado' WHERE id=?").run(id);

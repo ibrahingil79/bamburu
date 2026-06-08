@@ -373,18 +373,83 @@ export function runMigrations(db) {
     FOREIGN KEY (order_id) REFERENCES sales_orders(id) ON DELETE CASCADE
   )`);
 
-  // Inventory movements (extended)
-  db.exec(`CREATE TABLE IF NOT EXISTS inventory_movements (
+  // ── PILAR 3 · Paso 1 — Inventario unificado: libro de movimientos + caché ───
+  // El stock es la SUMA de stock_movements (append-only). products.stock queda como
+  // caché derivada. Multi-almacén preparado en datos (warehouse_id por movimiento) pero
+  // la UI usa UN almacén por defecto. La tabla vieja `inventory_movements` se ARCHIVA
+  // (renombrada a `_legacy`), no se borra (regla del incidente `services`).
+  db.exec(`CREATE TABLE IF NOT EXISTS warehouses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    active INTEGER DEFAULT 1
+  )`);
+  if (!db.prepare('SELECT id FROM warehouses LIMIT 1').get()) {
+    db.prepare("INSERT INTO warehouses (name, active) VALUES ('Almacén principal', 1)").run();
+  }
+
+  db.exec(`CREATE TABLE IF NOT EXISTS stock_movements (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     product_id INTEGER NOT NULL,
-    variant_id INTEGER,
-    type TEXT NOT NULL CHECK(type IN ('in','out','adjust')),
-    quantity INTEGER NOT NULL,
-    reason TEXT DEFAULT '',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+    warehouse_id INTEGER NOT NULL,
+    type TEXT NOT NULL,                 -- apertura|entrada|salida|ajuste|transferencia
+    quantity INTEGER NOT NULL,          -- delta CON SIGNO (+ entra, − sale)
+    reason TEXT,                        -- lista cerrada, solo en 'ajuste' (null en los demás)
+    origin_type TEXT,                   -- opening|order|purchase|manual|reversal|legacy
+    origin_id INTEGER,                  -- id del pedido/compra que lo originó (null si no aplica)
+    reverses_movement_id INTEGER,       -- id del movimiento que revierte (null normal)
+    note TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (product_id) REFERENCES products(id)
   )`);
-  addCol(db, 'inventory_movements', 'variant_id', 'INTEGER');
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON stock_movements(product_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_stock_movements_reverses ON stock_movements(reverses_movement_id)`);
+
+  // Migración de datos UNA vez: importa el libro viejo, siembra saldos iniciales y archiva.
+  const stockMigKey = 'migration_stock_unify_2026_v1';
+  if (!db.prepare('SELECT value FROM settings WHERE key=?').get(stockMigKey)) {
+    const defWh = (db.prepare('SELECT id FROM warehouses WHERE active=1 ORDER BY id LIMIT 1').get() || {}).id;
+    const hasLegacy = db.prepare("SELECT count(*) n FROM sqlite_master WHERE type='table' AND name='inventory_movements'").get().n;
+    const migrate = db.transaction(() => {
+      // 1) Importa inventory_movements → stock_movements (mapeo mecánico por type viejo).
+      if (hasLegacy) {
+        const legacy = db.prepare('SELECT * FROM inventory_movements ORDER BY id').all();
+        const ins = db.prepare(
+          `INSERT INTO stock_movements (product_id, warehouse_id, type, quantity, reason, origin_type, origin_id, reverses_movement_id, note, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?)`
+        );
+        for (const m of legacy) {
+          const q = m.type === 'in' ? Math.abs(m.quantity)
+                  : m.type === 'out' ? -Math.abs(m.quantity)
+                  : m.quantity;                                   // 'adjust' viejo (no hay en datos): se conserva tal cual
+          const newType = m.type === 'in' ? 'entrada' : m.type === 'out' ? 'salida' : 'ajuste';
+          ins.run(m.product_id, defWh, newType, q, null, 'legacy', null, null, m.reason || '', m.created_at);
+        }
+        // 3) Archiva la tabla vieja (no se borra): renombra a _legacy.
+        db.exec('ALTER TABLE inventory_movements RENAME TO inventory_movements_legacy');
+      }
+      // 2) Saldo inicial por producto físico: apertura = stock_heredado − SUMA(legacy importadas).
+      //    Así SUMA(libro) == products.stock EXACTO el día 1. created_at sentinela (antes que todo).
+      const physicals = db.prepare("SELECT id, stock FROM products WHERE type='physical'").all();
+      const insOpen = db.prepare(
+        `INSERT INTO stock_movements (product_id, warehouse_id, type, quantity, reason, origin_type, origin_id, reverses_movement_id, note, created_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`
+      );
+      for (const p of physicals) {
+        const sum = db.prepare('SELECT COALESCE(SUM(quantity),0) s FROM stock_movements WHERE product_id=?').get(p.id).s;
+        const baseline = (p.stock || 0) - sum;
+        if (baseline !== 0) {
+          insOpen.run(p.id, defWh, 'apertura', baseline, null, 'opening', null, null, 'Saldo inicial (migración)', '2000-01-01 00:00:00');
+        }
+      }
+      // 4) products.stock pasa a caché derivada: recálculo de control (debe coincidir con el previo).
+      for (const p of physicals) {
+        const s = db.prepare('SELECT COALESCE(SUM(quantity),0) s FROM stock_movements WHERE product_id=?').get(p.id).s;
+        db.prepare('UPDATE products SET stock=? WHERE id=?').run(s, p.id);
+      }
+      db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(stockMigKey, 'done');
+    });
+    migrate();
+  }
 
   // Customer accounts (store login)
   db.exec(`CREATE TABLE IF NOT EXISTS customer_accounts (

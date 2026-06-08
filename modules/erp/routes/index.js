@@ -8,6 +8,7 @@ import { createCategoryRoutes } from './categories.js';
 import { createClientRoutes } from './clients.js';
 import { createOrderRoutes } from './orders.js';
 import { createInventoryRoutes } from './inventory.js';
+import { createStockRoutes } from './stock.js';
 import { createDiscountRoutes } from './discounts.js';
 import { createShippingRoutes } from './shipping.js';
 import { createAnalyticsRoutes } from './analytics.js';
@@ -38,6 +39,7 @@ export function mountRoutes(app, db) {
   const { api: clientApi, views: clientViews } = createClientRoutes(db);
   const { api: orderApi, views: orderViews } = createOrderRoutes(db);
   const { api: invApi, views: invViews } = createInventoryRoutes(db);
+  const { api: stockApi } = createStockRoutes(db);
   const { api: discApi, views: discViews } = createDiscountRoutes(db);
   const { api: shipApi, views: shipViews } = createShippingRoutes(db);
   const { api: analytApi, views: analytViews } = createAnalyticsRoutes(db);
@@ -103,5 +105,6 @@ export function mountRoutes(app, db) {
   apiApp.route('/feedback', feedbackApi);
   apiApp.route('/invoices', invoiceApi);
   apiApp.route('/cobros', cobrosApi);
+  apiApp.route('/stock', stockApi);
   app.route('/api/erp', apiApp);
 }

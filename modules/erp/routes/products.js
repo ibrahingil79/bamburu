@@ -2,8 +2,10 @@ import { Hono } from 'hono';
 import { adminLayout, can } from '../layout.js';
 import { logActivity, requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
-import { productSchema, productImageSchema, variantSchema, tagSchema } from '../schemas.js';
+import { productSchema, productImageSchema, variantSchema, tagSchema, stockAdjustSchema } from '../schemas.js';
 import { getVatBands } from '../../../core/vat-bands.js';
+import { adjustStock, kardex, productStock, isPhysical, recordMovement, TYPE_LABEL, REASON_LABEL } from '../stock.js';
+import { stockModalHtml, stockModalScript } from '../views/stock-modal.js';
 
 function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now();
@@ -60,9 +62,15 @@ export function createProductRoutes(db, cfg = {}) {
       const chosen = getVatBands(country, fallbackRate).find(b => b.code === d.tax_band);
       if (!chosen) return c.json({ error: 'La banda de IVA es obligatoria y debe ser válida' }, 400);
       const band = chosen.code, rate = chosen.rate;
-      const stock = (d.type === 'service' || d.type === 'digital') ? 0 : d.stock;
+      // Pilar 3: products.stock es caché derivada. Se inserta a 0 y, si es físico con stock
+      // inicial, se siembra un movimiento 'apertura' (recomputeStock pone la caché al valor).
+      const ptype = d.type || 'physical';
+      const initialStock = (ptype === 'service' || ptype === 'digital') ? 0 : (parseInt(d.stock) || 0);
       const r = db.prepare(`INSERT INTO products (name,slug,sku,description,price,compare_price,image_url,category_id,status,type,digital_file_url,featured,stock,supplier_id,tax_rate,tax_band) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(d.name, slug, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', d.type||'physical', d.digital_file_url||'', d.featured?1:0, stock, d.supplier_id||null, rate, band);
+        .run(d.name, slug, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', ptype, d.digital_file_url||'', d.featured?1:0, 0, d.supplier_id||null, rate, band);
+      if (ptype === 'physical' && initialStock > 0) {
+        recordMovement(db, { product_id: r.lastInsertRowid, type: 'apertura', quantity: initialStock, origin_type: 'opening', note: 'Stock inicial' });
+      }
       if (d.tags?.length) {
         for (const tid of d.tags) {
           try { db.prepare('INSERT OR IGNORE INTO product_tags (product_id,tag_id) VALUES (?,?)').run(r.lastInsertRowid, tid); } catch(_){}
@@ -71,6 +79,38 @@ export function createProductRoutes(db, cfg = {}) {
       logActivity(db, c.get('session'), 'Creó producto', 'product', r.lastInsertRowid, d.name);
       return c.json({id:r.lastInsertRowid, message:'Creado'});
     } catch(e) { return c.json({error:e.message},500); }
+  });
+
+  // ── Pilar 3 · Paso 1 — stock de un producto (caché + kardex) ──────────────
+  // GET stock actual (caché derivada) + kardex (movimientos con saldo corriente, si está
+  // revertido y el origen). Solo físicos llevan kardex; service/digital → physical:false.
+  api.get('/:id/stock', requirePerm('products.read'), c => {
+    try {
+      const id = parseInt(c.req.param('id'));
+      const p = db.prepare('SELECT id, name, type FROM products WHERE id=?').get(id);
+      if (!p) return c.json({ error: 'Producto no encontrado' }, 404);
+      const physical = isPhysical(db, p);
+      if (!physical) return c.json({ physical: false, stock: 0, movements: [] });
+      const movements = kardex(db, id).map(m => ({
+        id: m.id, type: m.type, type_label: TYPE_LABEL[m.type] || m.type,
+        quantity: m.quantity, reason: m.reason, reason_label: m.reason ? (REASON_LABEL[m.reason] || m.reason) : null,
+        origin_type: m.origin_type, origin_id: m.origin_id, note: m.note,
+        created_at: m.created_at, balance: m.balance, reversed: m.reversed, is_reversal: m.is_reversal,
+      }));
+      return c.json({ physical: true, stock: productStock(db, id), movements });
+    } catch(e) { return c.json({ error: e.message }, 500); }
+  });
+
+  // POST ajuste manual: crea UN movimiento type='ajuste' con el delta (poner/sumar/restar).
+  // Doble seguro en backend: rechaza 400 si el producto no es físico (no solo en la UI).
+  api.post('/:id/stock/adjust', requirePerm('inventory.edit'), validate(stockAdjustSchema), c => {
+    try {
+      const id = parseInt(c.req.param('id'));
+      const d = c.get('validated');
+      const res = adjustStock(db, id, { mode: d.mode, value: d.value, reason: d.reason, note: d.note });
+      logActivity(db, c.get('session'), 'Ajustó stock', 'product', id, `${d.mode} ${d.value} (${d.reason}) → ${res.stock}`);
+      return c.json(res);
+    } catch(e) { return c.json({ error: e.message }, e.status || 400); }
   });
 
   api.put('/:id', requirePerm('products.edit'), validate(productSchema), async c => {
@@ -288,7 +328,8 @@ export function createProductRoutes(db, cfg = {}) {
                 <div class="form-group"><label class="form-label">Precio *</label><input class="form-control" type="number" id="pPrice" step="0.01"></div>
                 <div class="form-group"><label class="form-label">Tipo de IVA *</label><select class="form-control" id="pTaxBand"></select></div>
                 <div class="form-group" style="display:none"><label class="form-label">Precio antes (tachado)</label><input class="form-control" type="number" id="pCompare" step="0.01"></div><!-- OCULTO: promoción de tienda online -->
-                <div class="form-group" id="pStockWrap"><label class="form-label">Stock</label><input class="form-control" type="number" id="pStock" value="0"></div>
+                <div class="form-group" id="pStockWrap"><label class="form-label">Stock inicial</label><input class="form-control" type="number" id="pStock" value="0"></div>
+                <div class="form-group" id="pStockManage" style="display:none"><label class="form-label">Stock</label><div><button type="button" class="btn btn-secondary btn-sm" onclick="openStockKardex(currentProdId, document.getElementById('pName').value)">Gestionar stock (kardex · ajustar)</button></div></div>
               </div>
               <div style="font-size:.72rem;color:var(--muted);margin:-.5rem 0 .25rem">
                 <a href="https://sede.agenciatributaria.gob.es/Sede/iva.html" target="_blank" rel="noopener" style="color:var(--teal)">Tipos de IVA oficiales (AEAT) ↗</a>
@@ -365,7 +406,9 @@ export function createProductRoutes(db, cfg = {}) {
         </div>
       </div>
 
+      ${stockModalHtml()}
       <script>
+      ${stockModalScript(sym)}
       const A='/api/erp';
       const VAT_BANDS=${vatBandsJson};   // bandas de IVA del país (P1+P2 refinamiento)
       let allTags=[], allCats=[], allSuppliers=[], selTags=[], currentProdId=null;
@@ -401,7 +444,13 @@ export function createProductRoutes(db, cfg = {}) {
       function applyTypeUI(t){
         // URL archivo digital OCULTA de la vista (entrega de tienda online). El campo
         // sigue en el DOM (#pDigitalWrap, display:none de base); no se muestra para ningún tipo.
-        document.getElementById('pStockWrap').style.display = (t==='service' || t==='digital') ? 'none' : '';
+        // Pilar 3: el stock es caché derivada del libro. En CREAR (físico) se ofrece "Stock
+        // inicial" (siembra apertura); en EDITAR (físico) se gestiona por el kardex, no a mano.
+        const physical = !(t==='service' || t==='digital');
+        const isEdit = !!currentProdId;
+        document.getElementById('pStockWrap').style.display = (physical && !isEdit) ? '' : 'none';
+        const mng = document.getElementById('pStockManage');
+        if (mng) mng.style.display = (physical && isEdit) ? '' : 'none';
       }
       document.getElementById('pType').addEventListener('change',e=>applyTypeUI(e.target.value));
 

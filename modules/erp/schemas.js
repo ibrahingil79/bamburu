@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { str, strOpt, email as emailField, price, intPos } from '../../core/validate.js';
+import { ADJUST_REASONS, ADJUST_MODES } from './stock.js';
 
 const optId = z.union([z.null(), z.coerce.number().int().positive()]).optional();
 const priceOpt = z.union([z.null(), z.coerce.number().nonnegative().max(1_000_000)]).optional();
@@ -243,6 +244,15 @@ export const inventoryMovementSchema = z.object({
   type: z.enum(['in', 'out', 'adjust']),
   quantity: z.coerce.number().int().positive(),
   reason: strOpt(500),
+});
+
+// Pilar 3 · Paso 1 — ajuste manual de stock: modo (poner/sumar/restar) + motivo (lista
+// cerrada) obligatorio + nota opcional. Tipos/motivos vienen del motor (fuente única).
+export const stockAdjustSchema = z.object({
+  mode:   z.enum(ADJUST_MODES),
+  value:  z.coerce.number().int().min(0),
+  reason: z.enum(ADJUST_REASONS),
+  note:   strOpt(500),
 });
 
 // ── Shipping ───────────────────────────────────────────────────
