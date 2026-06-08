@@ -64,6 +64,8 @@ export const clientSchema = z.object({
   client_type: z.enum(['particular', 'empresa']).optional().default('particular'),
   payment_term_days: z.coerce.number().int().min(0).optional().default(0),
   payment_method: z.enum(['', 'transferencia', 'efectivo', 'tarjeta', 'domiciliacion']).optional().default(''),
+  // T4 Paso 2 — perfil de cobro: gobierna la cadencia de la próxima acción (motor en cobros.js).
+  collections_profile: z.enum(['suave', 'estandar', 'firme', 'manual']).optional().default('estandar'),
 });
 
 export const clientGroupSchema = z.object({
@@ -159,6 +161,43 @@ export const invoicePaymentSchema = z.object({
   paid_date:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   payment_method: z.string().trim().max(40).optional().default(''),
   note:           strOpt(500),
+});
+
+// T4 Paso 2 — registrar una ACCIÓN de cobro (recordatorio por email, contacto manual o
+// promesa de pago). El email es confirm-first: el cuerpo editado por el usuario llega en
+// email_subject/email_text (opcionales). promesa_pago exige fecha.
+export const collectionActionSchema = z.object({
+  type:          z.enum(['recordatorio_email', 'contacto_manual', 'promesa_pago']),
+  channel:       z.enum(['email', 'telefono', 'whatsapp', 'otro']).optional().nullable(),
+  note:          strOpt(1000),
+  promised_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  email_subject: z.string().trim().max(200).optional(),
+  email_text:    z.string().max(5000).optional(),
+}).refine(d => d.type !== 'promesa_pago' || !!d.promised_date, {
+  message: 'La promesa de pago necesita una fecha', path: ['promised_date'],
+});
+
+// T4 Paso 2.1 — acción a nivel de CUENTA del cliente (sobre todas sus facturas vivas).
+// cobro_cuenta lleva importe + modo (auto/manual) y, en manual, el reparto por factura.
+export const accountActionSchema = z.object({
+  type:          z.enum(['recordatorio_cuenta', 'promesa_cuenta', 'cobro_cuenta']),
+  note:          strOpt(1000),
+  promised_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  email_subject: z.string().trim().max(200).optional(),
+  email_text:    z.string().max(8000).optional(),
+  importe:       z.coerce.number().positive().max(1_000_000).optional(),
+  modo:          z.enum(['auto', 'manual']).optional().default('auto'),
+  payment_method: z.string().trim().max(40).optional().default(''),
+  asignacion:    z.array(z.object({
+                   invoice_id: z.coerce.number().int().positive(),
+                   importe:    z.coerce.number().min(0).max(1_000_000),
+                 })).optional(),
+}).refine(d => d.type !== 'promesa_cuenta' || !!d.promised_date, {
+  message: 'La promesa de cuenta necesita una fecha', path: ['promised_date'],
+}).refine(d => d.type !== 'cobro_cuenta' || (d.importe && d.importe > 0), {
+  message: 'El cobro a cuenta necesita un importe', path: ['importe'],
+}).refine(d => d.type !== 'cobro_cuenta' || d.modo !== 'manual' || (Array.isArray(d.asignacion) && d.asignacion.length > 0), {
+  message: 'El reparto manual necesita la asignación por factura', path: ['asignacion'],
 });
 
 // ── Discounts ──────────────────────────────────────────────────

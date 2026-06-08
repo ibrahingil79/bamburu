@@ -159,6 +159,13 @@ export function runMigrations(db) {
   addCol(db, 'clients', 'payment_term_days', 'INTEGER DEFAULT 0');     // plazo de pago en días (0 = contado)
   addCol(db, 'clients', 'payment_method', "TEXT DEFAULT ''");          // transferencia | efectivo | tarjeta | domiciliacion
 
+  // T4 Paso 2 — perfil de cobro del cliente. Gobierna la cadencia de la próxima acción
+  // (motor en cobros.js): suave | estandar | firme | manual. addCol rellena las filas
+  // existentes con el DEFAULT 'estandar'; el UPDATE asegura que ningún NULL se cuele
+  // (idempotente; nunca pisa un perfil ya elegido). Aditivo: no toca facturas ni cobros.
+  addCol(db, 'clients', 'collections_profile', "TEXT DEFAULT 'estandar'");
+  db.prepare("UPDATE clients SET collections_profile='estandar' WHERE collections_profile IS NULL OR collections_profile=''").run();
+
   // Products (extended)
   db.exec(`CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -696,6 +703,33 @@ export function runMigrations(db) {
       WHERE due_date IS NULL OR due_date = ''`).run();
     db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(dueMigKey, 'done');
   }
+
+  // ── T4 Paso 2: pipeline de cobros — registro de ACCIONES de cobro ───────────
+  // Cada gestión de cobro de una factura (recordatorio por email, contacto manual o
+  // promesa de pago) queda registrada aquí. El motor (cobros.js) lee este log para
+  // calcular la PRÓXIMA acción (qué paso de la cadencia falta) y para posponerla
+  // cuando hay una promesa viva. Nada se borra: se archiva con active=0.
+  db.exec(`CREATE TABLE IF NOT EXISTS collection_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_id INTEGER NOT NULL,
+    client_id INTEGER,
+    type TEXT NOT NULL,                 -- recordatorio_email | contacto_manual | promesa_pago
+    channel TEXT,                       -- email | telefono | whatsapp | otro (NULL si no aplica)
+    stage TEXT,                         -- etapa de la cadencia en el momento de la acción
+    note TEXT,
+    promised_date TEXT,                 -- ISO; solo en promesa_pago
+    created_at TEXT NOT NULL,           -- ISO
+    active INTEGER DEFAULT 1,
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_collection_actions_invoice ON collection_actions(invoice_id)`);
+
+  // T4 Paso 2.1 — gestión a nivel de CUENTA. Un cobro/recordatorio/promesa de cuenta se
+  // materializa en varias filas (un invoice_payment o un collection_action por factura viva).
+  // Esta columna OPCIONAL agrupa esas filas para poder trazar de qué lote vinieron. Aditiva,
+  // NULL en la gestión factura-a-factura de Paso 1/2; no toca el hash ni el núcleo de invoices.
+  addCol(db, 'invoice_payments', 'account_batch_id', 'TEXT');
+  addCol(db, 'collection_actions', 'account_batch_id', 'TEXT');
 
   db.exec(`CREATE TABLE IF NOT EXISTS invoice_sequences (
     series TEXT NOT NULL,

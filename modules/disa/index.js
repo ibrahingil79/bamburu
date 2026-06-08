@@ -3,6 +3,8 @@ import { adminAuth, getCsrfToken } from '../../core/auth.js';
 import { adminLayout } from '../erp/layout.js';
 import { generateInvoice } from '../erp/routes/invoices.js';
 import { fiscalIdConflict } from '../erp/routes/clients.js';
+import { collectionsWorklist, registerCollectionAction, accountsSummary, registerAccountAction } from '../erp/cobros.js';
+import { sendEmail } from '../../core/mailer.js';
 
 export function register(app, db) {
   const router = new Hono();
@@ -96,6 +98,7 @@ export function register(app, db) {
     'create_order', 'edit_order', 'update_order_status', 'cancel_order',
     'create_invoice_from_order', 'adjust_stock', 'reset_stock',
     'update_company_config', 'disable_2fa_user', 'list_users_security',
+    'register_collection_action', 'register_account_action',
   ]);
 
   function isAdminUser(session) {
@@ -517,6 +520,52 @@ export function register(app, db) {
           return { ok: true, message: 'Cliente #' + p.client_id + ' desactivado.' };
         }
 
+        // T4 Paso 2 — DISA registra una acción de cobro SIEMPRE por el servicio validado
+        // (mismo que el endpoint POST .../collection-actions): NO hace INSERT directo y
+        // reutiliza el doble seguro (rechaza factura no viva). La confirmación previa la
+        // garantiza el protocolo [ACCION] (DISA propone → el usuario dice "si").
+        case 'register_collection_action': {
+          const p = action.params || {};
+          try {
+            const res = await registerCollectionAction(db, parseInt(p.invoice_id), {
+              type: p.type, channel: p.channel, note: p.note, promised_date: p.promised_date,
+            }, { sendEmail });
+            logActivity(db, 'collection_action', 'invoices', res.id,
+              'DISA registró ' + res.type + ' en factura ' + res.invoice_number, session);
+            const msg = res.type === 'recordatorio_email'
+              ? 'Recordatorio enviado para la factura ' + res.invoice_number + '.'
+              : res.type === 'promesa_pago'
+                ? 'Promesa de pago registrada para la factura ' + res.invoice_number + '.'
+                : 'Contacto registrado para la factura ' + res.invoice_number + '.';
+            return { ok: true, message: msg };
+          } catch (e) {
+            return { ok: false, message: 'No se pudo registrar la acción de cobro: ' + e.message };
+          }
+        }
+
+        // T4 Paso 2.1 — acción a nivel de CUENTA (toda la deuda viva del cliente), SIEMPRE
+        // por el mismo servicio validado (no INSERT directo). Confirmación previa vía [ACCION].
+        case 'register_account_action': {
+          const p = action.params || {};
+          try {
+            const res = await registerAccountAction(db, parseInt(p.client_id), {
+              type: p.type, note: p.note, promised_date: p.promised_date,
+              importe: p.importe, modo: p.modo || 'auto', asignacion: p.asignacion, payment_method: p.payment_method,
+            }, { sendEmail });
+            logActivity(db, 'account_action', 'clients', p.client_id,
+              'DISA ejecutó ' + res.type + ' (lote ' + res.batch_id + ')', session);
+            const msg = res.type === 'recordatorio_cuenta'
+              ? 'Recordatorio de cuenta enviado (' + res.facturas + ' factura(s)).'
+              : res.type === 'promesa_cuenta'
+                ? 'Promesa de cuenta registrada en ' + res.facturas + ' factura(s).'
+                : 'Cobro a cuenta registrado en ' + (res.pagos ? res.pagos.length : 0) + ' factura(s)'
+                  + (res.sinAsignar > 0.0049 ? ' (sobran ' + res.sinAsignar.toFixed(2) + ').' : '.');
+            return { ok: true, message: msg };
+          } catch (e) {
+            return { ok: false, message: 'No se pudo ejecutar la acción de cuenta: ' + e.message };
+          }
+        }
+
         case 'activate_client': {
           const p = action.params;
           const r = db.prepare('UPDATE clients SET active=1 WHERE id=?').run(p.client_id);
@@ -825,6 +874,48 @@ export function register(app, db) {
             : 'ninguno'),
         '- Clientes sin compra en >30 dias: ' + (inactiveClients.count || 0),
         '',
+        // get_collections_summary (lectura): worklist priorizado + próxima acción por deuda.
+        ...(() => {
+          try {
+            const wl = collectionsWorklist(db, new Date().toISOString().slice(0, 10));
+            const top = wl.rows.slice(0, 8).map((r, i) => {
+              const p = r.proximaAccion;
+              const accion = !p ? 'sin accion'
+                : p.accion === 'recordatorio_email' ? ('recordatorio (' + p.etapa + ', tono ' + p.tono + ')')
+                : p.etapa === 'promesa' ? ('promesa hasta ' + (p.fechaObjetivo || '?'))
+                : p.etapa === 'manual' ? 'gestion manual'
+                : p.etapa === 'por_vencer' ? 'aun no vence' : 'sin accion';
+              return (i + 1) + '. ' + (r.client_name || '-') + ' · factura ' + r.invoice_number
+                + ' · ' + sym + Number(r.pendiente || 0).toFixed(2)
+                + (r.dias_vencida > 0 ? ' · vencida ' + r.dias_vencida + 'd' : '')
+                + ' · perfil ' + (r.collections_profile || 'estandar')
+                + ' · PROXIMA: ' + accion + ' (invoice_id=' + r.invoice_id + ')';
+            });
+            return [
+              'COBROS POR FACTURA — TE DEBEN ' + sym + Number(wl.total || 0).toFixed(2) + ' (' + wl.rows.length + ' factura(s)):',
+              wl.rows.length ? top.join('\n') : 'sin deudas vivas',
+              '',
+            ];
+          } catch { return []; }
+        })(),
+        // get_collections_summary a nivel de CUENTA: deuda total + próxima acción de cuenta por cliente.
+        ...(() => {
+          try {
+            const acc = accountsSummary(db, new Date().toISOString().slice(0, 10));
+            if (!acc.rows.length) return [];
+            const lines = acc.rows.slice(0, 8).map((r, i) => {
+              const p = r.proximaAccionCuenta;
+              const accion = !p ? 'sin accion'
+                : p.accion === 'recordatorio_email' ? ('recordatorio de cuenta (' + p.etapa + ', tono ' + p.tono + ')')
+                : p.etapa === 'promesa' ? 'promesa en curso'
+                : p.etapa === 'manual' ? 'gestion manual' : 'sin accion ahora';
+              return (i + 1) + '. ' + (r.client_name || '-') + ' (client_id=' + r.client_id + ') · '
+                + sym + Number(r.deudaTotal).toFixed(2) + ' en ' + r.facturas + ' factura(s)'
+                + ' · perfil ' + (r.perfilCuenta || 'estandar') + ' · CUENTA: ' + accion;
+            });
+            return ['COBROS POR CUENTA (cliente entero):', lines.join('\n'), ''];
+          } catch { return []; }
+        })(),
         'PRODUCTOS MAS VENDIDOS ESTE MES:',
         topProducts.length > 0
           ? topProducts.map((p, i) => (i + 1) + '. ' + p.name + ' (' + p.sold + ' uds)').join('\n')
@@ -1660,7 +1751,8 @@ export function register(app, db) {
       'NO PUEDES HACER:',
       '- Acceder a datos de otros negocios.',
       '- Modificar usuarios admin, sesiones ni la BD central del sistema.',
-      '- Enviar emails, SMS o notificaciones (capacidad futura).',
+      '- Enviar SMS ni hacer llamadas. El UNICO email que puedes enviar es el recordatorio de',
+      '  cobro (register_collection_action, type=recordatorio_email), y SOLO con confirmacion previa.',
       '- Inventar datos, URLs o capacidades. Si no sabes algo, dilo.',
       '',
       'REGLA DE ORO:',
@@ -1744,6 +1836,19 @@ export function register(app, db) {
       'Inventario:',
       '- adjust_stock: {"product_id":0,"quantity":0,"reason":""}  (positivo=entrada, negativo=salida)',
       '- reset_stock: {"product_id":0,"reason":""}',
+      '',
+      'Cobros (ver seccion COBROS del contexto para invoice_id, perfil y proxima accion):',
+      '- register_collection_action: {"invoice_id":0,"type":"recordatorio_email|contacto_manual|promesa_pago","channel":"telefono|whatsapp|otro","note":"","promised_date":"AAAA-MM-DD"}',
+      '  type=recordatorio_email ENVIA un email al cliente (confirmacion OBLIGATORIA antes de enviar).',
+      '  type=promesa_pago exige promised_date. type=contacto_manual usa channel (telefono/whatsapp/otro).',
+      '  Propon TU la accion segun la PROXIMA del contexto y el tono del perfil; ejecuta solo tras "si".',
+      '  Ejemplo: "Hoy toca Maria (300 EUR, 20 dias vencida, perfil Estandar): 2º recordatorio. Lo mando?"',
+      '',
+      'Cobros a nivel de CUENTA (cliente entero; ver seccion COBROS POR CUENTA del contexto):',
+      '- register_account_action: {"client_id":0,"type":"recordatorio_cuenta|promesa_cuenta|cobro_cuenta","promised_date":"AAAA-MM-DD","importe":0,"modo":"auto|manual","asignacion":[{"invoice_id":0,"importe":0}]}',
+      '  recordatorio_cuenta = UN email con el total y el desglose. promesa_cuenta exige promised_date.',
+      '  cobro_cuenta reparte el importe (modo auto = mas antigua primero) entre las facturas vivas.',
+      '  Propon la cuenta entera, p.ej.: "Te debe 450 EUR en 3 facturas, mando un recordatorio de la cuenta?"',
       '',
       'Configuracion:',
       '- update_company_config: {"campo":"valor",...}',

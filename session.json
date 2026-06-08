@@ -1,7 +1,7 @@
 {
-  "sesion_inicio": "2026-06-03",
-  "ultima_tarea": "P4 — Buscador y filtros en la lista de productos (HECHO)",
-  "estado": "Pilar 1 — Producto CERRADO (P1+P2, P2.1, P2.2, P3, P4)",
-  "donde_sigo": "Arrancar Pilar 2 — Cliente (por detallar en TABLERO.md)",
-  "notas": "Lista /admin/products ahora server-rendered con ?q=&categoria=&page= (LIKE + filtro categoría + LIMIT/OFFSET + COUNT). POS y facturación intactos (usan API /api/erp/products). Reiniciar servicio para desplegar: sudo systemctl restart bamburu"
+  "sesion_inicio": "2026-06-08",
+  "ultima_tarea": "T4 Paso 2 (perfiles + próxima acción + DISA) y Paso 2.1 (gestión de cuenta) — HECHO",
+  "estado": "Pilar 2 — Cliente EN CURSO. T1, T2, T3 y T4 (Paso 1, 2, 2.1) hechos.",
+  "donde_sigo": "T5 — DISA sobre clientes (acciones por API validada, búsqueda de clientes, enlazar client_id en pedidos de DISA).",
+  "notas": "Cobros con perfil por cliente + pipeline priorizado + próxima acción + plantillas email (Resend, core/mailer.js) + gestión a nivel de cuenta (recordatorio/promesa/cobro con reparto auto/manual). Migraciones aditivas: clients.collections_profile, tabla collection_actions, invoice_payments.account_batch_id + collection_actions.account_batch_id. Tests: scripts/test-cobros-paso2.mjs (47) y scripts/test-cobros-paso2-1.mjs (46). Reiniciar: sudo systemctl restart bamburu"
 }

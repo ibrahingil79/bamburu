@@ -3,9 +3,11 @@ import { adminLayout, can } from '../layout.js';
 import { logActivity, requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { escHtml } from '../../../core/escape.js';
-import { clientSchema, clientGroupSchema } from '../schemas.js';
-import { clientDebt, isCobrable } from '../cobros.js';
+import { clientSchema, clientGroupSchema, accountActionSchema } from '../schemas.js';
+import { clientDebt, isCobrable, invoiceProximaAccion, invoiceActionHistory, PROFILE_LABELS,
+  resumenCuentaCliente, registerAccountAction, accountEmail } from '../cobros.js';
 import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
+import { sendEmail } from '../../../core/mailer.js';
 
 // Comprobación reutilizable de NIF duplicado (regla de integridad — sin duplicados).
 // Devuelve el cliente ACTIVO en conflicto (otro id con el mismo fiscal_id normalizado)
@@ -55,7 +57,7 @@ export function createClientRoutes(db, cfg = {}) {
       const d = c.get('validated');
       if (!d.name) return c.json({error:'Nombre requerido'},400);
       if (fiscalIdConflict(db, d.fiscal_id)) return c.json({error:'Ya existe un cliente con ese NIF'},409);
-      const r = db.prepare('INSERT INTO clients (name,fiscal_id,email,phone,address,city,country,group_id,notes,accepts_newsletter,client_type,payment_term_days,payment_method) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').run(d.name, d.fiscal_id||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.country||'', d.group_id||null, d.notes||'', d.accepts_newsletter?1:0, d.client_type||'particular', d.payment_term_days||0, d.payment_method||'');
+      const r = db.prepare('INSERT INTO clients (name,fiscal_id,email,phone,address,city,country,group_id,notes,accepts_newsletter,client_type,payment_term_days,payment_method,collections_profile) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(d.name, d.fiscal_id||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.country||'', d.group_id||null, d.notes||'', d.accepts_newsletter?1:0, d.client_type||'particular', d.payment_term_days||0, d.payment_method||'', d.collections_profile||'estandar');
       syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
       logActivity(db, c.get('session'), 'Creó cliente', 'client', r.lastInsertRowid, d.name);
       return c.json({id:r.lastInsertRowid, message:'Creado'});
@@ -66,7 +68,7 @@ export function createClientRoutes(db, cfg = {}) {
     try {
       const d = c.get('validated');
       if (fiscalIdConflict(db, d.fiscal_id, c.req.param('id'))) return c.json({error:'Ya existe un cliente con ese NIF'},409);
-      db.prepare('UPDATE clients SET name=?,fiscal_id=?,email=?,phone=?,address=?,city=?,country=?,group_id=?,notes=?,accepts_newsletter=?,client_type=?,payment_term_days=?,payment_method=? WHERE id=?').run(d.name, d.fiscal_id||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.country||'', d.group_id||null, d.notes||'', d.accepts_newsletter?1:0, d.client_type||'particular', d.payment_term_days||0, d.payment_method||'', c.req.param('id'));
+      db.prepare('UPDATE clients SET name=?,fiscal_id=?,email=?,phone=?,address=?,city=?,country=?,group_id=?,notes=?,accepts_newsletter=?,client_type=?,payment_term_days=?,payment_method=?,collections_profile=? WHERE id=?').run(d.name, d.fiscal_id||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.country||'', d.group_id||null, d.notes||'', d.accepts_newsletter?1:0, d.client_type||'particular', d.payment_term_days||0, d.payment_method||'', d.collections_profile||'estandar', c.req.param('id'));
       syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
       return c.json({message:'Actualizado'});
     } catch(e) { return c.json({error:e.message},500); }
@@ -98,9 +100,55 @@ export function createClientRoutes(db, cfg = {}) {
       const debt = clientDebt(db, c.req.param('id'), today);
       // Marca cada factura con el MISMO flag que usa el guard del backend (isCobrable),
       // para que el botón "Registrar cobro" de la ficha no pueda divergir de la regla.
-      debt.invoices = debt.invoices.map(inv => ({ ...inv, cobrable: isCobrable(db, inv) }));
+      // Paso 2: misma próxima acción + historial de acciones que las otras superficies.
+      debt.invoices = debt.invoices.map(inv => ({
+        ...inv,
+        cobrable: isCobrable(db, inv),
+        proxima: invoiceProximaAccion(db, inv, today),
+        actionHistory: invoiceActionHistory(db, inv.id),
+      }));
+      const cl = db.prepare('SELECT collections_profile FROM clients WHERE id=?').get(c.req.param('id'));
+      debt.collections_profile = (cl && cl.collections_profile) || 'estandar';
       return c.json(debt);
     } catch(e) { return c.json({error:e.message},500); }
+  });
+
+  // ── T4 Paso 2.1 — gestión a nivel de CUENTA del cliente ─────────────────────
+  // GET resumen de cuenta: deuda total + facturas vivas (priorizadas) + etapa y próxima
+  // acción de cuenta (heredadas de la factura más grave). Lo lee el modal "Gestionar cuenta".
+  api.get('/:id/account-summary', requirePerm('clients.read'), c => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      return c.json(resumenCuentaCliente(db, parseInt(c.req.param('id')), today));
+    } catch(e) { return c.json({error:e.message},500); }
+  });
+
+  // GET plantilla de email de CUENTA precargada (editable antes de enviar).
+  api.get('/:id/account-email-preview', requirePerm('clients.read'), c => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const id = parseInt(c.req.param('id'));
+      const resumen = resumenCuentaCliente(db, id, today);
+      const client = db.prepare('SELECT * FROM clients WHERE id=?').get(id);
+      const company = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
+      const tono = (resumen.proximaAccionCuenta && resumen.proximaAccionCuenta.tono) || 'amable';
+      const tpl = accountEmail(tono, { client, company, facturasVivas: resumen.facturasVivas, total: resumen.deudaTotal });
+      return c.json({ subject: tpl.subject, text: tpl.text, tono, to: (client && client.email) || '', has_email: !!(client && client.email), total: resumen.deudaTotal, facturas: resumen.facturasVivas.length });
+    } catch(e) { return c.json({error:e.message},400); }
+  });
+
+  // POST acción de CUENTA — recordatorio (UN email + acción por factura), promesa (todas)
+  // o cobro a cuenta (reparto auto/manual → un invoice_payment por factura). Va por el mismo
+  // servicio validado que usa DISA. Rechaza facturas no vivas (doble seguro de Paso 1).
+  api.post('/:id/account-actions', requirePerm('invoices.create'), validate(accountActionSchema), async c => {
+    try {
+      const input = c.get('validated');
+      const res = await registerAccountAction(db, parseInt(c.req.param('id')), input, { sendEmail });
+      const label = input.type === 'recordatorio_cuenta' ? 'Envió recordatorio de cuenta'
+        : input.type === 'promesa_cuenta' ? 'Registró promesa de cuenta' : 'Registró cobro a cuenta';
+      logActivity(db, c.get('session'), label, 'client', c.req.param('id'), `${res.facturas || (res.pagos && res.pagos.length) || 0} factura(s) · lote ${res.batch_id}`);
+      return c.json(res, 201);
+    } catch(e) { return c.json({error:e.message}, e.status || 400); }
   });
 
   // Restaurar un cliente archivado (inverso de archivar, T1). Guarda: archivar libera
@@ -262,14 +310,24 @@ export function createClientRoutes(db, cfg = {}) {
                 <input class="form-control" id="cTermDays" type="number" min="0" step="1" value="0">
               </div>
             </div>
-            <div class="form-group" style="max-width:50%"><label class="form-label">Forma de pago preferida</label>
-              <select class="form-control" id="cPayMethod">
-                <option value="">— Sin especificar —</option>
-                <option value="transferencia">Transferencia</option>
-                <option value="efectivo">Efectivo</option>
-                <option value="tarjeta">Tarjeta</option>
-                <option value="domiciliacion">Domiciliación</option>
-              </select>
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">Forma de pago preferida</label>
+                <select class="form-control" id="cPayMethod">
+                  <option value="">— Sin especificar —</option>
+                  <option value="transferencia">Transferencia</option>
+                  <option value="efectivo">Efectivo</option>
+                  <option value="tarjeta">Tarjeta</option>
+                  <option value="domiciliacion">Domiciliación</option>
+                </select>
+              </div>
+              <div class="form-group"><label class="form-label">Perfil de cobro</label>
+                <select class="form-control" id="cProfile">
+                  <option value="suave">Suave (recordatorios espaciados)</option>
+                  <option value="estandar">Estándar</option>
+                  <option value="firme">Firme (reclama pronto)</option>
+                  <option value="manual">Manual (lo gestionas tú)</option>
+                </select>
+              </div>
             </div>
             <div class="form-group"><label class="form-label">Notas internas</label><textarea class="form-control" id="cNotes" rows="2"></textarea></div>
           </div>
@@ -302,6 +360,7 @@ export function createClientRoutes(db, cfg = {}) {
         document.getElementById('cType').value='particular';
         document.getElementById('cTermDays').value=0;
         document.getElementById('cPayMethod').value='';
+        document.getElementById('cProfile').value='estandar';
         openModal('clientModal');
       }
       async function editClient(id){
@@ -321,11 +380,12 @@ export function createClientRoutes(db, cfg = {}) {
         document.getElementById('cType').value=c.client_type||'particular';
         document.getElementById('cTermDays').value=Number(c.payment_term_days||0);
         document.getElementById('cPayMethod').value=c.payment_method||'';
+        document.getElementById('cProfile').value=c.collections_profile||'estandar';
         openModal('clientModal');
       }
       async function saveClient(){
         const id=document.getElementById('clientId').value;
-        const body={name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,address:document.getElementById('cAddress').value,city:document.getElementById('cCity').value,country:document.getElementById('cCountry').value,group_id:document.getElementById('cGroup').value||null,notes:document.getElementById('cNotes').value,accepts_newsletter: id ? !!(currentClient&&currentClient.accepts_newsletter) : false,client_type:document.getElementById('cType').value,payment_term_days:parseInt(document.getElementById('cTermDays').value)||0,payment_method:document.getElementById('cPayMethod').value};
+        const body={name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,address:document.getElementById('cAddress').value,city:document.getElementById('cCity').value,country:document.getElementById('cCountry').value,group_id:document.getElementById('cGroup').value||null,notes:document.getElementById('cNotes').value,accepts_newsletter: id ? !!(currentClient&&currentClient.accepts_newsletter) : false,client_type:document.getElementById('cType').value,payment_term_days:parseInt(document.getElementById('cTermDays').value)||0,payment_method:document.getElementById('cPayMethod').value,collections_profile:document.getElementById('cProfile').value};
         try{if(id)await api('PUT','/api/erp/clients/'+id,body);else await api('POST','/api/erp/clients',body);closeModal('clientModal');toast(id?'Actualizado':'Creado');location.reload();}catch(e){toast(e.message,'err')}
       }
       async function delClient(id){if(!confirm('¿Archivar este cliente? Dejará de aparecer en la lista, pero no se borra.'))return;try{await api('DELETE','/api/erp/clients/'+id);toast('Archivado');location.reload();}catch(e){toast(e.message,'err')}}
@@ -343,22 +403,33 @@ export function createClientRoutes(db, cfg = {}) {
           const estadoCell=!f.counts
             ?'<span class="badge b-gray" title="No computa como deuda (anulada o rectificada por sustitución)">no computa</span>'
             :'<span class="badge '+(cobroBadge[f.estado]||'')+'">'+(cobroLabel[f.estado]||f.estado)+(f.estado==='vencida'&&f.dias_vencida?' '+f.dias_vencida+'d':'')+'</span>';
-          // Botón "Registrar cobro" usando el MISMO flag del motor (f.cobrable = isCobrable);
-          // solo si además queda pendiente. Abre el modal compartido (mismo endpoint único).
+          // Botón "Gestionar" (centro compartido: cobro + próxima acción + acciones), con
+          // el MISMO flag del motor (f.cobrable) y solo si queda pendiente.
           const cobrarCell = (f.cobrable && Number(f.pendiente)>0.0049)
-            ? '<button class="btn btn-secondary btn-sm" onclick="openCobros('+f.id+')">Registrar cobro</button>'
+            ? '<button class="btn btn-primary btn-sm" onclick="openGestion('+f.id+')">Gestionar</button>'
             : '';
+          // Próxima acción (misma que en Cobros y listado de facturas).
+          const p=f.proxima;
+          const proxCell = p
+            ? (window.proximaBadgeHtml?window.proximaBadgeHtml(p):'')+' <span style="font-size:.8rem">'+(p.accion==='recordatorio_email'?'recordatorio':((window.STAGE_LABEL&&window.STAGE_LABEL[p.etapa])||p.etapa))+'</span>'+(p.fechaObjetivo?'<br><span style="color:var(--muted);font-size:.75rem">'+p.fechaObjetivo+'</span>':'')
+            : '<span style="color:var(--muted)">—</span>';
           return '<tr><td><a href="/admin/invoices/'+f.id+'" target="_blank">'+f.invoice_number+'</a></td>'+
             '<td style="color:var(--muted);font-size:.8rem">'+(f.due_date||f.issue_date||'-')+'</td>'+
             '<td>${sym}'+Number(f.total||0).toFixed(2)+'</td>'+
             '<td>'+(f.counts?'${sym}'+Number(f.pendiente||0).toFixed(2):'—')+'</td>'+
             '<td>'+estadoCell+'</td>'+
+            '<td>'+proxCell+'</td>'+
             '<td style="text-align:right">'+cobrarCell+'</td></tr>';
-        }).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:1rem">Sin facturas</td></tr>';
+        }).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:1rem">Sin facturas</td></tr>';
         const o=deb.oldest;
+        // Paso 2.1 — "Gestionar cuenta" (toda la deuda viva a la vez), junto al "Te debe X".
+        const gestionarCuentaBtn = Number(deb.total||0)>0.0049
+          ? ' <button class="btn btn-primary btn-sm" style="margin-left:.5rem" onclick="openGestionCuenta('+id+')">Gestionar cuenta</button>'
+          : '';
         const debtBlock='<div class="alert '+(Number(deb.total||0)>0?'alert-warn':'alert-ok')+'" style="margin-bottom:1rem">'+
           'Te debe <strong>${sym}'+Number(deb.total||0).toFixed(2)+'</strong>'+
           (o?' · Deuda más antigua: <a href="/admin/invoices/'+o.invoice_id+'" target="_blank">'+o.invoice_number+'</a> (${sym}'+Number(o.pendiente||0).toFixed(2)+', vence '+(o.due_date||'-')+(o.dias_vencida>0?' · '+o.dias_vencida+' días vencida':'')+')':' · sin deuda pendiente')+
+          gestionarCuentaBtn+
           '</div>';
         document.getElementById('detailBody').innerHTML=
           '<div class="grid g2" style="margin-bottom:1rem">'+
@@ -369,11 +440,12 @@ export function createClientRoutes(db, cfg = {}) {
           '<div><div class="form-label">Tipo de cliente</div><div>'+(c.client_type==='empresa'?'Empresa o profesional':'Particular')+'</div></div>'+
           '<div><div class="form-label">Plazo de pago</div><div>'+(Number(c.payment_term_days||0)>0?Number(c.payment_term_days)+' días':'Contado')+'</div></div>'+
           '<div><div class="form-label">Forma de pago</div><div>'+({transferencia:"Transferencia",efectivo:"Efectivo",tarjeta:"Tarjeta",domiciliacion:"Domiciliación"}[c.payment_method]||'—')+'</div></div>'+
+          '<div><div class="form-label">Perfil de cobro</div><div>'+({suave:"Suave",estandar:"Estándar",firme:"Firme",manual:"Manual"}[c.collections_profile||'estandar'])+'</div></div>'+
           '</div>'+
           (c.notes?'<div class="alert alert-ok" style="margin-bottom:1rem">'+c.notes+'</div>':'')+
           '<h4 style="margin-bottom:.75rem">Facturas y cobro</h4>'+
           debtBlock+
-          '<div class="table-wrap" style="margin-bottom:1.25rem"><table><thead><tr><th>Factura</th><th>Vence</th><th>Total</th><th>Pendiente</th><th>Cobro</th><th></th></tr></thead><tbody>'+invRows+'</tbody></table></div>'+
+          '<div class="table-wrap" style="margin-bottom:1.25rem"><table><thead><tr><th>Factura</th><th>Vence</th><th>Total</th><th>Pendiente</th><th>Cobro</th><th>Próxima acción</th><th></th></tr></thead><tbody>'+invRows+'</tbody></table></div>'+
           '<h4 style="margin-bottom:.75rem">Historial de pedidos</h4>'+
           '<div class="table-wrap"><table><thead><tr><th>Orden</th><th>Total</th><th>Estado</th><th>Fecha</th></tr></thead><tbody>'+ordRows+'</tbody></table></div>';
         openModal('detailModal');

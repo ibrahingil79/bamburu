@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { requirePerm } from '../../../core/auth.js';
 import { adminLayout } from '../layout.js';
-import { openDebts } from '../cobros.js';
+import { collectionsWorklist } from '../cobros.js';
 import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
 
 // T4 Paso 1 — Sección "Cobros": torre de control de lo que te deben. Lee SIEMPRE del
@@ -12,10 +12,11 @@ export function createCobrosRoutes(db) {
   const api = new Hono();
   const views = new Hono();
 
-  // GET /api/erp/cobros — todas las deudas vivas + total global.
+  // GET /api/erp/cobros — pipeline PRIORIZADO de deudas vivas (cada una con su próxima
+  // acción + motivo) + total global. Una sola fuente de verdad (collectionsWorklist).
   api.get('/', requirePerm('orders.read'), c => {
     try {
-      return c.json(openDebts(db, new Date().toISOString().slice(0, 10)));
+      return c.json(collectionsWorklist(db, new Date().toISOString().slice(0, 10)));
     } catch (e) { return c.json({ error: e.message }, 500); }
   });
 
@@ -33,9 +34,9 @@ export function createCobrosRoutes(db) {
         </div>
       </div>
       <div class="card">
-        <div class="card-head"><h3>Deudas vivas (más vencidas arriba)</h3><input class="search" id="searchBox" placeholder="Buscar cliente o factura..." oninput="filterRows()"></div>
+        <div class="card-head"><h3>Pipeline de cobro (más urgentes arriba)</h3><input class="search" id="searchBox" placeholder="Buscar cliente o factura..." oninput="filterRows()"></div>
         <div class="table-wrap"><table>
-          <thead><tr><th>Cliente</th><th>Factura</th><th>Vence</th><th>Pendiente</th><th>Antigüedad</th><th></th></tr></thead>
+          <thead><tr><th>Cliente</th><th>Factura</th><th>Pendiente</th><th>Etapa</th><th>Próxima acción</th><th></th></tr></thead>
           <tbody id="cobrosBody"></tbody>
         </table></div>
       </div>
@@ -44,8 +45,15 @@ export function createCobrosRoutes(db) {
       <script>
       ${cobroModalScript(sym)}
       const SYM = ${JSON.stringify(sym)};
-      const tramoBadge = { '0-30':'b-yellow', '30-60':'b-purple', '+60':'b-red' };
       let cobrosRows = [];
+      function accionTxt(p){
+        if(!p) return 'Sin acción';
+        if(p.accion==='recordatorio_email') return 'Mandar recordatorio';
+        if(p.etapa==='promesa') return 'Esperar (promesa)';
+        if(p.etapa==='manual') return 'Gestión manual';
+        if(p.etapa==='por_vencer') return 'Aún no vence';
+        return 'Sin acción';
+      }
       async function loadCobros(){
         let data;
         try { data = await api('GET','/api/erp/cobros'); } catch(e){ toast(e.message||'Error','err'); return; }
@@ -53,16 +61,15 @@ export function createCobrosRoutes(db) {
         document.getElementById('cobrosTotal').textContent = SYM + Number(data.total||0).toFixed(2);
         document.getElementById('cobrosCount').textContent = '· ' + cobrosRows.length + ' factura' + (cobrosRows.length===1?'':'s') + ' pendiente' + (cobrosRows.length===1?'':'s');
         document.getElementById('cobrosBody').innerHTML = cobrosRows.length ? cobrosRows.map(function(r){
-          const venc = r.estado==='vencida'
-            ? '<span class="badge '+(tramoBadge[r.tramo]||'')+'">'+r.dias_vencida+' días · '+r.tramo+'</span>'
-            : '<span style="color:var(--muted)">al corriente</span>';
+          const p = r.proximaAccion||null;
+          const fecha = p&&p.fechaObjetivo ? ' <span style="color:var(--muted);font-size:.8rem">· '+escHtml(p.fechaObjetivo)+'</span>' : '';
           return '<tr class="frow">'
             +'<td>'+escHtml(r.client_name||'')+'</td>'
             +'<td><a href="/admin/invoices/'+r.invoice_id+'" target="_blank"><strong>'+escHtml(r.invoice_number||'')+'</strong></a></td>'
-            +'<td style="color:var(--muted);font-size:.85rem">'+escHtml(r.due_date||'-')+'</td>'
             +'<td><strong>'+SYM+Number(r.pendiente||0).toFixed(2)+'</strong></td>'
-            +'<td>'+venc+'</td>'
-            +'<td><button class="btn btn-secondary btn-sm" onclick="openCobros('+r.invoice_id+')">Registrar cobro</button></td>'
+            +'<td>'+(window.proximaBadgeHtml?window.proximaBadgeHtml(p):'')+'</td>'
+            +'<td>'+escHtml(accionTxt(p))+fecha+'<div style="color:var(--muted);font-size:.8rem">'+escHtml(r.motivo||'')+'</div></td>'
+            +'<td><button class="btn btn-primary btn-sm" onclick="openGestion('+r.invoice_id+')">Gestionar</button></td>'
             +'</tr>';
         }).join('') : '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--muted)">No hay deudas pendientes 🎉</td></tr>';
         filterRows();

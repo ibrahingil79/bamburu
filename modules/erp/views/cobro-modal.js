@@ -15,8 +15,25 @@ export function cobroModalHtml() {
       <div class="modal-head"><h3 id="cobroTitle">Cobros</h3><button class="modal-close" onclick="closeModal('cobroModal')">✕</button></div>
       <div class="modal-body" id="cobroBody"></div>
     </div>
+  </div>
+  <div class="modal-overlay" id="gestionModal">
+    <div class="modal" style="max-width:640px">
+      <div class="modal-head"><h3 id="gestionTitle">Gestión de cobro</h3><button class="modal-close" onclick="closeModal('gestionModal')">✕</button></div>
+      <div class="modal-body" id="gestionBody"></div>
+    </div>
   </div>`;
 }
+
+// Etiquetas compartidas de etapa del pipeline (mismas en las 3 superficies).
+export const STAGE_LABEL_JS = {
+  por_vencer: 'Por vencer', r1: '1er recordatorio', r2: '2º recordatorio',
+  firme: 'Aviso formal', en_riesgo: 'En riesgo', promesa: 'Promesa de pago',
+  manual: 'Manual', sin_pasos: 'Gestionada',
+};
+export const STAGE_BADGE_JS = {
+  por_vencer: 'b-gray', r1: 'b-yellow', r2: 'b-purple', firme: 'b-red',
+  en_riesgo: 'b-red', promesa: 'b-blue', manual: 'b-gray', sin_pasos: 'b-green',
+};
 
 export function cobroModalScript(sym) {
   return `
@@ -63,6 +80,245 @@ export function cobroModalScript(sym) {
         toast('Cobro registrado');
         await openCobros(id);                                              // refresca el propio modal
         if (typeof window.cobroOnSaved === 'function') window.cobroOnSaved(id);  // refresca la vista de la página
+      } catch(e){ toast(e.message||'Error registrando el cobro','err'); }
+    };
+
+    // ── Paso 2: GESTIÓN DE COBRO (próxima acción + acciones) — compartido por las 3 superficies ──
+    const STAGE_LABEL = ${JSON.stringify(STAGE_LABEL_JS)};
+    const STAGE_BADGE = ${JSON.stringify(STAGE_BADGE_JS)};
+    window.STAGE_LABEL = STAGE_LABEL;
+    window.proximaBadgeHtml = function(p){
+      if(!p) return '';
+      return '<span class="badge '+(STAGE_BADGE[p.etapa]||'')+'">'+(STAGE_LABEL[p.etapa]||p.etapa)+'</span>';
+    };
+    function accionLabel(p){
+      if(!p) return 'Sin deuda viva';
+      if(p.accion==='recordatorio_email') return 'Mandar '+(STAGE_LABEL[p.etapa]||p.etapa).toLowerCase();
+      return STAGE_LABEL[p.etapa]||p.etapa;
+    }
+    // Abre el centro de gestión de UNA factura: próxima acción + las 4 acciones.
+    window.openGestion = async function(id){
+      let inv;
+      try { inv = await api('GET','/api/erp/invoices/'+id); } catch(e){ toast(e.message||'Error','err'); return; }
+      const co = inv.cobro||{}; const p = inv.proxima||null;
+      document.getElementById('gestionTitle').textContent = 'Gestión de cobro · '+inv.invoice_number;
+      const proxLine = p
+        ? '<div class="alert '+(p.accion?'alert-warn':'alert-ok')+'" style="margin-bottom:1rem">'
+            +'<strong>Próxima acción:</strong> '+window.proximaBadgeHtml(p)+' '+escHtml(accionLabel(p))
+            +(p.fechaObjetivo?' <span style="color:var(--muted)">· '+escHtml(p.fechaObjetivo)+'</span>':'')
+            +'<div style="color:var(--muted);font-size:.85rem;margin-top:.25rem">'+escHtml(p.motivo||'')+'</div></div>'
+        : '<div class="alert alert-ok" style="margin-bottom:1rem">Sin deuda viva que gestionar.</div>';
+      const hist = (inv.collectionActions&&inv.collectionActions.length)
+        ? '<div style="margin-top:1rem"><div class="form-label">Historial de gestiones</div><ul style="margin:.25rem 0 0;padding-left:1.1rem;color:var(--muted);font-size:.85rem">'
+          +inv.collectionActions.slice(0,6).map(function(a){
+            const t={recordatorio_email:'Recordatorio email',contacto_manual:'Contacto',promesa_pago:'Promesa de pago'}[a.type]||a.type;
+            return '<li>'+escHtml((a.created_at||'').slice(0,10))+' · '+escHtml(t)+(a.channel?' ('+escHtml(a.channel)+')':'')+(a.promised_date?' → '+escHtml(a.promised_date):'')+(a.note?' · '+escHtml(a.note):'')+'</li>';
+          }).join('')+'</ul></div>'
+        : '';
+      const canCobro = inv.cobrable && co.pendiente>0.0049;
+      const buttons = '<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">'
+        +(canCobro?'<button class="btn btn-secondary btn-sm" onclick="openCobros('+id+')">Registrar cobro</button>':'')
+        +(canCobro?'<button class="btn btn-primary btn-sm" onclick="formRecordatorio('+id+')">Mandar recordatorio</button>':'')
+        +(canCobro?'<button class="btn btn-secondary btn-sm" onclick="formContacto('+id+')">Registrar contacto</button>':'')
+        +(canCobro?'<button class="btn btn-secondary btn-sm" onclick="formPromesa('+id+')">Registrar promesa de pago</button>':'')
+        +'</div>';
+      document.getElementById('gestionBody').innerHTML =
+        '<div style="margin-bottom:.75rem">Pendiente <strong>'+SYM+Number(co.pendiente||0).toFixed(2)+'</strong> de '+SYM+Number(inv.total||0).toFixed(2)+'</div>'
+        +proxLine+buttons+'<div id="gestionForm"></div>'+hist;
+      openModal('gestionModal');
+    };
+    // Recordatorio por email: precarga la plantilla (editable) → confirmar → endpoint (envía).
+    window.formRecordatorio = async function(id){
+      let prev;
+      try { prev = await api('GET','/api/erp/invoices/'+id+'/collection-email-preview'); } catch(e){ toast(e.message||'Error','err'); return; }
+      if(!prev.has_email){ document.getElementById('gestionForm').innerHTML='<p style="color:var(--danger,#c00)">El cliente no tiene email. Usa "Registrar contacto".</p>'; return; }
+      document.getElementById('gestionForm').innerHTML =
+        '<div class="card" style="margin-top:.5rem"><div class="card-body">'
+        +'<div class="form-group"><label class="form-label">Para</label><input class="form-control" value="'+escHtml(prev.to)+'" disabled></div>'
+        +'<div class="form-group"><label class="form-label">Asunto</label><input class="form-control" id="em-subject" value="'+escHtml(prev.subject)+'"></div>'
+        +'<div class="form-group"><label class="form-label">Mensaje (editable antes de enviar)</label><textarea class="form-control" id="em-text" rows="9">'+escHtml(prev.text)+'</textarea></div>'
+        +'<div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" onclick="document.getElementById(\\'gestionForm\\').innerHTML=\\'\\'">Cancelar</button><button class="btn btn-primary btn-sm" onclick="enviarRecordatorio('+id+')">Enviar email</button></div>'
+        +'</div></div>';
+    };
+    window.enviarRecordatorio = async function(id){
+      const email_subject=document.getElementById('em-subject').value;
+      const email_text=document.getElementById('em-text').value;
+      try {
+        await api('POST','/api/erp/invoices/'+id+'/collection-actions',{ type:'recordatorio_email', email_subject, email_text });
+        toast('Recordatorio enviado');
+        await openGestion(id);
+        if(typeof window.cobroOnSaved==='function') window.cobroOnSaved(id);
+      } catch(e){ toast(e.message||'Error enviando','err'); }
+    };
+    window.formContacto = function(id){
+      document.getElementById('gestionForm').innerHTML =
+        '<div class="card" style="margin-top:.5rem"><div class="card-body"><div class="form-row" style="gap:.5rem">'
+        +'<div class="form-group"><label class="form-label">Canal</label><select class="form-control" id="ct-channel"><option value="telefono">Teléfono</option><option value="whatsapp">WhatsApp</option><option value="otro">Otro</option></select></div>'
+        +'<div class="form-group" style="flex:1"><label class="form-label">Nota</label><input class="form-control" id="ct-note" placeholder="Qué hablasteis (opcional)"></div>'
+        +'</div><div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" onclick="document.getElementById(\\'gestionForm\\').innerHTML=\\'\\'">Cancelar</button><button class="btn btn-primary btn-sm" onclick="guardarContacto('+id+')">Registrar contacto</button></div></div></div>';
+    };
+    window.guardarContacto = async function(id){
+      const channel=document.getElementById('ct-channel').value;
+      const note=document.getElementById('ct-note').value;
+      try {
+        await api('POST','/api/erp/invoices/'+id+'/collection-actions',{ type:'contacto_manual', channel, note });
+        toast('Contacto registrado');
+        await openGestion(id);
+        if(typeof window.cobroOnSaved==='function') window.cobroOnSaved(id);
+      } catch(e){ toast(e.message||'Error','err'); }
+    };
+    window.formPromesa = function(id){
+      const today=new Date().toISOString().slice(0,10);
+      document.getElementById('gestionForm').innerHTML =
+        '<div class="card" style="margin-top:.5rem"><div class="card-body"><div class="form-row" style="gap:.5rem">'
+        +'<div class="form-group"><label class="form-label">Promete pagar el</label><input type="date" class="form-control" id="pr-date" value="'+today+'"></div>'
+        +'<div class="form-group" style="flex:1"><label class="form-label">Nota</label><input class="form-control" id="pr-note" placeholder="(opcional)"></div>'
+        +'</div><div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" onclick="document.getElementById(\\'gestionForm\\').innerHTML=\\'\\'">Cancelar</button><button class="btn btn-primary btn-sm" onclick="guardarPromesa('+id+')">Registrar promesa</button></div></div></div>';
+    };
+    window.guardarPromesa = async function(id){
+      const promised_date=document.getElementById('pr-date').value;
+      const note=document.getElementById('pr-note').value;
+      if(!promised_date){ toast('Indica una fecha','err'); return; }
+      try {
+        await api('POST','/api/erp/invoices/'+id+'/collection-actions',{ type:'promesa_pago', promised_date, note });
+        toast('Promesa registrada');
+        await openGestion(id);
+        if(typeof window.cobroOnSaved==='function') window.cobroOnSaved(id);
+      } catch(e){ toast(e.message||'Error','err'); }
+    };
+
+    // ── Paso 2.1: GESTIÓN A NIVEL DE CUENTA (toda la deuda viva del cliente) ──────
+    let acct = null;   // resumen de cuenta abierto (facturasVivas, deudaTotal, etapaCuenta...)
+    function repartoAutoJS(importe, vivas){
+      let rest=Math.round(Number(importe)*100);
+      const orden=vivas.slice().sort(function(a,b){return String(a.due_date||'').localeCompare(String(b.due_date||''))||(a.invoice_id-b.invoice_id);});
+      const asg={}; for(var i=0;i<orden.length;i++){ var f=orden[i]; if(rest<=0)break; var d=Math.round(Number(f.pendiente)*100); var ap=Math.min(rest,d); if(ap>0){ asg[f.invoice_id]=ap/100; rest-=ap; } }
+      return { asg:asg, sinAsignar:rest/100 };
+    }
+    // Abre el modal compartido en MODO CUENTA para un cliente.
+    window.openGestionCuenta = async function(clientId){
+      try { acct = await api('GET','/api/erp/clients/'+clientId+'/account-summary'); } catch(e){ toast(e.message||'Error','err'); return; }
+      acct.client_id = clientId;
+      const p = acct.proximaAccionCuenta||null;
+      document.getElementById('gestionTitle').textContent = 'Gestionar cuenta · '+escHtml(acct.client_name||'');
+      const vivas = acct.facturasVivas||[];
+      if(!vivas.length){ document.getElementById('gestionBody').innerHTML='<div class="alert alert-ok">Este cliente no tiene deuda viva.</div>'; openModal('gestionModal'); return; }
+      const proxLine = '<div class="alert alert-warn" style="margin-bottom:1rem"><strong>Cuenta:</strong> '
+        +window.proximaBadgeHtml(p)+' '+escHtml(p&&p.accion==='recordatorio_email'?'Mandar recordatorio':(p?(STAGE_LABEL[p.etapa]||p.etapa):'Sin acción'))
+        +'<div style="color:var(--muted);font-size:.85rem;margin-top:.25rem">Perfil '+escHtml(acct.perfilCuenta||'estandar')+(p&&p.motivo?(' · '+escHtml(p.motivo)):'')+'</div></div>';
+      const listado = '<div class="table-wrap" style="margin-bottom:1rem"><table><thead><tr><th>Factura</th><th>Vence</th><th style="text-align:right">Pendiente</th></tr></thead><tbody>'
+        +vivas.map(function(f){return '<tr><td>'+escHtml(f.invoice_number)+'</td><td style="color:var(--muted);font-size:.8rem">'+escHtml(f.due_date||'-')+'</td><td style="text-align:right">'+SYM+Number(f.pendiente).toFixed(2)+'</td></tr>';}).join('')
+        +'<tr><td colspan="2" style="font-weight:700;border-top:1px solid var(--border)">Total adeudado</td><td style="text-align:right;font-weight:700;border-top:1px solid var(--border)">'+SYM+Number(acct.deudaTotal).toFixed(2)+'</td></tr></tbody></table></div>';
+      const buttons = '<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">'
+        +'<button class="btn btn-primary btn-sm" onclick="formRecordatorioCuenta()">Mandar recordatorio</button>'
+        +'<button class="btn btn-secondary btn-sm" onclick="formPromesaCuenta()">Registrar promesa</button>'
+        +'<button class="btn btn-secondary btn-sm" onclick="formCobroCuenta()">Registrar cobro a cuenta</button>'
+        +'</div>';
+      document.getElementById('gestionBody').innerHTML =
+        '<div style="margin-bottom:.75rem">Te debe <strong>'+SYM+Number(acct.deudaTotal).toFixed(2)+'</strong> en '+vivas.length+' factura'+(vivas.length===1?'':'s')+'</div>'
+        +proxLine+listado+buttons+'<div id="acctForm"></div>';
+      openModal('gestionModal');
+    };
+    window.formRecordatorioCuenta = async function(){
+      let prev; try { prev = await api('GET','/api/erp/clients/'+acct.client_id+'/account-email-preview'); } catch(e){ toast(e.message||'Error','err'); return; }
+      if(!prev.has_email){ document.getElementById('acctForm').innerHTML='<p style="color:var(--danger,#c00)">El cliente no tiene email. Usa cobro o promesa.</p>'; return; }
+      document.getElementById('acctForm').innerHTML =
+        '<div class="card" style="margin-top:.5rem"><div class="card-body">'
+        +'<div class="form-group"><label class="form-label">Para</label><input class="form-control" value="'+escHtml(prev.to)+'" disabled></div>'
+        +'<div class="form-group"><label class="form-label">Asunto</label><input class="form-control" id="acct-subject" value="'+escHtml(prev.subject)+'"></div>'
+        +'<div class="form-group"><label class="form-label">Mensaje (un solo email de toda la cuenta, editable)</label><textarea class="form-control" id="acct-text" rows="10">'+escHtml(prev.text)+'</textarea></div>'
+        +'<div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" onclick="document.getElementById(\\'acctForm\\').innerHTML=\\'\\'">Cancelar</button><button class="btn btn-primary btn-sm" onclick="enviarRecordatorioCuenta()">Enviar email</button></div>'
+        +'</div></div>';
+    };
+    window.enviarRecordatorioCuenta = async function(){
+      const email_subject=document.getElementById('acct-subject').value;
+      const email_text=document.getElementById('acct-text').value;
+      try {
+        const r=await api('POST','/api/erp/clients/'+acct.client_id+'/account-actions',{ type:'recordatorio_cuenta', email_subject, email_text });
+        toast('Recordatorio de cuenta enviado ('+r.facturas+' factura'+(r.facturas===1?'':'s')+')');
+        if(typeof window.cobroOnSaved==='function') window.cobroOnSaved(acct.client_id);
+        await openGestionCuenta(acct.client_id);
+      } catch(e){ toast(e.message||'Error enviando','err'); }
+    };
+    window.formPromesaCuenta = function(){
+      const today=new Date().toISOString().slice(0,10);
+      document.getElementById('acctForm').innerHTML =
+        '<div class="card" style="margin-top:.5rem"><div class="card-body"><div class="form-row" style="gap:.5rem">'
+        +'<div class="form-group"><label class="form-label">Promete pagar el</label><input type="date" class="form-control" id="acct-pr-date" value="'+today+'"></div>'
+        +'<div class="form-group" style="flex:1"><label class="form-label">Nota</label><input class="form-control" id="acct-pr-note" placeholder="(opcional)"></div>'
+        +'</div><p style="color:var(--muted);font-size:.8rem;margin:.25rem 0">Pospone la próxima acción de TODAS las facturas vivas.</p>'
+        +'<div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" onclick="document.getElementById(\\'acctForm\\').innerHTML=\\'\\'">Cancelar</button><button class="btn btn-primary btn-sm" onclick="guardarPromesaCuenta()">Registrar promesa</button></div></div></div>';
+    };
+    window.guardarPromesaCuenta = async function(){
+      const promised_date=document.getElementById('acct-pr-date').value;
+      const note=document.getElementById('acct-pr-note').value;
+      if(!promised_date){ toast('Indica una fecha','err'); return; }
+      try {
+        const r=await api('POST','/api/erp/clients/'+acct.client_id+'/account-actions',{ type:'promesa_cuenta', promised_date, note });
+        toast('Promesa de cuenta registrada ('+r.facturas+')');
+        if(typeof window.cobroOnSaved==='function') window.cobroOnSaved(acct.client_id);
+        await openGestionCuenta(acct.client_id);
+      } catch(e){ toast(e.message||'Error','err'); }
+    };
+    window.formCobroCuenta = function(){
+      document.getElementById('acctForm').innerHTML =
+        '<div class="card" style="margin-top:.5rem"><div class="card-body">'
+        +'<div class="form-row" style="gap:.5rem;align-items:end">'
+        +'<div class="form-group"><label class="form-label">Importe a cuenta</label><input type="number" step="0.01" min="0.01" class="form-control" id="acct-importe" value="'+Number(acct.deudaTotal).toFixed(2)+'" style="width:140px" oninput="renderReparto()"></div>'
+        +'<div class="form-group"><label class="form-label">Reparto</label><select class="form-control" id="acct-modo" onchange="renderReparto()"><option value="auto">Automático (más antigua primero)</option><option value="manual">Repartir a mano</option></select></div>'
+        +'</div><div id="acct-reparto"></div>'
+        +'<div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.5rem"><button class="btn btn-secondary btn-sm" onclick="document.getElementById(\\'acctForm\\').innerHTML=\\'\\'">Cancelar</button><button class="btn btn-primary btn-sm" id="acct-cobro-btn" onclick="guardarCobroCuenta()">Registrar cobro</button></div>'
+        +'</div></div>';
+      renderReparto();
+    };
+    window.renderReparto = function(){
+      const importe=parseFloat(document.getElementById('acct-importe').value)||0;
+      const modo=document.getElementById('acct-modo').value;
+      const vivas=acct.facturasVivas||[];
+      const cont=document.getElementById('acct-reparto');
+      const btn=document.getElementById('acct-cobro-btn');
+      if(modo==='auto'){
+        const r=repartoAutoJS(importe, vivas);
+        cont.innerHTML='<table style="width:100%;font-size:.85rem;margin-top:.5rem"><thead><tr><th style="text-align:left">Factura</th><th style="text-align:right">Se aplica</th></tr></thead><tbody>'
+          +vivas.map(function(f){return '<tr><td>'+escHtml(f.invoice_number)+' <span style="color:var(--muted)">('+SYM+Number(f.pendiente).toFixed(2)+')</span></td><td style="text-align:right">'+SYM+Number(r.asg[f.invoice_id]||0).toFixed(2)+'</td></tr>';}).join('')+'</tbody></table>'
+          +(r.sinAsignar>0.0049?'<p style="color:var(--warn,#b58100);font-size:.8rem;margin:.4rem 0">Sobran '+SYM+r.sinAsignar.toFixed(2)+' tras saldar toda la deuda (no se aplican).</p>':'');
+        if(btn) btn.disabled=!(importe>0);
+      } else {
+        cont.innerHTML='<table style="width:100%;font-size:.85rem;margin-top:.5rem"><thead><tr><th style="text-align:left">Factura</th><th style="text-align:right">Pendiente</th><th style="text-align:right">Importe</th></tr></thead><tbody>'
+          +vivas.map(function(f){return '<tr><td>'+escHtml(f.invoice_number)+'</td><td style="text-align:right;color:var(--muted)">'+SYM+Number(f.pendiente).toFixed(2)+'</td><td style="text-align:right"><input type="number" step="0.01" min="0" max="'+Number(f.pendiente).toFixed(2)+'" class="form-control acct-mf" data-id="'+f.invoice_id+'" data-pend="'+Number(f.pendiente).toFixed(2)+'" value="0" style="width:110px;text-align:right;display:inline-block" oninput="sumManual()"></td></tr>';}).join('')+'</tbody></table>'
+          +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:.4rem"><button class="btn btn-secondary btn-sm" type="button" onclick="autoFillManual()">Auto por antigüedad</button><span id="acct-counter" style="font-size:.85rem"></span></div>';
+        sumManual();
+      }
+    };
+    window.autoFillManual = function(){
+      const importe=parseFloat(document.getElementById('acct-importe').value)||0;
+      const r=repartoAutoJS(importe, acct.facturasVivas||[]);
+      document.querySelectorAll('.acct-mf').forEach(function(inp){ inp.value=Number(r.asg[inp.getAttribute('data-id')]||0).toFixed(2); });
+      sumManual();
+    };
+    window.sumManual = function(){
+      const importe=parseFloat(document.getElementById('acct-importe').value)||0;
+      let suma=0, over=false;
+      document.querySelectorAll('.acct-mf').forEach(function(inp){ const v=parseFloat(inp.value)||0; suma+=Math.round(v*100); if(Math.round(v*100)>Math.round(parseFloat(inp.getAttribute('data-pend'))*100)) over=true; });
+      const totalC=Math.round(importe*100);
+      const cuadra=(suma===totalC)&&!over&&importe>0;
+      const cnt=document.getElementById('acct-counter');
+      if(cnt) cnt.innerHTML='Asignado <strong>'+SYM+(suma/100).toFixed(2)+'</strong> / '+SYM+importe.toFixed(2)+(over?' <span style="color:var(--danger,#c00)">· alguna se pasa</span>':(cuadra?' <span style="color:var(--ok,#127a3a)">· cuadra ✓</span>':' <span style="color:var(--muted)">· falta cuadrar</span>'));
+      const btn=document.getElementById('acct-cobro-btn'); if(btn) btn.disabled=!cuadra;
+    };
+    window.guardarCobroCuenta = async function(){
+      const importe=parseFloat(document.getElementById('acct-importe').value)||0;
+      const modo=document.getElementById('acct-modo').value;
+      if(!(importe>0)){ toast('Importe inválido','err'); return; }
+      const body={ type:'cobro_cuenta', importe:importe, modo:modo };
+      if(modo==='manual'){
+        body.asignacion=Array.prototype.map.call(document.querySelectorAll('.acct-mf'), function(inp){ return { invoice_id:parseInt(inp.getAttribute('data-id')), importe:parseFloat(inp.value)||0 }; });
+      }
+      try {
+        const r=await api('POST','/api/erp/clients/'+acct.client_id+'/account-actions',body);
+        toast('Cobro a cuenta registrado en '+(r.pagos?r.pagos.length:0)+' factura(s)'+(r.sinAsignar>0.0049?' (sobran '+SYM+Number(r.sinAsignar).toFixed(2)+')':''));
+        if(typeof window.cobroOnSaved==='function') window.cobroOnSaved(acct.client_id);
+        await openGestionCuenta(acct.client_id);
       } catch(e){ toast(e.message||'Error registrando el cobro','err'); }
     };
   })();

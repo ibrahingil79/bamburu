@@ -2,12 +2,14 @@ import { Hono } from 'hono';
 import { createHash } from 'crypto';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
-import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema, invoicePaymentSchema } from '../schemas.js';
+import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema, invoicePaymentSchema, collectionActionSchema } from '../schemas.js';
 import { getCountryConfig } from '../../../core/control-db.js';
 import { adminLayout } from '../layout.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
-import { paymentsSum, invoiceCobro, cobroState, isCobrable, ESTADO_LABEL } from '../cobros.js';
+import { paymentsSum, invoiceCobro, cobroState, isCobrable, ESTADO_LABEL,
+  invoiceProximaAccion, invoiceActionHistory, registerCollectionAction, collectionEmail } from '../cobros.js';
+import { sendEmail } from '../../../core/mailer.js';
 
 // T4 Paso 1 — fecha de vencimiento de una factura = fecha de emisión + plazo de pago
 // del cliente (días). Se guarda en la factura al emitir; cada factura conserva el suyo.
@@ -383,6 +385,7 @@ export function createInvoiceRoutes(db) {
         r.cobro_estado = st.estado; r.cobro_estado_label = ESTADO_LABEL[st.estado] || st.estado;
         r.dias_vencida = st.dias_vencida;
         r.cobrable = isCobrable(db, r);   // gate del botón/modal de cobro en el listado
+        r.proxima = invoiceProximaAccion(db, r, today);   // Paso 2: misma próxima acción que las otras superficies
       }
       return c.json(rows);
     } catch (e) { return c.json({ error: e.message }, 500); }
@@ -403,9 +406,13 @@ export function createInvoiceRoutes(db) {
         : null;
       // Cobros registrados + estado de cobro en vivo + si admite cobro.
       const payments = db.prepare('SELECT * FROM invoice_payments WHERE invoice_id=? ORDER BY paid_date, id').all(inv.id);
-      const cobro = invoiceCobro(db, inv, new Date().toISOString().slice(0, 10));
+      const today = new Date().toISOString().slice(0, 10);
+      const cobro = invoiceCobro(db, inv, today);
       const cobrable = isCobrable(db, inv);
-      return c.json({ ...inv, items, anulacion, rectifiedBy, rectifiesOriginal, payments, cobro, cobrable });
+      // Paso 2: próxima acción de cobro + historial de acciones (compartido por las 3 superficies).
+      const proxima = invoiceProximaAccion(db, inv, today);
+      const collectionActions = invoiceActionHistory(db, inv.id);
+      return c.json({ ...inv, items, anulacion, rectifiedBy, rectifiesOriginal, payments, cobro, cobrable, proxima, collectionActions });
     } catch (e) { return c.json({ error: e.message }, 500); }
   });
 
@@ -495,6 +502,38 @@ export function createInvoiceRoutes(db) {
     } catch (e) { return c.json({ error: e.message }, 400); }
   });
 
+  // GET /api/erp/invoices/:id/collection-email-preview — plantilla precargada (editable
+  // en el modal) según el tono de la próxima acción. Solo construye, no envía.
+  api.get('/:id/collection-email-preview', requirePerm('orders.read'), c => {
+    try {
+      const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(c.req.param('id'));
+      if (!inv) return c.json({ error: 'Factura no encontrada' }, 404);
+      const today = new Date().toISOString().slice(0, 10);
+      const cobro = invoiceCobro(db, inv, today);
+      const prox = invoiceProximaAccion(db, inv, today);
+      const client = inv.client_id ? db.prepare('SELECT * FROM clients WHERE id=?').get(inv.client_id) : null;
+      const company = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
+      const tono = (prox && prox.tono) || 'amable';
+      const tpl = collectionEmail(tono, { inv, client, cobro, company });
+      return c.json({ subject: tpl.subject, text: tpl.text, tono, to: client && client.email || '', has_email: !!(client && client.email) });
+    } catch (e) { return c.json({ error: e.message }, 400); }
+  });
+
+  // POST /api/erp/invoices/:id/collection-actions — registrar una acción de cobro.
+  // ÚNICA vía de escritura (la usan las 3 superficies y DISA): el servicio reutiliza el
+  // doble seguro de Paso 1 (rechaza 400 sobre factura no viva) y, en recordatorio_email,
+  // envía por Resend antes de registrar. Nada se envía solo: el front confirma primero.
+  api.post('/:id/collection-actions', requirePerm('invoices.create'), validate(collectionActionSchema), async c => {
+    try {
+      const input = c.get('validated');
+      const res = await registerCollectionAction(db, parseInt(c.req.param('id')), input, { sendEmail });
+      const label = input.type === 'recordatorio_email' ? 'Envió recordatorio'
+        : input.type === 'promesa_pago' ? 'Registró promesa de pago' : 'Registró contacto';
+      logActivity(db, c.get('session'), label, 'invoice', res.id, `${res.invoice_number} · ${res.stage}`);
+      return c.json(res, 201);
+    } catch (e) { return c.json({ error: e.message }, e.status || 400); }
+  });
+
   // GET /admin/invoices — list view
   views.get('/', requirePerm('orders.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
@@ -534,17 +573,22 @@ export function createInvoiceRoutes(db) {
           // Acciones de ciclo de vida: solo una factura "emitida" se puede anular o rectificar.
           let acts = '<a href="/admin/invoices/'+r.id+'" target="_blank" class="btn btn-secondary btn-sm">Ver</a>';
           // Cobro: solo facturas vivas (no anulada, no abono, no sustituida) — gestión en el panel.
+          // Paso 2: "Gestionar" abre el centro compartido (cobro + próxima acción + acciones).
           if (r.cobrable) {
-            acts += ' <button class="btn btn-secondary btn-sm" onclick="openCobros('+r.id+')">Cobros</button>';
+            acts += ' <button class="btn btn-secondary btn-sm" onclick="openGestion('+r.id+')">Gestionar</button>';
           }
           if (r.status === 'emitida') {
             acts += ' <button class="btn btn-secondary btn-sm" onclick="anular('+r.id+',\\''+(r.invoice_number||'')+'\\')">Anular</button>'
                   + ' <a href="/admin/invoices/'+r.id+'/rectificativa/new" class="btn btn-secondary btn-sm">Rectificar</a>';
           }
           // Cobro: para anuladas no aplica (no son deuda); para el resto, pendiente + badge en vivo.
+          // Paso 2: bajo el estado, la PRÓXIMA acción de cobro (misma que en Cobros y ficha).
+          const proxLine = (r.proxima)
+            ? '<div style="font-size:.78rem;color:var(--muted);margin-top:.15rem">'+(window.proximaBadgeHtml?window.proximaBadgeHtml(r.proxima):'')+' '+(r.proxima.accion==='recordatorio_email'?'recordatorio':((window.STAGE_LABEL&&window.STAGE_LABEL[r.proxima.etapa])||r.proxima.etapa))+'</div>'
+            : '';
           const cobroCell = (r.status==='anulada')
             ? '<span style="color:var(--muted)">—</span>'
-            : '<span class="badge '+(cobroBadge[r.cobro_estado]||'')+'">'+(r.cobro_estado_label||'')+(r.cobro_estado==='vencida'&&r.dias_vencida?' '+r.dias_vencida+'d':'')+'</span>';
+            : '<span class="badge '+(cobroBadge[r.cobro_estado]||'')+'">'+(r.cobro_estado_label||'')+(r.cobro_estado==='vencida'&&r.dias_vencida?' '+r.dias_vencida+'d':'')+'</span>'+proxLine;
           const pendienteCell = (r.status==='anulada')
             ? '<span style="color:var(--muted)">—</span>'
             : '${sym}'+Number(r.pendiente||0).toFixed(2);
