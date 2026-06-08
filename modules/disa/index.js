@@ -4,6 +4,7 @@ import { adminLayout } from '../erp/layout.js';
 import { generateInvoice } from '../erp/routes/invoices.js';
 import { createClientSvc, updateClientSvc, archiveClientSvc, restoreClientSvc, searchClients } from '../erp/routes/clients.js';
 import { clientFieldOptions } from '../erp/schemas.js';
+import { nextCode } from '../erp/codes.js';
 import { collectionsWorklist, registerCollectionAction, accountsSummary, registerAccountAction } from '../erp/cobros.js';
 import { sendEmail } from '../../core/mailer.js';
 
@@ -347,9 +348,9 @@ export function register(app, db) {
         case 'create_product': {
           const p = action.params;
           const r = db.prepare(`
-            INSERT INTO products (name, price, stock, status, type)
-            VALUES (?, ?, ?, 'active', 'physical')
-          `).run(p.name || '', Number(p.price) || 0, Number(p.stock) || 0);
+            INSERT INTO products (name, price, stock, status, type, product_code)
+            VALUES (?, ?, ?, 'active', 'physical', ?)
+          `).run(p.name || '', Number(p.price) || 0, Number(p.stock) || 0, nextCode(db, 'product'));
           logActivity(db, 'create', 'products', r.lastInsertRowid,
             'Producto "' + p.name + '" creado por DISA', session);
           return { ok: true, message: 'Producto "' + (p.name || 'nuevo') + '" creado.' };
@@ -596,9 +597,9 @@ export function register(app, db) {
         case 'create_supplier': {
           const p = action.params;
           const r = db.prepare(`
-            INSERT INTO suppliers (name, contact, email, phone, notes)
-            VALUES (?, ?, ?, ?, ?)
-          `).run(p.name || '', p.contact || '', p.email || '', p.phone || '', p.notes || '');
+            INSERT INTO suppliers (name, contact, email, phone, notes, supplier_code)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `).run(p.name || '', p.contact || '', p.email || '', p.phone || '', p.notes || '', nextCode(db, 'supplier'));
           logActivity(db, 'create', 'suppliers', r.lastInsertRowid,
             'Proveedor "' + p.name + '" creado por DISA', session);
           return { ok: true, message: 'Proveedor "' + (p.name || 'nuevo') + '" creado.' };

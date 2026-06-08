@@ -309,11 +309,14 @@ export const changePwdSchema = z.object({
 
 // ── Suppliers / Purchases ──────────────────────────────────────
 export const supplierSchema = z.object({
-  name:    str(200),
-  contact: strOpt(200),
-  email:   strOpt(200),
-  phone:   strOpt(50),
-  notes:   strOpt(1000),
+  name:      str(200),
+  fiscal_id: strOpt(50),   // NIF/CIF — guarda de duplicados (solo activos; vacío no bloquea)
+  contact:   strOpt(200),
+  email:     strOpt(200),
+  phone:     strOpt(50),
+  address:   strOpt(500),
+  city:      strOpt(100),
+  notes:     strOpt(1000),
 });
 
 export const purchaseItemSchema = z.object({

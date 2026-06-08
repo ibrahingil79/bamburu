@@ -185,7 +185,7 @@ funciones de pilares futuros.
 - Todo proceso que añade un producto a un documento (pedido, factura, albarán, compra)
   lleva buscador de producto que rellena la línea; nunca solo entrada manual.
 - **Regla de integridad — sin duplicados.** Toda entidad con identidad única (cliente→NIF,
-  producto→SKU, categoría/grupo/proveedor→nombre) debe impedir o avisar de duplicados en sus
+  proveedor→NIF/CIF, producto→SKU, categoría/grupo→nombre) debe impedir o avisar de duplicados en sus
   puntos de entrada: formulario, API y acciones de DISA. Las facturas ya lo cumplen vía
   numeración correlativa + hash encadenado. Cada pilar aplica esta regla a sus entidades
   cuando se construye.

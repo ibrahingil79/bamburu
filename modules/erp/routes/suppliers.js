@@ -1,53 +1,107 @@
 import { Hono } from 'hono';
 import { adminLayout, can } from '../layout.js';
 import { validate } from '../../../core/validate.js';
+import { requirePerm, logActivity } from '../../../core/auth.js';
 import { supplierSchema } from '../schemas.js';
+import { nextCode } from '../codes.js';
+
+// Saneamiento de Proveedor.
+// Guarda de NIF único GLOBAL: el NIF identifica fiscalmente al proveedor, así que un
+// proveedor ARCHIVADO sigue reservando su NIF (no se libera al archivar). Bloquea si ya
+// existe CUALQUIER proveedor (activo o archivado) con ese NIF (normaliza trim+UPPER; vacío
+// no bloquea; excluye al propio en edición). Devuelve también `active` para que la ruta
+// pueda sugerir "restaurar" si el conflicto es con uno archivado. La usan POST/PUT y restore.
+export function supplierFiscalIdConflict(db, fiscalId, excludeId = null) {
+  const norm = String(fiscalId || '').trim().toUpperCase();
+  if (!norm) return null;
+  const ex = Number(excludeId);
+  return db.prepare(
+    'SELECT id, name, active FROM suppliers WHERE UPPER(TRIM(fiscal_id))=? AND id<>?'
+  ).get(norm, Number.isFinite(ex) ? ex : -1) || null;
+}
 
 export function createSupplierRoutes(db) {
   const api = new Hono();
   const views = new Hono();
 
-  api.get('/', c => {
+  // GET lista: activos por defecto; ?archived=1 devuelve los archivados.
+  api.get('/', requirePerm('suppliers.read'), c => {
     try {
-      return c.json(db.prepare('SELECT * FROM suppliers ORDER BY name').all());
+      const archived = c.req.query('archived') === '1' ? 0 : 1;
+      return c.json(db.prepare('SELECT * FROM suppliers WHERE active=? ORDER BY name').all(archived));
     } catch(e) { return c.json({error:e.message},500); }
   });
 
-  api.post('/', validate(supplierSchema), c => {
+  api.post('/', requirePerm('suppliers.create'), validate(supplierSchema), c => {
     try {
       const d = c.get('validated');
-      const r = db.prepare('INSERT INTO suppliers (name,contact,email,phone,notes) VALUES (?,?,?,?,?)').run(d.name, d.contact||'', d.email||'', d.phone||'', d.notes||'');
+      const conf = supplierFiscalIdConflict(db, d.fiscal_id);
+      if (conf) return c.json({error: conf.active ? 'Ya existe un proveedor con ese NIF/CIF' : 'Ya existe un proveedor ARCHIVADO con ese NIF/CIF; restáuralo en vez de crear uno nuevo'},409);
+      const code = nextCode(db, 'supplier');   // código interno PROV-NNNN, tras la guarda de NIF
+      const r = db.prepare('INSERT INTO suppliers (name,fiscal_id,contact,email,phone,address,city,notes,supplier_code) VALUES (?,?,?,?,?,?,?,?,?)')
+        .run(d.name, d.fiscal_id||'', d.contact||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.notes||'', code);
+      logActivity(db, c.get('session'), 'Creó proveedor', 'supplier', r.lastInsertRowid, d.name);
       return c.json({id:r.lastInsertRowid, message:'Proveedor creado'}, 201);
     } catch(e) { return c.json({error:e.message},500); }
   });
 
-  api.put('/:id', validate(supplierSchema), c => {
+  api.put('/:id', requirePerm('suppliers.edit'), validate(supplierSchema), c => {
     try {
       const d = c.get('validated');
       const id = parseInt(c.req.param('id'));
-      const info = db.prepare('UPDATE suppliers SET name=?,contact=?,email=?,phone=?,notes=? WHERE id=?').run(d.name, d.contact||'', d.email||'', d.phone||'', d.notes||'', id);
+      const conf = supplierFiscalIdConflict(db, d.fiscal_id, id);
+      if (conf) return c.json({error: conf.active ? 'Ya existe un proveedor con ese NIF/CIF' : 'Ya existe un proveedor archivado con ese NIF/CIF'},409);
+      const info = db.prepare('UPDATE suppliers SET name=?,fiscal_id=?,contact=?,email=?,phone=?,address=?,city=?,notes=? WHERE id=?')
+        .run(d.name, d.fiscal_id||'', d.contact||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.notes||'', id);
       if (!info.changes) return c.json({error:'No encontrado'},404);
+      logActivity(db, c.get('session'), 'Editó proveedor', 'supplier', id, d.name);
       return c.json({message:'Actualizado'});
     } catch(e) { return c.json({error:e.message},500); }
   });
 
-  api.delete('/:id', c => {
+  // Archivar (no borrar): soft-delete. Conserva la fila y sus compras; sale de lista y
+  // selectores. El NIF sigue reservado (no se libera): para reutilizarlo, restaurar.
+  api.delete('/:id', requirePerm('suppliers.delete'), c => {
     try {
       const id = parseInt(c.req.param('id'));
-      const count = db.prepare('SELECT COUNT(*) as c FROM purchases WHERE supplier_id=?').get(id).c;
-      if (count > 0) return c.json({error:'No se puede eliminar: tiene compras asociadas'},400);
-      db.prepare('DELETE FROM suppliers WHERE id=?').run(id);
-      return c.json({message:'Eliminado'});
+      const s = db.prepare('SELECT name FROM suppliers WHERE id=?').get(id);
+      if (!s) return c.json({error:'No encontrado'},404);
+      db.prepare('UPDATE suppliers SET active=0 WHERE id=?').run(id);
+      logActivity(db, c.get('session'), 'Archivó proveedor', 'supplier', id, s.name||'');
+      return c.json({message:'Archivado'});
     } catch(e) { return c.json({error:e.message},500); }
   });
 
-  views.get('/', c => {
+  // Restaurar un archivado. Red de seguridad: si por datos heredados existiera otro
+  // proveedor con el mismo NIF, se bloquea (la unicidad global ya lo evita al crear).
+  api.post('/:id/restore', requirePerm('suppliers.edit'), c => {
+    try {
+      const id = parseInt(c.req.param('id'));
+      const s = db.prepare('SELECT id, name, fiscal_id FROM suppliers WHERE id=?').get(id);
+      if (!s) return c.json({error:'No encontrado'},404);
+      if (supplierFiscalIdConflict(db, s.fiscal_id, id)) return c.json({error:'Ya existe otro proveedor con este NIF/CIF'},409);
+      db.prepare('UPDATE suppliers SET active=1 WHERE id=?').run(id);
+      logActivity(db, c.get('session'), 'Restauró proveedor', 'supplier', id, s.name||'');
+      return c.json({message:'Restaurado'});
+    } catch(e) { return c.json({error:e.message},500); }
+  });
+
+  views.get('/', requirePerm('suppliers.read'), c => {
     const content = `
-      <div class="ph"><h2>Proveedores</h2>${can(c,'suppliers.create')?'<button class="btn btn-primary" id="btnNew">Nuevo proveedor</button>':''}</div>
+      <div class="ph">
+        <h2>Proveedores</h2>
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <select class="form-control" id="supState" style="width:auto;min-width:150px" onchange="loadSups()">
+            <option value="0">Activos</option>
+            <option value="1">Archivados</option>
+          </select>
+          ${can(c,'suppliers.create')?'<button class="btn btn-primary" id="btnNew">Nuevo proveedor</button>':''}
+        </div>
+      </div>
       <div class="card">
-        <div class="card-head"><h3>Lista de proveedores</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="filterTable()"></div>
+        <div class="card-head"><h3>Lista de proveedores</h3><input class="search" id="searchBox" placeholder="Buscar nombre, NIF o email..." oninput="filterTable()"></div>
         <div class="table-wrap"><table>
-          <thead><tr><th>Nombre</th><th>Contacto</th><th>Email</th><th>Teléfono</th><th></th></tr></thead>
+          <thead><tr><th>Código</th><th>Nombre</th><th>NIF/CIF</th><th>Contacto</th><th>Email</th><th>Teléfono</th><th></th></tr></thead>
           <tbody id="supBody"></tbody>
         </table></div>
       </div>
@@ -57,12 +111,18 @@ export function createSupplierRoutes(db) {
           <div class="modal-head"><h3 id="modalTitle">Nuevo proveedor</h3><button class="modal-close" onclick="closeModal('supModal')">✕</button></div>
           <div class="modal-body">
             <input type="hidden" id="supId">
-            <div class="form-group"><label class="form-label">Nombre *</label><input class="form-control" id="supName"></div>
+            <div class="form-group" id="supCodeWrap" style="display:none"><label class="form-label">Código interno</label><div id="supCode" style="font-family:monospace;color:var(--muted)"></div></div>
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">Nombre *</label><input class="form-control" id="supName"></div>
+              <div class="form-group"><label class="form-label">NIF/CIF</label><input class="form-control" id="supFiscal"></div>
+            </div>
             <div class="form-group"><label class="form-label">Persona de contacto</label><input class="form-control" id="supContact"></div>
             <div class="form-row">
               <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="supEmail" type="email"></div>
               <div class="form-group"><label class="form-label">Teléfono</label><input class="form-control" id="supPhone"></div>
             </div>
+            <div class="form-group"><label class="form-label">Dirección</label><input class="form-control" id="supAddress"></div>
+            <div class="form-group" style="max-width:50%"><label class="form-label">Ciudad</label><input class="form-control" id="supCity"></div>
             <div class="form-group"><label class="form-label">Notas</label><textarea class="form-control" id="supNotes"></textarea></div>
           </div>
           <div class="modal-foot">
@@ -75,24 +135,26 @@ export function createSupplierRoutes(db) {
       <script>
       var sups=[];
       var _btnNew=document.getElementById('btnNew'); if(_btnNew) _btnNew.onclick=function(){openNew();};
+      function viewingArchived(){ return document.getElementById('supState').value==='1'; }
       async function loadSups(){
-        sups=await api('GET','/api/erp/suppliers').catch(function(){return[];});
+        var qs = viewingArchived() ? '?archived=1' : '';
+        sups=await api('GET','/api/erp/suppliers'+qs).catch(function(){return[];});
         filterTable();
       }
       function filterTable(){
         var q=document.getElementById('searchBox').value.toLowerCase();
-        var f=q?sups.filter(function(s){return s.name.toLowerCase().includes(q)||(s.email||'').toLowerCase().includes(q);}):sups;
+        var f=q?sups.filter(function(s){return s.name.toLowerCase().includes(q)||(s.fiscal_id||'').toLowerCase().includes(q)||(s.email||'').toLowerCase().includes(q);}):sups;
+        var arch=viewingArchived();
         document.getElementById('supBody').innerHTML=f.length?f.map(function(s){
-          return '<tr><td><strong>'+escHtml(s.name)+'</strong></td><td>'+escHtml(s.contact||'-')+'</td><td>'+escHtml(s.email||'-')+'</td><td>'+escHtml(s.phone||'-')+'</td><td style="text-align:right">'+(window.canDo('suppliers.edit')?'<button class="btn btn-secondary btn-sm" onclick="editSup('+s.id+')">Editar</button> ':'')+( window.canDo('suppliers.delete')?'<button class="btn btn-danger btn-sm" onclick="delSup('+s.id+')">Eliminar</button>':'')+'</td></tr>';
-        }).join(''):'<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--muted)">Sin proveedores registrados</td></tr>';
+          var acts = arch
+            ? (window.canDo('suppliers.edit')?'<button class="btn btn-primary btn-sm" onclick="restoreSup('+s.id+')">Restaurar</button>':'')
+            : (window.canDo('suppliers.edit')?'<button class="btn btn-secondary btn-sm" onclick="editSup('+s.id+')">Editar</button> ':'')+(window.canDo('suppliers.delete')?'<button class="btn btn-danger btn-sm" onclick="delSup('+s.id+')">Archivar</button>':'');
+          return '<tr><td style="color:var(--muted);font-family:monospace;font-size:.8rem">'+escHtml(s.supplier_code||'-')+'</td><td><strong>'+escHtml(s.name)+'</strong></td><td style="color:var(--muted)">'+escHtml(s.fiscal_id||'-')+'</td><td>'+escHtml(s.contact||'-')+'</td><td>'+escHtml(s.email||'-')+'</td><td>'+escHtml(s.phone||'-')+'</td><td style="text-align:right;white-space:nowrap">'+acts+'</td></tr>';
+        }).join(''):'<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">Sin proveedores'+(arch?' archivados':' registrados')+'</td></tr>';
       }
       function openNew(){
-        document.getElementById('supId').value='';
-        document.getElementById('supName').value='';
-        document.getElementById('supContact').value='';
-        document.getElementById('supEmail').value='';
-        document.getElementById('supPhone').value='';
-        document.getElementById('supNotes').value='';
+        ['supId','supName','supFiscal','supContact','supEmail','supPhone','supAddress','supCity','supNotes'].forEach(function(id){document.getElementById(id).value='';});
+        document.getElementById('supCodeWrap').style.display='none';
         document.getElementById('modalTitle').textContent='Nuevo proveedor';
         openModal('supModal');
       }
@@ -100,10 +162,15 @@ export function createSupplierRoutes(db) {
         var s=sups.find(function(x){return x.id===id;});
         if(!s)return;
         document.getElementById('supId').value=s.id;
+        document.getElementById('supCode').textContent=s.supplier_code||'—';
+        document.getElementById('supCodeWrap').style.display=s.supplier_code?'':'none';
         document.getElementById('supName').value=s.name;
+        document.getElementById('supFiscal').value=s.fiscal_id||'';
         document.getElementById('supContact').value=s.contact||'';
         document.getElementById('supEmail').value=s.email||'';
         document.getElementById('supPhone').value=s.phone||'';
+        document.getElementById('supAddress').value=s.address||'';
+        document.getElementById('supCity').value=s.city||'';
         document.getElementById('supNotes').value=s.notes||'';
         document.getElementById('modalTitle').textContent='Editar proveedor';
         openModal('supModal');
@@ -112,9 +179,12 @@ export function createSupplierRoutes(db) {
         var id=document.getElementById('supId').value;
         var body={
           name:document.getElementById('supName').value.trim(),
+          fiscal_id:document.getElementById('supFiscal').value.trim(),
           contact:document.getElementById('supContact').value.trim(),
           email:document.getElementById('supEmail').value.trim(),
           phone:document.getElementById('supPhone').value.trim(),
+          address:document.getElementById('supAddress').value.trim(),
+          city:document.getElementById('supCity').value.trim(),
           notes:document.getElementById('supNotes').value.trim()
         };
         if(!body.name){toast('El nombre es obligatorio','err');return;}
@@ -127,8 +197,12 @@ export function createSupplierRoutes(db) {
         }catch(e){toast(e.message,'err');}
       }
       async function delSup(id){
-        if(!confirm('¿Eliminar este proveedor?'))return;
-        try{await api('DELETE','/api/erp/suppliers/'+id);toast('Eliminado');loadSups();}
+        if(!confirm('¿Archivar este proveedor? Dejará de aparecer en la lista y en los selectores, pero no se borra.'))return;
+        try{await api('DELETE','/api/erp/suppliers/'+id);toast('Archivado');loadSups();}
+        catch(e){toast(e.message,'err');}
+      }
+      async function restoreSup(id){
+        try{await api('POST','/api/erp/suppliers/'+id+'/restore');toast('Restaurado');loadSups();}
         catch(e){toast(e.message,'err');}
       }
       loadSups();

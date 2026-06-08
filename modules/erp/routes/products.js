@@ -6,6 +6,7 @@ import { productSchema, productImageSchema, variantSchema, tagSchema, stockAdjus
 import { getVatBands } from '../../../core/vat-bands.js';
 import { adjustStock, kardex, productStock, isPhysical, recordMovement, TYPE_LABEL, REASON_LABEL } from '../stock.js';
 import { stockModalHtml, stockModalScript } from '../views/stock-modal.js';
+import { nextCode } from '../codes.js';
 
 function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now();
@@ -66,8 +67,10 @@ export function createProductRoutes(db, cfg = {}) {
       // inicial, se siembra un movimiento 'apertura' (recomputeStock pone la caché al valor).
       const ptype = d.type || 'physical';
       const initialStock = (ptype === 'service' || ptype === 'digital') ? 0 : (parseInt(d.stock) || 0);
-      const r = db.prepare(`INSERT INTO products (name,slug,sku,description,price,compare_price,image_url,category_id,status,type,digital_file_url,featured,stock,supplier_id,tax_rate,tax_band) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(d.name, slug, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', ptype, d.digital_file_url||'', d.featured?1:0, 0, d.supplier_id||null, rate, band);
+      // Código interno PROD-NNNN, tras la validación de SKU/banda. NO toca el SKU (referencia del proveedor).
+      const code = nextCode(db, 'product');
+      const r = db.prepare(`INSERT INTO products (name,slug,sku,description,price,compare_price,image_url,category_id,status,type,digital_file_url,featured,stock,supplier_id,tax_rate,tax_band,product_code) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(d.name, slug, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', ptype, d.digital_file_url||'', d.featured?1:0, 0, d.supplier_id||null, rate, band, code);
       if (ptype === 'physical' && initialStock > 0) {
         recordMovement(db, { product_id: r.lastInsertRowid, type: 'apertura', quantity: initialStock, origin_type: 'opening', note: 'Stock inicial' });
       }
@@ -262,7 +265,7 @@ export function createProductRoutes(db, cfg = {}) {
     const statusB = { active:'<span class="badge b-green">Activo</span>', draft:'<span class="badge b-yellow">Borrador</span>', archived:'<span class="badge b-gray">Archivado</span>' };
     const rowsHtml = products.map(p => '<tr>'+
       '<td>'+(p.image_url?'<img class="thumb" src="'+escHtml(p.image_url)+'" alt="">':'<span style="font-size:1.2rem"></span>')+'</td>'+
-      '<td><strong>'+escHtml(p.name)+'</strong>'+(p.featured?'  <span class="badge b-purple">Destacado</span>':'')+'<br><span style="color:var(--muted);font-size:.75rem">SKU: '+escHtml(p.sku||'-')+'</span></td>'+
+      '<td><strong>'+escHtml(p.name)+'</strong>'+(p.featured?'  <span class="badge b-purple">Destacado</span>':'')+'<br><span style="color:var(--muted);font-size:.75rem"><span style="font-family:monospace">'+escHtml(p.product_code||'-')+'</span> · SKU: '+escHtml(p.sku||'-')+'</span></td>'+
       '<td>'+escHtml(p.category_name||'-')+'</td>'+
       '<td><strong>'+sym+p.price.toFixed(2)+'</strong>'+(p.compare_price?'<br><span style="text-decoration:line-through;color:var(--muted);font-size:.75rem">'+sym+p.compare_price.toFixed(2)+'</span>':'')+'<br><span style="color:var(--muted);font-size:.72rem">'+(Number(p.tax_rate)>0?('IVA '+p.tax_rate+'%'):'Exento')+'</span></td>'+
       '<td>'+(p.type==='service'?'<span style="color:var(--muted)">—</span>':(p.stock<5?'<span style="color:#ef4444;font-weight:600">'+p.stock+'</span>':p.stock))+'</td>'+
@@ -308,6 +311,7 @@ export function createProductRoutes(db, cfg = {}) {
           <div class="modal-head"><h3 id="modalTitle">Nuevo Producto</h3><button class="modal-close" onclick="closeModal('productModal')">✕</button></div>
           <div class="modal-body">
             <input type="hidden" id="prodId">
+            <div class="form-group" id="pCodeWrap" style="display:none"><label class="form-label">Código interno</label><div id="pCode" style="font-family:monospace;color:var(--muted)"></div></div>
             <div class="tabs">
               <div class="tab active" data-tab-group="prod" data-tab-key="basic" onclick="switchTab('prod','basic')">General</div>
               <!-- Imágenes OCULTA de la vista (e-commerce); botón con display:none, panel sigue en el DOM para no romper el JS de editar. Variantes SÍ se mantiene (necesaria). -->
@@ -456,6 +460,7 @@ export function createProductRoutes(db, cfg = {}) {
 
       function openNewProduct(){
         currentProdId=null; selTags=[];
+        document.getElementById('pCodeWrap').style.display='none';
         document.getElementById('modalTitle').textContent='Nuevo Producto';
         ['pName','pSku','pDesc','pPrice','pCompare','pImage','pDigital'].forEach(id=>document.getElementById(id).value='');
         document.getElementById('pStock').value='0';
@@ -479,6 +484,8 @@ export function createProductRoutes(db, cfg = {}) {
         selTags=p.tags.map(t=>t.id);
         document.getElementById('modalTitle').textContent='Editar Producto';
         document.getElementById('prodId').value=id;
+        document.getElementById('pCode').textContent=p.product_code||'—';
+        document.getElementById('pCodeWrap').style.display=p.product_code?'':'none';
         document.getElementById('pName').value=p.name;
         document.getElementById('pSku').value=p.sku||'';
         document.getElementById('pDesc').value=p.description||'';

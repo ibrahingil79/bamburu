@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 import { hashPasswordLegacy } from '../../core/auth.js';
+import { backfillCodes } from './codes.js';
 
 function addCol(db, table, col, def) {
   const cols = db.pragma(`table_info(${table})`).map(c => c.name);
@@ -562,6 +563,28 @@ export function runMigrations(db) {
     notes TEXT DEFAULT '',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
+  // Saneamiento de Proveedor (espejo del T1 de Clientes): datos fiscales para documentos
+  // de compra + soft-delete. Aditivo por tenant; filas antiguas → activo, NIF/dirección ''.
+  addCol(db, 'suppliers', 'fiscal_id', "TEXT DEFAULT ''");   // NIF/CIF (guarda de duplicados)
+  addCol(db, 'suppliers', 'address',   "TEXT DEFAULT ''");
+  addCol(db, 'suppliers', 'city',      "TEXT DEFAULT ''");
+  addCol(db, 'suppliers', 'active',    'INTEGER DEFAULT 1'); // archivar en vez de borrar
+  db.prepare('UPDATE suppliers SET active=1 WHERE active IS NULL').run();
+
+  // ── Código interno autogenerado (cliente / proveedor / producto) ────────────
+  // Identificación interna CLI-/PROV-/PROD-NNNN (no es guarda de duplicados). Contador por
+  // tipo y por tenant (code_counters). Backfill idempotente a las filas existentes en orden
+  // de creación; aditivo (addCol), nunca destructivo. (clients/products/suppliers ya creadas.)
+  db.exec(`CREATE TABLE IF NOT EXISTS code_counters (
+    entity TEXT PRIMARY KEY,
+    last_seq INTEGER NOT NULL DEFAULT 0
+  )`);
+  addCol(db, 'clients',   'client_code',   'TEXT');
+  addCol(db, 'suppliers', 'supplier_code', 'TEXT');
+  addCol(db, 'products',  'product_code',  'TEXT');
+  backfillCodes(db, { table: 'clients',   column: 'client_code',   entity: 'client' });
+  backfillCodes(db, { table: 'suppliers', column: 'supplier_code', entity: 'supplier' });
+  backfillCodes(db, { table: 'products',  column: 'product_code',  entity: 'product' });
 
   // Purchases
   db.exec(`CREATE TABLE IF NOT EXISTS purchases (
@@ -586,6 +609,16 @@ export function runMigrations(db) {
     FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(id)
   )`);
+
+  // Motor de Compras: archivar (no borrar) las compras rotas heredadas (sin líneas en
+  // purchase_items) para que no ensucien el listado. Aditivo (addCol). Una vez por tenant.
+  addCol(db, 'purchases', 'archived', 'INTEGER DEFAULT 0');
+  const purgeKey = 'migration_purchases_archive_broken_2026_v1';
+  if (!db.prepare('SELECT value FROM settings WHERE key=?').get(purgeKey)) {
+    db.prepare(`UPDATE purchases SET archived=1
+                WHERE id NOT IN (SELECT DISTINCT purchase_id FROM purchase_items)`).run();
+    db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(purgeKey, 'done');
+  }
 
   // Feedback
   db.exec(`CREATE TABLE IF NOT EXISTS feedback (

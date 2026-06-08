@@ -8,6 +8,7 @@ import { clientDebt, isCobrable, invoiceProximaAccion, invoiceActionHistory, PRO
   resumenCuentaCliente, registerAccountAction, accountEmail } from '../cobros.js';
 import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
 import { sendEmail } from '../../../core/mailer.js';
+import { nextCode } from '../codes.js';
 
 // Comprobación reutilizable de NIF duplicado (regla de integridad — sin duplicados).
 // Devuelve el cliente ACTIVO en conflicto (otro id con el mismo fiscal_id normalizado)
@@ -50,10 +51,11 @@ function parseClient(input) {
 export function createClientSvc(db, input) {
   const d = parseClient(input);
   if (fiscalIdConflict(db, d.fiscal_id)) { const e = new Error('Ya existe un cliente con ese NIF'); e.status = 409; throw e; }
-  const r = db.prepare('INSERT INTO clients (name,fiscal_id,email,phone,address,city,country,group_id,notes,accepts_newsletter,client_type,payment_term_days,payment_method,collections_profile) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-    .run(d.name, d.fiscal_id || '', d.email || '', d.phone || '', d.address || '', d.city || '', d.country || '', d.group_id || null, d.notes || '', d.accepts_newsletter ? 1 : 0, d.client_type || 'particular', d.payment_term_days || 0, d.payment_method || '', d.collections_profile || 'estandar');
+  const code = nextCode(db, 'client');   // código interno CLI-NNNN, tras la guarda de NIF (no editable)
+  const r = db.prepare('INSERT INTO clients (name,fiscal_id,email,phone,address,city,country,group_id,notes,accepts_newsletter,client_type,payment_term_days,payment_method,collections_profile,client_code) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(d.name, d.fiscal_id || '', d.email || '', d.phone || '', d.address || '', d.city || '', d.country || '', d.group_id || null, d.notes || '', d.accepts_newsletter ? 1 : 0, d.client_type || 'particular', d.payment_term_days || 0, d.payment_method || '', d.collections_profile || 'estandar', code);
   syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
-  return { id: r.lastInsertRowid, name: d.name };
+  return { id: r.lastInsertRowid, name: d.name, client_code: code };
 }
 
 export function updateClientSvc(db, id, input) {
@@ -298,6 +300,7 @@ export function createClientRoutes(db, cfg = {}) {
     };
 
     const rowsHtml = clientsList.map(cl => '<tr>'+
+      '<td style="color:var(--muted);font-family:monospace;font-size:.8rem">'+escHtml(cl.client_code||'-')+'</td>'+
       '<td><strong>'+escHtml(cl.name)+'</strong>'+(cl.fiscal_id?'<br><span style="color:var(--muted);font-size:.75rem">'+escHtml(cl.fiscal_id)+'</span>':'')+'</td>'+
       '<td style="color:var(--muted)">'+escHtml(cl.email||'-')+'</td>'+
       '<td style="color:var(--muted)">'+escHtml(cl.phone||'-')+'</td>'+
@@ -328,8 +331,8 @@ export function createClientRoutes(db, cfg = {}) {
 
       <div class="card">
         <div class="table-wrap"><table>
-          <thead><tr><th>Nombre</th><th>Email</th><th>Teléfono</th><th>Grupo</th><th>Registrado</th><th></th></tr></thead>
-          <tbody>${total === 0 ? '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--muted)">No se encontraron clientes</td></tr>' : rowsHtml}</tbody>
+          <thead><tr><th>Código</th><th>Nombre</th><th>Email</th><th>Teléfono</th><th>Grupo</th><th>Registrado</th><th></th></tr></thead>
+          <tbody>${total === 0 ? '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">No se encontraron clientes</td></tr>' : rowsHtml}</tbody>
         </table></div>
       </div>
 
@@ -496,6 +499,7 @@ export function createClientRoutes(db, cfg = {}) {
           '</div>';
         document.getElementById('detailBody').innerHTML=
           '<div class="grid g2" style="margin-bottom:1rem">'+
+          '<div><div class="form-label">Código</div><div style="font-family:monospace">'+escHtml(c.client_code||'-')+'</div></div>'+
           '<div><div class="form-label">Email</div><div>'+escHtml(c.email||'-')+'</div></div>'+
           '<div><div class="form-label">Teléfono</div><div>'+escHtml(c.phone||'-')+'</div></div>'+
           '<div><div class="form-label">Dirección</div><div>'+escHtml(c.address||'-')+(c.city?' · '+escHtml(c.city):'')+'</div></div>'+

@@ -1,8 +1,47 @@
 import { Hono } from 'hono';
 import { adminLayout, can } from '../layout.js';
 import { validate } from '../../../core/validate.js';
+import { requirePerm } from '../../../core/auth.js';
 import { purchaseSchema } from '../schemas.js';
 import { recordMovement } from '../stock.js';
+
+// ── Motor de Compras: servicios de transición (testables; los usan las rutas) ──
+// Recibir una compra PENDIENTE: el stock sube en el libro (entrada +, origen compra X).
+// Una sola entrega por compra (sin recepciones parciales por ahora).
+export function receivePurchaseSvc(db, id) {
+  const p = db.prepare('SELECT * FROM purchases WHERE id=?').get(id);
+  if (!p) { const e = new Error('Compra no encontrada'); e.status = 404; throw e; }
+  if (p.archived) { const e = new Error('Compra archivada'); e.status = 400; throw e; }
+  if (p.status !== 'pending') { const e = new Error('Solo se puede recibir una compra pendiente'); e.status = 400; throw e; }
+  const items = db.prepare('SELECT * FROM purchase_items WHERE purchase_id=?').all(id);
+  db.transaction(() => {
+    for (const item of items) {
+      recordMovement(db, { product_id: item.product_id, type: 'entrada', quantity: item.quantity, origin_type: 'purchase', origin_id: id, note: 'Recepción de compra #' + id + (p.reference ? ' ref:' + p.reference : '') });
+    }
+    db.prepare("UPDATE purchases SET status='received' WHERE id=?").run(id);
+  })();
+  return { id, lines: items.length };
+}
+
+// Cancelar una compra. Si estaba RECIBIDA, movimiento INVERSO en el libro (salida −, mismo
+// origen compra), misma filosofía que las reversas: nada se borra, la compra queda 'cancelled'.
+// Si estaba pendiente, solo cambia el estado (no había movido stock).
+export function cancelPurchaseSvc(db, id) {
+  const p = db.prepare('SELECT * FROM purchases WHERE id=?').get(id);
+  if (!p) { const e = new Error('Compra no encontrada'); e.status = 404; throw e; }
+  if (p.status === 'cancelled') { const e = new Error('La compra ya está cancelada'); e.status = 400; throw e; }
+  const items = db.prepare('SELECT * FROM purchase_items WHERE purchase_id=?').all(id);
+  const wasReceived = p.status === 'received';
+  db.transaction(() => {
+    if (wasReceived) {
+      for (const item of items) {
+        recordMovement(db, { product_id: item.product_id, type: 'salida', quantity: -item.quantity, origin_type: 'purchase', origin_id: id, note: 'Cancelación de compra #' + id });
+      }
+    }
+    db.prepare("UPDATE purchases SET status='cancelled' WHERE id=?").run(id);
+  })();
+  return { id, reverted: wasReceived };
+}
 
 export function createPurchaseRoutes(db, cfg = {}) {
   const sym = cfg.sym || '€';
@@ -11,7 +50,8 @@ export function createPurchaseRoutes(db, cfg = {}) {
 
   api.get('/', c => {
     try {
-      return c.json(db.prepare('SELECT p.*,s.name as supplier_name FROM purchases p JOIN suppliers s ON p.supplier_id=s.id ORDER BY p.date DESC,p.created_at DESC').all());
+      // archived=0: las compras rotas heredadas (sin líneas) quedan fuera del listado.
+      return c.json(db.prepare('SELECT p.*,s.name as supplier_name FROM purchases p JOIN suppliers s ON p.supplier_id=s.id WHERE p.archived=0 ORDER BY p.date DESC,p.created_at DESC').all());
     } catch(e) { return c.json({error:e.message},500); }
   });
 
@@ -45,6 +85,20 @@ export function createPurchaseRoutes(db, cfg = {}) {
       const newId = create();
       return c.json({id:newId, message:'Compra registrada'}, 201);
     } catch(e) { return c.json({error:e.message},500); }
+  });
+
+  api.post('/:id/receive', requirePerm('purchases.create'), c => {
+    try {
+      const r = receivePurchaseSvc(db, parseInt(c.req.param('id')));
+      return c.json({ message: 'Compra recibida', ...r });
+    } catch(e) { return c.json({error:e.message}, e.status||500); }
+  });
+
+  api.post('/:id/cancel', requirePerm('purchases.create'), c => {
+    try {
+      const r = cancelPurchaseSvc(db, parseInt(c.req.param('id')));
+      return c.json({ message: 'Compra cancelada', ...r });
+    } catch(e) { return c.json({error:e.message}, e.status||500); }
   });
 
   views.get('/', c => {
@@ -85,7 +139,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
   views.get('/new', c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const today = new Date().toISOString().split('T')[0];
-    const suppliers = db.prepare('SELECT id,name FROM suppliers ORDER BY name').all();
+    const suppliers = db.prepare('SELECT id,name FROM suppliers WHERE active=1 ORDER BY name').all();   // solo activos en el selector
     const products = db.prepare("SELECT id,name,sku,price FROM products WHERE status='active' ORDER BY name").all();
 
     const csrfToken = c.get('session')?.csrfToken||'';
@@ -272,8 +326,14 @@ export function createPurchaseRoutes(db, cfg = {}) {
     const refBlock = purchase.reference ? `<div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Referencia</span><br>${purchase.reference}</div>` : '';
     const notesBlock = purchase.notes ? `<div><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Notas</span><br>${purchase.notes}</div>` : '';
 
+    const canEdit = can(c, 'purchases.create');
+    const actionBtns = canEdit ? (
+      (purchase.status === 'pending' ? `<button class="btn btn-primary" onclick="receivePurchase()">Recibir</button> ` : '') +
+      (purchase.status !== 'cancelled' ? `<button class="btn btn-danger" onclick="cancelPurchase()">Cancelar</button> ` : '')
+    ) : '';
+
     const content = `
-      <div class="ph"><h2>Compra #${purchase.id}</h2><a href="/admin/purchases" class="btn btn-secondary">Volver</a></div>
+      <div class="ph"><h2>Compra #${purchase.id}</h2><div style="display:flex;gap:.5rem">${actionBtns}<a href="/admin/purchases" class="btn btn-secondary">Volver</a></div></div>
       <div class="grid g2" style="margin-bottom:1rem">
         <div class="card card-body">
           <div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Proveedor</span><br><strong>${purchase.supplier_name}</strong></div>
@@ -292,7 +352,18 @@ export function createPurchaseRoutes(db, cfg = {}) {
           <thead><tr><th>Producto</th><th>Cantidad</th><th>Coste unitario</th><th>Subtotal</th></tr></thead>
           <tbody>${itemRows}</tbody>
         </table></div>
-      </div>`;
+      </div>
+      <script>
+      async function receivePurchase(){
+        try{ await api('POST','/api/erp/purchases/${purchase.id}/receive',{}); toast('Compra recibida: stock actualizado'); location.reload(); }
+        catch(e){ toast(e.message||'Error','err'); }
+      }
+      async function cancelPurchase(){
+        if(!confirm('¿Cancelar esta compra? Si estaba recibida, se revertirá el stock (no se borra).'))return;
+        try{ var r=await api('POST','/api/erp/purchases/${purchase.id}/cancel',{}); toast(r.reverted?'Compra cancelada y stock revertido':'Compra cancelada'); location.reload(); }
+        catch(e){ toast(e.message||'Error','err'); }
+      }
+      </script>`;
     return c.html(adminLayout('Compra #'+purchase.id, content, 'purchases', c.get('session')?.csrfToken||'', c));
   });
 
