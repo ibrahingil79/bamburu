@@ -155,6 +155,46 @@ _(por detallar)_ — Pedido → Albarán / nota de entrega → Factura. Usa los 
 
 ---
 
+## TRANSVERSAL (fuera del orden de pilares) — SISTEMA DE DISEÑO + SANEAMIENTO VISUAL — 🔵 REGISTRADA (no iniciar hasta indicación)
+
+> Tarea PROPIA del roadmap (no un pendiente suelto menor), por su impacto en el **diferencial** del
+> producto. Registrada ahora; **no se construye nada todavía** — seguimos a mitad del Pilar 2. Se aborda
+> cuando se indique. La pieza 1 manda sobre la 2 (ver REGLA).
+
+**Problema (palabras del dueño del producto).** La UI ha crecido "metiendo cada función donde cabía", sin
+criterio estético: pantallas recargadas, sin jerarquía, que "se ven feas" y poco profesionales. Choca
+directamente con la estrella polar de CANON ("si no se siente fácil, está mal diseñado aunque funcione").
+**No es un retoque cosmético: es deuda contra el diferencial del producto.**
+
+**Referencia de estilo.** Minimalismo tipo **Claude / iOS**: pocos elementos a la vista, jerarquía clara,
+mucho aire, lo secundario oculto hasta que se necesita.
+
+**Enfoque en dos piezas, EN ESTE ORDEN:**
+
+1) **CREAR `DISEÑO.md`** en el repo = la **fuente de verdad visual** de Bamburu, equivalente a lo que
+   `CANON.md` es para la estrategia. Debe definir, como mínimo:
+   - **Principios:** minimalismo, jerarquía visual, espacio en blanco, ocultar lo secundario.
+   - **Botones:** UN solo botón primario por pantalla; las acciones secundarias agrupadas/ocultas (menú
+     "…" o similar), nunca esparcidas "donde quepan".
+   - **Densidad:** límite de cuánta información se muestra de golpe por pantalla; lo demás, progresivo
+     (expandibles, secciones, segundo nivel).
+   - **FONDO CLARO como estándar** (decisión del dueño): el fondo oscuro actual no se considera profesional
+     para un software de gestión/facturación → se cambia a fondo claro y aireado. Mantener
+     accesibilidad/contraste.
+   - **Tokens ya definidos del proyecto:** tipografía **Inter**; acento **teal #0D9488**; fondos claros;
+     esquinas redondeadas suaves; escala de espaciado de **4px**.
+   - **Consistencia entre pantallas:** mismos patrones de lista, ficha, modal y tabla en todo el ERP.
+
+2) **PASADA DE SANEAMIENTO VISUAL** de lo ya construido aplicando ese `DISEÑO.md`, empezando por las
+   pantallas más recargadas (**ficha de cliente** y **sección Cobros**). Es el equivalente visual al
+   saneamiento de datos que fue T1. **Solo presentación:** no cambiar lógica, datos, endpoints ni
+   comportamiento.
+
+**REGLA:** la pieza 1 manda. Sin las reglas escritas, el saneamiento (pieza 2) vuelve a salir a ojo y
+desigual. **No empezar por la 2.**
+
+---
+
 ## Contexto heredado (era anterior — código que SE QUEDA)
 
 La era previa ("facturación de servicios") dejó código que funciona y no se tira; solo se retira su plan:
