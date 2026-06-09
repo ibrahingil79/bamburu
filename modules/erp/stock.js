@@ -40,11 +40,34 @@ export function productStock(db, productId) {
   return db.prepare('SELECT COALESCE(SUM(quantity),0) s FROM stock_movements WHERE product_id=?').get(productId).s;
 }
 
-// Mantiene products.stock == SUMA(libro). Se llama tras CADA inserción de movimiento.
+// Mantiene products.stock == SUMA(libro) Y products.average_cost (coste medio ponderado, WAC)
+// como cachés derivadas. Se llama tras CADA inserción de movimiento (y en la migración).
+// Relee el libro EN ORDEN (mismo orden que el kardex) y aplica WAC:
+//   · movimiento + (entrada/apertura/ajuste+/...) con unit_cost: avg=(qty*avg+mov*coste)/(qty+mov)
+//   · movimiento + con unit_cost NULL: cuenta como coste 0 (diluye el medio; aperturas/legacy/ajustes)
+//   · movimiento − (salida): solo baja la cantidad, el medio NO cambia
+//   · si la cantidad llega a <=0 (vaciado o sobreventa): el medio se reestablece a 0
+// La caché de stock es la SUMA EXACTA del libro (puede ser negativa por sobreventa); el contador
+// del WAC se aparta de esa suma (se pisa a 0 al vaciar) para no contaminar la siguiente entrada.
 export function recomputeStock(db, productId) {
-  const s = productStock(db, productId);
-  db.prepare('UPDATE products SET stock=? WHERE id=?').run(s, productId);
-  return s;
+  const rows = db.prepare(
+    'SELECT quantity, unit_cost FROM stock_movements WHERE product_id=? ORDER BY created_at, id'
+  ).all(productId);
+  let stock = 0;            // caché = SUMA exacta del libro
+  let wacQty = 0, avg = 0;  // acumuladores del coste medio ponderado
+  for (const r of rows) {
+    stock += r.quantity;
+    if (r.quantity > 0) {
+      const cost = r.unit_cost == null ? 0 : r.unit_cost;
+      avg = (wacQty * avg + r.quantity * cost) / (wacQty + r.quantity);
+      wacQty += r.quantity;
+    } else {
+      wacQty += r.quantity;
+      if (wacQty <= 0) { wacQty = 0; avg = 0; }   // vaciado/sobreventa: el medio vuelve a 0
+    }
+  }
+  db.prepare('UPDATE products SET stock=?, average_cost=? WHERE id=?').run(stock, avg, productId);
+  return stock;
 }
 
 // ¿Está revertido? (se deriva por consulta: otro movimiento lo referencia; no hay flag).
@@ -52,15 +75,18 @@ export function isReversed(db, movementId) {
   return !!db.prepare('SELECT 1 FROM stock_movements WHERE reverses_movement_id=? LIMIT 1').get(movementId);
 }
 
-// ÚNICO punto de escritura del libro: inserta el movimiento y recalcula la caché.
-// m: { product_id, type, quantity(signo), reason?, origin_type, origin_id?, reverses_movement_id?, note?, warehouse_id?, created_at? }
+// ÚNICO punto de escritura del libro: inserta el movimiento y recalcula la caché (stock + WAC).
+// m: { product_id, type, quantity(signo), reason?, origin_type, origin_id?, reverses_movement_id?, note?, unit_cost?, warehouse_id?, created_at? }
+// unit_cost OPCIONAL: coste unitario de las unidades de la entrada (compra). Por defecto NULL
+// (salidas, aperturas, ajustes, reversiones) → el WAC lo cuenta como coste 0.
 export function recordMovement(db, m) {
   const wid = m.warehouse_id || defaultWarehouseId(db);
   const res = db.prepare(
-    `INSERT INTO stock_movements (product_id, warehouse_id, type, quantity, reason, origin_type, origin_id, reverses_movement_id, note, created_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`
+    `INSERT INTO stock_movements (product_id, warehouse_id, type, quantity, reason, origin_type, origin_id, reverses_movement_id, note, unit_cost, created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`
   ).run(m.product_id, wid, m.type, m.quantity, m.reason || null, m.origin_type || null,
-        m.origin_id || null, m.reverses_movement_id || null, m.note || null, m.created_at || nowStr());
+        m.origin_id || null, m.reverses_movement_id || null, m.note || null,
+        m.unit_cost == null ? null : m.unit_cost, m.created_at || nowStr());
   recomputeStock(db, m.product_id);
   return res.lastInsertRowid;
 }

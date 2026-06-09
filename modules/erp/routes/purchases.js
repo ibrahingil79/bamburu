@@ -16,7 +16,7 @@ export function receivePurchaseSvc(db, id) {
   const items = db.prepare('SELECT * FROM purchase_items WHERE purchase_id=?').all(id);
   db.transaction(() => {
     for (const item of items) {
-      recordMovement(db, { product_id: item.product_id, type: 'entrada', quantity: item.quantity, origin_type: 'purchase', origin_id: id, note: 'Recepción de compra #' + id + (p.reference ? ' ref:' + p.reference : '') });
+      recordMovement(db, { product_id: item.product_id, type: 'entrada', quantity: item.quantity, unit_cost: item.unit_cost, origin_type: 'purchase', origin_id: id, note: 'Recepción de compra #' + id + (p.reference ? ' ref:' + p.reference : '') });
     }
     db.prepare("UPDATE purchases SET status='received' WHERE id=?").run(id);
   })();
@@ -77,7 +77,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
         if (d.status === 'received') {
           // Recepción de compra: entra al libro (caché vía recomputeStock), no por UPDATE directo.
           for (const item of d.items) {
-            recordMovement(db, { product_id: item.product_id, type: 'entrada', quantity: item.quantity, origin_type: 'purchase', origin_id: pid, note: 'Compra #'+pid+(d.reference?' ref:'+d.reference:'') });
+            recordMovement(db, { product_id: item.product_id, type: 'entrada', quantity: item.quantity, unit_cost: item.unit_cost, origin_type: 'purchase', origin_id: pid, note: 'Compra #'+pid+(d.reference?' ref:'+d.reference:'') });
           }
         }
         return pid;
@@ -140,7 +140,15 @@ export function createPurchaseRoutes(db, cfg = {}) {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const today = new Date().toISOString().split('T')[0];
     const suppliers = db.prepare('SELECT id,name FROM suppliers WHERE active=1 ORDER BY name').all();   // solo activos en el selector
-    const products = db.prepare("SELECT id,name,sku,price FROM products WHERE status='active' ORDER BY name").all();
+    // last_cost = unit_cost de la compra MÁS RECIENTE de cada producto (no archivada). Es el
+    // valor por defecto de la línea de compra; null si el producto nunca se compró → casilla en blanco.
+    const products = db.prepare(`
+      SELECT p.id, p.name, p.sku, p.price,
+        (SELECT pi.unit_cost FROM purchase_items pi
+           JOIN purchases pu ON pu.id=pi.purchase_id
+          WHERE pi.product_id=p.id AND pu.archived=0
+          ORDER BY pu.date DESC, pu.created_at DESC, pi.id DESC LIMIT 1) AS last_cost
+      FROM products p WHERE p.status='active' ORDER BY p.name`).all();
 
     const csrfToken = c.get('session')?.csrfToken||'';
     const role = c.get('session')?.role||'';
@@ -180,7 +188,10 @@ export function createPurchaseRoutes(db, cfg = {}) {
       </div>
       <div class="card" style="margin-bottom:1rem">
         <div class="card-head"><h3>Líneas de compra</h3><button class="btn btn-secondary" onclick="addLine()">+ Añadir línea</button></div>
-        <div class="table-wrap"><table>
+        <!-- overflow:visible aquí (no en .table-wrap global): el desplegable de sugerencias del
+             buscador es position:absolute y .table-wrap{overflow-x:auto} fuerza overflow-y:auto,
+             que lo recortaba e impedía verlo. Esta tabla no necesita scroll horizontal. -->
+        <div class="table-wrap" style="overflow:visible"><table>
           <thead><tr><th>Producto</th><th>Cantidad</th><th>Coste unitario</th><th>Subtotal</th><th></th></tr></thead>
           <tbody id="linesBody"></tbody>
         </table></div>
@@ -251,7 +262,9 @@ export function createPurchaseRoutes(db, cfg = {}) {
         if(!p)return;
         document.getElementById('prod-'+lineId).value=prodId;
         document.getElementById('prodsearch-'+lineId).value=(p.sku?'['+p.sku+'] ':'')+p.name;
-        document.getElementById('cost-'+lineId).value=Number(p.price||0).toFixed(2);
+        // Coste por defecto = ÚLTIMO coste de compra del producto; en blanco si nunca se compró.
+        // Nunca el precio de venta.
+        document.getElementById('cost-'+lineId).value=(p.last_cost!=null)?Number(p.last_cost).toFixed(2):'';
         var box=document.getElementById('suggest-'+lineId);
         if(box){box.style.display='none';box.innerHTML='';}
         calcTotal();

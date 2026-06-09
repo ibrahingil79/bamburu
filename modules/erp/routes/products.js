@@ -334,6 +334,7 @@ export function createProductRoutes(db, cfg = {}) {
                 <div class="form-group" style="display:none"><label class="form-label">Precio antes (tachado)</label><input class="form-control" type="number" id="pCompare" step="0.01"></div><!-- OCULTO: promoción de tienda online -->
                 <div class="form-group" id="pStockWrap"><label class="form-label">Stock inicial</label><input class="form-control" type="number" id="pStock" value="0"></div>
                 <div class="form-group" id="pStockManage" style="display:none"><label class="form-label">Stock</label><div><button type="button" class="btn btn-secondary btn-sm" onclick="openStockKardex(currentProdId, document.getElementById('pName').value)">Gestionar stock (kardex · ajustar)</button></div></div>
+                <div class="form-group" id="pAvgCostWrap" style="display:none"><label class="form-label">Coste medio</label><div id="pAvgCost" style="padding:.55rem 0;font-weight:600">—</div><div style="font-size:.7rem;color:var(--muted)">Se gana desde las compras (no editable)</div></div>
               </div>
               <div style="font-size:.72rem;color:var(--muted);margin:-.5rem 0 .25rem">
                 <a href="https://sede.agenciatributaria.gob.es/Sede/iva.html" target="_blank" rel="noopener" style="color:var(--teal)">Tipos de IVA oficiales (AEAT) ↗</a>
@@ -455,6 +456,9 @@ export function createProductRoutes(db, cfg = {}) {
         document.getElementById('pStockWrap').style.display = (physical && !isEdit) ? '' : 'none';
         const mng = document.getElementById('pStockManage');
         if (mng) mng.style.display = (physical && isEdit) ? '' : 'none';
+        // Coste medio (WAC): solo lectura, solo en EDITAR de un físico (se gana desde compras).
+        const avgw = document.getElementById('pAvgCostWrap');
+        if (avgw) avgw.style.display = (physical && isEdit) ? '' : 'none';
       }
       document.getElementById('pType').addEventListener('change',e=>applyTypeUI(e.target.value));
 
@@ -492,6 +496,7 @@ export function createProductRoutes(db, cfg = {}) {
         document.getElementById('pPrice').value=p.price;
         document.getElementById('pCompare').value=p.compare_price||'';
         document.getElementById('pStock').value=p.stock;
+        document.getElementById('pAvgCost').textContent='${sym}'+Number(p.average_cost||0).toFixed(2);
         document.getElementById('pTaxBand').value=p.tax_band||'general';
         document.getElementById('pImage').value=p.image_url||'';
         document.getElementById('pDigital').value=p.digital_file_url||'';

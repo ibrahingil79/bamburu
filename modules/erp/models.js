@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 import { hashPasswordLegacy } from '../../core/auth.js';
 import { backfillCodes } from './codes.js';
+import { recomputeStock } from './stock.js';
 
 function addCol(db, table, col, def) {
   const cols = db.pragma(`table_info(${table})`).map(c => c.name);
@@ -193,6 +194,12 @@ export function runMigrations(db) {
   addCol(db, 'products', 'digital_file_url', 'TEXT DEFAULT ""');
   addCol(db, 'products', 'featured', 'INTEGER DEFAULT 0');
   addCol(db, 'products', 'supplier_id', 'INTEGER DEFAULT NULL');
+
+  // Pilar 3 (coste/valoración): coste medio ponderado del producto. CACHÉ DERIVADA del
+  // libro stock_movements (igual que products.stock): nunca se escribe a mano, se recalcula
+  // en recomputeStock. Las filas existentes quedan a 0 y el backfill de más abajo las
+  // recalcula desde las entradas de compra.
+  addCol(db, 'products', 'average_cost', 'REAL DEFAULT 0');
 
   // P1+P2: IVA propio por producto. Las filas existentes quedan con DEFAULT 21;
   // el backfill (una sola vez) las alinea al IVA por defecto del negocio por si
@@ -404,6 +411,10 @@ export function runMigrations(db) {
   )`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON stock_movements(product_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_stock_movements_reverses ON stock_movements(reverses_movement_id)`);
+  // Pilar 3 (coste/valoración): coste unitario de las unidades de ESE movimiento. Entrada de
+  // compra → coste de la línea; salidas, aperturas, legacy, ajustes y reversiones → NULL (que el
+  // WAC trata como coste 0). Alimenta el coste medio ponderado (cache en products.average_cost).
+  addCol(db, 'stock_movements', 'unit_cost', 'REAL');
 
   // Migración de datos UNA vez: importa el libro viejo, siembra saldos iniciales y archiva.
   const stockMigKey = 'migration_stock_unify_2026_v1';
@@ -618,6 +629,33 @@ export function runMigrations(db) {
     db.prepare(`UPDATE purchases SET archived=1
                 WHERE id NOT IN (SELECT DISTINCT purchase_id FROM purchase_items)`).run();
     db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(purgeKey, 'done');
+  }
+
+  // Pilar 3 (coste/valoración) — backfill del coste, UNA vez por tenant. Corre DESPUÉS de que
+  // existan las columnas nuevas (stock_movements.unit_cost, products.average_cost) y la tabla
+  // purchase_items. Las compras ya guardadas NO se tocan (purchase_items.unit_cost es inmutable):
+  // solo se RELLENA el coste de los movimientos de entrada de compra y se recalcula la caché.
+  const costMigKey = 'migration_inventory_cost_2026_v1';
+  if (!db.prepare('SELECT value FROM settings WHERE key=?').get(costMigKey)) {
+    const backfill = db.transaction(() => {
+      // 1) Entradas de compra sin coste → coste de purchase_items cruzando por (compra, producto).
+      //    Si hay varias líneas del mismo producto en la misma compra: media ponderada por cantidad.
+      const entradas = db.prepare(
+        "SELECT id, product_id, origin_id FROM stock_movements WHERE type='entrada' AND origin_type='purchase' AND unit_cost IS NULL AND origin_id IS NOT NULL"
+      ).all();
+      const lineCost = db.prepare(
+        'SELECT SUM(quantity*unit_cost) AS num, SUM(quantity) AS den FROM purchase_items WHERE purchase_id=? AND product_id=?'
+      );
+      const setCost = db.prepare('UPDATE stock_movements SET unit_cost=? WHERE id=?');
+      for (const mv of entradas) {
+        const r = lineCost.get(mv.origin_id, mv.product_id);
+        if (r && r.den) setCost.run(r.num / r.den, mv.id);   // sin líneas que casen → se queda NULL (coste 0)
+      }
+      // 2) Recalcula la caché (stock + average_cost) de TODOS los productos desde el libro.
+      for (const p of db.prepare('SELECT id FROM products').all()) recomputeStock(db, p.id);
+      db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(costMigKey, 'done');
+    });
+    backfill();
   }
 
   // Feedback
