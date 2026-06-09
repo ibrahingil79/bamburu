@@ -160,13 +160,22 @@ Compras, Stock, Proveedores, Devoluciones, Descuentos. Qué tienes y de dónde s
 ### PILAR 3 · COMPRAS — pendientes en orden (tras coste/valoración):
 
 ```
-[ ] C1 · Orden de compra → recepción con diferencias
-    - Orden de compra OPCIONAL (la recepción sigue siendo el evento base;
-      se puede comprar directo sin orden).
-    - Estados: orden enviada al proveedor → recepción real.
-    - La recepción puede diferir de la orden en cantidad y/o precio; se
-      registra lo realmente recibido (eso es lo que mueve stock y fija coste).
-    - Encaja sobre el motor de compras actual (pendiente→recibida ya existe).
+[ ] C1 · Orden de compra COMPLETA (opción B) — entidad propia con numeración
+        y documento; recepciones PARCIALES múltiples cuelgan de la orden.
+    Se construye en 3 pasos, validados uno a uno (no de una tacada):
+    - C1.a · La orden como entidad + documento: tabla de órdenes propia,
+      numeración propia, formulario de alta, estados (borrador → enviada),
+      PDF/email al proveedor. Aún NO mueve stock.
+    - C1.b · Recepciones contra la orden: una orden admite varias recepciones
+      (parciales o totales); cada recepción mueve stock y fija coste por lo
+      REALMENTE recibido; la orden muestra pedido / recibido / pendiente por
+      línea; se cierra sola al completarse.
+    - C1.c · Diferencias y cierre manual: recibir distinto de lo pedido
+      (menos cantidad o distinto precio) y cerrar una orden con pendiente
+      que "no va a llegar".
+    La COMPRA DIRECTA actual (recibir sin orden previa) se CONSERVA: no es
+    obligatorio emitir orden.
+    Tras C1 va C2 (factura de proveedor por foto/PDF con DISA, depende de C1).
 
 [ ] C2 · Captura de factura de proveedor por foto/PDF (DISA)
     - Subir foto o PDF; DISA extrae proveedor, líneas e importes.
