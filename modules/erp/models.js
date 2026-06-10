@@ -713,6 +713,24 @@ export function runMigrations(db) {
   // y el motivo obligatorio se guarda aparte. Cerrar no mueve stock ni borra nada.
   addCol(db, 'purchase_orders', 'cerrada_motivo', 'TEXT');
 
+  // C2 — Adjuntos (documentos origen subidos por el usuario: foto/PDF de factura de
+  // proveedor). El binario vive FUERA del repo (data/uploads/<tenant>/), aquí solo el
+  // metadato. entity_type/entity_id quedan NULL hasta que la captura aterriza en una
+  // recepción ('po_receipt') o una compra directa ('purchase'). Aditiva. Nada se borra:
+  // un adjunto se conserva aunque su documento se anule.
+  db.exec(`CREATE TABLE IF NOT EXISTS attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL DEFAULT 'supplier_invoice',
+    original_name TEXT DEFAULT '',
+    path TEXT NOT NULL,
+    mime TEXT DEFAULT '',
+    size INTEGER DEFAULT 0,
+    entity_type TEXT,
+    entity_id INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_attachments_entity ON attachments(entity_type, entity_id)`);
+
   // Pilar 3 (coste/valoración) — backfill del coste, UNA vez por tenant. Corre DESPUÉS de que
   // existan las columnas nuevas (stock_movements.unit_cost, products.average_cost) y la tabla
   // purchase_items. Las compras ya guardadas NO se tocan (purchase_items.unit_cost es inmutable):

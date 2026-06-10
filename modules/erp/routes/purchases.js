@@ -4,6 +4,7 @@ import { validate } from '../../../core/validate.js';
 import { requirePerm } from '../../../core/auth.js';
 import { purchaseSchema } from '../schemas.js';
 import { recordMovement } from '../stock.js';
+import { originDocBlock } from '../attachments.js';
 
 // ── Motor de Compras: servicios de transición (testables; los usan las rutas) ──
 // Recibir una compra PENDIENTE: el stock sube en el libro (entrada +, origen compra X).
@@ -43,6 +44,29 @@ export function cancelPurchaseSvc(db, id) {
   return { id, reverted: wasReceived };
 }
 
+// Compra directa: crea la compra + sus líneas y, si nace 'received', mueve el stock
+// por el libro (entrada, origen compra → WAC por recomputeStock). Servicio testable
+// que usan la ruta POST y la captura de factura (C2, aterrizaje sin orden). Validar
+// con purchaseSchema es responsabilidad del llamador (la ruta lo hace por middleware;
+// C2 lo valida antes de llamar).
+export function createDirectPurchaseSvc(db, d) {
+  const create = db.transaction(() => {
+    const total = d.items.reduce((s, i) => s + i.quantity * i.unit_cost, 0);
+    const r = db.prepare('INSERT INTO purchases (supplier_id,reference,date,notes,status,total) VALUES (?,?,?,?,?,?)')
+      .run(d.supplier_id, d.reference || '', d.date, d.notes || '', d.status, total);
+    const pid = r.lastInsertRowid;
+    const insItem = db.prepare('INSERT INTO purchase_items (purchase_id,product_id,quantity,unit_cost) VALUES (?,?,?,?)');
+    for (const item of d.items) insItem.run(pid, item.product_id, item.quantity, item.unit_cost);
+    if (d.status === 'received') {
+      for (const item of d.items) {
+        recordMovement(db, { product_id: item.product_id, type: 'entrada', quantity: item.quantity, unit_cost: item.unit_cost, origin_type: 'purchase', origin_id: pid, note: 'Compra #' + pid + (d.reference ? ' ref:' + d.reference : '') });
+      }
+    }
+    return pid;
+  });
+  return create();
+}
+
 export function createPurchaseRoutes(db, cfg = {}) {
   const sym = cfg.sym || '€';
   const api = new Hono();
@@ -67,22 +91,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
 
   api.post('/', requirePerm('purchases.create'), validate(purchaseSchema), c => {
     try {
-      const d = c.get('validated');
-      const create = db.transaction(() => {
-        const total = d.items.reduce((s,i) => s + i.quantity * i.unit_cost, 0);
-        const r = db.prepare('INSERT INTO purchases (supplier_id,reference,date,notes,status,total) VALUES (?,?,?,?,?,?)').run(d.supplier_id, d.reference||'', d.date, d.notes||'', d.status, total);
-        const pid = r.lastInsertRowid;
-        const insItem = db.prepare('INSERT INTO purchase_items (purchase_id,product_id,quantity,unit_cost) VALUES (?,?,?,?)');
-        for (const item of d.items) insItem.run(pid, item.product_id, item.quantity, item.unit_cost);
-        if (d.status === 'received') {
-          // Recepción de compra: entra al libro (caché vía recomputeStock), no por UPDATE directo.
-          for (const item of d.items) {
-            recordMovement(db, { product_id: item.product_id, type: 'entrada', quantity: item.quantity, unit_cost: item.unit_cost, origin_type: 'purchase', origin_id: pid, note: 'Compra #'+pid+(d.reference?' ref:'+d.reference:'') });
-          }
-        }
-        return pid;
-      });
-      const newId = create();
+      const newId = createDirectPurchaseSvc(db, c.get('validated'));
       return c.json({id:newId, message:'Compra registrada'}, 201);
     } catch(e) { return c.json({error:e.message},500); }
   });
@@ -104,7 +113,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
   views.get('/', requirePerm('purchases.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const content = `
-      <div class="ph"><h2>Compras</h2>${can(c,'purchases.create')?'<a href="/admin/purchases/new" class="btn btn-primary">Nueva compra</a>':''}</div>
+      <div class="ph"><h2>Compras</h2><div style="display:flex;gap:.5rem">${can(c,'purchases.create')?'<a href="/admin/purchases/capture" class="btn btn-secondary">Capturar factura</a><a href="/admin/purchases/new" class="btn btn-primary">Nueva compra</a>':''}</div></div>
       <div class="card">
         <div class="card-head"><h3>Registro de compras</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="renderPurchases()"></div>
         <div class="table-wrap"><table>
@@ -366,6 +375,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
           <tbody>${itemRows}</tbody>
         </table></div>
       </div>
+      ${originDocBlock(db, 'purchase', purchase.id)}
       <script>
       async function receivePurchase(){
         try{ await api('POST','/api/erp/purchases/${purchase.id}/receive',{}); toast('Compra recibida: stock actualizado'); location.reload(); }

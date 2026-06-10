@@ -5,6 +5,7 @@ import { validate } from '../../../core/validate.js';
 import { purchaseOrderAnularSchema } from '../schemas.js';
 import { nextCode } from '../codes.js';
 import { recordMovement } from '../stock.js';
+import { originDocBlock } from '../attachments.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // C1.b — RECEPCIONES contra la orden de compra. Una orden ENVIADA se recibe en
@@ -233,6 +234,7 @@ export function createPurchaseOrderReceiptRoutes(db) {
           <tfoot><tr><td colspan="3" style="text-align:right;font-weight:700;padding:.7rem 1rem">Total recepción</td><td style="font-weight:700">${total.toFixed(2)} ${sym}</td></tr></tfoot>
         </table></div>
       </div>
+      ${originDocBlock(db, 'po_receipt', r.id)}
       <script>
       async function anularRecepcion(){
         const motivo = prompt('Motivo de anulación de la recepción ${esc(r.receipt_number || '')} (revertirá su stock):');

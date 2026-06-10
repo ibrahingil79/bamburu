@@ -84,6 +84,10 @@ export function register(app, db) {
   // genérico insert_record/update_record (eludiría validación y guarda de NIF). Los
   // clientes SOLO por create_client/edit_client/deactivate_client/activate_client,
   // que pasan por el servicio validado compartido.
+  // C2 — 'purchases'/'purchase_items' SALEN igual: una compra mueve stock y fija coste
+  // por el libro (recordMovement → WAC). Escribirlas con el genérico insert_record
+  // dejaría stock/coste sin tocar (incoherencia). El camino de DISA para compras será
+  // la captura de factura (C2, pantalla + servicios validados), no el INSERT genérico.
   const WRITABLE_TABLES = new Set([
     'categories', 'tags', 'product_tags',
     'products', 'product_variants', 'product_images',
@@ -94,7 +98,6 @@ export function register(app, db) {
     'discount_codes', 'auto_discounts',
     'shipping_methods',
     'company_config', 'settings', 'store_settings', 'disa_profile',
-    'purchases', 'purchase_items',
   ]);
 
   const SECURITY_ACTIONS = new Set(['disable_2fa_user']);

@@ -18,6 +18,60 @@ function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// C2 — búsqueda server-side de productos (clona el patrón de searchClients de T5).
+// Coincidencia parcial sobre nombre, SKU y código interno (product_code); solo
+// activos. La usan el cuadre de la captura de factura (C2) y su endpoint JSON. NO
+// sustituye la API de catálogo completo ni el buscador client-side de line-search.
+export function searchProducts(db, { q = '', limit = 20 } = {}) {
+  const where = ["status='active'"];
+  const params = [];
+  if (q) {
+    where.push('(name LIKE ? OR sku LIKE ? OR product_code LIKE ?)');
+    params.push('%' + q + '%', '%' + q + '%', '%' + q + '%');
+  }
+  const lim = Math.min(Math.max(Number(limit) || 20, 1), 100);
+  return db.prepare(
+    'SELECT id, name, sku, product_code, price, tax_band, tax_rate, type FROM products WHERE '
+    + where.join(' AND ') + ' ORDER BY name LIMIT ?'
+  ).all(...params, lim);
+}
+
+// ── SERVICIO VALIDADO COMPARTIDO DE PRODUCTO — única vía de alta (patrón T5) ──
+// La usan la ruta POST y la captura de factura (C2: creación de producto al vuelo).
+// Resuelve el % de IVA desde la BANDA elegida + país (nunca confía en un número del
+// cliente); la banda es OBLIGATORIA (sin defecto silencioso, mismo principio que el
+// pendiente de DISA create_product). Físico con stock inicial → siembra 'apertura'.
+export function createProductSvc(db, input) {
+  const res = productSchema.safeParse(input);
+  if (!res.success) {
+    const msg = res.error.issues.map(i => (i.path?.length ? i.path.join('.') + ': ' : '') + i.message).join('; ');
+    const e = new Error(msg || 'Datos de producto inválidos'); e.status = 400; throw e;
+  }
+  const d = res.data;
+  const cfg = db.prepare('SELECT country, tax_rate FROM company_config WHERE id=1').get() || {};
+  const country = (cfg.country || 'ES').toUpperCase();
+  const fallbackRate = cfg.tax_rate != null ? cfg.tax_rate : 21;
+  const chosen = getVatBands(country, fallbackRate).find(b => b.code === d.tax_band);
+  if (!chosen) { const e = new Error('La banda de IVA es obligatoria y debe ser válida'); e.status = 400; throw e; }
+  const band = chosen.code, rate = chosen.rate;
+  const ptype = d.type || 'physical';
+  const initialStock = (ptype === 'service' || ptype === 'digital') ? 0 : (parseInt(d.stock) || 0);
+  const code = nextCode(db, 'product');
+  const slug = slugify(d.name);
+  const r = db.prepare(`INSERT INTO products (name,slug,sku,description,price,compare_price,image_url,category_id,status,type,digital_file_url,featured,stock,supplier_id,tax_rate,tax_band,product_code) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(d.name, slug, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', ptype, d.digital_file_url||'', d.featured?1:0, 0, d.supplier_id||null, rate, band, code);
+  const id = r.lastInsertRowid;
+  if (ptype === 'physical' && initialStock > 0) {
+    recordMovement(db, { product_id: id, type: 'apertura', quantity: initialStock, origin_type: 'opening', note: 'Stock inicial' });
+  }
+  if (d.tags?.length) {
+    for (const tid of d.tags) {
+      try { db.prepare('INSERT OR IGNORE INTO product_tags (product_id,tag_id) VALUES (?,?)').run(id, tid); } catch(_){}
+    }
+  }
+  return { id, name: d.name, product_code: code, tax_band: band, tax_rate: rate };
+}
+
 export function createProductRoutes(db, cfg = {}) {
   const sym = cfg.sym || '€';
   const api = new Hono();
@@ -36,6 +90,13 @@ export function createProductRoutes(db, cfg = {}) {
     } catch(e) { return c.json({error:e.message},500); }
   });
 
+  // C2 — búsqueda de productos (JSON). ANTES de '/:id' para que no la capture como id.
+  api.get('/search', requirePerm('products.read'), c => {
+    try {
+      return c.json(searchProducts(db, { q: c.req.query('q') || '', limit: c.req.query('limit') }));
+    } catch(e) { return c.json({error:e.message},500); }
+  });
+
   api.get('/:id', requirePerm('products.read'), c => {
     try {
       const p = db.prepare(`SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.id=?`).get(c.req.param('id'));
@@ -49,39 +110,10 @@ export function createProductRoutes(db, cfg = {}) {
 
   api.post('/', requirePerm('products.create'), validate(productSchema), async c => {
     try {
-      const d = c.get('validated');
-      if (!d.name || d.price === undefined) return c.json({error:'Nombre y precio requeridos'},400);
-      const slug = slugify(d.name);
-      // P1+P2 refinamiento: el % de IVA lo resuelve el servidor desde la banda elegida
-      // y el país del negocio (nunca se confía en un número del cliente). Servicio y
-      // digital no llevan stock (CANON §2).
-      const cfg = db.prepare('SELECT country, tax_rate FROM company_config WHERE id=1').get() || {};
-      const country = (cfg.country || 'ES').toUpperCase();
-      const fallbackRate = cfg.tax_rate != null ? cfg.tax_rate : 21;
-      // IVA OBLIGATORIO (dato fiscal): la banda debe venir y ser válida para el país.
-      // No se aplica ningún valor por defecto silencioso.
-      const chosen = getVatBands(country, fallbackRate).find(b => b.code === d.tax_band);
-      if (!chosen) return c.json({ error: 'La banda de IVA es obligatoria y debe ser válida' }, 400);
-      const band = chosen.code, rate = chosen.rate;
-      // Pilar 3: products.stock es caché derivada. Se inserta a 0 y, si es físico con stock
-      // inicial, se siembra un movimiento 'apertura' (recomputeStock pone la caché al valor).
-      const ptype = d.type || 'physical';
-      const initialStock = (ptype === 'service' || ptype === 'digital') ? 0 : (parseInt(d.stock) || 0);
-      // Código interno PROD-NNNN, tras la validación de SKU/banda. NO toca el SKU (referencia del proveedor).
-      const code = nextCode(db, 'product');
-      const r = db.prepare(`INSERT INTO products (name,slug,sku,description,price,compare_price,image_url,category_id,status,type,digital_file_url,featured,stock,supplier_id,tax_rate,tax_band,product_code) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(d.name, slug, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', ptype, d.digital_file_url||'', d.featured?1:0, 0, d.supplier_id||null, rate, band, code);
-      if (ptype === 'physical' && initialStock > 0) {
-        recordMovement(db, { product_id: r.lastInsertRowid, type: 'apertura', quantity: initialStock, origin_type: 'opening', note: 'Stock inicial' });
-      }
-      if (d.tags?.length) {
-        for (const tid of d.tags) {
-          try { db.prepare('INSERT OR IGNORE INTO product_tags (product_id,tag_id) VALUES (?,?)').run(r.lastInsertRowid, tid); } catch(_){}
-        }
-      }
-      logActivity(db, c.get('session'), 'Creó producto', 'product', r.lastInsertRowid, d.name);
-      return c.json({id:r.lastInsertRowid, message:'Creado'});
-    } catch(e) { return c.json({error:e.message},500); }
+      const r = createProductSvc(db, c.get('validated'));
+      logActivity(db, c.get('session'), 'Creó producto', 'product', r.id, r.name);
+      return c.json({id:r.id, message:'Creado'});
+    } catch(e) { return c.json({error:e.message}, e.status||500); }
   });
 
   // ── Pilar 3 · Paso 1 — stock de un producto (caché + kardex) ──────────────

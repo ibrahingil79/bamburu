@@ -20,6 +20,42 @@ export function supplierFiscalIdConflict(db, fiscalId, excludeId = null) {
   ).get(norm, Number.isFinite(ex) ? ex : -1) || null;
 }
 
+// ── SERVICIO VALIDADO COMPARTIDO DE PROVEEDOR — única vía de alta (patrón T5) ──
+// La usan la ruta POST y la captura de factura (C2): misma validación (supplierSchema)
+// y misma guarda de NIF único global (supplierFiscalIdConflict). Errores con .status.
+export function createSupplierSvc(db, input) {
+  const res = supplierSchema.safeParse(input);
+  if (!res.success) {
+    const msg = res.error.issues.map(i => (i.path?.length ? i.path.join('.') + ': ' : '') + i.message).join('; ');
+    const e = new Error(msg || 'Datos de proveedor inválidos'); e.status = 400; throw e;
+  }
+  const d = res.data;
+  const conf = supplierFiscalIdConflict(db, d.fiscal_id);
+  if (conf) {
+    const e = new Error(conf.active
+      ? 'Ya existe un proveedor con ese NIF/CIF'
+      : 'Ya existe un proveedor ARCHIVADO con ese NIF/CIF; restáuralo en vez de crear uno nuevo');
+    e.status = 409; throw e;
+  }
+  const code = nextCode(db, 'supplier');   // código interno PROV-NNNN, tras la guarda de NIF
+  const r = db.prepare('INSERT INTO suppliers (name,fiscal_id,contact,email,phone,address,city,notes,supplier_code) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(d.name, d.fiscal_id||'', d.contact||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.notes||'', code);
+  return { id: r.lastInsertRowid, name: d.name, supplier_code: code };
+}
+
+// C2 — búsqueda server-side de proveedores (patrón de searchClients): nombre o NIF,
+// solo activos. El cuadre exacto por NIF usa supplierFiscalIdConflict.
+export function searchSuppliers(db, { q = '', limit = 20 } = {}) {
+  const where = ['active=1'];
+  const params = [];
+  if (q) { where.push('(name LIKE ? OR fiscal_id LIKE ?)'); params.push('%' + q + '%', '%' + q + '%'); }
+  const lim = Math.min(Math.max(Number(limit) || 20, 1), 100);
+  return db.prepare(
+    'SELECT id, name, fiscal_id, email, phone, supplier_code FROM suppliers WHERE '
+    + where.join(' AND ') + ' ORDER BY name LIMIT ?'
+  ).all(...params, lim);
+}
+
 export function createSupplierRoutes(db) {
   const api = new Hono();
   const views = new Hono();
@@ -32,17 +68,20 @@ export function createSupplierRoutes(db) {
     } catch(e) { return c.json({error:e.message},500); }
   });
 
+  // C2 — búsqueda de proveedores (JSON). ANTES de '/:id' (no hay /:id aquí, pero se mantiene el patrón).
+  api.get('/search', requirePerm('suppliers.read'), c => {
+    try {
+      return c.json(searchSuppliers(db, { q: c.req.query('q') || '', limit: c.req.query('limit') }));
+    } catch(e) { return c.json({error:e.message},500); }
+  });
+
+  // El alta pasa por el servicio compartido (misma validación + guarda de NIF que C2).
   api.post('/', requirePerm('suppliers.create'), validate(supplierSchema), c => {
     try {
-      const d = c.get('validated');
-      const conf = supplierFiscalIdConflict(db, d.fiscal_id);
-      if (conf) return c.json({error: conf.active ? 'Ya existe un proveedor con ese NIF/CIF' : 'Ya existe un proveedor ARCHIVADO con ese NIF/CIF; restáuralo en vez de crear uno nuevo'},409);
-      const code = nextCode(db, 'supplier');   // código interno PROV-NNNN, tras la guarda de NIF
-      const r = db.prepare('INSERT INTO suppliers (name,fiscal_id,contact,email,phone,address,city,notes,supplier_code) VALUES (?,?,?,?,?,?,?,?,?)')
-        .run(d.name, d.fiscal_id||'', d.contact||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.notes||'', code);
-      logActivity(db, c.get('session'), 'Creó proveedor', 'supplier', r.lastInsertRowid, d.name);
-      return c.json({id:r.lastInsertRowid, message:'Proveedor creado'}, 201);
-    } catch(e) { return c.json({error:e.message},500); }
+      const r = createSupplierSvc(db, c.get('validated'));
+      logActivity(db, c.get('session'), 'Creó proveedor', 'supplier', r.id, r.name);
+      return c.json({id:r.id, message:'Proveedor creado'}, 201);
+    } catch(e) { return c.json({error:e.message}, e.status||500); }
   });
 
   api.put('/:id', requirePerm('suppliers.edit'), validate(supplierSchema), c => {

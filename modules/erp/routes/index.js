@@ -19,6 +19,7 @@ import { createReviewRoutes } from './reviews.js';
 import { createChangePasswordRoutes } from './change-password.js';
 import { createSupplierRoutes } from './suppliers.js';
 import { createPurchaseRoutes } from './purchases.js';
+import { createPurchaseCaptureRoutes } from './purchases-capture.js';
 import { createPurchaseOrderRoutes } from './purchase-orders.js';
 import { createPurchaseOrderReceiptRoutes } from './purchase-order-receipts.js';
 import { createFeedbackRoutes } from './feedback.js';
@@ -53,6 +54,7 @@ export function mountRoutes(app, db) {
   const securityRoutes = createSecurityRoutes(db);
   const { api: supplierApi, views: supplierViews } = createSupplierRoutes(db);
   const { api: purchaseApi, views: purchaseViews } = createPurchaseRoutes(db);
+  const { api: captureApi, views: captureViews } = createPurchaseCaptureRoutes(db);
   const { api: purchaseOrderApi, views: purchaseOrderViews } = createPurchaseOrderRoutes(db);
   const { api: poReceiptApi, views: poReceiptViews } = createPurchaseOrderReceiptRoutes(db);
   const { api: feedbackApi, views: feedbackViews } = createFeedbackRoutes(db);
@@ -82,6 +84,8 @@ export function mountRoutes(app, db) {
   admin.route('/change-password', changePasswordRoutes);
   admin.route('/security', securityRoutes);
   admin.route('/suppliers', supplierViews);
+  // C2 — captura ANTES que /purchases para que /purchases/capture no lo capture /purchases/:id.
+  admin.route('/purchases/capture', captureViews);
   admin.route('/purchases', purchaseViews);
   admin.route('/purchase-orders', purchaseOrderViews);
   admin.route('/purchase-order-receipts', poReceiptViews);
@@ -107,6 +111,8 @@ export function mountRoutes(app, db) {
   apiApp.route('/newsletter', nlApi);
   apiApp.route('/reviews', revApi);
   apiApp.route('/suppliers', supplierApi);
+  // C2 — captura ANTES que /purchases (mismo motivo de prioridad de rutas).
+  apiApp.route('/purchases/capture', captureApi);
   apiApp.route('/purchases', purchaseApi);
   apiApp.route('/purchase-orders', purchaseOrderApi);
   apiApp.route('/purchase-order-receipts', poReceiptApi);

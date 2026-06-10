@@ -501,6 +501,7 @@ export function createPurchaseOrderRoutes(db) {
           <input class="search" type="text" name="q" value="${esc(q)}" placeholder="Buscar por proveedor o número...">
           <select class="form-control" name="estado" style="width:auto;min-width:140px" onchange="this.form.submit()">${estadoOptions}</select>
           <button class="btn btn-secondary" type="submit">Buscar</button>
+          ${can(c, 'purchases.create') ? '<a href="/admin/purchases/capture" class="btn btn-secondary">Capturar factura</a>' : ''}
           ${can(c, 'purchases.create') ? '<a href="/admin/purchase-orders/new" class="btn btn-primary">Nueva orden</a>' : ''}
         </form>
       </div>
