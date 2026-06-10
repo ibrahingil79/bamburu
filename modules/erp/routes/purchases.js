@@ -48,14 +48,14 @@ export function createPurchaseRoutes(db, cfg = {}) {
   const api = new Hono();
   const views = new Hono();
 
-  api.get('/', c => {
+  api.get('/', requirePerm('purchases.read'), c => {
     try {
       // archived=0: las compras rotas heredadas (sin líneas) quedan fuera del listado.
       return c.json(db.prepare('SELECT p.*,s.name as supplier_name FROM purchases p JOIN suppliers s ON p.supplier_id=s.id WHERE p.archived=0 ORDER BY p.date DESC,p.created_at DESC').all());
     } catch(e) { return c.json({error:e.message},500); }
   });
 
-  api.get('/:id', c => {
+  api.get('/:id', requirePerm('purchases.read'), c => {
     try {
       const id = parseInt(c.req.param('id'));
       const purchase = db.prepare('SELECT p.*,s.name as supplier_name FROM purchases p JOIN suppliers s ON p.supplier_id=s.id WHERE p.id=?').get(id);
@@ -65,7 +65,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
     } catch(e) { return c.json({error:e.message},500); }
   });
 
-  api.post('/', validate(purchaseSchema), c => {
+  api.post('/', requirePerm('purchases.create'), validate(purchaseSchema), c => {
     try {
       const d = c.get('validated');
       const create = db.transaction(() => {
@@ -101,7 +101,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
     } catch(e) { return c.json({error:e.message}, e.status||500); }
   });
 
-  views.get('/', c => {
+  views.get('/', requirePerm('purchases.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const content = `
       <div class="ph"><h2>Compras</h2>${can(c,'purchases.create')?'<a href="/admin/purchases/new" class="btn btn-primary">Nueva compra</a>':''}</div>
@@ -136,7 +136,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
     return c.html(adminLayout('Compras', content, 'purchases', c.get('session')?.csrfToken||'', c));
   });
 
-  views.get('/new', c => {
+  views.get('/new', requirePerm('purchases.create'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const today = new Date().toISOString().split('T')[0];
     const suppliers = db.prepare('SELECT id,name FROM suppliers WHERE active=1 ORDER BY name').all();   // solo activos en el selector
@@ -319,7 +319,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
     return c.html(adminLayout('Nueva compra', content, 'purchases', csrfToken, c));
   });
 
-  views.get('/:id', c => {
+  views.get('/:id', requirePerm('purchases.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const id = parseInt(c.req.param('id'));
     const purchase = db.prepare('SELECT p.*,s.name as supplier_name FROM purchases p JOIN suppliers s ON p.supplier_id=s.id WHERE p.id=?').get(id);
