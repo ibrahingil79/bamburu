@@ -55,6 +55,24 @@ function checkSupplier(db, supplierId) {
   if (!s) { const e = new Error('Proveedor no encontrado o archivado'); e.status = 400; throw e; }
 }
 
+// Último coste CONOCIDO de un producto, para precargar la línea de la orden: el más
+// reciente entre la compra directa (no archivada) y la orden de compra ENVIADA.
+// Borradores y anuladas no cuentan (el borrador no está comprometido; una anulada
+// pudo anularse precisamente por precio incorrecto). NULL si nunca se compró/pidió.
+export function lastKnownCost(db, productId) {
+  const r = db.prepare(`
+    SELECT cost FROM (
+      SELECT pi.unit_cost AS cost, pu.date AS d, pu.created_at AS ca, pi.id AS i
+        FROM purchase_items pi JOIN purchases pu ON pu.id=pi.purchase_id
+       WHERE pi.product_id=? AND pu.archived=0
+      UNION ALL
+      SELECT poi.unit_cost, po.date, po.created_at, poi.id
+        FROM purchase_order_items poi JOIN purchase_orders po ON po.id=poi.order_id
+       WHERE poi.product_id=? AND po.status='enviada'
+    ) ORDER BY d DESC, ca DESC, i DESC LIMIT 1`).get(productId, productId);
+  return r ? r.cost : null;
+}
+
 // ── Servicios (testables; los usan las rutas) ───────────────────────────────
 
 export function createPurchaseOrderSvc(db, d, opts = {}) {
@@ -416,14 +434,11 @@ export function createPurchaseOrderRoutes(db) {
     }
 
     // Catálogo para el buscador: productos activos con su IVA (banda ya resuelta) y el
-    // last_cost (coste de la compra más reciente, no archivada) para precargar la línea.
-    const products = db.prepare(`
-      SELECT p.id, p.name, p.sku, p.price, p.tax_rate,
-        (SELECT pi.unit_cost FROM purchase_items pi
-           JOIN purchases pu ON pu.id=pi.purchase_id
-          WHERE pi.product_id=p.id AND pu.archived=0
-          ORDER BY pu.date DESC, pu.created_at DESC, pi.id DESC LIMIT 1) AS last_cost
-      FROM products p WHERE p.status='active' ORDER BY p.name`).all();
+    // último coste conocido (compra directa U orden enviada, vía lastKnownCost) para
+    // precargar la línea. Solo un producto NUEVO (sin historial) exige teclear el coste.
+    const products = db.prepare(
+      "SELECT p.id, p.name, p.sku, p.price, p.tax_rate FROM products p WHERE p.status='active' ORDER BY p.name"
+    ).all().map(p => ({ ...p, last_cost: lastKnownCost(db, p.id) }));
 
     const isEdit = !!existing;
     const seed = isEdit ? {
@@ -486,12 +501,21 @@ export function createPurchaseOrderRoutes(db) {
 
       ${lineSearchScript()}
 
-      // Al elegir un producto: nombre + product_id + coste desde el ÚLTIMO coste de
-      // compra (en blanco si nunca se compró; NUNCA el PVP) + IVA de su banda.
+      // Al elegir un producto: nombre + product_id + coste desde el ÚLTIMO coste
+      // conocido (compra directa u orden enviada; NUNCA el PVP) + IVA de su banda.
+      // Si el producto es NUEVO (sin historial) el campo queda en blanco y lo dice:
+      // ahí sí hay que teclear el coste.
       function applyLinePick(row, p){
         row.querySelector('.line-desc').value = p.name;
         row.querySelector('.line-pid').value  = p.id;
-        row.querySelector('.line-cost').value = (p.last_cost != null) ? Number(p.last_cost).toFixed(2) : '';
+        const costEl = row.querySelector('.line-cost');
+        if (p.last_cost != null) {
+          costEl.value = Number(p.last_cost).toFixed(2);
+          costEl.placeholder = '';
+        } else {
+          costEl.value = '';
+          costEl.placeholder = 'Nuevo: indica el coste';
+        }
         row.querySelector('.line-tax').value  = String(Number(p.tax_rate) || 0);
         row.querySelector('.line-taxlbl').textContent = (Number(p.tax_rate) > 0) ? (Number(p.tax_rate) + '%') : 'Exento';
         recalc();
@@ -570,7 +594,11 @@ export function createPurchaseOrderRoutes(db) {
           const cost = parseFloat(r.querySelector('.line-cost').value);
           if (!pid){ toast('Busca y elige un producto del catálogo en cada línea','err'); return; }
           if (!(qty > 0)){ toast('La cantidad debe ser mayor que 0','err'); return; }
-          if (!(cost >= 0)){ toast('Falta el coste unitario de una línea','err'); return; }
+          if (!(cost >= 0)){
+            const nm = (catalog.find(x => x.id === pid) || {}).name || 'una línea';
+            toast('"' + nm + '" no tiene compras previas: indica su coste unitario','err');
+            return;
+          }
           items.push({ product_id: pid, quantity: qty, unit_cost: cost });
         }
         const body = {

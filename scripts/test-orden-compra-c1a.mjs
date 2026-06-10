@@ -14,6 +14,7 @@ import { runMigrations } from '../modules/erp/models.js';
 import {
   createPurchaseOrderSvc, updatePurchaseOrderSvc, sendPurchaseOrderSvc,
   anularPurchaseOrderSvc, anularYRehacerSvc, emailPurchaseOrderSvc, purchaseOrderTotals,
+  lastKnownCost,
 } from '../modules/erp/routes/purchase-orders.js';
 
 let pass = 0, fail = 0;
@@ -235,6 +236,43 @@ console.log('8. Cero stock en todo el flujo');
   eq(movCount(db), 0, 'flujo completo (crear→editar→enviar→email→anular y rehacer→anular): 0 stock_movements');
   eq(stockOf(db, p), 5, 'products.stock intacto');
   eq(db.prepare('SELECT average_cost FROM products WHERE id=?').get(p).average_cost, costBefore, 'products.average_cost intacto');
+  db.close();
+}
+
+// ── 9. Último coste conocido (autorrelleno de la línea) ──────────────────────
+// El más reciente entre compra directa (no archivada) y orden ENVIADA; borradores
+// y anuladas no cuentan. NULL si nunca → solo el producto nuevo exige teclearlo.
+console.log('9. Último coste conocido');
+{
+  const db = freshDb();
+  const sup = addSupplier(db), p = addProduct(db);
+  eq(lastKnownCost(db, p), null, 'sin historial → null (producto nuevo: se teclea)');
+
+  const buy = (date, cost, archived = 0) => {
+    const pid = db.prepare("INSERT INTO purchases (supplier_id,date,status,total,archived) VALUES (?,?,'received',?,?)").run(sup, date, cost, archived).lastInsertRowid;
+    db.prepare('INSERT INTO purchase_items (purchase_id,product_id,quantity,unit_cost) VALUES (?,?,1,?)').run(pid, p, cost);
+    return pid;
+  };
+  const order = (date, cost) => createPurchaseOrderSvc(db, { supplier_id: sup, date, items: [{ product_id: p, quantity: 1, unit_cost: cost }] });
+
+  buy('2026-06-01', 5);
+  eq(lastKnownCost(db, p), 5, 'compra directa → 5.00');
+
+  const draft = order('2026-06-05', 7);
+  eq(lastKnownCost(db, p), 5, 'un BORRADOR posterior no compromete coste (sigue 5.00)');
+
+  sendPurchaseOrderSvc(db, draft);
+  eq(lastKnownCost(db, p), 7, 'orden ENVIADA más reciente → gana (7.00)');
+
+  anularPurchaseOrderSvc(db, draft, 'precio incorrecto');
+  eq(lastKnownCost(db, p), 5, 'al ANULARLA deja de contar → vuelve a la compra (5.00)');
+
+  const o2 = order('2026-06-08', 6.5); sendPurchaseOrderSvc(db, o2);
+  buy('2026-06-09', 5.9);
+  eq(lastKnownCost(db, p), 5.9, 'entre orden enviada y compra directa gana la MÁS RECIENTE (5.90)');
+
+  buy('2026-06-12', 99, 1);   // compra archivada (rota) → no cuenta
+  eq(lastKnownCost(db, p), 5.9, 'una compra archivada no cuenta');
   db.close();
 }
 
