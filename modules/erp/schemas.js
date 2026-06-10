@@ -334,6 +334,29 @@ export const purchaseSchema = z.object({
   items:       z.array(purchaseItemSchema).min(1),
 });
 
+// ── Orden de compra (C1.a) ─────────────────────────────────────
+// La línea SIEMPRE es un producto del catálogo (sin línea libre) y su coste es NETO
+// (sin IVA). El tax_rate NO viene del cliente: lo resuelve el servidor desde el
+// producto (products.tax_rate, ya resuelto de su banda legal) al guardar la línea.
+const purchaseOrderItemSchema = z.object({
+  product_id: z.coerce.number().int().positive(),
+  quantity:   z.coerce.number().int().positive(),
+  unit_cost:  price,
+});
+
+export const purchaseOrderSchema = z.object({
+  supplier_id:   z.coerce.number().int().positive(),
+  date:          z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  expected_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal('')),
+  notes:         strOpt(1000),
+  items:         z.array(purchaseOrderItemSchema).min(1, 'Al menos una línea requerida'),
+});
+
+// Anular (y anular-y-rehacer): motivo obligatorio, mismo criterio que la factura.
+export const purchaseOrderAnularSchema = z.object({
+  motivo: z.string().trim().min(3, 'Indica el motivo de la anulación').max(500),
+});
+
 export const draftOrderSchema = z.object({
   client_id:      optId,
   items:          z.array(posItemSchema).min(1),

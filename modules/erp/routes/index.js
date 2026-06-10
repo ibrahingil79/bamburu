@@ -19,6 +19,7 @@ import { createReviewRoutes } from './reviews.js';
 import { createChangePasswordRoutes } from './change-password.js';
 import { createSupplierRoutes } from './suppliers.js';
 import { createPurchaseRoutes } from './purchases.js';
+import { createPurchaseOrderRoutes } from './purchase-orders.js';
 import { createFeedbackRoutes } from './feedback.js';
 import { createInvoiceRoutes } from './invoices.js';
 import { createCobrosRoutes } from './cobros.js';
@@ -51,6 +52,7 @@ export function mountRoutes(app, db) {
   const securityRoutes = createSecurityRoutes(db);
   const { api: supplierApi, views: supplierViews } = createSupplierRoutes(db);
   const { api: purchaseApi, views: purchaseViews } = createPurchaseRoutes(db);
+  const { api: purchaseOrderApi, views: purchaseOrderViews } = createPurchaseOrderRoutes(db);
   const { api: feedbackApi, views: feedbackViews } = createFeedbackRoutes(db);
   const { api: invoiceApi, views: invoiceViews } = createInvoiceRoutes(db);
   const { api: cobrosApi, views: cobrosViews } = createCobrosRoutes(db);
@@ -79,6 +81,7 @@ export function mountRoutes(app, db) {
   admin.route('/security', securityRoutes);
   admin.route('/suppliers', supplierViews);
   admin.route('/purchases', purchaseViews);
+  admin.route('/purchase-orders', purchaseOrderViews);
   admin.route('/feedback', feedbackViews);
   admin.route('/invoices', invoiceViews);
   admin.route('/cobros', cobrosViews);
@@ -102,6 +105,7 @@ export function mountRoutes(app, db) {
   apiApp.route('/reviews', revApi);
   apiApp.route('/suppliers', supplierApi);
   apiApp.route('/purchases', purchaseApi);
+  apiApp.route('/purchase-orders', purchaseOrderApi);
   apiApp.route('/feedback', feedbackApi);
   apiApp.route('/invoices', invoiceApi);
   apiApp.route('/cobros', cobrosApi);

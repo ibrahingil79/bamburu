@@ -631,6 +631,37 @@ export function runMigrations(db) {
     db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(purgeKey, 'done');
   }
 
+  // C1.a — Orden de compra: PEDIDO al proveedor con numeración y documento propios.
+  // NO toca inventario ni coste (las recepciones contra la orden son C1.b). La compra
+  // directa (purchases) se conserva intacta como flujo paralelo. order_number es NULL
+  // en borrador y gana OC-NNNN (code_counters) al enviar: el borrador no consume número.
+  db.exec(`CREATE TABLE IF NOT EXISTS purchase_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_number TEXT,
+    supplier_id INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'borrador' CHECK(status IN ('borrador','enviada','anulada')),
+    date DATE NOT NULL,
+    expected_date DATE,
+    notes TEXT DEFAULT '',
+    replaces_order_id INTEGER,
+    anulada_motivo TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id),
+    FOREIGN KEY (replaces_order_id) REFERENCES purchase_orders(id)
+  )`);
+  // unit_cost es NETO (sin IVA); tax_rate se resuelve desde la banda del producto al
+  // guardar la línea (igual que la factura) y es SOLO para el documento.
+  db.exec(`CREATE TABLE IF NOT EXISTS purchase_order_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL CHECK(quantity > 0),
+    unit_cost REAL NOT NULL CHECK(unit_cost >= 0),
+    tax_rate REAL NOT NULL DEFAULT 0,
+    FOREIGN KEY (order_id) REFERENCES purchase_orders(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id)
+  )`);
+
   // Pilar 3 (coste/valoración) — backfill del coste, UNA vez por tenant. Corre DESPUÉS de que
   // existan las columnas nuevas (stock_movements.unit_cost, products.average_cost) y la tabla
   // purchase_items. Las compras ya guardadas NO se tocan (purchase_items.unit_cost es inmutable):
