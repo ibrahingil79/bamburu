@@ -22,7 +22,10 @@ import { recordMovement } from '../stock.js';
 const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 // Estado de recepción de la orden, línea a línea y SIEMPRE derivado del dato:
-// pedido (línea de la orden), recibido (suma de recepciones CONFIRMADAS) y pendiente.
+// pedido (línea de la orden), recibido (suma de recepciones CONFIRMADAS),
+// pendiente (NUNCA negativo en pantalla) y exceso (C1.c: recibido − pedido si
+// se sobre-recibió — derivado, sin columna nueva). Una línea sobre-recibida
+// cuenta como completada.
 export function orderReceptionState(db, orderId) {
   const lines = db.prepare(`
     SELECT poi.id AS order_item_id, poi.product_id, poi.quantity AS pedido,
@@ -35,14 +38,18 @@ export function orderReceptionState(db, orderId) {
       JOIN products pr ON pr.id = poi.product_id
      WHERE poi.order_id = ?
      ORDER BY poi.id`).all(orderId)
-    .map(l => ({ ...l, pendiente: l.pedido - l.recibido }));
+    .map(l => ({ ...l, pendiente: Math.max(0, l.pedido - l.recibido), exceso: Math.max(0, l.recibido - l.pedido) }));
   const anyReceived = lines.some(l => l.recibido > 0);
-  const allReceived = anyReceived && lines.every(l => l.pendiente <= 0);
+  const allReceived = anyReceived && lines.every(l => l.recibido >= l.pedido);
   return { lines, anyReceived, allReceived, totalPendiente: lines.reduce((s, l) => s + l.pendiente, 0) };
 }
 
 // Recalcula y guarda received_status (caché aditiva del estado de recepción).
+// C1.c: 'cerrada_manual' es TERMINAL — anular recepciones de una orden cerrada
+// revierte su stock pero NO la reabre nunca (rehacer = orden nueva).
 export function recalcReceivedStatus(db, orderId) {
+  const current = db.prepare('SELECT received_status FROM purchase_orders WHERE id=?').get(orderId);
+  if (current && current.received_status === 'cerrada_manual') return 'cerrada_manual';
   const st = orderReceptionState(db, orderId);
   const val = !st.anyReceived ? null : (st.allReceived ? 'recibida' : 'parcial');
   db.prepare('UPDATE purchase_orders SET received_status=? WHERE id=?').run(val, orderId);
@@ -74,29 +81,37 @@ export function getReceipt(db, id) {
 }
 
 // ── CREAR Y CONFIRMAR una recepción (un solo paso; el confirm-first es de UI) ──
-// Solo contra orden ENVIADA; la cantidad por línea no puede superar el pendiente
-// (recibir de más / diferencias llega en C1.c). En transacción: número RC-NNNN,
-// recepción + líneas, ENTRADA al libro por línea con su coste real, y recálculo
-// del estado de recepción de la orden.
+// Solo contra orden ENVIADA (ni borrador, ni anulada, ni cerrada manualmente).
+// C1.c: recibir MÁS que el pendiente está permitido pero NUNCA en silencio — el
+// exceso exige el flag explícito confirm_excess (sin él → 400 con el detalle).
+// En transacción: número RC-NNNN, recepción + líneas, ENTRADA al libro por línea
+// con su coste real (el exceso entra como cualquier entrada y el WAC lo pondera
+// por el camino existente), y recálculo del estado de recepción de la orden.
 export function createReceiptSvc(db, orderId, d) {
   const o = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(orderId);
   if (!o) { const e = new Error('Orden no encontrada'); e.status = 404; throw e; }
   if (o.status !== 'enviada') { const e = new Error('Solo se puede recibir contra una orden ENVIADA (borradores y anuladas no)'); e.status = 400; throw e; }
+  if (o.received_status === 'cerrada_manual') { const e = new Error('Esta orden está cerrada manualmente y no admite más recepciones. Si hace falta, crea una orden nueva.'); e.status = 400; throw e; }
 
   const state = orderReceptionState(db, orderId);
   if (!state.lines.some(l => l.pendiente > 0)) { const e = new Error('La orden ya está completamente recibida'); e.status = 400; throw e; }
 
   const byId = new Map(state.lines.map(l => [l.order_item_id, l]));
   const seen = new Set();
+  const excess = [];
   for (const it of d.items) {
     const line = byId.get(it.order_item_id);
     if (!line) { const e = new Error('La línea ' + it.order_item_id + ' no pertenece a esta orden'); e.status = 400; throw e; }
     if (seen.has(it.order_item_id)) { const e = new Error('Línea repetida en la recepción ("' + line.product_name + '")'); e.status = 400; throw e; }
     seen.add(it.order_item_id);
     if (it.quantity > line.pendiente) {
-      const e = new Error('"' + line.product_name + '": no puedes recibir ' + it.quantity + ' (pendiente: ' + line.pendiente + '). Recibir de más llega en C1.c');
-      e.status = 400; throw e;
+      const totalLinea = line.recibido + it.quantity;
+      excess.push('"' + line.product_name + '": pedido ' + line.pedido + ', recibirás ' + totalLinea + ' — exceso de ' + (totalLinea - line.pedido));
     }
+  }
+  if (excess.length && !d.confirm_excess) {
+    const e = new Error('La recepción supera lo pedido — ' + excess.join('; ') + '. Para aceptar el exceso confirma explícitamente (confirm_excess).');
+    e.status = 400; throw e;
   }
 
   const run = db.transaction(() => {
@@ -115,7 +130,7 @@ export function createReceiptSvc(db, orderId, d) {
       });
     }
     const order_received_status = recalcReceivedStatus(db, orderId);
-    return { id: rid, receipt_number, order_id: orderId, lines: d.items.length, order_received_status };
+    return { id: rid, receipt_number, order_id: orderId, lines: d.items.length, excess_lines: excess.length, order_received_status };
   });
   return run();
 }

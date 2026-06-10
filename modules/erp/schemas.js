@@ -370,6 +370,9 @@ export const purchaseOrderReceiptSchema = z.object({
   date:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   notes: strOpt(1000),
   items: z.array(purchaseOrderReceiptItemSchema).min(1, 'Al menos una línea requerida'),
+  // C1.c — recibir MÁS que el pendiente exige confirmación EXPLÍCITA del cliente
+  // (aviso confirmado, nunca silencioso): con exceso y sin este flag → 400.
+  confirm_excess: z.coerce.boolean().optional().default(false),
 });
 
 export const draftOrderSchema = z.object({

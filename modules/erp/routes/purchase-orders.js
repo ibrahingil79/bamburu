@@ -152,6 +152,22 @@ export function anularPurchaseOrderSvc(db, id, motivo) {
   return { id, order_number: o.order_number };
 }
 
+// C1.c — CERRAR MANUALMENTE una orden con pendiente: declara que lo que falta
+// "no va a llegar". NO mueve stock ni crea recepciones; las confirmadas quedan
+// intactas. Estado TERMINAL (received_status='cerrada_manual' + motivo): la
+// orden no admite más recepciones ni se reabre nunca — rehacer = orden nueva.
+export function closePurchaseOrderSvc(db, id, motivo) {
+  const m = String(motivo || '').trim();
+  if (m.length < 3) { const e = new Error('Indica el motivo del cierre'); e.status = 400; throw e; }
+  const o = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(id);
+  if (!o) { const e = new Error('Orden no encontrada'); e.status = 404; throw e; }
+  if (o.status !== 'enviada') { const e = new Error('Solo se puede cerrar una orden enviada (borradores y anuladas no)'); e.status = 400; throw e; }
+  if (o.received_status === 'cerrada_manual') { const e = new Error('La orden ya está cerrada manualmente'); e.status = 400; throw e; }
+  if (o.received_status === 'recibida') { const e = new Error('La orden ya está completamente recibida: no hay pendiente que cerrar'); e.status = 400; throw e; }
+  db.prepare("UPDATE purchase_orders SET received_status='cerrada_manual', cerrada_motivo=? WHERE id=?").run(m, id);
+  return { id, order_number: o.order_number, motivo: m };
+}
+
 // ANULAR Y REHACER: anula la enviada y abre un borrador NUEVO precargado con su
 // proveedor y líneas (tal cual se pidieron), enlazado vía replaces_order_id.
 export function anularYRehacerSvc(db, id, motivo, opts = {}) {
@@ -315,6 +331,7 @@ export function createPurchaseOrderRoutes(db) {
   // existen sobre una enviada.
   const displayEstado = (o) =>
     o.status === 'anulada' ? ['Anulada', 'b-red']
+      : o.received_status === 'cerrada_manual' ? ['Cerrada (incompleta)', 'b-gray']
       : o.received_status === 'recibida' ? ['Recibida', 'b-teal']
       : o.received_status === 'parcial' ? ['Parcialmente recibida', 'b-blue']
       : o.status === 'enviada' ? ['Enviada', 'b-green']
@@ -324,9 +341,10 @@ export function createPurchaseOrderRoutes(db) {
     enviada:  "po.status='enviada' AND po.received_status IS NULL",
     parcial:  "po.status='enviada' AND po.received_status='parcial'",
     recibida: "po.received_status='recibida'",
+    cerrada:  "po.status='enviada' AND po.received_status='cerrada_manual'",
     anulada:  "po.status='anulada'",
   };
-  const ESTADO_OPTION_LABEL = { borrador: 'Borradores', enviada: 'Enviadas', parcial: 'Parcialmente recibidas', recibida: 'Recibidas', anulada: 'Anuladas' };
+  const ESTADO_OPTION_LABEL = { borrador: 'Borradores', enviada: 'Enviadas', parcial: 'Parcialmente recibidas', recibida: 'Recibidas', cerrada: 'Cerradas (incompletas)', anulada: 'Anuladas' };
 
   // ── API ──
   api.get('/:id', requirePerm('purchases.read'), c => {
@@ -387,6 +405,16 @@ export function createPurchaseOrderRoutes(db) {
       const id = parseInt(c.req.param('id'));
       if (!db.prepare('SELECT 1 FROM purchase_orders WHERE id=?').get(id)) return c.json({ error: 'No encontrada' }, 404);
       return c.json({ reception: orderReceptionState(db, id), receipts: receiptsOfOrder(db, id) });
+    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+  });
+
+  // C1.c — cierre manual con pendiente (motivo obligatorio). No mueve stock.
+  api.post('/:id/close', requirePerm('purchases.edit'), validate(purchaseOrderAnularSchema), c => {
+    try {
+      const { motivo } = c.get('validated');
+      const r = closePurchaseOrderSvc(db, parseInt(c.req.param('id')), motivo);
+      logActivity(db, c.get('session'), 'Cerró orden de compra con pendiente', 'purchase_order', r.id, (r.order_number || '') + ' — ' + motivo);
+      return c.json({ ...r, message: 'Orden cerrada (incompleta): el pendiente queda declarado como que no va a llegar' });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
 
@@ -462,7 +490,7 @@ export function createPurchaseOrderRoutes(db) {
         + '</tr>';
     }).join('');
 
-    const estadoOptions = ['', 'borrador', 'enviada', 'parcial', 'recibida', 'anulada'].map(v =>
+    const estadoOptions = ['', 'borrador', 'enviada', 'parcial', 'recibida', 'cerrada', 'anulada'].map(v =>
       '<option value="' + v + '"' + (v === estado ? ' selected' : '') + '>' + (v ? ESTADO_OPTION_LABEL[v] : 'Todas') + '</option>'
     ).join('');
 
@@ -719,6 +747,7 @@ export function createPurchaseOrderRoutes(db) {
     const o = getOrder(db, id);
     if (!o) return c.redirect('/admin/purchase-orders');
     if (o.status !== 'enviada') return c.redirect('/admin/purchase-orders/' + id);
+    if (o.received_status === 'cerrada_manual') return c.redirect('/admin/purchase-orders/' + id);   // cerrada: no admite más recepciones
     const reception = orderReceptionState(db, id);
     const pendingLines = reception.lines.filter(l => l.pendiente > 0);
     if (!pendingLines.length) return c.redirect('/admin/purchase-orders/' + id);
@@ -728,19 +757,22 @@ export function createPurchaseOrderRoutes(db) {
     const csrfToken = c.get('session')?.csrfToken || '';
 
     const rows = pendingLines.map(l => `
-      <tr data-oid="${l.order_item_id}">
+      <tr data-oid="${l.order_item_id}" data-pend="${l.pendiente}" data-pedido="${l.pedido}" data-rec="${l.recibido}">
         <td>${l.sku ? `<span style="color:var(--text3);font-size:.8rem">[${esc(l.sku)}]</span> ` : ''}${esc(l.product_name)}</td>
         <td style="text-align:right">${l.pedido}</td>
         <td style="text-align:right">${l.recibido}</td>
         <td style="text-align:right;font-weight:600">${l.pendiente}</td>
-        <td><input class="form-control r-qty" type="number" min="0" max="${l.pendiente}" value="${l.pendiente}" style="width:90px" oninput="recalcR()"></td>
+        <td>
+          <input class="form-control r-qty" type="number" min="0" value="${l.pendiente}" style="width:90px" oninput="recalcR()">
+          <div class="r-warn" style="display:none;color:#FCD34D;font-size:.74rem;margin-top:4px;max-width:170px"></div>
+        </td>
         <td><input class="form-control r-cost" type="number" min="0" step="0.01" value="${Number(l.unit_cost).toFixed(2)}" style="width:120px" oninput="recalcR()"></td>
         <td style="text-align:right"><span class="r-sub">0.00 ${sym}</span></td>
       </tr>`).join('');
 
     const content = `
       <div class="ph"><h2>Registrar recepción — ${esc(o.order_number || ('#' + id))}</h2><a href="/admin/purchase-orders/${id}" class="btn btn-secondary">Volver a la orden</a></div>
-      <div class="alert alert-warn">Una recepción confirmada es <strong>inmutable</strong> y mueve el stock con el coste REAL recibido. Corregirla = anularla (con motivo) y crear otra. Pon cantidad 0 en las líneas que no llegan en esta entrega; recibir MÁS que el pendiente llega en C1.c.</div>
+      <div class="alert alert-warn">Una recepción confirmada es <strong>inmutable</strong> y mueve el stock con el coste REAL recibido. Corregirla = anularla (con motivo) y crear otra. Pon cantidad 0 en las líneas que no llegan en esta entrega. Recibir <strong>más</strong> que el pendiente está permitido, pero se marca como exceso y exige confirmarlo expresamente.</div>
       <div class="card" style="margin-bottom:1rem">
         <div class="card-head"><h3>Datos de la recepción</h3></div>
         <div class="card-body">
@@ -765,6 +797,8 @@ export function createPurchaseOrderRoutes(db) {
       <script>
       const SYM = '${sym}';
       function rowsR(){ return Array.prototype.slice.call(document.querySelectorAll('#rLines tr')); }
+      // Pie en vivo + AVISO de exceso por línea (C1.c): si la cantidad supera el
+      // pendiente, la línea se resalta y dice cuánto recibirás de más. Nunca silencioso.
       function recalcR(){
         let total = 0;
         rowsR().forEach(function(r){
@@ -773,29 +807,55 @@ export function createPurchaseOrderRoutes(db) {
           const sub = Math.round(qty * cost * 100) / 100;
           r.querySelector('.r-sub').textContent = sub.toFixed(2) + ' ' + SYM;
           total += sub;
+          const pend = parseInt(r.dataset.pend), pedido = parseInt(r.dataset.pedido), rec = parseInt(r.dataset.rec);
+          const warn = r.querySelector('.r-warn');
+          if (qty > pend){
+            const totalLinea = rec + qty;
+            warn.textContent = 'Pedido ' + pedido + ', recibirás ' + totalLinea + ' — exceso de ' + (totalLinea - pedido);
+            warn.style.display = '';
+            r.style.background = 'rgba(245,158,11,0.08)';
+          } else {
+            warn.style.display = 'none';
+            r.style.background = '';
+          }
         });
         document.getElementById('rTotal').textContent = total.toFixed(2) + ' ' + SYM;
       }
-      async function confirmReceipt(){
-        const items = [];
+      function collectR(){
+        const items = [], excess = [];
         for (const r of rowsR()){
           const qty = parseInt(r.querySelector('.r-qty').value) || 0;
-          const max = parseInt(r.querySelector('.r-qty').max);
           const cost = parseFloat(r.querySelector('.r-cost').value);
           if (qty === 0) continue;                  // esta línea no llega en esta entrega
-          if (qty < 0 || qty > max){ toast('La cantidad a recibir no puede superar el pendiente ('+max+')','err'); return; }
-          if (!(cost >= 0)){ toast('Falta el coste unitario de una línea','err'); return; }
+          if (qty < 0){ return { error: 'Cantidad inválida' }; }
+          if (!(cost >= 0)){ return { error: 'Falta el coste unitario de una línea' }; }
+          const pend = parseInt(r.dataset.pend), pedido = parseInt(r.dataset.pedido), rec = parseInt(r.dataset.rec);
+          if (qty > pend){
+            const totalLinea = rec + qty;
+            excess.push(r.cells[0].textContent.trim() + ': pedido ' + pedido + ', recibirás ' + totalLinea + ' (exceso de ' + (totalLinea - pedido) + ')');
+          }
           items.push({ order_item_id: parseInt(r.dataset.oid), quantity: qty, unit_cost: cost });
         }
-        if (!items.length){ toast('Indica al menos una línea con cantidad a recibir','err'); return; }
+        return { items: items, excess: excess };
+      }
+      async function confirmReceipt(){
+        const col = collectR();
+        if (col.error){ toast(col.error,'err'); return; }
+        if (!col.items.length){ toast('Indica al menos una línea con cantidad a recibir','err'); return; }
         const date = document.getElementById('rDate').value;
         if (!date){ toast('La fecha es obligatoria','err'); return; }
-        const units = items.reduce(function(s,i){ return s + i.quantity; }, 0);
-        if (!confirm('Vas a CONFIRMAR la recepción de ' + items.length + ' línea(s) (' + units + ' unidades). Moverá el stock con el coste indicado y será inmutable (corregir = anular y crear otra). ¿Confirmar?')) return;
+        const units = col.items.reduce(function(s,i){ return s + i.quantity; }, 0);
+        // Confirm-first: si hay exceso, la confirmación lo REPITE antes de guardar.
+        let msg = 'Vas a CONFIRMAR la recepción de ' + col.items.length + ' línea(s) (' + units + ' unidades). Moverá el stock con el coste indicado y será inmutable (corregir = anular y crear otra).';
+        if (col.excess.length){
+          msg += '\\n\\nATENCIÓN — vas a recibir MÁS de lo pedido:\\n· ' + col.excess.join('\\n· ');
+        }
+        if (!confirm(msg + '\\n\\n¿Confirmar?')) return;
         const btn = document.getElementById('btn-confirm');
         btn.disabled = true;
         try {
-          const d = await api('POST','/api/erp/purchase-orders/${id}/receipts', { date: date, notes: document.getElementById('rNotes').value.trim(), items: items });
+          const d = await api('POST','/api/erp/purchase-orders/${id}/receipts',
+            { date: date, notes: document.getElementById('rNotes').value.trim(), items: col.items, confirm_excess: col.excess.length > 0 });
           toast(d.message || 'Recepción confirmada');
           window.location.href = '/admin/purchase-order-receipts/' + d.id;
         } catch(e){ toast(e.message || 'Error registrando la recepción','err'); btn.disabled = false; }
@@ -837,6 +897,12 @@ export function createPurchaseOrderRoutes(db) {
     if (replacesPrev) {
       lifecycle += `<div class="lifecycle lc-sustituye">Sustituye a <a href="/admin/purchase-orders/${replacesPrev.id}">${esc(replacesPrev.order_number || ('borrador #' + replacesPrev.id))}</a> (anulada).</div>`;
     }
+    // C1.c — marca visible del cierre manual (también al imprimir, como la anulada).
+    // (condición directa: isCerrada se declara más abajo, junto al pill)
+    if (o.status !== 'anulada' && o.received_status === 'cerrada_manual') {
+      lifecycle += `<div class="lifecycle lc-cerrada"><strong>Orden cerrada manualmente (incompleta).</strong> Motivo: ${esc(o.cerrada_motivo || '')}.
+        <div style="font-size:11px;margin-top:4px">El pendiente queda declarado como que no va a llegar. Esta orden no admite más recepciones ni se reabre; anular una recepción confirmada revierte su stock, pero la orden permanece cerrada. Si necesitas rehacer el pedido, crea una orden nueva.</div></div>`;
+    }
 
     // C1.b — estado de recepción (pedido/recibido/pendiente por línea + recepciones).
     // Solo aplica a órdenes que salieron de borrador; el bloque NO se imprime.
@@ -844,12 +910,18 @@ export function createPurchaseOrderRoutes(db) {
     const receipts = reception ? receiptsOfOrder(db, id) : [];
     const hasConfirmedReceipts = receipts.some(r => r.status === 'confirmada');
 
+    const isCerrada = o.received_status === 'cerrada_manual';
     const statusPill =
       o.status === 'anulada' ? ['status-anulada', 'Anulada']
+        : isCerrada ? ['status-cerrada', 'Cerrada (incompleta)']
         : o.received_status === 'recibida' ? ['status-recibida', 'Recibida']
         : o.received_status === 'parcial' ? ['status-parcial', 'Parcialmente recibida']
         : o.status === 'enviada' ? ['status-enviada', 'Enviada']
         : ['status-borrador', 'Borrador'];
+
+    // C1.c — cierre manual: solo sobre enviada/parcial con pendiente > 0.
+    const canClose = o.status === 'enviada' && !isCerrada && o.received_status !== 'recibida'
+      && reception && reception.totalPendiente > 0;
 
     const actions =
       (o.status === 'borrador' ? (
@@ -858,6 +930,7 @@ export function createPurchaseOrderRoutes(db) {
       ) : '') +
       (o.status === 'enviada' ? (
         (canEdit ? `<button onclick="emailOrden()" class="btn-secondary">Enviar por email</button>` : '') +
+        (canEdit && canClose ? `<button onclick="cerrarOrden()" class="btn-secondary">Cerrar orden</button>` : '') +
         // Con recepciones confirmadas la orden no se puede anular (su stock ya se
         // movió): primero se anulan las recepciones. Se ocultan los botones.
         (canEdit && !hasConfirmedReceipts ? `<button onclick="anularOrden()" class="btn-secondary">Anular</button>` : '') +
@@ -873,7 +946,7 @@ export function createPurchaseOrderRoutes(db) {
 <div class="no-print" style="margin-top:32px;border-top:2px solid #e2e8f0;padding-top:16px">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
     <h2 style="font-size:15px;font-weight:700">Recepción de mercancía</h2>
-    ${o.status === 'enviada' && reception.totalPendiente > 0 && canCreate
+    ${o.status === 'enviada' && !isCerrada && reception.totalPendiente > 0 && canCreate
       ? `<a href="/admin/purchase-orders/${id}/receipts/new" class="btn-primary">Registrar recepción</a>` : ''}
   </div>
   <table>
@@ -882,8 +955,8 @@ export function createPurchaseOrderRoutes(db) {
       <tr>
         <td>${esc(l.product_name)}${l.sku ? ` <span style="color:#64748b;font-size:11px">[${esc(l.sku)}]</span>` : ''}</td>
         <td style="text-align:right">${l.pedido}</td>
-        <td style="text-align:right">${l.recibido}</td>
-        <td style="text-align:right;font-weight:600${l.pendiente === 0 ? ';color:#166534' : ''}">${l.pendiente}</td>
+        <td style="text-align:right">${l.exceso > 0 ? `${l.recibido} de ${l.pedido} <span style="color:#b45309;font-weight:600">(+${l.exceso})</span>` : l.recibido}</td>
+        <td style="text-align:right;font-weight:600${l.pendiente === 0 ? ';color:#166534' : ''}">${l.pendiente}${isCerrada && l.pendiente > 0 ? ' <span style="color:#64748b;font-size:11px">(no llegará)</span>' : ''}</td>
       </tr>`).join('')}
     </tbody>
   </table>
@@ -921,6 +994,8 @@ export function createPurchaseOrderRoutes(db) {
   .status-anulada{background:#fee2e2;color:#991b1b}
   .status-parcial{background:#dbeafe;color:#1e40af}
   .status-recibida{background:#ccfbf1;color:#0f766e}
+  .status-cerrada{background:#f1f5f9;color:#475569}
+  .lc-cerrada{background:#f1f5f9;color:#334155}
   .lifecycle{margin:0 0 16px;padding:12px 16px;border-radius:6px;font-size:13px}
   .lifecycle a{color:inherit;font-weight:600}
   .lc-anulada{background:#fee2e2;color:#991b1b}
@@ -968,6 +1043,13 @@ ${receptionBlock}
     if (motivo.trim().length < 3){ alert('El motivo es obligatorio (mínimo 3 caracteres)'); return; }
     try { const d = await post('/api/erp/purchase-orders/${id}/anular-y-rehacer', { motivo: motivo.trim() }); window.location.href = '/admin/purchase-orders/' + d.id + '/edit'; }
     catch(e){ alert(e.message || 'Error'); }
+  }
+  async function cerrarOrden(){
+    const motivo = prompt('Motivo del cierre (el pendiente NO va a llegar; la orden no admitirá más recepciones ni se reabre):');
+    if (motivo === null) return;
+    if (motivo.trim().length < 3){ alert('El motivo es obligatorio (mínimo 3 caracteres)'); return; }
+    try { await post('/api/erp/purchase-orders/${id}/close', { motivo: motivo.trim() }); location.reload(); }
+    catch(e){ alert(e.message || 'Error cerrando la orden'); }
   }
 </script>
 </body>

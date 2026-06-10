@@ -708,6 +708,10 @@ export function runMigrations(db) {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_po_receipts_order ON purchase_order_receipts(order_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_po_receipt_items_receipt ON purchase_order_receipt_items(receipt_id)`);
   addCol(db, 'purchase_orders', 'received_status', 'TEXT');
+  // C1.c — cierre manual con pendiente: received_status gana el valor TERMINAL
+  // 'cerrada_manual' (la columna es TEXT sin CHECK → ampliar valores es aditivo)
+  // y el motivo obligatorio se guarda aparte. Cerrar no mueve stock ni borra nada.
+  addCol(db, 'purchase_orders', 'cerrada_motivo', 'TEXT');
 
   // Pilar 3 (coste/valoración) — backfill del coste, UNA vez por tenant. Corre DESPUÉS de que
   // existan las columnas nuevas (stock_movements.unit_cost, products.average_cost) y la tabla
