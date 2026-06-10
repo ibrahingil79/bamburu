@@ -109,14 +109,27 @@ export function updatePurchaseOrderSvc(db, id, d) {
 }
 
 // ENVIAR: el borrador gana su número OC-NNNN (contador code_counters, solo aquí:
-// un borrador no consume número) y queda bloqueado. NO mueve stock.
+// un borrador no consume número) y queda bloqueado. En la MISMA transacción se
+// CONGELA la foto de emisor y proveedor (mismo patrón que la factura al emitir):
+// la orden enviada conserva los datos del momento aunque luego cambien Ajustes o
+// la ficha del proveedor. NO mueve stock.
 export function sendPurchaseOrderSvc(db, id) {
   const o = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(id);
   if (!o) { const e = new Error('Orden no encontrada'); e.status = 404; throw e; }
   if (o.status !== 'borrador') { const e = new Error('Solo se puede enviar un borrador'); e.status = 400; throw e; }
   const run = db.transaction(() => {
+    const cfg = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
+    const s = db.prepare('SELECT * FROM suppliers WHERE id=?').get(o.supplier_id) || {};
     const order_number = nextCode(db, 'purchase_order');
-    db.prepare("UPDATE purchase_orders SET order_number=?, status='enviada' WHERE id=?").run(order_number, id);
+    db.prepare(`UPDATE purchase_orders SET order_number=?, status='enviada',
+        company_name=?, company_fiscal_id=?, company_address=?, company_phone=?,
+        supplier_name=?, supplier_fiscal_id=?, supplier_address=?
+      WHERE id=?`).run(
+      order_number,
+      cfg.company_name || '', cfg.fiscal_id || '', cfg.address || '', cfg.phone || '',
+      s.name || '', s.fiscal_id || '', [s.address, s.city].filter(Boolean).join(', '),
+      id
+    );
     return { id, order_number };
   });
   return run();
@@ -173,9 +186,12 @@ export async function emailPurchaseOrderSvc(db, id, opts = {}) {
   const items = getItems(db, id);
   const sym = company.currency_symbol || '€';
   const empresa = company.company_name || 'Bamburu';
+  // El cuerpo es el documento con su cabecera CONGELADA (foto del envío); el
+  // destinatario sí es el email VIVO del proveedor (puede haberlo corregido).
+  const { emisor, proveedor } = docParties(db, o);
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"></head>
 <body style="font-family:system-ui,sans-serif;font-size:14px;color:#1e293b;max-width:760px;margin:auto;padding:24px">
-${documentBodyHtml(o, items, company, supplier, sym)}
+${documentBodyHtml(o, items, emisor, proveedor, sym)}
 <p style="color:#64748b;font-size:12px;margin-top:24px">Documento enviado desde ${esc(empresa)} con Bamburu.</p>
 </body></html>`;
   const t = purchaseOrderTotals(items);
@@ -199,9 +215,26 @@ ${documentBodyHtml(o, items, company, supplier, sym)}
 }
 
 // ── Documento (compartido entre la vista imprimible y el email) ─────────────
-// Cabecera empresa + proveedor LEÍDAS EN VIVO (la orden no es documento fiscal:
-// no congela copia como la factura), líneas y pie con desglose de IVA por tasa.
-function documentBodyHtml(o, items, company, supplier, sym) {
+// Cabecera de emisor y proveedor del documento: la orden ENVIADA/ANULADA usa su
+// FOTO CONGELADA (copiada al enviar); el borrador — y las órdenes enviadas antes
+// de existir la foto (company_name NULL) — leen en vivo.
+function docParties(db, o) {
+  if (o.company_name != null) {
+    return {
+      emisor:    { name: o.company_name, fiscal_id: o.company_fiscal_id, address: o.company_address, phone: o.company_phone },
+      proveedor: { name: o.supplier_name, fiscal_id: o.supplier_fiscal_id, address: o.supplier_address },
+    };
+  }
+  const cfg = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
+  const s = db.prepare('SELECT * FROM suppliers WHERE id=?').get(o.supplier_id) || {};
+  return {
+    emisor:    { name: cfg.company_name || '', fiscal_id: cfg.fiscal_id || '', address: cfg.address || '', phone: cfg.phone || '', email: cfg.email || '' },
+    proveedor: { name: s.name || '', fiscal_id: s.fiscal_id || '', address: [s.address, s.city].filter(Boolean).join(', '), email: s.email || '', phone: s.phone || '' },
+  };
+}
+
+// Líneas y pie con desglose de IVA por tasa; cabecera desde docParties.
+function documentBodyHtml(o, items, emisor, proveedor, sym) {
   const t = purchaseOrderTotals(items);
   const rows = items.map(i => `
     <tr>
@@ -230,19 +263,19 @@ function documentBodyHtml(o, items, company, supplier, sym) {
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:24px">
   <div>
     <div style="font-size:11px;text-transform:uppercase;color:#64748b;font-weight:600;margin-bottom:4px">Emisor</div>
-    <div><strong>${esc(company.company_name || '')}</strong></div>
-    ${company.fiscal_id ? `<div>${esc(company.fiscal_id)}</div>` : ''}
-    ${company.address ? `<div style="color:#64748b">${esc(company.address)}</div>` : ''}
-    ${company.email ? `<div style="color:#64748b">${esc(company.email)}</div>` : ''}
-    ${company.phone ? `<div style="color:#64748b">${esc(company.phone)}</div>` : ''}
+    <div><strong>${esc(emisor.name || '')}</strong></div>
+    ${emisor.fiscal_id ? `<div>${esc(emisor.fiscal_id)}</div>` : ''}
+    ${emisor.address ? `<div style="color:#64748b">${esc(emisor.address)}</div>` : ''}
+    ${emisor.email ? `<div style="color:#64748b">${esc(emisor.email)}</div>` : ''}
+    ${emisor.phone ? `<div style="color:#64748b">${esc(emisor.phone)}</div>` : ''}
   </div>
   <div>
     <div style="font-size:11px;text-transform:uppercase;color:#64748b;font-weight:600;margin-bottom:4px">Proveedor</div>
-    <div><strong>${esc(supplier.name)}</strong></div>
-    ${supplier.fiscal_id ? `<div>${esc(supplier.fiscal_id)}</div>` : ''}
-    ${(supplier.address || supplier.city) ? `<div style="color:#64748b">${esc([supplier.address, supplier.city].filter(Boolean).join(', '))}</div>` : ''}
-    ${supplier.email ? `<div style="color:#64748b">${esc(supplier.email)}</div>` : ''}
-    ${supplier.phone ? `<div style="color:#64748b">${esc(supplier.phone)}</div>` : ''}
+    <div><strong>${esc(proveedor.name || '')}</strong></div>
+    ${proveedor.fiscal_id ? `<div>${esc(proveedor.fiscal_id)}</div>` : ''}
+    ${proveedor.address ? `<div style="color:#64748b">${esc(proveedor.address)}</div>` : ''}
+    ${proveedor.email ? `<div style="color:#64748b">${esc(proveedor.email)}</div>` : ''}
+    ${proveedor.phone ? `<div style="color:#64748b">${esc(proveedor.phone)}</div>` : ''}
   </div>
 </div>
 <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
@@ -633,14 +666,16 @@ export function createPurchaseOrderRoutes(db) {
   });
 
   // Documento imprimible (patrón factura: página propia + window.print) con las
-  // acciones según estado. Cabecera empresa + proveedor leídas en vivo.
+  // acciones según estado. Cabecera desde docParties: la enviada/anulada muestra
+  // su foto congelada del envío; el borrador lee en vivo.
   views.get('/:id', requirePerm('purchases.read'), c => {
     const id = parseInt(c.req.param('id'));
     const o = getOrder(db, id);
     if (!o) return c.text('Orden no encontrada', 404);
     const items = getItems(db, id);
     const company = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
-    const supplier = db.prepare('SELECT * FROM suppliers WHERE id=?').get(o.supplier_id) || {};
+    const supplier = db.prepare('SELECT * FROM suppliers WHERE id=?').get(o.supplier_id) || {};   // email VIVO para el confirm del botón de email
+    const { emisor, proveedor } = docParties(db, o);
     const sym = company.currency_symbol || '€';
     const csrfToken = c.get('session')?.csrfToken || '';
     const canEdit = can(c, 'purchases.edit');
@@ -706,7 +741,7 @@ export function createPurchaseOrderRoutes(db) {
 </div>
 <span class="status-pill ${statusPill[0]}">${statusPill[1]}</span>
 ${lifecycle}
-${documentBodyHtml(o, items, company, supplier, sym)}
+${documentBodyHtml(o, items, emisor, proveedor, sym)}
 <script>
   const CSRF = ${JSON.stringify(csrfToken)};
   async function post(url, body){

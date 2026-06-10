@@ -276,5 +276,51 @@ console.log('9. Último coste conocido');
   db.close();
 }
 
+// ── 10. Foto congelada de emisor/proveedor al enviar ─────────────────────────
+// El borrador no tiene foto (NULL); enviar copia company_config + proveedor en la
+// misma transacción; cambiar después Ajustes o la ficha NO toca la orden enviada;
+// un borrador posterior toma los datos nuevos al enviarse.
+console.log('10. Foto congelada al enviar');
+{
+  const db = freshDb();
+  db.prepare("UPDATE company_config SET company_name='Velas Ibra', fiscal_id='12345678Z', address='Calle Vieja 1', phone='600111222' WHERE id=1").run();
+  const sup = db.prepare("INSERT INTO suppliers (name, fiscal_id, address, city, email) VALUES ('Prov Foto','B11111111','Av. Norte 5','Sevilla','p@x.com')").run().lastInsertRowid;
+  const p = addProduct(db);
+  const mk = () => createPurchaseOrderSvc(db, { supplier_id: sup, date: '2026-06-10', items: [{ product_id: p, quantity: 1, unit_cost: 2 }] });
+
+  const id = mk();
+  let o = orderRow(db, id);
+  eq([o.company_name, o.supplier_name], [null, null], 'borrador: foto vacía (NULL)');
+
+  sendPurchaseOrderSvc(db, id);
+  o = orderRow(db, id);
+  eq([o.company_name, o.company_fiscal_id, o.company_address, o.company_phone],
+     ['Velas Ibra', '12345678Z', 'Calle Vieja 1', '600111222'], 'enviar congela los datos de empresa');
+  eq([o.supplier_name, o.supplier_fiscal_id, o.supplier_address],
+     ['Prov Foto', 'B11111111', 'Av. Norte 5, Sevilla'], 'enviar congela proveedor (dirección+ciudad unidas)');
+
+  // Cambian Ajustes y la ficha del proveedor DESPUÉS del envío…
+  db.prepare("UPDATE company_config SET company_name='Velas Ibra SL', address='Calle Nueva 99' WHERE id=1").run();
+  db.prepare("UPDATE suppliers SET name='Prov Foto SA', address='Av. Sur 9', city='Cádiz' WHERE id=?").run(sup);
+  o = orderRow(db, id);
+  eq([o.company_name, o.company_address, o.supplier_name, o.supplier_address],
+     ['Velas Ibra', 'Calle Vieja 1', 'Prov Foto', 'Av. Norte 5, Sevilla'],
+     'la orden enviada conserva la foto del momento del envío');
+
+  // …y anularla tampoco la toca.
+  anularPurchaseOrderSvc(db, id, 'prueba de foto');
+  o = orderRow(db, id);
+  eq(o.company_address, 'Calle Vieja 1', 'anular no toca la foto');
+
+  // Un borrador nuevo toma los datos NUEVOS al enviarse.
+  const id2 = mk();
+  sendPurchaseOrderSvc(db, id2);
+  const o2 = orderRow(db, id2);
+  eq([o2.company_name, o2.company_address, o2.supplier_name, o2.supplier_address],
+     ['Velas Ibra SL', 'Calle Nueva 99', 'Prov Foto SA', 'Av. Sur 9, Cádiz'], 'el borrador nuevo congela los datos nuevos');
+  eq(movCount(db), 0, 'la foto no añade movimientos de stock');
+  db.close();
+}
+
 console.log('\n' + (fail === 0 ? '✅' : '❌') + ' C1.a Orden de compra: ' + pass + ' OK, ' + fail + ' fallos');
 process.exit(fail === 0 ? 0 : 1);

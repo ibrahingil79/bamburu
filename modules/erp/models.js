@@ -649,6 +649,17 @@ export function runMigrations(db) {
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id),
     FOREIGN KEY (replaces_order_id) REFERENCES purchase_orders(id)
   )`);
+  // Foto congelada de emisor y proveedor, copiada AL ENVIAR (mismo patrón que la
+  // factura al emitir): NULL en borrador; la orden enviada/anulada muestra los datos
+  // del momento del envío aunque luego cambien Ajustes o la ficha del proveedor.
+  addCol(db, 'purchase_orders', 'company_name',       'TEXT');
+  addCol(db, 'purchase_orders', 'company_fiscal_id',  'TEXT');
+  addCol(db, 'purchase_orders', 'company_address',    'TEXT');
+  addCol(db, 'purchase_orders', 'company_phone',      'TEXT');
+  addCol(db, 'purchase_orders', 'supplier_name',      'TEXT');
+  addCol(db, 'purchase_orders', 'supplier_fiscal_id', 'TEXT');
+  addCol(db, 'purchase_orders', 'supplier_address',   'TEXT');
+
   // unit_cost es NETO (sin IVA); tax_rate se resuelve desde la banda del producto al
   // guardar la línea (igual que la factura) y es SOLO para el documento.
   db.exec(`CREATE TABLE IF NOT EXISTS purchase_order_items (
