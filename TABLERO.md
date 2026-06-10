@@ -192,6 +192,33 @@ _(por detallar)_ — Pedido → Albarán / nota de entrega → Factura. Usa los 
 
 ---
 
+## ROADMAP FUTURO — módulos registrados (decisión del dueño, 2026-06-10) — 🔵 NO INICIADOS
+
+> Solo registro, cero código. Orden TENTATIVO para después de cerrar el trabajo actual de
+> Compras (C1.b / C1.c / C2): nada de aquí adelanta a las tareas activas — **la siguiente
+> tarea sigue siendo C1.b**. Cada módulo pasará por "la línea" (CANON §5) al detallarse.
+
+1. **Ventas completas** — ya previsto, no es entrada nueva: el flujo pedido → albarán →
+   factura es el **PILAR 4** (con PDF real, email y Verifactu), y devoluciones y descuentos
+   están en el alcance del Pilar 3. Confirmado que está reflejado; el motor de descuentos y
+   las devoluciones de cliente se llevan a su versión completa al construir Ventas.
+2. **Sistema de diseño + saneamiento visual** — ya registrado el 2026-06-08 (ver sección
+   TRANSVERSAL más abajo). Mantiene su posición; no se duplica aquí.
+3. **DISA como producto — NO INICIADA.** DISA proactiva (propone sin que le pregunten),
+   personalidad y voz definidas, y superficie propia en la app. Es el diferencial central de
+   Bamburu (CANON §1 y §5); hasta ahora DISA solo existía repartida dentro de otros módulos —
+   pasa a ser un módulo con nombre propio.
+4. **Agendado automático de citas — NO INICIADA.** Reservas/citas para autónomos de servicios
+   (peluquería, fisio, técnico): calendario, reserva por el propio cliente y recordatorios.
+   Alto valor para el público objetivo de servicios.
+5. **CRM comercial — NO INICIADA.** Seguimiento comercial sobre la ficha de cliente ya
+   existente: notas, recordatorios de contacto y oportunidades. Encaja cerca de Ventas (la
+   ficha de cliente y el motor de cobros ya dan la base).
+6. **Control horario (registro de jornada) — NO INICIADA.** Cumplimiento de la normativa
+   española de registro de jornada para clientes con empleados. Módulo completo nuevo.
+
+---
+
 ## TRANSVERSAL (fuera del orden de pilares) — SISTEMA DE DISEÑO + SANEAMIENTO VISUAL — 🔵 REGISTRADA (no iniciar hasta indicación)
 
 > Tarea PROPIA del roadmap (no un pendiente suelto menor), por su impacto en el **diferencial** del

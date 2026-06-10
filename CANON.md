@@ -3,7 +3,7 @@
 > Este es el único documento que manda. Si cualquier otro archivo (TABLERO.md,
 > CLAUDE.md, etc.) dice algo distinto de lo que está aquí, gana este documento.
 > Al empezar cualquier sesión (con Ibrahin o con Claude Code) se lee este archivo primero.
-> Última actualización: 2026-06-08
+> Última actualización: 2026-06-10
 
 ---
 
@@ -202,6 +202,13 @@ funciones de pilares futuros.
 - **A quién vender primero** — la misión apunta a autónomos + pequeñas + medianas. Sigue
   siendo amplio; decidir por cuál arrancar a vender de verdad cuando toque estrategia
   comercial.
+- **Módulos futuros registrados (10 jun 2026, decisión del dueño)** — solo registro, sin
+  adelantar pilares: **DISA como producto** (proactividad, personalidad y superficie propia:
+  el diferencial del §5 con nombre propio de módulo), **agendado automático de citas**
+  (reservas para autónomos de servicios), **CRM comercial** (seguimiento sobre la ficha de
+  cliente) y **control horario** (registro de jornada, normativa ES). Ventas completas y el
+  sistema de diseño ya estaban previstos. Orden tentativo y detalle en TABLERO.md
+  ("Roadmap futuro").
 
 ---
 
