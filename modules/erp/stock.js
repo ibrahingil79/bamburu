@@ -8,7 +8,7 @@
 // Vocabulario CERRADO.
 export const STOCK_MOVEMENT_TYPES = ['apertura', 'entrada', 'salida', 'ajuste', 'transferencia'];
 export const ADJUST_REASONS = ['rotura', 'caducado', 'robo_perdida', 'error_conteo', 'autoconsumo', 'muestra_regalo', 'otro'];
-export const ORIGIN_TYPES = ['opening', 'order', 'purchase', 'manual', 'reversal', 'legacy'];
+export const ORIGIN_TYPES = ['opening', 'order', 'purchase', 'po_receipt', 'manual', 'reversal', 'legacy'];   // po_receipt = recepción de orden de compra (C1.b)
 export const ADJUST_MODES = ['set', 'add', 'sub'];   // Poner a X / Sumar X / Restar X
 
 export const REASON_LABEL = {

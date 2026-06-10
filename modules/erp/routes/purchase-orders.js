@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { adminLayout, can } from '../layout.js';
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
-import { purchaseOrderSchema, purchaseOrderAnularSchema } from '../schemas.js';
+import { purchaseOrderSchema, purchaseOrderAnularSchema, purchaseOrderReceiptSchema } from '../schemas.js';
+import { createReceiptSvc, orderReceptionState, receiptsOfOrder } from './purchase-order-receipts.js';
 import { nextCode } from '../codes.js';
 import { computeTotals } from './invoices.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
@@ -136,13 +137,17 @@ export function sendPurchaseOrderSvc(db, id) {
 }
 
 // ANULAR: solo una enviada, con motivo (mín. 3). No se borra ni se edita nada:
-// la orden queda 'anulada' con su motivo, número y líneas intactos.
+// la orden queda 'anulada' con su motivo, número y líneas intactos. C1.b: si la
+// orden tiene recepciones CONFIRMADAS no se puede anular (su stock ya se movió):
+// primero se anulan las recepciones; cerrar con pendiente que no llegará es C1.c.
 export function anularPurchaseOrderSvc(db, id, motivo) {
   const m = String(motivo || '').trim();
   if (m.length < 3) { const e = new Error('Indica el motivo de la anulación'); e.status = 400; throw e; }
   const o = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(id);
   if (!o) { const e = new Error('Orden no encontrada'); e.status = 404; throw e; }
   if (o.status !== 'enviada') { const e = new Error('Solo se puede anular una orden enviada'); e.status = 400; throw e; }
+  const conRecepcion = db.prepare("SELECT 1 FROM purchase_order_receipts WHERE order_id=? AND status='confirmada' LIMIT 1").get(id);
+  if (conRecepcion) { const e = new Error('Esta orden tiene recepciones confirmadas (su stock ya se movió): anula primero sus recepciones'); e.status = 400; throw e; }
   db.prepare("UPDATE purchase_orders SET status='anulada', anulada_motivo=? WHERE id=?").run(m, id);
   return { id, order_number: o.order_number };
 }
@@ -305,6 +310,24 @@ export function createPurchaseOrderRoutes(db) {
   const STATUS_LABEL = { borrador: 'Borrador', enviada: 'Enviada', anulada: 'Anulada' };
   const STATUS_BADGE = { borrador: 'b-yellow', enviada: 'b-green', anulada: 'b-red' };
 
+  // C1.b — estado COMBINADO que ve el usuario: ciclo (status) + recepción
+  // (received_status, columna aditiva). Anulada manda; recibida/parcial solo
+  // existen sobre una enviada.
+  const displayEstado = (o) =>
+    o.status === 'anulada' ? ['Anulada', 'b-red']
+      : o.received_status === 'recibida' ? ['Recibida', 'b-teal']
+      : o.received_status === 'parcial' ? ['Parcialmente recibida', 'b-blue']
+      : o.status === 'enviada' ? ['Enviada', 'b-green']
+      : ['Borrador', 'b-yellow'];
+  const ESTADO_FILTER = {
+    borrador: "po.status='borrador'",
+    enviada:  "po.status='enviada' AND po.received_status IS NULL",
+    parcial:  "po.status='enviada' AND po.received_status='parcial'",
+    recibida: "po.received_status='recibida'",
+    anulada:  "po.status='anulada'",
+  };
+  const ESTADO_OPTION_LABEL = { borrador: 'Borradores', enviada: 'Enviadas', parcial: 'Parcialmente recibidas', recibida: 'Recibidas', anulada: 'Anuladas' };
+
   // ── API ──
   api.get('/:id', requirePerm('purchases.read'), c => {
     try {
@@ -348,6 +371,25 @@ export function createPurchaseOrderRoutes(db) {
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
 
+  // C1.b — crear y confirmar una recepción contra la orden (valida estado y
+  // pendientes, asigna RC-NNNN, escribe en el libro y actualiza received_status).
+  api.post('/:id/receipts', requirePerm('purchases.create'), validate(purchaseOrderReceiptSchema), c => {
+    try {
+      const r = createReceiptSvc(db, parseInt(c.req.param('id')), c.get('validated'));
+      logActivity(db, c.get('session'), 'Registró recepción de orden de compra', 'po_receipt', r.id, r.receipt_number + ' (' + r.lines + ' líneas)');
+      return c.json({ ...r, message: 'Recepción ' + r.receipt_number + ' confirmada' }, 201);
+    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+  });
+
+  // C1.b — lista de recepciones de la orden + estado por línea (pedido/recibido/pendiente).
+  api.get('/:id/receipts', requirePerm('purchases.read'), c => {
+    try {
+      const id = parseInt(c.req.param('id'));
+      if (!db.prepare('SELECT 1 FROM purchase_orders WHERE id=?').get(id)) return c.json({ error: 'No encontrada' }, 404);
+      return c.json({ reception: orderReceptionState(db, id), receipts: receiptsOfOrder(db, id) });
+    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+  });
+
   api.post('/:id/anular', requirePerm('purchases.edit'), validate(purchaseOrderAnularSchema), c => {
     try {
       const { motivo } = c.get('validated');
@@ -381,7 +423,7 @@ export function createPurchaseOrderRoutes(db) {
     const where = [];
     const params = [];
     if (q) { where.push('(s.name LIKE ? OR po.order_number LIKE ?)'); params.push('%' + q + '%', '%' + q + '%'); }
-    if (estado && STATUS_LABEL[estado]) { where.push('po.status = ?'); params.push(estado); }
+    if (estado && ESTADO_FILTER[estado]) { where.push('(' + ESTADO_FILTER[estado] + ')'); }
     const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
     const total = db.prepare('SELECT COUNT(*) AS n FROM purchase_orders po JOIN suppliers s ON po.supplier_id=s.id ' + whereSql).get(...params).n;
@@ -408,17 +450,20 @@ export function createPurchaseOrderRoutes(db) {
       return u.toString();
     };
 
-    const rowsHtml = orders.map(o => '<tr>'
-      + '<td>' + (o.order_number ? '<strong style="font-family:monospace">' + esc(o.order_number) + '</strong>' : '<span style="color:var(--text3)">Borrador</span>') + '</td>'
-      + '<td><strong>' + esc(o.supplier_name) + '</strong></td>'
-      + '<td>' + esc(o.date) + '</td>'
-      + '<td><span class="badge ' + (STATUS_BADGE[o.status] || 'b-gray') + '">' + esc(STATUS_LABEL[o.status] || o.status) + '</span></td>'
-      + '<td><strong>' + totalOf(o.id).toFixed(2) + ' ' + sym + '</strong></td>'
-      + '<td style="text-align:right"><a href="/admin/purchase-orders/' + o.id + '" class="btn btn-secondary btn-sm">Ver</a></td>'
-      + '</tr>').join('');
+    const rowsHtml = orders.map(o => {
+      const [lbl, badge] = displayEstado(o);
+      return '<tr>'
+        + '<td>' + (o.order_number ? '<strong style="font-family:monospace">' + esc(o.order_number) + '</strong>' : '<span style="color:var(--text3)">Borrador</span>') + '</td>'
+        + '<td><strong>' + esc(o.supplier_name) + '</strong></td>'
+        + '<td>' + esc(o.date) + '</td>'
+        + '<td><span class="badge ' + badge + '">' + esc(lbl) + '</span></td>'
+        + '<td><strong>' + totalOf(o.id).toFixed(2) + ' ' + sym + '</strong></td>'
+        + '<td style="text-align:right"><a href="/admin/purchase-orders/' + o.id + '" class="btn btn-secondary btn-sm">Ver</a></td>'
+        + '</tr>';
+    }).join('');
 
-    const estadoOptions = ['', 'borrador', 'enviada', 'anulada'].map(v =>
-      '<option value="' + v + '"' + (v === estado ? ' selected' : '') + '>' + (v ? STATUS_LABEL[v] + 's' : 'Todas') + '</option>'
+    const estadoOptions = ['', 'borrador', 'enviada', 'parcial', 'recibida', 'anulada'].map(v =>
+      '<option value="' + v + '"' + (v === estado ? ' selected' : '') + '>' + (v ? ESTADO_OPTION_LABEL[v] : 'Todas') + '</option>'
     ).join('');
 
     const content = `
@@ -665,6 +710,101 @@ export function createPurchaseOrderRoutes(db) {
     return formView(c, o);
   });
 
+  // C1.b — Formulario de recepción: líneas de la orden con pendiente > 0, cantidad
+  // precargada con el pendiente (editable a la baja; 0 = no recibir esa línea) y
+  // coste precargado del de la orden (editable: el real puede diferir del pedido).
+  // Confirm-first: la recepción confirmada es inmutable y mueve stock.
+  views.get('/:id/receipts/new', requirePerm('purchases.create'), c => {
+    const id = parseInt(c.req.param('id'));
+    const o = getOrder(db, id);
+    if (!o) return c.redirect('/admin/purchase-orders');
+    if (o.status !== 'enviada') return c.redirect('/admin/purchase-orders/' + id);
+    const reception = orderReceptionState(db, id);
+    const pendingLines = reception.lines.filter(l => l.pendiente > 0);
+    if (!pendingLines.length) return c.redirect('/admin/purchase-orders/' + id);
+
+    const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
+    const today = new Date().toISOString().split('T')[0];
+    const csrfToken = c.get('session')?.csrfToken || '';
+
+    const rows = pendingLines.map(l => `
+      <tr data-oid="${l.order_item_id}">
+        <td>${l.sku ? `<span style="color:var(--text3);font-size:.8rem">[${esc(l.sku)}]</span> ` : ''}${esc(l.product_name)}</td>
+        <td style="text-align:right">${l.pedido}</td>
+        <td style="text-align:right">${l.recibido}</td>
+        <td style="text-align:right;font-weight:600">${l.pendiente}</td>
+        <td><input class="form-control r-qty" type="number" min="0" max="${l.pendiente}" value="${l.pendiente}" style="width:90px" oninput="recalcR()"></td>
+        <td><input class="form-control r-cost" type="number" min="0" step="0.01" value="${Number(l.unit_cost).toFixed(2)}" style="width:120px" oninput="recalcR()"></td>
+        <td style="text-align:right"><span class="r-sub">0.00 ${sym}</span></td>
+      </tr>`).join('');
+
+    const content = `
+      <div class="ph"><h2>Registrar recepción — ${esc(o.order_number || ('#' + id))}</h2><a href="/admin/purchase-orders/${id}" class="btn btn-secondary">Volver a la orden</a></div>
+      <div class="alert alert-warn">Una recepción confirmada es <strong>inmutable</strong> y mueve el stock con el coste REAL recibido. Corregirla = anularla (con motivo) y crear otra. Pon cantidad 0 en las líneas que no llegan en esta entrega; recibir MÁS que el pendiente llega en C1.c.</div>
+      <div class="card" style="margin-bottom:1rem">
+        <div class="card-head"><h3>Datos de la recepción</h3></div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Fecha *</label><input class="form-control" type="date" id="rDate" value="${today}"></div>
+            <div class="form-group"><label class="form-label">Notas</label><input class="form-control" id="rNotes" placeholder="Nº de albarán del proveedor, incidencias..."></div>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:1rem">
+        <div class="card-head"><h3>Líneas con pendiente</h3></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Producto</th><th style="text-align:right">Pedido</th><th style="text-align:right">Recibido</th><th style="text-align:right">Pendiente</th><th>Recibir ahora</th><th>Coste unit. real (neto)</th><th style="text-align:right">Subtotal</th></tr></thead>
+          <tbody id="rLines">${rows}</tbody>
+          <tfoot><tr><td colspan="6" style="text-align:right;font-weight:700;padding:.7rem 1rem">Total recepción</td><td style="text-align:right;font-weight:700" id="rTotal">0.00 ${sym}</td></tr></tfoot>
+        </table></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:.5rem">
+        <a href="/admin/purchase-orders/${id}" class="btn btn-secondary">Cancelar</a>
+        <button class="btn btn-primary" id="btn-confirm" onclick="confirmReceipt()">Confirmar recepción</button>
+      </div>
+      <script>
+      const SYM = '${sym}';
+      function rowsR(){ return Array.prototype.slice.call(document.querySelectorAll('#rLines tr')); }
+      function recalcR(){
+        let total = 0;
+        rowsR().forEach(function(r){
+          const qty = parseInt(r.querySelector('.r-qty').value) || 0;
+          const cost = parseFloat(r.querySelector('.r-cost').value) || 0;
+          const sub = Math.round(qty * cost * 100) / 100;
+          r.querySelector('.r-sub').textContent = sub.toFixed(2) + ' ' + SYM;
+          total += sub;
+        });
+        document.getElementById('rTotal').textContent = total.toFixed(2) + ' ' + SYM;
+      }
+      async function confirmReceipt(){
+        const items = [];
+        for (const r of rowsR()){
+          const qty = parseInt(r.querySelector('.r-qty').value) || 0;
+          const max = parseInt(r.querySelector('.r-qty').max);
+          const cost = parseFloat(r.querySelector('.r-cost').value);
+          if (qty === 0) continue;                  // esta línea no llega en esta entrega
+          if (qty < 0 || qty > max){ toast('La cantidad a recibir no puede superar el pendiente ('+max+')','err'); return; }
+          if (!(cost >= 0)){ toast('Falta el coste unitario de una línea','err'); return; }
+          items.push({ order_item_id: parseInt(r.dataset.oid), quantity: qty, unit_cost: cost });
+        }
+        if (!items.length){ toast('Indica al menos una línea con cantidad a recibir','err'); return; }
+        const date = document.getElementById('rDate').value;
+        if (!date){ toast('La fecha es obligatoria','err'); return; }
+        const units = items.reduce(function(s,i){ return s + i.quantity; }, 0);
+        if (!confirm('Vas a CONFIRMAR la recepción de ' + items.length + ' línea(s) (' + units + ' unidades). Moverá el stock con el coste indicado y será inmutable (corregir = anular y crear otra). ¿Confirmar?')) return;
+        const btn = document.getElementById('btn-confirm');
+        btn.disabled = true;
+        try {
+          const d = await api('POST','/api/erp/purchase-orders/${id}/receipts', { date: date, notes: document.getElementById('rNotes').value.trim(), items: items });
+          toast(d.message || 'Recepción confirmada');
+          window.location.href = '/admin/purchase-order-receipts/' + d.id;
+        } catch(e){ toast(e.message || 'Error registrando la recepción','err'); btn.disabled = false; }
+      }
+      recalcR();
+      </script>`;
+    return c.html(adminLayout('Registrar recepción', content, 'purchase-orders', csrfToken, c));
+  });
+
   // Documento imprimible (patrón factura: página propia + window.print) con las
   // acciones según estado. Cabecera desde docParties: la enviada/anulada muestra
   // su foto congelada del envío; el borrador lee en vivo.
@@ -698,7 +838,18 @@ export function createPurchaseOrderRoutes(db) {
       lifecycle += `<div class="lifecycle lc-sustituye">Sustituye a <a href="/admin/purchase-orders/${replacesPrev.id}">${esc(replacesPrev.order_number || ('borrador #' + replacesPrev.id))}</a> (anulada).</div>`;
     }
 
-    const statusPill = { borrador: ['status-borrador', 'Borrador'], enviada: ['status-enviada', 'Enviada'], anulada: ['status-anulada', 'Anulada'] }[o.status] || ['', o.status];
+    // C1.b — estado de recepción (pedido/recibido/pendiente por línea + recepciones).
+    // Solo aplica a órdenes que salieron de borrador; el bloque NO se imprime.
+    const reception = o.status !== 'borrador' ? orderReceptionState(db, id) : null;
+    const receipts = reception ? receiptsOfOrder(db, id) : [];
+    const hasConfirmedReceipts = receipts.some(r => r.status === 'confirmada');
+
+    const statusPill =
+      o.status === 'anulada' ? ['status-anulada', 'Anulada']
+        : o.received_status === 'recibida' ? ['status-recibida', 'Recibida']
+        : o.received_status === 'parcial' ? ['status-parcial', 'Parcialmente recibida']
+        : o.status === 'enviada' ? ['status-enviada', 'Enviada']
+        : ['status-borrador', 'Borrador'];
 
     const actions =
       (o.status === 'borrador' ? (
@@ -707,10 +858,51 @@ export function createPurchaseOrderRoutes(db) {
       ) : '') +
       (o.status === 'enviada' ? (
         (canEdit ? `<button onclick="emailOrden()" class="btn-secondary">Enviar por email</button>` : '') +
-        (canEdit ? `<button onclick="anularOrden()" class="btn-secondary">Anular</button>` : '') +
-        (canCreate ? `<button onclick="anularYRehacer()" class="btn-secondary">Anular y rehacer</button>` : '')
+        // Con recepciones confirmadas la orden no se puede anular (su stock ya se
+        // movió): primero se anulan las recepciones. Se ocultan los botones.
+        (canEdit && !hasConfirmedReceipts ? `<button onclick="anularOrden()" class="btn-secondary">Anular</button>` : '') +
+        (canCreate && !hasConfirmedReceipts ? `<button onclick="anularYRehacer()" class="btn-secondary">Anular y rehacer</button>` : '')
       ) : '') +
       `<button onclick="window.print()" class="btn-primary">Imprimir</button>`;
+
+    const receiptStatusBadge = s => s === 'confirmada'
+      ? '<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600">Confirmada</span>'
+      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600">Anulada</span>';
+
+    const receptionBlock = reception ? `
+<div class="no-print" style="margin-top:32px;border-top:2px solid #e2e8f0;padding-top:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <h2 style="font-size:15px;font-weight:700">Recepción de mercancía</h2>
+    ${o.status === 'enviada' && reception.totalPendiente > 0 && canCreate
+      ? `<a href="/admin/purchase-orders/${id}/receipts/new" class="btn-primary">Registrar recepción</a>` : ''}
+  </div>
+  <table>
+    <thead><tr><th>Producto</th><th style="text-align:right">Pedido</th><th style="text-align:right">Recibido</th><th style="text-align:right">Pendiente</th></tr></thead>
+    <tbody>${reception.lines.map(l => `
+      <tr>
+        <td>${esc(l.product_name)}${l.sku ? ` <span style="color:#64748b;font-size:11px">[${esc(l.sku)}]</span>` : ''}</td>
+        <td style="text-align:right">${l.pedido}</td>
+        <td style="text-align:right">${l.recibido}</td>
+        <td style="text-align:right;font-weight:600${l.pendiente === 0 ? ';color:#166534' : ''}">${l.pendiente}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>
+  ${receipts.length ? `
+  <h2 style="font-size:14px;font-weight:700;margin:8px 0">Recepciones</h2>
+  <table>
+    <thead><tr><th>Número</th><th>Fecha</th><th>Estado</th><th style="text-align:right">Líneas</th><th style="text-align:right">Unidades</th><th></th></tr></thead>
+    <tbody>${receipts.map(r => `
+      <tr>
+        <td style="font-family:monospace;font-weight:600">${esc(r.receipt_number || ('#' + r.id))}</td>
+        <td>${esc(r.date)}</td>
+        <td>${receiptStatusBadge(r.status)}</td>
+        <td style="text-align:right">${r.line_count}</td>
+        <td style="text-align:right">${r.units}</td>
+        <td style="text-align:right"><a href="/admin/purchase-order-receipts/${r.id}" class="btn-secondary" style="padding:4px 10px">Ver</a></td>
+      </tr>`).join('')}
+    </tbody>
+  </table>` : '<div style="color:#64748b;font-size:12px;margin-top:4px">Sin recepciones todavía.</div>'}
+</div>` : '';
 
     const html = `<!DOCTYPE html>
 <html lang="es">
@@ -727,11 +919,13 @@ export function createPurchaseOrderRoutes(db) {
   .status-borrador{background:#fef3c7;color:#92400e}
   .status-enviada{background:#dcfce7;color:#166534}
   .status-anulada{background:#fee2e2;color:#991b1b}
+  .status-parcial{background:#dbeafe;color:#1e40af}
+  .status-recibida{background:#ccfbf1;color:#0f766e}
   .lifecycle{margin:0 0 16px;padding:12px 16px;border-radius:6px;font-size:13px}
   .lifecycle a{color:inherit;font-weight:600}
   .lc-anulada{background:#fee2e2;color:#991b1b}
   .lc-sustituye{background:#e0f2fe;color:#075985}
-  @media print{body{padding:20px}.actions{display:none}.status-pill{display:none}}
+  @media print{body{padding:20px}.actions{display:none}.status-pill{display:none}.no-print{display:none}}
 </style>
 </head>
 <body>
@@ -742,6 +936,7 @@ export function createPurchaseOrderRoutes(db) {
 <span class="status-pill ${statusPill[0]}">${statusPill[1]}</span>
 ${lifecycle}
 ${documentBodyHtml(o, items, emisor, proveedor, sym)}
+${receptionBlock}
 <script>
   const CSRF = ${JSON.stringify(csrfToken)};
   async function post(url, body){

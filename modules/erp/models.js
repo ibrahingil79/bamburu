@@ -673,6 +673,42 @@ export function runMigrations(db) {
     FOREIGN KEY (product_id) REFERENCES products(id)
   )`);
 
+  // C1.b — Recepciones contra la orden: una orden ENVIADA se recibe en varias veces.
+  // Cada recepción es un documento propio e INMUTABLE (corregir = anular con motivo y
+  // crear otra; anular revierte su stock con movimientos inversos, nunca borrando).
+  // El estado de recepción de la orden NO puede vivir en purchase_orders.status: el
+  // CHECK (borrador|enviada|anulada) está horneado en la tabla de los tenants ya
+  // creados y reescribirlo exigiría reconstruir la tabla. Columna ADITIVA
+  // received_status (NULL=sin recepciones | 'parcial' | 'recibida'), mantenida
+  // automáticamente al confirmar/anular recepciones; status no cambia de significado.
+  db.exec(`CREATE TABLE IF NOT EXISTS purchase_order_receipts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL,
+    receipt_number TEXT,
+    date DATE NOT NULL,
+    notes TEXT DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'confirmada' CHECK(status IN ('confirmada','anulada')),
+    anulada_motivo TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (order_id) REFERENCES purchase_orders(id)
+  )`);
+  // unit_cost = coste unitario NETO REALMENTE recibido (precargado de la línea de la
+  // orden, editable antes de confirmar): es el que entra al libro y fija el WAC.
+  db.exec(`CREATE TABLE IF NOT EXISTS purchase_order_receipt_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    receipt_id INTEGER NOT NULL,
+    order_item_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL CHECK(quantity > 0),
+    unit_cost REAL NOT NULL CHECK(unit_cost >= 0),
+    FOREIGN KEY (receipt_id) REFERENCES purchase_order_receipts(id) ON DELETE CASCADE,
+    FOREIGN KEY (order_item_id) REFERENCES purchase_order_items(id),
+    FOREIGN KEY (product_id) REFERENCES products(id)
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_po_receipts_order ON purchase_order_receipts(order_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_po_receipt_items_receipt ON purchase_order_receipt_items(receipt_id)`);
+  addCol(db, 'purchase_orders', 'received_status', 'TEXT');
+
   // Pilar 3 (coste/valoración) — backfill del coste, UNA vez por tenant. Corre DESPUÉS de que
   // existan las columnas nuevas (stock_movements.unit_cost, products.average_cost) y la tabla
   // purchase_items. Las compras ya guardadas NO se tocan (purchase_items.unit_cost es inmutable):

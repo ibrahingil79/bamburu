@@ -357,6 +357,21 @@ export const purchaseOrderAnularSchema = z.object({
   motivo: z.string().trim().min(3, 'Indica el motivo de la anulación').max(500),
 });
 
+// C1.b — Recepción contra la orden: líneas referenciadas por order_item_id; la cantidad
+// no puede superar el pendiente (lo valida el servicio contra la BD) y el coste es el
+// REALMENTE recibido (precargado del de la orden, editable). Anular reusa el schema de motivo.
+const purchaseOrderReceiptItemSchema = z.object({
+  order_item_id: z.coerce.number().int().positive(),
+  quantity:      z.coerce.number().int().positive(),
+  unit_cost:     price,
+});
+
+export const purchaseOrderReceiptSchema = z.object({
+  date:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  notes: strOpt(1000),
+  items: z.array(purchaseOrderReceiptItemSchema).min(1, 'Al menos una línea requerida'),
+});
+
 export const draftOrderSchema = z.object({
   client_id:      optId,
   items:          z.array(posItemSchema).min(1),
