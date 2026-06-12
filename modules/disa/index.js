@@ -7,6 +7,7 @@ import { clientFieldOptions } from '../erp/schemas.js';
 import { nextCode } from '../erp/codes.js';
 import { collectionsWorklist, registerCollectionAction, accountsSummary, registerAccountAction } from '../erp/cobros.js';
 import { sendEmail } from '../../core/mailer.js';
+import { callClaude, hasAnthropicKey } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
 
 export function register(app, db) {
   const router = new Hono();
@@ -1646,16 +1647,7 @@ export function register(app, db) {
     const history = Array.isArray(body?.history) ? body.history.slice(-8) : [];
     const ss = body?.store_state || {};
 
-    let apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      try {
-        const { readFileSync } = await import('fs');
-        const env = readFileSync('.env', 'utf8');
-        const match = env.match(/ANTHROPIC_API_KEY=(.+)/);
-        if (match) apiKey = match[1].trim();
-      } catch {}
-    }
-    if (!apiKey) return c.json({ reply: 'DISA no está configurada (sin API key).', action: null });
+    if (!hasAnthropicKey()) return c.json({ reply: 'DISA no está configurada (sin API key).', action: null });
 
     const systemPrompt = [
       'Eres el constructor web de Bamburu. Ayudas a crear y personalizar tiendas online para pequeñas empresas hispanohablantes.',
@@ -1692,13 +1684,12 @@ export function register(app, db) {
     ];
 
     try {
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 800, system: systemPrompt, messages })
+      // Vía core/llm.js (callClaude): clave + transporte centralizados. Mismo modelo
+      // (haiku), max_tokens, prompt y mensajes. Si falla la red/API, callClaude lanza →
+      // lo captura el catch de abajo, que devuelve el MISMO { reply, action } (200).
+      const data = await callClaude({
+        model: 'claude-haiku-4-5-20251001', max_tokens: 800, system: systemPrompt, messages,
       });
-      if (!resp.ok) return c.json({ reply: 'Error al conectar con DISA.', action: null });
-      const data = await resp.json();
       const raw = data.content?.[0]?.text || 'Sin respuesta.';
       let action = null;
       let reply = raw;
@@ -1985,16 +1976,7 @@ export function register(app, db) {
     const recentHistory = history.slice(-10).map(m => ({ role: m.role, content: m.content }));
 
     try {
-      let apiKey = process.env.ANTHROPIC_API_KEY;
-      if (!apiKey) {
-        try {
-          const fs = await import('fs');
-          const env = fs.default.readFileSync('/etc/bamburu.env', 'utf8');
-          const match = env.match(/ANTHROPIC_API_KEY=(.+)/);
-          if (match) apiKey = match[1].trim();
-        } catch {}
-      }
-      if (!apiKey) return c.json({ error: 'DISA no esta configurada. Contacta con soporte.' }, 500);
+      if (!hasAnthropicKey()) return c.json({ error: 'DISA no esta configurada. Contacta con soporte.' }, 500);
 
       const PROTECTED_TABLES = new Set([
         'admin_users', 'admin_sessions', 'customer_accounts', 'customer_sessions',
@@ -2035,29 +2017,18 @@ export function register(app, db) {
       let toolCalls = 0;
 
       while (toolCalls <= 4) {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01'
-          },
-          body: JSON.stringify({
-            model: 'claude-sonnet-4-6',
-            max_tokens: 1024,
-            system: systemPrompt,
-            messages: apiMessages,
-            tools
-          })
-        });
-
-        if (!response.ok) {
-          const err = await response.json().catch(() => ({}));
-          console.error('[DISA] API error:', JSON.stringify(err));
+        // Vía core/llm.js (callClaude): clave + transporte centralizados. Mismo modelo,
+        // max_tokens, prompt, mensajes y tools; el bucle de tool-use queda intacto. Si
+        // falla la red/API, callClaude lanza → mismo 500 "Error al contactar con DISA.".
+        let data;
+        try {
+          data = await callClaude({
+            model: 'claude-sonnet-4-6', max_tokens: 1024, system: systemPrompt, messages: apiMessages, tools,
+          });
+        } catch (e) {
+          console.error('[DISA] API error:', e.message);
           return c.json({ error: 'Error al contactar con DISA. Intentalo de nuevo.' }, 500);
         }
-
-        const data = await response.json();
 
         if (data.stop_reason === 'tool_use') {
           const toolUse = data.content.find(b => b.type === 'tool_use');

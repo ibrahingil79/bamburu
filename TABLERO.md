@@ -4,7 +4,7 @@
 > Estructura: 4 pilares en ORDEN DE CONSTRUCCIÓN — Producto → Cliente → Inventario → Ventas
 > (Ventas necesita los otros tres ya hechos; ver CANON §3).
 > REGLA DE ORO: una sola tarea "EN CURSO" a la vez. Terminar antes de empezar otra.
-> Última actualización: 2026-06-10
+> Última actualización: 2026-06-12
 
 ---
 
@@ -176,10 +176,13 @@ Compras, Stock, Proveedores, Devoluciones, Descuentos. Qué tienes y de dónde s
 
 **Con C2 cerrado, la captura de factura por foto/PDF está operativa de punta a punta sobre los motores ya fiables (C1 + WAC + libro de stock).**
 
-- **Siguiente (resto, por detallar):** reservado vs. disponible, multi-almacén en UI + transferencias, devoluciones, y voz de DISA sobre stock/compras.
+- **C2.1 · Migración de las 3 llamadas LLM a `core/llm.js` (deuda de C2). ✅ HECHO (2026-06-12).** Las 3 llamadas que aún hablaban con la API de Anthropic por su cuenta — **DISA asistente** (`/message`, `claude-sonnet-4-6` + tool `query_database`), **store builder** (`/store-message`, `claude-haiku-4-5-20251001`) y **onboarding/registro** (`modules/registro/index.js`, `claude-sonnet-4-6`) — pasan ahora por `callClaude` de `core/llm.js`. Quitada la lectura local de la clave (la resuelve `getAnthropicKey` dentro del helper) y **borrado el fetch viejo**; nuevo helper `hasAnthropicKey()` conserva **idénticos** los mensajes de "IA no configurada" sin que la ruta toque la clave. **Mudanza pura**: mismos modelos, parámetros y respuestas; cero cambio visible (incl. la rama sin clave). De paso, el store builder detecta la clave por el mismo camino que el resto (antes leía `.env` relativo). **Regla resultante anotada en la cabecera de `core/llm.js`**: es el ÚNICO punto que conoce la clave + transporte (URL/cabeceras/versión); ninguna otra parte llama a la API ni lee `ANTHROPIC_API_KEY`/`/etc/bamburu.env` (el nombre del modelo lo elige cada caller). Verificado: regresión (T5 32/32, C2 55/55, compras 29/29, WAC 19/19, stock 34/34), **prueba real contra el modelo** de las 3 (`scripts/verify-llm-migracion.mjs`, 6/6 incl. bucle tool-use de DISA), grep limpio (0 hits fuera de `core/llm.js`) y reinicio del servicio limpio. Commit `0afb48f`.
+
+- **Siguiente (resto, por detallar):** multi-almacén en UI + transferencias, **devoluciones a proveedor**, y voz de DISA sobre stock/compras. _(«reservado vs. disponible» se trasladó al Pilar 4 — Ventas el 2026-06-12; ver allí.)_
 
 ## PILAR 4 — VENTAS
 _(por detallar)_ — Pedido → Albarán / nota de entrega → Factura. Usa los tres pilares anteriores. Aquí entran: **PDF real de la factura**, **enviar factura por email** y **sello Verifactu (QR + leyenda)**.
+- **Reservado vs. disponible (stock).** _(Movido desde el Pilar 3 el 2026-06-12.)_ Justificación: **lo que reserva stock es un pedido de venta**; se construye junto al flujo pedido→albarán→factura para no hacerlo a medias.
 - **Pedidos multi-línea (DISA `create_order`).** Hoy `create_order` solo admite **un producto por pedido** (limitación heredada de la base de e-commerce). Los pedidos multi-línea entran al construir Ventas, junto con el flujo pedido→albarán→factura. No se tocó en T5 (allí solo se enlazó `client_id`). Ref: `modules/disa/index.js`, acción `create_order`.
 
 ---
@@ -263,7 +266,6 @@ La era previa ("facturación de servicios") dejó código que funciona y no se t
 ## Pendientes técnicos (deuda rastreable)
 - **DISA `create_product`: exigir banda de IVA.** Hoy hace `INSERT INTO products` directo (NO vía API) sin banda → el producto nace en **General/21 por el DEFAULT de la columna, sin elección explícita**. La API ya lo exige; DISA no. **Cerrar al reenfocar DISA** (no se parchea ahora: esa acción se reescribe entonces y el parche se tiraría). Ref: `modules/disa/index.js`, acción `create_product`.
 - **DISA `create_order`: un solo producto por pedido.** Limitación heredada de la base de e-commerce; los pedidos multi-línea entran con **Pilar 4 — Ventas** (flujo pedido→albarán→factura). En T5 solo se enlazó `client_id`. Ref: `modules/disa/index.js`, acción `create_order`.
-- **Migrar las 3 llamadas LLM existentes a `core/llm.js` (C2).** El helper único `callClaude` se creó en C2 pero solo lo usa el código nuevo de captura. Quedan 3 llamadas directas a la Anthropic Messages API con su propia lectura de key y manejo de errores duplicados: **DISA asistente** (`modules/disa/index.js`, `claude-haiku-4-5-20251001` ~línea 1695 y `claude-sonnet-4-6` ~línea 2038), **store builder** (`modules/disa/index.js`) y **onboarding/registro** (`modules/registro/index.js`, `claude-sonnet-4-6` ~línea 126). Migrarlas a `callClaude` (centraliza key + cabeceras + errores). No se hizo en C2 a propósito (riesgo de tocar 3 caminos vivos en una tarea de captura).
 
 ---
 

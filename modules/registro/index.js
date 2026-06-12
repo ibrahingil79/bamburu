@@ -3,6 +3,7 @@ import { provisionTenant } from '../../core/tenant-provisioning.js';
 import { rateLimit } from '../../core/rate-limit.js';
 import { autologinStore } from '../../core/autologin-store.js';
 import { randomBytes } from 'crypto';
+import { callClaude, hasAnthropicKey } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
 
 // In-memory onboarding sessions: sessionId -> { messages, created }
 const onboardingSessions = new Map();
@@ -80,17 +81,8 @@ export function register(app) {
         }
       }
 
-      // Get API key
-      let apiKey = process.env.ANTHROPIC_API_KEY;
-      if (!apiKey) {
-        try {
-          const fs = await import('fs');
-          const env = fs.default.readFileSync('/etc/bamburu.env', 'utf8');
-          const match = env.match(/ANTHROPIC_API_KEY=(.+)/);
-          if (match) apiKey = match[1].trim();
-        } catch {}
-      }
-      if (!apiKey) {
+      // La clave la gestiona core/llm.js; aquí solo comprobamos si la IA está lista.
+      if (!hasAnthropicKey()) {
         return c.json({ error: 'Servicio no disponible. Contacta con soporte.' }, 500);
       }
 
@@ -121,34 +113,22 @@ export function register(app) {
 
       const recentHistory = history.slice(-12).map(m => ({ role: m.role, content: m.content }));
 
-      let apiResponse;
+      // Vía core/llm.js (callClaude): clave + transporte centralizados. Mismo modelo,
+      // prompt, mensajes y max_tokens. Si falla la red/API, callClaude lanza → mismo
+      // 500 "Error al conectar con DISA.".
+      let apiData;
       try {
-        apiResponse = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01'
-          },
-          body: JSON.stringify({
-            model: 'claude-sonnet-4-6',
-            max_tokens: 1024,
-            system: onboardingPrompt,
-            messages: [...recentHistory, { role: 'user', content: message }]
-          })
+        apiData = await callClaude({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1024,
+          system: onboardingPrompt,
+          messages: [...recentHistory, { role: 'user', content: message }],
         });
       } catch (err) {
-        console.error('[DISA onboarding] API fetch error:', err.message);
+        console.error('[DISA onboarding] API error:', err.message);
         return c.json({ error: 'Error al conectar con DISA.' }, 500);
       }
 
-      if (!apiResponse.ok) {
-        const errData = await apiResponse.json().catch(() => ({}));
-        console.error('[DISA onboarding] API error:', JSON.stringify(errData));
-        return c.json({ error: 'Error al conectar con DISA.' }, 500);
-      }
-
-      const apiData = await apiResponse.json();
       const reply = apiData.content[0]?.text || '';
 
       let cleanReply = reply;

@@ -1,13 +1,23 @@
 // core/llm.js — helper ÚNICO para llamar a Claude (Anthropic Messages API).
 //
+// REGLA (resultante de la migración del 2026-06-12): este archivo es el ÚNICO punto
+// del código que conoce la clave API de Anthropic y el transporte (URL, cabeceras,
+// versión de la API). NINGUNA otra parte del código puede:
+//   - llamar a la API de Anthropic directamente (fetch a api.anthropic.com), ni
+//   - leer ANTHROPIC_API_KEY ni /etc/bamburu.env para obtener la clave.
+// Si necesitas hablar con Claude, hazlo SIEMPRE por callClaude(). El nombre del
+// modelo lo elige y lo pasa quien llama (cada caso de uso usa el suyo); la clave y
+// el transporte viven SOLO aquí. Para saber si la IA está configurada sin tocar la
+// clave, usa hasAnthropicKey().
+//
 // Centraliza: lectura de la API key (env + fallback /etc/bamburu.env), URL,
 // cabeceras y el manejo de errores. Admite `content` de cada mensaje como string
 // O como array de bloques ({type:'text'|'image'|'document', ...}) — necesario para
-// mandar fotos/PDF al modelo (visión), que el camino actual (content string) no hace.
+// mandar fotos/PDF al modelo (visión).
 //
-// USO: hoy SOLO lo usa el código nuevo de C2 (captura de factura de proveedor).
-// Las 3 llamadas existentes (DISA asistente, store builder, onboarding) NO se
-// migran en esta tarea — queda anotado como pendiente técnico en TABLERO.md.
+// USO: la captura de factura (C2) y las 3 llamadas de conversación — DISA asistente
+// (/message), store builder (/store-message) y onboarding/registro — pasan TODAS por
+// callClaude(). (Migración del 2026-06-12.)
 
 import { readFileSync } from 'fs';
 
@@ -26,6 +36,12 @@ export function getAnthropicKey() {
     } catch { /* sin fichero: queda sin key */ }
   }
   return apiKey || null;
+}
+
+// ¿Hay clave configurada? Permite a las rutas mostrar su mensaje de "IA no
+// configurada" sin leer ni conocer la clave (que vive solo aquí).
+export function hasAnthropicKey() {
+  return !!getAnthropicKey();
 }
 
 // Bloque de imagen base64 para el array `content` de un mensaje de usuario.
