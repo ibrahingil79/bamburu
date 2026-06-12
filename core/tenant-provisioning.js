@@ -4,6 +4,14 @@ import { mkdirSync, unlinkSync } from 'fs';
 import { hashPassword } from './auth.js';
 import { runMigrations } from '../modules/erp/models.js';
 import { getTenantBySlug, createTenant, getCountryConfig } from './control-db.js';
+import { parseSignup } from './signup-schema.js';
+
+// Borra el .db de un tenant a medio crear (y sus ficheros WAL/SHM). Idempotente.
+function cleanupTenantDbFiles(absolutePath) {
+  for (const f of [absolutePath, absolutePath + '-wal', absolutePath + '-shm']) {
+    try { unlinkSync(f); } catch {}
+  }
+}
 
 // Convierte un nombre de negocio en un slug URL-safe.
 // Ej: 'Panaderia Garcia' → 'panaderia-garcia'
@@ -16,7 +24,12 @@ function toSlug(text) {
     .replace(/^-+|-+$/g, '');           // sin guiones al inicio ni al final
 }
 
-export async function provisionTenant({ businessName, ownerName, email, password, phone, country = 'ES' }) {
+export async function provisionTenant(input) {
+  // 0. Defensa en profundidad: nadie crea un tenant con datos sin validar (defecto C).
+  //    Lanza Error { status:400, field } si algo no es válido.
+  const { businessName, ownerName, email, password, phone = '', country = 'ES', sector = '' } =
+    parseSignup(input, { draft: false });
+
   // 1. Generar slug unico
   let slug = toSlug(businessName);
   if (getTenantBySlug(slug)) {
@@ -74,16 +87,26 @@ export async function provisionTenant({ businessName, ownerName, email, password
       .run(phone);
     tenantDb.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES ('country', ?)`)
       .run(country);
+    // Sector: se guarda como materia prima para la personalización futura de DISA (defecto F).
+    tenantDb.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES ('business_sector', ?)`)
+      .run(sector);
 
     tenantDb.close();
   } catch (err) {
     if (tenantDb) try { tenantDb.close(); } catch {}
-    try { unlinkSync(absolutePath); } catch {}
+    cleanupTenantDbFiles(absolutePath);
     throw err;
   }
 
-  // 5. Registrar en control.db
-  const tenant = createTenant({ name: businessName, slug, db_filename, plan: 'starter', country });
+  // 5. Registrar en control.db. Si esto falla DESPUÉS de crear el .db, el archivo quedaría
+  //    huérfano → lo limpiamos y propagamos el error (defecto J).
+  let tenant;
+  try {
+    tenant = createTenant({ name: businessName, slug, db_filename, plan: 'starter', country });
+  } catch (err) {
+    cleanupTenantDbFiles(absolutePath);
+    throw err;
+  }
 
   return { tenant, slug, db_filename };
 }

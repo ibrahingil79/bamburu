@@ -7,7 +7,7 @@ import { hashPassword, verifyPassword, createAdminSession, destroyAdminSession, 
 import { rateLimit } from '../../../core/rate-limit.js';
 import { validate } from '../../../core/validate.js';
 import { loginSchema } from '../schemas.js';
-import { autologinStore } from '../../../core/autologin-store.js';
+import { destroyTenantSession, createTenantSession } from '../../../core/control-db.js';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -87,6 +87,20 @@ function ensureAdminRole(db, userId) {
       db.prepare('INSERT OR IGNORE INTO user_roles (admin_user_id, role_id) VALUES (?, ?)').run(userId, adminRole.id);
     }
   } catch (_) {}
+}
+
+// Registra el vínculo cookie→negocio (control.db tenant_sessions) para que el resto de la
+// navegación sepa en qué negocio está aunque el host no lo identifique (desarrollo). Mismo
+// mecanismo que el auto-login del alta; en producción coincide con el subdominio.
+function bindTenantSession(c, db, token, userId) {
+  const tenant = c.get('tenant');
+  if (!tenant) return;
+  const u = db.prepare('SELECT email, role FROM admin_users WHERE id=?').get(userId);
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+  createTenantSession({
+    tenant_id: tenant.id, session_token: token,
+    user_id: userId, user_email: u?.email || '', user_role: u?.role || '', expires_at: expiresAt,
+  });
 }
 
 export function createAuthRoutes(db) {
@@ -189,8 +203,10 @@ export function createAuthRoutes(db) {
 
     ensureAdminRole(db, user.id);
     const token = createAdminSession(db, user.id);
+    bindTenantSession(c, db, token, user.id);
     const headers = new Headers({ Location: '/admin' });
-    headers.set('Set-Cookie', `asess=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400`);
+    headers.append('Set-Cookie', `asess=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400`);
+    headers.append('Set-Cookie', `btenant=; Path=/; Max-Age=0`);
     return new Response(null, { status: 302, headers });
   });
 
@@ -217,8 +233,10 @@ export function createAuthRoutes(db) {
     pending2FAStore.delete(pending);
     ensureAdminRole(db, entry.userId);
     const sessionToken = createAdminSession(db, entry.userId);
+    bindTenantSession(c, db, sessionToken, entry.userId);
     const headers = new Headers({ Location: '/admin' });
-    headers.set('Set-Cookie', `asess=${sessionToken}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400`);
+    headers.append('Set-Cookie', `asess=${sessionToken}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400`);
+    headers.append('Set-Cookie', `btenant=; Path=/; Max-Age=0`);
     return new Response(null, { status: 302, headers });
   });
 
@@ -620,24 +638,13 @@ export function createAuthRoutes(db) {
     }
   });
 
-  r.get('/autologin', async c => {
-    const token = c.req.query('token');
-    if (!token) return c.redirect('/admin/login');
-    const data = autologinStore.get(token);
-    if (!data) return c.redirect('/admin/login?error=expired');
-    autologinStore.delete(token);
-    const user = db.prepare('SELECT id FROM admin_users WHERE email=? AND active=1').get(data.email);
-    if (!user) return c.redirect('/admin/login');
-    const sessionToken = createAdminSession(db, user.id);
-    const headers = new Headers({ Location: '/admin' });
-    headers.set('Set-Cookie', `asess=${sessionToken}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400`);
-    return new Response(null, { status: 302, headers });
-  });
+  // (El auto-login tras el alta vive ahora en el APEX — index.js — y resuelve el negocio
+  //  desde el token, no desde el subdominio. Aquí ya no hace falta.)
 
   r.get('/logout', c => {
     const cookie = c.req.header('cookie') || '';
     const match = cookie.match(/asess=([A-Za-z0-9_-]+)/);
-    if (match) destroyAdminSession(db, match[1]);
+    if (match) { destroyAdminSession(db, match[1]); destroyTenantSession(match[1]); }
     const headers = new Headers({ Location: '/admin/login' });
     headers.set('Set-Cookie', 'asess=; Path=/; Max-Age=0');
     return new Response(null, { status: 302, headers });

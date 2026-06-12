@@ -138,6 +138,11 @@ export function createTenantSession({ tenant_id, session_token, user_id, user_em
   return controlDb.prepare('SELECT * FROM tenant_sessions WHERE id = ?').get(result.lastInsertRowid);
 }
 
+// Borra el vínculo sesión→negocio (al cerrar sesión). Idempotente.
+export function destroyTenantSession(token) {
+  controlDb.prepare('DELETE FROM tenant_sessions WHERE session_token = ?').run(token);
+}
+
 export function getCountryConfig(code) {
   return controlDb
     .prepare('SELECT * FROM country_configs WHERE code = ?')

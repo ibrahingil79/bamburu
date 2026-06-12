@@ -187,6 +187,23 @@ _(por detallar)_ — Pedido → Albarán / nota de entrega → Factura. Usa los 
 
 ---
 
+## PLATAFORMA — ALTA CONVERSACIONAL (onboarding) + ENRUTADO POR VÍNCULO — ✅ HECHO (2026-06-12)
+
+> Fuera del orden de pilares (plataforma). El alta de un negocio (conversación con DISA en `/registro`) es la primera impresión del producto y estaba pobre e insegura. Auditada (defectos A–J) y reescrita con la misma seriedad que el resto.
+
+- **Bienvenida real (A).** Quitado el saludo pegado en el navegador; `POST /api/registro/init` siembra el saludo como primer mensaje del asistente en el historial del backend (la IA "sabe" que ya saludó). Bienvenida cálida + pregunta abierta.
+- **Prompt reescrito** (con tildes; flujo nombre→sector→propietario→email; España por defecto, pregunta país solo si hay señales; resumen antes de proponer). La contraseña NO se pide por chat.
+- **Alta por servicio validado (C, D, E, H).** Nuevos `core/signup-schema.js` (zod, patrón `clientSchema`) y `core/tenant-signup.js` (`createTenantSvc`/`validateSignupDraft`/`emailTaken`): email con formato válido y **único entre todos los negocios**, contraseña ≥ 8 validada en servidor, nombre obligatorio; errores con `field` para re-preguntar el dato exacto. `provisionTenant` valida (defensa en profundidad).
+- **Verificación del email EN VIVO** (feedback del dueño): la IA marca `[EMAIL:…]` en cuanto lo recibe; el servidor valida formato + unicidad y le devuelve el resultado → se re-pregunta **antes** del resumen, nunca un resumen contradicho por un error a posteriori.
+- **Contraseña por campo seguro + confirmación estricta (E, G).** Tras el resumen aparece el botón "Crear mi negocio" y un campo de contraseña (doble + mostrar/ocultar); la contraseña viaja directa a `POST /api/registro/crear`, nunca por el chat ni la memoria. Al crear se revalida todo contra el esquema.
+- **Sector guardado (F)** en `settings.business_sector`. **Robustez (I, J):** `sessionId` con `crypto`; limpieza del `.db` huérfano si control.db falla tras crearlo.
+- **Auto-login y login que funcionan en TODOS los entornos (B + bug de login).** El redirect tras crear es **relativo** (`/admin/autologin?token=…`, sin inventar subdominios). El auto-login vive en el apex y resuelve el negocio **desde el token**; registra el vínculo cookie→negocio en `tenant_sessions` (control.db). El **tenant-middleware** resuelve por: (1) vínculo de sesión `asess`, (2) cookie `btenant` (login en curso, la fija `/find-tenant` por email), (3) subdominio (primario en producción, intacto). Así, en dev/Tailscale (un solo host) tanto el aterrizaje tras el alta como el **login por `/acceso`** caen en el negocio correcto. Las cookies son host-only → el aislamiento por subdominio en producción no cambia.
+- Verificado: lógica del alta 26/26; gate modelo real (localhost) 32/32 (incl. email duplicado rechazado antes del resumen, contraseña corta, login por `/acceso` correcto + contraprueba de contraseña mala); gate navegador real (Puppeteer) por Tailscale 13/13 (aterriza DENTRO del panel del negocio nuevo + login por `/acceso` sobre Tailscale); regresión T5 32/32, C2 55/55; login por subdominio dev intacto (200). Commit `__COMMIT__`.
+
+Archivos: `modules/registro/index.js`, `core/signup-schema.js`, `core/tenant-signup.js`, `core/tenant-provisioning.js`, `core/tenant-middleware.js`, `core/control-db.js`, `index.js`, `modules/erp/routes/auth.js`. Tests/gates: `scripts/test-registro-alta.mjs`, `scripts/gate-registro-alta.mjs`, `scripts/gate-registro-tailscale.mjs`.
+
+---
+
 ## ROADMAP FUTURO — módulos registrados (decisión del dueño, 2026-06-10) — 🔵 NO INICIADOS
 
 > Solo registro, cero código. Orden TENTATIVO para después de cerrar el trabajo actual de

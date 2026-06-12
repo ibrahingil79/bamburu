@@ -6,8 +6,10 @@ import { loadModules } from './core/loader.js';
 import { cleanupExpiredSessions } from './core/auth.js';
 import { cleanupRateLimitBuckets } from './core/rate-limit.js';
 import { securityHeaders } from './core/security-headers.js';
-import { initControlDb } from './core/control-db.js';
-import { tenantMiddleware } from './core/tenant-middleware.js';
+import { initControlDb, getTenantBySlug, createTenantSession } from './core/control-db.js';
+import { tenantMiddleware, getTenantDb } from './core/tenant-middleware.js';
+import { createAdminSession } from './core/auth.js';
+import { autologinStore } from './core/autologin-store.js';
 import { register as registerRegistro } from './modules/registro/index.js';
 import { docsHtml } from './docs.html.js';
 
@@ -1165,9 +1167,13 @@ app.post('/find-tenant', async c => {
     if (!tenant) {
       return c.json({ error: 'No encontramos ningún negocio con ese email' }, 404);
     }
-    // Ruta RELATIVA a propósito: el POST de la contraseña se queda en el mismo host
-    // por el que entró el usuario (localhost / Tailscale / <slug>.bamburu.com), que ya
-    // es el subdominio del tenant. No hardcodear el dominio base.
+    // Selección de negocio para el login: cuando el host NO identifica al tenant
+    // (desarrollo: un solo host), esta cookie host-only y corta hace que el POST de la
+    // contraseña a /admin/login resuelva el negocio correcto (el del email), no el del
+    // subdominio. En producción coincide con el subdominio (no cambia nada). La consume el
+    // tenant-middleware (paso 2) y se borra al iniciar sesión.
+    c.header('Set-Cookie', `btenant=${tenant.slug}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600`);
+    // Ruta RELATIVA a propósito: el POST se queda en el mismo host por el que entró el usuario.
     return c.json({ slug: tenant.slug, url: '/admin/login' });
   } catch(e) {
     return c.json({ error: 'Error interno' }, 500);
@@ -1296,6 +1302,39 @@ input[readonly]{color:rgba(255,255,255,0.5);cursor:default}
 app.get('/docs', c => c.html(docsHtml()));
 
 registerRegistro(app);
+
+// Auto-login tras el alta. Vive en el APEX (antes del tenant-middleware) y resuelve el
+// negocio desde el TOKEN, no desde el subdominio — así el redirect puede ser relativo al
+// host actual y funciona en cualquier entorno (Tailscale/localhost/dominio público).
+// Crea la sesión en la BD del negocio y registra el vínculo cookie→negocio en control.db
+// (tenant_sessions) para que el resto de la navegación sepa en qué negocio está aunque el
+// host no lo identifique. El camino por subdominio sigue intacto para el login normal.
+app.get('/admin/autologin', c => {
+  const token = c.req.query('token');
+  if (!token) return c.redirect('/acceso');
+  const data = autologinStore.get(token);
+  if (!data) return c.redirect('/acceso?error=expired');
+  autologinStore.delete(token);                       // un solo uso
+
+  const tenant = getTenantBySlug(data.slug);
+  if (!tenant || tenant.status !== 'active') return c.redirect('/acceso');
+
+  const tenantDb = getTenantDb(tenant);
+  const user = tenantDb.prepare('SELECT id, role FROM admin_users WHERE email=? AND active=1').get(data.email);
+  if (!user) return c.redirect('/acceso');
+
+  const sessionToken = createAdminSession(tenantDb, user.id);
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+  createTenantSession({
+    tenant_id: tenant.id, session_token: sessionToken,
+    user_id: user.id, user_email: data.email, user_role: user.role, expires_at: expiresAt,
+  });
+
+  const headers = new Headers({ Location: '/admin' });   // relativo: se queda en el host actual
+  headers.set('Set-Cookie', `asess=${sessionToken}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400`);
+  return new Response(null, { status: 302, headers });
+});
+
 app.use('*', tenantMiddleware);
 
 console.log('🎋 Iniciando Bamburu...');
