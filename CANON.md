@@ -254,3 +254,16 @@ queda accesible y activable a un clic. Las funciones fuera del perfil del negoci
 **P2. Postura fiscal: aliado del gestor, no sustituto.** Bamburu deja los datos listos —libro registro
 impecable, borradores de modelos, avisos de DISA sobre el trimestre— para que **el gestor presente**. Bamburu
 **NO presenta impuestos ante Hacienda**. Se evita así la responsabilidad legal.
+
+**P3. Fuente real de liderazgo.** Bamburu no gana por tener IA. Gana por tener **el negocio entero en un solo
+dato**: funciones que el especialista no puede construir porque no tiene nuestros datos —la obra que se compara
+sola con las compras reales, el food cost que se actualiza solo, la previsión de caja, la lista de espera que se
+autorrellena, la cuota que se cobra y reclama sola—. DISA orquesta esas funciones; es **una palanca más, no la
+única**.
+
+### Contexto de mercado (autónomos España, 2025 — por tamaño de colectivo)
+1. **Comercio** ~725.000 · 2. **Construcción/oficios** ~414.000 · 3. **Servicios profesionales** ~341.000 ·
+4. **Hostelería** ~316.000 · 5. **Salud/bienestar/belleza** (~142.000 sanitarias + peluquería/estética).
+Consecuencia: el **comercio es el nicho nº 1**, lo que refuerza el **TPV** como pieza de peso (ver roadmap en TABLERO.md).
+
+**Especificación de funciones por nicho: ver [docs/ESTRATEGIA-NICHOS.md](docs/ESTRATEGIA-NICHOS.md).**

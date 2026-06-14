@@ -212,6 +212,8 @@ Archivos: `modules/registro/index.js`, `core/signup-schema.js`, `core/tenant-sig
 
 ## ROADMAP FUTURO — módulos registrados (decisión del dueño, 2026-06-10) — 🔵 NO INICIADOS
 
+> Especificación de funciones por nicho (visión/benchmark): ver `docs/ESTRATEGIA-NICHOS.md`.
+
 > Solo registro, cero código. Orden TENTATIVO para después de cerrar el trabajo actual de
 > Compras (C1.b / C1.c / C2): nada de aquí adelanta a las tareas activas — **la siguiente
 > tarea sigue siendo C1.b**. Cada módulo pasará por "la línea" (CANON §5) al detallarse.
