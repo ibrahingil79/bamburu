@@ -89,6 +89,10 @@ export function register(app, db) {
   // por el libro (recordMovement → WAC). Escribirlas con el genérico insert_record
   // dejaría stock/coste sin tocar (incoherencia). El camino de DISA para compras será
   // la captura de factura (C2, pantalla + servicios validados), no el INSERT genérico.
+  // Devoluciones — 'supplier_returns'/'supplier_return_items' tampoco están en el
+  // whitelist (= NO escribibles por el genérico): una devolución mueve stock por el
+  // libro y es documento inmutable con numeración. La voz de DISA sobre stock/compras
+  // es tarea futura; por ahora DISA no crea devoluciones.
   const WRITABLE_TABLES = new Set([
     'categories', 'tags', 'product_tags',
     'products', 'product_variants', 'product_images',

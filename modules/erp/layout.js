@@ -29,6 +29,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     pos:              'orders.create',
     'store-settings': null,
     refunds:          'orders.edit',
+    'supplier-returns': 'purchases.read',
     discounts:        'discounts.read',
     invoices:         'invoices.read',
     cobros:           'invoices.read',
@@ -85,7 +86,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       { href: '/admin/purchases', label: 'Compras', key: 'purchases', icon: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>' },
       { href: '/admin/inventory', label: 'Stock', key: 'inventory', icon: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>' },
       { href: '/admin/suppliers', label: 'Proveedores', key: 'suppliers', icon: '<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>' },
-      { href: '/admin/orders/refunds', label: 'Devoluciones', key: 'refunds', icon: '<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>' },
+      { href: '/admin/supplier-returns', label: 'Devoluciones', key: 'supplier-returns', icon: '<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>' },
       { href: '/admin/discounts', label: 'Descuentos', key: 'discounts', icon: '<line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>' },
     ]},
     { section: 'Analítica', items: [

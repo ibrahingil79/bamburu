@@ -375,6 +375,24 @@ export const purchaseOrderReceiptSchema = z.object({
   confirm_excess: z.coerce.boolean().optional().default(false),
 });
 
+// ── Devolución a proveedor ─────────────────────────────────────
+// Solo la capa física. La línea referencia la línea de ORIGEN (origin_item_id) de la
+// compra/recepción; el coste NO viene del cliente (lo copia el servidor del origen). La
+// cantidad ≤ devolvible la valida el servicio contra la BD. Motivo obligatorio (mín. 3).
+const supplierReturnItemSchema = z.object({
+  origin_item_id: z.coerce.number().int().positive(),
+  quantity:       z.coerce.number().int().positive(),
+});
+
+export const supplierReturnSchema = z.object({
+  origin_type: z.enum(['purchase', 'po_receipt']),
+  origin_id:   z.coerce.number().int().positive(),
+  date:        z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  motivo:      z.string().trim().min(3, 'Indica el motivo de la devolución').max(500),
+  notes:       strOpt(1000),
+  items:       z.array(supplierReturnItemSchema).min(1, 'Al menos una línea requerida'),
+});
+
 export const draftOrderSchema = z.object({
   client_id:      optId,
   items:          z.array(posItemSchema).min(1),

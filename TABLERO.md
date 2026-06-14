@@ -4,7 +4,7 @@
 > Estructura: 4 pilares en ORDEN DE CONSTRUCCIÓN — Producto → Cliente → Inventario → Ventas
 > (Ventas necesita los otros tres ya hechos; ver CANON §3).
 > REGLA DE ORO: una sola tarea "EN CURSO" a la vez. Terminar antes de empezar otra.
-> Última actualización: 2026-06-12
+> Última actualización: 2026-06-14
 
 ---
 
@@ -178,7 +178,9 @@ Compras, Stock, Proveedores, Devoluciones, Descuentos. Qué tienes y de dónde s
 
 - **C2.1 · Migración de las 3 llamadas LLM a `core/llm.js` (deuda de C2). ✅ HECHO (2026-06-12).** Las 3 llamadas que aún hablaban con la API de Anthropic por su cuenta — **DISA asistente** (`/message`, `claude-sonnet-4-6` + tool `query_database`), **store builder** (`/store-message`, `claude-haiku-4-5-20251001`) y **onboarding/registro** (`modules/registro/index.js`, `claude-sonnet-4-6`) — pasan ahora por `callClaude` de `core/llm.js`. Quitada la lectura local de la clave (la resuelve `getAnthropicKey` dentro del helper) y **borrado el fetch viejo**; nuevo helper `hasAnthropicKey()` conserva **idénticos** los mensajes de "IA no configurada" sin que la ruta toque la clave. **Mudanza pura**: mismos modelos, parámetros y respuestas; cero cambio visible (incl. la rama sin clave). De paso, el store builder detecta la clave por el mismo camino que el resto (antes leía `.env` relativo). **Regla resultante anotada en la cabecera de `core/llm.js`**: es el ÚNICO punto que conoce la clave + transporte (URL/cabeceras/versión); ninguna otra parte llama a la API ni lee `ANTHROPIC_API_KEY`/`/etc/bamburu.env` (el nombre del modelo lo elige cada caller). Verificado: regresión (T5 32/32, C2 55/55, compras 29/29, WAC 19/19, stock 34/34), **prueba real contra el modelo** de las 3 (`scripts/verify-llm-migracion.mjs`, 6/6 incl. bucle tool-use de DISA), grep limpio (0 hits fuera de `core/llm.js`) y reinicio del servicio limpio. Commit `8528373`.
 
-- **Siguiente (resto, por detallar):** multi-almacén en UI + transferencias, **devoluciones a proveedor**, y voz de DISA sobre stock/compras. _(«reservado vs. disponible» se trasladó al Pilar 4 — Ventas el 2026-06-12; ver allí.)_
+- **Devoluciones a proveedor (capa física). ✅ HECHO (2026-06-14).** Devolver mercancía al proveedor saca el stock del almacén y emite un documento propio **DEV-NNNN** (contador `code_counters`, asignado al confirmar — no hay borrador) e **INMUTABLE**. Se apoya 100% en la maquinaria existente (auditoría previa): **cero camino nuevo de stock ni de coste**. Una devolución nace SIEMPRE de un documento de origen que ya movió stock — **compra directa RECIBIDA** (`origin_type='purchase'`) o **recepción de orden CONFIRMADA** (`origin_type='po_receipt'`); no hay devolución suelta. Tablas nuevas `supplier_returns` (origin_type/origin_id, supplier_id + **foto congelada** supplier_name/fiscal_id resuelta del origen al confirmar, return_number, date, **motivo obligatorio** mín. 3, status confirmada/anulada, anulada_motivo) y `supplier_return_items` (origin_item_id → línea de origen, product_id, quantity>0, unit_cost = coste de origen **solo para el VALOR** del documento). **Stock al confirmar:** por línea `recordMovement` `salida −`, `unit_cost=NULL`, origen nuevo `supplier_return` → una salida **no toca el WAC** de lo que queda (correcto). **Anular** (`cancelSupplierReturnSvc`, motivo mín. 3): re-entra el stock con `entrada +` y **`unit_cost = el coste de origen guardado` (NO NULL)** — una entrada con coste NULL hundiría el medio a 0; re-entrar con el coste recompone el WAC sin corromperlo. Nada se borra. **Guardas:** origen debe haber movido stock (compra `received` / recepción `confirmada`, comprobado sobre el documento en sí, no sobre la orden padre); cantidad ≤ **devolvible** = recibido en ese origen − devoluciones confirmadas previas; solo productos **físicos**; línea ajena/repetida → 400. **Integridad bidireccional:** una compra/recepción con devoluciones confirmadas **no se puede cancelar/anular** (descontaría stock dos veces) → 409 hasta anular antes la devolución (guarda añadida a `cancelPurchaseSvc` y `cancelReceiptSvc`). **NO** se construyó la capa del dinero (lo que el proveedor abona / cuentas con proveedores): tarea futura propia. **DISA:** `supplier_returns`/`supplier_return_items` fuera del whitelist genérico (no escribibles por `insert_record`); DISA no crea devoluciones (futuro). **UI** (espejo de los patrones): lista server-rendered (búsqueda + filtro estado + paginación), alta (elige origen → líneas con devolvible → cantidades + motivo → confirm-first) y ficha inmutable (DEV-NNNN, proveedor, enlace al origen, líneas con valor, total, Anular). **Menú Inventario → Devoluciones repuntado** a `/admin/supplier-returns`; la ruta vieja de reembolsos de cliente (`/admin/orders/refunds`) **queda viva**, solo deja de enlazarse aquí (pertenece a Ventas/Pilar 4). Verificado: **lógica 48/48** (devolvible desde compra y recepción, WAC tras devolver y tras anular —el punto frágil—, exceso/ajena/repetida/no-física/origen-no-elegible, integridad bidireccional, correlativo DEV, cuadre caché==libro), **regresión completa** (compras 29, recepciones C1.b 48, WAC 19, stock 34, códigos 25, proveedores 18, C1.a 78, C1.c 35, C2 55), **migración aditiva e idempotente sobre copia de la BD real** (59→61 tablas, datos intactos, tablas nuevas vacías) y **navegador real Puppeteer 18/18** (compra de prueba → devolución parcial → stock baja → anular → stock vuelve + WAC == libro; limpieza al inicial). Tests `scripts/test-devoluciones-proveedor.mjs`; gate `scripts/gate-devoluciones-proveedor.mjs`.
+
+- **Siguiente (resto, por detallar):** multi-almacén en UI + transferencias y voz de DISA sobre stock/compras. _(«reservado vs. disponible» se trasladó al Pilar 4 — Ventas el 2026-06-12; ver allí. «Devoluciones a proveedor» ✅ hecha 2026-06-14.)_
 
 ## PILAR 4 — VENTAS
 _(por detallar)_ — Pedido → Albarán / nota de entrega → Factura. Usa los tres pilares anteriores. Aquí entran: **PDF real de la factura**, **enviar factura por email** y **sello Verifactu (QR + leyenda)**.
@@ -211,9 +213,15 @@ Archivos: `modules/registro/index.js`, `core/signup-schema.js`, `core/tenant-sig
 > tarea sigue siendo C1.b**. Cada módulo pasará por "la línea" (CANON §5) al detallarse.
 
 1. **Ventas completas** — ya previsto, no es entrada nueva: el flujo pedido → albarán →
-   factura es el **PILAR 4** (con PDF real, email y Verifactu), y devoluciones y descuentos
-   están en el alcance del Pilar 3. Confirmado que está reflejado; el motor de descuentos y
-   las devoluciones de cliente se llevan a su versión completa al construir Ventas.
+   factura es el **PILAR 4** (con PDF real, email y Verifactu), y el **motor de descuentos**
+   se lleva a su versión completa al construir Ventas.
+   - **Aclaración de "devoluciones" (estaban mezcladas):** son DOS cosas distintas en sitios
+     distintos. **Devolución a proveedor = Inventario (Pilar 3)** — devolvemos mercancía al
+     proveedor, sale stock; **✅ HECHA (2026-06-14)**, capa física (la capa del dinero / cuentas
+     con proveedores queda como tarea futura). **Reembolso de cliente = Ventas (Pilar 4)** — le
+     devolvemos dinero a un cliente sobre una venta; vive en `/admin/orders/refunds` (resto
+     e-commerce, sigue viva) y se llevará a su versión completa al construir Ventas. No se
+     vuelven a meter bajo el mismo término.
 2. **Sistema de diseño + saneamiento visual** — ya registrado el 2026-06-08 (ver sección
    TRANSVERSAL más abajo). Mantiene su posición; no se duplica aquí.
 3. **DISA como producto — NO INICIADA.** DISA proactiva (propone sin que le pregunten),
@@ -271,6 +279,27 @@ desigual. **No empezar por la 2.**
 
 ---
 
+## TRANSVERSAL (fuera del orden de pilares) — 🔐 PERMISOS POR USUARIO: FUNDAMENTO + ADMINISTRACIÓN POR DISA — 🔵 REGISTRADA (no iniciar hasta indicación)
+
+> Tarea de roadmap, **dos pasos EN ORDEN**. Distinta de la futura "voz de DISA sobre stock/compras"
+> (esa OPERA el inventario; esta ADMINISTRA quién puede hacer qué). No iniciar hasta que se indique.
+
+**Paso 1 — Fundamento (revisión transversal).** Repasar **TODAS** las rutas y servicios de los pilares ya
+hechos (catálogo, clientes, inventario/compras) y confirmar que **cada acción exige el permiso correcto**
+(`requirePerm`), no solo sesión. **Precedente real:** la compra directa solo exigía sesión, sin `requirePerm`,
+detectado el 10 jun al construir C1.a (Ajuste 1). Definir un **modelo de permisos limpio agrupado por áreas**
+(p. ej. stock, compras, ventas, clientes) sobre el que se pueda razonar y hablar.
+
+**Paso 2 — DISA administra los permisos hablando.** El dueño gestiona usuarios y accesos por conversación
+("el usuario B solo ve stock y compras") y DISA lo traduce a la configuración real a través de un **servicio
+validado** (DISA **nunca** escribe permisos directamente; patrón T5 / cobros). Es la materialización de "DISA
+es el centro de todo" aplicada a la administración.
+
+**REGLA DE ORDEN:** el Paso 2 **no se inicia sin el Paso 1 cerrado** — si las rutas no comprueban permisos,
+DISA repartiría accesos que el sistema no respeta (control aparente, no real).
+
+---
+
 ## Contexto heredado (era anterior — código que SE QUEDA)
 
 La era previa ("facturación de servicios") dejó código que funciona y no se tira; solo se retira su plan:
@@ -287,5 +316,5 @@ La era previa ("facturación de servicios") dejó código que funciona y no se t
 ---
 
 ## Notas
-- Una tarea "EN CURSO" a la vez (RITUAL). **Pilar 1 — Producto: CERRADO** (P1+P2, P2.1, P2.2, P3 y P4 hechos). Hecha además la **corrección transversal de buscadores/filtros** (2026-06-03). **Pilar 2 — Cliente: CERRADO (2026-06-08)** — T1 (saneamiento) ✅, T2 (lista) ✅, T3 (campos de gestión) ✅, **T4** (Paso 1 motor de cobros, Paso 2 perfiles+próxima acción+DISA, Paso 2.1 gestión de cuenta) ✅ y **T5** (DISA sobre clientes por servicio validado + identificación + pedidos con cliente) ✅. **Siguiente: Pilar 3 — Inventario** (por detallar). Pendiente transversal registrado pero NO iniciado: **Sistema de diseño + saneamiento visual**.
+- Una tarea "EN CURSO" a la vez (RITUAL). **Pilar 1 — Producto: CERRADO** (P1+P2, P2.1, P2.2, P3 y P4 hechos). Hecha además la **corrección transversal de buscadores/filtros** (2026-06-03). **Pilar 2 — Cliente: CERRADO (2026-06-08)** — T1 (saneamiento) ✅, T2 (lista) ✅, T3 (campos de gestión) ✅, **T4** (Paso 1 motor de cobros, Paso 2 perfiles+próxima acción+DISA, Paso 2.1 gestión de cuenta) ✅ y **T5** (DISA sobre clientes por servicio validado + identificación + pedidos con cliente) ✅. **Siguiente: Pilar 3 — Inventario** (por detallar). En Inventario, además del cuerpo de Compras (C1–C2), **devoluciones a proveedor (capa física) ✅ HECHO (2026-06-14)**. Pendientes transversales registrados pero NO iniciados: **Sistema de diseño + saneamiento visual** y **🔐 Permisos por usuario (fundamento + administración por DISA)**.
 - Este orden y alcances no son sagrados (CANON §3): si al construir algo no cuadra, se cambia.

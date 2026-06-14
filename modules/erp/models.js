@@ -707,6 +707,49 @@ export function runMigrations(db) {
   )`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_po_receipts_order ON purchase_order_receipts(order_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_po_receipt_items_receipt ON purchase_order_receipt_items(receipt_id)`);
+
+  // Devolución a proveedor: SOLO la capa física (sale el stock + documento inmutable).
+  // La capa del dinero (lo que el proveedor abona / cuentas con proveedores) es tarea
+  // FUTURA y NO vive aquí. Una devolución siempre nace de un documento de origen que ya
+  // movió stock: una compra directa RECIBIDA ('purchase') o una recepción CONFIRMADA
+  // ('po_receipt'). supplier_name/supplier_fiscal_id son la FOTO CONGELADA del proveedor
+  // al confirmar (resueltos del origen — mismo patrón que la factura/orden). return_number
+  // (DEV-NNNN, code_counters) se asigna al confirmar; no hay borrador. Documento INMUTABLE:
+  // corregir = anular (con motivo) y crear otra; nada se borra.
+  db.exec(`CREATE TABLE IF NOT EXISTS supplier_returns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    origin_type TEXT NOT NULL CHECK(origin_type IN ('purchase','po_receipt')),
+    origin_id INTEGER NOT NULL,
+    supplier_id INTEGER NOT NULL,
+    supplier_name TEXT,                 -- foto congelada al confirmar (del origen)
+    supplier_fiscal_id TEXT,            -- foto congelada al confirmar (del origen)
+    return_number TEXT,
+    date DATE NOT NULL,
+    motivo TEXT NOT NULL,
+    notes TEXT DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'confirmada' CHECK(status IN ('confirmada','anulada')),
+    anulada_motivo TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+  )`);
+  // unit_cost = coste de la línea de ORIGEN (copiado al confirmar). Es SOLO para el VALOR
+  // del documento ("te deben X €"): al confirmar la salida va al libro con coste NULL (una
+  // salida no toca el WAC de lo que queda). Al ANULAR, la re-entrada usa ESTE coste (no
+  // NULL) para recomponer el WAC sin hundirlo a 0.
+  db.exec(`CREATE TABLE IF NOT EXISTS supplier_return_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    return_id INTEGER NOT NULL,
+    origin_item_id INTEGER NOT NULL,    -- línea de purchase_items / purchase_order_receipt_items de origen
+    product_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL CHECK(quantity > 0),
+    unit_cost REAL NOT NULL CHECK(unit_cost >= 0),
+    FOREIGN KEY (return_id) REFERENCES supplier_returns(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id)
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_supplier_returns_origin ON supplier_returns(origin_type, origin_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_supplier_returns_supplier ON supplier_returns(supplier_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_supplier_return_items_return ON supplier_return_items(return_id)`);
+
   addCol(db, 'purchase_orders', 'received_status', 'TEXT');
   // C1.c — cierre manual con pendiente: received_status gana el valor TERMINAL
   // 'cerrada_manual' (la columna es TEXT sin CHECK → ampliar valores es aditivo)

@@ -31,6 +31,11 @@ export function cancelPurchaseSvc(db, id) {
   const p = db.prepare('SELECT * FROM purchases WHERE id=?').get(id);
   if (!p) { const e = new Error('Compra no encontrada'); e.status = 404; throw e; }
   if (p.status === 'cancelled') { const e = new Error('La compra ya está cancelada'); e.status = 400; throw e; }
+  // Integridad: si tiene devoluciones a proveedor CONFIRMADAS, cancelarla descontaría el
+  // stock dos veces (la devolución ya lo sacó). Hay que anular antes esas devoluciones.
+  if (db.prepare("SELECT 1 FROM supplier_returns WHERE origin_type='purchase' AND origin_id=? AND status='confirmada' LIMIT 1").get(id)) {
+    const e = new Error('Esta compra tiene devoluciones a proveedor confirmadas: anúlalas primero (si no, el stock se descontaría dos veces)'); e.status = 409; throw e;
+  }
   const items = db.prepare('SELECT * FROM purchase_items WHERE purchase_id=?').all(id);
   const wasReceived = p.status === 'received';
   db.transaction(() => {

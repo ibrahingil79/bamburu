@@ -146,6 +146,11 @@ export function cancelReceiptSvc(db, receiptId, motivo) {
   const rec = db.prepare('SELECT * FROM purchase_order_receipts WHERE id=?').get(receiptId);
   if (!rec) { const e = new Error('Recepción no encontrada'); e.status = 404; throw e; }
   if (rec.status !== 'confirmada') { const e = new Error('Esta recepción ya está anulada'); e.status = 400; throw e; }
+  // Integridad: si la recepción tiene devoluciones a proveedor CONFIRMADAS, anularla
+  // descontaría el stock dos veces. Hay que anular antes esas devoluciones.
+  if (db.prepare("SELECT 1 FROM supplier_returns WHERE origin_type='po_receipt' AND origin_id=? AND status='confirmada' LIMIT 1").get(receiptId)) {
+    const e = new Error('Esta recepción tiene devoluciones a proveedor confirmadas: anúlalas primero (si no, el stock se descontaría dos veces)'); e.status = 409; throw e;
+  }
   const items = db.prepare('SELECT * FROM purchase_order_receipt_items WHERE receipt_id=?').all(receiptId);
 
   const run = db.transaction(() => {
