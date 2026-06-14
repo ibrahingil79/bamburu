@@ -235,3 +235,22 @@ el núcleo, es el documento legal que acompaña a la venta. Por eso se reescribi
   lugar del modelo de "capas e-commerce".
 - Se mantiene intacto lo que seguía siendo cierto: el protagonismo de DISA, la
   diferenciación por IA proactiva + ejecución, y el modelo fiscal multi-país.
+
+---
+
+## 8. Principios de visión (decisiones de estrategia, registrados 2026-06-14)
+
+> Registrados como principios de visión; no cambian la tarea actual (compras/inventario). El detalle de
+> los módulos de visión vive en TABLERO.md (roadmap futuro).
+
+**P1. Modelo adaptativo multinicho.** En el onboarding conversacional, DISA determina el tipo de negocio y
+presenta una estructura a medida: cada negocio ve en primer plano solo lo suyo. El resto **no se oculta**:
+queda accesible y activable a un clic. Las funciones fuera del perfil del negocio se activan **con recargo**.
+- *Enfoque técnico recomendado:* componer el perfil por **capacidades** (¿vende producto?, ¿da cita previa?,
+  ¿tiene empleados?, ¿cobra cuotas?) para que los negocios **mixtos** encajen.
+- *Línea base vs recargo:* **PENDIENTE de afinar por Ibrahin.** Principio: el **núcleo de gestionar cualquier
+  negocio y DISA van en la base**; el recargo es solo para módulos pesados opcionales.
+
+**P2. Postura fiscal: aliado del gestor, no sustituto.** Bamburu deja los datos listos —libro registro
+impecable, borradores de modelos, avisos de DISA sobre el trimestre— para que **el gestor presente**. Bamburu
+**NO presenta impuestos ante Hacienda**. Se evita así la responsabilidad legal.
