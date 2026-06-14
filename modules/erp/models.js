@@ -394,6 +394,21 @@ export function runMigrations(db) {
   if (!db.prepare('SELECT id FROM warehouses LIMIT 1').get()) {
     db.prepare("INSERT INTO warehouses (name, active) VALUES ('Almacén principal', 1)").run();
   }
+  // Multi-almacén · Capa 1 — almacén por defecto EXPLÍCITO (is_default). addCol aditivo +
+  // backfill de una sola vez (bandera en settings): marca is_default=1 en EXACTAMENTE el
+  // almacén que defaultWarehouseId devolvía hasta hoy (el primer activo por id) y 0 en el
+  // resto. Así el comportamiento es idéntico hasta que el usuario reasigne el principal a
+  // mano. Idempotente: re-ejecutar no cambia nada (la bandera corta).
+  addCol(db, 'warehouses', 'is_default', 'INTEGER DEFAULT 0');
+  const whDefaultKey = 'migration_warehouse_default_2026_v1';
+  if (!db.prepare('SELECT value FROM settings WHERE key=?').get(whDefaultKey)) {
+    const def = db.prepare('SELECT id FROM warehouses WHERE active=1 ORDER BY id LIMIT 1').get();
+    db.transaction(() => {
+      db.prepare('UPDATE warehouses SET is_default=0').run();
+      if (def) db.prepare('UPDATE warehouses SET is_default=1 WHERE id=?').run(def.id);
+      db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(whDefaultKey, 'done');
+    })();
+  }
 
   db.exec(`CREATE TABLE IF NOT EXISTS stock_movements (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -411,6 +426,9 @@ export function runMigrations(db) {
   )`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON stock_movements(product_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_stock_movements_reverses ON stock_movements(reverses_movement_id)`);
+  // Multi-almacén · Capa 1 — stock por almacén se calcula al vuelo sumando el libro por
+  // (warehouse_id); este índice acelera ese GROUP BY. Aditivo, idempotente.
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_stock_movements_warehouse ON stock_movements(warehouse_id)`);
   // Pilar 3 (coste/valoración): coste unitario de las unidades de ESE movimiento. Entrada de
   // compra → coste de la línea; salidas, aperturas, legacy, ajustes y reversiones → NULL (que el
   // WAC trata como coste 0). Alimenta el coste medio ponderado (cache en products.average_cost).

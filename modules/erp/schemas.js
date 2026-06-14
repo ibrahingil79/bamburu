@@ -319,6 +319,12 @@ export const supplierSchema = z.object({
   notes:     strOpt(1000),
 });
 
+// Multi-almacén · Capa 1 — el almacén solo tiene nombre (obligatorio, único entre activos
+// lo valida el servicio contra la BD). is_default/active los gobiernan acciones propias.
+export const warehouseSchema = z.object({
+  name: str(120),
+});
+
 export const purchaseItemSchema = z.object({
   product_id: intPos,
   quantity:   intPos,

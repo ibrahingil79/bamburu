@@ -5,6 +5,7 @@ import { validate } from '../../../core/validate.js';
 import { productSchema, productImageSchema, variantSchema, tagSchema, stockAdjustSchema } from '../schemas.js';
 import { getVatBands } from '../../../core/vat-bands.js';
 import { adjustStock, kardex, productStock, isPhysical, recordMovement, TYPE_LABEL, REASON_LABEL } from '../stock.js';
+import { warehouseBreakdown } from './warehouses.js';
 import { stockModalHtml, stockModalScript } from '../views/stock-modal.js';
 import { nextCode } from '../codes.js';
 
@@ -132,7 +133,8 @@ export function createProductRoutes(db, cfg = {}) {
         origin_type: m.origin_type, origin_id: m.origin_id, note: m.note,
         created_at: m.created_at, balance: m.balance, reversed: m.reversed, is_reversal: m.is_reversal,
       }));
-      return c.json({ physical: true, stock: productStock(db, id), movements });
+      // Multi-almacén · Capa 1: desglose por almacén activo (solo lectura; al vuelo).
+      return c.json({ physical: true, stock: productStock(db, id), movements, by_warehouse: warehouseBreakdown(db, id) });
     } catch(e) { return c.json({ error: e.message }, 500); }
   });
 

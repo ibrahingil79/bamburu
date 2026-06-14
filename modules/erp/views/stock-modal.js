@@ -85,11 +85,20 @@ export function stockModalScript(sym) {
           +'<td style="text-align:right">'+revCell+'</td>'
           +'</tr>';
       }).join('');
+      // Multi-almacén · Capa 1 — desglose por almacén activo (solo lectura).
+      const wh = data.by_warehouse || [];
+      const whBlock = wh.length
+        ? '<div style="margin-bottom:1rem"><div style="font-size:.75rem;text-transform:uppercase;color:var(--muted);margin-bottom:.4rem">Stock por almacén</div>'
+          +'<div class="table-wrap"><table><tbody>'
+          +wh.map(function(w){ return '<tr><td>'+escHtml(w.name)+(w.is_default?' <span class="badge b-green" style="font-size:.62rem">Principal</span>':'')+'</td><td style="text-align:right;font-weight:600">'+w.qty+'</td></tr>'; }).join('')
+          +'</tbody></table></div></div>'
+        : '';
       document.getElementById('stockKardexBody').innerHTML =
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">'
         +'<div>Stock actual: <strong style="font-size:1.4rem">'+data.stock+'</strong></div>'
         +'<button class="btn btn-primary btn-sm" onclick="openAjustar('+id+',\\''+escHtml((name||'').replace(/\\'/g,''))+'\\','+data.stock+')">Ajustar stock</button>'
         +'</div>'
+        +whBlock
         +'<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th style="text-align:right">Cant.</th><th>Motivo</th><th>Origen</th><th style="text-align:right">Saldo</th><th></th></tr></thead><tbody>'
         +(rows||'<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:1rem">Sin movimientos</td></tr>')
         +'</tbody></table></div>';

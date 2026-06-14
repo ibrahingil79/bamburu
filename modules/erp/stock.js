@@ -23,8 +23,13 @@ function nowStr() {
   return new Date().toISOString().slice(0, 19).replace('T', ' ');   // 'YYYY-MM-DD HH:MM:SS' (UTC), como CURRENT_TIMESTAMP
 }
 
-// Almacén por defecto (UN almacén en este paso; multi-almacén preparado en datos).
+// Almacén por defecto: el activo marcado is_default=1 (multi-almacén · Capa 1). FALLBACK
+// robusto al primer activo por id si ninguno tuviera la marca (datos previos al backfill),
+// y a cualquier almacén si no hubiera activos. Los escritores que no eligen almacén siguen
+// cayendo aquí (POS, compras, recepciones, devoluciones, ajustes — la elección es Capa 2).
 export function defaultWarehouseId(db) {
+  const d = db.prepare('SELECT id FROM warehouses WHERE active=1 AND is_default=1 ORDER BY id LIMIT 1').get();
+  if (d) return d.id;
   const w = db.prepare('SELECT id FROM warehouses WHERE active=1 ORDER BY id LIMIT 1').get()
         || db.prepare('SELECT id FROM warehouses ORDER BY id LIMIT 1').get();
   return w ? w.id : null;
