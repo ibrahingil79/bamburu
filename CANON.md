@@ -3,7 +3,15 @@
 > Este es el único documento que manda. Si cualquier otro archivo (TABLERO.md,
 > CLAUDE.md, etc.) dice algo distinto de lo que está aquí, gana este documento.
 > Al empezar cualquier sesión (con Ibrahin o con Claude Code) se lee este archivo primero.
-> Última actualización: 2026-06-10
+> Última actualización: 2026-06-14
+
+---
+
+## 0. Principio de cabecera (manda sobre todo lo demás)
+
+Bamburu no es "un software para autónomos". Es software de gestión de clase mundial —con todo lo que tiene el mejor software del mundo— a un precio que un autónomo pueda costear. Un negocio pequeño no es un negocio simple. Si un autónomo no usa hoy ciertas funciones no es porque no las necesite, sino porque no puede pagar el software que las tiene. Bamburu rompe eso.
+
+Regla que gobierna toda decisión de alcance: nunca se omite, recorta ni simplifica una función por el tamaño del cliente. Si algo no entra ahora, es por orden/momento de construcción, jamás por "el autónomo no lo necesita".
 
 ---
 

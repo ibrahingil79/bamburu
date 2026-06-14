@@ -88,6 +88,7 @@ estado `errored` y no es la instancia productiva — ignorarla.
 - NADA de Capa 2 (e-commerce: productos, inventario, POS, tienda) ni Capa 3 hasta
   cerrar Capa 1. Si una petición toca eso, avísame y recuérdame que está congelado.
 - Si aparece una idea nueva, pásala por "la línea" (CANON sección 4) antes de construir.
+- Prohibido justificar omitir, aplazar o simplificar una función por ser el cliente un autónomo o negocio pequeño. El alcance se decide por momento/orden de construcción, nunca por tamaño de cliente. Si la palabra "autónomo" hace algún trabajo en el argumento, el argumento está mal: rehacerlo.
 - La métrica de progreso es TAREAS COMPLETADAS, no líneas de código.
 - Al terminar la sesión, sigue el paso de cierre del RITUAL (resumen + actualizar Notion).
 
