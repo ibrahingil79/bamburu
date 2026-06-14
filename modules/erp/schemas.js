@@ -3,6 +3,9 @@ import { str, strOpt, email as emailField, price, intPos } from '../../core/vali
 import { ADJUST_REASONS, ADJUST_MODES } from './stock.js';
 
 const optId = z.union([z.null(), z.coerce.number().int().positive()]).optional();
+// Multi-almacén · Capa 2 — almacén opcional en las operaciones. Permisivo: '' / null /
+// ausente = "no se eligió" → el servidor cae al principal (resolveWarehouseId). Nunca rechaza.
+const optWarehouse = z.union([z.literal(''), z.null(), z.coerce.number().int().positive()]).optional();
 const priceOpt = z.union([z.null(), z.coerce.number().nonnegative().max(1_000_000)]).optional();
 
 // ── Products ───────────────────────────────────────────────────
@@ -21,6 +24,7 @@ export const productSchema = z.object({
   featured: z.coerce.boolean().default(false),
   tags: z.array(intPos).optional().default([]),
   stock: z.coerce.number().int().min(0).default(0),
+  warehouse_id: optWarehouse,            // Capa 2: almacén del stock inicial (apertura); principal por defecto
 });
 
 export const productImageSchema = z.object({
@@ -107,6 +111,7 @@ export const posSchema = z.object({
   items: z.array(posItemSchema).min(1),
   shipping_method_id: optId,
   discount_code: z.union([z.string().max(50), z.null()]).optional(),
+  warehouse_id: optWarehouse,            // Capa 2: almacén de la venta (guarda + salida); principal por defecto
 });
 
 export const orderStatusSchema = z.object({
@@ -253,6 +258,7 @@ export const stockAdjustSchema = z.object({
   value:  z.coerce.number().int().min(0),
   reason: z.enum(ADJUST_REASONS),
   note:   strOpt(500),
+  warehouse_id: optWarehouse,            // Capa 2: almacén del ajuste; principal por defecto
 });
 
 // ── Shipping ───────────────────────────────────────────────────
@@ -338,6 +344,7 @@ export const purchaseSchema = z.object({
   notes:       strOpt(1000),
   status:      z.enum(['pending','received','cancelled']).default('received'),
   items:       z.array(purchaseItemSchema).min(1),
+  warehouse_id: optWarehouse,            // Capa 2: almacén de destino de la compra; principal por defecto
 });
 
 // ── Orden de compra (C1.a) ─────────────────────────────────────
@@ -379,6 +386,7 @@ export const purchaseOrderReceiptSchema = z.object({
   // C1.c — recibir MÁS que el pendiente exige confirmación EXPLÍCITA del cliente
   // (aviso confirmado, nunca silencioso): con exceso y sin este flag → 400.
   confirm_excess: z.coerce.boolean().optional().default(false),
+  warehouse_id: optWarehouse,            // Capa 2: almacén de ESTA recepción; principal por defecto
 });
 
 // ── Devolución a proveedor ─────────────────────────────────────

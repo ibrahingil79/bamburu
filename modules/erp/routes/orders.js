@@ -6,7 +6,8 @@ import { posSchema, orderStatusSchema, orderNotesSchema, orderTrackingSchema, re
 import { escHtml } from '../../../core/escape.js';
 import { generateInvoice } from './invoices.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
-import { recordMovement } from '../stock.js';
+import { recordMovement, resolveWarehouseId, productStockInWarehouse, originMovementWarehouse } from '../stock.js';
+import { activeWarehouses } from './warehouses.js';
 
 const ORDER_STATUSES = [
   'borrador', 'en_preparacion', 'enviado',
@@ -39,8 +40,10 @@ export function createOrderRoutes(db, cfg = {}) {
   // ── API: SALES (POS, kept compatible) ─────────────────────────
   api.post('/sales', requirePerm('orders.create'), validate(posSchema), async c => {
     try {
-      const { client_id, items, shipping_method_id, discount_code } = c.get('validated');
+      const { client_id, items, shipping_method_id, discount_code, warehouse_id } = c.get('validated');
       if (!items || !items.length) return c.json({error:'Carrito vacío'},400);
+      // Capa 2: la venta opera sobre un almacén (el elegido, o el principal por defecto).
+      const wid = resolveWarehouseId(db, warehouse_id);
 
       const cfg = db.prepare('SELECT tax_rate FROM company_config WHERE id=1').get();
       const taxRate = cfg ? cfg.tax_rate : 21;
@@ -77,11 +80,14 @@ export function createOrderRoutes(db, cfg = {}) {
           const p = db.prepare('SELECT stock FROM products WHERE id=?').get(it.id);
           if (!p) throw new Error('Producto no encontrado: ' + it.name);
           if (it.variant_id) {
+            // C3: las variantes conservan su stock GLOBAL (product_variants.stock), sin almacén.
             const v = db.prepare('SELECT stock FROM product_variants WHERE id=? AND product_id=?').get(it.variant_id, it.id);
             if (!v) throw new Error('Variante no encontrada: ' + it.name);
             if (v.stock < parseInt(it.qty)) throw new Error('Stock insuficiente para la variante: ' + it.name);
           } else {
-            if (p.stock < parseInt(it.qty)) throw new Error('Stock insuficiente: ' + it.name);
+            // Capa 2: la guarda mira el saldo del ALMACÉN elegido (no el global). Política
+            // actual conservada: el POS bloquea vender por encima de lo que hay en ese almacén.
+            if (productStockInWarehouse(db, it.id, wid) < parseInt(it.qty)) throw new Error('Stock insuficiente en el almacén seleccionado: ' + it.name);
           }
         }
         const ord = db.prepare('INSERT INTO sales_orders (order_number,client_id,shipping_method_id,discount_code_id,subtotal,shipping_cost,discount_amount,tax_amount,total,status,source) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(num, client_id||null, shippingId, discountCodeId, subtotal, shippingCost, discountAmount, tax, total, 'completado', 'pos');
@@ -89,7 +95,8 @@ export function createOrderRoutes(db, cfg = {}) {
         items.forEach(it => {
           db.prepare('INSERT INTO sales_items (order_id,product_id,variant_id,product_name,quantity,unit_price,total) VALUES (?,?,?,?,?,?,?)').run(orderId, it.id, it.variant_id || null, it.name, parseInt(it.qty), parseFloat(it.price), parseFloat(it.price)*parseInt(it.qty));
           // Pilar 3: el stock sale al libro (caché derivada vía recomputeStock), no por UPDATE directo.
-          recordMovement(db, { product_id: it.id, type: 'salida', quantity: -parseInt(it.qty), origin_type: 'order', origin_id: orderId, note: `Venta POS (Pedido #${num})` });
+          // Capa 2: la salida va al almacén elegido (wid).
+          recordMovement(db, { product_id: it.id, type: 'salida', quantity: -parseInt(it.qty), origin_type: 'order', origin_id: orderId, warehouse_id: wid, note: `Venta POS (Pedido #${num})` });
           if (it.variant_id) {
             db.prepare('UPDATE product_variants SET stock=stock-? WHERE id=? AND product_id=?').run(parseInt(it.qty), it.variant_id, it.id);
           }
@@ -112,8 +119,12 @@ export function createOrderRoutes(db, cfg = {}) {
         console.error('Error al generar factura automática para pedido ' + num + ':', invoiceErr);
       }
 
+      // Capa 2: recuerda el almacén usado por este usuario (pegajoso, aditivo).
+      const uid = c.get('session')?.userId;
+      if (uid) { try { db.prepare('UPDATE admin_users SET last_warehouse_id=? WHERE id=?').run(wid, uid); } catch (_) {} }
+
       logActivity(db, c.get('session'), 'Creó venta POS', 'order', null, num);
-      return c.json({order_number: num, message:'Venta completada', total});
+      return c.json({order_number: num, message:'Venta completada', total, warehouse_id: wid});
     } catch(e) { return c.json({error:e.message},500); }
   });
 
@@ -169,7 +180,9 @@ export function createOrderRoutes(db, cfg = {}) {
         const items = db.prepare('SELECT * FROM sales_items WHERE order_id=?').all(c.req.param('id'));
         for (const item of items) {
           // Devuelve al libro lo reservado por el borrador (entrada, mismo pedido; no es reversión).
-          recordMovement(db, { product_id: item.product_id, type: 'entrada', quantity: item.quantity, origin_type: 'order', origin_id: order.id, note: `Cancelación de borrador (Pedido #${order.order_number})` });
+          // C1: la entrada vuelve al MISMO almacén del que salió (deriva del movimiento original);
+          // para un borrador es el principal, así que es idéntico a hoy.
+          recordMovement(db, { product_id: item.product_id, type: 'entrada', quantity: item.quantity, origin_type: 'order', origin_id: order.id, warehouse_id: originMovementWarehouse(db, 'order', order.id, item.product_id), note: `Cancelación de borrador (Pedido #${order.order_number})` });
           if (item.variant_id) {
             db.prepare('UPDATE product_variants SET stock = stock + ? WHERE id = ? AND product_id = ?').run(item.quantity, item.variant_id, item.product_id);
           }
@@ -483,6 +496,19 @@ export function createOrderRoutes(db, cfg = {}) {
   // ── VIEW: POS ──────────────────────────────────────────────────
   views.get('/pos', c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
+    // Capa 2: selector de almacén que recuerda el último usado por ESTE usuario (pegajoso).
+    const posWarehouses = activeWarehouses(db);
+    const defWh = (posWarehouses.find(w => w.is_default) || posWarehouses[0] || {}).id || '';
+    const lastWh = db.prepare('SELECT last_warehouse_id FROM admin_users WHERE id=?').get(c.get('session')?.userId)?.last_warehouse_id;
+    const selWh = (lastWh && posWarehouses.some(w => w.id === lastWh)) ? lastWh : defWh;
+    const whSelectorHtml = posWarehouses.length > 1
+      ? `<div style="margin-bottom:1rem">
+           <label class="form-label" style="margin:0 0 .3rem">Almacén</label>
+           <select class="form-control" id="posWarehouse" onchange="onWhChange()">
+             ${posWarehouses.map(w => `<option value="${w.id}"${w.id === selWh ? ' selected' : ''}>${String(w.name).replace(/</g, '&lt;')}${w.is_default ? ' (principal)' : ''}</option>`).join('')}
+           </select>
+         </div>`
+      : `<input type="hidden" id="posWarehouse" value="${selWh}">`;   // un solo almacén: oculto, sin UI
     const content = `
       <div class="ph"><h2>Punto de Venta</h2></div>
       <div class="grid g2">
@@ -506,6 +532,7 @@ export function createOrderRoutes(db, cfg = {}) {
                 </div>
                 <select class="form-control" id="posClient"><option value="">Anónimo</option></select>
               </div>
+              ${whSelectorHtml}
               <div id="cartItems" style="min-height:80px;border:1px dashed var(--border);border-radius:6px;padding:.75rem;margin-bottom:1rem"></div>
               <div style="margin-bottom:1rem">
                 <label class="form-label">Cupón de descuento</label>
@@ -557,23 +584,46 @@ export function createOrderRoutes(db, cfg = {}) {
       <script>
       let cart=[],prods=[],couponApplied=null,_vmProd=null;
       window._sym='${sym}';
+      // Capa 2: almacén activo del POS + mapa de stock de ese almacén (al vuelo).
+      let WH=document.getElementById('posWarehouse')?document.getElementById('posWarehouse').value:'';
+      let whStock={};
+      // Stock disponible según el almacén elegido. C3: las variantes siguen GLOBALES
+      // (su stock vive en product_variants.stock, fuera del libro), así que para productos
+      // con variante se usa el total global del producto.
+      function whStockOf(p){
+        if(p.variants&&p.variants.length>0) return p.stock;
+        return (whStock[p.id]!=null?whStock[p.id]:0);
+      }
+      async function loadWhStock(){
+        whStock={};
+        if(!WH){ return; }
+        try{ const rows=await api('GET','/api/erp/warehouses/'+WH+'/stock'); (rows||[]).forEach(function(r){ whStock[r.product_id]=r.qty; }); }catch(e){}
+      }
+      async function onWhChange(){
+        WH=document.getElementById('posWarehouse').value;
+        await loadWhStock();
+        filterProds();
+      }
       async function loadPOS(){
         [prods,clients,shipping]=await Promise.all([
           api('GET','/api/erp/products').catch(()=>[]),
           api('GET','/api/erp/clients').catch(()=>[]),
           api('GET','/api/erp/shipping').catch(()=>[])
         ]);
-        prods=prods.filter(p=>p.status==='active'&&p.stock>0);
+        prods=prods.filter(p=>p.status==='active');
         const cl=document.getElementById('posClient');
         cl.innerHTML='<option value="">Anónimo</option>'+clients.map(c=>'<option value="'+c.id+'">'+c.name+'</option>').join('');
         const sm=document.getElementById('shippingMethod');
         sm.innerHTML='<option value="">Sin envío (retiro/local)</option>'+shipping.filter(s=>s.active).map(s=>'<option value="'+s.id+'">'+s.name+' — ${sym}'+s.price+(s.free_from?' (gratis desde ${sym}'+s.free_from+')':'')+'</option>').join('');
+        await loadWhStock();
         filterProds();
       }
       function filterProds(){
         const q=document.getElementById('prodSearch').value.toLowerCase();
-        const filtered=q?prods.filter(p=>p.name.toLowerCase().includes(q)):prods;
-        document.getElementById('prodList').innerHTML=filtered.map(p=>'<div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:.75rem;cursor:pointer" onclick="addToCart('+p.id+')">'+(p.image_url?'<img src="'+p.image_url+'" style="width:100%;height:80px;object-fit:cover;border-radius:4px;margin-bottom:.4rem">':'<div style="height:60px;display:flex;align-items:center;justify-content:center;font-size:1.5rem"></div>')+'<div style="font-size:.8rem;font-weight:600">'+p.name+'</div><div style="color:#10b981;font-size:.85rem;font-weight:700">${sym}'+p.price.toFixed(2)+'</div><div style="font-size:.72rem;color:var(--muted)">Stock: '+p.stock+'</div></div>').join('');
+        // Disponibles = stock > 0 EN EL ALMACÉN elegido (variantes: global).
+        const base=prods.filter(p=>whStockOf(p)>0);
+        const filtered=q?base.filter(p=>p.name.toLowerCase().includes(q)):base;
+        document.getElementById('prodList').innerHTML=filtered.length?filtered.map(p=>'<div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:.75rem;cursor:pointer" onclick="addToCart('+p.id+')">'+(p.image_url?'<img src="'+p.image_url+'" style="width:100%;height:80px;object-fit:cover;border-radius:4px;margin-bottom:.4rem">':'<div style="height:60px;display:flex;align-items:center;justify-content:center;font-size:1.5rem"></div>')+'<div style="font-size:.8rem;font-weight:600">'+p.name+'</div><div style="color:#10b981;font-size:.85rem;font-weight:700">${sym}'+p.price.toFixed(2)+'</div><div style="font-size:.72rem;color:var(--muted)">Stock: '+whStockOf(p)+'</div></div>').join(''):'<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:1.5rem">Sin productos con stock en este almacén</div>';
       }
       function addToCart(id){
         const p=prods.find(x=>x.id===id);if(!p)return;
@@ -620,10 +670,13 @@ export function createOrderRoutes(db, cfg = {}) {
         const clientId=rawClient?parseInt(rawClient,10):null;
         const shippingId=document.getElementById('shippingMethod').value||null;
         try{
-          const d=await api('POST','/api/erp/orders/sales',{client_id:clientId,items:cart.map(x=>({id:x.id,variant_id:x.variant_id||null,name:x.name,price:x.price,qty:x.qty})),shipping_method_id:shippingId,discount_code:couponApplied?document.getElementById('couponCode').value:null});
+          const d=await api('POST','/api/erp/orders/sales',{client_id:clientId,items:cart.map(x=>({id:x.id,variant_id:x.variant_id||null,name:x.name,price:x.price,qty:x.qty})),shipping_method_id:shippingId,discount_code:couponApplied?document.getElementById('couponCode').value:null,warehouse_id:WH||null});
           toast('Venta: '+d.order_number+' — ${sym}'+Number(d.total||0).toFixed(2));
           cart=[];couponApplied=null;document.getElementById('couponCode').value='';document.getElementById('couponMsg').textContent='';
           renderCart();
+          // El stock del almacén bajó: refresca disponibilidad y catálogo (variantes globales aparte).
+          await Promise.all([loadWhStock(), api('GET','/api/erp/products').then(function(pp){ prods=(pp||[]).filter(p=>p.status==='active'); }).catch(function(){})]);
+          filterProds();
         }catch(e){toast(e.message,'err')}
       }
       async function saveNewClient(){
@@ -782,7 +835,8 @@ export function createOrderRoutes(db, cfg = {}) {
           const items = db.prepare('SELECT * FROM sales_items WHERE order_id=?').all(id);
           for (const item of items) {
             // Devuelve al libro lo reservado (entrada, mismo pedido).
-            recordMovement(db, { product_id: item.product_id, type: 'entrada', quantity: item.quantity, origin_type: 'order', origin_id: order.id, note: `Cancelación de pedido (Pedido #${order.order_number})` });
+            // C1: vuelve al MISMO almacén del que salió (deriva del movimiento original).
+            recordMovement(db, { product_id: item.product_id, type: 'entrada', quantity: item.quantity, origin_type: 'order', origin_id: order.id, warehouse_id: originMovementWarehouse(db, 'order', order.id, item.product_id), note: `Cancelación de pedido (Pedido #${order.order_number})` });
             if (item.variant_id) {
               db.prepare('UPDATE product_variants SET stock = stock + ? WHERE id = ? AND product_id = ?').run(item.quantity, item.variant_id, item.product_id);
             }

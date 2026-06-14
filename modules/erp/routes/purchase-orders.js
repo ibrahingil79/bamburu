@@ -7,6 +7,7 @@ import { createReceiptSvc, orderReceptionState, receiptsOfOrder } from './purcha
 import { nextCode } from '../codes.js';
 import { computeTotals } from './invoices.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
+import { activeWarehouses } from './warehouses.js';
 import { sendEmail } from '../../../core/mailer.js';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -756,6 +757,9 @@ export function createPurchaseOrderRoutes(db) {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const today = new Date().toISOString().split('T')[0];
     const csrfToken = c.get('session')?.csrfToken || '';
+    // Capa 2: almacén de ESTA recepción (principal por defecto; cada parcial puede ir a otro).
+    const warehouses = activeWarehouses(db);
+    const whOptions = warehouses.map(w => '<option value="' + w.id + '"' + (w.is_default ? ' selected' : '') + '>' + esc(w.name) + (w.is_default ? ' (principal)' : '') + '</option>').join('');
 
     const rows = pendingLines.map(l => `
       <tr data-oid="${l.order_item_id}" data-pend="${l.pendiente}" data-pedido="${l.pedido}" data-rec="${l.recibido}">
@@ -779,6 +783,7 @@ export function createPurchaseOrderRoutes(db) {
         <div class="card-body">
           <div class="form-row">
             <div class="form-group"><label class="form-label">Fecha *</label><input class="form-control" type="date" id="rDate" value="${today}"></div>
+            <div class="form-group"><label class="form-label">Almacén de recepción</label><select class="form-control" id="rWarehouse">${whOptions}</select></div>
             <div class="form-group"><label class="form-label">Notas</label><input class="form-control" id="rNotes" placeholder="Nº de albarán del proveedor, incidencias..."></div>
           </div>
         </div>
@@ -856,7 +861,7 @@ export function createPurchaseOrderRoutes(db) {
         btn.disabled = true;
         try {
           const d = await api('POST','/api/erp/purchase-orders/${id}/receipts',
-            { date: date, notes: document.getElementById('rNotes').value.trim(), items: col.items, confirm_excess: col.excess.length > 0 });
+            { date: date, notes: document.getElementById('rNotes').value.trim(), items: col.items, confirm_excess: col.excess.length > 0, warehouse_id: parseInt(document.getElementById('rWarehouse').value) || null });
           toast(d.message || 'Recepción confirmada');
           window.location.href = '/admin/purchase-order-receipts/' + d.id;
         } catch(e){ toast(e.message || 'Error registrando la recepción','err'); btn.disabled = false; }

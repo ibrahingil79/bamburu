@@ -10,7 +10,10 @@ export function stockModalHtml() {
     <div class="modal" style="max-width:520px">
       <div class="modal-head"><h3 id="stockAdjTitle">Ajustar stock</h3><button class="modal-close" onclick="closeModal('stockAdjModal')">✕</button></div>
       <div class="modal-body">
-        <div style="margin-bottom:.75rem;color:var(--muted)">Stock actual: <strong id="stockAdjCurrent">—</strong></div>
+        <div class="form-group" id="stockAdjWhWrap"><label class="form-label">Almacén</label>
+          <select class="form-control" id="stockAdjWh" onchange="stockAdjWhChange()"></select>
+        </div>
+        <div style="margin-bottom:.75rem;color:var(--muted)">Stock actual en el almacén: <strong id="stockAdjCurrent">—</strong></div>
         <div class="form-row" style="gap:.5rem">
           <div class="form-group"><label class="form-label">Modo</label>
             <select class="form-control" id="stockAdjMode" onchange="stockAdjLabel()">
@@ -39,12 +42,28 @@ export function stockModalHtml() {
   </div>`;
 }
 
-export function stockModalScript(sym) {
+export function stockModalScript(sym, warehouses = []) {
   return `
   (function(){
     const SYM = ${JSON.stringify(sym)};
     const TYPE_LABEL = ${JSON.stringify(TYPE_LABEL)};
+    const WAREHOUSES = ${JSON.stringify(warehouses)};   // Capa 2: almacenes activos
     let curProd = null;     // {id, name}
+    let curByWh = [];       // by_warehouse del producto abierto (para "Stock actual" por almacén)
+    // Almacén por defecto del ajuste: el del filtro activo en pantalla si lo hay; si no, el principal.
+    function defaultAdjWh(){
+      const f = Number(window.stockFilterWarehouse);
+      if (Number.isFinite(f) && f > 0 && WAREHOUSES.some(w => w.id === f)) return f;
+      const def = WAREHOUSES.find(w => w.is_default) || WAREHOUSES[0];
+      return def ? def.id : '';
+    }
+    function whQty(wid){ const r = curByWh.find(x => x.id === Number(wid)); return r ? r.qty : 0; }
+    window.stockAdjWhChange = function(){
+      const wid = document.getElementById('stockAdjWh').value;
+      const q = whQty(wid);
+      document.getElementById('stockAdjCurrent').textContent = q;
+      if (document.getElementById('stockAdjMode').value === 'set') document.getElementById('stockAdjValue').value = q;
+    };
     window.stockAdjLabel = function(){
       const m = document.getElementById('stockAdjMode').value;
       document.getElementById('stockAdjValLabel').textContent = m==='set' ? 'Nuevo total' : 'Cantidad';
@@ -105,15 +124,22 @@ export function stockModalScript(sym) {
       // (el modal ya está abierto desde el inicio del gesto de clic)
     };
     function badge(t){ return ({apertura:'b-gray',entrada:'b-green',salida:'b-red',ajuste:'b-yellow',transferencia:'b-blue'})[t]||''; }
-    // Abre el modal de ajuste (modos poner/sumar/restar + motivo + nota).
-    window.openAjustar = function(id, name, current){
+    // Abre el modal de ajuste (modos poner/sumar/restar + motivo + nota). Capa 2: opera sobre
+    // UN almacén; "Stock actual" y el valor de "Poner a" reflejan el saldo de ESE almacén.
+    window.openAjustar = async function(id, name){
       curProd = { id: id, name: name||('#'+id) };
       document.getElementById('stockAdjTitle').textContent = 'Ajustar stock · '+curProd.name;
-      document.getElementById('stockAdjCurrent').textContent = (current!=null?current:'—');
+      const sel = document.getElementById('stockAdjWh');
+      const wrap = document.getElementById('stockAdjWhWrap');
+      sel.innerHTML = WAREHOUSES.map(function(w){ return '<option value="'+w.id+'">'+escHtml(w.name)+(w.is_default?' (principal)':'')+'</option>'; }).join('');
+      if (wrap) wrap.style.display = WAREHOUSES.length > 1 ? '' : 'none';   // un solo almacén → sin selector
+      curByWh = [];
+      try { const d = await api('GET','/api/erp/products/'+id+'/stock'); curByWh = d.by_warehouse || []; } catch(e){}
+      sel.value = String(defaultAdjWh());
       document.getElementById('stockAdjMode').value='set';
-      document.getElementById('stockAdjValue').value = (current!=null?current:0);
       document.getElementById('stockAdjReason').selectedIndex = 0;
       document.getElementById('stockAdjNote').value='';
+      stockAdjWhChange();   // fija "Stock actual" y el valor de "Poner a" según el almacén
       stockAdjLabel();
       openModal('stockAdjModal');
     };
@@ -125,7 +151,7 @@ export function stockModalScript(sym) {
       const note = document.getElementById('stockAdjNote').value;
       if(!(value>=0)){ toast('Cantidad no válida','err'); return; }
       try {
-        const r = await api('POST','/api/erp/products/'+curProd.id+'/stock/adjust',{ mode, value, reason, note });
+        const r = await api('POST','/api/erp/products/'+curProd.id+'/stock/adjust',{ mode, value, reason, note, warehouse_id: document.getElementById('stockAdjWh').value || null });
         toast(r.message || ('Stock: '+r.stock));
         closeModal('stockAdjModal');
         if (typeof window.stockOnSaved === 'function') window.stockOnSaved(curProd.id);

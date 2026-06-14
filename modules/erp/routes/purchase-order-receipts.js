@@ -4,7 +4,7 @@ import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { purchaseOrderAnularSchema } from '../schemas.js';
 import { nextCode } from '../codes.js';
-import { recordMovement } from '../stock.js';
+import { recordMovement, resolveWarehouseId } from '../stock.js';
 import { originDocBlock } from '../attachments.js';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -115,10 +115,13 @@ export function createReceiptSvc(db, orderId, d) {
     e.status = 400; throw e;
   }
 
+  // Capa 2: almacén de ESTA recepción (cada parcial puede ir a uno distinto; principal por
+  // defecto). Se guarda en la recepción para que la anulación revierta sobre el mismo almacén.
+  const wid = resolveWarehouseId(db, d.warehouse_id);
   const run = db.transaction(() => {
     const receipt_number = nextCode(db, 'purchase_order_receipt');
-    const r = db.prepare('INSERT INTO purchase_order_receipts (order_id, receipt_number, date, notes) VALUES (?,?,?,?)')
-      .run(orderId, receipt_number, d.date, d.notes || '');
+    const r = db.prepare('INSERT INTO purchase_order_receipts (order_id, receipt_number, date, notes, warehouse_id) VALUES (?,?,?,?,?)')
+      .run(orderId, receipt_number, d.date, d.notes || '', wid);
     const rid = r.lastInsertRowid;
     const ins = db.prepare('INSERT INTO purchase_order_receipt_items (receipt_id, order_item_id, product_id, quantity, unit_cost) VALUES (?,?,?,?,?)');
     for (const it of d.items) {
@@ -126,7 +129,7 @@ export function createReceiptSvc(db, orderId, d) {
       ins.run(rid, it.order_item_id, line.product_id, it.quantity, it.unit_cost);
       recordMovement(db, {
         product_id: line.product_id, type: 'entrada', quantity: it.quantity, unit_cost: it.unit_cost,
-        origin_type: 'po_receipt', origin_id: rid,
+        origin_type: 'po_receipt', origin_id: rid, warehouse_id: wid,
         note: 'Recepción ' + receipt_number + ' de la orden ' + (o.order_number || ('#' + orderId)),
       });
     }
@@ -153,11 +156,14 @@ export function cancelReceiptSvc(db, receiptId, motivo) {
   }
   const items = db.prepare('SELECT * FROM purchase_order_receipt_items WHERE receipt_id=?').all(receiptId);
 
+  // C1: la salida inversa sale del MISMO almacén de la recepción (resolveWarehouseId cae al
+  // principal para recepciones históricas sin almacén).
+  const wid = resolveWarehouseId(db, rec.warehouse_id);
   const run = db.transaction(() => {
     for (const it of items) {
       recordMovement(db, {
         product_id: it.product_id, type: 'salida', quantity: -it.quantity,
-        origin_type: 'po_receipt', origin_id: receiptId,
+        origin_type: 'po_receipt', origin_id: receiptId, warehouse_id: wid,
         note: 'Anulación de la recepción ' + (rec.receipt_number || ('#' + receiptId)),
       });
     }

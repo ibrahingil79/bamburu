@@ -40,9 +40,36 @@ export function isPhysical(db, product) {
   return !!p && (p.type || 'physical') === 'physical';
 }
 
-// Stock real = SUMA(quantity) del libro para ese producto (fuente de verdad).
+// Stock real = SUMA(quantity) del libro para ese producto (fuente de verdad, GLOBAL).
 export function productStock(db, productId) {
   return db.prepare('SELECT COALESCE(SUM(quantity),0) s FROM stock_movements WHERE product_id=?').get(productId).s;
+}
+
+// Multi-almacén · Capa 2 — saldo de un producto EN UN ALMACÉN (mismo libro, al vuelo).
+// Es la vía única de la guarda "¿hay suficiente?" por almacén (no hay caché por almacén).
+export function productStockInWarehouse(db, productId, warehouseId) {
+  return db.prepare('SELECT COALESCE(SUM(quantity),0) s FROM stock_movements WHERE product_id=? AND warehouse_id=?')
+    .get(productId, warehouseId).s;
+}
+
+// Resuelve el almacén de una operación: el pedido si es un almacén ACTIVO válido; si no
+// ('' / null / inexistente / archivado), el principal. Centraliza "selector vacío → principal".
+export function resolveWarehouseId(db, requested) {
+  const id = Number(requested);
+  if (Number.isFinite(id) && id > 0) {
+    const w = db.prepare('SELECT id FROM warehouses WHERE id=? AND active=1').get(id);
+    if (w) return w.id;
+  }
+  return defaultWarehouseId(db);
+}
+
+// Almacén del que SALIÓ un movimiento de un origen dado (para devolver la entrada al MISMO
+// almacén — C1). Mira la salida (quantity<0) de ese origen+producto; histórico → principal.
+export function originMovementWarehouse(db, originType, originId, productId) {
+  const r = db.prepare(
+    'SELECT warehouse_id FROM stock_movements WHERE origin_type=? AND origin_id=? AND product_id=? AND quantity<0 ORDER BY id LIMIT 1'
+  ).get(originType, originId, productId);
+  return r ? r.warehouse_id : defaultWarehouseId(db);
 }
 
 // Mantiene products.stock == SUMA(libro) Y products.average_cost (coste medio ponderado, WAC)
@@ -109,7 +136,7 @@ export function kardex(db, productId) {
 // ── SERVICIO: ajuste manual (modo poner/sumar/restar) ───────────────────────
 // Crea UN movimiento type='ajuste', origin_type='manual', con el delta calculado.
 // Rechaza (status 400) si el producto no es físico o el motivo no es válido.
-export function adjustStock(db, productId, { mode, value, reason, note }, opts = {}) {
+export function adjustStock(db, productId, { mode, value, reason, note, warehouse_id }, opts = {}) {
   const product = db.prepare('SELECT * FROM products WHERE id=?').get(productId);
   if (!product) { const e = new Error('Producto no encontrado'); e.status = 404; throw e; }
   if (!isPhysical(db, product)) { const e = new Error('Solo los productos físicos llevan stock'); e.status = 400; throw e; }
@@ -118,15 +145,19 @@ export function adjustStock(db, productId, { mode, value, reason, note }, opts =
   const v = Number(value);
   if (!Number.isFinite(v) || v < 0) { const e = new Error('Cantidad no válida'); e.status = 400; throw e; }
 
-  const current = productStock(db, productId);
+  // Capa 2: el ajuste opera sobre UN almacén (principal por defecto). "Poner a X" es
+  // relativo al saldo de ESE almacén; sumar/restar es el delta. El ajuste puede dejar
+  // negativo a propósito (política actual, sin guarda de negativo).
+  const wid = resolveWarehouseId(db, warehouse_id);
+  const current = productStockInWarehouse(db, productId, wid);
   const delta = mode === 'set' ? (v - current) : mode === 'add' ? v : -v;
-  if (delta === 0) return { stock: current, movement_id: null, delta: 0, message: 'Sin cambios' };
+  if (delta === 0) return { stock: current, warehouse_id: wid, movement_id: null, delta: 0, message: 'Sin cambios' };
 
   const movement_id = recordMovement(db, {
     product_id: productId, type: 'ajuste', quantity: delta, reason,
-    origin_type: 'manual', note: note || null, created_at: opts.created_at,
+    origin_type: 'manual', note: note || null, warehouse_id: wid, created_at: opts.created_at,
   });
-  return { stock: productStock(db, productId), movement_id, delta };
+  return { stock: productStockInWarehouse(db, productId, wid), warehouse_id: wid, movement_id, delta };
 }
 
 // ── SERVICIO: revertir un movimiento (corrige un error) ─────────────────────

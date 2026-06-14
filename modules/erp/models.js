@@ -400,6 +400,12 @@ export function runMigrations(db) {
   // resto. Así el comportamiento es idéntico hasta que el usuario reasigne el principal a
   // mano. Idempotente: re-ejecutar no cambia nada (la bandera corta).
   addCol(db, 'warehouses', 'is_default', 'INTEGER DEFAULT 0');
+  // Multi-almacén · Capa 2 — almacén elegido por operación (aditivo, NULL = principal,
+  // resuelto por resolveWarehouseId → comportamiento idéntico a Capa 1 hasta que se elija).
+  // admin_users ya existe aquí; purchases / purchase_order_receipts reciben su columna
+  // JUNTO a la creación de su tabla (más abajo), no aquí.
+  // No hay backfill: NULL ya cae al principal; los movimientos históricos no se tocan.
+  addCol(db, 'admin_users', 'last_warehouse_id', 'INTEGER');   // último almacén usado en POS por ese usuario
   const whDefaultKey = 'migration_warehouse_default_2026_v1';
   if (!db.prepare('SELECT value FROM settings WHERE key=?').get(whDefaultKey)) {
     const def = db.prepare('SELECT id FROM warehouses WHERE active=1 ORDER BY id LIMIT 1').get();
@@ -642,6 +648,7 @@ export function runMigrations(db) {
   // Motor de Compras: archivar (no borrar) las compras rotas heredadas (sin líneas en
   // purchase_items) para que no ensucien el listado. Aditivo (addCol). Una vez por tenant.
   addCol(db, 'purchases', 'archived', 'INTEGER DEFAULT 0');
+  addCol(db, 'purchases', 'warehouse_id', 'INTEGER');   // Capa 2: almacén de destino de la compra directa (NULL = principal)
   const purgeKey = 'migration_purchases_archive_broken_2026_v1';
   if (!db.prepare('SELECT value FROM settings WHERE key=?').get(purgeKey)) {
     db.prepare(`UPDATE purchases SET archived=1
@@ -725,6 +732,7 @@ export function runMigrations(db) {
   )`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_po_receipts_order ON purchase_order_receipts(order_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_po_receipt_items_receipt ON purchase_order_receipt_items(receipt_id)`);
+  addCol(db, 'purchase_order_receipts', 'warehouse_id', 'INTEGER');   // Capa 2: almacén de ESA recepción (NULL = principal)
 
   // Devolución a proveedor: SOLO la capa física (sale el stock + documento inmutable).
   // La capa del dinero (lo que el proveedor abona / cuentas con proveedores) es tarea

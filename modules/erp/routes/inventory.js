@@ -45,11 +45,12 @@ export function createInventoryRoutes(db, cfg = {}) {
 
       ${stockModalHtml()}
       <script>
-      ${stockModalScript(sym)}
+      ${stockModalScript(sym, warehouses)}
       const CAN_EDIT = ${canEdit ? 'true' : 'false'};
       const WAREHOUSES = ${JSON.stringify(warehouses)};
       let prods=[];
       let WH='';            // '' = Todos (total global); si no, id de almacén
+      window.stockFilterWarehouse = '';   // Capa 2: el ajuste por defecto usa el almacén del filtro activo
       let whMap=null;       // mapa product_id -> cantidad en el almacén WH (null si Todos)
       // Cantidad a mostrar de un producto: global (caché) si "Todos", o por almacén (al vuelo).
       function stockOf(p){ return WH==='' ? (p.stock||0) : (whMap && whMap[p.id]!=null ? whMap[p.id] : 0); }
@@ -62,6 +63,7 @@ export function createInventoryRoutes(db, cfg = {}) {
       }
       async function onWhChange(){
         WH = document.getElementById('whFilter').value;
+        window.stockFilterWarehouse = WH;   // el ajuste por defecto apuntará a este almacén
         if (WH===''){ whMap=null; }
         else {
           try {

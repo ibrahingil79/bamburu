@@ -4,8 +4,8 @@ import { logActivity, requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { productSchema, productImageSchema, variantSchema, tagSchema, stockAdjustSchema } from '../schemas.js';
 import { getVatBands } from '../../../core/vat-bands.js';
-import { adjustStock, kardex, productStock, isPhysical, recordMovement, TYPE_LABEL, REASON_LABEL } from '../stock.js';
-import { warehouseBreakdown } from './warehouses.js';
+import { adjustStock, kardex, productStock, isPhysical, recordMovement, resolveWarehouseId, TYPE_LABEL, REASON_LABEL } from '../stock.js';
+import { warehouseBreakdown, activeWarehouses } from './warehouses.js';
 import { stockModalHtml, stockModalScript } from '../views/stock-modal.js';
 import { nextCode } from '../codes.js';
 
@@ -63,7 +63,8 @@ export function createProductSvc(db, input) {
     .run(d.name, slug, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', ptype, d.digital_file_url||'', d.featured?1:0, 0, d.supplier_id||null, rate, band, code);
   const id = r.lastInsertRowid;
   if (ptype === 'physical' && initialStock > 0) {
-    recordMovement(db, { product_id: id, type: 'apertura', quantity: initialStock, origin_type: 'opening', note: 'Stock inicial' });
+    // Capa 2: el stock inicial entra al almacén elegido (principal por defecto).
+    recordMovement(db, { product_id: id, type: 'apertura', quantity: initialStock, origin_type: 'opening', warehouse_id: resolveWarehouseId(db, d.warehouse_id), note: 'Stock inicial' });
   }
   if (d.tags?.length) {
     for (const tid of d.tags) {
@@ -144,7 +145,7 @@ export function createProductRoutes(db, cfg = {}) {
     try {
       const id = parseInt(c.req.param('id'));
       const d = c.get('validated');
-      const res = adjustStock(db, id, { mode: d.mode, value: d.value, reason: d.reason, note: d.note });
+      const res = adjustStock(db, id, { mode: d.mode, value: d.value, reason: d.reason, note: d.note, warehouse_id: d.warehouse_id });
       logActivity(db, c.get('session'), 'Ajustó stock', 'product', id, `${d.mode} ${d.value} (${d.reason}) → ${res.stock}`);
       return c.json(res);
     } catch(e) { return c.json({ error: e.message }, e.status || 400); }
@@ -257,6 +258,9 @@ export function createProductRoutes(db, cfg = {}) {
     const fallbackRate = cfgRow.tax_rate != null ? cfgRow.tax_rate : 21;
     const vatBands = getVatBands(country, fallbackRate);   // bandas del país (hoy ES); no quemadas en la pantalla
     const vatBandsJson = JSON.stringify(vatBands);
+    // Capa 2: almacén del stock inicial (apertura) al crear un producto físico; principal por defecto.
+    const warehouses = activeWarehouses(db);
+    const whInitOptions = warehouses.map(w => '<option value="'+w.id+'"'+(w.is_default?' selected':'')+'>'+String(w.name).replace(/</g,'&lt;')+(w.is_default?' (principal)':'')+'</option>').join('');
 
     // P4: búsqueda (nombre/SKU), filtro por categoría y paginación, todo por URL (GET).
     const q = (c.req.query('q') || '').trim();
@@ -367,6 +371,7 @@ export function createProductRoutes(db, cfg = {}) {
                 <div class="form-group"><label class="form-label">Tipo de IVA *</label><select class="form-control" id="pTaxBand"></select></div>
                 <div class="form-group" style="display:none"><label class="form-label">Precio antes (tachado)</label><input class="form-control" type="number" id="pCompare" step="0.01"></div><!-- OCULTO: promoción de tienda online -->
                 <div class="form-group" id="pStockWrap"><label class="form-label">Stock inicial</label><input class="form-control" type="number" id="pStock" value="0"></div>
+                <div class="form-group" id="pWarehouseWrap"><label class="form-label">Almacén del stock inicial</label><select class="form-control" id="pWarehouse">${whInitOptions}</select></div>
                 <div class="form-group" id="pStockManage" style="display:none"><label class="form-label">Stock</label><div><button type="button" class="btn btn-secondary btn-sm" onclick="openStockKardex(currentProdId, document.getElementById('pName').value)">Gestionar stock (kardex · ajustar)</button></div></div>
                 <div class="form-group" id="pAvgCostWrap" style="display:none"><label class="form-label">Coste medio</label><div id="pAvgCost" style="padding:.55rem 0;font-weight:600">—</div><div style="font-size:.7rem;color:var(--muted)">Se gana desde las compras (no editable)</div></div>
               </div>
@@ -447,7 +452,7 @@ export function createProductRoutes(db, cfg = {}) {
 
       ${stockModalHtml()}
       <script>
-      ${stockModalScript(sym)}
+      ${stockModalScript(sym, warehouses)}
       const A='/api/erp';
       const VAT_BANDS=${vatBandsJson};   // bandas de IVA del país (P1+P2 refinamiento)
       let allTags=[], allCats=[], allSuppliers=[], selTags=[], currentProdId=null;
@@ -488,6 +493,8 @@ export function createProductRoutes(db, cfg = {}) {
         const physical = !(t==='service' || t==='digital');
         const isEdit = !!currentProdId;
         document.getElementById('pStockWrap').style.display = (physical && !isEdit) ? '' : 'none';
+        const whw = document.getElementById('pWarehouseWrap');   // almacén del stock inicial: solo crear+físico
+        if (whw) whw.style.display = (physical && !isEdit) ? '' : 'none';
         const mng = document.getElementById('pStockManage');
         if (mng) mng.style.display = (physical && isEdit) ? '' : 'none';
         // Coste medio (WAC): solo lectura, solo en EDITAR de un físico (se gana desde compras).
@@ -574,7 +581,8 @@ export function createProductRoutes(db, cfg = {}) {
           tax_band:document.getElementById('pTaxBand').value,
           featured:document.getElementById('pFeatured').checked,
           tags:selTags,
-          stock:(document.getElementById('pType').value==='service'||document.getElementById('pType').value==='digital')?0:(parseInt(document.getElementById('pStock').value)||0)
+          stock:(document.getElementById('pType').value==='service'||document.getElementById('pType').value==='digital')?0:(parseInt(document.getElementById('pStock').value)||0),
+          warehouse_id:(document.getElementById('pWarehouse')?parseInt(document.getElementById('pWarehouse').value):null)||null
         };
         try{
           if(isEdit) await api('PUT',A+'/products/'+currentProdId,body);

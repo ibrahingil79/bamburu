@@ -4,7 +4,7 @@ import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { supplierReturnSchema, purchaseOrderAnularSchema } from '../schemas.js';
 import { nextCode } from '../codes.js';
-import { recordMovement, isPhysical } from '../stock.js';
+import { recordMovement, isPhysical, resolveWarehouseId, originMovementWarehouse } from '../stock.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // DEVOLUCIÓN A PROVEEDOR — solo la CAPA FÍSICA (sale el stock + documento). La
@@ -38,7 +38,7 @@ const ORIGIN = {
     load(db, id) {
       const o = db.prepare('SELECT * FROM purchases WHERE id=?').get(id);
       if (!o) return null;
-      return { status: o.status, supplier_id: o.supplier_id, archived: !!o.archived,
+      return { status: o.status, supplier_id: o.supplier_id, archived: !!o.archived, warehouse_id: o.warehouse_id,
                label: 'Compra #' + o.id + (o.reference ? ' · ' + o.reference : ''), date: o.date,
                href: '/admin/purchases/' + o.id };
     },
@@ -56,7 +56,7 @@ const ORIGIN = {
         'SELECT por.*, po.supplier_id FROM purchase_order_receipts por JOIN purchase_orders po ON po.id=por.order_id WHERE por.id=?'
       ).get(id);
       if (!r) return null;
-      return { status: r.status, supplier_id: r.supplier_id, archived: false,
+      return { status: r.status, supplier_id: r.supplier_id, archived: false, warehouse_id: r.warehouse_id,
                label: 'Recepción ' + (r.receipt_number || ('#' + r.id)), date: r.date,
                href: '/admin/purchase-order-receipts/' + r.id };
     },
@@ -155,6 +155,9 @@ export function createSupplierReturnSvc(db, d) {
     resolved.push({ origin_item_id: it.origin_item_id, product_id: line.product_id, quantity: it.quantity, unit_cost: line.unit_cost });
   }
 
+  // Capa 2: la DEV sale del MISMO almacén al que entró el documento de origen (sin selector).
+  // Origen histórico (sin almacén) → principal vía resolveWarehouseId.
+  const wid = resolveWarehouseId(db, origin.warehouse_id);
   const run = db.transaction(() => {
     const s = db.prepare('SELECT name, fiscal_id FROM suppliers WHERE id=?').get(origin.supplier_id) || {};
     const return_number = nextCode(db, 'supplier_return');
@@ -167,9 +170,10 @@ export function createSupplierReturnSvc(db, d) {
     for (const it of resolved) {
       ins.run(rid, it.origin_item_id, it.product_id, it.quantity, it.unit_cost);
       // Salida al libro con coste NULL a propósito: una salida deja el WAC intacto.
+      // Capa 2: sale del almacén del origen (wid).
       recordMovement(db, {
         product_id: it.product_id, type: 'salida', quantity: -it.quantity,
-        origin_type: 'supplier_return', origin_id: rid,
+        origin_type: 'supplier_return', origin_id: rid, warehouse_id: wid,
         note: 'Devolución ' + return_number + ' (' + origin.label + ')',
       });
     }
@@ -191,9 +195,11 @@ export function cancelSupplierReturnSvc(db, returnId, motivo) {
 
   const run = db.transaction(() => {
     for (const it of items) {
+      // C1: la re-entrada vuelve al MISMO almacén del que salió la DEV (deriva de su salida).
       recordMovement(db, {
         product_id: it.product_id, type: 'entrada', quantity: it.quantity, unit_cost: it.unit_cost,
         origin_type: 'supplier_return', origin_id: returnId,
+        warehouse_id: originMovementWarehouse(db, 'supplier_return', returnId, it.product_id),
         note: 'Anulación de la devolución ' + (sr.return_number || ('#' + returnId)),
       });
     }

@@ -3,7 +3,8 @@ import { adminLayout, can } from '../layout.js';
 import { validate } from '../../../core/validate.js';
 import { requirePerm } from '../../../core/auth.js';
 import { purchaseSchema } from '../schemas.js';
-import { recordMovement } from '../stock.js';
+import { recordMovement, resolveWarehouseId } from '../stock.js';
+import { activeWarehouses } from './warehouses.js';
 import { originDocBlock } from '../attachments.js';
 
 // ── Motor de Compras: servicios de transición (testables; los usan las rutas) ──
@@ -15,9 +16,11 @@ export function receivePurchaseSvc(db, id) {
   if (p.archived) { const e = new Error('Compra archivada'); e.status = 400; throw e; }
   if (p.status !== 'pending') { const e = new Error('Solo se puede recibir una compra pendiente'); e.status = 400; throw e; }
   const items = db.prepare('SELECT * FROM purchase_items WHERE purchase_id=?').all(id);
+  // Capa 2: la entrada va al almacén guardado en la compra (principal por defecto / histórico).
+  const wid = resolveWarehouseId(db, p.warehouse_id);
   db.transaction(() => {
     for (const item of items) {
-      recordMovement(db, { product_id: item.product_id, type: 'entrada', quantity: item.quantity, unit_cost: item.unit_cost, origin_type: 'purchase', origin_id: id, note: 'Recepción de compra #' + id + (p.reference ? ' ref:' + p.reference : '') });
+      recordMovement(db, { product_id: item.product_id, type: 'entrada', quantity: item.quantity, unit_cost: item.unit_cost, origin_type: 'purchase', origin_id: id, warehouse_id: wid, note: 'Recepción de compra #' + id + (p.reference ? ' ref:' + p.reference : '') });
     }
     db.prepare("UPDATE purchases SET status='received' WHERE id=?").run(id);
   })();
@@ -38,10 +41,13 @@ export function cancelPurchaseSvc(db, id) {
   }
   const items = db.prepare('SELECT * FROM purchase_items WHERE purchase_id=?').all(id);
   const wasReceived = p.status === 'received';
+  // C1: la salida inversa sale del MISMO almacén al que entró (el guardado en la compra;
+  // resolveWarehouseId cae al principal para compras históricas sin almacén).
+  const wid = resolveWarehouseId(db, p.warehouse_id);
   db.transaction(() => {
     if (wasReceived) {
       for (const item of items) {
-        recordMovement(db, { product_id: item.product_id, type: 'salida', quantity: -item.quantity, origin_type: 'purchase', origin_id: id, note: 'Cancelación de compra #' + id });
+        recordMovement(db, { product_id: item.product_id, type: 'salida', quantity: -item.quantity, origin_type: 'purchase', origin_id: id, warehouse_id: wid, note: 'Cancelación de compra #' + id });
       }
     }
     db.prepare("UPDATE purchases SET status='cancelled' WHERE id=?").run(id);
@@ -55,16 +61,19 @@ export function cancelPurchaseSvc(db, id) {
 // con purchaseSchema es responsabilidad del llamador (la ruta lo hace por middleware;
 // C2 lo valida antes de llamar).
 export function createDirectPurchaseSvc(db, d) {
+  // Capa 2: almacén de destino (principal por defecto). Se guarda en la compra para que
+  // recibir/cancelar usen el mismo almacén.
+  const wid = resolveWarehouseId(db, d.warehouse_id);
   const create = db.transaction(() => {
     const total = d.items.reduce((s, i) => s + i.quantity * i.unit_cost, 0);
-    const r = db.prepare('INSERT INTO purchases (supplier_id,reference,date,notes,status,total) VALUES (?,?,?,?,?,?)')
-      .run(d.supplier_id, d.reference || '', d.date, d.notes || '', d.status, total);
+    const r = db.prepare('INSERT INTO purchases (supplier_id,reference,date,notes,status,total,warehouse_id) VALUES (?,?,?,?,?,?,?)')
+      .run(d.supplier_id, d.reference || '', d.date, d.notes || '', d.status, total, wid);
     const pid = r.lastInsertRowid;
     const insItem = db.prepare('INSERT INTO purchase_items (purchase_id,product_id,quantity,unit_cost) VALUES (?,?,?,?)');
     for (const item of d.items) insItem.run(pid, item.product_id, item.quantity, item.unit_cost);
     if (d.status === 'received') {
       for (const item of d.items) {
-        recordMovement(db, { product_id: item.product_id, type: 'entrada', quantity: item.quantity, unit_cost: item.unit_cost, origin_type: 'purchase', origin_id: pid, note: 'Compra #' + pid + (d.reference ? ' ref:' + d.reference : '') });
+        recordMovement(db, { product_id: item.product_id, type: 'entrada', quantity: item.quantity, unit_cost: item.unit_cost, origin_type: 'purchase', origin_id: pid, warehouse_id: wid, note: 'Compra #' + pid + (d.reference ? ' ref:' + d.reference : '') });
       }
     }
     return pid;
@@ -179,6 +188,9 @@ export function createPurchaseRoutes(db, cfg = {}) {
     const suppliersJson = JSON.stringify(suppliers);
     const productsJson = JSON.stringify(products);
     const supOptions = suppliers.map(s => '<option value="'+s.id+'">'+s.name+'</option>').join('');
+    // Capa 2: almacén de destino, principal por defecto (NO pegajoso).
+    const warehouses = activeWarehouses(db);
+    const whOptions = warehouses.map(w => '<option value="'+w.id+'"'+(w.is_default?' selected':'')+'>'+String(w.name).replace(/</g,'&lt;')+(w.is_default?' (principal)':'')+'</option>').join('');
 
     const content = `
       <div class="ph"><h2>Nueva compra</h2><a href="/admin/purchases" class="btn btn-secondary">Volver</a></div>
@@ -196,6 +208,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
                 <option value="cancelled">Cancelada</option>
               </select>
             </div>
+            <div class="form-group"><label class="form-label">Almacén de destino</label><select class="form-control" id="fWarehouse">${whOptions}</select></div>
           </div>
           <div class="form-group"><label class="form-label">Notas</label><textarea class="form-control" id="fNotes"></textarea></div>
         </div>
@@ -320,6 +333,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
           date:document.getElementById('fDate').value,
           notes:document.getElementById('fNotes').value.trim(),
           status:document.getElementById('fStatus').value,
+          warehouse_id:parseInt(document.getElementById('fWarehouse').value)||null,
           items:items
         };
         if(!body.date){toast('La fecha es obligatoria','err');return;}
