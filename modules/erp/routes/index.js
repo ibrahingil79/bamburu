@@ -23,6 +23,7 @@ import { createPurchaseCaptureRoutes } from './purchases-capture.js';
 import { createPurchaseOrderRoutes } from './purchase-orders.js';
 import { createPurchaseOrderReceiptRoutes } from './purchase-order-receipts.js';
 import { createSupplierReturnRoutes } from './supplier-returns.js';
+import { createStockTransferRoutes } from './stock-transfers.js';
 import { createWarehouseRoutes } from './warehouses.js';
 import { createFeedbackRoutes } from './feedback.js';
 import { createInvoiceRoutes } from './invoices.js';
@@ -60,6 +61,7 @@ export function mountRoutes(app, db) {
   const { api: purchaseOrderApi, views: purchaseOrderViews } = createPurchaseOrderRoutes(db);
   const { api: poReceiptApi, views: poReceiptViews } = createPurchaseOrderReceiptRoutes(db);
   const { api: supplierReturnApi, views: supplierReturnViews } = createSupplierReturnRoutes(db);
+  const { api: stockTransferApi, views: stockTransferViews } = createStockTransferRoutes(db);
   const { api: warehouseApi, views: warehouseViews } = createWarehouseRoutes(db);
   const { api: feedbackApi, views: feedbackViews } = createFeedbackRoutes(db);
   const { api: invoiceApi, views: invoiceViews } = createInvoiceRoutes(db);
@@ -94,6 +96,7 @@ export function mountRoutes(app, db) {
   admin.route('/purchase-orders', purchaseOrderViews);
   admin.route('/purchase-order-receipts', poReceiptViews);
   admin.route('/supplier-returns', supplierReturnViews);
+  admin.route('/stock-transfers', stockTransferViews);
   admin.route('/warehouses', warehouseViews);
   admin.route('/feedback', feedbackViews);
   admin.route('/invoices', invoiceViews);
@@ -123,6 +126,7 @@ export function mountRoutes(app, db) {
   apiApp.route('/purchase-orders', purchaseOrderApi);
   apiApp.route('/purchase-order-receipts', poReceiptApi);
   apiApp.route('/supplier-returns', supplierReturnApi);
+  apiApp.route('/stock-transfers', stockTransferApi);
   apiApp.route('/warehouses', warehouseApi);
   apiApp.route('/feedback', feedbackApi);
   apiApp.route('/invoices', invoiceApi);

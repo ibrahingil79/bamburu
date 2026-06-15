@@ -5,6 +5,7 @@ import { requirePerm } from '../../../core/auth.js';
 import { purchaseSchema } from '../schemas.js';
 import { recordMovement, resolveWarehouseId } from '../stock.js';
 import { activeWarehouses } from './warehouses.js';
+import { hasActiveTransfersFromOrigin } from './stock-transfers.js';
 import { originDocBlock } from '../attachments.js';
 
 // ── Motor de Compras: servicios de transición (testables; los usan las rutas) ──
@@ -44,6 +45,12 @@ export function cancelPurchaseSvc(db, id) {
   // C1: la salida inversa sale del MISMO almacén al que entró (el guardado en la compra;
   // resolveWarehouseId cae al principal para compras históricas sin almacén).
   const wid = resolveWarehouseId(db, p.warehouse_id);
+  // Capa 3 — integridad aguas arriba: si parte de este stock ya se trasladó a otro almacén
+  // (traslado confirmado desde wid con estos productos), la salida inversa dejaría wid en
+  // negativo. Hay que anular antes esos traslados. Solo aplica si la compra movió stock.
+  if (wasReceived && hasActiveTransfersFromOrigin(db, wid, items.map(i => i.product_id))) {
+    const e = new Error('Esta compra tiene traslados activos desde su almacén con estos productos: anúlalos primero (si no, el stock quedaría en negativo)'); e.status = 409; throw e;
+  }
   db.transaction(() => {
     if (wasReceived) {
       for (const item of items) {

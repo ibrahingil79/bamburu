@@ -407,6 +407,25 @@ export const supplierReturnSchema = z.object({
   items:       z.array(supplierReturnItemSchema).min(1, 'Al menos una línea requerida'),
 });
 
+// ── Traslado entre almacenes (Multi-almacén · Capa 3) ──────────
+// Mueve mercancía de un almacén a otro en un solo gesto (sale de uno, entra en otro).
+// El coste NO viene del cliente: lo congela el servidor del WAC global del producto al
+// confirmar. La cantidad ≤ disponible en ORIGEN la valida el servicio contra la BD.
+// origen ≠ destino y ambos activos los valida el servicio. Multi-línea (varios productos
+// entre los DOS mismos almacenes). Sin motivo al crear; el motivo es obligatorio al ANULAR.
+const stockTransferItemSchema = z.object({
+  product_id: intPos,
+  quantity:   intPos,
+});
+
+export const stockTransferSchema = z.object({
+  from_warehouse_id: intPos,
+  to_warehouse_id:   intPos,
+  date:              z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  notes:             strOpt(1000),
+  items:             z.array(stockTransferItemSchema).min(1, 'Al menos una línea requerida'),
+});
+
 export const draftOrderSchema = z.object({
   client_id:      optId,
   items:          z.array(posItemSchema).min(1),

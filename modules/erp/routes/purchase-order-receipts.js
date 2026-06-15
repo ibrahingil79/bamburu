@@ -5,6 +5,7 @@ import { validate } from '../../../core/validate.js';
 import { purchaseOrderAnularSchema } from '../schemas.js';
 import { nextCode } from '../codes.js';
 import { recordMovement, resolveWarehouseId } from '../stock.js';
+import { hasActiveTransfersFromOrigin } from './stock-transfers.js';
 import { originDocBlock } from '../attachments.js';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -159,6 +160,11 @@ export function cancelReceiptSvc(db, receiptId, motivo) {
   // C1: la salida inversa sale del MISMO almacén de la recepción (resolveWarehouseId cae al
   // principal para recepciones históricas sin almacén).
   const wid = resolveWarehouseId(db, rec.warehouse_id);
+  // Capa 3 — integridad aguas arriba: si parte de este stock ya se trasladó a otro almacén,
+  // la salida inversa dejaría el almacén de la recepción en negativo. Anular antes esos traslados.
+  if (hasActiveTransfersFromOrigin(db, wid, items.map(i => i.product_id))) {
+    const e = new Error('Esta recepción tiene traslados activos desde su almacén con estos productos: anúlalos primero (si no, el stock quedaría en negativo)'); e.status = 409; throw e;
+  }
   const run = db.transaction(() => {
     for (const it of items) {
       recordMovement(db, {

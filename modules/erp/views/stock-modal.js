@@ -72,6 +72,7 @@ export function stockModalScript(sym, warehouses = []) {
       if(!m.origin_id) return m.note ? escHtml(m.note) : '';
       if(m.origin_type==='order') return '<a href="/admin/orders/'+m.origin_id+'" target="_blank">Pedido #'+m.origin_id+'</a>';
       if(m.origin_type==='purchase') return '<a href="/admin/purchases/'+m.origin_id+'" target="_blank">Compra #'+m.origin_id+'</a>';
+      if(m.origin_type==='transfer_out'||m.origin_type==='transfer_in') return '<a href="/admin/stock-transfers/'+m.origin_id+'" target="_blank">'+escHtml(m.note||('Traslado #'+m.origin_id))+'</a>';
       return escHtml(m.note||'');
     }
     // Abre el kardex de un producto: stock actual + movimientos con saldo + revertir.

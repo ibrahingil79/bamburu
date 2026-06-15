@@ -776,6 +776,47 @@ export function runMigrations(db) {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_supplier_returns_supplier ON supplier_returns(supplier_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_supplier_return_items_return ON supplier_return_items(return_id)`);
 
+  // ── Multi-almacén · Capa 3 — TRASLADOS entre almacenes ────────────────────────
+  // Mueve mercancía de un almacén a otro en un solo gesto: por cada línea, una salida
+  // del ORIGEN (coste NULL: una salida no toca el WAC) + una entrada en el DESTINO con el
+  // WAC GLOBAL congelado (vuelve a entrar el mismo valor que salió). Resultado: cantidad
+  // total y WAC global del producto SIN CAMBIO; solo se redistribuye entre almacenes.
+  // from/to_warehouse_name son la FOTO CONGELADA del almacén al confirmar (mismo patrón que
+  // supplier_name en las devoluciones). transfer_number (TR-NNNN, code_counters) se asigna al
+  // confirmar; no hay borrador ni estado "en tránsito" (Capa 3 es instantánea). Documento
+  // INMUTABLE: corregir = anular (con motivo) y crear otro; nada se borra.
+  db.exec(`CREATE TABLE IF NOT EXISTS stock_transfers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    transfer_number TEXT,
+    from_warehouse_id INTEGER NOT NULL,
+    from_warehouse_name TEXT,           -- foto congelada al confirmar
+    to_warehouse_id INTEGER NOT NULL,
+    to_warehouse_name TEXT,             -- foto congelada al confirmar
+    date DATE NOT NULL,
+    notes TEXT DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'confirmada' CHECK(status IN ('confirmada','anulada')),
+    anulada_motivo TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (from_warehouse_id) REFERENCES warehouses(id),
+    FOREIGN KEY (to_warehouse_id) REFERENCES warehouses(id)
+  )`);
+  // unit_cost = WAC GLOBAL del producto congelado al confirmar. Es el coste con el que la
+  // entrada en el DESTINO recompone el valor (y, al anular, la re-entrada en el ORIGEN).
+  // Congelarlo (en vez de leer el WAC en vivo) es lo que mantiene la neutralidad aunque el
+  // traslado vacíe el stock global a 0 a mitad (el medio se resetea y este coste lo recompone).
+  db.exec(`CREATE TABLE IF NOT EXISTS stock_transfer_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    transfer_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL CHECK(quantity > 0),
+    unit_cost REAL NOT NULL CHECK(unit_cost >= 0),
+    FOREIGN KEY (transfer_id) REFERENCES stock_transfers(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id)
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_stock_transfers_from ON stock_transfers(from_warehouse_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_stock_transfers_to ON stock_transfers(to_warehouse_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_stock_transfer_items_transfer ON stock_transfer_items(transfer_id)`);
+
   addCol(db, 'purchase_orders', 'received_status', 'TEXT');
   // C1.c — cierre manual con pendiente: received_status gana el valor TERMINAL
   // 'cerrada_manual' (la columna es TEXT sin CHECK → ampliar valores es aditivo)
