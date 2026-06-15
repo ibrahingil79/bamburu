@@ -23,6 +23,8 @@ export function getDisaWidget() {
 #dpInput::placeholder{color:rgba(255,255,255,0.25)}
 #dpInput:focus{border-color:#14B8A6}
 #dpSendBtn{width:36px;height:36px;border:none;border-radius:9px;background:linear-gradient(135deg,#14B8A6,#0F766E);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+#dpAttachBtn{width:36px;height:36px;border:1px solid rgba(255,255,255,0.1);border-radius:9px;background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.55);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+#dpAttachBtn:hover{border-color:#14B8A6;color:#14B8A6}
 </style>
 
 <button id="disaFab" onclick="disaOpen()">D</button>
@@ -32,12 +34,19 @@ export function getDisaWidget() {
     <div class="dp-head" id="disaDragHandle">
       <div class="dp-avatar">D</div>
       <div><div class="dp-name">DISA</div><div class="dp-status"><span class="dp-dot"></span>Asistente IA</div></div>
-      <button class="dp-close" onclick="disaClose()">✕</button>
+      <button class="dp-close" onclick="dpNewThread()" onmousedown="event.stopPropagation()" title="Nueva conversación" style="margin-left:auto">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      <button class="dp-close" onclick="disaClose()" style="margin-left:0">✕</button>
     </div>
     <div id="dpMsgs">
       <div style="text-align:center;padding:40px 16px;color:rgba(255,255,255,0.3);font-size:12px">Hola, soy DISA. ¿En qué te ayudo?</div>
     </div>
     <div id="disaInputWrap">
+      <button id="dpAttachBtn" onclick="document.getElementById('dpFile').click()" title="Adjuntar factura (foto o PDF)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+      </button>
+      <input id="dpFile" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" style="display:none" onchange="dpAttach()"/>
       <input id="dpInput" placeholder="Pregunta a DISA..." onkeydown="if(event.key==='Enter'){event.preventDefault();dpSend()}"/>
       <button id="dpSendBtn" onclick="dpSend()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
@@ -122,6 +131,42 @@ export function getDisaWidget() {
     }catch(e){
       dpAppend('assistant','Error al conectar con DISA');
     }
+  };
+
+  // Adjuntar factura: la sube a DISA, que la lee con el extractor de C2 y devuelve un
+  // enlace a la pantalla de revisión EDITABLE precargada. No se guarda nada hasta que el
+  // usuario confirma allí (confirm-first). Reutiliza el mismo CSRF que el chat.
+  window.dpAttach = async function(){
+    var inp=document.getElementById('dpFile');
+    var f=inp.files[0];
+    if(!f) return;
+    inp.value='';
+    dpAppend('user','📄 '+f.name);
+    dpAppend('assistant','Leyendo la factura… esto puede tardar unos segundos.');
+    var fd=new FormData(); fd.append('file', f);
+    try{
+      var r=await fetch('/api/disa/attach',{ method:'POST', headers:{'x-csrf-token':csrf}, body:fd });
+      var d=await r.json();
+      var msgs=document.getElementById('dpMsgs');
+      if(msgs.lastChild) msgs.removeChild(msgs.lastChild);   // quita el "Leyendo…"
+      if(!r.ok || d.error){ dpAppend('assistant', d.error||'No pude procesar el archivo.'); return; }
+      dpAppend('assistant', d.reply||'Listo.');
+      if(d.capture_url){ setTimeout(function(){ window.location.href=d.capture_url; }, 900); }
+    }catch(e){
+      var m=document.getElementById('dpMsgs'); if(m.lastChild) m.removeChild(m.lastChild);
+      dpAppend('assistant','Error al subir la factura.');
+    }
+  };
+
+  // Nueva conversación: crea un hilo nuevo (mismo motor que el asistente IA) y limpia el chat.
+  window.dpNewThread = async function(){
+    try{
+      var r=await fetch('/api/disa/threads',{ method:'POST', headers:{'Content-Type':'application/json','x-csrf-token':csrf} });
+      var t=await r.json();
+      window.disaWidgetThreadId = t.id || null;
+    }catch(e){ window.disaWidgetThreadId=null; }
+    document.getElementById('dpMsgs').innerHTML='<div style="text-align:center;padding:40px 16px;color:rgba(255,255,255,0.3);font-size:12px">Nueva conversación. ¿En qué te ayudo?</div>';
+    document.getElementById('dpInput').focus();
   };
 
   function dpAppend(role, text){

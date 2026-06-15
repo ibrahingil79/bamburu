@@ -290,6 +290,45 @@ export function confirmCaptureSvc(db, d) {
 // ════════════════════════════════════════════════════════════════════════════
 // Rutas
 // ════════════════════════════════════════════════════════════════════════════
+// Pipeline COMPARTIDO de captura (lo usa la pantalla C2 y el chat de DISA, así DISA
+// reutiliza EXACTAMENTE este extractor — sin un camino nuevo de extracción): guarda el
+// adjunto, lo lee con el modelo (visión), PERSISTE la lectura cruda en
+// attachments.extraction_json (para precargar la revisión sin volver a llamar al modelo)
+// y cuadra contra catálogo/proveedores. NO escribe NADA de stock/compras (eso solo lo
+// hace confirmCaptureSvc al confirmar). Devuelve el blob que la pantalla espera en DATA.
+export async function runCapture(db, tenant, session, { buffer, mime, originalName = '' }) {
+  // Guarda el original SIEMPRE (aunque la extracción falle, el documento queda guardado).
+  const att = saveAttachment(db, tenant, { buffer, originalName, mime });
+
+  // Extracción (simulable en el gate de navegador con C2_FAKE_EXTRACTION).
+  let extracted;
+  const fake = process.env.C2_FAKE_EXTRACTION;
+  if (fake) extracted = parseExtraction(fake);
+  else extracted = await extractInvoice({ buffer, mime });
+
+  // Persistir SOLO la lectura cruda del modelo (no match/open_orders: son derivados de BD,
+  // se recalculan frescos al precargar la pantalla).
+  db.prepare('UPDATE attachments SET extraction_json=? WHERE id=?').run(JSON.stringify(extracted), att.id);
+
+  const match = matchExtraction(db, extracted);
+  const open_orders = match.supplier ? supplierOpenOrders(db, match.supplier.id) : [];
+  if (session) logActivity(db, session, 'Capturó factura de proveedor', 'attachment', att.id, originalName);
+  return { attachment_id: att.id, mime, extracted, match, open_orders };
+}
+
+// Reconstruye el blob de la pantalla a partir de un adjunto YA extraído (precarga sin
+// re-extraer): lee extraction_json y RECALCULA match + open_orders frescos. Devuelve null
+// si el adjunto no existe o no tiene lectura guardada.
+export function preparedCapture(db, attachmentId) {
+  const att = getAttachment(db, attachmentId);
+  if (!att || !att.extraction_json) return null;
+  let extracted;
+  try { extracted = JSON.parse(att.extraction_json); } catch { return null; }
+  const match = matchExtraction(db, extracted);
+  const open_orders = match.supplier ? supplierOpenOrders(db, match.supplier.id) : [];
+  return { attachment_id: att.id, mime: att.mime, extracted, match, open_orders };
+}
+
 export function createPurchaseCaptureRoutes(db) {
   const api = new Hono();
   const views = new Hono();
@@ -308,19 +347,8 @@ export function createPurchaseCaptureRoutes(db) {
         if (!buffer.length) return c.json({ error: 'El archivo está vacío.' }, 400);
         if (buffer.length > MAX_UPLOAD_BYTES) return c.json({ error: 'El archivo supera el máximo de 12 MB.' }, 413);
 
-        // Guarda el original SIEMPRE (aunque la extracción falle, el documento queda guardado).
-        const att = saveAttachment(db, c.get('tenant'), { buffer, originalName: file.name || '', mime });
-
-        // Extracción (simulable en el gate de navegador con C2_FAKE_EXTRACTION).
-        let extracted;
-        const fake = process.env.C2_FAKE_EXTRACTION;
-        if (fake) extracted = parseExtraction(fake);
-        else extracted = await extractInvoice({ buffer, mime });
-
-        const match = matchExtraction(db, extracted);
-        const open_orders = match.supplier ? supplierOpenOrders(db, match.supplier.id) : [];
-        logActivity(db, c.get('session'), 'Capturó factura de proveedor', 'attachment', att.id, file.name || '');
-        return c.json({ attachment_id: att.id, mime, extracted, match, open_orders });
+        const result = await runCapture(db, c.get('tenant'), c.get('session'), { buffer, mime, originalName: file.name || '' });
+        return c.json(result);
       } catch (e) { return c.json({ error: e.message }, e.status || 500); }
     });
 
@@ -368,15 +396,23 @@ export function createPurchaseCaptureRoutes(db) {
     const sym = cfg.currency_symbol || '€';
     const bands = getVatBands((cfg.country || 'ES').toUpperCase());
     const today = new Date().toISOString().slice(0, 10);
-    return c.html(adminLayout('Capturar factura', capturePage({ sym, bands, today }), 'purchases', csrf, c));
+    // Precarga desde el chat de DISA: ?attachment=ID → reconstruye el blob desde la lectura
+    // guardada (recalcula match/open_orders frescos, NO re-extrae) y arranca en el Paso 2.
+    let preload = null;
+    const attId = parseInt(c.req.query('attachment'));
+    if (attId) preload = preparedCapture(db, attId);
+    return c.html(adminLayout('Capturar factura', capturePage({ sym, bands, today, preload }), 'purchases', csrf, c));
   });
 
   return { api, views };
 }
 
 // ── HTML + JS de la pantalla de revisión (paso 1 subir · paso 2 revisar) ─────
-function capturePage({ sym, bands, today }) {
+function capturePage({ sym, bands, today, preload = null }) {
   const bandsJson = JSON.stringify(bands);
+  // Precarga (chat de DISA): se inyecta el blob ya extraído; escapamos `<` para no
+  // romper el <script> con el contenido del documento.
+  const preloadJson = preload ? JSON.stringify(preload).replace(/</g, '\\u003c') : 'null';
   return `
   <div class="ph">
     <h2>Capturar factura de proveedor</h2>
@@ -448,6 +484,7 @@ function capturePage({ sym, bands, today }) {
   <script>
   var SYM = ${JSON.stringify(sym)};
   var BANDS = ${bandsJson};
+  var PRELOAD = ${preloadJson};   // blob precargado desde el chat de DISA (o null)
   var DATA = null;          // respuesta de extracción { attachment_id, mime, extracted, match, open_orders }
   var supplier = null;      // { mode:'existing'|'new'|'none', id, name, fiscal_id }
   var target = { mode:'direct', order_id:null };
@@ -819,5 +856,8 @@ function capturePage({ sym, bands, today }) {
     ['dragleave','drop'].forEach(function(ev){ dz.addEventListener(ev,function(e){ e.preventDefault(); dz.style.borderColor='var(--border2)'; }); });
     dz.addEventListener('drop',function(e){ if(e.dataTransfer.files.length){ document.getElementById('fileInput').files=e.dataTransfer.files; onFilePick(); } });
   })();
+
+  // Precarga desde el chat de DISA (sin re-extraer): salta el Paso 1 y monta la revisión.
+  if (PRELOAD) { DATA = PRELOAD; buildReview(); }
   </script>`;
 }

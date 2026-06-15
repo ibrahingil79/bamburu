@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
-import { adminAuth, getCsrfToken } from '../../core/auth.js';
+import { bodyLimit } from 'hono/body-limit';
+import { adminAuth, getCsrfToken, requirePerm } from '../../core/auth.js';
 import { adminLayout } from '../erp/layout.js';
 import { generateInvoice } from '../erp/routes/invoices.js';
 import { createClientSvc, updateClientSvc, archiveClientSvc, restoreClientSvc, searchClients } from '../erp/routes/clients.js';
@@ -11,6 +12,8 @@ import { createStockTransferSvc } from '../erp/routes/stock-transfers.js';
 import { activeWarehouses, inventoryValuation } from '../erp/routes/warehouses.js';
 import { collectionsWorklist, registerCollectionAction, accountsSummary, registerAccountAction } from '../erp/cobros.js';
 import { sendEmail } from '../../core/mailer.js';
+import { runCapture } from '../erp/routes/purchases-capture.js';   // pipeline de captura C2 reutilizado tal cual
+import { ALLOWED_MIME, MAX_UPLOAD_BYTES } from '../erp/attachments.js';
 import { callClaude, hasAnthropicKey } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
 
 export function register(app, db) {
@@ -1337,6 +1340,10 @@ export function register(app, db) {
       + 'color:#f1f5f9;transition:border-color .15s;scrollbar-width:thin" '
       + 'onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();disaSend()}" '
       + 'onfocus="this.style.borderColor=\'#0D9488\'" onblur="this.style.borderColor=\'rgba(255,255,255,0.09)\'"></textarea>'
+      + '<input type="file" id="disaFilePage" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" style="display:none" onchange="disaAttach()">'
+      + '<button onclick="document.getElementById(\'disaFilePage\').click()" title="Adjuntar factura (foto o PDF)" '
+      + 'style="background:rgba(255,255,255,0.04);color:#94a3b8;border:1px solid rgba(255,255,255,0.09);border-radius:10px;'
+      + 'padding:0 14px;font-size:16px;cursor:pointer;font-family:inherit;align-self:stretch">📎</button>'
       + '<button onclick="disaSend()" style="background:#0D9488;color:white;border:none;border-radius:10px;'
       + 'padding:0 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;align-self:stretch;'
       + 'white-space:nowrap">Enviar</button>'
@@ -1650,6 +1657,32 @@ export function register(app, db) {
   window.dtTogglePanel = function() {
     var p = document.getElementById('dtPanel');
     if (p) p.classList.toggle('dt-open');
+  };
+
+  // Adjuntar factura de proveedor desde la página de asistente IA: mismo endpoint que el
+  // widget y el dashboard. DISA la lee con el extractor de C2 y lleva a la pantalla de
+  // revisión EDITABLE precargada. Nada se guarda hasta confirmar allí (confirm-first).
+  window.disaAttach = async function() {
+    var inp = document.getElementById('disaFilePage');
+    if (!inp) return;
+    var f = inp.files[0];
+    if (!f) return;
+    inp.value = '';
+    var empty = document.getElementById('emptyState'); if (empty) empty.remove();
+    addMsgDOM('user', '📄 ' + f.name);
+    showTyping(true);
+    try {
+      var fd = new FormData(); fd.append('file', f);
+      var res = await fetch('/api/disa/attach', { method: 'POST', headers: { 'x-csrf-token': csrf }, body: fd });
+      var data = await res.json();
+      showTyping(false);
+      if (!res.ok || data.error) { addMsgDOM('assistant', data.error || 'No pude procesar el archivo.'); return; }
+      addMsgDOM('assistant', data.reply || 'Listo.');
+      if (data.capture_url) setTimeout(function(){ window.location.href = data.capture_url; }, 900);
+    } catch {
+      showTyping(false);
+      addMsgDOM('assistant', 'Error al subir la factura.');
+    }
   };
 
   window.disaSend = async function() {
@@ -2329,6 +2362,56 @@ export function register(app, db) {
     db.prepare('DELETE FROM disa_conversations').run();
     return c.json({ ok: true });
   });
+
+  // ── Captura de factura de proveedor DENTRO del chat (Pilar 3 · reutiliza C2) ──
+  // El usuario adjunta una foto/PDF de una factura en el chat. DISA la reconoce, la lee
+  // con el MISMO extractor de C2 (runCapture) y devuelve un enlace a la pantalla de
+  // revisión EDITABLE ya precargada (/admin/purchases/capture?attachment=ID). NO escribe
+  // stock ni compras: nada se guarda hasta que el usuario confirma en esa pantalla por el
+  // servicio validado (confirm-first). No cuenta contra el límite mensual (no es un mensaje
+  // de chat). Permiso de compras como en la propia pantalla de captura.
+  router.post('/attach', adminAuth(db), requirePerm('purchases.create'),
+    bodyLimit({ maxSize: MAX_UPLOAD_BYTES, onError: c => c.json({ error: 'El archivo supera el máximo de 12 MB. Sube una foto o PDF más ligero.' }, 413) }),
+    async c => {
+      try {
+        const body = await c.req.parseBody();
+        const file = body.file;
+        if (!file || typeof file === 'string') return c.json({ error: 'Adjunta una foto o PDF de la factura.' }, 400);
+        const mime = file.type || '';
+        if (!ALLOWED_MIME[mime]) return c.json({ error: 'Formato no admitido. Sube una imagen (JPG, PNG, WebP) o un PDF.' }, 400);
+        const buffer = Buffer.from(await file.arrayBuffer());
+        if (!buffer.length) return c.json({ error: 'El archivo está vacío.' }, 400);
+        if (buffer.length > MAX_UPLOAD_BYTES) return c.json({ error: 'El archivo supera el máximo de 12 MB.' }, 413);
+
+        if (!hasAnthropicKey()) return c.json({ error: 'DISA no esta configurada. Contacta con soporte.' }, 500);
+
+        let result;
+        try {
+          result = await runCapture(db, c.get('tenant'), c.get('session'), { buffer, mime, originalName: file.name || '' });
+        } catch (e) {
+          // 422 = el modelo no devolvió una factura legible. Se responde en el chat sin romper.
+          return c.json({ reply: 'He recibido el archivo pero no he podido leerlo como una factura. ' + (e.message || 'Prueba con una foto más nítida o un PDF.') });
+        }
+
+        // Reconocer factura: el extractor debe haber sacado proveedor o líneas.
+        const ex = result.extracted || {};
+        const hasSupplier = ex.supplier && (ex.supplier.name || ex.supplier.fiscal_id);
+        const lines = Array.isArray(ex.lines) ? ex.lines : [];
+        if (!hasSupplier && !lines.length) {
+          return c.json({ reply: 'He recibido el archivo, pero no parece una factura de proveedor. Si lo es, prueba con una foto más nítida o un PDF.' });
+        }
+
+        const supName = hasSupplier && ex.supplier.name ? ex.supplier.name : 'un proveedor sin identificar';
+        const n = lines.length;
+        const totalTxt = (ex.totals && ex.totals.total != null) ? (' por ' + ex.totals.total + ' ' + (db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€')) : '';
+        const reply = 'He leído la factura de ' + supName + ': ' + n + (n === 1 ? ' línea' : ' líneas') + totalTxt +
+          '. Te llevo a la pantalla de revisión para que la compruebes y la confirmes — no he guardado nada todavía.';
+        return c.json({ reply, capture_url: '/admin/purchases/capture?attachment=' + result.attachment_id });
+      } catch (e) {
+        console.error('[DISA] attach error:', e);
+        return c.json({ error: e.message || 'No se pudo procesar el archivo.' }, e.status || 500);
+      }
+    });
 
   app.route('/admin/disa', router);
   app.route('/api/disa', router);

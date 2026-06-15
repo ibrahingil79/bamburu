@@ -840,6 +840,10 @@ export function runMigrations(db) {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_attachments_entity ON attachments(entity_type, entity_id)`);
+  // Captura DENTRO del chat de DISA (Pilar 3): se guarda la LECTURA CRUDA del modelo
+  // (el `extracted`) junto al adjunto, para precargar la pantalla de revisión sin volver
+  // a llamar al modelo. NULL en adjuntos previos / subidas que no extraen. Aditiva.
+  addCol(db, 'attachments', 'extraction_json', 'TEXT');
 
   // Pilar 3 (coste/valoración) — backfill del coste, UNA vez por tenant. Corre DESPUÉS de que
   // existan las columnas nuevas (stock_movements.unit_cost, products.average_cost) y la tabla

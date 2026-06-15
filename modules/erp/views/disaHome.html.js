@@ -360,6 +360,12 @@ export function disaHomeHtml({ userName, alertCount, kpis }) {
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
               </svg>
             </button>
+            <button onclick="dhNewThread()" title="Nueva conversación"
+              style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.3);padding:3px 8px;border-radius:6px;font-size:11px;line-height:1;display:flex;align-items:center;gap:4px;flex-shrink:0;font-family:inherit"
+              onmouseover="this.style.color='rgba(255,255,255,0.6)'" onmouseout="this.style.color='rgba(255,255,255,0.3)'">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Nueva
+            </button>
           </div>
           <form onsubmit="event.preventDefault(); disaSubmitHome();">
             <div class="disa-input-box">
@@ -369,6 +375,12 @@ export function disaHomeHtml({ userName, alertCount, kpis }) {
               <input type="text" id="dh-input" class="disa-input"
                 placeholder="Pregunta a DISA o pídele que haga algo..."
                 autocomplete="off" />
+              <input type="file" id="dh-file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" style="display:none" onchange="dhAttach()" />
+              <button type="button" id="dh-attach" title="Adjuntar factura (foto o PDF)"
+                onclick="document.getElementById('dh-file').click()"
+                style="background:none;border:none;cursor:pointer;color:#64748b;padding:6px;display:flex;align-items:center;flex-shrink:0">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              </button>
               <button type="submit" class="disa-send-btn" id="dh-send">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="22" y1="2" x2="11" y2="13"/>
@@ -427,11 +439,46 @@ export function disaHomeHtml({ userName, alertCount, kpis }) {
 
     <script>
       let dhStarted = false;
+      // ARREGLO 2 — el dashboard recupera la conversación de DISA al recargar: recuerda el
+      // hilo activo (como el widget) para enviar al MISMO hilo y recuperar su historial al
+      // cargar. No toca el motor de hilos/guardado (que ya funciona); solo lo usa.
+      let dhThreadId = null;
+
+      function dhDock() {
+        if (dhStarted) return;
+        document.getElementById('dh-hero').classList.add('hidden');
+        document.getElementById('dh-cards').classList.add('hidden');
+        document.getElementById('dh-chips').style.display = 'none';
+        document.getElementById('dh-messages').classList.add('visible');
+        document.getElementById('dh-input-area').classList.add('docked');
+        document.getElementById('dh-stage').style.justifyContent = 'flex-end';
+        dhStarted = true;
+      }
 
       function disaQuickSend(text) {
         document.getElementById('dh-input').value = text;
         disaSubmitHome();
       }
+
+      // Nueva conversación: crea un hilo nuevo (mismo motor que el asistente IA) y vuelve a
+      // la pantalla inicial (hero + accesos), sin mensajes.
+      window.dhNewThread = async function() {
+        try {
+          const res = await fetch('/api/disa/threads', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-csrf-token': dhGetCsrf() } });
+          const t = await res.json();
+          dhThreadId = t.id || null;
+        } catch { dhThreadId = null; }
+        const msgs = document.getElementById('dh-messages');
+        msgs.innerHTML = '';
+        msgs.classList.remove('visible');
+        document.getElementById('dh-hero').classList.remove('hidden');
+        document.getElementById('dh-cards').classList.remove('hidden');
+        document.getElementById('dh-chips').style.display = '';
+        document.getElementById('dh-input-area').classList.remove('docked');
+        document.getElementById('dh-stage').style.justifyContent = '';
+        dhStarted = false;
+        document.getElementById('dh-input').focus();
+      };
 
       async function disaSubmitHome() {
         const input = document.getElementById('dh-input');
@@ -460,10 +507,13 @@ export function disaHomeHtml({ userName, alertCount, kpis }) {
           const res = await fetch('/api/disa/message', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf },
-            body: JSON.stringify({ message: msg })
+            // ARREGLO 2: manda el hilo activo para que la conversación sea UNA sola y recuperable.
+            // body: JSON.stringify({ message: msg })   // (antes: sin thread_id → el dashboard no recuperaba al recargar)
+            body: JSON.stringify({ message: msg, thread_id: dhThreadId })
           });
           const data = await res.json();
           dhRemoveTyping(typingId);
+          if (data.thread_id) dhThreadId = data.thread_id;   // recuerda el hilo para las siguientes
           const reply = data.reply || data.response || data.message || 'Sin respuesta.';
           dhAppendMsg('assistant', reply, data.artifact || null);
         } catch {
@@ -472,6 +522,40 @@ export function disaHomeHtml({ userName, alertCount, kpis }) {
         } finally {
           btn.disabled = false;
           input.focus();
+        }
+      }
+
+      // Adjuntar factura de proveedor: la sube a DISA (mismo endpoint que el widget), que la
+      // lee con el extractor de C2 y devuelve un enlace a la pantalla de revisión EDITABLE
+      // precargada. Nada se guarda hasta confirmar allí (confirm-first).
+      async function dhAttach() {
+        const fileInput = document.getElementById('dh-file');
+        const f = fileInput.files[0];
+        if (!f) return;
+        fileInput.value = '';
+        if (!dhStarted) {
+          document.getElementById('dh-hero').classList.add('hidden');
+          document.getElementById('dh-cards').classList.add('hidden');
+          document.getElementById('dh-chips').style.display = 'none';
+          document.getElementById('dh-messages').classList.add('visible');
+          document.getElementById('dh-input-area').classList.add('docked');
+          document.getElementById('dh-stage').style.justifyContent = 'flex-end';
+          dhStarted = true;
+        }
+        dhAppendMsg('user', '📄 ' + f.name);
+        const typingId = dhAppendTyping();
+        try {
+          const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || window.CSRF_TOKEN || '';
+          const fd = new FormData(); fd.append('file', f);
+          const res = await fetch('/api/disa/attach', { method: 'POST', headers: { 'x-csrf-token': csrf }, body: fd });
+          const data = await res.json();
+          dhRemoveTyping(typingId);
+          if (!res.ok || data.error) { dhAppendMsg('assistant', data.error || 'No pude procesar el archivo.'); return; }
+          dhAppendMsg('assistant', data.reply || 'Listo.');
+          if (data.capture_url) setTimeout(() => { window.location.href = data.capture_url; }, 900);
+        } catch {
+          dhRemoveTyping(typingId);
+          dhAppendMsg('assistant', 'Error al subir la factura.');
         }
       }
 
@@ -748,7 +832,31 @@ export function disaHomeHtml({ userName, alertCount, kpis }) {
         } catch {}
       };
 
+      // ARREGLO 2 — al cargar el dashboard, recupera y pinta el historial del hilo activo
+      // (equivalente a loadActiveThread del widget). Solo LEE los endpoints de hilos ya
+      // existentes; no toca el guardado. Silencioso si falla (como el widget).
+      async function dhLoadActiveThread() {
+        try {
+          const r = await fetch('/api/disa/threads', { headers: { 'x-csrf-token': dhGetCsrf() } });
+          if (!r.ok) return;
+          const threads = await r.json();
+          if (!Array.isArray(threads) || !threads.length) return;
+          dhThreadId = threads[0].id;
+          const r2 = await fetch('/api/disa/threads/' + dhThreadId, { headers: { 'x-csrf-token': dhGetCsrf() } });
+          if (!r2.ok) return;
+          const t = await r2.json();
+          if (t.messages && t.messages.length > 0) {
+            dhDock();
+            const msgs = document.getElementById('dh-messages');
+            msgs.innerHTML = '';
+            t.messages.forEach(function(m) { dhAppendMsg(m.role, m.content, null); });
+            msgs.scrollTop = msgs.scrollHeight;
+          }
+        } catch (e) { /* silencioso, como el widget */ }
+      }
+
       dhLoadChips();
+      dhLoadActiveThread();
     </script>
 
     <div id="dh-chips-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center">
