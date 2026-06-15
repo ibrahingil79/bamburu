@@ -12,7 +12,8 @@ import { createStockTransferSvc } from '../erp/routes/stock-transfers.js';
 import { activeWarehouses, inventoryValuation } from '../erp/routes/warehouses.js';
 import { collectionsWorklist, registerCollectionAction, accountsSummary, registerAccountAction } from '../erp/cobros.js';
 import { sendEmail } from '../../core/mailer.js';
-import { runCapture } from '../erp/routes/purchases-capture.js';   // pipeline de captura C2 reutilizado tal cual
+import { runCapture, captureFromExtraction } from '../erp/routes/purchases-capture.js';   // pipeline de captura C2 reutilizado (foto/PDF y voz)
+import { createProductSvc } from '../erp/routes/products.js';   // alta validada (banda de IVA obligatoria, sin defecto silencioso)
 import { ALLOWED_MIME, MAX_UPLOAD_BYTES } from '../erp/attachments.js';
 import { callClaude, hasAnthropicKey } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
 
@@ -117,6 +118,11 @@ export function register(app, db) {
 
   const SECURITY_ACTIONS = new Set(['disable_2fa_user']);
 
+  // Acciones de HANDOFF: no se confirman de palabra en el chat (no mueven nada por sí solas),
+  // solo preparan un payload y enrutan a una pantalla donde está el control visual y el confirm
+  // REAL. Se ejecutan en cuanto se detecta la acción (sin el "¿confirmas?" del chat).
+  const HANDOFF_ACTIONS = new Set(['dictar_compra']);
+
   const ADMIN_ONLY_ACTIONS = new Set([
     'insert_record', 'update_record', 'delete_record',
     'create_order', 'edit_order', 'update_order_status', 'cancel_order',
@@ -124,6 +130,7 @@ export function register(app, db) {
     'update_company_config', 'disable_2fa_user', 'list_users_security',
     'register_collection_action', 'register_account_action',
     'create_client', 'edit_client', 'deactivate_client', 'activate_client',
+    'dictar_compra',
   ]);
 
   function isAdminUser(session) {
@@ -391,13 +398,31 @@ export function register(app, db) {
 
         case 'create_product': {
           const p = action.params;
-          const r = db.prepare(`
-            INSERT INTO products (name, price, stock, status, type, product_code)
-            VALUES (?, ?, ?, 'active', 'physical', ?)
-          `).run(p.name || '', Number(p.price) || 0, Number(p.stock) || 0, nextCode(db, 'product'));
-          logActivity(db, 'create', 'products', r.lastInsertRowid,
-            'Producto "' + p.name + '" creado por DISA', session);
-          return { ok: true, message: 'Producto "' + (p.name || 'nuevo') + '" creado.' };
+          // [Banda de IVA — arreglo] Un producto creado por DISA debe nacer con BANDA DE IVA
+          // EXPLÍCITA, nunca caer en General/21 por defecto en silencio. Antes hacía un INSERT
+          // crudo sin tax_band → caía en el DEFAULT 'general'. Ahora pasa por el MISMO servicio
+          // validado que la pantalla (createProductSvc), que exige banda válida del país (400 si no).
+          // OLD (defecto silencioso a General/21):
+          // const r = db.prepare(`
+          //   INSERT INTO products (name, price, stock, status, type, product_code)
+          //   VALUES (?, ?, ?, 'active', 'physical', ?)
+          // `).run(p.name || '', Number(p.price) || 0, Number(p.stock) || 0, nextCode(db, 'product'));
+          // logActivity(db, 'create', 'products', r.lastInsertRowid, 'Producto "' + p.name + '" creado por DISA', session);
+          // return { ok: true, message: 'Producto "' + (p.name || 'nuevo') + '" creado.' };
+          const band = p.tax_band || p.banda_iva || p.iva_banda;
+          if (!band) return { ok: false, message: 'Para crear el producto necesito su banda de IVA explícita: general (21%), reducido (10%), superreducido (4%) o exento (0%). ¿Cuál le corresponde?' };
+          // SKU obligatorio en el alta validada: si DISA no lo da, lo generamos (mismo patrón que la captura).
+          const pSku = p.sku || ('DISA-' + String(p.name || 'prod').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) + '-' + Date.now());
+          try {
+            const r = createProductSvc(db, {
+              name: p.name, sku: pSku, price: Number(p.price) || 0,
+              stock: Number(p.stock) || 0, type: 'physical', tax_band: band,
+            });
+            logActivity(db, 'create', 'products', r.id, 'Producto "' + r.name + '" creado por DISA', session);
+            return { ok: true, message: 'Producto "' + (r.name || 'nuevo') + '" creado (banda ' + band + ').' };
+          } catch (e) {
+            return { ok: false, message: 'No se pudo crear el producto: ' + (e.message || 'datos inválidos') + '.' };
+          }
         }
 
         case 'edit_product': {
@@ -537,6 +562,48 @@ export function register(app, db) {
             return { ok: true, message: 'Traslado ' + r.transfer_number + ' confirmado (' + r.lines + ' línea(s)).' };
           } catch (e) {
             return { ok: false, message: 'No se pudo hacer el traslado: ' + e.message };
+          }
+        }
+
+        // ── Compras por voz (handoff a la pantalla de captura) ────────────────
+        // [Voz DISA compras] DISA recoge una compra HABLANDO y deja al usuario en la MISMA
+        // pantalla de revisión que la captura por foto/PDF (/admin/purchases/capture),
+        // precargada. A diferencia de adjust_stock/transfer_stock, NO confirma la compra de
+        // palabra (varias líneas, costes y bandas de IVA se revisan en pantalla): produce el
+        // MISMO payload normalizado que el extractor de visión (captureFromExtraction) y
+        // devuelve capture_url. CERO escritura de stock/compras aquí (eso lo hace el confirm
+        // de la pantalla por createReceiptSvc/createDirectPurchaseSvc). El proveedor y los
+        // productos los IDENTIFICA DISA por conversación (listas en contexto); el cuadre por
+        // NIF/nombre/descripción lo rehace matchExtraction al precargar.
+        case 'dictar_compra': {
+          const p = action.params || {};
+          const sup = p.supplier || p.proveedor || {};
+          const lineasRaw = Array.isArray(p.lines) ? p.lines : (Array.isArray(p.lineas) ? p.lineas : []);
+          if (!lineasRaw.length) return { ok: false, message: 'No he entendido ninguna línea de compra. Dime, por cada producto: nombre, cantidad y coste unitario.' };
+          // Mismo shape que extractInvoice: { supplier:{name,fiscal_id}, date, lines:[{description,quantity,unit_cost,vat_rate}] }
+          const extracted = {
+            supplier: { name: sup.name || sup.nombre || '', fiscal_id: sup.fiscal_id || sup.nif || '' },
+            date: p.date || p.fecha || '',
+            invoice_number: p.invoice_number || p.referencia || '',
+            lines: lineasRaw.map(l => ({
+              description: l.description || l.producto || l.nombre || '',
+              quantity:  (l.quantity != null ? Number(l.quantity) : (l.cantidad != null ? Number(l.cantidad) : 1)),
+              unit_cost: (l.unit_cost != null ? Number(l.unit_cost) : (l.coste != null ? Number(l.coste) : 0)),
+              vat_rate:  (l.vat_rate != null ? Number(l.vat_rate) : (l.iva != null ? Number(l.iva) : null)),
+            })),
+            totals: { base: null, tax: null, total: null },
+          };
+          try {
+            const r = captureFromExtraction(db, session, extracted);
+            const n = r.extracted.lines.length;
+            return {
+              ok: true,
+              message: 'He preparado la compra' + (extracted.supplier.name ? ' a ' + extracted.supplier.name : '')
+                + ' con ' + n + ' línea(s). Te llevo a la pantalla de revisión para que la confirmes ahí.',
+              capture_url: '/admin/purchases/capture?attachment=' + r.attachment_id,
+            };
+          } catch (e) {
+            return { ok: false, message: 'No he podido preparar la compra: ' + (e.message || 'datos insuficientes') + '.' };
           }
         }
 
@@ -1706,6 +1773,9 @@ export function register(app, db) {
       addMsgDOM('assistant', res.ok ? (data.reply || 'Sin respuesta.') : (data.error || 'Error.'));
       if (data.thread_id) window.disaActiveThreadId = data.thread_id;
       loadThreads();
+      // Handoff a pantalla (p.ej. dictar una compra por voz): navega al enlace de la accion
+      // (mismo mecanismo que el adjunto de factura).
+      if (data.capture_url) setTimeout(function(){ window.location.href = data.capture_url; }, 900);
     } catch {
       showTyping(false);
       addMsgDOM('assistant', 'Error de conexión. Inténtalo de nuevo.');
@@ -1962,6 +2032,8 @@ export function register(app, db) {
       '  compra, historico de compras, pedidos/recepciones pendientes, traslados y devoluciones (ver INVENTARIO).',
       '- Operar el stock por la via validada, con confirmacion: trasladar entre almacenes (transfer_stock) y',
       '  ajustar stock (adjust_stock). Identifica producto y almacen por nombre antes; las guardas las pone el servicio.',
+      '- Registrar una compra de proveedor DICTANDOLA (dictar_compra): la preparas y llevas al usuario a la',
+      '  pantalla de revision para que confirme ahi (no se confirma de palabra).',
       '- Mostrar respuestas visuales con artifacts (KPIs, listas, numeros).',
       '- Si el usuario es admin/owner: ejecutar cambios (crear, editar, eliminar registros,',
       '  ajustar stock, generar facturas) SIEMPRE pidiendo confirmacion previa.',
@@ -2084,6 +2156,21 @@ export function register(app, db) {
       '  Resume SIEMPRE antes: "Voy a trasladar N de X de [origen] a [destino], confirmo?" y ejecuta solo tras "si".',
       'NO consultes el stock antes de ajustar o trasladar: el servicio valida la disponibilidad y rechaza si no',
       'llega (traducelo si falla). Propon la accion directamente con el bloque [ACCION:...] al final, sin query previa.',
+      '',
+      'Compras por voz (registrar una factura/compra de proveedor HABLANDO):',
+      '- dictar_compra: {"supplier":{"name":"","fiscal_id":""},"date":"AAAA-MM-DD","lines":[{"description":"","quantity":0,"unit_cost":0,"vat_rate":21}]}',
+      '  Cuando el usuario DICTA una compra ("compre 10 cajas de X a Proveedor Y a 3 EUR cada una"), recoge el',
+      '  proveedor y las lineas (producto, cantidad, coste UNITARIO NETO sin IVA). A DIFERENCIA de adjust_stock/',
+      '  transfer_stock, NO se confirma de palabra: esta accion NO mueve stock; prepara la compra y te lleva a la',
+      '  PANTALLA de revision (la misma de la captura por foto), donde el usuario revisa y CONFIRMA. Por eso va',
+      '  directa, sin "confirmas?" en el chat.',
+      '  IDENTIFICACION antes: resuelve el proveedor por nombre/NIF con la lista PROVEEDORES (uno -> usalo en',
+      '  "supplier"; varios -> pregunta cual; ninguno -> ponlo igual con su nombre/NIF, la pantalla ofrecera crearlo).',
+      '  Resuelve cada producto por nombre con PRODUCTOS FISICOS ACTIVOS para escribir bien la "description".',
+      '  vat_rate = % de IVA de la linea (21, 10, 4 o 0). IMPORTANTISIMO para productos NUEVOS (que no esten en el',
+      '  catalogo): pregunta y pon su vat_rate para que la pantalla prerellene su banda de IVA; si no lo sabes, dejalo',
+      '  null y la pantalla lo exigira. Para productos ya existentes el vat_rate es orientativo (manda la banda del catalogo).',
+      '  No hace falta saber el total: la pantalla cuadra base/IVA/total. Una sola accion; una compra por mensaje.',
       '',
       'Consultas de inventario (solo lectura, sin accion):',
       '- Stock GLOBAL y coste medio (WAC) de cada producto: en PRODUCTOS FISICOS ACTIVOS. Valoracion total y por almacen: en INVENTARIO (dato curado, no recalcular).',
@@ -2304,7 +2391,19 @@ export function register(app, db) {
         // Extractor con balanceo de llaves (soporta JSON anidado como transfer_stock.items).
         if (!parsedAsArtifact) {
           const parsedAction = extractActionBlock(reply);
-          if (parsedAction) {
+          if (parsedAction && HANDOFF_ACTIONS.has(parsedAction.action.type)) {
+            // Handoff: ejecuta YA (no mueve nada; prepara el payload y devuelve capture_url para
+            // enrutar a la pantalla de revisión, donde está el confirm real). Sin "¿confirmas?".
+            const session = c.get('session');
+            cleanReply = reply.replace(parsedAction.raw, '').trim();
+            if (ADMIN_ONLY_ACTIONS.has(parsedAction.action.type) && !isAdminUser(session)) {
+              cleanReply = 'No tienes permisos para esta accion. Solo administradores pueden registrar compras.';
+            } else {
+              executionResult = await executeAction(db, parsedAction.action, session);
+              const tail = executionResult?.message || '';
+              cleanReply = cleanReply ? (tail ? cleanReply + '\n\n' + tail : cleanReply) : tail;
+            }
+          } else if (parsedAction) {
             newPendingAction = parsedAction.action;
             cleanReply = reply.replace(parsedAction.raw, '').trim();
             if (SECURITY_ACTIONS.has(newPendingAction.type)) {
@@ -2349,7 +2448,10 @@ export function register(app, db) {
         thread_id: thread.id,
         usage: getUsage(db),
         limit,
-        action_executed: executionResult?.ok || false
+        action_executed: executionResult?.ok || false,
+        // Handoff a pantalla (p.ej. dictar_compra → revisión de captura precargada). El front
+        // navega a esta URL (mismo mecanismo que el adjunto de factura por chat).
+        ...(executionResult?.capture_url ? { capture_url: executionResult.capture_url } : {}),
       });
 
     } catch (err) {

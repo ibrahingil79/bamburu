@@ -316,6 +316,25 @@ export async function runCapture(db, tenant, session, { buffer, mime, originalNa
   return { attachment_id: att.id, mime, extracted, match, open_orders };
 }
 
+// Captura DICTADA POR VOZ (DISA): no hay foto/PDF, pero el destino y el control visual
+// son los MISMOS que la captura por imagen. En vez de extraer con visión, DISA ya trae el
+// resultado; aquí solo lo NORMALIZAMOS por el MISMO `parseExtraction` (cero normalización
+// nueva) y lo persistimos como un adjunto SIN fichero (path='' → readAttachmentBuffer lo
+// trata como "sin documento"; mime='' → la pantalla muestra el panel degradado). El handoff
+// reusa `?attachment=ID` → `preparedCapture` (recalcula match/open_orders frescos). A partir
+// de ahí, la pantalla editable y el confirm (createReceiptSvc/createDirectPurchaseSvc) son
+// IDÉNTICOS a la captura por foto. NO escribe nada de stock/compras.
+export function captureFromExtraction(db, session, extractedRaw) {
+  // Misma normalización que el extractor de visión (números EU, fecha, defaults, líneas).
+  const extracted = parseExtraction(JSON.stringify(extractedRaw || {}));
+  const r = db.prepare(
+    "INSERT INTO attachments (kind, original_name, path, mime, size, extraction_json) VALUES ('supplier_invoice_voice', ?, '', '', 0, ?)"
+  ).run('Compra dictada por voz a DISA', JSON.stringify(extracted));
+  const attId = r.lastInsertRowid;
+  if (session) logActivity(db, session, 'Dictó compra por voz a DISA', 'attachment', attId, extracted.supplier?.name || '');
+  return { attachment_id: attId, extracted };
+}
+
 // Reconstruye el blob de la pantalla a partir de un adjunto YA extraído (precarga sin
 // re-extraer): lee extraction_json y RECALCULA match + open_orders frescos. Devuelve null
 // si el adjunto no existe o no tiene lectura guardada.
@@ -520,12 +539,23 @@ function capturePage({ sym, bands, today, preload = null }) {
   function resetCapture(){ location.reload(); }
 
   // ───────── Paso 2 — montaje ─────────
+  // Mapea el % de IVA de la línea a UNA banda del país, SOLO si es inequívoco (1:1).
+  // Si el rate no aparece, o varias bandas comparten ese %, devuelve '' (la pantalla la
+  // exige como obligatoria: no adivinamos). Para la voz, esto prerellena la banda que DISA
+  // ya recogió; para la foto, ayuda igual cuando el modelo leyó un % nítido.
+  function bandFromRate(rate){
+    if(rate==null || rate==='') return '';
+    var hits = BANDS.filter(function(b){ return Number(b.rate)===Number(rate); });
+    return hits.length===1 ? hits[0].code : '';
+  }
   function buildReview(){
     document.getElementById('step1').style.display='none';
     document.getElementById('step2').style.display='block';
-    // documento
+    // documento — degradado si la compra se dictó por voz (sin foto/PDF: DATA.mime vacío)
     var url = '/api/erp/purchases/capture/file/'+DATA.attachment_id;
-    document.getElementById('docPreview').innerHTML = (DATA.mime==='application/pdf')
+    document.getElementById('docPreview').innerHTML = !DATA.mime
+      ? '<div class="alert alert-info" style="margin:0">🎙️ Compra <strong>dictada por voz</strong> a DISA — no hay documento adjunto. Revisa los datos precargados y confirma.</div>'
+      : (DATA.mime==='application/pdf')
       ? '<embed src="'+url+'" type="application/pdf" style="width:100%;height:70vh;border:1px solid var(--border);border-radius:8px"><div style="margin-top:.5rem"><a href="'+url+'" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Abrir PDF</a></div>'
       : '<a href="'+url+'" target="_blank" rel="noopener"><img src="'+url+'" style="max-width:100%;border-radius:8px;border:1px solid var(--border)"></a>';
     // datos
@@ -548,7 +578,7 @@ function capturePage({ sym, bands, today, preload = null }) {
         product_mode: (mt && mt.matched) ? 'existing' : 'unset',
         product_id: (mt && mt.matched) ? mt.product_id : null,
         product_label: (mt && mt.matched) ? ((mt.sku?'['+mt.sku+'] ':'')+mt.name) : '',
-        new_name: l.description, new_sku:'', new_tax_band:''
+        new_name: l.description, new_sku:'', new_tax_band: bandFromRate(l.vat_rate)
       };
     });
     renderDestino();

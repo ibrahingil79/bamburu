@@ -83,6 +83,9 @@ export function originDocBlock(db, entityType, entityId) {
   const atts = attachmentsFor(db, entityType, entityId);
   if (!atts.length) return '';
   const items = atts.map(a => {
+    // Adjunto SIN fichero (compra dictada por voz a DISA): no hay foto/PDF que servir →
+    // nota en vez de un enlace roto.
+    if (!a.path) return `<div style="color:var(--text2)">🎙️ ${esc(a.original_name || 'Compra dictada por voz a DISA')}</div>`;
     const url = '/api/erp/purchases/capture/file/' + a.id;
     const isImg = (a.mime || '').startsWith('image/');
     return isImg

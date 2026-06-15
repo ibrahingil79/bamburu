@@ -516,6 +516,9 @@ export function disaHomeHtml({ userName, alertCount, kpis }) {
           if (data.thread_id) dhThreadId = data.thread_id;   // recuerda el hilo para las siguientes
           const reply = data.reply || data.response || data.message || 'Sin respuesta.';
           dhAppendMsg('assistant', reply, data.artifact || null);
+          // Handoff a pantalla (p.ej. dictar una compra por voz): navega al enlace que devuelve
+          // la acción (mismo mecanismo que el adjunto de factura).
+          if (data.capture_url) setTimeout(() => { window.location.href = data.capture_url; }, 900);
         } catch {
           dhRemoveTyping(typingId);
           dhAppendMsg('assistant', 'Error al contactar con DISA. Intenta de nuevo.');

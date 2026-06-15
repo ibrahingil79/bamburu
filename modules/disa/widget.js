@@ -128,6 +128,10 @@ export function getDisaWidget() {
       var d=await r.json();
       if(d.thread_id) window.disaWidgetThreadId=d.thread_id;
       dpAppend('assistant', d.reply||'Sin respuesta');
+      // Handoff a pantalla (p.ej. dictar una compra por voz): si la acción devuelve un
+      // enlace, navega (mismo mecanismo que el adjunto de factura). Sin esto, DISA decia
+      // "te llevo a la pantalla" pero no navegaba.
+      if(d.capture_url){ setTimeout(function(){ window.location.href=d.capture_url; }, 900); }
     }catch(e){
       dpAppend('assistant','Error al conectar con DISA');
     }
