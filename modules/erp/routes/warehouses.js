@@ -61,6 +61,42 @@ export function warehouseBreakdown(db, productId) {
       FROM warehouses w WHERE w.active=1 ORDER BY w.is_default DESC, w.id`).all(productId);
 }
 
+// ── Valoración a coste (WAC global) — helpers CURADOS para que la voz de DISA no
+// recalcule a ojo. Valor = cantidad × average_cost (coste medio ponderado GLOBAL del
+// producto). Un traslado no cambia el WAC global; el valor por almacén es derivado
+// (qty_almacén × WAC global), mismo criterio que /admin/inventory.
+const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
+
+// Valoración de UN producto: stock + coste medio + valor, global y por almacén activo.
+export function productValuation(db, productId) {
+  const p = db.prepare("SELECT id, name, sku, stock, average_cost FROM products WHERE id=?").get(productId);
+  if (!p) return null;
+  const avg = p.average_cost || 0;
+  const warehouses = warehouseBreakdown(db, productId).map(w => ({
+    id: w.id, name: w.name, is_default: w.is_default, qty: w.qty, value: r2(w.qty * avg),
+  }));
+  return { product_id: p.id, name: p.name, sku: p.sku, stock: p.stock, average_cost: avg, value: r2(p.stock * avg), warehouses };
+}
+
+// Valoración del inventario completo: total global + por almacén (a coste WAC).
+// Solo productos físicos (servicios/digitales no llevan stock).
+export function inventoryValuation(db) {
+  const tot = db.prepare(
+    "SELECT COALESCE(SUM(stock * COALESCE(average_cost,0)),0) AS value, COALESCE(SUM(stock),0) AS units FROM products WHERE COALESCE(type,'physical')='physical'"
+  ).get();
+  const byWarehouse = db.prepare(`
+    SELECT w.id, w.name, w.is_default,
+           COALESCE(SUM(sm.quantity), 0) AS units,
+           COALESCE(SUM(sm.quantity * COALESCE(p.average_cost, 0)), 0) AS value
+      FROM warehouses w
+      LEFT JOIN stock_movements sm ON sm.warehouse_id = w.id
+      LEFT JOIN products p ON p.id = sm.product_id
+     WHERE w.active = 1
+     GROUP BY w.id ORDER BY w.is_default DESC, w.id`).all()
+    .map(w => ({ id: w.id, name: w.name, is_default: w.is_default, units: w.units, value: r2(w.value) }));
+  return { total_value: r2(tot.value), total_units: tot.units, warehouses: byWarehouse };
+}
+
 // ── Servicios validados (los usan la API y, por paridad, el resto del sistema) ──
 export function createWarehouseSvc(db, input) {
   const res = warehouseSchema.safeParse(input);

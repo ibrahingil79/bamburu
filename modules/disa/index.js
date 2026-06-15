@@ -5,6 +5,10 @@ import { generateInvoice } from '../erp/routes/invoices.js';
 import { createClientSvc, updateClientSvc, archiveClientSvc, restoreClientSvc, searchClients } from '../erp/routes/clients.js';
 import { clientFieldOptions } from '../erp/schemas.js';
 import { nextCode } from '../erp/codes.js';
+// Voz de DISA sobre stock/compras (Fase 1): operar por servicio validado + valoración curada.
+import { adjustStock, ADJUST_REASONS } from '../erp/stock.js';
+import { createStockTransferSvc } from '../erp/routes/stock-transfers.js';
+import { activeWarehouses, inventoryValuation } from '../erp/routes/warehouses.js';
 import { collectionsWorklist, registerCollectionAction, accountsSummary, registerAccountAction } from '../erp/cobros.js';
 import { sendEmail } from '../../core/mailer.js';
 import { callClaude, hasAnthropicKey } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
@@ -99,7 +103,10 @@ export function register(app, db) {
     'client_groups', 'suppliers',
     'sales_orders', 'sales_items',
     'invoices', 'invoice_items',
-    'inventory_movements',
+    // 'inventory_movements',  // [Voz DISA stock] ENTRADA MUERTA: la tabla se archivó a
+    // inventory_movements_legacy en Pilar 3 (stock unificado); el stock se mueve por el
+    // libro stock_movements vía servicios validados (adjust_stock/transfer_stock), nunca por
+    // el genérico. Se comenta (no se borra) para no permitir escrituras a una tabla inexistente.
     'discount_codes', 'auto_discounts',
     'shipping_methods',
     'company_config', 'settings', 'store_settings', 'disa_profile',
@@ -110,7 +117,7 @@ export function register(app, db) {
   const ADMIN_ONLY_ACTIONS = new Set([
     'insert_record', 'update_record', 'delete_record',
     'create_order', 'edit_order', 'update_order_status', 'cancel_order',
-    'create_invoice_from_order', 'adjust_stock', 'reset_stock',
+    'create_invoice_from_order', 'adjust_stock', 'reset_stock', 'transfer_stock',
     'update_company_config', 'disable_2fa_user', 'list_users_security',
     'register_collection_action', 'register_account_action',
     'create_client', 'edit_client', 'deactivate_client', 'activate_client',
@@ -141,6 +148,32 @@ export function register(app, db) {
         return t.name + ': ' + cols.map(c => c.name + (c.notnull && !c.dflt_value ? '*' : '')).join(', ');
       })
       .join('\n');
+  }
+
+  // [Voz DISA stock] Extrae el bloque [ACCION:{...}] EQUILIBRANDO LLAVES. El regex no-greedy
+  // anterior (\{[\s\S]*?\}) partía un JSON anidado en el primer "}]" interno → rompía acciones
+  // con arrays como transfer_stock {"items":[{...}]} (las planas no lo notaban). Devuelve el
+  // objeto y el texto completo del bloque (para retirarlo). Si el JSON viene truncado, null.
+  function extractActionBlock(reply) {
+    const tag = reply.indexOf('[ACCION:');
+    if (tag === -1) return null;
+    const open = reply.indexOf('{', tag);
+    if (open === -1) return null;
+    let depth = 0, inStr = false, esc = false, close = -1;
+    for (let i = open; i < reply.length; i++) {
+      const ch = reply[i];
+      if (inStr) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') inStr = false; continue; }
+      if (ch === '"') inStr = true;
+      else if (ch === '{') depth++;
+      else if (ch === '}') { if (--depth === 0) { close = i; break; } }
+    }
+    if (close === -1) return null;
+    let end = close + 1;
+    while (end < reply.length && /\s/.test(reply[end])) end++;
+    if (reply[end] !== ']') return null;
+    let action;
+    try { action = JSON.parse(reply.slice(open, close + 1)); } catch { return null; }
+    return { action, raw: reply.slice(tag, end + 1) };
   }
 
   async function executeAction(db, action, session) {
@@ -451,35 +484,77 @@ export function register(app, db) {
 
         // ── Inventario ────────────────────────────────────────
 
+        // [Voz DISA stock — reescrito] Ajuste por el SERVICIO VALIDADO adjustStock (mismo que
+        // /admin/inventory): opera por almacén, motivo de lista cerrada (ADJUST_REASONS), escribe
+        // al libro stock_movements (WAC y caché coherentes). modes: set=poner a X / add=sumar /
+        // sub=restar. El servicio impone físico/modo/motivo válidos (400). DISA traduce el error.
         case 'adjust_stock': {
-          const p = action.params;
+          const p = action.params || {};
           const prod = db.prepare('SELECT name FROM products WHERE id=?').get(p.product_id);
           if (!prod) return { ok: false, message: 'Producto no encontrado.' };
-          db.prepare('UPDATE products SET stock = stock + ? WHERE id=?').run(p.quantity, p.product_id);
-          db.prepare(`
-            INSERT INTO inventory_movements (product_id, type, quantity, reason)
-            VALUES (?, ?, ?, ?)
-          `).run(p.product_id, p.quantity > 0 ? 'in' : 'out',
-            Math.abs(p.quantity), p.reason || 'Ajuste por DISA');
-          logActivity(db, 'edit', 'products', p.product_id,
-            'Stock ajustado ' + (p.quantity > 0 ? '+' : '') + p.quantity + ' por DISA', session);
-          return { ok: true, message: 'Stock de "' + prod.name + '" ajustado en ' + p.quantity + ' unidades.' };
+          try {
+            const r = adjustStock(db, parseInt(p.product_id), {
+              mode: p.mode || 'set',
+              value: p.value,
+              reason: p.reason,
+              note: p.note || 'Ajuste por DISA',
+              warehouse_id: p.warehouse_id,
+            });
+            const wh = db.prepare('SELECT name FROM warehouses WHERE id=?').get(r.warehouse_id);
+            logActivity(db, 'edit', 'products', p.product_id,
+              'Stock ajustado por DISA (' + (p.mode || 'set') + ' ' + p.value + ', ' + p.reason + ')', session);
+            return { ok: true, message: 'Stock de "' + prod.name + '" ajustado en ' + (wh?.name || 'el almacén')
+              + '. Nuevo saldo: ' + r.stock + ' uds.' };
+          } catch (e) {
+            return { ok: false, message: 'No se pudo ajustar el stock: ' + e.message };
+          }
         }
 
-        case 'reset_stock': {
-          const p = action.params;
-          const product = db.prepare('SELECT name, stock FROM products WHERE id=?').get(p.product_id);
-          if (!product) return { ok: false, message: 'Producto no encontrado.' };
-          db.prepare('UPDATE products SET stock=0 WHERE id=?').run(p.product_id);
-          if (product.stock !== 0) {
-            db.prepare(`
-              INSERT INTO inventory_movements (product_id, type, quantity, reason)
-              VALUES (?, 'adjust', ?, ?)
-            `).run(p.product_id, Math.abs(product.stock), p.reason || 'Reset por DISA');
+        // [Voz DISA stock — reescrito] Traslado entre almacenes por el SERVICIO VALIDADO
+        // createStockTransferSvc (Capa 3): multi-línea, congela el WAC, escribe TR-NNNN inmutable.
+        // El servicio impone origen≠destino, almacenes activos, solo físicos, qty≤disponible en
+        // origen. DISA identifica producto y almacenes por nombre y resume antes (confirm-first).
+        case 'transfer_stock': {
+          const p = action.params || {};
+          try {
+            const items = (Array.isArray(p.items) && p.items.length
+              ? p.items
+              : [{ product_id: p.product_id, quantity: p.quantity }])
+              .map(it => ({ product_id: parseInt(it.product_id), quantity: Number(it.quantity) }));
+            const today = new Date().toISOString().split('T')[0];
+            const r = createStockTransferSvc(db, {
+              from_warehouse_id: parseInt(p.from_warehouse_id),
+              to_warehouse_id: parseInt(p.to_warehouse_id),
+              date: p.date || today,
+              notes: p.notes || 'Traslado por DISA',
+              items,
+            });
+            logActivity(db, 'create', 'stock_transfers', r.id,
+              'Traslado ' + r.transfer_number + ' por DISA (' + r.lines + ' líneas)', session);
+            return { ok: true, message: 'Traslado ' + r.transfer_number + ' confirmado (' + r.lines + ' línea(s)).' };
+          } catch (e) {
+            return { ok: false, message: 'No se pudo hacer el traslado: ' + e.message };
           }
-          logActivity(db, 'edit', 'products', p.product_id, 'Stock reseteado a 0 por DISA', session);
-          return { ok: true, message: 'Stock de "' + product.name + '" puesto a 0.' };
         }
+
+        // [Voz DISA stock — OBSOLETO, comentado no borrado] El reset_stock viejo hacía UPDATE
+        // directo a products.stock + INSERT en inventory_movements (tabla archivada en Pilar 3):
+        // saltaba el libro y el WAC, y hoy lanzaría "no such table". "Poner a 0/vaciar" se hace
+        // ahora con adjust_stock mode:set value:0 (servicio validado). Se deja como registro.
+        // case 'reset_stock': {
+        //   const p = action.params;
+        //   const product = db.prepare('SELECT name, stock FROM products WHERE id=?').get(p.product_id);
+        //   if (!product) return { ok: false, message: 'Producto no encontrado.' };
+        //   db.prepare('UPDATE products SET stock=0 WHERE id=?').run(p.product_id);
+        //   if (product.stock !== 0) {
+        //     db.prepare(`
+        //       INSERT INTO inventory_movements (product_id, type, quantity, reason)
+        //       VALUES (?, 'adjust', ?, ?)
+        //     `).run(p.product_id, Math.abs(product.stock), p.reason || 'Reset por DISA');
+        //   }
+        //   logActivity(db, 'edit', 'products', p.product_id, 'Stock reseteado a 0 por DISA', session);
+        //   return { ok: true, message: 'Stock de "' + product.name + '" puesto a 0.' };
+        // }
 
         // ── Clientes ──────────────────────────────────────────
 
@@ -959,6 +1034,68 @@ export function register(app, db) {
               'Usa esta lista para resolver un nombre a su client_id antes de cualquier accion. Varios que encajen → pregunta cual. Ninguno → propon crearlo (create_client, con confirmacion).',
               '',
             ];
+          } catch { return []; }
+        })(),
+        // [Voz DISA stock] Índice de PRODUCTOS físicos activos — resolver nombre→id antes de
+        // consultar u operar (mismo protocolo de identificación que clientes). Incluye stock
+        // GLOBAL y coste medio (WAC) curados; el stock por almacén NO va aquí (se consulta).
+        ...(() => {
+          try {
+            const total = db.prepare("SELECT COUNT(*) n FROM products WHERE status='active' AND COALESCE(type,'physical')='physical'").get().n;
+            if (!total) return [];
+            const prods = db.prepare("SELECT id, name, sku, stock, average_cost FROM products WHERE status='active' AND COALESCE(type,'physical')='physical' ORDER BY name LIMIT 40").all();
+            const list = prods.map(p => '#' + p.id + ' ' + p.name + (p.sku ? ' [' + p.sku + ']' : '')
+              + ' · stock ' + p.stock + ' · coste medio ' + sym + Number(p.average_cost || 0).toFixed(2)).join('\n');
+            return [
+              'PRODUCTOS FISICOS ACTIVOS (' + total + (total > prods.length ? '; muestro los ' + prods.length + ' primeros por nombre' : '') + ') — id, nombre, [SKU], stock GLOBAL, coste medio (WAC):',
+              list,
+              'Resuelve un nombre de producto a su id con esta lista antes de consultar u operar. Varios → pregunta cual. Ninguno → dilo (no inventes). El stock POR ALMACEN no esta aqui: consultalo.',
+              '',
+            ];
+          } catch { return []; }
+        })(),
+        // [Voz DISA stock] Almacenes activos (lista cerrada) — para identificar origen/destino
+        // de un traslado o el almacén de un ajuste por nombre.
+        ...(() => {
+          try {
+            const whs = activeWarehouses(db);
+            if (!whs.length) return [];
+            return [
+              'ALMACENES ACTIVOS — id, nombre:',
+              whs.map(w => '#' + w.id + ' ' + w.name + (w.is_default ? ' (principal)' : '')).join('\n'),
+              'Para trasladar o ajustar por almacen, resuelve el nombre a su id aqui. En un traslado, origen y destino deben ser distintos.',
+              '',
+            ];
+          } catch { return []; }
+        })(),
+        // [Voz DISA stock] Índice de proveedores — resolver nombre→id para consultas de compras.
+        ...(() => {
+          try {
+            const total = db.prepare('SELECT COUNT(*) n FROM suppliers').get().n;
+            if (!total) return [];
+            const sups = db.prepare('SELECT id, name, fiscal_id FROM suppliers ORDER BY name LIMIT 40').all();
+            return [
+              'PROVEEDORES (' + total + (total > sups.length ? '; ' + sups.length + ' primeros' : '') + ') — id, nombre, [NIF]:',
+              sups.map(s => '#' + s.id + ' ' + s.name + (s.fiscal_id ? ' [' + s.fiscal_id + ']' : '')).join('\n'),
+              '',
+            ];
+          } catch { return []; }
+        })(),
+        // [Voz DISA stock] Valoración a coste (WAC) CURADA — no recalcular a ojo. Total global +
+        // por almacén. Y aviso explícito: el stock mínimo no se gestiona (no inventar "bajo minimos").
+        ...(() => {
+          try {
+            const v = inventoryValuation(db);
+            const out = [
+              'INVENTARIO — valoracion a coste (WAC global) [dato curado, usalo tal cual]:',
+              'Valor total: ' + sym + v.total_value.toFixed(2) + ' (' + v.total_units + ' uds)',
+            ];
+            if (v.warehouses.length > 1) {
+              out.push('Por almacen: ' + v.warehouses.map(w => w.name + ' ' + sym + w.value.toFixed(2) + ' (' + w.units + ' uds)').join(' · '));
+            }
+            out.push('El stock minimo / punto de pedido NO se gestiona aun: si preguntan que hay "bajo minimos", dilo claramente; no uses un umbral inventado.');
+            out.push('');
+            return out;
           } catch { return []; }
         })(),
         'PRODUCTOS MAS VENDIDOS ESTE MES:',
@@ -1776,6 +1913,8 @@ export function register(app, db) {
     // (no escritos a mano → no se desincronizan). DISA debe usar solo estos, nunca inventar.
     const ctVals = (clientFieldOptions.client_type || []).join(' | ');
     const pmVals = (clientFieldOptions.payment_method || []).map(v => v === '' ? '"" (en blanco)' : v).join(' | ');
+    // [Voz DISA stock] Motivos de ajuste de lista cerrada, desde el esquema real (no a mano).
+    const arVals = (ADJUST_REASONS || []).join(' | ');
 
     const systemPrompt = [
       agentIdentity,
@@ -1783,9 +1922,13 @@ export function register(app, db) {
       '## CAPACIDADES Y LIMITES',
       '',
       'PUEDES HACER:',
-      '- Leer cualquier dato del negocio (productos, pedidos, clientes, inventario, ventas, facturas).',
+      '- Leer cualquier dato del negocio (productos, pedidos, clientes, inventario, ventas, facturas, compras).',
       '- Buscar y consultar clientes, e identificarlos por nombre antes de actuar (ver CLIENTES ACTIVOS).',
       '- Gestionar clientes (crear, editar, archivar, restaurar) por la via validada, con confirmacion.',
+      '- Consultar inventario y compras: stock global y por almacen, valoracion a coste (WAC), ultimo coste de',
+      '  compra, historico de compras, pedidos/recepciones pendientes, traslados y devoluciones (ver INVENTARIO).',
+      '- Operar el stock por la via validada, con confirmacion: trasladar entre almacenes (transfer_stock) y',
+      '  ajustar stock (adjust_stock). Identifica producto y almacen por nombre antes; las guardas las pone el servicio.',
       '- Mostrar respuestas visuales con artifacts (KPIs, listas, numeros).',
       '- Si el usuario es admin/owner: ejecutar cambios (crear, editar, eliminar registros,',
       '  ajustar stock, generar facturas) SIEMPRE pidiendo confirmacion previa.',
@@ -1894,9 +2037,27 @@ export function register(app, db) {
       '- cancel_order: {"order_id":0,"reason":""}',
       '- create_invoice_from_order: {"order_id":0}',
       '',
-      'Inventario:',
-      '- adjust_stock: {"product_id":0,"quantity":0,"reason":""}  (positivo=entrada, negativo=salida)',
-      '- reset_stock: {"product_id":0,"reason":""}',
+      'Inventario (ver PRODUCTOS FISICOS ACTIVOS y ALMACENES ACTIVOS del contexto para los id):',
+      '- adjust_stock: {"product_id":0,"mode":"set|add|sub","value":0,"reason":"...","warehouse_id":0}',
+      '  mode: set = poner a X | add = sumar X | sub = restar X. value >= 0. "poner a 0"/"vaciar" = mode:set, value:0.',
+      '  warehouse_id OPCIONAL (vacio = almacen principal). "set" es relativo al saldo de ESE almacen.',
+      '  reason OBLIGATORIO, EXACTAMENTE uno de: ' + arVals,
+      '  Identifica el producto (y el almacen si lo dicen) por nombre antes. Si el motivo no encaja, pregunta; no lo inventes.',
+      '- transfer_stock: {"from_warehouse_id":0,"to_warehouse_id":0,"items":[{"product_id":0,"quantity":0}]}',
+      '  Mueve stock de un almacen a otro. Multi-linea (varios productos entre los DOS mismos almacenes).',
+      '  Para una sola linea vale {"from_warehouse_id":0,"to_warehouse_id":0,"product_id":0,"quantity":0}.',
+      '  Origen != destino, solo productos fisicos, cantidad <= disponible en el ORIGEN (lo valida el servicio).',
+      '  NO cambia el stock total ni el coste medio del producto: solo lo redistribuye entre almacenes.',
+      '  Resume SIEMPRE antes: "Voy a trasladar N de X de [origen] a [destino], confirmo?" y ejecuta solo tras "si".',
+      'NO consultes el stock antes de ajustar o trasladar: el servicio valida la disponibilidad y rechaza si no',
+      'llega (traducelo si falla). Propon la accion directamente con el bloque [ACCION:...] al final, sin query previa.',
+      '',
+      'Consultas de inventario (solo lectura, sin accion):',
+      '- Stock GLOBAL y coste medio (WAC) de cada producto: en PRODUCTOS FISICOS ACTIVOS. Valoracion total y por almacen: en INVENTARIO (dato curado, no recalcular).',
+      '- Stock POR ALMACEN o historico (compras/recepciones/traslados/devoluciones): consulta con query_database.',
+      '  Stock de un producto en un almacen = SUMA(quantity) de stock_movements filtrando product_id y warehouse_id.',
+      '  Valor a coste = cantidad x products.average_cost (WAC global). Ultimo coste de compra = unit_cost de la compra/recepcion mas reciente del producto.',
+      '- El stock minimo / punto de pedido NO se gestiona: si preguntan "bajo minimos", dilo; no uses un umbral inventado.',
       '',
       'Cobros (ver seccion COBROS del contexto para invoice_id, perfil y proxima accion):',
       '- register_collection_action: {"invoice_id":0,"type":"recordatorio_email|contacto_manual|promesa_pago","channel":"telefono|whatsapp|otro","note":"","promised_date":"AAAA-MM-DD"}',
@@ -2106,23 +2267,25 @@ export function register(app, db) {
           console.log('[DISA] artifact parse failed:', e.message.substring(0, 80));
         }
 
-        // Fall back to action block parsing only if not an artifact response
+        // Fall back to action block parsing only if not an artifact response.
+        // Extractor con balanceo de llaves (soporta JSON anidado como transfer_stock.items).
         if (!parsedAsArtifact) {
-          const actionMatch = reply.match(/\[ACCION:(\{[\s\S]*?\})\]/);
-          if (actionMatch) {
-            try {
-              newPendingAction = JSON.parse(actionMatch[1]);
-              cleanReply = reply.replace(/\[ACCION:[\s\S]*?\]/, '').trim();
-              if (SECURITY_ACTIONS.has(newPendingAction.type)) {
-                const confirmPhrase = (newPendingAction.confirm || newPendingAction.type).toUpperCase();
-                newPendingAction._securityPhrase = confirmPhrase;
-                cleanReply += '\n\n⚠️ Accion de seguridad. Para confirmar, escribe exactamente:\n' + confirmPhrase;
-              } else {
-                cleanReply += '\n\n¿Confirmas esta accion? Responde "si" para ejecutarla.';
-              }
-            } catch {
-              cleanReply = reply.replace(/\[ACCION:[\s\S]*?\]/, '').trim();
+          const parsedAction = extractActionBlock(reply);
+          if (parsedAction) {
+            newPendingAction = parsedAction.action;
+            cleanReply = reply.replace(parsedAction.raw, '').trim();
+            if (SECURITY_ACTIONS.has(newPendingAction.type)) {
+              const confirmPhrase = (newPendingAction.confirm || newPendingAction.type).toUpperCase();
+              newPendingAction._securityPhrase = confirmPhrase;
+              cleanReply += '\n\n⚠️ Accion de seguridad. Para confirmar, escribe exactamente:\n' + confirmPhrase;
+            } else {
+              cleanReply += '\n\n¿Confirmas esta accion? Responde "si" para ejecutarla.';
             }
+          } else if (/\[ACCION:/.test(reply)) {
+            // Había intención de acción pero el bloque vino mal formado/truncado: retira el
+            // resto y pide reformular (no ejecuta nada a medias).
+            cleanReply = reply.replace(/\[ACCION:[\s\S]*$/, '').trim()
+              + '\n\n(No pude leer la accion completa. ¿Puedes repetir la instruccion?)';
           }
         }
       }
