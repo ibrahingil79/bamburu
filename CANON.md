@@ -217,6 +217,12 @@ funciones de pilares futuros.
   cliente) y **control horario** (registro de jornada, normativa ES). Ventas completas y el
   sistema de diseño ya estaban previstos. Orden tentativo y detalle en TABLERO.md
   ("Roadmap futuro").
+- **Módulos futuros registrados (15 jun 2026, decisión del dueño) — Plataforma / Capa 2, fuera del
+  orden de pilares, NO iniciar hasta indicación:** **Telegram como canal de producto** (comunicación
+  interna del equipo + operar DISA por Telegram desde el móvil; atención al cliente queda como pregunta
+  abierta), **mapas con OpenStreetMap** (geolocalización y direcciones, sin Google Maps) y **suite
+  ofimática ligera** (ver/editar hojas, texto y PDF dentro de Bamburu). Solo registro, sin adelantar
+  pilares; detalle en TABLERO.md ("Roadmap futuro", entradas 11–13).
 
 ---
 

@@ -258,6 +258,25 @@ Archivos: `modules/registro/index.js`, `core/signup-schema.js`, `core/tenant-sig
 10. **Portal de Cliente — NO INICIADA.** Completo: el cliente final ve y descarga sus presupuestos y
     facturas, **aprueba presupuestos** e interactúa/pide. **Diferencial**; su forma depende del tipo de
     negocio. Va **después del pilar de Ventas**. (Decisión del dueño, 2026-06-14.)
+11. **Telegram como canal (PRODUCTO) — NO INICIADA · Plataforma / Capa 2 · registrado 2026-06-15 · NO iniciar
+    hasta que se indique.** Distinto del bot de monitorización/administración del servidor ya registrado (ese
+    vigila la máquina; esto es producto). **DOS usos confirmados por el dueño:** (a) **comunicación interna de
+    la compañía** (mensajería del equipo del negocio); (b) **DISA por Telegram** — el dueño/equipo opera DISA
+    desde el móvil por chat de Telegram, sin entrar a la plataforma (gestionar el negocio por voz a distancia).
+    **Pregunta abierta (NO confirmada, solo anotada):** atención al cliente — que los clientes escriban al
+    negocio por Telegram. Alcance fino y arquitectura **a definir al abrir la tarea**.
+12. **Mapas (OpenStreetMap / OpenMaps) — NO INICIADA · Plataforma / Capa 2 · registrado 2026-06-15 · NO iniciar
+    hasta que se indique.** Geolocalización y direcciones en la plataforma. Alcance a definir: direcciones de
+    clientes/proveedores en mapa, **geocodificación al dar de alta**, rutas de reparto/visitas. **OSM por coste y
+    licencia** (sin dependencia de Google Maps). **Verificar residencia de datos** al abrirla.
+13. **Documentos dentro de la plataforma (suite ofimática ligera) — NO INICIADA · Plataforma / Capa 2 ·
+    registrado 2026-06-15 · NO iniciar hasta que se indique.** Ver y editar hojas de cálculo, documentos de
+    texto y PDF sin salir de Bamburu. **Librerías CANDIDATAS a evaluar** (decisión técnica al construir, con
+    benchmark previo; **no fijar ahora**): **FortuneSheet** (hojas de cálculo), **Editor.js** o **Milkdown**
+    (texto), **PDF.js** (visor PDF).
+
+> Entradas 11–13 (Telegram, Mapas, Documentos): **fuera del orden de pilares actual**; no adelantan ninguna
+> tarea activa. Pasarán por "la línea" (CANON §5) al detallarse.
 
 ---
 
