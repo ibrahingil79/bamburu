@@ -49,8 +49,9 @@ export function cobroModalScript(sym) {
       const payRows = (inv.payments && inv.payments.length) ? inv.payments.map(function(p){
         running = Math.round((running+Number(p.amount))*100)/100;
         const saldo = Math.round((Number(inv.total)-running)*100)/100;
-        return '<tr><td>'+p.paid_date+'</td><td style="text-align:right">'+SYM+Number(p.amount).toFixed(2)+'</td><td>'+escHtml(p.payment_method||'—')+'</td><td>'+escHtml(p.note||'')+'</td><td style="text-align:right;color:var(--muted)">'+SYM+saldo.toFixed(2)+'</td></tr>';
-      }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:1rem">Sin cobros registrados</td></tr>';
+        return '<tr><td>'+p.paid_date+'</td><td style="text-align:right">'+SYM+Number(p.amount).toFixed(2)+'</td><td>'+escHtml(p.payment_method||'—')+'</td><td>'+escHtml(p.note||'')+'</td><td style="text-align:right;color:var(--muted)">'+SYM+saldo.toFixed(2)+'</td>'
+          +'<td style="text-align:right"><button class="btn btn-secondary btn-sm" title="Deshacer este cobro" onclick="deshacerCobro('+inv.id+','+p.id+')">Deshacer</button></td></tr>';
+      }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:1rem">Sin cobros registrados</td></tr>';
       // El formulario solo si la factura admite cobro (flag del motor: inv.cobrable) y queda pendiente.
       const canRegister = inv.cobrable && co.pendiente > 0.0049;
       const form = canRegister
@@ -64,9 +65,19 @@ export function cobroModalScript(sym) {
         : '<p style="color:var(--muted);margin:0">'+(co.estado==='cobrada'?'Factura cobrada por completo.':'Esta factura no admite registrar más cobros.')+'</p>';
       document.getElementById('cobroBody').innerHTML =
         '<div style="margin-bottom:1rem">Cobrado <strong>'+SYM+Number(co.cobrado||0).toFixed(2)+'</strong> · Pendiente <strong>'+SYM+Number(co.pendiente||0).toFixed(2)+'</strong> <span style="color:var(--muted)">(de '+SYM+Number(inv.total||0).toFixed(2)+')</span></div>'
-        +'<div class="table-wrap" style="margin-bottom:1rem"><table><thead><tr><th>Fecha</th><th style="text-align:right">Importe</th><th>Forma</th><th>Nota</th><th style="text-align:right">Saldo</th></tr></thead><tbody>'+payRows+'</tbody></table></div>'
+        +'<div class="table-wrap" style="margin-bottom:1rem"><table><thead><tr><th>Fecha</th><th style="text-align:right">Importe</th><th>Forma</th><th>Nota</th><th style="text-align:right">Saldo</th><th></th></tr></thead><tbody>'+payRows+'</tbody></table></div>'
         +form;
       openModal('cobroModal');
+    };
+    // Deshacer un cobro concreto (corrige un apunte mal metido; NO anula la factura).
+    window.deshacerCobro = async function(invoiceId, paymentId){
+      if(!confirm('¿Deshacer este cobro? Se elimina solo este apunte de caja; la factura sigue igual.')) return;
+      try {
+        await api('DELETE','/api/erp/invoices/'+invoiceId+'/payments/'+paymentId);
+        toast('Cobro deshecho');
+        await openCobros(invoiceId);
+        if (typeof window.cobroOnSaved === 'function') window.cobroOnSaved(invoiceId);
+      } catch(e){ toast(e.message||'Error deshaciendo el cobro','err'); }
     };
     // Guarda un cobro: ÚNICO endpoint de escritura. Refresca el modal y avisa a la página.
     window.registrarCobro = async function(id){

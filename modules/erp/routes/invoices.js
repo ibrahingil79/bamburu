@@ -502,6 +502,22 @@ export function createInvoiceRoutes(db) {
     } catch (e) { return c.json({ error: e.message }, 400); }
   });
 
+  // DELETE /api/erp/invoices/:id/payments/:pid — deshacer un cobro mal metido. Un cobro
+  // es un apunte de caja interno (control interno, no documento legal, no toca el hash):
+  // corregirlo = borrar ESE apunte, sin tocar la factura. El estado de cobro se recalcula.
+  api.delete('/:id/payments/:pid', requirePerm('invoices.create'), c => {
+    try {
+      const id = parseInt(c.req.param('id')), pid = parseInt(c.req.param('pid'));
+      const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(id);
+      if (!inv) return c.json({ error: 'Factura no encontrada' }, 404);
+      const pay = db.prepare('SELECT * FROM invoice_payments WHERE id=? AND invoice_id=?').get(pid, id);
+      if (!pay) return c.json({ error: 'Cobro no encontrado en esta factura' }, 404);
+      db.prepare('DELETE FROM invoice_payments WHERE id=?').run(pid);
+      logActivity(db, c.get('session'), 'Deshizo cobro', 'invoice', id, `${inv.invoice_number} · ${pay.amount}`);
+      return c.json({ deleted: pid, amount: pay.amount, cobro: invoiceCobro(db, inv, new Date().toISOString().slice(0, 10)) });
+    } catch (e) { return c.json({ error: e.message }, 400); }
+  });
+
   // GET /api/erp/invoices/:id/collection-email-preview — plantilla precargada (editable
   // en el modal) según el tono de la próxima acción. Solo construye, no envía.
   api.get('/:id/collection-email-preview', requirePerm('orders.read'), c => {

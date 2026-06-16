@@ -323,6 +323,40 @@ export const supplierSchema = z.object({
   address:   strOpt(500),
   city:      strOpt(100),
   notes:     strOpt(1000),
+  // Capa de dinero (a) — datos de gestión, espejo del T3 de clients. Defaults seguros
+  // (contado / sin especificar): el vencimiento de la factura recibida sale de aquí.
+  payment_term_days: z.coerce.number().int().min(0).max(3650).optional().default(0),
+  payment_method:    z.enum(['', 'transferencia', 'efectivo', 'tarjeta', 'domiciliacion']).optional().default(''),
+});
+
+// ── Factura recibida (Capa de dinero proveedor · Paso a) ───────────────────────
+// Creación MANUAL: la mercancía llegó antes que la factura. SIEMPRE enlazada a un
+// documento de stock YA existente (recepción confirmada o compra recibida). El total
+// es CON IVA (lo que se debe). base/tax son informativos del documento. supplier_id se
+// deriva del documento de origen en el servicio (no se teclea suelto).
+export const supplierInvoiceSchema = z.object({
+  entity_type:             z.enum(['po_receipt', 'purchase']),
+  entity_id:               z.coerce.number().int().positive(),
+  supplier_invoice_number: strOpt(100),
+  invoice_date:            z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  base:                    z.coerce.number().min(0).max(100_000_000).optional().default(0),
+  tax:                     z.coerce.number().min(0).max(100_000_000).optional().default(0),
+  total:                   z.coerce.number().positive('El total debe ser mayor que 0').max(100_000_000),
+  notes:                   strOpt(1000),
+});
+
+// Anular una factura recibida: solo motivo (mismo criterio que factura/devoluciones).
+export const supplierInvoiceAnularSchema = z.object({
+  motivo: z.string().trim().min(3, 'Indica el motivo de la anulación').max(500),
+});
+
+// Registrar un pago a proveedor (total o parcial). Espejo EXACTO de invoicePaymentSchema:
+// importe positivo (dinero pagado); el estado de pago se calcula en vivo, no se guarda.
+export const supplierPaymentSchema = z.object({
+  amount:         z.coerce.number().positive('El importe debe ser mayor que 0').max(1_000_000),
+  paid_date:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  payment_method: z.string().trim().max(40).optional().default(''),
+  note:           strOpt(500),
 });
 
 // Multi-almacén · Capa 1 — el almacén solo tiene nombre (obligatorio, único entre activos

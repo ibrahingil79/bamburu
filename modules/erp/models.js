@@ -605,6 +605,13 @@ export function runMigrations(db) {
   addCol(db, 'suppliers', 'city',      "TEXT DEFAULT ''");
   addCol(db, 'suppliers', 'active',    'INTEGER DEFAULT 1'); // archivar en vez de borrar
   db.prepare('UPDATE suppliers SET active=1 WHERE active IS NULL').run();
+  // Capa de dinero (a) — datos de gestión del proveedor, espejo del T3 de clients:
+  // plazo de pago (fija el vencimiento de la factura recibida) y forma de pago. Aditivo;
+  // filas antiguas → 0 / ''. NO se añaden datos bancarios/IBAN aquí (queda en cola).
+  addCol(db, 'suppliers', 'payment_term_days', 'INTEGER DEFAULT 0');   // plazo de pago en días (0 = contado)
+  addCol(db, 'suppliers', 'payment_method',    "TEXT DEFAULT ''");     // transferencia | efectivo | tarjeta | domiciliacion
+  db.prepare('UPDATE suppliers SET payment_term_days=0 WHERE payment_term_days IS NULL').run();
+  db.prepare("UPDATE suppliers SET payment_method='' WHERE payment_method IS NULL").run();
 
   // ── Código interno autogenerado (cliente / proveedor / producto) ────────────
   // Identificación interna CLI-/PROV-/PROD-NNNN (no es guarda de duplicados). Contador por
@@ -844,6 +851,62 @@ export function runMigrations(db) {
   // (el `extracted`) junto al adjunto, para precargar la pantalla de revisión sin volver
   // a llamar al modelo. NULL en adjuntos previos / subidas que no extraen. Aditiva.
   addCol(db, 'attachments', 'extraction_json', 'TEXT');
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // CAPA DE DINERO CON PROVEEDORES · Paso (a) — DEUDA de compras de stock.
+  // Espejo de Cobros (invoice_payments + invoices.due_date) del lado proveedor.
+  // La deuda NO cuelga del coste de la mercancía: cuelga de la FACTURA DEL PROVEEDOR
+  // como documento propio, porque lo que se paga es el TOTAL CON IVA (que la captura
+  // C2 calcula y hoy se descartaba). Por eso "factura recibida" es una entidad nueva.
+  // NO toca la cadena de hash ni el Verifactu (la factura del proveedor no es emisión
+  // nuestra). NO toca la capa física (stock/WAC): solo LEE importes.
+  // ════════════════════════════════════════════════════════════════════════════
+  // Factura recibida (documento INMUTABLE). Nace AUTO desde la captura C2 (con los
+  // importes reales) o MANUAL (mercancía antes que factura), SIEMPRE enlazada a un
+  // documento de stock de origen (po_receipt | purchase). internal_code FRP-NNNN
+  // (code_counters) al crear, no editable. supplier_invoice_number = el número del
+  // proveedor (texto libre, puede repetir entre proveedores; guarda de duplicado por
+  // proveedor+número). total = CON IVA = lo que se debe. status vigente|anulada;
+  // corregir = anular (motivo) + crear otra, nunca editar/borrar. Snapshot del
+  // proveedor congelado al crear (mismo patrón que la orden/devolución).
+  db.exec(`CREATE TABLE IF NOT EXISTS supplier_invoices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplier_id INTEGER NOT NULL,
+    internal_code TEXT,
+    supplier_invoice_number TEXT DEFAULT '',
+    invoice_date DATE NOT NULL,
+    due_date DATE,
+    base REAL NOT NULL DEFAULT 0,
+    tax REAL NOT NULL DEFAULT 0,
+    total REAL NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'vigente' CHECK(status IN ('vigente','anulada')),
+    anulada_motivo TEXT,
+    supplier_name TEXT,                 -- foto congelada al crear
+    supplier_fiscal_id TEXT,            -- foto congelada al crear
+    supplier_address TEXT,              -- foto congelada al crear
+    entity_type TEXT,                   -- 'po_receipt' | 'purchase' (documento de stock de origen)
+    entity_id INTEGER,
+    notes TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_supplier_invoices_supplier ON supplier_invoices(supplier_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_supplier_invoices_entity ON supplier_invoices(entity_type, entity_id)`);
+
+  // Pagos a proveedor (totales o parciales) de una factura recibida. Espejo EXACTO de
+  // invoice_payments. El ESTADO de pago NO se guarda: se calcula en vivo (pagos.js)
+  // desde la suma de pagos y due_date, para que nunca quede viejo.
+  db.exec(`CREATE TABLE IF NOT EXISTS supplier_payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplier_invoice_id INTEGER NOT NULL,
+    amount REAL NOT NULL,
+    paid_date DATE NOT NULL,
+    payment_method TEXT DEFAULT '',
+    note TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (supplier_invoice_id) REFERENCES supplier_invoices(id) ON DELETE CASCADE
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_supplier_payments_invoice ON supplier_payments(supplier_invoice_id)`);
 
   // Pilar 3 (coste/valoración) — backfill del coste, UNA vez por tenant. Corre DESPUÉS de que
   // existan las columnas nuevas (stock_movements.unit_cost, products.average_cost) y la tabla

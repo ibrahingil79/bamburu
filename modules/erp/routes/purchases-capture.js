@@ -10,6 +10,7 @@ import { searchProducts, createProductSvc } from './products.js';
 import { searchSuppliers, createSupplierSvc, supplierFiscalIdConflict } from './suppliers.js';
 import { createDirectPurchaseSvc } from './purchases.js';
 import { createReceiptSvc, orderReceptionState } from './purchase-order-receipts.js';
+import { createSupplierInvoiceSvc } from './supplier-invoices.js';
 import {
   ALLOWED_MIME, MAX_UPLOAD_BYTES, saveAttachment, getAttachment,
   readAttachmentBuffer, linkAttachment,
@@ -234,11 +235,36 @@ export const confirmCaptureSchema = z.object({
   notes:          z.string().trim().max(1000).optional().default(''),
   confirm_excess: z.coerce.boolean().optional().default(false),
   lines:          z.array(confirmLineSchema).min(1, 'Al menos una línea'),
+  // Capa de dinero (a) — importes de la factura del proveedor (CON IVA en inv_total) que
+  // la captura calcula. Al confirmar, generan AUTO la factura recibida (la deuda). Opcionales:
+  // si no hay total (p. ej. dictado por voz sin importes), no se crea factura recibida.
+  inv_base:       z.union([z.null(), z.coerce.number().min(0).max(100_000_000)]).optional(),
+  inv_tax:        z.union([z.null(), z.coerce.number().min(0).max(100_000_000)]).optional(),
+  inv_total:      z.union([z.null(), z.coerce.number().min(0).max(100_000_000)]).optional(),
 });
 
 // Ejecuta, en servidor y EN ESTE ORDEN, dentro de UNA transacción (todo o nada — nunca
 // un guardado a medias): crear proveedor nuevo si procede → crear productos nuevos si
 // procede → aterrizar (recepción contra orden o compra directa) → enlazar el adjunto.
+// Crea la factura recibida (deuda) que acompaña al aterrizaje de stock, con los importes
+// reales que la captura leyó. Se llama DENTRO de la transacción de confirmCaptureSvc, así
+// que NO abre transacción propia. onDuplicate:'skip' para no tumbar el aterrizaje de stock
+// si esa factura ya existía (se devuelve el aviso). Sin total > 0 (p. ej. voz sin importes)
+// no se crea deuda. supplier_invoice_number = la referencia (nº del proveedor).
+function autoSupplierInvoice(db, d, entity_type, entity_id) {
+  const total = Number(d.inv_total);
+  if (!(total > 0)) return null;   // sin importe → no hay deuda que registrar
+  return createSupplierInvoiceSvc(db, {
+    entity_type, entity_id,
+    supplier_invoice_number: d.reference || '',
+    invoice_date: d.date,
+    base: d.inv_base != null ? Number(d.inv_base) : 0,
+    tax:  d.inv_tax  != null ? Number(d.inv_tax)  : 0,
+    total,
+    notes: d.notes || '',
+  }, { onDuplicate: 'skip', today: d.date });
+}
+
 export function confirmCaptureSvc(db, d) {
   const run = db.transaction(() => {
     // 1 + 3) destino contra ORDEN: el proveedor lo manda la propia orden.
@@ -250,7 +276,8 @@ export function confirmCaptureSvc(db, d) {
       if (!items.length) { const e = new Error('No hay ninguna línea que cuadre contra la orden'); e.status = 400; throw e; }
       const receipt = createReceiptSvc(db, d.order_id, { date: d.date, notes: d.notes, items, confirm_excess: d.confirm_excess });
       if (d.attachment_id) linkAttachment(db, d.attachment_id, 'po_receipt', receipt.id);
-      return { entity_type: 'po_receipt', entity_id: receipt.id, redirect: '/admin/purchase-order-receipts/' + receipt.id, label: receipt.receipt_number };
+      const debt = autoSupplierInvoice(db, d, 'po_receipt', receipt.id);
+      return { entity_type: 'po_receipt', entity_id: receipt.id, redirect: '/admin/purchase-order-receipts/' + receipt.id, label: receipt.receipt_number, supplier_invoice: debt };
     }
 
     // 1) proveedor (compra directa): existente o creado al vuelo (servicio validado + guarda de NIF).
@@ -282,7 +309,8 @@ export function confirmCaptureSvc(db, d) {
       supplier_id: supplierId, reference: d.reference, date: d.date, notes: d.notes, status: 'received', items,
     });
     if (d.attachment_id) linkAttachment(db, d.attachment_id, 'purchase', pid);
-    return { entity_type: 'purchase', entity_id: pid, redirect: '/admin/purchases/' + pid, label: '#' + pid };
+    const debt = autoSupplierInvoice(db, d, 'purchase', pid);
+    return { entity_type: 'purchase', entity_id: pid, redirect: '/admin/purchases/' + pid, label: '#' + pid, supplier_invoice: debt };
   });
   return run();
 }
@@ -510,6 +538,7 @@ function capturePage({ sym, bands, today, preload = null }) {
   var lines = [];           // estado editable de líneas (modo directo)
   var orderLines = [];      // estado editable (modo orden)
   var lineSeq = 0;
+  var LAST_TOTALS = { base:0, tax:0, total:0 };   // últimos totales calculados (→ factura recibida auto)
 
   // ───────── Paso 1 ─────────
   function onFilePick(){
@@ -806,6 +835,13 @@ function capturePage({ sym, bands, today, preload = null }) {
       rateHtml += '<div style="display:flex;justify-content:space-between"><span>IVA '+rate+'% sobre '+byRate[rate].toFixed(2)+'</span><span>'+iva.toFixed(2)+' '+SYM+'</span></div>';
     });
     var total = base + ivaTotal;
+    // Importes que generarán AUTO la factura recibida (la deuda) al confirmar. El total es
+    // CON IVA (lo que se debe).
+    LAST_TOTALS = {
+      base: Math.round(base*100)/100,
+      tax: Math.round(ivaTotal*100)/100,
+      total: Math.round(total*100)/100
+    };
     var ex = DATA.extracted.totals||{};
     var cmp = '';
     if(ex.total!=null){
@@ -837,7 +873,11 @@ function capturePage({ sym, bands, today, preload = null }) {
       supplier_id: supplier.mode==='existing' ? supplier.id : null,
       new_supplier: supplier.mode==='new' ? { name:(supplier.name||'').trim(), fiscal_id:(supplier.fiscal_id||'').trim() } : null,
       lines: [],
-      confirm_excess: false
+      confirm_excess: false,
+      // Importes de la factura del proveedor → factura recibida (deuda) automática.
+      inv_base: LAST_TOTALS.base,
+      inv_tax: LAST_TOTALS.tax,
+      inv_total: LAST_TOTALS.total
     };
     if(target.mode==='order'){
       var excess = [];

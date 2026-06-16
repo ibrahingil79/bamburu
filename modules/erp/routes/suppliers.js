@@ -38,8 +38,8 @@ export function createSupplierSvc(db, input) {
     e.status = 409; throw e;
   }
   const code = nextCode(db, 'supplier');   // código interno PROV-NNNN, tras la guarda de NIF
-  const r = db.prepare('INSERT INTO suppliers (name,fiscal_id,contact,email,phone,address,city,notes,supplier_code) VALUES (?,?,?,?,?,?,?,?,?)')
-    .run(d.name, d.fiscal_id||'', d.contact||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.notes||'', code);
+  const r = db.prepare('INSERT INTO suppliers (name,fiscal_id,contact,email,phone,address,city,notes,supplier_code,payment_term_days,payment_method) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+    .run(d.name, d.fiscal_id||'', d.contact||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.notes||'', code, d.payment_term_days||0, d.payment_method||'');
   return { id: r.lastInsertRowid, name: d.name, supplier_code: code };
 }
 
@@ -90,8 +90,8 @@ export function createSupplierRoutes(db) {
       const id = parseInt(c.req.param('id'));
       const conf = supplierFiscalIdConflict(db, d.fiscal_id, id);
       if (conf) return c.json({error: conf.active ? 'Ya existe un proveedor con ese NIF/CIF' : 'Ya existe un proveedor archivado con ese NIF/CIF'},409);
-      const info = db.prepare('UPDATE suppliers SET name=?,fiscal_id=?,contact=?,email=?,phone=?,address=?,city=?,notes=? WHERE id=?')
-        .run(d.name, d.fiscal_id||'', d.contact||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.notes||'', id);
+      const info = db.prepare('UPDATE suppliers SET name=?,fiscal_id=?,contact=?,email=?,phone=?,address=?,city=?,notes=?,payment_term_days=?,payment_method=? WHERE id=?')
+        .run(d.name, d.fiscal_id||'', d.contact||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.notes||'', d.payment_term_days||0, d.payment_method||'', id);
       if (!info.changes) return c.json({error:'No encontrado'},404);
       logActivity(db, c.get('session'), 'Editó proveedor', 'supplier', id, d.name);
       return c.json({message:'Actualizado'});
@@ -162,6 +162,18 @@ export function createSupplierRoutes(db) {
             </div>
             <div class="form-group"><label class="form-label">Dirección</label><input class="form-control" id="supAddress"></div>
             <div class="form-group" style="max-width:50%"><label class="form-label">Ciudad</label><input class="form-control" id="supCity"></div>
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">Plazo de pago (días)</label><input class="form-control" id="supTerm" type="number" min="0" step="1" placeholder="0 = contado"></div>
+              <div class="form-group"><label class="form-label">Forma de pago</label>
+                <select class="form-control" id="supPayMethod">
+                  <option value="">— Sin especificar —</option>
+                  <option value="transferencia">Transferencia</option>
+                  <option value="efectivo">Efectivo</option>
+                  <option value="tarjeta">Tarjeta</option>
+                  <option value="domiciliacion">Domiciliación</option>
+                </select>
+              </div>
+            </div>
             <div class="form-group"><label class="form-label">Notas</label><textarea class="form-control" id="supNotes"></textarea></div>
           </div>
           <div class="modal-foot">
@@ -187,12 +199,12 @@ export function createSupplierRoutes(db) {
         document.getElementById('supBody').innerHTML=f.length?f.map(function(s){
           var acts = arch
             ? (window.canDo('suppliers.edit')?'<button class="btn btn-primary btn-sm" onclick="restoreSup('+s.id+')">Restaurar</button>':'')
-            : (window.canDo('suppliers.edit')?'<button class="btn btn-secondary btn-sm" onclick="editSup('+s.id+')">Editar</button> ':'')+(window.canDo('suppliers.delete')?'<button class="btn btn-danger btn-sm" onclick="delSup('+s.id+')">Archivar</button>':'');
+            : (window.canDo('purchases.read')?'<a class="btn btn-secondary btn-sm" href="/admin/supplier-invoices?supplier='+s.id+'">Deuda</a> ':'')+(window.canDo('suppliers.edit')?'<button class="btn btn-secondary btn-sm" onclick="editSup('+s.id+')">Editar</button> ':'')+(window.canDo('suppliers.delete')?'<button class="btn btn-danger btn-sm" onclick="delSup('+s.id+')">Archivar</button>':'');
           return '<tr><td style="color:var(--muted);font-family:monospace;font-size:.8rem">'+escHtml(s.supplier_code||'-')+'</td><td><strong>'+escHtml(s.name)+'</strong></td><td style="color:var(--muted)">'+escHtml(s.fiscal_id||'-')+'</td><td>'+escHtml(s.contact||'-')+'</td><td>'+escHtml(s.email||'-')+'</td><td>'+escHtml(s.phone||'-')+'</td><td style="text-align:right;white-space:nowrap">'+acts+'</td></tr>';
         }).join(''):'<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">Sin proveedores'+(arch?' archivados':' registrados')+'</td></tr>';
       }
       function openNew(){
-        ['supId','supName','supFiscal','supContact','supEmail','supPhone','supAddress','supCity','supNotes'].forEach(function(id){document.getElementById(id).value='';});
+        ['supId','supName','supFiscal','supContact','supEmail','supPhone','supAddress','supCity','supNotes','supTerm','supPayMethod'].forEach(function(id){document.getElementById(id).value='';});
         document.getElementById('supCodeWrap').style.display='none';
         document.getElementById('modalTitle').textContent='Nuevo proveedor';
         openModal('supModal');
@@ -210,6 +222,8 @@ export function createSupplierRoutes(db) {
         document.getElementById('supPhone').value=s.phone||'';
         document.getElementById('supAddress').value=s.address||'';
         document.getElementById('supCity').value=s.city||'';
+        document.getElementById('supTerm').value=(s.payment_term_days!=null?s.payment_term_days:'');
+        document.getElementById('supPayMethod').value=s.payment_method||'';
         document.getElementById('supNotes').value=s.notes||'';
         document.getElementById('modalTitle').textContent='Editar proveedor';
         openModal('supModal');
@@ -224,6 +238,8 @@ export function createSupplierRoutes(db) {
           phone:document.getElementById('supPhone').value.trim(),
           address:document.getElementById('supAddress').value.trim(),
           city:document.getElementById('supCity').value.trim(),
+          payment_term_days:parseInt(document.getElementById('supTerm').value)||0,
+          payment_method:document.getElementById('supPayMethod').value,
           notes:document.getElementById('supNotes').value.trim()
         };
         if(!body.name){toast('El nombre es obligatorio','err');return;}
