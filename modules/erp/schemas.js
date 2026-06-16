@@ -334,16 +334,35 @@ export const supplierSchema = z.object({
 // documento de stock YA existente (recepción confirmada o compra recibida). El total
 // es CON IVA (lo que se debe). base/tax son informativos del documento. supplier_id se
 // deriva del documento de origen en el servicio (no se teclea suelto).
+// Una línea de factura de GASTO: concepto libre + base + tipo de IVA (banda legal). La cuota
+// la calcula el servidor (base*tax_rate/100); 0% = exento permitido.
+const supplierInvoiceLineSchema = z.object({
+  concepto: z.string().trim().max(300).optional().default(''),
+  base:     z.coerce.number().min(0).max(100_000_000),
+  tax_rate: z.coerce.number().min(0).max(50),
+});
+
+// Factura recibida — DOS modos en un solo schema:
+//  (a) CON origen de stock (paso a): entity_type+entity_id + total (proveedor derivado del origen).
+//  (b) GASTO PURO (paso b): supplier_id directo + ≥1 línea (concepto/base/IVA); total = Σ líneas.
 export const supplierInvoiceSchema = z.object({
-  entity_type:             z.enum(['po_receipt', 'purchase']),
-  entity_id:               z.coerce.number().int().positive(),
+  entity_type:             z.enum(['po_receipt', 'purchase']).optional(),
+  entity_id:               z.coerce.number().int().positive().optional(),
+  supplier_id:             z.coerce.number().int().positive().optional(),   // gasto: proveedor tecleado
+  expense_category:        strOpt(80),
+  lines:                   z.array(supplierInvoiceLineSchema).optional(),
   supplier_invoice_number: strOpt(100),
   invoice_date:            z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  due_date:                z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal('')),   // gasto: editable
   base:                    z.coerce.number().min(0).max(100_000_000).optional().default(0),
   tax:                     z.coerce.number().min(0).max(100_000_000).optional().default(0),
-  total:                   z.coerce.number().positive('El total debe ser mayor que 0').max(100_000_000),
+  total:                   z.coerce.number().min(0).max(100_000_000).optional(),
   notes:                   strOpt(1000),
-});
+})
+  .refine(d => d.entity_type ? !!d.entity_id : true, { message: 'Falta el documento de origen', path: ['entity_id'] })
+  .refine(d => d.entity_type || d.supplier_id, { message: 'Indica el proveedor (factura de gasto) o el documento de origen', path: ['supplier_id'] })
+  .refine(d => d.entity_type || (Array.isArray(d.lines) && d.lines.length >= 1), { message: 'Una factura de gasto necesita al menos una línea', path: ['lines'] })
+  .refine(d => d.entity_type ? (d.total != null && d.total > 0) : true, { message: 'El total debe ser mayor que 0', path: ['total'] });
 
 // Anular una factura recibida: solo motivo (mismo criterio que factura/devoluciones).
 export const supplierInvoiceAnularSchema = z.object({

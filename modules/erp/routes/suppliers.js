@@ -51,7 +51,7 @@ export function searchSuppliers(db, { q = '', limit = 20 } = {}) {
   if (q) { where.push('(name LIKE ? OR fiscal_id LIKE ?)'); params.push('%' + q + '%', '%' + q + '%'); }
   const lim = Math.min(Math.max(Number(limit) || 20, 1), 100);
   return db.prepare(
-    'SELECT id, name, fiscal_id, email, phone, supplier_code FROM suppliers WHERE '
+    'SELECT id, name, fiscal_id, email, phone, supplier_code, payment_term_days FROM suppliers WHERE '
     + where.join(' AND ') + ' ORDER BY name LIMIT ?'
   ).all(...params, lim);
 }

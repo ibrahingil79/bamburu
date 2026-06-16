@@ -6,6 +6,7 @@ import { supplierInvoiceSchema, supplierInvoiceAnularSchema, supplierPaymentSche
 import { nextCode } from '../codes.js';
 import { supplierInvoicePago, isPayable, supplierDebt, ESTADO_LABEL, ESTADO_BADGE } from '../pagos.js';
 import { pagoModalHtml, pagoModalScript } from '../views/pago-modal.js';
+import { getVatBands } from '../../../core/vat-bands.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // FACTURA RECIBIDA (Capa de dinero con proveedores · Paso a) — documento INMUTABLE
@@ -63,20 +64,59 @@ export function supplierInvoiceDuplicate(db, supplierId, number, excludeId = nul
   ).get(supplierId, norm, Number.isFinite(ex) ? ex : -1) || null;
 }
 
-// ── SERVICIO: crear una factura recibida ────────────────────────────────────
-// Lo usan la ruta MANUAL y la captura C2 (auto). El proveedor se DERIVA del documento de
-// origen (no se teclea suelto). due_date = invoice_date + plazo del proveedor. Snapshot del
-// proveedor congelado al crear. opts.onDuplicate: 'throw' (manual) | 'skip' (auto, para no
-// tumbar el aterrizaje de stock si la factura ya existía). NO abre transacción propia (es
-// seguro tanto suelto como anidado dentro de la transacción de la captura).
-export function createSupplierInvoiceSvc(db, d, opts = {}) {
-  const cfg = ORIGIN[d.entity_type];
-  if (!cfg) { const e = new Error('Tipo de origen no válido'); e.status = 400; throw e; }
-  const origin = cfg.load(db, d.entity_id);
-  if (!origin) { const e = new Error('Documento de origen no encontrado'); e.status = 404; throw e; }
-  if (!origin.ok) { const e = new Error('El documento de origen no es válido (necesita una compra RECIBIDA o una recepción CONFIRMADA)'); e.status = 400; throw e; }
+// Categorías de gasto — lista CERRADA definida en código (fácil de ampliar). Se inyecta en
+// el formulario; el servicio valida que la elegida pertenezca a la lista (no se inventan).
+export const EXPENSE_CATEGORIES = [
+  'Alquiler', 'Suministros', 'Servicios profesionales', 'Software y herramientas',
+  'Banca y financieros', 'Marketing y publicidad', 'Transporte y vehículo',
+  'Material de oficina', 'Otros',
+];
 
-  const supplierId = origin.supplier_id;
+// ── SERVICIO: crear una factura recibida (DOS modos) ────────────────────────
+// (a) CON origen de stock: proveedor DERIVADO del origen; base/tax/total del documento de
+//     mercancía. Lo usan la ruta manual del paso (a) y la captura C2 (auto).
+// (b) GASTO PURO (sin origen): proveedor tecleado (supplier_id), categoría y LÍNEAS
+//     (concepto/base/IVA); base/tax/total = SUMA de las líneas; foto del proveedor congelada
+//     del registro vivo. NUNCA mueve stock.
+// due_date = invoice_date + plazo del proveedor (en gasto, editable vía d.due_date).
+// opts.onDuplicate: 'throw' (manual) | 'skip' (auto). NO abre transacción propia (seguro
+// suelto y anidado dentro de la transacción de la captura).
+export function createSupplierInvoiceSvc(db, d, opts = {}) {
+  const isExpense = !d.entity_type;   // sin origen de stock → factura de GASTO
+
+  // 1) Proveedor + importes (+ líneas en gasto), según el modo.
+  let supplierId, base, tax, total, lines = null, dueOverride = null, category = null;
+  if (isExpense) {
+    supplierId = Number(d.supplier_id);
+    if (!supplierId) { const e = new Error('Falta el proveedor de la factura de gasto'); e.status = 400; throw e; }
+    if (!db.prepare('SELECT 1 FROM suppliers WHERE id=?').get(supplierId)) { const e = new Error('Proveedor no encontrado'); e.status = 404; throw e; }
+    lines = (d.lines || []).map(l => {
+      const b = round2(l.base);
+      const rate = Number(l.tax_rate) || 0;
+      return { concepto: String(l.concepto || '').trim(), base: b, tax_rate: rate, cuota: round2(b * rate / 100) };
+    });
+    if (!lines.length) { const e = new Error('Una factura de gasto necesita al menos una línea'); e.status = 400; throw e; }
+    base  = round2(lines.reduce((s, l) => s + l.base, 0));
+    tax   = round2(lines.reduce((s, l) => s + l.cuota, 0));
+    total = round2(base + tax);
+    if (!(total > 0)) { const e = new Error('El total de la factura debe ser mayor que 0 (revisa las bases de las líneas)'); e.status = 400; throw e; }
+    category = String(d.expense_category || '').trim() || null;
+    if (category && !EXPENSE_CATEGORIES.includes(category)) { const e = new Error('Categoría de gasto no válida'); e.status = 400; throw e; }
+    if (d.due_date) dueOverride = d.due_date;
+  } else {
+    const cfg = ORIGIN[d.entity_type];
+    if (!cfg) { const e = new Error('Tipo de origen no válido'); e.status = 400; throw e; }
+    const origin = cfg.load(db, d.entity_id);
+    if (!origin) { const e = new Error('Documento de origen no encontrado'); e.status = 404; throw e; }
+    if (!origin.ok) { const e = new Error('El documento de origen no es válido (necesita una compra RECIBIDA o una recepción CONFIRMADA)'); e.status = 400; throw e; }
+    supplierId = origin.supplier_id;
+    base  = round2(d.base != null ? d.base : 0);
+    total = round2(d.total != null ? d.total : (Number(d.base || 0) + Number(d.tax || 0)));
+    tax   = round2(d.tax != null ? d.tax : Math.max(0, total - base));
+    if (!(total > 0)) { const e = new Error('El total de la factura debe ser mayor que 0'); e.status = 400; throw e; }
+  }
+
+  // 2) Guarda de duplicado por proveedor + número (igual en ambos modos).
   const number = String(d.supplier_invoice_number || '').trim();
   if (number) {
     const dup = supplierInvoiceDuplicate(db, supplierId, number);
@@ -86,21 +126,23 @@ export function createSupplierInvoiceSvc(db, d, opts = {}) {
     }
   }
 
-  const base  = round2(d.base != null ? d.base : 0);
-  const total = round2(d.total != null ? d.total : (Number(d.base || 0) + Number(d.tax || 0)));
-  const tax   = round2(d.tax != null ? d.tax : Math.max(0, total - base));
-  if (!(total > 0)) { const e = new Error('El total de la factura debe ser mayor que 0'); e.status = 400; throw e; }
-
+  // 3) Snapshot del proveedor + vencimiento + FRP + inserción (+ líneas en gasto).
   const s = db.prepare('SELECT name, fiscal_id, address, payment_term_days FROM suppliers WHERE id=?').get(supplierId) || {};
-  const dueDate = addDays(d.invoice_date, s.payment_term_days || 0);
+  const dueDate = dueOverride || addDays(d.invoice_date, s.payment_term_days || 0);
   const code = nextCode(db, 'supplier_invoice');
   const r = db.prepare(`INSERT INTO supplier_invoices
       (supplier_id, internal_code, supplier_invoice_number, invoice_date, due_date, base, tax, total, status,
-       supplier_name, supplier_fiscal_id, supplier_address, entity_type, entity_id, notes)
-      VALUES (?,?,?,?,?,?,?,?, 'vigente', ?,?,?,?,?,?)`)
+       supplier_name, supplier_fiscal_id, supplier_address, entity_type, entity_id, expense_category, notes)
+      VALUES (?,?,?,?,?,?,?,?, 'vigente', ?,?,?,?,?,?,?)`)
     .run(supplierId, code, number, d.invoice_date, dueDate, base, tax, total,
-         s.name || '', s.fiscal_id || '', s.address || '', d.entity_type, d.entity_id, d.notes || '');
-  return { id: r.lastInsertRowid, internal_code: code, supplier_id: supplierId, total, due_date: dueDate };
+         s.name || '', s.fiscal_id || '', s.address || '',
+         isExpense ? null : d.entity_type, isExpense ? null : d.entity_id, category, d.notes || '');
+  const invId = r.lastInsertRowid;
+  if (lines) {
+    const ins = db.prepare('INSERT INTO supplier_invoice_items (supplier_invoice_id, concepto, base, tax_rate, cuota) VALUES (?,?,?,?,?)');
+    for (const l of lines) ins.run(invId, l.concepto, l.base, l.tax_rate, l.cuota);
+  }
+  return { id: invId, internal_code: code, supplier_id: supplierId, total, due_date: dueDate, is_expense: isExpense };
 }
 
 // ── SERVICIO: anular una factura recibida (motivo obligatorio) ──────────────
@@ -158,8 +200,9 @@ export function getSupplierInvoice(db, id, today) {
   const pago = supplierInvoicePago(db, inv, t);
   const cfg = ORIGIN[inv.entity_type];
   const origin = cfg ? cfg.load(db, inv.entity_id) : null;
+  const items = db.prepare('SELECT * FROM supplier_invoice_items WHERE supplier_invoice_id=? ORDER BY id').all(id);
   const sup = db.prepare('SELECT payment_method FROM suppliers WHERE id=?').get(inv.supplier_id) || {};
-  return { ...inv, payments, pago, pagable: isPayable(inv), origin, payment_method_default: sup.payment_method || '' };
+  return { ...inv, payments, items, is_expense: !inv.entity_type, pago, pagable: isPayable(inv), origin, payment_method_default: sup.payment_method || '' };
 }
 
 // Orígenes elegibles para una factura MANUAL de un proveedor: compras recibidas +
@@ -286,9 +329,18 @@ export function createSupplierInvoiceRoutes(db) {
       </div>
       ${supplierId ? `<div class="card" id="debtCard" style="margin-bottom:1rem;display:none"><div class="card-body" id="debtBox"></div></div>` : ''}
       <div class="card">
-        <div class="card-head"><h3>Documentos de deuda con proveedores</h3><input class="search" id="searchBox" placeholder="Buscar proveedor, código o nº factura..." oninput="filterRows()"></div>
+        <div class="card-head" style="gap:.5rem;flex-wrap:wrap"><h3>Documentos de deuda con proveedores</h3>
+          <div style="display:flex;gap:.5rem;align-items:center;margin-left:auto">
+            <select class="form-control" id="tipoFilter" style="width:auto;min-width:120px" onchange="filterRows()">
+              <option value="">Todos los tipos</option>
+              <option value="compra">Compra (stock)</option>
+              <option value="gasto">Gasto</option>
+            </select>
+            <input class="search" id="searchBox" placeholder="Buscar proveedor, código o nº factura..." oninput="filterRows()">
+          </div>
+        </div>
         <div class="table-wrap"><table>
-          <thead><tr><th>Código</th><th>Proveedor</th><th>Nº factura</th><th>Fecha</th><th>Vence</th><th>Total</th><th>Estado</th><th>Pendiente</th><th></th></tr></thead>
+          <thead><tr><th>Código</th><th>Tipo</th><th>Proveedor</th><th>Nº factura</th><th>Fecha</th><th>Vence</th><th>Total</th><th>Estado</th><th>Pendiente</th><th></th></tr></thead>
           <tbody id="siBody"></tbody>
         </table></div>
       </div>
@@ -306,8 +358,13 @@ export function createSupplierInvoiceRoutes(db) {
           const badge = r.status==='anulada' ? '<span class="badge b-gray">Anulada</span>' : '<span class="badge '+(ESTADO_BADGE[r.estado]||'')+'">'+(ESTADO_LABEL[r.estado]||r.estado)+(r.dias_vencida>0?' · '+r.dias_vencida+'d':'')+'</span>';
           const pend = r.status==='anulada' ? '—' : SYM+Number(r.pendiente||0).toFixed(2);
           const payBtn = (r.pagable && r.pendiente>0.0049) ? '<button class="btn btn-primary btn-sm" onclick="openPagos('+r.id+')">Pago</button> ' : '';
-          return '<tr class="frow">'
+          const esGasto = !r.entity_type;
+          const tipo = esGasto
+            ? '<span class="badge b-purple">Gasto</span>'+(r.expense_category?'<div style="color:var(--muted);font-size:.76rem;margin-top:2px">'+escHtml(r.expense_category)+'</div>':'')
+            : '<span class="badge b-teal">Compra</span>';
+          return '<tr class="frow" data-tipo="'+(esGasto?'gasto':'compra')+'">'
             +'<td style="font-family:monospace;color:var(--muted)">'+escHtml(r.internal_code||'-')+'</td>'
+            +'<td>'+tipo+'</td>'
             +'<td><strong>'+escHtml(r.supplier_name||'')+'</strong></td>'
             +'<td>'+escHtml(r.supplier_invoice_number||'-')+'</td>'
             +'<td>'+escHtml(r.invoice_date||'')+'</td>'
@@ -317,7 +374,7 @@ export function createSupplierInvoiceRoutes(db) {
             +'<td>'+pend+'</td>'
             +'<td style="text-align:right;white-space:nowrap">'+payBtn+'<a href="/admin/supplier-invoices/'+r.id+'" class="btn btn-secondary btn-sm">Ver</a></td>'
             +'</tr>';
-        }).join('') : '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--muted)">Sin facturas recibidas</td></tr>';
+        }).join('') : '<tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--muted)">Sin facturas recibidas</td></tr>';
         filterRows();
         if(SUPPLIER_ID) loadDebt();
       }
@@ -333,7 +390,12 @@ export function createSupplierInvoiceRoutes(db) {
       }
       function filterRows(){
         const q=document.getElementById('searchBox').value.toLowerCase();
-        document.querySelectorAll('#siBody tr.frow').forEach(function(tr){ tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none'; });
+        const tipo=document.getElementById('tipoFilter').value;
+        document.querySelectorAll('#siBody tr.frow').forEach(function(tr){
+          const okText = tr.textContent.toLowerCase().includes(q);
+          const okTipo = !tipo || tr.getAttribute('data-tipo')===tipo;
+          tr.style.display = (okText && okTipo) ? '' : 'none';
+        });
       }
       window.pagoOnSaved = function(){ loadList(); };
       loadList();
@@ -341,17 +403,29 @@ export function createSupplierInvoiceRoutes(db) {
     return c.html(adminLayout('Facturas recibidas', content, 'supplier-invoices', c.get('session')?.csrfToken || '', c));
   });
 
-  // Creación MANUAL.
+  // Creación MANUAL — DOS modos: factura de compra (enlazada a stock, paso a) o factura de
+  // gasto (sin mercancía, paso b: proveedor directo + categoría + líneas con IVA por tipo).
   views.get('/new', requirePerm('purchases.create'), c => {
     const s = sym();
     const t = today();
+    const cfg = db.prepare('SELECT country FROM company_config WHERE id=1').get() || {};
+    const bands = getVatBands((cfg.country || 'ES').toUpperCase());   // [{code,label,rate}]
     const suppliers = db.prepare('SELECT id,name FROM suppliers WHERE active=1 ORDER BY name').all();
     const supOptions = suppliers.map(x => '<option value="' + x.id + '">' + esc(x.name) + '</option>').join('');
+    const catOptions = EXPENSE_CATEGORIES.map(x => '<option value="' + esc(x) + '">' + esc(x) + '</option>').join('');
     const content = `
       <div class="ph"><h2>Registrar factura recibida</h2><a href="/admin/supplier-invoices" class="btn btn-secondary">Volver</a></div>
-      <div class="card" style="max-width:720px">
+
+      <div class="card" style="max-width:760px;margin-bottom:1rem"><div class="card-body" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <span style="color:var(--text2)">Tipo de factura:</span>
+        <button id="btnModeCompra" class="btn btn-primary btn-sm" onclick="setMode('compra')">Factura de compra (enlazar a mercancía)</button>
+        <button id="btnModeGasto" class="btn btn-secondary btn-sm" onclick="setMode('gasto')">Factura de gasto (sin mercancía)</button>
+      </div></div>
+
+      <!-- ── MODO COMPRA (paso a, intacto) ── -->
+      <div class="card" id="modeCompra" style="max-width:760px">
         <div class="card-body">
-          <p style="color:var(--text2);margin-bottom:1rem">Para cuando la mercancía llegó antes que la factura. La factura SIEMPRE se enlaza a una <strong>compra recibida</strong> o <strong>recepción confirmada</strong> de stock ya existente.</p>
+          <p style="color:var(--text2);margin-bottom:1rem">Para cuando la mercancía llegó antes que la factura. Se enlaza a una <strong>compra recibida</strong> o <strong>recepción confirmada</strong> de stock ya existente.</p>
           ${suppliers.length ? '' : '<div class="alert alert-warn">No hay proveedores. <a href="/admin/suppliers">Crea uno primero.</a></div>'}
           <div class="form-row">
             <div class="form-group"><label class="form-label">Proveedor *</label><select class="form-control" id="fSupplier" onchange="loadOrigins()"><option value="">— Elige —</option>${supOptions}</select></div>
@@ -369,11 +443,59 @@ export function createSupplierInvoiceRoutes(db) {
           <div class="form-group"><label class="form-label">Notas</label><input class="form-control" id="fNotes"></div>
           <div style="display:flex;justify-content:flex-end;gap:.5rem">
             <a href="/admin/supplier-invoices" class="btn btn-secondary">Cancelar</a>
-            <button class="btn btn-primary" onclick="save()">Registrar factura</button>
+            <button class="btn btn-primary" onclick="saveCompra()">Registrar factura</button>
           </div>
         </div>
       </div>
+
+      <!-- ── MODO GASTO (paso b) ── -->
+      <div class="card" id="modeGasto" style="max-width:880px;display:none">
+        <div class="card-body">
+          <p style="color:var(--text2);margin-bottom:1rem">Factura de <strong>gasto</strong> (gestoría, alquiler, software, suministros, banca…): no trae mercancía. Lleva líneas con concepto, base y tipo de IVA — el IVA soportado queda desglosado por tipo.</p>
+          ${suppliers.length ? '' : '<div class="alert alert-warn">No hay proveedores. <a href="/admin/suppliers">Crea uno primero.</a></div>'}
+          <div class="form-row">
+            <div class="form-group" style="position:relative"><label class="form-label">Proveedor *</label>
+              <input class="form-control" id="gSupSearch" autocomplete="off" placeholder="Buscar proveedor por nombre o NIF...">
+              <div id="gSupSuggest" style="display:none;position:absolute;z-index:30;left:0;right:0;top:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;max-height:240px;overflow:auto;box-shadow:0 6px 16px rgba(0,0,0,.4)"></div>
+              <div id="gSupPicked" style="display:none;margin-top:.35rem"></div>
+            </div>
+            <div class="form-group"><label class="form-label">Categoría de gasto *</label><select class="form-control" id="gCategory"><option value="">— Elige —</option>${catOptions}</select></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Nº factura del proveedor</label><input class="form-control" id="gNumber" placeholder="(el que pone la factura)"></div>
+            <div class="form-group"><label class="form-label">Fecha de factura *</label><input class="form-control" type="date" id="gDate" value="${t}" onchange="recalcDue()"></div>
+            <div class="form-group"><label class="form-label">Vencimiento</label><input class="form-control" type="date" id="gDue" value="${t}"></div>
+          </div>
+          <div class="card" style="margin:0 0 1rem"><div class="card-head" style="padding:.6rem 1rem"><h3 style="font-size:.95rem">Líneas (concepto · base · IVA)</h3><button class="btn btn-secondary btn-sm" onclick="addGLine()">+ Añadir línea</button></div>
+            <div class="table-wrap" style="overflow:visible"><table>
+              <thead><tr><th>Concepto</th><th style="width:120px">Base</th><th style="width:140px">IVA</th><th style="width:110px">Cuota</th><th style="width:40px"></th></tr></thead>
+              <tbody id="gLinesBody"></tbody>
+            </table></div>
+          </div>
+          <div class="card-body" id="gTotals" style="padding:.5rem 0"></div>
+          <div class="form-group"><label class="form-label">Notas</label><input class="form-control" id="gNotes"></div>
+          <div style="display:flex;justify-content:flex-end;gap:.5rem">
+            <a href="/admin/supplier-invoices" class="btn btn-secondary">Cancelar</a>
+            <button class="btn btn-primary" onclick="saveGasto()">Registrar factura de gasto</button>
+          </div>
+        </div>
+      </div>
+
       <script>
+      var SYM = ${JSON.stringify(s)};
+      var BANDS = ${JSON.stringify(bands)};
+      // Banda por defecto de una línea nueva: la general (mayor tasa); si no, la primera.
+      function defaultBand(){ var g=BANDS.find(function(b){return b.code==='general';}); return g?Number(g.rate):(BANDS[0]?Number(BANDS[0].rate):21); }
+
+      function setMode(m){
+        document.getElementById('modeCompra').style.display = m==='compra'?'':'none';
+        document.getElementById('modeGasto').style.display  = m==='gasto'?'':'none';
+        document.getElementById('btnModeCompra').className = 'btn btn-sm '+(m==='compra'?'btn-primary':'btn-secondary');
+        document.getElementById('btnModeGasto').className  = 'btn btn-sm '+(m==='gasto'?'btn-primary':'btn-secondary');
+        if(m==='gasto' && !glines.length){ addGLine(); }
+      }
+
+      // ───────── MODO COMPRA (paso a) ─────────
       async function loadOrigins(){
         const sid=document.getElementById('fSupplier').value;
         const sel=document.getElementById('fOrigin');
@@ -384,13 +506,12 @@ export function createSupplierInvoiceRoutes(db) {
           ? '<option value="">— Elige —</option>'+list.map(function(o){ return '<option value="'+o.entity_type+':'+o.entity_id+'">'+escHtml(o.label)+' ('+escHtml(o.date||'')+')'+(o.already_invoiced?' · ya facturada':'')+'</option>'; }).join('')
           : '<option value="">— Sin compras/recepciones de este proveedor —</option>';
       }
-      // El total manda (es lo que se debe); base+IVA se suman como ayuda si el usuario los teclea.
       function syncTotal(){
         const b=parseFloat(document.getElementById('fBase').value)||0;
         const t=parseFloat(document.getElementById('fTax').value)||0;
         if(b||t) document.getElementById('fTotal').value=(Math.round((b+t)*100)/100).toFixed(2);
       }
-      async function save(){
+      async function saveCompra(){
         const origin=document.getElementById('fOrigin').value;
         if(!origin){ toast('Elige el documento de origen','err'); return; }
         const parts=origin.split(':');
@@ -408,6 +529,100 @@ export function createSupplierInvoiceRoutes(db) {
           notes:document.getElementById('fNotes').value.trim()
         };
         try { const r=await api('POST','/api/erp/supplier-invoices',body); toast(r.message||'Registrada'); window.location.href='/admin/supplier-invoices/'+r.id; }
+        catch(e){ toast(e.message||'Error','err'); }
+      }
+
+      // ───────── MODO GASTO (paso b) ─────────
+      var gsupplier = null;   // { id, name, term }
+      var glines = [];        // { uid, concepto, base, tax_rate }
+      var gseq = 0;
+
+      // Buscador de proveedor (server-side, mismo patrón que la captura C2).
+      (function(){
+        var inp=document.getElementById('gSupSearch'); var box=document.getElementById('gSupSuggest');
+        inp.oninput=async function(){
+          var q=inp.value.trim();
+          if(!q){ box.style.display='none'; box.innerHTML=''; return; }
+          try{
+            var res=await api('GET','/api/erp/suppliers/search?q='+encodeURIComponent(q));
+            if(!res.length){ box.style.display='none'; box.innerHTML=''; return; }
+            box.innerHTML=res.map(function(s){ return '<div style="padding:.5rem .7rem;cursor:pointer;border-bottom:1px solid var(--border)" onmousedown="event.preventDefault();pickGSup('+s.id+',&quot;'+escAttr(s.name)+'&quot;,'+(s.payment_term_days||0)+')"><strong>'+escHtml(s.name)+'</strong>'+(s.fiscal_id?' <span style="color:var(--text3);font-size:.8rem">'+escHtml(s.fiscal_id)+'</span>':'')+'</div>'; }).join('');
+            box.style.display='';
+          }catch(e){ box.style.display='none'; }
+        };
+        inp.onblur=function(){ setTimeout(function(){ box.style.display='none'; },150); };
+      })();
+      window.escAttr=function(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); };
+      window.pickGSup=function(id,name,term){
+        gsupplier={ id:id, name:name, term:Number(term)||0 };
+        document.getElementById('gSupSearch').value='';
+        document.getElementById('gSupSuggest').style.display='none';
+        var p=document.getElementById('gSupPicked');
+        p.style.display=''; p.innerHTML='<span class="badge b-green">Proveedor</span> <strong>'+escHtml(name)+'</strong> <span style="color:var(--muted);font-size:.8rem">· plazo '+gsupplier.term+'d</span> <button class="btn btn-secondary btn-sm" onclick="clearGSup()">Cambiar</button>';
+        recalcDue();
+      };
+      window.clearGSup=function(){ gsupplier=null; document.getElementById('gSupPicked').style.display='none'; };
+      window.recalcDue=function(){
+        var date=document.getElementById('gDate').value; if(!date) return;
+        var term=gsupplier?gsupplier.term:0;
+        var d=new Date(Date.parse(date+'T00:00:00Z')+term*86400000);
+        document.getElementById('gDue').value=d.toISOString().slice(0,10);
+      };
+
+      window.addGLine=function(){ gseq++; glines.push({uid:gseq, concepto:'', base:0, tax_rate:defaultBand()}); renderGLines(); };
+      window.gRemove=function(uid){ glines=glines.filter(function(l){return l.uid!==uid;}); renderGLines(); };
+      window.gSet=function(uid,key,val){ var l=glines.find(function(x){return x.uid===uid;}); if(!l)return; if(key==='base')l.base=parseFloat(val)||0; else if(key==='tax_rate')l.tax_rate=Number(val)||0; else l[key]=val; if(key!=='concepto'){ updateGRow(uid); renderGTotals(); } };
+      function renderGLines(){
+        var body=document.getElementById('gLinesBody');
+        if(!glines.length){ body.innerHTML='<tr><td colspan="5" style="text-align:center;padding:1rem;color:var(--text3)">Sin líneas. Usa "+ Añadir línea".</td></tr>'; renderGTotals(); return; }
+        var bandOpts=function(rate){ return BANDS.map(function(b){ return '<option value="'+b.rate+'"'+(Number(b.rate)===Number(rate)?' selected':'')+'>'+escHtml(b.label)+' ('+b.rate+'%)</option>'; }).join(''); };
+        body.innerHTML=glines.map(function(l){
+          var cuota=Math.round(l.base*l.tax_rate)/100;
+          return '<tr data-uid="'+l.uid+'">'
+            +'<td><input class="form-control" value="'+escAttr(l.concepto)+'" placeholder="Concepto (p. ej. Asesoría junio)" oninput="gSet('+l.uid+',\\'concepto\\',this.value)"></td>'
+            +'<td><input class="form-control" type="number" min="0" step="0.01" value="'+Number(l.base).toFixed(2)+'" oninput="gSet('+l.uid+',\\'base\\',this.value)"></td>'
+            +'<td><select class="form-control" onchange="gSet('+l.uid+',\\'tax_rate\\',this.value)">'+bandOpts(l.tax_rate)+'</select></td>'
+            +'<td class="gcuota" style="font-weight:600">'+cuota.toFixed(2)+' '+SYM+'</td>'
+            +'<td><button class="btn btn-danger btn-sm" onclick="gRemove('+l.uid+')">×</button></td>'
+            +'</tr>';
+        }).join('');
+        renderGTotals();
+      }
+      function updateGRow(uid){ var l=glines.find(function(x){return x.uid===uid;}); if(!l)return; var tr=document.querySelector('#gLinesBody tr[data-uid="'+uid+'"]'); if(tr){ var c=tr.querySelector('.gcuota'); if(c) c.textContent=(Math.round(l.base*l.tax_rate)/100).toFixed(2)+' '+SYM; } }
+      window.renderGTotals=function(){
+        var base=0, byRate={};
+        glines.forEach(function(l){ base+=l.base; var k=String(l.tax_rate); byRate[k]=(byRate[k]||0)+l.base; });
+        var iva=0, rateHtml='';
+        Object.keys(byRate).sort(function(a,b){return Number(b)-Number(a);}).forEach(function(rate){
+          var cuota=byRate[rate]*Number(rate)/100; iva+=cuota;
+          rateHtml+='<div style="display:flex;justify-content:space-between"><span>IVA '+rate+'% sobre '+byRate[rate].toFixed(2)+'</span><span>'+cuota.toFixed(2)+' '+SYM+'</span></div>';
+        });
+        var total=base+iva;
+        document.getElementById('gTotals').innerHTML=
+          '<div style="display:flex;justify-content:space-between;margin-bottom:.3rem"><span>Base</span><strong>'+base.toFixed(2)+' '+SYM+'</strong></div>'
+          +rateHtml
+          +'<div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:.4rem;padding-top:.4rem"><span style="font-weight:700">Total a pagar</span><strong style="font-size:1.1rem">'+total.toFixed(2)+' '+SYM+'</strong></div>';
+      };
+      async function saveGasto(){
+        if(!gsupplier){ toast('Elige el proveedor','err'); return; }
+        var category=document.getElementById('gCategory').value;
+        if(!category){ toast('Elige la categoría de gasto','err'); return; }
+        var date=document.getElementById('gDate').value;
+        if(!date){ toast('La fecha es obligatoria','err'); return; }
+        var lines=glines.filter(function(l){ return l.base>0 || (l.concepto||'').trim(); })
+          .map(function(l){ return { concepto:(l.concepto||'').trim(), base:l.base, tax_rate:l.tax_rate }; });
+        if(!lines.length){ toast('Añade al menos una línea con base','err'); return; }
+        if(!lines.some(function(l){return l.base>0;})){ toast('Al menos una línea debe tener base > 0','err'); return; }
+        var body={
+          supplier_id:gsupplier.id,
+          expense_category:category,
+          supplier_invoice_number:document.getElementById('gNumber').value.trim(),
+          invoice_date:date,
+          due_date:document.getElementById('gDue').value||undefined,
+          lines:lines,
+          notes:document.getElementById('gNotes').value.trim()
+        };
+        try { var r=await api('POST','/api/erp/supplier-invoices',body); toast(r.message||'Registrada'); window.location.href='/admin/supplier-invoices/'+r.id; }
         catch(e){ toast(e.message||'Error','err'); }
       }
       </script>`;
@@ -431,14 +646,27 @@ export function createSupplierInvoiceRoutes(db) {
       ? `<a href="${inv.origin.href}">${esc(inv.origin.label)}</a>` : '<span style="color:var(--muted)">—</span>';
     const actionBtns = (canCreate && inv.status !== 'anulada')
       ? `<button class="btn btn-primary" onclick="openPagos(${inv.id})">Registrar pago</button> <button class="btn btn-danger" onclick="anular()">Anular factura</button> ` : '';
+    const isExpense = inv.is_expense;
+    const tipoBadge = isExpense ? '<span class="badge b-purple" style="margin-left:.5rem">Gasto</span>' : '<span class="badge b-teal" style="margin-left:.5rem">Compra</span>';
+    const linesCard = (isExpense && inv.items.length)
+      ? `<div class="card" style="margin-bottom:1rem">
+          <div class="card-head"><h3>Líneas del gasto</h3></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Concepto</th><th style="text-align:right">Base</th><th>IVA</th><th style="text-align:right">Cuota</th></tr></thead>
+            <tbody>${inv.items.map(it => `<tr><td>${esc(it.concepto || '—')}</td><td style="text-align:right">${s}${Number(it.base).toFixed(2)}</td><td>${Number(it.tax_rate)}%</td><td style="text-align:right">${s}${Number(it.cuota).toFixed(2)}</td></tr>`).join('')}
+            <tr><td style="font-weight:700;border-top:1px solid var(--border)">Totales</td><td style="text-align:right;font-weight:700;border-top:1px solid var(--border)">${s}${Number(inv.base).toFixed(2)}</td><td style="border-top:1px solid var(--border)"></td><td style="text-align:right;font-weight:700;border-top:1px solid var(--border)">${s}${Number(inv.tax).toFixed(2)}</td></tr></tbody>
+          </table></div>
+        </div>` : '';
     const content = `
-      <div class="ph"><h2>Factura recibida ${esc(inv.internal_code || ('#' + inv.id))}</h2><div style="display:flex;gap:.5rem">${actionBtns}<a href="/admin/supplier-invoices" class="btn btn-secondary">Volver</a></div></div>
+      <div class="ph"><h2>Factura recibida ${esc(inv.internal_code || ('#' + inv.id))}${tipoBadge}</h2><div style="display:flex;gap:.5rem">${actionBtns}<a href="/admin/supplier-invoices" class="btn btn-secondary">Volver</a></div></div>
       ${anuladaBlock}
       <div class="grid g2" style="margin-bottom:1rem">
         <div class="card card-body">
           <div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Proveedor</span><br><strong>${esc(inv.supplier_name || '')}</strong>${inv.supplier_fiscal_id ? ' <span style="color:var(--muted)">' + esc(inv.supplier_fiscal_id) + '</span>' : ''}</div>
           <div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Nº factura proveedor</span><br>${esc(inv.supplier_invoice_number || '—')}</div>
-          <div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Documento de origen</span><br>${originBlock}</div>
+          ${isExpense
+            ? `<div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Tipo</span><br><span class="badge b-purple">Gasto</span>${inv.expense_category ? ' · <strong>' + esc(inv.expense_category) + '</strong>' : ''}</div>`
+            : `<div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Documento de origen</span><br>${originBlock}</div>`}
           ${inv.notes ? `<div><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Notas</span><br>${esc(inv.notes)}</div>` : ''}
         </div>
         <div class="card card-body">
@@ -447,6 +675,7 @@ export function createSupplierInvoiceRoutes(db) {
           <div><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Estado de pago</span><br>${statusBadge} ${inv.status !== 'anulada' ? `Pagado ${s}${Number(pg.pagado).toFixed(2)} · Pendiente <strong>${s}${Number(pg.pendiente).toFixed(2)}</strong>` : ''}</div>
         </div>
       </div>
+      ${linesCard}
       <div class="card">
         <div class="card-head"><h3>Pagos registrados</h3></div>
         <div class="table-wrap"><table>

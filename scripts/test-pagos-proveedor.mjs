@@ -15,8 +15,10 @@ import {
 import {
   createSupplierInvoiceSvc, anularSupplierInvoiceSvc, registerSupplierPaymentSvc,
   deleteSupplierPaymentSvc, supplierInvoiceDuplicate, getSupplierInvoice, eligibleOriginsForSupplier,
+  EXPENSE_CATEGORIES,
 } from '../modules/erp/routes/supplier-invoices.js';
 import { confirmCaptureSvc } from '../modules/erp/routes/purchases-capture.js';
+import { supplierInvoiceSchema } from '../modules/erp/schemas.js';
 
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) pass++; else { fail++; console.error('  ✗ ' + m); } }
@@ -264,6 +266,116 @@ console.log('12. Deshacer pago');
   // Deshacer un pago inexistente / de otra factura → 404.
   throws(() => deleteSupplierPaymentSvc(db, id, 99999, {}), 404, 'deshacer pago inexistente → 404');
   db.close();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PASO (b) — FACTURAS DE GASTO PURO (sin origen de stock)
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── 13. Alta de gasto: proveedor directo + líneas, total = suma, IVA por tipo ──
+console.log('13. Gasto: alta sin origen + IVA por tipo');
+{
+  const db = freshDb();
+  const sup = addSupplier(db, { term: 30 });
+  const r = createSupplierInvoiceSvc(db, {
+    supplier_id: sup, expense_category: 'Servicios profesionales',
+    supplier_invoice_number: 'GEST-01', invoice_date: '2026-06-10',
+    lines: [
+      { concepto: 'Asesoría junio', base: 100, tax_rate: 21 },   // cuota 21
+      { concepto: 'Gestión laboral', base: 50, tax_rate: 10 },   // cuota 5
+      { concepto: 'Suplido exento', base: 30, tax_rate: 0 },     // cuota 0 (exento)
+    ],
+  }, { onDuplicate: 'throw', today: '2026-06-10' });
+  ok(r.is_expense === true, 'la factura es de gasto (sin origen)');
+  ok(/^FRP-\d{4}$/.test(r.internal_code), 'código FRP asignado');
+  const inv = db.prepare('SELECT * FROM supplier_invoices WHERE id=?').get(r.id);
+  eq([inv.base, inv.tax, inv.total], [180, 26, 206], 'base=180, IVA=26 (21+5+0), total=206 (mezcla 21+10+exenta)');
+  eq([inv.entity_type, inv.entity_id], [null, null], 'sin enlace a documento de stock');
+  eq(inv.expense_category, 'Servicios profesionales', 'categoría de gasto guardada');
+  eq(inv.due_date, '2026-07-10', 'vencimiento = fecha + plazo del proveedor (30d)');
+  const items = db.prepare('SELECT * FROM supplier_invoice_items WHERE supplier_invoice_id=? ORDER BY id').all(r.id);
+  eq(items.length, 3, '3 líneas insertadas');
+  eq([items[0].cuota, items[1].cuota, items[2].cuota], [21, 5, 0], 'cuota por línea = base*tipo/100');
+  // El motor de pago funciona igual sobre el total de cabecera.
+  eq(supplierInvoicePago(db, inv, '2026-06-10').estado, 'pendiente', 'gasto nace pendiente');
+  db.close();
+}
+
+// ── 14. Gasto: due_date editable + guardas ──────────────────────────────────
+console.log('14. Gasto: vencimiento editable + guardas');
+{
+  const db = freshDb();
+  const sup = addSupplier(db, { term: 30 });
+  const r = createSupplierInvoiceSvc(db, {
+    supplier_id: sup, expense_category: 'Alquiler', invoice_date: '2026-06-10',
+    due_date: '2026-06-30', lines: [{ concepto: 'Renta local', base: 800, tax_rate: 21 }],
+  }, {});
+  eq(db.prepare('SELECT due_date FROM supplier_invoices WHERE id=?').get(r.id).due_date, '2026-06-30', 'vencimiento manual respeta lo tecleado');
+  // Sin proveedor → 400 (vía servicio).
+  throws(() => createSupplierInvoiceSvc(db, { invoice_date: '2026-06-10', lines: [{ concepto: 'x', base: 10, tax_rate: 21 }] }, {}), 400, 'gasto sin proveedor → 400');
+  // Sin líneas → 400.
+  throws(() => createSupplierInvoiceSvc(db, { supplier_id: sup, invoice_date: '2026-06-10', lines: [] }, {}), 400, 'gasto sin líneas → 400');
+  // Categoría inválida → 400.
+  throws(() => createSupplierInvoiceSvc(db, { supplier_id: sup, expense_category: 'Inventada', invoice_date: '2026-06-10', lines: [{ concepto: 'x', base: 10, tax_rate: 21 }] }, {}), 400, 'categoría fuera de la lista → 400');
+  // Total 0 (todas las bases a 0) → 400.
+  throws(() => createSupplierInvoiceSvc(db, { supplier_id: sup, invoice_date: '2026-06-10', lines: [{ concepto: 'x', base: 0, tax_rate: 21 }] }, {}), 400, 'gasto con base 0 → total 0 → 400');
+  ok(EXPENSE_CATEGORIES.includes('Servicios profesionales') && EXPENSE_CATEGORIES.includes('Otros'), 'lista de categorías expuesta');
+  db.close();
+}
+
+// ── 15. Gasto: duplicado, anular y pagar ────────────────────────────────────
+console.log('15. Gasto: duplicado + anular + pago');
+{
+  const db = freshDb();
+  const sup = addSupplier(db);
+  const mk = (num) => createSupplierInvoiceSvc(db, { supplier_id: sup, expense_category: 'Banca y financieros', supplier_invoice_number: num, invoice_date: '2026-06-10', lines: [{ concepto: 'Comisión', base: 100, tax_rate: 21 }] }, { onDuplicate: 'throw', today: '2026-06-10' });
+  const a = mk('B-1');
+  throws(() => mk('B-1'), 409, 'mismo proveedor + mismo número → 409 (igual que stock)');
+  // Pagar parcial y total contra la factura de gasto.
+  registerSupplierPaymentSvc(db, a.id, { amount: 50 }, { today: '2026-06-10' });
+  eq(supplierInvoicePago(db, db.prepare('SELECT * FROM supplier_invoices WHERE id=?').get(a.id), '2026-06-10').estado, 'parcial', 'pago parcial → parcial');
+  registerSupplierPaymentSvc(db, a.id, { amount: 71 }, { today: '2026-06-10' });
+  eq(supplierInvoicePago(db, db.prepare('SELECT * FROM supplier_invoices WHERE id=?').get(a.id), '2026-06-10').estado, 'pagada', 'pago restante (121 total) → pagada');
+  // Anular un gasto (inmutable, igual que stock).
+  anularSupplierInvoiceSvc(db, a.id, 'duplicada por error');
+  eq(db.prepare('SELECT status FROM supplier_invoices WHERE id=?').get(a.id).status, 'anulada', 'gasto anulado');
+  db.close();
+}
+
+// ── 16. Convivencia gasto + stock en la torre de control ────────────────────
+console.log('16. Gasto y stock conviven (torre de control)');
+{
+  const db = freshDb();
+  const sup = addSupplier(db);
+  const prod = addProduct(db);
+  // factura de STOCK (paso a) — sin tocar nada del flujo
+  const stockInv = createSupplierInvoiceSvc(db, { entity_type: 'purchase', entity_id: addReceivedPurchase(db, sup, prod), invoice_date: '2026-06-01', total: 100 }, {});
+  // factura de GASTO (paso b)
+  const gasto = createSupplierInvoiceSvc(db, { supplier_id: sup, expense_category: 'Suministros', invoice_date: '2026-06-01', lines: [{ concepto: 'Luz', base: 50, tax_rate: 21 }] }, {});
+  const st = getSupplierInvoice(db, stockInv.id, '2026-06-16');
+  const gt = getSupplierInvoice(db, gasto.id, '2026-06-16');
+  ok(!st.is_expense && st.items.length === 0, 'la de stock NO es gasto y no tiene líneas');
+  ok(gt.is_expense && gt.items.length === 1, 'la de gasto sí tiene su línea');
+  eq(st.origin && st.origin.label.startsWith('Compra'), true, 'la de stock conserva su documento de origen');
+  eq(gt.origin, null, 'la de gasto no tiene origen (ficha mostrará "—")');
+  const torre = openPayables(db, '2026-06-16');
+  eq(torre.total, 160.5, 'torre suma ambas: 100 (stock) + 60.5 (gasto 50+21%)');
+  db.close();
+}
+
+// ── 17. Schema: origen ahora OPCIONAL; gasto exige proveedor + líneas ───────
+console.log('17. Schema relajado');
+{
+  // (a) Con origen: válido sin supplier_id ni líneas.
+  ok(supplierInvoiceSchema.safeParse({ entity_type: 'purchase', entity_id: 5, invoice_date: '2026-06-10', total: 100 }).success, 'modo stock: origen + total → válido');
+  // (b) Gasto: válido con supplier_id + líneas, sin origen.
+  ok(supplierInvoiceSchema.safeParse({ supplier_id: 3, invoice_date: '2026-06-10', lines: [{ base: 100, tax_rate: 21 }] }).success, 'modo gasto: proveedor + líneas → válido');
+  // Sin origen y sin proveedor → inválido.
+  ok(!supplierInvoiceSchema.safeParse({ invoice_date: '2026-06-10' }).success, 'sin origen ni proveedor → inválido');
+  // Gasto sin líneas → inválido.
+  ok(!supplierInvoiceSchema.safeParse({ supplier_id: 3, invoice_date: '2026-06-10' }).success, 'gasto sin líneas → inválido');
+  // Con origen pero sin total → inválido.
+  ok(!supplierInvoiceSchema.safeParse({ entity_type: 'purchase', entity_id: 5, invoice_date: '2026-06-10' }).success, 'stock sin total>0 → inválido');
 }
 
 console.log('\n' + (fail ? '✗ ' + fail + ' fallos, ' : '') + pass + ' OK');

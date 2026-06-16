@@ -908,6 +908,26 @@ export function runMigrations(db) {
   )`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_supplier_payments_invoice ON supplier_payments(supplier_invoice_id)`);
 
+  // ── Paso (b) — FACTURAS DE GASTO PURO (gestoría, alquiler, software, banca…) ──
+  // Una factura de gasto NO trae mercancía ni producto de catálogo: entity_type/entity_id
+  // quedan NULL (ya eran opcionales en el paso a). Lleva LÍNEAS con concepto libre + base +
+  // tipo de IVA, para capturar el desglose de IVA soportado por tipo (materia prima del gasto
+  // deducible del autónomo; aquí NO se construye ningún informe fiscal, solo se captura el dato).
+  // Las facturas CON origen de stock del paso (a) NO llevan líneas y NO se tocan: sus
+  // base/tax/total siguen viniendo del documento de mercancía. Tabla OPCIONAL: aditiva.
+  db.exec(`CREATE TABLE IF NOT EXISTS supplier_invoice_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplier_invoice_id INTEGER NOT NULL,
+    concepto TEXT NOT NULL DEFAULT '',
+    base REAL NOT NULL DEFAULT 0,
+    tax_rate REAL NOT NULL DEFAULT 0,        -- banda legal: 21/10/4/0 (0 = exento)
+    cuota REAL NOT NULL DEFAULT 0,           -- = base * tax_rate / 100
+    FOREIGN KEY (supplier_invoice_id) REFERENCES supplier_invoices(id) ON DELETE CASCADE
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_supplier_invoice_items_invoice ON supplier_invoice_items(supplier_invoice_id)`);
+  // Categoría de gasto (lista cerrada definida en código). NULL en las facturas de stock.
+  addCol(db, 'supplier_invoices', 'expense_category', 'TEXT');
+
   // Pilar 3 (coste/valoración) — backfill del coste, UNA vez por tenant. Corre DESPUÉS de que
   // existan las columnas nuevas (stock_movements.unit_cost, products.average_cost) y la tabla
   // purchase_items. Las compras ya guardadas NO se tocan (purchase_items.unit_cost es inmutable):
