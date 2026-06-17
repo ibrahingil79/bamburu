@@ -19,6 +19,18 @@ export function pagoModalHtml() {
   </div>`;
 }
 
+// Paso (e) — modal de PAGO A CUENTA (saldar varias facturas del proveedor a la vez). Overlay
+// propio; las funciones viven en pagoModalScript (mismas dependencias). Espejo del "cobro a
+// cuenta" de clientes, payment-only.
+export function pagoCuentaModalHtml() {
+  return `<div class="modal-overlay" id="pagoCuentaModal">
+    <div class="modal" style="max-width:640px">
+      <div class="modal-head"><h3 id="pagoCuentaTitle">Pagar a cuenta</h3><button class="modal-close" onclick="closeModal('pagoCuentaModal')">✕</button></div>
+      <div class="modal-body" id="pagoCuentaBody"></div>
+    </div>
+  </div>`;
+}
+
 export function pagoModalScript(sym) {
   return `
   (function(){
@@ -122,6 +134,91 @@ export function pagoModalScript(sym) {
         await openPagos(id);
         if (typeof window.pagoOnSaved === 'function') window.pagoOnSaved(id);
       } catch(e){ toast(e.message||'Error registrando el reembolso','err'); }
+    };
+
+    // ── Paso (e): PAGO A CUENTA del proveedor (saldar varias facturas a la vez) ──────────
+    // Clon del cobro a cuenta de clientes, payment-only. El reparto (auto/manual) lo CALCULA y
+    // lo VALIDA el servidor (registerSupplierAccountPayment); aquí solo se previsualiza y se
+    // pega al endpoint POST /api/erp/suppliers/:id/account-payments. Abonos ya vienen excluidos.
+    let pcAcct = null;
+    window.pcClose = function(){ closeModal('pagoCuentaModal'); };
+    function pcLabel(f){ return escHtml(f.internal_code||('#'+f.supplier_invoice_id)); }
+    function pcRepartoAuto(importe, vivas){
+      let rest=Math.round(Number(importe)*100);
+      const orden=vivas.slice().sort(function(a,b){return String(a.due_date||'').localeCompare(String(b.due_date||''))||(a.supplier_invoice_id-b.supplier_invoice_id);});
+      const asg={}; for(var i=0;i<orden.length;i++){ var f=orden[i]; if(rest<=0)break; var d=Math.round(Number(f.pendiente)*100); var ap=Math.min(rest,d); if(ap>0){ asg[f.supplier_invoice_id]=ap/100; rest-=ap; } }
+      return { asg:asg, sinAsignar:rest/100 };
+    }
+    // Abre el modal para un proveedor: carga su deuda viva y pinta el reparto.
+    window.openPagoCuenta = async function(supplierId){
+      try { pcAcct = await api('GET','/api/erp/suppliers/'+supplierId+'/account-summary'); } catch(e){ toast(e.message||'Error','err'); return; }
+      pcAcct.supplier_id = supplierId;
+      document.getElementById('pagoCuentaTitle').textContent = 'Pagar a cuenta · '+escHtml(pcAcct.supplier_name||'');
+      const vivas = pcAcct.facturasVivas||[];
+      if(!vivas.length){ document.getElementById('pagoCuentaBody').innerHTML='<div class="alert alert-ok">Este proveedor no tiene deuda viva que pagar.</div>'; openModal('pagoCuentaModal'); return; }
+      const listado = '<div class="table-wrap" style="margin-bottom:1rem"><table><thead><tr><th>Factura</th><th>Vence</th><th style="text-align:right">Pendiente</th></tr></thead><tbody>'
+        +vivas.map(function(f){return '<tr><td>'+pcLabel(f)+(f.supplier_invoice_number?' <span style="color:var(--muted);font-size:.8rem">'+escHtml(f.supplier_invoice_number)+'</span>':'')+'</td><td style="color:var(--muted);font-size:.8rem">'+escHtml(f.due_date||'-')+(f.dias_vencida>0?' · vencida '+f.dias_vencida+'d':'')+'</td><td style="text-align:right">'+SYM+Number(f.pendiente).toFixed(2)+'</td></tr>';}).join('')
+        +'<tr><td colspan="2" style="font-weight:700;border-top:1px solid var(--border)">Le debes</td><td style="text-align:right;font-weight:700;border-top:1px solid var(--border)">'+SYM+Number(pcAcct.deudaTotal).toFixed(2)+'</td></tr></tbody></table></div>';
+      document.getElementById('pagoCuentaBody').innerHTML =
+        '<div style="margin-bottom:.75rem">Le debes <strong>'+SYM+Number(pcAcct.deudaTotal).toFixed(2)+'</strong> en '+vivas.length+' factura'+(vivas.length===1?'':'s')+'</div>'
+        +listado
+        +'<div class="form-row" style="gap:.5rem;align-items:end">'
+        +'<div class="form-group"><label class="form-label">Importe a pagar</label><input type="number" step="0.01" min="0.01" class="form-control" id="pc-importe" value="'+Number(pcAcct.deudaTotal).toFixed(2)+'" style="width:140px" oninput="pcRender()"></div>'
+        +'<div class="form-group"><label class="form-label">Reparto</label><select class="form-control" id="pc-modo" onchange="pcRender()"><option value="auto">Automático (más antigua primero)</option><option value="manual">Repartir a mano</option></select></div>'
+        +'<div class="form-group"><label class="form-label">Forma</label><select class="form-control" id="pc-method"><option value="">—</option><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option><option value="tarjeta">Tarjeta</option><option value="domiciliacion">Domiciliación</option></select></div>'
+        +'</div><div id="pc-reparto"></div>'
+        +'<div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.75rem"><button class="btn btn-secondary btn-sm" onclick="pcClose()">Cancelar</button><button class="btn btn-primary btn-sm" id="pc-btn" onclick="guardarPagoCuenta()">Registrar pago</button></div>';
+      pcRender();
+      openModal('pagoCuentaModal');
+    };
+    window.pcRender = function(){
+      const importe=parseFloat(document.getElementById('pc-importe').value)||0;
+      const modo=document.getElementById('pc-modo').value;
+      const vivas=pcAcct.facturasVivas||[];
+      const cont=document.getElementById('pc-reparto');
+      const btn=document.getElementById('pc-btn');
+      if(modo==='auto'){
+        const r=pcRepartoAuto(importe, vivas);
+        cont.innerHTML='<table style="width:100%;font-size:.85rem;margin-top:.5rem"><thead><tr><th style="text-align:left">Factura</th><th style="text-align:right">Se aplica</th></tr></thead><tbody>'
+          +vivas.map(function(f){return '<tr><td>'+pcLabel(f)+' <span style="color:var(--muted)">('+SYM+Number(f.pendiente).toFixed(2)+')</span></td><td style="text-align:right">'+SYM+Number(r.asg[f.supplier_invoice_id]||0).toFixed(2)+'</td></tr>';}).join('')+'</tbody></table>'
+          +(r.sinAsignar>0.0049?'<p style="color:var(--warn,#b58100);font-size:.8rem;margin:.4rem 0">Sobran '+SYM+r.sinAsignar.toFixed(2)+' tras saldar toda la deuda (no se aplican).</p>':'');
+        if(btn) btn.disabled=!(importe>0);
+      } else {
+        cont.innerHTML='<table style="width:100%;font-size:.85rem;margin-top:.5rem"><thead><tr><th style="text-align:left">Factura</th><th style="text-align:right">Pendiente</th><th style="text-align:right">Importe</th></tr></thead><tbody>'
+          +vivas.map(function(f){return '<tr><td>'+pcLabel(f)+'</td><td style="text-align:right;color:var(--muted)">'+SYM+Number(f.pendiente).toFixed(2)+'</td><td style="text-align:right"><input type="number" step="0.01" min="0" max="'+Number(f.pendiente).toFixed(2)+'" class="form-control pc-mf" data-id="'+f.supplier_invoice_id+'" data-pend="'+Number(f.pendiente).toFixed(2)+'" value="0" style="width:110px;text-align:right;display:inline-block" oninput="pcSum()"></td></tr>';}).join('')+'</tbody></table>'
+          +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:.4rem"><button class="btn btn-secondary btn-sm" type="button" onclick="pcAutoFill()">Auto por antigüedad</button><span id="pc-counter" style="font-size:.85rem"></span></div>';
+        pcSum();
+      }
+    };
+    window.pcAutoFill = function(){
+      const importe=parseFloat(document.getElementById('pc-importe').value)||0;
+      const r=pcRepartoAuto(importe, pcAcct.facturasVivas||[]);
+      document.querySelectorAll('.pc-mf').forEach(function(inp){ inp.value=Number(r.asg[inp.getAttribute('data-id')]||0).toFixed(2); });
+      pcSum();
+    };
+    window.pcSum = function(){
+      const importe=parseFloat(document.getElementById('pc-importe').value)||0;
+      let suma=0, over=false;
+      document.querySelectorAll('.pc-mf').forEach(function(inp){ const v=parseFloat(inp.value)||0; suma+=Math.round(v*100); if(Math.round(v*100)>Math.round(parseFloat(inp.getAttribute('data-pend'))*100)) over=true; });
+      const cuadra=(suma===Math.round(importe*100))&&!over&&importe>0;
+      const cnt=document.getElementById('pc-counter');
+      if(cnt) cnt.innerHTML='Asignado <strong>'+SYM+(suma/100).toFixed(2)+'</strong> / '+SYM+importe.toFixed(2)+(over?' <span style="color:var(--danger,#c00)">· alguna se pasa</span>':(cuadra?' <span style="color:var(--ok,#127a3a)">· cuadra ✓</span>':' <span style="color:var(--muted)">· falta cuadrar</span>'));
+      const btn=document.getElementById('pc-btn'); if(btn) btn.disabled=!cuadra;
+    };
+    window.guardarPagoCuenta = async function(){
+      const importe=parseFloat(document.getElementById('pc-importe').value)||0;
+      const modo=document.getElementById('pc-modo').value;
+      if(!(importe>0)){ toast('Importe inválido','err'); return; }
+      const body={ amount:importe, modo:modo, payment_method:document.getElementById('pc-method').value||'' };
+      if(modo==='manual'){
+        body.asignacion=Array.prototype.map.call(document.querySelectorAll('.pc-mf'), function(inp){ return { supplier_invoice_id:parseInt(inp.getAttribute('data-id')), importe:parseFloat(inp.value)||0 }; });
+      }
+      try {
+        const r=await api('POST','/api/erp/suppliers/'+pcAcct.supplier_id+'/account-payments',body);
+        toast('Pagados '+SYM+Number(r.repartido).toFixed(2)+' en '+r.pagos.length+' factura'+(r.pagos.length===1?'':'s')+(r.sinAsignar>0.0049?' (sobran '+SYM+Number(r.sinAsignar).toFixed(2)+')':''));
+        closeModal('pagoCuentaModal');
+        if(typeof window.pagoOnSaved==='function') window.pagoOnSaved(pcAcct.supplier_id);
+      } catch(e){ toast(e.message||'Error registrando el pago','err'); }
     };
   })();
   `;

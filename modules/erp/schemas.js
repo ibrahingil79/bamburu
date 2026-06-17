@@ -378,6 +378,23 @@ export const supplierPaymentSchema = z.object({
   note:           strOpt(500),
 });
 
+// Paso (e) — PAGO A CUENTA del proveedor (saldar varias facturas a la vez). Espejo de
+// accountActionSchema (parte cobro_cuenta), lado proveedor: importe + modo (auto/manual) y,
+// en manual, el reparto por factura. Lo valida el endpoint; el reparto lo hace el servicio.
+export const supplierAccountPaymentSchema = z.object({
+  amount:         z.coerce.number().positive('El importe debe ser mayor que 0').max(1_000_000),
+  modo:           z.enum(['auto', 'manual']).optional().default('auto'),
+  paid_date:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  payment_method: z.string().trim().max(40).optional().default(''),
+  note:           strOpt(500),
+  asignacion:     z.array(z.object({
+                    supplier_invoice_id: z.coerce.number().int().positive(),
+                    importe:             z.coerce.number().min(0).max(1_000_000),
+                  })).optional(),
+}).refine(d => d.modo !== 'manual' || (Array.isArray(d.asignacion) && d.asignacion.length > 0), {
+  message: 'El reparto manual necesita la asignación por factura', path: ['asignacion'],
+});
+
 // Multi-almacén · Capa 1 — el almacén solo tiene nombre (obligatorio, único entre activos
 // lo valida el servicio contra la BD). is_default/active los gobiernan acciones propias.
 export const warehouseSchema = z.object({

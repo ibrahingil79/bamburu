@@ -2,8 +2,10 @@ import { Hono } from 'hono';
 import { adminLayout, can } from '../layout.js';
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
-import { supplierSchema } from '../schemas.js';
+import { supplierSchema, supplierAccountPaymentSchema } from '../schemas.js';
 import { nextCode } from '../codes.js';
+import { liveSupplierPayables } from '../pagos.js';                                 // Paso (e): facturas vivas del proveedor para el modal de pago a cuenta
+import { registerSupplierAccountPayment } from './supplier-invoices.js';           // Paso (e): servicio de reparto ya hecho en (d) — se EXPONE, no se duplica
 
 // Saneamiento de Proveedor.
 // Guarda de NIF único GLOBAL: el NIF identifica fiscalmente al proveedor, así que un
@@ -73,6 +75,31 @@ export function createSupplierRoutes(db) {
     try {
       return c.json(searchSuppliers(db, { q: c.req.query('q') || '', limit: c.req.query('limit') }));
     } catch(e) { return c.json({error:e.message},500); }
+  });
+
+  // Paso (e) — resumen de cuenta del proveedor (deuda viva, factura a factura) para el modal
+  // "Pagar a cuenta". Solo lectura; reusa liveSupplierPayables (excluye abonos). ANTES de '/:id'.
+  api.get('/:id/account-summary', requirePerm('purchases.read'), c => {
+    try {
+      const sid = parseInt(c.req.param('id'));
+      const sup = db.prepare('SELECT id, name FROM suppliers WHERE id=?').get(sid);
+      if (!sup) return c.json({ error: 'Proveedor no encontrado' }, 404);
+      const facturasVivas = liveSupplierPayables(db, sid, new Date().toISOString().slice(0, 10));
+      const deudaTotal = Math.round(facturasVivas.reduce((s, f) => s + f.pendiente, 0) * 100) / 100;
+      return c.json({ supplier_id: sid, supplier_name: sup.name, deudaTotal, facturasVivas });
+    } catch (e) { return c.json({ error: e.message }, 500); }
+  });
+
+  // Paso (e) — PAGO A CUENTA: reparte el importe entre las facturas vivas del proveedor
+  // (auto = más antigua primero / manual) por el servicio EXISTENTE registerSupplierAccountPayment
+  // (el MISMO que usa el pago por voz de DISA). NADA de lógica de reparto nueva aquí: solo se expone.
+  api.post('/:id/account-payments', requirePerm('purchases.create'), validate(supplierAccountPaymentSchema), c => {
+    try {
+      const sid = parseInt(c.req.param('id'));
+      const r = registerSupplierAccountPayment(db, sid, c.get('validated'), { today: new Date().toISOString().slice(0, 10) });
+      logActivity(db, c.get('session'), 'Pago a cuenta de proveedor', 'supplier', sid, `${r.supplier_name} · ${r.repartido} en ${r.pagos.length} factura(s)`);
+      return c.json(r, 201);
+    } catch (e) { return c.json({ error: e.message }, e.status || 400); }
   });
 
   // El alta pasa por el servicio compartido (misma validación + guarda de NIF que C2).

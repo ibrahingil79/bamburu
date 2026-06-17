@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { requirePerm } from '../../../core/auth.js';
 import { adminLayout } from '../layout.js';
 import { openPayables } from '../pagos.js';
-import { pagoModalHtml, pagoModalScript } from '../views/pago-modal.js';
+import { pagoModalHtml, pagoCuentaModalHtml, pagoModalScript } from '../views/pago-modal.js';
 
 // Sección "Pagos a proveedores": torre de control de lo que DEBES. Espejo de la sección
 // Cobros. Lee SIEMPRE del motor (openPayables → supplierDebt), no duplica cálculo. Cada
@@ -40,6 +40,7 @@ export function createPagosRoutes(db) {
       </div>
 
       ${pagoModalHtml()}
+      ${pagoCuentaModalHtml()}
       <script>
       ${pagoModalScript(sym)}
       const SYM = ${JSON.stringify(sym)};
@@ -65,7 +66,8 @@ export function createPagosRoutes(db) {
             : '<strong>'+SYM+Number(r.pendiente||0).toFixed(2)+'</strong>';
           const btn = esAbono
             ? '<button class="btn btn-secondary btn-sm" onclick="openPagos('+r.supplier_invoice_id+')">Reembolso</button>'
-            : '<button class="btn btn-primary btn-sm" onclick="openPagos('+r.supplier_invoice_id+')">Pagar</button>';
+            : '<button class="btn btn-primary btn-sm" onclick="openPagos('+r.supplier_invoice_id+')">Pagar</button>'
+              + ' <button class="btn btn-secondary btn-sm" title="Saldar varias facturas de este proveedor a la vez" onclick="openPagoCuenta('+r.supplier_id+')">A cuenta</button>';
           return '<tr class="frow">'
             +'<td>'+escHtml(r.supplier_name||'')+'</td>'
             +'<td><a href="/admin/supplier-invoices/'+r.supplier_invoice_id+'"><strong>'+escHtml(r.internal_code||'')+'</strong></a>'+(r.supplier_invoice_number?' <span style="color:var(--muted);font-size:.8rem">'+escHtml(r.supplier_invoice_number)+'</span>':'')+'</td>'
