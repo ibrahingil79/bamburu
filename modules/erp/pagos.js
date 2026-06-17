@@ -143,3 +143,87 @@ export const ESTADO_BADGE = {
   pendiente: 'b-yellow', parcial: 'b-blue', pagada: 'b-green', vencida: 'b-red',
   abono: 'b-purple', reembolsado: 'b-gray',
 };
+
+// ════════════════════════════════════════════════════════════════════════════
+// Paso (d) — PAGO A CUENTA del proveedor (saldar varias facturas de golpe) + el
+// índice de deuda para la voz de DISA. Espejo EXACTO de la gestión de CUENTA de
+// cobros.js (repartoAutomatico / validarRepartoManual / accountsSummary), al revés.
+// El reparto trabaja en CÉNTIMOS para cuadrar siempre al céntimo; cada apunte real lo
+// inserta registerSupplierPaymentSvc (no se duplica la guarda de pago/sobrepago aquí).
+// ════════════════════════════════════════════════════════════════════════════
+
+const cents = n => Math.round(Number(n || 0) * 100);
+
+// Reparto AUTOMÁTICO de un pago a cuenta: de la factura MÁS ANTIGUA a la más nueva hasta
+// agotar el importe. Si sobra dinero tras saldar todo, el resto queda SIN asignar (aviso);
+// no se inventa nada (igual que cobro_cuenta). facturasVivas: [{supplier_invoice_id, pendiente, due_date}].
+export function repartoAutomaticoPago(importe, facturasVivas) {
+  let restante = cents(importe);
+  const orden = facturasVivas.slice().sort((a, b) =>
+    String(a.due_date || '').localeCompare(String(b.due_date || '')) || (a.supplier_invoice_id - b.supplier_invoice_id));
+  const asignacion = [];
+  for (const f of orden) {
+    if (restante <= 0) break;
+    const deuda = cents(f.pendiente);
+    const aplica = Math.min(restante, deuda);
+    if (aplica > 0) { asignacion.push({ supplier_invoice_id: f.supplier_invoice_id, importe: aplica / 100 }); restante -= aplica; }
+  }
+  return { asignacion, sinAsignar: restante / 100 };
+}
+
+// Valida un reparto MANUAL: ok solo si la suma == importeTotal (al céntimo) y ninguna factura
+// recibe más que su pendiente (ni importes negativos / facturas ajenas o no vivas).
+export function validarRepartoManualPago(asignacion, importeTotal, facturasVivas) {
+  const deudaPorId = new Map(facturasVivas.map(f => [Number(f.supplier_invoice_id), cents(f.pendiente)]));
+  let suma = 0;
+  for (const a of (asignacion || [])) {
+    const id = Number(a.supplier_invoice_id);
+    const c = cents(a.importe);
+    if (!deudaPorId.has(id)) return { ok: false, error: 'La factura ' + id + ' no es deuda viva de este proveedor' };
+    if (c < 0) return { ok: false, error: 'No se permiten importes negativos' };
+    if (c > deudaPorId.get(id)) return { ok: false, error: 'La factura ' + id + ' recibe más que su deuda pendiente' };
+    suma += c;
+  }
+  const total = cents(importeTotal);
+  if (suma !== total) return { ok: false, error: 'El reparto suma ' + (suma / 100).toFixed(2) + ' y debe sumar exactamente ' + (total / 100).toFixed(2) };
+  return { ok: true };
+}
+
+// Facturas PAGABLES vivas de un proveedor (deuda real: isPayable + pendiente>0), de más
+// antigua a más nueva. Los ABONOS (total<0) quedan FUERA por isPayable (son crédito, no deuda).
+// Base común del reparto a cuenta y del índice de deuda de DISA.
+export function liveSupplierPayables(db, supplierId, today) {
+  const d = supplierDebt(db, supplierId, today);
+  return d.invoices
+    .filter(inv => isPayable(inv) && inv.pendiente > 0.0049)
+    .map(inv => ({
+      supplier_invoice_id: inv.id, internal_code: inv.internal_code,
+      supplier_invoice_number: inv.supplier_invoice_number,
+      pendiente: r2(inv.pendiente), due_date: inv.due_date,
+      estado: inv.estado, dias_vencida: inv.dias_vencida,
+    }));
+}
+
+// Resumen de cuentas de TODOS los proveedores con deuda (para la voz de DISA): cada proveedor
+// con su deuda total + sus facturas pagables vivas, ordenado por urgencia (más vencida arriba).
+// Espejo de accountsSummary de cobros, lado proveedor.
+export function supplierAccountsSummary(db, today) {
+  const t = today || new Date().toISOString().slice(0, 10);
+  const supplierIds = db.prepare('SELECT DISTINCT supplier_id FROM supplier_invoices').all().map(r => r.supplier_id);
+  const rows = [];
+  let total = 0;
+  for (const sid of supplierIds) {
+    const vivas = liveSupplierPayables(db, sid, t);
+    if (!vivas.length) continue;                       // sin deuda real (o solo abonos) → fuera
+    const deuda = r2(vivas.reduce((s, f) => s + f.pendiente, 0));
+    const maxVencida = vivas.reduce((m, f) => Math.max(m, f.dias_vencida || 0), 0);
+    const s = db.prepare('SELECT name FROM suppliers WHERE id=?').get(sid);
+    rows.push({
+      supplier_id: sid, supplier_name: s ? s.name : '—',
+      deudaTotal: deuda, facturas: vivas.length, maxVencida, vivas,
+    });
+    total = r2(total + deuda);
+  }
+  rows.sort((a, b) => (b.maxVencida - a.maxVencida) || (b.deudaTotal - a.deudaTotal));
+  return { total: r2(total), rows };
+}

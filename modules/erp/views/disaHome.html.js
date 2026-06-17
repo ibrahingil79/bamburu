@@ -1,4 +1,4 @@
-export function disaHomeHtml({ userName, alertCount, kpis }) {
+export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
   const sym = kpis?.sym || '€';
 
   return `
@@ -48,6 +48,14 @@ export function disaHomeHtml({ userName, alertCount, kpis }) {
       }
       .disa-alerts-badge:hover { background: rgba(239,68,68,0.25); }
       .disa-alerts-badge .adot { width: 5px; height: 5px; background: #ef4444; border-radius: 50%; }
+      /* Estado "visto" (Opción C): hay avisos pero ya se abrieron y nada nuevo → gris, sin gritar. */
+      .disa-alerts-badge.visto {
+        background: rgba(148,163,184,0.12);
+        color: #94a3b8;
+        border-color: rgba(148,163,184,0.22);
+      }
+      .disa-alerts-badge.visto:hover { background: rgba(148,163,184,0.2); }
+      .disa-alerts-badge.visto .adot { background: #94a3b8; }
 
       /* Stage central */
       .disa-stage {
@@ -328,10 +336,10 @@ export function disaHomeHtml({ userName, alertCount, kpis }) {
         </div>
       </div>
 
-      ${alertCount > 0 ? `
-        <button class="disa-alerts-badge" onclick="disaQuickSend('¿Qué requiere mi atención?')">
+      ${alertState !== 'apagado' && alertCount > 0 ? `
+        <button class="disa-alerts-badge${alertState === 'visto' ? ' visto' : ''}" id="dh-alerts-badge" onclick="disaShowAlerts()">
           <span class="adot"></span>
-          ${alertCount} ${alertCount === 1 ? 'alerta' : 'alertas'}
+          ${alertState === 'visto' ? 'Avisos' : (alertCount + ' ' + (alertCount === 1 ? 'alerta' : 'alertas'))}
         </button>
       ` : ''}
 
@@ -459,6 +467,37 @@ export function disaHomeHtml({ userName, alertCount, kpis }) {
         document.getElementById('dh-input').value = text;
         disaSubmitHome();
       }
+
+      // Pulsar el badge (Paso d · resumen-primero): NO lanza una pregunta abierta a DISA. Pide
+      // al motor de avisos un RESUMEN DE CONTEOS (determinista, sin modelo, sin ofrecer acciones)
+      // y de paso marca los avisos como VISTOS (el badge pasa a gris). El DETALLE solo si el dueño
+      // lo pide luego escribiendo ("enséñame los vencimientos") — esa sí es conversación normal.
+      window.disaShowAlerts = async function() {
+        if (!dhStarted) {
+          document.getElementById('dh-hero').classList.add('hidden');
+          document.getElementById('dh-cards').classList.add('hidden');
+          document.getElementById('dh-chips').style.display = 'none';
+          document.getElementById('dh-messages').classList.add('visible');
+          document.getElementById('dh-input-area').classList.add('docked');
+          document.getElementById('dh-stage').style.justifyContent = 'flex-end';
+          dhStarted = true;
+        }
+        dhAppendMsg('user', '¿Qué requiere mi atención?');
+        const typingId = dhAppendTyping();
+        try {
+          const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || window.CSRF_TOKEN || '';
+          const res = await fetch('/api/disa/alerts/open', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf } });
+          const data = await res.json();
+          dhRemoveTyping(typingId);
+          dhAppendMsg('assistant', data.reply || 'Ahora mismo no tienes nada pendiente.');
+          // El badge pasa a "visto" (gris) en cuanto se abre: el rojo vuelve solo si aparece algo nuevo.
+          const badge = document.getElementById('dh-alerts-badge');
+          if (badge) { badge.classList.add('visto'); badge.textContent = ''; const d = document.createElement('span'); d.className = 'adot'; badge.appendChild(d); badge.appendChild(document.createTextNode(' Avisos')); }
+        } catch {
+          dhRemoveTyping(typingId);
+          dhAppendMsg('assistant', 'No pude cargar tus avisos. Intenta de nuevo.');
+        }
+      };
 
       // Nueva conversación: crea un hilo nuevo (mismo motor que el asistente IA) y vuelve a
       // la pantalla inicial (hero + accesos), sin mensajes.

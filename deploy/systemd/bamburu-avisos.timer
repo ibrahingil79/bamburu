@@ -1,0 +1,14 @@
+[Unit]
+Description=Bamburu — disparador diario del resumen de avisos de pagos
+
+[Timer]
+# Diario a las 08:00 hora local: el dueño abre el día con el resumen ya en el correo.
+OnCalendar=*-*-* 08:00:00
+# Si el servidor estaba apagado a esa hora, ejecuta en el siguiente arranque (la guarda de
+# idempotencia daily_alert_log evita que un arranque tardío reenvíe lo de un día ya cubierto).
+Persistent=true
+# Pequeño desfase aleatorio para no clavar siempre el mismo segundo.
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

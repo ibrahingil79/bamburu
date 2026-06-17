@@ -4,7 +4,8 @@ import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { supplierInvoiceSchema, supplierInvoiceAnularSchema, supplierPaymentSchema } from '../schemas.js';
 import { nextCode } from '../codes.js';
-import { supplierInvoicePago, isPayable, isRefundable, supplierDebt, ESTADO_LABEL, ESTADO_BADGE } from '../pagos.js';
+import { supplierInvoicePago, isPayable, isRefundable, supplierDebt, ESTADO_LABEL, ESTADO_BADGE,
+         liveSupplierPayables, repartoAutomaticoPago, validarRepartoManualPago } from '../pagos.js';
 import { pagoModalHtml, pagoModalScript } from '../views/pago-modal.js';
 import { getVatBands } from '../../../core/vat-bands.js';
 
@@ -186,6 +187,51 @@ export function registerSupplierPaymentSvc(db, id, input, opts = {}) {
   const res = db.prepare('INSERT INTO supplier_payments (supplier_invoice_id, amount, paid_date, payment_method, note) VALUES (?,?,?,?,?)')
     .run(id, amount, input.paid_date || t, input.payment_method || '', input.note || '');
   return { id: res.lastInsertRowid, pago: supplierInvoicePago(db, inv, t) };
+}
+
+// ── SERVICIO: PAGO A CUENTA del proveedor (saldar varias facturas de golpe) ──
+// Paso (d): espejo de cobro_cuenta. Reparte input.amount entre las facturas PAGABLES vivas
+// del proveedor (más antigua primero en auto, o asignacion[] en manual), insertando cada
+// apunte por el MISMO registerSupplierPaymentSvc (que revalida isPayable + no-sobrepago).
+// Los abonos quedan fuera (liveSupplierPayables ya los excluye). El sobrante (amount > deuda
+// total) NO crea crédito: se devuelve como sinAsignar para avisar. NO mueve stock ni hash.
+export function registerSupplierAccountPayment(db, supplierId, input, opts = {}) {
+  const today = opts.today || new Date().toISOString().slice(0, 10);
+  const sup = db.prepare('SELECT id, name FROM suppliers WHERE id=?').get(supplierId);
+  if (!sup) { const e = new Error('Proveedor no encontrado'); e.status = 404; throw e; }
+
+  const vivas = liveSupplierPayables(db, supplierId, today);   // deuda real, más antigua primero
+  if (!vivas.length) { const e = new Error('El proveedor no tiene deuda viva que pagar'); e.status = 400; throw e; }
+
+  const importe = round2(input.amount);
+  if (!(importe > 0)) { const e = new Error('El importe debe ser mayor que 0'); e.status = 400; throw e; }
+
+  let asignacion, sinAsignar = 0;
+  if (input.modo === 'manual') {
+    const v = validarRepartoManualPago(input.asignacion, importe, vivas);
+    if (!v.ok) { const e = new Error(v.error); e.status = 400; throw e; }
+    asignacion = (input.asignacion || []).filter(a => round2(a.importe) > 0)
+      .map(a => ({ supplier_invoice_id: Number(a.supplier_invoice_id), importe: round2(a.importe) }));
+  } else {
+    const auto = repartoAutomaticoPago(importe, vivas);
+    asignacion = auto.asignacion; sinAsignar = auto.sinAsignar;
+  }
+
+  const pagos = [];
+  db.transaction(() => {
+    for (const a of asignacion) {
+      const r = registerSupplierPaymentSvc(db, a.supplier_invoice_id, {
+        amount: a.importe, paid_date: input.paid_date || today,
+        payment_method: input.payment_method || '', note: input.note || 'Pago a cuenta',
+      }, { today });
+      pagos.push({ supplier_invoice_id: a.supplier_invoice_id, importe: a.importe, payment_id: r.id });
+    }
+  })();
+
+  return {
+    supplier_id: supplierId, supplier_name: sup.name,
+    asignacion, sinAsignar: round2(sinAsignar), pagos, repartido: round2(importe - sinAsignar),
+  };
 }
 
 // ── SERVICIO: deshacer (borrar) un pago mal metido ─────────────────────────

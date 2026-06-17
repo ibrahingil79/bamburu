@@ -1,0 +1,16 @@
+[Unit]
+Description=Bamburu — resumen diario de avisos (vencimientos de proveedor) por email
+Documentation=file:///home/ibrahin/bamburu/deploy/systemd/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ibrahin
+Group=ibrahin
+WorkingDirectory=/home/ibrahin/bamburu
+# Secretos (RESEND_API_KEY) — el mismo EnvironmentFile que la app.
+EnvironmentFile=/etc/bamburu.env
+# El .mjs itera TODOS los tenants (data/tenants/*.db) por sí mismo (no hace falta bash).
+ExecStart=/usr/bin/node /home/ibrahin/bamburu/scripts/bamburu-avisos.mjs
+SyslogIdentifier=bamburu-avisos

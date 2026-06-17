@@ -11,6 +11,9 @@ import { adjustStock, ADJUST_REASONS } from '../erp/stock.js';
 import { createStockTransferSvc } from '../erp/routes/stock-transfers.js';
 import { activeWarehouses, inventoryValuation } from '../erp/routes/warehouses.js';
 import { collectionsWorklist, registerCollectionAction, accountsSummary, registerAccountAction } from '../erp/cobros.js';
+import { supplierAccountsSummary } from '../erp/pagos.js';                                  // Paso (d): índice de deuda con proveedores para la voz de DISA
+import { registerSupplierAccountPayment } from '../erp/routes/supplier-invoices.js';       // Paso (d): pago a proveedor por voz (reparto a cuenta)
+import { marcarVistoYResumir } from '../erp/avisos.js';                                     // Paso (d): resumen-primero del badge (motor de avisos)
 import { sendEmail } from '../../core/mailer.js';
 import { runCapture, captureFromExtraction } from '../erp/routes/purchases-capture.js';   // pipeline de captura C2 reutilizado (foto/PDF y voz)
 import { createProductSvc } from '../erp/routes/products.js';   // alta validada (banda de IVA obligatoria, sin defecto silencioso)
@@ -129,6 +132,7 @@ export function register(app, db) {
     'create_invoice_from_order', 'adjust_stock', 'reset_stock', 'transfer_stock',
     'update_company_config', 'disable_2fa_user', 'list_users_security',
     'register_collection_action', 'register_account_action',
+    'register_supplier_payment',
     'create_client', 'edit_client', 'deactivate_client', 'activate_client',
     'dictar_compra',
   ]);
@@ -734,6 +738,38 @@ export function register(app, db) {
           }
         }
 
+        // Paso (d) — PAGO A PROVEEDOR por voz ("pagué 200€ a Esencias"). Espejo de
+        // cobro_cuenta: reparte el importe entre las facturas vivas del proveedor (más
+        // antigua primero) por el servicio validado registerSupplierAccountPayment (no
+        // INSERT directo; reusa isPayable + no-sobrepago por factura). Resuelve el proveedor
+        // por id (del índice COMPRAS POR PAGAR) o, si DISA pasa nombre, uno/varios/ninguno.
+        case 'register_supplier_payment': {
+          const p = action.params || {};
+          try {
+            let supplierId = parseInt(p.supplier_id) || null;
+            if (!supplierId && p.supplier) {
+              const q = String(p.supplier).trim().toLowerCase();
+              const matches = db.prepare('SELECT id, name FROM suppliers WHERE LOWER(name) LIKE ?').all('%' + q + '%');
+              if (matches.length === 0) return { ok: false, message: 'No encuentro ningún proveedor que se llame "' + p.supplier + '". ¿Lo creo o lo dices de otra forma?' };
+              if (matches.length > 1) return { ok: false, message: 'Hay varios proveedores que encajan con "' + p.supplier + '": ' + matches.map(m => m.name).join(', ') + '. ¿Cuál de ellos?' };
+              supplierId = matches[0].id;
+            }
+            if (!supplierId) return { ok: false, message: 'Falta el proveedor del pago.' };
+            const res = registerSupplierAccountPayment(db, supplierId, {
+              amount: p.amount, modo: p.modo || 'auto', asignacion: p.asignacion,
+              payment_method: p.payment_method, note: p.note,
+            });
+            logActivity(db, 'supplier_payment', 'suppliers', supplierId,
+              'DISA registró pago a cuenta de ' + res.repartido + ' a ' + res.supplier_name + ' (' + res.pagos.length + ' factura/s)', session);
+            const msg = 'Pagados ' + res.repartido.toFixed(2) + ' a ' + res.supplier_name
+              + ' en ' + res.pagos.length + ' factura' + (res.pagos.length === 1 ? '' : 's')
+              + (res.sinAsignar > 0.0049 ? ' (sobran ' + res.sinAsignar.toFixed(2) + ': el proveedor no debía tanto).' : '.');
+            return { ok: true, message: msg };
+          } catch (e) {
+            return { ok: false, message: 'No se pudo registrar el pago al proveedor: ' + e.message };
+          }
+        }
+
         case 'activate_client': {
           const p = action.params || {};
           try {
@@ -1086,6 +1122,32 @@ export function register(app, db) {
                 + ' · perfil ' + (r.perfilCuenta || 'estandar') + ' · CUENTA: ' + accion;
             });
             return ['COBROS POR CUENTA (cliente entero):', lines.join('\n'), ''];
+          } catch { return []; }
+        })(),
+        // Paso (d) — COMPRAS POR PAGAR: deuda VIVA con cada proveedor + sus facturas recibidas
+        // pendientes (lo que DEBES). Sin esto DISA no puede identificar al proveedor para un pago
+        // por voz ni avisar de vencimientos. Espejo de COBROS POR CUENTA, lado proveedor. Los
+        // ABONOS (crédito a tu favor) quedan fuera (no son deuda). due_date/estado → DISA puede
+        // responder "qué vence" desde aquí.
+        ...(() => {
+          try {
+            const pa = supplierAccountsSummary(db, new Date().toISOString().slice(0, 10));
+            if (!pa.rows.length) return [];
+            const lines = pa.rows.slice(0, 8).map((r, i) => {
+              const facts = r.vivas.slice(0, 5).map(f => (f.internal_code || ('#' + f.supplier_invoice_id))
+                + ' ' + sym + Number(f.pendiente).toFixed(2)
+                + ' vence ' + (f.due_date || '-')
+                + (f.dias_vencida > 0 ? ' (vencida ' + f.dias_vencida + 'd)' : '')).join('; ');
+              return (i + 1) + '. ' + (r.supplier_name || '-') + ' (supplier_id=' + r.supplier_id + ') · '
+                + 'DEBES ' + sym + Number(r.deudaTotal).toFixed(2) + ' en ' + r.facturas + ' factura(s)'
+                + (r.maxVencida > 0 ? ' · más vencida ' + r.maxVencida + 'd' : '') + ' · ' + facts;
+            });
+            return [
+              'COMPRAS POR PAGAR (lo que DEBES a proveedores) — DEBES ' + sym + Number(pa.total || 0).toFixed(2) + ' en total:',
+              lines.join('\n'),
+              'Para un pago por voz, resuelve el proveedor a supplier_id aqui. Vence en <=7 dias o vencida = avisalo.',
+              '',
+            ];
           } catch { return []; }
         })(),
         // T5 — índice de clientes activos: la vía de lectura para IDENTIFICAR un cliente
@@ -2192,6 +2254,13 @@ export function register(app, db) {
       '  cobro_cuenta reparte el importe (modo auto = mas antigua primero) entre las facturas vivas.',
       '  Propon la cuenta entera, p.ej.: "Te debe 450 EUR en 3 facturas, mando un recordatorio de la cuenta?"',
       '',
+      'Pagos a PROVEEDORES (lo que TU pagas; ver seccion COMPRAS POR PAGAR del contexto):',
+      '- register_supplier_payment: {"supplier_id":0,"amount":0,"modo":"auto|manual","asignacion":[{"supplier_invoice_id":0,"importe":0}],"payment_method":"","note":""}',
+      '  Cuando el dueno diga "pague X a <proveedor>": resuelve el proveedor a supplier_id con COMPRAS POR PAGAR.',
+      '  modo=auto (por defecto) reparte amount entre sus facturas vivas, MAS ANTIGUA primero. modo=manual usa asignacion.',
+      '  Si el proveedor debe MENOS que amount, el sobrante NO se aplica (se avisa). Confirma ANTES (espejo de cobro_cuenta).',
+      '  Varios proveedores con ese nombre → pregunta cual. Ninguno → dilo. Ejemplo: "Pagas 200 EUR a Esencias (2 facturas, la mas antigua primero)?"',
+      '',
       'Configuracion:',
       '- update_company_config: {"campo":"valor",...}',
       '  (company_name, fiscal_id, tax_rate, address, phone, email, website, country,',
@@ -2463,6 +2532,20 @@ export function register(app, db) {
   router.post('/clear', adminAuth(db), c => {
     db.prepare('DELETE FROM disa_conversations').run();
     return c.json({ ok: true });
+  });
+
+  // Paso (d) · RESUMEN-PRIMERO del badge. Al pulsar el badge, en vez de lanzar una pregunta
+  // abierta al modelo (que mezclaba temas y ofrecía acciones no pedidas), se devuelve un RESUMEN
+  // DE CONTEOS determinista de las MISMAS fuentes del motor (vencimientos de proveedor + stock
+  // bajo) — sin detalle y sin ofrecer acciones — y se marca todo como VISTO (el badge pasa a gris;
+  // el rojo solo vuelve si aparece algo nuevo). El detalle lo pide el dueño escribiendo después.
+  router.post('/alerts/open', adminAuth(db), c => {
+    try {
+      const r = marcarVistoYResumir(db, new Date().toISOString().slice(0, 10));
+      return c.json(r);
+    } catch (e) {
+      return c.json({ reply: 'No pude cargar tus avisos ahora mismo.' }, 500);
+    }
   });
 
   // ── Captura de factura de proveedor DENTRO del chat (Pilar 3 · reutiliza C2) ──

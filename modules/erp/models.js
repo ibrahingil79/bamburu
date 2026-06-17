@@ -928,6 +928,27 @@ export function runMigrations(db) {
   // Categoría de gasto (lista cerrada definida en código). NULL en las facturas de stock.
   addCol(db, 'supplier_invoices', 'expense_category', 'TEXT');
 
+  // ── Paso (d) — MOTOR PROACTIVO DE AVISOS: registro de envío del resumen diario ──
+  // Idempotencia del email diario por tenant: una fila por día (fecha = PK). El proceso
+  // programado (scripts/bamburu-avisos.mjs) consulta esta tabla antes de enviar: si ya hay
+  // fila para hoy, NO reenvía (evita duplicar el correo en una segunda ejecución del timer
+  // por Persistent/reintento). Solo deja rastro cuando de verdad se envió algo.
+  db.exec(`CREATE TABLE IF NOT EXISTS daily_alert_log (
+    fecha DATE PRIMARY KEY,                  -- AAAA-MM-DD del envío (uno por día)
+    sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    canal TEXT DEFAULT 'email',
+    avisos INTEGER NOT NULL DEFAULT 0        -- cuántos avisos llevaba el resumen
+  )`);
+  // Estado VISTO/NUEVO del badge de avisos (Opción C). Singleton (id=1): la HUELLA de los
+  // avisos ya vistos = conjunto de claves (factura en aviso / producto en stock bajo). El
+  // badge vuelve a ROJO solo si aparece una clave NUEVA respecto a esta huella; que un aviso
+  // ya visto empeore NO reactiva el rojo (misma clave). Aditiva, no destructiva.
+  db.exec(`CREATE TABLE IF NOT EXISTS alert_seen (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    fingerprint TEXT NOT NULL DEFAULT '[]',  -- JSON: lista de claves de avisos vistas
+    seen_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   // Pilar 3 (coste/valoración) — backfill del coste, UNA vez por tenant. Corre DESPUÉS de que
   // existan las columnas nuevas (stock_movements.unit_cost, products.average_cost) y la tabla
   // purchase_items. Las compras ya guardadas NO se tocan (purchase_items.unit_cost es inmutable):
