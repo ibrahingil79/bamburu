@@ -30,10 +30,18 @@ export function countsAsPayable(inv) {
 
 // ¿Esta factura recibida ADMITE pago? (gate de UI y de backend) — solo facturas vivas:
 //  - NO anulada
-//  - total >= 0
+//  - total >= 0  (un ABONO de total negativo NO se paga, se reembolsa)
 // Espejo de isCobrable.
 export function isPayable(inv) {
   return countsAsPayable(inv) && Number(inv.total) >= 0;
+}
+
+// ¿Esta factura ADMITE reembolso recibido? (paso c) — solo ABONOS vivos (total < 0).
+// Un abono nace de una devolución a proveedor; si el proveedor te devuelve el dinero, se
+// registra como pago NEGATIVO que lleva el crédito pendiente a 0. El gate de importe
+// (no sobrepasar |crédito|) lo aplica el endpoint, igual que isPayable + el guard de sobrepago.
+export function isRefundable(inv) {
+  return countsAsPayable(inv) && Number(inv.total) < 0;
 }
 
 // Estado de pago en vivo de una factura recibida, dada la suma ya pagada y la fecha de hoy.
@@ -45,7 +53,12 @@ export function pagoState(inv, pagado, today) {
   const due       = inv.due_date || inv.invoice_date;
 
   let estado, vencida = false, dias_vencida = 0, tramo = null;
-  if (pendiente <= 0.0049) {
+  if (total < 0) {
+    // Documento de ABONO (crédito a tu favor, p. ej. una devolución). 'pendiente' es el
+    // crédito que aún NO te han reembolsado (negativo). Un reembolso es un pago negativo
+    // que lo lleva a 0. Un abono NO vence. Espejo de la rama 'abono' de cobros.js.
+    estado = (pendiente >= -0.0049) ? 'reembolsado' : 'abono';
+  } else if (pendiente <= 0.0049) {
     estado = 'pagada';
   } else {
     estado = pagado > 0 ? 'parcial' : 'pendiente';
@@ -102,7 +115,10 @@ export function openPayables(db, today) {
     const s = db.prepare('SELECT name FROM suppliers WHERE id=?').get(sid);
     const supplierName = s ? s.name : '—';
     for (const inv of d.invoices) {
-      if (inv.counts && inv.pendiente > 0.0049) {
+      // Incluye deudas (pendiente>0) Y abonos vivos (pendiente<0, crédito sin reembolsar):
+      // así Σ(filas) cuadra con el total de cabecera. Los abonos van con dias_vencida=0
+      // (no vencen) → quedan abajo en el orden "más vencida arriba".
+      if (inv.counts && Math.abs(inv.pendiente) > 0.0049) {
         rows.push({
           supplier_id: sid, supplier_name: supplierName,
           supplier_invoice_id: inv.id, internal_code: inv.internal_code,
@@ -121,7 +137,9 @@ export function openPayables(db, today) {
 // Etiquetas legibles para el estado (UI). Espejo de ESTADO_LABEL/BADGE de cobros.
 export const ESTADO_LABEL = {
   pendiente: 'Pendiente', parcial: 'Pagada en parte', pagada: 'Pagada', vencida: 'Vencida',
+  abono: 'Abono (a tu favor)', reembolsado: 'Reembolsado',
 };
 export const ESTADO_BADGE = {
   pendiente: 'b-yellow', parcial: 'b-blue', pagada: 'b-green', vencida: 'b-red',
+  abono: 'b-purple', reembolsado: 'b-gray',
 };

@@ -29,6 +29,8 @@ export function pagoModalScript(sym) {
       try { inv = await api('GET','/api/erp/supplier-invoices/'+id); } catch(e){ toast(e.message||'Error','err'); return; }
       const pg = inv.pago||{};
       const titulo = inv.internal_code || ('#'+inv.id);
+      // ABONO (total negativo): no se paga, se REEMBOLSA. Modal en modo crédito/reembolso.
+      if (Number(inv.total) < 0) { renderAbono(inv, pg, titulo); return; }
       document.getElementById('pagoTitle').textContent = 'Pagos · '+titulo;
       let running = 0;
       const payRows = (inv.payments && inv.payments.length) ? inv.payments.map(function(p){
@@ -79,6 +81,47 @@ export function pagoModalScript(sym) {
         await openPagos(id);                                              // refresca el propio modal
         if (typeof window.pagoOnSaved === 'function') window.pagoOnSaved(id);  // refresca la vista de la página
       } catch(e){ toast(e.message||'Error registrando el pago','err'); }
+    };
+
+    // ── ABONO (crédito a tu favor por una devolución) — registrar REEMBOLSO recibido ──
+    function renderAbono(inv, pg, titulo){
+      document.getElementById('pagoTitle').textContent = 'Abono · '+titulo;
+      const credito = Math.abs(Number(inv.total)||0);
+      const reembolsado = Math.abs(Number(pg.pagado)||0);     // pagos negativos → abs
+      const pteCredito = Math.abs(Number(pg.pendiente)||0);   // crédito sin reembolsar
+      const refRows = (inv.payments && inv.payments.length) ? inv.payments.map(function(p){
+        return '<tr><td>'+p.paid_date+'</td><td style="text-align:right">'+SYM+Math.abs(Number(p.amount)).toFixed(2)+'</td><td>'+escHtml(p.payment_method||'—')+'</td><td>'+escHtml(p.note||'')+'</td>'
+          +'<td style="text-align:right"><button class="btn btn-secondary btn-sm" onclick="deshacerPago('+inv.id+','+p.id+')">Deshacer</button></td></tr>';
+      }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:1rem">Sin reembolsos registrados</td></tr>';
+      const canRefund = inv.refundable && pteCredito > 0.0049;
+      const form = canRefund
+        ? '<div class="form-row" style="align-items:end;gap:.5rem;flex-wrap:wrap">'
+          +'<div class="form-group"><label class="form-label">Fecha</label><input type="date" id="ref-date" class="form-control" value="'+new Date().toISOString().slice(0,10)+'"></div>'
+          +'<div class="form-group"><label class="form-label">Importe reembolsado</label><input type="number" id="ref-amount" class="form-control" step="0.01" min="0.01" value="'+pteCredito.toFixed(2)+'" style="width:130px"></div>'
+          +'<div class="form-group"><label class="form-label">Forma</label><select id="ref-method" class="form-control"><option value="">—</option><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option><option value="tarjeta">Tarjeta</option></select></div>'
+          +'<div class="form-group" style="flex:1;min-width:140px"><label class="form-label">Nota</label><input type="text" id="ref-note" class="form-control" placeholder="(opcional)"></div>'
+          +'<button class="btn btn-primary" onclick="registrarReembolso('+inv.id+')">Registrar reembolso recibido</button>'
+          +'</div>'
+        : '<p style="color:var(--muted);margin:0">'+(pteCredito<=0.0049?'Crédito reembolsado por completo.':'Este abono no admite más reembolsos.')+'</p>';
+      document.getElementById('pagoBody').innerHTML =
+        '<div class="alert alert-ok" style="margin-bottom:1rem">Abono a tu favor por devolución. <strong>No se paga: ya resta de lo que debes</strong>; si el proveedor te devuelve el dinero, regístralo como reembolso.</div>'
+        +'<div style="margin-bottom:1rem">Crédito <strong>'+SYM+credito.toFixed(2)+'</strong> · Reembolsado <strong>'+SYM+reembolsado.toFixed(2)+'</strong> · Pendiente de reembolso <strong>'+SYM+pteCredito.toFixed(2)+'</strong></div>'
+        +'<div class="table-wrap" style="margin-bottom:1rem"><table><thead><tr><th>Fecha</th><th style="text-align:right">Reembolsado</th><th>Forma</th><th>Nota</th><th></th></tr></thead><tbody>'+refRows+'</tbody></table></div>'
+        +form;
+      openModal('pagoModal');
+    }
+    window.registrarReembolso = async function(id){
+      const amount = parseFloat(document.getElementById('ref-amount').value);
+      if(!(amount>0)){ toast('Importe inválido','err'); return; }
+      const paid_date = document.getElementById('ref-date').value || undefined;
+      const payment_method = document.getElementById('ref-method').value || '';
+      const note = document.getElementById('ref-note').value || '';
+      try {
+        await api('POST','/api/erp/supplier-invoices/'+id+'/refunds',{ amount, paid_date, payment_method, note });
+        toast('Reembolso registrado');
+        await openPagos(id);
+        if (typeof window.pagoOnSaved === 'function') window.pagoOnSaved(id);
+      } catch(e){ toast(e.message||'Error registrando el reembolso','err'); }
     };
   })();
   `;

@@ -5,6 +5,7 @@ import { validate } from '../../../core/validate.js';
 import { supplierReturnSchema, purchaseOrderAnularSchema } from '../schemas.js';
 import { nextCode } from '../codes.js';
 import { recordMovement, isPhysical, resolveWarehouseId, originMovementWarehouse } from '../stock.js';
+import { createReturnCredit, anularReturnCredit } from './supplier-invoices.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // DEVOLUCIÓN A PROVEEDOR — solo la CAPA FÍSICA (sale el stock + documento). La
@@ -177,7 +178,10 @@ export function createSupplierReturnSvc(db, d) {
         note: 'Devolución ' + return_number + ' (' + origin.label + ')',
       });
     }
-    return { id: rid, return_number, supplier_id: origin.supplier_id, lines: resolved.length };
+    // Paso (c): la devolución confirmada genera un ABONO (factura recibida en negativo) que
+    // resta de lo que debes al proveedor. Solo dinero; no toca stock (ya movido arriba).
+    const credit = createReturnCredit(db, rid);
+    return { id: rid, return_number, supplier_id: origin.supplier_id, lines: resolved.length, credit };
   });
   return run();
 }
@@ -194,6 +198,9 @@ export function cancelSupplierReturnSvc(db, returnId, motivo) {
   const items = db.prepare('SELECT * FROM supplier_return_items WHERE return_id=?').all(returnId);
 
   const run = db.transaction(() => {
+    // Paso (c): anular la devolución anula su ABONO (la deuda vuelve a subir). Guarda: si el
+    // abono ya tiene reembolsos → 409 (deshazlos antes); el throw revierte toda la anulación.
+    anularReturnCredit(db, returnId, m);
     for (const it of items) {
       // C1: la re-entrada vuelve al MISMO almacén del que salió la DEV (deriva de su salida).
       recordMovement(db, {

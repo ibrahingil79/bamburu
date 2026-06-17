@@ -15,9 +15,12 @@ import {
 import {
   createSupplierInvoiceSvc, anularSupplierInvoiceSvc, registerSupplierPaymentSvc,
   deleteSupplierPaymentSvc, supplierInvoiceDuplicate, getSupplierInvoice, eligibleOriginsForSupplier,
-  EXPENSE_CATEGORIES,
+  EXPENSE_CATEGORIES, registerSupplierRefundSvc,
 } from '../modules/erp/routes/supplier-invoices.js';
 import { confirmCaptureSvc } from '../modules/erp/routes/purchases-capture.js';
+import { createSupplierReturnSvc, cancelSupplierReturnSvc } from '../modules/erp/routes/supplier-returns.js';
+import { isRefundable } from '../modules/erp/pagos.js';
+import { createDirectPurchaseSvc } from '../modules/erp/routes/purchases.js';
 import { supplierInvoiceSchema } from '../modules/erp/schemas.js';
 
 let pass = 0, fail = 0;
@@ -376,6 +379,149 @@ console.log('17. Schema relajado');
   ok(!supplierInvoiceSchema.safeParse({ supplier_id: 3, invoice_date: '2026-06-10' }).success, 'gasto sin líneas → inválido');
   // Con origen pero sin total → inválido.
   ok(!supplierInvoiceSchema.safeParse({ entity_type: 'purchase', entity_id: 5, invoice_date: '2026-06-10' }).success, 'stock sin total>0 → inválido');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PASO (c) — la DEVOLUCIÓN resta deuda (ABONO) + REEMBOLSO recibido
+// ════════════════════════════════════════════════════════════════════════════
+
+// Producto con tipo de IVA concreto + compra recibida REAL (mueve stock) → para devolver.
+function addProductRate(db, rate, band) {
+  return db.prepare("INSERT INTO products (name,slug,sku,price,type,stock,tax_rate,tax_band) VALUES (?,?,?,10,'physical',0,?,?)")
+    .run('P' + (++seq), 'p' + seq, 'S' + seq, rate, band).lastInsertRowid;
+}
+function receivedPurchaseWithStock(db, sup, items) {  // items: [{product_id, quantity, unit_cost}]
+  const pid = createDirectPurchaseSvc(db, { supplier_id: sup, reference: 'C', date: '2026-06-01', status: 'received', items });
+  const lineIds = db.prepare('SELECT id, product_id FROM purchase_items WHERE purchase_id=? ORDER BY id').all(pid);
+  return { pid, lineIds };
+}
+
+// ── 18. Confirmar devolución crea ABONO ABP con IVA por línea + total negativo ──
+console.log('18. Devolución → abono ABP');
+{
+  const db = freshDb();
+  const sup = addSupplier(db, { term: 0 });
+  const prod = addProductRate(db, 21, 'general');
+  const { pid, lineIds } = receivedPurchaseWithStock(db, sup, [{ product_id: prod, quantity: 10, unit_cost: 5 }]);
+  const ret = createSupplierReturnSvc(db, { origin_type: 'purchase', origin_id: pid, date: '2026-06-05', motivo: 'defectuoso', items: [{ origin_item_id: lineIds[0].id, quantity: 4 }] });
+  ok(ret.credit && /^ABP-\d{4}$/.test(ret.credit.internal_code), 'la devolución crea un abono ABP-NNNN');
+  const abono = db.prepare('SELECT * FROM supplier_invoices WHERE id=?').get(ret.credit.id);
+  eq([abono.base, abono.tax, abono.total], [-20, -4.2, -24.2], 'abono negativo: base -20, IVA 21% -4.2, total -24.2');
+  eq([abono.entity_type, abono.entity_id, abono.status], ['supplier_return', ret.id, 'vigente'], 'enlazado al DEV, vigente');
+  eq(abono.supplier_invoice_number, '', 'sin número de proveedor (no es factura del proveedor)');
+  const items = db.prepare('SELECT * FROM supplier_invoice_items WHERE supplier_invoice_id=?').all(ret.credit.id);
+  eq([items.length, items[0].base, items[0].tax_rate, items[0].cuota], [1, -20, 21, -4.2], 'una línea de abono en negativo con IVA del producto');
+  db.close();
+}
+
+// ── 19. El abono NETEA la deuda ("Debes X" baja) + estado 'abono' ───────────
+console.log('19. El abono netea la deuda');
+{
+  const db = freshDb();
+  const sup = addSupplier(db, { term: 0 });
+  const prod = addProductRate(db, 21, 'general');
+  const { pid, lineIds } = receivedPurchaseWithStock(db, sup, [{ product_id: prod, quantity: 10, unit_cost: 5 }]);
+  // deuda de 100 (factura de la compra)
+  createSupplierInvoiceSvc(db, { entity_type: 'purchase', entity_id: pid, invoice_date: '2026-06-01', total: 100 }, {});
+  eq(supplierDebt(db, sup, '2026-06-16').total, 100, 'deuda inicial 100');
+  const ret = createSupplierReturnSvc(db, { origin_type: 'purchase', origin_id: pid, date: '2026-06-05', motivo: 'x', items: [{ origin_item_id: lineIds[0].id, quantity: 4 }] });
+  eq(supplierDebt(db, sup, '2026-06-16').total, 75.8, 'tras el abono (-24.2) la deuda baja a 75.8');
+  const abono = db.prepare('SELECT * FROM supplier_invoices WHERE id=?').get(ret.credit.id);
+  eq(supplierInvoicePago(db, abono, '2026-06-16').estado, 'abono', "estado 'abono' (no 'pagada')");
+  ok(isRefundable(abono) && !isPayable(abono), 'el abono admite reembolso pero NO pago');
+  db.close();
+}
+
+// ── 20. Abono > deuda → saldo a tu favor (total negativo) + desglose cuadra ──
+console.log('20. Saldo a tu favor + desglose');
+{
+  const db = freshDb();
+  const sup = addSupplier(db, { term: 0 });
+  const prod = addProductRate(db, 21, 'general');
+  const { pid, lineIds } = receivedPurchaseWithStock(db, sup, [{ product_id: prod, quantity: 10, unit_cost: 5 }]);
+  createSupplierInvoiceSvc(db, { entity_type: 'purchase', entity_id: pid, invoice_date: '2026-06-01', total: 10 }, {});   // deuda pequeña
+  createSupplierReturnSvc(db, { origin_type: 'purchase', origin_id: pid, date: '2026-06-05', motivo: 'x', items: [{ origin_item_id: lineIds[0].id, quantity: 4 }] });  // abono -24.2
+  const d = supplierDebt(db, sup, '2026-06-16');
+  ok(d.total < 0, 'el neto es NEGATIVO (saldo a tu favor): ' + d.total);
+  eq(d.total, -14.2, 'saldo a tu favor = 10 − 24.2 = -14.2');
+  // Desglose: Σ(filas) cuadra con el total de cabecera (deuda + abono).
+  const torre = openPayables(db, '2026-06-16');
+  const sumaFilas = Math.round(torre.rows.reduce((s, r) => s + r.pendiente, 0) * 100) / 100;
+  eq(sumaFilas, torre.total, 'Σ(filas mostradas) == total de cabecera (incluye el abono)');
+  ok(torre.rows.some(r => r.pendiente < 0), 'el abono aparece como fila (crédito) en el desglose');
+  db.close();
+}
+
+// ── 21. Anular la devolución anula el abono → la deuda vuelve a subir ────────
+console.log('21. Anular devolución sube la deuda');
+{
+  const db = freshDb();
+  const sup = addSupplier(db, { term: 0 });
+  const prod = addProductRate(db, 21, 'general');
+  const { pid, lineIds } = receivedPurchaseWithStock(db, sup, [{ product_id: prod, quantity: 10, unit_cost: 5 }]);
+  createSupplierInvoiceSvc(db, { entity_type: 'purchase', entity_id: pid, invoice_date: '2026-06-01', total: 100 }, {});
+  const ret = createSupplierReturnSvc(db, { origin_type: 'purchase', origin_id: pid, date: '2026-06-05', motivo: 'x', items: [{ origin_item_id: lineIds[0].id, quantity: 4 }] });
+  eq(supplierDebt(db, sup, '2026-06-16').total, 75.8, 'con abono: 75.8');
+  cancelSupplierReturnSvc(db, ret.id, 'me equivoqué');
+  eq(db.prepare('SELECT status FROM supplier_invoices WHERE id=?').get(ret.credit.id).status, 'anulada', 'el abono queda anulado al anular la devolución');
+  eq(supplierDebt(db, sup, '2026-06-16').total, 100, 'la deuda vuelve a 100');
+  db.close();
+}
+
+// ── 22. Reembolso recibido: netea a 0, no se puede sobrepasar ───────────────
+console.log('22. Reembolso recibido');
+{
+  const db = freshDb();
+  const sup = addSupplier(db, { term: 0 });
+  const prod = addProductRate(db, 21, 'general');
+  const { pid, lineIds } = receivedPurchaseWithStock(db, sup, [{ product_id: prod, quantity: 10, unit_cost: 5 }]);
+  createSupplierInvoiceSvc(db, { entity_type: 'purchase', entity_id: pid, invoice_date: '2026-06-01', total: 100 }, {});
+  const ret = createSupplierReturnSvc(db, { origin_type: 'purchase', origin_id: pid, date: '2026-06-05', motivo: 'x', items: [{ origin_item_id: lineIds[0].id, quantity: 4 }] });
+  const abonoId = ret.credit.id;
+  // Sobrepasar el crédito (24.2) → 400.
+  throws(() => registerSupplierRefundSvc(db, abonoId, { amount: 30 }, { today: '2026-06-16' }), 400, 'reembolso > crédito pendiente → 400');
+  // Reembolso parcial de 10 → crédito pendiente 14.2; la deuda VUELVE a subir 10 (ya tienes el dinero).
+  registerSupplierRefundSvc(db, abonoId, { amount: 10 }, { today: '2026-06-16' });
+  eq(supplierDebt(db, sup, '2026-06-16').total, 85.8, 'tras reembolso de 10: deuda neta 75.8 + 10 = 85.8');
+  // Reembolso del resto (14.2) → crédito a 0, estado reembolsado; la deuda vuelve a 100.
+  registerSupplierRefundSvc(db, abonoId, { amount: 14.2 }, { today: '2026-06-16' });
+  const abono = db.prepare('SELECT * FROM supplier_invoices WHERE id=?').get(abonoId);
+  eq(supplierInvoicePago(db, abono, '2026-06-16').estado, 'reembolsado', 'crédito reembolsado del todo → estado reembolsado');
+  eq(supplierDebt(db, sup, '2026-06-16').total, 100, 'reembolsado del todo: la deuda vuelve a 100 (el abono ya no compensa)');
+  db.close();
+}
+
+// ── 23. Guarda: no anular una devolución cuyo abono ya tiene reembolso ──────
+console.log('23. Guarda anular con reembolso');
+{
+  const db = freshDb();
+  const sup = addSupplier(db, { term: 0 });
+  const prod = addProductRate(db, 21, 'general');
+  const { pid, lineIds } = receivedPurchaseWithStock(db, sup, [{ product_id: prod, quantity: 10, unit_cost: 5 }]);
+  const ret = createSupplierReturnSvc(db, { origin_type: 'purchase', origin_id: pid, date: '2026-06-05', motivo: 'x', items: [{ origin_item_id: lineIds[0].id, quantity: 4 }] });
+  registerSupplierRefundSvc(db, ret.credit.id, { amount: 10 }, { today: '2026-06-16' });
+  throws(() => cancelSupplierReturnSvc(db, ret.id, 'intento'), 409, 'anular devolución con abono ya reembolsado → 409 (deshacer reembolso antes)');
+  // La devolución sigue confirmada y el abono vigente (la transacción revirtió).
+  eq(db.prepare('SELECT status FROM supplier_returns WHERE id=?').get(ret.id).status, 'confirmada', 'la devolución sigue confirmada');
+  eq(db.prepare('SELECT status FROM supplier_invoices WHERE id=?').get(ret.credit.id).status, 'vigente', 'el abono sigue vigente');
+  db.close();
+}
+
+// ── 24. IVA por línea según la banda del producto (mezcla 21 + 10) ──────────
+console.log('24. Abono con IVA por línea (mezcla)');
+{
+  const db = freshDb();
+  const sup = addSupplier(db, { term: 0 });
+  const p21 = addProductRate(db, 21, 'general');
+  const p10 = addProductRate(db, 10, 'reducido');
+  const { pid, lineIds } = receivedPurchaseWithStock(db, sup, [{ product_id: p21, quantity: 10, unit_cost: 5 }, { product_id: p10, quantity: 10, unit_cost: 8 }]);
+  const byProd = Object.fromEntries(lineIds.map(l => [l.product_id, l.id]));
+  const ret = createSupplierReturnSvc(db, { origin_type: 'purchase', origin_id: pid, date: '2026-06-05', motivo: 'x',
+    items: [{ origin_item_id: byProd[p21], quantity: 2 }, { origin_item_id: byProd[p10], quantity: 5 }] });
+  const abono = db.prepare('SELECT * FROM supplier_invoices WHERE id=?').get(ret.credit.id);
+  // p21: 2×5=10 base, IVA 2.1 ; p10: 5×8=40 base, IVA 4.0 → base -50, IVA -6.1, total -56.1
+  eq([abono.base, abono.tax, abono.total], [-50, -6.1, -56.1], 'IVA por línea: 21% sobre 10 + 10% sobre 40 → IVA -6.1');
+  db.close();
 }
 
 console.log('\n' + (fail ? '✗ ' + fail + ' fallos, ' : '') + pass + ' OK');

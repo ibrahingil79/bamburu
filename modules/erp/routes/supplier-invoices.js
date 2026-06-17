@@ -4,7 +4,7 @@ import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { supplierInvoiceSchema, supplierInvoiceAnularSchema, supplierPaymentSchema } from '../schemas.js';
 import { nextCode } from '../codes.js';
-import { supplierInvoicePago, isPayable, supplierDebt, ESTADO_LABEL, ESTADO_BADGE } from '../pagos.js';
+import { supplierInvoicePago, isPayable, isRefundable, supplierDebt, ESTADO_LABEL, ESTADO_BADGE } from '../pagos.js';
 import { pagoModalHtml, pagoModalScript } from '../views/pago-modal.js';
 import { getVatBands } from '../../../core/vat-bands.js';
 
@@ -49,6 +49,16 @@ const ORIGIN = {
     },
     eligibleSql: "SELECT por.id, por.date, por.receipt_number FROM purchase_order_receipts por JOIN purchase_orders po ON po.id=por.order_id WHERE po.supplier_id=? AND por.status='confirmada' ORDER BY por.date DESC, por.id DESC",
     label: r => 'Recepción ' + (r.receipt_number || ('#' + r.id)),
+  },
+  // Paso (c): el ABONO nace de una devolución a proveedor. Solo se usa para resolver el
+  // enlace de origen en la ficha (no es elegible en el alta manual: el abono se crea solo).
+  supplier_return: {
+    load(db, id) {
+      const r = db.prepare('SELECT * FROM supplier_returns WHERE id=?').get(id);
+      if (!r) return null;
+      return { supplier_id: r.supplier_id, status: r.status, ok: r.status === 'confirmada',
+               label: 'Devolución ' + (r.return_number || ('#' + r.id)), date: r.date, href: '/admin/supplier-returns/' + r.id };
+    },
   },
 };
 
@@ -191,6 +201,84 @@ export function deleteSupplierPaymentSvc(db, invoiceId, paymentId, opts = {}) {
   return { deleted: paymentId, amount: pay.amount, pago: supplierInvoicePago(db, inv, opts.today || new Date().toISOString().slice(0, 10)) };
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// PASO (c) — ABONO de proveedor (la devolución RESTA deuda) + REEMBOLSO recibido
+// ════════════════════════════════════════════════════════════════════════════
+
+// Crea el ABONO (supplier_invoices de total NEGATIVO) que nace de una devolución CONFIRMADA.
+// NO mueve stock (la devolución física ya lo hizo): es solo dinero. Líneas en negativo con
+// el IVA por banda del producto (products.tax_rate). Enlazado al DEV (entity_type
+// 'supplier_return'). Idempotente: como mucho UN abono vigente por devolución. Se llama
+// DENTRO de la transacción de createSupplierReturnSvc (no abre transacción propia).
+export function createReturnCredit(db, returnId) {
+  const ret = db.prepare('SELECT * FROM supplier_returns WHERE id=?').get(returnId);
+  if (!ret) { const e = new Error('Devolución no encontrada'); e.status = 404; throw e; }
+  const existing = db.prepare("SELECT id, internal_code FROM supplier_invoices WHERE entity_type='supplier_return' AND entity_id=? AND status='vigente'").get(returnId);
+  if (existing) return { id: existing.id, internal_code: existing.internal_code, skipped: true };
+
+  const items = db.prepare(
+    'SELECT sri.product_id, sri.quantity, sri.unit_cost, p.name AS product_name, p.tax_rate FROM supplier_return_items sri JOIN products p ON p.id=sri.product_id WHERE sri.return_id=? ORDER BY sri.id'
+  ).all(returnId);
+  if (!items.length) return null;   // devolución sin líneas → sin abono
+
+  const lines = items.map(it => {
+    const base = round2(-(it.quantity * it.unit_cost));    // NEGATIVO (crédito a tu favor)
+    const rate = Number(it.tax_rate) || 0;                 // banda de IVA del producto
+    return { concepto: it.product_name + ' (dev. ' + (ret.return_number || ('#' + returnId)) + ')', base, tax_rate: rate, cuota: round2(base * rate / 100) };
+  });
+  const base = round2(lines.reduce((s, l) => s + l.base, 0));
+  const tax = round2(lines.reduce((s, l) => s + l.cuota, 0));
+  const total = round2(base + tax);
+
+  const sup = db.prepare('SELECT address FROM suppliers WHERE id=?').get(ret.supplier_id) || {};
+  const code = nextCode(db, 'supplier_credit');   // ABP-NNNN
+  const r = db.prepare(`INSERT INTO supplier_invoices
+      (supplier_id, internal_code, supplier_invoice_number, invoice_date, due_date, base, tax, total, status,
+       supplier_name, supplier_fiscal_id, supplier_address, entity_type, entity_id, expense_category, notes)
+      VALUES (?,?, '', ?,?,?,?,?, 'vigente', ?,?,?, 'supplier_return', ?, NULL, ?)`)
+    .run(ret.supplier_id, code, ret.date, ret.date, base, tax, total,
+         ret.supplier_name || '', ret.supplier_fiscal_id || '', sup.address || '', returnId,
+         'Abono por devolución ' + (ret.return_number || ('#' + returnId)));
+  const invId = r.lastInsertRowid;
+  const ins = db.prepare('INSERT INTO supplier_invoice_items (supplier_invoice_id, concepto, base, tax_rate, cuota) VALUES (?,?,?,?,?)');
+  for (const l of lines) ins.run(invId, l.concepto, l.base, l.tax_rate, l.cuota);
+  return { id: invId, internal_code: code, total };
+}
+
+// Anula el abono vigente de una devolución (lo dispara la anulación de la devolución). Si el
+// abono ya tiene reembolsos registrados → 409 (deshazlos antes; mismo criterio que "deshacer
+// pago" del paso a). Se llama dentro de la transacción de cancelSupplierReturnSvc.
+export function anularReturnCredit(db, returnId, motivo) {
+  const credit = db.prepare("SELECT * FROM supplier_invoices WHERE entity_type='supplier_return' AND entity_id=? AND status='vigente'").get(returnId);
+  if (!credit) return null;
+  const refunds = db.prepare('SELECT COUNT(*) n FROM supplier_payments WHERE supplier_invoice_id=?').get(credit.id).n;
+  if (refunds > 0) { const e = new Error('El abono ' + (credit.internal_code || ('#' + credit.id)) + ' ya tiene reembolsos: deshazlos antes de anular la devolución'); e.status = 409; throw e; }
+  db.prepare("UPDATE supplier_invoices SET status='anulada', anulada_motivo=? WHERE id=?")
+    .run('Anulada por anulación de la devolución' + (motivo ? ': ' + motivo : ''), credit.id);
+  return { id: credit.id, internal_code: credit.internal_code };
+}
+
+// ── SERVICIO: registrar un REEMBOLSO recibido contra un abono ────────────────
+// El proveedor te devuelve el dinero: se modela como un pago NEGATIVO que lleva el crédito
+// pendiente a 0. input.amount es POSITIVO (lo que te reembolsan); se guarda en negativo.
+// Doble seguro: solo abonos vivos (isRefundable) y sin sobrepasar el crédito pendiente.
+export function registerSupplierRefundSvc(db, id, input, opts = {}) {
+  const t = opts.today || new Date().toISOString().slice(0, 10);
+  const inv = db.prepare('SELECT * FROM supplier_invoices WHERE id=?').get(id);
+  if (!inv) { const e = new Error('Factura recibida no encontrada'); e.status = 404; throw e; }
+  if (!isRefundable(inv)) { const e = new Error('Esta factura no admite reembolso (no es un abono vivo)'); e.status = 400; throw e; }
+  const amount = round2(input.amount);
+  if (!(amount > 0)) { const e = new Error('El importe del reembolso debe ser mayor que 0'); e.status = 400; throw e; }
+  const st = supplierInvoicePago(db, inv, t);
+  const creditoPendiente = round2(-st.pendiente);   // crédito sin reembolsar (positivo)
+  if (Math.round(amount * 100) > Math.round(creditoPendiente * 100)) {
+    const e = new Error('El reembolso (' + amount.toFixed(2) + ') supera el crédito pendiente (' + creditoPendiente.toFixed(2) + ')'); e.status = 400; throw e;
+  }
+  const res = db.prepare('INSERT INTO supplier_payments (supplier_invoice_id, amount, paid_date, payment_method, note) VALUES (?,?,?,?,?)')
+    .run(id, -amount, input.paid_date || t, input.payment_method || '', input.note || 'Reembolso recibido');
+  return { id: res.lastInsertRowid, pago: supplierInvoicePago(db, inv, t) };
+}
+
 // Lectura enriquecida de una factura recibida (para la ficha y el modal de pago).
 export function getSupplierInvoice(db, id, today) {
   const inv = db.prepare('SELECT * FROM supplier_invoices WHERE id=?').get(id);
@@ -202,7 +290,8 @@ export function getSupplierInvoice(db, id, today) {
   const origin = cfg ? cfg.load(db, inv.entity_id) : null;
   const items = db.prepare('SELECT * FROM supplier_invoice_items WHERE supplier_invoice_id=? ORDER BY id').all(id);
   const sup = db.prepare('SELECT payment_method FROM suppliers WHERE id=?').get(inv.supplier_id) || {};
-  return { ...inv, payments, items, is_expense: !inv.entity_type, pago, pagable: isPayable(inv), origin, payment_method_default: sup.payment_method || '' };
+  return { ...inv, payments, items, is_expense: !inv.entity_type, is_credit: inv.entity_type === 'supplier_return',
+           pago, pagable: isPayable(inv), refundable: isRefundable(inv), origin, payment_method_default: sup.payment_method || '' };
 }
 
 // Orígenes elegibles para una factura MANUAL de un proveedor: compras recibidas +
@@ -310,6 +399,18 @@ export function createSupplierInvoiceRoutes(db) {
     } catch (e) { return c.json({ error: e.message }, e.status || 400); }
   });
 
+  // Paso (c): registrar un REEMBOLSO recibido contra un abono (importe positivo en la
+  // entrada; se guarda como pago negativo). Reutiliza supplierPaymentSchema (amount>0).
+  api.post('/:id/refunds', requirePerm('purchases.create'), validate(supplierPaymentSchema), c => {
+    try {
+      const id = parseInt(c.req.param('id'));
+      const r = registerSupplierRefundSvc(db, id, c.get('validated'), { today: today() });
+      const inv = db.prepare('SELECT internal_code FROM supplier_invoices WHERE id=?').get(id);
+      logActivity(db, c.get('session'), 'Registró reembolso de proveedor', 'supplier_invoice', id, `${(inv && inv.internal_code) || ('#' + id)} · ${c.get('validated').amount}`);
+      return c.json(r, 201);
+    } catch (e) { return c.json({ error: e.message }, e.status || 400); }
+  });
+
   // ── Vistas ──────────────────────────────────────────────────────────────────
   const sym = () => db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
 
@@ -335,6 +436,7 @@ export function createSupplierInvoiceRoutes(db) {
               <option value="">Todos los tipos</option>
               <option value="compra">Compra (stock)</option>
               <option value="gasto">Gasto</option>
+              <option value="abono">Abono (devolución)</option>
             </select>
             <input class="search" id="searchBox" placeholder="Buscar proveedor, código o nº factura..." oninput="filterRows()">
           </div>
@@ -357,12 +459,18 @@ export function createSupplierInvoiceRoutes(db) {
         document.getElementById('siBody').innerHTML = rows.length ? rows.map(function(r){
           const badge = r.status==='anulada' ? '<span class="badge b-gray">Anulada</span>' : '<span class="badge '+(ESTADO_BADGE[r.estado]||'')+'">'+(ESTADO_LABEL[r.estado]||r.estado)+(r.dias_vencida>0?' · '+r.dias_vencida+'d':'')+'</span>';
           const pend = r.status==='anulada' ? '—' : SYM+Number(r.pendiente||0).toFixed(2);
-          const payBtn = (r.pagable && r.pendiente>0.0049) ? '<button class="btn btn-primary btn-sm" onclick="openPagos('+r.id+')">Pago</button> ' : '';
+          const payBtn = (r.pagable && r.pendiente>0.0049) ? '<button class="btn btn-primary btn-sm" onclick="openPagos('+r.id+')">Pago</button> '
+            : (r.entity_type==='supplier_return' && r.status==='vigente' && r.pendiente<-0.0049) ? '<button class="btn btn-secondary btn-sm" onclick="openPagos('+r.id+')">Reembolso</button> '
+            : '';
+          const esAbono = r.entity_type==='supplier_return';
           const esGasto = !r.entity_type;
-          const tipo = esGasto
+          const tipo = esAbono
+            ? '<span class="badge b-gray">Abono</span>'
+            : esGasto
             ? '<span class="badge b-purple">Gasto</span>'+(r.expense_category?'<div style="color:var(--muted);font-size:.76rem;margin-top:2px">'+escHtml(r.expense_category)+'</div>':'')
             : '<span class="badge b-teal">Compra</span>';
-          return '<tr class="frow" data-tipo="'+(esGasto?'gasto':'compra')+'">'
+          const dataTipo = esAbono?'abono':(esGasto?'gasto':'compra');
+          return '<tr class="frow" data-tipo="'+dataTipo+'">'
             +'<td style="font-family:monospace;color:var(--muted)">'+escHtml(r.internal_code||'-')+'</td>'
             +'<td>'+tipo+'</td>'
             +'<td><strong>'+escHtml(r.supplier_name||'')+'</strong></td>'
@@ -383,7 +491,10 @@ export function createSupplierInvoiceRoutes(db) {
           const d = await api('GET','/api/erp/supplier-invoices/supplier-debt?supplier_id='+SUPPLIER_ID);
           const card=document.getElementById('debtCard'); const box=document.getElementById('debtBox');
           const o=d.oldest;
-          box.innerHTML = 'Le debes <strong style="font-size:1.3rem">'+SYM+Number(d.total||0).toFixed(2)+'</strong>'
+          const neto=Number(d.total||0);
+          box.innerHTML = (neto < -0.0049
+              ? 'Saldo a tu favor <strong style="font-size:1.3rem;color:var(--ok,#127a3a)">'+SYM+Math.abs(neto).toFixed(2)+'</strong>'
+              : 'Le debes <strong style="font-size:1.3rem">'+SYM+neto.toFixed(2)+'</strong>')
             + (o ? ' · Deuda más antigua: <a href="/admin/supplier-invoices/'+o.supplier_invoice_id+'">'+escHtml(o.internal_code||'')+'</a> ('+SYM+Number(o.pendiente||0).toFixed(2)+', vence '+escHtml(o.due_date||'-')+(o.dias_vencida>0?' · '+o.dias_vencida+' días vencida':'')+')' : ' · sin deuda pendiente');
           card.style.display='';
         } catch(e){}
@@ -644,13 +755,20 @@ export function createSupplierInvoiceRoutes(db) {
       ? `<div class="alert alert-warn" style="margin-bottom:1rem">Factura <strong>anulada</strong>. Motivo: ${esc(inv.anulada_motivo || '')}</div>` : '';
     const originBlock = inv.origin
       ? `<a href="${inv.origin.href}">${esc(inv.origin.label)}</a>` : '<span style="color:var(--muted)">—</span>';
-    const actionBtns = (canCreate && inv.status !== 'anulada')
-      ? `<button class="btn btn-primary" onclick="openPagos(${inv.id})">Registrar pago</button> <button class="btn btn-danger" onclick="anular()">Anular factura</button> ` : '';
     const isExpense = inv.is_expense;
-    const tipoBadge = isExpense ? '<span class="badge b-purple" style="margin-left:.5rem">Gasto</span>' : '<span class="badge b-teal" style="margin-left:.5rem">Compra</span>';
-    const linesCard = (isExpense && inv.items.length)
+    const isCredit = inv.is_credit;
+    const actionBtns = (canCreate && inv.status !== 'anulada')
+      ? (isCredit
+          ? (inv.refundable && pg.pendiente < -0.0049 ? `<button class="btn btn-primary" onclick="openPagos(${inv.id})">Registrar reembolso recibido</button> ` : '')
+          : `<button class="btn btn-primary" onclick="openPagos(${inv.id})">Registrar pago</button> <button class="btn btn-danger" onclick="anular()">Anular factura</button> `)
+      : '';
+    const tipoBadge = isCredit ? '<span class="badge b-purple" style="margin-left:.5rem">Abono</span>'
+      : isExpense ? '<span class="badge b-purple" style="margin-left:.5rem">Gasto</span>'
+      : '<span class="badge b-teal" style="margin-left:.5rem">Compra</span>';
+    const linesTitle = isCredit ? 'Líneas del abono (negativas)' : 'Líneas del gasto';
+    const linesCard = (inv.items.length)
       ? `<div class="card" style="margin-bottom:1rem">
-          <div class="card-head"><h3>Líneas del gasto</h3></div>
+          <div class="card-head"><h3>${linesTitle}</h3></div>
           <div class="table-wrap"><table>
             <thead><tr><th>Concepto</th><th style="text-align:right">Base</th><th>IVA</th><th style="text-align:right">Cuota</th></tr></thead>
             <tbody>${inv.items.map(it => `<tr><td>${esc(it.concepto || '—')}</td><td style="text-align:right">${s}${Number(it.base).toFixed(2)}</td><td>${Number(it.tax_rate)}%</td><td style="text-align:right">${s}${Number(it.cuota).toFixed(2)}</td></tr>`).join('')}
@@ -672,7 +790,7 @@ export function createSupplierInvoiceRoutes(db) {
         <div class="card card-body">
           <div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Fecha / Vencimiento</span><br>${esc(inv.invoice_date)} · vence <strong>${esc(inv.due_date || '-')}</strong></div>
           <div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Importe</span><br>Base ${s}${Number(inv.base).toFixed(2)} · IVA ${s}${Number(inv.tax).toFixed(2)} · <strong style="font-size:1.2rem">Total ${s}${Number(inv.total).toFixed(2)}</strong></div>
-          <div><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Estado de pago</span><br>${statusBadge} ${inv.status !== 'anulada' ? `Pagado ${s}${Number(pg.pagado).toFixed(2)} · Pendiente <strong>${s}${Number(pg.pendiente).toFixed(2)}</strong>` : ''}</div>
+          <div><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">${isCredit ? 'Estado del abono' : 'Estado de pago'}</span><br>${statusBadge} ${inv.status === 'anulada' ? '' : isCredit ? `Crédito ${s}${Math.abs(Number(inv.total)).toFixed(2)} · Reembolsado ${s}${Math.abs(Number(pg.pagado)).toFixed(2)} · Pendiente <strong>${s}${Math.abs(Number(pg.pendiente)).toFixed(2)}</strong>` : `Pagado ${s}${Number(pg.pagado).toFixed(2)} · Pendiente <strong>${s}${Number(pg.pendiente).toFixed(2)}</strong>`}</div>
         </div>
       </div>
       ${linesCard}
