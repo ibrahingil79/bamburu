@@ -4,7 +4,67 @@
 > Estructura: 4 pilares en ORDEN DE CONSTRUCCIÓN — Producto → Cliente → Inventario → Ventas
 > (Ventas necesita los otros tres ya hechos; ver CANON §3).
 > REGLA DE ORO: una sola tarea "EN CURSO" a la vez. Terminar antes de empezar otra.
-> Última actualización: 2026-06-15
+> Última actualización: 2026-06-19
+
+---
+
+## INFRAESTRUCTURA — SALIDA A PRODUCCIÓN (fuera del orden de pilares) — 🌐 BAMBURU PÚBLICO desde 2026-06-19
+
+No es un pilar: es poner Bamburu en internet de forma segura tras migrar al servidor Oracle nuevo
+(Ubuntu 24.04 ARM64, proyecto en `/home/ubuntu/bamburu`, NO `/home/ibrahin` — **CLAUDE.md quedó desactualizado en eso**).
+
+- **Parte A+B — Producción + HTTPS. ✅ HECHO (2026-06-19).** Servicio **systemd `bamburu.service`** (arranque al boot, `Restart`, `User=ubuntu`, lee `/etc/bamburu.env`). **iptables** 80/443 abiertos y persistidos. **Caddy** como proxy inverso: HTTPS con **certificado comodín Let's Encrypt `*.bamburu.com`+apex** vía DNS-01 con token de Cloudflare (el DNS de bamburu.com está en **Cloudflare**, no Namecheap), reenvía Host real + `X-Forwarded-Proto`, www→apex 301, HTTP→HTTPS. Cada negocio entra por `https://<slug>.bamburu.com/admin/login`. Secretos en `/etc/bamburu.env` (600): claves Anthropic/Resend/Notion + `PUBLIC_BASE_DOMAIN` + `HEALTHCHECKS_URL`. `NODE_ENV` **sin definir a propósito** (decisión del dueño: DISA sin tope de mensajes en beta). Git remoto pasado a SSH.
+- **Acceso desde la landing → subdominio (Opción A). ✅ HECHO (2026-06-19, commit `894e750`).** `/find-tenant` en producción manda al subdominio del negocio (URL absoluta) en vez de quedarse en el apex con cookie `btenant` (que perdía contra una `asess` del apex → "credenciales incorrectas"). Email en varios negocios → pantalla "Elige tu negocio". Dev/Tailscale (sin `PUBLIC_BASE_DOMAIN`) mantiene el flujo original. `getTenantsByEmail` (plural) nueva.
+- **Backup diario a Google Drive, blindado. ✅ HECHO (2026-06-19, commit `3076f68`).** Sustituye el Backblaze viejo (perdido en la migración). rclone → Drive (`Bamburu-backup/daily`), copia de control.db + tenants/*.db (snapshot consistente) + uploads (tar.gz), **subida verificada (tamaño+MD5)**, **prueba de restore real** (integrity_check), retención 14 días, **email OK + email FALLO** (Resend), **heartbeat 48h** y **healthchecks.io** (dead-man's-switch externo). Timers systemd 03:30 / 09:00. Validado en producción por el dueño.
+
+### 🔒 Auditoría de seguridad (solo lectura) — 2026-06-19
+
+Hecha con Bamburu ya público. **Aislamiento entre negocios SÓLIDO (sin CRÍTICOS):** el negocio se
+resuelve por la sesión `asess`→`tenant_sessions` (mapeo servidor-side), no por dato manipulable. Hallazgos
+a tratar (arreglo NO iniciado — pendiente de priorizar con el dueño):
+
+- **ALTO · A1 — XSS almacenado** en el listado de facturas: `client_name` sin escapar en `innerHTML` (`modules/erp/routes/invoices.js:584,611-617`). Empleado/API/DISA (o tienda si activa) inyecta script que corre en la sesión del dueño.
+- **ALTO · A2 — Anti-fuerza-bruta saltable:** `core/rate-limit.js:5-9` confía en `X-Real-IP` ("la pone Nginx"), pero ahora es **Caddy** y no la fija → cabecera falsificable → límite de login evitable.
+- **ALTO · A3 — DISA puede editar/borrar facturas** por la vía genérica: `invoices`/`invoice_items`/`sales_orders` están en `WRITABLE_TABLES` (`modules/disa/index.js:107`) y `update_record`/`delete_record` (`:229,:241`) operan sobre ellas → riesgo de romper la cadena de hash fiscal. Mitigado por admin-only + confirm-first; falta guard duro de inmutabilidad fiscal.
+- **MEDIO · M1 — Límite de DISA inactivo** (`NODE_ENV` sin definir → `disa/index.js:2037` se salta) → gasto de API sin tope. Es la decisión de beta, pero es la exposición.
+- **MEDIO · M2 — Rutas con sesión pero sin `requirePerm`** (gate 7, solo señalado): `GET /admin/orders/:id/invoice` (`orders.js:442`), `GET /admin/settings` (`settings.js:43`), `POST /api/erp/feedback` (`feedback.js:9`). Repaso completo de permisos = tarea de roadmap aparte.
+- **MEDIO · M3 — `hono` con avisos** (`npm audit`, 1 alta); la mayoría de CVE no aplican a nuestro uso, pero conviene actualizar.
+- **BAJO** — `btenant` sin `Secure` (tarea 7); camino de hash sha256 legacy (sin uso hoy, todas bcrypt); SSH `PermitRootLogin without-password`; `NODE_ENV` sin definir como trampa a futuro.
+
+**BIEN confirmado:** bcrypt(12) en todas las cuentas, SQL parametrizado, secretos fuera de git (`.gitignore` cubre `data/`,`*.db`,`.env`), solo 22/80/443 públicos + SSH solo por clave + app no-root, subida de archivos con `requirePerm` + scoping por-negocio (sin path traversal), sin `onError` que filtre trazas.
+
+**Pendientes técnicos anotados (no iniciados):** tarea 7 (`Secure` en `btenant`), tarea 6 (alta muestra `https://<slug>.bamburu.com`), fragilidad `auth.js:12` (`new Resend()` al cargar tumba `/admin` sin clave), corregir CLAUDE.md (`/home/ibrahin`→`/home/ubuntu`).
+
+---
+
+## 🗂️ ORDEN DE TRABAJO (19 jun 2026)
+
+**Criterio:** público + 0 clientes → primero lo explotable por un desconocido; luego lo que necesita cómplice o riesgo legal; luego limpieza. **Pilar 4 retoma tras la Fase 1** (Fases 2–3 pueden intercalarse).
+
+**FASE 1 — sangra hoy (desconocido, sin cómplice):**
+1. **Anti-avalancha (DoS):** tope **GLOBAL** de gasto de Anthropic + freno al registro masivo por IP + límite de peticiones por IP en toda la plataforma. *(El tope por-negocio es bypassable registrando muchos negocios.)*
+2. **A2 — fuerza bruta de login** (`X-Real-IP` falsificable; Caddy no la fija). Agujero + avería viva (bloqueos falsos).
+3. **A1 — XSS en listado de facturas** (`client_name` sin escapar). Prioridad ALTA **si la tienda pública/checkout está activa**; si no, pasa a Fase 2.
+
+**FASE 2 — antes de beta:**
+4. **A3 — DISA edita/borra facturas** por vía genérica (riesgo Verifactu). Arreglo barato.
+5. **M2 — rutas con sesión sin `requirePerm`** (`orders.js:442`, `settings.js:43`, `feedback.js:9`).
+
+**FASE 3 — robustez y limpieza:**
+6. **Tareas 6 y 7** (7 = cookie `btenant` con `Secure` / B1).
+7. **Fragilidad de Resend** (`auth.js:12`).
+8. **CLAUDE.md desactualizado** (`/home/ibrahin`→`/home/ubuntu`).
+9. **M3 `hono`** (`npm audit fix`) + **B2 hash legacy** + **B3 SSH root por clave**.
+
+→ **Retomar Pilar 4 — Ventas** tras cerrar la Fase 1.
+
+**ROADMAP (no iniciar):** panel de superadmin · repaso de permisos · sistema de diseño · prueba de carga · resto ya registrado.
+
+**Contenido real de las tareas referidas (reconciliado del histórico, no se tenía a la vista):**
+- **Tarea 6** — al terminar el alta en `/registro`, la pantalla final **muestra y enlaza la dirección de acceso** del negocio `https://<slug>.bamburu.com` (el alta ya conoce el slug; cambio mínimo, no rediseñar el flujo).
+- **Tarea 7** — igualar el flag **`Secure`** en la cookie `btenant` (hoy va sin `Secure`, `index.js` ~1175) para que coincida con `asess`. **NO** tocar el aislamiento host-only (no añadir `Domain=.bamburu.com` a `asess`, rompería el aislamiento entre negocios).
+
+**Reconciliación (PASO 0) — pendientes que YA estaban en este TABLERO y NO se pierden:** la deuda de la sección *"Pendientes técnicos (deuda rastreable)"* (DISA `create_product` exigir banda de IVA · DISA `create_order` monoproducto) sigue al final del fichero; el ROADMAP FUTURO, el Sistema de diseño y los Permisos por usuario siguen en sus secciones (caen bajo "ROADMAP"). *(Nota: Pilar 3 — Inventario quedó completado el 14–15 jun + capa de dinero con proveedores; `session.json` antiguo está desactualizado. Por eso "Retomar Pilar 4" es correcto.)*
 
 ---
 
