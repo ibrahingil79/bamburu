@@ -4,7 +4,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { db } from './core/db.js';
 import { loadModules } from './core/loader.js';
 import { cleanupExpiredSessions } from './core/auth.js';
-import { cleanupRateLimitBuckets } from './core/rate-limit.js';
+import { cleanupRateLimitBuckets, rateLimit } from './core/rate-limit.js';
 import { securityHeaders } from './core/security-headers.js';
 import { initControlDb, getTenantBySlug, createTenantSession } from './core/control-db.js';
 import { tenantMiddleware, getTenantDb } from './core/tenant-middleware.js';
@@ -19,6 +19,9 @@ const app = new Hono();
 
 app.use('*', securityHeaders());
 app.use('/public/*', serveStatic({ root: './' }));
+// Límite general por IP (anti-avalancha). Va DESPUÉS de serveStatic: los estáticos de /public
+// se sirven antes y NO lo disparan (una página normal carga varios assets). ~100 req/min por IP.
+app.use('*', rateLimit({ windowMs: 60000, max: 100, keyPrefix: 'global' }));
 app.get('/', c => c.html(`<!DOCTYPE html>
 <html lang="es">
 <head>

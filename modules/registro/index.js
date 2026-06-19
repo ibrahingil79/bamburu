@@ -202,6 +202,9 @@ export function register(app) {
   // seguro: la contraseña llega SOLO aquí, nunca por el chat ni la memoria (defectos E, G).
   app.post('/api/registro/crear',
     rateLimit({ windowMs: 60000, max: 10, keyPrefix: 'onboarding-crear' }),
+    // Freno al registro masivo por IP (anti-avalancha): además del 10/min, tope por hora y por día.
+    rateLimit({ windowMs: 60 * 60 * 1000, max: 3, keyPrefix: 'registro-hora', message: 'Demasiados negocios creados desde aquí. Prueba más tarde.' }),
+    rateLimit({ windowMs: 24 * 60 * 60 * 1000, max: 10, keyPrefix: 'registro-dia', message: 'Demasiados negocios creados desde aquí hoy. Prueba mañana.' }),
     async (c) => {
       let body;
       try { body = await c.req.json(); } catch { return c.json({ error: 'Petición inválida.' }, 400); }

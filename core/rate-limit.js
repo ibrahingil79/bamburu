@@ -1,11 +1,16 @@
 const buckets = new Map();
 
 function getClientIp(c) {
-  // X-Real-IP is injected by local Nginx — not forgeable by the client
-  const realIp = c.req.header('x-real-ip');
-  if (realIp) return realIp.trim();
-  // Direct connection fallback (Hono Node adapter exposes socket via c.env.incoming)
-  const addr = c.env?.incoming?.socket?.remoteAddress;
+  // La IP real del cliente la PISA Caddy en X-Real-IP ({remote_host}); lo que mande el
+  // cliente se descarta. Pero solo nos fiamos de esa cabecera si la conexión llega desde
+  // loopback (= viene de Caddy en 127.0.0.1/::1). Si la conexión NO es de loopback, la
+  // cabecera podría venir directa del cliente → la ignoramos y usamos la IP del socket.
+  const addr = c.env?.incoming?.socket?.remoteAddress || '';
+  const isLoopback = addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
+  if (isLoopback) {
+    const realIp = c.req.header('x-real-ip');
+    if (realIp) return realIp.trim();
+  }
   return addr || 'unknown';
 }
 

@@ -1240,6 +1240,15 @@ export function runMigrations(db) {
     )
   `);
 
+  // Gasto de Anthropic de ESTE negocio por mes natural (freno de gasto por-negocio, 5 €/mes).
+  // En € (1 USD = 1 EUR a propósito; ver core/llm.js). La suma global vive en control.db.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS disa_spend (
+      month      TEXT PRIMARY KEY,
+      eur        REAL NOT NULL DEFAULT 0
+    )
+  `);
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS disa_profile (
       id           INTEGER PRIMARY KEY CHECK(id = 1),

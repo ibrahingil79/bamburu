@@ -20,9 +20,48 @@
 // callClaude(). (Migración del 2026-06-12.)
 
 import { readFileSync } from 'fs';
+import { getGlobalLlmSpend, addGlobalLlmSpend, markGlobalLlmAlerted } from './control-db.js';
+import { sendEmail } from './mailer.js';
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
+
+// ── Freno de gasto de Anthropic ────────────────────────────────────────────
+// Precios verificado 19 jun 2026, fuente Anthropic ($ por millón de tokens, in/out).
+const PRICING = {
+  'claude-sonnet-4-6':         { in: 3,  out: 15 },
+  'claude-haiku-4-5-20251001': { in: 1,  out: 5  },
+};
+// Topes por MES NATURAL. 1 USD = 1 EUR a propósito (sobreestima → corta un pelín antes, lado seguro).
+const TENANT_CAP_EUR   = 5;    // por negocio
+const GLOBAL_CAP_EUR   = 50;   // suma de todos
+const GLOBAL_ALERT_EUR = 40;   // aviso por email a Ibrahin al 80%
+
+function currentMonth() { return new Date().toISOString().slice(0, 7); } // 'YYYY-MM'
+
+// Coste en € de una respuesta a partir de su `usage`. Cuenta TODO lo de entrada (incluida
+// la caché) al precio de input → sobreestima (lado seguro). Modelo desconocido → 0.
+function eurCost(model, usage) {
+  const p = PRICING[model];
+  if (!p || !usage) return 0;
+  const inTok = (usage.input_tokens || 0)
+    + (usage.cache_creation_input_tokens || 0)
+    + (usage.cache_read_input_tokens || 0);
+  const outTok = usage.output_tokens || 0;
+  return inTok / 1e6 * p.in + outTok / 1e6 * p.out;
+}
+
+// Gasto por-negocio (tabla disa_spend de la BD del tenant). Tolerante a fallos de BD.
+function tenantSpendEur(db, month) {
+  try { return db.prepare('SELECT eur FROM disa_spend WHERE month=?').get(month)?.eur || 0; }
+  catch { return 0; }
+}
+function addTenantSpendEur(db, month, eur) {
+  try {
+    db.prepare(`INSERT INTO disa_spend (month, eur) VALUES (?, ?)
+                ON CONFLICT(month) DO UPDATE SET eur = eur + excluded.eur`).run(month, eur);
+  } catch { /* el registro nunca rompe la llamada */ }
+}
 
 // API key: variable de entorno primero; fallback a /etc/bamburu.env (producción).
 // Mismo patrón que las 3 llamadas actuales, aquí en un único sitio.
@@ -68,6 +107,21 @@ export async function callClaude(opts = {}) {
   const apiKey = opts.apiKey || getAnthropicKey();
   if (!apiKey) { const e = new Error('La IA no está configurada (falta ANTHROPIC_API_KEY)'); e.status = 500; throw e; }
 
+  // ── Freno PREVENTIVO de gasto: si ya se superó el tope, NO se llama a la API. ──
+  // opts.billDb = BD del tenant (factura por-negocio + tope 5 €). Si no se pasa, solo cuenta al global.
+  const billDb = opts.billDb || null;
+  const month = currentMonth();
+  let globalBefore = null;
+  try { globalBefore = getGlobalLlmSpend(month); } catch { /* sin control.db legible: no bloquea */ }
+  if (globalBefore && globalBefore.eur >= GLOBAL_CAP_EUR) {
+    const e = new Error('DISA ha llegado al límite de uso de este mes. Inténtalo de nuevo el mes que viene.');
+    e.status = 429; e.code = 'llm_global_cap'; throw e;
+  }
+  if (billDb && tenantSpendEur(billDb, month) >= TENANT_CAP_EUR) {
+    const e = new Error('DISA ha llegado a su límite de uso de este mes para tu negocio.');
+    e.status = 429; e.code = 'llm_tenant_cap'; throw e;
+  }
+
   const doFetch = opts.fetchImpl || fetch;
   const body = { model, max_tokens, messages };
   if (system) body.system = system;
@@ -89,7 +143,29 @@ export async function callClaude(opts = {}) {
     try { const j = await resp.json(); detail = j?.error?.message || JSON.stringify(j); } catch { detail = 'HTTP ' + resp.status; }
     const e = new Error('La IA devolvió un error: ' + detail); e.status = 502; throw e;
   }
-  return resp.json();
+  const data = await resp.json();
+
+  // ── Registro de gasto (después de gastar). Nunca rompe la respuesta. ──
+  try {
+    const eur = eurCost(data.model || model, data.usage);
+    if (eur > 0) {
+      addGlobalLlmSpend(month, eur);
+      if (billDb) addTenantSpendEur(billDb, month, eur);
+      const after = getGlobalLlmSpend(month);
+      if (after.eur >= GLOBAL_ALERT_EUR && !after.alerted_80) {
+        markGlobalLlmAlerted(month);   // marca antes de enviar → no se repite el aviso
+        sendEmail({
+          from: 'Bamburu <noreply@bamburu.com>',
+          to: 'ibrahingil@gmail.com',
+          subject: `⚠️ Gasto Anthropic al 80% (${month})`,
+          text: `El gasto global de Anthropic este mes (${month}) va por ${after.eur.toFixed(2)} €.\n`
+            + `Umbral de aviso: ${GLOBAL_ALERT_EUR} € (80%). DISA se pausa automáticamente al llegar a ${GLOBAL_CAP_EUR} €.`,
+        }).catch(() => {});
+      }
+    }
+  } catch { /* el registro de gasto nunca rompe la respuesta */ }
+
+  return data;
 }
 
 // Atajo: concatena el texto de los bloques `text` de la respuesta (ignora tool_use).

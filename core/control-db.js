@@ -54,6 +54,16 @@ function runMigrations(db) {
     )
   `);
 
+  // Acumulador GLOBAL del gasto de Anthropic por mes natural (freno anti-avalancha de gasto).
+  // El gasto por-negocio vive en la BD de cada tenant (tabla disa_spend); este es la suma global.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS llm_spend_global (
+      month      TEXT PRIMARY KEY,
+      eur        REAL    NOT NULL DEFAULT 0,
+      alerted_80 INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
   // Configuración de países disponibles en la plataforma
   db.exec(`
     CREATE TABLE IF NOT EXISTS country_configs (
@@ -205,4 +215,28 @@ export function getTenantsByEmail(email) {
     }
   }
   return matches;
+}
+
+// ---------------------------------------------------------------------------
+// Gasto GLOBAL de Anthropic (freno de gasto, por mes natural 'YYYY-MM')
+// ---------------------------------------------------------------------------
+
+// Devuelve { eur, alerted_80 } del mes (0 si no hay fila).
+export function getGlobalLlmSpend(month) {
+  return controlDb
+    .prepare('SELECT eur, alerted_80 FROM llm_spend_global WHERE month = ?')
+    .get(month) ?? { eur: 0, alerted_80: 0 };
+}
+
+// Suma gasto al acumulador global del mes (crea la fila si no existe).
+export function addGlobalLlmSpend(month, eur) {
+  controlDb
+    .prepare(`INSERT INTO llm_spend_global (month, eur) VALUES (?, ?)
+              ON CONFLICT(month) DO UPDATE SET eur = eur + excluded.eur`)
+    .run(month, eur);
+}
+
+// Marca que ya se envió el aviso del 80% de este mes (para no repetirlo).
+export function markGlobalLlmAlerted(month) {
+  controlDb.prepare('UPDATE llm_spend_global SET alerted_80 = 1 WHERE month = ?').run(month);
 }

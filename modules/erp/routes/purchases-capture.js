@@ -147,6 +147,7 @@ export async function extractInvoice({ buffer, mime }, opts = {}) {
     messages: [{ role: 'user', content: [block, { type: 'text', text: extractionUserText() }] }],
     apiKey: opts.apiKey,
     fetchImpl: opts.fetchImpl,
+    billDb: opts.billDb,
   });
   return parseExtraction(textFromResponse(resp));
 }
@@ -332,7 +333,7 @@ export async function runCapture(db, tenant, session, { buffer, mime, originalNa
   let extracted;
   const fake = process.env.C2_FAKE_EXTRACTION;
   if (fake) extracted = parseExtraction(fake);
-  else extracted = await extractInvoice({ buffer, mime });
+  else extracted = await extractInvoice({ buffer, mime }, { billDb: db });
 
   // Persistir SOLO la lectura cruda del modelo (no match/open_orders: son derivados de BD,
   // se recalculan frescos al precargar la pantalla).

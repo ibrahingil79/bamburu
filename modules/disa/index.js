@@ -19,6 +19,7 @@ import { runCapture, captureFromExtraction } from '../erp/routes/purchases-captu
 import { createProductSvc } from '../erp/routes/products.js';   // alta validada (banda de IVA obligatoria, sin defecto silencioso)
 import { ALLOWED_MIME, MAX_UPLOAD_BYTES } from '../erp/attachments.js';
 import { callClaude, hasAnthropicKey } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
+import { rateLimit } from '../../core/rate-limit.js';   // freno por IP del endpoint caro de DISA
 
 export function register(app, db) {
   const router = new Hono();
@@ -1994,7 +1995,7 @@ export function register(app, db) {
       // (haiku), max_tokens, prompt y mensajes. Si falla la red/API, callClaude lanza →
       // lo captura el catch de abajo, que devuelve el MISMO { reply, action } (200).
       const data = await callClaude({
-        model: 'claude-haiku-4-5-20251001', max_tokens: 800, system: systemPrompt, messages,
+        model: 'claude-haiku-4-5-20251001', max_tokens: 800, system: systemPrompt, messages, billDb: db,
       });
       const raw = data.content?.[0]?.text || 'Sin respuesta.';
       let action = null;
@@ -2030,7 +2031,9 @@ export function register(app, db) {
     return c.json({ ok: true });
   });
 
-  router.post('/message', adminAuth(db), async c => {
+  router.post('/message',
+    rateLimit({ windowMs: 60000, max: 15, keyPrefix: 'disa-message', message: 'Vas demasiado rápido con DISA. Espera un momento.' }),
+    adminAuth(db), async c => {
     const usage = getUsage(db);
     const limit = 50;
     const tenantSlug = c.get('tenant')?.slug;
@@ -2377,10 +2380,12 @@ export function register(app, db) {
         let data;
         try {
           data = await callClaude({
-            model: 'claude-sonnet-4-6', max_tokens: 1024, system: systemPrompt, messages: apiMessages, tools,
+            model: 'claude-sonnet-4-6', max_tokens: 1024, system: systemPrompt, messages: apiMessages, tools, billDb: db,
           });
         } catch (e) {
           console.error('[DISA] API error:', e.message);
+          // Tope de gasto alcanzado → mensaje claro al usuario (no el genérico de error de red).
+          if (e.code === 'llm_tenant_cap' || e.code === 'llm_global_cap') return c.json({ error: e.message }, 429);
           return c.json({ error: 'Error al contactar con DISA. Intentalo de nuevo.' }, 500);
         }
 
