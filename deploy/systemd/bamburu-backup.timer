@@ -1,9 +1,8 @@
 [Unit]
-Description=Bamburu — disparador diario de la copia a Backblaze B2
+Description=Bamburu — disparador diario de la copia a Google Drive (03:30)
 
 [Timer]
-# Diario a las 03:30 hora local. La BD es diminuta: diario no cuesta nada
-# y es más seguro que semanal.
+# Diario a las 03:30 hora local. Los datos son pequeños: diario no cuesta nada.
 OnCalendar=*-*-* 03:30:00
 # Si el servidor estaba apagado a esa hora, ejecuta en el siguiente arranque.
 Persistent=true

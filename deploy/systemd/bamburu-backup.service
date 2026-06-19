@@ -1,13 +1,14 @@
 [Unit]
-Description=Bamburu — copia diaria de las BD SQLite a Backblaze B2
-Documentation=file:///home/ibrahin/bamburu/deploy/systemd/README.md
+Description=Bamburu — copia diaria de BD + uploads a Google Drive (rclone), verificada
+Documentation=file:///home/ubuntu/bamburu/deploy/systemd/README.md
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=ibrahin
-Group=ibrahin
-WorkingDirectory=/home/ibrahin/bamburu
-ExecStart=/home/ibrahin/bamburu/scripts/bamburu-backup.sh
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/bamburu
+EnvironmentFile=/etc/bamburu.env
+ExecStart=/home/ubuntu/bamburu/scripts/bamburu-backup.sh
 SyslogIdentifier=bamburu-backup

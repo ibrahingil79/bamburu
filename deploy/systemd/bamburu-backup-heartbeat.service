@@ -1,0 +1,13 @@
+[Unit]
+Description=Bamburu — heartbeat: avisa si no hay backup con éxito en +48h
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/bamburu
+EnvironmentFile=/etc/bamburu.env
+ExecStart=/home/ubuntu/bamburu/scripts/bamburu-backup-heartbeat.sh
+SyslogIdentifier=bamburu-backup-heartbeat
