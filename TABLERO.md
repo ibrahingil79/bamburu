@@ -49,14 +49,15 @@ a tratar (arreglo NO iniciado — pendiente de priorizar con el dueño):
 **FASE 2 — antes de beta:**
 4. **A3 — DISA edita/borra facturas** por vía genérica (riesgo Verifactu). Arreglo barato.
 5. **M2 — rutas con sesión sin `requirePerm`** (`orders.js:442`, `settings.js:43`, `feedback.js:9`).
+6. **DISA `create_product` — exigir banda de IVA** (hoy hace `INSERT` directo sin banda → IVA mal en factura = riesgo fiscal; va aquí con A3/M2, antes de beta).
 
 **FASE 3 — robustez y limpieza:**
-6. **Tareas 6 y 7** (7 = cookie `btenant` con `Secure` / B1).
-7. **Fragilidad de Resend** (`auth.js:12`).
-8. **CLAUDE.md desactualizado** (`/home/ibrahin`→`/home/ubuntu`).
-9. **M3 `hono`** (`npm audit fix`) + **B2 hash legacy** + **B3 SSH root por clave**.
+7. **Tareas 6 y 7** (7 = cookie `btenant` con `Secure` / B1).
+8. **Fragilidad de Resend** (`auth.js:12`).
+9. **CLAUDE.md desactualizado** (`/home/ibrahin`→`/home/ubuntu`).
+10. **M3 `hono`** (`npm audit fix`) + **B2 hash legacy** + **B3 SSH root por clave**.
 
-→ **Retomar Pilar 4 — Ventas** tras cerrar la Fase 1.
+→ **Retomar Pilar 4 — Ventas** tras cerrar la Fase 1. Incluye **DISA `create_order` multiproducto** (pedido multilínea): se aborda dentro de Ventas, no como deuda suelta.
 
 **ROADMAP (no iniciar):** panel de superadmin · repaso de permisos · sistema de diseño · prueba de carga · resto ya registrado.
 
@@ -64,7 +65,7 @@ a tratar (arreglo NO iniciado — pendiente de priorizar con el dueño):
 - **Tarea 6** — al terminar el alta en `/registro`, la pantalla final **muestra y enlaza la dirección de acceso** del negocio `https://<slug>.bamburu.com` (el alta ya conoce el slug; cambio mínimo, no rediseñar el flujo).
 - **Tarea 7** — igualar el flag **`Secure`** en la cookie `btenant` (hoy va sin `Secure`, `index.js` ~1175) para que coincida con `asess`. **NO** tocar el aislamiento host-only (no añadir `Domain=.bamburu.com` a `asess`, rompería el aislamiento entre negocios).
 
-**Reconciliación (PASO 0) — pendientes que YA estaban en este TABLERO y NO se pierden:** la deuda de la sección *"Pendientes técnicos (deuda rastreable)"* (DISA `create_product` exigir banda de IVA · DISA `create_order` monoproducto) sigue al final del fichero; el ROADMAP FUTURO, el Sistema de diseño y los Permisos por usuario siguen en sus secciones (caen bajo "ROADMAP"). *(Nota: Pilar 3 — Inventario quedó completado el 14–15 jun + capa de dinero con proveedores; `session.json` antiguo está desactualizado. Por eso "Retomar Pilar 4" es correcto.)*
+**Reconciliación (PASO 0) — pendientes que YA estaban en este TABLERO y NO se pierden:** la deuda de DISA de la sección *"Pendientes técnicos (deuda rastreable)"* queda **colocada**: `create_product` (banda de IVA) → **Fase 2 (#6)** y `create_order` multiproducto → **Pilar 4 — Ventas** (pedido multilínea, no deuda suelta); el detalle original sigue al final del fichero. El ROADMAP FUTURO, el Sistema de diseño y los Permisos por usuario siguen en sus secciones (caen bajo "ROADMAP"). *(Nota: Pilar 3 — Inventario quedó completado el 14–15 jun + capa de dinero con proveedores; `session.json` antiguo está desactualizado. Por eso "Retomar Pilar 4" es correcto.)*
 
 ---
 
