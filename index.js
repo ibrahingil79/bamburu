@@ -1158,23 +1158,55 @@ gsap.to('.hero-glow2', {
 
 app.post('/find-tenant', async c => {
   try {
-    const { email } = await c.req.json();
+    const body = await c.req.json();
+    const email = (body?.email || '').trim().toLowerCase();
+    const pickedSlug = typeof body?.slug === 'string' ? body.slug : null;
     if (!email || !email.includes('@')) {
       return c.json({ error: 'Email inválido' }, 400);
     }
-    const { getTenantByEmail } = await import('./core/control-db.js');
-    const tenant = getTenantByEmail(email.trim().toLowerCase());
-    if (!tenant) {
+    const { getTenantsByEmail } = await import('./core/control-db.js');
+    const tenants = getTenantsByEmail(email);
+    if (!tenants.length) {
       return c.json({ error: 'No encontramos ningún negocio con ese email' }, 404);
     }
-    // Selección de negocio para el login: cuando el host NO identifica al tenant
-    // (desarrollo: un solo host), esta cookie host-only y corta hace que el POST de la
-    // contraseña a /admin/login resuelva el negocio correcto (el del email), no el del
-    // subdominio. En producción coincide con el subdominio (no cambia nada). La consume el
-    // tenant-middleware (paso 2) y se borra al iniciar sesión.
+
+    // Dominio base público: presente SOLO en producción (lo pone /etc/bamburu.env).
+    // Su ausencia = dev/Tailscale (un solo host, sin subdominios) → se mantiene el flujo
+    // original (cookie btenant + login relativo). No rompe desarrollo.
+    const baseDomain = process.env.PUBLIC_BASE_DOMAIN || null;
+
+    // ¿El usuario ya eligió un negocio concreto en la pantalla de selección?
+    let tenant = null;
+    if (pickedSlug) {
+      tenant = tenants.find(t => t.slug === pickedSlug) || null;
+      if (!tenant) return c.json({ error: 'Ese email no pertenece a ese negocio' }, 404);
+    } else if (tenants.length === 1) {
+      tenant = tenants[0];
+    }
+
+    // Varios negocios y aún sin elegir → devolver la lista para que el usuario escoja.
+    if (!tenant) {
+      return c.json({
+        mode: 'choose',
+        tenants: tenants.map(t => ({
+          slug: t.slug,
+          name: t.name,
+          // Producción: URL absoluta del subdominio. Dev: null (se resuelve por btenant al elegir).
+          url: baseDomain ? `https://${t.slug}.${baseDomain}/admin/login` : null,
+        })),
+      });
+    }
+
+    // Un negocio resuelto.
+    if (baseDomain) {
+      // PRODUCCIÓN: al login de SU subdominio → manda el paso 3 del middleware y la sesión
+      // cae en el host correcto. No hace falta cookie btenant (el subdominio identifica el negocio).
+      return c.json({ mode: 'redirect', url: `https://${tenant.slug}.${baseDomain}/admin/login` });
+    }
+
+    // DEV/Tailscale (un solo host): comportamiento original — cookie btenant host-only + login relativo.
     c.header('Set-Cookie', `btenant=${tenant.slug}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600`);
-    // Ruta RELATIVA a propósito: el POST se queda en el mismo host por el que entró el usuario.
-    return c.json({ slug: tenant.slug, url: '/admin/login' });
+    return c.json({ mode: 'password', slug: tenant.slug, url: '/admin/login' });
   } catch(e) {
     return c.json({ error: 'Error interno' }, 500);
   }
@@ -1251,17 +1283,69 @@ input[readonly]{color:rgba(255,255,255,0.5);cursor:default}
       <a href="/admin/forgot-password" style="color:rgba(255,255,255,0.4);text-decoration:none" onmouseover="this.style.color='#14B8A6'" onmouseout="this.style.color='rgba(255,255,255,0.4)'">¿Olvidaste tu contraseña?</a>
     </p>
   </div>
+
+  <!-- Paso: elegir negocio (cuando el email está en varios) -->
+  <div id="stepChoose" style="display:none">
+    <button class="back" onclick="goBack()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
+      Cambiar email
+    </button>
+    <h1>Elige tu negocio</h1>
+    <p class="sub">Tu email está en varios negocios. ¿A cuál quieres entrar?</p>
+    <div id="chooseList"></div>
+  </div>
 </div>
 <script>
 (function(){
   const step1=document.getElementById('step1');
   const step2=document.getElementById('step2');
+  const stepChoose=document.getElementById('stepChoose');
   const emailIn=document.getElementById('emailIn');
   const pwIn=document.getElementById('pwIn');
   const err1=document.getElementById('err1');
   const err2=document.getElementById('err2');
 
   emailIn.addEventListener('keydown',e=>{if(e.key==='Enter')findTenant()});
+
+  function resetContinue(){
+    const btn=document.getElementById('btnContinue');
+    btn.textContent='Continuar';btn.disabled=false;
+  }
+
+  // Decide qué hacer con la respuesta de /find-tenant según su 'mode'.
+  function handleResp(r,d,email){
+    if(!r.ok){showErr(err1,(d&&d.error)||'No encontramos ninguna cuenta con ese email.');resetContinue();return}
+    if(d.mode==='redirect'){window.location.href=d.url;return}        // producción: al subdominio del negocio
+    if(d.mode==='choose'){showChooser(d.tenants||[],email);return}     // email en varios negocios
+    // dev (un solo host): pedir la contraseña aquí mismo (btenant ya puesto por el servidor)
+    document.getElementById('loginForm').action=d.url;
+    document.getElementById('hiddenEmail').value=email;
+    document.getElementById('emailDisplay').textContent=email;
+    step1.style.display='none';stepChoose.style.display='none';step2.style.display='block';
+    pwIn.focus();
+  }
+
+  function showChooser(list,email){
+    const box=document.getElementById('chooseList');
+    box.innerHTML='';
+    list.forEach(function(t){
+      const b=document.createElement('button');
+      b.className='btn';b.style.marginBottom='10px';
+      b.textContent=t.name||t.slug;
+      b.onclick=function(){choose(t,email)};
+      box.appendChild(b);
+    });
+    step1.style.display='none';step2.style.display='none';stepChoose.style.display='block';
+    resetContinue();
+  }
+
+  async function choose(t,email){
+    if(t.url){window.location.href=t.url;return}                      // producción: URL absoluta del negocio
+    try{
+      const r=await fetch('/find-tenant',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,slug:t.slug})});
+      handleResp(r,await r.json(),email);                             // dev: vuelve como 'password'
+    }catch{showErr(err1,'Error de conexión. Inténtalo de nuevo.')}
+  }
 
   window.findTenant=async function(){
     const email=emailIn.value.trim();
@@ -1270,21 +1354,14 @@ input[readonly]{color:rgba(255,255,255,0.5);cursor:default}
     btn.textContent='Buscando...';btn.disabled=true;err1.style.display='none';
     try{
       const r=await fetch('/find-tenant',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
-      const d=await r.json();
-      if(!r.ok||!d.url){showErr(err1,d.error||'No encontramos ninguna cuenta con ese email.');btn.textContent='Continuar';btn.disabled=false;return}
-      document.getElementById('loginForm').action=d.url;
-      document.getElementById('hiddenEmail').value=email;
-      document.getElementById('emailDisplay').textContent=email;
-      step1.style.display='none';step2.style.display='block';
-      pwIn.focus();
-    }catch{showErr(err1,'Error de conexión. Inténtalo de nuevo.');btn.textContent='Continuar';btn.disabled=false}
+      handleResp(r,await r.json(),email);
+    }catch{showErr(err1,'Error de conexión. Inténtalo de nuevo.');resetContinue()}
   };
 
   window.goBack=function(){
-    step2.style.display='none';step1.style.display='block';
+    step2.style.display='none';stepChoose.style.display='none';step1.style.display='block';
     err2.style.display='none';
-    const btn=document.getElementById('btnContinue');
-    btn.textContent='Continuar';btn.disabled=false;
+    resetContinue();
     emailIn.focus();
   };
 

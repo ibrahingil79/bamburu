@@ -178,3 +178,31 @@ export function getTenantByEmail(email) {
   }
   return null;
 }
+
+// Como getTenantByEmail pero devuelve TODOS los negocios donde el email es admin activo.
+// Lo usa /find-tenant: si hay varios, deja que el usuario elija a cuál entrar (en vez de
+// elegir el primero en silencio). Devuelve [] si no hay ninguno.
+export function getTenantsByEmail(email) {
+  const tenants = controlDb
+    .prepare("SELECT * FROM tenants WHERE status='active'")
+    .all();
+
+  const matches = [];
+  for (const tenant of tenants) {
+    try {
+      const db = new Database(
+        path.isAbsolute(tenant.db_filename)
+          ? tenant.db_filename
+          : path.join(process.cwd(), tenant.db_filename)
+      );
+      const user = db
+        .prepare('SELECT id FROM admin_users WHERE email=? AND active=1')
+        .get(email);
+      db.close();
+      if (user) matches.push(tenant);
+    } catch {
+      continue;
+    }
+  }
+  return matches;
+}
