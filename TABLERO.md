@@ -42,9 +42,11 @@ a tratar (arreglo NO iniciado — pendiente de priorizar con el dueño):
 **Criterio:** público + 0 clientes → primero lo explotable por un desconocido; luego lo que necesita cómplice o riesgo legal; luego limpieza. **Pilar 4 retoma tras la Fase 1** (Fases 2–3 pueden intercalarse).
 
 **FASE 1 — sangra hoy (desconocido, sin cómplice):**
-1. **Anti-avalancha (DoS):** tope **GLOBAL** de gasto de Anthropic + freno al registro masivo por IP + límite de peticiones por IP en toda la plataforma. *(El tope por-negocio es bypassable registrando muchos negocios.)*
-2. **A2 — fuerza bruta de login** (`X-Real-IP` falsificable; Caddy no la fija). Agujero + avería viva (bloqueos falsos).
-3. **A1 — XSS en listado de facturas** (`client_name` sin escapar). Prioridad ALTA **si la tienda pública/checkout está activa**; si no, pasa a Fase 2.
+1. ✅ **Anti-avalancha (DoS) — HECHO 2026-06-19 (commit `307632e`).** Tope de gasto de Anthropic medido en `core/llm.js` (precios verificados, 1 USD=1 EUR): **por-negocio 5 €/mes** (`disa_spend` en el tenant) + **GLOBAL 50 €/mes** (`llm_spend_global` en control.db), corte preventivo + **email a Ibrahin al 80% (40 €)**. Freno al **registro masivo** por IP (3/hora, 10/día). **Rate por IP**: general 100/min (estáticos exentos) + 15/min en `/api/disa/message`.
+2. ✅ **A2 — fuerza bruta de login — HECHO 2026-06-19 (commit `307632e`).** `getClientIp()` fiable: Caddy fija `X-Real-IP {remote_host}` y la app solo confía en esa cabecera si la conexión es loopback (= Caddy). El `loginLimiter` (5/15 min) queda **no-saltable** y por IP real (se acaban los bloqueos falsos por cubo compartido).
+3. **A1 — XSS en listado de facturas** (`client_name` sin escapar). ⬅ **SIGUIENTE de la Fase 1.** Prioridad ALTA **si la tienda pública/checkout está activa**; si no, pasa a Fase 2. *(Va en chat aparte.)*
+
+> **Verificación de P1/P2 (2026-06-19, servidor vivo):** X-Real-IP falsa rotada → 429 (no crea cubos); 5 logins fallidos bloquean ESA IP 15 min y otra IP no; 4º registro/hora → 429; 16º msg DISA → 429; topes 5 €/50 € cortan con mensaje claro y email del 80% enviado (simulación aislada, producción intacta). Regresión: captura 55, WAC 19, cobros 47, DISA-clientes 32, stock 34, capa LLM real 6/6. El cambio del `Caddyfile` (`header_up X-Real-IP {remote_host}`) vive fuera de git, ya aplicado + reload.
 
 **FASE 2 — antes de beta:**
 4. **A3 — DISA edita/borra facturas** por vía genérica (riesgo Verifactu). Arreglo barato.
