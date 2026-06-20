@@ -26,7 +26,7 @@ a tratar (arreglo NO iniciado — pendiente de priorizar con el dueño):
 
 - **ALTO · A1 — XSS almacenado** en el listado de facturas: `client_name` sin escapar en `innerHTML` (`modules/erp/routes/invoices.js:584,611-617`). Empleado/API/DISA (o tienda si activa) inyecta script que corre en la sesión del dueño.
 - **ALTO · A2 — Anti-fuerza-bruta saltable:** `core/rate-limit.js:5-9` confía en `X-Real-IP` ("la pone Nginx"), pero ahora es **Caddy** y no la fija → cabecera falsificable → límite de login evitable.
-- **ALTO · A3 — DISA puede editar/borrar facturas** por la vía genérica: `invoices`/`invoice_items`/`sales_orders` están en `WRITABLE_TABLES` (`modules/disa/index.js:107`) y `update_record`/`delete_record` (`:229,:241`) operan sobre ellas → riesgo de romper la cadena de hash fiscal. Mitigado por admin-only + confirm-first; falta guard duro de inmutabilidad fiscal.
+- ✅ **ALTO · A3 — DISA podía editar/borrar facturas — HECHO 2026-06-20 (commit `1fb4fd4`).** `invoices`/`invoice_items` fuera de `WRITABLE_TABLES`: los tres handlers genéricos (`insert/update/delete_record`) las cortan con "Tabla no permitida". A cambio, DISA gana la **vía legal**: acciones `anular_invoice` y `create_rectificativa` que delegan en los servicios validados `anularInvoice`/`createRectificativa` de `invoices.js` (admin-only + confirm-first). DISA puede MÁS, no menos. No se tocó cadena de hash/Verifactu ni la creación válida (`create_invoice_from_order`).
 - **MEDIO · M1 — Límite de DISA inactivo** (`NODE_ENV` sin definir → `disa/index.js:2037` se salta) → gasto de API sin tope. Es la decisión de beta, pero es la exposición.
 - **MEDIO · M2 — Rutas con sesión pero sin `requirePerm`** (gate 7, solo señalado): `GET /admin/orders/:id/invoice` (`orders.js:442`), `GET /admin/settings` (`settings.js:43`), `POST /api/erp/feedback` (`feedback.js:9`). Repaso completo de permisos = tarea de roadmap aparte.
 - **MEDIO · M3 — `hono` con avisos** (`npm audit`, 1 alta); la mayoría de CVE no aplican a nuestro uso, pero conviene actualizar.
@@ -52,8 +52,8 @@ a tratar (arreglo NO iniciado — pendiente de priorizar con el dueño):
 > **Verificación de P1/P2 (2026-06-19, servidor vivo):** X-Real-IP falsa rotada → 429 (no crea cubos); 5 logins fallidos bloquean ESA IP 15 min y otra IP no; 4º registro/hora → 429; 16º msg DISA → 429; topes 5 €/50 € cortan con mensaje claro y email del 80% enviado (simulación aislada, producción intacta). Regresión: captura 55, WAC 19, cobros 47, DISA-clientes 32, stock 34, capa LLM real 6/6. El cambio del `Caddyfile` (`header_up X-Real-IP {remote_host}`) vive fuera de git, ya aplicado + reload.
 
 **FASE 2 — antes de beta:**
-4. **A3 — DISA edita/borra facturas** por vía genérica (riesgo Verifactu). Arreglo barato.
-5. **M2 — rutas con sesión sin `requirePerm`** (`orders.js:442`, `settings.js:43`, `feedback.js:9`).
+4. ✅ **A3 — DISA edita/borra facturas — HECHO 2026-06-20 (commit `1fb4fd4`).** Facturas emitidas inmutables para la vía genérica + vía legal (`anular_invoice`/`create_rectificativa`, admin-only + confirm-first, sobre los servicios validados). Validado en navegador por el dueño.
+5. **M2 — rutas con sesión sin `requirePerm`** (`orders.js:442`, `settings.js:43`, `feedback.js:9`). ← **siguiente**
 6. **DISA `create_product` — exigir banda de IVA** (hoy hace `INSERT` directo sin banda → IVA mal en factura = riesgo fiscal; va aquí con A3/M2, antes de beta).
 
 **FASE 3 — robustez y limpieza:**
