@@ -4,7 +4,8 @@ import { randomBytes } from 'crypto';
 import { generateSecret, verify as verifyTOTP, keyuri } from '../../../core/totp.js';
 import QRCode from 'qrcode';
 import { hashPassword, verifyPassword, createAdminSession, destroyAdminSession, adminAuth } from '../../../core/auth.js';
-import { rateLimit } from '../../../core/rate-limit.js';
+import { rateLimit, getClientIp } from '../../../core/rate-limit.js';
+import { recordSecurityEvent } from '../../../core/control-db.js';
 import { validate } from '../../../core/validate.js';
 import { loginSchema } from '../schemas.js';
 import { destroyTenantSession, createTenantSession } from '../../../core/control-db.js';
@@ -185,9 +186,15 @@ export function createAuthRoutes(db) {
     const user = db.prepare(
       'SELECT id, password_hash, totp_enabled, totp_secret, must_change_password FROM admin_users WHERE email=? AND active=1'
     ).get(email);
-    if (!user) return c.redirect(`/admin/login?error=1&attempts=${attempts}`);
+    if (!user) {
+      recordSecurityEvent('login_failed', getClientIp(c), c.get('tenant')?.slug, email);
+      return c.redirect(`/admin/login?error=1&attempts=${attempts}`);
+    }
     const result = await verifyPassword(password, user.password_hash);
-    if (!result.valid) return c.redirect(`/admin/login?error=1&attempts=${attempts}`);
+    if (!result.valid) {
+      recordSecurityEvent('login_failed', getClientIp(c), c.get('tenant')?.slug, email);
+      return c.redirect(`/admin/login?error=1&attempts=${attempts}`);
+    }
     if (result.needsRehash) {
       db.prepare('UPDATE admin_users SET password_hash=? WHERE id=?').run(await hashPassword(password), user.id);
     }

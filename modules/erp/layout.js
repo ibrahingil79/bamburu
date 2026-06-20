@@ -18,6 +18,15 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   const isAdmin = role === 'admin' || isOwner;
   const perms = c?.get?.('userPerms') || [];
 
+  // Banner de SOLO LECTURA: el negocio fue suspendido por impago (suspended_admin) desde el
+  // panel de superadmin. Entra y ve sus datos, pero el guard bloquea cualquier escritura.
+  const readOnly = !!c?.get?.('tenantReadOnly');
+  const _noteRaw = c?.get?.('tenant')?.suspend_note || '';
+  const _note = _noteRaw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const roBanner = readOnly
+    ? `<div style="background:#7c2d12;color:#fed7aa;padding:11px 18px;font-size:13px;font-weight:600;text-align:center">⚠️ Tu cuenta está en <strong>SOLO LECTURA</strong> por regularizar. Puedes ver tus datos y facturas, pero no crear ni modificar nada hasta reactivarla.${_note ? ' · ' + _note : ''}</div>`
+    : '';
+
   // Nav permission map: key → required perm (null = always visible to all logged-in users)
   const navPerms = {
     dashboard:        null,
@@ -356,7 +365,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     <div class="topbar">
       <span class="topbar-title">${title}</span>
     </div>
-    <main class="content">${content}</main>
+    <main class="content">${roBanner}${content}</main>
   </div>
   <script>
     document.addEventListener('click',e=>{if(e.target.classList.contains('modal-overlay'))e.target.classList.remove('open')});

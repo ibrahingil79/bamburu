@@ -56,6 +56,13 @@ function tenantSpendEur(db, month) {
   try { return db.prepare('SELECT eur FROM disa_spend WHERE month=?').get(month)?.eur || 0; }
   catch { return 0; }
 }
+// Tope por-negocio: el que fije el superadmin en platform_limits, o el default TENANT_CAP_EUR.
+function tenantCapEur(db) {
+  try {
+    const v = db.prepare("SELECT value FROM platform_limits WHERE key='ai_cap_eur'").get()?.value;
+    return (typeof v === 'number' && v >= 0) ? v : TENANT_CAP_EUR;
+  } catch { return TENANT_CAP_EUR; }
+}
 function addTenantSpendEur(db, month, eur) {
   try {
     db.prepare(`INSERT INTO disa_spend (month, eur) VALUES (?, ?)
@@ -117,7 +124,7 @@ export async function callClaude(opts = {}) {
     const e = new Error('DISA ha llegado al límite de uso de este mes. Inténtalo de nuevo el mes que viene.');
     e.status = 429; e.code = 'llm_global_cap'; throw e;
   }
-  if (billDb && tenantSpendEur(billDb, month) >= TENANT_CAP_EUR) {
+  if (billDb && tenantSpendEur(billDb, month) >= tenantCapEur(billDb)) {
     const e = new Error('DISA ha llegado a su límite de uso de este mes para tu negocio.');
     e.status = 429; e.code = 'llm_tenant_cap'; throw e;
   }

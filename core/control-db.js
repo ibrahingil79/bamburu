@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'path';
+import { randomBytes } from 'crypto';
 
 // BD central de control: registra todos los tenants y sus sesiones.
 // Es independiente de las BDs individuales de cada negocio.
@@ -30,6 +31,11 @@ function runMigrations(db) {
   try {
     db.exec("ALTER TABLE tenants ADD COLUMN country TEXT DEFAULT 'ES'");
   } catch {}
+
+  // Suspensión por el superadmin (estado vive en control.db; status ∈
+  // active | suspended_admin (solo lectura) | suspended_security (corte total)).
+  try { db.exec("ALTER TABLE tenants ADD COLUMN suspended_at DATETIME"); } catch {}
+  try { db.exec("ALTER TABLE tenants ADD COLUMN suspend_note TEXT"); } catch {}
 
   // Sesiones cross-tenant: relaciona una cookie con un usuario de un tenant
   db.exec(`
@@ -83,6 +89,61 @@ function runMigrations(db) {
     ('ES','España','EUR','€','IVA','21,10,4',21.0,'NIF/CIF','Factura'),
     ('MX','México','MXN','$','IVA','16,8,0',16.0,'RFC','CFDI'),
     ('CO','Colombia','COP','$','IVA','19,5,0',19.0,'NIT','Factura electrónica')
+  `);
+
+  // Superadmin (sala de máquinas de la plataforma) — identidad SEPARADA del admin de negocios.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS superadmins (
+      id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+      email                TEXT UNIQUE NOT NULL,
+      password_hash        TEXT NOT NULL,
+      totp_secret          TEXT DEFAULT NULL,
+      totp_enabled         INTEGER NOT NULL DEFAULT 0,
+      must_change_password INTEGER NOT NULL DEFAULT 0,
+      created_at           DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS superadmin_sessions (
+      token         TEXT PRIMARY KEY,
+      superadmin_id INTEGER NOT NULL,
+      created_at    INTEGER NOT NULL,
+      expires_at    INTEGER NOT NULL,
+      csrf_token    TEXT NOT NULL
+    )
+  `);
+
+  // Vigilancia del superadmin (tablas RODANTES: se conservan las últimas ~1000 filas).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS security_events (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      ts          INTEGER NOT NULL,
+      type        TEXT NOT NULL,
+      ip          TEXT,
+      tenant_slug TEXT,
+      detail      TEXT
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS error_log (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      ts          INTEGER NOT NULL,
+      tenant_slug TEXT,
+      method      TEXT,
+      path        TEXT,
+      message     TEXT
+    )
+  `);
+
+  // Resultado del ÚLTIMO chequeo de integridad de facturas por negocio (zona 3 del panel).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS integrity_checks (
+      tenant_slug TEXT PRIMARY KEY,
+      ts          INTEGER NOT NULL,
+      ok          INTEGER NOT NULL,
+      total       INTEGER NOT NULL DEFAULT 0,
+      detail      TEXT
+    )
   `);
 }
 
@@ -239,4 +300,123 @@ export function addGlobalLlmSpend(month, eur) {
 // Marca que ya se envió el aviso del 80% de este mes (para no repetirlo).
 export function markGlobalLlmAlerted(month) {
   controlDb.prepare('UPDATE llm_spend_global SET alerted_80 = 1 WHERE month = ?').run(month);
+}
+
+// ---------------------------------------------------------------------------
+// Superadmin: identidad + sesiones (todo en control.db, separado de los tenants)
+// ---------------------------------------------------------------------------
+
+export function getSuperadminByEmail(email) {
+  return controlDb.prepare('SELECT * FROM superadmins WHERE email = ?').get(String(email || '').trim().toLowerCase()) ?? null;
+}
+export function getSuperadminById(id) {
+  return controlDb.prepare('SELECT * FROM superadmins WHERE id = ?').get(id) ?? null;
+}
+export function createSuperadmin({ email, password_hash, must_change_password = 1 }) {
+  const r = controlDb.prepare(
+    'INSERT INTO superadmins (email, password_hash, must_change_password) VALUES (?,?,?)'
+  ).run(String(email).trim().toLowerCase(), password_hash, must_change_password ? 1 : 0);
+  return getSuperadminById(r.lastInsertRowid);
+}
+// Fija una contraseña nueva y limpia el flag de cambio obligatorio.
+export function setSuperadminPassword(id, password_hash) {
+  controlDb.prepare('UPDATE superadmins SET password_hash=?, must_change_password=0 WHERE id=?').run(password_hash, id);
+}
+
+export function createSuperadminSession(superadminId) {
+  const token = randomBytes(32).toString('base64url');
+  const csrf  = randomBytes(32).toString('base64url');
+  const now = Math.floor(Date.now() / 1000);
+  controlDb.prepare(
+    'INSERT INTO superadmin_sessions (token, superadmin_id, created_at, expires_at, csrf_token) VALUES (?,?,?,?,?)'
+  ).run(token, superadminId, now, now + 24 * 60 * 60, csrf);
+  return { token, csrf };
+}
+export function getSuperadminSessionByToken(token) {
+  const now = Math.floor(Date.now() / 1000);
+  const row = controlDb.prepare(`
+    SELECT s.token, s.csrf_token, s.expires_at, a.id, a.email, a.must_change_password, a.totp_enabled
+    FROM superadmin_sessions s JOIN superadmins a ON a.id = s.superadmin_id
+    WHERE s.token = ?`).get(token);
+  if (!row) return null;
+  if (row.expires_at <= now) { controlDb.prepare('DELETE FROM superadmin_sessions WHERE token=?').run(token); return null; }
+  return { token: row.token, csrfToken: row.csrf_token, id: row.id, email: row.email,
+           mustChangePassword: !!row.must_change_password, totpEnabled: !!row.totp_enabled };
+}
+export function destroySuperadminSession(token) {
+  controlDb.prepare('DELETE FROM superadmin_sessions WHERE token=?').run(token);
+}
+export function destroyAllSuperadminSessions(superadminId) {
+  controlDb.prepare('DELETE FROM superadmin_sessions WHERE superadmin_id=?').run(superadminId);
+}
+
+// ---------------------------------------------------------------------------
+// Control de tenants desde el superadmin (estado de suspensión vive aquí)
+// ---------------------------------------------------------------------------
+
+export function listTenants() {
+  return controlDb.prepare(
+    'SELECT id, name, slug, db_filename, plan, status, country, created_at, suspended_at, suspend_note FROM tenants ORDER BY created_at DESC, id DESC'
+  ).all();
+}
+// status ∈ active | suspended_admin | suspended_security. note: motivo visible.
+export function setTenantStatus(id, status, note = null) {
+  const suspended = status === 'active' ? null : "datetime('now')";
+  if (status === 'active') {
+    controlDb.prepare('UPDATE tenants SET status=?, suspended_at=NULL, suspend_note=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(status, id);
+  } else {
+    controlDb.prepare("UPDATE tenants SET status=?, suspended_at=datetime('now'), suspend_note=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(status, note, id);
+  }
+  return getTenantById(id);
+}
+
+// ---------------------------------------------------------------------------
+// Vigilancia: eventos de seguridad + log de errores (para el panel de superadmin)
+// ---------------------------------------------------------------------------
+
+const _trunc = (s, n) => String(s == null ? '' : s).slice(0, n);
+
+// Registra un evento de seguridad (rate-limits 429, logins fallidos, …). Nunca lanza.
+export function recordSecurityEvent(type, ip, tenantSlug, detail) {
+  try {
+    const r = controlDb.prepare('INSERT INTO security_events (ts,type,ip,tenant_slug,detail) VALUES (?,?,?,?,?)')
+      .run(Math.floor(Date.now() / 1000), _trunc(type, 40), _trunc(ip, 60), tenantSlug ? _trunc(tenantSlug, 60) : null, detail ? _trunc(detail, 200) : null);
+    if (Number(r.lastInsertRowid) % 200 === 0) controlDb.prepare('DELETE FROM security_events WHERE id <= ? - 1000').run(r.lastInsertRowid);
+  } catch { /* la vigilancia nunca rompe la petición */ }
+}
+export function listSecurityEvents(limit = 100) {
+  return controlDb.prepare('SELECT id, ts, type, ip, tenant_slug, detail FROM security_events ORDER BY id DESC LIMIT ?').all(limit);
+}
+// Conteo por tipo en las últimas `hours` horas → { type: count }.
+export function securityCounts(hours = 24) {
+  const since = Math.floor(Date.now() / 1000) - hours * 3600;
+  const map = {};
+  for (const r of controlDb.prepare('SELECT type, COUNT(*) c FROM security_events WHERE ts >= ? GROUP BY type').all(since)) map[r.type] = r.c;
+  return map;
+}
+
+// Registra un error de la plataforma. Nunca lanza.
+export function recordError({ tenantSlug, method, path, message }) {
+  try {
+    const r = controlDb.prepare('INSERT INTO error_log (ts,tenant_slug,method,path,message) VALUES (?,?,?,?,?)')
+      .run(Math.floor(Date.now() / 1000), tenantSlug ? _trunc(tenantSlug, 60) : null, _trunc(method, 10), _trunc(path, 200), _trunc(message, 500));
+    if (Number(r.lastInsertRowid) % 200 === 0) controlDb.prepare('DELETE FROM error_log WHERE id <= ? - 1000').run(r.lastInsertRowid);
+  } catch { /* idem */ }
+}
+export function listErrors(limit = 100) {
+  return controlDb.prepare('SELECT id, ts, tenant_slug, method, path, message FROM error_log ORDER BY id DESC LIMIT ?').all(limit);
+}
+export function errorCount(hours = 24) {
+  const since = Math.floor(Date.now() / 1000) - hours * 3600;
+  return controlDb.prepare('SELECT COUNT(*) c FROM error_log WHERE ts >= ?').get(since).c;
+}
+
+// Guarda/lee el resultado del último chequeo de integridad de facturas (zona 3).
+export function saveIntegrityResult(tenantSlug, ok, total, detail) {
+  controlDb.prepare(`INSERT INTO integrity_checks (tenant_slug, ts, ok, total, detail) VALUES (?,?,?,?,?)
+    ON CONFLICT(tenant_slug) DO UPDATE SET ts=excluded.ts, ok=excluded.ok, total=excluded.total, detail=excluded.detail`)
+    .run(tenantSlug, Math.floor(Date.now() / 1000), ok ? 1 : 0, total | 0, detail || null);
+}
+export function listIntegrityResults() {
+  return controlDb.prepare('SELECT tenant_slug, ts, ok, total, detail FROM integrity_checks ORDER BY ok ASC, tenant_slug').all();
 }

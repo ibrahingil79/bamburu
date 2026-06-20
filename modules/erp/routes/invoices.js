@@ -90,7 +90,9 @@ function getPrevHash(db, series, year) {
   return prev?.verifactu_hash || '';
 }
 
-function calcHash(inv) {
+// Exportada para que el verificador de integridad del superadmin use EXACTAMENTE el mismo
+// hash, sin duplicar la lógica (única fuente de verdad de la cadena Verifactu).
+export function calcHash(inv) {
   const data = [inv.invoice_number, inv.issue_date, inv.company_fiscal_id, inv.client_fiscal_id || '', inv.total.toFixed(2), inv.prev_hash].join('|');
   return createHash('sha256').update(data).digest('hex');
 }

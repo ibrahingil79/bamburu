@@ -35,12 +35,13 @@ export async function tenantMiddleware(c, next) {
 
   let tenant = null;
 
-  // 1) Vínculo sesión→negocio.
+  // 1) Vínculo sesión→negocio. (Resuelve el negocio aunque esté suspendido; la suspensión
+  //    se aplica más abajo de forma unificada, no aquí.)
   const cookie = c.req.header('cookie') || '';
   const m = cookie.match(/asess=([A-Za-z0-9_-]+)/);
   if (m) {
     const bound = getSessionByToken(m[1]);
-    if (bound && bound.tenant && bound.tenant.status === 'active') tenant = bound.tenant;
+    if (bound && bound.tenant) tenant = bound.tenant;
   }
 
   // 2) Selección de negocio en curso de login (cookie `btenant`, host-only y corta): la
@@ -51,7 +52,7 @@ export async function tenantMiddleware(c, next) {
     const bt = cookie.match(/btenant=([a-z0-9-]+)/);
     if (bt) {
       const t = getTenantBySlug(bt[1]);
-      if (t && t.status === 'active') tenant = t;
+      if (t) tenant = t;
     }
   }
 
@@ -64,14 +65,48 @@ export async function tenantMiddleware(c, next) {
 
     tenant = getTenantBySlug(slug);
     if (!tenant) return c.json({ error: 'Negocio no encontrado' }, 404);
-    if (tenant.status !== 'active') return c.json({ error: 'Negocio inactivo' }, 403);
+  }
+
+  // Suspensión (resuelto el negocio por cualquier vía). Lo fija el superadmin en control.db:
+  //  - suspended_security: acceso CORTADO del todo (cuenta comprometida).
+  //  - suspended_admin: deja ENTRAR pero en SOLO LECTURA (impago); el guard de escritura y el
+  //    banner se encargan del resto. Nunca se le secuestran datos.
+  if (tenant.status === 'suspended_security') {
+    return c.html(cuentaSuspendidaPage(), 403);
   }
 
   const tenantDb = getTenantDb(tenant);
   c.set('db', tenantDb);
   c.set('tenant', tenant);
+  c.set('tenantReadOnly', tenant.status === 'suspended_admin');
 
   return tenantStorage.run(tenantDb, () => next());
+}
+
+// Pantalla de corte total (cuenta suspendida por seguridad). Sin pistas de por qué.
+function cuentaSuspendidaPage() {
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Cuenta suspendida</title>
+<style>body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#070B14;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0}
+.box{max-width:440px;padding:40px;text-align:center}.box h1{font-size:22px;margin:0 0 12px}.box p{color:#94a3b8;line-height:1.6}</style>
+</head><body><div class="box"><h1>Cuenta suspendida</h1>
+<p>El acceso a esta cuenta está suspendido. Por favor, contacta con soporte para resolverlo.</p></div></body></html>`;
+}
+
+// Guard de SOLO LECTURA para negocios suspendidos por impago (status suspended_admin):
+// bloquea toda ESCRITURA del tenant; deja pasar la lectura y las rutas de sesión/cuenta para
+// que el dueño pueda entrar, ver sus datos y salir. Nunca se le secuestran datos.
+// (Para negocios NO suspendidos, c.get('tenantReadOnly') es falsy → no hace nada.)
+export async function readOnlyGuard(c, next) {
+  if (!c.get('tenantReadOnly')) return next();
+  const method = c.req.method;
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return next();
+  const p = c.req.path;
+  const allow = ['/admin/login', '/admin/verify-2fa', '/admin/logout', '/admin/forgot-password', '/admin/reset-password', '/admin/change-password'];
+  if (allow.some(a => p === a || p.startsWith(a + '/'))) return next();
+  const msg = 'Tu cuenta está en modo SOLO LECTURA por regularizar. No puedes crear ni modificar nada hasta reactivarla. Tus datos están intactos.';
+  if (p.startsWith('/api/')) return c.json({ error: msg }, 403);
+  return c.html(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Solo lectura</title></head><body style="font-family:-apple-system,sans-serif;max-width:520px;margin:60px auto;text-align:center;color:#334155;padding:0 20px"><h2>Cuenta en solo lectura</h2><p style="line-height:1.6">${msg}</p><p style="margin-top:20px"><a href="/admin">← Volver al panel</a></p></body></html>`, 403);
 }
 
 // Devuelve la conexión cacheada para un slug, o null si aún no se ha abierto.

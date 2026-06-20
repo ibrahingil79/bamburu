@@ -6,11 +6,12 @@ import { loadModules } from './core/loader.js';
 import { cleanupExpiredSessions } from './core/auth.js';
 import { cleanupRateLimitBuckets, rateLimit } from './core/rate-limit.js';
 import { securityHeaders } from './core/security-headers.js';
-import { initControlDb, getTenantBySlug, createTenantSession } from './core/control-db.js';
-import { tenantMiddleware, getTenantDb } from './core/tenant-middleware.js';
+import { initControlDb, getTenantBySlug, createTenantSession, recordError } from './core/control-db.js';
+import { tenantMiddleware, getTenantDb, readOnlyGuard } from './core/tenant-middleware.js';
 import { createAdminSession } from './core/auth.js';
 import { autologinStore } from './core/autologin-store.js';
 import { register as registerRegistro } from './modules/registro/index.js';
+import { register as registerSuperadmin } from './modules/superadmin/index.js';
 import { docsHtml } from './docs.html.js';
 
 initControlDb();
@@ -1382,6 +1383,7 @@ input[readonly]{color:rgba(255,255,255,0.5);cursor:default}
 app.get('/docs', c => c.html(docsHtml()));
 
 registerRegistro(app);
+registerSuperadmin(app);   // panel de superadmin — ANTES del tenant-middleware (vive en el apex)
 
 // Auto-login tras el alta. Vive en el APEX (antes del tenant-middleware) y resuelve el
 // negocio desde el TOKEN, no desde el subdominio — así el redirect puede ser relativo al
@@ -1416,9 +1418,24 @@ app.get('/admin/autologin', c => {
 });
 
 app.use('*', tenantMiddleware);
+app.use('*', readOnlyGuard);   // bloqueo de escritura para negocios en SOLO LECTURA (impago)
 
 console.log('🎋 Iniciando Bamburu...');
 await loadModules(app, db);
+
+// Manejador global de errores: registra los 5xx para el panel de superadmin (zona Errores),
+// los deja en el journal y devuelve un 500 genérico (sin filtrar el detalle al cliente).
+// Para HTTPException respeta su respuesta/estado (no cambia el comportamiento actual).
+app.onError((err, c) => {
+  const isHttpEx = err && typeof err.getResponse === 'function';
+  const status = isHttpEx && err.status ? err.status : 500;
+  if (status >= 500) {
+    try { recordError({ tenantSlug: c.get('tenant')?.slug || null, method: c.req.method, path: c.req.path, message: err?.message || String(err) }); } catch {}
+  }
+  console.error('[onError]', c.req.method, c.req.path, '-', err?.stack || err);
+  if (isHttpEx) return err.getResponse();
+  return c.text('Error interno del servidor', 500);
+});
 
 serve({ fetch: app.fetch, port: 3000, hostname: '127.0.0.1' }, (info) => {
   console.log('🚀 Bamburu listo en http://localhost:' + info.port);

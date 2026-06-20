@@ -1249,6 +1249,15 @@ export function runMigrations(db) {
     )
   `);
 
+  // Límites de plataforma por-negocio que fija el SUPERADMIN (escritura sancionada desde el panel).
+  // Hoy solo 'ai_cap_eur' (tope de gasto de IA/mes). Ausente = se usa el default de core/llm.js.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS platform_limits (
+      key   TEXT PRIMARY KEY,
+      value REAL
+    )
+  `);
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS disa_profile (
       id           INTEGER PRIMARY KEY CHECK(id = 1),

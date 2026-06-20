@@ -1,6 +1,8 @@
+import { recordSecurityEvent } from './control-db.js';
+
 const buckets = new Map();
 
-function getClientIp(c) {
+export function getClientIp(c) {
   // La IP real del cliente la PISA Caddy en X-Real-IP ({remote_host}); lo que mande el
   // cliente se descarta. Pero solo nos fiamos de esa cabecera si la conexión llega desde
   // loopback (= viene de Caddy en 127.0.0.1/::1). Si la conexión NO es de loopback, la
@@ -29,6 +31,8 @@ export function rateLimit({ windowMs, max, keyPrefix, message = 'Demasiados inte
       const oldest = arr[0];
       const retryAfter = Math.ceil((oldest + windowMs - now) / 1000);
       c.header('Retry-After', String(retryAfter));
+      // Vigilancia: la petición frenada queda registrada para el panel de superadmin.
+      recordSecurityEvent('ratelimit:' + keyPrefix, ip, slug, c.req.method + ' ' + c.req.path);
       if (c.req.path.startsWith('/api/')) {
         return c.json({ error: message, retry_after_seconds: retryAfter }, 429);
       }
