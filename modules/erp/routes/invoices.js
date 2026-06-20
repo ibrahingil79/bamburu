@@ -4,6 +4,7 @@ import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema, invoicePaymentSchema, collectionActionSchema } from '../schemas.js';
 import { getCountryConfig } from '../../../core/control-db.js';
+import { escHtml } from '../../../core/escape.js';
 import { adminLayout } from '../layout.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
@@ -611,7 +612,7 @@ export function createInvoiceRoutes(db) {
           return \`<tr>
           <td><strong>\${r.invoice_number}</strong></td>
           <td>\${pedidoCell}</td>
-          <td>\${r.client_name||'-'}</td>
+          <td>\${escHtml(r.client_name||'-')}</td>
           <td style="color:var(--muted);font-size:.85rem">\${r.issue_date||'-'}</td>
           <td><strong>${sym}\${r.total?.toFixed(2)||'0.00'}</strong></td>
           <td>\${pendienteCell}</td>
@@ -908,7 +909,7 @@ export function createInvoiceRoutes(db) {
       <div class="card" style="max-width:900px">
         <div class="card-body">
           <div style="background:#e0f2fe;color:#075985;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:1rem">
-            Rectifica a <strong>${original.invoice_number}</strong> · Cliente: <strong>${(original.client_name || 'Cliente general').replace(/</g,'&lt;')}</strong>.
+            Rectifica a <strong>${original.invoice_number}</strong> · Cliente: <strong>${escHtml(original.client_name || 'Cliente general')}</strong>.
             Se emitirá en serie <strong>${rSeries}</strong> con numeración propia. Admite importes negativos (abono).
           </div>
 
@@ -1243,10 +1244,10 @@ ${(() => {
   </div>
   <div>
     <div class="label">Cliente</div>
-    <div><strong>${inv.client_name || 'Cliente general'}</strong></div>
-    ${inv.client_fiscal_id ? `<div>${inv.client_fiscal_id}</div>` : ''}
-    ${inv.client_address ? `<div style="color:#64748b">${inv.client_address}</div>` : ''}
-    ${inv.client_email ? `<div style="color:#64748b">${inv.client_email}</div>` : ''}
+    <div><strong>${escHtml(inv.client_name || 'Cliente general')}</strong></div>
+    ${inv.client_fiscal_id ? `<div>${escHtml(inv.client_fiscal_id)}</div>` : ''}
+    ${inv.client_address ? `<div style="color:#64748b">${escHtml(inv.client_address)}</div>` : ''}
+    ${inv.client_email ? `<div style="color:#64748b">${escHtml(inv.client_email)}</div>` : ''}
   </div>
 </div>
 
