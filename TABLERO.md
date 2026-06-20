@@ -74,6 +74,26 @@ a tratar (arreglo NO iniciado — pendiente de priorizar con el dueño):
 
 ---
 
+## 🧷 DECISIONES REGISTRADAS (20 jun 2026) — pendientes documentados, NO iniciar sin encargo
+
+> **Origen y contexto (para quien lo lea en una sesión futura, sin el chat donde se decidió):** del **inventario de superficie de la plataforma** (20 jun 2026) salió que Bamburu nació como e-commerce para autónomos y pivotó a software de gestión (CANON §7); del cambio quedaron **funciones huérfanas** y **superficie de riesgo**. Lo de abajo son decisiones YA TOMADAS por Ibrahin pero **aún no ejecutadas**. Esto es **documentación, no construcción**: no tocar nada de esto sin un encargo explícito.
+>
+> **Regla permanente del proyecto** (CLAUDE.md): "eliminar" = **desmontar rutas/UI y dejar de leerlo**, **archivando** datos (renombrar tabla a `_archived`); **NUNCA** `DROP TABLE`/`DROP COLUMN` ni borrado en duro. Si un encargo pidiera borrar datos de verdad, se para y se pregunta.
+
+- **D1 · [SEGURIDAD] Cerrar la tienda pública con llave (NO borrar).** La tienda online por negocio (`modules/store/`) está **viva y abierta a internet**: `https://<slug>.bamburu.com/store` responde **200** (verificado 20 jun); el checkout crea pedidos `sales_orders` con `status='pending'` y **sin pasarela de pago**, y capta PII (clientes, newsletter). Es **proyecto futuro** (Capa 2), así que **no se borra**: se **desactiva/cierra con llave de forma reversible** para eliminar la superficie pública sin vigilar. **Antes del cierre hay un encargo de diagnóstico de SOLO LECTURA ya pedido**: cómo está montada (`core/loader.js` la carga; `modules/store/index.js` la registra en `/store` + `/api/store`), si existe un flag de encendido/apagado por negocio o global, cómo apagarla sin romper el panel `/admin` ni DISA (que comparten `sales_orders`, productos, clientes), y efectos secundarios. De ese diagnóstico saldrá el cierre. **Estado: pendiente, diagnóstico primero.**
+
+- **D2 · [LIMPIEZA] Restos e-commerce a archivar/desactivar (decididos FUERA del producto).** Son restos de la versión e-commerce anterior, hoy montados pero la mayoría fuera del menú y alcanzables por URL. Lista decidida para sacar del sistema vivo (archivar, no borrar en duro): **buzón de feedback** (`routes/feedback.js`), **newsletter/suscriptores** (`routes/newsletter.js`), **reseñas** (`routes/reviews.js` + su parte pública en `modules/store/`), **métodos de envío** (`routes/shipping.js`), **etiquetas/tags** (`routes/products.js`, ya marcadas "e-commerce" y ocultas del menú), **editor "Tienda Online"/store-settings** (`routes/settings.js`). **Pendiente de un encargo de limpieza posterior** (desmontar rutas/UI + archivar tablas; coherente con la filosofía de Bamburu y la regla de no-DROP). Tras M2 todas tienen ya su candado de permiso, pero siguen siendo superficie viva. **Estado: pendiente, encargo de limpieza aparte.**
+
+- **D3 · [RIESGO LEGAL a revisar] Documento de pedido titulado "FACTURA" que NO es la factura Verifactu.** En `routes/orders.js:442` (`GET /admin/orders/:id/invoice`) hay una hoja imprimible de un pedido `sales_orders` **rotulada "FACTURA"** que **no** es la factura legal con cadena de hash Verifactu (esas viven en `routes/invoices.js`). Riesgo de **confusión fiscal** (entregar como factura algo que no lo es). **Pendiente: decidir cómo resolverlo** (renombrar el documento, retirarlo, o aclararlo). **Estado: pendiente a resolver.**
+
+- **D4 · [DECISIÓN DE PRODUCTO en espera — NO cerrada] Clúster de Ventas viejo (`sales_orders`).** Pedidos + Punto de Venta (POS) + Reembolsos + cupones/descuentos, todo sobre `sales_orders`, es el sistema de pedidos heredado del e-commerce y precede al **Pilar 4 — Ventas** (que en CANON §2–3 está **pendiente de construir** como pedido→albarán→factura). **Queda EN ESPERA hasta diseñar el Pilar 4**: entonces se decidirá si se **reutiliza** o se **reconstruye**. **No tocar este clúster hasta esa decisión.** (Relacionado: el Pilar 4 incluye `create_order` multiproducto de DISA.) **Estado: en espera de la decisión del Pilar 4.**
+
+- **D5 · [FASE 2, ya en cola] `create_product` debe exigir banda de IVA.** Ya está registrado como **Fase 2 · #6** (arriba) — hoy `create_product` de DISA hace `INSERT` sin banda de IVA explícita → riesgo fiscal antes de beta. Se anota aquí solo como recordatorio cruzado; el sitio canónico es Fase 2 #6. **Estado: pendiente, es la siguiente de Fase 2.**
+
+- **D6 · [A VERIFICAR — sin confirmar] Dos cosas surgidas del inventario, no comprobadas a fondo.** (a) Posible **bug de `cancel_order`**: `create_order` resta stock al crear el pedido, y `cancel_order` podría **no devolver** ese stock al cancelar (inconsistencia de existencias). (b) Páginas de la tienda pública (`modules/store/`, p. ej. términos/privacidad/devoluciones y temas) que **renderizan HTML guardado por el admin sin escapar** → riesgo tipo **XSS** si un admin pega `<script>`. Ambas **señaladas por el inventario pero NO confirmadas**; requieren una mirada al código antes de tratarlas como bug real. **Estado: a verificar.**
+
+---
+
 ## PILAR 1 — PRODUCTO (Catálogo) — ✅ CERRADO (2026-06-03)
 
 El producto es la raíz de la que parte todo (CANON §2). Objetivo de este pilar: dejar el
