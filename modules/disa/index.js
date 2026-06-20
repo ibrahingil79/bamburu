@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { adminAuth, getCsrfToken, requirePerm } from '../../core/auth.js';
 import { adminLayout } from '../erp/layout.js';
-import { generateInvoice } from '../erp/routes/invoices.js';
+import { generateInvoice, anularInvoice, createRectificativa } from '../erp/routes/invoices.js';
 import { createClientSvc, updateClientSvc, archiveClientSvc, restoreClientSvc, searchClients } from '../erp/routes/clients.js';
 import { clientFieldOptions } from '../erp/schemas.js';
 import { nextCode } from '../erp/codes.js';
@@ -110,7 +110,11 @@ export function register(app, db) {
     'products', 'product_variants', 'product_images',
     'client_groups', 'suppliers',
     'sales_orders', 'sales_items',
-    'invoices', 'invoice_items',
+    // [A3] 'invoices', 'invoice_items' EXCLUIDAS del genérico: son documentos LEGALES INMUTABLES
+    // (cadena de hash Verifactu). Reescribir o borrar una factura emitida por insert/update/delete_record
+    // rompería la cadena en silencio (la firma solo se calcula al emitir, nunca se revalida al escribir).
+    // DISA CREA facturas por create_invoice_from_order (con hash correcto) y ANULA/RECTIFICA por las
+    // acciones legales anular_invoice / create_rectificativa (servicios validados de invoices.js).
     // 'inventory_movements',  // [Voz DISA stock] ENTRADA MUERTA: la tabla se archivó a
     // inventory_movements_legacy en Pilar 3 (stock unificado); el stock se mueve por el
     // libro stock_movements vía servicios validados (adjust_stock/transfer_stock), nunca por
@@ -130,7 +134,7 @@ export function register(app, db) {
   const ADMIN_ONLY_ACTIONS = new Set([
     'insert_record', 'update_record', 'delete_record',
     'create_order', 'edit_order', 'update_order_status', 'cancel_order',
-    'create_invoice_from_order', 'adjust_stock', 'reset_stock', 'transfer_stock',
+    'create_invoice_from_order', 'anular_invoice', 'create_rectificativa', 'adjust_stock', 'reset_stock', 'transfer_stock',
     'update_company_config', 'disable_2fa_user', 'list_users_security',
     'register_collection_action', 'register_account_action',
     'register_supplier_payment',
@@ -396,6 +400,49 @@ export function register(app, db) {
             if (e.message === 'Pedido no encontrado') return { ok: false, message: 'Pedido #' + p.order_id + ' no encontrado.' };
             if (e.message === 'Solo se pueden facturar pedidos completados') return { ok: false, message: 'Solo se pueden facturar pedidos completados.' };
             return { ok: false, message: 'Error al generar la factura: ' + e.message };
+          }
+        }
+
+        // ── Ciclo de vida legal de la factura (vía VALIDADA, NO el genérico) ──
+        // Conectan con los servicios existentes de invoices.js; no reimplementan lógica fiscal.
+
+        case 'anular_invoice': {
+          const p = action.params || {};
+          const num = String(p.invoice_number || '').trim();
+          if (!num) return { ok: false, message: 'Falta el número de la factura a anular.' };
+          const inv = db.prepare('SELECT id FROM invoices WHERE invoice_number=?').get(num);
+          if (!inv) return { ok: false, message: 'No existe ninguna factura con el número ' + num + '.' };
+          try {
+            const r = anularInvoice(db, inv.id, p.motivo);
+            logActivity(db, 'edit', 'invoices', inv.id, 'Factura ' + r.invoice_number + ' anulada por DISA', session);
+            return { ok: true, message: 'Factura ' + r.invoice_number + ' anulada: se creó el asiento de anulación y la original queda intacta (solo cambia su estado a "anulada").' };
+          } catch (e) {
+            return { ok: false, message: 'No se pudo anular: ' + e.message };
+          }
+        }
+
+        case 'create_rectificativa': {
+          const p = action.params || {};
+          const num = String(p.invoice_number || '').trim();
+          if (!num) return { ok: false, message: 'Falta el número de la factura original a rectificar.' };
+          if (!Array.isArray(p.lines) || p.lines.length === 0)
+            return { ok: false, message: 'Faltan las líneas de la rectificativa.' };
+          const inv = db.prepare('SELECT id FROM invoices WHERE invoice_number=?').get(num);
+          if (!inv) return { ok: false, message: 'No existe ninguna factura con el número ' + num + '.' };
+          try {
+            const r = createRectificativa(db, {
+              original_id: inv.id,
+              lines: p.lines,
+              rectification_type: p.rectification_type,
+              rectification_mode: p.rectification_mode,
+              irpf_rate: p.irpf_rate || 0,
+              notes: p.notes || '',
+              issue_date: p.issue_date,
+            });
+            logActivity(db, 'create', 'invoices', r.id, 'Rectificativa ' + r.invoice_number + ' de ' + num + ' por DISA', session);
+            return { ok: true, message: 'Rectificativa ' + r.invoice_number + ' creada en serie propia, rectifica a ' + num + ' (la original queda marcada como "rectificada").' };
+          } catch (e) {
+            return { ok: false, message: 'No se pudo crear la rectificativa: ' + e.message };
           }
         }
 
@@ -2206,6 +2253,14 @@ export function register(app, db) {
       '- update_order_status: {"order_id":0,"status":"en_preparacion|enviado|completado|cancelado"}',
       '- cancel_order: {"order_id":0,"reason":""}',
       '- create_invoice_from_order: {"order_id":0}',
+      '- anular_invoice: {"invoice_number":"","motivo":""}',
+      '  Vía LEGAL para dejar sin efecto una factura YA EMITIDA (crea su asiento de anulacion; la original NO se borra ni se reescribe).',
+      '  Identifica la factura por su numero EXACTO (p. ej. "A2026-0007"). motivo OBLIGATORIO. Solo se puede anular una factura en estado "emitida".',
+      '  NO existe forma de "editar" o "borrar" una factura emitida: si el cliente lo pide, se anula o se rectifica. No lo inventes.',
+      '- create_rectificativa: {"invoice_number":"","rectification_type":"R1","rectification_mode":"I","lines":[{"description":"","quantity":1,"unit_price":0,"tax_rate":21}],"irpf_rate":0,"notes":""}',
+      '  Vía LEGAL para CORREGIR una factura emitida emitiendo un documento nuevo en serie propia (la original queda "rectificada").',
+      '  invoice_number = numero EXACTO de la factura original. rectification_type uno de R1–R5; rectification_mode "S" (sustitucion) o "I" (diferencias).',
+      '  lines son las lineas del documento rectificativo (en modo abono pueden ser negativas). Si dudas del tipo/modalidad o de las lineas, pregunta; no lo inventes.',
       '',
       'Inventario (ver PRODUCTOS FISICOS ACTIVOS y ALMACENES ACTIVOS del contexto para los id):',
       '- adjust_stock: {"product_id":0,"mode":"set|add|sub","value":0,"reason":"...","warehouse_id":0}',
