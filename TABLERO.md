@@ -28,7 +28,7 @@ a tratar (arreglo NO iniciado — pendiente de priorizar con el dueño):
 - **ALTO · A2 — Anti-fuerza-bruta saltable:** `core/rate-limit.js:5-9` confía en `X-Real-IP` ("la pone Nginx"), pero ahora es **Caddy** y no la fija → cabecera falsificable → límite de login evitable.
 - ✅ **ALTO · A3 — DISA podía editar/borrar facturas — HECHO 2026-06-20 (commit `1fb4fd4`).** `invoices`/`invoice_items` fuera de `WRITABLE_TABLES`: los tres handlers genéricos (`insert/update/delete_record`) las cortan con "Tabla no permitida". A cambio, DISA gana la **vía legal**: acciones `anular_invoice` y `create_rectificativa` que delegan en los servicios validados `anularInvoice`/`createRectificativa` de `invoices.js` (admin-only + confirm-first). DISA puede MÁS, no menos. No se tocó cadena de hash/Verifactu ni la creación válida (`create_invoice_from_order`).
 - **MEDIO · M1 — Límite de DISA inactivo** (`NODE_ENV` sin definir → `disa/index.js:2037` se salta) → gasto de API sin tope. Es la decisión de beta, pero es la exposición.
-- **MEDIO · M2 — Rutas con sesión pero sin `requirePerm`** (gate 7, solo señalado): `GET /admin/orders/:id/invoice` (`orders.js:442`), `GET /admin/settings` (`settings.js:43`), `POST /api/erp/feedback` (`feedback.js:9`). Repaso completo de permisos = tarea de roadmap aparte.
+- ✅ **MEDIO · M2 — Vistas con sesión pero sin `requirePerm` — HECHO 2026-06-20 (commit `8458688`).** No eran 3 puntos sino una CLASE: vistas que renderizaban datos server-side gated solo por sesión, alcanzables por URL directa sin el permiso (el peor: lista de clientes con NIF). Arreglo quirúrgico: se añadió el candado que ya existe (`requirePerm` con el permiso de la API hermana) a 21 vistas; una línea por ruta, sin tocar `adminAuth`/`requirePerm` ni las APIs ya protegidas. Se creó el permiso `feedback.create` (solo owner/admin de salida). Validado en navegador por el dueño.
 - **MEDIO · M3 — `hono` con avisos** (`npm audit`, 1 alta); la mayoría de CVE no aplican a nuestro uso, pero conviene actualizar.
 - **BAJO** — `btenant` sin `Secure` (tarea 7); camino de hash sha256 legacy (sin uso hoy, todas bcrypt); SSH `PermitRootLogin without-password`; `NODE_ENV` sin definir como trampa a futuro.
 
@@ -53,8 +53,8 @@ a tratar (arreglo NO iniciado — pendiente de priorizar con el dueño):
 
 **FASE 2 — antes de beta:**
 4. ✅ **A3 — DISA edita/borra facturas — HECHO 2026-06-20 (commit `1fb4fd4`).** Facturas emitidas inmutables para la vía genérica + vía legal (`anular_invoice`/`create_rectificativa`, admin-only + confirm-first, sobre los servicios validados). Validado en navegador por el dueño.
-5. **M2 — rutas con sesión sin `requirePerm`** (`orders.js:442`, `settings.js:43`, `feedback.js:9`). ← **siguiente**
-6. **DISA `create_product` — exigir banda de IVA** (hoy hace `INSERT` directo sin banda → IVA mal en factura = riesgo fiscal; va aquí con A3/M2, antes de beta).
+5. ✅ **M2 — vistas con sesión sin `requirePerm` — HECHO 2026-06-20 (commit `8458688`).** Clase entera cerrada (21 vistas candadas con el permiso de su API hermana) + permiso `feedback.create` nuevo (solo owner/admin). Validado en navegador.
+6. **DISA `create_product` — exigir banda de IVA** (hoy hace `INSERT` directo sin banda → IVA mal en factura = riesgo fiscal; va aquí con A3/M2, antes de beta). ← **siguiente**
 
 **FASE 3 — robustez y limpieza:**
 7. **Tareas 6 y 7** (7 = cookie `btenant` con `Secure` / B1).
