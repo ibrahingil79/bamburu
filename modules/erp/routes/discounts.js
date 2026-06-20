@@ -57,7 +57,7 @@ export function createDiscountRoutes(db, cfg = {}) {
   });
 
   // ── VIEW ───────────────────────────────────────────────────────
-  views.get('/', c => {
+  views.get('/', requirePerm('discounts.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const content = `
       <div class="ph"><h2>Descuentos</h2></div>

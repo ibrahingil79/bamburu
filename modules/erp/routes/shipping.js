@@ -35,7 +35,7 @@ export function createShippingRoutes(db, cfg = {}) {
     catch(e) { return c.json({error:e.message},500); }
   });
 
-  views.get('/', c => {
+  views.get('/', requirePerm('shipping.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const content = `
       <div class="ph"><h2>Métodos de Envío</h2><button class="btn btn-primary" onclick="openModal('shipModal')">Nuevo método</button></div>

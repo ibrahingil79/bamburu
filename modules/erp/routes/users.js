@@ -124,7 +124,7 @@ export function createUserRoutes(db) {
   });
 
   // ── VIEWS ──────────────────────────────────────────────────────
-  views.get('/', c => {
+  views.get('/', requirePerm('admin.manage_users'), c => {
     const allPerms = db.prepare('SELECT id, module, action, description FROM permissions ORDER BY module, action').all();
     const permsJson = JSON.stringify(allPerms);
     const content = `
@@ -314,7 +314,7 @@ export function createUserRoutes(db) {
     return c.html(adminLayout('Usuarios Admin', content, 'users', c.get('session')?.csrfToken || '', c));
   });
 
-  activityViews.get('/', c => {
+  activityViews.get('/', requirePerm('admin.manage_users'), c => {
     const content = `
       <div class="ph"><h2>Registro de Actividad</h2></div>
       <div class="card">

@@ -1369,6 +1369,7 @@ export function runMigrations(db) {
     { module: 'tags',      action: 'delete',  description: 'Eliminar etiquetas' },
     { module: 'analytics', action: 'read',    description: 'Ver analítica' },
     { module: 'activity',  action: 'read',    description: 'Ver actividad' },
+    { module: 'feedback',  action: 'create',  description: 'Enviar comentarios' },
   ];
   for (const p of permissionsData) {
     db.prepare('INSERT OR IGNORE INTO permissions (module, action, description) VALUES (?, ?, ?)').run(p.module, p.action, p.description);

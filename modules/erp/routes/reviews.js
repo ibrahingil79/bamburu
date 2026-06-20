@@ -32,7 +32,7 @@ export function createReviewRoutes(db) {
     catch(e) { return c.json({error:e.message},500); }
   });
 
-  views.get('/', c => {
+  views.get('/', requirePerm('reviews.read'), c => {
     const pending = db.prepare("SELECT COUNT(*) as c FROM product_reviews WHERE status='pending'").get()?.c || 0;
     const content = `
       <div class="ph"><h2>Reseñas de Productos</h2>

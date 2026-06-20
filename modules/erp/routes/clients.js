@@ -259,7 +259,7 @@ export function createClientRoutes(db, cfg = {}) {
   });
 
   // ── VIEWS ──────────────────────────────────────────────────────
-  views.get('/', c => {
+  views.get('/', requirePerm('clients.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
 
     // T2: búsqueda (nombre/NIF), filtro por estado (activos/archivados) y paginación, todo por URL (GET).
@@ -521,7 +521,7 @@ export function createClientRoutes(db, cfg = {}) {
     return c.html(adminLayout('Clientes', content, 'clients', c.get('session')?.csrfToken || '', c));
   });
 
-  views.get('/groups', c => {
+  views.get('/groups', requirePerm('clients.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const content = `
       <div class="ph"><h2>Grupos de Clientes</h2><button class="btn btn-primary" onclick="openModal('groupModal')">Nuevo grupo</button></div>

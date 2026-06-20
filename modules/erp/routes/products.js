@@ -676,7 +676,7 @@ export function createProductRoutes(db, cfg = {}) {
     return c.html(adminLayout('Productos', content, 'products', c.get('session')?.csrfToken || '', c));
   });
 
-  tagsViews.get('/', c => {
+  tagsViews.get('/', requirePerm('tags.read'), c => {
     const content = `
       <div class="ph"><h2>Etiquetas</h2></div>
       <div class="card">

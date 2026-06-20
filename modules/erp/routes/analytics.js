@@ -72,7 +72,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
     } catch(e) { return c.json({error:e.message},500); }
   });
 
-  views.get('/', c => {
+  views.get('/', requirePerm('analytics.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const content = `
       <div class="ph"><h2>Analítica</h2>

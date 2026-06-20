@@ -26,7 +26,7 @@ export function createNewsletterRoutes(db) {
     } catch(e) { return c.json({error:e.message},500); }
   });
 
-  views.get('/', c => {
+  views.get('/', requirePerm('newsletter.read'), c => {
     const total = db.prepare('SELECT COUNT(*) as c FROM newsletter_subscribers WHERE active=1').get()?.c || 0;
     const content = `
       <div class="ph"><h2>Newsletter</h2>

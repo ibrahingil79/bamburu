@@ -35,7 +35,7 @@ export function createCategoryRoutes(db) {
     catch(e) { return c.json({error:e.message},500); }
   });
 
-  views.get('/', c => {
+  views.get('/', requirePerm('categories.read'), c => {
     const content = `
       <div class="ph"><h2>Categorías</h2>${can(c,'categories.create')?'<button class="btn btn-primary" onclick="openModal(\'catModal\')">Nueva categoría</button>':''}</div>
       <div class="card">

@@ -1,12 +1,13 @@
 import { Hono } from 'hono';
 import { adminLayout } from '../layout.js';
+import { requirePerm } from '../../../core/auth.js';
 
 export function createFeedbackRoutes(db) {
   const api = new Hono();
   const views = new Hono();
 
   // ── API: POST /api/erp/feedback ────────────────────────────────
-  api.post('/', async c => {
+  api.post('/', requirePerm('feedback.create'), async c => {
     try {
       const body = await c.req.json();
       const { rating, message } = body;
@@ -24,7 +25,7 @@ export function createFeedbackRoutes(db) {
   });
 
   // ── VIEW: GET /admin/feedback ──────────────────────────────────
-  views.get('/', c => {
+  views.get('/', requirePerm('feedback.create'), c => {
     const csrf = c.get('session')?.csrfToken || '';
     const content = `
       <div class="ph"><h2>Enviar comentario</h2></div>

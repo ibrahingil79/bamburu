@@ -40,7 +40,7 @@ export function createSettingsRoutes(db, cfg = {}) {
   });
 
   // ── VIEW: COMPANY SETTINGS ─────────────────────────────────────
-  views.get('/', c => {
+  views.get('/', requirePerm('company.read'), c => {
     const config = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
     const sym = config.currency_symbol || '€';
     const countryInfo = getCountryConfig(config.country || 'ES');
@@ -117,7 +117,7 @@ export function createSettingsRoutes(db, cfg = {}) {
     return c.html(adminLayout('Configuración Empresa', content, 'settings', c.get('session')?.csrfToken || '', c));
   });
 
-  storeViews.get('/', c => {
+  storeViews.get('/', requirePerm('store_settings.read'), c => {
     const csrfToken = c.get('session')?.csrfToken || '';
     const hasCustom = !!db.prepare('SELECT homepage_sections FROM store_settings WHERE id=1').get()?.homepage_sections;
     const content = `

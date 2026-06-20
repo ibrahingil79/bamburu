@@ -226,7 +226,7 @@ export function createOrderRoutes(db, cfg = {}) {
   });
 
   // ── VIEW: ORDERS LIST ──────────────────────────────────────────
-  views.get('/', c => {
+  views.get('/', requirePerm('orders.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const content = `
       <div class="ph">
@@ -274,7 +274,7 @@ export function createOrderRoutes(db, cfg = {}) {
   });
 
   // ── VIEW: ORDER DETAIL ─────────────────────────────────────────
-  views.get('/:id{[0-9]+}', c => {
+  views.get('/:id{[0-9]+}', requirePerm('orders.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const orderId = c.req.param('id');
 
@@ -439,7 +439,7 @@ export function createOrderRoutes(db, cfg = {}) {
   });
 
   // ── VIEW: INVOICE (printable) ──────────────────────────────────
-  views.get('/:id{[0-9]+}/invoice', c => {
+  views.get('/:id{[0-9]+}/invoice', requirePerm('orders.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const orderId = c.req.param('id');
     try {
@@ -494,7 +494,7 @@ export function createOrderRoutes(db, cfg = {}) {
   });
 
   // ── VIEW: POS ──────────────────────────────────────────────────
-  views.get('/pos', c => {
+  views.get('/pos', requirePerm('orders.create'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     // Capa 2: selector de almacén que recuerda el último usado por ESTE usuario (pegajoso).
     const posWarehouses = activeWarehouses(db);
@@ -728,7 +728,7 @@ export function createOrderRoutes(db, cfg = {}) {
   });
 
   // ── VIEW: REFUNDS ──────────────────────────────────────────────
-  views.get('/refunds', c => {
+  views.get('/refunds', requirePerm('orders.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const refunds = db.prepare('SELECT r.*,so.order_number,c.name as client_name FROM refunds r JOIN sales_orders so ON r.order_id=so.id LEFT JOIN clients c ON so.client_id=c.id ORDER BY r.id DESC').all();
     const rows = refunds.map(r => `<tr class="frow">
@@ -852,7 +852,7 @@ export function createOrderRoutes(db, cfg = {}) {
   });
 
   // ── VISTA: NUEVO BORRADOR ──────────────────────────────────────
-  views.get('/draft/new', c => {
+  views.get('/draft/new', requirePerm('orders.create'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const session  = c.get('session');
     const clients  = db.prepare('SELECT id, name FROM clients WHERE active=1 ORDER BY name').all();
