@@ -388,11 +388,11 @@ Archivos: `modules/registro/index.js`, `core/signup-schema.js`, `core/tenant-sig
 
 ---
 
-## TRANSVERSAL (fuera del orden de pilares) — SISTEMA DE DISEÑO + SANEAMIENTO VISUAL — 🔵 REGISTRADA (no iniciar hasta indicación)
+## TRANSVERSAL (fuera del orden de pilares) — SISTEMA DE DISEÑO + SANEAMIENTO VISUAL — 🟡 PIEZA 1 HECHA (2026-06-22) · PIEZA 2 PENDIENTE
 
 > Tarea PROPIA del roadmap (no un pendiente suelto menor), por su impacto en el **diferencial** del
-> producto. Registrada ahora; **no se construye nada todavía** — seguimos a mitad del Pilar 2. Se aborda
-> cuando se indique. La pieza 1 manda sobre la 2 (ver REGLA).
+> producto. **PIEZA 1 (DISEÑO.md) HECHA el 2026-06-22 (commit `029ac39`).** La PIEZA 2 (saneamiento
+> visual de las pantallas) sigue pendiente; **no iniciar hasta indicación**. La pieza 1 manda sobre la 2 (ver REGLA).
 
 **Problema (palabras del dueño del producto).** La UI ha crecido "metiendo cada función donde cabía", sin
 criterio estético: pantallas recargadas, sin jerarquía, que "se ven feas" y poco profesionales. Choca
@@ -404,8 +404,11 @@ mucho aire, lo secundario oculto hasta que se necesita.
 
 **Enfoque en dos piezas, EN ESTE ORDEN:**
 
-1) **CREAR `DISEÑO.md`** en el repo = la **fuente de verdad visual** de Bamburu, equivalente a lo que
-   `CANON.md` es para la estrategia. Debe definir, como mínimo:
+1) ✅ **CREAR `DISEÑO.md` — HECHO (2026-06-22, commit `029ac39`).** Fuente de verdad visual de Bamburu,
+   equivalente a lo que `CANON.md` es para la estrategia. Incluye además del mínimo de abajo: auditoría
+   del Paso 0 (inventario de pantallas reales), mapa sección→submenú con rutas reales, DISA fija arriba
+   del menú, documentos dentro de la plataforma y huérfanas en dos destinos (archivar/cerrar D1–D3 · en
+   espera del Pilar 4 D4). El mínimo que se pidió:
    - **Principios:** minimalismo, jerarquía visual, espacio en blanco, ocultar lo secundario.
    - **Botones:** UN solo botón primario por pantalla; las acciones secundarias agrupadas/ocultas (menú
      "…" o similar), nunca esparcidas "donde quepan".
