@@ -106,48 +106,55 @@ es *la* acción o *el* protagonista.
 - **Sin logo** en la barra superior.
 - **Cuenta y Ajustes NO son una sección del menú:** viven dentro del **menú del usuario**
   (avatar, arriba a la derecha).
-- **DISA va FIJA y destacada ARRIBA del menú**, encima de la zona OPERACIÓN, **siempre
+- **DISA va FIJA y destacada ARRIBA del menú**, encima de todo lo demás, **siempre
   visible** — es el protagonista, no una entrada más (ver §4).
 - El **panel de superadmin** va por su **rol aparte**, fuera de este menú
   (`bamburu.com/superadmin`).
 
-### 3.2 Mapa COMPLETO sección → submenú
+### 3.2 Mapa del menú (grupos → enlaces)
 
-> Cada entrada apunta a su(s) **ruta(s) real(es)** del código (auditoría del Paso 0). Los
-> "huecos reservados" son del **Pilar 4 (Ventas)** y aún no existen como ruta.
+> Cada entrada apunta a su(s) **ruta(s) real(es)** del código (auditoría del Paso 0).
+> Agrupado por el **ciclo del negocio**, no por "operación / datos". **Sin etiquetas de
+> zona:** solo cuatro grupos (Ventas, Compras, Inventario, Catálogo), con **DISA fija
+> arriba** e **Inicio** justo debajo. El cliente vive donde se vende (Ventas) y el
+> proveedor donde se compra (Compras).
 
 **▸ DISA** *(entrada fija y destacada, arriba del todo — siempre visible)*
-- Asistente IA → `/admin/disa`
+- DISA → `/admin/disa`
 
-**OPERACIÓN**
-- **Inicio** (panel + DISA proactiva) → `/admin`
-- **Ventas**
-  - Facturas → `/admin/invoices`
-  - Cobros → `/admin/cobros`
-  - TPV → `/admin/orders/pos`  · *(⚠ hoy corre sobre el clúster viejo `sales_orders`
-    (D4); se mapea aquí, pero su destino real se decide en el Pilar 4)*
-  - *Huecos reservados (Pilar 4): Presupuestos · Pedidos · Albaranes*
-- **Compras**
-  - Órdenes de compra → `/admin/purchase-orders`
-  - Recepciones → `/admin/purchase-order-receipts` *(se crean desde la orden)*
-  - Compra directa → `/admin/purchases`
-  - Facturas recibidas → `/admin/supplier-invoices`
-  - Pagos a proveedores → `/admin/pagos`
-  - Devoluciones → `/admin/supplier-returns`
-  - Captura de factura → `/admin/purchases/capture`
-- **Inventario**
-  - Stock → `/admin/inventory`  · *(Movimientos / kardex = **modal dentro de Stock**,
-    `views/stock-modal.js`; no es entrada de submenú)*
-  - Almacenes → `/admin/warehouses`
-  - Traslados → `/admin/stock-transfers`
+**· Inicio** (el panel: KPIs y avisos de DISA) → `/admin`
 
-**DATOS**
-- **Catálogo**
-  - Productos → `/admin/products`
-  - Categorías → `/admin/categories`
-- **Clientes** → `/admin/clients`  *(Grupos → `/admin/clients/groups`)*
-  - *Hueco reservado (futuro): CRM*
-- **Proveedores** → `/admin/suppliers`
+**VENTAS**
+- Facturas → `/admin/invoices`
+- Cobros → `/admin/cobros`
+- TPV → `/admin/orders/pos`  · *(⚠ hoy corre sobre el clúster viejo `sales_orders` (D4);
+  se mapea aquí, pero su destino real se decide en el Pilar 4)*
+- Clientes → `/admin/clients`
+- Grupos → `/admin/clients/groups`  *(función viva — el cliente y su agrupación son la
+  materia de la venta)*
+- *Reservados deshabilitados (existen hoy, sin ruta): **Albaranes** · **CRM**.
+  Presupuestos y Pedidos no existen como ítems → no se muestran.*
+
+**COMPRAS**
+- Órdenes de compra → `/admin/purchase-orders`
+- Compra directa → `/admin/purchases`
+- Facturas recibidas → `/admin/supplier-invoices`
+- Pagos a proveedores → `/admin/pagos`
+- Devoluciones → `/admin/supplier-returns`
+- Captura de factura → `/admin/purchases/capture`
+- Proveedores → `/admin/suppliers`  *(la contraparte de la compra)*
+- *(Recepciones no es entrada de menú: se crean desde la Orden de compra,
+  `/admin/purchase-order-receipts/:id`.)*
+
+**INVENTARIO**
+- Stock → `/admin/inventory`  · *(Movimientos / kardex = **modal dentro de Stock**,
+  `views/stock-modal.js`; no es entrada de menú)*
+- Almacenes → `/admin/warehouses`
+- Traslados → `/admin/stock-transfers`
+
+**CATÁLOGO**
+- Productos → `/admin/products`
+- Categorías → `/admin/categories`
 
 **Fuera del menú — bajo el avatar (Cuenta / Ajustes):**
 - Empresa / Ajustes → `/admin/settings`
@@ -160,10 +167,10 @@ es *la* acción o *el* protagonista.
 
 ### 3.3 Regla de colocación (permanente)
 
-Antes de añadir cualquier función nueva, preguntar: **"¿esto es operar o es un dato?"** y
-colocarla en su zona/submenú. **Si no encaja, NO se fuerza:** se anota en "huérfanas / a
-decidir" y se deja para que lo decida el dueño. **Nunca crear un cajón nuevo "donde
-quepa".**
+Antes de añadir cualquier función nueva, preguntar: **"¿de qué parte del ciclo es —venta,
+compra, inventario o catálogo?"** y colocarla en ese grupo. **Si no encaja en ninguno, NO
+se fuerza:** se anota en "huérfanas / a decidir" y se deja para que lo decida el dueño.
+**Nunca crear un grupo nuevo "donde quepa".**
 
 ---
 

@@ -57,6 +57,8 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     users:            'admin.manage_users',
     settings:         'admin.settings',
     security:         'admin.settings',
+    'change-password': null,
+    'purchases-capture': 'purchases.create',
   };
 
   const roleFilters = {
@@ -66,58 +68,58 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     security:         r => r === 'owner' || r === 'admin',
   };
 
+  // ── MENÚ REORDENADO según DISEÑO.md §3 (PIEZA 2 — solo navegación) ──────────────
+  // Agrupado por el CICLO DEL NEGOCIO: Ventas (con Clientes/Grupos), Compras (con
+  // Proveedores), Inventario, Catálogo. DISA fija arriba e Inicio justo debajo. Sin
+  // etiquetas de zona. Solo cambia DÓNDE aparece cada enlace; ninguna ruta se crea/renombra.
+  // Colapso/hover + avatar + DISA destacada + quitar logo son capa visual (CSS/JS) → 2º paso.
+  // Desenlazados (rutas SIGUEN montadas): orders (Pedidos viejos), discounts (Descuentos),
+  // analytics (Analítica) → D4, en espera del Pilar 4. tags/store-settings ya estaban
+  // ocultos (D2). Cuenta queda en el lateral de forma provisional hasta tener el avatar.
   const nav = [
-    { section: 'General', items: [
-      { href: '/admin', label: 'Dashboard', key: 'dashboard', icon: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>' },
-      { href: '/admin/activity', label: 'Actividad', key: 'activity', icon: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>' },
+    // DISA — protagonista, fija y arriba del todo. Su realce visual va en el 2º paso.
+    { section: 'DISA', items: [
+      { href: '/admin/disa', label: 'DISA', key: 'disa', icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6v6H9z"/>' },
+    ]},
+    { section: 'Inicio', items: [
+      { href: '/admin', label: 'Inicio', key: 'dashboard', icon: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>' },
+    ]},
+    { section: 'Ventas', items: [
+      { href: '/admin/invoices', label: 'Facturas', key: 'invoices', icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>' },
+      { href: '/admin/cobros', label: 'Cobros', key: 'cobros', icon: '<rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>' },
+      { href: '/admin/orders/pos', label: 'TPV', key: 'pos', icon: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/><line x1="7" y1="21" x2="17" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>' },
+      { href: '/admin/clients', label: 'Clientes', key: 'clients', icon: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' },
+      { href: '/admin/clients/groups', label: 'Grupos', key: 'client-groups', icon: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>' },
+      { label: 'Albaranes', key: 'albaranes', disabled: true, icon: '<path d="M9 2h6a1 1 0 0 1 1 1v1h1a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1V3a1 1 0 0 1 1-1z"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/>' },
+      { label: 'CRM', key: 'crm', disabled: true, icon: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="10" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/>' },
+    ]},
+    { section: 'Compras', items: [
+      { href: '/admin/purchase-orders', label: 'Órdenes de compra', key: 'purchase-orders', icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>' },
+      { href: '/admin/purchases', label: 'Compra directa', key: 'purchases', icon: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>' },
+      { href: '/admin/supplier-invoices', label: 'Facturas recibidas', key: 'supplier-invoices', icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>' },
+      { href: '/admin/pagos', label: 'Pagos a proveedores', key: 'pagos', icon: '<rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>' },
+      { href: '/admin/supplier-returns', label: 'Devoluciones', key: 'supplier-returns', icon: '<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>' },
+      { href: '/admin/purchases/capture', label: 'Captura de factura', key: 'purchases-capture', icon: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>' },
+      { href: '/admin/suppliers', label: 'Proveedores', key: 'suppliers', icon: '<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>' },
+    ]},
+    { section: 'Inventario', items: [
+      { href: '/admin/inventory', label: 'Stock', key: 'inventory', icon: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>' },
+      { href: '/admin/warehouses', label: 'Almacenes', key: 'warehouses', icon: '<path d="M3 21V8l9-5 9 5v13"/><path d="M3 21h18"/><path d="M9 21v-6h6v6"/>' },
+      { href: '/admin/stock-transfers', label: 'Traslados', key: 'stock-transfers', icon: '<path d="M16 3l4 4-4 4"/><path d="M20 7H4"/><path d="M8 21l-4-4 4-4"/><path d="M4 17h16"/>' },
     ]},
     { section: 'Catálogo', items: [
       { href: '/admin/products', label: 'Productos', key: 'products', icon: '<path d="M20 7l-8-4-8 4M20 7l-8 4M20 7v10l-8 4M12 11v10M12 11L4 7M4 7v10l8 4"/>' },
       { href: '/admin/categories', label: 'Categorías', key: 'categories', icon: '<path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/>' },
-      // OCULTO del menú (e-commerce, tienda online). Ruta /admin/tags sigue montada:
-      // { href: '/admin/tags', label: 'Etiquetas', key: 'tags', icon: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>' },
+      // OCULTO del menú (e-commerce, D2). Ruta /admin/tags sigue montada (no se enlaza).
     ]},
-    // OCULTOS del menú (no borrados — rutas siguen montadas): 'store-settings' (Tienda
-    // Online). [El módulo 'services' de A3 se eliminó en P3: los servicios son ahora
-    // productos de tipo 'servicio'.] 'pos' (Punto de Venta) reintegrado al menú.
-    { section: 'Ventas', items: [
-      { href: '/admin/orders', label: 'Pedidos', key: 'orders', icon: '<path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4"/><path d="M9 11V7a3 3 0 0 1 6 0v4"/>' },
-      { href: '/admin/orders/pos', label: 'Punto de venta', key: 'pos', icon: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/><line x1="7" y1="21" x2="17" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>' },
-      { label: 'Albaranes', key: 'albaranes', disabled: true, icon: '<path d="M9 2h6a1 1 0 0 1 1 1v1h1a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1V3a1 1 0 0 1 1-1z"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/>' },
-      { href: '/admin/invoices', label: 'Facturas', key: 'invoices', icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>' },
-    ]},
-    { section: 'Clientes', items: [
-      { href: '/admin/clients', label: 'Clientes', key: 'clients', icon: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' },
-      { href: '/admin/clients/groups', label: 'Grupos', key: 'client-groups', icon: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>' },
-      { label: 'CRM', key: 'crm', disabled: true, icon: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="10" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/>' },
-    ]},
-    { section: 'Cobros', items: [
-      { href: '/admin/cobros', label: 'Cobros', key: 'cobros', icon: '<rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>' },
-    ]},
-    { section: 'Pagos a proveedores', items: [
-      { href: '/admin/pagos', label: 'Pagos', key: 'pagos', icon: '<rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>' },
-      { href: '/admin/supplier-invoices', label: 'Facturas recibidas', key: 'supplier-invoices', icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>' },
-    ]},
-    { section: 'Inventario', items: [
-      { href: '/admin/purchase-orders', label: 'Órdenes de compra', key: 'purchase-orders', icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>' },
-      { href: '/admin/purchases', label: 'Compras', key: 'purchases', icon: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>' },
-      { href: '/admin/inventory', label: 'Stock', key: 'inventory', icon: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>' },
-      { href: '/admin/warehouses', label: 'Almacenes', key: 'warehouses', icon: '<path d="M3 21V8l9-5 9 5v13"/><path d="M3 21h18"/><path d="M9 21v-6h6v6"/>' },
-      { href: '/admin/stock-transfers', label: 'Traslados', key: 'stock-transfers', icon: '<path d="M16 3l4 4-4 4"/><path d="M20 7H4"/><path d="M8 21l-4-4 4-4"/><path d="M4 17h16"/>' },
-      { href: '/admin/suppliers', label: 'Proveedores', key: 'suppliers', icon: '<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>' },
-      { href: '/admin/supplier-returns', label: 'Devoluciones', key: 'supplier-returns', icon: '<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>' },
-      { href: '/admin/discounts', label: 'Descuentos', key: 'discounts', icon: '<line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>' },
-    ]},
-    { section: 'Analítica', items: [
-      { href: '/admin/analytics', label: 'Analítica', key: 'analytics', icon: '<path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/>' },
-    ]},
-    { section: 'DISA', items: [
-      { href: '/admin/disa', label: 'Asistente IA', key: 'disa', icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6v6H9z"/>' },
-    ]},
-    { section: 'Sistema', items: [
+    // Cuenta — destino final BAJO EL AVATAR (DISEÑO.md §3.1). Provisional en el lateral
+    // hasta construir el menú de avatar (2º paso, CSS/JS) — así no se pierde el acceso.
+    { section: 'Cuenta', items: [
       { href: '/admin/settings', label: 'Empresa', key: 'settings', icon: '<path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/>' },
-      { href: '/admin/users', label: 'Usuarios Admin', key: 'users', icon: '<path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/>' },
+      { href: '/admin/users', label: 'Usuarios admin', key: 'users', icon: '<path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/>' },
       { href: '/admin/security', label: 'Seguridad', key: 'security', icon: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>' },
+      { href: '/admin/change-password', label: 'Cambiar contraseña', key: 'change-password', icon: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>' },
+      { href: '/admin/activity', label: 'Actividad', key: 'activity', icon: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>' },
     ]},
   ];
 
