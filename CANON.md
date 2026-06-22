@@ -15,6 +15,38 @@ Regla que gobierna toda decisión de alcance: nunca se omite, recorta ni simplif
 
 ---
 
+## 0-bis. El iPhone del nicho (principio rector del producto)
+
+Bamburu se enciende y se usa en minutos, como un iPhone —no como un Android, que exige
+aprender antes de servir. Cualquiera (un frutero, una peluquera, un fotógrafo, sin
+conocimientos técnicos) debe poder usarlo desde el primer momento, sin manual y sin
+formación. De aquí se derivan reglas innegociables:
+
+- **Una sola versión.** No hay versión "fácil" y versión "pro". Hay una sola, que es la
+  fácil con toda la potencia dentro. El autónomo más simple y la gestoría más exigente
+  usan exactamente el mismo Bamburu.
+- **Toda la potencia, escondida hasta que hace falta.** Ninguna función se quita ni se
+  recorta por ser el cliente pequeño; se esconde. La complejidad está siempre disponible
+  debajo y aparece sola, vía DISA, el día que el usuario la necesita —no antes.
+- **Nadie ve lo que no es suyo.** Cada negocio ve solo lo que usa. El frutero nunca ve
+  una rectificativa ni un embudo; el fotógrafo nunca ve un cobro de mostrador. DISA
+  detecta la forma del negocio y monta la cara que le corresponde.
+- **Si necesita manual, está mal hecho.** La facilidad es trabajo del fabricante, no del
+  usuario. Cada vez que haya que explicarle algo al usuario, el fallo es de diseño y se
+  rehace.
+- **El onboarding lo hace DISA, no un formulario.** Al entrar por primera vez, DISA
+  pregunta dos o tres cosas en lenguaje normal y deja el producto montado y listo para
+  trabajar. Nada de pantallas vacías ni fichas de treinta campos.
+- **La complejidad la absorbe el fabricante.** Esconder bien cuesta más que enseñar todo.
+  Ese coste lo paga Bamburu para que el usuario no lo toque. Es el precio del iPhone, y
+  es innegociable.
+
+**Consecuencia directa en Ventas:** un solo motor de venta (mismo cliente, catálogo,
+stock y factura) con varias caras —mostrador, agenda, tablero— que DISA enciende según
+el tipo de negocio. Se cambia la cara, nunca las tripas.
+
+---
+
 ## 1. Misión (la estrella polar)
 
 Bamburu le hace fácil gestionar su empresa a cualquiera —autónomo, pequeña o mediana
