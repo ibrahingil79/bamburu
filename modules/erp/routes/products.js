@@ -306,7 +306,7 @@ export function createProductRoutes(db, cfg = {}) {
       '<td><strong>'+escHtml(p.name)+'</strong>'+(p.featured?'  <span class="badge b-purple">Destacado</span>':'')+'<br><span style="color:var(--muted);font-size:.75rem"><span style="font-family:monospace">'+escHtml(p.product_code||'-')+'</span> · SKU: '+escHtml(p.sku||'-')+'</span></td>'+
       '<td>'+escHtml(p.category_name||'-')+'</td>'+
       '<td><strong>'+sym+p.price.toFixed(2)+'</strong>'+(p.compare_price?'<br><span style="text-decoration:line-through;color:var(--muted);font-size:.75rem">'+sym+p.compare_price.toFixed(2)+'</span>':'')+'<br><span style="color:var(--muted);font-size:.72rem">'+(Number(p.tax_rate)>0?('IVA '+p.tax_rate+'%'):'Exento')+'</span></td>'+
-      '<td>'+(p.type==='service'?'<span style="color:var(--muted)">—</span>':(p.stock<5?'<span style="color:#ef4444;font-weight:600">'+p.stock+'</span>':p.stock))+'</td>'+
+      '<td>'+(p.type==='service'?'<span style="color:var(--muted)">—</span>':(p.stock<5?'<span style="color:var(--danger);font-weight:500">'+p.stock+'</span>':p.stock))+'</td>'+
       '<td>'+(statusB[p.status]||escHtml(p.status))+'</td>'+
       '<td><span class="badge b-gray">'+(p.type==='digital'?'Digital':p.type==='service'?'Servicio':'Físico')+'</span></td>'+
       '<td style="white-space:nowrap">'+(can(c,'products.edit')?'<button class="btn btn-secondary btn-sm" onclick="editProd('+p.id+')">Editar</button> ':'')+(can(c,'products.delete')?'<button class="btn btn-danger btn-sm" onclick="delProd('+p.id+')">Eliminar</button>':'')+'</td>'+
@@ -603,7 +603,7 @@ export function createProductRoutes(db, cfg = {}) {
         const el=document.getElementById('tagSelector');
         el.innerHTML=allTags.map(t=>{
           const sel=selTags.includes(t.id);
-          return '<span style="cursor:pointer;padding:.2rem .6rem;border-radius:99px;font-size:.75rem;font-weight:600;background:'+(sel?'#10b981':'#f1f5f9')+';color:'+(sel?'#fff':'#475569')+';border:1px solid '+(sel?'#10b981':'#e2e8f0')+'" onclick="toggleTag('+t.id+')">'+t.name+'</span>';
+          return '<span style="cursor:pointer;padding:.2rem .6rem;border-radius:99px;font-size:.75rem;font-weight:500;background:'+(sel?'var(--ok-s)':'var(--bg3)')+';color:'+(sel?'var(--ok)':'var(--text2)')+';border:1px solid '+(sel?'var(--ok-s)':'var(--border)')+'" onclick="toggleTag('+t.id+')">'+t.name+'</span>';
         }).join('')+(allTags.length===0?'<span style="color:var(--muted);font-size:.8rem">Sin etiquetas aún</span>':'');
       }
       function toggleTag(id){if(selTags.includes(id))selTags=selTags.filter(x=>x!==id);else selTags.push(id);renderTagSelector();}
@@ -619,7 +619,7 @@ export function createProductRoutes(db, cfg = {}) {
       // Images
       function renderGallery(imgs){
         document.getElementById('imageGallery').innerHTML=imgs.map(img=>
-          '<div style="position:relative"><img src="'+img.url+'" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--border)"><button onclick="delImage('+img.id+')" style="position:absolute;top:-6px;right:-6px;background:#ef4444;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:.65rem;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button></div>'
+          '<div style="position:relative"><img src="'+img.url+'" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--border)"><button onclick="delImage('+img.id+')" style="position:absolute;top:-6px;right:-6px;background:var(--danger-s);color:var(--danger);border:none;border-radius:50%;width:18px;height:18px;font-size:.65rem;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button></div>'
         ).join('');
       }
       async function addImage(){

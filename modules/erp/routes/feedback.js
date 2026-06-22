@@ -35,7 +35,7 @@ export function createFeedbackRoutes(db) {
             <label class="form-label">Valoración</label>
             <div id="stars" style="display:flex;gap:8px;margin-top:4px">
               ${[1,2,3,4,5].map(n => `<button type="button" data-v="${n}" onclick="setRating(${n})"
-                style="width:40px;height:40px;border-radius:8px;border:1px solid var(--border);background:#f8fafc;font-size:18px;cursor:pointer;transition:.15s">★</button>`).join('')}
+                style="width:40px;height:40px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-size:18px;cursor:pointer;transition:.15s">★</button>`).join('')}
             </div>
             <input type="hidden" id="rating" value="">
           </div>
@@ -47,7 +47,7 @@ export function createFeedbackRoutes(db) {
         </div>
         <div id="thanks" style="display:none;padding:2rem;text-align:center">
           <div style="font-size:2rem;margin-bottom:12px">✓</div>
-          <p style="font-weight:600;margin-bottom:8px">¡Gracias por tu comentario!</p>
+          <p style="font-weight:500;margin-bottom:8px">¡Gracias por tu comentario!</p>
           <p style="color:var(--muted);font-size:.85rem;margin-bottom:20px">Tu opinión nos ayuda a mejorar Bamburu.</p>
           <a href="/admin" class="btn btn-secondary">Volver al panel</a>
         </div>
@@ -59,9 +59,9 @@ export function createFeedbackRoutes(db) {
         document.getElementById('rating').value = v;
         document.querySelectorAll('#stars button').forEach(b => {
           const n = +b.dataset.v;
-          b.style.background = n <= v ? '#0D9488' : '#f8fafc';
-          b.style.color = n <= v ? '#fff' : '#0F172A';
-          b.style.borderColor = n <= v ? '#0D9488' : 'var(--border)';
+          b.style.background = n <= v ? 'var(--accent)' : 'var(--bg3)';
+          b.style.color = n <= v ? '#fff' : 'var(--text)';
+          b.style.borderColor = n <= v ? 'var(--accent)' : 'var(--border)';
         });
       }
       async function sendFeedback() {

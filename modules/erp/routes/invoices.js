@@ -5,7 +5,7 @@ import { validate } from '../../../core/validate.js';
 import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema, invoicePaymentSchema, collectionActionSchema } from '../schemas.js';
 import { getCountryConfig } from '../../../core/control-db.js';
 import { escHtml } from '../../../core/escape.js';
-import { adminLayout } from '../layout.js';
+import { adminLayout, docShell } from '../layout.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
 import { paymentsSum, invoiceCobro, cobroState, isCobrable, ESTADO_LABEL,
@@ -1162,103 +1162,32 @@ export function createInvoiceRoutes(db) {
           <td style="text-align:right">${sym}${it.total_price.toFixed(2)}</td>
         </tr>`).join('');
 
-      const html = `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>${inv.document_name} ${inv.invoice_number}</title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:system-ui,sans-serif;font-size:13px;color:#1e293b;padding:40px;max-width:800px;margin:auto}
-  h1{font-size:24px;font-weight:700;margin-bottom:4px}
-  .sub{color:#64748b;font-size:12px;margin-bottom:32px}
-  .cols{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:32px}
-  .label{font-size:11px;text-transform:uppercase;color:#64748b;font-weight:600;margin-bottom:4px}
-  table{width:100%;border-collapse:collapse;margin-bottom:24px}
-  th{background:#f8fafc;padding:8px 12px;text-align:left;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0}
-  td{padding:8px 12px;border-bottom:1px solid #f1f5f9}
-  .totals{margin-left:auto;width:280px}
-  .totals tr td:first-child{color:#64748b}
-  .totals tr td:last-child{text-align:right;font-weight:600}
-  .totals tr.grand td{font-size:15px;border-top:2px solid #1e293b;padding-top:10px}
-  .hash{margin-top:32px;padding:12px;background:#f8fafc;border-radius:6px;font-family:monospace;font-size:10px;color:#94a3b8;word-break:break-all}
-  .status-pill{display:inline-block;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;margin-top:4px}
-  .status-emitida{background:#dcfce7;color:#166534}
-  .status-rectificada{background:#fef3c7;color:#92400e}
-  .status-anulada{background:#fee2e2;color:#991b1b}
-  .actions{display:flex;gap:8px}
-  .btn-primary{padding:8px 16px;background:#1e293b;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;text-decoration:none}
-  .btn-secondary{padding:8px 16px;background:#fff;color:#1e293b;border:1px solid #cbd5e1;border-radius:6px;cursor:pointer;font-size:13px;text-decoration:none}
-  .lifecycle{margin:0 0 24px;padding:12px 16px;border-radius:6px;font-size:13px}
-  .lifecycle a{color:inherit;font-weight:600}
-  .lc-anulada{background:#fee2e2;color:#991b1b}
-  .lc-rectificada{background:#fef3c7;color:#92400e}
-  .lc-rectificativa{background:#e0f2fe;color:#075985}
-  @media print{body{padding:20px}.hash{break-inside:avoid}.actions{display:none}.status-pill{display:none}}
-</style>
-</head>
-<body>
-<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px">
-  <div>
-    <h1>${inv.document_name}</h1>
-    <div class="sub">${inv.invoice_number}</div>
-    <div class="status-pill status-${inv.status}">${inv.status === 'emitida' ? 'Emitida' : inv.status === 'rectificada' ? 'Rectificada' : 'Anulada'} el ${inv.issue_date}</div>
-  </div>
-  <div class="actions">
-    <a href="/admin/invoices" class="btn-secondary">← Volver al listado</a>
-    ${inv.status === 'emitida' ? `<button onclick="anularFactura()" class="btn-secondary">Anular</button>
-    <a href="/admin/invoices/${inv.id}/rectificativa/new" class="btn-secondary">Crear rectificativa</a>` : ''}
-    <button onclick="window.print()" class="btn-primary">Imprimir</button>
-  </div>
-</div>
-
-${(() => {
+      const lifecycle = (() => {
   // Banner de ciclo de vida: explica el estado y enlaza los documentos relacionados.
   if (inv.status === 'anulada' && anulacion) {
-    return `<div class="lifecycle lc-anulada">
+    return `<div class="alert alert-err" style="margin-bottom:24px">
       <strong>Factura anulada</strong> el ${esc(anulacion.issue_date)}.
       Motivo: ${esc(anulacion.motivo)}.
-      <div style="font-size:11px;color:#94a3b8;margin-top:4px;font-family:monospace;word-break:break-all">Asiento de anulación · hash ${esc(anulacion.verifactu_hash)}</div>
+      <div style="font-size:11px;margin-top:4px;font-family:ui-monospace,monospace;word-break:break-all">Asiento de anulación · hash ${esc(anulacion.verifactu_hash)}</div>
     </div>`;
   }
   if (inv.status === 'rectificada' && rectifiedBy) {
-    return `<div class="lifecycle lc-rectificada">
+    return `<div class="alert alert-warn" style="margin-bottom:24px">
       <strong>Factura rectificada</strong> por
-      <a href="/admin/invoices/${rectifiedBy.id}">${esc(rectifiedBy.invoice_number)}</a>.
+      <a href="/admin/invoices/${rectifiedBy.id}" style="color:inherit;font-weight:600">${esc(rectifiedBy.invoice_number)}</a>.
     </div>`;
   }
   if (inv.record_type === 'rectificativa' && rectifiesOriginal) {
-    return `<div class="lifecycle lc-rectificativa">
+    return `<div class="alert" style="margin-bottom:24px;background:#e0f2fe;color:#075985;border:1px solid #bae6fd">
       <strong>Factura rectificativa</strong> ${esc(rTypeLabels[inv.rectification_type] || inv.rectification_type || '')}
       · ${inv.rectification_mode === 'S' ? 'por sustitución' : 'por diferencias'}.
-      Rectifica a <a href="/admin/invoices/${rectifiesOriginal.id}">${esc(rectifiesOriginal.invoice_number)}</a>.
+      Rectifica a <a href="/admin/invoices/${rectifiesOriginal.id}" style="color:inherit;font-weight:600">${esc(rectifiesOriginal.invoice_number)}</a>.
     </div>`;
   }
   return '';
-})()}
+})();
 
-<div class="cols">
-  <div>
-    <div class="label">Emisor</div>
-    <div><strong>${inv.company_name}</strong></div>
-    ${inv.company_fiscal_id ? `<div>${inv.company_fiscal_id}</div>` : ''}
-    ${inv.company_address ? `<div style="color:#64748b">${inv.company_address}</div>` : ''}
-  </div>
-  <div>
-    <div class="label">Cliente</div>
-    <div><strong>${escHtml(inv.client_name || 'Cliente general')}</strong></div>
-    ${inv.client_fiscal_id ? `<div>${escHtml(inv.client_fiscal_id)}</div>` : ''}
-    ${inv.client_address ? `<div style="color:#64748b">${escHtml(inv.client_address)}</div>` : ''}
-    ${inv.client_email ? `<div style="color:#64748b">${escHtml(inv.client_email)}</div>` : ''}
-  </div>
-</div>
-
-<table>
-  <thead><tr><th>Descripción</th><th style="text-align:right">Cant.</th><th style="text-align:right">P. unitario</th><th style="text-align:right">Total</th></tr></thead>
-  <tbody>${rows}</tbody>
-</table>
-
-${(() => {
+const totalsBlock = (() => {
   // Tres casos:
   // (1) Items con tasa registrada (A1+A2) → desglose desde items. 1 row si única tasa,
   //     N rows si mezcla. Fila al 0% se etiqueta "Exento de IVA".
@@ -1296,20 +1225,69 @@ ${(() => {
   const irpfBlock = (Number(inv.irpf_amount) > 0)
     ? `<tr><td style="color:#9333ea">IRPF (${inv.irpf_rate}%)</td><td style="color:#9333ea">−${sym}${inv.irpf_amount.toFixed(2)}</td></tr>`
     : '';
-  return `<table class="totals">
+  return `<table class="doc-totals">
   <tr><td>Base imponible</td><td>${sym}${inv.subtotal.toFixed(2)}</td></tr>
   ${taxBlock}
   ${irpfBlock}
   <tr class="grand"><td>TOTAL</td><td>${sym}${inv.total.toFixed(2)}</td></tr>
 </table>`;
-})()}
+})();
 
-${inv.notes ? `<div style="margin-top:16px;color:#64748b">${inv.notes}</div>` : ''}
+      const statusBadge = inv.status === 'emitida'
+        ? '<span class="badge b-green">Emitida</span>'
+        : inv.status === 'rectificada'
+        ? '<span class="badge b-yellow">Rectificada</span>'
+        : '<span class="badge b-red">Anulada</span>';
 
-<div class="hash">
+      const paper = `
+${lifecycle}
+<h1>${inv.document_name}</h1>
+<div class="doc-sub">${inv.invoice_number} · ${inv.status === 'emitida' ? 'Emitida' : inv.status === 'rectificada' ? 'Rectificada' : 'Anulada'} el ${inv.issue_date}</div>
+
+<div class="doc-cols">
+  <div>
+    <div class="doc-label">Emisor</div>
+    <div><strong>${inv.company_name}</strong></div>
+    ${inv.company_fiscal_id ? `<div>${inv.company_fiscal_id}</div>` : ''}
+    ${inv.company_address ? `<div style="color:var(--text2)">${inv.company_address}</div>` : ''}
+  </div>
+  <div>
+    <div class="doc-label">Cliente</div>
+    <div><strong>${escHtml(inv.client_name || 'Cliente general')}</strong></div>
+    ${inv.client_fiscal_id ? `<div>${escHtml(inv.client_fiscal_id)}</div>` : ''}
+    ${inv.client_address ? `<div style="color:var(--text2)">${escHtml(inv.client_address)}</div>` : ''}
+    ${inv.client_email ? `<div style="color:var(--text2)">${escHtml(inv.client_email)}</div>` : ''}
+  </div>
+</div>
+
+<table>
+  <thead><tr><th>Descripción</th><th style="text-align:right">Cant.</th><th style="text-align:right">P. unitario</th><th style="text-align:right">Total</th></tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+
+${totalsBlock}
+
+${inv.notes ? `<div style="margin-top:16px;color:var(--text2)">${inv.notes}</div>` : ''}
+
+<div class="doc-hash">
   <strong>Hash Verifactu:</strong> ${inv.verifactu_hash}<br>
   <strong>Hash anterior:</strong> ${inv.prev_hash || '(primera factura)'}
-</div>
+</div>`;
+
+      const panel = `
+<div class="card"><div class="card-body">
+  <div style="margin-bottom:12px">${statusBadge}</div>
+  <div class="dp-row"><span class="k">Nº</span><span class="v">${inv.invoice_number}</span></div>
+  <div class="dp-row"><span class="k">Fecha</span><span class="v">${inv.issue_date}</span></div>
+  <div class="dp-row"><span class="k">Cliente</span><span class="v">${escHtml(inv.client_name || 'Cliente general')}</span></div>
+  <div class="dp-row"><span class="k">Total</span><span class="v">${sym}${inv.total.toFixed(2)}</span></div>
+  <div class="dp-actions" style="margin-top:14px">
+    <button onclick="window.print()" class="btn btn-primary">Imprimir</button>
+    ${inv.status === 'emitida' ? `<button onclick="anularFactura()" class="btn btn-danger">Anular</button>
+    <a href="/admin/invoices/${inv.id}/rectificativa/new" class="btn btn-secondary">Crear rectificativa</a>` : ''}
+    <a href="/admin/invoices" class="btn btn-secondary">Volver al listado</a>
+  </div>
+</div></div>
 <script>
   const CSRF = ${JSON.stringify(csrfToken)};
   async function anularFactura(){
@@ -1327,10 +1305,8 @@ ${inv.notes ? `<div style="margin-top:16px;color:#64748b">${inv.notes}</div>` : 
       location.reload();
     } catch(e){ alert(e.message || 'Error anulando la factura'); }
   }
-</script>
-</body>
-</html>`;
-      return c.html(html);
+</script>`;
+      return c.html(adminLayout('Factura ' + inv.invoice_number, docShell(paper, panel), 'invoices', csrfToken, c));
     } catch (e) { return c.text(e.message, 500); }
   });
 

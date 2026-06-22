@@ -17,5 +17,8 @@
     "qrcode": "^1.5.4",
     "resend": "^6.12.3",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "puppeteer": "^25.2.0"
   }
 }

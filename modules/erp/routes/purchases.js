@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can } from '../layout.js';
+import { adminLayout, can, docShell } from '../layout.js';
 import { validate } from '../../../core/validate.js';
 import { requirePerm } from '../../../core/auth.js';
 import { purchaseSchema } from '../schemas.js';
@@ -380,28 +380,42 @@ export function createPurchaseRoutes(db, cfg = {}) {
       (purchase.status !== 'cancelled' ? `<button class="btn btn-danger" onclick="cancelPurchase()">Cancelar</button> ` : '')
     ) : '';
 
-    const content = `
-      <div class="ph"><h2>Compra #${purchase.id}</h2><div style="display:flex;gap:.5rem">${actionBtns}<a href="/admin/purchases" class="btn btn-secondary">Volver</a></div></div>
-      <div class="grid g2" style="margin-bottom:1rem">
-        <div class="card card-body">
-          <div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Proveedor</span><br><strong>${purchase.supplier_name}</strong></div>
-          <div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Fecha</span><br>${purchase.date}</div>
+    const paper = `
+      <h1>Compra #${purchase.id}</h1>
+      <div class="doc-sub">${purchase.date}</div>
+      <div class="doc-cols">
+        <div>
+          <div class="doc-label">Proveedor</div>
+          <div><strong>${purchase.supplier_name}</strong></div>
           ${refBlock}
         </div>
-        <div class="card card-body">
-          <div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Estado</span><br><span class="badge ${badge}">${statusLabel}</span></div>
-          <div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Total</span><br><strong style="font-size:1.2rem">${parseFloat(purchase.total).toFixed(2)} ${sym}</strong></div>
+        <div>
+          <div class="doc-label">Fecha</div>
+          <div>${purchase.date}</div>
           ${notesBlock}
         </div>
       </div>
-      <div class="card">
-        <div class="card-head"><h3>Líneas de compra</h3></div>
-        <div class="table-wrap"><table>
-          <thead><tr><th>Producto</th><th>Cantidad</th><th>Coste unitario</th><th>Subtotal</th></tr></thead>
-          <tbody>${itemRows}</tbody>
-        </table></div>
-      </div>
-      ${originDocBlock(db, 'purchase', purchase.id)}
+      <table>
+        <thead><tr><th>Producto</th><th>Cantidad</th><th>Coste unitario</th><th>Subtotal</th></tr></thead>
+        <tbody>${itemRows}</tbody>
+      </table>
+      <table class="doc-totals">
+        <tr class="grand"><td>Total</td><td>${parseFloat(purchase.total).toFixed(2)} ${sym}</td></tr>
+      </table>
+      ${originDocBlock(db, 'purchase', purchase.id)}`;
+
+    const panel = `
+      <div class="card"><div class="card-body">
+        <div style="margin-bottom:12px"><span class="badge ${badge}">${statusLabel}</span></div>
+        <div class="dp-row"><span class="k">Compra</span><span class="v">#${purchase.id}</span></div>
+        <div class="dp-row"><span class="k">Proveedor</span><span class="v">${purchase.supplier_name}</span></div>
+        <div class="dp-row"><span class="k">Fecha</span><span class="v">${purchase.date}</span></div>
+        <div class="dp-row"><span class="k">Total</span><span class="v">${parseFloat(purchase.total).toFixed(2)} ${sym}</span></div>
+        <div class="dp-actions" style="margin-top:14px">
+          ${actionBtns}
+          <a href="/admin/purchases" class="btn btn-secondary">Volver</a>
+        </div>
+      </div></div>
       <script>
       async function receivePurchase(){
         try{ await api('POST','/api/erp/purchases/${purchase.id}/receive',{}); toast('Compra recibida: stock actualizado'); location.reload(); }
@@ -413,7 +427,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
         catch(e){ toast(e.message||'Error','err'); }
       }
       </script>`;
-    return c.html(adminLayout('Compra #'+purchase.id, content, 'purchases', c.get('session')?.csrfToken||'', c));
+    return c.html(adminLayout('Compra #'+purchase.id, docShell(paper, panel), 'purchases', c.get('session')?.csrfToken||'', c));
   });
 
   return { api, views };

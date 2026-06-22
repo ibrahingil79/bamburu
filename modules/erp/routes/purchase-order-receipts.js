@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can } from '../layout.js';
+import { adminLayout, can, docShell } from '../layout.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { purchaseOrderAnularSchema } from '../schemas.js';
@@ -224,34 +224,44 @@ export function createPurchaseOrderReceiptRoutes(db) {
       ? `<div class="alert alert-err">Recepción anulada. Motivo: ${esc(r.anulada_motivo || '')}. El stock que movió se revirtió con movimientos inversos.</div>` : '';
     const notesBlock = r.notes ? `<div style="margin-top:.5rem"><span style="color:var(--text3);font-size:.8rem;text-transform:uppercase">Notas</span><br>${esc(r.notes)}</div>` : '';
 
-    const content = `
-      <div class="ph"><h2>Recepción ${esc(r.receipt_number || ('#' + r.id))}</h2>
-        <div style="display:flex;gap:.5rem">
+    const paper = `
+      <h1>Recepción ${esc(r.receipt_number || ('#' + r.id))}</h1>
+      <div class="doc-sub">${esc(r.date)}</div>
+      ${motivoBlock}
+      <div class="doc-cols">
+        <div>
+          <div class="doc-label">Orden</div>
+          <div><a href="/admin/purchase-orders/${r.order_id}" style="color:var(--teal);font-weight:600">${esc(r.order_number || ('#' + r.order_id))}</a></div>
+        </div>
+        <div>
+          <div class="doc-label">Proveedor</div>
+          <div><strong>${esc(r.supplier_name)}</strong></div>
+        </div>
+      </div>
+      <table>
+        <thead><tr><th>Producto</th><th>Cantidad recibida</th><th>Coste unit. real (neto)</th><th>Subtotal</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <table class="doc-totals">
+        <tr class="grand"><td>Total recepción</td><td>${total.toFixed(2)} ${sym}</td></tr>
+      </table>
+      <div style="margin-top:8px;color:var(--text3);font-size:.78rem">Líneas recibidas inmutables — corregir = anular y crear otra recepción.</div>
+      ${notesBlock}
+      ${originDocBlock(db, 'po_receipt', r.id)}`;
+
+    const panel = `
+      <div class="card"><div class="card-body">
+        <div style="margin-bottom:12px">${badge}</div>
+        <div class="dp-row"><span class="k">Recepción</span><span class="v">${esc(r.receipt_number || ('#' + r.id))}</span></div>
+        <div class="dp-row"><span class="k">Fecha</span><span class="v">${esc(r.date)}</span></div>
+        <div class="dp-row"><span class="k">Orden</span><span class="v">${esc(r.order_number || ('#' + r.order_id))}</span></div>
+        <div class="dp-row"><span class="k">Proveedor</span><span class="v">${esc(r.supplier_name)}</span></div>
+        <div class="dp-row"><span class="k">Total</span><span class="v">${total.toFixed(2)} ${sym}</span></div>
+        <div class="dp-actions" style="margin-top:14px">
           ${r.status === 'confirmada' && canEdit ? '<button class="btn btn-danger" onclick="anularRecepcion()">Anular</button>' : ''}
           <a href="/admin/purchase-orders/${r.order_id}" class="btn btn-secondary">Ver orden</a>
         </div>
-      </div>
-      ${motivoBlock}
-      <div class="grid g2" style="margin-bottom:1rem">
-        <div class="card card-body">
-          <div style="margin-bottom:.5rem"><span style="color:var(--text3);font-size:.8rem;text-transform:uppercase">Orden</span><br><a href="/admin/purchase-orders/${r.order_id}" style="color:var(--teal);font-weight:600">${esc(r.order_number || ('#' + r.order_id))}</a></div>
-          <div style="margin-bottom:.5rem"><span style="color:var(--text3);font-size:.8rem;text-transform:uppercase">Proveedor</span><br><strong>${esc(r.supplier_name)}</strong></div>
-        </div>
-        <div class="card card-body">
-          <div style="margin-bottom:.5rem"><span style="color:var(--text3);font-size:.8rem;text-transform:uppercase">Fecha</span><br>${esc(r.date)}</div>
-          <div style="margin-bottom:.5rem"><span style="color:var(--text3);font-size:.8rem;text-transform:uppercase">Estado</span><br>${badge}</div>
-          ${notesBlock}
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-head"><h3>Líneas recibidas (inmutables — corregir = anular y crear otra recepción)</h3></div>
-        <div class="table-wrap"><table>
-          <thead><tr><th>Producto</th><th>Cantidad recibida</th><th>Coste unit. real (neto)</th><th>Subtotal</th></tr></thead>
-          <tbody>${rows}</tbody>
-          <tfoot><tr><td colspan="3" style="text-align:right;font-weight:700;padding:.7rem 1rem">Total recepción</td><td style="font-weight:700">${total.toFixed(2)} ${sym}</td></tr></tfoot>
-        </table></div>
-      </div>
-      ${originDocBlock(db, 'po_receipt', r.id)}
+      </div></div>
       <script>
       async function anularRecepcion(){
         const motivo = prompt('Motivo de anulación de la recepción ${esc(r.receipt_number || '')} (revertirá su stock):');
@@ -263,7 +273,7 @@ export function createPurchaseOrderReceiptRoutes(db) {
         } catch(e){ toast(e.message || 'Error anulando','err'); }
       }
       </script>`;
-    return c.html(adminLayout('Recepción ' + (r.receipt_number || ''), content, 'purchase-orders', csrfToken, c));
+    return c.html(adminLayout('Recepción ' + (r.receipt_number || ''), docShell(paper, panel), 'purchase-orders', csrfToken, c));
   });
 
   return { api, views };

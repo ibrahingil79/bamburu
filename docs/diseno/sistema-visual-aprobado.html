@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Bamburu — Sistema visual APROBADO (patrón oro)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<style>
+  :root{
+    /* ===== TOKENS APROBADOS — valores EXACTOS. Cero teal. ===== */
+    --chrome:#20242F;          /* menú lateral + barra superior (GRAFITO AZUL OSCURO) */
+    --chrome-tx:#9AA3B3;       /* texto menú inactivo */
+    --chrome-tx-on:#FFFFFF;    /* texto menú activo */
+    --chrome-ic:#727B8C;       /* iconos menú inactivos */
+    --chrome-grp:#5B6475;      /* título de grupo de menú */
+    --chrome-active:rgba(255,255,255,.10); /* fondo item activo */
+    --chrome-div:rgba(255,255,255,.07);    /* divisor sobre chrome */
+
+    --bg:#F5F6F8;              /* fondo del área de trabajo (CLARO) */
+    --surface:#FFFFFF;         /* tarjetas / paneles / tablas */
+    --border:#ECEEF1;          /* borde fino interno */
+    --border2:#E4E6EA;         /* borde exterior (1px, visible) */
+
+    --text:#1A1D21;            /* texto principal */
+    --text2:#6B7280;           /* texto secundario */
+    --text3:#9097A1;           /* texto terciario / placeholder */
+
+    --accent:#334155;          /* slate — acento de marca (botón primario, DISA) */
+    --accent-d:#1E293B;        /* slate fuerte / activo */
+    --accent-soft:#EDF0F4;     /* fondo chip / activo claro */
+
+    /* Estados (píldoras) */
+    --danger:#A32D2D; --danger-s:#FEE2E2;
+    --warn:#854F0B;   --warn-s:#FAEEDA;
+    --ok:#2E7D55;     --ok-s:#E8F5EE;
+    --neutral:#1E293B;--neutral-s:#EDF0F4;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#E9EBEF;color:var(--text);padding:28px;font-size:14px;-webkit-font-smoothing:antialiased}
+  .ref-h{max-width:1080px;margin:0 auto 6px;font-size:13px;color:#5B6475;font-weight:500}
+  .ref-note{max-width:1080px;margin:0 auto 24px;font-size:12px;color:#8A909B}
+  .screen{max-width:1080px;margin:0 auto 30px}
+  .screen-label{font-size:12px;font-weight:600;color:#3F454F;margin:0 0 8px;display:flex;align-items:center;gap:8px}
+  .screen-label span{font-weight:400;color:#9097A1}
+  .app{display:flex;border-radius:14px;overflow:hidden;border:1px solid var(--border2);background:var(--bg)}
+
+  /* chrome */
+  .rail{width:58px;background:var(--chrome);padding:13px 0;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:5px}
+  .rail .brand{color:#fff;font-size:19px;margin-bottom:8px}
+  .ri{color:var(--chrome-ic);font-size:18px;padding:7px;display:flex;justify-content:center;border-radius:8px}
+  .ri.on{color:#fff;background:var(--chrome-active)}
+  .top{background:var(--chrome);padding:10px 16px;display:flex;align-items:center;gap:12px}
+  .top .srch{flex:1;max-width:330px;display:flex;align-items:center;gap:8px;background:var(--chrome-div);border-radius:9px;padding:7px 12px;color:#8A92A1;font-size:12.5px}
+  .top .bell{margin-left:auto;color:var(--chrome-tx);display:flex}
+  .top .av{width:30px;height:30px;border-radius:50%;background:#3A4357;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
+  .top .back{color:var(--chrome-tx);font-size:12.5px;text-decoration:none;display:flex;align-items:center;gap:6px}
+  .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .content{flex:1;padding:20px 22px}
+
+  /* expanded sidebar variant */
+  .side{width:160px;background:var(--chrome);padding:13px 9px;flex-shrink:0}
+  .side .brand{font-size:16px;font-weight:600;color:#fff;padding:4px 10px 12px}
+  .snav{display:flex;align-items:center;gap:9px;padding:7px 10px;margin:1px 0;border-radius:8px;font-size:12.5px;color:var(--chrome-tx);text-decoration:none}
+  .snav i{font-size:17px;color:var(--chrome-ic);width:17px}
+  .snav.on{background:var(--chrome-active);color:#fff;font-weight:500}.snav.on i{color:#fff}
+  .sgrp{font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--chrome-grp);padding:13px 10px 4px}
+
+  h3.pt{font-size:18px;font-weight:600;margin:0}
+  .ph{display:flex;align-items:center;justify-content:space-between;margin-bottom:15px}
+  .kc{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:11px 13px}
+  .kl{font-size:11px;color:var(--text2);margin:0 0 5px;display:flex;align-items:center;gap:5px}
+  .kv{font-size:18px;font-weight:600;margin:0;letter-spacing:-.3px}
+  .pill{font-size:10.5px;font-weight:500;padding:2px 9px;border-radius:20px;white-space:nowrap}
+  .btn{font-size:11.5px;font-weight:500;padding:6px 12px;border-radius:8px;cursor:pointer;border:1px solid var(--border2);background:#fff;color:#3F4A5C;display:inline-flex;align-items:center;gap:5px}
+  .btn.p{background:var(--accent);color:#fff;border:none}
+  table{width:100%;border-collapse:collapse}
+  th{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text2);font-weight:500;text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
+  td{padding:9px 10px;border-bottom:1px solid #F1F3F5;font-size:12px;color:#374151}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+  .disa{background:#fff;border:1px solid #D6DCE4;border-left:3px solid var(--accent);border-radius:0 11px 11px 0;padding:13px 15px;display:flex;gap:11px}
+  .disa-ic{width:33px;height:33px;border-radius:9px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+  .chip{font-size:11.5px;font-weight:500;padding:5px 11px;border-radius:8px;background:var(--accent-soft);color:var(--accent);cursor:pointer}
+  .disa-input{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #D6DCE4;border-radius:12px;padding:10px 14px}
+  .disa-send{width:32px;height:32px;border-radius:9px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center}
+  .lb{font-size:11px;font-weight:500;color:var(--text2);display:block;margin-bottom:4px}
+  .inp{width:100%;border:1px solid var(--border2);border-radius:9px;padding:8px 11px;font-size:12.5px;color:var(--text3);background:#fff}
+</style>
+</head>
+<body>
+<div class="ref-h">Bamburu — Sistema visual APROBADO por Ibrahin (22 jun 2026). Patrón oro.</div>
+<div class="ref-note">Regla: el menú lateral y la barra superior van en GRAFITO AZUL OSCURO (#20242F). El área de trabajo SIEMPRE clara. Acento slate #334155. Cero teal. Estos son los 6 moldes; toda pantalla de Bamburu es uno de ellos.</div>
+
+<!-- ============ 1. INICIO / DASHBOARD ============ -->
+<div class="screen">
+<p class="screen-label">1 · INICIO / DASHBOARD <span>— DISA es la home</span></p>
+<div class="app">
+  <aside class="rail">
+    <div class="brand"><i class="ti ti-sparkles"></i></div>
+    <div class="ri on"><i class="ti ti-home"></i></div>
+    <div class="ri"><i class="ti ti-file-invoice"></i></div>
+    <div class="ri"><i class="ti ti-cash"></i></div>
+    <div class="ri"><i class="ti ti-users"></i></div>
+    <div class="ri"><i class="ti ti-shopping-cart"></i></div>
+    <div class="ri"><i class="ti ti-building-warehouse"></i></div>
+    <div class="ri"><i class="ti ti-box"></i></div>
+  </aside>
+  <div class="main">
+    <div class="top">
+      <div class="srch"><i class="ti ti-search"></i>Buscar cliente, factura, producto…</div>
+      <div class="bell"><i class="ti ti-bell"></i></div>
+      <div class="av">FF</div>
+    </div>
+    <div class="content" style="display:flex;flex-direction:column">
+      <h3 class="pt">Buenos días, Floristería Flora</h3>
+      <p style="font-size:12.5px;color:var(--text2);margin:2px 0 16px">Lunes, 22 de junio · esto es lo que pide tu atención hoy</p>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:15px">
+        <div class="kc"><p class="kl"><i class="ti ti-file-invoice" style="color:var(--accent)"></i>Ventas del mes</p><p class="kv">6.290 €</p></div>
+        <div class="kc"><p class="kl"><i class="ti ti-arrow-down-left" style="color:var(--ok)"></i>Por cobrar</p><p class="kv">1.840 €</p></div>
+        <div class="kc"><p class="kl"><i class="ti ti-arrow-up-right" style="color:var(--warn)"></i>Por pagar</p><p class="kv">412 €</p></div>
+        <div class="kc"><p class="kl"><i class="ti ti-alert-triangle" style="color:#DC2626"></i>Stock bajo</p><p class="kv">2</p></div>
+      </div>
+      <div class="disa" style="margin-bottom:15px">
+        <div class="disa-ic"><i class="ti ti-sparkles"></i></div>
+        <div style="flex:1"><p style="font-size:12.5px;font-weight:600;color:var(--accent-d);margin:0 0 3px">DISA</p>
+        <p style="font-size:12.5px;color:#374151;margin:0 0 9px;line-height:1.5">Tienes 3 facturas de proveedor que vencen esta semana (412 €) y 2 productos por debajo del mínimo. ¿Quieres que prepare los pagos y un pedido a tu proveedor habitual?</p>
+        <div style="display:flex;gap:8px"><span class="chip">Preparar pagos</span><span class="chip">Crear pedido</span><span class="chip" style="background:transparent;color:var(--text2)">Ahora no</span></div></div>
+      </div>
+      <div class="card" style="padding:5px 4px;margin-bottom:15px">
+        <div style="display:flex;justify-content:space-between;padding:9px 11px;font-size:12px;color:#374151"><span>García e Hijos · F-118</span><span class="pill" style="background:var(--danger-s);color:var(--danger)">Vencida 12 d</span></div>
+        <div style="display:flex;justify-content:space-between;padding:9px 11px;font-size:12px;color:#374151;border-top:1px solid #F1F3F5"><span>Bodas del Sur · F-121</span><span class="pill" style="background:var(--warn-s);color:var(--warn)">Vence en 3 d</span></div>
+        <div style="display:flex;justify-content:space-between;padding:9px 11px;font-size:12px;color:#374151;border-top:1px solid #F1F3F5"><span>Hotel Marina · F-124</span><span class="pill" style="background:var(--neutral-s);color:var(--neutral)">Al día</span></div>
+      </div>
+      <div class="disa-input" style="margin-top:auto"><i class="ti ti-search" style="color:var(--text3);font-size:17px"></i><span style="flex:1;color:var(--text3);font-size:13px">Pregunta a DISA o pídele que haga algo…</span><div class="disa-send"><i class="ti ti-send" style="font-size:16px"></i></div></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ============ 2. DOCUMENTO (visor 2 columnas) ============ -->
+<div class="screen">
+<p class="screen-label">2 · DOCUMENTO <span>— factura, OC, albarán, devolución… documento a la izquierda + panel a la derecha</span></p>
+<div class="app">
+  <aside class="rail">
+    <div class="brand"><i class="ti ti-sparkles"></i></div>
+    <div class="ri"><i class="ti ti-home"></i></div>
+    <div class="ri on"><i class="ti ti-file-invoice"></i></div>
+    <div class="ri"><i class="ti ti-cash"></i></div>
+    <div class="ri"><i class="ti ti-users"></i></div>
+    <div class="ri"><i class="ti ti-shopping-cart"></i></div>
+  </aside>
+  <div class="main">
+    <div class="top"><a class="back"><i class="ti ti-arrow-left"></i>Volver a Facturas</a><div class="av" style="margin-left:auto">FF</div></div>
+    <div class="content" style="display:flex;gap:18px;align-items:flex-start">
+      <div style="flex:1;min-width:0;background:#fff;border:1px solid var(--border2);border-radius:13px;padding:30px 32px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px"><div><div style="font-size:20px;font-weight:600">Factura</div><div style="font-size:12.5px;color:var(--text2)">F-2026-118</div></div><div style="text-align:right;font-size:12px;color:var(--text2)">Fecha<br><span style="color:var(--text);font-weight:500;font-size:13px">14/06/2026</span></div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:26px;margin-bottom:24px">
+          <div><div style="font-size:10.5px;text-transform:uppercase;color:var(--text2);font-weight:500;margin-bottom:5px">Emisor</div><div style="font-size:13px;font-weight:500">Floristería Flora</div><div style="font-size:12px;color:var(--text2)">B-12345678</div></div>
+          <div><div style="font-size:10.5px;text-transform:uppercase;color:var(--text2);font-weight:500;margin-bottom:5px">Cliente</div><div style="font-size:13px;font-weight:500">García e Hijos S.L.</div><div style="font-size:12px;color:var(--text2)">Barcelona · A-87654321</div></div>
+        </div>
+        <table style="margin-bottom:18px"><thead><tr><th>Descripción</th><th style="text-align:right">Cant.</th><th style="text-align:right">Precio</th><th style="text-align:right">Total</th></tr></thead><tbody>
+          <tr><td style="color:var(--text)">Ramo de temporada</td><td style="text-align:right">8</td><td style="text-align:right">35,00 €</td><td style="text-align:right;font-weight:500">280,00 €</td></tr>
+          <tr><td style="color:var(--text)">Centro de mesa</td><td style="text-align:right">3</td><td style="text-align:right">60,00 €</td><td style="text-align:right;font-weight:500">180,00 €</td></tr>
+        </tbody></table>
+        <table style="margin-left:auto;width:240px"><tr><td style="color:var(--text2);border:none">Base imponible</td><td style="text-align:right;border:none">460,00 €</td></tr><tr><td style="color:var(--text2);border:none">IVA (21%)</td><td style="text-align:right;border:none">96,60 €</td></tr><tr><td style="font-weight:600;border:none;border-top:1px solid var(--text);padding-top:9px">TOTAL</td><td style="text-align:right;font-weight:600;font-size:15px;border:none;border-top:1px solid var(--text);padding-top:9px">556,60 €</td></tr></table>
+        <div style="margin-top:22px;padding:11px 13px;background:var(--bg);border:1px solid var(--border);border-radius:9px;font-family:monospace;font-size:9.5px;color:var(--text2);word-break:break-all">Verifactu · huella a3f9c1e7b2…d04e · cadena verificada</div>
+      </div>
+      <aside style="width:262px;flex-shrink:0;display:flex;flex-direction:column;gap:13px">
+        <div style="background:#fff;border:1px solid var(--border2);border-radius:12px;padding:14px">
+          <span class="pill" style="background:var(--warn-s);color:var(--warn);display:inline-block;margin-bottom:12px">Vence en 3 días</span>
+          <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12.5px"><span style="color:var(--text2)">Total</span><span style="font-weight:500">556,60 €</span></div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12.5px"><span style="color:var(--text2)">Nº documento</span><span style="font-weight:500">F-2026-118</span></div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12.5px"><span style="color:var(--text2)">Cliente</span><span style="font-weight:500">García e Hijos</span></div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12.5px"><span style="color:var(--text2)">Estado</span><span style="font-weight:500">Emitida</span></div>
+        </div>
+        <div style="background:#fff;border:1px solid var(--border2);border-radius:12px;padding:14px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:7px"><span style="color:var(--text2)">Cobro</span><span style="font-weight:600;color:var(--accent)">60%</span></div>
+          <div style="height:6px;background:var(--accent-soft);border-radius:6px;overflow:hidden;margin-bottom:7px"><div style="width:60%;height:100%;background:var(--accent)"></div></div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2)"><span>333,96 € cobrado</span><span>222,64 € pendiente</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="btn p" style="justify-content:center"><i class="ti ti-cash"></i>Registrar cobro</div>
+          <div class="btn" style="justify-content:center"><i class="ti ti-share"></i>Compartir</div>
+          <div class="btn" style="justify-content:center"><i class="ti ti-arrow-back-up"></i>Rectificar</div>
+          <div class="btn" style="justify-content:center"><i class="ti ti-download"></i>Descargar PDF</div>
+        </div>
+        <div style="background:#fff;border:1px solid var(--border2);border-radius:12px;padding:4px">
+          <div style="display:flex;align-items:center;gap:9px;padding:9px 11px;font-size:12.5px;color:#3F4A5C"><i class="ti ti-message" style="font-size:16px;color:var(--chrome-ic)"></i>Mensajes</div>
+          <div style="display:flex;align-items:center;gap:9px;padding:9px 11px;font-size:12.5px;color:#3F4A5C;border-top:1px solid #F1F3F5"><i class="ti ti-history" style="font-size:16px;color:var(--chrome-ic)"></i>Historial</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ============ 3. LISTA (Cobros) ============ -->
+<div class="screen">
+<p class="screen-label">3 · LISTA <span>— Cobros (mismo molde: Facturas, Clientes, Proveedores, Productos, Pagos, Devoluciones, Almacenes…)</span></p>
+<div class="app">
+  <aside class="rail"><div class="brand"><i class="ti ti-sparkles"></i></div><div class="ri"><i class="ti ti-home"></i></div><div class="ri"><i class="ti ti-file-invoice"></i></div><div class="ri on"><i class="ti ti-cash"></i></div><div class="ri"><i class="ti ti-users"></i></div><div class="ri"><i class="ti ti-shopping-cart"></i></div></aside>
+  <div class="main">
+    <div class="top"><div class="srch"><i class="ti ti-search"></i>Buscar…</div><div class="bell"><i class="ti ti-bell"></i></div><div class="av">FF</div></div>
+    <div class="content">
+      <div class="ph"><h3 class="pt">Cobros</h3><div class="btn p"><i class="ti ti-send"></i>Enviar recordatorios</div></div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-bottom:15px">
+        <div class="kc"><p class="kl">Pendiente total</p><p class="kv">1.840 €</p></div>
+        <div class="kc"><p class="kl" style="color:var(--danger)">Vencido</p><p class="kv" style="color:var(--danger)">680 €</p></div>
+        <div class="kc"><p class="kl" style="color:var(--warn)">Por vencer</p><p class="kv">1.160 €</p></div>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid var(--border)"><span style="font-size:12.5px;font-weight:500">Pendiente de cobro</span><span style="font-size:11.5px;color:var(--text3);border:1px solid var(--border2);border-radius:8px;padding:4px 10px">Buscar cliente…</span></div>
+        <table><thead><tr><th>Cliente</th><th>Factura</th><th>Pendiente</th><th>Estado</th><th></th></tr></thead><tbody>
+          <tr><td style="font-weight:500;color:var(--text)">García e Hijos</td><td>F-2026-118</td><td style="font-weight:500;color:var(--text)">222,64 €</td><td><span class="pill" style="background:var(--danger-s);color:var(--danger)">Vencida 12 d</span><div style="font-size:10.5px;color:var(--text3);margin-top:3px">Próximo: 2º recordatorio</div></td><td style="text-align:right"><span class="btn">Reclamar</span></td></tr>
+          <tr><td style="font-weight:500;color:var(--text)">Bodas del Sur</td><td>F-2026-121</td><td style="font-weight:500;color:var(--text)">556,60 €</td><td><span class="pill" style="background:var(--warn-s);color:var(--warn)">Vence en 3 d</span></td><td style="text-align:right"><span class="btn">Registrar cobro</span></td></tr>
+          <tr><td style="font-weight:500;color:var(--text)">Hotel Marina</td><td>F-2026-124</td><td style="font-weight:500;color:var(--text)">1.060,76 €</td><td><span class="pill" style="background:var(--neutral-s);color:var(--neutral)">Al día</span></td><td style="text-align:right"><span class="btn">Registrar cobro</span></td></tr>
+        </tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ============ 4. FORMULARIO (Nueva factura) ============ -->
+<div class="screen">
+<p class="screen-label">4 · FORMULARIO <span>— toda alta/edición (nueva factura, nuevo producto, ajustes…)</span></p>
+<div class="app">
+  <aside class="rail"><div class="brand"><i class="ti ti-sparkles"></i></div><div class="ri"><i class="ti ti-home"></i></div><div class="ri on"><i class="ti ti-file-invoice"></i></div><div class="ri"><i class="ti ti-cash"></i></div><div class="ri"><i class="ti ti-users"></i></div></aside>
+  <div class="main">
+    <div class="top"><a class="back"><i class="ti ti-arrow-left"></i>Facturas</a><div class="av" style="margin-left:auto">FF</div></div>
+    <div class="content">
+      <div class="ph"><h3 class="pt">Nueva factura</h3><div class="btn">Cancelar</div></div>
+      <div style="background:#fff;border:1px solid var(--border2);border-radius:12px;padding:18px 20px;max-width:560px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
+          <div><span class="lb">Cliente *</span><div class="inp" style="display:flex;justify-content:space-between">Selecciona cliente <i class="ti ti-chevron-down"></i></div></div>
+          <div><span class="lb">Fecha de emisión</span><div class="inp" style="color:var(--text)">22/06/2026</div></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:12.5px;font-weight:600">Líneas</span><span class="btn" style="font-size:11px;padding:4px 10px"><i class="ti ti-plus"></i>Añadir línea</span></div>
+        <table style="margin-bottom:14px"><thead><tr><th>Descripción</th><th>Cant.</th><th>P. unit.</th><th style="text-align:right">Subtotal</th></tr></thead><tbody><tr><td><span style="color:var(--text3)">Buscar en catálogo o escribir…</span></td><td>1</td><td>35,00</td><td style="text-align:right;font-weight:500;color:var(--text)">35,00 €</td></tr></tbody></table>
+        <div style="margin-left:auto;width:230px;font-size:12.5px"><div style="display:flex;justify-content:space-between;padding:4px 0;color:var(--text2)"><span>Base imponible</span><span style="color:var(--text)">35,00 €</span></div><div style="display:flex;justify-content:space-between;padding:4px 0;color:var(--text2)"><span>IVA (21%)</span><span style="color:var(--text)">7,35 €</span></div><div style="display:flex;justify-content:space-between;padding:8px 0 0;border-top:1px solid var(--text);margin-top:4px;font-weight:600"><span>Total</span><span>42,35 €</span></div></div>
+        <div style="margin-top:16px"><span class="lb">Notas (opcional)</span><div class="inp" style="height:48px"></div></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:16px"><div class="btn p">Emitir factura</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ============ 5. MODAL (Nuevo cliente) ============ -->
+<div class="screen">
+<p class="screen-label">5 · MODAL <span>— alta rápida sobre una lista (nuevo cliente, nuevo proveedor…)</span></p>
+<div style="background:rgba(20,24,31,.55);border-radius:14px;border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;padding:30px">
+  <div style="width:100%;max-width:480px;background:#fff;border-radius:15px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 20px;border-bottom:1px solid var(--border)"><span style="font-size:15px;font-weight:600">Nuevo cliente</span><i class="ti ti-x" style="color:var(--text3);font-size:18px"></i></div>
+    <div style="padding:18px 20px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:13px"><div><span class="lb">Nombre *</span><div class="inp">&nbsp;</div></div><div><span class="lb">NIF / CIF</span><div class="inp">&nbsp;</div></div><div><span class="lb">Email</span><div class="inp">&nbsp;</div></div><div><span class="lb">Teléfono</span><div class="inp">&nbsp;</div></div></div>
+      <div style="margin-bottom:13px"><span class="lb">Dirección</span><div class="inp">&nbsp;</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:13px;margin-bottom:18px"><div><span class="lb">Ciudad</span><div class="inp">&nbsp;</div></div><div><span class="lb">País</span><div class="inp">&nbsp;</div></div><div><span class="lb">Grupo</span><div class="inp" style="display:flex;justify-content:space-between">Sin grupo <i class="ti ti-chevron-down"></i></div></div></div>
+      <div style="font-size:11.5px;font-weight:600;color:var(--accent);border-top:1px solid var(--border);padding-top:14px;margin-bottom:12px">Gestión / datos fiscales</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px"><div><span class="lb">Tipo de cliente</span><div class="inp" style="display:flex;justify-content:space-between">Particular <i class="ti ti-chevron-down"></i></div></div><div><span class="lb">Plazo de pago (días)</span><div class="inp" style="color:var(--text)">0</div></div><div><span class="lb">Forma de pago</span><div class="inp" style="display:flex;justify-content:space-between">Sin especificar <i class="ti ti-chevron-down"></i></div></div><div><span class="lb">Perfil de cobro</span><div class="inp" style="display:flex;justify-content:space-between">Estándar <i class="ti ti-chevron-down"></i></div></div></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;padding:14px 20px;border-top:1px solid var(--border)"><div class="btn">Cancelar</div><div class="btn p" style="padding:8px 18px">Guardar</div></div>
+  </div>
+</div>
+</div>
+
+<!-- ============ 6. TPV ============ -->
+<div class="screen">
+<p class="screen-label">6 · TPV <span>— el mostrador (catálogo + ticket)</span></p>
+<div class="app">
+  <aside class="rail"><div class="brand"><i class="ti ti-sparkles"></i></div><div class="ri"><i class="ti ti-home"></i></div><div class="ri"><i class="ti ti-file-invoice"></i></div><div class="ri on"><i class="ti ti-cash-register"></i></div><div class="ri"><i class="ti ti-users"></i></div></aside>
+  <div class="main">
+    <div class="top"><div class="srch"><i class="ti ti-search"></i>Buscar producto o escanear…</div><div class="av" style="margin-left:auto">FF</div></div>
+    <div style="flex:1;display:flex;min-width:0">
+      <div style="flex:1;padding:18px;min-width:0">
+        <div style="display:flex;gap:8px;margin-bottom:13px"><span class="chip" style="background:var(--accent);color:#fff">Todos</span><span class="chip" style="background:var(--accent-soft);color:#3F4A5C">Ramos</span><span class="chip" style="background:var(--accent-soft);color:#3F4A5C">Plantas</span></div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+          <div style="background:#fff;border:1px solid var(--border);border-radius:11px;padding:12px;text-align:center"><div style="height:42px;background:var(--accent-soft);border-radius:7px;display:flex;align-items:center;justify-content:center;color:#9AA3B3"><i class="ti ti-flower" style="font-size:20px"></i></div><div style="font-size:12px;font-weight:500;margin:8px 0 2px">Rosa roja</div><div style="font-size:12px;color:var(--accent);font-weight:600">3,50 €</div></div>
+          <div style="background:#fff;border:1px solid var(--border);border-radius:11px;padding:12px;text-align:center"><div style="height:42px;background:var(--accent-soft);border-radius:7px;display:flex;align-items:center;justify-content:center;color:#9AA3B3"><i class="ti ti-bouquet" style="font-size:20px"></i></div><div style="font-size:12px;font-weight:500;margin:8px 0 2px">Ramo temporada</div><div style="font-size:12px;color:var(--accent);font-weight:600">35,00 €</div></div>
+          <div style="background:#fff;border:1px solid var(--border);border-radius:11px;padding:12px;text-align:center"><div style="height:42px;background:var(--accent-soft);border-radius:7px;display:flex;align-items:center;justify-content:center;color:#9AA3B3"><i class="ti ti-plant" style="font-size:20px"></i></div><div style="font-size:12px;font-weight:500;margin:8px 0 2px">Maceta</div><div style="font-size:12px;color:var(--accent);font-weight:600">12,00 €</div></div>
+        </div>
+      </div>
+      <div style="width:230px;flex-shrink:0;background:#fff;border-left:1px solid var(--border);padding:16px;display:flex;flex-direction:column">
+        <div style="font-size:12.5px;font-weight:600;margin-bottom:10px">Ticket</div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;padding:7px 0;border-bottom:1px solid #F1F3F5"><span>2 × Rosa roja</span><span style="font-weight:500">7,00 €</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;padding:7px 0;border-bottom:1px solid #F1F3F5"><span>1 × Ramo temporada</span><span style="font-weight:500">35,00 €</span></div>
+        <div style="margin-top:auto"><div style="display:flex;justify-content:space-between;font-size:16px;font-weight:600;padding:8px 0;border-top:1px solid var(--text);margin-top:8px"><span>Total</span><span>42,00 €</span></div><div style="background:var(--accent);color:#fff;text-align:center;font-size:13px;font-weight:500;padding:11px;border-radius:10px;margin-top:6px">Cobrar</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ============ 7. CAPTURA DE FACTURA ============ -->
+<div class="screen">
+<p class="screen-label">7 · CAPTURA DE FACTURA <span>— subes el PDF, DISA lee, tú confirmas</span></p>
+<div class="app">
+  <aside class="rail"><div class="brand"><i class="ti ti-sparkles"></i></div><div class="ri"><i class="ti ti-home"></i></div><div class="ri"><i class="ti ti-file-invoice"></i></div><div class="ri"><i class="ti ti-cash"></i></div><div class="ri on"><i class="ti ti-shopping-cart"></i></div></aside>
+  <div class="main">
+    <div class="top"><a class="back"><i class="ti ti-arrow-left"></i>Compras</a><div class="av" style="margin-left:auto">FF</div></div>
+    <div class="content">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:15px"><h3 class="pt">Captura de factura</h3><span style="font-size:11px;font-weight:500;padding:3px 10px;border-radius:20px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;gap:5px"><i class="ti ti-sparkles" style="font-size:13px"></i>Leída por DISA</span></div>
+      <div style="display:flex;gap:18px;align-items:flex-start">
+        <div style="flex:1;min-width:0;background:#fff;border:1px solid var(--border2);border-radius:12px;padding:14px"><div style="background:var(--bg);border:1px dashed #D6DCE4;border-radius:9px;height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#9AA3B3;gap:8px"><i class="ti ti-file-text" style="font-size:38px"></i><span style="font-size:12px">factura-aromas-del-sur.pdf</span></div></div>
+        <div style="width:260px;flex-shrink:0"><div style="background:#fff;border:1px solid var(--border2);border-radius:12px;padding:15px">
+          <div style="font-size:12px;color:var(--text2);margin-bottom:12px">DISA extrajo estos datos. Revísalos y confirma.</div>
+          <div style="margin-bottom:11px"><span class="lb">Proveedor</span><div class="inp" style="color:var(--text)">Aromas del Sur SL</div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div style="margin-bottom:11px"><span class="lb">Fecha</span><div class="inp" style="color:var(--text)">14/06/2026</div></div><div style="margin-bottom:11px"><span class="lb">Nº factura</span><div class="inp" style="color:var(--text)">A-2291</div></div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div style="margin-bottom:11px"><span class="lb">Base</span><div class="inp" style="color:var(--text)">60,00 €</div></div><div style="margin-bottom:11px"><span class="lb">IVA (21%)</span><div class="inp" style="color:var(--text)">12,60 €</div></div></div>
+          <div style="margin-bottom:11px"><span class="lb">Total</span><div class="inp" style="color:var(--text);font-weight:600">72,60 €</div></div>
+          <div style="background:var(--accent);color:#fff;text-align:center;font-size:12.5px;font-weight:500;padding:10px;border-radius:9px;margin-top:6px">Confirmar y registrar</div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+</body>
+</html>

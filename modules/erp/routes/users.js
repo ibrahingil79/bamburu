@@ -210,7 +210,7 @@ export function createUserRoutes(db) {
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:.4rem">
               \${perms.map(p=>\`
-                <label style="display:inline-flex;align-items:center;gap:.35rem;padding:.3rem .65rem;border:1px solid \${selectedPermIds.has(p.id)?'var(--teal)':'var(--border)'};border-radius:20px;font-size:.8rem;cursor:pointer;background:\${selectedPermIds.has(p.id)?'rgba(20,184,166,.1)':'transparent'};color:\${selectedPermIds.has(p.id)?'var(--teal)':'var(--text2)'};transition:all .15s" id="plabel_\${p.id}">
+                <label style="display:inline-flex;align-items:center;gap:.35rem;padding:.3rem .65rem;border:1px solid \${selectedPermIds.has(p.id)?'var(--teal)':'var(--border)'};border-radius:20px;font-size:.8rem;cursor:pointer;background:\${selectedPermIds.has(p.id)?'rgba(58,65,80,.1)':'transparent'};color:\${selectedPermIds.has(p.id)?'var(--teal)':'var(--text2)'};transition:all .15s" id="plabel_\${p.id}">
                   <input type="checkbox" value="\${p.id}" \${selectedPermIds.has(p.id)?'checked':''} onchange="togglePerm(\${p.id},this.checked)" style="display:none">
                   \${p.description}
                 </label>\`).join('')}
@@ -223,7 +223,7 @@ export function createUserRoutes(db) {
         const lbl=document.getElementById('plabel_'+id);
         if(lbl){
           lbl.style.borderColor=checked?'var(--teal)':'var(--border)';
-          lbl.style.background=checked?'rgba(20,184,166,.1)':'transparent';
+          lbl.style.background=checked?'rgba(58,65,80,.1)':'transparent';
           lbl.style.color=checked?'var(--teal)':'var(--text2)';
         }
       }

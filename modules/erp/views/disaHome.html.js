@@ -1,82 +1,73 @@
 export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
   const sym = kpis?.sym || '€';
 
+  // Fecha de hoy en español (presentación; server-side, no toca datos del tenant).
+  const _now = new Date();
+  const _dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  const _meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  const _h = _now.getHours();
+  const _saludo = _h < 6 ? 'Hola' : _h < 13 ? 'Buenos días' : _h < 21 ? 'Buenas tardes' : 'Buenas noches';
+  const fechaHoy = `${_dias[_now.getDay()]}, ${_now.getDate()} de ${_meses[_now.getMonth()]}`;
+
+  // Texto proactivo de DISA, derivado de los avisos reales que ya calcula el motor.
+  const disaProactivo = (alertState !== 'apagado' && alertCount > 0)
+    ? `Tienes ${alertCount} ${alertCount === 1 ? 'aviso que pide' : 'avisos que piden'} tu atención (vencimientos de proveedor y stock bajo). ¿Quieres que te los enseñe y preparemos los pagos?`
+    : `Todo en orden por ahora. ¿En qué quieres trabajar hoy en tu negocio? Puedo crear facturas, registrar gastos o darte un resumen.`;
+
   return `
     <style>
       .disa-home {
         min-height: calc(100vh - 60px);
         display: flex;
         flex-direction: column;
-        background: radial-gradient(ellipse at 50% 30%, rgba(13,148,136,0.05) 0%, transparent 60%);
         margin: -1.5rem;
         position: relative;
       }
 
-      /* Franja KPIs */
-      .disa-kpis-strip {
-        display: flex;
-        justify-content: center;
-        gap: 32px;
-        padding: 14px 80px 14px 24px;
-        border-bottom: 1px solid rgba(255,255,255,0.04);
-        flex-wrap: wrap;
-      }
-      .disa-kpi { display: flex; align-items: baseline; gap: 8px; }
-      .disa-kpi-value { color: #fff; font-size: 16px; font-weight: 600; }
-      .disa-kpi-value.teal { color: #14b8a6; }
-      .disa-kpi-label { color: #64748b; font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 500; }
-      .disa-kpi-divider { width: 1px; background: rgba(255,255,255,0.06); align-self: stretch; }
-
-      /* Badge alertas */
+      /* Badge alertas (esquina superior derecha) */
       .disa-alerts-badge {
         position: absolute;
         top: 12px;
         right: 20px;
-        background: rgba(239,68,68,0.15);
-        color: #ef4444;
+        background: var(--danger-s);
+        color: var(--danger);
         font-size: 11px;
         padding: 5px 11px;
-        border-radius: 12px;
-        font-weight: 600;
+        border-radius: 20px;
+        font-weight: 500;
         display: flex;
         align-items: center;
         gap: 6px;
         cursor: pointer;
-        border: 1px solid rgba(239,68,68,0.25);
+        border: 1px solid var(--border2);
         font-family: inherit;
+        z-index: 5;
         transition: background 0.15s;
       }
-      .disa-alerts-badge:hover { background: rgba(239,68,68,0.25); }
-      .disa-alerts-badge .adot { width: 5px; height: 5px; background: #ef4444; border-radius: 50%; }
-      /* Estado "visto" (Opción C): hay avisos pero ya se abrieron y nada nuevo → gris, sin gritar. */
+      .disa-alerts-badge .adot { width: 5px; height: 5px; background: var(--danger); border-radius: 50%; }
       .disa-alerts-badge.visto {
-        background: rgba(148,163,184,0.12);
-        color: #94a3b8;
-        border-color: rgba(148,163,184,0.22);
+        background: var(--bg3);
+        color: var(--text2);
+        border-color: var(--border);
       }
-      .disa-alerts-badge.visto:hover { background: rgba(148,163,184,0.2); }
-      .disa-alerts-badge.visto .adot { background: #94a3b8; }
+      .disa-alerts-badge.visto .adot { background: var(--text2); }
 
       /* Stage central */
       .disa-stage {
         flex: 1;
         display: flex;
         flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 32px 24px 24px;
+        padding: 20px 22px 24px;
         width: 100%;
         max-width: 920px;
         margin: 0 auto;
         box-sizing: border-box;
       }
 
-      /* Hero */
+      /* Hero = saludo + tarjeta DISA + cifras (estado inicial; el JS lo oculta al hablar) */
       .disa-hero {
-        text-align: center;
-        margin-bottom: 28px;
-        transition: opacity 0.25s ease, max-height 0.3s ease, margin 0.3s ease;
-        max-height: 200px;
+        transition: opacity 0.25s ease, max-height 0.35s ease, margin 0.3s ease;
+        max-height: 640px;
         overflow: hidden;
       }
       .disa-hero.hidden {
@@ -85,17 +76,75 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
         margin-bottom: 0;
         pointer-events: none;
       }
-      .disa-avatar-big {
-        width: 68px; height: 68px;
-        background: linear-gradient(135deg,#0D9488,#14b8a6);
-        border-radius: 20px;
-        display: flex; align-items: center; justify-content: center;
-        font-weight: 700; color: #fff; font-size: 30px;
-        margin: 0 auto 18px;
-        box-shadow: 0 8px 32px rgba(13,148,136,0.35);
+
+      /* Saludo */
+      .disa-greeting { color: var(--text); font-size: 18px; font-weight: 600; margin: 0 0 2px; letter-spacing: -0.2px; }
+      .disa-question { color: var(--text2); font-size: 13px; margin: 0 0 18px; }
+
+      /* Tarjeta DISA (borde izquierdo acento) */
+      .disa-card-main {
+        background: var(--bg2);
+        border: 0.5px solid #D6DCE4;
+        border-left: 3px solid var(--accent);
+        border-radius: 12px;
+        padding: 14px 16px;
+        display: flex;
+        gap: 11px;
+        margin-bottom: 18px;
       }
-      .disa-greeting { color: #fff; font-size: 26px; font-weight: 600; margin-bottom: 6px; letter-spacing: -0.4px; }
-      .disa-question { color: #94a3b8; font-size: 14px; }
+      .disa-card-icon {
+        width: 34px; height: 34px;
+        border-radius: 9px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 19px;
+        flex-shrink: 0;
+      }
+      .disa-card-icon i { font-size: 19px; }
+      .disa-card-title { font-size: 13px; font-weight: 600; color: var(--accent-d); margin: 0 0 3px; }
+      .disa-card-text { font-size: 13px; color: var(--body-tx); margin: 0; line-height: 1.55; }
+
+      /* Rejilla de cifras */
+      .disa-figs {
+        display: grid;
+        grid-template-columns: repeat(4,1fr);
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+      .disa-fig {
+        background: var(--bg2);
+        border: 1px solid var(--border2);
+        border-radius: 12px;
+        padding: 13px 14px;
+      }
+      .disa-fig-label { font-size: 11.5px; color: var(--text2); margin: 0 0 7px; display: flex; align-items: center; gap: 5px; }
+      .disa-fig-label i { font-size: 14px; }
+      .disa-fig-value { font-size: 21px; font-weight: 600; margin: 0; letter-spacing: -0.5px; color: var(--text); }
+
+      /* Lista de avisos / accesos */
+      .disa-rows {
+        background: var(--bg2);
+        border: 1px solid var(--border2);
+        border-radius: 12px;
+        padding: 6px 4px;
+        margin-bottom: 18px;
+      }
+      .disa-row {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 10px 12px; font-size: 13px;
+        width: 100%; box-sizing: border-box;
+        background: none; border: none; font-family: inherit;
+        text-align: left; cursor: pointer; color: inherit;
+      }
+      .disa-row + .disa-row { border-top: 0.5px solid #F3F4F6; }
+      .disa-row:hover { background: var(--bg3); }
+      .disa-row-label { color: var(--body-tx); display: flex; align-items: center; gap: 9px; }
+      .disa-row-label i { font-size: 16px; color: var(--text3); }
+      .disa-pill { font-size: 11px; font-weight: 500; padding: 2px 9px; border-radius: 20px; }
+      .disa-pill.vencida { background: var(--danger-s); color: var(--danger); }
+      .disa-pill.porvencer { background: var(--warn-s); color: var(--warn); }
+      .disa-pill.aldia { background: var(--accent-soft); color: var(--accent-d); }
 
       /* Mensajes */
       .disa-messages {
@@ -122,24 +171,24 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
         word-break: break-word;
       }
       .disa-msg.user .disa-msg-bubble {
-        background: #0D9488; color: #fff; border-bottom-right-radius: 4px;
+        background: var(--accent); color: #fff; border-bottom-right-radius: 4px;
       }
       .disa-msg.assistant .disa-msg-bubble {
-        background: rgba(255,255,255,0.04); color: #e2e8f0; border-top-left-radius: 4px;
+        background: #FFFFFF; border: 1px solid var(--border2); color: var(--text); border-top-left-radius: 4px;
       }
       .disa-msg-avatar {
         width: 28px; height: 28px;
-        background: linear-gradient(135deg,#0D9488,#14b8a6);
+        background: linear-gradient(135deg,var(--accent),var(--accent-d));
         border-radius: 8px;
         display: flex; align-items: center; justify-content: center;
-        font-weight: 600; color: #fff; font-size: 11px;
+        font-weight: 500; color: #fff; font-size: 11px;
         flex-shrink: 0; margin-top: 2px;
       }
 
       /* Typing indicator */
       .disa-typing { display: flex; gap: 4px; padding: 4px 0; align-items: center; }
       .disa-typing span {
-        width: 6px; height: 6px; background: #14b8a6;
+        width: 6px; height: 6px; background: var(--accent);
         border-radius: 50%; opacity: 0.4; animation: dh-typing 1.2s infinite;
       }
       .disa-typing span:nth-child(2) { animation-delay: 0.2s; }
@@ -161,7 +210,7 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
         bottom: 0;
         padding-bottom: 16px;
         padding-top: 12px;
-        background: linear-gradient(to bottom, transparent 0%, #070B14 35%);
+        background: linear-gradient(to bottom, transparent 0%, var(--bg2) 35%);
       }
 
       /* Chips */
@@ -170,52 +219,51 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
         margin-bottom: 10px; flex-wrap: wrap;
       }
       .disa-chip {
-        background: rgba(255,255,255,0.03);
-        border: 1px solid rgba(255,255,255,0.07);
-        color: #94a3b8; font-size: 11px;
+        background: var(--bg3);
+        border: 1px solid var(--border2);
+        color: var(--text2); font-size: 11px;
         padding: 5px 12px; border-radius: 14px;
         cursor: pointer; transition: all 0.15s; font-family: inherit;
       }
-      .disa-chip:hover { background: rgba(20,184,166,0.08); border-color: rgba(20,184,166,0.25); color: #14b8a6; }
+      .disa-chip:hover { background: var(--accent-soft); border-color: var(--border2); color: var(--accent-d); }
 
       /* Input box */
       .disa-input-box {
         display: flex; align-items: center; gap: 8px;
-        background: rgba(255,255,255,0.05);
-        border: 1px solid rgba(255,255,255,0.12);
+        background: var(--bg2);
+        border: 1px solid var(--border2);
         border-radius: 24px;
         padding: 8px 8px 8px 18px;
-        box-shadow: 0 4px 24px rgba(0,0,0,0.25);
-        transition: border-color 0.15s;
+        box-shadow: 0 1px 3px rgba(16,24,40,0.06);
+        transition: border-color 0.15s, box-shadow 0.15s;
       }
-      .disa-input-box:focus-within { border-color: rgba(20,184,166,0.5); }
+      .disa-input-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(51,65,85,0.10); }
       .disa-input {
         flex: 1; background: transparent; border: none; outline: none;
-        color: #fff; font-size: 13px; padding: 6px 0; font-family: inherit;
+        color: var(--text); font-size: 13px; padding: 6px 0; font-family: inherit;
       }
-      .disa-input::placeholder { color: #64748b; }
+      .disa-input::placeholder { color: var(--text2); }
       .disa-send-btn {
-        background: linear-gradient(135deg,#0D9488,#14b8a6);
+        background: var(--accent);
         border: none; color: #fff;
         padding: 9px 11px; border-radius: 18px;
         cursor: pointer; display: flex; align-items: center; justify-content: center;
-        box-shadow: 0 2px 8px rgba(13,148,136,0.4);
-        transition: transform 0.15s, opacity 0.15s;
+        transition: background 0.15s, opacity 0.15s;
         flex-shrink: 0;
       }
-      .disa-send-btn:hover { transform: scale(1.05); }
-      .disa-send-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+      .disa-send-btn:hover { background: var(--accent-d); }
+      .disa-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-      .disa-disclaimer { color: #475569; font-size: 10px; text-align: center; margin-top: 8px; }
+      .disa-disclaimer { color: var(--text2); font-size: 10px; text-align: center; margin-top: 8px; }
 
-      /* Cards */
+      /* Cards (accesos rápidos) */
       .disa-cards {
         display: grid;
         grid-template-columns: repeat(4,1fr);
-        gap: 10px;
+        gap: 12px;
         width: 100%;
         max-width: 920px;
-        margin: 20px auto 0;
+        margin: 18px auto 0;
         transition: opacity 0.25s ease, max-height 0.3s ease, margin 0.3s ease;
         max-height: 200px;
         overflow: hidden;
@@ -224,30 +272,30 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
         opacity: 0; max-height: 0; margin: 0; pointer-events: none;
       }
       .disa-card {
-        background: rgba(255,255,255,0.03);
-        border: 1px solid rgba(255,255,255,0.06);
-        border-radius: 10px; padding: 14px;
-        cursor: pointer; transition: all 0.15s;
+        background: var(--bg2);
+        border: 1px solid var(--border2);
+        border-radius: 12px; padding: 13px 14px;
+        cursor: pointer; transition: border-color 0.15s, background 0.15s;
         text-align: left; color: inherit; font-family: inherit;
       }
       .disa-card:hover {
-        background: rgba(255,255,255,0.05);
-        border-color: rgba(20,184,166,0.3);
-        transform: translateY(-2px);
+        background: var(--bg3);
+        border-color: var(--border2);
       }
       .disa-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-      .disa-card-title { color: #fff; font-size: 12px; font-weight: 500; }
-      .disa-card-desc { color: #64748b; font-size: 11px; line-height: 1.4; }
+      .disa-card-head i { font-size: 16px; color: var(--accent); }
+      .disa-card-title { color: var(--text); font-size: 12.5px; font-weight: 600; }
+      .disa-card-desc { color: var(--text2); font-size: 11px; line-height: 1.4; }
 
       @media (max-width: 900px) {
         .disa-cards { grid-template-columns: repeat(2,1fr); }
-        .disa-kpis-strip { gap: 16px; }
+        .disa-figs { grid-template-columns: repeat(2,1fr); }
       }
 
       /* ── Artifacts ── */
       .disa-artifact {
-        background: rgba(255,255,255,0.03);
-        border: 1px solid rgba(255,255,255,0.08);
+        background: #FFFFFF;
+        border: 1px solid var(--border2);
         border-radius: 12px;
         padding: 14px;
         max-width: 560px;
@@ -257,84 +305,66 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
         margin-top: 6px;
       }
       .disa-artifact-title {
-        color: #94a3b8; font-size: 11px; text-transform: uppercase;
-        letter-spacing: 0.8px; font-weight: 600; margin-bottom: 12px;
+        color: var(--text2); font-size: 11px; text-transform: uppercase;
+        letter-spacing: 0.8px; font-weight: 500; margin-bottom: 12px;
       }
       .disa-artifact-link {
         display: inline-flex; align-items: center; gap: 4px;
-        color: #14b8a6; font-size: 11px; text-decoration: none;
+        color: var(--accent); font-size: 11px; text-decoration: none;
         margin-top: 10px; padding: 5px 10px;
-        background: rgba(20,184,166,0.08); border: 1px solid rgba(20,184,166,0.2);
+        background: var(--accent-soft); border: 0.5px solid var(--border2);
         border-radius: 6px; transition: background 0.15s;
       }
-      .disa-artifact-link:hover { background: rgba(20,184,166,0.15); }
+      .disa-artifact-link:hover { background: #E2E7EE; }
 
       /* kpi_dashboard */
       .disa-kpis-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(110px,1fr)); gap: 8px; margin-bottom: 10px; }
-      .disa-kpi-card { background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px; }
-      .disa-kpi-card-value { color: #fff; font-size: 17px; font-weight: 700; line-height: 1.1; }
-      .disa-kpi-card-value.positive { color: #14b8a6; }
-      .disa-kpi-card-value.warn { color: #f59e0b; }
-      .disa-kpi-card-value.danger { color: #ef4444; }
-      .disa-kpi-card-label { color: #64748b; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 3px; }
-      .disa-kpi-card-delta { font-size: 10px; margin-top: 4px; font-weight: 600; }
-      .disa-kpi-card-delta.positive { color: #10b981; }
-      .disa-kpi-card-delta.danger { color: #ef4444; }
-      .disa-kpi-card-delta.neutral { color: #64748b; }
+      .disa-kpi-card { background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px; padding: 10px; }
+      .disa-kpi-card-value { color: var(--text); font-size: 17px; font-weight: 600; line-height: 1.1; }
+      .disa-kpi-card-value.positive { color: var(--accent); }
+      .disa-kpi-card-value.warn { color: var(--warn); }
+      .disa-kpi-card-value.danger { color: var(--danger); }
+      .disa-kpi-card-label { color: var(--text2); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 3px; }
+      .disa-kpi-card-delta { font-size: 10px; margin-top: 4px; font-weight: 500; }
+      .disa-kpi-card-delta.positive { color: var(--ok); }
+      .disa-kpi-card-delta.danger { color: var(--danger); }
+      .disa-kpi-card-delta.neutral { color: var(--text2); }
 
-      .disa-chart-bars { display: flex; align-items: flex-end; gap: 5px; height: 72px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 8px; }
+      .disa-chart-bars { display: flex; align-items: flex-end; gap: 5px; height: 72px; padding: 8px; background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px; }
       .disa-chart-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
-      .disa-chart-bar { width: 100%; background: linear-gradient(180deg,#14b8a6,#0D9488); border-radius: 3px 3px 0 0; min-height: 2px; }
-      .disa-chart-label { color: #64748b; font-size: 9px; }
+      .disa-chart-bar { width: 100%; background: linear-gradient(180deg,var(--accent),var(--accent-d)); border-radius: 3px 3px 0 0; min-height: 2px; }
+      .disa-chart-label { color: var(--text2); font-size: 9px; }
 
       /* action_list */
       .disa-list { display: flex; flex-direction: column; gap: 6px; }
-      .disa-list-item { background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px; display: flex; align-items: center; gap: 10px; }
-      .disa-list-item.danger { border-left: 2px solid #ef4444; }
-      .disa-list-item.warn { border-left: 2px solid #f59e0b; }
-      .disa-list-item.positive { border-left: 2px solid #14b8a6; }
+      .disa-list-item { background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px; padding: 10px; display: flex; align-items: center; gap: 10px; }
+      .disa-list-item.danger { border-left: 2px solid var(--danger); }
+      .disa-list-item.warn { border-left: 2px solid var(--warn); }
+      .disa-list-item.positive { border-left: 2px solid var(--accent); }
       .disa-list-item-body { flex: 1; min-width: 0; }
-      .disa-list-item-title { color: #fff; font-size: 12px; font-weight: 500; }
-      .disa-list-item-subtitle { color: #94a3b8; font-size: 11px; margin-top: 2px; }
-      .disa-list-item-meta { color: #64748b; font-size: 10px; margin-top: 2px; }
+      .disa-list-item-title { color: var(--text); font-size: 12px; font-weight: 500; }
+      .disa-list-item-subtitle { color: var(--text2); font-size: 11px; margin-top: 2px; }
+      .disa-list-item-meta { color: var(--text2); font-size: 10px; margin-top: 2px; }
       .disa-list-item-actions { display: flex; gap: 5px; flex-shrink: 0; }
-      .disa-list-btn { border: none; font-size: 10px; padding: 4px 9px; border-radius: 5px; cursor: pointer; font-weight: 600; transition: opacity 0.15s; font-family: inherit; }
-      .disa-list-btn.primary { background: #0D9488; color: #fff; }
-      .disa-list-btn.secondary { background: transparent; color: #94a3b8; border: 1px solid rgba(255,255,255,0.1); }
+      .disa-list-btn { border: none; font-size: 10px; padding: 4px 9px; border-radius: 5px; cursor: pointer; font-weight: 500; transition: opacity 0.15s; font-family: inherit; }
+      .disa-list-btn.primary { background: var(--accent); color: #fff; }
+      .disa-list-btn.secondary { background: transparent; color: var(--text2); border: 1px solid var(--border2); }
       .disa-list-btn:hover { opacity: 0.8; }
 
       /* big_number */
       .disa-bignum { text-align: center; padding: 14px 8px; }
-      .disa-bignum-value { color: #fff; font-size: 40px; font-weight: 700; line-height: 1; letter-spacing: -1.5px; }
-      .disa-bignum-value.positive { color: #14b8a6; }
-      .disa-bignum-value.warn { color: #f59e0b; }
-      .disa-bignum-value.danger { color: #ef4444; }
-      .disa-bignum-label { color: #94a3b8; font-size: 13px; margin-top: 6px; }
-      .disa-bignum-context { color: #64748b; font-size: 11px; margin-top: 4px; }
+      .disa-bignum-value { color: var(--text); font-size: 40px; font-weight: 500; line-height: 1; letter-spacing: -1.5px; }
+      .disa-bignum-value.positive { color: var(--accent); }
+      .disa-bignum-value.warn { color: var(--warn); }
+      .disa-bignum-value.danger { color: var(--danger); }
+      .disa-bignum-label { color: var(--text2); font-size: 13px; margin-top: 6px; }
+      .disa-bignum-context { color: var(--text2); font-size: 11px; margin-top: 4px; }
 
       /* Assistant col with artifact */
       .disa-msg-col { display: flex; flex-direction: column; gap: 6px; max-width: 82%; }
     </style>
 
     <div class="disa-home">
-
-      <!-- Franja KPIs -->
-      <div class="disa-kpis-strip">
-        <div class="disa-kpi">
-          <span class="disa-kpi-value teal">${sym}${kpis?.ventas ?? 0}</span>
-          <span class="disa-kpi-label">Ventas mes</span>
-        </div>
-        <div class="disa-kpi-divider"></div>
-        <div class="disa-kpi">
-          <span class="disa-kpi-value">${kpis?.pedidos ?? 0}</span>
-          <span class="disa-kpi-label">Pedidos</span>
-        </div>
-        <div class="disa-kpi-divider"></div>
-        <div class="disa-kpi">
-          <span class="disa-kpi-value">${kpis?.pendiente ?? 0}</span>
-          <span class="disa-kpi-label">Pendiente</span>
-        </div>
-      </div>
 
       ${alertState !== 'apagado' && alertCount > 0 ? `
         <button class="disa-alerts-badge${alertState === 'visto' ? ' visto' : ''}" id="dh-alerts-badge" onclick="disaShowAlerts()">
@@ -346,11 +376,50 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
       <!-- Stage -->
       <div class="disa-stage" id="dh-stage">
 
-        <!-- Hero -->
+        <!-- Hero: saludo + DISA + cifras + lista (estado inicial) -->
         <div class="disa-hero" id="dh-hero">
-          <div class="disa-avatar-big">D</div>
-          <div class="disa-greeting">Hola, ${userName}</div>
-          <div class="disa-question">¿En qué quieres trabajar hoy en tu negocio?</div>
+          <h3 class="disa-greeting">${_saludo}, ${userName}</h3>
+          <p class="disa-question">${fechaHoy} · esto es lo que pide tu atención hoy</p>
+
+          <div class="disa-card-main">
+            <div class="disa-card-icon"><i class="ti ti-sparkles"></i></div>
+            <div>
+              <p class="disa-card-title">DISA</p>
+              <p class="disa-card-text">${disaProactivo}</p>
+            </div>
+          </div>
+
+          <div class="disa-figs">
+            <div class="disa-fig">
+              <p class="disa-fig-label"><i class="ti ti-arrow-down-left" style="color:var(--accent)"></i>Ventas del mes</p>
+              <p class="disa-fig-value">${sym}${kpis?.ventas ?? 0}</p>
+            </div>
+            <div class="disa-fig">
+              <p class="disa-fig-label"><i class="ti ti-receipt" style="color:#BA7517"></i>Pedidos</p>
+              <p class="disa-fig-value">${kpis?.pedidos ?? 0}</p>
+            </div>
+            <div class="disa-fig">
+              <p class="disa-fig-label"><i class="ti ti-clock-hour-4" style="color:var(--text2)"></i>Pendientes</p>
+              <p class="disa-fig-value">${kpis?.pendiente ?? 0}</p>
+            </div>
+            <div class="disa-fig">
+              <p class="disa-fig-label"><i class="ti ti-alert-triangle" style="color:#DC2626"></i>Avisos</p>
+              <p class="disa-fig-value">${alertState !== 'apagado' ? (alertCount ?? 0) : 0}</p>
+            </div>
+          </div>
+
+          ${alertState !== 'apagado' && alertCount > 0 ? `
+          <div class="disa-rows">
+            <button class="disa-row" type="button" onclick="disaShowAlerts()">
+              <span class="disa-row-label"><i class="ti ti-bell"></i>${alertCount} ${alertCount === 1 ? 'aviso pendiente' : 'avisos pendientes'}</span>
+              <span class="disa-pill ${alertState === 'visto' ? 'aldia' : 'vencida'}">${alertState === 'visto' ? 'Visto' : 'Requiere atención'}</span>
+            </button>
+            <button class="disa-row" type="button" onclick="disaQuickSend('¿Qué requiere mi atención?')">
+              <span class="disa-row-label"><i class="ti ti-list-check"></i>Ver detalle y preparar pagos</span>
+              <span class="disa-pill porvencer">Por revisar</span>
+            </button>
+          </div>
+          ` : ''}
         </div>
 
         <!-- Mensajes -->
@@ -361,23 +430,23 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
           <div style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
             <div class="disa-chips" id="dh-chips" style="margin-bottom:0"></div>
             <button onclick="disaEditChips()" title="Editar accesos rápidos"
-              style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.2);padding:3px;border-radius:4px;line-height:1;transition:color 0.15s;flex-shrink:0"
-              onmouseover="this.style.color='rgba(255,255,255,0.5)'" onmouseout="this.style.color='rgba(255,255,255,0.2)'">
+              style="background:none;border:none;cursor:pointer;color:var(--text3);padding:3px;border-radius:4px;line-height:1;transition:color 0.15s;flex-shrink:0"
+              onmouseover="this.style.color='var(--text2)'" onmouseout="this.style.color='var(--text3)'">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
               </svg>
             </button>
             <button onclick="dhNewThread()" title="Nueva conversación"
-              style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.3);padding:3px 8px;border-radius:6px;font-size:11px;line-height:1;display:flex;align-items:center;gap:4px;flex-shrink:0;font-family:inherit"
-              onmouseover="this.style.color='rgba(255,255,255,0.6)'" onmouseout="this.style.color='rgba(255,255,255,0.3)'">
+              style="background:none;border:none;cursor:pointer;color:var(--text3);padding:3px 8px;border-radius:6px;font-size:11px;line-height:1;display:flex;align-items:center;gap:4px;flex-shrink:0;font-family:inherit"
+              onmouseover="this.style.color='var(--text2)'" onmouseout="this.style.color='var(--text3)'">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Nueva
             </button>
           </div>
           <form onsubmit="event.preventDefault(); disaSubmitHome();">
             <div class="disa-input-box">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
               </svg>
               <input type="text" id="dh-input" class="disa-input"
@@ -386,7 +455,7 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
               <input type="file" id="dh-file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" style="display:none" onchange="dhAttach()" />
               <button type="button" id="dh-attach" title="Adjuntar factura (foto o PDF)"
                 onclick="document.getElementById('dh-file').click()"
-                style="background:none;border:none;cursor:pointer;color:#64748b;padding:6px;display:flex;align-items:center;flex-shrink:0">
+                style="background:none;border:none;cursor:pointer;color:var(--text2);padding:6px;display:flex;align-items:center;flex-shrink:0">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
               </button>
               <button type="submit" class="disa-send-btn" id="dh-send">
@@ -404,38 +473,28 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
         <div class="disa-cards" id="dh-cards">
           <button class="disa-card" onclick="disaQuickSend('Resumen del día')">
             <div class="disa-card-head">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#14b8a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/>
-              </svg>
+              <i class="ti ti-chart-line"></i>
               <div class="disa-card-title">Resumen del día</div>
             </div>
             <div class="disa-card-desc">Ventas, pedidos y métricas de hoy</div>
           </button>
           <button class="disa-card" onclick="disaQuickSend('¿Qué requiere mi atención?')">
             <div class="disa-card-head">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-              </svg>
+              <i class="ti ti-alert-triangle"></i>
               <div class="disa-card-title">¿Qué requiere mi atención?</div>
             </div>
             <div class="disa-card-desc">Stock bajo, clientes, oportunidades</div>
           </button>
           <button class="disa-card" onclick="disaQuickSend('Crea un producto nuevo')">
             <div class="disa-card-head">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
+              <i class="ti ti-plus"></i>
               <div class="disa-card-title">Crear nuevo producto</div>
             </div>
             <div class="disa-card-desc">Te guío paso a paso</div>
           </button>
           <button class="disa-card" onclick="disaQuickSend('Construir mi tienda web')">
             <div class="disa-card-head">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
-                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-              </svg>
+              <i class="ti ti-world"></i>
               <div class="disa-card-title">Construir mi tienda web</div>
             </div>
             <div class="disa-card-desc">Catálogo + checkout en minutos</div>
@@ -898,23 +957,27 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
       }
 
       dhLoadChips();
-      dhLoadActiveThread();
+      // La HOME (/admin) es el DASHBOARD del molde 1 (saludo + cifras + tarjeta DISA + lista +
+      // input): aterriza SIEMPRE en el hero, no en el chat. La conversación a pantalla completa
+      // vive en /admin/disa (DISEÑO.md §3.2). Por eso ya NO se auto-restaura el hilo aquí; al
+      // escribir en el input, la home abre el chat en línea (disaSubmitHome). dhLoadActiveThread()
+      // se conserva por si /admin/disa lo reutiliza, pero la home no lo invoca al cargar.
     </script>
 
     <div id="dh-chips-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center">
-      <div style="background:#0f1420;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:24px;width:360px;max-width:90vw">
+      <div style="background:#FFFFFF;border: 1px solid var(--border2);border-radius:12px;padding:24px;width:360px;max-width:90vw">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-          <div style="color:#fff;font-weight:600;font-size:14px">Accesos rápidos</div>
-          <button onclick="document.getElementById('dh-chips-modal').style.display='none'" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:18px;line-height:1;padding:0">✕</button>
+          <div style="color:var(--text);font-weight:500;font-size:14px">Accesos rápidos</div>
+          <button onclick="document.getElementById('dh-chips-modal').style.display='none'" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:18px;line-height:1;padding:0">✕</button>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">
-          <input id="dh-chip-0" placeholder="Chip 1" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 12px;font-size:13px;color:#f1f5f9;font-family:inherit;outline:none;width:100%;box-sizing:border-box">
-          <input id="dh-chip-1" placeholder="Chip 2" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 12px;font-size:13px;color:#f1f5f9;font-family:inherit;outline:none;width:100%;box-sizing:border-box">
-          <input id="dh-chip-2" placeholder="Chip 3" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 12px;font-size:13px;color:#f1f5f9;font-family:inherit;outline:none;width:100%;box-sizing:border-box">
+          <input id="dh-chip-0" placeholder="Chip 1" style="background:#FFFFFF;border:1px solid var(--border2);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);font-family:inherit;outline:none;width:100%;box-sizing:border-box">
+          <input id="dh-chip-1" placeholder="Chip 2" style="background:#FFFFFF;border:1px solid var(--border2);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);font-family:inherit;outline:none;width:100%;box-sizing:border-box">
+          <input id="dh-chip-2" placeholder="Chip 3" style="background:#FFFFFF;border:1px solid var(--border2);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);font-family:inherit;outline:none;width:100%;box-sizing:border-box">
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end">
-          <button onclick="document.getElementById('dh-chips-modal').style.display='none'" style="padding:7px 14px;border:1px solid rgba(255,255,255,0.1);border-radius:7px;background:none;color:#94a3b8;cursor:pointer;font-size:13px;font-family:inherit">Cancelar</button>
-          <button onclick="disaSaveChips()" style="padding:7px 14px;background:#0D9488;border:none;border-radius:7px;color:#fff;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit">Guardar</button>
+          <button onclick="document.getElementById('dh-chips-modal').style.display='none'" style="padding:7px 14px;border:1px solid var(--border2);border-radius:7px;background:none;color:var(--text2);cursor:pointer;font-size:13px;font-family:inherit">Cancelar</button>
+          <button onclick="disaSaveChips()" style="padding:7px 14px;background:var(--accent);border:none;border-radius:7px;color:#fff;cursor:pointer;font-size:13px;font-weight:500;font-family:inherit">Guardar</button>
         </div>
       </div>
     </div>

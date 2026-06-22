@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can } from '../layout.js';
+import { adminLayout, can, docShell } from '../layout.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { supplierReturnSchema, purchaseOrderAnularSchema } from '../schemas.js';
@@ -489,35 +489,43 @@ export function createSupplierReturnRoutes(db) {
       ? `<a href="${r.origin.href}" style="color:var(--teal);font-weight:600">${esc(r.origin.label)}</a>`
       : `<span style="color:var(--text3)">${esc(r.origin_type)} #${r.origin_id}</span>`;
 
-    const content = `
-      <div class="ph"><h2>Devolución ${esc(r.return_number || ('#' + r.id))}</h2>
-        <div style="display:flex;gap:.5rem">
-          ${r.status === 'confirmada' && canEdit ? '<button class="btn btn-danger" onclick="anularDevolucion()">Anular</button>' : ''}
-          <a href="/admin/supplier-returns" class="btn btn-secondary">Volver</a>
-        </div>
-      </div>
+    const paper = `
+      <h1>Devolución ${esc(r.return_number || ('#' + r.id))}</h1>
+      <div class="doc-sub">${esc(r.date)}</div>
       ${motivoBlock}
-      <div class="grid g2" style="margin-bottom:1rem">
-        <div class="card card-body">
-          <div style="margin-bottom:.5rem"><span style="color:var(--text3);font-size:.8rem;text-transform:uppercase">Proveedor</span><br><strong>${esc(r.supplier_name || r.supplier_current_name)}</strong>${r.supplier_fiscal_id ? ` <span style="color:var(--text3)">(${esc(r.supplier_fiscal_id)})</span>` : ''}</div>
-          <div style="margin-bottom:.5rem"><span style="color:var(--text3);font-size:.8rem;text-transform:uppercase">Documento de origen</span><br>${originLink}</div>
-          <div><span style="color:var(--text3);font-size:.8rem;text-transform:uppercase">Motivo</span><br>${esc(r.motivo)}</div>
+      <div class="doc-cols">
+        <div>
+          <div class="doc-label">Proveedor</div>
+          <div><strong>${esc(r.supplier_name || r.supplier_current_name)}</strong>${r.supplier_fiscal_id ? ` <span style="color:var(--text3)">(${esc(r.supplier_fiscal_id)})</span>` : ''}</div>
+          <div style="margin-top:.5rem"><div class="doc-label">Documento de origen</div>${originLink}</div>
         </div>
-        <div class="card card-body">
-          <div style="margin-bottom:.5rem"><span style="color:var(--text3);font-size:.8rem;text-transform:uppercase">Fecha</span><br>${esc(r.date)}</div>
-          <div style="margin-bottom:.5rem"><span style="color:var(--text3);font-size:.8rem;text-transform:uppercase">Estado</span><br>${badge}</div>
+        <div>
+          <div class="doc-label">Motivo</div>
+          <div>${esc(r.motivo)}</div>
           ${notesBlock}
         </div>
       </div>
-      <div class="card">
-        <div class="card-head"><h3>Líneas devueltas (inmutables — corregir = anular y crear otra)</h3></div>
-        <div class="table-wrap"><table>
-          <thead><tr><th>Producto</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Coste unit. (neto)</th><th style="text-align:right">Valor</th></tr></thead>
-          <tbody>${rows}</tbody>
-          <tfoot><tr><td colspan="3" style="text-align:right;font-weight:700;padding:.7rem 1rem">Valor devuelto</td><td style="text-align:right;font-weight:700">${total.toFixed(2)} ${sym}</td></tr></tfoot>
-        </table></div>
-        <div class="card-body" style="color:var(--text3);font-size:.78rem">El valor es informativo (lo que el proveedor debería abonar). El cobro/abono al proveedor no se gestiona aquí.</div>
-      </div>
+      <table>
+        <thead><tr><th>Producto</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Coste unit. (neto)</th><th style="text-align:right">Valor</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <table class="doc-totals">
+        <tr class="grand"><td>Valor devuelto</td><td>${total.toFixed(2)} ${sym}</td></tr>
+      </table>
+      <div style="margin-top:8px;color:var(--text3);font-size:.78rem">Líneas devueltas inmutables — corregir = anular y crear otra. El valor es informativo (lo que el proveedor debería abonar). El cobro/abono al proveedor no se gestiona aquí.</div>`;
+
+    const panel = `
+      <div class="card"><div class="card-body">
+        <div style="margin-bottom:12px">${badge}</div>
+        <div class="dp-row"><span class="k">Devolución</span><span class="v">${esc(r.return_number || ('#' + r.id))}</span></div>
+        <div class="dp-row"><span class="k">Fecha</span><span class="v">${esc(r.date)}</span></div>
+        <div class="dp-row"><span class="k">Proveedor</span><span class="v">${esc(r.supplier_name || r.supplier_current_name)}</span></div>
+        <div class="dp-row"><span class="k">Valor</span><span class="v">${total.toFixed(2)} ${sym}</span></div>
+        <div class="dp-actions" style="margin-top:14px">
+          ${r.status === 'confirmada' && canEdit ? '<button class="btn btn-danger" onclick="anularDevolucion()">Anular</button>' : ''}
+          <a href="/admin/supplier-returns" class="btn btn-secondary">Volver</a>
+        </div>
+      </div></div>
       <script>
       async function anularDevolucion(){
         const motivo = prompt('Motivo de anulación de la devolución ${esc(r.return_number || '')} (reintegrará su stock):');
@@ -529,7 +537,7 @@ export function createSupplierReturnRoutes(db) {
         } catch(e){ toast(e.message || 'Error anulando','err'); }
       }
       </script>`;
-    return c.html(adminLayout('Devolución ' + (r.return_number || ''), content, 'supplier-returns', csrfToken, c));
+    return c.html(adminLayout('Devolución ' + (r.return_number || ''), docShell(paper, panel), 'supplier-returns', csrfToken, c));
   });
 
   return { api, views };

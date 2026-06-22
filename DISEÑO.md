@@ -3,9 +3,10 @@
 > La **fuente de verdad visual y estructural** de Bamburu. Lo que `CANON.md` es a la
 > estrategia, esto es al aspecto y a *dónde vive cada cosa*. Si una pantalla contradice
 > este documento, gana este documento (y se sanea, no al revés).
-> Esto es la **PIEZA 1** de la tarea de roadmap "Sistema de diseño + saneamiento visual"
-> (TABLERO): las **reglas + el mapa**. La PIEZA 2 (rediseñar/sanear las pantallas por
-> dentro) es otra tarea y **no se toca aquí**.
+> Tarea de roadmap "Sistema de diseño + saneamiento visual" (TABLERO): PIEZA 1 (reglas + mapa,
+> este archivo), PIEZA 2 (menú de /admin) y PIEZA 3 (saneamiento visual) **HECHAS el 2026-06-22**.
+> El **patrón oro visual aprobado** es `docs/diseno/sistema-visual-aprobado.html` y está aplicado a
+> toda la plataforma vía `modules/erp/layout.js` (chrome grafito `#20242F`, área clara, slate, cero teal).
 > Última actualización: 2026-06-22
 
 ---
@@ -16,10 +17,11 @@
   menú y patrones comunes. Define **cómo se ve** y **dónde vive cada función**.
 - **No es** un rediseño. Aquí no se toca ni una pantalla, ni el menú real
   (`modules/erp/layout.js`), ni un token del código. Eso es la PIEZA 2.
-- **Nota de realidad (deuda, no objetivo):** la UI de hoy todavía NO cumple este
-  documento — el área de trabajo es oscura y el acento es *teal*. Esa divergencia ES la
-  deuda que la PIEZA 2 vendrá a saldar. Este archivo describe el **destino**, no el estado
-  actual.
+- **Nota de realidad:** el patrón oro visual (`docs/diseno/sistema-visual-aprobado.html`) está
+  aplicado a toda la plataforma vía las piezas compartidas de `modules/erp/layout.js` (chrome
+  GRAFITO OSCURO `#20242F`, área de trabajo clara, acento slate `#334155`, cero teal). El acento
+  ya NO es teal y el área de trabajo ya NO es oscura. Este archivo y el patrón oro **coinciden**;
+  si una pantalla se desvía, se sanea hacia el patrón oro, no al revés.
 
 ---
 
@@ -41,75 +43,91 @@ estándar de validación de cualquier pantalla:
 
 ## 2. Identidad visual (tokens)
 
+> **Fuente de verdad visual = `docs/diseno/sistema-visual-aprobado.html`** (patrón oro aprobado
+> por Ibrahin el 22-jun-2026; sustituye al anterior `mockup-aprobado.html`). Los valores de abajo
+> se leen de ese archivo carácter por carácter. Si algo choca, manda el patrón oro en lo visual.
+
 ### 2.1 Luz y "chrome"
 
-- **El área de trabajo SIEMPRE en claro.** Nunca tema oscuro en el contenido.
-- **"Chrome"** (barra superior + menú lateral) en **grafito profundo `#20242F`**.
-  Divisores sobre el chrome: **blanco al 6–8 % de opacidad**.
+- **Área de trabajo SIEMPRE en CLARO.** Fondo de aplicación `#F5F6F8`; superficies blancas `#FFFFFF`.
+- **"Chrome" (barra superior + menú lateral) en GRAFITO AZUL OSCURO** (`#20242F`). Sobre ese fondo:
+  texto inactivo `#9AA3B3`, texto activo `#FFFFFF`, icono inactivo `#727B8C`, título de grupo
+  `#5B6475`, item activo = fondo `rgba(255,255,255,.10)` + texto blanco, divisor `rgba(255,255,255,.07)`.
+  La marca (sparkles) va en blanco arriba del rail. El slate `#334155` es el **acento** del área de
+  trabajo (botón primario, DISA), nunca el fondo del chrome.
+- **Cero teal** en toda la app.
 
 ### 2.2 Fondos y superficies
 
 | Token | Valor |
 |---|---|
-| Fondo de contenido | `#F8FAFC` |
-| Superficies / tarjetas | `#FFFFFF` |
-| Borde fino (tarjetas) | `#EDEFF2` |
-| Borde exterior | `#E7E9ED` |
+| Fondo de aplicación | `#F5F6F8` |
+| Superficies / tarjetas / chrome / paneles | `#FFFFFF` |
+| Subsuperficie (search, hover, sutil) | `#F1F3F5` |
+| Borde fino interno (hairline 0.5px) | `#ECEEF1` |
+| Borde exterior | `#E4E6EA` |
+| Borde tarjeta de DISA | `#D6DCE4` |
+| Divisor de fila en lista | `#F3F4F6` |
 
 ### 2.3 Texto
 
 | Token | Valor |
 |---|---|
-| Texto principal | `#23262C` |
-| Texto secundario | `#828B9B` |
-| Sobre el chrome — inactivo | `#9AA3B3` |
-| Sobre el chrome — activo | `#FFFFFF` |
-| Sobre el chrome — iconos inactivos | `#727B8C` |
+| Texto principal | `#1A1D21` |
+| Texto fuerte / activo | `#1E293B` |
+| Texto cuerpo | `#374151` |
+| Texto secundario | `#6B7280` |
+| Texto terciario / etiquetas | `#9097A1` |
+| Título de grupo de menú | `#A0A6B0` |
+| Texto de item de menú | `#3F454F` |
+| Icono de menú (inactivo) | `#8A909B` |
 
-### 2.4 Acento de marca (grafito azulado)
+### 2.4 Acento (grafito azulado / slate)
 
-Familia **`#3A4150` / `#20242F`**. Se usa **con MUCHA moderación**: el botón principal, la
-barra de DISA y algún icono clave. No es un color decorativo: si aparece, es porque algo
-es *la* acción o *el* protagonista.
+Familia **`#334155` / `#1E293B`**. Es el acento (logo, borde izquierdo de la tarjeta de DISA,
+botón primario, item de menú **activo** → fondo `#EDF0F4` + texto `#1E293B` + icono `#334155`,
+aro del avatar `rgba(51,65,85,0.16)`). Con moderación: si aparece, es *la* acción o *el*
+protagonista. **No hay teal.**
 
-> **Observación (no actuar):** el TABLERO (§ "Sistema de diseño") registraba un acento
-> *teal `#0D9488`* como token previo. Este DISEÑO.md lo **sustituye** por la familia
-> grafito azulado. No se cambia ningún token del código aquí; se reconciliará en la
-> PIEZA 2.
-
-### 2.5 Colores de estado (independientes del acento)
+### 2.5 Colores de estado (píldoras del mockup)
 
 | Estado | Fondo | Texto |
 |---|---|---|
-| Vencido | `#FBEDEC` | `#A6453F` |
-| Por vencer | `#FAF2E2` | `#8A6018` |
-| Al día / neutro | `#EFF1F4` | `#3F4A5C` |
+| Vencida / error | `#FEE2E2` | `#A32D2D` |
+| Por vencer / aviso | `#FAEEDA` | `#854F0B` |
+| Al día / neutro | `#EDF0F4` | `#1E293B` |
+
+Iconos de acento de estado: alerta/peligro `#DC2626`, ámbar `#BA7517`, neutro `#6B7280`.
+*(El mockup no define un verde de "éxito"; cuando haga falta —p. ej. "cobrada"— se usa un
+verde sobrio de estado, coherente y discreto, sin teal.)*
 
 ### 2.6 Tipografía
 
-- **Inter**, y **solo pesos 400 y 500** (nada de 600/700).
-- La jerarquía se hace con **tamaño y color**, no con negritas pesadas.
+- **Inter**, pesos **400 / 500 / 600** (como el mockup). Títulos, valores y logo a **600**;
+  item activo y etiquetas a **500**; cuerpo a **400**. Jerarquía por tamaño, color y peso.
 
-### 2.7 Esquinas y espacio
+### 2.7 Esquinas y espacio · iconos
 
-- Esquinas: **tarjetas 13px**, **controles 9–10px**, **píldoras 7px**.
-- **Mucho aire:** rejilla de **4px**, padding de contenido **~24px**.
+- Esquinas: **contenedor 14px**, **tarjetas/paneles 12px**, **controles/menú 9px**, **píldoras 20px**.
+- Bordes **hairline 0.5px**. Padding de contenido del mockup ~20–22px.
+- **Iconos: Tabler Icons** (línea, `ti ti-*`), como el mockup.
 
 ---
 
 ## 3. Estructura — el "ritual": cada cosa en su sitio
 
-### 3.1 Reglas del menú
+### 3.1 Reglas del menú y chrome (como el mockup)
 
-- **Menú lateral COLAPSABLE:** por defecto **solo iconos** (centrados); al pasar el ratón
-  se despliega y muestra las etiquetas.
-- **Sin logo** en la barra superior.
-- **Cuenta y Ajustes NO son una sección del menú:** viven dentro del **menú del usuario**
-  (avatar, arriba a la derecha).
-- **DISA va FIJA y destacada ARRIBA del menú**, encima de todo lo demás, **siempre
-  visible** — es el protagonista, no una entrada más (ver §4).
-- El **panel de superadmin** va por su **rol aparte**, fuera de este menú
-  (`bamburu.com/superadmin`).
+- **Barra superior GRAFITO OSCURO** (`#20242F`) con: buscador, campana de avisos y **avatar**
+  (`#3A4357`, arriba a la derecha). La marca va en el rail, no en la barra.
+- **Menú lateral GRAFITO OSCURO** (`#20242F`), **colapsable**: por defecto iconos; al pasar el ratón
+  se despliega y muestra las etiquetas. Marca (sparkles, blanca) arriba. Item activo = fondo
+  `rgba(255,255,255,.10)` + texto blanco + icono blanco.
+- **DISA es la HOME** (vive dentro de `/admin`): la pantalla de inicio ES DISA (saludo, propuesta de
+  DISA, cifras del día, lista con píldoras y campo para hablarle). **No** es una entrada fija aparte.
+- **Cuenta/Ajustes NO en el lateral:** en el **desplegable del avatar** — *Mi cuenta · Ajustes ·
+  Datos del negocio · Documentación (`/docs`) · Cerrar sesión* (mapeados a las rutas reales).
+- El **panel de superadmin** va por su **rol aparte**, fuera de este menú (`bamburu.com/superadmin`).
 
 ### 3.2 Mapa del menú (grupos → enlaces)
 
@@ -119,10 +137,9 @@ es *la* acción o *el* protagonista.
 > arriba** e **Inicio** justo debajo. El cliente vive donde se vende (Ventas) y el
 > proveedor donde se compra (Compras).
 
-**▸ DISA** *(entrada fija y destacada, arriba del todo — siempre visible)*
-- DISA → `/admin/disa`
-
-**· Inicio** (el panel: KPIs y avisos de DISA) → `/admin`
+**· Inicio = DISA** (la home: saludo, propuesta de DISA, cifras del día, lista con píldoras y
+campo para hablarle) → `/admin`. *(La conversación a pantalla completa sigue en `/admin/disa`,
+accesible desde la home; ya no es una entrada fija del menú.)*
 
 **VENTAS**
 - Facturas → `/admin/invoices`
@@ -176,9 +193,9 @@ se fuerza:** se anota en "huérfanas / a decidir" y se deja para que lo decida e
 
 ## 4. DISA
 
-- **Protagonista.** Entrada fija y destacada arriba del menú (§3.1), siempre visible.
-- **Proactiva en el panel de Inicio:** habla primero, propone (avisos del día), no espera
-  órdenes (CANON §1, §5).
+- **Protagonista — DISA ES la home** (`/admin`): saludo personalizado + tarjeta de DISA
+  proponiendo acciones del día + cifras + lista con píldoras + campo para hablarle.
+- **Proactiva:** habla primero, propone (avisos del día), no espera órdenes (CANON §1, §5).
 - **Presentación consistente** en toda la plataforma: la misma cara de DISA donde aparezca
   (Inicio, su sección, y donde se invoque).
 

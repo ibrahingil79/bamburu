@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can } from '../layout.js';
+import { adminLayout, can, docShell } from '../layout.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { supplierInvoiceSchema, supplierInvoiceAnularSchema, supplierPaymentSchema } from '../schemas.js';
@@ -814,41 +814,58 @@ export function createSupplierInvoiceRoutes(db) {
       : isExpense ? '<span class="badge b-purple" style="margin-left:.5rem">Gasto</span>'
       : '<span class="badge b-teal" style="margin-left:.5rem">Compra</span>';
     const linesTitle = isCredit ? 'Líneas del abono (negativas)' : 'Líneas del gasto';
-    const linesCard = (inv.items.length)
-      ? `<div class="card" style="margin-bottom:1rem">
-          <div class="card-head"><h3>${linesTitle}</h3></div>
-          <div class="table-wrap"><table>
+    const linesBlock = (inv.items.length)
+      ? `<h2 style="font-size:14px;font-weight:500;margin:0 0 8px">${linesTitle}</h2>
+          <table>
             <thead><tr><th>Concepto</th><th style="text-align:right">Base</th><th>IVA</th><th style="text-align:right">Cuota</th></tr></thead>
             <tbody>${inv.items.map(it => `<tr><td>${esc(it.concepto || '—')}</td><td style="text-align:right">${s}${Number(it.base).toFixed(2)}</td><td>${Number(it.tax_rate)}%</td><td style="text-align:right">${s}${Number(it.cuota).toFixed(2)}</td></tr>`).join('')}
             <tr><td style="font-weight:700;border-top:1px solid var(--border)">Totales</td><td style="text-align:right;font-weight:700;border-top:1px solid var(--border)">${s}${Number(inv.base).toFixed(2)}</td><td style="border-top:1px solid var(--border)"></td><td style="text-align:right;font-weight:700;border-top:1px solid var(--border)">${s}${Number(inv.tax).toFixed(2)}</td></tr></tbody>
-          </table></div>
-        </div>` : '';
-    const content = `
-      <div class="ph"><h2>Factura recibida ${esc(inv.internal_code || ('#' + inv.id))}${tipoBadge}</h2><div style="display:flex;gap:.5rem">${actionBtns}<a href="/admin/supplier-invoices" class="btn btn-secondary">Volver</a></div></div>
+          </table>` : '';
+    const paper = `
+      <h1>Factura recibida ${esc(inv.internal_code || ('#' + inv.id))}${tipoBadge}</h1>
+      <div class="doc-sub">${esc(inv.invoice_date)} · vence ${esc(inv.due_date || '-')}</div>
       ${anuladaBlock}
-      <div class="grid g2" style="margin-bottom:1rem">
-        <div class="card card-body">
-          <div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Proveedor</span><br><strong>${esc(inv.supplier_name || '')}</strong>${inv.supplier_fiscal_id ? ' <span style="color:var(--muted)">' + esc(inv.supplier_fiscal_id) + '</span>' : ''}</div>
-          <div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Nº factura proveedor</span><br>${esc(inv.supplier_invoice_number || '—')}</div>
+      <div class="doc-cols">
+        <div>
+          <div class="doc-label">Proveedor</div>
+          <div><strong>${esc(inv.supplier_name || '')}</strong>${inv.supplier_fiscal_id ? ' <span style="color:var(--muted)">' + esc(inv.supplier_fiscal_id) + '</span>' : ''}</div>
+          <div style="margin-top:.5rem"><div class="doc-label">Nº factura proveedor</div>${esc(inv.supplier_invoice_number || '—')}</div>
           ${isExpense
-            ? `<div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Tipo</span><br><span class="badge b-purple">Gasto</span>${inv.expense_category ? ' · <strong>' + esc(inv.expense_category) + '</strong>' : ''}</div>`
-            : `<div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Documento de origen</span><br>${originBlock}</div>`}
-          ${inv.notes ? `<div><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Notas</span><br>${esc(inv.notes)}</div>` : ''}
+            ? `<div style="margin-top:.5rem"><div class="doc-label">Tipo</div><span class="badge b-purple">Gasto</span>${inv.expense_category ? ' · <strong>' + esc(inv.expense_category) + '</strong>' : ''}</div>`
+            : `<div style="margin-top:.5rem"><div class="doc-label">Documento de origen</div>${originBlock}</div>`}
+          ${inv.notes ? `<div style="margin-top:.5rem"><div class="doc-label">Notas</div>${esc(inv.notes)}</div>` : ''}
         </div>
-        <div class="card card-body">
-          <div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Fecha / Vencimiento</span><br>${esc(inv.invoice_date)} · vence <strong>${esc(inv.due_date || '-')}</strong></div>
-          <div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Importe</span><br>Base ${s}${Number(inv.base).toFixed(2)} · IVA ${s}${Number(inv.tax).toFixed(2)} · <strong style="font-size:1.2rem">Total ${s}${Number(inv.total).toFixed(2)}</strong></div>
-          <div><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">${isCredit ? 'Estado del abono' : 'Estado de pago'}</span><br>${statusBadge} ${inv.status === 'anulada' ? '' : isCredit ? `Crédito ${s}${Math.abs(Number(inv.total)).toFixed(2)} · Reembolsado ${s}${Math.abs(Number(pg.pagado)).toFixed(2)} · Pendiente <strong>${s}${Math.abs(Number(pg.pendiente)).toFixed(2)}</strong>` : `Pagado ${s}${Number(pg.pagado).toFixed(2)} · Pendiente <strong>${s}${Number(pg.pendiente).toFixed(2)}</strong>`}</div>
+        <div>
+          <div class="doc-label">Fecha / Vencimiento</div>
+          <div>${esc(inv.invoice_date)} · vence <strong>${esc(inv.due_date || '-')}</strong></div>
+          <div style="margin-top:.5rem"><div class="doc-label">${isCredit ? 'Estado del abono' : 'Estado de pago'}</div>${statusBadge} ${inv.status === 'anulada' ? '' : isCredit ? `Crédito ${s}${Math.abs(Number(inv.total)).toFixed(2)} · Reembolsado ${s}${Math.abs(Number(pg.pagado)).toFixed(2)} · Pendiente <strong>${s}${Math.abs(Number(pg.pendiente)).toFixed(2)}</strong>` : `Pagado ${s}${Number(pg.pagado).toFixed(2)} · Pendiente <strong>${s}${Number(pg.pendiente).toFixed(2)}</strong>`}</div>
         </div>
       </div>
-      ${linesCard}
-      <div class="card">
-        <div class="card-head"><h3>Pagos registrados</h3></div>
-        <div class="table-wrap"><table>
-          <thead><tr><th>Fecha</th><th style="text-align:right">Importe</th><th>Forma</th><th>Nota</th><th></th></tr></thead>
-          <tbody>${inv.payments.length ? inv.payments.map(p => `<tr><td>${esc(p.paid_date)}</td><td style="text-align:right">${s}${Number(p.amount).toFixed(2)}</td><td>${esc(p.payment_method || '—')}</td><td>${esc(p.note || '')}</td><td style="text-align:right">${canCreate ? `<button class="btn btn-secondary btn-sm" onclick="deshacerPago(${inv.id},${p.id})">Deshacer</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin pagos registrados</td></tr>'}</tbody>
-        </table></div>
-      </div>
+      ${linesBlock}
+      <table class="doc-totals">
+        <tr><td>Base</td><td>${s}${Number(inv.base).toFixed(2)}</td></tr>
+        <tr><td>IVA</td><td>${s}${Number(inv.tax).toFixed(2)}</td></tr>
+        <tr class="grand"><td>Total</td><td>${s}${Number(inv.total).toFixed(2)}</td></tr>
+      </table>
+      <h2 style="font-size:14px;font-weight:500;margin:22px 0 8px">Pagos registrados</h2>
+      <table>
+        <thead><tr><th>Fecha</th><th style="text-align:right">Importe</th><th>Forma</th><th>Nota</th><th></th></tr></thead>
+        <tbody>${inv.payments.length ? inv.payments.map(p => `<tr><td>${esc(p.paid_date)}</td><td style="text-align:right">${s}${Number(p.amount).toFixed(2)}</td><td>${esc(p.payment_method || '—')}</td><td>${esc(p.note || '')}</td><td style="text-align:right">${canCreate ? `<button class="btn btn-secondary btn-sm" onclick="deshacerPago(${inv.id},${p.id})">Deshacer</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin pagos registrados</td></tr>'}</tbody>
+      </table>`;
+
+    const panel = `
+      <div class="card"><div class="card-body">
+        <div style="margin-bottom:12px">${statusBadge}</div>
+        <div class="dp-row"><span class="k">Código</span><span class="v">${esc(inv.internal_code || ('#' + inv.id))}</span></div>
+        <div class="dp-row"><span class="k">Proveedor</span><span class="v">${esc(inv.supplier_name || '')}</span></div>
+        <div class="dp-row"><span class="k">Fecha</span><span class="v">${esc(inv.invoice_date)}</span></div>
+        <div class="dp-row"><span class="k">Vencimiento</span><span class="v">${esc(inv.due_date || '-')}</span></div>
+        <div class="dp-row"><span class="k">Total</span><span class="v">${s}${Number(inv.total).toFixed(2)}</span></div>
+        <div class="dp-actions" style="margin-top:14px">
+          ${actionBtns}
+          <a href="/admin/supplier-invoices" class="btn btn-secondary">Volver</a>
+        </div>
+      </div></div>
       ${pagoModalHtml()}
       <script>
       ${pagoModalScript(s)}
@@ -863,7 +880,7 @@ export function createSupplierInvoiceRoutes(db) {
         catch(e){ toast(e.message||'Error','err'); }
       }
       </script>`;
-    return c.html(adminLayout('Factura recibida ' + (inv.internal_code || ('#' + inv.id)), content, 'supplier-invoices', c.get('session')?.csrfToken || '', c));
+    return c.html(adminLayout('Factura recibida ' + (inv.internal_code || ('#' + inv.id)), docShell(paper, panel), 'supplier-invoices', c.get('session')?.csrfToken || '', c));
   });
 
   return { api, views };

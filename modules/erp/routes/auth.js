@@ -38,22 +38,22 @@ function totpVerifyPage(pending, error = false) {
   <title>Verificar 2FA — Bamburu</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#070B14;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-    .card{width:100%;max-width:400px;padding:40px 36px;background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,0.08);border-radius:24px;box-shadow:0 30px 80px rgba(0,0,0,0.5)}
-    .logo{font-size:22px;font-weight:800;color:#fff;letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
-    .logo span{color:#14B8A6}
-    h1{font-size:20px;font-weight:700;color:#fff;margin-bottom:6px;text-align:center}
-    .sub{font-size:14px;color:rgba(255,255,255,0.45);text-align:center;margin-bottom:28px}
-    label{display:block;font-size:12px;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F6F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+    .card{width:100%;max-width:400px;padding:40px 36px;background:#FFFFFF;border:1px solid #ECEEF1;border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10)}
+    .logo{font-size:22px;font-weight:500;color:#1A1D21;letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
+    .logo span{color:#334155}
+    h1{font-size:20px;font-weight:500;color:#1A1D21;margin-bottom:6px;text-align:center}
+    .sub{font-size:14px;color:#6B7280;text-align:center;margin-bottom:28px}
+    label{display:block;font-size:12px;font-weight:500;color:#6B7280;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
     .field{margin-bottom:20px}
-    input{width:100%;padding:16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:#fff;font-size:28px;font-family:monospace;letter-spacing:0.2em;text-align:center;outline:none;transition:all 0.2s}
-    input:focus{border-color:#14B8A6;box-shadow:0 0 0 3px rgba(20,184,166,0.15)}
-    .btn{width:100%;padding:14px;background:linear-gradient(135deg,#14B8A6,#0F766E);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
-    .btn:hover{transform:translateY(-1px);box-shadow:0 8px 30px rgba(20,184,166,0.35)}
-    .error{background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:#FCA5A5;margin-bottom:20px}
-    .back{text-align:center;font-size:13px;color:rgba(255,255,255,0.4);margin-top:16px}
-    .back a{color:rgba(255,255,255,0.4);text-decoration:none}
-    .back a:hover{color:#14B8A6}
+    input{width:100%;padding:16px;background:#FFFFFF;border:1px solid #E4E6EA;border-radius:12px;color:#1A1D21;font-size:28px;font-family:monospace;letter-spacing:0.2em;text-align:center;outline:none;transition:all 0.2s}
+    input:focus{border-color:#334155;box-shadow:0 0 0 3px rgba(58,65,80,0.15)}
+    .btn{width:100%;padding:14px;background:#334155;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:500;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
+    .btn:hover{transform:translateY(-1px);box-shadow:0 8px 30px rgba(58,65,80,0.35)}
+    .error{background:#FEE2E2;border:1px solid rgba(166,69,63,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:#A32D2D;margin-bottom:20px}
+    .back{text-align:center;font-size:13px;color:#6B7280;margin-top:16px}
+    .back a{color:#6B7280;text-decoration:none}
+    .back a:hover{color:#334155}
   </style>
 </head>
 <body>
@@ -121,23 +121,23 @@ export function createAuthRoutes(db) {
   <title>Iniciar sesión — Bamburu</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#070B14;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-    .card{width:100%;max-width:400px;padding:40px 36px;background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,0.08);border-radius:24px;box-shadow:0 30px 80px rgba(0,0,0,0.5)}
-    .logo{font-size:22px;font-weight:800;color:#fff;letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
-    .logo span{color:#14B8A6}
-    h1{font-size:20px;font-weight:700;color:#fff;margin-bottom:6px;text-align:center}
-    .sub{font-size:14px;color:rgba(255,255,255,0.45);text-align:center;margin-bottom:28px}
-    label{display:block;font-size:12px;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F6F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+    .card{width:100%;max-width:400px;padding:40px 36px;background:#FFFFFF;border:1px solid #ECEEF1;border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10)}
+    .logo{font-size:22px;font-weight:500;color:#1A1D21;letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
+    .logo span{color:#334155}
+    h1{font-size:20px;font-weight:500;color:#1A1D21;margin-bottom:6px;text-align:center}
+    .sub{font-size:14px;color:#6B7280;text-align:center;margin-bottom:28px}
+    label{display:block;font-size:12px;font-weight:500;color:#6B7280;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
     .field{margin-bottom:20px;position:relative}
-    input{width:100%;padding:13px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:#fff;font-size:15px;font-family:inherit;outline:none;transition:all 0.2s}
-    input:focus{border-color:#14B8A6;box-shadow:0 0 0 3px rgba(20,184,166,0.15)}
+    input{width:100%;padding:13px 16px;background:#FFFFFF;border:1px solid #E4E6EA;border-radius:12px;color:#1A1D21;font-size:15px;font-family:inherit;outline:none;transition:all 0.2s}
+    input:focus{border-color:#334155;box-shadow:0 0 0 3px rgba(58,65,80,0.15)}
     input[type=password]{padding-right:80px}
-    .toggle{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;color:rgba(255,255,255,0.4);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;padding:4px 6px}
-    .toggle:hover{color:#14B8A6}
-    .btn{width:100%;padding:14px;background:linear-gradient(135deg,#14B8A6,#0F766E);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
-    .btn:hover{transform:translateY(-1px);box-shadow:0 8px 30px rgba(20,184,166,0.35)}
+    .toggle{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;color:#6B7280;font-size:12px;font-weight:500;font-family:inherit;cursor:pointer;padding:4px 6px}
+    .toggle:hover{color:#334155}
+    .btn{width:100%;padding:14px;background:#334155;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:500;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
+    .btn:hover{transform:translateY(-1px);box-shadow:0 8px 30px rgba(58,65,80,0.35)}
     .btn:active{transform:none}
-    .error{background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:#FCA5A5;margin-bottom:20px;line-height:1.5}
+    .error{background:#FEE2E2;border:1px solid rgba(166,69,63,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:#A32D2D;margin-bottom:20px;line-height:1.5}
   </style>
 </head>
 <body>
@@ -162,8 +162,8 @@ export function createAuthRoutes(db) {
       </div>
       <button type="submit" class="btn">Entrar</button>
     </form>
-    <p style="text-align:center;font-size:13px;color:rgba(255,255,255,0.4);margin-top:16px">
-      <a href="/admin/forgot-password" style="color:rgba(255,255,255,0.4);text-decoration:none" onmouseover="this.style.color='#14B8A6'" onmouseout="this.style.color='rgba(255,255,255,0.4)'">¿Olvidaste tu contraseña?</a>
+    <p style="text-align:center;font-size:13px;color:#6B7280;margin-top:16px">
+      <a href="/admin/forgot-password" style="color:#6B7280;text-decoration:none" onmouseover="this.style.color='#334155'" onmouseout="this.style.color='#6B7280'">¿Olvidaste tu contraseña?</a>
     </p>
   </div>
   <script>
@@ -270,31 +270,31 @@ export function createAuthRoutes(db) {
   <title>Autenticación de Dos Factores — Bamburu</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#070B14;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:20px}
-    .card{width:100%;max-width:480px;padding:40px 36px;background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,0.08);border-radius:24px;box-shadow:0 30px 80px rgba(0,0,0,0.5)}
-    .logo{font-size:22px;font-weight:800;color:#fff;letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
-    .logo span{color:#14B8A6}
-    h1{font-size:20px;font-weight:700;color:#fff;margin-bottom:8px;text-align:center}
-    .sub{font-size:14px;color:rgba(255,255,255,0.45);text-align:center;margin-bottom:24px}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F6F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:20px}
+    .card{width:100%;max-width:480px;padding:40px 36px;background:#FFFFFF;border:1px solid #ECEEF1;border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10)}
+    .logo{font-size:22px;font-weight:500;color:#1A1D21;letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
+    .logo span{color:#334155}
+    h1{font-size:20px;font-weight:500;color:#1A1D21;margin-bottom:8px;text-align:center}
+    .sub{font-size:14px;color:#6B7280;text-align:center;margin-bottom:24px}
     .qr-box{text-align:center;margin:20px 0;padding:16px;background:white;border-radius:12px;display:inline-block;width:100%}
-    .secret-box{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px 14px;font-family:monospace;font-size:13px;color:#94a3b8;word-break:break-all;text-align:center;margin-bottom:20px}
-    label{display:block;font-size:12px;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
+    .secret-box{background:#FFFFFF;border:1px solid #E4E6EA;border-radius:8px;padding:10px 14px;font-family:monospace;font-size:13px;color:#6B7280;word-break:break-all;text-align:center;margin-bottom:20px}
+    label{display:block;font-size:12px;font-weight:500;color:#6B7280;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
     .field{margin-bottom:20px}
-    input[type=text]{width:100%;padding:13px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:#fff;font-size:18px;font-family:monospace;letter-spacing:0.15em;text-align:center;outline:none;transition:all 0.2s}
-    input[type=text]:focus{border-color:#14B8A6;box-shadow:0 0 0 3px rgba(20,184,166,0.15)}
-    .btn{width:100%;padding:14px;background:linear-gradient(135deg,#14B8A6,#0F766E);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
-    .btn:hover{transform:translateY(-1px);box-shadow:0 8px 30px rgba(20,184,166,0.35)}
+    input[type=text]{width:100%;padding:13px 16px;background:#FFFFFF;border:1px solid #E4E6EA;border-radius:12px;color:#1A1D21;font-size:18px;font-family:monospace;letter-spacing:0.15em;text-align:center;outline:none;transition:all 0.2s}
+    input[type=text]:focus{border-color:#334155;box-shadow:0 0 0 3px rgba(58,65,80,0.15)}
+    .btn{width:100%;padding:14px;background:#334155;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:500;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
+    .btn:hover{transform:translateY(-1px);box-shadow:0 8px 30px rgba(58,65,80,0.35)}
     .btn-danger{background:linear-gradient(135deg,#ef4444,#b91c1c)}
     .btn-danger:hover{box-shadow:0 8px 30px rgba(239,68,68,0.35)}
-    .error{background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:#FCA5A5;margin-bottom:20px}
+    .error{background:#FEE2E2;border:1px solid rgba(166,69,63,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:#A32D2D;margin-bottom:20px}
     .ok{background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:#6ee7b7;margin-bottom:20px}
-    .back{text-align:center;font-size:13px;color:rgba(255,255,255,0.4);margin-top:16px}
-    .back a{color:#14B8A6;text-decoration:none}
-    .divider{border:none;border-top:1px solid rgba(255,255,255,0.08);margin:24px 0}
-    p.hint{font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:16px;line-height:1.5}
-    .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600}
+    .back{text-align:center;font-size:13px;color:#6B7280;margin-top:16px}
+    .back a{color:#334155;text-decoration:none}
+    .divider{border:none;border-top:1px solid #ECEEF1;margin:24px 0}
+    p.hint{font-size:13px;color:#6B7280;margin-bottom:16px;line-height:1.5}
+    .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500}
     .badge-on{background:rgba(16,185,129,0.15);color:#6ee7b7;border:1px solid rgba(16,185,129,0.3)}
-    .badge-off{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.4);border:1px solid rgba(255,255,255,0.1)}
+    .badge-off{background:#EFF1F4;color:#6B7280;border:1px solid #E4E6EA}
   </style>
 </head>
 <body>
@@ -314,7 +314,7 @@ export function createAuthRoutes(db) {
     <hr class="divider">
     <p class="hint" style="text-align:center">Para reconfigurar 2FA con un nuevo dispositivo, desactívala primero.</p>
     ` : `
-    <p class="hint">Escanea este código QR con <strong style="color:#fff">Google Authenticator</strong>, <strong style="color:#fff">Authy</strong> o cualquier app TOTP:</p>
+    <p class="hint">Escanea este código QR con <strong style="color:#1A1D21">Google Authenticator</strong>, <strong style="color:#1A1D21">Authy</strong> o cualquier app TOTP:</p>
     <div class="qr-box">
       <img src="${qrDataUrl}" width="200" height="200" alt="QR 2FA">
     </div>
@@ -362,14 +362,14 @@ export function createAuthRoutes(db) {
   <title>2FA Activada — Bamburu</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#070B14;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-    .card{width:100%;max-width:400px;padding:40px 36px;background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,0.08);border-radius:24px;box-shadow:0 30px 80px rgba(0,0,0,0.5);text-align:center}
-    .logo{font-size:22px;font-weight:800;color:#fff;letter-spacing:-0.03em;margin-bottom:28px}
-    .logo span{color:#14B8A6}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F6F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+    .card{width:100%;max-width:400px;padding:40px 36px;background:#FFFFFF;border:1px solid #ECEEF1;border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10);text-align:center}
+    .logo{font-size:22px;font-weight:500;color:#1A1D21;letter-spacing:-0.03em;margin-bottom:28px}
+    .logo span{color:#334155}
     .icon{font-size:48px;margin-bottom:16px}
-    p{color:rgba(255,255,255,0.7);font-size:14px;line-height:1.6;margin-bottom:16px}
-    .ok{color:#6ee7b7;font-weight:700;font-size:18px;margin-bottom:8px}
-    a{color:#14B8A6;text-decoration:none;font-size:14px;font-weight:600}
+    p{color:#6B7280;font-size:14px;line-height:1.6;margin-bottom:16px}
+    .ok{color:#6ee7b7;font-weight:500;font-size:18px;margin-bottom:8px}
+    a{color:#334155;text-decoration:none;font-size:14px;font-weight:500}
   </style>
 </head>
 <body>
@@ -402,21 +402,21 @@ export function createAuthRoutes(db) {
   <title>Recuperar Contraseña — Bamburu</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#070B14;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-    .card{width:100%;max-width:400px;padding:40px 36px;background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,0.08);border-radius:24px;box-shadow:0 30px 80px rgba(0,0,0,0.5)}
-    .logo{font-size:22px;font-weight:800;color:#fff;letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
-    .logo span{color:#14B8A6}
-    h1{font-size:20px;font-weight:700;color:#fff;margin-bottom:6px;text-align:center}
-    .sub{font-size:14px;color:rgba(255,255,255,0.45);text-align:center;margin-bottom:28px}
-    label{display:block;font-size:12px;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F6F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+    .card{width:100%;max-width:400px;padding:40px 36px;background:#FFFFFF;border:1px solid #ECEEF1;border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10)}
+    .logo{font-size:22px;font-weight:500;color:#1A1D21;letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
+    .logo span{color:#334155}
+    h1{font-size:20px;font-weight:500;color:#1A1D21;margin-bottom:6px;text-align:center}
+    .sub{font-size:14px;color:#6B7280;text-align:center;margin-bottom:28px}
+    label{display:block;font-size:12px;font-weight:500;color:#6B7280;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
     .field{margin-bottom:20px}
-    input{width:100%;padding:13px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:#fff;font-size:15px;font-family:inherit;outline:none;transition:all 0.2s}
-    input:focus{border-color:#14B8A6;box-shadow:0 0 0 3px rgba(20,184,166,0.15)}
-    .btn{width:100%;padding:14px;background:linear-gradient(135deg,#14B8A6,#0F766E);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
-    .btn:hover{transform:translateY(-1px);box-shadow:0 8px 30px rgba(20,184,166,0.35)}
-    .back{text-align:center;font-size:13px;color:rgba(255,255,255,0.4);margin-top:16px}
-    .back a{color:rgba(255,255,255,0.4);text-decoration:none}
-    .back a:hover{color:#14B8A6}
+    input{width:100%;padding:13px 16px;background:#FFFFFF;border:1px solid #E4E6EA;border-radius:12px;color:#1A1D21;font-size:15px;font-family:inherit;outline:none;transition:all 0.2s}
+    input:focus{border-color:#334155;box-shadow:0 0 0 3px rgba(58,65,80,0.15)}
+    .btn{width:100%;padding:14px;background:#334155;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:500;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
+    .btn:hover{transform:translateY(-1px);box-shadow:0 8px 30px rgba(58,65,80,0.35)}
+    .back{text-align:center;font-size:13px;color:#6B7280;margin-top:16px}
+    .back a{color:#6B7280;text-decoration:none}
+    .back a:hover{color:#334155}
   </style>
 </head>
 <body>
@@ -458,13 +458,13 @@ export function createAuthRoutes(db) {
   <title>Email enviado — Bamburu</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#070B14;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-    .card{width:100%;max-width:400px;padding:40px 36px;background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,0.08);border-radius:24px;box-shadow:0 30px 80px rgba(0,0,0,0.5);text-align:center}
-    .logo{font-size:22px;font-weight:800;color:#fff;letter-spacing:-0.03em;margin-bottom:28px}
-    .logo span{color:#14B8A6}
-    p{color:rgba(255,255,255,0.7);font-size:14px;line-height:1.6;margin-bottom:12px}
-    .ok{color:#10b981;font-weight:600;font-size:15px}
-    a{color:#14B8A6;text-decoration:none;font-size:13px}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F6F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+    .card{width:100%;max-width:400px;padding:40px 36px;background:#FFFFFF;border:1px solid #ECEEF1;border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10);text-align:center}
+    .logo{font-size:22px;font-weight:500;color:#1A1D21;letter-spacing:-0.03em;margin-bottom:28px}
+    .logo span{color:#334155}
+    p{color:#6B7280;font-size:14px;line-height:1.6;margin-bottom:12px}
+    .ok{color:#10b981;font-weight:500;font-size:15px}
+    a{color:#334155;text-decoration:none;font-size:13px}
   </style>
 </head>
 <body>
@@ -503,13 +503,13 @@ export function createAuthRoutes(db) {
         subject: 'Recupera tu contraseña en Bamburu',
         html: `
           <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:480px;margin:0 auto;padding:40px 24px">
-            <h2 style="color:#070B14;font-size:20px;margin-bottom:16px">Hola, ${user.name}</h2>
+            <h2 style="color:#1A1D21;font-size:20px;margin-bottom:16px">Hola, ${user.name}</h2>
             <p style="color:#374151;font-size:15px;line-height:1.6;margin-bottom:24px">
               Hemos recibido una solicitud para recuperar tu contraseña en Bamburu.
             </p>
             <a href="${resetLink}"
-               style="background:#14B8A6;color:white;padding:12px 24px;border-radius:8px;
-                      text-decoration:none;display:inline-block;font-weight:600;font-size:15px">
+               style="background:#334155;color:white;padding:12px 24px;border-radius:8px;
+                      text-decoration:none;display:inline-block;font-weight:500;font-size:15px">
               Recuperar Contraseña
             </a>
             <p style="color:#6b7280;font-size:13px;margin-top:24px">
@@ -544,19 +544,19 @@ export function createAuthRoutes(db) {
   <title>Nueva Contraseña — Bamburu</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#070B14;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-    .card{width:100%;max-width:400px;padding:40px 36px;background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,0.08);border-radius:24px;box-shadow:0 30px 80px rgba(0,0,0,0.5)}
-    .logo{font-size:22px;font-weight:800;color:#fff;letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
-    .logo span{color:#14B8A6}
-    h1{font-size:20px;font-weight:700;color:#fff;margin-bottom:6px;text-align:center}
-    .sub{font-size:14px;color:rgba(255,255,255,0.45);text-align:center;margin-bottom:28px}
-    label{display:block;font-size:12px;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F6F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+    .card{width:100%;max-width:400px;padding:40px 36px;background:#FFFFFF;border:1px solid #ECEEF1;border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10)}
+    .logo{font-size:22px;font-weight:500;color:#1A1D21;letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
+    .logo span{color:#334155}
+    h1{font-size:20px;font-weight:500;color:#1A1D21;margin-bottom:6px;text-align:center}
+    .sub{font-size:14px;color:#6B7280;text-align:center;margin-bottom:28px}
+    label{display:block;font-size:12px;font-weight:500;color:#6B7280;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
     .field{margin-bottom:20px}
-    input{width:100%;padding:13px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:#fff;font-size:15px;font-family:inherit;outline:none;transition:all 0.2s}
-    input:focus{border-color:#14B8A6;box-shadow:0 0 0 3px rgba(20,184,166,0.15)}
-    .btn{width:100%;padding:14px;background:linear-gradient(135deg,#14B8A6,#0F766E);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
-    .btn:hover{transform:translateY(-1px);box-shadow:0 8px 30px rgba(20,184,166,0.35)}
-    .error{background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:#FCA5A5;margin-bottom:20px}
+    input{width:100%;padding:13px 16px;background:#FFFFFF;border:1px solid #E4E6EA;border-radius:12px;color:#1A1D21;font-size:15px;font-family:inherit;outline:none;transition:all 0.2s}
+    input:focus{border-color:#334155;box-shadow:0 0 0 3px rgba(58,65,80,0.15)}
+    .btn{width:100%;padding:14px;background:#334155;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:500;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
+    .btn:hover{transform:translateY(-1px);box-shadow:0 8px 30px rgba(58,65,80,0.35)}
+    .error{background:#FEE2E2;border:1px solid rgba(166,69,63,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:#A32D2D;margin-bottom:20px}
   </style>
 </head>
 <body>
@@ -621,13 +621,13 @@ export function createAuthRoutes(db) {
   <title>Contraseña cambiada — Bamburu</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#070B14;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-    .card{width:100%;max-width:400px;padding:40px 36px;background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,0.08);border-radius:24px;box-shadow:0 30px 80px rgba(0,0,0,0.5);text-align:center}
-    .logo{font-size:22px;font-weight:800;color:#fff;letter-spacing:-0.03em;margin-bottom:28px}
-    .logo span{color:#14B8A6}
-    p{color:rgba(255,255,255,0.7);font-size:14px;line-height:1.6;margin-bottom:16px}
-    .ok{color:#10b981;font-weight:600;font-size:16px}
-    a{color:#14B8A6;text-decoration:none;font-size:14px;font-weight:600}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F6F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+    .card{width:100%;max-width:400px;padding:40px 36px;background:#FFFFFF;border:1px solid #ECEEF1;border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10);text-align:center}
+    .logo{font-size:22px;font-weight:500;color:#1A1D21;letter-spacing:-0.03em;margin-bottom:28px}
+    .logo span{color:#334155}
+    p{color:#6B7280;font-size:14px;line-height:1.6;margin-bottom:16px}
+    .ok{color:#10b981;font-weight:500;font-size:16px}
+    a{color:#334155;text-decoration:none;font-size:14px;font-weight:500}
   </style>
 </head>
 <body>

@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can } from '../layout.js';
+import { adminLayout, can, docShell } from '../layout.js';
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { purchaseOrderSchema, purchaseOrderAnularSchema, purchaseOrderReceiptSchema } from '../schemas.js';
@@ -302,11 +302,11 @@ function documentBodyHtml(o, items, emisor, proveedor, sym) {
 </div>
 <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
   <thead><tr>
-    <th style="background:#f8fafc;padding:8px 12px;text-align:left;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">Producto</th>
-    <th style="background:#f8fafc;padding:8px 12px;text-align:right;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">Cant.</th>
-    <th style="background:#f8fafc;padding:8px 12px;text-align:right;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">Coste unit. (neto)</th>
-    <th style="background:#f8fafc;padding:8px 12px;text-align:right;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">IVA</th>
-    <th style="background:#f8fafc;padding:8px 12px;text-align:right;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">Subtotal</th>
+    <th style="background:#F5F6F8;padding:8px 12px;text-align:left;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">Producto</th>
+    <th style="background:#F5F6F8;padding:8px 12px;text-align:right;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">Cant.</th>
+    <th style="background:#F5F6F8;padding:8px 12px;text-align:right;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">Coste unit. (neto)</th>
+    <th style="background:#F5F6F8;padding:8px 12px;text-align:right;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">IVA</th>
+    <th style="background:#F5F6F8;padding:8px 12px;text-align:right;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">Subtotal</th>
   </tr></thead>
   <tbody>${rows}</tbody>
 </table>
@@ -482,7 +482,7 @@ export function createPurchaseOrderRoutes(db) {
     const rowsHtml = orders.map(o => {
       const [lbl, badge] = displayEstado(o);
       return '<tr>'
-        + '<td>' + (o.order_number ? '<strong style="font-family:monospace">' + esc(o.order_number) + '</strong>' : '<span style="color:var(--text3)">Borrador</span>') + '</td>'
+        + '<td>' + (o.order_number ? '<strong style="font-family:monospace">' + esc(o.order_number) + '</strong>' : '<span style="color:#9097A1">Borrador</span>') + '</td>'
         + '<td><strong>' + esc(o.supplier_name) + '</strong></td>'
         + '<td>' + esc(o.date) + '</td>'
         + '<td><span class="badge ' + badge + '">' + esc(lbl) + '</span></td>'
@@ -509,11 +509,11 @@ export function createPurchaseOrderRoutes(db) {
       <div class="card">
         <div class="table-wrap"><table>
           <thead><tr><th>Número</th><th>Proveedor</th><th>Fecha</th><th>Estado</th><th>Total</th><th></th></tr></thead>
-          <tbody>${total === 0 ? '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text3)">' + (q || estado ? 'No se encontraron órdenes' : 'Sin órdenes de compra. La orden es el pedido al proveedor; la compra directa sigue en Compras.') + '</td></tr>' : rowsHtml}</tbody>
+          <tbody>${total === 0 ? '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#9097A1">' + (q || estado ? 'No se encontraron órdenes' : 'Sin órdenes de compra. La orden es el pedido al proveedor; la compra directa sigue en Compras.') + '</td></tr>' : rowsHtml}</tbody>
         </table></div>
       </div>
       ${total > 0 ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem;flex-wrap:wrap;gap:.5rem">
-        <span style="color:var(--text3);font-size:.85rem">Página ${page} de ${totalPages} · ${total} orden${total === 1 ? '' : 'es'}</span>
+        <span style="color:#9097A1;font-size:.85rem">Página ${page} de ${totalPages} · ${total} orden${total === 1 ? '' : 'es'}</span>
         <div style="display:flex;gap:.5rem">
           ${page > 1 ? `<a class="btn btn-secondary btn-sm" href="?${buildQs(page - 1)}">← Anterior</a>` : '<span class="btn btn-secondary btn-sm" style="opacity:.4;pointer-events:none">← Anterior</span>'}
           ${page < totalPages ? `<a class="btn btn-secondary btn-sm" href="?${buildQs(page + 1)}">Siguiente →</a>` : '<span class="btn btn-secondary btn-sm" style="opacity:.4;pointer-events:none">Siguiente →</span>'}
@@ -535,7 +535,7 @@ export function createPurchaseOrderRoutes(db) {
     if (!suppliers.length) {
       const content = `
         <div class="ph"><h2>Nueva orden de compra</h2><a href="/admin/purchase-orders" class="btn btn-secondary">Volver</a></div>
-        <div class="card card-body" style="text-align:center;padding:2rem;color:var(--text3)">
+        <div class="card card-body" style="text-align:center;padding:2rem;color:#9097A1">
           No hay proveedores. <a href="/admin/suppliers">Crea uno primero.</a>
         </div>`;
       return c.html(adminLayout('Nueva orden de compra', content, 'purchase-orders', csrfToken, c));
@@ -636,7 +636,7 @@ export function createPurchaseOrderRoutes(db) {
           LINE_CELL +
           '<td><input type="number" class="form-control line-qty" min="1" value="1" style="width:90px"></td>' +
           '<td><input type="number" class="form-control line-cost" min="0" step="0.01" value="" style="width:120px"></td>' +
-          '<td><span class="line-taxlbl" style="color:var(--text3)">—</span></td>' +
+          '<td><span class="line-taxlbl" style="color:#9097A1">—</span></td>' +
           '<td style="text-align:right;padding:.7rem 1rem"><span class="line-subtotal">' + SYM + '0.00</span></td>' +
           '<td><button class="btn btn-danger btn-sm" onclick="this.closest(\\'tr\\').remove();recalc()">✕</button></td>';
         tbody.appendChild(row);
@@ -684,8 +684,8 @@ export function createPurchaseOrderRoutes(db) {
         Object.values(byRate).sort((a,b) => b.rate - a.rate).forEach(function(x){
           const amount = r2(x.amount); taxTotal += amount;
           const lbl = (x.rate > 0 ? 'IVA ' + x.rate + '%' : 'Exento (0%)') + ' (sobre ' + SYM + r2(x.base).toFixed(2) + ')';
-          html += '<tr><td colspan="4" style="text-align:right;padding:.45rem 1rem;color:var(--text3)">' + lbl + '</td>' +
-                  '<td style="text-align:right;padding:.45rem 1rem;color:var(--text3)">' + SYM + amount.toFixed(2) + '</td><td></td></tr>';
+          html += '<tr><td colspan="4" style="text-align:right;padding:.45rem 1rem;color:#9097A1">' + lbl + '</td>' +
+                  '<td style="text-align:right;padding:.45rem 1rem;color:#9097A1">' + SYM + amount.toFixed(2) + '</td><td></td></tr>';
         });
         html += '<tr><td colspan="4" style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">Total</td>' +
                 '<td style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">' + SYM + r2(subtotal + taxTotal).toFixed(2) + '</td><td></td></tr>';
@@ -763,7 +763,7 @@ export function createPurchaseOrderRoutes(db) {
 
     const rows = pendingLines.map(l => `
       <tr data-oid="${l.order_item_id}" data-pend="${l.pendiente}" data-pedido="${l.pedido}" data-rec="${l.recibido}">
-        <td>${l.sku ? `<span style="color:var(--text3);font-size:.8rem">[${esc(l.sku)}]</span> ` : ''}${esc(l.product_name)}</td>
+        <td>${l.sku ? `<span style="color:#9097A1;font-size:.8rem">[${esc(l.sku)}]</span> ` : ''}${esc(l.product_name)}</td>
         <td style="text-align:right">${l.pedido}</td>
         <td style="text-align:right">${l.recibido}</td>
         <td style="text-align:right;font-weight:600">${l.pendiente}</td>
@@ -929,95 +929,82 @@ export function createPurchaseOrderRoutes(db) {
     const canClose = o.status === 'enviada' && !isCerrada && o.received_status !== 'recibida'
       && reception && reception.totalPendiente > 0;
 
+    const statusBadgeMap = {
+      'status-anulada': 'b-red', 'status-cerrada': 'b-gray', 'status-recibida': 'b-teal',
+      'status-parcial': 'b-blue', 'status-enviada': 'b-green', 'status-borrador': 'b-yellow',
+    };
+    const statusBadge = `<span class="badge ${statusBadgeMap[statusPill[0]] || 'b-gray'}">${statusPill[1]}</span>`;
+
     const actions =
       (o.status === 'borrador' ? (
-        (canEdit ? `<a href="/admin/purchase-orders/${id}/edit" class="btn-secondary">Editar</a>` : '') +
-        (canEdit ? `<button onclick="enviarOrden()" class="btn-secondary">Enviar</button>` : '')
+        (canEdit ? `<a href="/admin/purchase-orders/${id}/edit" class="btn btn-secondary">Editar</a>` : '') +
+        (canEdit ? `<button onclick="enviarOrden()" class="btn btn-secondary">Enviar</button>` : '')
       ) : '') +
       (o.status === 'enviada' ? (
-        (canEdit ? `<button onclick="emailOrden()" class="btn-secondary">Enviar por email</button>` : '') +
-        (canEdit && canClose ? `<button onclick="cerrarOrden()" class="btn-secondary">Cerrar orden</button>` : '') +
+        (canEdit ? `<button onclick="emailOrden()" class="btn btn-secondary">Enviar por email</button>` : '') +
+        (canEdit && canClose ? `<button onclick="cerrarOrden()" class="btn btn-secondary">Cerrar orden</button>` : '') +
         // Con recepciones confirmadas la orden no se puede anular (su stock ya se
         // movió): primero se anulan las recepciones. Se ocultan los botones.
-        (canEdit && !hasConfirmedReceipts ? `<button onclick="anularOrden()" class="btn-secondary">Anular</button>` : '') +
-        (canCreate && !hasConfirmedReceipts ? `<button onclick="anularYRehacer()" class="btn-secondary">Anular y rehacer</button>` : '')
-      ) : '') +
-      `<button onclick="window.print()" class="btn-primary">Imprimir</button>`;
+        (canEdit && !hasConfirmedReceipts ? `<button onclick="anularOrden()" class="btn btn-danger">Anular</button>` : '') +
+        (canCreate && !hasConfirmedReceipts ? `<button onclick="anularYRehacer()" class="btn btn-secondary">Anular y rehacer</button>` : '')
+      ) : '');
 
     const receiptStatusBadge = s => s === 'confirmada'
-      ? '<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600">Confirmada</span>'
-      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600">Anulada</span>';
+      ? '<span class="badge b-green">Confirmada</span>'
+      : '<span class="badge b-red">Anulada</span>';
 
     const receptionBlock = reception ? `
-<div class="no-print" style="margin-top:32px;border-top:2px solid #e2e8f0;padding-top:16px">
+<div style="margin-top:32px;border-top:1px solid #E4E6EA;padding-top:16px">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-    <h2 style="font-size:15px;font-weight:700">Recepción de mercancía</h2>
+    <h2 style="font-size:15px;font-weight:500">Recepción de mercancía</h2>
     ${o.status === 'enviada' && !isCerrada && reception.totalPendiente > 0 && canCreate
-      ? `<a href="/admin/purchase-orders/${id}/receipts/new" class="btn-primary">Registrar recepción</a>` : ''}
+      ? `<a href="/admin/purchase-orders/${id}/receipts/new" class="btn btn-primary">Registrar recepción</a>` : ''}
   </div>
   <table>
     <thead><tr><th>Producto</th><th style="text-align:right">Pedido</th><th style="text-align:right">Recibido</th><th style="text-align:right">Pendiente</th></tr></thead>
     <tbody>${reception.lines.map(l => `
       <tr>
-        <td>${esc(l.product_name)}${l.sku ? ` <span style="color:#64748b;font-size:11px">[${esc(l.sku)}]</span>` : ''}</td>
+        <td>${esc(l.product_name)}${l.sku ? ` <span style="color:#6B7280;font-size:11px">[${esc(l.sku)}]</span>` : ''}</td>
         <td style="text-align:right">${l.pedido}</td>
         <td style="text-align:right">${l.exceso > 0 ? `${l.recibido} de ${l.pedido} <span style="color:#b45309;font-weight:600">(+${l.exceso})</span>` : l.recibido}</td>
-        <td style="text-align:right;font-weight:600${l.pendiente === 0 ? ';color:#166534' : ''}">${l.pendiente}${isCerrada && l.pendiente > 0 ? ' <span style="color:#64748b;font-size:11px">(no llegará)</span>' : ''}</td>
+        <td style="text-align:right;font-weight:600${l.pendiente === 0 ? ';color:#166534' : ''}">${l.pendiente}${isCerrada && l.pendiente > 0 ? ' <span style="color:#6B7280;font-size:11px">(no llegará)</span>' : ''}</td>
       </tr>`).join('')}
     </tbody>
   </table>
   ${receipts.length ? `
-  <h2 style="font-size:14px;font-weight:700;margin:8px 0">Recepciones</h2>
+  <h2 style="font-size:14px;font-weight:500;margin:8px 0">Recepciones</h2>
   <table>
     <thead><tr><th>Número</th><th>Fecha</th><th>Estado</th><th style="text-align:right">Líneas</th><th style="text-align:right">Unidades</th><th></th></tr></thead>
     <tbody>${receipts.map(r => `
       <tr>
-        <td style="font-family:monospace;font-weight:600">${esc(r.receipt_number || ('#' + r.id))}</td>
+        <td style="font-family:ui-monospace,monospace;font-weight:600">${esc(r.receipt_number || ('#' + r.id))}</td>
         <td>${esc(r.date)}</td>
         <td>${receiptStatusBadge(r.status)}</td>
         <td style="text-align:right">${r.line_count}</td>
         <td style="text-align:right">${r.units}</td>
-        <td style="text-align:right"><a href="/admin/purchase-order-receipts/${r.id}" class="btn-secondary" style="padding:4px 10px">Ver</a></td>
+        <td style="text-align:right"><a href="/admin/purchase-order-receipts/${r.id}" class="btn btn-secondary btn-sm">Ver</a></td>
       </tr>`).join('')}
     </tbody>
-  </table>` : '<div style="color:#64748b;font-size:12px;margin-top:4px">Sin recepciones todavía.</div>'}
+  </table>` : '<div style="color:#6B7280;font-size:12px;margin-top:4px">Sin recepciones todavía.</div>'}
 </div>` : '';
 
-    const html = `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>Orden de compra ${o.order_number ? esc(o.order_number) : '(borrador)'}</title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:system-ui,sans-serif;font-size:13px;color:#1e293b;padding:40px;max-width:800px;margin:auto}
-  .actions{display:flex;gap:8px;justify-content:flex-end;margin-bottom:24px;flex-wrap:wrap}
-  .btn-primary{padding:8px 16px;background:#1e293b;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;text-decoration:none}
-  .btn-secondary{padding:8px 16px;background:#fff;color:#1e293b;border:1px solid #cbd5e1;border-radius:6px;cursor:pointer;font-size:13px;text-decoration:none}
-  .status-pill{display:inline-block;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;margin-bottom:16px}
-  .status-borrador{background:#fef3c7;color:#92400e}
-  .status-enviada{background:#dcfce7;color:#166534}
-  .status-anulada{background:#fee2e2;color:#991b1b}
-  .status-parcial{background:#dbeafe;color:#1e40af}
-  .status-recibida{background:#ccfbf1;color:#0f766e}
-  .status-cerrada{background:#f1f5f9;color:#475569}
-  .lc-cerrada{background:#f1f5f9;color:#334155}
-  .lifecycle{margin:0 0 16px;padding:12px 16px;border-radius:6px;font-size:13px}
-  .lifecycle a{color:inherit;font-weight:600}
-  .lc-anulada{background:#fee2e2;color:#991b1b}
-  .lc-sustituye{background:#e0f2fe;color:#075985}
-  @media print{body{padding:20px}.actions{display:none}.status-pill{display:none}.no-print{display:none}}
-</style>
-</head>
-<body>
-<div class="actions">
-  <a href="/admin/purchase-orders" class="btn-secondary">← Volver al listado</a>
-  ${actions}
-</div>
-<span class="status-pill ${statusPill[0]}">${statusPill[1]}</span>
-${lifecycle}
+    const paper = `${lifecycle}
 ${documentBodyHtml(o, items, emisor, proveedor, sym)}
-${receptionBlock}
+${receptionBlock}`;
+
+    const panel = `
+<div class="card"><div class="card-body">
+  <div style="margin-bottom:12px">${statusBadge}</div>
+  <div class="dp-row"><span class="k">Nº</span><span class="v">${o.order_number ? esc(o.order_number) : 'Borrador'}</span></div>
+  <div class="dp-row"><span class="k">Fecha</span><span class="v">${esc(o.date)}</span></div>
+  ${o.expected_date ? `<div class="dp-row"><span class="k">Entrega prevista</span><span class="v">${esc(o.expected_date)}</span></div>` : ''}
+  <div class="dp-row"><span class="k">Proveedor</span><span class="v">${esc(proveedor.name || '')}</span></div>
+  <div class="dp-actions" style="margin-top:14px">
+    <button onclick="window.print()" class="btn btn-primary">Imprimir</button>
+    ${actions}
+    <a href="/admin/purchase-orders" class="btn btn-secondary">Volver al listado</a>
+  </div>
+</div></div>
 <script>
   const CSRF = ${JSON.stringify(csrfToken)};
   async function post(url, body){
@@ -1057,10 +1044,8 @@ ${receptionBlock}
     try { await post('/api/erp/purchase-orders/${id}/close', { motivo: motivo.trim() }); location.reload(); }
     catch(e){ alert(e.message || 'Error cerrando la orden'); }
   }
-</script>
-</body>
-</html>`;
-    return c.html(html);
+</script>`;
+    return c.html(adminLayout('Orden de compra ' + (o.order_number ? esc(o.order_number) : '(borrador)'), docShell(paper, panel), 'purchase-orders', csrfToken, c));
   });
 
   return { api, views };

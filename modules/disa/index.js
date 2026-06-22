@@ -1492,8 +1492,8 @@ export function register(app, db) {
       return '<div style="display:flex;justify-content:' + (isUser ? 'flex-end' : 'flex-start') + '">'
         + '<div style="max-width:80%;padding:10px 14px;border-radius:12px;font-size:13px;line-height:1.6;'
         + (isUser
-          ? 'background:#0D9488;color:white;border-bottom-right-radius:3px'
-          : 'background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);color:#e2e8f0;border-bottom-left-radius:3px')
+          ? 'background:var(--accent);color:#fff;border-bottom-right-radius:3px'
+          : 'background:#FFFFFF;border:1px solid var(--border);color:var(--text);border-bottom-left-radius:3px')
         + '">' + esc(m.content).replace(/\\n/g, '<br>') + '</div></div>';
     };
 
@@ -1504,59 +1504,59 @@ export function register(app, db) {
       ? 'var inp=document.getElementById("msgInput");if(inp){inp.value=' + JSON.stringify(prefill) + ';inp.focus();}'
       : '';
 
-    const emptyState = '<div id="emptyState" style="text-align:center;padding:40px 24px;color:#475569">'
-      + '<div style="font-size:30px;margin-bottom:10px;color:#0D9488;opacity:.5">✦</div>'
-      + '<div style="font-size:15px;font-weight:600;color:#64748b;margin-bottom:6px">Hola, soy DISA</div>'
+    const emptyState = '<div id="emptyState" style="text-align:center;padding:40px 24px;color:var(--text2)">'
+      + '<div style="font-size:30px;margin-bottom:10px;color:var(--accent);opacity:.5">✦</div>'
+      + '<div style="font-size:15px;font-weight:500;color:var(--text2);margin-bottom:6px">Hola, soy DISA</div>'
       + '<div style="font-size:13px">Pregúntame lo que necesites sobre tu negocio</div>'
       + '</div>';
 
     const inputHTML = '<div style="display:flex;gap:8px">'
       + '<textarea id="msgInput" rows="2" placeholder="Escribe tu mensaje..." '
-      + 'style="flex:1;padding:10px 14px;border:1px solid rgba(255,255,255,0.09);border-radius:10px;'
-      + 'font-size:13px;font-family:inherit;resize:none;outline:none;background:rgba(255,255,255,0.04);'
-      + 'color:#f1f5f9;transition:border-color .15s;scrollbar-width:thin" '
+      + 'style="flex:1;padding:10px 14px;border:1px solid var(--border2);border-radius:10px;'
+      + 'font-size:13px;font-family:inherit;resize:none;outline:none;background:#FFFFFF;'
+      + 'color:var(--text);transition:border-color .15s;scrollbar-width:thin" '
       + 'onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();disaSend()}" '
-      + 'onfocus="this.style.borderColor=\'#0D9488\'" onblur="this.style.borderColor=\'rgba(255,255,255,0.09)\'"></textarea>'
+      + 'onfocus="this.style.borderColor=\'var(--accent)\'" onblur="this.style.borderColor=\'var(--border2)\'"></textarea>'
       + '<input type="file" id="disaFilePage" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" style="display:none" onchange="disaAttach()">'
       + '<button onclick="document.getElementById(\'disaFilePage\').click()" title="Adjuntar factura (foto o PDF)" '
-      + 'style="background:rgba(255,255,255,0.04);color:#94a3b8;border:1px solid rgba(255,255,255,0.09);border-radius:10px;'
+      + 'style="background:#FFFFFF;color:var(--text2);border:1px solid var(--border2);border-radius:10px;'
       + 'padding:0 14px;font-size:16px;cursor:pointer;font-family:inherit;align-self:stretch">📎</button>'
-      + '<button onclick="disaSend()" style="background:#0D9488;color:white;border:none;border-radius:10px;'
-      + 'padding:0 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;align-self:stretch;'
+      + '<button onclick="disaSend()" style="background:var(--accent);color:#fff;border:none;border-radius:10px;'
+      + 'padding:0 18px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;align-self:stretch;'
       + 'white-space:nowrap">Enviar</button>'
       + '</div>'
-      + '<div style="font-size:11px;color:#475569;margin-top:6px">Shift+Enter para nueva línea</div>';
+      + '<div style="font-size:11px;color:var(--text2);margin-top:6px">Shift+Enter para nueva línea</div>';
 
-    const limitHTML = '<div style="background:rgba(239,68,68,0.08);color:#fca5a5;padding:10px 14px;'
-      + 'border-radius:8px;font-size:13px;text-align:center;border:1px solid rgba(239,68,68,0.15)">'
+    const limitHTML = '<div style="background:var(--danger-s);color:var(--danger);padding:10px 14px;'
+      + 'border-radius:8px;font-size:13px;text-align:center;border:1px solid var(--border)">'
       + 'Límite de ' + limit + ' mensajes alcanzado este mes.</div>';
 
     const body = `
 <style>
-  .dt-panel{width:240px;background:rgba(5,8,15,0.5);border-right:1px solid rgba(255,255,255,0.06);
+  .dt-panel{width:240px;background:#F9FAFB;border-right:1px solid var(--border);
     display:flex;flex-direction:column;flex-shrink:0;transition:transform .22s}
   .dt-item{position:relative;padding:8px 10px;border-radius:7px;cursor:pointer;margin:0 4px;
     border:1px solid transparent;transition:background .12s}
-  .dt-item:hover{background:rgba(255,255,255,0.04)}
-  .dt-item.dt-active{background:rgba(13,148,136,0.12);border-color:rgba(13,148,136,0.25)}
-  .dt-title{font-size:12px;font-weight:500;color:#c8d6e5;white-space:nowrap;overflow:hidden;
+  .dt-item:hover{background:#F3F4F6}
+  .dt-item.dt-active{background:rgba(58,65,80,0.12);border-color:rgba(58,65,80,0.25)}
+  .dt-title{font-size:12px;font-weight:500;color:var(--text2);white-space:nowrap;overflow:hidden;
     text-overflow:ellipsis;padding-right:44px}
-  .dt-item.dt-active .dt-title{color:#2dd4bf}
-  .dt-title-input{font-size:12px;font-weight:500;color:#c8d6e5;background:rgba(255,255,255,0.06);
-    border:1px solid #14B8A6;border-radius:4px;padding:1px 5px;width:calc(100% - 48px);
+  .dt-item.dt-active .dt-title{color:var(--accent)}
+  .dt-title-input{font-size:12px;font-weight:500;color:var(--text2);background:#F3F4F6;
+    border:1px solid var(--accent);border-radius:4px;padding:1px 5px;width:calc(100% - 48px);
     outline:none;font-family:inherit}
-  .dt-meta{font-size:10px;color:rgba(255,255,255,0.3);margin-top:1px}
+  .dt-meta{font-size:10px;color:var(--text3);margin-top:1px}
   .dt-actions{position:absolute;top:50%;right:6px;transform:translateY(-50%);display:flex;
     align-items:center;gap:1px;opacity:0;transition:opacity .12s}
   .dt-item:hover .dt-actions{opacity:1}
-  .dt-pin,.dt-del{background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.35);
+  .dt-pin,.dt-del{background:none;border:none;cursor:pointer;color:var(--text3);
     padding:3px;border-radius:4px;line-height:1;display:flex;align-items:center;justify-content:center}
-  .dt-pin:hover{color:#14B8A6;background:rgba(20,184,166,0.12)}
-  .dt-pin.pinned{color:#14B8A6;opacity:1!important}
+  .dt-pin:hover{color:var(--accent);background:rgba(58,65,80,0.12)}
+  .dt-pin.pinned{color:var(--accent);opacity:1!important}
   .dt-del:hover{color:#ef4444;background:rgba(239,68,68,0.1)}
   .dt-actions.has-pinned{opacity:1}
-  .dt-sep{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
-    color:rgba(255,255,255,0.22);padding:8px 12px 3px;flex-shrink:0}
+  .dt-sep{font-size:9px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--text3);padding:8px 12px 3px;flex-shrink:0}
   @keyframes tdot{0%,60%,100%{opacity:.25;transform:scale(.8)}30%{opacity:1;transform:scale(1.1)}}
   @media(max-width:900px){
     .dt-panel{position:fixed;top:0;left:240px;height:100vh;z-index:95;
@@ -1569,10 +1569,10 @@ export function register(app, db) {
 <div style="display:flex;height:calc(100vh - 52px);margin:-1.5rem;overflow:hidden">
 
   <div class="dt-panel" id="dtPanel">
-    <div style="padding:12px 10px;border-bottom:1px solid rgba(255,255,255,0.06);flex-shrink:0">
+    <div style="padding:12px 10px;border-bottom:1px solid var(--border);flex-shrink:0">
       <button onclick="dtNewThread()"
-        style="width:100%;background:#0D9488;color:#fff;border:none;border-radius:8px;padding:8px;
-               font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;
+        style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px;
+               font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;display:flex;
                align-items:center;justify-content:center;gap:5px;transition:opacity .15s">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -1581,14 +1581,14 @@ export function register(app, db) {
       </button>
     </div>
     <div id="dtList" style="flex:1;overflow-y:auto;padding:6px 4px;display:flex;flex-direction:column;
-      gap:1px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.05) transparent"></div>
+      gap:1px;scrollbar-width:thin;scrollbar-color:rgba(58,65,80,0.18) transparent"></div>
   </div>
 
   <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;padding:1rem 1.5rem">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-shrink:0">
       <button id="dtMobileBtn" onclick="dtTogglePanel()"
-        style="display:none;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);
-               border-radius:7px;padding:5px 8px;cursor:pointer;color:#94a3b8;align-items:center;
+        style="display:none;background:#F3F4F6;border:1px solid var(--border);
+               border-radius:7px;padding:5px 8px;cursor:pointer;color:var(--text2);align-items:center;
                gap:5px;font-size:12px;font-family:inherit">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="3" y1="12" x2="21" y2="12"/>
@@ -1597,32 +1597,32 @@ export function register(app, db) {
         </svg>
       </button>
       <div style="flex:1;min-width:0">
-        <div id="dtCurrentTitle" style="font-size:13px;font-weight:600;color:#f1f5f9;
+        <div id="dtCurrentTitle" style="font-size:13px;font-weight:500;color:var(--text);
           white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${threadTitle}</div>
       </div>
-      <span style="font-size:11px;color:#475569;flex-shrink:0">${usage}/${limit}</span>
+      <span style="font-size:11px;color:var(--text2);flex-shrink:0">${usage}/${limit}</span>
     </div>
 
-    <div style="height:2px;background:rgba(255,255,255,0.05);margin-bottom:12px;flex-shrink:0;
+    <div style="height:2px;background:#F3F4F6;margin-bottom:12px;flex-shrink:0;
       border-radius:2px;overflow:hidden">
-      <div style="height:100%;width:${usagePct}%;background:#0D9488;transition:width .3s"></div>
+      <div style="height:100%;width:${usagePct}%;background:var(--accent);transition:width .3s"></div>
     </div>
 
     <div id="chatArea" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;
-      padding:0 2px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.06) transparent">
+      padding:0 2px;scrollbar-width:thin;scrollbar-color:rgba(58,65,80,0.18) transparent">
       ${messages.length === 0 ? emptyState : messages.map(renderMsgHtml).join('')}
       <div id="typingIndicator" style="display:none">
-        <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.07);
+        <div style="background:#FFFFFF;border:1px solid var(--border);
           padding:10px 14px;border-radius:12px;border-bottom-left-radius:3px;
           display:inline-flex;gap:4px;align-items:center">
-          <span style="width:5px;height:5px;border-radius:50%;background:#94a3b8;animation:tdot 1.4s infinite"></span>
-          <span style="width:5px;height:5px;border-radius:50%;background:#94a3b8;animation:tdot 1.4s infinite .2s"></span>
-          <span style="width:5px;height:5px;border-radius:50%;background:#94a3b8;animation:tdot 1.4s infinite .4s"></span>
+          <span style="width:5px;height:5px;border-radius:50%;background:var(--text2);animation:tdot 1.4s infinite"></span>
+          <span style="width:5px;height:5px;border-radius:50%;background:var(--text2);animation:tdot 1.4s infinite .2s"></span>
+          <span style="width:5px;height:5px;border-radius:50%;background:var(--text2);animation:tdot 1.4s infinite .4s"></span>
         </div>
       </div>
     </div>
 
-    <div style="flex-shrink:0;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);margin-top:10px">
+    <div style="flex-shrink:0;padding-top:12px;border-top:1px solid var(--border);margin-top:10px">
       ${(!isDevView && usage >= limit) ? limitHTML : inputHTML}
     </div>
   </div>
@@ -1661,10 +1661,10 @@ export function register(app, db) {
     clearChatArea();
     var el = document.createElement('div');
     el.id = 'emptyState';
-    el.style.cssText = 'text-align:center;padding:40px 24px;color:#475569';
-    el.innerHTML = '<div style="font-size:30px;margin-bottom:10px;color:#0D9488;opacity:.5">✦</div>'
-      + '<div style="font-size:15px;font-weight:600;color:#64748b;margin-bottom:6px">' + esc(line1) + '</div>'
-      + '<div style="font-size:13px;color:#475569">' + esc(line2) + '</div>';
+    el.style.cssText = 'text-align:center;padding:40px 24px;color:var(--text2)';
+    el.innerHTML = '<div style="font-size:30px;margin-bottom:10px;color:var(--accent);opacity:.5">✦</div>'
+      + '<div style="font-size:15px;font-weight:500;color:var(--text2);margin-bottom:6px">' + esc(line1) + '</div>'
+      + '<div style="font-size:13px;color:var(--text2)">' + esc(line2) + '</div>';
     area.insertBefore(el, typing);
   }
 
@@ -1675,8 +1675,8 @@ export function register(app, db) {
     div.style.cssText = 'display:flex;justify-content:' + (role === 'user' ? 'flex-end' : 'flex-start');
     div.innerHTML = '<div style="max-width:80%;padding:10px 14px;border-radius:12px;font-size:13px;line-height:1.6;'
       + (role === 'user'
-        ? 'background:#0D9488;color:white;border-bottom-right-radius:3px'
-        : 'background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);color:#e2e8f0;border-bottom-left-radius:3px')
+        ? 'background:var(--accent);color:#fff;border-bottom-right-radius:3px'
+        : 'background:#FFFFFF;border:1px solid var(--border);color:var(--text);border-bottom-left-radius:3px')
       + '">' + esc(content).replace(/\\n/g,'<br>') + '</div>';
     area.insertBefore(div, typing);
     area.scrollTop = area.scrollHeight;
@@ -1714,7 +1714,7 @@ export function register(app, db) {
       var list = document.getElementById('dtList');
       if (!list) return;
       if (!threads.length) {
-        list.innerHTML = '<div style="padding:14px 10px;font-size:11px;color:rgba(255,255,255,.28);text-align:center">Sin conversaciones</div>';
+        list.innerHTML = '<div style="padding:14px 10px;font-size:11px;color:var(--text3);text-align:center">Sin conversaciones</div>';
         return;
       }
       var pinned = threads.filter(function(t){ return t.pinned; });

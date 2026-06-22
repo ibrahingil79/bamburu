@@ -47,26 +47,26 @@ export function createSecurityRoutes(db) {
     <style>
       .sec-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:1.5rem}
       .sec-tab{padding:.6rem 1.2rem;font-size:.85rem;font-weight:500;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;text-decoration:none;transition:all .15s}
-      .sec-tab.active{color:var(--teal);border-bottom-color:var(--teal);font-weight:600}
+      .sec-tab.active{color:var(--teal);border-bottom-color:var(--teal);font-weight:500}
       .sec-tab:hover{color:var(--text)}
       .sec-pane{display:none}.sec-pane.active{display:block}
       .sec-alert{padding:.75rem 1rem;border-radius:8px;font-size:.85rem;margin-bottom:1.2rem}
-      .sec-ok{background:rgba(20,184,166,.1);border:1px solid rgba(20,184,166,.25);color:#5EEAD4}
-      .sec-err{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#FCA5A5}
+      .sec-ok{background:var(--ok-s);border:1px solid var(--ok);color:var(--ok)}
+      .sec-err{background:var(--danger-s);border:1px solid var(--danger);color:var(--danger)}
       .form-row{display:grid;gap:1rem}
-      .f-label{font-size:.8rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.35rem;display:block}
-      .f-input{width:100%;padding:.6rem .8rem;background:var(--input-bg,rgba(255,255,255,.04));border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:.9rem;font-family:inherit;outline:none;transition:border-color .15s}
+      .f-label{font-size:.8rem;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.35rem;display:block}
+      .f-input{width:100%;padding:.6rem .8rem;background:var(--input-bg,#F3F4F6);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:.9rem;font-family:inherit;outline:none;transition:border-color .15s}
       .f-input:focus{border-color:var(--teal)}
-      .badge-2fa-on{display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .8rem;background:rgba(20,184,166,.12);border:1px solid rgba(20,184,166,.3);color:#5EEAD4;border-radius:20px;font-size:.8rem;font-weight:600}
-      .badge-2fa-off{display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .8rem;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text3);border-radius:20px;font-size:.8rem;font-weight:600}
-      .info-box{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:1rem 1.2rem;margin-bottom:1.4rem}
-      .info-box h4{font-size:.85rem;font-weight:600;margin-bottom:.5rem;color:var(--text)}
+      .badge-2fa-on{display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .8rem;background:var(--ok-s);border:1px solid var(--ok);color:var(--ok);border-radius:20px;font-size:.8rem;font-weight:500}
+      .badge-2fa-off{display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .8rem;background:#F3F4F6;border:1px solid var(--border);color:var(--text3);border-radius:20px;font-size:.8rem;font-weight:500}
+      .info-box{background:#F3F4F6;border:1px solid var(--border);border-radius:10px;padding:1rem 1.2rem;margin-bottom:1.4rem}
+      .info-box h4{font-size:.85rem;font-weight:500;margin-bottom:.5rem;color:var(--text)}
       .info-box p,.info-box li{font-size:.82rem;color:var(--text3);line-height:1.6}
       .info-box ol{padding-left:1.1rem}
       .qr-wrap{text-align:center;padding:1rem;background:#fff;border-radius:10px;display:inline-block;margin:1rem 0}
-      .secret-chip{font-family:monospace;font-size:.78rem;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:.35rem .7rem;word-break:break-all;color:var(--text3)}
-      .btn-danger{background:rgba(239,68,68,.15);color:#FCA5A5;border:1px solid rgba(239,68,68,.3)}
-      .btn-danger:hover{background:rgba(239,68,68,.25)}
+      .secret-chip{font-family:monospace;font-size:.78rem;background:#F3F4F6;border:1px solid var(--border);border-radius:6px;padding:.35rem .7rem;word-break:break-all;color:var(--text3)}
+      .btn-danger{background:var(--danger-s);color:var(--danger);border:1px solid var(--danger)}
+      .btn-danger:hover{background:#F7DAD7}
       .sec-divider{border:none;border-top:1px solid var(--border);margin:1.5rem 0}
     </style>
 
@@ -109,7 +109,7 @@ export function createSecurityRoutes(db) {
       <div class="sec-pane${tab === '2fa' ? ' active' : ''}">
 
         <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.2rem">
-          <span style="font-size:.9rem;font-weight:600;color:var(--text)">Estado:</span>
+          <span style="font-size:.9rem;font-weight:500;color:var(--text)">Estado:</span>
           ${user.totp_enabled
             ? '<span class="badge-2fa-on">● Activada</span>'
             : '<span class="badge-2fa-off">○ Desactivada</span>'
@@ -117,8 +117,8 @@ export function createSecurityRoutes(db) {
         </div>
 
         ${user.totp_enabled ? `
-          <div class="info-box" style="border-color:rgba(20,184,166,.2);background:rgba(20,184,166,.04)">
-            <h4 style="color:#5EEAD4">2FA activa en tu cuenta</h4>
+          <div class="info-box" style="border-color:var(--ok);background:var(--ok-s)">
+            <h4 style="color:var(--ok)">2FA activa en tu cuenta</h4>
             <p>Cada vez que inicies sesión se te pedirá un código de 6 dígitos de tu app autenticadora.</p>
           </div>
           <form method="POST" action="/admin/security/disable-2fa" onsubmit="return confirm('¿Seguro que quieres desactivar el doble factor? Tu cuenta quedará menos protegida.')">

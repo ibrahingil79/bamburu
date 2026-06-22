@@ -145,7 +145,7 @@ export function createDiscountRoutes(db, cfg = {}) {
         const codes=q?_codes.filter(c=>(c.code||'').toLowerCase().includes(q)):_codes;
         document.getElementById('codesBody').innerHTML=codes.length?codes.map(c=>{
           const used=c.max_uses?c.uses_count+'/'+c.max_uses:(c.uses_count+' usos');
-          return '<tr><td><code style="background:#f1f5f9;padding:.2rem .5rem;border-radius:4px;font-weight:600">'+c.code+'</code></td>'+
+          return '<tr><td><code style="background:var(--bg3);padding:.2rem .5rem;border-radius:4px;font-weight:500">'+c.code+'</code></td>'+
             '<td>'+(c.type==='percentage'?'Porcentaje':'Fijo')+'</td>'+
             '<td><strong>'+(c.type==='percentage'?c.value+'%':'${sym}'+c.value)+'</strong></td>'+
             '<td>'+(c.min_order>0?'${sym}'+c.min_order:'-')+'</td>'+

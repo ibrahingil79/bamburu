@@ -14,25 +14,25 @@ export function createChangePasswordRoutes(db) {
     const content = `
       <div class="page-header"><h1>Cambiar contraseña</h1></div>
       <div class="card" style="max-width:460px;padding:2rem">
-        <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:.9rem 1.1rem;margin-bottom:1.5rem;color:#92400e;font-size:.9rem">
+        <div style="background:var(--warn-s);border:1px solid var(--warn);border-radius:8px;padding:.9rem 1.1rem;margin-bottom:1.5rem;color:var(--warn);font-size:.9rem">
           <strong>Por seguridad, debes cambiar tu contraseña antes de continuar.</strong>
         </div>
-        ${err ? `<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:.75rem 1rem;margin-bottom:1.2rem;color:#991b1b;font-size:.85rem">${escHtml(decodeURIComponent(err))}</div>` : ''}
+        ${err ? `<div style="background:var(--danger-s);border:1px solid var(--danger);border-radius:8px;padding:.75rem 1rem;margin-bottom:1.2rem;color:var(--danger);font-size:.85rem">${escHtml(decodeURIComponent(err))}</div>` : ''}
         <form method="POST" action="/admin/change-password">
           <input type="hidden" name="_csrf" value="${csrfToken}">
           <div style="margin-bottom:1rem">
-            <label style="display:block;font-size:.82rem;font-weight:500;margin-bottom:.3rem;color:#334155">Contraseña actual</label>
-            <input type="password" name="current_password" required style="width:100%;padding:.6rem .8rem;border:1px solid #e2e8f0;border-radius:6px;font-size:.9rem">
+            <label style="display:block;font-size:.82rem;font-weight:500;margin-bottom:.3rem;color:var(--text)">Contraseña actual</label>
+            <input type="password" name="current_password" required style="width:100%;padding:.6rem .8rem;border:1px solid var(--border);border-radius:6px;font-size:.9rem">
           </div>
           <div style="margin-bottom:1rem">
-            <label style="display:block;font-size:.82rem;font-weight:500;margin-bottom:.3rem;color:#334155">Nueva contraseña <span style="font-weight:400;color:#94a3b8">(mínimo 10 caracteres)</span></label>
-            <input type="password" name="new_password" required minlength="10" style="width:100%;padding:.6rem .8rem;border:1px solid #e2e8f0;border-radius:6px;font-size:.9rem">
+            <label style="display:block;font-size:.82rem;font-weight:500;margin-bottom:.3rem;color:var(--text)">Nueva contraseña <span style="font-weight:400;color:var(--text2)">(mínimo 10 caracteres)</span></label>
+            <input type="password" name="new_password" required minlength="10" style="width:100%;padding:.6rem .8rem;border:1px solid var(--border);border-radius:6px;font-size:.9rem">
           </div>
           <div style="margin-bottom:1.5rem">
-            <label style="display:block;font-size:.82rem;font-weight:500;margin-bottom:.3rem;color:#334155">Confirmar nueva contraseña</label>
-            <input type="password" name="confirm_password" required style="width:100%;padding:.6rem .8rem;border:1px solid #e2e8f0;border-radius:6px;font-size:.9rem">
+            <label style="display:block;font-size:.82rem;font-weight:500;margin-bottom:.3rem;color:var(--text)">Confirmar nueva contraseña</label>
+            <input type="password" name="confirm_password" required style="width:100%;padding:.6rem .8rem;border:1px solid var(--border);border-radius:6px;font-size:.9rem">
           </div>
-          <button type="submit" style="padding:.65rem 1.4rem;background:#111;color:#fff;border:none;border-radius:6px;font-size:.9rem;font-weight:600;cursor:pointer">Cambiar contraseña</button>
+          <button type="submit" style="padding:.65rem 1.4rem;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:.9rem;font-weight:500;cursor:pointer">Cambiar contraseña</button>
         </form>
       </div>`;
     return c.html(adminLayout('Cambiar contraseña', content, '', csrfToken, c));

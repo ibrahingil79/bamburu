@@ -388,12 +388,15 @@ Archivos: `modules/registro/index.js`, `core/signup-schema.js`, `core/tenant-sig
 
 ---
 
-## TRANSVERSAL (fuera del orden de pilares) — SISTEMA DE DISEÑO + SANEAMIENTO VISUAL — 🟡 PIEZAS 1 y 2 HECHAS (2026-06-22) · PIEZA 3 PENDIENTE
+## TRANSVERSAL (fuera del orden de pilares) — SISTEMA DE DISEÑO + SANEAMIENTO VISUAL — ✅ PIEZAS 1, 2 y 3 HECHAS (2026-06-22)
 
 > Tarea PROPIA del roadmap (no un pendiente suelto menor), por su impacto en el **diferencial** del
 > producto. **PIEZA 1 (DISEÑO.md) HECHA el 2026-06-22 (commit `029ac39`).** **PIEZA 2 (reordenación del
-> menú de /admin) HECHA el 2026-06-22 (commit `2fe2fee`).** La PIEZA 3 (saneamiento visual de las
-> pantallas) sigue pendiente; **no iniciar hasta indicación**. El orden manda: cada pieza sobre la siguiente (ver REGLA).
+> menú de /admin) HECHA el 2026-06-22 (commit `2fe2fee`).** **PIEZA 3 (saneamiento visual) HECHA el
+> 2026-06-22:** aplicado el **patrón oro aprobado** (`docs/diseno/sistema-visual-aprobado.html`) a toda la
+> plataforma vía las piezas compartidas de `layout.js` — **chrome GRAFITO OSCURO `#20242F`** (rail + barra
+> superior), área de trabajo clara, acento slate `#334155`, cero teal; los 6/7 moldes (dashboard, documento,
+> lista, formulario, modal, TPV, captura) verificados con capturas headless contra la referencia. **Tarea CERRADA.**
 
 **Problema (palabras del dueño del producto).** La UI ha crecido "metiendo cada función donde cabía", sin
 criterio estético: pantallas recargadas, sin jerarquía, que "se ven feas" y poco profesionales. Choca
@@ -431,10 +434,20 @@ mucho aire, lo secundario oculto hasta que se necesita.
    en los 23 enlaces. Pendiente para la PIEZA 3 (capa visual, CSS/JS): menú de avatar (Cuenta está
    provisional en el lateral), colapso a iconos + hover, DISA destacada y quitar el logo.
 
-3) **PASADA DE SANEAMIENTO VISUAL** de lo ya construido aplicando ese `DISEÑO.md`, empezando por las
-   pantallas más recargadas (**ficha de cliente** y **sección Cobros**). Es el equivalente visual al
-   saneamiento de datos que fue T1. **Solo presentación:** no cambiar lógica, datos, endpoints ni
-   comportamiento. Incluye también la **capa visual del menú** pendiente de la PIEZA 2 (avatar, colapso/hover, etc.).
+3) ✅ **PASADA DE SANEAMIENTO VISUAL — HECHA (2026-06-22).** Aplicado el **patrón oro aprobado por Ibrahin**
+   (`docs/diseno/sistema-visual-aprobado.html`) a TODA la plataforma construyendo los moldes **una vez** en
+   las piezas compartidas (`modules/erp/layout.js`) y montando todas las pantallas encima, en vez de pintar
+   pantalla por pantalla: **chrome GRAFITO OSCURO `#20242F`** (rail + barra superior), área de trabajo clara
+   (`#F5F6F8`/`#FFFFFF`), acento **slate `#334155`**, **cero teal**. Reconciliado `DISEÑO.md` (§0/§2/§3) con
+   el patrón oro (antes decía chrome claro). Además, dos bugs reales encontrados al verificar con el HTML
+   servido: (a) **iconos del menú en blanco** → la CSP (`core/security-headers.js`) no permitía el webfont
+   Tabler de `cdn.jsdelivr.net` en `style-src`/`font-src`; corregido. (b) **`/admin` aterrizaba en el chat
+   viejo** en vez del dashboard → `disaHome` auto-restauraba la conversación al cargar; quitado, la home es
+   el **dashboard (molde 1)** y el chat completo vive en `/admin/disa`. **Solo presentación/entrega:** no se
+   tocó lógica, datos, endpoints ni permisos. Verificado con capturas headless (Puppeteer + Chromium) y con
+   estilos computados (`.topbar`/`.sidebar` = `rgb(32,36,47)`). La capa visual del menú pendiente de la
+   PIEZA 2 (avatar, colapso/hover) queda cubierta. **Limpieza de datos de prueba basura → tarea aparte (no se
+   tocan datos sin encargo).**
 
 **REGLA:** el orden manda — cada pieza sobre la siguiente. Sin las reglas escritas (PIEZA 1), el
 saneamiento visual (PIEZA 3) vuelve a salir a ojo y desigual. **No empezar por la última.**
