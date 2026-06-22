@@ -388,11 +388,12 @@ Archivos: `modules/registro/index.js`, `core/signup-schema.js`, `core/tenant-sig
 
 ---
 
-## TRANSVERSAL (fuera del orden de pilares) — SISTEMA DE DISEÑO + SANEAMIENTO VISUAL — 🟡 PIEZA 1 HECHA (2026-06-22) · PIEZA 2 PENDIENTE
+## TRANSVERSAL (fuera del orden de pilares) — SISTEMA DE DISEÑO + SANEAMIENTO VISUAL — 🟡 PIEZAS 1 y 2 HECHAS (2026-06-22) · PIEZA 3 PENDIENTE
 
 > Tarea PROPIA del roadmap (no un pendiente suelto menor), por su impacto en el **diferencial** del
-> producto. **PIEZA 1 (DISEÑO.md) HECHA el 2026-06-22 (commit `029ac39`).** La PIEZA 2 (saneamiento
-> visual de las pantallas) sigue pendiente; **no iniciar hasta indicación**. La pieza 1 manda sobre la 2 (ver REGLA).
+> producto. **PIEZA 1 (DISEÑO.md) HECHA el 2026-06-22 (commit `029ac39`).** **PIEZA 2 (reordenación del
+> menú de /admin) HECHA el 2026-06-22 (commit `2fe2fee`).** La PIEZA 3 (saneamiento visual de las
+> pantallas) sigue pendiente; **no iniciar hasta indicación**. El orden manda: cada pieza sobre la siguiente (ver REGLA).
 
 **Problema (palabras del dueño del producto).** La UI ha crecido "metiendo cada función donde cabía", sin
 criterio estético: pantallas recargadas, sin jerarquía, que "se ven feas" y poco profesionales. Choca
@@ -402,7 +403,7 @@ directamente con la estrella polar de CANON ("si no se siente fácil, está mal 
 **Referencia de estilo.** Minimalismo tipo **Claude / iOS**: pocos elementos a la vista, jerarquía clara,
 mucho aire, lo secundario oculto hasta que se necesita.
 
-**Enfoque en dos piezas, EN ESTE ORDEN:**
+**Enfoque en tres piezas, EN ESTE ORDEN:**
 
 1) ✅ **CREAR `DISEÑO.md` — HECHO (2026-06-22, commit `029ac39`).** Fuente de verdad visual de Bamburu,
    equivalente a lo que `CANON.md` es para la estrategia. Incluye además del mínimo de abajo: auditoría
@@ -421,13 +422,22 @@ mucho aire, lo secundario oculto hasta que se necesita.
      esquinas redondeadas suaves; escala de espaciado de **4px**.
    - **Consistencia entre pantallas:** mismos patrones de lista, ficha, modal y tabla en todo el ERP.
 
-2) **PASADA DE SANEAMIENTO VISUAL** de lo ya construido aplicando ese `DISEÑO.md`, empezando por las
+2) ✅ **REORDENACIÓN DEL MENÚ de /admin — HECHO (2026-06-22, commit `2fe2fee`).** Árbol de navegación
+   alineado con `DISEÑO.md §3` (corregido en el mismo commit): agrupado por el ciclo del negocio —
+   **Ventas** (con Clientes/Grupos), **Compras** (con Proveedores), **Inventario**, **Catálogo** — con
+   **DISA fija arriba** e **Inicio** debajo. Desenlazados los restos D4 (Pedidos viejos, Descuentos,
+   Analítica) y D2/D3; sus rutas SIGUEN montadas (vivas por URL, no borradas). **Solo navegación:**
+   ninguna ruta creada/renombrada; cero cambios en lógica/endpoints/permisos/datos. Verificado HTTP 200
+   en los 23 enlaces. Pendiente para la PIEZA 3 (capa visual, CSS/JS): menú de avatar (Cuenta está
+   provisional en el lateral), colapso a iconos + hover, DISA destacada y quitar el logo.
+
+3) **PASADA DE SANEAMIENTO VISUAL** de lo ya construido aplicando ese `DISEÑO.md`, empezando por las
    pantallas más recargadas (**ficha de cliente** y **sección Cobros**). Es el equivalente visual al
    saneamiento de datos que fue T1. **Solo presentación:** no cambiar lógica, datos, endpoints ni
-   comportamiento.
+   comportamiento. Incluye también la **capa visual del menú** pendiente de la PIEZA 2 (avatar, colapso/hover, etc.).
 
-**REGLA:** la pieza 1 manda. Sin las reglas escritas, el saneamiento (pieza 2) vuelve a salir a ojo y
-desigual. **No empezar por la 2.**
+**REGLA:** el orden manda — cada pieza sobre la siguiente. Sin las reglas escritas (PIEZA 1), el
+saneamiento visual (PIEZA 3) vuelve a salir a ojo y desigual. **No empezar por la última.**
 
 ---
 
