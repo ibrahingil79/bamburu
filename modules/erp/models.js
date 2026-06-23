@@ -1125,6 +1125,33 @@ export function runMigrations(db) {
     FOREIGN KEY (invoice_id) REFERENCES invoices(id)
   )`);
 
+  // ── VERI*FACTU · Tarea 1 — Registro de facturación oficial (alta/anulación) ──
+  // Cadena de huella OFICIAL de la AEAT (doc v0.1.2), SEPARADA de la cadena propietaria
+  // de integridad (invoices.verifactu_hash, que recorre superadmin/integridad.js). NO toca
+  // ninguna tabla existente. Encadenamiento ÚNICO por tenant (alta+anulación en orden de id)
+  // que ARRANCA LIMPIO en la implantación: el primer registro lleva prev_huella='' y
+  // primer_registro='S'. Las facturas anteriores NO se registran retroactivamente. La huella y
+  // su FechaHoraHusoGenRegistro se CONGELAN al generar (la Tarea 2 transmite ese valor exacto).
+  // Aditiva e idempotente. La Tarea 2 (envío AEAT) reconstruye el RegistroAlta/Anulación completo
+  // desde estos campos + la factura inmutable enlazada. Detalle en modules/erp/verifactu.js.
+  db.exec(`CREATE TABLE IF NOT EXISTS verifactu_registros (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_id INTEGER NOT NULL,
+    record_type TEXT NOT NULL CHECK(record_type IN ('alta','anulacion')),
+    id_emisor TEXT NOT NULL,
+    num_serie TEXT NOT NULL,
+    fecha_expedicion TEXT NOT NULL,
+    tipo_factura TEXT,
+    cuota_total TEXT,
+    importe_total TEXT,
+    prev_huella TEXT NOT NULL DEFAULT '',
+    huella TEXT NOT NULL,
+    fecha_hora_huso TEXT NOT NULL,
+    primer_registro TEXT NOT NULL DEFAULT 'N',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+  )`);
+
   // ── T4 Paso 1: motor de cobros (estado de cobro de la factura) ─────────────
   // Cobros (totales o parciales) de una factura. Una factura puede tener varios.
   // El ESTADO de cobro NO se guarda: se calcula siempre en vivo (modules/erp/cobros.js)

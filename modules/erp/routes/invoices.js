@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import { createHash } from 'crypto';
+import QRCode from 'qrcode';
 import { requirePerm, logActivity } from '../../../core/auth.js';
+import { recordVerifactuAlta, recordVerifactuAnulacion, cotejoUrl } from '../verifactu.js';   // VERI*FACTU T1: registro oficial + QR de cotejo
 import { validate } from '../../../core/validate.js';
 import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema, invoicePaymentSchema, collectionActionSchema } from '../schemas.js';
 import { getCountryConfig } from '../../../core/control-db.js';
@@ -148,30 +150,36 @@ export function generateInvoice(db, orderId) {
   inv.verifactu_hash = calcHash(inv);
 
   const due_date = computeDueDate(db, issue_date, order.client_id || null);
-  const result = db.prepare(`INSERT INTO invoices
-    (invoice_number,order_id,client_id,series,year,sequence,issue_date,
-     company_name,company_fiscal_id,company_address,
-     client_name,client_fiscal_id,client_address,client_email,
-     subtotal,tax_rate,tax_name,tax_amount,total,
-     currency,currency_symbol,document_name,
-     verifactu_hash,prev_hash,due_date)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-  ).run(
-    inv.invoice_number, inv.order_id, inv.client_id, inv.series, inv.year, inv.sequence, inv.issue_date,
-    inv.company_name, inv.company_fiscal_id, inv.company_address,
-    inv.client_name, inv.client_fiscal_id, inv.client_address, inv.client_email,
-    inv.subtotal, inv.tax_rate, inv.tax_name, inv.tax_amount, inv.total,
-    inv.currency, inv.currency_symbol, inv.document_name,
-    inv.verifactu_hash, inv.prev_hash, due_date
-  );
-  const invoiceId = result.lastInsertRowid;
+  // VERI*FACTU T1: factura + líneas + registro de ALTA oficial en UNA transacción (la huella
+  // oficial se encadena leyendo la anterior e insertando de forma atómica → cadena única sin carrera).
+  const emit = db.transaction(() => {
+    const result = db.prepare(`INSERT INTO invoices
+      (invoice_number,order_id,client_id,series,year,sequence,issue_date,
+       company_name,company_fiscal_id,company_address,
+       client_name,client_fiscal_id,client_address,client_email,
+       subtotal,tax_rate,tax_name,tax_amount,total,
+       currency,currency_symbol,document_name,
+       verifactu_hash,prev_hash,due_date)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).run(
+      inv.invoice_number, inv.order_id, inv.client_id, inv.series, inv.year, inv.sequence, inv.issue_date,
+      inv.company_name, inv.company_fiscal_id, inv.company_address,
+      inv.client_name, inv.client_fiscal_id, inv.client_address, inv.client_email,
+      inv.subtotal, inv.tax_rate, inv.tax_name, inv.tax_amount, inv.total,
+      inv.currency, inv.currency_symbol, inv.document_name,
+      inv.verifactu_hash, inv.prev_hash, due_date
+    );
+    const invoiceId = result.lastInsertRowid;
 
-  const insItem = db.prepare('INSERT INTO invoice_items (invoice_id,description,quantity,unit_price,total_price) VALUES (?,?,?,?,?)');
-  for (const it of items) {
-    insItem.run(invoiceId, it.product_name, it.quantity, it.unit_price, it.total);
-  }
+    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id,description,quantity,unit_price,total_price) VALUES (?,?,?,?,?)');
+    for (const it of items) {
+      insItem.run(invoiceId, it.product_name, it.quantity, it.unit_price, it.total);
+    }
 
-  return { id: invoiceId, invoice_number };
+    recordVerifactuAlta(db, { ...inv, id: invoiceId });
+    return { id: invoiceId, invoice_number };
+  });
+  return emit();
 }
 
 // A1+A2: crear factura directa (sin pedido). Cada línea lleva su propia tasa
@@ -240,6 +248,12 @@ export function createInvoice(db, invoiceData) {
       const tax   = Math.round(base * rate / 100 * 100) / 100;
       insItem.run(invoiceId, line.description, qty, price, base, rate, tax);
     }
+    // VERI*FACTU T1: registro de ALTA oficial (huella encadenada) en la MISMA transacción.
+    recordVerifactuAlta(db, {
+      id: invoiceId, company_fiscal_id: cfg.fiscal_id || '', invoice_number,
+      issue_date: issueDate, record_type: 'alta',
+      subtotal: totals.subtotal, tax_amount: totals.taxAmount,
+    });
     return { id: invoiceId, invoice_number };
   });
 
@@ -285,6 +299,8 @@ export function anularInvoice(db, invoiceId, motivo) {
     ).run(original.id, original.invoice_number, motivoClean, issue_date, company_fiscal_id, prev_hash, verifactu_hash);
 
     db.prepare("UPDATE invoices SET status='anulada' WHERE id=?").run(original.id);
+    // VERI*FACTU T1: registro de ANULACIÓN oficial (huella encadenada) en la MISMA transacción.
+    recordVerifactuAnulacion(db, original);
     return { id: res.lastInsertRowid, invoice_id: original.id, invoice_number: original.invoice_number };
   });
   return run();
@@ -363,6 +379,13 @@ export function createRectificativa(db, data) {
     }
 
     db.prepare("UPDATE invoices SET status='rectificada' WHERE id=?").run(original.id);
+    // VERI*FACTU T1: la rectificativa es un ALTA en serie 'R' (TipoFactura = R1..R5); su registro
+    // de alta oficial (huella encadenada) va en la MISMA transacción.
+    recordVerifactuAlta(db, {
+      id: invoiceId, company_fiscal_id: original.company_fiscal_id || cfg.fiscal_id || '',
+      invoice_number, issue_date: issueDate, record_type: 'rectificativa', rectification_type,
+      subtotal: totals.subtotal, tax_amount: totals.taxAmount,
+    });
     return { id: invoiceId, invoice_number, rectifies: original.invoice_number };
   });
   return run();
@@ -1137,7 +1160,7 @@ export function createInvoiceRoutes(db) {
   });
 
   // GET /admin/invoices/:id — printable invoice
-  views.get('/:id', requirePerm('orders.read'), c => {
+  views.get('/:id', requirePerm('orders.read'), async c => {
     try {
       const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(c.req.param('id'));
       if (!inv) return c.text('Factura no encontrada', 404);
@@ -1239,7 +1262,26 @@ const totalsBlock = (() => {
         ? '<span class="badge b-yellow">Rectificada</span>'
         : '<span class="badge b-red">Anulada</span>';
 
-      const paper = `
+      // VERI*FACTU T1 — QR de cotejo + leyenda al INICIO del documento. Solo para facturas con
+      // registro oficial de ALTA (cadena nueva desde la implantación); las anteriores no lo llevan.
+      // El QR se construye desde el propio registro (nif/numserie/fecha/importe), así coincide EXACTO
+      // con lo registrado. La huella NO va en el QR. Escanearlo dará "no consta" hasta la Tarea 2 (envío).
+      const vfReg = db.prepare("SELECT * FROM verifactu_registros WHERE invoice_id=? AND record_type='alta' ORDER BY id ASC LIMIT 1").get(inv.id) || null;
+      let vfHead = '';
+      if (vfReg) {
+        const qrTarget = cotejoUrl({ nif: vfReg.id_emisor, numSerie: vfReg.num_serie, fecha: vfReg.fecha_expedicion, importe: vfReg.importe_total });
+        const qrImg = await QRCode.toDataURL(qrTarget, { errorCorrectionLevel: 'M', margin: 1, width: 200 });
+        vfHead = `
+<div class="vf-head" style="display:flex;gap:16px;align-items:center;margin-bottom:24px">
+  <img src="${qrImg}" alt="Código QR Veri*Factu" style="width:35mm;height:35mm;flex:0 0 auto">
+  <div>
+    <div style="font-weight:700;letter-spacing:.5px;font-size:15px">VERI*FACTU</div>
+    <div style="font-size:12px;color:var(--text2)">Factura verificable en la sede electrónica de la AEAT</div>
+  </div>
+</div>`;
+      }
+
+      const paper = `${vfHead}
 ${lifecycle}
 <h1>${inv.document_name}</h1>
 <div class="doc-sub">${inv.invoice_number} · ${inv.status === 'emitida' ? 'Emitida' : inv.status === 'rectificada' ? 'Rectificada' : 'Anulada'} el ${inv.issue_date}</div>
