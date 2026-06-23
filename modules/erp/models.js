@@ -1152,6 +1152,67 @@ export function runMigrations(db) {
     FOREIGN KEY (invoice_id) REFERENCES invoices(id)
   )`);
 
+  // ── PILAR 4 · VENTAS · PIEZA 1 — PRESUPUESTO (quotes) ──────────────────────
+  // Documento PRESUPUESTO, ESPEJO de la orden de compra (purchase_orders): mismo ciclo
+  // borrador (editable, sin número) → emitido (gana PRE-NNNN vía code_counters y se bloquea)
+  // → anulado (con motivo; corregir = anular y rehacer, vía replaces_quote_id). Foto congelada
+  // de emisor + cliente AL EMITIR (igual que la factura/OC): el borrador lee en vivo. Estados de
+  // SEGUIMIENTO en columna aditiva follow_status (aceptado|rechazado|caducado), separada del
+  // ciclo. Totales con la MISMA matemática de la factura (base + IVA por tasa + IRPF). Aditiva e
+  // idempotente. DISA NO escribe presupuestos (quotes/quote_items fuera de WRITABLE_TABLES).
+  db.exec(`CREATE TABLE IF NOT EXISTS quotes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    quote_number TEXT,
+    client_id INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'borrador' CHECK(status IN ('borrador','emitido','anulado')),
+    follow_status TEXT,
+    date DATE NOT NULL,
+    valid_until DATE,
+    notes TEXT DEFAULT '',
+    replaces_quote_id INTEGER,
+    anulada_motivo TEXT,
+    company_name TEXT, company_fiscal_id TEXT, company_address TEXT, company_phone TEXT, company_email TEXT,
+    client_name TEXT, client_fiscal_id TEXT, client_address TEXT, client_email TEXT,
+    subtotal REAL NOT NULL DEFAULT 0,
+    tax_amount REAL NOT NULL DEFAULT 0,
+    irpf_rate REAL NOT NULL DEFAULT 0,
+    irpf_amount REAL NOT NULL DEFAULT 0,
+    total REAL NOT NULL DEFAULT 0,
+    currency TEXT DEFAULT 'EUR',
+    currency_symbol TEXT DEFAULT '€',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id) REFERENCES clients(id),
+    FOREIGN KEY (replaces_quote_id) REFERENCES quotes(id)
+  )`);
+  // Líneas: ESPEJO de la FACTURA (no de la OC) — admite línea de catálogo (product_id + IVA por
+  // banda) Y línea libre (product_id NULL, IVA 21% por defecto). unit_price es NETO (sin IVA).
+  db.exec(`CREATE TABLE IF NOT EXISTS quote_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    quote_id INTEGER NOT NULL,
+    product_id INTEGER,
+    description TEXT NOT NULL,
+    quantity REAL NOT NULL DEFAULT 1,
+    unit_price REAL NOT NULL DEFAULT 0,
+    total_price REAL NOT NULL DEFAULT 0,
+    tax_rate REAL NOT NULL DEFAULT 0,
+    tax_amount REAL NOT NULL DEFAULT 0,
+    FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id)
+  )`);
+  // MOTOR DE CONVERSIÓN — enlace GENERAL origen↔destino entre documentos (presupuesto→factura/
+  // ticket; preparado para pedido→albarán→factura sin rehacerlo). Una fila por conversión; admite
+  // varias por origen (conversión parcial futura). Hoy solo conversión del documento COMPLETO.
+  db.exec(`CREATE TABLE IF NOT EXISTS document_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_type TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    dest_type TEXT NOT NULL,
+    dest_id INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_doclinks_source ON document_links(source_type, source_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_doclinks_dest   ON document_links(dest_type, dest_id)`);
+
   // ── T4 Paso 1: motor de cobros (estado de cobro de la factura) ─────────────
   // Cobros (totales o parciales) de una factura. Una factura puede tener varios.
   // El ESTADO de cobro NO se guarda: se calcula siempre en vivo (modules/erp/cobros.js)
@@ -1398,6 +1459,9 @@ export function runMigrations(db) {
     { module: 'activity',  action: 'read',    description: 'Ver actividad' },
     { module: 'feedback',  action: 'create',  description: 'Enviar comentarios' },
     { module: 'sales',     action: 'emit_over_stock', description: 'Emitir factura con exceso de stock (físicos)' },
+    { module: 'quotes',    action: 'read',    description: 'Ver presupuestos' },
+    { module: 'quotes',    action: 'create',  description: 'Crear presupuestos' },
+    { module: 'quotes',    action: 'edit',    description: 'Editar/emitir presupuestos' },
   ];
   for (const p of permissionsData) {
     db.prepare('INSERT OR IGNORE INTO permissions (module, action, description) VALUES (?, ?, ?)').run(p.module, p.action, p.description);
@@ -1409,6 +1473,7 @@ export function runMigrations(db) {
                  'orders.read','orders.create','orders.edit','orders.update_status',
                  'clients.read','clients.create','clients.edit',
                  'invoices.read','invoices.create','sales.emit_over_stock',
+                 'quotes.read','quotes.create','quotes.edit',
                  'admin.manage_users','admin.manage_roles','admin.settings'],
     Seller:     ['products.read',
                  'orders.read','orders.create','orders.edit','orders.update_status',

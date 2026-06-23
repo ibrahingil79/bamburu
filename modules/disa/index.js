@@ -106,6 +106,9 @@ export function register(app, db) {
   // whitelist (= NO escribibles por el genérico): una devolución mueve stock por el
   // libro y es documento inmutable con numeración. La voz de DISA sobre stock/compras
   // es tarea futura; por ahora DISA no crea devoluciones.
+  // Ventas/Pilar 4 — 'quotes'/'quote_items'/'document_links' FUERA del whitelist (igual que
+  // compras/sales_orders): un presupuesto es documento con ciclo, numeración y conversión por
+  // servicio validado. La voz de DISA sobre presupuestos es capa posterior; hoy no los escribe.
   const WRITABLE_TABLES = new Set([
     'categories', 'tags', 'product_tags',
     'products', 'product_variants', 'product_images',

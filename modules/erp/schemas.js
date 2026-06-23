@@ -164,6 +164,39 @@ export const invoiceAnularSchema = z.object({
   motivo: z.string().trim().min(3, 'Indica el motivo de la anulación').max(500),
 });
 
+// ── Presupuestos (quotes) — Pilar 4 · Pieza 1 ──────────────────
+// Línea ESPEJO de la factura: catálogo (product_id) o línea libre; unit_price NETO.
+const quoteLineSchema = z.object({
+  description: str(500),
+  quantity:    z.coerce.number().positive().max(1_000_000),
+  unit_price:  z.coerce.number().nonnegative().max(1_000_000),
+  tax_rate:    z.coerce.number().min(0).max(50).optional().default(0),
+  product_id:  optId,   // línea de catálogo → el servidor re-resuelve el IVA desde la banda del producto
+});
+export const quoteCreateSchema = z.object({
+  client_id:   intPos,
+  date:        z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  valid_until: z.union([z.literal(''), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).optional(),
+  notes:       strOpt(2000),
+  lines:       z.array(quoteLineSchema).min(1, 'Al menos una línea requerida'),
+});
+export const quoteComputeSchema = z.object({
+  client_id: optId,
+  lines:     z.array(quoteLineSchema).min(1, 'Al menos una línea requerida'),
+});
+export const quoteAnularSchema = z.object({
+  motivo: z.string().trim().min(3, 'Indica el motivo de la anulación').max(500),
+});
+export const quoteConvertSchema = z.object({
+  // destino del motor de conversión: hoy 'invoice' (real); 'ticket' queda registrado pero su
+  // creador se construye con la pieza de TPV.
+  dest: z.enum(['invoice', 'ticket']),
+  confirm_excess: z.coerce.boolean().optional().default(false),
+});
+export const quoteFollowSchema = z.object({
+  follow_status: z.enum(['aceptado', 'rechazado', 'caducado', '']).optional().default(''),
+});
+
 // Ciclo de vida — RECTIFICATIVA: factura nueva (serie propia) que referencia a la
 // original. ADMITE IMPORTES NEGATIVOS (abono): a diferencia de la factura ordinaria,
 // quantity y unit_price pueden ser negativos para devoluciones/anulación de operación.
