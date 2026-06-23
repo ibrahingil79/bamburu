@@ -17,6 +17,7 @@ import { marcarVistoYResumir } from '../erp/avisos.js';                         
 import { sendEmail } from '../../core/mailer.js';
 import { runCapture, captureFromExtraction } from '../erp/routes/purchases-capture.js';   // pipeline de captura C2 reutilizado (foto/PDF y voz)
 import { createProductSvc } from '../erp/routes/products.js';   // alta validada (banda de IVA obligatoria, sin defecto silencioso)
+import { getVatBands } from '../../core/vat-bands.js';   // [D5] lista cerrada de bandas legales (misma fuente que el formulario/API)
 import { ALLOWED_MIME, MAX_UPLOAD_BYTES } from '../erp/attachments.js';
 import { callClaude, hasAnthropicKey } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
 import { rateLimit } from '../../core/rate-limit.js';   // freno por IP del endpoint caro de DISA
@@ -139,6 +140,7 @@ export function register(app, db) {
     'register_collection_action', 'register_account_action',
     'register_supplier_payment',
     'create_client', 'edit_client', 'deactivate_client', 'activate_client',
+    'create_product', 'edit_product', 'delete_product', 'deactivate_product', 'activate_product',
     'dictar_compra',
   ]);
 
@@ -207,6 +209,24 @@ export function register(app, db) {
             return { ok: false, message: 'Tabla no permitida: ' + table };
           if (!data || typeof data !== 'object' || Object.keys(data).length === 0)
             return { ok: false, message: 'Se requiere data con al menos un campo.' };
+          // [Banda de IVA — D5] Un producto NO puede nacer por el INSERT genérico: caería en el
+          // DEFAULT 'general'/21 de la columna SIN banda elegida (o con banda↔% incoherente). Se
+          // enruta al MISMO servicio validado que la pantalla y la acción create_product
+          // (createProductSvc: banda obligatoria de la lista cerrada del país; el % lo deriva el
+          // servidor). Mismo principio que 'clients' (T5) y 'purchases' (C2): la tabla fiscal no
+          // se escribe a pelo por el genérico. SKU autogenerado si falta (igual que create_product).
+          if (table === 'products') {
+            const band = data.tax_band || data.banda_iva || data.iva_banda;
+            if (!band) return { ok: false, message: 'Para crear el producto necesito su banda de IVA explícita: general (21%), reducido (10%), superreducido (4%) o exento (0%). ¿Cuál le corresponde?' };
+            const pSku = data.sku || ('DISA-' + String(data.name || 'prod').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) + '-' + Date.now());
+            try {
+              const r = createProductSvc(db, { ...data, sku: pSku, tax_band: band });
+              logActivity(db, 'create', 'products', r.id, 'Producto "' + r.name + '" creado por DISA', session);
+              return { ok: true, message: 'Producto "' + (r.name || 'nuevo') + '" creado (banda ' + r.tax_band + ').' };
+            } catch (e) {
+              return { ok: false, message: 'No se pudo crear el producto: ' + (e.message || 'datos inválidos') + '.' };
+            }
+          }
           const colNames = Object.keys(data);
           const invalidCols = colNames.filter(c => !isValidColumnName(c));
           if (invalidCols.length > 0)
@@ -2130,6 +2150,11 @@ export function register(app, db) {
     const pmVals = (clientFieldOptions.payment_method || []).map(v => v === '' ? '"" (en blanco)' : v).join(' | ');
     // [Voz DISA stock] Motivos de ajuste de lista cerrada, desde el esquema real (no a mano).
     const arVals = (ADJUST_REASONS || []).join(' | ');
+    // [D5] Bandas de IVA legales del país, desde la fuente única (core/vat-bands.js) — la MISMA
+    // lista cerrada que valida el formulario/API. DISA elige el CODE; el % lo deriva el servidor.
+    const cfgVat = (() => { try { return db.prepare('SELECT country, tax_rate FROM company_config WHERE id=1').get() || {}; } catch { return {}; } })();
+    const vatVals = getVatBands((cfgVat.country || 'ES').toUpperCase(), cfgVat.tax_rate != null ? cfgVat.tax_rate : 21)
+      .map(b => b.code + ' (' + b.rate + '%)').join(' | ');
 
     const systemPrompt = [
       agentIdentity,
@@ -2261,6 +2286,16 @@ export function register(app, db) {
       '  Vía LEGAL para CORREGIR una factura emitida emitiendo un documento nuevo en serie propia (la original queda "rectificada").',
       '  invoice_number = numero EXACTO de la factura original. rectification_type uno de R1–R5; rectification_mode "S" (sustitucion) o "I" (diferencias).',
       '  lines son las lineas del documento rectificativo (en modo abono pueden ser negativas). Si dudas del tipo/modalidad o de las lineas, pregunta; no lo inventes.',
+      '',
+      'Catalogo de productos:',
+      '- create_product: {"name":"","price":0,"type":"physical|digital|service","tax_band":"...","stock":0}',
+      '  La BANDA DE IVA (tax_band) es OBLIGATORIA y es un dato FISCAL: usa EXACTAMENTE uno de estos',
+      '  codigos de la lista cerrada, nunca inventes otro ni un numero libre:',
+      '    tax_band: ' + vatVals,
+      '  Mapea lo que diga el usuario a su banda SOLO si es inequivoco (1:1): "21" o "IVA general" -> general,',
+      '  "10" -> reducido, "4" -> superreducido, "0"/"exento"/"sin IVA" -> exento. Si el usuario NO dice el IVA,',
+      '  o lo que dice es ambiguo/no encaja claro con una banda, NO lo adivines: PREGUNTA cual es la banda antes',
+      '  de crear. Sin banda no se crea el producto (el servidor lo rechaza). El SKU se genera solo si no lo das.',
       '',
       'Inventario (ver PRODUCTOS FISICOS ACTIVOS y ALMACENES ACTIVOS del contexto para los id):',
       '- adjust_stock: {"product_id":0,"mode":"set|add|sub","value":0,"reason":"...","warehouse_id":0}',
