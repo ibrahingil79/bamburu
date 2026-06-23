@@ -405,6 +405,8 @@ Archivos: `modules/registro/index.js`, `core/signup-schema.js`, `core/tenant-sig
 > plataforma vía las piezas compartidas de `layout.js` — **chrome GRAFITO OSCURO `#20242F`** (rail + barra
 > superior), área de trabajo clara, acento slate `#334155`, cero teal; los 6/7 moldes (dashboard, documento,
 > lista, formulario, modal, TPV, captura) verificados con capturas headless contra la referencia. **Tarea CERRADA.**
+>
+> - ✅ **Fleco visual de PIEZA 3 — desplegable del buscador ilegible — HECHO 2026-06-23 (commit `f23c4c1`).** El panel de sugerencias del buscador de producto en una línea salía oscuro con el nombre en texto oscuro (dark-on-dark). Causa raíz: los paneles usan `var(--card,#1e1e1e)` y el token `--card` nunca se definió (PIEZA 3 renombró las superficies a `--bg2`/`--bg3`) → caían en el fallback oscuro. Arreglo molde-una-vez (CSS global, 1 línea): `--card: #FFFFFF` en `:root` de `layout.js` → los **2** paneles afectados (`line-search.js` = factura + borrador de pedido, y `purchases.js` = compra) quedan claros y legibles a la vez; los otros 3 desplegables (captura/gasto) usan `--bg3` y ya estaban bien. Solo presentación. Verificado con estilos computados (contraste 16.9:1, AA) + capturas y navegador real del dueño. Script `scripts/verify-suggest-legible.mjs`.
 
 **Problema (palabras del dueño del producto).** La UI ha crecido "metiendo cada función donde cabía", sin
 criterio estético: pantallas recargadas, sin jerarquía, que "se ven feas" y poco profesionales. Choca
