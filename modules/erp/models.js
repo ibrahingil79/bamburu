@@ -1397,6 +1397,7 @@ export function runMigrations(db) {
     { module: 'analytics', action: 'read',    description: 'Ver analítica' },
     { module: 'activity',  action: 'read',    description: 'Ver actividad' },
     { module: 'feedback',  action: 'create',  description: 'Enviar comentarios' },
+    { module: 'sales',     action: 'emit_over_stock', description: 'Emitir factura con exceso de stock (físicos)' },
   ];
   for (const p of permissionsData) {
     db.prepare('INSERT OR IGNORE INTO permissions (module, action, description) VALUES (?, ?, ?)').run(p.module, p.action, p.description);
@@ -1407,7 +1408,7 @@ export function runMigrations(db) {
     Admin:      ['products.read','products.create','products.edit','products.delete',
                  'orders.read','orders.create','orders.edit','orders.update_status',
                  'clients.read','clients.create','clients.edit',
-                 'invoices.read','invoices.create',
+                 'invoices.read','invoices.create','sales.emit_over_stock',
                  'admin.manage_users','admin.manage_roles','admin.settings'],
     Seller:     ['products.read',
                  'orders.read','orders.create','orders.edit','orders.update_status',

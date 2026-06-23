@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import { createHash } from 'crypto';
 import QRCode from 'qrcode';
 import { requirePerm, logActivity } from '../../../core/auth.js';
+import { checkPermission } from '../../../core/permission-check.js';   // chequeo de permiso programático (condicional)
+import { isPhysical, productStock } from '../stock.js';                 // aviso de exceso de stock al facturar (RAMA B)
 import { recordVerifactuAlta, recordVerifactuAnulacion, cotejoUrl } from '../verifactu.js';   // VERI*FACTU T1: registro oficial + QR de cotejo
 import { validate } from '../../../core/validate.js';
 import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema, invoicePaymentSchema, collectionActionSchema } from '../schemas.js';
@@ -391,9 +393,33 @@ export function createRectificativa(db, data) {
   return run();
 }
 
+// ── Aviso de exceso de stock al facturar (RAMA B: la factura NO mueve stock) ──────────────
+// Por cada línea ENLAZADA a un producto FÍSICO, compara la cantidad con el disponible GLOBAL
+// (suma del libro, sin almacén ni reservas). Devuelve solo las líneas en exceso. Servicios,
+// digitales y líneas libres (sin product_id) no se chequean. No escribe nada.
+export function invoiceStockExcess(db, lines) {
+  const out = [];
+  for (const line of (lines || [])) {
+    if (!line.product_id) continue;
+    const p = db.prepare('SELECT id, name, type FROM products WHERE id=?').get(line.product_id);
+    if (!p || !isPhysical(db, p)) continue;
+    const available = productStock(db, p.id);
+    const requested = Number(line.quantity) || 0;
+    if (requested > available)
+      out.push({ product_id: p.id, name: p.name, available, requested, excess: requested - available });
+  }
+  return out;
+}
+
 export function createInvoiceRoutes(db) {
   const api = new Hono();
   const views = new Hono();
+
+  // ¿Puede el usuario emitir una factura con exceso de stock? Owner/admin sí (bypass del modelo
+  // de permisos, igual que requirePerm). Otros roles, solo con el permiso sales.emit_over_stock
+  // concedido en user_permissions. Para volverlo "solo-dueño" basta cambiar isAdmin por isOwner.
+  const canEmitOverStock = c =>
+    c.get('isAdmin') || checkPermission(db, c.get('session'), 'sales', 'emit_over_stock');
 
   // GET /api/erp/invoices — list (+ estado de cobro en vivo por factura)
   api.get('/', requirePerm('orders.read'), c => {
@@ -474,8 +500,20 @@ export function createInvoiceRoutes(db) {
   api.post('/', requirePerm('invoices.create'), validate(invoiceCreateSchema), c => {
     try {
       const data = c.get('validated');
+      // Exceso de stock (RAMA B — la factura NO mueve stock): por cada línea de producto FÍSICO,
+      // si la cantidad supera el disponible GLOBAL, NO se emite en silencio. Sin confirm_excess → 400;
+      // con el flag, solo si el usuario PUEDE emitir con exceso (sales.emit_over_stock; owner/admin
+      // por el bypass de requirePerm). Servicios/digitales y líneas libres no se chequean.
+      const excess = invoiceStockExcess(db, data.lines);
+      if (excess.length) {
+        const detalle = excess.map(x => '"' + x.name + '": hay ' + x.available + ', facturas ' + x.requested + ' — exceso de ' + x.excess).join('; ');
+        if (!data.confirm_excess)
+          return c.json({ error: 'Hay líneas que superan el stock disponible — ' + detalle + '. Para facturar el exceso confírmalo explícitamente (confirm_excess).', excess }, 400);
+        if (!canEmitOverStock(c))
+          return c.json({ error: 'No tienes permiso para emitir una factura con exceso de stock. Solo el dueño o un administrador pueden hacerlo; baja la cantidad a lo disponible.' }, 403);
+      }
       const result = createInvoice(db, data);
-      logActivity(db, c.get('session'), 'Creó factura', 'invoice', result.id, result.invoice_number);
+      logActivity(db, c.get('session'), 'Creó factura', 'invoice', result.id, result.invoice_number + (excess.length ? ' (exceso de stock confirmado)' : ''));
       return c.json(result, 201);
     } catch (e) {
       let code = 400;
@@ -674,6 +712,7 @@ export function createInvoiceRoutes(db) {
     const defaultRate = Number(cc.tax_default) || rates[0] || 0;
     const today = new Date().toISOString().slice(0, 10);
     const showIrpf = country === 'ES';
+    const canOver = canEmitOverStock(c);   // ¿puede confirmar y emitir con exceso de stock? (owner/admin o permiso)
 
     const ratesJson = JSON.stringify(rates);
 
@@ -738,7 +777,11 @@ export function createInvoiceRoutes(db) {
       const DEFAULT_RATE = ${defaultRate};
       const SHOW_IRPF = ${showIrpf};
       const IRPF_DEFAULT = ${irpfDefault};   // retención del negocio (precarga; empresa la aplica, particular no)
-      const LINE_CELL = ${JSON.stringify(lineSearchCellHtml())};  // celda buscador (componente compartido)
+      const LINE_CELL = ${JSON.stringify(lineSearchCellHtml(
+        '<input type="hidden" class="line-pid"><input type="hidden" class="line-ptype"><input type="hidden" class="line-pstock"><input type="hidden" class="line-pname">' +
+        '<div class="line-warn" style="display:none;color:var(--warn);font-size:.74rem;margin-top:4px;font-weight:500"></div>'
+      ))};  // celda buscador (componente compartido) + enlace al producto y aviso de exceso de stock
+      const CAN_OVER = ${canOver};   // dueño/admin (o permiso): puede confirmar el exceso. Si no, se bloquea.
       let clients = [];
       let catalog = [];                        // catálogo completo activo para el buscador de línea
       let recalcTimer = null;
@@ -791,6 +834,10 @@ export function createInvoiceRoutes(db) {
         row.cells[0].insertAdjacentHTML('beforeend', '<input type="hidden" class="line-tax" value="21">');
         tbody.appendChild(row);
         row.querySelectorAll('.line-qty, .line-price').forEach(inp => inp.addEventListener('input', scheduleRecalc));
+        // El aviso de exceso se refresca al cambiar la cantidad o al editar la descripción
+        // (editarla a mano desliga el producto → la línea deja de chequearse).
+        row.querySelector('.line-qty').addEventListener('input', () => updateLineWarn(row));
+        row.querySelector('.line-desc').addEventListener('input', () => updateLineWarn(row));
         scheduleRecalc();
       }
 
@@ -803,7 +850,36 @@ export function createInvoiceRoutes(db) {
         row.querySelector('.line-desc').value  = p.name;
         row.querySelector('.line-price').value = Number(p.price || 0).toFixed(2);
         row.querySelector('.line-tax').value   = String(Number(p.tax_rate) || 0);
+        // Enlace al producto para el aviso de exceso (solo físicos). Si luego editan la
+        // descripción, el nombre deja de coincidir y la línea pasa a tratarse como libre.
+        row.querySelector('.line-pid').value    = p.id;
+        row.querySelector('.line-ptype').value  = p.type || 'physical';
+        row.querySelector('.line-pstock').value = (p.stock != null ? p.stock : '');
+        row.querySelector('.line-pname').value  = p.name;
+        updateLineWarn(row);
         scheduleRecalc();
+      }
+
+      // Producto enlazado a la línea, SOLO si la descripción sigue siendo la del producto elegido
+      // (si la editaron a mano, es una línea libre y no se chequea stock).
+      function lineProduct(row){
+        const pid = row.querySelector('.line-pid');
+        if (!pid || !pid.value) return null;
+        const desc = (row.querySelector('.line-desc').value || '').trim();
+        const pname = (row.querySelector('.line-pname').value || '').trim();
+        if (desc !== pname) return null;
+        return { id: parseInt(pid.value), type: row.querySelector('.line-ptype').value, stock: parseFloat(row.querySelector('.line-pstock').value) };
+      }
+
+      // Aviso EN LA LÍNEA: producto físico con cantidad > disponible. "Disponible" = stock global.
+      function updateLineWarn(row){
+        const w = row.querySelector('.line-warn'); if (!w) return;
+        const prod = lineProduct(row);
+        const qty = parseFloat(row.querySelector('.line-qty').value) || 0;
+        if (prod && prod.type === 'physical' && isFinite(prod.stock) && qty > prod.stock) {
+          w.textContent = 'Hay ' + prod.stock + ', facturas ' + qty + ' — exceso de ' + (qty - prod.stock);
+          w.style.display = '';
+        } else { w.style.display = 'none'; w.textContent = ''; }
       }
 
       function scheduleRecalc(){
@@ -868,6 +944,7 @@ export function createInvoiceRoutes(db) {
         const notes = document.getElementById('f-notes').value || '';
         const irpf_rate = currentIrpfRate();
         const lines = [];
+        const excess = [];
         for (const r of document.querySelectorAll('#lines-body tr')) {
           const desc = r.querySelector('.line-desc').value.trim();
           const qty = parseFloat(r.querySelector('.line-qty').value);
@@ -876,13 +953,24 @@ export function createInvoiceRoutes(db) {
           if (!desc) { toast('Falta descripción en una línea','err'); return; }
           if (!(qty > 0)) { toast('Cantidad debe ser > 0','err'); return; }
           if (!(price >= 0)) { toast('Precio inválido','err'); return; }
-          lines.push({ description: desc, quantity: qty, unit_price: price, tax_rate: rate });
+          const prod = lineProduct(r);
+          lines.push({ description: desc, quantity: qty, unit_price: price, tax_rate: rate, product_id: prod ? prod.id : null });
+          if (prod && prod.type === 'physical' && isFinite(prod.stock) && qty > prod.stock)
+            excess.push('· "' + desc + '": hay ' + prod.stock + ', facturas ' + qty + ' — exceso de ' + (qty - prod.stock));
         }
         if (lines.length === 0) { toast('Añade al menos una línea','err'); return; }
+        // Exceso de stock: nunca en silencio. Sin permiso → bloqueado (baja la cantidad). Con
+        // permiso → el aviso se REPITE aquí y exige confirmarlo a propósito (confirm_excess).
+        let confirm_excess = false;
+        if (excess.length) {
+          if (!CAN_OVER) { toast('No tienes permiso para facturar con exceso de stock. Baja la cantidad a lo disponible.','err'); return; }
+          if (!confirm('Vas a facturar MÁS de lo que hay en stock:\\n' + excess.join('\\n') + '\\n\\nEl stock NO se moverá (la factura no es una venta de almacén). ¿Confirmar el exceso?')) return;
+          confirm_excess = true;
+        }
         const btn = document.getElementById('btn-emit');
         btn.disabled = true;
         try {
-          const res = await api('POST','/api/erp/invoices',{ client_id, lines, issue_date, notes, irpf_rate });
+          const res = await api('POST','/api/erp/invoices',{ client_id, lines, issue_date, notes, irpf_rate, confirm_excess });
           toast('Factura ' + res.invoice_number + ' emitida');
           window.location.href = '/admin/invoices/' + res.id;
         } catch(e) {

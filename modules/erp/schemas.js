@@ -138,6 +138,7 @@ const invoiceLineSchema = z.object({
   quantity:    z.coerce.number().positive().max(1_000_000),
   unit_price:  z.coerce.number().nonnegative().max(1_000_000),
   tax_rate:    z.coerce.number().min(0).max(50).optional().default(0),  // A2: IVA por línea
+  product_id:  optId,   // si la línea procede del catálogo: enlaza al producto para el aviso de exceso de stock (físicos)
 });
 
 export const invoiceCreateSchema = z.object({
@@ -146,6 +147,10 @@ export const invoiceCreateSchema = z.object({
   issue_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   notes:      strOpt(2000),
   irpf_rate:  z.coerce.number().min(0).max(50).optional().default(0),   // A2: IRPF global
+  // Exceso de stock: facturar un físico por más de lo disponible NO se bloquea, pero NUNCA
+  // en silencio — con exceso y sin este flag → 400; con el flag, solo si el usuario tiene
+  // el permiso sales.emit_over_stock (owner/admin). El stock NO se mueve (la factura no es POS).
+  confirm_excess: z.coerce.boolean().optional().default(false),
 });
 
 // A2: payload para POST /api/erp/invoices/compute-totals (preview en vivo)
