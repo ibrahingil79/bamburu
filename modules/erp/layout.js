@@ -214,6 +214,9 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       --bg:        #F5F6F8;   /* fondo de aplicación */
       --bg2:       #FFFFFF;   /* superficies / tarjetas / chrome / paneles */
       --bg3:       #F1F3F5;   /* subsuperficie: search, hover, sutil */
+      --card:      #FFFFFF;   /* alias de superficie de panel (= --bg2). Lo usan los paneles de
+                                 sugerencias del buscador de línea (var(--card,#1e1e1e)); sin definir
+                                 caían en el fallback oscuro #1e1e1e → nombre ilegible. */
       --border:    #ECEEF1;   /* hairline interno */
       --border2:   #E4E6EA;   /* borde exterior */
       --text:      #1A1D21;   /* texto principal */
