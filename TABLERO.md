@@ -1,10 +1,86 @@
 # TABLERO — Bamburu
 
 > Plan de trabajo. La estrategia manda desde CANON.md; el ritual desde RITUAL.md.
-> Estructura: 4 pilares en ORDEN DE CONSTRUCCIÓN — Producto → Cliente → Inventario → Ventas
-> (Ventas necesita los otros tres ya hechos; ver CANON §3).
+> Estructura: 4 pilares (el **NÚCLEO**) en ORDEN DE CONSTRUCCIÓN — Producto → Cliente → Inventario → Ventas —
+> y, encima, dos capas: **EL SUELO** (cumplimiento, contabilidad, multiusuario) y **EL FOSO** (DISA como
+> producto + caras por oficio). Orden global y mapa de cada pieza a su capa: ver **§ ESTRUCTURA ESTRATÉGICA**
+> (abajo) y CANON §2-bis / §0-ter. (Ventas necesita los otros tres pilares ya hechos; ver CANON §3.)
 > REGLA DE ORO: una sola tarea "EN CURSO" a la vez. Terminar antes de empezar otra.
 > Última actualización: 2026-06-23
+
+---
+
+## 🧭 ESTRUCTURA ESTRATÉGICA — NÚCLEO · SUELO · FOSO (2026-06-23)
+
+> Marco que ordena TODO el trabajo (CANON §2-bis y §0-ter). Encima de los 4 pilares —que **NO se
+> renumeran**: son el núcleo— hay dos capas. El orden entre piezas y dentro de cada una responde
+> **solo a dependencia técnica** (qué se apoya sobre qué), nunca a recorte ni al tamaño del cliente.
+> **Las secciones de detalle siguen donde estaban**; esto las MAPEA a su capa, no las mueve.
+
+**NÚCLEO OPERATIVO — los 4 pilares (intactos):**
+- Catálogo ✅ · Cliente ✅ · Inventario 🟡 (casi) · **Ventas (Pilar 4)**.
+- **Pilar 4 — Ventas:** cadena documental completa **presupuesto → pedido → albarán → factura**
+  (antes faltaban presupuesto y albarán), con **PDF real** y **envío por email** + Verifactu. Detalle
+  vivo en "PILAR 4 — VENTAS · INICIADO" y "PILAR 4 — VENTAS".
+
+**EL SUELO — lo que hay que cruzar para poder vender (todo dentro, nada opcional):**
+- **Cumplimiento:** Verifactu completo (QR + leyenda ✅ Tarea 1; **envío a la AEAT** = Tarea 2,
+  pendiente) + **factura electrónica B2B (Facturae)**. **Verifactu y Facturae son dos obligaciones
+  separadas; cerrar primero Verifactu (envío AEAT), Facturae después según calendario legal.**
+- **Contabilidad propia (ASCIENDE desde "decisión de producto futura"):** motor de **asientos
+  automáticos por documento**, **conciliación bancaria**, **modelos (303, 130…)** y **libros**,
+  dejado **LISTO PARA VALIDAR**. Bamburu nunca valida ni presenta (§0-ter); la **gestoría es el
+  destinatario** (puerta de salida: el gestor entra a Bamburu), no un requisito.
+  - **Orden interno (dependencia técnica):** asientos → conciliación → modelos → libros → puente de gestoría.
+- **Multiusuario — permisos por usuario (ASCIENDE del roadmap):** detalle en la sección TRANSVERSAL
+  "🔐 PERMISOS POR USUARIO" (sigue ahí; ahora vive en El Suelo).
+
+**EL FOSO — lo que hace ganar una vez admitido:**
+- **DISA como producto (ASCIENDE del roadmap):** de avisos por umbral a **predicción + detección de
+  anomalías + agente que cierra el bucle**. Detalle: "ROADMAP FUTURO" #3.
+- **Caras por oficio:** **CRM comercial** (roadmap #5), **agenda/citas** (#4), **control horario** (#6)
+  — las superficies que DISA enciende según el negocio. Detalle en "ROADMAP FUTURO"; ahora se agrupan
+  como El Foso.
+- *(El resto del roadmap —TPV, Parte de obra, Portal de Cliente, SEPA, Telegram, Mapas, Documentos—
+  sigue registrado en "ROADMAP FUTURO"; se colocará en su capa al detallarse.)*
+
+**ORDEN DE CONSTRUCCIÓN (global):** cerrar **Inventario** → **Pilar 4 (Ventas)** → **El Suelo**
+(Cumplimiento → Contabilidad → Multiusuario) → **El Foso**.
+
+---
+
+## 📋 ALCANCE TOTAL — TODO ENTRA (2026-06-23)
+
+> Bamburu aspira a TODAS las funciones de un software de gestión de primer nivel (Holded, Sage, Odoo,
+> Salesforce). **Todo lo de abajo está COMPROMETIDO**; lo único pendiente es su **turno**, y el turno lo
+> decide la **dependencia técnica**, nunca el recorte ni el tamaño del cliente (CANON §0 / §0-ter).
+> Estado: ✅ hecho · ⚠️ parcial · ⬜ pendiente. El **detalle** de cada pieza vive en su sección/capa
+> (§ ESTRUCTURA ESTRATÉGICA, pilares, ROADMAP FUTURO, transversales); esto es el **inventario completo**
+> de lo comprometido, no un duplicado del detalle.
+
+**VENTAS:** presupuestos / proformas ⬜ · pedidos ⬜ · albaranes ⬜ · facturas ✅ · facturación recurrente / suscripciones ⬜ · PDF + email de cada documento ⬜ · plantillas personalizables ⬜ · cobro online (pasarela) ⬜ · TPV ⚠️.
+
+**COMPRAS:** pedidos / recepciones / facturas ✅ · devoluciones ✅ · OCR (captura de factura) ✅ · gastos ✅ · gastos recurrentes ⚠️.
+
+**INVENTARIO:** tiempo real / multi-almacén / traslados ✅ · WAC (coste medio) ✅ · stock mínimo / punto de pedido ⬜ · trazabilidad lote / nº de serie ⬜ · sync e-commerce (Shopify / Woo / Prestashop) ⬜ · códigos de barras ⬜.
+
+**CONTABILIDAD:** asientos automáticos ⬜ · conciliación bancaria ⬜ · conexión bancaria ⬜ · modelos (303 / 130 / 347 / 349 / 390) ⬜ · libros / diario / balances ⬜ · activos / amortizaciones ⬜ · tesorería / previsión ⚠️ · acceso gestoría ⬜ · remesas SEPA ⬜ · analítica por etiquetas ⬜.
+
+**CUMPLIMIENTO:** hash encadenado ✅ · Verifactu QR + leyenda ✅ + envío AEAT ⬜ · Facturae (B2B) ⬜ · SII ⬜ · TicketBAI ⬜.
+
+**CLIENTES / CRM:** ficha de cliente ✅ · cobros / recordatorios ✅ · embudo / oportunidades ⬜ · agenda / calendario ⬜ · portal del cliente ⬜.
+
+**EQUIPO / RRHH:** multiusuario con permisos ⚠️ *(roles + `requirePerm` + permisos por usuario en BD ya operativos; falta la administración de usuarios/permisos por pantalla y por DISA)* · nóminas ⬜ · control horario / fichaje ⬜ · vacaciones / ausencias ⬜ · documentos de empleados ⬜.
+
+**PROYECTOS / SERVICIOS:** proyectos / rentabilidad ⬜ · partes de horas ⬜ · servicio de campo / órdenes de trabajo ⬜ · helpdesk ⬜.
+
+**PLATAFORMA:** app móvil nativa ⬜ · API pública / webhooks ⬜ · integraciones / marketplace ⬜ · dashboards personalizables ⚠️ · multiempresa ⬜ · fabricación ⬜ · asistente IA ✅ (DISA).
+
+### Orden de construcción por dependencia (registrar, NO construir)
+- **NÚCLEO:** cerrar **Inventario** → **Pilar 4 Ventas** (presupuesto → pedido → albarán → factura + PDF + email).
+- **SUELO (admisión al mercado):** **Cumplimiento** (Verifactu AEAT → Facturae) → **Contabilidad** (asientos → conciliación → conexión banco → modelos → libros) → **Multiusuario / permisos**.
+- **FOSO (ventaja):** **DISA predictiva / agéntica** → **API / integraciones** → **app móvil**.
+- **Resto** (RRHH, proyectos, e-commerce, fabricación, SII, TicketBAI…): comprometido; se **intercala según dependencia** conforme avanza. **Ninguno queda fuera.**
 
 ---
 
@@ -71,7 +147,8 @@ a tratar (arreglo NO iniciado — pendiente de priorizar con el dueño):
 - ✅ **Completar Verifactu · Tarea 1 — Registros oficiales + QR + leyenda (modalidad VERI\*FACTU) — HECHO 2026-06-23 (commit `f762139`).** Primera pieza del Pilar 4. Diagnóstico previo: la cadena `invoices.verifactu_hash` es **propietaria de integridad** (la recorre superadmin/integridad), **NO** la huella oficial. Enfoque aprobado: **registro oficial EN PARALELO**, sin tocar la cadena propietaria, con **arranque limpio desde la implantación** (primer registro `prev_huella=''`/`primer_registro='S'`; las facturas previas **no** se registran retroactivamente). Construido: tabla `verifactu_registros` (aditiva/idempotente) + `modules/erp/verifactu.js` con la **huella SHA-256 UPPERCASE encadenada** de los registros de **ALTA** (incl. rectificativa = alta serie 'R', TipoFactura R1–R5) y **ANULACIÓN** según el **doc oficial AEAT v0.1.2 — verificada contra sus 3 ejemplos**; registro generado dentro de la transacción de emisión/anulación (cadena única sin carrera); `FechaHoraHusoGenRegistro` (Europe/Madrid) **congelada y persistida** con la huella (la Tarea 2 transmite ese valor exacto). **QR** (nivel M, 30–40 mm, endpoint de **PRODUCCIÓN** del servicio de cotejo, params URL-encoded — el `/` del numserie → `%2F`; **la huella NO va en el QR**) + **leyenda** "VERI\*FACTU / Factura verificable en la sede electrónica de la AEAT" al inicio del documento. **Sin tocar** IVA/IRPF/totales, cadena propietaria, stock ni permisos; sin migración destructiva. Verificado: Parte A 18/18 (3 ejemplos oficiales con el código real; QR encoding incl. `%2F`; emitir/anular/rectificar → registros + encadenamiento + recomputo exacto; cadena propietaria intacta) + Parte B 7/7 (emisión por API real → registro + documento con QR/leyenda) + migración idempotente sobre BD real (datos intactos) + integridad propietaria dev `{total:21, ok}`. Validado en navegador por el dueño (QR + leyenda; "no consta" en AEAT es lo **esperado** hasta la Tarea 2). Tests `scripts/verify-verifactu-t1.mjs` y `scripts/verify-verifactu-t1-http.mjs`.
 - **Completar Verifactu · Tarea 2 — Envío a la AEAT (PENDIENTE).** Servicio web de remisión + certificado + WSDL/XSD de envío + validación XSD formal del registro. La firma electrónica de los registros y los registros de evento **NO aplican** en VERI\*FACTU. La Tarea 2 transmite EXACTAMENTE la huella + `FechaHoraHusoGenRegistro` ya congelados en `verifactu_registros`.
 - ✅ **Factura: aviso + permiso al facturar un físico por encima del stock — HECHO 2026-06-23 (commit `35c4f22`).** Emitir factura dejaba facturar un físico por más unidades de las que hay, en silencio. Decisión de producto: **NO se bloquea** (ventas bajo pedido/reposición), pero **nunca en silencio**. Diagnóstico: la factura es **RAMA B** (documento legal, **no mueve stock**; el stock se mueve en POS/pedido) y la línea era texto libre **sin `product_id`**. Arreglo quirúrgico (mismo espíritu que `confirm_excess` de compras): la línea enlaza al producto, avisa del exceso **en la línea** ("Hay 5, facturas 100 — exceso de 95") y lo **repite en la confirmación final**; el endpoint rechaza el exceso **sin flag → 400** y **sin permiso → 403**. Permiso nuevo **`sales.emit_over_stock`** (owner/admin por el bypass de `requirePerm`; otros, solo si se concede en `user_permissions` — fácil de mover a solo-dueño). Servicios/digitales y líneas libres **nunca** se chequean; "disponible" = stock GLOBAL (sin reservas). Sin tocar IVA/IRPF/totales, cadena de hash, POS ni la vía order→factura. Verificado: lógica 10/10, servidor real 5/5 (400/201/201/403/201), DOM 2/2; migración aditiva idempotente. Validado en navegador por el dueño. Scripts `scripts/verify-invoice-over-stock*.mjs`.
-- Pendiente del pilar (por detallar): flujo **pedido→albarán→factura**, **DISA `create_order` multiproducto**, y la decisión D4 sobre el clúster `sales_orders` heredado.
+- ✅ **PIEZA 1 — Presupuesto + motor de conversión — HECHO 2026-06-23 (commit `568c05e`).** Documento **PRESUPUESTO** como ESPEJO de la orden de compra (`purchase_orders`): tablas aditivas `quotes` + `quote_items` (+ `document_links` para el motor de conversión), **numeración PRE-NNNN solo al emitir** (el borrador no consume número), ciclo **borrador→emitido→anulado** + **seguimiento** (aceptado/rechazado/caducado) + **válido hasta**, **foto congelada** de emisor+cliente al emitir, corregir = **anular y rehacer**. Líneas como la **factura** (catálogo con IVA por banda o **línea libre 21%**); totales con la misma matemática (base → IVA por tasa → IRPF). **Documento imprimible** (patrón factura) + **email** al cliente (Resend, confirm-first). **MOTOR DE CONVERSIÓN general**: presupuesto emitido → **FACTURA** real (`createInvoice`) con **enlace bidireccional** en `document_links` (visible en ambos documentos) y el **mismo gate de exceso de stock** que la factura; **'ticket' queda registrado** como destino pero su creador se construye con la pieza de **TPV** (decisión del dueño; hoy 501). Permisos `quotes.*` espejo de la OC; lista con buscador/filtro/paginación; entrada **"Presupuestos"** en el menú de Ventas. DISA: `quotes`/`quote_items`/`document_links` **fuera de `WRITABLE_TABLES`**. **Intacto**: hash/Verifactu, stock, POS, cadena de compras. Verificado: lógica 20/20, migración idempotente sobre BD real (datos intactos), navegador 9/9 (borrador→emitir PRE-NNNN→convertir a factura→enlace bidireccional). Validado en navegador por el dueño. Scripts `scripts/verify-quotes*.mjs`.
+- Pendiente del pilar (por detallar): flujo restante **pedido→albarán→factura** (PIEZA 1 = presupuesto ✅; faltan pedido y albarán), conversión **parcial** (preparada en `document_links`, sin construir), **DISA `create_order` multiproducto**, y la decisión D4 sobre el clúster `sales_orders` heredado.
 
 **ROADMAP (no iniciar):** ~~panel de superadmin~~ ✅ HECHO (20 jun, commit `4b9b228`) · repaso de permisos · sistema de diseño · prueba de carga · resto ya registrado.
 
@@ -308,7 +385,7 @@ Compras, Stock, Proveedores, Devoluciones, Descuentos. Qué tienes y de dónde s
 - **Siguiente (resto, por detallar):** la pieza de "DISA escribe compras por voz" **queda cerrada** (dictado de compras ✅ + `create_product` con banda de IVA obligatoria ✅). La **capa de dinero con proveedores** lleva el **Paso (a) deuda de compras de stock ✅** y el **Paso (b) facturas de gasto puro ✅** (ambos 2026-06-16); pendientes (c)–(e) en cola arriba, más los sub-pendientes de (b). Pendiente técnico que aún encaja cuando toque: `create_order` debe admitir **multi-línea** (es de Ventas/Pilar 4). _(«reservado vs. disponible» → Pilar 4 (2026-06-12). «Devoluciones a proveedor» ✅ 2026-06-14. «Multi-almacén Capa 1/2/3» ✅ (físico CERRADO) 14–15 jun. «Voz de DISA · Fase 1: consultar + operar stock» ✅ 2026-06-15. «Factura dentro del chat de DISA» ✅ 2026-06-15. «DISA dicta compras por voz» ✅ 2026-06-15.)_
 
 ## PILAR 4 — VENTAS
-_(por detallar)_ — Pedido → Albarán / nota de entrega → Factura. Usa los tres pilares anteriores. Aquí entran: **PDF real de la factura**, **enviar factura por email** y **sello Verifactu (QR + leyenda)**.
+_(por detallar)_ — **Presupuesto → Pedido → Albarán / nota de entrega → Factura** (cadena documental completa; antes faltaban **presupuesto** y **albarán**). Usa los tres pilares anteriores. Aquí entran: **PDF real** de cada documento, **envío por email**, y **Verifactu** (QR + leyenda ✅ Tarea 1; envío AEAT = Tarea 2 pendiente). Es el Núcleo; encima va El Suelo (ver § ESTRUCTURA ESTRATÉGICA).
 - **Reservado vs. disponible (stock).** _(Movido desde el Pilar 3 el 2026-06-12.)_ Justificación: **lo que reserva stock es un pedido de venta**; se construye junto al flujo pedido→albarán→factura para no hacerlo a medias.
 - **Pedidos multi-línea (DISA `create_order`).** Hoy `create_order` solo admite **un producto por pedido** (limitación heredada de la base de e-commerce). Los pedidos multi-línea entran al construir Ventas, junto con el flujo pedido→albarán→factura. No se tocó en T5 (allí solo se enlazó `client_id`). Ref: `modules/disa/index.js`, acción `create_order`.
 
@@ -332,6 +409,11 @@ Archivos: `modules/registro/index.js`, `core/signup-schema.js`, `core/tenant-sig
 ---
 
 ## ROADMAP FUTURO — módulos registrados (decisión del dueño, 2026-06-10) — 🔵 NO INICIADOS
+
+> **Reubicación (2026-06-23, ver § ESTRUCTURA ESTRATÉGICA):** estos módulos pasan a su capa —**#3 DISA
+> como producto, #4 Agenda/Citas, #5 CRM comercial, #6 Control horario → EL FOSO**— y la **Contabilidad
+> propia** (antes "decisión de producto futura") sube a **EL SUELO**. El detalle de cada uno **se queda
+> aquí**; arriba solo se mapea a su capa. El resto de entradas sigue en cola hasta detallarse.
 
 > Especificación de funciones por nicho (visión/benchmark): ver `docs/ESTRATEGIA-NICHOS.md`.
 
@@ -465,7 +547,10 @@ saneamiento visual (PIEZA 3) vuelve a salir a ojo y desigual. **No empezar por l
 
 ---
 
-## TRANSVERSAL (fuera del orden de pilares) — 🔐 PERMISOS POR USUARIO: FUNDAMENTO + ADMINISTRACIÓN POR DISA — 🔵 REGISTRADA (no iniciar hasta indicación)
+## TRANSVERSAL — 🔐 PERMISOS POR USUARIO (MULTIUSUARIO): FUNDAMENTO + ADMINISTRACIÓN POR DISA — 🔵 REGISTRADA (no iniciar hasta indicación)
+
+> **Reubicada (2026-06-23):** asciende del roadmap a **EL SUELO** como pieza **Multiusuario** (ver
+> § ESTRUCTURA ESTRATÉGICA). El detalle de los dos pasos sigue intacto aquí abajo.
 
 > Tarea de roadmap, **dos pasos EN ORDEN**. Distinta de la futura "voz de DISA sobre stock/compras"
 > (esa OPERA el inventario; esta ADMINISTRA quién puede hacer qué). No iniciar hasta que se indique.

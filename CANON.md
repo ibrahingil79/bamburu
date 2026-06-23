@@ -3,7 +3,44 @@
 > Este es el único documento que manda. Si cualquier otro archivo (TABLERO.md,
 > CLAUDE.md, etc.) dice algo distinto de lo que está aquí, gana este documento.
 > Al empezar cualquier sesión (con Ibrahin o con Claude Code) se lee este archivo primero.
-> Última actualización: 2026-06-14
+> Última actualización: 2026-06-23
+
+---
+
+## 0. El dueño no opera, decide (principio rector nº0)
+
+Bamburu no es donde el dueño gestiona su negocio; es quien lo gestiona por él.
+El dueño no opera, decide. Todo lo demás en este CANON es consecuencia de esta
+frase: si algo en Bamburu la contradice, está mal, aunque funcione.
+
+Qué significa:
+- El software de gestión clásico es un archivador con pantallas: guarda datos y
+  espera a que el dueño venga a buscarlos y a actuar. El trabajo de vigilar,
+  decidir y ejecutar sigue siendo del humano.
+- Bamburu lo invierte: DISA hace el trabajo, el dueño da el sí o el no. La
+  pantalla deja de ser un panel que se opera y pasa a ser una bandeja de
+  decisiones que se aprueban.
+- El autónomo de servicios no quiere un software de gestión: odia gestionar.
+  Bamburu no le da mejores herramientas para gestionar, le quita la gestión de
+  encima.
+
+Reglas que este principio obliga:
+1. Toda función se construye para que DISA pueda operarla, no solo el usuario.
+   Una función que solo funciona si el humano la opera está construida a medias.
+2. El alcance total es munición de DISA, no una lista de paridad con la
+   competencia. Cada función existe para darle a DISA una palanca más que mover
+   sola. No construimos funciones para que el usuario las use; las construimos
+   para que DISA las use por él. Mismo código que la competencia, propósito
+   opuesto.
+3. El dueño no prepara nada, decide todo. DISA llega siempre con el trabajo hecho
+   y una decisión clara que pedir, nunca con un formulario vacío. "Te llevo a la
+   pantalla" queda prohibido como respuesta final de DISA.
+4. La simplicidad no viene de esconder funciones, viene de que el dueño no las
+   toca. Bamburu lo tiene todo dentro y aun así se siente simple, porque DISA
+   opera la mayoría por él.
+5. Frontera de seguridad: DISA prepara y propone; el humano valida lo que tiene
+   consecuencia (cobrar, pagar, presentar a Hacienda, borrar). DISA lo deja listo
+   y pide el OK, nunca lo ejecuta sola. (Enlaza con §0-ter.)
 
 ---
 
@@ -13,9 +50,13 @@ Bamburu no es "un software para autónomos". Es software de gestión de clase mu
 
 Regla que gobierna toda decisión de alcance: nunca se omite, recorta ni simplifica una función por el tamaño del cliente. Si algo no entra ahora, es por orden/momento de construcción, jamás por "el autónomo no lo necesita".
 
+**Alcance total comprometido.** Bamburu aspira a tener TODAS las funciones de un software de gestión de primer nivel (las de Holded, Sage, Odoo y Salesforce). Ninguna se omite, recorta ni se marca como "opcional" o "decisión futura" por el tamaño del cliente: una pequeña empresa no es una empresa simple. El ÚNICO criterio para el orden de construcción es la **dependencia técnica** —qué pieza se apoya sobre cuál—, nunca el recorte. Todo lo listado en el inventario de alcance (TABLERO → "ALCANCE TOTAL — TODO ENTRA") ESTÁ comprometido; lo único pendiente es su turno.
+
 ---
 
 ## 0-bis. El iPhone del nicho (principio rector del producto)
+
+**Consecuencia del §0:** no es "todo dentro y fácil", es "todo dentro y DISA lo conduce".
 
 Bamburu se enciende y se usa en minutos, como un iPhone —no como un Android, que exige
 aprender antes de servir. Cualquiera (un frutero, una peluquera, un fotógrafo, sin
@@ -44,6 +85,20 @@ formación. De aquí se derivan reglas innegociables:
 **Consecuencia directa en Ventas:** un solo motor de venta (mismo cliente, catálogo,
 stock y factura) con varias caras —mostrador, agenda, tablero— que DISA enciende según
 el tipo de negocio. Se cambia la cara, nunca las tripas.
+
+---
+
+## 0-ter. Bamburu prepara, el humano valida (principio rector)
+
+(Es la **frontera de seguridad** del §0 — su **regla 5**: DISA prepara y propone; el humano valida lo que tiene consecuencia.)
+
+Bamburu prepara, el humano valida. La contabilidad se construye entera dentro del producto
+—asientos, conciliación, modelos, libros— y se deja LISTA para validar, pero Bamburu NUNCA
+valida ni presenta ante la AEAT, ni siquiera cuando el usuario lo pida: esa decisión es
+siempre del autónomo o su gestor. Las
+integraciones externas, como la gestoría, son el destinatario de ese trabajo ya hecho, no una
+dependencia para que el sistema funcione. El orden entre piezas responde solo a dependencia
+técnica (qué se apoya sobre qué), nunca a recorte ni al tamaño del cliente.
 
 ---
 
@@ -84,10 +139,47 @@ distinto del producto que revendes.
 - **CATÁLOGO** — ✅ CERRADO. Productos (tipo: físico / digital / servicio), Categorías.
 - **CLIENTES** — ✅ CERRADO. Clientes, Grupos, CRM (+ cobros y voz de DISA sobre clientes).
 - **INVENTARIO** — 🟡 EN CURSO. Compras, Stock, Proveedores, Devoluciones, Descuentos.
-- **VENTAS** — pendiente. Pedidos → Albaranes / notas de entrega → Facturas.
+- **VENTAS** — pendiente. **Presupuesto → Pedido → Albarán / nota de entrega → Factura**
+  (cadena documental completa; antes faltaban presupuesto y albarán), con **PDF real** de cada
+  documento y **envío por email**.
 
 No se añaden piezas salvo que se detecte que falta algo real. Lo que existe, se lleva a
 su mejor versión.
+
+---
+
+## 2-bis. Las tres capas: Núcleo Operativo, El Suelo y El Foso
+
+Sobre los 4 pilares —que **NO se renumeran**: son el núcleo— Bamburu se ordena en tres capas.
+El orden entre ellas y dentro de cada una responde **solo a dependencia técnica** (qué se apoya
+sobre qué), nunca a recorte ni al tamaño del cliente (§0, §0-ter).
+
+**NÚCLEO OPERATIVO — los 4 pilares de siempre (intactos).**
+Catálogo ✅ · Cliente ✅ · Inventario 🟡 (casi) · Ventas. Es la base de gestionar el negocio
+—comprar → almacenar → vender → entregar—. **Ventas amplía su cadena documental a
+presupuesto → pedido → albarán → factura** (antes faltaban presupuesto y albarán), con PDF real
+y envío por email.
+
+**EL SUELO — lo que hay que cruzar para poder vender (todo dentro, nada opcional).**
+El Suelo no es "lo básico": es el **umbral de admisión**. Por debajo de él, el producto no se
+vende por brillante que sea el resto.
+- **Cumplimiento:** Verifactu completo (QR + leyenda + envío a la AEAT) + **factura electrónica
+  B2B (Facturae)**.
+- **Contabilidad propia:** motor que genera **asientos automáticos por documento**,
+  **conciliación bancaria**, **modelos (303, 130…)** y **libros**, y lo deja **LISTO PARA VALIDAR**.
+  Bamburu nunca valida ni presenta (§0-ter); la **gestoría es el destinatario natural** de ese
+  trabajo (puerta de salida: el gestor entra a Bamburu), no un requisito para que el sistema funcione.
+- **Multiusuario con permisos por usuario.**
+
+**EL FOSO — lo que hace ganar una vez admitido.**
+- **DISA como producto:** de avisos por umbral a **predicción + detección de anomalías + agente
+  que cierra el bucle**.
+- **Caras por oficio** (CRM comercial, agenda/citas, control horario…): las superficies que DISA
+  enciende según el negocio (coherente con §0-bis: se cambia la cara, nunca las tripas).
+
+**Orden de construcción (global):** cerrar **Inventario** → **Pilar 4 (Ventas)** → **El Suelo**
+(Cumplimiento → Contabilidad → Multiusuario) → **El Foso**. **Dentro de Contabilidad** (por
+dependencia técnica): **asientos → conciliación → modelos → libros → puente de gestoría**.
 
 ---
 
@@ -99,7 +191,11 @@ ya hechos (vendes un producto, a un cliente, desde un almacén):
 1. **Producto (Catálogo)** — la raíz. ✅ CERRADO (2026-06-03).
 2. **Cliente** — a quién vendes. ✅ CERRADO (2026-06-08).
 3. **Almacén (Inventario)** — qué tienes y de dónde sale. 🟡 EN CURSO (2026-06-08).
-4. **Ventas** — pedido → albarán → factura; usa los tres anteriores. Pendiente.
+4. **Ventas** — **presupuesto → pedido → albarán → factura**; usa los tres anteriores. Pendiente.
+
+Tras cerrar los 4 pilares (el Núcleo), el orden continúa por **El Suelo** (Cumplimiento →
+Contabilidad → Multiusuario) y luego **El Foso** (DISA como producto + caras por oficio). Ese
+orden, y el interno de Contabilidad, están en **§2-bis** y responden solo a dependencia técnica.
 
 **Primer paso — Producto, mínimo para darlo por listo:** ✅ COMPLETO (2026-06-03)
 - Tipo de producto: físico / digital / servicio. ✅
