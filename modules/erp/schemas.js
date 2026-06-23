@@ -187,6 +187,11 @@ export const quoteComputeSchema = z.object({
 export const quoteAnularSchema = z.object({
   motivo: z.string().trim().min(3, 'Indica el motivo de la anulación').max(500),
 });
+// Envío por email: destinatario EDITABLE (un único correo). El formato y el "vacío" los valida
+// el servicio con mensajes claros (campo vacío → 400; formato inválido → 400).
+export const quoteEmailSchema = z.object({
+  to: z.string().trim().max(200).optional().default(''),
+});
 export const quoteConvertSchema = z.object({
   // destino del motor de conversión: hoy 'invoice' (real); 'ticket' queda registrado pero su
   // creador se construye con la pieza de TPV.

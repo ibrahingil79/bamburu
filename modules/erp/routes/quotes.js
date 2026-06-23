@@ -3,7 +3,7 @@ import { adminLayout, can, docShell } from '../layout.js';
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { checkPermission } from '../../../core/permission-check.js';
-import { quoteCreateSchema, quoteComputeSchema, quoteAnularSchema, quoteConvertSchema, quoteFollowSchema } from '../schemas.js';
+import { quoteCreateSchema, quoteComputeSchema, quoteAnularSchema, quoteConvertSchema, quoteFollowSchema, quoteEmailSchema } from '../schemas.js';
 import { nextCode } from '../codes.js';
 import { computeTotals, createInvoice, invoiceStockExcess } from './invoices.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
@@ -208,9 +208,12 @@ export async function emailQuoteSvc(db, id, opts = {}) {
   const q = db.prepare('SELECT * FROM quotes WHERE id=?').get(id);
   if (!q) { const e = new Error('Presupuesto no encontrado'); e.status = 404; throw e; }
   if (q.status !== 'emitido') { const e = new Error('Solo se puede enviar por email un presupuesto emitido'); e.status = 400; throw e; }
-  const cl = db.prepare('SELECT * FROM clients WHERE id=?').get(q.client_id);
-  const to = String((cl && cl.email) || q.client_email || '').trim();
-  if (!to) { const e = new Error('El cliente no tiene email. Añádeselo en su ficha para poder enviarle el presupuesto.'); e.status = 400; throw e; }
+  // Destinatario EDITABLE (envío puntual): viene del campo "Para" (pre-rellenado en la pantalla
+  // con el email de la ficha, pero modificable). NO se exige que la ficha tenga email, NI se
+  // modifica la ficha. Validación: vacío → 400; formato inválido → 400.
+  const to = String(opts.to == null ? '' : opts.to).trim();
+  if (!to) { const e = new Error('Indica un correo de destino'); e.status = 400; throw e; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) { const e = new Error('El correo de destino no tiene un formato válido'); e.status = 400; throw e; }
   if (typeof opts.sendEmail !== 'function') { const e = new Error('El envío de email no está configurado'); e.status = 500; throw e; }
   const items = getItems(db, id);
   const sym = q.currency_symbol || '€';
@@ -386,9 +389,9 @@ export function createQuoteRoutes(db) {
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
 
-  api.post('/:id/email', requirePerm('quotes.edit'), async c => {
+  api.post('/:id/email', requirePerm('quotes.edit'), validate(quoteEmailSchema), async c => {
     try {
-      const r = await emailQuoteSvc(db, parseInt(c.req.param('id')), { sendEmail });
+      const r = await emailQuoteSvc(db, parseInt(c.req.param('id')), { to: c.get('validated').to, sendEmail });
       logActivity(db, c.get('session'), 'Envió presupuesto por email', 'quote', parseInt(c.req.param('id')), r.quote_number + ' → ' + r.to);
       return c.json({ ...r, message: 'Presupuesto enviado por email a ' + r.to });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
@@ -694,7 +697,13 @@ export function createQuoteRoutes(db) {
   const CSRF=${JSON.stringify(csrfToken)}, QID=${id}, LIVE_EMAIL=${JSON.stringify(liveEmail)};
   async function call(path, body){ const r=await fetch('/api/erp/quotes/'+QID+path,{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:JSON.stringify(body||{})}); const d=await r.json(); if(!r.ok||d.error) throw new Error(d.error||'Error'); return d; }
   async function emitir(){ if(!confirm('Vas a EMITIR el presupuesto: ganará número PRE-NNNN y quedará bloqueado (corregir = anular y rehacer). ¿Continuar?')) return; try{ const d=await call('/emitir'); location.reload(); }catch(e){ alert(e.message); } }
-  async function emailQuote(){ if(!LIVE_EMAIL){ alert('El cliente no tiene email. Añádeselo en su ficha.'); return; } if(!confirm('Enviar el presupuesto por email a '+LIVE_EMAIL+'?')) return; try{ const d=await call('/email'); alert(d.message); }catch(e){ alert(e.message); } }
+  async function emailQuote(){
+    // "Para" pre-rellenado con el email de la ficha (si hay), pero EDITABLE: un único destinatario.
+    const to = prompt('Enviar el presupuesto por email.\\nCorreo de destino (puedes cambiarlo):', LIVE_EMAIL || '');
+    if (to === null) return;                       // cancelado
+    if (!String(to).trim()){ alert('Indica un correo de destino'); return; }
+    try{ const d=await call('/email', { to: String(to).trim() }); alert(d.message); }catch(e){ alert(e.message); }
+  }
   async function convertir(dest){ if(!confirm('Convertir este presupuesto a factura? Se creará una factura real con sus líneas.')) return;
     try{ const d=await call('/convert',{dest}); location.href='/admin/invoices/'+d.invoice_id; }
     catch(e){ if(/exceso|excede|supera el stock/i.test(e.message) && confirm(e.message+'\\n\\n¿Confirmar el exceso y convertir igualmente?')){ try{ const d=await call('/convert',{dest,confirm_excess:true}); location.href='/admin/invoices/'+d.invoice_id; }catch(e2){ alert(e2.message); } } else { alert(e.message); } } }

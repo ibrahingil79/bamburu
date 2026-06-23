@@ -92,16 +92,26 @@ try {
      && db.prepare('SELECT COUNT(*) n FROM quote_items WHERE quote_id=?').get(re.id).n === 1,
      'anular-y-rehacer: anula el emitido y abre un borrador nuevo enlazado con las mismas líneas');
 
-  // 10b) email (mock — confirm-first, sin enviar de verdad): éxito con email + error sin email
+  // 10b) email a destinatario EDITABLE (mock — no envía de verdad).
   let mailedTo = null;
   const mock = async (p) => { mailedTo = p.to; return { data: { id: 'mock' }, error: null }; };
-  const mailRes = await emailQuoteSvc(db, qid, { sendEmail: mock });   // qid: cliente con email cli@x.com, emitido
-  ok(mailRes.sent && mailedTo === 'cli@x.com', 'email del presupuesto al cliente (mock) → enviado a cli@x.com');
+  // El cliente del presupuesto qid tiene email cli@x.com en su ficha (pre-relleno del campo "Para").
+  ok(db.prepare('SELECT email FROM clients WHERE id=?').get(cli).email === 'cli@x.com', 'cliente con email en ficha → ese correo es el pre-relleno del campo "Para"');
+  // Cambiar el destino a OTRO correo válido → envía a ese; la ficha NO cambia.
+  const mailRes1 = await emailQuoteSvc(db, qid, { to: 'otro@dominio.com', sendEmail: mock });
+  ok(mailRes1.sent && mailedTo === 'otro@dominio.com', 'enviar a un correo distinto del de la ficha → llega a ese (otro@dominio.com)');
+  ok(db.prepare('SELECT email FROM clients WHERE id=?').get(cli).email === 'cli@x.com', 'editar el destino NO modifica la ficha del cliente');
+  // Cliente SIN email en ficha → escribo uno válido → envía igualmente.
   const cliNoMail = db.prepare("INSERT INTO clients (name, fiscal_id, client_type) VALUES ('Sin Email','C33333333','particular')").run().lastInsertRowid;
   const qNoMail = createQuoteSvc(db, { client_id: cliNoMail, lines: [{ description: 'X', quantity: 1, unit_price: 5, tax_rate: 21 }] });
   emitQuoteSvc(db, qNoMail);
-  let noMailErr = false; try { await emailQuoteSvc(db, qNoMail, { sendEmail: mock }); } catch (e) { noMailErr = e.status === 400; }
-  ok(noMailErr, 'email a un cliente SIN email → 400 con mensaje claro (no se envía)');
+  const mailRes2 = await emailQuoteSvc(db, qNoMail, { to: 'nuevo@x.com', sendEmail: mock });
+  ok(mailRes2.sent && mailedTo === 'nuevo@x.com', 'cliente SIN email en ficha → escribir un correo válido → se envía a nuevo@x.com');
+  // Campo vacío → 400 (ya NO "ficha sin email"). Formato inválido → 400.
+  let emptyErr = false; try { await emailQuoteSvc(db, qNoMail, { to: '', sendEmail: mock }); } catch (e) { emptyErr = e.status === 400 && /correo de destino/i.test(e.message); }
+  ok(emptyErr, 'campo de destino vacío → 400 ("indica un correo de destino")');
+  let badErr = false; try { await emailQuoteSvc(db, qNoMail, { to: 'no-es-un-email', sendEmail: mock }); } catch (e) { badErr = e.status === 400 && /formato/i.test(e.message); }
+  ok(badErr, 'formato de email inválido → 400');
 
   // 10) migración idempotente: re-ejecutar no rompe ni duplica
   const before = db.prepare('SELECT COUNT(*) n FROM quotes').get().n;
