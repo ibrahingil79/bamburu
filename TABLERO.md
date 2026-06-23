@@ -4,7 +4,7 @@
 > Estructura: 4 pilares en ORDEN DE CONSTRUCCIÓN — Producto → Cliente → Inventario → Ventas
 > (Ventas necesita los otros tres ya hechos; ver CANON §3).
 > REGLA DE ORO: una sola tarea "EN CURSO" a la vez. Terminar antes de empezar otra.
-> Última actualización: 2026-06-19
+> Última actualización: 2026-06-23
 
 ---
 
@@ -54,7 +54,9 @@ a tratar (arreglo NO iniciado — pendiente de priorizar con el dueño):
 **FASE 2 — antes de beta:**
 4. ✅ **A3 — DISA edita/borra facturas — HECHO 2026-06-20 (commit `1fb4fd4`).** Facturas emitidas inmutables para la vía genérica + vía legal (`anular_invoice`/`create_rectificativa`, admin-only + confirm-first, sobre los servicios validados). Validado en navegador por el dueño.
 5. ✅ **M2 — vistas con sesión sin `requirePerm` — HECHO 2026-06-20 (commit `8458688`).** Clase entera cerrada (21 vistas candadas con el permiso de su API hermana) + permiso `feedback.create` nuevo (solo owner/admin). Validado en navegador.
-6. **DISA `create_product` — exigir banda de IVA** (hoy hace `INSERT` directo sin banda → IVA mal en factura = riesgo fiscal; va aquí con A3/M2, antes de beta). ← **siguiente**
+6. ✅ **DISA `create_product` — exigir banda de IVA — HECHO 2026-06-23 (commit `c2bbf17`).** Verificado primero: la acción dedicada `create_product` ya estaba blindada (side-fix `a2a1938`, 15 jun), pero **no se anunciaba al modelo** y el genérico `insert_record` sobre `products` (en `WRITABLE_TABLES`) seguía haciendo un `INSERT` crudo sin `tax_band` → **DEFAULT `general`/21 en silencio** (residuo aún vivo). Cerrado quirúrgico: `insert_record` sobre `products` se enruta al MISMO `createProductSvc` (banda obligatoria de la lista cerrada de `core/vat-bands.js`, el % lo deriva el servidor) — mismo principio que clients (T5)/purchases (C2); se **anuncia** la acción validada `create_product` con la lista cerrada de bandas + mapeo %→banda solo si es 1:1 + "ambiguo/sin IVA → pregunta, no inventes"; acciones de producto a `ADMIN_ONLY_ACTIONS`. Sin tocar hash/Verifactu ni stock; sin esquema ni migración. Verificado con **modelo real 11/11** ((a) sin IVA→exige banda, (b) IVA 10%→reducido/10%, (c) ambiguo→no adivina, genérico→servicio, regresión API P2.2). Validado en navegador por el dueño.
+
+> ✅ **FASE 2 CERRADA (2026-06-23).** A3 (`1fb4fd4`) + M2 (`8458688`) + D5/create_product (`c2bbf17`). **Siguiente: Fase 3** (robustez/limpieza) y/o **retomar Pilar 4 — Ventas**.
 
 **FASE 3 — robustez y limpieza:**
 7. **Tareas 6 y 7** (7 = cookie `btenant` con `Secure` / B1).
@@ -88,7 +90,7 @@ a tratar (arreglo NO iniciado — pendiente de priorizar con el dueño):
 
 - **D4 · [DECISIÓN DE PRODUCTO en espera — NO cerrada] Clúster de Ventas viejo (`sales_orders`).** Pedidos + Punto de Venta (POS) + Reembolsos + cupones/descuentos, todo sobre `sales_orders`, es el sistema de pedidos heredado del e-commerce y precede al **Pilar 4 — Ventas** (que en CANON §2–3 está **pendiente de construir** como pedido→albarán→factura). **Queda EN ESPERA hasta diseñar el Pilar 4**: entonces se decidirá si se **reutiliza** o se **reconstruye**. **No tocar este clúster hasta esa decisión.** (Relacionado: el Pilar 4 incluye `create_order` multiproducto de DISA.) **Estado: en espera de la decisión del Pilar 4.**
 
-- **D5 · [FASE 2, ya en cola] `create_product` debe exigir banda de IVA.** Ya está registrado como **Fase 2 · #6** (arriba) — hoy `create_product` de DISA hace `INSERT` sin banda de IVA explícita → riesgo fiscal antes de beta. Se anota aquí solo como recordatorio cruzado; el sitio canónico es Fase 2 #6. **Estado: pendiente, es la siguiente de Fase 2.**
+- **D5 · ✅ [FASE 2] `create_product` debe exigir banda de IVA — HECHO 2026-06-23 (commit `c2bbf17`).** El sitio canónico es **Fase 2 · #6** (arriba), donde está el detalle del cierre. Resumen: el hueco no era la acción dedicada (ya blindada el 15 jun) sino el genérico `insert_record` sobre `products`, que caía en `general`/21 en silencio; ahora todo el alta de producto por DISA pasa por `createProductSvc` (banda obligatoria de la lista cerrada). Verificado con modelo real 11/11 + navegador. **Estado: cerrado.**
 
 - **D6 · [A VERIFICAR — sin confirmar] Dos cosas surgidas del inventario, no comprobadas a fondo.** (a) Posible **bug de `cancel_order`**: `create_order` resta stock al crear el pedido, y `cancel_order` podría **no devolver** ese stock al cancelar (inconsistencia de existencias). (b) Páginas de la tienda pública (`modules/store/`, p. ej. términos/privacidad/devoluciones y temas) que **renderizan HTML guardado por el admin sin escapar** → riesgo tipo **XSS** si un admin pega `<script>`. Ambas **señaladas por el inventario pero NO confirmadas**; requieren una mirada al código antes de tratarlas como bug real. **Estado: a verificar.**
 
@@ -485,7 +487,7 @@ La era previa ("facturación de servicios") dejó código que funciona y no se t
 ---
 
 ## Pendientes técnicos (deuda rastreable)
-- **DISA `create_product`: exigir banda de IVA.** Hoy hace `INSERT INTO products` directo (NO vía API) sin banda → el producto nace en **General/21 por el DEFAULT de la columna, sin elección explícita**. La API ya lo exige; DISA no. **Cerrar al reenfocar DISA** (no se parchea ahora: esa acción se reescribe entonces y el parche se tiraría). Ref: `modules/disa/index.js`, acción `create_product`.
+- ✅ **DISA `create_product`: exigir banda de IVA — HECHO 2026-06-23 (commit `c2bbf17`).** Todo el alta de producto por DISA (acción dedicada + genérico `insert_record` sobre `products`) pasa por `createProductSvc`, con banda obligatoria de la lista cerrada de `core/vat-bands.js`; ya no hay `INSERT` crudo que caiga en `General/21` por el DEFAULT. Detalle en **Fase 2 · #6**. Ref: `modules/disa/index.js`.
 - **DISA `create_order`: un solo producto por pedido.** Limitación heredada de la base de e-commerce; los pedidos multi-línea entran con **Pilar 4 — Ventas** (flujo pedido→albarán→factura). En T5 solo se enlazó `client_id`. Ref: `modules/disa/index.js`, acción `create_order`.
 
 ---
