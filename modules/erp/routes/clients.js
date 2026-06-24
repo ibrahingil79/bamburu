@@ -9,6 +9,7 @@ import { clientDebt, isCobrable, invoiceProximaAccion, invoiceActionHistory, PRO
 import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
 import { sendEmail } from '../../../core/mailer.js';
 import { nextCode } from '../codes.js';
+import { clientVentas } from '../ventas-metrics.js';   // PIEZA C: historial = facturas del cliente, no sales_orders viejos
 
 // Comprobación reutilizable de NIF duplicado (regla de integridad — sin duplicados).
 // Devuelve el cliente ACTIVO en conflicto (otro id con el mismo fiscal_id normalizado)
@@ -123,7 +124,9 @@ export function createClientRoutes(db, cfg = {}) {
     try {
       const client = db.prepare('SELECT c.*, g.name as group_name FROM clients c LEFT JOIN client_groups g ON c.group_id=g.id WHERE c.id=?').get(c.req.param('id'));
       if (!client) return c.json({error:'No encontrado'},404);
-      client.orders = db.prepare('SELECT * FROM sales_orders WHERE client_id=? ORDER BY id DESC').all(client.id);
+      // PIEZA C — el historial del cliente son sus FACTURAS (cadena nueva), no los sales_orders viejos.
+      // Shape {order_number,total,status,created_at} para que la ficha siga pintando igual.
+      client.orders = clientVentas(db, client.id);
       return c.json(client);
     } catch(e) { return c.json({error:e.message},500); }
   });
@@ -156,7 +159,7 @@ export function createClientRoutes(db, cfg = {}) {
 
   api.get('/:id/orders', requirePerm('clients.read'), c => {
     try {
-      return c.json(db.prepare('SELECT * FROM sales_orders WHERE client_id=? ORDER BY id DESC').all(c.req.param('id')));
+      return c.json(clientVentas(db, c.req.param('id')));   // PIEZA C — facturas del cliente (cadena nueva)
     } catch(e) { return c.json({error:e.message},500); }
   });
 

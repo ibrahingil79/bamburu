@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { adminLayout } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
+import { ventasResumen, topProductos, ventasPorDia, ventasCsvRows } from '../ventas-metrics.js';   // PIEZA C: ventas desde la cadena nueva (facturas)
 
 export function createAnalyticsRoutes(db, cfg = {}) {
   const sym = cfg.sym || '€';
@@ -9,10 +10,12 @@ export function createAnalyticsRoutes(db, cfg = {}) {
 
   api.get('/overview', requirePerm('analytics.read'), c => {
     try {
+      // PIEZA C — ingresos/nº pedidos/ticket medio desde la cadena nueva (facturas que cuentan).
+      const v = ventasResumen(db);
       return c.json({
-        totalRevenue: db.prepare("SELECT COALESCE(SUM(total),0) as v FROM sales_orders WHERE status NOT IN ('cancelado','reembolsado','borrador')").get().v,
-        totalOrders: db.prepare("SELECT COUNT(*) as v FROM sales_orders WHERE status NOT IN ('cancelado','reembolsado','borrador')").get().v,
-        avgOrder: db.prepare("SELECT COALESCE(AVG(total),0) as v FROM sales_orders WHERE status NOT IN ('cancelado','reembolsado','borrador')").get().v,
+        totalRevenue: v.total,                              // total facturado (con IVA)
+        totalOrders: v.count,
+        avgOrder: v.count ? Math.round(v.total / v.count * 100) / 100 : 0,
         totalClients: db.prepare("SELECT COUNT(*) as v FROM clients").get().v,
         totalProducts: db.prepare("SELECT COUNT(*) as v FROM products WHERE status='active'").get().v,
         lowStock: db.prepare("SELECT COUNT(*) as v FROM products WHERE stock<5 AND status='active'").get().v,
@@ -23,15 +26,14 @@ export function createAnalyticsRoutes(db, cfg = {}) {
   api.get('/sales-by-period', requirePerm('analytics.read'), c => {
     try {
       const days = parseInt(c.req.query('days') || '30');
-      const rows = db.prepare(`SELECT date(created_at) as date, COALESCE(SUM(total),0) as total, COUNT(*) as orders FROM sales_orders WHERE created_at >= date('now', '-' || ? || ' days') AND status NOT IN ('cancelado','reembolsado','borrador') GROUP BY date(created_at) ORDER BY date`).all(days);
-      return c.json(rows);
+      return c.json(ventasPorDia(db, days));   // PIEZA C — ventas/día desde facturas que cuentan
     } catch(e) { return c.json({error:e.message},500); }
   });
 
   api.get('/best-sellers', requirePerm('analytics.read'), c => {
     try {
       const limit = parseInt(c.req.query('limit') || '10');
-      return c.json(db.prepare('SELECT product_name, SUM(quantity) as total_qty, SUM(total) as total_val FROM sales_items GROUP BY product_id ORDER BY total_val DESC LIMIT ?').all(limit));
+      return c.json(topProductos(db, { limit }));   // PIEZA C — top productos desde líneas de facturas que cuentan
     } catch(e) { return c.json({error:e.message},500); }
   });
 
@@ -44,10 +46,11 @@ export function createAnalyticsRoutes(db, cfg = {}) {
   // CSV exports
   api.get('/export/sales', requirePerm('analytics.read'), c => {
     try {
-      const rows = db.prepare('SELECT o.order_number,o.created_at,o.status,o.source,c.name as client,i.product_name,i.quantity,i.unit_price,i.total FROM sales_items i JOIN sales_orders o ON i.order_id=o.id LEFT JOIN clients c ON o.client_id=c.id ORDER BY o.created_at DESC').all();
+      // PIEZA C — una fila por línea de las facturas que cuentan (serie = origen del documento).
+      const rows = ventasCsvRows(db);
       const q = v => '"'+String(v??'').replace(/"/g,'""')+'"';
-      const h = ['Orden','Fecha','Estado','Origen','Cliente','Producto','Cantidad','Precio_Unitario','Total'];
-      const r = rows.map(x => [q(x.order_number),q(x.created_at),q(x.status),q(x.source),q(x.client),q(x.product_name),x.quantity,x.unit_price,x.total].join(','));
+      const h = ['Factura','Fecha','Estado','Serie','Cliente','Producto','Cantidad','Precio_Unitario','Total'];
+      const r = rows.map(x => [q(x.invoice_number),q(x.issue_date),q(x.status),q(x.series),q(x.client),q(x.product_name),x.quantity,x.unit_price,x.total].join(','));
       return c.body([h.join(','),...r].join('\n'), 200, {'Content-Type':'text/csv','Content-Disposition':'attachment; filename="ventas.csv"'});
     } catch(e) { return c.json({error:e.message},500); }
   });

@@ -11,6 +11,7 @@ import { adjustStock, ADJUST_REASONS, reservedOfProduct } from '../erp/stock.js'
 import { createStockTransferSvc } from '../erp/routes/stock-transfers.js';
 import { activeWarehouses, inventoryValuation } from '../erp/routes/warehouses.js';
 import { collectionsWorklist, registerCollectionAction, accountsSummary, registerAccountAction } from '../erp/cobros.js';
+import { ventasResumen, topProductos, ventasPorMes, clientesInactivos, pedidosSinEntregar } from '../erp/ventas-metrics.js';   // PIEZA C: cifras de venta desde la cadena nueva (facturas)
 import { supplierAccountsSummary } from '../erp/pagos.js';                                  // Paso (d): índice de deuda con proveedores para la voz de DISA
 import { registerSupplierAccountPayment } from '../erp/routes/supplier-invoices.js';       // Paso (d): pago a proveedor por voz (reparto a cuenta)
 import { marcarVistoYResumir } from '../erp/avisos.js';                                     // Paso (d): resumen-primero del badge (motor de avisos)
@@ -1046,8 +1047,8 @@ export function register(app, db) {
       console.log('[DISA] Usando BD:', _dbCheck ? 'OK' : 'VACIA');
       const _products = db.prepare('SELECT COUNT(*) as c FROM products').get();
       console.log('[DISA] Productos encontrados:', _products?.c ?? 0);
-      const _orders = db.prepare("SELECT COUNT(*) as c FROM sales_orders WHERE status='completado'").get();
-      console.log('[DISA] Pedidos completados:', _orders?.c ?? 0);
+      const _ventas = ventasResumen(db);   // PIEZA C: ventas reales = facturas que cuentan (no sales_orders viejo)
+      console.log('[DISA] Ventas contabilizadas (facturas):', _ventas.count);
 
       const _userPerms = session ? (() => {
         try {
@@ -1081,15 +1082,11 @@ export function register(app, db) {
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
 
-      const sales = db.prepare(`
-        SELECT COUNT(*) as orders,
-               COALESCE(SUM(subtotal),0) as revenue,
-               COALESCE(SUM(tax_amount),0) as iva,
-               COALESCE(SUM(total),0) as gross_revenue
-        FROM sales_orders
-        WHERE status NOT IN ('cancelado','reembolsado','borrador')
-        AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
-      `).get() || {};
+      // PIEZA C — VENTAS DEL MES desde la cadena nueva (facturas que cuentan: F1/F2/F3,
+      // rectificativas netean, sin anuladas ni tickets sustituidos). Mostrador, facturas y
+      // ventas manuales quedan unificadas. Misma forma {orders,revenue(neta),iva,gross_revenue}.
+      const _vm = ventasResumen(db, { from: monthStart });
+      const sales = { orders: _vm.count, revenue: _vm.base, iva: _vm.iva, gross_revenue: _vm.total };
 
       // PIEZA 2a — "pedido pendiente de entrega": DEFINICION UNICA = documento Pedido
       // (customer_orders) en estado 'confirmado' (anulados y borradores NO cuentan; en la 2a nada
@@ -1117,38 +1114,17 @@ export function register(app, db) {
         WHERE status='active' AND stock <= 5 ORDER BY stock ASC LIMIT 5
       `).all() || [];
 
+      // PIEZA C — clientes inactivos: sin ninguna FACTURA que cuente en 30 días (último documento
+      // del cliente = su última factura de la cadena nueva, no un sales_order viejo).
       let inactiveClients = { count: 0 };
-      try {
-        inactiveClients = db.prepare(`
-          SELECT COUNT(*) as count FROM clients c
-          WHERE c.active = 1
-          AND NOT EXISTS (
-            SELECT 1 FROM sales_orders so
-            WHERE so.client_id = c.id
-            AND so.created_at >= date('now', '-30 days')
-            AND so.status = 'completado'
-          )
-        `).get() || {};
-      } catch {}
+      try { inactiveClients = { count: clientesInactivos(db, 30) }; } catch {}
 
-      const topProducts = db.prepare(`
-        SELECT p.name, SUM(si.quantity) as sold
-        FROM sales_items si
-        JOIN products p ON p.id = si.product_id
-        JOIN sales_orders so ON so.id = si.order_id
-        WHERE so.status NOT IN ('cancelado','reembolsado','borrador')
-        AND so.created_at >= ?
-        GROUP BY p.id ORDER BY sold DESC LIMIT 5
-      `).all(monthStart) || [];
-
-      const topProductsAllTime = db.prepare(`
-        SELECT p.name, SUM(si.quantity) as sold, ROUND(SUM(si.total),2) as revenue
-        FROM sales_items si
-        JOIN products p ON p.id = si.product_id
-        JOIN sales_orders so ON so.id = si.order_id
-        WHERE so.status NOT IN ('cancelado','reembolsado','borrador')
-        GROUP BY p.id ORDER BY sold DESC LIMIT 5
-      `).all() || [];
+      // PIEZA C — productos más vendidos desde las líneas de las facturas que cuentan.
+      // Forma {name,sold} (mes) y {name,sold,revenue} (histórico) para no tocar el render.
+      const topProducts = topProductos(db, { from: monthStart, limit: 5 })
+        .map(p => ({ name: p.product_name, sold: p.total_qty }));
+      const topProductsAllTime = topProductos(db, { limit: 5 })
+        .map(p => ({ name: p.product_name, sold: p.total_qty, revenue: p.total_val }));
 
       const lines = [
         userContext,
@@ -1159,7 +1135,7 @@ export function register(app, db) {
         'Pais: ' + (cfg.country || 'ES'),
         'Moneda: ' + sym,
         '',
-        'VENTAS ESTE MES (' + (sales.orders || 0) + ' ventas/tickets de TPV):',
+        'VENTAS ESTE MES (' + (sales.orders || 0) + ' facturas que cuentan: mostrador, facturas y ventas manuales):',
         '- Venta neta (sin IVA): ' + sym + Number(sales.revenue || 0).toFixed(2),
         '- IVA recaudado: ' + sym + Number(sales.iva || 0).toFixed(2),
         '- Total cobrado (con IVA): ' + sym + Number(sales.gross_revenue || 0).toFixed(2),
@@ -1354,13 +1330,14 @@ export function register(app, db) {
         lines.push('Productos recientes (id, nombre, precio, stock):');
         lines.push(recent.map(p => '#' + p.id + ' ' + p.name + ' ' + sym + p.price + ' stock:' + p.stock).join(', ') || 'ninguno');
       } else if (currentPage === 'orders') {
+        // PIEZA C — pedidos recientes desde la cadena nueva (customer_orders), no el TPV viejo.
         const recentOrders = db.prepare(
-          "SELECT id, order_number, total, status FROM sales_orders ORDER BY id DESC LIMIT 5"
+          "SELECT id, order_number, total, status FROM customer_orders ORDER BY id DESC LIMIT 5"
         ).all();
         lines.push('', 'PAGINA ACTUAL: Pedidos');
-        lines.push('Pedidos recientes: ' + recentOrders.map(
+        lines.push('Pedidos recientes: ' + (recentOrders.map(
           o => '#' + o.id + ' ' + o.order_number + ' ' + sym + o.total + ' [' + o.status + ']'
-        ).join(', '));
+        ).join(', ') || 'ninguno'));
       } else if (currentPage === 'inventory') {
         const lowStockAll = db.prepare(
           "SELECT id, name, stock FROM products WHERE stock <= 10 AND status='active' ORDER BY stock ASC LIMIT 10"
@@ -1386,15 +1363,11 @@ export function register(app, db) {
         lines.push('Proveedores (id, nombre):');
         lines.push(suppliers.map(s => '#' + s.id + ' ' + s.name).join(', ') || 'ninguno');
       } else if (currentPage === 'analytics') {
-        const last3months = db.prepare(`
-          SELECT strftime('%Y-%m', created_at) as month, COALESCE(SUM(total),0) as revenue, COUNT(*) as orders
-          FROM sales_orders WHERE status='completado'
-          AND created_at >= date('now', '-90 days')
-          GROUP BY month ORDER BY month DESC
-        `).all();
+        // PIEZA C — ventas por mes desde la cadena nueva (facturas que cuentan, total con IVA).
+        const last3months = ventasPorMes(db, 3);
         lines.push('', 'PAGINA ACTUAL: Analitica');
         lines.push('Ventas ultimos 3 meses: ' + (last3months.map(
-          m => m.month + ': ' + sym + Number(m.revenue).toFixed(2) + ' (' + m.orders + ' ped.)'
+          m => m.month + ': ' + sym + Number(m.revenue).toFixed(2) + ' (' + m.orders + ' fact.)'
         ).join(' | ') || 'sin datos'));
       } else if (currentPage === 'dashboard' || currentPage === 'admin') {
         lines.push('', 'PAGINA ACTUAL: Dashboard principal');
@@ -1430,13 +1403,10 @@ export function register(app, db) {
       const cfg = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get() || {};
       const sym = cfg.currency_symbol || '€';
 
-      const sales = db.prepare(`
-        SELECT COUNT(*) as orders,
-               COALESCE(SUM(subtotal),0) as revenue
-        FROM sales_orders
-        WHERE status NOT IN ('cancelado','reembolsado','borrador')
-        AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
-      `).get() || {};
+      // PIEZA C — ventas del mes desde la cadena nueva (facturas que cuentan). Titular = total con IVA.
+      const _monthStart = new Date().toISOString().slice(0, 7) + '-01';
+      const _sm = ventasResumen(db, { from: _monthStart });
+      const sales = { orders: _sm.count, revenue: _sm.total };
 
       // PIEZA 2a — misma DEFINICION UNICA de "pedido pendiente de entrega" que el resumen:
       // documento Pedido (customer_orders) confirmado. Coherente en todas las superficies.
@@ -1462,35 +1432,22 @@ export function register(app, db) {
         });
       }
 
-      const stale = db.prepare(`
-        SELECT COUNT(*) as count FROM sales_orders
-        WHERE status='en_preparacion'
-        AND created_at < date('now', '-3 days')
-      `).get() || {};
-      if ((stale.count || 0) > 0) {
+      // PIEZA C — "pedidos bloqueados": equivalente nuevo = customer_orders confirmados, sin
+      // entregar, con > 3 días (cadena nueva, alineado con la 2a). Apunta a /admin/pedidos.
+      const staleCount = pedidosSinEntregar(db, 3);
+      if (staleCount > 0) {
         alerts.push({
           type: 'warn',
           title: 'Pedidos bloqueados',
-          body: stale.count + ' pedido' + (stale.count > 1 ? 's llevan' : ' lleva') + ' más de 3 días sin enviar',
-          href: '/admin/orders',
+          body: staleCount + ' pedido' + (staleCount > 1 ? 's llevan' : ' lleva') + ' más de 3 días sin entregar',
+          href: '/admin/pedidos',
           action: 'Ver pedidos'
         });
       }
 
+      // PIEZA C — inactivos por última FACTURA que cuenta (cadena nueva), no por sales_order viejo.
       let inactiveCount = 0;
-      try {
-        const row = db.prepare(`
-          SELECT COUNT(*) as count FROM clients
-          WHERE active=1
-          AND NOT EXISTS (
-            SELECT 1 FROM sales_orders so
-            WHERE so.client_id = clients.id
-            AND so.created_at >= date('now', '-30 days')
-            AND so.status = 'completado'
-          )
-        `).get();
-        inactiveCount = row?.count || 0;
-      } catch {}
+      try { inactiveCount = clientesInactivos(db, 30); } catch {}
       if (inactiveCount > 0) {
         alerts.push({
           type: 'info',

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { adminLayout } from '../layout.js';
 import { disaHomeHtml } from '../views/disaHome.html.js';
 import { estadoAvisos } from '../avisos.js';
+import { ventasResumen, pedidosResumen } from '../ventas-metrics.js';   // PIEZA C: ventas desde la cadena nueva (facturas), pedidos desde customer_orders
 
 export function createDashboardRoutes(db) {
   const r = new Hono();
@@ -29,12 +30,14 @@ export function createDashboardRoutes(db) {
     try {
       const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
       kpis.sym = sym;
-      const ventasRow = db.prepare(`SELECT COALESCE(SUM(total),0) as total FROM sales_orders WHERE status != 'cancelado' AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')`).get();
-      kpis.ventas = Math.round(ventasRow?.total || 0);
-      const pedidosRow = db.prepare(`SELECT COUNT(*) as c FROM sales_orders WHERE status != 'cancelado' AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')`).get();
-      kpis.pedidos = pedidosRow?.c || 0;
-      const pendienteRow = db.prepare(`SELECT COUNT(*) as c FROM sales_orders WHERE status IN ('borrador','en_preparacion','enviado')`).get();
-      kpis.pendiente = pendienteRow?.c || 0;
+      // PIEZA C — ventas del mes desde la cadena NUEVA (facturas: F1 ordinaria + F2 ticket + F3
+      // sustitutiva, neteando rectificativas, sin anuladas ni tickets sustituidos). Titular = total
+      // facturado con IVA. Pedidos/pendientes desde customer_orders (alineado con la 2a).
+      const monthStart = new Date().toISOString().slice(0, 7) + '-01';
+      kpis.ventas = Math.round(ventasResumen(db, { from: monthStart }).total);
+      const ped = pedidosResumen(db);
+      kpis.pedidos = ped.confirmadosMes;
+      kpis.pendiente = ped.pendientes;
     } catch {}
 
     return c.html(adminLayout('Dashboard', disaHomeHtml({ userName, alertCount, alertState, kpis }), 'dashboard', session?.csrfToken || '', c, true));
