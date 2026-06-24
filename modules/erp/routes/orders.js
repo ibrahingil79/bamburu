@@ -6,7 +6,7 @@ import { posSchema, orderStatusSchema, orderNotesSchema, orderTrackingSchema, re
 import { escHtml } from '../../../core/escape.js';
 import { generateInvoice } from './invoices.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
-import { recordMovement, resolveWarehouseId, productStockInWarehouse, originMovementWarehouse } from '../stock.js';
+import { recordMovement, resolveWarehouseId, productStockInWarehouse, availableOfProduct, originMovementWarehouse } from '../stock.js';
 import { activeWarehouses } from './warehouses.js';
 
 const ORDER_STATUSES = [
@@ -85,9 +85,10 @@ export function createOrderRoutes(db, cfg = {}) {
             if (!v) throw new Error('Variante no encontrada: ' + it.name);
             if (v.stock < parseInt(it.qty)) throw new Error('Stock insuficiente para la variante: ' + it.name);
           } else {
-            // Capa 2: la guarda mira el saldo del ALMACÉN elegido (no el global). Política
-            // actual conservada: el POS bloquea vender por encima de lo que hay en ese almacén.
-            if (productStockInWarehouse(db, it.id, wid) < parseInt(it.qty)) throw new Error('Stock insuficiente en el almacén seleccionado: ' + it.name);
+            // Capa 2 + PIEZA 2a: la guarda mira el DISPONIBLE del ALMACÉN elegido (stock −
+            // reservado por pedidos confirmados), no el stock bruto: el TPV no deja vender lo
+            // que está apartado para un pedido. Política conservada: bloquea vender de más.
+            if (availableOfProduct(db, it.id, wid) < parseInt(it.qty)) throw new Error('Disponible insuficiente en el almacén seleccionado (hay stock reservado por pedidos): ' + it.name);
           }
         }
         const ord = db.prepare('INSERT INTO sales_orders (order_number,client_id,shipping_method_id,discount_code_id,subtotal,shipping_cost,discount_amount,tax_amount,total,status,source) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(num, client_id||null, shippingId, discountCodeId, subtotal, shippingCost, discountAmount, tax, total, 'completado', 'pos');
@@ -584,10 +585,11 @@ export function createOrderRoutes(db, cfg = {}) {
       <script>
       let cart=[],prods=[],couponApplied=null,_vmProd=null;
       window._sym='${sym}';
-      // Capa 2: almacén activo del POS + mapa de stock de ese almacén (al vuelo).
+      // Capa 2 + PIEZA 2a: almacén activo del POS + mapa de DISPONIBLE de ese almacén (stock −
+      // reservado por pedidos confirmados), al vuelo. El TPV vende contra el disponible.
       let WH=document.getElementById('posWarehouse')?document.getElementById('posWarehouse').value:'';
       let whStock={};
-      // Stock disponible según el almacén elegido. C3: las variantes siguen GLOBALES
+      // Disponible según el almacén elegido. C3: las variantes siguen GLOBALES
       // (su stock vive en product_variants.stock, fuera del libro), así que para productos
       // con variante se usa el total global del producto.
       function whStockOf(p){
@@ -597,7 +599,7 @@ export function createOrderRoutes(db, cfg = {}) {
       async function loadWhStock(){
         whStock={};
         if(!WH){ return; }
-        try{ const rows=await api('GET','/api/erp/warehouses/'+WH+'/stock'); (rows||[]).forEach(function(r){ whStock[r.product_id]=r.qty; }); }catch(e){}
+        try{ const rows=await api('GET','/api/erp/warehouses/'+WH+'/stock'); (rows||[]).forEach(function(r){ whStock[r.product_id]=(r.available!=null?r.available:r.qty); }); }catch(e){}
       }
       async function onWhChange(){
         WH=document.getElementById('posWarehouse').value;

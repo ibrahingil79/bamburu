@@ -22,6 +22,7 @@ import { createPurchaseRoutes } from './purchases.js';
 import { createPurchaseCaptureRoutes } from './purchases-capture.js';
 import { createPurchaseOrderRoutes } from './purchase-orders.js';
 import { createQuoteRoutes } from './quotes.js';
+import { createPedidoRoutes } from './pedidos.js';
 import { createPurchaseOrderReceiptRoutes } from './purchase-order-receipts.js';
 import { createSupplierReturnRoutes } from './supplier-returns.js';
 import { createStockTransferRoutes } from './stock-transfers.js';
@@ -72,6 +73,7 @@ export function mountRoutes(app, db) {
   const { api: supplierInvoiceApi, views: supplierInvoiceViews } = createSupplierInvoiceRoutes(db);
   const { api: pagosApi, views: pagosViews } = createPagosRoutes(db);
   const { api: quoteApi, views: quoteViews } = createQuoteRoutes(db);
+  const { api: pedidoApi, views: pedidoViews } = createPedidoRoutes(db);
 
   // ── Protected admin views ──────────────────────────────────────
   const admin = new Hono();
@@ -106,6 +108,7 @@ export function mountRoutes(app, db) {
   admin.route('/warehouses', warehouseViews);
   admin.route('/feedback', feedbackViews);
   admin.route('/quotes', quoteViews);
+  admin.route('/pedidos', pedidoViews);
   admin.route('/invoices', invoiceViews);
   admin.route('/cobros', cobrosViews);
   admin.route('/supplier-invoices', supplierInvoiceViews);
@@ -139,6 +142,7 @@ export function mountRoutes(app, db) {
   apiApp.route('/warehouses', warehouseApi);
   apiApp.route('/feedback', feedbackApi);
   apiApp.route('/quotes', quoteApi);
+  apiApp.route('/pedidos', pedidoApi);
   apiApp.route('/invoices', invoiceApi);
   apiApp.route('/cobros', cobrosApi);
   apiApp.route('/supplier-invoices', supplierInvoiceApi);

@@ -4,7 +4,7 @@ import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { stockTransferSchema, purchaseOrderAnularSchema } from '../schemas.js';
 import { nextCode } from '../codes.js';
-import { recordMovement, isPhysical, productStockInWarehouse } from '../stock.js';
+import { recordMovement, isPhysical, productStockInWarehouse, reservedOfProduct } from '../stock.js';
 import { activeWarehouses } from './warehouses.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 
@@ -71,6 +71,19 @@ export function createStockTransferSvc(db, d) {
     if (it.quantity > avail) {
       const e = new Error('"' + product.name + '": disponible en ' + from.name + ' ' + avail + ', intentas trasladar ' + it.quantity);
       e.status = 400; throw e;
+    }
+    // PIEZA 2a — GUARDA DE INTEGRIDAD DE LA RESERVA (aviso-confirmado, nunca en silencio):
+    // sacar este traslado no puede dejar el ORIGEN por debajo de lo reservado allí (pedidos
+    // confirmados que apartan desde ese almacén) sin que el usuario lo confirme.
+    if (!d.confirm_below_reserved) {
+      const reserved = reservedOfProduct(db, product.id, from.id);
+      const after = avail - it.quantity;
+      if (reserved > 0 && after < reserved) {
+        const e = new Error('"' + product.name + '": este traslado dejaría ' + after + ' en ' + from.name
+          + ', y hay ' + reserved + ' reservados por pedidos confirmados (quedarían ' + (after - reserved)
+          + ' libres). Confírmalo para trasladar igualmente (confirm_below_reserved).');
+        e.status = 409; throw e;
+      }
     }
     // WAC GLOBAL congelado: con este coste vuelve a entrar el valor en el destino.
     resolved.push({ product_id: product.id, quantity: it.quantity, unit_cost: product.average_cost || 0 });
@@ -399,11 +412,22 @@ export function createStockTransferRoutes(db) {
         if (!confirm('Vas a CONFIRMAR el traslado de ' + items.length + ' línea(s) (' + units + ' unidades) de ' + fromName + ' a ' + toName + '. Moverá ese stock entre almacenes y será inmutable (corregir = anular y crear otro).\\n\\n¿Confirmar?')) return;
         const btn = document.getElementById('btn-confirm');
         btn.disabled = true;
-        try {
-          const d = await api('POST','/api/erp/stock-transfers', {
+        const send = function(confirmBelow){
+          return api('POST','/api/erp/stock-transfers', {
             from_warehouse_id: from, to_warehouse_id: to,
             date: date, notes: document.getElementById('fNotes').value.trim(), items: items,
+            confirm_below_reserved: !!confirmBelow,
           });
+        };
+        try {
+          let d;
+          try { d = await send(false); }
+          catch(e){
+            // PIEZA 2a — guarda de reserva: dejar el origen por debajo de lo reservado avisa
+            // (aviso-confirmado). El usuario confirma y se reintenta.
+            if (/reservad/i.test(e.message||'') && confirm((e.message||'')+'\\n\\n¿Trasladar igualmente?')) d = await send(true);
+            else throw e;
+          }
           toast(d.message || 'Traslado confirmado');
           window.location.href = '/admin/stock-transfers/' + d.id;
         } catch(e){ toast(e.message || 'Error registrando el traslado','err'); btn.disabled = false; }

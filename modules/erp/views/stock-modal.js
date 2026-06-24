@@ -105,17 +105,19 @@ export function stockModalScript(sym, warehouses = []) {
           +'<td style="text-align:right">'+revCell+'</td>'
           +'</tr>';
       }).join('');
-      // Multi-almacén · Capa 1 — desglose por almacén activo (solo lectura).
+      // Multi-almacén · Capa 1 + PIEZA 2a — desglose por almacén: stock / reservado / disponible.
+      // "Reservado" = pedidos de venta confirmados; "Disponible" = stock − reservado.
       const wh = data.by_warehouse || [];
       const whBlock = wh.length
         ? '<div style="margin-bottom:1rem"><div style="font-size:.75rem;text-transform:uppercase;color:var(--muted);margin-bottom:.4rem">Stock por almacén</div>'
-          +'<div class="table-wrap"><table><tbody>'
-          +wh.map(function(w){ return '<tr><td>'+escHtml(w.name)+(w.is_default?' <span class="badge b-green" style="font-size:.62rem">Principal</span>':'')+'</td><td style="text-align:right;font-weight:600">'+w.qty+'</td></tr>'; }).join('')
+          +'<div class="table-wrap"><table><thead><tr><th>Almacén</th><th style="text-align:right">Stock</th><th style="text-align:right">Reservado</th><th style="text-align:right">Disponible</th></tr></thead><tbody>'
+          +wh.map(function(w){ return '<tr><td>'+escHtml(w.name)+(w.is_default?' <span class="badge b-green" style="font-size:.62rem">Principal</span>':'')+'</td><td style="text-align:right;font-weight:600">'+w.qty+'</td><td style="text-align:right;color:'+((w.reserved||0)>0?'#9333ea':'var(--muted)')+'">'+(w.reserved||0)+'</td><td style="text-align:right;font-weight:600;color:'+((w.available||0)<0?'#ef4444':'inherit')+'">'+(w.available!=null?w.available:w.qty)+'</td></tr>'; }).join('')
           +'</tbody></table></div></div>'
         : '';
+      const resvTxt = (data.reserved||0)>0 ? ' &nbsp;·&nbsp; reservado <strong style="color:#9333ea">'+data.reserved+'</strong> &nbsp;·&nbsp; disponible <strong style="color:'+((data.available||0)<0?'#ef4444':'#10b981')+'">'+(data.available!=null?data.available:data.stock)+'</strong>' : '';
       document.getElementById('stockKardexBody').innerHTML =
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">'
-        +'<div>Stock actual: <strong style="font-size:1.4rem">'+data.stock+'</strong></div>'
+        +'<div>Stock actual: <strong style="font-size:1.4rem">'+data.stock+'</strong>'+resvTxt+'</div>'
         +'<button class="btn btn-primary btn-sm" onclick="openAjustar('+id+',\\''+escHtml((name||'').replace(/\\'/g,''))+'\\','+data.stock+')">Ajustar stock</button>'
         +'</div>'
         +whBlock
@@ -151,8 +153,19 @@ export function stockModalScript(sym, warehouses = []) {
       const reason = document.getElementById('stockAdjReason').value;
       const note = document.getElementById('stockAdjNote').value;
       if(!(value>=0)){ toast('Cantidad no válida','err'); return; }
+      const wid = document.getElementById('stockAdjWh').value || null;
+      const send = async function(confirmBelow){
+        return api('POST','/api/erp/products/'+curProd.id+'/stock/adjust',{ mode, value, reason, note, warehouse_id: wid, confirm_below_reserved: !!confirmBelow });
+      };
       try {
-        const r = await api('POST','/api/erp/products/'+curProd.id+'/stock/adjust',{ mode, value, reason, note, warehouse_id: document.getElementById('stockAdjWh').value || null });
+        let r;
+        try { r = await send(false); }
+        catch(e){
+          // PIEZA 2a — guarda de reserva: dejar el almacén por debajo de lo reservado avisa
+          // (aviso-confirmado, nunca en silencio). El usuario confirma y se reintenta.
+          if (/reservad/i.test(e.message||'') && confirm((e.message||'')+'\n\n¿Ajustar igualmente?')) r = await send(true);
+          else throw e;
+        }
         toast(r.message || ('Stock: '+r.stock));
         closeModal('stockAdjModal');
         if (typeof window.stockOnSaved === 'function') window.stockOnSaved(curProd.id);

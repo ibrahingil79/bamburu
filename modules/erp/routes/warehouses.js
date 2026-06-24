@@ -3,6 +3,7 @@ import { adminLayout, can } from '../layout.js';
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { warehouseSchema } from '../schemas.js';
+import { reservedOfProduct } from '../stock.js';   // PIEZA 2a: reservado/disponible por almacén
 
 // ════════════════════════════════════════════════════════════════════════════
 // Multi-almacén · CAPA 1 — gestionar almacenes + ver stock por almacén. Es el
@@ -45,20 +46,32 @@ export function activeWarehouses(db) {
   return db.prepare('SELECT id, name, is_default FROM warehouses WHERE active=1 ORDER BY is_default DESC, id').all();
 }
 
-// Mapa producto→cantidad en UN almacén (al vuelo, sin caché nueva).
+// Mapa producto→cantidad en UN almacén (al vuelo, sin caché nueva). PIEZA 2a: añade el
+// reservado (pedidos confirmados en ESE almacén) y el disponible = qty − reservado, para que
+// el TPV y el inventario miren "disponible" sin recalcular a ojo. qty sigue siendo el stock
+// físico (no se rompe a ningún consumidor que ya lo lea).
 export function warehouseStockMap(db, warehouseId) {
-  return db.prepare(
+  const rows = db.prepare(
     'SELECT product_id, COALESCE(SUM(quantity),0) AS qty FROM stock_movements WHERE warehouse_id=? GROUP BY product_id'
   ).all(warehouseId);
+  return rows.map(r => {
+    const reserved = reservedOfProduct(db, r.product_id, warehouseId);
+    return { ...r, reserved, available: r.qty - reserved };
+  });
 }
 
-// Desglose por almacén activo de UN producto (cantidad en cada uno; 0 si no tiene).
+// Desglose por almacén activo de UN producto: stock físico (qty) + reservado + disponible
+// (qty − reservado) en cada almacén. La reserva solo aplica a físicos; en no-físicos es 0.
 export function warehouseBreakdown(db, productId) {
-  return db.prepare(`
+  const rows = db.prepare(`
     SELECT w.id, w.name, w.is_default,
            COALESCE((SELECT SUM(sm.quantity) FROM stock_movements sm
                       WHERE sm.warehouse_id=w.id AND sm.product_id=?), 0) AS qty
       FROM warehouses w WHERE w.active=1 ORDER BY w.is_default DESC, w.id`).all(productId);
+  return rows.map(w => {
+    const reserved = reservedOfProduct(db, productId, w.id);
+    return { ...w, reserved, available: w.qty - reserved };
+  });
 }
 
 // ── Valoración a coste (WAC global) — helpers CURADOS para que la voz de DISA no

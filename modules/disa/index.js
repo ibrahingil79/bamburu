@@ -7,7 +7,7 @@ import { createClientSvc, updateClientSvc, archiveClientSvc, restoreClientSvc, s
 import { clientFieldOptions } from '../erp/schemas.js';
 import { nextCode } from '../erp/codes.js';
 // Voz de DISA sobre stock/compras (Fase 1): operar por servicio validado + valoración curada.
-import { adjustStock, ADJUST_REASONS } from '../erp/stock.js';
+import { adjustStock, ADJUST_REASONS, reservedOfProduct } from '../erp/stock.js';
 import { createStockTransferSvc } from '../erp/routes/stock-transfers.js';
 import { activeWarehouses, inventoryValuation } from '../erp/routes/warehouses.js';
 import { collectionsWorklist, registerCollectionAction, accountsSummary, registerAccountAction } from '../erp/cobros.js';
@@ -106,9 +106,11 @@ export function register(app, db) {
   // whitelist (= NO escribibles por el genérico): una devolución mueve stock por el
   // libro y es documento inmutable con numeración. La voz de DISA sobre stock/compras
   // es tarea futura; por ahora DISA no crea devoluciones.
-  // Ventas/Pilar 4 — 'quotes'/'quote_items'/'document_links' FUERA del whitelist (igual que
-  // compras/sales_orders): un presupuesto es documento con ciclo, numeración y conversión por
-  // servicio validado. La voz de DISA sobre presupuestos es capa posterior; hoy no los escribe.
+  // Ventas/Pilar 4 — 'quotes'/'quote_items'/'document_links' + 'customer_orders'/
+  // 'customer_order_items' (PIEZA 2a, pedido + reserva) FUERA del whitelist (igual que
+  // compras/sales_orders): son documentos con ciclo, numeración y reserva por servicio
+  // validado. En la 2a DISA es SOLO LECTURA sobre pedidos (responde "cuánto tengo" con el
+  // disponible); crear/confirmar pedidos por voz es capa posterior (create_order multiproducto).
   const WRITABLE_TABLES = new Set([
     'categories', 'tags', 'product_tags',
     'products', 'product_variants', 'product_images',
@@ -1088,10 +1090,26 @@ export function register(app, db) {
         AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
       `).get() || {};
 
+      // PIEZA 2a — "pedido pendiente de entrega": DEFINICION UNICA = documento Pedido
+      // (customer_orders) en estado 'confirmado' (anulados y borradores NO cuentan; en la 2a nada
+      // esta entregado). El resumen inyectado y cualquier consulta usan ESTA misma definicion para
+      // que el numero no cambie segun a quien se pregunte. NO es el clúster viejo sales_orders
+      // (TPV/e-commerce), que cuenta como "ventas".
       const pending = db.prepare(`
-        SELECT COUNT(*) as count FROM sales_orders
-        WHERE status IN ('en_preparacion','enviado')
+        SELECT COUNT(*) as count FROM customer_orders WHERE status='confirmado'
       `).get() || {};
+      // Listas curadas (cliente REAL y consistente): confirmados usan su foto congelada
+      // (client_name); borradores leen el cliente vivo por client_id, o "sin cliente" si no tienen.
+      const pedidosConfirmados = db.prepare(`
+        SELECT o.order_number, o.total, COALESCE(NULLIF(o.client_name,''), c.name, 'sin cliente') AS cliente
+          FROM customer_orders o LEFT JOIN clients c ON c.id=o.client_id
+         WHERE o.status='confirmado' ORDER BY o.id DESC LIMIT 10
+      `).all() || [];
+      const pedidosBorradores = db.prepare(`
+        SELECT o.id, o.total, CASE WHEN o.client_id IS NULL THEN 'sin cliente' ELSE COALESCE(c.name,'sin cliente') END AS cliente
+          FROM customer_orders o LEFT JOIN clients c ON c.id=o.client_id
+         WHERE o.status='borrador' ORDER BY o.id DESC LIMIT 10
+      `).all() || [];
 
       const lowStock = db.prepare(`
         SELECT name, stock FROM products
@@ -1140,11 +1158,20 @@ export function register(app, db) {
         'Pais: ' + (cfg.country || 'ES'),
         'Moneda: ' + sym,
         '',
-        'VENTAS ESTE MES (' + (sales.orders || 0) + ' pedidos):',
+        'VENTAS ESTE MES (' + (sales.orders || 0) + ' ventas/tickets de TPV):',
         '- Venta neta (sin IVA): ' + sym + Number(sales.revenue || 0).toFixed(2),
         '- IVA recaudado: ' + sym + Number(sales.iva || 0).toFixed(2),
         '- Total cobrado (con IVA): ' + sym + Number(sales.gross_revenue || 0).toFixed(2),
-        '- Pedidos pendientes de entrega: ' + (pending.count || 0),
+        '',
+        // PIEZA 2a — PEDIDOS de venta (documento "Pedido", customer_orders). Numero y clientes
+        // CURADOS: DISA los usa tal cual, no recalcula con otra definicion ni inventa el cliente.
+        'PEDIDOS DE VENTA (documento "Pedido" del Pilar 4 · tabla customer_orders; NO es el TPV/sales_orders viejo):',
+        '- Pendientes de entrega = CONFIRMADOS (definicion UNICA; anulados y borradores NO cuentan): ' + (pending.count || 0),
+        ...(pedidosConfirmados.length ? ['  ' + pedidosConfirmados.map(p => (p.order_number || '?') + ' · ' + p.cliente + ' · ' + sym + Number(p.total || 0).toFixed(2)).join(' | ')] : []),
+        '- Borradores (sin confirmar; NO reservan, sin numero): ' + pedidosBorradores.length,
+        ...(pedidosBorradores.length ? ['  ' + pedidosBorradores.map(p => '#' + p.id + ' · ' + p.cliente + ' · ' + sym + Number(p.total || 0).toFixed(2)).join(' | ')] : []),
+        'Usa SIEMPRE estos numeros y estos clientes (no recalcules "pendientes" con otra definicion ni inventes/cambies el cliente de un borrador).',
+        'GESTION DE PEDIDOS POR CHAT: NO disponible en esta version. NO crees, confirmes, anules ni elimines pedidos por chat (ni con insert/update/delete_record sobre customer_orders/customer_order_items). Ante esa peticion, DECLINA con un mensaje claro y redirige a la pantalla de Pedidos (/admin/pedidos), SIN pedir confirmacion. LEER pedidos SI esta permitido.',
         '',
         'ATENCION:',
         '- Productos con stock bajo (<=5 unidades): ' +
@@ -1241,18 +1268,24 @@ export function register(app, db) {
         })(),
         // [Voz DISA stock] Índice de PRODUCTOS físicos activos — resolver nombre→id antes de
         // consultar u operar (mismo protocolo de identificación que clientes). Incluye stock
-        // GLOBAL y coste medio (WAC) curados; el stock por almacén NO va aquí (se consulta).
+        // GLOBAL, RESERVADO (pedidos de venta confirmados) y DISPONIBLE (= stock − reservado) +
+        // coste medio (WAC) curados; el stock por almacén NO va aquí (se consulta).
         ...(() => {
           try {
             const total = db.prepare("SELECT COUNT(*) n FROM products WHERE status='active' AND COALESCE(type,'physical')='physical'").get().n;
             if (!total) return [];
             const prods = db.prepare("SELECT id, name, sku, stock, average_cost FROM products WHERE status='active' AND COALESCE(type,'physical')='physical' ORDER BY name LIMIT 40").all();
-            const list = prods.map(p => '#' + p.id + ' ' + p.name + (p.sku ? ' [' + p.sku + ']' : '')
-              + ' · stock ' + p.stock + ' · coste medio ' + sym + Number(p.average_cost || 0).toFixed(2)).join('\n');
+            const list = prods.map(p => {
+              const reserved = reservedOfProduct(db, p.id);   // PIEZA 2a: reservado GLOBAL
+              const available = (p.stock || 0) - reserved;
+              return '#' + p.id + ' ' + p.name + (p.sku ? ' [' + p.sku + ']' : '')
+                + ' · stock ' + p.stock + (reserved > 0 ? ' · reservado ' + reserved : '') + ' · disponible ' + available
+                + ' · coste medio ' + sym + Number(p.average_cost || 0).toFixed(2);
+            }).join('\n');
             return [
-              'PRODUCTOS FISICOS ACTIVOS (' + total + (total > prods.length ? '; muestro los ' + prods.length + ' primeros por nombre' : '') + ') — id, nombre, [SKU], stock GLOBAL, coste medio (WAC):',
+              'PRODUCTOS FISICOS ACTIVOS (' + total + (total > prods.length ? '; muestro los ' + prods.length + ' primeros por nombre' : '') + ') — id, nombre, [SKU], stock GLOBAL, reservado, disponible (= stock − reservado), coste medio (WAC):',
               list,
-              'Resuelve un nombre de producto a su id con esta lista antes de consultar u operar. Varios → pregunta cual. Ninguno → dilo (no inventes). El stock POR ALMACEN no esta aqui: consultalo.',
+              'Cuando te pregunten "cuanto tengo de X", responde el DISPONIBLE y, si hay reservas, desglosa lo reservado (apartado por pedidos de venta confirmados; sigue en el almacen, no facturable libremente). Resuelve un nombre a su id con esta lista antes de consultar. Varios → pregunta cual. Ninguno → dilo (no inventes). El stock/disponible POR ALMACEN no esta aqui: consultalo. En esta pieza NO creas ni confirmas pedidos (solo lectura).',
               '',
             ];
           } catch { return []; }
@@ -1404,9 +1437,10 @@ export function register(app, db) {
         AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
       `).get() || {};
 
+      // PIEZA 2a — misma DEFINICION UNICA de "pedido pendiente de entrega" que el resumen:
+      // documento Pedido (customer_orders) confirmado. Coherente en todas las superficies.
       const pending = db.prepare(`
-        SELECT COUNT(*) as count FROM sales_orders
-        WHERE status IN ('en_preparacion','enviado')
+        SELECT COUNT(*) as count FROM customer_orders WHERE status='confirmado'
       `).get() || {};
 
       const alerts = [];
@@ -2179,6 +2213,7 @@ export function register(app, db) {
       '  ajustar stock, generar facturas) SIEMPRE pidiendo confirmacion previa.',
       '',
       'NO PUEDES HACER:',
+      '- GESTIONAR PEDIDOS de venta (el documento "Pedido": crear, confirmar, anular o eliminar) POR CHAT en esta version. LEERLOS si puedes (cuantos pendientes, borradores, ver uno). Ante una peticion de gestionar un pedido, DECLINA con un mensaje claro y redirige a la pantalla de Pedidos (/admin/pedidos); NO pidas confirmacion ni intentes insert/update/delete sobre customer_orders/customer_order_items.',
       '- Acceder a datos de otros negocios.',
       '- Modificar usuarios admin, sesiones ni la BD central del sistema.',
       '- Enviar SMS ni hacer llamadas. El UNICO email que puedes enviar es el recordatorio de',
@@ -2275,6 +2310,13 @@ export function register(app, db) {
       '  Para responder consultas de clientes ("cuales tengo en Madrid", "ficha de X") usa esa lista.',
       '',
       'Pedidos y facturacion:',
+      'IMPORTANTE — hay DOS conceptos distintos de "pedido"; no los confundas:',
+      '  · El DOCUMENTO "Pedido" del Pilar 4 (numeros PED-NNNN, pantalla /admin/pedidos, RESERVA stock): en esta',
+      '    version NO se gestiona por chat. Crear/confirmar/anular/eliminar uno → DECLINA y redirige a /admin/pedidos.',
+      '    NO uses create_order/cancel_order/edit_order/update_order_status para esto, NI insert/update/delete sobre',
+      '    customer_orders/customer_order_items. Leerlos (cuantos pendientes, borradores, su cliente) SI puedes.',
+      '  · Las acciones de abajo son del modulo de pedidos de TPV/tienda heredado (sales_orders), NO del documento',
+      '    Pedido PED-NNNN. Usalas solo si el usuario habla claramente de ese flujo antiguo.',
       '- create_order: {"client_id":0,"product_id":0,"product_name":"","quantity":1,"price":null,"notes":""}',
       '  client_id es OBLIGATORIO (identifica al cliente primero). Sin cliente, NO se crea el pedido.',
       '- edit_order: {"order_id":0,"admin_notes":"","tracking_number":""}',

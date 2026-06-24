@@ -193,13 +193,38 @@ export const quoteEmailSchema = z.object({
   to: z.string().trim().max(200).optional().default(''),
 });
 export const quoteConvertSchema = z.object({
-  // destino del motor de conversión: hoy 'invoice' (real); 'ticket' queda registrado pero su
-  // creador se construye con la pieza de TPV.
-  dest: z.enum(['invoice', 'ticket']),
+  // destino del motor de conversión: 'invoice' (real) y 'order' (PIEZA 2a: pedido en borrador,
+  // arrastra líneas). 'ticket' queda registrado pero su creador se construye con la pieza de TPV.
+  dest: z.enum(['invoice', 'order', 'ticket']),
   confirm_excess: z.coerce.boolean().optional().default(false),
 });
 export const quoteFollowSchema = z.object({
   follow_status: z.enum(['aceptado', 'rechazado', 'caducado', '']).optional().default(''),
+});
+
+// ── Pedidos (customer_orders) — Pilar 4 · Pieza 2a ─────────────
+// Línea ESPEJO del presupuesto/factura: catálogo (product_id) o línea libre; unit_price NETO.
+const pedidoLineSchema = z.object({
+  description: str(500),
+  quantity:    z.coerce.number().positive().max(1_000_000),
+  unit_price:  z.coerce.number().nonnegative().max(1_000_000),
+  tax_rate:    z.coerce.number().min(0).max(50).optional().default(0),
+  product_id:  optId,   // línea de catálogo → el servidor re-resuelve el IVA desde la banda del producto
+});
+export const pedidoCreateSchema = z.object({
+  client_id:    intPos,
+  warehouse_id: optWarehouse,            // almacén del que sale la reserva; principal por defecto
+  date:         z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  expected_delivery_date: z.union([z.literal(''), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).optional(),  // INFORMATIVA: no caduca, no libera
+  notes:        strOpt(2000),
+  lines:        z.array(pedidoLineSchema).min(1, 'Al menos una línea requerida'),
+});
+export const pedidoComputeSchema = z.object({
+  client_id: optId,
+  lines:     z.array(pedidoLineSchema).min(1, 'Al menos una línea requerida'),
+});
+export const pedidoAnularSchema = z.object({
+  motivo: z.string().trim().min(3, 'Indica el motivo de la anulación').max(500),
 });
 
 // Ciclo de vida — RECTIFICATIVA: factura nueva (serie propia) que referencia a la
@@ -302,6 +327,7 @@ export const stockAdjustSchema = z.object({
   reason: z.enum(ADJUST_REASONS),
   note:   strOpt(500),
   warehouse_id: optWarehouse,            // Capa 2: almacén del ajuste; principal por defecto
+  confirm_below_reserved: z.coerce.boolean().optional().default(false),   // PIEZA 2a: confirmar dejar el almacén por debajo de lo reservado
 });
 
 // ── Shipping ───────────────────────────────────────────────────
@@ -537,6 +563,7 @@ export const stockTransferSchema = z.object({
   date:              z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   notes:             strOpt(1000),
   items:             z.array(stockTransferItemSchema).min(1, 'Al menos una línea requerida'),
+  confirm_below_reserved: z.coerce.boolean().optional().default(false),   // PIEZA 2a: confirmar dejar el origen por debajo de lo reservado
 });
 
 export const draftOrderSchema = z.object({

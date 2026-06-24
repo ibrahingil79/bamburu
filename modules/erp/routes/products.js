@@ -4,7 +4,7 @@ import { logActivity, requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { productSchema, productImageSchema, variantSchema, tagSchema, stockAdjustSchema } from '../schemas.js';
 import { getVatBands } from '../../../core/vat-bands.js';
-import { adjustStock, kardex, productStock, isPhysical, recordMovement, resolveWarehouseId, TYPE_LABEL, REASON_LABEL } from '../stock.js';
+import { adjustStock, kardex, productStock, isPhysical, recordMovement, resolveWarehouseId, reservedOfProduct, availableOfProduct, TYPE_LABEL, REASON_LABEL } from '../stock.js';
 import { warehouseBreakdown, activeWarehouses } from './warehouses.js';
 import { stockModalHtml, stockModalScript } from '../views/stock-modal.js';
 import { nextCode } from '../codes.js';
@@ -86,7 +86,10 @@ export function createProductRoutes(db, cfg = {}) {
       const products = db.prepare(`SELECT p.*, c.name as category_name, s.name as supplier_name FROM products p LEFT JOIN categories c ON p.category_id=c.id LEFT JOIN suppliers s ON s.id=p.supplier_id ORDER BY p.name`).all();
       const result = products.map(p => {
         const variants = db.prepare('SELECT * FROM product_variants WHERE product_id=? ORDER BY id').all(p.id);
-        return { ...p, variants };
+        // PIEZA 2a — reservado GLOBAL (pedidos confirmados) + disponible = stock − reservado.
+        // Solo físicos reservan; en el resto reserved=0 y available=stock. Aditivo (no rompe lectores de p.stock).
+        const reserved = reservedOfProduct(db, p.id);
+        return { ...p, variants, reserved, available: (p.stock || 0) - reserved };
       });
       return c.json(result);
     } catch(e) { return c.json({error:e.message},500); }
@@ -135,7 +138,10 @@ export function createProductRoutes(db, cfg = {}) {
         created_at: m.created_at, balance: m.balance, reversed: m.reversed, is_reversal: m.is_reversal,
       }));
       // Multi-almacén · Capa 1: desglose por almacén activo (solo lectura; al vuelo).
-      return c.json({ physical: true, stock: productStock(db, id), movements, by_warehouse: warehouseBreakdown(db, id) });
+      // PIEZA 2a: + reservado/disponible GLOBAL y por almacén (warehouseBreakdown ya los trae).
+      const reserved = reservedOfProduct(db, id);
+      const stock = productStock(db, id);
+      return c.json({ physical: true, stock, reserved, available: stock - reserved, movements, by_warehouse: warehouseBreakdown(db, id) });
     } catch(e) { return c.json({ error: e.message }, 500); }
   });
 
@@ -145,7 +151,7 @@ export function createProductRoutes(db, cfg = {}) {
     try {
       const id = parseInt(c.req.param('id'));
       const d = c.get('validated');
-      const res = adjustStock(db, id, { mode: d.mode, value: d.value, reason: d.reason, note: d.note, warehouse_id: d.warehouse_id });
+      const res = adjustStock(db, id, { mode: d.mode, value: d.value, reason: d.reason, note: d.note, warehouse_id: d.warehouse_id }, { confirmBelowReserved: d.confirm_below_reserved });
       logActivity(db, c.get('session'), 'Ajustó stock', 'product', id, `${d.mode} ${d.value} (${d.reason}) → ${res.stock}`);
       return c.json(res);
     } catch(e) { return c.json({ error: e.message }, e.status || 400); }

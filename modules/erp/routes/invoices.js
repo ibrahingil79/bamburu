@@ -3,7 +3,7 @@ import { createHash } from 'crypto';
 import QRCode from 'qrcode';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { checkPermission } from '../../../core/permission-check.js';   // chequeo de permiso programático (condicional)
-import { isPhysical, productStock } from '../stock.js';                 // aviso de exceso de stock al facturar (RAMA B)
+import { isPhysical, productStock, reservedOfProduct } from '../stock.js';   // aviso de exceso al facturar (RAMA B): mira DISPONIBLE = stock − reservado
 import { recordVerifactuAlta, recordVerifactuAnulacion, cotejoUrl } from '../verifactu.js';   // VERI*FACTU T1: registro oficial + QR de cotejo
 import { validate } from '../../../core/validate.js';
 import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema, invoicePaymentSchema, collectionActionSchema } from '../schemas.js';
@@ -394,21 +394,33 @@ export function createRectificativa(db, data) {
 }
 
 // ── Aviso de exceso de stock al facturar (RAMA B: la factura NO mueve stock) ──────────────
-// Por cada línea ENLAZADA a un producto FÍSICO, compara la cantidad con el disponible GLOBAL
-// (suma del libro, sin almacén ni reservas). Devuelve solo las líneas en exceso. Servicios,
-// digitales y líneas libres (sin product_id) no se chequean. No escribe nada.
+// Por cada línea ENLAZADA a un producto FÍSICO, compara la cantidad con el DISPONIBLE GLOBAL
+// = stock − reservado (PIEZA 2a: lo apartado por pedidos confirmados ya NO cuenta como
+// facturable libremente). Devuelve solo las líneas en exceso, con el desglose (stock,
+// reservado, disponible) para que el aviso lo distinga. Servicios, digitales y líneas libres
+// (sin product_id) no se chequean. No escribe nada.
 export function invoiceStockExcess(db, lines) {
   const out = [];
   for (const line of (lines || [])) {
     if (!line.product_id) continue;
     const p = db.prepare('SELECT id, name, type FROM products WHERE id=?').get(line.product_id);
     if (!p || !isPhysical(db, p)) continue;
-    const available = productStock(db, p.id);
+    const stock = productStock(db, p.id);
+    const reserved = reservedOfProduct(db, p.id);
+    const available = stock - reserved;
     const requested = Number(line.quantity) || 0;
     if (requested > available)
-      out.push({ product_id: p.id, name: p.name, available, requested, excess: requested - available });
+      out.push({ product_id: p.id, name: p.name, stock, reserved, available, requested, excess: requested - available });
   }
   return out;
+}
+
+// Frase de aviso de una línea en exceso (compartida servidor↔presupuesto→factura): distingue
+// lo reservado. P.ej.: «"Mesa": hay 5, 2 reservados, disponible 3, facturas 100 — exceso de 97».
+export function excessLineText(x) {
+  return '"' + x.name + '": hay ' + x.stock
+    + (x.reserved > 0 ? ', ' + x.reserved + ' reservados' : '')
+    + ', disponible ' + x.available + ', facturas ' + x.requested + ' — exceso de ' + x.excess;
 }
 
 export function createInvoiceRoutes(db) {
@@ -506,7 +518,7 @@ export function createInvoiceRoutes(db) {
       // por el bypass de requirePerm). Servicios/digitales y líneas libres no se chequean.
       const excess = invoiceStockExcess(db, data.lines);
       if (excess.length) {
-        const detalle = excess.map(x => '"' + x.name + '": hay ' + x.available + ', facturas ' + x.requested + ' — exceso de ' + x.excess).join('; ');
+        const detalle = excess.map(excessLineText).join('; ');
         if (!data.confirm_excess)
           return c.json({ error: 'Hay líneas que superan el stock disponible — ' + detalle + '. Para facturar el exceso confírmalo explícitamente (confirm_excess).', excess }, 400);
         if (!canEmitOverStock(c))
@@ -778,7 +790,7 @@ export function createInvoiceRoutes(db) {
       const SHOW_IRPF = ${showIrpf};
       const IRPF_DEFAULT = ${irpfDefault};   // retención del negocio (precarga; empresa la aplica, particular no)
       const LINE_CELL = ${JSON.stringify(lineSearchCellHtml(
-        '<input type="hidden" class="line-pid"><input type="hidden" class="line-ptype"><input type="hidden" class="line-pstock"><input type="hidden" class="line-pname">' +
+        '<input type="hidden" class="line-pid"><input type="hidden" class="line-ptype"><input type="hidden" class="line-pstock"><input type="hidden" class="line-preserved"><input type="hidden" class="line-pavailable"><input type="hidden" class="line-pname">' +
         '<div class="line-warn" style="display:none;color:var(--warn);font-size:.74rem;margin-top:4px;font-weight:500"></div>'
       ))};  // celda buscador (componente compartido) + enlace al producto y aviso de exceso de stock
       const CAN_OVER = ${canOver};   // dueño/admin (o permiso): puede confirmar el exceso. Si no, se bloquea.
@@ -855,6 +867,9 @@ export function createInvoiceRoutes(db) {
         row.querySelector('.line-pid').value    = p.id;
         row.querySelector('.line-ptype').value  = p.type || 'physical';
         row.querySelector('.line-pstock').value = (p.stock != null ? p.stock : '');
+        // PIEZA 2a — reservado/disponible del catálogo (disponible = stock − reservado).
+        row.querySelector('.line-preserved').value  = (p.reserved != null ? p.reserved : 0);
+        row.querySelector('.line-pavailable').value = (p.available != null ? p.available : (p.stock != null ? p.stock : ''));
         row.querySelector('.line-pname').value  = p.name;
         updateLineWarn(row);
         scheduleRecalc();
@@ -868,16 +883,20 @@ export function createInvoiceRoutes(db) {
         const desc = (row.querySelector('.line-desc').value || '').trim();
         const pname = (row.querySelector('.line-pname').value || '').trim();
         if (desc !== pname) return null;
-        return { id: parseInt(pid.value), type: row.querySelector('.line-ptype').value, stock: parseFloat(row.querySelector('.line-pstock').value) };
+        return { id: parseInt(pid.value), type: row.querySelector('.line-ptype').value, stock: parseFloat(row.querySelector('.line-pstock').value),
+                 reserved: parseFloat(row.querySelector('.line-preserved').value) || 0,
+                 available: parseFloat(row.querySelector('.line-pavailable').value) };
       }
 
-      // Aviso EN LA LÍNEA: producto físico con cantidad > disponible. "Disponible" = stock global.
+      // Aviso EN LA LÍNEA: producto físico con cantidad > DISPONIBLE (= stock − reservado). El
+      // mensaje distingue lo reservado por pedidos confirmados.
       function updateLineWarn(row){
         const w = row.querySelector('.line-warn'); if (!w) return;
         const prod = lineProduct(row);
         const qty = parseFloat(row.querySelector('.line-qty').value) || 0;
-        if (prod && prod.type === 'physical' && isFinite(prod.stock) && qty > prod.stock) {
-          w.textContent = 'Hay ' + prod.stock + ', facturas ' + qty + ' — exceso de ' + (qty - prod.stock);
+        const avail = prod && isFinite(prod.available) ? prod.available : (prod ? prod.stock : NaN);
+        if (prod && prod.type === 'physical' && isFinite(avail) && qty > avail) {
+          w.textContent = 'Hay ' + prod.stock + (prod.reserved > 0 ? ', ' + prod.reserved + ' reservados' : '') + ', disponible ' + avail + ', facturas ' + qty + ' — exceso de ' + (qty - avail);
           w.style.display = '';
         } else { w.style.display = 'none'; w.textContent = ''; }
       }
@@ -955,8 +974,9 @@ export function createInvoiceRoutes(db) {
           if (!(price >= 0)) { toast('Precio inválido','err'); return; }
           const prod = lineProduct(r);
           lines.push({ description: desc, quantity: qty, unit_price: price, tax_rate: rate, product_id: prod ? prod.id : null });
-          if (prod && prod.type === 'physical' && isFinite(prod.stock) && qty > prod.stock)
-            excess.push('· "' + desc + '": hay ' + prod.stock + ', facturas ' + qty + ' — exceso de ' + (qty - prod.stock));
+          const avail = prod && isFinite(prod.available) ? prod.available : (prod ? prod.stock : NaN);
+          if (prod && prod.type === 'physical' && isFinite(avail) && qty > avail)
+            excess.push('· "' + desc + '": hay ' + prod.stock + (prod.reserved > 0 ? ', ' + prod.reserved + ' reservados' : '') + ', disponible ' + avail + ', facturas ' + qty + ' — exceso de ' + (qty - avail));
         }
         if (lines.length === 0) { toast('Añade al menos una línea','err'); return; }
         // Exceso de stock: nunca en silencio. Sin permiso → bloqueado (baja la cantidad). Con

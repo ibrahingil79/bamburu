@@ -42,6 +42,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     'stock-transfers': 'inventory.read',
     discounts:        'discounts.read',
     quotes:           'quotes.read',
+    pedidos:          'pedidos.read',
     invoices:         'invoices.read',
     cobros:           'invoices.read',
     pagos:            'purchases.read',
@@ -84,6 +85,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     ]},
     { section: 'Ventas', items: [
       { href: '/admin/quotes', label: 'Presupuestos', key: 'quotes', icon: 'ti-file-text' },
+      { href: '/admin/pedidos', label: 'Pedidos', key: 'pedidos', icon: 'ti-clipboard-list' },
       { href: '/admin/invoices', label: 'Facturas', key: 'invoices', icon: 'ti-file-invoice' },
       { href: '/admin/cobros', label: 'Cobros', key: 'cobros', icon: 'ti-cash' },
       { href: '/admin/orders/pos', label: 'TPV', key: 'pos', icon: 'ti-cash-register' },

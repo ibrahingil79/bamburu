@@ -5,9 +5,10 @@ import { requirePerm, logActivity } from '../../../core/auth.js';
 import { checkPermission } from '../../../core/permission-check.js';
 import { quoteCreateSchema, quoteComputeSchema, quoteAnularSchema, quoteConvertSchema, quoteFollowSchema, quoteEmailSchema } from '../schemas.js';
 import { nextCode } from '../codes.js';
-import { computeTotals, createInvoice, invoiceStockExcess } from './invoices.js';
+import { computeTotals, createInvoice, invoiceStockExcess, excessLineText } from './invoices.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { sendEmail } from '../../../core/mailer.js';
+import { createPedidoSvc } from './pedidos.js';   // PIEZA 2a: presupuesto → pedido (motor de conversión)
 
 // ════════════════════════════════════════════════════════════════════════════
 // PILAR 4 · VENTAS · PIEZA 1 — PRESUPUESTO + MOTOR DE CONVERSIÓN.
@@ -183,14 +184,36 @@ export function convertQuoteSvc(db, id, dest) {
   if (!q) { const e = new Error('Presupuesto no encontrado'); e.status = 404; throw e; }
   if (q.status !== 'emitido') { const e = new Error('Solo se puede convertir un presupuesto emitido'); e.status = 400; throw e; }
   if (dest === 'ticket') { const e = new Error('La conversión a TICKET se construye con la pieza de TPV (mostrador). Por ahora, convierte a factura.'); e.status = 501; throw e; }
-  if (dest !== 'invoice') { const e = new Error('Destino de conversión no soportado'); e.status = 400; throw e; }
+  if (dest !== 'invoice' && dest !== 'order') { const e = new Error('Destino de conversión no soportado'); e.status = 400; throw e; }
+  const items = db.prepare('SELECT * FROM quote_items WHERE quote_id=? ORDER BY id').all(id);
+  const lines = items.map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price, tax_rate: i.tax_rate, product_id: i.product_id || undefined }));
+
+  // PIEZA 2a — presupuesto → PEDIDO (en BORRADOR): arrastra las líneas a un pedido nuevo
+  // (sin número, sin reserva) que el usuario revisa —almacén, entrega prevista— y confirma.
+  // Materializa el "siguiente paso que se propone". Enlace bidireccional en document_links.
+  if (dest === 'order') {
+    const already = db.prepare("SELECT dest_id FROM document_links WHERE source_type='quote' AND source_id=? AND dest_type='order'").get(id);
+    if (already) {
+      const ped = db.prepare('SELECT order_number, status FROM customer_orders WHERE id=?').get(already.dest_id);
+      const ref = ped ? (ped.order_number || ('borrador #' + already.dest_id)) : ('#' + already.dest_id);
+      const e = new Error('Este presupuesto ya se convirtió al pedido ' + ref + '.'); e.status = 400; throw e;
+    }
+    const run = db.transaction(() => {
+      const pid = createPedidoSvc(db, {
+        client_id: q.client_id, lines,
+        notes: 'Procede del presupuesto ' + (q.quote_number || ('#' + id)),
+      });
+      db.prepare("INSERT INTO document_links (source_type, source_id, dest_type, dest_id) VALUES ('quote', ?, 'order', ?)").run(id, pid);
+      return { dest: 'order', order_id: pid };
+    });
+    return run();
+  }
+
   const already = db.prepare("SELECT dest_id FROM document_links WHERE source_type='quote' AND source_id=? AND dest_type='invoice'").get(id);
   if (already) {
     const inv = db.prepare('SELECT invoice_number FROM invoices WHERE id=?').get(already.dest_id);
     const e = new Error('Este presupuesto ya se convirtió a la factura ' + (inv ? inv.invoice_number : '#' + already.dest_id) + '.'); e.status = 400; throw e;
   }
-  const items = db.prepare('SELECT * FROM quote_items WHERE quote_id=? ORDER BY id').all(id);
-  const lines = items.map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price, tax_rate: i.tax_rate, product_id: i.product_id || undefined }));
   const run = db.transaction(() => {
     const inv = createInvoice(db, {
       client_id: q.client_id, lines, irpf_rate: q.irpf_rate,
@@ -433,13 +456,17 @@ export function createQuoteRoutes(db) {
           const items = db.prepare('SELECT description, quantity, unit_price, tax_rate, product_id FROM quote_items WHERE quote_id=?').all(id);
           const excess = invoiceStockExcess(db, items);
           if (excess.length) {
-            const detalle = excess.map(x => '"' + x.name + '": hay ' + x.available + ', facturas ' + x.requested + ' — exceso de ' + x.excess).join('; ');
+            const detalle = excess.map(excessLineText).join('; ');
             if (!confirm_excess) return c.json({ error: 'La factura supera el stock disponible — ' + detalle + '. Confirma el exceso para convertir (confirm_excess).', excess }, 400);
             if (!canEmitOverStock(c)) return c.json({ error: 'No tienes permiso para facturar con exceso de stock. Solo el dueño o un administrador pueden hacerlo.' }, 403);
           }
         }
       }
       const r = convertQuoteSvc(db, id, dest);
+      if (r.dest === 'order') {
+        logActivity(db, c.get('session'), 'Convirtió presupuesto a pedido', 'quote', id, 'pedido #' + r.order_id);
+        return c.json({ ...r, message: 'Presupuesto convertido a un pedido (borrador). Revísalo y confírmalo para reservar el stock.' });
+      }
       logActivity(db, c.get('session'), 'Convirtió presupuesto a factura', 'quote', id, r.invoice_number || '');
       return c.json({ ...r, message: 'Presupuesto convertido a la factura ' + r.invoice_number });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
@@ -653,16 +680,18 @@ export function createQuoteRoutes(db) {
     // Enlaces de conversión (bidireccional): factura/ticket creados desde este presupuesto.
     const convs = db.prepare("SELECT * FROM document_links WHERE source_type='quote' AND source_id=?").all(id);
     const convLinks = convs.map(l => {
-      if (l.dest_type === 'invoice') { const inv = db.prepare('SELECT id, invoice_number FROM invoices WHERE id=?').get(l.dest_id); return inv ? `<a href="/admin/invoices/${inv.id}" style="color:inherit;font-weight:600">${esc(inv.invoice_number)}</a>` : null; }
+      if (l.dest_type === 'invoice') { const inv = db.prepare('SELECT id, invoice_number FROM invoices WHERE id=?').get(l.dest_id); return inv ? `factura <a href="/admin/invoices/${inv.id}" style="color:inherit;font-weight:600">${esc(inv.invoice_number)}</a>` : null; }
+      if (l.dest_type === 'order') { const ped = db.prepare('SELECT id, order_number FROM customer_orders WHERE id=?').get(l.dest_id); return ped ? `pedido <a href="/admin/pedidos/${ped.id}" style="color:inherit;font-weight:600">${esc(ped.order_number || ('borrador #' + ped.id))}</a>` : null; }
       return null;
     }).filter(Boolean);
+    const hasOrderLink = convs.some(l => l.dest_type === 'order');
     const replacedBy = db.prepare('SELECT id, quote_number, status FROM quotes WHERE replaces_quote_id=? ORDER BY id DESC LIMIT 1').get(id) || null;
     const replacesPrev = q.replaces_quote_id ? (db.prepare('SELECT id, quote_number FROM quotes WHERE id=?').get(q.replaces_quote_id) || null) : null;
 
     let lifecycle = '';
     if (q.status === 'anulado') lifecycle += `<div class="alert alert-err" style="margin-bottom:18px"><strong>Presupuesto anulado.</strong> Motivo: ${esc(q.anulada_motivo || '')}.${replacedBy ? ` La sustituye <a href="/admin/quotes/${replacedBy.id}" style="color:inherit;font-weight:600">${esc(replacedBy.quote_number || ('borrador #' + replacedBy.id))}</a>.` : ''}</div>`;
     if (replacesPrev) lifecycle += `<div class="alert alert-warn" style="margin-bottom:18px">Sustituye a <a href="/admin/quotes/${replacesPrev.id}" style="color:inherit;font-weight:600">${esc(replacesPrev.quote_number || ('borrador #' + replacesPrev.id))}</a> (anulado).</div>`;
-    if (convLinks.length) lifecycle += `<div class="alert" style="margin-bottom:18px;background:#e0f2fe;color:#075985;border:1px solid #bae6fd">Convertido a factura: ${convLinks.join(', ')}.</div>`;
+    if (convLinks.length) lifecycle += `<div class="alert" style="margin-bottom:18px;background:#e0f2fe;color:#075985;border:1px solid #bae6fd">Convertido a: ${convLinks.join(', ')}.</div>`;
     if (q.follow_status) lifecycle += `<div class="alert" style="margin-bottom:18px;background:#f1f5f9;color:#334155;border:1px solid #e2e8f0">Seguimiento: <strong>${esc(q.follow_status)}</strong>.</div>`;
 
     const paper = `${lifecycle}${quoteDocumentBodyHtml(q, items, emisor, cliente, sym)}`;
@@ -681,6 +710,7 @@ export function createQuoteRoutes(db) {
     ${isBorrador && can(c, 'quotes.edit') ? `<a href="/admin/quotes/${id}/edit" class="btn btn-secondary">Editar</a><button onclick="emitir()" class="btn btn-primary">Emitir presupuesto</button>` : ''}
     ${isEmitido && can(c, 'quotes.edit') ? `
       <button onclick="emailQuote()" class="btn btn-secondary">Enviar por email</button>
+      ${hasOrderLink ? '' : '<button onclick="crearPedido()" class="btn btn-primary">Crear pedido</button>'}
       <button onclick="convertir('invoice')" class="btn btn-primary">Convertir a factura</button>
       <button class="btn btn-secondary" disabled title="Se construye con la pieza de TPV (mostrador)">Convertir a ticket (próximamente)</button>
       <div style="display:flex;gap:.4rem;margin-top:.3rem">
@@ -704,6 +734,9 @@ export function createQuoteRoutes(db) {
     if (!String(to).trim()){ alert('Indica un correo de destino'); return; }
     try{ const d=await call('/email', { to: String(to).trim() }); alert(d.message); }catch(e){ alert(e.message); }
   }
+  async function crearPedido(){ if(!confirm('Crear un PEDIDO a partir de este presupuesto? Se creará un pedido en borrador con sus líneas; lo revisas (almacén, entrega) y lo confirmas para reservar el stock.')) return;
+    try{ const d=await call('/convert',{dest:'order'}); location.href='/admin/pedidos/'+d.order_id; }
+    catch(e){ alert(e.message); } }
   async function convertir(dest){ if(!confirm('Convertir este presupuesto a factura? Se creará una factura real con sus líneas.')) return;
     try{ const d=await call('/convert',{dest}); location.href='/admin/invoices/'+d.invoice_id; }
     catch(e){ if(/exceso|excede|supera el stock/i.test(e.message) && confirm(e.message+'\\n\\n¿Confirmar el exceso y convertir igualmente?')){ try{ const d=await call('/convert',{dest,confirm_excess:true}); location.href='/admin/invoices/'+d.invoice_id; }catch(e2){ alert(e2.message); } } else { alert(e.message); } } }

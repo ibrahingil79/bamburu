@@ -52,6 +52,41 @@ export function productStockInWarehouse(db, productId, warehouseId) {
     .get(productId, warehouseId).s;
 }
 
+// ── PILAR 4 · VENTAS · PIEZA 2a — RESERVA DE STOCK (capa derivada) ──────────
+// "Reservado" = lo que un PEDIDO de venta confirmado APARTA para un cliente sin sacarlo
+// del almacén. Es una CAPA APARTE del stock físico: NO escribe en el libro stock_movements
+// (la reserva no es un movimiento físico). Su fuente de verdad —misma filosofía que el
+// stock— es la SUMA DERIVADA de las líneas de pedidos CONFIRMADOS y NO entregados, por
+// producto y por almacén; nunca una columna manual que pueda descuadrar. Solo cuenta
+// productos FÍSICOS (servicios, digitales y líneas libres no reservan nada).
+//
+// reservadoDeProducto(producto, almacén?) — almacén omitido = GLOBAL (todos los almacenes).
+export function reservedOfProduct(db, productId, warehouseId = null) {
+  if (!isPhysical(db, productId)) return 0;
+  if (warehouseId == null) {
+    return db.prepare(
+      `SELECT COALESCE(SUM(oi.quantity),0) r FROM customer_order_items oi
+         JOIN customer_orders o ON o.id = oi.order_id
+        WHERE oi.product_id=? AND o.status='confirmado'`
+    ).get(productId).r;
+  }
+  return db.prepare(
+    `SELECT COALESCE(SUM(oi.quantity),0) r FROM customer_order_items oi
+       JOIN customer_orders o ON o.id = oi.order_id
+      WHERE oi.product_id=? AND o.status='confirmado' AND o.warehouse_id=?`
+  ).get(productId, warehouseId).r;
+}
+
+// disponibleDeProducto(...) = stock − reservado. almacén omitido = GLOBAL; con almacén,
+// disponible EN ESE ALMACÉN. Es el número que pasan a mirar TPV, el aviso de exceso al
+// facturar, la lectura de DISA, el inventario y las guardas de ajuste/traslado.
+export function availableOfProduct(db, productId, warehouseId = null) {
+  const stock = warehouseId == null
+    ? productStock(db, productId)
+    : productStockInWarehouse(db, productId, warehouseId);
+  return stock - reservedOfProduct(db, productId, warehouseId);
+}
+
 // Resuelve el almacén de una operación: el pedido si es un almacén ACTIVO válido; si no
 // ('' / null / inexistente / archivado), el principal. Centraliza "selector vacío → principal".
 export function resolveWarehouseId(db, requested) {
@@ -152,6 +187,21 @@ export function adjustStock(db, productId, { mode, value, reason, note, warehous
   const current = productStockInWarehouse(db, productId, wid);
   const delta = mode === 'set' ? (v - current) : mode === 'add' ? v : -v;
   if (delta === 0) return { stock: current, warehouse_id: wid, movement_id: null, delta: 0, message: 'Sin cambios' };
+
+  // PIEZA 2a — GUARDA DE INTEGRIDAD DE LA RESERVA (aviso-confirmado, nunca en silencio):
+  // un ajuste no puede dejar el almacén POR DEBAJO de lo reservado allí sin que el usuario lo
+  // confirme. No bloquea (política de ajuste libre), pero avisa con el desglose de la reserva.
+  if (delta < 0 && !opts.confirmBelowReserved) {
+    const reserved = reservedOfProduct(db, productId, wid);
+    const after = current + delta;
+    if (reserved > 0 && after < reserved) {
+      const wh = db.prepare('SELECT name FROM warehouses WHERE id=?').get(wid);
+      const e = new Error('Este ajuste dejaría ' + after + ' de "' + product.name + '" en ' + (wh ? wh.name : 'el almacén')
+        + ', y hay ' + reserved + ' reservados por pedidos confirmados (quedarían ' + (after - reserved)
+        + ' libres). Confírmalo para ajustar igualmente (confirm_below_reserved).');
+      e.status = 409; e.below_reserved = { after, reserved, warehouse_id: wid }; throw e;
+    }
+  }
 
   const movement_id = recordMovement(db, {
     product_id: productId, type: 'ajuste', quantity: delta, reason,

@@ -1213,6 +1213,64 @@ export function runMigrations(db) {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_doclinks_source ON document_links(source_type, source_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_doclinks_dest   ON document_links(dest_type, dest_id)`);
 
+  // ── PILAR 4 · VENTAS · PIEZA 2a — PEDIDO (customer_orders) ─────────────────
+  // Documento PEDIDO de venta en firme, ESPEJO del PRESUPUESTO (quotes): mismo ciclo
+  // borrador (editable, sin número, sin reserva) → confirmado (gana PED-NNNN vía code_counters
+  // y se bloquea; aquí nace la RESERVA de stock) → anulado (con motivo; suelta la reserva;
+  // corregir = anular y rehacer, vía replaces_order_id). Foto congelada de emisor + cliente AL
+  // CONFIRMAR. Totales con la MISMA matemática de la factura (base + IVA por tasa + IRPF). A
+  // diferencia del presupuesto: lleva ALMACÉN (la reserva sale de ese almacén) y una fecha de
+  // entrega prevista INFORMATIVA (no caduca, no libera). NO reutiliza el clúster e-commerce
+  // viejo (sales_orders). 'entregado' queda en el CHECK reservado para la PIEZA 2b (albarán):
+  // hoy NUNCA se asigna; permitirlo ahora evita una migración con rebuild después. La RESERVA
+  // es una capa derivada (suma de líneas de pedidos confirmados); NO escribe en stock_movements.
+  // Aditiva e idempotente. DISA NO escribe pedidos (fuera de WRITABLE_TABLES).
+  db.exec(`CREATE TABLE IF NOT EXISTS customer_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_number TEXT,
+    client_id INTEGER NOT NULL,
+    warehouse_id INTEGER,
+    status TEXT NOT NULL DEFAULT 'borrador' CHECK(status IN ('borrador','confirmado','anulado','entregado')),
+    date DATE NOT NULL,
+    expected_delivery_date DATE,
+    notes TEXT DEFAULT '',
+    replaces_order_id INTEGER,
+    anulada_motivo TEXT,
+    company_name TEXT, company_fiscal_id TEXT, company_address TEXT, company_phone TEXT, company_email TEXT,
+    client_name TEXT, client_fiscal_id TEXT, client_address TEXT, client_email TEXT,
+    subtotal REAL NOT NULL DEFAULT 0,
+    tax_amount REAL NOT NULL DEFAULT 0,
+    irpf_rate REAL NOT NULL DEFAULT 0,
+    irpf_amount REAL NOT NULL DEFAULT 0,
+    total REAL NOT NULL DEFAULT 0,
+    currency TEXT DEFAULT 'EUR',
+    currency_symbol TEXT DEFAULT '€',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id) REFERENCES clients(id),
+    FOREIGN KEY (warehouse_id) REFERENCES warehouses(id),
+    FOREIGN KEY (replaces_order_id) REFERENCES customer_orders(id)
+  )`);
+  // Líneas: ESPEJO de quote_items — catálogo (product_id + IVA por banda) o línea libre
+  // (product_id NULL, IVA 21%). unit_price NETO. La reserva solo cuenta las líneas con
+  // product_id de producto FÍSICO (servicios/digitales/libres no reservan: lo decide el motor).
+  db.exec(`CREATE TABLE IF NOT EXISTS customer_order_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL,
+    product_id INTEGER,
+    description TEXT NOT NULL,
+    quantity REAL NOT NULL DEFAULT 1,
+    unit_price REAL NOT NULL DEFAULT 0,
+    total_price REAL NOT NULL DEFAULT 0,
+    tax_rate REAL NOT NULL DEFAULT 0,
+    tax_amount REAL NOT NULL DEFAULT 0,
+    FOREIGN KEY (order_id) REFERENCES customer_orders(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id)
+  )`);
+  // El "reservado" se deriva al vuelo de estas líneas (pedidos confirmados, por producto y
+  // almacén): este índice acelera ese agregado. Aditivo, idempotente.
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_customer_order_items_product ON customer_order_items(product_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_customer_orders_status ON customer_orders(status, warehouse_id)`);
+
   // ── T4 Paso 1: motor de cobros (estado de cobro de la factura) ─────────────
   // Cobros (totales o parciales) de una factura. Una factura puede tener varios.
   // El ESTADO de cobro NO se guarda: se calcula siempre en vivo (modules/erp/cobros.js)
@@ -1462,6 +1520,9 @@ export function runMigrations(db) {
     { module: 'quotes',    action: 'read',    description: 'Ver presupuestos' },
     { module: 'quotes',    action: 'create',  description: 'Crear presupuestos' },
     { module: 'quotes',    action: 'edit',    description: 'Editar/emitir presupuestos' },
+    { module: 'pedidos',   action: 'read',    description: 'Ver pedidos' },
+    { module: 'pedidos',   action: 'create',  description: 'Crear pedidos' },
+    { module: 'pedidos',   action: 'edit',    description: 'Editar/confirmar/anular pedidos' },
   ];
   for (const p of permissionsData) {
     db.prepare('INSERT OR IGNORE INTO permissions (module, action, description) VALUES (?, ?, ?)').run(p.module, p.action, p.description);
@@ -1474,6 +1535,7 @@ export function runMigrations(db) {
                  'clients.read','clients.create','clients.edit',
                  'invoices.read','invoices.create','sales.emit_over_stock',
                  'quotes.read','quotes.create','quotes.edit',
+                 'pedidos.read','pedidos.create','pedidos.edit',
                  'admin.manage_users','admin.manage_roles','admin.settings'],
     Seller:     ['products.read',
                  'orders.read','orders.create','orders.edit','orders.update_status',

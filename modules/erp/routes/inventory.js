@@ -38,7 +38,7 @@ export function createInventoryRoutes(db, cfg = {}) {
       <div class="card">
         <div class="card-head"><h3>Existencias (productos físicos)</h3><input class="search" id="searchBox" placeholder="Buscar nombre o SKU..." oninput="filterTable()"></div>
         <div class="table-wrap"><table>
-          <thead><tr><th>Producto</th><th>SKU</th><th>Categoría</th><th>Stock</th><th>Coste medio</th><th>Valor</th><th>Estado</th><th></th></tr></thead>
+          <thead><tr><th>Producto</th><th>SKU</th><th>Categoría</th><th>Stock</th><th>Reservado</th><th>Disponible</th><th>Coste medio</th><th>Valor</th><th>Estado</th><th></th></tr></thead>
           <tbody id="invBody"></tbody>
         </table></div>
       </div>
@@ -51,9 +51,12 @@ export function createInventoryRoutes(db, cfg = {}) {
       let prods=[];
       let WH='';            // '' = Todos (total global); si no, id de almacén
       window.stockFilterWarehouse = '';   // Capa 2: el ajuste por defecto usa el almacén del filtro activo
-      let whMap=null;       // mapa product_id -> cantidad en el almacén WH (null si Todos)
+      let whMap=null;       // mapa product_id -> {qty,reserved,available} en el almacén WH (null si Todos)
       // Cantidad a mostrar de un producto: global (caché) si "Todos", o por almacén (al vuelo).
-      function stockOf(p){ return WH==='' ? (p.stock||0) : (whMap && whMap[p.id]!=null ? whMap[p.id] : 0); }
+      function stockOf(p){ return WH==='' ? (p.stock||0) : (whMap && whMap[p.id]!=null ? whMap[p.id].qty : 0); }
+      // PIEZA 2a — reservado/disponible: global (de la lista de productos) o por almacén (del mapa).
+      function reservedOf(p){ return WH==='' ? (p.reserved||0) : (whMap && whMap[p.id]!=null ? (whMap[p.id].reserved||0) : 0); }
+      function availableOf(p){ return WH==='' ? (p.available!=null?p.available:(p.stock||0)) : (whMap && whMap[p.id]!=null ? (whMap[p.id].available!=null?whMap[p.id].available:whMap[p.id].qty) : 0); }
       async function loadInv(){
         let all;
         try { all = await api('GET','/api/erp/products'); } catch(e){ toast(e.message||'Error','err'); return; }
@@ -68,7 +71,7 @@ export function createInventoryRoutes(db, cfg = {}) {
         else {
           try {
             const rows = await api('GET','/api/erp/warehouses/'+WH+'/stock');
-            whMap = {}; (rows||[]).forEach(function(r){ whMap[r.product_id]=r.qty; });
+            whMap = {}; (rows||[]).forEach(function(r){ whMap[r.product_id]=r; });
           } catch(e){ toast(e.message||'Error','err'); return; }
         }
         const lbl = WH==='' ? 'Valor del almacén' : 'Valor (almacén seleccionado)';
@@ -99,14 +102,15 @@ export function createInventoryRoutes(db, cfg = {}) {
             + (CAN_EDIT?' <button class="btn btn-primary btn-sm" onclick="openAjustar('+p.id+',\\''+escHtml(nm)+'\\','+p.stock+')">Ajustar</button>':'');
           const avg=Number(p.average_cost||0);
           const val=avg*s;
-          return '<tr><td><strong>'+escHtml(p.name)+'</strong></td><td style="color:var(--muted)">'+escHtml(p.sku||'-')+'</td><td>'+escHtml(p.category_name||'-')+'</td><td><strong style="color:'+(s<5?'#ef4444':'inherit')+'">'+s+'</strong></td><td>${sym}'+avg.toFixed(2)+'</td><td>${sym}'+val.toFixed(2)+'</td><td><span class="badge '+b[st]+'">'+sl[st]+'</span></td><td style="white-space:nowrap">'+acts+'</td></tr>';
-        }).join(''):'<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--muted)">Sin productos físicos</td></tr>';
+          const rsv=reservedOf(p), avl=availableOf(p);
+          return '<tr><td><strong>'+escHtml(p.name)+'</strong></td><td style="color:var(--muted)">'+escHtml(p.sku||'-')+'</td><td>'+escHtml(p.category_name||'-')+'</td><td><strong style="color:'+(s<5?'#ef4444':'inherit')+'">'+s+'</strong></td><td style="color:'+(rsv>0?'#9333ea':'var(--muted)')+'">'+rsv+'</td><td><strong style="color:'+(avl<0?'#ef4444':'inherit')+'">'+avl+'</strong></td><td>${sym}'+avg.toFixed(2)+'</td><td>${sym}'+val.toFixed(2)+'</td><td><span class="badge '+b[st]+'">'+sl[st]+'</span></td><td style="white-space:nowrap">'+acts+'</td></tr>';
+        }).join(''):'<tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--muted)">Sin productos físicos</td></tr>';
       }
       // Tras ajustar/revertir desde el componente compartido, refresca todo (la caché global
       // cambió y, si hay un almacén filtrado, también su mapa al vuelo).
       window.stockOnSaved = async function(id){
         try { const all = await api('GET','/api/erp/products'); prods=(all||[]).filter(p=>(p.type||'physical')==='physical'); } catch(e){}
-        if (WH!==''){ try { const rows=await api('GET','/api/erp/warehouses/'+WH+'/stock'); whMap={}; (rows||[]).forEach(function(r){ whMap[r.product_id]=r.qty; }); } catch(e){} }
+        if (WH!==''){ try { const rows=await api('GET','/api/erp/warehouses/'+WH+'/stock'); whMap={}; (rows||[]).forEach(function(r){ whMap[r.product_id]=r; }); } catch(e){} }
         render();
       };
       loadInv();
