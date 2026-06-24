@@ -227,6 +227,30 @@ export const pedidoAnularSchema = z.object({
   motivo: z.string().trim().min(3, 'Indica el motivo de la anulación').max(500),
 });
 
+// ── Albaranes / entregas (delivery_notes) — Pilar 4 · Pieza 2b ─────────────
+// Línea de albarán: desde pedido (order_item_id) o suelta (product_id de catálogo / línea libre).
+// quantity positiva (entrega parcial = a la baja sobre el pendiente). unit_price NETO.
+const albaranLineSchema = z.object({
+  order_item_id: optId,   // línea del pedido que entrega (NULL en albarán suelto)
+  product_id:    optId,   // línea de catálogo → re-resuelve IVA por banda; NULL = línea libre (no mueve stock)
+  description:   str(500),
+  quantity:      z.coerce.number().positive().max(1_000_000),
+  unit_price:    z.coerce.number().nonnegative().max(1_000_000),
+  tax_rate:      z.coerce.number().min(0).max(50).optional().default(0),
+});
+export const albaranCreateSchema = z.object({
+  order_id:     optId,                   // entrega DESDE un pedido confirmado; ausente = albarán suelto
+  client_id:    optId,                   // obligatorio en el suelto (sin pedido); en el de pedido se toma del pedido
+  warehouse_id: optWarehouse,            // almacén de SALIDA; principal por defecto / el del pedido
+  date:         z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  notes:        strOpt(2000),
+  lines:        z.array(albaranLineSchema).min(1, 'Al menos una línea requerida'),
+  confirm_over: z.coerce.boolean().optional().default(false),   // confirmar entregar por encima del disponible (aviso-confirmado)
+});
+export const albaranAnularSchema = z.object({
+  motivo: z.string().trim().min(3, 'Indica el motivo de la anulación').max(500),
+});
+
 // Ciclo de vida — RECTIFICATIVA: factura nueva (serie propia) que referencia a la
 // original. ADMITE IMPORTES NEGATIVOS (abono): a diferencia de la factura ordinaria,
 // quantity y unit_price pueden ser negativos para devoluciones/anulación de operación.

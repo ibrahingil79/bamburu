@@ -23,6 +23,7 @@ import { createPurchaseCaptureRoutes } from './purchases-capture.js';
 import { createPurchaseOrderRoutes } from './purchase-orders.js';
 import { createQuoteRoutes } from './quotes.js';
 import { createPedidoRoutes } from './pedidos.js';
+import { createAlbaranRoutes } from './albaranes.js';
 import { createPurchaseOrderReceiptRoutes } from './purchase-order-receipts.js';
 import { createSupplierReturnRoutes } from './supplier-returns.js';
 import { createStockTransferRoutes } from './stock-transfers.js';
@@ -74,6 +75,7 @@ export function mountRoutes(app, db) {
   const { api: pagosApi, views: pagosViews } = createPagosRoutes(db);
   const { api: quoteApi, views: quoteViews } = createQuoteRoutes(db);
   const { api: pedidoApi, views: pedidoViews } = createPedidoRoutes(db);
+  const { api: albaranApi, views: albaranViews } = createAlbaranRoutes(db);
 
   // ── Protected admin views ──────────────────────────────────────
   const admin = new Hono();
@@ -109,6 +111,7 @@ export function mountRoutes(app, db) {
   admin.route('/feedback', feedbackViews);
   admin.route('/quotes', quoteViews);
   admin.route('/pedidos', pedidoViews);
+  admin.route('/albaranes', albaranViews);
   admin.route('/invoices', invoiceViews);
   admin.route('/cobros', cobrosViews);
   admin.route('/supplier-invoices', supplierInvoiceViews);
@@ -143,6 +146,7 @@ export function mountRoutes(app, db) {
   apiApp.route('/feedback', feedbackApi);
   apiApp.route('/quotes', quoteApi);
   apiApp.route('/pedidos', pedidoApi);
+  apiApp.route('/albaranes', albaranApi);
   apiApp.route('/invoices', invoiceApi);
   apiApp.route('/cobros', cobrosApi);
   apiApp.route('/supplier-invoices', supplierInvoiceApi);

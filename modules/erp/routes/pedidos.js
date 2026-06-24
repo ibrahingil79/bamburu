@@ -4,10 +4,11 @@ import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { pedidoCreateSchema, pedidoComputeSchema, pedidoAnularSchema } from '../schemas.js';
 import { nextCode } from '../codes.js';
-import { computeTotals } from './invoices.js';
+import { computeTotals, createInvoice } from './invoices.js';
 import { resolveWarehouseId, reservedOfProduct } from '../stock.js';
 import { activeWarehouses } from './warehouses.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
+import { orderDeliveryState } from './albaranes.js';   // PIEZA 2b: estado de entrega + atajo a factura
 
 // ════════════════════════════════════════════════════════════════════════════
 // PILAR 4 · VENTAS · PIEZA 2a — PEDIDO + RESERVA DE STOCK.
@@ -153,6 +154,12 @@ export function cancelPedidoSvc(db, id, motivo) {
   const o = db.prepare('SELECT * FROM customer_orders WHERE id=?').get(id);
   if (!o) { const e = new Error('Pedido no encontrado'); e.status = 404; throw e; }
   if (o.status !== 'confirmado') { const e = new Error('Solo se puede anular un pedido confirmado'); e.status = 400; throw e; }
+  // PIEZA 2b — integridad bidireccional (espejo de compras): no se anula un pedido con
+  // albaranes (entregas) confirmados; hay que anular antes esos albaranes (si no, el stock
+  // ya entregado quedaría descuadrado y la reserva se perdería en silencio).
+  if (db.prepare("SELECT 1 FROM delivery_notes WHERE order_id=? AND status='confirmado' LIMIT 1").get(id)) {
+    const e = new Error('Este pedido tiene albaranes (entregas) confirmados: anúlalos primero (devuelven el stock y la reserva) antes de anular el pedido.'); e.status = 409; throw e;
+  }
   db.prepare("UPDATE customer_orders SET status='anulado', anulada_motivo=? WHERE id=?").run(m, id);
   return { id, order_number: o.order_number };
 }
@@ -174,6 +181,30 @@ export function cancelRedoPedidoSvc(db, id, motivo, opts = {}) {
       ins.run(newId, it.product_id, it.description, it.quantity, it.unit_price, it.total_price, it.tax_rate, it.tax_amount);
     }
     return { id: newId, anulada_id: id, anulada_number: anulada.order_number };
+  });
+  return run();
+}
+
+// ── MOTOR DE CONVERSIÓN: pedido → FACTURA (atajo, cadena suelta) ─────────────
+// Factura el pedido directamente (como presupuesto→factura), arrastrando sus líneas, con
+// enlace bidireccional. La factura NO mueve stock (lo mueve el albarán) y NO consume la
+// reserva: se puede facturar antes de entregar. Sin gate de exceso (las unidades son del
+// propio pedido reservado: aplicarlo daría un falso positivo contra su propia reserva).
+export function orderToInvoiceSvc(db, id) {
+  const o = db.prepare('SELECT * FROM customer_orders WHERE id=?').get(id);
+  if (!o) { const e = new Error('Pedido no encontrado'); e.status = 404; throw e; }
+  if (o.status !== 'confirmado') { const e = new Error('Solo se puede facturar un pedido confirmado'); e.status = 400; throw e; }
+  const already = db.prepare("SELECT dest_id FROM document_links WHERE source_type='order' AND source_id=? AND dest_type='invoice'").get(id);
+  if (already) {
+    const inv = db.prepare('SELECT invoice_number FROM invoices WHERE id=?').get(already.dest_id);
+    const e = new Error('Este pedido ya se facturó en ' + (inv ? inv.invoice_number : '#' + already.dest_id) + '.'); e.status = 400; throw e;
+  }
+  const items = db.prepare('SELECT * FROM customer_order_items WHERE order_id=? ORDER BY id').all(id);
+  const lines = items.map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price, tax_rate: i.tax_rate, product_id: i.product_id || undefined }));
+  const run = db.transaction(() => {
+    const inv = createInvoice(db, { client_id: o.client_id, lines, irpf_rate: o.irpf_rate, notes: 'Procede del pedido ' + (o.order_number || ('#' + id)) });
+    db.prepare("INSERT INTO document_links (source_type, source_id, dest_type, dest_id) VALUES ('order', ?, 'invoice', ?)").run(id, inv.id);
+    return { invoice_id: inv.id, invoice_number: inv.invoice_number };
   });
   return run();
 }
@@ -329,6 +360,15 @@ export function createPedidoRoutes(db) {
       const r = cancelPedidoSvc(db, parseInt(c.req.param('id')), c.get('validated').motivo);
       logActivity(db, c.get('session'), 'Anuló pedido', 'customer_order', r.id, (r.order_number || '') + ' — ' + c.get('validated').motivo);
       return c.json({ ...r, message: 'Pedido anulado (reserva liberada)' });
+    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+  });
+
+  // PIEZA 2b — atajo pedido → FACTURA (cadena suelta: facturar desde el pedido o desde el albarán).
+  api.post('/:id/factura', requirePerm('pedidos.edit'), c => {
+    try {
+      const r = orderToInvoiceSvc(db, parseInt(c.req.param('id')));
+      logActivity(db, c.get('session'), 'Facturó pedido', 'customer_order', parseInt(c.req.param('id')), r.invoice_number);
+      return c.json({ ...r, message: 'Pedido facturado en ' + r.invoice_number });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
 
@@ -561,14 +601,40 @@ export function createPedidoRoutes(db) {
 
     // Líneas físicas que reserva (informativo). La reserva real la deriva stock.js.
     const reservaFisica = items.filter(i => i.product_id && (i.product_type || 'physical') === 'physical');
+    // PIEZA 2b — estado de entrega (pedido/entregado/pendiente por línea) + albaranes + factura.
+    const delivery = o.status === 'confirmado' ? orderDeliveryState(db, id) : null;
+    const albaranes = db.prepare("SELECT id, delivery_number, status, date FROM delivery_notes WHERE order_id=? ORDER BY id").all(id);
+    const invLink = db.prepare("SELECT dest_id FROM document_links WHERE source_type='order' AND source_id=? AND dest_type='invoice'").get(id);
+    const invoice = invLink ? db.prepare('SELECT id, invoice_number FROM invoices WHERE id=?').get(invLink.dest_id) : null;
+    const hasPending = delivery ? delivery.lines.some(l => l.pendiente > 0) : false;
 
     let lifecycle = '';
     if (o.status === 'anulado') lifecycle += `<div class="alert alert-err" style="margin-bottom:18px"><strong>Pedido anulado.</strong> Motivo: ${esc(o.anulada_motivo || '')}. La reserva quedó liberada.${replacedBy ? ` Lo sustituye <a href="/admin/pedidos/${replacedBy.id}" style="color:inherit;font-weight:600">${esc(replacedBy.order_number || ('borrador #' + replacedBy.id))}</a>.` : ''}</div>`;
     if (replacesPrev) lifecycle += `<div class="alert alert-warn" style="margin-bottom:18px">Sustituye a <a href="/admin/pedidos/${replacesPrev.id}" style="color:inherit;font-weight:600">${esc(replacesPrev.order_number || ('borrador #' + replacesPrev.id))}</a> (anulado).</div>`;
     if (quoteLink) lifecycle += `<div class="alert" style="margin-bottom:18px;background:#e0f2fe;color:#075985;border:1px solid #bae6fd">Procede del presupuesto <a href="/admin/quotes/${quoteLink.id}" style="color:inherit;font-weight:600">${esc(quoteLink.quote_number || ('#' + quoteLink.id))}</a>.</div>`;
-    if (o.status === 'confirmado' && reservaFisica.length) lifecycle += `<div class="alert" style="margin-bottom:18px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0">Este pedido <strong>reserva stock</strong> en ${esc(o.warehouse_name || 'el almacén principal')} (${reservaFisica.length} línea${reservaFisica.length === 1 ? '' : 's'} de producto físico). La reserva se suelta solo al entregar o al anular.</div>`;
+    if (o.status === 'confirmado' && o.delivered_status) lifecycle += `<div class="alert" style="margin-bottom:18px;background:${o.delivered_status === 'entregado' ? '#f0fdf4;color:#166534;border:1px solid #bbf7d0' : '#fef9c3;color:#854d0e;border:1px solid #fde68a'}">Entrega: <strong>${o.delivered_status === 'entregado' ? 'completamente entregado' : 'parcialmente entregado'}</strong>.</div>`;
+    if (o.status === 'confirmado' && reservaFisica.length && o.delivered_status !== 'entregado') lifecycle += `<div class="alert" style="margin-bottom:18px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0">Este pedido <strong>reserva stock</strong> en ${esc(o.warehouse_name || 'el almacén principal')} (lo pendiente de entregar). La reserva se suelta al entregar (albarán) o al anular.</div>`;
+    if (invoice) lifecycle += `<div class="alert" style="margin-bottom:18px;background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe">Facturado en <a href="/admin/invoices/${invoice.id}" style="color:inherit;font-weight:600">${esc(invoice.invoice_number)}</a>.</div>`;
 
-    const paper = `${lifecycle}${orderDocumentBodyHtml(o, items, emisor, cliente, sym)}`;
+    // Tabla de entrega por línea (pedido / entregado / pendiente) cuando el pedido está confirmado.
+    let deliveryBlock = '';
+    if (delivery) {
+      const drows = delivery.lines.map(l => `<tr>
+        <td style="padding:6px 12px;border-bottom:1px solid #f1f5f9">${esc(l.description)}${(l.product_type && l.product_type !== 'physical') ? ' <span style="color:#94a3b8;font-size:11px">(no mueve stock)</span>' : ''}</td>
+        <td style="padding:6px 12px;border-bottom:1px solid #f1f5f9;text-align:right">${l.pedido}</td>
+        <td style="padding:6px 12px;border-bottom:1px solid #f1f5f9;text-align:right">${l.entregado}</td>
+        <td style="padding:6px 12px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:600;color:${l.pendiente > 0 ? '#854d0e' : '#166534'}">${l.pendiente}</td></tr>`).join('');
+      const albRows = albaranes.map(a => `<a href="/admin/albaranes/${a.id}" class="badge ${a.status === 'anulado' ? 'b-red' : 'b-green'}" style="margin-right:.3rem;text-decoration:none">${esc(a.delivery_number || ('#' + a.id))}${a.status === 'anulado' ? ' (anulado)' : ''}</a>`).join('');
+      deliveryBlock = `
+        <div style="margin-top:24px"><div style="font-size:11px;text-transform:uppercase;color:#64748b;font-weight:600;margin-bottom:6px">Entrega</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr><th style="background:#F5F6F8;padding:6px 12px;text-align:left;font-size:11px;color:#64748b;border-bottom:2px solid #e2e8f0">Línea</th><th style="background:#F5F6F8;padding:6px 12px;text-align:right;font-size:11px;color:#64748b;border-bottom:2px solid #e2e8f0">Pedido</th><th style="background:#F5F6F8;padding:6px 12px;text-align:right;font-size:11px;color:#64748b;border-bottom:2px solid #e2e8f0">Entregado</th><th style="background:#F5F6F8;padding:6px 12px;text-align:right;font-size:11px;color:#64748b;border-bottom:2px solid #e2e8f0">Pendiente</th></tr></thead>
+          <tbody>${drows}</tbody>
+        </table>
+        ${albaranes.length ? `<div style="margin-top:10px;font-size:12px;color:#64748b">Albaranes: ${albRows}</div>` : ''}</div>`;
+    }
+
+    const paper = `${lifecycle}${orderDocumentBodyHtml(o, items, emisor, cliente, sym)}${deliveryBlock}`;
 
     const [lbl, badge] = displayEstado(o);
     const isBorrador = o.status === 'borrador', isConfirmado = o.status === 'confirmado';
@@ -583,8 +649,10 @@ export function createPedidoRoutes(db) {
   <div class="dp-actions" style="margin-top:14px;display:flex;flex-direction:column;gap:.5rem">
     <button onclick="window.print()" class="btn btn-secondary">Imprimir</button>
     ${isBorrador && can(c, 'pedidos.edit') ? `<a href="/admin/pedidos/${id}/edit" class="btn btn-secondary">Editar</a><button onclick="confirmar()" class="btn btn-primary">Confirmar pedido</button>` : ''}
+    ${isConfirmado && can(c, 'albaranes.create') && hasPending ? `<a href="/admin/albaranes/new?order=${id}" class="btn btn-primary">Crear albarán (entregar)</a>` : ''}
+    ${isConfirmado && !invoice && can(c, 'pedidos.edit') ? `<button onclick="facturar()" class="btn btn-secondary">Facturar pedido</button>` : ''}
+    ${invoice ? `<a href="/admin/invoices/${invoice.id}" class="btn btn-secondary">Ver factura ${esc(invoice.invoice_number)}</a>` : ''}
     ${isConfirmado && can(c, 'pedidos.edit') ? `
-      <button class="btn btn-secondary" disabled title="La entrega (albarán) y la facturación del pedido se construyen en la PIEZA 2b">Crear albarán (próximamente)</button>
       <button onclick="anular()" class="btn btn-danger">Anular</button>
       <button onclick="anularYRehacer()" class="btn btn-secondary">Anular y rehacer</button>` : ''}
     <a href="/admin/pedidos" class="btn btn-secondary">Volver al listado</a>
@@ -594,6 +662,7 @@ export function createPedidoRoutes(db) {
   const CSRF=${JSON.stringify(csrfToken)}, OID=${id};
   async function call(path, body){ const r=await fetch('/api/erp/pedidos/'+OID+path,{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:JSON.stringify(body||{})}); const d=await r.json(); if(!r.ok||d.error) throw new Error(d.error||'Error'); return d; }
   async function confirmar(){ if(!confirm('Vas a CONFIRMAR el pedido: ganará número PED-NNNN, quedará bloqueado (corregir = anular y rehacer) y APARTARÁ (reservará) el stock físico para este cliente. ¿Continuar?')) return; try{ await call('/confirmar'); location.reload(); }catch(e){ alert(e.message); } }
+  async function facturar(){ if(!confirm('Facturar este pedido directamente? Se creará una factura real con sus líneas (no mueve stock; la entrega va por albarán). La cadena es suelta: también puedes facturar desde un albarán.')) return; try{ const d=await call('/factura'); location.href='/admin/invoices/'+d.invoice_id; }catch(e){ alert(e.message); } }
   async function anular(){ const m=prompt('Motivo de la anulación (se liberará la reserva):'); if(m===null) return; if(!m.trim()){ alert('El motivo es obligatorio'); return; } try{ await call('/anular',{motivo:m.trim()}); location.reload(); }catch(e){ alert(e.message); } }
   async function anularYRehacer(){ const m=prompt('Motivo de la anulación (se creará un borrador nuevo con las mismas líneas):'); if(m===null) return; if(!m.trim()){ alert('El motivo es obligatorio'); return; } try{ const d=await call('/anular-y-rehacer',{motivo:m.trim()}); location.href='/admin/pedidos/'+d.id+'/edit'; }catch(e){ alert(e.message); } }
 </script>`;

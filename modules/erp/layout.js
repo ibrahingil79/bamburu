@@ -43,6 +43,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     discounts:        'discounts.read',
     quotes:           'quotes.read',
     pedidos:          'pedidos.read',
+    albaranes:        'albaranes.read',
     invoices:         'invoices.read',
     cobros:           'invoices.read',
     pagos:            'purchases.read',
@@ -86,12 +87,12 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     { section: 'Ventas', items: [
       { href: '/admin/quotes', label: 'Presupuestos', key: 'quotes', icon: 'ti-file-text' },
       { href: '/admin/pedidos', label: 'Pedidos', key: 'pedidos', icon: 'ti-clipboard-list' },
+      { href: '/admin/albaranes', label: 'Albaranes', key: 'albaranes', icon: 'ti-truck-delivery' },
       { href: '/admin/invoices', label: 'Facturas', key: 'invoices', icon: 'ti-file-invoice' },
       { href: '/admin/cobros', label: 'Cobros', key: 'cobros', icon: 'ti-cash' },
       { href: '/admin/orders/pos', label: 'TPV', key: 'pos', icon: 'ti-cash-register' },
       { href: '/admin/clients', label: 'Clientes', key: 'clients', icon: 'ti-users' },
       { href: '/admin/clients/groups', label: 'Grupos', key: 'client-groups', icon: 'ti-users-group' },
-      { label: 'Albaranes', key: 'albaranes', disabled: true, icon: 'ti-truck-delivery' },
       { label: 'CRM', key: 'crm', disabled: true, icon: 'ti-address-book' },
     ]},
     { section: 'Compras', items: [

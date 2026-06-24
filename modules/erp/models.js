@@ -1271,6 +1271,66 @@ export function runMigrations(db) {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_customer_order_items_product ON customer_order_items(product_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_customer_orders_status ON customer_orders(status, warehouse_id)`);
 
+  // ── PILAR 4 · VENTAS · PIEZA 2b — ALBARÁN / entrega (delivery_notes) ───────
+  // Documento de ENTREGA, ESPEJO de la RECEPCIÓN de compra (purchase_order_receipts): es el
+  // ÚNICO punto de la cadena de ventas donde el stock SALE de verdad del libro. DEL-NNNN al
+  // confirmar (no hay borrador, igual que la recepción), INMUTABLE; corregir = anular (motivo)
+  // y rehacer. Dos orígenes: desde un PEDIDO confirmado (order_id) — consume su reserva al
+  // entregar, parciales permitidos — o SUELTO (order_id NULL, líneas de catálogo/libres). Foto
+  // congelada de empresa+cliente al confirmar (patrón pedido/factura). Solo físicos mueven stock.
+  // El estado de entrega del pedido vive en la columna ADITIVA customer_orders.delivered_status
+  // (NULL | 'parcial' | 'entregado'), espejo de received_status; el "entregado" por línea se
+  // deriva de los albaranes confirmados (delivery_note_items.order_item_id), nunca una columna
+  // manual. NO reutiliza el clúster e-commerce viejo. DISA NO escribe albaranes (fuera de WRITABLE).
+  db.exec(`CREATE TABLE IF NOT EXISTS delivery_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    delivery_number TEXT,
+    client_id INTEGER NOT NULL,
+    order_id INTEGER,
+    warehouse_id INTEGER,
+    status TEXT NOT NULL DEFAULT 'confirmado' CHECK(status IN ('confirmado','anulado')),
+    date DATE NOT NULL,
+    notes TEXT DEFAULT '',
+    anulada_motivo TEXT,
+    company_name TEXT, company_fiscal_id TEXT, company_address TEXT, company_phone TEXT, company_email TEXT,
+    client_name TEXT, client_fiscal_id TEXT, client_address TEXT, client_email TEXT,
+    subtotal REAL NOT NULL DEFAULT 0,
+    tax_amount REAL NOT NULL DEFAULT 0,
+    irpf_rate REAL NOT NULL DEFAULT 0,
+    irpf_amount REAL NOT NULL DEFAULT 0,
+    total REAL NOT NULL DEFAULT 0,
+    currency TEXT DEFAULT 'EUR',
+    currency_symbol TEXT DEFAULT '€',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id) REFERENCES clients(id),
+    FOREIGN KEY (order_id) REFERENCES customer_orders(id),
+    FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
+  )`);
+  // order_item_id: línea del pedido que esta línea entrega (NULL en albarán suelto); permite
+  // derivar "entregado por línea" y cuadrar la reserva. unit_price NETO + tax_rate por línea
+  // (copiados del pedido o del catálogo) para precargar la factura. Solo físicos mueven stock.
+  db.exec(`CREATE TABLE IF NOT EXISTS delivery_note_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    delivery_note_id INTEGER NOT NULL,
+    order_item_id INTEGER,
+    product_id INTEGER,
+    description TEXT NOT NULL,
+    quantity REAL NOT NULL DEFAULT 1,
+    unit_price REAL NOT NULL DEFAULT 0,
+    total_price REAL NOT NULL DEFAULT 0,
+    tax_rate REAL NOT NULL DEFAULT 0,
+    tax_amount REAL NOT NULL DEFAULT 0,
+    FOREIGN KEY (delivery_note_id) REFERENCES delivery_notes(id) ON DELETE CASCADE,
+    FOREIGN KEY (order_item_id) REFERENCES customer_order_items(id),
+    FOREIGN KEY (product_id) REFERENCES products(id)
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_delivery_notes_order ON delivery_notes(order_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_delivery_note_items_dn ON delivery_note_items(delivery_note_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_delivery_note_items_orderitem ON delivery_note_items(order_item_id)`);
+  // Estado de entrega del pedido (espejo de purchase_orders.received_status). ADITIVO: no toca
+  // el CHECK de customer_orders.status; el pedido sigue 'confirmado' aunque esté entregado.
+  addCol(db, 'customer_orders', 'delivered_status', 'TEXT');   // NULL | 'parcial' | 'entregado'
+
   // ── T4 Paso 1: motor de cobros (estado de cobro de la factura) ─────────────
   // Cobros (totales o parciales) de una factura. Una factura puede tener varios.
   // El ESTADO de cobro NO se guarda: se calcula siempre en vivo (modules/erp/cobros.js)
@@ -1523,6 +1583,9 @@ export function runMigrations(db) {
     { module: 'pedidos',   action: 'read',    description: 'Ver pedidos' },
     { module: 'pedidos',   action: 'create',  description: 'Crear pedidos' },
     { module: 'pedidos',   action: 'edit',    description: 'Editar/confirmar/anular pedidos' },
+    { module: 'albaranes', action: 'read',    description: 'Ver albaranes (entregas)' },
+    { module: 'albaranes', action: 'create',  description: 'Crear/confirmar albaranes (entregar)' },
+    { module: 'albaranes', action: 'edit',    description: 'Anular albaranes / facturar entregas' },
   ];
   for (const p of permissionsData) {
     db.prepare('INSERT OR IGNORE INTO permissions (module, action, description) VALUES (?, ?, ?)').run(p.module, p.action, p.description);
@@ -1536,6 +1599,7 @@ export function runMigrations(db) {
                  'invoices.read','invoices.create','sales.emit_over_stock',
                  'quotes.read','quotes.create','quotes.edit',
                  'pedidos.read','pedidos.create','pedidos.edit',
+                 'albaranes.read','albaranes.create','albaranes.edit',
                  'admin.manage_users','admin.manage_roles','admin.settings'],
     Seller:     ['products.read',
                  'orders.read','orders.create','orders.edit','orders.update_status',

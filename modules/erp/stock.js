@@ -8,7 +8,7 @@
 // Vocabulario CERRADO.
 export const STOCK_MOVEMENT_TYPES = ['apertura', 'entrada', 'salida', 'ajuste', 'transferencia'];
 export const ADJUST_REASONS = ['rotura', 'caducado', 'robo_perdida', 'error_conteo', 'autoconsumo', 'muestra_regalo', 'otro'];
-export const ORIGIN_TYPES = ['opening', 'order', 'purchase', 'po_receipt', 'supplier_return', 'transfer_out', 'transfer_in', 'manual', 'reversal', 'legacy'];   // po_receipt = recepción de orden de compra (C1.b); supplier_return = devolución a proveedor (sale stock); transfer_out/transfer_in = traslado entre almacenes (Capa 3): sale de un almacén, entra en otro
+export const ORIGIN_TYPES = ['opening', 'order', 'purchase', 'po_receipt', 'supplier_return', 'transfer_out', 'transfer_in', 'delivery_note', 'manual', 'reversal', 'legacy'];   // delivery_note (PIEZA 2b) = albarán: la entrega saca stock real del libro   // po_receipt = recepción de orden de compra (C1.b); supplier_return = devolución a proveedor (sale stock); transfer_out/transfer_in = traslado entre almacenes (Capa 3): sale de un almacén, entra en otro
 export const ADJUST_MODES = ['set', 'add', 'sub'];   // Poner a X / Sumar X / Restar X
 
 export const REASON_LABEL = {
@@ -56,25 +56,30 @@ export function productStockInWarehouse(db, productId, warehouseId) {
 // "Reservado" = lo que un PEDIDO de venta confirmado APARTA para un cliente sin sacarlo
 // del almacén. Es una CAPA APARTE del stock físico: NO escribe en el libro stock_movements
 // (la reserva no es un movimiento físico). Su fuente de verdad —misma filosofía que el
-// stock— es la SUMA DERIVADA de las líneas de pedidos CONFIRMADOS y NO entregados, por
+// stock— es la SUMA DERIVADA de las líneas de pedidos CONFIRMADOS y NO ENTREGADAS, por
 // producto y por almacén; nunca una columna manual que pueda descuadrar. Solo cuenta
 // productos FÍSICOS (servicios, digitales y líneas libres no reservan nada).
+//
+// PIEZA 2b: "no entregado" = ordenado − ENTREGADO, donde lo entregado se deriva de los
+// albaranes CONFIRMADOS (delivery_note_items.order_item_id). Entregar consume la reserva (la
+// línea baja su pendiente → reservado baja); anular el albarán la devuelve. Cuadra por
+// construcción: lo que ya salió de verdad del libro deja de estar reservado.
 //
 // reservadoDeProducto(producto, almacén?) — almacén omitido = GLOBAL (todos los almacenes).
 export function reservedOfProduct(db, productId, warehouseId = null) {
   if (!isPhysical(db, productId)) return 0;
-  if (warehouseId == null) {
-    return db.prepare(
-      `SELECT COALESCE(SUM(oi.quantity),0) r FROM customer_order_items oi
-         JOIN customer_orders o ON o.id = oi.order_id
-        WHERE oi.product_id=? AND o.status='confirmado'`
-    ).get(productId).r;
-  }
-  return db.prepare(
-    `SELECT COALESCE(SUM(oi.quantity),0) r FROM customer_order_items oi
+  const sql =
+    `SELECT COALESCE(SUM(MAX(oi.quantity - COALESCE(d.entregado,0), 0)),0) r
+       FROM customer_order_items oi
        JOIN customer_orders o ON o.id = oi.order_id
-      WHERE oi.product_id=? AND o.status='confirmado' AND o.warehouse_id=?`
-  ).get(productId, warehouseId).r;
+       LEFT JOIN (
+         SELECT di.order_item_id, SUM(di.quantity) AS entregado
+           FROM delivery_note_items di JOIN delivery_notes dn ON dn.id = di.delivery_note_id
+          WHERE dn.status='confirmado' GROUP BY di.order_item_id
+       ) d ON d.order_item_id = oi.id
+      WHERE oi.product_id=? AND o.status='confirmado'`;
+  if (warehouseId == null) return db.prepare(sql).get(productId).r;
+  return db.prepare(sql + ' AND o.warehouse_id=?').get(productId, warehouseId).r;
 }
 
 // disponibleDeProducto(...) = stock − reservado. almacén omitido = GLOBAL; con almacén,

@@ -107,10 +107,11 @@ export function register(app, db) {
   // libro y es documento inmutable con numeración. La voz de DISA sobre stock/compras
   // es tarea futura; por ahora DISA no crea devoluciones.
   // Ventas/Pilar 4 — 'quotes'/'quote_items'/'document_links' + 'customer_orders'/
-  // 'customer_order_items' (PIEZA 2a, pedido + reserva) FUERA del whitelist (igual que
-  // compras/sales_orders): son documentos con ciclo, numeración y reserva por servicio
-  // validado. En la 2a DISA es SOLO LECTURA sobre pedidos (responde "cuánto tengo" con el
-  // disponible); crear/confirmar pedidos por voz es capa posterior (create_order multiproducto).
+  // 'customer_order_items' (PIEZA 2a, pedido + reserva) + 'delivery_notes'/'delivery_note_items'
+  // (PIEZA 2b, albarán/entrega: saca stock real del libro) FUERA del whitelist (igual que
+  // compras/sales_orders): son documentos con ciclo, numeración, reserva y movimiento de stock
+  // por servicio validado. DISA es SOLO LECTURA sobre pedidos Y albaranes (responde "cuánto
+  // tengo"/"qué falta por entregar"); crear/confirmar/anular por voz es capa posterior.
   const WRITABLE_TABLES = new Set([
     'categories', 'tags', 'product_tags',
     'products', 'product_variants', 'product_images',
@@ -2213,7 +2214,7 @@ export function register(app, db) {
       '  ajustar stock, generar facturas) SIEMPRE pidiendo confirmacion previa.',
       '',
       'NO PUEDES HACER:',
-      '- GESTIONAR PEDIDOS de venta (el documento "Pedido": crear, confirmar, anular o eliminar) POR CHAT en esta version. LEERLOS si puedes (cuantos pendientes, borradores, ver uno). Ante una peticion de gestionar un pedido, DECLINA con un mensaje claro y redirige a la pantalla de Pedidos (/admin/pedidos); NO pidas confirmacion ni intentes insert/update/delete sobre customer_orders/customer_order_items.',
+      '- GESTIONAR PEDIDOS de venta NI ALBARANES/entregas (los documentos "Pedido" y "Albaran": crear, confirmar, entregar, anular o eliminar) POR CHAT en esta version. LEERLOS si puedes (cuantos pendientes, borradores, que falta por entregar, ver uno). Ante una peticion de gestionarlos, DECLINA con un mensaje claro y redirige a la pantalla (/admin/pedidos o /admin/albaranes); NO pidas confirmacion ni intentes insert/update/delete sobre customer_orders/customer_order_items/delivery_notes/delivery_note_items.',
       '- Acceder a datos de otros negocios.',
       '- Modificar usuarios admin, sesiones ni la BD central del sistema.',
       '- Enviar SMS ni hacer llamadas. El UNICO email que puedes enviar es el recordatorio de',
@@ -2311,10 +2312,12 @@ export function register(app, db) {
       '',
       'Pedidos y facturacion:',
       'IMPORTANTE — hay DOS conceptos distintos de "pedido"; no los confundas:',
-      '  · El DOCUMENTO "Pedido" del Pilar 4 (numeros PED-NNNN, pantalla /admin/pedidos, RESERVA stock): en esta',
-      '    version NO se gestiona por chat. Crear/confirmar/anular/eliminar uno → DECLINA y redirige a /admin/pedidos.',
-      '    NO uses create_order/cancel_order/edit_order/update_order_status para esto, NI insert/update/delete sobre',
-      '    customer_orders/customer_order_items. Leerlos (cuantos pendientes, borradores, su cliente) SI puedes.',
+      '  · El DOCUMENTO "Pedido" del Pilar 4 (numeros PED-NNNN, pantalla /admin/pedidos, RESERVA stock) y su',
+      '    ALBARAN de entrega (DEL-NNNN, /admin/albaranes, saca stock): en esta version NO se gestionan por chat.',
+      '    Crear/confirmar/entregar/anular uno → DECLINA y redirige a /admin/pedidos o /admin/albaranes. NO uses',
+      '    create_order/cancel_order/edit_order/update_order_status para esto, NI insert/update/delete sobre',
+      '    customer_orders/customer_order_items/delivery_notes/delivery_note_items. Leerlos (pendientes, borradores,',
+      '    que falta por entregar, su cliente) SI puedes.',
       '  · Las acciones de abajo son del modulo de pedidos de TPV/tienda heredado (sales_orders), NO del documento',
       '    Pedido PED-NNNN. Usalas solo si el usuario habla claramente de ese flujo antiguo.',
       '- create_order: {"client_id":0,"product_id":0,"product_name":"","quantity":1,"price":null,"notes":""}',
