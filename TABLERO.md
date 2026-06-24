@@ -176,6 +176,8 @@ a tratar (arreglo NO iniciado — pendiente de priorizar con el dueño):
   - **Conversión PARCIAL de presupuesto** (preparada en `document_links`, sin construir).
   - **DISA `create_order` multiproducto** (crear/confirmar pedidos, albaranes y tickets por voz; hoy DISA es solo-lectura sobre los documentos nuevos).
 
+- ✅ **Fix — Inventario en blanco (bug preexistente de la Pieza 2a, ortogonal a PIEZA C) — HECHO 2026-06-24 (commit `8449eb9`).** En `stock-modal.js:166`, dentro del template-literal de `stockModalScript()`, el `'\n\n'` se resolvía a saltos de línea reales y partía una cadena del `<script>` en línea → `SyntaxError` → tumbaba TODO el JS de Inventario (incluido `loadInv()` y "Ver stock") → pantalla en blanco; el servidor respondía 200 con datos correctos (fallo solo en navegador). Fix de un punto: escapar a `'\\n\\n'` (el salto se resuelve en runtime dentro del `confirm()`; aviso de reserva intacto). Verificado en Chromium real 8/8 (sin SyntaxError, 15 físicos + KPIs, kardex/movimientos visibles, aviso intacto, sin escritura). Validado por el dueño en navegador real. Script `scripts/verify-inventory-fix-browser.mjs`.
+
 **ROADMAP (no iniciar):** ~~panel de superadmin~~ ✅ HECHO (20 jun, commit `4b9b228`) · repaso de permisos · sistema de diseño · prueba de carga · resto ya registrado.
 
 **Contenido real de las tareas referidas (reconciliado del histórico, no se tenía a la vista):**

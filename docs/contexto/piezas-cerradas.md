@@ -34,7 +34,7 @@
 ## Fixes recientes (fuera de pilar)
 - CERRADA — Aviso + permiso al facturar un físico por más del stock (no en silencio) — `35c4f22`.
 - CERRADA — Fleco visual: desplegable del buscador legible — `f23c4c1`.
-- **EN CURSO — Fix Inventario en blanco** (`stock-modal.js`: `\n\n` en template-literal partía el `<script>`; bug de la Pieza 2a). Verificado en Chromium real. **Sin commit, pendiente de OK.**
+- CERRADA — Fix Inventario en blanco (`stock-modal.js`: `\n\n` en template-literal partía el `<script>` y tumbaba todo el JS de Inventario; bug de la Pieza 2a, ortogonal a PIEZA C) — `8449eb9`.
 
 ## El Suelo  (admisión — comprometido, mayormente sin construir)
 - CERRADA — Cumplimiento: hash encadenado + Verifactu QR + leyenda. ⬜ Envío AEAT, Facturae, SII, TicketBAI.
