@@ -163,7 +163,7 @@ export function stockModalScript(sym, warehouses = []) {
         catch(e){
           // PIEZA 2a — guarda de reserva: dejar el almacén por debajo de lo reservado avisa
           // (aviso-confirmado, nunca en silencio). El usuario confirma y se reintenta.
-          if (/reservad/i.test(e.message||'') && confirm((e.message||'')+'\n\n¿Ajustar igualmente?')) r = await send(true);
+          if (/reservad/i.test(e.message||'') && confirm((e.message||'')+'\\n\\n¿Ajustar igualmente?')) r = await send(true);
           else throw e;
         }
         toast(r.message || ('Stock: '+r.stock));
