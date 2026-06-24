@@ -14,6 +14,12 @@
 
 No empieces a tocar código sin haber leído CANON y TABLERO.
 
+## Biblia de contexto (docs/contexto/)
+
+Existe una biblia de contexto en `docs/contexto/` (7 documentos). Antes de empezar cualquier
+tarea, lee al menos `piezas-cerradas.md` y `errores-conocidos.md`. Respeta las **Reglas de oro**
+de `flujo-de-trabajo.md`.
+
 ---
 
 ## Qué es Bamburu (resumen — el detalle está en CANON.md)

@@ -19,6 +19,9 @@ errores-conocidos, piezas-cerradas). El **repo es la única fuente de verdad**; 
 - **Auditorías:** "🔍 Auditorías y diagnósticos" (panel) — los diagnósticos de solo lectura se vuelcan ahí
   con fecha antes de cerrar la tarea. Primera entrada: diagnóstico del Inventario en blanco (2026-06-24).
 - `flujo-de-trabajo.md` consagra el cierre en dos pasos y que la verificación headless es necesaria pero NO suficiente.
+- **Candados (2026-06-24):** `flujo-de-trabajo.md` abre con un bloque "⛔ Reglas de oro antes de tocar nada"
+  (leer piezas-cerradas + errores-conocidos; no tocar lo cerrado sin encargo; nada terminado hasta verse en
+  navegador real). `CLAUDE.md` apunta a la biblia al arrancar. Espejo de `flujo-de-trabajo.md` reescrito en Notion.
 
 ---
 

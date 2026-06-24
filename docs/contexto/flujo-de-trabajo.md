@@ -2,6 +2,12 @@
 
 > Cómo se hace un cambio, cuándo está "terminado" y cómo se cierra. Fuente: RITUAL.md + práctica del repo.
 
+## ⛔ Reglas de oro antes de tocar nada
+
+1. **Antes de cualquier cambio, lee `docs/contexto/piezas-cerradas.md` y `docs/contexto/errores-conocidos.md`.**
+2. **Lo marcado como cerrado / intocable no se toca ni se "mejora" sin un encargo explícito que lo pida.** Si crees que hay que tocarlo, párate y pregunta antes.
+3. **Nada está "terminado" hasta verse pintado en un navegador real.** La verificación headless/lógica es necesaria pero NO suficiente. El cierre es siempre en dos pasos: Code presenta la verificación literal y se para → Ibrahin valida en navegador real → entonces commit.
+
 ## Al empezar
 1. Leer `CANON.md` (qué es / qué NO) y `TABLERO.md` (qué toca). Leer `session.json` (dónde se quedó).
 2. Coger la **primera** tarea de "POR HACER" → moverla a "EN CURSO". **Una sola tarea en curso a la vez.**
