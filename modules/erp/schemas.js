@@ -267,6 +267,12 @@ export const mostradorSaleSchema = z.object({
   lines:          z.array(mostradorLineSchema).min(1, 'Al menos una línea requerida'),
 });
 
+// PIEZA B — emitir factura completa de canje (F3) que sustituye un ticket: solo el cliente
+// destinatario (las líneas se arrastran del ticket; el resto lo fija el servidor).
+export const sustitutivaSchema = z.object({
+  client_id: intPos,
+});
+
 // Ciclo de vida — RECTIFICATIVA: factura nueva (serie propia) que referencia a la
 // original. ADMITE IMPORTES NEGATIVOS (abono): a diferencia de la factura ordinaria,
 // quantity y unit_price pueden ser negativos para devoluciones/anulación de operación.

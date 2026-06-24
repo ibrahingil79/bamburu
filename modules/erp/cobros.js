@@ -24,6 +24,10 @@ export function paymentsSum(db, invoiceId) {
 // La modalidad vive en la rectificativa (rectification_mode), no en la original.
 export function countsAsReceivable(db, inv) {
   if (inv.status === 'anulada') return false;
+  // PIEZA B: un ticket (factura simplificada) SUSTITUIDO por una factura completa (F3) deja de
+  // contar — su importe fiscal lo lleva la sustitutiva (la venta no se cuenta dos veces). Espejo
+  // de la rectificada-por-sustitución. La marca es la FK substitutes_invoice_id de la sustitutiva.
+  if (db.prepare('SELECT 1 FROM invoices WHERE substitutes_invoice_id=? LIMIT 1').get(inv.id)) return false;
   if (inv.status === 'rectificada') {
     const rect = db.prepare(
       'SELECT rectification_mode FROM invoices WHERE rectifies_invoice_id=? ORDER BY id DESC LIMIT 1'
@@ -72,7 +76,11 @@ export function cobroState(inv, cobrado, today) {
 
 // Estado de cobro de una factura leyendo sus cobros de la BD.
 export function invoiceCobro(db, inv, today) {
-  return cobroState(inv, paymentsSum(db, inv.id), today);
+  let cobrado = paymentsSum(db, inv.id);
+  // PIEZA B: la factura completa de canje NACE PAGADA por el cobro del ticket que sustituye —
+  // hereda sus pagos (NO se crea una fila nueva en invoice_payments) → queda 'cobrada', no pendiente.
+  if (inv.substitutes_invoice_id) cobrado = r2(cobrado + paymentsSum(db, inv.substitutes_invoice_id));
+  return cobroState(inv, cobrado, today);
 }
 
 // Resumen de deuda de un cliente: sus facturas (con estado de cobro), el total que

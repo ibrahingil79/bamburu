@@ -6,10 +6,10 @@ import { checkPermission } from '../../../core/permission-check.js';   // cheque
 import { isPhysical, productStock, reservedOfProduct, recordMovement, resolveWarehouseId } from '../stock.js';   // aviso de exceso al facturar (RAMA B) + mostrador (ticket): salida de stock por el libro
 import { recordVerifactuAlta, recordVerifactuAnulacion, cotejoUrl } from '../verifactu.js';   // VERI*FACTU T1: registro oficial + QR de cotejo
 import { validate } from '../../../core/validate.js';
-import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema, invoicePaymentSchema, collectionActionSchema } from '../schemas.js';
+import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema, invoicePaymentSchema, collectionActionSchema, sustitutivaSchema } from '../schemas.js';
 import { getCountryConfig } from '../../../core/control-db.js';
 import { escHtml } from '../../../core/escape.js';
-import { adminLayout, docShell, printableShell } from '../layout.js';
+import { adminLayout, docShell, printableShell, can } from '../layout.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';   // PDF real: mismo HTML imprimible → Chromium
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
@@ -438,6 +438,9 @@ export async function buildInvoicePaper(db, inv) {
   const rectifiesOriginal = inv.rectifies_invoice_id
     ? (db.prepare('SELECT id, invoice_number FROM invoices WHERE id=?').get(inv.rectifies_invoice_id) || null)
     : null;
+  // PIEZA B — sustitución ticket↔factura completa (canje).
+  const substitutesTicket = inv.substitutes_invoice_id ? (db.prepare('SELECT id, invoice_number FROM invoices WHERE id=?').get(inv.substitutes_invoice_id) || null) : null;
+  const substitutedBy = db.prepare('SELECT id, invoice_number FROM invoices WHERE substitutes_invoice_id=? ORDER BY id DESC LIMIT 1').get(inv.id) || null;
 
   const rows = items.map(it => `
         <tr>
@@ -466,6 +469,16 @@ export async function buildInvoicePaper(db, inv) {
       <strong>Factura rectificativa</strong> ${esc(rTypeLabels[inv.rectification_type] || inv.rectification_type || '')}
       · ${inv.rectification_mode === 'S' ? 'por sustitución' : 'por diferencias'}.
       Rectifica a <a href="/admin/invoices/${rectifiesOriginal.id}" style="color:inherit;font-weight:600">${esc(rectifiesOriginal.invoice_number)}</a>.
+    </div>`;
+    }
+    if (substitutesTicket) {
+      return `<div class="alert" style="margin-bottom:24px;background:#e0f2fe;color:#075985;border:1px solid #bae6fd">
+      <strong>Factura completa de canje</strong> (TipoFactura F3). Sustituye al ticket <a href="/admin/invoices/${substitutesTicket.id}" style="color:inherit;font-weight:600">${esc(substitutesTicket.invoice_number)}</a>. Ya pagada por el cobro del ticket.
+    </div>`;
+    }
+    if (substitutedBy) {
+      return `<div class="alert alert-warn" style="margin-bottom:24px">
+      <strong>Ticket sustituido</strong> por la factura completa <a href="/admin/invoices/${substitutedBy.id}" style="color:inherit;font-weight:600">${esc(substitutedBy.invoice_number)}</a> — sin efecto fiscal (la factura completa lo sustituye). El ticket sigue válido y registrado.
     </div>`;
     }
     return '';
@@ -684,6 +697,82 @@ export async function buildTicketPaper(db, inv) {
 <div style="margin-top:10px;color:var(--text2);font-size:11px">Factura simplificada (art. 7.1 RD 1619/2012) — sin identificación del destinatario.</div>`;
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// PILAR 4 · PIEZA B — TICKET → FACTURA COMPLETA (factura sustitutiva / de canje).
+// El cliente que compró en mostrador (ticket simplificado F2) pide factura con sus datos. Se
+// emite una FACTURA COMPLETA NUEVA con TipoFactura F3 ("factura emitida en sustitución de
+// facturas simplificadas", lista L2 AEAT) que sustituye y referencia al ticket — UN solo paso,
+// NO rectificativa ni abono. La huella es la del alta ordinaria (altaHuellaString, idéntica para
+// cualquier TipoFactura → ya verificada en la Tarea 1; F3 solo cambia el valor del campo
+// TipoFactura, que NO altera el algoritmo). El ticket NO se anula ni se borra: queda "sustituido"
+// (derivado de substitutes_invoice_id), sin efecto fiscal, visible y enlazado. La sustitutiva
+// NACE PAGADA por el cobro del ticket (no se duplica invoice_payments; cobros.js lo hereda) y NO
+// mueve stock (ya salió en el ticket). Va en la serie ORDINARIA de facturas completas (es una
+// factura completa; lo que la marca como canje es el TipoFactura F3 + la referencia al ticket).
+export function emitSustitutivaSvc(db, ticketId, client_id) {
+  const ticket = db.prepare('SELECT * FROM invoices WHERE id=?').get(ticketId);
+  if (!ticket) { const e = new Error('Ticket no encontrado'); e.status = 404; throw e; }
+  if (ticket.series !== SIMPLIFIED_SERIES) { const e = new Error('Solo un ticket (factura simplificada) se puede sustituir por una factura completa'); e.status = 400; throw e; }
+  if (ticket.status !== 'emitida') { const e = new Error('No se puede sustituir un ticket anulado'); e.status = 400; throw e; }
+  const dup = db.prepare('SELECT invoice_number FROM invoices WHERE substitutes_invoice_id=?').get(ticketId);
+  if (dup) { const e = new Error('Este ticket ya fue sustituido por la factura ' + dup.invoice_number + ' (no se puede sustituir dos veces)'); e.status = 400; throw e; }
+  const client = db.prepare('SELECT * FROM clients WHERE id=?').get(client_id);
+  if (!client) { const e = new Error('Cliente no encontrado: la factura completa exige identificar al destinatario'); e.status = 400; throw e; }
+
+  const cfg = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
+  const items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id=? ORDER BY id').all(ticketId);
+  // Líneas ARRASTRADAS del ticket (mismos productos, mismas bases e IVA por tipo). SIN IRPF: el
+  // importe debe coincidir EXACTO con el del ticket ya cobrado (no se recalcula a la baja/alza).
+  const lines = items.map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price, tax_rate: i.tax_rate }));
+  const totals = computeTotals(lines, 0);
+  const headerTaxRate = mainTaxRate(totals.taxByRate);
+  const series = cfg.invoice_series || 'F';   // serie ordinaria de facturas completas
+  const year = new Date().getFullYear();
+  const issueDate = new Date().toISOString().slice(0, 10);
+
+  const run = db.transaction(() => {
+    const seq = getNextSeq(db, series, year);
+    const invoice_number = `${series}${year}-${String(seq).padStart(4, '0')}`;
+    const prev_hash = getPrevHash(db, series, year);
+    const verifactu_hash = calcHash({ invoice_number, issue_date: issueDate, company_fiscal_id: cfg.fiscal_id || '', client_fiscal_id: client.fiscal_id || '', total: totals.total, prev_hash });
+    const due_date = computeDueDate(db, issueDate, client_id);
+    const result = db.prepare(`INSERT INTO invoices
+      (invoice_number, order_id, client_id, series, year, sequence, issue_date,
+       company_name, company_fiscal_id, company_address,
+       client_name, client_fiscal_id, client_address, client_email,
+       subtotal, tax_rate, tax_name, tax_amount, total,
+       currency, currency_symbol, document_name,
+       verifactu_hash, prev_hash, notes,
+       irpf_rate, irpf_amount, due_date, substitutes_invoice_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).run(
+      invoice_number, null, client_id,
+      series, year, seq, issueDate,
+      cfg.company_name || 'Mi empresa', cfg.fiscal_id || '', cfg.address || '',
+      client.name, client.fiscal_id || '', client.address || '', client.email || '',
+      totals.subtotal, headerTaxRate, cfg.tax_name || 'IVA', totals.taxAmount, totals.total,
+      cfg.currency || 'EUR', cfg.currency_symbol || '€', cfg.document_name || 'Factura',
+      verifactu_hash, prev_hash, 'Factura completa en sustitución del ticket ' + ticket.invoice_number,
+      0, 0, due_date, ticketId
+    );
+    const invoiceId = result.lastInsertRowid;
+
+    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price, tax_rate, tax_amount) VALUES (?,?,?,?,?,?,?)');
+    for (const line of lines) {
+      const base = Math.round(line.quantity * line.unit_price * 100) / 100;
+      const tax = Math.round(base * line.tax_rate / 100 * 100) / 100;
+      insItem.run(invoiceId, line.description, line.quantity, line.unit_price, base, line.tax_rate, tax);
+    }
+    // Alta Verifactu TIPO F3 (sustitución de simplificadas), misma cadena de huella del emisor.
+    recordVerifactuAlta(db, { id: invoiceId, company_fiscal_id: cfg.fiscal_id || '', invoice_number, issue_date: issueDate, record_type: 'alta', tipo_factura: 'F3', subtotal: totals.subtotal, tax_amount: totals.taxAmount });
+    // Enlace bidireccional visible (mismo motor que presupuesto→factura).
+    db.prepare("INSERT INTO document_links (source_type, source_id, dest_type, dest_id) VALUES ('ticket', ?, 'invoice', ?)").run(ticketId, invoiceId);
+    // NO invoice_payments (el cobro del ticket vale; cobros.js lo hereda). NO movimiento de stock.
+    return { id: invoiceId, invoice_number, ticket_id: ticketId, ticket_number: ticket.invoice_number };
+  });
+  return run();
+}
+
 export function createInvoiceRoutes(db) {
   const api = new Hono();
   const views = new Hono();
@@ -819,6 +908,16 @@ export function createInvoiceRoutes(db) {
       const code = e.message === 'Factura original no encontrada' ? 404 : 400;
       return c.json({ error: e.message }, code);
     }
+  });
+
+  // PIEZA B — POST /api/erp/invoices/:id/sustitutiva — emitir factura completa (F3) que sustituye
+  // un ticket (factura simplificada). Identifica al destinatario (client_id). No duplica cobro ni stock.
+  api.post('/:id/sustitutiva', requirePerm('invoices.create'), validate(sustitutivaSchema), c => {
+    try {
+      const r = emitSustitutivaSvc(db, parseInt(c.req.param('id')), c.get('validated').client_id);
+      logActivity(db, c.get('session'), 'Emitió factura completa (sustitutiva de ticket)', 'invoice', r.id, r.invoice_number + ' sustituye a ' + r.ticket_number);
+      return c.json({ ...r, message: 'Factura completa ' + r.invoice_number + ' emitida (sustituye al ticket ' + r.ticket_number + ')' }, 201);
+    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
 
   // POST /api/erp/invoices/:id/payments — registrar un cobro (total o parcial)
@@ -1543,6 +1642,11 @@ export function createInvoiceRoutes(db) {
       // HTML imprimible del documento (QR Verifactu + leyenda incluidos). El MISMO que usa el PDF.
       const paper = await buildInvoicePaper(db, inv);
 
+      // PIEZA B — ¿este ticket (factura simplificada) es sustituible por una factura completa?
+      // Solo serie S, emitida (no anulada) y aún no sustituido.
+      const yaSustituido = !!db.prepare('SELECT 1 FROM invoices WHERE substitutes_invoice_id=? LIMIT 1').get(inv.id);
+      const esTicketSustituible = inv.series === 'S' && inv.status === 'emitida' && !yaSustituido;
+
       const panel = `
 <div class="card"><div class="card-body">
   <div style="margin-bottom:12px">${statusBadge}</div>
@@ -1553,11 +1657,36 @@ export function createInvoiceRoutes(db) {
   <div class="dp-actions" style="margin-top:14px">
     <button onclick="window.print()" class="btn btn-primary">Imprimir</button>
     <a href="/admin/invoices/${inv.id}/pdf" class="btn btn-secondary">Descargar PDF</a>
+    ${esTicketSustituible && can(c, 'invoices.create') ? `<button onclick="openSust()" class="btn btn-primary">Emitir factura completa</button>` : ''}
     ${inv.status === 'emitida' ? `<button onclick="anularFactura()" class="btn btn-danger">Anular</button>
     <a href="/admin/invoices/${inv.id}/rectificativa/new" class="btn btn-secondary">Crear rectificativa</a>` : ''}
     <a href="/admin/invoices" class="btn btn-secondary">Volver al listado</a>
   </div>
 </div></div>
+${esTicketSustituible ? `
+<div class="modal-overlay" id="sustModal">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-head"><h3>Factura completa del ticket ${escHtml(inv.invoice_number)}</h3><button class="modal-close" onclick="closeModal('sustModal')">✕</button></div>
+    <div class="modal-body">
+      <p style="font-size:.85rem;color:var(--text2);margin-bottom:.75rem">Se emitirá una factura completa (con los datos del cliente) que <strong>sustituye</strong> a este ticket. El ticket queda enlazado, sin efecto fiscal; el cobro NO se duplica y el stock NO se mueve.</p>
+      <div class="form-group"><label class="form-label">Cliente</label>
+        <select class="form-control" id="sustClient"><option value="">— Elige un cliente —</option></select>
+      </div>
+      <div style="margin:.25rem 0 .5rem"><button class="btn btn-secondary btn-sm" onclick="toggleNuevo()" id="btnNuevo">+ Cliente nuevo</button></div>
+      <div id="nuevoCli" style="display:none;border:1px solid var(--border);border-radius:8px;padding:.6rem">
+        <div class="form-group"><label class="form-label">Nombre / razón social *</label><input class="form-control" id="nc-name" maxlength="200"></div>
+        <div class="form-group"><label class="form-label">NIF / CIF</label><input class="form-control" id="nc-fiscal" maxlength="50"></div>
+        <div class="form-group"><label class="form-label">Domicilio</label><input class="form-control" id="nc-address" maxlength="500"></div>
+        <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="nc-email" maxlength="200"></div>
+        <div class="form-group"><label class="form-label">Tipo</label><select class="form-control" id="nc-type"><option value="particular">Particular</option><option value="empresa">Empresa</option></select></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" onclick="closeModal('sustModal')">Cancelar</button>
+      <button class="btn btn-primary" id="btn-emitir-sust" onclick="emitirSust()">Emitir factura completa</button>
+    </div>
+  </div>
+</div>` : ''}
 <script>
   const CSRF = ${JSON.stringify(csrfToken)};
   async function anularFactura(){
@@ -1575,6 +1704,33 @@ export function createInvoiceRoutes(db) {
       location.reload();
     } catch(e){ alert(e.message || 'Error anulando la factura'); }
   }
+  ${esTicketSustituible ? `
+  let _nuevo=false;
+  async function openSust(){
+    try { const cl=await api('GET','/api/erp/clients'); const sel=document.getElementById('sustClient');
+      sel.innerHTML='<option value="">— Elige un cliente —</option>'+(cl||[]).map(function(c){return '<option value="'+c.id+'">'+escHtml(c.name)+(c.fiscal_id?' — '+escHtml(c.fiscal_id):'')+'</option>';}).join('');
+    } catch(e){}
+    openModal('sustModal');
+  }
+  function toggleNuevo(){ _nuevo=!_nuevo; document.getElementById('nuevoCli').style.display=_nuevo?'block':'none'; document.getElementById('btnNuevo').textContent=_nuevo?'— Usar cliente existente':'+ Cliente nuevo'; document.getElementById('sustClient').disabled=_nuevo; }
+  async function emitirSust(){
+    const btn=document.getElementById('btn-emitir-sust'); btn.disabled=true;
+    try {
+      let clientId;
+      if(_nuevo){
+        const name=document.getElementById('nc-name').value.trim();
+        if(!name){ toast('El nombre del cliente es obligatorio','err'); btn.disabled=false; return; }
+        const nc=await api('POST','/api/erp/clients',{ name, fiscal_id:document.getElementById('nc-fiscal').value.trim(), address:document.getElementById('nc-address').value.trim(), email:document.getElementById('nc-email').value.trim(), client_type:document.getElementById('nc-type').value });
+        clientId=nc.id;
+      } else {
+        clientId=parseInt(document.getElementById('sustClient').value);
+        if(!clientId){ toast('Elige un cliente o crea uno nuevo','err'); btn.disabled=false; return; }
+      }
+      const d=await api('POST','/api/erp/invoices/${inv.id}/sustitutiva',{ client_id: clientId });
+      toast(d.message||'Factura completa emitida'); location.href='/admin/invoices/'+d.id;
+    } catch(e){ toast(e.message||'Error emitiendo la factura completa','err'); btn.disabled=false; }
+  }
+  ` : ''}
 </script>`;
       return c.html(adminLayout('Factura ' + inv.invoice_number, docShell(paper, panel), 'invoices', csrfToken, c));
     } catch (e) { return c.text(e.message, 500); }

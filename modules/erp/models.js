@@ -1104,6 +1104,10 @@ export function runMigrations(db) {
   addCol(db, 'invoices', 'rectifies_invoice_id', 'INTEGER');                       // FK a la factura original
   addCol(db, 'invoices', 'rectification_type',   "TEXT DEFAULT ''");               // R1..R5
   addCol(db, 'invoices', 'rectification_mode',   "TEXT DEFAULT ''");               // 'S' sustitución | 'I' diferencias
+  // PIEZA B — factura COMPLETA de canje (TipoFactura F3) que SUSTITUYE a un ticket (factura
+  // simplificada serie S). Apunta al ticket sustituido. El ticket NO se borra ni anula: queda
+  // "sustituido" (derivado de esta FK), sin efecto fiscal, enlazado. Aditiva, idempotente.
+  addCol(db, 'invoices', 'substitutes_invoice_id', 'INTEGER');                      // FK al ticket (factura simplificada) sustituido
 
   // Serie propia para rectificativas (estándar legal ES). No mete huecos en la
   // numeración F de facturas ordinarias; tiene su propia cadena de hash.
