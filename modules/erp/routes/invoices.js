@@ -3,7 +3,7 @@ import { createHash } from 'crypto';
 import QRCode from 'qrcode';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { checkPermission } from '../../../core/permission-check.js';   // chequeo de permiso programático (condicional)
-import { isPhysical, productStock, reservedOfProduct } from '../stock.js';   // aviso de exceso al facturar (RAMA B): mira DISPONIBLE = stock − reservado
+import { isPhysical, productStock, reservedOfProduct, recordMovement, resolveWarehouseId } from '../stock.js';   // aviso de exceso al facturar (RAMA B) + mostrador (ticket): salida de stock por el libro
 import { recordVerifactuAlta, recordVerifactuAnulacion, cotejoUrl } from '../verifactu.js';   // VERI*FACTU T1: registro oficial + QR de cotejo
 import { validate } from '../../../core/validate.js';
 import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema, invoicePaymentSchema, collectionActionSchema } from '../schemas.js';
@@ -557,6 +557,131 @@ ${inv.notes ? `<div style="margin-top:16px;color:var(--text2)">${inv.notes}</div
   <strong>Hash Verifactu:</strong> ${inv.verifactu_hash}<br>
   <strong>Hash anterior:</strong> ${inv.prev_hash || '(primera factura)'}
 </div>`;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PILAR 4 · MOSTRADOR (PIEZA A) — TICKET = FACTURA SIMPLIFICADA (Verifactu F2).
+// El documento de mostrador en España es una factura simplificada: se registra como una
+// factura ordinaria (huella encadenada única del emisor + QR + leyenda) pero con TipoFactura
+// F2 y SIN identificación del destinatario. Reutiliza TODA la maquinaria de la factura
+// (serie/correlativo, calcHash, recordVerifactuAlta), el libro de stock y el motor de cobros.
+// Serie PROPIA 'S' (distinta de F ordinaria y R rectificativa). SIN cliente, SIN IRPF.
+// ════════════════════════════════════════════════════════════════════════════
+const SIMPLIFIED_SERIES = 'S';
+
+// Re-resuelve las líneas del ticket: catálogo (product_id) → precio + IVA por BANDA del producto
+// (lo fija el SERVIDOR, nunca un 21% en silencio) + nombre; línea libre → concepto + importe del
+// formulario, IVA 21% fijo (como la factura). Marca qué líneas mueven stock (producto físico).
+function resolveTicketLines(db, lines) {
+  const get = db.prepare('SELECT id, name, price, tax_rate, type FROM products WHERE id=?');
+  return lines.map(l => {
+    if (l.product_id) {
+      const p = get.get(l.product_id);
+      if (p) return { product_id: p.id, description: (String(l.description || '').trim() || p.name), quantity: Number(l.quantity), unit_price: Number(p.price) || 0, tax_rate: Number(p.tax_rate) || 0, is_physical: (p.type || 'physical') === 'physical' };
+    }
+    const desc = String(l.description || '').trim();
+    if (!desc) { const e = new Error('Una línea libre necesita un concepto'); e.status = 400; throw e; }
+    return { product_id: null, description: desc, quantity: Number(l.quantity), unit_price: Number(l.unit_price) || 0, tax_rate: Number(l.tax_rate) || 21, is_physical: false };
+  });
+}
+
+// EMITIR TICKET (factura simplificada F2). TODO en UNA transacción atómica: factura + líneas +
+// alta Verifactu (F2, huella encadenada) + salida de stock por línea física + cobro total. Si
+// algo falla, NO se confirma NADA (ni venta huérfana, ni stock movido sin ticket, ni ticket sin
+// alta). Nace EMITIDA e inmutable; corregir = anular/rectificar por la vía legal ya existente.
+export function emitTicketSvc(db, { lines, warehouse_id, payment_method, paid_date } = {}) {
+  if (!['efectivo', 'tarjeta'].includes(payment_method)) { const e = new Error('Método de pago no válido (efectivo o tarjeta)'); e.status = 400; throw e; }
+  const resolved = resolveTicketLines(db, lines || []);
+  if (!resolved.length) { const e = new Error('El ticket no tiene líneas'); e.status = 400; throw e; }
+  for (const l of resolved) if (!(l.quantity > 0)) { const e = new Error('La cantidad debe ser mayor que 0'); e.status = 400; throw e; }
+
+  const cfg = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
+  const totals = computeTotals(resolved.map(l => ({ quantity: l.quantity, unit_price: l.unit_price, tax_rate: l.tax_rate })), 0);   // SIN IRPF (consumidor final)
+  const headerTaxRate = mainTaxRate(totals.taxByRate);
+  const wid = resolveWarehouseId(db, warehouse_id);
+  const year = new Date().getFullYear();
+  const issueDate = new Date().toISOString().slice(0, 10);
+  const payDate = paid_date || issueDate;
+
+  const emit = db.transaction(() => {
+    const seq = getNextSeq(db, SIMPLIFIED_SERIES, year);
+    const invoice_number = `${SIMPLIFIED_SERIES}${year}-${String(seq).padStart(4, '0')}`;
+    const prev_hash = getPrevHash(db, SIMPLIFIED_SERIES, year);
+    const verifactu_hash = calcHash({ invoice_number, issue_date: issueDate, company_fiscal_id: cfg.fiscal_id || '', client_fiscal_id: '', total: totals.total, prev_hash });
+
+    const result = db.prepare(`INSERT INTO invoices
+      (invoice_number, order_id, client_id, series, year, sequence, issue_date,
+       company_name, company_fiscal_id, company_address,
+       client_name, client_fiscal_id, client_address, client_email,
+       subtotal, tax_rate, tax_name, tax_amount, total,
+       currency, currency_symbol, document_name,
+       verifactu_hash, prev_hash, notes,
+       irpf_rate, irpf_amount, due_date)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).run(
+      invoice_number, null, null,
+      SIMPLIFIED_SERIES, year, seq, issueDate,
+      cfg.company_name || 'Mi empresa', cfg.fiscal_id || '', cfg.address || '',
+      '', '', '', '',
+      totals.subtotal, headerTaxRate, cfg.tax_name || 'IVA', totals.taxAmount, totals.total,
+      cfg.currency || 'EUR', cfg.currency_symbol || '€', 'Factura simplificada',
+      verifactu_hash, prev_hash, 'Venta de mostrador (' + payment_method + ')',
+      0, 0, issueDate
+    );
+    const invoiceId = result.lastInsertRowid;
+
+    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price, tax_rate, tax_amount) VALUES (?,?,?,?,?,?,?)');
+    for (const l of resolved) {
+      const base = Math.round(l.quantity * l.unit_price * 100) / 100;
+      const tax = Math.round(base * l.tax_rate / 100 * 100) / 100;
+      insItem.run(invoiceId, l.description, l.quantity, l.unit_price, base, l.tax_rate, tax);
+    }
+
+    // Alta Verifactu con TIPO F2 (simplificada), misma cadena de huella del emisor.
+    recordVerifactuAlta(db, { id: invoiceId, company_fiscal_id: cfg.fiscal_id || '', invoice_number, issue_date: issueDate, record_type: 'alta', tipo_factura: 'F2', subtotal: totals.subtotal, tax_amount: totals.taxAmount });
+
+    // Stock: salida al LIBRO por cada línea FÍSICA, en el almacén elegido (origin 'ticket').
+    for (const l of resolved) {
+      if (l.product_id && l.is_physical) {
+        recordMovement(db, { product_id: l.product_id, type: 'salida', quantity: -l.quantity, origin_type: 'ticket', origin_id: invoiceId, warehouse_id: wid, note: 'Venta mostrador ' + invoice_number });
+      }
+    }
+
+    // Cobro TOTAL al momento (por el motor de cobros existente) → queda 'cobrada', no pendiente.
+    db.prepare('INSERT INTO invoice_payments (invoice_id, amount, paid_date, payment_method, note) VALUES (?,?,?,?,?)')
+      .run(invoiceId, totals.total, payDate, payment_method, 'Cobro en mostrador');
+
+    return { id: invoiceId, invoice_number, total: totals.total, warehouse_id: wid, payment_method };
+  });
+  return emit();
+}
+
+// HTML imprimible en FORMATO TICKET (factura simplificada): emisor, líneas, IVA por tipo, total,
+// método de pago, QR + leyenda Veri*Factu. SIN datos de cliente. Mismo QR que la factura.
+export async function buildTicketPaper(db, inv) {
+  const sym = inv.currency_symbol || '€';
+  const items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id=? ORDER BY id').all(inv.id);
+  const pay = db.prepare('SELECT payment_method FROM invoice_payments WHERE invoice_id=? ORDER BY id').get(inv.id) || {};
+  const groups = {};
+  for (const it of items) { const r = Number(it.tax_rate) || 0; if (!groups[r]) groups[r] = { base: 0, amount: 0 }; groups[r].base += Number(it.total_price) || 0; groups[r].amount += Number(it.tax_amount) || 0; }
+  const taxRows = Object.keys(groups).sort((a, b) => b - a).map(r => `<tr><td>${Number(r) > 0 ? 'IVA ' + r + '%' : 'Exento de IVA'} (sobre ${sym}${groups[r].base.toFixed(2)})</td><td>${sym}${groups[r].amount.toFixed(2)}</td></tr>`).join('');
+  const rows = items.map(it => `<tr><td>${escHtml(it.description)}</td><td style="text-align:right">${it.quantity}</td><td style="text-align:right">${sym}${Number(it.unit_price).toFixed(2)}</td><td style="text-align:right">${sym}${Number(it.total_price).toFixed(2)}</td></tr>`).join('');
+
+  const vfReg = db.prepare("SELECT * FROM verifactu_registros WHERE invoice_id=? AND record_type='alta' ORDER BY id ASC LIMIT 1").get(inv.id) || null;
+  let vfHead = '';
+  if (vfReg) {
+    const qrImg = await QRCode.toDataURL(cotejoUrl({ nif: vfReg.id_emisor, numSerie: vfReg.num_serie, fecha: vfReg.fecha_expedicion, importe: vfReg.importe_total }), { errorCorrectionLevel: 'M', margin: 1, width: 200 });
+    vfHead = `<div style="display:flex;gap:16px;align-items:center;margin-bottom:20px"><img src="${qrImg}" alt="QR Veri*Factu" style="width:32mm;height:32mm;flex:0 0 auto"><div><div style="font-weight:700;letter-spacing:.5px;font-size:15px">VERI*FACTU</div><div style="font-size:12px;color:var(--text2)">Factura verificable en la sede electrónica de la AEAT</div></div></div>`;
+  }
+  const metodo = pay.payment_method === 'efectivo' ? 'Efectivo' : pay.payment_method === 'tarjeta' ? 'Tarjeta' : '—';
+  return `${vfHead}
+<h1>Factura simplificada</h1>
+<div class="doc-sub">${escHtml(inv.invoice_number)} · ${escHtml(inv.issue_date)}</div>
+<div class="doc-cols"><div><div class="doc-label">Emisor</div><div><strong>${escHtml(inv.company_name)}</strong></div>${inv.company_fiscal_id ? `<div>${escHtml(inv.company_fiscal_id)}</div>` : ''}${inv.company_address ? `<div style="color:var(--text2)">${escHtml(inv.company_address)}</div>` : ''}</div><div></div></div>
+<table><thead><tr><th>Concepto</th><th style="text-align:right">Cant.</th><th style="text-align:right">P. unit.</th><th style="text-align:right">Total</th></tr></thead><tbody>${rows}</tbody></table>
+<table class="doc-totals"><tr><td>Base imponible</td><td>${sym}${Number(inv.subtotal).toFixed(2)}</td></tr>${taxRows}<tr class="grand"><td>TOTAL</td><td>${sym}${Number(inv.total).toFixed(2)}</td></tr></table>
+<div style="margin-top:14px"><span class="doc-label">Forma de pago</span><div><strong>${metodo}</strong> · ${sym}${Number(inv.total).toFixed(2)} (pagado)</div></div>
+<div style="margin-top:10px;color:var(--text2);font-size:11px">Factura simplificada (art. 7.1 RD 1619/2012) — sin identificación del destinatario.</div>`;
 }
 
 export function createInvoiceRoutes(db) {

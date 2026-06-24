@@ -251,6 +251,22 @@ export const albaranAnularSchema = z.object({
   motivo: z.string().trim().min(3, 'Indica el motivo de la anulación').max(500),
 });
 
+// ── Mostrador / ticket (factura simplificada F2) — Pilar 4 · PIEZA A ────────
+// Línea: producto de catálogo (product_id → el servidor re-resuelve precio + IVA por banda) o
+// línea libre (concepto + importe, IVA 21% fijo). SIN cliente, SIN IRPF (venta a consumidor).
+const mostradorLineSchema = z.object({
+  product_id:  optId,
+  description: strOpt(500),
+  quantity:    z.coerce.number().positive().max(1_000_000),
+  unit_price:  z.coerce.number().nonnegative().max(1_000_000),
+  tax_rate:    z.coerce.number().min(0).max(50).optional().default(21),   // solo aplica a línea libre; en catálogo lo fija el servidor por banda
+});
+export const mostradorSaleSchema = z.object({
+  warehouse_id:   optWarehouse,                          // almacén de salida; principal por defecto
+  payment_method: z.enum(['efectivo', 'tarjeta']),       // lista cerrada; cobro al momento
+  lines:          z.array(mostradorLineSchema).min(1, 'Al menos una línea requerida'),
+});
+
 // Ciclo de vida — RECTIFICATIVA: factura nueva (serie propia) que referencia a la
 // original. ADMITE IMPORTES NEGATIVOS (abono): a diferencia de la factura ordinaria,
 // quantity y unit_price pueden ser negativos para devoluciones/anulación de operación.

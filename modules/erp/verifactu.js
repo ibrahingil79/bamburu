@@ -111,8 +111,12 @@ export function recordVerifactuAlta(db, inv) {
   const idEmisor = inv.company_fiscal_id || '';
   const numSerie = inv.invoice_number;
   const fechaExpedicion = toFechaExpedicion(inv.issue_date);
-  // Alta ordinaria → F1. Rectificativa → su tipo R1..R5 (es un alta en serie 'R').
-  const tipoFactura = inv.record_type === 'rectificativa' ? (inv.rectification_type || 'R1') : 'F1';
+  // TipoFactura (lista L2 AEAT): F1 alta ordinaria · F2 factura SIMPLIFICADA (ticket, sin
+  // destinatario) · R1..R5 rectificativa. Si quien emite pasa tipo_factura explícito (p. ej. el
+  // mostrador con 'F2'), se respeta; si no, ordinaria F1 / rectificativa su R*.
+  const tipoFactura = inv.tipo_factura
+    ? inv.tipo_factura
+    : (inv.record_type === 'rectificativa' ? (inv.rectification_type || 'R1') : 'F1');
   const cuotaTotal = fmtImporte(inv.tax_amount);                                   // CuotaTotal = IVA repercutido
   const importeTotal = fmtImporte((Number(inv.subtotal) || 0) + (Number(inv.tax_amount) || 0)); // base + IVA (sin IRPF; cuadra con el desglose)
   const prevHuella = lastHuella(db);
