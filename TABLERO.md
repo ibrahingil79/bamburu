@@ -10,6 +10,18 @@
 
 ---
 
+## 📚 BIBLIA DE CONTEXTO — `docs/contexto/` (2026-06-24)
+
+7 documentos en `docs/contexto/` (arquitectura, convenciones, decisiones, glosario, flujo-de-trabajo,
+errores-conocidos, piezas-cerradas). El **repo es la única fuente de verdad**; Notion solo los espeja.
+- **Espejo en Notion:** "📚 Biblia de contexto — ESPEJO" (panel del proyecto), una subpágina por documento.
+  **REGLA DE ORO:** si se toca un doc de `docs/contexto/`, en el mismo cierre se reescribe su subpágina espejo.
+- **Auditorías:** "🔍 Auditorías y diagnósticos" (panel) — los diagnósticos de solo lectura se vuelcan ahí
+  con fecha antes de cerrar la tarea. Primera entrada: diagnóstico del Inventario en blanco (2026-06-24).
+- `flujo-de-trabajo.md` consagra el cierre en dos pasos y que la verificación headless es necesaria pero NO suficiente.
+
+---
+
 ## 🧭 ESTRUCTURA ESTRATÉGICA — NÚCLEO · SUELO · FOSO (2026-06-23)
 
 > Marco que ordena TODO el trabajo (CANON §2-bis y §0-ter). Encima de los 4 pilares —que **NO se

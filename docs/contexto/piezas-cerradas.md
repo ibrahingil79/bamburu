@@ -1,0 +1,54 @@
+# Piezas cerradas — Bamburu
+
+> Inventario de lo ya construido y validado. **Lo marcado CERRADA no se vuelve a tocar ni "mejorar" sin encargo explícito.**
+> Una línea por pieza, con commit si está en el historial. Fuente de verdad: el repo (git log + TABLERO.md).
+> Estado: **CERRADA** (committeada y validada) · **EN CURSO** (sin commit / pendiente de OK en navegador real).
+
+## Núcleo — Pilar 1 · Catálogo  ✅ CERRADO
+- CERRADA — Producto con tipo (físico/digital/servicio) + IVA por banda + catálogo único (servicios unificados) + buscador nombre/SKU + filtro categoría + paginación.
+
+## Núcleo — Pilar 2 · Cliente  ✅ CERRADO
+- CERRADA — Ficha de cliente, grupos y CRM básico; voz de DISA sobre clientes (índice T5).
+- CERRADA — Ciclo de vida de factura: inmutable + anular + rectificar (R1–R5, modalidad S/I, abono) — `1fb4fd4` (A3 Fase 2).
+- CERRADA — Cobros / pendiente de pago calculado en vivo (T4 Paso 1) + perfiles, próxima acción y voz de DISA (Paso 2).
+
+## Núcleo — Pilar 3 · Inventario  🟡 EN CURSO (casi cerrado)
+- CERRADA — Stock como libro append-only (`stock_movements`) + caché derivada + kardex + reversión.
+- CERRADA — Multi-almacén Capa 1/2 (operar por almacén) + Capa 3 traslados (`TR-NNNN`) — `da7871e`.
+- CERRADA — WAC (coste medio) + valoración de inventario.
+- CERRADA — Compras: órdenes (C1a), recepciones (C1b), cierre por diferencias (C1c), facturas de proveedor, devoluciones, captura OCR (C2), gastos.
+- CERRADA — Capa de dinero con proveedores: pagos + voz de DISA + motor de vencimientos + pago por cuenta — `8620f15`, `e4ed8b1`.
+- ⬜ Pendiente del pilar: stock mínimo / punto de pedido, trazabilidad lote/serie (no cierra hasta su turno).
+
+## Núcleo — Pilar 4 · Ventas  🟡 EN CURSO
+- CERRADA — Verifactu Tarea 1: registros oficiales + huella encadenada + QR + leyenda — `f762139`.
+- CERRADA — PIEZA 1: presupuesto + motor de conversión + email a destinatario editable — `568c05e`, `6ded928`.
+- CERRADA — Pieza 2a: pedido + reserva de stock — `8526048`.
+- CERRADA — Pieza 2b: albarán (entrega, salida real) — cierra presupuesto→pedido→albarán→factura — `0c37a61`.
+- CERRADA — PDF real: generador Chromium compartido cableado a los 4 documentos — `45b4770`.
+- CERRADA — PIEZA A: mostrador nuevo (ticket = factura simplificada F2, cobro al momento) — `fe37338`.
+- CERRADA — PIEZA B: ticket → factura completa (sustitutiva F3, sin duplicar cobro) — `a655ed7`.
+- **EN CURSO — PIEZA C: repunte de lectores de ventas al clúster nuevo** (dashboard, analítica, contexto/summary de DISA, historial de cliente) vía `ventas-metrics.js`. Verificada (lógica + headless + venta real). **Sin commit, pendiente de OK en navegador real.**
+- ⬜ Pendiente del pilar: facturación recurrente, plantillas, cobro online, PDF+email de cada documento, retirada del POS viejo.
+
+## Fixes recientes (fuera de pilar)
+- CERRADA — Aviso + permiso al facturar un físico por más del stock (no en silencio) — `35c4f22`.
+- CERRADA — Fleco visual: desplegable del buscador legible — `f23c4c1`.
+- **EN CURSO — Fix Inventario en blanco** (`stock-modal.js`: `\n\n` en template-literal partía el `<script>`; bug de la Pieza 2a). Verificado en Chromium real. **Sin commit, pendiente de OK.**
+
+## El Suelo  (admisión — comprometido, mayormente sin construir)
+- CERRADA — Cumplimiento: hash encadenado + Verifactu QR + leyenda. ⬜ Envío AEAT, Facturae, SII, TicketBAI.
+- CERRADA — Multiusuario parcial: roles + `requirePerm` + permisos por usuario en BD operativos. ⬜ Administración de usuarios/permisos por pantalla y por DISA.
+- ⬜ Contabilidad entera (asientos → conciliación → modelos → libros → puente gestoría): sin empezar.
+
+## El Foso  (ventaja — comprometido, sin construir)
+- DISA predictiva/agéntica, caras por oficio (CRM comercial, agenda, control horario), API/integraciones, app móvil: ⬜.
+
+## Infraestructura / plataforma  ✅ CERRADO
+- CERRADA — Producción + HTTPS (systemd + Caddy + comodín Let's Encrypt vía Cloudflare) (2026-06-19).
+- CERRADA — Acceso landing → subdominio (Opción A) — `894e750`.
+- CERRADA — Backup diario a Google Drive blindado — `3076f68`.
+- CERRADA — Panel de superadmin (7 zonas, solo lectura) — `4b9b228`.
+- CERRADA — Endurecimiento del borde público (IP real, topes de gasto, rate limits, login) + XSS facturas (A1) — `307632e`, `7eb07f6`.
+
+> `modules/store/` (tienda pública, Capa 2) existe pero está **congelado**: no se toca.
