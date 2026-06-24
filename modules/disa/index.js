@@ -2217,20 +2217,19 @@ export function register(app, db) {
       '{"text":"2 clientes sin compras recientes","artifact":{"type":"action_list","data":{"title":"Clientes inactivos","items":[{"title":"Maria Garcia","subtitle":"45 dias sin comprar","meta":"LTV €0","tone":"warn"}],"link":{"label":"Ver clientes","url":"/admin/clients"}}}}',
       '',
       'big_number — una cifra destacada:',
-      '{"text":"Ayer vendiste bien","artifact":{"type":"big_number","data":{"value":"€450","label":"Ventas de ayer","context":"6 pedidos","tone":"positive","link":{"label":"Ver pedidos","url":"/admin/orders"}}}}',
+      '{"text":"Ayer vendiste bien","artifact":{"type":"big_number","data":{"value":"€450","label":"Ventas de ayer","context":"6 pedidos","tone":"positive"}}}',   // PIEZA C: sin link al POS viejo (retirado)
       '',
       '## URLs PERMITIDAS EN ARTIFACTS',
       '',
       'Solo estas rutas exactas (sin variaciones):',
-      '/admin/products /admin/categories /admin/tags /admin/orders',
-      '/admin/orders/pos /admin/orders/refunds /admin/orders/draft/new /admin/discounts',
+      '/admin/products /admin/categories /admin/tags /admin/discounts',
       '/admin/inventory /admin/suppliers /admin/purchases /admin/purchases/new',
       '/admin/invoices /admin/clients /admin/clients/groups /admin/analytics',
       '/admin/store-settings /admin/settings /admin/users /admin/activity',
       '/admin/security /admin/disa /admin/newsletter /admin/reviews /admin/feedback',
       '',
       'Detalle solo con ID numerico real existente:',
-      '/admin/orders/:id  /admin/orders/:id/invoice  /admin/purchases/:id  /admin/invoices/:id',
+      '/admin/purchases/:id  /admin/invoices/:id',   // PIEZA C: retirados /admin/orders/:id y /:id/invoice (POS viejo)
       '',
       'NO existen rutas de detalle para productos, clientes, categorias, stock ni proveedores.',
       'Para esos, enlaza siempre a la lista. Si dudas de una URL, NO la incluyas.',
@@ -2390,8 +2389,8 @@ export function register(app, db) {
 
     // ── URL whitelist + artifact sanitizer ───────────────────────────
     const DISA_ALLOWED_URLS = new Set([
-      '/admin/products','/admin/categories','/admin/tags','/admin/orders',
-      '/admin/orders/pos','/admin/orders/refunds','/admin/orders/draft/new',
+      '/admin/products','/admin/categories','/admin/tags',
+      // PIEZA C — POS viejo retirado: quitados '/admin/orders', '/admin/orders/pos', '/refunds', '/draft/new'.
       '/admin/discounts','/admin/inventory','/admin/suppliers','/admin/purchases',
       '/admin/purchases/new','/admin/invoices','/admin/clients','/admin/clients/groups',
       '/admin/analytics','/admin/store-settings','/admin/settings','/admin/users',
@@ -2399,8 +2398,7 @@ export function register(app, db) {
       '/admin/reviews','/admin/feedback',
     ]);
     const DISA_DETAIL_PATTERNS = [
-      /^\/admin\/orders\/\d+$/,
-      /^\/admin\/orders\/\d+\/invoice$/,
+      // PIEZA C — POS viejo retirado: quitados /admin/orders/:id y /admin/orders/:id/invoice.
       /^\/admin\/purchases\/\d+$/,
       /^\/admin\/invoices\/\d+$/,
     ];

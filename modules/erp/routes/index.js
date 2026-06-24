@@ -88,7 +88,10 @@ export function mountRoutes(app, db) {
   admin.route('/tags', tagsViews);
   admin.route('/categories', catViews);
   admin.route('/clients', clientViews);
-  admin.route('/orders', orderViews);
+  // PIEZA C — POS viejo RETIRADO del admin (clúster sales_orders, sin Verifactu). Desmontado, no
+  // borrado: orders.js sigue en el repo. Cae con él la falsa "FACTURA" (D3, /admin/orders/:id/invoice),
+  // el POS, los borradores y los reembolsos viejos. Archivado de tablas y corte de escritura de DISA = D1.
+  // admin.route('/orders', orderViews);
   admin.route('/inventory', invViews);
   admin.route('/discounts', discViews);
   admin.route('/shipping', shipViews);
@@ -128,7 +131,8 @@ export function mountRoutes(app, db) {
   apiApp.route('/products', prodApi);
   apiApp.route('/categories', catApi);
   apiApp.route('/clients', clientApi);
-  apiApp.route('/orders', orderApi);
+  // PIEZA C — API del POS viejo RETIRADA (ver nota arriba). Desmontado, no borrado.
+  // apiApp.route('/orders', orderApi);
   apiApp.route('/inventory', invApi);
   apiApp.route('/discounts', discApi);
   apiApp.route('/shipping', shipApi);

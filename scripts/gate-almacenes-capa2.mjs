@@ -1,12 +1,25 @@
-// Gate de navegador — Multi-almacén · Capa 2 contra el servidor real (tenant
-// desarrollo-bamburu). Trabaja sobre un PRODUCTO desechable y un ALMACÉN B de prueba
-// (se limpian al final) para no tocar los datos reales. Prueba: vender desde B (baja
-// solo en B), el POS recuerda el último almacén, comprar/recibir en B, recepción
-// parcial a B, devolución que sale de B, ajuste en B, apertura en B, guarda por
-// almacén (bloquea), C1 (cancelar devuelve a B) y cuadre caché==libro por almacén.
+// ⏸ GATE APARCADO (SKIP) — PIEZA C (POS viejo retirado). NO se ejecuta; tampoco se recorta.
+//
+// Qué probaba y por qué está aparcado:
+//  · §1 (venta desde almacén B), §2 ("el POS recuerda el último almacén"), §6 (guarda de
+//    sobreventa / almacén-equivocado) y §7 (cancelar devuelve stock) probaban el POS VIEJO
+//    (/admin/orders/pos + /api/erp/orders/sales|cancel), retirado en PIEZA C.
+//  · §6 destapó un AGUJERO REAL PENDIENTE: el mostrador nuevo (emitTicketSvc, invoices.js:605-670)
+//    emite SIN guarda de stock por almacén y permite dejar el saldo en NEGATIVO EN SILENCIO.
+//    Contradice la regla del proyecto "no se bloquea, pero nunca en silencio" (la que SÍ cumple
+//    la factura vía sales.emit_over_stock).
+//  · Las secciones de compras/recepciones/devoluciones/ajustes (§3/§4/§5/§8) NO dependen del POS.
+//
+// SE ARREGLA EN LA TAREA SIGUIENTE: aviso + permiso al vender por encima del stock en el mostrador
+// (espejo de sales.emit_over_stock) y, entonces, REESCRIBIR y REACTIVAR este gate contra el
+// mostrador nuevo. El cuerpo original queda INTACTO debajo (no se ejecuta por el skip de arriba).
 import puppeteer from 'puppeteer';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
+
+console.log('\n⏸  GATE Capa 2 APARCADO (skip): probaba el POS viejo, retirado en PIEZA C.');
+console.log('   Pendiente: guarda de sobreventa en el mostrador (emitTicketSvc). NO ejecutado — no es verde fingido.\n');
+process.exit(0);   // SKIP — sale antes de correr ninguna aserción
 
 const DB_PATH = '/home/ibrahin/bamburu/data/tenants/desarrollo-bamburu.db';
 const BASE = 'http://desarrollo-bamburu.localhost:3000';

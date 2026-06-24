@@ -70,7 +70,7 @@ export function stockModalScript(sym, warehouses = []) {
     };
     function originTxt(m){
       if(!m.origin_id) return m.note ? escHtml(m.note) : '';
-      if(m.origin_type==='order') return '<a href="/admin/orders/'+m.origin_id+'" target="_blank">Pedido #'+m.origin_id+'</a>';
+      if(m.origin_type==='order') return 'Pedido #'+m.origin_id;   // PIEZA C: POS viejo retirado → texto plano, sin enlace a /admin/orders/:id (404)
       if(m.origin_type==='purchase') return '<a href="/admin/purchases/'+m.origin_id+'" target="_blank">Compra #'+m.origin_id+'</a>';
       if(m.origin_type==='transfer_out'||m.origin_type==='transfer_in') return '<a href="/admin/stock-transfers/'+m.origin_id+'" target="_blank">'+escHtml(m.note||('Traslado #'+m.origin_id))+'</a>';
       return escHtml(m.note||'');

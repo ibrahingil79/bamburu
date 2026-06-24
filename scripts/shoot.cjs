@@ -1,5 +1,7 @@
 /* Verificación visual: mint de sesión owner (dev) + capturas de cada molde.
-   Uso: node scripts/shoot.cjs   → escribe docs/diseno/shots/*.png  */
+   Uso: node scripts/shoot.cjs   → escribe docs/diseno/shots/*.png
+   ⚠️ PIEZA C: la captura de /admin/orders/pos (POS viejo) quedó OBSOLETA — esa URL se retiró del admin
+   y ya no responde; ese shot fallará. No es prueba, no bloquea. Apuntar al mostrador nuevo al retomar. */
 const Database = require('better-sqlite3');
 const crypto = require('crypto');
 const puppeteer = require('puppeteer');

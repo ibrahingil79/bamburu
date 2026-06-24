@@ -1018,9 +1018,11 @@ export function createInvoiceRoutes(db) {
         const stBadge={emitida:'b-green',rectificada:'b-yellow',anulada:'b-red'};
         const cobroBadge={pendiente:'b-yellow',parcial:'b-blue',cobrada:'b-green',vencida:'b-red',abono:'b-gray'};
         document.getElementById('invBody').innerHTML=f.length?f.map(r=>{
-          // Facturas sin pedido (A1/A2 directas): order_id = NULL → mostrar "—" sin enlace roto.
+          // Facturas sin pedido (A1/A2 directas): order_id = NULL → mostrar "—".
+          // PIEZA C — el POS viejo se retiró: el pedido origen se muestra como TEXTO PLANO (sin enlace
+          // a /admin/orders/:id, que ya no existe). El dato sigue visible.
           const pedidoCell = r.order_id
-            ? '<a href="/admin/orders/'+r.order_id+'">'+(r.order_ref||r.order_id)+'</a>'
+            ? '<span>'+(r.order_ref||r.order_id)+'</span>'
             : '<span style="color:var(--muted)">—</span>';
           // Acciones de ciclo de vida: solo una factura "emitida" se puede anular o rectificar.
           let acts = '<a href="/admin/invoices/'+r.id+'" target="_blank" class="btn btn-secondary btn-sm">Ver</a>';

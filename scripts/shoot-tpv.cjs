@@ -1,4 +1,8 @@
-/* Captura aislada del TPV: la página mantiene el renderer ocupado (scanner/animación),
+/* ⚠️ OBSOLETO (PIEZA C): capturaba el POS viejo en /admin/orders/pos, retirado del admin (ya no responde).
+   No es prueba (solo captura), no bloquea. Para una captura del punto de venta, apuntar al mostrador
+   nuevo (/admin/mostrador) al retomar.
+   ── Original ──
+   Captura aislada del TPV: la página mantiene el renderer ocupado (scanner/animación),
    así que paramos la actividad y subimos protocolTimeout antes de capturar. */
 const Database = require('better-sqlite3');
 const crypto = require('crypto');

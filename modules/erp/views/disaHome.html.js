@@ -810,8 +810,8 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
       function dhMakeLink(link) {
         if (!link || !link.url) return document.createDocumentFragment();
         const allowedExact = [
-          '/admin/products','/admin/categories','/admin/tags','/admin/orders',
-          '/admin/orders/pos','/admin/orders/refunds','/admin/orders/draft/new',
+          '/admin/products','/admin/categories','/admin/tags',
+          // PIEZA C — POS viejo retirado: quitados '/admin/orders', '/admin/orders/pos', '/refunds', '/draft/new'.
           '/admin/discounts','/admin/inventory','/admin/suppliers','/admin/purchases',
           '/admin/purchases/new','/admin/invoices','/admin/clients','/admin/clients/groups',
           '/admin/analytics','/admin/store-settings','/admin/settings','/admin/users',
@@ -819,8 +819,7 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
           '/admin/reviews','/admin/feedback',
         ];
         const allowedPatterns = [
-          /^\\/admin\\/orders\\/\\d+$/,
-          /^\\/admin\\/orders\\/\\d+\\/invoice$/,
+          // PIEZA C — POS viejo retirado: quitados los patrones /admin/orders/:id y /admin/orders/:id/invoice.
           /^\\/admin\\/purchases\\/\\d+$/,
           /^\\/admin\\/invoices\\/\\d+$/,
         ];
@@ -839,7 +838,7 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
       function dhArtifactAction(action, params) {
         const navMap = {
           view_product: p => '/admin/products/' + p.product_id,
-          view_order: p => '/admin/orders/' + p.order_id,
+          // PIEZA C — POS viejo retirado: 'view_order' eliminado (apuntaba a /admin/orders/:id, ahora 404).
           view_client: p => '/admin/clients/' + p.client_id,
         };
         if (navMap[action] && Object.values(params)[0]) {
