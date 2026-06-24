@@ -28,8 +28,8 @@
 - CERRADA — PDF real: generador Chromium compartido cableado a los 4 documentos — `45b4770`.
 - CERRADA — PIEZA A: mostrador nuevo (ticket = factura simplificada F2, cobro al momento) — `fe37338`.
 - CERRADA — PIEZA B: ticket → factura completa (sustitutiva F3, sin duplicar cobro) — `a655ed7`.
-- **EN CURSO — PIEZA C: repunte de lectores de ventas al clúster nuevo** (dashboard, analítica, contexto/summary de DISA, historial de cliente) vía `ventas-metrics.js`. Verificada (lógica + headless + venta real). **Sin commit, pendiente de OK en navegador real.**
-- ⬜ Pendiente del pilar: facturación recurrente, plantillas, cobro online, PDF+email de cada documento, retirada del POS viejo.
+- CERRADA — PIEZA C: recableado de los 4 lectores (KPIs, analítica, DISA, historial de cliente) a la cadena nueva vía `ventas-metrics.js` + retirada del POS viejo del admin (D3 neutralizado, enlaces muertos limpiados, gate Capa 2 aparcado) — `4bb5f71` (recableado) + `9bbd16d` (retirada). Archivado de `sales_orders` y corte de escritura de DISA = pendientes en D1.
+- ⬜ Pendiente del pilar: facturación recurrente, plantillas, cobro online, PDF+email de cada documento; **aviso+permiso de sobreventa en el mostrador** (espejo de `sales.emit_over_stock`) y reactivar el gate de Capa 2.
 
 ## Fixes recientes (fuera de pilar)
 - CERRADA — Aviso + permiso al facturar un físico por más del stock (no en silencio) — `35c4f22`.
