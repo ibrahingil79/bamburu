@@ -487,3 +487,51 @@ ${hideDisaSidebar ? '' : getDisaWidget()}
 export function docShell(paper, panel) {
   return `<div class="docwrap"><div class="docpaper">${paper}</div><aside class="docpanel">${panel || ''}</aside></div>`;
 }
+
+// printableShell(bodyHtml, { title }) — HTML STANDALONE del documento imprimible, para:
+//   · generar el PDF (core/pdf.js renderPdfFromHtml) y
+//   · enviarlo como cuerpo/base de email,
+// con la MISMA maquetación que la pantalla. Reutiliza el cuerpo del documento TAL CUAL (el
+// `paper` que ya construye cada vista); aquí solo se le da el envoltorio: fuente Inter (web),
+// las variables de color y los estilos .docpaper/.doc-* + badge/alert que la factura usa por
+// clase (presupuesto/pedido/albarán usan estilos en línea y no dependen de esto, pero quedan
+// dentro del mismo lienzo .docpaper). @page A4 para que el PDF cuadre el tamaño.
+export function printableShell(bodyHtml, { title = 'Documento' } = {}) {
+  return `<!DOCTYPE html><html lang="es"><head>
+<meta charset="UTF-8">
+<title>${String(title).replace(/</g, '&lt;')}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F5F6F8;--bg2:#FFFFFF;--bg3:#F1F3F5;--border:#ECEEF1;--border2:#E4E6EA;
+    --text:#1A1D21;--text2:#6B7280;--text3:#9097A1;--teal:#334155;--radius:9px;
+    --danger:#A32D2D;--danger-s:#FEE2E2;--warn:#854F0B;--warn-s:#FAEEDA;--ok:#2E7D55;--ok-s:#E8F5EE;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  @page{size:A4;margin:0}
+  body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#fff;color:var(--text);font-size:13px;-webkit-font-smoothing:antialiased}
+  .docpaper{max-width:820px;margin:auto;padding:6mm 4mm;color:var(--text);font-size:13px}
+  .docpaper h1{font-size:22px;font-weight:500;margin:0 0 4px;color:var(--text)}
+  .docpaper .doc-sub{color:var(--text2);font-size:12px;margin-bottom:26px}
+  .docpaper .doc-cols{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-bottom:26px}
+  .docpaper .doc-label{font-size:11px;text-transform:uppercase;color:var(--text2);font-weight:500;letter-spacing:.04em;margin-bottom:4px}
+  .docpaper table{width:100%;border-collapse:collapse;margin-bottom:22px;font-size:13px}
+  .docpaper thead th{background:var(--bg3);padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);font-weight:500;border-bottom:1px solid var(--border)}
+  .docpaper tbody td{padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text)}
+  .docpaper .doc-totals{margin-left:auto;width:300px}
+  .docpaper .doc-totals td:first-child{color:var(--text2)}
+  .docpaper .doc-totals td:last-child{text-align:right;font-weight:500}
+  .docpaper .doc-totals tr.grand td{font-size:15px;border-top:1px solid var(--text);padding-top:10px;color:var(--text)}
+  .docpaper .doc-hash{margin-top:26px;padding:12px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;color:var(--text2);word-break:break-all}
+  .badge{display:inline-flex;align-items:center;padding:.18rem .55rem;border-radius:99px;font-size:.69rem;font-weight:500}
+  .b-green{background:var(--ok-s);color:var(--ok)}.b-yellow{background:var(--warn-s);color:var(--warn)}
+  .b-red{background:var(--danger-s);color:var(--danger)}.b-gray{background:#EFF1F4;color:#3F4A5C}.b-teal{background:#ECEEF1;color:#3A4150}
+  .alert{padding:.75rem 1rem;border-radius:var(--radius);margin-bottom:1rem;font-size:.84rem}
+  .alert-warn{background:var(--warn-s);color:var(--warn);border:1px solid #EBDDB7}
+  .alert-err{background:var(--danger-s);color:var(--danger);border:1px solid #F0CFCC}
+  .alert-ok{background:var(--ok-s);color:var(--ok);border:1px solid #CDE8D8}
+</style></head>
+<body><div class="docpaper">${bodyHtml}</div></body></html>`;
+}

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
-import { adminLayout, can, docShell } from '../layout.js';
+import { adminLayout, can, docShell, printableShell } from '../layout.js';
+import { renderPdfFromHtml } from '../../../core/pdf.js';   // PDF real: mismo HTML imprimible → Chromium
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { pedidoCreateSchema, pedidoComputeSchema, pedidoAnularSchema } from '../schemas.js';
@@ -648,6 +649,7 @@ export function createPedidoRoutes(db) {
   ${o.expected_delivery_date ? `<div class="dp-row"><span class="k">Entrega prevista</span><span class="v">${esc(o.expected_delivery_date)}</span></div>` : ''}
   <div class="dp-actions" style="margin-top:14px;display:flex;flex-direction:column;gap:.5rem">
     <button onclick="window.print()" class="btn btn-secondary">Imprimir</button>
+    <a href="/admin/pedidos/${id}/pdf" class="btn btn-secondary">Descargar PDF</a>
     ${isBorrador && can(c, 'pedidos.edit') ? `<a href="/admin/pedidos/${id}/edit" class="btn btn-secondary">Editar</a><button onclick="confirmar()" class="btn btn-primary">Confirmar pedido</button>` : ''}
     ${isConfirmado && can(c, 'albaranes.create') && hasPending ? `<a href="/admin/albaranes/new?order=${id}" class="btn btn-primary">Crear albarán (entregar)</a>` : ''}
     ${isConfirmado && !invoice && can(c, 'pedidos.edit') ? `<button onclick="facturar()" class="btn btn-secondary">Facturar pedido</button>` : ''}
@@ -667,6 +669,23 @@ export function createPedidoRoutes(db) {
   async function anularYRehacer(){ const m=prompt('Motivo de la anulación (se creará un borrador nuevo con las mismas líneas):'); if(m===null) return; if(!m.trim()){ alert('El motivo es obligatorio'); return; } try{ const d=await call('/anular-y-rehacer',{motivo:m.trim()}); location.href='/admin/pedidos/'+d.id+'/edit'; }catch(e){ alert(e.message); } }
 </script>`;
     return c.html(adminLayout('Pedido ' + (o.order_number || ('#' + id)), docShell(paper, panel), 'pedidos', csrfToken, c));
+  });
+
+  // PDF real del pedido — MISMA guarda que la ficha (pedidos.read), MISMO cuerpo imprimible
+  // (orderDocumentBodyHtml) → printableShell → Chromium.
+  views.get('/:id/pdf', requirePerm('pedidos.read'), async c => {
+    try {
+      const id = parseInt(c.req.param('id'));
+      const o = getOrder(db, id);
+      if (!o) return c.text('Pedido no encontrado', 404);
+      const items = getItems(db, id);
+      const { emisor, cliente } = docParties(db, o);
+      const sym = o.currency_symbol || '€';
+      const body = orderDocumentBodyHtml(o, items, emisor, cliente, sym);
+      const pdf = await renderPdfFromHtml(printableShell(body, { title: 'Pedido ' + (o.order_number || ('#' + id)) }));
+      const fname = ('Pedido-' + (o.order_number || ('' + id)) + '.pdf').replace(/[\/\\]/g, '-');
+      return new Response(pdf, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="' + fname + '"' } });
+    } catch (e) { return c.text('No se pudo generar el PDF: ' + e.message, e.status || 500); }
   });
 
   return { api, views };

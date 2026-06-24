@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
-import { adminLayout, can, docShell } from '../layout.js';
+import { adminLayout, can, docShell, printableShell } from '../layout.js';
+import { renderPdfFromHtml } from '../../../core/pdf.js';   // PDF real: mismo HTML imprimible → Chromium
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { checkPermission } from '../../../core/permission-check.js';
@@ -242,17 +243,30 @@ export async function emailQuoteSvc(db, id, opts = {}) {
   const sym = q.currency_symbol || '€';
   const { emisor, cliente } = docParties(db, q);
   const empresa = emisor.name || 'Bamburu';
+  // PDF ADJUNTO: el documento ya NO va en el cuerpo del email — va como PDF (mismo HTML imprimible
+  // del presupuesto, vía printableShell + Chromium). renderPdf inyectable (mock en tests). Si la
+  // generación del PDF FALLA, se ERRA claro y NO se envía email (nada de email sin adjunto).
+  const renderPdf = typeof opts.renderPdf === 'function' ? opts.renderPdf : renderPdfFromHtml;
+  let pdf;
+  try {
+    pdf = await renderPdf(printableShell(quoteDocumentBodyHtml(q, items, emisor, cliente, sym), { title: 'Presupuesto ' + q.quote_number }));
+  } catch (e) {
+    const err = new Error('No se pudo generar el PDF del presupuesto: ' + (e.message || e) + '. No se ha enviado el email.'); err.status = 502; throw err;
+  }
+  if (!pdf || !pdf.length) { const e = new Error('El PDF del presupuesto salió vacío. No se ha enviado el email.'); e.status = 502; throw e; }
+  const fname = ('Presupuesto-' + (q.quote_number || ('' + id)) + '.pdf').replace(/[\/\\]/g, '-');
+  // Cuerpo CORTO + PDF adjunto.
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"></head>
-<body style="font-family:system-ui,sans-serif;font-size:14px;color:#1e293b;max-width:760px;margin:auto;padding:24px">
-${quoteDocumentBodyHtml(q, items, emisor, cliente, sym)}
-<p style="color:#64748b;font-size:12px;margin-top:24px">Presupuesto enviado desde ${esc(empresa)} con Bamburu.</p>
+<body style="font-family:system-ui,sans-serif;font-size:14px;color:#1e293b;max-width:560px;margin:auto;padding:24px">
+<p>Hola,</p>
+<p>Adjuntamos tu presupuesto nº <strong>${esc(q.quote_number)}</strong>${q.valid_until ? ' (válido hasta ' + esc(q.valid_until) + ')' : ''}.</p>
+<p style="color:#64748b;font-size:12px;margin-top:24px">Enviado desde ${esc(empresa)} con Bamburu.</p>
 </body></html>`;
-  const text = 'Presupuesto ' + q.quote_number + ' de ' + empresa + '\n'
-    + 'Fecha: ' + q.date + (q.valid_until ? ' · Válido hasta: ' + q.valid_until : '') + '\n\n'
-    + items.map(i => '- ' + i.description + ' × ' + i.quantity + ' a ' + Number(i.unit_price).toFixed(2) + ' ' + sym).join('\n')
-    + '\n\nTotal: ' + Number(q.total).toFixed(2) + ' ' + sym
-    + (q.notes ? '\n\nNotas: ' + q.notes : '');
-  const payload = { from: empresa + ' <noreply@bamburu.com>', to, subject: 'Presupuesto ' + q.quote_number + ' — ' + empresa, html, text };
+  const text = 'Hola,\n\nAdjuntamos tu presupuesto nº ' + q.quote_number + (q.valid_until ? ' (válido hasta ' + q.valid_until + ')' : '') + '.\n\nEnviado desde ' + empresa + ' con Bamburu.';
+  const payload = {
+    from: empresa + ' <noreply@bamburu.com>', to, subject: 'Presupuesto ' + q.quote_number + ' — ' + empresa, html, text,
+    attachments: [{ filename: fname, content: pdf }],
+  };
   if (emisor.email) payload.replyTo = emisor.email;
   const { data, error } = await opts.sendEmail(payload);
   if (error) { const e = new Error('No se pudo enviar el email: ' + (error.message || JSON.stringify(error))); e.status = 502; throw e; }
@@ -707,6 +721,7 @@ export function createQuoteRoutes(db) {
   ${q.valid_until ? `<div class="dp-row"><span class="k">Válido hasta</span><span class="v">${esc(q.valid_until)}</span></div>` : ''}
   <div class="dp-actions" style="margin-top:14px;display:flex;flex-direction:column;gap:.5rem">
     <button onclick="window.print()" class="btn btn-secondary">Imprimir</button>
+    <a href="/admin/quotes/${id}/pdf" class="btn btn-secondary">Descargar PDF</a>
     ${isBorrador && can(c, 'quotes.edit') ? `<a href="/admin/quotes/${id}/edit" class="btn btn-secondary">Editar</a><button onclick="emitir()" class="btn btn-primary">Emitir presupuesto</button>` : ''}
     ${isEmitido && can(c, 'quotes.edit') ? `
       <button onclick="emailQuote()" class="btn btn-secondary">Enviar por email</button>
@@ -745,6 +760,23 @@ export function createQuoteRoutes(db) {
   async function anularYRehacer(){ const m=prompt('Motivo de la anulación (se creará un borrador nuevo con las mismas líneas):'); if(m===null) return; if(!m.trim()){ alert('El motivo es obligatorio'); return; } try{ const d=await call('/anular-y-rehacer',{motivo:m.trim()}); location.href='/admin/quotes/'+d.id+'/edit'; }catch(e){ alert(e.message); } }
 </script>`;
     return c.html(adminLayout('Presupuesto ' + (q.quote_number || ('#' + id)), docShell(paper, panel), 'quotes', csrfToken, c));
+  });
+
+  // PDF real del presupuesto — MISMA guarda que la ficha (quotes.read), MISMO cuerpo imprimible
+  // (quoteDocumentBodyHtml) → printableShell → Chromium.
+  views.get('/:id/pdf', requirePerm('quotes.read'), async c => {
+    try {
+      const id = parseInt(c.req.param('id'));
+      const q = getQuote(db, id);
+      if (!q) return c.text('Presupuesto no encontrado', 404);
+      const items = getItems(db, id);
+      const { emisor, cliente } = docParties(db, q);
+      const sym = q.currency_symbol || '€';
+      const body = quoteDocumentBodyHtml(q, items, emisor, cliente, sym);
+      const pdf = await renderPdfFromHtml(printableShell(body, { title: 'Presupuesto ' + (q.quote_number || ('#' + id)) }));
+      const fname = ('Presupuesto-' + (q.quote_number || ('' + id)) + '.pdf').replace(/[\/\\]/g, '-');
+      return new Response(pdf, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="' + fname + '"' } });
+    } catch (e) { return c.text('No se pudo generar el PDF: ' + e.message, e.status || 500); }
   });
 
   return { api, views };

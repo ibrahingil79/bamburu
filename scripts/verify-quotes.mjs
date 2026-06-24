@@ -98,14 +98,15 @@ try {
   // El cliente del presupuesto qid tiene email cli@x.com en su ficha (pre-relleno del campo "Para").
   ok(db.prepare('SELECT email FROM clients WHERE id=?').get(cli).email === 'cli@x.com', 'cliente con email en ficha → ese correo es el pre-relleno del campo "Para"');
   // Cambiar el destino a OTRO correo válido → envía a ese; la ficha NO cambia.
-  const mailRes1 = await emailQuoteSvc(db, qid, { to: 'otro@dominio.com', sendEmail: mock });
+  const mockPdf = async () => Buffer.from('%PDF-1.4\n mock');   // PDF adjunto: renderer inyectado (sin Chromium en el test de lógica)
+  const mailRes1 = await emailQuoteSvc(db, qid, { to: 'otro@dominio.com', sendEmail: mock, renderPdf: mockPdf });
   ok(mailRes1.sent && mailedTo === 'otro@dominio.com', 'enviar a un correo distinto del de la ficha → llega a ese (otro@dominio.com)');
   ok(db.prepare('SELECT email FROM clients WHERE id=?').get(cli).email === 'cli@x.com', 'editar el destino NO modifica la ficha del cliente');
   // Cliente SIN email en ficha → escribo uno válido → envía igualmente.
   const cliNoMail = db.prepare("INSERT INTO clients (name, fiscal_id, client_type) VALUES ('Sin Email','C33333333','particular')").run().lastInsertRowid;
   const qNoMail = createQuoteSvc(db, { client_id: cliNoMail, lines: [{ description: 'X', quantity: 1, unit_price: 5, tax_rate: 21 }] });
   emitQuoteSvc(db, qNoMail);
-  const mailRes2 = await emailQuoteSvc(db, qNoMail, { to: 'nuevo@x.com', sendEmail: mock });
+  const mailRes2 = await emailQuoteSvc(db, qNoMail, { to: 'nuevo@x.com', sendEmail: mock, renderPdf: mockPdf });
   ok(mailRes2.sent && mailedTo === 'nuevo@x.com', 'cliente SIN email en ficha → escribir un correo válido → se envía a nuevo@x.com');
   // Campo vacío → 400 (ya NO "ficha sin email"). Formato inválido → 400.
   let emptyErr = false; try { await emailQuoteSvc(db, qNoMail, { to: '', sendEmail: mock }); } catch (e) { emptyErr = e.status === 400 && /correo de destino/i.test(e.message); }

@@ -9,7 +9,8 @@ import { validate } from '../../../core/validate.js';
 import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema, invoicePaymentSchema, collectionActionSchema } from '../schemas.js';
 import { getCountryConfig } from '../../../core/control-db.js';
 import { escHtml } from '../../../core/escape.js';
-import { adminLayout, docShell } from '../layout.js';
+import { adminLayout, docShell, printableShell } from '../layout.js';
+import { renderPdfFromHtml } from '../../../core/pdf.js';   // PDF real: mismo HTML imprimible → Chromium
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
 import { paymentsSum, invoiceCobro, cobroState, isCobrable, ESTADO_LABEL,
@@ -421,6 +422,141 @@ export function excessLineText(x) {
   return '"' + x.name + '": hay ' + x.stock
     + (x.reserved > 0 ? ', ' + x.reserved + ' reservados' : '')
     + ', disponible ' + x.available + ', facturas ' + x.requested + ' — exceso de ' + x.excess;
+}
+
+// ── HTML imprimible de la factura (cuerpo del documento) — fuente ÚNICA para la vista
+// en pantalla, el PDF y el adjunto de email. Incluye el QR Veri*Factu + la leyenda al
+// inicio (cuando hay registro oficial de ALTA). NO incluye el chrome ni el panel de acciones.
+export async function buildInvoicePaper(db, inv) {
+  const sym = inv.currency_symbol || '€';
+  const items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id=? ORDER BY id').all(inv.id);
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const rTypeLabels = { R1: 'R1 · error fundado en derecho', R2: 'R2 · concurso/impago (art.80.3)', R3: 'R3 · impago (art.80.4)', R4: 'R4 · resto de causas', R5: 'R5 · simplificada/ticket' };
+
+  const anulacion = db.prepare('SELECT * FROM invoice_anulaciones WHERE invoice_id=? ORDER BY id DESC LIMIT 1').get(inv.id) || null;
+  const rectifiedBy = db.prepare('SELECT id, invoice_number FROM invoices WHERE rectifies_invoice_id=? ORDER BY id DESC LIMIT 1').get(inv.id) || null;
+  const rectifiesOriginal = inv.rectifies_invoice_id
+    ? (db.prepare('SELECT id, invoice_number FROM invoices WHERE id=?').get(inv.rectifies_invoice_id) || null)
+    : null;
+
+  const rows = items.map(it => `
+        <tr>
+          <td>${it.description}</td>
+          <td style="text-align:right">${it.quantity}</td>
+          <td style="text-align:right">${sym}${it.unit_price.toFixed(2)}</td>
+          <td style="text-align:right">${sym}${it.total_price.toFixed(2)}</td>
+        </tr>`).join('');
+
+  const lifecycle = (() => {
+    if (inv.status === 'anulada' && anulacion) {
+      return `<div class="alert alert-err" style="margin-bottom:24px">
+      <strong>Factura anulada</strong> el ${esc(anulacion.issue_date)}.
+      Motivo: ${esc(anulacion.motivo)}.
+      <div style="font-size:11px;margin-top:4px;font-family:ui-monospace,monospace;word-break:break-all">Asiento de anulación · hash ${esc(anulacion.verifactu_hash)}</div>
+    </div>`;
+    }
+    if (inv.status === 'rectificada' && rectifiedBy) {
+      return `<div class="alert alert-warn" style="margin-bottom:24px">
+      <strong>Factura rectificada</strong> por
+      <a href="/admin/invoices/${rectifiedBy.id}" style="color:inherit;font-weight:600">${esc(rectifiedBy.invoice_number)}</a>.
+    </div>`;
+    }
+    if (inv.record_type === 'rectificativa' && rectifiesOriginal) {
+      return `<div class="alert" style="margin-bottom:24px;background:#e0f2fe;color:#075985;border:1px solid #bae6fd">
+      <strong>Factura rectificativa</strong> ${esc(rTypeLabels[inv.rectification_type] || inv.rectification_type || '')}
+      · ${inv.rectification_mode === 'S' ? 'por sustitución' : 'por diferencias'}.
+      Rectifica a <a href="/admin/invoices/${rectifiesOriginal.id}" style="color:inherit;font-weight:600">${esc(rectifiesOriginal.invoice_number)}</a>.
+    </div>`;
+    }
+    return '';
+  })();
+
+  const totalsBlock = (() => {
+    let taxBlock = '';
+    const itemsHaveTax = items.length > 0 &&
+      items.some(it => Number(it.tax_rate) > 0 || Number(it.tax_amount) > 0);
+    if (itemsHaveTax) {
+      const groups = {};
+      for (const it of items) {
+        const r = Number(it.tax_rate) || 0;
+        if (!groups[r]) groups[r] = { base: 0, amount: 0 };
+        groups[r].base   += Number(it.total_price) || 0;
+        groups[r].amount += Number(it.tax_amount)  || 0;
+      }
+      taxBlock = Object.keys(groups).sort((a, b) => b - a).map(r => {
+        const base = groups[r].base.toFixed(2);
+        if (Number(r) === 0) return `<tr><td>Exento de IVA (sobre ${sym}${base})</td><td>${sym}0.00</td></tr>`;
+        return `<tr><td>${inv.tax_name} ${r}% (sobre ${sym}${base})</td><td>${sym}${groups[r].amount.toFixed(2)}</td></tr>`;
+      }).join('');
+    } else if (inv.tax_rate > 0) {
+      taxBlock = `<tr><td>${inv.tax_name} (${inv.tax_rate}%)</td><td>${sym}${inv.tax_amount.toFixed(2)}</td></tr>`;
+    } else if (items.length > 0) {
+      const totalBase = items.reduce((s, it) => s + (Number(it.total_price) || 0), 0);
+      taxBlock = `<tr><td>Exento de IVA (sobre ${sym}${totalBase.toFixed(2)})</td><td>${sym}0.00</td></tr>`;
+    } else {
+      taxBlock = `<tr><td>${inv.tax_name}</td><td>${sym}${inv.tax_amount.toFixed(2)}</td></tr>`;
+    }
+    const irpfBlock = (Number(inv.irpf_amount) > 0)
+      ? `<tr><td style="color:#9333ea">IRPF (${inv.irpf_rate}%)</td><td style="color:#9333ea">−${sym}${inv.irpf_amount.toFixed(2)}</td></tr>`
+      : '';
+    return `<table class="doc-totals">
+  <tr><td>Base imponible</td><td>${sym}${inv.subtotal.toFixed(2)}</td></tr>
+  ${taxBlock}
+  ${irpfBlock}
+  <tr class="grand"><td>TOTAL</td><td>${sym}${inv.total.toFixed(2)}</td></tr>
+</table>`;
+  })();
+
+  // VERI*FACTU T1 — QR de cotejo + leyenda al INICIO (solo facturas con registro oficial de ALTA).
+  const vfReg = db.prepare("SELECT * FROM verifactu_registros WHERE invoice_id=? AND record_type='alta' ORDER BY id ASC LIMIT 1").get(inv.id) || null;
+  let vfHead = '';
+  if (vfReg) {
+    const qrTarget = cotejoUrl({ nif: vfReg.id_emisor, numSerie: vfReg.num_serie, fecha: vfReg.fecha_expedicion, importe: vfReg.importe_total });
+    const qrImg = await QRCode.toDataURL(qrTarget, { errorCorrectionLevel: 'M', margin: 1, width: 200 });
+    vfHead = `
+<div class="vf-head" style="display:flex;gap:16px;align-items:center;margin-bottom:24px">
+  <img src="${qrImg}" alt="Código QR Veri*Factu" style="width:35mm;height:35mm;flex:0 0 auto">
+  <div>
+    <div style="font-weight:700;letter-spacing:.5px;font-size:15px">VERI*FACTU</div>
+    <div style="font-size:12px;color:var(--text2)">Factura verificable en la sede electrónica de la AEAT</div>
+  </div>
+</div>`;
+  }
+
+  return `${vfHead}
+${lifecycle}
+<h1>${inv.document_name}</h1>
+<div class="doc-sub">${inv.invoice_number} · ${inv.status === 'emitida' ? 'Emitida' : inv.status === 'rectificada' ? 'Rectificada' : 'Anulada'} el ${inv.issue_date}</div>
+
+<div class="doc-cols">
+  <div>
+    <div class="doc-label">Emisor</div>
+    <div><strong>${inv.company_name}</strong></div>
+    ${inv.company_fiscal_id ? `<div>${inv.company_fiscal_id}</div>` : ''}
+    ${inv.company_address ? `<div style="color:var(--text2)">${inv.company_address}</div>` : ''}
+  </div>
+  <div>
+    <div class="doc-label">Cliente</div>
+    <div><strong>${escHtml(inv.client_name || 'Cliente general')}</strong></div>
+    ${inv.client_fiscal_id ? `<div>${escHtml(inv.client_fiscal_id)}</div>` : ''}
+    ${inv.client_address ? `<div style="color:var(--text2)">${escHtml(inv.client_address)}</div>` : ''}
+    ${inv.client_email ? `<div style="color:var(--text2)">${escHtml(inv.client_email)}</div>` : ''}
+  </div>
+</div>
+
+<table>
+  <thead><tr><th>Descripción</th><th style="text-align:right">Cant.</th><th style="text-align:right">P. unitario</th><th style="text-align:right">Total</th></tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+
+${totalsBlock}
+
+${inv.notes ? `<div style="margin-top:16px;color:var(--text2)">${inv.notes}</div>` : ''}
+
+<div class="doc-hash">
+  <strong>Hash Verifactu:</strong> ${inv.verifactu_hash}<br>
+  <strong>Hash anterior:</strong> ${inv.prev_hash || '(primera factura)'}
+</div>`;
 }
 
 export function createInvoiceRoutes(db) {
@@ -1272,157 +1408,15 @@ export function createInvoiceRoutes(db) {
     try {
       const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(c.req.param('id'));
       if (!inv) return c.text('Factura no encontrada', 404);
-      const items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id=? ORDER BY id').all(inv.id);
       const sym = inv.currency_symbol || '€';
-
-      // Enlaces de ciclo de vida para el banner de estado.
-      const anulacion = db.prepare('SELECT * FROM invoice_anulaciones WHERE invoice_id=? ORDER BY id DESC LIMIT 1').get(inv.id) || null;
-      const rectifiedBy = db.prepare('SELECT id, invoice_number FROM invoices WHERE rectifies_invoice_id=? ORDER BY id DESC LIMIT 1').get(inv.id) || null;
-      const rectifiesOriginal = inv.rectifies_invoice_id
-        ? (db.prepare('SELECT id, invoice_number FROM invoices WHERE id=?').get(inv.rectifies_invoice_id) || null)
-        : null;
       const csrfToken = c.get('session')?.csrfToken || '';
-      const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-      const rTypeLabels = { R1: 'R1 · error fundado en derecho', R2: 'R2 · concurso/impago (art.80.3)', R3: 'R3 · impago (art.80.4)', R4: 'R4 · resto de causas', R5: 'R5 · simplificada/ticket' };
-
-      const rows = items.map(it => `
-        <tr>
-          <td>${it.description}</td>
-          <td style="text-align:right">${it.quantity}</td>
-          <td style="text-align:right">${sym}${it.unit_price.toFixed(2)}</td>
-          <td style="text-align:right">${sym}${it.total_price.toFixed(2)}</td>
-        </tr>`).join('');
-
-      const lifecycle = (() => {
-  // Banner de ciclo de vida: explica el estado y enlaza los documentos relacionados.
-  if (inv.status === 'anulada' && anulacion) {
-    return `<div class="alert alert-err" style="margin-bottom:24px">
-      <strong>Factura anulada</strong> el ${esc(anulacion.issue_date)}.
-      Motivo: ${esc(anulacion.motivo)}.
-      <div style="font-size:11px;margin-top:4px;font-family:ui-monospace,monospace;word-break:break-all">Asiento de anulación · hash ${esc(anulacion.verifactu_hash)}</div>
-    </div>`;
-  }
-  if (inv.status === 'rectificada' && rectifiedBy) {
-    return `<div class="alert alert-warn" style="margin-bottom:24px">
-      <strong>Factura rectificada</strong> por
-      <a href="/admin/invoices/${rectifiedBy.id}" style="color:inherit;font-weight:600">${esc(rectifiedBy.invoice_number)}</a>.
-    </div>`;
-  }
-  if (inv.record_type === 'rectificativa' && rectifiesOriginal) {
-    return `<div class="alert" style="margin-bottom:24px;background:#e0f2fe;color:#075985;border:1px solid #bae6fd">
-      <strong>Factura rectificativa</strong> ${esc(rTypeLabels[inv.rectification_type] || inv.rectification_type || '')}
-      · ${inv.rectification_mode === 'S' ? 'por sustitución' : 'por diferencias'}.
-      Rectifica a <a href="/admin/invoices/${rectifiesOriginal.id}" style="color:inherit;font-weight:600">${esc(rectifiesOriginal.invoice_number)}</a>.
-    </div>`;
-  }
-  return '';
-})();
-
-const totalsBlock = (() => {
-  // Tres casos:
-  // (1) Items con tasa registrada (A1+A2) → desglose desde items. 1 row si única tasa,
-  //     N rows si mezcla. Fila al 0% se etiqueta "Exento de IVA".
-  // (2) Factura vieja sin tasa en items pero con tax_rate global → resumen simple.
-  // (3) Factura toda exenta (items todos al 0%) → "Exento de IVA".
-  let taxBlock = '';
-  const itemsHaveTax = items.length > 0 &&
-    items.some(it => Number(it.tax_rate) > 0 || Number(it.tax_amount) > 0);
-
-  if (itemsHaveTax) {
-    const groups = {};
-    for (const it of items) {
-      const r = Number(it.tax_rate) || 0;
-      if (!groups[r]) groups[r] = { base: 0, amount: 0 };
-      groups[r].base   += Number(it.total_price) || 0;
-      groups[r].amount += Number(it.tax_amount)  || 0;
-    }
-    taxBlock = Object.keys(groups).sort((a,b) => b-a).map(r => {
-      const base = groups[r].base.toFixed(2);
-      if (Number(r) === 0) {
-        return `<tr><td>Exento de IVA (sobre ${sym}${base})</td><td>${sym}0.00</td></tr>`;
-      }
-      return `<tr><td>${inv.tax_name} ${r}% (sobre ${sym}${base})</td><td>${sym}${groups[r].amount.toFixed(2)}</td></tr>`;
-    }).join('');
-  } else if (inv.tax_rate > 0) {
-    taxBlock = `<tr><td>${inv.tax_name} (${inv.tax_rate}%)</td><td>${sym}${inv.tax_amount.toFixed(2)}</td></tr>`;
-  } else if (items.length > 0) {
-    // Factura completa al 0% — A2 con todas las líneas exentas.
-    const totalBase = items.reduce((s, it) => s + (Number(it.total_price) || 0), 0);
-    taxBlock = `<tr><td>Exento de IVA (sobre ${sym}${totalBase.toFixed(2)})</td><td>${sym}0.00</td></tr>`;
-  } else {
-    taxBlock = `<tr><td>${inv.tax_name}</td><td>${sym}${inv.tax_amount.toFixed(2)}</td></tr>`;
-  }
-
-  const irpfBlock = (Number(inv.irpf_amount) > 0)
-    ? `<tr><td style="color:#9333ea">IRPF (${inv.irpf_rate}%)</td><td style="color:#9333ea">−${sym}${inv.irpf_amount.toFixed(2)}</td></tr>`
-    : '';
-  return `<table class="doc-totals">
-  <tr><td>Base imponible</td><td>${sym}${inv.subtotal.toFixed(2)}</td></tr>
-  ${taxBlock}
-  ${irpfBlock}
-  <tr class="grand"><td>TOTAL</td><td>${sym}${inv.total.toFixed(2)}</td></tr>
-</table>`;
-})();
-
       const statusBadge = inv.status === 'emitida'
         ? '<span class="badge b-green">Emitida</span>'
         : inv.status === 'rectificada'
         ? '<span class="badge b-yellow">Rectificada</span>'
         : '<span class="badge b-red">Anulada</span>';
-
-      // VERI*FACTU T1 — QR de cotejo + leyenda al INICIO del documento. Solo para facturas con
-      // registro oficial de ALTA (cadena nueva desde la implantación); las anteriores no lo llevan.
-      // El QR se construye desde el propio registro (nif/numserie/fecha/importe), así coincide EXACTO
-      // con lo registrado. La huella NO va en el QR. Escanearlo dará "no consta" hasta la Tarea 2 (envío).
-      const vfReg = db.prepare("SELECT * FROM verifactu_registros WHERE invoice_id=? AND record_type='alta' ORDER BY id ASC LIMIT 1").get(inv.id) || null;
-      let vfHead = '';
-      if (vfReg) {
-        const qrTarget = cotejoUrl({ nif: vfReg.id_emisor, numSerie: vfReg.num_serie, fecha: vfReg.fecha_expedicion, importe: vfReg.importe_total });
-        const qrImg = await QRCode.toDataURL(qrTarget, { errorCorrectionLevel: 'M', margin: 1, width: 200 });
-        vfHead = `
-<div class="vf-head" style="display:flex;gap:16px;align-items:center;margin-bottom:24px">
-  <img src="${qrImg}" alt="Código QR Veri*Factu" style="width:35mm;height:35mm;flex:0 0 auto">
-  <div>
-    <div style="font-weight:700;letter-spacing:.5px;font-size:15px">VERI*FACTU</div>
-    <div style="font-size:12px;color:var(--text2)">Factura verificable en la sede electrónica de la AEAT</div>
-  </div>
-</div>`;
-      }
-
-      const paper = `${vfHead}
-${lifecycle}
-<h1>${inv.document_name}</h1>
-<div class="doc-sub">${inv.invoice_number} · ${inv.status === 'emitida' ? 'Emitida' : inv.status === 'rectificada' ? 'Rectificada' : 'Anulada'} el ${inv.issue_date}</div>
-
-<div class="doc-cols">
-  <div>
-    <div class="doc-label">Emisor</div>
-    <div><strong>${inv.company_name}</strong></div>
-    ${inv.company_fiscal_id ? `<div>${inv.company_fiscal_id}</div>` : ''}
-    ${inv.company_address ? `<div style="color:var(--text2)">${inv.company_address}</div>` : ''}
-  </div>
-  <div>
-    <div class="doc-label">Cliente</div>
-    <div><strong>${escHtml(inv.client_name || 'Cliente general')}</strong></div>
-    ${inv.client_fiscal_id ? `<div>${escHtml(inv.client_fiscal_id)}</div>` : ''}
-    ${inv.client_address ? `<div style="color:var(--text2)">${escHtml(inv.client_address)}</div>` : ''}
-    ${inv.client_email ? `<div style="color:var(--text2)">${escHtml(inv.client_email)}</div>` : ''}
-  </div>
-</div>
-
-<table>
-  <thead><tr><th>Descripción</th><th style="text-align:right">Cant.</th><th style="text-align:right">P. unitario</th><th style="text-align:right">Total</th></tr></thead>
-  <tbody>${rows}</tbody>
-</table>
-
-${totalsBlock}
-
-${inv.notes ? `<div style="margin-top:16px;color:var(--text2)">${inv.notes}</div>` : ''}
-
-<div class="doc-hash">
-  <strong>Hash Verifactu:</strong> ${inv.verifactu_hash}<br>
-  <strong>Hash anterior:</strong> ${inv.prev_hash || '(primera factura)'}
-</div>`;
+      // HTML imprimible del documento (QR Verifactu + leyenda incluidos). El MISMO que usa el PDF.
+      const paper = await buildInvoicePaper(db, inv);
 
       const panel = `
 <div class="card"><div class="card-body">
@@ -1433,6 +1427,7 @@ ${inv.notes ? `<div style="margin-top:16px;color:var(--text2)">${inv.notes}</div
   <div class="dp-row"><span class="k">Total</span><span class="v">${sym}${inv.total.toFixed(2)}</span></div>
   <div class="dp-actions" style="margin-top:14px">
     <button onclick="window.print()" class="btn btn-primary">Imprimir</button>
+    <a href="/admin/invoices/${inv.id}/pdf" class="btn btn-secondary">Descargar PDF</a>
     ${inv.status === 'emitida' ? `<button onclick="anularFactura()" class="btn btn-danger">Anular</button>
     <a href="/admin/invoices/${inv.id}/rectificativa/new" class="btn btn-secondary">Crear rectificativa</a>` : ''}
     <a href="/admin/invoices" class="btn btn-secondary">Volver al listado</a>
@@ -1458,6 +1453,19 @@ ${inv.notes ? `<div style="margin-top:16px;color:var(--text2)">${inv.notes}</div
 </script>`;
       return c.html(adminLayout('Factura ' + inv.invoice_number, docShell(paper, panel), 'invoices', csrfToken, c));
     } catch (e) { return c.text(e.message, 500); }
+  });
+
+  // PDF real de la factura — MISMA guarda que la ficha (orders.read), MISMO HTML imprimible
+  // (buildInvoicePaper, con QR + leyenda) → printableShell → Chromium. Adjunto descargable.
+  views.get('/:id/pdf', requirePerm('orders.read'), async c => {
+    try {
+      const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(c.req.param('id'));
+      if (!inv) return c.text('Factura no encontrada', 404);
+      const paper = await buildInvoicePaper(db, inv);
+      const pdf = await renderPdfFromHtml(printableShell(paper, { title: 'Factura ' + inv.invoice_number }));
+      const fname = ('Factura-' + (inv.invoice_number || ('' + inv.id)) + '.pdf').replace(/[\/\\]/g, '-');
+      return new Response(pdf, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="' + fname + '"' } });
+    } catch (e) { return c.text('No se pudo generar el PDF: ' + e.message, e.status || 500); }
   });
 
   return { api, views };
