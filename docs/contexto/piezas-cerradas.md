@@ -28,7 +28,8 @@
 - CERRADA — PDF real: generador Chromium compartido cableado a los 4 documentos — `45b4770`.
 - CERRADA — PIEZA A: mostrador nuevo (ticket = factura simplificada F2, cobro al momento) — `fe37338`.
 - CERRADA — PIEZA B: ticket → factura completa (sustitutiva F3, sin duplicar cobro) — `a655ed7`.
-- CERRADA — PIEZA C: recableado de los 4 lectores (KPIs, analítica, DISA, historial de cliente) a la cadena nueva vía `ventas-metrics.js` + retirada del POS viejo del admin (D3 neutralizado, enlaces muertos limpiados, gate Capa 2 aparcado) — `4bb5f71` (recableado) + `9bbd16d` (retirada). Archivado de `sales_orders` y corte de escritura de DISA = pendientes en D1.
+- CERRADA — PIEZA C: recableado de los 4 lectores (KPIs, analítica, DISA, historial de cliente) a la cadena nueva vía `ventas-metrics.js` + retirada del POS viejo del admin (D3 neutralizado, enlaces muertos limpiados, gate Capa 2 aparcado) — `4bb5f71` (recableado) + `9bbd16d` (retirada). Archivado de `sales_orders` y corte de escritura de DISA → hechos en **D1** (abajo).
+- CERRADA — D1: tienda pública apagada (reversible: `/store` + `/api/store` → 404) + vía vieja de escritura de DISA cortada (`create/edit/update/cancel_order` + puente `create_invoice_from_order` neutralizados → respuesta "en migración"; resuelve la fuga de stock de `cancel_order`) + `invoices.js` tolerante + **archivado** (rename → `_archived`, idempotente) de `sales_orders`, `sales_items`, `order_status_history`, `customer_accounts`, `customer_sessions`, `wishlist` — `5d181c7`. Diferido a **D2**: `product_reviews` y `newsletter_subscribers` (rutas admin vivas).
 - ⬜ Pendiente del pilar: facturación recurrente, plantillas, cobro online, PDF+email de cada documento; **aviso+permiso de sobreventa en el mostrador** (espejo de `sales.emit_over_stock`) y reactivar el gate de Capa 2.
 
 ## Fixes recientes (fuera de pilar)
@@ -51,4 +52,4 @@
 - CERRADA — Panel de superadmin (7 zonas, solo lectura) — `4b9b228`.
 - CERRADA — Endurecimiento del borde público (IP real, topes de gasto, rate limits, login) + XSS facturas (A1) — `307632e`, `7eb07f6`.
 
-> `modules/store/` (tienda pública, Capa 2) existe pero está **congelado**: no se toca.
+> `modules/store/` (tienda pública, Capa 2): **APAGADA en D1** (montajes comentados → 404; código en el repo). Su retirada definitiva + archivado de `product_reviews`/`newsletter_subscribers` y limpieza de restos e-commerce = **D2**.
