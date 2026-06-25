@@ -1721,6 +1721,10 @@ export function createRoutes(app, db) {
     return c.html(buildPage(db, title, content, '', c));
   });
 
-  app.route('/api/store', api);
-  app.route('/store', views);
+  // D1 — TIENDA PÚBLICA APAGADA (reversible). Mismo patrón que la retirada del POS viejo (PIEZA C):
+  // se comenta el montaje, NO se borra; `routes.js` permanece en el repo. /store/* y /api/store/* → 404.
+  // (El checkout ya estaba roto: INSERT a `inventory_movements`, tabla archivada en el Pilar 3.)
+  // Para reactivar: descomentar estas dos líneas (y revisar el clúster archivado por D1).
+  // app.route('/api/store', api);
+  // app.route('/store', views);
 }

@@ -203,7 +203,8 @@ export function createSettingsRoutes(db, cfg = {}) {
   <span style="font-size:16px">🏪</span>
   <input id="sbStoreName" class="sb-name-input" placeholder="Nombre de tu tienda" oninput="sbState.settings.store_name=this.value">
   <div class="sb-topbar-r">
-    <a class="sb-view-btn" href="/store" target="_blank">Ver tienda →</a>
+    <!-- D1 — tienda pública apagada: enlace neutralizado (/store da 404). El resto del constructor es D2. -->
+    <span class="sb-view-btn" style="opacity:.5;cursor:not-allowed" title="La tienda pública está desactivada (D1)">Tienda desactivada</span>
     <button class="sb-publish-btn" onclick="sbPublish()">Publicar cambios</button>
   </div>
 </div>
@@ -380,9 +381,10 @@ function sbTab(t, btn) {
 
 // ── Preview ───────────────────────────────────────────────────────────
 function sbPreview() {
-  var s = sbState.settings;
-  var params = new URLSearchParams({preview_theme:s.theme,preview_name:s.store_name,preview_tagline:s.tagline,preview_logo:s.logo_url,preview_banner:s.banner_url,preview_color:s.primary_color,preview_announce:s.announcement,preview_sections:JSON.stringify(sbState.sections)});
-  document.getElementById('sbIframe').src = '/store?' + params.toString();
+  // D1 — tienda pública apagada: /store da 404, así que NO se carga la previsualización en vivo.
+  // (El constructor de tienda es D2; aquí solo se neutraliza el resto muerto que apuntaba a /store.)
+  var ifr = document.getElementById('sbIframe');
+  if (ifr) { ifr.removeAttribute('src'); ifr.srcdoc = '<div style="font-family:system-ui;padding:2rem;color:#64748b">Previsualización no disponible: la tienda pública está desactivada (D1).</div>'; }
 }
 function sbTrigger() { clearTimeout(sbPrevTimer); sbPrevTimer = setTimeout(sbPreview, 400); }
 function sbDev(d, btn) {

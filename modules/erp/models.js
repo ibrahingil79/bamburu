@@ -13,6 +13,11 @@ export function runMigrations(db) {
   // Core
   db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)`);
 
+  // D1 — ¿ya se archivó el clúster viejo de ventas + cuentas de tienda? Si sí, NO recrear esas
+  // tablas (los CREATE de abajo van guardados con `if (!d1Archived)`), para que el rename → _archived
+  // sea idempotente y no reaparezcan vacías. La migración de archivado (al final) pone este flag.
+  const d1Archived = !!db.prepare('SELECT value FROM settings WHERE key=?').get('migration_d1_archive_store_2026_v1');
+
   // Admin users
   db.exec(`CREATE TABLE IF NOT EXISTS admin_users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -317,6 +322,9 @@ export function runMigrations(db) {
   )`);
 
   // Sales orders (extended)
+  // D1 — clúster viejo de ventas (sales_orders / sales_items / order_status_history): NO recrear si ya
+  // se archivó (si no, reaparecerían vacías tras el rename). La migración de archivado (al final) los renombra.
+  if (!d1Archived) {
   db.exec(`CREATE TABLE IF NOT EXISTS sales_orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     order_number TEXT UNIQUE,
@@ -369,6 +377,7 @@ export function runMigrations(db) {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (order_id) REFERENCES sales_orders(id) ON DELETE CASCADE
   )`);
+  }  // fin if(!d1Archived) — clúster viejo de ventas
 
   // Refunds
   db.exec(`CREATE TABLE IF NOT EXISTS refunds (
@@ -487,8 +496,8 @@ export function runMigrations(db) {
     migrate();
   }
 
-  // Customer accounts (store login)
-  db.exec(`CREATE TABLE IF NOT EXISTS customer_accounts (
+  // Customer accounts (store login) — D1: no recrear si ya está archivada (tienda apagada).
+  if (!d1Archived) db.exec(`CREATE TABLE IF NOT EXISTS customer_accounts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     client_id INTEGER UNIQUE,
     email TEXT UNIQUE NOT NULL,
@@ -498,8 +507,8 @@ export function runMigrations(db) {
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
   )`);
 
-  // Wishlist
-  db.exec(`CREATE TABLE IF NOT EXISTS wishlist (
+  // Wishlist — D1: no recrear si ya está archivada (tienda apagada).
+  if (!d1Archived) db.exec(`CREATE TABLE IF NOT EXISTS wishlist (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     customer_id INTEGER NOT NULL,
     product_id INTEGER NOT NULL,
@@ -527,7 +536,7 @@ export function runMigrations(db) {
     FOREIGN KEY (user_id) REFERENCES admin_users(id) ON DELETE CASCADE
   )`);
 
-  db.exec(`CREATE TABLE IF NOT EXISTS customer_sessions (
+  if (!d1Archived) db.exec(`CREATE TABLE IF NOT EXISTS customer_sessions (
     token TEXT PRIMARY KEY,
     account_id INTEGER NOT NULL,
     created_at INTEGER NOT NULL,
@@ -536,7 +545,7 @@ export function runMigrations(db) {
   )`);
 
   db.exec(`CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions(expires_at)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_customer_sessions_expires ON customer_sessions(expires_at)`);
+  if (!d1Archived) db.exec(`CREATE INDEX IF NOT EXISTS idx_customer_sessions_expires ON customer_sessions(expires_at)`);
 
   addCol(db, 'admin_sessions', 'csrf_token', 'TEXT');
 
@@ -1748,6 +1757,27 @@ Sé preciso con los números y siempre redondea correctamente.`,
       INSERT OR IGNORE INTO disa_agents (name, slug, specialization, system_prompt, icon)
       VALUES (?, ?, ?, ?, ?)
     `).run(agent.name, agent.slug, agent.specialization, agent.system_prompt, agent.icon);
+  }
+
+  // ── D1 — ARCHIVAR clúster viejo de ventas + cuentas de tienda (rename → _archived, idempotente) ──
+  // "Eliminar" = archivar, NUNCA DROP. Solo renombra si la tabla existe y su _archived aún NO. Va al
+  // final, después de los CREATE (que quedan guardados por `d1Archived` para no reaparecer vacías).
+  // NO se archivan aquí (lectores admin VIVOS → requieren desmontar su UI = D2): product_reviews
+  // (routes/reviews.js) y newsletter_subscribers (routes/newsletter.js + clients.js). `refunds` queda
+  // fuera de la lista (cuelga del POS viejo; no pedida).
+  const d1Key = 'migration_d1_archive_store_2026_v1';
+  if (!db.prepare('SELECT value FROM settings WHERE key=?').get(d1Key)) {
+    const archiveTable = (name) => {
+      const src = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
+      const dst = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name + '_archived');
+      if (src && !dst) db.exec(`ALTER TABLE ${name} RENAME TO ${name}_archived`);
+    };
+    const tx = db.transaction(() => {
+      ['sales_orders', 'sales_items', 'order_status_history',
+       'customer_accounts', 'customer_sessions', 'wishlist'].forEach(archiveTable);
+      db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(d1Key, 'done');
+    });
+    tx();
   }
 
   console.log('✅ ERP: Migraciones completadas');

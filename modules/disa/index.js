@@ -117,7 +117,9 @@ export function register(app, db) {
     'categories', 'tags', 'product_tags',
     'products', 'product_variants', 'product_images',
     'client_groups', 'suppliers',
-    'sales_orders', 'sales_items',
+    // D1 — clúster viejo de ventas RETIRADO de la vía genérica de DISA (se archiva sales_orders/sales_items).
+    // 'sales_orders', 'sales_items',
+
     // [A3] 'invoices', 'invoice_items' EXCLUIDAS del genérico: son documentos LEGALES INMUTABLES
     // (cadena de hash Verifactu). Reescribir o borrar una factura emitida por insert/update/delete_record
     // rompería la cadena en silencio (la firma solo se calcula al emitir, nunca se revalida al escribir).
@@ -206,6 +208,13 @@ export function register(app, db) {
 
   async function executeAction(db, action, session) {
     try {
+      // D1 — VÍA VIEJA DE VENTAS POR VOZ RETIRADA. Las acciones que escribían el clúster viejo
+      // (sales_orders/sales_items) y el puente legado pedido→factura quedan NEUTRALIZADAS aquí y
+      // responden con elegancia (sin error feo). Los `case` originales siguen abajo, ya inalcanzables
+      // (no se borran): se rehará sobre la cadena nueva (presupuesto→pedido→albarán→factura) en otra tarea.
+      if (['create_order', 'edit_order', 'update_order_status', 'cancel_order', 'create_invoice_from_order'].includes(action.type)) {
+        return { ok: false, message: 'Esa forma de crear, editar, cancelar o facturar pedidos (el sistema de ventas antiguo) está en migración a la cadena nueva — presupuesto → pedido → albarán → factura — y no está disponible por chat ahora mismo. Puedo ayudarte con facturas, cobros, productos, stock, compras o clientes.' };
+      }
       switch (action.type) {
 
         // ── Operaciones genéricas (cualquier tabla) ──────────

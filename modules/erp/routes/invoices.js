@@ -103,6 +103,11 @@ export function calcHash(inv) {
 }
 
 export function generateInvoice(db, orderId) {
+  // D1 — PUENTE LEGADO pedido (sales_orders) → factura RETIRADO. El clúster viejo se archiva y la
+  // cadena nueva tiene su propio camino a factura (createInvoice desde pedido/albarán). Se neutraliza,
+  // NO se borra: el cuerpo original queda intacto debajo, ya inalcanzable. Único llamador vivo era la
+  // acción create_invoice_from_order de DISA (también neutralizada) y la ruta /from-order/:orderId.
+  { const e = new Error('La facturación desde el sistema de pedidos antiguo está retirada (D1). Usa la cadena nueva: factura desde un pedido o albarán.'); e.status = 410; throw e; }
   // prevent duplicate
   const existing = db.prepare('SELECT id, invoice_number FROM invoices WHERE order_id=?').get(orderId);
   if (existing) return { id: existing.id, invoice_number: existing.invoice_number, already: true };
@@ -789,9 +794,13 @@ export function createInvoiceRoutes(db) {
       // Bug fix: la columna real en sales_orders es order_number, no reference.
       // Antes de A1 nunca había facturas en BD así que el error 500 no se notaba.
       // cobrado se suma con subconsulta (una sola query) y el estado se deriva en vivo.
-      const rows = db.prepare(`SELECT i.*, o.order_number as order_ref,
+      // D1 — el clúster viejo se archiva (sales_orders → sales_orders_archived). El JOIN solo sirve para
+      // MOSTRAR el nº de pedido origen de facturas legadas: lo hacemos tolerante a la tabla viva, a la
+      // archivada o a ninguna (entonces order_ref = NULL y la ficha muestra "—", sin romper).
+      const soTbl = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('sales_orders','sales_orders_archived') ORDER BY (name='sales_orders') DESC LIMIT 1").get()?.name || null;
+      const rows = db.prepare(`SELECT i.*, ${soTbl ? 'o.order_number as order_ref' : 'NULL as order_ref'},
           (SELECT COALESCE(SUM(p.amount),0) FROM invoice_payments p WHERE p.invoice_id=i.id) AS cobrado
-        FROM invoices i LEFT JOIN sales_orders o ON o.id=i.order_id ORDER BY i.created_at DESC LIMIT 200`).all();
+        FROM invoices i ${soTbl ? `LEFT JOIN ${soTbl} o ON o.id=i.order_id` : ''} ORDER BY i.created_at DESC LIMIT 200`).all();
       const today = new Date().toISOString().slice(0, 10);
       for (const r of rows) {
         const st = cobroState(r, r.cobrado, today);
