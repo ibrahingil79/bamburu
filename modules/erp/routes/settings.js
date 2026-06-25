@@ -25,13 +25,17 @@ export function createSettingsRoutes(db, cfg = {}) {
     } catch(e) { return c.json({error:e.message},500); }
   });
 
-  // ── API: STORE ─────────────────────────────────────────────────
+  // ── API: STORE — D2: editor "Tienda Online" DESMONTADO. Endpoints neutralizados (404).
+  // store_settings SE CONSERVA (NO se archiva): el diseño se guarda por si la tienda vuelve (Capa 2).
+  // El cuerpo original queda inalcanzable debajo (return temprano), no se borra.
   api.get('/store', requirePerm('store_settings.read'), c => {
+    return c.json({ error: 'Editor de tienda desmontado (D2)' }, 404);
     try { return c.json(db.prepare('SELECT * FROM store_settings WHERE id=1').get()); }
     catch(e) { return c.json({error:e.message},500); }
   });
 
   api.put('/store', requirePerm('store_settings.update'), validate(storeSettingsSchema), async c => {
+    return c.json({ error: 'Editor de tienda desmontado (D2)' }, 404);
     try {
       const d = c.get('validated');
       db.prepare('UPDATE store_settings SET store_name=?,tagline=?,logo_url=?,banner_url=?,primary_color=?,announcement=?,facebook_url=?,instagram_url=?,twitter_url=?,terms_html=?,privacy_html=?,returns_html=?,seo_title=?,seo_description=?,theme=?,homepage_sections=? WHERE id=1').run(d.store_name||'', d.tagline||'', d.logo_url||'', d.banner_url||'', d.primary_color||'#10b981', d.announcement||'', d.facebook_url||'', d.instagram_url||'', d.twitter_url||'', d.terms_html||'', d.privacy_html||'', d.returns_html||'', d.seo_title||'', d.seo_description||'', d.theme||'minimal_light', d.homepage_sections||null);

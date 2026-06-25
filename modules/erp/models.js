@@ -17,6 +17,10 @@ export function runMigrations(db) {
   // tablas (los CREATE de abajo van guardados con `if (!d1Archived)`), para que el rename → _archived
   // sea idempotente y no reaparezcan vacías. La migración de archivado (al final) pone este flag.
   const d1Archived = !!db.prepare('SELECT value FROM settings WHERE key=?').get('migration_d1_archive_store_2026_v1');
+  // D2 — ¿ya se archivaron los restos e-commerce (feedback, product_reviews, newsletter_subscribers,
+  // shipping_methods)? Si sí, NO recrearlos (CREATE guardados con `if (!d2Archived)`). NO incluye
+  // tags/product_tags (función viva del catálogo) ni store_settings (se conserva, tienda Capa 2).
+  const d2Archived = !!db.prepare('SELECT value FROM settings WHERE key=?').get('migration_d2_archive_ecommerce_2026_v1');
 
   // Admin users
   db.exec(`CREATE TABLE IF NOT EXISTS admin_users (
@@ -270,8 +274,8 @@ export function runMigrations(db) {
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
   )`);
 
-  // Product reviews
-  db.exec(`CREATE TABLE IF NOT EXISTS product_reviews (
+  // Product reviews — D2: no recrear si ya está archivada (reseñas desmontadas).
+  if (!d2Archived) db.exec(`CREATE TABLE IF NOT EXISTS product_reviews (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     product_id INTEGER NOT NULL,
     client_id INTEGER,
@@ -283,8 +287,8 @@ export function runMigrations(db) {
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
   )`);
 
-  // Shipping methods
-  db.exec(`CREATE TABLE IF NOT EXISTS shipping_methods (
+  // Shipping methods — D2: no recrear si ya está archivada (envíos desmontados).
+  if (!d2Archived) db.exec(`CREATE TABLE IF NOT EXISTS shipping_methods (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     description TEXT DEFAULT '',
@@ -518,8 +522,8 @@ export function runMigrations(db) {
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
   )`);
 
-  // Newsletter
-  db.exec(`CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+  // Newsletter — D2: no recrear si ya está archivada (newsletter desmontado).
+  if (!d2Archived) db.exec(`CREATE TABLE IF NOT EXISTS newsletter_subscribers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT UNIQUE NOT NULL,
     name TEXT DEFAULT '',
@@ -985,8 +989,8 @@ export function runMigrations(db) {
     backfill();
   }
 
-  // Feedback
-  db.exec(`CREATE TABLE IF NOT EXISTS feedback (
+  // Feedback — D2: no recrear si ya está archivada (buzón desmontado).
+  if (!d2Archived) db.exec(`CREATE TABLE IF NOT EXISTS feedback (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     rating     INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5),
     message    TEXT NOT NULL,
@@ -1778,6 +1782,24 @@ Sé preciso con los números y siempre redondea correctamente.`,
       db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(d1Key, 'done');
     });
     tx();
+  }
+
+  // ── D2 — ARCHIVAR restos e-commerce (rename → _archived, idempotente, sin DROP) ──
+  // Solo tras desmontar su UI (feedback, reviews, newsletter, shipping). NO incluye:
+  // tags/product_tags (función viva del catálogo, decisión del dueño) ni store_settings (se
+  // conserva el diseño por si la tienda vuelve en Capa 2). Mismo helper/patrón que D1.
+  const d2Key = 'migration_d2_archive_ecommerce_2026_v1';
+  if (!db.prepare('SELECT value FROM settings WHERE key=?').get(d2Key)) {
+    const archiveTable = (name) => {
+      const src = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
+      const dst = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name + '_archived');
+      if (src && !dst) db.exec(`ALTER TABLE ${name} RENAME TO ${name}_archived`);
+    };
+    const tx2 = db.transaction(() => {
+      ['feedback', 'product_reviews', 'newsletter_subscribers', 'shipping_methods'].forEach(archiveTable);
+      db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(d2Key, 'done');
+    });
+    tx2();
   }
 
   console.log('✅ ERP: Migraciones completadas');

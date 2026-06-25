@@ -122,16 +122,20 @@ console.log('5. Paridad DISA (edición parcial fusionada)');
 // La guarda viva ("sin client_id no se crea") está en el case create_order de DISA y se
 // valida en navegador; aquí comprobamos el invariante de datos: un pedido de un cliente
 // activo queda enlazado y se puede recuperar por cliente.
-console.log('6. Pedido enlazado a cliente');
-{
-  const db = freshDb();
-  const cid = createClientSvc(db, { name: 'Compradora', fiscal_id: 'C1' }).id;
-  const r = db.prepare("INSERT INTO sales_orders (order_number, client_id, status, subtotal, tax_amount, total) VALUES ('DISA-T', ?, 'completado', 100, 21, 121)").run(cid);
-  const ord = db.prepare('SELECT client_id FROM sales_orders WHERE id=?').get(r.lastInsertRowid);
-  eq(ord.client_id, cid, 'el pedido queda enlazado al cliente (no huérfano)');
-  eq(db.prepare('SELECT COUNT(*) n FROM sales_orders WHERE client_id=?').get(cid).n, 1, 'recuperable por cliente');
-  db.close();
-}
+// ⏸ §6 APARCADO (obsoleto) — probaba la VÍA VIEJA de pedidos de DISA sobre `sales_orders`, tabla
+// ARCHIVADA en D1 (commit 5d181c7) cuando se cortó esa vía. Se rehará cuando DISA recupere la creación
+// de ventas sobre la CADENA NUEVA (customer_orders). NO se reescribe ni se inventa otra aserción aquí.
+// Las secciones 1–5 (identificación de cliente, lo vivo de T5) siguen corriendo arriba.
+console.log('6. Pedido enlazado a cliente — ⏸ APARCADO (vía vieja sales_orders retirada en D1; saneamiento de tests aparte)');
+// {
+//   const db = freshDb();
+//   const cid = createClientSvc(db, { name: 'Compradora', fiscal_id: 'C1' }).id;
+//   const r = db.prepare("INSERT INTO sales_orders (order_number, client_id, status, subtotal, tax_amount, total) VALUES ('DISA-T', ?, 'completado', 100, 21, 121)").run(cid);
+//   const ord = db.prepare('SELECT client_id FROM sales_orders WHERE id=?').get(r.lastInsertRowid);
+//   eq(ord.client_id, cid, 'el pedido queda enlazado al cliente (no huérfano)');
+//   eq(db.prepare('SELECT COUNT(*) n FROM sales_orders WHERE client_id=?').get(cid).n, 1, 'recuperable por cliente');
+//   db.close();
+// }
 
 // ── 7. Campos de lista cerrada: valores exactos del esquema + caso "contado" ─
 // DISA debe usar solo estos valores (se inyectan en su prompt desde aquí). El servicio

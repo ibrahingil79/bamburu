@@ -814,9 +814,10 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
           // PIEZA C — POS viejo retirado: quitados '/admin/orders', '/admin/orders/pos', '/refunds', '/draft/new'.
           '/admin/discounts','/admin/inventory','/admin/suppliers','/admin/purchases',
           '/admin/purchases/new','/admin/invoices','/admin/clients','/admin/clients/groups',
-          '/admin/analytics','/admin/store-settings','/admin/settings','/admin/users',
-          '/admin/activity','/admin/security','/admin/disa','/admin/newsletter',
-          '/admin/reviews','/admin/feedback',
+          '/admin/analytics','/admin/settings','/admin/users',
+          '/admin/activity','/admin/security','/admin/disa',
+          // D2 — restos e-commerce desmontados: quitados '/admin/store-settings', '/admin/newsletter',
+          // '/admin/reviews', '/admin/feedback' (darían 404). '/admin/tags' SE QUEDA (función de catálogo).
         ];
         const allowedPatterns = [
           // PIEZA C — POS viejo retirado: quitados los patrones /admin/orders/:id y /admin/orders/:id/invoice.

@@ -94,14 +94,17 @@ export function mountRoutes(app, db) {
   // admin.route('/orders', orderViews);
   admin.route('/inventory', invViews);
   admin.route('/discounts', discViews);
-  admin.route('/shipping', shipViews);
+  // D2 — resto e-commerce DESMONTADO (envíos): comentado, no borrado; shipping.js permanece. /admin/shipping → 404.
+  // admin.route('/shipping', shipViews);
   admin.route('/analytics', analytViews);
-  admin.route('/settings', settViews);
-  admin.route('/store-settings', storeSettViews);
+  admin.route('/settings', settViews);   // ← /admin/settings (config de EMPRESA) SE QUEDA (núcleo vivo)
+  // D2 — store-builder DESMONTADO (UI): /admin/store-settings → 404. store_settings NO se archiva (se conserva el diseño, tienda Capa 2).
+  // admin.route('/store-settings', storeSettViews);
   admin.route('/users', userViews);
   admin.route('/activity', activityViews);
-  admin.route('/newsletter', nlViews);
-  admin.route('/reviews', revViews);
+  // D2 — restos e-commerce DESMONTADOS (newsletter, reseñas): comentados, no borrados. → 404.
+  // admin.route('/newsletter', nlViews);
+  // admin.route('/reviews', revViews);
   admin.route('/change-password', changePasswordRoutes);
   admin.route('/security', securityRoutes);
   admin.route('/suppliers', supplierViews);
@@ -113,7 +116,8 @@ export function mountRoutes(app, db) {
   admin.route('/supplier-returns', supplierReturnViews);
   admin.route('/stock-transfers', stockTransferViews);
   admin.route('/warehouses', warehouseViews);
-  admin.route('/feedback', feedbackViews);
+  // D2 — buzón de feedback DESMONTADO: comentado, no borrado. /admin/feedback → 404.
+  // admin.route('/feedback', feedbackViews);
   admin.route('/quotes', quoteViews);
   admin.route('/pedidos', pedidoViews);
   admin.route('/albaranes', albaranViews);
@@ -135,12 +139,14 @@ export function mountRoutes(app, db) {
   // apiApp.route('/orders', orderApi);
   apiApp.route('/inventory', invApi);
   apiApp.route('/discounts', discApi);
-  apiApp.route('/shipping', shipApi);
+  // D2 — API de envíos DESMONTADA: comentada, no borrada. /api/erp/shipping/* → 404.
+  // apiApp.route('/shipping', shipApi);
   apiApp.route('/analytics', analytApi);
-  apiApp.route('/settings', settApi);
+  apiApp.route('/settings', settApi);   // ← /api/erp/settings SE QUEDA (config de empresa); solo /settings/store se neutraliza en settings.js
   apiApp.route('/users', userApi);
-  apiApp.route('/newsletter', nlApi);
-  apiApp.route('/reviews', revApi);
+  // D2 — API de newsletter y reseñas DESMONTADAS: comentadas, no borradas. → 404.
+  // apiApp.route('/newsletter', nlApi);
+  // apiApp.route('/reviews', revApi);
   apiApp.route('/suppliers', supplierApi);
   // C2 — captura ANTES que /purchases (mismo motivo de prioridad de rutas).
   apiApp.route('/purchases/capture', captureApi);
@@ -150,7 +156,8 @@ export function mountRoutes(app, db) {
   apiApp.route('/supplier-returns', supplierReturnApi);
   apiApp.route('/stock-transfers', stockTransferApi);
   apiApp.route('/warehouses', warehouseApi);
-  apiApp.route('/feedback', feedbackApi);
+  // D2 — API del buzón de feedback DESMONTADA: comentada, no borrada. /api/erp/feedback → 404.
+  // apiApp.route('/feedback', feedbackApi);
   apiApp.route('/quotes', quoteApi);
   apiApp.route('/pedidos', pedidoApi);
   apiApp.route('/albaranes', albaranApi);

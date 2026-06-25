@@ -28,6 +28,10 @@ export function fiscalIdConflict(db, fiscalId, excludeId = null) {
 // semántica de "guardar cliente"; a nivel de módulo para que el servicio compartido
 // y las rutas usen exactamente la misma lógica).
 function syncNewsletter(db, email, name, accepts) {
+  // D2 — newsletter DESMONTADO y newsletter_subscribers ARCHIVADA: la ficha de cliente YA NO escribe
+  // a esa tabla (no-op). El campo accepts_newsletter del cliente se conserva tal cual. Cuerpo original
+  // abajo, inalcanzable (no se borra); si la tienda/boletín vuelve, se reconecta.
+  return;
   if (!email) return;
   if (accepts) {
     db.prepare('INSERT OR IGNORE INTO newsletter_subscribers (email,name) VALUES (?,?)').run(email, name || '');

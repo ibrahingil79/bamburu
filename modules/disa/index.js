@@ -2018,6 +2018,9 @@ export function register(app, db) {
 
   // ── Store Builder chat ────────────────────────────────────
   router.post('/store-message', adminAuth(db), async c => {
+    // D2 — builder de tienda por voz DESMONTADO (el editor "Tienda Online" se retiró; store_settings
+    // se conserva, no se archiva). Endpoint neutralizado; cuerpo original abajo, inalcanzable.
+    return c.json({ reply: 'El editor de tienda está desmontado (D2). La tienda pública está desactivada.', action: null }, 404);
     let body;
     try { body = await c.req.json(); } catch { return c.json({ ok: false }, 400); }
     const message = (body?.message || '').trim().substring(0, 2000);
@@ -2234,8 +2237,9 @@ export function register(app, db) {
       '/admin/products /admin/categories /admin/tags /admin/discounts',
       '/admin/inventory /admin/suppliers /admin/purchases /admin/purchases/new',
       '/admin/invoices /admin/clients /admin/clients/groups /admin/analytics',
-      '/admin/store-settings /admin/settings /admin/users /admin/activity',
-      '/admin/security /admin/disa /admin/newsletter /admin/reviews /admin/feedback',
+      '/admin/settings /admin/users /admin/activity',
+      '/admin/security /admin/disa',
+      // D2 — desmontados: quitados /admin/store-settings, /admin/newsletter, /admin/reviews, /admin/feedback.
       '',
       'Detalle solo con ID numerico real existente:',
       '/admin/purchases/:id  /admin/invoices/:id',   // PIEZA C: retirados /admin/orders/:id y /:id/invoice (POS viejo)
@@ -2402,9 +2406,9 @@ export function register(app, db) {
       // PIEZA C — POS viejo retirado: quitados '/admin/orders', '/admin/orders/pos', '/refunds', '/draft/new'.
       '/admin/discounts','/admin/inventory','/admin/suppliers','/admin/purchases',
       '/admin/purchases/new','/admin/invoices','/admin/clients','/admin/clients/groups',
-      '/admin/analytics','/admin/store-settings','/admin/settings','/admin/users',
-      '/admin/activity','/admin/security','/admin/disa','/admin/newsletter',
-      '/admin/reviews','/admin/feedback',
+      '/admin/analytics','/admin/settings','/admin/users',
+      '/admin/activity','/admin/security','/admin/disa',
+      // D2 — desmontados: quitados /admin/store-settings, /admin/newsletter, /admin/reviews, /admin/feedback.
     ]);
     const DISA_DETAIL_PATTERNS = [
       // PIEZA C — POS viejo retirado: quitados /admin/orders/:id y /admin/orders/:id/invoice.
