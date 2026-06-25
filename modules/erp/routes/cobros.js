@@ -14,14 +14,14 @@ export function createCobrosRoutes(db) {
 
   // GET /api/erp/cobros — pipeline PRIORIZADO de deudas vivas (cada una con su próxima
   // acción + motivo) + total global. Una sola fuente de verdad (collectionsWorklist).
-  api.get('/', requirePerm('orders.read'), c => {
+  api.get('/', requirePerm('cobros.read'), c => {
     try {
       return c.json(collectionsWorklist(db, new Date().toISOString().slice(0, 10)));
     } catch (e) { return c.json({ error: e.message }, 500); }
   });
 
   // GET /admin/cobros — torre de control (client-render: se refresca en vivo tras un cobro).
-  views.get('/', requirePerm('orders.read'), c => {
+  views.get('/', requirePerm('cobros.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
 
     const content = `

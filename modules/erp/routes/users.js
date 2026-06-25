@@ -125,7 +125,19 @@ export function createUserRoutes(db) {
 
   // ── VIEWS ──────────────────────────────────────────────────────
   views.get('/', requirePerm('admin.manage_users'), c => {
-    const allPerms = db.prepare('SELECT id, module, action, description FROM permissions ORDER BY module, action').all();
+    // Permisos · Paso 1 FASE 2 — la pantalla deja de OFRECER los permisos decorativos/legacy que no
+    // gobiernan nada vivo (no se borran del catálogo ni se tocan asignaciones existentes; solo no se
+    // listan para asignar). orders.* (POS retirado, ya no gatea nada tras recablear facturas/cobros),
+    // services.* (servicios unificados en productos), activity.read (la actividad va por admin.manage_users),
+    // purchases.delete / tags.edit (sin ruta), admin.manage_roles / admin.settings (sin uso). Los cobros.*
+    // nuevos sí aparecen (vienen del catálogo).
+    const HIDDEN_PERMS = new Set([
+      'orders.read','orders.create','orders.edit','orders.update_status',
+      'services.read','services.create','services.edit','services.delete',
+      'activity.read','purchases.delete','tags.edit','admin.manage_roles','admin.settings',
+    ]);
+    const allPerms = db.prepare('SELECT id, module, action, description FROM permissions ORDER BY module, action')
+      .all().filter(p => !HIDDEN_PERMS.has(p.module + '.' + p.action));
     const permsJson = JSON.stringify(allPerms);
     const content = `
       <div class="ph"><h2>Usuarios Administradores</h2><button class="btn btn-primary" onclick="newUser()">Nuevo usuario</button></div>
@@ -190,7 +202,7 @@ export function createUserRoutes(db) {
 
       <script>
       const SYSTEM_ROLES={owner:'Propietario',admin:'Administrador',employee:'Empleado',readonly:'Solo lectura'};
-      const MODULE_LABELS={activity:'Actividad',admin:'Administración',analytics:'Analítica',categories:'Categorías',clients:'Clientes',discounts:'Descuentos',inventory:'Inventario',invoices:'Facturas',orders:'Pedidos',products:'Productos',purchases:'Compras',suppliers:'Proveedores',tags:'Etiquetas'};
+      const MODULE_LABELS={activity:'Actividad',admin:'Administración',analytics:'Analítica',categories:'Categorías',clients:'Clientes',cobros:'Cobros',discounts:'Descuentos',inventory:'Inventario',invoices:'Facturas',orders:'Pedidos',products:'Productos',purchases:'Compras',quotes:'Presupuestos',pedidos:'Pedidos de venta',albaranes:'Albaranes',sales:'Ventas',feedback:'Feedback',suppliers:'Proveedores',tags:'Etiquetas'};
       const ALL_PERMS=${permsJson};
       let users=[], selectedPermIds=new Set();
 

@@ -216,7 +216,7 @@ export function createClientRoutes(db, cfg = {}) {
   // POST acción de CUENTA — recordatorio (UN email + acción por factura), promesa (todas)
   // o cobro a cuenta (reparto auto/manual → un invoice_payment por factura). Va por el mismo
   // servicio validado que usa DISA. Rechaza facturas no vivas (doble seguro de Paso 1).
-  api.post('/:id/account-actions', requirePerm('invoices.create'), validate(accountActionSchema), async c => {
+  api.post('/:id/account-actions', requirePerm('cobros.manage'), validate(accountActionSchema), async c => {
     try {
       const input = c.get('validated');
       const res = await registerAccountAction(db, parseInt(c.req.param('id')), input, { sendEmail });

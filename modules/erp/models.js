@@ -1603,6 +1603,9 @@ export function runMigrations(db) {
     { module: 'albaranes', action: 'read',    description: 'Ver albaranes (entregas)' },
     { module: 'albaranes', action: 'create',  description: 'Crear/confirmar albaranes (entregar)' },
     { module: 'albaranes', action: 'edit',    description: 'Anular albaranes / facturar entregas' },
+    // Permisos · Paso 1 FASE 2 — Cobros con permiso propio (antes iba por orders.read, del POS retirado).
+    { module: 'cobros',    action: 'read',    description: 'Ver Cobros: deudas, worklist y estado de cobro' },
+    { module: 'cobros',    action: 'manage',  description: 'Registrar cobros y acciones de cobro/cuenta' },
   ];
   for (const p of permissionsData) {
     db.prepare('INSERT OR IGNORE INTO permissions (module, action, description) VALUES (?, ?, ?)').run(p.module, p.action, p.description);

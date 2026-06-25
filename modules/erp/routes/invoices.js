@@ -811,7 +811,7 @@ export function createInvoiceRoutes(db) {
     c.get('isAdmin') || checkPermission(db, c.get('session'), 'sales', 'emit_over_stock');
 
   // GET /api/erp/invoices — list (+ estado de cobro en vivo por factura)
-  api.get('/', requirePerm('orders.read'), c => {
+  api.get('/', requirePerm('invoices.read'), c => {
     try {
       // Bug fix: la columna real en sales_orders es order_number, no reference.
       // Antes de A1 nunca había facturas en BD así que el error 500 no se notaba.
@@ -837,7 +837,7 @@ export function createInvoiceRoutes(db) {
   });
 
   // GET /api/erp/invoices/:id — single invoice JSON (+ enlaces de ciclo de vida)
-  api.get('/:id', requirePerm('orders.read'), c => {
+  api.get('/:id', requirePerm('invoices.read'), c => {
     try {
       const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(c.req.param('id'));
       if (!inv) return c.json({ error: 'No encontrada' }, 404);
@@ -862,7 +862,7 @@ export function createInvoiceRoutes(db) {
   });
 
   // POST /api/erp/invoices/from-order/:orderId — generate invoice from order
-  api.post('/from-order/:orderId', requirePerm('orders.edit'), c => {
+  api.post('/from-order/:orderId', requirePerm('invoices.create'), c => {
     try {
       const orderId = parseInt(c.req.param('orderId'));
       const res = generateInvoice(db, orderId);
@@ -952,7 +952,7 @@ export function createInvoiceRoutes(db) {
   });
 
   // POST /api/erp/invoices/:id/payments — registrar un cobro (total o parcial)
-  api.post('/:id/payments', requirePerm('invoices.create'), validate(invoicePaymentSchema), c => {
+  api.post('/:id/payments', requirePerm('cobros.manage'), validate(invoicePaymentSchema), c => {
     try {
       const id = parseInt(c.req.param('id'));
       const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(id);
@@ -972,7 +972,7 @@ export function createInvoiceRoutes(db) {
   // DELETE /api/erp/invoices/:id/payments/:pid — deshacer un cobro mal metido. Un cobro
   // es un apunte de caja interno (control interno, no documento legal, no toca el hash):
   // corregirlo = borrar ESE apunte, sin tocar la factura. El estado de cobro se recalcula.
-  api.delete('/:id/payments/:pid', requirePerm('invoices.create'), c => {
+  api.delete('/:id/payments/:pid', requirePerm('cobros.manage'), c => {
     try {
       const id = parseInt(c.req.param('id')), pid = parseInt(c.req.param('pid'));
       const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(id);
@@ -987,7 +987,7 @@ export function createInvoiceRoutes(db) {
 
   // GET /api/erp/invoices/:id/collection-email-preview — plantilla precargada (editable
   // en el modal) según el tono de la próxima acción. Solo construye, no envía.
-  api.get('/:id/collection-email-preview', requirePerm('orders.read'), c => {
+  api.get('/:id/collection-email-preview', requirePerm('cobros.read'), c => {
     try {
       const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(c.req.param('id'));
       if (!inv) return c.json({ error: 'Factura no encontrada' }, 404);
@@ -1006,7 +1006,7 @@ export function createInvoiceRoutes(db) {
   // ÚNICA vía de escritura (la usan las 3 superficies y DISA): el servicio reutiliza el
   // doble seguro de Paso 1 (rechaza 400 sobre factura no viva) y, en recordatorio_email,
   // envía por Resend antes de registrar. Nada se envía solo: el front confirma primero.
-  api.post('/:id/collection-actions', requirePerm('invoices.create'), validate(collectionActionSchema), async c => {
+  api.post('/:id/collection-actions', requirePerm('cobros.manage'), validate(collectionActionSchema), async c => {
     try {
       const input = c.get('validated');
       const res = await registerCollectionAction(db, parseInt(c.req.param('id')), input, { sendEmail });
@@ -1018,7 +1018,7 @@ export function createInvoiceRoutes(db) {
   });
 
   // GET /admin/invoices — list view
-  views.get('/', requirePerm('orders.read'), c => {
+  views.get('/', requirePerm('invoices.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const content = `
       <div class="ph">
@@ -1661,7 +1661,7 @@ export function createInvoiceRoutes(db) {
   });
 
   // GET /admin/invoices/:id — printable invoice
-  views.get('/:id', requirePerm('orders.read'), async c => {
+  views.get('/:id', requirePerm('invoices.read'), async c => {
     try {
       const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(c.req.param('id'));
       if (!inv) return c.text('Factura no encontrada', 404);
@@ -1771,7 +1771,7 @@ ${esTicketSustituible ? `
 
   // PDF real de la factura — MISMA guarda que la ficha (orders.read), MISMO HTML imprimible
   // (buildInvoicePaper, con QR + leyenda) → printableShell → Chromium. Adjunto descargable.
-  views.get('/:id/pdf', requirePerm('orders.read'), async c => {
+  views.get('/:id/pdf', requirePerm('invoices.read'), async c => {
     try {
       const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(c.req.param('id'));
       if (!inv) return c.text('Factura no encontrada', 404);
