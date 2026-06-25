@@ -42,7 +42,7 @@
 
 ## El Suelo  (admisión — comprometido, mayormente sin construir)
 - CERRADA — Cumplimiento: hash encadenado + Verifactu QR + leyenda. ⬜ Envío AEAT, Facturae, SII, TicketBAI.
-- CERRADA — Multiusuario parcial: roles + `requirePerm` + permisos por usuario en BD operativos. ⬜ Administración de usuarios/permisos por pantalla y por DISA.
+- CERRADA — Multiusuario: roles + `requirePerm` + permisos por usuario, **con pantalla de administración de usuarios/permisos** (`/admin/users`, `admin.manage_users`). El **cimiento** (cada ruta `/admin` y `/api/erp` con su candado, sin agujeros por URL) está hecho; **Permisos · Paso 1 FASE 2** (commit `9a2ec1f`) recableó facturas→`invoices.*` y cobros→`cobros.*` (nuevos) y limpió los permisos decorativos de la pantalla. ⬜ **Paso 2:** DISA no consulta `user_permissions` (solo sesión + admin-only) → mapear acciones de DISA ↔ permisos.
 - ⬜ Contabilidad entera (asientos → conciliación → modelos → libros → puente gestoría): sin empezar.
 
 ## El Foso  (ventaja — comprometido, sin construir)
