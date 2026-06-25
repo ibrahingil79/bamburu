@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { adminAuth, getCsrfToken, requirePerm } from '../../core/auth.js';
+import { checkPermission } from '../../core/permission-check.js';   // Permisos · Paso 2 — MISMO motor que requirePerm (sin lógica paralela)
 import { adminLayout } from '../erp/layout.js';
 import { generateInvoice, anularInvoice, createRectificativa } from '../erp/routes/invoices.js';
 import { createClientSvc, updateClientSvc, archiveClientSvc, restoreClientSvc, searchClients } from '../erp/routes/clients.js';
@@ -156,6 +157,58 @@ export function register(app, db) {
   function isAdminUser(session) {
     return session?.role === 'owner' || session?.role === 'admin';
   }
+
+  // ── Permisos · Paso 2 — DISA exige LA MISMA llave que la pantalla equivalente ──
+  // Cada acción dedicada → el permiso 'modulo.accion' EXACTO de su ruta hermana (verificado contra
+  // el requirePerm real). Owner/admin pasan por bypass (igual que requirePerm). Reutiliza checkPermission
+  // (mismo motor que requirePerm; cero lógica duplicada).
+  const ACTION_PERMS = {
+    create_product: 'products.create', edit_product: 'products.edit', deactivate_product: 'products.edit', activate_product: 'products.edit', delete_product: 'products.delete',
+    create_variant: 'products.edit', edit_variant: 'products.edit', delete_variant: 'products.edit',
+    create_category: 'categories.create', edit_category: 'categories.edit', delete_category: 'categories.delete',
+    create_discount: 'discounts.create', edit_discount: 'discounts.edit', delete_discount: 'discounts.delete',
+    create_supplier: 'suppliers.create', edit_supplier: 'suppliers.edit', delete_supplier: 'suppliers.delete',
+    create_client: 'clients.create', edit_client: 'clients.edit', deactivate_client: 'clients.edit', activate_client: 'clients.edit',
+    adjust_stock: 'inventory.edit', reset_stock: 'inventory.edit', transfer_stock: 'inventory.edit',
+    dictar_compra: 'purchases.create', register_supplier_payment: 'purchases.create',
+    register_collection_action: 'cobros.manage', register_account_action: 'cobros.manage',
+  };
+  // EXCEPCIONES que SIEMPRE exigen owner/admin (legal/seguridad/poder bruto), aunque la pantalla
+  // tenga un permiso asignable: documentos legales (cadena de hash), perfil de DISA, seguridad,
+  // config de empresa y el camino genérico insert/update/delete_record (poder bruto del dueño).
+  const STRICT_ADMIN_ONLY = new Set([
+    'insert_record', 'update_record', 'delete_record',
+    'anular_invoice', 'create_rectificativa', 'create_invoice_from_order',
+    'update_profile', 'update_company_config', 'disable_2fa_user', 'list_users_security',
+  ]);
+  // ¿Puede esta sesión EJECUTAR la acción? owner/admin sí (bypass); excepciones → solo admin;
+  // acciones con permiso de pantalla → ese permiso; sin mapeo y no estricta (p. ej. check_2fa_status
+  // autoservicio, lecturas propias) → como hoy.
+  function actionAllowed(db, session, type) {
+    if (isAdminUser(session)) return true;
+    if (STRICT_ADMIN_ONLY.has(type)) return false;
+    const perm = ACTION_PERMS[type];
+    if (!perm) return true;
+    const [m, a] = perm.split('.');
+    return checkPermission(db, session, m, a);
+  }
+  const PERM_DENIED_MSG = 'No tienes permiso para esto. Pídeselo al dueño o a un administrador de tu cuenta.';
+
+  // Permisos · Paso 2 (lectura) — query_database solo devuelve datos de un área si el usuario tiene su
+  // *.read. Tabla → permiso de lectura del área (PROTECTED_TABLES sigue aparte, siempre denegado).
+  const TABLE_READ_PERMS = {
+    invoices: 'invoices.read', invoice_items: 'invoices.read', verifactu_registros: 'invoices.read', verifactu_anulaciones: 'invoices.read',
+    invoice_payments: 'cobros.read',
+    clients: 'clients.read', client_groups: 'clients.read',
+    products: 'products.read', product_variants: 'products.read', product_images: 'products.read', categories: 'products.read', tags: 'products.read', product_tags: 'products.read',
+    stock_movements: 'inventory.read', warehouses: 'inventory.read',
+    customer_orders: 'pedidos.read', customer_order_items: 'pedidos.read',
+    quotes: 'quotes.read', quote_items: 'quotes.read',
+    delivery_notes: 'albaranes.read', delivery_note_items: 'albaranes.read',
+    suppliers: 'suppliers.read',
+    supplier_invoices: 'purchases.read', supplier_payments: 'purchases.read', purchases: 'purchases.read', purchase_items: 'purchases.read', purchase_orders: 'purchases.read', purchase_order_items: 'purchases.read', supplier_returns: 'purchases.read', supplier_return_items: 'purchases.read',
+    discount_codes: 'discounts.read', auto_discounts: 'discounts.read',
+  };
 
   function isValidColumnName(col) {
     if (typeof col !== 'string') return false;
@@ -1064,6 +1117,9 @@ export function register(app, db) {
           return db.prepare(`SELECT p.module, p.action FROM user_permissions up JOIN permissions p ON up.permission_id=p.id WHERE up.admin_user_id=?`).all(session.userId).map(p => p.module+'.'+p.action);
         } catch { return []; }
       })() : [];
+      // Permisos · Paso 2 — el contexto inyectado se TROCEA por área: un bloque solo entra si el usuario
+      // tiene su *.read. Owner/admin ven todo (bypass) → DISA no se queda ciega para el dueño.
+      const canRead = (perm) => isAdminUser(session) || _userPerms.includes(perm);
       const userContext = session
         ? [
             'USUARIO ACTUAL:',
@@ -1144,13 +1200,16 @@ export function register(app, db) {
         'Pais: ' + (cfg.country || 'ES'),
         'Moneda: ' + sym,
         '',
-        'VENTAS ESTE MES (' + (sales.orders || 0) + ' facturas que cuentan: mostrador, facturas y ventas manuales):',
-        '- Venta neta (sin IVA): ' + sym + Number(sales.revenue || 0).toFixed(2),
-        '- IVA recaudado: ' + sym + Number(sales.iva || 0).toFixed(2),
-        '- Total cobrado (con IVA): ' + sym + Number(sales.gross_revenue || 0).toFixed(2),
-        '',
+        ...(canRead('invoices.read') ? [
+          'VENTAS ESTE MES (' + (sales.orders || 0) + ' facturas que cuentan: mostrador, facturas y ventas manuales):',
+          '- Venta neta (sin IVA): ' + sym + Number(sales.revenue || 0).toFixed(2),
+          '- IVA recaudado: ' + sym + Number(sales.iva || 0).toFixed(2),
+          '- Total cobrado (con IVA): ' + sym + Number(sales.gross_revenue || 0).toFixed(2),
+          '',
+        ] : []),
         // PIEZA 2a — PEDIDOS de venta (documento "Pedido", customer_orders). Numero y clientes
         // CURADOS: DISA los usa tal cual, no recalcula con otra definicion ni inventa el cliente.
+        ...(canRead('pedidos.read') ? [
         'PEDIDOS DE VENTA (documento "Pedido" del Pilar 4 · tabla customer_orders; NO es el TPV/sales_orders viejo):',
         '- Pendientes de entrega = CONFIRMADOS (definicion UNICA; anulados y borradores NO cuentan): ' + (pending.count || 0),
         ...(pedidosConfirmados.length ? ['  ' + pedidosConfirmados.map(p => (p.order_number || '?') + ' · ' + p.cliente + ' · ' + sym + Number(p.total || 0).toFixed(2)).join(' | ')] : []),
@@ -1158,17 +1217,19 @@ export function register(app, db) {
         ...(pedidosBorradores.length ? ['  ' + pedidosBorradores.map(p => '#' + p.id + ' · ' + p.cliente + ' · ' + sym + Number(p.total || 0).toFixed(2)).join(' | ')] : []),
         'Usa SIEMPRE estos numeros y estos clientes (no recalcules "pendientes" con otra definicion ni inventes/cambies el cliente de un borrador).',
         'GESTION DE PEDIDOS POR CHAT: NO disponible en esta version. NO crees, confirmes, anules ni elimines pedidos por chat (ni con insert/update/delete_record sobre customer_orders/customer_order_items). Ante esa peticion, DECLINA con un mensaje claro y redirige a la pantalla de Pedidos (/admin/pedidos), SIN pedir confirmacion. LEER pedidos SI esta permitido.',
+        ] : []),
         '',
-        'ATENCION:',
-        '- Productos con stock bajo (<=5 unidades): ' +
-          (lowStock.length > 0
-            ? lowStock.map(p => p.name + ' (' + p.stock + ')').join(', ')
-            : 'ninguno'),
-        '- Clientes sin compra en >30 dias: ' + (inactiveClients.count || 0),
-        '',
+        ...((canRead('inventory.read') || canRead('clients.read')) ? [
+          'ATENCION:',
+          ...(canRead('inventory.read') ? ['- Productos con stock bajo (<=5 unidades): ' +
+            (lowStock.length > 0 ? lowStock.map(p => p.name + ' (' + p.stock + ')').join(', ') : 'ninguno')] : []),
+          ...(canRead('clients.read') ? ['- Clientes sin compra en >30 dias: ' + (inactiveClients.count || 0)] : []),
+          '',
+        ] : []),
         // get_collections_summary (lectura): worklist priorizado + próxima acción por deuda.
         ...(() => {
           try {
+            if (!canRead('cobros.read')) return [];
             const wl = collectionsWorklist(db, new Date().toISOString().slice(0, 10));
             const top = wl.rows.slice(0, 8).map((r, i) => {
               const p = r.proximaAccion;
@@ -1193,6 +1254,7 @@ export function register(app, db) {
         // get_collections_summary a nivel de CUENTA: deuda total + próxima acción de cuenta por cliente.
         ...(() => {
           try {
+            if (!canRead('cobros.read')) return [];
             const acc = accountsSummary(db, new Date().toISOString().slice(0, 10));
             if (!acc.rows.length) return [];
             const lines = acc.rows.slice(0, 8).map((r, i) => {
@@ -1215,6 +1277,7 @@ export function register(app, db) {
         // responder "qué vence" desde aquí.
         ...(() => {
           try {
+            if (!canRead('purchases.read')) return [];
             const pa = supplierAccountsSummary(db, new Date().toISOString().slice(0, 10));
             if (!pa.rows.length) return [];
             const lines = pa.rows.slice(0, 8).map((r, i) => {
@@ -1238,6 +1301,7 @@ export function register(app, db) {
         // por nombre (resolver a su id antes de actuar) y para responder consultas.
         ...(() => {
           try {
+            if (!canRead('clients.read')) return [];
             const totalCl = db.prepare('SELECT COUNT(*) n FROM clients WHERE active=1').get().n;
             if (!totalCl) return [];
             const cls = searchClients(db, { limit: 40 });
@@ -1258,6 +1322,7 @@ export function register(app, db) {
         // coste medio (WAC) curados; el stock por almacén NO va aquí (se consulta).
         ...(() => {
           try {
+            if (!canRead('inventory.read')) return [];
             const total = db.prepare("SELECT COUNT(*) n FROM products WHERE status='active' AND COALESCE(type,'physical')='physical'").get().n;
             if (!total) return [];
             const prods = db.prepare("SELECT id, name, sku, stock, average_cost FROM products WHERE status='active' AND COALESCE(type,'physical')='physical' ORDER BY name LIMIT 40").all();
@@ -1280,6 +1345,7 @@ export function register(app, db) {
         // de un traslado o el almacén de un ajuste por nombre.
         ...(() => {
           try {
+            if (!canRead('inventory.read')) return [];
             const whs = activeWarehouses(db);
             if (!whs.length) return [];
             return [
@@ -1293,6 +1359,7 @@ export function register(app, db) {
         // [Voz DISA stock] Índice de proveedores — resolver nombre→id para consultas de compras.
         ...(() => {
           try {
+            if (!canRead('suppliers.read')) return [];
             const total = db.prepare('SELECT COUNT(*) n FROM suppliers').get().n;
             if (!total) return [];
             const sups = db.prepare('SELECT id, name, fiscal_id FROM suppliers ORDER BY name LIMIT 40').all();
@@ -1307,6 +1374,7 @@ export function register(app, db) {
         // por almacén. Y aviso explícito: el stock mínimo no se gestiona (no inventar "bajo minimos").
         ...(() => {
           try {
+            if (!canRead('inventory.read')) return [];
             const v = inventoryValuation(db);
             const out = [
               'INVENTARIO — valoracion a coste (WAC global) [dato curado, usalo tal cual]:',
@@ -1320,25 +1388,27 @@ export function register(app, db) {
             return out;
           } catch { return []; }
         })(),
-        'PRODUCTOS MAS VENDIDOS ESTE MES:',
-        topProducts.length > 0
-          ? topProducts.map((p, i) => (i + 1) + '. ' + p.name + ' (' + p.sold + ' uds)').join('\n')
-          : 'Sin ventas completadas este mes todavia',
-        '',
-        'PRODUCTOS MAS VENDIDOS (historico total):',
-        topProductsAllTime.length > 0
-          ? topProductsAllTime.map((p, i) => (i + 1) + '. ' + p.name + ' (' + p.sold + ' uds, ' + sym + p.revenue + ')').join('\n')
-          : 'Sin datos',
+        ...(canRead('invoices.read') ? [
+          'PRODUCTOS MAS VENDIDOS ESTE MES:',
+          topProducts.length > 0
+            ? topProducts.map((p, i) => (i + 1) + '. ' + p.name + ' (' + p.sold + ' uds)').join('\n')
+            : 'Sin ventas completadas este mes todavia',
+          '',
+          'PRODUCTOS MAS VENDIDOS (historico total):',
+          topProductsAllTime.length > 0
+            ? topProductsAllTime.map((p, i) => (i + 1) + '. ' + p.name + ' (' + p.sold + ' uds, ' + sym + p.revenue + ')').join('\n')
+            : 'Sin datos',
+        ] : []),
       ];
 
-      if (currentPage === 'products') {
+      if (currentPage === 'products' && canRead('products.read')) {
         const recent = db.prepare(
           "SELECT id, name, price, stock FROM products WHERE status='active' ORDER BY id DESC LIMIT 5"
         ).all();
         lines.push('', 'PAGINA ACTUAL: Productos');
         lines.push('Productos recientes (id, nombre, precio, stock):');
         lines.push(recent.map(p => '#' + p.id + ' ' + p.name + ' ' + sym + p.price + ' stock:' + p.stock).join(', ') || 'ninguno');
-      } else if (currentPage === 'orders') {
+      } else if (currentPage === 'orders' && canRead('pedidos.read')) {
         // PIEZA C — pedidos recientes desde la cadena nueva (customer_orders), no el TPV viejo.
         const recentOrders = db.prepare(
           "SELECT id, order_number, total, status FROM customer_orders ORDER BY id DESC LIMIT 5"
@@ -1347,14 +1417,14 @@ export function register(app, db) {
         lines.push('Pedidos recientes: ' + (recentOrders.map(
           o => '#' + o.id + ' ' + o.order_number + ' ' + sym + o.total + ' [' + o.status + ']'
         ).join(', ') || 'ninguno'));
-      } else if (currentPage === 'inventory') {
+      } else if (currentPage === 'inventory' && canRead('inventory.read')) {
         const lowStockAll = db.prepare(
           "SELECT id, name, stock FROM products WHERE stock <= 10 AND status='active' ORDER BY stock ASC LIMIT 10"
         ).all();
         lines.push('', 'PAGINA ACTUAL: Inventario');
         lines.push('Productos stock bajo (id, nombre, stock):');
         lines.push(lowStockAll.map(p => '#' + p.id + ' ' + p.name + ' (' + p.stock + ')').join(', ') || 'ninguno');
-      } else if (currentPage === 'clients') {
+      } else if (currentPage === 'clients' && canRead('clients.read')) {
         const totalClients = db.prepare('SELECT COUNT(*) as c FROM clients WHERE active=1').get();
         const recentClients = db.prepare(
           'SELECT id, name, email FROM clients WHERE active=1 ORDER BY id DESC LIMIT 5'
@@ -1364,14 +1434,14 @@ export function register(app, db) {
         lines.push('Clientes recientes: ' + recentClients.map(
           c => '#' + c.id + ' ' + c.name + (c.email ? ' <' + c.email + '>' : '')
         ).join(', '));
-      } else if (currentPage === 'suppliers') {
+      } else if (currentPage === 'suppliers' && canRead('suppliers.read')) {
         const suppliers = db.prepare(
           'SELECT id, name, email, phone FROM suppliers ORDER BY id DESC LIMIT 8'
         ).all();
         lines.push('', 'PAGINA ACTUAL: Proveedores');
         lines.push('Proveedores (id, nombre):');
         lines.push(suppliers.map(s => '#' + s.id + ' ' + s.name).join(', ') || 'ninguno');
-      } else if (currentPage === 'analytics') {
+      } else if (currentPage === 'analytics' && canRead('invoices.read')) {
         // PIEZA C — ventas por mes desde la cadena nueva (facturas que cuentan, total con IVA).
         const last3months = ventasPorMes(db, 3);
         lines.push('', 'PAGINA ACTUAL: Analitica');
@@ -1380,7 +1450,7 @@ export function register(app, db) {
         ).join(' | ') || 'sin datos'));
       } else if (currentPage === 'dashboard' || currentPage === 'admin') {
         lines.push('', 'PAGINA ACTUAL: Dashboard principal');
-      } else if (currentPage === 'discounts') {
+      } else if (currentPage === 'discounts' && canRead('discounts.read')) {
         const activeDisco = db.prepare(
           "SELECT code, type, value, uses_count FROM discount_codes WHERE active=1 ORDER BY id DESC LIMIT 5"
         ).all();
@@ -1388,7 +1458,7 @@ export function register(app, db) {
         lines.push('Descuentos activos: ' + (activeDisco.map(
           d => d.code + ' (' + d.type + ':' + d.value + ', usos:' + d.uses_count + ')'
         ).join(', ') || 'ninguno'));
-      } else if (currentPage === 'invoices') {
+      } else if (currentPage === 'invoices' && canRead('invoices.read')) {
         const recentInv = db.prepare(
           "SELECT invoice_number, total, status FROM invoices ORDER BY id DESC LIMIT 5"
         ).all();
@@ -1411,6 +1481,9 @@ export function register(app, db) {
     try {
       const cfg = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get() || {};
       const sym = cfg.currency_symbol || '€';
+      // Permisos · Paso 2 — el resumen también se trocea por área (owner/admin: todo).
+      const session = c.get('session');
+      const can = (m, a) => isAdminUser(session) || checkPermission(db, session, m, a);
 
       // PIEZA C — ventas del mes desde la cadena nueva (facturas que cuentan). Titular = total con IVA.
       const _monthStart = new Date().toISOString().slice(0, 7) + '-01';
@@ -1430,7 +1503,7 @@ export function register(app, db) {
         WHERE status='active' AND stock <= 5
         ORDER BY stock ASC LIMIT 5
       `).all();
-      if (lowStock.length > 0) {
+      if (can('inventory','read') && lowStock.length > 0) {
         const critical = lowStock.filter(p => p.stock === 0).length;
         alerts.push({
           type: critical > 0 ? 'danger' : 'warn',
@@ -1443,7 +1516,7 @@ export function register(app, db) {
 
       // PIEZA C — "pedidos bloqueados": equivalente nuevo = customer_orders confirmados, sin
       // entregar, con > 3 días (cadena nueva, alineado con la 2a). Apunta a /admin/pedidos.
-      const staleCount = pedidosSinEntregar(db, 3);
+      const staleCount = can('pedidos','read') ? pedidosSinEntregar(db, 3) : 0;
       if (staleCount > 0) {
         alerts.push({
           type: 'warn',
@@ -1456,7 +1529,7 @@ export function register(app, db) {
 
       // PIEZA C — inactivos por última FACTURA que cuenta (cadena nueva), no por sales_order viejo.
       let inactiveCount = 0;
-      try { inactiveCount = clientesInactivos(db, 30); } catch {}
+      try { if (can('clients','read')) inactiveCount = clientesInactivos(db, 30); } catch {}
       if (inactiveCount > 0) {
         alerts.push({
           type: 'info',
@@ -1471,7 +1544,7 @@ export function register(app, db) {
         SELECT COUNT(*) as count FROM products
         WHERE status='active' AND (description IS NULL OR description='')
       `).get() || {};
-      if ((noDesc.count || 0) > 0) {
+      if (can('products','read') && (noDesc.count || 0) > 0) {
         alerts.push({
           type: 'info',
           title: 'Sin descripción',
@@ -1483,9 +1556,9 @@ export function register(app, db) {
 
       return c.json({
         metrics: {
-          revenue: Number(sales.revenue || 0),
-          orders: sales.orders || 0,
-          pending: pending.count || 0,
+          revenue: can('invoices','read') ? Number(sales.revenue || 0) : null,
+          orders: can('invoices','read') ? (sales.orders || 0) : null,
+          pending: can('pedidos','read') ? (pending.count || 0) : null,
           currency: sym
         },
         alerts
@@ -2455,6 +2528,14 @@ export function register(app, db) {
         );
         if (forbidden)
           return { error: 'Tabla protegida: ' + forbidden };
+        // Permisos · Paso 2 — por cada tabla de negocio referida, exige el *.read de su área (owner/admin bypass).
+        const denied = Object.entries(TABLE_READ_PERMS).find(([t, perm]) => {
+          if (!new RegExp('\\b' + t + '\\b', 'i').test(sql)) return false;
+          const [m, a] = perm.split('.');
+          return !(isAdminUser(session) || checkPermission(db, session, m, a));
+        });
+        if (denied)
+          return { error: 'No tienes permiso para consultar datos de esa área (' + denied[1] + '). Pídeselo al dueño.' };
         try {
           const rows = db.prepare(sql).all();
           return { rows, count: rows.length };
@@ -2532,8 +2613,8 @@ export function register(app, db) {
 
       if (isConfirming && pendingAction) {
         const session = c.get('session');
-        if (ADMIN_ONLY_ACTIONS.has(pendingAction.type) && !isAdminUser(session)) {
-          cleanReply = 'No tienes permisos para ejecutar esta accion. Solo administradores pueden hacer cambios. Contacta al admin de tu cuenta.';
+        if (!actionAllowed(db, session, pendingAction.type)) {
+          cleanReply = PERM_DENIED_MSG;
         } else {
           executionResult = await executeAction(db, pendingAction, session);
           cleanReply = executionResult.message;
@@ -2576,8 +2657,8 @@ export function register(app, db) {
             // enrutar a la pantalla de revisión, donde está el confirm real). Sin "¿confirmas?".
             const session = c.get('session');
             cleanReply = reply.replace(parsedAction.raw, '').trim();
-            if (ADMIN_ONLY_ACTIONS.has(parsedAction.action.type) && !isAdminUser(session)) {
-              cleanReply = 'No tienes permisos para esta accion. Solo administradores pueden registrar compras.';
+            if (!actionAllowed(db, session, parsedAction.action.type)) {
+              cleanReply = PERM_DENIED_MSG;
             } else {
               executionResult = await executeAction(db, parsedAction.action, session);
               const tail = executionResult?.message || '';
