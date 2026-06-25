@@ -2,8 +2,9 @@ import { Hono } from 'hono';
 import { adminLayout, can, printableShell } from '../layout.js';
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
+import { checkPermission } from '../../../core/permission-check.js';   // permiso programático sales.emit_over_stock (espejo de la factura)
 import { mostradorSaleSchema } from '../schemas.js';
-import { emitTicketSvc, buildTicketPaper } from './invoices.js';
+import { emitTicketSvc, buildTicketPaper, ticketStockExcess, excessLineText } from './invoices.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';
 import { activeWarehouses } from './warehouses.js';
 
@@ -26,8 +27,22 @@ export function createMostradorRoutes(db) {
   api.post('/sale', requirePerm('invoices.create'), validate(mostradorSaleSchema), c => {
     try {
       const d = c.get('validated');
+      // Sobreventa de FÍSICOS — espejo del mecanismo de la factura (sales.emit_over_stock), pero con el
+      // disponible POR ALMACÉN que el TPV ya usa (stock − reservado en ese almacén). NO se bloquea, pero
+      // NUNCA en silencio: sin confirm_excess → 400; con el flag pero sin permiso (owner/admin por el
+      // bypass de requirePerm; otros con sales.emit_over_stock) → 403. El rechazo va ANTES de emitTicketSvc,
+      // así que una sobreventa rechazada NO emite F2 ni mueve stock (atomicidad intacta). Servicios,
+      // digitales y líneas libres no se chequean.
+      const excess = ticketStockExcess(db, d.lines, d.warehouse_id);
+      if (excess.length) {
+        const detalle = excess.map(excessLineText).join('; ');
+        if (!d.confirm_excess)
+          return c.json({ error: 'Hay líneas que superan el stock disponible — ' + detalle + '. Para vender el exceso confírmalo explícitamente (confirm_excess).', excess }, 400);
+        if (!(c.get('isAdmin') || checkPermission(db, c.get('session'), 'sales', 'emit_over_stock')))
+          return c.json({ error: 'No tienes permiso para vender por encima del stock. Solo el dueño o un administrador pueden hacerlo; baja la cantidad a lo disponible.' }, 403);
+      }
       const r = emitTicketSvc(db, { lines: d.lines, warehouse_id: d.warehouse_id, payment_method: d.payment_method });
-      logActivity(db, c.get('session'), 'Emitió ticket de mostrador', 'invoice', r.id, r.invoice_number + ' · ' + r.payment_method);
+      logActivity(db, c.get('session'), 'Emitió ticket de mostrador', 'invoice', r.id, r.invoice_number + ' · ' + r.payment_method + (excess.length ? ' (exceso de stock confirmado)' : ''));
       return c.json({ ...r, message: 'Ticket ' + r.invoice_number + ' emitido y cobrado' }, 201);
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -60,6 +75,7 @@ export function createMostradorRoutes(db) {
         <div class="card"><div class="card-body">
           <h3 style="font-size:.95rem;margin:0 0 .75rem">Ticket</h3>
           <div id="cart" style="min-height:60px"></div>
+          <div id="stockWarn" style="display:none;margin:.75rem 0;padding:.6rem .8rem;border-radius:8px;background:#FBE9E7;color:#A32D2D;font-size:.82rem;border:1px solid #F3C6BF"></div>
           <div id="limitWarn" style="display:none;margin:.75rem 0;padding:.6rem .8rem;border-radius:8px;background:#FAEEDA;color:#854F0B;font-size:.82rem;border:1px solid #EBDDB7"></div>
           <table style="width:100%;margin-top:.75rem;font-size:.9rem"><tfoot id="totals"></tfoot></table>
           <button class="btn btn-primary" id="btn-cobrar" style="width:100%;margin-top:1rem" onclick="openCobro()" disabled>Cobrar</button>
@@ -81,6 +97,7 @@ export function createMostradorRoutes(db) {
               <input type="number" class="form-control" id="entregado" step="0.01" min="0" oninput="calcCambio()" placeholder="0.00">
               <div id="cambio" style="margin-top:.5rem;font-weight:600"></div>
             </div>
+            <div id="stockWarn2" style="display:none;margin-top:.5rem;padding:.6rem .8rem;border-radius:8px;background:#FBE9E7;color:#A32D2D;font-size:.82rem;border:1px solid #F3C6BF"></div>
             <div id="limitWarn2" style="display:none;margin-top:.5rem;padding:.6rem .8rem;border-radius:8px;background:#FAEEDA;color:#854F0B;font-size:.82rem;border:1px solid #EBDDB7"></div>
           </div>
           <div class="modal-foot">
@@ -114,6 +131,11 @@ export function createMostradorRoutes(db) {
       }
       async function onWhChange(){ await loadStock(); renderGrid(); }
       function stockOf(p){ return (p.type||'physical')!=='physical' ? null : (whStock[p.id]!=null?whStock[p.id]:0); }
+      // Disponible POR ALMACÉN de una línea física del carrito (el MISMO que muestra la rejilla). null = no se chequea.
+      function lineAvail(l){ return (l.physical && l.product_id!=null) ? (whStock[l.product_id]!=null?whStock[l.product_id]:0) : null; }
+      // Líneas de físico que superan su disponible (espejo del aviso de la factura, por almacén).
+      function stockExcess(){ return cart.filter(function(l){ const a=lineAvail(l); return a!=null && l.qty>a; })
+        .map(function(l){ const a=lineAvail(l); return { name:l.description, available:a, requested:l.qty, excess:l.qty-a }; }); }
       function renderGrid(){
         const q=(document.getElementById('prodSearch').value||'').toLowerCase();
         const list=catalog.filter(p=>!q || p.name.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q));
@@ -128,7 +150,7 @@ export function createMostradorRoutes(db) {
       function addProduct(id){
         const p=catalog.find(x=>x.id===id); if(!p) return;
         const ex=cart.find(x=>x.product_id===id);
-        if(ex){ ex.qty++; } else { cart.push({ product_id:id, description:p.name, qty:1, unit_price:Number(p.price)||0, tax_rate:Number(p.tax_rate)||0, free:false }); }
+        if(ex){ ex.qty++; } else { cart.push({ product_id:id, description:p.name, qty:1, unit_price:Number(p.price)||0, tax_rate:Number(p.tax_rate)||0, free:false, physical:(p.type||'physical')==='physical' }); }
         renderCart();
       }
       function addFreeLine(){
@@ -149,12 +171,17 @@ export function createMostradorRoutes(db) {
       }
       function renderCart(){
         document.getElementById('cart').innerHTML = cart.length ? cart.map(function(l,i){
+          const a=lineAvail(l); const over=(a!=null && l.qty>a);
+          const overTxt = over ? '<br><span style="color:#A32D2D;font-size:.72rem">⚠ hay '+a+', vendes '+l.qty+' — exceso de '+(l.qty-a)+'</span>' : '';
           return '<div style="display:flex;align-items:center;gap:.4rem;padding:.35rem 0;border-bottom:1px solid var(--border)">'
-            +'<div style="flex:1;font-size:.85rem">'+escHtml(l.description)+(l.free?' <span style="color:var(--muted);font-size:.72rem">(libre 21%)</span>':'')+'<br><span style="color:var(--muted);font-size:.75rem">'+SYM+l.unit_price.toFixed(2)+' · IVA '+l.tax_rate+'%</span></div>'
-            +'<input type="number" min="1" value="'+l.qty+'" onchange="setQty('+i+',this.value)" style="width:52px;padding:.2rem .3rem;border:1px solid var(--border2);border-radius:4px;font-size:.82rem">'
+            +'<div style="flex:1;font-size:.85rem">'+escHtml(l.description)+(l.free?' <span style="color:var(--muted);font-size:.72rem">(libre 21%)</span>':'')+'<br><span style="color:var(--muted);font-size:.75rem">'+SYM+l.unit_price.toFixed(2)+' · IVA '+l.tax_rate+'%</span>'+overTxt+'</div>'
+            +'<input type="number" min="1" value="'+l.qty+'" onchange="setQty('+i+',this.value)" style="width:52px;padding:.2rem .3rem;border:1px solid '+(over?'#A32D2D':'var(--border2)')+';border-radius:4px;font-size:.82rem">'
             +'<span style="min-width:64px;text-align:right;font-size:.85rem">'+SYM+(l.qty*l.unit_price).toFixed(2)+'</span>'
             +'<button class="btn btn-danger btn-sm" onclick="removeLine('+i+')">✕</button></div>';
         }).join('') : '<div style="color:var(--muted);font-size:.85rem">Carrito vacío. Toca un producto.</div>';
+        const exc=stockExcess(); const sw=document.getElementById('stockWarn');
+        if(exc.length){ sw.style.display='block'; sw.innerHTML='⚠ Venta por encima del stock disponible: '+exc.map(function(x){return escHtml(x.name)+' (hay '+x.available+', vendes '+x.requested+')';}).join('; ')+'. Puedes continuar; al cobrar se pedirá confirmación.'; }
+        else { sw.style.display='none'; }
         const t=totals();
         const ivaRows=Object.keys(t.byRate).sort((a,b)=>b-a).map(r=>'<tr><td style="color:var(--muted);padding:.15rem 0">IVA '+r+'%</td><td style="text-align:right">'+SYM+t.byRate[r].toFixed(2)+'</td></tr>').join('');
         document.getElementById('totals').innerHTML = cart.length
@@ -177,6 +204,10 @@ export function createMostradorRoutes(db) {
         document.getElementById('btn-confirmar').disabled=true;
         const w2=document.getElementById('limitWarn2');
         if(t.total>LIMIT){ w2.style.display='block'; w2.textContent='Importe > 400 €: normalmente correspondería factura completa. Aviso, no bloqueo.'; } else { w2.style.display='none'; }
+        // Repite el aviso de sobreventa en la confirmación final (espejo de la factura).
+        const exc=stockExcess(); const sw2=document.getElementById('stockWarn2');
+        if(exc.length){ sw2.style.display='block'; sw2.innerHTML='⚠ Vas a vender por encima del stock disponible: '+exc.map(function(x){return escHtml(x.name)+' (hay '+x.available+', vendes '+x.requested+' — exceso de '+x.excess+')';}).join('; ')+'. Al confirmar se registrará el exceso.'; }
+        else { sw2.style.display='none'; }
         openModal('cobroModal');
       }
       function setMethod(m){
@@ -204,7 +235,7 @@ export function createMostradorRoutes(db) {
         const t=totals();
         const lines=cart.map(function(l){ return { product_id:l.product_id, description:l.description, quantity:l.qty, unit_price:l.unit_price, tax_rate:l.tax_rate }; });
         try {
-          const d=await api('POST','/api/erp/mostrador/sale',{ warehouse_id: parseInt(WH())||null, payment_method: method, lines });
+          const d=await api('POST','/api/erp/mostrador/sale',{ warehouse_id: parseInt(WH())||null, payment_method: method, lines, confirm_excess: stockExcess().length>0 });
           let extra='';
           if(method==='efectivo'){ const ent=parseFloat(document.getElementById('entregado').value); if(isFinite(ent)) extra='<div style="margin-top:.4rem">Cambio: <strong>'+SYM+(Math.round((ent-d.total)*100)/100).toFixed(2)+'</strong></div>'; }
           closeModal('cobroModal');

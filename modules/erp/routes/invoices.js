@@ -3,7 +3,7 @@ import { createHash } from 'crypto';
 import QRCode from 'qrcode';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { checkPermission } from '../../../core/permission-check.js';   // chequeo de permiso programático (condicional)
-import { isPhysical, productStock, reservedOfProduct, recordMovement, resolveWarehouseId } from '../stock.js';   // aviso de exceso al facturar (RAMA B) + mostrador (ticket): salida de stock por el libro
+import { isPhysical, productStock, productStockInWarehouse, reservedOfProduct, recordMovement, resolveWarehouseId } from '../stock.js';   // aviso de exceso al facturar (RAMA B) + mostrador (ticket): salida de stock por el libro
 import { recordVerifactuAlta, recordVerifactuAnulacion, cotejoUrl } from '../verifactu.js';   // VERI*FACTU T1: registro oficial + QR de cotejo
 import { validate } from '../../../core/validate.js';
 import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema, invoicePaymentSchema, collectionActionSchema, sustitutivaSchema } from '../schemas.js';
@@ -413,6 +413,28 @@ export function invoiceStockExcess(db, lines) {
     if (!p || !isPhysical(db, p)) continue;
     const stock = productStock(db, p.id);
     const reserved = reservedOfProduct(db, p.id);
+    const available = stock - reserved;
+    const requested = Number(line.quantity) || 0;
+    if (requested > available)
+      out.push({ product_id: p.id, name: p.name, stock, reserved, available, requested, excess: requested - available });
+  }
+  return out;
+}
+
+// MOSTRADOR (ticket F2 — RAMA A: SÍ mueve stock al cobrar). Mismo aviso de exceso que la factura,
+// pero con el DISPONIBLE POR ALMACÉN (stock − reservado en ESE almacén) — el MISMO que el TPV ya
+// muestra (PIEZA 2a), no un cálculo nuevo. Solo líneas de producto FÍSICO; servicios/digitales y
+// líneas libres (sin product_id) no se chequean. Devuelve la misma forma que invoiceStockExcess
+// para reutilizar excessLineText. No escribe nada.
+export function ticketStockExcess(db, lines, warehouseId) {
+  const wid = resolveWarehouseId(db, warehouseId);
+  const out = [];
+  for (const line of (lines || [])) {
+    if (!line.product_id) continue;
+    const p = db.prepare('SELECT id, name, type FROM products WHERE id=?').get(line.product_id);
+    if (!p || !isPhysical(db, p)) continue;
+    const stock = productStockInWarehouse(db, p.id, wid);
+    const reserved = reservedOfProduct(db, p.id, wid);
     const available = stock - reserved;
     const requested = Number(line.quantity) || 0;
     if (requested > available)

@@ -265,6 +265,7 @@ export const mostradorSaleSchema = z.object({
   warehouse_id:   optWarehouse,                          // almacén de salida; principal por defecto
   payment_method: z.enum(['efectivo', 'tarjeta']),       // lista cerrada; cobro al momento
   lines:          z.array(mostradorLineSchema).min(1, 'Al menos una línea requerida'),
+  confirm_excess: z.coerce.boolean().optional().default(false),   // espejo de la factura: vender un físico por encima del disponible exige confirmación explícita
 });
 
 // PIEZA B — emitir factura completa de canje (F3) que sustituye un ticket: solo el cliente
