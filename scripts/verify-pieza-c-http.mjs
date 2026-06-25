@@ -3,10 +3,13 @@
 // Contra el servidor en marcha (tenant desarrollo): emite un ticket de mostrador por el endpoint REAL
 // (POST /api/erp/mostrador/sale) y comprueba que la venta aparece en (1) KPI del dashboard, (2) analítica
 // (overview), (3) contexto/summary de DISA. Luego crea una factura CON cliente y comprueba (4) su historial.
-// Después ANULA esa factura y verifica que deja de sumar. No retira el POS viejo; solo lee de la cadena nueva.
+// Después ANULA esa factura y verifica que deja de sumar. Por último (5) comprueba que el aviso "Pedidos
+// bloqueados" de /summary se nutre de la cadena nueva (customer_orders) y apunta a /admin/pedidos.
+// No retira el POS viejo; solo lee de la cadena nueva.
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 import { createInvoice, anularInvoice } from '../modules/erp/routes/invoices.js';
+import { pedidosSinEntregar } from '../modules/erp/ventas-metrics.js';
 
 const DB = 'data/tenants/desarrollo-bamburu.db';
 const ORIGIN = 'http://127.0.0.1:3000';
@@ -23,6 +26,7 @@ db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf
 const wh = db.prepare('SELECT id FROM warehouses WHERE is_default=1').get()?.id;
 const prod = db.prepare("SELECT id, price, tax_rate FROM products WHERE status='active' AND COALESCE(type,'physical')='physical' AND price>0 ORDER BY id LIMIT 1").get();
 const client = db.prepare('SELECT id, name FROM clients WHERE active=1 ORDER BY id LIMIT 1').get();
+const STALE_ORDER_NO = 'VERIFY-STALE-' + now;   // pedido de prueba "bloqueado" (se siembra y se limpia)
 
 const COOKIE = 'asess=' + token + '; btenant=desarrollo-bamburu';
 const get = async path => fetch(ORIGIN + path, { headers: { cookie: COOKIE } });
@@ -85,7 +89,20 @@ try {
   ok(r2(a3.ovRev) === r2(a1.ovRev) && a3.ovOrd === a1.ovOrd, 'factura ANULADA deja de sumar en analítica (vuelve al valor previo)');
   const histRes2 = await getJson('/api/erp/clients/' + client.id);
   ok((histRes2.orders || []).some(o => o.order_number === inv.invoice_number && o.status === 'anulada'), 'la anulada sigue en el historial del cliente, marcada "anulada"');
+
+  // ── 5) AVISO "Pedidos bloqueados" → cadena nueva (customer_orders) y href /admin/pedidos ──
+  // Sembramos un pedido CONFIRMADO, sin entregar, fechado hace 10 días: debe contar en pedidosSinEntregar
+  // y aparecer como aviso en /summary (la sesión es dueña → ve la alerta sin tropezar con pedidos.read).
+  const staleDate = new Date(Date.now() - 10 * 86400000).toISOString();
+  db.prepare("INSERT INTO customer_orders (order_number, client_id, status, date, delivered_status, subtotal, tax_amount, total) VALUES (?,?,'confirmado',?,NULL,0,0,0)").run(STALE_ORDER_NO, client.id, staleDate);
+  const expStale = pedidosSinEntregar(db, 3);   // cuenta real desde la cadena nueva
+  const sumAlerts = (await getJson('/api/disa/summary')).alerts || [];
+  const blk = sumAlerts.find(a => a.title === 'Pedidos bloqueados');
+  ok(expStale > 0 && !!blk, 'DISA /summary: el aviso "Pedidos bloqueados" aparece desde la cadena nueva (customer_orders, ' + expStale + ' sin entregar)');
+  ok(!!blk && blk.href === '/admin/pedidos', 'el aviso apunta a /admin/pedidos (cadena nueva, no al POS viejo)');
+  ok(!!blk && blk.body.startsWith(expStale + ' pedido'), 'el contador del aviso coincide con pedidosSinEntregar(db,3) = ' + expStale);
 } catch (e) { console.error('ERROR', e.message); fail++; } finally {
+  db.prepare('DELETE FROM customer_orders WHERE order_number=?').run(STALE_ORDER_NO);   // retira el pedido sembrado
   db.prepare('DELETE FROM admin_sessions WHERE token=?').run(token);
   db.close();
 }
