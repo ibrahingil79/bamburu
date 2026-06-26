@@ -8,6 +8,7 @@ import { supplierInvoicePago, isPayable, isRefundable, supplierDebt, ESTADO_LABE
          liveSupplierPayables, repartoAutomaticoPago, validarRepartoManualPago } from '../pagos.js';
 import { pagoModalHtml, pagoCuentaModalHtml, pagoModalScript } from '../views/pago-modal.js';
 import { getVatBands } from '../../../core/vat-bands.js';
+import { postSupplierInvoice, postSupplierPayment } from '../contabilidad.js';   // Contabilidad: posteo tras commit (writeEntry es seguro dentro o fuera de transacción)
 
 // ════════════════════════════════════════════════════════════════════════════
 // FACTURA RECIBIDA (Capa de dinero con proveedores · Paso a) — documento INMUTABLE
@@ -153,6 +154,7 @@ export function createSupplierInvoiceSvc(db, d, opts = {}) {
     const ins = db.prepare('INSERT INTO supplier_invoice_items (supplier_invoice_id, concepto, base, tax_rate, cuota) VALUES (?,?,?,?,?)');
     for (const l of lines) ins.run(invId, l.concepto, l.base, l.tax_rate, l.cuota);
   }
+  try { postSupplierInvoice(db, invId); } catch {}   // asiento de compra/gasto (seguro dentro/fuera de transacción); no rompe el documento
   return { id: invId, internal_code: code, supplier_id: supplierId, total, due_date: dueDate, is_expense: isExpense };
 }
 
@@ -166,6 +168,7 @@ export function anularSupplierInvoiceSvc(db, id, motivo) {
   if (!inv) { const e = new Error('Factura recibida no encontrada'); e.status = 404; throw e; }
   if (inv.status === 'anulada') { const e = new Error('Esta factura ya está anulada'); e.status = 400; throw e; }
   db.prepare("UPDATE supplier_invoices SET status='anulada', anulada_motivo=? WHERE id=?").run(m, id);
+  try { postSupplierInvoice(db, id); } catch {}   // reconcilia: la compra anulada se reversa
   return { id, status: 'anulada' };
 }
 
@@ -186,6 +189,7 @@ export function registerSupplierPaymentSvc(db, id, input, opts = {}) {
   }
   const res = db.prepare('INSERT INTO supplier_payments (supplier_invoice_id, amount, paid_date, payment_method, note) VALUES (?,?,?,?,?)')
     .run(id, amount, input.paid_date || t, input.payment_method || '', input.note || '');
+  try { postSupplierPayment(db, res.lastInsertRowid); } catch {}   // asiento de pago (proveedor/tesorería); no rompe el pago
   return { id: res.lastInsertRowid, pago: supplierInvoicePago(db, inv, t) };
 }
 
@@ -288,6 +292,7 @@ export function createReturnCredit(db, returnId) {
   const invId = r.lastInsertRowid;
   const ins = db.prepare('INSERT INTO supplier_invoice_items (supplier_invoice_id, concepto, base, tax_rate, cuota) VALUES (?,?,?,?,?)');
   for (const l of lines) ins.run(invId, l.concepto, l.base, l.tax_rate, l.cuota);
+  try { postSupplierInvoice(db, invId); } catch {}   // asiento del abono (resta compras y deuda); no rompe la devolución
   return { id: invId, internal_code: code, total };
 }
 
@@ -301,6 +306,7 @@ export function anularReturnCredit(db, returnId, motivo) {
   if (refunds > 0) { const e = new Error('El abono ' + (credit.internal_code || ('#' + credit.id)) + ' ya tiene reembolsos: deshazlos antes de anular la devolución'); e.status = 409; throw e; }
   db.prepare("UPDATE supplier_invoices SET status='anulada', anulada_motivo=? WHERE id=?")
     .run('Anulada por anulación de la devolución' + (motivo ? ': ' + motivo : ''), credit.id);
+  try { postSupplierInvoice(db, credit.id); } catch {}   // reconcilia: el abono anulado se reversa
   return { id: credit.id, internal_code: credit.internal_code };
 }
 

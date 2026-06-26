@@ -35,6 +35,7 @@ import { createCobrosRoutes } from './cobros.js';
 import { createSupplierInvoiceRoutes } from './supplier-invoices.js';
 import { createPagosRoutes } from './pagos.js';
 import { createSecurityRoutes } from './security.js';
+import { createContabilidadRoutes } from './contabilidad-routes.js';
 
 export function mountRoutes(app, db) {
   const auth = adminAuth(db);
@@ -78,6 +79,7 @@ export function mountRoutes(app, db) {
   const { api: pedidoApi, views: pedidoViews } = createPedidoRoutes(db);
   const { api: albaranApi, views: albaranViews } = createAlbaranRoutes(db);
   const { api: mostradorApi, views: mostradorViews } = createMostradorRoutes(db);
+  const { api: contabApi, views: contabViews } = createContabilidadRoutes(db);
 
   // ── Protected admin views ──────────────────────────────────────
   const admin = new Hono();
@@ -126,6 +128,7 @@ export function mountRoutes(app, db) {
   admin.route('/cobros', cobrosViews);
   admin.route('/supplier-invoices', supplierInvoiceViews);
   admin.route('/pagos', pagosViews);
+  admin.route('/contabilidad', contabViews);
   app.route('/admin', admin);
 
   // ── Protected API ──────────────────────────────────────────────
@@ -166,6 +169,7 @@ export function mountRoutes(app, db) {
   apiApp.route('/cobros', cobrosApi);
   apiApp.route('/supplier-invoices', supplierInvoiceApi);
   apiApp.route('/pagos', pagosApi);
+  apiApp.route('/contabilidad', contabApi);
   apiApp.route('/stock', stockApi);
   app.route('/api/erp', apiApp);
 }

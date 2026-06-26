@@ -5,6 +5,7 @@ import { requirePerm, logActivity } from '../../../core/auth.js';
 import { checkPermission } from '../../../core/permission-check.js';   // chequeo de permiso programático (condicional)
 import { isPhysical, productStock, productStockInWarehouse, reservedOfProduct, recordMovement, resolveWarehouseId } from '../stock.js';   // aviso de exceso al facturar (RAMA B) + mostrador (ticket): salida de stock por el libro
 import { recordVerifactuAlta, recordVerifactuAnulacion, cotejoUrl } from '../verifactu.js';   // VERI*FACTU T1: registro oficial + QR de cotejo
+import { postInvoice, postInvoicePayment } from '../contabilidad.js';   // Contabilidad: posteo del asiento tras commit (aditivo; no rompe el documento)
 import { validate } from '../../../core/validate.js';
 import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema, invoicePaymentSchema, collectionActionSchema, sustitutivaSchema } from '../schemas.js';
 import { getCountryConfig } from '../../../core/control-db.js';
@@ -265,7 +266,9 @@ export function createInvoice(db, invoiceData) {
     return { id: invoiceId, invoice_number };
   });
 
-  return create();
+  const out = create();
+  try { postInvoice(db, out.id); } catch {}   // asiento contable (en su propio try: un fallo de posteo NO rompe la factura; la red de seguridad reconcilia)
+  return out;
 }
 
 // ── Ciclo de vida: ANULAR ────────────────────────────────────────────────────
@@ -311,7 +314,9 @@ export function anularInvoice(db, invoiceId, motivo) {
     recordVerifactuAnulacion(db, original);
     return { id: res.lastInsertRowid, invoice_id: original.id, invoice_number: original.invoice_number };
   });
-  return run();
+  const out = run();
+  try { postInvoice(db, out.invoice_id); } catch {}   // reconcilia: la venta anulada se reversa (no rompe la anulación)
+  return out;
 }
 
 // ── Ciclo de vida: RECTIFICAR ────────────────────────────────────────────────
@@ -396,7 +401,10 @@ export function createRectificativa(db, data) {
     });
     return { id: invoiceId, invoice_number, rectifies: original.invoice_number };
   });
-  return run();
+  const out = run();
+  // Postea la rectificativa y reconcilia la original (S → se reversa; I → se queda). No rompe el documento.
+  try { postInvoice(db, out.id); postInvoice(db, original.id); } catch {}
+  return out;
 }
 
 // ── Aviso de exceso de stock al facturar (RAMA B: la factura NO mueve stock) ──────────────
@@ -693,7 +701,9 @@ export function emitTicketSvc(db, { lines, warehouse_id, payment_method, paid_da
 
     return { id: invoiceId, invoice_number, total: totals.total, warehouse_id: wid, payment_method };
   });
-  return emit();
+  const out = emit();
+  try { postInvoice(db, out.id); } catch {}   // asiento del ticket (tesorería + ventas); el cobro auto NO se postea aparte
+  return out;
 }
 
 // HTML imprimible en FORMATO TICKET (factura simplificada): emisor, líneas, IVA por tipo, total,
@@ -797,7 +807,10 @@ export function emitSustitutivaSvc(db, ticketId, client_id) {
     // NO invoice_payments (el cobro del ticket vale; cobros.js lo hereda). NO movimiento de stock.
     return { id: invoiceId, invoice_number, ticket_id: ticketId, ticket_number: ticket.invoice_number };
   });
-  return run();
+  const out = run();
+  // Postea la F3 (ingreso contra tesorería heredada) y reconcilia el ticket (su venta se reversa).
+  try { postInvoice(db, out.id); postInvoice(db, out.ticket_id); } catch {}
+  return out;
 }
 
 export function createInvoiceRoutes(db) {
@@ -964,6 +977,7 @@ export function createInvoiceRoutes(db) {
       const today = new Date().toISOString().slice(0, 10);
       const res = db.prepare('INSERT INTO invoice_payments (invoice_id, amount, paid_date, payment_method, note) VALUES (?,?,?,?,?)')
         .run(id, amount, paid_date || today, payment_method || '', note || '');
+      try { postInvoicePayment(db, res.lastInsertRowid); } catch {}   // asiento de cobro (tesorería/430); no rompe el cobro
       logActivity(db, c.get('session'), 'Registró cobro', 'invoice', id, `${inv.invoice_number} · ${amount}`);
       return c.json({ id: res.lastInsertRowid, cobro: invoiceCobro(db, inv, today) }, 201);
     } catch (e) { return c.json({ error: e.message }, 400); }

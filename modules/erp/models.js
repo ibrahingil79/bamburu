@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto';
 import { hashPasswordLegacy } from '../../core/auth.js';
 import { backfillCodes } from './codes.js';
 import { recomputeStock } from './stock.js';
+import { ensureLedgerSchema } from './contabilidad.js';
 
 function addCol(db, table, col, def) {
   const cols = db.pragma(`table_info(${table})`).map(c => c.name);
@@ -1804,6 +1805,12 @@ Sé preciso con los números y siempre redondea correctamente.`,
     });
     tx2();
   }
+
+  // ── Contabilidad (Pieza 1): cuaderno de doble cara + libros registro ──────────
+  // Aditivo: crea las tablas del libro diario (ledger_*) y siembra el plan de cuentas
+  // mínimo. NO postea aquí (el backfill se reconcilia perezosamente al abrir el libro y
+  // por los hooks de cada documento). Idempotente (CREATE TABLE IF NOT EXISTS + seed OR IGNORE).
+  ensureLedgerSchema(db);
 
   console.log('✅ ERP: Migraciones completadas');
 }

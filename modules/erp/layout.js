@@ -105,6 +105,9 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       { href: '/admin/purchases/capture', label: 'Captura de factura', key: 'purchases-capture', icon: 'ti-camera' },
       { href: '/admin/suppliers', label: 'Proveedores', key: 'suppliers', icon: 'ti-building-store' },
     ]},
+    { section: 'Contabilidad', items: [
+      { href: '/admin/contabilidad', label: 'Libros registro', key: 'contabilidad', icon: 'ti-book' },
+    ]},
     { section: 'Inventario', items: [
       { href: '/admin/inventory', label: 'Stock', key: 'inventory', icon: 'ti-building-warehouse' },
       { href: '/admin/warehouses', label: 'Almacenes', key: 'warehouses', icon: 'ti-buildings' },
