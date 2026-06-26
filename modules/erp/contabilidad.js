@@ -448,3 +448,48 @@ export function libroCompras(db, from, to) {
   out.forEach((r, i) => r.n = i + 1);   // número de recepción (orden en el periodo)
   return { rows: out, totals: { base: totBase, cuota: totCuota, total: r2(totBase + totCuota) } };
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// PIEZA 2 — VISTAS contables clásicas (libro diario / libro mayor), SOLO LECTURA.
+// Sacan a la luz los asientos de doble cara que ya existen. No crean ni escriben nada.
+// ════════════════════════════════════════════════════════════════════════════
+
+// LIBRO DIARIO — asientos en orden cronológico, cada uno con sus líneas (cuenta + debe/haber).
+export function libroDiario(db, from, to) {
+  const entries = db.prepare('SELECT * FROM ledger_entries WHERE entry_date BETWEEN ? AND ? ORDER BY entry_date, id').all(from, to);
+  const lineStmt = db.prepare(
+    `SELECT l.account_code, COALESCE(a.name,'') account_name, l.debit, l.credit, l.tax_rate, l.line_kind
+       FROM ledger_lines l LEFT JOIN ledger_accounts a ON a.code=l.account_code WHERE l.entry_id=? ORDER BY l.id`);
+  let totDebe = 0, totHaber = 0;
+  const rows = entries.map(e => {
+    const lines = lineStmt.all(e.id);
+    const d = r2(lines.reduce((s, l) => s + l.debit, 0));
+    const h = r2(lines.reduce((s, l) => s + l.credit, 0));
+    totDebe = r2(totDebe + d); totHaber = r2(totHaber + h);
+    return { id: e.id, entry_date: e.entry_date, entry_type: e.entry_type, origin_type: e.origin_type, origin_id: e.origin_id, memo: e.memo, lines, debe: d, haber: h, cuadra: Math.round(d * 100) === Math.round(h * 100) };
+  });
+  return { rows, totals: { debe: r2(totDebe), haber: r2(totHaber) }, cuadra: Math.round(totDebe * 100) === Math.round(totHaber * 100) };
+}
+
+// LIBRO MAYOR — agregado por cuenta PGC: total Debe, Haber y Saldo (debe−haber).
+export function libroMayor(db, from, to) {
+  const rows = db.prepare(
+    `SELECT l.account_code code, COALESCE(a.name,'') name, ROUND(SUM(l.debit),2) debe, ROUND(SUM(l.credit),2) haber
+       FROM ledger_lines l JOIN ledger_entries e ON e.id=l.entry_id LEFT JOIN ledger_accounts a ON a.code=l.account_code
+      WHERE e.entry_date BETWEEN ? AND ? GROUP BY l.account_code ORDER BY l.account_code`).all(from, to)
+    .map(r => ({ ...r, debe: r2(r.debe), haber: r2(r.haber), saldo: r2(r.debe - r.haber) }));
+  const totals = { debe: r2(rows.reduce((s, r) => s + r.debe, 0)), haber: r2(rows.reduce((s, r) => s + r.haber, 0)) };
+  return { rows, totals };
+}
+
+// DRILL-DOWN del mayor — movimientos de UNA cuenta en orden de fecha, con saldo acumulado.
+export function mayorCuenta(db, code, from, to) {
+  const name = db.prepare('SELECT name FROM ledger_accounts WHERE code=?').get(code)?.name || '';
+  const movs = db.prepare(
+    `SELECT e.entry_date, e.id entry_id, e.entry_type, e.memo, e.origin_type, e.origin_id, l.debit, l.credit
+       FROM ledger_lines l JOIN ledger_entries e ON e.id=l.entry_id
+      WHERE l.account_code=? AND e.entry_date BETWEEN ? AND ? ORDER BY e.entry_date, e.id, l.id`).all(code, from, to);
+  let saldo = 0;
+  const rows = movs.map(m => { saldo = r2(saldo + m.debit - m.credit); return { ...m, saldo }; });
+  return { code, name, rows, debe: r2(movs.reduce((s, m) => s + m.debit, 0)), haber: r2(movs.reduce((s, m) => s + m.credit, 0)), saldo };
+}

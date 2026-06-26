@@ -7,14 +7,16 @@ import { requirePerm } from '../../../core/auth.js';
 import { adminLayout } from '../layout.js';
 import { escHtml } from '../../../core/escape.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';
-import { backfillLedger, libroVentas, libroCompras } from '../contabilidad.js';
-import { ventasAsientos, comprasAsientos, ventasMatrix, comprasMatrix, toCSV, buildXlsx, libroHtml } from '../contabilidad-export.js';
+import { backfillLedger, libroVentas, libroCompras, libroDiario, libroMayor, mayorCuenta } from '../contabilidad.js';
+import { ventasAsientos, comprasAsientos, ventasMatrix, comprasMatrix, toCSV, buildXlsx, libroHtml,
+         diarioMatrix, mayorMatrix, diarioHtml, mayorHtml } from '../contabilidad-export.js';
 
 function defaultRange(db) {
   const y = (db.prepare('SELECT MAX(issue_date) m FROM invoices').get()?.m || '').slice(0, 4) || String(new Date().getFullYear());
   return { from: `${y}-01-01`, to: `${y}-12-31` };
 }
 const symbolOf = db => db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
+const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
 const money = (sym, n) => sym + Number(n || 0).toFixed(2);
 const rateLabel = r => (r === null || r === undefined) ? 'sin desglosar' : (Number(r) === 0 ? '0% (exento)' : `${r}%`);
 const rangeOf = (c, db) => { const d = defaultRange(db); return { from: c.req.query('from') || d.from, to: c.req.query('to') || d.to }; };
@@ -22,9 +24,11 @@ const rangeOf = (c, db) => { const d = defaultRange(db); return { from: c.req.qu
 function tabsBar(active, from, to) {
   const q = `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
   const tab = (key, href, label) => `<a href="${href}${q}" class="btn ${active === key ? '' : 'btn-ghost'}" style="${active === key ? '' : 'opacity:.7'}">${label}</a>`;
-  return `<div style="display:flex;gap:.5rem;margin-bottom:1rem">
+  return `<div style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap">
     ${tab('ventas', '/admin/contabilidad/ventas', 'Ventas e ingresos')}
-    ${tab('compras', '/admin/contabilidad/compras', 'Compras y gastos')}</div>`;
+    ${tab('compras', '/admin/contabilidad/compras', 'Compras y gastos')}
+    ${tab('diario', '/admin/contabilidad/diario', 'Libro diario')}
+    ${tab('mayor', '/admin/contabilidad/mayor', 'Libro mayor')}</div>`;
 }
 function periodForm(kind, from, to) {
   const q = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
@@ -66,6 +70,50 @@ function comprasTable(libro, sym) {
     <td style="text-align:right">${money(sym, libro.totals.base)}</td><td></td><td style="text-align:right">${money(sym, libro.totals.cuota)}</td>
     <td style="text-align:right">${money(sym, libro.totals.total)}</td></tr>`;
   return `<table><thead>${head}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`;
+}
+
+// LIBRO DIARIO — asientos cronológicos; cada línea con cuenta (código+nombre) en Debe/Haber.
+function diarioTable(diario, sym) {
+  const cuadre = diario.cuadra
+    ? `<span style="color:#15803d">✓ cuadra (Debe = Haber)</span>`
+    : `<span style="color:#b91c1c">✗ DESCUADRE</span>`;
+  const bloques = diario.rows.map(a => {
+    const ls = a.lines.map(l => `<tr><td></td><td>${escHtml(l.account_code)} · ${escHtml(l.account_name || '')}</td>
+      <td style="text-align:right">${l.debit ? money(sym, l.debit) : ''}</td><td style="text-align:right">${l.credit ? money(sym, l.credit) : ''}</td></tr>`).join('');
+    return `<tr style="background:var(--bg2,#f6f6f8)"><td>${escHtml(a.entry_date)}</td>
+      <td colspan="3"><b>Asiento ${a.id}</b> · ${escHtml(a.entry_type)} — ${escHtml(a.memo || '')}${a.cuadra ? '' : ' <span style="color:#b91c1c">(descuadra)</span>'}</td></tr>${ls}`;
+  }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text2)">Sin asientos en el periodo</td></tr>';
+  const foot = `<tr style="font-weight:700"><td colspan="2" style="text-align:right">TOTALES</td>
+    <td style="text-align:right">${money(sym, diario.totals.debe)}</td><td style="text-align:right">${money(sym, diario.totals.haber)}</td></tr>`;
+  return `<div style="margin:.25rem 0 .75rem;font-size:13px">Cuadre del diario: ${cuadre}</div>
+    <table><thead><tr><th>Fecha</th><th>Cuenta</th><th style="text-align:right">Debe</th><th style="text-align:right">Haber</th></tr></thead>
+    <tbody>${bloques}</tbody><tfoot>${foot}</tfoot></table>`;
+}
+// LIBRO MAYOR — saldo por cuenta; cada cuenta enlaza a su detalle (drill-down ?cuenta=).
+function mayorTable(mayor, sym, from, to) {
+  const q = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  const body = mayor.rows.map(r => `<tr>
+      <td><a href="/admin/contabilidad/mayor?cuenta=${encodeURIComponent(r.code)}&${q}">${escHtml(r.code)}</a></td>
+      <td>${escHtml(r.name || '')}</td>
+      <td style="text-align:right">${money(sym, r.debe)}</td><td style="text-align:right">${money(sym, r.haber)}</td>
+      <td style="text-align:right">${money(sym, r.saldo)}</td></tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text2)">Sin movimientos en el periodo</td></tr>';
+  const foot = `<tr style="font-weight:700"><td colspan="2" style="text-align:right">TOTALES</td>
+    <td style="text-align:right">${money(sym, mayor.totals.debe)}</td><td style="text-align:right">${money(sym, mayor.totals.haber)}</td>
+    <td style="text-align:right">${money(sym, r2(mayor.totals.debe - mayor.totals.haber))}</td></tr>`;
+  return `<table><thead><tr><th>Cuenta</th><th>Nombre</th><th style="text-align:right">Debe</th><th style="text-align:right">Haber</th><th style="text-align:right">Saldo</th></tr></thead>
+    <tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`;
+}
+// Detalle de UNA cuenta (drill-down): movimientos con saldo acumulado línea a línea.
+function mayorDetalle(det, sym) {
+  const body = det.rows.map(m => `<tr><td>${escHtml(m.entry_date)}</td><td>${m.entry_id}</td><td>${escHtml(m.entry_type)}</td>
+      <td>${escHtml(m.memo || '')}</td><td style="text-align:right">${m.debit ? money(sym, m.debit) : ''}</td>
+      <td style="text-align:right">${m.credit ? money(sym, m.credit) : ''}</td><td style="text-align:right">${money(sym, m.saldo)}</td></tr>`).join('')
+    || '<tr><td colspan="7" style="text-align:center;color:var(--text2)">Sin movimientos</td></tr>';
+  return `<div class="card" style="margin-top:1rem"><div class="card-body">
+      <h3>Cuenta ${escHtml(det.code)} · ${escHtml(det.name || '')}</h3>
+      <span style="color:var(--text2);font-size:12px">Debe ${money(sym, det.debe)} · Haber ${money(sym, det.haber)} · Saldo ${money(sym, det.saldo)}</span></div>
+    <table><thead><tr><th>Fecha</th><th>Asiento</th><th>Tipo</th><th>Concepto</th><th style="text-align:right">Debe</th><th style="text-align:right">Haber</th><th style="text-align:right">Saldo acum.</th></tr></thead>
+    <tbody>${body}</tbody></table></div>`;
 }
 
 const fileResp = (buf, type, name) => new Response(buf, { headers: { 'Content-Type': type, 'Content-Disposition': `attachment; filename="${name}"` } });
@@ -131,6 +179,60 @@ export function createContabilidadRoutes(db) {
     const { from, to } = rangeOf(c, db); backfillLedger(db); const libro = libroCompras(db, from, to);
     const pdf = await renderPdfFromHtml(libroHtml('Libro de compras y gastos', `${from} → ${to}`, comprasAsientos(libro), libro.totals, symbolOf(db), 'compras'));
     return fileResp(pdf, 'application/pdf', `libro-compras-${tag(from, to)}.pdf`);
+  });
+
+  // ── PIEZA 2 — Libro Diario ──────────────────────────────────────────────────
+  views.get('/diario', requirePerm('invoices.read'), c => {
+    const sym = symbolOf(db); const { from, to } = rangeOf(c, db); backfillLedger(db);
+    const diario = libroDiario(db, from, to);
+    const content = `<div class="ph"><h2>Contabilidad — Libros registro</h2></div>
+      ${tabsBar('diario', from, to)}${periodForm('diario', from, to)}
+      <div class="card"><div class="card-body"><h3>Libro diario — asientos de doble cara</h3>
+        <span style="color:var(--text2);font-size:12px">Lista cronológica; cada asiento con sus líneas al Debe/Haber sobre el plan de cuentas. Derivado del cuaderno (solo lectura).</span></div>
+        ${diarioTable(diario, sym)}</div>`;
+    return c.html(adminLayout('Contabilidad', content, 'contabilidad', c.get('session')?.csrfToken || '', c));
+  });
+
+  // ── PIEZA 2 — Libro Mayor (+ drill-down por cuenta) ──────────────────────────
+  views.get('/mayor', requirePerm('invoices.read'), c => {
+    const sym = symbolOf(db); const { from, to } = rangeOf(c, db); backfillLedger(db);
+    const mayor = libroMayor(db, from, to);
+    const cuenta = (c.req.query('cuenta') || '').replace(/[^0-9A-Za-z]/g, '');
+    const detalle = cuenta ? mayorDetalle(mayorCuenta(db, cuenta, from, to), sym) : '';
+    const content = `<div class="ph"><h2>Contabilidad — Libros registro</h2></div>
+      ${tabsBar('mayor', from, to)}${periodForm('mayor', from, to)}
+      <div class="card"><div class="card-body"><h3>Libro mayor — saldos por cuenta</h3>
+        <span style="color:var(--text2);font-size:12px">Pulsa una cuenta para ver sus movimientos con saldo acumulado.</span></div>
+        ${mayorTable(mayor, sym, from, to)}</div>${detalle}`;
+    return c.html(adminLayout('Contabilidad', content, 'contabilidad', c.get('session')?.csrfToken || '', c));
+  });
+
+  // ── PIEZA 2 — Export del diario y del mayor (XLSX/CSV/PDF) ────────────────────
+  views.get('/diario.xlsx', requirePerm('invoices.read'), c => {
+    const { from, to } = rangeOf(c, db); backfillLedger(db);
+    return fileResp(buildXlsx([{ name: 'DIARIO', matrix: diarioMatrix(libroDiario(db, from, to)) }]), XLSX_MIME, `libro-diario-${tag(from, to)}.xlsx`);
+  });
+  views.get('/diario.csv', requirePerm('invoices.read'), c => {
+    const { from, to } = rangeOf(c, db); backfillLedger(db);
+    return fileResp(Buffer.from(toCSV(diarioMatrix(libroDiario(db, from, to))), 'utf8'), 'text/csv; charset=utf-8', `libro-diario-${tag(from, to)}.csv`);
+  });
+  views.get('/diario.pdf', requirePerm('invoices.read'), async c => {
+    const { from, to } = rangeOf(c, db); backfillLedger(db);
+    const pdf = await renderPdfFromHtml(diarioHtml(`${from} → ${to}`, libroDiario(db, from, to), symbolOf(db)));
+    return fileResp(pdf, 'application/pdf', `libro-diario-${tag(from, to)}.pdf`);
+  });
+  views.get('/mayor.xlsx', requirePerm('invoices.read'), c => {
+    const { from, to } = rangeOf(c, db); backfillLedger(db);
+    return fileResp(buildXlsx([{ name: 'MAYOR', matrix: mayorMatrix(libroMayor(db, from, to)) }]), XLSX_MIME, `libro-mayor-${tag(from, to)}.xlsx`);
+  });
+  views.get('/mayor.csv', requirePerm('invoices.read'), c => {
+    const { from, to } = rangeOf(c, db); backfillLedger(db);
+    return fileResp(Buffer.from(toCSV(mayorMatrix(libroMayor(db, from, to))), 'utf8'), 'text/csv; charset=utf-8', `libro-mayor-${tag(from, to)}.csv`);
+  });
+  views.get('/mayor.pdf', requirePerm('invoices.read'), async c => {
+    const { from, to } = rangeOf(c, db); backfillLedger(db);
+    const pdf = await renderPdfFromHtml(mayorHtml(`${from} → ${to}`, libroMayor(db, from, to), symbolOf(db)));
+    return fileResp(pdf, 'application/pdf', `libro-mayor-${tag(from, to)}.pdf`);
   });
 
   return { api, views };

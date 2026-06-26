@@ -186,3 +186,42 @@ export function libroHtml(titulo, periodo, asientos, totals, sym, kind) {
     <table><thead>${head}</thead><tbody>${rows || `<tr><td colspan="${cols}">Sin operaciones</td></tr>`}</tbody>
     <tfoot><tr class="tot"><td colspan="6" style="text-align:right">TOTALES</td><td>${m(totals.base)}</td><td></td><td>${m(totals.cuota)}</td>${esVentas ? '<td></td>' : ''}<td>${m(totals.total)}</td></tr></tfoot></table></body></html>`;
 }
+
+// ── PIEZA 2 — Export del LIBRO DIARIO y el LIBRO MAYOR (formato propio limpio) ──
+const numOrBlank = n => (Math.round((Number(n) || 0) * 100) === 0 ? '' : r2(n));
+
+// DIARIO: una fila por línea de asiento (Fecha · Asiento · Tipo · Concepto · Cuenta · Debe · Haber).
+export function diarioMatrix(diario) {
+  const headers = ['Fecha', 'Asiento', 'Tipo', 'Concepto', 'Cuenta', 'Nombre de la cuenta', 'Debe', 'Haber'];
+  const rows = [];
+  for (const a of diario.rows) for (const l of a.lines)
+    rows.push([fechaES(a.entry_date), a.id, a.entry_type, a.memo || '', l.account_code, l.account_name || '', numOrBlank(l.debit), numOrBlank(l.credit)]);
+  return { headers, rows };
+}
+// MAYOR: una fila por cuenta (Cuenta · Nombre · Debe · Haber · Saldo).
+export function mayorMatrix(mayor) {
+  return {
+    headers: ['Cuenta', 'Nombre de la cuenta', 'Debe', 'Haber', 'Saldo'],
+    rows: mayor.rows.map(r => [r.code, r.name || '', r2(r.debe), r2(r.haber), r2(r.saldo)]),
+  };
+}
+
+export function diarioHtml(periodo, diario, sym) {
+  const m = n => sym + Number(n || 0).toFixed(2);
+  const bloques = diario.rows.map(a => {
+    const ls = a.lines.map(l => `<tr><td>${escHtml(l.account_code)}</td><td>${escHtml(l.account_name || '')}</td><td style="text-align:right">${l.debit ? m(l.debit) : ''}</td><td style="text-align:right">${l.credit ? m(l.credit) : ''}</td></tr>`).join('');
+    return `<tr class="hd"><td colspan="4"><b>${escHtml(a.entry_date)}</b> · asiento ${a.id} · ${escHtml(a.entry_type)} — ${escHtml(a.memo || '')}</td></tr>${ls}`;
+  }).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,Segoe UI,sans-serif;font-size:10px;color:#111}h1{font-size:15px;margin:0 0 2px}.sub{color:#555;margin-bottom:8px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:2px 5px}.hd td{background:#eef;font-weight:600}.tot{font-weight:700;background:#fafafa}</style></head><body>
+    <h1>Libro Diario</h1><div class="sub">Periodo ${escHtml(periodo)} · asientos de doble cara</div>
+    <table><thead><tr><th>Cuenta</th><th>Nombre</th><th>Debe</th><th>Haber</th></tr></thead><tbody>${bloques}</tbody>
+    <tfoot><tr class="tot"><td colspan="2" style="text-align:right">TOTALES</td><td style="text-align:right">${m(diario.totals.debe)}</td><td style="text-align:right">${m(diario.totals.haber)}</td></tr></tfoot></table></body></html>`;
+}
+export function mayorHtml(periodo, mayor, sym) {
+  const m = n => sym + Number(n || 0).toFixed(2);
+  const rows = mayor.rows.map(r => `<tr><td>${escHtml(r.code)}</td><td>${escHtml(r.name || '')}</td><td style="text-align:right">${m(r.debe)}</td><td style="text-align:right">${m(r.haber)}</td><td style="text-align:right">${m(r.saldo)}</td></tr>`).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,Segoe UI,sans-serif;font-size:10px;color:#111}h1{font-size:15px;margin:0 0 2px}.sub{color:#555;margin-bottom:8px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:2px 5px;text-align:right}th{background:#eee}td:nth-child(-n+2){text-align:left}.tot{font-weight:700;background:#fafafa}</style></head><body>
+    <h1>Libro Mayor</h1><div class="sub">Periodo ${escHtml(periodo)} · saldos por cuenta</div>
+    <table><thead><tr><th>Cuenta</th><th>Nombre</th><th>Debe</th><th>Haber</th><th>Saldo</th></tr></thead><tbody>${rows}</tbody>
+    <tfoot><tr class="tot"><td colspan="2" style="text-align:right">TOTALES</td><td>${m(mayor.totals.debe)}</td><td>${m(mayor.totals.haber)}</td><td>${m(r2(mayor.totals.debe - mayor.totals.haber))}</td></tr></tfoot></table></body></html>`;
+}
