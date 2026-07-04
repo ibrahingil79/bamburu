@@ -4,6 +4,7 @@ import { hashPasswordLegacy } from '../../core/auth.js';
 import { backfillCodes } from './codes.js';
 import { recomputeStock } from './stock.js';
 import { ensureLedgerSchema } from './contabilidad.js';
+import { ensureBienesSchema } from './contabilidad-bienes.js';
 
 function addCol(db, table, col, def) {
   const cols = db.pragma(`table_info(${table})`).map(c => c.name);
@@ -1811,6 +1812,12 @@ Sé preciso con los números y siempre redondea correctamente.`,
   // mínimo. NO postea aquí (el backfill se reconcilia perezosamente al abrir el libro y
   // por los hooks de cada documento). Idempotente (CREATE TABLE IF NOT EXISTS + seed OR IGNORE).
   ensureLedgerSchema(db);
+
+  // ── Contabilidad (Pieza 3): libro de bienes de inversión ──────────────────────
+  // DATO NUEVO (qué se capitaliza + parámetros de amortización) → tabla propia, aditiva e
+  // idempotente. NO entra en WRITABLE_TABLES (DISA no escribe aquí). La amortización se calcula
+  // en lectura. Sin DROP ni borrado.
+  ensureBienesSchema(db);
 
   console.log('✅ ERP: Migraciones completadas');
 }

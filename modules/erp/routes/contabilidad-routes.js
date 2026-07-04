@@ -9,7 +9,8 @@ import { escHtml } from '../../../core/escape.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';
 import { backfillLedger, libroVentas, libroCompras, libroDiario, libroMayor, mayorCuenta } from '../contabilidad.js';
 import { ventasAsientos, comprasAsientos, ventasMatrix, comprasMatrix, toCSV, buildXlsx, libroHtml,
-         diarioMatrix, mayorMatrix, diarioHtml, mayorHtml } from '../contabilidad-export.js';
+         diarioMatrix, mayorMatrix, diarioHtml, mayorHtml, bienesMatrix, bienesHtml } from '../contabilidad-export.js';
+import { libroBienes, createInvestmentGood, updateInvestmentGood, bajaInvestmentGood, reactivarInvestmentGood } from '../contabilidad-bienes.js';
 
 function defaultRange(db) {
   const y = (db.prepare('SELECT MAX(issue_date) m FROM invoices').get()?.m || '').slice(0, 4) || String(new Date().getFullYear());
@@ -28,7 +29,8 @@ function tabsBar(active, from, to) {
     ${tab('ventas', '/admin/contabilidad/ventas', 'Ventas e ingresos')}
     ${tab('compras', '/admin/contabilidad/compras', 'Compras y gastos')}
     ${tab('diario', '/admin/contabilidad/diario', 'Libro diario')}
-    ${tab('mayor', '/admin/contabilidad/mayor', 'Libro mayor')}</div>`;
+    ${tab('mayor', '/admin/contabilidad/mayor', 'Libro mayor')}
+    ${tab('bienes', '/admin/contabilidad/bienes', 'Bienes de inversión')}</div>`;
 }
 function periodForm(kind, from, to) {
   const q = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
@@ -233,6 +235,86 @@ export function createContabilidadRoutes(db) {
     const { from, to } = rangeOf(c, db); backfillLedger(db);
     const pdf = await renderPdfFromHtml(mayorHtml(`${from} → ${to}`, libroMayor(db, from, to), symbolOf(db)));
     return fileResp(pdf, 'application/pdf', `libro-mayor-${tag(from, to)}.pdf`);
+  });
+
+  // ── PIEZA 3 — Libro de bienes de inversión (DATO NUEVO; amortización en lectura) ──
+  views.get('/bienes', requirePerm('invoices.read'), c => {
+    const sym = symbolOf(db); const { from, to } = rangeOf(c, db);
+    const libro = libroBienes(db, from, to);
+    const csrf = c.get('session')?.csrfToken || '';
+    const td = (v, r) => `<td${r ? ' style="text-align:right"' : ''}>${v}</td>`;
+    const filas = libro.rows.map(g => {
+      const baseForm = `<input type="hidden" name="_csrf" value="${escHtml(csrf)}">`;
+      const edit = `<details><summary>Editar</summary><form method="post" action="/admin/contabilidad/bienes/${g.id}" style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin:.5rem 0">${baseForm}
+        <label>Descripción<input name="description" value="${escHtml(g.description || '')}" required></label>
+        <label>Nº documento<input name="doc_number" value="${escHtml(g.doc_number || '')}"></label>
+        <label>Proveedor<input name="supplier_name" value="${escHtml(g.supplier_name || '')}"></label>
+        <label>NIF<input name="supplier_fiscal_id" value="${escHtml(g.supplier_fiscal_id || '')}"></label>
+        <label>Valor adquisición<input type="number" step="0.01" name="acquisition_value" value="${g.acquisition_value}" required></label>
+        <label>Valor amortizable<input type="number" step="0.01" name="amortizable_base" value="${g.amortizable_base}"></label>
+        <label>% anual<input type="number" step="0.01" name="annual_rate" value="${g.annual_rate}" required></label>
+        <label>Puesta en func.<input type="date" name="start_date" value="${escHtml(g.start_date || '')}" required></label>
+        <button class="btn" type="submit">Guardar</button></form></details>`;
+      const baja = g.de_baja
+        ? `<form method="post" action="/admin/contabilidad/bienes/${g.id}/reactivar" style="margin-top:.3rem">${baseForm}<button class="btn btn-ghost" type="submit">Reactivar</button></form>`
+        : `<details><summary>Dar de baja</summary><form method="post" action="/admin/contabilidad/bienes/${g.id}/baja" style="margin:.4rem 0">${baseForm}
+          <input type="date" name="baja_date" required> <input name="motivo" placeholder="Motivo" required>
+          <button class="btn" type="submit">Baja</button></form></details>`;
+      return `<tr>
+        ${td(escHtml(g.description || '') + (g.de_baja ? ` <span style="color:#b91c1c">baja ${escHtml(g.baja_date)}</span>` : ''))}
+        ${td(escHtml(g.doc_number || ''))}${td(escHtml(g.supplier_name || ''))}${td(escHtml(g.supplier_fiscal_id || ''))}
+        ${td(escHtml(g.start_date || ''))}${td(money(sym, g.acquisition_value), 1)}${td(money(sym, g.amortizable_base), 1)}
+        ${td(Number(g.annual_rate) + '%', 1)}${td(money(sym, g.acuInicio), 1)}${td(money(sym, g.cuota), 1)}${td(money(sym, g.acuFinal), 1)}${td(money(sym, g.pendiente), 1)}
+        <td>${edit}${baja}</td></tr>`;
+    }).join('') || '<tr><td colspan="13" style="text-align:center;color:var(--text2)">Sin bienes de inversión registrados</td></tr>';
+    const altaForm = `<details><summary class="btn" style="display:inline-block">+ Alta de bien</summary>
+      <form method="post" action="/admin/contabilidad/bienes" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin:.75rem 0;max-width:900px">
+        <input type="hidden" name="_csrf" value="${escHtml(csrf)}">
+        <label>Descripción*<input name="description" required></label>
+        <label>Compra enlazada (id, opcional)<input type="number" name="purchase_id" placeholder="id de purchases"></label>
+        <label>Nº documento<input name="doc_number"></label>
+        <label>Proveedor<input name="supplier_name"></label>
+        <label>NIF proveedor<input name="supplier_fiscal_id"></label>
+        <label>Puesta en funcionamiento*<input type="date" name="start_date" required></label>
+        <label>Valor adquisición* (def.= total de la compra enlazada)<input type="number" step="0.01" name="acquisition_value"></label>
+        <label>Valor amortizable (def.=adquisición)<input type="number" step="0.01" name="amortizable_base"></label>
+        <label>% amortización anual*<input type="number" step="0.01" name="annual_rate" required></label>
+        <div style="grid-column:1/-1"><button class="btn" type="submit">Registrar bien</button> <span style="color:var(--text2);font-size:12px">Método: lineal. Si enlazas una compra, se traen proveedor/NIF/nº/valor.</span></div>
+      </form></details>`;
+    const content = `<div class="ph"><h2>Contabilidad — Libros registro</h2></div>
+      ${tabsBar('bienes', from, to)}${periodForm('bienes', from, to)}
+      <div class="card"><div class="card-body"><h3>Libro de bienes de inversión — amortización lineal</h3>
+        <span style="color:var(--text2);font-size:12px">Tercer libro registro (Orden HAC/773/2019). La amortización se calcula en lectura: cuota del periodo prorrateada por días, con tope = valor amortizable; la baja la detiene.</span>
+        <div style="margin-top:.5rem">${altaForm}</div></div>
+        <table><thead><tr><th>Descripción</th><th>Documento</th><th>Proveedor</th><th>NIF</th><th>Puesta func.</th>
+          <th style="text-align:right">V. adquisición</th><th style="text-align:right">V. amortizable</th><th style="text-align:right">% anual</th>
+          <th style="text-align:right">Acum. inicio</th><th style="text-align:right">Cuota periodo</th><th style="text-align:right">Acum. final</th><th style="text-align:right">Pendiente</th><th>Acciones</th></tr></thead>
+        <tbody>${filas}</tbody>
+        <tfoot><tr style="font-weight:700"><td colspan="5" style="text-align:right">TOTALES</td>
+          <td style="text-align:right">${money(sym, libro.totals.adquisicion)}</td><td style="text-align:right">${money(sym, libro.totals.amortizable)}</td><td></td><td></td>
+          <td style="text-align:right">${money(sym, libro.totals.cuota)}</td><td style="text-align:right">${money(sym, libro.totals.acumulada)}</td><td style="text-align:right">${money(sym, libro.totals.pendiente)}</td><td></td></tr></tfoot>
+        </table></div>`;
+    return c.html(adminLayout('Contabilidad', content, 'contabilidad', csrf, c));
+  });
+
+  const backToBienes = c => c.redirect('/admin/contabilidad/bienes');
+  views.post('/bienes', requirePerm('invoices.create'), async c => { try { createInvestmentGood(db, await c.req.parseBody()); return backToBienes(c); } catch (e) { return c.text(e.message, e.status || 400); } });
+  views.post('/bienes/:id', requirePerm('invoices.create'), async c => { try { updateInvestmentGood(db, +c.req.param('id'), await c.req.parseBody()); return backToBienes(c); } catch (e) { return c.text(e.message, e.status || 400); } });
+  views.post('/bienes/:id/baja', requirePerm('invoices.create'), async c => { try { const b = await c.req.parseBody(); bajaInvestmentGood(db, +c.req.param('id'), b.baja_date, b.motivo); return backToBienes(c); } catch (e) { return c.text(e.message, e.status || 400); } });
+  views.post('/bienes/:id/reactivar', requirePerm('invoices.create'), c => { try { reactivarInvestmentGood(db, +c.req.param('id')); return backToBienes(c); } catch (e) { return c.text(e.message, e.status || 400); } });
+
+  views.get('/bienes.xlsx', requirePerm('invoices.read'), c => {
+    const { from, to } = rangeOf(c, db);
+    return fileResp(buildXlsx([{ name: 'BIENES_INVERSION', matrix: bienesMatrix(libroBienes(db, from, to), from, to) }]), XLSX_MIME, `libro-bienes-inversion-${tag(from, to)}.xlsx`);
+  });
+  views.get('/bienes.csv', requirePerm('invoices.read'), c => {
+    const { from, to } = rangeOf(c, db);
+    return fileResp(Buffer.from(toCSV(bienesMatrix(libroBienes(db, from, to), from, to)), 'utf8'), 'text/csv; charset=utf-8', `libro-bienes-inversion-${tag(from, to)}.csv`);
+  });
+  views.get('/bienes.pdf', requirePerm('invoices.read'), async c => {
+    const { from, to } = rangeOf(c, db);
+    const pdf = await renderPdfFromHtml(bienesHtml(`${from} → ${to}`, libroBienes(db, from, to), symbolOf(db)));
+    return fileResp(pdf, 'application/pdf', `libro-bienes-inversion-${tag(from, to)}.pdf`);
   });
 
   return { api, views };

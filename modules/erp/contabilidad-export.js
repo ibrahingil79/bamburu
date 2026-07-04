@@ -225,3 +225,57 @@ export function mayorHtml(periodo, mayor, sym) {
     <table><thead><tr><th>Cuenta</th><th>Nombre</th><th>Debe</th><th>Haber</th><th>Saldo</th></tr></thead><tbody>${rows}</tbody>
     <tfoot><tr class="tot"><td colspan="2" style="text-align:right">TOTALES</td><td>${m(mayor.totals.debe)}</td><td>${m(mayor.totals.haber)}</td><td>${m(r2(mayor.totals.debe - mayor.totals.haber))}</td></tr></tfoot></table></body></html>`;
 }
+
+// ── PIEZA 3 — Export del LIBRO DE BIENES DE INVERSIÓN (columnas oficiales AEAT) ──
+// Orden/nombres de la hoja BIENES-INVERSIÓN de la plantilla LSI.xlsx (verificada 2026-06-26).
+// Columnas que la plantilla pide y Bamburu no tiene → vacías (nunca inventadas): ver PENDING.
+const COLS_BIENES = ['Ejercicio', 'Periodo', 'Actividad-Código', 'Actividad-Tipo', 'Grupo o Epígrafe del IAE',
+  'Tipo de Bien', 'Descripción del Bien-Identificador', 'Descripción del Bien-Literal', 'Fecha Inicio Utilización',
+  'Valor Adquisición', 'Valor Amortizable', 'Método de Amortización', 'Porcentaje de Amortización',
+  'Amortización Acumulada al Inicio', 'Cuota Resultante', 'Acumulada al Final', 'Pendiente',
+  'Fecha Expedición', 'Identificación Factura Expedidor (Serie-Número)', 'Número-Final', 'Número Recepción',
+  'Número Recepción Final', 'NIF Expedidor-Tipo', 'Código País', 'Identificación', 'Nombre Expedidor',
+  'Año Inicio-Base Imponible', 'Tipo de IVA', 'Prorrata Definitiva', 'Cuota Deducible',
+  'Regularización-Prorrata Definitiva', 'Regularización-Cuota Deducible', 'Cuota a Regularizar',
+  'Baja del Bien-Fecha', 'Baja del Bien-Causa', 'Transmisión-Serie', 'Transmisión-Número',
+  'Transmisión-Número-Final', 'Registro Acuerdo Facturación', 'Referencia Externa'];
+
+PENDING_COLUMNS.BIENES_INVERSION = ['Periodo', 'Actividad (Código/Tipo/IAE)', 'Tipo de Bien', 'Descripción-Identificador (código)', 'Fecha Expedición', 'NIF Expedidor-Tipo', 'Código País', 'Regularización del IVA (prorrata, cuota deducible, regularización anual)', 'Transmisión del bien (serie/número)', 'Registro Acuerdo Facturación', 'Referencia Externa'];
+
+export function bienesMatrix(libro, from, to) {
+  // Ejercicio: solo si el periodo cae en un único año natural; un rango que cruza el año no tiene
+  // un ejercicio único y se deja vacío (nunca inventado).
+  const ej = (from || '').slice(0, 4) === (to || '').slice(0, 4) ? (to || '').slice(0, 4) : '';
+  const rows = libro.rows.map(g => {
+    const c = new Array(COLS_BIENES.length).fill('');
+    c[0] = ej;                                  // Ejercicio
+    c[7] = g.description || '';                 // Descripción (literal)
+    c[8] = fechaES(g.start_date);               // Fecha Inicio Utilización
+    c[9] = r2(g.acquisition_value); c[10] = r2(g.amortizable_base);
+    c[11] = 'LINEAL'; c[12] = r2(g.annual_rate);
+    c[13] = r2(g.acuInicio); c[14] = r2(g.cuota); c[15] = r2(g.acuFinal); c[16] = r2(g.pendiente);
+    c[18] = g.doc_number || '';                 // Identificación Factura del Expedidor
+    c[24] = g.supplier_fiscal_id || '';         // Identificación (NIF)
+    c[25] = g.supplier_name || '';              // Nombre Expedidor
+    c[33] = g.baja_date ? fechaES(g.baja_date) : '';
+    c[34] = g.baja_date ? (g.baja_motivo || '') : '';   // motivo solo con baja vigente (reactivar lo conserva como rastro)
+    return c;
+  });
+  return { headers: COLS_BIENES, rows };
+}
+
+export function bienesHtml(periodo, libro, sym) {
+  const m = n => sym + Number(n || 0).toFixed(2);
+  const rows = libro.rows.map(g => `<tr>
+      <td>${escHtml(g.description || '')}${g.de_baja ? ' <b>(baja ' + escHtml(g.baja_date) + ')</b>' : ''}</td>
+      <td>${escHtml(g.doc_number || '')}</td><td>${escHtml(g.supplier_name || '')}</td><td>${escHtml(g.supplier_fiscal_id || '')}</td>
+      <td>${escHtml(g.start_date || '')}</td><td style="text-align:right">${m(g.acquisition_value)}</td><td style="text-align:right">${m(g.amortizable_base)}</td>
+      <td style="text-align:right">${Number(g.annual_rate)}%</td><td style="text-align:right">${m(g.acuInicio)}</td><td style="text-align:right">${m(g.cuota)}</td>
+      <td style="text-align:right">${m(g.acuFinal)}</td><td style="text-align:right">${m(g.pendiente)}</td></tr>`).join('')
+    || '<tr><td colspan="12" style="text-align:center">Sin bienes registrados</td></tr>';
+  return `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,Segoe UI,sans-serif;font-size:10px;color:#111}h1{font-size:15px;margin:0 0 2px}.sub{color:#555;margin-bottom:8px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:2px 4px;text-align:right}th{background:#eee;text-align:center}td:nth-child(-n+5){text-align:left}.tot{font-weight:700;background:#fafafa}</style></head><body>
+    <h1>Libro registro de bienes de inversión</h1><div class="sub">Periodo ${escHtml(periodo)} · amortización lineal</div>
+    <table><thead><tr><th>Descripción</th><th>Documento</th><th>Proveedor</th><th>NIF</th><th>Puesta func.</th><th>V. adquisición</th><th>V. amortizable</th><th>% anual</th><th>Acum. inicio</th><th>Cuota periodo</th><th>Acum. final</th><th>Pendiente</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr class="tot"><td colspan="5" style="text-align:right">TOTALES</td><td>${m(libro.totals.adquisicion)}</td><td>${m(libro.totals.amortizable)}</td><td></td><td></td><td>${m(libro.totals.cuota)}</td><td>${m(libro.totals.acumulada)}</td><td>${m(libro.totals.pendiente)}</td></tr></tfoot></table></body></html>`;
+}
