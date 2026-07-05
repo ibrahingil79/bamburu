@@ -5,6 +5,15 @@
 
 ---
 
+## Fase actual: OPTIMIZACIÓN (v2)
+
+- El proyecto está en **fase de optimización** (CANON v2 §4) sobre **tres ejes: UX, DISA, Seguridad**.
+  Las **funciones nuevas ceden prioridad al pulido**, salvo decisión expresa del dueño. La tarea activa
+  arranca por el **Eje A — UX** en `TABLERO.md`.
+- **Cuándo salir al mercado lo decide el dueño.** El asistente y Code no lo recomiendan ni lo usan como
+  argumento; solo ejecutan lo que el dueño prioriza.
+- **Fuente única de tareas: `TABLERO.md`.** Notion es solo panel; no dupliques tareas ni toques sus tablas.
+
 ## Lo PRIMERO en cada sesión
 
 1. Lee `CANON.md` — qué es Bamburu, qué entra y qué NO (la estrategia).

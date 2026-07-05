@@ -5,6 +5,29 @@
 
 ---
 
+## Actualización — FASE DE OPTIMIZACIÓN (v2)
+
+> Este bloque manda sobre lo que siga abajo cuando haya contradicción; el resto se conserva como
+> referencia del ritual de cierre.
+
+- Estamos en **fase de optimización** (CANON v2 §4) sobre **tres ejes: UX, DISA, Seguridad**. Las
+  **funciones nuevas ceden prioridad al pulido**, salvo decisión expresa del dueño.
+- **Cuándo salir al mercado lo decide el dueño.** El asistente y Code no lo recomiendan ni lo usan
+  como argumento; solo ejecutan lo que el dueño prioriza.
+- **Al empezar** cada sesión, lee la biblia: `CANON.md`, `TABLERO.md`, `RITUAL.md`, `CLAUDE.md` y
+  `docs/contexto/`. **Fuente única de tareas: `TABLERO.md`** (empezando por el Eje A — UX). Notion es
+  solo panel (KPIs, tiempo, "dónde sigo"); no dupliques tareas ni toques sus tablas.
+- **Aditivo, sin DROP.** No toques huella/Verifactu, stock, permisos base ni la lógica de
+  facturas/cobros/ledger salvo autorización expresa de la tarea, y siempre por su flujo con
+  confirmación (nunca escritura silenciosa).
+- **Simplicidad y cambios quirúrgicos.** Código/edición mínima; no "mejores" lo adyacente.
+- **Verificación siempre:** cada tarea define su test/gate propio y cierra con **regresión 0** en lo vivo.
+- **Legal/regulatorio:** verificado contra fuente oficial en la web, nunca de memoria.
+- **Al terminar:** `commit` + `push` con mensaje claro y actualiza el bloque **"DÓNDE LO DEJÉ / DÓNDE
+  SIGO"** de Notion. **Un tema por chat**: al cerrar, avisa para abrir chat nuevo.
+
+---
+
 ## Al EMPEZAR cada sesión
 1. Anotar la hora de inicio en `session.json` (campo "sesion_inicio").
 2. Leer `CANON.md` (qué es Bamburu y qué NO) y `TABLERO.md` (qué toca).

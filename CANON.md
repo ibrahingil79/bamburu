@@ -1,403 +1,50 @@
-# CANON.md — Bamburu
-
-> Este es el único documento que manda. Si cualquier otro archivo (TABLERO.md,
-> CLAUDE.md, etc.) dice algo distinto de lo que está aquí, gana este documento.
-> Al empezar cualquier sesión (con Ibrahin o con Claude Code) se lee este archivo primero.
-> Última actualización: 2026-06-23
-
----
-
-## 0. El dueño no opera, decide (principio rector nº0)
-
-Bamburu no es donde el dueño gestiona su negocio; es quien lo gestiona por él.
-El dueño no opera, decide. Todo lo demás en este CANON es consecuencia de esta
-frase: si algo en Bamburu la contradice, está mal, aunque funcione.
-
-Qué significa:
-- El software de gestión clásico es un archivador con pantallas: guarda datos y
-  espera a que el dueño venga a buscarlos y a actuar. El trabajo de vigilar,
-  decidir y ejecutar sigue siendo del humano.
-- Bamburu lo invierte: DISA hace el trabajo, el dueño da el sí o el no. La
-  pantalla deja de ser un panel que se opera y pasa a ser una bandeja de
-  decisiones que se aprueban.
-- El autónomo de servicios no quiere un software de gestión: odia gestionar.
-  Bamburu no le da mejores herramientas para gestionar, le quita la gestión de
-  encima.
-
-Reglas que este principio obliga:
-1. Toda función se construye para que DISA pueda operarla, no solo el usuario.
-   Una función que solo funciona si el humano la opera está construida a medias.
-2. El alcance total es munición de DISA, no una lista de paridad con la
-   competencia. Cada función existe para darle a DISA una palanca más que mover
-   sola. No construimos funciones para que el usuario las use; las construimos
-   para que DISA las use por él. Mismo código que la competencia, propósito
-   opuesto.
-3. El dueño no prepara nada, decide todo. DISA llega siempre con el trabajo hecho
-   y una decisión clara que pedir, nunca con un formulario vacío. "Te llevo a la
-   pantalla" queda prohibido como respuesta final de DISA.
-4. La simplicidad no viene de esconder funciones, viene de que el dueño no las
-   toca. Bamburu lo tiene todo dentro y aun así se siente simple, porque DISA
-   opera la mayoría por él.
-5. Frontera de seguridad: DISA prepara y propone; el humano valida lo que tiene
-   consecuencia (cobrar, pagar, presentar a Hacienda, borrar). DISA lo deja listo
-   y pide el OK, nunca lo ejecuta sola. (Enlaza con §0-ter.)
-
----
-
-## 0. Principio de cabecera (manda sobre todo lo demás)
-
-Bamburu no es "un software para autónomos". Es software de gestión de clase mundial —con todo lo que tiene el mejor software del mundo— a un precio que un autónomo pueda costear. Un negocio pequeño no es un negocio simple. Si un autónomo no usa hoy ciertas funciones no es porque no las necesite, sino porque no puede pagar el software que las tiene. Bamburu rompe eso.
-
-Regla que gobierna toda decisión de alcance: nunca se omite, recorta ni simplifica una función por el tamaño del cliente. Si algo no entra ahora, es por orden/momento de construcción, jamás por "el autónomo no lo necesita".
-
-**Alcance total comprometido.** Bamburu aspira a tener TODAS las funciones de un software de gestión de primer nivel (las de Holded, Sage, Odoo y Salesforce). Ninguna se omite, recorta ni se marca como "opcional" o "decisión futura" por el tamaño del cliente: una pequeña empresa no es una empresa simple. El ÚNICO criterio para el orden de construcción es la **dependencia técnica** —qué pieza se apoya sobre cuál—, nunca el recorte. Todo lo listado en el inventario de alcance (TABLERO → "ALCANCE TOTAL — TODO ENTRA") ESTÁ comprometido; lo único pendiente es su turno.
-
----
-
-## 0-bis. El iPhone del nicho (principio rector del producto)
-
-**Consecuencia del §0:** no es "todo dentro y fácil", es "todo dentro y DISA lo conduce".
-
-Bamburu se enciende y se usa en minutos, como un iPhone —no como un Android, que exige
-aprender antes de servir. Cualquiera (un frutero, una peluquera, un fotógrafo, sin
-conocimientos técnicos) debe poder usarlo desde el primer momento, sin manual y sin
-formación. De aquí se derivan reglas innegociables:
-
-- **Una sola versión.** No hay versión "fácil" y versión "pro". Hay una sola, que es la
-  fácil con toda la potencia dentro. El autónomo más simple y la gestoría más exigente
-  usan exactamente el mismo Bamburu.
-- **Toda la potencia, escondida hasta que hace falta.** Ninguna función se quita ni se
-  recorta por ser el cliente pequeño; se esconde. La complejidad está siempre disponible
-  debajo y aparece sola, vía DISA, el día que el usuario la necesita —no antes.
-- **Nadie ve lo que no es suyo.** Cada negocio ve solo lo que usa. El frutero nunca ve
-  una rectificativa ni un embudo; el fotógrafo nunca ve un cobro de mostrador. DISA
-  detecta la forma del negocio y monta la cara que le corresponde.
-- **Si necesita manual, está mal hecho.** La facilidad es trabajo del fabricante, no del
-  usuario. Cada vez que haya que explicarle algo al usuario, el fallo es de diseño y se
-  rehace.
-- **El onboarding lo hace DISA, no un formulario.** Al entrar por primera vez, DISA
-  pregunta dos o tres cosas en lenguaje normal y deja el producto montado y listo para
-  trabajar. Nada de pantallas vacías ni fichas de treinta campos.
-- **La complejidad la absorbe el fabricante.** Esconder bien cuesta más que enseñar todo.
-  Ese coste lo paga Bamburu para que el usuario no lo toque. Es el precio del iPhone, y
-  es innegociable.
-
-**Consecuencia directa en Ventas:** un solo motor de venta (mismo cliente, catálogo,
-stock y factura) con varias caras —mostrador, agenda, tablero— que DISA enciende según
-el tipo de negocio. Se cambia la cara, nunca las tripas.
-
----
-
-## 0-ter. Bamburu prepara, el humano valida (principio rector)
-
-(Es la **frontera de seguridad** del §0 — su **regla 5**: DISA prepara y propone; el humano valida lo que tiene consecuencia.)
-
-Bamburu prepara, el humano valida. La contabilidad se construye entera dentro del producto
-—asientos, conciliación, modelos, libros— y se deja LISTA para validar, pero Bamburu NUNCA
-valida ni presenta ante la AEAT, ni siquiera cuando el usuario lo pida: esa decisión es
-siempre del autónomo o su gestor. Las
-integraciones externas, como la gestoría, son el destinatario de ese trabajo ya hecho, no una
-dependencia para que el sistema funcione. El orden entre piezas responde solo a dependencia
-técnica (qué se apoya sobre qué), nunca a recorte ni al tamaño del cliente.
-
----
-
-## 1. Misión (la estrella polar)
-
-Bamburu le hace fácil gestionar su empresa a cualquiera —autónomo, pequeña o mediana
-empresa— con la IA como protagonista: le hablas a DISA en un par de líneas y ella lo
-hace por ti.
-
-La forma principal de usar Bamburu es conversando con DISA. Las pantallas y menús
-existen como respaldo —para ver, revisar o ajustar lo que la IA hace— pero el usuario
-no necesita pelearse con ellos. Bamburu nunca enseña un lienzo en blanco: DISA habla
-primero y propone.
-
-Esto no es un módulo ni una fase. Es la razón de existir de Bamburu. Si una función no
-se siente fácil y conversacional, está mal diseñada aunque funcione.
-
----
-
-## 2. Los 4 pilares y el ciclo del producto
-
-Bamburu gira en torno al producto y al ciclo de negocio:
-**comprar → almacenar → vender → entregar**. La factura no es una etapa del ciclo: es
-el documento legal que acompaña a la venta.
-
-El producto es la raíz. Cada producto tiene un **tipo**, y el tipo decide qué parte del
-ciclo aplica:
-- **Físico** (ej. recambios): ciclo completo — se compra, se almacena con stock, se
-  vende y se entrega.
-- **Servicio** (ej. fotografía): se vende y se factura; no lleva stock propio.
-- **Digital**: se vende y se entrega; sin stock físico.
-
-Vender servicios no impide comprar: el fotógrafo compra cámara, papel, material. Eso
-entra en Compras y Stock como **material del negocio** (lo que usas para trabajar),
-distinto del producto que revendes.
-
-**Los 4 pilares (estado):**
-- **CATÁLOGO** — ✅ CERRADO. Productos (tipo: físico / digital / servicio), Categorías.
-- **CLIENTES** — ✅ CERRADO. Clientes, Grupos, CRM (+ cobros y voz de DISA sobre clientes).
-- **INVENTARIO** — 🟡 EN CURSO. Compras, Stock, Proveedores, Devoluciones, Descuentos.
-- **VENTAS** — pendiente. **Presupuesto → Pedido → Albarán / nota de entrega → Factura**
-  (cadena documental completa; antes faltaban presupuesto y albarán), con **PDF real** de cada
-  documento y **envío por email**.
-
-No se añaden piezas salvo que se detecte que falta algo real. Lo que existe, se lleva a
-su mejor versión.
-
----
-
-## 2-bis. Las tres capas: Núcleo Operativo, El Suelo y El Foso
-
-Sobre los 4 pilares —que **NO se renumeran**: son el núcleo— Bamburu se ordena en tres capas.
-El orden entre ellas y dentro de cada una responde **solo a dependencia técnica** (qué se apoya
-sobre qué), nunca a recorte ni al tamaño del cliente (§0, §0-ter).
-
-**NÚCLEO OPERATIVO — los 4 pilares de siempre (intactos).**
-Catálogo ✅ · Cliente ✅ · Inventario 🟡 (casi) · Ventas. Es la base de gestionar el negocio
-—comprar → almacenar → vender → entregar—. **Ventas amplía su cadena documental a
-presupuesto → pedido → albarán → factura** (antes faltaban presupuesto y albarán), con PDF real
-y envío por email.
-
-**EL SUELO — lo que hay que cruzar para poder vender (todo dentro, nada opcional).**
-El Suelo no es "lo básico": es el **umbral de admisión**. Por debajo de él, el producto no se
-vende por brillante que sea el resto.
-- **Cumplimiento:** Verifactu completo (QR + leyenda + envío a la AEAT) + **factura electrónica
-  B2B (Facturae)**.
-- **Contabilidad propia:** motor que genera **asientos automáticos por documento**,
-  **conciliación bancaria**, **modelos (303, 130…)** y **libros**, y lo deja **LISTO PARA VALIDAR**.
-  Bamburu nunca valida ni presenta (§0-ter); la **gestoría es el destinatario natural** de ese
-  trabajo (puerta de salida: el gestor entra a Bamburu), no un requisito para que el sistema funcione.
-- **Multiusuario con permisos por usuario.**
-
-**EL FOSO — lo que hace ganar una vez admitido.**
-- **DISA como producto:** de avisos por umbral a **predicción + detección de anomalías + agente
-  que cierra el bucle**.
-- **Caras por oficio** (CRM comercial, agenda/citas, control horario…): las superficies que DISA
-  enciende según el negocio (coherente con §0-bis: se cambia la cara, nunca las tripas).
-
-**Orden de construcción (global):** cerrar **Inventario** → **Pilar 4 (Ventas)** → **El Suelo**
-(Cumplimiento → Contabilidad → Multiusuario) → **El Foso**. **Dentro de Contabilidad** (por
-dependencia técnica): **asientos → conciliación → modelos → libros → puente de gestoría**.
-
----
-
-## 3. Orden de construcción (fases)
-
-Se construye un pilar cada vez, en este orden, porque Ventas necesita a los otros tres
-ya hechos (vendes un producto, a un cliente, desde un almacén):
-
-1. **Producto (Catálogo)** — la raíz. ✅ CERRADO (2026-06-03).
-2. **Cliente** — a quién vendes. ✅ CERRADO (2026-06-08).
-3. **Almacén (Inventario)** — qué tienes y de dónde sale. 🟡 EN CURSO (2026-06-08).
-4. **Ventas** — **presupuesto → pedido → albarán → factura**; usa los tres anteriores. Pendiente.
-
-Tras cerrar los 4 pilares (el Núcleo), el orden continúa por **El Suelo** (Cumplimiento →
-Contabilidad → Multiusuario) y luego **El Foso** (DISA como producto + caras por oficio). Ese
-orden, y el interno de Contabilidad, están en **§2-bis** y responden solo a dependencia técnica.
-
-**Primer paso — Producto, mínimo para darlo por listo:** ✅ COMPLETO (2026-06-03)
-- Tipo de producto: físico / digital / servicio. ✅
-- IVA por producto. ✅
-- Un solo catálogo: unificar Productos + Servicios (eliminar la tabla suelta de
-  servicios de A3). ✅
-- Buscador y filtros usables: por nombre, código y categoría. ✅ (P4: búsqueda nombre/SKU + filtro categoría + paginación por URL)
-
-**Fuera de este primer paso (más adelante):** variantes, galería de imágenes, SEO,
-coste/margen, unidad (por hora/sesión), multi-almacén.
-
-### Inventario (Pilar 3) — modelo de stock (Paso 1 HECHO 2026-06-08)
-
-Se copia el modelo de los ERP grandes: **el stock NO se guarda y se pisa**; es la **SUMA de
-un libro de movimientos** (`stock_movements`, append-only, delta con signo). `products.stock`
-es solo una **caché derivada** (siempre = suma del libro; se mantiene tras cada movimiento)
-para que el POS siga rápido. Un movimiento contabilizado es **inmutable**: nunca se edita ni
-se borra; para corregir se crea otro que lo **revierte** — misma filosofía que el ciclo de vida
-de la factura (original intacta, asiento nuevo enlazado). Solo los productos **físicos** llevan
-stock/kardex (servicio y digital no). **Multi-almacén** preparado en datos (cada movimiento lleva
-`warehouse_id`) pero la UI usa un almacén por defecto; transferencias y selección de almacén,
-más adelante. Todo escritor de stock (POS, Compras, ajustes) pasa por el mismo libro: una sola
-fuente de verdad.
-
-**Regla viva:** este orden y estos alcances no son sagrados. Si al construir algo no
-cuadra, se cambia, se quita o se mejora. La realidad del producto manda sobre el plan.
-
----
-
-## 4. Arquitectura multi-país (gestión universal + enchufe fiscal por país)
-
-**Capa de gestión (universal, desde el día uno).** Catálogo, clientes, inventario,
-ventas, hablar con DISA, emitir el documento de venta. Igual para cualquier
-hispanohablante. No toca ninguna autoridad fiscal. A nadie se le cierra la puerta.
-
-**Capa de cumplimiento fiscal (un "enchufe" por país).** Convierte el documento de
-venta en factura legal del país. Cada país es un enchufe independiente:
-- **España (Verifactu) → lo hacemos nosotros, 100 %.** Mercado principal, control total
-  donde más importa. Obligatorio jul-2027.
-- **LATAM (México/SAT, Colombia/DIAN, Argentina/ARCA…) → vía proveedor externo
-  certificado con API.** No se construye a mano; coste por factura que va dentro del
-  precio del plan.
-
-Se diseña como enchufes desde el principio: añadir un país = conectar un módulo, no
-reescribir el producto.
-
-### El modelo fiscal: IVA vs IRPF (crítico — no modelarlo mal)
-
-Son dos cosas distintas y se modelan en sitios distintos:
-
-- **IVA → depende del PRODUCTO y del PAÍS.** Cada país tiene sus **bandas** de IVA;
-  España = General 21 % / Reducido 10 % / Superreducido 4 % / Exento. **El producto
-  guarda su banda** (no un número tecleado), y el % se resuelve desde la tabla de
-  bandas del país (`core/vat-bands.js`; hoy solo ES). Añadir un país = añadir su tabla
-  de bandas, sin tocar el producto.
-
-- **IRPF / retención → NO es del producto ni del servicio.** Depende de **QUIÉN
-  factura** (régimen del negocio: profesional con retención 15 % — o 7 % los primeros
-  años de nuevo autónomo —; empresarial no retiene) y de **A QUIÉN** (si el cliente es
-  particular, no hay retención). Por eso el IRPF se decide en **Settings (datos del
-  negocio)** + en la **factura según el cliente**, y se construye en **Ventas**, no en
-  el producto ni antes.
-
-- **Responsabilidad fiscal.** La responsabilidad final del tipo aplicado es del usuario.
-  Bamburu **ayuda** (bandas legales, enlaces a la AEAT, DISA) pero **no garantiza** el
-  tipo correcto en casos dudosos.
-
-### Ciclo de vida de la factura (ES) — anular y rectificar (HECHO 2026-06-04)
-
-Una factura emitida **nunca se edita ni se borra** (rompería la cadena de hash; es infracción).
-Las dos únicas operaciones legales son **asientos nuevos enlazados** en la cadena; la original solo
-cambia su `status` (campo fuera del hash):
-
-- **Anular** (factura que nunca debió existir: error/duplicado/operación no realizada): asiento de
-  anulación nuevo (`invoice_anulaciones`) hash-enlazado a la original; pide motivo; original → `anulada`.
-- **Rectificativa** (operación real con datos/importes mal): es el **único** mecanismo de corrección en
-  España — **no existen notas de crédito/débito** (eso es LATAM, vía proveedor externo). Factura nueva en
-  **serie propia 'R'** con numeración y cadena propias, que referencia a la original (→ `rectificada`),
-  con **tipo R1–R5** y **modalidad sustitución (S) / diferencias (I)**; admite **importe negativo (abono)**.
-
-Pendiente aparte (Verifactu, Pilar 4): QR + leyenda VERI*FACTU y envío a la AEAT. El ciclo de vida local
-(documentos + estados + enlace en la cadena de hash) ya está construido.
-
-### Cobros / pendiente de pago (HECHO 2026-06-04, T4 Paso 1)
-
-El estado de cobro de una factura **nunca se guarda**: se calcula siempre en vivo (`modules/erp/cobros.js`)
-desde los cobros (`invoice_payments`, totales o parciales) y la fecha de vencimiento (`invoices.due_date`,
-guardada al emitir = emisión + plazo del cliente). Estado = pendiente / cobrada en parte / cobrada / vencida
-(+ días vencida y tramo 0–30/30–60/+60). **Qué cuenta como deuda del cliente:** anulada no; rectificada por
-**sustitución** no (la cobra su rectificativa), por **diferencias** sí; abono (negativo) resta. El registro de
-cobro tiene **un único punto de escritura** (`POST /api/erp/invoices/:id/payments`, guard `isCobrable`) y se
-usa desde tres sitios (factura, sección Cobros, ficha de cliente) con un modal compartido. **El PDF/documento
-de la factura no incluye nada de cobros** (es control interno, no documento legal). Pendiente (Paso 2): perfiles
-de cobro, próxima acción y voz de DISA sobre cobros.
-
----
-
-## 5. Diferenciación y disciplina de construcción
-
-**La diferenciación.** Bamburu no gana por ser el primero ni por tener más funciones
-—ya hay software de gestión de sobra. Gana por dos cosas, y solo si se ejecutan bien:
-1. **IA proactiva, no reactiva.** DISA habla primero y propone: "este cliente te debe
-   300 € hace 20 días, ¿reclamo?", "se acerca el trimestre, aparta X de IVA", "te queda
-   poco stock de este recambio". Es un asesor, no un bot que espera órdenes.
-2. **Ejecución impecable.** No queremos mil funciones a medias; queremos que las que hay
-   sean las mejores. Ser "uno más" = perder.
-
-**Regla de oro de construcción.** Los motores (producto, stock, ventas, facturación) se
-terminan antes o a la vez que la capa de DISA que los acciona. DISA es tan fiable como
-el motor que tiene debajo. Si DISA dice "te he facturado" y la factura sale ilegal, la
-magia se rompe — y en facturación eso es una multa, no un bug. La fiabilidad del núcleo
-sostiene el protagonismo de la IA.
-
-**Corrección inmediata de lo construido.** Lo que YA está construido y funciona se corrige
-en el momento, no se posterga — la deuda sobre lo hecho se acumula y degrada el producto.
-PERO lo que aún no existe no es "corrección": es construcción, y respeta el orden de
-pilares (Producto → Cliente → Inventario → Ventas). No se usa esta regla para adelantar
-funciones de pilares futuros.
-
-**Reglas de diseño permanentes:**
-- Toda sección con lista (productos, clientes, facturas, pedidos, etc.) lleva filtro de
-  búsqueda desde que se construye.
-- Todo proceso que añade un producto a un documento (pedido, factura, albarán, compra)
-  lleva buscador de producto que rellena la línea; nunca solo entrada manual.
-- **Regla de integridad — sin duplicados.** Toda entidad con identidad única (cliente→NIF,
-  proveedor→NIF/CIF, producto→SKU, categoría/grupo→nombre) debe impedir o avisar de duplicados en sus
-  puntos de entrada: formulario, API y acciones de DISA. Las facturas ya lo cumplen vía
-  numeración correlativa + hash encadenado. Cada pilar aplica esta regla a sus entidades
-  cuando se construye.
-
----
-
-## 6. Pendientes apuntados (para no olvidar)
-
-- **Multi-almacén** — soportar varios almacenes por ubicación (ej. Madrid, Málaga) y por
-  función (producto terminado vs. materias primas). Define de dónde sale lo que se vende
-  y de dónde se consume el material de trabajo. **Preparado en datos** (Pilar 3 Paso 1: cada
-  `stock_movement` lleva `warehouse_id` y hay un "Almacén principal" sembrado); falta la **UI**
-  multi-almacén + **transferencias** (`type='transferencia'` ya definido, sin uso). Pieza de peso.
-- **A quién vender primero** — la misión apunta a autónomos + pequeñas + medianas. Sigue
-  siendo amplio; decidir por cuál arrancar a vender de verdad cuando toque estrategia
-  comercial.
-- **Módulos futuros registrados (10 jun 2026, decisión del dueño)** — solo registro, sin
-  adelantar pilares: **DISA como producto** (proactividad, personalidad y superficie propia:
-  el diferencial del §5 con nombre propio de módulo), **agendado automático de citas**
-  (reservas para autónomos de servicios), **CRM comercial** (seguimiento sobre la ficha de
-  cliente) y **control horario** (registro de jornada, normativa ES). Ventas completas y el
-  sistema de diseño ya estaban previstos. Orden tentativo y detalle en TABLERO.md
-  ("Roadmap futuro").
-- **Módulos futuros registrados (15 jun 2026, decisión del dueño) — Plataforma / Capa 2, fuera del
-  orden de pilares, NO iniciar hasta indicación:** **Telegram como canal de producto** (comunicación
-  interna del equipo + operar DISA por Telegram desde el móvil; atención al cliente queda como pregunta
-  abierta), **mapas con OpenStreetMap** (geolocalización y direcciones, sin Google Maps) y **suite
-  ofimática ligera** (ver/editar hojas, texto y PDF dentro de Bamburu). Solo registro, sin adelantar
-  pilares; detalle en TABLERO.md ("Roadmap futuro", entradas 11–13).
-
----
-
-## 7. Nota: qué cambió respecto al CANON anterior (y por qué)
-
-El CANON anterior definía Bamburu como software para el **autónomo de servicios, sin
-stock, sin catálogo de productos**, con el e-commerce "congelado" en una Capa 2 y la
-facturación como núcleo.
-
-Construyendo se vio que eso era erróneo: **el producto es la raíz de la que parte todo**,
-y el negocio real es el ciclo comprar → almacenar → vender → entregar. La factura no es
-el núcleo, es el documento legal que acompaña a la venta. Por eso se reescribió:
-- El producto físico (con stock) pasa a ser el centro, no algo "congelado".
-- Los servicios son un **tipo de producto**, no un módulo aparte.
-- La estructura se ordena en **4 pilares** (Catálogo, Ventas, Clientes, Inventario) en
-  lugar del modelo de "capas e-commerce".
-- Se mantiene intacto lo que seguía siendo cierto: el protagonismo de DISA, la
-  diferenciación por IA proactiva + ejecución, y el modelo fiscal multi-país.
-
----
-
-## 8. Principios de visión (decisiones de estrategia, registrados 2026-06-14)
-
-> Registrados como principios de visión; no cambian la tarea actual (compras/inventario). El detalle de
-> los módulos de visión vive en TABLERO.md (roadmap futuro).
-
-**P1. Modelo adaptativo multinicho.** En el onboarding conversacional, DISA determina el tipo de negocio y
-presenta una estructura a medida: cada negocio ve en primer plano solo lo suyo. El resto **no se oculta**:
-queda accesible y activable a un clic. Las funciones fuera del perfil del negocio se activan **con recargo**.
-- *Enfoque técnico recomendado:* componer el perfil por **capacidades** (¿vende producto?, ¿da cita previa?,
-  ¿tiene empleados?, ¿cobra cuotas?) para que los negocios **mixtos** encajen.
-- *Línea base vs recargo:* **PENDIENTE de afinar por Ibrahin.** Principio: el **núcleo de gestionar cualquier
-  negocio y DISA van en la base**; el recargo es solo para módulos pesados opcionales.
-
-**P2. Postura fiscal: aliado del gestor, no sustituto.** Bamburu deja los datos listos —libro registro
-impecable, borradores de modelos, avisos de DISA sobre el trimestre— para que **el gestor presente**. Bamburu
-**NO presenta impuestos ante Hacienda**. Se evita así la responsabilidad legal.
-
-**P3. Fuente real de liderazgo.** Bamburu no gana por tener IA. Gana por tener **el negocio entero en un solo
-dato**: funciones que el especialista no puede construir porque no tiene nuestros datos —la obra que se compara
-sola con las compras reales, el food cost que se actualiza solo, la previsión de caja, la lista de espera que se
-autorrellena, la cuota que se cobra y reclama sola—. DISA orquesta esas funciones; es **una palanca más, no la
-única**.
-
-### Contexto de mercado (autónomos España, 2025 — por tamaño de colectivo)
-1. **Comercio** ~725.000 · 2. **Construcción/oficios** ~414.000 · 3. **Servicios profesionales** ~341.000 ·
-4. **Hostelería** ~316.000 · 5. **Salud/bienestar/belleza** (~142.000 sanitarias + peluquería/estética).
-Consecuencia: el **comercio es el nicho nº 1**, lo que refuerza el **TPV** como pieza de peso (ver roadmap en TABLERO.md).
-
-**Especificación de funciones por nicho: ver [docs/ESTRATEGIA-NICHOS.md](docs/ESTRATEGIA-NICHOS.md).**
+# CANON — Bamburu (v2: fase de optimización)
+
+> Estrategia e identidad del proyecto. La mantiene Claude Code en el servidor y GitHub. El chat decide y redacta; Code ejecuta y commitea.
+
+## 1. Qué es Bamburu (identidad — no se toca)
+Software de gestión de primer nivel a un precio que el autónomo sí puede pagar. Bamburu no es "software para pequeños": es software de clase mundial al alcance del autónomo. Los negocios pequeños no son negocios simples; si un autónomo no usa hoy ciertas funciones es porque no podía pagar el software que las tenía — Bamburu rompe eso.
+Referencias: las mejoras estructurales se copian de los líderes mundiales (Salesforce, SAP, Odoo, Sage), no solo de la competencia directa (Holded, Quipu).
+
+## 2. DISA (identidad — no se toca)
+DISA no es una función: es la inversión que hace a Bamburu disruptivo. Principio: "El dueño no opera, decide."
+Cinco reglas: (1) DISA puede operar cualquier función. (2) Las funciones existen para que DISA las use. (3) DISA siempre llega con una propuesta ya preparada, nunca con un formulario en blanco. (4) La simplicidad nace de que el dueño no necesita tocar las cosas, no de esconderlas. (5) DISA prepara y propone; el humano siempre valida las acciones con consecuencias.
+
+## 3. Regla de alcance (no se toca)
+Nunca se omite, simplifica ni recorta una función porque el cliente sea pequeño o autónomo. Si algo no encaja ahora es cuestión de orden/tiempo, jamás de capacidad.
+Prohibido: desanimar al dueño o enmarcar una idea como "demasiado grande para ti". Si algo no toca ahora, se dice como orden/tiempo, nunca como límite.
+Antes de aplazar, recortar o descartar algo, comprueba: ¿mi razón se apoya en que el cliente es pequeño? Si sí, la razón está mal. Rehazla.
+
+## 4. Fase actual: OPTIMIZACIÓN
+El objetivo de esta fase ya no es el orden de construcción, sino pulir lo construido. La plataforma es potente pero cruda. Se optimiza en tres ejes: UX, DISA y Seguridad. Las funciones nuevas ceden prioridad al pulido, salvo decisión expresa del dueño.
+Decisión de mercado: cuándo sale Bamburu al mercado lo decide el dueño. El asistente y Code no recomiendan el momento de lanzar ni lo usan como argumento; solo ejecutan lo que el dueño prioriza.
+
+### Eje A — UX
+Regla rectora: cada pantalla y flujo debe acercar el "el dueño no opera, decide". Menos clics, menos formularios en blanco, más propuestas listas.
+Optimizado cuando: hay un sistema visual coherente (tipografía, espaciado, componentes, color); todas las pantallas tienen estados vacíos y de carga cuidados; los mensajes de error son claros y accionables; los flujos clave están medidos en clics y reducidos; funciona bien en móvil; hay onboarding que lleva al dueño al primer valor sin fricción.
+
+### Eje B — DISA
+Regla rectora: DISA llega con el trabajo hecho y una decisión que pedir.
+Optimizado cuando: DISA cubre de verdad operar cada función; sus propuestas son correctas y bien argumentadas; es proactiva; respeta permisos; su tono es el de Bamburu; responde con latencia razonable y buen contexto.
+
+### Eje C — Seguridad
+Regla rectora: el dato del autónomo es sagrado y aislado.
+Optimizado cuando: el aislamiento multi-tenant está auditado sin fugas; no hay huecos de permisos ni por URL; sesiones y tokens (incluidos los enlaces del portal) son seguros y caducan; las entradas se validan; los secretos (certificados/claves) se gestionan fuera del código; hay límites de peticiones, registro de auditoría y respaldos automáticos de la BD de cada tenant.
+
+## 5. Reglas de trabajo
+- Simplicidad primero: el código mínimo que resuelve el problema; sin abstracciones ni configurabilidad no pedida.
+- Cambios quirúrgicos: tocar solo lo pedido; aditivo, sin DROP; no tocar huella/Verifactu ni la lógica de documentos salvo autorización.
+- Verificación siempre: cada tarea con test/gate propio y cierre con regresión 0.
+- Fuente única de tareas: TABLERO.md. Notion es solo panel.
+- Legal/regulatorio: verificado contra fuente oficial, nunca de memoria.
+- Un tema por chat.
+
+## 6. Quién decide qué
+- El dueño decide: negocio, producto, prioridades, precios, experiencia de usuario, y cuándo salir al mercado.
+- El técnico (chat + Code) decide: base de datos, arquitectura, nombres, orden técnico de programar. Si una duda técnica tiene recomendación clara, se aplica sin preguntar y se explica en una frase simple.
+
+## 7. Mapa de capas (referencia, no mandato de orden)
+- Núcleo Operativo: Pilares 1–4 (Catálogo, Cliente, Inventario, Ventas).
+- El Suelo: Verifactu, motor contable propio, multiusuario con permisos.
+- El Foso: DISA como producto predictivo/agente, CRM, API, móvil, interfaces por profesión.
+En la fase actual, este mapa es referencia; la prioridad la marca la optimización (§4) y lo que el dueño decida.
