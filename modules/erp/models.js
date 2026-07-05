@@ -1228,6 +1228,47 @@ export function runMigrations(db) {
   );
   CREATE INDEX IF NOT EXISTS idx_bank_movements_opdate ON bank_movements(op_date);`);
 
+  // ── FACTURAS RECURRENTES · Bloque A (aditiva) — plantillas de cuota/iguala que Bamburu genera solas ──
+  // La generación crea una OCURRENCIA en estado 'borrador' (NO una factura emitida: el CHECK de
+  // invoices no admite borrador y la huella Verifactu solo nace al emitir). El dueño revisa y emite
+  // con un clic → ahí se crea la factura real por el flujo existente (createInvoice). Idempotente por
+  // UNIQUE(template_id, due_date). Detalle en modules/erp/recurrentes.js.
+  db.exec(`CREATE TABLE IF NOT EXISTS recurring_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER,
+    document_name TEXT DEFAULT 'Factura',
+    interval_months INTEGER NOT NULL DEFAULT 1,
+    start_date DATE NOT NULL,
+    end_date DATE,
+    max_occurrences INTEGER,
+    irpf_rate REAL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'activa',
+    notes TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id) REFERENCES clients(id)
+  );
+  CREATE TABLE IF NOT EXISTS recurring_template_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    template_id INTEGER NOT NULL,
+    description TEXT NOT NULL,
+    quantity REAL NOT NULL DEFAULT 1,
+    unit_price REAL NOT NULL DEFAULT 0,
+    tax_rate REAL NOT NULL DEFAULT 21,
+    FOREIGN KEY (template_id) REFERENCES recurring_templates(id) ON DELETE CASCADE
+  );
+  CREATE TABLE IF NOT EXISTS recurring_occurrences (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    template_id INTEGER NOT NULL,
+    due_date DATE NOT NULL,
+    status TEXT NOT NULL DEFAULT 'borrador',
+    invoice_id INTEGER,
+    generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    emitted_at DATETIME,
+    UNIQUE(template_id, due_date),
+    FOREIGN KEY (template_id) REFERENCES recurring_templates(id)
+  );`);
+
   // bank_reconciliations: el VÍNCULO movimiento ↔ objetivo (cobro existente o factura), o "ignorado".
   // El estado de conciliación de un movimiento se DERIVA de aquí (no hay columna de estado en el
   // movimiento). Una fila por movimiento (UNIQUE); deshacer = borrar la fila. `created_payment_id`
@@ -1684,6 +1725,8 @@ export function runMigrations(db) {
     // Conciliación bancaria · Pieza 1 — permiso propio (registrar un cobro desde aquí exige además cobros.manage).
     { module: 'conciliacion', action: 'read',   description: 'Ver conciliación bancaria: movimientos y estado' },
     { module: 'conciliacion', action: 'manage', description: 'Importar extractos (Norma 43) y conciliar/ignorar/deshacer' },
+    { module: 'recurrentes',  action: 'read',   description: 'Ver facturas recurrentes: plantillas y borradores' },
+    { module: 'recurrentes',  action: 'manage', description: 'Crear/editar/pausar plantillas recurrentes' },
   ];
   for (const p of permissionsData) {
     db.prepare('INSERT OR IGNORE INTO permissions (module, action, description) VALUES (?, ?, ?)').run(p.module, p.action, p.description);
@@ -1704,7 +1747,8 @@ export function runMigrations(db) {
                  'clients.read','clients.create','clients.edit',
                  'invoices.read'],
     Accountant: ['orders.read','clients.read','invoices.read','invoices.create','admin.settings',
-                 'cobros.read','cobros.manage','conciliacion.read','conciliacion.manage'],
+                 'cobros.read','cobros.manage','conciliacion.read','conciliacion.manage',
+                 'recurrentes.read','recurrentes.manage'],
     Viewer:     ['products.read','orders.read','clients.read','invoices.read'],
   };
   for (const [roleName, perms] of Object.entries(rolePermissions)) {

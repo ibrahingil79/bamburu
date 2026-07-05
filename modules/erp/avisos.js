@@ -76,9 +76,24 @@ export function stockBajo(db, today) {
   }));
 }
 
+// Borradores de FACTURAS RECURRENTES pendientes de revisar/emitir (Bloque A). Query inline para no
+// crear dependencia entre avisos y recurrentes.
+export function borradoresRecurrentes(db, today) {
+  const rows = db.prepare(`SELECT o.id, o.due_date, t.document_name, COALESCE(c.name,'—') client_name
+      FROM recurring_occurrences o JOIN recurring_templates t ON t.id=o.template_id
+      LEFT JOIN clients c ON c.id=t.client_id WHERE o.status='borrador' ORDER BY o.due_date`).all();
+  return rows.map(o => ({
+    tipo: 'factura_recurrente',
+    urgencia: 200,     // por encima de stock bajo, por debajo de lo vencido
+    titulo: `${o.document_name} recurrente · ${o.client_name}`,
+    detalle: `Borrador listo para revisar y emitir (fecha ${o.due_date})`,
+    ref: { source: 'factura_recurrente', occurrence_id: o.id },
+  }));
+}
+
 // Fuentes registradas. Para añadir cobros de cliente mañana: escribe la función y añádela aquí.
 // NADA más cambia (ni el panel, ni el resumen del badge, ni el email).
-const SOURCES = [vencimientosProveedor, stockBajo];
+const SOURCES = [vencimientosProveedor, stockBajo, borradoresRecurrentes];
 
 // Todos los avisos del día (todas las fuentes), ordenados por urgencia (más urgente arriba).
 // Robusto: si una fuente peta, se ignora esa fuente y siguen las demás (un fallo aislado no
@@ -174,8 +189,9 @@ export function avisoKey(a) {
 const TIPO_FRASE = {
   vencimiento_proveedor: n => n + ' factura' + (n === 1 ? '' : 's') + ' de proveedor que vence' + (n === 1 ? '' : 'n') + ' o ' + (n === 1 ? 'está' : 'están') + ' vencida' + (n === 1 ? '' : 's'),
   stock_bajo: n => n + ' producto' + (n === 1 ? '' : 's') + ' con stock bajo',
+  factura_recurrente: n => n + ' factura' + (n === 1 ? '' : 's') + ' recurrente' + (n === 1 ? '' : 's') + ' en borrador para revisar',
 };
-const TIPO_ORDEN = ['vencimiento_proveedor', 'stock_bajo'];   // orden estable en el resumen
+const TIPO_ORDEN = ['vencimiento_proveedor', 'factura_recurrente', 'stock_bajo'];   // orden estable en el resumen
 
 // Resumen de CONTEOS por fuente (grupos no vacíos), en orden estable. Σ counts = total avisos
 // (== número del badge). NO incluye detalle ni ofrece acciones.

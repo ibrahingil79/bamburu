@@ -46,6 +46,10 @@ async function processTenant(path) {
   try {
     runMigrations(db);   // idempotente: garantiza daily_alert_log y demás esquema
 
+    // Bloque A: genera los borradores de facturas recurrentes vencidos ANTES de calcular los avisos
+    // (idempotente), para que el aviso del día incluya "borrador listo para emitir".
+    try { (await import('../modules/erp/recurrentes.js')).generateDueOccurrences(db, TODAY); } catch { /* tenant sin esquema aún */ }
+
     const avisos = avisosDelDia(db, TODAY);
     if (!avisos.length) { log(slug + ': sin avisos hoy → no se envía'); return { slug, sent: false, avisos: 0 }; }
 
