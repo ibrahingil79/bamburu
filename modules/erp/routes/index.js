@@ -36,6 +36,7 @@ import { createSupplierInvoiceRoutes } from './supplier-invoices.js';
 import { createPagosRoutes } from './pagos.js';
 import { createSecurityRoutes } from './security.js';
 import { createContabilidadRoutes } from './contabilidad-routes.js';
+import { createVerifactuEnvioRoutes } from './verifactu-envio-routes.js';
 
 export function mountRoutes(app, db) {
   const auth = adminAuth(db);
@@ -129,6 +130,7 @@ export function mountRoutes(app, db) {
   admin.route('/supplier-invoices', supplierInvoiceViews);
   admin.route('/pagos', pagosViews);
   admin.route('/contabilidad', contabViews);
+  admin.route('/verifactu', createVerifactuEnvioRoutes(db).views);
   app.route('/admin', admin);
 
   // ── Protected API ──────────────────────────────────────────────

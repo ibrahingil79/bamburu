@@ -1171,6 +1171,35 @@ export function runMigrations(db) {
     FOREIGN KEY (invoice_id) REFERENCES invoices(id)
   )`);
 
+  // ── VERI*FACTU · Tarea 2 (Fase A) — ESTADO DE ENVÍO a la AEAT (aditiva, idempotente) ──
+  // Una fila por registro de facturación (1:1 con verifactu_registros vía registro_id UNIQUE):
+  // el envío es idempotente por diseño (upsert; no se reenvía lo ya 'correcto'). Guarda el estado,
+  // el CSV, los códigos/descripciones de error de la AEAT y la respuesta cruda (no se tragan), más
+  // el XML enviado para auditoría. NO toca la huella/QR (Tarea 1, inmutable). Detalle en
+  // modules/erp/verifactu-envio.js.
+  db.exec(`CREATE TABLE IF NOT EXISTS verifactu_envios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    registro_id INTEGER NOT NULL UNIQUE,
+    estado TEXT NOT NULL DEFAULT 'pendiente',
+    entorno TEXT,
+    endpoint TEXT,
+    estado_envio TEXT,
+    estado_registro TEXT,
+    codigo_error TEXT,
+    descripcion_error TEXT,
+    csv TEXT,
+    tiempo_espera_envio INTEGER,
+    http_status INTEGER,
+    request_xml TEXT,
+    response_xml TEXT,
+    aviso TEXT,
+    intentos INTEGER NOT NULL DEFAULT 0,
+    enviado_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (registro_id) REFERENCES verifactu_registros(id)
+  )`);
+
   // ── PILAR 4 · VENTAS · PIEZA 1 — PRESUPUESTO (quotes) ──────────────────────
   // Documento PRESUPUESTO, ESPEJO de la orden de compra (purchase_orders): mismo ciclo
   // borrador (editable, sin número) → emitido (gana PRE-NNNN vía code_counters y se bloquea)
