@@ -1200,6 +1200,50 @@ export function runMigrations(db) {
     FOREIGN KEY (registro_id) REFERENCES verifactu_registros(id)
   )`);
 
+  // ── CONCILIACIÓN BANCARIA · Pieza 1 — extracto Norma 43 + cruce de ingresos (aditiva) ──
+  // bank_movements: un movimiento del extracto bancario (Cuaderno 43). El `balance` (saldo corriente)
+  // NO viene por movimiento en el reg. 22: se CALCULA acumulando desde el saldo inicial (reg. 11), y
+  // entra en `natural_hash` para deduplicar de forma robusta (dos abonos idénticos el mismo día tienen
+  // saldos distintos → no colapsan; el mismo movimiento reimportado tiene el mismo saldo → no duplica).
+  // Aditiva: no toca facturas, cobros ni el ledger. Detalle en modules/erp/conciliacion.js.
+  db.exec(`CREATE TABLE IF NOT EXISTS bank_movements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account TEXT NOT NULL,
+    entity_code TEXT DEFAULT '',
+    office_code TEXT DEFAULT '',
+    account_number TEXT DEFAULT '',
+    op_date DATE NOT NULL,
+    value_date DATE,
+    amount REAL NOT NULL,
+    is_credit INTEGER NOT NULL DEFAULT 0,
+    balance REAL,
+    concept_common TEXT DEFAULT '',
+    concept TEXT DEFAULT '',
+    doc_number TEXT DEFAULT '',
+    ref1 TEXT DEFAULT '',
+    ref2 TEXT DEFAULT '',
+    natural_hash TEXT NOT NULL UNIQUE,
+    source_file TEXT DEFAULT '',
+    imported_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_bank_movements_opdate ON bank_movements(op_date);`);
+
+  // bank_reconciliations: el VÍNCULO movimiento ↔ objetivo (cobro existente o factura), o "ignorado".
+  // El estado de conciliación de un movimiento se DERIVA de aquí (no hay columna de estado en el
+  // movimiento). Una fila por movimiento (UNIQUE); deshacer = borrar la fila. `created_payment_id`
+  // marca el cobro creado AL conciliar (para avisar antes de borrarlo en el deshacer).
+  db.exec(`CREATE TABLE IF NOT EXISTS bank_reconciliations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    movement_id INTEGER NOT NULL UNIQUE,
+    estado TEXT NOT NULL DEFAULT 'conciliado',
+    target_type TEXT,
+    target_id INTEGER,
+    created_payment_id INTEGER,
+    reconciled_by TEXT DEFAULT '',
+    reconciled_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (movement_id) REFERENCES bank_movements(id)
+  )`);
+
   // ── PILAR 4 · VENTAS · PIEZA 1 — PRESUPUESTO (quotes) ──────────────────────
   // Documento PRESUPUESTO, ESPEJO de la orden de compra (purchase_orders): mismo ciclo
   // borrador (editable, sin número) → emitido (gana PRE-NNNN vía code_counters y se bloquea)
@@ -1637,6 +1681,9 @@ export function runMigrations(db) {
     // Permisos · Paso 1 FASE 2 — Cobros con permiso propio (antes iba por orders.read, del POS retirado).
     { module: 'cobros',    action: 'read',    description: 'Ver Cobros: deudas, worklist y estado de cobro' },
     { module: 'cobros',    action: 'manage',  description: 'Registrar cobros y acciones de cobro/cuenta' },
+    // Conciliación bancaria · Pieza 1 — permiso propio (registrar un cobro desde aquí exige además cobros.manage).
+    { module: 'conciliacion', action: 'read',   description: 'Ver conciliación bancaria: movimientos y estado' },
+    { module: 'conciliacion', action: 'manage', description: 'Importar extractos (Norma 43) y conciliar/ignorar/deshacer' },
   ];
   for (const p of permissionsData) {
     db.prepare('INSERT OR IGNORE INTO permissions (module, action, description) VALUES (?, ?, ?)').run(p.module, p.action, p.description);
@@ -1656,7 +1703,8 @@ export function runMigrations(db) {
                  'orders.read','orders.create','orders.edit','orders.update_status',
                  'clients.read','clients.create','clients.edit',
                  'invoices.read'],
-    Accountant: ['orders.read','clients.read','invoices.read','invoices.create','admin.settings'],
+    Accountant: ['orders.read','clients.read','invoices.read','invoices.create','admin.settings',
+                 'cobros.read','cobros.manage','conciliacion.read','conciliacion.manage'],
     Viewer:     ['products.read','orders.read','clients.read','invoices.read'],
   };
   for (const [roleName, perms] of Object.entries(rolePermissions)) {

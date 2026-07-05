@@ -47,6 +47,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     mostrador:        'invoices.create',
     invoices:         'invoices.read',
     'verifactu-envio': 'invoices.read',
+    conciliacion:     'conciliacion.read',
     cobros:           'invoices.read',
     pagos:            'purchases.read',
     'supplier-invoices': 'purchases.read',
@@ -109,6 +110,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     { section: 'Contabilidad', items: [
       { href: '/admin/contabilidad', label: 'Libros registro', key: 'contabilidad', icon: 'ti-book' },
       { href: '/admin/verifactu/envios', label: 'Envío Verifactu (AEAT)', key: 'verifactu-envio', icon: 'ti-cloud-upload' },
+      { href: '/admin/conciliacion', label: 'Conciliación bancaria', key: 'conciliacion', icon: 'ti-arrows-exchange' },
     ]},
     { section: 'Inventario', items: [
       { href: '/admin/inventory', label: 'Stock', key: 'inventory', icon: 'ti-building-warehouse' },
