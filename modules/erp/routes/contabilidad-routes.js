@@ -53,14 +53,14 @@ function modelosPeriodForm(year, q) {
 function modeloTabla(filas, sym) {
   const fmt = (casilla, imp) => imp === '' ? '' : (casilla === '65' ? `${Number(imp)} %` : money(sym, imp));
   const body = filas.map(([casilla, desc, imp]) => casilla === '—'
-    ? `<tr style="background:var(--bg2,#f6f6f8)"><td colspan="3" style="font-weight:600">${escHtml(desc)}</td></tr>`
+    ? `<tr style="background:var(--bg2)"><td colspan="3" style="font-weight:600">${escHtml(desc)}</td></tr>`
     : `<tr><td style="width:4rem;color:var(--text2)">${escHtml(casilla)}</td><td>${escHtml(desc)}</td>
         <td style="text-align:right;white-space:nowrap">${fmt(casilla, imp)}</td></tr>`).join('');
   return `<table><thead><tr><th style="width:4rem">Casilla</th><th>Concepto</th><th style="text-align:right">Importe</th></tr></thead><tbody>${body}</tbody></table>`;
 }
 function avisosBox(warnings) {
   if (!warnings || !warnings.length) return '';
-  return `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid #d97706;background:#fffbeb;font-size:12px;color:#92400e">
+  return `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid var(--warn);background:var(--warn-s);font-size:12px;color:var(--warn)">
     <b>Antes de presentar, revisa:</b><ul style="margin:.3rem 0 0;padding-left:1.1rem">${warnings.map(w => `<li>${escHtml(w)}</li>`).join('')}</ul></div>`;
 }
 function periodForm(kind, from, to) {
@@ -81,7 +81,7 @@ function ventasTable(libro, sym) {
     <th style="text-align:right">Base</th><th style="text-align:right">Tipo IVA</th><th style="text-align:right">Cuota IVA</th>
     <th style="text-align:right">Retención IRPF</th><th style="text-align:right">Total línea</th></tr>`;
   const body = ventasAsientos(libro).map(a => {
-    const badge = a.es_rectificativa ? ` <span title="Rectificativa" style="background:#fde68a;color:#92400e;border-radius:4px;padding:0 4px;font-size:10px">R${a.rect_mode ? '·' + a.rect_mode : ''}</span>` : '';
+    const badge = a.es_rectificativa ? ` <span title="Rectificativa" style="background:var(--warn-s);color:var(--warn);border-radius:4px;padding:0 4px;font-size:10px">R${a.rect_mode ? '·' + a.rect_mode : ''}</span>` : '';
     return `<tr><td>${escHtml(a.invoice_number || '')}${badge}</td><td>${escHtml(a.issue_date || '')}</td><td>${escHtml(a.operation_date || '—')}</td>
       <td>${escHtml(a.tipo_factura || '')}</td><td>${escHtml(a.nif || '')}</td><td>${escHtml(a.nombre || '')}</td>
       <td style="text-align:right">${money(sym, a.base)}</td><td style="text-align:right">${rateLabel(a.rate)}</td><td style="text-align:right">${money(sym, a.cuota)}</td>
@@ -108,13 +108,13 @@ function comprasTable(libro, sym) {
 // LIBRO DIARIO — asientos cronológicos; cada línea con cuenta (código+nombre) en Debe/Haber.
 function diarioTable(diario, sym) {
   const cuadre = diario.cuadra
-    ? `<span style="color:#15803d">✓ cuadra (Debe = Haber)</span>`
-    : `<span style="color:#b91c1c">✗ DESCUADRE</span>`;
+    ? `<span style="color:var(--ok)">✓ cuadra (Debe = Haber)</span>`
+    : `<span style="color:var(--danger)">✗ DESCUADRE</span>`;
   const bloques = diario.rows.map(a => {
     const ls = a.lines.map(l => `<tr><td></td><td>${escHtml(l.account_code)} · ${escHtml(l.account_name || '')}</td>
       <td style="text-align:right">${l.debit ? money(sym, l.debit) : ''}</td><td style="text-align:right">${l.credit ? money(sym, l.credit) : ''}</td></tr>`).join('');
-    return `<tr style="background:var(--bg2,#f6f6f8)"><td>${escHtml(a.entry_date)}</td>
-      <td colspan="3"><b>Asiento ${a.id}</b> · ${escHtml(a.entry_type)} — ${escHtml(a.memo || '')}${a.cuadra ? '' : ' <span style="color:#b91c1c">(descuadra)</span>'}</td></tr>${ls}`;
+    return `<tr style="background:var(--bg2)"><td>${escHtml(a.entry_date)}</td>
+      <td colspan="3"><b>Asiento ${a.id}</b> · ${escHtml(a.entry_type)} — ${escHtml(a.memo || '')}${a.cuadra ? '' : ' <span style="color:var(--danger)">(descuadra)</span>'}</td></tr>${ls}`;
   }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text2)">Sin asientos en el periodo</td></tr>';
   const foot = `<tr style="font-weight:700"><td colspan="2" style="text-align:right">TOTALES</td>
     <td style="text-align:right">${money(sym, diario.totals.debe)}</td><td style="text-align:right">${money(sym, diario.totals.haber)}</td></tr>`;
@@ -154,7 +154,7 @@ function mayorDetalle(det, sym) {
 function pygTable(pyg, sym) {
   const m = n => { const v = Number(n || 0); return v < 0 ? `(${sym}${Math.abs(v).toFixed(2)})` : `${sym}${v.toFixed(2)}`; };
   const body = filasPyG(pyg).map(([etiqueta, nombre, importe, tipo]) => tipo === 'subtotal'
-    ? `<tr style="font-weight:700;background:var(--bg2,#f3f4f6)"><td>${escHtml(etiqueta)}</td><td>${escHtml(nombre)}</td><td style="text-align:right;white-space:nowrap">${m(importe)}</td></tr>`
+    ? `<tr style="font-weight:700;background:var(--bg2)"><td>${escHtml(etiqueta)}</td><td>${escHtml(nombre)}</td><td style="text-align:right;white-space:nowrap">${m(importe)}</td></tr>`
     : `<tr><td style="color:var(--text2)">${escHtml(etiqueta)}</td><td>${escHtml(nombre)}</td><td style="text-align:right;white-space:nowrap">${m(importe)}</td></tr>`).join('');
   return `<table><thead><tr><th style="width:3.5rem">Partida</th><th>Concepto</th><th style="text-align:right">Importe</th></tr></thead><tbody>${body}</tbody></table>`;
 }
@@ -302,7 +302,7 @@ export function createContabilidadRoutes(db) {
           <input type="date" name="baja_date" required> <input name="motivo" placeholder="Motivo" required>
           <button class="btn" type="submit">Baja</button></form></details>`;
       return `<tr>
-        ${td(escHtml(g.description || '') + (g.de_baja ? ` <span style="color:#b91c1c">baja ${escHtml(g.baja_date)}</span>` : ''))}
+        ${td(escHtml(g.description || '') + (g.de_baja ? ` <span style="color:var(--danger)">baja ${escHtml(g.baja_date)}</span>` : ''))}
         ${td(escHtml(g.doc_number || ''))}${td(escHtml(g.supplier_name || ''))}${td(escHtml(g.supplier_fiscal_id || ''))}
         ${td(escHtml(g.start_date || ''))}${td(money(sym, g.acquisition_value), 1)}${td(money(sym, g.amortizable_base), 1)}
         ${td(Number(g.annual_rate) + '%', 1)}${td(money(sym, g.acuInicio), 1)}${td(money(sym, g.cuota), 1)}${td(money(sym, g.acuFinal), 1)}${td(money(sym, g.pendiente), 1)}
@@ -426,9 +426,9 @@ export function createContabilidadRoutes(db) {
     }</tbody></table>`;
     const avisos = w => (w && w.length) ? `<div class="avisos"><b>Antes de presentar, revisa:</b><ul>${w.map(x => `<li>${escHtml(x)}</li>`).join('')}</ul></div>` : '';
     return `<!doctype html><html><head><meta charset="utf-8"><style>
-      body{font-family:-apple-system,Segoe UI,sans-serif;font-size:11px;color:#111}h1{font-size:16px;margin:0 0 2px}h2{font-size:13px;margin:14px 0 4px}
-      .sub{color:#555;margin-bottom:8px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:3px 6px}th{background:#eee}
-      tr.sec td{background:#f3f4f6;font-weight:700}.avisos{margin:6px 0;padding:5px 8px;border-left:3px solid #d97706;background:#fffbeb;color:#92400e;font-size:10px}</style></head><body>
+      body{font-family:-apple-system,Segoe UI,sans-serif;font-size:11px;color:var(--text)}h1{font-size:16px;margin:0 0 2px}h2{font-size:13px;margin:14px 0 4px}
+      .sub{color:var(--text2);margin-bottom:8px}table{border-collapse:collapse;width:100%}td,th{border:1px solid var(--border2);padding:3px 6px}th{background:var(--border)}
+      tr.sec td{background:var(--bg3);font-weight:700}.avisos{margin:6px 0;padding:5px 8px;border-left:3px solid var(--warn);background:var(--warn-s);color:var(--warn);font-size:10px}</style></head><body>
       <h1>Borradores de modelos — ${q}T ${year}</h1>
       <div class="sub">Calculados por Bamburu desde los libros registro. Documento de trabajo para revisión/presentación por el obligado o su gestoría; Bamburu no presenta ante la AEAT.</div>
       ${tabla('Modelo 303 · IVA', filas303(m303))}${avisos(m303.warnings)}

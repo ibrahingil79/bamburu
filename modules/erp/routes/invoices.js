@@ -500,14 +500,14 @@ export async function buildInvoicePaper(db, inv) {
     </div>`;
     }
     if (inv.record_type === 'rectificativa' && rectifiesOriginal) {
-      return `<div class="alert" style="margin-bottom:24px;background:#e0f2fe;color:#075985;border:1px solid #bae6fd">
+      return `<div class="alert" style="margin-bottom:24px;background:var(--info-s);color:var(--info);border:1px solid var(--info)">
       <strong>Factura rectificativa</strong> ${esc(rTypeLabels[inv.rectification_type] || inv.rectification_type || '')}
       · ${inv.rectification_mode === 'S' ? 'por sustitución' : 'por diferencias'}.
       Rectifica a <a href="/admin/invoices/${rectifiesOriginal.id}" style="color:inherit;font-weight:600">${esc(rectifiesOriginal.invoice_number)}</a>.
     </div>`;
     }
     if (substitutesTicket) {
-      return `<div class="alert" style="margin-bottom:24px;background:#e0f2fe;color:#075985;border:1px solid #bae6fd">
+      return `<div class="alert" style="margin-bottom:24px;background:var(--info-s);color:var(--info);border:1px solid var(--info)">
       <strong>Factura completa de canje</strong> (TipoFactura F3). Sustituye al ticket <a href="/admin/invoices/${substitutesTicket.id}" style="color:inherit;font-weight:600">${esc(substitutesTicket.invoice_number)}</a>. Ya pagada por el cobro del ticket.
     </div>`;
     }
@@ -545,7 +545,7 @@ export async function buildInvoicePaper(db, inv) {
       taxBlock = `<tr><td>${inv.tax_name}</td><td>${sym}${inv.tax_amount.toFixed(2)}</td></tr>`;
     }
     const irpfBlock = (Number(inv.irpf_amount) > 0)
-      ? `<tr><td style="color:#9333ea">IRPF (${inv.irpf_rate}%)</td><td style="color:#9333ea">−${sym}${inv.irpf_amount.toFixed(2)}</td></tr>`
+      ? `<tr><td style="color:var(--accent-purple)">IRPF (${inv.irpf_rate}%)</td><td style="color:var(--accent-purple)">−${sym}${inv.irpf_amount.toFixed(2)}</td></tr>`
       : '';
     return `<table class="doc-totals">
   <tr><td>Base imponible</td><td>${sym}${inv.subtotal.toFixed(2)}</td></tr>
@@ -1356,7 +1356,7 @@ export function createInvoiceRoutes(db) {
           }
         }
         if (SHOW_IRPF && t.irpfAmount > 0) {
-          html += '<tr>'+labelTd('IRPF '+irpfRate+'%','#e879f9')+valTd('−'+SYM+t.irpfAmount.toFixed(2),'#e879f9')+'</tr>';
+          html += '<tr>'+labelTd('IRPF '+irpfRate+'%','var(--accent-purple)')+valTd('−'+SYM+t.irpfAmount.toFixed(2),'var(--accent-purple)')+'</tr>';
         }
         html += '<tr><td colspan="3" style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">Total</td>' +
                 '<td style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">'+SYM+t.total.toFixed(2)+'</td><td></td></tr>';
@@ -1448,7 +1448,7 @@ export function createInvoiceRoutes(db) {
 
       <div class="card" style="max-width:900px">
         <div class="card-body">
-          <div style="background:#e0f2fe;color:#075985;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:1rem">
+          <div style="background:var(--info-s);color:var(--info);padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:1rem">
             Rectifica a <strong>${original.invoice_number}</strong> · Cliente: <strong>${escHtml(original.client_name || 'Cliente general')}</strong>.
             Se emitirá en serie <strong>${rSeries}</strong> con numeración propia. Admite importes negativos (abono).
           </div>
@@ -1633,7 +1633,7 @@ export function createInvoiceRoutes(db) {
           const lbl = (Number(x.rate) > 0 ? 'IVA '+x.rate+'%' : 'Exento (0%)') + ' (sobre '+SYM+Number(x.base).toFixed(2)+')';
           html += '<tr>'+labelTd(lbl,'var(--muted)')+valTd(SYM+Number(x.amount).toFixed(2),'var(--muted)')+'</tr>';
         }
-        if (Math.abs(t.irpfAmount) > 0) html += '<tr>'+labelTd('IRPF '+IRPF_RATE+'%','#e879f9')+valTd('−'+SYM+t.irpfAmount.toFixed(2),'#e879f9')+'</tr>';
+        if (Math.abs(t.irpfAmount) > 0) html += '<tr>'+labelTd('IRPF '+IRPF_RATE+'%','var(--accent-purple)')+valTd('−'+SYM+t.irpfAmount.toFixed(2),'var(--accent-purple)')+'</tr>';
         html += '<tr><td colspan="3" style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">Total</td>' +
                 '<td style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">'+SYM+t.total.toFixed(2)+'</td><td></td></tr>';
         document.getElementById('totals-foot').innerHTML = html;

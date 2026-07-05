@@ -238,60 +238,60 @@ function orderDocumentBodyHtml(o, items, emisor, cliente, sym) {
   }
   const rows = items.map(i => `
     <tr>
-      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9">${esc(i.description)}${i.sku ? ` <span style="color:#64748b;font-size:11px">[${esc(i.sku)}]</span>` : ''}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right">${i.quantity}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right">${sym}${Number(i.unit_price).toFixed(2)}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right">${Number(i.tax_rate) > 0 ? Number(i.tax_rate) + '%' : 'Exento'}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right">${sym}${Number(i.total_price).toFixed(2)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid var(--bg3)">${esc(i.description)}${i.sku ? ` <span style="color:var(--text2);font-size:11px">[${esc(i.sku)}]</span>` : ''}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${i.quantity}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${sym}${Number(i.unit_price).toFixed(2)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${Number(i.tax_rate) > 0 ? Number(i.tax_rate) + '%' : 'Exento'}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${sym}${Number(i.total_price).toFixed(2)}</td>
     </tr>`).join('');
   const taxRows = Object.values(taxByRate).sort((a, b) => b.rate - a.rate).map(x =>
-    `<tr><td style="padding:4px 12px;color:#64748b">${x.rate > 0 ? 'IVA ' + x.rate + '%' : 'Exento de IVA'} (sobre ${sym}${x.base.toFixed(2)})</td><td style="padding:4px 12px;text-align:right;font-weight:600">${sym}${x.amount.toFixed(2)}</td></tr>`
+    `<tr><td style="padding:4px 12px;color:var(--text2)">${x.rate > 0 ? 'IVA ' + x.rate + '%' : 'Exento de IVA'} (sobre ${sym}${x.base.toFixed(2)})</td><td style="padding:4px 12px;text-align:right;font-weight:600">${sym}${x.amount.toFixed(2)}</td></tr>`
   ).join('');
   const irpfRow = (Number(o.irpf_amount) > 0)
-    ? `<tr><td style="padding:4px 12px;color:#9333ea">IRPF (${o.irpf_rate}%)</td><td style="padding:4px 12px;text-align:right;color:#9333ea">−${sym}${Number(o.irpf_amount).toFixed(2)}</td></tr>` : '';
+    ? `<tr><td style="padding:4px 12px;color:var(--accent-purple)">IRPF (${o.irpf_rate}%)</td><td style="padding:4px 12px;text-align:right;color:var(--accent-purple)">−${sym}${Number(o.irpf_amount).toFixed(2)}</td></tr>` : '';
   return `
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px">
   <div>
     <h1 style="font-size:22px;font-weight:700;margin:0 0 4px">Pedido</h1>
-    <div style="color:#64748b;font-size:12px">${o.order_number ? esc(o.order_number) : 'Borrador (sin número)'}</div>
+    <div style="color:var(--text2);font-size:12px">${o.order_number ? esc(o.order_number) : 'Borrador (sin número)'}</div>
   </div>
-  <div style="text-align:right;color:#64748b;font-size:12px">
-    <div>Fecha: <strong style="color:#1e293b">${esc(o.date)}</strong></div>
-    ${o.expected_delivery_date ? `<div>Entrega prevista: <strong style="color:#1e293b">${esc(o.expected_delivery_date)}</strong></div>` : ''}
+  <div style="text-align:right;color:var(--text2);font-size:12px">
+    <div>Fecha: <strong style="color:var(--accent-d)">${esc(o.date)}</strong></div>
+    ${o.expected_delivery_date ? `<div>Entrega prevista: <strong style="color:var(--accent-d)">${esc(o.expected_delivery_date)}</strong></div>` : ''}
   </div>
 </div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:24px">
   <div>
-    <div style="font-size:11px;text-transform:uppercase;color:#64748b;font-weight:600;margin-bottom:4px">Emisor</div>
+    <div style="font-size:11px;text-transform:uppercase;color:var(--text2);font-weight:600;margin-bottom:4px">Emisor</div>
     <div><strong>${esc(emisor.name || '')}</strong></div>
     ${emisor.fiscal_id ? `<div>${esc(emisor.fiscal_id)}</div>` : ''}
-    ${emisor.address ? `<div style="color:#64748b">${esc(emisor.address)}</div>` : ''}
+    ${emisor.address ? `<div style="color:var(--text2)">${esc(emisor.address)}</div>` : ''}
   </div>
   <div>
-    <div style="font-size:11px;text-transform:uppercase;color:#64748b;font-weight:600;margin-bottom:4px">Cliente</div>
+    <div style="font-size:11px;text-transform:uppercase;color:var(--text2);font-weight:600;margin-bottom:4px">Cliente</div>
     <div><strong>${esc(cliente.name || '')}</strong></div>
     ${cliente.fiscal_id ? `<div>${esc(cliente.fiscal_id)}</div>` : ''}
-    ${cliente.address ? `<div style="color:#64748b">${esc(cliente.address)}</div>` : ''}
-    ${cliente.email ? `<div style="color:#64748b">${esc(cliente.email)}</div>` : ''}
+    ${cliente.address ? `<div style="color:var(--text2)">${esc(cliente.address)}</div>` : ''}
+    ${cliente.email ? `<div style="color:var(--text2)">${esc(cliente.email)}</div>` : ''}
   </div>
 </div>
 <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
   <thead><tr>
-    <th style="background:#F5F6F8;padding:8px 12px;text-align:left;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">Descripción</th>
-    <th style="background:#F5F6F8;padding:8px 12px;text-align:right;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">Cant.</th>
-    <th style="background:#F5F6F8;padding:8px 12px;text-align:right;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">P. unit.</th>
-    <th style="background:#F5F6F8;padding:8px 12px;text-align:right;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">IVA</th>
-    <th style="background:#F5F6F8;padding:8px 12px;text-align:right;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">Subtotal</th>
+    <th style="background:var(--bg);padding:8px 12px;text-align:left;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">Descripción</th>
+    <th style="background:var(--bg);padding:8px 12px;text-align:right;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">Cant.</th>
+    <th style="background:var(--bg);padding:8px 12px;text-align:right;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">P. unit.</th>
+    <th style="background:var(--bg);padding:8px 12px;text-align:right;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">IVA</th>
+    <th style="background:var(--bg);padding:8px 12px;text-align:right;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">Subtotal</th>
   </tr></thead>
   <tbody>${rows}</tbody>
 </table>
 <table style="margin-left:auto;width:320px;border-collapse:collapse">
-  <tr><td style="padding:4px 12px;color:#64748b">Base imponible</td><td style="padding:4px 12px;text-align:right;font-weight:600">${sym}${Number(o.subtotal).toFixed(2)}</td></tr>
+  <tr><td style="padding:4px 12px;color:var(--text2)">Base imponible</td><td style="padding:4px 12px;text-align:right;font-weight:600">${sym}${Number(o.subtotal).toFixed(2)}</td></tr>
   ${taxRows}
   ${irpfRow}
-  <tr><td style="padding:10px 12px;font-size:15px;border-top:2px solid #1e293b;font-weight:700">TOTAL</td><td style="padding:10px 12px;text-align:right;font-size:15px;border-top:2px solid #1e293b;font-weight:700">${sym}${Number(o.total).toFixed(2)}</td></tr>
+  <tr><td style="padding:10px 12px;font-size:15px;border-top:2px solid var(--accent-d);font-weight:700">TOTAL</td><td style="padding:10px 12px;text-align:right;font-size:15px;border-top:2px solid var(--accent-d);font-weight:700">${sym}${Number(o.total).toFixed(2)}</td></tr>
 </table>
-${o.notes ? `<div style="margin-top:16px;color:#64748b">${esc(o.notes)}</div>` : ''}`;
+${o.notes ? `<div style="margin-top:16px;color:var(--text2)">${esc(o.notes)}</div>` : ''}`;
 }
 
 // ── Rutas ────────────────────────────────────────────────────────────────────
@@ -409,7 +409,7 @@ export function createPedidoRoutes(db) {
       const [lbl, badge] = displayEstado(o);
       const name = o.company_name != null ? (o.client_name || o.client_live_name) : o.client_live_name;
       return '<tr>'
-        + '<td>' + (o.order_number ? '<strong style="font-family:monospace">' + esc(o.order_number) + '</strong>' : '<span style="color:#9097A1">Borrador</span>') + '</td>'
+        + '<td>' + (o.order_number ? '<strong style="font-family:monospace">' + esc(o.order_number) + '</strong>' : '<span style="color:var(--text3)">Borrador</span>') + '</td>'
         + '<td><strong>' + esc(name) + '</strong></td>'
         + '<td>' + esc(o.date) + '</td>'
         + '<td><span class="badge ' + badge + '">' + esc(lbl) + '</span></td>'
@@ -432,10 +432,10 @@ export function createPedidoRoutes(db) {
       </div>
       <div class="card"><div class="table-wrap"><table>
         <thead><tr><th>Número</th><th>Cliente</th><th>Fecha</th><th>Estado</th><th>Total</th><th></th></tr></thead>
-        <tbody>${total === 0 ? '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#9097A1">' + (qstr || estado ? 'No se encontraron pedidos' : 'Sin pedidos. Crea el primero.') + '</td></tr>' : rowsHtml}</tbody>
+        <tbody>${total === 0 ? '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text3)">' + (qstr || estado ? 'No se encontraron pedidos' : 'Sin pedidos. Crea el primero.') + '</td></tr>' : rowsHtml}</tbody>
       </table></div></div>
       ${total > 0 ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem;flex-wrap:wrap;gap:.5rem">
-        <span style="color:#9097A1;font-size:.85rem">Página ${page} de ${totalPages} · ${total} pedido${total === 1 ? '' : 's'}</span>
+        <span style="color:var(--text3);font-size:.85rem">Página ${page} de ${totalPages} · ${total} pedido${total === 1 ? '' : 's'}</span>
         <div style="display:flex;gap:.5rem">
           ${page > 1 ? `<a class="btn btn-secondary btn-sm" href="?${buildQs(page - 1)}">← Anterior</a>` : '<span class="btn btn-secondary btn-sm" style="opacity:.4;pointer-events:none">← Anterior</span>'}
           ${page < totalPages ? `<a class="btn btn-secondary btn-sm" href="?${buildQs(page + 1)}">Siguiente →</a>` : '<span class="btn btn-secondary btn-sm" style="opacity:.4;pointer-events:none">Siguiente →</span>'}
@@ -454,7 +454,7 @@ export function createPedidoRoutes(db) {
     const csrfToken = c.get('session')?.csrfToken || '';
     const clients = db.prepare("SELECT id, name, fiscal_id, client_type FROM clients ORDER BY name").all();
     if (!clients.length) {
-      return c.html(adminLayout('Nuevo pedido', `<div class="ph"><h2>Nuevo pedido</h2><a href="/admin/pedidos" class="btn btn-secondary">Volver</a></div><div class="card card-body" style="text-align:center;padding:2rem;color:#9097A1">No hay clientes. <a href="/admin/clients">Crea uno primero.</a></div>`, 'pedidos', csrfToken, c));
+      return c.html(adminLayout('Nuevo pedido', `<div class="ph"><h2>Nuevo pedido</h2><a href="/admin/pedidos" class="btn btn-secondary">Volver</a></div><div class="card card-body" style="text-align:center;padding:2rem;color:var(--text3)">No hay clientes. <a href="/admin/clients">Crea uno primero.</a></div>`, 'pedidos', csrfToken, c));
     }
     const warehouses = activeWarehouses(db);
     const defWh = (warehouses.find(w => w.is_default) || warehouses[0] || {}).id || '';
@@ -556,7 +556,7 @@ export function createPedidoRoutes(db) {
         const rates=Object.values(t.taxByRate||{});
         if(!rates.length){ html+='<tr>'+lab('IVA','var(--muted)')+val(SYM+'0.00','var(--muted)')+'</tr>'; }
         else { for(const x of rates){ const l=(Number(x.rate)>0?'IVA '+x.rate+'%':'Exento (0%)')+' (sobre '+SYM+Number(x.base).toFixed(2)+')'; html+='<tr>'+lab(l,'var(--muted)')+val(SYM+Number(x.amount).toFixed(2),'var(--muted)')+'</tr>'; } }
-        if(SHOW_IRPF && t.irpfAmount>0){ html+='<tr>'+lab('IRPF '+t.irpfRate+'%','#9333ea')+val('−'+SYM+t.irpfAmount.toFixed(2),'#9333ea')+'</tr>'; }
+        if(SHOW_IRPF && t.irpfAmount>0){ html+='<tr>'+lab('IRPF '+t.irpfRate+'%','var(--accent-purple)')+val('−'+SYM+t.irpfAmount.toFixed(2),'var(--accent-purple)')+'</tr>'; }
         html+='<tr><td colspan="3" style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">Total</td><td style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">'+SYM+t.total.toFixed(2)+'</td><td></td></tr>';
         document.getElementById('totals-foot').innerHTML=html;
       }
@@ -612,27 +612,27 @@ export function createPedidoRoutes(db) {
     let lifecycle = '';
     if (o.status === 'anulado') lifecycle += `<div class="alert alert-err" style="margin-bottom:18px"><strong>Pedido anulado.</strong> Motivo: ${esc(o.anulada_motivo || '')}. La reserva quedó liberada.${replacedBy ? ` Lo sustituye <a href="/admin/pedidos/${replacedBy.id}" style="color:inherit;font-weight:600">${esc(replacedBy.order_number || ('borrador #' + replacedBy.id))}</a>.` : ''}</div>`;
     if (replacesPrev) lifecycle += `<div class="alert alert-warn" style="margin-bottom:18px">Sustituye a <a href="/admin/pedidos/${replacesPrev.id}" style="color:inherit;font-weight:600">${esc(replacesPrev.order_number || ('borrador #' + replacesPrev.id))}</a> (anulado).</div>`;
-    if (quoteLink) lifecycle += `<div class="alert" style="margin-bottom:18px;background:#e0f2fe;color:#075985;border:1px solid #bae6fd">Procede del presupuesto <a href="/admin/quotes/${quoteLink.id}" style="color:inherit;font-weight:600">${esc(quoteLink.quote_number || ('#' + quoteLink.id))}</a>.</div>`;
-    if (o.status === 'confirmado' && o.delivered_status) lifecycle += `<div class="alert" style="margin-bottom:18px;background:${o.delivered_status === 'entregado' ? '#f0fdf4;color:#166534;border:1px solid #bbf7d0' : '#fef9c3;color:#854d0e;border:1px solid #fde68a'}">Entrega: <strong>${o.delivered_status === 'entregado' ? 'completamente entregado' : 'parcialmente entregado'}</strong>.</div>`;
-    if (o.status === 'confirmado' && reservaFisica.length && o.delivered_status !== 'entregado') lifecycle += `<div class="alert" style="margin-bottom:18px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0">Este pedido <strong>reserva stock</strong> en ${esc(o.warehouse_name || 'el almacén principal')} (lo pendiente de entregar). La reserva se suelta al entregar (albarán) o al anular.</div>`;
-    if (invoice) lifecycle += `<div class="alert" style="margin-bottom:18px;background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe">Facturado en <a href="/admin/invoices/${invoice.id}" style="color:inherit;font-weight:600">${esc(invoice.invoice_number)}</a>.</div>`;
+    if (quoteLink) lifecycle += `<div class="alert" style="margin-bottom:18px;background:var(--info-s);color:var(--info);border:1px solid var(--info)">Procede del presupuesto <a href="/admin/quotes/${quoteLink.id}" style="color:inherit;font-weight:600">${esc(quoteLink.quote_number || ('#' + quoteLink.id))}</a>.</div>`;
+    if (o.status === 'confirmado' && o.delivered_status) lifecycle += `<div class="alert" style="margin-bottom:18px;background:${o.delivered_status === 'entregado' ? 'var(--ok-s);color:var(--ok);border:1px solid var(--ok-s)' : 'var(--warn-s);color:var(--warn);border:1px solid var(--warn-s)'}">Entrega: <strong>${o.delivered_status === 'entregado' ? 'completamente entregado' : 'parcialmente entregado'}</strong>.</div>`;
+    if (o.status === 'confirmado' && reservaFisica.length && o.delivered_status !== 'entregado') lifecycle += `<div class="alert" style="margin-bottom:18px;background:var(--ok-s);color:var(--ok);border:1px solid var(--ok-s)">Este pedido <strong>reserva stock</strong> en ${esc(o.warehouse_name || 'el almacén principal')} (lo pendiente de entregar). La reserva se suelta al entregar (albarán) o al anular.</div>`;
+    if (invoice) lifecycle += `<div class="alert" style="margin-bottom:18px;background:var(--info-s);color:var(--info);border:1px solid var(--info)">Facturado en <a href="/admin/invoices/${invoice.id}" style="color:inherit;font-weight:600">${esc(invoice.invoice_number)}</a>.</div>`;
 
     // Tabla de entrega por línea (pedido / entregado / pendiente) cuando el pedido está confirmado.
     let deliveryBlock = '';
     if (delivery) {
       const drows = delivery.lines.map(l => `<tr>
-        <td style="padding:6px 12px;border-bottom:1px solid #f1f5f9">${esc(l.description)}${(l.product_type && l.product_type !== 'physical') ? ' <span style="color:#94a3b8;font-size:11px">(no mueve stock)</span>' : ''}</td>
-        <td style="padding:6px 12px;border-bottom:1px solid #f1f5f9;text-align:right">${l.pedido}</td>
-        <td style="padding:6px 12px;border-bottom:1px solid #f1f5f9;text-align:right">${l.entregado}</td>
-        <td style="padding:6px 12px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:600;color:${l.pendiente > 0 ? '#854d0e' : '#166534'}">${l.pendiente}</td></tr>`).join('');
+        <td style="padding:6px 12px;border-bottom:1px solid var(--bg3)">${esc(l.description)}${(l.product_type && l.product_type !== 'physical') ? ' <span style="color:var(--text3);font-size:11px">(no mueve stock)</span>' : ''}</td>
+        <td style="padding:6px 12px;border-bottom:1px solid var(--bg3);text-align:right">${l.pedido}</td>
+        <td style="padding:6px 12px;border-bottom:1px solid var(--bg3);text-align:right">${l.entregado}</td>
+        <td style="padding:6px 12px;border-bottom:1px solid var(--bg3);text-align:right;font-weight:600;color:${l.pendiente > 0 ? 'var(--warn)' : 'var(--ok)'}">${l.pendiente}</td></tr>`).join('');
       const albRows = albaranes.map(a => `<a href="/admin/albaranes/${a.id}" class="badge ${a.status === 'anulado' ? 'b-red' : 'b-green'}" style="margin-right:.3rem;text-decoration:none">${esc(a.delivery_number || ('#' + a.id))}${a.status === 'anulado' ? ' (anulado)' : ''}</a>`).join('');
       deliveryBlock = `
-        <div style="margin-top:24px"><div style="font-size:11px;text-transform:uppercase;color:#64748b;font-weight:600;margin-bottom:6px">Entrega</div>
+        <div style="margin-top:24px"><div style="font-size:11px;text-transform:uppercase;color:var(--text2);font-weight:600;margin-bottom:6px">Entrega</div>
         <table style="width:100%;border-collapse:collapse">
-          <thead><tr><th style="background:#F5F6F8;padding:6px 12px;text-align:left;font-size:11px;color:#64748b;border-bottom:2px solid #e2e8f0">Línea</th><th style="background:#F5F6F8;padding:6px 12px;text-align:right;font-size:11px;color:#64748b;border-bottom:2px solid #e2e8f0">Pedido</th><th style="background:#F5F6F8;padding:6px 12px;text-align:right;font-size:11px;color:#64748b;border-bottom:2px solid #e2e8f0">Entregado</th><th style="background:#F5F6F8;padding:6px 12px;text-align:right;font-size:11px;color:#64748b;border-bottom:2px solid #e2e8f0">Pendiente</th></tr></thead>
+          <thead><tr><th style="background:var(--bg);padding:6px 12px;text-align:left;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border2)">Línea</th><th style="background:var(--bg);padding:6px 12px;text-align:right;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border2)">Pedido</th><th style="background:var(--bg);padding:6px 12px;text-align:right;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border2)">Entregado</th><th style="background:var(--bg);padding:6px 12px;text-align:right;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border2)">Pendiente</th></tr></thead>
           <tbody>${drows}</tbody>
         </table>
-        ${albaranes.length ? `<div style="margin-top:10px;font-size:12px;color:#64748b">Albaranes: ${albRows}</div>` : ''}</div>`;
+        ${albaranes.length ? `<div style="margin-top:10px;font-size:12px;color:var(--text2)">Albaranes: ${albRows}</div>` : ''}</div>`;
     }
 
     const paper = `${lifecycle}${orderDocumentBodyHtml(o, items, emisor, cliente, sym)}${deliveryBlock}`;

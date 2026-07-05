@@ -84,7 +84,7 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
       /* Tarjeta DISA (borde izquierdo acento) */
       .disa-card-main {
         background: var(--bg2);
-        border: 0.5px solid #D6DCE4;
+        border: 0.5px solid var(--border-disa);
         border-left: 3px solid var(--accent);
         border-radius: 12px;
         padding: 14px 16px;
@@ -137,7 +137,7 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
         background: none; border: none; font-family: inherit;
         text-align: left; cursor: pointer; color: inherit;
       }
-      .disa-row + .disa-row { border-top: 0.5px solid #F3F4F6; }
+      .disa-row + .disa-row { border-top: 0.5px solid var(--bg3); }
       .disa-row:hover { background: var(--bg3); }
       .disa-row-label { color: var(--body-tx); display: flex; align-items: center; gap: 9px; }
       .disa-row-label i { font-size: 16px; color: var(--text3); }
@@ -171,17 +171,17 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
         word-break: break-word;
       }
       .disa-msg.user .disa-msg-bubble {
-        background: var(--accent); color: #fff; border-bottom-right-radius: 4px;
+        background: var(--accent); color: var(--bg2); border-bottom-right-radius: 4px;
       }
       .disa-msg.assistant .disa-msg-bubble {
-        background: #FFFFFF; border: 1px solid var(--border2); color: var(--text); border-top-left-radius: 4px;
+        background: var(--bg2); border: 1px solid var(--border2); color: var(--text); border-top-left-radius: 4px;
       }
       .disa-msg-avatar {
         width: 28px; height: 28px;
         background: linear-gradient(135deg,var(--accent),var(--accent-d));
         border-radius: 8px;
         display: flex; align-items: center; justify-content: center;
-        font-weight: 500; color: #fff; font-size: 11px;
+        font-weight: 500; color: var(--bg2); font-size: 11px;
         flex-shrink: 0; margin-top: 2px;
       }
 
@@ -245,7 +245,7 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
       .disa-input::placeholder { color: var(--text2); }
       .disa-send-btn {
         background: var(--accent);
-        border: none; color: #fff;
+        border: none; color: var(--bg2);
         padding: 9px 11px; border-radius: 18px;
         cursor: pointer; display: flex; align-items: center; justify-content: center;
         transition: background 0.15s, opacity 0.15s;
@@ -294,7 +294,7 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
 
       /* ── Artifacts ── */
       .disa-artifact {
-        background: #FFFFFF;
+        background: var(--bg2);
         border: 1px solid var(--border2);
         border-radius: 12px;
         padding: 14px;
@@ -315,7 +315,7 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
         background: var(--accent-soft); border: 0.5px solid var(--border2);
         border-radius: 6px; transition: background 0.15s;
       }
-      .disa-artifact-link:hover { background: #E2E7EE; }
+      .disa-artifact-link:hover { background: var(--bg3); }
 
       /* kpi_dashboard */
       .disa-kpis-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(110px,1fr)); gap: 8px; margin-bottom: 10px; }
@@ -347,7 +347,7 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
       .disa-list-item-meta { color: var(--text2); font-size: 10px; margin-top: 2px; }
       .disa-list-item-actions { display: flex; gap: 5px; flex-shrink: 0; }
       .disa-list-btn { border: none; font-size: 10px; padding: 4px 9px; border-radius: 5px; cursor: pointer; font-weight: 500; transition: opacity 0.15s; font-family: inherit; }
-      .disa-list-btn.primary { background: var(--accent); color: #fff; }
+      .disa-list-btn.primary { background: var(--accent); color: var(--bg2); }
       .disa-list-btn.secondary { background: transparent; color: var(--text2); border: 1px solid var(--border2); }
       .disa-list-btn:hover { opacity: 0.8; }
 
@@ -395,7 +395,7 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
               <p class="disa-fig-value">${sym}${kpis?.ventas ?? 0}</p>
             </div>
             <div class="disa-fig">
-              <p class="disa-fig-label"><i class="ti ti-receipt" style="color:#BA7517"></i>Pedidos</p>
+              <p class="disa-fig-label"><i class="ti ti-receipt" style="color:var(--warn)"></i>Pedidos</p>
               <p class="disa-fig-value">${kpis?.pedidos ?? 0}</p>
             </div>
             <div class="disa-fig">
@@ -403,7 +403,7 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
               <p class="disa-fig-value">${kpis?.pendiente ?? 0}</p>
             </div>
             <div class="disa-fig">
-              <p class="disa-fig-label"><i class="ti ti-alert-triangle" style="color:#DC2626"></i>Avisos</p>
+              <p class="disa-fig-label"><i class="ti ti-alert-triangle" style="color:var(--danger)"></i>Avisos</p>
               <p class="disa-fig-value">${alertState !== 'apagado' ? (alertCount ?? 0) : 0}</p>
             </div>
           </div>
@@ -965,19 +965,19 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
     </script>
 
     <div id="dh-chips-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center">
-      <div style="background:#FFFFFF;border: 1px solid var(--border2);border-radius:12px;padding:24px;width:360px;max-width:90vw">
+      <div style="background:var(--bg2);border: 1px solid var(--border2);border-radius:12px;padding:24px;width:360px;max-width:90vw">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
           <div style="color:var(--text);font-weight:500;font-size:14px">Accesos rápidos</div>
           <button onclick="document.getElementById('dh-chips-modal').style.display='none'" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:18px;line-height:1;padding:0">✕</button>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">
-          <input id="dh-chip-0" placeholder="Chip 1" style="background:#FFFFFF;border:1px solid var(--border2);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);font-family:inherit;outline:none;width:100%;box-sizing:border-box">
-          <input id="dh-chip-1" placeholder="Chip 2" style="background:#FFFFFF;border:1px solid var(--border2);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);font-family:inherit;outline:none;width:100%;box-sizing:border-box">
-          <input id="dh-chip-2" placeholder="Chip 3" style="background:#FFFFFF;border:1px solid var(--border2);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);font-family:inherit;outline:none;width:100%;box-sizing:border-box">
+          <input id="dh-chip-0" placeholder="Chip 1" style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);font-family:inherit;outline:none;width:100%;box-sizing:border-box">
+          <input id="dh-chip-1" placeholder="Chip 2" style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);font-family:inherit;outline:none;width:100%;box-sizing:border-box">
+          <input id="dh-chip-2" placeholder="Chip 3" style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);font-family:inherit;outline:none;width:100%;box-sizing:border-box">
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button onclick="document.getElementById('dh-chips-modal').style.display='none'" style="padding:7px 14px;border:1px solid var(--border2);border-radius:7px;background:none;color:var(--text2);cursor:pointer;font-size:13px;font-family:inherit">Cancelar</button>
-          <button onclick="disaSaveChips()" style="padding:7px 14px;background:var(--accent);border:none;border-radius:7px;color:#fff;cursor:pointer;font-size:13px;font-weight:500;font-family:inherit">Guardar</button>
+          <button onclick="disaSaveChips()" style="padding:7px 14px;background:var(--accent);border:none;border-radius:7px;color:var(--bg2);cursor:pointer;font-size:13px;font-weight:500;font-family:inherit">Guardar</button>
         </div>
       </div>
     </div>

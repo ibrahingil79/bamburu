@@ -351,7 +351,7 @@ export function createStockTransferRoutes(db) {
         qtyEl.max = avail;
         let qty = parseInt(qtyEl.value) || 0;
         if (qty > avail){ qtyEl.value = avail; }
-        cell.style.color = (parseInt(qtyEl.value)||0) > avail ? 'var(--danger,#e55)' : '';
+        cell.style.color = (parseInt(qtyEl.value)||0) > avail ? 'var(--danger)' : '';
       }
 
       function rowHtml(){

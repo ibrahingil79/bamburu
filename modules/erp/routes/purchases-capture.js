@@ -805,8 +805,8 @@ function capturePage({ sym, bands, today, preload = null }) {
     var body = document.getElementById('linesBody');
     body.innerHTML = orderLines.map(function(l){
       var sub=((l.quantity*l.unit_cost)||0);
-      var warn = (l.quantity>l.pendiente) ? '<div style="color:#FCD34D;font-size:.74rem;margin-top:3px">Pedido '+l.pedido+', recibirás '+(l.recibido+l.quantity)+' — exceso de '+((l.recibido+l.quantity)-l.pedido)+'</div>' : '';
-      return '<tr data-uid="'+l.uid+'"'+(l.quantity>l.pendiente?' style="background:rgba(245,158,11,0.08)"':'')+'>'
+      var warn = (l.quantity>l.pendiente) ? '<div style="color:var(--warn);font-size:.74rem;margin-top:3px">Pedido '+l.pedido+', recibirás '+(l.recibido+l.quantity)+' — exceso de '+((l.recibido+l.quantity)-l.pedido)+'</div>' : '';
+      return '<tr data-uid="'+l.uid+'"'+(l.quantity>l.pendiente?' style="background:var(--warn-s)"':'')+'>'
         +'<td>'+escHtml(l.product_label)+'</td>'
         +'<td style="text-align:right">'+l.pedido+'</td>'
         +'<td style="text-align:right">'+l.recibido+'</td>'

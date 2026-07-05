@@ -181,7 +181,7 @@ export function pagoModalScript(sym) {
         const r=pcRepartoAuto(importe, vivas);
         cont.innerHTML='<table style="width:100%;font-size:.85rem;margin-top:.5rem"><thead><tr><th style="text-align:left">Factura</th><th style="text-align:right">Se aplica</th></tr></thead><tbody>'
           +vivas.map(function(f){return '<tr><td>'+pcLabel(f)+' <span style="color:var(--muted)">('+SYM+Number(f.pendiente).toFixed(2)+')</span></td><td style="text-align:right">'+SYM+Number(r.asg[f.supplier_invoice_id]||0).toFixed(2)+'</td></tr>';}).join('')+'</tbody></table>'
-          +(r.sinAsignar>0.0049?'<p style="color:var(--warn,#b58100);font-size:.8rem;margin:.4rem 0">Sobran '+SYM+r.sinAsignar.toFixed(2)+' tras saldar toda la deuda (no se aplican).</p>':'');
+          +(r.sinAsignar>0.0049?'<p style="color:var(--warn);font-size:.8rem;margin:.4rem 0">Sobran '+SYM+r.sinAsignar.toFixed(2)+' tras saldar toda la deuda (no se aplican).</p>':'');
         if(btn) btn.disabled=!(importe>0);
       } else {
         cont.innerHTML='<table style="width:100%;font-size:.85rem;margin-top:.5rem"><thead><tr><th style="text-align:left">Factura</th><th style="text-align:right">Pendiente</th><th style="text-align:right">Importe</th></tr></thead><tbody>'
@@ -202,7 +202,7 @@ export function pagoModalScript(sym) {
       document.querySelectorAll('.pc-mf').forEach(function(inp){ const v=parseFloat(inp.value)||0; suma+=Math.round(v*100); if(Math.round(v*100)>Math.round(parseFloat(inp.getAttribute('data-pend'))*100)) over=true; });
       const cuadra=(suma===Math.round(importe*100))&&!over&&importe>0;
       const cnt=document.getElementById('pc-counter');
-      if(cnt) cnt.innerHTML='Asignado <strong>'+SYM+(suma/100).toFixed(2)+'</strong> / '+SYM+importe.toFixed(2)+(over?' <span style="color:var(--danger,#c00)">· alguna se pasa</span>':(cuadra?' <span style="color:var(--ok,#127a3a)">· cuadra ✓</span>':' <span style="color:var(--muted)">· falta cuadrar</span>'));
+      if(cnt) cnt.innerHTML='Asignado <strong>'+SYM+(suma/100).toFixed(2)+'</strong> / '+SYM+importe.toFixed(2)+(over?' <span style="color:var(--danger)">· alguna se pasa</span>':(cuadra?' <span style="color:var(--ok)">· cuadra ✓</span>':' <span style="color:var(--muted)">· falta cuadrar</span>'));
       const btn=document.getElementById('pc-btn'); if(btn) btn.disabled=!cuadra;
     };
     window.guardarPagoCuenta = async function(){

@@ -142,7 +142,7 @@ export function cobroModalScript(sym) {
     window.formRecordatorio = async function(id){
       let prev;
       try { prev = await api('GET','/api/erp/invoices/'+id+'/collection-email-preview'); } catch(e){ toast(e.message||'Error','err'); return; }
-      if(!prev.has_email){ document.getElementById('gestionForm').innerHTML='<p style="color:var(--danger,#c00)">El cliente no tiene email. Usa "Registrar contacto".</p>'; return; }
+      if(!prev.has_email){ document.getElementById('gestionForm').innerHTML='<p style="color:var(--danger)">El cliente no tiene email. Usa "Registrar contacto".</p>'; return; }
       document.getElementById('gestionForm').innerHTML =
         '<div class="card" style="margin-top:.5rem"><div class="card-body">'
         +'<div class="form-group"><label class="form-label">Para</label><input class="form-control" value="'+escHtml(prev.to)+'" disabled></div>'
@@ -232,7 +232,7 @@ export function cobroModalScript(sym) {
     };
     window.formRecordatorioCuenta = async function(){
       let prev; try { prev = await api('GET','/api/erp/clients/'+acct.client_id+'/account-email-preview'); } catch(e){ toast(e.message||'Error','err'); return; }
-      if(!prev.has_email){ document.getElementById('acctForm').innerHTML='<p style="color:var(--danger,#c00)">El cliente no tiene email. Usa cobro o promesa.</p>'; return; }
+      if(!prev.has_email){ document.getElementById('acctForm').innerHTML='<p style="color:var(--danger)">El cliente no tiene email. Usa cobro o promesa.</p>'; return; }
       document.getElementById('acctForm').innerHTML =
         '<div class="card" style="margin-top:.5rem"><div class="card-body">'
         +'<div class="form-group"><label class="form-label">Para</label><input class="form-control" value="'+escHtml(prev.to)+'" disabled></div>'
@@ -292,7 +292,7 @@ export function cobroModalScript(sym) {
         const r=repartoAutoJS(importe, vivas);
         cont.innerHTML='<table style="width:100%;font-size:.85rem;margin-top:.5rem"><thead><tr><th style="text-align:left">Factura</th><th style="text-align:right">Se aplica</th></tr></thead><tbody>'
           +vivas.map(function(f){return '<tr><td>'+escHtml(f.invoice_number)+' <span style="color:var(--muted)">('+SYM+Number(f.pendiente).toFixed(2)+')</span></td><td style="text-align:right">'+SYM+Number(r.asg[f.invoice_id]||0).toFixed(2)+'</td></tr>';}).join('')+'</tbody></table>'
-          +(r.sinAsignar>0.0049?'<p style="color:var(--warn,#b58100);font-size:.8rem;margin:.4rem 0">Sobran '+SYM+r.sinAsignar.toFixed(2)+' tras saldar toda la deuda (no se aplican).</p>':'');
+          +(r.sinAsignar>0.0049?'<p style="color:var(--warn);font-size:.8rem;margin:.4rem 0">Sobran '+SYM+r.sinAsignar.toFixed(2)+' tras saldar toda la deuda (no se aplican).</p>':'');
         if(btn) btn.disabled=!(importe>0);
       } else {
         cont.innerHTML='<table style="width:100%;font-size:.85rem;margin-top:.5rem"><thead><tr><th style="text-align:left">Factura</th><th style="text-align:right">Pendiente</th><th style="text-align:right">Importe</th></tr></thead><tbody>'
@@ -314,7 +314,7 @@ export function cobroModalScript(sym) {
       const totalC=Math.round(importe*100);
       const cuadra=(suma===totalC)&&!over&&importe>0;
       const cnt=document.getElementById('acct-counter');
-      if(cnt) cnt.innerHTML='Asignado <strong>'+SYM+(suma/100).toFixed(2)+'</strong> / '+SYM+importe.toFixed(2)+(over?' <span style="color:var(--danger,#c00)">· alguna se pasa</span>':(cuadra?' <span style="color:var(--ok,#127a3a)">· cuadra ✓</span>':' <span style="color:var(--muted)">· falta cuadrar</span>'));
+      if(cnt) cnt.innerHTML='Asignado <strong>'+SYM+(suma/100).toFixed(2)+'</strong> / '+SYM+importe.toFixed(2)+(over?' <span style="color:var(--danger)">· alguna se pasa</span>':(cuadra?' <span style="color:var(--ok)">· cuadra ✓</span>':' <span style="color:var(--muted)">· falta cuadrar</span>'));
       const btn=document.getElementById('acct-cobro-btn'); if(btn) btn.disabled=!cuadra;
     };
     window.guardarCobroCuenta = async function(){

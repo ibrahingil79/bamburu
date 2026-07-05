@@ -18,11 +18,11 @@ const fileResp = (buf, type, name) => new Response(buf, { headers: { 'Content-Ty
 const can = (c, db, mod, act) => { const s = c.get('session'); return s?.role === 'owner' || s?.role === 'admin' || checkPermission(db, s, mod, act); };
 
 const ESTADO_BADGE = {
-  pendiente:  ['Pendiente', '#6b7280'],
-  conciliado: ['Conciliado', '#15803d'],
-  ignorado:   ['Ignorado', '#92400e'],
+  pendiente:  ['Pendiente', 'var(--text2)'],
+  conciliado: ['Conciliado', 'var(--ok)'],
+  ignorado:   ['Ignorado', 'var(--warn)'],
 };
-function badge(estado) { const [l, c] = ESTADO_BADGE[estado] || [estado, '#6b7280']; return `<span style="color:${c};font-weight:600">${escHtml(l)}</span>`; }
+function badge(estado) { const [l, c] = ESTADO_BADGE[estado] || [estado, 'var(--text2)']; return `<span style="color:${c};font-weight:600">${escHtml(l)}</span>`; }
 
 function movimientosFiltrados(db, { from, to, estado }) {
   const where = [], args = [];
@@ -86,7 +86,7 @@ export function createConciliacionRoutes(db) {
       </form></div></div>` : '';
 
     const filas = rows.map(m => {
-      const imp = `<span style="color:${m.is_credit ? '#15803d' : '#b91c1c'}">${money(sym, m.amount)}</span>`;
+      const imp = `<span style="color:${m.is_credit ? 'var(--ok)' : 'var(--danger)'}">${money(sym, m.amount)}</span>`;
       let acciones = '';
       if (m.estado === 'pendiente' && puedeGestionar) {
         if (m.is_credit) {
@@ -94,7 +94,7 @@ export function createConciliacionRoutes(db) {
           acciones = sugs.map(s => {
             const label = `${s.type === 'cobro' ? 'Cobro' : 'Factura'} ${escHtml(s.invoice_number || '')} · ${escHtml(s.client_name || '')} · ${money(sym, s.amount)}${s.hints.length ? ' · ' + s.hints.join('/') : ''}`;
             const action = s.type === 'cobro' ? 'conciliar-cobro' : 'conciliar-factura';
-            const cobroNote = s.type === 'factura' ? (puedeCobrar ? ' <span style="color:var(--text2);font-size:11px">(registra el cobro)</span>' : ' <span style="color:#92400e;font-size:11px">(necesita permiso de cobros)</span>') : '';
+            const cobroNote = s.type === 'factura' ? (puedeCobrar ? ' <span style="color:var(--text2);font-size:11px">(registra el cobro)</span>' : ' <span style="color:var(--warn);font-size:11px">(necesita permiso de cobros)</span>') : '';
             return `<form method="post" action="/admin/conciliacion/${m.id}/${action}" style="margin:.15rem 0">
               <input type="hidden" name="_csrf" value="${escHtml(csrf)}"><input type="hidden" name="target_id" value="${s.id}">
               <input type="hidden" name="registrar_cobro" value="1">
@@ -106,7 +106,7 @@ export function createConciliacionRoutes(db) {
           acciones = sugs.map(s => {
             const label = `${s.type === 'pago_proveedor' ? 'Pago' : 'Compra'} ${escHtml(s.ref || '')} · ${escHtml(s.name || '')} · ${money(sym, s.amount)}${s.hints.length ? ' · ' + s.hints.join('/') : ''}`;
             const action = s.type === 'pago_proveedor' ? 'conciliar-pago' : 'conciliar-gasto';
-            const pagoNote = s.type === 'gasto' ? (puedePagar ? ' <span style="color:var(--text2);font-size:11px">(registra el pago)</span>' : ' <span style="color:#92400e;font-size:11px">(necesita permiso de compras)</span>') : '';
+            const pagoNote = s.type === 'gasto' ? (puedePagar ? ' <span style="color:var(--text2);font-size:11px">(registra el pago)</span>' : ' <span style="color:var(--warn);font-size:11px">(necesita permiso de compras)</span>') : '';
             return `<form method="post" action="/admin/conciliacion/${m.id}/${action}" style="margin:.15rem 0">
               <input type="hidden" name="_csrf" value="${escHtml(csrf)}"><input type="hidden" name="target_id" value="${s.id}">
               <input type="hidden" name="registrar_pago" value="1">

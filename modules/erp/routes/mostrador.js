@@ -75,8 +75,8 @@ export function createMostradorRoutes(db) {
         <div class="card"><div class="card-body">
           <h3 style="font-size:.95rem;margin:0 0 .75rem">Ticket</h3>
           <div id="cart" style="min-height:60px"></div>
-          <div id="stockWarn" style="display:none;margin:.75rem 0;padding:.6rem .8rem;border-radius:8px;background:#FBE9E7;color:#A32D2D;font-size:.82rem;border:1px solid #F3C6BF"></div>
-          <div id="limitWarn" style="display:none;margin:.75rem 0;padding:.6rem .8rem;border-radius:8px;background:#FAEEDA;color:#854F0B;font-size:.82rem;border:1px solid #EBDDB7"></div>
+          <div id="stockWarn" style="display:none;margin:.75rem 0;padding:.6rem .8rem;border-radius:8px;background:var(--danger-s);color:var(--danger);font-size:.82rem;border:1px solid var(--danger-s)"></div>
+          <div id="limitWarn" style="display:none;margin:.75rem 0;padding:.6rem .8rem;border-radius:8px;background:var(--warn-s);color:var(--warn);font-size:.82rem;border:1px solid var(--warn-s)"></div>
           <table style="width:100%;margin-top:.75rem;font-size:.9rem"><tfoot id="totals"></tfoot></table>
           <button class="btn btn-primary" id="btn-cobrar" style="width:100%;margin-top:1rem" onclick="openCobro()" disabled>Cobrar</button>
         </div></div>
@@ -97,8 +97,8 @@ export function createMostradorRoutes(db) {
               <input type="number" class="form-control" id="entregado" step="0.01" min="0" oninput="calcCambio()" placeholder="0.00">
               <div id="cambio" style="margin-top:.5rem;font-weight:600"></div>
             </div>
-            <div id="stockWarn2" style="display:none;margin-top:.5rem;padding:.6rem .8rem;border-radius:8px;background:#FBE9E7;color:#A32D2D;font-size:.82rem;border:1px solid #F3C6BF"></div>
-            <div id="limitWarn2" style="display:none;margin-top:.5rem;padding:.6rem .8rem;border-radius:8px;background:#FAEEDA;color:#854F0B;font-size:.82rem;border:1px solid #EBDDB7"></div>
+            <div id="stockWarn2" style="display:none;margin-top:.5rem;padding:.6rem .8rem;border-radius:8px;background:var(--danger-s);color:var(--danger);font-size:.82rem;border:1px solid var(--danger-s)"></div>
+            <div id="limitWarn2" style="display:none;margin-top:.5rem;padding:.6rem .8rem;border-radius:8px;background:var(--warn-s);color:var(--warn);font-size:.82rem;border:1px solid var(--warn-s)"></div>
           </div>
           <div class="modal-foot">
             <button class="btn btn-secondary" onclick="closeModal('cobroModal')">Cancelar</button>
@@ -141,10 +141,10 @@ export function createMostradorRoutes(db) {
         const list=catalog.filter(p=>!q || p.name.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q));
         document.getElementById('prodGrid').innerHTML = list.length ? list.map(function(p){
           const s=stockOf(p);
-          const stxt = s===null ? '' : '<div style="font-size:.7rem;color:'+(s<=0?'#ef4444':'var(--muted)')+'">disp. '+s+'</div>';
-          return '<div onclick="addProduct('+p.id+')" style="border:1px solid var(--border2);border-radius:8px;padding:.55rem;cursor:pointer;background:#fff">'
+          const stxt = s===null ? '' : '<div style="font-size:.7rem;color:'+(s<=0?'var(--danger)':'var(--muted)')+'">disp. '+s+'</div>';
+          return '<div onclick="addProduct('+p.id+')" style="border:1px solid var(--border2);border-radius:8px;padding:.55rem;cursor:pointer;background:var(--bg2)">'
             +'<div style="font-size:.8rem;font-weight:500;line-height:1.2">'+escHtml(p.name)+'</div>'
-            +'<div style="font-size:.82rem;color:#334155;font-weight:600;margin-top:.2rem">'+SYM+Number(p.price||0).toFixed(2)+'</div>'+stxt+'</div>';
+            +'<div style="font-size:.82rem;color:var(--accent);font-weight:600;margin-top:.2rem">'+SYM+Number(p.price||0).toFixed(2)+'</div>'+stxt+'</div>';
         }).join('') : '<div style="grid-column:1/-1;color:var(--muted);text-align:center;padding:1rem">Sin productos</div>';
       }
       function addProduct(id){
@@ -172,10 +172,10 @@ export function createMostradorRoutes(db) {
       function renderCart(){
         document.getElementById('cart').innerHTML = cart.length ? cart.map(function(l,i){
           const a=lineAvail(l); const over=(a!=null && l.qty>a);
-          const overTxt = over ? '<br><span style="color:#A32D2D;font-size:.72rem">⚠ hay '+a+', vendes '+l.qty+' — exceso de '+(l.qty-a)+'</span>' : '';
+          const overTxt = over ? '<br><span style="color:var(--danger);font-size:.72rem">⚠ hay '+a+', vendes '+l.qty+' — exceso de '+(l.qty-a)+'</span>' : '';
           return '<div style="display:flex;align-items:center;gap:.4rem;padding:.35rem 0;border-bottom:1px solid var(--border)">'
             +'<div style="flex:1;font-size:.85rem">'+escHtml(l.description)+(l.free?' <span style="color:var(--muted);font-size:.72rem">(libre 21%)</span>':'')+'<br><span style="color:var(--muted);font-size:.75rem">'+SYM+l.unit_price.toFixed(2)+' · IVA '+l.tax_rate+'%</span>'+overTxt+'</div>'
-            +'<input type="number" min="1" value="'+l.qty+'" onchange="setQty('+i+',this.value)" style="width:52px;padding:.2rem .3rem;border:1px solid '+(over?'#A32D2D':'var(--border2)')+';border-radius:4px;font-size:.82rem">'
+            +'<input type="number" min="1" value="'+l.qty+'" onchange="setQty('+i+',this.value)" style="width:52px;padding:.2rem .3rem;border:1px solid '+(over?'var(--danger)':'var(--border2)')+';border-radius:4px;font-size:.82rem">'
             +'<span style="min-width:64px;text-align:right;font-size:.85rem">'+SYM+(l.qty*l.unit_price).toFixed(2)+'</span>'
             +'<button class="btn btn-danger btn-sm" onclick="removeLine('+i+')">✕</button></div>';
         }).join('') : '<div style="color:var(--muted);font-size:.85rem">Carrito vacío. Toca un producto.</div>';
@@ -220,7 +220,7 @@ export function createMostradorRoutes(db) {
       function calcCambio(){
         const t=totals(); const ent=parseFloat(document.getElementById('entregado').value);
         const el=document.getElementById('cambio');
-        if(isFinite(ent)){ const c=Math.round((ent-t.total)*100)/100; el.textContent = c>=0 ? 'Cambio: '+SYM+c.toFixed(2) : 'Falta '+SYM+(-c).toFixed(2); el.style.color=c>=0?'#2E7D55':'#A32D2D'; }
+        if(isFinite(ent)){ const c=Math.round((ent-t.total)*100)/100; el.textContent = c>=0 ? 'Cambio: '+SYM+c.toFixed(2) : 'Falta '+SYM+(-c).toFixed(2); el.style.color=c>=0?'var(--ok)':'var(--danger)'; }
         else { el.textContent=''; }
         updateConfirm();
       }

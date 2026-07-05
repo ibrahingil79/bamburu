@@ -227,7 +227,8 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   </script>
   <style>
     :root{
-      /* Tokens EXACTOS de docs/diseno/mockup-aprobado.html. Cambiar aquí = toda la app. Cero teal. */
+      /* Tokens EXACTOS de docs/diseno/sistema-visual-aprobado.html (patrón oro, DISEÑO.md §2).
+         FUENTE ÚNICA de color/tipo/espaciado de la app. Cambiar aquí = toda la app. Cero teal. */
       --bg:        #F5F6F8;   /* fondo de aplicación */
       --bg2:       #FFFFFF;   /* superficies / tarjetas / chrome / paneles */
       --bg3:       #F1F3F5;   /* subsuperficie: search, hover, sutil */
@@ -236,6 +237,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
                                  caían en el fallback oscuro #1e1e1e → nombre ilegible. */
       --border:    #ECEEF1;   /* hairline interno */
       --border2:   #E4E6EA;   /* borde exterior */
+      --border-disa: #D6DCE4; /* borde de la tarjeta de DISA (DISEÑO §2.2) */
       --text:      #1A1D21;   /* texto principal */
       --text2:     #6B7280;   /* texto secundario */
       --text3:     #9097A1;   /* texto terciario / etiquetas */
@@ -243,6 +245,9 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       --accent:    #334155;   /* slate (acento de marca) */
       --accent-d:  #1E293B;   /* slate fuerte / activo */
       --accent-soft:#EDF0F4;  /* fondo activo / chips */
+      /* Acento morado SEMÁNTICO (IRPF/retención + stock reservado). No es teal ni IA: es el
+         tercer acento de dato que ya usaban documentos e inventario (U1, 2026-07-05). */
+      --accent-purple: #9333EA;  --accent-purple-s: #F0EBFB;
       --grp:       #A0A6B0;   /* título de grupo de menú */
       --muted:     #6B7280;   /* alias heredado (= secundario) */
       --p:         #334155;   /* alias heredado (= acento) */
@@ -255,6 +260,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       --danger:    #A32D2D;  --danger-s:  #FEE2E2;
       --warn:      #854F0B;  --warn-s:    #FAEEDA;
       --ok:        #2E7D55;  --ok-s:      #E8F5EE;
+      --info:      #075985;  --info-s:    #E0F2FE;   /* aviso informativo (azul), familia de alerta */
       /* Chrome GRAFITO AZUL OSCURO (barra superior + menú lateral). Patrón oro aprobado por
          Ibrahin 22-jun-2026: docs/diseno/sistema-visual-aprobado.html. Valores EXACTOS. */
       --chrome:        #20242F;   /* fondo del chrome (rail + topbar) */
@@ -269,6 +275,19 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       --sw-exp:    176px;
       --radius:    9px;
       --radius-lg: 12px;
+      /* ── Escala de ESPACIADO (U1). Fuente única; valores calcados de los ya usados para que
+         aplicarla sea 1:1 (no recoloca nada). El espaciado inline estructural por-vista se
+         conserva mientras no haya un paso equivalente. ── */
+      --space-1:  .25rem;   /* 4px  */
+      --space-2:  .5rem;    /* 8px  */
+      --space-3:  .75rem;   /* 12px */
+      --space-4:  1rem;     /* 16px */
+      --space-5:  1.25rem;  /* 20px */
+      --space-6:  1.5rem;   /* 24px */
+      /* ── Escala de TIPOGRAFÍA (U1). Inter en body; tamaños/pesos calcados de los usados. ── */
+      --fs-xs:    .72rem;   --fs-sm:  .82rem;   --fs-md:  .88rem;
+      --fs-base:  14px;     --fs-lg:  1.05rem;  --fs-xl:  1.7rem;
+      --fw-normal: 400;     --fw-medium: 500;   --fw-semibold: 600;
     }
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;font-size:14px;-webkit-font-smoothing:antialiased}
@@ -427,6 +446,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     .alert-warn{background:var(--warn-s);color:var(--warn);border:1px solid #EBDDB7}
     .alert-err{background:var(--danger-s);color:var(--danger);border:1px solid #F0CFCC}
     .alert-ok{background:var(--ok-s);color:var(--ok);border:1px solid #CDE8D8}
+    .alert-info{background:var(--info-s);color:var(--info);border:1px solid #BAE6FD}
 
     /* ── Misc ── */
     .ph{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem}

@@ -31,9 +31,9 @@ export function createInventoryRoutes(db, cfg = {}) {
       </div>
       <div class="grid ga" style="margin-bottom:1.5rem">
         <div class="kpi"><div class="kpi-label">Productos físicos</div><div class="kpi-val" id="kTotal">-</div></div>
-        <div class="kpi"><div class="kpi-label">Stock bajo (&lt;5)</div><div class="kpi-val" id="kLow" style="color:#f59e0b">-</div></div>
-        <div class="kpi"><div class="kpi-label">Sin stock</div><div class="kpi-val" id="kOut" style="color:#ef4444">-</div></div>
-        <div class="kpi"><div class="kpi-label" id="kValLabel">Valor del almacén</div><div class="kpi-val" id="kVal" style="color:#10b981">-</div></div>
+        <div class="kpi"><div class="kpi-label">Stock bajo (&lt;5)</div><div class="kpi-val" id="kLow" style="color:var(--warn)">-</div></div>
+        <div class="kpi"><div class="kpi-label">Sin stock</div><div class="kpi-val" id="kOut" style="color:var(--danger)">-</div></div>
+        <div class="kpi"><div class="kpi-label" id="kValLabel">Valor del almacén</div><div class="kpi-val" id="kVal" style="color:var(--ok)">-</div></div>
       </div>
       <div class="card">
         <div class="card-head"><h3>Existencias (productos físicos)</h3><input class="search" id="searchBox" placeholder="Buscar nombre o SKU..." oninput="filterTable()"></div>
@@ -103,7 +103,7 @@ export function createInventoryRoutes(db, cfg = {}) {
           const avg=Number(p.average_cost||0);
           const val=avg*s;
           const rsv=reservedOf(p), avl=availableOf(p);
-          return '<tr><td><strong>'+escHtml(p.name)+'</strong></td><td style="color:var(--muted)">'+escHtml(p.sku||'-')+'</td><td>'+escHtml(p.category_name||'-')+'</td><td><strong style="color:'+(s<5?'#ef4444':'inherit')+'">'+s+'</strong></td><td style="color:'+(rsv>0?'#9333ea':'var(--muted)')+'">'+rsv+'</td><td><strong style="color:'+(avl<0?'#ef4444':'inherit')+'">'+avl+'</strong></td><td>${sym}'+avg.toFixed(2)+'</td><td>${sym}'+val.toFixed(2)+'</td><td><span class="badge '+b[st]+'">'+sl[st]+'</span></td><td style="white-space:nowrap">'+acts+'</td></tr>';
+          return '<tr><td><strong>'+escHtml(p.name)+'</strong></td><td style="color:var(--muted)">'+escHtml(p.sku||'-')+'</td><td>'+escHtml(p.category_name||'-')+'</td><td><strong style="color:'+(s<5?'var(--danger)':'inherit')+'">'+s+'</strong></td><td style="color:'+(rsv>0?'var(--accent-purple)':'var(--muted)')+'">'+rsv+'</td><td><strong style="color:'+(avl<0?'var(--danger)':'inherit')+'">'+avl+'</strong></td><td>${sym}'+avg.toFixed(2)+'</td><td>${sym}'+val.toFixed(2)+'</td><td><span class="badge '+b[st]+'">'+sl[st]+'</span></td><td style="white-space:nowrap">'+acts+'</td></tr>';
         }).join(''):'<tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--muted)">Sin productos físicos</td></tr>';
       }
       // Tras ajustar/revertir desde el componente compartido, refresca todo (la caché global

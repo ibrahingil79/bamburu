@@ -32,7 +32,7 @@ export function createChangePasswordRoutes(db) {
             <label style="display:block;font-size:.82rem;font-weight:500;margin-bottom:.3rem;color:var(--text)">Confirmar nueva contraseña</label>
             <input type="password" name="confirm_password" required style="width:100%;padding:.6rem .8rem;border:1px solid var(--border);border-radius:6px;font-size:.9rem">
           </div>
-          <button type="submit" style="padding:.65rem 1.4rem;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:.9rem;font-weight:500;cursor:pointer">Cambiar contraseña</button>
+          <button type="submit" style="padding:.65rem 1.4rem;background:var(--accent);color:var(--bg2);border:none;border-radius:6px;font-size:.9rem;font-weight:500;cursor:pointer">Cambiar contraseña</button>
         </form>
       </div>`;
     return c.html(adminLayout('Cambiar contraseña', content, '', csrfToken, c));

@@ -252,7 +252,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
           +'<td style="position:relative">'
             +'<input class="form-control" type="text" id="prodsearch-'+id+'" autocomplete="off" placeholder="Buscar producto..." oninput="onProdInput('+id+')" onfocus="onProdInput('+id+')" onblur="hideProdSuggest('+id+')" style="min-width:200px">'
             +'<input type="hidden" id="prod-'+id+'">'
-            +'<div id="suggest-'+id+'" style="display:none;position:absolute;z-index:30;left:0;right:0;top:100%;background:var(--card,#1e1e1e);border:1px solid var(--border);border-radius:6px;max-height:240px;overflow:auto;box-shadow:0 6px 16px rgba(0,0,0,.25)"></div>'
+            +'<div id="suggest-'+id+'" style="display:none;position:absolute;z-index:30;left:0;right:0;top:100%;background:var(--card);border:1px solid var(--border);border-radius:6px;max-height:240px;overflow:auto;box-shadow:0 6px 16px rgba(0,0,0,.25)"></div>'
           +'</td>'
           +'<td><input class="form-control" type="number" id="qty-'+id+'" min="1" value="1" style="width:80px" oninput="calcTotal()"></td>'
           +'<td><input class="form-control" type="number" id="cost-'+id+'" min="0" step="0.01" value="0.00" style="width:110px" oninput="calcTotal()"></td>'

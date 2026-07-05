@@ -1589,8 +1589,8 @@ export function register(app, db) {
       return '<div style="display:flex;justify-content:' + (isUser ? 'flex-end' : 'flex-start') + '">'
         + '<div style="max-width:80%;padding:10px 14px;border-radius:12px;font-size:13px;line-height:1.6;'
         + (isUser
-          ? 'background:var(--accent);color:#fff;border-bottom-right-radius:3px'
-          : 'background:#FFFFFF;border:1px solid var(--border);color:var(--text);border-bottom-left-radius:3px')
+          ? 'background:var(--accent);color:var(--bg2);border-bottom-right-radius:3px'
+          : 'background:var(--bg2);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:3px')
         + '">' + esc(m.content).replace(/\\n/g, '<br>') + '</div></div>';
     };
 
@@ -1610,15 +1610,15 @@ export function register(app, db) {
     const inputHTML = '<div style="display:flex;gap:8px">'
       + '<textarea id="msgInput" rows="2" placeholder="Escribe tu mensaje..." '
       + 'style="flex:1;padding:10px 14px;border:1px solid var(--border2);border-radius:10px;'
-      + 'font-size:13px;font-family:inherit;resize:none;outline:none;background:#FFFFFF;'
+      + 'font-size:13px;font-family:inherit;resize:none;outline:none;background:var(--bg2);'
       + 'color:var(--text);transition:border-color .15s;scrollbar-width:thin" '
       + 'onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();disaSend()}" '
       + 'onfocus="this.style.borderColor=\'var(--accent)\'" onblur="this.style.borderColor=\'var(--border2)\'"></textarea>'
       + '<input type="file" id="disaFilePage" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" style="display:none" onchange="disaAttach()">'
       + '<button onclick="document.getElementById(\'disaFilePage\').click()" title="Adjuntar factura (foto o PDF)" '
-      + 'style="background:#FFFFFF;color:var(--text2);border:1px solid var(--border2);border-radius:10px;'
+      + 'style="background:var(--bg2);color:var(--text2);border:1px solid var(--border2);border-radius:10px;'
       + 'padding:0 14px;font-size:16px;cursor:pointer;font-family:inherit;align-self:stretch">📎</button>'
-      + '<button onclick="disaSend()" style="background:var(--accent);color:#fff;border:none;border-radius:10px;'
+      + '<button onclick="disaSend()" style="background:var(--accent);color:var(--bg2);border:none;border-radius:10px;'
       + 'padding:0 18px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;align-self:stretch;'
       + 'white-space:nowrap">Enviar</button>'
       + '</div>'
@@ -1630,16 +1630,16 @@ export function register(app, db) {
 
     const body = `
 <style>
-  .dt-panel{width:240px;background:#F9FAFB;border-right:1px solid var(--border);
+  .dt-panel{width:240px;background:var(--bg3);border-right:1px solid var(--border);
     display:flex;flex-direction:column;flex-shrink:0;transition:transform .22s}
   .dt-item{position:relative;padding:8px 10px;border-radius:7px;cursor:pointer;margin:0 4px;
     border:1px solid transparent;transition:background .12s}
-  .dt-item:hover{background:#F3F4F6}
+  .dt-item:hover{background:var(--bg3)}
   .dt-item.dt-active{background:rgba(58,65,80,0.12);border-color:rgba(58,65,80,0.25)}
   .dt-title{font-size:12px;font-weight:500;color:var(--text2);white-space:nowrap;overflow:hidden;
     text-overflow:ellipsis;padding-right:44px}
   .dt-item.dt-active .dt-title{color:var(--accent)}
-  .dt-title-input{font-size:12px;font-weight:500;color:var(--text2);background:#F3F4F6;
+  .dt-title-input{font-size:12px;font-weight:500;color:var(--text2);background:var(--bg3);
     border:1px solid var(--accent);border-radius:4px;padding:1px 5px;width:calc(100% - 48px);
     outline:none;font-family:inherit}
   .dt-meta{font-size:10px;color:var(--text3);margin-top:1px}
@@ -1650,7 +1650,7 @@ export function register(app, db) {
     padding:3px;border-radius:4px;line-height:1;display:flex;align-items:center;justify-content:center}
   .dt-pin:hover{color:var(--accent);background:rgba(58,65,80,0.12)}
   .dt-pin.pinned{color:var(--accent);opacity:1!important}
-  .dt-del:hover{color:#ef4444;background:rgba(239,68,68,0.1)}
+  .dt-del:hover{color:var(--danger);background:var(--danger-s)}
   .dt-actions.has-pinned{opacity:1}
   .dt-sep{font-size:9px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;
     color:var(--text3);padding:8px 12px 3px;flex-shrink:0}
@@ -1668,7 +1668,7 @@ export function register(app, db) {
   <div class="dt-panel" id="dtPanel">
     <div style="padding:12px 10px;border-bottom:1px solid var(--border);flex-shrink:0">
       <button onclick="dtNewThread()"
-        style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px;
+        style="width:100%;background:var(--accent);color:var(--bg2);border:none;border-radius:8px;padding:8px;
                font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;display:flex;
                align-items:center;justify-content:center;gap:5px;transition:opacity .15s">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
@@ -1684,7 +1684,7 @@ export function register(app, db) {
   <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;padding:1rem 1.5rem">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-shrink:0">
       <button id="dtMobileBtn" onclick="dtTogglePanel()"
-        style="display:none;background:#F3F4F6;border:1px solid var(--border);
+        style="display:none;background:var(--bg3);border:1px solid var(--border);
                border-radius:7px;padding:5px 8px;cursor:pointer;color:var(--text2);align-items:center;
                gap:5px;font-size:12px;font-family:inherit">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1700,7 +1700,7 @@ export function register(app, db) {
       <span style="font-size:11px;color:var(--text2);flex-shrink:0">${usage}/${limit}</span>
     </div>
 
-    <div style="height:2px;background:#F3F4F6;margin-bottom:12px;flex-shrink:0;
+    <div style="height:2px;background:var(--bg3);margin-bottom:12px;flex-shrink:0;
       border-radius:2px;overflow:hidden">
       <div style="height:100%;width:${usagePct}%;background:var(--accent);transition:width .3s"></div>
     </div>
@@ -1709,7 +1709,7 @@ export function register(app, db) {
       padding:0 2px;scrollbar-width:thin;scrollbar-color:rgba(58,65,80,0.18) transparent">
       ${messages.length === 0 ? emptyState : messages.map(renderMsgHtml).join('')}
       <div id="typingIndicator" style="display:none">
-        <div style="background:#FFFFFF;border:1px solid var(--border);
+        <div style="background:var(--bg2);border:1px solid var(--border);
           padding:10px 14px;border-radius:12px;border-bottom-left-radius:3px;
           display:inline-flex;gap:4px;align-items:center">
           <span style="width:5px;height:5px;border-radius:50%;background:var(--text2);animation:tdot 1.4s infinite"></span>
@@ -1772,8 +1772,8 @@ export function register(app, db) {
     div.style.cssText = 'display:flex;justify-content:' + (role === 'user' ? 'flex-end' : 'flex-start');
     div.innerHTML = '<div style="max-width:80%;padding:10px 14px;border-radius:12px;font-size:13px;line-height:1.6;'
       + (role === 'user'
-        ? 'background:var(--accent);color:#fff;border-bottom-right-radius:3px'
-        : 'background:#FFFFFF;border:1px solid var(--border);color:var(--text);border-bottom-left-radius:3px')
+        ? 'background:var(--accent);color:var(--bg2);border-bottom-right-radius:3px'
+        : 'background:var(--bg2);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:3px')
       + '">' + esc(content).replace(/\\n/g,'<br>') + '</div>';
     area.insertBefore(div, typing);
     area.scrollTop = area.scrollHeight;

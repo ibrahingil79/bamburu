@@ -32,7 +32,7 @@ export function createNewsletterRoutes(db) {
       <div class="ph"><h2>Newsletter</h2>
         <a href="/api/erp/newsletter/export" class="btn btn-secondary">Exportar CSV</a>
       </div>
-      <div class="kpi" style="margin-bottom:1rem;max-width:200px"><div class="kpi-label">Suscriptores activos</div><div class="kpi-val" style="color:#10b981">${total}</div></div>
+      <div class="kpi" style="margin-bottom:1rem;max-width:200px"><div class="kpi-label">Suscriptores activos</div><div class="kpi-val" style="color:var(--ok)">${total}</div></div>
       <div class="card">
         <div class="table-wrap"><table>
           <thead><tr><th>Email</th><th>Nombre</th><th>Estado</th><th>Fecha</th><th></th></tr></thead>

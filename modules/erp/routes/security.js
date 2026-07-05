@@ -55,18 +55,17 @@ export function createSecurityRoutes(db) {
       .sec-err{background:var(--danger-s);border:1px solid var(--danger);color:var(--danger)}
       .form-row{display:grid;gap:1rem}
       .f-label{font-size:.8rem;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.35rem;display:block}
-      .f-input{width:100%;padding:.6rem .8rem;background:var(--input-bg,#F3F4F6);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:.9rem;font-family:inherit;outline:none;transition:border-color .15s}
+      .f-input{width:100%;padding:.6rem .8rem;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:.9rem;font-family:inherit;outline:none;transition:border-color .15s}
       .f-input:focus{border-color:var(--teal)}
       .badge-2fa-on{display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .8rem;background:var(--ok-s);border:1px solid var(--ok);color:var(--ok);border-radius:20px;font-size:.8rem;font-weight:500}
-      .badge-2fa-off{display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .8rem;background:#F3F4F6;border:1px solid var(--border);color:var(--text3);border-radius:20px;font-size:.8rem;font-weight:500}
-      .info-box{background:#F3F4F6;border:1px solid var(--border);border-radius:10px;padding:1rem 1.2rem;margin-bottom:1.4rem}
+      .badge-2fa-off{display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .8rem;background:var(--bg3);border:1px solid var(--border);color:var(--text3);border-radius:20px;font-size:.8rem;font-weight:500}
+      .info-box{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:1rem 1.2rem;margin-bottom:1.4rem}
       .info-box h4{font-size:.85rem;font-weight:500;margin-bottom:.5rem;color:var(--text)}
       .info-box p,.info-box li{font-size:.82rem;color:var(--text3);line-height:1.6}
       .info-box ol{padding-left:1.1rem}
-      .qr-wrap{text-align:center;padding:1rem;background:#fff;border-radius:10px;display:inline-block;margin:1rem 0}
-      .secret-chip{font-family:monospace;font-size:.78rem;background:#F3F4F6;border:1px solid var(--border);border-radius:6px;padding:.35rem .7rem;word-break:break-all;color:var(--text3)}
-      .btn-danger{background:var(--danger-s);color:var(--danger);border:1px solid var(--danger)}
-      .btn-danger:hover{background:#F7DAD7}
+      .qr-wrap{text-align:center;padding:1rem;background:var(--bg2);border-radius:10px;display:inline-block;margin:1rem 0}
+      .secret-chip{font-family:monospace;font-size:.78rem;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:.35rem .7rem;word-break:break-all;color:var(--text3)}
+      /* .btn-danger se hereda del componente canónico de layout.js (fuente única) */
       .sec-divider{border:none;border-top:1px solid var(--border);margin:1.5rem 0}
     </style>
 

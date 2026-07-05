@@ -98,7 +98,7 @@ export function stockModalScript(sym, warehouses = []) {
         return '<tr>'
           +'<td style="color:var(--muted);font-size:.8rem">'+escHtml((m.created_at||'').slice(0,16))+'</td>'
           +'<td><span class="badge '+badge(m.type)+'">'+escHtml(TYPE_LABEL[m.type]||m.type)+'</span></td>'
-          +'<td style="text-align:right;font-weight:600;color:'+(m.quantity<0?'#ef4444':'#10b981')+'">'+qty+'</td>'
+          +'<td style="text-align:right;font-weight:600;color:'+(m.quantity<0?'var(--danger)':'var(--ok)')+'">'+qty+'</td>'
           +'<td>'+motivo+(m.note&&m.reason_label?(' · '+escHtml(m.note)):'')+'</td>'
           +'<td>'+originTxt(m)+'</td>'
           +'<td style="text-align:right">'+m.balance+'</td>'
@@ -111,10 +111,10 @@ export function stockModalScript(sym, warehouses = []) {
       const whBlock = wh.length
         ? '<div style="margin-bottom:1rem"><div style="font-size:.75rem;text-transform:uppercase;color:var(--muted);margin-bottom:.4rem">Stock por almacén</div>'
           +'<div class="table-wrap"><table><thead><tr><th>Almacén</th><th style="text-align:right">Stock</th><th style="text-align:right">Reservado</th><th style="text-align:right">Disponible</th></tr></thead><tbody>'
-          +wh.map(function(w){ return '<tr><td>'+escHtml(w.name)+(w.is_default?' <span class="badge b-green" style="font-size:.62rem">Principal</span>':'')+'</td><td style="text-align:right;font-weight:600">'+w.qty+'</td><td style="text-align:right;color:'+((w.reserved||0)>0?'#9333ea':'var(--muted)')+'">'+(w.reserved||0)+'</td><td style="text-align:right;font-weight:600;color:'+((w.available||0)<0?'#ef4444':'inherit')+'">'+(w.available!=null?w.available:w.qty)+'</td></tr>'; }).join('')
+          +wh.map(function(w){ return '<tr><td>'+escHtml(w.name)+(w.is_default?' <span class="badge b-green" style="font-size:.62rem">Principal</span>':'')+'</td><td style="text-align:right;font-weight:600">'+w.qty+'</td><td style="text-align:right;color:'+((w.reserved||0)>0?'var(--accent-purple)':'var(--muted)')+'">'+(w.reserved||0)+'</td><td style="text-align:right;font-weight:600;color:'+((w.available||0)<0?'var(--danger)':'inherit')+'">'+(w.available!=null?w.available:w.qty)+'</td></tr>'; }).join('')
           +'</tbody></table></div></div>'
         : '';
-      const resvTxt = (data.reserved||0)>0 ? ' &nbsp;·&nbsp; reservado <strong style="color:#9333ea">'+data.reserved+'</strong> &nbsp;·&nbsp; disponible <strong style="color:'+((data.available||0)<0?'#ef4444':'#10b981')+'">'+(data.available!=null?data.available:data.stock)+'</strong>' : '';
+      const resvTxt = (data.reserved||0)>0 ? ' &nbsp;·&nbsp; reservado <strong style="color:var(--accent-purple)">'+data.reserved+'</strong> &nbsp;·&nbsp; disponible <strong style="color:'+((data.available||0)<0?'var(--danger)':'var(--ok)')+'">'+(data.available!=null?data.available:data.stock)+'</strong>' : '';
       document.getElementById('stockKardexBody').innerHTML =
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">'
         +'<div>Stock actual: <strong style="font-size:1.4rem">'+data.stock+'</strong>'+resvTxt+'</div>'

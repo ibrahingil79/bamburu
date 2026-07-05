@@ -89,7 +89,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
       </div>
 
       <div class="grid ga" style="margin-bottom:1.5rem" id="kpiRow">
-        <div class="kpi"><div class="kpi-label">Ingresos</div><div class="kpi-val" id="kRev" style="color:#10b981">-</div></div>
+        <div class="kpi"><div class="kpi-label">Ingresos</div><div class="kpi-val" id="kRev" style="color:var(--ok)">-</div></div>
         <div class="kpi"><div class="kpi-label">Pedidos</div><div class="kpi-val" id="kOrd">-</div></div>
         <div class="kpi"><div class="kpi-label">Ticket medio</div><div class="kpi-val" id="kAvg">-</div></div>
         <div class="kpi"><div class="kpi-label">Clientes</div><div class="kpi-val" id="kCli">-</div></div>
@@ -146,9 +146,9 @@ export function createAnalyticsRoutes(db, cfg = {}) {
           '<td><strong>'+p.name+'</strong></td>'+
           '<td style="color:var(--muted)">'+(p.sku||'-')+'</td>'+
           '<td>'+(p.category||'-')+'</td>'+
-          '<td><strong style="color:'+(p.stock<5?'#ef4444':'inherit')+'">'+p.stock+'</strong></td>'+
+          '<td><strong style="color:'+(p.stock<5?'var(--danger)':'inherit')+'">'+p.stock+'</strong></td>'+
           '<td>${sym}'+Number(p.price).toFixed(2)+'</td>'+
-          '<td style="color:#10b981;font-weight:600">${sym}'+Number(p.inventory_value||0).toFixed(2)+'</td>'+
+          '<td style="color:var(--ok);font-weight:600">${sym}'+Number(p.inventory_value||0).toFixed(2)+'</td>'+
           '</tr>').join(''):'<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin productos</td></tr>';
       }
       loadCharts();

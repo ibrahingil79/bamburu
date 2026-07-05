@@ -16,7 +16,7 @@
 export function lineSearchCellHtml(extraInner = '') {
   return '<td style="position:relative">' +
     '<input type="text" class="form-control line-desc" autocomplete="off" placeholder="Buscar en el catálogo o escribir libremente" oninput="onDescInput(this)" onfocus="onDescInput(this)" onblur="hideSuggest(this)">' +
-    '<div class="line-suggest" style="display:none;position:absolute;z-index:30;left:0;right:0;top:100%;background:var(--card,#1e1e1e);border:1px solid var(--border);border-radius:6px;max-height:240px;overflow:auto;box-shadow:0 6px 16px rgba(0,0,0,.25)"></div>' +
+    '<div class="line-suggest" style="display:none;position:absolute;z-index:30;left:0;right:0;top:100%;background:var(--card);border:1px solid var(--border);border-radius:6px;max-height:240px;overflow:auto;box-shadow:0 6px 16px rgba(0,0,0,.25)"></div>' +
     extraInner +
   '</td>';
 }

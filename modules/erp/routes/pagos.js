@@ -55,14 +55,14 @@ export function createPagosRoutes(db) {
         const neto = Number(data.total||0);
         const totEl = document.getElementById('pagosTotal');
         const lblEl = document.querySelector('#pagosTotal').previousElementSibling;
-        if (neto < -0.0049) { lblEl.textContent='Saldo a tu favor'; totEl.textContent=SYM+Math.abs(neto).toFixed(2); totEl.style.color='var(--ok,#127a3a)'; }
+        if (neto < -0.0049) { lblEl.textContent='Saldo a tu favor'; totEl.textContent=SYM+Math.abs(neto).toFixed(2); totEl.style.color='var(--ok)'; }
         else { lblEl.textContent='Debes'; totEl.textContent=SYM+neto.toFixed(2); totEl.style.color=''; }
         document.getElementById('pagosCount').textContent = '· ' + pagosRows.length + ' documento' + (pagosRows.length===1?'':'s');
         document.getElementById('pagosBody').innerHTML = pagosRows.length ? pagosRows.map(function(r){
           const tramo = r.dias_vencida>0 ? ' · '+r.dias_vencida+'d' : '';
           const esAbono = r.estado==='abono' || Number(r.pendiente)<-0.0049;
           const pend = esAbono
-            ? '<strong style="color:var(--ok,#127a3a)">'+SYM+Number(r.pendiente||0).toFixed(2)+'</strong> <span style="color:var(--muted);font-size:.78rem">(a tu favor)</span>'
+            ? '<strong style="color:var(--ok)">'+SYM+Number(r.pendiente||0).toFixed(2)+'</strong> <span style="color:var(--muted);font-size:.78rem">(a tu favor)</span>'
             : '<strong>'+SYM+Number(r.pendiente||0).toFixed(2)+'</strong>';
           const btn = esAbono
             ? '<button class="btn btn-secondary btn-sm" onclick="openPagos('+r.supplier_invoice_id+')">Reembolso</button>'

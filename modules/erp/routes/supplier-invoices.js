@@ -546,7 +546,7 @@ export function createSupplierInvoiceRoutes(db) {
           const o=d.oldest;
           const neto=Number(d.total||0);
           box.innerHTML = (neto < -0.0049
-              ? 'Saldo a tu favor <strong style="font-size:1.3rem;color:var(--ok,#127a3a)">'+SYM+Math.abs(neto).toFixed(2)+'</strong>'
+              ? 'Saldo a tu favor <strong style="font-size:1.3rem;color:var(--ok)">'+SYM+Math.abs(neto).toFixed(2)+'</strong>'
               : 'Le debes <strong style="font-size:1.3rem">'+SYM+neto.toFixed(2)+'</strong>')
             + (o ? ' · Deuda más antigua: <a href="/admin/supplier-invoices/'+o.supplier_invoice_id+'">'+escHtml(o.internal_code||'')+'</a> ('+SYM+Number(o.pendiente||0).toFixed(2)+', vence '+escHtml(o.due_date||'-')+(o.dias_vencida>0?' · '+o.dias_vencida+' días vencida':'')+')' : ' · sin deuda pendiente')
             + (neto > 0.0049 ? ' <button class="btn btn-primary btn-sm" style="margin-left:.75rem" onclick="openPagoCuenta('+SUPPLIER_ID+')">Pagar a cuenta</button>' : '');

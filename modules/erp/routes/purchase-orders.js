@@ -212,9 +212,9 @@ export async function emailPurchaseOrderSvc(db, id, opts = {}) {
   // destinatario sí es el email VIVO del proveedor (puede haberlo corregido).
   const { emisor, proveedor } = docParties(db, o);
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"></head>
-<body style="font-family:system-ui,sans-serif;font-size:14px;color:#1e293b;max-width:760px;margin:auto;padding:24px">
+<body style="font-family:system-ui,sans-serif;font-size:14px;color:var(--accent-d);max-width:760px;margin:auto;padding:24px">
 ${documentBodyHtml(o, items, emisor, proveedor, sym)}
-<p style="color:#64748b;font-size:12px;margin-top:24px">Documento enviado desde ${esc(empresa)} con Bamburu.</p>
+<p style="color:var(--text2);font-size:12px;margin-top:24px">Documento enviado desde ${esc(empresa)} con Bamburu.</p>
 </body></html>`;
   const t = purchaseOrderTotals(items);
   const text = 'Orden de compra ' + o.order_number + ' de ' + empresa + '\n'
@@ -260,62 +260,62 @@ function documentBodyHtml(o, items, emisor, proveedor, sym) {
   const t = purchaseOrderTotals(items);
   const rows = items.map(i => `
     <tr>
-      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9">${esc(i.product_name)}${i.sku ? ` <span style="color:#64748b;font-size:11px">[${esc(i.sku)}]</span>` : ''}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right">${i.quantity}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right">${sym}${Number(i.unit_cost).toFixed(2)}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right">${Number(i.tax_rate) > 0 ? Number(i.tax_rate) + '%' : 'Exento'}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right">${sym}${(Math.round(i.quantity * i.unit_cost * 100) / 100).toFixed(2)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid var(--bg3)">${esc(i.product_name)}${i.sku ? ` <span style="color:var(--text2);font-size:11px">[${esc(i.sku)}]</span>` : ''}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${i.quantity}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${sym}${Number(i.unit_cost).toFixed(2)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${Number(i.tax_rate) > 0 ? Number(i.tax_rate) + '%' : 'Exento'}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${sym}${(Math.round(i.quantity * i.unit_cost * 100) / 100).toFixed(2)}</td>
     </tr>`).join('');
 
   const taxRows = Object.values(t.taxByRate).sort((a, b) => b.rate - a.rate).map(x =>
-    `<tr><td style="padding:4px 12px;color:#64748b">${Number(x.rate) > 0 ? 'IVA ' + x.rate + '%' : 'Exento de IVA'} (sobre ${sym}${x.base.toFixed(2)})</td><td style="padding:4px 12px;text-align:right;font-weight:600">${sym}${x.amount.toFixed(2)}</td></tr>`
+    `<tr><td style="padding:4px 12px;color:var(--text2)">${Number(x.rate) > 0 ? 'IVA ' + x.rate + '%' : 'Exento de IVA'} (sobre ${sym}${x.base.toFixed(2)})</td><td style="padding:4px 12px;text-align:right;font-weight:600">${sym}${x.amount.toFixed(2)}</td></tr>`
   ).join('');
 
   return `
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px">
   <div>
     <h1 style="font-size:22px;font-weight:700;margin:0 0 4px">Orden de compra</h1>
-    <div style="color:#64748b;font-size:12px">${o.order_number ? esc(o.order_number) : 'Borrador (sin número)'}</div>
+    <div style="color:var(--text2);font-size:12px">${o.order_number ? esc(o.order_number) : 'Borrador (sin número)'}</div>
   </div>
-  <div style="text-align:right;color:#64748b;font-size:12px">
-    <div>Fecha: <strong style="color:#1e293b">${esc(o.date)}</strong></div>
-    ${o.expected_date ? `<div>Entrega prevista: <strong style="color:#1e293b">${esc(o.expected_date)}</strong></div>` : ''}
+  <div style="text-align:right;color:var(--text2);font-size:12px">
+    <div>Fecha: <strong style="color:var(--accent-d)">${esc(o.date)}</strong></div>
+    ${o.expected_date ? `<div>Entrega prevista: <strong style="color:var(--accent-d)">${esc(o.expected_date)}</strong></div>` : ''}
   </div>
 </div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:24px">
   <div>
-    <div style="font-size:11px;text-transform:uppercase;color:#64748b;font-weight:600;margin-bottom:4px">Emisor</div>
+    <div style="font-size:11px;text-transform:uppercase;color:var(--text2);font-weight:600;margin-bottom:4px">Emisor</div>
     <div><strong>${esc(emisor.name || '')}</strong></div>
     ${emisor.fiscal_id ? `<div>${esc(emisor.fiscal_id)}</div>` : ''}
-    ${emisor.address ? `<div style="color:#64748b">${esc(emisor.address)}</div>` : ''}
-    ${emisor.email ? `<div style="color:#64748b">${esc(emisor.email)}</div>` : ''}
-    ${emisor.phone ? `<div style="color:#64748b">${esc(emisor.phone)}</div>` : ''}
+    ${emisor.address ? `<div style="color:var(--text2)">${esc(emisor.address)}</div>` : ''}
+    ${emisor.email ? `<div style="color:var(--text2)">${esc(emisor.email)}</div>` : ''}
+    ${emisor.phone ? `<div style="color:var(--text2)">${esc(emisor.phone)}</div>` : ''}
   </div>
   <div>
-    <div style="font-size:11px;text-transform:uppercase;color:#64748b;font-weight:600;margin-bottom:4px">Proveedor</div>
+    <div style="font-size:11px;text-transform:uppercase;color:var(--text2);font-weight:600;margin-bottom:4px">Proveedor</div>
     <div><strong>${esc(proveedor.name || '')}</strong></div>
     ${proveedor.fiscal_id ? `<div>${esc(proveedor.fiscal_id)}</div>` : ''}
-    ${proveedor.address ? `<div style="color:#64748b">${esc(proveedor.address)}</div>` : ''}
-    ${proveedor.email ? `<div style="color:#64748b">${esc(proveedor.email)}</div>` : ''}
-    ${proveedor.phone ? `<div style="color:#64748b">${esc(proveedor.phone)}</div>` : ''}
+    ${proveedor.address ? `<div style="color:var(--text2)">${esc(proveedor.address)}</div>` : ''}
+    ${proveedor.email ? `<div style="color:var(--text2)">${esc(proveedor.email)}</div>` : ''}
+    ${proveedor.phone ? `<div style="color:var(--text2)">${esc(proveedor.phone)}</div>` : ''}
   </div>
 </div>
 <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
   <thead><tr>
-    <th style="background:#F5F6F8;padding:8px 12px;text-align:left;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">Producto</th>
-    <th style="background:#F5F6F8;padding:8px 12px;text-align:right;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">Cant.</th>
-    <th style="background:#F5F6F8;padding:8px 12px;text-align:right;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">Coste unit. (neto)</th>
-    <th style="background:#F5F6F8;padding:8px 12px;text-align:right;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">IVA</th>
-    <th style="background:#F5F6F8;padding:8px 12px;text-align:right;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">Subtotal</th>
+    <th style="background:var(--bg);padding:8px 12px;text-align:left;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">Producto</th>
+    <th style="background:var(--bg);padding:8px 12px;text-align:right;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">Cant.</th>
+    <th style="background:var(--bg);padding:8px 12px;text-align:right;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">Coste unit. (neto)</th>
+    <th style="background:var(--bg);padding:8px 12px;text-align:right;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">IVA</th>
+    <th style="background:var(--bg);padding:8px 12px;text-align:right;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">Subtotal</th>
   </tr></thead>
   <tbody>${rows}</tbody>
 </table>
 <table style="margin-left:auto;width:300px;border-collapse:collapse">
-  <tr><td style="padding:4px 12px;color:#64748b">Base imponible</td><td style="padding:4px 12px;text-align:right;font-weight:600">${sym}${t.subtotal.toFixed(2)}</td></tr>
+  <tr><td style="padding:4px 12px;color:var(--text2)">Base imponible</td><td style="padding:4px 12px;text-align:right;font-weight:600">${sym}${t.subtotal.toFixed(2)}</td></tr>
   ${taxRows}
-  <tr><td style="padding:10px 12px;font-size:15px;border-top:2px solid #1e293b;font-weight:700">TOTAL</td><td style="padding:10px 12px;text-align:right;font-size:15px;border-top:2px solid #1e293b;font-weight:700">${sym}${t.total.toFixed(2)}</td></tr>
+  <tr><td style="padding:10px 12px;font-size:15px;border-top:2px solid var(--accent-d);font-weight:700">TOTAL</td><td style="padding:10px 12px;text-align:right;font-size:15px;border-top:2px solid var(--accent-d);font-weight:700">${sym}${t.total.toFixed(2)}</td></tr>
 </table>
-${o.notes ? `<div style="margin-top:16px;color:#64748b">${esc(o.notes)}</div>` : ''}`;
+${o.notes ? `<div style="margin-top:16px;color:var(--text2)">${esc(o.notes)}</div>` : ''}`;
 }
 
 // ── Rutas ────────────────────────────────────────────────────────────────────
@@ -482,7 +482,7 @@ export function createPurchaseOrderRoutes(db) {
     const rowsHtml = orders.map(o => {
       const [lbl, badge] = displayEstado(o);
       return '<tr>'
-        + '<td>' + (o.order_number ? '<strong style="font-family:monospace">' + esc(o.order_number) + '</strong>' : '<span style="color:#9097A1">Borrador</span>') + '</td>'
+        + '<td>' + (o.order_number ? '<strong style="font-family:monospace">' + esc(o.order_number) + '</strong>' : '<span style="color:var(--text3)">Borrador</span>') + '</td>'
         + '<td><strong>' + esc(o.supplier_name) + '</strong></td>'
         + '<td>' + esc(o.date) + '</td>'
         + '<td><span class="badge ' + badge + '">' + esc(lbl) + '</span></td>'
@@ -509,11 +509,11 @@ export function createPurchaseOrderRoutes(db) {
       <div class="card">
         <div class="table-wrap"><table>
           <thead><tr><th>Número</th><th>Proveedor</th><th>Fecha</th><th>Estado</th><th>Total</th><th></th></tr></thead>
-          <tbody>${total === 0 ? '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#9097A1">' + (q || estado ? 'No se encontraron órdenes' : 'Sin órdenes de compra. La orden es el pedido al proveedor; la compra directa sigue en Compras.') + '</td></tr>' : rowsHtml}</tbody>
+          <tbody>${total === 0 ? '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text3)">' + (q || estado ? 'No se encontraron órdenes' : 'Sin órdenes de compra. La orden es el pedido al proveedor; la compra directa sigue en Compras.') + '</td></tr>' : rowsHtml}</tbody>
         </table></div>
       </div>
       ${total > 0 ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem;flex-wrap:wrap;gap:.5rem">
-        <span style="color:#9097A1;font-size:.85rem">Página ${page} de ${totalPages} · ${total} orden${total === 1 ? '' : 'es'}</span>
+        <span style="color:var(--text3);font-size:.85rem">Página ${page} de ${totalPages} · ${total} orden${total === 1 ? '' : 'es'}</span>
         <div style="display:flex;gap:.5rem">
           ${page > 1 ? `<a class="btn btn-secondary btn-sm" href="?${buildQs(page - 1)}">← Anterior</a>` : '<span class="btn btn-secondary btn-sm" style="opacity:.4;pointer-events:none">← Anterior</span>'}
           ${page < totalPages ? `<a class="btn btn-secondary btn-sm" href="?${buildQs(page + 1)}">Siguiente →</a>` : '<span class="btn btn-secondary btn-sm" style="opacity:.4;pointer-events:none">Siguiente →</span>'}
@@ -535,7 +535,7 @@ export function createPurchaseOrderRoutes(db) {
     if (!suppliers.length) {
       const content = `
         <div class="ph"><h2>Nueva orden de compra</h2><a href="/admin/purchase-orders" class="btn btn-secondary">Volver</a></div>
-        <div class="card card-body" style="text-align:center;padding:2rem;color:#9097A1">
+        <div class="card card-body" style="text-align:center;padding:2rem;color:var(--text3)">
           No hay proveedores. <a href="/admin/suppliers">Crea uno primero.</a>
         </div>`;
       return c.html(adminLayout('Nueva orden de compra', content, 'purchase-orders', csrfToken, c));
@@ -636,7 +636,7 @@ export function createPurchaseOrderRoutes(db) {
           LINE_CELL +
           '<td><input type="number" class="form-control line-qty" min="1" value="1" style="width:90px"></td>' +
           '<td><input type="number" class="form-control line-cost" min="0" step="0.01" value="" style="width:120px"></td>' +
-          '<td><span class="line-taxlbl" style="color:#9097A1">—</span></td>' +
+          '<td><span class="line-taxlbl" style="color:var(--text3)">—</span></td>' +
           '<td style="text-align:right;padding:.7rem 1rem"><span class="line-subtotal">' + SYM + '0.00</span></td>' +
           '<td><button class="btn btn-danger btn-sm" onclick="this.closest(\\'tr\\').remove();recalc()">✕</button></td>';
         tbody.appendChild(row);
@@ -684,8 +684,8 @@ export function createPurchaseOrderRoutes(db) {
         Object.values(byRate).sort((a,b) => b.rate - a.rate).forEach(function(x){
           const amount = r2(x.amount); taxTotal += amount;
           const lbl = (x.rate > 0 ? 'IVA ' + x.rate + '%' : 'Exento (0%)') + ' (sobre ' + SYM + r2(x.base).toFixed(2) + ')';
-          html += '<tr><td colspan="4" style="text-align:right;padding:.45rem 1rem;color:#9097A1">' + lbl + '</td>' +
-                  '<td style="text-align:right;padding:.45rem 1rem;color:#9097A1">' + SYM + amount.toFixed(2) + '</td><td></td></tr>';
+          html += '<tr><td colspan="4" style="text-align:right;padding:.45rem 1rem;color:var(--text3)">' + lbl + '</td>' +
+                  '<td style="text-align:right;padding:.45rem 1rem;color:var(--text3)">' + SYM + amount.toFixed(2) + '</td><td></td></tr>';
         });
         html += '<tr><td colspan="4" style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">Total</td>' +
                 '<td style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">' + SYM + r2(subtotal + taxTotal).toFixed(2) + '</td><td></td></tr>';
@@ -763,13 +763,13 @@ export function createPurchaseOrderRoutes(db) {
 
     const rows = pendingLines.map(l => `
       <tr data-oid="${l.order_item_id}" data-pend="${l.pendiente}" data-pedido="${l.pedido}" data-rec="${l.recibido}">
-        <td>${l.sku ? `<span style="color:#9097A1;font-size:.8rem">[${esc(l.sku)}]</span> ` : ''}${esc(l.product_name)}</td>
+        <td>${l.sku ? `<span style="color:var(--text3);font-size:.8rem">[${esc(l.sku)}]</span> ` : ''}${esc(l.product_name)}</td>
         <td style="text-align:right">${l.pedido}</td>
         <td style="text-align:right">${l.recibido}</td>
         <td style="text-align:right;font-weight:600">${l.pendiente}</td>
         <td>
           <input class="form-control r-qty" type="number" min="0" value="${l.pendiente}" style="width:90px" oninput="recalcR()">
-          <div class="r-warn" style="display:none;color:#FCD34D;font-size:.74rem;margin-top:4px;max-width:170px"></div>
+          <div class="r-warn" style="display:none;color:var(--warn);font-size:.74rem;margin-top:4px;max-width:170px"></div>
         </td>
         <td><input class="form-control r-cost" type="number" min="0" step="0.01" value="${Number(l.unit_cost).toFixed(2)}" style="width:120px" oninput="recalcR()"></td>
         <td style="text-align:right"><span class="r-sub">0.00 ${sym}</span></td>
@@ -819,7 +819,7 @@ export function createPurchaseOrderRoutes(db) {
             const totalLinea = rec + qty;
             warn.textContent = 'Pedido ' + pedido + ', recibirás ' + totalLinea + ' — exceso de ' + (totalLinea - pedido);
             warn.style.display = '';
-            r.style.background = 'rgba(245,158,11,0.08)';
+            r.style.background = 'var(--warn-s)';
           } else {
             warn.style.display = 'none';
             r.style.background = '';
@@ -954,7 +954,7 @@ export function createPurchaseOrderRoutes(db) {
       : '<span class="badge b-red">Anulada</span>';
 
     const receptionBlock = reception ? `
-<div style="margin-top:32px;border-top:1px solid #E4E6EA;padding-top:16px">
+<div style="margin-top:32px;border-top:1px solid var(--border2);padding-top:16px">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
     <h2 style="font-size:15px;font-weight:500">Recepción de mercancía</h2>
     ${o.status === 'enviada' && !isCerrada && reception.totalPendiente > 0 && canCreate
@@ -964,10 +964,10 @@ export function createPurchaseOrderRoutes(db) {
     <thead><tr><th>Producto</th><th style="text-align:right">Pedido</th><th style="text-align:right">Recibido</th><th style="text-align:right">Pendiente</th></tr></thead>
     <tbody>${reception.lines.map(l => `
       <tr>
-        <td>${esc(l.product_name)}${l.sku ? ` <span style="color:#6B7280;font-size:11px">[${esc(l.sku)}]</span>` : ''}</td>
+        <td>${esc(l.product_name)}${l.sku ? ` <span style="color:var(--text2);font-size:11px">[${esc(l.sku)}]</span>` : ''}</td>
         <td style="text-align:right">${l.pedido}</td>
-        <td style="text-align:right">${l.exceso > 0 ? `${l.recibido} de ${l.pedido} <span style="color:#b45309;font-weight:600">(+${l.exceso})</span>` : l.recibido}</td>
-        <td style="text-align:right;font-weight:600${l.pendiente === 0 ? ';color:#166534' : ''}">${l.pendiente}${isCerrada && l.pendiente > 0 ? ' <span style="color:#6B7280;font-size:11px">(no llegará)</span>' : ''}</td>
+        <td style="text-align:right">${l.exceso > 0 ? `${l.recibido} de ${l.pedido} <span style="color:var(--warn);font-weight:600">(+${l.exceso})</span>` : l.recibido}</td>
+        <td style="text-align:right;font-weight:600${l.pendiente === 0 ? ';color:var(--ok)' : ''}">${l.pendiente}${isCerrada && l.pendiente > 0 ? ' <span style="color:var(--text2);font-size:11px">(no llegará)</span>' : ''}</td>
       </tr>`).join('')}
     </tbody>
   </table>
@@ -985,7 +985,7 @@ export function createPurchaseOrderRoutes(db) {
         <td style="text-align:right"><a href="/admin/purchase-order-receipts/${r.id}" class="btn btn-secondary btn-sm">Ver</a></td>
       </tr>`).join('')}
     </tbody>
-  </table>` : '<div style="color:#6B7280;font-size:12px;margin-top:4px">Sin recepciones todavía.</div>'}
+  </table>` : '<div style="color:var(--text2);font-size:12px;margin-top:4px">Sin recepciones todavía.</div>'}
 </div>` : '';
 
     const paper = `${lifecycle}

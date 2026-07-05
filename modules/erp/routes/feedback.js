@@ -60,7 +60,7 @@ export function createFeedbackRoutes(db) {
         document.querySelectorAll('#stars button').forEach(b => {
           const n = +b.dataset.v;
           b.style.background = n <= v ? 'var(--accent)' : 'var(--bg3)';
-          b.style.color = n <= v ? '#fff' : 'var(--text)';
+          b.style.color = n <= v ? 'var(--bg2)' : 'var(--text)';
           b.style.borderColor = n <= v ? 'var(--accent)' : 'var(--border)';
         });
       }

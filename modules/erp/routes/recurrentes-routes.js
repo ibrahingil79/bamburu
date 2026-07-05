@@ -32,7 +32,7 @@ export function createRecurrentesRoutes(db) {
       const est = importeEstimado(db, o.template_id);
       const emitir = puedeEmitir
         ? `<form method="post" action="/admin/recurrentes/borrador/${o.id}/emitir" style="display:inline"><input type="hidden" name="_csrf" value="${escHtml(csrf)}"><button class="btn" type="submit">Emitir factura</button></form>`
-        : `<span style="color:#92400e;font-size:12px">Necesita permiso de emisión</span>`;
+        : `<span style="color:var(--warn);font-size:12px">Necesita permiso de emisión</span>`;
       const omitir = puedeGestionar ? `<form method="post" action="/admin/recurrentes/borrador/${o.id}/omitir" style="display:inline;margin-left:.3rem"><input type="hidden" name="_csrf" value="${escHtml(csrf)}"><button class="btn btn-ghost" type="submit">Omitir</button></form>` : '';
       return `<tr><td>${escHtml(o.due_date)}</td><td>${escHtml(o.document_name)} · ${escHtml(o.client_name)}</td>
         <td style="text-align:right">${money(sym, est.total)}</td><td>${emitir}${omitir}</td></tr>`;
@@ -44,7 +44,7 @@ export function createRecurrentesRoutes(db) {
       const est = importeEstimado(db, t.id);
       const toggle = puedeGestionar ? `<form method="post" action="/admin/recurrentes/${t.id}/${t.status === 'activa' ? 'pausar' : 'activar'}" style="display:inline"><input type="hidden" name="_csrf" value="${escHtml(csrf)}"><button class="btn btn-ghost" type="submit">${t.status === 'activa' ? 'Pausar' : 'Activar'}</button></form>` : '';
       return `<tr><td>${escHtml(cli)}</td><td>${escHtml(cadLabel(t.interval_months))}</td><td>${escHtml(t.start_date)}${t.end_date ? ' → ' + escHtml(t.end_date) : (t.max_occurrences ? ` (${t.max_occurrences}x)` : '')}</td>
-        <td style="text-align:right">${money(sym, est.total)}</td><td>${t.status === 'activa' ? '<span style="color:#15803d">Activa</span>' : '<span style="color:#92400e">Pausada</span>'}</td>
+        <td style="text-align:right">${money(sym, est.total)}</td><td>${t.status === 'activa' ? '<span style="color:var(--ok)">Activa</span>' : '<span style="color:var(--warn)">Pausada</span>'}</td>
         <td style="font-size:12px;color:var(--text2)">${escHtml(prox)}</td><td>${toggle}</td></tr>`;
     }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text2)">Sin plantillas. Crea la primera.</td></tr>';
 

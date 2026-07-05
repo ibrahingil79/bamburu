@@ -8,16 +8,16 @@ import { escHtml } from '../../../core/escape.js';
 import { enviarRegistro, getEnvio, certStatus, ESTADO } from '../verifactu-envio.js';
 
 const ESTADO_LABEL = {
-  [ESTADO.PENDIENTE]:  ['Pendiente', '#6b7280'],
-  [ESTADO.BLOQUEADO]:  ['Bloqueado (datos)', '#b45309'],
-  [ESTADO.CORRECTO]:   ['Aceptado', '#15803d'],
-  [ESTADO.CON_ERRORES]:['Aceptado con errores', '#b45309'],
-  [ESTADO.INCORRECTO]: ['Rechazado', '#b91c1c'],
-  [ESTADO.ERROR_COM]:  ['Error de comunicación', '#b91c1c'],
+  [ESTADO.PENDIENTE]:  ['Pendiente', 'var(--text2)'],
+  [ESTADO.BLOQUEADO]:  ['Bloqueado (datos)', 'var(--warn)'],
+  [ESTADO.CORRECTO]:   ['Aceptado', 'var(--ok)'],
+  [ESTADO.CON_ERRORES]:['Aceptado con errores', 'var(--warn)'],
+  [ESTADO.INCORRECTO]: ['Rechazado', 'var(--danger)'],
+  [ESTADO.ERROR_COM]:  ['Error de comunicación', 'var(--danger)'],
 };
 
 function estadoBadge(estado) {
-  const [label, color] = ESTADO_LABEL[estado] || [estado || 'Pendiente', '#6b7280'];
+  const [label, color] = ESTADO_LABEL[estado] || [estado || 'Pendiente', 'var(--text2)'];
   return `<span style="color:${color};font-weight:600">${escHtml(label)}</span>`;
 }
 
@@ -36,8 +36,8 @@ export function createVerifactuEnvioRoutes(db) {
        ORDER BY r.id DESC`).all();
     const csrf = c.get('session')?.csrfToken || '';
     const certAviso = cs.present
-      ? `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid #15803d;background:#f0fdf4;font-size:12px;color:#166534">Certificado configurado: el envío real al entorno de pruebas de la AEAT está disponible.</div>`
-      : `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid #d97706;background:#fffbeb;font-size:12px;color:#92400e"><b>Falta el certificado FNMT.</b> ${escHtml(cs.reason)} Hasta configurarlo, "Enviar" avisará sin romper (el motor está probado contra simulador).</div>`;
+      ? `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid var(--ok);background:var(--ok-s);font-size:12px;color:var(--ok)">Certificado configurado: el envío real al entorno de pruebas de la AEAT está disponible.</div>`
+      : `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid var(--warn);background:var(--warn-s);font-size:12px;color:var(--warn)"><b>Falta el certificado FNMT.</b> ${escHtml(cs.reason)} Hasta configurarlo, "Enviar" avisará sin romper (el motor está probado contra simulador).</div>`;
     const rows = registros.map(r => {
       const detalle = r.codigo_error ? `${escHtml(r.codigo_error)} · ${escHtml(r.descripcion_error || '')}` : escHtml(r.aviso || r.csv || '');
       const puede = r.estado !== ESTADO.CORRECTO && r.estado !== ESTADO.CON_ERRORES;

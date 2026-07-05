@@ -133,7 +133,7 @@ export function createSettingsRoutes(db, cfg = {}) {
 .sb-topbar-r{margin-left:auto;display:flex;align-items:center;gap:8px}
 .sb-view-btn{background:none;border:1px solid var(--border);color:var(--text2);padding:6px 14px;border-radius:7px;font-size:12px;font-weight:500;cursor:pointer;text-decoration:none;font-family:inherit;transition:all .15s}
 .sb-view-btn:hover{border-color:var(--border2);color:var(--text)}
-.sb-publish-btn{background:var(--teal);color:#fff;border:none;padding:7px 20px;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:opacity .15s}
+.sb-publish-btn{background:var(--teal);color:var(--bg2);border:none;padding:7px 20px;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:opacity .15s}
 .sb-publish-btn:hover{opacity:.85}
 .sb-body{display:flex;flex:1;overflow:hidden}
 .sb-left{width:400px;min-width:380px;display:flex;flex-direction:column;border-right:1px solid var(--border);background:var(--bg2);overflow:hidden}
@@ -143,27 +143,27 @@ export function createSettingsRoutes(db, cfg = {}) {
 .sb-tab:hover:not(.active){color:var(--text2)}
 .sb-panel{flex:1;overflow-y:auto;display:none;flex-direction:column;min-height:0}
 .sb-panel.active{display:flex}
-.sb-right{flex:1;display:flex;flex-direction:column;background:#FFFFFF}
+.sb-right{flex:1;display:flex;flex-direction:column;background:var(--bg2)}
 .sb-preview-bar{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--border);background:var(--bg3);flex-shrink:0}
 .sb-dev-btns{display:flex;gap:3px}
 .sb-dev-btn{display:flex;align-items:center;gap:4px;background:none;border:1px solid transparent;color:var(--text3);padding:4px 10px;border-radius:5px;font-size:11px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .15s}
 .sb-dev-btn.active{background:rgba(58,65,80,.12);border-color:var(--teal);color:var(--teal)}
 .sb-iframe-wrap{flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;padding:12px}
-#sbIframe{border:none;background:#fff;box-shadow:0 8px 40px rgba(0,0,0,.5);transition:all .3s}
+#sbIframe{border:none;background:var(--bg2);box-shadow:0 8px 40px rgba(0,0,0,.5);transition:all .3s}
 #sbIframe.desktop{width:100%;height:100%;border-radius:3px}
 #sbIframe.mobile{width:375px;height:667px;border:10px solid var(--bg3);border-radius:32px}
 /* DISA chat */
 .sb-chat-msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;min-height:0}
 .sb-bubble{max-width:85%;padding:9px 13px;border-radius:12px;font-size:13px;line-height:1.55;word-break:break-word}
-.sb-bubble.user{background:linear-gradient(135deg,var(--accent),var(--accent-d));color:#fff;align-self:flex-end;border-radius:12px 12px 3px 12px}
-.sb-bubble.assistant{background:#FFFFFF;border:1px solid var(--border);color:var(--text);align-self:flex-start;border-radius:12px 12px 12px 3px}
+.sb-bubble.user{background:linear-gradient(135deg,var(--accent),var(--accent-d));color:var(--bg2);align-self:flex-end;border-radius:12px 12px 3px 12px}
+.sb-bubble.assistant{background:var(--bg2);border:1px solid var(--border);color:var(--text);align-self:flex-start;border-radius:12px 12px 12px 3px}
 .sb-style-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-self:flex-start}
 .sb-style-chip{background:rgba(58,65,80,0.1);border:1px solid rgba(58,65,80,0.3);color:var(--accent);padding:5px 14px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s}
 .sb-style-chip:hover{background:rgba(58,65,80,.22)}
 .sb-chat-foot{flex-shrink:0;padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:7px}
-#sbChatIn{flex:1;background:#F3F4F6;border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;height:36px}
+#sbChatIn{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;height:36px}
 #sbChatIn:focus{border-color:var(--teal)}
-.sb-send-btn{width:36px;height:36px;background:var(--teal);border:none;border-radius:8px;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sb-send-btn{width:36px;height:36px;background:var(--teal);border:none;border-radius:8px;color:var(--bg2);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .sb-typing{display:flex;gap:4px;padding:6px 4px;align-self:flex-start}
 .sb-typing span{width:6px;height:6px;border-radius:50%;background:var(--text2);animation:sbdot 1.2s infinite}
 .sb-typing span:nth-child(2){animation-delay:.2s}
@@ -171,10 +171,10 @@ export function createSettingsRoutes(db, cfg = {}) {
 @keyframes sbdot{0%,60%,100%{opacity:.25;transform:scale(.8)}30%{opacity:1;transform:scale(1.1)}}
 /* Templates */
 .sb-tpl-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px}
-.sb-tpl-card{background:#F3F4F6;border:1px solid var(--border);border-radius:10px;overflow:hidden;cursor:pointer;transition:all .15s;position:relative}
+.sb-tpl-card{background:var(--bg3);border:1px solid var(--border);border-radius:10px;overflow:hidden;cursor:pointer;transition:all .15s;position:relative}
 .sb-tpl-card:hover{border-color:var(--teal);background:rgba(58,65,80,.04)}
 .sb-tpl-card.active{border-color:var(--teal);box-shadow:0 0 0 1px var(--teal)}
-.sb-tpl-badge{position:absolute;top:7px;right:7px;background:var(--teal);color:#fff;font-size:9px;font-weight:500;padding:2px 6px;border-radius:8px}
+.sb-tpl-badge{position:absolute;top:7px;right:7px;background:var(--teal);color:var(--bg2);font-size:9px;font-weight:500;padding:2px 6px;border-radius:8px}
 .sb-tpl-mock{width:100%;height:80px;overflow:hidden}
 .sb-tpl-info{padding:7px 9px}
 .sb-tpl-name{font-size:12px;font-weight:500;color:var(--text);margin-bottom:1px}
@@ -184,10 +184,10 @@ export function createSettingsRoutes(db, cfg = {}) {
 .sb-blk-lib{padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
 .sb-blk-label{font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:7px}
 .sb-blk-chips{display:flex;flex-wrap:wrap;gap:5px}
-.sb-blk-chip{background:#F3F4F6;border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit;transition:all .15s}
+.sb-blk-chip{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit;transition:all .15s}
 .sb-blk-chip:hover{background:rgba(58,65,80,.1);border-color:rgba(58,65,80,.3);color:var(--teal)}
 .sb-sec-list-wrap{flex:1;overflow-y:auto;padding:8px 10px;min-height:0}
-.sb-sec-row{display:flex;align-items:center;gap:7px;padding:7px 9px;background:#F3F4F6;border:1px solid var(--border);border-radius:7px;margin-bottom:4px;cursor:default;transition:all .15s;user-select:none}
+.sb-sec-row{display:flex;align-items:center;gap:7px;padding:7px 9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;margin-bottom:4px;cursor:default;transition:all .15s;user-select:none}
 .sb-sec-row:hover{background:var(--border);border-color:var(--border2)}
 .sb-sec-row.selected{border-color:var(--teal);background:rgba(58,65,80,.08)}
 .sb-handle{cursor:grab;color:var(--text3);font-size:15px;line-height:1;padding:0 1px}
@@ -388,7 +388,7 @@ function sbPreview() {
   // D1 — tienda pública apagada: /store da 404, así que NO se carga la previsualización en vivo.
   // (El constructor de tienda es D2; aquí solo se neutraliza el resto muerto que apuntaba a /store.)
   var ifr = document.getElementById('sbIframe');
-  if (ifr) { ifr.removeAttribute('src'); ifr.srcdoc = '<div style="font-family:system-ui;padding:2rem;color:#64748b">Previsualización no disponible: la tienda pública está desactivada (D1).</div>'; }
+  if (ifr) { ifr.removeAttribute('src'); ifr.srcdoc = '<div style="font-family:system-ui;padding:2rem;color:var(--text2)">Previsualización no disponible: la tienda pública está desactivada (D1).</div>'; }
 }
 function sbTrigger() { clearTimeout(sbPrevTimer); sbPrevTimer = setTimeout(sbPreview, 400); }
 function sbDev(d, btn) {

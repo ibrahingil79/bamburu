@@ -274,43 +274,43 @@ function docParties(db, a) {
 function albaranDocumentBodyHtml(a, items, emisor, cliente, sym) {
   const rows = items.map(i => `
     <tr>
-      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9">${esc(i.description)}${i.sku ? ` <span style="color:#64748b;font-size:11px">[${esc(i.sku)}]</span>` : ''}${(i.product_type && i.product_type !== 'physical') ? ' <span style="color:#64748b;font-size:11px">(no mueve stock)</span>' : ''}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right">${i.quantity}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid var(--bg3)">${esc(i.description)}${i.sku ? ` <span style="color:var(--text2);font-size:11px">[${esc(i.sku)}]</span>` : ''}${(i.product_type && i.product_type !== 'physical') ? ' <span style="color:var(--text2);font-size:11px">(no mueve stock)</span>' : ''}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${i.quantity}</td>
     </tr>`).join('');
   return `
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px">
   <div>
     <h1 style="font-size:22px;font-weight:700;margin:0 0 4px">Albarán de entrega</h1>
-    <div style="color:#64748b;font-size:12px">${a.delivery_number ? esc(a.delivery_number) : 'Sin número'}</div>
+    <div style="color:var(--text2);font-size:12px">${a.delivery_number ? esc(a.delivery_number) : 'Sin número'}</div>
   </div>
-  <div style="text-align:right;color:#64748b;font-size:12px">
-    <div>Fecha: <strong style="color:#1e293b">${esc(a.date)}</strong></div>
-    ${a.order_number ? `<div>Pedido: <strong style="color:#1e293b">${esc(a.order_number)}</strong></div>` : ''}
+  <div style="text-align:right;color:var(--text2);font-size:12px">
+    <div>Fecha: <strong style="color:var(--accent-d)">${esc(a.date)}</strong></div>
+    ${a.order_number ? `<div>Pedido: <strong style="color:var(--accent-d)">${esc(a.order_number)}</strong></div>` : ''}
   </div>
 </div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:24px">
   <div>
-    <div style="font-size:11px;text-transform:uppercase;color:#64748b;font-weight:600;margin-bottom:4px">Emisor</div>
+    <div style="font-size:11px;text-transform:uppercase;color:var(--text2);font-weight:600;margin-bottom:4px">Emisor</div>
     <div><strong>${esc(emisor.name || '')}</strong></div>
     ${emisor.fiscal_id ? `<div>${esc(emisor.fiscal_id)}</div>` : ''}
-    ${emisor.address ? `<div style="color:#64748b">${esc(emisor.address)}</div>` : ''}
+    ${emisor.address ? `<div style="color:var(--text2)">${esc(emisor.address)}</div>` : ''}
   </div>
   <div>
-    <div style="font-size:11px;text-transform:uppercase;color:#64748b;font-weight:600;margin-bottom:4px">Entregar a</div>
+    <div style="font-size:11px;text-transform:uppercase;color:var(--text2);font-weight:600;margin-bottom:4px">Entregar a</div>
     <div><strong>${esc(cliente.name || '')}</strong></div>
     ${cliente.fiscal_id ? `<div>${esc(cliente.fiscal_id)}</div>` : ''}
-    ${cliente.address ? `<div style="color:#64748b">${esc(cliente.address)}</div>` : ''}
+    ${cliente.address ? `<div style="color:var(--text2)">${esc(cliente.address)}</div>` : ''}
   </div>
 </div>
 <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
   <thead><tr>
-    <th style="background:#F5F6F8;padding:8px 12px;text-align:left;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">Concepto entregado</th>
-    <th style="background:#F5F6F8;padding:8px 12px;text-align:right;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">Cantidad</th>
+    <th style="background:var(--bg);padding:8px 12px;text-align:left;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">Concepto entregado</th>
+    <th style="background:var(--bg);padding:8px 12px;text-align:right;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">Cantidad</th>
   </tr></thead>
   <tbody>${rows}</tbody>
 </table>
-${a.notes ? `<div style="margin-top:16px;color:#64748b">${esc(a.notes)}</div>` : ''}
-<div style="margin-top:8px;color:#94a3b8;font-size:11px">Documento de ENTREGA (no es factura). Importe a facturar aparte.</div>`;
+${a.notes ? `<div style="margin-top:16px;color:var(--text2)">${esc(a.notes)}</div>` : ''}
+<div style="margin-top:8px;color:var(--text3);font-size:11px">Documento de ENTREGA (no es factura). Importe a facturar aparte.</div>`;
 }
 
 // ── Rutas ────────────────────────────────────────────────────────────────────
@@ -394,10 +394,10 @@ export function createAlbaranRoutes(db) {
       </div>
       <div class="card"><div class="table-wrap"><table>
         <thead><tr><th>Número</th><th>Cliente</th><th>Fecha</th><th>Estado</th><th></th></tr></thead>
-        <tbody>${total === 0 ? '<tr><td colspan="5" style="text-align:center;padding:2rem;color:#9097A1">' + (qstr || estado ? 'No se encontraron albaranes' : 'Sin albaranes. Entrega un pedido o crea uno suelto.') + '</td></tr>' : rowsHtml}</tbody>
+        <tbody>${total === 0 ? '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text3)">' + (qstr || estado ? 'No se encontraron albaranes' : 'Sin albaranes. Entrega un pedido o crea uno suelto.') + '</td></tr>' : rowsHtml}</tbody>
       </table></div></div>
       ${total > 0 ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem;flex-wrap:wrap;gap:.5rem">
-        <span style="color:#9097A1;font-size:.85rem">Página ${page} de ${totalPages} · ${total} albarán${total === 1 ? '' : 'es'}</span>
+        <span style="color:var(--text3);font-size:.85rem">Página ${page} de ${totalPages} · ${total} albarán${total === 1 ? '' : 'es'}</span>
         <div style="display:flex;gap:.5rem">
           ${page > 1 ? `<a class="btn btn-secondary btn-sm" href="?${buildQs(page - 1)}">← Anterior</a>` : ''}
           ${page < totalPages ? `<a class="btn btn-secondary btn-sm" href="?${buildQs(page + 1)}">Siguiente →</a>` : ''}
@@ -463,7 +463,7 @@ export function createAlbaranRoutes(db) {
 
     // Albarán SUELTO
     const clients = db.prepare("SELECT id, name, fiscal_id FROM clients ORDER BY name").all();
-    if (!clients.length) return c.html(adminLayout('Nuevo albarán', `<div class="ph"><h2>Nuevo albarán</h2><a href="/admin/albaranes" class="btn btn-secondary">Volver</a></div><div class="card card-body" style="text-align:center;padding:2rem;color:#9097A1">No hay clientes. <a href="/admin/clients">Crea uno primero.</a></div>`, 'albaranes', csrfToken, c));
+    if (!clients.length) return c.html(adminLayout('Nuevo albarán', `<div class="ph"><h2>Nuevo albarán</h2><a href="/admin/albaranes" class="btn btn-secondary">Volver</a></div><div class="card card-body" style="text-align:center;padding:2rem;color:var(--text3)">No hay clientes. <a href="/admin/clients">Crea uno primero.</a></div>`, 'albaranes', csrfToken, c));
     const warehouses = activeWarehouses(db);
     const defWh = (warehouses.find(w => w.is_default) || warehouses[0] || {}).id || '';
     const clientOpts = clients.map(cl => '<option value="' + cl.id + '">' + esc(cl.name) + (cl.fiscal_id ? ' — ' + esc(cl.fiscal_id) : '') + '</option>').join('');
@@ -549,8 +549,8 @@ export function createAlbaranRoutes(db) {
 
     let lifecycle = '';
     if (a.status === 'anulado') lifecycle += `<div class="alert alert-err" style="margin-bottom:18px"><strong>Albarán anulado.</strong> Motivo: ${esc(a.anulada_motivo || '')}. El stock que salió se revirtió${a.order_id ? ' y esas unidades vuelven a reservarse en el pedido' : ''}.</div>`;
-    if (a.order_id && a.order_number) lifecycle += `<div class="alert" style="margin-bottom:18px;background:#e0f2fe;color:#075985;border:1px solid #bae6fd">Entrega del pedido <a href="/admin/pedidos/${a.order_id}" style="color:inherit;font-weight:600">${esc(a.order_number)}</a>.</div>`;
-    if (invoice) lifecycle += `<div class="alert" style="margin-bottom:18px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0">Facturado en <a href="/admin/invoices/${invoice.id}" style="color:inherit;font-weight:600">${esc(invoice.invoice_number)}</a>.</div>`;
+    if (a.order_id && a.order_number) lifecycle += `<div class="alert" style="margin-bottom:18px;background:var(--info-s);color:var(--info);border:1px solid var(--info)">Entrega del pedido <a href="/admin/pedidos/${a.order_id}" style="color:inherit;font-weight:600">${esc(a.order_number)}</a>.</div>`;
+    if (invoice) lifecycle += `<div class="alert" style="margin-bottom:18px;background:var(--ok-s);color:var(--ok);border:1px solid var(--ok-s)">Facturado en <a href="/admin/invoices/${invoice.id}" style="color:inherit;font-weight:600">${esc(invoice.invoice_number)}</a>.</div>`;
 
     const paper = `${lifecycle}${albaranDocumentBodyHtml(a, a.items, emisor, cliente, sym)}`;
     const [lbl, badge] = a.status === 'anulado' ? ['Anulado', 'b-red'] : ['Confirmado', 'b-green'];

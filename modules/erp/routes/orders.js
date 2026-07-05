@@ -344,10 +344,10 @@ export function createOrderRoutes(db, cfg = {}) {
           '<div class="card-head"><h3>Resumen financiero</h3></div>'+
           '<div class="card-body">'+
           '<div style="display:flex;justify-content:space-between;margin-bottom:.4rem"><span style="color:var(--muted)">Subtotal</span><span>${sym}'+Number(order.subtotal||0).toFixed(2)+'</span></div>'+
-          (order.discount_amount>0?'<div style="display:flex;justify-content:space-between;margin-bottom:.4rem"><span style="color:#2E7D55">Descuento</span><span style="color:#2E7D55">-${sym}'+Number(order.discount_amount).toFixed(2)+'</span></div>':'')+
+          (order.discount_amount>0?'<div style="display:flex;justify-content:space-between;margin-bottom:.4rem"><span style="color:var(--ok)">Descuento</span><span style="color:var(--ok)">-${sym}'+Number(order.discount_amount).toFixed(2)+'</span></div>':'')+
           (order.shipping_cost>0?'<div style="display:flex;justify-content:space-between;margin-bottom:.4rem"><span style="color:var(--muted)">Envío</span><span>${sym}'+Number(order.shipping_cost).toFixed(2)+'</span></div>':'')+
           '<div style="display:flex;justify-content:space-between;margin-bottom:.4rem"><span style="color:var(--muted)">IVA</span><span>${sym}'+Number(order.tax_amount||0).toFixed(2)+'</span></div>'+
-          '<hr style="border:none;border-top:1px solid #ECEEF1;margin:.5rem 0">'+
+          '<hr style="border:none;border-top:1px solid var(--border);margin:.5rem 0">'+
           '<div style="display:flex;justify-content:space-between;font-weight:500;font-size:1.1rem"><span>Total</span><span>${sym}'+Number(order.total||0).toFixed(2)+'</span></div>'+
           '</div></div></div>'+
 
@@ -360,7 +360,7 @@ export function createOrderRoutes(db, cfg = {}) {
           '<div class="card">'+
           '<div class="card-head"><h3>Historial de estados</h3></div>'+
           '<div class="card-body">'+
-          history.map(h=>'<div style="display:flex;gap:.75rem;padding:.5rem 0;border-bottom:1px solid #ECEEF1">'+
+          history.map(h=>'<div style="display:flex;gap:.75rem;padding:.5rem 0;border-bottom:1px solid var(--border)">'+
           '<span class="badge '+(sb[h.status]||'b-gray')+'">'+h.status+'</span>'+
           '<span style="font-size:.82rem;color:var(--muted)">'+(h.comment||'')+'</span>'+
           '<span style="margin-left:auto;font-size:.75rem;color:var(--muted)">'+(h.created_at?.split(' ')[0]||'-')+'</span>'+
@@ -453,19 +453,19 @@ export function createOrderRoutes(db, cfg = {}) {
       return c.html(`<!DOCTYPE html>
 <html lang="es"><head><meta charset="UTF-8"><title>Factura ${escHtml(order.order_number)}</title>
 <style>
-  body{font-family:system-ui,sans-serif;max-width:700px;margin:2rem auto;padding:1rem;color:#1A1D21}
-  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2rem;padding-bottom:1rem;border-bottom:2px solid #334155}
-  .company{font-size:.85rem;color:#6B7280}.company h2{color:#1A1D21;font-size:1.3rem;margin:0 0 .25rem}
+  body{font-family:system-ui,sans-serif;max-width:700px;margin:2rem auto;padding:1rem;color:var(--text)}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2rem;padding-bottom:1rem;border-bottom:2px solid var(--accent)}
+  .company{font-size:.85rem;color:var(--text2)}.company h2{color:var(--text);font-size:1.3rem;margin:0 0 .25rem}
   .invoice-info{text-align:right;font-size:.85rem}
-  .invoice-info h1{color:#334155;font-size:1.5rem;margin:0}
+  .invoice-info h1{color:var(--accent);font-size:1.5rem;margin:0}
   .parties{display:grid;grid-template-columns:1fr 1fr;gap:2rem;margin-bottom:2rem}
-  .party h4{margin:0 0 .5rem;font-size:.8rem;text-transform:uppercase;color:#6B7280}
+  .party h4{margin:0 0 .5rem;font-size:.8rem;text-transform:uppercase;color:var(--text2)}
   table{width:100%;border-collapse:collapse;margin-bottom:1.5rem}
-  th{background:#F1F3F5;padding:.6rem 1rem;text-align:left;font-size:.8rem;font-weight:500;text-transform:uppercase;color:#6B7280;border-bottom:2px solid #ECEEF1}
-  td{padding:.6rem 1rem;border-bottom:1px solid #ECEEF1}
+  th{background:var(--bg3);padding:.6rem 1rem;text-align:left;font-size:.8rem;font-weight:500;text-transform:uppercase;color:var(--text2);border-bottom:2px solid var(--border)}
+  td{padding:.6rem 1rem;border-bottom:1px solid var(--border)}
   .totals{margin-left:auto;width:280px}
   .total-row{display:flex;justify-content:space-between;padding:.3rem 0;font-size:.9rem}
-  .total-final{font-size:1.1rem;font-weight:500;border-top:2px solid #334155;padding-top:.5rem;color:#334155}
+  .total-final{font-size:1.1rem;font-weight:500;border-top:2px solid var(--accent);padding-top:.5rem;color:var(--accent)}
   @media print{button{display:none}}
 </style></head>
 <body>
@@ -484,12 +484,12 @@ export function createOrderRoutes(db, cfg = {}) {
   </table>
   <div class="totals">
     <div class="total-row"><span>Subtotal</span><span>${sym}${Number(order.subtotal||0).toFixed(2)}</span></div>
-    ${order.discount_amount>0?'<div class="total-row" style="color:#2E7D55"><span>Descuento</span><span>-${sym}'+Number(order.discount_amount).toFixed(2)+'</span></div>':''}
+    ${order.discount_amount>0?'<div class="total-row" style="color:var(--ok)"><span>Descuento</span><span>-${sym}'+Number(order.discount_amount).toFixed(2)+'</span></div>':''}
     ${order.shipping_cost>0?'<div class="total-row"><span>Envío</span><span>${sym}'+Number(order.shipping_cost).toFixed(2)+'</span></div>':''}
     <div class="total-row"><span>IVA</span><span>${sym}${Number(order.tax_amount||0).toFixed(2)}</span></div>
     <div class="total-row total-final"><span>TOTAL</span><span>${sym}${Number(order.total||0).toFixed(2)}</span></div>
   </div>
-  <br><button onclick="window.print()" style="background:#334155;color:#fff;border:none;padding:.6rem 1.5rem;border-radius:6px;cursor:pointer;font-weight:500">Imprimir / PDF</button>
+  <br><button onclick="window.print()" style="background:var(--accent);color:var(--bg2);border:none;padding:.6rem 1.5rem;border-radius:6px;cursor:pointer;font-weight:500">Imprimir / PDF</button>
 </body></html>`);
     } catch(e) { return c.html('<p>Error: '+e.message+'</p>'); }
   });
@@ -534,7 +534,7 @@ export function createOrderRoutes(db, cfg = {}) {
                 <select class="form-control" id="posClient"><option value="">Anónimo</option></select>
               </div>
               ${whSelectorHtml}
-              <div id="cartItems" style="min-height:80px;border:1px dashed #ECEEF1;border-radius:6px;padding:.75rem;margin-bottom:1rem"></div>
+              <div id="cartItems" style="min-height:80px;border:1px dashed var(--border);border-radius:6px;padding:.75rem;margin-bottom:1rem"></div>
               <div style="margin-bottom:1rem">
                 <label class="form-label">Cupón de descuento</label>
                 <div style="display:flex;gap:.5rem">
@@ -547,9 +547,9 @@ export function createOrderRoutes(db, cfg = {}) {
                 <label class="form-label">Método de envío</label>
                 <select class="form-control" id="shippingMethod"><option value="">Sin envío</option></select>
               </div>
-              <div style="background:#F1F3F5;padding:1rem;border-radius:8px;margin-bottom:1rem">
+              <div style="background:var(--bg3);padding:1rem;border-radius:8px;margin-bottom:1rem">
                 <div style="display:flex;justify-content:space-between;margin-bottom:.3rem;font-size:.85rem"><span>Subtotal</span><span id="posSubtotal">${sym}0.00</span></div>
-                <div style="display:flex;justify-content:space-between;margin-bottom:.3rem;font-size:.85rem;color:#2E7D55" id="discountRow" style="display:none"><span>Descuento</span><span id="posDiscount">-${sym}0.00</span></div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:.3rem;font-size:.85rem;color:var(--ok)" id="discountRow" style="display:none"><span>Descuento</span><span id="posDiscount">-${sym}0.00</span></div>
                 <div style="display:flex;justify-content:space-between;font-size:1rem;font-weight:500"><span>Total estimado</span><span id="posTotal">${sym}0.00</span></div>
               </div>
               <button class="btn btn-primary" style="width:100%" onclick="checkout()">Cobrar</button>
@@ -575,10 +575,10 @@ export function createOrderRoutes(db, cfg = {}) {
       </div>
 
       <div id="variantModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
-        <div style="background:#fff;border-radius:14px;padding:24px;max-width:400px;width:90%">
+        <div style="background:var(--bg2);border-radius:14px;padding:24px;max-width:400px;width:90%">
           <h3 id="variantModalTitle" style="margin-bottom:16px;font-size:16px;font-weight:500"></h3>
           <div id="variantOptionList" style="display:flex;flex-direction:column;gap:8px"></div>
-          <button onclick="closeVariantModal()" style="margin-top:16px;width:100%;padding:10px;border:1px solid #ECEEF1;border-radius:8px;background:#fff;cursor:pointer">Cancelar</button>
+          <button onclick="closeVariantModal()" style="margin-top:16px;width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);cursor:pointer">Cancelar</button>
         </div>
       </div>
 
@@ -625,7 +625,7 @@ export function createOrderRoutes(db, cfg = {}) {
         // Disponibles = stock > 0 EN EL ALMACÉN elegido (variantes: global).
         const base=prods.filter(p=>whStockOf(p)>0);
         const filtered=q?base.filter(p=>p.name.toLowerCase().includes(q)):base;
-        document.getElementById('prodList').innerHTML=filtered.length?filtered.map(p=>'<div style="background:#F1F3F5;border:1px solid #ECEEF1;border-radius:8px;padding:.75rem;cursor:pointer" onclick="addToCart('+p.id+')">'+(p.image_url?'<img src="'+p.image_url+'" style="width:100%;height:80px;object-fit:cover;border-radius:4px;margin-bottom:.4rem">':'<div style="height:60px;display:flex;align-items:center;justify-content:center;font-size:1.5rem"></div>')+'<div style="font-size:.8rem;font-weight:500">'+p.name+'</div><div style="color:#334155;font-size:.85rem;font-weight:500">${sym}'+p.price.toFixed(2)+'</div><div style="font-size:.72rem;color:var(--muted)">Stock: '+whStockOf(p)+'</div></div>').join(''):'<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:1.5rem">Sin productos con stock en este almacén</div>';
+        document.getElementById('prodList').innerHTML=filtered.length?filtered.map(p=>'<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:.75rem;cursor:pointer" onclick="addToCart('+p.id+')">'+(p.image_url?'<img src="'+p.image_url+'" style="width:100%;height:80px;object-fit:cover;border-radius:4px;margin-bottom:.4rem">':'<div style="height:60px;display:flex;align-items:center;justify-content:center;font-size:1.5rem"></div>')+'<div style="font-size:.8rem;font-weight:500">'+p.name+'</div><div style="color:var(--accent);font-size:.85rem;font-weight:500">${sym}'+p.price.toFixed(2)+'</div><div style="font-size:.72rem;color:var(--muted)">Stock: '+whStockOf(p)+'</div></div>').join(''):'<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:1.5rem">Sin productos con stock en este almacén</div>';
       }
       function addToCart(id){
         const p=prods.find(x=>x.id===id);if(!p)return;
@@ -643,9 +643,9 @@ export function createOrderRoutes(db, cfg = {}) {
         if(!cart.length){el.innerHTML='<p style="color:var(--muted);font-size:.85rem;text-align:center">Carrito vacío</p>';updateTotals();return;}
         el.innerHTML=cart.map((x,i)=>'<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;font-size:.85rem">'+
           '<span style="flex:1">'+x.name+'</span>'+
-          '<input type="number" min="1" value="'+x.qty+'" style="width:55px;padding:.25rem .4rem;border:1px solid #ECEEF1;border-radius:4px;font-size:.82rem" onchange="cart['+i+'].qty=Math.max(1,+this.value);renderCart()">'+
+          '<input type="number" min="1" value="'+x.qty+'" style="width:55px;padding:.25rem .4rem;border:1px solid var(--border);border-radius:4px;font-size:.82rem" onchange="cart['+i+'].qty=Math.max(1,+this.value);renderCart()">'+
           '<span style="min-width:55px;text-align:right">${sym}'+(x.price*x.qty).toFixed(2)+'</span>'+
-          '<button onclick="cart.splice('+i+',1);renderCart()" style="background:none;border:none;color:#A32D2D;cursor:pointer;font-size:.9rem">✕</button>'+
+          '<button onclick="cart.splice('+i+',1);renderCart()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:.9rem">✕</button>'+
           '</div>').join('');
         updateTotals();
       }
@@ -662,8 +662,8 @@ export function createOrderRoutes(db, cfg = {}) {
         if(!code)return;
         const r=await fetch('/api/store/validate-coupon',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,subtotal:cart.reduce((a,b)=>a+(b.price*b.qty),0)})});
         const d=await r.json();
-        if(d.error){document.getElementById('couponMsg').innerHTML='<span style="color:#A32D2D">'+d.error+'</span>';couponApplied=null;}
-        else{document.getElementById('couponMsg').innerHTML='<span style="color:#2E7D55">✓ '+d.message+'</span>';couponApplied=d.discount;}
+        if(d.error){document.getElementById('couponMsg').innerHTML='<span style="color:var(--danger)">'+d.error+'</span>';couponApplied=null;}
+        else{document.getElementById('couponMsg').innerHTML='<span style="color:var(--ok)">✓ '+d.message+'</span>';couponApplied=d.discount;}
         updateTotals();
       }
       async function checkout(){
@@ -709,7 +709,7 @@ export function createOrderRoutes(db, cfg = {}) {
           const parts=[v.option1_name&&v.option1_value?v.option1_name+': '+v.option1_value:'',v.option2_name&&v.option2_value?v.option2_name+': '+v.option2_value:'',v.name].filter(Boolean);
           const label=parts.join(' · ');
           const price=v.price!==null?v.price:p.price;
-          return '<button onclick="selectVariant('+i+')" style="padding:12px;border:1px solid #ECEEF1;border-radius:8px;background:#fff;cursor:pointer;text-align:left;width:100%"><strong>'+label+'</strong><span style="float:right;color:#334155">'+sym+price.toFixed(2)+'</span><br><small style="color:#6B7280">Stock: '+v.stock+'</small></button>';
+          return '<button onclick="selectVariant('+i+')" style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);cursor:pointer;text-align:left;width:100%"><strong>'+label+'</strong><span style="float:right;color:var(--accent)">'+sym+price.toFixed(2)+'</span><br><small style="color:var(--text2)">Stock: '+v.stock+'</small></button>';
         }).join('');
         document.getElementById('variantModal').style.display='flex';
       }
@@ -743,7 +743,7 @@ export function createOrderRoutes(db, cfg = {}) {
     const total = refunds.reduce((a, b) => a + b.amount, 0);
     const content = `
       <div class="ph"><h2>Devoluciones</h2></div>
-      <div class="kpi" style="margin-bottom:1rem;max-width:250px"><div class="kpi-label">Total reembolsado</div><div class="kpi-val" style="color:#A32D2D">${sym}${total.toFixed(2)}</div></div>
+      <div class="kpi" style="margin-bottom:1rem;max-width:250px"><div class="kpi-label">Total reembolsado</div><div class="kpi-val" style="color:var(--danger)">${sym}${total.toFixed(2)}</div></div>
       <div class="card">
         <div class="card-head"><h3>Listado de devoluciones</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="filterRefunds()"></div>
         <div class="table-wrap"><table>
@@ -877,7 +877,7 @@ export function createOrderRoutes(db, cfg = {}) {
             </select>
           </div>
 
-          <hr style="margin:1.25rem 0;border:none;border-top:1px solid #ECEEF1">
+          <hr style="margin:1.25rem 0;border:none;border-top:1px solid var(--border)">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
             <h3 style="font-size:.9rem;font-weight:500;margin:0">Productos</h3>
             <button class="btn btn-secondary btn-sm" onclick="addLine()">+ Añadir producto</button>
