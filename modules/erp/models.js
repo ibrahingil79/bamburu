@@ -1200,6 +1200,21 @@ export function runMigrations(db) {
     FOREIGN KEY (registro_id) REFERENCES verifactu_registros(id)
   )`);
 
+  // ── PORTAL DE CLIENTE · Bloque C — enlaces mágicos temporales (aditiva) ──
+  // El cliente accede por /portal/<token> (sin contraseña). El token es temporal y solo da acceso a
+  // las facturas de SU client_id. Solo lectura: el portal no toca documentos ni ledger.
+  db.exec(`CREATE TABLE IF NOT EXISTS portal_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL,
+    token TEXT NOT NULL UNIQUE,
+    expires_at INTEGER NOT NULL,
+    revoked INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_used_at DATETIME,
+    FOREIGN KEY (client_id) REFERENCES clients(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_portal_tokens_token ON portal_tokens(token);`);
+
   // ── CONCILIACIÓN BANCARIA · Pieza 1 — extracto Norma 43 + cruce de ingresos (aditiva) ──
   // bank_movements: un movimiento del extracto bancario (Cuaderno 43). El `balance` (saldo corriente)
   // NO viene por movimiento en el reg. 22: se CALCULA acumulando desde el saldo inicial (reg. 11), y

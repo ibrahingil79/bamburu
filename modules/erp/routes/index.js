@@ -39,6 +39,7 @@ import { createContabilidadRoutes } from './contabilidad-routes.js';
 import { createVerifactuEnvioRoutes } from './verifactu-envio-routes.js';
 import { createConciliacionRoutes } from './conciliacion-routes.js';
 import { createRecurrentesRoutes } from './recurrentes-routes.js';
+import { createPortalAdminRoutes } from '../../portal/admin.js';
 
 export function mountRoutes(app, db) {
   const auth = adminAuth(db);
@@ -135,6 +136,7 @@ export function mountRoutes(app, db) {
   admin.route('/verifactu', createVerifactuEnvioRoutes(db).views);
   admin.route('/conciliacion', createConciliacionRoutes(db).views);
   admin.route('/recurrentes', createRecurrentesRoutes(db).views);
+  admin.route('/portal', createPortalAdminRoutes(db).views);
   app.route('/admin', admin);
 
   // ── Protected API ──────────────────────────────────────────────

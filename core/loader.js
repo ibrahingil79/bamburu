@@ -1,6 +1,6 @@
 import { join } from 'path';
 
-const MODULE_ORDER = ['erp', 'store', 'disa'];
+const MODULE_ORDER = ['erp', 'store', 'disa', 'portal'];
 
 export async function loadModules(app, db) {
   const modulesDir = join(process.cwd(), 'modules');
