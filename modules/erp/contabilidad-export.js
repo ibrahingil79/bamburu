@@ -14,6 +14,7 @@
 // Hojas: EXPEDIDAS_INGRESOS y RECIBIDAS_GASTOS. Las columnas que la plantilla pide y Bamburu no
 // tiene se dejan VACÍAS (nunca inventadas) — ver PENDING_COLUMNS.
 import { escHtml } from '../../core/escape.js';
+import { filasPyG } from './contabilidad-pyg.js';
 
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
 const fechaES = s => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || ''); return m ? `${m[3]}/${m[2]}/${m[1]}` : ''; };
@@ -278,4 +279,28 @@ export function bienesHtml(periodo, libro, sym) {
     <table><thead><tr><th>Descripción</th><th>Documento</th><th>Proveedor</th><th>NIF</th><th>Puesta func.</th><th>V. adquisición</th><th>V. amortizable</th><th>% anual</th><th>Acum. inicio</th><th>Cuota periodo</th><th>Acum. final</th><th>Pendiente</th></tr></thead>
     <tbody>${rows}</tbody>
     <tfoot><tr class="tot"><td colspan="5" style="text-align:right">TOTALES</td><td>${m(libro.totals.adquisicion)}</td><td>${m(libro.totals.amortizable)}</td><td></td><td></td><td>${m(libro.totals.cuota)}</td><td>${m(libro.totals.acumulada)}</td><td>${m(libro.totals.pendiente)}</td></tr></tfoot></table></body></html>`;
+}
+
+// ── PIEZA 5 — Export de la CUENTA DE PÉRDIDAS Y GANANCIAS (PGC PYMES) ──
+// Una fila por partida/subtotal (Partida · Concepto · Importe). Importe con signo (los gastos
+// entran en negativo). Reutiliza filasPyG (contabilidad-pyg.js), que da la estructura formal.
+export function pygMatrix(pyg) {
+  return {
+    headers: ['Partida', 'Concepto', 'Importe'],
+    rows: filasPyG(pyg).map(([etiqueta, nombre, importe]) => [etiqueta, nombre, r2(importe)]),
+  };
+}
+
+export function pygHtml(periodo, pyg, sym) {
+  // Convención contable: importes negativos entre paréntesis.
+  const m = n => { const v = Number(n || 0); return v < 0 ? `(${sym}${Math.abs(v).toFixed(2)})` : `${sym}${v.toFixed(2)}`; };
+  const rows = filasPyG(pyg).map(([etiqueta, nombre, importe, tipo]) => tipo === 'subtotal'
+    ? `<tr class="tot"><td>${escHtml(etiqueta)}</td><td>${escHtml(nombre)}</td><td style="text-align:right">${m(importe)}</td></tr>`
+    : `<tr><td>${escHtml(etiqueta)}</td><td>${escHtml(nombre)}</td><td style="text-align:right">${m(importe)}</td></tr>`).join('');
+  const avisos = (pyg.warnings && pyg.warnings.length)
+    ? `<div class="avisos"><b>Antes de dar el resultado por bueno, revisa:</b><ul>${pyg.warnings.map(w => `<li>${escHtml(w)}</li>`).join('')}</ul></div>` : '';
+  return `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,Segoe UI,sans-serif;font-size:11px;color:#111}h1{font-size:15px;margin:0 0 2px}.sub{color:#555;margin-bottom:8px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:3px 6px}th{background:#eee}td:first-child{width:3rem}td:last-child,th:last-child{text-align:right}.tot{font-weight:700;background:#f3f4f6}.avisos{margin:8px 0;padding:5px 8px;border-left:3px solid #d97706;background:#fffbeb;color:#92400e;font-size:10px}</style></head><body>
+    <h1>Cuenta de pérdidas y ganancias</h1><div class="sub">Periodo ${escHtml(periodo)} · modelo PGC de PYMES (RD 1515/2007) · derivada del libro diario</div>
+    <table><thead><tr><th>Partida</th><th>Concepto</th><th style="text-align:right">Importe</th></tr></thead><tbody>${rows}</tbody></table>
+    ${avisos}</body></html>`;
 }

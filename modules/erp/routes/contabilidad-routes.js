@@ -9,9 +9,10 @@ import { escHtml } from '../../../core/escape.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';
 import { backfillLedger, libroVentas, libroCompras, libroDiario, libroMayor, mayorCuenta } from '../contabilidad.js';
 import { ventasAsientos, comprasAsientos, ventasMatrix, comprasMatrix, toCSV, buildXlsx, libroHtml,
-         diarioMatrix, mayorMatrix, diarioHtml, mayorHtml, bienesMatrix, bienesHtml } from '../contabilidad-export.js';
+         diarioMatrix, mayorMatrix, diarioHtml, mayorHtml, bienesMatrix, bienesHtml, pygMatrix, pygHtml } from '../contabilidad-export.js';
 import { libroBienes, createInvestmentGood, updateInvestmentGood, bajaInvestmentGood, reactivarInvestmentGood } from '../contabilidad-bienes.js';
 import { modelo303, modelo130, filas303, filas130, quarterRange } from '../contabilidad-modelos.js';
+import { cuentaPyG, filasPyG } from '../contabilidad-pyg.js';
 
 function defaultRange(db) {
   const y = (db.prepare('SELECT MAX(issue_date) m FROM invoices').get()?.m || '').slice(0, 4) || String(new Date().getFullYear());
@@ -32,6 +33,7 @@ function tabsBar(active, from, to) {
     ${tab('diario', '/admin/contabilidad/diario', 'Libro diario')}
     ${tab('mayor', '/admin/contabilidad/mayor', 'Libro mayor')}
     ${tab('bienes', '/admin/contabilidad/bienes', 'Bienes de inversión')}
+    ${tab('pyg', '/admin/contabilidad/pyg', 'Pérdidas y ganancias')}
     <a href="/admin/contabilidad/modelos" class="btn ${active === 'modelos' ? '' : 'btn-ghost'}" style="${active === 'modelos' ? '' : 'opacity:.7'}">Modelos (303/130)</a></div>`;
 }
 // Selector de ejercicio + trimestre para la pestaña Modelos (usa year/q, no from/to).
@@ -145,6 +147,16 @@ function mayorDetalle(det, sym) {
       <span style="color:var(--text2);font-size:12px">Debe ${money(sym, det.debe)} · Haber ${money(sym, det.haber)} · Saldo ${money(sym, det.saldo)}</span></div>
     <table><thead><tr><th>Fecha</th><th>Asiento</th><th>Tipo</th><th>Concepto</th><th style="text-align:right">Debe</th><th style="text-align:right">Haber</th><th style="text-align:right">Saldo acum.</th></tr></thead>
     <tbody>${body}</tbody></table></div>`;
+}
+
+// CUENTA DE PÉRDIDAS Y GANANCIAS — estructura formal PGC PYMES; subtotales resaltados; los
+// gastos entran en negativo (mostrados entre paréntesis, convención contable).
+function pygTable(pyg, sym) {
+  const m = n => { const v = Number(n || 0); return v < 0 ? `(${sym}${Math.abs(v).toFixed(2)})` : `${sym}${v.toFixed(2)}`; };
+  const body = filasPyG(pyg).map(([etiqueta, nombre, importe, tipo]) => tipo === 'subtotal'
+    ? `<tr style="font-weight:700;background:var(--bg2,#f3f4f6)"><td>${escHtml(etiqueta)}</td><td>${escHtml(nombre)}</td><td style="text-align:right;white-space:nowrap">${m(importe)}</td></tr>`
+    : `<tr><td style="color:var(--text2)">${escHtml(etiqueta)}</td><td>${escHtml(nombre)}</td><td style="text-align:right;white-space:nowrap">${m(importe)}</td></tr>`).join('');
+  return `<table><thead><tr><th style="width:3.5rem">Partida</th><th>Concepto</th><th style="text-align:right">Importe</th></tr></thead><tbody>${body}</tbody></table>`;
 }
 
 const fileResp = (buf, type, name) => new Response(buf, { headers: { 'Content-Type': type, 'Content-Disposition': `attachment; filename="${name}"` } });
@@ -344,6 +356,34 @@ export function createContabilidadRoutes(db) {
     const { from, to } = rangeOf(c, db);
     const pdf = await renderPdfFromHtml(bienesHtml(`${from} → ${to}`, libroBienes(db, from, to), symbolOf(db)));
     return fileResp(pdf, 'application/pdf', `libro-bienes-inversion-${tag(from, to)}.pdf`);
+  });
+
+  // ── PIEZA 5 — Cuenta de Pérdidas y Ganancias (estado formal PGC PYMES, SOLO LECTURA) ──
+  // Vista derivada del libro diario; misma cara y mismo gateo (invoices.read) que el resto.
+  views.get('/pyg', requirePerm('invoices.read'), c => {
+    const sym = symbolOf(db); const { from, to } = rangeOf(c, db); backfillLedger(db);
+    const pyg = cuentaPyG(db, from, to);
+    const res = pyg.resultadoEjercicio > 0 ? 'beneficio' : (pyg.resultadoEjercicio < 0 ? 'pérdida' : 'sin resultado');
+    const content = `<div class="ph"><h2>Contabilidad — Libros registro</h2></div>
+      ${tabsBar('pyg', from, to)}${periodForm('pyg', from, to)}
+      <div class="card"><div class="card-body"><h3>Cuenta de pérdidas y ganancias</h3>
+        <span style="color:var(--text2);font-size:12px">Modelo del PGC de PYMES (RD 1515/2007), derivada del libro diario (solo lectura). Los gastos figuran en negativo (entre paréntesis). Resultado del ejercicio: <b>${money(sym, pyg.resultadoEjercicio)} (${escHtml(res)})</b>.</span>
+        ${avisosBox(pyg.warnings)}</div>
+        ${pygTable(pyg, sym)}</div>`;
+    return c.html(adminLayout('Contabilidad', content, 'contabilidad', c.get('session')?.csrfToken || '', c));
+  });
+  views.get('/pyg.xlsx', requirePerm('invoices.read'), c => {
+    const { from, to } = rangeOf(c, db); backfillLedger(db);
+    return fileResp(buildXlsx([{ name: 'PERDIDAS_Y_GANANCIAS', matrix: pygMatrix(cuentaPyG(db, from, to)) }]), XLSX_MIME, `cuenta-pyg-${tag(from, to)}.xlsx`);
+  });
+  views.get('/pyg.csv', requirePerm('invoices.read'), c => {
+    const { from, to } = rangeOf(c, db); backfillLedger(db);
+    return fileResp(Buffer.from(toCSV(pygMatrix(cuentaPyG(db, from, to))), 'utf8'), 'text/csv; charset=utf-8', `cuenta-pyg-${tag(from, to)}.csv`);
+  });
+  views.get('/pyg.pdf', requirePerm('invoices.read'), async c => {
+    const { from, to } = rangeOf(c, db); backfillLedger(db);
+    const pdf = await renderPdfFromHtml(pygHtml(`${from} → ${to}`, cuentaPyG(db, from, to), symbolOf(db)));
+    return fileResp(pdf, 'application/pdf', `cuenta-pyg-${tag(from, to)}.pdf`);
   });
 
   // ── PIEZA 4 — Modelos AEAT (303 IVA y 130 IRPF), BORRADORES listos para validar ──
