@@ -16,14 +16,14 @@ export function createPortalAdminRoutes(db) {
     const clientes = db.prepare(`SELECT c.id, c.name, c.email,
         (SELECT COUNT(*) FROM portal_tokens t WHERE t.client_id=c.id AND t.revoked=0 AND t.expires_at > strftime('%s','now')) enlaces
         FROM clients c ORDER BY c.name`).all();
-    const flash = c.req.query('sent') ? `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid #15803d;background:#f0fdf4;font-size:12px;color:#166534">Enlace enviado a ${escHtml(c.req.query('sent'))}.</div>` : '';
-    const err = c.req.query('err') ? `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid #b91c1c;background:#fef2f2;font-size:12px;color:#991b1b">${escHtml(c.req.query('err'))}</div>` : '';
+    const flash = c.req.query('sent') ? `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid var(--ok);background:var(--ok-s);font-size:12px;color:var(--ok)">Enlace enviado a ${escHtml(c.req.query('sent'))}.</div>` : '';
+    const err = c.req.query('err') ? `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid var(--danger);background:var(--danger-s);font-size:12px;color:var(--danger)">${escHtml(c.req.query('err'))}</div>` : '';
     const filas = clientes.map(cl => `<tr>
       <td>${escHtml(cl.name)}</td><td>${escHtml(cl.email || '')}</td>
-      <td>${cl.enlaces ? `<span style="color:#15803d">${cl.enlaces} activo(s)</span>` : '<span style="color:var(--text2)">—</span>'}</td>
+      <td>${cl.enlaces ? `<span style="color:var(--ok)">${cl.enlaces} activo(s)</span>` : '<span style="color:var(--text2)">—</span>'}</td>
       <td>${cl.email
         ? `<form method="post" action="/admin/portal/enviar/${cl.id}" style="display:inline"><input type="hidden" name="_csrf" value="${escHtml(csrf)}"><button class="btn" type="submit">Enviar enlace</button></form>`
-        : '<span style="color:#92400e;font-size:12px">Sin email</span>'}</td></tr>`).join('')
+        : '<span style="color:var(--warn);font-size:12px">Sin email</span>'}</td></tr>`).join('')
       || '<tr><td colspan="4" style="text-align:center;color:var(--text2)">Sin clientes.</td></tr>';
     const content = `<div class="ph"><h2>Portal de cliente</h2></div>
       <div style="color:var(--text2);font-size:12px;margin-bottom:.5rem">Envía a cada cliente un enlace privado (caduca en 14 días) para que vea y descargue sus facturas y su estado de pago. El pago con tarjeta queda fuera por ahora: se muestran los datos de transferencia.</div>

@@ -164,6 +164,21 @@ se conserva (no hay recolor); las escalas `--space-*/--fs-*` quedan definidas co
 cuelga **también sin mis cambios** (estado de datos pre-existente: exige `PED-0006` prístino) → no es
 regresión. Boot limpio en cada reinicio (valida sintaxis de todos los módulos).
 
+## 5.ter RESULTADO — tanda LOGIN + PORTAL (2026-07-05)
+
+Para que login y portal (shells propios, sin `:root`) consuman **la misma** fuente sin duplicar,
+se **extrajo el bloque `:root` de `layout.js` a un export `ROOT_TOKENS`** (single source). Ahora:
+`layout.js` lo usa vía `${ROOT_TOKENS}`, y `auth.js` (login/2FA/reset) y `portal/index.js` lo
+inyectan en su `<style>`. Resultado del censo:
+- `auth.js` (login, 5 páginas): **0 hex a mano** (137+ migrados; antes 140).
+- `portal/index.js` (portal público) y `portal/admin.js`: **0 hex a mano**.
+- `portal/portal.js`: **4 hex** que se quedan → es el **HTML del email** del enlace mágico; los
+  clientes de correo no soportan `var()`/`:root`, así que el color va inline (exclusión, como canvas).
+- `printableShell` (documento PDF/email standalone) mantiene su `:root` propio: es **definición** de
+  tokens para un documento autónomo, no hardcode de vista. (Unificarlo con `ROOT_TOKENS` queda para U1b.)
+
+Regresión: `verify-portal 17/0`; login renderiza (form + `var(--accent)`, HTTP 200); boot limpio.
+
 ## 6. Nota para U2–U6 (encontrado, NO se toca aquí)
 - Estados vacíos desiguales, errores `c.text()` crudos, tablas anchas sin scroll → ya inventariado
   en `auditoria-ux.md`, es U2/U3/U5. Aquí solo estilo.

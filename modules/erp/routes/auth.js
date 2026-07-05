@@ -8,6 +8,7 @@ import { rateLimit, getClientIp } from '../../../core/rate-limit.js';
 import { recordSecurityEvent } from '../../../core/control-db.js';
 import { validate } from '../../../core/validate.js';
 import { loginSchema } from '../schemas.js';
+import { ROOT_TOKENS } from '../layout.js';
 import { destroyTenantSession, createTenantSession } from '../../../core/control-db.js';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -36,24 +37,24 @@ function totpVerifyPage(pending, error = false) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Verificar 2FA — Bamburu</title>
-  <style>
+  <style>${ROOT_TOKENS}
     *{box-sizing:border-box;margin:0;padding:0}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F6F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-    .card{width:100%;max-width:400px;padding:40px 36px;background:#FFFFFF;border:1px solid #ECEEF1;border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10)}
-    .logo{font-size:22px;font-weight:500;color:#1A1D21;letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
-    .logo span{color:#334155}
-    h1{font-size:20px;font-weight:500;color:#1A1D21;margin-bottom:6px;text-align:center}
-    .sub{font-size:14px;color:#6B7280;text-align:center;margin-bottom:28px}
-    label{display:block;font-size:12px;font-weight:500;color:#6B7280;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+    .card{width:100%;max-width:400px;padding:40px 36px;background:var(--bg2);border:1px solid var(--border);border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10)}
+    .logo{font-size:22px;font-weight:500;color:var(--text);letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
+    .logo span{color:var(--accent)}
+    h1{font-size:20px;font-weight:500;color:var(--text);margin-bottom:6px;text-align:center}
+    .sub{font-size:14px;color:var(--text2);text-align:center;margin-bottom:28px}
+    label{display:block;font-size:12px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
     .field{margin-bottom:20px}
-    input{width:100%;padding:16px;background:#FFFFFF;border:1px solid #E4E6EA;border-radius:12px;color:#1A1D21;font-size:28px;font-family:monospace;letter-spacing:0.2em;text-align:center;outline:none;transition:all 0.2s}
-    input:focus{border-color:#334155;box-shadow:0 0 0 3px rgba(58,65,80,0.15)}
-    .btn{width:100%;padding:14px;background:#334155;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:500;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
+    input{width:100%;padding:16px;background:var(--bg2);border:1px solid var(--border2);border-radius:12px;color:var(--text);font-size:28px;font-family:monospace;letter-spacing:0.2em;text-align:center;outline:none;transition:all 0.2s}
+    input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(58,65,80,0.15)}
+    .btn{width:100%;padding:14px;background:var(--accent);color:var(--bg2);border:none;border-radius:12px;font-size:15px;font-weight:500;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
     .btn:hover{transform:translateY(-1px);box-shadow:0 8px 30px rgba(58,65,80,0.35)}
-    .error{background:#FEE2E2;border:1px solid rgba(166,69,63,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:#A32D2D;margin-bottom:20px}
-    .back{text-align:center;font-size:13px;color:#6B7280;margin-top:16px}
-    .back a{color:#6B7280;text-decoration:none}
-    .back a:hover{color:#334155}
+    .error{background:var(--danger-s);border:1px solid rgba(166,69,63,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:var(--danger);margin-bottom:20px}
+    .back{text-align:center;font-size:13px;color:var(--text2);margin-top:16px}
+    .back a{color:var(--text2);text-decoration:none}
+    .back a:hover{color:var(--accent)}
   </style>
 </head>
 <body>
@@ -111,7 +112,7 @@ export function createAuthRoutes(db) {
     const err = c.req.query('error');
     const attempts = Number(c.req.query('attempts') || 0);
     const warnBlock = attempts >= 3
-      ? '<p style="font-size:12px;color:#DC2626;margin-top:6px">Después de 5 intentos fallidos tu acceso se bloqueará temporalmente.</p>'
+      ? '<p style="font-size:12px;color:var(--danger);margin-top:6px">Después de 5 intentos fallidos tu acceso se bloqueará temporalmente.</p>'
       : '';
     return c.html(`<!DOCTYPE html>
 <html lang="es">
@@ -119,25 +120,25 @@ export function createAuthRoutes(db) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Iniciar sesión — Bamburu</title>
-  <style>
+  <style>${ROOT_TOKENS}
     *{box-sizing:border-box;margin:0;padding:0}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F6F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-    .card{width:100%;max-width:400px;padding:40px 36px;background:#FFFFFF;border:1px solid #ECEEF1;border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10)}
-    .logo{font-size:22px;font-weight:500;color:#1A1D21;letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
-    .logo span{color:#334155}
-    h1{font-size:20px;font-weight:500;color:#1A1D21;margin-bottom:6px;text-align:center}
-    .sub{font-size:14px;color:#6B7280;text-align:center;margin-bottom:28px}
-    label{display:block;font-size:12px;font-weight:500;color:#6B7280;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+    .card{width:100%;max-width:400px;padding:40px 36px;background:var(--bg2);border:1px solid var(--border);border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10)}
+    .logo{font-size:22px;font-weight:500;color:var(--text);letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
+    .logo span{color:var(--accent)}
+    h1{font-size:20px;font-weight:500;color:var(--text);margin-bottom:6px;text-align:center}
+    .sub{font-size:14px;color:var(--text2);text-align:center;margin-bottom:28px}
+    label{display:block;font-size:12px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
     .field{margin-bottom:20px;position:relative}
-    input{width:100%;padding:13px 16px;background:#FFFFFF;border:1px solid #E4E6EA;border-radius:12px;color:#1A1D21;font-size:15px;font-family:inherit;outline:none;transition:all 0.2s}
-    input:focus{border-color:#334155;box-shadow:0 0 0 3px rgba(58,65,80,0.15)}
+    input{width:100%;padding:13px 16px;background:var(--bg2);border:1px solid var(--border2);border-radius:12px;color:var(--text);font-size:15px;font-family:inherit;outline:none;transition:all 0.2s}
+    input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(58,65,80,0.15)}
     input[type=password]{padding-right:80px}
-    .toggle{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;color:#6B7280;font-size:12px;font-weight:500;font-family:inherit;cursor:pointer;padding:4px 6px}
-    .toggle:hover{color:#334155}
-    .btn{width:100%;padding:14px;background:#334155;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:500;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
+    .toggle{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text2);font-size:12px;font-weight:500;font-family:inherit;cursor:pointer;padding:4px 6px}
+    .toggle:hover{color:var(--accent)}
+    .btn{width:100%;padding:14px;background:var(--accent);color:var(--bg2);border:none;border-radius:12px;font-size:15px;font-weight:500;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
     .btn:hover{transform:translateY(-1px);box-shadow:0 8px 30px rgba(58,65,80,0.35)}
     .btn:active{transform:none}
-    .error{background:#FEE2E2;border:1px solid rgba(166,69,63,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:#A32D2D;margin-bottom:20px;line-height:1.5}
+    .error{background:var(--danger-s);border:1px solid rgba(166,69,63,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:var(--danger);margin-bottom:20px;line-height:1.5}
   </style>
 </head>
 <body>
@@ -162,8 +163,8 @@ export function createAuthRoutes(db) {
       </div>
       <button type="submit" class="btn">Entrar</button>
     </form>
-    <p style="text-align:center;font-size:13px;color:#6B7280;margin-top:16px">
-      <a href="/admin/forgot-password" style="color:#6B7280;text-decoration:none" onmouseover="this.style.color='#334155'" onmouseout="this.style.color='#6B7280'">¿Olvidaste tu contraseña?</a>
+    <p style="text-align:center;font-size:13px;color:var(--text2);margin-top:16px">
+      <a href="/admin/forgot-password" style="color:var(--text2);text-decoration:none" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text2)'">¿Olvidaste tu contraseña?</a>
     </p>
   </div>
   <script>
@@ -268,33 +269,33 @@ export function createAuthRoutes(db) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Autenticación de Dos Factores — Bamburu</title>
-  <style>
+  <style>${ROOT_TOKENS}
     *{box-sizing:border-box;margin:0;padding:0}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F6F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:20px}
-    .card{width:100%;max-width:480px;padding:40px 36px;background:#FFFFFF;border:1px solid #ECEEF1;border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10)}
-    .logo{font-size:22px;font-weight:500;color:#1A1D21;letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
-    .logo span{color:#334155}
-    h1{font-size:20px;font-weight:500;color:#1A1D21;margin-bottom:8px;text-align:center}
-    .sub{font-size:14px;color:#6B7280;text-align:center;margin-bottom:24px}
-    .qr-box{text-align:center;margin:20px 0;padding:16px;background:white;border-radius:12px;display:inline-block;width:100%}
-    .secret-box{background:#FFFFFF;border:1px solid #E4E6EA;border-radius:8px;padding:10px 14px;font-family:monospace;font-size:13px;color:#6B7280;word-break:break-all;text-align:center;margin-bottom:20px}
-    label{display:block;font-size:12px;font-weight:500;color:#6B7280;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:20px}
+    .card{width:100%;max-width:480px;padding:40px 36px;background:var(--bg2);border:1px solid var(--border);border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10)}
+    .logo{font-size:22px;font-weight:500;color:var(--text);letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
+    .logo span{color:var(--accent)}
+    h1{font-size:20px;font-weight:500;color:var(--text);margin-bottom:8px;text-align:center}
+    .sub{font-size:14px;color:var(--text2);text-align:center;margin-bottom:24px}
+    .qr-box{text-align:center;margin:20px 0;padding:16px;background:var(--bg2);border-radius:12px;display:inline-block;width:100%}
+    .secret-box{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;font-family:monospace;font-size:13px;color:var(--text2);word-break:break-all;text-align:center;margin-bottom:20px}
+    label{display:block;font-size:12px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
     .field{margin-bottom:20px}
-    input[type=text]{width:100%;padding:13px 16px;background:#FFFFFF;border:1px solid #E4E6EA;border-radius:12px;color:#1A1D21;font-size:18px;font-family:monospace;letter-spacing:0.15em;text-align:center;outline:none;transition:all 0.2s}
-    input[type=text]:focus{border-color:#334155;box-shadow:0 0 0 3px rgba(58,65,80,0.15)}
-    .btn{width:100%;padding:14px;background:#334155;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:500;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
+    input[type=text]{width:100%;padding:13px 16px;background:var(--bg2);border:1px solid var(--border2);border-radius:12px;color:var(--text);font-size:18px;font-family:monospace;letter-spacing:0.15em;text-align:center;outline:none;transition:all 0.2s}
+    input[type=text]:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(58,65,80,0.15)}
+    .btn{width:100%;padding:14px;background:var(--accent);color:var(--bg2);border:none;border-radius:12px;font-size:15px;font-weight:500;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
     .btn:hover{transform:translateY(-1px);box-shadow:0 8px 30px rgba(58,65,80,0.35)}
-    .btn-danger{background:linear-gradient(135deg,#ef4444,#b91c1c)}
+    .btn-danger{background:linear-gradient(135deg,var(--danger),var(--danger))}
     .btn-danger:hover{box-shadow:0 8px 30px rgba(239,68,68,0.35)}
-    .error{background:#FEE2E2;border:1px solid rgba(166,69,63,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:#A32D2D;margin-bottom:20px}
-    .ok{background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:#6ee7b7;margin-bottom:20px}
-    .back{text-align:center;font-size:13px;color:#6B7280;margin-top:16px}
-    .back a{color:#334155;text-decoration:none}
-    .divider{border:none;border-top:1px solid #ECEEF1;margin:24px 0}
-    p.hint{font-size:13px;color:#6B7280;margin-bottom:16px;line-height:1.5}
+    .error{background:var(--danger-s);border:1px solid rgba(166,69,63,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:var(--danger);margin-bottom:20px}
+    .ok{background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:var(--ok-s);margin-bottom:20px}
+    .back{text-align:center;font-size:13px;color:var(--text2);margin-top:16px}
+    .back a{color:var(--accent);text-decoration:none}
+    .divider{border:none;border-top:1px solid var(--border);margin:24px 0}
+    p.hint{font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.5}
     .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500}
-    .badge-on{background:rgba(16,185,129,0.15);color:#6ee7b7;border:1px solid rgba(16,185,129,0.3)}
-    .badge-off{background:#EFF1F4;color:#6B7280;border:1px solid #E4E6EA}
+    .badge-on{background:rgba(16,185,129,0.15);color:var(--ok-s);border:1px solid rgba(16,185,129,0.3)}
+    .badge-off{background:var(--accent-soft);color:var(--text2);border:1px solid var(--border2)}
   </style>
 </head>
 <body>
@@ -314,7 +315,7 @@ export function createAuthRoutes(db) {
     <hr class="divider">
     <p class="hint" style="text-align:center">Para reconfigurar 2FA con un nuevo dispositivo, desactívala primero.</p>
     ` : `
-    <p class="hint">Escanea este código QR con <strong style="color:#1A1D21">Google Authenticator</strong>, <strong style="color:#1A1D21">Authy</strong> o cualquier app TOTP:</p>
+    <p class="hint">Escanea este código QR con <strong style="color:var(--text)">Google Authenticator</strong>, <strong style="color:var(--text)">Authy</strong> o cualquier app TOTP:</p>
     <div class="qr-box">
       <img src="${qrDataUrl}" width="200" height="200" alt="QR 2FA">
     </div>
@@ -360,16 +361,16 @@ export function createAuthRoutes(db) {
 <head>
   <meta charset="UTF-8">
   <title>2FA Activada — Bamburu</title>
-  <style>
+  <style>${ROOT_TOKENS}
     *{box-sizing:border-box;margin:0;padding:0}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F6F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-    .card{width:100%;max-width:400px;padding:40px 36px;background:#FFFFFF;border:1px solid #ECEEF1;border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10);text-align:center}
-    .logo{font-size:22px;font-weight:500;color:#1A1D21;letter-spacing:-0.03em;margin-bottom:28px}
-    .logo span{color:#334155}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+    .card{width:100%;max-width:400px;padding:40px 36px;background:var(--bg2);border:1px solid var(--border);border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10);text-align:center}
+    .logo{font-size:22px;font-weight:500;color:var(--text);letter-spacing:-0.03em;margin-bottom:28px}
+    .logo span{color:var(--accent)}
     .icon{font-size:48px;margin-bottom:16px}
-    p{color:#6B7280;font-size:14px;line-height:1.6;margin-bottom:16px}
-    .ok{color:#6ee7b7;font-weight:500;font-size:18px;margin-bottom:8px}
-    a{color:#334155;text-decoration:none;font-size:14px;font-weight:500}
+    p{color:var(--text2);font-size:14px;line-height:1.6;margin-bottom:16px}
+    .ok{color:var(--ok-s);font-weight:500;font-size:18px;margin-bottom:8px}
+    a{color:var(--accent);text-decoration:none;font-size:14px;font-weight:500}
   </style>
 </head>
 <body>
@@ -400,23 +401,23 @@ export function createAuthRoutes(db) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Recuperar Contraseña — Bamburu</title>
-  <style>
+  <style>${ROOT_TOKENS}
     *{box-sizing:border-box;margin:0;padding:0}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F6F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-    .card{width:100%;max-width:400px;padding:40px 36px;background:#FFFFFF;border:1px solid #ECEEF1;border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10)}
-    .logo{font-size:22px;font-weight:500;color:#1A1D21;letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
-    .logo span{color:#334155}
-    h1{font-size:20px;font-weight:500;color:#1A1D21;margin-bottom:6px;text-align:center}
-    .sub{font-size:14px;color:#6B7280;text-align:center;margin-bottom:28px}
-    label{display:block;font-size:12px;font-weight:500;color:#6B7280;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+    .card{width:100%;max-width:400px;padding:40px 36px;background:var(--bg2);border:1px solid var(--border);border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10)}
+    .logo{font-size:22px;font-weight:500;color:var(--text);letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
+    .logo span{color:var(--accent)}
+    h1{font-size:20px;font-weight:500;color:var(--text);margin-bottom:6px;text-align:center}
+    .sub{font-size:14px;color:var(--text2);text-align:center;margin-bottom:28px}
+    label{display:block;font-size:12px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
     .field{margin-bottom:20px}
-    input{width:100%;padding:13px 16px;background:#FFFFFF;border:1px solid #E4E6EA;border-radius:12px;color:#1A1D21;font-size:15px;font-family:inherit;outline:none;transition:all 0.2s}
-    input:focus{border-color:#334155;box-shadow:0 0 0 3px rgba(58,65,80,0.15)}
-    .btn{width:100%;padding:14px;background:#334155;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:500;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
+    input{width:100%;padding:13px 16px;background:var(--bg2);border:1px solid var(--border2);border-radius:12px;color:var(--text);font-size:15px;font-family:inherit;outline:none;transition:all 0.2s}
+    input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(58,65,80,0.15)}
+    .btn{width:100%;padding:14px;background:var(--accent);color:var(--bg2);border:none;border-radius:12px;font-size:15px;font-weight:500;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
     .btn:hover{transform:translateY(-1px);box-shadow:0 8px 30px rgba(58,65,80,0.35)}
-    .back{text-align:center;font-size:13px;color:#6B7280;margin-top:16px}
-    .back a{color:#6B7280;text-decoration:none}
-    .back a:hover{color:#334155}
+    .back{text-align:center;font-size:13px;color:var(--text2);margin-top:16px}
+    .back a{color:var(--text2);text-decoration:none}
+    .back a:hover{color:var(--accent)}
   </style>
 </head>
 <body>
@@ -456,15 +457,15 @@ export function createAuthRoutes(db) {
 <head>
   <meta charset="UTF-8">
   <title>Email enviado — Bamburu</title>
-  <style>
+  <style>${ROOT_TOKENS}
     *{box-sizing:border-box;margin:0;padding:0}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F6F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-    .card{width:100%;max-width:400px;padding:40px 36px;background:#FFFFFF;border:1px solid #ECEEF1;border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10);text-align:center}
-    .logo{font-size:22px;font-weight:500;color:#1A1D21;letter-spacing:-0.03em;margin-bottom:28px}
-    .logo span{color:#334155}
-    p{color:#6B7280;font-size:14px;line-height:1.6;margin-bottom:12px}
-    .ok{color:#10b981;font-weight:500;font-size:15px}
-    a{color:#334155;text-decoration:none;font-size:13px}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+    .card{width:100%;max-width:400px;padding:40px 36px;background:var(--bg2);border:1px solid var(--border);border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10);text-align:center}
+    .logo{font-size:22px;font-weight:500;color:var(--text);letter-spacing:-0.03em;margin-bottom:28px}
+    .logo span{color:var(--accent)}
+    p{color:var(--text2);font-size:14px;line-height:1.6;margin-bottom:12px}
+    .ok{color:var(--ok);font-weight:500;font-size:15px}
+    a{color:var(--accent);text-decoration:none;font-size:13px}
   </style>
 </head>
 <body>
@@ -503,16 +504,16 @@ export function createAuthRoutes(db) {
         subject: 'Recupera tu contraseña en Bamburu',
         html: `
           <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:480px;margin:0 auto;padding:40px 24px">
-            <h2 style="color:#1A1D21;font-size:20px;margin-bottom:16px">Hola, ${user.name}</h2>
-            <p style="color:#374151;font-size:15px;line-height:1.6;margin-bottom:24px">
+            <h2 style="color:var(--text);font-size:20px;margin-bottom:16px">Hola, ${user.name}</h2>
+            <p style="color:var(--body-tx);font-size:15px;line-height:1.6;margin-bottom:24px">
               Hemos recibido una solicitud para recuperar tu contraseña en Bamburu.
             </p>
             <a href="${resetLink}"
-               style="background:#334155;color:white;padding:12px 24px;border-radius:8px;
+               style="background:var(--accent);color:var(--bg2);padding:12px 24px;border-radius:8px;
                       text-decoration:none;display:inline-block;font-weight:500;font-size:15px">
               Recuperar Contraseña
             </a>
-            <p style="color:#6b7280;font-size:13px;margin-top:24px">
+            <p style="color:var(--text2);font-size:13px;margin-top:24px">
               Este enlace expira en 1 hora. Si no solicitaste esto, ignora este email.
             </p>
           </div>
@@ -521,14 +522,14 @@ export function createAuthRoutes(db) {
 
       if (resendError) {
         console.error('[Resend] Error de API:', JSON.stringify(resendError));
-        return c.html('<p style="color:red">Error al enviar el email. Intenta más tarde.</p>', 500);
+        return c.html('<p style="color:var(--danger)">Error al enviar el email. Intenta más tarde.</p>', 500);
       }
 
       console.log('[Resend] Email enviado OK, id:', data?.id);
       return c.html(successHtml);
     } catch (err) {
       console.error('[Auth] Error enviando email de recuperación:', err);
-      return c.html('<p style="color:red">Error al enviar el email. Intenta más tarde.</p>', 500);
+      return c.html('<p style="color:var(--danger)">Error al enviar el email. Intenta más tarde.</p>', 500);
     }
   });
 
@@ -542,21 +543,21 @@ export function createAuthRoutes(db) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Nueva Contraseña — Bamburu</title>
-  <style>
+  <style>${ROOT_TOKENS}
     *{box-sizing:border-box;margin:0;padding:0}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F6F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-    .card{width:100%;max-width:400px;padding:40px 36px;background:#FFFFFF;border:1px solid #ECEEF1;border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10)}
-    .logo{font-size:22px;font-weight:500;color:#1A1D21;letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
-    .logo span{color:#334155}
-    h1{font-size:20px;font-weight:500;color:#1A1D21;margin-bottom:6px;text-align:center}
-    .sub{font-size:14px;color:#6B7280;text-align:center;margin-bottom:28px}
-    label{display:block;font-size:12px;font-weight:500;color:#6B7280;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+    .card{width:100%;max-width:400px;padding:40px 36px;background:var(--bg2);border:1px solid var(--border);border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10)}
+    .logo{font-size:22px;font-weight:500;color:var(--text);letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
+    .logo span{color:var(--accent)}
+    h1{font-size:20px;font-weight:500;color:var(--text);margin-bottom:6px;text-align:center}
+    .sub{font-size:14px;color:var(--text2);text-align:center;margin-bottom:28px}
+    label{display:block;font-size:12px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
     .field{margin-bottom:20px}
-    input{width:100%;padding:13px 16px;background:#FFFFFF;border:1px solid #E4E6EA;border-radius:12px;color:#1A1D21;font-size:15px;font-family:inherit;outline:none;transition:all 0.2s}
-    input:focus{border-color:#334155;box-shadow:0 0 0 3px rgba(58,65,80,0.15)}
-    .btn{width:100%;padding:14px;background:#334155;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:500;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
+    input{width:100%;padding:13px 16px;background:var(--bg2);border:1px solid var(--border2);border-radius:12px;color:var(--text);font-size:15px;font-family:inherit;outline:none;transition:all 0.2s}
+    input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(58,65,80,0.15)}
+    .btn{width:100%;padding:14px;background:var(--accent);color:var(--bg2);border:none;border-radius:12px;font-size:15px;font-weight:500;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
     .btn:hover{transform:translateY(-1px);box-shadow:0 8px 30px rgba(58,65,80,0.35)}
-    .error{background:#FEE2E2;border:1px solid rgba(166,69,63,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:#A32D2D;margin-bottom:20px}
+    .error{background:var(--danger-s);border:1px solid rgba(166,69,63,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:var(--danger);margin-bottom:20px}
   </style>
 </head>
 <body>
@@ -588,10 +589,10 @@ export function createAuthRoutes(db) {
     const { token, password, password2 } = form;
 
     if (!password || password.length < 8) {
-      return c.html('<p style="color:#FCA5A5">La contraseña debe tener mínimo 8 caracteres.</p>', 400);
+      return c.html('<p style="color:var(--danger)">La contraseña debe tener mínimo 8 caracteres.</p>', 400);
     }
     if (password !== password2) {
-      return c.html('<p style="color:#FCA5A5">Las contraseñas no coinciden.</p>', 400);
+      return c.html('<p style="color:var(--danger)">Las contraseñas no coinciden.</p>', 400);
     }
 
     try {
@@ -601,11 +602,11 @@ export function createAuthRoutes(db) {
       `).get(token);
 
       if (!resetToken) {
-        return c.html('<p style="color:#FCA5A5">Token inválido o ya utilizado.</p>', 400);
+        return c.html('<p style="color:var(--danger)">Token inválido o ya utilizado.</p>', 400);
       }
 
       if (new Date(resetToken.expires_at) < new Date()) {
-        return c.html('<p style="color:#FCA5A5">Token expirado. <a href="/admin/forgot-password">Solicita uno nuevo</a>.</p>', 400);
+        return c.html('<p style="color:var(--danger)">Token expirado. <a href="/admin/forgot-password">Solicita uno nuevo</a>.</p>', 400);
       }
 
       const hash = await hashPassword(password);
@@ -619,15 +620,15 @@ export function createAuthRoutes(db) {
 <head>
   <meta charset="UTF-8">
   <title>Contraseña cambiada — Bamburu</title>
-  <style>
+  <style>${ROOT_TOKENS}
     *{box-sizing:border-box;margin:0;padding:0}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F6F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-    .card{width:100%;max-width:400px;padding:40px 36px;background:#FFFFFF;border:1px solid #ECEEF1;border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10);text-align:center}
-    .logo{font-size:22px;font-weight:500;color:#1A1D21;letter-spacing:-0.03em;margin-bottom:28px}
-    .logo span{color:#334155}
-    p{color:#6B7280;font-size:14px;line-height:1.6;margin-bottom:16px}
-    .ok{color:#10b981;font-weight:500;font-size:16px}
-    a{color:#334155;text-decoration:none;font-size:14px;font-weight:500}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+    .card{width:100%;max-width:400px;padding:40px 36px;background:var(--bg2);border:1px solid var(--border);border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10);text-align:center}
+    .logo{font-size:22px;font-weight:500;color:var(--text);letter-spacing:-0.03em;margin-bottom:28px}
+    .logo span{color:var(--accent)}
+    p{color:var(--text2);font-size:14px;line-height:1.6;margin-bottom:16px}
+    .ok{color:var(--ok);font-weight:500;font-size:16px}
+    a{color:var(--accent);text-decoration:none;font-size:14px;font-weight:500}
   </style>
 </head>
 <body>
@@ -641,7 +642,7 @@ export function createAuthRoutes(db) {
 </html>`);
     } catch (err) {
       console.error('[Auth] Error en reset-password:', err);
-      return c.html('<p style="color:#FCA5A5">Error al cambiar la contraseña. Intenta más tarde.</p>', 500);
+      return c.html('<p style="color:var(--danger)">Error al cambiar la contraseña. Intenta más tarde.</p>', 500);
     }
   });
 

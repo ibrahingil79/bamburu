@@ -1,5 +1,71 @@
 import { getDisaWidget } from '../disa/widget.js';
 
+export const ROOT_TOKENS = `
+    :root{
+      /* Tokens EXACTOS de docs/diseno/sistema-visual-aprobado.html (patrón oro, DISEÑO.md §2).
+         FUENTE ÚNICA de color/tipo/espaciado de la app. Cambiar aquí = toda la app. Cero teal. */
+      --bg:        #F5F6F8;   /* fondo de aplicación */
+      --bg2:       #FFFFFF;   /* superficies / tarjetas / chrome / paneles */
+      --bg3:       #F1F3F5;   /* subsuperficie: search, hover, sutil */
+      --card:      #FFFFFF;   /* alias de superficie de panel (= --bg2). Lo usan los paneles de
+                                 sugerencias del buscador de línea (var(--card,#1e1e1e)); sin definir
+                                 caían en el fallback oscuro #1e1e1e → nombre ilegible. */
+      --border:    #ECEEF1;   /* hairline interno */
+      --border2:   #E4E6EA;   /* borde exterior */
+      --border-disa: #D6DCE4; /* borde de la tarjeta de DISA (DISEÑO §2.2) */
+      --text:      #1A1D21;   /* texto principal */
+      --text2:     #6B7280;   /* texto secundario */
+      --text3:     #9097A1;   /* texto terciario / etiquetas */
+      --body-tx:   #374151;   /* texto cuerpo */
+      --accent:    #334155;   /* slate (acento de marca) */
+      --accent-d:  #1E293B;   /* slate fuerte / activo */
+      --accent-soft:#EDF0F4;  /* fondo activo / chips */
+      /* Acento morado SEMÁNTICO (IRPF/retención + stock reservado). No es teal ni IA: es el
+         tercer acento de dato que ya usaban documentos e inventario (U1, 2026-07-05). */
+      --accent-purple: #9333EA;  --accent-purple-s: #F0EBFB;
+      --grp:       #A0A6B0;   /* título de grupo de menú */
+      --muted:     #6B7280;   /* alias heredado (= secundario) */
+      --p:         #334155;   /* alias heredado (= acento) */
+      /* Alias de compatibilidad: el código heredado usa var(--teal*) → ahora ES slate */
+      --teal:      #334155;
+      --teal-d:    #1E293B;
+      --teal-soft: rgba(51,65,85,0.10);
+      --teal-glow: rgba(51,65,85,0.16);
+      /* Estados (píldoras del mockup) */
+      --danger:    #A32D2D;  --danger-s:  #FEE2E2;
+      --warn:      #854F0B;  --warn-s:    #FAEEDA;
+      --ok:        #2E7D55;  --ok-s:      #E8F5EE;
+      --info:      #075985;  --info-s:    #E0F2FE;   /* aviso informativo (azul), familia de alerta */
+      /* Chrome GRAFITO AZUL OSCURO (barra superior + menú lateral). Patrón oro aprobado por
+         Ibrahin 22-jun-2026: docs/diseno/sistema-visual-aprobado.html. Valores EXACTOS. */
+      --chrome:        #20242F;   /* fondo del chrome (rail + topbar) */
+      --chrome-tx:     #9AA3B3;   /* texto de menú inactivo */
+      --chrome-tx-on:  #FFFFFF;   /* texto de menú activo */
+      --chrome-ic:     #727B8C;   /* icono de menú inactivo */
+      --chrome-grp:    #5B6475;   /* título de grupo de menú */
+      --chrome-active: rgba(255,255,255,.10);  /* fondo del item activo */
+      --chrome-div:    rgba(255,255,255,.07);   /* divisor sobre el chrome */
+      --brand:         #FFFFFF;   /* marca (sparkles) sobre el chrome */
+      --sw:        62px;
+      --sw-exp:    176px;
+      --radius:    9px;
+      --radius-lg: 12px;
+      /* ── Escala de ESPACIADO (U1). Fuente única; valores calcados de los ya usados para que
+         aplicarla sea 1:1 (no recoloca nada). El espaciado inline estructural por-vista se
+         conserva mientras no haya un paso equivalente. ── */
+      --space-1:  .25rem;   /* 4px  */
+      --space-2:  .5rem;    /* 8px  */
+      --space-3:  .75rem;   /* 12px */
+      --space-4:  1rem;     /* 16px */
+      --space-5:  1.25rem;  /* 20px */
+      --space-6:  1.5rem;   /* 24px */
+      /* ── Escala de TIPOGRAFÍA (U1). Inter en body; tamaños/pesos calcados de los usados. ── */
+      --fs-xs:    .72rem;   --fs-sm:  .82rem;   --fs-md:  .88rem;
+      --fs-base:  14px;     --fs-lg:  1.05rem;  --fs-xl:  1.7rem;
+      --fw-normal: 400;     --fw-medium: 500;   --fw-semibold: 600;
+    }`;
+
+
 export function csrfField(token) {
   return `<input type="hidden" name="_csrf" value="${token}">`;
 }
@@ -226,69 +292,8 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     };
   </script>
   <style>
-    :root{
-      /* Tokens EXACTOS de docs/diseno/sistema-visual-aprobado.html (patrón oro, DISEÑO.md §2).
-         FUENTE ÚNICA de color/tipo/espaciado de la app. Cambiar aquí = toda la app. Cero teal. */
-      --bg:        #F5F6F8;   /* fondo de aplicación */
-      --bg2:       #FFFFFF;   /* superficies / tarjetas / chrome / paneles */
-      --bg3:       #F1F3F5;   /* subsuperficie: search, hover, sutil */
-      --card:      #FFFFFF;   /* alias de superficie de panel (= --bg2). Lo usan los paneles de
-                                 sugerencias del buscador de línea (var(--card,#1e1e1e)); sin definir
-                                 caían en el fallback oscuro #1e1e1e → nombre ilegible. */
-      --border:    #ECEEF1;   /* hairline interno */
-      --border2:   #E4E6EA;   /* borde exterior */
-      --border-disa: #D6DCE4; /* borde de la tarjeta de DISA (DISEÑO §2.2) */
-      --text:      #1A1D21;   /* texto principal */
-      --text2:     #6B7280;   /* texto secundario */
-      --text3:     #9097A1;   /* texto terciario / etiquetas */
-      --body-tx:   #374151;   /* texto cuerpo */
-      --accent:    #334155;   /* slate (acento de marca) */
-      --accent-d:  #1E293B;   /* slate fuerte / activo */
-      --accent-soft:#EDF0F4;  /* fondo activo / chips */
-      /* Acento morado SEMÁNTICO (IRPF/retención + stock reservado). No es teal ni IA: es el
-         tercer acento de dato que ya usaban documentos e inventario (U1, 2026-07-05). */
-      --accent-purple: #9333EA;  --accent-purple-s: #F0EBFB;
-      --grp:       #A0A6B0;   /* título de grupo de menú */
-      --muted:     #6B7280;   /* alias heredado (= secundario) */
-      --p:         #334155;   /* alias heredado (= acento) */
-      /* Alias de compatibilidad: el código heredado usa var(--teal*) → ahora ES slate */
-      --teal:      #334155;
-      --teal-d:    #1E293B;
-      --teal-soft: rgba(51,65,85,0.10);
-      --teal-glow: rgba(51,65,85,0.16);
-      /* Estados (píldoras del mockup) */
-      --danger:    #A32D2D;  --danger-s:  #FEE2E2;
-      --warn:      #854F0B;  --warn-s:    #FAEEDA;
-      --ok:        #2E7D55;  --ok-s:      #E8F5EE;
-      --info:      #075985;  --info-s:    #E0F2FE;   /* aviso informativo (azul), familia de alerta */
-      /* Chrome GRAFITO AZUL OSCURO (barra superior + menú lateral). Patrón oro aprobado por
-         Ibrahin 22-jun-2026: docs/diseno/sistema-visual-aprobado.html. Valores EXACTOS. */
-      --chrome:        #20242F;   /* fondo del chrome (rail + topbar) */
-      --chrome-tx:     #9AA3B3;   /* texto de menú inactivo */
-      --chrome-tx-on:  #FFFFFF;   /* texto de menú activo */
-      --chrome-ic:     #727B8C;   /* icono de menú inactivo */
-      --chrome-grp:    #5B6475;   /* título de grupo de menú */
-      --chrome-active: rgba(255,255,255,.10);  /* fondo del item activo */
-      --chrome-div:    rgba(255,255,255,.07);   /* divisor sobre el chrome */
-      --brand:         #FFFFFF;   /* marca (sparkles) sobre el chrome */
-      --sw:        62px;
-      --sw-exp:    176px;
-      --radius:    9px;
-      --radius-lg: 12px;
-      /* ── Escala de ESPACIADO (U1). Fuente única; valores calcados de los ya usados para que
-         aplicarla sea 1:1 (no recoloca nada). El espaciado inline estructural por-vista se
-         conserva mientras no haya un paso equivalente. ── */
-      --space-1:  .25rem;   /* 4px  */
-      --space-2:  .5rem;    /* 8px  */
-      --space-3:  .75rem;   /* 12px */
-      --space-4:  1rem;     /* 16px */
-      --space-5:  1.25rem;  /* 20px */
-      --space-6:  1.5rem;   /* 24px */
-      /* ── Escala de TIPOGRAFÍA (U1). Inter en body; tamaños/pesos calcados de los usados. ── */
-      --fs-xs:    .72rem;   --fs-sm:  .82rem;   --fs-md:  .88rem;
-      --fs-base:  14px;     --fs-lg:  1.05rem;  --fs-xl:  1.7rem;
-      --fw-normal: 400;     --fw-medium: 500;   --fw-semibold: 600;
-    }
+${ROOT_TOKENS}
+
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;font-size:14px;-webkit-font-smoothing:antialiased}
 
