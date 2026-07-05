@@ -7,7 +7,8 @@ import { checkPermission } from '../../../core/permission-check.js';
 import { adminLayout } from '../layout.js';
 import { escHtml } from '../../../core/escape.js';
 import { buildXlsx, toCSV } from '../contabilidad-export.js';
-import { importNorma43, sugerenciasIngreso, conciliarConCobro, conciliarConFactura, ignorarMovimiento, deshacer } from '../conciliacion.js';
+import { importNorma43, sugerenciasIngreso, conciliarConCobro, conciliarConFactura, ignorarMovimiento, deshacer,
+         sugerenciasGasto, conciliarConGasto, conciliarConPagoProveedor } from '../conciliacion.js';
 
 const symbolOf = db => db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
 const money = (sym, n) => { const v = Number(n || 0); return (v < 0 ? '-' : '') + sym + Math.abs(v).toFixed(2); };
@@ -35,6 +36,11 @@ function movimientosFiltrados(db, { from, to, estado }) {
   if (estado && estado !== 'todos') rows = rows.filter(r => r.estado === estado);
   return rows;
 }
+function filtraTipo(rows, tipo) {
+  if (tipo === 'abonos') return rows.filter(r => r.is_credit);
+  if (tipo === 'cargos') return rows.filter(r => !r.is_credit);
+  return rows;
+}
 
 function movMatrix(rows) {
   return {
@@ -49,17 +55,21 @@ export function createConciliacionRoutes(db) {
 
   views.get('/', requirePerm('conciliacion.read'), c => {
     const sym = symbolOf(db);
-    const from = c.req.query('from') || '', to = c.req.query('to') || '', estado = c.req.query('estado') || 'todos';
-    const rows = movimientosFiltrados(db, { from, to, estado });
+    const from = c.req.query('from') || '', to = c.req.query('to') || '', estado = c.req.query('estado') || 'todos', tipo = c.req.query('tipo') || 'todos';
+    const rows = filtraTipo(movimientosFiltrados(db, { from, to, estado }), tipo);
     const csrf = c.get('session')?.csrfToken || '';
     const puedeGestionar = can(c, db, 'conciliacion', 'manage');
     const puedeCobrar = can(c, db, 'cobros', 'manage');
+    const puedePagar = can(c, db, 'purchases', 'create');
 
     const filtro = `<form method="get" style="display:flex;gap:.75rem;align-items:end;flex-wrap:wrap;margin:1rem 0">
       <div><label class="doc-label">Desde</label><br><input type="date" name="from" value="${escHtml(from)}"></div>
       <div><label class="doc-label">Hasta</label><br><input type="date" name="to" value="${escHtml(to)}"></div>
       <div><label class="doc-label">Estado</label><br><select name="estado">
         ${['todos', 'pendiente', 'conciliado', 'ignorado'].map(e => `<option value="${e}" ${estado === e ? 'selected' : ''}>${e[0].toUpperCase() + e.slice(1)}</option>`).join('')}
+      </select></div>
+      <div><label class="doc-label">Tipo</label><br><select name="tipo">
+        ${[['todos', 'Todos'], ['abonos', 'Abonos (ingresos)'], ['cargos', 'Cargos (gastos)']].map(([v, l]) => `<option value="${v}" ${tipo === v ? 'selected' : ''}>${l}</option>`).join('')}
       </select></div>
       <button class="btn" type="submit">Filtrar</button><span style="flex:1"></span>
       <a class="btn btn-ghost" href="/admin/conciliacion/export.xlsx?from=${from}&to=${to}&estado=${estado}">Excel</a>
@@ -90,14 +100,33 @@ export function createConciliacionRoutes(db) {
               <input type="hidden" name="registrar_cobro" value="1">
               <button class="btn btn-ghost" type="submit" style="text-align:left">✓ ${label}${cobroNote}</button></form>`;
           }).join('') || '<span style="color:var(--text2);font-size:12px">Sin sugerencias automáticas.</span>';
+        } else {
+          // CARGO (gasto) — Pieza 2: sugiere pago a proveedor / factura de proveedor.
+          const sugs = sugerenciasGasto(db, m, { ventanaDias: 7 }).slice(0, 3);
+          acciones = sugs.map(s => {
+            const label = `${s.type === 'pago_proveedor' ? 'Pago' : 'Compra'} ${escHtml(s.ref || '')} · ${escHtml(s.name || '')} · ${money(sym, s.amount)}${s.hints.length ? ' · ' + s.hints.join('/') : ''}`;
+            const action = s.type === 'pago_proveedor' ? 'conciliar-pago' : 'conciliar-gasto';
+            const pagoNote = s.type === 'gasto' ? (puedePagar ? ' <span style="color:var(--text2);font-size:11px">(registra el pago)</span>' : ' <span style="color:#92400e;font-size:11px">(necesita permiso de compras)</span>') : '';
+            return `<form method="post" action="/admin/conciliacion/${m.id}/${action}" style="margin:.15rem 0">
+              <input type="hidden" name="_csrf" value="${escHtml(csrf)}"><input type="hidden" name="target_id" value="${s.id}">
+              <input type="hidden" name="registrar_pago" value="1">
+              <button class="btn btn-ghost" type="submit" style="text-align:left">✓ ${label}${pagoNote}</button></form>`;
+          }).join('') || '<span style="color:var(--text2);font-size:12px">Sin sugerencias automáticas.</span>';
         }
         acciones += `<form method="post" action="/admin/conciliacion/${m.id}/ignorar" style="margin-top:.2rem"><input type="hidden" name="_csrf" value="${escHtml(csrf)}"><button class="btn btn-ghost" type="submit">Ignorar</button></form>`;
       } else if (m.estado !== 'pendiente' && puedeGestionar) {
-        const necesitaAviso = m.created_payment_id ? ' onclick="return confirm(\'Este movimiento creó un cobro al conciliar. ¿Deshacer y ELIMINAR también ese cobro?\')"' : '';
+        const cobroPago = m.target_type === 'supplier_payment' ? 'pago' : 'cobro';
+        const necesitaAviso = m.created_payment_id ? ` onclick="return confirm('Este movimiento creó un ${cobroPago} al conciliar. ¿Deshacer y ELIMINAR también ese ${cobroPago}?')"` : '';
         const delFlag = m.created_payment_id ? '<input type="hidden" name="delete_payment" value="1">' : '';
         acciones = `<form method="post" action="/admin/conciliacion/${m.id}/deshacer"><input type="hidden" name="_csrf" value="${escHtml(csrf)}">${delFlag}<button class="btn btn-ghost" type="submit"${necesitaAviso}>Deshacer</button></form>`;
       }
-      const vinc = m.target_type === 'invoice_payment' ? `cobro #${m.target_id}${m.created_payment_id ? ' (creado aquí)' : ''}` : (m.target_type === 'invoice' ? `factura #${m.target_id}` : '');
+      const VINC = {
+        invoice_payment: `cobro #${m.target_id}${m.created_payment_id ? ' (creado aquí)' : ''}`,
+        invoice: `factura #${m.target_id}`,
+        supplier_payment: `pago a proveedor #${m.target_id}${m.created_payment_id ? ' (creado aquí)' : ''}`,
+        supplier_invoice: `compra/gasto #${m.target_id}`,
+      };
+      const vinc = VINC[m.target_type] || '';
       return `<tr>
         <td>${escHtml(m.op_date)}</td>
         <td style="max-width:22rem">${escHtml(m.concept || '')}${vinc ? `<br><span style="color:var(--text2);font-size:11px">→ ${escHtml(vinc)}</span>` : ''}</td>
@@ -141,6 +170,22 @@ export function createConciliacionRoutes(db) {
       const registrar = b.registrar_cobro === '1';
       if (registrar && !can(c, db, 'cobros', 'manage')) return c.text('Registrar el cobro requiere permiso de cobros (cobros.manage).', 403);
       conciliarConFactura(db, +c.req.param('id'), +b.target_id, { by: c.get('session')?.email || '', registrarCobro: registrar });
+    } catch (e) { return c.text(e.message, e.status || 400); }
+    return back(c);
+  });
+
+  views.post('/:id/conciliar-pago', requirePerm('conciliacion.manage'), async c => {
+    try { const b = await c.req.parseBody(); conciliarConPagoProveedor(db, +c.req.param('id'), +b.target_id, { by: c.get('session')?.email || '' }); }
+    catch (e) { return c.text(e.message, e.status || 400); }
+    return back(c);
+  });
+
+  views.post('/:id/conciliar-gasto', requirePerm('conciliacion.manage'), async c => {
+    try {
+      const b = await c.req.parseBody();
+      const registrar = b.registrar_pago === '1';
+      if (registrar && !can(c, db, 'purchases', 'create')) return c.text('Registrar el pago requiere permiso de compras (purchases.create).', 403);
+      conciliarConGasto(db, +c.req.param('id'), +b.target_id, { by: c.get('session')?.email || '', registrarPago: registrar });
     } catch (e) { return c.text(e.message, e.status || 400); }
     return back(c);
   });

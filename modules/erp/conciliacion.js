@@ -11,6 +11,7 @@
 
 import { createHash } from 'crypto';
 import { paymentsSum, countsAsReceivable } from './cobros.js';
+import { paymentsSum as pagoProvSum, countsAsPayable } from './pagos.js';
 
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
 const daysBetween = (a, b) => Math.abs(Math.floor((Date.parse(a + 'T00:00:00Z') - Date.parse(b + 'T00:00:00Z')) / 86400000));
@@ -310,7 +311,112 @@ export function deshacer(db, movementId, { deletePayment } = {}) {
   }
   db.transaction(() => {
     db.prepare('DELETE FROM bank_reconciliations WHERE movement_id=?').run(movementId);
-    if (creadoAqui && deletePayment === true) db.prepare('DELETE FROM invoice_payments WHERE id=?').run(rec.created_payment_id);
+    if (creadoAqui && deletePayment === true) {
+      // El cobro creado aquí vive en invoice_payments (ingreso) o supplier_payments (gasto), según target.
+      const tabla = rec.target_type === 'supplier_payment' ? 'supplier_payments' : 'invoice_payments';
+      db.prepare(`DELETE FROM ${tabla} WHERE id=?`).run(rec.created_payment_id);
+    }
   })();
   return { undone: true, deletedPayment: !!(creadoAqui && deletePayment === true), keptPayment: creadoAqui && deletePayment === false };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// CONCILIACIÓN · Pieza 2 — CRUCE DE GASTOS (cargos ↔ compras/gastos). Reutiliza todo lo anterior.
+// ════════════════════════════════════════════════════════════════════════════
+
+function conceptHintsGasto(conceptNorm, si) {
+  const hints = [];
+  if (si.internal_code && conceptNorm.includes(norm(si.internal_code))) hints.push('nº recepción');
+  if (si.supplier_invoice_number && conceptNorm.includes(norm(si.supplier_invoice_number))) hints.push('nº factura');
+  if (si.supplier_fiscal_id && conceptNorm.includes(norm(si.supplier_fiscal_id))) hints.push('NIF');
+  if (si.supplier_name) {
+    const tokens = norm(si.supplier_name).split(/\s+/).filter(t => t.length >= 4);
+    if (tokens.some(t => conceptNorm.includes(t))) hints.push('proveedor');
+  }
+  return hints;
+}
+
+// Candidatos para UN movimiento de CARGO (gasto): pagos a proveedor ya registrados o facturas de
+// proveedor con pendiente, por importe (|cargo|) + ventana de fechas + pistas del concepto.
+export function sugerenciasGasto(db, movement, { toleranciaCts = 0, ventanaDias = 5, limit = 8 } = {}) {
+  if (!movement || movement.is_credit) return [];   // solo cargos
+  const tol = toleranciaCts / 100;
+  const importe = r2(Math.abs(movement.amount));
+  const conceptNorm = norm(movement.concept);
+  const opDate = movement.op_date;
+  const cand = [];
+
+  const pagos = db.prepare(`SELECT p.id, p.supplier_invoice_id, p.amount, p.paid_date,
+      si.internal_code, si.supplier_invoice_number, si.supplier_name, si.supplier_fiscal_id
+      FROM supplier_payments p JOIN supplier_invoices si ON si.id = p.supplier_invoice_id
+      WHERE ABS(p.amount - ?) <= ?`).all(importe, tol + 0.0001);
+  for (const p of pagos) {
+    if (!p.paid_date || daysBetween(opDate, p.paid_date) > ventanaDias) continue;
+    const hints = conceptHintsGasto(conceptNorm, p);
+    const dd = daysBetween(opDate, p.paid_date);
+    cand.push({ type: 'pago_proveedor', id: p.id, supplier_invoice_id: p.supplier_invoice_id,
+      ref: p.internal_code || p.supplier_invoice_number || '', name: p.supplier_name, amount: r2(p.amount), date: p.paid_date, hints,
+      score: 100 - Math.round(Math.abs(p.amount - importe) * 100) - dd + hints.length * 25 });
+  }
+  const invs = db.prepare('SELECT * FROM supplier_invoices ORDER BY invoice_date DESC, id DESC LIMIT 500').all();
+  for (const si of invs) {
+    if (!countsAsPayable(si)) continue;
+    const pend = r2(Number(si.total) - pagoProvSum(db, si.id));
+    if (pend <= 0.0049) continue;
+    if (Math.abs(pend - importe) > tol + 0.0001) continue;
+    const dd = si.invoice_date ? daysBetween(opDate, si.invoice_date) : 999;
+    const hints = conceptHintsGasto(conceptNorm, si);
+    if (dd > ventanaDias * 6 && hints.length === 0) continue;
+    cand.push({ type: 'gasto', id: si.id, supplier_invoice_id: si.id, ref: si.internal_code || si.supplier_invoice_number || '',
+      name: si.supplier_name, amount: pend, date: si.invoice_date, hints,
+      score: 90 - Math.round(Math.abs(pend - importe) * 100) - Math.min(dd, 60) + hints.length * 25 });
+  }
+  cand.sort((a, b) => b.score - a.score);
+  return cand.slice(0, limit);
+}
+
+// Enlaza el cargo a un pago a proveedor YA existente.
+export function conciliarConPagoProveedor(db, movementId, paymentId, { by = '' } = {}) {
+  assertPendiente(db, movementId);
+  const pay = db.prepare('SELECT id FROM supplier_payments WHERE id=?').get(paymentId);
+  if (!pay) { const e = new Error('Pago a proveedor no encontrado'); e.status = 404; throw e; }
+  insRec(db).run(movementId, 'conciliado', 'supplier_payment', paymentId, null, by);
+  return estadoMovimiento(db, movementId);
+}
+
+function pagoProvLibreQueCuadra(db, supplierInvoiceId, importe) {
+  const pagos = db.prepare('SELECT id, amount FROM supplier_payments WHERE supplier_invoice_id=?').all(supplierInvoiceId);
+  for (const p of pagos) {
+    if (Math.abs(p.amount - importe) > 0.0049) continue;
+    if (!db.prepare("SELECT 1 FROM bank_reconciliations WHERE target_type='supplier_payment' AND target_id=?").get(p.id)) return p;
+  }
+  return null;
+}
+
+// Concilia el cargo contra una FACTURA DE PROVEEDOR (compra/gasto). Espejo de conciliarConFactura:
+//  - si ya hay un pago que cuadra (sin enlazar) → solo enlaza (no duplica pago);
+//  - si registrarPago=true → REGISTRA el pago (reutiliza supplier_payments) con confirmación, marcado
+//    para el aviso al deshacer; respeta el pendiente (no paga de más);
+//  - si no → enlaza a la factura de proveedor de forma informativa.
+// registrarPago debe venir de una ruta con permiso purchases.create.
+export function conciliarConGasto(db, movementId, supplierInvoiceId, { by = '', registrarPago = false, payment_method = 'transferencia' } = {}) {
+  const mov = assertPendiente(db, movementId);
+  const si = db.prepare('SELECT id, total FROM supplier_invoices WHERE id=?').get(supplierInvoiceId);
+  if (!si) { const e = new Error('Factura de proveedor no encontrada'); e.status = 404; throw e; }
+  const importe = r2(Math.abs(mov.amount));
+
+  const libre = pagoProvLibreQueCuadra(db, supplierInvoiceId, importe);
+  if (libre) { insRec(db).run(movementId, 'conciliado', 'supplier_payment', libre.id, null, by); return { ...estadoMovimiento(db, movementId), pagoCreado: false, enlazadoAPagoExistente: true }; }
+
+  if (registrarPago) {
+    const pend = r2(Number(si.total) - pagoProvSum(db, supplierInvoiceId));
+    if (importe > pend + 0.0049) { const e = new Error(`El pago (${importe.toFixed(2)}) supera lo pendiente (${pend.toFixed(2)})`); e.status = 400; throw e; }
+    const res = db.prepare('INSERT INTO supplier_payments (supplier_invoice_id, amount, paid_date, payment_method, note) VALUES (?,?,?,?,?)')
+      .run(supplierInvoiceId, importe, mov.op_date, payment_method, `Conciliación bancaria (mov #${movementId})`);
+    const paymentId = res.lastInsertRowid;
+    insRec(db).run(movementId, 'conciliado', 'supplier_payment', paymentId, paymentId, by);
+    return { ...estadoMovimiento(db, movementId), pagoCreado: true, payment_id: paymentId };
+  }
+  insRec(db).run(movementId, 'conciliado', 'supplier_invoice', supplierInvoiceId, null, by);
+  return { ...estadoMovimiento(db, movementId), pagoCreado: false, soloVinculo: true };
 }
