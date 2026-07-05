@@ -11,6 +11,7 @@ import { backfillLedger, libroVentas, libroCompras, libroDiario, libroMayor, may
 import { ventasAsientos, comprasAsientos, ventasMatrix, comprasMatrix, toCSV, buildXlsx, libroHtml,
          diarioMatrix, mayorMatrix, diarioHtml, mayorHtml, bienesMatrix, bienesHtml } from '../contabilidad-export.js';
 import { libroBienes, createInvestmentGood, updateInvestmentGood, bajaInvestmentGood, reactivarInvestmentGood } from '../contabilidad-bienes.js';
+import { modelo303, modelo130, filas303, filas130, quarterRange } from '../contabilidad-modelos.js';
 
 function defaultRange(db) {
   const y = (db.prepare('SELECT MAX(issue_date) m FROM invoices').get()?.m || '').slice(0, 4) || String(new Date().getFullYear());
@@ -30,7 +31,35 @@ function tabsBar(active, from, to) {
     ${tab('compras', '/admin/contabilidad/compras', 'Compras y gastos')}
     ${tab('diario', '/admin/contabilidad/diario', 'Libro diario')}
     ${tab('mayor', '/admin/contabilidad/mayor', 'Libro mayor')}
-    ${tab('bienes', '/admin/contabilidad/bienes', 'Bienes de inversión')}</div>`;
+    ${tab('bienes', '/admin/contabilidad/bienes', 'Bienes de inversión')}
+    <a href="/admin/contabilidad/modelos" class="btn ${active === 'modelos' ? '' : 'btn-ghost'}" style="${active === 'modelos' ? '' : 'opacity:.7'}">Modelos (303/130)</a></div>`;
+}
+// Selector de ejercicio + trimestre para la pestaña Modelos (usa year/q, no from/to).
+function modelosPeriodForm(year, q) {
+  const opt = (v, label) => `<option value="${v}" ${Number(q) === v ? 'selected' : ''}>${label}</option>`;
+  return `<form method="get" action="/admin/contabilidad/modelos" style="display:flex;gap:.75rem;align-items:end;flex-wrap:wrap;margin-bottom:1rem">
+    <div><label class="doc-label">Ejercicio</label><br><input type="number" name="year" value="${escHtml(String(year))}" style="width:6rem"></div>
+    <div><label class="doc-label">Trimestre</label><br><select name="q">${opt(1, '1T (ene–mar)')}${opt(2, '2T (abr–jun)')}${opt(3, '3T (jul–sep)')}${opt(4, '4T (oct–dic)')}</select></div>
+    <button class="btn" type="submit">Ver periodo</button>
+    <span style="flex:1"></span>
+    <a class="btn btn-ghost" href="/admin/contabilidad/modelos.pdf?year=${year}&q=${q}">PDF (borrador)</a>
+    <a class="btn btn-ghost" href="/admin/contabilidad/modelos.csv?year=${year}&q=${q}">CSV</a>
+  </form>`;
+}
+// Renderiza un modelo como tabla casilla·descripción·importe. Las filas separadoras (casilla '—')
+// son subtítulos; casilla 65 se muestra como porcentaje.
+function modeloTabla(filas, sym) {
+  const fmt = (casilla, imp) => imp === '' ? '' : (casilla === '65' ? `${Number(imp)} %` : money(sym, imp));
+  const body = filas.map(([casilla, desc, imp]) => casilla === '—'
+    ? `<tr style="background:var(--bg2,#f6f6f8)"><td colspan="3" style="font-weight:600">${escHtml(desc)}</td></tr>`
+    : `<tr><td style="width:4rem;color:var(--text2)">${escHtml(casilla)}</td><td>${escHtml(desc)}</td>
+        <td style="text-align:right;white-space:nowrap">${fmt(casilla, imp)}</td></tr>`).join('');
+  return `<table><thead><tr><th style="width:4rem">Casilla</th><th>Concepto</th><th style="text-align:right">Importe</th></tr></thead><tbody>${body}</tbody></table>`;
+}
+function avisosBox(warnings) {
+  if (!warnings || !warnings.length) return '';
+  return `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid #d97706;background:#fffbeb;font-size:12px;color:#92400e">
+    <b>Antes de presentar, revisa:</b><ul style="margin:.3rem 0 0;padding-left:1.1rem">${warnings.map(w => `<li>${escHtml(w)}</li>`).join('')}</ul></div>`;
 }
 function periodForm(kind, from, to) {
   const q = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
@@ -315,6 +344,70 @@ export function createContabilidadRoutes(db) {
     const { from, to } = rangeOf(c, db);
     const pdf = await renderPdfFromHtml(bienesHtml(`${from} → ${to}`, libroBienes(db, from, to), symbolOf(db)));
     return fileResp(pdf, 'application/pdf', `libro-bienes-inversion-${tag(from, to)}.pdf`);
+  });
+
+  // ── PIEZA 4 — Modelos AEAT (303 IVA y 130 IRPF), BORRADORES listos para validar ──
+  // Vistas derivadas de los libros; Bamburu prepara, nunca presenta (CANON §0-ter).
+  const modelosParams = c => {
+    const now = new Date();
+    const year = Number(c.req.query('year')) || (db.prepare('SELECT MAX(issue_date) m FROM invoices').get()?.m || '').slice(0, 4) || now.getFullYear();
+    let q = Number(c.req.query('q'));
+    if (![1, 2, 3, 4].includes(q)) q = Math.floor(now.getMonth() / 3) + 1;
+    return { year: Number(year), q };
+  };
+  views.get('/modelos', requirePerm('invoices.read'), c => {
+    const sym = symbolOf(db); const { year, q } = modelosParams(c); backfillLedger(db);
+    const m303 = modelo303(db, year, q), m130 = modelo130(db, year, q);
+    const { from, to } = quarterRange(year, q);
+    const res303 = m303.casilla71 < 0 ? 'a compensar' : (m303.casilla71 > 0 ? 'a ingresar' : 'sin resultado');
+    const res130 = m130.c19 < 0 ? 'sin ingreso (negativo o cero)' : (m130.c19 > 0 ? 'a ingresar' : 'sin ingreso');
+    const content = `<div class="ph"><h2>Contabilidad — Libros registro</h2></div>
+      ${tabsBar('modelos', from, to)}${modelosPeriodForm(year, q)}
+      <div style="color:var(--text2);font-size:12px;margin-bottom:1rem">Periodo ${escHtml(from)} → ${escHtml(to)}. <b>Borradores</b> calculados desde tus libros: Bamburu los deja listos para que tú o tu gestoría los revisen y presenten. Bamburu no presenta ante la AEAT.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;align-items:start">
+        <div class="card"><div class="card-body"><h3>Modelo 303 · IVA — ${escHtml(String(q))}T ${escHtml(String(year))}</h3>
+          <span style="color:var(--text2);font-size:12px">IVA repercutido − IVA soportado deducible. Resultado de la liquidación (casilla 71): <b>${money(sym, m303.casilla71)} ${escHtml(res303)}</b>.</span>
+          ${avisosBox(m303.warnings)}</div>
+          ${modeloTabla(filas303(m303), sym)}</div>
+        <div class="card"><div class="card-body"><h3>Modelo 130 · IRPF — ${escHtml(String(q))}T ${escHtml(String(year))}</h3>
+          <span style="color:var(--text2);font-size:12px">Pago fraccionado (20% del rendimiento acumulado − retenciones − pagos previos). Resultado (casilla 19): <b>${money(sym, m130.c19)} ${escHtml(res130)}</b>.</span>
+          ${avisosBox(m130.warnings)}</div>
+          ${modeloTabla(filas130(m130), sym)}</div>
+      </div>`;
+    return c.html(adminLayout('Contabilidad', content, 'contabilidad', c.get('session')?.csrfToken || '', c));
+  });
+
+  // Export del borrador: PDF (para la gestoría) y CSV (casilla·concepto·importe de ambos modelos).
+  const modelosBorradorHtml = (year, q, m303, m130, sym) => {
+    const tabla = (titulo, filas) => `<h2>${escHtml(titulo)}</h2><table><thead><tr><th>Casilla</th><th>Concepto</th><th style="text-align:right">Importe</th></tr></thead><tbody>${
+      filas.map(([cas, desc, imp]) => cas === '—'
+        ? `<tr class="sec"><td colspan="3">${escHtml(desc)}</td></tr>`
+        : `<tr><td>${escHtml(cas)}</td><td>${escHtml(desc)}</td><td style="text-align:right">${imp === '' ? '' : (cas === '65' ? Number(imp) + ' %' : sym + Number(imp).toFixed(2))}</td></tr>`).join('')
+    }</tbody></table>`;
+    const avisos = w => (w && w.length) ? `<div class="avisos"><b>Antes de presentar, revisa:</b><ul>${w.map(x => `<li>${escHtml(x)}</li>`).join('')}</ul></div>` : '';
+    return `<!doctype html><html><head><meta charset="utf-8"><style>
+      body{font-family:-apple-system,Segoe UI,sans-serif;font-size:11px;color:#111}h1{font-size:16px;margin:0 0 2px}h2{font-size:13px;margin:14px 0 4px}
+      .sub{color:#555;margin-bottom:8px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:3px 6px}th{background:#eee}
+      tr.sec td{background:#f3f4f6;font-weight:700}.avisos{margin:6px 0;padding:5px 8px;border-left:3px solid #d97706;background:#fffbeb;color:#92400e;font-size:10px}</style></head><body>
+      <h1>Borradores de modelos — ${q}T ${year}</h1>
+      <div class="sub">Calculados por Bamburu desde los libros registro. Documento de trabajo para revisión/presentación por el obligado o su gestoría; Bamburu no presenta ante la AEAT.</div>
+      ${tabla('Modelo 303 · IVA', filas303(m303))}${avisos(m303.warnings)}
+      ${tabla('Modelo 130 · IRPF', filas130(m130))}${avisos(m130.warnings)}</body></html>`;
+  };
+  views.get('/modelos.pdf', requirePerm('invoices.read'), async c => {
+    const { year, q } = modelosParams(c); backfillLedger(db);
+    const pdf = await renderPdfFromHtml(modelosBorradorHtml(year, q, modelo303(db, year, q), modelo130(db, year, q), symbolOf(db)));
+    return fileResp(pdf, 'application/pdf', `borrador-modelos-${year}-${q}T.pdf`);
+  });
+  views.get('/modelos.csv', requirePerm('invoices.read'), c => {
+    const { year, q } = modelosParams(c); backfillLedger(db);
+    const m303 = modelo303(db, year, q), m130 = modelo130(db, year, q);
+    const esc = v => { const s = String(v ?? ''); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const rows = [['Modelo', 'Casilla', 'Concepto', 'Importe']];
+    for (const [cas, desc, imp] of filas303(m303)) if (cas !== '—') rows.push(['303', cas, desc, imp === '' ? '' : imp]);
+    for (const [cas, desc, imp] of filas130(m130)) if (cas !== '—') rows.push(['130', cas, desc, imp === '' ? '' : imp]);
+    const csv = '﻿' + rows.map(r => r.map(esc).join(';')).join('\r\n');
+    return fileResp(Buffer.from(csv, 'utf8'), 'text/csv; charset=utf-8', `borrador-modelos-${year}-${q}T.csv`);
   });
 
   return { api, views };
