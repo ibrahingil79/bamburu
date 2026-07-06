@@ -225,8 +225,12 @@ export function createSupplierRoutes(db) {
         var arch=viewingArchived();
         document.getElementById('supBody').innerHTML=f.length?f.map(function(s){
           var acts = arch
-            ? (window.canDo('suppliers.edit')?'<button class="btn btn-primary btn-sm" onclick="restoreSup('+s.id+')">Restaurar</button>':'')
-            : (window.canDo('purchases.read')?'<a class="btn btn-secondary btn-sm" href="/admin/supplier-invoices?supplier='+s.id+'">Deuda</a> ':'')+(window.canDo('suppliers.edit')?'<button class="btn btn-secondary btn-sm" onclick="editSup('+s.id+')">Editar</button> ':'')+(window.canDo('suppliers.delete')?'<button class="btn btn-danger btn-sm" onclick="delSup('+s.id+')">Archivar</button>':'');
+            ? (window.canDo('suppliers.edit')?'<button class="btn btn-secondary btn-sm" onclick="restoreSup('+s.id+')">Restaurar</button>':'')
+            : (window.canDo('purchases.read')?'<a class="btn btn-secondary btn-sm" href="/admin/supplier-invoices?supplier='+s.id+'">Deuda</a> ':'')
+              + ((window.canDo('suppliers.edit')||window.canDo('suppliers.delete')) ? window.rowMenu([
+                  window.canDo('suppliers.edit') ? {label:'Editar', onclick:'editSup('+s.id+')'} : null,
+                  window.canDo('suppliers.delete') ? {label:'Archivar', danger:true, onclick:'delSup('+s.id+')'} : null
+                ].filter(Boolean)) : '');
           return '<tr><td style="color:var(--muted);font-family:monospace;font-size:.8rem">'+escHtml(s.supplier_code||'-')+'</td><td><strong>'+escHtml(s.name)+'</strong></td><td style="color:var(--muted)">'+escHtml(s.fiscal_id||'-')+'</td><td>'+escHtml(s.contact||'-')+'</td><td>'+escHtml(s.email||'-')+'</td><td>'+escHtml(s.phone||'-')+'</td><td style="text-align:right;white-space:nowrap">'+acts+'</td></tr>';
         }).join(''):'<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">Sin proveedores'+(arch?' archivados':' registrados')+'</td></tr>';
       }

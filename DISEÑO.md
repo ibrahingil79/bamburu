@@ -229,9 +229,12 @@ ninguna, se anota como huérfana y lo decide el dueño — **no se fuerza una se
 > - **Clientes** — Editar/Archivar en `···`, "Ver" visible.
 > - **Contabilidad** — la fila de 3 enlaces de export (Excel/CSV/PDF) colapsada en "Exportar ▾".
 >
-> **Pendiente de §6:** (a) reducir las **6 pestañas** de Contabilidad a máx 2-3 es una decisión de
-> IA del dueño (no se fuerza aquí); (b) aplicar el patrón a las pantallas de **solo-URL** (Compras,
-> Inventario, Catálogo, TPV, Presupuestos…), con las mismas primitivas.
+> **Aplicado a las pantallas secundarias (2026-07-06):** acciones de fila colapsadas en `···` y
+> primarios-por-fila degradados a secundarios en **Productos**, **Categorías**, **Proveedores**,
+> **Almacenes**, **Stock** y **Pagos**. Las listas de Presupuestos, Pedidos, Albaranes, Órdenes de
+> compra, Traslados, Devoluciones y Compra directa **ya cumplían** (una sola acción "Ver" por fila).
+> **Pendiente de §6:** reducir las **6 pestañas** de Contabilidad a máx 2-3 — decisión de IA del
+> dueño, no se fuerza aquí.
 
 La regla de densidad del §1, aterrizada en cada pantalla:
 

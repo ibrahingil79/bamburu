@@ -66,7 +66,7 @@ export function createPagosRoutes(db) {
             : '<strong>'+SYM+Number(r.pendiente||0).toFixed(2)+'</strong>';
           const btn = esAbono
             ? '<button class="btn btn-secondary btn-sm" onclick="openPagos('+r.supplier_invoice_id+')">Reembolso</button>'
-            : '<button class="btn btn-primary btn-sm" onclick="openPagos('+r.supplier_invoice_id+')">Pagar</button>'
+            : '<button class="btn btn-secondary btn-sm" onclick="openPagos('+r.supplier_invoice_id+')">Pagar</button>'
               + ' <button class="btn btn-secondary btn-sm" title="Saldar varias facturas de este proveedor a la vez" onclick="openPagoCuenta('+r.supplier_id+')">A cuenta</button>';
           return '<tr class="frow">'
             +'<td>'+escHtml(r.supplier_name||'')+'</td>'

@@ -286,11 +286,13 @@ export function createWarehouseRoutes(db) {
           let acts = '';
           if (CAN_EDIT){
             if (arch){
-              acts = '<button class="btn btn-primary btn-sm" onclick="restoreWh('+w.id+')">Restaurar</button>';
+              acts = '<button class="btn btn-secondary btn-sm" onclick="restoreWh('+w.id+')">Restaurar</button>';
             } else {
               acts = '<button class="btn btn-secondary btn-sm" onclick="editWh('+w.id+')">Editar</button> ';
-              if (!w.is_default) acts += '<button class="btn btn-secondary btn-sm" onclick="defaultWh('+w.id+')">Marcar principal</button> '
-                                       + '<button class="btn btn-danger btn-sm" onclick="archiveWh('+w.id+')">Archivar</button>';
+              if (!w.is_default) acts += window.rowMenu([
+                { label:'Marcar principal', onclick:'defaultWh('+w.id+')' },
+                { label:'Archivar', danger:true, onclick:'archiveWh('+w.id+')' }
+              ]);
             }
           }
           return '<tr><td><strong>'+escHtml(w.name)+'</strong></td><td>'+principal+'</td><td style="text-align:right;white-space:nowrap">'+acts+'</td></tr>';

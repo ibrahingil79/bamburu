@@ -99,7 +99,7 @@ export function createInventoryRoutes(db, cfg = {}) {
           // "Ver stock" abre el kardex (con desglose por almacén); "Ajustar" usa el stock GLOBAL
           // (el ajuste por almacén es Capa 2): por eso pasa p.stock, no la cantidad filtrada.
           const acts = '<button class="btn btn-secondary btn-sm" onclick="openStockKardex('+p.id+',\\''+escHtml(nm)+'\\')">Ver stock</button>'
-            + (CAN_EDIT?' <button class="btn btn-primary btn-sm" onclick="openAjustar('+p.id+',\\''+escHtml(nm)+'\\','+p.stock+')">Ajustar</button>':'');
+            + (CAN_EDIT?' <button class="btn btn-secondary btn-sm" onclick="openAjustar('+p.id+',\\''+escHtml(nm)+'\\','+p.stock+')">Ajustar</button>':'');
           const avg=Number(p.average_cost||0);
           const val=avg*s;
           const rsv=reservedOf(p), avl=availableOf(p);

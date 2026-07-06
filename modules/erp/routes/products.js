@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can } from '../layout.js';
+import { adminLayout, can, rowMenu } from '../layout.js';
 import { logActivity, requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { productSchema, productImageSchema, variantSchema, tagSchema, stockAdjustSchema } from '../schemas.js';
@@ -315,7 +315,7 @@ export function createProductRoutes(db, cfg = {}) {
       '<td>'+(p.type==='service'?'<span style="color:var(--muted)">—</span>':(p.stock<5?'<span style="color:var(--danger);font-weight:500">'+p.stock+'</span>':p.stock))+'</td>'+
       '<td>'+(statusB[p.status]||escHtml(p.status))+'</td>'+
       '<td><span class="badge b-gray">'+(p.type==='digital'?'Digital':p.type==='service'?'Servicio':'Físico')+'</span></td>'+
-      '<td style="white-space:nowrap">'+(can(c,'products.edit')?'<button class="btn btn-secondary btn-sm" onclick="editProd('+p.id+')">Editar</button> ':'')+(can(c,'products.delete')?'<button class="btn btn-danger btn-sm" onclick="delProd('+p.id+')">Eliminar</button>':'')+'</td>'+
+      '<td style="white-space:nowrap">'+(can(c,'products.edit')?'<button class="btn btn-secondary btn-sm" onclick="editProd('+p.id+')">Editar</button> ':'')+(can(c,'products.delete')?rowMenu([{label:'Eliminar',danger:true,onclick:'delProd('+p.id+')'}]):'')+'</td>'+
       '</tr>').join('');
 
     const content = `
