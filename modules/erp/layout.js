@@ -2,50 +2,51 @@ import { getDisaWidget } from '../disa/widget.js';
 
 export const ROOT_TOKENS = `
     :root{
-      /* Tokens EXACTOS de docs/diseno/sistema-visual-aprobado.html (patrón oro, DISEÑO.md §2).
-         FUENTE ÚNICA de color/tipo/espaciado de la app. Cambiar aquí = toda la app. Cero teal. */
-      --bg:        #F5F6F8;   /* fondo de aplicación */
+      /* Tokens EXACTOS de la dirección UX del 2026-07-06 (DISEÑO.md §0-bis + §2).
+         FUENTE ÚNICA de color/tipo/espaciado de la app. Cambiar aquí = toda la app.
+         SUSTITUCIÓN 1 (chrome claro) y SUSTITUCIÓN 2 (acento azul) aplicadas aquí. */
+      --bg:        #F5F6F8;   /* fondo de aplicación (claro) */
       --bg2:       #FFFFFF;   /* superficies / tarjetas / chrome / paneles */
       --bg3:       #F1F3F5;   /* subsuperficie: search, hover, sutil */
       --card:      #FFFFFF;   /* alias de superficie de panel (= --bg2). Lo usan los paneles de
                                  sugerencias del buscador de línea (var(--card,#1e1e1e)); sin definir
                                  caían en el fallback oscuro #1e1e1e → nombre ilegible. */
-      --border:    #ECEEF1;   /* hairline interno */
-      --border2:   #E4E6EA;   /* borde exterior */
+      --border:    #EEEFF2;   /* separadores (DISEÑO §2.4) */
+      --border2:   #E4E6EA;   /* bordes (DISEÑO §2.4) */
       --border-disa: #D6DCE4; /* borde de la tarjeta de DISA (DISEÑO §2.2) */
-      --text:      #1A1D21;   /* texto principal */
-      --text2:     #6B7280;   /* texto secundario */
-      --text3:     #9097A1;   /* texto terciario / etiquetas */
-      --body-tx:   #374151;   /* texto cuerpo */
-      --accent:    #334155;   /* slate (acento de marca) */
-      --accent-d:  #1E293B;   /* slate fuerte / activo */
-      --accent-soft:#EDF0F4;  /* fondo activo / chips */
-      /* Acento morado SEMÁNTICO (IRPF/retención + stock reservado). No es teal ni IA: es el
+      --text:      #14161B;   /* texto principal (DISEÑO §2.3) */
+      --text2:     #5C616B;   /* texto secundario (DISEÑO §2.3) */
+      --text3:     #8A8F99;   /* texto tenue (DISEÑO §2.3) */
+      --body-tx:   #3A3F48;   /* texto cuerpo (entre principal y secundario) */
+      --accent:    #2F6BFF;   /* AZUL — acción principal y enlaces (DISEÑO §2.2, SUSTITUCIÓN 2) */
+      --accent-d:  #2456D6;   /* azul fuerte / hover / activo */
+      --accent-soft:#E4EDFF;  /* fondo azul claro: item activo / avisos de DISA / chips */
+      /* Acento morado SEMÁNTICO (IRPF/retención + stock reservado). No es acento de marca: es el
          tercer acento de dato que ya usaban documentos e inventario (U1, 2026-07-05). */
       --accent-purple: #9333EA;  --accent-purple-s: #F0EBFB;
-      --grp:       #A0A6B0;   /* título de grupo de menú */
-      --muted:     #6B7280;   /* alias heredado (= secundario) */
-      --p:         #334155;   /* alias heredado (= acento) */
-      /* Alias de compatibilidad: el código heredado usa var(--teal*) → ahora ES slate */
-      --teal:      #334155;
-      --teal-d:    #1E293B;
-      --teal-soft: rgba(51,65,85,0.10);
-      --teal-glow: rgba(51,65,85,0.16);
-      /* Estados (píldoras del mockup) */
-      --danger:    #A32D2D;  --danger-s:  #FEE2E2;
-      --warn:      #854F0B;  --warn-s:    #FAEEDA;
-      --ok:        #2E7D55;  --ok-s:      #E8F5EE;
-      --info:      #075985;  --info-s:    #E0F2FE;   /* aviso informativo (azul), familia de alerta */
-      /* Chrome GRAFITO AZUL OSCURO (barra superior + menú lateral). Patrón oro aprobado por
-         Ibrahin 22-jun-2026: docs/diseno/sistema-visual-aprobado.html. Valores EXACTOS. */
-      --chrome:        #20242F;   /* fondo del chrome (rail + topbar) */
-      --chrome-tx:     #9AA3B3;   /* texto de menú inactivo */
-      --chrome-tx-on:  #FFFFFF;   /* texto de menú activo */
-      --chrome-ic:     #727B8C;   /* icono de menú inactivo */
-      --chrome-grp:    #5B6475;   /* título de grupo de menú */
-      --chrome-active: rgba(255,255,255,.10);  /* fondo del item activo */
-      --chrome-div:    rgba(255,255,255,.07);   /* divisor sobre el chrome */
-      --brand:         #FFFFFF;   /* marca (sparkles) sobre el chrome */
+      --grp:       #8A8F99;   /* título de grupo de menú (= texto tenue) */
+      --muted:     #5C616B;   /* alias heredado (= secundario) */
+      --p:         #2F6BFF;   /* alias heredado (= acento azul) */
+      /* Alias de compatibilidad: el código heredado usa var(--teal*) → ahora ES el azul de marca */
+      --teal:      #2F6BFF;
+      --teal-d:    #2456D6;
+      --teal-soft: rgba(47,107,255,0.10);
+      --teal-glow: rgba(47,107,255,0.20);
+      /* Estados — chips (DISEÑO §2.5). fondo (-s) / texto */
+      --danger:    #C0392B;  --danger-s:  #FBE3E3;   /* Vencida */
+      --warn:      #8A5B00;  --warn-s:    #FBEED0;   /* Pendiente */
+      --ok:        #157F3B;  --ok-s:      #E4F6EA;   /* Pagada */
+      --info:      #2451C7;  --info-s:    #E4EDFF;   /* Enviada (azul) */
+      /* Chrome CLARO (barra superior + menú lateral). Dirección UX 2026-07-06 (SUSTITUCIÓN 1):
+         sidebar y superficies claras; el azul es el acento del item activo, no el fondo. */
+      --chrome:        #FFFFFF;   /* fondo del chrome (rail + topbar) — BLANCO */
+      --chrome-tx:     #5C616B;   /* texto de menú inactivo */
+      --chrome-tx-on:  #2F6BFF;   /* texto/icono de menú activo (azul) */
+      --chrome-ic:     #8A8F99;   /* icono de menú inactivo */
+      --chrome-grp:    #8A8F99;   /* título de grupo de menú */
+      --chrome-active: #E4EDFF;   /* fondo del item activo (azul claro) */
+      --chrome-div:    #EEEFF2;   /* divisor / borde del chrome */
+      --brand:         #2F6BFF;   /* marca (sparkles) — azul */
       --sw:        62px;
       --sw-exp:    176px;
       --radius:    9px;
@@ -142,55 +143,25 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     security:         r => r === 'owner' || r === 'admin',
   };
 
-  // ── MENÚ REORDENADO según DISEÑO.md §3 (PIEZA 2 — solo navegación) ──────────────
-  // Agrupado por el CICLO DEL NEGOCIO: Ventas (con Clientes/Grupos), Compras (con
-  // Proveedores), Inventario, Catálogo. DISA fija arriba e Inicio justo debajo. Sin
-  // etiquetas de zona. Solo cambia DÓNDE aparece cada enlace; ninguna ruta se crea/renombra.
-  // Colapso/hover + avatar + DISA destacada + quitar logo son capa visual (CSS/JS) → 2º paso.
-  // Desenlazados (rutas SIGUEN montadas): orders (Pedidos viejos), discounts (Descuentos),
-  // analytics (Analítica) → D4, en espera del Pilar 4. tags/store-settings ya estaban
-  // ocultos (D2). Cuenta queda en el lateral de forma provisional hasta tener el avatar.
-  // Iconos = Tabler (ti-*), como el mockup. DISA NO es entrada del menú: es la home (/admin).
+  // ── MENÚ LEAN de UNA sola capa (DISEÑO.md §3, dirección UX 2026-07-06) ──────────────
+  // EXACTAMENTE 5 entradas, sin sub-enlaces ni grupos: Inicio · Facturas · Gastos · Clientes ·
+  // Contabilidad. Todo lo demás (Presupuestos, Recurrentes, TPV, Compras, Proveedores,
+  // Inventario, Catálogo, Pedidos, Cobros, Conciliación, Verifactu-envío…) DEJA de estar en el
+  // menú y queda accesible SOLO por URL — las rutas siguen montadas, no se borra nada.
+  //   · Presupuestos/Recurrentes viven dentro de Facturas · Conciliación dentro de Gastos/cobros
+  //     y la empuja DISA · Impuestos/modelos/libros/P&G dentro de Contabilidad · Analítica no es
+  //     menú: la responde DISA desde Inicio (§3.2).
+  // "Gastos" → /admin/supplier-invoices (Facturas recibidas = el libro de "Compras y gastos").
+  //   Es el destino más representativo del gasto hoy; si el dueño prefiere Compra directa
+  //   (/admin/purchases), es un solo cambio de href aquí.
+  // DISA NO es entrada del menú: ES la home (Inicio = /admin), §4.
   const nav = [
-    { section: 'Inicio', bare: true, items: [
+    { section: 'principal', bare: true, items: [
       { href: '/admin', label: 'Inicio', key: 'dashboard', icon: 'ti-home' },
-    ]},
-    { section: 'Ventas', items: [
-      { href: '/admin/quotes', label: 'Presupuestos', key: 'quotes', icon: 'ti-file-text' },
-      { href: '/admin/pedidos', label: 'Pedidos', key: 'pedidos', icon: 'ti-clipboard-list' },
-      { href: '/admin/albaranes', label: 'Albaranes', key: 'albaranes', icon: 'ti-truck-delivery' },
       { href: '/admin/invoices', label: 'Facturas', key: 'invoices', icon: 'ti-file-invoice' },
-      { href: '/admin/recurrentes', label: 'Recurrentes', key: 'recurrentes', icon: 'ti-repeat' },
-      { href: '/admin/cobros', label: 'Cobros', key: 'cobros', icon: 'ti-cash' },
-      { href: '/admin/portal', label: 'Portal de cliente', key: 'portal', icon: 'ti-external-link' },
-      { href: '/admin/mostrador', label: 'TPV', key: 'mostrador', icon: 'ti-cash-register' },
+      { href: '/admin/supplier-invoices', label: 'Gastos', key: 'supplier-invoices', icon: 'ti-receipt' },
       { href: '/admin/clients', label: 'Clientes', key: 'clients', icon: 'ti-users' },
-      { href: '/admin/clients/groups', label: 'Grupos', key: 'client-groups', icon: 'ti-users-group' },
-      { label: 'CRM', key: 'crm', disabled: true, icon: 'ti-address-book' },
-    ]},
-    { section: 'Compras', items: [
-      { href: '/admin/purchase-orders', label: 'Órdenes de compra', key: 'purchase-orders', icon: 'ti-clipboard-list' },
-      { href: '/admin/purchases', label: 'Compra directa', key: 'purchases', icon: 'ti-shopping-cart' },
-      { href: '/admin/supplier-invoices', label: 'Facturas recibidas', key: 'supplier-invoices', icon: 'ti-file-dollar' },
-      { href: '/admin/pagos', label: 'Pagos a proveedores', key: 'pagos', icon: 'ti-cash' },
-      { href: '/admin/supplier-returns', label: 'Devoluciones', key: 'supplier-returns', icon: 'ti-arrow-back-up' },
-      { href: '/admin/purchases/capture', label: 'Captura de factura', key: 'purchases-capture', icon: 'ti-camera' },
-      { href: '/admin/suppliers', label: 'Proveedores', key: 'suppliers', icon: 'ti-building-store' },
-    ]},
-    { section: 'Contabilidad', items: [
-      { href: '/admin/contabilidad', label: 'Libros registro', key: 'contabilidad', icon: 'ti-book' },
-      { href: '/admin/verifactu/envios', label: 'Envío Verifactu (AEAT)', key: 'verifactu-envio', icon: 'ti-cloud-upload' },
-      { href: '/admin/conciliacion', label: 'Conciliación bancaria', key: 'conciliacion', icon: 'ti-arrows-exchange' },
-    ]},
-    { section: 'Inventario', items: [
-      { href: '/admin/inventory', label: 'Stock', key: 'inventory', icon: 'ti-building-warehouse' },
-      { href: '/admin/warehouses', label: 'Almacenes', key: 'warehouses', icon: 'ti-buildings' },
-      { href: '/admin/stock-transfers', label: 'Traslados', key: 'stock-transfers', icon: 'ti-transfer' },
-    ]},
-    { section: 'Catálogo', items: [
-      { href: '/admin/products', label: 'Productos', key: 'products', icon: 'ti-box' },
-      { href: '/admin/categories', label: 'Categorías', key: 'categories', icon: 'ti-category' },
-      // OCULTO del menú (e-commerce, D2). Ruta /admin/tags sigue montada (no se enlaza).
+      { href: '/admin/contabilidad', label: 'Contabilidad', key: 'contabilidad', icon: 'ti-book' },
     ]},
   ];
 
@@ -242,10 +213,10 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>${title} — Bamburu</title>
   <meta name="csrf-token" content="${csrfToken}">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+  <!-- Tipografía DEL SISTEMA (DISEÑO §2.6): sin fuentes cargadas de internet. -->
+  <!-- Iconos Tabler AUTO-HOSPEDADOS (DISEÑO §2.7 — prohibido depender de iconos de internet).
+       CSS + webfont servidos desde /public/vendor/tabler (self-host); cero llamadas a CDN. -->
+  <link rel="stylesheet" href="/public/vendor/tabler/tabler-icons.min.css">
   <script>
     window.CSRF_TOKEN="${csrfToken}";
     window.USER_PERMS=${JSON.stringify(perms)};
@@ -258,7 +229,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     function closeModal(id){document.getElementById(id).classList.remove('open')}
     function toast(msg,type='ok'){
       const t=document.createElement('div');
-      const styles={ok:'background:#E8F5EE;border:1px solid #CDE8D8;color:#2E7D55',err:'background:#FBEDEC;border:1px solid #F0CFCC;color:#A6453F',warn:'background:#FAF2E2;border:1px solid #EBDDB7;color:#8A6018'};
+      const styles={ok:'background:#E4F6EA;border:1px solid #CDE8D8;color:#157F3B',err:'background:#FBE3E3;border:1px solid #F0CFCC;color:#C0392B',warn:'background:#FBEED0;border:1px solid #EBDDB7;color:#8A5B00'};
       t.style.cssText='position:fixed;bottom:1.5rem;right:1.5rem;padding:.75rem 1.1rem;border-radius:12px;font-size:.85rem;font-weight:500;z-index:9999;box-shadow:0 12px 36px rgba(16,24,40,.16);max-width:300px';
       Object.assign(t.style, {});
       t.setAttribute('style', t.style.cssText + ';' + (styles[type]||styles.ok));
@@ -295,13 +266,13 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
 ${ROOT_TOKENS}
 
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;font-size:14px;-webkit-font-smoothing:antialiased}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;font-size:14px;-webkit-font-smoothing:antialiased}
 
-    /* ── Sidebar GRAFITO OSCURO (patrón oro): colapsable a iconos · se despliega al hover ── */
+    /* ── Sidebar CLARO (dirección UX 2026-07-06): colapsable a iconos · se despliega al hover ── */
     .sidebar{width:var(--sw);background:var(--chrome);border-right:1px solid var(--chrome-div);position:fixed;top:0;left:0;height:100vh;overflow-x:hidden;overflow-y:auto;z-index:100;display:flex;flex-direction:column;transition:width .18s ease}
     .sidebar:hover{width:var(--sw-exp);box-shadow:6px 0 24px rgba(16,24,40,.18)}
     .sidebar::-webkit-scrollbar{width:6px}
-    .sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:6px}
+    .sidebar::-webkit-scrollbar-thumb{background:rgba(0,0,0,.12);border-radius:6px}
     .sb-brand{display:flex;align-items:center;justify-content:center;height:50px;flex-shrink:0;color:var(--brand);font-size:21px;line-height:1}
     .sidebar:hover .sb-brand{justify-content:flex-start;padding-left:1.05rem}
     .sb-nav{flex:1;padding:.4rem .55rem .6rem;overflow-y:auto;overflow-x:hidden}
@@ -310,7 +281,7 @@ ${ROOT_TOKENS}
     .sidebar:hover .nav-title{opacity:1}
     .nav-item{display:flex;align-items:center;justify-content:center;gap:0;padding:.5rem .57rem;margin:1px 0;border-radius:9px;color:var(--chrome-tx);text-decoration:none;font-size:13px;font-weight:400;white-space:nowrap;transition:background .15s,color .15s}
     .sidebar:hover .nav-item{justify-content:flex-start;gap:9px}
-    .nav-item:hover{background:rgba(255,255,255,.06);color:var(--chrome-tx-on)}
+    .nav-item:hover{background:var(--bg3);color:var(--chrome-tx-on)}
     .nav-item.active{background:var(--chrome-active);color:var(--chrome-tx-on);font-weight:500}
     .nav-item i.ti,.nav-item svg{flex-shrink:0;width:18px;height:18px;font-size:18px;line-height:1;color:var(--chrome-ic)}
     .nav-item:hover i.ti,.nav-item:hover svg,.nav-item.active i.ti,.nav-item.active svg{color:var(--chrome-tx-on)}
@@ -318,14 +289,14 @@ ${ROOT_TOKENS}
     .sidebar:hover .nav-item>span{width:auto;opacity:1}
     .nav-item-disabled{color:var(--chrome-ic);cursor:default;opacity:.5}
     .nav-item-disabled:hover{background:none;color:var(--chrome-ic)}
-    .nav-pending{margin-left:auto;font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;color:rgba(255,255,255,.4);border:.5px solid rgba(255,255,255,.15);border-radius:7px;padding:1px 5px}
+    .nav-pending{margin-left:auto;font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);border:.5px solid var(--border2);border-radius:7px;padding:1px 5px}
 
-    /* ── Topbar GRAFITO OSCURO (patrón oro): buscador · campana · avatar ── */
+    /* ── Topbar CLARO (dirección UX 2026-07-06): buscador · campana · avatar ── */
     .wrap{margin-left:var(--sw);flex:1;display:flex;flex-direction:column;min-height:100vh}
     .topbar{background:var(--chrome);border-bottom:1px solid var(--chrome-div);padding:.6rem 1.1rem;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:50}
-    .tb-search{flex:1;max-width:430px;display:flex;align-items:center;gap:8px;background:var(--chrome-div);border:.5px solid transparent;border-radius:9px;padding:7px 12px;color:#8A92A1;font-size:13px;cursor:text}
+    .tb-search{flex:1;max-width:430px;display:flex;align-items:center;gap:8px;background:var(--bg3);border:.5px solid var(--border2);border-radius:9px;padding:7px 12px;color:var(--text3);font-size:13px;cursor:text}
     .tb-search i.ti{font-size:16px}
-    .tb-search:focus-within{border-color:rgba(255,255,255,.14);background:rgba(255,255,255,.12)}
+    .tb-search:focus-within{border-color:var(--accent);background:#fff}
     .tb-bell{color:var(--chrome-tx);font-size:18px;position:relative;display:flex;margin-left:auto;cursor:pointer}
     .tb-bell .dot{position:absolute;top:-1px;right:-1px;width:7px;height:7px;border-radius:50%;background:#DC2626;border:1.5px solid var(--chrome)}
     .topbar-title{font-weight:500;font-size:.85rem;color:var(--text2)}
@@ -430,9 +401,9 @@ ${ROOT_TOKENS}
     .b-green{background:var(--ok-s);color:var(--ok)}
     .b-yellow{background:var(--warn-s);color:var(--warn)}
     .b-red{background:var(--danger-s);color:var(--danger)}
-    .b-blue{background:#E8EEFB;color:#2F5BBF}
+    .b-blue{background:#E4EDFF;color:#2451C7}
     .b-purple{background:#F0EBFB;color:#6D4DC0}
-    .b-gray{background:#EFF1F4;color:#3F4A5C}
+    .b-gray{background:#ECEDF0;color:#565A62}
     .b-teal{background:#ECEEF1;color:#3A4150}
 
     /* ── Modals ── */
@@ -529,7 +500,7 @@ export function docShell(paper, panel) {
 //   · generar el PDF (core/pdf.js renderPdfFromHtml) y
 //   · enviarlo como cuerpo/base de email,
 // con la MISMA maquetación que la pantalla. Reutiliza el cuerpo del documento TAL CUAL (el
-// `paper` que ya construye cada vista); aquí solo se le da el envoltorio: fuente Inter (web),
+// `paper` que ya construye cada vista); aquí solo se le da el envoltorio: fuente del sistema,
 // las variables de color y los estilos .docpaper/.doc-* + badge/alert que la factura usa por
 // clase (presupuesto/pedido/albarán usan estilos en línea y no dependen de esto, pero quedan
 // dentro del mismo lienzo .docpaper). @page A4 para que el PDF cuadre el tamaño.
@@ -537,18 +508,16 @@ export function printableShell(bodyHtml, { title = 'Documento' } = {}) {
   return `<!DOCTYPE html><html lang="es"><head>
 <meta charset="UTF-8">
 <title>${String(title).replace(/</g, '&lt;')}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
+  /* Tipografía DEL SISTEMA (DISEÑO §2.6): sin fuentes cargadas de internet. */
   :root{
-    --bg:#F5F6F8;--bg2:#FFFFFF;--bg3:#F1F3F5;--border:#ECEEF1;--border2:#E4E6EA;
-    --text:#1A1D21;--text2:#6B7280;--text3:#9097A1;--teal:#334155;--radius:9px;
-    --danger:#A32D2D;--danger-s:#FEE2E2;--warn:#854F0B;--warn-s:#FAEEDA;--ok:#2E7D55;--ok-s:#E8F5EE;
+    --bg:#F5F6F8;--bg2:#FFFFFF;--bg3:#F1F3F5;--border:#EEEFF2;--border2:#E4E6EA;
+    --text:#14161B;--text2:#5C616B;--text3:#8A8F99;--teal:#2F6BFF;--radius:9px;
+    --danger:#C0392B;--danger-s:#FBE3E3;--warn:#8A5B00;--warn-s:#FBEED0;--ok:#157F3B;--ok-s:#E4F6EA;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   @page{size:A4;margin:0}
-  body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#fff;color:var(--text);font-size:13px;-webkit-font-smoothing:antialiased}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,system-ui,sans-serif;background:#fff;color:var(--text);font-size:13px;-webkit-font-smoothing:antialiased}
   .docpaper{max-width:820px;margin:auto;padding:6mm 4mm;color:var(--text);font-size:13px}
   .docpaper h1{font-size:22px;font-weight:500;margin:0 0 4px;color:var(--text)}
   .docpaper .doc-sub{color:var(--text2);font-size:12px;margin-bottom:26px}

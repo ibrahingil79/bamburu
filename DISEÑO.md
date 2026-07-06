@@ -7,6 +7,10 @@
 > este archivo), PIEZA 2 (menú de /admin) y PIEZA 3 (saneamiento visual) **HECHAS el 2026-06-22**.
 > **Dirección UX fijada el 2026-07-06** (ver §0-bis): chrome CLARO + acento AZUL `#2F6BFF` +
 > menú LEAN de una capa + patrón "un-primario-y-···". Base visual para U1 (tokens).
+> **APLICADO en código el 2026-07-06** (`modules/erp/layout.js`): tokens (chrome claro + azul +
+> texto/bordes/chips), fuente del sistema (fuera Inter), iconos Tabler **auto-hospedados**
+> (`/public/vendor/tabler`, fuera CDN) y **menú lean estricto de 5 entradas**. Pendiente: patrón
+> por pantalla §6 (refactor por-vista) y la barra DISA-fija-con-contador + "Ayuda y soporte" §3.1.
 > Última actualización: 2026-07-06
 
 ---
@@ -47,7 +51,9 @@ sistema**, y los **iconos** dejan de depender de *Tabler Icons* cargado por CDN.
 
 El patrón oro anterior (`docs/diseno/sistema-visual-aprobado.html`, chrome grafito) queda
 **superado por esta dirección** en lo relativo a chrome, acento, tipografía e iconos. La
-reconciliación de los tokens del código con estos valores es la tarea **U1 (tokens)**.
+reconciliación de los tokens del código con estos valores (tarea **U1 — tokens**) quedó
+**APLICADA el 2026-07-06** en `modules/erp/layout.js` (`ROOT_TOKENS` + chrome/topbar claros +
+fuente del sistema + chips), junto con el **auto-hospedaje de los iconos** y el **menú lean**.
 
 ---
 
@@ -127,8 +133,9 @@ pantalla:
 ### 2.7 Esquinas · iconos
 
 - Radios: **9px en controles**, **12px en tarjetas**.
-- **Iconos:** de línea, propios/embebidos. **Prohibido depender de iconos cargados de
-  internet** *(sustituye a Tabler Icons por CDN).*
+- **Iconos:** de línea. **Prohibido depender de iconos cargados de internet.** *(Aplicado: el
+  webfont de Tabler se sirve **auto-hospedado** desde `/public/vendor/tabler`, sin CDN. Migrar a
+  SVG inline propio queda como mejora futura; el requisito "sin internet" ya se cumple.)*
 
 ---
 
@@ -143,6 +150,9 @@ pantalla:
 
 - **Entradas (una capa, sin sub-enlaces):**
   **Inicio · Facturas · Gastos · Clientes · Contabilidad.**
+  *(Aplicado 2026-07-06, lean estricto: estas 5 y nada más en el menú; el resto de rutas siguen
+  montadas y accesibles solo por URL. "Gastos" → `/admin/supplier-invoices` — el libro de
+  "Compras y gastos". DISA fija-con-contador y "Ayuda y soporte" del §3.1 quedan pendientes.)*
 - **DISA fija arriba**, con **contador de propuestas**.
 - **Abajo del rail:** **Ayuda y soporte** + **usuario** (bajo el usuario: Mi cuenta · Ajustes ·
   Datos del negocio · Cerrar sesión).
@@ -251,8 +261,9 @@ Notas de esta zona:
 ## 8. Observaciones registradas (no se actúa sobre ellas aquí)
 
 - **Reconciliación de tokens del código** con los valores del §2 (chrome claro, azul `#2F6BFF`,
-  tipografía del sistema, iconos embebidos) → tarea **U1 (tokens)**. Este archivo fija los
-  valores; U1 los aplica.
+  tipografía del sistema, iconos auto-hospedados) → tarea **U1 (tokens)**, **APLICADA el
+  2026-07-06** en `modules/erp/layout.js` (+ `printableShell` para PDF/email). Verificado: render
+  con el azul y sin Inter/Google Fonts, y los estáticos de `/public/vendor/tabler` servidos 200.
 - **Patrón oro anterior** (`docs/diseno/sistema-visual-aprobado.html`, chrome grafito): queda
   superado por §0-bis en chrome, acento, tipografía e iconos. Si se conserva como referencia
   histórica, no manda sobre estos tokens.
