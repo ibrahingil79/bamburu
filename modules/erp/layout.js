@@ -1,4 +1,5 @@
 import { getDisaWidget } from '../disa/widget.js';
+import { estadoAvisos } from './avisos.js';
 
 export const ROOT_TOKENS = `
     :root{
@@ -109,6 +110,14 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   const isAdmin = role === 'admin' || isOwner;
   const perms = c?.get?.('userPerms') || [];
 
+  // Contador de propuestas de DISA para la insignia del rail (§3.1). Se lee de la BD del tenant
+  // (c.get('db')); si falla, 0 y sin insignia — nunca rompe el render de la página.
+  let disaCount = 0;
+  try {
+    const _db = c?.get?.('db');
+    if (_db) disaCount = estadoAvisos(_db, new Date().toISOString().slice(0, 10)).count || 0;
+  } catch { disaCount = 0; }
+
   // Banner de SOLO LECTURA: el negocio fue suspendido por impago (suspended_admin) desde el
   // panel de superadmin. Entra y ve sus datos, pero el guard bloquea cualquier escritura.
   const readOnly = !!c?.get?.('tenantReadOnly');
@@ -173,7 +182,6 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   //  con TODAS sus funciones.) Inicio es enlace directo (la home de DISA, §4). El resto son
   //  grupos desplegables. Cada hijo apunta a su ruta real; nada se crea ni se renombra.
   const nav = [
-    { home: true, href: '/admin', label: 'Inicio', key: 'dashboard', icon: 'ti-home' },
     { label: 'Ventas', icon: 'ti-shopping-cart', items: [
       { href: '/admin/invoices', label: 'Facturas', key: 'invoices', icon: 'ti-file-invoice' },
       { href: '/admin/quotes', label: 'Presupuestos', key: 'quotes', icon: 'ti-file-text' },
@@ -384,8 +392,14 @@ ${ROOT_TOKENS}
     .sidebar{width:var(--sw);background:var(--chrome);border-right:1px solid var(--chrome-div);position:fixed;top:0;left:0;height:100vh;overflow-x:hidden;overflow-y:auto;z-index:100;display:flex;flex-direction:column}
     .sidebar::-webkit-scrollbar{width:6px}
     .sidebar::-webkit-scrollbar-thumb{background:rgba(0,0,0,.12);border-radius:6px}
-    .sb-brand{display:flex;align-items:center;justify-content:center;height:50px;flex-shrink:0;color:var(--brand);font-size:21px;line-height:1}
+    /* DISA fija arriba con contador de propuestas (§3.1) — también es la marca y el Inicio */
+    .disa-pin{position:relative;display:flex;align-items:center;justify-content:center;height:50px;flex-shrink:0;color:var(--brand);text-decoration:none}
+    .disa-pin i.ti{font-size:22px;line-height:1}
+    .disa-pin:hover{color:var(--accent-d)}
+    .disa-pin.active i.ti{color:var(--accent)}
+    .disa-pin-badge{position:absolute;top:7px;right:11px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:#DC2626;color:#fff;font-size:10px;font-weight:600;line-height:1;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--chrome)}
     .sb-nav{flex:1;padding:.4rem .5rem .6rem;display:flex;flex-direction:column;gap:3px;overflow-x:hidden}
+    .rail-spacer{flex:1;min-height:8px}
     .navg{position:relative}
     .nav-item{display:flex;align-items:center;justify-content:center;padding:.55rem;border-radius:10px;color:var(--chrome-ic);text-decoration:none;cursor:pointer;background:none;border:none;width:100%;font-family:inherit;transition:background .15s,color .15s}
     .nav-item:hover{background:var(--bg3);color:var(--accent)}
@@ -582,8 +596,15 @@ ${ROOT_TOKENS}
 </head>
 <body>
   <aside class="sidebar">
-    <a href="/admin" class="sb-brand" title="Bamburu"><i class="ti ti-sparkles"></i></a>
-    <nav class="sb-nav">${navHTML}</nav>
+    <a href="/admin" class="disa-pin${active === 'dashboard' ? ' active' : ''}" title="Inicio — DISA${disaCount ? ` · ${disaCount} propuesta${disaCount === 1 ? '' : 's'}` : ''}">
+      <i class="ti ti-sparkles"></i>
+      ${disaCount ? `<span class="disa-pin-badge">${disaCount > 9 ? '9+' : disaCount}</span>` : ''}
+    </a>
+    <nav class="sb-nav">
+      ${navHTML}
+      <span class="rail-spacer"></span>
+      <a href="/docs" target="_blank" class="nav-item" title="Ayuda y soporte"><i class="ti ti-lifebuoy"></i></a>
+    </nav>
   </aside>
   <div class="wrap">
     <div class="topbar">

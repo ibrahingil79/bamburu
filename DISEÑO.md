@@ -163,8 +163,10 @@ pantalla:
   - **Inventario:** Stock · Almacenes · Traslados.
   - **Catálogo:** Productos · Categorías.
 - El icono del área se marca **activo** cuando la pantalla actual es una de sus funciones.
-- **Cuenta/usuario:** en el desplegable del avatar (topbar). **Pendiente §3.1:** DISA
-  fija-con-contador y "Ayuda y soporte" al pie del rail.
+- **DISA fija arriba** (aplicado): sparkles en lo alto del rail con **insignia de contador de
+  propuestas** (de `estadoAvisos`, leído de la BD del tenant); es a la vez marca e **Inicio**
+  (→ `/admin`, la home de DISA). **"Ayuda y soporte"** (aplicado): al **pie del rail** (→ `/docs`).
+- **Cuenta/usuario:** en el desplegable del avatar (topbar).
 
 ### 3.2 Cómo DISA reagrupa dentro de cada área (no crea menús nuevos)
 
