@@ -207,11 +207,20 @@ huérfana y lo decide el dueño — no se fuerza el menú.
 ## 6. Patrón por pantalla (mata la "sopa de enlaces")
 
 > **Aplicación (2026-07-06):** primitivas compartidas en `modules/erp/layout.js` — `disaBand()`
-> / `window.disaBand` (banda azul con un enlace) y `rowMenu()` / `window.rowMenu` (menú `···`),
-> con su CSS `.disa-band` / `.rmenu*`. Aplicado a **Facturas** (banda de vencidas → "Revisar →" a
-> Cobros; acciones de fila Gestionar/Rectificar/Anular colapsadas en `···`) y a **Clientes**
-> (Editar/Archivar en `···`). Pendiente el resto de pantallas (Gastos, Contabilidad, Inicio y las
-> de solo-URL) — mismo patrón con las mismas primitivas.
+> / `window.disaBand` (banda azul con un enlace) y `rowMenu(items, {label})` / `window.rowMenu`
+> (menú `···`, o botón con etiqueta tipo "Exportar ▾"), con su CSS `.disa-band` / `.rmenu*`.
+> Aplicado a las **5 pantallas del menú lean**:
+> - **Inicio** — ya cumplía el patrón (es la home de DISA: filas calmadas + un solo primario).
+> - **Facturas** — banda de vencidas → "Revisar →" a Cobros; acciones de fila (Gestionar/
+>   Rectificar/Anular) colapsadas en `···`, "Ver" como única acción visible.
+> - **Gastos** (facturas recibidas) — banda de vencidas → "Revisar →" a Pagos; "Pago" deja de ser
+>   azul (secundario), sin primario por fila.
+> - **Clientes** — Editar/Archivar en `···`, "Ver" visible.
+> - **Contabilidad** — la fila de 3 enlaces de export (Excel/CSV/PDF) colapsada en "Exportar ▾".
+>
+> **Pendiente de §6:** (a) reducir las **6 pestañas** de Contabilidad a máx 2-3 es una decisión de
+> IA del dueño (no se fuerza aquí); (b) aplicar el patrón a las pantallas de **solo-URL** (Compras,
+> Inventario, Catálogo, TPV, Presupuestos…), con las mismas primitivas.
 
 La regla de densidad del §1, aterrizada en cada pantalla:
 

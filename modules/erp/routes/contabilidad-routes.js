@@ -4,7 +4,7 @@
 // en pantalla, PDF y export. Descarga real XLSX/CSV/PDF (Content-Disposition). Aditivo.
 import { Hono } from 'hono';
 import { requirePerm } from '../../../core/auth.js';
-import { adminLayout } from '../layout.js';
+import { adminLayout, rowMenu } from '../layout.js';
 import { escHtml } from '../../../core/escape.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';
 import { backfillLedger, libroVentas, libroCompras, libroDiario, libroMayor, mayorCuenta } from '../contabilidad.js';
@@ -70,9 +70,11 @@ function periodForm(kind, from, to) {
     <div><label class="doc-label">Hasta</label><br><input type="date" name="to" value="${escHtml(to)}"></div>
     <button class="btn" type="submit">Ver periodo</button>
     <span style="flex:1"></span>
-    <a class="btn btn-ghost" href="/admin/contabilidad/${kind}.xlsx?${q}">Excel (XLSX)</a>
-    <a class="btn btn-ghost" href="/admin/contabilidad/${kind}.csv?${q}">CSV</a>
-    <a class="btn btn-ghost" href="/admin/contabilidad/${kind}.pdf?${q}">PDF</a>
+    ${rowMenu([
+      { label: 'Excel (XLSX)', href: `/admin/contabilidad/${kind}.xlsx?${q}` },
+      { label: 'CSV', href: `/admin/contabilidad/${kind}.csv?${q}` },
+      { label: 'PDF', href: `/admin/contabilidad/${kind}.pdf?${q}` },
+    ], { label: 'Exportar' })}
   </form>`;
 }
 

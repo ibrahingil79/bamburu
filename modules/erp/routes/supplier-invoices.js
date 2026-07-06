@@ -480,6 +480,7 @@ export function createSupplierInvoiceRoutes(db) {
           ${canCreate ? '<a href="/admin/supplier-invoices/new" class="btn btn-primary">Registrar factura</a>' : ''}
         </div>
       </div>
+      <div id="disaBand"></div>
       ${supplierId ? `<div class="card" id="debtCard" style="margin-bottom:1rem;display:none"><div class="card-body" id="debtBox"></div></div>` : ''}
       <div class="card">
         <div class="card-head" style="gap:.5rem;flex-wrap:wrap"><h3>Documentos de deuda con proveedores</h3>
@@ -507,12 +508,22 @@ export function createSupplierInvoiceRoutes(db) {
       const ESTADO_LABEL = ${JSON.stringify(ESTADO_LABEL)};
       const ESTADO_BADGE = ${JSON.stringify(ESTADO_BADGE)};
       let rows = [];
+      // Banda de DISA (§6): aviso calmado de facturas de proveedor vencidas con UN enlace a Pagos.
+      function updateDisaBand(){
+        const el=document.getElementById('disaBand'); if(!el) return;
+        const v=rows.filter(function(r){return r.status!=='anulada' && Number(r.pendiente||0)>0.0049 && Number(r.dias_vencida||0)>0;});
+        if(!v.length){ el.innerHTML=''; return; }
+        const eur=v.reduce(function(a,r){return a+Number(r.pendiente||0);},0);
+        const txt='Tienes <strong>'+v.length+'</strong> factura'+(v.length===1?'':'s')+' de proveedor vencida'+(v.length===1?'':'s')+' ('+SYM+eur.toFixed(2)+' pendiente de pago).';
+        el.innerHTML=window.disaBand(txt,'/admin/pagos','Revisar');
+      }
       async function loadList(){
         try { rows = await api('GET','/api/erp/supplier-invoices'+(SUPPLIER_ID?('?supplier='+SUPPLIER_ID):'')); } catch(e){ toast(e.message||'Error','err'); return; }
+        updateDisaBand();
         document.getElementById('siBody').innerHTML = rows.length ? rows.map(function(r){
           const badge = r.status==='anulada' ? '<span class="badge b-gray">Anulada</span>' : '<span class="badge '+(ESTADO_BADGE[r.estado]||'')+'">'+(ESTADO_LABEL[r.estado]||r.estado)+(r.dias_vencida>0?' · '+r.dias_vencida+'d':'')+'</span>';
           const pend = r.status==='anulada' ? '—' : SYM+Number(r.pendiente||0).toFixed(2);
-          const payBtn = (r.pagable && r.pendiente>0.0049) ? '<button class="btn btn-primary btn-sm" onclick="openPagos('+r.id+')">Pago</button> '
+          const payBtn = (r.pagable && r.pendiente>0.0049) ? '<button class="btn btn-secondary btn-sm" onclick="openPagos('+r.id+')">Pago</button> '
             : (r.entity_type==='supplier_return' && r.status==='vigente' && r.pendiente<-0.0049) ? '<button class="btn btn-secondary btn-sm" onclick="openPagos('+r.id+')">Reembolso</button> '
             : '';
           const esAbono = r.entity_type==='supplier_return';

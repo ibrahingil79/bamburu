@@ -81,14 +81,18 @@ export function disaBand(text, href = '', cta = 'Revisar') {
 }
 
 // Menú "···" (DISEÑO §6) para vistas SERVER-rendered: acciones secundarias de una fila.
-// items = [{label, href?, onclick?, danger?, target?}]. Espejo de window.rowMenu.
-export function rowMenu(items = []) {
+// items = [{label, href?, onclick?, danger?, target?}]. opts.label → botón con texto (p. ej.
+// "Exportar ▾") en vez del "···". Espejo de window.rowMenu.
+export function rowMenu(items = [], opts = {}) {
   const body = items.map(it => {
     const cls = 'rmenu-item' + (it.danger ? ' danger' : '');
     if (it.href) return `<a href="${it.href}" class="${cls}"${it.target ? ` target="${it.target}"` : ''}>${it.label}</a>`;
     return `<button type="button" class="${cls}" onclick="closeRowMenus();${it.onclick || ''}">${it.label}</button>`;
   }).join('');
-  return `<span class="rmenu"><button type="button" class="rmenu-btn" onclick="toggleRowMenu(this)" aria-label="Más acciones" title="Más acciones">⋯</button><div class="rmenu-pop">${body}</div></span>`;
+  const trig = opts.label
+    ? `<button type="button" class="rmenu-btn rmenu-btn-lbl" onclick="toggleRowMenu(this)">${opts.label} ▾</button>`
+    : `<button type="button" class="rmenu-btn" onclick="toggleRowMenu(this)" aria-label="Más acciones" title="Más acciones">⋯</button>`;
+  return `<span class="rmenu">${trig}<div class="rmenu-pop">${body}</div></span>`;
 }
 
 export function can(c, perm) {
@@ -289,13 +293,17 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
         +(href?'<a class="db-cta" href="'+href+'">'+(cta||'Revisar')+' →</a>':'')+'</div>';
     };
     // Menú "···": acciones secundarias de una fila. items=[{label, href?, onclick?, danger?, target?}].
-    window.rowMenu=function(items){
+    window.rowMenu=function(items,opts){
+      opts=opts||{};
       var body=(items||[]).map(function(it){
         var cls='rmenu-item'+(it.danger?' danger':'');
         if(it.href) return '<a href="'+it.href+'" class="'+cls+'"'+(it.target?' target="'+it.target+'"':'')+'>'+it.label+'</a>';
         return '<button type="button" class="'+cls+'" onclick="closeRowMenus();'+(it.onclick||'')+'">'+it.label+'</button>';
       }).join('');
-      return '<span class="rmenu"><button type="button" class="rmenu-btn" onclick="toggleRowMenu(this)" aria-label="Más acciones" title="Más acciones">⋯</button><div class="rmenu-pop">'+body+'</div></span>';
+      var trig=opts.label
+        ? '<button type="button" class="rmenu-btn rmenu-btn-lbl" onclick="toggleRowMenu(this)">'+opts.label+' ▾</button>'
+        : '<button type="button" class="rmenu-btn" onclick="toggleRowMenu(this)" aria-label="Más acciones" title="Más acciones">⋯</button>';
+      return '<span class="rmenu">'+trig+'<div class="rmenu-pop">'+body+'</div></span>';
     };
     window.closeRowMenus=function(){document.querySelectorAll('.rmenu-pop.open').forEach(function(p){p.classList.remove('open');});};
     window.toggleRowMenu=function(btn){
@@ -485,6 +493,7 @@ ${ROOT_TOKENS}
     .rmenu{position:relative;display:inline-block}
     .rmenu-btn{background:none;border:1px solid var(--border2);border-radius:8px;cursor:pointer;color:var(--text2);font-size:1rem;line-height:1;padding:.2rem .5rem;font-family:inherit;transition:background .12s,border-color .12s}
     .rmenu-btn:hover{background:var(--bg3);border-color:var(--text3);color:var(--text)}
+    .rmenu-btn-lbl{font-size:.82rem;font-weight:500;padding:.42rem .8rem}
     .rmenu-pop{position:fixed;min-width:172px;background:#fff;border:1px solid var(--border2);border-radius:10px;box-shadow:0 8px 24px rgba(16,24,40,.12);padding:6px;display:none;z-index:300}
     .rmenu-pop.open{display:block}
     .rmenu-item{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;font-size:.82rem;color:var(--body-tx);text-decoration:none;cursor:pointer;white-space:nowrap;background:none;border:none;width:100%;text-align:left;font-family:inherit}
