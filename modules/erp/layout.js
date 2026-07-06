@@ -112,6 +112,36 @@ export function estadoTabs(active = '', entries = [], q = '') {
     + `</div>`;
 }
 
+// ── Estado VACÍO compartido (U2) ─────────────────────────────────────────────────
+// Bloque centrado con voz de DISA: icono sutil (marca) + UNA frase + acción opcional.
+// `text` ya viene escapado por quien llama (es voz de producto, texto fijo). Reutiliza
+// los tokens (--accent-soft/--accent) y el botón .btn-primary; espejo de window.emptyState.
+// opts: { cta, href } acción principal (botón azul) · soft:true → enlace suave (vacío
+// derivado) · tone:'ok' → vacío "bueno" (check verde, sin acción) · icon: icono Tabler.
+export function emptyState(text, opts = {}) {
+  const { cta = '', href = '', onclick = '', soft = false, icon = 'ti-sparkles', tone = '' } = opts;
+  let action = '';
+  if (cta && onclick) action = `<button type="button" class="btn btn-primary" onclick="${onclick}">${cta}</button>`;
+  else if (cta && href) action = soft ? `<a class="empty-soft" href="${href}">${cta} →</a>` : `<a class="btn btn-primary" href="${href}">${cta}</a>`;
+  const ic = tone === 'ok' ? 'ti-circle-check' : icon;
+  return `<div class="empty"><span class="empty-ic${tone === 'ok' ? ' ok' : ''}"><i class="ti ${ic}"></i></span>`
+    + `<div class="empty-tx">${text}</div>${action}</div>`;
+}
+
+// Fila de tabla vacía: envuelve emptyState en <tr><td colspan>. Espejo de window.emptyRow.
+export function emptyRow(cols, text, opts = {}) {
+  return `<tr><td colspan="${cols}" class="empty-cell">${emptyState(text, opts)}</td></tr>`;
+}
+
+// ── Skeleton de CARGA compartido (U2) ────────────────────────────────────────────
+// Filas atenuadas con leve pulso mientras el fetch resuelve. Sustituye el <tbody> vacío
+// (pantallazo en blanco) y los "Cargando..." sueltos por un patrón único. Espejo de
+// window.skeletonRows. `cols` = nº de columnas de la tabla; `rows` = filas fantasma.
+export function skeletonRows(cols, rows = 6) {
+  const cells = Array.from({ length: cols }, () => `<td><span class="skel"></span></td>`).join('');
+  return Array.from({ length: rows }, () => `<tr class="skel-row">${cells}</tr>`).join('');
+}
+
 export function can(c, perm) {
   if (c.get('isOwner')) return true;
   if (c.get('isAdmin')) return true;
@@ -347,6 +377,21 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
         +'<span class="db-tx">'+text+'</span>'
         +(href?'<a class="db-cta" href="'+href+'">'+(cta||'Revisar')+' →</a>':'')+'</div>';
     };
+    // Estado VACÍO (U2): icono sutil + frase + acción opcional. text ya viene escapado.
+    // opts: {cta,href} botón azul · soft:true enlace suave · tone:'ok' vacío bueno (check).
+    window.emptyState=function(text,opts){
+      opts=opts||{};
+      var cta=opts.cta||'',href=opts.href||'',onclick=opts.onclick||'',soft=opts.soft,icon=opts.icon||'ti-sparkles',tone=opts.tone||'';
+      var action='';
+      if(cta&&onclick)action='<button type="button" class="btn btn-primary" onclick="'+onclick+'">'+cta+'</button>';
+      else if(cta&&href)action=soft?'<a class="empty-soft" href="'+href+'">'+cta+' →</a>':'<a class="btn btn-primary" href="'+href+'">'+cta+'</a>';
+      var ic=tone==='ok'?'ti-circle-check':icon;
+      return '<div class="empty"><span class="empty-ic'+(tone==='ok'?' ok':'')+'"><i class="ti '+ic+'"></i></span><div class="empty-tx">'+text+'</div>'+action+'</div>';
+    };
+    // Fila de tabla vacía: envuelve emptyState en <tr><td colspan>.
+    window.emptyRow=function(cols,text,opts){return '<tr><td colspan="'+cols+'" class="empty-cell">'+window.emptyState(text,opts)+'</td></tr>';};
+    // Skeleton de CARGA (U2): filas atenuadas con leve pulso mientras resuelve el fetch.
+    window.skeletonRows=function(cols,rows){rows=rows||6;var cells='';for(var i=0;i<cols;i++)cells+='<td><span class="skel"></span></td>';var out='';for(var r=0;r<rows;r++)out+='<tr class="skel-row">'+cells+'</tr>';return out;};
     // Menú "···": acciones secundarias de una fila. items=[{label, href?, onclick?, danger?, target?}].
     window.rowMenu=function(items,opts){
       opts=opts||{};
@@ -600,6 +645,26 @@ ${ROOT_TOKENS}
     .rmenu-item:hover{background:var(--bg3)}
     .rmenu-item.danger{color:var(--danger)}
     .rmenu-item.danger:hover{background:var(--danger-s)}
+
+    /* ── Estado VACÍO (U2) — voz de DISA: icono sutil + frase + acción opcional.
+       Reutiliza tokens (--accent-soft/--accent, --ok-s/--ok) y el botón .btn-primary. ── */
+    .empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:.55rem;padding:2.75rem 1.5rem;color:var(--text2)}
+    .empty-ic{width:42px;height:42px;border-radius:12px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:21px;line-height:1;flex-shrink:0}
+    .empty-ic.ok{background:var(--ok-s);color:var(--ok)}
+    .empty-tx{font-size:.9rem;color:var(--text2);max-width:34rem;line-height:1.5}
+    .empty .btn{margin-top:.35rem}
+    .empty-soft{color:var(--accent);font-weight:500;text-decoration:none;font-size:.85rem;margin-top:.1rem}
+    .empty-soft:hover{text-decoration:underline}
+    .empty-cell{background:transparent!important}
+    tbody tr:hover .empty-cell{background:transparent!important}
+    /* ── Skeleton de CARGA (U2) — filas atenuadas con leve pulso (shimmer sobre --bg3) ── */
+    .skel{display:block;height:.72rem;width:100%;border-radius:6px;background:var(--bg3);position:relative;overflow:hidden}
+    .skel::after{content:"";position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,rgba(255,255,255,.6),transparent);animation:skel 1.3s ease-in-out infinite}
+    .skel-block{height:62px;border-radius:9px}
+    .skel-row td{padding:.7rem 1rem}
+    .skel-row:hover td{background:transparent!important}
+    @keyframes skel{100%{transform:translateX(100%)}}
+    @media(prefers-reduced-motion:reduce){.skel::after{animation:none}}
 
     /* ── Misc ── */
     .ph{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem}

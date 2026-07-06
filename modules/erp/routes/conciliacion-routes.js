@@ -4,7 +4,7 @@
 import { Hono } from 'hono';
 import { requirePerm } from '../../../core/auth.js';
 import { checkPermission } from '../../../core/permission-check.js';
-import { adminLayout } from '../layout.js';
+import { adminLayout, emptyRow } from '../layout.js';
 import { escHtml } from '../../../core/escape.js';
 import { buildXlsx, toCSV } from '../contabilidad-export.js';
 import { importNorma43, sugerenciasIngreso, conciliarConCobro, conciliarConFactura, ignorarMovimiento, deshacer,
@@ -134,7 +134,9 @@ export function createConciliacionRoutes(db) {
         <td style="text-align:right;white-space:nowrap">${m.balance != null ? money(sym, m.balance) : ''}</td>
         <td>${badge(m.estado)}</td>
         <td>${acciones}</td></tr>`;
-    }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text2)">Sin movimientos. Sube un extracto Norma 43 para empezar.</td></tr>';
+    }).join('') || (puedeGestionar
+      ? emptyRow(6, 'Aún no has subido ningún extracto. Súbelo (Norma 43) y cruzo tus cobros por ti.', { cta: 'Subir extracto', onclick: "var f=document.querySelector('input[name=file]');if(f){f.scrollIntoView({block:'center'});f.click()}" })
+      : emptyRow(6, 'Aún no hay movimientos bancarios que conciliar.'));
 
     const content = `<div class="ph"><h2>Conciliación bancaria</h2></div>
       <div style="color:var(--text2);font-size:12px;margin-bottom:.5rem">Sube el extracto de tu banco (Norma 43) y cruza los abonos con tus facturas/cobros. Todo por sugerencia que tú confirmas; los cargos (gastos) se listan pero su cruce es una pieza posterior.</div>

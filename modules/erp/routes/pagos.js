@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { requirePerm } from '../../../core/auth.js';
-import { adminLayout } from '../layout.js';
+import { adminLayout, skeletonRows } from '../layout.js';
 import { openPayables } from '../pagos.js';
 import { pagoModalHtml, pagoCuentaModalHtml, pagoModalScript } from '../views/pago-modal.js';
 
@@ -35,7 +35,7 @@ export function createPagosRoutes(db) {
         <div class="card-head"><h3>Deudas con proveedores (más urgentes arriba)</h3><input class="search" id="searchBox" placeholder="Buscar proveedor o factura..." oninput="filterRows()"></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Proveedor</th><th>Factura</th><th>Vence</th><th>Pendiente</th><th>Estado</th><th></th></tr></thead>
-          <tbody id="pagosBody"></tbody>
+          <tbody id="pagosBody">${skeletonRows(6)}</tbody>
         </table></div>
       </div>
 
@@ -76,7 +76,7 @@ export function createPagosRoutes(db) {
             +'<td><span class="badge '+(ESTADO_BADGE[r.estado]||'')+'">'+(ESTADO_LABEL[r.estado]||r.estado)+tramo+'</span></td>'
             +'<td>'+btn+'</td>'
             +'</tr>';
-        }).join('') : '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--muted)">No debes nada pendiente 🎉</td></tr>';
+        }).join('') : window.emptyRow(6, 'No debes nada a proveedores ahora mismo. Todo al día.', { tone: 'ok' });
         filterRows();
       }
       function filterRows(){

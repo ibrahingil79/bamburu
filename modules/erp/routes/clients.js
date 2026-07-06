@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can, rowMenu } from '../layout.js';
+import { adminLayout, can, rowMenu, emptyRow, skeletonRows } from '../layout.js';
 import { logActivity, requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { escHtml } from '../../../core/escape.js';
@@ -344,7 +344,7 @@ export function createClientRoutes(db, cfg = {}) {
       <div class="card">
         <div class="table-wrap"><table>
           <thead><tr><th>Código</th><th>Nombre</th><th>Email</th><th>Teléfono</th><th>Grupo</th><th>Registrado</th><th></th></tr></thead>
-          <tbody>${total === 0 ? '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">No se encontraron clientes</td></tr>' : rowsHtml}</tbody>
+          <tbody>${total === 0 ? ((q || verArchivados) ? emptyRow(7, 'No se encontraron clientes con ese filtro.', { icon: 'ti-search' }) : emptyRow(7, 'Todavía no tienes clientes. Vamos a dar de alta el primero.', can(c, 'clients.create') ? { cta: 'Nuevo cliente', onclick: 'openNewClient()' } : {})) : rowsHtml}</tbody>
         </table></div>
       </div>
 
@@ -473,7 +473,7 @@ export function createClientRoutes(db, cfg = {}) {
         const c=await api('GET','/api/erp/clients/'+id);
         const deb=await api('GET','/api/erp/clients/'+id+'/invoices').catch(()=>({total:0,oldest:null,invoices:[]}));
         document.getElementById('detailName').textContent=c.name;
-        const ordRows=c.orders?.length?c.orders.map(o=>'<tr><td>'+o.order_number+'</td><td>${sym}'+Number(o.total||0).toFixed(2)+'</td><td><span class="badge b-gray">'+o.status+'</span></td><td style="color:var(--muted);font-size:.8rem">'+(o.created_at?.split(' ')[0]||'-')+'</td></tr>').join(''):'<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:1rem">Sin pedidos</td></tr>';
+        const ordRows=c.orders?.length?c.orders.map(o=>'<tr><td>'+o.order_number+'</td><td>${sym}'+Number(o.total||0).toFixed(2)+'</td><td><span class="badge b-gray">'+o.status+'</span></td><td style="color:var(--muted);font-size:.8rem">'+(o.created_at?.split(' ')[0]||'-')+'</td></tr>').join(''):window.emptyRow(4,'Este cliente aún no tiene pedidos.');
         // Facturas del cliente con estado de cobro en vivo (T4).
         const cobroBadge={pendiente:'b-yellow',parcial:'b-blue',cobrada:'b-green',vencida:'b-red',abono:'b-gray'};
         const cobroLabel={pendiente:'Pendiente',parcial:'Cobrada en parte',cobrada:'Cobrada',vencida:'Vencida',abono:'Abono'};
@@ -498,7 +498,7 @@ export function createClientRoutes(db, cfg = {}) {
             '<td>'+estadoCell+'</td>'+
             '<td>'+proxCell+'</td>'+
             '<td style="text-align:right">'+cobrarCell+'</td></tr>';
-        }).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:1rem">Sin facturas</td></tr>';
+        }).join(''):window.emptyRow(7,'Este cliente aún no tiene facturas.');
         const o=deb.oldest;
         // Paso 2.1 — "Gestionar cuenta" (toda la deuda viva a la vez), junto al "Te debe X".
         const gestionarCuentaBtn = Number(deb.total||0)>0.0049
@@ -541,7 +541,7 @@ export function createClientRoutes(db, cfg = {}) {
         <div class="card-head"><h3>Lista de grupos</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="renderGroups()"></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Nombre</th><th>Descripción</th><th>Miembros</th><th></th></tr></thead>
-          <tbody id="groupBody"></tbody>
+          <tbody id="groupBody">${skeletonRows(4)}</tbody>
         </table></div>
       </div>
       <div class="modal-overlay" id="groupModal">
@@ -564,7 +564,7 @@ export function createClientRoutes(db, cfg = {}) {
       function renderGroups(){
         const q=(document.getElementById('searchBox').value||'').toLowerCase();
         const f=q?groups.filter(g=>(g.name||'').toLowerCase().includes(q)||(g.description||'').toLowerCase().includes(q)):groups;
-        document.getElementById('groupBody').innerHTML=f.length?f.map(g=>'<tr><td><strong>'+g.name+'</strong></td><td style="color:var(--muted)">'+(g.description||'-')+'</td><td><span class="badge b-blue">'+g.member_count+'</span></td><td><button class="btn btn-secondary btn-sm" onclick="editGroup('+g.id+')">Editar</button> <button class="btn btn-danger btn-sm" onclick="delGroup('+g.id+')">Eliminar</button></td></tr>').join(''):'<tr><td colspan="4" style="text-align:center;padding:1.5rem;color:var(--muted)">'+(q?'Sin coincidencias':'Sin grupos')+'</td></tr>';
+        document.getElementById('groupBody').innerHTML=f.length?f.map(g=>'<tr><td><strong>'+g.name+'</strong></td><td style="color:var(--muted)">'+(g.description||'-')+'</td><td><span class="badge b-blue">'+g.member_count+'</span></td><td><button class="btn btn-secondary btn-sm" onclick="editGroup('+g.id+')">Editar</button> <button class="btn btn-danger btn-sm" onclick="delGroup('+g.id+')">Eliminar</button></td></tr>').join(''):(q?window.emptyRow(4,'No se encontraron grupos con ese filtro.',{icon:'ti-search'}):window.emptyRow(4,'Aún no has creado grupos. Agrupa clientes para tratarlos juntos.',{cta:'Nuevo grupo',onclick:"openModal('groupModal')"}));
       }
       function editGroup(id){const g=groups.find(x=>x.id===id);if(!g)return;document.getElementById('groupModalTitle').textContent='Editar Grupo';document.getElementById('groupId').value=id;document.getElementById('gName').value=g.name;document.getElementById('gDesc').value=g.description||'';openModal('groupModal');}
       async function saveGroup(){

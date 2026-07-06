@@ -10,7 +10,7 @@ import { validate } from '../../../core/validate.js';
 import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema, invoicePaymentSchema, collectionActionSchema, sustitutivaSchema } from '../schemas.js';
 import { getCountryConfig } from '../../../core/control-db.js';
 import { escHtml } from '../../../core/escape.js';
-import { adminLayout, docShell, printableShell, can } from '../layout.js';
+import { adminLayout, docShell, printableShell, can, skeletonRows } from '../layout.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';   // PDF real: mismo HTML imprimible → Chromium
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
@@ -1044,7 +1044,7 @@ export function createInvoiceRoutes(db) {
         <div class="card-head"><h3>Todas las facturas</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="filterTable()"></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Número</th><th>Pedido</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Pendiente</th><th>Cobro</th><th>Estado</th><th></th></tr></thead>
-          <tbody id="invBody"></tbody>
+          <tbody id="invBody">${skeletonRows(9)}</tbody>
         </table></div>
       </div>
 
@@ -1112,7 +1112,7 @@ export function createInvoiceRoutes(db) {
           <td>\${cobroCell}</td>
           <td><span class="badge \${stBadge[r.status]||''}"\>\${r.status}</span></td>
           <td style="white-space:nowrap">\${acts}</td>
-        </tr>\`}).join(''):'<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--muted)">Sin facturas</td></tr>';
+        </tr>\`}).join(''):(q?window.emptyRow(9,'No se encontraron facturas con ese filtro.',{icon:'ti-search'}):window.emptyRow(9,'Aún no has emitido ninguna factura. ¿Empezamos por la primera?',window.canDo('invoices.create')?{cta:'Nueva factura',href:'/admin/invoices/new'}:{}));
       }
       async function anular(id, num){
         const motivo = prompt('Motivo de anulación de la factura '+num+':');

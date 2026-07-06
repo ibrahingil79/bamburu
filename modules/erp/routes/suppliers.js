@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can } from '../layout.js';
+import { adminLayout, can, skeletonRows } from '../layout.js';
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { supplierSchema, supplierAccountPaymentSchema } from '../schemas.js';
@@ -168,7 +168,7 @@ export function createSupplierRoutes(db) {
         <div class="card-head"><h3>Lista de proveedores</h3><input class="search" id="searchBox" placeholder="Buscar nombre, NIF o email..." oninput="filterTable()"></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Código</th><th>Nombre</th><th>NIF/CIF</th><th>Contacto</th><th>Email</th><th>Teléfono</th><th></th></tr></thead>
-          <tbody id="supBody"></tbody>
+          <tbody id="supBody">${skeletonRows(7)}</tbody>
         </table></div>
       </div>
 
@@ -232,7 +232,7 @@ export function createSupplierRoutes(db) {
                   window.canDo('suppliers.delete') ? {label:'Archivar', danger:true, onclick:'delSup('+s.id+')'} : null
                 ].filter(Boolean)) : '');
           return '<tr><td style="color:var(--muted);font-family:monospace;font-size:.8rem">'+escHtml(s.supplier_code||'-')+'</td><td><strong>'+escHtml(s.name)+'</strong></td><td style="color:var(--muted)">'+escHtml(s.fiscal_id||'-')+'</td><td>'+escHtml(s.contact||'-')+'</td><td>'+escHtml(s.email||'-')+'</td><td>'+escHtml(s.phone||'-')+'</td><td style="text-align:right;white-space:nowrap">'+acts+'</td></tr>';
-        }).join(''):'<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">Sin proveedores'+(arch?' archivados':' registrados')+'</td></tr>';
+        }).join(''):(arch?window.emptyRow(7,'No tienes proveedores archivados.',{icon:'ti-search'}):(q?window.emptyRow(7,'No se encontraron proveedores con ese filtro.',{icon:'ti-search'}):window.emptyRow(7,'Todavía no tienes proveedores. ¿Damos de alta el primero?',window.canDo('suppliers.create')?{cta:'Nuevo proveedor',onclick:'openNew()'}:{})));
       }
       function openNew(){
         ['supId','supName','supFiscal','supContact','supEmail','supPhone','supAddress','supCity','supNotes','supTerm','supPayMethod'].forEach(function(id){document.getElementById(id).value='';});

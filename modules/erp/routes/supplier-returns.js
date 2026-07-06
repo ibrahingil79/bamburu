@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can, docShell, estadoTabs } from '../layout.js';
+import { adminLayout, can, docShell, estadoTabs, emptyRow } from '../layout.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { supplierReturnSchema, purchaseOrderAnularSchema } from '../schemas.js';
@@ -327,7 +327,7 @@ export function createSupplierReturnRoutes(db) {
       <div class="card">
         <div class="table-wrap"><table>
           <thead><tr><th>Número</th><th>Proveedor</th><th>Fecha</th><th>Estado</th><th>Valor devuelto</th><th></th></tr></thead>
-          <tbody>${total === 0 ? '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text3)">' + (q || estado ? 'No se encontraron devoluciones' : 'Sin devoluciones a proveedor. Una devolución sale siempre de una compra recibida o una recepción confirmada.') + '</td></tr>' : rowsHtml}</tbody>
+          <tbody>${total === 0 ? ((q || estado) ? emptyRow(6, 'No se encontraron devoluciones con ese filtro.', { icon: 'ti-search' }) : emptyRow(6, 'Aún no hay devoluciones. Una devolución nace siempre de una compra recibida o una recepción confirmada.')) : rowsHtml}</tbody>
         </table></div>
       </div>
       ${total > 0 ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem;flex-wrap:wrap;gap:.5rem">

@@ -4,7 +4,7 @@
 import { Hono } from 'hono';
 import { requirePerm } from '../../../core/auth.js';
 import { checkPermission } from '../../../core/permission-check.js';
-import { adminLayout } from '../layout.js';
+import { adminLayout, emptyRow } from '../layout.js';
 import { escHtml } from '../../../core/escape.js';
 import { generateDueOccurrences, borradoresPendientes, proximasFechas, importeEstimado,
          emitirOcurrencia, omitirOcurrencia, createTemplate, setTemplateStatus } from '../recurrentes.js';
@@ -36,7 +36,7 @@ export function createRecurrentesRoutes(db) {
       const omitir = puedeGestionar ? `<form method="post" action="/admin/recurrentes/borrador/${o.id}/omitir" style="display:inline;margin-left:.3rem"><input type="hidden" name="_csrf" value="${escHtml(csrf)}"><button class="btn btn-ghost" type="submit">Omitir</button></form>` : '';
       return `<tr><td>${escHtml(o.due_date)}</td><td>${escHtml(o.document_name)} · ${escHtml(o.client_name)}</td>
         <td style="text-align:right">${money(sym, est.total)}</td><td>${emitir}${omitir}</td></tr>`;
-    }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text2)">No hay borradores pendientes.</td></tr>';
+    }).join('') || emptyRow(4, 'No hay borradores esperando. Cuando toque una recurrente, la verás aquí para revisarla y emitirla.');
 
     const tplHtml = tpls.map(t => {
       const cli = db.prepare('SELECT name FROM clients WHERE id=?').get(t.client_id)?.name || '—';
@@ -46,9 +46,11 @@ export function createRecurrentesRoutes(db) {
       return `<tr><td>${escHtml(cli)}</td><td>${escHtml(cadLabel(t.interval_months))}</td><td>${escHtml(t.start_date)}${t.end_date ? ' → ' + escHtml(t.end_date) : (t.max_occurrences ? ` (${t.max_occurrences}x)` : '')}</td>
         <td style="text-align:right">${money(sym, est.total)}</td><td>${t.status === 'activa' ? '<span style="color:var(--ok)">Activa</span>' : '<span style="color:var(--warn)">Pausada</span>'}</td>
         <td style="font-size:12px;color:var(--text2)">${escHtml(prox)}</td><td>${toggle}</td></tr>`;
-    }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text2)">Sin plantillas. Crea la primera.</td></tr>';
+    }).join('') || (puedeGestionar
+      ? emptyRow(7, 'Aún no tienes facturas recurrentes. ¿Programamos la primera?', { cta: 'Nueva plantilla', onclick: "var d=document.getElementById('nuevaPlantilla');if(d)d.open=true" })
+      : emptyRow(7, 'Aún no tienes facturas recurrentes.'));
 
-    const nueva = puedeGestionar ? `<details><summary class="btn" style="display:inline-block">+ Nueva plantilla</summary>
+    const nueva = puedeGestionar ? `<details id="nuevaPlantilla"><summary class="btn" style="display:inline-block">+ Nueva plantilla</summary>
       <form method="post" action="/admin/recurrentes" style="margin:.75rem 0;max-width:820px">
         <input type="hidden" name="_csrf" value="${escHtml(csrf)}">
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem">

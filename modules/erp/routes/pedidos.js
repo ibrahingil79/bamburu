@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can, docShell, printableShell, estadoTabs } from '../layout.js';
+import { adminLayout, can, docShell, printableShell, estadoTabs, emptyRow } from '../layout.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';   // PDF real: mismo HTML imprimible → Chromium
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
@@ -432,7 +432,7 @@ export function createPedidoRoutes(db) {
       ${estadoTabsHtml}
       <div class="card"><div class="table-wrap"><table>
         <thead><tr><th>Número</th><th>Cliente</th><th>Fecha</th><th>Estado</th><th>Total</th><th></th></tr></thead>
-        <tbody>${total === 0 ? '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text3)">' + (qstr || estado ? 'No se encontraron pedidos' : 'Sin pedidos. Crea el primero.') + '</td></tr>' : rowsHtml}</tbody>
+        <tbody>${total === 0 ? ((qstr || estado) ? emptyRow(6, 'No se encontraron pedidos con ese filtro.', { icon: 'ti-search' }) : emptyRow(6, 'Aún no hay pedidos. ¿Creamos el primero?', { cta: 'Nuevo pedido', href: '/admin/pedidos/new' })) : rowsHtml}</tbody>
       </table></div></div>
       ${total > 0 ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem;flex-wrap:wrap;gap:.5rem">
         <span style="color:var(--text3);font-size:.85rem">Página ${page} de ${totalPages} · ${total} pedido${total === 1 ? '' : 's'}</span>

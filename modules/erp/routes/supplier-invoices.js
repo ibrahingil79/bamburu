@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can, docShell } from '../layout.js';
+import { adminLayout, can, docShell, skeletonRows } from '../layout.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { supplierInvoiceSchema, supplierInvoiceAnularSchema, supplierPaymentSchema } from '../schemas.js';
@@ -496,7 +496,7 @@ export function createSupplierInvoiceRoutes(db) {
         </div>
         <div class="table-wrap"><table>
           <thead><tr><th>Código</th><th>Tipo</th><th>Proveedor</th><th>Nº factura</th><th>Fecha</th><th>Vence</th><th>Total</th><th>Estado</th><th>Pendiente</th><th></th></tr></thead>
-          <tbody id="siBody"></tbody>
+          <tbody id="siBody">${skeletonRows(10)}</tbody>
         </table></div>
       </div>
       ${pagoModalHtml()}
@@ -546,7 +546,7 @@ export function createSupplierInvoiceRoutes(db) {
             +'<td>'+pend+'</td>'
             +'<td style="text-align:right;white-space:nowrap">'+payBtn+'<a href="/admin/supplier-invoices/'+r.id+'" class="btn btn-secondary btn-sm">Ver</a></td>'
             +'</tr>';
-        }).join('') : '<tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--muted)">Sin facturas recibidas</td></tr>';
+        }).join('') : window.emptyRow(10, 'Aún no has registrado facturas de proveedor. ¿Añadimos la primera?', window.canDo('purchases.create') ? { cta: 'Nueva factura recibida', href: '/admin/supplier-invoices/new' } : {});
         filterRows();
         if(SUPPLIER_ID) loadDebt();
       }

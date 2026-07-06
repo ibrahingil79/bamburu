@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout } from '../layout.js';
+import { adminLayout, skeletonRows } from '../layout.js';
 import { hashPassword, requirePerm } from '../../../core/auth.js';
 import { readFileSync } from 'fs';
 import path from 'path';
@@ -144,7 +144,7 @@ export function createUserRoutes(db) {
       <div class="card">
         <div class="table-wrap"><table>
           <thead><tr><th>Nombre</th><th>Email</th><th>Acceso</th><th>Permisos</th><th>Estado</th><th>Creado</th><th></th></tr></thead>
-          <tbody id="userBody"></tbody>
+          <tbody id="userBody">${skeletonRows(7)}</tbody>
         </table></div>
       </div>
       <div class="card" style="margin-top:1rem;max-width:400px">
@@ -265,7 +265,7 @@ export function createUserRoutes(db) {
             '<td style="color:var(--muted);font-size:.8rem">'+(u.created_at?.split(' ')[0]||'-')+'</td>'+
             '<td style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="editUser('+u.id+')">Editar</button> <button class="btn btn-danger btn-sm" onclick="delUser('+u.id+')">Eliminar</button></td>'+
             '</tr>';
-        }).join(''):'<tr><td colspan="7" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin usuarios</td></tr>';
+        }).join(''):window.emptyRow(7,'Por ahora solo estás tú. Invita a tu equipo cuando quieras.',window.canDo('admin.manage_users')?{cta:'Nuevo usuario',onclick:'newUser()'}:{});
       }
 
       function newUser(){
@@ -332,7 +332,7 @@ export function createUserRoutes(db) {
       <div class="card">
         <div class="table-wrap"><table>
           <thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Entidad</th><th>Detalle</th></tr></thead>
-          <tbody id="actBody"><tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--muted)">Cargando...</td></tr></tbody>
+          <tbody id="actBody">${skeletonRows(5)}</tbody>
         </table></div>
       </div>
       <script>
@@ -343,7 +343,7 @@ export function createUserRoutes(db) {
           '<td>'+l.action+'</td>'+
           '<td style="color:var(--muted)">'+(l.entity||'-')+(l.entity_id?' #'+l.entity_id:'')+'</td>'+
           '<td style="color:var(--muted);font-size:.82rem">'+escHtml(l.details||'-')+'</td>'+
-          '</tr>').join(''):'<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--muted)">Sin actividad registrada</td></tr>';
+          '</tr>').join(''):window.emptyRow(5,'Aún no hay actividad registrada. Aquí verás lo que ocurre en tu cuenta.');
       });
       </script>`;
     return c.html(adminLayout('Actividad', content, 'activity', c.get('session')?.csrfToken || '', c));

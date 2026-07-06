@@ -40,7 +40,7 @@ export function register(app, db) {
       <td class="r">${escHtml(r.currency_symbol)}${Number(r.total).toFixed(2)}</td>
       <td>${r.pagada ? '<span class="pill pagada">Pagada</span>' : `<span class="pill pend">Pendiente${r.pendiente < r.total ? ' · ' + r.currency_symbol + r.pendiente.toFixed(2) : ''}</span>`}</td>
       <td class="r"><a class="btn" href="/portal/${escHtml(token)}/factura/${r.id}/pdf">PDF</a></td></tr>`).join('')
-      || '<tr><td colspan="5" style="text-align:center;color:var(--text3)">No hay facturas.</td></tr>';
+      || '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:2rem">No tienes facturas pendientes. Estás al día.</td></tr>';
     const pago = t.iban ? `<div class="card"><h3 style="margin:.2rem 0">¿Cómo pagar?</h3>
       <p class="sub">Haz una transferencia a esta cuenta indicando el nº de factura en el concepto. El estado se actualizará cuando tu proveedor concilie el pago.</p>
       <div class="iban">${escHtml(t.iban)}</div>${t.holder ? `<div style="color:var(--text2);font-size:.85rem;margin-top:.2rem">Titular: ${escHtml(t.holder)}</div>` : ''}</div>`

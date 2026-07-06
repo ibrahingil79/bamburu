@@ -2,7 +2,7 @@
 // Bajo /admin (con requirePerm + sesión). Gateado por invoices.read. Aditivo.
 import { Hono } from 'hono';
 import { requirePerm } from '../../core/auth.js';
-import { adminLayout } from '../erp/layout.js';
+import { adminLayout, emptyRow } from '../erp/layout.js';
 import { escHtml } from '../../core/escape.js';
 import { sendEmail } from '../../core/mailer.js';
 import { getPortalSetting, setPortalSetting, sendPortalLink } from './portal.js';
@@ -24,7 +24,7 @@ export function createPortalAdminRoutes(db) {
       <td>${cl.email
         ? `<form method="post" action="/admin/portal/enviar/${cl.id}" style="display:inline"><input type="hidden" name="_csrf" value="${escHtml(csrf)}"><button class="btn" type="submit">Enviar enlace</button></form>`
         : '<span style="color:var(--warn);font-size:12px">Sin email</span>'}</td></tr>`).join('')
-      || '<tr><td colspan="4" style="text-align:center;color:var(--text2)">Sin clientes.</td></tr>';
+      || emptyRow(4, 'Todavía no tienes clientes a los que dar acceso al portal. Empieza por crear uno.', { cta: 'Nuevo cliente', href: '/admin/clients' });
     const content = `<div class="ph"><h2>Portal de cliente</h2></div>
       <div style="color:var(--text2);font-size:12px;margin-bottom:.5rem">Envía a cada cliente un enlace privado (caduca en 14 días) para que vea y descargue sus facturas y su estado de pago. El pago con tarjeta queda fuera por ahora: se muestran los datos de transferencia.</div>
       ${flash}${err}

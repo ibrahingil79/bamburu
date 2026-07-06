@@ -4,7 +4,7 @@
 // en pantalla, PDF y export. Descarga real XLSX/CSV/PDF (Content-Disposition). Aditivo.
 import { Hono } from 'hono';
 import { requirePerm } from '../../../core/auth.js';
-import { adminLayout, rowMenu } from '../layout.js';
+import { adminLayout, rowMenu, emptyRow } from '../layout.js';
 import { escHtml } from '../../../core/escape.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';
 import { backfillLedger, libroVentas, libroCompras, libroDiario, libroMayor, mayorCuenta } from '../contabilidad.js';
@@ -103,7 +103,7 @@ function ventasTable(libro, sym) {
       <td>${escHtml(a.tipo_factura || '')}</td><td>${escHtml(a.nif || '')}</td><td>${escHtml(a.nombre || '')}</td>
       <td style="text-align:right">${money(sym, a.base)}</td><td style="text-align:right">${rateLabel(a.rate)}</td><td style="text-align:right">${money(sym, a.cuota)}</td>
       <td style="text-align:right">${a.irpf != null && a.irpf !== 0 ? money(sym, a.irpf) : ''}</td><td style="text-align:right">${money(sym, a.total_linea)}</td></tr>`;
-  }).join('') || '<tr><td colspan="11" style="text-align:center;color:var(--text2)">Sin operaciones en el periodo</td></tr>';
+  }).join('') || emptyRow(11, 'No hay operaciones en este periodo. Cambia las fechas o emite tu primera factura.');
   const foot = `<tr style="font-weight:700"><td colspan="6" style="text-align:right">TOTALES</td>
     <td style="text-align:right">${money(sym, libro.totals.base)}</td><td></td><td style="text-align:right">${money(sym, libro.totals.cuota)}</td>
     <td style="text-align:right">${money(sym, libro.totals.irpf)}</td><td style="text-align:right">${money(sym, libro.totals.total)}</td></tr>`;
@@ -115,7 +115,7 @@ function comprasTable(libro, sym) {
   const body = comprasAsientos(libro).map(a => `<tr><td>${escHtml(a.internal_code || '')}</td><td>${escHtml(a.supplier_number || '')}</td>
       <td>${escHtml(a.invoice_date || '')}</td><td>${escHtml(a.operation_date || '—')}</td><td>${escHtml(a.nif || '')}</td><td>${escHtml(a.nombre || '')}</td>
       <td style="text-align:right">${money(sym, a.base)}</td><td style="text-align:right">${rateLabel(a.rate)}</td><td style="text-align:right">${money(sym, a.cuota)}</td>
-      <td style="text-align:right">${money(sym, a.total_linea)}</td></tr>`).join('') || '<tr><td colspan="10" style="text-align:center;color:var(--text2)">Sin operaciones en el periodo</td></tr>';
+      <td style="text-align:right">${money(sym, a.total_linea)}</td></tr>`).join('') || emptyRow(10, 'No hay operaciones en este periodo. Cambia las fechas o emite tu primera factura.');
   const foot = `<tr style="font-weight:700"><td colspan="6" style="text-align:right">TOTALES</td>
     <td style="text-align:right">${money(sym, libro.totals.base)}</td><td></td><td style="text-align:right">${money(sym, libro.totals.cuota)}</td>
     <td style="text-align:right">${money(sym, libro.totals.total)}</td></tr>`;
@@ -132,7 +132,7 @@ function diarioTable(diario, sym) {
       <td style="text-align:right">${l.debit ? money(sym, l.debit) : ''}</td><td style="text-align:right">${l.credit ? money(sym, l.credit) : ''}</td></tr>`).join('');
     return `<tr style="background:var(--bg2)"><td>${escHtml(a.entry_date)}</td>
       <td colspan="3"><b>Asiento ${a.id}</b> · ${escHtml(a.entry_type)} — ${escHtml(a.memo || '')}${a.cuadra ? '' : ' <span style="color:var(--danger)">(descuadra)</span>'}</td></tr>${ls}`;
-  }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text2)">Sin asientos en el periodo</td></tr>';
+  }).join('') || emptyRow(4, 'No hay asientos en este periodo. Cambia las fechas o emite tu primera factura.');
   const foot = `<tr style="font-weight:700"><td colspan="2" style="text-align:right">TOTALES</td>
     <td style="text-align:right">${money(sym, diario.totals.debe)}</td><td style="text-align:right">${money(sym, diario.totals.haber)}</td></tr>`;
   return `<div style="margin:.25rem 0 .75rem;font-size:13px">Cuadre del diario: ${cuadre}</div>
@@ -146,7 +146,7 @@ function mayorTable(mayor, sym, from, to) {
       <td><a href="/admin/contabilidad/mayor?cuenta=${encodeURIComponent(r.code)}&${q}">${escHtml(r.code)}</a></td>
       <td>${escHtml(r.name || '')}</td>
       <td style="text-align:right">${money(sym, r.debe)}</td><td style="text-align:right">${money(sym, r.haber)}</td>
-      <td style="text-align:right">${money(sym, r.saldo)}</td></tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text2)">Sin movimientos en el periodo</td></tr>';
+      <td style="text-align:right">${money(sym, r.saldo)}</td></tr>`).join('') || emptyRow(5, 'No hay movimientos en este periodo. Cambia las fechas o emite tu primera factura.');
   const foot = `<tr style="font-weight:700"><td colspan="2" style="text-align:right">TOTALES</td>
     <td style="text-align:right">${money(sym, mayor.totals.debe)}</td><td style="text-align:right">${money(sym, mayor.totals.haber)}</td>
     <td style="text-align:right">${money(sym, r2(mayor.totals.debe - mayor.totals.haber))}</td></tr>`;
@@ -158,7 +158,7 @@ function mayorDetalle(det, sym) {
   const body = det.rows.map(m => `<tr><td>${escHtml(m.entry_date)}</td><td>${m.entry_id}</td><td>${escHtml(m.entry_type)}</td>
       <td>${escHtml(m.memo || '')}</td><td style="text-align:right">${m.debit ? money(sym, m.debit) : ''}</td>
       <td style="text-align:right">${m.credit ? money(sym, m.credit) : ''}</td><td style="text-align:right">${money(sym, m.saldo)}</td></tr>`).join('')
-    || '<tr><td colspan="7" style="text-align:center;color:var(--text2)">Sin movimientos</td></tr>';
+    || emptyRow(7, 'No hay movimientos en este periodo.');
   return `<div class="card" style="margin-top:1rem"><div class="card-body">
       <h3>Cuenta ${escHtml(det.code)} · ${escHtml(det.name || '')}</h3>
       <span style="color:var(--text2);font-size:12px">Debe ${money(sym, det.debe)} · Haber ${money(sym, det.haber)} · Saldo ${money(sym, det.saldo)}</span></div>
@@ -324,8 +324,8 @@ export function createContabilidadRoutes(db) {
         ${td(escHtml(g.start_date || ''))}${td(money(sym, g.acquisition_value), 1)}${td(money(sym, g.amortizable_base), 1)}
         ${td(Number(g.annual_rate) + '%', 1)}${td(money(sym, g.acuInicio), 1)}${td(money(sym, g.cuota), 1)}${td(money(sym, g.acuFinal), 1)}${td(money(sym, g.pendiente), 1)}
         <td>${edit}${baja}</td></tr>`;
-    }).join('') || '<tr><td colspan="13" style="text-align:center;color:var(--text2)">Sin bienes de inversión registrados</td></tr>';
-    const altaForm = `<details><summary class="btn" style="display:inline-block">+ Alta de bien</summary>
+    }).join('') || emptyRow(13, 'Aún no has registrado bienes de inversión. Cuando compres un bien amortizable, márcalo aquí.', { cta: 'Nuevo bien', onclick: "var d=document.getElementById('altaBien');if(d)d.open=true" });
+    const altaForm = `<details id="altaBien"><summary class="btn" style="display:inline-block">+ Alta de bien</summary>
       <form method="post" action="/admin/contabilidad/bienes" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin:.75rem 0;max-width:900px">
         <input type="hidden" name="_csrf" value="${escHtml(csrf)}">
         <label>Descripción*<input name="description" required></label>

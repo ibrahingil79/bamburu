@@ -69,7 +69,7 @@ export function createMostradorRoutes(db) {
       <div class="grid g2" style="align-items:start">
         <div class="card"><div class="card-body">
           <input class="search" id="prodSearch" placeholder="Buscar producto..." oninput="renderGrid()" style="width:100%;margin-bottom:1rem">
-          <div id="prodGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:.6rem;max-height:60vh;overflow:auto"></div>
+          <div id="prodGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:.6rem;max-height:60vh;overflow:auto">${Array.from({ length: 10 }, () => '<div class="skel skel-block"></div>').join('')}</div>
           <div style="margin-top:1rem"><button class="btn btn-secondary btn-sm" onclick="addFreeLine()">+ Línea libre (concepto + importe, IVA 21%)</button></div>
         </div></div>
         <div class="card"><div class="card-body">
@@ -145,7 +145,7 @@ export function createMostradorRoutes(db) {
           return '<div onclick="addProduct('+p.id+')" style="border:1px solid var(--border2);border-radius:8px;padding:.55rem;cursor:pointer;background:var(--bg2)">'
             +'<div style="font-size:.8rem;font-weight:500;line-height:1.2">'+escHtml(p.name)+'</div>'
             +'<div style="font-size:.82rem;color:var(--accent);font-weight:600;margin-top:.2rem">'+SYM+Number(p.price||0).toFixed(2)+'</div>'+stxt+'</div>';
-        }).join('') : '<div style="grid-column:1/-1;color:var(--muted);text-align:center;padding:1rem">Sin productos</div>';
+        }).join('') : (q?'<div style="grid-column:1/-1">'+window.emptyState('No hay productos que coincidan con la búsqueda.',{icon:'ti-search'})+'</div>':'<div style="grid-column:1/-1">'+window.emptyState('No hay productos con stock en este almacén. Repón stock o añade productos al catálogo para vender aquí.',{cta:'Ir al catálogo',href:'/admin/products',soft:true})+'</div>');
       }
       function addProduct(id){
         const p=catalog.find(x=>x.id===id); if(!p) return;

@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can, rowMenu } from '../layout.js';
+import { adminLayout, can, rowMenu, emptyRow, skeletonRows } from '../layout.js';
 import { logActivity, requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { productSchema, productImageSchema, variantSchema, tagSchema, stockAdjustSchema } from '../schemas.js';
@@ -336,7 +336,7 @@ export function createProductRoutes(db, cfg = {}) {
         <div class="table-wrap">
           <table>
             <thead><tr><th>Imagen</th><th>Nombre</th><th>Categoría</th><th>Precio</th><th>Stock</th><th>Estado</th><th>Tipo</th><th></th></tr></thead>
-            <tbody id="prodBody">${total === 0 ? '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--muted)">No se encontraron productos</td></tr>' : rowsHtml}</tbody>
+            <tbody id="prodBody">${total === 0 ? ((q || categoria) ? emptyRow(8, 'No se encontraron productos con ese filtro.', { icon: 'ti-search' }) : emptyRow(8, 'Tu catálogo está vacío. ¿Añadimos el primer producto o servicio?', can(c, 'products.create') ? { cta: 'Nuevo producto', onclick: 'openNewProduct()' } : {})) : rowsHtml}</tbody>
           </table>
         </div>
       </div>
@@ -695,14 +695,14 @@ export function createProductRoutes(db, cfg = {}) {
         <div class="table-wrap">
           <table>
             <thead><tr><th>Nombre</th><th>Creada</th><th></th></tr></thead>
-            <tbody id="tagBody"><tr><td colspan="3" style="text-align:center;padding:2rem;color:var(--muted)">Cargando...</td></tr></tbody>
+            <tbody id="tagBody">${skeletonRows(3)}</tbody>
           </table>
         </div>
       </div>
       <script>
       async function loadTags(){
         const tags=await api('GET','/api/erp/products/tags/all').catch(()=>[]);
-        document.getElementById('tagBody').innerHTML=tags.length?tags.map(t=>'<tr><td><span class="badge b-gray">'+t.name+'</span></td><td style="color:var(--muted);font-size:.8rem">'+(t.created_at?.split(' ')[0]||'-')+'</td><td>'+(window.canDo('products.delete')?'<button class="btn btn-danger btn-sm" onclick="delTag('+t.id+')">Eliminar</button>':'')+'</td></tr>').join(''):'<tr><td colspan="3" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin etiquetas</td></tr>';
+        document.getElementById('tagBody').innerHTML=tags.length?tags.map(t=>'<tr><td><span class="badge b-gray">'+t.name+'</span></td><td style="color:var(--muted);font-size:.8rem">'+(t.created_at?.split(' ')[0]||'-')+'</td><td>'+(window.canDo('products.delete')?'<button class="btn btn-danger btn-sm" onclick="delTag('+t.id+')">Eliminar</button>':'')+'</td></tr>').join(''):window.emptyRow(3,'Aún no tienes etiquetas. Crea la primera para clasificar tus productos.',window.canDo('products.create')?{cta:'Nueva etiqueta',onclick:"var i=document.getElementById('tagName');if(i)i.focus()"}:{});
       }
       async function addTag(){
         const n=document.getElementById('tagName').value.trim();if(!n)return;

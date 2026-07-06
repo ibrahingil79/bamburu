@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can } from '../layout.js';
+import { adminLayout, can, skeletonRows } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
 import { stockModalHtml, stockModalScript } from '../views/stock-modal.js';
 import { activeWarehouses } from './warehouses.js';
@@ -39,7 +39,7 @@ export function createInventoryRoutes(db, cfg = {}) {
         <div class="card-head"><h3>Existencias (productos físicos)</h3><input class="search" id="searchBox" placeholder="Buscar nombre o SKU..." oninput="filterTable()"></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Producto</th><th>SKU</th><th>Categoría</th><th>Stock</th><th>Reservado</th><th>Disponible</th><th>Coste medio</th><th>Valor</th><th>Estado</th><th></th></tr></thead>
-          <tbody id="invBody"></tbody>
+          <tbody id="invBody">${skeletonRows(10)}</tbody>
         </table></div>
       </div>
 
@@ -104,7 +104,7 @@ export function createInventoryRoutes(db, cfg = {}) {
           const val=avg*s;
           const rsv=reservedOf(p), avl=availableOf(p);
           return '<tr><td><strong>'+escHtml(p.name)+'</strong></td><td style="color:var(--muted)">'+escHtml(p.sku||'-')+'</td><td>'+escHtml(p.category_name||'-')+'</td><td><strong style="color:'+(s<5?'var(--danger)':'inherit')+'">'+s+'</strong></td><td style="color:'+(rsv>0?'var(--accent-purple)':'var(--muted)')+'">'+rsv+'</td><td><strong style="color:'+(avl<0?'var(--danger)':'inherit')+'">'+avl+'</strong></td><td>${sym}'+avg.toFixed(2)+'</td><td>${sym}'+val.toFixed(2)+'</td><td><span class="badge '+b[st]+'">'+sl[st]+'</span></td><td style="white-space:nowrap">'+acts+'</td></tr>';
-        }).join(''):'<tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--muted)">Sin productos físicos</td></tr>';
+        }).join(''):(q?window.emptyRow(10,'No se encontraron productos con ese filtro.',{icon:'ti-search'}):window.emptyRow(10,'Aquí verás el stock de tus productos físicos. Si vendes servicios, es normal que esté vacío.',{cta:'Ir al catálogo',href:'/admin/products',soft:true}));
       }
       // Tras ajustar/revertir desde el componente compartido, refresca todo (la caché global
       // cambió y, si hay un almacén filtrado, también su mapa al vuelo).

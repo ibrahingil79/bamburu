@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { requirePerm } from '../../../core/auth.js';
-import { adminLayout } from '../layout.js';
+import { adminLayout, skeletonRows } from '../layout.js';
 import { collectionsWorklist } from '../cobros.js';
 import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
 
@@ -37,7 +37,7 @@ export function createCobrosRoutes(db) {
         <div class="card-head"><h3>Pipeline de cobro (más urgentes arriba)</h3><input class="search" id="searchBox" placeholder="Buscar cliente o factura..." oninput="filterRows()"></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Cliente</th><th>Factura</th><th>Pendiente</th><th>Etapa</th><th>Próxima acción</th><th></th></tr></thead>
-          <tbody id="cobrosBody"></tbody>
+          <tbody id="cobrosBody">${skeletonRows(6)}</tbody>
         </table></div>
       </div>
 
@@ -71,7 +71,7 @@ export function createCobrosRoutes(db) {
             +'<td>'+escHtml(accionTxt(p))+fecha+'<div style="color:var(--muted);font-size:.8rem">'+escHtml(r.motivo||'')+'</div></td>'
             +'<td><button class="btn btn-primary btn-sm" onclick="openGestion('+r.invoice_id+')">Gestionar</button></td>'
             +'</tr>';
-        }).join('') : '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--muted)">No hay deudas pendientes 🎉</td></tr>';
+        }).join('') : window.emptyRow(6, 'No hay nada pendiente de cobro ahora mismo. Todo al día.', { tone: 'ok' });
         filterRows();
       }
       function filterRows(){

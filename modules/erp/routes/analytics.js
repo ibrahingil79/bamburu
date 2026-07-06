@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout } from '../layout.js';
+import { adminLayout, skeletonRows } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
 import { ventasResumen, topProductos, ventasPorDia, ventasCsvRows } from '../ventas-metrics.js';   // PIEZA C: ventas desde la cadena nueva (facturas)
 
@@ -116,7 +116,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         </div>
         <div class="table-wrap"><table>
           <thead><tr><th>Producto</th><th>SKU</th><th>Categoría</th><th>Stock</th><th>Precio</th><th>Valor en inventario</th></tr></thead>
-          <tbody id="stockBody"><tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--muted)">Cargando...</td></tr></tbody>
+          <tbody id="stockBody">${skeletonRows(6)}</tbody>
         </table></div>
       </div>
 
@@ -149,7 +149,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
           '<td><strong style="color:'+(p.stock<5?'var(--danger)':'inherit')+'">'+p.stock+'</strong></td>'+
           '<td>${sym}'+Number(p.price).toFixed(2)+'</td>'+
           '<td style="color:var(--ok);font-weight:600">${sym}'+Number(p.inventory_value||0).toFixed(2)+'</td>'+
-          '</tr>').join(''):'<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin productos</td></tr>';
+          '</tr>').join(''):window.emptyRow(6,'Sin datos de stock todavía: aparecerán cuando tengas productos con movimiento.');
       }
       loadCharts();
       </script>`;

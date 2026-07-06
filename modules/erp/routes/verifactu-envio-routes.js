@@ -3,7 +3,7 @@
 // (el envío tiene peso legal, igual que emitir). No toca la huella/QR (Tarea 1). Aditivo.
 import { Hono } from 'hono';
 import { requirePerm } from '../../../core/auth.js';
-import { adminLayout } from '../layout.js';
+import { adminLayout, emptyRow } from '../layout.js';
 import { escHtml } from '../../../core/escape.js';
 import { enviarRegistro, getEnvio, certStatus, ESTADO } from '../verifactu-envio.js';
 
@@ -50,7 +50,7 @@ export function createVerifactuEnvioRoutes(db) {
         <td>${estadoBadge(r.estado)}</td>
         <td style="font-size:12px;color:var(--text2)">${detalle}</td>
         <td>${btn}</td></tr>`;
-    }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text2)">Sin registros de facturación</td></tr>';
+    }).join('') || emptyRow(7, 'Aún no hay registros que enviar. Se generan solos al emitir tus facturas.');
     const content = `<div class="ph"><h2>Envío Verifactu a la AEAT</h2></div>
       <div style="color:var(--text2);font-size:12px;margin-bottom:.5rem">Remisión de los registros de facturación (huella congelada por la Tarea 1) al entorno de <b>pruebas (preproducción)</b> de la AEAT. Estado por documento; reenviar no duplica (idempotente).</div>
       ${certAviso}

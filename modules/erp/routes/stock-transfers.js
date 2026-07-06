@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can, estadoTabs } from '../layout.js';
+import { adminLayout, can, estadoTabs, emptyRow } from '../layout.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { stockTransferSchema, purchaseOrderAnularSchema } from '../schemas.js';
@@ -255,7 +255,7 @@ export function createStockTransferRoutes(db) {
       <div class="card">
         <div class="table-wrap"><table>
           <thead><tr><th>Número</th><th>Origen → Destino</th><th>Fecha</th><th>Estado</th><th style="text-align:right">Unidades</th><th></th></tr></thead>
-          <tbody>${total === 0 ? '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text3)">' + (q || estado ? 'No se encontraron traslados' : 'Sin traslados. Un traslado mueve mercancía de un almacén a otro sin cambiar el stock total ni el coste medio del producto.') + '</td></tr>' : rowsHtml}</tbody>
+          <tbody>${total === 0 ? ((q || estado) ? emptyRow(6, 'No se encontraron traslados con ese filtro.', { icon: 'ti-search' }) : emptyRow(6, 'Aún no hay traslados. Un traslado mueve mercancía entre almacenes sin cambiar tu stock total.', { cta: 'Nuevo traslado', href: '/admin/stock-transfers/new' })) : rowsHtml}</tbody>
         </table></div>
       </div>
       ${total > 0 ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem;flex-wrap:wrap;gap:.5rem">

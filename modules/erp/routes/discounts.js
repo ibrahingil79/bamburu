@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can } from '../layout.js';
+import { adminLayout, can, skeletonRows } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { discountCodeSchema, autoDiscountSchema } from '../schemas.js';
@@ -75,7 +75,7 @@ export function createDiscountRoutes(db, cfg = {}) {
           <div class="card-head"><h3>Cupones</h3><input class="search" id="codesSearch" placeholder="Buscar..." oninput="renderCodes()"></div>
           <div class="table-wrap"><table>
             <thead><tr><th>Código</th><th>Tipo</th><th>Valor</th><th>Mín. pedido</th><th>Usos</th><th>Vence</th><th>Estado</th><th></th></tr></thead>
-            <tbody id="codesBody"></tbody>
+            <tbody id="codesBody">${skeletonRows(8)}</tbody>
           </table></div>
         </div>
       </div>
@@ -89,7 +89,7 @@ export function createDiscountRoutes(db, cfg = {}) {
           <div class="card-head"><h3>Descuentos automáticos</h3><input class="search" id="autoSearch" placeholder="Buscar..." oninput="renderAuto()"></div>
           <div class="table-wrap"><table>
             <thead><tr><th>Nombre</th><th>Tipo</th><th>Valor</th><th>Condición</th><th>Estado</th><th></th></tr></thead>
-            <tbody id="autoBody"></tbody>
+            <tbody id="autoBody">${skeletonRows(6)}</tbody>
           </table></div>
         </div>
       </div>
@@ -153,7 +153,7 @@ export function createDiscountRoutes(db, cfg = {}) {
             '<td style="color:var(--muted)">'+(c.expires_at?.split(' ')[0]||'Sin límite')+'</td>'+
             '<td>'+(c.active?'<span class="badge b-green">Activo</span>':'<span class="badge b-red">Inactivo</span>')+'</td>'+
             '<td>'+(window.canDo('discounts.delete')?'<button class="btn btn-danger btn-sm" onclick="delCode('+c.id+')">Eliminar</button>':'')+'</td></tr>';
-        }).join(''):'<tr><td colspan="8" style="text-align:center;padding:1.5rem;color:var(--muted)">'+(q?'Sin coincidencias':'Sin cupones')+'</td></tr>';
+        }).join(''):(q?window.emptyRow(8,'No se encontraron cupones con ese filtro.',{icon:'ti-search'}):window.emptyRow(8,'Aún no tienes cupones. Crea el primero para dar un descuento con código.',window.canDo('discounts.create')?{cta:'Nuevo cupón',onclick:"openModal('codeModal')"}:{}));
       }
       async function loadAuto(){
         _autos=await api('GET','/api/erp/discounts/auto').catch(()=>[]);
@@ -168,7 +168,7 @@ export function createDiscountRoutes(db, cfg = {}) {
           '<td><strong>'+(a.type==='percentage'?a.value+'%':'${sym}'+a.value)+'</strong></td>'+
           '<td style="color:var(--muted)">'+(a.condition_type==='min_order'?'Pedido ≥ ${sym}'+a.condition_value:'Categoría: '+a.condition_value)+'</td>'+
           '<td>'+(a.active?'<span class="badge b-green">Activo</span>':'<span class="badge b-red">Inactivo</span>')+'</td>'+
-          '<td>'+(window.canDo('discounts.delete')?'<button class="btn btn-danger btn-sm" onclick="delAuto('+a.id+')">Eliminar</button>':'')+'</td></tr>').join(''):'<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--muted)">'+(q?'Sin coincidencias':'Sin descuentos automáticos')+'</td></tr>';
+          '<td>'+(window.canDo('discounts.delete')?'<button class="btn btn-danger btn-sm" onclick="delAuto('+a.id+')">Eliminar</button>':'')+'</td></tr>').join(''):(q?window.emptyRow(6,'No se encontraron descuentos con ese filtro.',{icon:'ti-search'}):window.emptyRow(6,'No hay descuentos automáticos. Crea uno para aplicar rebajas sin código.',window.canDo('discounts.create')?{cta:'Nuevo descuento',onclick:"openModal('autoModal')"}:{}));
       }
       async function saveCode(){
         const exp=document.getElementById('dcExpires').value;

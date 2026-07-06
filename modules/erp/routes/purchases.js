@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can, docShell } from '../layout.js';
+import { adminLayout, can, docShell, skeletonRows } from '../layout.js';
 import { validate } from '../../../core/validate.js';
 import { requirePerm } from '../../../core/auth.js';
 import { purchaseSchema } from '../schemas.js';
@@ -139,7 +139,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
         <div class="card-head"><h3>Registro de compras</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="renderPurchases()"></div>
         <div class="table-wrap"><table>
           <thead><tr><th>#</th><th>Proveedor</th><th>Referencia</th><th>Fecha</th><th>Estado</th><th>Total</th><th></th></tr></thead>
-          <tbody id="purchBody"></tbody>
+          <tbody id="purchBody">${skeletonRows(7)}</tbody>
         </table></div>
       </div>
       <script>
@@ -159,7 +159,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
         }):PURCHASES;
         document.getElementById('purchBody').innerHTML=rows.length?rows.map(function(r){
           return '<tr><td style="color:var(--muted)">#'+r.id+'</td><td><strong>'+escHtml(r.supplier_name)+'</strong></td><td>'+escHtml(r.reference||'-')+'</td><td>'+escHtml(r.date)+'</td><td><span class="badge '+(BADGE_MAP[r.status]||'b-gray')+'">'+escHtml(STATUS_MAP[r.status]||r.status)+'</span></td><td><strong>'+parseFloat(r.total).toFixed(2)+' ${sym}</strong></td><td style="text-align:right"><a href="/admin/purchases/'+r.id+'" class="btn btn-secondary btn-sm">Ver</a></td></tr>';
-        }).join(''):'<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">'+(q?'Sin coincidencias':'Sin compras registradas')+'</td></tr>';
+        }).join(''):(q?window.emptyRow(7,'No se encontraron compras con ese filtro.',{icon:'ti-search'}):window.emptyRow(7,'Todavía no hay compras registradas. ¿Anotamos la primera?',window.canDo('purchases.create')?{cta:'Nueva compra',href:'/admin/purchases/new'}:{}));
       }
       loadPurchases();
       </script>`;

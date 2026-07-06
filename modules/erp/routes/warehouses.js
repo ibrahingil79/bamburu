@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can } from '../layout.js';
+import { adminLayout, can, skeletonRows } from '../layout.js';
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { warehouseSchema } from '../schemas.js';
@@ -250,7 +250,7 @@ export function createWarehouseRoutes(db) {
         <div class="card-head"><h3>Lista de almacenes</h3><input class="search" id="searchBox" placeholder="Buscar por nombre..." oninput="filterTable()"></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Nombre</th><th>Principal</th><th></th></tr></thead>
-          <tbody id="whBody"></tbody>
+          <tbody id="whBody">${skeletonRows(3)}</tbody>
         </table></div>
       </div>
 
@@ -296,7 +296,7 @@ export function createWarehouseRoutes(db) {
             }
           }
           return '<tr><td><strong>'+escHtml(w.name)+'</strong></td><td>'+principal+'</td><td style="text-align:right;white-space:nowrap">'+acts+'</td></tr>';
-        }).join('') : '<tr><td colspan="3" style="text-align:center;padding:2rem;color:var(--muted)">Sin almacenes'+(arch?' archivados':'')+'</td></tr>';
+        }).join('') : (arch?window.emptyRow(3,'No tienes almacenes archivados.',{icon:'ti-search'}):(q?window.emptyRow(3,'No se encontraron almacenes con ese filtro.',{icon:'ti-search'}):window.emptyRow(3,'Todavía no tienes almacenes. ¿Creamos el primero?',CAN_EDIT?{cta:'Nuevo almacén',onclick:'openNew()'}:{})));
       }
       function openNew(){
         document.getElementById('whId').value='';
