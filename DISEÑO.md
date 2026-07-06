@@ -9,8 +9,10 @@
 > menú LEAN de una capa + patrón "un-primario-y-···". Base visual para U1 (tokens).
 > **APLICADO en código el 2026-07-06** (`modules/erp/layout.js`): tokens (chrome claro + azul +
 > texto/bordes/chips), fuente del sistema (fuera Inter), iconos Tabler **auto-hospedados**
-> (`/public/vendor/tabler`, fuera CDN) y **menú lean estricto de 5 entradas**. Pendiente: patrón
-> por pantalla §6 (refactor por-vista) y la barra DISA-fija-con-contador + "Ayuda y soporte" §3.1.
+> (`/public/vendor/tabler`, fuera CDN), **menú = rail de iconos por área + flyout estilo Holded**
+> (§3, sustituye al "lean estricto" que escondía demasiado) y **patrón por pantalla §6** (banda de
+> DISA + menú `···`) en las pantallas principales. Pendiente: DISA-fija-con-contador + "Ayuda y
+> soporte" al pie del rail (§3.1), y §6 en las pantallas secundarias.
 > Última actualización: 2026-07-06
 
 ---
@@ -139,41 +141,45 @@ pantalla:
 
 ---
 
-## 3. Navegación — menú LEAN de UNA sola capa
+## 3. Navegación — RAIL de iconos por área + submenú FLOTANTE (estilo Holded)
 
-> **Nueva dirección (2026-07-06).** Menú de **una capa, máx 5-6 entradas, SIN sub-enlaces ni
-> tercer nivel.** Esto **supera** el mapa anterior por ciclo de negocio (Ventas / Compras /
-> Inventario / Catálogo): aquello arrastraba superficie de Capa 2 y densidad de ERP. Aquí se
-> esconde la complejidad, no se despliega.
+> **SUSTITUCIÓN 3 — modelo de menú (revisado 2026-07-06).** El **"lean estricto"** (5 entradas,
+> resto solo-por-URL) **escondía demasiadas funciones**; el dueño lo descartó al verlo. Modelo
+> vigente: **rail estrecho de iconos, un icono por ÁREA; al pasar/pulsar abre un flyout con TODAS
+> las funciones de esa área** (como Holded). Así **ninguna función se esconde**, pero el menú
+> sigue calmado (en reposo solo iconos). Registro del cambio:
+> `menú por ciclo (siempre expandido)` → `lean estricto (5, resto por URL)` → **`rail + flyout`**.
 
-### 3.1 Estructura del menú
+### 3.1 Estructura del menú (aplicado 2026-07-06, `modules/erp/layout.js`)
 
-- **Entradas (una capa, sin sub-enlaces):**
-  **Inicio · Facturas · Gastos · Clientes · Contabilidad.**
-  *(Aplicado 2026-07-06, lean estricto: estas 5 y nada más en el menú; el resto de rutas siguen
-  montadas y accesibles solo por URL. "Gastos" → `/admin/supplier-invoices` — el libro de
-  "Compras y gastos". DISA fija-con-contador y "Ayuda y soporte" del §3.1 quedan pendientes.)*
-- **DISA fija arriba**, con **contador de propuestas**.
-- **Abajo del rail:** **Ayuda y soporte** + **usuario** (bajo el usuario: Mi cuenta · Ajustes ·
-  Datos del negocio · Cerrar sesión).
+- **Rail (icono por área):** **Inicio** (enlace directo, es la home de DISA) · **Ventas** ·
+  **Compras y gastos** · **Contabilidad** · **Inventario** · **Catálogo**.
+- **Flyout por área** (submenú flotante a la derecha, se abre al hover/click):
+  - **Ventas:** Facturas · Presupuestos · Recurrentes · Pedidos · Albaranes · Cobros · TPV ·
+    Portal de cliente · Clientes · Grupos · *(CRM pendiente)*.
+  - **Compras y gastos:** Facturas recibidas · Compra directa · Órdenes de compra · Pagos a
+    proveedores · Devoluciones · Captura de factura · Proveedores.
+  - **Contabilidad:** Libros y modelos · Conciliación bancaria · Envío Verifactu (AEAT).
+  - **Inventario:** Stock · Almacenes · Traslados.
+  - **Catálogo:** Productos · Categorías.
+- El icono del área se marca **activo** cuando la pantalla actual es una de sus funciones.
+- **Cuenta/usuario:** en el desplegable del avatar (topbar). **Pendiente §3.1:** DISA
+  fija-con-contador y "Ayuda y soporte" al pie del rail.
 
-### 3.2 Dónde vive lo que deja de ser menú propio
+### 3.2 Cómo DISA reagrupa dentro de cada área (no crea menús nuevos)
 
-Nada de lo anterior desaparece: se **esconde dentro** de una de las cinco entradas.
-
-| Lo que antes era su propio menú | Dónde vive ahora |
+| Función | Dónde vive |
 |---|---|
-| **Presupuestos** y **Recurrentes** | dentro de **Facturas** (pestaña o filtro) |
-| **Conciliación** | dentro de **Gastos/cobros** — y la **empuja DISA** |
-| **Impuestos, modelos, libros, P&G** | dentro de **Contabilidad** |
+| **Presupuestos** y **Recurrentes** | en **Ventas** (y conceptualmente cuelgan de Facturas) |
+| **Conciliación** | en **Contabilidad** — y la **empuja DISA** |
+| **Impuestos, modelos, libros, P&G** | en **Contabilidad** → "Libros y modelos" |
 | **Analítica** | **no es menú**: DISA responde "¿cómo va mi negocio?" desde **Inicio** |
 
 ### 3.3 Regla de colocación (permanente)
 
-Antes de añadir cualquier función nueva, preguntar: **"¿en cuál de las cinco entradas cabe?"**
-y esconderla dentro (pestaña, filtro, o empujada por DISA). **Nunca crear una sexta entrada
-"donde quepa"** ni abrir un segundo/tercer nivel. Si no cabe en ninguna, se anota como
-huérfana y lo decide el dueño — no se fuerza el menú.
+Antes de añadir una función nueva, preguntar **"¿de qué área es —venta, compra/gasto,
+contabilidad, inventario o catálogo?"** y meterla en el flyout de esa área. Si no encaja en
+ninguna, se anota como huérfana y lo decide el dueño — **no se fuerza una sexta área**.
 
 ---
 

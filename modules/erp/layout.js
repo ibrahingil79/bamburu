@@ -167,25 +167,48 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     security:         r => r === 'owner' || r === 'admin',
   };
 
-  // ── MENÚ LEAN de UNA sola capa (DISEÑO.md §3, dirección UX 2026-07-06) ──────────────
-  // EXACTAMENTE 5 entradas, sin sub-enlaces ni grupos: Inicio · Facturas · Gastos · Clientes ·
-  // Contabilidad. Todo lo demás (Presupuestos, Recurrentes, TPV, Compras, Proveedores,
-  // Inventario, Catálogo, Pedidos, Cobros, Conciliación, Verifactu-envío…) DEJA de estar en el
-  // menú y queda accesible SOLO por URL — las rutas siguen montadas, no se borra nada.
-  //   · Presupuestos/Recurrentes viven dentro de Facturas · Conciliación dentro de Gastos/cobros
-  //     y la empuja DISA · Impuestos/modelos/libros/P&G dentro de Contabilidad · Analítica no es
-  //     menú: la responde DISA desde Inicio (§3.2).
-  // "Gastos" → /admin/supplier-invoices (Facturas recibidas = el libro de "Compras y gastos").
-  //   Es el destino más representativo del gasto hoy; si el dueño prefiere Compra directa
-  //   (/admin/purchases), es un solo cambio de href aquí.
-  // DISA NO es entrada del menú: ES la home (Inicio = /admin), §4.
+  // ── MENÚ estilo HOLDED — rail de iconos por ÁREA + submenú FLOTANTE (flyout) ──────────
+  // (Dirección UX 2026-07-06, revisada: el "lean estricto" escondía demasiado. Ahora NINGUNA
+  //  función se esconde: el rail muestra un icono por área y, al pasar/pulsar, abre un flyout
+  //  con TODAS sus funciones.) Inicio es enlace directo (la home de DISA, §4). El resto son
+  //  grupos desplegables. Cada hijo apunta a su ruta real; nada se crea ni se renombra.
   const nav = [
-    { section: 'principal', bare: true, items: [
-      { href: '/admin', label: 'Inicio', key: 'dashboard', icon: 'ti-home' },
+    { home: true, href: '/admin', label: 'Inicio', key: 'dashboard', icon: 'ti-home' },
+    { label: 'Ventas', icon: 'ti-shopping-cart', items: [
       { href: '/admin/invoices', label: 'Facturas', key: 'invoices', icon: 'ti-file-invoice' },
-      { href: '/admin/supplier-invoices', label: 'Gastos', key: 'supplier-invoices', icon: 'ti-receipt' },
+      { href: '/admin/quotes', label: 'Presupuestos', key: 'quotes', icon: 'ti-file-text' },
+      { href: '/admin/recurrentes', label: 'Recurrentes', key: 'recurrentes', icon: 'ti-repeat' },
+      { href: '/admin/pedidos', label: 'Pedidos', key: 'pedidos', icon: 'ti-clipboard-list' },
+      { href: '/admin/albaranes', label: 'Albaranes', key: 'albaranes', icon: 'ti-truck-delivery' },
+      { href: '/admin/cobros', label: 'Cobros', key: 'cobros', icon: 'ti-cash' },
+      { href: '/admin/mostrador', label: 'TPV', key: 'mostrador', icon: 'ti-cash-register' },
+      { href: '/admin/portal', label: 'Portal de cliente', key: 'portal', icon: 'ti-external-link' },
       { href: '/admin/clients', label: 'Clientes', key: 'clients', icon: 'ti-users' },
-      { href: '/admin/contabilidad', label: 'Contabilidad', key: 'contabilidad', icon: 'ti-book' },
+      { href: '/admin/clients/groups', label: 'Grupos', key: 'client-groups', icon: 'ti-users-group' },
+      { label: 'CRM', key: 'crm', disabled: true, icon: 'ti-address-book' },
+    ]},
+    { label: 'Compras y gastos', icon: 'ti-receipt', items: [
+      { href: '/admin/supplier-invoices', label: 'Facturas recibidas', key: 'supplier-invoices', icon: 'ti-file-dollar' },
+      { href: '/admin/purchases', label: 'Compra directa', key: 'purchases', icon: 'ti-shopping-cart' },
+      { href: '/admin/purchase-orders', label: 'Órdenes de compra', key: 'purchase-orders', icon: 'ti-clipboard-list' },
+      { href: '/admin/pagos', label: 'Pagos a proveedores', key: 'pagos', icon: 'ti-cash' },
+      { href: '/admin/supplier-returns', label: 'Devoluciones', key: 'supplier-returns', icon: 'ti-arrow-back-up' },
+      { href: '/admin/purchases/capture', label: 'Captura de factura', key: 'purchases-capture', icon: 'ti-camera' },
+      { href: '/admin/suppliers', label: 'Proveedores', key: 'suppliers', icon: 'ti-building-store' },
+    ]},
+    { label: 'Contabilidad', icon: 'ti-book', items: [
+      { href: '/admin/contabilidad', label: 'Libros y modelos', key: 'contabilidad', icon: 'ti-book' },
+      { href: '/admin/conciliacion', label: 'Conciliación bancaria', key: 'conciliacion', icon: 'ti-arrows-exchange' },
+      { href: '/admin/verifactu/envios', label: 'Envío Verifactu (AEAT)', key: 'verifactu-envio', icon: 'ti-cloud-upload' },
+    ]},
+    { label: 'Inventario', icon: 'ti-building-warehouse', items: [
+      { href: '/admin/inventory', label: 'Stock', key: 'inventory', icon: 'ti-building-warehouse' },
+      { href: '/admin/warehouses', label: 'Almacenes', key: 'warehouses', icon: 'ti-buildings' },
+      { href: '/admin/stock-transfers', label: 'Traslados', key: 'stock-transfers', icon: 'ti-transfer' },
+    ]},
+    { label: 'Catálogo', icon: 'ti-box', items: [
+      { href: '/admin/products', label: 'Productos', key: 'products', icon: 'ti-box' },
+      { href: '/admin/categories', label: 'Categorías', key: 'categories', icon: 'ti-category' },
     ]},
   ];
 
@@ -205,16 +228,24 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     if (hasCustomPerms) { const req = navPerms[i.key]; if (req != null && !perms.includes(req)) return false; }
     return true;
   };
-  const filteredNav = nav.map(s => ({ ...s, items: s.items.filter(navFilter) })).filter(s => s.items.length > 0);
-
-  const navHTML = filteredNav.map(s => `
-    <div class="nav-section">
-      ${s.bare ? '' : `<div class="nav-title">${s.section}</div>`}
-      ${s.items.map(i => i.disabled
-        ? `<span class="nav-item nav-item-disabled" title="Pendiente — aún no disponible"><i class="ti ${i.icon}"></i><span>${i.label}</span><span class="nav-pending">pendiente</span></span>`
-        : `<a href="${i.href}" class="nav-item${active === i.key ? ' active' : ''}"><i class="ti ${i.icon}"></i><span>${i.label}</span></a>`
-      ).join('')}
-    </div>`).join('');
+  // Rail: Inicio (enlace directo) + un icono por ÁREA. Cada área abre un flyout con sus hijos
+  // (filtrados por permiso). Un área se marca activa si la pantalla actual es uno de sus hijos.
+  const navHTML = nav.map(g => {
+    if (g.home) {
+      return `<a href="${g.href}" class="nav-item${active === g.key ? ' active' : ''}" title="${g.label}"><i class="ti ${g.icon}"></i></a>`;
+    }
+    const items = g.items.filter(navFilter);
+    if (!items.length) return '';
+    const groupActive = items.some(i => i.key === active);
+    const fly = items.map(i => i.disabled
+      ? `<span class="fly-item disabled" title="Pendiente — aún no disponible"><i class="ti ${i.icon}"></i>${i.label}<span class="nav-pending">pendiente</span></span>`
+      : `<a href="${i.href}" class="fly-item${i.key === active ? ' active' : ''}"><i class="ti ${i.icon}"></i>${i.label}</a>`
+    ).join('');
+    return `<div class="navg" onmouseenter="openFly(this)" onmouseleave="scheduleCloseFly()">`
+      + `<button type="button" class="nav-item${groupActive ? ' active' : ''}" title="${g.label}" aria-label="${g.label}" onclick="toggleFly(this.closest('.navg'))"><i class="ti ${g.icon}"></i></button>`
+      + `<div class="flyout" onmouseenter="cancelCloseFly()" onmouseleave="scheduleCloseFly()"><div class="flyout-h">${g.label}</div>${fly}</div>`
+      + `</div>`;
+  }).join('');
 
   // ── Avatar + barra de Cuenta (mockup): cabecera + items gateados + Documentación + salir ──
   const acctVisible = accountItems.filter(navFilter);
@@ -319,6 +350,29 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     document.addEventListener('click',function(e){if(!e.target.closest('.rmenu'))window.closeRowMenus();});
     window.addEventListener('scroll',function(){window.closeRowMenus();},true);
     document.addEventListener('keydown',function(e){if(e.key==='Escape')window.closeRowMenus();});
+    // ── Rail estilo Holded — flyout (submenú flotante) por área ──
+    var _flyTimer=null;
+    window.cancelCloseFly=function(){if(_flyTimer){clearTimeout(_flyTimer);_flyTimer=null;}};
+    window.closeFly=function(){document.querySelectorAll('.flyout.open').forEach(function(f){f.classList.remove('open');});};
+    window.scheduleCloseFly=function(){window.cancelCloseFly();_flyTimer=setTimeout(window.closeFly,180);};
+    window.openFly=function(g){
+      window.cancelCloseFly();
+      var fly=g.querySelector('.flyout'); if(!fly) return;
+      document.querySelectorAll('.flyout.open').forEach(function(f){if(f!==fly)f.classList.remove('open');});
+      var icon=g.querySelector('.nav-item'), r=icon.getBoundingClientRect();
+      fly.style.left=(r.right+6)+'px';
+      fly.style.top='0px';
+      fly.classList.add('open');
+      var oh=fly.offsetHeight;
+      fly.style.top=Math.max(8, Math.min(r.top, window.innerHeight-8-oh))+'px';
+    };
+    window.toggleFly=function(g){
+      var fly=g.querySelector('.flyout');
+      if(fly&&fly.classList.contains('open')) fly.classList.remove('open'); else window.openFly(g);
+    };
+    document.addEventListener('click',function(e){if(!e.target.closest('.navg'))window.closeFly();});
+    window.addEventListener('scroll',function(){window.closeFly();},true);
+    document.addEventListener('keydown',function(e){if(e.key==='Escape')window.closeFly();});
   </script>
   <style>
 ${ROOT_TOKENS}
@@ -326,27 +380,27 @@ ${ROOT_TOKENS}
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;font-size:14px;-webkit-font-smoothing:antialiased}
 
-    /* ── Sidebar CLARO (dirección UX 2026-07-06): colapsable a iconos · se despliega al hover ── */
-    .sidebar{width:var(--sw);background:var(--chrome);border-right:1px solid var(--chrome-div);position:fixed;top:0;left:0;height:100vh;overflow-x:hidden;overflow-y:auto;z-index:100;display:flex;flex-direction:column;transition:width .18s ease}
-    .sidebar:hover{width:var(--sw-exp);box-shadow:6px 0 24px rgba(16,24,40,.18)}
+    /* ── Sidebar CLARO — RAIL de iconos por área + flyout (estilo Holded) ── */
+    .sidebar{width:var(--sw);background:var(--chrome);border-right:1px solid var(--chrome-div);position:fixed;top:0;left:0;height:100vh;overflow-x:hidden;overflow-y:auto;z-index:100;display:flex;flex-direction:column}
     .sidebar::-webkit-scrollbar{width:6px}
     .sidebar::-webkit-scrollbar-thumb{background:rgba(0,0,0,.12);border-radius:6px}
     .sb-brand{display:flex;align-items:center;justify-content:center;height:50px;flex-shrink:0;color:var(--brand);font-size:21px;line-height:1}
-    .sidebar:hover .sb-brand{justify-content:flex-start;padding-left:1.05rem}
-    .sb-nav{flex:1;padding:.4rem .55rem .6rem;overflow-y:auto;overflow-x:hidden}
-    .nav-section{margin-bottom:.1rem}
-    .nav-title{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--chrome-grp);padding:.7rem .55rem .3rem;white-space:nowrap;opacity:0;transition:opacity .15s}
-    .sidebar:hover .nav-title{opacity:1}
-    .nav-item{display:flex;align-items:center;justify-content:center;gap:0;padding:.5rem .57rem;margin:1px 0;border-radius:9px;color:var(--chrome-tx);text-decoration:none;font-size:13px;font-weight:400;white-space:nowrap;transition:background .15s,color .15s}
-    .sidebar:hover .nav-item{justify-content:flex-start;gap:9px}
-    .nav-item:hover{background:var(--bg3);color:var(--chrome-tx-on)}
-    .nav-item.active{background:var(--chrome-active);color:var(--chrome-tx-on);font-weight:500}
-    .nav-item i.ti,.nav-item svg{flex-shrink:0;width:18px;height:18px;font-size:18px;line-height:1;color:var(--chrome-ic)}
-    .nav-item:hover i.ti,.nav-item:hover svg,.nav-item.active i.ti,.nav-item.active svg{color:var(--chrome-tx-on)}
-    .nav-item>span{width:0;opacity:0;overflow:hidden;transition:opacity .15s}
-    .sidebar:hover .nav-item>span{width:auto;opacity:1}
-    .nav-item-disabled{color:var(--chrome-ic);cursor:default;opacity:.5}
-    .nav-item-disabled:hover{background:none;color:var(--chrome-ic)}
+    .sb-nav{flex:1;padding:.4rem .5rem .6rem;display:flex;flex-direction:column;gap:3px;overflow-x:hidden}
+    .navg{position:relative}
+    .nav-item{display:flex;align-items:center;justify-content:center;padding:.55rem;border-radius:10px;color:var(--chrome-ic);text-decoration:none;cursor:pointer;background:none;border:none;width:100%;font-family:inherit;transition:background .15s,color .15s}
+    .nav-item:hover{background:var(--bg3);color:var(--accent)}
+    .nav-item.active{background:var(--chrome-active);color:var(--accent)}
+    .nav-item i.ti{flex-shrink:0;font-size:20px;line-height:1;color:inherit}
+    /* Flyout: submenú flotante del rail (position:fixed → escapa el clip del rail) */
+    .flyout{position:fixed;min-width:210px;background:#fff;border:1px solid var(--border2);border-radius:12px;box-shadow:0 10px 30px rgba(16,24,40,.14);padding:7px;display:none;z-index:200}
+    .flyout.open{display:block}
+    .flyout-h{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);padding:5px 10px 6px}
+    .fly-item{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;color:var(--body-tx);text-decoration:none;font-size:13px;white-space:nowrap}
+    .fly-item:hover{background:var(--bg3)}
+    .fly-item.active{background:var(--accent-soft);color:var(--accent);font-weight:500}
+    .fly-item.disabled{color:var(--text3);opacity:.65;cursor:default;pointer-events:none}
+    .fly-item i.ti{flex-shrink:0;font-size:16px;width:16px;color:var(--text3)}
+    .fly-item.active i.ti{color:var(--accent)}
     .nav-pending{margin-left:auto;font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);border:.5px solid var(--border2);border-radius:7px;padding:1px 5px}
 
     /* ── Topbar CLARO (dirección UX 2026-07-06): buscador · campana · avatar ── */
