@@ -24,17 +24,32 @@ const money = (sym, n) => sym + Number(n || 0).toFixed(2);
 const rateLabel = r => (r === null || r === undefined) ? 'sin desglosar' : (Number(r) === 0 ? '0% (exento)' : `${r}%`);
 const rangeOf = (c, db) => { const d = defaultRange(db); return { from: c.req.query('from') || d.from, to: c.req.query('to') || d.to }; };
 
+// Navegación en DOS niveles (reagrupación 7→3, SOLO presentación; cada vista sigue en su ruta,
+// con su gateo y sus exports intactos). Nivel 1 = 3 pestañas ficha; nivel 2 = pestañas ficha
+// también (2ª fila), solo dentro de "Libros oficiales".
+//   · Libros oficiales → ventas · compras · diario · mayor · bienes
+//   · Impuestos        → modelos (303/130)
+//   · Resultados       → pérdidas y ganancias  [sitio previsto para el futuro Balance]
+const LIBROS_OFICIALES = [
+  ['ventas', 'Ventas e ingresos'],
+  ['compras', 'Compras y gastos'],
+  ['diario', 'Libro diario'],
+  ['mayor', 'Libro mayor'],
+  ['bienes', 'Bienes de inversión'],
+];
+const grupoDe = active => active === 'modelos' ? 'impuestos' : (active === 'pyg' ? 'resultados' : 'libros');
 function tabsBar(active, from, to) {
   const q = `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
-  const tab = (key, href, label) => `<a href="${href}${q}" class="tab${active === key ? ' active' : ''}">${label}</a>`;
-  return `<div class="tabs">
-    ${tab('ventas', '/admin/contabilidad/ventas', 'Ventas e ingresos')}
-    ${tab('compras', '/admin/contabilidad/compras', 'Compras y gastos')}
-    ${tab('diario', '/admin/contabilidad/diario', 'Libro diario')}
-    ${tab('mayor', '/admin/contabilidad/mayor', 'Libro mayor')}
-    ${tab('bienes', '/admin/contabilidad/bienes', 'Bienes de inversión')}
-    ${tab('pyg', '/admin/contabilidad/pyg', 'Pérdidas y ganancias')}
-    <a href="/admin/contabilidad/modelos" class="tab${active === 'modelos' ? ' active' : ''}">Modelos (303/130)</a></div>`;
+  const grupo = grupoDe(active);
+  const top = (key, href, label) => `<a href="${href}" class="tab${grupo === key ? ' active' : ''}">${label}</a>`;
+  const nivel1 = `<div class="tabs">
+    ${top('libros', `/admin/contabilidad/ventas${q}`, 'Libros oficiales')}
+    ${top('impuestos', '/admin/contabilidad/modelos', 'Impuestos')}
+    ${top('resultados', `/admin/contabilidad/pyg${q}`, 'Resultados')}</div>`;
+  if (grupo !== 'libros') return nivel1;
+  const sub = LIBROS_OFICIALES.map(([key, label]) =>
+    `<a href="/admin/contabilidad/${key}${q}" class="tab${active === key ? ' active' : ''}">${label}</a>`).join('');
+  return `${nivel1}<div class="tabs">${sub}</div>`;
 }
 // Selector de ejercicio + trimestre para la pestaña Modelos (usa year/q, no from/to).
 function modelosPeriodForm(year, q) {

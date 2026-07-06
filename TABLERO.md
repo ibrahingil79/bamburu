@@ -10,6 +10,7 @@ Hecho cuando: existe docs/ux/auditoria-ux.md con la lista concreta priorizada, y
 ### U1 — Sistema visual coherente (design tokens)
 Unificar tipografía, escala de espaciado, colores y componentes base desde un único sitio (tokens), a partir de layout.js. Sin rediseñar: dar consistencia.
 Hecho cuando: los valores visuales salen de un único origen y las pantallas de mayor uso los usan; captura antes/después.
+- Avance (2026-07-06): componente de pestañas unificado en estilo FICHA (`.tabs`/`.tab`) — aplicado a Contabilidad, Seguridad, Productos/Descuentos y a los filtros de estado de los listados. Contabilidad reagrupada de 7→3 pestañas de primer nivel (Libros oficiales · Impuestos · Resultados), con 2º nivel de fichas para las 5 vistas legales. Solo navegación/presentación: regresión 0, exports/permisos/datos/rutas intactos.
 
 ### U2 — Estados vacíos y de carga
 Toda pantalla con datos tiene estado vacío útil (qué es, qué hacer) y estado de carga.
