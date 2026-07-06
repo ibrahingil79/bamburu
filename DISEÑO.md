@@ -154,6 +154,9 @@ pantalla:
 
 - **Rail (icono por área):** **Inicio** (enlace directo, es la home de DISA) · **Ventas** ·
   **Compras y gastos** · **Contabilidad** · **Inventario** · **Catálogo**.
+- **Se despliega al hover** (aplicado): en reposo solo iconos (62px); al pasar el ratón (o con un
+  flyout abierto) el rail se ensancha y **muestra el nombre de cada área, con la actual resaltada**
+  (así se ve "dónde estás"). Los sub-elementos siguen en el flyout a la derecha.
 - **Flyout por área** (submenú flotante a la derecha, se abre al hover/click):
   - **Ventas:** Facturas · Presupuestos · Recurrentes · Pedidos · Albaranes · Cobros · TPV ·
     Portal de cliente · Clientes · Grupos · *(CRM pendiente)*.

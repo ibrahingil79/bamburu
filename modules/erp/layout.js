@@ -250,7 +250,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       : `<a href="${i.href}" class="fly-item${i.key === active ? ' active' : ''}"><i class="ti ${i.icon}"></i>${i.label}</a>`
     ).join('');
     return `<div class="navg" onmouseenter="openFly(this)" onmouseleave="scheduleCloseFly()">`
-      + `<button type="button" class="nav-item${groupActive ? ' active' : ''}" title="${g.label}" aria-label="${g.label}" onclick="toggleFly(this.closest('.navg'))"><i class="ti ${g.icon}"></i></button>`
+      + `<button type="button" class="nav-item${groupActive ? ' active' : ''}" title="${g.label}" aria-label="${g.label}" onclick="toggleFly(this.closest('.navg'))"><i class="ti ${g.icon}"></i><span class="nav-label">${g.label}</span><i class="ti ti-chevron-right nav-chev"></i></button>`
       + `<div class="flyout" onmouseenter="cancelCloseFly()" onmouseleave="scheduleCloseFly()"><div class="flyout-h">${g.label}</div>${fly}</div>`
       + `</div>`;
   }).join('');
@@ -361,14 +361,17 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     // ── Rail estilo Holded — flyout (submenú flotante) por área ──
     var _flyTimer=null;
     window.cancelCloseFly=function(){if(_flyTimer){clearTimeout(_flyTimer);_flyTimer=null;}};
-    window.closeFly=function(){document.querySelectorAll('.flyout.open').forEach(function(f){f.classList.remove('open');});};
+    window.closeFly=function(){document.querySelectorAll('.flyout.open').forEach(function(f){f.classList.remove('open');});var sb=document.querySelector('.sidebar');if(sb)sb.classList.remove('flyopen');};
     window.scheduleCloseFly=function(){window.cancelCloseFly();_flyTimer=setTimeout(window.closeFly,180);};
     window.openFly=function(g){
       window.cancelCloseFly();
       var fly=g.querySelector('.flyout'); if(!fly) return;
       document.querySelectorAll('.flyout.open').forEach(function(f){if(f!==fly)f.classList.remove('open');});
+      var sb=document.querySelector('.sidebar'); if(sb) sb.classList.add('flyopen');
+      // El rail queda anclado a 216px (.sidebar.flyopen); el flyout va justo a su derecha.
+      // Usamos la constante (no getBoundingClientRect) porque el ancho está a mitad de transición.
       var icon=g.querySelector('.nav-item'), r=icon.getBoundingClientRect();
-      fly.style.left=(r.right+6)+'px';
+      fly.style.left='222px';
       fly.style.top='0px';
       fly.classList.add('open');
       var oh=fly.offsetHeight;
@@ -388,23 +391,36 @@ ${ROOT_TOKENS}
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;font-size:14px;-webkit-font-smoothing:antialiased}
 
-    /* ── Sidebar CLARO — RAIL de iconos por área + flyout (estilo Holded) ── */
-    .sidebar{width:var(--sw);background:var(--chrome);border-right:1px solid var(--chrome-div);position:fixed;top:0;left:0;height:100vh;overflow-x:hidden;overflow-y:auto;z-index:100;display:flex;flex-direction:column}
+    /* ── Sidebar CLARO — RAIL de iconos que SE DESPLIEGA al hover mostrando los nombres ──
+       (estilo Holded). En reposo: solo iconos (62px). Al pasar el ratón / con un flyout abierto:
+       se ensancha y muestra el nombre de cada área, con la actual resaltada. El flyout sigue
+       abriendo las sub-funciones a la derecha. */
+    .sidebar{width:var(--sw);background:var(--chrome);border-right:1px solid var(--chrome-div);position:fixed;top:0;left:0;height:100vh;overflow-x:hidden;overflow-y:auto;z-index:100;display:flex;flex-direction:column;transition:width .16s ease}
+    .sidebar:hover,.sidebar.flyopen{width:216px;box-shadow:6px 0 24px rgba(16,24,40,.10)}
     .sidebar::-webkit-scrollbar{width:6px}
     .sidebar::-webkit-scrollbar-thumb{background:rgba(0,0,0,.12);border-radius:6px}
     /* DISA fija arriba con contador de propuestas (§3.1) — también es la marca y el Inicio */
-    .disa-pin{position:relative;display:flex;align-items:center;justify-content:center;height:50px;flex-shrink:0;color:var(--brand);text-decoration:none}
-    .disa-pin i.ti{font-size:22px;line-height:1}
+    .disa-pin{position:relative;display:flex;align-items:center;justify-content:center;gap:0;height:50px;flex-shrink:0;color:var(--brand);text-decoration:none;overflow:hidden}
+    .sidebar:hover .disa-pin,.sidebar.flyopen .disa-pin{justify-content:flex-start;gap:12px;padding-left:1.05rem}
+    .disa-pin i.ti{font-size:22px;line-height:1;flex-shrink:0}
     .disa-pin:hover{color:var(--accent-d)}
     .disa-pin.active i.ti{color:var(--accent)}
-    .disa-pin-badge{position:absolute;top:7px;right:11px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:#DC2626;color:#fff;font-size:10px;font-weight:600;line-height:1;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--chrome)}
+    .disa-pin .nav-label{font-weight:600;color:var(--text)}
+    .disa-pin-badge{position:absolute;top:7px;left:34px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:#DC2626;color:#fff;font-size:10px;font-weight:600;line-height:1;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--chrome)}
     .sb-nav{flex:1;padding:.4rem .5rem .6rem;display:flex;flex-direction:column;gap:3px;overflow-x:hidden}
     .rail-spacer{flex:1;min-height:8px}
     .navg{position:relative}
-    .nav-item{display:flex;align-items:center;justify-content:center;padding:.55rem;border-radius:10px;color:var(--chrome-ic);text-decoration:none;cursor:pointer;background:none;border:none;width:100%;font-family:inherit;transition:background .15s,color .15s}
+    .nav-item{display:flex;align-items:center;justify-content:center;gap:0;padding:.55rem;border-radius:10px;color:var(--chrome-ic);text-decoration:none;cursor:pointer;background:none;border:none;width:100%;font-family:inherit;transition:background .15s,color .15s}
+    .sidebar:hover .nav-item,.sidebar.flyopen .nav-item{justify-content:flex-start;gap:12px;padding-left:.7rem}
     .nav-item:hover{background:var(--bg3);color:var(--accent)}
     .nav-item.active{background:var(--chrome-active);color:var(--accent)}
     .nav-item i.ti{flex-shrink:0;font-size:20px;line-height:1;color:inherit}
+    /* Etiqueta del rail: oculta en reposo, visible al desplegar */
+    .nav-label{white-space:nowrap;opacity:0;max-width:0;overflow:hidden;font-size:13px;font-weight:500;transition:opacity .12s}
+    .sidebar:hover .nav-label,.sidebar.flyopen .nav-label{opacity:1;max-width:150px}
+    .nav-item.active .nav-label{font-weight:600}
+    .nav-chev{margin-left:auto;font-size:14px!important;opacity:0;transition:opacity .12s}
+    .sidebar:hover .nav-chev,.sidebar.flyopen .nav-chev{opacity:.45}
     /* Flyout: submenú flotante del rail (position:fixed → escapa el clip del rail) */
     .flyout{position:fixed;min-width:210px;background:#fff;border:1px solid var(--border2);border-radius:12px;box-shadow:0 10px 30px rgba(16,24,40,.14);padding:7px;display:none;z-index:200}
     .flyout.open{display:block}
@@ -598,12 +614,13 @@ ${ROOT_TOKENS}
   <aside class="sidebar">
     <a href="/admin" class="disa-pin${active === 'dashboard' ? ' active' : ''}" title="Inicio — DISA${disaCount ? ` · ${disaCount} propuesta${disaCount === 1 ? '' : 's'}` : ''}">
       <i class="ti ti-sparkles"></i>
+      <span class="nav-label">Inicio</span>
       ${disaCount ? `<span class="disa-pin-badge">${disaCount > 9 ? '9+' : disaCount}</span>` : ''}
     </a>
     <nav class="sb-nav">
       ${navHTML}
       <span class="rail-spacer"></span>
-      <a href="/docs" target="_blank" class="nav-item" title="Ayuda y soporte"><i class="ti ti-lifebuoy"></i></a>
+      <a href="/docs" target="_blank" class="nav-item" title="Ayuda y soporte"><i class="ti ti-lifebuoy"></i><span class="nav-label">Ayuda y soporte</span></a>
     </nav>
   </aside>
   <div class="wrap">
