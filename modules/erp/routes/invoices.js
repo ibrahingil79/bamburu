@@ -1039,6 +1039,7 @@ export function createInvoiceRoutes(db) {
         <h2>Facturas</h2>
         <a href="/admin/invoices/new" class="btn btn-primary">Nueva factura</a>
       </div>
+      <div id="disaBand"></div>
       <div class="card">
         <div class="card-head"><h3>Todas las facturas</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="filterTable()"></div>
         <div class="table-wrap"><table>
@@ -1055,7 +1056,17 @@ export function createInvoiceRoutes(db) {
       let rows=[];
       async function loadInvoices(){
         rows=await api('GET','/api/erp/invoices').catch(()=>[]);
+        updateDisaBand();
         filterTable();
+      }
+      // Banda de DISA (§6): aviso calmado de vencidas con UN enlace ("Revisar →" a Cobros).
+      function updateDisaBand(){
+        const el=document.getElementById('disaBand'); if(!el) return;
+        const v=rows.filter(r=>r.cobro_estado==='vencida');
+        if(!v.length){ el.innerHTML=''; return; }
+        const eur=v.reduce((a,r)=>a+Number(r.pendiente||0),0);
+        const txt='Tienes <strong>'+v.length+'</strong> factura'+(v.length===1?'':'s')+' vencida'+(v.length===1?'':'s')+' ('+'${sym}'+eur.toFixed(2)+' pendiente). DISA puede ayudarte a reclamar el cobro.';
+        el.innerHTML=window.disaBand(txt,'/admin/cobros','Revisar');
       }
       function filterTable(){
         const q=document.getElementById('searchBox').value.toLowerCase();
@@ -1069,17 +1080,17 @@ export function createInvoiceRoutes(db) {
           const pedidoCell = r.order_id
             ? '<span>'+(r.order_ref||r.order_id)+'</span>'
             : '<span style="color:var(--muted)">—</span>';
-          // Acciones de ciclo de vida: solo una factura "emitida" se puede anular o rectificar.
-          let acts = '<a href="/admin/invoices/'+r.id+'" target="_blank" class="btn btn-secondary btn-sm">Ver</a>';
+          // Patrón §6: UNA acción clara por fila ("Ver") + el resto en un menú "···".
           // Cobro: solo facturas vivas (no anulada, no abono, no sustituida) — gestión en el panel.
-          // Paso 2: "Gestionar" abre el centro compartido (cobro + próxima acción + acciones).
-          if (r.cobrable) {
-            acts += ' <button class="btn btn-secondary btn-sm" onclick="openGestion('+r.id+')">Gestionar</button>';
-          }
+          // Ciclo de vida: solo una factura "emitida" se puede anular o rectificar.
+          let acts = '<a href="/admin/invoices/'+r.id+'" target="_blank" class="btn btn-secondary btn-sm">Ver</a>';
+          let mi = [];
+          if (r.cobrable) mi.push({ label:'Gestionar cobro', onclick:'openGestion('+r.id+')' });
           if (r.status === 'emitida') {
-            acts += ' <button class="btn btn-secondary btn-sm" onclick="anular('+r.id+',\\''+(r.invoice_number||'')+'\\')">Anular</button>'
-                  + ' <a href="/admin/invoices/'+r.id+'/rectificativa/new" class="btn btn-secondary btn-sm">Rectificar</a>';
+            mi.push({ label:'Rectificar', href:'/admin/invoices/'+r.id+'/rectificativa/new' });
+            mi.push({ label:'Anular', danger:true, onclick:'anular('+r.id+',\\''+(r.invoice_number||'')+'\\')' });
           }
+          if (mi.length) acts += ' '+window.rowMenu(mi);
           // Cobro: para anuladas no aplica (no son deuda); para el resto, pendiente + badge en vivo.
           // Paso 2: bajo el estado, la PRÓXIMA acción de cobro (misma que en Cobros y ficha).
           const proxLine = (r.proxima)

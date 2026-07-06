@@ -206,6 +206,13 @@ huérfana y lo decide el dueño — no se fuerza el menú.
 
 ## 6. Patrón por pantalla (mata la "sopa de enlaces")
 
+> **Aplicación (2026-07-06):** primitivas compartidas en `modules/erp/layout.js` — `disaBand()`
+> / `window.disaBand` (banda azul con un enlace) y `rowMenu()` / `window.rowMenu` (menú `···`),
+> con su CSS `.disa-band` / `.rmenu*`. Aplicado a **Facturas** (banda de vencidas → "Revisar →" a
+> Cobros; acciones de fila Gestionar/Rectificar/Anular colapsadas en `···`) y a **Clientes**
+> (Editar/Archivar en `···`). Pendiente el resto de pantallas (Gastos, Contabilidad, Inicio y las
+> de solo-URL) — mismo patrón con las mismas primitivas.
+
 La regla de densidad del §1, aterrizada en cada pantalla:
 
 - **UN botón primario azul por pantalla.** El resto de acciones se agrupan en un menú

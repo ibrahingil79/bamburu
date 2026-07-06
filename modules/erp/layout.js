@@ -71,6 +71,26 @@ export function csrfField(token) {
   return `<input type="hidden" name="_csrf" value="${token}">`;
 }
 
+// Banda de DISA (DISEÑO §6) para vistas SERVER-rendered: aviso calmado con tinte azul y UN solo
+// enlace de acción. `text` debe venir ya escapado por quien llama. Espejo de window.disaBand.
+export function disaBand(text, href = '', cta = 'Revisar') {
+  return `<div class="disa-band"><span class="db-ic"><i class="ti ti-sparkles"></i></span>`
+    + `<span class="db-tx">${text}</span>`
+    + (href ? `<a class="db-cta" href="${href}">${cta} →</a>` : '')
+    + `</div>`;
+}
+
+// Menú "···" (DISEÑO §6) para vistas SERVER-rendered: acciones secundarias de una fila.
+// items = [{label, href?, onclick?, danger?, target?}]. Espejo de window.rowMenu.
+export function rowMenu(items = []) {
+  const body = items.map(it => {
+    const cls = 'rmenu-item' + (it.danger ? ' danger' : '');
+    if (it.href) return `<a href="${it.href}" class="${cls}"${it.target ? ` target="${it.target}"` : ''}>${it.label}</a>`;
+    return `<button type="button" class="${cls}" onclick="closeRowMenus();${it.onclick || ''}">${it.label}</button>`;
+  }).join('');
+  return `<span class="rmenu"><button type="button" class="rmenu-btn" onclick="toggleRowMenu(this)" aria-label="Más acciones" title="Más acciones">⋯</button><div class="rmenu-pop">${body}</div></span>`;
+}
+
 export function can(c, perm) {
   if (c.get('isOwner')) return true;
   if (c.get('isAdmin')) return true;
@@ -261,6 +281,36 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       var m=document.getElementById('accessDeniedModal');
       if(m)m.style.display='flex';
     };
+    // ── Patrón por pantalla (DISEÑO §6) — helpers compartidos ──
+    // Banda de DISA: aviso calmado con UN enlace de acción ("Revisar →"). text ya viene escapado.
+    window.disaBand=function(text,href,cta){
+      return '<div class="disa-band"><span class="db-ic"><i class="ti ti-sparkles"></i></span>'
+        +'<span class="db-tx">'+text+'</span>'
+        +(href?'<a class="db-cta" href="'+href+'">'+(cta||'Revisar')+' →</a>':'')+'</div>';
+    };
+    // Menú "···": acciones secundarias de una fila. items=[{label, href?, onclick?, danger?, target?}].
+    window.rowMenu=function(items){
+      var body=(items||[]).map(function(it){
+        var cls='rmenu-item'+(it.danger?' danger':'');
+        if(it.href) return '<a href="'+it.href+'" class="'+cls+'"'+(it.target?' target="'+it.target+'"':'')+'>'+it.label+'</a>';
+        return '<button type="button" class="'+cls+'" onclick="closeRowMenus();'+(it.onclick||'')+'">'+it.label+'</button>';
+      }).join('');
+      return '<span class="rmenu"><button type="button" class="rmenu-btn" onclick="toggleRowMenu(this)" aria-label="Más acciones" title="Más acciones">⋯</button><div class="rmenu-pop">'+body+'</div></span>';
+    };
+    window.closeRowMenus=function(){document.querySelectorAll('.rmenu-pop.open').forEach(function(p){p.classList.remove('open');});};
+    window.toggleRowMenu=function(btn){
+      var pop=btn.nextElementSibling, isOpen=pop.classList.contains('open');
+      window.closeRowMenus();
+      if(isOpen) return;
+      var r=btn.getBoundingClientRect();
+      pop.classList.add('open');
+      var pw=pop.offsetWidth;
+      pop.style.top=(r.bottom+4)+'px';
+      pop.style.left=Math.max(8,r.right-pw)+'px';
+    };
+    document.addEventListener('click',function(e){if(!e.target.closest('.rmenu'))window.closeRowMenus();});
+    window.addEventListener('scroll',function(){window.closeRowMenus();},true);
+    document.addEventListener('keydown',function(e){if(e.key==='Escape')window.closeRowMenus();});
   </script>
   <style>
 ${ROOT_TOKENS}
@@ -423,6 +473,24 @@ ${ROOT_TOKENS}
     .alert-err{background:var(--danger-s);color:var(--danger);border:1px solid #F0CFCC}
     .alert-ok{background:var(--ok-s);color:var(--ok);border:1px solid #CDE8D8}
     .alert-info{background:var(--info-s);color:var(--info);border:1px solid #BAE6FD}
+
+    /* ── Patrón por pantalla (DISEÑO §6) ─────────────────────────────────────────────
+       Banda de DISA: aviso CALMADO con tinte azul claro y UN solo enlace de acción
+       (nunca un grupo de botones). Menú "···": recoge las acciones secundarias de fila. */
+    .disa-band{display:flex;align-items:center;gap:12px;background:var(--accent-soft);border:1px solid #CFE0FF;border-radius:var(--radius-lg);padding:11px 15px;margin-bottom:1.25rem;font-size:.86rem;color:var(--text)}
+    .disa-band .db-ic{color:var(--accent);font-size:18px;flex-shrink:0;display:flex;line-height:1}
+    .disa-band .db-tx{flex:1;min-width:0}
+    .disa-band .db-cta{color:var(--accent);font-weight:600;text-decoration:none;white-space:nowrap;font-size:.85rem;flex-shrink:0}
+    .disa-band .db-cta:hover{text-decoration:underline}
+    .rmenu{position:relative;display:inline-block}
+    .rmenu-btn{background:none;border:1px solid var(--border2);border-radius:8px;cursor:pointer;color:var(--text2);font-size:1rem;line-height:1;padding:.2rem .5rem;font-family:inherit;transition:background .12s,border-color .12s}
+    .rmenu-btn:hover{background:var(--bg3);border-color:var(--text3);color:var(--text)}
+    .rmenu-pop{position:fixed;min-width:172px;background:#fff;border:1px solid var(--border2);border-radius:10px;box-shadow:0 8px 24px rgba(16,24,40,.12);padding:6px;display:none;z-index:300}
+    .rmenu-pop.open{display:block}
+    .rmenu-item{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;font-size:.82rem;color:var(--body-tx);text-decoration:none;cursor:pointer;white-space:nowrap;background:none;border:none;width:100%;text-align:left;font-family:inherit}
+    .rmenu-item:hover{background:var(--bg3)}
+    .rmenu-item.danger{color:var(--danger)}
+    .rmenu-item.danger:hover{background:var(--danger-s)}
 
     /* ── Misc ── */
     .ph{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem}

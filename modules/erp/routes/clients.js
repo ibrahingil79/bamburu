@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can } from '../layout.js';
+import { adminLayout, can, rowMenu } from '../layout.js';
 import { logActivity, requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { escHtml } from '../../../core/escape.js';
@@ -314,11 +314,16 @@ export function createClientRoutes(db, cfg = {}) {
       '<td>'+(cl.group_name?'<span class="badge b-purple">'+escHtml(cl.group_name)+'</span>':'-')+'</td>'+
       '<td style="color:var(--muted);font-size:.8rem">'+((cl.created_at||'').split(' ')[0]||'-')+'</td>'+
       '<td style="white-space:nowrap">'+
+        // Patrón §6: UNA acción clara ("Ver") + el resto en un menú "···".
         '<button class="btn btn-secondary btn-sm" onclick="viewDetail('+cl.id+')">Ver</button> '+
         (verArchivados
-          ? (can(c,'clients.edit')?'<button class="btn btn-primary btn-sm" onclick="restoreClient('+cl.id+')">Restaurar</button>':'')
-          : (can(c,'clients.edit')?'<button class="btn btn-secondary btn-sm" onclick="editClient('+cl.id+')">Editar</button> ':'')+
-            (can(c,'clients.delete')?'<button class="btn btn-danger btn-sm" onclick="delClient('+cl.id+')">Archivar</button>':''))+
+          ? (can(c,'clients.edit')?'<button class="btn btn-secondary btn-sm" onclick="restoreClient('+cl.id+')">Restaurar</button>':'')
+          : ((can(c,'clients.edit')||can(c,'clients.delete'))
+              ? rowMenu([
+                  can(c,'clients.edit') ? {label:'Editar', onclick:'editClient('+cl.id+')'} : null,
+                  can(c,'clients.delete') ? {label:'Archivar', danger:true, onclick:'delClient('+cl.id+')'} : null,
+                ].filter(Boolean))
+              : ''))+
       '</td>'+
       '</tr>').join('');
 
