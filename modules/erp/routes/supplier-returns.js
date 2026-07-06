@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can, docShell } from '../layout.js';
+import { adminLayout, can, docShell, estadoTabs } from '../layout.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { supplierReturnSchema, purchaseOrderAnularSchema } from '../schemas.js';
@@ -311,20 +311,19 @@ export function createSupplierReturnRoutes(db) {
       + '</tr>'
     ).join('');
 
-    const estadoOptions = ['', 'confirmada', 'anulada'].map(v =>
-      '<option value="' + v + '"' + (v === estado ? ' selected' : '') + '>' + (v === '' ? 'Todas' : v === 'confirmada' ? 'Confirmadas' : 'Anuladas') + '</option>'
-    ).join('');
+    const estadoTabsHtml = estadoTabs(estado, [['', 'Todas'], ['confirmada', 'Confirmadas'], ['anulada', 'Anuladas']], q);
 
     const content = `
       <div class="ph">
         <h2>Devoluciones a proveedor</h2>
         <form method="get" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
           <input class="search" type="text" name="q" value="${esc(q)}" placeholder="Buscar por número o proveedor...">
-          <select class="form-control" name="estado" style="width:auto;min-width:140px" onchange="this.form.submit()">${estadoOptions}</select>
+          <input type="hidden" name="estado" value="${esc(estado)}">
           <button class="btn btn-secondary" type="submit">Buscar</button>
           ${can(c, 'purchases.create') ? '<a href="/admin/supplier-returns/new" class="btn btn-primary">Nueva devolución</a>' : ''}
         </form>
       </div>
+      ${estadoTabsHtml}
       <div class="card">
         <div class="table-wrap"><table>
           <thead><tr><th>Número</th><th>Proveedor</th><th>Fecha</th><th>Estado</th><th>Valor devuelto</th><th></th></tr></thead>

@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can, docShell, printableShell } from '../layout.js';
+import { adminLayout, can, docShell, printableShell, estadoTabs } from '../layout.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';   // PDF real: mismo HTML imprimible → Chromium
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
@@ -417,19 +417,19 @@ export function createPedidoRoutes(db) {
         + '<td style="text-align:right"><a href="/admin/pedidos/' + o.id + '" class="btn btn-secondary btn-sm">Ver</a></td>'
         + '</tr>';
     }).join('');
-    const estadoOptions = ['', 'borrador', 'confirmado', 'anulado', 'entregado'].map(v =>
-      '<option value="' + v + '"' + (v === estado ? ' selected' : '') + '>' + (v ? ESTADO_OPTION_LABEL[v] : 'Todos') + '</option>').join('');
+    const estadoTabsHtml = estadoTabs(estado, [['', 'Todos'], ...Object.entries(ESTADO_OPTION_LABEL)], qstr);
 
     const content = `
       <div class="ph">
         <h2>Pedidos</h2>
         <form method="get" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
           <input class="search" type="text" name="q" value="${esc(qstr)}" placeholder="Buscar por cliente o número...">
-          <select class="form-control" name="estado" style="width:auto;min-width:140px" onchange="this.form.submit()">${estadoOptions}</select>
+          <input type="hidden" name="estado" value="${esc(estado)}">
           <button class="btn btn-secondary" type="submit">Buscar</button>
           ${can(c, 'pedidos.create') ? '<a href="/admin/pedidos/new" class="btn btn-primary">Nuevo pedido</a>' : ''}
         </form>
       </div>
+      ${estadoTabsHtml}
       <div class="card"><div class="table-wrap"><table>
         <thead><tr><th>Número</th><th>Cliente</th><th>Fecha</th><th>Estado</th><th>Total</th><th></th></tr></thead>
         <tbody>${total === 0 ? '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text3)">' + (qstr || estado ? 'No se encontraron pedidos' : 'Sin pedidos. Crea el primero.') + '</td></tr>' : rowsHtml}</tbody>

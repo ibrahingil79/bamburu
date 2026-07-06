@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can, docShell } from '../layout.js';
+import { adminLayout, can, docShell, estadoTabs } from '../layout.js';
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { purchaseOrderSchema, purchaseOrderAnularSchema, purchaseOrderReceiptSchema } from '../schemas.js';
@@ -491,21 +491,20 @@ export function createPurchaseOrderRoutes(db) {
         + '</tr>';
     }).join('');
 
-    const estadoOptions = ['', 'borrador', 'enviada', 'parcial', 'recibida', 'cerrada', 'anulada'].map(v =>
-      '<option value="' + v + '"' + (v === estado ? ' selected' : '') + '>' + (v ? ESTADO_OPTION_LABEL[v] : 'Todas') + '</option>'
-    ).join('');
+    const estadoTabsHtml = estadoTabs(estado, [['', 'Todas'], ...Object.entries(ESTADO_OPTION_LABEL)], q);
 
     const content = `
       <div class="ph">
         <h2>Órdenes de compra</h2>
         <form method="get" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
           <input class="search" type="text" name="q" value="${esc(q)}" placeholder="Buscar por proveedor o número...">
-          <select class="form-control" name="estado" style="width:auto;min-width:140px" onchange="this.form.submit()">${estadoOptions}</select>
+          <input type="hidden" name="estado" value="${esc(estado)}">
           <button class="btn btn-secondary" type="submit">Buscar</button>
           ${can(c, 'purchases.create') ? '<a href="/admin/purchases/capture" class="btn btn-secondary">Capturar factura</a>' : ''}
           ${can(c, 'purchases.create') ? '<a href="/admin/purchase-orders/new" class="btn btn-primary">Nueva orden</a>' : ''}
         </form>
       </div>
+      ${estadoTabsHtml}
       <div class="card">
         <div class="table-wrap"><table>
           <thead><tr><th>Número</th><th>Proveedor</th><th>Fecha</th><th>Estado</th><th>Total</th><th></th></tr></thead>

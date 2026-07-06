@@ -96,6 +96,22 @@ export function rowMenu(items = [], opts = {}) {
   return `<span class="rmenu">${trig}<div class="rmenu-pop">${body}</div></span>`;
 }
 
+// Pestañas de filtro por ESTADO para listados (estilo ficha compartido .tabs/.tab). Cada entrada
+// es [valor, etiqueta]; '' = "Todos". Los enlaces conservan la búsqueda `q` y reinician la página.
+export function estadoTabs(active = '', entries = [], q = '') {
+  const link = (v) => {
+    const u = new URLSearchParams();
+    if (q) u.set('q', q);
+    if (v) u.set('estado', v);
+    const s = u.toString();
+    return s ? `?${s}` : '?';
+  };
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return `<div class="tabs">`
+    + entries.map(([v, label]) => `<a href="${esc(link(v))}" class="tab${v === (active || '') ? ' active' : ''}">${esc(label)}</a>`).join('')
+    + `</div>`;
+}
+
 export function can(c, perm) {
   if (c.get('isOwner')) return true;
   if (c.get('isAdmin')) return true;
@@ -592,10 +608,12 @@ ${ROOT_TOKENS}
     .search:focus{border-color:var(--teal)}
     .search::placeholder{color:var(--text3)}
     img.thumb{width:38px;height:38px;object-fit:cover;border-radius:6px;border:1px solid var(--border)}
-    .tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:1.25rem;gap:0}
-    .tab{padding:.55rem .9rem;cursor:pointer;font-size:.83rem;font-weight:500;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
-    .tab:hover{color:var(--text2)}
-    .tab.active{color:var(--teal);border-bottom-color:var(--teal)}
+    /* Pestañas tipo FICHA/CARPETA (DISEÑO): la activa es una tarjeta blanca elevada que se
+       une al panel de debajo; las inactivas quedan detrás sobre la línea base. */
+    .tabs{display:flex;align-items:flex-end;gap:5px;border-bottom:1px solid var(--border2);margin-bottom:1.25rem;overflow-x:auto}
+    .tab{padding:.5rem .95rem;cursor:pointer;font-size:.83rem;font-weight:500;color:var(--text2);background:var(--bg);border:1px solid var(--border2);border-bottom-color:transparent;border-radius:9px 9px 0 0;margin-bottom:-1px;white-space:nowrap;text-decoration:none;transition:all .15s}
+    .tab:hover{color:var(--text);background:var(--bg3)}
+    .tab.active{color:var(--accent);font-weight:600;background:var(--bg2);border-color:var(--border2);border-bottom-color:var(--bg2)}
     .tab-pane{display:none}.tab-pane.active{display:block}
     .stars{color:#F59E0B}
     @media(max-width:768px){

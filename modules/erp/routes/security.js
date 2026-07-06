@@ -45,10 +45,6 @@ export function createSecurityRoutes(db) {
 
     const content = `
     <style>
-      .sec-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:1.5rem}
-      .sec-tab{padding:.6rem 1.2rem;font-size:.85rem;font-weight:500;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;text-decoration:none;transition:all .15s}
-      .sec-tab.active{color:var(--teal);border-bottom-color:var(--teal);font-weight:500}
-      .sec-tab:hover{color:var(--text)}
       .sec-pane{display:none}.sec-pane.active{display:block}
       .sec-alert{padding:.75rem 1rem;border-radius:8px;font-size:.85rem;margin-bottom:1.2rem}
       .sec-ok{background:var(--ok-s);border:1px solid var(--ok);color:var(--ok)}
@@ -74,9 +70,9 @@ export function createSecurityRoutes(db) {
     <div class="card" style="padding:1.5rem 2rem;max-width:600px">
       ${alert}
 
-      <div class="sec-tabs">
-        <a href="/admin/security?tab=password" class="sec-tab${tab === 'password' ? ' active' : ''}">Contraseña</a>
-        <a href="/admin/security?tab=2fa"      class="sec-tab${tab === '2fa'      ? ' active' : ''}">Autenticación 2FA</a>
+      <div class="tabs">
+        <a href="/admin/security?tab=password" class="tab${tab === 'password' ? ' active' : ''}">Contraseña</a>
+        <a href="/admin/security?tab=2fa"      class="tab${tab === '2fa'      ? ' active' : ''}">Autenticación 2FA</a>
       </div>
 
       <!-- TAB: CONTRASEÑA -->

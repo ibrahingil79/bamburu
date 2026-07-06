@@ -26,15 +26,15 @@ const rangeOf = (c, db) => { const d = defaultRange(db); return { from: c.req.qu
 
 function tabsBar(active, from, to) {
   const q = `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
-  const tab = (key, href, label) => `<a href="${href}${q}" class="btn ${active === key ? '' : 'btn-ghost'}" style="${active === key ? '' : 'opacity:.7'}">${label}</a>`;
-  return `<div style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap">
+  const tab = (key, href, label) => `<a href="${href}${q}" class="tab${active === key ? ' active' : ''}">${label}</a>`;
+  return `<div class="tabs">
     ${tab('ventas', '/admin/contabilidad/ventas', 'Ventas e ingresos')}
     ${tab('compras', '/admin/contabilidad/compras', 'Compras y gastos')}
     ${tab('diario', '/admin/contabilidad/diario', 'Libro diario')}
     ${tab('mayor', '/admin/contabilidad/mayor', 'Libro mayor')}
     ${tab('bienes', '/admin/contabilidad/bienes', 'Bienes de inversión')}
     ${tab('pyg', '/admin/contabilidad/pyg', 'Pérdidas y ganancias')}
-    <a href="/admin/contabilidad/modelos" class="btn ${active === 'modelos' ? '' : 'btn-ghost'}" style="${active === 'modelos' ? '' : 'opacity:.7'}">Modelos (303/130)</a></div>`;
+    <a href="/admin/contabilidad/modelos" class="tab${active === 'modelos' ? ' active' : ''}">Modelos (303/130)</a></div>`;
 }
 // Selector de ejercicio + trimestre para la pestaña Modelos (usa year/q, no from/to).
 function modelosPeriodForm(year, q) {
