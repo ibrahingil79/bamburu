@@ -179,9 +179,9 @@ export function validarRepartoManualPago(asignacion, importeTotal, facturasVivas
   for (const a of (asignacion || [])) {
     const id = Number(a.supplier_invoice_id);
     const c = cents(a.importe);
-    if (!deudaPorId.has(id)) return { ok: false, error: 'La factura ' + id + ' no es deuda viva de este proveedor' };
+    if (!deudaPorId.has(id)) return { ok: false, error: 'Una de las facturas del reparto ya no es deuda viva de este proveedor.' };
     if (c < 0) return { ok: false, error: 'No se permiten importes negativos' };
-    if (c > deudaPorId.get(id)) return { ok: false, error: 'La factura ' + id + ' recibe más que su deuda pendiente' };
+    if (c > deudaPorId.get(id)) return { ok: false, error: 'Una de las facturas del reparto recibe más que su deuda pendiente.' };
     suma += c;
   }
   const total = cents(importeTotal);

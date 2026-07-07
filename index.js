@@ -13,6 +13,7 @@ import { autologinStore } from './core/autologin-store.js';
 import { register as registerRegistro } from './modules/registro/index.js';
 import { register as registerSuperadmin } from './modules/superadmin/index.js';
 import { docsHtml } from './docs.html.js';
+import { errorShell, ERR } from './modules/erp/layout.js';
 
 initControlDb();
 
@@ -1434,7 +1435,15 @@ app.onError((err, c) => {
   }
   console.error('[onError]', c.req.method, c.req.path, '-', err?.stack || err);
   if (isHttpEx) return err.getResponse();
-  return c.text('Error interno del servidor', 500);
+  // U3: nunca volcamos el detalle interno. API → JSON limpio (lo muestra el toast); resto → página maquetada.
+  if (c.req.path.startsWith('/api/')) return c.json({ error: ERR.GEN }, 500);
+  return c.html(errorShell('Algo ha ido mal', ERR.SERVER, { action: 'Ir al inicio', href: '/admin' }), 500);
+});
+
+// U3: 404 propio (antes caía en el "404 Not Found" de texto plano de Hono). API → JSON; resto → página maquetada.
+app.notFound((c) => {
+  if (c.req.path.startsWith('/api/')) return c.json({ error: 'No encontrado' }, 404);
+  return c.html(errorShell('Página no encontrada', ERR.PAGE, { action: 'Ir al inicio', href: '/admin' }), 404);
 });
 
 serve({ fetch: app.fetch, port: 3000, hostname: '127.0.0.1' }, (info) => {

@@ -101,7 +101,7 @@ export function register(app) {
       const history = sessionData.messages;
 
       if (!hasAnthropicKey()) {
-        return c.json({ error: 'Servicio no disponible. Contacta con soporte.' }, 500);
+        return c.json({ error: 'Ahora mismo no puedo seguir con el alta. Inténtalo en unos minutos o escríbenos a soporte.' }, 500);
       }
 
       const recentHistory = history.slice(-14).map(m => ({ role: m.role, content: m.content }));
@@ -127,7 +127,7 @@ export function register(app) {
           });
         } catch (err) {
           console.error('[DISA onboarding] API error:', err.message);
-          return c.json({ error: 'Error al conectar con DISA.' }, 500);
+          return c.json({ error: 'He tenido un problema para responderte. Inténtalo de nuevo en un momento.' }, 500);
         }
         const raw = apiData.content?.[0]?.text || '';
 
@@ -463,7 +463,7 @@ function onboardingHtml() {
         sendBtn.disabled=false;
 
         if(!res.ok){
-          addMsg('assistant',data.error||'Error interno. Inténtalo de nuevo.');
+          addMsg('assistant',data.error||'Algo ha fallado por mi lado. Vuelve a intentarlo.');
           return;
         }
 

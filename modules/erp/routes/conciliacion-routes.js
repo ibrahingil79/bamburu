@@ -4,7 +4,7 @@
 import { Hono } from 'hono';
 import { requirePerm } from '../../../core/auth.js';
 import { checkPermission } from '../../../core/permission-check.js';
-import { adminLayout, emptyRow } from '../layout.js';
+import { adminLayout, emptyRow, errorShell, ERR, cleanErrMsg } from '../layout.js';
 import { escHtml } from '../../../core/escape.js';
 import { buildXlsx, toCSV } from '../contabilidad-export.js';
 import { importNorma43, sugerenciasIngreso, conciliarConCobro, conciliarConFactura, ignorarMovimiento, deshacer,
@@ -154,15 +154,15 @@ export function createConciliacionRoutes(db) {
       const body = await c.req.parseBody();
       const f = body['file'];
       const text = typeof f === 'string' ? f : (f && typeof f.text === 'function' ? await f.text() : '');
-      if (!text.trim()) return c.text('Fichero vacío o ilegible', 400);
+      if (!text.trim()) return c.html(errorShell('No hemos podido leer el extracto', 'El fichero está vacío o no se puede leer. Revisa que sea un extracto Norma 43 (.n43) válido y vuelve a subirlo.', { action: 'Volver a Conciliación', href: '/admin/conciliacion' }), 400);
       importNorma43(db, text, { sourceFile: (f && f.name) || 'extracto.q43' });
-    } catch (e) { return c.text('Error importando: ' + e.message, e.status || 400); }
+    } catch (e) { return c.html(errorShell('No hemos podido importar el extracto', 'No hemos podido leer el extracto. Revisa que sea un fichero Norma 43 (.n43) válido y vuelve a subirlo.', { action: 'Volver a Conciliación', href: '/admin/conciliacion' }), e.status || 400); }
     return back(c);
   });
 
   views.post('/:id/conciliar-cobro', requirePerm('conciliacion.manage'), async c => {
     try { const b = await c.req.parseBody(); conciliarConCobro(db, +c.req.param('id'), +b.target_id, { by: c.get('session')?.email || '' }); }
-    catch (e) { return c.text(e.message, e.status || 400); }
+    catch (e) { return c.html(errorShell('No hemos podido completar la conciliación', cleanErrMsg(e.message), { action: 'Volver a Conciliación', href: '/admin/conciliacion' }), e.status || 400); }
     return back(c);
   });
 
@@ -170,15 +170,15 @@ export function createConciliacionRoutes(db) {
     try {
       const b = await c.req.parseBody();
       const registrar = b.registrar_cobro === '1';
-      if (registrar && !can(c, db, 'cobros', 'manage')) return c.text('Registrar el cobro requiere permiso de cobros (cobros.manage).', 403);
+      if (registrar && !can(c, db, 'cobros', 'manage')) return c.html(errorShell('No tienes permiso', ERR.PERM, { action: 'Volver a Conciliación', href: '/admin/conciliacion' }), 403);
       conciliarConFactura(db, +c.req.param('id'), +b.target_id, { by: c.get('session')?.email || '', registrarCobro: registrar });
-    } catch (e) { return c.text(e.message, e.status || 400); }
+    } catch (e) { return c.html(errorShell('No hemos podido completar la conciliación', cleanErrMsg(e.message), { action: 'Volver a Conciliación', href: '/admin/conciliacion' }), e.status || 400); }
     return back(c);
   });
 
   views.post('/:id/conciliar-pago', requirePerm('conciliacion.manage'), async c => {
     try { const b = await c.req.parseBody(); conciliarConPagoProveedor(db, +c.req.param('id'), +b.target_id, { by: c.get('session')?.email || '' }); }
-    catch (e) { return c.text(e.message, e.status || 400); }
+    catch (e) { return c.html(errorShell('No hemos podido completar la conciliación', cleanErrMsg(e.message), { action: 'Volver a Conciliación', href: '/admin/conciliacion' }), e.status || 400); }
     return back(c);
   });
 
@@ -186,21 +186,21 @@ export function createConciliacionRoutes(db) {
     try {
       const b = await c.req.parseBody();
       const registrar = b.registrar_pago === '1';
-      if (registrar && !can(c, db, 'purchases', 'create')) return c.text('Registrar el pago requiere permiso de compras (purchases.create).', 403);
+      if (registrar && !can(c, db, 'purchases', 'create')) return c.html(errorShell('No tienes permiso', ERR.PERM, { action: 'Volver a Conciliación', href: '/admin/conciliacion' }), 403);
       conciliarConGasto(db, +c.req.param('id'), +b.target_id, { by: c.get('session')?.email || '', registrarPago: registrar });
-    } catch (e) { return c.text(e.message, e.status || 400); }
+    } catch (e) { return c.html(errorShell('No hemos podido completar la conciliación', cleanErrMsg(e.message), { action: 'Volver a Conciliación', href: '/admin/conciliacion' }), e.status || 400); }
     return back(c);
   });
 
   views.post('/:id/ignorar', requirePerm('conciliacion.manage'), async c => {
     try { await c.req.parseBody(); ignorarMovimiento(db, +c.req.param('id'), { by: c.get('session')?.email || '' }); }
-    catch (e) { return c.text(e.message, e.status || 400); }
+    catch (e) { return c.html(errorShell('No hemos podido completar la conciliación', cleanErrMsg(e.message), { action: 'Volver a Conciliación', href: '/admin/conciliacion' }), e.status || 400); }
     return back(c);
   });
 
   views.post('/:id/deshacer', requirePerm('conciliacion.manage'), async c => {
     try { const b = await c.req.parseBody(); deshacer(db, +c.req.param('id'), { deletePayment: b.delete_payment === '1' ? true : false }); }
-    catch (e) { return c.text(e.message, e.status || 400); }
+    catch (e) { return c.html(errorShell('No hemos podido completar la conciliación', cleanErrMsg(e.message), { action: 'Volver a Conciliación', href: '/admin/conciliacion' }), e.status || 400); }
     return back(c);
   });
 

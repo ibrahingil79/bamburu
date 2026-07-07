@@ -2,7 +2,7 @@
 // Bajo /admin (con requirePerm + sesión). Gateado por invoices.read. Aditivo.
 import { Hono } from 'hono';
 import { requirePerm } from '../../core/auth.js';
-import { adminLayout, emptyRow } from '../erp/layout.js';
+import { adminLayout, emptyRow, cleanErrMsg } from '../erp/layout.js';
 import { escHtml } from '../../core/escape.js';
 import { sendEmail } from '../../core/mailer.js';
 import { getPortalSetting, setPortalSetting, sendPortalLink } from './portal.js';
@@ -17,7 +17,7 @@ export function createPortalAdminRoutes(db) {
         (SELECT COUNT(*) FROM portal_tokens t WHERE t.client_id=c.id AND t.revoked=0 AND t.expires_at > strftime('%s','now')) enlaces
         FROM clients c ORDER BY c.name`).all();
     const flash = c.req.query('sent') ? `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid var(--ok);background:var(--ok-s);font-size:12px;color:var(--ok)">Enlace enviado a ${escHtml(c.req.query('sent'))}.</div>` : '';
-    const err = c.req.query('err') ? `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid var(--danger);background:var(--danger-s);font-size:12px;color:var(--danger)">${escHtml(c.req.query('err'))}</div>` : '';
+    const err = c.req.query('err') ? `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid var(--danger);background:var(--danger-s);font-size:12px;color:var(--danger)">${escHtml(cleanErrMsg(c.req.query('err')))}</div>` : '';
     const filas = clientes.map(cl => `<tr>
       <td>${escHtml(cl.name)}</td><td>${escHtml(cl.email || '')}</td>
       <td>${cl.enlaces ? `<span style="color:var(--ok)">${cl.enlaces} activo(s)</span>` : '<span style="color:var(--text2)">—</span>'}</td>

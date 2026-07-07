@@ -62,7 +62,7 @@ export function createStockTransferSvc(db, d) {
   const resolved = [];
   for (const it of d.items) {
     const product = db.prepare('SELECT id, name, type, average_cost FROM products WHERE id=?').get(it.product_id);
-    if (!product) { const e = new Error('Producto ' + it.product_id + ' no encontrado'); e.status = 400; throw e; }
+    if (!product) { const e = new Error('Uno de los productos del traslado ya no existe.'); e.status = 400; throw e; }
     if (seen.has(product.id)) { const e = new Error('Producto repetido en el traslado ("' + product.name + '")'); e.status = 400; throw e; }
     seen.add(product.id);
     if (!isPhysical(db, product)) { const e = new Error('"' + product.name + '" no es un producto físico: no lleva stock'); e.status = 400; throw e; }

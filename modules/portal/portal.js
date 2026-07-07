@@ -89,7 +89,7 @@ export async function sendPortalLink(db, clientId, baseUrl, sendEmailImpl, { ttl
     from: `${empresa} <noreply@bamburu.com>`, to: client.email, replyTo: cfg.email || undefined,
     subject: `Tus facturas — ${empresa}`, html,
   });
-  if (res && res.error) { const e = new Error('No se pudo enviar el email: ' + (res.error.message || 'error de Resend')); e.status = 502; throw e; }
+  if (res && res.error) { const e = new Error('No hemos podido enviar el email. Comprueba la dirección del destinatario e inténtalo más tarde.'); e.status = 502; throw e; }   // U3: sin volcar el objeto de Resend
   return { sent: true, email: client.email };
 }
 

@@ -27,9 +27,24 @@ Hecho cuando: las pantallas marcadas en U0 quedan cubiertas; revisión en navega
   aditivo y reversible: **regresión 0** (28 archivos `node --check`, smoke headless 0 errores JS y ninguna
   pantalla en blanco; sin tocar lógica, datos, endpoints ni permisos).
 
-### U3 — Mensajes de error claros y accionables
+### U3 — Mensajes de error claros y accionables  ✅ HECHO (2026-07-07)
 Sustituir errores genéricos por mensajes que dicen qué pasó y qué hacer, en la voz de Bamburu.
 Hecho cuando: los casos de U0 muestran mensaje claro; test que dispara los errores y comprueba el texto.
+- Propuesta (2026-07-07): barrido completo de admin + portal (más allá de los 16 de U0: la superficie
+  real usa **5 mecanismos** — `c.text` planos, `alert`, `toast`, `c.json`→toast y banners DOM). Lista
+  aprobada en bloque por el dueño en `docs/ux/u3-textos-errores.md` (11 plantillas T1–T11 + casos A–I).
+- Hecho (2026-07-07): pieza compartida en `layout.js` (un solo sitio, como U2) — **`ERR`** (textos
+  T1–T11), **`cleanErrMsg()`** (traduce lo crudo a llano: UNIQUE SQLite→duplicado contextual, errores
+  internos→genérico, `Datos inválidos`→accionable, y **quita** tokens `confirm_*`/códigos de permiso
+  `cobros.manage`/`(R1–R5)`/`(D1)` conservando las palabras que el front necesita) y **`errorShell()`**
+  (página de error maquetada con el visual de U2), con espejos `window.*`. El chokepoint **`api()`** limpia
+  todos los toast/alert de golpe (403→T4, red→T2). `onError`(T10)+`notFound`(T11) propios con rama JSON para
+  `/api/`. Aplicado a ~20 ficheros: `alert`→`toast`, páginas `c.text` planas→maqueta (fichas 404, PDF,
+  conciliación, recurrentes, bienes), vertidos de Resend e IDs internos crudos→texto llano. El **portal
+  público** mantiene su shell NEUTRO (sin DISA). **Fuera:** los 2 avisos de 2FA/contraseña (lógica) y el
+  caso F de Verifactu. Solo presentación, aditivo y reversible: **regresión 0** (20 archivos `node --check`,
+  smoke headless `scripts/verify-u3-errores.mjs` **13/13 OK · 0 errores JS**, forzando un caso de cada
+  mecanismo en vivo; sin tocar lógica, validaciones, permisos ni la causa de los errores).
 
 ### U4 — Reducir clics en flujos clave
 Tomar los flujos medidos en U0 (emitir factura, registrar cobro, conciliar, crear recurrente…) y recortar pasos/formularios en blanco.

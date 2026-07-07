@@ -454,7 +454,7 @@ export async function registerCollectionAction(db, invoiceId, input, opts = {}) 
     };
     if (company.email) payload.replyTo = company.email;   // las respuestas van al autónomo
     const { data, error } = await opts.sendEmail(payload);
-    if (error) { const e = new Error('No se pudo enviar el email: ' + (error.message || JSON.stringify(error))); e.status = 502; throw e; }
+    if (error) { const e = new Error('No hemos podido enviar el email. Comprueba la dirección del destinatario e inténtalo más tarde.'); e.status = 502; throw e; }   // U3: sin volcar el objeto de Resend
     emailInfo = { sent: true, to: client.email, subject, id: data && data.id };
   }
 
@@ -643,7 +643,7 @@ export async function registerAccountAction(db, clientId, input, opts = {}) {
     const payload = { from: empresa + ' <noreply@bamburu.com>', to: client.email, subject, ...(html ? { html } : {}), text };
     if (company.email) payload.replyTo = company.email;
     const { data, error } = await opts.sendEmail(payload);   // UN solo email
-    if (error) { const e = new Error('No se pudo enviar el email: ' + (error.message || JSON.stringify(error))); e.status = 502; throw e; }
+    if (error) { const e = new Error('No hemos podido enviar el email. Comprueba la dirección del destinatario e inténtalo más tarde.'); e.status = 502; throw e; }   // U3: sin volcar el objeto de Resend
     db.transaction(() => {
       for (const f of vivas) {
         insertCollectionActionRow(db, {
@@ -687,7 +687,7 @@ export async function registerAccountAction(db, clientId, input, opts = {}) {
     db.transaction(() => {
       for (const a of asignacion) {
         const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(a.invoice_id);
-        if (!inv || !isCobrable(db, inv)) { const e = new Error('La factura ' + a.invoice_id + ' no admite cobro'); e.status = 400; throw e; }
+        if (!inv || !isCobrable(db, inv)) { const e = new Error('Una de las facturas seleccionadas ya no admite cobro (anulada o sustituida).'); e.status = 400; throw e; }
         const r = insertPaymentRow(db, { invoice_id: a.invoice_id, amount: a.importe, paid_date: today, payment_method: input.payment_method || '', note: input.note || 'Cobro a cuenta', account_batch_id: batchId });
         pagos.push({ invoice_id: a.invoice_id, importe: a.importe, payment_id: r.lastInsertRowid });
       }

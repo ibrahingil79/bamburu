@@ -53,16 +53,18 @@ export function register(app, db) {
 
   app.get('/portal/:token/factura/:id/pdf', async (c) => {
     const v = validateToken(db, c.req.param('token'));
-    if (!v) return c.text('Enlace no válido', 403);
+    if (!v) return c.html(denied(), 403);
     const invId = Number(c.req.param('id'));
-    if (!invoiceBelongsToClient(db, invId, v.client_id)) return c.text('No encontrada', 404);   // nunca una factura ajena
+    if (!invoiceBelongsToClient(db, invId, v.client_id)) return c.html(shell('Factura no encontrada', `<div class="card"><h1>No encontramos esta factura</h1>
+  <p class="sub">Puede que el enlace ya no sea válido. Pide a tu proveedor uno nuevo.</p></div>`), 404);   // nunca una factura ajena
     try {
       const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(invId);
       const paper = await buildInvoicePaper(db, inv);
       const pdf = await renderPdfFromHtml(printableShell(paper, { title: 'Factura ' + inv.invoice_number }));
       const fname = ('Factura-' + (inv.invoice_number || invId) + '.pdf').replace(/[\/\\]/g, '-');
       return new Response(pdf, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="' + fname + '"' } });
-    } catch (e) { return c.text('No se pudo generar el PDF', 500); }
+    } catch (e) { return c.html(shell('No se pudo generar el PDF', `<div class="card"><h1>No hemos podido preparar el PDF</h1>
+  <p class="sub">Vuelve a intentarlo en un momento.</p></div>`), 500); }
   });
 
   console.log('✅ Portal: portal de cliente en /portal/<token>');

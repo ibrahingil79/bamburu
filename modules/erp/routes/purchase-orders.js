@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can, docShell, estadoTabs, emptyRow } from '../layout.js';
+import { adminLayout, can, docShell, estadoTabs, emptyRow, errorShell, ERR } from '../layout.js';
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { purchaseOrderSchema, purchaseOrderAnularSchema, purchaseOrderReceiptSchema } from '../schemas.js';
@@ -47,7 +47,7 @@ function resolveItems(db, items) {
   const get = db.prepare('SELECT id, tax_rate FROM products WHERE id=?');
   return items.map(it => {
     const p = get.get(it.product_id);
-    if (!p) { const e = new Error('La línea debe ser un producto del catálogo (producto ' + it.product_id + ' no existe)'); e.status = 400; throw e; }
+    if (!p) { const e = new Error('Cada línea debe ser un producto del catálogo. Elige uno de la lista.'); e.status = 400; throw e; }
     return { product_id: it.product_id, quantity: it.quantity, unit_cost: it.unit_cost, tax_rate: Number(p.tax_rate) || 0 };
   });
 }
@@ -232,7 +232,7 @@ ${documentBodyHtml(o, items, emisor, proveedor, sym)}
   };
   if (company.email) payload.replyTo = company.email;   // las respuestas van al negocio
   const { data, error } = await opts.sendEmail(payload);
-  if (error) { const e = new Error('No se pudo enviar el email: ' + (error.message || JSON.stringify(error))); e.status = 502; throw e; }
+  if (error) { const e = new Error(ERR.EMAIL); e.status = 502; throw e; }   // U3: sin volcar el objeto de Resend
   return { sent: true, to: supplier.email, order_number: o.order_number, id: data && data.id };
 }
 
@@ -876,7 +876,7 @@ export function createPurchaseOrderRoutes(db) {
   views.get('/:id', requirePerm('purchases.read'), c => {
     const id = parseInt(c.req.param('id'));
     const o = getOrder(db, id);
-    if (!o) return c.text('Orden no encontrada', 404);
+    if (!o) return c.html(errorShell('No encontramos esta orden', 'Puede que se haya anulado o que el enlace ya no sea válido.', { action: 'Ver órdenes de compra', href: '/admin/purchase-orders' }), 404);
     const items = getItems(db, id);
     const company = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
     const supplier = db.prepare('SELECT * FROM suppliers WHERE id=?').get(o.supplier_id) || {};   // email VIVO para el confirm del botón de email
@@ -1007,41 +1007,41 @@ ${receptionBlock}`;
 <script>
   const CSRF = ${JSON.stringify(csrfToken)};
   async function post(url, body){
-    const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json','x-csrf-token':CSRF}, body: JSON.stringify(body||{}) });
-    const d = await r.json();
-    if (d.error) throw new Error(d.error);
+    let r; try{ r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json','x-csrf-token':CSRF}, body: JSON.stringify(body||{}) }); }catch(_e){ throw new Error(window.ERR.NET); }
+    let d; try{ d = await r.json(); }catch(_e){ d=null; }
+    if (!r.ok || !d || d.error) throw new Error(window.cleanErrMsg((d&&d.error)||''));
     return d;
   }
   async function enviarOrden(){
     if (!confirm('¿Enviar esta orden? Recibirá su número OC y quedará bloqueada (no editable).')) return;
-    try { const d = await post('/api/erp/purchase-orders/${id}/enviar'); alert('Orden ' + d.order_number + ' enviada'); location.reload(); }
-    catch(e){ alert(e.message || 'Error'); }
+    try { const d = await post('/api/erp/purchase-orders/${id}/enviar'); toast('Orden ' + d.order_number + ' enviada'); location.reload(); }
+    catch(e){ toast(e.message,'err'); }
   }
   async function emailOrden(){
     if (!confirm('¿Enviar la orden por email a ${esc(supplier.email || 'el proveedor')}?')) return;
-    try { const d = await post('/api/erp/purchase-orders/${id}/email'); alert('Enviada por email a ' + d.to); }
-    catch(e){ alert(e.message || 'Error enviando el email'); }
+    try { const d = await post('/api/erp/purchase-orders/${id}/email'); toast('Enviada por email a ' + d.to); }
+    catch(e){ toast(e.message,'err'); }
   }
   async function anularOrden(){
     const motivo = prompt('Motivo de anulación de la orden ${esc(o.order_number || '')}:');
     if (motivo === null) return;
-    if (motivo.trim().length < 3){ alert('El motivo es obligatorio (mínimo 3 caracteres)'); return; }
+    if (motivo.trim().length < 3){ toast('El motivo es obligatorio (mínimo 3 caracteres)','err'); return; }
     try { await post('/api/erp/purchase-orders/${id}/anular', { motivo: motivo.trim() }); location.reload(); }
-    catch(e){ alert(e.message || 'Error anulando'); }
+    catch(e){ toast(e.message,'err'); }
   }
   async function anularYRehacer(){
     const motivo = prompt('Motivo de anulación (se abrirá un borrador nuevo precargado):');
     if (motivo === null) return;
-    if (motivo.trim().length < 3){ alert('El motivo es obligatorio (mínimo 3 caracteres)'); return; }
+    if (motivo.trim().length < 3){ toast('El motivo es obligatorio (mínimo 3 caracteres)','err'); return; }
     try { const d = await post('/api/erp/purchase-orders/${id}/anular-y-rehacer', { motivo: motivo.trim() }); window.location.href = '/admin/purchase-orders/' + d.id + '/edit'; }
-    catch(e){ alert(e.message || 'Error'); }
+    catch(e){ toast(e.message,'err'); }
   }
   async function cerrarOrden(){
     const motivo = prompt('Motivo del cierre (el pendiente NO va a llegar; la orden no admitirá más recepciones ni se reabre):');
     if (motivo === null) return;
-    if (motivo.trim().length < 3){ alert('El motivo es obligatorio (mínimo 3 caracteres)'); return; }
+    if (motivo.trim().length < 3){ toast('El motivo es obligatorio (mínimo 3 caracteres)','err'); return; }
     try { await post('/api/erp/purchase-orders/${id}/close', { motivo: motivo.trim() }); location.reload(); }
-    catch(e){ alert(e.message || 'Error cerrando la orden'); }
+    catch(e){ toast(e.message,'err'); }
   }
 </script>`;
     return c.html(adminLayout('Orden de compra ' + (o.order_number ? esc(o.order_number) : '(borrador)'), docShell(paper, panel), 'purchase-orders', csrfToken, c));

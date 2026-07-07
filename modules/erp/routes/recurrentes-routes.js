@@ -4,7 +4,7 @@
 import { Hono } from 'hono';
 import { requirePerm } from '../../../core/auth.js';
 import { checkPermission } from '../../../core/permission-check.js';
-import { adminLayout, emptyRow } from '../layout.js';
+import { adminLayout, emptyRow, errorShell, cleanErrMsg } from '../layout.js';
 import { escHtml } from '../../../core/escape.js';
 import { generateDueOccurrences, borradoresPendientes, proximasFechas, importeEstimado,
          emitirOcurrencia, omitirOcurrencia, createTemplate, setTemplateStatus } from '../recurrentes.js';
@@ -85,20 +85,20 @@ export function createRecurrentesRoutes(db) {
       const lines = [0, 1, 2].map(i => ({ description: b[`desc_${i}`], quantity: b[`qty_${i}`], unit_price: b[`price_${i}`], tax_rate: b[`tax_${i}`] }));
       createTemplate(db, { client_id: b.client_id, interval_months: b.interval_months, start_date: b.start_date,
         end_date: b.end_date || null, max_occurrences: b.max_occurrences || null, irpf_rate: b.irpf_rate, lines });
-    } catch (e) { return c.text(e.message, e.status || 400); }
+    } catch (e) { return c.html(errorShell('No hemos podido completar la acción', cleanErrMsg(e.message), { action: 'Volver a Recurrentes', href: '/admin/recurrentes' }), e.status || 400); }
     return back(c);
   });
 
-  views.post('/:id/pausar', requirePerm('recurrentes.manage'), async c => { try { await c.req.parseBody(); setTemplateStatus(db, +c.req.param('id'), 'pausada'); } catch (e) { return c.text(e.message, e.status || 400); } return back(c); });
-  views.post('/:id/activar', requirePerm('recurrentes.manage'), async c => { try { await c.req.parseBody(); setTemplateStatus(db, +c.req.param('id'), 'activa'); } catch (e) { return c.text(e.message, e.status || 400); } return back(c); });
+  views.post('/:id/pausar', requirePerm('recurrentes.manage'), async c => { try { await c.req.parseBody(); setTemplateStatus(db, +c.req.param('id'), 'pausada'); } catch (e) { return c.html(errorShell('No hemos podido completar la acción', cleanErrMsg(e.message), { action: 'Volver a Recurrentes', href: '/admin/recurrentes' }), e.status || 400); } return back(c); });
+  views.post('/:id/activar', requirePerm('recurrentes.manage'), async c => { try { await c.req.parseBody(); setTemplateStatus(db, +c.req.param('id'), 'activa'); } catch (e) { return c.html(errorShell('No hemos podido completar la acción', cleanErrMsg(e.message), { action: 'Volver a Recurrentes', href: '/admin/recurrentes' }), e.status || 400); } return back(c); });
 
   // Emitir el borrador → factura real (requiere el permiso de emisión de facturas, no basta recurrentes.manage).
   views.post('/borrador/:id/emitir', requirePerm('invoices.create'), async c => {
     try { await c.req.parseBody(); emitirOcurrencia(db, +c.req.param('id')); }
-    catch (e) { return c.text(e.message, e.status || 400); }
+    catch (e) { return c.html(errorShell('No hemos podido completar la acción', cleanErrMsg(e.message), { action: 'Volver a Recurrentes', href: '/admin/recurrentes' }), e.status || 400); }
     return back(c);
   });
-  views.post('/borrador/:id/omitir', requirePerm('recurrentes.manage'), async c => { try { await c.req.parseBody(); omitirOcurrencia(db, +c.req.param('id')); } catch (e) { return c.text(e.message, e.status || 400); } return back(c); });
+  views.post('/borrador/:id/omitir', requirePerm('recurrentes.manage'), async c => { try { await c.req.parseBody(); omitirOcurrencia(db, +c.req.param('id')); } catch (e) { return c.html(errorShell('No hemos podido completar la acción', cleanErrMsg(e.message), { action: 'Volver a Recurrentes', href: '/admin/recurrentes' }), e.status || 400); } return back(c); });
 
   return { views };
 }

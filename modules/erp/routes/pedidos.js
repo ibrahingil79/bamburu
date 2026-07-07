@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can, docShell, printableShell, estadoTabs, emptyRow } from '../layout.js';
+import { adminLayout, can, docShell, printableShell, estadoTabs, emptyRow, errorShell, ERR } from '../layout.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';   // PDF real: mismo HTML imprimible → Chromium
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
@@ -588,7 +588,7 @@ export function createPedidoRoutes(db) {
   views.get('/:id', requirePerm('pedidos.read'), c => {
     const id = parseInt(c.req.param('id'));
     const o = getOrder(db, id);
-    if (!o) return c.text('Pedido no encontrado', 404);
+    if (!o) return c.html(errorShell('No encontramos este pedido', 'Puede que se haya anulado o que el enlace ya no sea válido.', { action: 'Ver pedidos', href: '/admin/pedidos' }), 404);
     const items = getItems(db, id);
     const { emisor, cliente } = docParties(db, o);
     const sym = o.currency_symbol || '€';
@@ -662,11 +662,11 @@ export function createPedidoRoutes(db) {
 </div></div>
 <script>
   const CSRF=${JSON.stringify(csrfToken)}, OID=${id};
-  async function call(path, body){ const r=await fetch('/api/erp/pedidos/'+OID+path,{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:JSON.stringify(body||{})}); const d=await r.json(); if(!r.ok||d.error) throw new Error(d.error||'Error'); return d; }
-  async function confirmar(){ if(!confirm('Vas a CONFIRMAR el pedido: ganará número PED-NNNN, quedará bloqueado (corregir = anular y rehacer) y APARTARÁ (reservará) el stock físico para este cliente. ¿Continuar?')) return; try{ await call('/confirmar'); location.reload(); }catch(e){ alert(e.message); } }
-  async function facturar(){ if(!confirm('Facturar este pedido directamente? Se creará una factura real con sus líneas (no mueve stock; la entrega va por albarán). La cadena es suelta: también puedes facturar desde un albarán.')) return; try{ const d=await call('/factura'); location.href='/admin/invoices/'+d.invoice_id; }catch(e){ alert(e.message); } }
-  async function anular(){ const m=prompt('Motivo de la anulación (se liberará la reserva):'); if(m===null) return; if(!m.trim()){ alert('El motivo es obligatorio'); return; } try{ await call('/anular',{motivo:m.trim()}); location.reload(); }catch(e){ alert(e.message); } }
-  async function anularYRehacer(){ const m=prompt('Motivo de la anulación (se creará un borrador nuevo con las mismas líneas):'); if(m===null) return; if(!m.trim()){ alert('El motivo es obligatorio'); return; } try{ const d=await call('/anular-y-rehacer',{motivo:m.trim()}); location.href='/admin/pedidos/'+d.id+'/edit'; }catch(e){ alert(e.message); } }
+  async function call(path, body){ let r; try{ r=await fetch('/api/erp/pedidos/'+OID+path,{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:JSON.stringify(body||{})}); }catch(_e){ throw new Error(window.ERR.NET); } let d; try{ d=await r.json(); }catch(_e){ d=null; } if(!r.ok||!d||d.error) throw new Error(window.cleanErrMsg((d&&d.error)||'')); return d; }
+  async function confirmar(){ if(!confirm('Vas a CONFIRMAR el pedido: ganará número PED-NNNN, quedará bloqueado (corregir = anular y rehacer) y APARTARÁ (reservará) el stock físico para este cliente. ¿Continuar?')) return; try{ await call('/confirmar'); location.reload(); }catch(e){ toast(e.message,'err'); } }
+  async function facturar(){ if(!confirm('Facturar este pedido directamente? Se creará una factura real con sus líneas (no mueve stock; la entrega va por albarán). La cadena es suelta: también puedes facturar desde un albarán.')) return; try{ const d=await call('/factura'); location.href='/admin/invoices/'+d.invoice_id; }catch(e){ toast(e.message,'err'); } }
+  async function anular(){ const m=prompt('Motivo de la anulación (se liberará la reserva):'); if(m===null) return; if(!m.trim()){ toast('El motivo es obligatorio','err'); return; } try{ await call('/anular',{motivo:m.trim()}); location.reload(); }catch(e){ toast(e.message,'err'); } }
+  async function anularYRehacer(){ const m=prompt('Motivo de la anulación (se creará un borrador nuevo con las mismas líneas):'); if(m===null) return; if(!m.trim()){ toast('El motivo es obligatorio','err'); return; } try{ const d=await call('/anular-y-rehacer',{motivo:m.trim()}); location.href='/admin/pedidos/'+d.id+'/edit'; }catch(e){ toast(e.message,'err'); } }
 </script>`;
     return c.html(adminLayout('Pedido ' + (o.order_number || ('#' + id)), docShell(paper, panel), 'pedidos', csrfToken, c));
   });
@@ -677,7 +677,7 @@ export function createPedidoRoutes(db) {
     try {
       const id = parseInt(c.req.param('id'));
       const o = getOrder(db, id);
-      if (!o) return c.text('Pedido no encontrado', 404);
+      if (!o) return c.html(errorShell('No encontramos este pedido', 'Puede que se haya anulado o que el enlace ya no sea válido.', { action: 'Ver pedidos', href: '/admin/pedidos' }), 404);
       const items = getItems(db, id);
       const { emisor, cliente } = docParties(db, o);
       const sym = o.currency_symbol || '€';
@@ -685,7 +685,7 @@ export function createPedidoRoutes(db) {
       const pdf = await renderPdfFromHtml(printableShell(body, { title: 'Pedido ' + (o.order_number || ('#' + id)) }));
       const fname = ('Pedido-' + (o.order_number || ('' + id)) + '.pdf').replace(/[\/\\]/g, '-');
       return new Response(pdf, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="' + fname + '"' } });
-    } catch (e) { return c.text('No se pudo generar el PDF: ' + e.message, e.status || 500); }
+    } catch (e) { return c.html(errorShell('No hemos podido generar el PDF', ERR.PDF, { action: 'Ver pedidos', href: '/admin/pedidos' }), e.status || 500); }
   });
 
   return { api, views };

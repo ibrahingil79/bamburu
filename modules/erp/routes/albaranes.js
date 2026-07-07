@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can, docShell, printableShell, estadoTabs, emptyRow } from '../layout.js';
+import { adminLayout, can, docShell, printableShell, estadoTabs, emptyRow, errorShell, ERR } from '../layout.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';   // PDF real: mismo HTML imprimible → Chromium
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
@@ -116,7 +116,7 @@ export function createAlbaranSvc(db, d) {
     for (const it of d.lines) {
       if (!it.order_item_id) { const e = new Error('Cada línea del albarán de pedido debe referenciar una línea del pedido'); e.status = 400; throw e; }
       const line = byId.get(it.order_item_id);
-      if (!line) { const e = new Error('La línea ' + it.order_item_id + ' no pertenece a este pedido'); e.status = 400; throw e; }
+      if (!line) { const e = new Error('Una de las líneas no corresponde a este pedido'); e.status = 400; throw e; }
       if (seen.has(it.order_item_id)) { const e = new Error('Línea repetida en el albarán ("' + esc(line.description) + '")'); e.status = 400; throw e; }
       seen.add(it.order_item_id);
       if (!(it.quantity > 0)) continue;
@@ -449,10 +449,11 @@ export function createAlbaranRoutes(db) {
           const btn=document.getElementById('btn-save'); btn.disabled=true;
           try {
             const body={ order_id: ORDER_ID, date: document.getElementById('f-date').value||undefined, notes: document.getElementById('f-notes').value||'', lines, confirm_over: !!over };
-            const r=await fetch('/api/erp/albaranes',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:JSON.stringify(body)});
-            const d=await r.json(); if(!r.ok||d.error){
-              if(/disponible|supera/i.test(d.error||'') && !over && confirm((d.error||'')+'\\n\\n¿Entregar igualmente?')){ btn.disabled=false; return saveAlbaran(true); }
-              throw new Error(d.error||'Error'); }
+            let r; try{ r=await fetch('/api/erp/albaranes',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:JSON.stringify(body)}); }catch(_e){ throw new Error(window.ERR.NET); }
+            let d; try{ d=await r.json(); }catch(_e){ d=null; } if(!r.ok||!d||d.error){
+              const em=window.cleanErrMsg((d&&d.error)||'');
+              if(/disponible|supera/i.test(em) && !over && confirm(em+'\\n\\n¿Entregar igualmente?')){ btn.disabled=false; return saveAlbaran(true); }
+              throw new Error(em); }
             window.location.href='/admin/albaranes/'+d.id;
           } catch(e){ toast(e.message||'Error','err'); btn.disabled=false; }
         }
@@ -524,10 +525,11 @@ export function createAlbaranRoutes(db) {
         const btn=document.getElementById('btn-save'); btn.disabled=true;
         try {
           const body={ client_id, warehouse_id: parseInt(document.getElementById('f-warehouse').value)||null, date: document.getElementById('f-date').value||undefined, notes: document.getElementById('f-notes').value||'', lines, confirm_over: !!over };
-          const r=await fetch('/api/erp/albaranes',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:JSON.stringify(body)});
-          const d=await r.json(); if(!r.ok||d.error){
-            if(/disponible|supera/i.test(d.error||'') && !over && confirm((d.error||'')+'\\n\\n¿Entregar igualmente?')){ btn.disabled=false; return saveAlbaran(true); }
-            throw new Error(d.error||'Error'); }
+          let r; try{ r=await fetch('/api/erp/albaranes',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:JSON.stringify(body)}); }catch(_e){ throw new Error(window.ERR.NET); }
+          let d; try{ d=await r.json(); }catch(_e){ d=null; } if(!r.ok||!d||d.error){
+            const em=window.cleanErrMsg((d&&d.error)||'');
+            if(/disponible|supera/i.test(em) && !over && confirm(em+'\\n\\n¿Entregar igualmente?')){ btn.disabled=false; return saveAlbaran(true); }
+            throw new Error(em); }
           window.location.href='/admin/albaranes/'+d.id;
         } catch(e){ toast(e.message||'Error','err'); btn.disabled=false; }
       }
@@ -540,7 +542,7 @@ export function createAlbaranRoutes(db) {
   views.get('/:id', requirePerm('albaranes.read'), c => {
     const id = parseInt(c.req.param('id'));
     const a = getAlbaran(db, id);
-    if (!a) return c.text('Albarán no encontrado', 404);
+    if (!a) return c.html(errorShell('No encontramos este albarán', 'Puede que se haya anulado o que el enlace ya no sea válido.', { action: 'Ver albaranes', href: '/admin/albaranes' }), 404);
     const { emisor, cliente } = docParties(db, a);
     const sym = a.currency_symbol || '€';
     const csrfToken = c.get('session')?.csrfToken || '';
@@ -573,9 +575,9 @@ export function createAlbaranRoutes(db) {
 </div></div>
 <script>
   const CSRF=${JSON.stringify(csrfToken)}, AID=${id};
-  async function call(path, body){ const r=await fetch('/api/erp/albaranes/'+AID+path,{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:JSON.stringify(body||{})}); const d=await r.json(); if(!r.ok||d.error) throw new Error(d.error||'Error'); return d; }
-  async function facturar(){ if(!confirm('Facturar este albarán? Se creará una factura real con las líneas entregadas (el stock ya salió con el albarán).')) return; try{ const d=await call('/factura'); location.href='/admin/invoices/'+d.invoice_id; }catch(e){ alert(e.message); } }
-  async function anular(){ const m=prompt('Motivo de la anulación (revertirá el stock entregado):'); if(m===null) return; if(!m.trim()){ alert('El motivo es obligatorio'); return; } try{ await call('/anular',{motivo:m.trim()}); location.reload(); }catch(e){ alert(e.message); } }
+  async function call(path, body){ let r; try{ r=await fetch('/api/erp/albaranes/'+AID+path,{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:JSON.stringify(body||{})}); }catch(_e){ throw new Error(window.ERR.NET); } let d; try{ d=await r.json(); }catch(_e){ d=null; } if(!r.ok||!d||d.error) throw new Error(window.cleanErrMsg((d&&d.error)||'')); return d; }
+  async function facturar(){ if(!confirm('Facturar este albarán? Se creará una factura real con las líneas entregadas (el stock ya salió con el albarán).')) return; try{ const d=await call('/factura'); location.href='/admin/invoices/'+d.invoice_id; }catch(e){ toast(e.message,'err'); } }
+  async function anular(){ const m=prompt('Motivo de la anulación (revertirá el stock entregado):'); if(m===null) return; if(!m.trim()){ toast('El motivo es obligatorio','err'); return; } try{ await call('/anular',{motivo:m.trim()}); location.reload(); }catch(e){ toast(e.message,'err'); } }
 </script>`;
     return c.html(adminLayout('Albarán ' + (a.delivery_number || ('#' + id)), docShell(paper, panel), 'albaranes', csrfToken, c));
   });
@@ -586,14 +588,14 @@ export function createAlbaranRoutes(db) {
     try {
       const id = parseInt(c.req.param('id'));
       const a = getAlbaran(db, id);
-      if (!a) return c.text('Albarán no encontrado', 404);
+      if (!a) return c.html(errorShell('No encontramos este albarán', 'Puede que se haya anulado o que el enlace ya no sea válido.', { action: 'Ver albaranes', href: '/admin/albaranes' }), 404);
       const { emisor, cliente } = docParties(db, a);
       const sym = a.currency_symbol || '€';
       const body = albaranDocumentBodyHtml(a, a.items, emisor, cliente, sym);
       const pdf = await renderPdfFromHtml(printableShell(body, { title: 'Albarán ' + (a.delivery_number || ('#' + id)) }));
       const fname = ('Albaran-' + (a.delivery_number || ('' + id)) + '.pdf').replace(/[\/\\]/g, '-');
       return new Response(pdf, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="' + fname + '"' } });
-    } catch (e) { return c.text('No se pudo generar el PDF: ' + e.message, e.status || 500); }
+    } catch (e) { return c.html(errorShell('No hemos podido generar el PDF', ERR.PDF, { action: 'Ver albaranes', href: '/admin/albaranes' }), e.status || 500); }
   });
 
   return { api, views };

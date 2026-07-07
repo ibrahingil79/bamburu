@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can, printableShell } from '../layout.js';
+import { adminLayout, can, printableShell, errorShell, ERR } from '../layout.js';
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { checkPermission } from '../../../core/permission-check.js';   // permiso programático sales.emit_over_stock (espejo de la factura)
@@ -255,12 +255,12 @@ export function createMostradorRoutes(db) {
   views.get('/:id/pdf', requirePerm('invoices.read'), async c => {
     try {
       const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(parseInt(c.req.param('id')));
-      if (!inv) return c.text('Ticket no encontrado', 404);
+      if (!inv) return c.html(errorShell('No encontramos este ticket', 'Puede que se haya anulado o que el enlace ya no sea válido.', { action: 'Ir al TPV', href: '/admin/mostrador' }), 404);
       const paper = await buildTicketPaper(db, inv);
       const pdf = await renderPdfFromHtml(printableShell(paper, { title: 'Ticket ' + inv.invoice_number }));
       const fname = ('Ticket-' + (inv.invoice_number || ('' + inv.id)) + '.pdf').replace(/[\/\\]/g, '-');
       return new Response(pdf, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="' + fname + '"' } });
-    } catch (e) { return c.text('No se pudo generar el PDF: ' + e.message, e.status || 500); }
+    } catch (e) { return c.html(errorShell('No hemos podido generar el PDF', ERR.PDF, { action: 'Ir al TPV', href: '/admin/mostrador' }), e.status || 500); }
   });
 
   return { api, views };

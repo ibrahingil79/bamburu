@@ -103,7 +103,7 @@ export function createReceiptSvc(db, orderId, d) {
   const excess = [];
   for (const it of d.items) {
     const line = byId.get(it.order_item_id);
-    if (!line) { const e = new Error('La línea ' + it.order_item_id + ' no pertenece a esta orden'); e.status = 400; throw e; }
+    if (!line) { const e = new Error('Una de las líneas no corresponde a esta orden'); e.status = 400; throw e; }
     if (seen.has(it.order_item_id)) { const e = new Error('Línea repetida en la recepción ("' + line.product_name + '")'); e.status = 400; throw e; }
     seen.add(it.order_item_id);
     if (it.quantity > line.pendiente) {

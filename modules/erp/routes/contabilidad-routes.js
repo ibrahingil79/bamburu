@@ -4,7 +4,7 @@
 // en pantalla, PDF y export. Descarga real XLSX/CSV/PDF (Content-Disposition). Aditivo.
 import { Hono } from 'hono';
 import { requirePerm } from '../../../core/auth.js';
-import { adminLayout, rowMenu, emptyRow } from '../layout.js';
+import { adminLayout, rowMenu, emptyRow, errorShell, cleanErrMsg } from '../layout.js';
 import { escHtml } from '../../../core/escape.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';
 import { backfillLedger, libroVentas, libroCompras, libroDiario, libroMayor, mayorCuenta } from '../contabilidad.js';
@@ -356,10 +356,10 @@ export function createContabilidadRoutes(db) {
   });
 
   const backToBienes = c => c.redirect('/admin/contabilidad/bienes');
-  views.post('/bienes', requirePerm('invoices.create'), async c => { try { createInvestmentGood(db, await c.req.parseBody()); return backToBienes(c); } catch (e) { return c.text(e.message, e.status || 400); } });
-  views.post('/bienes/:id', requirePerm('invoices.create'), async c => { try { updateInvestmentGood(db, +c.req.param('id'), await c.req.parseBody()); return backToBienes(c); } catch (e) { return c.text(e.message, e.status || 400); } });
-  views.post('/bienes/:id/baja', requirePerm('invoices.create'), async c => { try { const b = await c.req.parseBody(); bajaInvestmentGood(db, +c.req.param('id'), b.baja_date, b.motivo); return backToBienes(c); } catch (e) { return c.text(e.message, e.status || 400); } });
-  views.post('/bienes/:id/reactivar', requirePerm('invoices.create'), c => { try { reactivarInvestmentGood(db, +c.req.param('id')); return backToBienes(c); } catch (e) { return c.text(e.message, e.status || 400); } });
+  views.post('/bienes', requirePerm('invoices.create'), async c => { try { createInvestmentGood(db, await c.req.parseBody()); return backToBienes(c); } catch (e) { return c.html(errorShell('No hemos podido guardar el bien', cleanErrMsg(e.message), { action: 'Volver a Bienes de inversión', href: '/admin/contabilidad/bienes' }), e.status || 400); } });
+  views.post('/bienes/:id', requirePerm('invoices.create'), async c => { try { updateInvestmentGood(db, +c.req.param('id'), await c.req.parseBody()); return backToBienes(c); } catch (e) { return c.html(errorShell('No hemos podido guardar el bien', cleanErrMsg(e.message), { action: 'Volver a Bienes de inversión', href: '/admin/contabilidad/bienes' }), e.status || 400); } });
+  views.post('/bienes/:id/baja', requirePerm('invoices.create'), async c => { try { const b = await c.req.parseBody(); bajaInvestmentGood(db, +c.req.param('id'), b.baja_date, b.motivo); return backToBienes(c); } catch (e) { return c.html(errorShell('No hemos podido guardar el bien', cleanErrMsg(e.message), { action: 'Volver a Bienes de inversión', href: '/admin/contabilidad/bienes' }), e.status || 400); } });
+  views.post('/bienes/:id/reactivar', requirePerm('invoices.create'), c => { try { reactivarInvestmentGood(db, +c.req.param('id')); return backToBienes(c); } catch (e) { return c.html(errorShell('No hemos podido guardar el bien', cleanErrMsg(e.message), { action: 'Volver a Bienes de inversión', href: '/admin/contabilidad/bienes' }), e.status || 400); } });
 
   views.get('/bienes.xlsx', requirePerm('invoices.read'), c => {
     const { from, to } = rangeOf(c, db);

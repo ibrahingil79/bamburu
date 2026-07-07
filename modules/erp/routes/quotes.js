@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, can, docShell, printableShell, estadoTabs, emptyRow } from '../layout.js';
+import { adminLayout, can, docShell, printableShell, estadoTabs, emptyRow, errorShell, ERR } from '../layout.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';   // PDF real: mismo HTML imprimible → Chromium
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
@@ -269,7 +269,7 @@ export async function emailQuoteSvc(db, id, opts = {}) {
   };
   if (emisor.email) payload.replyTo = emisor.email;
   const { data, error } = await opts.sendEmail(payload);
-  if (error) { const e = new Error('No se pudo enviar el email: ' + (error.message || JSON.stringify(error))); e.status = 502; throw e; }
+  if (error) { const e = new Error(ERR.EMAIL); e.status = 502; throw e; }   // U3: sin volcar el objeto de Resend
   return { sent: true, to, quote_number: q.quote_number, id: data && data.id };
 }
 
@@ -684,7 +684,7 @@ export function createQuoteRoutes(db) {
   views.get('/:id', requirePerm('quotes.read'), c => {
     const id = parseInt(c.req.param('id'));
     const q = getQuote(db, id);
-    if (!q) return c.text('Presupuesto no encontrado', 404);
+    if (!q) return c.html(errorShell('No encontramos este presupuesto', 'Puede que se haya anulado o que el enlace ya no sea válido.', { action: 'Ver presupuestos', href: '/admin/quotes' }), 404);
     const items = getItems(db, id);
     const { emisor, cliente } = docParties(db, q);
     const sym = q.currency_symbol || '€';
@@ -740,24 +740,24 @@ export function createQuoteRoutes(db) {
 </div></div>
 <script>
   const CSRF=${JSON.stringify(csrfToken)}, QID=${id}, LIVE_EMAIL=${JSON.stringify(liveEmail)};
-  async function call(path, body){ const r=await fetch('/api/erp/quotes/'+QID+path,{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:JSON.stringify(body||{})}); const d=await r.json(); if(!r.ok||d.error) throw new Error(d.error||'Error'); return d; }
-  async function emitir(){ if(!confirm('Vas a EMITIR el presupuesto: ganará número PRE-NNNN y quedará bloqueado (corregir = anular y rehacer). ¿Continuar?')) return; try{ const d=await call('/emitir'); location.reload(); }catch(e){ alert(e.message); } }
+  async function call(path, body){ let r; try{ r=await fetch('/api/erp/quotes/'+QID+path,{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:JSON.stringify(body||{})}); }catch(_e){ throw new Error(window.ERR.NET); } let d; try{ d=await r.json(); }catch(_e){ d=null; } if(!r.ok||!d||d.error) throw new Error(window.cleanErrMsg((d&&d.error)||'')); return d; }
+  async function emitir(){ if(!confirm('Vas a EMITIR el presupuesto: ganará número PRE-NNNN y quedará bloqueado (corregir = anular y rehacer). ¿Continuar?')) return; try{ const d=await call('/emitir'); location.reload(); }catch(e){ toast(e.message,'err'); } }
   async function emailQuote(){
     // "Para" pre-rellenado con el email de la ficha (si hay), pero EDITABLE: un único destinatario.
     const to = prompt('Enviar el presupuesto por email.\\nCorreo de destino (puedes cambiarlo):', LIVE_EMAIL || '');
     if (to === null) return;                       // cancelado
-    if (!String(to).trim()){ alert('Indica un correo de destino'); return; }
-    try{ const d=await call('/email', { to: String(to).trim() }); alert(d.message); }catch(e){ alert(e.message); }
+    if (!String(to).trim()){ toast('Indica un correo de destino','err'); return; }
+    try{ const d=await call('/email', { to: String(to).trim() }); toast(d.message); }catch(e){ toast(e.message,'err'); }
   }
   async function crearPedido(){ if(!confirm('Crear un PEDIDO a partir de este presupuesto? Se creará un pedido en borrador con sus líneas; lo revisas (almacén, entrega) y lo confirmas para reservar el stock.')) return;
     try{ const d=await call('/convert',{dest:'order'}); location.href='/admin/pedidos/'+d.order_id; }
-    catch(e){ alert(e.message); } }
+    catch(e){ toast(e.message,'err'); } }
   async function convertir(dest){ if(!confirm('Convertir este presupuesto a factura? Se creará una factura real con sus líneas.')) return;
     try{ const d=await call('/convert',{dest}); location.href='/admin/invoices/'+d.invoice_id; }
-    catch(e){ if(/exceso|excede|supera el stock/i.test(e.message) && confirm(e.message+'\\n\\n¿Confirmar el exceso y convertir igualmente?')){ try{ const d=await call('/convert',{dest,confirm_excess:true}); location.href='/admin/invoices/'+d.invoice_id; }catch(e2){ alert(e2.message); } } else { alert(e.message); } } }
-  async function seguimiento(s){ try{ await call('/follow',{follow_status:s}); location.reload(); }catch(e){ alert(e.message); } }
-  async function anular(){ const m=prompt('Motivo de la anulación:'); if(m===null) return; if(!m.trim()){ alert('El motivo es obligatorio'); return; } try{ await call('/anular',{motivo:m.trim()}); location.reload(); }catch(e){ alert(e.message); } }
-  async function anularYRehacer(){ const m=prompt('Motivo de la anulación (se creará un borrador nuevo con las mismas líneas):'); if(m===null) return; if(!m.trim()){ alert('El motivo es obligatorio'); return; } try{ const d=await call('/anular-y-rehacer',{motivo:m.trim()}); location.href='/admin/quotes/'+d.id+'/edit'; }catch(e){ alert(e.message); } }
+    catch(e){ if(/exceso|excede|supera el stock/i.test(e.message) && confirm(e.message+'\\n\\n¿Confirmar el exceso y convertir igualmente?')){ try{ const d=await call('/convert',{dest,confirm_excess:true}); location.href='/admin/invoices/'+d.invoice_id; }catch(e2){ toast(e2.message,'err'); } } else { toast(e.message,'err'); } } }
+  async function seguimiento(s){ try{ await call('/follow',{follow_status:s}); location.reload(); }catch(e){ toast(e.message,'err'); } }
+  async function anular(){ const m=prompt('Motivo de la anulación:'); if(m===null) return; if(!m.trim()){ toast('El motivo es obligatorio','err'); return; } try{ await call('/anular',{motivo:m.trim()}); location.reload(); }catch(e){ toast(e.message,'err'); } }
+  async function anularYRehacer(){ const m=prompt('Motivo de la anulación (se creará un borrador nuevo con las mismas líneas):'); if(m===null) return; if(!m.trim()){ toast('El motivo es obligatorio','err'); return; } try{ const d=await call('/anular-y-rehacer',{motivo:m.trim()}); location.href='/admin/quotes/'+d.id+'/edit'; }catch(e){ toast(e.message,'err'); } }
 </script>`;
     return c.html(adminLayout('Presupuesto ' + (q.quote_number || ('#' + id)), docShell(paper, panel), 'quotes', csrfToken, c));
   });
@@ -768,7 +768,7 @@ export function createQuoteRoutes(db) {
     try {
       const id = parseInt(c.req.param('id'));
       const q = getQuote(db, id);
-      if (!q) return c.text('Presupuesto no encontrado', 404);
+      if (!q) return c.html(errorShell('No encontramos este presupuesto', 'Puede que se haya anulado o que el enlace ya no sea válido.', { action: 'Ver presupuestos', href: '/admin/quotes' }), 404);
       const items = getItems(db, id);
       const { emisor, cliente } = docParties(db, q);
       const sym = q.currency_symbol || '€';
@@ -776,7 +776,7 @@ export function createQuoteRoutes(db) {
       const pdf = await renderPdfFromHtml(printableShell(body, { title: 'Presupuesto ' + (q.quote_number || ('#' + id)) }));
       const fname = ('Presupuesto-' + (q.quote_number || ('' + id)) + '.pdf').replace(/[\/\\]/g, '-');
       return new Response(pdf, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="' + fname + '"' } });
-    } catch (e) { return c.text('No se pudo generar el PDF: ' + e.message, e.status || 500); }
+    } catch (e) { return c.html(errorShell('No hemos podido generar el PDF', ERR.PDF, { action: 'Ver presupuestos', href: '/admin/quotes' }), e.status || 500); }
   });
 
   return { api, views };

@@ -145,7 +145,7 @@ export function createSupplierReturnSvc(db, d) {
   const resolved = [];
   for (const it of d.items) {
     const line = byId.get(it.origin_item_id);
-    if (!line) { const e = new Error('La línea ' + it.origin_item_id + ' no pertenece a este origen o no es devolvible (¿producto no físico?)'); e.status = 400; throw e; }
+    if (!line) { const e = new Error('Una de las líneas no corresponde a este documento o no se puede devolver.'); e.status = 400; throw e; }
     if (seen.has(it.origin_item_id)) { const e = new Error('Línea repetida en la devolución ("' + line.product_name + '")'); e.status = 400; throw e; }
     seen.add(it.origin_item_id);
     if (!isPhysical(db, line.product_id)) { const e = new Error('"' + line.product_name + '" no es un producto físico: no lleva stock'); e.status = 400; throw e; }

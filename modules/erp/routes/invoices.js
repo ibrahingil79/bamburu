@@ -10,7 +10,7 @@ import { validate } from '../../../core/validate.js';
 import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema, invoicePaymentSchema, collectionActionSchema, sustitutivaSchema } from '../schemas.js';
 import { getCountryConfig } from '../../../core/control-db.js';
 import { escHtml } from '../../../core/escape.js';
-import { adminLayout, docShell, printableShell, can, skeletonRows } from '../layout.js';
+import { adminLayout, docShell, printableShell, can, skeletonRows, errorShell, ERR } from '../layout.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';   // PDF real: mismo HTML imprimible → Chromium
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
@@ -1426,7 +1426,7 @@ export function createInvoiceRoutes(db) {
   // precargado desde la original. (Va ANTES de '/:id' para no ser capturada por él.)
   views.get('/:id/rectificativa/new', requirePerm('invoices.create'), c => {
     const original = db.prepare('SELECT * FROM invoices WHERE id=?').get(c.req.param('id'));
-    if (!original) return c.text('Factura no encontrada', 404);
+    if (!original) return c.html(errorShell('No encontramos esta factura', 'Puede que se haya anulado o que el enlace ya no sea válido.', { action: 'Ver mis facturas', href: '/admin/invoices' }), 404);
     if (original.status !== 'emitida') {
       return c.html(adminLayout('Rectificativa',
         `<div class="ph"><h2>Rectificativa</h2><a href="/admin/invoices/${original.id}" class="btn btn-secondary">Volver</a></div>
@@ -1689,7 +1689,7 @@ export function createInvoiceRoutes(db) {
   views.get('/:id', requirePerm('invoices.read'), async c => {
     try {
       const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(c.req.param('id'));
-      if (!inv) return c.text('Factura no encontrada', 404);
+      if (!inv) return c.html(errorShell('No encontramos esta factura', 'Puede que se haya anulado o que el enlace ya no sea válido.', { action: 'Ver mis facturas', href: '/admin/invoices' }), 404);
       const sym = inv.currency_symbol || '€';
       const csrfToken = c.get('session')?.csrfToken || '';
       const statusBadge = inv.status === 'emitida'
@@ -1750,17 +1750,17 @@ ${esTicketSustituible ? `
   async function anularFactura(){
     const motivo = prompt('Motivo de anulación de la factura ${inv.invoice_number}:');
     if (motivo === null) return;
-    if (!motivo.trim()){ alert('El motivo es obligatorio'); return; }
+    if (!motivo.trim()){ toast('El motivo es obligatorio','err'); return; }
     try {
-      const r = await fetch('/api/erp/invoices/${inv.id}/anular', {
+      let r; try{ r = await fetch('/api/erp/invoices/${inv.id}/anular', {
         method:'POST',
         headers:{'Content-Type':'application/json','x-csrf-token':CSRF},
         body: JSON.stringify({ motivo: motivo.trim() })
-      });
-      const d = await r.json();
-      if (d.error) throw new Error(d.error);
+      }); }catch(_e){ throw new Error(window.ERR.NET); }
+      let d; try{ d = await r.json(); }catch(_e){ d=null; }
+      if (!r.ok || !d || d.error) throw new Error(window.cleanErrMsg((d&&d.error)||''));
       location.reload();
-    } catch(e){ alert(e.message || 'Error anulando la factura'); }
+    } catch(e){ toast(e.message,'err'); }
   }
   ${esTicketSustituible ? `
   let _nuevo=false;
@@ -1791,7 +1791,7 @@ ${esTicketSustituible ? `
   ` : ''}
 </script>`;
       return c.html(adminLayout('Factura ' + inv.invoice_number, docShell(paper, panel), 'invoices', csrfToken, c));
-    } catch (e) { return c.text(e.message, 500); }
+    } catch (e) { return c.html(errorShell('No hemos podido abrir la factura', ERR.SERVER, { action: 'Ver mis facturas', href: '/admin/invoices' }), 500); }
   });
 
   // PDF real de la factura — MISMA guarda que la ficha (orders.read), MISMO HTML imprimible
@@ -1799,12 +1799,12 @@ ${esTicketSustituible ? `
   views.get('/:id/pdf', requirePerm('invoices.read'), async c => {
     try {
       const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(c.req.param('id'));
-      if (!inv) return c.text('Factura no encontrada', 404);
+      if (!inv) return c.html(errorShell('No encontramos esta factura', 'Puede que se haya anulado o que el enlace ya no sea válido.', { action: 'Ver mis facturas', href: '/admin/invoices' }), 404);
       const paper = await buildInvoicePaper(db, inv);
       const pdf = await renderPdfFromHtml(printableShell(paper, { title: 'Factura ' + inv.invoice_number }));
       const fname = ('Factura-' + (inv.invoice_number || ('' + inv.id)) + '.pdf').replace(/[\/\\]/g, '-');
       return new Response(pdf, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="' + fname + '"' } });
-    } catch (e) { return c.text('No se pudo generar el PDF: ' + e.message, e.status || 500); }
+    } catch (e) { return c.html(errorShell('No hemos podido generar el PDF', ERR.PDF, { action: 'Ver mis facturas', href: '/admin/invoices' }), e.status || 500); }
   });
 
   return { api, views };
