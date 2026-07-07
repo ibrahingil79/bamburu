@@ -83,9 +83,30 @@ Hecho cuando: esas pantallas se usan sin romperse en ancho móvil; revisión a e
   chat cabe entero, 0 errores JS; sin tocar lógica, datos, endpoints ni permisos. 4 ficheros: `layout.js`,
   `disa/index.js`, `disa/widget.js`, `disaHome.html.js`.
 
-### U6 — Onboarding / primeros pasos
+### U6 — Onboarding / primeros pasos  ✅ HECHO (2026-07-07)  ← CIERRA EL EJE A (UX)
 Recorrido que lleve al dueño nuevo al primer valor sin fricción (idealmente de la mano de DISA, enlaza con Eje B).
 Hecho cuando: un dueño nuevo llega a su primera acción útil sin bloquearse; recorrido probado.
+- Diagnóstico (solo lectura): el dueño aterriza en `/admin` (dashboard → `disaHomeHtml`) tras el alta. `provisionTenant`
+  NO fija los datos fiscales → estado "vacío" = `company_name='Mi Empresa'`, `fiscal_id=''`, 0 clientes, 0 facturas.
+  Cada paso se deriva del estado real (sin flags): empresa = `fiscal_id` no vacío · cliente = `≥1 en clientes` ·
+  factura = `≥1 en invoices`. Destinos existentes: `/admin/settings` · `/admin/clients?nuevo=1` · `/admin/invoices/new`.
+- Hecho (2026-07-07): panel **"Configura tu negocio"** en el Inicio (nivel Stripe/Shopify/Holded), SOLO para dueño/admin
+  y solo mientras falte algún paso. Lleva **anillo de progreso** (SVG), **timeline** de 3 pasos con iconos y estado
+  (verde=hecho · azul=actual · gris=luego), **tiempo estimado** por paso, y el **paso actual desplegado** con la guía de
+  DISA (qué·por qué·cómo, en su voz) + CTA directo a la pantalla preparada; los hechos con "Hecho", los futuros plegados
+  y alcanzables. Bienvenida de DISA con momentum según avance; motion sutil (`prefers-reduced-motion` respetado). Cada
+  paso se marca **solo** (derivado del estado); con los 3 hechos el dashboard NO pasa `onboarding` → el panel **se retira
+  solo** y el Inicio vuelve al home normal. Reutiliza pantallas/acciones existentes (empresa, clientes, facturas); `?nuevo=1`
+  abre directo el alta de cliente. Solo presentación + lectura de estado: sin tocar lógica/datos/permisos de
+  empresa/clientes/facturas. **Verificado** en navegador con un tenant nuevo provisionado y **eliminado** al terminar:
+  0/3→1/3→2/3→panel retirado (completando cada paso real, factura vía `createInvoice`); negocio configurado (desarrollo)
+  **sin panel** → regresión 0; 0 errores JS. 3 ficheros: `dashboard.js`, `disaHome.html.js`, `clients.js`.
+- Nota (pendiente, ajeno a U6): el menú de la cuenta (avatar → "Datos del negocio") apunta a `/admin/settings/company`,
+  que solo existe como API → **404 como página**; el destino vivo es `/admin/settings`. Fix trivial de 1 línea en
+  `layout.js`, sin encargo aún — decidir por el dueño.
+
+> **EJE A (UX) COMPLETO**: U0 (auditoría) · U1 (tokens) · U2 (vacíos/carga) · U3 (errores) · U4 (clics) · U5 (móvil) ·
+> U6 (onboarding). Siguiente: planificar **Eje B — DISA** (empieza por aquí en la próxima sesión).
 
 ## Eje B: DISA (pendiente de planificar)
 ## Eje C: Seguridad (pendiente de planificar)

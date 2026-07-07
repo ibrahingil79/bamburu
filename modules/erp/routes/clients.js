@@ -530,6 +530,12 @@ export function createClientRoutes(db, cfg = {}) {
           '<div class="table-wrap"><table><thead><tr><th>Orden</th><th>Total</th><th>Estado</th><th>Fecha</th></tr></thead><tbody>'+ordRows+'</tbody></table></div>';
         openModal('detailModal');
       }
+      // U6 · Onboarding: al llegar con ?nuevo=1 (enlace "Vamos →" del checklist de Inicio) se abre
+      // directo el alta de cliente. Limpia la query para que un refresco no lo reabra. Solo UI.
+      if (new URLSearchParams(location.search).get('nuevo') === '1') {
+        try { history.replaceState(null, '', '/admin/clients'); } catch(e){}
+        openNewClient();
+      }
       </script>`;
     return c.html(adminLayout('Clientes', content, 'clients', c.get('session')?.csrfToken || '', c));
   });

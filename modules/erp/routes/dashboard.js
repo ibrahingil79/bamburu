@@ -40,7 +40,24 @@ export function createDashboardRoutes(db) {
       kpis.pendiente = ped.pendientes;
     } catch {}
 
-    return c.html(adminLayout('Dashboard', disaHomeHtml({ userName, alertCount, alertState, kpis }), 'dashboard', session?.csrfToken || '', c, true));
+    // U6 — Onboarding / primeros pasos. Estado de los 3 pasos DERIVADO del estado real del negocio
+    // (solo lectura, sin flags que mantener a mano): datos de empresa (NIF puesto), ≥1 cliente,
+    // ≥1 factura. Solo para el dueño/admin (es la bienvenida del dueño). Si los 3 están hechos,
+    // onboarding=null → el Inicio queda como el home normal de DISA (el checklist se retira solo).
+    let onboarding = null;
+    try {
+      const role = session?.role;
+      if (role === 'owner' || role === 'admin') {
+        const cc = db.prepare('SELECT fiscal_id FROM company_config WHERE id=1').get() || {};
+        const companyDone = !!(cc.fiscal_id && String(cc.fiscal_id).trim());
+        const clientDone = (db.prepare('SELECT COUNT(*) AS n FROM clients').get()?.n || 0) > 0;
+        const invoiceDone = (db.prepare('SELECT COUNT(*) AS n FROM invoices').get()?.n || 0) > 0;
+        const done = [companyDone, clientDone, invoiceDone].filter(Boolean).length;
+        if (done < 3) onboarding = { companyDone, clientDone, invoiceDone, done };
+      }
+    } catch {}
+
+    return c.html(adminLayout('Dashboard', disaHomeHtml({ userName, alertCount, alertState, kpis, onboarding }), 'dashboard', session?.csrfToken || '', c, true));
   });
 
   return r;

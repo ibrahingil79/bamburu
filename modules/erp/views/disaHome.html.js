@@ -1,4 +1,4 @@
-export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
+export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboarding = null }) {
   const sym = kpis?.sym || '€';
 
   // Fecha de hoy en español (presentación; server-side, no toca datos del tenant).
@@ -13,6 +13,66 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
   const disaProactivo = (alertState !== 'apagado' && alertCount > 0)
     ? `Tienes ${alertCount} ${alertCount === 1 ? 'aviso que pide' : 'avisos que piden'} tu atención (vencimientos de proveedor y stock bajo). ¿Quieres que te los enseñe y preparemos los pagos?`
     : `Todo en orden por ahora. ¿En qué quieres trabajar hoy en tu negocio? Puedo crear facturas, registrar gastos o darte un resumen.`;
+
+  // ── U6 · Onboarding — primeros pasos (solo presentación; el estado llega derivado del negocio) ──
+  // Cuando `onboarding` viene (dueño/admin con algún paso pendiente), el hero muestra una bienvenida
+  // de DISA + el checklist de 3 pasos; cada pendiente lleva a su pantalla. Con los 3 hechos, el
+  // dashboard NO pasa onboarding → el Inicio queda como el home normal (el checklist se retira solo).
+  // Cada paso trae su icono, tiempo estimado y la GUÍA de DISA (qué · por qué · cómo, en su voz) +
+  // la acción. Textos fijos de producto (por eso llevan <b>): no son entrada de usuario.
+  const onbSteps = onboarding ? [
+    { done: onboarding.companyDone, icon: 'ti-building-store', label: 'Datos de tu empresa', time: '~1 min', href: '/admin/settings', cta: 'Ir a mis datos',
+      guide: `Necesito tu <b>NIF</b> y tu <b>tipo de IRPF</b> para que tus facturas salgan legales y con los importes exactos desde la primera. Añade también el <b>nombre fiscal</b>, que aparece en cada documento. Te llevo al formulario con esos campos y, en cuanto guardes, este paso se marca solo.` },
+    { done: onboarding.clientDone, icon: 'ti-user-plus', label: 'Tu primer cliente', time: '~1 min', href: '/admin/clients?nuevo=1', cta: 'Crear cliente',
+      guide: `Un cliente es <b>a quién le facturas</b>: su nombre y su NIF, y si quieres su email para enviarle las facturas. Con uno basta para arrancar; los demás los añades cuando los necesites. Te abro el alta directamente.` },
+    { done: onboarding.invoiceDone, icon: 'ti-file-invoice', label: 'Tu primera factura', time: '~2 min', href: '/admin/invoices/new', cta: 'Emitir factura',
+      guide: `Aquí nace tu <b>primer documento legal</b>. Eliges el cliente, añades una línea (concepto, importe e IVA) y emites; del resto me encargo yo: numeración, IVA/IRPF y la <b>huella Verifactu</b>. Te llevo a la factura nueva ya preparada.` },
+  ] : [];
+  const onbNext = onbSteps.findIndex(s => !s.done);   // primer paso pendiente = el que se despliega
+  const _onbRem = onboarding ? 3 - onboarding.done : 0;
+  const onbSub = onboarding
+    ? (_onbRem === 1 ? 'Te queda 1 paso para emitir tu primera factura.' : `Estás a ${_onbRem} pasos de emitir tu primera factura.`)
+    : '';
+  const onbDisaLine = onboarding
+    ? (onboarding.done === 0
+        ? `¡Bienvenida, ${userName}! Soy DISA. Te llevo de la mano por cada paso y a la pantalla ya preparada — sin manuales que memorizar.`
+        : `${_onbRem === 1 ? 'Un último empujón' : 'Vas muy bien'}, ${userName}: te guío en lo que falta y cuando terminemos, esto desaparece.`)
+    : '';
+  const _ringC = 150.8;   // circunferencia (2π·24)
+  const _ringOff = (onboarding ? _ringC * (1 - onboarding.done / 3) : _ringC).toFixed(1);
+  const onbStep = (s, i) => {
+    const state = s.done ? 'done' : (i === onbNext ? 'now' : 'soon');
+    const ico = s.done ? 'ti-check' : s.icon;
+    const right = s.done ? '<span class="onb-tag">Hecho</span>' : (state === 'soon' ? `<span class="onb-time">${s.time}</span>` : '');
+    const expand = state === 'now' ? `
+                <div class="onb-when">Ahora · ${s.time}</div>
+                <p class="onb-guide">${s.guide}</p>
+                <a class="onb-cta" href="${s.href}">${s.cta} <i class="ti ti-arrow-right"></i></a>` : '';
+    const tag = state === 'soon' ? 'a' : 'div';
+    const attr = state === 'soon' ? ` href="${s.href}"` : '';
+    return `
+            <${tag} class="onb-step ${state}"${attr}>
+              <span class="onb-node"><span class="onb-ic"><i class="ti ${ico}"></i></span></span>
+              <div class="onb-sbody">
+                <div class="onb-shead"><span class="onb-stitle">${s.label}</span>${right}</div>${expand}
+              </div>
+            </${tag}>`;
+  };
+  const onbHtml = onboarding ? `
+          <div class="onb-card">
+            <div class="onb-hero">
+              <div class="onb-ring" role="img" aria-label="${onboarding.done} de 3 pasos completados">
+                <svg viewBox="0 0 56 56" width="56" height="56"><circle class="onb-ring-bg" cx="28" cy="28" r="24"/><circle class="onb-ring-fg" cx="28" cy="28" r="24" style="stroke-dasharray:${_ringC};stroke-dashoffset:${_ringOff}"/></svg>
+                <span class="onb-ring-n">${onboarding.done}<i>/3</i></span>
+              </div>
+              <div>
+                <h3 class="onb-title">Configura tu negocio</h3>
+                <p class="onb-sub">${onbSub}</p>
+              </div>
+            </div>
+            <div class="onb-disa"><span class="onb-disa-ic"><i class="ti ti-sparkles"></i></span><span>${onbDisaLine}</span></div>
+            <div class="onb-steps">${onbSteps.map((s, i) => onbStep(s, i)).join('')}</div>
+          </div>` : '';
 
   return `
     <style>
@@ -145,6 +205,49 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
       .disa-pill.vencida { background: var(--danger-s); color: var(--danger); }
       .disa-pill.porvencer { background: var(--warn-s); color: var(--warn); }
       .disa-pill.aldia { background: var(--accent-soft); color: var(--accent-d); }
+
+      /* ── U6 · Onboarding — "Configura tu negocio" (nivel Stripe/Shopify): anillo de progreso +
+         timeline de pasos con iconos; el paso ACTUAL desplegado con la guía de DISA + su acción;
+         los hechos y los futuros plegados. Reutiliza los tokens de la app. ── */
+      .onb-card { background: var(--bg2); border: 1px solid var(--border2); border-radius: 16px; padding: 20px 20px 8px; margin-bottom: 18px; box-shadow: 0 1px 3px rgba(16,24,40,.05); animation: onb-in .5s cubic-bezier(.2,.7,.3,1) both; }
+      @keyframes onb-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+      .onb-hero { display: flex; align-items: center; gap: 16px; }
+      .onb-ring { position: relative; width: 56px; height: 56px; flex-shrink: 0; }
+      .onb-ring svg { transform: rotate(-90deg); }
+      .onb-ring-bg { fill: none; stroke: var(--bg3); stroke-width: 5; }
+      .onb-ring-fg { fill: none; stroke: var(--accent); stroke-width: 5; stroke-linecap: round; transition: stroke-dashoffset .7s cubic-bezier(.2,.7,.3,1); }
+      .onb-ring-n { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: var(--text); }
+      .onb-ring-n i { font-style: normal; font-size: 10px; font-weight: 600; color: var(--text3); margin-left: 1px; }
+      .onb-title { font-size: 16px; font-weight: 700; margin: 0; letter-spacing: -.2px; color: var(--text); }
+      .onb-sub { font-size: 13px; color: var(--text2); margin: 3px 0 0; }
+      .onb-disa { display: flex; gap: 10px; align-items: flex-start; margin: 15px 0 8px; padding: 11px 13px; background: var(--accent-soft); border: 1px solid #cfe0ff; border-radius: 11px; font-size: 12.75px; line-height: 1.5; color: var(--text); }
+      .onb-disa-ic { color: var(--accent); font-size: 16px; flex-shrink: 0; display: flex; margin-top: 1px; }
+      /* Timeline */
+      .onb-steps { position: relative; padding: 4px 0; }
+      .onb-step { position: relative; display: flex; gap: 14px; padding: 8px 0; text-decoration: none; }
+      .onb-step::before { content: ''; position: absolute; left: 17px; top: 40px; bottom: -4px; width: 2px; background: var(--border2); }
+      .onb-step:last-child::before { display: none; }
+      .onb-node { position: relative; z-index: 1; flex-shrink: 0; }
+      .onb-ic { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; background: var(--bg3); color: var(--text3); border: 3px solid var(--bg2); box-sizing: content-box; }
+      .onb-step.done .onb-ic { background: var(--ok-s); color: var(--ok); }
+      .onb-step.now .onb-ic { background: var(--accent); color: #fff; box-shadow: 0 4px 14px var(--teal-glow); }
+      .onb-sbody { flex: 1; min-width: 0; padding-top: 8px; }
+      .onb-shead { display: flex; align-items: center; gap: 10px; }
+      .onb-stitle { font-size: 14px; font-weight: 600; color: var(--text); }
+      .onb-step.done .onb-stitle { color: var(--text3); font-weight: 500; }
+      .onb-step.soon .onb-stitle { color: var(--text2); font-weight: 500; }
+      .onb-tag { flex-shrink: 0; margin-left: auto; font-size: 11px; font-weight: 600; color: var(--ok); background: var(--ok-s); padding: 2px 9px; border-radius: 10px; }
+      .onb-time { flex-shrink: 0; margin-left: auto; font-size: 11.5px; color: var(--text3); }
+      .onb-step.soon { cursor: pointer; }
+      .onb-step.soon:hover .onb-stitle { color: var(--accent); }
+      .onb-step.now { padding-bottom: 12px; }
+      .onb-when { font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--accent); margin: 5px 0 7px; }
+      .onb-guide { margin: 0 0 13px; font-size: 12.9px; line-height: 1.62; color: var(--text2); max-width: 58ch; }
+      .onb-guide b { color: var(--text); font-weight: 600; }
+      .onb-cta { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #fff; background: var(--accent); text-decoration: none; padding: 9px 17px; border-radius: 10px; box-shadow: 0 3px 12px var(--teal-glow); transition: background .15s, transform .15s, box-shadow .15s; }
+      .onb-cta:hover { background: var(--accent-d); transform: translateY(-1px); box-shadow: 0 6px 18px var(--teal-glow); }
+      .onb-cta i { font-size: 15px; }
+      @media (prefers-reduced-motion: reduce) { .onb-card { animation: none; } .onb-ring-fg { transition: none; } .onb-cta:hover { transform: none; } }
 
       /* Mensajes */
       .disa-messages {
@@ -386,17 +489,17 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
         <!-- Hero: saludo + DISA + cifras + lista (estado inicial) -->
         <div class="disa-hero" id="dh-hero">
           <h3 class="disa-greeting">${_saludo}, ${userName}</h3>
-          <p class="disa-question">${fechaHoy} · esto es lo que pide tu atención hoy</p>
+          <p class="disa-question">${onboarding ? 'Vamos a dejar tu negocio a punto — tú decides, yo te acompaño.' : `${fechaHoy} · esto es lo que pide tu atención hoy`}</p>
 
-          <div class="disa-card-main">
+          ${onboarding ? '' : `<div class="disa-card-main">
             <div class="disa-card-icon"><i class="ti ti-sparkles"></i></div>
             <div>
               <p class="disa-card-title">DISA</p>
               <p class="disa-card-text">${disaProactivo}</p>
             </div>
-          </div>
-
-          <div class="disa-figs">
+          </div>`}
+${onbHtml}
+          ${onboarding ? '' : `<div class="disa-figs">
             <div class="disa-fig">
               <p class="disa-fig-label"><i class="ti ti-arrow-down-left" style="color:var(--accent)"></i>Ventas del mes</p>
               <p class="disa-fig-value">${sym}${kpis?.ventas ?? 0}</p>
@@ -426,7 +529,7 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
               <span class="disa-pill porvencer">Por revisar</span>
             </button>
           </div>
-          ` : ''}
+          ` : ''}`}
         </div>
 
         <!-- Mensajes -->
