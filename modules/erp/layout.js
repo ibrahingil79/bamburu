@@ -549,7 +549,9 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
 ${ROOT_TOKENS}
 
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;font-size:14px;-webkit-font-smoothing:antialiased}
+    /* min-height en dvh (viewport dinámico): en móvil, 100vh incluye la zona bajo la barra del
+       navegador y deja scroll fantasma; 100dvh = alto realmente visible. En escritorio dvh=vh. */
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;min-height:100dvh;font-size:14px;-webkit-font-smoothing:antialiased}
 
     /* ── Sidebar CLARO — RAIL de iconos que SE DESPLIEGA al hover mostrando los nombres ──
        (estilo Holded). En reposo: solo iconos (62px). Al pasar el ratón / con un flyout abierto:
@@ -594,7 +596,7 @@ ${ROOT_TOKENS}
     .nav-pending{margin-left:auto;font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);border:.5px solid var(--border2);border-radius:7px;padding:1px 5px}
 
     /* ── Topbar CLARO (dirección UX 2026-07-06): buscador · campana · avatar ── */
-    .wrap{margin-left:var(--sw);flex:1;display:flex;flex-direction:column;min-height:100vh}
+    .wrap{margin-left:var(--sw);flex:1;display:flex;flex-direction:column;min-height:100vh;min-height:100dvh}
     .topbar{background:var(--chrome);border-bottom:1px solid var(--chrome-div);padding:.6rem 1.1rem;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:50}
     .tb-search{flex:1;max-width:430px;display:flex;align-items:center;gap:8px;background:var(--bg3);border:.5px solid var(--border2);border-radius:9px;padding:7px 12px;color:var(--text3);font-size:13px;cursor:text}
     .tb-search i.ti{font-size:16px}
@@ -603,6 +605,10 @@ ${ROOT_TOKENS}
     .tb-bell .dot{position:absolute;top:-1px;right:-1px;width:7px;height:7px;border-radius:50%;background:#DC2626;border:1.5px solid var(--chrome)}
     .topbar-title{font-weight:500;font-size:.85rem;color:var(--text2)}
     .content{flex:1;padding:20px 22px}
+    /* Hamburguesa (solo móvil) + fondo del drawer. Ocultos por defecto → sin efecto en escritorio. */
+    .nav-toggle{display:none;align-items:center;justify-content:center;background:none;border:none;color:var(--chrome-tx);font-size:22px;line-height:1;cursor:pointer;padding:5px;border-radius:8px;flex-shrink:0;font-family:inherit}
+    .nav-toggle:hover{background:var(--bg3);color:var(--accent)}
+    .nav-backdrop{display:none;position:fixed;inset:0;background:rgba(16,24,40,.42);z-index:99}
     /* ── Avatar + desplegable (mockup) ── */
     .acct{position:relative;flex-shrink:0}
     .acct-btn{display:flex;align-items:center;background:none;border:none;cursor:pointer;padding:0;border-radius:50%;font-family:inherit}
@@ -781,14 +787,43 @@ ${ROOT_TOKENS}
     .tab-pane{display:none}.tab-pane.active{display:block}
     .stars{color:#F59E0B}
     @media(max-width:768px){
-      .sidebar{transform:translateX(-100%)}
-      .wrap{margin-left:0}
+      /* El buscador del topbar se mantiene en UNA línea (si no, el texto se parte en dos y engorda
+         la barra, descuadrando cualquier alto calculado). */
+      .tb-search{min-width:0}
+      .tb-search span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      /* Pantallas a pantalla completa (el chat de DISA): el contenido RELLENA el hueco bajo el
+         topbar con flexbox, sin restar una altura fija de topbar → el compositor queda siempre a la
+         vista, sin scroll, sea cual sea el alto real del topbar o del navegador móvil. */
+      .content-flush{padding:0;display:flex;flex-direction:column;overflow:hidden;min-height:0}
+      /* ── Navegación: el rail pasa a DRAWER off-canvas que abre la hamburguesa ── */
+      .nav-toggle{display:inline-flex}
+      .sidebar{transform:translateX(-100%);width:250px;transition:transform .2s ease;overflow-y:auto}
+      .sidebar.open{transform:translateX(0);box-shadow:8px 0 30px rgba(16,24,40,.22)}
+      /* Con el drawer abierto se muestran los nombres (en táctil no hay hover que los despliegue) */
+      .sidebar.open .nav-label{opacity:1;max-width:170px}
+      .sidebar.open .nav-item,.sidebar.open .disa-pin{justify-content:flex-start;gap:12px}
+      .sidebar.open .nav-item{padding-left:.7rem}
+      .sidebar.open .disa-pin{padding-left:1.05rem}
+      .sidebar.open .nav-chev{opacity:.45}
+      /* Submenús: en acordeón INLINE dentro del drawer (no popovers flotantes que se saldrían) */
+      .sidebar.open .flyout{position:static;min-width:0;width:auto;box-shadow:none;border:none;background:transparent;padding:2px 0 6px 34px;z-index:auto;top:auto!important;left:auto!important}
+      .sidebar.open .flyout-h{display:none}
+      body.nav-open .nav-backdrop{display:block}
+      .wrap{margin-left:0;min-width:0}
+      .content{min-width:0}
       .acct-meta{display:none}
       #disaFab{bottom:16px;right:16px}
       #disaPanel{width:calc(100vw - 24px);right:12px;bottom:80px}
       .g4{grid-template-columns:repeat(2,1fr)}
       .g3{grid-template-columns:repeat(2,1fr)}
       .g2{grid-template-columns:1fr}
+      /* ── Tablas anchas: que scrollee la TABLA sola, no la página (patrón único para todas) ── */
+      .content table{display:block;width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+      /* ── Formularios en rejilla inline (recurrentes, bienes…) → 1 columna en móvil ── */
+      form [style*="grid-template-columns"]{grid-template-columns:1fr!important}
+      /* ── Modales → hoja inferior a lo ancho, alcanzable con el pulgar, con scroll propio ── */
+      .modal-overlay{padding:0;align-items:flex-end}
+      .modal{max-width:100%;width:100%;max-height:92vh;border-radius:16px 16px 0 0}
     }
   </style>
 </head>
@@ -805,8 +840,10 @@ ${ROOT_TOKENS}
       <a href="/docs" target="_blank" class="nav-item" title="Ayuda y soporte"><i class="ti ti-lifebuoy"></i><span class="nav-label">Ayuda y soporte</span></a>
     </nav>
   </aside>
+  <div class="nav-backdrop" onclick="closeNav()" aria-hidden="true"></div>
   <div class="wrap">
     <div class="topbar">
+      <button type="button" class="nav-toggle" aria-label="Abrir menú" aria-expanded="false" onclick="toggleNav()"><i class="ti ti-menu-2"></i></button>
       <div class="tb-search"><i class="ti ti-search"></i><span>Buscar cliente, factura, producto…</span></div>
       <div class="tb-bell"><i class="ti ti-bell"></i><span class="dot"></span></div>
       <div class="acct">
@@ -816,10 +853,15 @@ ${ROOT_TOKENS}
         <div class="acct-menu" id="acctMenu">${acctMenuHTML}</div>
       </div>
     </div>
-    <main class="content">${roBanner}${content}</main>
+    <main class="content${active === 'disa' ? ' content-flush' : ''}">${roBanner}${content}</main>
   </div>
   <script>
     document.addEventListener('click',e=>{if(e.target.classList.contains('modal-overlay'))e.target.classList.remove('open')});
+    // ── Menú lateral en móvil: drawer que abre la hamburguesa del topbar (en escritorio, sin efecto) ──
+    window.toggleNav=function(){var sb=document.querySelector('.sidebar');if(!sb)return;var open=sb.classList.toggle('open');document.body.classList.toggle('nav-open',open);var b=document.querySelector('.nav-toggle');if(b)b.setAttribute('aria-expanded',open?'true':'false');};
+    window.closeNav=function(){var sb=document.querySelector('.sidebar');if(sb)sb.classList.remove('open');document.body.classList.remove('nav-open');var b=document.querySelector('.nav-toggle');if(b)b.setAttribute('aria-expanded','false');};
+    document.addEventListener('keydown',function(e){if(e.key==='Escape')window.closeNav();});
+    document.addEventListener('click',function(e){var a=e.target.closest('.sidebar a[href]');if(a)window.closeNav();});
     function toggleAcct(e){e.stopPropagation();var m=document.getElementById('acctMenu'),b=document.getElementById('acctBtn');var open=m.classList.toggle('open');b.setAttribute('aria-expanded',open?'true':'false');}
     document.addEventListener('click',function(e){var m=document.getElementById('acctMenu');if(m&&m.classList.contains('open')&&!e.target.closest('.acct')){m.classList.remove('open');var b=document.getElementById('acctBtn');if(b)b.setAttribute('aria-expanded','false');}});
     document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=document.getElementById('acctMenu');if(m&&m.classList.contains('open')){m.classList.remove('open');var b=document.getElementById('acctBtn');if(b)b.setAttribute('aria-expanded','false');}}});

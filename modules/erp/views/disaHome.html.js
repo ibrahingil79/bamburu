@@ -291,6 +291,13 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis }) {
         .disa-cards { grid-template-columns: repeat(2,1fr); }
         .disa-figs { grid-template-columns: repeat(2,1fr); }
       }
+      /* Móvil: el bloque rompe el padding del contenido con margin:-1.5rem (−24px) pero el
+         padding horizontal es 22px → sobresalía 2px y desbordaba. Se cuadra al padding (−22px)
+         y se aprieta un poco el stage para dar aire al compositor. Solo móvil. */
+      @media (max-width: 768px) {
+        .disa-home { margin-left: -22px; margin-right: -22px; }
+        .disa-stage { padding-left: 16px; padding-right: 16px; }
+      }
 
       /* ── Artifacts ── */
       .disa-artifact {

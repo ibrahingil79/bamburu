@@ -81,6 +81,9 @@ export function getDisaWidget() {
   }
 
   window.disaOpen = function(){
+    // En móvil, el botón lleva a la CONVERSACIÓN a pantalla completa (/admin/disa, DISEÑO §3.2),
+    // no a la ventanita flotante (que es la experiencia de escritorio) ni al dashboard de Inicio.
+    if (window.matchMedia && window.matchMedia('(max-width:768px)').matches) { window.location.href = '/admin/disa'; return; }
     document.getElementById('disaModal').classList.add('open');
     document.getElementById('dpInput').focus();
     if (!widgetLoaded) { widgetLoaded = true; loadActiveThread(); }

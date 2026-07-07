@@ -1655,16 +1655,28 @@ export function register(app, db) {
   .dt-sep{font-size:9px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;
     color:var(--text3);padding:8px 12px 3px;flex-shrink:0}
   @keyframes tdot{0%,60%,100%{opacity:.25;transform:scale(.8)}30%{opacity:1;transform:scale(1.1)}}
+  .dt-backdrop{display:none}
   @media(max-width:900px){
-    .dt-panel{position:fixed;top:0;left:240px;height:100vh;z-index:95;
-      transform:translateX(-101%);box-shadow:4px 0 20px rgba(0,0,0,0.4)}
+    /* La lista de conversaciones pasa a DRAWER off-canvas, al estilo de los chats de IA
+       (Claude/ChatGPT/Gemini): cerrado por defecto → la conversación se ve a lo ancho; se abre con
+       el botón ☰ deslizándose desde la izquierda SOBRE UN FONDO OSCURECIDO, y se cierra al tocar
+       fuera o elegir una conversación. */
+    .dt-panel{position:fixed;top:52px;left:0;width:min(86vw,340px);height:calc(100vh - 52px);z-index:95;
+      transform:translateX(-101%);box-shadow:2px 0 24px rgba(16,24,40,0.28)}
     .dt-panel.dt-open{transform:translateX(0)}
+    .dt-backdrop.dt-open{display:block;position:fixed;top:52px;left:0;right:0;bottom:0;z-index:94;
+      background:rgba(16,24,40,0.42);backdrop-filter:blur(1px)}
     #dtMobileBtn{display:flex!important}
+    /* El contenedor del chat RELLENA el hueco bajo el topbar (flex:1 dentro de .content-flush),
+       sin altura fija ni márgenes: se adapta a cualquier alto de topbar/navegador → el compositor
+       queda siempre a la vista y solo scrollea la lista de mensajes por dentro. */
+    .dt-wrap{flex:1!important;min-height:0!important;height:auto!important;margin:0!important}
   }
 </style>
 
-<div style="display:flex;height:calc(100vh - 52px);margin:-1.5rem;overflow:hidden">
+<div class="dt-wrap" style="display:flex;height:calc(100vh - 52px);height:calc(100dvh - 52px);margin:-1.5rem;overflow:hidden">
 
+  <div class="dt-backdrop" id="dtBackdrop" onclick="dtClosePanel()" aria-hidden="true"></div>
   <div class="dt-panel" id="dtPanel">
     <div style="padding:12px 10px;border-bottom:1px solid var(--border);flex-shrink:0">
       <button onclick="dtNewThread()"
@@ -1926,11 +1938,16 @@ export function register(app, db) {
   function dtClosePanel() {
     var p = document.getElementById('dtPanel');
     if (p) p.classList.remove('dt-open');
+    var b = document.getElementById('dtBackdrop');
+    if (b) b.classList.remove('dt-open');
   }
+  window.dtClosePanel = dtClosePanel;   // el onclick del fondo (scope global) necesita verla
 
   window.dtTogglePanel = function() {
     var p = document.getElementById('dtPanel');
-    if (p) p.classList.toggle('dt-open');
+    var b = document.getElementById('dtBackdrop');
+    var open = p ? p.classList.toggle('dt-open') : false;
+    if (b) b.classList.toggle('dt-open', open);
   };
 
   // Adjuntar factura de proveedor desde la página de asistente IA: mismo endpoint que el
