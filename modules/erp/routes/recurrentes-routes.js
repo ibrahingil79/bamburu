@@ -50,17 +50,25 @@ export function createRecurrentesRoutes(db) {
       ? emptyRow(7, 'Aún no tienes facturas recurrentes. ¿Programamos la primera?', { cta: 'Nueva plantilla', onclick: "var d=document.getElementById('nuevaPlantilla');if(d)d.open=true" })
       : emptyRow(7, 'Aún no tienes facturas recurrentes.'));
 
+    // U4: el formulario llega con lo esencial y ya decidido donde el sistema lo sabe. La FECHA DE
+    // INICIO viene precargada a HOY (editable) —era el único campo obligatorio en blanco— y los
+    // ajustes avanzados (fin, nº de ocurrencias, IRPF) se pliegan bajo "Más opciones": menos campos
+    // a la vista, sin quitar nada (siguen en el formulario con sus valores por defecto). Regresión 0.
     const nueva = puedeGestionar ? `<details id="nuevaPlantilla"><summary class="btn" style="display:inline-block">+ Nueva plantilla</summary>
       <form method="post" action="/admin/recurrentes" style="margin:.75rem 0;max-width:820px">
         <input type="hidden" name="_csrf" value="${escHtml(csrf)}">
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem">
           <label>Cliente<select name="client_id" required>${clientes.map(cl => `<option value="${cl.id}">${escHtml(cl.name)}</option>`).join('')}</select></label>
           <label>Cadencia<select name="interval_months"><option value="1">Mensual</option><option value="3">Trimestral</option><option value="12">Anual</option><option value="2">Cada 2 meses</option><option value="6">Cada 6 meses</option></select></label>
-          <label>Fecha de inicio<input type="date" name="start_date" required></label>
-          <label>Fin (opcional)<input type="date" name="end_date"></label>
-          <label>Nº ocurrencias (opcional)<input type="number" min="1" name="max_occurrences"></label>
-          <label>IRPF %<input type="number" step="0.01" name="irpf_rate" value="0"></label>
+          <label>Fecha de inicio<input type="date" name="start_date" value="${today()}" required></label>
         </div>
+        <details style="margin-top:.5rem"><summary style="cursor:pointer;color:var(--text2);font-size:13px">Más opciones (fin, nº de ocurrencias, IRPF)</summary>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin-top:.4rem">
+            <label>Fin (opcional)<input type="date" name="end_date"></label>
+            <label>Nº ocurrencias (opcional)<input type="number" min="1" name="max_occurrences"></label>
+            <label>IRPF %<input type="number" step="0.01" name="irpf_rate" value="0"></label>
+          </div>
+        </details>
         <div style="margin-top:.5rem"><b>Líneas</b> <span style="color:var(--text2);font-size:12px">(1 fila mínima)</span></div>
         ${[0, 1, 2].map(i => `<div style="display:grid;grid-template-columns:3fr 1fr 1fr 1fr;gap:.4rem;margin:.2rem 0">
           <input name="desc_${i}" placeholder="Descripción"><input type="number" step="0.01" name="qty_${i}" placeholder="Cant." value="${i === 0 ? 1 : ''}">

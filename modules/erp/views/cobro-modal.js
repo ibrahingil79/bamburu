@@ -54,11 +54,14 @@ export function cobroModalScript(sym) {
       }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:1rem">Sin cobros registrados</td></tr>';
       // El formulario solo si la factura admite cobro (flag del motor: inv.cobrable) y queda pendiente.
       const canRegister = inv.cobrable && co.pendiente > 0.0049;
+      // U4: precarga de la "Forma" con la última usada / la registrada del cliente (editable). Espejo del modal de pago.
+      const defMethod = inv.payment_method_default || '';
+      const methodOpt = function(v,l){ return '<option value="'+v+'"'+(defMethod===v?' selected':'')+'>'+l+'</option>'; };
       const form = canRegister
         ? '<div class="form-row" style="align-items:end;gap:.5rem;flex-wrap:wrap">'
           +'<div class="form-group"><label class="form-label">Fecha</label><input type="date" id="pay-date" class="form-control" value="'+new Date().toISOString().slice(0,10)+'"></div>'
           +'<div class="form-group"><label class="form-label">Importe</label><input type="number" id="pay-amount" class="form-control" step="0.01" min="0.01" value="'+Number(co.pendiente||0).toFixed(2)+'" style="width:120px"></div>'
-          +'<div class="form-group"><label class="form-label">Forma</label><select id="pay-method" class="form-control"><option value="">—</option><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option><option value="tarjeta">Tarjeta</option><option value="domiciliacion">Domiciliación</option></select></div>'
+          +'<div class="form-group"><label class="form-label">Forma</label><select id="pay-method" class="form-control"><option value="">—</option>'+methodOpt('transferencia','Transferencia')+methodOpt('efectivo','Efectivo')+methodOpt('tarjeta','Tarjeta')+methodOpt('domiciliacion','Domiciliación')+'</select></div>'
           +'<div class="form-group" style="flex:1;min-width:140px"><label class="form-label">Nota</label><input type="text" id="pay-note" class="form-control" placeholder="(opcional)"></div>'
           +'<button class="btn btn-primary" onclick="registrarCobro('+inv.id+')">Registrar cobro</button>'
           +'</div>'

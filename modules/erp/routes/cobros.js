@@ -69,7 +69,11 @@ export function createCobrosRoutes(db) {
             +'<td><strong>'+SYM+Number(r.pendiente||0).toFixed(2)+'</strong></td>'
             +'<td>'+(window.proximaBadgeHtml?window.proximaBadgeHtml(p):'')+'</td>'
             +'<td>'+escHtml(accionTxt(p))+fecha+'<div style="color:var(--muted);font-size:.8rem">'+escHtml(r.motivo||'')+'</div></td>'
-            +'<td><button class="btn btn-primary btn-sm" onclick="openGestion('+r.invoice_id+')">Gestionar</button></td>'
+            // U4: la acción frecuente (registrar el cobro que ha entrado) es directa —abre el
+            // formulario ya precargado (importe pendiente + fecha hoy + forma)—; "Gestionar" (la
+            // reclamación: próxima acción, recordatorios) queda a un clic. Antes se llegaba al
+            // cobro pasando SIEMPRE por Gestionar (3 clics); ahora son 2, como el espejo de Pagos.
+            +'<td style="white-space:nowrap"><button class="btn btn-primary btn-sm" onclick="openCobros('+r.invoice_id+')">Registrar cobro</button> <button class="btn btn-secondary btn-sm" onclick="openGestion('+r.invoice_id+')">Gestionar</button></td>'
             +'</tr>';
         }).join('') : window.emptyRow(6, 'No hay nada pendiente de cobro ahora mismo. Todo al día.', { tone: 'ok' });
         filterRows();

@@ -481,10 +481,11 @@ export function createClientRoutes(db, cfg = {}) {
           const estadoCell=!f.counts
             ?'<span class="badge b-gray" title="No computa como deuda (anulada o rectificada por sustitución)">no computa</span>'
             :'<span class="badge '+(cobroBadge[f.estado]||'')+'">'+(cobroLabel[f.estado]||f.estado)+(f.estado==='vencida'&&f.dias_vencida?' '+f.dias_vencida+'d':'')+'</span>';
-          // Botón "Gestionar" (centro compartido: cobro + próxima acción + acciones), con
-          // el MISMO flag del motor (f.cobrable) y solo si queda pendiente.
+          // U4: acción directa "Registrar cobro" (abre el formulario ya precargado) + "Gestionar"
+          // (centro compartido: próxima acción + recordatorios) a un clic. Mismo flag del motor
+          // (f.cobrable) y solo si queda pendiente. Antes solo estaba "Gestionar" (un clic más).
           const cobrarCell = (f.cobrable && Number(f.pendiente)>0.0049)
-            ? '<button class="btn btn-primary btn-sm" onclick="openGestion('+f.id+')">Gestionar</button>'
+            ? '<button class="btn btn-primary btn-sm" onclick="openCobros('+f.id+')">Registrar cobro</button> <button class="btn btn-secondary btn-sm" onclick="openGestion('+f.id+')">Gestionar</button>'
             : '';
           // Próxima acción (misma que en Cobros y listado de facturas).
           const p=f.proxima;

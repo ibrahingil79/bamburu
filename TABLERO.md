@@ -46,9 +46,22 @@ Hecho cuando: los casos de U0 muestran mensaje claro; test que dispara los error
   smoke headless `scripts/verify-u3-errores.mjs` **13/13 OK · 0 errores JS**, forzando un caso de cada
   mecanismo en vivo; sin tocar lógica, validaciones, permisos ni la causa de los errores).
 
-### U4 — Reducir clics en flujos clave
+### U4 — Reducir clics en flujos clave  ✅ HECHO (2026-07-07)
 Tomar los flujos medidos en U0 (emitir factura, registrar cobro, conciliar, crear recurrente…) y recortar pasos/formularios en blanco.
 Hecho cuando: cada flujo baja de nº de clics medido; antes/después documentado.
+- Hecho (2026-07-07): mismo principio que los flujos "propuesta lista" (conciliar/emitir recurrente/enviar
+  enlace) llevado a los de más fricción del U0. **Registrar cobro**: la acción frecuente estaba detrás de
+  "Gestionar" (centro de reclamación) → 3 clics; ahora la fila de **Cobros** y la **ficha de cliente**
+  llevan **"Registrar cobro" directo** (abre el formulario ya precargado: importe pendiente + fecha hoy) +
+  "Gestionar" a un clic → **3→2 clics**, como el espejo de Pagos ("Pagar" directo). **Modal de cobro**:
+  precarga la **"Forma"** con el último valor usado (forma del último cobro de la factura y, si no, la
+  registrada del cliente) — el API expone `payment_method_default` (aditivo), espejo del modal de pago a
+  proveedores. **Crear plantilla recurrente**: **fecha de inicio precargada a hoy** (único obligatorio en
+  blanco) y avanzados (fin, nº de ocurrencias, IRPF) plegados en **"Más opciones"** → menos campos a la
+  vista sin quitar nada (siguen en el form con sus defaults). Solo presentación/precarga, aditivo y
+  reversible: **regresión 0** (motores recurrentes 15/0 · cobros-paso2 47/0 · cobros-paso2-1 46/0; smoke
+  navegador real 10/0, 0 errores JS; sin tocar endpoints de escritura, validaciones, permisos ni cálculo).
+  5 ficheros: `cobros.js`, `clients.js`, `cobro-modal.js`, `invoices.js`, `recurrentes-routes.js`.
 
 ### U5 — Móvil / responsive
 Que las pantallas de uso frecuente funcionen bien en móvil (lo que U0 marque como roto).

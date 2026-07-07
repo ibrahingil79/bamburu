@@ -870,7 +870,13 @@ export function createInvoiceRoutes(db) {
       // Paso 2: próxima acción de cobro + historial de acciones (compartido por las 3 superficies).
       const proxima = invoiceProximaAccion(db, inv, today);
       const collectionActions = invoiceActionHistory(db, inv.id);
-      return c.json({ ...inv, items, anulacion, rectifiedBy, rectifiesOriginal, payments, cobro, cobrable, proxima, collectionActions });
+      // U4: forma de pago sugerida para el modal de cobro (precarga, editable) — "último valor
+      // usado": la forma del último cobro de ESTA factura y, si no hay, la forma registrada del
+      // cliente. Espejo de payment_method_default del lado de proveedores. Solo dato de UI.
+      const lastPay = db.prepare("SELECT payment_method FROM invoice_payments WHERE invoice_id=? AND payment_method IS NOT NULL AND payment_method!='' ORDER BY id DESC LIMIT 1").get(inv.id);
+      const clientPm = inv.client_id ? db.prepare('SELECT payment_method FROM clients WHERE id=?').get(inv.client_id) : null;
+      const payment_method_default = (lastPay && lastPay.payment_method) || (clientPm && clientPm.payment_method) || '';
+      return c.json({ ...inv, items, anulacion, rectifiedBy, rectifiesOriginal, payments, cobro, cobrable, proxima, collectionActions, payment_method_default });
     } catch (e) { return c.json({ error: e.message }, 500); }
   });
 
