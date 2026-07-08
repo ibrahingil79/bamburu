@@ -20,7 +20,9 @@ export function createSettingsRoutes(db, cfg = {}) {
   api.put('/company', requirePerm('company.update'), validate(companySchema), async c => {
     try {
       const d = c.get('validated');
-      db.prepare('UPDATE company_config SET company_name=?,fiscal_id=?,tax_rate=?,logo_url=?,address=?,phone=?,email=?,website=?,country=?,currency=?,currency_symbol=?,tax_name=?,fiscal_id_label=?,document_name=?,irpf_default=? WHERE id=1').run(d.company_name||'', d.fiscal_id||'', parseFloat(d.tax_rate)||0, d.logo_url||'', d.address||'', d.phone||'', d.email||'', d.website||'', d.country||'ES', d.currency||'EUR', d.currency_symbol||sym, d.tax_name||'IVA', d.fiscal_id_label||'NIF/CIF', d.document_name||'Factura', parseFloat(d.irpf_default)||0);
+      // postal_code/city/province: dirección fiscal estructurada que exige Facturae. Sin ellos,
+      // ninguna factura de este negocio puede exportarse (el emisor también va con dirección completa).
+      db.prepare('UPDATE company_config SET company_name=?,fiscal_id=?,tax_rate=?,logo_url=?,address=?,postal_code=?,city=?,province=?,phone=?,email=?,website=?,country=?,currency=?,currency_symbol=?,tax_name=?,fiscal_id_label=?,document_name=?,irpf_default=? WHERE id=1').run(d.company_name||'', d.fiscal_id||'', parseFloat(d.tax_rate)||0, d.logo_url||'', d.address||'', d.postal_code||'', d.city||'', d.province||'', d.phone||'', d.email||'', d.website||'', d.country||'ES', d.currency||'EUR', d.currency_symbol||sym, d.tax_name||'IVA', d.fiscal_id_label||'NIF/CIF', d.document_name||'Factura', parseFloat(d.irpf_default)||0);
       return c.json({message:'Guardado'});
     } catch(e) { return c.json({error:e.message},500); }
   });
@@ -88,7 +90,13 @@ export function createSettingsRoutes(db, cfg = {}) {
           <div class="form-row">
             <div class="form-group"><label class="form-label">Web</label><input class="form-control" id="cWeb"></div>
           </div>
-          <div class="form-group"><label class="form-label">Dirección fiscal</label><input class="form-control" id="cAddr"></div>
+          <div class="form-group"><label class="form-label">Dirección fiscal</label><input class="form-control" id="cAddr" placeholder="Calle y número"></div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Código postal</label><input class="form-control" id="cPostal" maxlength="10" placeholder="28001"></div>
+            <div class="form-group"><label class="form-label">Municipio</label><input class="form-control" id="cCity" placeholder="Madrid"></div>
+            <div class="form-group"><label class="form-label">Provincia</label><input class="form-control" id="cProvince" placeholder="Madrid"></div>
+          </div>
+          <small style="color:var(--text2);font-size:12px;margin:-8px 0 16px;display:block">Dirección completa: obligatoria para generar la factura electrónica <strong>Facturae</strong>.</small>
           <div class="form-group"><label class="form-label">URL Logo empresa</label><input class="form-control" id="cLogo"></div>
           <button class="btn btn-primary" onclick="saveCompany()">Guardar cambios</button>
         </div>
@@ -110,10 +118,13 @@ export function createSettingsRoutes(db, cfg = {}) {
         document.getElementById('cPhone').value=d.phone||'';
         document.getElementById('cWeb').value=d.website||'';
         document.getElementById('cAddr').value=d.address||'';
+        document.getElementById('cPostal').value=d.postal_code||'';
+        document.getElementById('cCity').value=d.city||'';
+        document.getElementById('cProvince').value=d.province||'';
         document.getElementById('cLogo').value=d.logo_url||'';
       });
       async function saveCompany(){
-        try{await api('PUT','/api/erp/settings/company',{company_name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,country:document.getElementById('countryCode').value,currency:document.getElementById('currencyCode').value,currency_symbol:document.getElementById('currencySymbol').value,tax_name:document.getElementById('taxName').value,fiscal_id_label:document.getElementById('fiscalIdLabel').value,document_name:document.getElementById('documentName').value,tax_rate:document.getElementById('cTax').value,irpf_default:document.getElementById('cIrpfDefault').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,website:document.getElementById('cWeb').value,address:document.getElementById('cAddr').value,logo_url:document.getElementById('cLogo').value});toast('Guardado ✓');}catch(e){toast(e.message,'err')}
+        try{await api('PUT','/api/erp/settings/company',{company_name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,country:document.getElementById('countryCode').value,currency:document.getElementById('currencyCode').value,currency_symbol:document.getElementById('currencySymbol').value,tax_name:document.getElementById('taxName').value,fiscal_id_label:document.getElementById('fiscalIdLabel').value,document_name:document.getElementById('documentName').value,tax_rate:document.getElementById('cTax').value,irpf_default:document.getElementById('cIrpfDefault').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,website:document.getElementById('cWeb').value,address:document.getElementById('cAddr').value,postal_code:document.getElementById('cPostal').value,city:document.getElementById('cCity').value,province:document.getElementById('cProvince').value,logo_url:document.getElementById('cLogo').value});toast('Guardado ✓');}catch(e){toast(e.message,'err')}
       }
       </script>`;
     return c.html(adminLayout('Configuración Empresa', content, 'settings', c.get('session')?.csrfToken || '', c));

@@ -1970,5 +1970,42 @@ Sé preciso con los números y siempre redondea correctamente.`,
   addCol(db, 'admin_users', 'idioma',        "TEXT DEFAULT 'es'");
   addCol(db, 'admin_users', 'foto_url',      'TEXT');
 
+  // ── Facturae ──────────────────────────────────────────────────────────────────
+  // Facturae 3.2.2 exige dirección fiscal ESTRUCTURADA (Address · PostCode · Town · Province ·
+  // CountryCode). Bamburu solo tenía `address` libre + `city`. Todo aditivo y OPCIONAL: un cliente
+  // que no factura a la Administración no necesita rellenar nada y el alta normal no cambia.
+  addCol(db, 'clients', 'postal_code', "TEXT DEFAULT ''");
+  addCol(db, 'clients', 'province',    "TEXT DEFAULT ''");
+  // El EMISOR también: hoy company_config no tenía ni CP ni municipio ni provincia, así que ninguna
+  // factura podía ser un Facturae válido (docs/facturae/investigacion.md §3.3).
+  addCol(db, 'company_config', 'postal_code', "TEXT DEFAULT ''");
+  addCol(db, 'company_config', 'city',        "TEXT DEFAULT ''");
+  addCol(db, 'company_config', 'province',    "TEXT DEFAULT ''");
+
+  // SNAPSHOT en la factura. `invoices` ya congelaba nombre/NIF/dirección libre de ambas partes; le
+  // faltaban las piezas estructuradas. Se congelan AL EMITIR y no se vuelven a tocar: un Facturae
+  // regenerado en 2028 debe llevar la dirección de 2026, no la de hoy. Vacío = no había dato
+  // entonces (no se inventa: la factura simplemente no puede exportarse a Facturae).
+  for (const p of ['client', 'company']) {
+    addCol(db, 'invoices', `${p}_postal_code`, "TEXT DEFAULT ''");
+    addCol(db, 'invoices', `${p}_city`,        "TEXT DEFAULT ''");
+    addCol(db, 'invoices', `${p}_province`,    "TEXT DEFAULT ''");
+    addCol(db, 'invoices', `${p}_country`,     "TEXT DEFAULT ''");
+  }
+  // Tipo de factura (lista L2 AEAT: F1 · F2 simplificada · F3 sustitutiva · R1–R5) FIJO en la
+  // factura. OJO: NO era transitorio — ya se persistía en `verifactu_registros.tipo_factura`. Se
+  // desnormaliza aquí porque (a) es un atributo de la factura, no del registro de Verifactu, y
+  // (b) las facturas anteriores a Verifactu no tienen registro. Backfill desde ahí: no se pierde nada.
+  addCol(db, 'invoices', 'tipo_factura', 'TEXT');
+  const tipoMigKey = 'migration_invoices_tipo_factura_backfill_v1';
+  if (!db.prepare('SELECT value FROM settings WHERE key=?').get(tipoMigKey)) {
+    db.prepare(`UPDATE invoices SET tipo_factura = (
+                  SELECT v.tipo_factura FROM verifactu_registros v
+                  WHERE v.invoice_id = invoices.id AND v.record_type='alta'
+                  ORDER BY v.id LIMIT 1)
+                WHERE tipo_factura IS NULL`).run();
+    db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(tipoMigKey, 'done');
+  }
+
   console.log('✅ ERP: Migraciones completadas');
 }

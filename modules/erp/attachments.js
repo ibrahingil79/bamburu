@@ -38,8 +38,11 @@ export function uploadsDir(tenant) {
 // Guarda el binario con un nombre NO adivinable (16 bytes aleatorios) y registra el
 // metadato en `attachments`. entity_type/entity_id quedan NULL hasta que la captura
 // aterriza en una recepción ('po_receipt') o una compra directa ('purchase').
-export function saveAttachment(db, tenant, { buffer, originalName, mime, kind = 'supplier_invoice' }) {
-  const ext = ALLOWED_MIME[mime] || 'bin';
+// `ext` permite guardar con extensión propia un fichero que NO nace de una subida del usuario (p. ej.
+// el Facturae que genera el propio Bamburu). Se deja fuera de ALLOWED_MIME a propósito: esa lista
+// gobierna qué se admite SUBIR, y ampliarla dejaría colar un XML como si fuera factura de proveedor.
+export function saveAttachment(db, tenant, { buffer, originalName, mime, kind = 'supplier_invoice', ext: extOverride = null }) {
+  const ext = extOverride || ALLOWED_MIME[mime] || 'bin';
   const dir = uploadsDir(tenant);
   const fname = randomBytes(16).toString('hex') + '.' + ext;
   writeFileSync(join(dir, fname), buffer);

@@ -201,7 +201,59 @@ fase actual ceden prioridad a la optimización (Ejes A/B/C).
 ### Contabilidad y cumplimiento fiscal
 - **Verifactu — envío real a la AEAT:** la Fase A (motor SOAP+mTLS, probado contra simulador) está hecha; falta disparar el envío real a preproducción/producción cuando el dueño aporte su **certificado FNMT** (`VERIFACTU_CERT_PATH`/`VERIFACTU_CERT_PASS` + NIF/NombreRazón del productor). Comando: `scripts/verifactu-enviar-preproduccion.mjs`.
 - **Verifactu — Fase B (legal):** colaboración social (Convenio tipo 17), declaración responsable, y elección de certificado (propio-por-todos vs por-cliente, modelo del Anexo II). Ampliaciones técnicas: envío de **anulaciones** (hoy solo altas), **cola + timer por tenant** (control de flujo `TiempoEsperaEnvio`), validación XSD formal.
-- **Factura electrónica B2B (Facturae):** obligación separada de Verifactu; después según calendario legal.
+- **Facturae — motor de generación del XML ✅ HECHO (2026-07-08).** Ver `docs/facturae/investigacion.md`.
+  - **Investigación** verificada en fuente oficial (XSD 3.2.2 descargado y parseado, política de firma v3.1
+    extraída del PDF, WSDL de FACe descargado en vivo, BOE consolidado). Vigente: **Facturae 3.2.2**.
+  - **Motor** (nuevo, `modules/erp/facturae/`): `modelo.js` (modelo NEUTRO de factura, sin XML) →
+    `facturae322.js` (serializador) + `iso-paises.js`. La separación existe porque el **RD 238/2026**
+    (BOE 31-03-2026) obliga a remitir una copia en **UBL** a la solución pública: UBL será otro
+    serializador sobre el mismo modelo, no un proyecto nuevo.
+  - **Migración aditiva**: `clients.postal_code/province` · `company_config.postal_code/city/province`
+    (faltaban: sin dirección del EMISOR ninguna factura podía ser válida) · snapshot en `invoices` de
+    CP/municipio/provincia/país de ambas partes · `invoices.tipo_factura`.
+  - **Mapeo decidido** (no hay tabla oficial): F1→`FC`+`OO` · F2→`FA`+`OO` (bloqueada igual: sin
+    destinatario identificado) · **F3→`FC`+`OO`, NO `OC`** (una recapitulativa agrupa varias operaciones
+    de un periodo; la F3 sustituye un único ticket) · R1–R5→`FC`+`OR`+`Corrective`. `ReasonCode`:
+    R1/R4/R5→`16`, R2/R3→`85`. `CorrectionMethod`: `S`→`01`, `I`→`02`. El código AEAT se conserva en
+    `AdditionalReasonDescription`. `PersonTypeCode` se DERIVA del NIF (sin columna nueva, sin snapshot
+    que se desincronice); `ResidenceTypeCode` del país; el NIF solo se prefija con el país en
+    intracomunitarias. `UnitOfMeasure` se omite (es `[0..1]`).
+  - **UI**: bloque plegado "Añadir dirección fiscal completa" en la ficha de cliente (opcional, no toca
+    el alta normal) · CP/municipio/provincia en Datos del negocio · botón **"Generar Facturae"** en la
+    ficha de factura con tres estados: congelado → normal; sin snapshot pero cliente completo hoy →
+    genera **con aviso visible**; datos incompletos → sin botón, dice qué falta y enlaza a arreglarlo.
+    XML sin firmar, descargable, archivado vía `attachments.js` (`kind='facturae_xml'`).
+  - **Tres supuestos del encargo resultaron falsos** y se corrigieron: (a) `tipo_factura` NO era
+    transitorio — ya se persistía en `verifactu_registros`; se hizo **backfill** en vez de perderlo.
+    (b) `InvoiceTotal` **SÍ descuenta la retención** (el XSD lo dice literal); `TotalTaxesWithheld`
+    (IRPF) ≠ `AmountsWithheld` (retención de garantía) → los tres totales coinciden y valen
+    `invoices.total`. (c) `company_config` no tenía dirección estructurada.
+  - **El XSD cazó un bug del serializador**: `ReasonDescription` y `CorrectionMethodDescription` son
+    **enumeraciones**, no texto libre.
+  - **Verificado**: 55/55 (lógica + validación contra el XSD oficial con `xmllint`, sobre una COPIA de la
+    BD) y 26/26 (HTTP + navegador). Tres facturas reales validadas: F1 con snapshot (2 tipos de IVA +
+    IRPF; cambiar la dirección del cliente después NO contamina el XML), factura vieja sin snapshot con
+    cliente completado hoy (genera + aviso), cliente incompleto (bloqueo + 409). Aritmética:
+    1.100 + 220 − 165 = **1.155,00** en los tres totales. Rectificativa con `Corrective`. Ticket F2
+    bloqueado. Total manipulado → se niega a generar. **0 errores JS**. BD real intacta.
+  - **Hallazgo**: 8 facturas (las anteriores a Verifactu) tienen `invoice_items.tax_rate=0` mientras la
+    cabecera declara 21%. Se **bloquean con mensaje propio**: reconstruir el desglose desde la cabecera
+    sería inventarse el reparto por tipos en un documento con valor legal.
+- **Facturae — firma y envío (BLOQUEADO por certificado).** Firma **XAdES-EPES** enveloped, política v3.1
+  (`SigPolicyId` con la URL literal `.es`, no `.gob.es`). **Buena noticia verificada: NO exige certificado
+  de persona jurídica ni sello de empresa** — el FNMT de persona física del dueño sirve para firmar sus
+  propias facturas. Ojo: son DOS certificados distintos — el que firma la factura (del emisor) y el que
+  autentica el webservice de FACe (hay que darlo de alta en el portal de proveedores). Extensión `.xsig`.
+  FACe exige además **tres códigos DIR3** en `BuyerParty` (oficina contable · órgano gestor · unidad
+  tramitadora) que aporta el cliente de la Administración. Endpoints (WSDL descargado en vivo):
+  prod `https://webservice.face.gob.es/facturasspp?wsdl` · pruebas `https://se-face-webservice.redsara.es/facturasspp?wsdl`.
+  **Sin confirmar**: que FACe valide contra XAdES 1.3.2 (la página está tras WAF; no la leí en fuente).
+- **Facturae — serializador UBL (pendiente).** RD 238/2026: quien no use la solución pública debe remitir
+  «una copia electrónica fiel de cada factura en la sintaxis UBL». La arquitectura ya lo deja preparado.
+- **Contexto legal verificado (BOE):** el umbral de **5.000 €** de la Ley 25/2013 art. 4 sigue vigente, pero
+  es una **facultad** de cada Administración para excluir por reglamento, no una exención automática. Y un
+  **autónomo (persona física) NO está en la lista de obligados** a)–f): para el público de Bamburu la
+  e-factura a la Administración es un derecho, no un deber (salvo que la Administración concreta la exija).
 - **Balance de Situación:** requiere pieza previa de **saldos de apertura + capital + capitalización de inmovilizado** (escritura de apuntes); decisiones de datos del dueño.
 - **Cuentas anuales y legalización de libros.**
 - **Plan de cuentas con subcuentas.**

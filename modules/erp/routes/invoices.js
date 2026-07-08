@@ -12,6 +12,9 @@ import { getCountryConfig } from '../../../core/control-db.js';
 import { escHtml } from '../../../core/escape.js';
 import { adminLayout, docShell, printableShell, can, skeletonRows, errorShell, ERR } from '../layout.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';   // PDF real: mismo HTML imprimible → Chromium
+import { buildInvoiceModel, facturaeStatus } from '../facturae/modelo.js';   // Facturae: modelo neutro (sirve también para UBL en el futuro)
+import { serializeFacturae322, facturaeFilename } from '../facturae/facturae322.js';
+import { saveAttachment } from '../attachments.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
 import { paymentsSum, invoiceCobro, cobroState, isCobrable, ESTADO_LABEL,
@@ -196,9 +199,9 @@ export function generateInvoice(db, orderId) {
 // y hash encadenado igual que generateInvoice, pero sin tocar sales_orders.
 // order_id queda NULL.
 export function createInvoice(db, invoiceData) {
-  const { client_id, lines, issue_date, notes = '', irpf_rate = 0 } = invoiceData;
+  const { client_id, lines, issue_date, notes = '', irpf_rate = 0, tipo_factura = 'F1' } = invoiceData;
 
-  const client = db.prepare('SELECT id, name, fiscal_id, address, email FROM clients WHERE id=?').get(client_id);
+  const client = db.prepare('SELECT * FROM clients WHERE id=?').get(client_id);
   if (!client) throw new Error('Cliente no existe');
 
   const cfg = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
@@ -227,24 +230,31 @@ export function createInvoice(db, invoiceData) {
     });
 
     const due_date = computeDueDate(db, issueDate, client_id);
+    // SNAPSHOT (Facturae): se congela lo que HAY AHORA de emisor y cliente. Si un campo está vacío
+    // se guarda vacío — no se inventa. Regenerar el Facturae dentro de dos años debe reproducir la
+    // dirección del día de emisión, no la de entonces. Mismo patrón que ya seguía `company_name`.
     const result = db.prepare(`INSERT INTO invoices
       (invoice_number, order_id, client_id, series, year, sequence, issue_date,
        company_name, company_fiscal_id, company_address,
+       company_postal_code, company_city, company_province, company_country,
        client_name, client_fiscal_id, client_address, client_email,
+       client_postal_code, client_city, client_province, client_country,
        subtotal, tax_rate, tax_name, tax_amount, total,
        currency, currency_symbol, document_name,
        verifactu_hash, prev_hash, notes,
-       irpf_rate, irpf_amount, due_date)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       irpf_rate, irpf_amount, due_date, tipo_factura)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       invoice_number, null, client_id,
       series, year, seq, issueDate,
       cfg.company_name || 'Mi empresa', cfg.fiscal_id || '', cfg.address || '',
+      cfg.postal_code || '', cfg.city || '', cfg.province || '', cfg.country || '',
       client.name, client.fiscal_id || '', client.address || '', client.email || '',
+      client.postal_code || '', client.city || '', client.province || '', client.country || '',
       totals.subtotal, headerTaxRate, cfg.tax_name || 'IVA', totals.taxAmount, totals.total,
       cfg.currency || 'EUR', cfg.currency_symbol || '€', cfg.document_name || 'Factura',
       verifactu_hash, prev_hash, notes,
-      appliedIrpfRate, totals.irpfAmount, due_date
+      appliedIrpfRate, totals.irpfAmount, due_date, tipo_factura || 'F1'
     );
     const invoiceId = result.lastInsertRowid;
 
@@ -260,7 +270,7 @@ export function createInvoice(db, invoiceData) {
     // VERI*FACTU T1: registro de ALTA oficial (huella encadenada) en la MISMA transacción.
     recordVerifactuAlta(db, {
       id: invoiceId, company_fiscal_id: cfg.fiscal_id || '', invoice_number,
-      issue_date: issueDate, record_type: 'alta',
+      issue_date: issueDate, record_type: 'alta', tipo_factura: tipo_factura || 'F1',
       subtotal: totals.subtotal, tax_amount: totals.taxAmount,
     });
     return { id: invoiceId, invoice_number };
@@ -361,23 +371,29 @@ export function createRectificativa(db, data) {
     });
 
     const due_date = computeDueDate(db, issueDate, original.client_id || null);
+    // La rectificativa HEREDA el snapshot de la original (ya lo hacía con nombre/NIF/dirección):
+    // debe describir a las mismas partes tal y como estaban el día de la factura rectificada.
     const result = db.prepare(`INSERT INTO invoices
       (invoice_number, order_id, client_id, series, year, sequence, issue_date,
        company_name, company_fiscal_id, company_address,
+       company_postal_code, company_city, company_province, company_country,
        client_name, client_fiscal_id, client_address, client_email,
+       client_postal_code, client_city, client_province, client_country,
        subtotal, tax_rate, tax_name, tax_amount, total,
        currency, currency_symbol, document_name,
        verifactu_hash, prev_hash, notes, irpf_rate, irpf_amount,
-       record_type, rectifies_invoice_id, rectification_type, rectification_mode, status, due_date)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       record_type, rectifies_invoice_id, rectification_type, rectification_mode, status, due_date, tipo_factura)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       invoice_number, null, original.client_id || null, series, year, seq, issueDate,
       original.company_name, original.company_fiscal_id, original.company_address,
+      original.company_postal_code || '', original.company_city || '', original.company_province || '', original.company_country || '',
       original.client_name, original.client_fiscal_id, original.client_address, original.client_email,
+      original.client_postal_code || '', original.client_city || '', original.client_province || '', original.client_country || '',
       totals.subtotal, headerTaxRate, original.tax_name || cfg.tax_name || 'IVA', totals.taxAmount, totals.total,
       original.currency || 'EUR', original.currency_symbol || '€', original.document_name || 'Factura',
       verifactu_hash, prev_hash, notes, appliedIrpfRate, totals.irpfAmount,
-      'rectificativa', original.id, rectification_type, rectification_mode, 'emitida', due_date
+      'rectificativa', original.id, rectification_type, rectification_mode, 'emitida', due_date, rectification_type
     );
     const invoiceId = result.lastInsertRowid;
 
@@ -657,24 +673,28 @@ export function emitTicketSvc(db, { lines, warehouse_id, payment_method, paid_da
     const prev_hash = getPrevHash(db, SIMPLIFIED_SERIES, year);
     const verifactu_hash = calcHash({ invoice_number, issue_date: issueDate, company_fiscal_id: cfg.fiscal_id || '', client_fiscal_id: '', total: totals.total, prev_hash });
 
+    // Ticket = factura SIMPLIFICADA (F2): sin destinatario identificado, por definición. No lleva
+    // snapshot de cliente porque no hay cliente. Facturae la bloquea (exige BuyerParty con NIF).
     const result = db.prepare(`INSERT INTO invoices
       (invoice_number, order_id, client_id, series, year, sequence, issue_date,
        company_name, company_fiscal_id, company_address,
+       company_postal_code, company_city, company_province, company_country,
        client_name, client_fiscal_id, client_address, client_email,
        subtotal, tax_rate, tax_name, tax_amount, total,
        currency, currency_symbol, document_name,
        verifactu_hash, prev_hash, notes,
-       irpf_rate, irpf_amount, due_date)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       irpf_rate, irpf_amount, due_date, tipo_factura)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       invoice_number, null, null,
       SIMPLIFIED_SERIES, year, seq, issueDate,
       cfg.company_name || 'Mi empresa', cfg.fiscal_id || '', cfg.address || '',
+      cfg.postal_code || '', cfg.city || '', cfg.province || '', cfg.country || '',
       '', '', '', '',
       totals.subtotal, headerTaxRate, cfg.tax_name || 'IVA', totals.taxAmount, totals.total,
       cfg.currency || 'EUR', cfg.currency_symbol || '€', 'Factura simplificada',
       verifactu_hash, prev_hash, 'Venta de mostrador (' + payment_method + ')',
-      0, 0, issueDate
+      0, 0, issueDate, 'F2'
     );
     const invoiceId = result.lastInsertRowid;
 
@@ -776,21 +796,25 @@ export function emitSustitutivaSvc(db, ticketId, client_id) {
     const result = db.prepare(`INSERT INTO invoices
       (invoice_number, order_id, client_id, series, year, sequence, issue_date,
        company_name, company_fiscal_id, company_address,
+       company_postal_code, company_city, company_province, company_country,
        client_name, client_fiscal_id, client_address, client_email,
+       client_postal_code, client_city, client_province, client_country,
        subtotal, tax_rate, tax_name, tax_amount, total,
        currency, currency_symbol, document_name,
        verifactu_hash, prev_hash, notes,
-       irpf_rate, irpf_amount, due_date, substitutes_invoice_id)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       irpf_rate, irpf_amount, due_date, substitutes_invoice_id, tipo_factura)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       invoice_number, null, client_id,
       series, year, seq, issueDate,
       cfg.company_name || 'Mi empresa', cfg.fiscal_id || '', cfg.address || '',
+      cfg.postal_code || '', cfg.city || '', cfg.province || '', cfg.country || '',
       client.name, client.fiscal_id || '', client.address || '', client.email || '',
+      client.postal_code || '', client.city || '', client.province || '', client.country || '',
       totals.subtotal, headerTaxRate, cfg.tax_name || 'IVA', totals.taxAmount, totals.total,
       cfg.currency || 'EUR', cfg.currency_symbol || '€', cfg.document_name || 'Factura',
       verifactu_hash, prev_hash, 'Factura completa en sustitución del ticket ' + ticket.invoice_number,
-      0, 0, due_date, ticketId
+      0, 0, due_date, ticketId, 'F3'
     );
     const invoiceId = result.lastInsertRowid;
 
@@ -1711,7 +1735,40 @@ export function createInvoiceRoutes(db) {
       const yaSustituido = !!db.prepare('SELECT 1 FROM invoices WHERE substitutes_invoice_id=? LIMIT 1').get(inv.id);
       const esTicketSustituible = inv.series === 'S' && inv.status === 'emitida' && !yaSustituido;
 
+      // ── Facturae: los tres estados del botón ──────────────────────────────────
+      //  (a) listo con datos CONGELADOS → botón normal.
+      //  (b) listo pero leyendo los datos VIVOS del cliente (factura anterior a esta pieza) →
+      //      botón + aviso visible: la dirección puede no ser la del día de emisión.
+      //  (c) bloqueado → sin botón, aviso con lo que falta y enlace a la ficha del cliente.
+      let feStatus = null, feModel = null;
+      try {
+        feModel = buildInvoiceModel(db, inv.id);
+        feStatus = facturaeStatus(feModel);
+      } catch { feStatus = null; }
+      const feLive = feStatus?.ready && (feStatus.usedLiveData.buyer || feStatus.usedLiveData.seller);
+      const feAviso = !feStatus ? '' : feStatus.ready
+        ? (feLive ? `<div class="fe-nota fe-warn">
+             <strong>Esta factura es anterior al Facturae de Bamburu.</strong> No tiene congelados los
+             datos fiscales, así que el XML se genera con los datos <em>actuales</em>
+             ${feStatus.usedLiveData.buyer ? 'del cliente' : ''}${feStatus.usedLiveData.buyer && feStatus.usedLiveData.seller ? ' y ' : ''}${feStatus.usedLiveData.seller ? 'de tu empresa' : ''}.
+             Si la dirección cambió desde ${escHtml(inv.issue_date)}, no será la del día de emisión.
+           </div>` : '')
+        : `<div class="fe-nota fe-block">
+             <strong>Facturae no disponible.</strong> ${escHtml(feStatus.reason)}
+             ${feStatus.missing.length ? `<ul style="margin:.5rem 0 0 1.1rem;padding:0">${feStatus.missing.map(m => `<li>${escHtml(m)}</li>`).join('')}</ul>` : ''}
+             ${feStatus.missing.some(m => m.startsWith('Cliente')) && inv.client_id
+               ? `<div style="margin-top:.6rem"><a href="/admin/clients?editar=${inv.client_id}" class="btn btn-secondary btn-sm">Completar ficha del cliente</a></div>` : ''}
+             ${feStatus.missing.some(m => m.startsWith('Tu empresa'))
+               ? `<div style="margin-top:.6rem"><a href="/admin/settings" class="btn btn-secondary btn-sm">Completar datos del negocio</a></div>` : ''}
+           </div>`;
+
       const panel = `
+<style>
+  .fe-nota{border-radius:8px;padding:.7rem .9rem;font-size:12px;line-height:1.5;margin-top:12px}
+  .fe-warn{background:var(--warn-s);border:1px solid var(--warn);color:var(--warn)}
+  .fe-block{background:var(--bg3);border:1px solid var(--border);color:var(--text2)}
+  .fe-nota strong{color:inherit}
+</style>
 <div class="card"><div class="card-body">
   <div style="margin-bottom:12px">${statusBadge}</div>
   <div class="dp-row"><span class="k">Nº</span><span class="v">${inv.invoice_number}</span></div>
@@ -1721,11 +1778,13 @@ export function createInvoiceRoutes(db) {
   <div class="dp-actions" style="margin-top:14px">
     <button onclick="window.print()" class="btn btn-primary">Imprimir</button>
     <a href="/admin/invoices/${inv.id}/pdf" class="btn btn-secondary">Descargar PDF</a>
+    ${feStatus?.ready ? `<a href="/admin/invoices/${inv.id}/facturae.xml" class="btn btn-secondary">Generar Facturae</a>` : ''}
     ${esTicketSustituible && can(c, 'invoices.create') ? `<button onclick="openSust()" class="btn btn-primary">Emitir factura completa</button>` : ''}
     ${inv.status === 'emitida' ? `<button onclick="anularFactura()" class="btn btn-danger">Anular</button>
     <a href="/admin/invoices/${inv.id}/rectificativa/new" class="btn btn-secondary">Crear rectificativa</a>` : ''}
     <a href="/admin/invoices" class="btn btn-secondary">Volver al listado</a>
   </div>
+  ${feAviso}
 </div></div>
 ${esTicketSustituible ? `
 <div class="modal-overlay" id="sustModal">
@@ -1811,6 +1870,46 @@ ${esTicketSustituible ? `
       const fname = ('Factura-' + (inv.invoice_number || ('' + inv.id)) + '.pdf').replace(/[\/\\]/g, '-');
       return new Response(pdf, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="' + fname + '"' } });
     } catch (e) { return c.html(errorShell('No hemos podido generar el PDF', ERR.PDF, { action: 'Ver mis facturas', href: '/admin/invoices' }), e.status || 500); }
+  });
+
+  // ── Facturae 3.2.2, SIN FIRMAR ────────────────────────────────────────────────
+  // Se genera on-demand desde los datos de la factura (como el PDF): Facturae no encadena huellas,
+  // no hay nada que calcular en el momento de emitir. Lo que sí se archiva es el XML producido,
+  // vía attachments.js, para tener trazabilidad de qué se entregó.
+  // La extensión es .xml y no .xsig a propósito: un .xsig es un Facturae FIRMADO. La firma XAdES y
+  // el envío a FACe quedan fuera de esta pieza (bloqueados por el certificado FNMT del dueño).
+  views.get('/:id/facturae.xml', requirePerm('invoices.read'), c => {
+    try {
+      const model = buildInvoiceModel(db, c.req.param('id'));
+      const status = facturaeStatus(model);
+      if (!status.ready) {
+        const detalle = status.missing.length ? status.reason + ' Faltan: ' + status.missing.join(' · ') : status.reason;
+        return c.html(errorShell('Todavía no podemos generar el Facturae', detalle,
+          { action: 'Volver a la factura', href: '/admin/invoices/' + model.id }), 409);
+      }
+
+      const xml = serializeFacturae322(model);
+      const fname = facturaeFilename(model);
+      // Archivar el entregable (no destructivo: cada generación deja su copia).
+      try {
+        saveAttachment(db, c.get('tenant'), {
+          buffer: Buffer.from(xml, 'utf8'), originalName: fname,
+          mime: 'application/xml', kind: 'facturae_xml', ext: 'xml',
+        });
+      } catch { /* si el archivado falla, la descarga NO se rompe */ }
+      logActivity(db, c.get('session'), 'Generó el Facturae de una factura', 'invoice', model.id, model.invoice.number);
+
+      return new Response(xml, {
+        headers: {
+          'Content-Type': 'application/xml; charset=utf-8',
+          'Content-Disposition': 'attachment; filename="' + fname + '"',
+          'Cache-Control': 'private, no-store',
+        },
+      });
+    } catch (e) {
+      return c.html(errorShell('No hemos podido generar el Facturae', e.message || ERR.GEN,
+        { action: 'Ver mis facturas', href: '/admin/invoices' }), e.status || 500);
+    }
   });
 
   return { api, views };

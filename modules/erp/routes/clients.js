@@ -57,8 +57,8 @@ export function createClientSvc(db, input) {
   const d = parseClient(input);
   if (fiscalIdConflict(db, d.fiscal_id)) { const e = new Error('Ya existe un cliente con ese NIF'); e.status = 409; throw e; }
   const code = nextCode(db, 'client');   // código interno CLI-NNNN, tras la guarda de NIF (no editable)
-  const r = db.prepare('INSERT INTO clients (name,fiscal_id,email,phone,address,city,country,group_id,notes,accepts_newsletter,client_type,payment_term_days,payment_method,collections_profile,client_code) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-    .run(d.name, d.fiscal_id || '', d.email || '', d.phone || '', d.address || '', d.city || '', d.country || '', d.group_id || null, d.notes || '', d.accepts_newsletter ? 1 : 0, d.client_type || 'particular', d.payment_term_days || 0, d.payment_method || '', d.collections_profile || 'estandar', code);
+  const r = db.prepare('INSERT INTO clients (name,fiscal_id,email,phone,address,city,country,postal_code,province,group_id,notes,accepts_newsletter,client_type,payment_term_days,payment_method,collections_profile,client_code) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(d.name, d.fiscal_id || '', d.email || '', d.phone || '', d.address || '', d.city || '', d.country || '', d.postal_code || '', d.province || '', d.group_id || null, d.notes || '', d.accepts_newsletter ? 1 : 0, d.client_type || 'particular', d.payment_term_days || 0, d.payment_method || '', d.collections_profile || 'estandar', code);
   syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
   return { id: r.lastInsertRowid, name: d.name, client_code: code };
 }
@@ -68,8 +68,8 @@ export function updateClientSvc(db, id, input) {
   if (!exists) { const e = new Error('Cliente no encontrado'); e.status = 404; throw e; }
   const d = parseClient(input);
   if (fiscalIdConflict(db, d.fiscal_id, id)) { const e = new Error('Ya existe un cliente con ese NIF'); e.status = 409; throw e; }
-  db.prepare('UPDATE clients SET name=?,fiscal_id=?,email=?,phone=?,address=?,city=?,country=?,group_id=?,notes=?,accepts_newsletter=?,client_type=?,payment_term_days=?,payment_method=?,collections_profile=? WHERE id=?')
-    .run(d.name, d.fiscal_id || '', d.email || '', d.phone || '', d.address || '', d.city || '', d.country || '', d.group_id || null, d.notes || '', d.accepts_newsletter ? 1 : 0, d.client_type || 'particular', d.payment_term_days || 0, d.payment_method || '', d.collections_profile || 'estandar', id);
+  db.prepare('UPDATE clients SET name=?,fiscal_id=?,email=?,phone=?,address=?,city=?,country=?,postal_code=?,province=?,group_id=?,notes=?,accepts_newsletter=?,client_type=?,payment_term_days=?,payment_method=?,collections_profile=? WHERE id=?')
+    .run(d.name, d.fiscal_id || '', d.email || '', d.phone || '', d.address || '', d.city || '', d.country || '', d.postal_code || '', d.province || '', d.group_id || null, d.notes || '', d.accepts_newsletter ? 1 : 0, d.client_type || 'particular', d.payment_term_days || 0, d.payment_method || '', d.collections_profile || 'estandar', id);
   syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
   return { id: Number(id), name: d.name };
 }
@@ -375,6 +375,26 @@ export function createClientRoutes(db, cfg = {}) {
               <div class="form-group"><label class="form-label">País</label><input class="form-control" id="cCountry"></div>
               <div class="form-group"><label class="form-label">Grupo</label><select class="form-control" id="cGroup"><option value="">Sin grupo</option>${groupOptions}</select></div>
             </div>
+
+            <!-- Dirección fiscal completa: OPCIONAL y PLEGADA. Solo hace falta para exportar la
+                 factura a Facturae (FACe). Quien nunca factura a la Administración no la ve. -->
+            <div style="margin:.25rem 0 .75rem">
+              <button type="button" class="btn btn-secondary btn-sm" id="btnFiscal" onclick="toggleFiscal()">
+                + Añadir dirección fiscal completa
+              </button>
+              <div style="font-size:11px;color:var(--text2);margin-top:.35rem">
+                Necesaria solo para generar la factura electrónica <strong>Facturae</strong> (facturas a la Administración).
+              </div>
+            </div>
+            <div id="fiscalBlock" style="display:none">
+              <div class="form-row">
+                <div class="form-group"><label class="form-label">Código postal</label><input class="form-control" id="cPostal" maxlength="10" placeholder="28001"></div>
+                <div class="form-group"><label class="form-label">Provincia</label><input class="form-control" id="cProvince" maxlength="100" placeholder="Madrid"></div>
+              </div>
+              <div style="font-size:11px;color:var(--text2);margin:-.35rem 0 .75rem">
+                Facturae exige además <strong>NIF</strong>, <strong>dirección</strong>, <strong>ciudad</strong> y <strong>país</strong>, arriba.
+              </div>
+            </div>
             <hr style="margin:1rem 0;border:none;border-top:1px solid var(--border)">
             <h4 style="font-size:.85rem;font-weight:600;margin:.25rem 0 .75rem">Gestión / Datos fiscales</h4>
             <div class="form-row">
@@ -429,11 +449,21 @@ export function createClientRoutes(db, cfg = {}) {
       // (su "Te debe X €", deuda más antigua y la tabla de facturas).
       window.cobroOnSaved = function(id){ if(currentDetailClientId) viewDetail(currentDetailClientId); };
       let currentClient=null;   // cliente en edición (conserva accepts_newsletter sin tocar la API)
+      // Bloque de dirección fiscal (Facturae): plegado por defecto; se despliega solo si el cliente
+      // ya tiene alguno de esos datos, para que al editar no queden escondidos.
+      function setFiscal(abierto){
+        document.getElementById('fiscalBlock').style.display = abierto ? 'block' : 'none';
+        document.getElementById('btnFiscal').textContent = abierto
+          ? '— Ocultar dirección fiscal completa' : '+ Añadir dirección fiscal completa';
+      }
+      function toggleFiscal(){ setFiscal(document.getElementById('fiscalBlock').style.display==='none'); }
+
       function openNewClient(){
         currentClient=null;
         document.getElementById('clientModalTitle').textContent='Nuevo Cliente';
         document.getElementById('clientId').value='';
-        ['cName','cFiscal','cEmail','cPhone','cAddress','cCity','cCountry','cNotes'].forEach(id=>document.getElementById(id).value='');
+        ['cName','cFiscal','cEmail','cPhone','cAddress','cCity','cCountry','cNotes','cPostal','cProvince'].forEach(id=>document.getElementById(id).value='');
+        setFiscal(false);
         document.getElementById('cGroup').value='';
         document.getElementById('cType').value='particular';
         document.getElementById('cTermDays').value=0;
@@ -453,6 +483,9 @@ export function createClientRoutes(db, cfg = {}) {
         document.getElementById('cAddress').value=c.address||'';
         document.getElementById('cCity').value=c.city||'';
         document.getElementById('cCountry').value=c.country||'';
+        document.getElementById('cPostal').value=c.postal_code||'';
+        document.getElementById('cProvince').value=c.province||'';
+        setFiscal(!!(c.postal_code||c.province));
         document.getElementById('cGroup').value=c.group_id||'';
         document.getElementById('cNotes').value=c.notes||'';
         document.getElementById('cType').value=c.client_type||'particular';
@@ -463,7 +496,7 @@ export function createClientRoutes(db, cfg = {}) {
       }
       async function saveClient(){
         const id=document.getElementById('clientId').value;
-        const body={name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,address:document.getElementById('cAddress').value,city:document.getElementById('cCity').value,country:document.getElementById('cCountry').value,group_id:document.getElementById('cGroup').value||null,notes:document.getElementById('cNotes').value,accepts_newsletter: id ? !!(currentClient&&currentClient.accepts_newsletter) : false,client_type:document.getElementById('cType').value,payment_term_days:parseInt(document.getElementById('cTermDays').value)||0,payment_method:document.getElementById('cPayMethod').value,collections_profile:document.getElementById('cProfile').value};
+        const body={name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,address:document.getElementById('cAddress').value,city:document.getElementById('cCity').value,country:document.getElementById('cCountry').value,postal_code:document.getElementById('cPostal').value,province:document.getElementById('cProvince').value,group_id:document.getElementById('cGroup').value||null,notes:document.getElementById('cNotes').value,accepts_newsletter: id ? !!(currentClient&&currentClient.accepts_newsletter) : false,client_type:document.getElementById('cType').value,payment_term_days:parseInt(document.getElementById('cTermDays').value)||0,payment_method:document.getElementById('cPayMethod').value,collections_profile:document.getElementById('cProfile').value};
         try{if(id)await api('PUT','/api/erp/clients/'+id,body);else await api('POST','/api/erp/clients',body);closeModal('clientModal');toast(id?'Actualizado':'Creado');location.reload();}catch(e){toast(e.message,'err')}
       }
       async function delClient(id){if(!confirm('¿Archivar este cliente? Dejará de aparecer en la lista, pero no se borra.'))return;try{await api('DELETE','/api/erp/clients/'+id);toast('Archivado');location.reload();}catch(e){toast(e.message,'err')}}
@@ -535,6 +568,13 @@ export function createClientRoutes(db, cfg = {}) {
       if (new URLSearchParams(location.search).get('nuevo') === '1') {
         try { history.replaceState(null, '', '/admin/clients'); } catch(e){}
         openNewClient();
+      }
+      // Facturae: el aviso "Facturae no disponible" de la ficha de factura enlaza aquí con
+      // ?editar=<id> para abrir directo la ficha del cliente que hay que completar.
+      var _ed = new URLSearchParams(location.search).get('editar');
+      if (_ed && /^[0-9]+$/.test(_ed)) {
+        try { history.replaceState(null, '', '/admin/clients'); } catch(e){}
+        editClient(parseInt(_ed));
       }
       </script>`;
     return c.html(adminLayout('Clientes', content, 'clients', c.get('session')?.csrfToken || '', c));

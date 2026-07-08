@@ -61,6 +61,10 @@ export const clientSchema = z.object({
   address: strOpt(500),
   city: strOpt(100),
   country: strOpt(100),
+  // Facturae exige dirección fiscal estructurada (Address · PostCode · Town · Province ·
+  // CountryCode). Opcionales: solo hacen falta para exportar a Facturae/FACe.
+  postal_code: strOpt(10),
+  province: strOpt(100),
   group_id: optId,
   notes: strOpt(2000),
   accepts_newsletter: z.coerce.boolean().optional().default(false),
