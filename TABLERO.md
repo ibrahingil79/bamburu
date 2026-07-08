@@ -101,12 +101,86 @@ Hecho cuando: un dueño nuevo llega a su primera acción útil sin bloquearse; r
   empresa/clientes/facturas. **Verificado** en navegador con un tenant nuevo provisionado y **eliminado** al terminar:
   0/3→1/3→2/3→panel retirado (completando cada paso real, factura vía `createInvoice`); negocio configurado (desarrollo)
   **sin panel** → regresión 0; 0 errores JS. 3 ficheros: `dashboard.js`, `disaHome.html.js`, `clients.js`.
-- Nota (pendiente, ajeno a U6): el menú de la cuenta (avatar → "Datos del negocio") apunta a `/admin/settings/company`,
-  que solo existe como API → **404 como página**; el destino vivo es `/admin/settings`. Fix trivial de 1 línea en
-  `layout.js`, sin encargo aún — decidir por el dueño.
+### U7 — Enlaces rotos e inconsistencias de navegación  ✅ HECHO (2026-07-08)
+Encargo del dueño: revisar enlaces que no llevan a ningún sitio e incoherencias del menú.
+- Auditoría: se enumeraron las **98 rutas GET reales** del admin (montando `mountRoutes` e inspeccionando
+  `app.routes`) y los **288 destinos de navegación** del código (`href=`, `href:`, `location.href`, `redirect()`);
+  cruzados entre sí y **verificados en vivo** los 33 destinos del menú con sesión de owner.
+- Arreglado (3 ficheros: `layout.js`, `change-password.js`, `security.js`):
+  1. **404 real**: el menú de la cuenta tenía "Datos del negocio" → `/admin/settings/company`, que solo existe
+     como API (`/api/erp/settings/company`). Además "Ajustes" → `/admin/settings` era **la misma pantalla**
+     ("Configuración Empresa"), y ambas compartían `key: 'settings'` → marcaba dos items activos. Fusionadas
+     en una sola entrada: **Datos del negocio → `/admin/settings`**.
+  2. **"Mi cuenta" era la pantalla-cerrojo**: `/admin/change-password` es donde `core/auth.js` encierra al
+     usuario con `must_change_password=1`, y mostraba "debes cambiar tu contraseña antes de continuar" también
+     al entrar por el menú. Ahora ese aviso **solo sale cuando hay cerrojo**; la pantalla es "Mi cuenta"
+     (identidad: nombre · email · rol + cambiar contraseña) y el cambio voluntario vuelve a ella con confirmación.
+  3. **La contraseña se cambiaba en dos sitios** con dos implementaciones: `POST /admin/change-password` y
+     `POST /admin/security/change-password`; la de Seguridad **no registraba en Actividad**. Retirada esa
+     segunda. Reparto (decisión del dueño: separadas): **Mi cuenta = contraseña** (todos los roles) ·
+     **Seguridad = 2FA** (owner/admin en el menú). Necesario porque Seguridad está gateada a owner/admin y un
+     empleado se quedaba sin forma de cambiar su contraseña.
+  4. `logActivity` en el cambio de contraseña usaba mal la firma (frase en `entity`, `action='password_change'`);
+     alineado con la convención del resto (`action` = frase humana, `entity` = tipo, `entityId` = id).
+- **Verificado** end-to-end con un usuario `employee` de prueba creado y **eliminado** al terminar: cerrojo
+  redirige y muestra el aviso · cambio forzado → 2FA · cambio voluntario → vuelta a Mi cuenta · ambos registrados
+  en Actividad · Seguridad sin formulario de contraseña · `POST /admin/security/change-password` → 404 y sin
+  efecto · menú del owner con las 5 entradas correctas. Barrido final: **0 enlaces rotos**.
+- Encontrado y NO tocado (sin encargo): **`/admin/security` no tiene `requirePerm` en el GET** — solo se oculta
+  del menú vía `roleFilters` (owner/admin), así que un empleado llega escribiendo la URL. → **Eje C (Seguridad)**.
+- Encontrado y NO tocado (decisión del dueño: "se abordarán luego"): tres pantallas vivas (200) sin enlace en
+  ningún menú → `/admin/analytics` ("Analítica"), `/admin/discounts` ("Descuentos"), `/admin/tags` ("Etiquetas").
+  `navPerms.analytics` (`layout.js`) existe sin item que lo use.
+- Nota: el reparto del punto 3 (Mi cuenta = contraseña · Seguridad = 2FA) quedó **superado por U8**, que
+  consolida datos + contraseña + 2FA en la pantalla nueva `/admin/perfil`.
+
+### U8 — Pantalla "Perfil de usuario"  ✅ HECHO (2026-07-08)
+Encargo del dueño: datos personales del usuario logueado, separados de "Datos del negocio" (empresa).
+- **Nuevo**: `modules/erp/routes/perfil.js` (`/admin/perfil` + `/api/erp/perfil`) y `modules/erp/paises-telefono.js`
+  (74 prefijos E.164 + 9 idiomas). Estructura de 3 tarjetas: Datos personales · Contraseña · Verificación en
+  dos pasos, con el patrón `card`/`form-row`/`form-group` de `/admin/settings` y los tokens de U1.
+- **Migración aditiva** (`addCol`, sin `DROP`): `apellidos` (`''`), `telefono` (`''`), `pais_telefono` (`'+34'`),
+  `idioma` (`'es'`), `foto_url`. **`apellidos` NUNCA se deriva de `name`**: partir un campo libre por el primer
+  espacio inventa apellidos falsos ("María del Carmen Pérez" → "del"). Arranca vacío, lo rellena el usuario.
+- **Contraseña**: extraída a `core/auth.js` → **`changeOwnPassword()`, fuente única** (bcrypt 12, cierre de las
+  demás sesiones, registro en Actividad). La consumen `/admin/perfil` y la pantalla-cerrojo. No se reimplementa.
+- **Foto**: sube por `attachments.js` con `kind='user_photo'`; la sirve `GET /api/erp/perfil/foto/:id`, que
+  **filtra por ese `kind`** — si no, sería una puerta trasera para leer adjuntos de facturas de proveedor pasando
+  otro id. La foto anterior no se destruye, solo deja de referenciarse. El avatar del sidebar la usa.
+- **`idioma` GUARDA la preferencia pero HOY NO TRADUCE NADA**; la pantalla se lo dice al usuario. El motor de
+  i18n real es tarea aparte (ver cola abajo).
+- **2FA consolidado**: único sitio, Perfil. Hallazgo que corrigió el supuesto del encargo: **no había dos estados
+  que migrar**. Los dos `pendingTOTPStore` son `Map()` en memoria (secreto pendiente durante el alta); ambas
+  implementaciones escribían las MISMAS columnas (`totp_secret`/`totp_enabled`), que es lo que lee el login.
+  Consolidar fue mover UI. `/admin/security` → **302 a `/admin/perfil`** (no 404: `disa/index.js` le dice al
+  usuario "ve a /admin/security"). Retirada la tarjeta 2FA de "Datos del negocio" (`settings.js`).
+- **Menú de cuenta**: Perfil · Datos del negocio · Usuarios · Actividad. `/admin/change-password` sigue viva
+  como **pantalla-cerrojo** de `core/auth.js:156` (fuera del menú); sin cerrojo redirige a Perfil.
+- **Verificado 70/70** con usuario `employee` de prueba creado y eliminado: migración y defaults · `apellidos`
+  vacío al alta · guardado campo a campo · rechazo de nombre vacío, prefijo inventado, idioma inválido, teléfono
+  con letras y PUT sin CSRF (403) · foto (sube, sirve con sesión, no sin ella, rechaza PDF, no sirve adjuntos de
+  otro `kind`, no destruye el adjunto al quitarla) · contraseña (bcrypt, cierra otras sesiones, conserva la
+  actual, queda en Actividad) · 2FA (código malo rechazado, bueno activa y persiste, desactivar limpia secreto) ·
+  **el 2FA ya activo del owner sobrevive** (secreto intacto y sigue validando códigos; Perfil lo muestra como
+  Activada sin ofrecer QR nuevo) · **cerrojo intacto**. Headless: 4 pantallas 200, sin scroll horizontal a 390px,
+  **0 errores JS**. `node --check` en los 9 ficheros.
+- Incluye el fix del 404 de `/admin/settings/company` (U7).
+- Encontrado y NO tocado: **`/admin/setup-2fa`** (`routes/auth.js`) queda huérfana y se monta **fuera del
+  middleware CSRF**; sus formularios no llevan `_csrf`. Riesgo práctico mitigado por la cookie `SameSite=Lax`,
+  pero es un hueco de defensa en profundidad. → **Eje C (Seguridad)**.
 
 > **EJE A (UX) COMPLETO**: U0 (auditoría) · U1 (tokens) · U2 (vacíos/carga) · U3 (errores) · U4 (clics) · U5 (móvil) ·
-> U6 (onboarding). Siguiente: planificar **Eje B — DISA** (empieza por aquí en la próxima sesión).
+> U6 (onboarding) · U7 (enlaces rotos e inconsistencias de navegación) · U8 (perfil de usuario).
+> Siguiente: planificar **Eje B — DISA** (empieza por aquí en la próxima sesión).
+
+### Cola del Eje A (fuera de encargo, NO descartadas — decisión del dueño)
+- **Motor de traducción (i18n) real.** Hoy `admin_users.idioma` guarda la preferencia y la interfaz sigue en
+  español (`lang="es"` hardcodeado; no hay i18n de ningún tipo en el proyecto). U8 avisa al usuario de ello en
+  la propia pantalla. Cuando exista el motor, `idioma` es el campo que lo alimenta.
+- **Códigos de recuperación de 2FA.** Ninguna de las implementaciones los tuvo nunca: si el usuario pierde el
+  móvil, no hay salida por producto (hoy solo por intervención en BD). Necesario antes de empujar el 2FA a los
+  clientes.
+- **Tres pantallas vivas sin enlace** (U7): `/admin/analytics`, `/admin/discounts`, `/admin/tags`.
 
 ## Eje B: DISA (pendiente de planificar)
 ## Eje C: Seguridad (pendiente de planificar)

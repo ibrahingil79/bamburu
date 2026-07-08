@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { adminLayout } from '../layout.js';
-import { hashPassword, verifyPassword, logActivity, destroyAllAdminSessionsForUser } from '../../../core/auth.js';
+import { changeOwnPassword } from '../../../core/auth.js';
 import { escHtml } from '../../../core/escape.js';
 import { validate } from '../../../core/validate.js';
 import { changePwdSchema } from '../schemas.js';
@@ -8,9 +8,20 @@ import { changePwdSchema } from '../schemas.js';
 export function createChangePasswordRoutes(db) {
   const r = new Hono();
 
+  // PANTALLA-CERROJO del cambio obligatorio de contraseña. core/auth.js redirige aquí (y solo
+  // permite esta ruta y /admin/logout) mientras must_change_password=1. NO está en el menú: el
+  // cambio voluntario vive en /admin/perfil. Por eso, si alguien llega aquí sin cerrojo, lo
+  // mandamos al Perfil en vez de enseñarle un segundo formulario de contraseña.
+  // La lógica de cambio es la compartida (core/auth.js → changeOwnPassword).
   r.get('/', c => {
+    const session = c.get('session');
     const err = c.req.query('error');
-    const csrfToken = c.get('session')?.csrfToken || '';
+    const csrfToken = session?.csrfToken || '';
+
+    const user = db.prepare('SELECT must_change_password FROM admin_users WHERE id=?')
+      .get(session.userId) || {};
+    if (user.must_change_password !== 1) return c.redirect('/admin/perfil');
+
     const content = `
       <div class="page-header"><h1>Cambiar contraseña</h1></div>
       <div class="card" style="max-width:460px;padding:2rem">
@@ -47,27 +58,21 @@ export function createChangePasswordRoutes(db) {
 
     const fail = (msg) => c.redirect(`/admin/change-password?error=${encodeURIComponent(msg)}`);
 
-    if (!current || !nuevo || !confirm) return fail('Todos los campos son obligatorios.');
-    if (nuevo.length < 10) return fail('La nueva contraseña debe tener al menos 10 caracteres.');
-    if (nuevo !== confirm) return fail('Las contraseñas nuevas no coinciden.');
-    if (nuevo === current) return fail('La nueva contraseña debe ser diferente a la actual.');
+    // Servicio compartido con /admin/perfil (core/auth.js): bcrypt, cierre de las demás
+    // sesiones y registro en Actividad. Aquí solo decidimos a dónde va el usuario después.
+    const res = await changeOwnPassword(db, session, { current, nuevo, confirm });
+    if (!res.ok) return fail(res.error);
 
-    const user = db.prepare('SELECT * FROM admin_users WHERE id=?').get(session.userId);
-    if (!user) return fail('Usuario no encontrado.');
-    const result = await verifyPassword(current, user.password_hash);
-    if (!result.valid) return fail('La contraseña actual es incorrecta.');
-
-    const newHash = await hashPassword(nuevo);
-    db.prepare('UPDATE admin_users SET password_hash=?, must_change_password=0 WHERE id=?').run(newHash, session.userId);
-    logActivity(db, session, 'password_change', 'Cambio de contraseña obligatorio completado');
-    const currentToken = session.token;
-    destroyAllAdminSessionsForUser(db, session.userId, currentToken);
-
+    // Salida del cerrojo. Si el usuario ya tiene 2FA, al Inicio; si no, al Perfil, que es donde
+    // ahora vive el 2FA (antes empujaba a /admin/security, hoy un simple redirect al Perfil).
+    if (!res.forced) {
+      return c.redirect('/admin/perfil?msg=' + encodeURIComponent('Contraseña cambiada correctamente.'));
+    }
     const user2fa = db.prepare('SELECT totp_enabled FROM admin_users WHERE id=?').get(session.userId);
     if (user2fa?.totp_enabled) {
       return c.redirect('/admin');
     }
-    return c.redirect('/admin/security?tab=2fa&msg=' + encodeURIComponent('Contraseña cambiada. Te recomendamos activar el doble factor de autenticación.'));
+    return c.redirect('/admin/perfil?msg=' + encodeURIComponent('Contraseña cambiada. Te recomendamos activar la verificación en dos pasos.'));
   });
 
   return r;

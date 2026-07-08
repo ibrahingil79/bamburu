@@ -44,6 +44,9 @@ export function createSettingsRoutes(db, cfg = {}) {
   });
 
   // ── VIEW: COMPANY SETTINGS ─────────────────────────────────────
+  // Aquí abajo vivía una tarjeta "Seguridad de tu cuenta" que enlazaba /admin/setup-2fa.
+  // Retirada: el 2FA es seguridad PERSONAL del usuario, no configuración de la EMPRESA, y estaba
+  // duplicado con /admin/security. Su único sitio es ahora /admin/perfil.
   views.get('/', requirePerm('company.read'), c => {
     const config = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
     const sym = config.currency_symbol || '€';
@@ -91,11 +94,6 @@ export function createSettingsRoutes(db, cfg = {}) {
         </div>
       </div>
 
-      <div class="card" style="margin-top:24px;padding:1.5rem 2rem">
-        <h3 style="font-size:16px;font-weight:500;color:var(--text);margin-bottom:4px">Seguridad de tu cuenta</h3>
-        <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Configura la autenticación de dos factores (2FA) para proteger tu cuenta.</p>
-        <a href="/admin/setup-2fa" class="btn btn-primary">Configurar autenticación 2FA</a>
-      </div>
 
       <script>
       api('GET','/api/erp/settings/company').then(d=>{

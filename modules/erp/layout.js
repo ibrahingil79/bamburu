@@ -235,6 +235,16 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     if (_db) disaCount = estadoAvisos(_db, new Date().toISOString().slice(0, 10)).count || 0;
   } catch { disaCount = 0; }
 
+  // Foto de perfil del usuario (admin_users.foto_url, la elige en /admin/perfil). Mismo patrón
+  // que disaCount: si falla, cae a la inicial — nunca rompe el render.
+  let fotoUrl = '';
+  try {
+    const _db = c?.get?.('db');
+    if (_db && session.userId) {
+      fotoUrl = _db.prepare('SELECT foto_url FROM admin_users WHERE id=?').get(session.userId)?.foto_url || '';
+    }
+  } catch { fotoUrl = ''; }
+
   // Banner de SOLO LECTURA: el negocio fue suspendido por impago (suspended_admin) desde el
   // panel de superadmin. Entra y ve sus datos, pero el guard bloquea cualquier escritura.
   const readOnly = !!c?.get?.('tenantReadOnly');
@@ -279,6 +289,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     'client-groups':  'clients.read',
     analytics:        'analytics.read',
     disa:             null,
+    perfil:           null,   // todo usuario gestiona su propio perfil
     users:            'admin.manage_users',
     settings:         'admin.settings',
     security:         'admin.settings',
@@ -339,11 +350,16 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
 
   // ── Barra de Cuenta (desplegable del avatar, mockup): items reales + Documentación + salir ──
   const accountItems = [
-    { href: '/admin/change-password', label: 'Mi cuenta', key: 'change-password', icon: 'ti-user' },
-    { href: '/admin/settings', label: 'Ajustes', key: 'settings', icon: 'ti-settings' },
-    { href: '/admin/settings/company', label: 'Datos del negocio', key: 'settings', icon: 'ti-building' },
+    // PERFIL absorbe lo personal: datos, contraseña y verificación en dos pasos. Por eso ya no
+    // están "Mi cuenta" (era la pantalla-cerrojo de contraseña obligatoria, sigue viva pero fuera
+    // del menú) ni "Seguridad" (solo tenía el 2FA; su ruta redirige a /admin/perfil).
+    { href: '/admin/perfil', label: 'Perfil', key: 'perfil', icon: 'ti-user' },
+    // Una sola entrada de empresa: /admin/settings ES la "Configuración Empresa". Antes había dos
+    // ("Ajustes" + "Datos del negocio"), con la segunda apuntando a /admin/settings/company, que
+    // solo existe como API (/api/erp/settings/company) → daba 404, y ambas compartían key 'settings'
+    // (marcaba dos items activos). El onboarding (disaHome.html.js) ya apuntaba bien a /admin/settings.
+    { href: '/admin/settings', label: 'Datos del negocio', key: 'settings', icon: 'ti-building' },
     { href: '/admin/users', label: 'Usuarios', key: 'users', icon: 'ti-user-cog' },
-    { href: '/admin/security', label: 'Seguridad', key: 'security', icon: 'ti-shield-lock' },
     { href: '/admin/activity', label: 'Actividad', key: 'activity', icon: 'ti-history' },
   ];
 
@@ -378,8 +394,14 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   const escName = String(userName).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const initial = (String(userName).trim().charAt(0) || 'U').toUpperCase();
   const roleLabel = isOwner ? 'Propietario' : role === 'admin' ? 'Administrador' : role === 'employee' ? 'Empleado' : 'Usuario';
+  // Avatar: la foto del Perfil si la hay, si no la inicial. Una sola pieza para los dos sitios
+  // que lo pintan (el botón del sidebar y la cabecera del desplegable).
+  const escFoto = String(fotoUrl).replace(/"/g, '&quot;');
+  const avatarHTML = fotoUrl
+    ? `<img src="${escFoto}" alt="" class="acct-avatar" style="object-fit:cover">`
+    : `<span class="acct-avatar">${initial}</span>`;
   const acctMenuHTML =
-    `<div class="acct-mh"><span class="acct-avatar">${initial}</span><div><div class="acct-mh-n">${escName}</div><div class="acct-mh-e">${roleLabel}</div></div></div>`
+    `<div class="acct-mh">${avatarHTML}<div><div class="acct-mh-n">${escName}</div><div class="acct-mh-e">${roleLabel}</div></div></div>`
     + acctVisible.map(i => `<a href="${i.href}" class="acct-item"><i class="ti ${i.icon}"></i><span>${i.label}</span></a>`).join('')
     + `<div class="acct-sep"></div>`
     + `<a href="/docs" target="_blank" class="acct-item"><i class="ti ti-file-text"></i><span>Documentación</span></a>`
@@ -848,7 +870,7 @@ ${ROOT_TOKENS}
       <div class="tb-bell"><i class="ti ti-bell"></i><span class="dot"></span></div>
       <div class="acct">
         <button class="acct-btn" id="acctBtn" type="button" aria-haspopup="true" aria-expanded="false" onclick="toggleAcct(event)" title="${escName}">
-          <span class="acct-avatar">${initial}</span>
+          ${avatarHTML}
         </button>
         <div class="acct-menu" id="acctMenu">${acctMenuHTML}</div>
       </div>

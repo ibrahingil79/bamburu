@@ -35,6 +35,7 @@ import { createCobrosRoutes } from './cobros.js';
 import { createSupplierInvoiceRoutes } from './supplier-invoices.js';
 import { createPagosRoutes } from './pagos.js';
 import { createSecurityRoutes } from './security.js';
+import { createPerfilRoutes } from './perfil.js';
 import { createContabilidadRoutes } from './contabilidad-routes.js';
 import { createVerifactuEnvioRoutes } from './verifactu-envio-routes.js';
 import { createConciliacionRoutes } from './conciliacion-routes.js';
@@ -66,6 +67,7 @@ export function mountRoutes(app, db) {
   const { api: revApi, views: revViews } = createReviewRoutes(db);
   const changePasswordRoutes = createChangePasswordRoutes(db);
   const securityRoutes = createSecurityRoutes(db);
+  const { api: perfilApi, views: perfilViews } = createPerfilRoutes(db);
   const { api: supplierApi, views: supplierViews } = createSupplierRoutes(db);
   const { api: purchaseApi, views: purchaseViews } = createPurchaseRoutes(db);
   const { api: captureApi, views: captureViews } = createPurchaseCaptureRoutes(db);
@@ -111,8 +113,9 @@ export function mountRoutes(app, db) {
   // D2 — restos e-commerce DESMONTADOS (newsletter, reseñas): comentados, no borrados. → 404.
   // admin.route('/newsletter', nlViews);
   // admin.route('/reviews', revViews);
-  admin.route('/change-password', changePasswordRoutes);
-  admin.route('/security', securityRoutes);
+  admin.route('/perfil', perfilViews);          // ← Perfil de usuario: datos + contraseña + 2FA
+  admin.route('/change-password', changePasswordRoutes);   // pantalla-cerrojo (core/auth.js), fuera del menú
+  admin.route('/security', securityRoutes);     // solo redirige a /admin/perfil (2FA consolidado)
   admin.route('/suppliers', supplierViews);
   // C2 — captura ANTES que /purchases para que /purchases/capture no lo capture /purchases/:id.
   admin.route('/purchases/capture', captureViews);
@@ -153,6 +156,7 @@ export function mountRoutes(app, db) {
   // D2 — API de envíos DESMONTADA: comentada, no borrada. /api/erp/shipping/* → 404.
   // apiApp.route('/shipping', shipApi);
   apiApp.route('/analytics', analytApi);
+  apiApp.route('/perfil', perfilApi);   // ← datos personales del usuario logueado (+ su foto)
   apiApp.route('/settings', settApi);   // ← /api/erp/settings SE QUEDA (config de empresa); solo /settings/store se neutraliza en settings.js
   apiApp.route('/users', userApi);
   // D2 — API de newsletter y reseñas DESMONTADAS: comentadas, no borradas. → 404.

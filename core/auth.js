@@ -176,3 +176,34 @@ export function logActivity(db, session, action, entity = '', entityId = null, d
       .run(session?.userId || null, session?.userName || 'Sistema', action, entity, entityId, details);
   } catch (_) {}
 }
+
+// ── Cambio de contraseña del PROPIO usuario ────────────────────
+// FUENTE ÚNICA. La usan la pantalla-cerrojo (/admin/change-password, obligatorio por
+// must_change_password) y el Perfil (/admin/perfil, voluntario). Antes esta lógica estaba
+// duplicada en dos rutas, y una de las copias no registraba en Actividad.
+// Devuelve { ok:true, forced } o { ok:false, error } — NUNCA lanza; quien llama decide
+// cómo presentar el error (redirect con ?error= o JSON para el toast).
+export async function changeOwnPassword(db, session, { current = '', nuevo = '', confirm = '' }) {
+  if (!current || !nuevo || !confirm) return { ok: false, error: 'Todos los campos son obligatorios.' };
+  if (nuevo.length < 10) return { ok: false, error: 'La nueva contraseña debe tener al menos 10 caracteres.' };
+  if (nuevo !== confirm) return { ok: false, error: 'Las contraseñas nuevas no coinciden.' };
+  if (nuevo === current) return { ok: false, error: 'La nueva contraseña debe ser diferente a la actual.' };
+
+  const user = db.prepare('SELECT * FROM admin_users WHERE id=?').get(session.userId);
+  if (!user) return { ok: false, error: 'Usuario no encontrado.' };
+  const result = await verifyPassword(current, user.password_hash);
+  if (!result.valid) return { ok: false, error: 'La contraseña actual es incorrecta.' };
+
+  const forced = user.must_change_password === 1;
+  const newHash = await hashPassword(nuevo);
+  db.prepare('UPDATE admin_users SET password_hash=?, must_change_password=0 WHERE id=?')
+    .run(newHash, session.userId);
+  // Convención del resto del código: action = frase humana, entity = tipo, entityId = id.
+  logActivity(db, session,
+    forced ? 'Cambió su contraseña (cambio obligatorio)' : 'Cambió su contraseña',
+    'admin_user', session.userId);
+  // Cierra las demás sesiones del usuario; conserva la actual.
+  destroyAllAdminSessionsForUser(db, session.userId, session.token);
+
+  return { ok: true, forced };
+}

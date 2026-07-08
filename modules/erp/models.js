@@ -1955,5 +1955,20 @@ Sé preciso con los números y siempre redondea correctamente.`,
   // en lectura. Sin DROP ni borrado.
   ensureBienesSchema(db);
 
+  // ── Perfil de usuario ─────────────────────────────────────────────────────────
+  // Datos PERSONALES del usuario logueado (distintos de los de la empresa, que viven en
+  // `settings`). Aditivo e idempotente vía addCol: nunca DROP, nunca reescribe `name`.
+  // `apellidos` arranca VACÍO a propósito: `name` es un campo libre y partirlo por el primer
+  // espacio produciría apellidos falsos ("María del Carmen" → apellido "del"). Lo rellena el
+  // usuario desde /admin/perfil.
+  addCol(db, 'admin_users', 'apellidos',     "TEXT DEFAULT ''");
+  addCol(db, 'admin_users', 'telefono',      "TEXT DEFAULT ''");
+  addCol(db, 'admin_users', 'pais_telefono', "TEXT DEFAULT '+34'");
+  // `idioma` GUARDA la preferencia; hoy NO traduce nada: la interfaz está en español y el motor
+  // de i18n real es una tarea futura aparte (ver TABLERO, cola de Eje A). No usar esta columna
+  // para decidir textos hasta que exista ese motor.
+  addCol(db, 'admin_users', 'idioma',        "TEXT DEFAULT 'es'");
+  addCol(db, 'admin_users', 'foto_url',      'TEXT');
+
   console.log('✅ ERP: Migraciones completadas');
 }
