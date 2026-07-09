@@ -172,46 +172,18 @@ export function enviosVerifactu(db, today) {
   });
 }
 
-// Cada fuente lleva el MISMO permiso que ya exige su pantalla de origen. Un aviso no puede ser una
-// puerta trasera a datos que su pantalla te niega: quien no puede abrir /admin/cobros tampoco puede
-// leer "te deben 15,61 € de la factura F2026-0017" en la campana.
-//   envio_verifactu       → /admin/verifactu/envios  (invoices.read)
-//   vencimiento_proveedor → /admin/pagos             (purchases.read)
-//   cobro_vencido         → /admin/cobros            (cobros.read)
-//   stock_bajo            → /admin/inventory         (inventory.read)
-//   factura_recurrente    → /admin/recurrentes       (recurrentes.read)
-export const PERM_POR_FUENTE = {
-  envio_verifactu:       'invoices.read',
-  vencimiento_proveedor: 'purchases.read',
-  cobro_vencido:         'cobros.read',
-  stock_bajo:            'inventory.read',
-  factura_recurrente:    'recurrentes.read',
-};
+// Fuentes registradas. Añadir una fuente = escribir la función y añadirla aquí. NADA más cambia
+// (ni el panel, ni el resumen del badge, ni el email, ni la pantalla central de /admin/avisos).
+const SOURCES = [enviosVerifactu, vencimientosProveedor, cobrosVencidos, stockBajo, borradoresRecurrentes];
 
-// Fuentes registradas. Añadir una fuente = escribir la función, registrarla aquí y darle su permiso
-// en PERM_POR_FUENTE. Sin permiso declarado, la fuente NO se sirve a nadie (falla cerrado).
-const SOURCES = [
-  { tipo: 'envio_verifactu',       fn: enviosVerifactu },
-  { tipo: 'vencimiento_proveedor', fn: vencimientosProveedor },
-  { tipo: 'cobro_vencido',         fn: cobrosVencidos },
-  { tipo: 'stock_bajo',            fn: stockBajo },
-  { tipo: 'factura_recurrente',    fn: borradoresRecurrentes },
-];
-
-// Todos los avisos del día, ordenados por urgencia (más urgente arriba). Robusto: si una fuente
-// peta, se ignora esa fuente y siguen las demás (un fallo aislado no silencia todo el aviso).
-//
-// `tipos` = conjunto de fuentes que quien pregunta TIENE DERECHO a ver. Las demás ni se ejecutan:
-// además de cerrar la fuga, ahorra el escaneo caro (openDebts) a quien no puede verlo. Omitirlo
-// (undefined) devuelve todas las fuentes — es el caso del email diario, que va al negocio y no a
-// un usuario. Pasar un conjunto vacío devuelve cero avisos: falla cerrado, no abierto.
-export function avisosDelDia(db, today, tipos) {
-  const t = today || hoyLocal();
-  const puede = tipos === undefined ? () => true : x => tipos.has(x);
+// Todos los avisos del día (todas las fuentes), ordenados por urgencia (más urgente arriba).
+// Robusto: si una fuente peta, se ignora esa fuente y siguen las demás (un fallo aislado no
+// silencia todo el aviso).
+export function avisosDelDia(db, today) {
+  const t = today || new Date().toISOString().slice(0, 10);
   const todos = [];
   for (const src of SOURCES) {
-    if (!puede(src.tipo)) continue;
-    try { todos.push(...src.fn(db, t)); } catch { /* fuente caída: se omite, las demás siguen */ }
+    try { todos.push(...src(db, t)); } catch { /* fuente caída: se omite, las demás siguen */ }
   }
   todos.sort((a, b) => b.urgencia - a.urgencia);
   return todos;

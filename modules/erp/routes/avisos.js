@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
-import { rateLimit } from '../../../core/rate-limit.js';
-import { adminLayout, skeletonRows, can, fuentesPermitidas } from '../layout.js';
-import { estadoAvisos, avisoKey, aplicarVisto, hoyLocal } from '../avisos.js';
+import { adminLayout, skeletonRows, can } from '../layout.js';
+import { estadoAvisos, avisoKey, marcarVistos, desmarcarVistos } from '../avisos.js';
 import { pagoModalHtml, pagoCuentaModalHtml, pagoModalScript } from '../views/pago-modal.js';
 import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
 import { stockModalHtml, stockModalScript } from '../views/stock-modal.js';
@@ -33,7 +32,7 @@ export function createAvisosRoutes(db) {
   const api = new Hono();
   const views = new Hono();
 
-  const today = () => hoyLocal();   // fecha LOCAL del negocio: en UTC, de madrugada, "hoy" es ayer
+  const today = () => new Date().toISOString().slice(0, 10);
   const symbol = () => db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
 
   // Texto de la fila con el DINERO bien formateado (símbolo del negocio + 2 decimales), espejo
@@ -86,9 +85,9 @@ export function createAvisosRoutes(db) {
     });
   }
 
-  // Da forma a un estado ya calculado. NO vuelve a llamar al motor: quien lo llama ya pagó el
-  // escaneo una vez.
-  function comoJson(est) {
+  // Respuesta común de las tres rutas: el estado recalculado en vivo para ESTE usuario.
+  function estadoJson(c) {
+    const est = estadoAvisos(db, today(), c.get('session')?.userId);
     const nuevos = new Set(est.nuevos || []);
     return {
       count: est.count, estado: est.estado, sinVer: nuevos.size,
@@ -96,50 +95,30 @@ export function createAvisosRoutes(db) {
     };
   }
 
-  // ── Freno propio del endpoint de avisos ─────────────────────────────────────
-  // Es una consulta CARA: recorre clientes y facturas (openDebts, O(clientes × facturas)) sobre un
-  // SQLite síncrono que bloquea el hilo. El freno general subió a 600/min por IP, y este endpoint
-  // no tenía ninguno: una sola IP autenticada podía disparar 600 escaneos por minuto y tumbar el
-  // panel del negocio entero. Va montado detrás de tenantMiddleware, así que la clave es
-  // negocio+IP: una oficina no se come el cupo de otro negocio. Espejo de /find-tenant.
-  //
-  // 120/min cubre el uso real más intenso (abrir la pantalla, marcar avisos uno a uno, resolver
-  // varios con los modales) con holgura, y sigue siendo un techo firme.
-  const frenoAvisos = rateLimit({
-    windowMs: 60_000, max: 120, keyPrefix: 'avisos',
-    message: 'Demasiadas consultas de avisos. Espera un momento.',
-  });
-
-  // GET /api/erp/avisos — recalcula TODO en el momento de la llamada, SOLO las fuentes que este
-  // usuario puede ver. `estado`/`sinVer`/`count` son suyos: si no puede ver los cobros, tampoco
-  // cuentan para su número (si no, la campana le dice cuántas facturas vencidas hay).
-  api.get('/', frenoAvisos, c => {
-    try {
-      const est = estadoAvisos(db, today(), c.get('session')?.userId, fuentesPermitidas(c));
-      return c.json(comoJson(est));
-    } catch (e) { return c.json({ error: e.message }, 500); }
+  // GET /api/erp/avisos — recalcula TODO en el momento de la llamada. `estado`/`sinVer` son de
+  // este usuario (huella por usuario); `count` es del negocio.
+  api.get('/', c => {
+    try { return c.json(estadoJson(c)); }
+    catch (e) { return c.json({ error: e.message }, 500); }
   });
 
   // POST /api/erp/avisos/visto — marca como VISTOS los avisos cuyas claves lleguen en `keys`.
-  // Sin `keys` (o vacío) → marca todos los suyos. Nada se auto-marca por el mero hecho de abrir la
-  // pantalla: "visto" lo decide el usuario, aviso a aviso o de golpe. Una clave de una fuente que
-  // no puede ver se ignora en silencio (no confirma que exista).
-  api.post('/visto', frenoAvisos, async c => {
+  // Sin `keys` (o vacío) → marca todos. Nada se auto-marca por el mero hecho de abrir la
+  // pantalla: "visto" lo decide el usuario, aviso a aviso o de golpe.
+  api.post('/visto', async c => {
     try {
       const body = await c.req.json().catch(() => ({}));
-      const est = aplicarVisto(db, { keys: body.keys || [], marcar: true,
-        today: today(), userId: c.get('session')?.userId, tipos: fuentesPermitidas(c) });
-      return c.json(comoJson(est));
+      marcarVistos(db, body.keys || [], today(), c.get('session')?.userId);
+      return c.json(estadoJson(c));
     } catch (e) { return c.json({ error: e.message }, 500); }
   });
 
   // POST /api/erp/avisos/no-visto — lo contrario: "esto todavía lo tengo que mirar".
-  api.post('/no-visto', frenoAvisos, async c => {
+  api.post('/no-visto', async c => {
     try {
       const body = await c.req.json().catch(() => ({}));
-      const est = aplicarVisto(db, { keys: body.keys || [], marcar: false,
-        today: today(), userId: c.get('session')?.userId, tipos: fuentesPermitidas(c) });
-      return c.json(comoJson(est));
+      desmarcarVistos(db, body.keys || [], today(), c.get('session')?.userId);
+      return c.json(estadoJson(c));
     } catch (e) { return c.json({ error: e.message }, 500); }
   });
 
