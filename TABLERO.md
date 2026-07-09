@@ -196,6 +196,76 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
 
 ## Función por encargo del dueño (fuera de los ejes A/B/C)
 
+### Verifactu · Cola de envío automático por negocio  ✅ HECHO (2026-07-09) — `7b394c6`
+Encargo expreso del dueño, a raíz del **hallazgo de los 240 s** de la Tarea 2 Fase A: el envío dejó de
+ser manual. Al emitir una factura, su registro sale hacia la AEAT **en segundos**. Aditivo y reversible.
+No toca huella/QR/encadenado (Tarea 1), no envía anulaciones, no subsana el 2004. Detalle completo en
+`docs/verifactu/tarea2-cola-envio-automatico.md`.
+
+- **⚠️ Hay DOS relojes, y empujan en contra.** Además de la ventana de 240 s de la huella, el **control
+  de flujo** (art. 16.2 Orden HAC/1177/2024) obliga a esperar el `TiempoEsperaEnvio` devuelto (t inicial
+  = 60 s) entre envíos, y **un envío = un obligado** (una Cabecera). Un sobre por factura da un techo de
+  **1 registro/60 s**: en una ráfaga de mostrador la 6ª factura llegaría fuera de ventana. Por eso la
+  cola **AGRUPA** todo lo pendiente del negocio en UN sobre (1..1000 `RegistroFactura`). En calma la
+  factura sale en ~1 s; en ráfaga salen juntas dentro del minuto. **El envío "inmediato por factura" del
+  encargo no era implementable tal cual**; el objetivo sí se cumple.
+
+- **`enviarLote` es ahora el único orquestador.** `buildEnvelope` ya admitía N registros; faltaba quien
+  los agrupara. `enviarRegistro` (botón manual + script de preproducción) **delega** en un lote de 1:
+  imposible que el camino manual y el automático diverjan. El gate de T2 (17/17) valida el lote a N=1.
+
+- **Reintentos.** Solo el fallo de COMUNICACIÓN se reintenta (backoff 5→15→45→135→300→300 s; agotados
+  los 6 intentos → terminal + aviso). Un **rechazo** de la AEAT no se reintenta (el mismo XML da el mismo
+  rechazo) y un **bloqueo por datos** ni sale: los dos van directos a aviso. Lo aceptado no se reenvía
+  jamás (idempotencia del motor). Pasados los 240 s se sigue enviando: remitido tarde > no remitido.
+
+- **Multi-tenant.** Cada negocio remite con SU certificado: `VERIFACTU_CERT_DIR/<slug>.p12` + contraseña
+  en `VERIFACTU_CERT_PASS_<SLUG>`, con caída al `VERIFACTU_CERT_PATH` global. **La contraseña sigue sin
+  escribirse en ningún fichero del repo** (decisión de la Fase A, intacta): si no está en el entorno del
+  servicio, la cola de ese negocio **no se activa** y la pantalla dice el motivo exacto. Hoy, por tanto,
+  **la cola está inactiva en los 6 negocios** y el comportamiento es el de siempre (botón manual).
+
+- **Concurrencia.** Cola en proceso + barrido de systemd (`bamburu-verifactu-cola.timer`, cada 2 min) como
+  red de seguridad para reinicios y caídas largas. Cerrojo entre procesos: reclamar una fila empuja su
+  `next_retry_at` al futuro (lease 120 s) en una transacción `IMMEDIATE`. El reloj del control de flujo se
+  deriva de la BD, no de memoria, para que sobreviva a un reinicio. `next_retry_at` va **siempre** en ISO-Z:
+  `CURRENT_TIMESTAMP` ('AAAA-MM-DD HH:MM:SS') y `toISOString()` no se comparan bien como cadenas (`0x20` < `'T'`).
+
+- **El histórico NO se drena.** La cola solo toca filas con `next_retry_at` no nulo, y eso solo lo pone
+  ella. Los 85 registros antiguos de `desarrollo-bamburu` y el `incorrecto` (1239) de `helados-ibrahin` se
+  quedan quietos: remitirlos hoy solo devolvería `AceptadoConErrores`.
+
+- **Avisos** (fuente `enviosVerifactu` en el motor existente, sin crear uno nuevo): solo lo que quedó en
+  punto muerto — rechazado, bloqueado por datos, o comunicación agotada. Lo que se reintenta solo NO avisa.
+  **Urgencia 2000** (por encima de las facturas vencidas, cuya urgencia crece con los días): un registro
+  fiscal sin remitir es lo más grave del panel y no debe quedar sepultado. *Decisión del dueño, 2026-07-09.*
+  Sin botón de acción directa, como las recurrentes: reenviar tiene valor legal → se revisa antes
+  (`gate-avisos-pantalla` amplía su excepción "confirm-first" a Recurrente **y** Verifactu). *Decisión del dueño.*
+
+- **Corregido de mi propia pieza:** al agrupar, cada fila de auditoría guardaba el sobre ENTERO → coste
+  cuadrático (50 tickets en hora punta ≈ 3 MB por vaciado, sin techo). Ahora, en lotes de varios, cada
+  fila guarda **lo suyo**: su `<RegistroAlta>` y su `<RespuestaLinea>` (emparejada por serie exacta, no
+  por subcadena: `F2026-1000` es subcadena de `F2026-10000`). CSV y `EstadoEnvio` ya vivían en columnas.
+
+- **Verificación.** Gate nuevo `verify-verifactu-cola.mjs` **62/0** (encolado, ventana de 240 s, agrupación,
+  control de flujo, idempotencia, cerrojo, red caída + reintento, backoff hasta terminal, rechazo que no se
+  reintenta, lote mixto, avisos, histórico intacto, aislamiento entre negocios, emisión nunca bloqueada).
+  **Regresión 24/24 gates, 0 fallos** (T1 18/0, T2 17/0, T1-http 7/0, mostrador, pedidos, contabilidad ×5, CRM…).
+  **3 facturas reales** sobre COPIA de la BD de `ibrahin-repuestos`: un solo sobre, 3/3 `Correcto`, hueco
+  huella→envío **1,2 s**, la cadena continúa desde la huella real de `S2026-0002`, los 2 aceptados no se reenvían.
+
+- **Fuera de alcance, para encargos propios:**
+  - **Envío real a preproducción CON la cola**: falta el `.p12` del dueño y su contraseña en el entorno del
+    servicio. Hasta entonces la cola está inactiva (comportamiento idéntico al actual).
+  - Envío de **anulaciones** · **subsanación** del 2004 · **Fase B legal**.
+  - Bug latente de `verifactu-envio.js` (`prevRegistro` por `id` sin filtrar por emisor) — sigue vivo, es encadenado.
+  - **`company_config.fiscal_id` vacío** en `duniya`, `rachibra` e `inversiones-disan`: la Cabecera saldría con
+    `ObligadoEmision` vacío. Hoy teórico (sin certificado, su cola no arranca). El gate de T2 no lo detectaba
+    porque `runMigrations` siembra `fiscal_id=''` y su `INSERT OR IGNORE` no lo pisa.
+  - **`verify-pieza-c-http` es un gate FRÁGIL preexistente** (no roto por esta pieza): compara
+    `round(round(S)+t)` con `round(S+t)` sobre "Ventas del mes", así que alterna según los céntimos
+    acumulados. Demostrado: falla igual con el código anterior a esta tarea. *Estado: arreglar el gate.*
+
 ### Verifactu · Tarea 2 (Fase A) — ENVÍO REAL a la AEAT conseguido  ✅ HECHO (2026-07-09)
 Encargo expreso del dueño. El motor (`verifactu-envio.js`) y el script ya estaban probados contra el
 simulador (17/17); faltaba conectar el certificado FNMT real y remitir a **preproducción**
@@ -402,8 +472,12 @@ Todas las tareas pendientes anteriores, **conservadas**. No se inician sin encar
 fase actual ceden prioridad a la optimización (Ejes A/B/C).
 
 ### Contabilidad y cumplimiento fiscal
-- **Verifactu — envío real a la AEAT:** la Fase A (motor SOAP+mTLS, probado contra simulador) está hecha; falta disparar el envío real a preproducción/producción cuando el dueño aporte su **certificado FNMT** (`VERIFACTU_CERT_PATH`/`VERIFACTU_CERT_PASS` + NIF/NombreRazón del productor). Comando: `scripts/verifactu-enviar-preproduccion.mjs`.
-- **Verifactu — Fase B (legal):** colaboración social (Convenio tipo 17), declaración responsable, y elección de certificado (propio-por-todos vs por-cliente, modelo del Anexo II). Ampliaciones técnicas: envío de **anulaciones** (hoy solo altas), **cola + timer por tenant** (control de flujo `TiempoEsperaEnvio`), validación XSD formal.
+- **Verifactu — envío real a la AEAT:** ✅ Fase A hecha (motor SOAP+mTLS) y **cola de envío automático por
+  negocio** hecha (2026-07-09). Falta **activarla**: el dueño debe dejar su **certificado FNMT** y su
+  contraseña en el entorno del servicio (`VERIFACTU_CERT_DIR/<slug>.p12` + `VERIFACTU_CERT_PASS_<SLUG>`, o
+  los globales `VERIFACTU_CERT_PATH`/`VERIFACTU_CERT_PASS`). Sin eso la cola está inactiva y solo funciona el
+  envío manual: pantalla `/admin/verifactu/envios` o `scripts/verifactu-enviar-preproduccion.mjs`.
+- **Verifactu — Fase B (legal):** colaboración social (Convenio tipo 17), declaración responsable, y elección de certificado (propio-por-todos vs por-cliente, modelo del Anexo II). Ampliaciones técnicas: envío de **anulaciones** (hoy solo altas), **subsanación** del aviso 2004, validación XSD formal. (La ~~cola + timer por tenant~~ ya está hecha.)
 - **Facturae — motor de generación del XML ✅ HECHO (2026-07-08).** Ver `docs/facturae/investigacion.md`.
   - **Investigación** verificada en fuente oficial (XSD 3.2.2 descargado y parseado, política de firma v3.1
     extraída del PDF, WSDL de FACe descargado en vivo, BOE consolidado). Vigente: **Facturae 3.2.2**.
