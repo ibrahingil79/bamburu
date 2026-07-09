@@ -196,6 +196,61 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
 
 ## Función por encargo del dueño (fuera de los ejes A/B/C)
 
+### Verifactu · Tarea 2 (Fase A) — ENVÍO REAL a la AEAT conseguido  ✅ HECHO (2026-07-09)
+Encargo expreso del dueño. El motor (`verifactu-envio.js`) y el script ya estaban probados contra el
+simulador (17/17); faltaba conectar el certificado FNMT real y remitir a **preproducción**
+(`prewww1.aeat.es`). Nunca contra producción. Detalle completo en `docs/verifactu/tarea2-fase-a-envio.md`.
+
+- **Dos registros aceptados por la AEAT**, negocio `ibrahin-repuestos`, obligado `13334347M` (FNMT de
+  persona física del dueño), tickets F2 de 0,48 €:
+
+  | # | Registro | Cadena | Respuesta | CSV |
+  |---|---|---|---|---|
+  | 1 | `S2026-0001` | `PrimerRegistro=S` | `AceptadoConErrores` · error 2004 | `A-FA5DXLJ5HSC2ZU` |
+  | 2 | `S2026-0002` | `PrimerRegistro=N` + `RegistroAnterior`→#1 | **`Correcto`**, sin errores | `A-5LE89B7EUFZ7ER` |
+
+  La AEAT devuelve el obligado en su Cabecera: el certificado **autentica y está autorizado**. El
+  segundo envío valida el **encadenamiento real** contra un registro que la Agencia ya tenía guardado.
+
+- **Arreglo del namespace de la Cabecera** (`buildEnvelope`). `SuministroLR.xsd` declara `Cabecera`
+  como elemento LOCAL con `elementFormDefault="qualified"` → vive en el namespace **`sfLR`**, aunque su
+  TIPO (`sf:CabeceraType`) venga del otro esquema; de hecho `Cabecera` **no existe** en
+  `SuministroInformacion.xsd`. Enviarla como `<sf:Cabecera>` provocaba
+  `Codigo[4102].El XML no cumple el esquema. Falta informar campo obligatorio.: Cabecera`.
+  **Validado con `xmllint` contra los XSD oficiales descargados**: reproduce el 4102 con el namespace
+  malo y pasa con el bueno. (Cierra el "sin confirmar" de `tarea2-remision-aeat-investigacion.md`.)
+
+- **Seguridad del certificado.** `.gitignore` cubre ahora `*.p12 *.pfx *.pem *.key *.jks *.crt`: antes
+  un `git add -A` habría commiteado la identidad digital del dueño. La **contraseña no se escribe en
+  ningún fichero**: el script la pide por teclado **sin eco** (ni historial, ni `ps`, ni
+  `/etc/bamburu.env`). Y si falta `VERIFACTU_PRODUCTOR_*` el script **para en seco** en vez de avisar:
+  el motor marcaba cada registro `bloqueado_datos` y no salía ni una petición — el aviso engañaba.
+
+- **El `.p12` del Llavero de macOS no lo abre Node**: cifra los certificados con RC2-40, que OpenSSL 3
+  dejó en el proveedor *legacy* → `Unsupported PKCS12 PFX data`, antes de tocar la red. Se reconvierte a
+  PKCS#12 moderno (AES-256 + MAC SHA-256). Se descarta `node --openssl-legacy-provider`: habría que
+  ponerlo también en `bamburu.service` y reactivaría RC2/RC4/DES en todo el proceso de producción.
+
+- **⚠️ Hallazgo estructural — la ventana de 240 s.** `FechaHoraHusoGenRegistro` va DENTRO de la huella,
+  así que queda congelada al emitir; la AEAT exige que esté a ±240 s de SU reloj cuando recibe (error
+  2004). Medido: 376 s de hueco → `AceptadoConErrores`; 0 s → `Correcto`. Reloj del servidor verificado
+  contra la AEAT (**+1 s**, NTP sincronizado): no era un desvío. **Consecuencia: la cola + timer por
+  negocio deja de ser una mejora y pasa a ser un requisito** para remitir en verde.
+
+- **Fuera de alcance, para encargos propios:**
+  - **Fase B legal** — colaboración social (Convenio tipo 17), declaración responsable (art. 13 RD
+    1007/2023), elección de certificado (propio-por-todos vs. Anexo II por cliente).
+  - **Cola + timer de envío automático por negocio** — confirmado NECESARIO por el hallazgo de los 240 s.
+  - **Bug de selección de cadena por id** (`verifactu-envio.js:347`): elige el registro anterior por id
+    sin filtrar por emisor. **Latente**: `company_config` es singleton (un obligado por BD) y se verificó
+    sobre los 61 registros reales (0 desajustes, 0 cruces). Solo mordería si un negocio cambiase de NIF
+    teniendo ya registros.
+  - **Subsanación del 2004** con un alta `Subsanacion=S` sobre `S2026-0001`.
+  - Envío de **anulaciones** (hoy Fase A solo remite altas).
+
+- **Evidencia que se conserva:** `helados-ibrahin` guarda su registro 1 en `incorrecto` con el error
+  1239 (NIF de destinatario ficticio, no identificado en el censo real de preproducción). No se toca.
+
 ### Rendimiento · Opción A — coste de bcrypt y frenos de peticiones  ✅ HECHO (2026-07-09)
 Encargo expreso del dueño a partir de `docs/rendimiento/diagnostico-carga.md` (que se guarda aquí con
 este commit: no estaba en el repo). **Solo la opción A.** Las opciones B (varios procesos con afinidad)

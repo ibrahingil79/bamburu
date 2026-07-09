@@ -236,8 +236,18 @@ export function buildRegistroAlta({ registro, invoice, items, prevRegistro, comp
 }
 
 // Envuelve N <RegistroAlta> en la Cabecera (ObligadoEmision) + envelope SOAP 1.1.
+//
+// OJO con los namespaces (verificado contra el XSD oficial, no de memoria): en SuministroLR.xsd,
+// `Cabecera` y `RegistroFactura` se declaran LOCALES dentro de RegFactuSistemaFacturacion, y ese
+// esquema tiene elementFormDefault="qualified" → ambos elementos viven en el namespace sfLR,
+// aunque el TIPO de Cabecera (sf:CabeceraType) venga del otro esquema. `Cabecera` ni siquiera
+// existe en SuministroInformacion.xsd. Sus HIJOS (ObligadoEmision, NombreRazon, NIF) sí son de
+// sf, porque los declara CabeceraType allí (también qualified).
+//
+// Mandarla como <sf:Cabecera> provoca un SoapFault de la AEAT:
+//   Codigo[4102].El XML no cumple el esquema. Falta informar campo obligatorio.: Cabecera
 export function buildEnvelope({ obligadoNombre, obligadoNif, registrosXml }) {
-  const cabecera = `<sf:Cabecera><sf:ObligadoEmision>${el('sf:NombreRazon', obligadoNombre)}${el('sf:NIF', obligadoNif)}</sf:ObligadoEmision></sf:Cabecera>`;
+  const cabecera = `<sfLR:Cabecera><sf:ObligadoEmision>${el('sf:NombreRazon', obligadoNombre)}${el('sf:NIF', obligadoNif)}</sf:ObligadoEmision></sfLR:Cabecera>`;
   const registros = registrosXml.map(x => `<sfLR:RegistroFactura>${x}</sfLR:RegistroFactura>`).join('');
   const cuerpo = `<sfLR:RegFactuSistemaFacturacion xmlns:sfLR="${NS_LR}" xmlns:sf="${NS_SF}">${cabecera}${registros}</sfLR:RegFactuSistemaFacturacion>`;
   return `<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Header/><soapenv:Body>${cuerpo}</soapenv:Body></soapenv:Envelope>`;

@@ -25,3 +25,13 @@ modules/*.backup.*/
 .DS_Store
 *.swp
 Thumbs.db
+
+# Certificados y claves privadas — NUNCA al repositorio.
+# El .p12/.pfx del FNMT (Verifactu, mTLS contra la AEAT) vive fuera del árbol de trabajo y se
+# referencia por VERIFACTU_CERT_PATH. Esta red de seguridad evita subirlo por un `git add -A`.
+*.p12
+*.pfx
+*.pem
+*.key
+*.jks
+*.crt
