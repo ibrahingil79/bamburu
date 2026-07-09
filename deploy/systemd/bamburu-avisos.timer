@@ -1,9 +1,11 @@
 [Unit]
-Description=Bamburu — disparador diario del resumen de avisos de pagos
+Description=Bamburu — disparador diario del resumen de avisos por email
 
 [Timer]
-# Diario a las 08:00 hora local: el dueño abre el día con el resumen ya en el correo.
-OnCalendar=*-*-* 08:00:00
+# Diario a las 08:00 DE ESPAÑA: el dueño abre el día con el resumen ya en el correo.
+# La zona va EXPLÍCITA porque el servidor corre en UTC: sin ella, "08:00" serían las 10:00 en
+# España en verano. Con Europe/Madrid, systemd absorbe el cambio de hora (requiere systemd ≥252).
+OnCalendar=*-*-* 08:00:00 Europe/Madrid
 # Si el servidor estaba apagado a esa hora, ejecuta en el siguiente arranque (la guarda de
 # idempotencia daily_alert_log evita que un arranque tardío reenvíe lo de un día ya cubierto).
 Persistent=true

@@ -183,11 +183,61 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
 - **Tres pantallas vivas sin enlace** (U7): `/admin/analytics`, `/admin/discounts`, `/admin/tags`.
 
 ## Eje B: DISA (pendiente de planificar)
+- **Diagnóstico de avisos/notificaciones (solo lectura, 9 jul 2026):** `docs/disa/diagnostico-avisos.md`.
+  Es la **foto ANTES** del encargo de avisos; se conserva tal cual (documento fechado), pero ya no describe
+  el estado actual. De sus seis hallazgos, el encargo cerró cinco (pantalla central · fuente de cobros
+  vencidos · visto por usuario y por aviso · email diario programado y verificado · etiqueta del bloque
+  recurrente). **Sigue abierto:** el contador no se refresca en vivo fuera de `/admin/avisos` (§3), y faltan
+  las fuentes de **CRM** en riesgo y de **cumplimiento** (Verifactu, calendario fiscal). No construir sin encargo.
+
 ## Eje C: Seguridad (pendiente de planificar)
 
 ---
 
 ## Función por encargo del dueño (fuera de los ejes A/B/C)
+
+### Avisos — pantalla central, cobros vencidos, visto por usuario y correo diario  ✅ HECHO (2026-07-09)
+Encargo expreso del dueño a partir de `docs/disa/diagnostico-avisos.md`. **Aditivo y reversible**: no se
+toca el hash de facturas, ni el stock, ni la lógica de los motores que ya calculan cada aviso
+(`pagos.js` / `cobros.js` / `recurrentes.js`). Este encargo los concentra y los muestra bien.
+
+- **Pantalla central `/admin/avisos`** (`routes/avisos.js`). Se sirve vacía y pide `/api/erp/avisos` al
+  abrirse → **recalcula en vivo**, nunca hay un número guardado que se quede viejo. **Se RESUELVE aquí**:
+  cada fila abre el MISMO modal compartido que su pantalla de origen (`cobro-modal` / `pago-modal` /
+  `stock-modal`), que pega al único endpoint validado. Cero lógica de negocio duplicada. Al guardar, el
+  aviso desaparece y el contador baja sin recargar. Botones **gateados por permiso**
+  (`cobros.manage` · `purchases.create` · `inventory.edit`); sin permiso, enlace de solo lectura.
+  - **Excepción deliberada:** el borrador recurrente NO se emite desde una fila (crea una factura con
+    valor legal + cadena de hash) → enlaza a `/admin/recurrentes` a revisarlo. Confirm-first.
+- **Fuente nueva `cobrosVencidos`** (`avisos.js`), una función más en `SOURCES`. Se apoya en `openDebts()`
+  de `cobros.js` — ese motor ya decide qué factura cuenta como deuda y cuál está vencida; aquí solo se
+  filtra y se normaliza. Aparece en pantalla, campana, Inicio y correo. Etiqueta del bloque
+  `factura_recurrente` en el email, que faltaba (§6 del diagnóstico).
+- **"Visto" por USUARIO, no por negocio** (`alert_seen` era singleton `CHECK (id=1)`: si uno los abría,
+  quedaban vistos para todos). Tabla nueva `alert_seen_user (user_id PK, fingerprint, seen_at)`, sembrada
+  una vez desde la huella vieja para que nadie vea el badge en rojo de golpe. **`alert_seen` NO se toca ni
+  se borra**: revertir el código restaura el comportamiento anterior con su estado.
+  - **Visto POR AVISO**: cada fila (y cada item del panel) se marca/desmarca por separado; también
+    "marcar todos". Abrir la pantalla NO marca nada: el visto lo decide el usuario.
+- **Señales consolidadas: de 7 sitios a 2.** Se retiran el contador del pin de DISA y el badge flotante
+  "N alertas". Queda **la campana del topbar** — que ahora **abre un panel** de notificaciones con su
+  "Visto" por aviso y su "marcar todos" (antes era un `<div>` decorativo, sin destino y con el punto rojo
+  encendido siempre) — y **la tarjeta "Avisos" del Inicio**, ahora clicable (era un `<div>` muerto).
+  El punto de la campana cuelga del **estado**, no del conteo: rojo = algo sin ver · gris = pendientes ya
+  vistos · ausente = nada.
+- **Correo diario, de verdad.** Existía `scripts/bamburu-avisos.mjs` pero **nunca se programó** y apuntaba a
+  `User=ibrahin`. Timer systemd instalado y activo (`User=ubuntu`, `OnCalendar=*-*-* 08:00:00 Europe/Madrid`
+  — la zona va explícita porque el servidor corre en UTC). **Causa raíz que el diagnóstico no vio:**
+  `company_config.email` estaba **vacío en los cinco tenants** → el script salía con código 0, `fallos=0` y
+  **0 correos**. Verificado con envío real: fila en `daily_alert_log` + correo recibido; segunda ejecución
+  no reenvía (idempotencia por día).
+- **Gates** (94 aserciones, navegador real): `test-pago-voz-avisos.mjs` (47) · `gate-avisos-badge.mjs` (24,
+  señal única + estado + aislamiento por usuario) · `gate-avisos-pantalla.mjs` (23, **pulsa los botones**:
+  registra un cobro y lo deshace, marca visto por aviso, abre el panel de la campana).
+- **Fuera** (registrado): la campana **no baja sola** al resolver algo en Cobros/Pagos sin navegar (§3 del
+  diagnóstico; ahora que existe `window.bellSync` es un `fetch` por pantalla) · fuente de **CRM** en riesgo ·
+  coste de `estadoAvisos()` en cada render (4,05 ms con 72 facturas, de los que 3,06 ms son `openDebts()`;
+  es lineal en nº de facturas y `layout.js` lo llama en TODA página admin).
 
 ### CRM comercial — embudo de oportunidades + actividad de cliente  ✅ HECHO (2026-07-09)
 Encargo expreso del dueño (estaba en el roadmap futuro). **Motor primero, DISA después** (RITUAL): esta

@@ -228,7 +228,9 @@ console.log('10. Fuente stock bajo + resumen-primero');
   const groups = resumenAvisos(todos);
   eq(groups.map(g => [g.tipo, g.count]), [['vencimiento_proveedor', 1], ['stock_bajo', 2]], 'resumen agrupa por fuente con sus conteos');
   const txt = resumenTexto(todos);
-  ok(/Tienes 2 cosas que mirar/.test(txt) && /1 factura/.test(txt) && /2 producto/.test(txt) && !/email|recordatorio|cobr/i.test(txt), 'resumen: 2 grupos, conteos correctos, SIN ofrecer acciones');
+  // (el token "cobr" ya no sirve de proxy: "cobros de cliente vencidos" es una fuente legítima
+  //  del motor y la palabra aparece nombrando el aviso. Se vigilan los verbos de oferta.)
+  ok(/Tienes 2 cosas que mirar/.test(txt) && /1 factura/.test(txt) && /2 producto/.test(txt) && !/email|recordatorio|reclam/i.test(txt), 'resumen: 2 grupos, conteos correctos, SIN ofrecer acciones');
   db.close();
 }
 

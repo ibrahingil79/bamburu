@@ -113,6 +113,10 @@ export function createInventoryRoutes(db, cfg = {}) {
         if (WH!==''){ try { const rows=await api('GET','/api/erp/warehouses/'+WH+'/stock'); whMap={}; (rows||[]).forEach(function(r){ whMap[r.product_id]=r; }); } catch(e){} }
         render();
       };
+      // Enlace directo desde /admin/avisos (?q=Nombre del producto): deja el producto ya
+      // filtrado, con "Ajustar" a un clic. loadInv() llama a filterTable() al terminar.
+      const _q = new URLSearchParams(location.search).get('q');
+      if (_q) document.getElementById('searchBox').value = _q;
       loadInv();
       </script>`;
     return c.html(adminLayout('Inventario', content, 'inventory', c.get('session')?.csrfToken || '', c));

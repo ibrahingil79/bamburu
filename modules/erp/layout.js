@@ -227,13 +227,24 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   const isAdmin = role === 'admin' || isOwner;
   const perms = c?.get?.('userPerms') || [];
 
-  // Contador de propuestas de DISA para la insignia del rail (§3.1). Se lee de la BD del tenant
-  // (c.get('db')); si falla, 0 y sin insignia — nunca rompe el render de la página.
-  let disaCount = 0;
+  // Estado de avisos de ESTE usuario para la ÚNICA señal del chrome: la campana.
+  // Se recalcula en cada render (nunca es un número guardado). Manda el ESTADO, no el conteo:
+  //   'rojo'    → hay algo que este usuario no ha visto  → punto rojo
+  //   'visto'   → hay avisos, pero ya los abrió          → punto gris (siguen pendientes)
+  //   'apagado' → no hay nada                            → sin punto
+  // Antes el punto colgaba del conteo, así que seguía encendido después de leerlos.
+  // Si falla, 'apagado' y sin punto — nunca rompe el render de la página.
+  let avisos = { count: 0, estado: 'apagado' };
   try {
     const _db = c?.get?.('db');
-    if (_db) disaCount = estadoAvisos(_db, new Date().toISOString().slice(0, 10)).count || 0;
-  } catch { disaCount = 0; }
+    if (_db) {
+      const est = estadoAvisos(_db, new Date().toISOString().slice(0, 10), session.userId);
+      avisos = { count: est.count || 0, estado: est.estado };
+    }
+  } catch { avisos = { count: 0, estado: 'apagado' }; }
+  const bellTitle = avisos.estado === 'apagado'
+    ? 'Avisos — no tienes nada pendiente'
+    : `${avisos.count} aviso${avisos.count === 1 ? '' : 's'}${avisos.estado === 'rojo' ? ' sin ver' : ' pendientes (ya vistos)'}`;
 
   // Foto de perfil del usuario (admin_users.foto_url, la elige en /admin/perfil). Mismo patrón
   // que disaCount: si falla, cae a la inicial — nunca rompe el render.
@@ -589,14 +600,14 @@ ${ROOT_TOKENS}
     .sidebar:hover,.sidebar.flyopen{width:216px;box-shadow:6px 0 24px rgba(16,24,40,.10)}
     .sidebar::-webkit-scrollbar{width:6px}
     .sidebar::-webkit-scrollbar-thumb{background:rgba(0,0,0,.12);border-radius:6px}
-    /* DISA fija arriba con contador de propuestas (§3.1) — también es la marca y el Inicio */
+    /* DISA fija arriba — la marca y el Inicio. YA NO lleva contador de avisos: la única señal
+       de avisos de todo el chrome es la campana del topbar (una sola cosa que mirar). */
     .disa-pin{position:relative;display:flex;align-items:center;justify-content:center;gap:0;height:50px;flex-shrink:0;color:var(--brand);text-decoration:none;overflow:hidden}
     .sidebar:hover .disa-pin,.sidebar.flyopen .disa-pin{justify-content:flex-start;gap:12px;padding-left:1.05rem}
     .disa-pin i.ti{font-size:22px;line-height:1;flex-shrink:0}
     .disa-pin:hover{color:var(--accent-d)}
     .disa-pin.active i.ti{color:var(--accent)}
     .disa-pin .nav-label{font-weight:600;color:var(--text)}
-    .disa-pin-badge{position:absolute;top:7px;left:34px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:#DC2626;color:#fff;font-size:10px;font-weight:600;line-height:1;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--chrome)}
     .sb-nav{flex:1;padding:.4rem .5rem .6rem;display:flex;flex-direction:column;gap:3px;overflow-x:hidden}
     .rail-spacer{flex:1;min-height:8px}
     .navg{position:relative}
@@ -629,8 +640,32 @@ ${ROOT_TOKENS}
     .tb-search{flex:1;max-width:430px;display:flex;align-items:center;gap:8px;background:var(--bg3);border:.5px solid var(--border2);border-radius:9px;padding:7px 12px;color:var(--text3);font-size:13px;cursor:text}
     .tb-search i.ti{font-size:16px}
     .tb-search:focus-within{border-color:var(--accent);background:#fff}
-    .tb-bell{color:var(--chrome-tx);font-size:18px;position:relative;display:flex;margin-left:auto;cursor:pointer}
+    /* La campana ABRE un panel de notificaciones (antes era un div decorativo con el punto rojo
+       siempre encendido y sin destino). Desde el panel se marca cada aviso como visto, o todos. */
+    .tb-bell-wrap{position:relative;margin-left:auto;display:flex}
+    .tb-bell{color:var(--chrome-tx);font-size:18px;position:relative;display:flex;cursor:pointer;background:none;border:none;padding:0;font-family:inherit}
+    .tb-bell:hover{color:var(--accent)}
+    /* Punto de la campana: ROJO = algo sin ver · GRIS = pendientes, ya vistos · ausente = nada. */
     .tb-bell .dot{position:absolute;top:-1px;right:-1px;width:7px;height:7px;border-radius:50%;background:#DC2626;border:1.5px solid var(--chrome)}
+    .tb-bell .dot.visto{background:var(--text3)}
+    .bell-panel{position:absolute;top:calc(100% + 10px);right:0;width:380px;max-width:calc(100vw - 24px);background:#fff;border:1px solid var(--border2);border-radius:12px;box-shadow:0 6px 20px rgba(16,24,40,0.10);display:none;z-index:120;overflow:hidden}
+    .bell-panel.open{display:block}
+    .bell-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 13px;border-bottom:1px solid var(--border2)}
+    .bell-head strong{font-size:13px}
+    .bell-all{background:none;border:none;color:var(--accent);font-size:11.5px;cursor:pointer;font-family:inherit;padding:0}
+    .bell-all:disabled{color:var(--text3);cursor:default}
+    .bell-list{max-height:340px;overflow-y:auto}
+    .bell-item{display:flex;align-items:flex-start;gap:9px;padding:10px 13px;border-bottom:1px solid var(--bg3);text-decoration:none;color:inherit}
+    .bell-item:last-child{border-bottom:none}
+    .bell-item.nuevo{background:var(--danger-s)}
+    .bell-item-txt{flex:1;min-width:0}
+    .bell-item-t{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .bell-item-d{font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .bell-ver{flex-shrink:0;background:none;border:1px solid var(--border2);border-radius:6px;color:var(--text2);font-size:11px;cursor:pointer;padding:3px 7px;font-family:inherit}
+    .bell-ver:hover{border-color:var(--accent);color:var(--accent)}
+    .bell-foot{display:block;text-align:center;padding:10px;font-size:12px;color:var(--accent);text-decoration:none;border-top:1px solid var(--border2);background:var(--bg2)}
+    .bell-foot:hover{background:var(--bg3)}
+    .bell-empty{padding:22px 13px;text-align:center;color:var(--text2);font-size:12px;margin:0}
     .topbar-title{font-weight:500;font-size:.85rem;color:var(--text2)}
     .content{flex:1;padding:20px 22px}
     /* Hamburguesa (solo móvil) + fondo del drawer. Ocultos por defecto → sin efecto en escritorio. */
@@ -857,10 +892,9 @@ ${ROOT_TOKENS}
 </head>
 <body>
   <aside class="sidebar">
-    <a href="/admin" class="disa-pin${active === 'dashboard' ? ' active' : ''}" title="Inicio — DISA${disaCount ? ` · ${disaCount} propuesta${disaCount === 1 ? '' : 's'}` : ''}">
+    <a href="/admin" class="disa-pin${active === 'dashboard' ? ' active' : ''}" title="Inicio — DISA">
       <i class="ti ti-sparkles"></i>
       <span class="nav-label">Inicio</span>
-      ${disaCount ? `<span class="disa-pin-badge">${disaCount > 9 ? '9+' : disaCount}</span>` : ''}
     </a>
     <nav class="sb-nav">
       ${navHTML}
@@ -873,7 +907,20 @@ ${ROOT_TOKENS}
     <div class="topbar">
       <button type="button" class="nav-toggle" aria-label="Abrir menú" aria-expanded="false" onclick="toggleNav()"><i class="ti ti-menu-2"></i></button>
       <div class="tb-search"><i class="ti ti-search"></i><span>Buscar cliente, factura, producto…</span></div>
-      <div class="tb-bell"><i class="ti ti-bell"></i><span class="dot"></span></div>
+      <div class="tb-bell-wrap">
+        <button type="button" class="tb-bell" id="tbBell" title="${bellTitle}" aria-label="${bellTitle}"
+                aria-haspopup="true" aria-expanded="false" onclick="toggleBell(event)">
+          <i class="ti ti-bell"></i>${avisos.estado === 'apagado' ? '' : `<span class="dot${avisos.estado === 'visto' ? ' visto' : ''}"></span>`}
+        </button>
+        <div class="bell-panel" id="bellPanel">
+          <div class="bell-head">
+            <strong>Avisos</strong>
+            <button type="button" class="bell-all" id="bellAll" onclick="bellMarcarTodos(event)">Marcar todos como vistos</button>
+          </div>
+          <div class="bell-list" id="bellList"><p class="bell-empty">Cargando…</p></div>
+          <a class="bell-foot" href="/admin/avisos">Ver y resolver todos</a>
+        </div>
+      </div>
       <div class="acct">
         <button class="acct-btn" id="acctBtn" type="button" aria-haspopup="true" aria-expanded="false" onclick="toggleAcct(event)" title="${escName}">
           ${avatarHTML}
@@ -890,6 +937,75 @@ ${ROOT_TOKENS}
     window.closeNav=function(){var sb=document.querySelector('.sidebar');if(sb)sb.classList.remove('open');document.body.classList.remove('nav-open');var b=document.querySelector('.nav-toggle');if(b)b.setAttribute('aria-expanded','false');};
     document.addEventListener('keydown',function(e){if(e.key==='Escape')window.closeNav();});
     document.addEventListener('click',function(e){var a=e.target.closest('.sidebar a[href]');if(a)window.closeNav();});
+    // ── Campana de notificaciones ────────────────────────────────────────────────
+    // El panel lee del MISMO motor que la pantalla (/api/erp/avisos): mismos avisos, mismo
+    // número. Cada aviso se marca visto por separado; también hay "marcar todos". Nada se
+    // marca solo por abrir el panel: "visto" lo decide el usuario.
+    window.bellSync=function(sinVer,total){
+      var b=document.getElementById('tbBell'); if(!b) return;
+      var dot=b.querySelector('.dot');
+      if(!total){ if(dot) dot.remove(); return; }
+      if(!dot){ dot=document.createElement('span'); dot.className='dot'; b.appendChild(dot); }
+      dot.classList.toggle('visto', !sinVer);              // rojo = queda algo sin ver
+      b.title = sinVer ? (sinVer+' aviso'+(sinVer===1?'':'s')+' sin ver') : (total+' aviso'+(total===1?'':'s')+' pendientes (ya vistos)');
+    };
+    var _bellCargado=false;
+    function bellPinta(d){
+      var list=document.getElementById('bellList');
+      var all=document.getElementById('bellAll');
+      var av=d.avisos||[];
+      if(!av.length){ list.innerHTML='<p class="bell-empty">No tienes nada pendiente. Todo al día.</p>'; }
+      else {
+        // Sin ver primero: es lo que enciende el punto rojo.
+        var orden=av.slice().sort(function(a,b){return (b.nuevo?1:0)-(a.nuevo?1:0);}).slice(0,8);
+        // La clave va en data-key (nunca incrustada en un onclick): la lee el listener delegado.
+        list.innerHTML=orden.map(function(a){
+          return '<div class="bell-item'+(a.nuevo?' nuevo':'')+'">'
+            +'<div class="bell-item-txt"><div class="bell-item-t">'+escHtml(a.titulo)+'</div>'
+            +'<div class="bell-item-d">'+escHtml(a.detalle)+'</div></div>'
+            +'<button type="button" class="bell-ver" data-key="'+escHtml(a.key)+'" data-visto="'+(a.nuevo?'1':'0')+'"'
+            +' title="'+(a.nuevo?'Marcar este aviso como visto':'Volver a marcarlo como no visto')+'">'
+            +(a.nuevo?'Visto':'✓ Visto')+'</button>'
+            +'</div>';
+        }).join('') + (av.length>8 ? '<p class="bell-empty">y '+(av.length-8)+' más</p>' : '');
+      }
+      if(all) all.disabled = !d.sinVer;
+      window.bellSync(d.sinVer, d.count);
+    }
+    async function bellCargar(){
+      try{ bellPinta(await api('GET','/api/erp/avisos')); _bellCargado=true; }
+      catch(e){ document.getElementById('bellList').innerHTML='<p class="bell-empty">No pude cargar tus avisos.</p>'; }
+    }
+    // Delegación: un solo listener para todos los botones "Visto" del panel.
+    document.addEventListener('click',async function(e){
+      var btn=e.target.closest('#bellList .bell-ver'); if(!btn) return;
+      e.stopPropagation(); e.preventDefault();
+      var visto = btn.dataset.visto === '1';
+      try{ bellPinta(await api('POST','/api/erp/avisos/'+(visto?'visto':'no-visto'),{keys:[btn.dataset.key]}));
+           if(typeof window.avisosOnVisto==='function') window.avisosOnVisto();
+      }catch(err){ toast(err.message||'Error','err'); }
+    });
+    window.bellMarcarTodos=async function(e){
+      e.stopPropagation();
+      try{ bellPinta(await api('POST','/api/erp/avisos/visto',{}));   // sin keys = todos
+           toast('Avisos marcados como vistos');
+           if(typeof window.avisosOnVisto==='function') window.avisosOnVisto();
+      }catch(err){ toast(err.message||'Error','err'); }
+    };
+    function toggleBell(e){
+      e.stopPropagation();
+      var p=document.getElementById('bellPanel'),b=document.getElementById('tbBell');
+      var open=p.classList.toggle('open');
+      b.setAttribute('aria-expanded',open?'true':'false');
+      if(open&&!_bellCargado) bellCargar();
+    }
+    function closeBell(){
+      var p=document.getElementById('bellPanel'),b=document.getElementById('tbBell');
+      if(p&&p.classList.contains('open')){p.classList.remove('open');if(b)b.setAttribute('aria-expanded','false');}
+    }
+    document.addEventListener('click',function(e){if(!e.target.closest('.tb-bell-wrap'))closeBell();});
+    document.addEventListener('keydown',function(e){if(e.key==='Escape')closeBell();});
+
     function toggleAcct(e){e.stopPropagation();var m=document.getElementById('acctMenu'),b=document.getElementById('acctBtn');var open=m.classList.toggle('open');b.setAttribute('aria-expanded',open?'true':'false');}
     document.addEventListener('click',function(e){var m=document.getElementById('acctMenu');if(m&&m.classList.contains('open')&&!e.target.closest('.acct')){m.classList.remove('open');var b=document.getElementById('acctBtn');if(b)b.setAttribute('aria-expanded','false');}});
     document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=document.getElementById('acctMenu');if(m&&m.classList.contains('open')){m.classList.remove('open');var b=document.getElementById('acctBtn');if(b)b.setAttribute('aria-expanded','false');}}});

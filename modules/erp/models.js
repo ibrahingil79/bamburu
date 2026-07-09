@@ -963,6 +963,34 @@ export function runMigrations(db) {
     fingerprint TEXT NOT NULL DEFAULT '[]',  -- JSON: lista de claves de avisos vistas
     seen_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
+  // ── "Visto" POR USUARIO, no por negocio ──────────────────────────────────────────
+  // alert_seen nació singleton (CHECK id=1): si el dueño abría los avisos, quedaban vistos
+  // TAMBIÉN para el empleado. "Visto" es un hecho de una persona. Como el CHECK impide meter
+  // más de una fila, la columna user_id no cabe en la tabla vieja: se añade en una tabla nueva.
+  // ADITIVO Y REVERSIBLE: alert_seen NO se toca ni se borra (regla permanente); revertir el
+  // código restaura el comportamiento anterior con su huella intacta.
+  db.exec(`CREATE TABLE IF NOT EXISTS alert_seen_user (
+    user_id INTEGER PRIMARY KEY,             -- admin_users.id (0 = procesos sin sesión)
+    fingerprint TEXT NOT NULL DEFAULT '[]',  -- JSON: lista de claves de avisos vistas por ESE usuario
+    seen_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+  // Siembra ÚNICA: la huella del negocio pasa a ser el punto de partida de cada usuario que ya
+  // existía, para que nadie vea el badge en rojo de golpe por avisos que ya había leído. Los
+  // usuarios creados DESPUÉS no se siembran: empiezan con la huella vacía (todo es nuevo para
+  // ellos), que es justo lo correcto.
+  const seenMigKey = 'migration_alert_seen_per_user_v1';
+  if (!db.prepare('SELECT value FROM settings WHERE key=?').get(seenMigKey)) {
+    try {
+      const legacy = db.prepare('SELECT fingerprint FROM alert_seen WHERE id=1').get();
+      if (legacy && legacy.fingerprint) {
+        const ins = db.prepare('INSERT OR IGNORE INTO alert_seen_user (user_id, fingerprint) VALUES (?,?)');
+        db.transaction(() => {
+          for (const u of db.prepare('SELECT id FROM admin_users').all()) ins.run(u.id, legacy.fingerprint);
+        })();
+      }
+    } catch { /* tenant sin admin_users todavía: nada que sembrar */ }
+    db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(seenMigKey, 'done');
+  }
 
   // Pilar 3 (coste/valoración) — backfill del coste, UNA vez por tenant. Corre DESPUÉS de que
   // existan las columnas nuevas (stock_movements.unit_cost, products.average_cost) y la tabla

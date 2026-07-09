@@ -2775,7 +2775,8 @@ export function register(app, db) {
   // el rojo solo vuelve si aparece algo nuevo). El detalle lo pide el dueño escribiendo después.
   router.post('/alerts/open', adminAuth(db), c => {
     try {
-      const r = marcarVistoYResumir(db, new Date().toISOString().slice(0, 10));
+      // "Visto" es de quien abre, no del negocio: la huella se guarda contra su user_id.
+      const r = marcarVistoYResumir(db, new Date().toISOString().slice(0, 10), c.get('session')?.userId);
       return c.json(r);
     } catch (e) {
       return c.json({ reply: 'No pude cargar tus avisos ahora mismo.' }, 500);

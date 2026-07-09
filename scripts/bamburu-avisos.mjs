@@ -5,7 +5,8 @@
 // Tarea diaria por la mañana (systemd timer). ITERA cada BD de tenant igual que el backup y,
 // por cada una:
 //   1. Asegura el esquema (runMigrations idempotente — el script no pasa por el middleware).
-//   2. Calcula avisosDelDia (hoy: vencimientos de proveedor ≤7d o vencidos).
+//   2. Calcula avisosDelDia (cobros de cliente vencidos, vencimientos de proveedor ≤7d o
+//      vencidos, stock bajo y recurrentes en borrador).
 //   3. Si HAY avisos y NO se envió ya hoy (daily_alert_log), manda UN email resumen al
 //      email del negocio (company_config.email) y deja rastro. Si no hay avisos, NO envía
 //      (nunca un correo vacío). Si el negocio no tiene email configurado, lo registra y sigue.
@@ -14,7 +15,11 @@
 // Persistent / reintento) reenvíe el mismo correo.
 //
 // Secretos (RESEND_API_KEY) vienen del EnvironmentFile del servicio (=/etc/bamburu.env), igual
-// que la app. Pensado para correr como User=ibrahin desde un systemd timer. Escribe al journal.
+// que la app. Corre como User=ubuntu (el dueño de data/ y de bamburu.service) desde el timer
+// bamburu-avisos.timer (deploy/systemd/, diario 08:00 Europe/Madrid). Escribe al journal.
+//
+// OJO: solo envía a los tenants con company_config.email configurado. Un negocio sin email en
+// sus ajustes se registra como 'no_email' y se salta — no es un fallo del canal.
 //
 //   node scripts/bamburu-avisos.mjs            # todos los tenants
 //   node scripts/bamburu-avisos.mjs --dry-run  # calcula y reporta, NO envía ni marca

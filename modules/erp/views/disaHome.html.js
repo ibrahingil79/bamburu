@@ -10,8 +10,10 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboardin
   const fechaHoy = `${_dias[_now.getDay()]}, ${_now.getDate()} de ${_meses[_now.getMonth()]}`;
 
   // Texto proactivo de DISA, derivado de los avisos reales que ya calcula el motor.
+  // No promete "¿quieres que te los enseñe?" (eso obligaba a pasar por el chat): señala dónde se
+  // resuelven. La acción vive en /admin/avisos, no en una conversación.
   const disaProactivo = (alertState !== 'apagado' && alertCount > 0)
-    ? `Tienes ${alertCount} ${alertCount === 1 ? 'aviso que pide' : 'avisos que piden'} tu atención (vencimientos de proveedor y stock bajo). ¿Quieres que te los enseñe y preparemos los pagos?`
+    ? `Tienes ${alertCount} ${alertCount === 1 ? 'aviso que pide' : 'avisos que piden'} tu atención (cobros vencidos, pagos a proveedor, stock y recurrentes). Los tienes en Avisos, cada uno con su acción al lado.`
     : `Todo en orden por ahora. ¿En qué quieres trabajar hoy en tu negocio? Puedo crear facturas, registrar gastos o darte un resumen.`;
 
   // ── U6 · Onboarding — primeros pasos (solo presentación; el estado llega derivado del negocio) ──
@@ -84,33 +86,8 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboardin
         position: relative;
       }
 
-      /* Badge alertas (esquina superior derecha) */
-      .disa-alerts-badge {
-        position: absolute;
-        top: 12px;
-        right: 20px;
-        background: var(--danger-s);
-        color: var(--danger);
-        font-size: 11px;
-        padding: 5px 11px;
-        border-radius: 20px;
-        font-weight: 500;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        cursor: pointer;
-        border: 1px solid var(--border2);
-        font-family: inherit;
-        z-index: 5;
-        transition: background 0.15s;
-      }
-      .disa-alerts-badge .adot { width: 5px; height: 5px; background: var(--danger); border-radius: 50%; }
-      .disa-alerts-badge.visto {
-        background: var(--bg3);
-        color: var(--text2);
-        border-color: var(--border);
-      }
-      .disa-alerts-badge.visto .adot { background: var(--text2); }
+      /* El badge flotante de alertas se retiró: la única señal del chrome es la campana del
+         topbar, y en el Inicio el aviso vive en la tarjeta "Avisos" (clicable) y en su fila. */
 
       /* Stage central */
       .disa-stage {
@@ -178,6 +155,9 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboardin
         border-radius: 12px;
         padding: 13px 14px;
       }
+      /* La tarjeta de Avisos es un <a> a /admin/avisos: se ve el número y se va a resolverlo. */
+      .disa-fig-link { display: block; text-decoration: none; color: inherit; transition: border-color .15s, background .15s; }
+      .disa-fig-link:hover { border-color: var(--accent); background: var(--bg3); }
       .disa-fig-label { font-size: 11.5px; color: var(--text2); margin: 0 0 7px; display: flex; align-items: center; gap: 5px; }
       .disa-fig-label i { font-size: 14px; }
       .disa-fig-value { font-size: 21px; font-weight: 600; margin: 0; letter-spacing: -0.5px; color: var(--text); }
@@ -196,6 +176,7 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboardin
         width: 100%; box-sizing: border-box;
         background: none; border: none; font-family: inherit;
         text-align: left; cursor: pointer; color: inherit;
+        text-decoration: none;   /* la fila también se usa como <a> (→ /admin/avisos) */
       }
       .disa-row + .disa-row { border-top: 0.5px solid var(--bg3); }
       .disa-row:hover { background: var(--bg3); }
@@ -476,12 +457,6 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboardin
 
     <div class="disa-home">
 
-      ${alertState !== 'apagado' && alertCount > 0 ? `
-        <button class="disa-alerts-badge${alertState === 'visto' ? ' visto' : ''}" id="dh-alerts-badge" onclick="disaShowAlerts()">
-          <span class="adot"></span>
-          ${alertState === 'visto' ? 'Avisos' : (alertCount + ' ' + (alertCount === 1 ? 'alerta' : 'alertas'))}
-        </button>
-      ` : ''}
 
       <!-- Stage -->
       <div class="disa-stage" id="dh-stage">
@@ -512,22 +487,18 @@ ${onbHtml}
               <p class="disa-fig-label"><i class="ti ti-clock-hour-4" style="color:var(--text2)"></i>Pendientes</p>
               <p class="disa-fig-value">${kpis?.pendiente ?? 0}</p>
             </div>
-            <div class="disa-fig">
+            <a class="disa-fig disa-fig-link" href="/admin/avisos" title="Ver y resolver tus avisos">
               <p class="disa-fig-label"><i class="ti ti-alert-triangle" style="color:var(--danger)"></i>Avisos</p>
               <p class="disa-fig-value">${alertState !== 'apagado' ? (alertCount ?? 0) : 0}</p>
-            </div>
+            </a>
           </div>
 
           ${alertState !== 'apagado' && alertCount > 0 ? `
           <div class="disa-rows">
-            <button class="disa-row" type="button" onclick="disaShowAlerts()">
-              <span class="disa-row-label"><i class="ti ti-bell"></i>${alertCount} ${alertCount === 1 ? 'aviso pendiente' : 'avisos pendientes'}</span>
+            <a class="disa-row" href="/admin/avisos">
+              <span class="disa-row-label"><i class="ti ti-bell"></i>${alertCount} ${alertCount === 1 ? 'aviso pendiente' : 'avisos pendientes'} · resolverlos</span>
               <span class="disa-pill ${alertState === 'visto' ? 'aldia' : 'vencida'}">${alertState === 'visto' ? 'Visto' : 'Requiere atención'}</span>
-            </button>
-            <button class="disa-row" type="button" onclick="disaQuickSend('¿Qué requiere mi atención?')">
-              <span class="disa-row-label"><i class="ti ti-list-check"></i>Ver detalle y preparar pagos</span>
-              <span class="disa-pill porvencer">Por revisar</span>
-            </button>
+            </a>
           </div>
           ` : ''}`}
         </div>
@@ -588,12 +559,12 @@ ${onbHtml}
             </div>
             <div class="disa-card-desc">Ventas, pedidos y métricas de hoy</div>
           </button>
-          <button class="disa-card" onclick="disaQuickSend('¿Qué requiere mi atención?')">
+          <button class="disa-card" onclick="disaShowAlerts()">
             <div class="disa-card-head">
               <i class="ti ti-alert-triangle"></i>
               <div class="disa-card-title">¿Qué requiere mi atención?</div>
             </div>
-            <div class="disa-card-desc">Stock bajo, clientes, oportunidades</div>
+            <div class="disa-card-desc">Cobros vencidos, pagos, stock y recurrentes</div>
           </button>
           <button class="disa-card" onclick="disaQuickSend('Crea un producto nuevo')">
             <div class="disa-card-head">
@@ -637,10 +608,17 @@ ${onbHtml}
         disaSubmitHome();
       }
 
-      // Pulsar el badge (Paso d · resumen-primero): NO lanza una pregunta abierta a DISA. Pide
-      // al motor de avisos un RESUMEN DE CONTEOS (determinista, sin modelo, sin ofrecer acciones)
-      // y de paso marca los avisos como VISTOS (el badge pasa a gris). El DETALLE solo si el dueño
-      // lo pide luego escribiendo ("enséñame los vencimientos") — esa sí es conversación normal.
+      // Tarjeta "¿Qué requiere mi atención?" (Paso d · resumen-primero): NO lanza una pregunta
+      // abierta al modelo. Pide al motor de avisos un RESUMEN DE CONTEOS (determinista, sin
+      // modelo, sin ofrecer acciones) y marca los avisos como VISTOS para este usuario. Para
+      // RESOLVERLOS está /admin/avisos (la campana y la tarjeta "Avisos" llevan allí).
+      // El punto de la campana es la ÚNICA señal del chrome. Tras ver los avisos pasa a gris
+      // (siguen pendientes, pero ya no hay nada nuevo). Si no quedan, desaparece.
+      function apagarPuntoCampana() {
+        const dot = document.querySelector('#tbBell .dot');
+        if (dot) dot.classList.add('visto');
+      }
+
       window.disaShowAlerts = async function() {
         if (!dhStarted) {
           document.getElementById('dh-hero').classList.add('hidden');
@@ -659,9 +637,8 @@ ${onbHtml}
           const data = await res.json();
           dhRemoveTyping(typingId);
           dhAppendMsg('assistant', data.reply || 'Ahora mismo no tienes nada pendiente.');
-          // El badge pasa a "visto" (gris) en cuanto se abre: el rojo vuelve solo si aparece algo nuevo.
-          const badge = document.getElementById('dh-alerts-badge');
-          if (badge) { badge.classList.add('visto'); badge.textContent = ''; const d = document.createElement('span'); d.className = 'adot'; badge.appendChild(d); badge.appendChild(document.createTextNode(' Avisos')); }
+          // Quedaron vistos: el punto de la campana pasa de rojo a gris sin recargar.
+          apagarPuntoCampana();
         } catch {
           dhRemoveTyping(typingId);
           dhAppendMsg('assistant', 'No pude cargar tus avisos. Intenta de nuevo.');

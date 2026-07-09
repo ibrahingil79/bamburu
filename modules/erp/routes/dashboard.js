@@ -19,11 +19,12 @@ export function createDashboardRoutes(db) {
       const user = db.prepare('SELECT name FROM admin_users WHERE id = ?').get(session?.userId);
       if (user?.name) userName = user.name.split(' ')[0];
     } catch {}
-    // Paso (d) — el badge sale ENTERO del motor de avisos (fuentes: vencimientos de proveedor +
-    // stock bajo). count = total de avisos; estado = rojo (algo nuevo) / visto / apagado (Opción C).
-    // Una sola fuente de verdad → el número del badge y el del resumen-primero coinciden siempre.
+    // Paso (d) — el badge sale ENTERO del motor de avisos (fuentes: vencimientos de proveedor,
+    // cobros de cliente vencidos, stock bajo, recurrentes en borrador). count = total de avisos;
+    // estado = rojo (algo nuevo PARA ESTE USUARIO) / visto / apagado (Opción C). Una sola fuente
+    // de verdad → el número del badge, el del resumen-primero y el de /admin/avisos coinciden.
     try {
-      const est = estadoAvisos(db, new Date().toISOString().slice(0, 10));
+      const est = estadoAvisos(db, new Date().toISOString().slice(0, 10), session?.userId);
       alertCount = est.count;
       alertState = est.estado;
     } catch {}

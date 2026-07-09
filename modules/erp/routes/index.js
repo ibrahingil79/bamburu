@@ -35,6 +35,7 @@ import { createCobrosRoutes } from './cobros.js';
 import { createCrmRoutes } from './crm.js';
 import { createSupplierInvoiceRoutes } from './supplier-invoices.js';
 import { createPagosRoutes } from './pagos.js';
+import { createAvisosRoutes } from './avisos.js';
 import { createSecurityRoutes } from './security.js';
 import { createPerfilRoutes } from './perfil.js';
 import { createContabilidadRoutes } from './contabilidad-routes.js';
@@ -83,6 +84,7 @@ export function mountRoutes(app, db) {
   const { api: crmApi, views: crmViews } = createCrmRoutes(db);
   const { api: supplierInvoiceApi, views: supplierInvoiceViews } = createSupplierInvoiceRoutes(db);
   const { api: pagosApi, views: pagosViews } = createPagosRoutes(db);
+  const { api: avisosApi, views: avisosViews } = createAvisosRoutes(db);
   const { api: quoteApi, views: quoteViews } = createQuoteRoutes(db);
   const { api: pedidoApi, views: pedidoViews } = createPedidoRoutes(db);
   const { api: albaranApi, views: albaranViews } = createAlbaranRoutes(db);
@@ -138,6 +140,7 @@ export function mountRoutes(app, db) {
   admin.route('/crm', crmViews);                // CRM comercial: embudo (/) + cola (/cola)
   admin.route('/supplier-invoices', supplierInvoiceViews);
   admin.route('/pagos', pagosViews);
+  admin.route('/avisos', avisosViews);          // pantalla central de avisos (motor: erp/avisos.js)
   admin.route('/contabilidad', contabViews);
   admin.route('/verifactu', createVerifactuEnvioRoutes(db).views);
   admin.route('/conciliacion', createConciliacionRoutes(db).views);
@@ -185,6 +188,7 @@ export function mountRoutes(app, db) {
   apiApp.route('/crm', crmApi);
   apiApp.route('/supplier-invoices', supplierInvoiceApi);
   apiApp.route('/pagos', pagosApi);
+  apiApp.route('/avisos', avisosApi);
   apiApp.route('/contabilidad', contabApi);
   apiApp.route('/stock', stockApi);
   app.route('/api/erp', apiApp);
