@@ -32,14 +32,30 @@ function hashPasswordLegacy(password) {
   return createHash('sha256').update('bamburu_2026_' + password).digest('hex');
 }
 
+// Coste de bcrypt para contraseñas NUEVAS (opción A del diagnóstico de carga). Era 12: cada
+// login costaba ~242 ms de CPU en este servidor y el pool de libuv (4 hilos) saturaba los 4
+// cores. A 10 baja a ~61 ms —del orden de 4×— y sigue por encima del mínimo que recomienda
+// OWASP. Cambiar esta constante migra a todo el mundo solo, vía needsRehash (abajo).
+export const BCRYPT_COST = 10;
+
 export async function hashPassword(password) {
-  return bcrypt.hash(password, 12);
+  return bcrypt.hash(password, BCRYPT_COST);
+}
+
+// Coste con el que se generó un hash bcrypt ('$2b$12$...' → 12). null si no se puede leer.
+function bcryptCost(hash) {
+  try { return bcrypt.getRounds(hash); } catch { return null; }
 }
 
 export async function verifyPassword(password, storedHash) {
   if (storedHash.startsWith('$2')) {
     const valid = await bcrypt.compare(password, storedHash);
-    return { valid, needsRehash: false };
+    // Un hash bcrypt con un coste DISTINTO al vigente también hay que renovarlo: quien entra
+    // con una contraseña guardada a coste 12 sale con ella guardada a coste 10, sin enterarse.
+    // Antes esto devolvía siempre `false`, así que un cambio de coste no migraba a nadie: solo
+    // se renovaban los hashes del sistema viejo (sha256). Vale en los dos sentidos (subir o
+    // bajar el coste). Solo si la contraseña es correcta: renovar exige el texto plano.
+    return { valid, needsRehash: valid && bcryptCost(storedHash) !== BCRYPT_COST };
   }
   const valid = hashPasswordLegacy(password) === storedHash;
   if (valid) return { valid: true, needsRehash: true };

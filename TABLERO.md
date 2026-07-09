@@ -196,6 +196,46 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
 
 ## Función por encargo del dueño (fuera de los ejes A/B/C)
 
+### Rendimiento · Opción A — coste de bcrypt y frenos de peticiones  ✅ HECHO (2026-07-09)
+Encargo expreso del dueño a partir de `docs/rendimiento/diagnostico-carga.md` (que se guarda aquí con
+este commit: no estaba en el repo). **Solo la opción A.** Las opciones B (varios procesos con afinidad)
+y C (sacar la BD del hilo principal) quedan sin tocar, tal como pidió el dueño.
+
+- **bcrypt de coste 12 → 10** (`core/auth.js`, constante `BCRYPT_COST`, fuente única). Medido en el banco
+  aislado: el login pasa de **3,9 a 15,8 req/s** (p50 259 → 63 ms) a concurrencia 1, y de **15,3 a 59,8
+  req/s** (p50 1010 → 263 ms) a concurrencia 16. **~4×**, justo lo que predecía el informe ("50-60
+  logins/s"). Sigue por encima del mínimo de OWASP.
+- **Migración al vuelo, sin resetear nada.** `verifyPassword` solo marcaba `needsRehash` para los hashes
+  del sistema viejo (sha256): un hash bcrypt devolvía SIEMPRE `false`, así que bajar la constante no
+  habría migrado a nadie. Ahora lee el coste del propio hash (`bcrypt.getRounds`) y renueva si difiere del
+  vigente — vale para subir y para bajar. Verificado: 50 dueños a `$2b$12$` acabaron en `$2b$10$` tras un
+  login; una contraseña **incorrecta** no renueva nada; el sha256 legado sigue migrando.
+  - El coste estaba además escrito a mano en `models.js` (admin de arranque) y `scripts/reset-admin.js`,
+    ambos creando contraseñas nuevas. Los dos leen ya `BCRYPT_COST`. Un negocio nuevo nace a `$2b$10$`.
+- **Freno general: NO se mueve, sube el tope de 100 → 600/min por IP.** Ponerlo detrás de
+  `tenantMiddleware` (para tener clave negocio+IP) dejaría `/`, `/acceso`, `/docs`, `POST /find-tenant` y
+  `GET /admin/autologin` **sin freno ninguno** — y `/find-tenant` es justo la que hay que blindar. El 600
+  sale de medir: una carga de página del admin cuenta **2,8 peticiones** (5 la más pesada,
+  `/admin/analytics`), y una oficina de 5 empleados tras un NAT genera 133 req/min — con el tope de 100
+  disparaba **21 respuestas 429 con tráfico normal**. Con 600: 0 con 5 empleados, 0 con 10, y una
+  avalancha de 4.467 req/min sigue cortada (599 servidas, 1.633 bloqueadas).
+  - *(Nota: el informe decía "~9 llamadas a `/api/` por página". Hoy son 2,8 de media.)*
+- **`POST /find-tenant` estrena freno propio** (10/min + 60/hora por IP). Es una ruta sin autenticar que
+  resuelve email → negocio y distingue acierto de fallo (404): oráculo de enumeración. Y es cara:
+  `getTenantsByEmail` **abre la BD de cada negocio activo** (57-67 ms con 50). De 99 sondas/min a 10.
+- **El freno respondía HTML a un endpoint JSON.** `/find-tenant` se llama por `fetch` + `await r.json()`;
+  el 429 salía como página y el usuario leía *"Error de conexión"*. `core/rate-limit.js` responde ahora
+  JSON a quien manda JSON (o pide `Accept: application/json`); una navegación normal sigue recibiendo la
+  página. No se ha tocado ningún límite de los frenos que ya iban bien (login, DISA, tienda, alta).
+- **Banco de pruebas** (`:3999`, `data/` propia, 50 negocios, snapshot restaurado y reinicio entre
+  escenarios, **nunca contra producción**). Reprodujo la línea base del informe antes de tocar nada (3,9
+  req/s · p50 259 ms frente a los 3,9 · 261 publicados), así que la mejora es del cambio, no del medidor.
+- **Fuera** (registrado): separar el cupo **por persona** dentro de un mismo negocio (hoy la clave del
+  freno general es solo la IP; los compañeros de una oficina comparten cubo) · `superadmin/index.js:94`
+  usa `verifyPassword` pero **ignora `needsRehash`**, así que esa contraseña no migrará nunca · cada 429
+  hace un INSERT en `control.db` (`recordSecurityEvent`): una petición bloqueada cuesta más que una
+  servida · hallazgo 1 del informe (un negocio con la BD bloqueada congela a los demás 5 s) · opciones B y C.
+
 ### Avisos — pantalla central, cobros vencidos, visto por usuario y correo diario  ✅ HECHO (2026-07-09)
 Encargo expreso del dueño a partir de `docs/disa/diagnostico-avisos.md`. **Aditivo y reversible**: no se
 toca el hash de facturas, ni el stock, ni la lógica de los motores que ya calculan cada aviso

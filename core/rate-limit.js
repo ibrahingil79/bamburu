@@ -33,7 +33,14 @@ export function rateLimit({ windowMs, max, keyPrefix, message = 'Demasiados inte
       c.header('Retry-After', String(retryAfter));
       // Vigilancia: la petición frenada queda registrada para el panel de superadmin.
       recordSecurityEvent('ratelimit:' + keyPrefix, ip, slug, c.req.method + ' ' + c.req.path);
-      if (c.req.path.startsWith('/api/')) {
+      // Responde en el idioma del cliente. Antes solo miraba el prefijo /api/, así que un
+      // endpoint JSON fuera de /api/ (POST /find-tenant) recibía una PÁGINA HTML: el `await
+      // r.json()` del navegador reventaba y el usuario leía "Error de conexión" en vez del
+      // motivo real. Una navegación normal manda Accept: text/html → sigue recibiendo la página.
+      const esperaJson = c.req.path.startsWith('/api/')
+        || (c.req.header('content-type') || '').includes('application/json')
+        || (c.req.header('accept') || '').includes('application/json');
+      if (esperaJson) {
         return c.json({ error: message, retry_after_seconds: retryAfter }, 429);
       }
       return c.html(`<html><body style="font-family:sans-serif;max-width:500px;margin:50px auto;text-align:center"><h1>429 — Demasiadas peticiones</h1><p>${message}</p><p>Inténtalo de nuevo en ${retryAfter} segundos.</p></body></html>`, 429);

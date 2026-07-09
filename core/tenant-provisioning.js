@@ -40,7 +40,7 @@ export async function provisionTenant(input) {
   const db_filename = path.join('data', 'tenants', slug + '.db');
   mkdirSync(path.join(process.cwd(), 'data', 'tenants'), { recursive: true });
 
-  // 3. Hashear contrasena (bcrypt saltRounds=12, igual que core/auth.js)
+  // 3. Hashear contrasena (bcrypt con el coste vigente, BCRYPT_COST de core/auth.js)
   const passwordHash = await hashPassword(password);
 
   // 4. Crear y migrar el .db del tenant

@@ -1,6 +1,6 @@
 import bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
-import { hashPasswordLegacy } from '../../core/auth.js';
+import { hashPasswordLegacy, BCRYPT_COST } from '../../core/auth.js';
 import { backfillCodes } from './codes.js';
 import { recomputeStock } from './stock.js';
 import { ensureLedgerSchema } from './contabilidad.js';
@@ -578,7 +578,7 @@ export function runMigrations(db) {
   const adminCount = db.prepare('SELECT COUNT(*) as c FROM admin_users').get().c;
   if (adminCount === 0) {
     const pwd = randomBytes(12).toString('base64url');
-    const hash = bcrypt.hashSync(pwd, 12);
+    const hash = bcrypt.hashSync(pwd, BCRYPT_COST);   // el coste vive en un solo sitio (core/auth.js)
     db.prepare('INSERT INTO admin_users (name, email, password_hash, role, must_change_password) VALUES (?,?,?,?,?)')
       .run('Administrador', 'admin@bamburu.com', hash, 'owner', 1);
     console.log(`

@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 import bcrypt from 'bcrypt';
 import { db } from '../core/db.js';
+import { BCRYPT_COST } from '../core/auth.js';
 
 const email = process.argv[2] || 'admin@bamburu.com';
 
@@ -17,7 +18,7 @@ if (!user) {
 }
 
 const newPassword = randomBytes(12).toString('base64url');
-const hash = bcrypt.hashSync(newPassword, 12);
+const hash = bcrypt.hashSync(newPassword, BCRYPT_COST);   // el coste vive en un solo sitio (core/auth.js)
 
 db.prepare(`
   UPDATE admin_users

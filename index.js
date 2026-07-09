@@ -22,8 +22,21 @@ const app = new Hono();
 app.use('*', securityHeaders());
 app.use('/public/*', serveStatic({ root: './' }));
 // Límite general por IP (anti-avalancha). Va DESPUÉS de serveStatic: los estáticos de /public
-// se sirven antes y NO lo disparan (una página normal carga varios assets). ~100 req/min por IP.
-app.use('*', rateLimit({ windowMs: 60000, max: 100, keyPrefix: 'global' }));
+// se sirven antes y NO lo disparan (una página normal carga varios assets).
+//
+// NO se mueve detrás de tenantMiddleware, aunque así la clave sería negocio+IP: entre este
+// punto y la línea ~1421 se registran /, /acceso, /docs, POST /find-tenant y /admin/autologin,
+// que se quedarían SIN ningún freno. /find-tenant es justo la ruta que hay que blindar contra
+// enumeración de emails; tiene su propio freno, más abajo.
+//
+// El máximo sube de 100 a 600/min por IP. Medido en el banco aislado: una carga de página del
+// admin cuenta 2,8 peticiones de media (5 la más pesada, /admin/analytics), y una oficina de 5
+// empleados tras un mismo NAT genera ~133 peticiones/min — con el tope de 100 disparaba 429 con
+// tráfico normal. 600 cubre ~10 empleados a buen ritmo con holgura, y sigue siendo un tope
+// (10 req/s por IP) muy por debajo de lo que aguanta el servidor (~1.200 lecturas/s). Lo caro y
+// lo sensible tiene freno propio y más estricto: login (5/15 min), DISA, tienda, alta de
+// negocio y /find-tenant. Separar el cupo por PERSONA dentro de un negocio queda pendiente.
+app.use('*', rateLimit({ windowMs: 60000, max: 600, keyPrefix: 'global' }));
 app.get('/', c => c.html(`<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -1161,7 +1174,17 @@ gsap.to('.hero-glow2', {
 </body>
 </html>`));
 
-app.post('/find-tenant', async c => {
+// Freno PROPIO de /find-tenant (antes solo la cubría el general, y al subirlo a 600 quedaría
+// aún más expuesta). Es una ruta SIN autenticar que resuelve email → negocio, y distingue el
+// acierto del fallo (404 «no encontramos ningún negocio»): es un oráculo de enumeración. Además
+// cuesta cara: getTenantsByEmail ABRE la BD de cada negocio activo (57-67 ms con 50 negocios).
+// Un humano la usa una o dos veces al entrar; 10/min y 60/hora por IP le sobran.
+const findTenantMin  = rateLimit({ windowMs: 60_000, max: 10, keyPrefix: 'find-tenant',
+  message: 'Demasiadas búsquedas de negocio. Inténtalo dentro de un minuto.' });
+const findTenantHora = rateLimit({ windowMs: 60 * 60_000, max: 60, keyPrefix: 'find-tenant-hora',
+  message: 'Demasiadas búsquedas de negocio desde aquí. Inténtalo más tarde.' });
+
+app.post('/find-tenant', findTenantMin, findTenantHora, async c => {
   try {
     const body = await c.req.json();
     const email = (body?.email || '').trim().toLowerCase();
