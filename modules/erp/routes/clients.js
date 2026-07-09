@@ -444,6 +444,7 @@ export function createClientRoutes(db, cfg = {}) {
       ${cobroModalHtml()}
       <script>
       ${cobroModalScript(sym)}
+      const PUEDE_CRM = ${can(c, 'crm.read') ? 'true' : 'false'};   // la sección CRM de la ficha solo si tiene la llave
       let currentDetailClientId=null;   // cliente abierto en la ficha (para refrescar tras un cobro)
       // Punto de extensión del modal compartido: tras un cobro, refresca la ficha del cliente
       // (su "Te debe X €", deuda más antigua y la tabla de facturas).
@@ -560,8 +561,54 @@ export function createClientRoutes(db, cfg = {}) {
           debtBlock+
           '<div class="table-wrap" style="margin-bottom:1.25rem"><table><thead><tr><th>Factura</th><th>Vence</th><th>Total</th><th>Pendiente</th><th>Cobro</th><th>Próxima acción</th><th></th></tr></thead><tbody>'+invRows+'</tbody></table></div>'+
           '<h4 style="margin-bottom:.75rem">Historial de pedidos</h4>'+
-          '<div class="table-wrap"><table><thead><tr><th>Orden</th><th>Total</th><th>Estado</th><th>Fecha</th></tr></thead><tbody>'+ordRows+'</tbody></table></div>';
+          '<div class="table-wrap"><table><thead><tr><th>Orden</th><th>Total</th><th>Estado</th><th>Fecha</th></tr></thead><tbody>'+ordRows+'</tbody></table></div>'+
+          (PUEDE_CRM?'<div id="crmSection" style="margin-top:1.5rem"><div class="skel" style="display:block;height:1.1rem;width:45%"></div></div>':'');
         openModal('detailModal');
+        if(PUEDE_CRM) loadCrm(id);
+      }
+      // ── CRM en la ficha: oportunidades abiertas (con próxima acción) + línea de tiempo unificada.
+      // Da superficie a los dos endpoints que ya existían sin ella (summary + timeline). El timeline
+      // llega YA troceado por permisos desde el servidor (crm.read no revela facturas/cobros sin su
+      // llave): aquí solo se pinta lo que vino. Fallo silencioso: si no hay permiso, la ficha no cambia.
+      async function loadCrm(id){
+        const box=document.getElementById('crmSection'); if(!box) return;
+        let sum, tl=[];
+        try{ sum=await api('GET','/api/erp/crm/clients/'+id+'/summary'); }
+        catch(e){ box.innerHTML=''; return; }
+        try{ tl=await api('GET','/api/erp/crm/clients/'+id+'/timeline'); }catch(e){ tl=[]; }
+        const eur=n=>'${sym}'+Number(n||0).toFixed(2);
+        const head='<div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.75rem">'
+          +'<h4 style="margin:0">Actividad y oportunidades</h4>'
+          +'<a class="btn btn-secondary btn-sm" href="/admin/crm">Ver embudo</a></div>';
+        const resumen='<div class="alert '+(sum.abiertas.length?'alert-warn':'alert-ok')+'" style="margin-bottom:1rem">'
+          +'<strong>'+sum.abiertas.length+'</strong> abierta'+(sum.abiertas.length===1?'':'s')+' · '+eur(sum.valorAbierto)+' en juego'
+          +' · Ganadas <strong>'+sum.ganadas.count+'</strong> ('+eur(sum.ganadas.total)+')'
+          +' · Perdidas '+sum.perdidas.count+' ('+eur(sum.perdidas.total)+')</div>';
+        const opps=sum.abiertas.map(function(o){
+          const p=o.proximaAccion; const due=!!(p&&p.accion);
+          return '<a href="/admin/crm" style="display:block;text-decoration:none;color:inherit;border:1px solid var(--border2);border-radius:10px;padding:.6rem .75rem;margin-bottom:.5rem">'
+            +'<div style="display:flex;justify-content:space-between;gap:.5rem">'
+            +'<strong style="color:var(--text)">'+escHtml(o.title)+'</strong>'
+            +'<span style="white-space:nowrap"><strong>'+eur(o.amount)+'</strong> <span style="color:var(--muted);font-size:.75rem">'+o.probability+'%</span></span></div>'
+            +'<div style="display:flex;align-items:center;gap:.4rem;margin-top:.3rem">'
+            +'<span class="badge b-blue">'+escHtml(o.stage_label||o.stage)+'</span>'
+            +'<span style="font-size:.8rem;color:'+(due?'var(--accent)':'var(--muted)')+'">'
+            +(due?'<i class="ti ti-bell"></i> ':'<i class="ti ti-clock"></i> ')+escHtml((p&&p.motivo)||'Al día')+'</span></div></a>';
+        }).join('');
+        const evs=(tl||[]).slice(0,15).map(function(e){
+          const date=String(e.ts||'').slice(0,10);
+          const t=e.href?'<a href="'+e.href+'" target="_blank" style="color:inherit">'+escHtml(e.title)+'</a>':escHtml(e.title);
+          return '<div style="display:flex;gap:.6rem;padding:.5rem 0;border-bottom:1px solid var(--border)">'
+            +'<i class="ti '+(e.icon||'ti-point')+'" style="color:var(--muted);margin-top:.15rem"></i>'
+            +'<div style="flex:1"><div style="font-size:.85rem">'+t+'</div>'
+            +(e.detail?'<div style="color:var(--muted);font-size:.78rem">'+escHtml(e.detail)+'</div>':'')+'</div>'
+            +'<span style="color:var(--muted);font-size:.75rem;white-space:nowrap">'+date+'</span></div>';
+        }).join('');
+        const timeline=evs
+          ? ('<h5 style="margin:1rem 0 .25rem;font-size:.82rem;color:var(--muted)">Línea de tiempo</h5>'+evs
+             +(tl.length>15?'<div style="text-align:center;padding:.5rem"><a href="/admin/crm" style="font-size:.8rem">Ver todo en Oportunidades</a></div>':''))
+          : (sum.abiertas.length?'':'<div style="color:var(--muted);font-size:.85rem">Aún no hay actividad comercial con este cliente. Ábrele una oportunidad cuando te pida precio.</div>');
+        box.innerHTML=head+resumen+opps+timeline;
       }
       // U6 · Onboarding: al llegar con ?nuevo=1 (enlace "Vamos →" del checklist de Inicio) se abre
       // directo el alta de cliente. Limpia la query para que un refresco no lo reabra. Solo UI.

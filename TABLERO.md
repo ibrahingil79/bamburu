@@ -187,6 +187,64 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
 
 ---
 
+## Función por encargo del dueño (fuera de los ejes A/B/C)
+
+### CRM comercial — embudo de oportunidades + actividad de cliente  ✅ HECHO (2026-07-09)
+Encargo expreso del dueño (estaba en el roadmap futuro). **Motor primero, DISA después** (RITUAL): esta
+tanda cierra el motor y las pantallas; la voz de DISA queda para el Eje B.
+
+- **Investigación en fuente oficial** (`docs/crm/embudo-referencia.md`, verificada, no de memoria; lo no
+  comprobable va marcado NO VERIFICADO): Salesforce, HubSpot, Pipedrive, Holded (competidor directo ES).
+  Decisiones que salen de ahí:
+  - **Estado separado de la etapa** (`status ∈ activa|ganada|perdida`, ortogonal a `stage`), como Pipedrive
+    y Holded. Ganada/Perdida NO son etapas → al cerrar se **conserva la etapa** en la que se cayó (métrica
+    real para un autónomo), sin columna extra. Reabrir existe (un drop por error no es callejón sin salida).
+  - **4 etapas abiertas** 10/30/60/85 % (Nuevo contacto · Cualificado · Presupuesto enviado · Negociación).
+    Interpolación razonada entre SF y HS; se descartan las etapas "evento de calendario" de PD/HS (venta SaaS).
+  - **Motivo de pérdida híbrido** (picklist + texto libre; «Otro» exige nota). Hallazgo: ningún CRM trae
+    lista por defecto → la nuestra es propuesta razonada, y así consta en el código.
+  - **Origen** anclado en `LeadSource` de Salesforce (única lista verificable en doc oficial), podado.
+- **Migración aditiva, sin DROP** (`models.js`): dos tablas nuevas `opportunities` + `client_activities`
+  (hermana de `collection_actions`, sin `invoice_id`). `stage` sin CHECK a propósito (cambiarlo obligaría a
+  recrear=DROP); la lista cerrada la validan zod + servicio (fuente única en `crm.js`). Permisos propios
+  **`crm.read` / `crm.manage`** (no se reutiliza `clients.*`): a Admin y Seller; owner/admin hacen bypass.
+- **Motor** (`modules/erp/crm.js`, espejo de `cobros.js`): próxima acción por **silencio vs cadencia de la
+  etapa**; **compromiso** pospone (espejo de la promesa de pago); **en_riesgo** si venció el cierre previsto;
+  priorización explicable (cada fila con su `motivo`); worklist + embudo con **previsión ponderada** (Σ
+  valor×prob); **timeline unificado** (oportunidades + actividad + cadena documental + cobros); email de
+  seguimiento por Resend (mismo mailer, `replyTo` al dueño, confirm-first). Todo por **servicio validado**
+  (la única vía de escritura, la que usará DISA).
+- **Pantallas** (`routes/crm.js`, `/admin/crm`, menú "Oportunidades"): **Embudo** (Kanban con drag&drop
+  nativo; soltar en Ganar/Perder abre el cierre, que exige motivo) y **Cola de trabajo** (lo más urgente
+  arriba, con su porqué). Reutiliza tokens/U2/U3; cero azules nuevos.
+- **Ficha de cliente**: nueva sección **"Actividad y oportunidades"** (summary + timeline) que da superficie
+  a dos endpoints que quedaban colgantes. El timeline llega **troceado por permisos** desde el servidor
+  (`crm.read` NO revela facturas/cobros sin su llave — se cerró esa puerta trasera en la ruta).
+- **Fuera** (registrado): la **voz de DISA** sobre el embudo (Eje B) · registrar actividad desde la propia
+  ficha (hoy se gestiona en `/admin/crm`) · agenda/calendario del roadmap.
+- **Verificado**: motor `scripts/verify-crm.mjs` **44/0** (crear/mover/cerrar ganada+perdida+motivo/reabrir,
+  cadencia, compromiso, en_riesgo, worklist/ponderado, actividad, timeline+troceo por permisos, archivar,
+  migración idempotente) + **smoke navegador real** (embudo, cola, ficha) con la oportunidad creada por el
+  API real: 4 columnas, KPIs, tarjeta, cola priorizada y la sección de la ficha con su línea de tiempo,
+  **0 errores JS** (solo el 404 de `/favicon.ico`, ajeno y de toda la app). Aditivo y reversible.
+- **Arreglo (2026-07-09, tras prueba del dueño)**: el selector de cliente del modal de oportunidad no dejaba
+  ni **elegir clientes ya registrados** ni **avanzar si el cliente no existía**. Dos causas y sus arreglos:
+  - Era **buscar-y-solo-al-teclear-≥2**: si no tecleabas, no veías a nadie que elegir. Ahora es un
+    **combobox**: al **enfocar** el campo muestra tus clientes para elegir; teclear filtra. La selección va
+    en **`mousedown` + preventDefault** (se elige antes de perder el foco: inmune al cierre-por-blur que no
+    aparece en pruebas headless) y **cierra al salir** del campo (no tapa el resto del formulario).
+  - Era **buscar-o-nada**: si el cliente no existía, callejón sin salida. Ahora **crea el cliente en línea**
+    (nombre + email/teléfono + tipo → `POST /api/erp/clients`, permiso `clients.create`); el desplegable
+    ofrece "Crear «X»" siempre y en el vacío.
+  - El modal se **unificó** en un solo sitio (`oppModalHtml`, antes duplicado en las dos vistas). Nombres de
+    cliente **escapados** (`escHtml`) en el desplegable (hay filas de prueba con payloads XSS en el tenant
+    dev: se pintan como texto, no ejecutan).
+  - **Verificado** en navegador real: selector 17/0 (elegir registrado + crear nuevo, **escritorio y móvil
+    390px**) + combobox 7/0 (enfocar muestra lista · mousedown elige · teclear filtra · blur cierra). 0
+    errores JS.
+
+---
+
 > **Fase actual: OPTIMIZACIÓN** (CANON v2 §4) sobre tres ejes — UX, DISA, Seguridad. Las funciones
 > nuevas ceden prioridad al pulido salvo decisión del dueño. **Cuándo salir al mercado lo decide el
 > dueño**; el asistente y Code no lo recomiendan.
@@ -289,7 +347,7 @@ fase actual ceden prioridad a la optimización (Ejes A/B/C).
 - **DISA `create_order` multi-línea:** limitación heredada de la base e-commerce; los pedidos multi-línea entran con el flujo pedido→albarán→factura.
 
 ### Roadmap futuro — módulos (decisión del dueño, NO iniciar sin encargo)
-DISA como producto proactivo · **Citas / Agenda** (🔺 prioritaria) · CRM comercial (embudo/oportunidades, agenda/calendario) · Control horario (registro de jornada) · TPV / POS módulo completo · Parte de obra · Cobro recurrente + domiciliación SEPA · Telegram como canal · Mapas (OpenStreetMap) · Documentos / suite ofimática ligera · App móvil nativa · API pública / webhooks · Integraciones / marketplace · Dashboards personalizables · Multiempresa · Fabricación · Multi-moneda · Firma digital de documentos · Previsión de caja 3/6/12 meses · Proyectos / rentabilidad · Partes de horas · Servicio de campo / órdenes de trabajo · Helpdesk.
+DISA como producto proactivo · **Citas / Agenda** (🔺 prioritaria) · CRM comercial (**embudo/oportunidades ✅ HECHO 2026-07-09**; agenda/calendario pendiente) · Control horario (registro de jornada) · TPV / POS módulo completo · Parte de obra · Cobro recurrente + domiciliación SEPA · Telegram como canal · Mapas (OpenStreetMap) · Documentos / suite ofimática ligera · App móvil nativa · API pública / webhooks · Integraciones / marketplace · Dashboards personalizables · Multiempresa · Fabricación · Multi-moneda · Firma digital de documentos · Previsión de caja 3/6/12 meses · Proyectos / rentabilidad · Partes de horas · Servicio de campo / órdenes de trabajo · Helpdesk.
 
 ---
 

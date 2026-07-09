@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { str, strOpt, email as emailField, price, intPos } from '../../core/validate.js';
 import { ADJUST_REASONS, ADJUST_MODES } from './stock.js';
+// CRM: las listas cerradas viven en el motor (crm.js). Aquí solo se validan. Sin ciclo de imports:
+// crm.js no importa schemas.js (solo core/escape.js).
+import { ETAPA_KEYS, ORIGENES, MOTIVOS_PERDIDA, CANALES } from './crm.js';
 
 const optId = z.union([z.null(), z.coerce.number().int().positive()]).optional();
 // Multi-almacén · Capa 2 — almacén opcional en las operaciones. Permisivo: '' / null /
@@ -342,6 +345,62 @@ export const accountActionSchema = z.object({
 }).refine(d => d.type !== 'cobro_cuenta' || d.modo !== 'manual' || (Array.isArray(d.asignacion) && d.asignacion.length > 0), {
   message: 'El reparto manual necesita la asignación por factura', path: ['asignacion'],
 });
+
+// ── CRM comercial ──────────────────────────────────────────────
+// Las listas cerradas NO se escriben a mano aquí: se leen de crm.js (fuente única), igual que
+// clientFieldOptions hace con clientSchema. Así el prompt de DISA, el formulario y el validador
+// no pueden desincronizarse nunca. `z.enum` necesita una tupla no vacía → se castea el array.
+const enumOf = (arr) => z.enum(arr);
+const idReq = z.coerce.number().int().positive();
+
+export const opportunitySchema = z.object({
+  client_id:           idReq,
+  title:               str(200),
+  amount:              z.coerce.number().nonnegative().max(100_000_000).optional().default(0),
+  stage:               enumOf(ETAPA_KEYS).optional().default('nuevo'),
+  // Probabilidad: si no viene, la fija la etapa (crm.js). '' se trata como "no viene".
+  probability:         z.union([z.literal(''), z.null(), z.coerce.number().int().min(0).max(100)]).optional(),
+  expected_close_date: z.union([z.literal(''), z.null(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).optional(),
+  source:              z.union([z.literal(''), enumOf(ORIGENES)]).optional().default(''),
+  notes:               strOpt(2000),
+});
+
+// Mover de etapa: solo etapas ABIERTAS. Ganada/Perdida NO son etapas (ver docs/crm/embudo-referencia.md),
+// van por closeOpportunitySchema — que es lo que impide "arrastrar a Perdido" sin dar motivo.
+export const opportunityStageSchema = z.object({
+  stage: enumOf(ETAPA_KEYS),
+  note:  strOpt(500),
+});
+
+export const closeOpportunitySchema = z.object({
+  status:      z.enum(['ganada', 'perdida']),
+  lost_reason: z.union([z.literal(''), z.null(), enumOf(MOTIVOS_PERDIDA)]).optional(),
+  note:        strOpt(1000),
+}).refine(d => d.status !== 'perdida' || MOTIVOS_PERDIDA.includes(d.lost_reason), {
+  message: 'Para dar una oportunidad por perdida hace falta el motivo', path: ['lost_reason'],
+}).refine(d => !(d.status === 'perdida' && d.lost_reason === 'otro') || !!String(d.note || '').trim(), {
+  message: 'Si el motivo es «Otro», cuéntame en una línea qué pasó', path: ['note'],
+});
+
+// Actividad de cliente (con o sin oportunidad, SIEMPRE sin factura). Espejo de collectionActionSchema.
+// 'cambio_etapa' y 'cierre' NO se aceptan aquí: los escribe el motor al mover/cerrar, no un humano.
+export const clientActivitySchema = z.object({
+  opportunity_id:  z.union([z.literal(''), z.null(), z.coerce.number().int().positive()]).optional(),
+  type:            z.enum(['contacto', 'nota', 'compromiso', 'email']),
+  channel:         z.union([z.literal(''), z.null(), enumOf(CANALES)]).optional(),
+  note:            strOpt(2000),
+  commitment_date: z.union([z.literal(''), z.null(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).optional(),
+  tono:            strOpt(30),
+  email_subject:   z.string().trim().max(200).optional(),
+  email_text:      z.string().max(8000).optional(),
+}).refine(d => d.type !== 'contacto' || CANALES.includes(d.channel), {
+  message: 'Un contacto necesita canal (teléfono, WhatsApp, reunión…)', path: ['channel'],
+}).refine(d => d.type !== 'compromiso' || !!d.commitment_date, {
+  message: 'Un compromiso necesita la fecha en la que quedasteis', path: ['commitment_date'],
+});
+
+// Espejo de clientFieldOptions: valores EXACTOS para que DISA no invente ninguno.
+export const crmFieldOptions = { stage: ETAPA_KEYS, source: ORIGENES, lost_reason: MOTIVOS_PERDIDA, channel: CANALES };
 
 // ── Discounts ──────────────────────────────────────────────────
 export const discountCodeSchema = z.object({

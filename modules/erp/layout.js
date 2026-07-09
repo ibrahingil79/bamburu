@@ -287,6 +287,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     'purchase-orders': 'purchases.read',
     clients:          'clients.read',
     'client-groups':  'clients.read',
+    crm:              'crm.read',
     analytics:        'analytics.read',
     disa:             null,
     perfil:           null,   // todo usuario gestiona su propio perfil
@@ -321,7 +322,12 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       { href: '/admin/portal', label: 'Portal de cliente', key: 'portal', icon: 'ti-external-link' },
       { href: '/admin/clients', label: 'Clientes', key: 'clients', icon: 'ti-users' },
       { href: '/admin/clients/groups', label: 'Grupos', key: 'client-groups', icon: 'ti-users-group' },
-      { label: 'CRM', key: 'crm', disabled: true, icon: 'ti-address-book' },
+      // Era un cartel gris (`disabled:true`, sin ruta ni tabla). Ahora es el embudo comercial real.
+      // NO se llama "CRM": ese nombre colisionaba con "Clientes", que es donde vive el CRM básico
+      // (ficha, grupos, historial) y que ya estaba CERRADO. Lo pendiente era el embudo, y así se
+      // llama. La ruta sigue siendo /admin/crm (es el módulo), pero el usuario lee "Oportunidades",
+      // que es la palabra de Holded ("embudos de venta" y "oportunidades"), no "negocios"/"deals".
+      { href: '/admin/crm', label: 'Oportunidades', key: 'crm', icon: 'ti-target-arrow' },
     ]},
     { label: 'Compras y gastos', icon: 'ti-receipt', items: [
       { href: '/admin/supplier-invoices', label: 'Facturas recibidas', key: 'supplier-invoices', icon: 'ti-file-dollar' },

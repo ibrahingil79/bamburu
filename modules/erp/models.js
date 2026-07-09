@@ -1742,6 +1742,11 @@ export function runMigrations(db) {
     { module: 'conciliacion', action: 'manage', description: 'Importar extractos (Norma 43) y conciliar/ignorar/deshacer' },
     { module: 'recurrentes',  action: 'read',   description: 'Ver facturas recurrentes: plantillas y borradores' },
     { module: 'recurrentes',  action: 'manage', description: 'Crear/editar/pausar plantillas recurrentes' },
+    // CRM comercial — permiso propio. NO se reutiliza clients.* : ver la ficha de un cliente y
+    // gobernar el embudo de ventas son dos accesos distintos (un administrativo puede necesitar
+    // el primero sin el segundo). `manage` cubre crear/mover/cerrar oportunidad y registrar actividad.
+    { module: 'crm',       action: 'read',   description: 'Ver el CRM: embudo de oportunidades y actividad de cliente' },
+    { module: 'crm',       action: 'manage', description: 'Crear/mover/cerrar oportunidades y registrar actividad de cliente' },
   ];
   for (const p of permissionsData) {
     db.prepare('INSERT OR IGNORE INTO permissions (module, action, description) VALUES (?, ?, ?)').run(p.module, p.action, p.description);
@@ -1756,11 +1761,13 @@ export function runMigrations(db) {
                  'quotes.read','quotes.create','quotes.edit',
                  'pedidos.read','pedidos.create','pedidos.edit',
                  'albaranes.read','albaranes.create','albaranes.edit',
+                 'crm.read','crm.manage',
                  'admin.manage_users','admin.manage_roles','admin.settings'],
     Seller:     ['products.read',
                  'orders.read','orders.create','orders.edit','orders.update_status',
                  'clients.read','clients.create','clients.edit',
-                 'invoices.read'],
+                 'invoices.read',
+                 'crm.read','crm.manage'],   // el comercial es justo quien gobierna el embudo
     Accountant: ['orders.read','clients.read','invoices.read','invoices.create','admin.settings',
                  'cobros.read','cobros.manage','conciliacion.read','conciliacion.manage',
                  'recurrentes.read','recurrentes.manage'],
@@ -2006,6 +2013,68 @@ Sé preciso con los números y siempre redondea correctamente.`,
                 WHERE tipo_factura IS NULL`).run();
     db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(tipoMigKey, 'done');
   }
+
+  // ── CRM COMERCIAL — embudo de oportunidades + actividad de cliente (aditiva) ───
+  // Dos tablas NUEVAS. Nada existente se toca: `clients`, `collection_actions`,
+  // `document_links` y los documentos del ciclo siguen exactamente igual.
+  //
+  // OPORTUNIDAD = una venta POSIBLE (aún no es documento). Cuando se gana, el documento
+  // que la materializa (presupuesto/pedido/factura) sigue su propia cadena; la oportunidad
+  // no duplica importes fiscales — su `amount` es una ESTIMACIÓN comercial, no una base
+  // imponible. Por eso vive fuera de la contabilidad y del hash de Verifactu.
+  //
+  // `stage` NO lleva CHECK a propósito: un CHECK obliga a recrear la tabla para cambiar el
+  // embudo (SQLite no permite alterarlo) y recrear = DROP, prohibido por la regla permanente.
+  // La lista cerrada de etapas la valida el esquema zod + el servicio (fuente única en crm.js).
+  // `status` SÍ lleva CHECK: los tres estados (activa/ganada/perdida) son la semántica de la
+  // tabla, no una configuración.
+  db.exec(`CREATE TABLE IF NOT EXISTS opportunities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    amount REAL NOT NULL DEFAULT 0,          -- valor estimado (comercial, no fiscal)
+    stage TEXT NOT NULL DEFAULT 'nuevo',     -- etapa del embudo (ETAPAS en crm.js)
+    probability INTEGER NOT NULL DEFAULT 0,  -- 0..100
+    expected_close_date TEXT,                -- ISO AAAA-MM-DD, cierre PREVISTO
+    source TEXT DEFAULT '',                  -- origen (ORIGENES en crm.js)
+    notes TEXT DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'activa' CHECK(status IN ('activa','ganada','perdida')),
+    lost_reason TEXT,                        -- solo en 'perdida' (MOTIVOS_PERDIDA en crm.js)
+    closed_at TEXT,                          -- ISO, cuando pasó a ganada/perdida
+    stage_changed_at TEXT NOT NULL,          -- ISO; alimenta "días en la etapa"
+    active INTEGER NOT NULL DEFAULT 1,       -- archivar-no-borrar (nunca DELETE)
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (client_id) REFERENCES clients(id)
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_opportunities_client ON opportunities(client_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_opportunities_stage  ON opportunities(status, stage)`);
+
+  // ACTIVIDAD DE CLIENTE — el registro de "qué pasó con este cliente" que `collection_actions`
+  // NO puede ser: allí `invoice_id` es NOT NULL con FK CASCADE, y SQLite no sabe quitar un
+  // NOT NULL sin recrear la tabla (= DROP, prohibido). Se crea la tabla HERMANA, y el timeline
+  // de la ficha UNE las dos (más los documentos del ciclo). `collection_actions` sigue siendo
+  // la bitácora del motor de cobros y su cadencia; nadie la toca.
+  //
+  // `opportunity_id` es OPCIONAL: hay actividad de cliente sin oportunidad (una llamada suelta)
+  // y actividad de oportunidad (el seguimiento del embudo). `commitment_date` es el espejo de
+  // `promised_date` de cobros: mientras esté viva, el motor no vuelve a proponer que insistas.
+  db.exec(`CREATE TABLE IF NOT EXISTS client_activities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL,
+    opportunity_id INTEGER,                  -- NULL = actividad del cliente, no de una oportunidad
+    type TEXT NOT NULL,                      -- contacto | nota | compromiso | email | cambio_etapa | cierre
+    channel TEXT,                            -- email | telefono | whatsapp | reunion | nota | otro
+    stage TEXT,                              -- etapa de la oportunidad en el momento de la acción
+    note TEXT,
+    commitment_date TEXT,                    -- ISO; compromiso ("me llama el día X")
+    created_at TEXT NOT NULL,                -- ISO
+    user_name TEXT DEFAULT '',               -- quién lo registró (o 'DISA')
+    active INTEGER NOT NULL DEFAULT 1,       -- archivar-no-borrar
+    FOREIGN KEY (client_id) REFERENCES clients(id),
+    FOREIGN KEY (opportunity_id) REFERENCES opportunities(id)
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_client_activities_client ON client_activities(client_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_client_activities_opp    ON client_activities(opportunity_id)`);
 
   console.log('✅ ERP: Migraciones completadas');
 }

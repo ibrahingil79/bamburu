@@ -32,6 +32,7 @@ import { createWarehouseRoutes } from './warehouses.js';
 import { createFeedbackRoutes } from './feedback.js';
 import { createInvoiceRoutes } from './invoices.js';
 import { createCobrosRoutes } from './cobros.js';
+import { createCrmRoutes } from './crm.js';
 import { createSupplierInvoiceRoutes } from './supplier-invoices.js';
 import { createPagosRoutes } from './pagos.js';
 import { createSecurityRoutes } from './security.js';
@@ -79,6 +80,7 @@ export function mountRoutes(app, db) {
   const { api: feedbackApi, views: feedbackViews } = createFeedbackRoutes(db);
   const { api: invoiceApi, views: invoiceViews } = createInvoiceRoutes(db);
   const { api: cobrosApi, views: cobrosViews } = createCobrosRoutes(db);
+  const { api: crmApi, views: crmViews } = createCrmRoutes(db);
   const { api: supplierInvoiceApi, views: supplierInvoiceViews } = createSupplierInvoiceRoutes(db);
   const { api: pagosApi, views: pagosViews } = createPagosRoutes(db);
   const { api: quoteApi, views: quoteViews } = createQuoteRoutes(db);
@@ -133,6 +135,7 @@ export function mountRoutes(app, db) {
   admin.route('/mostrador', mostradorViews);
   admin.route('/invoices', invoiceViews);
   admin.route('/cobros', cobrosViews);
+  admin.route('/crm', crmViews);                // CRM comercial: embudo (/) + cola (/cola)
   admin.route('/supplier-invoices', supplierInvoiceViews);
   admin.route('/pagos', pagosViews);
   admin.route('/contabilidad', contabViews);
@@ -179,6 +182,7 @@ export function mountRoutes(app, db) {
   apiApp.route('/mostrador', mostradorApi);
   apiApp.route('/invoices', invoiceApi);
   apiApp.route('/cobros', cobrosApi);
+  apiApp.route('/crm', crmApi);
   apiApp.route('/supplier-invoices', supplierInvoiceApi);
   apiApp.route('/pagos', pagosApi);
   apiApp.route('/contabilidad', contabApi);
