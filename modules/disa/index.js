@@ -15,7 +15,8 @@ import { collectionsWorklist, registerCollectionAction, accountsSummary, registe
 import { ventasResumen, topProductos, ventasPorMes, clientesInactivos, pedidosSinEntregar } from '../erp/ventas-metrics.js';   // PIEZA C: cifras de venta desde la cadena nueva (facturas)
 import { supplierAccountsSummary } from '../erp/pagos.js';                                  // Paso (d): índice de deuda con proveedores para la voz de DISA
 import { registerSupplierAccountPayment } from '../erp/routes/supplier-invoices.js';       // Paso (d): pago a proveedor por voz (reparto a cuenta)
-import { marcarVistoYResumir } from '../erp/avisos.js';                                     // Paso (d): resumen-primero del badge (motor de avisos)
+import { resumirAvisos, hoyLocal } from '../erp/avisos.js';                                 // Paso (d): resumen-primero del badge (motor de avisos)
+import { fuentesPermitidas } from '../erp/layout.js';                                       // cada fuente exige el permiso de su pantalla
 import { sendEmail } from '../../core/mailer.js';
 import { runCapture, captureFromExtraction } from '../erp/routes/purchases-capture.js';   // pipeline de captura C2 reutilizado (foto/PDF y voz)
 import { createProductSvc } from '../erp/routes/products.js';   // alta validada (banda de IVA obligatoria, sin defecto silencioso)
@@ -2775,8 +2776,10 @@ export function register(app, db) {
   // el rojo solo vuelve si aparece algo nuevo). El detalle lo pide el dueño escribiendo después.
   router.post('/alerts/open', adminAuth(db), c => {
     try {
-      // "Visto" es de quien abre, no del negocio: la huella se guarda contra su user_id.
-      const r = marcarVistoYResumir(db, new Date().toISOString().slice(0, 10), c.get('session')?.userId);
+      // Un RESUMEN DE CONTEOS no descarta nada: ya NO marca los avisos como vistos. Antes pisaba la
+      // huella entera y borraba los "no visto" que el usuario había marcado a propósito. Marcar es
+      // una acción suya, en la pantalla o en la campana. Y solo cuenta lo que puede ver.
+      const r = resumirAvisos(db, hoyLocal(), c.get('session')?.userId, fuentesPermitidas(c));
       return c.json(r);
     } catch (e) {
       return c.json({ reply: 'No pude cargar tus avisos ahora mismo.' }, 500);

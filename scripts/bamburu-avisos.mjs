@@ -30,13 +30,13 @@ import { join, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { runMigrations } from '../modules/erp/models.js';
-import { avisosDelDia, avisosEmail } from '../modules/erp/avisos.js';
+import { avisosDelDia, avisosEmail, hoyLocal } from '../modules/erp/avisos.js';
 import { sendEmail } from '../core/mailer.js';
 
 const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TENANTS_DIR = join(APP_DIR, 'data', 'tenants');
 const DRY = process.argv.includes('--dry-run');
-const TODAY = new Date().toISOString().slice(0, 10);
+const TODAY = hoyLocal();   // fecha local del negocio: el correo sale a las 08:00 de España
 const log = (...a) => console.log('[bamburu-avisos]', ...a);
 
 // Lista de BD de tenant a procesar (o una sola vía AVISOS_DB para pruebas).

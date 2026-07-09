@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import { adminLayout } from '../layout.js';
+import { adminLayout, fuentesPermitidas } from '../layout.js';
 import { disaHomeHtml } from '../views/disaHome.html.js';
-import { estadoAvisos } from '../avisos.js';
+import { estadoAvisos, hoyLocal } from '../avisos.js';
 import { ventasResumen, pedidosResumen } from '../ventas-metrics.js';   // PIEZA C: ventas desde la cadena nueva (facturas), pedidos desde customer_orders
 
 export function createDashboardRoutes(db) {
@@ -24,7 +24,11 @@ export function createDashboardRoutes(db) {
     // estado = rojo (algo nuevo PARA ESTE USUARIO) / visto / apagado (Opción C). Una sola fuente
     // de verdad → el número del badge, el del resumen-primero y el de /admin/avisos coinciden.
     try {
-      const est = estadoAvisos(db, new Date().toISOString().slice(0, 10), session?.userId);
+      // Una sola pasada del motor por carga de /admin: se deja en el contexto y adminLayout la
+      // reutiliza para la campana en vez de recalcular lo mismo con los mismos argumentos.
+      // Solo las fuentes que este usuario puede ver.
+      const est = estadoAvisos(db, hoyLocal(), session?.userId, fuentesPermitidas(c));
+      c.set('avisosEstado', est);
       alertCount = est.count;
       alertState = est.estado;
     } catch {}

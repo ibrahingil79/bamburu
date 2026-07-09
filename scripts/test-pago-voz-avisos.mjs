@@ -13,7 +13,7 @@ import {
 import { registerSupplierAccountPayment, registerSupplierPaymentSvc } from '../modules/erp/routes/supplier-invoices.js';
 import {
   vencimientosProveedor, avisosDelDia, avisosEmail,
-  stockBajo, resumenTexto, resumenAvisos, estadoAvisos, marcarVistoYResumir, avisoKey,
+  stockBajo, resumenTexto, resumenAvisos, estadoAvisos, marcarVistos, avisoKey,
 } from '../modules/erp/avisos.js';
 
 let pass = 0, fail = 0;
@@ -242,7 +242,7 @@ console.log('11. Estado del badge (visto/nuevo)');
   const a = addInvoice(db, s, { total: 100, due: '2026-06-01' });   // vencida → 1 aviso
   eq(estadoAvisos(db, TODAY).estado, 'rojo', 'con un aviso sin abrir → ROJO');
 
-  marcarVistoYResumir(db, TODAY);                                    // abrir el badge
+  marcarVistos(db, [], TODAY);                                    // abrir el badge
   eq(estadoAvisos(db, TODAY).estado, 'visto', 'tras abrir → VISTO');
 
   // Empeora la ya vista (vence antes → más días vencida): MISMA clave → sigue visto.
@@ -255,7 +255,7 @@ console.log('11. Estado del badge (visto/nuevo)');
   eq(est.estado, 'rojo', 'una factura NUEVA vencida → vuelve a ROJO');
   ok(est.nuevos.length === 1 && est.nuevos[0] === avisoKey({ ref: { source: 'vencimientos_proveedor', supplier_invoice_id: b } }), 'lo nuevo es exactamente la factura nueva');
 
-  marcarVistoYResumir(db, TODAY);
+  marcarVistos(db, [], TODAY);
   eq(estadoAvisos(db, TODAY).estado, 'visto', 'tras volver a abrir → VISTO de nuevo');
 
   // Se pagan todas → sin avisos → APAGADO.
@@ -271,7 +271,7 @@ console.log('12. Stock nuevo reactiva el rojo');
   const db = freshDb();
   const s = addSupplier(db);
   addInvoice(db, s, { total: 100, due: '2026-06-01' });
-  marcarVistoYResumir(db, TODAY);
+  marcarVistos(db, [], TODAY);
   eq(estadoAvisos(db, TODAY).estado, 'visto', 'visto con solo el vencimiento');
   addLowProduct(db, { stock: 1 });                                  // producto nuevo bajo mínimos
   eq(estadoAvisos(db, TODAY).estado, 'rojo', 'un producto que cae a stock bajo → ROJO');

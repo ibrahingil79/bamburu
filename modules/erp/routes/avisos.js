@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
-import { adminLayout, skeletonRows, can } from '../layout.js';
-import { estadoAvisos, avisoKey, marcarVistos, desmarcarVistos } from '../avisos.js';
+import { rateLimit } from '../../../core/rate-limit.js';
+import { adminLayout, skeletonRows, can, fuentesPermitidas } from '../layout.js';
+import { estadoAvisos, avisoKey, aplicarVisto, hoyLocal, detalleAviso } from '../avisos.js';
 import { pagoModalHtml, pagoCuentaModalHtml, pagoModalScript } from '../views/pago-modal.js';
 import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
 import { stockModalHtml, stockModalScript } from '../views/stock-modal.js';
@@ -32,29 +33,13 @@ export function createAvisosRoutes(db) {
   const api = new Hono();
   const views = new Hono();
 
-  const today = () => new Date().toISOString().slice(0, 10);
+  const today = () => hoyLocal();   // fecha LOCAL del negocio: en UTC, de madrugada, "hoy" es ayer
   const symbol = () => db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
 
-  // Texto de la fila con el DINERO bien formateado (símbolo del negocio + 2 decimales), espejo
-  // de filaDetalle() del email diario. El motor devuelve `detalle` sin moneda (no conoce el
-  // símbolo del tenant); las fuentes sin importe (stock, recurrentes) usan su detalle tal cual.
-  function detalleDe(a, sym) {
-    const r = a.ref || {};
-    const money = n => sym + Number(n || 0).toFixed(2);
-    if (a.tipo === 'cobro_vencido') {
-      return 'Te deben ' + money(r.pendiente) + ' · vencida hace ' + r.dias_vencida
-        + ' día' + (r.dias_vencida === 1 ? '' : 's') + ' (' + (r.due_date || '-') + ')';
-    }
-    if (a.tipo === 'vencimiento_proveedor') {
-      const estado = r.vencida
-        ? 'Vencida hace ' + r.dias_vencida + ' día' + (r.dias_vencida === 1 ? '' : 's')
-        : (r.dias_para_vencer === 0 ? 'Vence HOY'
-          : 'Vence en ' + r.dias_para_vencer + ' día' + (r.dias_para_vencer === 1 ? '' : 's'))
-          + ' (' + (r.due_date || '-') + ')';
-      return estado + ' · pendiente ' + money(r.pendiente);
-    }
-    return a.detalle;
-  }
+  // El detalle sale del ÚNICO formateador del motor (detalleAviso). Aquí solo se le pasa el símbolo
+  // de moneda del negocio, que el motor no conoce. Antes esta función duplicaba, casi palabra por
+  // palabra, lo que ya hacían el motor y el email: tres redacciones que podían discrepar.
+  const detalleDe = (a, sym) => detalleAviso(a, sym);
 
   // Etiqueta y color de cada fuente. El enlace del título va al DOCUMENTO (contexto); la ACCIÓN
   // se hace en el modal, sin salir de aquí. Una fuente nueva sin entrada aquí sale con su tipo
@@ -85,9 +70,9 @@ export function createAvisosRoutes(db) {
     });
   }
 
-  // Respuesta común de las tres rutas: el estado recalculado en vivo para ESTE usuario.
-  function estadoJson(c) {
-    const est = estadoAvisos(db, today(), c.get('session')?.userId);
+  // Da forma a un estado ya calculado. NO vuelve a llamar al motor: quien lo llama ya pagó el
+  // escaneo una vez.
+  function comoJson(est) {
     const nuevos = new Set(est.nuevos || []);
     return {
       count: est.count, estado: est.estado, sinVer: nuevos.size,
@@ -95,30 +80,50 @@ export function createAvisosRoutes(db) {
     };
   }
 
-  // GET /api/erp/avisos — recalcula TODO en el momento de la llamada. `estado`/`sinVer` son de
-  // este usuario (huella por usuario); `count` es del negocio.
-  api.get('/', c => {
-    try { return c.json(estadoJson(c)); }
-    catch (e) { return c.json({ error: e.message }, 500); }
+  // ── Freno propio del endpoint de avisos ─────────────────────────────────────
+  // Es una consulta CARA: recorre clientes y facturas (openDebts, O(clientes × facturas)) sobre un
+  // SQLite síncrono que bloquea el hilo. El freno general subió a 600/min por IP, y este endpoint
+  // no tenía ninguno: una sola IP autenticada podía disparar 600 escaneos por minuto y tumbar el
+  // panel del negocio entero. Va montado detrás de tenantMiddleware, así que la clave es
+  // negocio+IP: una oficina no se come el cupo de otro negocio. Espejo de /find-tenant.
+  //
+  // 120/min cubre el uso real más intenso (abrir la pantalla, marcar avisos uno a uno, resolver
+  // varios con los modales) con holgura, y sigue siendo un techo firme.
+  const frenoAvisos = rateLimit({
+    windowMs: 60_000, max: 120, keyPrefix: 'avisos',
+    message: 'Demasiadas consultas de avisos. Espera un momento.',
+  });
+
+  // GET /api/erp/avisos — recalcula TODO en el momento de la llamada, SOLO las fuentes que este
+  // usuario puede ver. `estado`/`sinVer`/`count` son suyos: si no puede ver los cobros, tampoco
+  // cuentan para su número (si no, la campana le dice cuántas facturas vencidas hay).
+  api.get('/', frenoAvisos, c => {
+    try {
+      const est = estadoAvisos(db, today(), c.get('session')?.userId, fuentesPermitidas(c));
+      return c.json(comoJson(est));
+    } catch (e) { return c.json({ error: e.message }, 500); }
   });
 
   // POST /api/erp/avisos/visto — marca como VISTOS los avisos cuyas claves lleguen en `keys`.
-  // Sin `keys` (o vacío) → marca todos. Nada se auto-marca por el mero hecho de abrir la
-  // pantalla: "visto" lo decide el usuario, aviso a aviso o de golpe.
-  api.post('/visto', async c => {
+  // Sin `keys` (o vacío) → marca todos los suyos. Nada se auto-marca por el mero hecho de abrir la
+  // pantalla: "visto" lo decide el usuario, aviso a aviso o de golpe. Una clave de una fuente que
+  // no puede ver se ignora en silencio (no confirma que exista).
+  api.post('/visto', frenoAvisos, async c => {
     try {
       const body = await c.req.json().catch(() => ({}));
-      marcarVistos(db, body.keys || [], today(), c.get('session')?.userId);
-      return c.json(estadoJson(c));
+      const est = aplicarVisto(db, { keys: body.keys || [], marcar: true,
+        today: today(), userId: c.get('session')?.userId, tipos: fuentesPermitidas(c) });
+      return c.json(comoJson(est));
     } catch (e) { return c.json({ error: e.message }, 500); }
   });
 
   // POST /api/erp/avisos/no-visto — lo contrario: "esto todavía lo tengo que mirar".
-  api.post('/no-visto', async c => {
+  api.post('/no-visto', frenoAvisos, async c => {
     try {
       const body = await c.req.json().catch(() => ({}));
-      desmarcarVistos(db, body.keys || [], today(), c.get('session')?.userId);
-      return c.json(estadoJson(c));
+      const est = aplicarVisto(db, { keys: body.keys || [], marcar: false,
+        today: today(), userId: c.get('session')?.userId, tipos: fuentesPermitidas(c) });
+      return c.json(comoJson(est));
     } catch (e) { return c.json({ error: e.message }, 500); }
   });
 

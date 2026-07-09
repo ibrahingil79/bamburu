@@ -1,5 +1,5 @@
 import { getDisaWidget } from '../disa/widget.js';
-import { estadoAvisos } from './avisos.js';
+import { estadoAvisos, hoyLocal, PERM_POR_FUENTE } from './avisos.js';
 
 export const ROOT_TOKENS = `
     :root{
@@ -220,6 +220,15 @@ export function can(c, perm) {
   return perms.includes(perm);
 }
 
+// Qué FUENTES de avisos puede ver este usuario. Cada fuente exige el mismo permiso que su pantalla
+// de origen (PERM_POR_FUENTE), así que un aviso nunca es una puerta trasera a datos que la pantalla
+// te niega. Falla cerrado: una fuente sin permiso declarado no se sirve a nadie.
+export function fuentesPermitidas(c) {
+  const s = new Set();
+  for (const [tipo, perm] of Object.entries(PERM_POR_FUENTE)) if (can(c, perm)) s.add(tipo);
+  return s;
+}
+
 export function adminLayout(title, content, active = '', csrfToken = '', c = null, hideDisaSidebar = false) {
   const session = c?.get?.('session') || {};
   const role = session.role || '';
@@ -234,11 +243,16 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   //   'apagado' → no hay nada                            → sin punto
   // Antes el punto colgaba del conteo, así que seguía encendido después de leerlos.
   // Si falla, 'apagado' y sin punto — nunca rompe el render de la página.
+  //
+  // Cuenta SOLO las fuentes que este usuario puede ver (fuentesPermitidas). Y si la ruta ya calculó
+  // el estado (el Inicio lo necesita para su tarjeta), lo deja en `avisosEstado` y aquí se reutiliza:
+  // antes /admin ejecutaba el motor entero DOS veces por carga, con argumentos idénticos.
   let avisos = { count: 0, estado: 'apagado' };
   try {
     const _db = c?.get?.('db');
     if (_db) {
-      const est = estadoAvisos(_db, new Date().toISOString().slice(0, 10), session.userId);
+      const est = c?.get?.('avisosEstado')
+        || estadoAvisos(_db, hoyLocal(), session.userId, fuentesPermitidas(c));
       avisos = { count: est.count || 0, estado: est.estado };
     }
   } catch { avisos = { count: 0, estado: 'apagado' }; }
@@ -941,13 +955,24 @@ ${ROOT_TOKENS}
     // El panel lee del MISMO motor que la pantalla (/api/erp/avisos): mismos avisos, mismo
     // número. Cada aviso se marca visto por separado; también hay "marcar todos". Nada se
     // marca solo por abrir el panel: "visto" lo decide el usuario.
+    // ÚNICA vía para tocar la campana desde fuera. Antes solo pintaba el punto: la LISTA cacheada
+    // del panel se quedaba vieja, así que tras cobrar una factura en /admin/avisos la campana
+    // seguía ofreciéndola como pendiente, con el punto ya en gris. Ahora invalida el caché y, si el
+    // panel está abierto, lo repinta. Nadie debe tocar el punto a mano.
     window.bellSync=function(sinVer,total){
       var b=document.getElementById('tbBell'); if(!b) return;
       var dot=b.querySelector('.dot');
-      if(!total){ if(dot) dot.remove(); return; }
-      if(!dot){ dot=document.createElement('span'); dot.className='dot'; b.appendChild(dot); }
-      dot.classList.toggle('visto', !sinVer);              // rojo = queda algo sin ver
-      b.title = sinVer ? (sinVer+' aviso'+(sinVer===1?'':'s')+' sin ver') : (total+' aviso'+(total===1?'':'s')+' pendientes (ya vistos)');
+      if(!total){ if(dot) dot.remove(); }
+      else {
+        if(!dot){ dot=document.createElement('span'); dot.className='dot'; b.appendChild(dot); }
+        dot.classList.toggle('visto', !sinVer);            // rojo = queda algo sin ver
+      }
+      b.title = !total ? 'Avisos — no tienes nada pendiente'
+        : (sinVer ? (sinVer+' aviso'+(sinVer===1?'':'s')+' sin ver')
+                  : (total+' aviso'+(total===1?'':'s')+' pendientes (ya vistos)'));
+      _bellCargado=false;                                   // lo cacheado ya no vale
+      var p=document.getElementById('bellPanel');
+      if(p&&p.classList.contains('open')) bellCargar();     // abierto → repinta ahora
     };
     var _bellCargado=false;
     function bellPinta(d){

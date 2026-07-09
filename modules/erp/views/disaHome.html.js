@@ -610,15 +610,10 @@ ${onbHtml}
 
       // Tarjeta "¿Qué requiere mi atención?" (Paso d · resumen-primero): NO lanza una pregunta
       // abierta al modelo. Pide al motor de avisos un RESUMEN DE CONTEOS (determinista, sin
-      // modelo, sin ofrecer acciones) y marca los avisos como VISTOS para este usuario. Para
-      // RESOLVERLOS está /admin/avisos (la campana y la tarjeta "Avisos" llevan allí).
-      // El punto de la campana es la ÚNICA señal del chrome. Tras ver los avisos pasa a gris
-      // (siguen pendientes, pero ya no hay nada nuevo). Si no quedan, desaparece.
-      function apagarPuntoCampana() {
-        const dot = document.querySelector('#tbBell .dot');
-        if (dot) dot.classList.add('visto');
-      }
-
+      // modelo, sin ofrecer acciones). YA NO marca nada como visto: un resumen de conteos no es
+      // descartar avisos, y marcarlos borraba los "no visto" que el usuario había puesto a mano.
+      // Marcar es suyo, en /admin/avisos o en el panel de la campana. Por eso este código tampoco
+      // toca el punto de la campana: apagarlo a mano sería mentir sobre el estado del servidor.
       window.disaShowAlerts = async function() {
         if (!dhStarted) {
           document.getElementById('dh-hero').classList.add('hidden');
@@ -637,8 +632,6 @@ ${onbHtml}
           const data = await res.json();
           dhRemoveTyping(typingId);
           dhAppendMsg('assistant', data.reply || 'Ahora mismo no tienes nada pendiente.');
-          // Quedaron vistos: el punto de la campana pasa de rojo a gris sin recargar.
-          apagarPuntoCampana();
         } catch {
           dhRemoveTyping(typingId);
           dhAppendMsg('assistant', 'No pude cargar tus avisos. Intenta de nuevo.');

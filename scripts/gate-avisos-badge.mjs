@@ -4,8 +4,8 @@
 // tarjeta "Avisos" del Inicio. Se retiraron el contador del pin de DISA y el badge flotante.
 //   1. Campana ROJA cuando hay algo sin ver; tarjeta con el número y enlace a /admin/avisos.
 //   2. Resumen-primero → DISA da un RESUMEN DE CONTEOS (de avisosDelDia), sin detalle y SIN
-//      ofrecer acciones; el conteo == el de la tarjeta. La campana pasa a GRIS (visto) y SIGUE
-//      gris al recargar y en otras pantallas (el fallo era que colgaba del conteo, no del estado).
+//      ofrecer acciones; el conteo == el de la tarjeta. Y NO marca nada: un resumen de conteos no
+//      descarta avisos (antes pisaba la huella y borraba los "no visto" puestos a mano).
 //   3. Ciclo: tras abrir = visto; una factura NUEVA vencida → vuelve a rojo; empeorar una ya
 //      vista → sigue visto. Restaura el estado previo del tenant (huella + datos) al terminar.
 //   4. "Visto" es POR USUARIO: que uno los abra NO se los deja vistos a otro del mismo negocio.
@@ -108,17 +108,21 @@ try {
   ok(!/recordatorio|email|reclam|prepar/i.test(reply) && /¿Cuál quieres ver\?|¿Quieres verlo\?/.test(reply),
     'el resumen NO ofrece acciones: solo conteos y "¿cuál quieres ver?"');
   b = await bellState();
-  ok(b.present && b.visto, 'tras verlos, el punto de la campana pasa a GRIS sin recargar');
+  ok(b.present && !b.visto, 'el resumen de DISA NO marca nada: la campana sigue ROJA');
 
-  // La huella quedó marcada → al recargar, la campana SIGUE gris. (Este es el fallo que se
-  // corrige: antes el punto colgaba del conteo y seguía rojo después de leerlos.)
+  // Y no lo marcó tampoco en el servidor: al recargar sigue en rojo.
   await page.goto(BASE + '/admin', { waitUntil: 'networkidle0' });
   b = await bellState();
-  ok(b.present && b.visto, 'al recargar, la campana sigue GRIS (ya no hay nada nuevo)');
-  // Y en otra pantalla cualquiera del admin, también.
+  ok(b.present && !b.visto, 'al recargar, la campana sigue ROJA (DISA no descartó nada)');
+
+  // Marcar es una acción del usuario. Por la vía real (el endpoint del panel), la campana sí se apaga.
+  await page.evaluate(async () => {
+    await fetch('/api/erp/avisos/visto', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': window.CSRF_TOKEN }, body: '{}' });
+  });
   await page.goto(BASE + '/admin/cobros', { waitUntil: 'networkidle0' });
   b = await bellState();
-  ok(b.present && b.visto, 'en otra pantalla del admin la campana también está GRIS');
+  ok(b.present && b.visto, 'tras "marcar todos como vistos", la campana pasa a GRIS y sigue gris en otra pantalla');
 
   // ── 3. Una factura NUEVA vencida → vuelve a ROJO ────────────────────────────
   supId = db.prepare("INSERT INTO suppliers (name,active,payment_term_days) VALUES (?,1,0)").run(SUP_NAME).lastInsertRowid;
@@ -133,8 +137,15 @@ try {
   ok(tarj2.text.includes(String(est0.count + 1)), 'la tarjeta sube a ' + (est0.count + 1) + ' (got "' + tarj2.text + '")');
 
   // ── 4. Empeorar una ya vista NO reactiva el rojo ────────────────────────────
-  await page.evaluate(() => window.disaShowAlerts());                 // marca visto (incluye la nueva)
-  await page.waitForFunction(() => document.querySelectorAll('#dh-messages .disa-msg.assistant').length > 0, { timeout: 8000 });
+  // Marcar por la vía real (DISA ya no marca), para que la nueva quede vista también.
+  // El fetch se espera dentro del evaluate: no hay mensaje de chat que aguardar, porque ya no se
+  // llama a DISA (antes esto esperaba a que apareciera su respuesta en el hilo).
+  const marcado = await page.evaluate(async () => {
+    const r = await fetch('/api/erp/avisos/visto', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': window.CSRF_TOKEN }, body: '{}' });
+    return r.status;
+  });
+  ok(marcado === 200, 'POST /api/erp/avisos/visto responde 200 (got ' + marcado + ')');
   db.prepare('UPDATE supplier_invoices SET due_date=? WHERE id=?').run('2026-01-01', invId);   // empeora (más días vencida)
   ok(estadoAvisos(db, TODAY, UID).estado === 'visto', 'que una factura ya vista EMPEORE no reactiva el rojo (sigue VISTO)');
 

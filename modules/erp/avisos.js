@@ -15,6 +15,17 @@ import { MAX_INTENTOS } from './verifactu-cola.js';
 
 const r2 = n => Math.round(n * 100) / 100;
 
+// "Hoy" en la fecha LOCAL del negocio, no en UTC. El servidor corre en UTC, así que entre las 00:00
+// y las 02:00 de España `new Date().toISOString().slice(0,10)` seguía devolviendo el día ANTERIOR:
+// una factura que acababa de vencer no salía como vencida, y desaparecía de la campana hasta las 2
+// de la madrugada. Las fechas de vencimiento son días de calendario, no instantes.
+export const ZONA_NEGOCIO = 'Europe/Madrid';   // España (CANON: cumplimiento legal ES). Multi-país: T.O.D.O.
+export function hoyLocal(tz = ZONA_NEGOCIO) {
+  // 'en-CA' formatea como AAAA-MM-DD, que es justo el formato que usa todo el motor.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' })
+    .format(new Date());
+}
+
 // Días entre dos fechas YYYY-MM-DD (a - b), en UTC. Mismo criterio que pagos/cobros.
 function daysBetween(a, b) {
   return Math.floor((Date.parse(a + 'T00:00:00Z') - Date.parse(b + 'T00:00:00Z')) / 86400000);
@@ -31,7 +42,7 @@ function daysBetween(a, b) {
 // a tu favor: pendiente<0) y lo ya pagado. Ordena: vencido primero (más vencido arriba),
 // luego lo que vence antes.
 export function vencimientosProveedor(db, today) {
-  const t = today || new Date().toISOString().slice(0, 10);
+  const t = today || hoyLocal();
   const { rows } = openPayables(db, t);
   const avisos = [];
   for (const f of rows) {
@@ -50,14 +61,10 @@ export function vencimientosProveedor(db, today) {
       vencida, dias_vencida: f.dias_vencida || 0, dias_para_vencer: vencida ? 0 : faltan,
     };
     const titulo = (f.supplier_name || 'Proveedor') + ' · ' + (f.internal_code || ('#' + f.supplier_invoice_id));
-    const detalle = vencida
-      ? 'Factura vencida hace ' + f.dias_vencida + ' día' + (f.dias_vencida === 1 ? '' : 's') + ' · pendiente ' + r2(f.pendiente)
-      : (faltan === 0 ? 'Factura vence HOY' : 'Factura vence en ' + faltan + ' día' + (faltan === 1 ? '' : 's'))
-        + ' (' + due + ') · pendiente ' + r2(f.pendiente);
     avisos.push({
       tipo: 'vencimiento_proveedor',
       urgencia: vencida ? (1000 + f.dias_vencida) : (100 - faltan),
-      titulo, detalle, ref,
+      titulo, ref,   // el detalle lo redacta detalleAviso() (necesita el símbolo de moneda)
     });
   }
   avisos.sort((a, b) => b.urgencia - a.urgencia);
@@ -74,7 +81,7 @@ export function vencimientosProveedor(db, today) {
 // Solo VENCIDAS (a diferencia de proveedor, que además avisa de lo que vence en ≤7 días): lo que
 // aún no ha vencido no es un aviso, es el pipeline normal de /admin/cobros.
 export function cobrosVencidos(db, today) {
-  const t = today || new Date().toISOString().slice(0, 10);
+  const t = today || hoyLocal();
   const { rows } = openDebts(db, t);
   const avisos = [];
   for (const d of rows) {
@@ -91,8 +98,6 @@ export function cobrosVencidos(db, today) {
       tipo: 'cobro_vencido',
       urgencia: 1000 + (d.dias_vencida || 0),              // misma convención que lo vencido de proveedor
       titulo: (d.client_name || 'Cliente') + ' · ' + (d.invoice_number || ('#' + d.invoice_id)),
-      detalle: 'Te deben ' + r2(d.pendiente).toFixed(2) + ' · vencida hace ' + d.dias_vencida
-        + ' día' + (d.dias_vencida === 1 ? '' : 's') + ' (' + (d.due_date || '-') + ')',
       ref,
     });
   }
@@ -172,18 +177,46 @@ export function enviosVerifactu(db, today) {
   });
 }
 
-// Fuentes registradas. Añadir una fuente = escribir la función y añadirla aquí. NADA más cambia
-// (ni el panel, ni el resumen del badge, ni el email, ni la pantalla central de /admin/avisos).
-const SOURCES = [enviosVerifactu, vencimientosProveedor, cobrosVencidos, stockBajo, borradoresRecurrentes];
+// Cada fuente lleva el MISMO permiso que ya exige su pantalla de origen. Un aviso no puede ser una
+// puerta trasera a datos que su pantalla te niega: quien no puede abrir /admin/cobros tampoco puede
+// leer "te deben 15,61 € de la factura F2026-0017" en la campana.
+//   envio_verifactu       → /admin/verifactu/envios  (invoices.read)
+//   vencimiento_proveedor → /admin/pagos             (purchases.read)
+//   cobro_vencido         → /admin/cobros            (cobros.read)
+//   stock_bajo            → /admin/inventory         (inventory.read)
+//   factura_recurrente    → /admin/recurrentes       (recurrentes.read)
+export const PERM_POR_FUENTE = {
+  envio_verifactu:       'invoices.read',
+  vencimiento_proveedor: 'purchases.read',
+  cobro_vencido:         'cobros.read',
+  stock_bajo:            'inventory.read',
+  factura_recurrente:    'recurrentes.read',
+};
 
-// Todos los avisos del día (todas las fuentes), ordenados por urgencia (más urgente arriba).
-// Robusto: si una fuente peta, se ignora esa fuente y siguen las demás (un fallo aislado no
-// silencia todo el aviso).
-export function avisosDelDia(db, today) {
-  const t = today || new Date().toISOString().slice(0, 10);
+// Fuentes registradas. Añadir una fuente = escribir la función, registrarla aquí y darle su permiso
+// en PERM_POR_FUENTE. Sin permiso declarado, la fuente NO se sirve a nadie (falla cerrado).
+const SOURCES = [
+  { tipo: 'envio_verifactu',       fn: enviosVerifactu },
+  { tipo: 'vencimiento_proveedor', fn: vencimientosProveedor },
+  { tipo: 'cobro_vencido',         fn: cobrosVencidos },
+  { tipo: 'stock_bajo',            fn: stockBajo },
+  { tipo: 'factura_recurrente',    fn: borradoresRecurrentes },
+];
+
+// Todos los avisos del día, ordenados por urgencia (más urgente arriba). Robusto: si una fuente
+// peta, se ignora esa fuente y siguen las demás (un fallo aislado no silencia todo el aviso).
+//
+// `tipos` = conjunto de fuentes que quien pregunta TIENE DERECHO a ver. Las demás ni se ejecutan:
+// además de cerrar la fuga, ahorra el escaneo caro (openDebts) a quien no puede verlo. Omitirlo
+// (undefined) devuelve todas las fuentes — es el caso del email diario, que va al negocio y no a
+// un usuario. Pasar un conjunto vacío devuelve cero avisos: falla cerrado, no abierto.
+export function avisosDelDia(db, today, tipos) {
+  const t = today || hoyLocal();
+  const puede = tipos === undefined ? () => true : x => tipos.has(x);
   const todos = [];
   for (const src of SOURCES) {
-    try { todos.push(...src(db, t)); } catch { /* fuente caída: se omite, las demás siguen */ }
+    if (!puede(src.tipo)) continue;
+    try { todos.push(...src.fn(db, t)); } catch { /* fuente caída: se omite, las demás siguen */ }
   }
   todos.sort((a, b) => b.urgencia - a.urgencia);
   return todos;
@@ -213,19 +246,7 @@ export function avisosEmail(ctx) {
     stock_bajo: 'Productos con stock bajo',
   };
   // Detalle de una fila según su fuente (con la moneda donde toca; stock va en unidades).
-  const filaDetalle = a => {
-    const r = a.ref || {};
-    if (a.tipo === 'vencimiento_proveedor') {
-      const estado = r.vencida ? ('vencida hace ' + r.dias_vencida + 'd')
-        : (r.dias_para_vencer === 0 ? 'vence hoy' : 'vence en ' + r.dias_para_vencer + 'd');
-      return estado + ' · pendiente ' + sym + Number(r.pendiente || 0).toFixed(2);
-    }
-    if (a.tipo === 'cobro_vencido') {
-      return 'vencida hace ' + r.dias_vencida + 'd · te deben ' + sym + Number(r.pendiente || 0).toFixed(2);
-    }
-    if (a.tipo === 'stock_bajo') return 'stock ' + r.stock + ' uds';
-    return a.detalle;
-  };
+  const filaDetalle = a => detalleAviso(a, sym, { compacto: true });
 
   const bloquesTxt = [], bloquesHtml = [];
   for (const g of groups) {
@@ -267,6 +288,44 @@ function escapeHtml(s) {
 // que empeora (vence en 5d → vencida) conserva su clave → no cuenta como nuevo.
 // La clave viaja al cliente (atributo data-key) para marcar ESE aviso como visto: debe ser corta
 // y sin comillas. Antes `factura_recurrente` caía al caso genérico y salía un JSON entero.
+// ÚNICO formateador del detalle de un aviso. `sym` = símbolo de moneda del negocio (el motor no lo
+// conoce: se lo pasa quien pinta). `compacto` = la celda estrecha del email; largo = la pantalla.
+// Antes había TRES casi idénticos (el del motor, el del email y el de la pantalla), y el del motor
+// se calculaba solo para que la pantalla lo pisara: trabajo muerto en cada render. Cambiar cómo se
+// redacta un vencimiento ahora se hace en un sitio, y la pantalla, el correo y el panel no discrepan.
+export function detalleAviso(a, sym = '', { compacto = false } = {}) {
+  const r = (a && a.ref) || {};
+  const dinero = n => sym + Number(n || 0).toFixed(2);
+  const dias = n => n + ' día' + (n === 1 ? '' : 's');
+
+  if (a.tipo === 'cobro_vencido') {
+    return compacto
+      ? 'vencida hace ' + r.dias_vencida + 'd · te deben ' + dinero(r.pendiente)
+      : 'Te deben ' + dinero(r.pendiente) + ' · vencida hace ' + dias(r.dias_vencida) + ' (' + (r.due_date || '-') + ')';
+  }
+  if (a.tipo === 'vencimiento_proveedor') {
+    if (compacto) {
+      const e = r.vencida ? 'vencida hace ' + r.dias_vencida + 'd'
+        : (r.dias_para_vencer === 0 ? 'vence hoy' : 'vence en ' + r.dias_para_vencer + 'd');
+      return e + ' · pendiente ' + dinero(r.pendiente);
+    }
+    const e = r.vencida
+      ? 'Vencida hace ' + dias(r.dias_vencida)
+      : (r.dias_para_vencer === 0 ? 'Vence HOY' : 'Vence en ' + dias(r.dias_para_vencer)) + ' (' + (r.due_date || '-') + ')';
+    return e + ' · pendiente ' + dinero(r.pendiente);
+  }
+  if (a.tipo === 'stock_bajo' && compacto) return 'stock ' + r.stock + ' uds';
+  return a.detalle || '';
+}
+
+// La clave identifica un aviso a lo largo del tiempo (para la huella de "visto"). Es identidad, NO
+// gravedad: una factura que empeora conserva su clave y no vuelve a contar como nueva.
+//
+// OJO al cambiar una rama: la huella guardada NO se migra. `factura_recurrente` caía antes al caso
+// genérico ('factura_recurrente:{...json...}') y pasó a 'fr:<id>' para poder viajar dentro de un
+// atributo data-key sin comillas. Efecto de UNA sola vez tras ese despliegue: los borradores de
+// recurrentes ya descartados reaparecen como no vistos y reencienden la campana. Está documentado a
+// propósito, no se revierte: la clave vieja era insegura en el DOM.
 export function avisoKey(a) {
   const r = (a && a.ref) || {};
   if (r.source === 'vencimientos_proveedor') return 'vp:' + r.supplier_invoice_id;
@@ -335,48 +394,74 @@ export function setSeenFingerprint(db, keys, userId) {
 }
 
 // Estado del badge (Opción C): 'apagado' (sin avisos), 'rojo' (hay algo NUEVO vs la huella),
-// 'visto' (hay avisos pero ya se abrieron, nada nuevo). count = total avisos (== badge).
-// El estado es de ESTE usuario; el count es del negocio (los avisos son los mismos para todos).
-export function estadoAvisos(db, today, userId) {
-  const avisos = avisosDelDia(db, today);
+// 'visto' (hay avisos pero ya se abrieron, nada nuevo).
+//
+// `count` YA NO es "del negocio": es el total de lo que ESTE usuario tiene derecho a ver. Si no
+// filtrásemos el número, la campana de un empleado sin permiso de cobros le seguiría diciendo
+// cuántas facturas vencidas hay. El invariante pasa de "todas las superficies cuentan lo mismo" a
+// "todas las superficies cuentan lo mismo QUE TÚ PUEDES VER". El email diario va al negocio (sin
+// usuario) y sigue contándolas todas.
+export function estadoAvisos(db, today, userId, tipos) {
+  const avisos = avisosDelDia(db, today, tipos);
   const keys = avisos.map(avisoKey);
-  if (!avisos.length) return { count: 0, estado: 'apagado', avisos, keys };
+  if (!avisos.length) return { count: 0, estado: 'apagado', avisos, keys, nuevos: [] };
   const seen = getSeenFingerprint(db, userId);
   const nuevos = keys.filter(k => !seen.has(k));
   return { count: avisos.length, estado: nuevos.length ? 'rojo' : 'visto', avisos, keys, nuevos };
 }
 
-// Marca los avisos actuales como VISTOS PARA ESTE USUARIO y devuelve el resumen-primero.
-// Lo llama DISA al dar el resumen: si te los ha enseñado, los has visto.
-export function marcarVistoYResumir(db, today, userId) {
-  const avisos = avisosDelDia(db, today);
-  setSeenFingerprint(db, avisos.map(avisoKey), userId);
+// Resumen-primero de DISA: conteos por fuente, sin detalle y sin acciones. NO MARCA NADA.
+//
+// Antes se llamaba marcarVistoYResumir y hacía setSeenFingerprint(todas las claves vivas): pisaba
+// la huella entera. Eso borraba en silencio los "no visto" que el usuario había marcado a propósito
+// aviso por aviso — bastaba pulsar la tarjeta de DISA para perderlos. Y fusionar en vez de pisar
+// tampoco lo arregla: volver a añadir la clave que el usuario quitó la marca igual.
+//
+// Un RESUMEN DE CONTEOS no es descartar nada. "Visto" lo decide el usuario, como en la pantalla
+// (que tampoco marca al abrirse) y en la campana. Para marcar están marcarVistos/desmarcarVistos.
+export function resumirAvisos(db, today, userId, tipos) {
+  const avisos = avisosDelDia(db, today, tipos);
   return { reply: resumenTexto(avisos), count: avisos.length, groups: resumenAvisos(avisos) };
 }
 
 // ── Visto/no visto de UN aviso concreto ─────────────────────────────────────────────
 // La huella es un CONJUNTO de claves, así que marcar un aviso suelto es añadir su clave.
-// Se PODA siempre contra los avisos vivos de hoy: la huella no crece sin fin, y un aviso que
-// se resuelve y vuelve a aparecer cuenta como nuevo otra vez (su clave ya no estaba).
-function clavesVivas(db, today) {
-  return new Set(avisosDelDia(db, today).map(avisoKey));
-}
+//
+// Dos conjuntos distintos, y confundirlos rompe cosas:
+//   · vivasTodas   → TODAS las fuentes. Es contra lo que se PODA, para que la huella no crezca sin
+//                    fin. Podar contra las permitidas borraría las claves de fuentes que este
+//                    usuario vio ayer y hoy no puede ver (o al revés): se le reencenderían solas.
+//   · permitidas   → solo las fuentes que este usuario puede ver. Es lo único que se le deja marcar
+//                    o desmarcar, y lo único que cuenta para su "sin ver".
+//
+// Una sola pasada del motor sirve para marcar Y para responder: antes el POST calculaba avisosDelDia
+// dos veces (una aquí, otra en estadoAvisos), pagando el escaneo caro de cobros por duplicado.
+export function aplicarVisto(db, { keys, marcar, today, userId, tipos }) {
+  const t = today || hoyLocal();
+  const todos = avisosDelDia(db, t);                    // sin filtrar: la poda necesita el universo
+  const vivasTodas = new Set(todos.map(avisoKey));
+  const avisos = tipos === undefined ? todos : todos.filter(a => tipos.has(a.tipo));
+  const permitidas = new Set(avisos.map(avisoKey));
 
-// Añade claves a la huella. `keys` vacío o ausente → marca TODOS los avisos de hoy.
-export function marcarVistos(db, keys, today, userId) {
-  const vivas = clavesVivas(db, today);
   const seen = getSeenFingerprint(db, userId);
-  for (const k of (keys && keys.length ? keys : vivas)) if (vivas.has(k)) seen.add(k);
-  setSeenFingerprint(db, [...seen].filter(k => vivas.has(k)), userId);
-  return { sinVer: vivas.size - [...seen].filter(k => vivas.has(k)).length, total: vivas.size };
-}
-
-// Quita claves de la huella (volver a marcar como NO visto: "esto todavía lo tengo que mirar").
-export function desmarcarVistos(db, keys, today, userId) {
-  const vivas = clavesVivas(db, today);
-  const seen = getSeenFingerprint(db, userId);
-  for (const k of (keys || [])) seen.delete(k);
-  const next = [...seen].filter(k => vivas.has(k));
+  // `keys` vacío o ausente → todas las del usuario ("marcar todos como vistos").
+  const objetivo = (keys && keys.length) ? keys : [...permitidas];
+  for (const k of objetivo) {
+    if (!permitidas.has(k)) continue;                   // no se toca lo que no se puede ni ver
+    if (marcar) seen.add(k); else seen.delete(k);
+  }
+  const next = [...seen].filter(k => vivasTodas.has(k));
   setSeenFingerprint(db, next, userId);
-  return { sinVer: vivas.size - next.length, total: vivas.size };
+
+  const nextSet = new Set(next);
+  const nuevos = [...permitidas].filter(k => !nextSet.has(k));
+  return {
+    count: avisos.length,
+    estado: !avisos.length ? 'apagado' : (nuevos.length ? 'rojo' : 'visto'),
+    avisos, keys: [...permitidas], nuevos,
+  };
 }
+
+// Azúcar sobre aplicarVisto, para los tests y los scripts que ya los usaban.
+export const marcarVistos   = (db, keys, today, userId, tipos) => aplicarVisto(db, { keys, marcar: true,  today, userId, tipos });
+export const desmarcarVistos = (db, keys, today, userId, tipos) => aplicarVisto(db, { keys, marcar: false, today, userId, tipos });

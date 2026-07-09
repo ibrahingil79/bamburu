@@ -196,6 +196,51 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
 
 ## Función por encargo del dueño (fuera de los ejes A/B/C)
 
+### Auditoría de código del 9 jul — los 11 hallazgos, cerrados  ✅ HECHO (2026-07-09)
+`/code-review` a nivel `xhigh` sobre `cc5bec3`, `021f5df` y `d515242`: 19 candidatos, **11 confirmados**
+por un verificador independiente (1 refutado). Se cierran todos, en orden de gravedad.
+
+**CRÍTICO 1 — fuga de permisos.** `GET /api/erp/avisos` no exigía permiso, y la campana lo llama en
+TODA página admin: un empleado sin `cobros.read` leía *"María García López · F2026-0017 · Te deben
+€15,61, vencida hace 12 días"*, más los nombres de proveedores y lo que se les debe. Sus hermanas sí lo
+exigían (`cobros.js:17`, `pagos.js:16`, `inventory.js:15`). Ahora cada fuente declara el permiso de su
+pantalla de origen (`PERM_POR_FUENTE`) y el motor **ni siquiera ejecuta** las que no puedes ver — cierra
+la fuga y ahorra el escaneo caro. **Falla cerrado**: fuente sin permiso declarado, fuente que no se
+sirve. *Consecuencia:* el conteo pasa a ser **por usuario**; el invariante deja de ser "todas las
+superficies cuentan lo mismo" y pasa a "lo mismo QUE TÚ PUEDES VER". El correo diario va al negocio (sin
+usuario) y sigue contándolas todas.
+
+**CRÍTICO 2 — freno propio.** El tope general subió a 600/min por IP en el mismo commit que añadió este
+endpoint caro (`openDebts`, O(clientes × facturas), y el POST lo corría dos veces). 600 escaneos/min
+tumbaban el panel del negocio. Freno propio de **120/min con clave negocio+IP** (va detrás de
+`tenantMiddleware`): una oficina no se come el cupo de otra. Verificado: `200×120 · 429×10`, el negocio
+B intacto, y un token de A contra el Host de B → `401`.
+
+**Corrección.** `marcarVistoYResumir` pisaba la huella entera y borraba los "no visto" puestos a mano;
+**fusionar no lo arreglaba** (volver a añadir la clave que quitaste la marca igual), así que pasa a
+`resumirAvisos`: **un resumen de conteos no descarta nada**. `hoyLocal()` con `Europe/Madrid` — en UTC,
+entre las 00:00 y las 02:00 de España una factura recién vencida desaparecía. `bellSync` invalida su
+caché y repinta si el panel está abierto (antes la campana seguía ofreciendo la factura ya cobrada); y
+DISA deja de apagar el punto a mano, que era mentir sobre el servidor.
+
+**Eficiencia y limpieza.** El motor se ejecutaba **dos veces** por carga de `/admin` (badge + campana) y
+**dos veces** por marcado: ahora una sola pasada, compartida por el contexto. Los **tres formateadores**
+de detalle (motor, email, pantalla) son uno solo, `detalleAviso()`; para las fuentes de dinero, el
+`detalle` del motor se calculaba solo para que la pantalla lo pisara.
+
+**Documentado, no revertido:** la clave `fr:` de los recurrentes cambió (antes era un JSON con comillas,
+inseguro dentro de un `data-key`), así que los borradores ya descartados **reaparecen una vez** tras el
+despliegue. Está escrito en `avisoKey()`.
+
+**Verificación:** `node --check` en 10 ficheros · 6 módulos importan · motor **47 OK** · cobros paso 2
+**47 OK** · cobros 2.1 **46 OK** · gate de estado **25 OK** · gate de acciones **23 OK** · permisos en
+**dos negocios 16 OK** (`scripts/verify-avisos-permisos.mjs`, nuevo) · navegador real: el usuario
+limitado ve *"No tienes nada pendiente"* y **ni una cifra**; el dueño ve sus 8 items. El usuario de
+prueba queda **archivado** (`active=0`), nunca borrado.
+
+**Fuera de alcance (no tocado):** `verifactu-cola.js`, sus scripts y sus unidades systemd — necesita su
+propia revisión antes de activarse, precisamente porque mete registros fiscales en esta zona.
+
 ### Verifactu · Cola de envío automático por negocio  ✅ HECHO (2026-07-09) — `7b394c6`
 Encargo expreso del dueño, a raíz del **hallazgo de los 240 s** de la Tarea 2 Fase A: el envío dejó de
 ser manual. Al emitir una factura, su registro sale hacia la AEAT **en segundos**. Aditivo y reversible.
