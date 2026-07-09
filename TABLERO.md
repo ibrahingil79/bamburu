@@ -349,6 +349,19 @@ fase actual ceden prioridad a la optimización (Ejes A/B/C).
 ### Roadmap futuro — módulos (decisión del dueño, NO iniciar sin encargo)
 DISA como producto proactivo · **Citas / Agenda** (🔺 prioritaria) · CRM comercial (**embudo/oportunidades ✅ HECHO 2026-07-09**; agenda/calendario pendiente) · Control horario (registro de jornada) · TPV / POS módulo completo · Parte de obra · Cobro recurrente + domiciliación SEPA · Telegram como canal · Mapas (OpenStreetMap) · Documentos / suite ofimática ligera · App móvil nativa · API pública / webhooks · Integraciones / marketplace · Dashboards personalizables · Multiempresa · Fabricación · Multi-moneda · Firma digital de documentos · Previsión de caja 3/6/12 meses · Proyectos / rentabilidad · Partes de horas · Servicio de campo / órdenes de trabajo · Helpdesk.
 
+### Auditoría Bamburu vs Holded (9 jul 2026) — módulos y mejoras nuevas
+> Origen: **auditoría Bamburu vs Holded del 9 jul 2026**, repaso con el **manual funcional completo de
+> Holded** (más detallado que la auditoría del 4 jul 2026). Solo documentación, sin fecha comprometida.
+
+- **RRHH:** ficha de empleado (datos fiscales/contrato) + nóminas + organigrama. Se suma al **control
+  horario** que ya estaba anotado en El Foso.
+- **Proyectos:** gestión de tareas internas tipo kanban — distinto del **CRM** ya registrado.
+- **Analítica:** módulo de informes predefinidos por área (ventas, compras, clientes…) + **plan financiero**
+  (objetivos vs. real). Va más allá de los KPIs sueltos del panel actual.
+- **Mejoras menores de UX/plataforma** (sin pilar propio, encajar donde toque): importar contactos en bloque
+  desde archivo · buzón de email propio para reenviar tickets de gasto · calendario fiscal de vencimientos ·
+  búsqueda global + botón de creación rápida universal + sidebar personalizable.
+
 ---
 
 > El detalle completo de cada módulo del roadmap, de las decisiones registradas (D1–D6) y de todas las
