@@ -14,6 +14,11 @@ export function getTenantDb(tenant) {
     tenantDb = new Database(tenant.db_filename);
     tenantDb.pragma('journal_mode = WAL');
     tenantDb.pragma('foreign_keys = ON');
+    // De qué negocio es esta conexión. La cola de envío a la AEAT lo necesita para resolver el
+    // certificado del obligado (cada negocio remite con el suyo) sin arrastrar el slug por la firma
+    // de media docena de funciones de facturación. Ausente = no hay tenant resuelto (scripts, tests)
+    // y la cola no se activa: un gate nunca dispara una petición a la AEAT por accidente.
+    tenantDb.bamburuSlug = tenant.slug;
     runMigrations(tenantDb);
     tenantConnections.set(tenant.slug, tenantDb);
   }

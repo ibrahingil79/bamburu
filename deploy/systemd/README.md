@@ -1,3 +1,35 @@
+# Units de systemd de Bamburu
+
+| Unit | Qué hace | Detalle |
+|------|----------|---------|
+| `bamburu-backup` + `bamburu-backup-heartbeat` | Copia diaria a Google Drive, blindada | abajo |
+| `bamburu-avisos` | Resumen diario de avisos por email (08:00 Europe/Madrid) | `scripts/bamburu-avisos.mjs` |
+| `bamburu-verifactu-cola` | **Red de seguridad** de la cola de envío a la AEAT (cada 2 min) | `docs/verifactu/tarea2-cola-envio-automatico.md` |
+
+## Cola de envío Verifactu — instalación
+
+El camino normal es la cola **en proceso**: al emitir una factura, su registro sale hacia la AEAT en
+segundos (ventana de 240 s de la huella). Este timer solo recoge lo que quedó colgado tras un reinicio
+o una caída larga de la AEAT — nunca perseguiría los 240 s por sí solo.
+
+**Sin certificado configurado la cola está inactiva y este barrido no hace nada: instalarlo es inocuo.**
+
+```bash
+cd /home/ubuntu/bamburu
+sudo cp deploy/systemd/bamburu-verifactu-cola.service /etc/systemd/system/
+sudo cp deploy/systemd/bamburu-verifactu-cola.timer   /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now bamburu-verifactu-cola.timer
+
+# Comprobar sin enviar nada:
+node scripts/bamburu-verifactu-cola.mjs --dry-run
+journalctl -u bamburu-verifactu-cola -n 40 --no-pager
+```
+
+Para desactivarla del todo (reversible, sin desinstalar): `VERIFACTU_COLA=off` en `/etc/bamburu.env`.
+
+---
+
 # Copia automática de los datos a Google Drive (rclone)
 
 Copia diaria de los datos del servidor Bamburu a **Google Drive** (cuenta personal

@@ -57,6 +57,7 @@ export function createAvisosRoutes(db) {
   // se hace en el modal, sin salir de aquí. Una fuente nueva sin entrada aquí sale con su tipo
   // crudo y sin acción: se degrada, no se rompe.
   const VISTA = {
+    envio_verifactu:       { etiqueta: 'Verifactu',        badge: 'b-red',    href: () => '/admin/verifactu/envios' },
     cobro_vencido:         { etiqueta: 'Cobro vencido',    badge: 'b-red',    href: r => '/admin/invoices/' + r.invoice_id },
     vencimiento_proveedor: { etiqueta: 'Pago a proveedor', href: r => '/admin/supplier-invoices/' + r.supplier_invoice_id,
                              badge: r => (r.vencida ? 'b-red' : 'b-yellow') },
@@ -200,6 +201,12 @@ export function createAvisosRoutes(db) {
         // Recurrente en borrador: emitir crea una factura con valor legal → se revisa primero.
         if (a.tipo === 'factura_recurrente') {
           return '<a class="btn btn-primary btn-sm" href="/admin/recurrentes">Revisar y emitir</a>';
+        }
+        // Verifactu sin remitir: reenviar es un acto con valor legal, y además ninguno de los tres
+        // casos (rechazado / bloqueado / comunicación agotada) se arregla pulsando "reintentar" a
+        // ciegas. Mismo criterio que la recurrente: se lleva a la pantalla, se mira y se decide.
+        if (a.tipo === 'envio_verifactu') {
+          return '<a class="btn btn-primary btn-sm" href="/admin/verifactu/envios">Revisar envío</a>';
         }
         return ver;
       }

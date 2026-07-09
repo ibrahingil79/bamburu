@@ -1228,6 +1228,19 @@ export function runMigrations(db) {
     FOREIGN KEY (registro_id) REFERENCES verifactu_registros(id)
   )`);
 
+  // ── VERI*FACTU · COLA de envío automático — reloj del reintento (aditiva) ──
+  // `next_retry_at` es lo ÚNICO que la cola añade al estado de envío, y hace de tres cosas a la vez:
+  //   · marca de propiedad — una fila con next_retry_at NULL NO la toca la cola (registros históricos
+  //     y envíos manuales quedan fuera; encender la cola no drena el pasado).
+  //   · reloj del reintento — cuándo vuelve a ser elegible tras un fallo de comunicación (backoff).
+  //   · cerrojo entre procesos — al reclamar una fila se empuja al futuro (lease), así el barrido de
+  //     systemd y la cola en proceso nunca envían el mismo registro dos veces.
+  // Se guarda SIEMPRE en ISO-8601 UTC con Z (new Date().toISOString()), igual que `enviado_at`, y
+  // NUNCA con CURRENT_TIMESTAMP: 'AAAA-MM-DD HH:MM:SS' y 'AAAA-MM-DDTHH:MM:SS.sssZ' se comparan como
+  // cadenas y el espacio (0x20) ordena antes que la 'T' (0x54) — mezclarlos rompe el <= del reclamo.
+  addCol(db, 'verifactu_envios', 'next_retry_at', 'DATETIME');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_verifactu_envios_retry ON verifactu_envios(next_retry_at)');
+
   // ── PORTAL DE CLIENTE · Bloque C — enlaces mágicos temporales (aditiva) ──
   // El cliente accede por /portal/<token> (sin contraseña). El token es temporal y solo da acceso a
   // las facturas de SU client_id. Solo lectura: el portal no toca documentos ni ledger.

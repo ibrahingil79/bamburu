@@ -62,12 +62,15 @@ try {
     };
   });
   ok(acciones.conBoton > 0, 'las filas traen BOTÓN de acción, no solo enlaces (' + acciones.conBoton + '/' + acciones.total + ')');
-  // Las únicas filas sin botón deben ser las de recurrente (emitir = documento legal → se revisa).
-  const sinBotonEsperado = await page.evaluate(() =>
+  // Las únicas filas sin botón son las que desembocan en un acto con VALOR LEGAL, que se revisa
+  // antes de dispararlo (confirm-first): emitir una recurrente, y remitir un registro a la AEAT.
+  // Las dos llevan un enlace-botón a su pantalla en vez de una acción directa en la fila.
+  const CONFIRM_FIRST = ['Recurrente', 'Verifactu'];
+  const sinBotonEsperado = await page.evaluate(cf =>
     [...document.querySelectorAll('#avBody tr.frow')]
       .filter(tr => !tr.querySelector('td:last-child button'))
-      .every(tr => tr.querySelector('.badge')?.textContent.trim() === 'Recurrente'));
-  ok(sinBotonEsperado, 'las únicas filas sin botón son las de Recurrente (emitir factura = confirm-first)');
+      .every(tr => cf.includes(tr.querySelector('.badge')?.textContent.trim())), CONFIRM_FIRST);
+  ok(sinBotonEsperado, 'las únicas filas sin botón son las confirm-first: Recurrente y Verifactu (documento legal → se revisa)');
 
   // ── 2. Pulsar "Registrar cobro" abre el modal con el importe precargado ─────
   const N0 = await totalEnPantalla();

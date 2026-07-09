@@ -5,6 +5,7 @@ import { requirePerm, logActivity } from '../../../core/auth.js';
 import { checkPermission } from '../../../core/permission-check.js';   // chequeo de permiso programático (condicional)
 import { isPhysical, productStock, productStockInWarehouse, reservedOfProduct, recordMovement, resolveWarehouseId } from '../stock.js';   // aviso de exceso al facturar (RAMA B) + mostrador (ticket): salida de stock por el libro
 import { recordVerifactuAlta, recordVerifactuAnulacion, cotejoUrl } from '../verifactu.js';   // VERI*FACTU T1: registro oficial + QR de cotejo
+import { encolarSiProcede } from '../verifactu-cola.js';   // VERI*FACTU T2: remisión automática a la AEAT tras commit (ventana de 240 s)
 import { postInvoice, postInvoicePayment } from '../contabilidad.js';   // Contabilidad: posteo del asiento tras commit (aditivo; no rompe el documento)
 import { validate } from '../../../core/validate.js';
 import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema, invoicePaymentSchema, collectionActionSchema, sustitutivaSchema } from '../schemas.js';
@@ -188,10 +189,12 @@ export function generateInvoice(db, orderId) {
       insItem.run(invoiceId, it.product_name, it.quantity, it.unit_price, it.total);
     }
 
-    recordVerifactuAlta(db, { ...inv, id: invoiceId });
-    return { id: invoiceId, invoice_number };
+    const reg = recordVerifactuAlta(db, { ...inv, id: invoiceId });
+    return { id: invoiceId, invoice_number, registro_id: reg.id };
   });
-  return emit();
+  const out = emit();
+  encolarSiProcede(db, out.registro_id);   // remisión automática a la AEAT (no lanza; no bloquea la emisión)
+  return out;
 }
 
 // A1+A2: crear factura directa (sin pedido). Cada línea lleva su propia tasa
@@ -268,16 +271,17 @@ export function createInvoice(db, invoiceData) {
       insItem.run(invoiceId, line.description, qty, price, base, rate, tax);
     }
     // VERI*FACTU T1: registro de ALTA oficial (huella encadenada) en la MISMA transacción.
-    recordVerifactuAlta(db, {
+    const reg = recordVerifactuAlta(db, {
       id: invoiceId, company_fiscal_id: cfg.fiscal_id || '', invoice_number,
       issue_date: issueDate, record_type: 'alta', tipo_factura: tipo_factura || 'F1',
       subtotal: totals.subtotal, tax_amount: totals.taxAmount,
     });
-    return { id: invoiceId, invoice_number };
+    return { id: invoiceId, invoice_number, registro_id: reg.id };
   });
 
   const out = create();
   try { postInvoice(db, out.id); } catch {}   // asiento contable (en su propio try: un fallo de posteo NO rompe la factura; la red de seguridad reconcilia)
+  encolarSiProcede(db, out.registro_id);      // VERI*FACTU T2: a la cola de remisión (240 s de ventana). No lanza.
   return out;
 }
 
@@ -410,16 +414,17 @@ export function createRectificativa(db, data) {
     db.prepare("UPDATE invoices SET status='rectificada' WHERE id=?").run(original.id);
     // VERI*FACTU T1: la rectificativa es un ALTA en serie 'R' (TipoFactura = R1..R5); su registro
     // de alta oficial (huella encadenada) va en la MISMA transacción.
-    recordVerifactuAlta(db, {
+    const reg = recordVerifactuAlta(db, {
       id: invoiceId, company_fiscal_id: original.company_fiscal_id || cfg.fiscal_id || '',
       invoice_number, issue_date: issueDate, record_type: 'rectificativa', rectification_type,
       subtotal: totals.subtotal, tax_amount: totals.taxAmount,
     });
-    return { id: invoiceId, invoice_number, rectifies: original.invoice_number };
+    return { id: invoiceId, invoice_number, rectifies: original.invoice_number, registro_id: reg.id };
   });
   const out = run();
   // Postea la rectificativa y reconcilia la original (S → se reversa; I → se queda). No rompe el documento.
   try { postInvoice(db, out.id); postInvoice(db, original.id); } catch {}
+  encolarSiProcede(db, out.registro_id);   // VERI*FACTU T2: la rectificativa es un alta (R1..R5) y también se remite.
   return out;
 }
 
@@ -706,7 +711,7 @@ export function emitTicketSvc(db, { lines, warehouse_id, payment_method, paid_da
     }
 
     // Alta Verifactu con TIPO F2 (simplificada), misma cadena de huella del emisor.
-    recordVerifactuAlta(db, { id: invoiceId, company_fiscal_id: cfg.fiscal_id || '', invoice_number, issue_date: issueDate, record_type: 'alta', tipo_factura: 'F2', subtotal: totals.subtotal, tax_amount: totals.taxAmount });
+    const reg = recordVerifactuAlta(db, { id: invoiceId, company_fiscal_id: cfg.fiscal_id || '', invoice_number, issue_date: issueDate, record_type: 'alta', tipo_factura: 'F2', subtotal: totals.subtotal, tax_amount: totals.taxAmount });
 
     // Stock: salida al LIBRO por cada línea FÍSICA, en el almacén elegido (origin 'ticket').
     for (const l of resolved) {
@@ -719,10 +724,11 @@ export function emitTicketSvc(db, { lines, warehouse_id, payment_method, paid_da
     db.prepare('INSERT INTO invoice_payments (invoice_id, amount, paid_date, payment_method, note) VALUES (?,?,?,?,?)')
       .run(invoiceId, totals.total, payDate, payment_method, 'Cobro en mostrador');
 
-    return { id: invoiceId, invoice_number, total: totals.total, warehouse_id: wid, payment_method };
+    return { id: invoiceId, invoice_number, total: totals.total, warehouse_id: wid, payment_method, registro_id: reg.id };
   });
   const out = emit();
   try { postInvoice(db, out.id); } catch {}   // asiento del ticket (tesorería + ventas); el cobro auto NO se postea aparte
+  encolarSiProcede(db, out.registro_id);      // VERI*FACTU T2: el mostrador es el caso que MÁS necesita la cola (ráfagas)
   return out;
 }
 
@@ -825,15 +831,16 @@ export function emitSustitutivaSvc(db, ticketId, client_id) {
       insItem.run(invoiceId, line.description, line.quantity, line.unit_price, base, line.tax_rate, tax);
     }
     // Alta Verifactu TIPO F3 (sustitución de simplificadas), misma cadena de huella del emisor.
-    recordVerifactuAlta(db, { id: invoiceId, company_fiscal_id: cfg.fiscal_id || '', invoice_number, issue_date: issueDate, record_type: 'alta', tipo_factura: 'F3', subtotal: totals.subtotal, tax_amount: totals.taxAmount });
+    const reg = recordVerifactuAlta(db, { id: invoiceId, company_fiscal_id: cfg.fiscal_id || '', invoice_number, issue_date: issueDate, record_type: 'alta', tipo_factura: 'F3', subtotal: totals.subtotal, tax_amount: totals.taxAmount });
     // Enlace bidireccional visible (mismo motor que presupuesto→factura).
     db.prepare("INSERT INTO document_links (source_type, source_id, dest_type, dest_id) VALUES ('ticket', ?, 'invoice', ?)").run(ticketId, invoiceId);
     // NO invoice_payments (el cobro del ticket vale; cobros.js lo hereda). NO movimiento de stock.
-    return { id: invoiceId, invoice_number, ticket_id: ticketId, ticket_number: ticket.invoice_number };
+    return { id: invoiceId, invoice_number, ticket_id: ticketId, ticket_number: ticket.invoice_number, registro_id: reg.id };
   });
   const out = run();
   // Postea la F3 (ingreso contra tesorería heredada) y reconcilia el ticket (su venta se reversa).
   try { postInvoice(db, out.id); postInvoice(db, out.ticket_id); } catch {}
+  encolarSiProcede(db, out.registro_id);   // VERI*FACTU T2: la F3 es un alta más y también se remite.
   return out;
 }
 

@@ -12,6 +12,7 @@
 import fs from 'fs';
 import http from 'http';
 import https from 'https';
+import { join } from 'path';
 import { fmtImporte } from './verifactu.js';   // Tarea 1 (inmutable): formato oficial de importes
 
 // Namespaces canónicos (targetNamespace de los XSD; apuntan a www2 aunque el XSD se sirva de prewww2).
@@ -80,6 +81,55 @@ export function certStatus() {
   if (!path) return { present: false, reason: 'Falta VERIFACTU_CERT_PATH en el entorno: certificado FNMT no configurado (envío real no disponible; el simulador sí).' };
   try { fs.accessSync(path, fs.constants.R_OK); } catch { return { present: false, reason: `No se puede leer el certificado en ${path}.` }; }
   return { present: true };
+}
+
+// ── Certificado POR NEGOCIO (multi-tenant), con caída al global ───────────────
+// Quien remite es el obligado, y es SU certificado el que autentica el transporte mTLS: la cola
+// tiene que resolverlo por negocio o cruzaría identidades entre tenants. Convención:
+//   VERIFACTU_CERT_DIR/<slug>.p12  (o .pfx)   ·  contraseña en VERIFACTU_CERT_PASS_<SLUG>
+// Si no hay directorio, o ese negocio no tiene fichero, se cae al VERIFACTU_CERT_PATH global (el
+// camino que ya existía y que usa el script de preproducción). El slug se valida contra el mismo
+// alfabeto que control.db ([a-z0-9-]) antes de tocar el sistema de ficheros: nunca se concatena
+// una cadena ajena en una ruta.
+//
+// La CONTRASEÑA sigue sin escribirse en ningún fichero del repo. Vive en el entorno del proceso, y
+// si no está, la cola de ese negocio NO se activa (motivoColaInactiva lo dice): no se inventa, no
+// se pide por teclado (no hay teclado) y no se lanzan intentos contra un muro.
+const SLUG_OK = /^[a-z0-9-]+$/;
+const slugEnv = slug => String(slug || '').toUpperCase().replace(/[^A-Z0-9]/g, '_');
+
+export function certPathForTenant(slug) {
+  const dir = process.env.VERIFACTU_CERT_DIR;
+  if (dir && slug && SLUG_OK.test(slug)) {
+    for (const ext of ['p12', 'pfx']) {
+      const p = join(dir, `${slug}.${ext}`);
+      try { fs.accessSync(p, fs.constants.R_OK); return p; } catch { /* prueba la siguiente extensión */ }
+    }
+  }
+  return process.env.VERIFACTU_CERT_PATH || null;
+}
+
+// Contraseña del .p12 de un negocio. `undefined` = no configurada (≠ '' , que es contraseña vacía
+// legítima). La cola distingue los dos casos: sin definir → no arranca; vacía → lo intenta.
+export function certPassForTenant(slug) {
+  const propia = process.env['VERIFACTU_CERT_PASS_' + slugEnv(slug)];
+  return propia !== undefined ? propia : process.env.VERIFACTU_CERT_PASS;
+}
+
+// Estado del certificado de UN negocio (para avisar con claridad, sin romper).
+export function certStatusForTenant(slug) {
+  const path = certPathForTenant(slug);
+  if (!path) return { present: false, reason: 'Falta el certificado FNMT: ni VERIFACTU_CERT_DIR/' + (slug || '<negocio>') + '.p12 ni VERIFACTU_CERT_PATH están configurados (envío real no disponible; el simulador sí).' };
+  try { fs.accessSync(path, fs.constants.R_OK); } catch { return { present: false, reason: `No se puede leer el certificado en ${path}.` }; }
+  return { present: true, path };
+}
+
+export function loadCertificateForTenant(slug) {
+  const cs = certStatusForTenant(slug);
+  if (!cs.present) return null;
+  let pfx;
+  try { pfx = fs.readFileSync(cs.path); } catch { return null; }
+  return { pfx, passphrase: certPassForTenant(slug) || '' };
 }
 
 // ── Persistencia del estado de envío (idempotente por registro_id) ────────────
@@ -334,66 +384,138 @@ export function estadoRegistroToEstado(estadoRegistro) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// PASO 4 — Orquestación IDEMPOTENTE del envío de UN registro de alta.
+// PASO 4 — Orquestación IDEMPOTENTE del envío de un LOTE de registros de alta.
+//
+// Va por lotes porque la ley obliga: el control de flujo (art. 16.2 Orden HAC/1177/2024) impone
+// esperar el `TiempoEsperaEnvio` devuelto (t inicial = 60 s) entre envíos, mientras que la huella
+// caduca a los 240 s. Un sobre por factura da un techo de 1 registro/60 s: en una ráfaga de
+// mostrador la sexta factura llegaría fuera de ventana. Agrupando 1..1000 RegistroFactura en UNA
+// Cabecera, ambos relojes se cumplen a la vez. `buildEnvelope` ya lo admitía; era esto lo que no.
+//
+// Un envío = UN obligado (una sola Cabecera): el lote se rechaza si mezcla emisores.
 // No reenvía lo ya aceptado (idempotencia). Falta de datos → 'bloqueado_datos' con AVISO (no sale).
 // Falta de certificado contra la AEAT → 'error_comunicacion' con aviso claro (no rompe). Contra el
 // simulador (endpoint http / cert null) va sin certificado. Persiste TODO: estado, CSV, error, XML.
+//
+// Devuelve un array PARALELO a registroIds (misma posición, misma factura); un hueco es null.
 // ════════════════════════════════════════════════════════════════════════════
-export async function enviarRegistro(db, registroId, opts = {}) {
-  const registro = db.prepare('SELECT * FROM verifactu_registros WHERE id=?').get(registroId);
-  if (!registro) throw new Error(`Registro de facturación ${registroId} no existe`);
-
-  // Fase A: solo altas. La remisión de anulaciones es ampliación posterior (no romper).
-  if (registro.record_type !== 'alta') {
-    return upsertEnvio(db, registroId, { estado: ESTADO.BLOQUEADO, aviso: 'Fase A solo remite registros de ALTA; la anulación se enviará en una ampliación posterior.' });
-  }
-
-  // Idempotencia: no reenviar lo ya aceptado por la AEAT.
-  const existing = getEnvio(db, registroId);
-  if (yaAceptado(existing) && !opts.forzar) return existing;
-
-  const invoice = db.prepare('SELECT * FROM invoices WHERE id=?').get(registro.invoice_id) || {};
-  const items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id=?').all(registro.invoice_id);
-  const prevRegistro = registro.primer_registro === 'S' ? null
-    : db.prepare('SELECT * FROM verifactu_registros WHERE id < ? ORDER BY id DESC LIMIT 1').get(registroId);
-  const companyName = db.prepare('SELECT company_name FROM company_config WHERE id=1').get()?.company_name || invoice.company_name || '';
+export async function enviarLote(db, registroIds, opts = {}) {
+  const ids = [...new Set((registroIds || []).map(Number))];
+  const resultados = new Map();
+  const lote = [];                     // { registro, xml } — lo que de verdad sale por el cable
   const sistemaInfo = opts.sistemaInfo || sistemaInformatico();
+  let companyName = null;
 
-  const built = buildRegistroAlta({ registro, invoice, items, prevRegistro, companyName, sistemaInfo });
-  if (built.bloqueado) {
-    return upsertEnvio(db, registroId, { estado: ESTADO.BLOQUEADO, aviso: built.avisos.join(' | ') });
+  for (const registroId of ids) {
+    const registro = db.prepare('SELECT * FROM verifactu_registros WHERE id=?').get(registroId);
+    if (!registro) throw new Error(`Registro de facturación ${registroId} no existe`);
+
+    // Fase A: solo altas. La remisión de anulaciones es ampliación posterior (no romper).
+    if (registro.record_type !== 'alta') {
+      resultados.set(registroId, upsertEnvio(db, registroId, { estado: ESTADO.BLOQUEADO, aviso: 'Fase A solo remite registros de ALTA; la anulación se enviará en una ampliación posterior.' }));
+      continue;
+    }
+
+    // Idempotencia: no reenviar lo ya aceptado por la AEAT.
+    const existing = getEnvio(db, registroId);
+    if (yaAceptado(existing) && !opts.forzar) { resultados.set(registroId, existing); continue; }
+
+    const invoice = db.prepare('SELECT * FROM invoices WHERE id=?').get(registro.invoice_id) || {};
+    const items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id=?').all(registro.invoice_id);
+    const prevRegistro = registro.primer_registro === 'S' ? null
+      : db.prepare('SELECT * FROM verifactu_registros WHERE id < ? ORDER BY id DESC LIMIT 1').get(registroId);
+    if (companyName === null) companyName = db.prepare('SELECT company_name FROM company_config WHERE id=1').get()?.company_name || invoice.company_name || '';
+
+    const built = buildRegistroAlta({ registro, invoice, items, prevRegistro, companyName, sistemaInfo });
+    if (built.bloqueado) {
+      resultados.set(registroId, upsertEnvio(db, registroId, { estado: ESTADO.BLOQUEADO, aviso: built.avisos.join(' | ') }));
+      continue;
+    }
+    lote.push({ registro, xml: built.xml });
   }
+
+  const salida = () => ids.map(id => resultados.get(id) ?? null);
+  if (!lote.length) return salida();
+
+  // Una Cabecera lleva UN ObligadoEmision. Mezclar emisores produciría un XML que miente sobre
+  // quién remite: se para aquí, no se manda a medias.
+  const emisores = [...new Set(lote.map(x => x.registro.id_emisor))];
+  if (emisores.length > 1) throw new Error('Un envío solo puede llevar registros de UN obligado (Cabecera única); llegaron: ' + emisores.join(', '));
 
   const entorno = opts.entorno || 'pruebas';
   const endpoint = opts.endpoint || AEAT_ENDPOINTS[entorno];
   const esAeat = /aeat\.es|agenciatributaria\.gob\.es/.test(endpoint);
-  const cert = opts.cert !== undefined ? opts.cert : (esAeat ? loadCertificate() : null);
+  const cert = opts.cert !== undefined ? opts.cert : (esAeat ? loadCertificateForTenant(opts.slug) : null);
   if (esAeat && !cert) {
-    return upsertEnvio(db, registroId, { estado: ESTADO.ERROR_COM, entorno, endpoint, aviso: 'No se puede enviar a la AEAT: ' + certStatus().reason });
+    const aviso = 'No se puede enviar a la AEAT: ' + certStatusForTenant(opts.slug).reason;
+    for (const { registro } of lote) resultados.set(registro.id, upsertEnvio(db, registro.id, { estado: ESTADO.ERROR_COM, entorno, endpoint, aviso }));
+    return salida();
   }
 
-  const envelope = buildEnvelope({ obligadoNombre: companyName, obligadoNif: registro.id_emisor, registrosXml: [built.xml] });
+  const envelope = buildEnvelope({ obligadoNombre: companyName, obligadoNif: emisores[0], registrosXml: lote.map(x => x.xml) });
   const ahora = opts.now || new Date().toISOString();
+
+  // Auditoría por registro, SIN coste cuadrático. `verifactu_envios` tiene una fila por registro, así
+  // que guardar el sobre entero en cada una multiplica su tamaño por N (50 tickets de una ráfaga →
+  // ~3 MB por vaciado, creciendo sin techo en la BD del negocio). Cuando el sobre es de UN registro,
+  // se guarda tal cual (comportamiento de siempre, el del botón manual). Cuando lleva varios, cada
+  // fila guarda LO SUYO: su <RegistroAlta> y su <RespuestaLinea>. No se pierde nada — el obligado de
+  // la Cabecera es `id_emisor`, y el CSV y el EstadoEnvio del sobre ya viven en sus propias columnas.
+  const solo = lote.length === 1;
+  const peticionDe = x => (solo ? envelope : x.xml);
+
+  // La <RespuestaLinea> de UNA serie. Se ancla en el TAG completo (<NumSerieFactura>X</NumSerieFactura>),
+  // no en la serie suelta: 'F2026-1000' es subcadena de 'F2026-10000' y cazaría la línea del vecino.
+  // El token templado impide además saltar de una RespuestaLinea a la siguiente.
+  const lineaXml = (body, serie) => {
+    const esc = serie.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp('<(?:[\\w.-]+:)?RespuestaLinea>(?:(?!</(?:[\\w.-]+:)?RespuestaLinea>)[\\s\\S])*?'
+      + '<(?:[\\w.-]+:)?NumSerieFactura>' + esc + '</(?:[\\w.-]+:)?NumSerieFactura>'
+      + '[\\s\\S]*?</(?:[\\w.-]+:)?RespuestaLinea>');
+    const m = String(body || '').match(re);
+    return m ? m[0] : null;
+  };
 
   let resp;
   try {
     resp = await sendSoap(envelope, { endpoint, cert, timeoutMs: opts.timeoutMs || 30000, rejectUnauthorized: opts.rejectUnauthorized !== false });
   } catch (e) {
-    return upsertEnvio(db, registroId, { estado: ESTADO.ERROR_COM, entorno, endpoint, descripcion_error: e.message, aviso: 'Error de comunicación con la AEAT: ' + e.message, request_xml: envelope, enviado_at: ahora, bumpIntentos: true });
+    // Red caída / AEAT sin responder: NO hubo envío. `http_status` queda NULL a propósito — es lo que
+    // la cola mira para saber que el control de flujo no se ha consumido y puede reintentar antes.
+    for (const x of lote) resultados.set(x.registro.id, upsertEnvio(db, x.registro.id, { estado: ESTADO.ERROR_COM, entorno, endpoint, descripcion_error: e.message, aviso: 'Error de comunicación con la AEAT: ' + e.message, request_xml: peticionDe(x), enviado_at: ahora, bumpIntentos: true }));
+    return salida();
   }
 
   const parsed = parseRespuesta(resp.body);
   if (parsed.soapFault) {
-    return upsertEnvio(db, registroId, { estado: ESTADO.ERROR_COM, entorno, endpoint, http_status: resp.httpStatus, descripcion_error: parsed.faultString, aviso: 'SoapFault de la AEAT: ' + parsed.faultString, request_xml: envelope, response_xml: resp.body, enviado_at: ahora, bumpIntentos: true });
+    // El fault es del sobre entero (no trae líneas): se guarda íntegro en cada fila. Es corto.
+    for (const x of lote) resultados.set(x.registro.id, upsertEnvio(db, x.registro.id, { estado: ESTADO.ERROR_COM, entorno, endpoint, http_status: resp.httpStatus, descripcion_error: parsed.faultString, aviso: 'SoapFault de la AEAT: ' + parsed.faultString, request_xml: peticionDe(x), response_xml: resp.body, enviado_at: ahora, bumpIntentos: true }));
+    return salida();
   }
-  const linea = parsed.lineas[0] || {};
-  return upsertEnvio(db, registroId, {
-    estado: estadoRegistroToEstado(linea.estadoRegistro),
-    entorno, endpoint, http_status: resp.httpStatus,
-    estado_envio: parsed.estadoEnvio, estado_registro: linea.estadoRegistro,
-    codigo_error: linea.codigoError, descripcion_error: linea.descripcionError,
-    csv: parsed.csv, tiempo_espera_envio: parsed.tiempoEspera,
-    request_xml: envelope, response_xml: resp.body,
-    enviado_at: ahora, bumpIntentos: true,
+
+  // Cada RespuestaLinea con SU registro por NumSerieFactura: la AEAT no garantiza el orden, y dentro
+  // de un lote de altas el correlativo de serie es único. El índice queda solo de red de seguridad.
+  const porSerie = new Map(parsed.lineas.filter(l => l.numSerie).map(l => [l.numSerie, l]));
+  lote.forEach((x, i) => {
+    const { registro } = x;
+    const linea = porSerie.get(registro.num_serie) || parsed.lineas[i] || {};
+    resultados.set(registro.id, upsertEnvio(db, registro.id, {
+      estado: estadoRegistroToEstado(linea.estadoRegistro),
+      entorno, endpoint, http_status: resp.httpStatus,
+      estado_envio: parsed.estadoEnvio, estado_registro: linea.estadoRegistro,
+      codigo_error: linea.codigoError, descripcion_error: linea.descripcionError,
+      csv: parsed.csv, tiempo_espera_envio: parsed.tiempoEspera,
+      request_xml: peticionDe(x),
+      response_xml: solo ? resp.body : (lineaXml(resp.body, registro.num_serie) || resp.body),
+      enviado_at: ahora, bumpIntentos: true,
+    }));
   });
+  return salida();
+}
+
+// Envío de UN registro (pantalla "Enviar" y script de preproducción). Delega en el lote de tamaño 1
+// para que el camino manual y el automático no puedan divergir nunca: un solo orquestador.
+export async function enviarRegistro(db, registroId, opts = {}) {
+  const [envio] = await enviarLote(db, [registroId], opts);
+  return envio;
 }

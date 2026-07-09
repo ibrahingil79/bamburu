@@ -11,6 +11,7 @@
 
 import { openPayables } from './pagos.js';
 import { openDebts } from './cobros.js';
+import { MAX_INTENTOS } from './verifactu-cola.js';
 
 const r2 = n => Math.round(n * 100) / 100;
 
@@ -130,18 +131,87 @@ export function borradoresRecurrentes(db, today) {
   }));
 }
 
-// Fuentes registradas. Añadir una fuente = escribir la función y añadirla aquí. NADA más cambia
-// (ni el panel, ni el resumen del badge, ni el email, ni la pantalla central de /admin/avisos).
-const SOURCES = [vencimientosProveedor, cobrosVencidos, stockBajo, borradoresRecurrentes];
+// ── FUENTE: registros Verifactu que NO llegaron a la AEAT y ya no llegarán solos ───────────────
+// La cola (verifactu-cola.js) reintenta sola los fallos de comunicación. Aquí solo aparece lo que
+// quedó en punto muerto y necesita a una persona:
+//   · rechazado ('incorrecto') — la AEAT lo tumbó (p. ej. NIF no censado). Reenviar el mismo XML da
+//     el mismo rechazo: hay que corregir la factura.
+//   · bloqueado ('bloqueado_datos') — falta un dato obligatorio; el registro ni salió (nunca se
+//     inventa un dato para poder enviar).
+//   · comunicación agotada — se gastaron los MAX_INTENTOS de la cola.
+// Lo que sigue en reintento NO avisa (todavía se está resolviendo solo), y lo aceptado tampoco.
+// Urgencia por encima de todo lo demás a propósito: un registro de facturación sin remitir es un
+// problema legal, y no debe poder quedar sepultado bajo facturas vencidas (cuya urgencia crece con
+// los días). Es un número: si el dueño lo prefiere más abajo, se baja aquí y solo aquí.
+export function enviosVerifactu(db, today) {
+  let rows;
+  try {
+    rows = db.prepare(`SELECT e.registro_id, e.estado, e.intentos, e.codigo_error, e.descripcion_error, e.aviso,
+                              r.num_serie, r.fecha_expedicion
+        FROM verifactu_envios e JOIN verifactu_registros r ON r.id = e.registro_id
+       WHERE r.record_type='alta'
+         AND ( e.estado IN ('incorrecto','bloqueado_datos')
+            OR (e.estado='error_comunicacion' AND e.intentos >= ?) )
+       ORDER BY e.registro_id`).all(MAX_INTENTOS);
+  } catch {
+    return [];   // tenant sin el esquema de Verifactu todavía
+  }
+  return rows.map(r => {
+    const detalle = r.estado === 'incorrecto'
+      ? 'La AEAT rechazó el registro' + (r.codigo_error ? ' (error ' + r.codigo_error + ')' : '') + ': ' + (r.descripcion_error || 'sin descripción') + '. Corrige la factura y vuelve a enviarlo.'
+      : r.estado === 'bloqueado_datos'
+        ? 'No se envió por falta de datos: ' + (r.aviso || 'revisa la factura') + '.'
+        : 'No se pudo comunicar con la AEAT tras ' + r.intentos + ' intentos: ' + (r.descripcion_error || 'sin respuesta') + '.';
+    return {
+      tipo: 'envio_verifactu',
+      urgencia: 2000,
+      titulo: 'Verifactu · factura ' + r.num_serie + ' sin remitir a la AEAT',
+      detalle,
+      ref: { source: 'envio_verifactu', registro_id: r.registro_id, num_serie: r.num_serie, estado: r.estado },
+    };
+  });
+}
 
-// Todos los avisos del día (todas las fuentes), ordenados por urgencia (más urgente arriba).
-// Robusto: si una fuente peta, se ignora esa fuente y siguen las demás (un fallo aislado no
-// silencia todo el aviso).
-export function avisosDelDia(db, today) {
-  const t = today || new Date().toISOString().slice(0, 10);
+// Cada fuente lleva el MISMO permiso que ya exige su pantalla de origen. Un aviso no puede ser una
+// puerta trasera a datos que su pantalla te niega: quien no puede abrir /admin/cobros tampoco puede
+// leer "te deben 15,61 € de la factura F2026-0017" en la campana.
+//   envio_verifactu       → /admin/verifactu/envios  (invoices.read)
+//   vencimiento_proveedor → /admin/pagos             (purchases.read)
+//   cobro_vencido         → /admin/cobros            (cobros.read)
+//   stock_bajo            → /admin/inventory         (inventory.read)
+//   factura_recurrente    → /admin/recurrentes       (recurrentes.read)
+export const PERM_POR_FUENTE = {
+  envio_verifactu:       'invoices.read',
+  vencimiento_proveedor: 'purchases.read',
+  cobro_vencido:         'cobros.read',
+  stock_bajo:            'inventory.read',
+  factura_recurrente:    'recurrentes.read',
+};
+
+// Fuentes registradas. Añadir una fuente = escribir la función, registrarla aquí y darle su permiso
+// en PERM_POR_FUENTE. Sin permiso declarado, la fuente NO se sirve a nadie (falla cerrado).
+const SOURCES = [
+  { tipo: 'envio_verifactu',       fn: enviosVerifactu },
+  { tipo: 'vencimiento_proveedor', fn: vencimientosProveedor },
+  { tipo: 'cobro_vencido',         fn: cobrosVencidos },
+  { tipo: 'stock_bajo',            fn: stockBajo },
+  { tipo: 'factura_recurrente',    fn: borradoresRecurrentes },
+];
+
+// Todos los avisos del día, ordenados por urgencia (más urgente arriba). Robusto: si una fuente
+// peta, se ignora esa fuente y siguen las demás (un fallo aislado no silencia todo el aviso).
+//
+// `tipos` = conjunto de fuentes que quien pregunta TIENE DERECHO a ver. Las demás ni se ejecutan:
+// además de cerrar la fuga, ahorra el escaneo caro (openDebts) a quien no puede verlo. Omitirlo
+// (undefined) devuelve todas las fuentes — es el caso del email diario, que va al negocio y no a
+// un usuario. Pasar un conjunto vacío devuelve cero avisos: falla cerrado, no abierto.
+export function avisosDelDia(db, today, tipos) {
+  const t = today || hoyLocal();
+  const puede = tipos === undefined ? () => true : x => tipos.has(x);
   const todos = [];
   for (const src of SOURCES) {
-    try { todos.push(...src(db, t)); } catch { /* fuente caída: se omite, las demás siguen */ }
+    if (!puede(src.tipo)) continue;
+    try { todos.push(...src.fn(db, t)); } catch { /* fuente caída: se omite, las demás siguen */ }
   }
   todos.sort((a, b) => b.urgencia - a.urgencia);
   return todos;
@@ -231,20 +301,22 @@ export function avisoKey(a) {
   if (r.source === 'cobros_vencidos') return 'cv:' + r.invoice_id;
   if (r.source === 'stock_bajo') return 'sb:' + r.product_id;
   if (r.source === 'factura_recurrente') return 'fr:' + r.occurrence_id;
+  if (r.source === 'envio_verifactu') return 'vf:' + r.registro_id;
   return (r.source || (a && a.tipo) || '?') + ':' + (r.id != null ? r.id : JSON.stringify(r));
 }
 
 // Frase por tipo de fuente (singular/plural). Mapa = la cara legible de cada fuente del motor.
 const TIPO_FRASE = {
+  envio_verifactu: n => n + ' factura' + (n === 1 ? '' : 's') + ' sin remitir a la AEAT (Verifactu)',
   vencimiento_proveedor: n => n + ' factura' + (n === 1 ? '' : 's') + ' de proveedor que vence' + (n === 1 ? '' : 'n') + ' o ' + (n === 1 ? 'está' : 'están') + ' vencida' + (n === 1 ? '' : 's'),
   cobro_vencido: n => n + ' factura' + (n === 1 ? '' : 's') + ' de cliente vencida' + (n === 1 ? '' : 's') + ' sin cobrar',
   stock_bajo: n => n + ' producto' + (n === 1 ? '' : 's') + ' con stock bajo',
   factura_recurrente: n => n + ' factura' + (n === 1 ? '' : 's') + ' recurrente' + (n === 1 ? '' : 's') + ' en borrador para revisar',
 };
-// Orden estable del resumen. `cobro_vencido` va tras proveedor para no reordenar lo que ya
-// veía el dueño; dentro de la LISTA el orden real lo manda `urgencia` (días vencida), donde
-// cobros y pagos se intercalan por gravedad.
-const TIPO_ORDEN = ['vencimiento_proveedor', 'cobro_vencido', 'factura_recurrente', 'stock_bajo'];
+// Orden estable del resumen. `envio_verifactu` abre porque es lo único con consecuencia legal.
+// `cobro_vencido` va tras proveedor para no reordenar lo que ya veía el dueño; dentro de la LISTA
+// el orden real lo manda `urgencia` (días vencida), donde cobros y pagos se intercalan por gravedad.
+const TIPO_ORDEN = ['envio_verifactu', 'vencimiento_proveedor', 'cobro_vencido', 'factura_recurrente', 'stock_bajo'];
 
 // Resumen de CONTEOS por fuente (grupos no vacíos), en orden estable. Σ counts = total avisos
 // (== número del badge). NO incluye detalle ni ofrece acciones.

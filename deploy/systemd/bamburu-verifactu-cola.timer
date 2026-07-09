@@ -1,0 +1,15 @@
+[Unit]
+Description=Bamburu — barrido periódico de la cola de envío Verifactu (respaldo, no camino normal)
+
+[Timer]
+# El camino normal es la cola EN PROCESO: una factura emitida sale hacia la AEAT en segundos. Este
+# barrido solo recoge lo que quedó colgado tras un reinicio o una caída larga de la AEAT, así que no
+# necesita frecuencia fina: cada 2 minutos sobra. Perseguir aquí la ventana de 240 s sería inútil —
+# un timer de systemd nunca llega a tiempo a una factura recién emitida; la cola sí.
+OnBootSec=2min
+OnUnitActiveSec=2min
+# Sin Persistent=true: un barrido perdido no hay que recuperarlo (el siguiente ve el mismo trabajo).
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target

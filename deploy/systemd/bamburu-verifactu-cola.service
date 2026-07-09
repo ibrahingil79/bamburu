@@ -1,0 +1,17 @@
+[Unit]
+Description=Bamburu — red de seguridad de la cola de envío Verifactu a la AEAT
+Documentation=file:///home/ubuntu/bamburu/deploy/systemd/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/bamburu
+# Certificado por negocio (VERIFACTU_CERT_DIR) y contraseñas — el mismo EnvironmentFile que la app.
+# Sin ellos la cola está inactiva y este barrido no hace nada: instalarlo es inocuo.
+EnvironmentFile=/etc/bamburu.env
+# El .mjs itera TODOS los negocios (data/tenants/*.db) por sí mismo (no hace falta bash).
+ExecStart=/usr/bin/node /home/ubuntu/bamburu/scripts/bamburu-verifactu-cola.mjs
+SyslogIdentifier=bamburu-verifactu-cola
