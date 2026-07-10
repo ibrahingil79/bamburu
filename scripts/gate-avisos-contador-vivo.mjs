@@ -30,6 +30,9 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail
 
 const db = new Database(DB_PATH);
 const ownerId = db.prepare("SELECT id FROM admin_users WHERE role='owner' AND active=1").get().id;
+// El gate pulsa "visto" en el panel, y eso escribe la huella del dueño. Se guarda y se restaura:
+// un test no debe dejar marcados como vistos los avisos de una persona real.
+const huellaPrevia = (() => { try { return db.prepare('SELECT fingerprint FROM alert_seen_user WHERE user_id=?').get(ownerId)?.fingerprint ?? null; } catch { return null; } })();
 const token = randomBytes(32).toString('base64url'), csrf = randomBytes(32).toString('base64url');
 const now = Math.floor(Date.now() / 1000);
 db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)')
@@ -118,6 +121,32 @@ try {
   const navegaciones = await page.evaluate(() => performance.getEntriesByType('navigation').length);
   ok(navegaciones === 1, `una sola navegación en toda la prueba (${navegaciones}): el número cambió en vivo`);
 
+  // ── ABRIR EL PANEL NO PUEDE DISPARAR UNA AVALANCHA ──────────────────────────
+  // Regresión de un bucle real: bellCargar → bellPinta → bellSync → bellCargar → … Abrir la campana
+  // lanzaba ~120 peticiones en 6 s hasta que el freno del endpoint devolvía 429, y el panel se
+  // quedaba en «No pude cargar tus avisos». El gate anterior no lo vio porque nunca abrió el panel.
+  const antesDeAbrir = pedidosAvisos.length;
+  await page.click('#tbBell');
+  await new Promise(r => setTimeout(r, 5000));
+  const alAbrir = pedidosAvisos.length - antesDeAbrir;
+  ok(alAbrir <= 2, `abrir el panel pide la lista UNA vez, no en bucle (${alAbrir} peticiones en 5 s)`);
+  ok(!fallosRecurso.some(f => f.startsWith('429')), `ningún 429 del freno de avisos${fallosRecurso.filter(f => f.startsWith('429')).length ? ': ' + fallosRecurso.filter(f => f.startsWith('429')).join(', ') : ''}`);
+  const panelTexto = await page.$eval('#bellList', e => e.textContent.trim());
+  ok(!/No pude cargar/.test(panelTexto), `el panel muestra sus avisos, no un error («${panelTexto.slice(0, 40)}…»)`);
+
+  // Marcar un aviso como visto CON EL PANEL ABIERTO tampoco puede encadenar recargas.
+  const antesDeVisto = pedidosAvisos.length;
+  const botonVisto = await page.$('#bellList .bell-ver');
+  if (botonVisto) {
+    await botonVisto.click();
+    await new Promise(r => setTimeout(r, 3000));
+    const alMarcar = pedidosAvisos.length - antesDeVisto;
+    ok(alMarcar <= 2, `marcar visto con el panel abierto: ${alMarcar} peticiones (no una cascada)`);
+  } else {
+    ok(true, '(sin avisos sin ver en el panel: no hay botón que pulsar)');
+  }
+  await page.screenshot({ path: join(OUT, '4-panel.png') });
+
   // ── Errores ────────────────────────────────────────────────────────────────
   const propios = fallosRecurso.filter(f => !f.endsWith('/favicon.ico'));
   ok(erroresJs.length === 0, `0 errores de JS${erroresJs.length ? ': ' + erroresJs.slice(0, 3).join(' | ') : ''}`);
@@ -128,6 +157,11 @@ try {
   if (browser) await browser.close();
   if (oppId) { db.prepare('DELETE FROM client_activities WHERE opportunity_id=?').run(oppId); db.prepare('DELETE FROM opportunities WHERE id=?').run(oppId); }
   if (clientId) db.prepare('DELETE FROM clients WHERE id=? AND name=?').run(clientId, MARCA);
+  // Devolver al dueño su huella de "visto" exactamente como estaba.
+  try {
+    if (huellaPrevia === null) db.prepare('DELETE FROM alert_seen_user WHERE user_id=?').run(ownerId);
+    else db.prepare('UPDATE alert_seen_user SET fingerprint=? WHERE user_id=?').run(huellaPrevia, ownerId);
+  } catch {}
   db.prepare('DELETE FROM admin_sessions WHERE token=?').run(token);
   db.close();
   console.log('\n' + (fail ? '✗ ' + fail + ' fallos, ' : '') + pass + ' OK');

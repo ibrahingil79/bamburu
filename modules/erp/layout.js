@@ -969,11 +969,21 @@ ${ROOT_TOKENS}
     // El panel lee del MISMO motor que la pantalla (/api/erp/avisos): mismos avisos, mismo
     // número. Cada aviso se marca visto por separado; también hay "marcar todos". Nada se
     // marca solo por abrir el panel: "visto" lo decide el usuario.
-    // ÚNICA vía para tocar la campana desde fuera. Antes solo pintaba el punto: la LISTA cacheada
-    // del panel se quedaba vieja, así que tras cobrar una factura en /admin/avisos la campana
-    // seguía ofreciéndola como pendiente, con el punto ya en gris. Ahora invalida el caché y, si el
-    // panel está abierto, lo repinta. Nadie debe tocar el punto a mano.
-    window.bellSync=function(sinVer,total){
+    // DOS funciones, y separarlas NO es cosmética: mezclarlas causó un bucle infinito.
+    //
+    //   bellDot(sinVer,total) — pinta el punto y el título. SIN EFECTOS: no invalida nada,
+    //                           no pide nada. La usa quien ya tiene los números en la mano.
+    //   bellSync(sinVer,total) — bellDot + invalida el caché del panel + si el panel está
+    //                           abierto, lo repinta pidiendo la lista. Es la vía para tocar la
+    //                           campana DESDE FUERA (otra pantalla ya cambió los avisos).
+    //
+    // Antes solo existía bellSync, y bellPinta (que repinta la lista) la llamaba al terminar.
+    // Con el panel abierto eso era: bellCargar → bellPinta → bellSync → bellCargar → … Cada vuelta
+    // era una petición de red, así que abrir la campana disparaba ~120 peticiones en 6 segundos
+    // hasta que el freno del endpoint devolvía 429 y el panel decía «No pude cargar tus avisos».
+    // El freno hizo su trabajo: cortó una recursión, no un abuso. La causa estaba aquí.
+    // Regla: quien acaba de pintar la lista NO vuelve a pedirla. bellPinta usa bellDot.
+    function bellDot(sinVer,total){
       var b=document.getElementById('tbBell'); if(!b) return;
       var dot=b.querySelector('.dot');
       if(!total){ if(dot) dot.remove(); }
@@ -984,6 +994,9 @@ ${ROOT_TOKENS}
       b.title = !total ? 'Avisos — no tienes nada pendiente'
         : (sinVer ? (sinVer+' aviso'+(sinVer===1?'':'s')+' sin ver')
                   : (total+' aviso'+(total===1?'':'s')+' pendientes (ya vistos)'));
+    }
+    window.bellSync=function(sinVer,total){
+      bellDot(sinVer,total);
       _bellCargado=false;                                   // lo cacheado ya no vale
       var p=document.getElementById('bellPanel');
       if(p&&p.classList.contains('open')) bellCargar();     // abierto → repinta ahora
@@ -1009,11 +1022,17 @@ ${ROOT_TOKENS}
         }).join('') + (av.length>8 ? '<p class="bell-empty">y '+(av.length-8)+' más</p>' : '');
       }
       if(all) all.disabled = !d.sinVer;
-      window.bellSync(d.sinVer, d.count);
+      bellDot(d.sinVer, d.count);   // NO bellSync: la lista ya está pintada; pedirla otra vez = bucle
     }
+    // Cerrojo de reentrada: dos cargas solapadas del panel no sirven de nada y, si algún día
+    // alguien vuelve a encadenar bellPinta → bellSync, esto evita que se convierta en una avalancha.
+    var _bellCargando=false;
     async function bellCargar(){
+      if(_bellCargando) return;
+      _bellCargando=true;
       try{ bellPinta(await api('GET','/api/erp/avisos')); _bellCargado=true; }
       catch(e){ document.getElementById('bellList').innerHTML='<p class="bell-empty">No pude cargar tus avisos.</p>'; }
+      finally{ _bellCargando=false; }
     }
     // Delegación: un solo listener para todos los botones "Visto" del panel.
     document.addEventListener('click',async function(e){
