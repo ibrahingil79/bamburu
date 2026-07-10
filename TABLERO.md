@@ -219,11 +219,21 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
     anunciar **no se tocaron** (es decisión de D5).
   - ✅ **D4 — docs y modelo** (`4a4beb1`): estados de pedido de `CLAUDE.md` al enum vivo; chat de DISA
     y onboarding a **`claude-sonnet-5`** (extracción por visión se queda en 4-6). Tarifa nueva en `llm.js`.
-  - ⬜ **D5 — DISEÑAR LA PROACTIVIDAD REAL DE DISA. ← ÚNICO PENDIENTE del Eje B.** Hoy DISA es un
-    tablón de avisos excelente pero no *propone* acciones ni actúa en vivo (sondeo de 60 s como único
-    push). Decidir hasta dónde llega "el dueño no opera, decide": ¿DISA propone "¿reclamo este cobro?"
-    desde la campana? ¿push en vivo (SSE)? ¿confirm-first en un clic desde el aviso? Es tarea de DISEÑO.
-- **Lo que toca aquí es PLANIFICAR (D5)**, no construir. No construir sin encargo.
+  - 🟡 **D5 — PROACTIVIDAD REAL DE DISA. Primera pieza HECHA** (`742920a`): **recordatorio de impago**.
+    Cuando una factura de venta lleva vencida más días que el umbral del negocio (`company_config.
+    dias_recordatorio_impago`, por defecto 7, editable en Ajustes), un cron diario prepara un borrador
+    de email de recordatorio (plantilla `collectionEmail`, no LLM) y lo deja en el panel nuevo
+    **"Propuestas de DISA"** (`/admin/propuestas`, badge en el topbar). El dueño **aprueba y envía**
+    (reutiliza `registerCollectionAction` → Resend), edita o descarta. **NUNCA se autoenvía.** Tabla
+    `disa_proposals` genérica (para más tipos), idempotencia por índice único (factura,tipo). Permisos:
+    ver → invoices.read/cobros.read; aprobar → cobros.manage (anti-backdoor). Verificado: gate 22/0 +
+    navegador 8/0 + envío REAL por HTTP a la dirección del dueño. `verify-propuestas-d5.mjs`. El cron
+    `bamburu-propuestas.{service,timer}` está escrito pero **NO instalado** (el panel genera a demanda
+    al abrirse; instalar el timer cuando se decida — es inocuo).
+    - **Siguientes piezas de proactividad (sin encargo, para planificar):** más tipos de propuesta
+      (subsanación Verifactu, borrador de recurrente, etc.); push en vivo (SSE) en vez del sondeo de
+      60 s; que DISA proponga desde la propia campana. Es el resto del diseño de D5.
+- **Lo que queda del Eje B es diseñar/construir MÁS proactividad** (D5, siguientes piezas). No sin encargo.
 
 ## Eje C: Seguridad (pendiente de planificar)
 
