@@ -51,6 +51,9 @@ export function createAvisosRoutes(db) {
                              badge: r => (r.vencida ? 'b-red' : 'b-yellow') },
     factura_recurrente:    { etiqueta: 'Recurrente',       badge: 'b-blue',   href: () => '/admin/recurrentes' },
     stock_bajo:            { etiqueta: 'Stock bajo',       badge: 'b-yellow', href: r => '/admin/inventory?q=' + encodeURIComponent(r.nombre || '') },
+    // El CRM no tiene página por oportunidad: la cola de trabajo comercial ES su sitio de origen,
+    // porque lista justo las que piden acción, con su motivo y ya ordenadas por urgencia.
+    cliente_en_riesgo:     { etiqueta: 'Cliente en riesgo', badge: 'b-yellow', href: () => '/admin/crm/cola' },
   };
 
   // `nuevos` = claves que este usuario aún no ha marcado como vistas.
@@ -101,6 +104,19 @@ export function createAvisosRoutes(db) {
     try {
       const est = estadoAvisos(db, today(), c.get('session')?.userId, fuentesPermitidas(c));
       return c.json(comoJson(est));
+    } catch (e) { return c.json({ error: e.message }, 500); }
+  });
+
+  // GET /api/erp/avisos/contador — SOLO el conteo, para el refresco en vivo de la campana en
+  // cualquier pantalla del panel. Comparte todo lo que protege a `GET /`: va detrás del mismo
+  // `auth` del router, del mismo `frenoAvisos` (120/min por negocio+IP) y de las MISMAS
+  // `fuentesPermitidas(c)` — así que las fuentes que este usuario no puede ver ni se ejecutan, y
+  // su número no las cuenta. No devuelve la lista de avisos: por el cable no viaja ni un título,
+  // ni un importe, ni un nombre de cliente. Sondearlo no puede filtrar lo que `GET /` no filtra.
+  api.get('/contador', frenoAvisos, c => {
+    try {
+      const est = estadoAvisos(db, today(), c.get('session')?.userId, fuentesPermitidas(c));
+      return c.json({ count: est.count, estado: est.estado, sinVer: (est.nuevos || []).length });
     } catch (e) { return c.json({ error: e.message }, 500); }
   });
 
@@ -216,6 +232,12 @@ export function createAvisosRoutes(db) {
         if (a.tipo === 'envio_verifactu') {
           return '<a class="btn btn-primary btn-sm" href="/admin/verifactu/envios">Revisar envío</a>';
         }
+        // Cliente en riesgo: la acción es COMERCIAL (llamar, mover de etapa, cerrar o reponer
+        // fecha). No cabe en un modal ni la decide una fila: se va a la cola del CRM, que ya
+        // explica el motivo y ofrece las acciones. Mismo criterio que la recurrente.
+        if (a.tipo === 'cliente_en_riesgo') {
+          return '<a class="btn btn-primary btn-sm" href="/admin/crm/cola">Revisar en el CRM</a>';
+        }
         return ver;
       }
 
@@ -259,11 +281,13 @@ export function createAvisosRoutes(db) {
       document.getElementById('avBody').addEventListener('click', async function(e){
         const btn = e.target.closest('.av-visto'); if (!btn) return;
         const visto = btn.dataset.visto === '1';
-        try { pintar(await api('POST','/api/erp/avisos/'+(visto?'visto':'no-visto'),{ keys:[btn.dataset.key] })); }
+        try { pintar(await api('POST','/api/erp/avisos/'+(visto?'visto':'no-visto'),{ keys:[btn.dataset.key] }));
+              if (typeof window.bellAvisarPestanas === 'function') window.bellAvisarPestanas(); }
         catch(err){ toast(err.message||'Error','err'); }
       });
       window.marcarTodosVistos = async function(){
         try { pintar(await api('POST','/api/erp/avisos/visto',{}));  // sin keys = todos
+              if (typeof window.bellAvisarPestanas === 'function') window.bellAvisarPestanas();
               toast('Avisos marcados como vistos'); }
         catch(e){ toast(e.message||'Error','err'); }
       };

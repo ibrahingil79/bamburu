@@ -4,14 +4,16 @@
 // cliente, stock bajo, etc.) es registrar UNA función en SOURCES — nada más se rehace.
 //
 // El motor SOLO LEE (no escribe, no migra, no toca stock/WAC ni la cadena de hash) — salvo la
-// huella de "visto", que es estado de UI. Fuentes conectadas: vencimientos de proveedor, cobros
-// de cliente vencidos, stock bajo y borradores de recurrentes. Lo consumen cuatro superficies:
-// la pantalla central (/admin/avisos), el contador del rail, el Inicio y el email diario
-// (scripts/bamburu-avisos.mjs). Todas cuentan LO MISMO porque todas leen de aquí.
+// huella de "visto", que es estado de UI. Fuentes conectadas: registros Verifactu sin remitir,
+// vencimientos de proveedor, cobros de cliente vencidos, clientes en riesgo (CRM), stock bajo y
+// borradores de recurrentes. Lo consumen cuatro superficies: la pantalla central (/admin/avisos),
+// la campana del topbar, el Inicio y el email diario (scripts/bamburu-avisos.mjs). Todas cuentan
+// LO MISMO porque todas leen de aquí.
 
 import { openPayables } from './pagos.js';
 import { openDebts } from './cobros.js';
 import { MAX_INTENTOS } from './verifactu-cola.js';
+import { salesWorklist } from './crm.js';
 
 const r2 = n => Math.round(n * 100) / 100;
 
@@ -177,6 +179,49 @@ export function enviosVerifactu(db, today) {
   });
 }
 
+// ── FUENTE: oportunidades del CRM cuyo seguimiento ya venció ("cliente en riesgo") ──────────────
+// NO define un criterio propio: se lo pregunta al CRM. `salesWorklist` ya recorre las oportunidades
+// ABIERTAS (status='activa' AND active=1), les calcula su próxima acción con
+// `calcularProximaAccionOportunidad` y marca `accionPendiente` = "su fecha ya pasó". Escribir aquí
+// la regla otra vez habría creado una segunda verdad, que se desincroniza con /admin/crm/cola en
+// cuanto alguien toque una cadencia.
+//
+// Qué cuenta como vencido, según ese motor (las tres ramas, siempre con la oportunidad abierta):
+//   · el cierre previsto (`expected_close_date`) ya pasó  → el CRM lo llama etapa 'en_riesgo'
+//   · el silencio supera la cadencia de su etapa          → toca seguimiento
+//   · se incumplió un compromiso (`commitment_date`)      → sube el tono y reanuda el seguimiento
+// Lo que NO cuenta: un compromiso VIVO (fecha futura). El CRM dice "no insistas hasta esa fecha", y
+// el aviso lo respeta: avisar ahí sería contradecir a la propia pantalla que te manda esperar.
+export function clientesEnRiesgo(db, today) {
+  const t = today || hoyLocal();
+  let rows;
+  try { rows = salesWorklist(db, t).rows; }
+  catch { return []; }                                   // tenant sin el esquema del CRM todavía
+  const avisos = [];
+  for (const o of rows) {
+    if (!o.accionPendiente) continue;
+    const pa = o.proximaAccion || {};
+    const retraso = pa.fechaObjetivo ? Math.max(0, daysBetween(t, pa.fechaObjetivo)) : 0;
+    avisos.push({
+      tipo: 'cliente_en_riesgo',
+      // Entre la recurrente (200) y el dinero vencido (1000+). Una oportunidad que se enfría
+      // importa, pero jamás debe tapar una factura sin cobrar ni un registro sin remitir a la
+      // AEAT. El retraso ordena DENTRO de la fuente, y va topado para no escalar fuera de banda.
+      urgencia: 300 + Math.min(retraso, 99),
+      titulo: (o.client_name || 'Cliente') + ' · ' + (o.title || 'Oportunidad'),
+      detalle: pa.motivo || 'Su próxima acción comercial ya venció.',
+      ref: {
+        source: 'clientes_en_riesgo',
+        opportunity_id: o.id, client_id: o.client_id, client_name: o.client_name,
+        title: o.title, amount: r2(o.amount || 0), stage: o.stage,
+        accion: pa.accion || null, fecha_objetivo: pa.fechaObjetivo || null, retraso,
+      },
+    });
+  }
+  avisos.sort((a, b) => b.urgencia - a.urgencia);
+  return avisos;
+}
+
 // Cada fuente lleva el MISMO permiso que ya exige su pantalla de origen. Un aviso no puede ser una
 // puerta trasera a datos que su pantalla te niega: quien no puede abrir /admin/cobros tampoco puede
 // leer "te deben 15,61 € de la factura F2026-0017" en la campana.
@@ -185,12 +230,14 @@ export function enviosVerifactu(db, today) {
 //   cobro_vencido         → /admin/cobros            (cobros.read)
 //   stock_bajo            → /admin/inventory         (inventory.read)
 //   factura_recurrente    → /admin/recurrentes       (recurrentes.read)
+//   cliente_en_riesgo     → /admin/crm/cola          (crm.read)
 export const PERM_POR_FUENTE = {
   envio_verifactu:       'invoices.read',
   vencimiento_proveedor: 'purchases.read',
   cobro_vencido:         'cobros.read',
   stock_bajo:            'inventory.read',
   factura_recurrente:    'recurrentes.read',
+  cliente_en_riesgo:     'crm.read',
 };
 
 // Fuentes registradas. Añadir una fuente = escribir la función, registrarla aquí y darle su permiso
@@ -199,6 +246,7 @@ const SOURCES = [
   { tipo: 'envio_verifactu',       fn: enviosVerifactu },
   { tipo: 'vencimiento_proveedor', fn: vencimientosProveedor },
   { tipo: 'cobro_vencido',         fn: cobrosVencidos },
+  { tipo: 'cliente_en_riesgo',     fn: clientesEnRiesgo },
   { tipo: 'stock_bajo',            fn: stockBajo },
   { tipo: 'factura_recurrente',    fn: borradoresRecurrentes },
 ];
@@ -242,6 +290,7 @@ export function avisosEmail(ctx) {
   const BLOQUE = {
     vencimiento_proveedor: 'Facturas de proveedor (vencidas o que vencen en ≤7 días)',
     cobro_vencido: 'Facturas de cliente vencidas (te deben)',
+    cliente_en_riesgo: 'Clientes en riesgo (seguimiento comercial vencido)',
     factura_recurrente: 'Facturas recurrentes en borrador',
     stock_bajo: 'Productos con stock bajo',
   };
@@ -315,6 +364,11 @@ export function detalleAviso(a, sym = '', { compacto = false } = {}) {
     return e + ' · pendiente ' + dinero(r.pendiente);
   }
   if (a.tipo === 'stock_bajo' && compacto) return 'stock ' + r.stock + ' uds';
+  // El motivo largo del CRM ("El cierre previsto era el… decide si la ganas…") no cabe en la celda
+  // estrecha del email: ahí va el retraso, que es el dato que hace actuar.
+  if (a.tipo === 'cliente_en_riesgo' && compacto) {
+    return r.retraso > 0 ? 'seguimiento vencido hace ' + r.retraso + 'd' : 'el seguimiento toca hoy';
+  }
   return a.detalle || '';
 }
 
@@ -333,6 +387,9 @@ export function avisoKey(a) {
   if (r.source === 'stock_bajo') return 'sb:' + r.product_id;
   if (r.source === 'factura_recurrente') return 'fr:' + r.occurrence_id;
   if (r.source === 'envio_verifactu') return 'vf:' + r.registro_id;
+  // Identidad = la oportunidad, no su gravedad: si pasa de "toca seguimiento" a "cierre vencido",
+  // conserva su clave y no reaparece como nueva (mismo criterio que la factura que empeora).
+  if (r.source === 'clientes_en_riesgo') return 'cr:' + r.opportunity_id;
   return (r.source || (a && a.tipo) || '?') + ':' + (r.id != null ? r.id : JSON.stringify(r));
 }
 
@@ -341,13 +398,14 @@ const TIPO_FRASE = {
   envio_verifactu: n => n + ' factura' + (n === 1 ? '' : 's') + ' sin remitir a la AEAT (Verifactu)',
   vencimiento_proveedor: n => n + ' factura' + (n === 1 ? '' : 's') + ' de proveedor que vence' + (n === 1 ? '' : 'n') + ' o ' + (n === 1 ? 'está' : 'están') + ' vencida' + (n === 1 ? '' : 's'),
   cobro_vencido: n => n + ' factura' + (n === 1 ? '' : 's') + ' de cliente vencida' + (n === 1 ? '' : 's') + ' sin cobrar',
+  cliente_en_riesgo: n => n + ' oportunidad' + (n === 1 ? '' : 'es') + ' del CRM con el seguimiento vencido',
   stock_bajo: n => n + ' producto' + (n === 1 ? '' : 's') + ' con stock bajo',
   factura_recurrente: n => n + ' factura' + (n === 1 ? '' : 's') + ' recurrente' + (n === 1 ? '' : 's') + ' en borrador para revisar',
 };
 // Orden estable del resumen. `envio_verifactu` abre porque es lo único con consecuencia legal.
 // `cobro_vencido` va tras proveedor para no reordenar lo que ya veía el dueño; dentro de la LISTA
 // el orden real lo manda `urgencia` (días vencida), donde cobros y pagos se intercalan por gravedad.
-const TIPO_ORDEN = ['envio_verifactu', 'vencimiento_proveedor', 'cobro_vencido', 'factura_recurrente', 'stock_bajo'];
+const TIPO_ORDEN = ['envio_verifactu', 'vencimiento_proveedor', 'cobro_vencido', 'cliente_en_riesgo', 'factura_recurrente', 'stock_bajo'];
 
 // Resumen de CONTEOS por fuente (grupos no vacíos), en orden estable. Σ counts = total avisos
 // (== número del badge). NO incluye detalle ni ofrece acciones.

@@ -247,18 +247,25 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   // Cuenta SOLO las fuentes que este usuario puede ver (fuentesPermitidas). Y si la ruta ya calculó
   // el estado (el Inicio lo necesita para su tarjeta), lo deja en `avisosEstado` y aquí se reutiliza:
   // antes /admin ejecutaba el motor entero DOS veces por carga, con argumentos idénticos.
-  let avisos = { count: 0, estado: 'apagado' };
+  let avisos = { count: 0, sinVer: 0, estado: 'apagado' };
   try {
     const _db = c?.get?.('db');
     if (_db) {
       const est = c?.get?.('avisosEstado')
         || estadoAvisos(_db, hoyLocal(), session.userId, fuentesPermitidas(c));
-      avisos = { count: est.count || 0, estado: est.estado };
+      avisos = { count: est.count || 0, sinVer: (est.nuevos || []).length, estado: est.estado };
     }
-  } catch { avisos = { count: 0, estado: 'apagado' }; }
+  } catch { avisos = { count: 0, sinVer: 0, estado: 'apagado' }; }
+  // El título tiene que decir EXACTAMENTE lo mismo que dirá `bellSync` en el primer refresco, o el
+  // número da un salto en cuanto la campana se actualiza sola. Antes, con estado 'rojo', el
+  // servidor pintaba «46 avisos sin ver» usando el TOTAL, y bellSync lo corregía a «3 avisos sin
+  // ver» (los realmente no vistos). Nadie lo notaba porque nada refrescaba la campana; ahora sí.
+  // Un solo criterio: si queda algo sin ver, se cuenta lo SIN VER; si no, los pendientes ya vistos.
   const bellTitle = avisos.estado === 'apagado'
     ? 'Avisos — no tienes nada pendiente'
-    : `${avisos.count} aviso${avisos.count === 1 ? '' : 's'}${avisos.estado === 'rojo' ? ' sin ver' : ' pendientes (ya vistos)'}`;
+    : (avisos.sinVer
+        ? `${avisos.sinVer} aviso${avisos.sinVer === 1 ? '' : 's'} sin ver`
+        : `${avisos.count} aviso${avisos.count === 1 ? '' : 's'} pendientes (ya vistos)`);
 
   // Foto de perfil del usuario (admin_users.foto_url, la elige en /admin/perfil). Mismo patrón
   // que disaCount: si falla, cae a la inicial — nunca rompe el render.
@@ -512,6 +519,13 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       try{ d=await r.json(); }catch(_e){ d=null; }                                   // respuesta no-JSON (500 HTML, etc.)
       if(!d){ if(r.ok) return {}; throw new Error(window.ERR.GEN); }
       if(d.error)throw new Error(window.cleanErrMsg(d.error));
+      // Cualquier MUTACIÓN puede cambiar los avisos: cobrar, pagar, ajustar stock, mover una
+      // oportunidad del CRM, emitir una recurrente… En vez de que cada pantalla se acuerde de
+      // avisar a la campana (y una se olvide), se engancha aquí, que es el ÚNICO sitio por el
+      // que pasan todas. Los endpoints de avisos se excluyen: esos ya sincronizan con bellSync,
+      // y volver a preguntar sería pagar el escaneo caro dos veces por cada clic.
+      if(!['GET','HEAD'].includes(method.toUpperCase()) && url.indexOf('/api/erp/avisos')!==0
+         && typeof window.bellTrasCambio==='function') window.bellTrasCambio();
       return d;
     }
     window.escHtml=function(s){
@@ -1008,6 +1022,7 @@ ${ROOT_TOKENS}
       var visto = btn.dataset.visto === '1';
       try{ bellPinta(await api('POST','/api/erp/avisos/'+(visto?'visto':'no-visto'),{keys:[btn.dataset.key]}));
            if(typeof window.avisosOnVisto==='function') window.avisosOnVisto();
+           bellAvisarPestanas();      // "visto" es de esta persona: sus otras pestañas se enteran
       }catch(err){ toast(err.message||'Error','err'); }
     });
     window.bellMarcarTodos=async function(e){
@@ -1015,8 +1030,56 @@ ${ROOT_TOKENS}
       try{ bellPinta(await api('POST','/api/erp/avisos/visto',{}));   // sin keys = todos
            toast('Avisos marcados como vistos');
            if(typeof window.avisosOnVisto==='function') window.avisosOnVisto();
+           bellAvisarPestanas();
       }catch(err){ toast(err.message||'Error','err'); }
     };
+    // ── CONTADOR EN VIVO (en TODAS las pantallas del panel) ─────────────────────────────
+    // Antes, el punto y el número salían del render del servidor y se quedaban congelados: fuera
+    // de /admin/avisos solo cambiaban al recargar la página o al abrir el panel. Ahora se
+    // refrescan solos por tres vías, y ninguna se salta el blindaje del 9 de julio: el conteo
+    // sigue viniendo del servidor, por usuario, por aviso y por permiso. El cliente NO recalcula
+    // nada — solo pregunta y pinta.
+    //
+    //   1) Sondeo ligero cada minuto, y solo con la pestaña visible.
+    //   2) Al volver a la pestaña (visibilitychange): lo primero que ves ya está al día.
+    //   3) Tras CUALQUIER mutación, venga de la pantalla que venga (enganche en api()).
+    //
+    // Pide /api/erp/avisos/contador, que devuelve tres números y ni un dato de negocio.
+    var BELL_MS = 60000;   // 1 sondeo/min por pestaña. El freno del endpoint es 120/min por
+                           // negocio+IP: una oficina entera cabe sin acercarse al techo.
+    window.bellRefrescar = async function(){
+      if(document.hidden) return;                 // en segundo plano no se gasta el escaneo
+      try{
+        var p=document.getElementById('bellPanel');
+        if(p&&p.classList.contains('open')){ await bellCargar(); return; }   // abierto → lista entera
+        var d=await api('GET','/api/erp/avisos/contador');
+        window.bellSync(d.sinVer||0, d.count||0);
+      }catch(_e){ /* fallo de red: no se rompe la pantalla, el siguiente sondeo lo arregla */ }
+    };
+
+    // Otras PESTAÑAS del mismo negocio. El canal es por ORIGEN, y cada negocio es un subdominio
+    // propio, así que un negocio jamás recibe la señal de otro: el aislamiento sale gratis. Si el
+    // navegador no trae BroadcastChannel, no pasa nada — el sondeo del minuto llega igual.
+    var _bellChan=null;
+    try{ _bellChan=('BroadcastChannel' in window)?new BroadcastChannel('bamburu-avisos'):null; }catch(_e){}
+    if(_bellChan) _bellChan.onmessage=function(){ window.bellRefrescar(); };
+    function bellAvisarPestanas(){ if(_bellChan){ try{ _bellChan.postMessage(1); }catch(_e){} } }
+    window.bellAvisarPestanas=bellAvisarPestanas;   // la pantalla de avisos también la usa
+
+    // Lo llama api() tras cada mutación. Debounce: guardar tres cosas seguidas es UN recálculo.
+    var _bellDebounce=null;
+    window.bellTrasCambio=function(){
+      bellAvisarPestanas();
+      // La pantalla de avisos ya se recalcula entera tras cada acción (loadAvisos → bellSync).
+      // Pedirle además el contador sería un segundo escaneo caro por cada cobro registrado.
+      if(typeof window.avisosOnVisto==='function') return;
+      clearTimeout(_bellDebounce);
+      _bellDebounce=setTimeout(function(){ window.bellRefrescar(); }, 700);
+    };
+
+    setInterval(function(){ window.bellRefrescar(); }, BELL_MS);
+    document.addEventListener('visibilitychange',function(){ if(!document.hidden) window.bellRefrescar(); });
+
     function toggleBell(e){
       e.stopPropagation();
       var p=document.getElementById('bellPanel'),b=document.getElementById('tbBell');
