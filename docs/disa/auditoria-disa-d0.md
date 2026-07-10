@@ -278,9 +278,11 @@ un servicio validado. El contraste lo confirma: para clientes, DISA llama a `arc
 
 ### Notas de referencia (factuales, no hallazgos)
 
-- **Modelos LLM:** el chat usa `claude-sonnet-4-6` (`:2517`) y el auto-título/registro `claude-haiku-4-5-20251001`
-  (`:2074`). Conviene revisar en la planificación si se migran a la generación actual (ver la skill
-  `claude-api` para los IDs vigentes) — no es un fallo, pero es una decisión del Eje B.
+- **Modelos LLM (actualizado D4, 2026-07-10):** el chat de DISA y el DISA de onboarding usan
+  **`claude-sonnet-5`** (antes `claude-sonnet-4-6`); el auto-título/store usa `claude-haiku-4-5-20251001`.
+  La **extracción de facturas por visión** (`purchases-capture.js`, `EXTRACTION_MODEL`) sigue en
+  `claude-sonnet-4-6` a propósito: no es chat, y migrar el modelo de visión es una decisión con sus
+  propias implicaciones de OCR, fuera de D4. Su tarifa se conserva en `core/llm.js`.
 - **Registro de coste:** `disa_usage` (contador mensual) + `billDb` en cada llamada. Los topes de gasto
   viven en el borde (Anthropic, por negocio) — fuera de este fichero.
 - **Confirm-first y HANDOFF:** las mutaciones piden "sí" en el chat; `dictar_compra` es HANDOFF (no

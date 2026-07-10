@@ -209,7 +209,7 @@ export function register(app, db) {
 
   const ADMIN_ONLY_ACTIONS = new Set([
     'insert_record', 'update_record', 'delete_record',
-    'anular_invoice', 'create_rectificativa', 'adjust_stock', 'reset_stock', 'transfer_stock',
+    'anular_invoice', 'create_rectificativa', 'adjust_stock', 'transfer_stock',
     'update_company_config', 'disable_2fa_user', 'list_users_security',
     'register_collection_action', 'register_account_action',
     'register_supplier_payment',
@@ -233,7 +233,7 @@ export function register(app, db) {
     create_discount: 'discounts.create', edit_discount: 'discounts.edit', delete_discount: 'discounts.delete',
     create_supplier: 'suppliers.create', edit_supplier: 'suppliers.edit', delete_supplier: 'suppliers.delete',
     create_client: 'clients.create', edit_client: 'clients.edit', deactivate_client: 'clients.edit', activate_client: 'clients.edit',
-    adjust_stock: 'inventory.edit', reset_stock: 'inventory.edit', transfer_stock: 'inventory.edit',
+    adjust_stock: 'inventory.edit', transfer_stock: 'inventory.edit',
     dictar_compra: 'purchases.create', register_supplier_payment: 'purchases.create',
     register_collection_action: 'cobros.manage', register_account_action: 'cobros.manage',
   };
@@ -539,18 +539,22 @@ export function register(app, db) {
         }
 
         case 'delete_product': {
+          // Soft-delete = ARCHIVAR (status del enum del esquema: active/draft/archived). Antes escribía
+          // 'inactive', un valor FUERA del enum que ninguna pantalla/badge/filtro reconocía (D3). Un
+          // producto archivado aparece en la lista con su badge "Archivado", igual que los que se
+          // archivan desde el formulario.
           const p = action.params;
-          const r = db.prepare("UPDATE products SET status='inactive' WHERE id=?").run(p.product_id);
+          const r = db.prepare("UPDATE products SET status='archived' WHERE id=?").run(p.product_id);
           if (r.changes === 0) return { ok: false, message: 'Producto no encontrado.' };
-          logActivity(db, 'delete', ENTITY.PRODUCT, p.product_id, 'Producto eliminado por DISA', session);
-          return { ok: true, message: 'Producto #' + p.product_id + ' eliminado (desactivado).' };
+          logActivity(db, 'delete', ENTITY.PRODUCT, p.product_id, 'Producto archivado por DISA', session);
+          return { ok: true, message: 'Producto #' + p.product_id + ' archivado.' };
         }
 
         case 'deactivate_product': {
           const p = action.params;
-          const r = db.prepare("UPDATE products SET status='inactive' WHERE id=?").run(p.product_id);
+          const r = db.prepare("UPDATE products SET status='archived' WHERE id=?").run(p.product_id);   // enum válido (antes 'inactive')
           if (r.changes === 0) return { ok: false, message: 'Producto no encontrado.' };
-          return { ok: true, message: 'Producto #' + p.product_id + ' desactivado.' };
+          return { ok: true, message: 'Producto #' + p.product_id + ' archivado.' };
         }
 
         case 'activate_product': {
@@ -709,24 +713,9 @@ export function register(app, db) {
           }
         }
 
-        // [Voz DISA stock — OBSOLETO, comentado no borrado] El reset_stock viejo hacía UPDATE
-        // directo a products.stock + INSERT en inventory_movements (tabla archivada en Pilar 3):
-        // saltaba el libro y el WAC, y hoy lanzaría "no such table". "Poner a 0/vaciar" se hace
-        // ahora con adjust_stock mode:set value:0 (servicio validado). Se deja como registro.
-        // case 'reset_stock': {
-        //   const p = action.params;
-        //   const product = db.prepare('SELECT name, stock FROM products WHERE id=?').get(p.product_id);
-        //   if (!product) return { ok: false, message: 'Producto no encontrado.' };
-        //   db.prepare('UPDATE products SET stock=0 WHERE id=?').run(p.product_id);
-        //   if (product.stock !== 0) {
-        //     db.prepare(`
-        //       INSERT INTO inventory_movements (product_id, type, quantity, reason)
-        //       VALUES (?, 'adjust', ?, ?)
-        //     `).run(p.product_id, Math.abs(product.stock), p.reason || 'Reset por DISA');
-        //   }
-        //   logActivity(db, 'edit', ENTITY.PRODUCT, p.product_id, 'Stock reseteado a 0 por DISA', session);
-        //   return { ok: true, message: 'Stock de "' + product.name + '" puesto a 0.' };
-        // }
+        // (reset_stock: acción OBSOLETA retirada en D3. Escribía directo a products.stock + una tabla
+        // archivada, saltándose el libro y el WAC. "Poner a 0/vaciar" se hace con adjust_stock
+        // mode:set value:0, por el servicio validado.)
 
         // ── Clientes ──────────────────────────────────────────
 
@@ -2553,7 +2542,7 @@ export function register(app, db) {
         let data;
         try {
           data = await callClaude({
-            model: 'claude-sonnet-4-6', max_tokens: 1024, system: systemPrompt, messages: apiMessages, tools, billDb: db,
+            model: 'claude-sonnet-5', max_tokens: 1024, system: systemPrompt, messages: apiMessages, tools, billDb: db,   // D4: chat de DISA en Sonnet 5 (antes 4-6)
           });
         } catch (e) {
           console.error('[DISA] API error:', e.message);

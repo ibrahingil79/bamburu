@@ -1,5 +1,5 @@
 // Gate de MODELO REAL — voz de DISA sobre stock. Llama al modelo de verdad (callClaude,
-// claude-sonnet-4-6, tool query_database) con un system prompt + contexto construidos a
+// claude-sonnet-5, tool query_database) con un system prompt + contexto construidos a
 // partir de las MISMAS piezas que inyecta el módulo (índices producto/almacén, motivos de
 // ajuste de lista cerrada, valoración curada y el spec de acciones adjust_stock/transfer_stock).
 // Verifica: identificación por nombre, consultas con dato real, y emisión de la acción correcta
@@ -85,7 +85,7 @@ async function ask(userMsg) {
   let msgs = [{ role: 'user', content: userMsg }];
   let turns = 0, usedTool = false, lastSql = '';
   while (turns <= 4) {
-    const data = await callClaude({ model: 'claude-sonnet-4-6', max_tokens: 1024, system: systemPrompt, messages: msgs, tools });
+    const data = await callClaude({ model: 'claude-sonnet-5', max_tokens: 1024, system: systemPrompt, messages: msgs, tools });
     if (data.stop_reason === 'tool_use') {
       const tu = data.content.find(b => b.type === 'tool_use');
       usedTool = true; lastSql = tu.input?.sql || '';

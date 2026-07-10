@@ -573,6 +573,9 @@ ${onbHtml}
             </div>
             <div class="disa-card-desc">Te guío paso a paso</div>
           </button>
+          <!-- D3 — Tarjeta "Construir mi tienda web" OCULTA: empujaba el prompt 'Construir mi tienda web',
+               que va a /api/disa/store-message → 404 (el builder de tienda está desmontado, D2). No se
+               borra la idea: se vuelve a mostrar cuando la función de tienda esté construida (Capa 2).
           <button class="disa-card" onclick="disaQuickSend('Construir mi tienda web')">
             <div class="disa-card-head">
               <i class="ti ti-world"></i>
@@ -580,6 +583,7 @@ ${onbHtml}
             </div>
             <div class="disa-card-desc">Catálogo + checkout en minutos</div>
           </button>
+          -->
         </div>
 
       </div>

@@ -120,7 +120,7 @@ export function register(app) {
         let apiData;
         try {
           apiData = await callClaude({
-            model: 'claude-sonnet-4-6',
+            model: 'claude-sonnet-5',   // D4: DISA de onboarding en Sonnet 5 (antes 4-6), como el chat del panel
             max_tokens: 1024,
             system: buildSystemPrompt(),
             messages: convo,

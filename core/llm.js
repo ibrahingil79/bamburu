@@ -29,9 +29,12 @@ const ANTHROPIC_VERSION = '2023-06-01';
 // ── Freno de gasto de Anthropic ────────────────────────────────────────────
 // Precios verificado 19 jun 2026, fuente Anthropic ($ por millón de tokens, in/out).
 const PRICING = {
-  'claude-sonnet-4-6':         { in: 3,  out: 15 },
+  'claude-sonnet-5':           { in: 3,  out: 15 },   // chat de DISA (D4). Tarifa estándar $3/$15 por millón
+  'claude-sonnet-4-6':         { in: 3,  out: 15 },   // se conserva: la extracción de facturas (visión) sigue en 4-6
   'claude-haiku-4-5-20251001': { in: 1,  out: 5  },
 };
+// OJO: un modelo que no esté en esta tabla cuenta como coste 0 (eurCost → 0), así que dejaría de
+// contar para el tope de gasto. Al cambiar el modelo del chat hay que añadir su tarifa AQUÍ.
 // Topes por MES NATURAL. 1 USD = 1 EUR a propósito (sobreestima → corta un pelín antes, lado seguro).
 const TENANT_CAP_EUR   = 5;    // por negocio
 const GLOBAL_CAP_EUR   = 50;   // suma de todos

@@ -30,7 +30,7 @@ console.log('\n[1] Store builder — haiku, max_tokens 800');
     (raw.match(/\[ACCION:(\{[\s\S]*?\})\]/) || [])[1] || 'sin acción');
 }
 
-// ── 2) REGISTRO (onboarding): claude-sonnet-4-6, max_tokens 1024 ──
+// ── 2) REGISTRO (onboarding): claude-sonnet-5, max_tokens 1024 ──
 console.log('\n[2] Registro/onboarding — sonnet, max_tokens 1024');
 {
   const system = [
@@ -39,7 +39,7 @@ console.log('\n[2] Registro/onboarding — sonnet, max_tokens 1024');
     'Habla en español, cercano. Haz las preguntas de una en una.',
   ].join('\n');
   const data = await callClaude({
-    model: 'claude-sonnet-4-6', max_tokens: 1024, system,
+    model: 'claude-sonnet-5', max_tokens: 1024, system,
     messages: [{ role: 'user', content: 'Hola, quiero registrar mi negocio. Se llama Fontanería Gómez.' }],
   });
   const reply = data.content?.[0]?.text || '';
@@ -48,7 +48,7 @@ console.log('\n[2] Registro/onboarding — sonnet, max_tokens 1024');
   check('responde texto conversacional no vacío', reply.length > 20);
 }
 
-// ── 3) DISA asistente (/message): claude-sonnet-4-6, max_tokens 1024, tools (query_database) ──
+// ── 3) DISA asistente (/message): claude-sonnet-5, max_tokens 1024, tools (query_database) ──
 console.log('\n[3] DISA asistente — sonnet, max_tokens 1024, tool query_database (bucle real)');
 {
   const system = 'Eres DISA, asistente de gestión de Bamburu. Usa query_database para consultar datos del negocio cuando haga falta. Responde en español.';
@@ -61,7 +61,7 @@ console.log('\n[3] DISA asistente — sonnet, max_tokens 1024, tool query_databa
 
   // Primera vuelta: esperamos stop_reason=tool_use (el modelo pide la query)
   const first = await callClaude({
-    model: 'claude-sonnet-4-6', max_tokens: 1024, system, messages: apiMessages, tools,
+    model: 'claude-sonnet-5', max_tokens: 1024, system, messages: apiMessages, tools,
   });
   console.log('  modelo devuelto:', first.model, '| stop_reason:', first.stop_reason);
   const toolUse = (first.content || []).find(b => b.type === 'tool_use');
@@ -73,7 +73,7 @@ console.log('\n[3] DISA asistente — sonnet, max_tokens 1024, tool query_databa
     apiMessages.push({ role: 'assistant', content: first.content });
     apiMessages.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify({ rows: [{ total: 7 }], count: 1 }) }] });
     const second = await callClaude({
-      model: 'claude-sonnet-4-6', max_tokens: 1024, system, messages: apiMessages, tools,
+      model: 'claude-sonnet-5', max_tokens: 1024, system, messages: apiMessages, tools,
     });
     const finalText = (second.content || []).find(b => b.type === 'text')?.text || '';
     console.log('  respuesta final:', JSON.stringify(finalText.slice(0, 220)));

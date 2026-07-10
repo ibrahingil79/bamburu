@@ -89,8 +89,10 @@ estado `errored` y no es la instancia productiva — ignorarla.
   **NUNCA** hace `DROP TABLE` (ni `DROP COLUMN` con datos). Aunque el TABLERO (u otra tarea) diga
   "eliminar", **eliminar = sacarlo del sistema vivo** (desmontar rutas/UI, dejar de leerlo), **no
   destruir los datos**. Si una tarea pide explícitamente borrar datos de verdad, se para y se pregunta.
-- Estados de pedido en ESPAÑOL: borrador, en_preparacion, enviado, completado, cancelado, reembolsado.
-  (NO en inglés — fue causa de bugs de analítica.)
+- Estados de pedido en ESPAÑOL (NO en inglés — fue causa de bugs de analítica). El pedido VIVO es el
+  documento del Pilar 4, tabla `customer_orders`: **borrador, confirmado, anulado, entregado** (enum real
+  del esquema). Los estados viejos `en_preparacion/enviado/completado/cancelado/reembolsado` eran de la
+  tabla `orders`/POS, **archivada en D1**; ya no se usan.
 - better-sqlite3 version mismatch se arregla con:
   `sudo bash -c "PYTHON=/usr/bin/python3.11 npm rebuild better-sqlite3"` (ejecutar desde `/home/ubuntu/bamburu`)
 
