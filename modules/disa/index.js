@@ -9,7 +9,7 @@ import { clientFieldOptions } from '../erp/schemas.js';
 import { nextCode } from '../erp/codes.js';
 // Voz de DISA sobre stock/compras (Fase 1): operar por servicio validado + valoración curada.
 import { adjustStock, ADJUST_REASONS, reservedOfProduct } from '../erp/stock.js';
-import { createStockTransferSvc } from '../erp/routes/stock-transfers.js';
+import { createStockTransferSvc, TRANSFER_ENTITY, transferLogDetails } from '../erp/routes/stock-transfers.js';
 import { activeWarehouses, inventoryValuation } from '../erp/routes/warehouses.js';
 import { collectionsWorklist, registerCollectionAction, accountsSummary, registerAccountAction } from '../erp/cobros.js';
 import { ventasResumen, topProductos, ventasPorMes, clientesInactivos, pedidosSinEntregar } from '../erp/ventas-metrics.js';   // PIEZA C: cifras de venta desde la cadena nueva (facturas)
@@ -699,8 +699,13 @@ export function register(app, db) {
               notes: p.notes || 'Traslado por DISA',
               items,
             });
-            logActivity(db, 'create', 'stock_transfers', r.id,
-              'Traslado ' + r.transfer_number + ' por DISA (' + r.lines + ' líneas)', session);
+            // MISMA entidad que la ruta del panel (TRANSFER_ENTITY), no el nombre de la tabla: un
+            // traslado es un traslado lo haga quien lo haga, y auditar por entidad debe encontrarlo
+            // venga del panel o de DISA. Antes aquí ponía 'stock_transfers' y se perdía en el filtro.
+            // `logActivity` de este módulo es LOCAL y su firma es (db, action, entity, id, details,
+            // session) — distinta de la de core/auth.js. No copiar el orden de la ruta.
+            logActivity(db, 'Registró traslado entre almacenes (DISA)', TRANSFER_ENTITY, r.id,
+              transferLogDetails(r), session);
             return { ok: true, message: 'Traslado ' + r.transfer_number + ' confirmado (' + r.lines + ' línea(s)).' };
           } catch (e) {
             return { ok: false, message: 'No se pudo hacer el traslado: ' + e.message };

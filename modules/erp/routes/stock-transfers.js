@@ -28,6 +28,19 @@ import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 
 const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+// Nombre de la ENTIDAD del traslado en `activity_logs`. Fuente única, y por un motivo concreto: el
+// traslado se registra desde DOS sitios (la ruta del panel y la acción `transfer_stock` de DISA), y
+// cada uno lo escribía a mano. Divergieron: la ruta ponía 'stock_transfer' y DISA 'stock_transfers'
+// (el nombre de la tabla), así que auditar por `entity='stock_transfer'` NO devolvía los traslados
+// hechos por DISA. Se elige el SINGULAR porque es la convención de las rutas del ERP ('invoice',
+// 'product', 'warehouse'…). Importar esta constante en vez de teclear el literal hace imposible
+// volver a separarlos. OJO: las filas viejas conservan su etiqueta — un registro de actividad no se
+// reescribe hacia atrás; ver `verify-traslado-auditoria.mjs`.
+export const TRANSFER_ENTITY = 'stock_transfer';
+// Detalle legible del registro, idéntico venga de donde venga.
+export const transferLogDetails = r =>
+  (r.transfer_number || ('#' + r.id)) + ' (' + r.lines + ' línea' + (r.lines === 1 ? '' : 's') + ')';
+
 // ¿Hay traslados CONFIRMADOS que ya SACARON stock de este almacén para alguno de estos
 // productos? (guarda de integridad AGUAS ARRIBA reutilizable). Cancelar la compra/recepción
 // que metió ese stock escribe una salida inversa del MISMO almacén; si parte ya se trasladó,
@@ -178,7 +191,7 @@ export function createStockTransferRoutes(db) {
   api.post('/', requirePerm('inventory.edit'), validate(stockTransferSchema), c => {
     try {
       const r = createStockTransferSvc(db, c.get('validated'));
-      logActivity(db, c.get('session'), 'Registró traslado entre almacenes', 'stock_transfer', r.id, r.transfer_number + ' (' + r.lines + ' líneas)');
+      logActivity(db, c.get('session'), 'Registró traslado entre almacenes', TRANSFER_ENTITY, r.id, transferLogDetails(r));
       return c.json({ ...r, message: 'Traslado ' + r.transfer_number + ' confirmado' }, 201);
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -187,7 +200,7 @@ export function createStockTransferRoutes(db) {
     try {
       const { motivo } = c.get('validated');
       const r = cancelStockTransferSvc(db, parseInt(c.req.param('id')), motivo);
-      logActivity(db, c.get('session'), 'Anuló traslado entre almacenes', 'stock_transfer', r.id, (r.transfer_number || '') + ' — ' + motivo);
+      logActivity(db, c.get('session'), 'Anuló traslado entre almacenes', TRANSFER_ENTITY, r.id, (r.transfer_number || '') + ' — ' + motivo);
       return c.json({ ...r, message: 'Traslado anulado y stock revertido' });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });

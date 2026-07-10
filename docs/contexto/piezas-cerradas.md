@@ -14,7 +14,15 @@
 
 ## Núcleo — Pilar 3 · Inventario  🟡 EN CURSO (casi cerrado)
 - CERRADA — Stock como libro append-only (`stock_movements`) + caché derivada + kardex + reversión.
-- CERRADA — Multi-almacén Capa 1/2 (operar por almacén) + Capa 3 traslados (`TR-NNNN`) — `da7871e`.
+- CERRADA — Multi-almacén Capa 1/2 (operar por almacén) — `da7871e` (14 jun) — **y Capa 3, traslados
+  entre almacenes** (`TR-NNNN`) — `3af928f` (15 jun). El traslado valida stock en origen, es atómico
+  (`db.transaction`), congela el WAC (salida con coste NULL, entrada con el WAC global del momento →
+  el valor total del inventario no cambia, solo dónde está), exige `inventory.edit`, deja documento
+  inmutable + doble movimiento en `stock_movements`, se anula con motivo, y **DISA ya lo ejecuta** por
+  el mismo servicio (`createStockTransferSvc`). Verificado el 2026-07-10 sobre copia de BD real: valor
+  total intacto y sobre-traslado bloqueado. Gates: `test-transfers.js` (30/0),
+  `test-transfer-upstream.js` (8/0), `verify-traslado-auditoria.mjs` (13/0). **No hay nada pendiente
+  del multi-almacén** — si un encargo pide "construir los traslados", ya están.
 - CERRADA — WAC (coste medio) + valoración de inventario.
 - CERRADA — Compras: órdenes (C1a), recepciones (C1b), cierre por diferencias (C1c), facturas de proveedor, devoluciones, captura OCR (C2), gastos.
 - CERRADA — Capa de dinero con proveedores: pagos + voz de DISA + motor de vencimientos + pago por cuenta — `8620f15`, `e4ed8b1`.
