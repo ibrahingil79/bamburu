@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { adminLayout, fuentesPermitidas } from '../layout.js';
+import { adminLayout, fuentesPermitidas, can } from '../layout.js';
 import { disaHomeHtml } from '../views/disaHome.html.js';
 import { estadoAvisos, hoyLocal } from '../avisos.js';
 import { ventasResumen, pedidosResumen } from '../ventas-metrics.js';   // PIEZA C: ventas desde la cadena nueva (facturas), pedidos desde customer_orders
@@ -35,14 +35,25 @@ export function createDashboardRoutes(db) {
     try {
       const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
       kpis.sym = sym;
-      // PIEZA C — ventas del mes desde la cadena NUEVA (facturas: F1 ordinaria + F2 ticket + F3
-      // sustitutiva, neteando rectificativas, sin anuladas ni tickets sustituidos). Titular = total
-      // facturado con IVA. Pedidos/pendientes desde customer_orders (alineado con la 2a).
-      const monthStart = new Date().toISOString().slice(0, 7) + '-01';
-      kpis.ventas = Math.round(ventasResumen(db, { from: monthStart }).total);
-      const ped = pedidosResumen(db);
-      kpis.pedidos = ped.confirmadosMes;
-      kpis.pendiente = ped.pendientes;
+      // D2 — los KPIs se filtran por permiso, IGUAL que el chat: "Ventas del mes" (facturado) exige
+      // invoices.read y "Pedidos"/"Pendientes" exigen pedidos.read (mismos permisos que gatea
+      // buildBusinessContext en disa/index.js). Antes se calculaban SIEMPRE, así que un empleado sin
+      // invoices.read veía la cifra total facturada en la home. `verVentas`/`verPedidos` distinguen
+      // "sin permiso" (la vista pinta "—") de un cero legítimo (pinta 0). Owner/admin: can() hace bypass.
+      kpis.verVentas = can(c, 'invoices.read');
+      kpis.verPedidos = can(c, 'pedidos.read');
+      if (kpis.verVentas) {
+        // PIEZA C — ventas del mes desde la cadena NUEVA (facturas: F1 ordinaria + F2 ticket + F3
+        // sustitutiva, neteando rectificativas, sin anuladas ni tickets sustituidos). Titular = total
+        // facturado con IVA.
+        const monthStart = new Date().toISOString().slice(0, 7) + '-01';
+        kpis.ventas = Math.round(ventasResumen(db, { from: monthStart }).total);
+      }
+      if (kpis.verPedidos) {
+        const ped = pedidosResumen(db);   // pedidos/pendientes desde customer_orders
+        kpis.pedidos = ped.confirmadosMes;
+        kpis.pendiente = ped.pendientes;
+      }
     } catch {}
 
     // U6 — Onboarding / primeros pasos. Estado de los 3 pasos DERIVADO del estado real del negocio

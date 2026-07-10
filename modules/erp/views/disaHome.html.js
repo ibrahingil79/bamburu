@@ -477,15 +477,15 @@ ${onbHtml}
           ${onboarding ? '' : `<div class="disa-figs">
             <div class="disa-fig">
               <p class="disa-fig-label"><i class="ti ti-arrow-down-left" style="color:var(--accent)"></i>Ventas del mes</p>
-              <p class="disa-fig-value">${sym}${kpis?.ventas ?? 0}</p>
+              <p class="disa-fig-value">${kpis?.verVentas ? sym + (kpis?.ventas ?? 0) : '—'}</p>
             </div>
             <div class="disa-fig">
               <p class="disa-fig-label"><i class="ti ti-receipt" style="color:var(--warn)"></i>Pedidos</p>
-              <p class="disa-fig-value">${kpis?.pedidos ?? 0}</p>
+              <p class="disa-fig-value">${kpis?.verPedidos ? (kpis?.pedidos ?? 0) : '—'}</p>
             </div>
             <div class="disa-fig">
               <p class="disa-fig-label"><i class="ti ti-clock-hour-4" style="color:var(--text2)"></i>Pendientes</p>
-              <p class="disa-fig-value">${kpis?.pendiente ?? 0}</p>
+              <p class="disa-fig-value">${kpis?.verPedidos ? (kpis?.pendiente ?? 0) : '—'}</p>
             </div>
             <a class="disa-fig disa-fig-link" href="/admin/avisos" title="Ver y resolver tus avisos">
               <p class="disa-fig-label"><i class="ti ti-alert-triangle" style="color:var(--danger)"></i>Avisos</p>

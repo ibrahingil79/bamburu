@@ -28,6 +28,67 @@ import { callClaude, hasAnthropicKey } from '../../core/llm.js';   // helper ún
 import { rateLimit } from '../../core/rate-limit.js';   // freno por IP del endpoint caro de DISA
 import { ENTITY, entityForTable } from '../../core/activity-entities.js';
 
+// ── query_database · control de acceso de lectura (ALLOWLIST, cierre D1) ──────────────────────────
+// A nivel de módulo y EXPORTADO para que el gate lo pruebe con los mapas REALES (no una copia).
+//
+// PROTECTED_TABLES: denegadas para TODOS, incluido owner/admin (identidades, sesiones, logs, tokens).
+export const QUERY_PROTECTED_TABLES = new Set([
+  'admin_users', 'admin_sessions', 'customer_accounts', 'customer_sessions',
+  'disa_conversations', 'disa_usage', 'sqlite_sequence',
+  'activity_logs', 'password_reset_tokens',
+]);
+// TABLE_READ_PERMS: allowlist. Una tabla de negocio SOLO se consulta si está aquí y el usuario tiene
+// su permiso. Lo NO mapeado se DENIEGA (mismo criterio que el motor de avisos). Cada permiso es el
+// MISMO `requirePerm` que exige la pantalla del área (verificado uno a uno). Owner/admin: bypass.
+// Antes esto era denylist —solo se comprobaban estas tablas y el resto pasaba sin filtro—: la fuga
+// que cerró D1 (auditoría D0).
+export const QUERY_TABLE_READ_PERMS = {
+  invoices: 'invoices.read', invoice_items: 'invoices.read', verifactu_registros: 'invoices.read', verifactu_anulaciones: 'invoices.read',
+  invoice_payments: 'cobros.read',
+  clients: 'clients.read', client_groups: 'clients.read',
+  products: 'products.read', product_variants: 'products.read', product_images: 'products.read', categories: 'products.read', tags: 'products.read', product_tags: 'products.read',
+  stock_movements: 'inventory.read', warehouses: 'inventory.read',
+  customer_orders: 'pedidos.read', customer_order_items: 'pedidos.read',
+  quotes: 'quotes.read', quote_items: 'quotes.read',
+  delivery_notes: 'albaranes.read', delivery_note_items: 'albaranes.read',
+  suppliers: 'suppliers.read',
+  supplier_invoices: 'purchases.read', supplier_payments: 'purchases.read', purchases: 'purchases.read', purchase_items: 'purchases.read', purchase_orders: 'purchases.read', purchase_order_items: 'purchases.read', supplier_returns: 'purchases.read', supplier_return_items: 'purchases.read',
+  discount_codes: 'discounts.read', auto_discounts: 'discounts.read',
+  // ── Añadidas por D1: tablas de negocio que antes pasaban sin ningún permiso ──
+  opportunities: 'crm.read', client_activities: 'crm.read',                          // pantalla /admin/crm → crm.read
+  ledger_accounts: 'invoices.read', ledger_entries: 'invoices.read', ledger_lines: 'invoices.read', investment_goods: 'invoices.read',  // /admin/contabilidad → invoices.read
+  bank_movements: 'conciliacion.read', bank_reconciliations: 'conciliacion.read',    // /admin/conciliacion → conciliacion.read
+  verifactu_envios: 'invoices.read', invoice_anulaciones: 'invoices.read',           // envíos AEAT / anulaciones → invoices.read
+  collection_actions: 'cobros.read',                                                 // acciones de cobro → cobros.read
+  recurring_templates: 'recurrentes.read', recurring_template_items: 'recurrentes.read', recurring_occurrences: 'recurrentes.read',
+  purchase_order_receipts: 'purchases.read', purchase_order_receipt_items: 'purchases.read', supplier_invoice_items: 'purchases.read',
+  stock_transfers: 'inventory.read', stock_transfer_items: 'inventory.read',
+  company_config: 'company.read', store_settings: 'store_settings.read',             // config de empresa/tienda (efectivo owner/admin)
+};
+
+// Una tabla se considera REFERIDA si su nombre aparece como palabra completa (\b). '_' es carácter de
+// palabra, así que 'products' NO matchea dentro de 'product_variants': nombres distintos, sin colisión.
+const _refiere = (sql, t) => new RegExp('\\b' + t + '\\b', 'i').test(sql);
+
+// Decisión de acceso de UNA consulta. Pura y determinista: no toca la BD ni la sesión.
+//   ctx = { isAdmin, allTables: string[], hasPerm: (module, action) => boolean }
+// Devuelve un string de error (denegado) o null (permitido). Owner/admin: solo se les frena por
+// PROTECTED. El resto: toda tabla referida debe estar mapeada y con permiso; lo no mapeado se deniega.
+export function evaluateQueryAccess(sql, { isAdmin, allTables, hasPerm }) {
+  if (!/^\s*SELECT\b/i.test(String(sql).trim())) return 'Solo se permiten consultas SELECT.';
+  const prot = [...QUERY_PROTECTED_TABLES].find(t => _refiere(sql, t));
+  if (prot) return 'Tabla protegida: ' + prot;
+  if (isAdmin) return null;                              // bypass owner/admin (igual que requirePerm)
+  for (const t of allTables) {
+    if (!_refiere(sql, t)) continue;
+    const perm = QUERY_TABLE_READ_PERMS[t];
+    if (!perm) return 'No tienes acceso a esos datos por chat (tabla "' + t + '" no consultable con tu permiso). Pídeselo al dueño.';
+    const [m, a] = perm.split('.');
+    if (!hasPerm(m, a)) return 'No tienes permiso para consultar datos de esa área (' + perm + '). Pídeselo al dueño.';
+  }
+  return null;
+}
+
 export function register(app, db) {
   const router = new Hono();
 
@@ -197,21 +258,9 @@ export function register(app, db) {
   }
   const PERM_DENIED_MSG = 'No tienes permiso para esto. Pídeselo al dueño o a un administrador de tu cuenta.';
 
-  // Permisos · Paso 2 (lectura) — query_database solo devuelve datos de un área si el usuario tiene su
-  // *.read. Tabla → permiso de lectura del área (PROTECTED_TABLES sigue aparte, siempre denegado).
-  const TABLE_READ_PERMS = {
-    invoices: 'invoices.read', invoice_items: 'invoices.read', verifactu_registros: 'invoices.read', verifactu_anulaciones: 'invoices.read',
-    invoice_payments: 'cobros.read',
-    clients: 'clients.read', client_groups: 'clients.read',
-    products: 'products.read', product_variants: 'products.read', product_images: 'products.read', categories: 'products.read', tags: 'products.read', product_tags: 'products.read',
-    stock_movements: 'inventory.read', warehouses: 'inventory.read',
-    customer_orders: 'pedidos.read', customer_order_items: 'pedidos.read',
-    quotes: 'quotes.read', quote_items: 'quotes.read',
-    delivery_notes: 'albaranes.read', delivery_note_items: 'albaranes.read',
-    suppliers: 'suppliers.read',
-    supplier_invoices: 'purchases.read', supplier_payments: 'purchases.read', purchases: 'purchases.read', purchase_items: 'purchases.read', purchase_orders: 'purchases.read', purchase_order_items: 'purchases.read', supplier_returns: 'purchases.read', supplier_return_items: 'purchases.read',
-    discount_codes: 'discounts.read', auto_discounts: 'discounts.read',
-  };
+  // El control de acceso de query_database (allowlist) vive a nivel de MÓDULO y exportado
+  // (`evaluateQueryAccess` + `QUERY_TABLE_READ_PERMS` + `QUERY_PROTECTED_TABLES`), para que el gate lo
+  // pruebe con los mapas reales. Aquí `runQueryTool` solo delega.
 
   function isValidColumnName(col) {
     if (typeof col !== 'string') return false;
@@ -2461,28 +2510,18 @@ export function register(app, db) {
     try {
       if (!hasAnthropicKey()) return c.json({ error: 'DISA no esta configurada. Contacta con soporte.' }, 500);
 
-      const PROTECTED_TABLES = new Set([
-        'admin_users', 'admin_sessions', 'customer_accounts', 'customer_sessions',
-        'disa_conversations', 'disa_usage', 'sqlite_sequence',
-        'activity_logs', 'password_reset_tokens',
-      ]);
+      // Todas las tablas reales del negocio (una vez por mensaje). La allowlist necesita detectar
+      // CUALQUIER tabla referida —también las no mapeadas— para poder denegarlas.
+      const ALL_TABLES = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name);
 
       function runQueryTool(sql) {
-        if (!/^\s*SELECT\b/i.test(sql.trim()))
-          return { error: 'Solo se permiten consultas SELECT.' };
-        const forbidden = [...PROTECTED_TABLES].find(t =>
-          new RegExp('\\b' + t + '\\b', 'i').test(sql)
-        );
-        if (forbidden)
-          return { error: 'Tabla protegida: ' + forbidden };
-        // Permisos · Paso 2 — por cada tabla de negocio referida, exige el *.read de su área (owner/admin bypass).
-        const denied = Object.entries(TABLE_READ_PERMS).find(([t, perm]) => {
-          if (!new RegExp('\\b' + t + '\\b', 'i').test(sql)) return false;
-          const [m, a] = perm.split('.');
-          return !(isAdminUser(session) || checkPermission(db, session, m, a));
+        // Toda la decisión de acceso vive en `evaluateQueryAccess` (módulo, exportada y testeada).
+        const err = evaluateQueryAccess(sql, {
+          isAdmin: isAdminUser(session),
+          allTables: ALL_TABLES,
+          hasPerm: (m, a) => checkPermission(db, session, m, a),
         });
-        if (denied)
-          return { error: 'No tienes permiso para consultar datos de esa área (' + denied[1] + '). Pídeselo al dueño.' };
+        if (err) return { error: err };
         try {
           const rows = db.prepare(sql).all();
           return { rows, count: rows.length };
