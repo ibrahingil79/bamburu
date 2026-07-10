@@ -230,6 +230,13 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
     navegador 8/0 + envío REAL por HTTP a la dirección del dueño. `verify-propuestas-d5.mjs`. El cron
     `bamburu-propuestas.{service,timer}` está escrito pero **NO instalado** (el panel genera a demanda
     al abrirse; instalar el timer cuando se decida — es inocuo).
+    - **Navegación HECHA (10 jul, `3b54cf8`):** el riel izquierdo ahora abre con **Inicio** (icono casa
+      → `/admin`) y **DISA** como 2º icono, un flyout con el MISMO patrón que las áreas: **Propuestas**
+      (`/admin/propuestas`) y **Hablar con DISA** (abre el widget flotante existente vía `disaOpen()`;
+      si la pantalla lo oculta cae a `/admin/disa` — nunca crea hilo nuevo). El **badge de pendientes se
+      mudó del topbar al icono de DISA** (mismo `contarPropuestasPendientes`, `propBadgeSync` retargeteado;
+      se retiró `#tbProps`). Solo navegación/vista; gateado igual (invoices.read/cobros.read). Verificado:
+      `gate-nav-inicio-disa.mjs` 34/0.
     - **Siguientes piezas de proactividad (sin encargo, para planificar):** más tipos de propuesta
       (subsanación Verifactu, borrador de recurrente, etc.); push en vivo (SSE) en vez del sondeo de
       60 s; que DISA proponga desde la propia campana. Es el resto del diseño de D5.
