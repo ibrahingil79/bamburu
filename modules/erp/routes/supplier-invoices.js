@@ -9,6 +9,7 @@ import { supplierInvoicePago, isPayable, isRefundable, supplierDebt, ESTADO_LABE
 import { pagoModalHtml, pagoCuentaModalHtml, pagoModalScript } from '../views/pago-modal.js';
 import { getVatBands } from '../../../core/vat-bands.js';
 import { postSupplierInvoice, postSupplierPayment } from '../contabilidad.js';   // Contabilidad: posteo tras commit (writeEntry es seguro dentro o fuera de transacción)
+import { ENTITY } from '../../../core/activity-entities.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // FACTURA RECIBIDA (Capa de dinero con proveedores · Paso a) — documento INMUTABLE
@@ -414,7 +415,7 @@ export function createSupplierInvoiceRoutes(db) {
   api.post('/', requirePerm('purchases.create'), validate(supplierInvoiceSchema), c => {
     try {
       const r = createSupplierInvoiceSvc(db, c.get('validated'), { onDuplicate: 'throw', today: today() });
-      logActivity(db, c.get('session'), 'Creó factura recibida', 'supplier_invoice', r.id, r.internal_code || '');
+      logActivity(db, c.get('session'), 'Creó factura recibida', ENTITY.SUPPLIER_INVOICE, r.id, r.internal_code || '');
       return c.json({ ...r, message: 'Factura recibida registrada' }, 201);
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -424,7 +425,7 @@ export function createSupplierInvoiceRoutes(db) {
     try {
       const id = parseInt(c.req.param('id'));
       const r = anularSupplierInvoiceSvc(db, id, c.get('validated').motivo);
-      logActivity(db, c.get('session'), 'Anuló factura recibida', 'supplier_invoice', id, c.get('validated').motivo);
+      logActivity(db, c.get('session'), 'Anuló factura recibida', ENTITY.SUPPLIER_INVOICE, id, c.get('validated').motivo);
       return c.json({ ...r, message: 'Factura anulada' });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -435,7 +436,7 @@ export function createSupplierInvoiceRoutes(db) {
       const id = parseInt(c.req.param('id'));
       const r = registerSupplierPaymentSvc(db, id, c.get('validated'), { today: today() });
       const inv = db.prepare('SELECT internal_code FROM supplier_invoices WHERE id=?').get(id);
-      logActivity(db, c.get('session'), 'Registró pago a proveedor', 'supplier_invoice', id, `${(inv && inv.internal_code) || ('#' + id)} · ${c.get('validated').amount}`);
+      logActivity(db, c.get('session'), 'Registró pago a proveedor', ENTITY.SUPPLIER_INVOICE, id, `${(inv && inv.internal_code) || ('#' + id)} · ${c.get('validated').amount}`);
       return c.json(r, 201);
     } catch (e) { return c.json({ error: e.message }, e.status || 400); }
   });
@@ -446,7 +447,7 @@ export function createSupplierInvoiceRoutes(db) {
       const id = parseInt(c.req.param('id')), pid = parseInt(c.req.param('pid'));
       const r = deleteSupplierPaymentSvc(db, id, pid, { today: today() });
       const inv = db.prepare('SELECT internal_code FROM supplier_invoices WHERE id=?').get(id);
-      logActivity(db, c.get('session'), 'Deshizo pago a proveedor', 'supplier_invoice', id, `${(inv && inv.internal_code) || ('#' + id)} · ${r.amount}`);
+      logActivity(db, c.get('session'), 'Deshizo pago a proveedor', ENTITY.SUPPLIER_INVOICE, id, `${(inv && inv.internal_code) || ('#' + id)} · ${r.amount}`);
       return c.json(r);
     } catch (e) { return c.json({ error: e.message }, e.status || 400); }
   });
@@ -458,7 +459,7 @@ export function createSupplierInvoiceRoutes(db) {
       const id = parseInt(c.req.param('id'));
       const r = registerSupplierRefundSvc(db, id, c.get('validated'), { today: today() });
       const inv = db.prepare('SELECT internal_code FROM supplier_invoices WHERE id=?').get(id);
-      logActivity(db, c.get('session'), 'Registró reembolso de proveedor', 'supplier_invoice', id, `${(inv && inv.internal_code) || ('#' + id)} · ${c.get('validated').amount}`);
+      logActivity(db, c.get('session'), 'Registró reembolso de proveedor', ENTITY.SUPPLIER_INVOICE, id, `${(inv && inv.internal_code) || ('#' + id)} · ${c.get('validated').amount}`);
       return c.json(r, 201);
     } catch (e) { return c.json({ error: e.message }, e.status || 400); }
   });

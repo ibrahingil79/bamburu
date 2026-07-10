@@ -7,6 +7,7 @@ import { nextCode } from '../codes.js';
 import { recordMovement, isPhysical, productStockInWarehouse, reservedOfProduct } from '../stock.js';
 import { activeWarehouses } from './warehouses.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
+import { ENTITY } from '../../../core/activity-entities.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // TRASLADO ENTRE ALMACENES — Multi-almacén · Capa 3. Mueve mercancía de un almacén
@@ -36,7 +37,10 @@ const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g,
 // 'product', 'warehouse'…). Importar esta constante en vez de teclear el literal hace imposible
 // volver a separarlos. OJO: las filas viejas conservan su etiqueta — un registro de actividad no se
 // reescribe hacia atrás; ver `verify-traslado-auditoria.mjs`.
-export const TRANSFER_ENTITY = 'stock_transfer';
+//
+// El valor ya no vive aquí: es `ENTITY.STOCK_TRANSFER` del catálogo único (`core/activity-entities.js`),
+// donde están TODAS las entidades. Esto se queda como re-exportación para no romper a quien lo importa.
+export const TRANSFER_ENTITY = ENTITY.STOCK_TRANSFER;
 // Detalle legible del registro, idéntico venga de donde venga.
 export const transferLogDetails = r =>
   (r.transfer_number || ('#' + r.id)) + ' (' + r.lines + ' línea' + (r.lines === 1 ? '' : 's') + ')';

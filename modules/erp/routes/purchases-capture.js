@@ -11,6 +11,7 @@ import { searchSuppliers, createSupplierSvc, supplierFiscalIdConflict } from './
 import { createDirectPurchaseSvc } from './purchases.js';
 import { createReceiptSvc, orderReceptionState } from './purchase-order-receipts.js';
 import { createSupplierInvoiceSvc } from './supplier-invoices.js';
+import { ENTITY } from '../../../core/activity-entities.js';
 import {
   ALLOWED_MIME, MAX_UPLOAD_BYTES, saveAttachment, getAttachment,
   readAttachmentBuffer, linkAttachment,
@@ -341,7 +342,7 @@ export async function runCapture(db, tenant, session, { buffer, mime, originalNa
 
   const match = matchExtraction(db, extracted);
   const open_orders = match.supplier ? supplierOpenOrders(db, match.supplier.id) : [];
-  if (session) logActivity(db, session, 'Capturó factura de proveedor', 'attachment', att.id, originalName);
+  if (session) logActivity(db, session, 'Capturó factura de proveedor', ENTITY.ATTACHMENT, att.id, originalName);
   return { attachment_id: att.id, mime, extracted, match, open_orders };
 }
 
@@ -360,7 +361,7 @@ export function captureFromExtraction(db, session, extractedRaw) {
     "INSERT INTO attachments (kind, original_name, path, mime, size, extraction_json) VALUES ('supplier_invoice_voice', ?, '', '', 0, ?)"
   ).run('Compra dictada por voz a DISA', JSON.stringify(extracted));
   const attId = r.lastInsertRowid;
-  if (session) logActivity(db, session, 'Dictó compra por voz a DISA', 'attachment', attId, extracted.supplier?.name || '');
+  if (session) logActivity(db, session, 'Dictó compra por voz a DISA', ENTITY.ATTACHMENT, attId, extracted.supplier?.name || '');
   return { attachment_id: attId, extracted };
 }
 

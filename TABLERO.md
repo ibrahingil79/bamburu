@@ -672,14 +672,22 @@ Lo que falta **no son cabos sueltos: es alcance pendiente del pilar.** No se emp
 - **D6 · [a verificar] XSS en páginas públicas de la tienda** (HTML guardado por admin sin escapar). La tienda está apagada de forma reversible (D1); revisar antes de reabrir en Capa 2. *(El bug de fuga de stock de `cancel_order` ya quedó resuelto al archivar `sales_orders`, D4.)*
 
 ### Deuda técnica
-- ⬜ **Etiquetas de `activity_logs`: DISA y las rutas no se llaman igual.** Las rutas del ERP registran la
-  entidad en **singular** (`invoice`, `product`, `client`, `order`) y DISA usa el **nombre de la tabla**
-  (`invoices`, `products`, `clients`, `sales_orders`). En un negocio vivo: `invoice`=96 vs `invoices`,
-  `product`=15 vs `products`=5, `client`=20 vs `clients`=2. Consecuencia: **auditar por entidad se deja fuera
-  lo que hizo DISA.** Ya se arregló **solo para el traslado** (`62ccd8b`, constante `TRANSFER_ENTITY`
-  compartida). El resto **NO se ha tocado**: arreglarlo pide decidir la convención y migrar (o no) el
-  histórico. **Encargo propio.** *(Ojo: `logActivity` de DISA es un helper LOCAL con firma distinta a la de
-  `core/auth.js` — no copiar el orden de argumentos.)*
+- ✅ **Etiquetas de `activity_logs`: CERRADO (2026-07-10).** DISA y las rutas nombraban distinto la misma
+  cosa (`invoices`/`invoice`, `products`/`product`, `clients`/`client`, `suppliers`/`supplier`,
+  `admin_users`/`admin_user`), y la vía genérica de DISA escribía el **nombre de la tabla**. Ahora las
+  **26 entidades viven en `core/activity-entities.js`** y las importan los dos lados: 110 sustituciones,
+  cero literales tecleados. La pantalla `/admin/activity` estrena **filtro por entidad y buscador** (antes
+  no tenía ninguno de los dos). El histórico **no se reescribe**: las filas viejas conservan su etiqueta y
+  el desplegable las sigue ofreciendo. Gate: `verify-actividad-etiquetas.mjs` (32/0).
+  *(Ojo: `logActivity` de DISA es un helper LOCAL con firma distinta a la de `core/auth.js` — no copiar el
+  orden de argumentos.)*
+- ⬜ **DISA: las acciones de PEDIDO están muertas.** `create_order`, `edit` y `delete` hacen
+  `INSERT INTO sales_orders`, tabla **archivada por D1** (hoy `sales_orders_archived`). El código revienta
+  y cae al `catch`, así que DISA responde "no se pudo". Marcadas en el fuente. **Decidir:** recablear a
+  `customer_orders` (el flujo vivo) o retirar la acción. Sus `logActivity` conservan el literal a propósito:
+  no se maquilla una acción rota.
+- ⬜ **`modules/erp/routes/orders.js` está desmontado** (POS viejo, `routes/index.js:106` y `:159`) pero
+  sigue en el árbol, con 6 `logActivity` que nunca se ejecutan. Retirarlo o revivirlo, no dejarlo a medias.
 - **DISA `create_order` multi-línea:** limitación heredada de la base e-commerce; los pedidos multi-línea entran con el flujo pedido→albarán→factura.
 - ~~Arreglar `scripts/gate-avisos-badge.mjs`~~ — **ya no reproduce**: ejecutado el 2026-07-10 pasa **25 OK**.
   Si vuelve a fallar por la ruta de BD fija, reabrir con la salida del fallo.

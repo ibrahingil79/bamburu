@@ -6,6 +6,7 @@ import { supplierSchema, supplierAccountPaymentSchema } from '../schemas.js';
 import { nextCode } from '../codes.js';
 import { liveSupplierPayables } from '../pagos.js';                                 // Paso (e): facturas vivas del proveedor para el modal de pago a cuenta
 import { registerSupplierAccountPayment } from './supplier-invoices.js';           // Paso (e): servicio de reparto ya hecho en (d) — se EXPONE, no se duplica
+import { ENTITY } from '../../../core/activity-entities.js';
 
 // Saneamiento de Proveedor.
 // Guarda de NIF único GLOBAL: el NIF identifica fiscalmente al proveedor, así que un
@@ -97,7 +98,7 @@ export function createSupplierRoutes(db) {
     try {
       const sid = parseInt(c.req.param('id'));
       const r = registerSupplierAccountPayment(db, sid, c.get('validated'), { today: new Date().toISOString().slice(0, 10) });
-      logActivity(db, c.get('session'), 'Pago a cuenta de proveedor', 'supplier', sid, `${r.supplier_name} · ${r.repartido} en ${r.pagos.length} factura(s)`);
+      logActivity(db, c.get('session'), 'Pago a cuenta de proveedor', ENTITY.SUPPLIER, sid, `${r.supplier_name} · ${r.repartido} en ${r.pagos.length} factura(s)`);
       return c.json(r, 201);
     } catch (e) { return c.json({ error: e.message }, e.status || 400); }
   });
@@ -106,7 +107,7 @@ export function createSupplierRoutes(db) {
   api.post('/', requirePerm('suppliers.create'), validate(supplierSchema), c => {
     try {
       const r = createSupplierSvc(db, c.get('validated'));
-      logActivity(db, c.get('session'), 'Creó proveedor', 'supplier', r.id, r.name);
+      logActivity(db, c.get('session'), 'Creó proveedor', ENTITY.SUPPLIER, r.id, r.name);
       return c.json({id:r.id, message:'Proveedor creado'}, 201);
     } catch(e) { return c.json({error:e.message}, e.status||500); }
   });
@@ -120,7 +121,7 @@ export function createSupplierRoutes(db) {
       const info = db.prepare('UPDATE suppliers SET name=?,fiscal_id=?,contact=?,email=?,phone=?,address=?,city=?,notes=?,payment_term_days=?,payment_method=? WHERE id=?')
         .run(d.name, d.fiscal_id||'', d.contact||'', d.email||'', d.phone||'', d.address||'', d.city||'', d.notes||'', d.payment_term_days||0, d.payment_method||'', id);
       if (!info.changes) return c.json({error:'No encontrado'},404);
-      logActivity(db, c.get('session'), 'Editó proveedor', 'supplier', id, d.name);
+      logActivity(db, c.get('session'), 'Editó proveedor', ENTITY.SUPPLIER, id, d.name);
       return c.json({message:'Actualizado'});
     } catch(e) { return c.json({error:e.message},500); }
   });
@@ -133,7 +134,7 @@ export function createSupplierRoutes(db) {
       const s = db.prepare('SELECT name FROM suppliers WHERE id=?').get(id);
       if (!s) return c.json({error:'No encontrado'},404);
       db.prepare('UPDATE suppliers SET active=0 WHERE id=?').run(id);
-      logActivity(db, c.get('session'), 'Archivó proveedor', 'supplier', id, s.name||'');
+      logActivity(db, c.get('session'), 'Archivó proveedor', ENTITY.SUPPLIER, id, s.name||'');
       return c.json({message:'Archivado'});
     } catch(e) { return c.json({error:e.message},500); }
   });
@@ -147,7 +148,7 @@ export function createSupplierRoutes(db) {
       if (!s) return c.json({error:'No encontrado'},404);
       if (supplierFiscalIdConflict(db, s.fiscal_id, id)) return c.json({error:'Ya existe otro proveedor con este NIF/CIF'},409);
       db.prepare('UPDATE suppliers SET active=1 WHERE id=?').run(id);
-      logActivity(db, c.get('session'), 'Restauró proveedor', 'supplier', id, s.name||'');
+      logActivity(db, c.get('session'), 'Restauró proveedor', ENTITY.SUPPLIER, id, s.name||'');
       return c.json({message:'Restaurado'});
     } catch(e) { return c.json({error:e.message},500); }
   });

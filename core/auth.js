@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'crypto';
 import bcrypt from 'bcrypt';
+import { ENTITY } from './activity-entities.js';
 
 // ── Role permissions ───────────────────────────────────────────
 export const PERMS = {
@@ -217,7 +218,7 @@ export async function changeOwnPassword(db, session, { current = '', nuevo = '',
   // Convención del resto del código: action = frase humana, entity = tipo, entityId = id.
   logActivity(db, session,
     forced ? 'Cambió su contraseña (cambio obligatorio)' : 'Cambió su contraseña',
-    'admin_user', session.userId);
+    ENTITY.ADMIN_USER, session.userId);
   // Cierra las demás sesiones del usuario; conserva la actual.
   destroyAllAdminSessionsForUser(db, session.userId, session.token);
 

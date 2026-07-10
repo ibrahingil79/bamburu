@@ -10,6 +10,7 @@ import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
 import { sendEmail } from '../../../core/mailer.js';
 import { nextCode } from '../codes.js';
 import { clientVentas } from '../ventas-metrics.js';   // PIEZA C: historial = facturas del cliente, no sales_orders viejos
+import { ENTITY } from '../../../core/activity-entities.js';
 
 // Comprobación reutilizable de NIF duplicado (regla de integridad — sin duplicados).
 // Devuelve el cliente ACTIVO en conflicto (otro id con el mismo fiscal_id normalizado)
@@ -140,7 +141,7 @@ export function createClientRoutes(db, cfg = {}) {
   api.post('/', requirePerm('clients.create'), validate(clientSchema), async c => {
     try {
       const r = createClientSvc(db, c.get('validated'));
-      logActivity(db, c.get('session'), 'Creó cliente', 'client', r.id, r.name);
+      logActivity(db, c.get('session'), 'Creó cliente', ENTITY.CLIENT, r.id, r.name);
       return c.json({id:r.id, message:'Creado'});
     } catch(e) { return c.json({error:e.message}, e.status||500); }
   });
@@ -148,7 +149,7 @@ export function createClientRoutes(db, cfg = {}) {
   api.put('/:id', requirePerm('clients.edit'), validate(clientSchema), async c => {
     try {
       const r = updateClientSvc(db, c.req.param('id'), c.get('validated'));
-      logActivity(db, c.get('session'), 'Editó cliente', 'client', r.id, r.name);
+      logActivity(db, c.get('session'), 'Editó cliente', ENTITY.CLIENT, r.id, r.name);
       return c.json({message:'Actualizado'});
     } catch(e) { return c.json({error:e.message}, e.status||500); }
   });
@@ -156,7 +157,7 @@ export function createClientRoutes(db, cfg = {}) {
   api.delete('/:id', requirePerm('clients.edit'), c => {
     try {
       const r = archiveClientSvc(db, c.req.param('id'));
-      logActivity(db, c.get('session'), 'Archivó cliente', 'client', r.id, r.name||'');
+      logActivity(db, c.get('session'), 'Archivó cliente', ENTITY.CLIENT, r.id, r.name||'');
       return c.json({message:'Archivado'});
     } catch(e) { return c.json({error:e.message}, e.status||500); }
   });
@@ -222,7 +223,7 @@ export function createClientRoutes(db, cfg = {}) {
       const res = await registerAccountAction(db, parseInt(c.req.param('id')), input, { sendEmail });
       const label = input.type === 'recordatorio_cuenta' ? 'Envió recordatorio de cuenta'
         : input.type === 'promesa_cuenta' ? 'Registró promesa de cuenta' : 'Registró cobro a cuenta';
-      logActivity(db, c.get('session'), label, 'client', c.req.param('id'), `${res.facturas || (res.pagos && res.pagos.length) || 0} factura(s) · lote ${res.batch_id}`);
+      logActivity(db, c.get('session'), label, ENTITY.CLIENT, c.req.param('id'), `${res.facturas || (res.pagos && res.pagos.length) || 0} factura(s) · lote ${res.batch_id}`);
       return c.json(res, 201);
     } catch(e) { return c.json({error:e.message}, e.status || 400); }
   });
@@ -233,7 +234,7 @@ export function createClientRoutes(db, cfg = {}) {
   api.post('/:id/restore', requirePerm('clients.edit'), c => {
     try {
       const r = restoreClientSvc(db, c.req.param('id'));
-      logActivity(db, c.get('session'), 'Restauró cliente', 'client', r.id, r.name||'');
+      logActivity(db, c.get('session'), 'Restauró cliente', ENTITY.CLIENT, r.id, r.name||'');
       return c.json({message:'Restaurado'});
     } catch(e) { return c.json({error:e.message}, e.status||500); }
   });

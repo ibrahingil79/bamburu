@@ -4,6 +4,7 @@ import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { warehouseSchema } from '../schemas.js';
 import { reservedOfProduct } from '../stock.js';   // PIEZA 2a: reservado/disponible por almacén
+import { ENTITY } from '../../../core/activity-entities.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // Multi-almacén · CAPA 1 — gestionar almacenes + ver stock por almacén. Es el
@@ -195,7 +196,7 @@ export function createWarehouseRoutes(db) {
   api.post('/', requirePerm('inventory.edit'), validate(warehouseSchema), c => {
     try {
       const r = createWarehouseSvc(db, c.get('validated'));
-      logActivity(db, c.get('session'), 'Creó almacén', 'warehouse', r.id, r.name);
+      logActivity(db, c.get('session'), 'Creó almacén', ENTITY.WAREHOUSE, r.id, r.name);
       return c.json({ ...r, message: 'Almacén creado' }, 201);
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -203,7 +204,7 @@ export function createWarehouseRoutes(db) {
   api.put('/:id', requirePerm('inventory.edit'), validate(warehouseSchema), c => {
     try {
       const r = renameWarehouseSvc(db, parseInt(c.req.param('id')), c.get('validated'));
-      logActivity(db, c.get('session'), 'Renombró almacén', 'warehouse', r.id, r.name);
+      logActivity(db, c.get('session'), 'Renombró almacén', ENTITY.WAREHOUSE, r.id, r.name);
       return c.json({ ...r, message: 'Almacén actualizado' });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -211,7 +212,7 @@ export function createWarehouseRoutes(db) {
   api.post('/:id/default', requirePerm('inventory.edit'), c => {
     try {
       const r = makeDefaultWarehouseSvc(db, parseInt(c.req.param('id')));
-      logActivity(db, c.get('session'), 'Marcó almacén como principal', 'warehouse', r.id, r.name);
+      logActivity(db, c.get('session'), 'Marcó almacén como principal', ENTITY.WAREHOUSE, r.id, r.name);
       return c.json({ ...r, message: 'Almacén marcado como principal' });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -219,7 +220,7 @@ export function createWarehouseRoutes(db) {
   api.delete('/:id', requirePerm('inventory.edit'), c => {
     try {
       const r = archiveWarehouseSvc(db, parseInt(c.req.param('id')));
-      logActivity(db, c.get('session'), 'Archivó almacén', 'warehouse', r.id, r.name);
+      logActivity(db, c.get('session'), 'Archivó almacén', ENTITY.WAREHOUSE, r.id, r.name);
       return c.json({ ...r, message: 'Almacén archivado' });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -227,7 +228,7 @@ export function createWarehouseRoutes(db) {
   api.post('/:id/restore', requirePerm('inventory.edit'), c => {
     try {
       const r = restoreWarehouseSvc(db, parseInt(c.req.param('id')));
-      logActivity(db, c.get('session'), 'Restauró almacén', 'warehouse', r.id, r.name);
+      logActivity(db, c.get('session'), 'Restauró almacén', ENTITY.WAREHOUSE, r.id, r.name);
       return c.json({ ...r, message: 'Almacén restaurado' });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });

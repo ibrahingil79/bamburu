@@ -21,6 +21,7 @@ import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
 import { paymentsSum, invoiceCobro, cobroState, isCobrable, ESTADO_LABEL,
   invoiceProximaAccion, invoiceActionHistory, registerCollectionAction, collectionEmail } from '../cobros.js';
 import { sendEmail } from '../../../core/mailer.js';
+import { ENTITY } from '../../../core/activity-entities.js';
 
 // T4 Paso 1 — fecha de vencimiento de una factura = fecha de emisión + plazo de pago
 // del cliente (días). Se guarda en la factura al emitir; cada factura conserva el suyo.
@@ -956,7 +957,7 @@ export function createInvoiceRoutes(db) {
           return c.json({ error: 'No tienes permiso para emitir una factura con exceso de stock. Solo el dueño o un administrador pueden hacerlo; baja la cantidad a lo disponible.' }, 403);
       }
       const result = createInvoice(db, data);
-      logActivity(db, c.get('session'), 'Creó factura', 'invoice', result.id, result.invoice_number + (excess.length ? ' (exceso de stock confirmado)' : ''));
+      logActivity(db, c.get('session'), 'Creó factura', ENTITY.INVOICE, result.id, result.invoice_number + (excess.length ? ' (exceso de stock confirmado)' : ''));
       return c.json(result, 201);
     } catch (e) {
       let code = 400;
@@ -970,7 +971,7 @@ export function createInvoiceRoutes(db) {
     try {
       const { motivo } = c.get('validated');
       const res = anularInvoice(db, parseInt(c.req.param('id')), motivo);
-      logActivity(db, c.get('session'), 'Anuló factura', 'invoice', res.invoice_id, `${res.invoice_number} — ${motivo}`);
+      logActivity(db, c.get('session'), 'Anuló factura', ENTITY.INVOICE, res.invoice_id, `${res.invoice_number} — ${motivo}`);
       return c.json(res);
     } catch (e) {
       const code = e.message === 'Factura no encontrada' ? 404 : 400;
@@ -983,7 +984,7 @@ export function createInvoiceRoutes(db) {
     try {
       const data = c.get('validated');
       const res = createRectificativa(db, { ...data, original_id: parseInt(c.req.param('id')) });
-      logActivity(db, c.get('session'), 'Creó rectificativa', 'invoice', res.id, `${res.invoice_number} (rectifica ${res.rectifies})`);
+      logActivity(db, c.get('session'), 'Creó rectificativa', ENTITY.INVOICE, res.id, `${res.invoice_number} (rectifica ${res.rectifies})`);
       return c.json(res, 201);
     } catch (e) {
       const code = e.message === 'Factura original no encontrada' ? 404 : 400;
@@ -996,7 +997,7 @@ export function createInvoiceRoutes(db) {
   api.post('/:id/sustitutiva', requirePerm('invoices.create'), validate(sustitutivaSchema), c => {
     try {
       const r = emitSustitutivaSvc(db, parseInt(c.req.param('id')), c.get('validated').client_id);
-      logActivity(db, c.get('session'), 'Emitió factura completa (sustitutiva de ticket)', 'invoice', r.id, r.invoice_number + ' sustituye a ' + r.ticket_number);
+      logActivity(db, c.get('session'), 'Emitió factura completa (sustitutiva de ticket)', ENTITY.INVOICE, r.id, r.invoice_number + ' sustituye a ' + r.ticket_number);
       return c.json({ ...r, message: 'Factura completa ' + r.invoice_number + ' emitida (sustituye al ticket ' + r.ticket_number + ')' }, 201);
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -1015,7 +1016,7 @@ export function createInvoiceRoutes(db) {
       const res = db.prepare('INSERT INTO invoice_payments (invoice_id, amount, paid_date, payment_method, note) VALUES (?,?,?,?,?)')
         .run(id, amount, paid_date || today, payment_method || '', note || '');
       try { postInvoicePayment(db, res.lastInsertRowid); } catch {}   // asiento de cobro (tesorería/430); no rompe el cobro
-      logActivity(db, c.get('session'), 'Registró cobro', 'invoice', id, `${inv.invoice_number} · ${amount}`);
+      logActivity(db, c.get('session'), 'Registró cobro', ENTITY.INVOICE, id, `${inv.invoice_number} · ${amount}`);
       return c.json({ id: res.lastInsertRowid, cobro: invoiceCobro(db, inv, today) }, 201);
     } catch (e) { return c.json({ error: e.message }, 400); }
   });
@@ -1031,7 +1032,7 @@ export function createInvoiceRoutes(db) {
       const pay = db.prepare('SELECT * FROM invoice_payments WHERE id=? AND invoice_id=?').get(pid, id);
       if (!pay) return c.json({ error: 'Cobro no encontrado en esta factura' }, 404);
       db.prepare('DELETE FROM invoice_payments WHERE id=?').run(pid);
-      logActivity(db, c.get('session'), 'Deshizo cobro', 'invoice', id, `${inv.invoice_number} · ${pay.amount}`);
+      logActivity(db, c.get('session'), 'Deshizo cobro', ENTITY.INVOICE, id, `${inv.invoice_number} · ${pay.amount}`);
       return c.json({ deleted: pid, amount: pay.amount, cobro: invoiceCobro(db, inv, new Date().toISOString().slice(0, 10)) });
     } catch (e) { return c.json({ error: e.message }, 400); }
   });
@@ -1063,7 +1064,7 @@ export function createInvoiceRoutes(db) {
       const res = await registerCollectionAction(db, parseInt(c.req.param('id')), input, { sendEmail });
       const label = input.type === 'recordatorio_email' ? 'Envió recordatorio'
         : input.type === 'promesa_pago' ? 'Registró promesa de pago' : 'Registró contacto';
-      logActivity(db, c.get('session'), label, 'invoice', res.id, `${res.invoice_number} · ${res.stage}`);
+      logActivity(db, c.get('session'), label, ENTITY.INVOICE, res.id, `${res.invoice_number} · ${res.stage}`);
       return c.json(res, 201);
     } catch (e) { return c.json({ error: e.message }, e.status || 400); }
   });
@@ -1904,7 +1905,7 @@ ${esTicketSustituible ? `
           mime: 'application/xml', kind: 'facturae_xml', ext: 'xml',
         });
       } catch { /* si el archivado falla, la descarga NO se rompe */ }
-      logActivity(db, c.get('session'), 'Generó el Facturae de una factura', 'invoice', model.id, model.invoice.number);
+      logActivity(db, c.get('session'), 'Generó el Facturae de una factura', ENTITY.INVOICE, model.id, model.invoice.number);
 
       return new Response(xml, {
         headers: {

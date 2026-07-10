@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { reverseMovement } from '../stock.js';
+import { ENTITY } from '../../../core/activity-entities.js';
 
 // Pilar 3 · Paso 1 — operaciones sobre el libro de movimientos a nivel global.
 // El ajuste por producto vive en /api/erp/products/:id/stock/adjust; aquí la reversión.
@@ -12,7 +13,7 @@ export function createStockRoutes(db) {
   api.post('/movements/:id/reverse', requirePerm('inventory.edit'), c => {
     try {
       const res = reverseMovement(db, parseInt(c.req.param('id')));
-      logActivity(db, c.get('session'), 'Revirtió movimiento de stock', 'stock_movement', res.movement_id, `revierte #${res.reverses}`);
+      logActivity(db, c.get('session'), 'Revirtió movimiento de stock', ENTITY.STOCK_MOVEMENT, res.movement_id, `revierte #${res.reverses}`);
       return c.json(res);
     } catch (e) { return c.json({ error: e.message }, e.status || 400); }
   });

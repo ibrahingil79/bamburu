@@ -155,7 +155,14 @@ try {
   console.log(`  · capturas en ${OUT}`);
 } finally {
   if (browser) await browser.close();
-  if (oppId) { db.prepare('DELETE FROM client_activities WHERE opportunity_id=?').run(oppId); db.prepare('DELETE FROM opportunities WHERE id=?').run(oppId); }
+  if (oppId) {
+    db.prepare('DELETE FROM client_activities WHERE opportunity_id=?').run(oppId);
+    db.prepare('DELETE FROM opportunities WHERE id=?').run(oppId);
+    // Cerrar la oportunidad por el endpoint real deja su apunte en el registro de actividad. Es
+    // basura de test apuntando a una fila que ya no existe: se borra. (No es "reescribir el
+    // historial": son filas que ha creado este gate hace un segundo.)
+    db.prepare("DELETE FROM activity_logs WHERE entity='opportunity' AND entity_id=?").run(oppId);
+  }
   if (clientId) db.prepare('DELETE FROM clients WHERE id=? AND name=?').run(clientId, MARCA);
   // Devolver al dueño su huella de "visto" exactamente como estaba.
   try {

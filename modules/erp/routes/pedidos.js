@@ -10,6 +10,7 @@ import { resolveWarehouseId, reservedOfProduct } from '../stock.js';
 import { activeWarehouses } from './warehouses.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { orderDeliveryState } from './albaranes.js';   // PIEZA 2b: estado de entrega + atajo a factura
+import { ENTITY } from '../../../core/activity-entities.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // PILAR 4 · VENTAS · PIEZA 2a — PEDIDO + RESERVA DE STOCK.
@@ -335,7 +336,7 @@ export function createPedidoRoutes(db) {
   api.post('/', requirePerm('pedidos.create'), validate(pedidoCreateSchema), c => {
     try {
       const id = createPedidoSvc(db, c.get('validated'));
-      logActivity(db, c.get('session'), 'Creó borrador de pedido', 'customer_order', id, '');
+      logActivity(db, c.get('session'), 'Creó borrador de pedido', ENTITY.CUSTOMER_ORDER, id, '');
       return c.json({ id, message: 'Borrador guardado' }, 201);
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -343,7 +344,7 @@ export function createPedidoRoutes(db) {
   api.put('/:id', requirePerm('pedidos.edit'), validate(pedidoCreateSchema), c => {
     try {
       const r = updatePedidoSvc(db, parseInt(c.req.param('id')), c.get('validated'));
-      logActivity(db, c.get('session'), 'Editó borrador de pedido', 'customer_order', r.id, '');
+      logActivity(db, c.get('session'), 'Editó borrador de pedido', ENTITY.CUSTOMER_ORDER, r.id, '');
       return c.json({ ...r, message: 'Borrador actualizado' });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -351,7 +352,7 @@ export function createPedidoRoutes(db) {
   api.post('/:id/confirmar', requirePerm('pedidos.edit'), c => {
     try {
       const r = confirmPedidoSvc(db, parseInt(c.req.param('id')));
-      logActivity(db, c.get('session'), 'Confirmó pedido', 'customer_order', r.id, r.order_number);
+      logActivity(db, c.get('session'), 'Confirmó pedido', ENTITY.CUSTOMER_ORDER, r.id, r.order_number);
       return c.json({ ...r, message: 'Pedido ' + r.order_number + ' confirmado (stock reservado)' });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -359,7 +360,7 @@ export function createPedidoRoutes(db) {
   api.post('/:id/anular', requirePerm('pedidos.edit'), validate(pedidoAnularSchema), c => {
     try {
       const r = cancelPedidoSvc(db, parseInt(c.req.param('id')), c.get('validated').motivo);
-      logActivity(db, c.get('session'), 'Anuló pedido', 'customer_order', r.id, (r.order_number || '') + ' — ' + c.get('validated').motivo);
+      logActivity(db, c.get('session'), 'Anuló pedido', ENTITY.CUSTOMER_ORDER, r.id, (r.order_number || '') + ' — ' + c.get('validated').motivo);
       return c.json({ ...r, message: 'Pedido anulado (reserva liberada)' });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -368,7 +369,7 @@ export function createPedidoRoutes(db) {
   api.post('/:id/factura', requirePerm('pedidos.edit'), c => {
     try {
       const r = orderToInvoiceSvc(db, parseInt(c.req.param('id')));
-      logActivity(db, c.get('session'), 'Facturó pedido', 'customer_order', parseInt(c.req.param('id')), r.invoice_number);
+      logActivity(db, c.get('session'), 'Facturó pedido', ENTITY.CUSTOMER_ORDER, parseInt(c.req.param('id')), r.invoice_number);
       return c.json({ ...r, message: 'Pedido facturado en ' + r.invoice_number });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -376,7 +377,7 @@ export function createPedidoRoutes(db) {
   api.post('/:id/anular-y-rehacer', requirePerm('pedidos.create'), validate(pedidoAnularSchema), c => {
     try {
       const r = cancelRedoPedidoSvc(db, parseInt(c.req.param('id')), c.get('validated').motivo);
-      logActivity(db, c.get('session'), 'Anuló y rehízo pedido', 'customer_order', r.id, 'sustituye a ' + (r.anulada_number || ('#' + r.anulada_id)));
+      logActivity(db, c.get('session'), 'Anuló y rehízo pedido', ENTITY.CUSTOMER_ORDER, r.id, 'sustituye a ' + (r.anulada_number || ('#' + r.anulada_id)));
       return c.json({ ...r, message: 'Pedido anulado; borrador nuevo creado' });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });

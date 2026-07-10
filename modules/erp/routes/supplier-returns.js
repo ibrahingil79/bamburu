@@ -6,6 +6,7 @@ import { supplierReturnSchema, purchaseOrderAnularSchema } from '../schemas.js';
 import { nextCode } from '../codes.js';
 import { recordMovement, isPhysical, resolveWarehouseId, originMovementWarehouse } from '../stock.js';
 import { createReturnCredit, anularReturnCredit } from './supplier-invoices.js';
+import { ENTITY } from '../../../core/activity-entities.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // DEVOLUCIÓN A PROVEEDOR — solo la CAPA FÍSICA (sale el stock + documento). La
@@ -249,7 +250,7 @@ export function createSupplierReturnRoutes(db) {
   api.post('/', requirePerm('purchases.create'), validate(supplierReturnSchema), c => {
     try {
       const r = createSupplierReturnSvc(db, c.get('validated'));
-      logActivity(db, c.get('session'), 'Registró devolución a proveedor', 'supplier_return', r.id, r.return_number + ' (' + r.lines + ' líneas)');
+      logActivity(db, c.get('session'), 'Registró devolución a proveedor', ENTITY.SUPPLIER_RETURN, r.id, r.return_number + ' (' + r.lines + ' líneas)');
       return c.json({ ...r, message: 'Devolución ' + r.return_number + ' confirmada' }, 201);
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -258,7 +259,7 @@ export function createSupplierReturnRoutes(db) {
     try {
       const { motivo } = c.get('validated');
       const r = cancelSupplierReturnSvc(db, parseInt(c.req.param('id')), motivo);
-      logActivity(db, c.get('session'), 'Anuló devolución a proveedor', 'supplier_return', r.id, (r.return_number || '') + ' — ' + motivo);
+      logActivity(db, c.get('session'), 'Anuló devolución a proveedor', ENTITY.SUPPLIER_RETURN, r.id, (r.return_number || '') + ' — ' + motivo);
       return c.json({ ...r, message: 'Devolución anulada y stock reintegrado' });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });

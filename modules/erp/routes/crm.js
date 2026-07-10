@@ -5,6 +5,7 @@ import { validate } from '../../../core/validate.js';
 import { escHtml } from '../../../core/escape.js';
 import { sendEmail } from '../../../core/mailer.js';
 import { opportunitySchema, opportunityStageSchema, closeOpportunitySchema, clientActivitySchema } from '../schemas.js';
+import { ENTITY } from '../../../core/activity-entities.js';
 import {
   ETAPAS, ETAPA_LABEL, ORIGENES, ORIGEN_LABEL, MOTIVOS_PERDIDA, MOTIVO_PERDIDA_LABEL,
   CANALES, CANAL_LABEL, URGENCIA_LABEL,
@@ -97,7 +98,7 @@ export function createCrmRoutes(db) {
   api.post('/', requirePerm('crm.manage'), validate(opportunitySchema), c => {
     try {
       const r = createOpportunitySvc(db, c.get('validated'));
-      logActivity(db, c.get('session'), 'Creó oportunidad', 'opportunity', r.id, r.title);
+      logActivity(db, c.get('session'), 'Creó oportunidad', ENTITY.OPPORTUNITY, r.id, r.title);
       return c.json(r, 201);
     } catch (e) { return c.json({ error: e.message }, e.status || 400); }
   });
@@ -105,7 +106,7 @@ export function createCrmRoutes(db) {
   api.put('/:id', requirePerm('crm.manage'), validate(opportunitySchema), c => {
     try {
       const r = updateOpportunitySvc(db, c.req.param('id'), c.get('validated'));
-      logActivity(db, c.get('session'), 'Editó oportunidad', 'opportunity', r.id, r.title);
+      logActivity(db, c.get('session'), 'Editó oportunidad', ENTITY.OPPORTUNITY, r.id, r.title);
       return c.json({ message: 'Actualizado' });
     } catch (e) { return c.json({ error: e.message }, e.status || 400); }
   });
@@ -116,7 +117,7 @@ export function createCrmRoutes(db) {
     try {
       const d = c.get('validated');
       const r = moveOpportunityStageSvc(db, c.req.param('id'), d.stage, { note: d.note, userName: userName(c) });
-      logActivity(db, c.get('session'), 'Movió oportunidad de etapa', 'opportunity', r.id,
+      logActivity(db, c.get('session'), 'Movió oportunidad de etapa', ENTITY.OPPORTUNITY, r.id,
         r.title + ': ' + (ETAPA_LABEL[r.from] || r.from) + ' → ' + (ETAPA_LABEL[r.to] || r.to));
       return c.json(r);
     } catch (e) { return c.json({ error: e.message }, e.status || 400); }
@@ -127,7 +128,7 @@ export function createCrmRoutes(db) {
       const d = c.get('validated');
       const r = closeOpportunitySvc(db, c.req.param('id'), d, { userName: userName(c) });
       logActivity(db, c.get('session'), r.status === 'ganada' ? 'Ganó una oportunidad' : 'Perdió una oportunidad',
-        'opportunity', r.id, r.title + (r.lost_reason ? ' — ' + (MOTIVO_PERDIDA_LABEL[r.lost_reason] || r.lost_reason) : ''));
+        ENTITY.OPPORTUNITY, r.id, r.title + (r.lost_reason ? ' — ' + (MOTIVO_PERDIDA_LABEL[r.lost_reason] || r.lost_reason) : ''));
       return c.json(r);
     } catch (e) { return c.json({ error: e.message }, e.status || 400); }
   });
@@ -135,7 +136,7 @@ export function createCrmRoutes(db) {
   api.post('/:id/reopen', requirePerm('crm.manage'), c => {
     try {
       const r = reopenOpportunitySvc(db, c.req.param('id'), { userName: userName(c) });
-      logActivity(db, c.get('session'), 'Reabrió oportunidad', 'opportunity', r.id, r.title);
+      logActivity(db, c.get('session'), 'Reabrió oportunidad', ENTITY.OPPORTUNITY, r.id, r.title);
       return c.json(r);
     } catch (e) { return c.json({ error: e.message }, e.status || 400); }
   });
@@ -144,14 +145,14 @@ export function createCrmRoutes(db) {
   api.delete('/:id', requirePerm('crm.manage'), c => {
     try {
       const r = archiveOpportunitySvc(db, c.req.param('id'));
-      logActivity(db, c.get('session'), 'Archivó oportunidad', 'opportunity', r.id, r.title);
+      logActivity(db, c.get('session'), 'Archivó oportunidad', ENTITY.OPPORTUNITY, r.id, r.title);
       return c.json({ message: 'Archivada' });
     } catch (e) { return c.json({ error: e.message }, e.status || 400); }
   });
   api.post('/:id/restore', requirePerm('crm.manage'), c => {
     try {
       const r = restoreOpportunitySvc(db, c.req.param('id'));
-      logActivity(db, c.get('session'), 'Restauró oportunidad', 'opportunity', r.id, r.title);
+      logActivity(db, c.get('session'), 'Restauró oportunidad', ENTITY.OPPORTUNITY, r.id, r.title);
       return c.json({ message: 'Restaurada' });
     } catch (e) { return c.json({ error: e.message }, e.status || 400); }
   });
@@ -165,7 +166,7 @@ export function createCrmRoutes(db) {
       const label = d.type === 'email' ? 'Envió email a un cliente'
         : d.type === 'compromiso' ? 'Registró un compromiso con un cliente'
         : d.type === 'nota' ? 'Anotó algo de un cliente' : 'Registró contacto con un cliente';
-      logActivity(db, c.get('session'), label, 'client', r.client_id, r.client_name + (d.note ? ' · ' + d.note : ''));
+      logActivity(db, c.get('session'), label, ENTITY.CLIENT, r.client_id, r.client_name + (d.note ? ' · ' + d.note : ''));
       return c.json(r, 201);
     } catch (e) { return c.json({ error: e.message }, e.status || 400); }
   });

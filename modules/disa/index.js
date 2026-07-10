@@ -24,6 +24,7 @@ import { getVatBands } from '../../core/vat-bands.js';   // [D5] lista cerrada d
 import { ALLOWED_MIME, MAX_UPLOAD_BYTES } from '../erp/attachments.js';
 import { callClaude, hasAnthropicKey } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
 import { rateLimit } from '../../core/rate-limit.js';   // freno por IP del endpoint caro de DISA
+import { ENTITY, entityForTable } from '../../core/activity-entities.js';
 
 export function register(app, db) {
   const router = new Hono();
@@ -291,7 +292,7 @@ export function register(app, db) {
             const pSku = data.sku || ('DISA-' + String(data.name || 'prod').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) + '-' + Date.now());
             try {
               const r = createProductSvc(db, { ...data, sku: pSku, tax_band: band });
-              logActivity(db, 'create', 'products', r.id, 'Producto "' + r.name + '" creado por DISA', session);
+              logActivity(db, 'create', ENTITY.PRODUCT, r.id, 'Producto "' + r.name + '" creado por DISA', session);
               return { ok: true, message: 'Producto "' + (r.name || 'nuevo') + '" creado (banda ' + r.tax_band + ').' };
             } catch (e) {
               return { ok: false, message: 'No se pudo crear el producto: ' + (e.message || 'datos inválidos') + '.' };
@@ -305,7 +306,10 @@ export function register(app, db) {
           const placeholders = colNames.map(() => '?').join(', ');
           const res = db.prepare('INSERT INTO ' + table + ' (' + cols + ') VALUES (' + placeholders + ')')
             .run(...Object.values(data));
-          logActivity(db, 'create', table, res.lastInsertRowid, 'Creado por DISA', session);
+          // La vía genérica registraba el NOMBRE DE LA TABLA ('products', 'categories'), y las
+          // pantallas registran la cosa ('product', 'category'): el historial guardaba dos nombres
+          // para lo mismo. `entityForTable` traduce con el catálogo único (core/activity-entities.js).
+          logActivity(db, 'create', entityForTable(table), res.lastInsertRowid, 'Creado por DISA', session);
           return { ok: true, message: 'Registro creado en ' + table + ' (id: ' + res.lastInsertRowid + ').' };
         }
 
@@ -324,7 +328,7 @@ export function register(app, db) {
           const info = db.prepare('UPDATE ' + table + ' SET ' + fields + ' WHERE id=?')
             .run(...Object.values(data), id);
           if (info.changes === 0) return { ok: false, message: 'No se encontró el registro con id ' + id + ' en ' + table + '.' };
-          logActivity(db, 'edit', table, id, 'Editado por DISA', session);
+          logActivity(db, 'edit', entityForTable(table), id, 'Editado por DISA', session);
           return { ok: true, message: 'Registro ' + id + ' en ' + table + ' actualizado.' };
         }
 
@@ -335,7 +339,7 @@ export function register(app, db) {
           if (!id) return { ok: false, message: 'Se requiere id.' };
           const info = db.prepare('DELETE FROM ' + table + ' WHERE id=?').run(id);
           if (info.changes === 0) return { ok: false, message: 'No se encontró el registro con id ' + id + ' en ' + table + '.' };
-          logActivity(db, 'delete', table, id, 'Eliminado por DISA', session);
+          logActivity(db, 'delete', entityForTable(table), id, 'Eliminado por DISA', session);
           return { ok: true, message: 'Registro ' + id + ' eliminado de ' + table + '.' };
         }
 
@@ -352,7 +356,7 @@ export function register(app, db) {
             Number(p.value) || 10,
             Number(p.min_order) || 0
           );
-          logActivity(db, 'create', 'discount_codes', r.lastInsertRowid,
+          logActivity(db, 'create', ENTITY.DISCOUNT_CODE, r.lastInsertRowid,
             'Descuento creado por DISA: ' + p.name, session);
           return { ok: true, message: 'Descuento "' + (p.name || 'DISA-' + r.lastInsertRowid) + '" creado.' };
         }
@@ -361,7 +365,7 @@ export function register(app, db) {
           const p = action.params;
           const r = db.prepare('UPDATE discount_codes SET active=0 WHERE code=?').run(p.code);
           if (r.changes === 0) return { ok: false, message: 'Descuento "' + p.code + '" no encontrado.' };
-          logActivity(db, 'delete', 'discount_codes', 0, 'Descuento desactivado por DISA: ' + p.code, session);
+          logActivity(db, 'delete', ENTITY.DISCOUNT_CODE, 0, 'Descuento desactivado por DISA: ' + p.code, session);
           return { ok: true, message: 'Descuento "' + p.code + '" desactivado.' };
         }
 
@@ -380,12 +384,16 @@ export function register(app, db) {
             p.active !== undefined ? (p.active ? 1 : 0) : disc.active,
             p.code
           );
-          logActivity(db, 'edit', 'discount_codes', disc.id, 'Descuento editado por DISA: ' + p.code, session);
+          logActivity(db, 'edit', ENTITY.DISCOUNT_CODE, disc.id, 'Descuento editado por DISA: ' + p.code, session);
           return { ok: true, message: 'Descuento "' + p.code + '" actualizado.' };
         }
 
         // ── Pedidos ──────────────────────────────────────────
 
+        // ⚠️ CÓDIGO MUERTO: estas acciones de pedido escriben en `sales_orders`, tabla ARCHIVADA por
+        // D1 (hoy `sales_orders_archived`). Cualquier intento revienta y cae al catch de abajo. Por eso
+        // su `logActivity` conserva el literal 'sales_orders' y NO se pasó al catálogo: no se maquilla
+        // una acción rota. Decidir si se recablea a customer_orders o se retira → TABLERO, deuda técnica.
         case 'create_order': {
           const p = action.params;
           // T5 — sin cliente identificado NO se crea el pedido (cero pedidos huérfanos).
@@ -483,7 +491,7 @@ export function register(app, db) {
             if (res.already) {
               return { ok: false, message: 'El pedido #' + p.order_id + ' ya tiene la factura ' + res.invoice_number + '.' };
             }
-            logActivity(db, 'create', 'invoices', res.id,
+            logActivity(db, 'create', ENTITY.INVOICE, res.id,
               'Factura ' + res.invoice_number + ' generada por DISA', session);
             return { ok: true, message: 'Factura ' + res.invoice_number + ' generada para el pedido #' + p.order_id + '.' };
           } catch (e) {
@@ -504,7 +512,7 @@ export function register(app, db) {
           if (!inv) return { ok: false, message: 'No existe ninguna factura con el número ' + num + '.' };
           try {
             const r = anularInvoice(db, inv.id, p.motivo);
-            logActivity(db, 'edit', 'invoices', inv.id, 'Factura ' + r.invoice_number + ' anulada por DISA', session);
+            logActivity(db, 'edit', ENTITY.INVOICE, inv.id, 'Factura ' + r.invoice_number + ' anulada por DISA', session);
             return { ok: true, message: 'Factura ' + r.invoice_number + ' anulada: se creó el asiento de anulación y la original queda intacta (solo cambia su estado a "anulada").' };
           } catch (e) {
             return { ok: false, message: 'No se pudo anular: ' + e.message };
@@ -529,7 +537,7 @@ export function register(app, db) {
               notes: p.notes || '',
               issue_date: p.issue_date,
             });
-            logActivity(db, 'create', 'invoices', r.id, 'Rectificativa ' + r.invoice_number + ' de ' + num + ' por DISA', session);
+            logActivity(db, 'create', ENTITY.INVOICE, r.id, 'Rectificativa ' + r.invoice_number + ' de ' + num + ' por DISA', session);
             return { ok: true, message: 'Rectificativa ' + r.invoice_number + ' creada en serie propia, rectifica a ' + num + ' (la original queda marcada como "rectificada").' };
           } catch (e) {
             return { ok: false, message: 'No se pudo crear la rectificativa: ' + e.message };
@@ -549,7 +557,7 @@ export function register(app, db) {
           //   INSERT INTO products (name, price, stock, status, type, product_code)
           //   VALUES (?, ?, ?, 'active', 'physical', ?)
           // `).run(p.name || '', Number(p.price) || 0, Number(p.stock) || 0, nextCode(db, 'product'));
-          // logActivity(db, 'create', 'products', r.lastInsertRowid, 'Producto "' + p.name + '" creado por DISA', session);
+          // logActivity(db, 'create', ENTITY.PRODUCT, r.lastInsertRowid, 'Producto "' + p.name + '" creado por DISA', session);
           // return { ok: true, message: 'Producto "' + (p.name || 'nuevo') + '" creado.' };
           const band = p.tax_band || p.banda_iva || p.iva_banda;
           if (!band) return { ok: false, message: 'Para crear el producto necesito su banda de IVA explícita: general (21%), reducido (10%), superreducido (4%) o exento (0%). ¿Cuál le corresponde?' };
@@ -560,7 +568,7 @@ export function register(app, db) {
               name: p.name, sku: pSku, price: Number(p.price) || 0,
               stock: Number(p.stock) || 0, type: 'physical', tax_band: band,
             });
-            logActivity(db, 'create', 'products', r.id, 'Producto "' + r.name + '" creado por DISA', session);
+            logActivity(db, 'create', ENTITY.PRODUCT, r.id, 'Producto "' + r.name + '" creado por DISA', session);
             return { ok: true, message: 'Producto "' + (r.name || 'nuevo') + '" creado (banda ' + band + ').' };
           } catch (e) {
             return { ok: false, message: 'No se pudo crear el producto: ' + (e.message || 'datos inválidos') + '.' };
@@ -579,7 +587,7 @@ export function register(app, db) {
             p.stock !== undefined ? Number(p.stock) : existing.stock,
             p.product_id
           );
-          logActivity(db, 'edit', 'products', p.product_id, 'Producto editado por DISA', session);
+          logActivity(db, 'edit', ENTITY.PRODUCT, p.product_id, 'Producto editado por DISA', session);
           return { ok: true, message: 'Producto "' + (p.name || existing.name) + '" actualizado.' };
         }
 
@@ -587,7 +595,7 @@ export function register(app, db) {
           const p = action.params;
           const r = db.prepare("UPDATE products SET status='inactive' WHERE id=?").run(p.product_id);
           if (r.changes === 0) return { ok: false, message: 'Producto no encontrado.' };
-          logActivity(db, 'delete', 'products', p.product_id, 'Producto eliminado por DISA', session);
+          logActivity(db, 'delete', ENTITY.PRODUCT, p.product_id, 'Producto eliminado por DISA', session);
           return { ok: true, message: 'Producto #' + p.product_id + ' eliminado (desactivado).' };
         }
 
@@ -622,7 +630,7 @@ export function register(app, db) {
             p.price != null ? Number(p.price) : null,
             Number(p.stock) || 0
           );
-          logActivity(db, 'create', 'product_variants', r.lastInsertRowid,
+          logActivity(db, 'create', ENTITY.PRODUCT_VARIANT, r.lastInsertRowid,
             'Variante creada por DISA en ' + product.name, session);
           return { ok: true, message: 'Variante "' + (p.name || 'nueva') + '" creada en ' + product.name + '.' };
         }
@@ -640,7 +648,7 @@ export function register(app, db) {
             p.sku !== undefined ? p.sku : variant.sku,
             p.variant_id
           );
-          logActivity(db, 'edit', 'product_variants', p.variant_id, 'Variante editada por DISA', session);
+          logActivity(db, 'edit', ENTITY.PRODUCT_VARIANT, p.variant_id, 'Variante editada por DISA', session);
           return { ok: true, message: 'Variante #' + p.variant_id + ' actualizada.' };
         }
 
@@ -648,7 +656,7 @@ export function register(app, db) {
           const p = action.params;
           const r = db.prepare('DELETE FROM product_variants WHERE id=?').run(p.variant_id);
           if (r.changes === 0) return { ok: false, message: 'Variante no encontrada.' };
-          logActivity(db, 'delete', 'product_variants', p.variant_id, 'Variante eliminada por DISA', session);
+          logActivity(db, 'delete', ENTITY.PRODUCT_VARIANT, p.variant_id, 'Variante eliminada por DISA', session);
           return { ok: true, message: 'Variante #' + p.variant_id + ' eliminada.' };
         }
 
@@ -671,7 +679,7 @@ export function register(app, db) {
               warehouse_id: p.warehouse_id,
             });
             const wh = db.prepare('SELECT name FROM warehouses WHERE id=?').get(r.warehouse_id);
-            logActivity(db, 'edit', 'products', p.product_id,
+            logActivity(db, 'edit', ENTITY.PRODUCT, p.product_id,
               'Stock ajustado por DISA (' + (p.mode || 'set') + ' ' + p.value + ', ' + p.reason + ')', session);
             return { ok: true, message: 'Stock de "' + prod.name + '" ajustado en ' + (wh?.name || 'el almacén')
               + '. Nuevo saldo: ' + r.stock + ' uds.' };
@@ -769,7 +777,7 @@ export function register(app, db) {
         //       VALUES (?, 'adjust', ?, ?)
         //     `).run(p.product_id, Math.abs(product.stock), p.reason || 'Reset por DISA');
         //   }
-        //   logActivity(db, 'edit', 'products', p.product_id, 'Stock reseteado a 0 por DISA', session);
+        //   logActivity(db, 'edit', ENTITY.PRODUCT, p.product_id, 'Stock reseteado a 0 por DISA', session);
         //   return { ok: true, message: 'Stock de "' + product.name + '" puesto a 0.' };
         // }
 
@@ -786,7 +794,7 @@ export function register(app, db) {
               address: p.address, city: p.city, country: p.country, notes: p.notes,
               client_type: p.client_type, payment_term_days: p.payment_term_days, payment_method: p.payment_method,
             });
-            logActivity(db, 'create', 'clients', r.id, 'Cliente "' + (r.name || '') + '" creado por DISA', session);
+            logActivity(db, 'create', ENTITY.CLIENT, r.id, 'Cliente "' + (r.name || '') + '" creado por DISA', session);
             return { ok: true, message: 'Cliente "' + (r.name || 'nuevo') + '" creado (#' + r.id + ').' };
           } catch (e) {
             return { ok: false, message: 'No se pudo crear el cliente: ' + e.message };
@@ -817,7 +825,7 @@ export function register(app, db) {
               payment_method:     keep(p.payment_method, client.payment_method) || '',
               collections_profile: keep(p.collections_profile, client.collections_profile) || 'estandar',
             });
-            logActivity(db, 'edit', 'clients', r.id, 'Cliente editado por DISA', session);
+            logActivity(db, 'edit', ENTITY.CLIENT, r.id, 'Cliente editado por DISA', session);
             return { ok: true, message: 'Cliente #' + r.id + ' actualizado.' };
           } catch (e) {
             return { ok: false, message: 'No se pudo editar el cliente: ' + e.message };
@@ -828,7 +836,7 @@ export function register(app, db) {
           const p = action.params || {};
           try {
             const r = archiveClientSvc(db, p.client_id);
-            logActivity(db, 'archive', 'clients', r.id, 'Cliente archivado por DISA', session);
+            logActivity(db, 'archive', ENTITY.CLIENT, r.id, 'Cliente archivado por DISA', session);
             return { ok: true, message: 'Cliente #' + r.id + ' archivado.' };
           } catch (e) {
             return { ok: false, message: 'No se pudo archivar el cliente: ' + e.message };
@@ -845,7 +853,7 @@ export function register(app, db) {
             const res = await registerCollectionAction(db, parseInt(p.invoice_id), {
               type: p.type, channel: p.channel, note: p.note, promised_date: p.promised_date,
             }, { sendEmail });
-            logActivity(db, 'collection_action', 'invoices', res.id,
+            logActivity(db, 'collection_action', ENTITY.INVOICE, res.id,
               'DISA registró ' + res.type + ' en factura ' + res.invoice_number, session);
             const msg = res.type === 'recordatorio_email'
               ? 'Recordatorio enviado para la factura ' + res.invoice_number + '.'
@@ -867,7 +875,7 @@ export function register(app, db) {
               type: p.type, note: p.note, promised_date: p.promised_date,
               importe: p.importe, modo: p.modo || 'auto', asignacion: p.asignacion, payment_method: p.payment_method,
             }, { sendEmail });
-            logActivity(db, 'account_action', 'clients', p.client_id,
+            logActivity(db, 'account_action', ENTITY.CLIENT, p.client_id,
               'DISA ejecutó ' + res.type + ' (lote ' + res.batch_id + ')', session);
             const msg = res.type === 'recordatorio_cuenta'
               ? 'Recordatorio de cuenta enviado (' + res.facturas + ' factura(s)).'
@@ -902,7 +910,7 @@ export function register(app, db) {
               amount: p.amount, modo: p.modo || 'auto', asignacion: p.asignacion,
               payment_method: p.payment_method, note: p.note,
             });
-            logActivity(db, 'supplier_payment', 'suppliers', supplierId,
+            logActivity(db, 'supplier_payment', ENTITY.SUPPLIER, supplierId,
               'DISA registró pago a cuenta de ' + res.repartido + ' a ' + res.supplier_name + ' (' + res.pagos.length + ' factura/s)', session);
             const msg = 'Pagados ' + res.repartido.toFixed(2) + ' a ' + res.supplier_name
               + ' en ' + res.pagos.length + ' factura' + (res.pagos.length === 1 ? '' : 's')
@@ -917,7 +925,7 @@ export function register(app, db) {
           const p = action.params || {};
           try {
             const r = restoreClientSvc(db, p.client_id);   // reusa la guarda de NIF al restaurar
-            logActivity(db, 'restore', 'clients', r.id, 'Cliente restaurado por DISA', session);
+            logActivity(db, 'restore', ENTITY.CLIENT, r.id, 'Cliente restaurado por DISA', session);
             return { ok: true, message: 'Cliente #' + r.id + ' restaurado.' };
           } catch (e) {
             return { ok: false, message: 'No se pudo restaurar el cliente: ' + e.message };
@@ -932,7 +940,7 @@ export function register(app, db) {
             INSERT INTO suppliers (name, contact, email, phone, notes, supplier_code)
             VALUES (?, ?, ?, ?, ?, ?)
           `).run(p.name || '', p.contact || '', p.email || '', p.phone || '', p.notes || '', nextCode(db, 'supplier'));
-          logActivity(db, 'create', 'suppliers', r.lastInsertRowid,
+          logActivity(db, 'create', ENTITY.SUPPLIER, r.lastInsertRowid,
             'Proveedor "' + p.name + '" creado por DISA', session);
           return { ok: true, message: 'Proveedor "' + (p.name || 'nuevo') + '" creado.' };
         }
@@ -951,7 +959,7 @@ export function register(app, db) {
             p.notes !== undefined ? p.notes : supplier.notes,
             p.supplier_id
           );
-          logActivity(db, 'edit', 'suppliers', p.supplier_id, 'Proveedor editado por DISA', session);
+          logActivity(db, 'edit', ENTITY.SUPPLIER, p.supplier_id, 'Proveedor editado por DISA', session);
           return { ok: true, message: 'Proveedor #' + p.supplier_id + ' actualizado.' };
         }
 
@@ -966,7 +974,7 @@ export function register(app, db) {
           };
           const r = db.prepare('DELETE FROM suppliers WHERE id=?').run(p.supplier_id);
           if (r.changes === 0) return { ok: false, message: 'Proveedor no encontrado.' };
-          logActivity(db, 'delete', 'suppliers', p.supplier_id, 'Proveedor eliminado por DISA', session);
+          logActivity(db, 'delete', ENTITY.SUPPLIER, p.supplier_id, 'Proveedor eliminado por DISA', session);
           return { ok: true, message: 'Proveedor #' + p.supplier_id + ' eliminado.' };
         }
 
@@ -997,7 +1005,7 @@ export function register(app, db) {
           const fields = Object.keys(updates).map(k => k + '=?').join(', ');
           db.prepare('UPDATE company_config SET ' + fields + ' WHERE id=1')
             .run(...Object.values(updates));
-          logActivity(db, 'edit', 'company_config', 1,
+          logActivity(db, 'edit', ENTITY.COMPANY_CONFIG, 1,
             'Config actualizada por DISA: ' + Object.keys(updates).join(', '), session);
           return { ok: true, message: 'Configuración actualizada: ' + Object.keys(updates).join(', ') + '.' };
         }
@@ -1010,7 +1018,7 @@ export function register(app, db) {
           const res = db.prepare(
             'INSERT INTO categories (name, description) VALUES (?,?)'
           ).run(p.name, p.description || '');
-          logActivity(db, 'create', 'category', res.lastInsertRowid,
+          logActivity(db, 'create', ENTITY.CATEGORY, res.lastInsertRowid,
             'Categoría creada por DISA: ' + p.name, session);
           return { ok: true, message: 'Categoría "' + p.name + '" creada correctamente (id: ' + res.lastInsertRowid + ').' };
         }
@@ -1025,7 +1033,7 @@ export function register(app, db) {
           const fields = Object.keys(updates).map(k => k + '=?').join(', ');
           db.prepare('UPDATE categories SET ' + fields + ' WHERE id=?')
             .run(...Object.values(updates), p.id);
-          logActivity(db, 'edit', 'category', p.id,
+          logActivity(db, 'edit', ENTITY.CATEGORY, p.id,
             'Categoría editada por DISA', session);
           return { ok: true, message: 'Categoría actualizada.' };
         }
@@ -1038,7 +1046,7 @@ export function register(app, db) {
           const inUse = db.prepare('SELECT COUNT(*) as c FROM products WHERE category_id=?').get(p.id);
           if (inUse.c > 0) return { ok: false, message: 'No se puede eliminar "' + cat.name + '" porque tiene ' + inUse.c + ' productos asignados.' };
           db.prepare('DELETE FROM categories WHERE id=?').run(p.id);
-          logActivity(db, 'delete', 'category', p.id,
+          logActivity(db, 'delete', ENTITY.CATEGORY, p.id,
             'Categoría eliminada por DISA: ' + cat.name, session);
           return { ok: true, message: 'Categoría "' + cat.name + '" eliminada.' };
         }
@@ -1079,7 +1087,7 @@ export function register(app, db) {
           if (!current?.totp_enabled)
             return { ok: false, message: `El usuario "${targetName}" no tiene 2FA activo.` };
           db.prepare('UPDATE admin_users SET totp_secret=NULL, totp_enabled=0 WHERE id=?').run(targetId);
-          logActivity(db, 'security', 'admin_users', targetId, `2FA desactivado por DISA`, session);
+          logActivity(db, 'security', ENTITY.ADMIN_USER, targetId, `2FA desactivado por DISA`, session);
           return { ok: true, message: `2FA desactivado para "${targetName}". Ya puede acceder solo con contraseña.` };
         }
 

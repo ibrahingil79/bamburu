@@ -9,6 +9,7 @@ import { computeTotals, createInvoice } from './invoices.js';
 import { recordMovement, isPhysical, resolveWarehouseId, availableOfProduct, productStockInWarehouse } from '../stock.js';
 import { activeWarehouses } from './warehouses.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
+import { ENTITY } from '../../../core/activity-entities.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // PILAR 4 · VENTAS · PIEZA 2b — ALBARÁN (entrega). ESPEJO de la RECEPCIÓN de compra
@@ -330,7 +331,7 @@ export function createAlbaranRoutes(db) {
   api.post('/', requirePerm('albaranes.create'), validate(albaranCreateSchema), c => {
     try {
       const r = createAlbaranSvc(db, c.get('validated'));
-      logActivity(db, c.get('session'), 'Confirmó albarán (entrega)', 'delivery_note', r.id, r.delivery_number + (r.order_id ? ' (pedido #' + r.order_id + ')' : ' (suelto)'));
+      logActivity(db, c.get('session'), 'Confirmó albarán (entrega)', ENTITY.DELIVERY_NOTE, r.id, r.delivery_number + (r.order_id ? ' (pedido #' + r.order_id + ')' : ' (suelto)'));
       return c.json({ ...r, message: 'Albarán ' + r.delivery_number + ' confirmado (stock entregado)' }, 201);
     } catch (e) { return c.json({ error: e.message, shortfall: e.shortfall }, e.status || 500); }
   });
@@ -338,7 +339,7 @@ export function createAlbaranRoutes(db) {
   api.post('/:id/anular', requirePerm('albaranes.edit'), validate(albaranAnularSchema), c => {
     try {
       const r = cancelAlbaranSvc(db, parseInt(c.req.param('id')), c.get('validated').motivo);
-      logActivity(db, c.get('session'), 'Anuló albarán', 'delivery_note', r.id, (r.delivery_number || '') + ' — ' + c.get('validated').motivo);
+      logActivity(db, c.get('session'), 'Anuló albarán', ENTITY.DELIVERY_NOTE, r.id, (r.delivery_number || '') + ' — ' + c.get('validated').motivo);
       return c.json({ ...r, message: 'Albarán anulado y stock revertido' });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -346,7 +347,7 @@ export function createAlbaranRoutes(db) {
   api.post('/:id/factura', requirePerm('albaranes.edit'), c => {
     try {
       const r = albaranToInvoiceSvc(db, parseInt(c.req.param('id')));
-      logActivity(db, c.get('session'), 'Facturó albarán', 'delivery_note', parseInt(c.req.param('id')), r.invoice_number);
+      logActivity(db, c.get('session'), 'Facturó albarán', ENTITY.DELIVERY_NOTE, parseInt(c.req.param('id')), r.invoice_number);
       return c.json({ ...r, message: 'Albarán facturado en ' + r.invoice_number });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });

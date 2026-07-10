@@ -106,9 +106,29 @@ export function createUserRoutes(db) {
   });
 
   // ── API: ACTIVITY LOGS ─────────────────────────────────────────
+  // Filtro por ENTIDAD y búsqueda libre. Antes no había ninguno de los dos: se devolvían los últimos
+  // 200 apuntes y punto, así que el desajuste de etiquetas (la pantalla escribía `invoice` y DISA
+  // `invoices`) no se veía como filas perdidas, sino como dos nombres para la misma cosa. Con las
+  // etiquetas ya unificadas, filtrar por una entidad devuelve lo que hizo la persona Y lo que hizo
+  // DISA. Aditivo: sin parámetros, la respuesta es exactamente la de antes.
+  //
+  // Todo va por parámetros LIGADOS (nunca concatenado): `q` viene del usuario.
+  // Multi-tenant: `db` ya es la BD de este negocio, así que un negocio no puede leer la de otro.
   api.get('/activity', requirePerm('admin.manage_users'), c => {
     try {
-      return c.json(db.prepare('SELECT * FROM activity_logs ORDER BY id DESC LIMIT 200').all());
+      const entity = String(c.req.query('entity') || '').trim();
+      const q      = String(c.req.query('q') || '').trim();
+      const where = [], params = [];
+      if (entity) { where.push('entity = ?'); params.push(entity); }
+      if (q) {
+        where.push('(user_name LIKE ? OR action LIKE ? OR entity LIKE ? OR details LIKE ?)');
+        const like = '%' + q + '%';
+        params.push(like, like, like, like);
+      }
+      const sql = 'SELECT * FROM activity_logs'
+        + (where.length ? ' WHERE ' + where.join(' AND ') : '')
+        + ' ORDER BY id DESC LIMIT 200';
+      return c.json(db.prepare(sql).all(...params));
     } catch(e) { return c.json({error:e.message},500); }
   });
 
@@ -327,24 +347,54 @@ export function createUserRoutes(db) {
   });
 
   activityViews.get('/', requirePerm('admin.manage_users'), c => {
+    // Las entidades del desplegable salen de lo que HAY en el historial, no del catálogo: así siguen
+    // siendo buscables los apuntes VIEJOS con la etiqueta antigua (`invoices`, `products`…), que no se
+    // reescriben. Un registro de actividad no se toca hacia atrás.
+    let entidades = [];
+    try {
+      entidades = db.prepare("SELECT entity, COUNT(*) n FROM activity_logs WHERE entity IS NOT NULL AND entity <> '' GROUP BY entity ORDER BY entity").all();
+    } catch { entidades = []; }
+    const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const opciones = entidades.map(e => `<option value="${esc(e.entity)}">${esc(e.entity)} (${e.n})</option>`).join('');
+
     const content = `
       <div class="ph"><h2>Registro de Actividad</h2></div>
       <div class="card">
+        <div class="card-head">
+          <select class="form-control" id="actEntity" style="max-width:260px" onchange="cargarActividad()">
+            <option value="">Todas las entidades</option>
+            ${opciones}
+          </select>
+          <input class="search" id="actQ" placeholder="Buscar usuario, acción o detalle..." oninput="buscarPronto()">
+        </div>
         <div class="table-wrap"><table>
           <thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Entidad</th><th>Detalle</th></tr></thead>
           <tbody id="actBody">${skeletonRows(5)}</tbody>
         </table></div>
       </div>
       <script>
-      api('GET','/api/erp/users/activity').then(logs=>{
-        document.getElementById('actBody').innerHTML=logs.length?logs.map(l=>'<tr>'+
-          '<td style="color:var(--muted);font-size:.78rem;white-space:nowrap">'+(l.created_at?.replace('T',' ').split('.')[0]||'-')+'</td>'+
-          '<td><span class="badge b-blue">'+l.user_name+'</span></td>'+
-          '<td>'+l.action+'</td>'+
-          '<td style="color:var(--muted)">'+(l.entity||'-')+(l.entity_id?' #'+l.entity_id:'')+'</td>'+
+      // Todo lo que viene de la BD se escapa al pintarlo. Antes solo se escapaba \`details\`: un nombre
+      // de usuario, una acción o una entidad con HTML dentro se ejecutaban en esta pantalla.
+      function pintarActividad(logs){
+        document.getElementById('actBody').innerHTML = logs.length ? logs.map(function(l){ return '<tr>'+
+          '<td style="color:var(--muted);font-size:.78rem;white-space:nowrap">'+escHtml((l.created_at||'').replace('T',' ').split('.')[0]||'-')+'</td>'+
+          '<td><span class="badge b-blue">'+escHtml(l.user_name||'-')+'</span></td>'+
+          '<td>'+escHtml(l.action||'-')+'</td>'+
+          '<td style="color:var(--muted)">'+escHtml(l.entity||'-')+(l.entity_id?' #'+Number(l.entity_id):'')+'</td>'+
           '<td style="color:var(--muted);font-size:.82rem">'+escHtml(l.details||'-')+'</td>'+
-          '</tr>').join(''):window.emptyRow(5,'Aún no hay actividad registrada. Aquí verás lo que ocurre en tu cuenta.');
-      });
+          '</tr>'; }).join('')
+          : window.emptyRow(5, 'No hay actividad que coincida con ese filtro.');
+      }
+      window.cargarActividad = async function(){
+        var e = document.getElementById('actEntity').value;
+        var q = document.getElementById('actQ').value.trim();
+        var url = '/api/erp/users/activity?entity='+encodeURIComponent(e)+'&q='+encodeURIComponent(q);
+        try { pintarActividad(await api('GET', url)); }
+        catch(err){ toast(err.message||'Error','err'); }
+      };
+      var _actT=null;
+      function buscarPronto(){ clearTimeout(_actT); _actT=setTimeout(window.cargarActividad, 250); }
+      cargarActividad();
       </script>`;
     return c.html(adminLayout('Actividad', content, 'activity', c.get('session')?.csrfToken || '', c));
   });

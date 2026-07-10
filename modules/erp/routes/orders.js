@@ -1,3 +1,6 @@
+// ⚠️ RUTA DESMONTADA (POS viejo). No está montada en routes/index.js (líneas 106 y 159, comentadas).
+// Sus `logActivity` conservan el literal 'order' y NO se pasaron al catálogo único de entidades
+// (core/activity-entities.js) a propósito: el código no se ejecuta y no se maquilla lo que está muerto.
 import { Hono } from 'hono';
 import { adminLayout, can } from '../layout.js';
 import { logActivity, requirePerm } from '../../../core/auth.js';

@@ -9,6 +9,7 @@ import { computeTotals } from './invoices.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { activeWarehouses } from './warehouses.js';
 import { sendEmail } from '../../../core/mailer.js';
+import { ENTITY } from '../../../core/activity-entities.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // C1.a — ORDEN DE COMPRA como documento. Es un PEDIDO al proveedor: aquí NO se
@@ -361,7 +362,7 @@ export function createPurchaseOrderRoutes(db) {
   api.post('/', requirePerm('purchases.create'), validate(purchaseOrderSchema), c => {
     try {
       const id = createPurchaseOrderSvc(db, c.get('validated'));
-      logActivity(db, c.get('session'), 'Creó borrador de orden de compra', 'purchase_order', id, '');
+      logActivity(db, c.get('session'), 'Creó borrador de orden de compra', ENTITY.PURCHASE_ORDER, id, '');
       return c.json({ id, message: 'Borrador guardado' }, 201);
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -369,7 +370,7 @@ export function createPurchaseOrderRoutes(db) {
   api.put('/:id', requirePerm('purchases.edit'), validate(purchaseOrderSchema), c => {
     try {
       const r = updatePurchaseOrderSvc(db, parseInt(c.req.param('id')), c.get('validated'));
-      logActivity(db, c.get('session'), 'Editó borrador de orden de compra', 'purchase_order', r.id, '');
+      logActivity(db, c.get('session'), 'Editó borrador de orden de compra', ENTITY.PURCHASE_ORDER, r.id, '');
       return c.json({ ...r, message: 'Borrador actualizado' });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -377,7 +378,7 @@ export function createPurchaseOrderRoutes(db) {
   api.post('/:id/enviar', requirePerm('purchases.edit'), c => {
     try {
       const r = sendPurchaseOrderSvc(db, parseInt(c.req.param('id')));
-      logActivity(db, c.get('session'), 'Envió orden de compra', 'purchase_order', r.id, r.order_number);
+      logActivity(db, c.get('session'), 'Envió orden de compra', ENTITY.PURCHASE_ORDER, r.id, r.order_number);
       return c.json({ ...r, message: 'Orden ' + r.order_number + ' enviada' });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -385,7 +386,7 @@ export function createPurchaseOrderRoutes(db) {
   api.post('/:id/email', requirePerm('purchases.edit'), async c => {
     try {
       const r = await emailPurchaseOrderSvc(db, parseInt(c.req.param('id')), { sendEmail });
-      logActivity(db, c.get('session'), 'Envió orden de compra por email', 'purchase_order', parseInt(c.req.param('id')), r.order_number + ' → ' + r.to);
+      logActivity(db, c.get('session'), 'Envió orden de compra por email', ENTITY.PURCHASE_ORDER, parseInt(c.req.param('id')), r.order_number + ' → ' + r.to);
       return c.json({ ...r, message: 'Orden enviada por email a ' + r.to });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -395,7 +396,7 @@ export function createPurchaseOrderRoutes(db) {
   api.post('/:id/receipts', requirePerm('purchases.create'), validate(purchaseOrderReceiptSchema), c => {
     try {
       const r = createReceiptSvc(db, parseInt(c.req.param('id')), c.get('validated'));
-      logActivity(db, c.get('session'), 'Registró recepción de orden de compra', 'po_receipt', r.id, r.receipt_number + ' (' + r.lines + ' líneas)');
+      logActivity(db, c.get('session'), 'Registró recepción de orden de compra', ENTITY.PO_RECEIPT, r.id, r.receipt_number + ' (' + r.lines + ' líneas)');
       return c.json({ ...r, message: 'Recepción ' + r.receipt_number + ' confirmada' }, 201);
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -414,7 +415,7 @@ export function createPurchaseOrderRoutes(db) {
     try {
       const { motivo } = c.get('validated');
       const r = closePurchaseOrderSvc(db, parseInt(c.req.param('id')), motivo);
-      logActivity(db, c.get('session'), 'Cerró orden de compra con pendiente', 'purchase_order', r.id, (r.order_number || '') + ' — ' + motivo);
+      logActivity(db, c.get('session'), 'Cerró orden de compra con pendiente', ENTITY.PURCHASE_ORDER, r.id, (r.order_number || '') + ' — ' + motivo);
       return c.json({ ...r, message: 'Orden cerrada (incompleta): el pendiente queda declarado como que no va a llegar' });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -423,7 +424,7 @@ export function createPurchaseOrderRoutes(db) {
     try {
       const { motivo } = c.get('validated');
       const r = anularPurchaseOrderSvc(db, parseInt(c.req.param('id')), motivo);
-      logActivity(db, c.get('session'), 'Anuló orden de compra', 'purchase_order', r.id, (r.order_number || '') + ' — ' + motivo);
+      logActivity(db, c.get('session'), 'Anuló orden de compra', ENTITY.PURCHASE_ORDER, r.id, (r.order_number || '') + ' — ' + motivo);
       return c.json({ ...r, message: 'Orden anulada' });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
@@ -432,7 +433,7 @@ export function createPurchaseOrderRoutes(db) {
     try {
       const { motivo } = c.get('validated');
       const r = anularYRehacerSvc(db, parseInt(c.req.param('id')), motivo);
-      logActivity(db, c.get('session'), 'Anuló y rehízo orden de compra', 'purchase_order', r.id, 'sustituye a ' + (r.anulada_number || ('#' + r.anulada_id)));
+      logActivity(db, c.get('session'), 'Anuló y rehízo orden de compra', ENTITY.PURCHASE_ORDER, r.id, 'sustituye a ' + (r.anulada_number || ('#' + r.anulada_id)));
       return c.json({ ...r, message: 'Orden anulada; borrador nuevo creado' });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });

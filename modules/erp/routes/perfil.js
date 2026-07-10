@@ -26,6 +26,7 @@ import { generateSecret, verify as verifyTOTP, keyuri } from '../../../core/totp
 import { saveAttachment, getAttachment, readAttachmentBuffer, ALLOWED_MIME, MAX_UPLOAD_BYTES } from '../attachments.js';
 import { PAISES_TELEFONO, PREFIJOS_VALIDOS, IDIOMAS, IDIOMAS_VALIDOS } from '../paises-telefono.js';
 import QRCode from 'qrcode';
+import { ENTITY } from '../../../core/activity-entities.js';
 
 // Solo imágenes para la foto de perfil (attachments.js admite además PDF, que aquí no tiene
 // sentido). Fuente única del mime→ext: ALLOWED_MIME.
@@ -336,14 +337,14 @@ export function createPerfilRoutes(db) {
 
     db.prepare('UPDATE admin_users SET totp_secret=?, totp_enabled=1 WHERE id=?').run(entry.secret, session.userId);
     pendingTOTPStore.delete(session.userId);
-    logActivity(db, session, 'Activó la verificación en dos pasos', 'admin_user', session.userId);
+    logActivity(db, session, 'Activó la verificación en dos pasos', ENTITY.ADMIN_USER, session.userId);
     return c.redirect('/admin/perfil?msg=' + encodeURIComponent('Verificación en dos pasos activada. La próxima vez te pediremos el código.'));
   });
 
   views.post('/disable-2fa', c => {
     const session = c.get('session');
     db.prepare('UPDATE admin_users SET totp_secret=NULL, totp_enabled=0 WHERE id=?').run(session.userId);
-    logActivity(db, session, 'Desactivó la verificación en dos pasos', 'admin_user', session.userId);
+    logActivity(db, session, 'Desactivó la verificación en dos pasos', ENTITY.ADMIN_USER, session.userId);
     return c.redirect('/admin/perfil?msg=' + encodeURIComponent('Verificación en dos pasos desactivada.'));
   });
 
@@ -376,7 +377,7 @@ export function createPerfilRoutes(db) {
 
       db.prepare(`UPDATE admin_users SET name=?, apellidos=?, telefono=?, pais_telefono=?, idioma=? WHERE id=?`)
         .run(name, apellidos, telefono, pais, idioma, session.userId);
-      logActivity(db, session, 'Actualizó su perfil', 'admin_user', session.userId);
+      logActivity(db, session, 'Actualizó su perfil', ENTITY.ADMIN_USER, session.userId);
 
       return c.json({ ok: true, ...loadPerfil(db, session.userId) });
     } catch (e) { return c.json({ error: e.message }, 500); }
@@ -405,7 +406,7 @@ export function createPerfilRoutes(db) {
       // simplemente deja de estar referenciada.
       const foto_url = '/api/erp/perfil/foto/' + att.id;
       db.prepare('UPDATE admin_users SET foto_url=? WHERE id=?').run(foto_url, session.userId);
-      logActivity(db, session, 'Cambió su foto de perfil', 'admin_user', session.userId);
+      logActivity(db, session, 'Cambió su foto de perfil', ENTITY.ADMIN_USER, session.userId);
 
       return c.json({ ok: true, foto_url });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
@@ -414,7 +415,7 @@ export function createPerfilRoutes(db) {
   api.delete('/foto', c => {
     const session = c.get('session');
     db.prepare('UPDATE admin_users SET foto_url=NULL WHERE id=?').run(session.userId);
-    logActivity(db, session, 'Quitó su foto de perfil', 'admin_user', session.userId);
+    logActivity(db, session, 'Quitó su foto de perfil', ENTITY.ADMIN_USER, session.userId);
     return c.json({ ok: true });
   });
 

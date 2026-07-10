@@ -7,6 +7,7 @@ import { nextCode } from '../codes.js';
 import { recordMovement, resolveWarehouseId } from '../stock.js';
 import { hasActiveTransfersFromOrigin } from './stock-transfers.js';
 import { originDocBlock } from '../attachments.js';
+import { ENTITY } from '../../../core/activity-entities.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // C1.b — RECEPCIONES contra la orden de compra. Una orden ENVIADA se recibe en
@@ -198,7 +199,7 @@ export function createPurchaseOrderReceiptRoutes(db) {
     try {
       const { motivo } = c.get('validated');
       const r = cancelReceiptSvc(db, parseInt(c.req.param('id')), motivo);
-      logActivity(db, c.get('session'), 'Anuló recepción de orden de compra', 'po_receipt', r.id, (r.receipt_number || '') + ' — ' + motivo);
+      logActivity(db, c.get('session'), 'Anuló recepción de orden de compra', ENTITY.PO_RECEIPT, r.id, (r.receipt_number || '') + ' — ' + motivo);
       return c.json({ ...r, message: 'Recepción anulada y stock revertido' });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });

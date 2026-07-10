@@ -8,6 +8,7 @@ import { adjustStock, kardex, productStock, isPhysical, recordMovement, resolveW
 import { warehouseBreakdown, activeWarehouses } from './warehouses.js';
 import { stockModalHtml, stockModalScript } from '../views/stock-modal.js';
 import { nextCode } from '../codes.js';
+import { ENTITY } from '../../../core/activity-entities.js';
 
 function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now();
@@ -116,7 +117,7 @@ export function createProductRoutes(db, cfg = {}) {
   api.post('/', requirePerm('products.create'), validate(productSchema), async c => {
     try {
       const r = createProductSvc(db, c.get('validated'));
-      logActivity(db, c.get('session'), 'Creó producto', 'product', r.id, r.name);
+      logActivity(db, c.get('session'), 'Creó producto', ENTITY.PRODUCT, r.id, r.name);
       return c.json({id:r.id, message:'Creado'});
     } catch(e) { return c.json({error:e.message}, e.status||500); }
   });
@@ -152,7 +153,7 @@ export function createProductRoutes(db, cfg = {}) {
       const id = parseInt(c.req.param('id'));
       const d = c.get('validated');
       const res = adjustStock(db, id, { mode: d.mode, value: d.value, reason: d.reason, note: d.note, warehouse_id: d.warehouse_id }, { confirmBelowReserved: d.confirm_below_reserved });
-      logActivity(db, c.get('session'), 'Ajustó stock', 'product', id, `${d.mode} ${d.value} (${d.reason}) → ${res.stock}`);
+      logActivity(db, c.get('session'), 'Ajustó stock', ENTITY.PRODUCT, id, `${d.mode} ${d.value} (${d.reason}) → ${res.stock}`);
       return c.json(res);
     } catch(e) { return c.json({ error: e.message }, e.status || 400); }
   });
@@ -176,7 +177,7 @@ export function createProductRoutes(db, cfg = {}) {
           try { db.prepare('INSERT OR IGNORE INTO product_tags (product_id,tag_id) VALUES (?,?)').run(id, tid); } catch(_){}
         }
       }
-      logActivity(db, c.get('session'), 'Editó producto', 'product', id, d.name);
+      logActivity(db, c.get('session'), 'Editó producto', ENTITY.PRODUCT, id, d.name);
       return c.json({message:'Actualizado'});
     } catch(e) { return c.json({error:e.message},500); }
   });
@@ -185,7 +186,7 @@ export function createProductRoutes(db, cfg = {}) {
     try {
       const p = db.prepare('SELECT name FROM products WHERE id=?').get(c.req.param('id'));
       db.prepare('DELETE FROM products WHERE id=?').run(c.req.param('id'));
-      logActivity(db, c.get('session'), 'Eliminó producto', 'product', c.req.param('id'), p?.name||'');
+      logActivity(db, c.get('session'), 'Eliminó producto', ENTITY.PRODUCT, c.req.param('id'), p?.name||'');
       return c.json({message:'Eliminado'});
     } catch(e) { return c.json({error:e.message},500); }
   });

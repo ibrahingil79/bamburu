@@ -7,6 +7,7 @@ import { mostradorSaleSchema } from '../schemas.js';
 import { emitTicketSvc, buildTicketPaper, ticketStockExcess, excessLineText } from './invoices.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';
 import { activeWarehouses } from './warehouses.js';
+import { ENTITY } from '../../../core/activity-entities.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // PILAR 4 · MOSTRADOR (PIEZA A) — pantalla del mostrador NUEVO, separada del POS viejo.
@@ -42,7 +43,7 @@ export function createMostradorRoutes(db) {
           return c.json({ error: 'No tienes permiso para vender por encima del stock. Solo el dueño o un administrador pueden hacerlo; baja la cantidad a lo disponible.' }, 403);
       }
       const r = emitTicketSvc(db, { lines: d.lines, warehouse_id: d.warehouse_id, payment_method: d.payment_method });
-      logActivity(db, c.get('session'), 'Emitió ticket de mostrador', 'invoice', r.id, r.invoice_number + ' · ' + r.payment_method + (excess.length ? ' (exceso de stock confirmado)' : ''));
+      logActivity(db, c.get('session'), 'Emitió ticket de mostrador', ENTITY.INVOICE, r.id, r.invoice_number + ' · ' + r.payment_method + (excess.length ? ' (exceso de stock confirmado)' : ''));
       return c.json({ ...r, message: 'Ticket ' + r.invoice_number + ' emitido y cobrado' }, 201);
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
