@@ -1,13 +1,25 @@
 # TABLERO — Fase de optimización
 
-## Eje A: UX (activo)
+> **DÓNDE ESTAMOS HOY (2026-07-10).** Eje A (UX) **completo**. Multi-almacén **cerrado** (las tres capas;
+> los traslados se verificaron el 10-jul: el valor del inventario no cambia al mover stock). Módulo de
+> **Avisos al 100 %** (contador en vivo + fuente "cliente en riesgo"; el bucle de la campana, arreglado).
+> **Verifactu para clientes NO es "activar la cola"**: el plan es **colaborador social** (un único
+> certificado de Bamburu + autorización de representación del cliente), y está **aparcado** hasta tener la
+> plataforma al 100 % — ver `docs/contexto/decisiones.md` (2026-07-10).
+>
+> **SIGUIENTE BLOQUE GRANDE: planificar el Eje B — DISA.** Empieza por ahí.
+>
+> **Inventario (Pilar 3) NO está cerrado, y no es un cabo suelto:** es alcance pendiente del pilar —
+> **stock mínimo / punto de pedido** y **lote / nº de serie**. Ver el Backlog.
+
+## Eje A: UX  ✅ COMPLETO (U0–U8)
 Objetivo: acercar cada pantalla y flujo a "el dueño no opera, decide". Método: auditoría primero, luego ejecución en piezas pequeñas. Cada tarea define cómo se verifica y cierra con regresión 0.
 
-### U0 — Auditoría UX global  ⬅️ EMPEZAR AQUÍ
+### U0 — Auditoría UX global  ✅ HECHO (2026-07-05) — `006cf6a`
 Recorre TODAS las pantallas del admin y del portal y produce un inventario real, sin cambiar nada: pantallas y su estado; incoherencias visuales (tipografía, espaciado, colores, componentes repetidos distintos); flujos clave y nº de clics de cada uno; pantallas sin estado vacío / sin estado de carga; mensajes de error genéricos; qué se rompe en móvil.
 Hecho cuando: existe docs/ux/auditoria-ux.md con la lista concreta priorizada, y de ahí salen U1–U6 con datos reales.
 
-### U1 — Sistema visual coherente (design tokens)
+### U1 — Sistema visual coherente (design tokens)  ✅ HECHO (2026-07-05) — `4332be4`
 Unificar tipografía, escala de espaciado, colores y componentes base desde un único sitio (tokens), a partir de layout.js. Sin rediseñar: dar consistencia.
 Hecho cuando: los valores visuales salen de un único origen y las pantallas de mayor uso los usan; captura antes/después.
 - Avance (2026-07-06): componente de pestañas unificado en estilo FICHA (`.tabs`/`.tab`) — aplicado a Contabilidad, Seguridad, Productos/Descuentos y a los filtros de estado de los listados. Contabilidad reagrupada de 7→3 pestañas de primer nivel (Libros oficiales · Impuestos · Resultados), con 2º nivel de fichas para las 5 vistas legales. Solo navegación/presentación: regresión 0, exports/permisos/datos/rutas intactos.
@@ -172,6 +184,9 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
 > **EJE A (UX) COMPLETO**: U0 (auditoría) · U1 (tokens) · U2 (vacíos/carga) · U3 (errores) · U4 (clics) · U5 (móvil) ·
 > U6 (onboarding) · U7 (enlaces rotos e inconsistencias de navegación) · U8 (perfil de usuario).
 > Siguiente: planificar **Eje B — DISA** (empieza por aquí en la próxima sesión).
+> *(U7 dejó "Datos del negocio" del menú de cuenta apuntando a `/admin/settings`; U8 lo consolidó en
+> `9cf2e46`. Reverificado en navegador el 10-jul: HTTP 200 en los tres negocios, y ninguno de los 34
+> enlaces del chrome del panel da 4xx.)*
 
 ### Cola del Eje A (fuera de encargo, NO descartadas — decisión del dueño)
 - **Motor de traducción (i18n) real.** Hoy `admin_users.idioma` guarda la preferencia y la interfaz sigue en
@@ -182,13 +197,18 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
   clientes.
 - **Tres pantallas vivas sin enlace** (U7): `/admin/analytics`, `/admin/discounts`, `/admin/tags`.
 
-## Eje B: DISA (pendiente de planificar)
+## Eje B: DISA (pendiente de planificar)  ⬅️ EMPEZAR AQUÍ
 - **Diagnóstico de avisos/notificaciones (solo lectura, 9 jul 2026):** `docs/disa/diagnostico-avisos.md`.
   Es la **foto ANTES** del encargo de avisos; se conserva tal cual (documento fechado), pero ya no describe
-  el estado actual. De sus seis hallazgos, el encargo cerró cinco (pantalla central · fuente de cobros
-  vencidos · visto por usuario y por aviso · email diario programado y verificado · etiqueta del bloque
-  recurrente). **Sigue abierto:** el contador no se refresca en vivo fuera de `/admin/avisos` (§3), y faltan
-  las fuentes de **CRM** en riesgo y de **cumplimiento** (Verifactu, calendario fiscal). No construir sin encargo.
+  el estado actual.
+- **Módulo de Avisos: CERRADO al 100 % (2026-07-10).** Los seis hallazgos del diagnóstico están cerrados.
+  Los dos que seguían abiertos se cerraron en `b441cf0`: el **contador en vivo** en todas las pantallas del
+  panel (sondeo de 60 s + refresco al volver a la pestaña + tras cualquier mutación, enganchado en `api()`)
+  y la fuente **"cliente en riesgo"** del CRM (permiso `crm.read`, criterio prestado de `salesWorklist`).
+  La fuente de **cumplimiento** ya existía (`envio_verifactu`). El bucle infinito de la campana (abrirla
+  disparaba ~120 peticiones hasta el 429) se arregló en `fc7b323`; venía de `14b6c1e`, no del contador.
+  *Queda fuera, sin encargo:* el **calendario fiscal** como fuente de avisos.
+- **Lo que toca aquí es PLANIFICAR el Eje B**, no construir. No construir sin encargo.
 
 ## Eje C: Seguridad (pendiente de planificar)
 
@@ -634,10 +654,15 @@ fiscales a medio camino. Decisión que la fija: `docs/contexto/decisiones.md` (2
 - **PDF + email de cada documento:** hoy solo el presupuesto envía PDF por email.
 - **Plantillas de documento personalizables.**
 
-### Inventario (Pilar 3 — pulido)
-- **Stock mínimo / punto de pedido.**
-- **Trazabilidad por lote / nº de serie.**
-- **Sync e-commerce** (Shopify / Woo / Prestashop) — Capa 2.
+### Inventario (Pilar 3 — EN CURSO, no cerrado)
+Lo que falta **no son cabos sueltos: es alcance pendiente del pilar.** No se empieza sin encargo.
+- ✅ **Multi-almacén CERRADO** — las tres capas. Capa 1/2 (operar por almacén) `da7871e` · Capa 3
+  (**traslados** `TR-NNNN`) `3af928f`. Verificado el 2026-07-10 sobre copia de BD real: el traslado valida
+  stock en origen, es atómico, y **el valor total del inventario no cambia** al mover mercancía (solo cambia
+  dónde está). DISA ya los ejecuta. Gates: `test-transfers` 30/0 · `verify-traslado-auditoria` 13/0.
+- ⬜ **Stock mínimo / punto de pedido.**
+- ⬜ **Trazabilidad por lote / nº de serie.**
+- ⬜ **Sync e-commerce** (Shopify / Woo / Prestashop) — Capa 2 (congelada).
 
 ### Multiusuario / permisos
 - **Administración de permisos por DISA (registrada, 2 pasos EN ORDEN).** *Paso 1 — Fundamento:* repasar TODAS las rutas/servicios de los pilares y confirmar que cada acción exige el permiso correcto (`requirePerm`), no solo sesión, con un modelo de permisos limpio agrupado por áreas. *Paso 2 — DISA administra hablando:* el dueño gestiona usuarios/accesos por conversación y DISA lo traduce vía servicio validado (DISA nunca escribe permisos directo; patrón T5/cobros). El Paso 2 no arranca sin el Paso 1 cerrado.
@@ -647,8 +672,17 @@ fiscales a medio camino. Decisión que la fija: `docs/contexto/decisiones.md` (2
 - **D6 · [a verificar] XSS en páginas públicas de la tienda** (HTML guardado por admin sin escapar). La tienda está apagada de forma reversible (D1); revisar antes de reabrir en Capa 2. *(El bug de fuga de stock de `cancel_order` ya quedó resuelto al archivar `sales_orders`, D4.)*
 
 ### Deuda técnica
-- **Arreglar `scripts/gate-avisos-badge.mjs`:** falla por una ruta de BD fija inexistente en el checkout actual (ambiental, ajeno a la lógica); reescribirlo para usar BD temporal como el resto de gates.
+- ⬜ **Etiquetas de `activity_logs`: DISA y las rutas no se llaman igual.** Las rutas del ERP registran la
+  entidad en **singular** (`invoice`, `product`, `client`, `order`) y DISA usa el **nombre de la tabla**
+  (`invoices`, `products`, `clients`, `sales_orders`). En un negocio vivo: `invoice`=96 vs `invoices`,
+  `product`=15 vs `products`=5, `client`=20 vs `clients`=2. Consecuencia: **auditar por entidad se deja fuera
+  lo que hizo DISA.** Ya se arregló **solo para el traslado** (`62ccd8b`, constante `TRANSFER_ENTITY`
+  compartida). El resto **NO se ha tocado**: arreglarlo pide decidir la convención y migrar (o no) el
+  histórico. **Encargo propio.** *(Ojo: `logActivity` de DISA es un helper LOCAL con firma distinta a la de
+  `core/auth.js` — no copiar el orden de argumentos.)*
 - **DISA `create_order` multi-línea:** limitación heredada de la base e-commerce; los pedidos multi-línea entran con el flujo pedido→albarán→factura.
+- ~~Arreglar `scripts/gate-avisos-badge.mjs`~~ — **ya no reproduce**: ejecutado el 2026-07-10 pasa **25 OK**.
+  Si vuelve a fallar por la ruta de BD fija, reabrir con la salida del fallo.
 
 ### Roadmap futuro — módulos (decisión del dueño, NO iniciar sin encargo)
 DISA como producto proactivo · **Citas / Agenda** (🔺 prioritaria) · CRM comercial (**embudo/oportunidades ✅ HECHO 2026-07-09**; agenda/calendario pendiente) · Control horario (registro de jornada) · TPV / POS módulo completo · Parte de obra · Cobro recurrente + domiciliación SEPA · Telegram como canal · Mapas (OpenStreetMap) · Documentos / suite ofimática ligera · App móvil nativa · API pública / webhooks · Integraciones / marketplace · Dashboards personalizables · Multiempresa · Fabricación · Multi-moneda · Firma digital de documentos · Previsión de caja 3/6/12 meses · Proyectos / rentabilidad · Partes de horas · Servicio de campo / órdenes de trabajo · Helpdesk.
