@@ -36,6 +36,7 @@ import { createCrmRoutes } from './crm.js';
 import { createSupplierInvoiceRoutes } from './supplier-invoices.js';
 import { createPagosRoutes } from './pagos.js';
 import { createAvisosRoutes } from './avisos.js';
+import { createPropuestasRoutes } from './propuestas.js';   // D5 — Propuestas de DISA (recordatorio de impago)
 import { createSecurityRoutes } from './security.js';
 import { createPerfilRoutes } from './perfil.js';
 import { createContabilidadRoutes } from './contabilidad-routes.js';
@@ -85,6 +86,7 @@ export function mountRoutes(app, db) {
   const { api: supplierInvoiceApi, views: supplierInvoiceViews } = createSupplierInvoiceRoutes(db);
   const { api: pagosApi, views: pagosViews } = createPagosRoutes(db);
   const { api: avisosApi, views: avisosViews } = createAvisosRoutes(db);
+  const { api: propuestasApi, views: propuestasViews } = createPropuestasRoutes(db);
   const { api: quoteApi, views: quoteViews } = createQuoteRoutes(db);
   const { api: pedidoApi, views: pedidoViews } = createPedidoRoutes(db);
   const { api: albaranApi, views: albaranViews } = createAlbaranRoutes(db);
@@ -141,6 +143,7 @@ export function mountRoutes(app, db) {
   admin.route('/supplier-invoices', supplierInvoiceViews);
   admin.route('/pagos', pagosViews);
   admin.route('/avisos', avisosViews);          // pantalla central de avisos (motor: erp/avisos.js)
+  admin.route('/propuestas', propuestasViews);  // D5 — Propuestas de DISA (recordatorio de impago)
   admin.route('/contabilidad', contabViews);
   admin.route('/verifactu', createVerifactuEnvioRoutes(db).views);
   admin.route('/conciliacion', createConciliacionRoutes(db).views);
@@ -189,6 +192,7 @@ export function mountRoutes(app, db) {
   apiApp.route('/supplier-invoices', supplierInvoiceApi);
   apiApp.route('/pagos', pagosApi);
   apiApp.route('/avisos', avisosApi);
+  apiApp.route('/propuestas', propuestasApi);
   apiApp.route('/contabilidad', contabApi);
   apiApp.route('/stock', stockApi);
   app.route('/api/erp', apiApp);

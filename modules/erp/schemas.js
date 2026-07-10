@@ -472,6 +472,8 @@ export const userUpdateSchema = z.object({
 export const companySchema = z.object({
   tax_rate: z.coerce.number().min(0).max(50).optional(),
   irpf_default: z.coerce.number().min(0).max(100).optional(),
+  // D5 — días tras el vencimiento para que DISA proponga recordatorio de impago (0..365).
+  dias_recordatorio_impago: z.coerce.number().int().min(0).max(365).optional(),
 }).passthrough();
 export const storeSettingsSchema = z.object({}).passthrough();
 

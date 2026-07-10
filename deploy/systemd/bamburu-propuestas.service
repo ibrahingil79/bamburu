@@ -1,0 +1,17 @@
+[Unit]
+Description=Bamburu — D5: genera las Propuestas de DISA (recordatorios de impago) del día
+Documentation=file:///home/ubuntu/bamburu/deploy/systemd/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/bamburu
+# No envía email: solo prepara borradores. No necesita RESEND_API_KEY, pero se hereda el mismo
+# EnvironmentFile que la app por consistencia (inocuo).
+EnvironmentFile=/etc/bamburu.env
+# El .mjs itera TODOS los tenants (data/tenants/*.db) por sí mismo.
+ExecStart=/usr/bin/node /home/ubuntu/bamburu/scripts/bamburu-propuestas.mjs
+SyslogIdentifier=bamburu-propuestas

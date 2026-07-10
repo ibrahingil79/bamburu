@@ -75,6 +75,8 @@ export function runMigrations(db) {
   // Retención de IRPF por defecto del negocio (% del autónomo). Precarga la factura
   // según el tipo de cliente; el dato legal es el de la factura. Default 0.
   addCol(db, 'company_config', 'irpf_default',    'REAL DEFAULT 0');
+  // D5 — días tras el vencimiento a partir de los cuales DISA propone un recordatorio de impago.
+  addCol(db, 'company_config', 'dias_recordatorio_impago', 'INTEGER DEFAULT 7');
 
   // Store settings
   db.exec(`CREATE TABLE IF NOT EXISTS store_settings (
@@ -1572,6 +1574,29 @@ export function runMigrations(db) {
     FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
   )`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_collection_actions_invoice ON collection_actions(invoice_id)`);
+
+  // D5 (Eje B) — PROPUESTAS DE DISA. La primera proactividad real: DISA prepara borradores que el
+  // dueño APRUEBA (nunca autoenvía). Tabla GENÉRICA a propósito (arranca solo con
+  // 'recordatorio_impago', pero pensada para futuros tipos): un tipo, una referencia a factura y a
+  // cliente, el estado del ciclo, y el borrador (asunto + cuerpo) ya generado por PLANTILLA.
+  //   estado: pendiente | aprobada_enviada | descartada
+  // Aislada por negocio como todo (una fila vive en la BD de su tenant).
+  db.exec(`CREATE TABLE IF NOT EXISTS disa_proposals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL DEFAULT 'recordatorio_impago',
+    invoice_id INTEGER,
+    client_id INTEGER,
+    status TEXT NOT NULL DEFAULT 'pendiente',
+    subject TEXT NOT NULL DEFAULT '',
+    body TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    resolved_at TEXT,
+    resolved_by TEXT
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_disa_proposals_status ON disa_proposals(status)`);
+  // IDEMPOTENCIA ESTRICTA: una sola propuesta por (factura, tipo) para SIEMPRE, sea cual sea su
+  // estado. Así una descartada NO se vuelve a proponer, y el generador no duplica (INSERT OR IGNORE).
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_disa_proposals_invoice_type ON disa_proposals(invoice_id, type)`);
 
   // T4 Paso 2.1 — gestión a nivel de CUENTA. Un cobro/recordatorio/promesa de cuenta se
   // materializa en varias filas (un invoice_payment o un collection_action por factura viva).

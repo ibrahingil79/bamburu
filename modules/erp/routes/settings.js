@@ -22,7 +22,11 @@ export function createSettingsRoutes(db, cfg = {}) {
       const d = c.get('validated');
       // postal_code/city/province: dirección fiscal estructurada que exige Facturae. Sin ellos,
       // ninguna factura de este negocio puede exportarse (el emisor también va con dirección completa).
-      db.prepare('UPDATE company_config SET company_name=?,fiscal_id=?,tax_rate=?,logo_url=?,address=?,postal_code=?,city=?,province=?,phone=?,email=?,website=?,country=?,currency=?,currency_symbol=?,tax_name=?,fiscal_id_label=?,document_name=?,irpf_default=? WHERE id=1').run(d.company_name||'', d.fiscal_id||'', parseFloat(d.tax_rate)||0, d.logo_url||'', d.address||'', d.postal_code||'', d.city||'', d.province||'', d.phone||'', d.email||'', d.website||'', d.country||'ES', d.currency||'EUR', d.currency_symbol||sym, d.tax_name||'IVA', d.fiscal_id_label||'NIF/CIF', d.document_name||'Factura', parseFloat(d.irpf_default)||0);
+      // D5 — dias_recordatorio_impago: umbral para las propuestas de DISA. Si no viene, se conserva
+      // el valor actual (COALESCE con lo guardado), no se pisa con el defecto.
+      const diasProp = (d.dias_recordatorio_impago === '' || d.dias_recordatorio_impago == null)
+        ? null : Math.max(0, Math.min(365, Math.floor(Number(d.dias_recordatorio_impago) || 0)));
+      db.prepare('UPDATE company_config SET company_name=?,fiscal_id=?,tax_rate=?,logo_url=?,address=?,postal_code=?,city=?,province=?,phone=?,email=?,website=?,country=?,currency=?,currency_symbol=?,tax_name=?,fiscal_id_label=?,document_name=?,irpf_default=?,dias_recordatorio_impago=COALESCE(?,dias_recordatorio_impago) WHERE id=1').run(d.company_name||'', d.fiscal_id||'', parseFloat(d.tax_rate)||0, d.logo_url||'', d.address||'', d.postal_code||'', d.city||'', d.province||'', d.phone||'', d.email||'', d.website||'', d.country||'ES', d.currency||'EUR', d.currency_symbol||sym, d.tax_name||'IVA', d.fiscal_id_label||'NIF/CIF', d.document_name||'Factura', parseFloat(d.irpf_default)||0, diasProp);
       return c.json({message:'Guardado'});
     } catch(e) { return c.json({error:e.message},500); }
   });
@@ -82,6 +86,7 @@ export function createSettingsRoutes(db, cfg = {}) {
           </div>
           <div class="form-row">
             <div class="form-group"><label class="form-label">Retención de IRPF por defecto (%)</label><input class="form-control" type="number" id="cIrpfDefault" min="0" max="100" step="0.1"><small style="color:var(--text2);font-size:12px;margin-top:4px;display:block">Es tu retención como autónomo. Precarga la factura: clientes empresa/profesional la aplican; particulares, no. Puedes cambiarla en cada factura.</small></div>
+            <div class="form-group"><label class="form-label">Recordatorio de impago (días tras el vencimiento)</label><input class="form-control" type="number" id="cDiasImpago" min="0" max="365" step="1"><small style="color:var(--text2);font-size:12px;margin-top:4px;display:block">DISA prepara un borrador de recordatorio de pago cuando una factura de venta lleva vencida más días que este umbral. Por defecto 7. Los borradores aparecen en «Propuestas de DISA» para que los apruebes; nunca se envían solos.</small></div>
           </div>
           <div class="form-row">
             <div class="form-group"><label class="form-label">Email</label><input class="form-control" type="email" id="cEmail"></div>
@@ -114,6 +119,7 @@ export function createSettingsRoutes(db, cfg = {}) {
         document.getElementById('documentName').value=d.document_name||'Factura';
         document.getElementById('cTax').value=d.tax_rate||21;
         document.getElementById('cIrpfDefault').value=d.irpf_default||0;
+        document.getElementById('cDiasImpago').value=(d.dias_recordatorio_impago==null?7:d.dias_recordatorio_impago);
         document.getElementById('cEmail').value=d.email||'';
         document.getElementById('cPhone').value=d.phone||'';
         document.getElementById('cWeb').value=d.website||'';
@@ -124,7 +130,7 @@ export function createSettingsRoutes(db, cfg = {}) {
         document.getElementById('cLogo').value=d.logo_url||'';
       });
       async function saveCompany(){
-        try{await api('PUT','/api/erp/settings/company',{company_name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,country:document.getElementById('countryCode').value,currency:document.getElementById('currencyCode').value,currency_symbol:document.getElementById('currencySymbol').value,tax_name:document.getElementById('taxName').value,fiscal_id_label:document.getElementById('fiscalIdLabel').value,document_name:document.getElementById('documentName').value,tax_rate:document.getElementById('cTax').value,irpf_default:document.getElementById('cIrpfDefault').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,website:document.getElementById('cWeb').value,address:document.getElementById('cAddr').value,postal_code:document.getElementById('cPostal').value,city:document.getElementById('cCity').value,province:document.getElementById('cProvince').value,logo_url:document.getElementById('cLogo').value});toast('Guardado ✓');}catch(e){toast(e.message,'err')}
+        try{await api('PUT','/api/erp/settings/company',{company_name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,country:document.getElementById('countryCode').value,currency:document.getElementById('currencyCode').value,currency_symbol:document.getElementById('currencySymbol').value,tax_name:document.getElementById('taxName').value,fiscal_id_label:document.getElementById('fiscalIdLabel').value,document_name:document.getElementById('documentName').value,tax_rate:document.getElementById('cTax').value,irpf_default:document.getElementById('cIrpfDefault').value,dias_recordatorio_impago:document.getElementById('cDiasImpago').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,website:document.getElementById('cWeb').value,address:document.getElementById('cAddr').value,postal_code:document.getElementById('cPostal').value,city:document.getElementById('cCity').value,province:document.getElementById('cProvince').value,logo_url:document.getElementById('cLogo').value});toast('Guardado ✓');}catch(e){toast(e.message,'err')}
       }
       </script>`;
     return c.html(adminLayout('Configuración Empresa', content, 'settings', c.get('session')?.csrfToken || '', c));

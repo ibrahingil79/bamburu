@@ -1,0 +1,14 @@
+[Unit]
+Description=Bamburu — disparador diario de las Propuestas de DISA
+
+[Timer]
+# Diario a las 07:45 DE ESPAÑA: se generan ANTES del resumen de avisos (08:00), para que el dueño
+# abra el día con las propuestas ya listas. Zona explícita (el servidor va en UTC).
+OnCalendar=*-*-* 07:45:00 Europe/Madrid
+# Un barrido perdido no hace falta recuperarlo: el siguiente día ve el mismo trabajo, y la
+# idempotencia (índice único por factura+tipo) evita duplicar. Aun así Persistent no molesta.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

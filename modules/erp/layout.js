@@ -1,5 +1,6 @@
 import { getDisaWidget } from '../disa/widget.js';
 import { estadoAvisos, hoyLocal, PERM_POR_FUENTE } from './avisos.js';
+import { contarPropuestasPendientes } from './propuestas.js';   // D5 — badge de Propuestas de DISA
 
 export const ROOT_TOKENS = `
     :root{
@@ -256,6 +257,14 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       avisos = { count: est.count || 0, sinVer: (est.nuevos || []).length, estado: est.estado };
     }
   } catch { avisos = { count: 0, sinVer: 0, estado: 'apagado' }; }
+  // D5 — Propuestas de DISA pendientes, para el badge del topbar. Solo se cuentan si este usuario
+  // PUEDE ver las propuestas (invoices.read o cobros.read; owner/admin bypass) — mismo criterio que
+  // las cifras de ventas. Un COUNT barato; si falla, 0 (nunca rompe el chrome).
+  let propuestasPend = 0;
+  try {
+    const _db = c?.get?.('db');
+    if (_db && (can(c, 'invoices.read') || can(c, 'cobros.read'))) propuestasPend = contarPropuestasPendientes(_db);
+  } catch { propuestasPend = 0; }
   // El título tiene que decir EXACTAMENTE lo mismo que dirá `bellSync` en el primer refresco, o el
   // número da un salto en cuanto la campana se actualiza sola. Antes, con estado 'rojo', el
   // servidor pintaba «46 avisos sin ver» usando el TOTAL, y bellSync lo corregía a «3 avisos sin
@@ -678,6 +687,9 @@ ${ROOT_TOKENS}
     /* Punto de la campana: ROJO = algo sin ver · GRIS = pendientes, ya vistos · ausente = nada. */
     .tb-bell .dot{position:absolute;top:-1px;right:-1px;width:7px;height:7px;border-radius:50%;background:#DC2626;border:1.5px solid var(--chrome)}
     .tb-bell .dot.visto{background:var(--text3)}
+    /* D5 — badge de Propuestas de DISA: mismo sitio que la campana, con conteo numérico */
+    .tb-props{margin-left:auto;margin-right:14px;text-decoration:none}
+    .tb-props .prop-count{position:absolute;top:-7px;right:-9px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:#DC2626;color:#fff;font-size:10px;font-weight:700;line-height:15px;text-align:center;border:1.5px solid var(--chrome)}
     .bell-panel{position:absolute;top:calc(100% + 10px);right:0;width:380px;max-width:calc(100vw - 24px);background:#fff;border:1px solid var(--border2);border-radius:12px;box-shadow:0 6px 20px rgba(16,24,40,0.10);display:none;z-index:120;overflow:hidden}
     .bell-panel.open{display:block}
     .bell-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 13px;border-bottom:1px solid var(--border2)}
@@ -937,6 +949,10 @@ ${ROOT_TOKENS}
     <div class="topbar">
       <button type="button" class="nav-toggle" aria-label="Abrir menú" aria-expanded="false" onclick="toggleNav()"><i class="ti ti-menu-2"></i></button>
       <div class="tb-search"><i class="ti ti-search"></i><span>Buscar cliente, factura, producto…</span></div>
+      <a href="/admin/propuestas" class="tb-bell tb-props" id="tbProps" title="Propuestas de DISA${propuestasPend ? ' — ' + propuestasPend + ' pendiente' + (propuestasPend === 1 ? '' : 's') : ''}"
+         aria-label="Propuestas de DISA">
+        <i class="ti ti-sparkles"></i><span class="prop-count" id="propCount"${propuestasPend ? '' : ' style="display:none"'}>${propuestasPend || ''}</span>
+      </a>
       <div class="tb-bell-wrap">
         <button type="button" class="tb-bell" id="tbBell" title="${bellTitle}" aria-label="${bellTitle}"
                 aria-haspopup="true" aria-expanded="false" onclick="toggleBell(event)">
@@ -1004,6 +1020,15 @@ ${ROOT_TOKENS}
       if(p&&p.classList.contains('open')) bellCargar();     // abierto → repinta ahora
     };
     var _bellCargado=false;
+    // D5 — el panel de Propuestas llama a esto tras cada acción para que el badge del topbar cuadre
+    // sin recargar. Solo actualiza el número visible; no vuelve a escanear cobros.
+    window.propBadgeSync=function(n){
+      var el=document.getElementById('propCount'); if(!el) return;
+      if(n>0){ el.textContent=String(n); el.style.display=''; }
+      else { el.textContent=''; el.style.display='none'; }
+      var b=document.getElementById('tbProps');
+      if(b) b.title='Propuestas de DISA'+(n>0?(' — '+n+' pendiente'+(n===1?'':'s')):'');
+    };
     function bellPinta(d){
       var list=document.getElementById('bellList');
       var all=document.getElementById('bellAll');
