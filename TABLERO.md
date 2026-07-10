@@ -522,6 +522,8 @@ fase actual ceden prioridad a la optimización (Ejes A/B/C).
   contraseña en el entorno del servicio (`VERIFACTU_CERT_DIR/<slug>.p12` + `VERIFACTU_CERT_PASS_<SLUG>`, o
   los globales `VERIFACTU_CERT_PATH`/`VERIFACTU_CERT_PASS`). Sin eso la cola está inactiva y solo funciona el
   envío manual: pantalla `/admin/verifactu/envios` o `scripts/verifactu-enviar-preproduccion.mjs`.
+  **El `.p12` se borró del servidor tras el envío del 9-jul (regla de la Fase A), y el timer de la cola
+  sigue sin instalar.** Estado verificado y decisión pendiente en `docs/verifactu/estado-certificado.md`.
 - **Verifactu — Fase B (legal):** colaboración social (Convenio tipo 17), declaración responsable, y elección de certificado (propio-por-todos vs por-cliente, modelo del Anexo II). Ampliaciones técnicas: envío de **anulaciones** (hoy solo altas), **subsanación** del aviso 2004, validación XSD formal. (La ~~cola + timer por tenant~~ ya está hecha.)
 - **Facturae — motor de generación del XML ✅ HECHO (2026-07-08).** Ver `docs/facturae/investigacion.md`.
   - **Investigación** verificada en fuente oficial (XSD 3.2.2 descargado y parseado, política de firma v3.1
