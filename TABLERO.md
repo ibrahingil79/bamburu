@@ -208,7 +208,22 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
   La fuente de **cumplimiento** ya existía (`envio_verifactu`). El bucle infinito de la campana (abrirla
   disparaba ~120 peticiones hasta el 429) se arregló en `fc7b323`; venía de `14b6c1e`, no del contador.
   *Queda fuera, sin encargo:* el **calendario fiscal** como fuente de avisos.
-- **Lo que toca aquí es PLANIFICAR el Eje B**, no construir. No construir sin encargo.
+- **Auditoría D0 (10 jul 2026):** `docs/disa/auditoria-disa-d0.md` — radiografía completa de DISA
+  (acciones, permisos, proactividad, nombres, mapa del código). De ella salieron D1…D5:
+  - ✅ **D1 — fuga de lectura de `query_database` cerrada** (`d1d0c84`): de denylist a allowlist; lo no
+    mapeado se deniega. Cada tabla al `*.read` de su pantalla. 43/0.
+  - ✅ **D2 — KPIs del Inicio filtrados por permiso** (`d1d0c84`): sin permiso, "—" en vez de la cifra.
+  - ✅ **D3 — saneamiento del catálogo** (`4a4beb1`): `delete_product` escribe `archived` (antes el
+    `inactive` off-enum); `reset_stock` muerto retirado; tarjeta "Construir tienda" (404) oculta.
+    `/summary` investigado y CONSERVADO (lo usan dos gates, no era huérfano). Las 16 acciones sin
+    anunciar **no se tocaron** (es decisión de D5).
+  - ✅ **D4 — docs y modelo** (`4a4beb1`): estados de pedido de `CLAUDE.md` al enum vivo; chat de DISA
+    y onboarding a **`claude-sonnet-5`** (extracción por visión se queda en 4-6). Tarifa nueva en `llm.js`.
+  - ⬜ **D5 — DISEÑAR LA PROACTIVIDAD REAL DE DISA. ← ÚNICO PENDIENTE del Eje B.** Hoy DISA es un
+    tablón de avisos excelente pero no *propone* acciones ni actúa en vivo (sondeo de 60 s como único
+    push). Decidir hasta dónde llega "el dueño no opera, decide": ¿DISA propone "¿reclamo este cobro?"
+    desde la campana? ¿push en vivo (SSE)? ¿confirm-first en un clic desde el aviso? Es tarea de DISEÑO.
+- **Lo que toca aquí es PLANIFICAR (D5)**, no construir. No construir sin encargo.
 
 ## Eje C: Seguridad (pendiente de planificar)
 
