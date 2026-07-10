@@ -3,7 +3,9 @@ import { bodyLimit } from 'hono/body-limit';
 import { adminAuth, getCsrfToken, requirePerm } from '../../core/auth.js';
 import { checkPermission } from '../../core/permission-check.js';   // Permisos · Paso 2 — MISMO motor que requirePerm (sin lógica paralela)
 import { adminLayout } from '../erp/layout.js';
-import { generateInvoice, anularInvoice, createRectificativa } from '../erp/routes/invoices.js';
+// `generateInvoice` ya no se importa: era el puente pedido-viejo→factura (create_invoice_from_order),
+// retirado el 2026-07-10. La función sigue en invoices.js, neutralizada desde D1 (lanza 410).
+import { anularInvoice, createRectificativa } from '../erp/routes/invoices.js';
 import { createClientSvc, updateClientSvc, archiveClientSvc, restoreClientSvc, searchClients } from '../erp/routes/clients.js';
 import { clientFieldOptions } from '../erp/schemas.js';
 import { nextCode } from '../erp/codes.js';
@@ -126,7 +128,7 @@ export function register(app, db) {
     // [A3] 'invoices', 'invoice_items' EXCLUIDAS del genérico: son documentos LEGALES INMUTABLES
     // (cadena de hash Verifactu). Reescribir o borrar una factura emitida por insert/update/delete_record
     // rompería la cadena en silencio (la firma solo se calcula al emitir, nunca se revalida al escribir).
-    // DISA CREA facturas por create_invoice_from_order (con hash correcto) y ANULA/RECTIFICA por las
+    // DISA ANULA/RECTIFICA facturas por las
     // acciones legales anular_invoice / create_rectificativa (servicios validados de invoices.js).
     // 'inventory_movements',  // [Voz DISA stock] ENTRADA MUERTA: la tabla se archivó a
     // inventory_movements_legacy en Pilar 3 (stock unificado); el stock se mueve por el
@@ -146,8 +148,7 @@ export function register(app, db) {
 
   const ADMIN_ONLY_ACTIONS = new Set([
     'insert_record', 'update_record', 'delete_record',
-    'create_order', 'edit_order', 'update_order_status', 'cancel_order',
-    'create_invoice_from_order', 'anular_invoice', 'create_rectificativa', 'adjust_stock', 'reset_stock', 'transfer_stock',
+    'anular_invoice', 'create_rectificativa', 'adjust_stock', 'reset_stock', 'transfer_stock',
     'update_company_config', 'disable_2fa_user', 'list_users_security',
     'register_collection_action', 'register_account_action',
     'register_supplier_payment',
@@ -180,7 +181,7 @@ export function register(app, db) {
   // config de empresa y el camino genérico insert/update/delete_record (poder bruto del dueño).
   const STRICT_ADMIN_ONLY = new Set([
     'insert_record', 'update_record', 'delete_record',
-    'anular_invoice', 'create_rectificativa', 'create_invoice_from_order',
+    'anular_invoice', 'create_rectificativa',
     'update_profile', 'update_company_config', 'disable_2fa_user', 'list_users_security',
   ]);
   // ¿Puede esta sesión EJECUTAR la acción? owner/admin sí (bypass); excepciones → solo admin;
@@ -263,13 +264,10 @@ export function register(app, db) {
 
   async function executeAction(db, action, session) {
     try {
-      // D1 — VÍA VIEJA DE VENTAS POR VOZ RETIRADA. Las acciones que escribían el clúster viejo
-      // (sales_orders/sales_items) y el puente legado pedido→factura quedan NEUTRALIZADAS aquí y
-      // responden con elegancia (sin error feo). Los `case` originales siguen abajo, ya inalcanzables
-      // (no se borran): se rehará sobre la cadena nueva (presupuesto→pedido→albarán→factura) en otra tarea.
-      if (['create_order', 'edit_order', 'update_order_status', 'cancel_order', 'create_invoice_from_order'].includes(action.type)) {
-        return { ok: false, message: 'Esa forma de crear, editar, cancelar o facturar pedidos (el sistema de ventas antiguo) está en migración a la cadena nueva — presupuesto → pedido → albarán → factura — y no está disponible por chat ahora mismo. Puedo ayudarte con facturas, cobros, productos, stock, compras o clientes.' };
-      }
+      // D1 dejó aquí una guarda que neutralizaba create_order / edit_order / update_order_status /
+      // cancel_order / create_invoice_from_order respondiendo "en migración", con sus `case` intactos
+      // pero ya inalcanzables. El 2026-07-10 se retiraron del todo: la guarda, los case, la declaración
+      // en el prompt y sus permisos. DISA ya no las conoce: una petición así ni se propone.
       switch (action.type) {
 
         // ── Operaciones genéricas (cualquier tabla) ──────────
@@ -390,116 +388,16 @@ export function register(app, db) {
 
         // ── Pedidos ──────────────────────────────────────────
 
-        // ⚠️ CÓDIGO MUERTO: estas acciones de pedido escriben en `sales_orders`, tabla ARCHIVADA por
-        // D1 (hoy `sales_orders_archived`). Cualquier intento revienta y cae al catch de abajo. Por eso
-        // su `logActivity` conserva el literal 'sales_orders' y NO se pasó al catálogo: no se maquilla
-        // una acción rota. Decidir si se recablea a customer_orders o se retira → TABLERO, deuda técnica.
-        case 'create_order': {
-          const p = action.params;
-          // T5 — sin cliente identificado NO se crea el pedido (cero pedidos huérfanos).
-          const client = p.client_id ? db.prepare('SELECT id, name FROM clients WHERE id=? AND active=1').get(p.client_id) : null;
-          if (!client) return { ok: false, message: 'Identifica primero al cliente (client_id de un cliente activo) antes de crear el pedido.' };
-          const product = p.product_id
-            ? db.prepare('SELECT * FROM products WHERE id=?').get(p.product_id)
-            : db.prepare("SELECT * FROM products WHERE LOWER(name) LIKE ? AND status='active' LIMIT 1")
-                .get('%' + (p.product_name || '').toLowerCase() + '%');
-          if (!product) return { ok: false, message: 'Producto no encontrado.' };
-
-          const qty = Number(p.quantity) || 1;
-          const price = p.price != null ? Number(p.price) : product.price;
-          const cfg = db.prepare('SELECT tax_rate, currency_symbol FROM company_config WHERE id=1').get() || {};
-          const taxRate = cfg.tax_rate || 21;
-          const subtotal = price * qty;
-          const taxAmount = subtotal * (taxRate / 100);
-          const total = subtotal + taxAmount;
-
-          const tx = db.transaction(() => {
-            const orderNumber = 'DISA-' + Math.random().toString(36).substr(2, 9).toUpperCase();
-            const r = db.prepare(`
-              INSERT INTO sales_orders
-                (order_number, client_id, status, subtotal, tax_amount, total, admin_notes)
-              VALUES (?, ?, 'completado', ?, ?, ?, ?)
-            `).run(orderNumber, client.id, subtotal, taxAmount, total, p.notes || 'Creado por DISA');
-            const orderId = r.lastInsertRowid;
-            db.prepare(`
-              INSERT INTO sales_items (order_id, product_id, product_name, quantity, unit_price, total)
-              VALUES (?, ?, ?, ?, ?, ?)
-            `).run(orderId, product.id, product.name, qty, price, price * qty);
-            db.prepare('UPDATE products SET stock = stock - ? WHERE id=?').run(qty, product.id);
-            logActivity(db, 'create', 'sales_orders', orderId,
-              'Pedido ' + orderNumber + ' creado por DISA', session);
-            return { orderId, orderNumber };
-          });
-
-          const { orderNumber } = tx();
-          const sym = cfg.currency_symbol || '€';
-          return { ok: true, message: 'Pedido ' + orderNumber + ' creado para ' + client.name + ': ' +
-            qty + 'x ' + product.name + ' por ' + sym + total.toFixed(2) + '.' };
-        }
-
-        case 'update_order_status': {
-          const p = action.params;
-          const order = db.prepare('SELECT status FROM sales_orders WHERE id=?').get(p.order_id);
-          if (!order) return { ok: false, message: 'Pedido no encontrado.' };
-          db.prepare('UPDATE sales_orders SET status=? WHERE id=?').run(p.status, p.order_id);
-          db.prepare(`
-            INSERT INTO order_status_history (order_id, status, comment, user_name)
-            VALUES (?, ?, ?, ?)
-          `).run(p.order_id, p.status, 'Actualizado por DISA', session?.userName || 'DISA');
-          logActivity(db, 'edit', 'sales_orders', p.order_id,
-            'Estado cambiado a ' + p.status + ' por DISA', session);
-          return { ok: true, message: 'Pedido #' + p.order_id + ' actualizado a "' + p.status + '".' };
-        }
-
-        case 'cancel_order': {
-          const p = action.params;
-          const order = db.prepare('SELECT status FROM sales_orders WHERE id=?').get(p.order_id);
-          if (!order) return { ok: false, message: 'Pedido no encontrado.' };
-          if (order.status === 'cancelado') return { ok: false, message: 'El pedido ya estaba cancelado.' };
-          db.prepare('UPDATE sales_orders SET status=? WHERE id=?').run('cancelado', p.order_id);
-          db.prepare(`
-            INSERT INTO order_status_history (order_id, status, comment, user_name)
-            VALUES (?, ?, ?, ?)
-          `).run(p.order_id, 'cancelado', p.reason || 'Cancelado por DISA', session?.userName || 'DISA');
-          logActivity(db, 'delete', 'sales_orders', p.order_id, 'Pedido cancelado por DISA', session);
-          return { ok: true, message: 'Pedido #' + p.order_id + ' cancelado.' };
-        }
-
-        case 'edit_order': {
-          const p = action.params;
-          const order = db.prepare('SELECT * FROM sales_orders WHERE id=?').get(p.order_id);
-          if (!order) return { ok: false, message: 'Pedido no encontrado.' };
-          db.prepare(`
-            UPDATE sales_orders SET
-              admin_notes=?, tracking_number=?
-            WHERE id=?
-          `).run(
-            p.admin_notes !== undefined ? p.admin_notes : order.admin_notes,
-            p.tracking_number !== undefined ? p.tracking_number : order.tracking_number,
-            p.order_id
-          );
-          logActivity(db, 'edit', 'sales_orders', p.order_id, 'Pedido editado por DISA', session);
-          return { ok: true, message: 'Pedido #' + p.order_id + ' actualizado.' };
-        }
-
-        case 'create_invoice_from_order': {
-          // A2: delega en generateInvoice de invoices.js para que la factura quede
-          // con verifactu_hash y prev_hash correctos (antes DISA escribía sin hash).
-          const p = action.params;
-          try {
-            const res = generateInvoice(db, p.order_id);
-            if (res.already) {
-              return { ok: false, message: 'El pedido #' + p.order_id + ' ya tiene la factura ' + res.invoice_number + '.' };
-            }
-            logActivity(db, 'create', ENTITY.INVOICE, res.id,
-              'Factura ' + res.invoice_number + ' generada por DISA', session);
-            return { ok: true, message: 'Factura ' + res.invoice_number + ' generada para el pedido #' + p.order_id + '.' };
-          } catch (e) {
-            if (e.message === 'Pedido no encontrado') return { ok: false, message: 'Pedido #' + p.order_id + ' no encontrado.' };
-            if (e.message === 'Solo se pueden facturar pedidos completados') return { ok: false, message: 'Solo se pueden facturar pedidos completados.' };
-            return { ok: false, message: 'Error al generar la factura: ' + e.message };
-          }
-        }
+        // ── Pedidos del TPV/tienda heredado: ACCIONES RETIRADAS (2026-07-10) ─────────────
+        // Aquí vivían create_order / edit_order / update_order_status / cancel_order y el puente
+        // create_invoice_from_order. Escribían contra `sales_orders`, `sales_items` y
+        // `order_status_history`, las tres ARCHIVADAS por D1: cualquier intento reventaba con
+        // "no such table". D1 las había NEUTRALIZADO con una guarda que respondía "en migración";
+        // ahora se retiran del todo, con su guarda, su declaración en el prompt y sus permisos.
+        //
+        // El pedido VIVO es otro: el documento PED-NNNN del Pilar 4 (`customer_orders`), y su cadena
+        // presupuesto → pedido → albarán → factura. NO se gestiona por chat, y eso no cambia aquí:
+        // DISA los LEE (pendientes, borradores, qué falta por entregar) y redirige a /admin/pedidos.
 
         // ── Ciclo de vida legal de la factura (vía VALIDADA, NO el genérico) ──
         // Conectan con los servicios existentes de invoices.js; no reimplementan lógica fiscal.
@@ -2409,21 +2307,14 @@ export function register(app, db) {
       '  Para responder consultas de clientes ("cuales tengo en Madrid", "ficha de X") usa esa lista.',
       '',
       'Pedidos y facturacion:',
-      'IMPORTANTE — hay DOS conceptos distintos de "pedido"; no los confundas:',
-      '  · El DOCUMENTO "Pedido" del Pilar 4 (numeros PED-NNNN, pantalla /admin/pedidos, RESERVA stock) y su',
-      '    ALBARAN de entrega (DEL-NNNN, /admin/albaranes, saca stock): en esta version NO se gestionan por chat.',
-      '    Crear/confirmar/entregar/anular uno → DECLINA y redirige a /admin/pedidos o /admin/albaranes. NO uses',
-      '    create_order/cancel_order/edit_order/update_order_status para esto, NI insert/update/delete sobre',
-      '    customer_orders/customer_order_items/delivery_notes/delivery_note_items. Leerlos (pendientes, borradores,',
-      '    que falta por entregar, su cliente) SI puedes.',
-      '  · Las acciones de abajo son del modulo de pedidos de TPV/tienda heredado (sales_orders), NO del documento',
-      '    Pedido PED-NNNN. Usalas solo si el usuario habla claramente de ese flujo antiguo.',
-      '- create_order: {"client_id":0,"product_id":0,"product_name":"","quantity":1,"price":null,"notes":""}',
-      '  client_id es OBLIGATORIO (identifica al cliente primero). Sin cliente, NO se crea el pedido.',
-      '- edit_order: {"order_id":0,"admin_notes":"","tracking_number":""}',
-      '- update_order_status: {"order_id":0,"status":"en_preparacion|enviado|completado|cancelado"}',
-      '- cancel_order: {"order_id":0,"reason":""}',
-      '- create_invoice_from_order: {"order_id":0}',
+      'NO gestionas PEDIDOS ni ALBARANES por chat. Ni crear, ni editar, ni confirmar, ni entregar, ni',
+      'anular, ni facturar desde un pedido. No tienes ninguna accion para eso: no la inventes ni la',
+      'ofrezcas. Si te lo piden, DECLINA en una frase y redirige a /admin/pedidos o /admin/albaranes.',
+      'Tampoco los toques por la via genérica (insert/update/delete sobre customer_orders,',
+      'customer_order_items, delivery_notes, delivery_note_items).',
+      'LEERLOS SI puedes, y debes: pendientes, borradores, que falta por entregar, de que cliente son.',
+      'Lo que SI haces con facturas: anularlas y rectificarlas (vias legales, abajo), consultarlas y',
+      'gestionar sus cobros.',
       '- anular_invoice: {"invoice_number":"","motivo":""}',
       '  Vía LEGAL para dejar sin efecto una factura YA EMITIDA (crea su asiento de anulacion; la original NO se borra ni se reescribe).',
       '  Identifica la factura por su numero EXACTO (p. ej. "A2026-0007"). motivo OBLIGATORIO. Solo se puede anular una factura en estado "emitida".',

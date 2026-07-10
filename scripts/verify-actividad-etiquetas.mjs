@@ -31,8 +31,9 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
 
 // Ficheros/literales que se dejan a propósito: su código está MUERTO y no se maquilla.
+// (`modules/disa/index.js` estuvo aquí con 'sales_orders': el 2026-07-10 se retiraron esas cinco
+// acciones enteras, así que ya no hay literal que perdonar. Ver `verify-disa-sin-pedidos.mjs`.)
 const MUERTOS = {
-  'modules/disa/index.js': new Set(['sales_orders']),     // tabla archivada por D1
   'modules/erp/routes/orders.js': new Set(['order']),     // ruta desmontada (POS viejo)
 };
 

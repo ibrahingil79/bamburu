@@ -393,9 +393,11 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     // del menú) ni "Seguridad" (solo tenía el 2FA; su ruta redirige a /admin/perfil).
     { href: '/admin/perfil', label: 'Perfil', key: 'perfil', icon: 'ti-user' },
     // Una sola entrada de empresa: /admin/settings ES la "Configuración Empresa". Antes había dos
-    // ("Ajustes" + "Datos del negocio"), con la segunda apuntando a /admin/settings/company, que
-    // solo existe como API (/api/erp/settings/company) → daba 404, y ambas compartían key 'settings'
-    // (marcaba dos items activos). El onboarding (disaHome.html.js) ya apuntaba bien a /admin/settings.
+    // ("Ajustes" + "Datos del negocio"), y la segunda colgaba de una subruta `/company` que solo
+    // existe bajo /api/erp/settings → daba 404; además ambas compartían key 'settings' (marcaba dos
+    // items activos). Arreglado en U8 (`9cf2e46`, 8-jul) y reverificado pulsando el enlace el 10-jul:
+    // HTTP 200, "Configuración Empresa". El onboarding (disaHome.html.js) ya apuntaba bien.
+    // OJO al buscar: la ruta 404 de aquel bug NO aparece ya en ningún href de este fichero.
     { href: '/admin/settings', label: 'Datos del negocio', key: 'settings', icon: 'ti-building' },
     { href: '/admin/users', label: 'Usuarios', key: 'users', icon: 'ti-user-cog' },
     { href: '/admin/activity', label: 'Actividad', key: 'activity', icon: 'ti-history' },

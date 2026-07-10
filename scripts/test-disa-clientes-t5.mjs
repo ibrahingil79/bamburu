@@ -1,8 +1,13 @@
 // T5 — DISA sobre clientes. Tests del SERVICIO validado compartido (la única vía de
 // escritura que usan tanto el formulario como DISA), de la búsqueda/identificación, y de
-// la paridad con la forma en que DISA fusiona ediciones parciales. El enlace de client_id
-// en pedidos y las guardas de create_order se validan en navegador (lógica dentro del
-// loop de DISA); aquí cubrimos toda la lógica unitaria.
+// la paridad con la forma en que DISA fusiona ediciones parciales. Aquí cubrimos toda la
+// lógica unitaria viva.
+//
+// §6 RETIRADA el 2026-07-10: probaba el enlace client_id de la vía VIEJA de pedidos de DISA
+// (`create_order` sobre `sales_orders`). Esa acción ya no existe —se retiró junto con las otras
+// cuatro del clúster archivado por D1—, así que la sección se elimina en vez de seguir aparcada
+// anunciando una cobertura que no daba. Si DISA recupera la creación de ventas sobre la cadena
+// nueva (`customer_orders`), se escribe un test NUEVO contra esa cadena.
 //
 //   node scripts/test-disa-clientes-t5.mjs
 import Database from 'better-sqlite3';
@@ -117,25 +122,6 @@ console.log('5. Paridad DISA (edición parcial fusionada)');
   eq([after.email, after.phone, after.client_type, after.payment_term_days], ['c@x.es', '600', 'empresa', 30], 'preserva los campos NO enviados (edición parcial)');
   db.close();
 }
-
-// ── 6. Pedido enlaza client_id (invariante anti-huérfanos) ──────────────────
-// La guarda viva ("sin client_id no se crea") está en el case create_order de DISA y se
-// valida en navegador; aquí comprobamos el invariante de datos: un pedido de un cliente
-// activo queda enlazado y se puede recuperar por cliente.
-// ⏸ §6 APARCADO (obsoleto) — probaba la VÍA VIEJA de pedidos de DISA sobre `sales_orders`, tabla
-// ARCHIVADA en D1 (commit 5d181c7) cuando se cortó esa vía. Se rehará cuando DISA recupere la creación
-// de ventas sobre la CADENA NUEVA (customer_orders). NO se reescribe ni se inventa otra aserción aquí.
-// Las secciones 1–5 (identificación de cliente, lo vivo de T5) siguen corriendo arriba.
-console.log('6. Pedido enlazado a cliente — ⏸ APARCADO (vía vieja sales_orders retirada en D1; saneamiento de tests aparte)');
-// {
-//   const db = freshDb();
-//   const cid = createClientSvc(db, { name: 'Compradora', fiscal_id: 'C1' }).id;
-//   const r = db.prepare("INSERT INTO sales_orders (order_number, client_id, status, subtotal, tax_amount, total) VALUES ('DISA-T', ?, 'completado', 100, 21, 121)").run(cid);
-//   const ord = db.prepare('SELECT client_id FROM sales_orders WHERE id=?').get(r.lastInsertRowid);
-//   eq(ord.client_id, cid, 'el pedido queda enlazado al cliente (no huérfano)');
-//   eq(db.prepare('SELECT COUNT(*) n FROM sales_orders WHERE client_id=?').get(cid).n, 1, 'recuperable por cliente');
-//   db.close();
-// }
 
 // ── 7. Campos de lista cerrada: valores exactos del esquema + caso "contado" ─
 // DISA debe usar solo estos valores (se inyectan en su prompt desde aquí). El servicio

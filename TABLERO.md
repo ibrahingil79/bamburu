@@ -681,13 +681,19 @@ Lo que falta **no son cabos sueltos: es alcance pendiente del pilar.** No se emp
   el desplegable las sigue ofreciendo. Gate: `verify-actividad-etiquetas.mjs` (32/0).
   *(Ojo: `logActivity` de DISA es un helper LOCAL con firma distinta a la de `core/auth.js` — no copiar el
   orden de argumentos.)*
-- ⬜ **DISA: las acciones de PEDIDO están muertas.** `create_order`, `edit` y `delete` hacen
-  `INSERT INTO sales_orders`, tabla **archivada por D1** (hoy `sales_orders_archived`). El código revienta
-  y cae al `catch`, así que DISA responde "no se pudo". Marcadas en el fuente. **Decidir:** recablear a
-  `customer_orders` (el flujo vivo) o retirar la acción. Sus `logActivity` conservan el literal a propósito:
-  no se maquilla una acción rota.
+- ✅ **DISA: acciones de PEDIDO RETIRADAS (2026-07-10).** Eran cinco (`create_order`, `edit_order`,
+  `update_order_status`, `cancel_order` y el puente `create_invoice_from_order`) y escribían contra
+  `sales_orders` / `sales_items` / `order_status_history`, las tres **archivadas por D1**: reventaban con
+  "no such table". D1 las había neutralizado con una guarda que respondía "en migración", pero dejó los
+  `case` y su declaración en el prompt, así que **DISA seguía anunciando una función que no existía**.
+  Retiradas del todo: guarda, `case`, prompt, permisos, el import de `generateInvoice` y la sección §6 de
+  `test-disa-clientes-t5` (un test aparcado que no probaba nada). **El flujo humano no se tocó.** Gates:
+  `verify-disa-sin-pedidos` (32/0, estructural) y `verify-disa-pedidos-modelo-real` (10/0, contra el modelo
+  de verdad: pide crear/cancelar/facturar un pedido y DISA declina y redirige a `/admin/pedidos`).
 - ⬜ **`modules/erp/routes/orders.js` está desmontado** (POS viejo, `routes/index.js:106` y `:159`) pero
   sigue en el árbol, con 6 `logActivity` que nunca se ejecutan. Retirarlo o revivirlo, no dejarlo a medias.
+  *(Sus hermanos ya cayeron: `generateInvoice` de `invoices.js` sigue neutralizada desde D1 —lanza 410— y su
+  ruta `/from-order/:orderId` tampoco se usa. Van juntos en el mismo encargo.)*
 - **DISA `create_order` multi-línea:** limitación heredada de la base e-commerce; los pedidos multi-línea entran con el flujo pedido→albarán→factura.
 - ~~Arreglar `scripts/gate-avisos-badge.mjs`~~ — **ya no reproduce**: ejecutado el 2026-07-10 pasa **25 OK**.
   Si vuelve a fallar por la ruta de BD fija, reabrir con la salida del fallo.
