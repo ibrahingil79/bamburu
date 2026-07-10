@@ -437,6 +437,28 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       + `</div>`;
   }).join('');
 
+  // ── DISA en el riel (2º icono, debajo de Inicio) ─────────────────────────────
+  // Sigue EXACTAMENTE el patrón .navg > .nav-item + .flyout de arriba (no se inventa
+  // estilo). Dos entradas: "Propuestas" (panel de cobros de D5, gateado igual que su
+  // pantalla: invoices.read O cobros.read) y "Hablar con DISA" (abre el MISMO chat
+  // flotante de siempre vía disaOpen(); no crea hilo nuevo ni toca el widget). El badge
+  // de pendientes vive aquí, sobre el icono, con el número que ya calcula D5.
+  const disaActive = active === 'propuestas' || active === 'disa';
+  const puedePropuestas = can(c, 'invoices.read') || can(c, 'cobros.read');
+  const disaFly =
+    (puedePropuestas
+      ? `<a href="/admin/propuestas" class="fly-item${active === 'propuestas' ? ' active' : ''}"><i class="ti ti-checklist"></i>Propuestas</a>`
+      : '')
+    + `<button type="button" class="fly-item" onclick="closeFly();if(window.disaOpen){disaOpen();}else{location.href='/admin/disa';}"><i class="ti ti-message-2"></i>Hablar con DISA</button>`;
+  const disaBadge = puedePropuestas
+    ? `<span class="rail-count" id="propCount"${propuestasPend ? '' : ' style="display:none"'}>${propuestasPend || ''}</span>`
+    : '';
+  const disaNavHTML =
+    `<div class="navg" onmouseenter="openFly(this)" onmouseleave="scheduleCloseFly()">`
+    + `<button type="button" id="disaRailBtn" class="nav-item${disaActive ? ' active' : ''}" title="DISA" aria-label="DISA" onclick="toggleFly(this.closest('.navg'))"><span class="rail-ic"><i class="ti ti-sparkles"></i>${disaBadge}</span><span class="nav-label">DISA</span><i class="ti ti-chevron-right nav-chev"></i></button>`
+    + `<div class="flyout" onmouseenter="cancelCloseFly()" onmouseleave="scheduleCloseFly()"><div class="flyout-h">DISA</div>${disaFly}</div>`
+    + `</div>`;
+
   // ── Avatar + barra de Cuenta (mockup): cabecera + items gateados + Documentación + salir ──
   const acctVisible = accountItems.filter(navFilter);
   const userName = session.userName || 'Cuenta';
@@ -661,11 +683,16 @@ ${ROOT_TOKENS}
     .nav-item.active .nav-label{font-weight:600}
     .nav-chev{margin-left:auto;font-size:14px!important;opacity:0;transition:opacity .12s}
     .sidebar:hover .nav-chev,.sidebar.flyopen .nav-chev{opacity:.45}
+    /* Badge de Propuestas pendientes, pegado al icono de DISA (mismo patrón que el contador
+       del topbar que sustituye: círculo rojo pequeño sobre la esquina del icono). */
+    .rail-ic{position:relative;display:inline-flex;flex-shrink:0}
+    .rail-count{position:absolute;top:-7px;right:-9px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:#DC2626;color:#fff;font-size:9px;font-weight:700;line-height:15px;text-align:center;pointer-events:none}
     /* Flyout: submenú flotante del rail (position:fixed → escapa el clip del rail) */
     .flyout{position:fixed;min-width:210px;background:#fff;border:1px solid var(--border2);border-radius:12px;box-shadow:0 10px 30px rgba(16,24,40,.14);padding:7px;display:none;z-index:200}
     .flyout.open{display:block}
     .flyout-h{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);padding:5px 10px 6px}
     .fly-item{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;color:var(--body-tx);text-decoration:none;font-size:13px;white-space:nowrap}
+    button.fly-item{width:100%;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left}
     .fly-item:hover{background:var(--bg3)}
     .fly-item.active{background:var(--accent-soft);color:var(--accent);font-weight:500}
     .fly-item.disabled{color:var(--text3);opacity:.65;cursor:default;pointer-events:none}
@@ -687,9 +714,6 @@ ${ROOT_TOKENS}
     /* Punto de la campana: ROJO = algo sin ver · GRIS = pendientes, ya vistos · ausente = nada. */
     .tb-bell .dot{position:absolute;top:-1px;right:-1px;width:7px;height:7px;border-radius:50%;background:#DC2626;border:1.5px solid var(--chrome)}
     .tb-bell .dot.visto{background:var(--text3)}
-    /* D5 — badge de Propuestas de DISA: mismo sitio que la campana, con conteo numérico */
-    .tb-props{margin-left:auto;margin-right:14px;text-decoration:none}
-    .tb-props .prop-count{position:absolute;top:-7px;right:-9px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:#DC2626;color:#fff;font-size:10px;font-weight:700;line-height:15px;text-align:center;border:1.5px solid var(--chrome)}
     .bell-panel{position:absolute;top:calc(100% + 10px);right:0;width:380px;max-width:calc(100vw - 24px);background:#fff;border:1px solid var(--border2);border-radius:12px;box-shadow:0 6px 20px rgba(16,24,40,0.10);display:none;z-index:120;overflow:hidden}
     .bell-panel.open{display:block}
     .bell-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 13px;border-bottom:1px solid var(--border2)}
@@ -934,12 +958,12 @@ ${ROOT_TOKENS}
 </head>
 <body>
   <aside class="sidebar">
-    <a href="/admin" class="disa-pin${active === 'dashboard' ? ' active' : ''}" title="Inicio — DISA">
-      <i class="ti ti-sparkles"></i>
+    <a href="/admin" class="disa-pin${active === 'dashboard' ? ' active' : ''}" title="Inicio">
+      <i class="ti ti-home"></i>
       <span class="nav-label">Inicio</span>
     </a>
     <nav class="sb-nav">
-      ${navHTML}
+      ${disaNavHTML}${navHTML}
       <span class="rail-spacer"></span>
       <a href="/docs" target="_blank" class="nav-item" title="Ayuda y soporte"><i class="ti ti-lifebuoy"></i><span class="nav-label">Ayuda y soporte</span></a>
     </nav>
@@ -949,10 +973,6 @@ ${ROOT_TOKENS}
     <div class="topbar">
       <button type="button" class="nav-toggle" aria-label="Abrir menú" aria-expanded="false" onclick="toggleNav()"><i class="ti ti-menu-2"></i></button>
       <div class="tb-search"><i class="ti ti-search"></i><span>Buscar cliente, factura, producto…</span></div>
-      <a href="/admin/propuestas" class="tb-bell tb-props" id="tbProps" title="Propuestas de DISA${propuestasPend ? ' — ' + propuestasPend + ' pendiente' + (propuestasPend === 1 ? '' : 's') : ''}"
-         aria-label="Propuestas de DISA">
-        <i class="ti ti-sparkles"></i><span class="prop-count" id="propCount"${propuestasPend ? '' : ' style="display:none"'}>${propuestasPend || ''}</span>
-      </a>
       <div class="tb-bell-wrap">
         <button type="button" class="tb-bell" id="tbBell" title="${bellTitle}" aria-label="${bellTitle}"
                 aria-haspopup="true" aria-expanded="false" onclick="toggleBell(event)">
@@ -1020,14 +1040,14 @@ ${ROOT_TOKENS}
       if(p&&p.classList.contains('open')) bellCargar();     // abierto → repinta ahora
     };
     var _bellCargado=false;
-    // D5 — el panel de Propuestas llama a esto tras cada acción para que el badge del topbar cuadre
-    // sin recargar. Solo actualiza el número visible; no vuelve a escanear cobros.
+    // D5 — el panel de Propuestas llama a esto tras cada acción para que el badge (ahora sobre el
+    // icono de DISA del riel) cuadre sin recargar. Solo actualiza el número visible; no reescanea cobros.
     window.propBadgeSync=function(n){
       var el=document.getElementById('propCount'); if(!el) return;
       if(n>0){ el.textContent=String(n); el.style.display=''; }
       else { el.textContent=''; el.style.display='none'; }
-      var b=document.getElementById('tbProps');
-      if(b) b.title='Propuestas de DISA'+(n>0?(' — '+n+' pendiente'+(n===1?'':'s')):'');
+      var b=document.getElementById('disaRailBtn');
+      if(b) b.title='DISA'+(n>0?(' — '+n+' propuesta'+(n===1?'':'s')+' pendiente'+(n===1?'':'s')):'');
     };
     function bellPinta(d){
       var list=document.getElementById('bellList');
