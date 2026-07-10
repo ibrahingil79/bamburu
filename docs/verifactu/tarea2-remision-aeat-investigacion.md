@@ -44,6 +44,10 @@
 
 ## Certificados y multi-tenant (Fase B, legal)
 
+> **✅ Elegido el 2026-07-10:** de las vías que investiga esta sección, Bamburu va con la de **colaborador
+> social** (Convenio tipo 17, un único certificado propio + Anexo II por cliente). Ver
+> `../contexto/decisiones.md`.
+
 - Puede remitir: el obligado, su apoderado o un **colaborador social** — cualquiera con certificado
   cualificado. **Vía diseñada para SaaS: colaboración social, Convenio tipo 17** (empresas de software
   Veri*factu; también valen 001/002). Bamburu firmaría el convenio y enviaría TODO con su propio certificado.

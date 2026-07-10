@@ -247,6 +247,14 @@ ser manual. Al emitir una factura, su registro sale hacia la AEAT **en segundos*
 No toca huella/QR/encadenado (Tarea 1), no envía anulaciones, no subsana el 2004. Detalle completo en
 `docs/verifactu/tarea2-cola-envio-automatico.md`.
 
+> **⚠️ ESTO ES UNA PRUEBA DE CONCEPTO, NO EL PRODUCTO FINAL.** Lo construido y lo remitido el 9-jul va con
+> el **certificado personal del dueño** (FNMT de persona física). Demostró que la tubería funciona de punta
+> a punta contra la AEAT — y eso es exactamente todo lo que demostró. **La versión de producto es la de
+> colaborador social:** un único certificado de Bamburu para todos los negocios + autorización de
+> representación firmada por cada dueño (decisión del 2026-07-10, ver `docs/contexto/decisiones.md`).
+> **No leer "cola hecha" como "Verifactu para clientes hecho".** La tarea de producto, entera y sin trocear,
+> está en el Backlog · Contabilidad y cumplimiento fiscal.
+
 - **⚠️ Hay DOS relojes, y empujan en contra.** Además de la ventana de 240 s de la huella, el **control
   de flujo** (art. 16.2 Orden HAC/1177/2024) obliga a esperar el `TiempoEsperaEnvio` devuelto (t inicial
   = 60 s) entre envíos, y **un envío = un obligado** (una Cabecera). Un sobre por factura da un techo de
@@ -355,6 +363,10 @@ simulador (17/17); faltaba conectar el certificado FNMT real y remitir a **prepr
 - **Fuera de alcance, para encargos propios:**
   - **Fase B legal** — colaboración social (Convenio tipo 17), declaración responsable (art. 13 RD
     1007/2023), elección de certificado (propio-por-todos vs. Anexo II por cliente).
+    **→ DECIDIDO el 2026-07-10: colaborador social, un único certificado de Bamburu**; descartado que cada
+    negocio aporte el suyo. (El Anexo II **no** era la alternativa: es el modelo de la autorización de
+    representación, que se usa dentro de este modelo.) Queda solo el trámite. Ver
+    `docs/contexto/decisiones.md` y la tarea única del Backlog.
   - **Cola + timer de envío automático por negocio** — confirmado NECESARIO por el hallazgo de los 240 s.
   - **Bug de selección de cadena por id** (`verifactu-envio.js:347`): elige el registro anterior por id
     sin filtrar por emisor. **Latente**: `company_config` es singleton (un obligado por BD) y se verificó
@@ -517,14 +529,40 @@ Todas las tareas pendientes anteriores, **conservadas**. No se inician sin encar
 fase actual ceden prioridad a la optimización (Ejes A/B/C).
 
 ### Contabilidad y cumplimiento fiscal
-- **Verifactu — envío real a la AEAT:** ✅ Fase A hecha (motor SOAP+mTLS) y **cola de envío automático por
-  negocio** hecha (2026-07-09). Falta **activarla**: el dueño debe dejar su **certificado FNMT** y su
-  contraseña en el entorno del servicio (`VERIFACTU_CERT_DIR/<slug>.p12` + `VERIFACTU_CERT_PASS_<SLUG>`, o
-  los globales `VERIFACTU_CERT_PATH`/`VERIFACTU_CERT_PASS`). Sin eso la cola está inactiva y solo funciona el
-  envío manual: pantalla `/admin/verifactu/envios` o `scripts/verifactu-enviar-preproduccion.mjs`.
-  **El `.p12` se borró del servidor tras el envío del 9-jul (regla de la Fase A), y el timer de la cola
-  sigue sin instalar.** Estado verificado y decisión pendiente en `docs/verifactu/estado-certificado.md`.
-- **Verifactu — Fase B (legal):** colaboración social (Convenio tipo 17), declaración responsable, y elección de certificado (propio-por-todos vs por-cliente, modelo del Anexo II). Ampliaciones técnicas: envío de **anulaciones** (hoy solo altas), **subsanación** del aviso 2004, validación XSD formal. (La ~~cola + timer por tenant~~ ya está hecha.)
+
+#### ⬜ Verifactu para clientes — colaborador social  ·  TAREA ÚNICA, NO TROCEAR
+**A ejecutar cuando Ibrahin lo indique.** Se hace entera o no se empieza: media tarea deja registros
+fiscales a medio camino. Decisión que la fija: `docs/contexto/decisiones.md` (2026-07-10).
+
+> **Verifactu clientes = registro colaborador social + certificado único Bamburu + pantalla de
+> autorización de representación + activar + probar.**
+
+- **Modelo.** Bamburu se registra ante la AEAT como **envío autorizado** (convenio de colaboración social
+  para empresas de sistemas informáticos de facturación, **«Tipo 17»**) y remite los registros de **todos**
+  los negocios con **un único certificado propio**. **Ningún cliente instala certificado.**
+- **Autorización de representación.** Cada dueño la firma **dentro de Bamburu**, con el **modelo del Anexo II**
+  (Resolución 18-12-2024, BOE 31-12-2024); la AEAT admite capturarlo por formulario dentro del propio SaaS.
+  Debe quedar **guardada y ser acreditable ante la AEAT**: un "acepto los términos" **no basta**. Es pantalla
+  + persistencia, no un checkbox.
+- **El motor no se reescribe.** Cola, agrupación por obligado en un sobre, reintentos y encadenamiento se
+  reutilizan **tal cual**. Solo cambian (a) el certificado firmante y (b) el flujo de autorización.
+- **Requisito ya confirmado contra fuente oficial AEAT:** *un lote = un solo obligado tributario*, envíos
+  separados por negocio. **Ya cumplido** por la cola actual (una Cabecera por sobre).
+- **El alta es un trámite legal y externo, y solo lo puede iniciar Ibrahin.** Se hará con la plataforma al
+  100 %, antes del lanzamiento. **Sin urgencia:** envío voluntario hasta la obligación general del
+  **1 ene 2027**.
+
+- **Verifactu — lo que existe hoy es una PRUEBA DE CONCEPTO:** ✅ Fase A (motor SOAP+mTLS, dos registros
+  aceptados en preproducción) y ✅ cola de envío automático por negocio (2026-07-09), ambas con el
+  **certificado personal del dueño**. Demostraron que la tubería llega a la AEAT de punta a punta. **No son
+  el producto.** El `.p12` se borró del servidor tras el envío del 9-jul (regla de la Fase A) y el timer de
+  la cola sigue sin instalar; **ya no hace falta activar nada con el certificado personal** — la activación
+  real llega con el de Bamburu. Hoy vive solo el envío manual: `/admin/verifactu/envios` o
+  `scripts/verifactu-enviar-preproduccion.mjs`. Estado verificado en `docs/verifactu/estado-certificado.md`.
+- **Verifactu — ampliaciones técnicas pendientes:** envío de **anulaciones** (hoy solo altas), **subsanación**
+  del aviso 2004, validación XSD formal. *(La ~~Fase B legal~~ queda resuelta por la decisión del 2026-07-10:
+  el modelo de certificado ya está elegido — colaborador social, un único certificado de Bamburu. Queda solo
+  el trámite, dentro de la tarea única de arriba. La ~~cola + timer por tenant~~ ya está hecha.)*
 - **Facturae — motor de generación del XML ✅ HECHO (2026-07-08).** Ver `docs/facturae/investigacion.md`.
   - **Investigación** verificada en fuente oficial (XSD 3.2.2 descargado y parseado, política de firma v3.1
     extraída del PDF, WSDL de FACe descargado en vivo, BOE consolidado). Vigente: **Facturae 3.2.2**.

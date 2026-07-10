@@ -1,6 +1,7 @@
 # Estado del certificado digital — verificado el 2026-07-10
 
-> Registro de hechos, no de decisiones. Se escribe para que el dueño decida con datos delante.
+> Registro de hechos. Se escribió para que el dueño decidiera con datos delante — y **ese mismo día
+> decidió**: ver §"La decisión" al final, y `../contexto/decisiones.md`.
 > Todo lo de aquí se comprobó **en la máquina** ese día (BD, `/etc/bamburu.env`, systemd, disco),
 > no se copió de otro documento. El envío en sí está contado en `tarea2-fase-a-envio.md`.
 
@@ -57,16 +58,26 @@ igual desde fuera tanto si fue deliberado como si se olvidó.
   **dos certificados distintos**: el que firma la factura (el FNMT de persona física del dueño sirve)
   y el que autentica el webservice de FACe, que hay que dar de alta en su portal de proveedores.
 
-## La decisión abierta (la toma el dueño)
+## La decisión — TOMADA el 2026-07-10
 
-Activar el envío automático **exige** que el `.p12` viva permanentemente en el servidor y que su
-contraseña esté escrita en `/etc/bamburu.env`. Eso es exactamente lo contrario de lo que se hizo el
-día 9 a propósito. No es un trámite: es un cambio de postura de seguridad.
+La disyuntiva que planteaba este documento (dejar el `.p12` personal del dueño en el servidor para
+activar el automático, o seguir en manual) **queda superada**: no se va a resolver, se cambia de
+modelo. Verifactu para los clientes se hará como **colaborador social**, con **un único certificado de
+Bamburu** que remite por todos los negocios y una **autorización de representación** firmada por cada
+dueño dentro de la plataforma. Ningún cliente instala certificado. Decisión completa, con lo
+descartado, en `../contexto/decisiones.md`; la tarea, entera y sin trocear, en `TABLERO.md`.
 
-- **Seguir en manual** — el certificado solo existe mientras se usa, la contraseña se teclea sin eco,
-  nada queda en disco. Coste: alguien tiene que pulsar el botón, y ahí muerde la ventana de 240 s.
-- **Pasar a automático** — la cola agrupa y remite sola dentro de ventana. Coste: la identidad digital
-  del dueño reside en el servidor a tiempo completo.
+Consecuencias para lo que cuenta este documento:
 
-Mientras no se decida, hay dos cosas que se pueden hacer sin tocar la postura: **instalar el timer**
-(inocuo sin certificado) y **subsanar el 2004**.
+- **La cola del 9-jul es una prueba de concepto**, no el producto. Demostró que la tubería llega a la
+  AEAT de punta a punta con el certificado personal del dueño. El motor se reutiliza tal cual: solo
+  cambia el certificado firmante y se añade el flujo de autorización.
+- **No hay que activar nada con el `.p12` personal.** El certificado siguió y sigue fuera del servidor,
+  y la postura de seguridad de la Fase A no se toca. El envío manual queda como está.
+- **Sigue habiendo prisa cero.** El envío es voluntario hasta la obligación general del **1 ene 2027**,
+  y el alta como colaborador social es un trámite legal y externo que solo puede iniciar el dueño,
+  cuando la plataforma esté al 100 %.
+
+Lo que se puede hacer en cualquier momento, sin depender de nada de lo anterior: **subsanar el 2004**.
+Instalar el timer de la cola es inocuo (sin certificado no hace nada), pero ya no es un paso previo a
+activar: la activación real vendrá con el certificado de Bamburu.

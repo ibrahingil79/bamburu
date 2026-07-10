@@ -116,9 +116,16 @@ y pasa con el bueno. Cierra el "sin confirmar" de `tarea2-remision-aeat-investig
 - Falta de NIF en F1, desglose que no cuadra con los importes congelados, o productor sin configurar
   → `bloqueado_datos` con AVISO (no se envía).
 
-## Fase B (legal) — PENDIENTE, fuera de esta tarea
-- Colaboración social (Convenio tipo 17), declaración responsable (art. 13 RD 1007/2023), y la elección
-  de certificado (propio-por-todos vs. por-cliente con modelo del Anexo II). Ver
+## Fase B (legal) — el MODELO ya está decidido; queda el trámite
+> **Ojo al leer esta página:** lo de aquí abajo se remitió con el **certificado personal del dueño**. Es una
+> **prueba de concepto** — demostró que la tubería llega a la AEAT —, **no el producto**. Ver `estado-certificado.md`.
+
+- **DECIDIDO el 2026-07-10: colaborador social**, con **un único certificado de Bamburu** para todos los
+  negocios y una **autorización de representación** firmada por cada dueño dentro de la plataforma (el
+  **modelo del Anexo II**, capturado por formulario en el propio SaaS). **Descartado:** que cada negocio
+  aporte su propio certificado. Detalle y porqué en `../contexto/decisiones.md`.
+- Queda **el trámite**: alta como envío autorizado (Convenio tipo 17) y declaración responsable (art. 13 RD
+  1007/2023). Es legal y externo, **solo lo puede iniciar el dueño**. Contexto en
   `tarea2-remision-aeat-investigacion.md` §Certificados y multi-tenant.
 - Ampliaciones técnicas anotadas: envío de **anulaciones** (hoy solo altas) · **cola + timer por
   tenant** (ya no opcional: sin ella, todo envío llega fuera de los 240 s → `AceptadoConErrores`) ·

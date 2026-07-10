@@ -3,6 +3,14 @@
 > Encargo del dueño, a raíz del **hallazgo de los 240 s** de la Tarea 2 Fase A
 > (`tarea2-fase-a-envio.md`). Aditivo y reversible. No toca la huella, el QR ni el encadenado
 > (Tarea 1 sigue siendo inmutable). No envía anulaciones. No subsana el 2004.
+>
+> **⚠️ PRUEBA DE CONCEPTO — no es el producto final.** Todo lo que sigue está construido y probado con el
+> **certificado personal del dueño** (FNMT de persona física), un certificado por negocio. Sirvió para
+> demostrar que la tubería funciona de punta a punta contra la AEAT. **El producto para clientes es otro
+> modelo: colaborador social** — un único certificado de Bamburu remitiendo por todos los negocios, con una
+> autorización de representación firmada por cada dueño (decisión del **2026-07-10**, en
+> `../contexto/decisiones.md`). El motor de aquí **se reutiliza tal cual**; solo cambia el certificado
+> firmante y se añade el flujo de autorización.
 
 ## El problema
 
@@ -141,6 +149,8 @@ ni reintenta el `incorrecto` de `helados-ibrahin`.
 - **Subsanación** del 2004 con un alta `Subsanacion=S`.
 - **Fase B legal**: colaboración social (Convenio tipo 17), declaración responsable, elección de
   certificado (propio-por-todos vs. Anexo II por cliente).
+  **→ DECIDIDO el 2026-07-10: colaborador social con un único certificado de Bamburu.** Ver
+  `../contexto/decisiones.md`. Queda el trámite (legal, externo, solo lo inicia el dueño).
 - Bug latente de `verifactu-envio.js` (`prevRegistro` se elige por `id` sin filtrar por emisor).
 - `company_config.fiscal_id` vacío (`duniya`, `rachibra`, `inversiones-disan`) haría salir la Cabecera
   con `ObligadoEmision` vacío. Hoy es teórico: esos negocios no tienen certificado, así que su cola
