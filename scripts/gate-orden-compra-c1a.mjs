@@ -3,10 +3,11 @@
 // → imprimir (botón) → enviar email (proveedor con email) → anular → anular y
 // rehacer (referencia visible). Verifica además 0 stock_movements nuevos.
 import puppeteer from 'puppeteer';
+import { tenantDb, launchOpts } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 
-const DB_PATH = '/home/ibrahin/bamburu/data/tenants/desarrollo-bamburu.db';
+const DB_PATH = tenantDb('desarrollo-bamburu');
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
 const OWNER_EMAIL = 'ibrahingil@gmail.com';
 
@@ -24,7 +25,7 @@ db.prepare('UPDATE suppliers SET email=? WHERE id=1').run(OWNER_EMAIL);
 const movBefore = db.prepare('SELECT COUNT(*) c FROM stock_movements').get().c;
 const poBefore = db.prepare('SELECT COUNT(*) c FROM purchase_orders').get().c;
 
-const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
+const browser = await puppeteer.launch({ ...launchOpts() });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 900 });
 await page.setCookie({ name: 'asess', value: token, domain: 'desarrollo-bamburu.localhost', path: '/' });

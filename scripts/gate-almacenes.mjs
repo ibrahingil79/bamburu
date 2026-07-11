@@ -5,11 +5,12 @@
 // desglose "Stock por almacén" en la ficha. Las mutaciones se ejecutan llamando a
 // las funciones JS de la página (api real + CSRF + sesión). Limpia tras de sí.
 import puppeteer from 'puppeteer';
+import { tenantDb, launchOpts } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 import { recordMovement, recomputeStock } from '../modules/erp/stock.js';
 
-const DB_PATH = '/home/ibrahin/bamburu/data/tenants/desarrollo-bamburu.db';
+const DB_PATH = tenantDb('desarrollo-bamburu');
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
 const PRODUCT_ID = 1;            // Vela Lavanda 200g (física)
 const NORTE = 'Almacén Norte (gate)';
@@ -29,7 +30,7 @@ const whRow = (name) => { const d = dbRead(); const r = d.prepare('SELECT * FROM
 const whById = (id) => { const d = dbRead(); const r = d.prepare('SELECT * FROM warehouses WHERE id=?').get(id); d.close(); return r; };
 const defCount = () => { const d = dbRead(); const r = d.prepare('SELECT COUNT(*) c FROM warehouses WHERE active=1 AND is_default=1').get().c; d.close(); return r; };
 
-const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
+const browser = await puppeteer.launch({ ...launchOpts() });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 950 });
 await page.setCookie({ name: 'asess', value: token, domain: 'desarrollo-bamburu.localhost', path: '/' });

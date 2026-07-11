@@ -4,10 +4,11 @@
 // Verifica el cuadre del libro y que el WAC no se corrompe. Limpia tras de sí.
 // OJO: crea una compra y una devolución de prueba en el tenant de desarrollo.
 import puppeteer from 'puppeteer';
+import { tenantDb, launchOpts } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 
-const DB_PATH = '/home/ibrahin/bamburu/data/tenants/desarrollo-bamburu.db';
+const DB_PATH = tenantDb('desarrollo-bamburu');
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
 const PRODUCT_ID = 1;   // Vela Lavanda 200g (física)
 const SUPPLIER_ID = 1;
@@ -36,7 +37,7 @@ const before = db.prepare('SELECT stock, average_cost FROM products WHERE id=?')
 const HJ = { 'Cookie': 'asess=' + token, 'Content-Type': 'application/json', 'x-csrf-token': csrf };
 const post = async (u, body) => (await fetch(BASE + u, { method: 'POST', headers: HJ, body: JSON.stringify(body || {}) })).json();
 
-const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
+const browser = await puppeteer.launch({ ...launchOpts() });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 950 });
 await page.setCookie({ name: 'asess', value: token, domain: 'desarrollo-bamburu.localhost', path: '/' });

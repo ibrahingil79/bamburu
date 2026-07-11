@@ -5,11 +5,12 @@
 // la cuenta del proveedor (3er sitio). Verifica los 3 sitios del modal compartido, el
 // vencimiento y el estado en vivo. Limpia tras de sí (anula la factura, cancela la compra).
 import puppeteer from 'puppeteer';
+import { tenantDb, launchOpts } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 import { recomputeStock } from '../modules/erp/stock.js';
 
-const DB_PATH = '/home/ibrahin/bamburu/data/tenants/desarrollo-bamburu.db';
+const DB_PATH = tenantDb('desarrollo-bamburu');
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
 const PRODUCT_ID = 1;
 const SUPPLIER_ID = 1;
@@ -28,7 +29,7 @@ const HJ = { 'Cookie': 'asess=' + token, 'Content-Type': 'application/json', 'x-
 const post = async (u, body) => (await fetch(BASE + u, { method: 'POST', headers: HJ, body: JSON.stringify(body || {}) })).json();
 const addDays = (iso, n) => new Date(Date.parse(iso + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
 
-const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
+const browser = await puppeteer.launch({ ...launchOpts() });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 950 });
 await page.setCookie({ name: 'asess', value: token, domain: 'desarrollo-bamburu.localhost', path: '/' });

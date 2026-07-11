@@ -12,10 +12,11 @@
 // Genera dos órdenes/compra de prueba en el tenant de desarrollo y deja productos nuevos.
 //   node scripts/gate-c2-captura.mjs
 import puppeteer from 'puppeteer';
+import { tenantDb, launchOpts } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 
-const DB_PATH = '/home/ibrahin/bamburu/data/tenants/desarrollo-bamburu.db';
+const DB_PATH = tenantDb('desarrollo-bamburu');
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
 const DOMAIN = 'desarrollo-bamburu.localhost';
 
@@ -65,7 +66,7 @@ function invoiceHtml() {
   </body></html>`;
 }
 
-const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
+const browser = await puppeteer.launch({ ...launchOpts() });
 
 async function makeAssets() {
   const p = await browser.newPage();

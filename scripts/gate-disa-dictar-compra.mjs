@@ -17,11 +17,12 @@
 //
 //   node scripts/gate-disa-dictar-compra.mjs
 import puppeteer from 'puppeteer';
+import { tenantDb, launchOpts } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 import { captureFromExtraction } from '../modules/erp/routes/purchases-capture.js';
 
-const DB_PATH = '/home/ibrahin/bamburu/data/tenants/desarrollo-bamburu.db';
+const DB_PATH = tenantDb('desarrollo-bamburu');
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
 const DOMAIN = 'desarrollo-bamburu.localhost';
 
@@ -46,7 +47,7 @@ function voiceAttachment(extracted) {
   return r.attachment_id;
 }
 
-const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
+const browser = await puppeteer.launch({ ...launchOpts() });
 async function newAdminPage() {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 1000 });

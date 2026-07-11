@@ -5,11 +5,12 @@
 // neteado, registrar reembolso, guarda de anular con reembolso, anular devolución → la deuda
 // vuelve. Limpia tras de sí (borra todo el dato de prueba y recompone el stock).
 import puppeteer from 'puppeteer';
+import { tenantDb, launchOpts } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 import { recomputeStock } from '../modules/erp/stock.js';
 
-const DB_PATH = '/home/ibrahin/bamburu/data/tenants/desarrollo-bamburu.db';
+const DB_PATH = tenantDb('desarrollo-bamburu');
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
 const SUPPLIER_ID = 1, PRODUCT_ID = 1;   // Aromas del Sur SL · Vela Lavanda (física, IVA 21)
 
@@ -24,7 +25,7 @@ const H = { 'Cookie': 'asess=' + token, 'Content-Type': 'application/json', 'x-c
 const apiJ = async (m, u, b) => { const r = await fetch(BASE + u, { method: m, headers: H, body: b ? JSON.stringify(b) : undefined }); return { status: r.status, body: await r.json().catch(() => null) }; };
 const debtTotal = () => db.prepare("SELECT COALESCE(SUM(total - (SELECT COALESCE(SUM(amount),0) FROM supplier_payments WHERE supplier_invoice_id=si.id)),0) t FROM supplier_invoices si WHERE supplier_id=? AND status='vigente'").get(SUPPLIER_ID).t;
 
-const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
+const browser = await puppeteer.launch({ ...launchOpts() });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 1000 });
 await page.setCookie({ name: 'asess', value: token, domain: 'desarrollo-bamburu.localhost', path: '/' });

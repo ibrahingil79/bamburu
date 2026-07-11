@@ -264,6 +264,34 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
       60 s; que DISA proponga desde la propia campana. Es el resto del diseño de D5.
 - **Lo que queda del Eje B es diseñar/construir MÁS proactividad** (D5, siguientes piezas). No sin encargo.
 
+## Verificación (transversal)
+
+- ✅ **HECHO (11 jul 2026) — RESUCITADOS LOS GATES DE NAVEGADOR MUERTOS + runner de regresión.**
+  **14** gates guardaban la ruta de la BD a mano (`/home/ibrahin/bamburu/...`); al migrar el servidor a
+  `/home/ubuntu` (~19 jun) murieron TODOS y llevaban **tres semanas sin probar nada**. Además, el
+  Chromium que trae puppeteer no arranca en este ARM. **Arreglo:** `scripts/lib/gate-env.mjs` resuelve
+  la ruta desde la ubicación del script (nunca a mano) y **aborta con código 2** si falta la BD o el
+  Chromium — un gate que no arranca ya no puede disfrazarse de aprobado.
+  **`scripts/run-gates.mjs`** (nuevo): el barrido que faltaba. Manda el **código de salida**, no lo que
+  el gate imprima; un gate que sale 0 sin resumen es SOSPECHOSO y cuenta como fallo; un gate pedido que
+  no existe es error; e imprime SIEMPRE la deuda. Grupos: `pagos`, `disa`, `inventario`, `avisos`, `--all`.
+  **Resultado real: 23/23 en verde**, con la regresión de Pagos en navegador cubriendo otra vez
+  (`gate-pagos-proveedor` 15, `gate-pago-cuenta` 12, `gate-abono-proveedor` 16, `gate-gasto-proveedor` 18,
+  `gate-c1c-diferencias-cierre` 20, `gate-disa-dictar-compra` 20). **Ningún bug de producto salió del
+  falso verde.**
+- 🔵 **PENDIENTE — 7 gates de navegador CADUCADOS o ROTOS (deuda de verificación).** Corren, pero sus
+  aserciones ya no describen el producto. **No son bugs**; el runner los lista en cada pasada y esas
+  pantallas NO están cubiertas en navegador mientras tanto:
+  - `gate-recepciones-c1b` y `gate-devoluciones-proveedor` — anulan una recepción/compra del producto 1,
+    que HOY tiene traslados activos: el motor lo bloquea (409) **y hace bien** (la regla de multi-almacén
+    es posterior al gate). El motor está verde en `test-recepciones-c1b` (48) y `test-devoluciones-proveedor` (48).
+  - `gate-orden-compra-c1a` — espera un `alert()`; la UI ya usa `toast()`. Y **manda un email real** en cada pasada.
+  - `gate-almacenes` — **no es idempotente**: crea un almacén nuevo cada pasada y no lo limpia; sus fallos
+    cambian de una vez a otra. Correrlo ensucia el tenant.
+  - `gate-c2-captura` (selector `#step2` que ya no existe), `gate-disa-captura-chat` (la respuesta del chat
+    cambió de forma), `gate-registro-tailscale` (necesita un entorno que este servidor no tiene).
+  - Aparte, `gate-pago-voz-avisos` llama al **modelo real**: no entra en el barrido (como `verify-disa-pedidos-modelo-real`).
+
 ## Eje C: Seguridad (pendiente de planificar)
 
 ---

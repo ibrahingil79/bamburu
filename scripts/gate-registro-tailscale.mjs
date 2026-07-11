@@ -6,6 +6,7 @@
 import path from 'path';
 import { unlinkSync } from 'fs';
 import puppeteer from 'puppeteer';
+import { launchOpts } from './lib/gate-env.mjs';
 import { controlDb, getTenantBySlug, getTenantByEmail } from '../core/control-db.js';
 
 const TS_BASE = 'https://desarrollo-bamburu.tailf66357.ts.net';
@@ -28,7 +29,7 @@ function cleanup(slug) {
   }
 }
 
-const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'], ignoreHTTPSErrors: true });
+const browser = await puppeteer.launch({ ...launchOpts(), ignoreHTTPSErrors: true });
 let createdSlug = null;
 try {
   const page = await browser.newPage();

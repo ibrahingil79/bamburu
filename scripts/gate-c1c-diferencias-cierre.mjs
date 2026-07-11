@@ -5,10 +5,11 @@
 //      línea de ayuda → intento de nueva recepción bloqueado (400 y sin botón).
 // OJO: crea dos órdenes de prueba en el tenant de desarrollo.
 import puppeteer from 'puppeteer';
+import { tenantDb, launchOpts } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 
-const DB_PATH = '/home/ibrahin/bamburu/data/tenants/desarrollo-bamburu.db';
+const DB_PATH = tenantDb('desarrollo-bamburu');
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
 
 let pass = 0, fail = 0;
@@ -22,7 +23,7 @@ db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf
 const PRODUCT_ID = 2;   // Vela Vainilla 200g (física)
 const stockBefore = db.prepare('SELECT stock FROM products WHERE id=?').get(PRODUCT_ID).stock;
 
-const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
+const browser = await puppeteer.launch({ ...launchOpts() });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 950 });
 await page.setCookie({ name: 'asess', value: token, domain: 'desarrollo-bamburu.localhost', path: '/' });

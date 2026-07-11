@@ -5,10 +5,11 @@
 // a cuenta" en la ficha del proveedor; el modal reparte por antigüedad y "Le debes X" baja.
 // Crea su propio proveedor + 3 facturas + 1 abono y LIMPIA todo al final.
 import puppeteer from 'puppeteer';
+import { tenantDb, launchOpts } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 
-const DB_PATH = '/home/ibrahin/bamburu/data/tenants/desarrollo-bamburu.db';
+const DB_PATH = tenantDb('desarrollo-bamburu');
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
 
 let pass = 0, fail = 0;
@@ -32,7 +33,7 @@ function addInv(sid, total, due, neg = false) {
     .run(sid, (neg ? 'ABP-T' : 'FRP-T') + seq, 'CT' + seq, '2026-01-10', due, total, 0, total, SUP_NAME, neg ? 'supplier_return' : null, neg ? seq : null).lastInsertRowid;
 }
 
-const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
+const browser = await puppeteer.launch({ ...launchOpts() });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 1000 });
 await page.setCookie({ name: 'asess', value: token, domain: 'desarrollo-bamburu.localhost', path: '/' });

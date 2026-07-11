@@ -7,10 +7,11 @@
 //   3. "¿Qué requiere mi atención?" → DISA menciona los vencimientos del proveedor de prueba.
 // Crea su propio proveedor + 2 facturas vencidas y LIMPIA todo al final (sin rastro).
 import puppeteer from 'puppeteer';
+import { tenantDb, launchOpts } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 
-const DB_PATH = '/home/ibrahin/bamburu/data/tenants/desarrollo-bamburu.db';
+const DB_PATH = tenantDb('desarrollo-bamburu');
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
 const TODAY = new Date().toISOString().slice(0, 10);
 
@@ -36,7 +37,7 @@ function addInvoice(sid, total, due) {
     .run(sid, 'FRP-T' + seq, 'TV' + seq, '2026-01-10', due, total, 0, total, SUP_NAME).lastInsertRowid;
 }
 
-const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
+const browser = await puppeteer.launch({ ...launchOpts() });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 1000 });
 await page.setCookie({ name: 'asess', value: token, domain: 'desarrollo-bamburu.localhost', path: '/' });

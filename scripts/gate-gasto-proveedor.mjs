@@ -4,10 +4,11 @@
 // exenta 0) → total con IVA por tipo → ficha con líneas/categoría → "Debes X" en Pagos →
 // pago parcial → anular. Limpia tras de sí (la factura no tiene origen de stock).
 import puppeteer from 'puppeteer';
+import { tenantDb, launchOpts } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 
-const DB_PATH = '/home/ibrahin/bamburu/data/tenants/desarrollo-bamburu.db';
+const DB_PATH = tenantDb('desarrollo-bamburu');
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
 const SUPPLIER_NAME = 'Aromas';   // existe en el tenant (Aromas del Sur SL)
 
@@ -19,7 +20,7 @@ const token = randomBytes(32).toString('base64url'), csrf = randomBytes(32).toSt
 const now = Math.floor(Date.now() / 1000);
 db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)').run(token, 2, now, now + 900, csrf);
 
-const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
+const browser = await puppeteer.launch({ ...launchOpts() });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 1000 });
 await page.setCookie({ name: 'asess', value: token, domain: 'desarrollo-bamburu.localhost', path: '/' });
