@@ -174,6 +174,12 @@ console.log('\n🚧 DEUDA — ' + Object.keys(DEUDA).length + ' gates de navegad
 for (const [g, motivo] of Object.entries(DEUDA)) console.log('  · ' + g + '\n      ' + motivo);
 console.log('  → Mientras sigan aquí, ESTAS PANTALLAS NO ESTÁN CUBIERTAS EN NAVEGADOR. Arreglarlos es tarea aparte.');
 
+// Los gates de compras crean documentos en la BD viva y, al limpiar, borran el documento pero NO su
+// asiento contable. Cada barrido deja residuo: hay que barrer detrás.
+console.log('\n🧹 Este barrido ha dejado documentos de prueba en el tenant. Para retirarlos:');
+console.log('     node scripts/limpiar-residuo-gates.mjs           (en seco: dice qué borraría)');
+console.log('     node scripts/limpiar-residuo-gates.mjs --hazlo   (borra y recalcula el stock)');
+
 const pasa = resultados.filter(r => r.estado === 'PASA').length;
 console.log('\n' + '═'.repeat(70));
 console.log(`${pasa}/${resultados.length} pasan` + (malos.length ? `  ·  ${malos.length} NO: ` + malos.map(r => r.gate).join(', ') : ''));
