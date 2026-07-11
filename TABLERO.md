@@ -292,6 +292,32 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
     cambió de forma), `gate-registro-tailscale` (necesita un entorno que este servidor no tiene).
   - Aparte, `gate-pago-voz-avisos` llama al **modelo real**: no entra en el barrido (como `verify-disa-pedidos-modelo-real`).
 
+## Sala de máquinas (servidor / BD)
+
+- ✅ **HECHO (11 jul 2026) — cerrados los 3 hallazgos del diagnóstico del 10 jul.**
+  1. **Superadmin ya no escribe por una conexión propia.** `setTenantAiCap` abría su `new Database()`
+     de escritura a la `.db` del negocio, fuera de la caché. Dos escritores contra el mismo fichero
+     SQLite se serializan: una escritura atascada dejaba al negocio esperando (`busy_timeout` 5 s).
+     Ahora escribe por `getTenantDb()` — **la misma conexión cacheada que usa el panel del negocio**.
+     Las demás aperturas de superadmin son `readonly: true` (un lector no compite por el bloqueo).
+     `arquitectura.md` decía "solo lectura" y era falso: corregido, ahora nombra la excepción.
+     Gate nuevo `verify-superadmin-escrituras` (10/0): se pone rojo si alguien reintroduce una
+     escritura fuera de la caché. Probado además por HTTP real (tope 5,00 € → 12,50 €).
+  2. **`data/bamburu.db` (327 KB) borrado.** El grep encontró una referencia —`init-staging.mjs` lo
+     usaba de `db_filename`— pero **ningún tenant apuntaba ahí** y el fichero era una BD de semilla
+     del 19-jun jamás usada (1 usuario, 0 clientes, 0 facturas, esquema viejo con `sales_orders`).
+     Borrado con respaldo. `init-staging.mjs` corregido a `data/tenants/staging.db` (la convención),
+     para que el huérfano no pueda volver a nacer.
+  3. **El WAL, acotado — y el diagnóstico estaba EQUIVOCADO en este punto.** No era que "no hiciera
+     checkpoint": un `wal_checkpoint(PASSIVE)` a mano devolvía `busy=0` y copiaba TODAS las páginas.
+     Los 4,1 MB eran exactamente el umbral de `wal_autocheckpoint` (1000 páginas × 4096 B). Lo que
+     pasa es que SQLite **no encoge el fichero** tras un checkpoint: lo reutiliza en el sitio y se
+     queda en su marca máxima. El arreglo no es un cron, es **`journal_size_limit = 4 MiB`**
+     (`WAL_SIZE_LIMIT`), puesto en `core/control-db.js` y en la caché de `tenant-middleware`. Gate
+     nuevo `verify-wal-acotado` (9/0), A/B con la misma carga sobre dos copias: **sin tope deja
+     12,74 MB, con tope 4,00 MB**. Tras la regresión completa, ningún `-wal` vivo pasa de 4 MiB.
+  - Regresión completa **26/26**. Grupo nuevo del runner: `node scripts/run-gates.mjs infra`.
+
 ## Eje C: Seguridad (pendiente de planificar)
 
 ---

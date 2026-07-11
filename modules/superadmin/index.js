@@ -1,13 +1,17 @@
 // Panel de SUPERADMIN — sala de máquinas de la plataforma (solo Ibrahin).
 // Se monta ANTES del tenant-middleware y SOLO en el apex (en un subdominio de negocio → 404).
-// Lee control.db + las .db de cada tenant en SOLO LECTURA; las únicas escrituras a una .db de
-// tenant son las acciones de control de la zona Negocios (tope de IA, suspender, reactivar).
+//
+// Lee control.db y las .db de cada tenant en SOLO LECTURA. La ÚNICA excepción es el tope de IA
+// (setTenantAiCap), que escribe en la .db del negocio — y lo hace por la CONEXIÓN CACHEADA de
+// tenant-middleware, la misma que usa el panel de ese negocio, nunca por una conexión propia.
+// (Suspender/reactivar un negocio escribe en control.db, no en la .db del tenant.)
 import { Hono } from 'hono';
 import Database from 'better-sqlite3';
 import path from 'path';
 import { escHtml } from '../../core/escape.js';
 import { hashPassword, verifyPassword } from '../../core/auth.js';
 import { rateLimit } from '../../core/rate-limit.js';
+import { getTenantDb } from '../../core/tenant-middleware.js';   // la caché de conexiones de la app
 import { saLayout } from './layout.js';
 import { mountSalud } from './salud.js';
 import { mountBackups } from './backups.js';
@@ -39,12 +43,18 @@ function tenantAiInfo(t) {
 }
 
 // Acción de control SANCIONADA: fija el tope de IA en la .db del tenant.
+//
+// Escribe por la CONEXIÓN CACHEADA de tenant-middleware (getTenantDb), la misma que usa el panel de
+// ese negocio, en vez de abrir una segunda conexión de escritura propia. Abrir la suya era el patrón
+// que el diagnóstico de carga marcó como riesgo: dos escritores contra el mismo fichero SQLite se
+// serializan, y si esta escritura se atasca, deja al negocio esperando (busy_timeout: 5 s).
+// Ahora esta escritura hace exactamente la misma cola que cualquier otra del panel — ni más, ni menos.
+//
+// getTenantDb() ya corre runMigrations, que crea platform_limits: por eso aquí no hace falta
+// CREATE TABLE. Y NO se cierra la conexión: la caché es su dueña y la comparte con el resto de la app.
 function setTenantAiCap(t, capEur) {
-  const db = new Database(tenantAbs(t));
-  try {
-    db.exec('CREATE TABLE IF NOT EXISTS platform_limits (key TEXT PRIMARY KEY, value REAL)');
-    db.prepare("INSERT INTO platform_limits (key,value) VALUES ('ai_cap_eur',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(capEur);
-  } finally { db.close(); }
+  const db = getTenantDb(t);
+  db.prepare("INSERT INTO platform_limits (key,value) VALUES ('ai_cap_eur',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(capEur);
 }
 
 const eur = (n) => Number(n || 0).toFixed(2).replace('.', ',') + ' €';

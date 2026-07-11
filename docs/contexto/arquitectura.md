@@ -13,6 +13,8 @@
 - **`data/control.db`** — enrutado de tenants + sesiones de superadmin + topes de plataforma + log de errores.
 - **`data/tenants/<slug>.db`** — una BD por negocio; **toda la lógica de negocio y `admin_users` viven aquí**, no en control.db.
 - Resolución de tenant por **subdominio** (`<slug>.bamburu.com`) o cookie `btenant` (dev/login). `core/tenant-middleware.js` resuelve la BD y aplica `readOnlyGuard` según el estado del negocio.
+- **UNA sola conexión de escritura por BD.** Las conexiones viven en la caché de `core/tenant-middleware.js` (`getTenantDb`, un `Map` slug → `Database`). **Toda escritura pasa por ahí**, incluidas las del superadmin: abrir una segunda conexión de escritura al mismo fichero SQLite las serializa entre sí, y una escritura atascada deja al negocio esperando (`busy_timeout` 5 s). Leer sí se puede con conexiones propias en `readonly: true` — un lector no compite por el bloqueo de escritura. Gate: `verify-superadmin-escrituras.mjs`.
+- **WAL:** todas las conexiones de la app se abren con `journal_mode = WAL` y **`journal_size_limit = 4 MiB`** (`WAL_SIZE_LIMIT`, en `core/control-db.js`). Sin ese tope, el fichero `-wal` **nunca se encoge**: se reutiliza en el sitio y se queda para siempre en su marca máxima. Con él, se devuelve al disco. Ojo: **`journal_size_limit` es POR CONEXIÓN, no se guarda en el fichero** — abrir la BD con la consola `sqlite3` enseña `-1`, y eso es normal. Gate: `verify-wal-acotado.mjs`.
 
 ## Mapa de carpetas
 - **`index.js`** — arranque: middlewares globales (security headers, rate limit), landing pública, monta módulos vía `core/loader.js` (orden: `erp` → `store` → `disa`). Cada módulo exporta `register(app, db)`.
@@ -20,7 +22,7 @@
 - **`modules/erp/`** — el panel `/admin`. Motores en la raíz (`cobros.js`, `pagos.js`, `stock.js`, `verifactu.js`, `avisos.js`, `codes.js`, `attachments.js`, `schemas.js`, `models.js`, `ventas-metrics.js`, `layout.js`); endpoints en **`routes/`**; vistas/componentes en **`views/`**.
 - **`modules/disa/`** — la IA (`index.js` con tool_use + contexto de negocio; `widget.js` flotante).
 - **`modules/registro/`** — alta/onboarding de tenants.
-- **`modules/superadmin/`** — panel del dueño en el apex (`/superadmin`), 7 zonas, lee todo en **solo lectura**.
+- **`modules/superadmin/`** — panel del dueño en el apex (`/superadmin`), 7 zonas. Lee las `.db` de los negocios en **solo lectura**, con **una excepción**: el **tope de IA** (`setTenantAiCap`) escribe en `platform_limits` de la `.db` del negocio. Esa escritura va por la **conexión cacheada de `tenant-middleware`** (`getTenantDb`), la misma que usa el panel de ese negocio — nunca por una conexión propia, que se serializaría contra la del negocio y podría dejarlo esperando. Suspender/reactivar un negocio escribe en `control.db`, no en su `.db`.
 - **`modules/store/`** — tienda pública. **Congelada (Capa 2), no se trabaja.**
 - **`scripts/`** — tests, gates y verificadores (ver convenciones.md).
 - **`public/`** — estáticos. **`docs/`** — documentación (incluye este `docs/contexto/`).

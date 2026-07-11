@@ -44,6 +44,8 @@ const GRUPOS = {
   ],
   inventario: ['test-transfers', 'verify-traslado-auditoria'],
   avisos: ['verify-avisos-permisos', 'gate-avisos-badge'],
+  // Sala de máquinas: superadmin, conexiones a la BD y el fichero -wal.
+  infra: ['verify-superadmin-escrituras', 'verify-wal-acotado'],
 };
 
 // ── Gates que NO entran en el barrido, y POR QUÉ ────────────────────────────────────────────────

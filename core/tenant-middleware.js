@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { getTenantBySlug, getSessionByToken } from './control-db.js';
+import { getTenantBySlug, getSessionByToken, WAL_SIZE_LIMIT } from './control-db.js';
 import { tenantStorage } from './db.js';
 import { runMigrations } from '../modules/erp/models.js';
 
@@ -14,6 +14,9 @@ export function getTenantDb(tenant) {
     tenantDb = new Database(tenant.db_filename);
     tenantDb.pragma('journal_mode = WAL');
     tenantDb.pragma('foreign_keys = ON');
+    // Que el fichero -wal se devuelva al disco al terminar cada checkpoint, en vez de quedarse para
+    // siempre en su marca máxima. Mismo tope que control.db (ver WAL_SIZE_LIMIT).
+    tenantDb.pragma(`journal_size_limit = ${WAL_SIZE_LIMIT}`);
     // De qué negocio es esta conexión. La cola de envío a la AEAT lo necesita para resolver el
     // certificado del obligado (cada negocio remite con el suyo) sin arrastrar el slug por la firma
     // de media docena de funciones de facturación. Ausente = no hay tenant resuelto (scripts, tests)

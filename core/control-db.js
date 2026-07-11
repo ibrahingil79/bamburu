@@ -2,12 +2,27 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { randomBytes } from 'crypto';
 
+// Tope al que SQLite TRUNCA el fichero -wal después de cada checkpoint. Sin esto
+// (`journal_size_limit = -1`, el defecto), el WAL nunca se encoge: se resetea por dentro y se
+// REUTILIZA en el sitio, así que el fichero se queda para siempre en su marca máxima.
+//
+// El diagnóstico del 10-jul leyó eso como "el WAL crece sin límite y no hace checkpoint". No era
+// verdad: el checkpoint SÍ corría (un PASSIVE a mano devolvía busy=0 y copiaba todas las páginas), y
+// los 4,1 MB no eran descontrol sino exactamente el umbral de `wal_autocheckpoint` (1000 páginas ×
+// 4096 B). Lo que faltaba era esto: que el fichero se TRUNQUE al terminar.
+//
+// Importa de verdad ante un imprevisto: si algún día una lectura larga bloquea los checkpoints, el
+// WAL se hincha — y sin este tope, ese tamaño se queda como marca máxima PARA SIEMPRE. Con él, en
+// cuanto el checkpoint vuelve a correr, el espacio se devuelve al disco.
+export const WAL_SIZE_LIMIT = 4 * 1024 * 1024;   // 4 MiB
+
 // BD central de control: registra todos los tenants y sus sesiones.
 // Es independiente de las BDs individuales de cada negocio.
 const CONTROL_DB_PATH = path.join(process.cwd(), 'data', 'control.db');
 export const controlDb = new Database(CONTROL_DB_PATH);
 controlDb.pragma('journal_mode = WAL');
 controlDb.pragma('foreign_keys = ON');
+controlDb.pragma(`journal_size_limit = ${WAL_SIZE_LIMIT}`);
 
 // ---------------------------------------------------------------------------
 // Migraciones — idempotentes (IF NOT EXISTS)

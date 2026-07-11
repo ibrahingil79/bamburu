@@ -11,6 +11,12 @@
 - **El Chrome que trae Puppeteer es x86-64**; el host es ARM64 → solo funciona **`/snap/bin/chromium`** (`executablePath`).
 - **El snap de Chromium falla bajo systemd con `NoNewPrivileges=true`** → la unit usa `NoNewPrivileges=false` (infra, fuera de git).
 
+## SQLite: WAL y conexiones
+- **El fichero `-wal` NO se encoge solo tras un checkpoint.** SQLite lo resetea por dentro y lo **reutiliza en el sitio**: el fichero se queda para siempre en su marca máxima. Un `-wal` de 4,1 MB junto a una BD de 184 KB **no significa** que el checkpoint esté roto — 4,1 MB es justo el umbral de `wal_autocheckpoint` (1000 páginas × 4096 B). *Antes de dar por hecho que un WAL "no hace checkpoint", ejecútalo:* `PRAGMA wal_checkpoint(PASSIVE)` devuelve `busy|log|checkpointed` — si `busy=0` y `checkpointed == log`, el checkpoint funciona perfectamente y el diagnóstico es otro. (El diagnóstico del 10-jul-2026 se equivocó justo aquí.)
+- **El arreglo es `journal_size_limit`**, no un cron de checkpoints. Con él, el `-wal` se **trunca** al tope tras cada reinicio del WAL. Importa el día que una lectura larga bloquee los checkpoints: sin tope, el WAL hinchado se queda grande **para siempre**; con tope, el espacio vuelve.
+- ⚠️ **`journal_size_limit` NO se aplica en el checkpoint, sino en la PRIMERA ESCRITURA posterior** (que es cuando el WAL se reinicia). Si mides el fichero justo después del checkpoint lo verás igual de grande y creerás que el arreglo no sirve. Secuencia correcta para comprobarlo: *checkpoint → una escritura → medir.*
+- ⚠️ **`journal_size_limit` es POR CONEXIÓN, no se guarda en el fichero.** Abrir la BD con la consola `sqlite3` y ver `-1` es NORMAL: esa es una conexión nueva. Hay que ponerlo en cada conexión que escriba (lo hacen `core/control-db.js` y `core/tenant-middleware.js`).
+
 ## Migraciones / BD
 - **Migración lazy:** una columna nueva no existe en la `.db` viva hasta que **una request a ese tenant** dispara `runMigrations`. En pruebas, "calentar" el tenant con un `curl` (cookie `btenant`) antes de leer el archivo.
 - **better-sqlite3 version mismatch:** reconstruir con `PYTHON=/usr/bin/python3.11 npm rebuild better-sqlite3` desde la raíz.
