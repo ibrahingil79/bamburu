@@ -77,6 +77,10 @@ export function runMigrations(db) {
   addCol(db, 'company_config', 'irpf_default',    'REAL DEFAULT 0');
   // D5 — días tras el vencimiento a partir de los cuales DISA propone un recordatorio de impago.
   addCol(db, 'company_config', 'dias_recordatorio_impago', 'INTEGER DEFAULT 7');
+  // D5b — días ANTES del vencimiento a partir de los cuales DISA propone registrar el pago a un
+  // proveedor. Hermano del anterior, invertido en el tiempo: aquel mira hacia atrás (ya vencido),
+  // este hacia delante (está a punto de vencer). Mismo defecto (7) y mismo sitio en Ajustes.
+  addCol(db, 'company_config', 'dias_aviso_pago', 'INTEGER DEFAULT 7');
 
   // Store settings
   db.exec(`CREATE TABLE IF NOT EXISTS store_settings (
@@ -1597,6 +1601,18 @@ export function runMigrations(db) {
   // IDEMPOTENCIA ESTRICTA: una sola propuesta por (factura, tipo) para SIEMPRE, sea cual sea su
   // estado. Así una descartada NO se vuelve a proponer, y el generador no duplica (INSERT OR IGNORE).
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_disa_proposals_invoice_type ON disa_proposals(invoice_id, type)`);
+
+  // D5b — PROPUESTA DE PAGO A PROVEEDOR POR VENCER. La propuesta apunta a una factura RECIBIDA
+  // (supplier_invoices), que es OTRO espacio de ids que las de venta (invoices): la factura de venta
+  // nº 7 y la recibida nº 7 no tienen nada que ver. Por eso NO se reutiliza invoice_id — se añaden
+  // columnas propias (aditivo, sin DROP). Si se sobrecargara invoice_id, propuestasPendientes(), que
+  // hace LEFT JOIN invoices ON i.id = p.invoice_id, uniría la propuesta a una factura de venta ajena.
+  addCol(db, 'disa_proposals', 'supplier_invoice_id', 'INTEGER');
+  addCol(db, 'disa_proposals', 'supplier_id', 'INTEGER');
+  // Misma idempotencia estricta que arriba, para el lado proveedor. Los dos índices conviven sin
+  // chocar: en SQLite los NULL de un índice único se consideran todos distintos entre sí, así que
+  // las filas de impago (supplier_invoice_id NULL) no compiten entre ellas, ni las de pago (invoice_id NULL).
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_disa_proposals_supplier_invoice_type ON disa_proposals(supplier_invoice_id, type)`);
 
   // T4 Paso 2.1 — gestión a nivel de CUENTA. Un cobro/recordatorio/promesa de cuenta se
   // materializa en varias filas (un invoice_payment o un collection_action por factura viva).

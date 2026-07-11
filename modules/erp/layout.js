@@ -1,6 +1,6 @@
 import { getDisaWidget } from '../disa/widget.js';
 import { estadoAvisos, hoyLocal, PERM_POR_FUENTE } from './avisos.js';
-import { contarPropuestasPendientes } from './propuestas.js';   // D5 — badge de Propuestas de DISA
+import { contarPropuestasPendientes, TIPO_IMPAGO, TIPO_PAGO } from './propuestas.js';   // D5 — badge de Propuestas de DISA
 
 export const ROOT_TOKENS = `
     :root{
@@ -257,13 +257,19 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       avisos = { count: est.count || 0, sinVer: (est.nuevos || []).length, estado: est.estado };
     }
   } catch { avisos = { count: 0, sinVer: 0, estado: 'apagado' }; }
-  // D5 — Propuestas de DISA pendientes, para el badge del topbar. Solo se cuentan si este usuario
-  // PUEDE ver las propuestas (invoices.read o cobros.read; owner/admin bypass) — mismo criterio que
-  // las cifras de ventas. Un COUNT barato; si falla, 0 (nunca rompe el chrome).
+  // D5 — Propuestas de DISA pendientes, para el badge del topbar. Cada TIPO se cuenta solo si el
+  // usuario puede ver ESE tipo (mismo permiso que su pantalla de origen; owner/admin bypass):
+  //   · recordatorio_impago → invoices.read o cobros.read (como las cifras de ventas).
+  //   · pago_por_vencer     → purchases.read (como /admin/pagos).
+  // Así el badge nunca delata la existencia de propuestas que el usuario no puede abrir.
+  // Un COUNT barato; si falla, 0 (nunca rompe el chrome).
   let propuestasPend = 0;
   try {
     const _db = c?.get?.('db');
-    if (_db && (can(c, 'invoices.read') || can(c, 'cobros.read'))) propuestasPend = contarPropuestasPendientes(_db);
+    const tipos = [];
+    if (can(c, 'invoices.read') || can(c, 'cobros.read')) tipos.push(TIPO_IMPAGO);
+    if (can(c, 'purchases.read')) tipos.push(TIPO_PAGO);
+    if (_db && tipos.length) propuestasPend = contarPropuestasPendientes(_db, tipos);
   } catch { propuestasPend = 0; }
   // El título tiene que decir EXACTAMENTE lo mismo que dirá `bellSync` en el primer refresco, o el
   // número da un salto en cuanto la campana se actualiza sola. Antes, con estado 'rojo', el
@@ -444,7 +450,9 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   // flotante de siempre vía disaOpen(); no crea hilo nuevo ni toca el widget). El badge
   // de pendientes vive aquí, sobre el icono, con el número que ya calcula D5.
   const disaActive = active === 'propuestas' || active === 'disa';
-  const puedePropuestas = can(c, 'invoices.read') || can(c, 'cobros.read');
+  // Ve el panel quien pueda ver AL MENOS UN tipo de propuesta: cobros (invoices.read/cobros.read) o
+  // pagos a proveedor (purchases.read). Mismo criterio que el gate de la pantalla y el del badge.
+  const puedePropuestas = can(c, 'invoices.read') || can(c, 'cobros.read') || can(c, 'purchases.read');
   const disaFly =
     (puedePropuestas
       ? `<a href="/admin/propuestas" class="fly-item${active === 'propuestas' ? ' active' : ''}"><i class="ti ti-checklist"></i>Propuestas</a>`

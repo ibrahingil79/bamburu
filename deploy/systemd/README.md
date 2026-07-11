@@ -4,7 +4,40 @@
 |------|----------|---------|
 | `bamburu-backup` + `bamburu-backup-heartbeat` | Copia diaria a Google Drive, blindada | abajo |
 | `bamburu-avisos` | Resumen diario de avisos por email (08:00 Europe/Madrid) | `scripts/bamburu-avisos.mjs` |
+| `bamburu-propuestas` | Genera las **Propuestas de DISA** del día (07:45 Europe/Madrid) | abajo |
 | `bamburu-verifactu-cola` | **Red de seguridad** de la cola de envío a la AEAT (cada 2 min) | `docs/verifactu/tarea2-cola-envio-automatico.md` |
+
+## Propuestas de DISA (D5 + D5b) — INSTALADO
+
+Prepara, cada mañana antes del resumen de avisos, el trabajo que DISA deja listo para que el dueño
+decida. Genera los **dos** tipos en un solo barrido (no hay un segundo timer):
+
+- **Recordatorio de impago (D5)** — factura de VENTA vencida con retraso ≥ `dias_recordatorio_impago`
+  (Ajustes, 7 por defecto) → borrador de email de cobro.
+- **Pago por vencer (D5b)** — factura de COMPRA con importe pendiente que vence dentro de los próximos
+  `dias_aviso_pago` (Ajustes, 7 por defecto) → atajo para registrar el pago.
+
+**No envía nada ni mueve dinero: solo PREPARA.** Todo lo que tiene consecuencias lo aprueba el dueño en
+`/admin/propuestas`. Por eso no necesita `RESEND_API_KEY`.
+
+**Idempotente:** los índices únicos `(invoice_id, type)` y `(supplier_invoice_id, type)` impiden
+duplicar. El panel TAMBIÉN genera al abrirse; que coincidan el mismo día no crea nada de más, y una
+propuesta descartada no se vuelve a proponer.
+
+```bash
+cd /home/ubuntu/bamburu
+sudo cp deploy/systemd/bamburu-propuestas.service /etc/systemd/system/
+sudo cp deploy/systemd/bamburu-propuestas.timer   /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now bamburu-propuestas.timer
+
+# Comprobar sin escribir nada:
+node scripts/bamburu-propuestas.mjs --dry-run
+systemctl list-timers bamburu-propuestas --no-pager
+journalctl -u bamburu-propuestas -n 40 --no-pager
+```
+
+---
 
 ## Cola de envío Verifactu — instalación
 

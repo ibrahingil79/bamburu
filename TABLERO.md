@@ -219,7 +219,8 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
     anunciar **no se tocaron** (es decisión de D5).
   - ✅ **D4 — docs y modelo** (`4a4beb1`): estados de pedido de `CLAUDE.md` al enum vivo; chat de DISA
     y onboarding a **`claude-sonnet-5`** (extracción por visión se queda en 4-6). Tarifa nueva en `llm.js`.
-  - 🟡 **D5 — PROACTIVIDAD REAL DE DISA. Primera pieza HECHA** (`742920a`): **recordatorio de impago**.
+  - 🟡 **D5 — PROACTIVIDAD REAL DE DISA. Dos piezas HECHAS** (`742920a`, + esta sesión): **recordatorio
+    de impago** y **pago a proveedor por vencer**.
     Cuando una factura de venta lleva vencida más días que el umbral del negocio (`company_config.
     dias_recordatorio_impago`, por defecto 7, editable en Ajustes), un cron diario prepara un borrador
     de email de recordatorio (plantilla `collectionEmail`, no LLM) y lo deja en el panel nuevo
@@ -227,9 +228,30 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
     (reutiliza `registerCollectionAction` → Resend), edita o descarta. **NUNCA se autoenvía.** Tabla
     `disa_proposals` genérica (para más tipos), idempotencia por índice único (factura,tipo). Permisos:
     ver → invoices.read/cobros.read; aprobar → cobros.manage (anti-backdoor). Verificado: gate 22/0 +
-    navegador 8/0 + envío REAL por HTTP a la dirección del dueño. `verify-propuestas-d5.mjs`. El cron
-    `bamburu-propuestas.{service,timer}` está escrito pero **NO instalado** (el panel genera a demanda
-    al abrirse; instalar el timer cuando se decida — es inocuo).
+    navegador 8/0 + envío REAL por HTTP a la dirección del dueño. `verify-propuestas-d5.mjs`.
+    - ✅ **CRON INSTALADO (11 jul 2026):** `bamburu-propuestas.timer` copiado a `/etc/systemd/system`,
+      `enable --now`. Diario 07:45 Europe/Madrid, antes del resumen de avisos (08:00). Verificado que
+      **corre solo** bajo systemd y que **no duplica** aunque el panel ya haya generado ese día (20
+      propuestas antes → 20 después; el índice único hace el trabajo). Documentado en
+      `deploy/systemd/README.md`. **Un solo timer para los dos tipos** — D5b lo reutiliza.
+    - ✅ **D5b — PAGO A PROVEEDOR POR VENCER (11 jul 2026).** El espejo de D5, invertido en el tiempo:
+      en vez de cobros ya vencidos, pagos que están A PUNTO de vencer. Factura de compra con importe
+      pendiente cuyo vencimiento cae dentro de los próximos `company_config.dias_aviso_pago` (Ajustes,
+      7 por defecto, campo hermano del de impago). **No incluye lo ya vencido** (fuera de esta pieza).
+      La propuesta muestra proveedor, nº de factura, importe pendiente, vencimiento y días que faltan.
+      **La acción NO es un email** — a un proveedor no se le avisa de que se le va a pagar: es un ATAJO
+      A PAGAR. "Aprobar y registrar pago" abre el **MISMO modal** del botón "Pagar" de `/admin/pagos`
+      (`views/pago-modal.js`), precargado con lo pendiente, y escribe por el **ÚNICO** endpoint de pagos
+      (`POST /api/erp/supplier-invoices/:id/payments`); editar = lo que ese modal ya permite (importe,
+      fecha, forma, nota). Descartar → no se repite. **Mismo candado que "Pagar": `purchases.create`
+      para aprobar, `purchases.read` para ver — ningún permiso nuevo.** El badge y la lista se filtran
+      POR TIPO según permiso: quien no tiene compras no ve —ni cuenta— las propuestas de pago.
+      Esquema **aditivo**: `disa_proposals.supplier_invoice_id`/`supplier_id` + índice único
+      `(supplier_invoice_id, type)`; NO se sobrecarga `invoice_id` (las facturas de venta y las de
+      compra son espacios de ids distintos). Verificado: `verify-propuestas-pagos.mjs` 48/0 +
+      `gate-propuestas-pagos-permisos.mjs` 32/0 (navegador, permisos reales, E2E: aprobar → pago real
+      en `supplier_payments` → propuesta cerrada) + punta a punta con factura de compra REAL (FRP-0005,
+      121,00 €, vence en 3 días). Regresión de DISA y Pagos en verde.
     - **Navegación HECHA (10 jul, `3b54cf8`):** el riel izquierdo ahora abre con **Inicio** (icono casa
       → `/admin`) y **DISA** como 2º icono, un flyout con el MISMO patrón que las áreas: **Propuestas**
       (`/admin/propuestas`) y **Hablar con DISA** (abre el widget flotante existente vía `disaOpen()`;

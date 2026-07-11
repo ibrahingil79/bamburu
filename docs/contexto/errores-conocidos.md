@@ -26,6 +26,11 @@
 - **`case` hardcodeado por entidad** → DISA rechazaba entidades nuevas; se sustituyó por `insert/update/delete_record` sobre `WRITABLE_TABLES`.
 - **Filtro de estado inconsistente:** `status='completado'` daba 0 ventas cuando había pedidos `en_preparacion`/`enviado`; usar `NOT IN ('cancelado','reembolsado','borrador')`. Raíz: **estados en inglés** rompieron analítica → estados siempre en español.
 
+## Gates de navegador (puppeteer)
+- **13 gates apuntan a una ruta MUERTA `/home/ibrahin/bamburu/...`** (el proyecto vive en `/home/ubuntu/bamburu`): `gate-pagos-proveedor`, `gate-pago-cuenta`, `gate-abono-proveedor`, `gate-gasto-proveedor`, `gate-devoluciones-proveedor`, `gate-orden-compra-c1a`, `gate-pago-voz-avisos`, `gate-almacenes`, `gate-recepciones-c1b`, `gate-c1c-diferencias-cierre`, `gate-c2-captura`, `gate-disa-captura-chat`, `gate-disa-dictar-compra`. Mueren al arrancar (`Cannot open database because the directory does not exist`) y **salen con exit 0 sin imprimir nada**: en un bucle de regresión pasan por verdes sin haber ejecutado UNA sola aserción. Detectado el 11-jul-2026; **preexistente en HEAD**, no lo introdujo esa sesión. *Lección:* en un barrido de gates, comprobar el **exit code Y que haya salida**, no solo la ausencia de "✗".
+- **El Chromium que trae puppeteer NO arranca en este servidor (ARM)**: `chrome-linux64/chrome: Syntax error: newline unexpected`. Los gates que SÍ funcionan pasan `executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/snap/bin/chromium'`. Copiar ese patrón siempre.
+- **`page.setCookie()` escribe en el tarro de cookies COMPARTIDO del contexto**: abrir una segunda sesión pisa la cookie `asess` de la primera y las páginas ya abiertas cambian de usuario en silencio (una prueba de permisos se sabotea sola y "demuestra" lo contrario de lo que cree). Para varios usuarios a la vez: **un `browser.createBrowserContext()` por usuario**.
+
 ## Resend / email
 - El SDK de Resend devuelve `{ data, error }` y **no lanza excepción**: hay que comprobar `error` explícitamente.
 
