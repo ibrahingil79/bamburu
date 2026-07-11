@@ -317,6 +317,22 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
      nuevo `verify-wal-acotado` (9/0), A/B con la misma carga sobre dos copias: **sin tope deja
      12,74 MB, con tope 4,00 MB**. Tras la regresión completa, ningún `-wal` vivo pasa de 4 MiB.
   - Regresión completa **26/26**. Grupo nuevo del runner: `node scripts/run-gates.mjs infra`.
+- ✅ **HECHO (11 jul 2026) — la búsqueda por email ya no abre la BD de nadie en escritura.**
+  El hermano del hallazgo 1: `getTenantByEmail` y `getTenantsByEmail` (las usan el **alta** y el
+  **login por email**) recorren la `.db` de CADA negocio activo y las abrían en **lectura+escritura**
+  solo para un `SELECT`. Dos pegas: una conexión de escritura de más que se serializa con la del
+  propio negocio, y —peor— si el fichero **no existía, SQLite lo CREABA vacío** en el intento: una
+  `.db` fantasma por cada tenant descuadrado, nacida de una simple búsqueda. Ahora las dos comparten
+  un helper que abre con `{ readonly: true, fileMustExist: true }`. Gate nuevo
+  `verify-tenant-lookup-readonly` (17/0), que además **demuestra el bug viejo** (sin esos flags,
+  SQLite crea el fichero). Probados los dos flujos reales: `/find-tenant` por HTTP y `emailTaken`.
+  Regresión **27/27**.
+- ✅ **HECHO (11 jul 2026) — auditoría de la clave de Anthropic + rotación.** La clave **nunca** se
+  había filtrado: 0 en el árbol, 0 en los **5.967 objetos de git** (incl. sueltos), 0 en los `.service`
+  (todos usan `EnvironmentFile`), 0 en los logs rotados, `.gitignore` correcto, fichero `0600`.
+  **La filtré yo al auditar**, con un `sudo grep -F "$CLAVE"` — `sudo` registra la línea de comando
+  entera. Limpiado `auth.log`; clave **rotada** y verificada con una llamada real a DISA. La lección
+  (nunca un secreto en `argv`) queda en `errores-conocidos.md`.
 
 ## Eje C: Seguridad (pendiente de planificar)
 

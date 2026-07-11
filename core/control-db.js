@@ -241,6 +241,23 @@ export function getAllCountryConfigs() {
     .all();
 }
 
+// Abre la .db de un negocio en SOLO LECTURA, para consultarla desde fuera de su petición.
+//
+// SOLO LECTURA a propósito. Buscar un email recorre la .db de CADA negocio activo, y abrirlas en
+// modo escritura —como se hacía— tenía dos pegas: (1) una conexión de escritura más contra el mismo
+// fichero, que se serializa con la del propio negocio (el patrón que el diagnóstico de carga marcó
+// como riesgo; el mismo que se corrigió en superadmin), y (2) si el fichero NO existía, SQLite lo
+// CREABA vacío en el intento — dejando una .db fantasma por cada tenant descuadrado. `readonly` no
+// compite por el bloqueo de escritura, y `fileMustExist` hace que un fichero ausente falle en vez de
+// nacer. Los errores los traga quien llama (un tenant ilegible simplemente no coincide).
+function openTenantReadonly(tenant) {
+  const abs = path.isAbsolute(tenant.db_filename)
+    ? tenant.db_filename
+    : path.join(process.cwd(), tenant.db_filename);
+  return new Database(abs, { readonly: true, fileMustExist: true });
+}
+
+// ¿En qué negocio activo es este email un admin? Devuelve el PRIMERO que coincida (o null).
 export function getTenantByEmail(email) {
   const tenants = controlDb
     .prepare("SELECT * FROM tenants WHERE status='active'")
@@ -248,11 +265,7 @@ export function getTenantByEmail(email) {
 
   for (const tenant of tenants) {
     try {
-      const db = new Database(
-        path.isAbsolute(tenant.db_filename)
-          ? tenant.db_filename
-          : path.join(process.cwd(), tenant.db_filename)
-      );
+      const db = openTenantReadonly(tenant);
       const user = db
         .prepare('SELECT id FROM admin_users WHERE email=? AND active=1')
         .get(email);
@@ -276,11 +289,7 @@ export function getTenantsByEmail(email) {
   const matches = [];
   for (const tenant of tenants) {
     try {
-      const db = new Database(
-        path.isAbsolute(tenant.db_filename)
-          ? tenant.db_filename
-          : path.join(process.cwd(), tenant.db_filename)
-      );
+      const db = openTenantReadonly(tenant);
       const user = db
         .prepare('SELECT id FROM admin_users WHERE email=? AND active=1')
         .get(email);
