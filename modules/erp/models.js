@@ -1625,6 +1625,24 @@ export function runMigrations(db) {
   // las filas de impago/pago (occurrence_id NULL) no compiten entre ellas.
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_disa_proposals_occurrence_type ON disa_proposals(occurrence_id, type)`);
 
+  // PROPUESTA DE CLIENTE DORMIDO. Se ancla al CLIENTE (client_id, que ya existe): no hay documento al
+  // que agarrarse — el asunto es justamente que no hay documento desde hace demasiado.
+  //
+  // Y aquí el índice NO puede ser como el de sus tres hermanas. Ellas usan un único total (documento,
+  // tipo): una vez propuesta —o descartada— esa factura, NUNCA más. Para un cliente eso sería falso:
+  // un cliente al que descartaste hace un año y que sigue sin comprar MERECE que se te vuelva a
+  // recordar. Pero tampoco puede reproponerse cada mañana.
+  //
+  // La solución es un índice único PARCIAL: solo sobre las propuestas de este tipo que están
+  // PENDIENTES. Así:
+  //   · un cliente ya propuesto y pendiente NO se vuelve a proponer (el índice lo impide, en la BD),
+  //   · y el HISTORIAL (descartadas, enviadas) convive sin reescribirse — que es la regla del proyecto.
+  // El tiempo de espera antes de volver a proponerlo (90 días) NO se mete aquí: lo aplica el generador
+  // mirando resolved_at. Un índice sabe decir "esto ya existe"; no sabe de calendarios.
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_disa_proposals_dormido_pendiente
+             ON disa_proposals(client_id, type)
+           WHERE type='cliente_dormido' AND status='pendiente'`);
+
   // T4 Paso 2.1 — gestión a nivel de CUENTA. Un cobro/recordatorio/promesa de cuenta se
   // materializa en varias filas (un invoice_payment o un collection_action por factura viva).
   // Esta columna OPCIONAL agrupa esas filas para poder trazar de qué lote vinieron. Aditiva,

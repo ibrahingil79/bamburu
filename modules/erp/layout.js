@@ -1,6 +1,6 @@
 import { getDisaWidget } from '../disa/widget.js';
 import { estadoAvisos, hoyLocal, PERM_POR_FUENTE } from './avisos.js';
-import { contarPropuestasPendientes, TIPO_IMPAGO, TIPO_PAGO } from './propuestas.js';   // D5 — badge de Propuestas de DISA
+import { contarPropuestasPendientes, tiposVisiblesPara } from './propuestas.js';   // D5 — badge de Propuestas de DISA
 
 export const ROOT_TOKENS = `
     :root{
@@ -259,16 +259,16 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   } catch { avisos = { count: 0, sinVer: 0, estado: 'apagado' }; }
   // D5 — Propuestas de DISA pendientes, para el badge del topbar. Cada TIPO se cuenta solo si el
   // usuario puede ver ESE tipo (mismo permiso que su pantalla de origen; owner/admin bypass):
-  //   · recordatorio_impago → invoices.read o cobros.read (como las cifras de ventas).
-  //   · pago_por_vencer     → purchases.read (como /admin/pagos).
+  // Qué tipos cuenta el badge lo decide `tiposVisiblesPara` (propuestas.js), la ÚNICA fuente de esa
+  // regla — la misma que usan las rutas del panel. Antes esta lista estaba COPIADA aquí, y al añadir
+  // tipos nuevos solo se actualizaba allí: el panel enseñaba 22 y el badge decía 21. Un badge que
+  // miente te enseña a no fiarte del número, que es peor que no tenerlo.
   // Así el badge nunca delata la existencia de propuestas que el usuario no puede abrir.
   // Un COUNT barato; si falla, 0 (nunca rompe el chrome).
   let propuestasPend = 0;
   try {
     const _db = c?.get?.('db');
-    const tipos = [];
-    if (can(c, 'invoices.read') || can(c, 'cobros.read')) tipos.push(TIPO_IMPAGO);
-    if (can(c, 'purchases.read')) tipos.push(TIPO_PAGO);
+    const tipos = tiposVisiblesPara(c, can);
     if (_db && tipos.length) propuestasPend = contarPropuestasPendientes(_db, tipos);
   } catch { propuestasPend = 0; }
   // El título tiene que decir EXACTAMENTE lo mismo que dirá `bellSync` en el primer refresco, o el

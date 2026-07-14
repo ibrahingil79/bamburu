@@ -110,6 +110,123 @@ export function clientesInactivos(db, days = 30) {
   return count;
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// CLIENTES DORMIDOS — el que te compraba y dejó de hacerlo.
+//
+// `clientesInactivos` (arriba) responde "¿cuántos?" con un listón fijo. Esto responde "¿QUIÉN, y por
+// qué lo sé?", y no usa un listón fijo para todos: **aprende el ritmo de cada cliente**. Un cliente
+// que te compra cada semana lleva dormido a los 30 días; uno que te compra cada trimestre, no. Medir
+// a los dos con la misma vara es lo que convierte un aviso útil en ruido que se ignora.
+//
+// LA REGLA
+//   · Con 2+ compras: se mira el hueco MEDIANO entre compras consecutivas (la mediana, no la media:
+//     una compra rara no debe torcer el ritmo de todo un año) y se le da un margen de FACTOR_RITMO.
+//     Con un SUELO de DIAS_SUELO, para no dar la alarma porque un cliente muy frecuente llegue tarde
+//     cuatro días.
+//   · Con 1 sola compra: no hay ritmo que aprender. Listón fijo de DIAS_UNA_COMPRA.
+//   · El que NUNCA compró no es un cliente dormido: es un cliente que nunca despertó. Otra
+//     conversación, y otra propuesta. Aquí NO entra.
+//
+// LO QUE NO CUENTA, Y POR QUÉ IMPORTA
+//   Una venta de mostrador SIN cliente (factura simplificada, `client_id` NULL — hoy son 35 de 72 en
+//   el negocio de desarrollo) no es de nadie: no puede hacer que ningún cliente parezca dormido. Aquí
+//   eso no se arregla con un filtro, se cae solo: se agrupa POR client_id, así que una venta sin
+//   cliente no entra en el cómputo de ningún cliente. Y una de mostrador CON cliente sí cuenta, que es
+//   justo lo que debe pasar.
+//   Lo que cuenta como venta lo decide `countsAsReceivable` — la MISMA regla que cobros y que el resto
+//   de métricas (anuladas fuera, tickets sustituidos fuera, rectificativas por sustitución fuera). No
+//   se reinventa aquí: un cliente al que le anulaste la única factura no "compró".
+//
+// AJUSTABLES. Son los tres números del encargo. Viven aquí, juntos y con nombre, para que cambiarlos
+// sea leer una línea. Si algún día se quieren por-negocio, el patrón está hecho: una columna en
+// `company_config` + su campo en Ajustes, como `dias_recordatorio_impago` y `dias_aviso_pago`.
+export const FACTOR_RITMO   = 2;    // margen sobre el hueco mediano del cliente
+export const DIAS_SUELO     = 30;   // por debajo de esto NUNCA se considera dormido (2+ compras)
+export const DIAS_UNA_COMPRA = 90;  // listón de respaldo para el que solo compró una vez
+
+const DIA = 86400000;
+const diasEntreISO = (a, b) => Math.round((Date.parse(a + 'T00:00:00Z') - Date.parse(b + 'T00:00:00Z')) / DIA);
+
+// Mediana de una lista de números (no la media: robusta a la compra rara que dispara el promedio).
+function mediana(xs) {
+  if (!xs.length) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+// El umbral de ESTE cliente, con la razón por la que es ese. La razón se devuelve porque el panel la
+// enseña: una propuesta que no puede explicarse no se aprueba, se ignora.
+//
+// SE MIDE EN DÍAS DE COMPRA, NO EN FACTURAS. Lo aprendí por las malas con un cliente real: tenía tres
+// facturas del MISMO día (una visita, tres documentos), y contando facturas salían "dos huecos de 0
+// días" → ritmo 0 → se le daba por dormido a los 30 días, con la explicación indefendible de que
+// "compra cada 0 días". Tres facturas de una misma visita son UNA compra, no tres compras separadas
+// por nada. Se agrupan por día, y con un solo día de compra no hay ritmo que aprender: respaldo fijo.
+export function umbralDormido(compras, opts = {}) {
+  const factor = opts.factor ?? FACTOR_RITMO;
+  const suelo = opts.suelo ?? DIAS_SUELO;
+  const unaCompra = opts.unaCompra ?? DIAS_UNA_COMPRA;
+
+  // Días DISTINTOS en los que compró, en orden. Varias facturas del mismo día cuentan como una.
+  const dias = [...new Set(compras.map(c => String(c).slice(0, 10)))].sort();
+
+  if (dias.length < 2) {
+    return {
+      umbral: unaCompra, ritmo: null, dias_compra: dias.length,
+      motivo: (compras.length > 1
+        ? 'compró una sola vez (' + compras.length + ' facturas del mismo día)'
+        : 'una sola compra')
+        + ': sin ritmo que aprender, listón de respaldo de ' + unaCompra + ' días',
+    };
+  }
+  const huecos = [];
+  for (let i = 1; i < dias.length; i++) huecos.push(diasEntreISO(dias[i], dias[i - 1]));
+  const ritmo = mediana(huecos);
+  const umbral = Math.max(Math.round(ritmo * factor), suelo);
+  const mandaElSuelo = Math.round(ritmo * factor) < suelo;
+  return {
+    umbral, ritmo, dias_compra: dias.length,
+    motivo: 'compra cada ' + Math.round(ritmo) + ' días de media; el umbral es ×' + factor
+      + (mandaElSuelo ? ' (con el suelo de ' + suelo + ' días)' : ''),
+  };
+}
+
+// Los clientes dormidos HOY, con su ritmo y sus días. Ordenados por los que más se han pasado.
+// `today` para poder fijar el día en las pruebas.
+export function clientesDormidos(db, today = null, opts = {}) {
+  const hoy = today || new Date().toISOString().slice(0, 10);
+  const out = [];
+
+  // Solo clientes ACTIVOS. Uno archivado no se "reengancha": se archivó por algo.
+  for (const cl of db.prepare('SELECT id, name, email FROM clients WHERE active=1 ORDER BY id').all()) {
+    // Sus ventas ATRIBUIDAS, por la regla canónica. Sin cliente → no llega aquí (se agrupa por id).
+    const facturas = db.prepare(
+      'SELECT * FROM invoices WHERE client_id=? ORDER BY issue_date, id'
+    ).all(cl.id).filter(inv => countsAsReceivable(db, inv));
+
+    if (!facturas.length) continue;              // NUNCA compró → no es dormido, es otra conversación
+
+    const compras = facturas.map(f => String(f.issue_date).slice(0, 10));
+    const ultima = compras[compras.length - 1];
+    const dias = diasEntreISO(hoy, ultima);
+    if (dias < 0) continue;                      // factura con fecha futura: no es asunto de esto
+
+    const { umbral, ritmo, motivo } = umbralDormido(compras, opts);
+    if (dias <= umbral) continue;                // sigue dentro de su ritmo: NO está dormido
+
+    out.push({
+      client_id: cl.id, client_name: cl.name, client_email: cl.email || null,
+      ultima_compra: ultima, dias_sin_comprar: dias,
+      compras: compras.length, ritmo_dias: ritmo, umbral_dias: umbral, motivo,
+      // Cuánto se ha pasado de SU ritmo: es lo que ordena la lista (no los días en bruto, que
+      // favorecerían siempre al cliente trimestral sobre el semanal que lleva un mes desaparecido).
+      exceso: dias - umbral,
+    });
+  }
+  return out.sort((a, b) => b.exceso - a.exceso);
+}
+
 // ── Pedidos (cadena nueva: customer_orders) ──────────────────────────────────
 // Alineado con la PIEZA 2a: "pedido pendiente de entrega" = customer_orders en estado
 // 'confirmado'. Además, los confirmados con fecha del mes en curso (KPI de pedidos).

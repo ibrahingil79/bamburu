@@ -14,11 +14,23 @@
 import { openDebts, collectionEmail, invoiceCobro } from './cobros.js';
 import { openPayables } from './pagos.js';
 import { borradoresPendientes, importeEstimado } from './recurrentes.js';
+import { clientesDormidos } from './ventas-metrics.js';
+import { opportunityEmail } from './crm.js';
 
 export const TIPO_IMPAGO = 'recordatorio_impago';
 export const TIPO_PAGO = 'pago_por_vencer';
 export const TIPO_RECURRENTE = 'emitir_recurrente';
-export const TIPOS = [TIPO_IMPAGO, TIPO_PAGO, TIPO_RECURRENTE];
+export const TIPO_DORMIDO = 'cliente_dormido';
+export const TIPOS = [TIPO_IMPAGO, TIPO_PAGO, TIPO_RECURRENTE, TIPO_DORMIDO];
+
+// Días que un cliente descansa antes de que se te vuelva a proponer, DESDE QUE RESOLVISTE la anterior.
+//
+// Cuenta tanto si la DESCARTASTE como si le ENVIASTE el email, y esto último no es un capricho: un
+// email de reenganche no le hace comprar. Si el descanso solo contara para las descartadas, al enviar
+// el email la propuesta pasaría a "enviada", el índice de pendientes dejaría de bloquear, y a la
+// mañana siguiente el cron te propondría escribirle OTRA VEZ al mismo cliente, que sigue dormido. Y al
+// otro día igual. Una máquina de spam con dos líneas de código. El descanso es lo que lo impide.
+export const DIAS_DESCANSO_DORMIDO = 90;
 const UMBRAL_DEFECTO = 7;   // días tras el vencimiento; editable en Ajustes (company_config)
 
 // Días entre dos fechas YYYY-MM-DD (a - b), en UTC. Mismo cálculo que pagos.js/cobros.js.
@@ -199,6 +211,103 @@ export function generarPropuestasRecurrentes(db, opts = {}) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// CLIENTE DORMIDO — el que te compraba y dejó de hacerlo.
+//
+// La detección (quién, y por qué) vive en `clientesDormidos` (ventas-metrics.js), junto al resto de
+// métricas de venta y con la MISMA regla de "esto cuenta como venta" que cobros. Aquí solo se decide
+// a quién se te propone y cuándo se te vuelve a proponer.
+//
+// EL FLUJO ES DISTINTO AL DE SUS HERMANAS, a propósito (esto lo pediste así):
+//   D5 genera el borrador de email en el cron y "Aprobar" LO ENVÍA de una.
+//   Aquí NO. Aprobar = DISA REDACTA y te lo enseña. Enviar es un segundo clic, tuyo, después de
+//   leerlo. Escribirle a un cliente que se te fue no es cobrar una deuda: el texto importa, y nadie
+//   manda un email de reenganche sin leerlo antes.
+//
+// Por eso la propuesta sigue PENDIENTE después de redactar: aprobar no la resuelve, la prepara. Lo
+// que la resuelve es enviarla (o descartarla). Y así el badge y los conteos no necesitan saber nada
+// nuevo: `pendiente` sigue significando "esto espera algo de ti".
+// ════════════════════════════════════════════════════════════════════════════
+
+// ¿Está este cliente descansando de una propuesta anterior? Mira la ÚLTIMA que se le resolvió (da
+// igual si se descartó o se envió) y exige DIAS_DESCANSO_DORMIDO desde entonces.
+export function enDescanso(db, clientId, today, dias = DIAS_DESCANSO_DORMIDO) {
+  const ult = db.prepare(
+    `SELECT resolved_at FROM disa_proposals
+      WHERE client_id=? AND type=? AND status!='pendiente' AND resolved_at IS NOT NULL
+      ORDER BY resolved_at DESC LIMIT 1`).get(clientId, TIPO_DORMIDO);
+  if (!ult) return null;                        // nunca se le propuso, o nunca se resolvió → libre
+  const desde = String(ult.resolved_at).slice(0, 10);
+  const pasados = diasEntre(today, desde);
+  if (pasados >= dias) return null;             // ya descansó lo suyo → puede volver a proponerse
+  return { desde, pasados, faltan: dias - pasados };
+}
+
+// Genera las propuestas de cliente dormido que falten. Idempotente por partida doble:
+//   · el índice único PARCIAL (client_id, type) sobre las PENDIENTES → nunca dos pendientes del mismo
+//     cliente, ni aunque dos procesos corran a la vez;
+//   · el descanso de 90 días → un cliente recién resuelto no vuelve a asomar.
+// Devuelve { creadas, yaTenian, enDescanso, sinEmail, candidatas }.
+//
+//   sinEmail = dormido de verdad, pero sin dirección a la que escribirle. NO se propone (la acción
+//              sería un botón que no puede funcionar), se cuenta como hallazgo. Igual que en D5.
+export function generarPropuestasDormidos(db, opts = {}) {
+  const today = opts.today || new Date().toISOString().slice(0, 10);
+  const candidatas = clientesDormidos(db, today, opts);
+  const company = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
+
+  const ins = db.prepare(
+    `INSERT OR IGNORE INTO disa_proposals (type, client_id, status, subject, body, created_at)
+     VALUES (?, ?, 'pendiente', ?, '', ?)`
+  );
+  const now = opts.now || new Date().toISOString();
+
+  let creadas = 0, yaTenian = 0, descansando = 0, sinEmail = 0;
+  for (const d of candidatas) {
+    const existe = db.prepare("SELECT 1 FROM disa_proposals WHERE client_id=? AND type=? AND status='pendiente'")
+      .get(d.client_id, TIPO_DORMIDO);
+    if (existe) { yaTenian++; continue; }
+
+    if (enDescanso(db, d.client_id, today, opts.descanso)) { descansando++; continue; }
+
+    if (!d.client_email) { sinEmail++; continue; }   // sin email no hay reenganche posible: hallazgo
+
+    // `subject` es la etiqueta del registro. El BORRADOR no se escribe aquí: se redacta cuando tú
+    // apruebas (y con los datos de ese momento), no la madrugada en que se detectó.
+    const etiqueta = 'Reenganchar a ' + (d.client_name || 'cliente') + ' · ' + d.dias_sin_comprar + ' días sin comprar';
+    const info = ins.run(TIPO_DORMIDO, d.client_id, etiqueta, now);
+    if (info.changes) creadas++; else yaTenian++;   // el índice parcial cerró una carrera
+  }
+  return { creadas, yaTenian, enDescanso: descansando, sinEmail, candidatas: candidatas.length };
+}
+
+// REDACTAR el borrador de reenganche de una propuesta (lo que hace "Aprobar"). NO envía nada: escribe
+// el borrador en la propuesta y lo devuelve para que lo leas y lo edites.
+//
+// La plantilla es `opportunityEmail` —la MISMA casa de plantillas del CRM, espejo declarado de la de
+// cobros— con el tono 'reenganche'. Ese tono se añadió AHÍ, no aquí: encajarle 'seguimiento' escribía
+// "Retomo el hilo de tu solicitud" a un cliente que no ha pedido nada, y un email sutilmente falso a
+// alguien que ya se fue es peor que no escribirle. Tono neutro y amable; ni marketing, ni reproche,
+// ni culpa. No se inventa un motor de plantillas nuevo: se le añade el tono que faltaba.
+export function redactarReenganche(db, proposalId, opts = {}) {
+  const p = db.prepare('SELECT * FROM disa_proposals WHERE id=?').get(proposalId);
+  if (!p) { const e = new Error('Propuesta no encontrada'); e.status = 404; throw e; }
+  if (p.type !== TIPO_DORMIDO) { const e = new Error('Esta propuesta no es de cliente dormido.'); e.status = 400; throw e; }
+  if (p.status !== 'pendiente') { const e = new Error('Esta propuesta ya se resolvió (' + p.status + ').'); e.status = 409; throw e; }
+
+  const client = db.prepare('SELECT * FROM clients WHERE id=?').get(p.client_id);
+  if (!client) { const e = new Error('Cliente no encontrado'); e.status = 404; throw e; }
+  if (!client.email) { const e = new Error('Este cliente no tiene email al que escribirle.'); e.status = 400; throw e; }
+
+  const company = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
+  // Sin oportunidad: esto no es un trato abierto, es una relación que se enfrió. El tono 'reenganche'
+  // es el único que no habla de "tu solicitud", justamente porque aquí no hay ninguna.
+  const tpl = opportunityEmail('reenganche', { client, company, opp: null });
+
+  db.prepare('UPDATE disa_proposals SET subject=?, body=? WHERE id=?').run(tpl.subject, tpl.text, proposalId);
+  return { id: proposalId, subject: tpl.subject, body: tpl.text, to: client.email, client_name: client.name };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 
 // Propuestas PENDIENTES, con los datos que pinta el panel. `tipos` acota QUÉ tipos se devuelven: el
 // panel pasa solo los que el usuario tiene permiso de ver (un tipo es una pantalla distinta y un
@@ -302,7 +411,59 @@ export function propuestasPendientes(db, today, tipos = TIPOS) {
       });
     }
   }
+
+  if (quiere.has(TIPO_DORMIDO)) {
+    // El estado de sueño se RECALCULA en vivo: entre que DISA lo detectó y tú abres el panel, el
+    // cliente pudo comprarte. Si ya no está dormido, el panel lo dice y no te deja escribirle una
+    // carta de "te echamos de menos" a alguien que te compró ayer.
+    const dormidos = new Map(clientesDormidos(db, t).map(d => [d.client_id, d]));
+    const props = db.prepare(
+      `SELECT p.*, c.name AS client_name, c.email AS client_email
+         FROM disa_proposals p
+         LEFT JOIN clients c ON c.id = p.client_id
+        WHERE p.status = 'pendiente' AND p.type = ?
+        ORDER BY p.created_at DESC, p.id DESC`
+    ).all(TIPO_DORMIDO);
+    for (const p of props) {
+      const d = dormidos.get(p.client_id);
+      out.push({
+        id: p.id, type: p.type, client_id: p.client_id,
+        client_name: p.client_name, client_email: p.client_email,
+        subject: p.subject, body: p.body, created_at: p.created_at,
+        // El borrador se escribe al APROBAR. Mientras body esté vacío, aún no se ha redactado.
+        redactada: !!(p.body && p.body.trim()),
+        dias_sin_comprar: d ? d.dias_sin_comprar : null,
+        ultima_compra: d ? d.ultima_compra : null,
+        compras: d ? d.compras : null,
+        ritmo_dias: d ? d.ritmo_dias : null,
+        umbral_dias: d ? d.umbral_dias : null,
+        motivo: d ? d.motivo : null,
+        viva: !!d,   // false = ya NO está dormido (te compró desde que se propuso) → el panel avisa
+      });
+    }
+  }
   return out;
+}
+
+// LOS TIPOS QUE ESTE USUARIO PUEDE VER. Fuente ÚNICA de la regla, y por eso vive aquí.
+//
+// NACE DE UN BUG REAL. Esta lista estaba escrita DOS VECES —una en las rutas del panel y otra en el
+// layout, para el badge del riel— y al añadir los tipos nuevos solo se actualizó una. Resultado: el
+// panel enseñaba 22 propuestas y el badge decía 21. Un badge que miente es peor que no tener badge:
+// te acostumbra a no fiarte del número. Ahora la regla se escribe una vez y la leen los dos.
+//
+// `can` se INYECTA (en vez de importarlo) para no crear un ciclo: layout.js ya importa este módulo.
+//
+// Cada tipo exige lo mismo que SU pantalla de origen (criterio anti-backdoor): una propuesta nunca
+// abre datos ni acciones que la pantalla te niega. Falla cerrado: sin permiso, el tipo no entra —ni
+// en la lista, ni en el badge, ni se genera.
+export function tiposVisiblesPara(c, can) {
+  const t = [];
+  if (can(c, 'invoices.read') || can(c, 'cobros.read')) t.push(TIPO_IMPAGO);
+  if (can(c, 'purchases.read')) t.push(TIPO_PAGO);
+  if (can(c, 'recurrentes.read') && can(c, 'invoices.create')) t.push(TIPO_RECURRENTE);
+  if (can(c, 'clients.read') && can(c, 'crm.manage')) t.push(TIPO_DORMIDO);
+  return t;
 }
 
 // Nº de propuestas pendientes (para el badge del topbar). Barato: un COUNT, sin escanear cobros ni

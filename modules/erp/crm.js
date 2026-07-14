@@ -573,6 +573,14 @@ export async function registerClientActivitySvc(db, clientId, input, opts = {}) 
 // Espejo de collectionEmail(): se precargan en el modal, el usuario las edita y confirma.
 // Nada se envía aquí: esta función solo construye. Un comercial no amenaza: el último tono
 // cierra el tema con elegancia, no advierte de "medidas oportunas".
+//
+// El tono 'reenganche' es el ÚNICO que NO habla de una oportunidad abierta, y por eso no usa
+// `asuntoObra`. Lo usa la propuesta de CLIENTE DORMIDO, y se añadió porque encajarle 'seguimiento'
+// producía un email sutilmente FALSO: "Retomo el hilo de tu solicitud" a alguien que no ha pedido
+// nada. Un cliente que se fue nota esas cosas — que le escriban por un asunto que no existe es peor
+// que no escribirle. Aquí no hay obra de la que retomar el hilo: hay una relación que se enfrió.
+// Sin marketing, sin culpa ("te echamos de menos") y sin promesas: se saluda y se deja la puerta
+// abierta. El dueño lo edita antes de enviarlo, siempre.
 export function opportunityEmail(tono, ctx) {
   const { client, company, opp } = ctx;
   const empresa = (company && company.company_name) || 'Nosotros';
@@ -584,6 +592,7 @@ export function opportunityEmail(tono, ctx) {
     'seguimiento':     'Retomo el hilo de ' + asuntoObra + ' por si has tenido ocasión de verlo. Quedo a tu disposición para cualquier duda.',
     'insistencia':     'Vuelvo a escribirte sobre ' + asuntoObra + '. Si sigues interesado, dime y lo retomamos; si necesitas ajustar algo, lo vemos sin problema.',
     'ultimo-intento':  'Te escribo una última vez sobre ' + asuntoObra + '. Si ahora no es el momento, lo entiendo perfectamente y aquí me tienes cuando lo sea.',
+    'reenganche':      'Hace un tiempo que no coincidimos y quería escribirte para saludarte. Sigo por aquí para lo que necesites.',
   }[tono] || ('Te escribo por ' + asuntoObra + '.');
 
   const cierre = {
@@ -591,6 +600,7 @@ export function opportunityEmail(tono, ctx) {
     'seguimiento':     'Si te encaja, dime y seguimos adelante.',
     'insistencia':     'Con una línea tuya me vale para saber cómo lo ves.',
     'ultimo-intento':  'Gracias por tu tiempo en cualquier caso.',
+    'reenganche':      'Si en algún momento te hace falta algo, dímelo y lo vemos sin compromiso.',
   }[tono] || 'Quedo atento.';
 
   const asunto = {
@@ -598,6 +608,7 @@ export function opportunityEmail(tono, ctx) {
     'seguimiento':     'Seguimiento: ' + asuntoObra,
     'insistencia':     '¿Cómo lo ves? — ' + asuntoObra,
     'ultimo-intento':  'Cierro el tema de ' + asuntoObra + ' (salvo que me digas)',
+    'reenganche':      'Hace tiempo que no coincidimos',
   }[tono] || asuntoObra;
 
   const text = ['Hola ' + nombre + ',', '', intro, '', cierre, '', 'Un saludo,', empresa].join('\n');
