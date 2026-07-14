@@ -252,6 +252,37 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
       `gate-propuestas-pagos-permisos.mjs` 32/0 (navegador, permisos reales, E2E: aprobar → pago real
       en `supplier_payments` → propuesta cerrada) + punta a punta con factura de compra REAL (FRP-0005,
       121,00 €, vence en 3 días). Regresión de DISA y Pagos en verde.
+    - ✅ **D5c — EMITIR LA FACTURA RECURRENTE QUE TOCA (14 jul 2026, `2b8927d`).** Tercer tipo de
+      propuesta (`emitir_recurrente`). DISA detecta las **igualas/cuotas que tocan este ciclo y siguen
+      sin emitir** —las ocurrencias en `borrador`, vía `borradoresPendientes()`— y las deja en el panel
+      con cliente, concepto, importe y el día que toca. **Aprobar = EMITIR, un clic. No manda ningún email.**
+      El **motor de recurrentes ya existía entero** (plantillas, ocurrencias, cron, pantalla): lo que
+      faltaba era que DISA lo pusiera DELANTE en vez de esperar a que entres a mirar — el mismo salto
+      que dio D5 (de avisar, a preparar).
+      **NO nace una segunda forma de emitir una factura:** "Aprobar" llama a `emitirOcurrencia`, **el
+      MISMO servicio** que hay detrás del botón de `/admin/recurrentes` (→ `createInvoice` → huella
+      Verifactu), y exige **`invoices.create`, el mismo permiso que ese POST** — si no, sería un camino
+      más flojo de emitir. El guardián de la doble emisión sigue en el motor (409), no en el panel.
+      **Importe SIEMPRE en vivo** desde la plantilla: si le subes el precio a la iguala después de que
+      DISA la proponga, se emite —y se enseña— el precio de HOY (probado a propósito: 121 → 242).
+      Esquema **aditivo**: `disa_proposals.occurrence_id` + índice único `(occurrence_id, type)`, hermano
+      de los otros dos; conviven porque en SQLite los NULL de un índice único son todos distintos entre sí.
+      Descartar → no se re-propone. **Candado a propósito MÁS estricto que el de sus hermanos:
+      `recurrentes.read` Y `invoices.create`** (la tarjeta enseña datos de la plantilla; emitir cuesta
+      `invoices.create`). Quien no puede emitir **no la ve**: ni lista, ni badge, ni se le genera. Falla
+      cerrado; **ningún permiso nuevo**. Enganchado en `generarTodo()` → corre en el timer de las 07:45,
+      **sin segundo cron**.
+      **PRUEBAS — decisión importante:** el camino feliz (aprobar → factura emitida de verdad) se corre
+      sobre una **COPIA desechable** de la BD real, **NO en el negocio vivo**. No es pereza: **una factura
+      emitida es INMUTABLE** (CANON), y borrarla al terminar el gate para "dejar el tenant como estaba"
+      **rompería la cadena de huellas Verifactu**. Así que la emisión se prueba **entera y por la RUTA
+      REAL** sobre la copia (`verify-propuestas-recurrentes.mjs` **55/0**: emite con número y huella, la
+      ocurrencia queda emitida, la propuesta resuelta, y deja de proponerse sola), y el gate de navegador
+      prueba **pantalla + candado** contra el servidor vivo cerrando por **Descartar**, que no emite nada
+      (`gate-propuestas-recurrentes.mjs` **28/0**). Que el negocio queda con **cero facturas nuevas** es
+      una aserción del gate, no una promesa. (La cola de envío a la AEAT está **inactiva** en desarrollo
+      por falta de certificado FNMT: emitir ahí no mandaría nada a Hacienda — pero la factura quedaría.)
+      Barrido completo **35/35**.
     - **Navegación HECHA (10 jul, `3b54cf8`):** el riel izquierdo ahora abre con **Inicio** (icono casa
       → `/admin`) y **DISA** como 2º icono, un flyout con el MISMO patrón que las áreas: **Propuestas**
       (`/admin/propuestas`) y **Hablar con DISA** (abre el widget flotante existente vía `disaOpen()`;
@@ -259,10 +290,38 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
       mudó del topbar al icono de DISA** (mismo `contarPropuestasPendientes`, `propBadgeSync` retargeteado;
       se retiró `#tbProps`). Solo navegación/vista; gateado igual (invoices.read/cobros.read). Verificado:
       `gate-nav-inicio-disa.mjs` 34/0.
+    - 📋 **Diagnóstico SOLO LECTURA (14 jul 2026) — terreno para 3 propuestas nuevas.** Se pidieron tres;
+      el diagnóstico **dio la vuelta a lo que se esperaba**. Veredicto de cada una:
+      - 🟢 **Facturas recurrentes por emitir → VERDE.** El motor **ya existía entero**; no había que
+        deducir cadencias de nada. **CONSTRUIDA: es D5c, arriba.**
+      - 🟡 **Clientes dormidos → ÁMBAR.** *(pendiente, y necesita DOS decisiones del dueño.)* La última
+        compra por cliente sale directa (`MAX(issue_date)`), y `ventas-metrics.js:clientesInactivos()`
+        ya hace el cálculo — pero **solo devuelve un número**, hay que extenderlo a filas. El umbral
+        encaja igual que sus hermanos (`dias_cliente_dormido` en `company_config` + input en Ajustes).
+        **PUNTO CIEGO REAL:** las **ventas de mostrador van sin cliente** (serie S, `client_id=NULL` — 35
+        de 72 facturas vivas), así que **quien te compra en el mostrador parecería dormido**. Eso no lo
+        arregla el código: es un dato que no está. **DECISIONES PENDIENTES:** (a) cada cuánto se puede
+        **re-proponer** un cliente — a diferencia de una factura, que se paga y muere, un cliente **puede
+        volver a dormirse**, y el "una propuesta por (cliente,tipo) para siempre" del modelo actual no
+        vale tal cual; (b) qué hacer con los clientes que **NUNCA compraron** (¿dormidos, o nunca
+        despertaron?). Ojo: eso sí exigiría una **clave de deduplicación genérica** (`(type, periodo)`),
+        que **NO se construyó** en D5c a propósito.
+      - 🟢 **Vencimientos fiscales (IVA/IRPF) → VERDE en los números; ESPERA TU DECISIÓN.** *(La sorpresa:
+        se esperaba que fuera la bloqueada por el motor contable.)* **El motor contable NO está a medias:
+        está CERRADO** (Piezas 1–4), y **`modelo303(db,year,q)` y `modelo130(db,year,q)` ya calculan** las
+        casillas oficiales del trimestre — **ejecutados en solo lectura sobre T3-2026 y responden**. Lo que
+        falta **no es motor**: es el **calendario fiscal** (20-abr / 20-jul / 20-oct / 30-ene, con día hábil
+        y corte de domiciliación), que **este TABLERO declara "fuera, sin encargo"** (línea 210). **Requiere
+        decisión del dueño para desbloquearse.** Salvedades para cuando se construya: **CANON §0-ter —
+        Bamburu PREPARA, nunca presenta**; hay que **propagar los `warnings`** de los modelos (IVA sin
+        desglosar, etc.), no esconderlos tras una cifra limpia; y "IRPF del trimestre" es el **130** (pago
+        fraccionado) — el **111 no se puede hacer**: `supplier_invoices` no guarda retención, por decisión
+        explícita del código.
     - **Siguientes piezas de proactividad (sin encargo, para planificar):** más tipos de propuesta
-      (subsanación Verifactu, borrador de recurrente, etc.); push en vivo (SSE) en vez del sondeo de
-      60 s; que DISA proponga desde la propia campana. Es el resto del diseño de D5.
-- **Lo que queda del Eje B es diseñar/construir MÁS proactividad** (D5, siguientes piezas). No sin encargo.
+      (subsanación Verifactu, etc.); push en vivo (SSE) en vez del sondeo de 60 s; que DISA proponga
+      desde la propia campana. Es el resto del diseño de D5.
+- **Lo que queda del Eje B es diseñar/construir MÁS proactividad** (D5: clientes dormidos y vencimientos
+  fiscales, ambos **a la espera de una decisión del dueño**, arriba). No sin encargo.
 
 ## Verificación (transversal)
 
