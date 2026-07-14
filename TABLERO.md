@@ -12,7 +12,7 @@
 > **Inventario (Pilar 3) NO está cerrado, y no es un cabo suelto:** es alcance pendiente del pilar —
 > **stock mínimo / punto de pedido** y **lote / nº de serie**. Ver el Backlog.
 
-## Eje A: UX  ✅ COMPLETO (U0–U8)
+## Eje A: UX  ✅ COMPLETO (U0–U9)
 Objetivo: acercar cada pantalla y flujo a "el dueño no opera, decide". Método: auditoría primero, luego ejecución en piezas pequeñas. Cada tarea define cómo se verifica y cierra con regresión 0.
 
 ### U0 — Auditoría UX global  ✅ HECHO (2026-07-05) — `006cf6a`
@@ -187,6 +187,43 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
 > *(U7 dejó "Datos del negocio" del menú de cuenta apuntando a `/admin/settings`; U8 lo consolidó en
 > `9cf2e46`. Reverificado en navegador el 10-jul: HTTP 200 en los tres negocios, y ninguno de los 34
 > enlaces del chrome del panel da 4xx.)*
+
+### U9 — Plantillas de email editables (TODAS)  ✅ HECHO (2026-07-14) — `cdda13c`
+Nueva sección en Ajustes (`/admin/settings/plantillas`): el dueño reescribe **con su voz** todos los correos
+que su negocio envía, sin tocar código. **NO se creó un segundo sistema de plantillas:** los textos ya existían
+—repartidos entre 4 constructores (`collectionEmail`, `accountEmail`, `opportunityEmail`, `avisosEmail`) y
+**4 HTML escritos a mano dentro de las rutas** (presupuesto, orden de compra, recuperar contraseña, portal)—
+y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no cambia: mismo Resend, mismo historial.
+- **La decisión que lo sostiene:** una plantilla de fábrica deja de ser código que concatena cadenas y pasa a ser
+  **DATO** (texto con huecos `{{asi}}`). Los constructores de siempre quedan como envoltorios que lo renderizan
+  (misma firma, misma salida). Y como la de fábrica ya es un texto con huecos, **la editable ES la misma cosa**:
+  no hay dos versiones del texto que puedan desincronizarse — que era el riesgo real de la tarea.
+- **El catálogo se recorrió DESDE EL CÓDIGO, no de memoria** — y corrigió tres suposiciones del encargo:
+  el recordatorio de pago tiene **CUATRO** tonos (no 3); **NO existe email de "envío de factura"** (las facturas
+  llegan al cliente **por el portal**, y ese es el correo que sí existe y se expone); y **no existen** invitación
+  de empleado, verificación de cuenta ni avisos de seguridad por email — **no se inventan**.
+  **8 tipos · 18 variantes editables.**
+- **Red de seguridad, distinta por familia:** *cliente* → quitar un hueco necesario **avisa** pero deja guardar
+  (es su voz); *sistema* → quitar el **elemento crítico** (el enlace de acción) **BLOQUEA** el guardado. Un
+  "recupera tu contraseña" sin enlace deja a una persona fuera de su cuenta y nadie se entera hasta que pasa.
+  El crítico sale **de la plantilla de fábrica**, no de una lista inventada.
+- 🔒 **AGUJERO DE SEGURIDAD REAL, CERRADO de paso:** `auth.js` imprimía el **enlace de recuperación de contraseña
+  en el log del servidor** (`console.log('[Resend] Reset link:', resetLink)`). Ese enlace lleva el **token**:
+  cualquiera con acceso a los logs podía **secuestrar una cuenta**. Mismo pecado que la clave de Anthropic en el
+  log de `sudo` (11-jul). Ya no se registra.
+- Editor **visual** (negrita, cursiva, enlaces, listas): el usuario no ve una etiqueta. HTML crudo disponible pero
+  **plegado**. Los huecos se **insertan con un clic**, nunca se teclean (un `{{factrua}}` mal escrito saldría vacío).
+  Vista previa con datos de **ejemplo** (nunca de un cliente real). **"Volver al original" = borrar la fila**: la de
+  fábrica vive en el código y **no se puede perder**.
+- **Permisos: los mismos de Ajustes.** Comprobado en la BD, no supuesto: el módulo `company` **no existe** en la
+  tabla `permissions`, así que Ajustes es **de facto del dueño/admin** — el candado más estricto que hay. **No se
+  afloja para los de sistema.** `email_templates` **FUERA de WRITABLE_TABLES**.
+- Verificado: `verify-plantillas-email` **49/0** (lo guardado es lo que se **envía**, no el código; los huecos se
+  rellenan con datos reales; los valores se **escapan** —un cliente llamado `<script>` no inyecta nada—; cliente
+  avisa y guarda; sistema **bloquea** en password **y** portal; volver al original devuelve la de fábrica carácter
+  a carácter) + `gate-plantillas-email` **41/0** (navegador; **envío REAL por Resend al buzón sumidero**,
+  comprobando que sale **mi** texto y **ninguno** de los cuatro de fábrica — **cero correos a personas**).
+  Barrido **39/39**.
 
 ### Cola del Eje A (fuera de encargo, NO descartadas — decisión del dueño)
 - **Motor de traducción (i18n) real.** Hoy `admin_users.idioma` guarda la preferencia y la interfaz sigue en
