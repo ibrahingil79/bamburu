@@ -326,9 +326,24 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
       real con **tres facturas del MISMO día** (una visita, tres documentos): salían "dos huecos de 0
       días" → ritmo 0 → dormida a los 30, explicado con el disparate de *"compra cada 0 días"*. Tres
       facturas de una visita son **UNA compra**; ahora se mide en días distintos.
-      Verificado: `verify-propuestas-dormidos.mjs` **77/0** (copias desechables) + `gate-propuestas-
+      Verificado: `verify-propuestas-dormidos.mjs` **92/0** (copias desechables) + `gate-propuestas-
       dormidos.mjs` **39/0** (navegador; el clic de enviar va por **Resend de verdad al buzón sumidero**
       `delivered@resend.dev` — **cero correos a personas**). Barrido **37/37**.
+      - ✅ **El fantasma del mostrador, AFIRMADO (14 jul 2026, `c95c95c`).** Verificación pedida aparte,
+        sobre el punto ciego que más podía doler. **Las tres pasan con el producto TAL CUAL: no se tocó
+        ni una línea de producto.** (1) Una venta de mostrador **ANÓNIMA nunca genera propuesta** —sin
+        ficha no hay a quién escribir—: se siembran 3 (una de hace 400 días, que podría "dormir" a
+        alguien, y una de ayer, que podría "despertarlo") y se afirma 0 propuestas nuevas, mismo conjunto
+        de clientes, ninguna con `client_id` NULL. (2) **LA INVARIANTE:** no se compara el flojo "¿sigue
+        dormido?", sino **la ficha ENTERA de sueño** (días, ritmo, umbral, nº de compras, última compra)
+        de **seis clientes de ritmos distintos**, byte a byte, **con y sin** las ventas anónimas — y en
+        **los dos sentidos** (quitarlas tampoco mueve nada). Si el fantasma se colara por cualquier
+        rendija, uno de esos números se movería. (3) **El mostrador ATRIBUIDO SÍ cuenta:** un cliente que
+        pasó por el mostrador y la venta quedó pegada a su ficha — sin contar el ticket saldría DORMIDO
+        (facturas de hace 200 y 150 días, umbral 100); con el ticket de hace 10 días **no lo está y no se
+        te propone**. *Nota de proceso:* la primera versión de (1) falló, y **NO era del producto: era del
+        gate** —generaba la línea base DESPUÉS de sembrar los fantasmas—. Se comprobó en aislamiento
+        antes de tocar nada; el orden correcto queda escrito en el propio gate.
     - 📋 **Diagnóstico SOLO LECTURA (14 jul 2026) — terreno para 3 propuestas nuevas.** Se pidieron tres;
       el diagnóstico **dio la vuelta a lo que se esperaba**. Veredicto de cada una:
       - 🟢 **Facturas recurrentes por emitir → VERDE.** El motor **ya existía entero**; no había que
