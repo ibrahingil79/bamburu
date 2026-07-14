@@ -3,13 +3,28 @@
 // negocio", elige contraseña en el campo seguro y comprueba que el auto-login se deriva
 // del host de Tailscale (no bamburu.com). El aterrizaje en el panel se verifica siguiendo
 // el token por el host loopback resoluble (MagicDNS no tiene comodín para slugs nuevos).
+//
+// ⚠️ ESTE GATE NO SE PUEDE CORRER EN CUALQUIER MÁQUINA, y no es una excusa: es su naturaleza.
+// Prueba el alta POR LA RED DE TAILSCALE, así que necesita esa red montada. En este servidor no lo
+// está (el host no resuelve), y el gate moría con un ERR_NAME_NOT_RESOLVED que en el barrido parecía
+// un producto roto. No lo es: es un entorno que falta.
+//
+// Apuntarlo al host local sería hacer trampa —dejaría de probar exactamente lo que se escribió para
+// probar (que el auto-login se deriva del host de Tailscale y no de bamburu.com)—, así que se hace lo
+// honesto: ABORTAR con código 2 y decir por qué. "No he podido probarlo" nunca se disfraza de
+// aprobado, ni de suspenso.
 import path from 'path';
 import { unlinkSync } from 'fs';
 import puppeteer from 'puppeteer';
-import { launchOpts } from './lib/gate-env.mjs';
+import { launchOpts, requireHost } from './lib/gate-env.mjs';
 import { controlDb, getTenantBySlug, getTenantByEmail } from '../core/control-db.js';
 
 const TS_BASE = 'https://desarrollo-bamburu.tailf66357.ts.net';
+
+// Antes de nada: ¿existe siquiera esa red aquí?
+await requireHost(new URL(TS_BASE).hostname,
+  'Este gate SOLO tiene sentido sobre Tailscale (levántalo con `tailscale up`). Apuntarlo a localhost '
+  + 'no probaría lo que debe probar: que el alta funciona por la dirección de Tailscale.');
 const RID = Math.random().toString(36).slice(2, 7);
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 

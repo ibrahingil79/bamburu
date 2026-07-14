@@ -36,13 +36,15 @@ const GRUPOS = {
     'test-suppliers-saneamiento', 'test-orden-compra-c1a', 'test-recepciones-c1b',
     'gate-c1c-diferencias-cierre', 'test-c1c-diferencias-cierre',
     'verify-propuestas-pagos', 'gate-propuestas-pagos-permisos',
+    // Gates de NAVEGADOR de compras: estaban en DEUDA (muertos) y volvieron el 14-jul-2026.
+    'gate-orden-compra-c1a', 'gate-recepciones-c1b', 'gate-devoluciones-proveedor', 'gate-c2-revision',
   ],
   disa: [
     'verify-propuestas-d5', 'verify-propuestas-pagos', 'gate-propuestas-pagos-permisos',
     'verify-disa-query-permisos', 'verify-disa-sin-pedidos', 'verify-actividad-etiquetas',
-    'gate-nav-inicio-disa', 'gate-disa-dictar-compra',
+    'gate-nav-inicio-disa', 'gate-disa-dictar-compra', 'gate-disa-adjuntar',
   ],
-  inventario: ['test-transfers', 'verify-traslado-auditoria'],
+  inventario: ['test-transfers', 'verify-traslado-auditoria', 'gate-almacenes'],
   avisos: ['verify-avisos-permisos', 'gate-avisos-badge'],
   // Sala de máquinas: superadmin, conexiones a la BD y el fichero -wal.
   infra: ['verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado'],
@@ -52,36 +54,50 @@ const GRUPOS = {
 // Se imprimen SIEMPRE al final, con su motivo. Un gate que no se corre tiene que VERSE: desaparecer
 // en silencio es exactamente el pecado que originó este runner.
 //
-// DEUDA: los cuatro `gate-*` de abajo están CADUCADOS —el producto cambió y el gate no— y además
-// tienen efectos secundarios (ensucian el tenant, mandan email real). No se corren para no hacer
-// daño en cada pasada, pero SIGUEN SIENDO TRABAJO PENDIENTE: el runner lo grita al terminar.
-// Descubiertos el 11-jul-2026, al resucitarlos tras tres semanas muertos por la ruta rota.
-const DEUDA = {
-  'gate-recepciones-c1b':
-    'CADUCADO: anula una recepción del producto 1, que hoy tiene TRASLADOS ACTIVOS → el motor lo bloquea (409) y hace BIEN. '
-    + 'La regla de multi-almacén es POSTERIOR al gate. El motor está cubierto y verde en test-recepciones-c1b.',
-  'gate-devoluciones-proveedor':
-    'CADUCADO: misma raíz — cancela una compra del producto 1, bloqueada por el mismo guardián de traslados.',
-  'gate-orden-compra-c1a':
-    'CADUCADO: espera un alert() del navegador y la UI ya usa toast(). Además ENVÍA UN EMAIL REAL en cada pasada.',
-  'gate-almacenes':
-    'ROTO: no es idempotente — crea un "Almacén Norte (gate)" nuevo en cada pasada y NO lo limpia; '
-    + 'en la siguiente tropieza con el anterior y los fallos cambian de una vez a otra. Correrlo ENSUCIA el tenant.',
-  'gate-c2-captura':
-    'CADUCADO: espera un selector #step2 que la pantalla ya no tiene (1 OK y muere). También deja almacenes de prueba sin limpiar.',
-  'gate-disa-captura-chat':
-    'CADUCADO: revienta leyendo una respuesta del chat que ya no tiene la forma que espera (5 OK y muere).',
-  'gate-registro-tailscale':
-    'NO CORRE aquí: el alta por Tailscale necesita un entorno que este servidor no tiene (0 OK). Revisar si sigue teniendo sentido.',
-};
+// DEUDA — VACÍA desde el 14-jul-2026. Aquí vivían los 7 gates de navegador que el 11-jul quedaron
+// muertos. Se diagnosticaron uno a uno y NINGUNO era un fallo del producto:
+//
+//   · gate-recepciones-c1b, gate-devoluciones-proveedor — CADUCADOS de verdad: anulaban compras del
+//     producto 1, que hoy tiene traslados confirmados, y el guardián del multi-almacén lo bloquea con
+//     un 409 (y hace BIEN). Ahora cada uno se trae SU PROPIO producto para el camino feliz y, además,
+//     AFIRMA el bloqueo sobre un producto trasladado. Se prueban los dos caminos, no uno en vez del otro.
+//   · gate-orden-compra-c1a — CADUCADO: esperaba un alert() y la UI usa toast(). De regalo, el alert
+//     fantasma envenenaba la cola de diálogos y el prompt siguiente anulaba con motivo vacío. Y mandaba
+//     un email REAL al dueño en cada pasada: ahora el envío se sigue probando contra Resend, pero a su
+//     buzón sumidero.
+//   · gate-almacenes — se envenenaba solo: se buscaba POR NOMBRE y enganchaba el almacén rancio de la
+//     pasada anterior. Nombre único por pasada y borra lo suyo al salir.
+//   · gate-c2-captura, gate-disa-captura-chat — el diagnóstico que había escrito aquí ERA FALSO
+//     ("#step2 ya no existe": sí existe). La causa real: el tenant agotó su tope de gasto de IA del mes
+//     y el modelo devolvía 429. Partidos en dos (ver EXCLUIDOS y los gates -revision/-adjuntar).
+//   · gate-registro-tailscale — no es deuda: es un entorno que falta (ver ENTORNO).
+//
+// La moraleja, para el que venga: un gate que se apoya en datos vivos ajenos, o en el saldo de una
+// cuenta, no se pudre por culpa del producto. Se pudre porque no era suyo lo que pisaba.
+const DEUDA = {};
 
 // Excluidos por naturaleza, no por estar rotos: no son deuda, simplemente no van en un barrido.
 const EXCLUIDOS = {
   'verify-disa-pedidos-modelo-real': 'llama al MODELO REAL: ni determinista ni gratis. A mano.',
   'gate-pago-voz-avisos': 'llama al MODELO REAL (misma familia). A mano y a conciencia.',
+  'gate-c2-captura':
+    'llama al MODELO REAL (visión) para LEER la factura: cuesta dinero y depende de la cuota de IA del mes. '
+    + 'Sin cuota ABORTA (código 2), no finge. La PANTALLA de revisión —que es lo que se rompe— sí va en el barrido: gate-c2-revision.',
+  'gate-disa-captura-chat':
+    'llama al MODELO REAL por el chat de DISA (misma familia). Sin cuota ABORTA. '
+    + 'Lo que no necesita modelo (superficies de adjuntar, aterrizaje precargado, archivo protegido) va en el barrido: gate-disa-adjuntar.',
   'verify-avisos-crm-riesgo': 'EN ROJO desde antes (datos de riesgo ya en la BD viva). Otro tema.',
   'gate-avisos-pantalla': 'EN ROJO desde antes (1 aserción). Otro tema.',
   'verify-pieza-c-http': 'gate FRÁGIL preexistente (redondeo de céntimos). Otro tema.',
+};
+
+// Requieren un ENTORNO que esta máquina no tiene. No están rotos ni caducados: aquí, sencillamente,
+// no se pueden correr. Abortan con código 2 ("no he verificado NADA") en vez de fingir un veredicto.
+// Se listan para que su falta de cobertura se VEA, que es lo único que un runner honesto puede hacer.
+const ENTORNO = {
+  'gate-registro-tailscale':
+    'el alta POR LA DIRECCIÓN DE TAILSCALE necesita esa red montada, y aquí el host no resuelve. '
+    + 'Apuntarlo a localhost lo dejaría sin probar lo que existe para probar. Correrlo donde haya Tailscale (`tailscale up`).',
 };
 
 const args = process.argv.slice(2);
@@ -170,20 +186,38 @@ for (const r of malos) {
 console.log('\nNO ejecutados, por su naturaleza (no son deuda):');
 for (const [g, motivo] of Object.entries(EXCLUIDOS)) console.log('  · ' + g.padEnd(32) + motivo);
 
+// Lo que NO se puede probar en esta máquina. Se ve siempre: una pantalla sin cobertura tiene que
+// doler a la vista, aunque el motivo sea bueno.
+console.log('\n🌍 REQUIEREN UN ENTORNO que esta máquina no tiene (abortan con código 2, no fingen):');
+for (const [g, motivo] of Object.entries(ENTORNO)) console.log('  · ' + g + '\n      ' + motivo);
+
 // La deuda va la ÚLTIMA y con banderita: es lo que el runner NO puede prometer. Un barrido "verde"
 // que calle esto valdría lo mismo que el falso verde que lo hizo nacer.
-console.log('\n🚧 DEUDA — ' + Object.keys(DEUDA).length + ' gates de navegador ROTOS o CADUCADOS, NO se están ejecutando:');
-for (const [g, motivo] of Object.entries(DEUDA)) console.log('  · ' + g + '\n      ' + motivo);
-console.log('  → Mientras sigan aquí, ESTAS PANTALLAS NO ESTÁN CUBIERTAS EN NAVEGADOR. Arreglarlos es tarea aparte.');
+const deuda = Object.keys(DEUDA).length;
+if (deuda) {
+  console.log('\n🚧 DEUDA — ' + deuda + ' gates de navegador ROTOS o CADUCADOS, NO se están ejecutando:');
+  for (const [g, motivo] of Object.entries(DEUDA)) console.log('  · ' + g + '\n      ' + motivo);
+  console.log('  → Mientras sigan aquí, ESTAS PANTALLAS NO ESTÁN CUBIERTAS EN NAVEGADOR. Arreglarlos es tarea aparte.');
+} else {
+  console.log('\n🚧 DEUDA — ninguna. Los 7 gates de navegador que estaban muertos volvieron el 14-jul-2026:');
+  console.log('     4 estaban CADUCADOS (el producto cambió y ellos no) → arreglados y dentro del barrido.');
+  console.log('     2 dependían del MODELO REAL (cuota de IA agotada, no un fallo) → partidos: la pantalla');
+  console.log('       entra al barrido (gate-c2-revision, gate-disa-adjuntar) y la extracción real se corre a mano.');
+  console.log('     1 necesita Tailscale, que aquí no existe → declarado ENTORNO (arriba), aborta en vez de fingir.');
+}
 
-// Los gates de compras crean documentos en la BD viva y, al limpiar, borran el documento pero NO su
-// asiento contable. Cada barrido deja residuo: hay que barrer detrás.
-console.log('\n🧹 Este barrido ha dejado documentos de prueba en el tenant. Para retirarlos:');
+// Los gates de compras crean documentos en la BD viva. Los seis de navegador arreglados el
+// 14-jul-2026 se limpian solos (borran POR ID lo que crearon y dejan el stock cuadrado), pero el
+// RESTO todavía deja documentos —y asientos contables huérfanos— detrás. Mientras sea así, hay que
+// barrer. Que se diga en cada pasada, y no se descubra dentro de tres semanas.
+console.log('\n🧹 Este barrido deja documentos de prueba en el tenant (los gates que aún NO se limpian solos):');
 console.log('     node scripts/limpiar-residuo-gates.mjs           (en seco: dice qué borraría)');
 console.log('     node scripts/limpiar-residuo-gates.mjs --hazlo   (borra y recalcula el stock)');
 
 const pasa = resultados.filter(r => r.estado === 'PASA').length;
 console.log('\n' + '═'.repeat(70));
 console.log(`${pasa}/${resultados.length} pasan` + (malos.length ? `  ·  ${malos.length} NO: ` + malos.map(r => r.gate).join(', ') : ''));
-console.log(`(y ${Object.keys(DEUDA).length} gates en DEUDA, sin ejecutar — arriba)`);
+console.log(deuda
+  ? `(y ${deuda} gates en DEUDA, sin ejecutar — arriba)`
+  : `(0 en deuda · ${Object.keys(EXCLUIDOS).length} excluidos por naturaleza · ${Object.keys(ENTORNO).length} sin entorno aquí — todo listado arriba)`);
 process.exit(malos.length ? 1 : 0);

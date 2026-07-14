@@ -2,14 +2,31 @@
 // tenant desarrollo-bamburu): crear borrador → editar → enviar (OC-NNNN + bloqueo)
 // → imprimir (botón) → enviar email (proveedor con email) → anular → anular y
 // rehacer (referencia visible). Verifica además 0 stock_movements nuevos.
+//
+// DOS COSAS QUE ESTE GATE APRENDIÓ POR LAS MALAS:
+//
+//   1. LA UI YA NO USA alert(), USA toast(). El gate esperaba un `dialog` de Chromium que hoy no
+//      llega nunca. Y no fallaba solo esa aserción: la respuesta que dejaba preparada para el alert
+//      fantasma se quedaba en la cola y se la comía el prompt() SIGUIENTE, que recibía basura → se
+//      anulaba con un motivo vacío, la página no navegaba, y el gate moría en un timeout que no
+//      tenía nada que ver con la causa. Ahora se encola SOLO lo que la página pregunta de verdad,
+//      y los avisos se afirman leyendo el toast REAL (ver engancharToasts).
+//
+//   2. MANDABA UN EMAIL DE VERDAD AL DUEÑO EN CADA PASADA. El envío se sigue probando CONTRA RESEND
+//      DE VERDAD —es lo que hay que probar—, pero contra su buzón sumidero de pruebas
+//      (delivered@resend.dev), no contra la bandeja de nadie. El email del proveedor se restaura al
+//      terminar.
 import puppeteer from 'puppeteer';
-import { tenantDb, launchOpts } from './lib/gate-env.mjs';
+import { tenantDb, launchOpts, engancharToasts, esperarToast } from './lib/gate-env.mjs';
+import { purgarArtefactos } from './lib/gate-fixtures.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 
 const DB_PATH = tenantDb('desarrollo-bamburu');
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
-const OWNER_EMAIL = 'ibrahingil@gmail.com';
+// Buzón sumidero de Resend: acepta y confirma la entrega, pero no aterriza en la bandeja de nadie.
+// Un barrido de regresión no puede tener como efecto secundario escribirle al dueño.
+const SINK_EMAIL = 'delivered@resend.dev';
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
@@ -21,20 +38,32 @@ const csrf = randomBytes(32).toString('base64url');
 const now = Math.floor(Date.now() / 1000);
 db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)').run(token, 2, now, now + 3600, csrf);
 const supOrig = db.prepare('SELECT id, email FROM suppliers WHERE id=1').get();
-db.prepare('UPDATE suppliers SET email=? WHERE id=1').run(OWNER_EMAIL);
+db.prepare('UPDATE suppliers SET email=? WHERE id=1').run(SINK_EMAIL);
 const movBefore = db.prepare('SELECT COUNT(*) c FROM stock_movements').get().c;
 const poBefore = db.prepare('SELECT COUNT(*) c FROM purchase_orders').get().c;
 
 const browser = await puppeteer.launch({ ...launchOpts() });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 900 });
+await engancharToasts(page);
 await page.setCookie({ name: 'asess', value: token, domain: 'desarrollo-bamburu.localhost', path: '/' });
 
-// Cola de respuestas a confirm/prompt/alert
+// Cola de respuestas a los diálogos REALES de la página: confirm() y prompt(), y nada más. Encolar
+// de más es tan peligroso como encolar de menos: un sobrante se lo traga el diálogo siguiente.
+// Si la página abre un diálogo que nadie ha encolado, el gate tiene que ENTERARSE.
+// Rastro de lo que crea el gate (3 órdenes: la del flujo, la 2ª y el sustituto de anular-y-rehacer).
+// Se purga por ID al final: una orden no mueve stock, pero dejar documentos de prueba tirados en el
+// tenant en cada pasada también es ensuciar.
+const creado = { ordenes: [] };
+
 const dialogQueue = [];
-const alerts = [];
+const dialogosInesperados = [];
 page.on('dialog', async d => {
-  alerts.push(d.type() + ': ' + d.message());
+  if (!dialogQueue.length) {
+    dialogosInesperados.push(d.type() + ': ' + d.message());
+    await d.dismiss();
+    return;
+  }
   const next = dialogQueue.shift();
   if (next === undefined) await d.accept();
   else if (next === false) await d.dismiss();
@@ -86,11 +115,14 @@ try {
   await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle0' }), page.click('#btn-save')]);
   const docUrl = page.url();
   const orderId = parseInt(docUrl.match(/purchase-orders\/(\d+)/)[1]);
+  creado.ordenes.push(orderId);
   let body = await page.content();
   ok(body.includes('Borrador (sin número)'), 'documento de borrador sin número');
   ok(body.includes('>Editar<') && body.includes('Enviar</button>'), 'borrador: botones Editar y Enviar');
   ok(body.includes('window.print()'), 'botón Imprimir (window.print)');
-  ok(body.includes('Aromas del Sur') && body.includes('Desarrollo') === body.includes('Desarrollo'), 'cabecera con proveedor en vivo');
+  // (Era una tautología: `x === x`, una aserción que NO podía fallar. Un check que siempre pasa es
+  //  un falso verde en miniatura. Ahora afirma lo que decía afirmar: el proveedor, en la cabecera.)
+  ok(body.includes('Aromas del Sur'), 'cabecera con el proveedor en vivo (Aromas del Sur)');
   await page.screenshot({ path: '/tmp/po-gate-1-borrador.png' });
 
   // ── 3. Editar el borrador ──
@@ -107,7 +139,7 @@ try {
   ok(body.includes('>5</td>'), 'edición guardada (cantidad 3 → 5)');
 
   // ── 4. Enviar: gana OC-NNNN y se bloquea ──
-  dialogQueue.push(undefined, undefined);          // confirm + alert
+  dialogQueue.push(undefined);                     // confirm() — y NADA más: ya no hay alert()
   await page.evaluate(() => enviarOrden());
   await page.waitForNavigation({ waitUntil: 'networkidle0' });
   body = await page.content();
@@ -131,14 +163,17 @@ try {
   await page.goto(BASE + `/admin/purchase-orders/${orderId}/edit`, { waitUntil: 'networkidle0' });
   ok(!page.url().endsWith('/edit'), 'GET /edit de una enviada redirige al documento');
 
-  // ── 5. Enviar por email (Resend REAL al email del dueño) ──
+  // ── 5. Enviar por email — envío REAL por Resend, al buzón sumidero ──
+  //     El aviso ya no es un alert() sino un toast: se espera al toast REAL, sin dormir a ciegas.
+  //     Si Resend fallara, el servicio lanza y la UI pinta un toast de error → la aserción cae.
   await page.goto(BASE + `/admin/purchase-orders/${orderId}`, { waitUntil: 'networkidle0' });
-  dialogQueue.push(undefined, undefined);          // confirm + alert resultado
+  dialogQueue.push(undefined);                     // confirm() — el resultado llega por toast
   await page.evaluate(() => emailOrden());
-  await page.waitForFunction((n) => true, {}, 1);  // los diálogos se procesan en el handler
-  await new Promise(r => setTimeout(r, 4000));     // espera a la respuesta de Resend
-  const emailAlert = alerts.find(a => a.includes('Enviada por email') || a.includes('email'));
-  ok(alerts.some(a => a.startsWith('alert: Enviada por email a ' + OWNER_EMAIL)), 'email enviado a ' + OWNER_EMAIL + ' (Resend OK)');
+  const avisoEmail = await esperarToast(page, /email/i, 30000);
+  ok(!!avisoEmail, 'la UI avisa del resultado del envío: ' + JSON.stringify(avisoEmail && avisoEmail.msg));
+  ok(avisoEmail && avisoEmail.tipo !== 'err', 'el envío NO devolvió error de Resend');
+  ok(avisoEmail && avisoEmail.msg === 'Enviada por email a ' + SINK_EMAIL,
+     'email enviado por Resend a ' + SINK_EMAIL + ' (toast exacto)');
 
   // ── 6. Anular (pide motivo) ──
   dialogQueue.push('precio pactado incorrecto');   // prompt
@@ -157,8 +192,9 @@ try {
     });
     return r.json();
   }, csrf);
+  creado.ordenes.push(create2.id);
   await page.goto(BASE + `/admin/purchase-orders/${create2.id}`, { waitUntil: 'networkidle0' });
-  dialogQueue.push(undefined, undefined);
+  dialogQueue.push(undefined);                     // confirm()
   await page.evaluate(() => enviarOrden());
   await page.waitForNavigation({ waitUntil: 'networkidle0' });
   const oc2 = (await page.content()).match(/OC-\d{4,}/)[0];
@@ -167,6 +203,7 @@ try {
   await page.evaluate(() => anularYRehacer());
   await page.waitForNavigation({ waitUntil: 'networkidle0' });
   ok(page.url().endsWith('/edit'), 'anular-y-rehacer aterriza en el borrador nuevo (editable)');
+  creado.ordenes.push(parseInt(page.url().match(/purchase-orders\/(\d+)/)[1]));   // el sustituto
   body = await page.content();
   ok(body.includes('Sustituye a') && body.includes(oc2), 'el borrador nuevo muestra "Sustituye a ' + oc2 + ' (anulada)"');
   const seeded2 = await page.$$eval('#lines-body tr', rows => rows.length);
@@ -185,15 +222,26 @@ try {
   await page.goto(BASE + '/admin/purchase-orders', { waitUntil: 'networkidle0' });
   await page.screenshot({ path: '/tmp/po-gate-5-lista.png' });
 
+  // ── 9. Ningún diálogo sorpresa: si la página abriera un alert/confirm que el gate no espera,
+  //       la cola se descuadraría y el siguiente prompt recibiría basura. Es exactamente como se
+  //       rompió este gate cuando la UI cambió de alert() a toast(). Que se vea.
+  ok(dialogosInesperados.length === 0, 'ningún diálogo inesperado' + (dialogosInesperados.length ? ': ' + JSON.stringify(dialogosInesperados) : ''));
+
 } finally {
   await browser.close();
   // ── Cuadre final + restauración ──
   const db2 = new Database(DB_PATH);
   const movAfter = db2.prepare('SELECT COUNT(*) c FROM stock_movements').get().c;
   ok(movAfter === movBefore, `stock_movements intactos (${movBefore} → ${movAfter}): la orden NO mueve stock`);
+
+  // Limpieza: se lleva por delante las órdenes que creó el gate (no movieron stock, pero son basura).
+  purgarArtefactos(db2, creado);
   const poAfter = db2.prepare('SELECT COUNT(*) c FROM purchase_orders').get().c;
-  console.log(`  (purchase_orders en dev: ${poBefore} → ${poAfter})`);
+  ok(poAfter === poBefore, `el tenant queda como estaba: purchase_orders vuelve a ${poBefore} (got ${poAfter})`);
+
   db2.prepare('UPDATE suppliers SET email=? WHERE id=1').run(supOrig.email);   // restaurar email original
+  const supAhora = db2.prepare('SELECT email FROM suppliers WHERE id=1').get().email;
+  ok(supAhora === supOrig.email, 'el email del proveedor queda restaurado (' + JSON.stringify(supAhora) + ')');
   db2.prepare('DELETE FROM admin_sessions WHERE token=?').run(token);          // limpiar la sesión del test
   db2.close();
 }

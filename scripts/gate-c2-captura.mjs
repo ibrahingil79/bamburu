@@ -1,6 +1,19 @@
 // Gate de navegador C2 — captura de factura de proveedor por foto/PDF — contra el
 // servidor real (tenant desarrollo-bamburu) y con LLAMADA REAL al modelo (visión).
 //
+// ⚠️ ESTE GATE SE CORRE A MANO, NO EN EL BARRIDO. Llama al modelo de visión de verdad: cuesta
+// dinero, no es determinista, y depende de que al negocio le quede cuota de IA este mes. En julio de
+// 2026 eso lo dejó MUERTO: el tenant de desarrollo agotó su tope (5 € de 5 €), el freno de gasto de
+// core/llm.js empezó a cortar con 429 ANTES de llamar a la API, la pantalla de revisión no llegaba a
+// pintarse y el gate moría esperando el selector #step2. El diagnóstico que quedó escrito —"#step2
+// ya no existe"— era FALSO: el selector estaba donde siempre. Ahora, sin cuota, ABORTA de frente
+// (código 2, "no he verificado NADA") en vez de morir con una traza que parece otra cosa.
+//
+// La PANTALLA de revisión (que es casi todo lo que hay aquí, y lo que de verdad se rompe con los
+// cambios) vive ahora en gate-c2-revision.mjs, que siembra el adjunto en la BD y NO llama al modelo:
+// ese sí entra en el barrido, gratis y determinista. Aquí se queda lo único que no se puede fingir:
+// que el modelo LEE una factura de verdad.
+//
 //   PART 1: llamada real de extracción sobre una imagen de factura sintética →
 //           imprime la salida LITERAL del modelo y verifica que parsea.
 //   FLUJO A (imagen, compra directa): subir → revisar → corregir una línea (producto
@@ -12,7 +25,7 @@
 // Genera dos órdenes/compra de prueba en el tenant de desarrollo y deja productos nuevos.
 //   node scripts/gate-c2-captura.mjs
 import puppeteer from 'puppeteer';
-import { tenantDb, launchOpts } from './lib/gate-env.mjs';
+import { tenantDb, launchOpts, requireLlmQuota } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 
@@ -25,6 +38,7 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const db = new Database(DB_PATH);
+requireLlmQuota(db);   // sin cuota, el modelo devuelve 429 y este gate no probaría NADA: mejor abortar
 const token = randomBytes(32).toString('base64url');
 const csrf = randomBytes(32).toString('base64url');
 const now = Math.floor(Date.now() / 1000);

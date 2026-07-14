@@ -1,6 +1,16 @@
 // Gate — Subir factura DENTRO del chat de DISA (Pilar 3) — servidor real (tenant
 // desarrollo-bamburu) y LLAMADA REAL al modelo (visión). Reutiliza C2 de punta a punta.
 //
+// ⚠️ ESTE GATE SE CORRE A MANO, NO EN EL BARRIDO. Llama al modelo de verdad: cuesta dinero, no es
+// determinista y depende de la cuota de IA del mes. En julio de 2026 el tope del tenant (5 €) se
+// agotó, DISA empezó a contestar "no he podido leerlo como una factura… límite de uso" (degradando
+// con elegancia, que es lo correcto), y el gate reventaba leyendo un capture_url que ya no venía.
+// Ahora, sin cuota, ABORTA de frente (código 2: "no he verificado NADA").
+//
+// Lo que NO necesita al modelo —las tres superficies de adjuntar de DISA, el aterrizaje precargado
+// en la pantalla de revisión y la protección del archivo— vive en gate-disa-adjuntar.mjs, que sí
+// entra en el barrido.
+//
 //   PART 1: POST /api/disa/attach con una imagen de factura → salida LITERAL del modelo,
 //           reconocimiento (reply + capture_url) y confirm-first (NO escribe stock/compras).
 //   FLUJO (navegador): abrir el widget de DISA → adjuntar la factura → DISA responde y
@@ -10,7 +20,7 @@
 //
 //   node scripts/gate-disa-captura-chat.mjs
 import puppeteer from 'puppeteer';
-import { tenantDb, launchOpts } from './lib/gate-env.mjs';
+import { tenantDb, launchOpts, requireLlmQuota } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 import { writeFileSync } from 'fs';
@@ -24,6 +34,8 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const db = new Database(DB_PATH);
+requireLlmQuota(db);   // sin cuota, DISA degrada y no devuelve capture_url: el gate no probaría NADA
+
 const token = randomBytes(32).toString('base64url');
 const csrf = randomBytes(32).toString('base64url');
 const now = Math.floor(Date.now() / 1000);
