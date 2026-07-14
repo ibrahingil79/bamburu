@@ -290,11 +290,53 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
       mudó del topbar al icono de DISA** (mismo `contarPropuestasPendientes`, `propBadgeSync` retargeteado;
       se retiró `#tbProps`). Solo navegación/vista; gateado igual (invoices.read/cobros.read). Verificado:
       `gate-nav-inicio-disa.mjs` 34/0.
+    - ✅ **D5d — CLIENTES DORMIDOS · reenganche (14 jul 2026, `a30009a`).** Cuarto tipo de propuesta
+      (`cliente_dormido`). DISA detecta al cliente **que te compraba y dejó de hacerlo**, y te propone
+      reengancharlo. Mismo panel, mismo cron de las 07:45, misma tabla.
+      **EL RITMO SE APRENDE, NO SE IMPONE.** Un cliente que compra cada semana lleva dormido a los 30
+      días; uno que compra cada trimestre, no — medirlos con la misma vara es lo que convierte un aviso
+      útil en ruido que se ignora. Con **2+ compras**: hueco **MEDIANO** (no la media: una compra rara no
+      debe torcer el ritmo de un año) **× 2**, con **suelo de 30 días**. Con **1 compra**: **respaldo de
+      90**. El que **NUNCA compró NO entra** (no está dormido: nunca despertó). Regla de venta =
+      `countsAsReceivable`, la misma que cobros. Las **ventas de mostrador SIN cliente no ensucian a
+      nadie**, y no por un filtro: se agrupa por `client_id`, así que una venta que no es de nadie no
+      puede dormir a nadie. Ajustables anotados en `ventas-metrics.js`.
+      **APROBAR NO ENVÍA NADA** (opción C): aprobar = **DISA REDACTA** y te lo enseña; **enviarlo es un
+      segundo clic, tuyo, después de leerlo**. La propuesta sigue *pendiente* tras redactar — aprobar la
+      **prepara**, no la resuelve.
+      **NO nace un segundo camino de email.** `registerCollectionAction` (el de los recordatorios) está
+      **atado a una factura**, y un cliente dormido no tiene ninguna que colgar — *de eso va*. Se usa la
+      vía que YA existe para escribir a un cliente sin factura: **`registerClientActivitySvc`
+      (type=email) → `core/mailer.sendEmail`**, el único envoltorio de Resend del proyecto ("el mismo
+      que cobros"), y **queda registrado en `client_activities`** como si lo hubieras escrito tú.
+      **Tono `reenganche` NUEVO** en `opportunityEmail` (aditivo): reutilizar `seguimiento` escribía
+      *"Retomo el hilo de TU SOLICITUD"* a alguien que no ha pedido nada — un email sutilmente falso a un
+      cliente que ya se fue es **peor que no escribirle**. Sin marketing, sin culpa.
+      **REAPARICIÓN:** índice único **PARCIAL** `(client_id, type) WHERE status='pendiente'` → no se
+      repite el pendiente, pero el **historial convive sin reescribirse**. El **descanso de 90 días** lo
+      aplica el generador, y **cuenta también tras ENVIAR**, no solo tras descartar: si no, al mandar el
+      email la propuesta se cerraría, el índice dejaría de bloquear, y a la mañana siguiente le
+      escribirías **otra vez** — una máquina de spam en dos líneas.
+      `disa_proposals` y `client_activities` **FUERA de WRITABLE_TABLES** (afirmado en el gate).
+      **Candado: `clients.read` Y `crm.manage`**. Sin permisos nuevos.
+      **DOS BUGS REALES cazados por el camino:** (1) **el badge MENTÍA** — la lista de "qué tipos ve este
+      usuario" estaba escrita DOS VECES (rutas y layout del riel), y al añadir D5c solo se actualizó una:
+      el badge llevaba el día sin contar las recurrentes. Ahora la regla es **única** (`tiposVisiblesPara`)
+      y una aserción la vigila. (2) **el ritmo se medía en FACTURAS, no en días** — lo destapó una clienta
+      real con **tres facturas del MISMO día** (una visita, tres documentos): salían "dos huecos de 0
+      días" → ritmo 0 → dormida a los 30, explicado con el disparate de *"compra cada 0 días"*. Tres
+      facturas de una visita son **UNA compra**; ahora se mide en días distintos.
+      Verificado: `verify-propuestas-dormidos.mjs` **77/0** (copias desechables) + `gate-propuestas-
+      dormidos.mjs` **39/0** (navegador; el clic de enviar va por **Resend de verdad al buzón sumidero**
+      `delivered@resend.dev` — **cero correos a personas**). Barrido **37/37**.
     - 📋 **Diagnóstico SOLO LECTURA (14 jul 2026) — terreno para 3 propuestas nuevas.** Se pidieron tres;
       el diagnóstico **dio la vuelta a lo que se esperaba**. Veredicto de cada una:
       - 🟢 **Facturas recurrentes por emitir → VERDE.** El motor **ya existía entero**; no había que
         deducir cadencias de nada. **CONSTRUIDA: es D5c, arriba.**
-      - 🟡 **Clientes dormidos → ÁMBAR.** *(pendiente, y necesita DOS decisiones del dueño.)* La última
+      - ✅ **Clientes dormidos → CONSTRUIDA: es D5d, arriba** (era ÁMBAR; las dos decisiones se tomaron:
+        descanso de 90 días —también tras enviar— y los que nunca compraron quedan FUERA). El punto ciego
+        del mostrador se resolvió por diseño: se agrupa por cliente, así que una venta sin cliente no
+        duerme a nadie. *(Diagnóstico original, para el registro:)* La última
         compra por cliente sale directa (`MAX(issue_date)`), y `ventas-metrics.js:clientesInactivos()`
         ya hace el cálculo — pero **solo devuelve un número**, hay que extenderlo a filas. El umbral
         encaja igual que sus hermanos (`dias_cliente_dormido` en `company_config` + input en Ajustes).
@@ -320,8 +362,10 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
     - **Siguientes piezas de proactividad (sin encargo, para planificar):** más tipos de propuesta
       (subsanación Verifactu, etc.); push en vivo (SSE) en vez del sondeo de 60 s; que DISA proponga
       desde la propia campana. Es el resto del diseño de D5.
-- **Lo que queda del Eje B es diseñar/construir MÁS proactividad** (D5: clientes dormidos y vencimientos
-  fiscales, ambos **a la espera de una decisión del dueño**, arriba). No sin encargo.
+- **Lo que queda del Eje B es diseñar/construir MÁS proactividad.** De las tres propuestas del
+  diagnóstico, **dos están HECHAS** (D5c recurrentes, D5d dormidos) y **queda UNA: los vencimientos
+  fiscales**, que **NO espera código sino tu decisión** sobre el calendario fiscal (el motor contable
+  está cerrado y el 303/130 ya calculan; ver arriba). No sin encargo.
 
 ## Verificación (transversal)
 
