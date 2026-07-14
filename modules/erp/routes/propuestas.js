@@ -3,15 +3,16 @@ import { adminLayout, can, skeletonRows } from '../layout.js';
 import { hoyLocal } from '../avisos.js';
 import {
   propuestasPendientes, contarPropuestasPendientes,
-  generarPropuestasImpago, generarPropuestasPago,
-  TIPO_IMPAGO, TIPO_PAGO,
+  generarPropuestasImpago, generarPropuestasPago, generarPropuestasRecurrentes,
+  TIPO_IMPAGO, TIPO_PAGO, TIPO_RECURRENTE,
 } from '../propuestas.js';
+import { emitirOcurrencia } from '../recurrentes.js';
 import { registerCollectionAction } from '../cobros.js';
 import { pagoModalHtml, pagoModalScript } from '../views/pago-modal.js';
 import { sendEmail } from '../../../core/mailer.js';
 
 // D5 (Eje B) — PANEL "PROPUESTAS DE DISA". Lista el trabajo que DISA ha preparado y que espera una
-// decisión del dueño. NUNCA se ejecuta nada sin aprobación. Dos tipos hoy:
+// decisión del dueño. NUNCA se ejecuta nada sin aprobación. Tres tipos hoy:
 //
 //   · recordatorio_impago (D5)  — factura de VENTA ya vencida → borrador de email de cobro.
 //                                 Aprobar = ENVIAR el email (motor de cobros).
@@ -20,6 +21,11 @@ import { sendEmail } from '../../../core/mailer.js';
 //                                 precargado con el importe pendiente, y registrar el pago por el
 //                                 ÚNICO endpoint de escritura. A un proveedor no se le manda email
 //                                 avisándole de que se le va a pagar: la acción útil es pagar.
+//   · emitir_recurrente         — la iguala/cuota que TOCA este ciclo y sigue sin emitirse (una
+//                                 ocurrencia en 'borrador'). Aprobar = EMITIRLA, un clic, llamando a
+//                                 `emitirOcurrencia` — el MISMO servicio que usa el botón de
+//                                 /admin/recurrentes, el que pasa por createInvoice y pone la huella
+//                                 Verifactu. Aquí NO hay una segunda forma de emitir una factura.
 //
 // PERMISOS (criterio anti-backdoor: cada tipo exige lo mismo que SU pantalla de origen, así una
 // propuesta nunca abre datos ni acciones que la pantalla te niega). owner/admin bypass en todos.
@@ -29,6 +35,14 @@ import { sendEmail } from '../../../core/mailer.js';
 //   pago_por_vencer      purchases.read (= /admin/pagos) purchases.create (registra   como VER
 //                                                        el pago; lo exige el propio
 //                                                        endpoint de pagos)
+//   emitir_recurrente    recurrentes.read Y             invoices.create (lo exige el  como VER
+//                        invoices.create                 propio POST de emitir)
+//
+// El candado de emitir_recurrente es a propósito MÁS estricto que el de sus hermanos, y exige las DOS
+// cosas: `recurrentes.read` (la propuesta enseña los datos de la plantilla —cliente, concepto,
+// importe de la iguala— que son justo lo que esa pantalla guarda) e `invoices.create` (el permiso que
+// exige de verdad emitir). Quien no puede emitir una recurrente NO la ve: ni en la lista, ni en el
+// badge, ni se le genera. Falla cerrado. Ningún permiso nuevo: los dos ya existían.
 export function createPropuestasRoutes(db) {
   const api = new Hono();
   const views = new Hono();
@@ -36,17 +50,24 @@ export function createPropuestasRoutes(db) {
   const today = () => hoyLocal();
   const puedeVerImpago = c => can(c, 'invoices.read') || can(c, 'cobros.read');
   const puedeVerPago = c => can(c, 'purchases.read');
+  // Emitir una recurrente exige invoices.create; ver la plantilla, recurrentes.read. Se piden las DOS:
+  // quien no puede emitirla no la ve (ver la cabecera del fichero).
+  const puedeVerRecurrente = c => can(c, 'recurrentes.read') && can(c, 'invoices.create');
   // Los tipos que ESTE usuario puede ver. Falla cerrado: sin permiso, el tipo no entra en la lista,
   // ni en el contador del badge, ni se genera.
   const tiposVisibles = c => {
     const t = [];
     if (puedeVerImpago(c)) t.push(TIPO_IMPAGO);
     if (puedeVerPago(c)) t.push(TIPO_PAGO);
+    if (puedeVerRecurrente(c)) t.push(TIPO_RECURRENTE);
     return t;
   };
   const puedeVer = c => tiposVisibles(c).length > 0;
   // Permiso de VER del tipo de una propuesta concreta (para descartar).
-  const puedeVerTipo = (c, tipo) => (tipo === TIPO_PAGO ? puedeVerPago(c) : puedeVerImpago(c));
+  const puedeVerTipo = (c, tipo) => (
+    tipo === TIPO_PAGO ? puedeVerPago(c)
+    : tipo === TIPO_RECURRENTE ? puedeVerRecurrente(c)
+    : puedeVerImpago(c));
 
   // GET /api/erp/propuestas — las pendientes, con importes y días recalculados en vivo. SOLO de los
   // tipos que este usuario puede ver.
@@ -120,6 +141,39 @@ export function createPropuestasRoutes(db) {
     } catch (e) { return c.json({ error: e.message }, 500); }
   });
 
+  // POST /api/erp/propuestas/:id/emitir — APROBAR Y EMITIR la factura recurrente que toca.
+  //
+  // NO emite por su cuenta: llama a `emitirOcurrencia`, EL MISMO servicio que hay detrás del botón de
+  // /admin/recurrentes — el que pasa por createInvoice y pone la huella Verifactu. Aquí no nace una
+  // segunda forma de emitir una factura; solo un atajo para llegar a la que ya existe.
+  //
+  // Exige `invoices.create`, lo mismo que exige ese POST: si no, esta ruta sería un camino más flojo
+  // de emitir. Y como emitirOcurrencia ya rechaza la doble emisión (409 si la ocurrencia no está en
+  // 'borrador'), el guardián real está donde tiene que estar: en el motor, no en el panel.
+  //
+  // La propuesta se marca resuelta SOLO si la factura se emitió de verdad. Si emitirOcurrencia lanza
+  // (plantilla sin líneas, ya emitida, lo que sea), la propuesta SIGUE pendiente y se devuelve el
+  // motivo: nada se da por hecho si no se hizo.
+  api.post('/:id/emitir', c => {
+    if (!can(c, 'invoices.create')) return c.json({ error: 'No tienes permiso para emitir facturas.' }, 403);
+    try {
+      const id = parseInt(c.req.param('id'));
+      const p = db.prepare('SELECT * FROM disa_proposals WHERE id=?').get(id);
+      if (!p) return c.json({ error: 'Propuesta no encontrada' }, 404);
+      if (p.type !== TIPO_RECURRENTE) return c.json({ error: 'Esta propuesta no es de emisión recurrente.' }, 400);
+      if (p.status !== 'pendiente') return c.json({ error: 'Esta propuesta ya se resolvió (' + p.status + ').' }, 409);
+      if (!puedeVerRecurrente(c)) return c.json({ error: 'Sin permiso' }, 403);
+
+      const factura = emitirOcurrencia(db, p.occurrence_id);   // ← la vía real. Si falla, lanza y no se marca nada.
+
+      const quien = c.get('session')?.userName || c.get('session')?.userId || '';
+      db.prepare("UPDATE disa_proposals SET status='aprobada_emitida', resolved_at=?, resolved_by=? WHERE id=?")
+        .run(new Date().toISOString(), String(quien), id);
+      return c.json({ ok: true, invoice_id: factura.id, invoice_number: factura.invoice_number,
+        message: 'Factura ' + (factura.invoice_number || '#' + factura.id) + ' emitida.' });
+    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+  });
+
   // POST /api/erp/propuestas/:id/descartar — marca 'descartada'. Por el índice único (factura,tipo)
   // NO se vuelve a proponer esa factura. No envía ni paga nada. Exige el permiso de VER de SU tipo:
   // descartar una propuesta de pago necesita permiso de compras, no de cobros.
@@ -147,6 +201,7 @@ export function createPropuestasRoutes(db) {
       const out = {};
       if (tipos.includes(TIPO_IMPAGO)) out.impago = generarPropuestasImpago(db, { today: today() });
       if (tipos.includes(TIPO_PAGO)) out.pago = generarPropuestasPago(db, { today: today() });
+      if (tipos.includes(TIPO_RECURRENTE)) out.recurrente = generarPropuestasRecurrentes(db, { today: today() });
       return c.json(out);
     } catch (e) { return c.json({ error: e.message }, 500); }
   });
@@ -159,15 +214,17 @@ export function createPropuestasRoutes(db) {
     const csrf = c.get('session')?.csrfToken || '';
     const puedeAprobar = can(c, 'cobros.manage');
     const puedePagar = can(c, 'purchases.create');   // el mismo que exige el botón "Pagar" de /admin/pagos
+    const puedeEmitir = can(c, 'invoices.create');   // el mismo que exige emitir en /admin/recurrentes
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const content = `
       <div class="ph"><h2>Propuestas de DISA</h2>
         <button class="btn btn-secondary" onclick="loadProps()"><i class="ti ti-refresh"></i> Actualizar</button>
       </div>
       <div class="card" style="margin-bottom:1rem"><div class="card-body" style="color:var(--muted)">
-        DISA prepara el trabajo y te lo deja listo: recordatorios de cobro para tus facturas vencidas, y
-        los pagos a proveedor que están a punto de vencer. <strong>Nada se ejecuta solo:</strong> revísalo,
-        edítalo si quieres, y apruébalo — o descártalo.
+        DISA prepara el trabajo y te lo deja listo: recordatorios de cobro para tus facturas vencidas,
+        los pagos a proveedor que están a punto de vencer, y las facturas recurrentes (igualas y cuotas)
+        que tocan y aún no has emitido. <strong>Nada se ejecuta solo:</strong> revísalo, edítalo si
+        quieres, y apruébalo — o descártalo.
       </div></div>
       <div id="propList">${skeletonRows ? '' : ''}<p style="color:var(--muted)">Cargando…</p></div>
       ${pagoModalHtml()}
@@ -184,12 +241,14 @@ export function createPropuestasRoutes(db) {
         .prop-tag{display:inline-block;font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding:.12rem .4rem;border-radius:5px;vertical-align:.08em}
         .prop-tag.t-cobro{background:var(--accent-soft,rgba(59,130,246,.14));color:var(--accent,#3b82f6)}
         .prop-tag.t-pago{background:rgba(245,158,11,.14);color:#b45309}
+        .prop-tag.t-recurrente{background:rgba(16,185,129,.14);color:#047857}
       </style>
       <script>
       ${pagoModalScript(sym)}
       const SYM = ${JSON.stringify(sym)};
       const PUEDE_APROBAR = ${puedeAprobar ? 'true' : 'false'};
       const PUEDE_PAGAR = ${puedePagar ? 'true' : 'false'};
+      const PUEDE_EMITIR = ${puedeEmitir ? 'true' : 'false'};
       // De factura de compra → id de propuesta. El modal de pago avisa con el id de la FACTURA
       // (no sabe nada de propuestas); así sabemos qué propuesta cerrar cuando el pago se guarda.
       let PROP_POR_FACTURA = {};
@@ -239,14 +298,41 @@ export function createPropuestasRoutes(db) {
           +'</div>';
       }
 
-      function propHtml(p){ return p.type==='pago_por_vencer' ? pagoHtml(p) : impagoHtml(p); }
+      // ── Tarjeta de EMITIR FACTURA RECURRENTE: la iguala que toca y sigue sin emitirse. No hay nada
+      //    que rellenar (la plantilla ya dice cliente, líneas, IVA e IRPF): Aprobar = emitir, un clic.
+      //    El importe viene recalculado EN VIVO desde la plantilla, no de la copia del día que se propuso. ──
+      function recurrenteHtml(p){
+        const imp = (p.importe!=null ? p.importe.toFixed(2) : '—');
+        const desglose = (p.base!=null)
+          ? 'base '+SYM+p.base.toFixed(2)+' + IVA '+SYM+p.iva.toFixed(2)+(p.irpf>0?' − IRPF '+SYM+p.irpf.toFixed(2):'')
+          : '';
+        const noViva = p.viva ? ''
+          : '<p class="prop-warn">⚠ Este borrador ya no está pendiente'+(p.occ_status?' ('+escHtml(p.occ_status)+')':'')+'. Se emitió u omitió desde Recurrentes. Descártala.</p>';
+        const acciones = (PUEDE_EMITIR && p.viva)
+          ? '<button class="btn btn-primary btn-sm" onclick="emitir('+p.id+')">Aprobar y emitir</button>'
+          : (!PUEDE_EMITIR ? '<span class="prop-meta">Necesitas permiso para emitir facturas.</span>' : '');
+        return '<div class="prop-card" id="prop'+p.id+'">'
+          +'<div class="prop-head"><div><span class="prop-tag t-recurrente">Recurrente</span> <strong>'+escHtml(p.client_name||'Cliente')+'</strong> · '+escHtml(p.document_name||'Factura')+'</div>'
+          +'<div class="prop-meta"><strong>'+SYM+imp+'</strong> · toca el '+escHtml(p.due_date||'—')+'</div></div>'
+          +'<div class="prop-meta">'+escHtml(p.concepto||'—')+(desglose?' · '+desglose:'')+'</div>'
+          + noViva
+          +'<div class="prop-actions">'+acciones
+          +' <button class="btn btn-secondary btn-sm" onclick="descartar('+p.id+')">Descartar</button></div>'
+          +'</div>';
+      }
+
+      function propHtml(p){
+        if (p.type==='pago_por_vencer') return pagoHtml(p);
+        if (p.type==='emitir_recurrente') return recurrenteHtml(p);
+        return impagoHtml(p);
+      }
 
       function pintar(props){
         const box=document.getElementById('propList');
         PROP_POR_FACTURA = {};
         props.forEach(function(p){ if(p.type==='pago_por_vencer') PROP_POR_FACTURA[p.supplier_invoice_id]=p.id; });
         box.innerHTML = props.length ? props.map(propHtml).join('')
-          : (window.emptyRow ? '' : '') + '<div class="card"><div class="card-body" style="color:var(--muted)">No hay propuestas pendientes. Cuando una factura de venta lleve vencida más días que el umbral, o un pago a proveedor esté a punto de vencer, DISA lo preparará aquí.</div></div>';
+          : (window.emptyRow ? '' : '') + '<div class="card"><div class="card-body" style="color:var(--muted)">No hay propuestas pendientes. Cuando una factura de venta lleve vencida más días que el umbral, un pago a proveedor esté a punto de vencer, o toque emitir una factura recurrente, DISA lo preparará aquí.</div></div>';
         if (typeof window.propBadgeSync==='function') window.propBadgeSync(props.length);
       }
 
@@ -268,6 +354,14 @@ export function createPropuestasRoutes(db) {
         const body=document.getElementById('body'+id).value;
         try { const r=await api('POST','/api/erp/propuestas/'+id+'/aprobar',{subject,body});
               toast(r.message||'Enviado'); loadProps(); }
+        catch(e){ toast(e.message||'Error','err'); }
+      };
+      // Emitir = un clic. Llama a la propuesta, que por dentro usa la MISMA vía que /admin/recurrentes.
+      // Si la emisión falla, la propuesta sigue pendiente y se ve el motivo.
+      window.emitir = async function(id){
+        if (!confirm('¿Emitir esta factura recurrente? Nacerá con su número y su huella Verifactu.')) return;
+        try { const r=await api('POST','/api/erp/propuestas/'+id+'/emitir',{});
+              toast(r.message||'Factura emitida'); loadProps(); }
         catch(e){ toast(e.message||'Error','err'); }
       };
       window.descartar = async function(id){

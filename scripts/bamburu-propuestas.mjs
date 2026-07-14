@@ -30,7 +30,7 @@ import { readdirSync } from 'fs';
 import { join, basename, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { runMigrations } from '../modules/erp/models.js';
-import { generarPropuestasImpago, generarPropuestasPago } from '../modules/erp/propuestas.js';
+import { generarPropuestasImpago, generarPropuestasPago, generarPropuestasRecurrentes } from '../modules/erp/propuestas.js';
 import { hoyLocal } from '../modules/erp/avisos.js';
 
 const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -50,7 +50,8 @@ function tenantDbs() {
 function generarTodo(db) {
   const impago = generarPropuestasImpago(db, { today: TODAY });
   const pago = generarPropuestasPago(db, { today: TODAY });
-  return { impago, pago };
+  const recurrente = generarPropuestasRecurrentes(db, { today: TODAY });
+  return { impago, pago, recurrente };
 }
 
 function processTenant(path) {
@@ -72,21 +73,29 @@ function processTenant(path) {
       + ' → ' + verbo + r.impago.creadas + ', ya tenían ' + r.impago.yaTenian + ', sin email ' + r.impago.sinEmail);
     log(slug + ': ' + pre + 'pago (umbral ' + r.pago.umbral + 'd antes de vencer) · candidatas ' + r.pago.candidatas
       + ' → ' + verbo + r.pago.creadas + ', ya tenían ' + r.pago.yaTenian);
-    return { slug, creadasImpago: r.impago.creadas, creadasPago: r.pago.creadas, sinEmail: r.impago.sinEmail };
+    log(slug + ': ' + pre + 'recurrentes (borradores que tocan) · candidatas ' + r.recurrente.candidatas
+      + ' → ' + verbo + r.recurrente.creadas + ', ya tenían ' + r.recurrente.yaTenian
+      + ', sin líneas ' + r.recurrente.sinLineas);
+    return {
+      slug, creadasImpago: r.impago.creadas, creadasPago: r.pago.creadas,
+      creadasRecurrente: r.recurrente.creadas, sinEmail: r.impago.sinEmail,
+    };
   } finally {
     db.close();
   }
 }
 
-let totalImpago = 0, totalPago = 0, totalSinEmail = 0, fallos = 0;
+let totalImpago = 0, totalPago = 0, totalRecurrente = 0, totalSinEmail = 0, fallos = 0;
 for (const path of tenantDbs()) {
   try {
     const r = processTenant(path);
-    totalImpago += r.creadasImpago; totalPago += r.creadasPago; totalSinEmail += r.sinEmail;
+    totalImpago += r.creadasImpago; totalPago += r.creadasPago;
+    totalRecurrente += r.creadasRecurrente; totalSinEmail += r.sinEmail;
   } catch (e) {
     fallos++;
     log(basename(path) + ': EXCEPCIÓN: ' + e.message);
   }
 }
 log('Resumen ' + TODAY + ': recordatorios de impago nuevos=' + totalImpago + ', propuestas de pago nuevas=' + totalPago
+  + ', facturas recurrentes por emitir=' + totalRecurrente
   + ', facturas sin email del cliente=' + totalSinEmail + ', fallos=' + fallos + (DRY ? ' (dry-run)' : ''));

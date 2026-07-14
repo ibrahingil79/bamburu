@@ -1614,6 +1614,17 @@ export function runMigrations(db) {
   // las filas de impago (supplier_invoice_id NULL) no compiten entre ellas, ni las de pago (invoice_id NULL).
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_disa_proposals_supplier_invoice_type ON disa_proposals(supplier_invoice_id, type)`);
 
+  // PROPUESTA DE EMITIR UNA FACTURA RECURRENTE. Tercer espacio de ids: la propuesta apunta a una
+  // OCURRENCIA (recurring_occurrences) — la factura todavía NO existe, ese es justo el asunto. Por eso
+  // no se reutiliza invoice_id: se llenaría con el id de una ocurrencia y propuestasPendientes(), que
+  // hace LEFT JOIN invoices ON i.id = p.invoice_id, la ataría a una factura de venta ajena. Aditivo, sin DROP.
+  addCol(db, 'disa_proposals', 'occurrence_id', 'INTEGER');
+  // Misma idempotencia estricta que sus dos hermanos: una sola propuesta por (ocurrencia, tipo) para
+  // SIEMPRE, sea cual sea su estado → una descartada NO se vuelve a proponer. Y convive con los otros
+  // dos índices por lo dicho arriba: los NULL de un índice único son todos distintos entre sí, así que
+  // las filas de impago/pago (occurrence_id NULL) no compiten entre ellas.
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_disa_proposals_occurrence_type ON disa_proposals(occurrence_id, type)`);
+
   // T4 Paso 2.1 — gestión a nivel de CUENTA. Un cobro/recordatorio/promesa de cuenta se
   // materializa en varias filas (un invoice_payment o un collection_action por factura viva).
   // Esta columna OPCIONAL agrupa esas filas para poder trazar de qué lote vinieron. Aditiva,

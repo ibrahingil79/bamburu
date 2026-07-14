@@ -13,10 +13,12 @@
 
 import { openDebts, collectionEmail, invoiceCobro } from './cobros.js';
 import { openPayables } from './pagos.js';
+import { borradoresPendientes, importeEstimado } from './recurrentes.js';
 
 export const TIPO_IMPAGO = 'recordatorio_impago';
 export const TIPO_PAGO = 'pago_por_vencer';
-export const TIPOS = [TIPO_IMPAGO, TIPO_PAGO];
+export const TIPO_RECURRENTE = 'emitir_recurrente';
+export const TIPOS = [TIPO_IMPAGO, TIPO_PAGO, TIPO_RECURRENTE];
 const UMBRAL_DEFECTO = 7;   // días tras el vencimiento; editable en Ajustes (company_config)
 
 // Días entre dos fechas YYYY-MM-DD (a - b), en UTC. Mismo cálculo que pagos.js/cobros.js.
@@ -149,6 +151,54 @@ export function generarPropuestasPago(db, opts = {}) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// EMITIR FACTURA RECURRENTE — la iguala/cuota que TOCA este ciclo y sigue sin emitirse.
+//
+// El motor de recurrentes ya existía entero: `generateDueOccurrences` (lo corre el cron de avisos)
+// crea una OCURRENCIA en 'borrador' cada vez que una plantilla cumple fecha, y la pantalla
+// /admin/recurrentes deja emitirla de un clic. Lo que faltaba era que DISA te lo PUSIERA DELANTE en
+// vez de esperar a que entres a mirar. Ese es el mismo salto que dio D5: de avisar, a preparar.
+//
+// A diferencia de D5 (que prepara un email) y de D5b (que prepara un pago), aquí la acción no tiene
+// nada que rellenar: la plantilla ya dice cliente, líneas, IVA e IRPF, y la ocurrencia dice la fecha.
+// Aprobar = EMITIR, un clic, por `emitirOcurrencia` — la MISMA vía que usa la pantalla, la que pasa
+// por createInvoice y pone la huella Verifactu. Aquí no se emite nada por un camino nuevo.
+// ════════════════════════════════════════════════════════════════════════════
+
+// Genera las propuestas de emisión que falten, una por ocurrencia en 'borrador'. Idempotente por el
+// índice único (occurrence_id, type): una ocurrencia nunca tiene dos propuestas, y una descartada no
+// se re-propone. Devuelve { creadas, yaTenian, sinLineas, candidatas }.
+//
+//   sinLineas = ocurrencias de una plantilla que se quedó sin líneas. `emitirOcurrencia` las
+//               rechazaría (400), así que proponer su emisión sería prometer un botón que no funciona.
+//               No se genera propuesta: se cuenta y se devuelve como hallazgo.
+export function generarPropuestasRecurrentes(db, opts = {}) {
+  const candidatas = borradoresPendientes(db);   // fuente canónica: ocurrencias en 'borrador'
+  const ins = db.prepare(
+    `INSERT OR IGNORE INTO disa_proposals (type, occurrence_id, client_id, status, subject, body, created_at)
+     VALUES (?, ?, ?, 'pendiente', ?, '', ?)`
+  );
+  const now = opts.now || new Date().toISOString();
+
+  let creadas = 0, yaTenian = 0, sinLineas = 0;
+  for (const o of candidatas) {
+    const existe = db.prepare('SELECT 1 FROM disa_proposals WHERE occurrence_id=? AND type=?').get(o.id, TIPO_RECURRENTE);
+    if (existe) { yaTenian++; continue; }
+
+    const nLineas = db.prepare('SELECT COUNT(*) n FROM recurring_template_items WHERE template_id=?').get(o.template_id).n;
+    if (!nLineas) { sinLineas++; continue; }   // emitirla fallaría (400): no se promete lo que no se puede cumplir
+
+    // `subject` es solo una etiqueta legible para el registro (aquí NO hay email, como en D5b). Todo lo
+    // que el panel pinta —importe, cliente, fecha— se recalcula SIEMPRE en vivo, nunca de esta copia:
+    // la plantilla pudo cambiar de precio entre que se propuso y que se aprueba.
+    const etiqueta = 'Emitir ' + (o.document_name || 'Factura') + ' de ' + (o.client_name || 'cliente')
+      + ' · toca el ' + o.due_date;
+    const info = ins.run(TIPO_RECURRENTE, o.id, o.client_id || null, etiqueta, now);
+    if (info.changes) creadas++; else yaTenian++;   // el índice único cerró una carrera → cuenta como ya-tenía
+  }
+  return { creadas, yaTenian, sinLineas, candidatas: candidatas.length };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 
 // Propuestas PENDIENTES, con los datos que pinta el panel. `tipos` acota QUÉ tipos se devuelven: el
 // panel pasa solo los que el usuario tiene permiso de ver (un tipo es una pantalla distinta y un
@@ -210,6 +260,45 @@ export function propuestasPendientes(db, today, tipos = TIPOS) {
         importe: d ? d.pendiente : Number(p.total || 0),
         dias_para_vencer: due ? diasEntre(due, t) : null,
         viva: !!d,   // false = ya pagada/anulada tras generarla → el panel lo avisa
+      });
+    }
+  }
+
+  if (quiere.has(TIPO_RECURRENTE)) {
+    const props = db.prepare(
+      `SELECT p.*, o.due_date, o.status AS occ_status, o.template_id, o.invoice_id AS emitida_invoice_id,
+              t.document_name, t.status AS tpl_status,
+              c.name AS client_name
+         FROM disa_proposals p
+         LEFT JOIN recurring_occurrences o ON o.id = p.occurrence_id
+         LEFT JOIN recurring_templates   t ON t.id = o.template_id
+         LEFT JOIN clients               c ON c.id = t.client_id
+        WHERE p.status = 'pendiente' AND p.type = ?
+        ORDER BY o.due_date, p.id DESC`
+    ).all(TIPO_RECURRENTE);
+    for (const p of props) {
+      // Importe y concepto SIEMPRE en vivo, desde la plantilla: si el dueño le subió el precio a la
+      // iguala después de que DISA la propusiera, se emite —y se enseña— el precio de HOY.
+      const imp = p.template_id ? importeEstimado(db, p.template_id) : null;
+      const lineas = p.template_id
+        ? db.prepare('SELECT description FROM recurring_template_items WHERE template_id=? ORDER BY id').all(p.template_id)
+        : [];
+      const concepto = lineas.length
+        ? lineas[0].description
+          + (lineas.length > 1 ? ' (+' + (lineas.length - 1) + ' línea' + (lineas.length === 2 ? '' : 's') + ' más)' : '')
+        : '—';
+      out.push({
+        id: p.id, type: p.type,
+        occurrence_id: p.occurrence_id, client_id: p.client_id, template_id: p.template_id,
+        client_name: p.client_name, document_name: p.document_name || 'Factura',
+        due_date: p.due_date, concepto,
+        subject: p.subject, created_at: p.created_at,
+        importe: imp ? imp.total : null,
+        base: imp ? imp.base : null, iva: imp ? imp.iva : null, irpf: imp ? imp.irpf : null,
+        // viva = la ocurrencia SIGUE en borrador. Si se emitió (o se omitió) por la pantalla de
+        // recurrentes después de proponerla, el botón de aquí ya no debe prometer nada.
+        viva: p.occ_status === 'borrador',
+        occ_status: p.occ_status || null,
       });
     }
   }
