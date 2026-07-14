@@ -279,18 +279,47 @@ Encargo del dueño: datos personales del usuario logueado, separados de "Datos d
   (`gate-pagos-proveedor` 15, `gate-pago-cuenta` 12, `gate-abono-proveedor` 16, `gate-gasto-proveedor` 18,
   `gate-c1c-diferencias-cierre` 20, `gate-disa-dictar-compra` 20). **Ningún bug de producto salió del
   falso verde.**
-- 🔵 **PENDIENTE — 7 gates de navegador CADUCADOS o ROTOS (deuda de verificación).** Corren, pero sus
-  aserciones ya no describen el producto. **No son bugs**; el runner los lista en cada pasada y esas
-  pantallas NO están cubiertas en navegador mientras tanto:
-  - `gate-recepciones-c1b` y `gate-devoluciones-proveedor` — anulan una recepción/compra del producto 1,
-    que HOY tiene traslados activos: el motor lo bloquea (409) **y hace bien** (la regla de multi-almacén
-    es posterior al gate). El motor está verde en `test-recepciones-c1b` (48) y `test-devoluciones-proveedor` (48).
-  - `gate-orden-compra-c1a` — espera un `alert()`; la UI ya usa `toast()`. Y **manda un email real** en cada pasada.
-  - `gate-almacenes` — **no es idempotente**: crea un almacén nuevo cada pasada y no lo limpia; sus fallos
-    cambian de una vez a otra. Correrlo ensucia el tenant.
-  - `gate-c2-captura` (selector `#step2` que ya no existe), `gate-disa-captura-chat` (la respuesta del chat
-    cambió de forma), `gate-registro-tailscale` (necesita un entorno que este servidor no tiene).
-  - Aparte, `gate-pago-voz-avisos` llama al **modelo real**: no entra en el barrido (como `verify-disa-pedidos-modelo-real`).
+- ✅ **HECHO (14 jul 2026) — SALDADA LA DEUDA DE LOS 7 GATES DE NAVEGADOR. Barrido 33/33, deuda a cero.**
+  `9a36232`. Diagnosticados uno a uno **ejecutándolos**, antes de tocar nada: **ninguno era un bug del
+  producto**, y **no se ha tocado una línea de producto**. Pero solo 4 estaban caducados — el diagnóstico
+  que había apuntado aquí el 11-jul **acertaba en 4 y fallaba en 3**:
+  - **CADUCADOS de verdad (4), arreglados y dentro del barrido:**
+    - `gate-recepciones-c1b` (16→**32**) y `gate-devoluciones-proveedor` (17→**32**) — confirmado: el
+      guardián de traslados bloquea con 409 **y hace bien**. Su dato era **prestado** (el producto 1, que
+      otros mueven). Ahora cada uno **se trae su propio producto** (recién nacido, sin traslados) para el
+      camino feliz **y además AFIRMA el bloqueo** sobre un producto sí trasladado: se prueban los **dos**
+      caminos, no uno en vez del otro.
+    - `gate-orden-compra-c1a` (24→**30**) — `alert()` → `toast()`, confirmado. Y el `alert` fantasma
+      **envenenaba la cola de diálogos**: el `prompt()` siguiente se comía la respuesta sobrante y anulaba
+      con motivo vacío → moría en un timeout ajeno a la causa. El email real ya no va al dueño: se sigue
+      probando **contra Resend de verdad**, pero a su buzón sumidero (`delivered@resend.dev`).
+    - `gate-almacenes` (10→**20**) — se envenenaba solo: se buscaba **por nombre** y enganchaba el almacén
+      rancio de la pasada anterior. Nombre único por pasada + **borra lo suyo** al salir (idempotente,
+      verificado con dos pasadas seguidas).
+  - **NO estaban caducados: les faltaba ENTORNO (3).** Aquí el diagnóstico anterior **era falso**:
+    - `gate-c2-captura` y `gate-disa-captura-chat` — **`#step2` sí existe**. La causa real era un **429**:
+      el tenant agotó su **tope de gasto de IA del mes (5,089 € de 5 €)** y el freno de `core/llm.js` corta
+      antes de llamar a la API — funcionando **como debe**. Una prueba que depende del saldo de una cuenta
+      no puede vivir en un barrido → **partidas en dos**: la extracción con modelo real se corre **a mano**
+      (y **aborta con código 2 si no hay cuota**, en vez de morir con una traza engañosa), y **la pantalla
+      entra al barrido** sembrando el adjunto en BD, sin modelo: **`gate-c2-revision` (28)** y
+      **`gate-disa-adjuntar` (18)**, ambos nuevos. Esas pantallas pasan de **cero cobertura** a cubiertas.
+    - `gate-registro-tailscale` — necesita la red de Tailscale, que aquí no resuelve. Apuntarlo a localhost
+      dejaría de probar lo que existe para probar → **aborta (código 2)** y se declara **ENTORNO** en el
+      runner: su falta de cobertura **se ve** en cada pasada.
+  - **Dos falsos verdes cazados de paso:** una aserción **tautológica** (`x === x`, no podía fallar) y un
+    control de acceso que **no probaba nada** (daba por hecho que el empleado 3 no tenía permiso de compras
+    — **sí lo tiene**, así que el 403 nunca se comprobó). El empleado sin permiso ahora **se crea a propósito**.
+  - Las **seis** pruebas de navegador **limpian lo suyo por ID** y dejan el tenant como lo encontraron
+    (stock cuadrado con el libro incluido). `scripts/lib/gate-fixtures.mjs` (nuevo) es el andamio común.
+  - **El barrido sigue siendo honesto**, verificado a propósito: una prueba que sale 0 **sin demostrar nada**
+    sigue contando como **FALLO** (`SOSPECHOSO`).
+- 🌍 **Sin entorno aquí (anotado, no oculto).** No son deuda ni bugs; el runner los grita en cada pasada:
+  - **Tope de IA agotado** en el tenant de desarrollo este mes → `gate-c2-captura` y `gate-disa-captura-chat`
+    no se pueden correr **ni a mano** hasta que se renueve el mes o se suba `platform_limits.ai_cap_eur`.
+  - **Tailscale no está** en este servidor → `gate-registro-tailscale` solo corre donde lo haya (`tailscale up`).
+  - `gate-pago-voz-avisos` y `verify-disa-pedidos-modelo-real` llaman al **modelo real**: fuera del barrido
+    por naturaleza, a mano y a conciencia.
 
 ## Sala de máquinas (servidor / BD)
 
