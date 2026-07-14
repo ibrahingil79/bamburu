@@ -69,6 +69,20 @@ function sembrarCliente(db, nombre, email, comprasHaceDias = []) {
 const esDormido = (lista, id) => lista.some(d => d.client_id === id);
 const propuestoPara = (db, id) => db.prepare("SELECT * FROM disa_proposals WHERE client_id=? AND type=? AND status='pendiente'").get(id, TIPO_DORMIDO);
 
+// Una VENTA DE MOSTRADOR: factura simplificada (serie S, tipo F2), exactamente como la emite el
+// mostrador. `clientId` null = ANÓNIMA (el caso normal: el 49 % de la facturación de este negocio);
+// con id = quedó atribuida a la ficha de un cliente, que también pasa.
+let seqMostrador = 9000;
+function ventaMostrador(db, haceDias, clientId = null) {
+  seqMostrador++;
+  const r = db.prepare(
+    `INSERT INTO invoices (invoice_number, series, year, sequence, client_id, issue_date,
+       company_name, company_fiscal_id, subtotal, tax_amount, total, status, tipo_factura)
+     VALUES (?, 'S', 2026, ?, ?, ?, 'Desarrollo', 'B00000000', 100, 21, 121, 'emitida', 'F2')`
+  ).run('S2026-' + seqMostrador, seqMostrador, clientId, diasAntes(haceDias));
+  return Number(r.lastInsertRowid);
+}
+
 try {
   // ── 1. Esquema ──────────────────────────────────────────────────────────────
   console.log('\n[1] Esquema y ajustables');
@@ -133,19 +147,86 @@ try {
   ok(!esDormido(clientesDormidos(db, HOY), anaComoCliente),
      'y a 47 días NO se la propone: compró una vez, y el respaldo son 90 días (antes se colaba)');
 
-  // ── 3. Lo que NO cuenta ─────────────────────────────────────────────────────
-  console.log('\n[3] Lo que NO cuenta: mostrador sin cliente y facturas anuladas');
-  // Venta de mostrador SIN cliente: no es de nadie. No puede dormir ni despertar a nadie.
-  const antesMostrador = clientesDormidos(db, HOY).length;
-  // Factura simplificada (serie S) SIN cliente: exactamente lo que emite el mostrador.
-  db.prepare(`INSERT INTO invoices (invoice_number, series, year, sequence, client_id, issue_date,
-                company_name, company_fiscal_id, subtotal, tax_amount, total, status)
-              VALUES ('S2026-9001','S',2026,9001,NULL,?,'Desarrollo','B00000000',100,21,121,'emitida')`).run(diasAntes(1));
-  const despuesMostrador = clientesDormidos(db, HOY);
-  ok(despuesMostrador.length === antesMostrador, 'una venta de mostrador SIN cliente no cambia el sueño de nadie (no es de nadie)');
-  ok(esDormido(despuesMostrador, semanalDormido), 'y no "despierta" por error a un cliente dormido');
+  // ── 3. EL FANTASMA DEL MOSTRADOR ────────────────────────────────────────────
+  //
+  // Una venta de mostrador ANÓNIMA (factura simplificada, serie S, sin `client_id`) es la mitad de la
+  // facturación de este negocio. No es de NADIE: ni tiene a quién reengancharse, ni puede hacer que
+  // otro parezca dormido o despierto. Es el riesgo real de esta propuesta —proponerte escribir a un
+  // cliente que en realidad te compra todas las semanas en el mostrador, o al revés— así que no basta
+  // con contarlo: hay que afirmarlo.
+  console.log('\n[3] El fantasma del mostrador: la venta anónima no es de nadie');
 
-  // Cliente cuya única factura está ANULADA → no compró nunca (regla canónica countsAsReceivable).
+  // (a) UNA VENTA ANÓNIMA NUNCA GENERA PROPUESTA. Sin ficha no hay a quién escribir.
+  //
+  // OJO CON EL ORDEN, que aquí me equivoqué yo primero: hay que generar la LÍNEA BASE **antes** de
+  // sembrar los fantasmas. Si se genera después, las propuestas de los clientes legítimos que ya
+  // estaban dormidos se cuentan como si las hubieran creado los fantasmas, y el gate acusa al
+  // producto de un fallo que es del gate.
+  const baseGen = generarPropuestasDormidos(db, { today: HOY });
+  const clientesBase = db.prepare('SELECT client_id FROM disa_proposals WHERE type=? ORDER BY client_id').all(TIPO_DORMIDO).map(r => r.client_id);
+  const candidatosAntes = clientesDormidos(db, HOY);
+  ok(clientesBase.length >= 3, 'línea base: ' + clientesBase.length + ' propuestas, de clientes CON ficha');
+
+  // Ventas anónimas repartidas: una MUY vieja (podría "dormir" a alguien) y una de AYER (podría
+  // "despertarlo"). Si el fantasma contara para alguien, una de las dos lo delataría.
+  const anon = [ventaMostrador(db, 400), ventaMostrador(db, 200), ventaMostrador(db, 1)];
+  ok(db.prepare('SELECT COUNT(*) n FROM invoices WHERE id IN (' + anon.join(',') + ') AND client_id IS NULL').get().n === 3,
+     'sembradas 3 ventas de mostrador ANÓNIMAS (serie S, sin cliente)');
+
+  const rAnon = generarPropuestasDormidos(db, { today: HOY });
+  ok(rAnon.creadas === 0, 'las ventas anónimas NO generan NI UNA propuesta nueva (creadas: ' + rAnon.creadas + ')');
+  const clientesTras = db.prepare('SELECT client_id FROM disa_proposals WHERE type=? ORDER BY client_id').all(TIPO_DORMIDO).map(r => r.client_id);
+  ok(JSON.stringify(clientesTras) === JSON.stringify(clientesBase),
+     'y las propuestas siguen siendo EXACTAMENTE las mismas, de los mismos clientes');
+  ok(!db.prepare('SELECT 1 FROM disa_proposals WHERE type=? AND client_id IS NULL').get(TIPO_DORMIDO),
+     'NINGUNA propuesta de dormido apunta a "nadie" (client_id NULL)');
+  ok(clientesDormidos(db, HOY).every(d => d.client_id != null && d.client_email),
+     'todo candidato a dormido tiene ficha Y vía de contacto: no hay fantasmas en la lista');
+
+  // (b) LA INVARIANTE: el estado de un cliente REAL es IDÉNTICO con y sin las ventas anónimas.
+  //     No se compara "¿sigue dormido?", que sería flojo: se compara su FICHA ENTERA de sueño
+  //     (días, ritmo, umbral, nº de compras, última compra). Si el fantasma se colara por cualquier
+  //     rendija del cálculo, uno de esos números se movería.
+  const fichaDe = (lista, id) => {
+    const d = lista.find(x => x.client_id === id);
+    return d ? JSON.stringify({ dormido: true, dias: d.dias_sin_comprar, ritmo: d.ritmo_dias, umbral: d.umbral_dias, compras: d.compras, ultima: d.ultima_compra })
+             : JSON.stringify({ dormido: false });
+  };
+  const conFantasmas = clientesDormidos(db, HOY);
+  for (const [nombre, id] of [['semanal DORMIDO', semanalDormido], ['semanal al día', semanalAlDia],
+                              ['trimestral al día', trimestralOk], ['trimestral DORMIDO', trimestralDorm],
+                              ['una compra vieja', unicaDormida], ['una compra reciente', unicaReciente]]) {
+    ok(fichaDe(candidatosAntes, id) === fichaDe(conFantasmas, id),
+       'el fantasma NO altera al cliente "' + nombre + '": su ficha de sueño es idéntica  ' + fichaDe(conFantasmas, id));
+  }
+  ok(conFantasmas.length === candidatosAntes.length,
+     'y la lista de dormidos tiene exactamente los mismos: ' + candidatosAntes.length + ' → ' + conFantasmas.length);
+
+  // Y al revés, por si acaso: quitarlas tampoco cambia nada (la invariante en los dos sentidos).
+  db.prepare('DELETE FROM invoices WHERE id IN (' + anon.join(',') + ')').run();
+  const sinFantasmas = clientesDormidos(db, HOY);
+  ok(fichaDe(sinFantasmas, semanalDormido) === fichaDe(conFantasmas, semanalDormido)
+     && sinFantasmas.length === conFantasmas.length,
+     'quitar las ventas anónimas tampoco mueve nada: el fantasma no contaba, ni para bien ni para mal');
+
+  // (c) MOSTRADOR ATRIBUIDO: si la venta SÍ quedó pegada a una ficha, ESA compra CUENTA como
+  //     cualquier otra. El cliente compra por F y por mostrador — es el mismo cliente.
+  //     La prueba es dura a propósito: sin contar el ticket, este cliente saldría DORMIDO.
+  //     Sus facturas F son de hace 200 y 150 días (ritmo 50 → umbral 100), así que a 150 días
+  //     estaría dormido. Pero hace 10 días pasó por el mostrador y quedó apuntado a su ficha.
+  const conTicket = sembrarCliente(db, 'ZZ Compra en mostrador', 'j@zz.test', [200, 150]);
+  ok(esDormido(clientesDormidos(db, HOY), conTicket), 'antes del ticket: DORMIDO (última compra hace 150 días, umbral 100)');
+  ventaMostrador(db, 10, conTicket);   // ← mostrador ATRIBUIDO a su ficha
+  const trasTicket = clientesDormidos(db, HOY);
+  ok(!esDormido(trasTicket, conTicket),
+     'el ticket de mostrador ATRIBUIDO a su ficha SÍ cuenta: ya NO está dormido (compró hace 10 días)');
+  const fichaTicket = umbralDormido(
+    db.prepare('SELECT issue_date FROM invoices WHERE client_id=? ORDER BY issue_date').all(conTicket).map(r => r.issue_date));
+  ok(fichaTicket.dias_compra === 3, 'y su ticket cuenta como un DÍA DE COMPRA más (3, no 2): entra en su ritmo');
+  generarPropuestasDormidos(db, { today: HOY });
+  ok(!propuestoPara(db, conTicket), 'así que NO se te propone reengancharlo: te compró la semana pasada');
+
+  // ── 3b. Facturas ANULADAS: tampoco cuentan como compra ──────────────────────
   const soloAnulada = sembrarCliente(db, 'ZZ Solo anulada', 'h@zz.test', [200]);
   db.prepare("UPDATE invoices SET status='anulada' WHERE client_id=?").run(soloAnulada);
   ok(!esDormido(clientesDormidos(db, HOY), soloAnulada), 'cliente con su única factura ANULADA → no cuenta como compra (no se propone)');
@@ -154,9 +235,9 @@ try {
   console.log('\n[4] Generación');
   const sinEmail = sembrarCliente(db, 'ZZ Dormido sin email', null, [200]);
   const r1 = generarPropuestasDormidos(db, { today: HOY });
-  // Se afirma sobre los clientes que ESTE gate siembra (3 dormidos con email), no sobre un total que
-  // depende de los datos vivos de la copia. Un gate que se apoya en datos ajenos se pudre.
-  ok(r1.creadas >= 3, 'genera las propuestas de los dormidos sembrados (' + r1.creadas + ')');
+  // Se afirma sobre los clientes que ESTE gate siembra, no sobre un total que depende de los datos
+  // vivos de la copia. Un gate que se apoya en datos ajenos se pudre. (Las propuestas de los dormidos
+  // ya nacieron en la línea base del bloque [3]; aquí se comprueba que SIGUEN y quiénes son.)
   ok(!!propuestoPara(db, semanalDormido) && !!propuestoPara(db, trimestralDorm) && !!propuestoPara(db, unicaDormida),
      'los tres dormidos con email tienen su propuesta');
   ok(!propuestoPara(db, trimestralOk) && !propuestoPara(db, semanalAlDia) && !propuestoPara(db, nuncaCompro),
