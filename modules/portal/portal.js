@@ -5,6 +5,7 @@
 // (invoiceCobro), NUNCA de lo que diga el cliente. Pago online (tarjeta) fuera de alcance: se muestran
 // los datos de transferencia. Aditivo.
 
+import { renderEmail, TONO_UNICO } from '../erp/email-templates.js';
 import { randomBytes } from 'crypto';
 import { countsAsReceivable, invoiceCobro } from '../erp/cobros.js';
 
@@ -79,15 +80,17 @@ export async function sendPortalLink(db, clientId, baseUrl, sendEmailImpl, { ttl
   const token = createToken(db, clientId, ttlDays);
   const url = `${baseUrl}/portal/${token}`;
   const empresa = cfg.company_name || 'tu proveedor';
-  const html = `<div style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;color:#111;max-width:520px">
-    <p>Hola ${escapeHtml(client.name || '')},</p>
-    <p>${escapeHtml(empresa)} pone a tu disposición un portal privado donde puedes <b>ver y descargar tus facturas</b> y consultar su estado de pago.</p>
-    <p><a href="${url}" style="display:inline-block;background:#111;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">Ver mis facturas</a></p>
-    <p style="color:#555;font-size:12px">El enlace es personal y caduca en ${ttlDays} días. Si no lo has solicitado, ignora este correo.</p>
-  </div>`;
+  // El TEXTO sale del catálogo de plantillas (editable en Ajustes). {{enlace}} es su ELEMENTO CRÍTICO:
+  // Ajustes NO deja guardar esta plantilla sin él, porque un portal sin enlace es un correo inútil.
+  const tpl = renderEmail(db, 'portal_cliente', TONO_UNICO, {
+    cliente: client.name || '',
+    empresa,
+    enlace: url,
+    dias: String(ttlDays),
+  });
   const res = await sendEmailImpl({
     from: `${empresa} <noreply@bamburu.com>`, to: client.email, replyTo: cfg.email || undefined,
-    subject: `Tus facturas — ${empresa}`, html,
+    subject: tpl.subject, html: tpl.html, text: tpl.text,
   });
   if (res && res.error) { const e = new Error('No hemos podido enviar el email. Comprueba la dirección del destinatario e inténtalo más tarde.'); e.status = 502; throw e; }   // U3: sin volcar el objeto de Resend
   return { sent: true, email: client.email };

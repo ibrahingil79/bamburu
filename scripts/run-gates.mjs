@@ -48,6 +48,8 @@ const GRUPOS = {
   ],
   inventario: ['test-transfers', 'verify-traslado-auditoria', 'gate-almacenes'],
   avisos: ['verify-avisos-permisos', 'gate-avisos-badge'],
+  // Plantillas de email editables: tocan TODOS los correos que el negocio manda.
+  plantillas: ['verify-plantillas-email', 'gate-plantillas-email'],
   // Sala de máquinas: superadmin, conexiones a la BD y el fichero -wal.
   infra: ['verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado'],
 };

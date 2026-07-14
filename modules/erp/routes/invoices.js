@@ -1049,7 +1049,7 @@ export function createInvoiceRoutes(db) {
       const client = inv.client_id ? db.prepare('SELECT * FROM clients WHERE id=?').get(inv.client_id) : null;
       const company = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
       const tono = (prox && prox.tono) || 'amable';
-      const tpl = collectionEmail(tono, { inv, client, cobro, company });
+      const tpl = collectionEmail(tono, { inv, client, cobro, company, db });
       return c.json({ subject: tpl.subject, text: tpl.text, tono, to: client && client.email || '', has_email: !!(client && client.email) });
     } catch (e) { return c.json({ error: e.message }, 400); }
   });

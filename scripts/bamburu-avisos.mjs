@@ -64,7 +64,7 @@ async function processTenant(path) {
     const company = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
     if (!company.email) { log(slug + ': ' + avisos.length + ' aviso(s) PERO el negocio no tiene email configurado → no se envía'); return { slug, sent: false, avisos: avisos.length, skipped: 'no_email' }; }
 
-    const tpl = avisosEmail({ avisos, company });
+    const tpl = avisosEmail({ avisos, company, db });
     if (DRY) { log(slug + ': [dry-run] ' + avisos.length + ' aviso(s) → enviaría a ' + company.email + ' · "' + tpl.subject + '"'); return { slug, sent: false, avisos: avisos.length, dry: true }; }
 
     const empresa = company.company_name || 'Bamburu';

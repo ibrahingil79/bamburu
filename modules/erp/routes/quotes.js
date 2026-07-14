@@ -1,3 +1,4 @@
+import { renderEmail, TONO_UNICO } from '../email-templates.js';
 import { Hono } from 'hono';
 import { adminLayout, can, docShell, printableShell, estadoTabs, emptyRow, errorShell, ERR } from '../layout.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';   // PDF real: mismo HTML imprimible → Chromium
@@ -256,16 +257,16 @@ export async function emailQuoteSvc(db, id, opts = {}) {
   }
   if (!pdf || !pdf.length) { const e = new Error('El PDF del presupuesto salió vacío. No se ha enviado el email.'); e.status = 502; throw e; }
   const fname = ('Presupuesto-' + (q.quote_number || ('' + id)) + '.pdf').replace(/[\/\\]/g, '-');
-  // Cuerpo CORTO + PDF adjunto.
-  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"></head>
-<body style="font-family:system-ui,sans-serif;font-size:14px;color:var(--accent-d);max-width:560px;margin:auto;padding:24px">
-<p>Hola,</p>
-<p>Adjuntamos tu presupuesto nº <strong>${esc(q.quote_number)}</strong>${q.valid_until ? ' (válido hasta ' + esc(q.valid_until) + ')' : ''}.</p>
-<p style="color:var(--text2);font-size:12px;margin-top:24px">Enviado desde ${esc(empresa)} con Bamburu.</p>
-</body></html>`;
-  const text = 'Hola,\n\nAdjuntamos tu presupuesto nº ' + q.quote_number + (q.valid_until ? ' (válido hasta ' + q.valid_until + ')' : '') + '.\n\nEnviado desde ' + empresa + ' con Bamburu.';
+  // Cuerpo CORTO + PDF adjunto. El TEXTO sale del catálogo de plantillas (editable en Ajustes);
+  // el PDF se adjunta siempre, lo diga el texto o no.
+  const tpl = renderEmail(db, 'presupuesto', TONO_UNICO, {
+    numero: q.quote_number || String(id),
+    validez: q.valid_until || '—',
+    empresa,
+  });
+  const html = tpl.html, text = tpl.text;
   const payload = {
-    from: empresa + ' <noreply@bamburu.com>', to, subject: 'Presupuesto ' + q.quote_number + ' — ' + empresa, html, text,
+    from: empresa + ' <noreply@bamburu.com>', to, subject: tpl.subject, html, text,
     attachments: [{ filename: fname, content: pdf }],
   };
   if (emisor.email) payload.replyTo = emisor.email;

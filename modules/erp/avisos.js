@@ -10,6 +10,7 @@
 // la campana del topbar, el Inicio y el email diario (scripts/bamburu-avisos.mjs). Todas cuentan
 // LO MISMO porque todas leen de aquí.
 
+import { renderEmail, renderEmailFabrica, TONO_UNICO } from './email-templates.js';
 import { openPayables } from './pagos.js';
 import { openDebts } from './cobros.js';
 import { MAX_INTENTOS } from './verifactu-cola.js';
@@ -274,18 +275,10 @@ export function avisosDelDia(db, today, tipos) {
 // Server-side, español. Devuelve { subject, html, text }. Nada se envía aquí: solo construye.
 // El remitente es el negocio (igual que cobros: from noreply@bamburu.com, replyTo = su email).
 export function avisosEmail(ctx) {
-  const { avisos, company } = ctx;
+  const { avisos, company, db } = ctx;
   const sym = (company && company.currency_symbol) || '€';
-  const empresa = (company && company.company_name) || 'tu negocio';
   const n = avisos.length;
-
-  // El email sale de avisosDelDia COMPLETO (las mismas fuentes que el flag: vencimientos de
-  // proveedor + stock bajo). Se muestra UN BLOQUE por fuente, cada uno con sus filas (ya
-  // ordenadas por urgencia) y su conteo. Una fuente sin nada no aparece; los conteos del email
-  // y los del badge COINCIDEN (misma fuente). No es un balance: solo lo urgente.
   const groups = resumenAvisos(avisos);                  // [{tipo, count, frase}] en orden estable
-  const subject = 'Bamburu · ' + n + ' aviso' + (n === 1 ? '' : 's') + ' que requieren tu atención';
-  const intro = 'Buenos días. Esto es lo que requiere tu atención hoy: ' + groups.map(g => g.frase).join('; ') + '.';
 
   const BLOQUE = {
     vencimiento_proveedor: 'Facturas de proveedor (vencidas o que vencen en ≤7 días)',
@@ -294,14 +287,14 @@ export function avisosEmail(ctx) {
     factura_recurrente: 'Facturas recurrentes en borrador',
     stock_bajo: 'Productos con stock bajo',
   };
-  // Detalle de una fila según su fuente (con la moneda donde toca; stock va en unidades).
   const filaDetalle = a => detalleAviso(a, sym, { compacto: true });
 
-  const bloquesTxt = [], bloquesHtml = [];
+  // La LISTA es un bloque que genera el sistema (un bloque por fuente, con sus filas ya ordenadas por
+  // urgencia). El dueño la coloca donde quiera con {{avisos}}, pero no la teclea: la pone Bamburu.
+  const bloquesHtml = [];
   for (const g of groups) {
     const items = avisos.filter(a => a.tipo === g.tipo);
     const titulo = (BLOQUE[g.tipo] || g.tipo) + ' (' + items.length + ')';
-    bloquesTxt.push(titulo + ':', ...items.map(a => '  · ' + a.titulo + ' — ' + filaDetalle(a)), '');
     const rows = items.map(a => {
       const vencido = a.tipo === 'cobro_vencido' || (a.tipo === 'vencimiento_proveedor' && a.ref && a.ref.vencida);
       const color = vencido ? '#b42318' : '#1f2937';
@@ -312,15 +305,14 @@ export function avisosEmail(ctx) {
       + '<table style="border-collapse:collapse;width:100%;background:#f9fafb;border-radius:8px">' + rows + '</table>');
   }
 
-  const text = ['Hola,', '', intro, '', ...bloquesTxt, 'Entra en Bamburu para gestionarlos.', '', 'Un saludo,', 'Bamburu (por ' + empresa + ')'].join('\n');
-  const html = '<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1f2937">'
-    + '<p>Hola,</p><p>' + escapeHtml(intro) + '</p>'
-    + bloquesHtml.join('')
-    + '<p style="margin-top:16px"><a href="https://bamburu.com" style="color:#2563eb">Entra en Bamburu</a> para gestionarlos.</p>'
-    + '<p style="margin-top:24px;color:#6b7280;font-size:.85rem">Un saludo,<br>Bamburu (por ' + escapeHtml(empresa) + ')</p>'
-    + '</div>';
-
-  return { subject, html, text };
+  const vars = {
+    empresa: (company && company.company_name) || 'tu negocio',
+    n: String(n),
+    resumen: groups.map(g => g.frase).join('; '),
+    avisos: { esHtml: true, valor: bloquesHtml.join('') },
+  };
+  return db ? renderEmail(db, 'resumen_avisos', TONO_UNICO, vars)
+            : renderEmailFabrica('resumen_avisos', TONO_UNICO, vars);
 }
 
 function escapeHtml(s) {

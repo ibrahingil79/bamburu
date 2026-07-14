@@ -87,7 +87,7 @@ export function generarPropuestasImpago(db, opts = {}) {
     const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(r.invoice_id);
     const cobro = invoiceCobro(db, inv, today);   // pendiente/estado reales para la plantilla
     // PLANTILLA, no LLM. Tono 'firme-medio' = cordial y profesional para un primer recordatorio.
-    const tpl = collectionEmail('firme-medio', { inv, client, cobro, company });
+    const tpl = collectionEmail('firme-medio', { inv, client, cobro, company, db });
     const info = ins.run(TIPO_IMPAGO, r.invoice_id, r.client_id || null, tpl.subject, tpl.text, now);
     if (info.changes) creadas++; else yaTenian++;   // el índice único cerró una carrera → cuenta como ya-tenía
   }
@@ -301,7 +301,7 @@ export function redactarReenganche(db, proposalId, opts = {}) {
   const company = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
   // Sin oportunidad: esto no es un trato abierto, es una relación que se enfrió. El tono 'reenganche'
   // es el único que no habla de "tu solicitud", justamente porque aquí no hay ninguna.
-  const tpl = opportunityEmail('reenganche', { client, company, opp: null });
+  const tpl = opportunityEmail('reenganche', { client, company, opp: null, db });
 
   db.prepare('UPDATE disa_proposals SET subject=?, body=? WHERE id=?').run(tpl.subject, tpl.text, proposalId);
   return { id: proposalId, subject: tpl.subject, body: tpl.text, to: client.email, client_name: client.name };

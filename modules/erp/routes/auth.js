@@ -1,3 +1,4 @@
+import { renderEmail, TONO_UNICO } from '../email-templates.js';
 import { Hono } from 'hono';
 import { Resend } from 'resend';
 import { randomBytes } from 'crypto';
@@ -494,30 +495,21 @@ export function createAuthRoutes(db) {
       const host = c.req.header('host') || 'bamburu.com';
       const resetLink = `https://${host}/admin/reset-password?token=${token}`;
 
-      console.log('[Resend] Enviando email a:', email);
-      console.log('[Resend] API Key presente:', !!process.env.RESEND_API_KEY);
-      console.log('[Resend] Reset link:', resetLink);
+      // NUNCA se registra el enlace: lleva el token de reseteo, y un token en un log es un token
+      // filtrado — cualquiera con acceso a los registros podría entrar en la cuenta de otro. Misma
+      // lección que la clave de Anthropic en el log de sudo (11-jul-2026): un secreto no va a un log.
+      console.log('[Resend] Enviando email de recuperación (destinatario oculto)');
 
+      // El TEXTO sale del catálogo de plantillas (editable en Ajustes). {{enlace}} es su ELEMENTO
+      // CRÍTICO: Ajustes NO deja guardar esta plantilla sin él — un "recupera tu contraseña" sin
+      // enlace deja a una persona fuera de su cuenta, y nadie se entera hasta que pasa.
+      const tpl = renderEmail(db, 'recuperar_password', TONO_UNICO, { nombre: user.name, enlace: resetLink });
       const { data, error: resendError } = await resend.emails.send({
         from: 'Bamburu <noreply@bamburu.com>',
         to: email,
-        subject: 'Recupera tu contraseña en Bamburu',
-        html: `
-          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:480px;margin:0 auto;padding:40px 24px">
-            <h2 style="color:var(--text);font-size:20px;margin-bottom:16px">Hola, ${user.name}</h2>
-            <p style="color:var(--body-tx);font-size:15px;line-height:1.6;margin-bottom:24px">
-              Hemos recibido una solicitud para recuperar tu contraseña en Bamburu.
-            </p>
-            <a href="${resetLink}"
-               style="background:var(--accent);color:var(--bg2);padding:12px 24px;border-radius:8px;
-                      text-decoration:none;display:inline-block;font-weight:500;font-size:15px">
-              Recuperar Contraseña
-            </a>
-            <p style="color:var(--text2);font-size:13px;margin-top:24px">
-              Este enlace expira en 1 hora. Si no solicitaste esto, ignora este email.
-            </p>
-          </div>
-        `
+        subject: tpl.subject,
+        html: tpl.html,
+        text: tpl.text,
       });
 
       if (resendError) {

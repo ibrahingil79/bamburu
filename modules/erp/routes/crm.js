@@ -89,7 +89,7 @@ export function createCrmRoutes(db) {
       const company = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
       const prox = opportunityProximaAccion(db, o, hoy());
       const tono = (prox && prox.tono) || 'primer-contacto';
-      const tpl = opportunityEmail(tono, { client: cl, company, opp: o });
+      const tpl = opportunityEmail(tono, { client: cl, company, opp: o, db });
       return c.json({ subject: tpl.subject, text: tpl.text, tono, to: cl.email || '', has_email: !!cl.email, client_id: cl.id });
     } catch (e) { return c.json({ error: e.message }, e.status || 400); }
   });

@@ -1643,6 +1643,21 @@ export function runMigrations(db) {
              ON disa_proposals(client_id, type)
            WHERE type='cliente_dormido' AND status='pendiente'`);
 
+  // PLANTILLAS DE EMAIL EDITADAS. Aquí SOLO viven las ediciones del dueño: la plantilla de FÁBRICA de
+  // cada tipo vive en el código (email-templates.js) y NO se puede perder. Por eso "Volver al original"
+  // es, literalmente, borrar la fila — no hay copia de fábrica que restaurar desde ningún sitio, porque
+  // la de fábrica nunca se sobrescribió.
+  // Aditiva e idempotente. FUERA de WRITABLE_TABLES: DISA no reescribe los textos que el negocio manda.
+  db.exec(`CREATE TABLE IF NOT EXISTS email_templates (
+    tipo TEXT NOT NULL,
+    tono TEXT NOT NULL DEFAULT '_',
+    subject TEXT NOT NULL DEFAULT '',
+    html TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_by TEXT DEFAULT '',
+    PRIMARY KEY (tipo, tono)
+  )`);
+
   // T4 Paso 2.1 — gestión a nivel de CUENTA. Un cobro/recordatorio/promesa de cuenta se
   // materializa en varias filas (un invoice_payment o un collection_action por factura viva).
   // Esta columna OPCIONAL agrupa esas filas para poder trazar de qué lote vinieron. Aditiva,

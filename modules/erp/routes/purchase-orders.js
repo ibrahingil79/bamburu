@@ -1,3 +1,4 @@
+import { renderEmail, TONO_UNICO } from '../email-templates.js';
 import { Hono } from 'hono';
 import { adminLayout, can, docShell, estadoTabs, emptyRow, errorShell, ERR } from '../layout.js';
 import { validate } from '../../../core/validate.js';
@@ -212,12 +213,16 @@ export async function emailPurchaseOrderSvc(db, id, opts = {}) {
   // El cuerpo es el documento con su cabecera CONGELADA (foto del envío); el
   // destinatario sí es el email VIVO del proveedor (puede haberlo corregido).
   const { emisor, proveedor } = docParties(db, o);
-  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"></head>
-<body style="font-family:system-ui,sans-serif;font-size:14px;color:var(--accent-d);max-width:760px;margin:auto;padding:24px">
-${documentBodyHtml(o, items, emisor, proveedor, sym)}
-<p style="color:var(--text2);font-size:12px;margin-top:24px">Documento enviado desde ${esc(empresa)} con Bamburu.</p>
-</body></html>`;
   const t = purchaseOrderTotals(items);
+  // El CUERPO del email es el documento en sí (la orden con sus líneas y totales). El dueño puede
+  // escribir alrededor desde Ajustes, pero el bloque {{documento}} lo genera Bamburu: si lo quitara,
+  // el proveedor recibiría un correo sin el pedido — por eso está declarado como hueco requerido.
+  const tpl = renderEmail(db, 'orden_compra', TONO_UNICO, {
+    numero: o.order_number || ('#' + o.id),
+    empresa,
+    documento: { esHtml: true, valor: documentBodyHtml(o, items, emisor, proveedor, sym) },
+  });
+  const html = tpl.html;
   const text = 'Orden de compra ' + o.order_number + ' de ' + empresa + '\n'
     + 'Fecha: ' + o.date + (o.expected_date ? ' · Entrega prevista: ' + o.expected_date : '') + '\n\n'
     + items.map(i => '- ' + i.product_name + (i.sku ? ' [' + i.sku + ']' : '') + ' × ' + i.quantity + ' a ' + Number(i.unit_cost).toFixed(2) + ' ' + sym + ' (neto)').join('\n')
@@ -227,7 +232,7 @@ ${documentBodyHtml(o, items, emisor, proveedor, sym)}
   const payload = {
     from: empresa + ' <noreply@bamburu.com>',     // dominio verificado; el nombre es el del negocio
     to: supplier.email,
-    subject: 'Orden de compra ' + o.order_number + ' — ' + empresa,
+    subject: tpl.subject,
     html,
     text,
   };

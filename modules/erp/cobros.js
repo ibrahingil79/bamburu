@@ -3,6 +3,7 @@
 // de vencimiento (invoices.due_date), para que no quede desactualizado.
 //
 // Fuera de alcance (Paso 2): perfiles de cobro, próxima acción, DISA. Aquí solo el motor.
+import { renderEmail, renderEmailFabrica } from './email-templates.js';
 
 const r2 = n => Math.round(n * 100) / 100;
 
@@ -348,61 +349,23 @@ export function invoiceProximaAccion(db, inv, today) {
 // ── Plantillas de email por tono (español, server-side, remitente = el autónomo) ──
 // Precargadas en el modal de confirmación; el usuario las ve y puede editar antes de
 // enviar. Devuelve { subject, html, text }. Nada se envía aquí: solo construye.
+// El TEXTO ya no vive aquí: vive en el catálogo de plantillas (email-templates.js), como dato con
+// huecos, para que el dueño pueda reescribirlo desde Ajustes. Esta función se queda con su firma de
+// siempre y hace lo de siempre — solo que ahora le pregunta al catálogo cuál es la plantilla EN VIGOR
+// (la editada, si la hay; si no, la de fábrica). `db` es opcional: sin él manda la de fábrica.
 export function collectionEmail(tono, ctx) {
-  const { inv, client, cobro, company } = ctx;
+  const { inv, client, cobro, company, db } = ctx;
   const sym = (company && company.currency_symbol) || '€';
-  const empresa = (company && company.company_name) || 'Nosotros';
-  const num = inv.invoice_number || '';
   const pend = Number((cobro && cobro.pendiente) != null ? cobro.pendiente : inv.total || 0).toFixed(2);
-  const due = inv.due_date || inv.issue_date || '';
-  const nombre = (client && client.name) || 'cliente';
-
-  const intro = {
-    'amable':      'Esperamos que todo vaya bien. Te escribimos como recordatorio amistoso de que la factura ' + num + ' está pendiente de pago.',
-    'firme-medio': 'Te recordamos que la factura ' + num + ', con vencimiento ' + due + ', sigue pendiente de pago. Agradeceríamos que la regularices lo antes posible.',
-    'formal':      'Por la presente te comunicamos formalmente que la factura ' + num + ', vencida el ' + due + ', continúa impagada. Te rogamos procedas a su abono de forma inmediata.',
-    'ultima':      'Esta es una última gestión de cobro respecto a la factura ' + num + ', vencida el ' + due + ' y aún impagada. De no recibir el pago, nos veremos obligados a valorar las medidas oportunas para su recuperación.',
-  }[tono] || ('La factura ' + num + ' está pendiente de pago.');
-
-  const cierre = {
-    'amable':      'Si ya la has abonado, ignora este mensaje. ¡Gracias!',
-    'firme-medio': 'Si ya has realizado el pago, te agradeceríamos que nos lo confirmes.',
-    'formal':      'Quedamos a la espera de su pago o de noticias suyas.',
-    'ultima':      'Quedamos a la espera de una respuesta a la mayor brevedad.',
-  }[tono] || 'Gracias.';
-
-  const asunto = {
-    'amable':      'Recordatorio: factura ' + num + ' pendiente',
-    'firme-medio': 'Recordatorio de pago: factura ' + num,
-    'formal':      'Aviso de pago pendiente: factura ' + num,
-    'ultima':      'Última gestión de cobro: factura ' + num,
-  }[tono] || ('Factura ' + num + ' pendiente');
-
-  const text = [
-    'Hola ' + nombre + ',',
-    '',
-    intro,
-    '',
-    'Importe pendiente: ' + sym + pend,
-    'Vencimiento: ' + due,
-    '',
-    cierre,
-    '',
-    'Un saludo,',
-    empresa,
-  ].join('\n');
-
-  const html = '<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1f2937">'
-    + '<p>Hola ' + escapeHtml(nombre) + ',</p>'
-    + '<p>' + escapeHtml(intro) + '</p>'
-    + '<p style="background:#f3f4f6;border-radius:8px;padding:12px 16px;margin:16px 0">'
-    + '<strong>Importe pendiente:</strong> ' + sym + pend + '<br>'
-    + '<strong>Vencimiento:</strong> ' + escapeHtml(due) + '</p>'
-    + '<p>' + escapeHtml(cierre) + '</p>'
-    + '<p style="margin-top:24px">Un saludo,<br>' + escapeHtml(empresa) + '</p>'
-    + '</div>';
-
-  return { subject: asunto, html, text };
+  const vars = {
+    cliente: (client && client.name) || 'cliente',
+    factura: inv.invoice_number || '',
+    importe: sym + pend,
+    vencimiento: inv.due_date || inv.issue_date || '',
+    empresa: (company && company.company_name) || 'Nosotros',
+  };
+  return db ? renderEmail(db, 'cobro_factura', tono, vars)
+            : renderEmailFabrica('cobro_factura', tono, vars);
 }
 
 function escapeHtml(s) {
@@ -439,7 +402,7 @@ export async function registerCollectionAction(db, invoiceId, input, opts = {}) 
     if (typeof opts.sendEmail !== 'function') { const e = new Error('El envío de email no está configurado'); e.status = 500; throw e; }
     const company = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
     const tono = (prox && prox.tono) || stageTono(stage);
-    const tpl = collectionEmail(tono, { inv, client, cobro, company });
+    const tpl = collectionEmail(tono, { inv, client, cobro, company, db });
     // El usuario puede haber editado asunto/cuerpo en el modal: si llegan, mandan.
     const subject = input.email_subject || tpl.subject;
     const text = input.email_text || tpl.text;
@@ -568,50 +531,24 @@ export function validarRepartoManual(asignacion, importeTotal, facturasVivas) {
 // Plantilla de email de CUENTA (total adeudado + desglose de facturas vivas). Tono = etapa
 // de la factura más grave. Editable en el modal antes de enviar (confirm-first).
 export function accountEmail(tono, ctx) {
-  const { client, company, facturasVivas, total } = ctx;
+  const { client, company, facturasVivas, total, db } = ctx;
   const sym = (company && company.currency_symbol) || '€';
-  const empresa = (company && company.company_name) || 'Nosotros';
-  const nombre = (client && client.name) || 'cliente';
-  const n = facturasVivas.length;
-
-  const intro = {
-    'amable':      'Esperamos que todo vaya bien. Te escribimos como recordatorio de que tienes ' + n + ' factura' + (n === 1 ? '' : 's') + ' pendiente' + (n === 1 ? '' : 's') + ' de pago con nosotros.',
-    'firme-medio': 'Te recordamos que mantienes ' + n + ' factura' + (n === 1 ? '' : 's') + ' pendiente' + (n === 1 ? '' : 's') + ' de pago. Agradeceríamos que regularices el saldo lo antes posible.',
-    'formal':      'Por la presente te comunicamos formalmente que mantienes un saldo pendiente con nosotros, detallado a continuación. Te rogamos procedas a su abono de forma inmediata.',
-    'ultima':      'Esta es una última gestión de cobro respecto al saldo pendiente que mantienes con nosotros. De no recibir el pago, nos veremos obligados a valorar las medidas oportunas para su recuperación.',
-  }[tono] || ('Tienes ' + n + ' factura(s) pendiente(s) de pago.');
-
-  const cierre = {
-    'amable':      'Si ya has abonado alguna, ignóralo. ¡Gracias!',
-    'firme-medio': 'Si ya has realizado algún pago, te agradeceríamos que nos lo confirmes.',
-    'formal':      'Quedamos a la espera de su pago o de noticias suyas.',
-    'ultima':      'Quedamos a la espera de una respuesta a la mayor brevedad.',
-  }[tono] || 'Gracias.';
-
-  const asunto = {
-    'amable':      'Recordatorio: saldo pendiente (' + sym + Number(total).toFixed(2) + ')',
-    'firme-medio': 'Recordatorio de pago: saldo pendiente ' + sym + Number(total).toFixed(2),
-    'formal':      'Aviso de saldo pendiente: ' + sym + Number(total).toFixed(2),
-    'ultima':      'Última gestión de cobro: saldo ' + sym + Number(total).toFixed(2),
-  }[tono] || ('Saldo pendiente ' + sym + Number(total).toFixed(2));
-
-  const filasTxt = facturasVivas.map(f => '  · ' + f.invoice_number + ' (vence ' + (f.due_date || '-') + '): ' + sym + Number(f.pendiente).toFixed(2)).join('\n');
-  const text = [
-    'Hola ' + nombre + ',', '', intro, '',
-    'Detalle del saldo pendiente:', filasTxt, '',
-    'TOTAL ADEUDADO: ' + sym + Number(total).toFixed(2), '',
-    cierre, '', 'Un saludo,', empresa,
-  ].join('\n');
-
+  // La lista de facturas es un BLOQUE que genera el sistema (el dueño no la teclea): se le ofrece como
+  // hueco {{facturas}} para que la coloque donde quiera, pero el HTML de dentro lo pone Bamburu.
   const filasHtml = facturasVivas.map(f =>
     '<tr><td style="padding:4px 8px">' + escapeHtml(f.invoice_number) + '</td><td style="padding:4px 8px;color:#6b7280">vence ' + escapeHtml(f.due_date || '-') + '</td><td style="padding:4px 8px;text-align:right">' + sym + Number(f.pendiente).toFixed(2) + '</td></tr>').join('');
-  const html = '<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:540px;margin:0 auto;padding:24px;color:#1f2937">'
-    + '<p>Hola ' + escapeHtml(nombre) + ',</p><p>' + escapeHtml(intro) + '</p>'
-    + '<table style="border-collapse:collapse;width:100%;margin:12px 0;background:#f9fafb;border-radius:8px">' + filasHtml
-    + '<tr><td colspan="2" style="padding:8px;font-weight:700;border-top:1px solid #e5e7eb">TOTAL ADEUDADO</td><td style="padding:8px;text-align:right;font-weight:700;border-top:1px solid #e5e7eb">' + sym + Number(total).toFixed(2) + '</td></tr></table>'
-    + '<p>' + escapeHtml(cierre) + '</p><p style="margin-top:24px">Un saludo,<br>' + escapeHtml(empresa) + '</p></div>';
-
-  return { subject: asunto, html, text };
+  const tabla = '<table style="border-collapse:collapse;width:100%;margin:12px 0;background:#f9fafb;border-radius:8px">' + filasHtml
+    + '<tr><td colspan="2" style="padding:8px;font-weight:700;border-top:1px solid #e5e7eb">TOTAL ADEUDADO</td><td style="padding:8px;text-align:right;font-weight:700;border-top:1px solid #e5e7eb">'
+    + sym + Number(total).toFixed(2) + '</td></tr></table>';
+  const vars = {
+    cliente: (client && client.name) || 'cliente',
+    n_facturas: String(facturasVivas.length),
+    total: sym + Number(total).toFixed(2),
+    facturas: { esHtml: true, valor: tabla },
+    empresa: (company && company.company_name) || 'Nosotros',
+  };
+  return db ? renderEmail(db, 'cobro_cuenta', tono, vars)
+            : renderEmailFabrica('cobro_cuenta', tono, vars);
 }
 
 // ── SERVICIO de acción de CUENTA — única vía validada (endpoint y DISA la usan) ──────
@@ -635,7 +572,7 @@ export async function registerAccountAction(db, clientId, input, opts = {}) {
     if (!client || !client.email) { const e = new Error('El cliente no tiene email'); e.status = 400; throw e; }
     if (typeof opts.sendEmail !== 'function') { const e = new Error('El envío de email no está configurado'); e.status = 500; throw e; }
     const tono = (resumen.proximaAccionCuenta && resumen.proximaAccionCuenta.tono) || stageTono(resumen.etapaCuenta || 'r1');
-    const tpl = accountEmail(tono, { client, company, facturasVivas: vivas, total: resumen.deudaTotal });
+    const tpl = accountEmail(tono, { client, company, facturasVivas: vivas, total: resumen.deudaTotal, db });
     const subject = input.email_subject || tpl.subject;
     const text = input.email_text || tpl.text;
     const html = input.email_html || (input.email_text ? null : tpl.html);

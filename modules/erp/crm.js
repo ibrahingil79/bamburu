@@ -22,6 +22,7 @@
 // Nada se envía ni se mueve solo: la próxima acción es una PROPUESTA (principio de
 // Bamburu — la oportunidad llega con el trabajo hecho, no con un formulario en blanco).
 // ════════════════════════════════════════════════════════════════════════════
+import { renderEmail, renderEmailFabrica } from './email-templates.js';
 import { escHtml } from '../../core/escape.js';
 
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
@@ -545,7 +546,7 @@ export async function registerClientActivitySvc(db, clientId, input, opts = {}) 
     const company = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
     const prox = opp ? calcularProximaAccionOportunidad(opp, opportunityActivities(db, opp.id), todayISO(opts)) : null;
     const tono = input.tono || (prox && prox.tono) || 'primer-contacto';
-    const tpl = opportunityEmail(tono, { client: cl, company, opp });
+    const tpl = opportunityEmail(tono, { client: cl, company, opp, db });
     // El usuario ve y puede editar asunto/cuerpo en el modal antes de enviar: si llegan, mandan.
     const subject = input.email_subject || tpl.subject;
     const text = input.email_text || tpl.text;
@@ -582,43 +583,14 @@ export async function registerClientActivitySvc(db, clientId, input, opts = {}) 
 // Sin marketing, sin culpa ("te echamos de menos") y sin promesas: se saluda y se deja la puerta
 // abierta. El dueño lo edita antes de enviarlo, siempre.
 export function opportunityEmail(tono, ctx) {
-  const { client, company, opp } = ctx;
-  const empresa = (company && company.company_name) || 'Nosotros';
-  const nombre = (client && client.name) || 'cliente';
-  const asuntoObra = opp && opp.title ? opp.title : 'tu solicitud';
-
-  const intro = {
-    'primer-contacto': 'Te escribo por ' + asuntoObra + '. Me gustaría conocer bien lo que necesitas para poder ayudarte.',
-    'seguimiento':     'Retomo el hilo de ' + asuntoObra + ' por si has tenido ocasión de verlo. Quedo a tu disposición para cualquier duda.',
-    'insistencia':     'Vuelvo a escribirte sobre ' + asuntoObra + '. Si sigues interesado, dime y lo retomamos; si necesitas ajustar algo, lo vemos sin problema.',
-    'ultimo-intento':  'Te escribo una última vez sobre ' + asuntoObra + '. Si ahora no es el momento, lo entiendo perfectamente y aquí me tienes cuando lo sea.',
-    'reenganche':      'Hace un tiempo que no coincidimos y quería escribirte para saludarte. Sigo por aquí para lo que necesites.',
-  }[tono] || ('Te escribo por ' + asuntoObra + '.');
-
-  const cierre = {
-    'primer-contacto': '¿Te viene bien que hablemos esta semana?',
-    'seguimiento':     'Si te encaja, dime y seguimos adelante.',
-    'insistencia':     'Con una línea tuya me vale para saber cómo lo ves.',
-    'ultimo-intento':  'Gracias por tu tiempo en cualquier caso.',
-    'reenganche':      'Si en algún momento te hace falta algo, dímelo y lo vemos sin compromiso.',
-  }[tono] || 'Quedo atento.';
-
-  const asunto = {
-    'primer-contacto': asuntoObra,
-    'seguimiento':     'Seguimiento: ' + asuntoObra,
-    'insistencia':     '¿Cómo lo ves? — ' + asuntoObra,
-    'ultimo-intento':  'Cierro el tema de ' + asuntoObra + ' (salvo que me digas)',
-    'reenganche':      'Hace tiempo que no coincidimos',
-  }[tono] || asuntoObra;
-
-  const text = ['Hola ' + nombre + ',', '', intro, '', cierre, '', 'Un saludo,', empresa].join('\n');
-  const html = '<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1f2937">'
-    + '<p>Hola ' + escHtml(nombre) + ',</p>'
-    + '<p>' + escHtml(intro) + '</p>'
-    + '<p>' + escHtml(cierre) + '</p>'
-    + '<p style="margin-top:24px">Un saludo,<br>' + escHtml(empresa) + '</p>'
-    + '</div>';
-  return { subject: asunto, html, text };
+  const { client, company, opp, db } = ctx;
+  const vars = {
+    cliente: (client && client.name) || 'cliente',
+    asunto: (opp && opp.title) ? opp.title : 'tu solicitud',
+    empresa: (company && company.company_name) || 'Nosotros',
+  };
+  return db ? renderEmail(db, 'comercial', tono, vars)
+            : renderEmailFabrica('comercial', tono, vars);
 }
 
 // ════════════════════════════════════════════════════════════════════════════

@@ -1,9 +1,13 @@
 import { Hono } from 'hono';
-import { adminLayout } from '../layout.js';
+import { adminLayout, can } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { companySchema, storeSettingsSchema } from '../schemas.js';
 import { getCountryConfig } from '../../../core/control-db.js';
+import {
+  CATALOGO, TONO_UNICO, esTonoValido, plantillaEnVigor, plantillaDeFabrica,
+  renderPlantilla, htmlAtexto, revisarPlantilla,
+} from '../email-templates.js';
 
 export function createSettingsRoutes(db, cfg = {}) {
   const sym = cfg.sym || '€';
@@ -57,6 +61,109 @@ export function createSettingsRoutes(db, cfg = {}) {
   // Aquí abajo vivía una tarjeta "Seguridad de tu cuenta" que enlazaba /admin/setup-2fa.
   // Retirada: el 2FA es seguridad PERSONAL del usuario, no configuración de la EMPRESA, y estaba
   // duplicado con /admin/security. Su único sitio es ahora /admin/perfil.
+  // ══ PLANTILLAS DE EMAIL ════════════════════════════════════════════════════
+  //
+  // Mismo permiso que el resto de Ajustes: `company.read` para mirar, `company.update` para tocar.
+  // Los de SISTEMA no aflojan el permiso — al revés: son los más sensibles (llevan los enlaces con
+  // los que alguien entra en su cuenta), así que van con el mismo candado y con bloqueo duro.
+  //
+  // La plantilla de FÁBRICA vive en el código y no se puede perder. Esta tabla solo guarda ediciones,
+  // así que "volver al original" es borrar la fila. Nada que restaurar, nada que se pueda corromper.
+
+  // El catálogo entero, agrupado por familia, con el estado de cada plantilla (editada o de fábrica).
+  api.get('/email-templates', requirePerm('company.read'), c => {
+    try {
+      const editadas = new Set(db.prepare('SELECT tipo, tono FROM email_templates').all().map(r => r.tipo + '|' + r.tono));
+      const out = { cliente: [], sistema: [] };
+      for (const [id, t] of Object.entries(CATALOGO)) {
+        const variantes = (t.tonos || [{ clave: TONO_UNICO, label: null }]).map(v => ({
+          tono: v.clave, label: v.label, editada: editadas.has(id + '|' + v.clave),
+        }));
+        out[t.familia].push({
+          tipo: id, label: t.label, descripcion: t.descripcion, familia: t.familia,
+          huecos: t.huecos, criticos: t.criticos || [], requeridos: t.requeridos || [],
+          variantes,
+        });
+      }
+      return c.json(out);
+    } catch (e) { return c.json({ error: e.message }, 500); }
+  });
+
+  // Una plantilla concreta: la EN VIGOR (editada o de fábrica) + la de fábrica, para poder comparar.
+  api.get('/email-templates/:tipo/:tono', requirePerm('company.read'), c => {
+    try {
+      const { tipo, tono } = c.req.param();
+      if (!esTonoValido(tipo, tono)) return c.json({ error: 'Plantilla desconocida' }, 404);
+      const vigor = plantillaEnVigor(db, tipo, tono);
+      const fab = plantillaDeFabrica(tipo, tono);
+      const t = CATALOGO[tipo];
+      return c.json({
+        tipo, tono, familia: t.familia, label: t.label,
+        subject: vigor.subject, html: vigor.html, editada: vigor.editada,
+        fabrica: { subject: fab.subject, html: fab.html },
+        huecos: t.huecos, criticos: t.criticos || [], requeridos: t.requeridos || [],
+        motivoCritico: t.motivoCritico || null,
+      });
+    } catch (e) { return c.json({ error: e.message }, 500); }
+  });
+
+  // VISTA PREVIA con datos de ejemplo. Nunca con datos reales de un cliente: una previsualización no
+  // es una excusa para sacar la ficha de nadie por una API de Ajustes.
+  api.post('/email-templates/:tipo/:tono/preview', requirePerm('company.read'), async c => {
+    try {
+      const { tipo, tono } = c.req.param();
+      if (!esTonoValido(tipo, tono)) return c.json({ error: 'Plantilla desconocida' }, 404);
+      const body = await c.req.json().catch(() => ({}));
+      const t = CATALOGO[tipo];
+      const p = (body.subject != null || body.html != null)
+        ? { subject: String(body.subject || ''), html: String(body.html || '') }   // lo que tiene delante, sin guardar
+        : plantillaEnVigor(db, tipo, tono);
+      const html = renderPlantilla(p.html, t.ejemplo, { html: true });
+      return c.json({
+        subject: renderPlantilla(p.subject, t.ejemplo, { html: false }),
+        html,
+        text: htmlAtexto(html),
+        revision: revisarPlantilla(tipo, p),
+      });
+    } catch (e) { return c.json({ error: e.message }, 500); }
+  });
+
+  // GUARDAR. Aquí vive la RED DE SEGURIDAD, y es distinta por familia:
+  //   · cliente → avisa (200 con `avisos`), pero guarda. Es su voz.
+  //   · sistema → BLOQUEA (400) si falta el elemento crítico. No se guarda nada.
+  api.put('/email-templates/:tipo/:tono', requirePerm('company.update'), async c => {
+    try {
+      const { tipo, tono } = c.req.param();
+      if (!esTonoValido(tipo, tono)) return c.json({ error: 'Plantilla desconocida' }, 404);
+      const body = await c.req.json().catch(() => ({}));
+      const subject = String(body.subject || '').trim();
+      const html = String(body.html || '').trim();
+
+      const rev = revisarPlantilla(tipo, { subject, html });
+      if (rev.bloquea) return c.json({ error: rev.motivo, bloqueada: true }, 400);
+
+      const quien = c.get('session')?.userName || '';
+      db.prepare(`INSERT INTO email_templates (tipo, tono, subject, html, updated_at, updated_by)
+                  VALUES (?,?,?,?,?,?)
+                  ON CONFLICT(tipo, tono) DO UPDATE SET subject=excluded.subject, html=excluded.html,
+                    updated_at=excluded.updated_at, updated_by=excluded.updated_by`)
+        .run(tipo, tono, subject, html, new Date().toISOString(), String(quien));
+      return c.json({ ok: true, avisos: rev.avisos, message: 'Plantilla guardada. A partir de ahora se envía con tu texto.' });
+    } catch (e) { return c.json({ error: e.message }, 500); }
+  });
+
+  // VOLVER AL ORIGINAL: borrar la edición. La de fábrica está en el código, así que no hay nada que
+  // restaurar — vuelve sola en cuanto la fila deja de existir.
+  api.delete('/email-templates/:tipo/:tono', requirePerm('company.update'), c => {
+    try {
+      const { tipo, tono } = c.req.param();
+      if (!esTonoValido(tipo, tono)) return c.json({ error: 'Plantilla desconocida' }, 404);
+      db.prepare('DELETE FROM email_templates WHERE tipo=? AND tono=?').run(tipo, tono);
+      const fab = plantillaDeFabrica(tipo, tono);
+      return c.json({ ok: true, ...fab, message: 'Restaurada la plantilla original.' });
+    } catch (e) { return c.json({ error: e.message }, 500); }
+  });
+
   views.get('/', requirePerm('company.read'), c => {
     const config = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
     const sym = config.currency_symbol || '€';
@@ -111,6 +218,13 @@ export function createSettingsRoutes(db, cfg = {}) {
           <button class="btn btn-primary" onclick="saveCompany()">Guardar cambios</button>
         </div>
       </div>
+      <div class="card" style="max-width:700px;margin-top:1rem">
+        <div class="card-body">
+          <h3 style="margin:0 0 .3rem;font-size:1rem">Plantillas de email</h3>
+          <p style="color:var(--text2);font-size:13px;margin:0 0 .8rem">Todos los correos que tu negocio envía —recordatorios de pago, presupuestos, reenganche, recuperar contraseña…— con tu voz. Los datos (nombre, factura, importe) los rellena Bamburu solo.</p>
+          <a class="btn btn-secondary" href="/admin/settings/plantillas"><i class="ti ti-mail"></i> Editar plantillas de email</a>
+        </div>
+      </div>
 
 
       <script>
@@ -140,6 +254,201 @@ export function createSettingsRoutes(db, cfg = {}) {
       }
       </script>`;
     return c.html(adminLayout('Configuración Empresa', content, 'settings', c.get('session')?.csrfToken || '', c));
+  });
+
+  // ── PANTALLA: Plantillas de email ──────────────────────────────────────────
+  // Editor VISUAL (contenteditable): negrita, cursiva, enlace, listas. El usuario no ve etiquetas.
+  // El HTML crudo existe, pero PLEGADO: quien lo quiera, lo abre; quien no, ni se entera.
+  // Los huecos se INSERTAN con un clic (nunca se teclean: un `{{factrua}}` mal escrito sale vacío).
+  views.get('/plantillas', requirePerm('company.read'), c => {
+    const csrf = c.get('session')?.csrfToken || '';
+    const puedeEditar = can(c, 'company.update');
+    const content = `
+      <div class="ph"><h2>Plantillas de email</h2>
+        <a class="btn btn-secondary" href="/admin/settings"><i class="ti ti-arrow-left"></i> Volver a Ajustes</a>
+      </div>
+      <div class="card" style="margin-bottom:1rem"><div class="card-body" style="color:var(--muted)">
+        Estos son <strong>todos</strong> los correos que tu negocio envía. Puedes reescribirlos con tu voz.
+        Los <strong>huecos</strong> (<code>{{cliente}}</code>, <code>{{factura}}</code>…) los rellena Bamburu
+        solo, con los datos de cada envío: insértalos con un clic, no los escribas a mano.
+        ${puedeEditar ? '' : '<br><strong>Solo lectura:</strong> necesitas permiso de administración de Ajustes para editarlas.'}
+      </div></div>
+      <div id="tplLista"><p style="color:var(--muted)">Cargando…</p></div>
+
+      <div class="modal" id="tplModal"><div class="modal-content" style="max-width:860px">
+        <div class="modal-head"><h3 id="tplTitulo">Plantilla</h3>
+          <button class="modal-x" onclick="closeModal('tplModal')">&times;</button></div>
+        <div class="modal-body">
+          <div id="tplCritico" class="alert alert-warn" style="display:none;margin-bottom:1rem"></div>
+
+          <div class="form-group"><label class="form-label">Asunto</label>
+            <input class="form-control" id="tplSubject"></div>
+
+          <label class="form-label">Mensaje</label>
+          <div class="tpl-tools">
+            <button type="button" class="btn btn-secondary btn-sm" onmousedown="return fmt(event,'bold')"><b>B</b></button>
+            <button type="button" class="btn btn-secondary btn-sm" onmousedown="return fmt(event,'italic')"><i>I</i></button>
+            <button type="button" class="btn btn-secondary btn-sm" onmousedown="return fmt(event,'insertUnorderedList')">• Lista</button>
+            <button type="button" class="btn btn-secondary btn-sm" onmousedown="return ponerEnlace(event)">🔗 Enlace</button>
+          </div>
+          <div id="tplEditor" class="tpl-editor" contenteditable="true"></div>
+
+          <div style="margin-top:.6rem">
+            <div style="font-size:.8rem;color:var(--muted);margin-bottom:.3rem">Huecos que este email sabe rellenar — pincha para insertarlos donde tengas el cursor:</div>
+            <div id="tplHuecos" class="tpl-huecos"></div>
+          </div>
+
+          <details style="margin-top:1rem">
+            <summary style="cursor:pointer;color:var(--muted);font-size:.85rem">Editar el HTML a mano (avanzado)</summary>
+            <textarea id="tplHtml" class="form-control" style="min-height:160px;font-family:ui-monospace,monospace;font-size:.8rem;margin-top:.5rem"></textarea>
+            <button class="btn btn-secondary btn-sm" style="margin-top:.4rem" onclick="delHtmlAlEditor()">Aplicar al editor visual</button>
+          </details>
+
+          <div id="tplAvisos" style="margin-top:1rem"></div>
+          <div id="tplPreview" style="display:none;margin-top:1rem">
+            <div style="font-size:.8rem;color:var(--muted);margin-bottom:.3rem">Vista previa (con datos de ejemplo, nunca de un cliente real):</div>
+            <div style="border:1px solid var(--border2);border-radius:10px;overflow:hidden">
+              <div style="padding:.5rem .8rem;background:var(--bg);border-bottom:1px solid var(--border2);font-size:.85rem"><strong>Asunto:</strong> <span id="pvSubject"></span></div>
+              <iframe id="pvBody" style="width:100%;height:320px;border:0;background:#fff"></iframe>
+            </div>
+          </div>
+        </div>
+        <div class="modal-foot" style="display:flex;gap:.5rem;flex-wrap:wrap">
+          <button class="btn btn-secondary" onclick="previsualizar()">Vista previa</button>
+          ${puedeEditar ? '<button class="btn btn-primary" onclick="guardar()">Guardar</button>' : ''}
+          ${puedeEditar ? '<button class="btn btn-secondary" onclick="volverAlOriginal()">Volver al original</button>' : ''}
+          <button class="btn btn-secondary" onclick="closeModal('tplModal')">Cerrar</button>
+        </div>
+      </div></div>
+
+      <style>
+        .tpl-fam{margin-bottom:1.5rem}
+        .tpl-fam h3{margin:0 0 .3rem;font-size:1rem}
+        .tpl-fam .sub{color:var(--muted);font-size:.85rem;margin-bottom:.7rem}
+        .tpl-card{border:1px solid var(--border2);border-radius:12px;padding:.9rem 1rem;margin-bottom:.6rem;background:var(--card)}
+        .tpl-card h4{margin:0 0 .2rem;font-size:.95rem}
+        .tpl-card .desc{color:var(--muted);font-size:.83rem;margin-bottom:.6rem}
+        .tpl-vars{display:flex;gap:.4rem;flex-wrap:wrap}
+        .tpl-editada{font-size:.7rem;font-weight:600;color:#047857;background:rgba(16,185,129,.14);padding:.1rem .4rem;border-radius:5px}
+        .tpl-tools{display:flex;gap:.3rem;margin-bottom:.3rem;flex-wrap:wrap}
+        .tpl-editor{min-height:200px;border:1px solid var(--border2);border-radius:10px;padding:.8rem;background:var(--bg);overflow:auto}
+        .tpl-editor:focus{outline:2px solid var(--accent,#3b82f6);outline-offset:1px}
+        .tpl-huecos{display:flex;gap:.35rem;flex-wrap:wrap}
+        .tpl-hueco{cursor:pointer;font-size:.75rem;font-family:ui-monospace,monospace;border:1px dashed var(--border2);border-radius:6px;padding:.15rem .45rem;background:var(--bg)}
+        .tpl-hueco.crit{border-color:#b45309;color:#b45309;border-style:solid}
+      </style>
+      <script>
+      const PUEDE_EDITAR = ${puedeEditar ? 'true' : 'false'};
+      let TPL = null;   // { tipo, tono, familia, huecos, criticos, ... }
+
+      async function cargar(){
+        const cat = await api('GET','/api/erp/settings/email-templates');
+        const box = document.getElementById('tplLista');
+        box.innerHTML = fam('Correos a tus clientes', 'Los que salen con tu nombre. Si te cargas un dato importante, te avisamos — pero es tu voz y tu decisión.', cat.cliente)
+          + fam('Correos de sistema', 'Los operativos. Llevan el enlace con el que alguien entra a su cuenta o a su portal: <strong>sin ese enlace no te dejamos guardar</strong>.', cat.sistema);
+      }
+      function fam(titulo, sub, tipos){
+        return '<div class="tpl-fam"><h3>'+titulo+'</h3><div class="sub">'+sub+'</div>'
+          + tipos.map(t =>
+            '<div class="tpl-card"><h4>'+escHtml(t.label)+'</h4><div class="desc">'+escHtml(t.descripcion)+'</div>'
+            + '<div class="tpl-vars">'
+            + t.variantes.map(v =>
+                '<button class="btn btn-secondary btn-sm" onclick="abrir(\\''+t.tipo+'\\',\\''+v.tono+'\\')">'
+                + escHtml(v.label || 'Editar')
+                + (v.editada ? ' <span class="tpl-editada">tuya</span>' : '') + '</button>').join('')
+            + '</div></div>').join('')
+          + '</div>';
+      }
+
+      async function abrir(tipo, tono){
+        TPL = await api('GET','/api/erp/settings/email-templates/'+tipo+'/'+tono);
+        document.getElementById('tplTitulo').textContent = TPL.label + (TPL.editada ? ' (editada por ti)' : ' (original)');
+        document.getElementById('tplSubject').value = TPL.subject;
+        document.getElementById('tplEditor').innerHTML = TPL.html;
+        document.getElementById('tplHtml').value = TPL.html;
+        document.getElementById('tplAvisos').innerHTML = '';
+        document.getElementById('tplPreview').style.display = 'none';
+        const crit = document.getElementById('tplCritico');
+        if (TPL.familia === 'sistema') {
+          crit.style.display = '';
+          crit.innerHTML = '<strong>Correo de sistema.</strong> ' + escHtml(TPL.motivoCritico || '')
+            + ' No podrás guardar si quitas ese elemento.';
+        } else { crit.style.display = 'none'; }
+        document.getElementById('tplHuecos').innerHTML = TPL.huecos.map(h =>
+          '<span class="tpl-hueco'+(TPL.criticos.includes(h.clave)?' crit':'')+'" onclick="insertar(\\'{{'+h.clave+'}}\\')" title="'+escHtml(h.label)+'">'
+          + '{{'+h.clave+'}}</span>').join('');
+        document.getElementById('tplEditor').contentEditable = PUEDE_EDITAR ? 'true' : 'false';
+        openModal('tplModal');
+      }
+
+      // ── Editor visual: sin ver una sola etiqueta ──
+      function fmt(ev, cmd){ ev.preventDefault(); document.execCommand(cmd,false,null); return false; }
+      function ponerEnlace(ev){
+        ev.preventDefault();
+        const url = prompt('¿A qué dirección enlaza?', 'https://');
+        if (url) document.execCommand('createLink', false, url);
+        return false;
+      }
+      // Los huecos se INSERTAN en el cursor. Nunca se teclean: un {{factrua}} mal escrito saldría vacío.
+      function insertar(txt){
+        const ed = document.getElementById('tplEditor');
+        ed.focus();
+        document.execCommand('insertText', false, txt);
+      }
+      function delHtmlAlEditor(){
+        document.getElementById('tplEditor').innerHTML = document.getElementById('tplHtml').value;
+        toast('Aplicado al editor visual');
+      }
+      const htmlActual = () => document.getElementById('tplEditor').innerHTML;
+
+      async function previsualizar(){
+        const r = await api('POST','/api/erp/settings/email-templates/'+TPL.tipo+'/'+TPL.tono+'/preview',
+          { subject: document.getElementById('tplSubject').value, html: htmlActual() });
+        document.getElementById('pvSubject').textContent = r.subject;
+        document.getElementById('pvBody').srcdoc = r.html;
+        document.getElementById('tplPreview').style.display = '';
+        pintarRevision(r.revision);
+      }
+      function pintarRevision(rev){
+        const box = document.getElementById('tplAvisos');
+        if (!rev) { box.innerHTML=''; return; }
+        let h = '';
+        if (rev.bloquea) h += '<div class="alert alert-danger"><strong>No se puede guardar.</strong> '+escHtml(rev.motivo)+'</div>';
+        for (const a of (rev.avisos||[])) h += '<div class="alert alert-warn">⚠ '+escHtml(a)+'</div>';
+        box.innerHTML = h;
+      }
+
+      async function guardar(){
+        try {
+          const r = await api('PUT','/api/erp/settings/email-templates/'+TPL.tipo+'/'+TPL.tono,
+            { subject: document.getElementById('tplSubject').value, html: htmlActual() });
+          // Familia CLIENTE: puede guardar Y avisar. El aviso no es un error: es un "oye, mira esto".
+          if (r.avisos && r.avisos.length) pintarRevision({ bloquea:false, avisos:r.avisos });
+          else document.getElementById('tplAvisos').innerHTML = '';
+          toast(r.message || 'Guardada');
+          cargar();
+        } catch(e){
+          // Familia SISTEMA: bloqueo duro. Se explica por qué, y NO se guarda nada.
+          pintarRevision({ bloquea:true, motivo:e.message, avisos:[] });
+          toast(e.message || 'No se pudo guardar','err');
+        }
+      }
+
+      async function volverAlOriginal(){
+        if (!confirm('¿Volver a la plantilla original de Bamburu? Se pierde tu texto.')) return;
+        try {
+          const r = await api('DELETE','/api/erp/settings/email-templates/'+TPL.tipo+'/'+TPL.tono);
+          document.getElementById('tplSubject').value = r.subject;
+          document.getElementById('tplEditor').innerHTML = r.html;
+          document.getElementById('tplHtml').value = r.html;
+          document.getElementById('tplAvisos').innerHTML = '';
+          toast(r.message || 'Restaurada');
+          cargar();
+        } catch(e){ toast(e.message,'err'); }
+      }
+      cargar();
+      </script>`;
+    return c.html(adminLayout('Plantillas de email', content, 'settings', csrf, c));
   });
 
   storeViews.get('/', requirePerm('store_settings.read'), c => {

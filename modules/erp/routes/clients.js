@@ -209,7 +209,7 @@ export function createClientRoutes(db, cfg = {}) {
       const client = db.prepare('SELECT * FROM clients WHERE id=?').get(id);
       const company = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
       const tono = (resumen.proximaAccionCuenta && resumen.proximaAccionCuenta.tono) || 'amable';
-      const tpl = accountEmail(tono, { client, company, facturasVivas: resumen.facturasVivas, total: resumen.deudaTotal });
+      const tpl = accountEmail(tono, { client, company, facturasVivas: resumen.facturasVivas, total: resumen.deudaTotal, db });
       return c.json({ subject: tpl.subject, text: tpl.text, tono, to: (client && client.email) || '', has_email: !!(client && client.email), total: resumen.deudaTotal, facturas: resumen.facturasVivas.length });
     } catch(e) { return c.json({error:e.message},400); }
   });
