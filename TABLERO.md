@@ -381,6 +381,32 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
         te propone**. *Nota de proceso:* la primera versión de (1) falló, y **NO era del producto: era del
         gate** —generaba la línea base DESPUÉS de sembrar los fantasmas—. Se comprobó en aislamiento
         antes de tocar nada; el orden correcto queda escrito en el propio gate.
+    - ✅ **D5e — VENCIMIENTOS FISCALES (15 jul 2026, `413bde1`).** Quinto tipo de propuesta
+      (`vencimiento_fiscal`) y el primero que **no cuelga de un documento** (factura/ocurrencia) ni de un
+      cliente: cuelga de la **FICHA FISCAL del tenant** (qué presenta) y del **CALENDARIO** (cuándo vence).
+      Mismo panel, mismo cron, misma tabla.
+      **BAMBURU PREPARA, NUNCA PRESENTA (CANON §0-ter).** "Marcar como preparado" cierra el recordatorio y
+      —para 303/130— te lleva al borrador en Impuestos; **presentar es tuyo, en la sede de la AEAT**. Aquí
+      no nace ningún camino de presentación.
+      **SOLO SE PROPONE LO DECLARADO.** `fiscal_profile` (singleton, **FUERA de WRITABLE_TABLES**: DISA no
+      se escribe a sí misma qué presentas) es la fuente de verdad; **nunca se asume 303+130 para todos**
+      —callarse el 111 de quien tiene un empleado es peor que no avisar—. Sin declarar (`configured_at`
+      NULL) no se propone nada, ni con actividad que lo alimentaría. Se declara en **Ajustes › Situación
+      fiscal**, en lenguaje llano (sin ver números de modelo si no quieres).
+      **LAS FECHAS SON APROXIMADAS A PROPÓSITO** (`calendario-fiscal.js`, lógica PURA): el plazo real se
+      corre por fin de semana/festivo, así que se da la fecha NOMINAL con **margen de 10 días** y **gracia
+      de 3** (el plazo real suele correrse HACIA DELANTE), y cada propuesta lleva la línea `NOTA_AEAT`. Una
+      **regla en código**, no una tabla de fechas a mano que se quedaría vieja en silencio.
+      **303/130 traen importe estimado** del motor de contabilidad (casilla 71 / c19), marcado como
+      estimación y recalculado EN VIVO; **111/115 y anuales avisan de la fecha y NO inventan cifra**
+      (importe null). Si dejas de declarar un modelo, su pendiente pasa a `viva=false` y el panel lo avisa,
+      en vez de empujarte a presentar lo que ya no te toca.
+      **Idempotencia:** índice único `(fiscal_model, fiscal_year, fiscal_period, type)` → una sola propuesta
+      por vencimiento para siempre; el periodo siguiente es otra clave. **El cron genera el 5º tipo:** un
+      solo timer para los cinco. **Candado `invoices.read`** (el mismo que la pantalla de modelos): quien no
+      ve los modelos no ve sus vencimientos, ni en la lista, ni en el badge, ni se le generan. Falla cerrado.
+      Verificado: `verify-propuestas-fiscales.mjs` **62/0** (copias desechables + clon limpio). De paso, el
+      gate de dormidos afirmaba `tipos===4`; con el quinto tipo pasó a **5**.
     - 📋 **Diagnóstico SOLO LECTURA (14 jul 2026) — terreno para 3 propuestas nuevas.** Se pidieron tres;
       el diagnóstico **dio la vuelta a lo que se esperaba**. Veredicto de cada una:
       - 🟢 **Facturas recurrentes por emitir → VERDE.** El motor **ya existía entero**; no había que
@@ -400,7 +426,7 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
         vale tal cual; (b) qué hacer con los clientes que **NUNCA compraron** (¿dormidos, o nunca
         despertaron?). Ojo: eso sí exigiría una **clave de deduplicación genérica** (`(type, periodo)`),
         que **NO se construyó** en D5c a propósito.
-      - 🟢 **Vencimientos fiscales (IVA/IRPF) → VERDE en los números; ESPERA TU DECISIÓN.** *(La sorpresa:
+      - 🟢 **Vencimientos fiscales (IVA/IRPF) → CONSTRUIDA: es D5e, arriba.** *(Era VERDE y esperaba tu decisión; se tomó y se construyó.)* *(La sorpresa:
         se esperaba que fuera la bloqueada por el motor contable.)* **El motor contable NO está a medias:
         está CERRADO** (Piezas 1–4), y **`modelo303(db,year,q)` y `modelo130(db,year,q)` ya calculan** las
         casillas oficiales del trimestre — **ejecutados en solo lectura sobre T3-2026 y responden**. Lo que
@@ -415,9 +441,10 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
       (subsanación Verifactu, etc.); push en vivo (SSE) en vez del sondeo de 60 s; que DISA proponga
       desde la propia campana. Es el resto del diseño de D5.
 - **Lo que queda del Eje B es diseñar/construir MÁS proactividad.** De las tres propuestas del
-  diagnóstico, **dos están HECHAS** (D5c recurrentes, D5d dormidos) y **queda UNA: los vencimientos
-  fiscales**, que **NO espera código sino tu decisión** sobre el calendario fiscal (el motor contable
-  está cerrado y el 303/130 ya calculan; ver arriba). No sin encargo.
+  diagnóstico, **las TRES están HECHAS** (D5c recurrentes, D5d dormidos, D5e vencimientos fiscales).
+  La última exigía tu decisión sobre el calendario fiscal (estaba "fuera, sin encargo"): se tomó, se
+  construyó y se verificó (62/0 + clon limpio). Siguiente proactividad, sin encargo: subsanación
+  Verifactu, push en vivo (SSE), proponer desde la campana.
 
 ## Verificación (transversal)
 
