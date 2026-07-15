@@ -7,7 +7,9 @@
 > certificado de Bamburu + autorización de representación del cliente), y está **aparcado** hasta tener la
 > plataforma al 100 % — ver `docs/contexto/decisiones.md` (2026-07-10).
 >
-> **SIGUIENTE BLOQUE GRANDE: planificar el Eje B — DISA.** Empieza por ahí.
+> **SIGUIENTE BLOQUE GRANDE: EJE C — SEGURIDAD.** Plan cargado desde la auditoría del 15 jul (ver la
+> sección "Eje C: Seguridad"). Empezar por **C1 (Verifactu, ALTA)**. Eje A (UX) y Eje B (DISA, seis
+> propuestas de proactividad) completos; Pilar 3 (inventario) cerrado.
 >
 > **Inventario (Pilar 3) CERRADO (15 jul 2026):** multi-almacén (`da7871e`/`3af928f`), stock mínimo /
 > punto de pedido (`8b4fbe4`) y trazabilidad por lote / nº de serie (`f56ad84`). Ver el Backlog.
@@ -562,7 +564,77 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
   entera. Limpiado `auth.log`; clave **rotada** y verificada con una llamada real a DISA. La lección
   (nunca un secreto en `argv`) queda en `errores-conocidos.md`.
 
-## Eje C: Seguridad (pendiente de planificar)
+## Eje C: Seguridad — plan cargado (auditoría del 15 jul)  ⬅️ EMPEZAR POR C1
+
+> Origen: **auditoría de seguridad de SOLO LECTURA del 15 jul 2026** (`docs/seguridad/auditoria-ejeC.md`,
+> commit `24dbf2a`). Postura general **buena** (aislamiento entre negocios sólido y fail-closed, DISA no se
+> sale de `WRITABLE_TABLES`, backups montados y verificados, transporte/cabeceras casi completos). Cada
+> tarea referencia su(s) **código(s) de hallazgo del informe** con file:line — no descripciones de memoria.
+> Orden = por gravedad y reversibilidad. **Ninguna empezada.**
+
+- ⬜ **C1 — [A1 · ALTA] Cadena legal de Verifactu encadenada por `id` sin filtrar por NIF del emisor.**
+  Va PRIMERO: es lo ÚNICO irreversible una vez enviado a la AEAT. Hoy no corrompe nada (un NIF por negocio),
+  pero la invariante NO está protegida por código. Arreglo: **(a)** filtrar por `id_emisor` en los DOS
+  sitios — `modules/erp/verifactu.js:98` (huella, Tarea 1) y `modules/erp/verifactu-envio.js:426`
+  (encadenado del envío, Tarea 2); **(b)** guarda que impida cambiar `company_config.fiscal_id` en Ajustes
+  cuando ya existen registros Verifactu; **(c)** gate que siembre DOS NIFs en una BD y afirme que cada
+  cadena es independiente. Esfuerzo bajo.
+
+- ⬜ **C2 — Verificación con permisos de administrador (`sudo`) de los 4 puntos que la auditoría de solo
+  lectura NO pudo comprobar.** Es VERIFICACIÓN, no arreglo: **(1)** redirect http→https efectivo en runtime
+  (escucha real en `:80`; es el default de Caddy, no explícito en el Caddyfile); **(2)** validez del remoto
+  rclone / token de Google Drive (`~/.config/rclone/rclone.conf`, fuera del repo); **(3)** contenido de
+  `/etc/bamburu.env` (no leído a propósito); **(4)** si un reverse-proxy delante registra la URL completa
+  con el token de reset (viaja como query param). Los hallazgos que salgan se añaden como **tareas nuevas**.
+
+- ⬜ **C3 — Victorias rápidas (tres arreglos cortos, EN ESTE ORDEN).**
+  - **[M2] Actualizar `hono`** (CVE HIGH de `npm audit`: bypass de restricción por IP en IPv6 no canónica +
+    inyección Set-Cookie por `sameSite`/`priority`) a versión parcheada + correr la regresión. Impacto real
+    bajo con el uso actual, pero es una CVE viva en dependencia de borde. Esfuerzo bajo.
+  - **[M7] Dejar de escribir el email y el estado del 2FA en el log en cada login** —
+    `modules/erp/routes/auth.js:204` (`console.log('[Login] user:', email, '| totp_enabled:', …)`): PII/RGPD
+    + reconocimiento de qué cuentas tienen 2FA. Reducir a `userId`. Esfuerzo bajo.
+  - **[M4] Dejar de enviar `e.message` de SQL al cliente** — ~40 `catch` por-ruta devuelven el mensaje crudo
+    de better-sqlite3 (tablas/columnas/constraints): `modules/store/routes.js`, `routes/categories.js:13-35`,
+    `routes/purchases.js:104-128`, `modules/superadmin/{backups,integridad,salud}.js`, ~30 en
+    `modules/disa/index.js`. Centralizar el saneado del error. Esfuerzo medio.
+
+- ⬜ **C4 — [M1 + M8] XSS almacenado en campos de texto libre + endurecer la CSP (MISMA tarea: saneado +
+  red de seguridad).** Envolver en `escHtml` los campos que el informe lista SIN escapar: notas de cliente
+  (`modules/erp/routes/clients.js:560`), grupos de cliente (`clients.js:662`), categorías
+  (`routes/categories.js:70`), descuentos automáticos (`routes/discounts.js:166-169`), `<option>` de
+  categoría/proveedor en el editor de producto (`routes/products.js:555,557`) y `<option>` de proveedor
+  server-rendered (`routes/purchases.js:201` — el almacén de la misma función SÍ se escapa, `:204`). Y
+  **quitar `'unsafe-inline'`** de `script-src`/`style-src` en la CSP (`core/security-headers.js:34-35`): es
+  la mitigación sistémica del XSS (esfuerzo ALTO — mover el JS inline a ficheros/nonces). El saneado es la
+  línea de fondo; la CSP, el cinturón.
+
+- ⬜ **C5 — Endurecer el acceso (tres, EN ESTE ORDEN).**
+  - **[M5] Revocar las sesiones activas al desactivar un usuario** — hoy aguantan ≤24 h porque
+    `getAdminSession` hace `JOIN admin_users` sin `active=1` (`core/auth.js:85-90`) y `PUT /users`
+    (`modules/erp/routes/users.js:54`) no destruye sus sesiones. Esfuerzo bajo.
+  - **[M6] Freno en `forgot-password` + cerrar la enumeración por timing** — `routes/auth.js:443` (sin rate
+    limit dedicado) y `:482` vs `:490-513` (retorno inmediato si el email no existe; INSERT+render+red si
+    existe → oráculo de latencia). Rate-limit propio + igualar el tiempo de respuesta. Esfuerzo medio.
+  - **[M3] 2FA para la cuenta de superadmin** — hoy solo contraseña (`modules/superadmin/index.js:99-110`);
+    las columnas `totp_secret`/`totp_enabled` (`core/control-db.js:115-116`) están muertas. Cablear el TOTP
+    que el esquema ya contempla. Es la cuenta MÁS poderosa de la plataforma. Esfuerzo medio.
+
+- ⬜ **C6 — Los 12 hallazgos BAJA (un solo bloque, al final).**
+  **[B1]** contraseña generada impresa al provisionar (`modules/erp/models.js:621`; cuenta desechable —
+  anti-patrón recurrente) · **[B2]** `POST /users/:id/permissions` sin allowlist server-side, confía en la
+  UI (`routes/users.js:94-106`) · **[B3]** el reset no invalida otras sesiones/tokens + longitud mínima
+  incoherente 8 vs 10 (`routes/auth.js:604,583`) · **[B4]** login sin lockout por cuenta, solo por IP
+  (`core/rate-limit.js:23`) · **[B5]** cookie `btenant` selecciona la BD activa sin auth
+  (`core/tenant-middleware.js:59-65`; mitigado por `adminAuth` per-BD) · **[B6]** enumeración de emails
+  cross-tenant en `/find-tenant` (`index.js:1187-1210`) · **[B7]** scripts de ops imprimen contraseñas
+  (`scripts/reset-admin.js:36`, `seed-superadmin.mjs:24`, `init-dev.mjs:30`) · **[B8]** DISA loguea el SQL
+  generado, con valores de WHERE (`modules/disa/index.js:2558`) · **[B9]** permisos `0644` (world-readable)
+  en 2 BD de tenant (`data/tenants/inversiones-disan.db`, `rachibra.db`; dir padre `0700` lo protege hoy) ·
+  **[B10]** hardening systemd mínimo (`/etc/systemd/system/bamburu.service`, `NoNewPrivileges=false`) ·
+  **[B11]** cookies `btenant`/`store_preview` sin `Secure` (`index.js:1236`, `modules/store/routes.js:200`;
+  dev / Capa 2 congelada) · **[B12]** `roles`/`role_permissions`/`user_roles` sembradas pero sin uso en la
+  aplicación de permisos (`models.js:1904-2017`; código muerto).
 
 ---
 
