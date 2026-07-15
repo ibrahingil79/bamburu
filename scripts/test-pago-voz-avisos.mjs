@@ -15,6 +15,7 @@ import {
   vencimientosProveedor, avisosDelDia, avisosEmail,
   stockBajo, resumenTexto, resumenAvisos, estadoAvisos, marcarVistos, avisoKey,
 } from '../modules/erp/avisos.js';
+import { recordMovement, defaultWarehouseId } from '../modules/erp/stock.js';
 
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) pass++; else { fail++; console.error('  ✗ ' + m); } }
@@ -183,15 +184,15 @@ console.log('13. Email unificado (bloques por fuente)');
   const tpl = avisosEmail({ avisos: avs, company: { company_name: 'X', currency_symbol: '€' } });
   // El email cuenta EXACTAMENTE lo mismo que el flag (misma fuente avisosDelDia).
   ok(/3 avisos/.test(tpl.subject), 'el email cuenta los 3 avisos = lo que dice el flag');
-  ok(/Facturas de proveedor.*\(1\)/.test(tpl.text) && /Productos con stock bajo \(2\)/.test(tpl.text), 'el email lleva LOS DOS bloques con sus conteos (1 / 2)');
-  ok(tpl.html.includes('Facturas de proveedor') && tpl.html.includes('Productos con stock bajo'), 'el HTML también muestra ambos bloques');
+  ok(/Facturas de proveedor.*\(1\)/.test(tpl.text) && /Productos bajo su mínimo de stock \(2\)/.test(tpl.text), 'el email lleva LOS DOS bloques con sus conteos (1 / 2)');
+  ok(tpl.html.includes('Facturas de proveedor') && tpl.html.includes('Productos bajo su mínimo de stock'), 'el HTML también muestra ambos bloques');
 
   // Tenant con SOLO stock bajo → el email lleva el bloque de stock (antes no lo llevaba).
   const db2 = freshDb();
   addLowProduct(db2, { stock: 1 });
   const avs2 = avisosDelDia(db2, TODAY);
   const tpl2 = avisosEmail({ avisos: avs2, company: { currency_symbol: '€' } });
-  ok(/Productos con stock bajo \(1\)/.test(tpl2.text) && !/Facturas de proveedor/.test(tpl2.text), 'solo stock bajo → bloque de stock, sin bloque de proveedor');
+  ok(/Productos bajo su mínimo de stock \(1\)/.test(tpl2.text) && !/Facturas de proveedor/.test(tpl2.text), 'solo stock bajo → bloque de stock, sin bloque de proveedor');
   db.close(); db2.close();
 }
 
@@ -207,10 +208,18 @@ console.log('9. Idempotencia diaria (daily_alert_log)');
   db.close();
 }
 
+// Un producto BAJO SU MÍNIMO: la señal ya no es el umbral fijo stock<5 sobre la caché, sino el
+// DISPONIBLE por almacén (stock_movements) contra un mínimo real (stock_levels). Se pone `stock`
+// de disponible y un mínimo por encima (stock+10) para que quede bajo mínimo. Un aviso por producto.
 function addLowProduct(db, { stock = 2, name = 'Vela' } = {}) {
   seq++;
-  return db.prepare("INSERT INTO products (name,slug,sku,price,type,stock,status,tax_rate,tax_band) VALUES (?,?,?,10,'physical',?, 'active',21,'general')")
-    .run(name + seq, 'p' + seq, 'S' + seq, stock).lastInsertRowid;
+  let w = defaultWarehouseId(db);
+  if (!w) w = Number(db.prepare("INSERT INTO warehouses (name, active, is_default) VALUES ('Principal',1,1)").run().lastInsertRowid);
+  const pid = Number(db.prepare("INSERT INTO products (name,slug,sku,price,type,stock,status,tax_rate,tax_band) VALUES (?,?,?,10,'physical',0,'active',21,'general')")
+    .run(name + seq, 'p' + seq, 'S' + seq).lastInsertRowid);
+  if (stock > 0) recordMovement(db, { product_id: pid, type: 'apertura', quantity: stock, origin_type: 'opening', warehouse_id: w, note: 'seed' });
+  db.prepare("INSERT INTO stock_levels (product_id, warehouse_id, min_qty, target_qty) VALUES (?,?,?,?)").run(pid, w, stock + 10, stock + 20);
+  return pid;
 }
 
 // ── 10. Stock bajo es FUENTE del motor; resumen y conteo coinciden ──────────
@@ -222,7 +231,7 @@ console.log('10. Fuente stock bajo + resumen-primero');
   addLowProduct(db, { stock: 2 });
   addLowProduct(db, { stock: 0 });                          // 2 productos stock bajo
   const sb = stockBajo(db, TODAY);
-  eq(sb.length, 2, 'stockBajo detecta 2 productos (<5, activos)');
+  eq(sb.length, 2, 'stockBajo detecta 2 productos bajo su mínimo');
   const todos = avisosDelDia(db, TODAY);
   eq(todos.length, 3, 'avisosDelDia agrega 2 fuentes: 1 vencimiento + 2 stock = 3 (== badge)');
   const groups = resumenAvisos(todos);

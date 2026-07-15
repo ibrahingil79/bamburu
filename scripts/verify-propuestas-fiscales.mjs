@@ -222,9 +222,9 @@ try {
   await POST(appVe, '/generar');
   ok(!!propDe(dbC, '303', '2T'), 'y quien lo tiene, sí');
 
-  // La fuente única declara los CINCO tipos.
+  // La fuente única declara los SEIS tipos.
   const tiposOwner = tiposVisiblesPara({ get: k => k === 'isOwner' }, () => true);
-  ok(tiposOwner.length === 5 && tiposOwner.includes(TIPO_FISCAL), 'la fuente única declara los CINCO tipos, con el fiscal (' + tiposOwner.join(', ') + ')');
+  ok(tiposOwner.length === 6 && tiposOwner.includes(TIPO_FISCAL), 'la fuente única declara los SEIS tipos, con el fiscal (' + tiposOwner.join(', ') + ')');
 
   // ── 9. Aislamiento entre negocios ───────────────────────────────────────────
   console.log('\n[9] Aislamiento entre negocios');

@@ -1684,6 +1684,43 @@ export function runMigrations(db) {
   )`);
   db.exec(`INSERT OR IGNORE INTO fiscal_profile (id) VALUES (1)`);
 
+  // ── NIVELES DE REPOSICIÓN (Pilar 3 · stock mínimo / punto de pedido) ─────────────────────────
+  // Nivel MÍNIMO y OBJETIVO de stock POR (producto, almacén). APAGADO POR DEFECTO: solo se vigila el
+  // (producto, almacén) donde el dueño ponga un número — una fila aquí ES la vigilancia. Al borrar el
+  // mínimo (ponerlo a 0) se borra la fila (deja de vigilarse). Solo tiene sentido para productos FÍSICOS
+  // (la UI y el motor filtran por type='physical'); no se fuerza con FK para no atar la migración.
+  //   · min_qty:    umbral. El aviso salta cuando el DISPONIBLE del almacén (físico − reservado) < min_qty.
+  //   · target_qty: objetivo de reposición. La cantidad a pedir = target − disponible. 0 = usar el mínimo.
+  // FUERA de WRITABLE_TABLES (DISA no se pone niveles a sí misma): se escribe por servicio validado desde
+  // la ficha del producto. No toca el libro de stock (stock_movements) ni el WAC: es solo configuración.
+  db.exec(`CREATE TABLE IF NOT EXISTS stock_levels (
+    product_id   INTEGER NOT NULL,
+    warehouse_id INTEGER NOT NULL,
+    min_qty      INTEGER NOT NULL DEFAULT 0,
+    target_qty   INTEGER NOT NULL DEFAULT 0,
+    updated_at   TEXT,
+    updated_by   TEXT DEFAULT '',
+    PRIMARY KEY (product_id, warehouse_id)
+  )`);
+
+  // PROPUESTA DE REPOSICIÓN DE STOCK (D5f) — el sexto tipo. Se ancla al PROVEEDOR habitual del producto
+  // (reutiliza la columna supplier_id que ya existe): una propuesta = un borrador de orden de compra a
+  // ese proveedor con TODOS sus productos bajo mínimo como líneas. No hay documento previo; el ancla es
+  // el proveedor. Dos columnas propias, aditivas:
+  //   · repo_signature: huella de la SITUACIÓN (qué productos/almacenes están bajo mínimo). Distingue
+  //     "sigue la misma situación descartada" de "un producto nuevo cayó" → sin re-proponer lo descartado.
+  //   · repo_po_id: la orden de compra en borrador creada al APROBAR. Mientras ese borrador siga vivo, no
+  //     se propone otra compra encima al mismo proveedor.
+  addCol(db, 'disa_proposals', 'repo_signature', 'TEXT');
+  addCol(db, 'disa_proposals', 'repo_po_id', 'INTEGER');
+  // "Una propuesta VIVA por proveedor": índice único PARCIAL sobre las PENDIENTES (como el de dormidos).
+  // El historial (descartada/aprobada) convive sin reescribirse; solo se bloquea una segunda pendiente
+  // del mismo proveedor. Convive con los demás índices únicos: los NULL de supplier_id (impago, fiscal…)
+  // son todos distintos entre sí en SQLite, así que no compiten aquí.
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_disa_proposals_reposicion_pendiente
+             ON disa_proposals(supplier_id, type)
+           WHERE type='reposicion_stock' AND status='pendiente'`);
+
   // PLANTILLAS DE EMAIL EDITADAS. Aquí SOLO viven las ediciones del dueño: la plantilla de FÁBRICA de
   // cada tipo vive en el código (email-templates.js) y NO se puede perder. Por eso "Volver al original"
   // es, literalmente, borrar la fila — no hay copia de fábrica que restaurar desde ningún sitio, porque

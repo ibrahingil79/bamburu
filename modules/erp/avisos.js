@@ -15,6 +15,7 @@ import { openPayables } from './pagos.js';
 import { openDebts } from './cobros.js';
 import { MAX_INTENTOS } from './verifactu-cola.js';
 import { salesWorklist } from './crm.js';
+import { productosBajoMinimo } from './reposicion.js';
 
 const r2 = n => Math.round(n * 100) / 100;
 
@@ -108,19 +109,22 @@ export function cobrosVencidos(db, today) {
   return avisos;
 }
 
-// ── FUENTE: productos con stock bajo (<5 uds, activos) ──────────────────────────────
-// El stock bajo pasa a ser una FUENTE del motor (antes lo contaba dashboard.js por su lado):
-// así el resumen del badge refleja EXACTAMENTE las mismas fuentes que cuenta el badge, y el
-// número del badge y el del resumen COINCIDEN siempre. El cálculo (stock<5 activos) es el de
-// dashboard.js, intacto. (Voz DISA de stock / punto de pedido = otra tarea; aquí solo el aviso.)
+// ── FUENTE: productos BAJO SU MÍNIMO de stock (por almacén) ──────────────────────────
+// Reemplaza la vieja heurística de umbral FIJO (stock<5 sobre la caché global) por el mínimo REAL que el
+// dueño configura por (producto, almacén) — ver reposicion.js. Un aviso por almacén que cae por debajo de
+// SU mínimo, medido contra el DISPONIBLE (físico − reservado). Un producto sin proveedor habitual también
+// avisa, pero diciendo que le asigne uno para poder prepararle la compra (no se lo inventa). Sigue siendo
+// una FUENTE del motor: badge y resumen cuentan lo mismo. (`today` no se usa: el mínimo no depende del día.)
 export function stockBajo(db, today) {
-  const rows = db.prepare("SELECT id, name, stock FROM products WHERE stock < 5 AND status='active' ORDER BY stock ASC, name").all();
-  return rows.map(p => ({
+  return productosBajoMinimo(db).map(e => ({
     tipo: 'stock_bajo',
-    urgencia: 50 - Number(p.stock || 0),     // menos stock = más arriba; por debajo de lo vencido
-    titulo: p.name,
-    detalle: 'Stock bajo: ' + p.stock + ' unidad' + (Number(p.stock) === 1 ? '' : 'es'),
-    ref: { source: 'stock_bajo', product_id: p.id, stock: p.stock },
+    urgencia: 50 - Number(e.disponible || 0),   // menos disponible = más arriba (misma banda que antes)
+    titulo: e.product_name,
+    detalle: 'Bajo mínimo en ' + e.warehouse_name + ': ' + e.disponible + ' disponible' + (e.disponible === 1 ? '' : 's')
+      + ' (mínimo ' + e.min_qty + ')'
+      + (e.supplier_id && e.supplier_name ? '' : ' — asígnale un proveedor para prepararte la compra'),
+    ref: { source: 'stock_bajo', product_id: e.product_id, warehouse_id: e.warehouse_id,
+           disponible: e.disponible, min_qty: e.min_qty, sin_proveedor: !(e.supplier_id && e.supplier_name) },
   }));
 }
 
@@ -285,7 +289,7 @@ export function avisosEmail(ctx) {
     cobro_vencido: 'Facturas de cliente vencidas (te deben)',
     cliente_en_riesgo: 'Clientes en riesgo (seguimiento comercial vencido)',
     factura_recurrente: 'Facturas recurrentes en borrador',
-    stock_bajo: 'Productos con stock bajo',
+    stock_bajo: 'Productos bajo su mínimo de stock',
   };
   const filaDetalle = a => detalleAviso(a, sym, { compacto: true });
 
@@ -355,7 +359,7 @@ export function detalleAviso(a, sym = '', { compacto = false } = {}) {
       : (r.dias_para_vencer === 0 ? 'Vence HOY' : 'Vence en ' + dias(r.dias_para_vencer)) + ' (' + (r.due_date || '-') + ')';
     return e + ' · pendiente ' + dinero(r.pendiente);
   }
-  if (a.tipo === 'stock_bajo' && compacto) return 'stock ' + r.stock + ' uds';
+  if (a.tipo === 'stock_bajo' && compacto) return r.disponible + ' disp · mín ' + r.min_qty;
   // El motivo largo del CRM ("El cierre previsto era el… decide si la ganas…") no cabe en la celda
   // estrecha del email: ahí va el retraso, que es el dato que hace actuar.
   if (a.tipo === 'cliente_en_riesgo' && compacto) {
@@ -376,7 +380,7 @@ export function avisoKey(a) {
   const r = (a && a.ref) || {};
   if (r.source === 'vencimientos_proveedor') return 'vp:' + r.supplier_invoice_id;
   if (r.source === 'cobros_vencidos') return 'cv:' + r.invoice_id;
-  if (r.source === 'stock_bajo') return 'sb:' + r.product_id;
+  if (r.source === 'stock_bajo') return 'sb:' + r.product_id + ':' + r.warehouse_id;
   if (r.source === 'factura_recurrente') return 'fr:' + r.occurrence_id;
   if (r.source === 'envio_verifactu') return 'vf:' + r.registro_id;
   // Identidad = la oportunidad, no su gravedad: si pasa de "toca seguimiento" a "cierre vencido",
@@ -391,7 +395,7 @@ const TIPO_FRASE = {
   vencimiento_proveedor: n => n + ' factura' + (n === 1 ? '' : 's') + ' de proveedor que vence' + (n === 1 ? '' : 'n') + ' o ' + (n === 1 ? 'está' : 'están') + ' vencida' + (n === 1 ? '' : 's'),
   cobro_vencido: n => n + ' factura' + (n === 1 ? '' : 's') + ' de cliente vencida' + (n === 1 ? '' : 's') + ' sin cobrar',
   cliente_en_riesgo: n => n + ' oportunidad' + (n === 1 ? '' : 'es') + ' del CRM con el seguimiento vencido',
-  stock_bajo: n => n + ' producto' + (n === 1 ? '' : 's') + ' con stock bajo',
+  stock_bajo: n => n + ' producto' + (n === 1 ? '' : 's') + ' bajo su mínimo de stock',
   factura_recurrente: n => n + ' factura' + (n === 1 ? '' : 's') + ' recurrente' + (n === 1 ? '' : 's') + ' en borrador para revisar',
 };
 // Orden estable del resumen. `envio_verifactu` abre porque es lo único con consecuencia legal.

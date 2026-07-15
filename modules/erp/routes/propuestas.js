@@ -6,9 +6,10 @@ import {
   generarPropuestasImpago, generarPropuestasPago, generarPropuestasRecurrentes, generarPropuestasDormidos,
   generarPropuestasFiscales,
   redactarReenganche, tiposVisiblesPara,
-  TIPO_IMPAGO, TIPO_PAGO, TIPO_RECURRENTE, TIPO_DORMIDO, TIPO_FISCAL,
+  TIPO_IMPAGO, TIPO_PAGO, TIPO_RECURRENTE, TIPO_DORMIDO, TIPO_FISCAL, TIPO_REPOSICION,
 } from '../propuestas.js';
 import { trimestreDe } from '../calendario-fiscal.js';
+import { generarPropuestasReposicion, aprobarReposicionSvc } from '../reposicion.js';
 import { emitirOcurrencia } from '../recurrentes.js';
 import { registerClientActivitySvc } from '../crm.js';
 import { registerCollectionAction } from '../cobros.js';
@@ -74,6 +75,8 @@ export function createPropuestasRoutes(db) {
   // El vencimiento fiscal exige lo mismo que la pantalla de modelos AEAT (invoices.read): quien no
   // puede ver los modelos no ve sus vencimientos ni los prepara.
   const puedeVerFiscal = c => can(c, 'invoices.read');
+  // La reposición prepara una ORDEN DE COMPRA: exige lo mismo que crear una a mano (purchases.create).
+  const puedeVerReposicion = c => can(c, 'purchases.create');
   // Los tipos que ESTE usuario puede ver. La regla NO se escribe aquí: vive en `tiposVisiblesPara`
   // (propuestas.js), que es también la que lee el badge del riel. Tenerla duplicada fue justo lo que
   // hizo que el panel enseñara 22 propuestas y el badge dijera 21.
@@ -85,6 +88,7 @@ export function createPropuestasRoutes(db) {
     : tipo === TIPO_RECURRENTE ? puedeVerRecurrente(c)
     : tipo === TIPO_DORMIDO ? puedeVerDormido(c)
     : tipo === TIPO_FISCAL ? puedeVerFiscal(c)
+    : tipo === TIPO_REPOSICION ? puedeVerReposicion(c)
     : puedeVerImpago(c));
 
   // GET /api/erp/propuestas — las pendientes, con importes y días recalculados en vivo. SOLO de los
@@ -281,6 +285,22 @@ export function createPropuestasRoutes(db) {
     } catch (e) { return c.json({ error: e.message }, 500); }
   });
 
+  // POST /api/erp/propuestas/:id/preparar-compra — APROBAR una reposición = CREAR el BORRADOR de orden
+  // de compra al proveedor con sus productos bajo mínimo, y llevar al dueño a revisarlo. NUNCA lo envía:
+  // enviar al proveedor es el 2º clic de siempre desde la orden. Exige `purchases.create` (lo mismo que
+  // crear una orden a mano). El servicio recalcula la situación ACTUAL: si ya se repuso todo, 409.
+  api.post('/:id/preparar-compra', c => {
+    if (!puedeVerReposicion(c)) return c.json({ error: 'No tienes permiso para preparar órdenes de compra.' }, 403);
+    try {
+      const id = parseInt(c.req.param('id'));
+      const quien = c.get('session')?.userName || c.get('session')?.userId || '';
+      const r = aprobarReposicionSvc(db, id, quien, { today: today() });
+      return c.json({ ok: true, ver_orden: '/admin/purchase-orders/' + r.po_id + '/edit',
+        message: 'Borrador de compra preparado (' + r.lineas + ' línea' + (r.lineas === 1 ? '' : 's')
+          + '). Revísalo y envíalo tú al proveedor — Bamburu no envía nada.' });
+    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+  });
+
   // POST /api/erp/propuestas/:id/descartar — marca 'descartada'. Por el índice único (factura,tipo)
   // NO se vuelve a proponer esa factura. No envía ni paga nada. Exige el permiso de VER de SU tipo:
   // descartar una propuesta de pago necesita permiso de compras, no de cobros.
@@ -311,6 +331,7 @@ export function createPropuestasRoutes(db) {
       if (tipos.includes(TIPO_RECURRENTE)) out.recurrente = generarPropuestasRecurrentes(db, { today: today() });
       if (tipos.includes(TIPO_DORMIDO)) out.dormido = generarPropuestasDormidos(db, { today: today() });
       if (tipos.includes(TIPO_FISCAL)) out.fiscal = generarPropuestasFiscales(db, { today: today() });
+      if (tipos.includes(TIPO_REPOSICION)) out.reposicion = generarPropuestasReposicion(db, { today: today() });
       return c.json(out);
     } catch (e) { return c.json({ error: e.message }, 500); }
   });
@@ -332,8 +353,9 @@ export function createPropuestasRoutes(db) {
       <div class="card" style="margin-bottom:1rem"><div class="card-body" style="color:var(--muted)">
         DISA prepara el trabajo y te lo deja listo: recordatorios de cobro para tus facturas vencidas,
         los pagos a proveedor que están a punto de vencer, las facturas recurrentes (igualas y cuotas)
-        que tocan y aún no has emitido, los clientes que te compraban y han dejado de hacerlo, y los
-        <strong>vencimientos fiscales</strong> de los modelos que presentas (IVA, IRPF…) antes de que se te echen encima.
+        que tocan y aún no has emitido, los clientes que te compraban y han dejado de hacerlo, los
+        <strong>vencimientos fiscales</strong> de los modelos que presentas (IVA, IRPF…), y la
+        <strong>reposición de stock</strong> —un borrador de compra al proveedor cuando un producto baja de su mínimo—.
         <strong>Nada se ejecuta solo:</strong> revísalo, edítalo si quieres, y apruébalo — o descártalo.
       </div></div>
       <div id="propList">${skeletonRows ? '' : ''}<p style="color:var(--muted)">Cargando…</p></div>
@@ -354,6 +376,7 @@ export function createPropuestasRoutes(db) {
         .prop-tag.t-recurrente{background:rgba(16,185,129,.14);color:#047857}
         .prop-tag.t-dormido{background:rgba(139,92,246,.14);color:#6d28d9}
         .prop-tag.t-fiscal{background:rgba(37,99,235,.12);color:#1d4ed8}
+        .prop-tag.t-reposicion{background:rgba(217,119,6,.14);color:#b45309}
       </style>
       <script>
       ${pagoModalScript(sym)}
@@ -513,11 +536,46 @@ export function createPropuestasRoutes(db) {
           +'</div>';
       }
 
+      // ── Tarjeta de REPOSICIÓN DE STOCK: un proveedor con productos bajo su mínimo. Muestra las líneas
+      //    que iría a pedir (producto · cantidad hasta el objetivo · coste conocido) y el total estimado.
+      //    "Preparar borrador de compra" crea la orden en BORRADOR y te lleva a revisarla — NO la envía. ──
+      function reposicionHtml(p){
+        const lineasHtml = (p.lineas||[]).map(function(l){
+          const cost = l.unit_cost ? SYM+Number(l.unit_cost).toFixed(2) : '<span style="color:var(--muted)">—</span>';
+          return '<tr><td style="padding:.2rem .5rem">'+escHtml(l.product_name)+'</td>'
+            +'<td style="padding:.2rem .5rem;text-align:right"><strong>'+l.quantity+'</strong></td>'
+            +'<td style="padding:.2rem .5rem;text-align:right">'+cost+'</td></tr>';
+        }).join('');
+        const tabla = (p.lineas&&p.lineas.length)
+          ? '<table style="width:100%;border-collapse:collapse;font-size:.85rem;margin:.4rem 0">'
+            +'<thead><tr style="color:var(--muted);text-align:left"><th style="padding:.2rem .5rem;font-weight:600">Producto</th>'
+            +'<th style="padding:.2rem .5rem;text-align:right;font-weight:600">Pedir</th>'
+            +'<th style="padding:.2rem .5rem;text-align:right;font-weight:600">Coste ud.</th></tr></thead>'
+            +'<tbody>'+lineasHtml+'</tbody></table>'
+          : '';
+        const total = '<div class="prop-meta">Total estimado: <strong>'+SYM+Number(p.total_estimado||0).toFixed(2)+'</strong>'
+          + (p.algun_coste_desconocido ? ' · <span style="color:var(--muted)">algún coste aún sin conocer (0): ajústalo en la orden</span>' : '')+'</div>';
+        const noViva = p.viva ? ''
+          : '<p class="prop-warn">⚠ Este proveedor ya no tiene productos bajo mínimo (repuesto). Descártala.</p>';
+        const acciones = p.viva
+          ? '<button class="btn btn-primary btn-sm" onclick="preparaCompra('+p.id+')">Preparar borrador de compra</button>'
+          : '';
+        return '<div class="prop-card" id="prop'+p.id+'">'
+          +'<div class="prop-head"><div><span class="prop-tag t-reposicion">Reposición</span> <strong>'+escHtml(p.supplier_name||'Proveedor')+'</strong></div>'
+          +'<div class="prop-meta">'+p.n_productos+' producto'+(p.n_productos===1?'':'s')+' bajo mínimo</div></div>'
+          + tabla + total + noViva
+          +'<div class="prop-meta" style="margin-top:.4rem;font-style:italic">Preparar NO envía nada al proveedor: crea el borrador y te lleva a revisarlo.</div>'
+          +'<div class="prop-actions">'+acciones
+          +' <button class="btn btn-secondary btn-sm" onclick="descartar('+p.id+')">Descartar</button></div>'
+          +'</div>';
+      }
+
       function propHtml(p){
         if (p.type==='pago_por_vencer') return pagoHtml(p);
         if (p.type==='emitir_recurrente') return recurrenteHtml(p);
         if (p.type==='cliente_dormido') return dormidoHtml(p);
         if (p.type==='vencimiento_fiscal') return fiscalHtml(p);
+        if (p.type==='reposicion_stock') return reposicionHtml(p);
         return impagoHtml(p);
       }
 
@@ -587,6 +645,15 @@ export function createPropuestasRoutes(db) {
               if (r.ver_modelos && confirm('¿Ir a revisar el borrador en Contabilidad › Impuestos?')) {
                 location.href=r.ver_modelos; return;
               }
+              loadProps(); }
+        catch(e){ toast(e.message||'Error','err'); }
+      };
+      // Preparar la reposición = CREAR el borrador de orden de compra y ofrecer ir a revisarlo. NO lo
+      // envía al proveedor. Si falla (p. ej. ya se repuso todo), la propuesta sigue y se ve el motivo.
+      window.preparaCompra = async function(id){
+        try { const r=await api('POST','/api/erp/propuestas/'+id+'/preparar-compra',{});
+              toast(r.message||'Borrador creado');
+              if (r.ver_orden && confirm('¿Ir a revisar el borrador de compra?')) { location.href=r.ver_orden; return; }
               loadProps(); }
         catch(e){ toast(e.message||'Error','err'); }
       };

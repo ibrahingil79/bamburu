@@ -402,7 +402,7 @@ try {
   ok((gPanel.propuestas || []).some(p => p.type === TIPO_DORMIDO),
      'y el número incluye los dormidos (el tipo nuevo entra en el badge, no se queda fuera)');
   const tiposOwner = tiposVisiblesPara({ get: k => k === 'isOwner' }, (c, p) => true);
-  ok(tiposOwner.length === 5, 'la fuente única declara los CINCO tipos (' + tiposOwner.join(', ') + ')');
+  ok(tiposOwner.length === 6, 'la fuente única declara los SEIS tipos (' + tiposOwner.join(', ') + ')');
 
   // ── 12. Aislamiento ─────────────────────────────────────────────────────────
   console.log('\n[12] Aislamiento entre negocios');

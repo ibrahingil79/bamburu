@@ -50,7 +50,7 @@ export function createAvisosRoutes(db) {
     vencimiento_proveedor: { etiqueta: 'Pago a proveedor', href: r => '/admin/supplier-invoices/' + r.supplier_invoice_id,
                              badge: r => (r.vencida ? 'b-red' : 'b-yellow') },
     factura_recurrente:    { etiqueta: 'Recurrente',       badge: 'b-blue',   href: () => '/admin/recurrentes' },
-    stock_bajo:            { etiqueta: 'Stock bajo',       badge: 'b-yellow', href: r => '/admin/inventory?q=' + encodeURIComponent(r.nombre || '') },
+    stock_bajo:            { etiqueta: 'Bajo mínimo',      badge: 'b-yellow', href: r => '/admin/inventory?q=' + encodeURIComponent(r.nombre || '') },
     // El CRM no tiene página por oportunidad: la cola de trabajo comercial ES su sitio de origen,
     // porque lista justo las que piden acción, con su motivo y ya ordenadas por urgencia.
     cliente_en_riesgo:     { etiqueta: 'Cliente en riesgo', badge: 'b-yellow', href: () => '/admin/crm/cola' },
@@ -219,7 +219,7 @@ export function createAvisosRoutes(db) {
         if (a.tipo === 'stock_bajo') {
           if (!PUEDE.stock) return ver;
           const nm = String(a.titulo||'').replace(/'/g,'');
-          return '<button class="btn btn-primary btn-sm" onclick="openAjustar('+r.product_id+',\\''+escHtml(nm)+'\\','+Number(r.stock||0)+')">Ajustar stock</button>'
+          return '<button class="btn btn-primary btn-sm" onclick="openAjustar('+r.product_id+',\\''+escHtml(nm)+'\\','+Number(r.disponible||0)+')">Ajustar stock</button>'
                + ' <button class="btn btn-secondary btn-sm" onclick="openStockKardex('+r.product_id+',\\''+escHtml(nm)+'\\')">Ver stock</button>';
         }
         // Recurrente en borrador: emitir crea una factura con valor legal → se revisa primero.

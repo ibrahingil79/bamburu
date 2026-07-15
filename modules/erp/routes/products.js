@@ -2,10 +2,11 @@ import { Hono } from 'hono';
 import { adminLayout, can, rowMenu, emptyRow, skeletonRows } from '../layout.js';
 import { logActivity, requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
-import { productSchema, productImageSchema, variantSchema, tagSchema, stockAdjustSchema } from '../schemas.js';
+import { productSchema, productImageSchema, variantSchema, tagSchema, stockAdjustSchema, stockLevelsSchema } from '../schemas.js';
 import { getVatBands } from '../../../core/vat-bands.js';
 import { adjustStock, kardex, productStock, isPhysical, recordMovement, resolveWarehouseId, reservedOfProduct, availableOfProduct, TYPE_LABEL, REASON_LABEL } from '../stock.js';
 import { warehouseBreakdown, activeWarehouses } from './warehouses.js';
+import { nivelesDeProducto, setNivelesProducto } from '../reposicion.js';
 import { stockModalHtml, stockModalScript } from '../views/stock-modal.js';
 import { nextCode } from '../codes.js';
 import { ENTITY } from '../../../core/activity-entities.js';
@@ -180,6 +181,31 @@ export function createProductRoutes(db, cfg = {}) {
       logActivity(db, c.get('session'), 'Editó producto', ENTITY.PRODUCT, id, d.name);
       return c.json({message:'Actualizado'});
     } catch(e) { return c.json({error:e.message},500); }
+  });
+
+  // ── Pilar 3 · Stock mínimo / punto de pedido — NIVELES DE REPOSICIÓN por almacén ──────────
+  // Config del producto (ver con products.read, tocar con products.edit), solo para físicos. No mueve
+  // stock ni WAC: solo dice cuándo avisar y hasta cuánto reponer. Ver reposicion.js.
+  api.get('/:id/niveles', requirePerm('products.read'), c => {
+    try {
+      const id = parseInt(c.req.param('id'));
+      const p = db.prepare('SELECT id, type FROM products WHERE id=?').get(id);
+      if (!p) return c.json({ error: 'Producto no encontrado' }, 404);
+      if (!isPhysical(db, p)) return c.json({ fisico: false, niveles: [] });
+      return c.json({ fisico: true, niveles: nivelesDeProducto(db, id) });
+    } catch (e) { return c.json({ error: e.message }, 500); }
+  });
+  api.put('/:id/niveles', requirePerm('products.edit'), validate(stockLevelsSchema), c => {
+    try {
+      const id = parseInt(c.req.param('id'));
+      const p = db.prepare('SELECT id, type, name FROM products WHERE id=?').get(id);
+      if (!p) return c.json({ error: 'Producto no encontrado' }, 404);
+      if (!isPhysical(db, p)) return c.json({ error: 'Los niveles de stock solo aplican a productos físicos.' }, 400);
+      const quien = c.get('session')?.userName || c.get('session')?.userId || '';
+      setNivelesProducto(db, id, c.get('validated').levels, quien);
+      logActivity(db, c.get('session'), 'Editó niveles de reposición', ENTITY.PRODUCT, id, p.name || '');
+      return c.json({ ok: true, message: 'Niveles guardados' });
+    } catch (e) { return c.json({ error: e.message }, 500); }
   });
 
   api.delete('/:id', requirePerm('products.delete'), c => {
@@ -380,6 +406,12 @@ export function createProductRoutes(db, cfg = {}) {
                 <div class="form-group" id="pStockWrap"><label class="form-label">Stock inicial</label><input class="form-control" type="number" id="pStock" value="0"></div>
                 <div class="form-group" id="pWarehouseWrap"><label class="form-label">Almacén del stock inicial</label><select class="form-control" id="pWarehouse">${whInitOptions}</select></div>
                 <div class="form-group" id="pStockManage" style="display:none"><label class="form-label">Stock</label><div><button type="button" class="btn btn-secondary btn-sm" onclick="openStockKardex(currentProdId, document.getElementById('pName').value)">Gestionar stock (kardex · ajustar)</button></div></div>
+                <div class="form-group" id="pNivelesWrap" style="display:none">
+                  <label class="form-label">Niveles de reposición por almacén</label>
+                  <p style="font-size:.75rem;color:var(--muted);margin:-.2rem 0 .5rem">Cuando el <strong>disponible</strong> de un almacén baja de su <strong>mínimo</strong>, DISA te avisa y —si el producto tiene proveedor habitual— te prepara un borrador de compra hasta el <strong>objetivo</strong>. Mínimo en 0 = no se vigila ese almacén.</p>
+                  <div id="pNivelesBody" style="font-size:.85rem"></div>
+                  <button type="button" class="btn btn-secondary btn-sm" style="margin-top:.5rem" onclick="guardarNiveles()">Guardar niveles</button>
+                </div>
                 <div class="form-group" id="pAvgCostWrap" style="display:none"><label class="form-label">Coste medio</label><div id="pAvgCost" style="padding:.55rem 0;font-weight:600">—</div><div style="font-size:.7rem;color:var(--muted)">Se gana desde las compras (no editable)</div></div>
               </div>
               <div style="font-size:.72rem;color:var(--muted);margin:-.5rem 0 .25rem">
@@ -504,6 +536,8 @@ export function createProductRoutes(db, cfg = {}) {
         if (whw) whw.style.display = (physical && !isEdit) ? '' : 'none';
         const mng = document.getElementById('pStockManage');
         if (mng) mng.style.display = (physical && isEdit) ? '' : 'none';
+        const nvw = document.getElementById('pNivelesWrap');   // niveles de reposición: solo editar+físico
+        if (nvw) nvw.style.display = (physical && isEdit) ? '' : 'none';
         // Coste medio (WAC): solo lectura, solo en EDITAR de un físico (se gana desde compras).
         const avgw = document.getElementById('pAvgCostWrap');
         if (avgw) avgw.style.display = (physical && isEdit) ? '' : 'none';
@@ -554,10 +588,48 @@ export function createProductRoutes(db, cfg = {}) {
         document.getElementById('pCategory').value=p.category_id||'';
         document.getElementById('pSupplier').value=p.supplier_id||'';
         applyTypeUI(p.type||'physical');
+        if ((p.type||'physical')==='physical') cargarNiveles(id); else document.getElementById('pNivelesBody').innerHTML='';
         renderTagSelector();
         renderGallery(p.images||[]);
         renderVariantList(p.variants||[]);
         openModal('productModal');
+      }
+
+      // Niveles de reposición (stock mínimo/objetivo por almacén) — Pilar 3. Se cargan al editar un
+      // producto físico y se guardan con su propio botón (independiente del guardado del producto).
+      function nvEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];});}
+      async function cargarNiveles(id){
+        const body=document.getElementById('pNivelesBody');
+        body.innerHTML='<span style="color:var(--muted)">Cargando…</span>';
+        try{
+          const r=await api('GET',A+'/products/'+id+'/niveles');
+          if(!r.fisico){ body.innerHTML='<span style="color:var(--muted)">Solo para productos físicos.</span>'; return; }
+          if(!r.niveles.length){ body.innerHTML='<span style="color:var(--muted)">No hay almacenes activos.</span>'; return; }
+          body.innerHTML='<table style="width:100%;border-collapse:collapse">'
+            +'<thead><tr style="color:var(--muted);text-align:left">'
+            +'<th style="padding:.2rem .4rem;font-weight:600">Almacén</th>'
+            +'<th style="padding:.2rem .4rem;text-align:right;font-weight:600">Disp.</th>'
+            +'<th style="padding:.2rem .4rem;text-align:right;font-weight:600">Mínimo</th>'
+            +'<th style="padding:.2rem .4rem;text-align:right;font-weight:600">Objetivo</th></tr></thead><tbody>'
+            + r.niveles.map(function(n){
+              return '<tr data-wh="'+n.warehouse_id+'">'
+                +'<td style="padding:.2rem .4rem">'+nvEsc(n.warehouse_name)+(n.is_default?' <span style="color:var(--muted)">(principal)</span>':'')+'</td>'
+                +'<td style="padding:.2rem .4rem;text-align:right">'+n.disponible+'</td>'
+                +'<td style="padding:.2rem .4rem;text-align:right"><input type="number" min="0" class="nvMin" value="'+n.min_qty+'" style="width:5rem;text-align:right"></td>'
+                +'<td style="padding:.2rem .4rem;text-align:right"><input type="number" min="0" class="nvTarget" value="'+n.target_qty+'" style="width:5rem;text-align:right"></td></tr>';
+            }).join('')
+            +'</tbody></table>';
+        }catch(e){ body.innerHTML='<span style="color:var(--danger)">No se pudieron cargar los niveles</span>'; }
+      }
+      async function guardarNiveles(){
+        if(!currentProdId){toast('Guarda el producto primero','warn');return;}
+        const levels=[...document.querySelectorAll('#pNivelesBody tr[data-wh]')].map(function(tr){
+          return { warehouse_id:parseInt(tr.getAttribute('data-wh')),
+                   min_qty:parseInt(tr.querySelector('.nvMin').value)||0,
+                   target_qty:parseInt(tr.querySelector('.nvTarget').value)||0 };
+        });
+        try{ await api('PUT',A+'/products/'+currentProdId+'/niveles',{levels}); toast('Niveles guardados ✓'); }
+        catch(e){ toast(e.message||'Error','err'); }
       }
 
       async function saveProduct(){

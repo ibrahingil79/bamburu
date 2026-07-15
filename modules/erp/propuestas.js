@@ -20,13 +20,17 @@ import { modelo303, modelo130 } from './contabilidad-modelos.js';
 import { backfillLedger } from './contabilidad.js';
 import { MODELOS, modelosDeclarados, vencimientosProximos, vencimientoNominal,
          etiquetaVencimiento, trimestreDe, NOTA_AEAT, NOTA_DOMICILIACION } from './calendario-fiscal.js';
+import { detallePropuestaReposicion } from './reposicion.js';
 
 export const TIPO_IMPAGO = 'recordatorio_impago';
 export const TIPO_PAGO = 'pago_por_vencer';
 export const TIPO_RECURRENTE = 'emitir_recurrente';
 export const TIPO_DORMIDO = 'cliente_dormido';
 export const TIPO_FISCAL = 'vencimiento_fiscal';
-export const TIPOS = [TIPO_IMPAGO, TIPO_PAGO, TIPO_RECURRENTE, TIPO_DORMIDO, TIPO_FISCAL];
+// LITERAL a propósito (no importado de reposicion.js): hay un ciclo propuestas↔reposicion↔purchase-orders
+// y, importado, quedaba en TDZ al construir TIPOS abajo (eval-time). Debe COINCIDIR con el de reposicion.js.
+export const TIPO_REPOSICION = 'reposicion_stock';
+export const TIPOS = [TIPO_IMPAGO, TIPO_PAGO, TIPO_RECURRENTE, TIPO_DORMIDO, TIPO_FISCAL, TIPO_REPOSICION];
 
 // Días que un cliente descansa antes de que se te vuelva a proponer, DESDE QUE RESOLVISTE la anterior.
 //
@@ -548,6 +552,26 @@ export function propuestasPendientes(db, today, tipos = TIPOS) {
       }
     }
   }
+  if (quiere.has(TIPO_REPOSICION)) {
+    // Reposición de stock: una propuesta por PROVEEDOR con productos bajo mínimo. El detalle (líneas,
+    // cantidades hasta el objetivo, coste, total) se RECALCULA en vivo contra el disponible actual
+    // (nunca de una copia): `viva=false` si el proveedor ya no tiene nada bajo mínimo (se repuso).
+    const props = db.prepare(
+      `SELECT * FROM disa_proposals WHERE status='pendiente' AND type=? ORDER BY created_at DESC, id DESC`
+    ).all(TIPO_REPOSICION);
+    for (const p of props) {
+      const d = detallePropuestaReposicion(db, p);
+      out.push({
+        id: p.id, type: p.type,
+        supplier_id: d.supplier_id, supplier_name: d.supplier_name,
+        subject: p.subject, created_at: p.created_at,
+        lineas: d.lineas, n_productos: d.n_productos,
+        total_estimado: d.total_estimado,
+        algun_coste_desconocido: d.algun_coste_desconocido,
+        viva: d.viva,
+      });
+    }
+  }
   return out;
 }
 
@@ -573,6 +597,10 @@ export function tiposVisiblesPara(c, can) {
   // (/admin/contabilidad/modelos, requirePerm('invoices.read')): quien no puede ver los modelos no ve
   // sus vencimientos, ni en la lista, ni en el badge, ni se le generan. Falla cerrado.
   if (can(c, 'invoices.read')) t.push(TIPO_FISCAL);
+  // La reposición prepara una ORDEN DE COMPRA: exige lo mismo que crear una a mano
+  // (purchases.create). Quien no puede comprar no ve la propuesta, ni en la lista, ni en el badge, ni
+  // se le genera. Falla cerrado.
+  if (can(c, 'purchases.create')) t.push(TIPO_REPOSICION);
   return t;
 }
 

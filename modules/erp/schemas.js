@@ -21,6 +21,8 @@ export const productSchema = z.object({
   image_url: strOpt(500),
   digital_file_url: strOpt(500),
   category_id: optId,
+  supplier_id: optId,             // proveedor HABITUAL (opcional). Antes se perdía: la columna, el <select>
+                                  //  y el SQL existían, pero faltaba aquí y Zod lo stripeaba → siempre null.
   status: z.enum(['active', 'draft', 'archived']).default('active'),
   type: z.enum(['physical', 'digital', 'service']).default('physical'),  // P1+P2: + servicio
   tax_band: str(40),                                                     // OBLIGATORIO (dato fiscal): banda de IVA; el % lo resuelve el servidor desde banda+país
@@ -28,6 +30,17 @@ export const productSchema = z.object({
   tags: z.array(intPos).optional().default([]),
   stock: z.coerce.number().int().min(0).default(0),
   warehouse_id: optWarehouse,            // Capa 2: almacén del stock inicial (apertura); principal por defecto
+});
+
+// Niveles de reposición por almacén (stock mínimo / objetivo). El cliente manda una fila por almacén;
+// min_qty=0 = "no vigilar ese almacén" (el servicio borra la fila). Enteros no negativos.
+export const stockLevelSchema = z.object({
+  warehouse_id: z.coerce.number().int().positive(),
+  min_qty:      z.coerce.number().int().min(0).max(1_000_000).default(0),
+  target_qty:   z.coerce.number().int().min(0).max(1_000_000).default(0),
+});
+export const stockLevelsSchema = z.object({
+  levels: z.array(stockLevelSchema).max(200).default([]),
 });
 
 export const productImageSchema = z.object({
