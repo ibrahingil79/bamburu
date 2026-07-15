@@ -8,7 +8,7 @@
 > plataforma al 100 % — ver `docs/contexto/decisiones.md` (2026-07-10).
 >
 > **SIGUIENTE BLOQUE GRANDE: EJE C — SEGURIDAD.** Plan cargado desde la auditoría del 15 jul (ver la
-> sección "Eje C: Seguridad"). Empezar por **C1 (Verifactu, ALTA)**. Eje A (UX) y Eje B (DISA, seis
+> sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA) HECHO** (`2fdc9bf`); siguiente **C2**. Eje A (UX) y Eje B (DISA, seis
 > propuestas de proactividad) completos; Pilar 3 (inventario) cerrado.
 >
 > **Inventario (Pilar 3) CERRADO (15 jul 2026):** multi-almacén (`da7871e`/`3af928f`), stock mínimo /
@@ -564,7 +564,7 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
   entera. Limpiado `auth.log`; clave **rotada** y verificada con una llamada real a DISA. La lección
   (nunca un secreto en `argv`) queda en `errores-conocidos.md`.
 
-## Eje C: Seguridad — plan cargado (auditoría del 15 jul)  ⬅️ EMPEZAR POR C1
+## Eje C: Seguridad — plan cargado (auditoría del 15 jul)  ⬅️ C1 HECHO · SIGUIENTE C2
 
 > Origen: **auditoría de seguridad de SOLO LECTURA del 15 jul 2026** (`docs/seguridad/auditoria-ejeC.md`,
 > commit `24dbf2a`). Postura general **buena** (aislamiento entre negocios sólido y fail-closed, DISA no se
@@ -572,13 +572,21 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
 > tarea referencia su(s) **código(s) de hallazgo del informe** con file:line — no descripciones de memoria.
 > Orden = por gravedad y reversibilidad. **Ninguna empezada.**
 
-- ⬜ **C1 — [A1 · ALTA] Cadena legal de Verifactu encadenada por `id` sin filtrar por NIF del emisor.**
-  Va PRIMERO: es lo ÚNICO irreversible una vez enviado a la AEAT. Hoy no corrompe nada (un NIF por negocio),
-  pero la invariante NO está protegida por código. Arreglo: **(a)** filtrar por `id_emisor` en los DOS
-  sitios — `modules/erp/verifactu.js:98` (huella, Tarea 1) y `modules/erp/verifactu-envio.js:426`
-  (encadenado del envío, Tarea 2); **(b)** guarda que impida cambiar `company_config.fiscal_id` en Ajustes
-  cuando ya existen registros Verifactu; **(c)** gate que siembre DOS NIFs en una BD y afirme que cada
-  cadena es independiente. Esfuerzo bajo.
+- ✅ **C1 — [A1 · ALTA] Cadena legal de Verifactu encadenada por NIF del emisor (15 jul 2026, `2fdc9bf`).**
+  Lo que quedaba sin proteger: el encadenado elegía el previo por `id` GLOBAL, así que un cambio de NIF en
+  Ajustes cruzaría dos cadenas legales en silencio (irreparable una vez enviado a la AEAT). **PASO 0 (solo
+  lectura):** `id_emisor` estaba POBLADO en los 3 tenants con registros y coincidía con el NIF de cada
+  empresa (0 vacíos) → sin relleno; las 2 facturas enviadas a la AEAT, intactas. **Arreglo:** (a) filtro por
+  `id_emisor` en los dos sitios — `verifactu.js` (`lastHuella(db, idEmisor)`) y `verifactu-envio.js` (previo
+  del envío `AND id_emisor=?`); (b) **candado** en Ajustes: bloquea el cambio de `company_config.fiscal_id`
+  si ya hay registros Verifactu (409); (c) **guarda** en `recordVerifactuAlta/Anulacion`: detiene la emisión
+  (409) si la base ya tiene registros de otro NIF; (d) **cinturón** idempotente (migración por bandera) que
+  completa `id_emisor` vacío con el NIF de la empresa (0 filas hoy; no toca la huella). Para un solo NIF las
+  cadenas quedan IDÉNTICAS (sin cambio de comportamiento). Verificado: `verify-verifactu-cadena-nif.mjs`
+  **18/0** (reproduce el fallo global≠per-NIF, guarda, candado, cinturón, datos intactos) + comprobación en
+  navegador de que emitir una factura sigue funcionando y encadena bien. Regresión verde (t1 18/0, t2 17/0,
+  mostrador 24/0, cola 62/0). *(De paso, hallazgo nuevo: `verify-mostrador-overstock.mjs` emite tickets al
+  tenant VIVO y no limpia sus registros Verifactu — higiene de gate a arreglar; anotable como BAJA del Eje C.)*
 
 - ⬜ **C2 — Verificación con permisos de administrador (`sudo`) de los 4 puntos que la auditoría de solo
   lectura NO pudo comprobar.** Es VERIFICACIÓN, no arreglo: **(1)** redirect http→https efectivo en runtime
