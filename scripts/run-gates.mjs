@@ -49,7 +49,7 @@ const GRUPOS = {
     'gate-nav-inicio-disa', 'gate-disa-dictar-compra', 'gate-disa-adjuntar',
   ],
   inventario: ['test-transfers', 'verify-traslado-auditoria', 'gate-almacenes', 'verify-propuestas-reposicion', 'gate-propuestas-reposicion',
-               'verify-trazabilidad', 'verify-trazabilidad-flujos'],
+               'verify-trazabilidad', 'verify-trazabilidad-flujos', 'gate-trazabilidad'],
   avisos: ['verify-avisos-permisos', 'gate-avisos-badge'],
   // Plantillas de email editables: tocan TODOS los correos que el negocio manda.
   plantillas: ['verify-plantillas-email', 'gate-plantillas-email'],
