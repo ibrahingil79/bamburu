@@ -407,6 +407,23 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
       ve los modelos no ve sus vencimientos, ni en la lista, ni en el badge, ni se le generan. Falla cerrado.
       Verificado: `verify-propuestas-fiscales.mjs` **62/0** (copias desechables + clon limpio). De paso, el
       gate de dormidos afirmaba `tipos===4`; con el quinto tipo pasó a **5**.
+    - ✅ **D5f — REPOSICIÓN DE STOCK (15 jul 2026, `8b4fbe4` + `ff98547`).** Sexto tipo (`reposicion_stock`)
+      y cierre del **stock mínimo / punto de pedido** del Pilar 3 (ver Backlog › Inventario). Se ancla al
+      PROVEEDOR habitual del producto (reutiliza `supplier_id`). Tres piezas: **NIVELES** por (producto,
+      almacén) —tabla `stock_levels`, mínimo+objetivo, apagados por defecto, solo físicos, FUERA de
+      WRITABLE_TABLES, editables en la ficha—; **AVISO** "bajo mínimo" en campana+correo, que **reemplaza la
+      heurística fija stock<5** (una sola línea en `stockBajo`) y se mide contra el DISPONIBLE por almacén
+      (físico − reservado); y la **PROPUESTA** que AGRUPA por proveedor → un borrador de orden de compra con
+      todos sus productos bajo mínimo (cantidad = objetivo − disponible; coste = `lastKnownCost`; reutiliza
+      `createPurchaseOrderSvc`). **Aprobar CREA el borrador y lleva a la vista para revisarlo; NO lo envía**
+      (2º clic del dueño). Un producto sin proveedor habitual **avisa pero no se propone** (pide asignarle
+      uno, no lo inventa). Candado **`purchases.create`**. **NO DUPLICAR:** una viva por proveedor (índice
+      único parcial); descartada no reaparece con la misma huella; no se apila sobre un borrador vivo;
+      recuperación + re-caída se re-propone. **Bug arreglado de paso:** `products.supplier_id` no se
+      guardaba (faltaba en `productSchema`, Zod lo stripeaba) → el "proveedor habitual" ya persiste.
+      Verificado: `verify-propuestas-reposicion.mjs` **46/0** (copias + clon limpio) + `gate-propuestas-
+      reposicion.mjs` **16/0** (navegador, servidor real, limpia por id). Los gates de dormidos/fiscal
+      pasaron a **6 tipos**.
     - 📋 **Diagnóstico SOLO LECTURA (14 jul 2026) — terreno para 3 propuestas nuevas.** Se pidieron tres;
       el diagnóstico **dio la vuelta a lo que se esperaba**. Veredicto de cada una:
       - 🟢 **Facturas recurrentes por emitir → VERDE.** El motor **ya existía entero**; no había que
@@ -995,7 +1012,13 @@ Lo que falta **no son cabos sueltos: es alcance pendiente del pilar.** No se emp
   (**traslados** `TR-NNNN`) `3af928f`. Verificado el 2026-07-10 sobre copia de BD real: el traslado valida
   stock en origen, es atómico, y **el valor total del inventario no cambia** al mover mercancía (solo cambia
   dónde está). DISA ya los ejecuta. Gates: `test-transfers` 30/0 · `verify-traslado-auditoria` 13/0.
-- ⬜ **Stock mínimo / punto de pedido.**
+- ✅ **Stock mínimo / punto de pedido — CERRADO (15 jul 2026, `8b4fbe4` + `ff98547`).** Nivel MÍNIMO y
+  OBJETIVO por (producto, almacén) —tabla `stock_levels`, apagados por defecto, solo físicos, editables en
+  la ficha del producto—. El disparo se mide contra el DISPONIBLE del almacén (físico − reservado). AVISO
+  "bajo mínimo" en campana + correo (reemplaza la heurística fija stock<5). Y la 6ª propuesta de DISA
+  (**D5f**, `reposicion_stock`): agrupa por proveedor → borrador de orden de compra hasta el objetivo;
+  aprobar lo CREA (no lo envía). Detalle en la sección de propuestas (Eje B). Gates: `verify-propuestas-
+  reposicion` 46/0 + `gate-propuestas-reposicion` 16/0 (navegador).
 - ⬜ **Trazabilidad por lote / nº de serie.**
 - ⬜ **Sync e-commerce** (Shopify / Woo / Prestashop) — Capa 2 (congelada).
 
