@@ -9,8 +9,8 @@
 >
 > **SIGUIENTE BLOQUE GRANDE: planificar el Eje B — DISA.** Empieza por ahí.
 >
-> **Inventario (Pilar 3) NO está cerrado, y no es un cabo suelto:** es alcance pendiente del pilar —
-> **stock mínimo / punto de pedido** y **lote / nº de serie**. Ver el Backlog.
+> **Inventario (Pilar 3) CERRADO (15 jul 2026):** multi-almacén (`da7871e`/`3af928f`), stock mínimo /
+> punto de pedido (`8b4fbe4`) y trazabilidad por lote / nº de serie (`f56ad84`). Ver el Backlog.
 
 ## Eje A: UX  ✅ COMPLETO (U0–U9)
 Objetivo: acercar cada pantalla y flujo a "el dueño no opera, decide". Método: auditoría primero, luego ejecución en piezas pequeñas. Cada tarea define cómo se verifica y cierra con regresión 0.
@@ -1006,8 +1006,8 @@ fiscales a medio camino. Decisión que la fija: `docs/contexto/decisiones.md` (2
 - **PDF + email de cada documento:** hoy solo el presupuesto envía PDF por email.
 - **Plantillas de documento personalizables.**
 
-### Inventario (Pilar 3 — EN CURSO, no cerrado)
-Lo que falta **no son cabos sueltos: es alcance pendiente del pilar.** No se empieza sin encargo.
+### Inventario (Pilar 3 — ✅ CERRADO 15 jul 2026)
+El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazabilidad por lote/serie.
 - ✅ **Multi-almacén CERRADO** — las tres capas. Capa 1/2 (operar por almacén) `da7871e` · Capa 3
   (**traslados** `TR-NNNN`) `3af928f`. Verificado el 2026-07-10 sobre copia de BD real: el traslado valida
   stock en origen, es atómico, y **el valor total del inventario no cambia** al mover mercancía (solo cambia
@@ -1019,7 +1019,17 @@ Lo que falta **no son cabos sueltos: es alcance pendiente del pilar.** No se emp
   (**D5f**, `reposicion_stock`): agrupa por proveedor → borrador de orden de compra hasta el objetivo;
   aprobar lo CREA (no lo envía). Detalle en la sección de propuestas (Eje B). Gates: `verify-propuestas-
   reposicion` 46/0 + `gate-propuestas-reposicion` 16/0 (navegador).
-- ⬜ **Trazabilidad por lote / nº de serie.**
+- ✅ **Trazabilidad por lote / nº de serie — CERRADO (15 jul 2026, `f56ad84` + `13a61df`).** Un producto
+  físico se marca `lot` (lotes con caducidad) o `serial` (nº de serie único). Modelo UNIFICADO: lote y
+  serie son una "unidad de traza" (`stock_lots`) con `code` único por producto; la serie es un lote de
+  capacidad 1. El saldo por lote se **deriva del libro** (`stock_movements.lot_id`), sin segunda fuente de
+  verdad. **Red de seguridad:** `tracking='none'` (el defecto) no se toca — todo igual que hoy. ENTRA por
+  recepción de compra (captura lote+caducidad o nº de serie); SALE por mostrador y albarán con **FEFO**
+  (antes caduca, primero sale; un trazado no se sobrevende); anular reingresa a SU lote. **Guardas:** un
+  trazado no se mueve por ajuste/traslado/devolución a proveedor/compra directa (con lote, más adelante).
+  UI: flag en la ficha, captura por línea en la recepción, informe de lotes/series (saldo + caducidad).
+  Núcleo `trazabilidad.js`. Invariante afirmada: **∑ saldos de lotes == stock**. Gates: `verify-trazabilidad`
+  30/0 + `verify-trazabilidad-flujos` 20/0 (servicios reales) + `gate-trazabilidad` 6/0 (navegador).
 - ⬜ **Sync e-commerce** (Shopify / Woo / Prestashop) — Capa 2 (congelada).
 
 ### Multiusuario / permisos
