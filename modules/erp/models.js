@@ -1231,6 +1231,20 @@ export function runMigrations(db) {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (invoice_id) REFERENCES invoices(id)
   )`);
+  // A1 (Eje C) — CINTURÓN idempotente para el encadenado por NIF: completa `id_emisor` donde estuviera
+  // VACÍO con el NIF de la propia empresa (una BD de tenant = un solo obligado tributario). Es un dato de
+  // IDENTIFICACIÓN: NO toca la huella, la huella anterior, la fecha ni ningún campo firmado de la cadena —
+  // solo permite que el filtrado por NIF no deje huérfano un registro histórico sin NIF. Comprobado el
+  // 15-jul-2026: 0 filas afectadas en los tenants actuales (todos ya poblados y coincidiendo con su NIF).
+  // Una sola vez, por bandera; los registros nuevos siempre nacen con su id_emisor.
+  const nifBackfillKey = 'migration_verifactu_id_emisor_backfill_2026_v1';
+  if (!db.prepare('SELECT value FROM settings WHERE key=?').get(nifBackfillKey)) {
+    const nif = (db.prepare('SELECT fiscal_id FROM company_config WHERE id=1').get() || {}).fiscal_id;
+    db.transaction(() => {
+      if (nif) db.prepare("UPDATE verifactu_registros SET id_emisor=? WHERE id_emisor IS NULL OR id_emisor=''").run(nif);
+      db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)').run(nifBackfillKey, 'done');
+    })();
+  }
 
   // ── VERI*FACTU · Tarea 2 (Fase A) — ESTADO DE ENVÍO a la AEAT (aditiva, idempotente) ──
   // Una fila por registro de facturación (1:1 con verifactu_registros vía registro_id UNIQUE):

@@ -422,8 +422,10 @@ export async function enviarLote(db, registroIds, opts = {}) {
 
     const invoice = db.prepare('SELECT * FROM invoices WHERE id=?').get(registro.invoice_id) || {};
     const items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id=?').all(registro.invoice_id);
+    // A1 (Eje C): el registro previo del ENCADENAMIENTO se busca dentro de la cadena DEL MISMO NIF emisor
+    // (`id_emisor`), nunca el último global — o el XML enviado a la AEAT cruzaría dos cadenas legales.
     const prevRegistro = registro.primer_registro === 'S' ? null
-      : db.prepare('SELECT * FROM verifactu_registros WHERE id < ? ORDER BY id DESC LIMIT 1').get(registroId);
+      : db.prepare('SELECT * FROM verifactu_registros WHERE id < ? AND id_emisor = ? ORDER BY id DESC LIMIT 1').get(registroId, registro.id_emisor);
     if (companyName === null) companyName = db.prepare('SELECT company_name FROM company_config WHERE id=1').get()?.company_name || invoice.company_name || '';
 
     const built = buildRegistroAlta({ registro, invoice, items, prevRegistro, companyName, sistemaInfo });

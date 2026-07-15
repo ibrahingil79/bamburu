@@ -94,9 +94,25 @@ export function cotejoUrl({ nif, numSerie, fecha, importe }) {
 // Huella del último registro de la cadena ÚNICA del tenant (alta o anulación), o '' si es el
 // primer registro. Lectura por MAX(id): dentro de la MISMA transacción síncrona de emisión
 // (better-sqlite3 es síncrono → lectura + inserción atómicas), no hay carrera de "huella anterior".
-function lastHuella(db) {
-  const r = db.prepare('SELECT huella FROM verifactu_registros ORDER BY id DESC LIMIT 1').get();
+// A1 (Eje C): Verifactu exige UNA cadena de huellas POR OBLIGADO TRIBUTARIO (NIF). Se filtra por
+// `id_emisor` para que un registro NUNCA encadene con el de otro NIF — una cadena cruzada es corrupción
+// legal irreparable una vez enviada a la AEAT. Para un solo NIF (la invariante normal) el resultado es
+// idéntico al de antes (todos los registros son de ese NIF), así que las cadenas existentes no cambian.
+export function lastHuella(db, idEmisor) {
+  const r = db.prepare('SELECT huella FROM verifactu_registros WHERE id_emisor = ? ORDER BY id DESC LIMIT 1').get(idEmisor);
   return r?.huella || '';
+}
+
+// GUARDA DEFENSIVA (A1): una BD de tenant = un solo obligado tributario. Si al emitir un registro para
+// `idEmisor` la base YA contiene registros de OTRO NIF, es un estado imposible (el candado de Ajustes lo
+// impide) → se DETIENE la emisión en vez de producir una cadena cruzada en silencio. Cinturón por si el
+// candado se saltara por cualquier vía: mejor parar que firmar una cadena corrupta.
+function assertUnSoloEmisor(db, idEmisor) {
+  const otro = db.prepare('SELECT id_emisor FROM verifactu_registros WHERE id_emisor <> ? LIMIT 1').get(idEmisor);
+  if (otro) {
+    const e = new Error('Verifactu: esta base ya tiene registros de otro NIF emisor (' + otro.id_emisor + '); no se puede emitir con ' + (idEmisor || '(vacío)') + ' sin cruzar la cadena legal. Revisa el NIF de la empresa antes de emitir.');
+    e.status = 409; throw e;
+  }
 }
 
 const INSERT_REGISTRO = `INSERT INTO verifactu_registros
@@ -109,6 +125,7 @@ const INSERT_REGISTRO = `INSERT INTO verifactu_registros
 // issue_date, subtotal, tax_amount, record_type, rectification_type, id).
 export function recordVerifactuAlta(db, inv) {
   const idEmisor = inv.company_fiscal_id || '';
+  assertUnSoloEmisor(db, idEmisor);
   const numSerie = inv.invoice_number;
   const fechaExpedicion = toFechaExpedicion(inv.issue_date);
   // TipoFactura (lista L2 AEAT): F1 alta ordinaria · F2 factura SIMPLIFICADA (ticket, sin
@@ -119,7 +136,7 @@ export function recordVerifactuAlta(db, inv) {
     : (inv.record_type === 'rectificativa' ? (inv.rectification_type || 'R1') : 'F1');
   const cuotaTotal = fmtImporte(inv.tax_amount);                                   // CuotaTotal = IVA repercutido
   const importeTotal = fmtImporte((Number(inv.subtotal) || 0) + (Number(inv.tax_amount) || 0)); // base + IVA (sin IRPF; cuadra con el desglose)
-  const prevHuella = lastHuella(db);
+  const prevHuella = lastHuella(db, idEmisor);
   const primer = prevHuella === '' ? 'S' : 'N';
   const fechaHoraHuso = genTimestampMadrid();
   const huella = altaHuella({ idEmisor, numSerie, fechaExpedicion, tipoFactura, cuotaTotal, importeTotal, prevHuella, fechaHoraHuso });
@@ -134,9 +151,10 @@ export function recordVerifactuAlta(db, inv) {
 // de anulación. `original` es la fila de la factura anulada.
 export function recordVerifactuAnulacion(db, original) {
   const idEmisor = original.company_fiscal_id || '';
+  assertUnSoloEmisor(db, idEmisor);
   const numSerie = original.invoice_number;
   const fechaExpedicion = toFechaExpedicion(original.issue_date);
-  const prevHuella = lastHuella(db);
+  const prevHuella = lastHuella(db, idEmisor);
   const primer = prevHuella === '' ? 'S' : 'N';
   const fechaHoraHuso = genTimestampMadrid();
   const huella = anulacionHuella({ idEmisor, numSerie, fechaExpedicion, prevHuella, fechaHoraHuso });

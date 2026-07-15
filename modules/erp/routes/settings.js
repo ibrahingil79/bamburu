@@ -24,6 +24,13 @@ export function createSettingsRoutes(db, cfg = {}) {
   api.put('/company', requirePerm('company.update'), validate(companySchema), async c => {
     try {
       const d = c.get('validated');
+      // A1 (Eje C) — CANDADO del NIF: el NIF de la empresa es el EMISOR de la cadena legal de Verifactu.
+      // Si ya se ha emitido alguna factura con registro Verifactu, cambiarlo cruzaría la cadena (corrupción
+      // legal irreparable). Se bloquea con un mensaje claro. Decisión de producto: se bloquea, no se avisa.
+      const cur = db.prepare('SELECT fiscal_id FROM company_config WHERE id=1').get() || {};
+      if ((d.fiscal_id || '') !== (cur.fiscal_id || '') && db.prepare('SELECT 1 FROM verifactu_registros LIMIT 1').get()) {
+        return c.json({ error: 'No puedes cambiar el NIF de la empresa: ya has emitido facturas con registro Verifactu, y el NIF es el emisor de la cadena legal firmada (no se puede reescribir). Si el NIF está mal, no emitas más facturas y contacta con soporte.' }, 409);
+      }
       // postal_code/city/province: dirección fiscal estructurada que exige Facturae. Sin ellos,
       // ninguna factura de este negocio puede exportarse (el emisor también va con dirección completa).
       // D5 — dias_recordatorio_impago: umbral para las propuestas de DISA. Si no viene, se conserva
