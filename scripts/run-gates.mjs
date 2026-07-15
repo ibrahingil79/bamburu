@@ -44,11 +44,11 @@ const GRUPOS = {
     'verify-propuestas-recurrentes', 'gate-propuestas-recurrentes',
     'verify-propuestas-dormidos', 'gate-propuestas-dormidos',
     'verify-propuestas-fiscales',
-    'verify-propuestas-reposicion',
+    'verify-propuestas-reposicion', 'gate-propuestas-reposicion',
     'verify-disa-query-permisos', 'verify-disa-sin-pedidos', 'verify-actividad-etiquetas',
     'gate-nav-inicio-disa', 'gate-disa-dictar-compra', 'gate-disa-adjuntar',
   ],
-  inventario: ['test-transfers', 'verify-traslado-auditoria', 'gate-almacenes', 'verify-propuestas-reposicion'],
+  inventario: ['test-transfers', 'verify-traslado-auditoria', 'gate-almacenes', 'verify-propuestas-reposicion', 'gate-propuestas-reposicion'],
   avisos: ['verify-avisos-permisos', 'gate-avisos-badge'],
   // Plantillas de email editables: tocan TODOS los correos que el negocio manda.
   plantillas: ['verify-plantillas-email', 'gate-plantillas-email'],

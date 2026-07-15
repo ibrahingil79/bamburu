@@ -295,7 +295,9 @@ export function createPropuestasRoutes(db) {
       const id = parseInt(c.req.param('id'));
       const quien = c.get('session')?.userName || c.get('session')?.userId || '';
       const r = aprobarReposicionSvc(db, id, quien, { today: today() });
-      return c.json({ ok: true, ver_orden: '/admin/purchase-orders/' + r.po_id + '/edit',
+      // Se lleva a la VISTA de la orden (revisarla) — requiere solo purchases.read, no purchases.edit:
+      // quien pudo aprobar la ve seguro. Desde ahí edita costes/cantidades o la envía, con un clic.
+      return c.json({ ok: true, ver_orden: '/admin/purchase-orders/' + r.po_id,
         message: 'Borrador de compra preparado (' + r.lineas + ' línea' + (r.lineas === 1 ? '' : 's')
           + '). Revísalo y envíalo tú al proveedor — Bamburu no envía nada.' });
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
