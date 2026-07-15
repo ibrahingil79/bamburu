@@ -4,6 +4,7 @@ import { validate } from '../../../core/validate.js';
 import { requirePerm } from '../../../core/auth.js';
 import { purchaseSchema } from '../schemas.js';
 import { recordMovement, resolveWarehouseId } from '../stock.js';
+import { bloquearSiTrazable } from '../trazabilidad.js';   // Pilar 3: los trazados entran por orden de compra + recepción (con captura de lote)
 import { activeWarehouses } from './warehouses.js';
 import { hasActiveTransfersFromOrigin } from './stock-transfers.js';
 import { originDocBlock } from '../attachments.js';
@@ -17,6 +18,7 @@ export function receivePurchaseSvc(db, id) {
   if (p.archived) { const e = new Error('Compra archivada'); e.status = 400; throw e; }
   if (p.status !== 'pending') { const e = new Error('Solo se puede recibir una compra pendiente'); e.status = 400; throw e; }
   const items = db.prepare('SELECT * FROM purchase_items WHERE purchase_id=?').all(id);
+  for (const item of items) bloquearSiTrazable(db, item.product_id, 'La compra directa');   // Pilar 3
   // Capa 2: la entrada va al almacén guardado en la compra (principal por defecto / histórico).
   const wid = resolveWarehouseId(db, p.warehouse_id);
   db.transaction(() => {
@@ -68,6 +70,8 @@ export function cancelPurchaseSvc(db, id) {
 // con purchaseSchema es responsabilidad del llamador (la ruta lo hace por middleware;
 // C2 lo valida antes de llamar).
 export function createDirectPurchaseSvc(db, d) {
+  // Pilar 3: un producto trazado no entra por compra directa (no captura lote): usa orden de compra + recepción.
+  for (const item of d.items) bloquearSiTrazable(db, item.product_id, 'La compra directa');
   // Capa 2: almacén de destino (principal por defecto). Se guarda en la compra para que
   // recibir/cancelar usen el mismo almacén.
   const wid = resolveWarehouseId(db, d.warehouse_id);

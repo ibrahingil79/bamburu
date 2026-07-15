@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { checkPermission } from '../../../core/permission-check.js';   // chequeo de permiso programático (condicional)
 import { isPhysical, productStock, productStockInWarehouse, reservedOfProduct, recordMovement, resolveWarehouseId } from '../stock.js';   // aviso de exceso al facturar (RAMA B) + mostrador (ticket): salida de stock por el libro
+import { esTrazable, asignarFEFO, salirConTraza } from '../trazabilidad.js';   // Pilar 3: consumo de lote/serie (FEFO) al vender por mostrador
 import { recordVerifactuAlta, recordVerifactuAnulacion, cotejoUrl } from '../verifactu.js';   // VERI*FACTU T1: registro oficial + QR de cotejo
 import { encolarSiProcede } from '../verifactu-cola.js';   // VERI*FACTU T2: remisión automática a la AEAT tras commit (ventana de 240 s)
 import { postInvoice, postInvoicePayment } from '../contabilidad.js';   // Contabilidad: posteo del asiento tras commit (aditivo; no rompe el documento)
@@ -717,7 +718,17 @@ export function emitTicketSvc(db, { lines, warehouse_id, payment_method, paid_da
     // Stock: salida al LIBRO por cada línea FÍSICA, en el almacén elegido (origin 'ticket').
     for (const l of resolved) {
       if (l.product_id && l.is_physical) {
-        recordMovement(db, { product_id: l.product_id, type: 'salida', quantity: -l.quantity, origin_type: 'ticket', origin_id: invoiceId, warehouse_id: wid, note: 'Venta mostrador ' + invoice_number });
+        if (esTrazable(db, l.product_id)) {
+          // Producto trazado: se consume por lote/serie con FEFO (el que antes caduca sale primero). Un
+          // trazado no se puede sobrevender: si no hay saldo trazado, asignarFEFO lanza 400 y el ticket
+          // no se emite (a diferencia del no trazado, que sí admite exceso confirmado). Consumo guiado
+          // FEFO; la elección manual del lote/serie desde el TPV es una mejora de UI posterior.
+          const alloc = asignarFEFO(db, l.product_id, wid, l.quantity);
+          salirConTraza(db, { product_id: l.product_id, warehouse_id: wid, origin_type: 'ticket', origin_id: invoiceId,
+            note: 'Venta mostrador ' + invoice_number, asignacion: alloc, cantidad: l.quantity });
+        } else {
+          recordMovement(db, { product_id: l.product_id, type: 'salida', quantity: -l.quantity, origin_type: 'ticket', origin_id: invoiceId, warehouse_id: wid, note: 'Venta mostrador ' + invoice_number });
+        }
       }
     }
 

@@ -7,6 +7,7 @@ import { albaranCreateSchema, albaranAnularSchema } from '../schemas.js';
 import { nextCode } from '../codes.js';
 import { computeTotals, createInvoice } from './invoices.js';
 import { recordMovement, isPhysical, resolveWarehouseId, availableOfProduct, productStockInWarehouse } from '../stock.js';
+import { esTrazable, asignarFEFO, salirConTraza, revertirTrazaDeOrigen } from '../trazabilidad.js';   // Pilar 3: consumo/reingreso de lote/serie
 import { activeWarehouses } from './warehouses.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { ENTITY } from '../../../core/activity-entities.js';
@@ -185,11 +186,18 @@ export function createAlbaranSvc(db, d) {
     const id = r.lastInsertRowid;
     insertItems(db, id, resolved);
     // SALIDA real al libro por cada línea FÍSICA (la entrega es el único punto que mueve stock).
+    const notaAlb = 'Albarán ' + number + (order ? ' (pedido ' + (order.order_number || ('#' + order.id)) + ')' : ' (suelto)');
     for (const l of resolved) {
       if (l.product_id && isPhysical(db, l.product_id)) {
-        recordMovement(db, { product_id: l.product_id, type: 'salida', quantity: -l.quantity,
-          origin_type: 'delivery_note', origin_id: id, warehouse_id: wid,
-          note: 'Albarán ' + number + (order ? ' (pedido ' + (order.order_number || ('#' + order.id)) + ')' : ' (suelto)') });
+        if (esTrazable(db, l.product_id)) {
+          // Trazado: consumo por lote/serie con FEFO (no se puede entregar más de lo que hay trazado).
+          const alloc = asignarFEFO(db, l.product_id, wid, l.quantity);
+          salirConTraza(db, { product_id: l.product_id, warehouse_id: wid, origin_type: 'delivery_note', origin_id: id,
+            note: notaAlb, asignacion: alloc, cantidad: l.quantity });
+        } else {
+          recordMovement(db, { product_id: l.product_id, type: 'salida', quantity: -l.quantity,
+            origin_type: 'delivery_note', origin_id: id, warehouse_id: wid, note: notaAlb });
+        }
       }
     }
     const order_delivered_status = recalcDeliveredStatus(db, d.order_id);
@@ -218,12 +226,14 @@ export function cancelAlbaranSvc(db, id, motivo) {
     }
   }
   const items = db.prepare('SELECT * FROM delivery_note_items WHERE delivery_note_id=?').all(id);
+  const notaAnul = 'Anulación del albarán ' + (a.delivery_number || ('#' + id));
   const run = db.transaction(() => {
+    // Trazado: reingreso a SU lote (revierte los movimientos con lote de este albarán).
+    revertirTrazaDeOrigen(db, 'delivery_note', id, { type: 'entrada', note: notaAnul });
     for (const it of items) {
-      if (it.product_id && isPhysical(db, it.product_id)) {
+      if (it.product_id && isPhysical(db, it.product_id) && !esTrazable(db, it.product_id)) {
         recordMovement(db, { product_id: it.product_id, type: 'entrada', quantity: it.quantity,
-          origin_type: 'delivery_note', origin_id: id, warehouse_id: a.warehouse_id,
-          note: 'Anulación del albarán ' + (a.delivery_number || ('#' + id)) });
+          origin_type: 'delivery_note', origin_id: id, warehouse_id: a.warehouse_id, note: notaAnul });
       }
     }
     db.prepare("UPDATE delivery_notes SET status='anulado', anulada_motivo=? WHERE id=?").run(m, id);

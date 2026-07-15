@@ -7,6 +7,7 @@ import { getVatBands } from '../../../core/vat-bands.js';
 import { adjustStock, kardex, productStock, isPhysical, recordMovement, resolveWarehouseId, reservedOfProduct, availableOfProduct, TYPE_LABEL, REASON_LABEL } from '../stock.js';
 import { warehouseBreakdown, activeWarehouses } from './warehouses.js';
 import { nivelesDeProducto, setNivelesProducto } from '../reposicion.js';
+import { lotesDeProducto, trazaDeLote, trackingDe } from '../trazabilidad.js';
 import { stockModalHtml, stockModalScript } from '../views/stock-modal.js';
 import { nextCode } from '../codes.js';
 import { ENTITY } from '../../../core/activity-entities.js';
@@ -58,11 +59,14 @@ export function createProductSvc(db, input) {
   if (!chosen) { const e = new Error('La banda de IVA es obligatoria y debe ser válida'); e.status = 400; throw e; }
   const band = chosen.code, rate = chosen.rate;
   const ptype = d.type || 'physical';
-  const initialStock = (ptype === 'service' || ptype === 'digital') ? 0 : (parseInt(d.stock) || 0);
+  const tracking = ptype === 'physical' ? (d.tracking || 'none') : 'none';   // solo físicos llevan traza
+  // Un producto TRAZADO no nace con stock de apertura: sus unidades entran por recepción/ajuste, que es
+  // donde se captura el lote/serie. Así el stock nunca queda sin traza.
+  const initialStock = (ptype === 'service' || ptype === 'digital' || tracking !== 'none') ? 0 : (parseInt(d.stock) || 0);
   const code = nextCode(db, 'product');
   const slug = slugify(d.name);
-  const r = db.prepare(`INSERT INTO products (name,slug,sku,description,price,compare_price,image_url,category_id,status,type,digital_file_url,featured,stock,supplier_id,tax_rate,tax_band,product_code) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(d.name, slug, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', ptype, d.digital_file_url||'', d.featured?1:0, 0, d.supplier_id||null, rate, band, code);
+  const r = db.prepare(`INSERT INTO products (name,slug,sku,description,price,compare_price,image_url,category_id,status,type,digital_file_url,featured,stock,supplier_id,tax_rate,tax_band,product_code,tracking) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(d.name, slug, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', ptype, d.digital_file_url||'', d.featured?1:0, 0, d.supplier_id||null, rate, band, code, tracking);
   const id = r.lastInsertRowid;
   if (ptype === 'physical' && initialStock > 0) {
     // Capa 2: el stock inicial entra al almacén elegido (principal por defecto).
@@ -170,8 +174,15 @@ export function createProductRoutes(db, cfg = {}) {
       const chosen = getVatBands(country, fallbackRate).find(b => b.code === d.tax_band);
       if (!chosen) return c.json({ error: 'La banda de IVA es obligatoria y debe ser válida' }, 400);
       const band = chosen.code, rate = chosen.rate;
-      db.prepare(`UPDATE products SET name=?,sku=?,description=?,price=?,compare_price=?,image_url=?,category_id=?,status=?,type=?,digital_file_url=?,featured=?,supplier_id=?,tax_rate=?,tax_band=? WHERE id=?`)
-        .run(d.name, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', d.type||'physical', d.digital_file_url||'', d.featured?1:0, d.supplier_id||null, rate, band, id);
+      // Trazabilidad (Pilar 3): solo físicos; y NO se puede cambiar si el producto ya tiene movimientos
+      // de stock (su stock existente no tendría lote → el libro quedaría descuadrado). Deja el stock a 0.
+      const cur = db.prepare('SELECT tracking FROM products WHERE id=?').get(id) || {};
+      const nuevoTracking = (d.type || 'physical') === 'physical' ? (d.tracking || 'none') : 'none';
+      if (nuevoTracking !== (cur.tracking || 'none') && db.prepare('SELECT 1 FROM stock_movements WHERE product_id=? LIMIT 1').get(id)) {
+        return c.json({ error: 'No puedes cambiar la trazabilidad de un producto que ya tiene movimientos de stock. Deja su stock a 0 primero, o crea un producto nuevo.' }, 400);
+      }
+      db.prepare(`UPDATE products SET name=?,sku=?,description=?,price=?,compare_price=?,image_url=?,category_id=?,status=?,type=?,digital_file_url=?,featured=?,supplier_id=?,tax_rate=?,tax_band=?,tracking=? WHERE id=?`)
+        .run(d.name, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', d.type||'physical', d.digital_file_url||'', d.featured?1:0, d.supplier_id||null, rate, band, nuevoTracking, id);
       if (d.tags !== undefined) {
         db.prepare('DELETE FROM product_tags WHERE product_id=?').run(id);
         for (const tid of (d.tags||[])) {
@@ -205,6 +216,18 @@ export function createProductRoutes(db, cfg = {}) {
       setNivelesProducto(db, id, c.get('validated').levels, quien);
       logActivity(db, c.get('session'), 'Editó niveles de reposición', ENTITY.PRODUCT, id, p.name || '');
       return c.json({ ok: true, message: 'Niveles guardados' });
+    } catch (e) { return c.json({ error: e.message }, 500); }
+  });
+
+  // ── Pilar 3 · Trazabilidad — LOTES / SERIES de un producto (informe) ──────────
+  // Lotes/series con su saldo actual y caducidad. Y la traza de un lote concreto (?lot=ID): sus
+  // movimientos con el documento que los originó, para "¿de dónde vino / a dónde fue?".
+  api.get('/:id/lotes', requirePerm('products.read'), c => {
+    try {
+      const id = parseInt(c.req.param('id'));
+      const lotId = c.req.query('lot');
+      if (lotId) return c.json({ traza: trazaDeLote(db, parseInt(lotId)) });
+      return c.json({ tracking: trackingDe(db, id), lotes: lotesDeProducto(db, id) });
     } catch (e) { return c.json({ error: e.message }, 500); }
   });
 
@@ -395,6 +418,15 @@ export function createProductRoutes(db, cfg = {}) {
             <div class="tab-pane active" data-pane-group="prod" data-pane-key="basic">
               <div class="form-row">
                 <div class="form-group"><label class="form-label">Tipo *</label><select class="form-control" id="pType"><option value="physical">Físico</option><option value="digital">Digital</option><option value="service">Servicio</option></select></div>
+                <div class="form-group" id="pTrackingWrap" style="display:none">
+                  <label class="form-label">Trazabilidad</label>
+                  <select class="form-control" id="pTracking" onchange="applyTypeUI(document.getElementById('pType').value)">
+                    <option value="none">Sin traza</option>
+                    <option value="lot">Por lote (con caducidad)</option>
+                    <option value="serial">Por nº de serie</option>
+                  </select>
+                  <small style="color:var(--text2);font-size:12px;margin-top:4px;display:block">Con traza, el stock entra por recepción de compra (capturas el lote y su caducidad, o el nº de serie) y sale por mostrador/albarán con FEFO (primero el que antes caduca). No se puede cambiar si el producto ya tiene movimientos de stock.</small>
+                </div>
                 <div class="form-group"><label class="form-label">Nombre *</label><input class="form-control" id="pName"></div>
                 <div class="form-group"><label class="form-label">SKU *</label><input class="form-control" id="pSku"></div>
               </div>
@@ -411,6 +443,10 @@ export function createProductRoutes(db, cfg = {}) {
                   <p style="font-size:.75rem;color:var(--muted);margin:-.2rem 0 .5rem">Cuando el <strong>disponible</strong> de un almacén baja de su <strong>mínimo</strong>, DISA te avisa y —si el producto tiene proveedor habitual— te prepara un borrador de compra hasta el <strong>objetivo</strong>. Mínimo en 0 = no se vigila ese almacén.</p>
                   <div id="pNivelesBody" style="font-size:.85rem"></div>
                   <button type="button" class="btn btn-secondary btn-sm" style="margin-top:.5rem" onclick="guardarNiveles()">Guardar niveles</button>
+                </div>
+                <div class="form-group" id="pLotesWrap" style="display:none">
+                  <label class="form-label">Lotes / nº de serie</label>
+                  <div id="pLotesBody" style="font-size:.85rem"></div>
                 </div>
                 <div class="form-group" id="pAvgCostWrap" style="display:none"><label class="form-label">Coste medio</label><div id="pAvgCost" style="padding:.55rem 0;font-weight:600">—</div><div style="font-size:.7rem;color:var(--muted)">Se gana desde las compras (no editable)</div></div>
               </div>
@@ -531,13 +567,19 @@ export function createProductRoutes(db, cfg = {}) {
         // inicial" (siembra apertura); en EDITAR (físico) se gestiona por el kardex, no a mano.
         const physical = !(t==='service' || t==='digital');
         const isEdit = !!currentProdId;
-        document.getElementById('pStockWrap').style.display = (physical && !isEdit) ? '' : 'none';
+        const trw = document.getElementById('pTrackingWrap');   // traza (lote/serie): solo físicos
+        if (trw) trw.style.display = physical ? '' : 'none';
+        // Un producto TRAZADO no tiene stock inicial de apertura (entra por recepción, con su lote).
+        const tracked = physical && (document.getElementById('pTracking')?.value || 'none') !== 'none';
+        document.getElementById('pStockWrap').style.display = (physical && !isEdit && !tracked) ? '' : 'none';
         const whw = document.getElementById('pWarehouseWrap');   // almacén del stock inicial: solo crear+físico
-        if (whw) whw.style.display = (physical && !isEdit) ? '' : 'none';
+        if (whw) whw.style.display = (physical && !isEdit && !tracked) ? '' : 'none';
         const mng = document.getElementById('pStockManage');
         if (mng) mng.style.display = (physical && isEdit) ? '' : 'none';
         const nvw = document.getElementById('pNivelesWrap');   // niveles de reposición: solo editar+físico
         if (nvw) nvw.style.display = (physical && isEdit) ? '' : 'none';
+        const lw = document.getElementById('pLotesWrap');      // lotes/series: solo editar + trazado
+        if (lw) lw.style.display = (tracked && isEdit) ? '' : 'none';
         // Coste medio (WAC): solo lectura, solo en EDITAR de un físico (se gana desde compras).
         const avgw = document.getElementById('pAvgCostWrap');
         if (avgw) avgw.style.display = (physical && isEdit) ? '' : 'none';
@@ -553,6 +595,7 @@ export function createProductRoutes(db, cfg = {}) {
         document.getElementById('pTaxBand').value='';
         document.getElementById('pStatus').value='active';
         document.getElementById('pType').value='physical';
+        document.getElementById('pTracking').value='none';
         document.getElementById('pFeatured').checked=false;
         applyTypeUI('physical');
         document.getElementById('pCategory').value='';
@@ -584,11 +627,13 @@ export function createProductRoutes(db, cfg = {}) {
         document.getElementById('pDigital').value=p.digital_file_url||'';
         document.getElementById('pStatus').value=p.status||'active';
         document.getElementById('pType').value=p.type||'physical';
+        document.getElementById('pTracking').value=p.tracking||'none';
         document.getElementById('pFeatured').checked=!!p.featured;
         document.getElementById('pCategory').value=p.category_id||'';
         document.getElementById('pSupplier').value=p.supplier_id||'';
         applyTypeUI(p.type||'physical');
         if ((p.type||'physical')==='physical') cargarNiveles(id); else document.getElementById('pNivelesBody').innerHTML='';
+        if ((p.tracking||'none')!=='none') cargarLotes(id); else document.getElementById('pLotesBody').innerHTML='';
         renderTagSelector();
         renderGallery(p.images||[]);
         renderVariantList(p.variants||[]);
@@ -620,6 +665,30 @@ export function createProductRoutes(db, cfg = {}) {
             }).join('')
             +'</tbody></table>';
         }catch(e){ body.innerHTML='<span style="color:var(--danger)">No se pudieron cargar los niveles</span>'; }
+      }
+      // Informe de lotes/series: saldo por lote + caducidad (los caducados/agotados también, para el histórico).
+      async function cargarLotes(id){
+        const body=document.getElementById('pLotesBody');
+        body.innerHTML='<span style="color:var(--muted)">Cargando…</span>';
+        try{
+          const r=await api('GET',A+'/products/'+id+'/lotes');
+          const ls=r.lotes||[];
+          if(!ls.length){ body.innerHTML='<span style="color:var(--muted)">Aún no hay lotes/series. Entran al recibir una orden de compra.</span>'; return; }
+          const hoy=new Date().toISOString().slice(0,10);
+          body.innerHTML='<table style="width:100%;border-collapse:collapse">'
+            +'<thead><tr style="color:var(--muted);text-align:left">'
+            +'<th style="padding:.2rem .4rem;font-weight:600">'+(r.tracking==='serial'?'Nº de serie':'Lote')+'</th>'
+            +'<th style="padding:.2rem .4rem;text-align:right;font-weight:600">Saldo</th>'
+            +'<th style="padding:.2rem .4rem;font-weight:600">Caducidad</th></tr></thead><tbody>'
+            + ls.map(function(l){
+                const cad = l.expiry ? (l.expiry < hoy ? '<span style="color:var(--danger)">'+nvEsc(l.expiry)+' (caducado)</span>' : nvEsc(l.expiry)) : '<span style="color:var(--text3)">—</span>';
+                const ag = l.saldo>0 ? '' : ' style="color:var(--text3)"';
+                return '<tr'+ag+'><td style="padding:.2rem .4rem">'+nvEsc(l.code)+'</td>'
+                  +'<td style="padding:.2rem .4rem;text-align:right">'+l.saldo+'</td>'
+                  +'<td style="padding:.2rem .4rem">'+cad+'</td></tr>';
+              }).join('')
+            +'</tbody></table>';
+        }catch(e){ body.innerHTML='<span style="color:var(--danger)">No se pudieron cargar los lotes</span>'; }
       }
       async function guardarNiveles(){
         if(!currentProdId){toast('Guarda el producto primero','warn');return;}
@@ -657,6 +726,7 @@ export function createProductRoutes(db, cfg = {}) {
           supplier_id:document.getElementById('pSupplier').value?+document.getElementById('pSupplier').value:null,
           status:document.getElementById('pStatus').value,
           type:document.getElementById('pType').value,
+          tracking:document.getElementById('pTracking').value,
           tax_band:document.getElementById('pTaxBand').value,
           featured:document.getElementById('pFeatured').checked,
           tags:selTags,

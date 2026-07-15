@@ -766,9 +766,23 @@ export function createPurchaseOrderRoutes(db) {
     const warehouses = activeWarehouses(db);
     const whOptions = warehouses.map(w => '<option value="' + w.id + '"' + (w.is_default ? ' selected' : '') + '>' + esc(w.name) + (w.is_default ? ' (principal)' : '') + '</option>').join('');
 
+    const capturaTraza = l => {
+      if (l.tracking === 'lot') return `
+        <div class="r-lotes" data-tracking="lot" style="margin-top:.4rem;display:flex;gap:.3rem;flex-wrap:wrap;align-items:center">
+          <input class="form-control r-lot-code" placeholder="Código de lote" style="width:150px">
+          <input class="form-control r-lot-expiry" type="date" style="width:150px" title="Caducidad (opcional)">
+          <small style="width:100%;color:var(--text3);font-size:.72rem">Todo lo recibido de esta línea va a este lote (caducidad opcional).</small>
+        </div>`;
+      if (l.tracking === 'serial') return `
+        <div class="r-lotes" data-tracking="serial" style="margin-top:.4rem">
+          <textarea class="form-control r-serials" placeholder="Un nº de serie por línea (uno por unidad)" style="width:230px;height:56px"></textarea>
+          <small style="display:block;color:var(--text3);font-size:.72rem">Escribe un nº de serie por unidad recibida.</small>
+        </div>`;
+      return '';
+    };
     const rows = pendingLines.map(l => `
-      <tr data-oid="${l.order_item_id}" data-pend="${l.pendiente}" data-pedido="${l.pedido}" data-rec="${l.recibido}">
-        <td>${l.sku ? `<span style="color:var(--text3);font-size:.8rem">[${esc(l.sku)}]</span> ` : ''}${esc(l.product_name)}</td>
+      <tr data-oid="${l.order_item_id}" data-pend="${l.pendiente}" data-pedido="${l.pedido}" data-rec="${l.recibido}" data-tracking="${l.tracking || 'none'}">
+        <td>${l.sku ? `<span style="color:var(--text3);font-size:.8rem">[${esc(l.sku)}]</span> ` : ''}${esc(l.product_name)}${capturaTraza(l)}</td>
         <td style="text-align:right">${l.pedido}</td>
         <td style="text-align:right">${l.recibido}</td>
         <td style="text-align:right;font-weight:600">${l.pendiente}</td>
@@ -845,7 +859,20 @@ export function createPurchaseOrderRoutes(db) {
             const totalLinea = rec + qty;
             excess.push(r.cells[0].textContent.trim() + ': pedido ' + pedido + ', recibirás ' + totalLinea + ' (exceso de ' + (totalLinea - pedido) + ')');
           }
-          items.push({ order_item_id: parseInt(r.dataset.oid), quantity: qty, unit_cost: cost });
+          const item = { order_item_id: parseInt(r.dataset.oid), quantity: qty, unit_cost: cost };
+          // Traza (Pilar 3): captura de lote/serie de la línea, si el producto la lleva.
+          const tr = r.dataset.tracking;
+          if (tr === 'lot'){
+            const code = (r.querySelector('.r-lot-code')?.value || '').trim();
+            if (!code) return { error: 'Indica el código de lote de "' + r.cells[0].textContent.trim() + '"' };
+            const exp = (r.querySelector('.r-lot-expiry')?.value || '').trim();
+            item.lotes = [{ code: code, expiry: exp, quantity: qty }];
+          } else if (tr === 'serial'){
+            const codes = (r.querySelector('.r-serials')?.value || '').split('\n').map(s => s.trim()).filter(Boolean);
+            if (codes.length !== qty) return { error: '"' + r.cells[0].textContent.trim() + '": pon exactamente ' + qty + ' nº de serie (uno por unidad), hay ' + codes.length };
+            item.lotes = codes.map(code => ({ code: code }));
+          }
+          items.push(item);
         }
         return { items: items, excess: excess };
       }

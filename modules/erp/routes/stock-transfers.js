@@ -4,6 +4,7 @@ import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { stockTransferSchema, purchaseOrderAnularSchema } from '../schemas.js';
 import { nextCode } from '../codes.js';
+import { bloquearSiTrazable } from '../trazabilidad.js';
 import { recordMovement, isPhysical, productStockInWarehouse, reservedOfProduct } from '../stock.js';
 import { activeWarehouses } from './warehouses.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
@@ -83,6 +84,7 @@ export function createStockTransferSvc(db, d) {
     if (seen.has(product.id)) { const e = new Error('Producto repetido en el traslado ("' + product.name + '")'); e.status = 400; throw e; }
     seen.add(product.id);
     if (!isPhysical(db, product)) { const e = new Error('"' + product.name + '" no es un producto físico: no lleva stock'); e.status = 400; throw e; }
+    bloquearSiTrazable(db, product.id, 'El traslado entre almacenes');
     if (!(it.quantity > 0)) { const e = new Error('"' + product.name + '": la cantidad debe ser mayor que 0'); e.status = 400; throw e; }
     const avail = productStockInWarehouse(db, product.id, from.id);
     if (it.quantity > avail) {

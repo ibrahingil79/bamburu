@@ -5,6 +5,7 @@ import { validate } from '../../../core/validate.js';
 import { purchaseOrderAnularSchema } from '../schemas.js';
 import { nextCode } from '../codes.js';
 import { recordMovement, resolveWarehouseId } from '../stock.js';
+import { esTrazable, entrarConTraza, revertirTrazaDeOrigen } from '../trazabilidad.js';
 import { hasActiveTransfersFromOrigin } from './stock-transfers.js';
 import { originDocBlock } from '../attachments.js';
 import { ENTITY } from '../../../core/activity-entities.js';
@@ -32,7 +33,7 @@ const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g,
 export function orderReceptionState(db, orderId) {
   const lines = db.prepare(`
     SELECT poi.id AS order_item_id, poi.product_id, poi.quantity AS pedido,
-           poi.unit_cost, poi.tax_rate, pr.name AS product_name, pr.sku,
+           poi.unit_cost, poi.tax_rate, pr.name AS product_name, pr.sku, pr.tracking,
            COALESCE((SELECT SUM(pori.quantity)
                        FROM purchase_order_receipt_items pori
                        JOIN purchase_order_receipts por ON por.id = pori.receipt_id
@@ -126,14 +127,23 @@ export function createReceiptSvc(db, orderId, d) {
       .run(orderId, receipt_number, d.date, d.notes || '', wid);
     const rid = r.lastInsertRowid;
     const ins = db.prepare('INSERT INTO purchase_order_receipt_items (receipt_id, order_item_id, product_id, quantity, unit_cost) VALUES (?,?,?,?,?)');
+    const nota = 'Recepción ' + receipt_number + ' de la orden ' + (o.order_number || ('#' + orderId));
     for (const it of d.items) {
       const line = byId.get(it.order_item_id);
       ins.run(rid, it.order_item_id, line.product_id, it.quantity, it.unit_cost);
-      recordMovement(db, {
-        product_id: line.product_id, type: 'entrada', quantity: it.quantity, unit_cost: it.unit_cost,
-        origin_type: 'po_receipt', origin_id: rid, warehouse_id: wid,
-        note: 'Recepción ' + receipt_number + ' de la orden ' + (o.order_number || ('#' + orderId)),
-      });
+      if (esTrazable(db, line.product_id)) {
+        // Producto trazado: un movimiento por lote/serie (entrarConTraza exige que las unidades por
+        // lote sumen la cantidad recibida). El coste de la línea va a cada lote (alimenta el WAC igual).
+        entrarConTraza(db, {
+          product_id: line.product_id, warehouse_id: wid, origin_type: 'po_receipt', origin_id: rid,
+          unit_cost: it.unit_cost, note: nota, lotes: it.lotes, cantidadEsperada: it.quantity,
+        });
+      } else {
+        recordMovement(db, {
+          product_id: line.product_id, type: 'entrada', quantity: it.quantity, unit_cost: it.unit_cost,
+          origin_type: 'po_receipt', origin_id: rid, warehouse_id: wid, note: nota,
+        });
+      }
     }
     const order_received_status = recalcReceivedStatus(db, orderId);
     return { id: rid, receipt_number, order_id: orderId, lines: d.items.length, excess_lines: excess.length, order_received_status };
@@ -166,12 +176,16 @@ export function cancelReceiptSvc(db, receiptId, motivo) {
   if (hasActiveTransfersFromOrigin(db, wid, items.map(i => i.product_id))) {
     const e = new Error('Esta recepción tiene traslados activos desde su almacén con estos productos: anúlalos primero (si no, el stock quedaría en negativo)'); e.status = 409; throw e;
   }
+  const nota = 'Anulación de la recepción ' + (rec.receipt_number || ('#' + receiptId));
   const run = db.transaction(() => {
+    // Traza: revierte los movimientos CON lote de esta recepción (cada salida vuelve a SU lote).
+    revertirTrazaDeOrigen(db, 'po_receipt', receiptId, { type: 'salida', note: nota });
+    // Sin traza: reversa por línea como siempre (los trazados ya se revirtieron por su lote arriba).
     for (const it of items) {
+      if (esTrazable(db, it.product_id)) continue;
       recordMovement(db, {
         product_id: it.product_id, type: 'salida', quantity: -it.quantity,
-        origin_type: 'po_receipt', origin_id: receiptId, warehouse_id: wid,
-        note: 'Anulación de la recepción ' + (rec.receipt_number || ('#' + receiptId)),
+        origin_type: 'po_receipt', origin_id: receiptId, warehouse_id: wid, note: nota,
       });
     }
     db.prepare("UPDATE purchase_order_receipts SET status='anulada', anulada_motivo=? WHERE id=?").run(m, receiptId);

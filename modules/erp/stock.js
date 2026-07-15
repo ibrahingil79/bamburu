@@ -148,17 +148,20 @@ export function isReversed(db, movementId) {
 }
 
 // ÚNICO punto de escritura del libro: inserta el movimiento y recalcula la caché (stock + WAC).
-// m: { product_id, type, quantity(signo), reason?, origin_type, origin_id?, reverses_movement_id?, note?, unit_cost?, warehouse_id?, created_at? }
+// m: { product_id, type, quantity(signo), reason?, origin_type, origin_id?, reverses_movement_id?, note?, unit_cost?, warehouse_id?, created_at?, lot_id? }
 // unit_cost OPCIONAL: coste unitario de las unidades de la entrada (compra). Por defecto NULL
 // (salidas, aperturas, ajustes, reversiones) → el WAC lo cuenta como coste 0.
+// lot_id OPCIONAL (Pilar 3 · trazabilidad): la unidad de traza (lote/serie) de este movimiento. NULL en
+// productos sin traza (tracking='none') — que es todo hasta que el dueño active la traza en un producto.
 export function recordMovement(db, m) {
   const wid = m.warehouse_id || defaultWarehouseId(db);
   const res = db.prepare(
-    `INSERT INTO stock_movements (product_id, warehouse_id, type, quantity, reason, origin_type, origin_id, reverses_movement_id, note, unit_cost, created_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+    `INSERT INTO stock_movements (product_id, warehouse_id, type, quantity, reason, origin_type, origin_id, reverses_movement_id, note, unit_cost, created_at, lot_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(m.product_id, wid, m.type, m.quantity, m.reason || null, m.origin_type || null,
         m.origin_id || null, m.reverses_movement_id || null, m.note || null,
-        m.unit_cost == null ? null : m.unit_cost, m.created_at || nowStr());
+        m.unit_cost == null ? null : m.unit_cost, m.created_at || nowStr(),
+        m.lot_id == null ? null : m.lot_id);
   recomputeStock(db, m.product_id);
   return res.lastInsertRowid;
 }
@@ -180,6 +183,9 @@ export function adjustStock(db, productId, { mode, value, reason, note, warehous
   const product = db.prepare('SELECT * FROM products WHERE id=?').get(productId);
   if (!product) { const e = new Error('Producto no encontrado'); e.status = 404; throw e; }
   if (!isPhysical(db, product)) { const e = new Error('Solo los productos físicos llevan stock'); e.status = 400; throw e; }
+  // Pilar 3: un producto TRAZADO (lote/serie) no se ajusta a mano por ahora — su stock entra por recepción
+  // y sale por mostrador/albarán con su lote. Ajustar sin lote descuadraría el saldo por lotes. Falla cerrado.
+  if ((product.tracking || 'none') !== 'none') { const e = new Error('Este producto lleva traza por lote/nº de serie: su stock se mueve por recepción de compra y por mostrador/albarán, no por ajuste manual (por ahora).'); e.status = 400; throw e; }
   if (!ADJUST_MODES.includes(mode)) { const e = new Error('Modo de ajuste no válido'); e.status = 400; throw e; }
   if (!ADJUST_REASONS.includes(reason)) { const e = new Error('Motivo de ajuste no válido'); e.status = 400; throw e; }
   const v = Number(value);

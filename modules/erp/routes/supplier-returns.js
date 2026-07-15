@@ -5,6 +5,7 @@ import { validate } from '../../../core/validate.js';
 import { supplierReturnSchema, purchaseOrderAnularSchema } from '../schemas.js';
 import { nextCode } from '../codes.js';
 import { recordMovement, isPhysical, resolveWarehouseId, originMovementWarehouse } from '../stock.js';
+import { bloquearSiTrazable } from '../trazabilidad.js';   // Pilar 3: la devolución con lote llega más adelante
 import { createReturnCredit, anularReturnCredit } from './supplier-invoices.js';
 import { ENTITY } from '../../../core/activity-entities.js';
 
@@ -150,6 +151,7 @@ export function createSupplierReturnSvc(db, d) {
     if (seen.has(it.origin_item_id)) { const e = new Error('Línea repetida en la devolución ("' + line.product_name + '")'); e.status = 400; throw e; }
     seen.add(it.origin_item_id);
     if (!isPhysical(db, line.product_id)) { const e = new Error('"' + line.product_name + '" no es un producto físico: no lleva stock'); e.status = 400; throw e; }
+    bloquearSiTrazable(db, line.product_id, 'La devolución a proveedor');
     if (it.quantity > line.devolvible) {
       const e = new Error('"' + line.product_name + '": devolvible ' + line.devolvible + ', intentas devolver ' + it.quantity);
       e.status = 400; throw e;

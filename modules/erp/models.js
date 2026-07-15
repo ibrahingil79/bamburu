@@ -461,6 +461,33 @@ export function runMigrations(db) {
   // WAC trata como coste 0). Alimenta el coste medio ponderado (cache en products.average_cost).
   addCol(db, 'stock_movements', 'unit_cost', 'REAL');
 
+  // ── TRAZABILIDAD POR LOTE / Nº DE SERIE (Pilar 3) ──────────────────────────────────────────────
+  // Terreno nuevo, aditivo y SIN romper nada: un producto nace `tracking='none'` (sin traza) y todo
+  // funciona EXACTAMENTE igual que hoy (lot_id NULL en sus movimientos). La traza solo entra cuando el
+  // dueño marca un producto como 'lot' (lotes con caducidad) o 'serial' (unidades con nº de serie único).
+  //
+  // MODELO UNIFICADO: un lote y un nº de serie son lo mismo con distinta `kind` — una "unidad de traza"
+  // (stock_lots) con un `code` (código de lote o nº de serie) único por producto. La serie es un lote de
+  // capacidad 1: su saldo nunca pasa de 1 (invariante que guarda el motor). El SALDO por lote/almacén NO
+  // se materializa: se deriva del libro sumando `quantity` por `lot_id` (+ `warehouse_id`), misma filosofía
+  // que el stock por almacén. Así la traza NO añade una segunda fuente de verdad que pueda descuadrar.
+  addCol(db, 'products', 'tracking', "TEXT NOT NULL DEFAULT 'none'");   // 'none' | 'lot' | 'serial'
+  db.exec(`CREATE TABLE IF NOT EXISTS stock_lots (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL,
+    code       TEXT NOT NULL,           -- código de LOTE o Nº DE SERIE
+    kind       TEXT NOT NULL,           -- 'lot' | 'serial'
+    expiry     TEXT,                    -- caducidad YYYY-MM-DD (opcional; NULL en serie o lote sin caducidad)
+    created_at TEXT,
+    FOREIGN KEY (product_id) REFERENCES products(id)
+  )`);
+  // Un código/serie es único POR PRODUCTO: recibir el mismo lote otra vez reutiliza su fila (suma stock);
+  // un nº de serie repetido es un error (no puede haber dos unidades con la misma serie) — lo aplica el motor.
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_lots_product_code ON stock_lots(product_id, code)`);
+  // El movimiento del libro apunta a su unidad de traza (NULL en productos sin traza, como hasta ahora).
+  addCol(db, 'stock_movements', 'lot_id', 'INTEGER');
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_stock_movements_lot ON stock_movements(lot_id)`);
+
   // Migración de datos UNA vez: importa el libro viejo, siembra saldos iniciales y archiva.
   const stockMigKey = 'migration_stock_unify_2026_v1';
   if (!db.prepare('SELECT value FROM settings WHERE key=?').get(stockMigKey)) {

@@ -25,6 +25,8 @@ export const productSchema = z.object({
                                   //  y el SQL existían, pero faltaba aquí y Zod lo stripeaba → siempre null.
   status: z.enum(['active', 'draft', 'archived']).default('active'),
   type: z.enum(['physical', 'digital', 'service']).default('physical'),  // P1+P2: + servicio
+  tracking: z.enum(['none', 'lot', 'serial']).default('none'),           // Pilar 3: traza por lote / nº de serie
+
   tax_band: str(40),                                                     // OBLIGATORIO (dato fiscal): banda de IVA; el % lo resuelve el servidor desde banda+país
   featured: z.coerce.boolean().default(false),
   tags: z.array(intPos).optional().default([]),
@@ -638,10 +640,24 @@ export const purchaseOrderAnularSchema = z.object({
 // C1.b — Recepción contra la orden: líneas referenciadas por order_item_id; la cantidad
 // no puede superar el pendiente (lo valida el servicio contra la BD) y el coste es el
 // REALMENTE recibido (precargado del de la orden, editable). Anular reusa el schema de motivo.
+// ── Trazabilidad por lote / nº de serie (Pilar 3) ──────────────────────────────
+// ENTRADA: unidades que entran. LOTE → [{code, expiry?, quantity}]. SERIE → una por unidad [{code}, ...].
+export const loteEntradaSchema = z.object({
+  code:     str(80),
+  expiry:   z.union([z.literal(''), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).optional(),
+  quantity: z.coerce.number().int().positive().optional(),
+});
+// SALIDA: de qué lote/serie (ya existente) sale la mercancía y cuánto.
+export const asignacionLoteSchema = z.object({
+  lot_id:   z.coerce.number().int().positive(),
+  quantity: z.coerce.number().int().positive(),
+});
+
 const purchaseOrderReceiptItemSchema = z.object({
   order_item_id: z.coerce.number().int().positive(),
   quantity:      z.coerce.number().int().positive(),
   unit_cost:     price,
+  lotes:         z.array(loteEntradaSchema).max(500).optional(),   // traza: solo si el producto la lleva
 });
 
 export const purchaseOrderReceiptSchema = z.object({
