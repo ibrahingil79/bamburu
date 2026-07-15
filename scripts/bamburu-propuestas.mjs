@@ -4,7 +4,7 @@
 //
 // Proceso programado (systemd timer). ITERA cada BD de tenant igual que el cron de avisos y, por cada una:
 //   1. Asegura el esquema (runMigrations idempotente — el script no pasa por el middleware).
-//   2. Genera las propuestas que falten, de los CUATRO tipos:
+//   2. Genera las propuestas que falten, de los CINCO tipos:
 //      · recordatorio_impago (D5)  — factura de VENTA vencida con retraso ≥ dias_recordatorio_impago
 //        (por defecto 7) → borrador de email de cobro. NO lo envía: lo deja para que el dueño apruebe.
 //      · pago_por_vencer   (D5b)  — factura de COMPRA con importe pendiente cuyo vencimiento cae
@@ -14,8 +14,11 @@
 //        'borrador'). NO emite nada: emitir es un clic del dueño, por la vía de siempre.
 //      · cliente_dormido   (D5d)   — el que te compraba a un ritmo y dejó de hacerlo. NO escribe a
 //        nadie: aprobar REDACTA el borrador, y enviarlo es un segundo clic del dueño.
+//      · vencimiento_fiscal (D5e)  — el modelo (IVA 303, IRPF 130, retenciones 111/115, resúmenes
+//        anuales) que TOCA presentar pronto, SOLO de los que el tenant declara en su ficha fiscal.
+//        NO presenta nada a la AEAT: deja el modelo preparado para que el dueño lo revise y lo presente.
 //
-// UN SOLO TIMER para los cuatro: cada tipo nuevo reutiliza este mecanismo, no añade un segundo cron.
+// UN SOLO TIMER para los cinco: cada tipo nuevo reutiliza este mecanismo, no añade un segundo cron.
 //
 // IDEMPOTENTE: los índices únicos (invoice_id/supplier_invoice_id/occurrence_id, type) impiden
 // duplicar; lo ya propuesto —o descartado— no se vuelve a proponer. El de cliente dormido es distinto
@@ -36,7 +39,7 @@ import { readdirSync } from 'fs';
 import { join, basename, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { runMigrations } from '../modules/erp/models.js';
-import { generarPropuestasImpago, generarPropuestasPago, generarPropuestasRecurrentes, generarPropuestasDormidos } from '../modules/erp/propuestas.js';
+import { generarPropuestasImpago, generarPropuestasPago, generarPropuestasRecurrentes, generarPropuestasDormidos, generarPropuestasFiscales } from '../modules/erp/propuestas.js';
 import { hoyLocal } from '../modules/erp/avisos.js';
 
 const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -58,7 +61,10 @@ function generarTodo(db) {
   const pago = generarPropuestasPago(db, { today: TODAY });
   const recurrente = generarPropuestasRecurrentes(db, { today: TODAY });
   const dormido = generarPropuestasDormidos(db, { today: TODAY });
-  return { impago, pago, recurrente, dormido };
+  // Vencimientos fiscales (D5e): solo de los modelos que el tenant DECLARA en su ficha fiscal. Sin
+  // ficha (configured_at NULL) devuelve 0 sin tocar nada — seguro de correr para todos los tenants.
+  const fiscal = generarPropuestasFiscales(db, { today: TODAY });
+  return { impago, pago, recurrente, dormido, fiscal };
 }
 
 function processTenant(path) {
@@ -86,9 +92,13 @@ function processTenant(path) {
     log(slug + ': ' + pre + 'dormidos (dejaron de comprar) · candidatas ' + r.dormido.candidatas
       + ' → ' + verbo + r.dormido.creadas + ', ya tenían ' + r.dormido.yaTenian
       + ', descansando ' + r.dormido.enDescanso + ', sin email ' + r.dormido.sinEmail);
+    log(slug + ': ' + pre + 'fiscales (modelos que vencen) · candidatas ' + r.fiscal.candidatas
+      + ' → ' + verbo + r.fiscal.creadas + ', ya tenían ' + r.fiscal.yaTenian
+      + (r.fiscal.sinPerfil ? ', sin ficha fiscal declarada' : ''));
     return {
       slug, creadasImpago: r.impago.creadas, creadasPago: r.pago.creadas,
       creadasRecurrente: r.recurrente.creadas, creadasDormido: r.dormido.creadas,
+      creadasFiscal: r.fiscal.creadas,
       sinEmail: r.impago.sinEmail,
     };
   } finally {
@@ -96,12 +106,13 @@ function processTenant(path) {
   }
 }
 
-let totalImpago = 0, totalPago = 0, totalRecurrente = 0, totalDormido = 0, totalSinEmail = 0, fallos = 0;
+let totalImpago = 0, totalPago = 0, totalRecurrente = 0, totalDormido = 0, totalFiscal = 0, totalSinEmail = 0, fallos = 0;
 for (const path of tenantDbs()) {
   try {
     const r = processTenant(path);
     totalImpago += r.creadasImpago; totalPago += r.creadasPago;
-    totalRecurrente += r.creadasRecurrente; totalDormido += r.creadasDormido; totalSinEmail += r.sinEmail;
+    totalRecurrente += r.creadasRecurrente; totalDormido += r.creadasDormido;
+    totalFiscal += r.creadasFiscal; totalSinEmail += r.sinEmail;
   } catch (e) {
     fallos++;
     log(basename(path) + ': EXCEPCIÓN: ' + e.message);
@@ -110,4 +121,5 @@ for (const path of tenantDbs()) {
 log('Resumen ' + TODAY + ': recordatorios de impago nuevos=' + totalImpago + ', propuestas de pago nuevas=' + totalPago
   + ', facturas recurrentes por emitir=' + totalRecurrente
   + ', clientes dormidos=' + totalDormido
+  + ', vencimientos fiscales=' + totalFiscal
   + ', facturas sin email del cliente=' + totalSinEmail + ', fallos=' + fallos + (DRY ? ' (dry-run)' : ''));

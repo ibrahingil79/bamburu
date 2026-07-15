@@ -43,6 +43,7 @@ const GRUPOS = {
     'verify-propuestas-d5', 'verify-propuestas-pagos', 'gate-propuestas-pagos-permisos',
     'verify-propuestas-recurrentes', 'gate-propuestas-recurrentes',
     'verify-propuestas-dormidos', 'gate-propuestas-dormidos',
+    'verify-propuestas-fiscales',
     'verify-disa-query-permisos', 'verify-disa-sin-pedidos', 'verify-actividad-etiquetas',
     'gate-nav-inicio-disa', 'gate-disa-dictar-compra', 'gate-disa-adjuntar',
   ],

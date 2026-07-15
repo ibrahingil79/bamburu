@@ -1643,6 +1643,47 @@ export function runMigrations(db) {
              ON disa_proposals(client_id, type)
            WHERE type='cliente_dormido' AND status='pendiente'`);
 
+  // PROPUESTA DE VENCIMIENTO FISCAL — el recordatorio de que TOCA presentar un modelo (303, 130,
+  // 111, 115, resúmenes anuales) SOLO de los que ESTE tenant declara en su ficha fiscal (ver
+  // fiscal_profile, abajo). Quinto espacio de ancla: aquí no hay documento (factura/ocurrencia) ni
+  // cliente, hay un (MODELO, AÑO, PERIODO). Por eso no se reutiliza ninguna columna existente —se
+  // añaden tres propias, aditivo y sin DROP. Si se sobrecargara invoice_id/client_id, los LEFT JOIN
+  // de propuestasPendientes atarían la propuesta a una factura o cliente ajenos.
+  addCol(db, 'disa_proposals', 'fiscal_model', 'TEXT');     // '303' | '130' | '111' | '115' | '390' | '190' | '180'
+  addCol(db, 'disa_proposals', 'fiscal_year', 'INTEGER');   // ejercicio al que se refiere la declaración
+  addCol(db, 'disa_proposals', 'fiscal_period', 'TEXT');    // '1T'..'4T' (trimestral) | 'anual'
+  // Misma idempotencia ESTRICTA que impago/pago/recurrente: una sola propuesta por (modelo, año,
+  // periodo) para SIEMPRE, sea cual sea su estado → una descartada/preparada NO se vuelve a proponer,
+  // y el siguiente periodo es otra clave (otra propuesta), como debe ser: el vencimiento se repite.
+  // Convive con los otros índices únicos: en SQLite los NULL de un índice único son todos distintos
+  // entre sí, así que las filas de los demás tipos (fiscal_model NULL) no compiten aquí.
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_disa_proposals_fiscal
+             ON disa_proposals(fiscal_model, fiscal_year, fiscal_period, type)`);
+
+  // FICHA FISCAL DEL TENANT — la FUENTE DE VERDAD de qué modelos presenta este negocio. Sin ella, el
+  // motor tendría que ASUMIR que todos presentan lo mismo (303+130), y un recordatorio fiscal que se
+  // calla un modelo que sí debes presentar (p. ej. el 111 de un negocio con un empleado) es peor que
+  // no tener recordatorio: da falsa tranquilidad y puede costar una multa. Por eso cada negocio
+  // DECLARA su situación (en lenguaje llano, en Ajustes) y de aquí se derivan sus modelos.
+  //
+  // Singleton por tenant (id=1), igual que company_config. Booleans de obligación en 0 por defecto:
+  // un negocio que NO ha declarado nada NO recibe ninguna propuesta fiscal (no se asume nada). La
+  // inferencia desde la actividad real solo PRE-RELLENA el formulario; lo que manda es lo declarado.
+  // Aditiva e idempotente. FUERA de WRITABLE_TABLES: DISA no se escribe a sí misma qué presenta el dueño.
+  db.exec(`CREATE TABLE IF NOT EXISTS fiscal_profile (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    presenta_iva INTEGER NOT NULL DEFAULT 0,                -- factura con IVA → 303 (trimestral) + 390 (anual)
+    presenta_irpf_directa INTEGER NOT NULL DEFAULT 0,       -- estimación directa → 130 (trimestral)
+    tiene_retenciones_trabajo INTEGER NOT NULL DEFAULT 0,   -- empleados/profesionales retenidos → 111 + 190 (anual)
+    tiene_retenciones_alquiler INTEGER NOT NULL DEFAULT 0,  -- alquiler de local con retención → 115 + 180 (anual)
+    situacion_especial INTEGER NOT NULL DEFAULT 0,          -- módulos, recargo de equivalencia, otro régimen: NO se deriva, se avisa
+    no_cubierto TEXT DEFAULT '',                            -- nota del caso ambiguo que el motor no asume
+    configured_at TEXT,                                     -- NULL = nunca declarado (distingue "sin declarar" de "declaró que no")
+    updated_at TEXT,
+    updated_by TEXT DEFAULT ''
+  )`);
+  db.exec(`INSERT OR IGNORE INTO fiscal_profile (id) VALUES (1)`);
+
   // PLANTILLAS DE EMAIL EDITADAS. Aquí SOLO viven las ediciones del dueño: la plantilla de FÁBRICA de
   // cada tipo vive en el código (email-templates.js) y NO se puede perder. Por eso "Volver al original"
   // es, literalmente, borrar la fila — no hay copia de fábrica que restaurar desde ningún sitio, porque

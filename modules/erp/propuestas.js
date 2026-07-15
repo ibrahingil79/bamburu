@@ -16,12 +16,17 @@ import { openPayables } from './pagos.js';
 import { borradoresPendientes, importeEstimado } from './recurrentes.js';
 import { clientesDormidos } from './ventas-metrics.js';
 import { opportunityEmail } from './crm.js';
+import { modelo303, modelo130 } from './contabilidad-modelos.js';
+import { backfillLedger } from './contabilidad.js';
+import { MODELOS, modelosDeclarados, vencimientosProximos, vencimientoNominal,
+         etiquetaVencimiento, trimestreDe, NOTA_AEAT, NOTA_DOMICILIACION } from './calendario-fiscal.js';
 
 export const TIPO_IMPAGO = 'recordatorio_impago';
 export const TIPO_PAGO = 'pago_por_vencer';
 export const TIPO_RECURRENTE = 'emitir_recurrente';
 export const TIPO_DORMIDO = 'cliente_dormido';
-export const TIPOS = [TIPO_IMPAGO, TIPO_PAGO, TIPO_RECURRENTE, TIPO_DORMIDO];
+export const TIPO_FISCAL = 'vencimiento_fiscal';
+export const TIPOS = [TIPO_IMPAGO, TIPO_PAGO, TIPO_RECURRENTE, TIPO_DORMIDO, TIPO_FISCAL];
 
 // Días que un cliente descansa antes de que se te vuelva a proponer, DESDE QUE RESOLVISTE la anterior.
 //
@@ -308,6 +313,57 @@ export function redactarReenganche(db, proposalId, opts = {}) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// VENCIMIENTO FISCAL — el modelo (303, 130, 111, 115, resúmenes anuales) que TOCA presentar pronto.
+//
+// La cara nueva de DISA que mira el CALENDARIO en vez de las facturas. A diferencia de sus hermanas,
+// no cuelga de un documento del negocio: cuelga de la FICHA FISCAL del tenant (fiscal_profile), que
+// dice QUÉ presenta este negocio, y del calendario (calendario-fiscal.js), que dice CUÁNDO.
+//
+// LA REGLA QUE MANDA: solo se propone lo que el tenant DECLARA. Nunca se asume 303+130 para todos —un
+// negocio con un empleado presenta un 111 que otro no, y callárselo sería peor que no avisar. Si la
+// ficha no declara un modelo, ese modelo no se propone, ni aunque haya actividad que lo alimentaría.
+//
+// APROBAR (en las rutas) = deja el modelo PREPARADO para que el dueño lo revise y lo presente él.
+// NUNCA presenta a la AEAT. Para 303/130 hay borrador con importe (motor de contabilidad, Pieza 4);
+// para 111/115/anuales se avisa de la fecha y NO se inventa importe (su cálculo llega más adelante).
+// ════════════════════════════════════════════════════════════════════════════
+
+// Genera las propuestas de vencimiento fiscal que falten, una por (modelo, año, periodo) que este
+// tenant declara y cuyo fin de plazo entra en la ventana de disparo (~10 días antes; ver
+// calendario-fiscal.js). Idempotente por el índice único (fiscal_model, fiscal_year, fiscal_period,
+// type): un periodo nunca tiene dos propuestas, y una descartada/preparada no se re-propone; el
+// periodo siguiente es otra clave. Si el tenant no declara nada, no se genera nada (no se asume).
+// Devuelve { creadas, yaTenian, candidatas, sinPerfil }.
+export function generarPropuestasFiscales(db, opts = {}) {
+  const today = opts.today || new Date().toISOString().slice(0, 10);
+  const profile = db.prepare('SELECT * FROM fiscal_profile WHERE id=1').get() || null;
+  const modelos = modelosDeclarados(profile);
+  // Sin ninguna obligación declarada → nada que proponer. `sinPerfil` distingue "nunca lo declaró" de
+  // "declaró que no presenta nada", solo para el log del cron: en ambos casos no se crea nada.
+  if (!modelos.length) return { creadas: 0, yaTenian: 0, candidatas: 0, sinPerfil: !profile?.configured_at };
+
+  const candidatas = vencimientosProximos(profile, today, opts);
+  const ins = db.prepare(
+    `INSERT OR IGNORE INTO disa_proposals (type, fiscal_model, fiscal_year, fiscal_period, status, subject, body, created_at)
+     VALUES (?, ?, ?, ?, 'pendiente', ?, '', ?)`
+  );
+  const now = opts.now || new Date().toISOString();
+
+  let creadas = 0, yaTenian = 0;
+  for (const v of candidatas) {
+    const existe = db.prepare('SELECT 1 FROM disa_proposals WHERE fiscal_model=? AND fiscal_year=? AND fiscal_period=? AND type=?')
+      .get(v.model, v.year, v.period, TIPO_FISCAL);
+    if (existe) { yaTenian++; continue; }
+    // `subject` es la etiqueta legible del registro. La fecha y el importe se RECALCULAN en vivo en el
+    // panel (la fecha real puede correrse; el importe cambia con cada asiento nuevo): nunca de esta copia.
+    const etiqueta = etiquetaVencimiento(v.model, v.year, v.period);
+    const info = ins.run(TIPO_FISCAL, v.model, v.year, v.period, etiqueta, now);
+    if (info.changes) creadas++; else yaTenian++;   // el índice único cerró una carrera → cuenta como ya-tenía
+  }
+  return { creadas, yaTenian, candidatas: candidatas.length, sinPerfil: false };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 
 // Propuestas PENDIENTES, con los datos que pinta el panel. `tipos` acota QUÉ tipos se devuelven: el
 // panel pasa solo los que el usuario tiene permiso de ver (un tipo es una pantalla distinta y un
@@ -442,6 +498,56 @@ export function propuestasPendientes(db, today, tipos = TIPOS) {
       });
     }
   }
+
+  if (quiere.has(TIPO_FISCAL)) {
+    const props = db.prepare(
+      `SELECT * FROM disa_proposals
+        WHERE status='pendiente' AND type=?
+        ORDER BY created_at DESC, id DESC`
+    ).all(TIPO_FISCAL);
+    if (props.length) {
+      // El perfil ACTUAL manda: si el dueño dejó de declarar un modelo (desmarcó IVA), su propuesta
+      // pendiente deja de estar "viva" y el panel lo avisa, en vez de empujar a presentar algo que ya
+      // no le toca. El estado de sueño de sus hermanas tiene el mismo espíritu: se recalcula en vivo.
+      const profile = db.prepare('SELECT * FROM fiscal_profile WHERE id=1').get();
+      const declarados = new Set(modelosDeclarados(profile));
+      // El importe de 303/130 sale del MISMO motor que la pantalla de modelos, que necesita el libro
+      // al día. Solo se backfillea si hay algún modelo con importe pendiente (111/115/anuales no lo usan).
+      const necesitaImporte = props.some(p => MODELOS[p.fiscal_model] && MODELOS[p.fiscal_model].tieneImporte);
+      if (necesitaImporte) { try { backfillLedger(db); } catch { /* el importe caerá a null, se avisa */ } }
+      for (const p of props) {
+        const model = p.fiscal_model, year = p.fiscal_year, period = p.fiscal_period;
+        const info = MODELOS[model] || {};
+        const deadline = vencimientoNominal(model, year, period);   // recalculada en vivo (la real puede correrse)
+        const q = trimestreDe(period);
+        let importe = null;
+        if (info.tieneImporte) {
+          // 303 → resultado de la liquidación (casilla 71); 130 → resultado a ingresar (casilla 19).
+          // ESTIMACIÓN: el panel la marca como tal. 111/115/anuales NO entran aquí: nunca se inventa cifra.
+          try {
+            if (model === '303') importe = modelo303(db, year, q).casilla71;
+            else if (model === '130') importe = modelo130(db, year, q).c19;
+          } catch { importe = null; }
+        }
+        out.push({
+          id: p.id, type: p.type,
+          fiscal_model: model, fiscal_year: year, fiscal_period: period,
+          model_nombre: info.nombre || ('Modelo ' + model),
+          etiqueta: etiquetaVencimiento(model, year, period),
+          q,   // trimestre (1..4) o null (anual): el panel lo usa para enlazar al borrador del modelo
+          subject: p.subject, created_at: p.created_at,
+          deadline,
+          dias_para_fin: deadline ? diasEntre(deadline, t) : null,
+          tiene_importe: !!info.tieneImporte,
+          importe,   // null para 111/115/anuales: se avisa de la fecha, no se inventa importe
+          es_anual: info.periodicidad === 'anual',
+          nota_aeat: NOTA_AEAT,
+          nota_domiciliacion: NOTA_DOMICILIACION,
+          viva: declarados.has(model),   // false = el dueño ya no declara este modelo → el panel avisa
+        });
+      }
+    }
+  }
   return out;
 }
 
@@ -463,6 +569,10 @@ export function tiposVisiblesPara(c, can) {
   if (can(c, 'purchases.read')) t.push(TIPO_PAGO);
   if (can(c, 'recurrentes.read') && can(c, 'invoices.create')) t.push(TIPO_RECURRENTE);
   if (can(c, 'clients.read') && can(c, 'crm.manage')) t.push(TIPO_DORMIDO);
+  // El vencimiento fiscal exige lo mismo que SU pantalla de origen, la de modelos AEAT
+  // (/admin/contabilidad/modelos, requirePerm('invoices.read')): quien no puede ver los modelos no ve
+  // sus vencimientos, ni en la lista, ni en el badge, ni se le generan. Falla cerrado.
+  if (can(c, 'invoices.read')) t.push(TIPO_FISCAL);
   return t;
 }
 

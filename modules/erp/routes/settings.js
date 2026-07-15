@@ -39,6 +39,36 @@ export function createSettingsRoutes(db, cfg = {}) {
     } catch(e) { return c.json({error:e.message},500); }
   });
 
+  // ── API: SITUACIÓN FISCAL (fiscal_profile) ─────────────────────
+  // QUÉ modelos presenta este negocio: la FUENTE DE VERDAD de la que DISA deriva los vencimientos
+  // fiscales (calendario-fiscal.js → modelosDeclarados). Mismo candado que el resto de Ajustes:
+  // `company.read` para mirar, `company.update` para declarar. Fuera de WRITABLE_TABLES a propósito:
+  // solo el dueño declara su situación; DISA nunca se la escribe a sí misma.
+  api.get('/fiscal-profile', requirePerm('company.read'), c => {
+    try { return c.json(db.prepare('SELECT * FROM fiscal_profile WHERE id=1').get() || {}); }
+    catch(e) { return c.json({error:e.message},500); }
+  });
+
+  api.put('/fiscal-profile', requirePerm('company.update'), async c => {
+    try {
+      const d = await c.req.json();
+      const b = v => (v === true || v === 1 || v === '1' || v === 'on') ? 1 : 0;
+      const quien = c.get('session')?.userName || c.get('session')?.userId || '';
+      const now = new Date().toISOString();
+      // configured_at se SELLA la primera vez (COALESCE): a partir de ahí deja de ser NULL. Es lo que
+      // distingue "nunca declaró" (no se le propone nada, ni con actividad) de "declaró que no presenta".
+      db.prepare(`UPDATE fiscal_profile SET
+          presenta_iva=?, presenta_irpf_directa=?, tiene_retenciones_trabajo=?, tiene_retenciones_alquiler=?,
+          situacion_especial=?, no_cubierto=?,
+          configured_at=COALESCE(configured_at, ?), updated_at=?, updated_by=?
+        WHERE id=1`)
+        .run(b(d.presenta_iva), b(d.presenta_irpf_directa), b(d.tiene_retenciones_trabajo),
+             b(d.tiene_retenciones_alquiler), b(d.situacion_especial),
+             String(d.no_cubierto || '').slice(0, 2000), now, now, String(quien));
+      return c.json({ message: 'Guardado' });
+    } catch(e) { return c.json({error:e.message},500); }
+  });
+
   // ── API: STORE — D2: editor "Tienda Online" DESMONTADO. Endpoints neutralizados (404).
   // store_settings SE CONSERVA (NO se archiva): el diseño se guarda por si la tienda vuelve (Capa 2).
   // El cuerpo original queda inalcanzable debajo (return temprano), no se borra.
@@ -223,6 +253,13 @@ export function createSettingsRoutes(db, cfg = {}) {
           <h3 style="margin:0 0 .3rem;font-size:1rem">Plantillas de email</h3>
           <p style="color:var(--text2);font-size:13px;margin:0 0 .8rem">Todos los correos que tu negocio envía —recordatorios de pago, presupuestos, reenganche, recuperar contraseña…— con tu voz. Los datos (nombre, factura, importe) los rellena Bamburu solo.</p>
           <a class="btn btn-secondary" href="/admin/settings/plantillas"><i class="ti ti-mail"></i> Editar plantillas de email</a>
+        </div>
+      </div>
+      <div class="card" style="max-width:700px;margin-top:1rem">
+        <div class="card-body">
+          <h3 style="margin:0 0 .3rem;font-size:1rem">Situación fiscal</h3>
+          <p style="color:var(--text2);font-size:13px;margin:0 0 .8rem">Dinos qué presentas a Hacienda (IVA, IRPF, retenciones…) y DISA te recordará cada modelo antes de que venza. Nunca presenta nada por ti: te lo deja preparado para que lo revises.</p>
+          <a class="btn btn-secondary" href="/admin/settings/situacion-fiscal"><i class="ti ti-calendar"></i> Declarar mi situación fiscal</a>
         </div>
       </div>
 
@@ -449,6 +486,99 @@ export function createSettingsRoutes(db, cfg = {}) {
       cargar();
       </script>`;
     return c.html(adminLayout('Plantillas de email', content, 'settings', csrf, c));
+  });
+
+  // ── PANTALLA: Situación fiscal ─────────────────────────────────────────────
+  // El dueño DECLARA en lenguaje llano qué presenta (sin ver números de modelo si no quiere). De aquí
+  // deriva DISA los vencimientos fiscales (calendario-fiscal.js). En blanco = no se recuerda nada: por
+  // eso el aviso mientras `configured_at` sea NULL. El caso ambiguo (módulos, recargo de equivalencia,
+  // otro régimen) NO se deriva: se marca "situación especial" y se anota, para no INVENTAR un modelo.
+  views.get('/situacion-fiscal', requirePerm('company.read'), c => {
+    const csrf = c.get('session')?.csrfToken || '';
+    const puedeEditar = can(c, 'company.update');
+    const dis = puedeEditar ? '' : 'disabled';
+    const content = `
+      <div class="ph"><h2>Situación fiscal</h2></div>
+      <div class="card" style="max-width:720px">
+        <div class="card-body">
+          <p style="color:var(--text2);font-size:13px;margin:0 0 1rem">
+            Dime qué presentas a Hacienda y DISA te recordará cada modelo <strong>antes</strong> de que
+            venza —en «Propuestas de DISA»—, con la fecha aproximada del plazo. <strong>Bamburu nunca
+            presenta nada a la AEAT:</strong> te lo deja preparado para que lo revises y lo presentes tú.
+          </p>
+          <div id="fpWarn"></div>
+
+          <label class="fp-check"><input type="checkbox" id="fIva" ${dis}>
+            <span><strong>Facturo con IVA</strong><small>Te recordaré el <b>IVA trimestral</b> (modelo 303) y su <b>resumen anual</b> (390).</small></span></label>
+
+          <label class="fp-check"><input type="checkbox" id="fIrpf" ${dis}>
+            <span><strong>Tributo el IRPF en estimación directa</strong><small>Te recordaré el <b>pago fraccionado de IRPF trimestral</b> (modelo 130).</small></span></label>
+
+          <label class="fp-check"><input type="checkbox" id="fRetTrab" ${dis}>
+            <span><strong>Tengo empleados o pago a profesionales con retención</strong><small>Te recordaré las <b>retenciones de trabajo</b> (modelo 111 trimestral) y su <b>resumen anual</b> (190). Aún no calculo su importe: te aviso de la fecha.</small></span></label>
+
+          <label class="fp-check"><input type="checkbox" id="fRetAlq" ${dis}>
+            <span><strong>Pago el alquiler de un local con retención</strong><small>Te recordaré las <b>retenciones de alquiler</b> (modelo 115 trimestral) y su <b>resumen anual</b> (180). Aún no calculo su importe: te aviso de la fecha.</small></span></label>
+
+          <label class="fp-check"><input type="checkbox" id="fEsp" ${dis}>
+            <span><strong>Estoy en un régimen especial</strong> (módulos, recargo de equivalencia, otro)<small>No lo doy por supuesto ni invento un modelo: apúntalo abajo y lo tendré en cuenta cuando construyamos tu caso.</small></span></label>
+
+          <div class="form-group" id="fEspBox" style="display:none;margin-top:.4rem">
+            <label class="form-label">¿Cuál es tu caso?</label>
+            <textarea class="form-control" id="fNota" rows="3" ${dis} placeholder="Ej.: estoy en módulos; recargo de equivalencia; etc."></textarea>
+          </div>
+
+          <div class="fp-summary" id="fpResumen"></div>
+
+          ${puedeEditar
+            ? `<button class="btn btn-primary" onclick="guardar()" style="margin-top:1rem">Guardar</button>`
+            : `<p style="color:var(--text2);font-size:13px;margin-top:1rem">No tienes permiso para cambiar la situación fiscal (requiere «Configuración de empresa»). Puedes verla.</p>`}
+        </div>
+      </div>
+      <style>
+        .fp-check{display:flex;gap:.6rem;align-items:flex-start;padding:.7rem;border:1px solid var(--border);border-radius:8px;margin-bottom:.6rem;cursor:pointer}
+        .fp-check input{margin-top:.25rem;flex:0 0 auto}
+        .fp-check span{display:flex;flex-direction:column;gap:.15rem}
+        .fp-check small{color:var(--text2);font-size:12px;line-height:1.35}
+        .fp-summary{margin-top:1rem;padding:.7rem .9rem;border-radius:8px;background:var(--bg3);font-size:13px;color:var(--text2);line-height:1.4}
+      </style>
+      <script>
+      const $fp = id => document.getElementById(id);
+      function pintarResumen(){
+        const m = [];
+        if ($fp('fIva').checked) m.push('IVA (303) y su resumen anual (390)');
+        if ($fp('fIrpf').checked) m.push('IRPF, pago fraccionado (130)');
+        if ($fp('fRetTrab').checked) m.push('retenciones de trabajo (111) y su resumen anual (190)');
+        if ($fp('fRetAlq').checked) m.push('retenciones de alquiler (115) y su resumen anual (180)');
+        $fp('fEspBox').style.display = $fp('fEsp').checked ? '' : 'none';
+        // Solo ILUSTRATIVO: lo que DISA propone de verdad lo decide el servidor (calendario-fiscal.js).
+        $fp('fpResumen').innerHTML = m.length
+          ? '<strong>Con esto, te recordaré:</strong> ' + m.join(' · ') + '.'
+          : 'Ahora mismo no me has dicho que presentes nada, así que <strong>no te recordaré ningún modelo</strong>. Marca lo que te toque.';
+      }
+      ['fIva','fIrpf','fRetTrab','fRetAlq','fEsp'].forEach(id => $fp(id).addEventListener('change', pintarResumen));
+      api('GET','/api/erp/settings/fiscal-profile').then(d=>{
+        $fp('fIva').checked = !!d.presenta_iva;
+        $fp('fIrpf').checked = !!d.presenta_irpf_directa;
+        $fp('fRetTrab').checked = !!d.tiene_retenciones_trabajo;
+        $fp('fRetAlq').checked = !!d.tiene_retenciones_alquiler;
+        $fp('fEsp').checked = !!d.situacion_especial;
+        $fp('fNota').value = d.no_cubierto || '';
+        if (!d.configured_at) $fp('fpWarn').innerHTML = '<div class="card" style="border-color:#f59e0b;margin-bottom:1rem"><div class="card-body" style="color:#b45309;font-size:13px">Aún no has declarado tu situación fiscal, así que <strong>DISA no te está recordando ningún vencimiento</strong>. Marca lo que presentas y guarda.</div></div>';
+        pintarResumen();
+      });
+      async function guardar(){
+        try{
+          await api('PUT','/api/erp/settings/fiscal-profile',{
+            presenta_iva:$fp('fIva').checked, presenta_irpf_directa:$fp('fIrpf').checked,
+            tiene_retenciones_trabajo:$fp('fRetTrab').checked, tiene_retenciones_alquiler:$fp('fRetAlq').checked,
+            situacion_especial:$fp('fEsp').checked, no_cubierto:$fp('fNota').value
+          });
+          toast('Guardado ✓'); $fp('fpWarn').innerHTML='';
+        }catch(e){ toast(e.message||'Error','err'); }
+      }
+      </script>`;
+    return c.html(adminLayout('Situación fiscal', content, 'settings', csrf, c));
   });
 
   storeViews.get('/', requirePerm('store_settings.read'), c => {

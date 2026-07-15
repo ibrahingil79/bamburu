@@ -4,9 +4,11 @@ import { hoyLocal } from '../avisos.js';
 import {
   propuestasPendientes, contarPropuestasPendientes,
   generarPropuestasImpago, generarPropuestasPago, generarPropuestasRecurrentes, generarPropuestasDormidos,
+  generarPropuestasFiscales,
   redactarReenganche, tiposVisiblesPara,
-  TIPO_IMPAGO, TIPO_PAGO, TIPO_RECURRENTE, TIPO_DORMIDO,
+  TIPO_IMPAGO, TIPO_PAGO, TIPO_RECURRENTE, TIPO_DORMIDO, TIPO_FISCAL,
 } from '../propuestas.js';
+import { trimestreDe } from '../calendario-fiscal.js';
 import { emitirOcurrencia } from '../recurrentes.js';
 import { registerClientActivitySvc } from '../crm.js';
 import { registerCollectionAction } from '../cobros.js';
@@ -69,6 +71,9 @@ export function createPropuestasRoutes(db) {
   // Escribirle a un cliente exige crm.manage (lo pide la ruta del CRM que manda el email); ver su
   // ficha, clients.read. Se piden las DOS: quien no puede escribirle, no ve la propuesta.
   const puedeVerDormido = c => can(c, 'clients.read') && can(c, 'crm.manage');
+  // El vencimiento fiscal exige lo mismo que la pantalla de modelos AEAT (invoices.read): quien no
+  // puede ver los modelos no ve sus vencimientos ni los prepara.
+  const puedeVerFiscal = c => can(c, 'invoices.read');
   // Los tipos que ESTE usuario puede ver. La regla NO se escribe aquí: vive en `tiposVisiblesPara`
   // (propuestas.js), que es también la que lee el badge del riel. Tenerla duplicada fue justo lo que
   // hizo que el panel enseñara 22 propuestas y el badge dijera 21.
@@ -79,6 +84,7 @@ export function createPropuestasRoutes(db) {
     tipo === TIPO_PAGO ? puedeVerPago(c)
     : tipo === TIPO_RECURRENTE ? puedeVerRecurrente(c)
     : tipo === TIPO_DORMIDO ? puedeVerDormido(c)
+    : tipo === TIPO_FISCAL ? puedeVerFiscal(c)
     : puedeVerImpago(c));
 
   // GET /api/erp/propuestas — las pendientes, con importes y días recalculados en vivo. SOLO de los
@@ -243,6 +249,38 @@ export function createPropuestasRoutes(db) {
     } catch (e) { return c.json({ error: e.message }, e.status || 500); }
   });
 
+  // POST /api/erp/propuestas/:id/preparar — APROBAR un vencimiento fiscal = dejar el modelo PREPARADO
+  // para que el dueño lo revise y lo presente ÉL. NUNCA presenta a la AEAT: solo marca el recordatorio
+  // como atendido y, para 303/130, devuelve el enlace al borrador que YA vive en la pantalla de modelos
+  // (/admin/contabilidad/modelos). Aquí no nace ningún camino de presentación: Bamburu no envía nada a
+  // Hacienda por sí solo, ni existe integración para hacerlo. Para 111/115/anuales no hay importe aún:
+  // se anota y se avisa de que su cálculo llega más adelante.
+  //
+  // Exige `invoices.read`, lo mismo que la pantalla de modelos: quien no puede ver el borrador tampoco
+  // resuelve su recordatorio. Bloquea el doble uso: solo desde 'pendiente'.
+  api.post('/:id/preparar', c => {
+    if (!puedeVerFiscal(c)) return c.json({ error: 'No tienes permiso para preparar modelos fiscales.' }, 403);
+    try {
+      const id = parseInt(c.req.param('id'));
+      const p = db.prepare('SELECT * FROM disa_proposals WHERE id=?').get(id);
+      if (!p) return c.json({ error: 'Propuesta no encontrada' }, 404);
+      if (p.type !== TIPO_FISCAL) return c.json({ error: 'Esta propuesta no es un vencimiento fiscal.' }, 400);
+      if (p.status !== 'pendiente') return c.json({ error: 'Esta propuesta ya se resolvió (' + p.status + ').' }, 409);
+
+      const quien = c.get('session')?.userName || c.get('session')?.userId || '';
+      db.prepare("UPDATE disa_proposals SET status='preparada', resolved_at=?, resolved_by=? WHERE id=?")
+        .run(new Date().toISOString(), String(quien), id);
+
+      const q = trimestreDe(p.fiscal_period);
+      const verModelos = (p.fiscal_model === '303' || p.fiscal_model === '130') && q
+        ? `/admin/contabilidad/modelos?year=${p.fiscal_year}&q=${q}` : null;
+      return c.json({ ok: true, ver_modelos: verModelos,
+        message: verModelos
+          ? 'Modelo preparado. Revísalo y preséntalo tú desde Contabilidad › Impuestos — Bamburu no presenta nada a la AEAT.'
+          : 'Anotado. Su importe se calculará más adelante; preséntalo tú en la AEAT cuando toque.' });
+    } catch (e) { return c.json({ error: e.message }, 500); }
+  });
+
   // POST /api/erp/propuestas/:id/descartar — marca 'descartada'. Por el índice único (factura,tipo)
   // NO se vuelve a proponer esa factura. No envía ni paga nada. Exige el permiso de VER de SU tipo:
   // descartar una propuesta de pago necesita permiso de compras, no de cobros.
@@ -272,6 +310,7 @@ export function createPropuestasRoutes(db) {
       if (tipos.includes(TIPO_PAGO)) out.pago = generarPropuestasPago(db, { today: today() });
       if (tipos.includes(TIPO_RECURRENTE)) out.recurrente = generarPropuestasRecurrentes(db, { today: today() });
       if (tipos.includes(TIPO_DORMIDO)) out.dormido = generarPropuestasDormidos(db, { today: today() });
+      if (tipos.includes(TIPO_FISCAL)) out.fiscal = generarPropuestasFiscales(db, { today: today() });
       return c.json(out);
     } catch (e) { return c.json({ error: e.message }, 500); }
   });
@@ -293,7 +332,8 @@ export function createPropuestasRoutes(db) {
       <div class="card" style="margin-bottom:1rem"><div class="card-body" style="color:var(--muted)">
         DISA prepara el trabajo y te lo deja listo: recordatorios de cobro para tus facturas vencidas,
         los pagos a proveedor que están a punto de vencer, las facturas recurrentes (igualas y cuotas)
-        que tocan y aún no has emitido, y los clientes que te compraban y han dejado de hacerlo.
+        que tocan y aún no has emitido, los clientes que te compraban y han dejado de hacerlo, y los
+        <strong>vencimientos fiscales</strong> de los modelos que presentas (IVA, IRPF…) antes de que se te echen encima.
         <strong>Nada se ejecuta solo:</strong> revísalo, edítalo si quieres, y apruébalo — o descártalo.
       </div></div>
       <div id="propList">${skeletonRows ? '' : ''}<p style="color:var(--muted)">Cargando…</p></div>
@@ -313,6 +353,7 @@ export function createPropuestasRoutes(db) {
         .prop-tag.t-pago{background:rgba(245,158,11,.14);color:#b45309}
         .prop-tag.t-recurrente{background:rgba(16,185,129,.14);color:#047857}
         .prop-tag.t-dormido{background:rgba(139,92,246,.14);color:#6d28d9}
+        .prop-tag.t-fiscal{background:rgba(37,99,235,.12);color:#1d4ed8}
       </style>
       <script>
       ${pagoModalScript(sym)}
@@ -434,10 +475,49 @@ export function createPropuestasRoutes(db) {
           +'</div>';
       }
 
+      // ── Tarjeta de VENCIMIENTO FISCAL: el modelo (IVA, IRPF…) que toca presentar pronto, SOLO de los
+      //    que este negocio declara. Muestra qué es, el periodo, la fecha APROXIMADA de fin de plazo y,
+      //    para 303/130, el importe estimado (del motor de contabilidad); para el resto, aviso sin cifra.
+      //    Aprobar = "Marcar como preparado": deja el modelo listo para que lo revises y lo presentes TÚ.
+      //    NUNCA presenta a la AEAT. ──
+      function fiscalHtml(p){
+        const d = p.dias_para_fin;
+        const cuando = d == null ? 'sin fecha'
+          : d === 0 ? 'el plazo vence HOY'
+          : d > 0 ? 'faltan ' + d + ' día' + (d===1?'':'s')
+          : 'el plazo terminó hace ' + (-d) + ' día' + (d===-1?'':'s');
+        const importe = p.tiene_importe
+          ? (p.importe != null
+              ? '<div class="prop-meta">Importe estimado: <strong>'+SYM+Number(p.importe).toFixed(2)+'</strong> · <span style="color:var(--muted)">estimación, revísala antes de presentar</span></div>'
+              : '<div class="prop-meta">Importe estimado: <strong>—</strong> <span style="color:var(--muted)">(sin datos de contabilidad aún)</span></div>')
+          : '<div class="prop-meta">Aún no calculamos el importe de este modelo; te avisamos de la fecha.</div>';
+        const verLink = (p.q && (p.fiscal_model==='303'||p.fiscal_model==='130'))
+          ? ' · <a href="/admin/contabilidad/modelos?year='+p.fiscal_year+'&q='+p.q+'">ver el borrador en Impuestos</a>'
+          : '';
+        const noViva = p.viva ? ''
+          : '<p class="prop-warn">⚠ Ya no declaras este modelo en tu ficha fiscal. Descártala, o revisa tu situación en Ajustes › Situación fiscal.</p>';
+        const acciones = p.viva
+          ? '<button class="btn btn-primary btn-sm" onclick="preparar('+p.id+')">Marcar como preparado</button>'
+          : '';
+        return '<div class="prop-card" id="prop'+p.id+'">'
+          +'<div class="prop-head"><div><span class="prop-tag t-fiscal">Fiscal</span> <strong>'+escHtml(p.etiqueta||p.model_nombre||'Modelo')+'</strong></div>'
+          +'<div class="prop-meta">'+cuando+'</div></div>'
+          +'<div class="prop-meta">Fin de plazo aproximado: <strong>'+escHtml(p.deadline||'—')+'</strong>'+verLink+'</div>'
+          + importe
+          +'<div class="prop-meta" style="font-style:italic;margin-top:.3rem">'+escHtml(p.nota_aeat||'')+'</div>'
+          + (p.tiene_importe ? '<div class="prop-meta" style="font-style:italic">'+escHtml(p.nota_domiciliacion||'')+'</div>' : '')
+          + noViva
+          +'<div class="prop-meta" style="margin-top:.4rem;font-style:italic">Marcar como preparado NO presenta nada a la AEAT: preséntalo tú.</div>'
+          +'<div class="prop-actions">'+acciones
+          +' <button class="btn btn-secondary btn-sm" onclick="descartar('+p.id+')">Descartar</button></div>'
+          +'</div>';
+      }
+
       function propHtml(p){
         if (p.type==='pago_por_vencer') return pagoHtml(p);
         if (p.type==='emitir_recurrente') return recurrenteHtml(p);
         if (p.type==='cliente_dormido') return dormidoHtml(p);
+        if (p.type==='vencimiento_fiscal') return fiscalHtml(p);
         return impagoHtml(p);
       }
 
@@ -496,6 +576,18 @@ export function createPropuestasRoutes(db) {
       window.descartar = async function(id){
         try { const r=await api('POST','/api/erp/propuestas/'+id+'/descartar',{});
               toast(r.message||'Descartada'); loadProps(); }
+        catch(e){ toast(e.message||'Error','err'); }
+      };
+      // Marcar un vencimiento fiscal como PREPARADO. NO presenta nada a la AEAT: solo cierra el
+      // recordatorio y, para 303/130, ofrece saltar al borrador en Impuestos para que lo revises y lo
+      // presentes TU (la ruta devuelve ver_modelos solo en ese caso). Si falla, la propuesta sigue viva.
+      window.preparar = async function(id){
+        try { const r=await api('POST','/api/erp/propuestas/'+id+'/preparar',{});
+              toast(r.message||'Preparado');
+              if (r.ver_modelos && confirm('¿Ir a revisar el borrador en Contabilidad › Impuestos?')) {
+                location.href=r.ver_modelos; return;
+              }
+              loadProps(); }
         catch(e){ toast(e.message||'Error','err'); }
       };
       loadProps();
