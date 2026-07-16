@@ -10,6 +10,7 @@ import { recordMovement, isPhysical, productStockInWarehouse, reservedOfProduct 
 import { activeWarehouses } from './warehouses.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { ENTITY } from '../../../core/activity-entities.js';
+import { jsonForScript } from '../../../core/escape.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // TRASLADO ENTRE ALMACENES — Multi-almacén · Capa 3. Mueve mercancía de un almacén
@@ -345,7 +346,7 @@ export function createStockTransferRoutes(db) {
       </div>
       <script>
       const SYM = '${sym}';
-      const catalog = ${JSON.stringify(catalog)};
+      const catalog = ${jsonForScript(catalog)};
       const LINE_CELL = ${JSON.stringify(lineSearchCellHtml('<input type="hidden" class="line-pid">'))};
       let STOCKMAP = {};   // product_id -> qty disponible en el ORIGEN seleccionado
 

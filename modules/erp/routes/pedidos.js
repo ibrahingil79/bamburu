@@ -12,6 +12,7 @@ import { activeWarehouses } from './warehouses.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { orderDeliveryState } from './albaranes.js';   // PIEZA 2b: estado de entrega + atajo a factura
 import { ENTITY } from '../../../core/activity-entities.js';
+import { jsonForScript } from '../../../core/escape.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // PILAR 4 · VENTAS · PIEZA 2a — PEDIDO + RESERVA DE STOCK.
@@ -494,7 +495,7 @@ export function createPedidoRoutes(db) {
       const SYM='${sym}', SHOW_IRPF=${showIrpf}, IRPF_DEFAULT=${irpfDefault};
       const LINE_CELL=${JSON.stringify(lineSearchCellHtml('<input type="hidden" class="line-pid"><input type="hidden" class="line-pname">'))};
       const IS_EDIT=${isEdit}, EDIT_ID=${isEdit ? existing.id : 'null'};
-      const PRELOAD=${JSON.stringify(items.map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price, tax_rate: i.tax_rate, product_id: i.product_id || null })))};
+      const PRELOAD=${jsonForScript(items.map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price, tax_rate: i.tax_rate, product_id: i.product_id || null })))};
       let clients=[], catalog=[], recalcTimer=null;
       async function loadAll(){
         try {

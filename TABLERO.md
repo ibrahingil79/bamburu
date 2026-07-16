@@ -9,9 +9,9 @@
 >
 > **SIGUIENTE BLOQUE GRANDE: EJE C — SEGURIDAD.** Plan cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
-> victorias rápidas) y C4a (saneado del XSS + los 3 más graves del barrido) HECHOS**; siguiente
-> **C4a-bis** (los 58 puntos restantes, inventario ya hecho). C4 se partió en C4a / C4a-bis / C4b (la CSP,
-> refactor de todo el admin). Eje A (UX) y Eje B (DISA, seis
+> victorias rápidas), C4a (saneado del XSS + los 3 más graves) y C4a-bis (los 44 restantes) HECHOS** →
+> **M1 (XSS almacenado) CERRADO ENTERO**. Siguiente: **C4b** — quitar `'unsafe-inline'` de la CSP, que es
+> un refactor de todo el admin y NO cabe en una sesión. Eje A (UX) y Eje B (DISA, seis
 > propuestas de proactividad) completos; Pilar 3 (inventario) cerrado.
 >
 > **Inventario (Pilar 3) CERRADO (15 jul 2026):** multi-almacén (`da7871e`/`3af928f`), stock mínimo /
@@ -567,7 +567,7 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
   entera. Limpiado `auth.log`; clave **rotada** y verificada con una llamada real a DISA. La lección
   (nunca un secreto en `argv`) queda en `errores-conocidos.md`.
 
-## Eje C: Seguridad — plan cargado (auditoría del 15 jul)  ⬅️ C1-C3 + C4a HECHOS · SIGUIENTE C4a-bis
+## Eje C: Seguridad — plan cargado (auditoría del 15 jul)  ⬅️ C1-C3 + C4a + C4a-bis HECHOS · SIGUIENTE C4b
 
 > Origen: **auditoría de seguridad de SOLO LECTURA del 15 jul 2026** (`docs/seguridad/auditoria-ejeC.md`,
 > commit `24dbf2a`). Postura general **buena** (aislamiento entre negocios sólido y fail-closed, DISA no se
@@ -662,18 +662,47 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
     exigiría **mutar una factura ya emitida** —documento legal con huella Verifactu—, que el ritual prohíbe.
     Ese arreglo queda verificado por revisión + regresión, no por payload. Anotado a conciencia.
 
-- ⬜ **C4a-bis — [M1] Los 58 puntos restantes del barrido (inventario YA HECHO, no hay que volver a buscar).**
-  Reparto: **9 de Clase B** (`</script>` en JSON → `jsonForScript`): `albaranes.js:447` (`PEND`, lleva
-  `description`+`sku`) · `purchase-orders.js:608,609` · `stock-transfers.js:348` · `supplier-returns.js:396` ·
-  `quotes.js:594` · `pedidos.js:497` · `invoices.js:1584` · **~18 de Clase A servidor** (`purchases.js:375-416`
-  papel de compra; `store/routes.js:1380,1390` — Capa 2 congelada, rotura de ATRIBUTO con `"`) ·
-  **~20 de Clase A cliente** (`orders.js:361,369,621,623,632,649` · `shipping.js:75-79` · `analytics.js:147-149` ·
-  `products.js:756,849` etiquetas · `clients.js:531,546` · `albaranes.js:450` `l.sku` sin escapar) ·
-  **~10 escapes parciales** (`products.js:320`, `orders.js:513`, `layout.js:1209`, `disa/index.js:1537,1706`…).
-  Descartados con evidencia (dato controlado, no de usuario): CSRF, `SYM`, mapas de etiquetas fijas,
-  `USER_PERMS`, `VALID_TRANSITIONS`, bandas de IVA, `order_number` (autogenerado). **Deuda de fondo
-  detectada:** ~14 ficheros definen su propio `esc` local — es `core/escape.js` duplicado 14 veces; no es un
-  agujero, pero es lo que hace que estos fallos se repitan.
+- ✅ **C4a-bis — [M1] Cerrado el resto del XSS almacenado: 44 puntos (16 jul 2026).** Con esto, **M1 queda
+  cerrado entero**: no queda ni un sink de Clase B con datos de usuario, ni un escape parcial de los
+  inventariados. Misma solución central que C4a, sin mecanismos nuevos: `escHtml` (`core/escape.js` y su
+  espejo `window.escHtml`) para HTML, `jsonForScript` para todo lo que aterriza en un `<script>`.
+  - **ERA 44, NO 58 — y el error era mío, del TABLERO.** El "58" era el recuento del barrido **anterior** a
+    los 3 arreglos graves de C4a, y esos 3 se llevaron 15 puntos por delante (las 10 líneas de `invoices.js`,
+    las 2 de superadmin, las 2 de `WAREHOUSES` y el parcial de `inventory.js:21`). El inventario real, ya
+    verificado contra el código: **43 abiertos** + **1 hallado al verificar** (`orders.js:932`, `PRODUCTS` con
+    `JSON.stringify` crudo — Clase B, no estaba en la lista). Lección: un inventario con `~` y `…` no es una
+    lista cerrada; hay que fijarlo con `file:line` verificado o no sirve para acotar alcance.
+  - **Reparto de los 44:** 9 de Clase B (`albaranes.js` `linesJson` · `purchase-orders.js` `catalog`+`SEED` ·
+    `stock-transfers.js` `catalog` · `supplier-returns.js` `ORIGINS` · `quotes.js`/`pedidos.js` `PRELOAD` ·
+    `invoices.js` `SEED_LINES` · `orders.js` `PRODUCTS`) · 8 de Clase A servidor (papel de compra ×6 +
+    `store/routes.js` ×2) · 18 de Clase A cliente · 9 escapes parciales completados.
+  - **12 de los 44 están en CÓDIGO MUERTO, y hay que saberlo:** `/admin/orders` y `/admin/shipping` dan
+    **404** — sus `admin.route(...)` están comentados (`routes/index.js:108,112`) y `shipping_methods` está
+    archivada; es el clúster de e-commerce que desmontó D1. Son `orders.js` (9 puntos) y `shipping.js` (3).
+    Se arreglan igual —red por si se remontan— pero **no eran vulnerabilidades vivas** y **no se pueden
+    verificar en navegador**: la pantalla no existe.
+  - **`store/routes.js` (2, Capa 2 congelada) — tocado CON permiso expreso del dueño.** Es el único XSS del
+    inventario que alcanza a un CLIENTE FINAL, no al panel: `<img src="${p.image_url}">` rompía el atributo,
+    y en `:1380` además `onclick="setMainImg(${JSON.stringify(img)},this)"` metía comillas dobles dentro de
+    un `onclick="..."`. Se usa `escHtml` y NO `safeUrl` a propósito: la CSP permite `data:` y `blob:` en
+    `img-src`, y `safeUrl` los rechazaría — rompería imágenes que hoy funcionan.
+  - **Verificado:** `verify-xss-escape` **49/0** · `gate-xss-escape` **29/0** (navegador). **Ambos DEMUESTRAN
+    el fallo** contra el código previo (`git stash` de solo `modules/`, para no revertir los propios gates):
+    **9 rojos** en el guardián estático y **6 rojos** en navegador, con `ReferenceError: catalog is not
+    defined` — el `</script>` mataba el script entero. Barrido `run-gates --all` **45/48**: los 3 rojos son
+    los MISMOS pre-existentes por datos vivos (`verify-propuestas-dormidos`, `gate-recepciones-c1b`,
+    `gate-c1c-diferencias-cierre`), NO de esta tarea.
+  - **Por qué parte del gate es ESTÁTICA (`verify-xss-escape` [5]/[6]) y no de navegador:** cada sink que
+    falta vive en una pantalla que exige un DOCUMENTO montado (un albarán nace de un pedido confirmado;
+    `PRELOAD`, de un presupuesto guardado; `ORIGINS`, de una compra recibida). Montar esos fixtures cuesta
+    más que el arreglo y mete escrituras de documentos —algunos con valor legal— dentro de un gate de
+    seguridad. Lo que sí se afirma sin ambigüedad es la REGLA: si el dato lo escribe el usuario y aterriza
+    en un `<script>`, se serializa con `jsonForScript`. Los sinks alcanzables (catálogo ×2, inventario,
+    nueva compra, categorías, superadmin) se prueban de verdad en navegador.
+  - **Deuda de fondo, NO cerrada aquí (no estaba en el alcance):** ~14 ficheros definen su propio `esc` local
+    — es `core/escape.js` duplicado 14 veces. No es un agujero (los inventariados ya se completaron), pero es
+    la causa de que estos fallos se repitan. Quedan parciales fuera del inventario en `layout.js:111,186,300`,
+    `email-templates.js:28` y `contabilidad-export.js:136` (este último es escape XML, otro contexto).
 
 - ⬜ **C4b — [M8] Quitar `'unsafe-inline'` de la CSP (esfuerzo ALTO, tarea propia).** Es la mitigación
   SISTÉMICA del XSS: hoy la CSP no frenaría ninguno de los de M1. Medido el 16 jul: **414 `onclick` + 109

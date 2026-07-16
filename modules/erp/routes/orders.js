@@ -7,7 +7,7 @@ import { adminLayout, can } from '../layout.js';
 import { logActivity, requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { posSchema, orderStatusSchema, orderNotesSchema, orderTrackingSchema, refundSchema, draftOrderSchema } from '../schemas.js';
-import { escHtml } from '../../../core/escape.js';
+import { escHtml, jsonForScript } from '../../../core/escape.js';
 import { generateInvoice } from './invoices.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { recordMovement, resolveWarehouseId, productStockInWarehouse, availableOfProduct, originMovementWarehouse } from '../stock.js';
@@ -358,7 +358,7 @@ export function createOrderRoutes(db, cfg = {}) {
           '<div class="card">'+
           '<div class="card-head"><h3>Productos</h3></div>'+
           '<div class="table-wrap"><table><thead><tr><th>Producto</th><th>Cant.</th><th>P.Unit</th><th>Total</th></tr></thead><tbody>'+
-          items.map(i=>'<tr><td>'+i.product_name+'</td><td>'+i.quantity+'</td><td>${sym}'+Number(i.unit_price).toFixed(2)+'</td><td>${sym}'+Number(i.total).toFixed(2)+'</td></tr>').join('')+
+          items.map(i=>'<tr><td>'+escHtml(i.product_name)+'</td><td>'+i.quantity+'</td><td>${sym}'+Number(i.unit_price).toFixed(2)+'</td><td>${sym}'+Number(i.total).toFixed(2)+'</td></tr>').join('')+
           '</tbody></table></div></div>'+
 
           '<div class="card">'+
@@ -366,7 +366,7 @@ export function createOrderRoutes(db, cfg = {}) {
           '<div class="card-body">'+
           history.map(h=>'<div style="display:flex;gap:.75rem;padding:.5rem 0;border-bottom:1px solid var(--border)">'+
           '<span class="badge '+(sb[h.status]||'b-gray')+'">'+h.status+'</span>'+
-          '<span style="font-size:.82rem;color:var(--muted)">'+(h.comment||'')+'</span>'+
+          '<span style="font-size:.82rem;color:var(--muted)">'+escHtml(h.comment||'')+'</span>'+
           '<span style="margin-left:auto;font-size:.75rem;color:var(--muted)">'+(h.created_at?.split(' ')[0]||'-')+'</span>'+
           '</div>').join('')+
           '</div></div>';
@@ -510,7 +510,7 @@ export function createOrderRoutes(db, cfg = {}) {
       ? `<div style="margin-bottom:1rem">
            <label class="form-label" style="margin:0 0 .3rem">Almacén</label>
            <select class="form-control" id="posWarehouse" onchange="onWhChange()">
-             ${posWarehouses.map(w => `<option value="${w.id}"${w.id === selWh ? ' selected' : ''}>${String(w.name).replace(/</g, '&lt;')}${w.is_default ? ' (principal)' : ''}</option>`).join('')}
+             ${posWarehouses.map(w => `<option value="${w.id}"${w.id === selWh ? ' selected' : ''}>${escHtml(w.name)}${w.is_default ? ' (principal)' : ''}</option>`).join('')}
            </select>
          </div>`
       : `<input type="hidden" id="posWarehouse" value="${selWh}">`;   // un solo almacén: oculto, sin UI
@@ -618,9 +618,9 @@ export function createOrderRoutes(db, cfg = {}) {
         ]);
         prods=prods.filter(p=>p.status==='active');
         const cl=document.getElementById('posClient');
-        cl.innerHTML='<option value="">Anónimo</option>'+clients.map(c=>'<option value="'+c.id+'">'+c.name+'</option>').join('');
+        cl.innerHTML='<option value="">Anónimo</option>'+clients.map(c=>'<option value="'+c.id+'">'+escHtml(c.name)+'</option>').join('');
         const sm=document.getElementById('shippingMethod');
-        sm.innerHTML='<option value="">Sin envío (retiro/local)</option>'+shipping.filter(s=>s.active).map(s=>'<option value="'+s.id+'">'+s.name+' — ${sym}'+s.price+(s.free_from?' (gratis desde ${sym}'+s.free_from+')':'')+'</option>').join('');
+        sm.innerHTML='<option value="">Sin envío (retiro/local)</option>'+shipping.filter(s=>s.active).map(s=>'<option value="'+s.id+'">'+escHtml(s.name)+' — ${sym}'+s.price+(s.free_from?' (gratis desde ${sym}'+s.free_from+')':'')+'</option>').join('');
         await loadWhStock();
         filterProds();
       }
@@ -629,7 +629,7 @@ export function createOrderRoutes(db, cfg = {}) {
         // Disponibles = stock > 0 EN EL ALMACÉN elegido (variantes: global).
         const base=prods.filter(p=>whStockOf(p)>0);
         const filtered=q?base.filter(p=>p.name.toLowerCase().includes(q)):base;
-        document.getElementById('prodList').innerHTML=filtered.length?filtered.map(p=>'<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:.75rem;cursor:pointer" onclick="addToCart('+p.id+')">'+(p.image_url?'<img src="'+p.image_url+'" style="width:100%;height:80px;object-fit:cover;border-radius:4px;margin-bottom:.4rem">':'<div style="height:60px;display:flex;align-items:center;justify-content:center;font-size:1.5rem"></div>')+'<div style="font-size:.8rem;font-weight:500">'+p.name+'</div><div style="color:var(--accent);font-size:.85rem;font-weight:500">${sym}'+p.price.toFixed(2)+'</div><div style="font-size:.72rem;color:var(--muted)">Stock: '+whStockOf(p)+'</div></div>').join(''):'<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:1.5rem">Sin productos con stock en este almacén</div>';
+        document.getElementById('prodList').innerHTML=filtered.length?filtered.map(p=>'<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:.75rem;cursor:pointer" onclick="addToCart('+p.id+')">'+(p.image_url?'<img src="'+escHtml(p.image_url)+'" style="width:100%;height:80px;object-fit:cover;border-radius:4px;margin-bottom:.4rem">':'<div style="height:60px;display:flex;align-items:center;justify-content:center;font-size:1.5rem"></div>')+'<div style="font-size:.8rem;font-weight:500">'+escHtml(p.name)+'</div><div style="color:var(--accent);font-size:.85rem;font-weight:500">${sym}'+p.price.toFixed(2)+'</div><div style="font-size:.72rem;color:var(--muted)">Stock: '+whStockOf(p)+'</div></div>').join(''):'<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:1.5rem">Sin productos con stock en este almacén</div>';
       }
       function addToCart(id){
         const p=prods.find(x=>x.id===id);if(!p)return;
@@ -646,7 +646,7 @@ export function createOrderRoutes(db, cfg = {}) {
         const el=document.getElementById('cartItems');
         if(!cart.length){el.innerHTML='<p style="color:var(--muted);font-size:.85rem;text-align:center">Carrito vacío</p>';updateTotals();return;}
         el.innerHTML=cart.map((x,i)=>'<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;font-size:.85rem">'+
-          '<span style="flex:1">'+x.name+'</span>'+
+          '<span style="flex:1">'+escHtml(x.name)+'</span>'+
           '<input type="number" min="1" value="'+x.qty+'" style="width:55px;padding:.25rem .4rem;border:1px solid var(--border);border-radius:4px;font-size:.82rem" onchange="cart['+i+'].qty=Math.max(1,+this.value);renderCart()">'+
           '<span style="min-width:55px;text-align:right">${sym}'+(x.price*x.qty).toFixed(2)+'</span>'+
           '<button onclick="cart.splice('+i+',1);renderCart()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:.9rem">✕</button>'+
@@ -698,7 +698,7 @@ export function createOrderRoutes(db, cfg = {}) {
           // Reload client list and select the new one
           clients=await api('GET','/api/erp/clients').catch(()=>clients);
           const cl=document.getElementById('posClient');
-          cl.innerHTML='<option value="">Anónimo</option>'+clients.map(c=>'<option value="'+c.id+'">'+c.name+'</option>').join('');
+          cl.innerHTML='<option value="">Anónimo</option>'+clients.map(c=>'<option value="'+c.id+'">'+escHtml(c.name)+'</option>').join('');
           cl.value=d.id;
           closeModal('newClientModal');
           ['ncName','ncEmail','ncPhone','ncAddr'].forEach(id=>document.getElementById(id).value='');
@@ -929,7 +929,7 @@ export function createOrderRoutes(db, cfg = {}) {
       </div>
 
       <script>
-        const PRODUCTS = ${JSON.stringify(products)};
+        const PRODUCTS = ${jsonForScript(products)};
         const catalog = PRODUCTS;          // el buscador compartido ofrece el catálogo completo
         const SYM = '${sym}';
         // Celda con el buscador compartido + campos ocultos propios del pedido

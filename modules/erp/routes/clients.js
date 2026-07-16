@@ -528,7 +528,7 @@ export function createClientRoutes(db, cfg = {}) {
           const proxCell = p
             ? (window.proximaBadgeHtml?window.proximaBadgeHtml(p):'')+' <span style="font-size:.8rem">'+(p.accion==='recordatorio_email'?'recordatorio':((window.STAGE_LABEL&&window.STAGE_LABEL[p.etapa])||p.etapa))+'</span>'+(p.fechaObjetivo?'<br><span style="color:var(--muted);font-size:.75rem">'+p.fechaObjetivo+'</span>':'')
             : '<span style="color:var(--muted)">—</span>';
-          return '<tr><td><a href="/admin/invoices/'+f.id+'" target="_blank">'+f.invoice_number+'</a></td>'+
+          return '<tr><td><a href="/admin/invoices/'+f.id+'" target="_blank">'+escHtml(f.invoice_number)+'</a></td>'+
             '<td style="color:var(--muted);font-size:.8rem">'+(f.due_date||f.issue_date||'-')+'</td>'+
             '<td>${sym}'+Number(f.total||0).toFixed(2)+'</td>'+
             '<td>'+(f.counts?'${sym}'+Number(f.pendiente||0).toFixed(2):'—')+'</td>'+
@@ -543,7 +543,7 @@ export function createClientRoutes(db, cfg = {}) {
           : '';
         const debtBlock='<div class="alert '+(Number(deb.total||0)>0?'alert-warn':'alert-ok')+'" style="margin-bottom:1rem">'+
           'Te debe <strong>${sym}'+Number(deb.total||0).toFixed(2)+'</strong>'+
-          (o?' · Deuda más antigua: <a href="/admin/invoices/'+o.invoice_id+'" target="_blank">'+o.invoice_number+'</a> (${sym}'+Number(o.pendiente||0).toFixed(2)+', vence '+(o.due_date||'-')+(o.dias_vencida>0?' · '+o.dias_vencida+' días vencida':'')+')':' · sin deuda pendiente')+
+          (o?' · Deuda más antigua: <a href="/admin/invoices/'+o.invoice_id+'" target="_blank">'+escHtml(o.invoice_number)+'</a> (${sym}'+Number(o.pendiente||0).toFixed(2)+', vence '+(o.due_date||'-')+(o.dias_vencida>0?' · '+o.dias_vencida+' días vencida':'')+')':' · sin deuda pendiente')+
           gestionarCuentaBtn+
           '</div>';
         document.getElementById('detailBody').innerHTML=

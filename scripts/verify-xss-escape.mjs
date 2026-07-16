@@ -42,5 +42,54 @@ ok(escHtml('</script>').includes('&lt;') && !escHtml('</script>').includes('<'),
 ok(jsonForScript('</script>') !== JSON.stringify('</script>'),
    'jsonForScript se aparta de JSON.stringify justo en el carácter que rompe la etiqueta');
 
+// ── [5] C4a-bis · Guardián de los sinks de Clase B ────────────────────────────────────────────
+// POR QUÉ ESTA PARTE ES ESTÁTICA Y NO DE NAVEGADOR. Cada uno de estos sinks vive en una pantalla que
+// exige un DOCUMENTO montado (un albarán nace de un pedido confirmado; PRELOAD, de un presupuesto ya
+// guardado; ORIGINS, de una compra recibida). Montar esos fixtures cuesta más que el arreglo y mete
+// escrituras de documentos —algunas con valor legal— en un gate de seguridad. Lo que SÍ se puede
+// afirmar sin ambigüedad es la regla: si el dato lo escribe el usuario y aterriza en un <script>,
+// se serializa con jsonForScript. Un JSON.stringify crudo aquí es el fallo, y esto lo caza.
+// Los sinks que SÍ son alcanzables se prueban de verdad en gate-xss-escape.mjs.
+import { readFileSync } from 'fs';
+
+console.log('\n[5] Ningún sink de Clase B con datos del usuario usa JSON.stringify crudo');
+const SINKS_B = [
+  ['modules/erp/routes/albaranes.js',       'linesJson',   'líneas del pedido: description + sku'],
+  ['modules/erp/routes/purchase-orders.js', 'catalog',     'catálogo: name + sku'],
+  ['modules/erp/routes/purchase-orders.js', 'SEED',        'borrador: notes + líneas'],
+  ['modules/erp/routes/stock-transfers.js', 'catalog',     'catálogo: name + sku'],
+  ['modules/erp/routes/supplier-returns.js','ORIGINS',     'orígenes: supplier_name + label'],
+  ['modules/erp/routes/quotes.js',          'PRELOAD',     'líneas del presupuesto: description'],
+  ['modules/erp/routes/pedidos.js',         'PRELOAD',     'líneas del pedido: description'],
+  ['modules/erp/routes/invoices.js',        'SEED_LINES',  'líneas de la factura: description'],
+  ['modules/erp/routes/orders.js',          'PRODUCTS',    'catálogo (ruta hoy desmontada, red por si vuelve)'],
+  ['modules/erp/routes/purchases.js',       'productsJson','catálogo: name + sku (C4a)'],
+  ['modules/erp/routes/inventory.js',       'WAREHOUSES',  'almacenes: name (C4a)'],
+  ['modules/erp/views/stock-modal.js',      'WAREHOUSES',  'almacenes: name (C4a)'],
+];
+for (const [fichero, sink, que] of SINKS_B) {
+  const src = readFileSync(fichero, 'utf8');
+  // La línea que SERIALIZA el sink. Se exige que además de declararlo lleve un serializador: varios
+  // ficheros tienen DOS `const catalog` —la consulta SQL del servidor y el sink del navegador— y sin
+  // este filtro el guardián señalaría la consulta, que no serializa nada. (Falso positivo real, visto
+  // en stock-transfers.js:309 vs :349.)
+  const decl = new RegExp('(const|var|let)\\s+' + sink + '\\s*=|[,\\s]' + sink + '\\s*=');
+  const defs = src.split('\n').filter(l => decl.test(l) && /(jsonForScript|JSON\.stringify)/.test(l));
+  ok(defs.length >= 1, fichero.split('/').pop() + ' · ' + sink + ' — se encuentra dónde se serializa');
+  if (defs.length) {
+    ok(defs.every(l => /jsonForScript/.test(l) && !/JSON\.stringify/.test(l)),
+       '  …usa jsonForScript y NO JSON.stringify crudo (' + que + ')');
+  }
+}
+
+console.log('\n[6] La pieza central está importada allí donde se usa (un jsonForScript sin importar es un 500)');
+for (const fichero of [...new Set(SINKS_B.map(s => s[0]))]) {
+  const src = readFileSync(fichero, 'utf8');
+  if (/jsonForScript\(/.test(src)) {
+    ok(/import \{[^}]*jsonForScript[^}]*\} from '[^']*core\/escape\.js'/.test(src),
+       fichero.split('/').pop() + ' — importa jsonForScript de core/escape.js');
+  }
+}
+
 console.log('\n' + (fail === 0 ? '✅' : '❌') + ' Escapado XSS (M1): ' + pass + ' OK, ' + fail + ' fallos');
 process.exit(fail === 0 ? 0 : 1);

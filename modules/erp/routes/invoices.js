@@ -12,7 +12,7 @@ import { postInvoice, postInvoicePayment } from '../contabilidad.js';   // Conta
 import { validate } from '../../../core/validate.js';
 import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema, invoicePaymentSchema, collectionActionSchema, sustitutivaSchema } from '../schemas.js';
 import { getCountryConfig } from '../../../core/control-db.js';
-import { escHtml } from '../../../core/escape.js';
+import { escHtml, jsonForScript } from '../../../core/escape.js';
 import { adminLayout, docShell, printableShell, can, skeletonRows, errorShell, ERR } from '../layout.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';   // PDF real: mismo HTML imprimible → Chromium
 import { buildInvoiceModel, facturaeStatus } from '../facturae/modelo.js';   // Facturae: modelo neutro (sirve también para UBL en el futuro)
@@ -1581,7 +1581,7 @@ export function createInvoiceRoutes(db) {
       <script>
       const SYM = '${sym}';
       const RATES = ${JSON.stringify(rates)};
-      const SEED_LINES = ${JSON.stringify(seedLines)};
+      const SEED_LINES = ${jsonForScript(seedLines)};
       const IRPF_RATE = ${Number(original.irpf_rate) || 0};   // se mantiene el IRPF de la original
       const ORIGINAL_ID = ${original.id};
       const LINE_CELL = ${JSON.stringify(lineSearchCellHtml())};

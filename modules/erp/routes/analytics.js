@@ -144,9 +144,9 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         topChartInst=new Chart(document.getElementById('topChart').getContext('2d'),{type:'bar',data:{labels:top.map(p=>p.product_name.substring(0,15)),datasets:[{label:'Ingresos',data:top.map(p=>p.total_val),backgroundColor:'rgba(14,165,233,.6)',borderColor:'#0ea5e9',borderWidth:1,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{callback:v=>'${sym}'+v}}}}});
 
         document.getElementById('stockBody').innerHTML=stock.length?stock.map(p=>'<tr>'+
-          '<td><strong>'+p.name+'</strong></td>'+
-          '<td style="color:var(--muted)">'+(p.sku||'-')+'</td>'+
-          '<td>'+(p.category||'-')+'</td>'+
+          '<td><strong>'+escHtml(p.name)+'</strong></td>'+
+          '<td style="color:var(--muted)">'+escHtml(p.sku||'-')+'</td>'+
+          '<td>'+escHtml(p.category||'-')+'</td>'+
           '<td><strong style="color:'+(p.stock<5?'var(--danger)':'inherit')+'">'+p.stock+'</strong></td>'+
           '<td>${sym}'+Number(p.price).toFixed(2)+'</td>'+
           '<td style="color:var(--ok);font-weight:600">${sym}'+Number(p.inventory_value||0).toFixed(2)+'</td>'+

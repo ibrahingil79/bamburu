@@ -317,7 +317,7 @@ export function createProductRoutes(db, cfg = {}) {
     const vatBandsJson = JSON.stringify(vatBands);
     // Capa 2: almacén del stock inicial (apertura) al crear un producto físico; principal por defecto.
     const warehouses = activeWarehouses(db);
-    const whInitOptions = warehouses.map(w => '<option value="'+w.id+'"'+(w.is_default?' selected':'')+'>'+String(w.name).replace(/</g,'&lt;')+(w.is_default?' (principal)':'')+'</option>').join('');
+    const whInitOptions = warehouses.map(w => '<option value="'+w.id+'"'+(w.is_default?' selected':'')+'>'+escHtml(w.name)+(w.is_default?' (principal)':'')+'</option>').join('');
 
     // P4: búsqueda (nombre/SKU), filtro por categoría y paginación, todo por URL (GET).
     const q = (c.req.query('q') || '').trim();
@@ -753,7 +753,7 @@ export function createProductRoutes(db, cfg = {}) {
         const el=document.getElementById('tagSelector');
         el.innerHTML=allTags.map(t=>{
           const sel=selTags.includes(t.id);
-          return '<span style="cursor:pointer;padding:.2rem .6rem;border-radius:99px;font-size:.75rem;font-weight:500;background:'+(sel?'var(--ok-s)':'var(--bg3)')+';color:'+(sel?'var(--ok)':'var(--text2)')+';border:1px solid '+(sel?'var(--ok-s)':'var(--border)')+'" onclick="toggleTag('+t.id+')">'+t.name+'</span>';
+          return '<span style="cursor:pointer;padding:.2rem .6rem;border-radius:99px;font-size:.75rem;font-weight:500;background:'+(sel?'var(--ok-s)':'var(--bg3)')+';color:'+(sel?'var(--ok)':'var(--text2)')+';border:1px solid '+(sel?'var(--ok-s)':'var(--border)')+'" onclick="toggleTag('+t.id+')">'+escHtml(t.name)+'</span>';
         }).join('')+(allTags.length===0?'<span style="color:var(--muted);font-size:.8rem">Sin etiquetas aún</span>':'');
       }
       function toggleTag(id){if(selTags.includes(id))selTags=selTags.filter(x=>x!==id);else selTags.push(id);renderTagSelector();}
@@ -846,7 +846,7 @@ export function createProductRoutes(db, cfg = {}) {
       <script>
       async function loadTags(){
         const tags=await api('GET','/api/erp/products/tags/all').catch(()=>[]);
-        document.getElementById('tagBody').innerHTML=tags.length?tags.map(t=>'<tr><td><span class="badge b-gray">'+t.name+'</span></td><td style="color:var(--muted);font-size:.8rem">'+(t.created_at?.split(' ')[0]||'-')+'</td><td>'+(window.canDo('products.delete')?'<button class="btn btn-danger btn-sm" onclick="delTag('+t.id+')">Eliminar</button>':'')+'</td></tr>').join(''):window.emptyRow(3,'Aún no tienes etiquetas. Crea la primera para clasificar tus productos.',window.canDo('products.create')?{cta:'Nueva etiqueta',onclick:"var i=document.getElementById('tagName');if(i)i.focus()"}:{});
+        document.getElementById('tagBody').innerHTML=tags.length?tags.map(t=>'<tr><td><span class="badge b-gray">'+escHtml(t.name)+'</span></td><td style="color:var(--muted);font-size:.8rem">'+(t.created_at?.split(' ')[0]||'-')+'</td><td>'+(window.canDo('products.delete')?'<button class="btn btn-danger btn-sm" onclick="delTag('+t.id+')">Eliminar</button>':'')+'</td></tr>').join(''):window.emptyRow(3,'Aún no tienes etiquetas. Crea la primera para clasificar tus productos.',window.canDo('products.create')?{cta:'Nueva etiqueta',onclick:"var i=document.getElementById('tagName');if(i)i.focus()"}:{});
       }
       async function addTag(){
         const n=document.getElementById('tagName').value.trim();if(!n)return;

@@ -12,6 +12,7 @@ import { esTrazable, asignarFEFO, salirConTraza, revertirTrazaDeOrigen } from '.
 import { activeWarehouses } from './warehouses.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { ENTITY } from '../../../core/activity-entities.js';
+import { jsonForScript } from '../../../core/escape.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // PILAR 4 · VENTAS · PIEZA 2b — ALBARÁN (entrega). ESPEJO de la RECEPCIÓN de compra
@@ -430,7 +431,7 @@ export function createAlbaranRoutes(db) {
       const state = orderDeliveryState(db, orderId);
       const pend = state.lines.filter(l => l.pendiente > 0);
       if (!pend.length) return c.redirect('/admin/pedidos/' + orderId);
-      const linesJson = JSON.stringify(pend.map(l => ({ order_item_id: l.order_item_id, description: l.description, pendiente: l.pendiente, sku: l.sku || '' })));
+      const linesJson = jsonForScript(pend.map(l => ({ order_item_id: l.order_item_id, description: l.description, pendiente: l.pendiente, sku: l.sku || '' })));
       const content = `
         <div class="ph"><h2>Entregar pedido ${esc(o.order_number || ('#' + orderId))}</h2><a href="/admin/pedidos/${orderId}" class="btn btn-secondary">Volver al pedido</a></div>
         <div class="card" style="max-width:820px"><div class="card-body">
@@ -447,7 +448,7 @@ export function createAlbaranRoutes(db) {
         const CSRF=${JSON.stringify(csrfToken)}, ORDER_ID=${orderId}, PEND=${linesJson};
         function render(){
           document.getElementById('lines-body').innerHTML = PEND.map(function(l,i){
-            return '<tr><td>'+(l.sku?'<span style="color:var(--muted);font-size:.8rem">['+l.sku+'] </span>':'')+l.description.replace(/</g,'&lt;')+'</td>'
+            return '<tr><td>'+(l.sku?'<span style="color:var(--muted);font-size:.8rem">['+escHtml(l.sku)+'] </span>':'')+escHtml(l.description)+'</td>'
               +'<td>'+l.pendiente+'</td>'
               +'<td><input type="number" class="form-control q" data-oi="'+l.order_item_id+'" step="1" min="0" max="'+l.pendiente+'" value="'+l.pendiente+'"></td></tr>';
           }).join('');

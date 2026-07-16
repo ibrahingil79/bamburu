@@ -1,4 +1,5 @@
 import { getDisaWidget } from '../disa/widget.js';
+import { escHtml } from '../../core/escape.js';
 import { estadoAvisos, hoyLocal, PERM_POR_FUENTE } from './avisos.js';
 import { contarPropuestasPendientes, tiposVisiblesPara } from './propuestas.js';   // D5 — badge de Propuestas de DISA
 
@@ -1206,7 +1207,7 @@ export function docShell(paper, panel) {
 export function printableShell(bodyHtml, { title = 'Documento' } = {}) {
   return `<!DOCTYPE html><html lang="es"><head>
 <meta charset="UTF-8">
-<title>${String(title).replace(/</g, '&lt;')}</title>
+<title>${escHtml(title)}</title>
 <style>
   /* Tipografía DEL SISTEMA (DISEÑO §2.6): sin fuentes cargadas de internet. */
   :root{

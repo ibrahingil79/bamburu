@@ -12,6 +12,7 @@ import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { activeWarehouses } from './warehouses.js';
 import { sendEmail } from '../../../core/mailer.js';
 import { ENTITY } from '../../../core/activity-entities.js';
+import { jsonForScript } from '../../../core/escape.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // C1.a — ORDEN DE COMPRA como documento. Es un PEDIDO al proveedor: aquí NO se
@@ -605,8 +606,8 @@ export function createPurchaseOrderRoutes(db) {
       </div>
       <script>
       const SYM = '${sym}';
-      const catalog = ${JSON.stringify(products)};
-      const SEED = ${JSON.stringify(seed)};
+      const catalog = ${jsonForScript(products)};
+      const SEED = ${jsonForScript(seed)};
       // Campos ocultos propios de la orden: product_id (la línea DEBE resolver a un
       // producto real, sin línea libre) y el IVA heredado de la banda del producto.
       const LINE_CELL = ${JSON.stringify(lineSearchCellHtml(

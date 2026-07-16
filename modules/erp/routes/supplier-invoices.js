@@ -730,7 +730,7 @@ export function createSupplierInvoiceRoutes(db) {
         };
         inp.onblur=function(){ setTimeout(function(){ box.style.display='none'; },150); };
       })();
-      window.escAttr=function(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); };
+      window.escAttr=function(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;'); };
       window.pickGSup=function(id,name,term){
         gsupplier={ id:id, name:name, term:Number(term)||0 };
         document.getElementById('gSupSearch').value='';

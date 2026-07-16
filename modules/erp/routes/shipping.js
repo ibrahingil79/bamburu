@@ -72,11 +72,11 @@ export function createShippingRoutes(db, cfg = {}) {
       async function load(){
         ships=await api('GET','/api/erp/shipping').catch(()=>[]);
         document.getElementById('shipBody').innerHTML=ships.length?ships.map(s=>'<tr>'+
-          '<td><strong>'+s.name+'</strong></td>'+
-          '<td style="color:var(--muted)">'+(s.description||'-')+'</td>'+
+          '<td><strong>'+escHtml(s.name)+'</strong></td>'+
+          '<td style="color:var(--muted)">'+escHtml(s.description||'-')+'</td>'+
           '<td>'+(s.price===0?'<span class="badge b-green">Gratis</span>':'${sym}'+Number(s.price).toFixed(2))+'</td>'+
           '<td>'+(s.free_from?'${sym}'+Number(s.free_from).toFixed(2):'-')+'</td>'+
-          '<td style="color:var(--muted)">'+(s.estimated_days||'-')+'</td>'+
+          '<td style="color:var(--muted)">'+escHtml(s.estimated_days||'-')+'</td>'+
           '<td>'+(s.active?'<span class="badge b-green">Activo</span>':'<span class="badge b-red">Inactivo</span>')+'</td>'+
           '<td><button class="btn btn-secondary btn-sm" onclick="editShip('+s.id+')">Editar</button> <button class="btn btn-danger btn-sm" onclick="delShip('+s.id+')">Eliminar</button></td></tr>').join(''):'<tr><td colspan="7" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin métodos de envío</td></tr>';
       }

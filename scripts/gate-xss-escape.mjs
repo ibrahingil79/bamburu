@@ -166,6 +166,31 @@ try {
   ok(sr.ejecutado === false && sr.imgs === 0, 'lo mismo por el otro camino: "Suspender" tampoco ejecuta nada');
   ok(saDialogos.length === 0, 'ningún alert() saltó en la consola de superadmin');
 
+  // ── E · C4a-bis · Las pantallas de CATÁLOGO, que sirven el producto-payload dentro de un <script> ──
+  // Las tres leen "productos activos", así que el PROD_NAME con </script> entra solo. Son el mismo
+  // sink de Clase B repetido en tres sitios: si el escape falla, el <script> muere entero.
+  console.log('\n[E] Pantallas de catálogo — el producto con </script> viaja en un <script>');
+  for (const [ruta, cte] of [
+    ['/admin/purchase-orders/new', 'catalog'],
+    ['/admin/stock-transfers/new', 'catalog'],
+  ]) {
+    await page.goto(BASE + ruta, { waitUntil: 'networkidle0' });
+    const r2 = await inyectado();
+    // El `const` de un <script> NO cuelga de window: hay que leerlo por su nombre. Y si el payload
+    // rompió la etiqueta, la constante no llega a existir y esto lanza ReferenceError — se captura
+    // para dar un ROJO legible en vez de tumbar el gate. Un gate que peta no dice si el fallo está
+    // en el producto o en él mismo.
+    const dato = await page.evaluate((c, n) => {
+      let v;
+      try { v = eval(c); } catch { return { existe: false }; }
+      if (v === undefined) return { existe: false };
+      return { existe: true, intacto: (v || []).some(x => x.name === n) };
+    }, cte, PROD_NAME);
+    ok(r2.ejecutado === false && r2.imgs === 0, ruta + ' — el payload NO ejecuta JS ni inyecta HTML');
+    ok(dato.existe === true, ruta + ' — const ' + cte + ' existe → el </script> no rompió el script');
+    ok(dato.intacto === true, ruta + ' — el nombre del producto llega INTACTO');
+  }
+
   ok(dialogos.length === 0, 'ningún alert()/confirm() saltó en toda la pasada');
 } finally {
   await browser.close();

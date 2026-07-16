@@ -9,6 +9,7 @@ import { recordMovement, isPhysical, resolveWarehouseId, originMovementWarehouse
 import { bloquearSiTrazable } from '../trazabilidad.js';   // Pilar 3: la devolución con lote llega más adelante
 import { createReturnCredit, anularReturnCredit } from './supplier-invoices.js';
 import { ENTITY } from '../../../core/activity-entities.js';
+import { jsonForScript } from '../../../core/escape.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // DEVOLUCIÓN A PROVEEDOR — solo la CAPA FÍSICA (sale el stock + documento). La
@@ -393,7 +394,7 @@ export function createSupplierReturnRoutes(db) {
       </div>
       <script>
       const SYM = '${sym}';
-      const ORIGINS = ${JSON.stringify(origins)};
+      const ORIGINS = ${jsonForScript(origins)};
       let CURRENT = null;   // { supplier, origin, lines }
 
       async function loadLines(){

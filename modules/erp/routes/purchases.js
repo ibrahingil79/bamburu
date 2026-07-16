@@ -372,12 +372,12 @@ export function createPurchaseRoutes(db, cfg = {}) {
     const badge = badgeMap[purchase.status] || 'b-gray';
 
     const itemRows = items.map(i => {
-      const skuTag = i.sku ? `<span style="color:var(--muted);font-size:.8rem">[${i.sku}]</span> ` : '';
-      return `<tr><td>${skuTag}${i.product_name}</td><td>${i.quantity}</td><td>${parseFloat(i.unit_cost).toFixed(2)} ${sym}</td><td><strong>${(i.quantity*i.unit_cost).toFixed(2)} ${sym}</strong></td></tr>`;
+      const skuTag = i.sku ? `<span style="color:var(--muted);font-size:.8rem">[${escHtml(i.sku)}]</span> ` : '';
+      return `<tr><td>${skuTag}${escHtml(i.product_name)}</td><td>${i.quantity}</td><td>${parseFloat(i.unit_cost).toFixed(2)} ${sym}</td><td><strong>${(i.quantity*i.unit_cost).toFixed(2)} ${sym}</strong></td></tr>`;
     }).join('') || '<tr><td colspan="4" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin líneas</td></tr>';
 
-    const refBlock = purchase.reference ? `<div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Referencia</span><br>${purchase.reference}</div>` : '';
-    const notesBlock = purchase.notes ? `<div><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Notas</span><br>${purchase.notes}</div>` : '';
+    const refBlock = purchase.reference ? `<div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Referencia</span><br>${escHtml(purchase.reference)}</div>` : '';
+    const notesBlock = purchase.notes ? `<div><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Notas</span><br>${escHtml(purchase.notes)}</div>` : '';
 
     const canEdit = can(c, 'purchases.create');
     const actionBtns = canEdit ? (
@@ -391,7 +391,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
       <div class="doc-cols">
         <div>
           <div class="doc-label">Proveedor</div>
-          <div><strong>${purchase.supplier_name}</strong></div>
+          <div><strong>${escHtml(purchase.supplier_name)}</strong></div>
           ${refBlock}
         </div>
         <div>
@@ -413,7 +413,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
       <div class="card"><div class="card-body">
         <div style="margin-bottom:12px"><span class="badge ${badge}">${statusLabel}</span></div>
         <div class="dp-row"><span class="k">Compra</span><span class="v">#${purchase.id}</span></div>
-        <div class="dp-row"><span class="k">Proveedor</span><span class="v">${purchase.supplier_name}</span></div>
+        <div class="dp-row"><span class="k">Proveedor</span><span class="v">${escHtml(purchase.supplier_name)}</span></div>
         <div class="dp-row"><span class="k">Fecha</span><span class="v">${purchase.date}</span></div>
         <div class="dp-row"><span class="k">Total</span><span class="v">${parseFloat(purchase.total).toFixed(2)} ${sym}</span></div>
         <div class="dp-actions" style="margin-top:14px">

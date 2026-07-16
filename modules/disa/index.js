@@ -28,6 +28,7 @@ import { ALLOWED_MIME, MAX_UPLOAD_BYTES } from '../erp/attachments.js';
 import { callClaude, hasAnthropicKey } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
 import { rateLimit } from '../../core/rate-limit.js';   // freno por IP del endpoint caro de DISA
 import { ENTITY, entityForTable } from '../../core/activity-entities.js';
+import { escHtml } from '../../core/escape.js';
 
 // ── query_database · control de acceso de lectura (ALLOWLIST, cierre D1) ──────────────────────────
 // A nivel de módulo y EXPORTADO para que el gate lo pruebe con los mapas REALES (no una copia).
@@ -1534,7 +1535,7 @@ export function register(app, db) {
     const messages = conv ? JSON.parse(conv.messages || '[]') : [];
     const csrf = getCsrfToken(c);
 
-    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const esc = escHtml;   // pieza central: también escapa comillas
     const renderMsgHtml = m => {
       const isUser = m.role === 'user';
       return '<div style="display:flex;justify-content:' + (isUser ? 'flex-end' : 'flex-start') + '">'
@@ -1705,7 +1706,7 @@ export function register(app, db) {
 
   function esc(s) {
     return String(s == null ? '' : s)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   }
 
   function clearChatArea() {

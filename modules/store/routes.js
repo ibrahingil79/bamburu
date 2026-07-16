@@ -1377,7 +1377,7 @@ export function createRoutes(app, db) {
       const stars = n => '★'.repeat(Math.round(n)) + '☆'.repeat(5-Math.round(n));
 
       const allImgs = [p.image_url, ...p.images.map(i=>i.url)].filter(Boolean);
-      const gallery = allImgs.length > 1 ? `<div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap">${allImgs.map((img,i)=>`<img src="${img}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid ${i===0?'var(--p)':'#e2e8f0'}" onclick="setMainImg(${JSON.stringify(img)},this)">`).join('')}</div>` : '';
+      const gallery = allImgs.length > 1 ? `<div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap">${allImgs.map((img,i)=>`<img src="${escHtml(img)}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid ${i===0?'var(--p)':'#e2e8f0'}" onclick="setMainImg(${escHtml(JSON.stringify(img))},this)">`).join('')}</div>` : '';
 
       const variantSelect = p.variants.length ? `<div class="form-group"><label class="form-label">Selecciona variante</label><select class="form-control" id="variantSel"><option value="">-- Elige --</option>${p.variants.map(v=>`<option value="${v.id}" data-price="${v.price||p.price}">${escHtml(v.name)} — €${(v.price||p.price).toFixed(2)} (stock: ${v.stock})</option>`).join('')}</select></div>` : '';
 
@@ -1387,7 +1387,7 @@ export function createRoutes(app, db) {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:2.5rem;margin-bottom:3rem">
           <div>
             <div style="background:#fff;border-radius:10px;overflow:hidden;border:1px solid #e2e8f0">
-              <img id="mainImg" src="${p.image_url||''}" style="width:100%;height:380px;object-fit:cover" onerror="this.style.display='none'">
+              <img id="mainImg" src="${escHtml(p.image_url||'')}" style="width:100%;height:380px;object-fit:cover" onerror="this.style.display='none'">
               ${!p.image_url ? `<div style="height:380px;display:flex;align-items:center;justify-content:center;font-size:4rem">📦</div>` : ''}
             </div>
             ${gallery}
