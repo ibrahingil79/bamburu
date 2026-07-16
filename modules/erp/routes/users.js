@@ -1,12 +1,29 @@
 import { Hono } from 'hono';
 import { safeError } from '../../../core/errors.js';
 import { adminLayout, skeletonRows } from '../layout.js';
-import { hashPassword, requirePerm, destroyAllAdminSessionsForUser } from '../../../core/auth.js';
+import { hashPassword, requirePerm, destroyAllAdminSessionsForUser, logActivity } from '../../../core/auth.js';
 import { destroyTenantSession } from '../../../core/control-db.js';
+import { ENTITY } from '../../../core/activity-entities.js';
 import { readFileSync } from 'fs';
 import path from 'path';
 import { validate } from '../../../core/validate.js';
 import { userCreateSchema, userUpdateSchema } from '../schemas.js';
+
+// Permisos que NO se conceden: retirados o sin ruta viva. orders.* (POS retirado, ya no gatea nada
+// tras recablear facturas/cobros), services.* (servicios unificados en productos), activity.read (la
+// actividad va por admin.manage_users), purchases.delete / tags.edit (sin ruta), admin.manage_roles /
+// admin.settings (sin uso).
+//
+// C6/B2 — FUENTE ÚNICA, y ahora la aplica el SERVIDOR. Esta lista vivía dentro del handler de la
+// pantalla y solo servía para no PINTAR estos permisos; la API los aceptaba igual. O sea que la
+// seguridad era que el checkbox no estuviera dibujado: cualquiera con `admin.manage_users` y la
+// consola del navegador abierta se los concedía a mano. Ocultar no es denegar. Ahora la pantalla y
+// la API leen la MISMA lista, y quien decide es la API.
+export const HIDDEN_PERMS = new Set([
+  'orders.read','orders.create','orders.edit','orders.update_status',
+  'services.read','services.create','services.edit','services.delete',
+  'activity.read','purchases.delete','tags.edit','admin.manage_roles','admin.settings',
+]);
 
 // Cierra todas las sesiones de un usuario: las suyas en esta BD y su espejo en control.db.
 // Los tokens se leen ANTES de borrarlos — después ya no habría con qué limpiar el espejo.
@@ -112,9 +129,34 @@ export function createUserRoutes(db) {
       if (userId === s.userId) return c.json({error:'No puedes cambiar tus propios permisos'},403);
       const body = await c.req.json();
       const permIds = Array.isArray(body.permission_ids) ? body.permission_ids.map(Number) : [];
-      db.prepare('DELETE FROM user_permissions WHERE admin_user_id=?').run(userId);
-      const ins = db.prepare('INSERT OR IGNORE INTO user_permissions (admin_user_id, permission_id) VALUES (?,?)');
-      for (const pid of permIds) ins.run(userId, pid);
+
+      // C6/B2 — ALLOWLIST en servidor. Se construye desde el catálogo (lo que EXISTE) menos
+      // HIDDEN_PERMS (lo que no se concede), así que un id que no esté en `permissions`, o que esté
+      // pero sea de los ocultos, se rechaza. Antes se insertaba cualquier id que llegara: el
+      // `INSERT OR IGNORE` tapaba los inventados, pero los OCULTOS —que sí existen en el catálogo—
+      // entraban tan ricamente. Falla CERRADO y ENTERO: si viene uno malo se rechaza la petición
+      // completa (400) en vez de aplicar "los buenos"; un guardado a medias en permisos deja al
+      // usuario con un juego que nadie pidió y sin que nadie se entere.
+      const concedibles = new Map(
+        db.prepare('SELECT id, module, action FROM permissions').all()
+          .filter(p => !HIDDEN_PERMS.has(p.module + '.' + p.action))
+          .map(p => [p.id, p.module + '.' + p.action])
+      );
+      const rechazados = permIds.filter(id => !concedibles.has(id));
+      if (rechazados.length) {
+        return c.json({ error: 'Esos permisos no se pueden conceder', permission_ids: rechazados }, 400);
+      }
+
+      const tx = db.transaction(() => {
+        db.prepare('DELETE FROM user_permissions WHERE admin_user_id=?').run(userId);
+        const ins = db.prepare('INSERT OR IGNORE INTO user_permissions (admin_user_id, permission_id) VALUES (?,?)');
+        for (const pid of permIds) ins.run(userId, pid);
+      });
+      tx();
+      // Queda en Actividad: cambiar los permisos de otro es de las acciones que más quieres poder
+      // mirar hacia atrás, y hasta ahora no dejaba rastro.
+      logActivity(db, s, 'Cambió los permisos de un usuario', ENTITY.ADMIN_USER, userId,
+        permIds.map(id => concedibles.get(id)).join(', ') || 'sin permisos');
       return c.json({message:'Permisos actualizados'});
     } catch(e) { return c.json({error:safeError(e)},500); }
   });
@@ -159,17 +201,10 @@ export function createUserRoutes(db) {
 
   // ── VIEWS ──────────────────────────────────────────────────────
   views.get('/', requirePerm('admin.manage_users'), c => {
-    // Permisos · Paso 1 FASE 2 — la pantalla deja de OFRECER los permisos decorativos/legacy que no
+    // Permisos · Paso 1 FASE 2 — la pantalla no OFRECE los permisos decorativos/legacy que no
     // gobiernan nada vivo (no se borran del catálogo ni se tocan asignaciones existentes; solo no se
-    // listan para asignar). orders.* (POS retirado, ya no gatea nada tras recablear facturas/cobros),
-    // services.* (servicios unificados en productos), activity.read (la actividad va por admin.manage_users),
-    // purchases.delete / tags.edit (sin ruta), admin.manage_roles / admin.settings (sin uso). Los cobros.*
-    // nuevos sí aparecen (vienen del catálogo).
-    const HIDDEN_PERMS = new Set([
-      'orders.read','orders.create','orders.edit','orders.update_status',
-      'services.read','services.create','services.edit','services.delete',
-      'activity.read','purchases.delete','tags.edit','admin.manage_roles','admin.settings',
-    ]);
+    // listan para asignar). La lista es HIDDEN_PERMS, arriba: la MISMA que aplica la API (C6/B2).
+    // Antes había una copia aquí, y era la única que existía — por eso la API no denegaba nada.
     const allPerms = db.prepare('SELECT id, module, action, description FROM permissions ORDER BY module, action')
       .all().filter(p => !HIDDEN_PERMS.has(p.module + '.' + p.action));
     const permsJson = JSON.stringify(allPerms);

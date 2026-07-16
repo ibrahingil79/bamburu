@@ -4,8 +4,8 @@ import { Resend } from 'resend';
 import { randomBytes } from 'crypto';
 import { generateSecret, verify as verifyTOTP, keyuri } from '../../../core/totp.js';
 import QRCode from 'qrcode';
-import { hashPassword, verifyPassword, createAdminSession, destroyAdminSession, adminAuth } from '../../../core/auth.js';
-import { rateLimit, getClientIp } from '../../../core/rate-limit.js';
+import { hashPassword, verifyPassword, createAdminSession, destroyAdminSession, adminAuth, destroyAllAdminSessionsForUser } from '../../../core/auth.js';
+import { rateLimit, getClientIp, throttlePorFallos, registrarFallo, limpiarFallos } from '../../../core/rate-limit.js';
 import { recordSecurityEvent } from '../../../core/control-db.js';
 import { validate } from '../../../core/validate.js';
 import { loginSchema, forgotSchema } from '../schemas.js';
@@ -29,6 +29,19 @@ const loginLimiter = rateLimit({
   max: 5,
   keyPrefix: 'admin-login',
   message: 'Demasiados intentos de login. Espera 15 minutos.',
+});
+
+// C6/B4 — freno por CUENTA, encadenado al de IP de arriba. El de IP no ve a un atacante que rota
+// IPs; este cuenta los fallos de ESA cuenta vengan de donde vengan. Ralentiza, nunca rechaza: ver el
+// porqué en core/rate-limit.js. 5 fallos gratis, luego +2 s por fallo hasta un techo de 10 s.
+const LOGIN_CUENTA = 'admin-login-cuenta';
+const loginThrottleCuenta = throttlePorFallos({
+  windowMs: 15 * 60 * 1000,
+  after: 5,
+  stepMs: 2000,
+  maxMs: 10_000,
+  keyPrefix: LOGIN_CUENTA,
+  keyFn: (c) => c.get('validated')?.email?.trim().toLowerCase() || null,
 });
 
 // C5/M6 — el freno de "he olvidado mi contraseña". Van los DOS, y por eso son dos:
@@ -164,6 +177,16 @@ async function enviarEnlaceReseteo(db, { host, user, email }) {
   console.log('[Resend] Email enviado OK, id:', data?.id);
 }
 
+// Cierra TODAS las sesiones de un usuario: las de esta BD y su espejo en control.db (el vínculo
+// cookie→negocio). Los tokens se leen ANTES de borrarlos — después no habría con qué limpiar el
+// espejo. Gemelo del de users.js (C5/M5): el mismo trabajo, ahora también desde el reset.
+function revocarSesiones(db, userId) {
+  const tokens = db.prepare('SELECT token FROM admin_sessions WHERE user_id=?').all(userId).map(r => r.token);
+  destroyAllAdminSessionsForUser(db, userId);
+  for (const t of tokens) { try { destroyTenantSession(t); } catch (_) {} }
+  return tokens.length;
+}
+
 export function createAuthRoutes(db) {
   const r = new Hono();
 
@@ -238,26 +261,35 @@ export function createAuthRoutes(db) {
 </html>`);
   });
 
-  r.post('/login', loginLimiter, validate(loginSchema), async c => {
+  // El orden manda: loginLimiter frena por IP · validate deja el email normalizado en `validated` ·
+  // loginThrottleCuenta lo lee de ahí para frenar por CUENTA. Los dos, porque cada uno tapa lo que
+  // el otro no ve: el de IP, el barrido desde un sitio; el de cuenta, el asedio a UNA persona desde
+  // mil sitios.
+  r.post('/login', loginLimiter, validate(loginSchema), loginThrottleCuenta, async c => {
     const form = c.get('validated');
     const email = (form.email || '').trim().toLowerCase();
     const password = form.password || '';
     const attempts = Number(c.req.query('attempts') || 0) + 1;
+    const slug = c.get('tenant')?.slug;
+    // C6/B4 — el fallo se apunta con el email TECLEADO, exista la cuenta o no. Si solo se apuntaran
+    // los de cuentas reales, la espera diría cuáles existen: el freno sería el chivato.
+    const fallar = () => {
+      registrarFallo(LOGIN_CUENTA, email, slug || 'global');
+      recordSecurityEvent('login_failed', getClientIp(c), slug, email);
+      return c.redirect(`/admin/login?error=1&attempts=${attempts}`);
+    };
     const user = db.prepare(
       'SELECT id, password_hash, totp_enabled, totp_secret, must_change_password FROM admin_users WHERE email=? AND active=1'
     ).get(email);
-    if (!user) {
-      recordSecurityEvent('login_failed', getClientIp(c), c.get('tenant')?.slug, email);
-      return c.redirect(`/admin/login?error=1&attempts=${attempts}`);
-    }
+    if (!user) return fallar();
     const result = await verifyPassword(password, user.password_hash);
-    if (!result.valid) {
-      recordSecurityEvent('login_failed', getClientIp(c), c.get('tenant')?.slug, email);
-      return c.redirect(`/admin/login?error=1&attempts=${attempts}`);
-    }
+    if (!result.valid) return fallar();
     if (result.needsRehash) {
       db.prepare('UPDATE admin_users SET password_hash=? WHERE id=?').run(await hashPassword(password), user.id);
     }
+    // Contraseña correcta: el historial de fallos se borra. Quien demuestra que es él no arrastra
+    // los intentos de nadie — es lo que impide que esto se convierta en un bloqueo de facto.
+    limpiarFallos(LOGIN_CUENTA, email, slug || 'global');
 
     // C3/M7 (Eje C): NO se registra el email ni el estado de 2FA (PII + reconocimiento de qué cuentas
     // tienen 2FA). Solo un id interno para depurar, sin dato identificable ni de seguridad.
@@ -599,12 +631,12 @@ export function createAuthRoutes(db) {
       <div class="field">
         <label for="password">Nueva contraseña</label>
         <input type="password" id="password" name="password"
-               placeholder="Mínimo 8 caracteres" required minlength="8">
+               placeholder="Mínimo 10 caracteres" required minlength="10">
       </div>
       <div class="field">
         <label for="password2">Confirmar contraseña</label>
         <input type="password" id="password2" name="password2"
-               placeholder="Repite la contraseña" required minlength="8">
+               placeholder="Repite la contraseña" required minlength="10">
       </div>
       <button type="submit" class="btn">Cambiar Contraseña</button>
     </form>
@@ -617,8 +649,12 @@ export function createAuthRoutes(db) {
     const form = await c.req.parseBody();
     const { token, password, password2 } = form;
 
-    if (!password || password.length < 8) {
-      return c.html('<p style="color:var(--danger)">La contraseña debe tener mínimo 8 caracteres.</p>', 400);
+    // C6/B3 — 10, igual que el cambio propio (changeOwnPassword, core/auth.js). Antes esta puerta
+    // pedía 8 y la otra 10: la misma cuenta con dos listones según por dónde entraras, y el más bajo
+    // era justo el de la vía que se usa SIN saber la contraseña actual. Un mínimo es el más flojo de
+    // sus caminos, no el más estricto.
+    if (!password || password.length < 10) {
+      return c.html('<p style="color:var(--danger)">La contraseña debe tener mínimo 10 caracteres.</p>', 400);
     }
     if (password !== password2) {
       return c.html('<p style="color:var(--danger)">Las contraseñas no coinciden.</p>', 400);
@@ -638,11 +674,24 @@ export function createAuthRoutes(db) {
         return c.html('<p style="color:var(--danger)">Token expirado. <a href="/admin/forgot-password">Solicita uno nuevo</a>.</p>', 400);
       }
 
+      const userId = resetToken.admin_user_id;
       const hash = await hashPassword(password);
-      db.prepare('UPDATE admin_users SET password_hash = ? WHERE id = ?')
-        .run(hash, resetToken.admin_user_id);
-      db.prepare('UPDATE password_reset_tokens SET used = 1 WHERE token = ?')
-        .run(token);
+      db.prepare('UPDATE admin_users SET password_hash = ? WHERE id = ?').run(hash, userId);
+      db.prepare('UPDATE password_reset_tokens SET used = 1 WHERE token = ?').run(token);
+
+      // C6/B3 — El reset EXPULSA. Sin esto, resetear la contraseña no echaba a nadie: quien ya
+      // estuviera dentro seguía dentro hasta 24 h, con la contraseña vieja ya cambiada. Y ese es el
+      // escenario para el que existe este botón — "creo que alguien ha entrado en mi cuenta". El
+      // sistema prometía cerrar la puerta y solo cambiaba la llave, dejando al intruso ya dentro.
+      //
+      // Dos cosas, y las dos hacen falta:
+      //   · Los DEMÁS tokens de reset pendientes se queman. Si alguien pidió enlaces a tu correo
+      //     antes que tú, seguirían valiendo para volver a cambiarla después de este cambio.
+      //   · Las sesiones abiertas, fuera —incluidas las de otros dispositivos—. Es deliberado que
+      //     caiga también la tuya: quien resetea no tiene sesión (viene del correo), y si la tuviera,
+      //     volver a entrar cuesta un login y es el precio correcto por echar a un intruso.
+      db.prepare('UPDATE password_reset_tokens SET used = 1 WHERE admin_user_id = ? AND used = 0').run(userId);
+      revocarSesiones(db, userId);
 
       return c.html(`<!DOCTYPE html>
 <html lang="es">

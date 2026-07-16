@@ -27,7 +27,11 @@ console.log('');
 console.log('✓ Tenant de desarrollo creado');
 console.log('  URL:          dev.bamburu.com');
 console.log('  Email:        dev@bamburu.com');
-console.log('  Contraseña:   ' + DEV_PASSWORD);
+console.log('  Contraseña:   la constante DEV_PASSWORD, arriba en este mismo fichero.');
 console.log('  Archivo .db:  ' + result.db_filename);
 console.log('');
-console.log('Guarda estas credenciales. No se volverán a mostrar.');
+// C6/B7 — no se imprime. Aquí no filtra nada nuevo (la constante está en el repo), pero un secreto
+// impreso es un secreto en el scrollback y en lo que capture stdout: la regla no admite excepciones
+// "porque este da igual". Es justo así como se cuela el que sí importa.
+console.log('Es un tenant de DESARROLLO con una contraseña conocida y publicada en el repo:');
+console.log('NO ejecutes este script contra producción.');

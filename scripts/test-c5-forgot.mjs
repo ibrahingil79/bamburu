@@ -65,6 +65,14 @@ try {
       expires_at DATETIME NOT NULL, used INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+    -- C6/B3: el reset ahora CIERRA las sesiones del usuario, así que esta tabla tiene que estar.
+    -- Faltaba, y el test se puso rojo al añadir B3 — pero el fallo era del fixture: una BD de negocio
+    -- sin admin_sessions no existe (la crea runMigrations). Un fixture que no puede existir en la
+    -- realidad no prueba la realidad.
+    CREATE TABLE admin_sessions (
+      token TEXT PRIMARY KEY, user_id INTEGER NOT NULL,
+      created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, csrf_token TEXT
+    );
   `);
   const EXISTE = 'existe@ej.com';
   const userId = db.prepare(

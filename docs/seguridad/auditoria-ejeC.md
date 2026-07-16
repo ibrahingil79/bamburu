@@ -348,3 +348,83 @@ arreglar):* el 308 preserva el token en la cabecera `Location`, y si alguien acc
 generan con `https` (`PUBLIC_BASE_DOMAIN`) y HSTS está activo.
 
 **Conclusión C2:** los 4 puntos verificados OK. **No hay ningún problema que registrar como tarea nueva.**
+
+---
+
+## C6 — Los 12 hallazgos BAJA: cierre (16 jul 2026)
+
+Último bloque del Eje C. **8 arreglados** (commit al pie), **3 asumidos como riesgo** con dueño y fecha, y
+**1 fuera del alcance por decisión previa**. Este apartado es el registro de lo segundo: lo que NO se arregla,
+por qué, y quién lo decidió — para que dentro de seis meses nadie lo lea como un olvido.
+
+> **Nota sobre los `file:line` de este informe (15 jul).** Cinco quedaron rancios: C3, C4a/b y C5 movieron el
+> código. Al cerrar C6 se trabajó contra el código de HOY, no contra los números de aquí. Un número de línea
+> caduca; el hallazgo, no.
+
+### Arreglados (8)
+
+| # | Qué era | Cómo se cerró |
+|---|---|---|
+| **B1** | La contraseña semilla se imprimía en CADA alta de negocio | Ya no se imprime. La cuenta se sigue creando (el alta la sustituye acto seguido); si hiciera falta entrar, `scripts/reset-admin.js` le pone contraseña |
+| **B2** | `POST /users/:id/permissions` aceptaba permisos que la UI solo OCULTABA | Allowlist en servidor desde el catálogo menos `HIDDEN_PERMS` (ahora fuente única, compartida con la pantalla). Falla entero: un id malo rechaza el lote. Queda en Actividad |
+| **B3** | El reset de contraseña **no echaba a nadie**, y pedía 8 frente a los 10 del cambio propio | El reset cierra TODAS las sesiones del usuario y quema los demás enlaces pendientes. Mínimo 10 en servidor y en la pantalla |
+| **B4** | Login sin freno por cuenta: un atacante con IPs rotativas probaba sin límite | Throttle por cuenta encadenado al de IP. **Ralentiza, nunca bloquea** (ver abajo). Cuenta fallos, no intentos; un acierto los borra |
+| **B6** | `/find-tenant` decía a un desconocido si un email existe y en qué negocios | La respuesta viaja por **correo**: enlace de un solo uso, 30 min. La respuesta HTTP es idéntica exista o no |
+| **B7** | Tres scripts de ops generaban contraseñas y las imprimían | La teclea el operador, sin eco (`scripts/lib/prompt-secret.mjs`). Sin TTY **aborta** en vez de degradarse |
+| **B8** | DISA mandaba al log el SQL con los valores del `WHERE` (= PII de los clientes del cliente) | `redactarSql()`: se conserva la forma (tablas, joins, cláusula), se pierden los valores |
+| **B9** | Dos BD de negocio en 0644 (y sus `-wal`/`-shm`, que también llevan datos) | `chmod 600` a las 6 + la causa: `restringirBd()` al crear y al abrir. Chmod explícito, **no umask** — un umask solo protege a quien lo tenga puesto |
+
+**Decisión de diseño en B4, por si alguien la revisa:** un freno por cuenta que RECHACE es un arma. Cualquiera
+falla cinco veces contra tu email y te deja fuera de tu propio negocio. Habríamos cambiado "te pueden probar
+contraseñas" por "te pueden echar" — y lo segundo es peor: pasa a la primera y no hace falta acertar nada. Por
+eso ralentiza (hasta 10 s por intento) y jamás dice que no. El legítimo siempre entra; al atacante, a 10 s por
+prueba, no le salen las cuentas.
+
+### 🔒 Riesgo ASUMIDO — decisión del dueño, 16 jul 2026
+
+No son olvidos ni deuda silenciosa: se miraron, se entendieron y se decidió no tocarlos. Si algún día cambia
+el contexto que los sostiene, vuelven a la mesa.
+
+- **B5 · La cookie `btenant` elige la BD activa sin auth** (`core/tenant-middleware.js`).
+  **No se toca.** Hoy no abre nada: el vínculo de sesión tiene precedencia y `adminAuth` revalida el token
+  contra `admin_sessions` de esa misma BD, así que **falla cerrado**. Es input de cliente alimentando la
+  selección de BD, sí, pero tocar la selección de BD arriesga el aislamiento multi-tenant —lo más valioso que
+  hay— a cambio de un riesgo que hoy no existe. **Revisar si:** alguna ruta llegara a leer `c.get('db')` sin
+  pasar por `adminAuth`. Ese sería el día.
+- **B11 (parte tienda) · Cookie `bamburu_store_preview` sin `Secure`** (`modules/store/routes.js`).
+  **No se toca mientras la tienda esté apagada** — misma decisión que C4b-3 (16 jul): endurecer una superficie
+  que no sirve a nadie es pagar el riesgo de romperla sin cobrar la protección. **Si la tienda se reactiva
+  como producto, el endurecimiento entra CON esa reactivación**, no después. *(La otra mitad de B11, la cookie
+  `btenant`, SÍ se arregló: ahora se emite con `Secure` desde `/acceso/entrar`.)*
+- **B12 · `roles`/`role_permissions`/`user_roles` sembradas y sin uso** (`modules/erp/models.js`).
+  **No se toca en C6.** Es código muerto, no un agujero: la aplicación de permisos lee solo
+  `user_permissions`, así que estas tablas **no conceden nada** y no pueden filtrar nada. Verificado al cerrar
+  C6: `role_permissions` no se referencia en ningún fichero fuera de `models.js`, y `user_roles` solo lo
+  ESCRIBE `ensureAdminRole()` en el login — nadie lo lee jamás. Y "retirar o cablear" no es higiene: es una
+  **decisión de diseño del modelo de permisos**, que le toca al dueño y merece tarea propia. Además la regla
+  del proyecto es archivar, nunca destruir.
+
+### Fuera de C6 por decisión previa
+
+- **B10 · Hardening de systemd** (`NoNewPrivileges=false`, sin `ProtectHome`/`PrivateDevices`).
+  **Aplazado a propósito, y con aviso:** es el único de los doce que puede **tirar el servicio**. `ProtectHome`
+  con las BD viviendo en `/home/ubuntu` es exactamente cómo se rompe. Si algún día entra: **solo**, nunca
+  mezclado con otros cambios, con reinicio y comprobación en vivo de que `data/` sigue escribible. Ya corre
+  no-root y en loopback, que es lo que acota el riesgo hoy.
+
+### Hallazgo NUEVO, salido de cerrar C6 (no estaba en el informe)
+
+- **El email SÍ entra en `security_events`** (`modules/erp/routes/auth.js`, los dos caminos de fallo del login:
+  `recordSecurityEvent('login_failed', ip, slug, email)`). C3/M7 sacó el email del `console.log` del login y
+  dejó la tabla, aunque el comentario de al lado diga que no se registra. Es PII de los admin de todos los
+  negocios, en control.db, visible en la zona Seguridad del superadmin. **Defendible** (telemetría de
+  seguridad del operador de la plataforma) pero **incoherente** con la regla que el propio código enuncia. Sin
+  arreglar: no estaba en el encargo de C6. Anotado aquí para que se decida a conciencia.
+
+**Verificado:** `test-c6-acceso` 32/0 (B3, B2, B4 y el enlace de B6) · `test-c6-secretos` 28/0 (B1, B7, B8, B9)
+· `gate-c6-find-tenant` 22/0 contra el servidor real (la respuesta no distingue un email real de uno
+inventado, y el login por correo sigue funcionando). Regresión: `test-c5-forgot` 25/0, `test-c5-sesiones` 10/0,
+`test-c5-2fa-superadmin` 44/0, `test-registro-alta` 26/0, `gate-csp-estricta` 19/0, `gate-c5-2fa-superadmin`
+18/0. *(`gate-registro-alta` sigue en 11/3: ya estaba rojo ANTES de C6 —comprobado restaurando el código
+anterior— por lo que responde el modelo real en el alta conversacional. No es regresión de C6; queda como
+tarea del Eje B.)*

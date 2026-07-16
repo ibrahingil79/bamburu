@@ -4,8 +4,9 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { db } from './core/db.js';
 import { loadModules } from './core/loader.js';
 import { cleanupExpiredSessions } from './core/auth.js';
-import { cleanupRateLimitBuckets, rateLimit } from './core/rate-limit.js';
+import { cleanupRateLimitBuckets, cleanupFallos, rateLimit } from './core/rate-limit.js';
 import { securityHeaders } from './core/security-headers.js';
+import { escHtml } from './core/escape.js';
 import { initControlDb, getTenantBySlug, createTenantSession, recordError } from './core/control-db.js';
 import { tenantMiddleware, getTenantDb, readOnlyGuard } from './core/tenant-middleware.js';
 import { createAdminSession } from './core/auth.js';
@@ -1184,61 +1185,150 @@ const findTenantMin  = rateLimit({ windowMs: 60_000, max: 10, keyPrefix: 'find-t
 const findTenantHora = rateLimit({ windowMs: 60 * 60_000, max: 60, keyPrefix: 'find-tenant-hora',
   message: 'Demasiadas búsquedas de negocio desde aquí. Inténtalo más tarde.' });
 
+// C6/B6 — La respuesta es SIEMPRE la misma: "si ese email tiene un negocio, te hemos mandado el
+// enlace". Nunca dice si existe, ni cuántos, ni cuáles.
+//
+// POR QUÉ CAMBIA EL FLUJO Y NO SOLO EL TEXTO. Esta ruta contestaba en el acto a un desconocido:
+// 404 si el email no era de nadie, y si lo era, el negocio (o la LISTA de negocios) al que pertenece.
+// Cualquiera con una lista de correos sabía cuáles son clientes de Bamburu y dónde entran. Y no se
+// arregla poniendo una respuesta genérica: el flujo NECESITA contestar para poder redirigir. Si la
+// respuesta tiene que decir algo, no puede callar. La salida es la de Slack ("Find your workspaces")
+// y la misma que ya usamos en el forgot-password de C5: la respuesta viaja por CORREO, fuera de
+// banda. El token prueba que controlas ese buzón, y solo entonces se dice algo.
+//
+// /acceso NO es el login diario —ese es el subdominio, guardado en marcadores—: es el "no recuerdo
+// dónde entro", o sea un rescate. Pasar por el correo en un rescate es lo normal y no choca con la
+// fricción mínima de CANON §3-bis, que habla de acciones FRECUENTES.
 app.post('/find-tenant', findTenantMin, findTenantHora, async c => {
   try {
-    const body = await c.req.json();
+    const body = await c.req.json().catch(() => ({}));
     const email = (body?.email || '').trim().toLowerCase();
-    const pickedSlug = typeof body?.slug === 'string' ? body.slug : null;
     if (!email || !email.includes('@')) {
       return c.json({ error: 'Email inválido' }, 400);
     }
+
     const { getTenantsByEmail } = await import('./core/control-db.js');
     const tenants = getTenantsByEmail(email);
-    if (!tenants.length) {
-      return c.json({ error: 'No encontramos ningún negocio con ese email' }, 404);
-    }
 
-    // Dominio base público: presente SOLO en producción (lo pone /etc/bamburu.env).
-    // Su ausencia = dev/Tailscale (un solo host, sin subdominios) → se mantiene el flujo
-    // original (cookie btenant + login relativo). No rompe desarrollo.
-    const baseDomain = process.env.PUBLIC_BASE_DOMAIN || null;
-
-    // ¿El usuario ya eligió un negocio concreto en la pantalla de selección?
-    let tenant = null;
-    if (pickedSlug) {
-      tenant = tenants.find(t => t.slug === pickedSlug) || null;
-      if (!tenant) return c.json({ error: 'Ese email no pertenece a ese negocio' }, 404);
-    } else if (tenants.length === 1) {
-      tenant = tenants[0];
-    }
-
-    // Varios negocios y aún sin elegir → devolver la lista para que el usuario escoja.
-    if (!tenant) {
-      return c.json({
-        mode: 'choose',
-        tenants: tenants.map(t => ({
-          slug: t.slug,
-          name: t.name,
-          // Producción: URL absoluta del subdominio. Dev: null (se resuelve por btenant al elegir).
-          url: baseDomain ? `https://${t.slug}.${baseDomain}/admin/login` : null,
-        })),
+    // setImmediate por lo mismo que en el forgot-password de C5: el cuerpo de una async corre
+    // SÍNCRONO hasta su primer await, y aquí dentro hay lecturas de SQLite (síncronas) que se harían
+    // antes de responder. Sin esto, el reloj distinguiría "tiene negocio" de "no tiene" aunque el
+    // texto fuera idéntico — allí se midió 10x sin solapamiento. La respuesta sale primero.
+    if (tenants.length) {
+      const host = c.req.header('host') || 'bamburu.com';
+      setImmediate(() => {
+        enviarEnlaceAcceso({ email, tenants, host })
+          .catch(err => console.error('[Acceso] Error enviando el enlace de acceso:', err));
       });
     }
-
-    // Un negocio resuelto.
-    if (baseDomain) {
-      // PRODUCCIÓN: al login de SU subdominio → manda el paso 3 del middleware y la sesión
-      // cae en el host correcto. No hace falta cookie btenant (el subdominio identifica el negocio).
-      return c.json({ mode: 'redirect', url: `https://${tenant.slug}.${baseDomain}/admin/login` });
-    }
-
-    // DEV/Tailscale (un solo host): comportamiento original — cookie btenant host-only + login relativo.
-    c.header('Set-Cookie', `btenant=${tenant.slug}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600`);
-    return c.json({ mode: 'password', slug: tenant.slug, url: '/admin/login' });
+    return c.json({ mode: 'sent' });
   } catch(e) {
-    return c.json({ error: 'Error interno' }, 500);
+    // Ni siquiera un fallo interno puede delatar: un 500 solo alcanzable con email real sería el
+    // mismo chivato que se cerró en el forgot-password (allí el 500 de Resend confirmaba la cuenta).
+    console.error('[Acceso] Error en /find-tenant:', e);
+    return c.json({ mode: 'sent' });
   }
 });
+
+// Manda el enlace de acceso. Corre FUERA de la respuesta: aquí no se decide nada de lo que ve quien
+// preguntó — solo se hace el trabajo y se registra lo que falle.
+async function enviarEnlaceAcceso({ email, tenants, host }) {
+  const { createAccessLink } = await import('./core/control-db.js');
+  const { sendEmail } = await import('./core/mailer.js');
+  const token = createAccessLink(email);
+  const baseDomain = process.env.PUBLIC_BASE_DOMAIN || null;
+  const enlace = baseDomain
+    ? `https://${baseDomain}/acceso/entrar?token=${token}`
+    : `https://${host}/acceso/entrar?token=${token}`;
+
+  // El enlace NUNCA se registra: un token en un log es un token filtrado. Misma regla que el de
+  // reseteo (C5) y que la clave de Anthropic en el log de sudo (11-jul-2026).
+  console.log('[Acceso] Enviando enlace de acceso (destinatario oculto), negocios:', tenants.length);
+
+  const cuantos = tenants.length === 1 ? 'tu negocio' : `tus ${tenants.length} negocios`;
+  const { error } = await sendEmail({
+    from: 'Bamburu <noreply@bamburu.com>',
+    to: email,
+    subject: 'Tu enlace para entrar en Bamburu',
+    text: `Pediste entrar en Bamburu.\n\nAbre este enlace para ir a ${cuantos}:\n${enlace}\n\n`
+        + `Caduca en 30 minutos y solo sirve una vez.\nSi no lo has pedido tú, ignora este correo: no se ha tocado nada.`,
+    html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
+      <p style="font-size:20px;font-weight:600;color:#0f172a;margin:0 0 18px">Entra en Bamburu</p>
+      <p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 22px">Pediste entrar. Este enlace te lleva a ${cuantos}:</p>
+      <p style="margin:0 0 22px"><a href="${enlace}" style="display:inline-block;padding:13px 22px;background:#0F766E;color:#fff;text-decoration:none;border-radius:10px;font-weight:600;font-size:15px">Entrar en Bamburu</a></p>
+      <p style="font-size:13px;color:#94a3b8;line-height:1.6;margin:0">Caduca en 30 minutos y solo sirve una vez.<br>Si no lo has pedido tú, ignora este correo: no se ha tocado nada.</p>
+    </div>`,
+  });
+  if (error) throw new Error('Resend: ' + JSON.stringify(error));
+}
+
+// Al otro lado del correo: aquí SÍ se puede hablar, porque el token demuestra que quien abre el
+// enlace controla ese buzón.
+//
+// El token se MIRA para pintar, y se GASTA al elegir negocio — no al abrir. Si se gastara al abrir,
+// quien tiene varios negocios vería la lista y, al pulsar uno, el enlace ya estaría muerto: un
+// rescate que se rompe justo en el último paso. Se gasta una vez y solo una: al entrar de verdad.
+app.get('/acceso/entrar', async c => {
+  const token = c.req.query('token') || '';
+  const pedido = c.req.query('n') || '';
+  const { peekAccessLink, consumeAccessLink, getTenantsByEmail } = await import('./core/control-db.js');
+
+  const caducado = () => c.html(avisoAcceso('Este enlace ya no vale',
+    'Los enlaces caducan a los 30 minutos y solo sirven una vez.',
+    '<a class="op" href="/acceso">Pedir uno nuevo</a>'), 400);
+
+  const email = peekAccessLink(token);
+  if (!email) return caducado();
+
+  const tenants = getTenantsByEmail(email);
+  if (!tenants.length) {
+    return c.html(avisoAcceso('No hay ningún negocio con ese email',
+      'Puede que se haya dado de baja. Si crees que es un error, escribe a soporte.'), 404);
+  }
+
+  const baseDomain = process.env.PUBLIC_BASE_DOMAIN || null;
+  const loginUrl = (t) => baseDomain ? `https://${t.slug}.${baseDomain}/admin/login` : '/admin/login';
+
+  let elegido = null;
+  if (tenants.length === 1) elegido = tenants[0];
+  else if (pedido) elegido = tenants.find(t => t.slug === pedido) || null;
+
+  // Varios negocios y aún sin elegir: la lista se enseña AQUÍ, ya con el token por delante — nunca
+  // a quien solo escribió un email en /acceso. El token viaja en los enlaces para gastarse al elegir.
+  if (!elegido) {
+    const items = tenants.map(t =>
+      `<a class="op" href="/acceso/entrar?token=${encodeURIComponent(token)}&n=${encodeURIComponent(t.slug)}">${escHtml(t.name || t.slug)}</a>`
+    ).join('');
+    return c.html(avisoAcceso('¿A cuál entras?', 'Tu email está en varios negocios.', items));
+  }
+
+  if (!consumeAccessLink(token)) return caducado();   // otra pestaña lo gastó primero
+
+  const headers = new Headers({ Location: loginUrl(elegido) });
+  // Dev/Tailscale (un solo host, sin subdominios): btenant es lo que dice al resto de la app en qué
+  // negocio estamos. En producción no hace falta: lo dice el subdominio. C6/B11: va con Secure.
+  if (!baseDomain) headers.append('Set-Cookie', `btenant=${elegido.slug}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`);
+  return new Response(null, { status: 302, headers });
+});
+
+// Página sobria para los avisos de /acceso (enlace caducado, elegir negocio). Mismo aire que /acceso.
+function avisoAcceso(titulo, texto, extra = '') {
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>${escHtml(titulo)} — Bamburu</title><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#070B14;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:20px}
+.card{width:100%;max-width:400px;padding:40px 36px;background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,0.08);border-radius:24px;text-align:center}
+.logo{font-size:22px;font-weight:800;color:#fff;letter-spacing:-0.03em;margin-bottom:24px}
+.logo span{color:#14B8A6}
+h1{font-size:19px;font-weight:700;color:#fff;margin-bottom:8px}
+p{font-size:14px;color:rgba(255,255,255,0.45);line-height:1.6;margin-bottom:20px}
+.op{display:block;width:100%;padding:13px;margin-bottom:10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:12px;color:#fff;text-decoration:none;font-size:15px;font-weight:600}
+.op:hover{border-color:#14B8A6;background:rgba(20,184,166,0.08)}
+</style></head><body><div class="card">
+<div class="logo">Bam<span>buru</span></div>
+<h1>${escHtml(titulo)}</h1><p>${escHtml(texto)}</p>${extra}
+</div></body></html>`;
+}
 
 app.get('/acceso', c => c.html(`<!DOCTYPE html>
 <html lang="es">
@@ -1286,52 +1376,23 @@ input[readonly]{color:rgba(255,255,255,0.5);cursor:default}
     <p class="err" id="err1"></p>
   </div>
 
-  <!-- Paso 2: contraseña -->
+  <!-- Paso 2: hemos mandado el enlace (C6/B6).
+       Aquí ya no se pide la contraseña ni se elige negocio: las dos cosas revelaban, a quien solo
+       había escrito un email, si esa cuenta existe y dónde. Ahora eso vive al otro lado del correo,
+       detrás de un enlace que prueba que el buzón es suyo. Este texto es EL MISMO exista o no la
+       cuenta — si cambiara, volveríamos a tener el chivato, solo que más bonito. -->
   <div id="step2" style="display:none">
-    <button class="back" onclick="goBack()">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
-      Cambiar email
-    </button>
-    <h1>Bienvenido</h1>
-    <p class="sub">Introduce tu contraseña</p>
-    <div class="email-badge">
-      <span id="emailDisplay"></span>
-      <button type="button" onclick="goBack()">Cambiar</button>
-    </div>
-    <form id="loginForm" method="POST">
-      <input type="hidden" name="email" id="hiddenEmail">
-      <div class="field">
-        <label for="pwIn">Contraseña</label>
-        <input id="pwIn" type="password" name="password" placeholder="••••••••" autocomplete="current-password">
-      </div>
-      <button type="submit" class="btn" id="btnLogin">Entrar al panel</button>
-      <p class="err" id="err2"></p>
-    </form>
-    <p style="text-align:center;font-size:13px;color:rgba(255,255,255,0.4);margin-top:16px">
-      <a href="/admin/forgot-password" style="color:rgba(255,255,255,0.4);text-decoration:none" onmouseover="this.style.color='#14B8A6'" onmouseout="this.style.color='rgba(255,255,255,0.4)'">¿Olvidaste tu contraseña?</a>
-    </p>
-  </div>
-
-  <!-- Paso: elegir negocio (cuando el email está en varios) -->
-  <div id="stepChoose" style="display:none">
-    <button class="back" onclick="goBack()">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
-      Cambiar email
-    </button>
-    <h1>Elige tu negocio</h1>
-    <p class="sub">Tu email está en varios negocios. ¿A cuál quieres entrar?</p>
-    <div id="chooseList"></div>
+    <h1>Mira tu correo</h1>
+    <p class="sub">Si ese email tiene un negocio en Bamburu, te hemos enviado un enlace para entrar. Caduca en 30 minutos.</p>
+    <button class="btn" onclick="goBack()" style="background:rgba(255,255,255,0.06)">Usar otro email</button>
   </div>
 </div>
 <script>
 (function(){
   const step1=document.getElementById('step1');
   const step2=document.getElementById('step2');
-  const stepChoose=document.getElementById('stepChoose');
   const emailIn=document.getElementById('emailIn');
-  const pwIn=document.getElementById('pwIn');
   const err1=document.getElementById('err1');
-  const err2=document.getElementById('err2');
 
   emailIn.addEventListener('keydown',e=>{if(e.key==='Enter')findTenant()});
 
@@ -1340,63 +1401,28 @@ input[readonly]{color:rgba(255,255,255,0.5);cursor:default}
     btn.textContent='Continuar';btn.disabled=false;
   }
 
-  // Decide qué hacer con la respuesta de /find-tenant según su 'mode'.
-  function handleResp(r,d,email){
-    if(!r.ok){showErr(err1,(d&&d.error)||'No encontramos ninguna cuenta con ese email.');resetContinue();return}
-    if(d.mode==='redirect'){window.location.href=d.url;return}        // producción: al subdominio del negocio
-    if(d.mode==='choose'){showChooser(d.tenants||[],email);return}     // email en varios negocios
-    // dev (un solo host): pedir la contraseña aquí mismo (btenant ya puesto por el servidor)
-    document.getElementById('loginForm').action=d.url;
-    document.getElementById('hiddenEmail').value=email;
-    document.getElementById('emailDisplay').textContent=email;
-    step1.style.display='none';stepChoose.style.display='none';step2.style.display='block';
-    pwIn.focus();
-  }
-
-  function showChooser(list,email){
-    const box=document.getElementById('chooseList');
-    box.innerHTML='';
-    list.forEach(function(t){
-      const b=document.createElement('button');
-      b.className='btn';b.style.marginBottom='10px';
-      b.textContent=t.name||t.slug;
-      b.onclick=function(){choose(t,email)};
-      box.appendChild(b);
-    });
-    step1.style.display='none';step2.style.display='none';stepChoose.style.display='block';
-    resetContinue();
-  }
-
-  async function choose(t,email){
-    if(t.url){window.location.href=t.url;return}                      // producción: URL absoluta del negocio
-    try{
-      const r=await fetch('/find-tenant',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,slug:t.slug})});
-      handleResp(r,await r.json(),email);                             // dev: vuelve como 'password'
-    }catch{showErr(err1,'Error de conexión. Inténtalo de nuevo.')}
-  }
-
+  // C6/B6 — pase lo que pase, la MISMA pantalla. Antes esto ramificaba según lo que contestara el
+  // servidor (redirect / elegir negocio / pedir contraseña), y cada rama era, ella sola, la
+  // respuesta a "¿existe este email y dónde?". Ya no hay ramas: se manda el email y se dice que
+  // mires el correo. Un fallo de red sí se avisa —eso no dice nada de la cuenta—, pero un 4xx/5xx
+  // del servidor NO cambia el mensaje: si un error pudiera verse solo con un email real, el error
+  // sería el chivato (es exactamente lo que pasaba con el 500 de Resend en el forgot-password).
   window.findTenant=async function(){
     const email=emailIn.value.trim();
     if(!email||!email.includes('@')){showErr(err1,'Introduce un email válido.');return}
     const btn=document.getElementById('btnContinue');
-    btn.textContent='Buscando...';btn.disabled=true;err1.style.display='none';
+    btn.textContent='Enviando...';btn.disabled=true;err1.style.display='none';
     try{
-      const r=await fetch('/find-tenant',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
-      handleResp(r,await r.json(),email);
+      await fetch('/find-tenant',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+      step1.style.display='none';step2.style.display='block';
     }catch{showErr(err1,'Error de conexión. Inténtalo de nuevo.');resetContinue()}
   };
 
   window.goBack=function(){
-    step2.style.display='none';stepChoose.style.display='none';step1.style.display='block';
-    err2.style.display='none';
+    step2.style.display='none';step1.style.display='block';
     resetContinue();
     emailIn.focus();
   };
-
-  document.getElementById('loginForm').addEventListener('submit',function(){
-    const btn=document.getElementById('btnLogin');
-    btn.textContent='Entrando...';btn.disabled=true;
-  });
 
   function showErr(el,msg){el.textContent=msg;el.style.display='block'}
 })();
@@ -1517,3 +1543,6 @@ async function cleanupAllTenantSessions() {
 cleanupAllTenantSessions();
 setInterval(cleanupAllTenantSessions, 6 * 60 * 60 * 1000);
 setInterval(cleanupRateLimitBuckets, 10 * 60 * 1000);
+// C6/B4 — el mapa de fallos por cuenta se barre igual que los cupos: si no, cada email que alguien
+// teclee mal queda en memoria para siempre, y eso es un goteo que solo se ve meses después.
+setInterval(cleanupFallos, 10 * 60 * 1000);

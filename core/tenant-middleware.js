@@ -1,5 +1,7 @@
 import Database from 'better-sqlite3';
+import path from 'path';
 import { getTenantBySlug, getSessionByToken, WAL_SIZE_LIMIT } from './control-db.js';
+import { restringirBd } from './db-file-perms.js';
 import { tenantStorage } from './db.js';
 import { runMigrations } from '../modules/erp/models.js';
 
@@ -23,6 +25,11 @@ export function getTenantDb(tenant) {
     // y la cola no se activa: un gate nunca dispara una petición a la AEAT por accidente.
     tenantDb.bamburuSlug = tenant.slug;
     runMigrations(tenantDb);
+    // C6/B9 — red de seguridad: al abrir, la BD queda privada aunque naciera abierta. Es lo que
+    // arregla las que ya existen sin tocarlas a mano, y lo que impide que una BD restaurada de una
+    // copia (que llega con los permisos del backup) se quede abierta sin que nadie mire. Solo actúa
+    // si de verdad hay bits de grupo/otros, así que no hace ruido en las que ya están bien.
+    restringirBd(path.isAbsolute(tenant.db_filename) ? tenant.db_filename : path.join(process.cwd(), tenant.db_filename));
     tenantConnections.set(tenant.slug, tenantDb);
   }
   return tenantDb;

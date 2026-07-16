@@ -120,13 +120,31 @@ try {
   tdb.close();
 
   console.log('\n[6] Login por /acceso tras crear (BUG REPORTADO): credenciales correctas → entra');
-  // Simula un navegador limpio (sin asess): /find-tenant por email → /admin/login con btenant.
+  // C6/B6 — el flujo cambió: /find-tenant ya NO contesta el negocio (era un oráculo: decía a un
+  // desconocido si un email existe y dónde). Ahora manda un enlace por correo y la respuesta es
+  // siempre la misma. El gate hace lo que haría el usuario: abrir ese enlace — leyendo el token de
+  // control.db en vez de un buzón. Lo que este caso vigila NO cambia: que tras el alta se pueda
+  // entrar por /acceso con las credenciales buenas.
   const ft = await fetch(APEX + '/find-tenant', { method: 'POST', headers: HJ, body: JSON.stringify({ email }) });
-  const ftBody = await ft.json();
-  const ftCookie = ft.headers.get('set-cookie') || '';
-  check('/find-tenant encuentra el negocio por email', ft.status === 200 && ftBody.slug === createdSlug, JSON.stringify(ftBody));
-  check('/find-tenant fija cookie btenant con el slug', new RegExp('btenant=' + createdSlug).test(ftCookie), ftCookie.split(';')[0]);
-  const btenant = (ftCookie.match(/btenant=([^;]+)/) || [])[1];
+  check('/find-tenant responde lo genérico (sin decir si el email existe)',
+    ft.status === 200 && (await ft.text()) === '{"mode":"sent"}');
+  check('y NO fija ya la cookie btenant', !(ft.headers.get('set-cookie') || '').includes('btenant'));
+
+  await new Promise(r => setTimeout(r, 400));   // el enlace se crea fuera de la respuesta (setImmediate)
+  const enlace = controlDb.prepare('SELECT token FROM tenant_access_links WHERE email=? AND used_at IS NULL ORDER BY rowid DESC LIMIT 1').get(email);
+  check('se creó el enlace de acceso para ese email', !!enlace);
+
+  const entrar = await fetch(`${APEX}/acceso/entrar?token=${enlace?.token}`, { redirect: 'manual' });
+  const ftCookie = entrar.headers.get('set-cookie') || '';
+  const destino = entrar.headers.get('location') || '';
+  check('el enlace del correo lleva al login de SU negocio',
+    entrar.status === 302 && /\/admin\/login/.test(destino) && (destino.includes(createdSlug) || new RegExp('btenant=' + createdSlug).test(ftCookie)),
+    destino);
+  controlDb.prepare('DELETE FROM tenant_access_links WHERE email=?').run(email);
+
+  // En dev el negocio se dice por cookie; en producción, por subdominio (y el gate va al APEX, así
+  // que se planta el btenant a mano para poder seguir probando el login contra este host).
+  const btenant = (ftCookie.match(/btenant=([^;]+)/) || [])[1] || createdSlug;
   const loginRes = await fetch(APEX + '/admin/login', {
     method: 'POST', redirect: 'manual',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: 'btenant=' + btenant },

@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { mkdirSync, unlinkSync } from 'fs';
 import { hashPassword } from './auth.js';
+import { restringirBd } from './db-file-perms.js';
 import { runMigrations } from '../modules/erp/models.js';
 import { getTenantBySlug, createTenant, getCountryConfig } from './control-db.js';
 import { parseSignup } from './signup-schema.js';
@@ -48,9 +49,14 @@ export async function provisionTenant(input) {
   let tenantDb;
   try {
     tenantDb = new Database(absolutePath);
+    // C6/B9 — privada desde el primer instante, antes de que entre un solo dato. El fichero nacía
+    // con el umask del proceso, y dos negocios acabaron en 0644 (legibles por cualquier usuario de
+    // la máquina) solo porque quien los creó tenía otro umask.
+    restringirBd(absolutePath);
     tenantDb.pragma('journal_mode = WAL');
     tenantDb.pragma('foreign_keys = ON');
     runMigrations(tenantDb);
+    restringirBd(absolutePath);   // otra vez: el -wal no existe hasta la primera escritura
 
     // Inicializar company_config con la configuración del país
     const countryConfig = getCountryConfig(country);

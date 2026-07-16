@@ -614,15 +614,16 @@ export function runMigrations(db) {
     const hash = bcrypt.hashSync(pwd, BCRYPT_COST);   // el coste vive en un solo sitio (core/auth.js)
     db.prepare('INSERT INTO admin_users (name, email, password_hash, role, must_change_password) VALUES (?,?,?,?,?)')
       .run('Administrador', 'admin@bamburu.com', hash, 'owner', 1);
-    console.log(`
-=====================================================
-⚠️  ADMIN CREADO POR PRIMERA VEZ
-   Email:      admin@bamburu.com
-   Contraseña: ${pwd}
-
-   GUÁRDALA AHORA. No volverá a mostrarse.
-   Se te pedirá cambiarla en el primer login.
-=====================================================`);
+    // C6/B1 — la contraseña NO se imprime. Este bloque corre en CADA alta de negocio (la BD nace
+    // vacía → adminCount === 0), así que imprimía una credencial en el journal por cada cliente
+    // nuevo. Era el anti-patrón exacto de los dos incidentes previos, repetido en bucle.
+    //
+    // Y no hace falta que nadie la lea: el provisioning BORRA esta cuenta acto seguido
+    // (core/tenant-provisioning.js) y crea al dueño real. Existe solo para que la BD no quede sin
+    // owner si alguien migra a mano. Si algún día hay que entrar por ella, se le pone contraseña
+    // con `node scripts/reset-admin.js admin@bamburu.com` — que la pide por teclado y no la imprime.
+    console.log('[Migraciones] BD sin admin: creada la cuenta semilla admin@bamburu.com '
+      + '(contraseña aleatoria NO impresa; el alta la sustituye por el dueño real).');
   }
 
   // Migrate old users table if exists

@@ -91,6 +91,25 @@ export function evaluateQueryAccess(sql, { isAdmin, allTables, hasPerm }) {
   return null;
 }
 
+// C6/B8 — deja el SQL en condiciones de ir a un log: misma consulta, sin sus valores.
+//
+// El SQL lo escribe el modelo a partir de lo que pide el dueño, así que los literales SON los datos:
+// "¿cuánto me debe Juan Pérez?" acaba en WHERE name='Juan Pérez'. Eso es PII de los clientes DEL
+// cliente, y el journal no se limpia solo. Pura y determinista, y exportada para poder probarla.
+//
+// Se conserva la FORMA entera —tablas, joins, columnas, la cláusula— que es lo único que sirve para
+// depurar; lo que se pierde es a quién buscaba. Va después del control de acceso, nunca antes: esto
+// es para MIRAR, no para decidir (sanear para decidir es como se cuelan las inyecciones).
+export function redactarSql(sql) {
+  return String(sql ?? '')
+    // Literales de texto ('' escapada incluida) → '?'. Primero, o sus comillas descuadran lo demás.
+    .replace(/'(?:[^']|'')*'/g, "'?'")
+    // Números sueltos → ?. El \b evita tocar identificadores tipo `linea1` o `s2`.
+    .replace(/\b\d+(?:\.\d+)?\b/g, '?')
+    // Fechas/valores entre comillas dobles, si el modelo las usa como literal.
+    .replace(/"(?:[^"]|"")*"/g, '"?"');
+}
+
 export function register(app, db) {
   const router = new Hono();
 
@@ -2557,7 +2576,13 @@ export function register(app, db) {
           const toolUse = data.content.find(b => b.type === 'tool_use');
           if (!toolUse) break;
           const result = runQueryTool(toolUse.input?.sql || '');
-          console.log('[DISA] query_database:', toolUse.input?.sql, '→', result.count ?? result.error);
+          // C6/B8 — el SQL va al log SIN sus valores. La consulta la escribe el modelo, así que los
+          // literales son lo que el dueño preguntó: "la factura de Juan Pérez" acaba como
+          // WHERE name='Juan Pérez' en el journal — PII de SUS clientes, en un sitio que nadie
+          // limpia. Misma lección que C3/M7 (el email fuera del log de login) y que el forgot-password
+          // de C5. La FORMA se conserva entera, que es lo único que sirve para depurar: se ve la
+          // tabla, el join y la cláusula; lo que se pierde es a quién buscaba.
+          console.log('[DISA] query_database:', redactarSql(toolUse.input?.sql), '→', result.count ?? result.error);
           apiMessages.push({ role: 'assistant', content: data.content });
           apiMessages.push({
             role: 'user',

@@ -143,6 +143,23 @@ function runMigrations(db) {
   `);
   db.exec('CREATE INDEX IF NOT EXISTS idx_sa_recovery_owner ON superadmin_recovery_codes (superadmin_id, used_at)');
 
+  // C6/B6 — enlaces de acceso ("¿en qué negocio entro?"). Antes /find-tenant contestaba en el acto
+  // a un desconocido si un email era admin y en qué negocios; ese es el oráculo. Ahora la respuesta
+  // viaja por CORREO: el token prueba que controlas ese buzón, y solo entonces se dice algo. Igual
+  // que el "Find your workspaces" de Slack y que el forgot-password de C5 (la respuesta, fuera de
+  // banda). De un solo uso y con caducidad corta — un enlace que abre tu panel no puede ser eterno.
+  // Aditiva e idempotente.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tenant_access_links (
+      token      TEXT PRIMARY KEY,
+      email      TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      used_at    INTEGER DEFAULT NULL
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_access_links_exp ON tenant_access_links (expires_at)');
+
   // Vigilancia del superadmin (tablas RODANTES: se conservan las últimas ~1000 filas).
   db.exec(`
     CREATE TABLE IF NOT EXISTS security_events (
@@ -387,6 +404,49 @@ export function destroySuperadminSession(token) {
 }
 export function destroyAllSuperadminSessions(superadminId) {
   controlDb.prepare('DELETE FROM superadmin_sessions WHERE superadmin_id=?').run(superadminId);
+}
+
+// ── C6/B6 · Enlaces de acceso por correo ─────────────────────────────────────
+// TTL corto (30 min): esto abre la puerta de tu panel, no es un boletín.
+
+export const ACCESS_LINK_TTL_S = 30 * 60;
+
+export function createAccessLink(email) {
+  const token = randomBytes(32).toString('hex');
+  const now = Math.floor(Date.now() / 1000);
+  controlDb.prepare('INSERT INTO tenant_access_links (token, email, created_at, expires_at) VALUES (?,?,?,?)')
+    .run(token, String(email).trim().toLowerCase(), now, now + ACCESS_LINK_TTL_S);
+  return token;
+}
+
+// Mira el enlace SIN gastarlo: para pintar la lista de negocios antes de que se elija uno.
+// Devuelve el email o null si no existe, caducó o ya se usó.
+export function peekAccessLink(token) {
+  if (!token) return null;
+  const now = Math.floor(Date.now() / 1000);
+  const row = controlDb.prepare(
+    'SELECT email FROM tenant_access_links WHERE token=? AND used_at IS NULL AND expires_at > ?'
+  ).get(String(token), now);
+  return row?.email || null;
+}
+
+// Gasta el enlace y devuelve su email, o null. El UPDATE lleva `used_at IS NULL` y comprueba la
+// caducidad en la MISMA sentencia: así dos clics a la vez sobre el mismo enlace solo dejan pasar a
+// uno, y no hay hueco entre "compruebo" y "gasto" por el que colar un segundo uso.
+export function consumeAccessLink(token) {
+  if (!token) return null;
+  const now = Math.floor(Date.now() / 1000);
+  const r = controlDb.prepare(
+    'UPDATE tenant_access_links SET used_at=? WHERE token=? AND used_at IS NULL AND expires_at > ?'
+  ).run(now, String(token), now);
+  if (r.changes !== 1) return null;
+  return controlDb.prepare('SELECT email FROM tenant_access_links WHERE token=?').get(String(token))?.email || null;
+}
+
+// Los caducados se van solos: son de usar y tirar, y guardarlos solo engorda la tabla.
+export function cleanupAccessLinks() {
+  const now = Math.floor(Date.now() / 1000);
+  controlDb.prepare('DELETE FROM tenant_access_links WHERE expires_at <= ?').run(now - 24 * 3600);
 }
 
 // ── 2FA del superadmin (C5/M3) ───────────────────────────────────────────────

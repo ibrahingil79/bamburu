@@ -7,7 +7,10 @@
 > certificado de Bamburu + autorización de representación del cliente), y está **aparcado** hasta tener la
 > plataforma al 100 % — ver `docs/contexto/decisiones.md` (2026-07-10).
 >
-> **BLOQUE EN CURSO: EJE C — SEGURIDAD** (5 de 6 tareas hechas; queda C6). Plan cargado desde la auditoría del 15 jul (ver la
+> **EJE C — SEGURIDAD: ✅ COMPLETO (C1–C6, 16 jul).** Los tres ejes de la fase de optimización quedan
+> cerrados (A: UX · B: DISA · C: Seguridad). **Sin tarea siguiente asignada: la próxima la decides tú** —
+> candidatas anotadas: C5-bis (códigos de rescate para los dueños), B10 (hardening systemd, va solo), y el
+> Backlog. Plan cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
 > victorias rápidas), C4a + C4a-bis HECHOS** → **M1 (XSS almacenado) CERRADO ENTERO**. **C4b: hechos
 > C4b-0 (nonce + sonda), C4b-1 (registro y superadmin ya sirven `script-src` SIN `'unsafe-inline'`) y
@@ -571,14 +574,16 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
   entera. Limpiado `auth.log`; clave **rotada** y verificada con una llamada real a DISA. La lección
   (nunca un secreto en `argv`) queda en `errores-conocidos.md`.
 
-## Eje C: Seguridad — plan cargado (auditoría del 15 jul)  ⬅️ C1-C3 + C4a + C4a-bis + C4b(0,1,2) + C5 HECHOS · C4b-3/C4b-4 DECIDIDOS (no) · SIGUIENTE C6
+## Eje C: Seguridad  ✅ COMPLETO (C1–C6)
 
 > Origen: **auditoría de seguridad de SOLO LECTURA del 15 jul 2026** (`docs/seguridad/auditoria-ejeC.md`,
 > commit `24dbf2a`). Postura general **buena** (aislamiento entre negocios sólido y fail-closed, DISA no se
 > sale de `WRITABLE_TABLES`, backups montados y verificados, transporte/cabeceras casi completos). Cada
 > tarea referencia su(s) **código(s) de hallazgo del informe** con file:line — no descripciones de memoria.
-> Orden = por gravedad y reversibilidad. **Estado (16 jul): C1–C5 hechas · C4b-3/C4b-4 decididas (no se
-> hacen) · queda C6.** El estado vivo de cada tarea está en su ficha, abajo — esta línea no lo duplica.
+> Orden = por gravedad y reversibilidad. **Estado (16 jul): CERRADO — C1 a C6 hechas.** Lo que NO se
+> arregló (B5, B11-tienda, B12 como riesgo asumido; B10 aplazado; C4b-3/C4b-4 descartadas) está por escrito
+> con dueño y fecha en sus fichas y en el informe. El estado vivo de cada tarea está en su ficha, abajo —
+> esta línea no lo duplica.
 
 - ✅ **C1 — [A1 · ALTA] Cadena legal de Verifactu encadenada por NIF del emisor (15 jul 2026, `2fdc9bf`).**
   Lo que quedaba sin proteger: el encadenado elegía el previo por `id` GLOBAL, así que un cambio de NIF en
@@ -882,21 +887,52 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
   aparte en vez de meterla en C5 (era construir para clientes dentro de una tarea de seguridad interna).
   Hoy nadie la necesita: `totp_enabled=0` en los 6 negocios.
 
-- ⬜ **C6 — Los 12 hallazgos BAJA (un solo bloque, al final).**
-  **[B1]** contraseña generada impresa al provisionar (`modules/erp/models.js:621`; cuenta desechable —
-  anti-patrón recurrente) · **[B2]** `POST /users/:id/permissions` sin allowlist server-side, confía en la
-  UI (`routes/users.js:94-106`) · **[B3]** el reset no invalida otras sesiones/tokens + longitud mínima
-  incoherente 8 vs 10 (`routes/auth.js:604,583`) · **[B4]** login sin lockout por cuenta, solo por IP
-  (`core/rate-limit.js:23`) · **[B5]** cookie `btenant` selecciona la BD activa sin auth
-  (`core/tenant-middleware.js:59-65`; mitigado por `adminAuth` per-BD) · **[B6]** enumeración de emails
-  cross-tenant en `/find-tenant` (`index.js:1187-1210`) · **[B7]** scripts de ops imprimen contraseñas
-  (`scripts/reset-admin.js:36`, `seed-superadmin.mjs:24`, `init-dev.mjs:30`) · **[B8]** DISA loguea el SQL
-  generado, con valores de WHERE (`modules/disa/index.js:2558`) · **[B9]** permisos `0644` (world-readable)
-  en 2 BD de tenant (`data/tenants/inversiones-disan.db`, `rachibra.db`; dir padre `0700` lo protege hoy) ·
-  **[B10]** hardening systemd mínimo (`/etc/systemd/system/bamburu.service`, `NoNewPrivileges=false`) ·
-  **[B11]** cookies `btenant`/`store_preview` sin `Secure` (`index.js:1236`, `modules/store/routes.js:200`;
-  dev / Capa 2 congelada) · **[B12]** `roles`/`role_permissions`/`user_roles` sembradas pero sin uso en la
-  aplicación de permisos (`models.js:1904-2017`; código muerto).
+- ✅ **C6 — Los 12 hallazgos BAJA (16 jul 2026).** **8 arreglados · 3 asumidos por escrito · 1 aplazado con
+  aviso.** Cierra el Eje C. El detalle, las decisiones y el porqué de cada "no", en
+  `docs/seguridad/auditoria-ejeC.md` § "C6 — Los 12 hallazgos BAJA: cierre".
+  - **Trabajado contra el código de HOY, no contra el informe:** 5 de los 12 `file:line` estaban rancios
+    (C3/C4a/C4b/C5 movieron el código desde el 15-jul). Se localizó cada uno antes de tocar nada.
+  - ✅ **[B3] El reset de contraseña ya EXPULSA** — era el peor de los doce y el único donde el sistema
+    prometía algo que no cumplía: resetear no echaba a nadie, así que el intruso seguía dentro ≤24 h con la
+    contraseña ya cambiada. Ahora cierra todas las sesiones y quema los enlaces pendientes. Mínimo a 10
+    (servidor y pantalla), igual que el cambio propio: un mínimo es el más flojo de sus caminos.
+  - ✅ **[B2] Allowlist de permisos en servidor** — la lista de ocultos vivía DENTRO del handler de la
+    pantalla y solo servía para no pintarlos; la API los aceptaba. La seguridad era que el checkbox no
+    estuviera dibujado. Ahora es fuente única (`HIDDEN_PERMS`) y la aplica la API. Falla entero (400 al lote)
+    y queda en Actividad.
+  - ✅ **[B4] Freno por CUENTA en el login, como ralentización** — decisión del dueño y bien traída: un freno
+    por cuenta que RECHACE es un arma (cualquiera falla 5 veces contra tu email y te deja fuera). Ralentiza
+    hasta 10 s y **nunca bloquea**; cuenta fallos, no intentos; un acierto los borra. Reutiliza el `keyFn` de
+    C5. Un email inexistente se frena igual → el reloj no chiva.
+  - ✅ **[B6] `/find-tenant` ya no chiva** — no se podía arreglar solo el texto: el flujo NECESITA contestar
+    para redirigir, así que si contesta, delata. Cambiado a **enlace por correo** (patrón Slack "Find your
+    workspaces", y el mismo de C5: la respuesta, fuera de banda). Token de un solo uso, 30 min, tabla
+    aditiva `tenant_access_links`. La respuesta HTTP es `{"mode":"sent"}` exista o no el email. `/acceso` se
+    simplifica: ya no ramifica (cada rama era, ella sola, la respuesta a "¿existe y dónde?").
+  - ✅ **[B1] + [B7] Ningún secreto se imprime** — el alta ya no vuelca la contraseña semilla en cada negocio
+    nuevo, y los 3 scripts de ops la piden por teclado sin eco (`scripts/lib/prompt-secret.mjs`). Sin TTY
+    **abortan** en vez de degradarse: un script de credenciales que se apaña solo cuando lo capturan es el
+    fallo que se evita.
+  - ✅ **[B8] DISA no loguea los valores del WHERE** — `redactarSql()` conserva la forma (tablas, joins,
+    cláusula) y pierde los valores. Eran los datos del dueño: "la factura de Juan Pérez" acababa en el journal.
+  - ✅ **[B9] Las BD nacen privadas** — arreglados los 6 ficheros abiertos (los `-wal`/`-shm` también llevan
+    datos, y el informe solo citaba los `.db`) **y la causa**: `chmod` explícito al crear y al abrir
+    (`core/db-file-perms.js`), no umask — un umask solo protege a quien lo tenga puesto.
+  - 🔒 **[B5] · [B11 tienda] · [B12] — riesgo ASUMIDO, con dueño y fecha.** B5 falla cerrado y tocar la
+    selección de BD arriesga el aislamiento a cambio de nada; la cookie de la tienda no se endurece mientras
+    esté apagada (misma decisión que C4b-3: si se reactiva, entra con ella); B12 es código muerto que no
+    concede permisos, y retirarlo o cablearlo es decisión de diseño, no higiene. *(La otra mitad de B11, la
+    cookie `btenant`, SÍ se cerró: sale con `Secure`.)*
+  - ⏸️ **[B10] systemd — aplazado y con aviso.** Es el único que puede **tirar el servicio**: `ProtectHome`
+    con las BD en `/home/ubuntu` es exactamente cómo se rompe. Si entra: solo, nunca mezclado, con
+    verificación en vivo.
+  - Verificado: `test-c6-acceso` **32/0** · `test-c6-secretos` **28/0** · `gate-c6-find-tenant` **22/0** (en
+    el servidor real). Regresión verde: forgot 25/0, sesiones 10/0, 2FA 44/0, registro 26/0, CSP 19/0, gate
+    2FA 18/0.
+  - *Hallazgo nuevo, anotado sin arreglar (no estaba en el encargo):* el email SÍ entra en `security_events`
+    (`routes/auth.js`, los dos caminos de fallo del login). C3/M7 lo sacó del `console.log` y dejó la tabla,
+    aunque el comentario de al lado diga lo contrario. Defendible como telemetría del operador, incoherente
+    con la regla que el propio código enuncia. **Decidir a conciencia.**
 
 ---
 
