@@ -1,13 +1,13 @@
 # TABLERO — Fase de optimización
 
-> **DÓNDE ESTAMOS HOY (2026-07-10).** Eje A (UX) **completo**. Multi-almacén **cerrado** (las tres capas;
+> **DÓNDE ESTAMOS HOY (2026-07-16).** Eje A (UX) **completo**. Multi-almacén **cerrado** (las tres capas;
 > los traslados se verificaron el 10-jul: el valor del inventario no cambia al mover stock). Módulo de
 > **Avisos al 100 %** (contador en vivo + fuente "cliente en riesgo"; el bucle de la campana, arreglado).
 > **Verifactu para clientes NO es "activar la cola"**: el plan es **colaborador social** (un único
 > certificado de Bamburu + autorización de representación del cliente), y está **aparcado** hasta tener la
 > plataforma al 100 % — ver `docs/contexto/decisiones.md` (2026-07-10).
 >
-> **SIGUIENTE BLOQUE GRANDE: EJE C — SEGURIDAD.** Plan cargado desde la auditoría del 15 jul (ver la
+> **BLOQUE EN CURSO: EJE C — SEGURIDAD** (5 de 6 tareas hechas; queda C6). Plan cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
 > victorias rápidas), C4a + C4a-bis HECHOS** → **M1 (XSS almacenado) CERRADO ENTERO**. **C4b: hechos
 > C4b-0 (nonce + sonda), C4b-1 (registro y superadmin ya sirven `script-src` SIN `'unsafe-inline'`) y
@@ -243,7 +243,7 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
   clientes.
 - **Tres pantallas vivas sin enlace** (U7): `/admin/analytics`, `/admin/discounts`, `/admin/tags`.
 
-## Eje B: DISA (pendiente de planificar)  ⬅️ EMPEZAR AQUÍ
+## Eje B: DISA  ✅ COMPLETO (D0–D5f)
 - **Diagnóstico de avisos/notificaciones (solo lectura, 9 jul 2026):** `docs/disa/diagnostico-avisos.md`.
   Es la **foto ANTES** del encargo de avisos; se conserva tal cual (documento fechado), pero ya no describe
   el estado actual.
@@ -577,7 +577,8 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
 > commit `24dbf2a`). Postura general **buena** (aislamiento entre negocios sólido y fail-closed, DISA no se
 > sale de `WRITABLE_TABLES`, backups montados y verificados, transporte/cabeceras casi completos). Cada
 > tarea referencia su(s) **código(s) de hallazgo del informe** con file:line — no descripciones de memoria.
-> Orden = por gravedad y reversibilidad. **Ninguna empezada.**
+> Orden = por gravedad y reversibilidad. **Estado (16 jul): C1–C5 hechas · C4b-3/C4b-4 decididas (no se
+> hacen) · queda C6.** El estado vivo de cada tarea está en su ficha, abajo — esta línea no lo duplica.
 
 - ✅ **C1 — [A1 · ALTA] Cadena legal de Verifactu encadenada por NIF del emisor (15 jul 2026, `2fdc9bf`).**
   Lo que quedaba sin proteger: el encadenado elegía el previo por `id` GLOBAL, así que un cambio de NIF en

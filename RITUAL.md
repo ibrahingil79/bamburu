@@ -47,9 +47,17 @@ Esta rutina se ejecuta SIEMPRE al final de la sesión. Es la única forma de que
 Notion quede al día sin que el fundador toque nada. Cuatro pasos, a/b/c/d:
 
 **a) Actualizar `TABLERO.md`**
-- Mover a `🟢 HECHO` las tareas completadas hoy (con fecha + commit).
-- Si la sesión terminó en mitad de una tarea, dejar la nota en `🟡 HACIENDO`.
-- La siguiente queda como primera en `🔵 POR HACER`.
+- **El TABLERO NO tiene columnas.** No busques `🟢 HECHO` / `🟡 HACIENDO` / `🔵 POR HACER`:
+  esos tres marcadores no existen en el fichero. Se organiza **por ejes** (A: UX · B: DISA ·
+  C: Seguridad), y cada tarea lleva su estado **en su propia ficha**: `⬜` pendiente → `✅`
+  hecha, con **fecha + commit** en la misma línea.
+- Al cerrar: cambiar el `⬜` de esa tarea por `✅`, añadirle fecha y hash, y dejar en la ficha
+  qué se hizo, qué se decidió y con qué test se verificó.
+- Si la sesión terminó a medias, la ficha lo dice en su propio texto (no hay sitio "HACIENDO").
+- **Los rótulos de sección y los punteros también son estado, y caducan.** Si esta tarea era la
+  última de un eje, el rótulo del eje pasa a `✅ COMPLETO`, y el `⬅️` de "aquí es donde vamos"
+  se mueve al eje que toca. Un puntero rancio manda al siguiente chat al sitio equivocado con
+  toda la confianza del mundo.
 
 **b) Actualizar `CANON.md` si se cerró una pieza**
 - **CANON v2 NO tiene tabla de estado.** Son 7 secciones de estrategia (identidad, fase,
