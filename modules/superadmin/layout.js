@@ -74,6 +74,13 @@ input,select{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,
     return d;
   }
   async function saLogout(){ try{ await saApi('POST','/superadmin/logout'); }catch(_){} location.href='/superadmin/login'; }
+  // Escapa texto para meterlo en el HTML de un modal. Hace falta AUNQUE el dato ya viniera escapado
+  // en un data-*: al leerlo con dataset.x el navegador lo DEVUELVE DECODIFICADO, y concatenarlo aquí
+  // lo reinyecta como HTML. El escape del atributo protege el atributo, no este segundo viaje.
+  function saEsc(s){
+    if(s==null)return'';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
   function saOpenModal(html){ document.getElementById('modalBox').innerHTML=html; document.getElementById('modalBg').style.display='flex'; }
   function saCloseModal(){ document.getElementById('modalBg').style.display='none'; }
   document.getElementById('modalBg').addEventListener('click',e=>{ if(e.target.id==='modalBg') saCloseModal(); });

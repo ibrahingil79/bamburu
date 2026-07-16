@@ -22,6 +22,17 @@ export function escHtmlMultiline(s) {
 }
 
 /**
+ * Serializa un valor a JSON para incrustarlo DENTRO de una etiqueta <script> inline.
+ * Escapa '<' como \u003c: sin eso, un dato que contenga '</script>' cierra la etiqueta
+ * antes de tiempo y el resto del documento se parsea como HTML (XSS almacenado).
+ * escHtml NO sirve aquí: dentro de un <script> las entidades HTML no se decodifican.
+ * Sigue siendo JSON válido — \u003c se decodifica a '<' al parsearlo.
+ */
+export function jsonForScript(value) {
+  return JSON.stringify(value).replace(/</g, '\\u003c');
+}
+
+/**
  * Valida y normaliza una URL para uso en href/src.
  * Rechaza javascript:, data:, vbscript:, file:. Devuelve '' si no es segura.
  * Acepta: http://, https://, mailto:, tel:, rutas relativas (/foo) y anchors (#foo).

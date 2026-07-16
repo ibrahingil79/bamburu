@@ -8,7 +8,10 @@
 > plataforma al 100 % — ver `docs/contexto/decisiones.md` (2026-07-10).
 >
 > **SIGUIENTE BLOQUE GRANDE: EJE C — SEGURIDAD.** Plan cargado desde la auditoría del 15 jul (ver la
-> sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador) y C3 (tres victorias rápidas) HECHOS**; siguiente **C4** (XSS + CSP). Eje A (UX) y Eje B (DISA, seis
+> sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
+> victorias rápidas) y C4a (saneado del XSS + los 3 más graves del barrido) HECHOS**; siguiente
+> **C4a-bis** (los 58 puntos restantes, inventario ya hecho). C4 se partió en C4a / C4a-bis / C4b (la CSP,
+> refactor de todo el admin). Eje A (UX) y Eje B (DISA, seis
 > propuestas de proactividad) completos; Pilar 3 (inventario) cerrado.
 >
 > **Inventario (Pilar 3) CERRADO (15 jul 2026):** multi-almacén (`da7871e`/`3af928f`), stock mínimo /
@@ -564,7 +567,7 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
   entera. Limpiado `auth.log`; clave **rotada** y verificada con una llamada real a DISA. La lección
   (nunca un secreto en `argv`) queda en `errores-conocidos.md`.
 
-## Eje C: Seguridad — plan cargado (auditoría del 15 jul)  ⬅️ C1-C3 HECHOS · SIGUIENTE C4
+## Eje C: Seguridad — plan cargado (auditoría del 15 jul)  ⬅️ C1-C3 + C4a HECHOS · SIGUIENTE C4a-bis
 
 > Origen: **auditoría de seguridad de SOLO LECTURA del 15 jul 2026** (`docs/seguridad/auditoria-ejeC.md`,
 > commit `24dbf2a`). Postura general **buena** (aislamiento entre negocios sólido y fail-closed, DISA no se
@@ -615,15 +618,69 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
     Comprobado en vivo: categoría duplicada → el cliente ve "Ha ocurrido un error, inténtalo de nuevo." y el
     `[error] SqliteError: UNIQUE constraint failed: categories.name` queda en el log del servidor, nunca en el cliente.
 
-- ⬜ **C4 — [M1 + M8] XSS almacenado en campos de texto libre + endurecer la CSP (MISMA tarea: saneado +
-  red de seguridad).** Envolver en `escHtml` los campos que el informe lista SIN escapar: notas de cliente
-  (`modules/erp/routes/clients.js:560`), grupos de cliente (`clients.js:662`), categorías
-  (`routes/categories.js:70`), descuentos automáticos (`routes/discounts.js:166-169`), `<option>` de
-  categoría/proveedor en el editor de producto (`routes/products.js:555,557`) y `<option>` de proveedor
-  server-rendered (`routes/purchases.js:201` — el almacén de la misma función SÍ se escapa, `:204`). Y
-  **quitar `'unsafe-inline'`** de `script-src`/`style-src` en la CSP (`core/security-headers.js:34-35`): es
-  la mitigación sistémica del XSS (esfuerzo ALTO — mover el JS inline a ficheros/nonces). El saneado es la
-  línea de fondo; la CSP, el cinturón.
+> **C4 SE PARTIÓ EN TRES (16 jul 2026, decisión del dueño).** El informe daba M1 como «BAJO por caso, 6
+> sitios»; el barrido de verdad encontró **67 puntos** (58 abiertos tras C4a). Y M8 (la CSP) resultó ser un
+> refactor de todo el admin —**414 `onclick` + 109 handlers + 81 `<script>` inline**, y los nonces NO cubren
+> los handlers de atributo—, no una tarea de sesión. Empaquetarlos juntos habría dejado el XSS real esperando
+> semanas a la CSP. C4a (hecho) · C4a-bis (los 58) · C4b (la CSP).
+
+- ✅ **C4a — [M1] Saneado del XSS almacenado: los 6 del informe + una clase de fallo que el informe no vio
+  (16 jul 2026).** Los 6 listados, envueltos en `escHtml` respetando la convención de cada fichero
+  (`escHtml` a pelo en `clients.js`/`products.js`, `window.escHtml` en `categories.js`/`discounts.js`):
+  notas de cliente, grupos, categorías, descuentos automáticos (`a.name` + `a.condition_value`) y los dos
+  `<option>` del editor de producto. Más el `<option>` server-rendered de proveedor (`purchases.js`, que no
+  importaba `escHtml`) y el escape PARCIAL del almacén (`replace(/</g,'&lt;')` → `escHtml`).
+  - **HALLAZGO NUEVO — ruptura de `</script>`, peor que los seis:** `purchases.js` inyectaba el catálogo en
+    un `<script>` con `var PRODUCTS=${productsJson}`. Un producto llamado `</script><img src=x onerror=…>`
+    cerraba la etiqueta y el resto se parseaba como HTML. **`escHtml` NO lo arregla** (dentro de un
+    `<script>` no se decodifican entidades). Defensa: **`jsonForScript()` en `core/escape.js`** (helper
+    central, un solo sitio, como `safeError()` en C3). El código ya conocía el vector en UN sitio
+    (`store/routes.js:1444`) y no en su gemelo — la misma evidencia de omisión que el almacén.
+  - **LOS 3 MÁS GRAVES DEL BARRIDO, arreglados aquí** (el resto → C4a-bis):
+    - **`superadmin/index.js:177,189` — ANÓNIMO → SESIÓN DE SUPERADMIN.** Cadena verificada entera:
+      `/api/registro/crear` es **público** (rate-limit, sin auth) · `businessName` se valida con `str(120)`
+      = `z.string().trim().min(1).max(120)`, **sin filtro de HTML** · la lista de Negocios escapa bien
+      (`:156-157`) **pero** `saCap()`/`saSuspend()` leen `tr.dataset.name`, que el navegador devuelve
+      **DECODIFICADO**, y lo reinyectan por `innerHTML`. Un desconocido se da de alta con un nombre-payload
+      y ejecuta código en la sesión del superadmin **en cuanto se pulsa un botón de su fila**. El `escHtml`
+      del atributo es justo lo que lo escondía. Arreglo: `saEsc()` en `superadmin/layout.js`, junto al
+      `saOpenModal` que hace el `innerHTML`. **Matiza el titular del informe** («ningún agujero crítico
+      explotable de forma anónima»): plantarlo es anónimo; ejecutarlo depende de un clic del superadmin.
+    - **`invoices.js` — datos de empresa sin escapar en TODA factura** (`document_name`, `invoice_number`,
+      `company_name`, `company_fiscal_id`, `company_address`, `tax_name` ×3, `notes`, `it.description`).
+    - **`stock-modal.js:50` + `inventory.js:50` — `WAREHOUSES` (Clase B).** El gate demostró que arreglar
+      solo el componente compartido NO bastaba: `inventory.js` declara **su propia** const `WAREHOUSES`
+      duplicada en la misma página (la del componente vive dentro de un IIFE, por eso conviven). El
+      `</script>` rompía el `<script>` entero y se llevaba por delante hasta el IIFE ya arreglado.
+  - **Verificado:** `verify-xss-escape` **14/0** + `gate-xss-escape` **23/0** (navegador, 4 pantallas:
+    Categorías · Nueva compra · Inventario · Superadmin), ambos en el grupo `infra` del barrido. **El gate
+    REPRODUCE el fallo**: con `git stash` sobre el código anterior da **18 rojos** — `/admin/purchases/new`
+    moría con `SyntaxError` y `PRODUCTS` a `undefined`, y en Superadmin el payload **sí** ponía
+    `window.__xss` tras pulsar «Tope IA». Limpia tras de sí, también en `control.db`.
+  - **Lo que NO se pudo probar en vivo, y por qué:** el papel de la factura lee `inv.company_name` etc. de
+    la **fila de `invoices`** (snapshot congelado al emitir), no de la config viva. Plantar un payload ahí
+    exigiría **mutar una factura ya emitida** —documento legal con huella Verifactu—, que el ritual prohíbe.
+    Ese arreglo queda verificado por revisión + regresión, no por payload. Anotado a conciencia.
+
+- ⬜ **C4a-bis — [M1] Los 58 puntos restantes del barrido (inventario YA HECHO, no hay que volver a buscar).**
+  Reparto: **9 de Clase B** (`</script>` en JSON → `jsonForScript`): `albaranes.js:447` (`PEND`, lleva
+  `description`+`sku`) · `purchase-orders.js:608,609` · `stock-transfers.js:348` · `supplier-returns.js:396` ·
+  `quotes.js:594` · `pedidos.js:497` · `invoices.js:1584` · **~18 de Clase A servidor** (`purchases.js:375-416`
+  papel de compra; `store/routes.js:1380,1390` — Capa 2 congelada, rotura de ATRIBUTO con `"`) ·
+  **~20 de Clase A cliente** (`orders.js:361,369,621,623,632,649` · `shipping.js:75-79` · `analytics.js:147-149` ·
+  `products.js:756,849` etiquetas · `clients.js:531,546` · `albaranes.js:450` `l.sku` sin escapar) ·
+  **~10 escapes parciales** (`products.js:320`, `orders.js:513`, `layout.js:1209`, `disa/index.js:1537,1706`…).
+  Descartados con evidencia (dato controlado, no de usuario): CSRF, `SYM`, mapas de etiquetas fijas,
+  `USER_PERMS`, `VALID_TRANSITIONS`, bandas de IVA, `order_number` (autogenerado). **Deuda de fondo
+  detectada:** ~14 ficheros definen su propio `esc` local — es `core/escape.js` duplicado 14 veces; no es un
+  agujero, pero es lo que hace que estos fallos se repitan.
+
+- ⬜ **C4b — [M8] Quitar `'unsafe-inline'` de la CSP (esfuerzo ALTO, tarea propia).** Es la mitigación
+  SISTÉMICA del XSS: hoy la CSP no frenaría ninguno de los de M1. Medido el 16 jul: **414 `onclick` + 109
+  otros handlers inline + 81 `<script>` inline** (y **2027 `style="..."`** para `style-src`). Los nonces
+  **no cubren los handlers de atributo**, así que exige eliminar los 523 uno a uno → refactor de todo el
+  admin. Planificar aparte; no cabe en una sesión. El saneado (C4a/C4a-bis) es la línea de fondo; la CSP,
+  el cinturón.
 
 - ⬜ **C5 — Endurecer el acceso (tres, EN ESTE ORDEN).**
   - **[M5] Revocar las sesiones activas al desactivar un usuario** — hoy aguantan ≤24 h porque

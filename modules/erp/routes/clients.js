@@ -558,7 +558,7 @@ export function createClientRoutes(db, cfg = {}) {
           '<div><div class="form-label">Forma de pago</div><div>'+({transferencia:"Transferencia",efectivo:"Efectivo",tarjeta:"Tarjeta",domiciliacion:"Domiciliación"}[c.payment_method]||'—')+'</div></div>'+
           '<div><div class="form-label">Perfil de cobro</div><div>'+({suave:"Suave",estandar:"Estándar",firme:"Firme",manual:"Manual"}[c.collections_profile||'estandar'])+'</div></div>'+
           '</div>'+
-          (c.notes?'<div class="alert alert-ok" style="margin-bottom:1rem">'+c.notes+'</div>':'')+
+          (c.notes?'<div class="alert alert-ok" style="margin-bottom:1rem">'+escHtml(c.notes)+'</div>':'')+
           '<h4 style="margin-bottom:.75rem">Facturas y cobro</h4>'+
           debtBlock+
           '<div class="table-wrap" style="margin-bottom:1.25rem"><table><thead><tr><th>Factura</th><th>Vence</th><th>Total</th><th>Pendiente</th><th>Cobro</th><th>Próxima acción</th><th></th></tr></thead><tbody>'+invRows+'</tbody></table></div>'+
@@ -660,7 +660,7 @@ export function createClientRoutes(db, cfg = {}) {
       function renderGroups(){
         const q=(document.getElementById('searchBox').value||'').toLowerCase();
         const f=q?groups.filter(g=>(g.name||'').toLowerCase().includes(q)||(g.description||'').toLowerCase().includes(q)):groups;
-        document.getElementById('groupBody').innerHTML=f.length?f.map(g=>'<tr><td><strong>'+g.name+'</strong></td><td style="color:var(--muted)">'+(g.description||'-')+'</td><td><span class="badge b-blue">'+g.member_count+'</span></td><td><button class="btn btn-secondary btn-sm" onclick="editGroup('+g.id+')">Editar</button> <button class="btn btn-danger btn-sm" onclick="delGroup('+g.id+')">Eliminar</button></td></tr>').join(''):(q?window.emptyRow(4,'No se encontraron grupos con ese filtro.',{icon:'ti-search'}):window.emptyRow(4,'Aún no has creado grupos. Agrupa clientes para tratarlos juntos.',{cta:'Nuevo grupo',onclick:"openModal('groupModal')"}));
+        document.getElementById('groupBody').innerHTML=f.length?f.map(g=>'<tr><td><strong>'+escHtml(g.name)+'</strong></td><td style="color:var(--muted)">'+escHtml(g.description||'-')+'</td><td><span class="badge b-blue">'+g.member_count+'</span></td><td><button class="btn btn-secondary btn-sm" onclick="editGroup('+g.id+')">Editar</button> <button class="btn btn-danger btn-sm" onclick="delGroup('+g.id+')">Eliminar</button></td></tr>').join(''):(q?window.emptyRow(4,'No se encontraron grupos con ese filtro.',{icon:'ti-search'}):window.emptyRow(4,'Aún no has creado grupos. Agrupa clientes para tratarlos juntos.',{cta:'Nuevo grupo',onclick:"openModal('groupModal')"}));
       }
       function editGroup(id){const g=groups.find(x=>x.id===id);if(!g)return;document.getElementById('groupModalTitle').textContent='Editar Grupo';document.getElementById('groupId').value=id;document.getElementById('gName').value=g.name;document.getElementById('gDesc').value=g.description||'';openModal('groupModal');}
       async function saveGroup(){

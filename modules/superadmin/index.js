@@ -174,7 +174,7 @@ export function register(app) {
       <script>
         function saCap(id){
           const tr=document.querySelector('tr[data-id="'+id+'"]');
-          saOpenModal('<h3>Tope de IA · '+tr.dataset.name+'</h3>'
+          saOpenModal('<h3>Tope de IA · '+saEsc(tr.dataset.name)+'</h3>'
             +'<label>Tope de gasto de IA al mes (€)</label>'
             +'<input id="capVal" type="number" min="0" step="0.5" value="'+tr.dataset.cap+'">'
             +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px"><button class="btn" onclick="saCloseModal()">Cancelar</button><button class="btn btn-amber" onclick="saCapSave('+id+')">Guardar</button></div>');
@@ -186,7 +186,7 @@ export function register(app) {
         }
         function saSuspend(id){
           const tr=document.querySelector('tr[data-id="'+id+'"]');
-          var h='<h3>Suspender · '+tr.dataset.name+'</h3>'
+          var h='<h3>Suspender · '+saEsc(tr.dataset.name)+'</h3>'
             +'<label>Motivo (se le muestra al negocio en el modo impago)</label>'
             +'<textarea id="susNote" rows="2" placeholder="Ej.: factura de junio pendiente"></textarea>'
             +'<label style="margin-top:14px">Tipo de suspensión</label>'

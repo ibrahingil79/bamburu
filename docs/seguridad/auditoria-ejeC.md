@@ -87,6 +87,31 @@ del bug de Verifactu y de los hallazgos MEDIA que se firman aquí.
 - **Esfuerzo:** BAJO por caso (envolver cada campo en `escHtml`). Conviene un barrido de todos los
   `innerHTML`/plantillas server-side buscando concatenaciones sin escape.
 
+#### AMPLIACIÓN (16 jul 2026, al ejecutar C4a) — una clase de fallo que ESTA auditoría no vio
+> El barrido que recomienda el punto anterior destapó un vector **peor que los seis de la lista**, y de
+> naturaleza distinta. Se documenta aquí porque el error de método es reutilizable: buscamos
+> concatenaciones sin `escHtml` y no miramos **en qué CONTEXTO** aterrizaba el dato.
+- **Qué es — ruptura de la etiqueta `<script>`:** `modules/erp/routes/purchases.js` inyectaba el catálogo
+  entero dentro de un `<script>` inline con `var PRODUCTS=${productsJson};`. Un producto llamado
+  `</script><img src=x onerror=…>` **cierra la etiqueta antes de tiempo** y el resto del documento se
+  parsea como HTML.
+- **Por qué `escHtml` NO lo arregla:** dentro de un `<script>` el navegador **no decodifica entidades
+  HTML**. Un `&lt;` escapado llega crudo al motor de JS. La lista de M1 (envolver en `escHtml`) habría
+  dejado este agujero abierto —o, aplicada aquí, habría roto la pantalla sin cerrar nada.
+- **Peor que los seis de M1:** ejecuta JS **directamente**, sin depender de que el dato se pinte en una
+  tabla ni de que el atacante acierte con el contexto HTML.
+- **La defensa:** `jsonForScript()` en `core/escape.js` (helper central, un solo sitio) — `JSON.stringify`
+  + escapar `<` como `\u003c`. Sigue siendo JSON válido: el dato llega intacto al navegador.
+- **El código ya conocía el vector en UN sitio:** `modules/store/routes.js:1444` hacía a mano
+  `.replace(/</g,'\\u003c')`. Misma evidencia de omisión que el `escHtml` del almacén en `:204`: cuando
+  una defensa aparece en un solo punto y no en su gemelo, el gemelo es un hallazgo.
+- **Lección de método para las auditorías siguientes:** no basta con preguntar *«¿está escapado?»*, hay
+  que preguntar *«¿escapado PARA QUÉ contexto?»*. HTML, atributo, `<script>` y URL tienen cuatro escapes
+  distintos, y el correcto en uno es inútil o dañino en otro.
+- **Verificado:** `scripts/gate-xss-escape.mjs` reproduce el fallo — contra el código anterior
+  (`git stash`) la pantalla `/admin/purchases/new` moría con `SyntaxError: Invalid or unexpected token`
+  y `PRODUCTS` a `undefined`; con el arreglo, 12/0.
+
 ### M2 · Dependencia `hono` con vulnerabilidad HIGH
 - **Qué es:** `npm audit` reporta 1 vulnerabilidad **high** en `hono`: (a) *IP Restriction bypass for
   non-canonical IPv6* y (b) *Cookie helper no sanea `sameSite`/`priority` → Set-Cookie injection*.

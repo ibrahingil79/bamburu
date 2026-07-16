@@ -3,6 +3,7 @@ import { adminLayout, can, skeletonRows } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
 import { stockModalHtml, stockModalScript } from '../views/stock-modal.js';
 import { activeWarehouses } from './warehouses.js';
+import { escHtml, jsonForScript } from '../../../core/escape.js';
 
 // Pilar 3 · Paso 1 — Inventario UNIFICADO. El stock es la SUMA del libro stock_movements
 // (products.stock es caché derivada). Esta página lista los productos FÍSICOS con su stock
@@ -18,7 +19,7 @@ export function createInventoryRoutes(db, cfg = {}) {
     // Multi-almacén · Capa 1 — filtro de almacén. "Todos" = total global (comportamiento de
     // hoy); un almacén concreto = cantidad y valor calculados al vuelo sobre el libro.
     const warehouses = activeWarehouses(db);
-    const whOptions = warehouses.map(w => `<option value="${w.id}">${String(w.name).replace(/</g, '&lt;')}${w.is_default ? ' (principal)' : ''}</option>`).join('');
+    const whOptions = warehouses.map(w => `<option value="${w.id}">${escHtml(w.name)}${w.is_default ? ' (principal)' : ''}</option>`).join('');
     const content = `
       <div class="ph"><h2>Inventario</h2>
         <div style="display:flex;align-items:center;gap:.5rem">
@@ -47,7 +48,7 @@ export function createInventoryRoutes(db, cfg = {}) {
       <script>
       ${stockModalScript(sym, warehouses)}
       const CAN_EDIT = ${canEdit ? 'true' : 'false'};
-      const WAREHOUSES = ${JSON.stringify(warehouses)};
+      const WAREHOUSES = ${jsonForScript(warehouses)};
       let prods=[];
       let WH='';            // '' = Todos (total global); si no, id de almacén
       window.stockFilterWarehouse = '';   // Capa 2: el ajuste por defecto usa el almacén del filtro activo

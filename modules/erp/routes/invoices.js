@@ -503,7 +503,7 @@ export async function buildInvoicePaper(db, inv) {
 
   const rows = items.map(it => `
         <tr>
-          <td>${it.description}</td>
+          <td>${escHtml(it.description)}</td>
           <td style="text-align:right">${it.quantity}</td>
           <td style="text-align:right">${sym}${it.unit_price.toFixed(2)}</td>
           <td style="text-align:right">${sym}${it.total_price.toFixed(2)}</td>
@@ -558,15 +558,15 @@ export async function buildInvoicePaper(db, inv) {
       taxBlock = Object.keys(groups).sort((a, b) => b - a).map(r => {
         const base = groups[r].base.toFixed(2);
         if (Number(r) === 0) return `<tr><td>Exento de IVA (sobre ${sym}${base})</td><td>${sym}0.00</td></tr>`;
-        return `<tr><td>${inv.tax_name} ${r}% (sobre ${sym}${base})</td><td>${sym}${groups[r].amount.toFixed(2)}</td></tr>`;
+        return `<tr><td>${escHtml(inv.tax_name)} ${r}% (sobre ${sym}${base})</td><td>${sym}${groups[r].amount.toFixed(2)}</td></tr>`;
       }).join('');
     } else if (inv.tax_rate > 0) {
-      taxBlock = `<tr><td>${inv.tax_name} (${inv.tax_rate}%)</td><td>${sym}${inv.tax_amount.toFixed(2)}</td></tr>`;
+      taxBlock = `<tr><td>${escHtml(inv.tax_name)} (${inv.tax_rate}%)</td><td>${sym}${inv.tax_amount.toFixed(2)}</td></tr>`;
     } else if (items.length > 0) {
       const totalBase = items.reduce((s, it) => s + (Number(it.total_price) || 0), 0);
       taxBlock = `<tr><td>Exento de IVA (sobre ${sym}${totalBase.toFixed(2)})</td><td>${sym}0.00</td></tr>`;
     } else {
-      taxBlock = `<tr><td>${inv.tax_name}</td><td>${sym}${inv.tax_amount.toFixed(2)}</td></tr>`;
+      taxBlock = `<tr><td>${escHtml(inv.tax_name)}</td><td>${sym}${inv.tax_amount.toFixed(2)}</td></tr>`;
     }
     const irpfBlock = (Number(inv.irpf_amount) > 0)
       ? `<tr><td style="color:var(--accent-purple)">IRPF (${inv.irpf_rate}%)</td><td style="color:var(--accent-purple)">−${sym}${inv.irpf_amount.toFixed(2)}</td></tr>`
@@ -597,15 +597,15 @@ export async function buildInvoicePaper(db, inv) {
 
   return `${vfHead}
 ${lifecycle}
-<h1>${inv.document_name}</h1>
-<div class="doc-sub">${inv.invoice_number} · ${inv.status === 'emitida' ? 'Emitida' : inv.status === 'rectificada' ? 'Rectificada' : 'Anulada'} el ${inv.issue_date}</div>
+<h1>${escHtml(inv.document_name)}</h1>
+<div class="doc-sub">${escHtml(inv.invoice_number)} · ${inv.status === 'emitida' ? 'Emitida' : inv.status === 'rectificada' ? 'Rectificada' : 'Anulada'} el ${inv.issue_date}</div>
 
 <div class="doc-cols">
   <div>
     <div class="doc-label">Emisor</div>
-    <div><strong>${inv.company_name}</strong></div>
-    ${inv.company_fiscal_id ? `<div>${inv.company_fiscal_id}</div>` : ''}
-    ${inv.company_address ? `<div style="color:var(--text2)">${inv.company_address}</div>` : ''}
+    <div><strong>${escHtml(inv.company_name)}</strong></div>
+    ${inv.company_fiscal_id ? `<div>${escHtml(inv.company_fiscal_id)}</div>` : ''}
+    ${inv.company_address ? `<div style="color:var(--text2)">${escHtml(inv.company_address)}</div>` : ''}
   </div>
   <div>
     <div class="doc-label">Cliente</div>
@@ -623,7 +623,7 @@ ${lifecycle}
 
 ${totalsBlock}
 
-${inv.notes ? `<div style="margin-top:16px;color:var(--text2)">${inv.notes}</div>` : ''}
+${inv.notes ? `<div style="margin-top:16px;color:var(--text2)">${escHtml(inv.notes)}</div>` : ''}
 
 <div class="doc-hash">
   <strong>Hash Verifactu:</strong> ${inv.verifactu_hash}<br>

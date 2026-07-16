@@ -3,6 +3,7 @@
 // de producto físico. Dos modales: "Ajustar stock" y "Kardex" (historial + saldo + revertir).
 // Requiere los globales de adminLayout: api, toast, escHtml, openModal, closeModal.
 import { ADJUST_REASONS, REASON_LABEL, TYPE_LABEL } from '../stock.js';
+import { jsonForScript } from '../../../core/escape.js';
 
 export function stockModalHtml() {
   const reasonOpts = ADJUST_REASONS.map(r => `<option value="${r}">${REASON_LABEL[r]}</option>`).join('');
@@ -47,7 +48,7 @@ export function stockModalScript(sym, warehouses = []) {
   (function(){
     const SYM = ${JSON.stringify(sym)};
     const TYPE_LABEL = ${JSON.stringify(TYPE_LABEL)};
-    const WAREHOUSES = ${JSON.stringify(warehouses)};   // Capa 2: almacenes activos
+    const WAREHOUSES = ${jsonForScript(warehouses)};   // Capa 2: almacenes activos — el nombre lo pone el usuario
     let curProd = null;     // {id, name}
     let curByWh = [];       // by_warehouse del producto abierto (para "Stock actual" por almacén)
     // Almacén por defecto del ajuste: el del filtro activo en pantalla si lo hay; si no, el principal.

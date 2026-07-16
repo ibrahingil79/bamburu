@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, docShell, skeletonRows } from '../layout.js';
 import { validate } from '../../../core/validate.js';
+import { escHtml, jsonForScript } from '../../../core/escape.js';
 import { requirePerm } from '../../../core/auth.js';
 import { purchaseSchema } from '../schemas.js';
 import { recordMovement, resolveWarehouseId } from '../stock.js';
@@ -197,12 +198,11 @@ export function createPurchaseRoutes(db, cfg = {}) {
       return c.html(adminLayout('Nueva compra', content, 'purchases', csrfToken, c));
     }
 
-    const suppliersJson = JSON.stringify(suppliers);
-    const productsJson = JSON.stringify(products);
-    const supOptions = suppliers.map(s => '<option value="'+s.id+'">'+s.name+'</option>').join('');
+    const productsJson = jsonForScript(products);
+    const supOptions = suppliers.map(s => '<option value="'+s.id+'">'+escHtml(s.name)+'</option>').join('');
     // Capa 2: almacén de destino, principal por defecto (NO pegajoso).
     const warehouses = activeWarehouses(db);
-    const whOptions = warehouses.map(w => '<option value="'+w.id+'"'+(w.is_default?' selected':'')+'>'+String(w.name).replace(/</g,'&lt;')+(w.is_default?' (principal)':'')+'</option>').join('');
+    const whOptions = warehouses.map(w => '<option value="'+w.id+'"'+(w.is_default?' selected':'')+'>'+escHtml(w.name)+(w.is_default?' (principal)':'')+'</option>').join('');
 
     const content = `
       <div class="ph"><h2>Nueva compra</h2><a href="/admin/purchases" class="btn btn-secondary">Volver</a></div>

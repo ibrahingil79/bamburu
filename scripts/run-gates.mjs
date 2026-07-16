@@ -53,8 +53,10 @@ const GRUPOS = {
   avisos: ['verify-avisos-permisos', 'gate-avisos-badge'],
   // Plantillas de email editables: tocan TODOS los correos que el negocio manda.
   plantillas: ['verify-plantillas-email', 'gate-plantillas-email'],
-  // Sala de máquinas: superadmin, conexiones a la BD, el fichero -wal y el saneo de errores al cliente.
-  infra: ['verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error'],
+  // Sala de máquinas: superadmin, conexiones a la BD, el fichero -wal, el saneo de errores al cliente
+  // y el escapado del texto del usuario (que no se vuelva HTML ni JS).
+  infra: ['verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
+          'verify-xss-escape', 'gate-xss-escape'],
 };
 
 // ── Gates que NO entran en el barrido, y POR QUÉ ────────────────────────────────────────────────

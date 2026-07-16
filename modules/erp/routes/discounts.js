@@ -164,10 +164,10 @@ export function createDiscountRoutes(db, cfg = {}) {
         const q=(document.getElementById('autoSearch').value||'').toLowerCase();
         const autos=q?_autos.filter(a=>(a.name||'').toLowerCase().includes(q)):_autos;
         document.getElementById('autoBody').innerHTML=autos.length?autos.map(a=>'<tr>'+
-          '<td><strong>'+a.name+'</strong></td>'+
+          '<td><strong>'+window.escHtml(a.name)+'</strong></td>'+
           '<td>'+(a.type==='percentage'?'Porcentaje':'Fijo')+'</td>'+
           '<td><strong>'+(a.type==='percentage'?a.value+'%':'${sym}'+a.value)+'</strong></td>'+
-          '<td style="color:var(--muted)">'+(a.condition_type==='min_order'?'Pedido ≥ ${sym}'+a.condition_value:'Categoría: '+a.condition_value)+'</td>'+
+          '<td style="color:var(--muted)">'+(a.condition_type==='min_order'?'Pedido ≥ ${sym}'+window.escHtml(a.condition_value):'Categoría: '+window.escHtml(a.condition_value))+'</td>'+
           '<td>'+(a.active?'<span class="badge b-green">Activo</span>':'<span class="badge b-red">Inactivo</span>')+'</td>'+
           '<td>'+(window.canDo('discounts.delete')?'<button class="btn btn-danger btn-sm" onclick="delAuto('+a.id+')">Eliminar</button>':'')+'</td></tr>').join(''):(q?window.emptyRow(6,'No se encontraron descuentos con ese filtro.',{icon:'ti-search'}):window.emptyRow(6,'No hay descuentos automáticos. Crea uno para aplicar rebajas sin código.',window.canDo('discounts.create')?{cta:'Nuevo descuento',onclick:"openModal('autoModal')"}:{}));
       }

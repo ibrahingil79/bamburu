@@ -553,9 +553,9 @@ export function createProductRoutes(db, cfg = {}) {
           api('GET',A+'/suppliers').catch(()=>[])
         ]);
         const catSel=document.getElementById('pCategory');
-        catSel.innerHTML='<option value="">Sin categoría</option>'+allCats.map(c=>'<option value="'+c.id+'">'+c.name+'</option>').join('');
+        catSel.innerHTML='<option value="">Sin categoría</option>'+allCats.map(c=>'<option value="'+c.id+'">'+escHtml(c.name)+'</option>').join('');
         const supSel=document.getElementById('pSupplier');
-        supSel.innerHTML='<option value="">Sin proveedor</option>'+allSuppliers.map(s=>'<option value="'+s.id+'">'+s.name+'</option>').join('');
+        supSel.innerHTML='<option value="">Sin proveedor</option>'+allSuppliers.map(s=>'<option value="'+s.id+'">'+escHtml(s.name)+'</option>').join('');
       }
 
       function escHtml(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
