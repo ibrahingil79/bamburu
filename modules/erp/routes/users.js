@@ -1,11 +1,20 @@
 import { Hono } from 'hono';
 import { safeError } from '../../../core/errors.js';
 import { adminLayout, skeletonRows } from '../layout.js';
-import { hashPassword, requirePerm } from '../../../core/auth.js';
+import { hashPassword, requirePerm, destroyAllAdminSessionsForUser } from '../../../core/auth.js';
+import { destroyTenantSession } from '../../../core/control-db.js';
 import { readFileSync } from 'fs';
 import path from 'path';
 import { validate } from '../../../core/validate.js';
 import { userCreateSchema, userUpdateSchema } from '../schemas.js';
+
+// Cierra todas las sesiones de un usuario: las suyas en esta BD y su espejo en control.db.
+// Los tokens se leen ANTES de borrarlos — después ya no habría con qué limpiar el espejo.
+function revokeUserSessions(db, userId) {
+  const tokens = db.prepare('SELECT token FROM admin_sessions WHERE user_id=?').all(userId).map(r => r.token);
+  destroyAllAdminSessionsForUser(db, userId);
+  for (const t of tokens) { try { destroyTenantSession(t); } catch (_) {} }
+}
 
 export function createUserRoutes(db) {
   const api = new Hono();
@@ -56,6 +65,10 @@ export function createUserRoutes(db) {
       } else {
         db.prepare('UPDATE admin_users SET name=?,email=?,role=?,active=? WHERE id=?').run(d.name||'', d.email||'', d.role||'employee', d.active?1:0, targetId);
       }
+      // C5/M5: quitar el acceso echa AHORA, no dentro de 24 h. Quien lo impide de verdad es
+      // getAdminSession (rechaza al desactivado venga por donde venga); esto borra además sus
+      // sesiones para no dejar filas muertas, y su espejo en control.db (el vínculo cookie→negocio).
+      if (!d.active) revokeUserSessions(db, targetId);
       return c.json({message:'Actualizado'});
     } catch(e) { return c.json({error:safeError(e)},500); }
   });

@@ -16,11 +16,22 @@ export function getClientIp(c) {
   return addr || 'unknown';
 }
 
-export function rateLimit({ windowMs, max, keyPrefix, message = 'Demasiados intentos. Inténtalo más tarde.' }) {
+// keyFn (opcional) — limita por algo que NO es la IP. Recibe el contexto y devuelve el sujeto del
+// cupo (p. ej. el email del formulario); si devuelve null/'' no hay a quién limitar y pasa de largo.
+// Sirve para el caso IP + cuenta a la vez: se encadenan dos limitadores con keyPrefix distinto, uno
+// por IP y otro por sujeto, y así una botnet repartida por mil IPs no puede machacar UNA cuenta.
+// Sin keyFn el comportamiento es el de siempre: por IP.
+//
+// OJO con la PII: el sujeto solo se usa como clave EN MEMORIA. El evento de vigilancia que se
+// registra al frenar lleva la IP y el keyPrefix, nunca el sujeto — un email en la tabla de eventos
+// sería la misma fuga de PII que se cerró en C3/M7 sacando el email de los logs de login.
+export function rateLimit({ windowMs, max, keyPrefix, message = 'Demasiados intentos. Inténtalo más tarde.', keyFn = null }) {
   return async (c, next) => {
     const ip = getClientIp(c);
     const slug = c.get('tenant')?.slug || 'global';
-    const key = `${keyPrefix}:${slug}:${ip}`;
+    const subject = keyFn ? await keyFn(c) : ip;
+    if (!subject) return next();
+    const key = `${keyPrefix}:${slug}:${subject}`;
     const now = Date.now();
     const windowStart = now - windowMs;
 

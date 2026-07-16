@@ -504,6 +504,10 @@ export const loginSchema = z.object({
   password: z.string().min(1).max(200),
 });
 
+export const forgotSchema = z.object({
+  email: emailField,
+});
+
 export const changePwdSchema = z.object({
   current_password: z.string().min(1).max(200),
   new_password: z.string().min(10).max(200),

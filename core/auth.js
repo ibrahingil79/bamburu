@@ -83,13 +83,21 @@ export function getAdminSession(db, req) {
   const token = match[1];
   const now = Math.floor(Date.now() / 1000);
   const row = db.prepare(`
-    SELECT s.expires_at, s.user_id, s.csrf_token, u.name, u.role
+    SELECT s.expires_at, s.user_id, s.csrf_token, u.name, u.role, u.active
     FROM admin_sessions s
     JOIN admin_users u ON u.id = s.user_id
     WHERE s.token = ?
   `).get(token);
   if (!row) return null;
   if (row.expires_at <= now) {
+    db.prepare('DELETE FROM admin_sessions WHERE token=?').run(token);
+    return null;
+  }
+  // C5/M5: desactivado = fuera AHORA, no cuando caduque. Este es el sitio donde se decide, no la
+  // ruta que desactiva: así cualquier vía que ponga active=0 (el panel, un script de ops, un UPDATE
+  // a mano) expulsa igual. La ruta además borra las sesiones, pero ese borrado es higiene; el gate
+  // es este. Antes el JOIN traía al usuario sin mirar `active` y la sesión aguantaba hasta 24 h.
+  if (!row.active) {
     db.prepare('DELETE FROM admin_sessions WHERE token=?').run(token);
     return null;
   }

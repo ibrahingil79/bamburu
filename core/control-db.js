@@ -127,6 +127,21 @@ function runMigrations(db) {
       csrf_token    TEXT NOT NULL
     )
   `);
+  // C5/M3 — códigos de rescate del 2FA del superadmin. Existen para que perder el móvil no sea
+  // perder la plataforma. Se guardan HASHEADOS (bcrypt), como una contraseña: si alguien lee esta
+  // tabla no puede entrar con lo que ve. `used_at` en vez de borrar la fila: un código gastado deja
+  // rastro de CUÁNDO se gastó, que es justo lo que querrías saber si un día se gasta uno que tú no
+  // usaste. Aditiva e idempotente: si la tabla ya está, esto no hace nada.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS superadmin_recovery_codes (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      superadmin_id INTEGER NOT NULL,
+      code_hash     TEXT NOT NULL,
+      used_at       INTEGER DEFAULT NULL,
+      created_at    INTEGER NOT NULL
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_sa_recovery_owner ON superadmin_recovery_codes (superadmin_id, used_at)');
 
   // Vigilancia del superadmin (tablas RODANTES: se conservan las últimas ~1000 filas).
   db.exec(`
@@ -372,6 +387,53 @@ export function destroySuperadminSession(token) {
 }
 export function destroyAllSuperadminSessions(superadminId) {
   controlDb.prepare('DELETE FROM superadmin_sessions WHERE superadmin_id=?').run(superadminId);
+}
+
+// ── 2FA del superadmin (C5/M3) ───────────────────────────────────────────────
+// El secreto TOTP y los códigos de rescate se mueven JUNTOS y siempre por aquí: activar sin códigos
+// de rescate, o dejar códigos vivos tras desactivar, son las dos formas de que esto salga mal.
+
+export function enableSuperadminTotp(id, secret, codeHashes) {
+  const now = Math.floor(Date.now() / 1000);
+  const tx = controlDb.transaction(() => {
+    controlDb.prepare('UPDATE superadmins SET totp_secret=?, totp_enabled=1 WHERE id=?').run(secret, id);
+    // Activar SUSTITUYE los códigos anteriores: si se reconfigura el 2FA, los papeles viejos dejan
+    // de valer en el mismo instante. Si no, un código impreso hace meses seguiría abriendo la puerta.
+    controlDb.prepare('DELETE FROM superadmin_recovery_codes WHERE superadmin_id=?').run(id);
+    const ins = controlDb.prepare('INSERT INTO superadmin_recovery_codes (superadmin_id, code_hash, created_at) VALUES (?,?,?)');
+    for (const h of codeHashes) ins.run(id, h, now);
+  });
+  tx();
+}
+
+// Desactivar borra el secreto Y los códigos: un código de rescate que sobreviva al 2FA que rescataba
+// es una segunda llave olvidada debajo del felpudo.
+export function disableSuperadminTotp(id) {
+  const tx = controlDb.transaction(() => {
+    controlDb.prepare('UPDATE superadmins SET totp_secret=NULL, totp_enabled=0 WHERE id=?').run(id);
+    controlDb.prepare('DELETE FROM superadmin_recovery_codes WHERE superadmin_id=?').run(id);
+  });
+  tx();
+}
+
+export function listUnusedRecoveryCodes(id) {
+  return controlDb.prepare(
+    'SELECT id, code_hash FROM superadmin_recovery_codes WHERE superadmin_id=? AND used_at IS NULL'
+  ).all(id);
+}
+
+// Marca el código como gastado. Devuelve false si otro lo gastó primero: el UPDATE lleva
+// `used_at IS NULL`, así que dos intentos con el mismo código a la vez solo dejan pasar a uno.
+export function consumeRecoveryCode(rowId) {
+  const r = controlDb.prepare('UPDATE superadmin_recovery_codes SET used_at=? WHERE id=? AND used_at IS NULL')
+    .run(Math.floor(Date.now() / 1000), rowId);
+  return r.changes === 1;
+}
+
+export function countUnusedRecoveryCodes(id) {
+  return controlDb.prepare(
+    'SELECT COUNT(*) n FROM superadmin_recovery_codes WHERE superadmin_id=? AND used_at IS NULL'
+  ).get(id).n;
 }
 
 // ---------------------------------------------------------------------------

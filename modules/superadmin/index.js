@@ -23,7 +23,14 @@ import {
   getTenantBySlug, getTenantById, listTenants, setTenantStatus,
   getSuperadminByEmail, getSuperadminById, setSuperadminPassword,
   createSuperadminSession, getSuperadminSessionByToken, destroySuperadminSession,
+  enableSuperadminTotp, disableSuperadminTotp, listUnusedRecoveryCodes,
+  consumeRecoveryCode, countUnusedRecoveryCodes, recordSecurityEvent,
 } from '../../core/control-db.js';
+import { randomBytes } from 'crypto';
+import QRCode from 'qrcode';
+import { generateSecret, verify as verifyTOTP, keyuri } from '../../core/totp.js';
+import { generarCodigosRescate, buscarCodigo } from '../../core/recovery-codes.js';
+import { getClientIp } from '../../core/rate-limit.js';
 
 const TENANT_CAP_DEFAULT = 5;   // espejo del default de core/llm.js
 const SADM_COOKIE = 'sadm=%; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400';
@@ -87,6 +94,26 @@ function saCsrf(c, next) {
 
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 8, keyPrefix: 'superadmin-login', message: 'Demasiados intentos. Espera 15 minutos.' });
 
+// C5/M3 — el hueco entre "la contraseña es correcta" y "el código también".
+//
+// `pendiente2FA`: contraseña ya verificada, esperando el código. Es un vale de 5 minutos, NO una
+// sesión: no abre nada por sí solo, solo dice "de esta cuenta ya se demostró la contraseña". Vive en
+// memoria a propósito — un reinicio lo tira y como mucho obliga a repetir el login. Y NUNCA viaja el
+// id de la cuenta al navegador: viaja este token opaco, que no dice nada de quién es.
+//
+// `secretoPendiente`: el secreto TOTP durante el alta, antes de que se demuestre que la app lo tiene
+// bien. Solo pasa a la BD cuando un código válido lo prueba — si se guardara antes, un alta a medias
+// (cierras la pestaña tras escanear) dejaría la cuenta con un 2FA activo que nadie sabe generar.
+const pendiente2FA = new Map();
+const secretoPendiente = new Map();
+const TTL_PENDIENTE = 5 * 60 * 1000;
+const TTL_SECRETO = 10 * 60 * 1000;
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of pendiente2FA) if (now - v.created > TTL_PENDIENTE) pendiente2FA.delete(k);
+  for (const [k, v] of secretoPendiente) if (now - v.created > TTL_SECRETO) secretoPendiente.delete(k);
+}, 60000).unref();
+
 export function register(app) {
   const sa = new Hono();
   sa.use('*', apexGuard);
@@ -102,12 +129,70 @@ export function register(app) {
     const password = String(body.password || '');
     const admin = getSuperadminByEmail(email);
     const ok = admin && await verifyPassword(password, admin.password_hash);
-    if (!ok || !ok.valid) return c.redirect('/superadmin/login?error=1');
+    if (!ok || !ok.valid) {
+      recordSecurityEvent('superadmin_login_failed', getClientIp(c), 'apex', 'POST /superadmin/login');
+      return c.redirect('/superadmin/login?error=1');
+    }
+    // C5/M3 — con 2FA activo, la contraseña ya NO abre la puerta: solo da derecho a que te pidan el
+    // código. Aquí no se crea sesión ni cookie; eso pasa al otro lado de /verify-2fa.
+    if (admin.totp_enabled && admin.totp_secret) {
+      const pending = randomBytes(20).toString('base64url');
+      pendiente2FA.set(pending, { id: admin.id, created: Date.now() });
+      return c.html(verify2faPage(pending));
+    }
+    return abrirSesion(admin);
+  });
+
+  // Segundo factor. Va ANTES de superadminAuth a propósito: quien llega aquí todavía no tiene sesión
+  // —esa es justo la cuestión—. Y por eso mismo tampoco pasa por saCsrf: no hay sesión de la que
+  // robar nada. El vale `pending` es lo que ata esta petición al login de hace un momento.
+  sa.post('/verify-2fa', loginLimiter, async c => {
+    const body = await c.req.parseBody();
+    const pending = String(body.pending || '');
+    const code = String(body.code || '');
+
+    const entry = pendiente2FA.get(pending);
+    if (!entry || Date.now() - entry.created > TTL_PENDIENTE) {
+      pendiente2FA.delete(pending);
+      return c.redirect('/superadmin/login?error=expirado');
+    }
+    const admin = getSuperadminById(entry.id);
+    if (!admin || !admin.totp_enabled || !admin.totp_secret) return c.redirect('/superadmin/login?error=1');
+
+    // Primero el código de la app (el caso normal). Si no cuela, se prueba como código de rescate:
+    // el orden importa poco para la seguridad y mucho para el coste — un TOTP correcto no debería
+    // pagar diez bcrypt de rescate por el camino.
+    let entra = verifyTOTP(code, admin.totp_secret);
+    let porRescate = false;
+    if (!entra) {
+      const fila = await buscarCodigo(code, listUnusedRecoveryCodes(admin.id));
+      // consumeRecoveryCode devuelve false si otra petición lo gastó primero: el código se quema
+      // AQUÍ, y solo si de verdad estaba sin usar. Un mismo papel no abre dos veces.
+      if (fila && consumeRecoveryCode(fila.id)) { entra = true; porRescate = true; }
+    }
+    if (!entra) {
+      recordSecurityEvent('superadmin_2fa_failed', getClientIp(c), 'apex', 'POST /superadmin/verify-2fa');
+      return c.html(verify2faPage(pending, 'malo'), 400);
+    }
+
+    pendiente2FA.delete(pending);
+    if (porRescate) {
+      // Que se gaste un código de rescate es NOTICIA: o perdiste el móvil, o alguien está entrando
+      // con un papel tuyo. Queda en la zona de Seguridad del panel, que es donde lo vas a mirar.
+      const quedan = countUnusedRecoveryCodes(admin.id);
+      recordSecurityEvent('superadmin_2fa_rescate', getClientIp(c), 'apex', `código de rescate usado · quedan ${quedan}`);
+      console.warn(`[Superadmin] Entrada con CÓDIGO DE RESCATE. Quedan ${quedan}.`);
+    }
+    return abrirSesion(admin);
+  });
+
+  // Crear la sesión + plantar la cookie es idéntico con 2FA y sin él; el único sitio donde se hace.
+  function abrirSesion(admin) {
     const { token } = createSuperadminSession(admin.id);
     const headers = new Headers({ Location: admin.must_change_password ? '/superadmin/change-password' : '/superadmin/negocios' });
     headers.set('Set-Cookie', SADM_COOKIE.replace('%', token));
     return new Response(null, { status: 302, headers });
-  });
+  }
 
   // ── A partir de aquí, protegido ───────────────────────────────────────────
   sa.use('*', superadminAuth);
@@ -133,6 +218,74 @@ export function register(app) {
     const pw = String(body.password || '');
     if (pw.length < 8) return c.json({ error: 'La contraseña debe tener al menos 8 caracteres.' }, 400);
     setSuperadminPassword(sess.id, await hashPassword(pw));
+    return c.json({ ok: true });
+  });
+
+  // ── C5/M3 · 2FA (TOTP) ────────────────────────────────────────────────────
+  sa.get('/2fa', async c => {
+    const sess = c.get('sa');
+    const admin = getSuperadminById(sess.id);
+    if (admin.totp_enabled) {
+      return c.html(dosFactoresActivoPage(sess, countUnusedRecoveryCodes(sess.id), c.get('cspNonce')));
+    }
+    // Secreto nuevo en cada visita: mientras no haya un código válido que lo confirme, no vale nada
+    // y no se guarda. Recargar la página = empezar de cero, que es lo que espera quien recarga.
+    const secret = generateSecret();
+    secretoPendiente.set(sess.id, { secret, created: Date.now() });
+    const qr = await QRCode.toDataURL(keyuri(admin.email, 'Bamburu Superadmin', secret), { width: 200, margin: 1 });
+    return c.html(altaDosFactoresPage(sess, secret, qr, c.get('cspNonce')));
+  });
+
+  sa.post('/2fa/activar', async c => {
+    const sess = c.get('sa');
+    let body; try { body = await c.req.json(); } catch { return c.json({ error: 'Petición inválida' }, 400); }
+    const pendiente = secretoPendiente.get(sess.id);
+    if (!pendiente || Date.now() - pendiente.created > TTL_SECRETO) {
+      return c.json({ error: 'El alta ha caducado. Recarga la página y vuelve a escanear.' }, 400);
+    }
+    // EXIGIR un código válido antes de activar es lo que separa "2FA puesto" de "2FA que te deja
+    // fuera": prueba que la app tiene el secreto y que el reloj del servidor y el del móvil se
+    // entienden. Sin esta comprobación, activar a ciegas es cerrar la puerta con la llave dentro.
+    if (!verifyTOTP(String(body.code || ''), pendiente.secret)) {
+      return c.json({ error: 'Ese código no es válido. Comprueba que copias el de Bamburu Superadmin.' }, 400);
+    }
+    const { codigos, hashes } = await generarCodigosRescate();
+    enableSuperadminTotp(sess.id, pendiente.secret, hashes);
+    secretoPendiente.delete(sess.id);
+    recordSecurityEvent('superadmin_2fa_activado', getClientIp(c), 'apex', 'POST /superadmin/2fa/activar');
+    // La ÚNICA vez que los códigos existen en claro. A partir de aquí solo hay hashes: ni este panel
+    // ni nadie puede volver a enseñarlos. Se pueden regenerar, no recuperar.
+    return c.json({ ok: true, codigos });
+  });
+
+  sa.post('/2fa/regenerar', async c => {
+    const sess = c.get('sa');
+    let body; try { body = await c.req.json(); } catch { return c.json({ error: 'Petición inválida' }, 400); }
+    const admin = getSuperadminById(sess.id);
+    if (!admin.totp_enabled || !admin.totp_secret) return c.json({ error: 'El 2FA no está activo.' }, 400);
+    // Se pide el código de la app: tener la sesión abierta no basta para reescribir la lista de
+    // llaves de emergencia. Quien encuentre el portátil desbloqueado no se fabrica una entrada.
+    if (!verifyTOTP(String(body.code || ''), admin.totp_secret)) {
+      return c.json({ error: 'Código incorrecto.' }, 400);
+    }
+    const { codigos, hashes } = await generarCodigosRescate();
+    enableSuperadminTotp(sess.id, admin.totp_secret, hashes);   // mismo secreto, códigos nuevos
+    recordSecurityEvent('superadmin_2fa_codigos_regenerados', getClientIp(c), 'apex', 'POST /superadmin/2fa/regenerar');
+    return c.json({ ok: true, codigos });
+  });
+
+  sa.post('/2fa/desactivar', async c => {
+    const sess = c.get('sa');
+    let body; try { body = await c.req.json(); } catch { return c.json({ error: 'Petición inválida' }, 400); }
+    const admin = getSuperadminById(sess.id);
+    if (!admin.totp_enabled || !admin.totp_secret) return c.json({ error: 'El 2FA no está activo.' }, 400);
+    // Quitar el segundo factor exige demostrarlo otra vez. Si bastara la sesión, el 2FA solo
+    // protegería del robo de contraseña, no del robo de sesión — y entonces sobraría media función.
+    if (!verifyTOTP(String(body.code || ''), admin.totp_secret)) {
+      return c.json({ error: 'Código incorrecto.' }, 400);
+    }
+    disableSuperadminTotp(sess.id);
+    recordSecurityEvent('superadmin_2fa_desactivado', getClientIp(c), 'apex', 'POST /superadmin/2fa/desactivar');
     return c.json({ ok: true });
   });
 
@@ -278,13 +431,145 @@ input{width:100%;padding:11px 13px;background:rgba(255,255,255,.05);border:1px s
 </style></head><body><div class="card"><div class="logo">Bam<span>buru</span> · Superadmin</div>${inner}</div></body></html>`;
 }
 function loginPage(err) {
+  // `expirado` no es un fallo de credenciales: el vale de 5 min del segundo paso se agotó. Decirlo
+  // tal cual evita el susto de "¿me he equivocado de contraseña?" cuando no ha pasado nada raro.
+  const aviso = err === 'expirado'
+    ? '<div class="err">La verificación caducó. Entra otra vez.</div>'
+    : err ? '<div class="err">Credenciales incorrectas.</div>' : '';
   return shell('Acceso', `<h1>Sala de máquinas</h1>
-    ${err ? '<div class="err">Credenciales incorrectas.</div>' : ''}
+    ${aviso}
     <form method="POST" action="/superadmin/login">
       <label>Email</label><input type="email" name="email" required autofocus autocomplete="username">
       <label>Contraseña</label><input type="password" name="password" required autocomplete="current-password">
       <button class="btn" type="submit">Entrar</button>
     </form>`);
+}
+
+// Segundo paso del login. El mismo campo acepta el código de la app y el de rescate: quien llega
+// aquí sin móvil no tiene que encontrar otro botón — escribe lo que tiene y funciona.
+function verify2faPage(pending, err = '') {
+  return shell('Verificación', `<h1>Código de verificación</h1>
+    ${err ? '<div class="err">Código incorrecto o ya usado.</div>' : ''}
+    <form method="POST" action="/superadmin/verify-2fa">
+      <input type="hidden" name="pending" value="${escHtml(pending)}">
+      <label>Código de tu app (o uno de rescate)</label>
+      <input type="text" name="code" required autofocus autocomplete="one-time-code"
+             inputmode="text" maxlength="20" placeholder="000000">
+      <button class="btn" type="submit">Verificar</button>
+    </form>`);
+}
+
+// Los códigos de rescate se enseñan aquí y NUNCA más. Por eso la pantalla insiste tanto y por eso
+// el botón de copiar existe: el modo de fallo real no es que alguien los robe, es que se cierre la
+// pestaña sin guardarlos y nadie lo note hasta el día del apuro.
+function bloqueCodigos() {
+  return `<div id="codigosBox" style="display:none">
+      <div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35);border-radius:9px;padding:12px;margin:14px 0">
+        <p style="color:#fbbf24;font-size:13px;font-weight:700;margin-bottom:4px">Guárdalos AHORA</p>
+        <p style="color:#94a3b8;font-size:12px;line-height:1.5">No se volverán a mostrar. Cada uno sirve UNA vez y sustituye al código de la app si pierdes el móvil. Imprímelos o guárdalos donde guardas lo importante — no en este ordenador.</p>
+      </div>
+      <pre id="codigos" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:12px;color:#e2e8f0;font-size:13px;line-height:1.9;text-align:center;font-family:ui-monospace,monospace;white-space:pre-wrap"></pre>
+      <button class="btn" id="btnCopiar" style="background:rgba(255,255,255,.08);color:#e2e8f0">Copiar al portapapeles</button>
+      <a href="/superadmin/negocios" class="btn" style="display:block;text-align:center;text-decoration:none;margin-top:10px">Ya los he guardado — continuar</a>
+    </div>`;
+}
+
+function altaDosFactoresPage(sess, secret, qr, nonce = '') {
+  return shell('Activar 2FA', `<h1>Activar doble factor</h1>
+    <div id="paso1">
+      <p style="color:#94a3b8;font-size:13px;text-align:center;margin-bottom:14px">Escanea con Google Authenticator, Authy, 1Password o cualquier app TOTP.</p>
+      <div style="text-align:center;background:#fff;padding:10px;border-radius:12px"><img src="${qr}" width="200" height="200" alt="Código QR para configurar el 2FA"></div>
+      <p style="color:#94a3b8;font-size:12px;text-align:center;margin:12px 0 4px">¿No puedes escanear? Escribe esta clave:</p>
+      <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:9px;color:#e2e8f0;font-size:12px;text-align:center;word-break:break-all;font-family:ui-monospace,monospace">${escHtml(secret)}</div>
+      <label>Escribe el código que muestra la app</label>
+      <input id="code" type="text" inputmode="numeric" maxlength="7" autocomplete="one-time-code" placeholder="000000">
+      <button class="btn" id="btnActivar">Verificar y activar</button>
+      <div class="ok" id="msg"></div>
+      <p style="text-align:center;margin-top:14px"><a href="/superadmin/negocios" style="color:#64748b;font-size:12px;text-decoration:none">← Volver sin activar</a></p>
+    </div>
+    ${bloqueCodigos()}
+    <script nonce="${nonce}">
+      window.SA_CSRF=${JSON.stringify(sess.csrfToken)};
+      window.addEventListener('DOMContentLoaded', function(){
+        document.getElementById('btnActivar').onclick = activar;
+        document.getElementById('btnCopiar').onclick = copiar;
+      });
+      function pinta(codigos){
+        document.getElementById('paso1').style.display='none';
+        document.getElementById('codigos').textContent = codigos.join('\\n');
+        document.getElementById('codigosBox').style.display='block';
+      }
+      function copiar(){
+        navigator.clipboard.writeText(document.getElementById('codigos').textContent)
+          .then(function(){ document.getElementById('btnCopiar').textContent='Copiados ✓'; });
+      }
+      async function activar(){
+        var msg=document.getElementById('msg');
+        msg.style.color='#fca5a5'; msg.textContent='';
+        try{
+          const r=await fetch('/superadmin/2fa/activar',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':window.SA_CSRF},body:JSON.stringify({code:document.getElementById('code').value})});
+          const d=await r.json(); if(!r.ok) throw new Error(d.error||'Error');
+          pinta(d.codigos);
+        }catch(e){ msg.textContent=e.message; }
+      }
+    </script>`);
+}
+
+function dosFactoresActivoPage(sess, quedan, nonce = '') {
+  // Quedarse sin códigos con el 2FA puesto es estar a un móvil roto de perder la plataforma: por eso
+  // el aviso cambia de tono según cuántos queden, en vez de ser un número más en la pantalla.
+  const color = quedan === 0 ? '#fca5a5' : quedan <= 3 ? '#fbbf24' : '#34d399';
+  const nota = quedan === 0
+    ? 'No te queda ninguno. Si pierdes el móvil, la única salida es el servidor. Regenéralos.'
+    : quedan <= 3 ? 'Te quedan pocos. Regenéralos cuando puedas.' : 'Cada uno sirve una vez.';
+  return shell('2FA', `<h1>Doble factor activo</h1>
+    <p style="color:#94a3b8;font-size:13px;text-align:center;margin-bottom:6px">${escHtml(sess.email)}</p>
+    <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:12px;text-align:center;margin-bottom:6px">
+      <div style="color:${color};font-size:22px;font-weight:800">${quedan}</div>
+      <div style="color:#94a3b8;font-size:12px">códigos de rescate sin usar</div>
+      <div style="color:#64748b;font-size:11px;margin-top:6px">${nota}</div>
+    </div>
+    <div id="paso1">
+      <label>Código de tu app (hace falta para cualquiera de las dos cosas)</label>
+      <input id="code" type="text" inputmode="numeric" maxlength="7" autocomplete="one-time-code" placeholder="000000">
+      <button class="btn" id="btnRegen">Generar códigos de rescate nuevos</button>
+      <button class="btn" id="btnOff" style="background:rgba(239,68,68,.15);color:#fca5a5;margin-top:10px">Desactivar el doble factor</button>
+      <div class="ok" id="msg"></div>
+      <p style="text-align:center;margin-top:14px"><a href="/superadmin/negocios" style="color:#64748b;font-size:12px;text-decoration:none">← Volver al panel</a></p>
+    </div>
+    ${bloqueCodigos()}
+    <script nonce="${nonce}">
+      window.SA_CSRF=${JSON.stringify(sess.csrfToken)};
+      window.addEventListener('DOMContentLoaded', function(){
+        document.getElementById('btnRegen').onclick = regenerar;
+        document.getElementById('btnOff').onclick = desactivar;
+        document.getElementById('btnCopiar').onclick = copiar;
+      });
+      function copiar(){
+        navigator.clipboard.writeText(document.getElementById('codigos').textContent)
+          .then(function(){ document.getElementById('btnCopiar').textContent='Copiados ✓'; });
+      }
+      async function llama(url){
+        const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':window.SA_CSRF},body:JSON.stringify({code:document.getElementById('code').value})});
+        const d=await r.json(); if(!r.ok) throw new Error(d.error||'Error');
+        return d;
+      }
+      async function regenerar(){
+        var msg=document.getElementById('msg'); msg.style.color='#fca5a5'; msg.textContent='';
+        try{
+          const d=await llama('/superadmin/2fa/regenerar');
+          document.getElementById('paso1').style.display='none';
+          document.getElementById('codigos').textContent = d.codigos.join('\\n');
+          document.getElementById('codigosBox').style.display='block';
+        }catch(e){ msg.textContent=e.message; }
+      }
+      async function desactivar(){
+        if(!confirm('¿Desactivar el doble factor? La cuenta más poderosa de la plataforma se quedará solo con contraseña.')) return;
+        var msg=document.getElementById('msg'); msg.style.color='#fca5a5'; msg.textContent='';
+        try{ await llama('/superadmin/2fa/desactivar'); location.href='/superadmin/2fa'; }
+        catch(e){ msg.textContent=e.message; }
+      }
+    </script>`);
 }
 function changePasswordPage(sess, nonce = '') {
   return shell('Cambiar contraseña', `<h1>Elige una contraseña nueva</h1>

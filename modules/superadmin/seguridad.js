@@ -5,7 +5,8 @@ import path from 'path';
 import Database from 'better-sqlite3';
 import { escHtml } from '../../core/escape.js';
 import { saLayout } from './layout.js';
-import { listSecurityEvents, securityCounts, listTenants, getGlobalLlmSpend } from '../../core/control-db.js';
+import { listSecurityEvents, securityCounts, listTenants, getGlobalLlmSpend,
+         getSuperadminById, countUnusedRecoveryCodes } from '../../core/control-db.js';
 
 const month = () => new Date().toISOString().slice(0, 7);
 const eur = (n) => Number(n || 0).toFixed(2).replace('.', ',') + ' €';
@@ -51,17 +52,42 @@ export function mountSeguridad(sa) {
 
     const evRows = listSecurityEvents(100).map(e => {
       const t = e.type || '';
+      // Los eventos del superadmin (C5/M3) se leen en castellano y no como el nombre interno del
+      // evento. El del rescate va en ROJO a propósito: es el único de esta lista que puede
+      // significar "alguien está entrando con un papel tuyo" y no debe parecer rutina.
       const badge = t === 'login_failed' ? '<span class="badge b-red">login fallido</span>'
         : t.startsWith('ratelimit:') ? `<span class="badge b-amber">freno ${escHtml(t.slice(10))}</span>`
+        : t === 'superadmin_login_failed' ? '<span class="badge b-red">superadmin: contraseña fallida</span>'
+        : t === 'superadmin_2fa_failed' ? '<span class="badge b-red">superadmin: código 2FA fallido</span>'
+        : t === 'superadmin_2fa_rescate' ? '<span class="badge b-red">superadmin: CÓDIGO DE RESCATE usado</span>'
+        : t === 'superadmin_2fa_activado' ? '<span class="badge b-green">superadmin: 2FA activado</span>'
+        : t === 'superadmin_2fa_desactivado' ? '<span class="badge b-amber">superadmin: 2FA desactivado</span>'
+        : t === 'superadmin_2fa_codigos_regenerados' ? '<span class="badge b-gray">superadmin: códigos regenerados</span>'
         : `<span class="badge b-gray">${escHtml(t)}</span>`;
       return `<tr><td style="color:#94a3b8;font-size:.8rem;white-space:nowrap">${new Date(e.ts * 1000).toLocaleString('es-ES')}</td>
         <td>${badge}</td><td style="font-family:monospace;font-size:.8rem">${escHtml(e.ip || '-')}</td>
         <td>${escHtml(e.tenant_slug || '—')}</td><td style="color:#94a3b8;font-size:.82rem">${escHtml(e.detail || '')}</td></tr>`;
     }).join('');
 
+    // C5/M3 — el estado del 2FA de ESTA cuenta, arriba del todo. Es la puerta de la sala de máquinas:
+    // si está abierta con solo una contraseña, eso es lo primero que hay que ver al entrar aquí, no
+    // un dato escondido en una pantalla que nadie visita.
+    const admin = getSuperadminById(sess.id);
+    const quedan = admin.totp_enabled ? countUnusedRecoveryCodes(sess.id) : 0;
+    const aviso2fa = admin.totp_enabled
+      ? `<div class="card" style="border-color:rgba(52,211,153,.3)">
+           <div style="font-weight:700;margin-bottom:4px;color:#34d399">Tu doble factor está activo</div>
+           <div style="color:#94a3b8;font-size:13px">Te quedan <strong style="color:${quedan <= 3 ? '#fbbf24' : '#e2e8f0'}">${quedan}</strong> códigos de rescate sin usar. <a href="/superadmin/2fa" style="color:#f59e0b">Gestionar</a></div>
+         </div>`
+      : `<div class="card" style="border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.06)">
+           <div style="font-weight:700;margin-bottom:4px;color:#fbbf24">Esta cuenta entra solo con contraseña</div>
+           <div style="color:#94a3b8;font-size:13px">Es la cuenta más poderosa de la plataforma: ve todos los negocios y puede suspenderlos. <a href="/superadmin/2fa" style="color:#f59e0b;font-weight:700">Activar el doble factor</a></div>
+         </div>`;
+
     const content = `
       <h1>Seguridad</h1>
       <div class="sa-sub">Lo que la plataforma frena, en las últimas 24 h. Si te atacan, se ve aquí.</div>
+      ${aviso2fa}
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px">
         ${kpi(loginFail, 'Logins fallidos (24h)', true)}
         ${kpi(rlLogin, 'Frenos de login (24h)', true)}

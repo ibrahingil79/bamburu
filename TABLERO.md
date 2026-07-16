@@ -11,9 +11,11 @@
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
 > victorias rápidas), C4a + C4a-bis HECHOS** → **M1 (XSS almacenado) CERRADO ENTERO**. **C4b: hechos
 > C4b-0 (nonce + sonda), C4b-1 (registro y superadmin ya sirven `script-src` SIN `'unsafe-inline'`) y
-> C4b-2 (los 4 scripts de CDN, autoalojados)**. Quedan por DECIDIR C4b-3 (store, Capa 2) y **C4b-4 (el
-> ERP: recomendación = NO hacerlo, deuda aceptada — ver el dato medido)**. Siguiente tarea real:
-> **C5** (M5 sesiones / M6 forgot-password / M3 2FA del superadmin). Eje A (UX) y Eje B (DISA, seis
+> C4b-2 (los 4 scripts de CDN, autoalojados)**. **C4b-3 (store) y C4b-4 (ERP): DECIDIDOS el 16 jul —
+> NO se les aplica la CSP; deuda consciente, con dueño y por escrito** (ver sus fichas). **C5 HECHO
+> (16 jul)**: sesiones revocadas al desactivar, freno + enumeración cerrada en `forgot-password`, y 2FA
+> con códigos de rescate en el superadmin. Siguiente tarea real: **C6** (los 12 hallazgos BAJA), con
+> **C5-bis** (códigos de rescate para los dueños) anotada como producto. Eje A (UX) y Eje B (DISA, seis
 > propuestas de proactividad) completos; Pilar 3 (inventario) cerrado.
 >
 > **Inventario (Pilar 3) CERRADO (15 jul 2026):** multi-almacén (`da7871e`/`3af928f`), stock mínimo /
@@ -569,7 +571,7 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
   entera. Limpiado `auth.log`; clave **rotada** y verificada con una llamada real a DISA. La lección
   (nunca un secreto en `argv`) queda en `errores-conocidos.md`.
 
-## Eje C: Seguridad — plan cargado (auditoría del 15 jul)  ⬅️ C1-C3 + C4a + C4a-bis + C4b(0,1,2) HECHOS · DECIDIR C4b-3/C4b-4 · SIGUIENTE C5
+## Eje C: Seguridad — plan cargado (auditoría del 15 jul)  ⬅️ C1-C3 + C4a + C4a-bis + C4b(0,1,2) + C5 HECHOS · C4b-3/C4b-4 DECIDIDOS (no) · SIGUIENTE C6
 
 > Origen: **auditoría de seguridad de SOLO LECTURA del 15 jul 2026** (`docs/seguridad/auditoria-ejeC.md`,
 > commit `24dbf2a`). Postura general **buena** (aislamiento entre negocios sólido y fail-closed, DISA no se
@@ -790,11 +792,27 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
     `/admin/store-settings`, que da 404** (constructor de tienda desmontado por D2, `routes/index.js:115`).
     Cuarta vez que aparece código muerto en este eje.
 
-  ### ⬜ C4b-3 — store (20 handlers) — Capa 2 CONGELADA: preguntar antes
-  Superficie pública de cara al cliente, con su propio shell (separable). Congelada → decisión expresa del
-  dueño, como en C4a-bis.
+  ### 🔒 C4b-3 — store (20 handlers) — DECIDIDO (16 jul 2026): NO, mientras esté apagada
+  **Decisión del dueño. La tienda NO se endurece mientras esté apagada/desmontada.** Endurecer una
+  superficie que hoy no sirve a nadie es pagar el riesgo de romperla sin cobrar la protección: no hay
+  usuario al que proteger porque no hay tienda encendida. **Si algún día se reactiva como producto, el
+  endurecimiento entra CON esa reactivación** — no después y no como tarea suelta: forma parte de volver a
+  encenderla, igual que volver a probarla. Esto es deuda **consciente y con dueño**, no un olvido.
 
-  ### ⬜ C4b-4 — ERP + DISA (489) — DECIDIR. Ya no faltan datos: faltan ganas de pagar el precio
+  ### 🔒 C4b-4 — ERP + DISA (489) — DECIDIDO (16 jul 2026): NO se le aplica la CSP
+  **Decisión del dueño, con los datos de la sonda ya medidos (abajo).** El panel de gestión (470 botones)
+  se queda con `'unsafe-inline'`. Las tres razones, en orden:
+  1. **El XSS ya está cerrado y con tests** (M1 completo: C4a + C4a-bis, 44 puntos saneados con gate). Aquí
+     la CSP sería cinturón contra un XSS **futuro**, no contra uno vivo.
+  2. **El precio es romper botones EN SILENCIO.** Un `onclick=` bajo CSP estricta no da error: simplemente
+     no hace nada. Y la sonda demostró que **no se delatan al cargar, solo al pulsarlos** (25 botones en
+     `/admin/categories` y CERO violaciones hasta el primer clic). Verificar exige pulsar ~470 a mano.
+  3. **El 90% del valor ya está cobrado por el 2% del trabajo:** las dos superficies donde un XSS dolía de
+     verdad —registro (anónimo) y superadmin (ve todos los negocios)— ya van con CSP estricta (C4b-1/2).
+  **Deuda aceptada, con dueño y por escrito.** Si algún día se hace: por pantalla, con `CSP_PROBE=1` y
+  pulsando todo. Terminar en "deuda anotada" es el resultado honesto, no un fracaso.
+
+  #### Los datos que sostienen la decisión de C4b-4 (medidos, no estimados)
   470 + 19 handlers, 39 ficheros, 68 `<script>`. Las piezas compartidas cubren poco (~43 vía
   `rowMenu`/`emptyRow`/`cta:onclick`): el resto son **~470 ediciones a mano**.
   - **Lo que dice la sonda (medido, no estimado):** 23 pantallas, **108 violaciones al cargar, todas
@@ -807,23 +825,61 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
   - **Y el valor, dicho honesto:** M1 está CERRADO y con gate. Aquí la CSP es cinturón contra un XSS
     **futuro**, no contra uno vivo. Las dos superficies donde un XSS de verdad dolía (registro anónimo y
     superadmin) **ya están protegidas** — que era el 90% del valor por el 2% del trabajo.
-  - **Recomendación: NO hacerlo por ahora.** Terminar en "deuda aceptada y anotada" es el resultado
-    honesto, no un fracaso. Si algún día se hace: por pantalla, con `CSP_PROBE=1` y pulsando todo.
 
   ### NO entra en C4b: `style-src`
   Son **2027** `style="..."` y el valor es muy inferior (inyección de ESTILO, no ejecución de código). Se
   queda `'unsafe-inline'` en `style-src`, a propósito y por escrito.
 
-- ⬜ **C5 — Endurecer el acceso (tres, EN ESTE ORDEN).**
-  - **[M5] Revocar las sesiones activas al desactivar un usuario** — hoy aguantan ≤24 h porque
-    `getAdminSession` hace `JOIN admin_users` sin `active=1` (`core/auth.js:85-90`) y `PUT /users`
-    (`modules/erp/routes/users.js:54`) no destruye sus sesiones. Esfuerzo bajo.
-  - **[M6] Freno en `forgot-password` + cerrar la enumeración por timing** — `routes/auth.js:443` (sin rate
-    limit dedicado) y `:482` vs `:490-513` (retorno inmediato si el email no existe; INSERT+render+red si
-    existe → oráculo de latencia). Rate-limit propio + igualar el tiempo de respuesta. Esfuerzo medio.
-  - **[M3] 2FA para la cuenta de superadmin** — hoy solo contraseña (`modules/superadmin/index.js:99-110`);
-    las columnas `totp_secret`/`totp_enabled` (`core/control-db.js:115-116`) están muertas. Cablear el TOTP
-    que el esquema ya contempla. Es la cuenta MÁS poderosa de la plataforma. Esfuerzo medio.
+- ✅ **C5 — Endurecer el acceso (16 jul 2026).** Los tres entregables cerrados. **PASO 0 (solo lectura):**
+  las sesiones son store en SERVIDOR (`admin_sessions` por tenant, cookie `asess`; el superadmin aparte en
+  `control.db` + cookie `sadm`) → revocar es borrar una fila, no hay JWT que esperar a que caduque. Dos
+  sorpresas, las dos a favor: el flujo de `forgot-password` YA existía con caducidad (1 h) y un solo uso
+  (`used=0/1`) — de los tres puntos de M6 solo faltaba el freno; y el TOTP ya estaba escrito y probado en
+  `core/totp.js` (M3 era cablearlo, no construirlo).
+  - ✅ **[M5] Revocar las sesiones al desactivar un usuario.** El gate se puso en `getAdminSession`
+    (`core/auth.js`), no en la ruta: así expulsa venga la desactivación de donde venga (panel, script, UPDATE
+    a mano), y la sesión muerta se borra al detectarla. `PUT /users` además corta sus sesiones y su espejo en
+    `control.db` (higiene, no el candado). Verificado: `test-c5-sesiones.mjs` **10/0** (rojo 4/10 antes).
+  - ✅ **[M6] Freno en `forgot-password` + enumeración cerrada.** Dos limitadores encadenados: por **IP**
+    (5/15 min, contra el barrido de una lista) y por **email** (3/15 min, contra inundar UN buzón desde mil
+    IPs) — el de IP solo no cubre lo segundo. Para eso `rateLimit` acepta ahora `keyFn` (aditivo; sin ella se
+    comporta igual que siempre). El **email nunca entra en `security_events`**: PII, misma lección que C3/M7.
+    La enumeración tenía DOS fugas, no una: (a) si Resend fallaba salía un **500**, que solo podía verse con
+    un email registrado — el error era la confirmación; (b) el reloj. Medido antes de tocar nada: **6,8 ms
+    con cuenta real vs 0,7 ms sin ella — 10,4× y SIN SOLAPAMIENTO**, o sea que UNA medición clasificaba un
+    email. El primer intento de arreglo (llamar sin esperar) **no bastó**: el cuerpo de una función `async`
+    corre síncrono hasta su primer `await`, y el INSERT y `renderEmail` son de better-sqlite3 = síncronos.
+    Con `setImmediate`: **1,01×, ramas indistinguibles**. Verificado: `test-c5-forgot.mjs` **24/0** (rojo
+    9 fallos antes) + medición de 40 muestras por rama + comprobación contra el servidor vivo (freno real
+    5→429; cuenta real vs inventada = misma huella de cuerpo).
+  - ✅ **[M3] 2FA (TOTP) para el superadmin, con códigos de rescate.** Decisión del dueño: app de
+    autenticación, no email. Alta con QR + secreto y **exigiendo un código válido** (activar a ciegas =
+    cerrar con la llave dentro); 10 códigos de rescate mostrados UNA vez, guardados con bcrypt, de un solo
+    uso (`used_at`, no borrado: deja rastro de cuándo). Regenerar y desactivar **piden el código**: si
+    bastara la sesión, el 2FA no protegería del robo de sesión. Usar un rescate levanta evento en la zona
+    Seguridad. Migración aditiva (`superadmin_recovery_codes`). Último recurso documentado:
+    `scripts/superadmin-2fa-off.mjs <email>`. Verificado: `test-c5-2fa-superadmin.mjs` **39/0** (control.db
+    desechable; los códigos TOTP los genera **otplib**, librería independiente → prueba de que una app real
+    entra) + `gate-c5-2fa-superadmin.mjs` **18/0** en navegador real contra la CSP estricta, con cuenta
+    desechable (activar el 2FA de la cuenta real desde un script es el bloqueo que C5 evita).
+  - ✅ **Extra decidido por el dueño (salida de emergencia):** `scripts/reset-admin.js` ya limpia
+    `totp_secret`/`totp_enabled`. **No era un extra: sin esto el script no rescataba a nadie con 2FA** — la
+    persona entraba con la contraseña nueva y chocaba contra la pantalla del código, fuera para siempre.
+    Hoy no había nadie en riesgo (`totp_enabled=0` en los 6 negocios), pero era un bloqueo permanente
+    esperando al primer dueño que activara el 2FA.
+  - *Hallazgo de paso:* `otplib` está en **`dependencies`** y no lo importa nadie en producción (el TOTP es
+    `core/totp.js`, escrito a mano). Ahora solo lo usan el test y el gate → le tocaría `devDependencies`.
+    Anotado, no tocado (fuera del alcance de C5).
+
+- ⬜ **C5-bis — Códigos de rescate para los DUEÑOS de negocio (producto, no seguridad interna).**
+  Sale del PASO 0 de C5: los admin de tenant YA tienen 2FA completo (`setup-2fa`/`confirm-2fa`/`verify-2fa`
+  en `modules/erp/routes/auth.js`) **sin códigos de rescate**. Con la salida de emergencia de C5
+  (`reset-admin.js` limpia el TOTP) ya no es un bloqueo permanente, pero **depende de ti**: el dueño que
+  pierda el móvil un domingo se queda fuera hasta que alguien entre por SSH. Los códigos de rescate lo
+  convierten en algo que resuelve solo. Mismo mecanismo que el del superadmin (`core/recovery-codes.js` ya
+  existe y es reutilizable) + su pantalla en el panel. Decidido el 16 jul: se anota como tarea de producto
+  aparte en vez de meterla en C5 (era construir para clientes dentro de una tarea de seguridad interna).
+  Hoy nadie la necesita: `totp_enabled=0` en los 6 negocios.
 
 - ⬜ **C6 — Los 12 hallazgos BAJA (un solo bloque, al final).**
   **[B1]** contraseña generada impresa al provisionar (`modules/erp/models.js:621`; cuenta desechable —

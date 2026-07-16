@@ -8,7 +8,7 @@ import { hashPassword, verifyPassword, createAdminSession, destroyAdminSession, 
 import { rateLimit, getClientIp } from '../../../core/rate-limit.js';
 import { recordSecurityEvent } from '../../../core/control-db.js';
 import { validate } from '../../../core/validate.js';
-import { loginSchema } from '../schemas.js';
+import { loginSchema, forgotSchema } from '../schemas.js';
 import { ROOT_TOKENS } from '../layout.js';
 import { destroyTenantSession, createTenantSession } from '../../../core/control-db.js';
 
@@ -29,6 +29,27 @@ const loginLimiter = rateLimit({
   max: 5,
   keyPrefix: 'admin-login',
   message: 'Demasiados intentos de login. Espera 15 minutos.',
+});
+
+// C5/M6 — el freno de "he olvidado mi contraseña". Van los DOS, y por eso son dos:
+//   · por IP    — que nadie barra la lista de emails desde un sitio para ver cuáles existen.
+//   · por email — que nadie inunde el buzón de UNA persona repartiendo la petición entre muchas IPs.
+// Solo el de IP frenaría lo primero pero no lo segundo. Cupos bajos a propósito: pedir el enlace es
+// algo que se hace una vez, no tres seguidas; 3/15 min por email sobra para el uso honesto.
+const forgotIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  keyPrefix: 'admin-forgot-ip',
+  message: 'Demasiadas peticiones de recuperación. Espera 15 minutos.',
+});
+const forgotEmailLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 3,
+  keyPrefix: 'admin-forgot-email',
+  // El email sale de `validated` (lo dejó ahí validate(forgotSchema), que corre justo antes): así se
+  // limita por la cuenta ya normalizada en minúsculas y no se vuelve a leer el cuerpo.
+  keyFn: (c) => c.get('validated')?.email?.trim().toLowerCase() || null,
+  message: 'Demasiadas peticiones de recuperación. Espera 15 minutos.',
 });
 
 function totpVerifyPage(pending, error = false) {
@@ -104,6 +125,43 @@ function bindTenantSession(c, db, token, userId) {
     tenant_id: tenant.id, session_token: token,
     user_id: userId, user_email: u?.email || '', user_role: u?.role || '', expires_at: expiresAt,
   });
+}
+
+// Crea el token de reseteo y manda el correo. Corre FUERA de la respuesta (ver POST /forgot-password):
+// quien la llama no la espera, así que aquí no se decide nada de lo que ve el usuario — solo se hace
+// el trabajo y se registra lo que falle. Recibe todo ya resuelto (db, host) en vez de leerlo del
+// contexto: para cuando esto corre, la petición ya se respondió y `c` no es sitio de donde fiarse.
+async function enviarEnlaceReseteo(db, { host, user, email }) {
+  const token = randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+  db.prepare(`
+    INSERT INTO password_reset_tokens (admin_user_id, token, expires_at)
+    VALUES (?, ?, ?)
+  `).run(user.id, token, expiresAt);
+
+  const resetLink = `https://${host}/admin/reset-password?token=${token}`;
+
+  // NUNCA se registra el enlace: lleva el token de reseteo, y un token en un log es un token
+  // filtrado — cualquiera con acceso a los registros podría entrar en la cuenta de otro. Misma
+  // lección que la clave de Anthropic en el log de sudo (11-jul-2026): un secreto no va a un log.
+  console.log('[Resend] Enviando email de recuperación (destinatario oculto)');
+
+  // El TEXTO sale del catálogo de plantillas (editable en Ajustes). {{enlace}} es su ELEMENTO
+  // CRÍTICO: Ajustes NO deja guardar esta plantilla sin él — un "recupera tu contraseña" sin
+  // enlace deja a una persona fuera de su cuenta, y nadie se entera hasta que pasa.
+  const tpl = renderEmail(db, 'recuperar_password', TONO_UNICO, { nombre: user.name, enlace: resetLink });
+  const { data, error: resendError } = await resend.emails.send({
+    from: 'Bamburu <noreply@bamburu.com>',
+    to: email,
+    subject: tpl.subject,
+    html: tpl.html,
+    text: tpl.text,
+  });
+
+  // Resend devuelve { data, error } — no lanza. Si falla, se ve AQUÍ, en el servidor.
+  if (resendError) throw new Error('Resend: ' + JSON.stringify(resendError));
+  console.log('[Resend] Email enviado OK, id:', data?.id);
 }
 
 export function createAuthRoutes(db) {
@@ -442,13 +500,8 @@ export function createAuthRoutes(db) {
 </html>`);
   });
 
-  r.post('/forgot-password', async c => {
-    const form = await c.req.parseBody();
-    const email = (form.email || '').trim().toLowerCase();
-
-    if (!email) {
-      return c.html('<p>Email requerido</p>', 400);
-    }
+  r.post('/forgot-password', forgotIpLimiter, validate(forgotSchema), forgotEmailLimiter, async c => {
+    const email = (c.get('validated').email || '').trim().toLowerCase();
 
     const user = db.prepare(
       'SELECT id, name FROM admin_users WHERE email = ? AND active = 1'
@@ -481,50 +534,32 @@ export function createAuthRoutes(db) {
 </body>
 </html>`;
 
-    if (!user) {
-      return c.html(successHtml);
-    }
-
-    const token = randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-
-    try {
-      db.prepare(`
-        INSERT INTO password_reset_tokens (admin_user_id, token, expires_at)
-        VALUES (?, ?, ?)
-      `).run(user.id, token, expiresAt);
-
+    // C5/M6 — la respuesta es LA MISMA, y tarda LO MISMO, exista o no la cuenta.
+    //
+    // El texto ya era idéntico, pero el reloj cantaba: un email desconocido volvía al instante y uno
+    // conocido esperaba al INSERT y a Resend (cientos de ms). Esa diferencia, sola, era un buscador
+    // de cuentas registradas — sin leer la respuesta, cronometrándola. Y encima, si Resend fallaba
+    // salía un 500 que SOLO podía verse con un email que existe: el error era la confirmación.
+    //
+    // Por eso el trabajo real no se espera: se lanza y se responde. Ningún fallo del envío cambia lo
+    // que ve quien pregunta; se registra en el servidor, que es donde hay que verlo. Contrapartida
+    // aceptada: si el envío falla, el usuario no se entera en la pantalla — hace lo mismo que haría
+    // si el correo se perdiera en el camino, volver a pedirlo. Lo que NO puede pasar es que el fallo
+    // le diga a un desconocido cuáles de sus 10.000 emails son clientes de Bamburu.
+    if (user) {
       const host = c.req.header('host') || 'bamburu.com';
-      const resetLink = `https://${host}/admin/reset-password?token=${token}`;
-
-      // NUNCA se registra el enlace: lleva el token de reseteo, y un token en un log es un token
-      // filtrado — cualquiera con acceso a los registros podría entrar en la cuenta de otro. Misma
-      // lección que la clave de Anthropic en el log de sudo (11-jul-2026): un secreto no va a un log.
-      console.log('[Resend] Enviando email de recuperación (destinatario oculto)');
-
-      // El TEXTO sale del catálogo de plantillas (editable en Ajustes). {{enlace}} es su ELEMENTO
-      // CRÍTICO: Ajustes NO deja guardar esta plantilla sin él — un "recupera tu contraseña" sin
-      // enlace deja a una persona fuera de su cuenta, y nadie se entera hasta que pasa.
-      const tpl = renderEmail(db, 'recuperar_password', TONO_UNICO, { nombre: user.name, enlace: resetLink });
-      const { data, error: resendError } = await resend.emails.send({
-        from: 'Bamburu <noreply@bamburu.com>',
-        to: email,
-        subject: tpl.subject,
-        html: tpl.html,
-        text: tpl.text,
+      // setImmediate, y NO llamar y no esperar. Parece lo mismo y no lo es: el cuerpo de una función
+      // async corre SÍNCRONO hasta su primer await, y ahí dentro el INSERT del token y renderEmail
+      // son de better-sqlite3, o sea síncronos. Sin esto, el trabajo se hacía igual antes de
+      // responder y el reloj seguía cantando: medido, 6,8 ms con cuenta real contra 0,7 ms sin ella
+      // —10× y sin solapamiento—, o sea que UNA medición bastaba para saber si el email existe. Con
+      // setImmediate la respuesta sale primero y el trabajo cae después: 1,0× y ramas indistinguibles.
+      setImmediate(() => {
+        enviarEnlaceReseteo(db, { host, user, email })
+          .catch(err => console.error('[Auth] Error enviando email de recuperación:', err));
       });
-
-      if (resendError) {
-        console.error('[Resend] Error de API:', JSON.stringify(resendError));
-        return c.html('<p style="color:var(--danger)">Error al enviar el email. Intenta más tarde.</p>', 500);
-      }
-
-      console.log('[Resend] Email enviado OK, id:', data?.id);
-      return c.html(successHtml);
-    } catch (err) {
-      console.error('[Auth] Error enviando email de recuperación:', err);
-      return c.html('<p style="color:var(--danger)">Error al enviar el email. Intenta más tarde.</p>', 500);
     }
+    return c.html(successHtml);
   });
 
   r.get('/reset-password', c => {
