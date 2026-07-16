@@ -575,6 +575,26 @@ export function runMigrations(db) {
     FOREIGN KEY (user_id) REFERENCES admin_users(id) ON DELETE CASCADE
   )`);
 
+  // C5-bis — códigos de rescate del 2FA del DUEÑO. Espejo de superadmin_recovery_codes
+  // (core/control-db.js), pero por negocio: aquella vive en control.db con superadmin_id; esta, en
+  // la BD de cada tenant con admin_user_id. No se comparte tabla porque no se comparte base.
+  //
+  // Existen para que perder el móvil no sea perder el negocio. Hasta ahora el dueño podía activar el
+  // 2FA y quedarse fuera para siempre: la única salida era que alguien entrara por SSH.
+  //
+  // Hasheados (bcrypt), como una contraseña: quien lea esta tabla no entra con lo que ve. `used_at`
+  // en vez de borrar la fila — un código gastado deja rastro de CUÁNDO, que es justo lo que querrías
+  // saber si un día se gasta uno que tú no usaste. Aditiva e idempotente.
+  db.exec(`CREATE TABLE IF NOT EXISTS admin_recovery_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_user_id INTEGER NOT NULL,
+    code_hash TEXT NOT NULL,
+    used_at INTEGER DEFAULT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (admin_user_id) REFERENCES admin_users(id) ON DELETE CASCADE
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_admin_recovery_owner ON admin_recovery_codes (admin_user_id, used_at)');
+
   if (!d1Archived) db.exec(`CREATE TABLE IF NOT EXISTS customer_sessions (
     token TEXT PRIMARY KEY,
     account_id INTEGER NOT NULL,

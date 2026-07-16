@@ -2,9 +2,11 @@ import { renderEmail, TONO_UNICO } from '../email-templates.js';
 import { Hono } from 'hono';
 import { Resend } from 'resend';
 import { randomBytes } from 'crypto';
-import { generateSecret, verify as verifyTOTP, keyuri } from '../../../core/totp.js';
-import QRCode from 'qrcode';
-import { hashPassword, verifyPassword, createAdminSession, destroyAdminSession, adminAuth, destroyAllAdminSessionsForUser } from '../../../core/auth.js';
+import { verify as verifyTOTP } from '../../../core/totp.js';
+import { hashPassword, verifyPassword, createAdminSession, destroyAdminSession, adminAuth, destroyAllAdminSessionsForUser,
+         listUnusedAdminRecoveryCodes, consumeAdminRecoveryCode, countUnusedAdminRecoveryCodes, logActivity } from '../../../core/auth.js';
+import { buscarCodigo } from '../../../core/recovery-codes.js';
+import { ENTITY } from '../../../core/activity-entities.js';
 import { rateLimit, getClientIp, throttlePorFallos, registrarFallo, limpiarFallos } from '../../../core/rate-limit.js';
 import { recordSecurityEvent } from '../../../core/control-db.js';
 import { validate } from '../../../core/validate.js';
@@ -14,14 +16,13 @@ import { destroyTenantSession, createTenantSession } from '../../../core/control
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Tokens temporales para el segundo paso de login (5 min TTL)
+// Tokens temporales para el segundo paso de login (5 min TTL). El almacén del ALTA del 2FA
+// (pendingTOTPStore) ya no vive aquí: se fue con las rutas huérfanas (C5-bis). El del alta está en
+// perfil.js, que es donde se activa el 2FA.
 const pending2FAStore = new Map();
-// Secrets temporales durante el setup de 2FA (keyed por userId, 10 min TTL)
-const pendingTOTPStore = new Map();
 setInterval(() => {
   const now = Date.now();
   for (const [k, v] of pending2FAStore) if (now - v.created > 5 * 60 * 1000) pending2FAStore.delete(k);
-  for (const [k, v] of pendingTOTPStore) if (now - v.created > 10 * 60 * 1000) pendingTOTPStore.delete(k);
 }, 60000);
 
 const loginLimiter = rateLimit({
@@ -97,18 +98,20 @@ function totpVerifyPage(pending, error = false) {
     <div class="logo">Bam<span>buru</span></div>
     <h1>Verificar identidad</h1>
     <p class="sub">Ingresa el código de tu app autenticadora</p>
-    ${error ? '<div class="error">Código incorrecto o expirado. Intenta de nuevo.</div>' : ''}
+    ${error ? '<div class="error">Código incorrecto o ya usado. Intenta de nuevo.</div>' : ''}
     <form method="POST" action="/admin/verify-2fa">
       <input type="hidden" name="pending" value="${pending}">
       <div class="field">
-        <label>Código de 6 dígitos</label>
-        <input type="text" name="code" inputmode="numeric"
-               pattern="[0-9 ]{6,7}" maxlength="7"
-               autofocus required placeholder="000 000"
+        <label>Código de la app (o uno de rescate)</label>
+        <input type="text" name="code" inputmode="text"
+               maxlength="20"
+               autofocus required placeholder="000000"
                autocomplete="one-time-code">
       </div>
       <button type="submit" class="btn">Verificar</button>
     </form>
+    <p class="back" style="margin-top:14px;line-height:1.5">¿Perdiste el móvil? Escribe aquí uno de los
+    <strong style="color:var(--text2)">códigos de rescate</strong> que guardaste al activar la verificación.</p>
     <p class="back"><a href="/admin/login">← Cancelar</a></p>
   </div>
 </body>
@@ -321,14 +324,39 @@ export function createAuthRoutes(db) {
       return c.redirect('/admin/login?error=expired');
     }
 
-    const user = db.prepare('SELECT totp_secret, active FROM admin_users WHERE id=?').get(entry.userId);
+    const user = db.prepare('SELECT id, name, totp_secret, active FROM admin_users WHERE id=?').get(entry.userId);
     if (!user || !user.active || !user.totp_secret) {
       return c.redirect('/admin/login?error=1');
     }
 
-    const isValid = verifyTOTP(code, user.totp_secret);
-    if (!isValid) {
+    // C5-bis — el mismo campo acepta el código de la app Y uno de rescate. Quien llega aquí sin móvil
+    // no tiene que encontrar otro botón: escribe lo que tiene y entra.
+    //
+    // Primero el TOTP (el caso normal): un código correcto no debería pagar diez bcrypt de rescate por
+    // el camino. Espejo del superadmin (modules/superadmin/index.js).
+    let entra = verifyTOTP(code, user.totp_secret);
+    let porRescate = false;
+    if (!entra) {
+      const fila = await buscarCodigo(code, listUnusedAdminRecoveryCodes(db, user.id));
+      // El código se quema AQUÍ, y solo si de verdad estaba sin usar: consumeAdminRecoveryCode
+      // devuelve false si otra petición lo gastó primero. Un mismo papel no abre dos veces.
+      if (fila && consumeAdminRecoveryCode(db, fila.id)) { entra = true; porRescate = true; }
+    }
+    if (!entra) {
+      recordSecurityEvent('login_2fa_failed', getClientIp(c), c.get('tenant')?.slug, '');
       return c.html(totpVerifyPage(pending, true), 400);
+    }
+
+    if (porRescate) {
+      // Que se gaste un código de rescate es NOTICIA para el dueño: o perdió el móvil, o alguien está
+      // entrando con un papel suyo. Va a SU Actividad (que es donde mira) y al panel de seguridad de
+      // la plataforma. El código NUNCA se registra: sería publicar la llave que se acaba de usar.
+      const quedan = countUnusedAdminRecoveryCodes(db, user.id);
+      logActivity(db, { userId: user.id, userName: user.name },
+        'Entró con un código de rescate (sin la app de autenticación)', ENTITY.ADMIN_USER, user.id,
+        `Quedan ${quedan} códigos de rescate sin usar`);
+      recordSecurityEvent('login_2fa_rescate', getClientIp(c), c.get('tenant')?.slug, `quedan ${quedan}`);
+      console.warn(`[Login] Entrada con CÓDIGO DE RESCATE. userId: ${user.id}. Quedan ${quedan}.`);
     }
 
     pending2FAStore.delete(pending);
@@ -341,149 +369,27 @@ export function createAuthRoutes(db) {
     return new Response(null, { status: 302, headers });
   });
 
-  // ── Configuración 2FA (requieren sesión activa) ────────────────
+  // ── 2FA del dueño: RETIRADO de aquí. Vive en /admin/perfil ─────
+  //
+  // C5-bis. Estas tres rutas (setup-2fa / confirm-2fa / disable-2fa) quedaron HUÉRFANAS en U8, que
+  // consolidó el 2FA en el Perfil: no las enlaza ninguna pantalla, pero seguían montadas y
+  // funcionando. `security.js` ya lo dejó anotado como pendiente del Eje C — con dos motivos, y hoy
+  // se le suma el tercero, que es el que obliga:
+  //   1. Se montan ANTES del middleware CSRF (routes/index.js: `app.route('/admin', authRoutes)` va
+  //      antes de `admin.use('*', csrf)`), así que sus formularios no llevaban `_csrf`.
+  //   2. Duplicaban el 2FA: dos pantallas escribiendo las mismas columnas. Justo lo que U8 deshizo.
+  //   3. ACTIVABAN EL 2FA SIN CÓDIGOS DE RESCATE. Con C5-bis eso es una puerta trasera al bloqueo
+  //      que esta tarea cierra: quien activara por aquí y perdiera el móvil se quedaba fuera para
+  //      siempre — el mismo agujero, por detrás.
+  //
+  // Se retiran con 302, no con 404: mismo patrón que U8 usó con /admin/security ("un 302 no rompe a
+  // nadie; un 404 sí"). Puede haber marcadores viejos. Lo que NO hacen ya es activar ni desactivar
+  // nada: el 2FA del dueño tiene UNA sola puerta, y es la que entrega códigos de rescate.
+  r.get('/setup-2fa', c => c.redirect('/admin/perfil'));
+  r.post('/setup-2fa', c => c.redirect('/admin/perfil'));
+  r.post('/confirm-2fa', c => c.redirect('/admin/perfil'));
+  r.post('/disable-2fa', c => c.redirect('/admin/perfil'));
 
-  r.get('/setup-2fa', adminAuth(db), async c => {
-    const session = c.get('session');
-    const user = db.prepare('SELECT email, name, totp_enabled FROM admin_users WHERE id=?').get(session.userId);
-    const err = c.req.query('error');
-    const disabled = c.req.query('disabled');
-
-    const secret = generateSecret();
-    const otpauthUrl = keyuri(user.email, 'Bamburu', secret);
-    const qrDataUrl = await QRCode.toDataURL(otpauthUrl, { width: 200, margin: 1 });
-
-    // Guardar secret en store temporal (keyed por userId)
-    pendingTOTPStore.set(session.userId, { secret, created: Date.now() });
-
-    return c.html(`<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Autenticación de Dos Factores — Bamburu</title>
-  <style>${ROOT_TOKENS}
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:20px}
-    .card{width:100%;max-width:480px;padding:40px 36px;background:var(--bg2);border:1px solid var(--border);border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10)}
-    .logo{font-size:22px;font-weight:500;color:var(--text);letter-spacing:-0.03em;margin-bottom:28px;text-align:center}
-    .logo span{color:var(--accent)}
-    h1{font-size:20px;font-weight:500;color:var(--text);margin-bottom:8px;text-align:center}
-    .sub{font-size:14px;color:var(--text2);text-align:center;margin-bottom:24px}
-    .qr-box{text-align:center;margin:20px 0;padding:16px;background:var(--bg2);border-radius:12px;display:inline-block;width:100%}
-    .secret-box{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;font-family:monospace;font-size:13px;color:var(--text2);word-break:break-all;text-align:center;margin-bottom:20px}
-    label{display:block;font-size:12px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
-    .field{margin-bottom:20px}
-    input[type=text]{width:100%;padding:13px 16px;background:var(--bg2);border:1px solid var(--border2);border-radius:12px;color:var(--text);font-size:18px;font-family:monospace;letter-spacing:0.15em;text-align:center;outline:none;transition:all 0.2s}
-    input[type=text]:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(58,65,80,0.15)}
-    .btn{width:100%;padding:14px;background:var(--accent);color:var(--bg2);border:none;border-radius:12px;font-size:15px;font-weight:500;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px}
-    .btn:hover{transform:translateY(-1px);box-shadow:0 8px 30px rgba(58,65,80,0.35)}
-    .btn-danger{background:linear-gradient(135deg,var(--danger),var(--danger))}
-    .btn-danger:hover{box-shadow:0 8px 30px rgba(239,68,68,0.35)}
-    .error{background:var(--danger-s);border:1px solid rgba(166,69,63,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:var(--danger);margin-bottom:20px}
-    .ok{background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:12px;padding:12px 16px;font-size:13px;color:var(--ok-s);margin-bottom:20px}
-    .back{text-align:center;font-size:13px;color:var(--text2);margin-top:16px}
-    .back a{color:var(--accent);text-decoration:none}
-    .divider{border:none;border-top:1px solid var(--border);margin:24px 0}
-    p.hint{font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.5}
-    .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500}
-    .badge-on{background:rgba(16,185,129,0.15);color:var(--ok-s);border:1px solid rgba(16,185,129,0.3)}
-    .badge-off{background:var(--accent-soft);color:var(--text2);border:1px solid var(--border2)}
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="logo">Bam<span>buru</span></div>
-    <h1>Autenticación de dos factores</h1>
-    <p class="sub">Estado: <span class="badge ${user.totp_enabled ? 'badge-on' : 'badge-off'}">${user.totp_enabled ? 'Activada' : 'Desactivada'}</span></p>
-
-    ${disabled ? '<div class="ok">2FA desactivada correctamente.</div>' : ''}
-    ${err ? '<div class="error">Código incorrecto. Intenta de nuevo.</div>' : ''}
-
-    ${user.totp_enabled ? `
-    <p class="hint">Tu cuenta ya tiene 2FA activada. Si quieres desactivarla:</p>
-    <form method="POST" action="/admin/disable-2fa" onsubmit="return confirm('¿Seguro que quieres desactivar 2FA?')">
-      <button type="submit" class="btn btn-danger">Desactivar 2FA</button>
-    </form>
-    <hr class="divider">
-    <p class="hint" style="text-align:center">Para reconfigurar 2FA con un nuevo dispositivo, desactívala primero.</p>
-    ` : `
-    <p class="hint">Escanea este código QR con <strong style="color:var(--text)">Google Authenticator</strong>, <strong style="color:var(--text)">Authy</strong> o cualquier app TOTP:</p>
-    <div class="qr-box">
-      <img src="${qrDataUrl}" width="200" height="200" alt="QR 2FA">
-    </div>
-    <p class="hint" style="text-align:center;margin-bottom:8px">O ingresa esta clave manualmente:</p>
-    <div class="secret-box">${secret}</div>
-    <form method="POST" action="/admin/confirm-2fa">
-      <div class="field">
-        <label>Código de verificación (6 dígitos)</label>
-        <input type="text" name="code" inputmode="numeric" pattern="[0-9 ]{6,7}"
-               maxlength="7" autofocus required placeholder="000 000">
-      </div>
-      <button type="submit" class="btn">Verificar y Activar 2FA</button>
-    </form>
-    `}
-
-    <p class="back"><a href="/admin">← Volver al panel</a></p>
-  </div>
-</body>
-</html>`);
-  });
-
-  r.post('/confirm-2fa', adminAuth(db), async c => {
-    const session = c.get('session');
-    const form = await c.req.parseBody();
-    const code = (form.code || '').replace(/\s/g, '');
-
-    const entry = pendingTOTPStore.get(session.userId);
-    if (!entry || Date.now() - entry.created > 10 * 60 * 1000) {
-      return c.redirect('/admin/setup-2fa?error=expired');
-    }
-
-    const isValid = verifyTOTP(code, entry.secret);
-    if (!isValid) {
-      return c.redirect('/admin/setup-2fa?error=1');
-    }
-
-    db.prepare('UPDATE admin_users SET totp_secret=?, totp_enabled=1 WHERE id=?')
-      .run(entry.secret, session.userId);
-    pendingTOTPStore.delete(session.userId);
-
-    return c.html(`<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>2FA Activada — Bamburu</title>
-  <style>${ROOT_TOKENS}
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-    .card{width:100%;max-width:400px;padding:40px 36px;background:var(--bg2);border:1px solid var(--border);border-radius:24px;box-shadow:0 16px 44px rgba(16,24,40,.10);text-align:center}
-    .logo{font-size:22px;font-weight:500;color:var(--text);letter-spacing:-0.03em;margin-bottom:28px}
-    .logo span{color:var(--accent)}
-    .icon{font-size:48px;margin-bottom:16px}
-    p{color:var(--text2);font-size:14px;line-height:1.6;margin-bottom:16px}
-    .ok{color:var(--ok-s);font-weight:500;font-size:18px;margin-bottom:8px}
-    a{color:var(--accent);text-decoration:none;font-size:14px;font-weight:500}
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="logo">Bam<span>buru</span></div>
-    <div class="icon">🔐</div>
-    <p class="ok">¡2FA Activada!</p>
-    <p>A partir de ahora necesitarás tu app de autenticación cada vez que inicies sesión.</p>
-    <a href="/admin">Ir al panel</a>
-  </div>
-</body>
-</html>`);
-  });
-
-  r.post('/disable-2fa', adminAuth(db), c => {
-    const session = c.get('session');
-    db.prepare('UPDATE admin_users SET totp_secret=NULL, totp_enabled=0 WHERE id=?')
-      .run(session.userId);
-    return c.redirect('/admin/setup-2fa?disabled=1');
-  });
 
   // ── Recuperación de contraseña ─────────────────────────────────
 

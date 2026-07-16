@@ -112,6 +112,59 @@ export function destroyAllAdminSessionsForUser(db, userId, exceptToken = null) {
   db.prepare('DELETE FROM admin_sessions WHERE user_id=? AND token != COALESCE(?,\'\')').run(userId, exceptToken);
 }
 
+// ── C5-bis · 2FA del DUEÑO: secreto + códigos de rescate ───────────────────────
+//
+// Espejo fiel del mecanismo del superadmin (core/control-db.js), pero por negocio: aquel vive en
+// control.db con `superadmin_id`; este, en la BD del tenant con `admin_user_id`. Por eso recibe `db`
+// y no hay tabla compartida: no se comparte la base. La generación de los códigos SÍ es común y no se
+// duplica — sale de core/recovery-codes.js, que ya era genérico.
+//
+// El secreto TOTP y los códigos se mueven JUNTOS y siempre por aquí: activar sin códigos de rescate,
+// o dejar códigos vivos tras desactivar, son las dos formas de que esto salga mal.
+
+export function enableAdminTotp(db, userId, secret, codeHashes) {
+  const now = Math.floor(Date.now() / 1000);
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE admin_users SET totp_secret=?, totp_enabled=1 WHERE id=?').run(secret, userId);
+    // Activar SUSTITUYE los códigos anteriores: si se reconfigura el 2FA, los papeles viejos dejan de
+    // valer en el mismo instante. Si no, un código impreso hace meses seguiría abriendo la puerta.
+    db.prepare('DELETE FROM admin_recovery_codes WHERE admin_user_id=?').run(userId);
+    const ins = db.prepare('INSERT INTO admin_recovery_codes (admin_user_id, code_hash, created_at) VALUES (?,?,?)');
+    for (const h of codeHashes) ins.run(userId, h, now);
+  });
+  tx();
+}
+
+// Desactivar borra el secreto Y los códigos: un código de rescate que sobreviva al 2FA que rescataba
+// es una segunda llave olvidada debajo del felpudo.
+export function disableAdminTotp(db, userId) {
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE admin_users SET totp_secret=NULL, totp_enabled=0 WHERE id=?').run(userId);
+    db.prepare('DELETE FROM admin_recovery_codes WHERE admin_user_id=?').run(userId);
+  });
+  tx();
+}
+
+export function listUnusedAdminRecoveryCodes(db, userId) {
+  try {
+    return db.prepare('SELECT id, code_hash FROM admin_recovery_codes WHERE admin_user_id=? AND used_at IS NULL').all(userId);
+  } catch (_) { return []; }   // BD sin migrar todavía: sin códigos, no sin login
+}
+
+// Marca el código como gastado. Devuelve false si otro lo gastó primero: el UPDATE lleva
+// `used_at IS NULL`, así que dos intentos con el mismo código a la vez solo dejan pasar a uno.
+export function consumeAdminRecoveryCode(db, rowId) {
+  const r = db.prepare('UPDATE admin_recovery_codes SET used_at=? WHERE id=? AND used_at IS NULL')
+    .run(Math.floor(Date.now() / 1000), rowId);
+  return r.changes === 1;
+}
+
+export function countUnusedAdminRecoveryCodes(db, userId) {
+  try {
+    return db.prepare('SELECT COUNT(*) n FROM admin_recovery_codes WHERE admin_user_id=? AND used_at IS NULL').get(userId).n;
+  } catch (_) { return 0; }
+}
+
 // ── Customer sessions ──────────────────────────────────────────
 
 export function createCustomerSession(db, accountId) {

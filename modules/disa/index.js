@@ -38,6 +38,11 @@ export const QUERY_PROTECTED_TABLES = new Set([
   'admin_users', 'admin_sessions', 'customer_accounts', 'customer_sessions',
   'disa_conversations', 'disa_usage', 'sqlite_sequence',
   'activity_logs', 'password_reset_tokens',
+  // C5-bis — los códigos de rescate del 2FA. Va en la lista PROTEGIDA, no basta con que no esté en
+  // el mapa de lectura: owner/admin hacen BYPASS de ese mapa (ver abajo), así que sin esto un dueño
+  // podría pedirle a DISA por chat que se los leyera. Son hashes, sí, pero son material de acceso y
+  // no se consultan hablando. (Escribir ya era imposible: WRITABLE_TABLES es allowlist.)
+  'admin_recovery_codes',
 ]);
 // TABLE_READ_PERMS: allowlist. Una tabla de negocio SOLO se consulta si está aquí y el usuario tiene
 // su permiso. Lo NO mapeado se DENIEGA (mismo criterio que el motor de avisos). Cada permiso es el

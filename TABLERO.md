@@ -7,10 +7,11 @@
 > certificado de Bamburu + autorización de representación del cliente), y está **aparcado** hasta tener la
 > plataforma al 100 % — ver `docs/contexto/decisiones.md` (2026-07-10).
 >
-> **EJE C — SEGURIDAD: ✅ COMPLETO (C1–C6, 16 jul).** Los tres ejes de la fase de optimización quedan
-> cerrados (A: UX · B: DISA · C: Seguridad). **Sin tarea siguiente asignada: la próxima la decides tú** —
-> candidatas anotadas: C5-bis (códigos de rescate para los dueños), B10 (hardening systemd, va solo), y el
-> Backlog. Plan cargado desde la auditoría del 15 jul (ver la
+> **EJE C — SEGURIDAD: ✅ COMPLETO (C1–C6, 16 jul) + C5-bis (rescate de los dueños, 16 jul).** Los tres
+> ejes de la fase de optimización quedan cerrados (A: UX · B: DISA · C: Seguridad). **Sin tarea siguiente
+> asignada: la próxima la decides tú** — candidatas anotadas: C5-ter (el paso "he guardado" del
+> superadmin, bajo), B10 (hardening systemd, va solo y puede tirar el servicio), y el Backlog. Plan
+> cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
 > victorias rápidas), C4a + C4a-bis HECHOS** → **M1 (XSS almacenado) CERRADO ENTERO**. **C4b: hechos
 > C4b-0 (nonce + sonda), C4b-1 (registro y superadmin ya sirven `script-src` SIN `'unsafe-inline'`) y
@@ -877,15 +878,45 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
     `core/totp.js`, escrito a mano). Ahora solo lo usan el test y el gate → le tocaría `devDependencies`.
     Anotado, no tocado (fuera del alcance de C5).
 
-- ⬜ **C5-bis — Códigos de rescate para los DUEÑOS de negocio (producto, no seguridad interna).**
-  Sale del PASO 0 de C5: los admin de tenant YA tienen 2FA completo (`setup-2fa`/`confirm-2fa`/`verify-2fa`
-  en `modules/erp/routes/auth.js`) **sin códigos de rescate**. Con la salida de emergencia de C5
-  (`reset-admin.js` limpia el TOTP) ya no es un bloqueo permanente, pero **depende de ti**: el dueño que
-  pierda el móvil un domingo se queda fuera hasta que alguien entre por SSH. Los códigos de rescate lo
-  convierten en algo que resuelve solo. Mismo mecanismo que el del superadmin (`core/recovery-codes.js` ya
-  existe y es reutilizable) + su pantalla en el panel. Decidido el 16 jul: se anota como tarea de producto
-  aparte en vez de meterla en C5 (era construir para clientes dentro de una tarea de seguridad interna).
-  Hoy nadie la necesita: `totp_enabled=0` en los 6 negocios.
+- ✅ **C5-bis — Códigos de rescate para los DUEÑOS de negocio (16 jul 2026).** El dueño que active el 2FA
+  y pierda el móvil ya NO se queda fuera: entra con un código de rescate, sin depender de que alguien
+  entre por SSH un domingo. Reflejo del mecanismo del superadmin (C5), sin tocarlo.
+  - **PASO 0 — lo que decidió el diseño:** `core/recovery-codes.js` **ya era el helper compartido**
+    (genérico, no sabe nada del superadmin) → se reutiliza sin tocar una línea. La otra mitad —guardar y
+    consumir— **no se puede compartir**: la del superadmin vive en `control.db` con `superadmin_id`; la del
+    dueño, en la BD de cada negocio con `admin_user_id`. Bases distintas, ciclos distintos: se refleja
+    (`enableAdminTotp`/`disableAdminTotp`/… en `core/auth.js`, reciben `db`), no se fuerza un helper común.
+  - ✅ **Activar exige código y entrega 10 códigos** (`/admin/perfil/confirm-2fa`), en transacción: activar
+    sin dar rescate es cerrar con la llave dentro. Se enseñan **una vez** (se renderizan, no se redirige:
+    un redirect los perdería), con copiar y descargar, y el **"Terminar" nace BLOQUEADO** hasta marcar "he
+    guardado". El modo de fallo real no es que los roben: es cerrar la pestaña sin guardarlos.
+  - ✅ **En el login, el mismo campo acepta app o rescate** (`auth.js`, `POST /admin/verify-2fa`): primero
+    TOTP, luego rescate; de un solo uso y atómico. Usarlo queda en **su Actividad** (con cuántos quedan) y
+    levanta evento `login_2fa_rescate`. El código NUNCA se registra: sería publicar la llave usada.
+  - ✅ **Regenerar exige código** (app o rescate) e invalida el juego anterior; el Perfil muestra cuántos
+    quedan y cambia de tono si quedan pocos o ninguno. **Desactivar borra los códigos** (llave bajo el
+    felpudo). Migración aditiva e idempotente por tenant: `admin_recovery_codes`.
+  - ✅ **DISA no los toca:** añadida a `QUERY_PROTECTED_TABLES` — no bastaba con dejarla fuera del mapa de
+    lectura, porque owner/admin hacen **bypass** de ese mapa y podría pedírselos por chat. (Escribir ya era
+    imposible: `WRITABLE_TABLES` es allowlist.)
+  - ✅ **Puerta trasera cerrada (decisión del dueño).** `/admin/setup-2fa`, `/admin/confirm-2fa` y
+    `/admin/disable-2fa` seguían **montadas y funcionando** pese a que U8 consolidó el 2FA en el Perfil:
+    activaban 2FA **sin códigos de rescate** — el mismo bloqueo, por detrás. Retiradas con **302 al Perfil**
+    (patrón de U8 con `/admin/security`: "un 302 no rompe a nadie; un 404 sí"). De paso cierra lo que
+    `security.js:15-18` dejó anotado como pendiente del Eje C: se montaban **fuera del middleware CSRF**.
+    Ahora el 2FA del dueño tiene UNA puerta, y es la que entrega códigos.
+  - Verificado: `test-c5bis-rescate-duenyo` **52/0** (tenant desechable; los TOTP los genera **otplib** →
+    prueba de que una app real entra) + `gate-c5bis-rescate-duenyo` **19/0** en navegador real, de punta a
+    punta: activa, ve los 10, cierra sesión, entra con un rescate y ese código ya falla al reutilizarlo.
+    Regresión verde: **2FA del superadmin intacto** (gate 18/0, test 44/0), login sin 2FA sin cambios,
+    forgot 25/0, sesiones 10/0, C6 32/0 + 28/0, registro 26/0, CSP 19/0.
+
+- ⬜ **C5-ter — El alta del superadmin no tiene el paso "he guardado mis códigos".** Sale de C5-bis: en el
+  superadmin, "Ya los he guardado — continuar" (`modules/superadmin/index.js:473`) es un **enlace normal**,
+  no un cerrojo — se puede pasar de largo sin leer. El dueño sí lo tiene (casilla que desbloquea el
+  "Terminar"). No se le añadió al superadmin **a propósito**: el encargo de C5-bis lo prohibía
+  expresamente para no tocarlo. Esfuerzo bajo (la casilla ya está escrita en `perfil.js`, es copiarla).
+  Anotado el 16 jul.
 
 - ✅ **C6 — Los 12 hallazgos BAJA (16 jul 2026).** **8 arreglados · 3 asumidos por escrito · 1 aplazado con
   aviso.** Cierra el Eje C. El detalle, las decisiones y el porqué de cada "no", en

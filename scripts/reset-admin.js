@@ -62,7 +62,9 @@ console.log('   Contraseña: la que acabas de teclear (no se muestra).');
 console.log('   Se le pedirá cambiarla en el próximo login.');
 if (tenia2FA) {
   console.log('   2FA DESACTIVADO: entraba con app de autenticación y ya no la necesita.');
-  console.log('   → Dile que lo reactive desde /admin/setup-2fa al entrar.');
+  // C5-bis: /admin/setup-2fa se retiró (redirige). El 2FA del dueño vive solo en el Perfil.
+  console.log('   → Dile que lo reactive desde /admin/perfil al entrar, y que GUARDE los');
+  console.log('     códigos de rescate que le daremos: con ellos ya no hará falta este script.');
 }
 if (sessionsDeleted > 0) {
   console.log(`   ${sessionsDeleted} sesión(es) activa(s) cerrada(s) por seguridad.`);
