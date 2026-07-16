@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, rowMenu, emptyRow, skeletonRows } from '../layout.js';
 import { logActivity, requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
@@ -115,14 +116,14 @@ export function createClientRoutes(db, cfg = {}) {
   api.get('/', requirePerm('clients.read'), c => {
     try {
       return c.json(db.prepare('SELECT c.*, g.name as group_name FROM clients c LEFT JOIN client_groups g ON c.group_id=g.id WHERE c.active=1 ORDER BY c.total_spent DESC').all());
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // T5 — búsqueda de clientes (JSON). ANTES de '/:id' para que no la capture como id.
   api.get('/search', requirePerm('clients.read'), c => {
     try {
       return c.json(searchClients(db, { q: c.req.query('q') || '', city: c.req.query('city') || '', limit: c.req.query('limit') }));
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.get('/:id', requirePerm('clients.read'), c => {
@@ -133,7 +134,7 @@ export function createClientRoutes(db, cfg = {}) {
       // Shape {order_number,total,status,created_at} para que la ficha siga pintando igual.
       client.orders = clientVentas(db, client.id);
       return c.json(client);
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // Las 4 escrituras pasan por el SERVICIO compartido (misma validación + guarda de NIF
@@ -143,7 +144,7 @@ export function createClientRoutes(db, cfg = {}) {
       const r = createClientSvc(db, c.get('validated'));
       logActivity(db, c.get('session'), 'Creó cliente', ENTITY.CLIENT, r.id, r.name);
       return c.json({id:r.id, message:'Creado'});
-    } catch(e) { return c.json({error:e.message}, e.status||500); }
+    } catch(e) { return c.json({error:safeError(e)}, e.status||500); }
   });
 
   api.put('/:id', requirePerm('clients.edit'), validate(clientSchema), async c => {
@@ -151,7 +152,7 @@ export function createClientRoutes(db, cfg = {}) {
       const r = updateClientSvc(db, c.req.param('id'), c.get('validated'));
       logActivity(db, c.get('session'), 'Editó cliente', ENTITY.CLIENT, r.id, r.name);
       return c.json({message:'Actualizado'});
-    } catch(e) { return c.json({error:e.message}, e.status||500); }
+    } catch(e) { return c.json({error:safeError(e)}, e.status||500); }
   });
 
   api.delete('/:id', requirePerm('clients.edit'), c => {
@@ -159,13 +160,13 @@ export function createClientRoutes(db, cfg = {}) {
       const r = archiveClientSvc(db, c.req.param('id'));
       logActivity(db, c.get('session'), 'Archivó cliente', ENTITY.CLIENT, r.id, r.name||'');
       return c.json({message:'Archivado'});
-    } catch(e) { return c.json({error:e.message}, e.status||500); }
+    } catch(e) { return c.json({error:safeError(e)}, e.status||500); }
   });
 
   api.get('/:id/orders', requirePerm('clients.read'), c => {
     try {
       return c.json(clientVentas(db, c.req.param('id')));   // PIEZA C — facturas del cliente (cadena nueva)
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // T4 Paso 1 — facturas del cliente con su estado de cobro en vivo + total que debe
@@ -187,7 +188,7 @@ export function createClientRoutes(db, cfg = {}) {
       const cl = db.prepare('SELECT collections_profile FROM clients WHERE id=?').get(c.req.param('id'));
       debt.collections_profile = (cl && cl.collections_profile) || 'estandar';
       return c.json(debt);
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // ── T4 Paso 2.1 — gestión a nivel de CUENTA del cliente ─────────────────────
@@ -197,7 +198,7 @@ export function createClientRoutes(db, cfg = {}) {
     try {
       const today = new Date().toISOString().slice(0, 10);
       return c.json(resumenCuentaCliente(db, parseInt(c.req.param('id')), today));
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // GET plantilla de email de CUENTA precargada (editable antes de enviar).
@@ -211,7 +212,7 @@ export function createClientRoutes(db, cfg = {}) {
       const tono = (resumen.proximaAccionCuenta && resumen.proximaAccionCuenta.tono) || 'amable';
       const tpl = accountEmail(tono, { client, company, facturasVivas: resumen.facturasVivas, total: resumen.deudaTotal, db });
       return c.json({ subject: tpl.subject, text: tpl.text, tono, to: (client && client.email) || '', has_email: !!(client && client.email), total: resumen.deudaTotal, facturas: resumen.facturasVivas.length });
-    } catch(e) { return c.json({error:e.message},400); }
+    } catch(e) { return c.json({error:safeError(e)},400); }
   });
 
   // POST acción de CUENTA — recordatorio (UN email + acción por factura), promesa (todas)
@@ -225,7 +226,7 @@ export function createClientRoutes(db, cfg = {}) {
         : input.type === 'promesa_cuenta' ? 'Registró promesa de cuenta' : 'Registró cobro a cuenta';
       logActivity(db, c.get('session'), label, ENTITY.CLIENT, c.req.param('id'), `${res.facturas || (res.pagos && res.pagos.length) || 0} factura(s) · lote ${res.batch_id}`);
       return c.json(res, 201);
-    } catch(e) { return c.json({error:e.message}, e.status || 400); }
+    } catch(e) { return c.json({error:safeError(e)}, e.status || 400); }
   });
 
   // Restaurar un cliente archivado (inverso de archivar, T1). Guarda: archivar libera
@@ -236,13 +237,13 @@ export function createClientRoutes(db, cfg = {}) {
       const r = restoreClientSvc(db, c.req.param('id'));
       logActivity(db, c.get('session'), 'Restauró cliente', ENTITY.CLIENT, r.id, r.name||'');
       return c.json({message:'Restaurado'});
-    } catch(e) { return c.json({error:e.message}, e.status||500); }
+    } catch(e) { return c.json({error:safeError(e)}, e.status||500); }
   });
 
   // ── API: CLIENT GROUPS ─────────────────────────────────────────
   api.get('/groups/all', requirePerm('clients.read'), c => {
     try { return c.json(db.prepare('SELECT g.*, COUNT(c.id) as member_count FROM client_groups g LEFT JOIN clients c ON c.group_id=g.id GROUP BY g.id ORDER BY g.name').all()); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.post('/groups/create', requirePerm('clients.create'), validate(clientGroupSchema), async c => {
@@ -250,7 +251,7 @@ export function createClientRoutes(db, cfg = {}) {
       const d = c.get('validated');
       const r = db.prepare('INSERT INTO client_groups (name,description,discount_pct) VALUES (?,?,?)').run(d.name, d.description||'', d.discount_pct||0);
       return c.json({id:r.lastInsertRowid});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.put('/groups/:id', requirePerm('clients.edit'), validate(clientGroupSchema), async c => {
@@ -258,12 +259,12 @@ export function createClientRoutes(db, cfg = {}) {
       const d = c.get('validated');
       db.prepare('UPDATE client_groups SET name=?,description=?,discount_pct=? WHERE id=?').run(d.name, d.description||'', d.discount_pct||0, c.req.param('id'));
       return c.json({message:'Actualizado'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.delete('/groups/:id', requirePerm('clients.edit'), c => {
     try { db.prepare('DELETE FROM client_groups WHERE id=?').run(c.req.param('id')); return c.json({message:'Eliminado'}); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // ── VIEWS ──────────────────────────────────────────────────────

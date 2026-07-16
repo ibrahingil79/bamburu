@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, docShell, estadoTabs, emptyRow } from '../layout.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
@@ -238,7 +239,7 @@ export function createSupplierReturnRoutes(db) {
       if (origin.status !== cfg.okStatus) return c.json({ error: cfg.badStatusMsg }, 400);
       const s = db.prepare('SELECT id, name, fiscal_id FROM suppliers WHERE id=?').get(origin.supplier_id) || {};
       return c.json({ supplier: s, origin: { type: origin_type, id: origin_id, label: origin.label, href: origin.href }, lines: returnableLines(db, origin_type, origin_id) });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.get('/:id', requirePerm('purchases.read'), c => {
@@ -246,7 +247,7 @@ export function createSupplierReturnRoutes(db) {
       const r = getReturn(db, parseInt(c.req.param('id')));
       if (!r) return c.json({ error: 'No encontrada' }, 404);
       return c.json(r);
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.post('/', requirePerm('purchases.create'), validate(supplierReturnSchema), c => {
@@ -254,7 +255,7 @@ export function createSupplierReturnRoutes(db) {
       const r = createSupplierReturnSvc(db, c.get('validated'));
       logActivity(db, c.get('session'), 'Registró devolución a proveedor', ENTITY.SUPPLIER_RETURN, r.id, r.return_number + ' (' + r.lines + ' líneas)');
       return c.json({ ...r, message: 'Devolución ' + r.return_number + ' confirmada' }, 201);
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.post('/:id/cancel', requirePerm('purchases.edit'), validate(purchaseOrderAnularSchema), c => {
@@ -263,7 +264,7 @@ export function createSupplierReturnRoutes(db) {
       const r = cancelSupplierReturnSvc(db, parseInt(c.req.param('id')), motivo);
       logActivity(db, c.get('session'), 'Anuló devolución a proveedor', ENTITY.SUPPLIER_RETURN, r.id, (r.return_number || '') + ' — ' + motivo);
       return c.json({ ...r, message: 'Devolución anulada y stock reintegrado' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // ── VISTAS ──

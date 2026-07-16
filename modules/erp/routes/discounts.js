@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, skeletonRows } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
@@ -12,7 +13,7 @@ export function createDiscountRoutes(db, cfg = {}) {
   // ── API: DISCOUNT CODES ────────────────────────────────────────
   api.get('/', requirePerm('discounts.read'), c => {
     try { return c.json(db.prepare('SELECT * FROM discount_codes ORDER BY id DESC').all()); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.post('/', requirePerm('discounts.create'), validate(discountCodeSchema), async c => {
@@ -21,7 +22,7 @@ export function createDiscountRoutes(db, cfg = {}) {
       if (!d.code || !d.value) return c.json({error:'Código y valor requeridos'},400);
       const r = db.prepare('INSERT INTO discount_codes (code,type,value,min_order,max_uses,active,expires_at) VALUES (?,?,?,?,?,?,?)').run(d.code.trim().toUpperCase(), d.type||'percentage', d.value, d.min_order||0, d.max_uses||null, 1, d.expires_at||null);
       return c.json({id:r.lastInsertRowid});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.put('/:id', requirePerm('discounts.edit'), validate(discountCodeSchema), async c => {
@@ -29,18 +30,18 @@ export function createDiscountRoutes(db, cfg = {}) {
       const d = c.get('validated');
       db.prepare('UPDATE discount_codes SET code=?,type=?,value=?,min_order=?,max_uses=?,active=?,expires_at=? WHERE id=?').run(d.code?.toUpperCase()||'', d.type||'percentage', d.value, d.min_order||0, d.max_uses||null, d.active?1:0, d.expires_at||null, c.req.param('id'));
       return c.json({message:'Actualizado'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.delete('/:id', requirePerm('discounts.delete'), c => {
     try { db.prepare('DELETE FROM discount_codes WHERE id=?').run(c.req.param('id')); return c.json({message:'Eliminado'}); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // ── API: AUTO DISCOUNTS ────────────────────────────────────────
   api.get('/auto', requirePerm('discounts.read'), c => {
     try { return c.json(db.prepare('SELECT * FROM auto_discounts ORDER BY id DESC').all()); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.post('/auto', requirePerm('discounts.create'), validate(autoDiscountSchema), async c => {
@@ -48,12 +49,12 @@ export function createDiscountRoutes(db, cfg = {}) {
       const d = c.get('validated');
       const r = db.prepare('INSERT INTO auto_discounts (name,type,value,condition_type,condition_value,active) VALUES (?,?,?,?,?,?)').run(d.name, d.type||'percentage', d.value, d.condition_type||'min_order', d.condition_value||'0', 1);
       return c.json({id:r.lastInsertRowid});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.delete('/auto/:id', requirePerm('discounts.delete'), c => {
     try { db.prepare('DELETE FROM auto_discounts WHERE id=?').run(c.req.param('id')); return c.json({message:'Eliminado'}); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // ── VIEW ───────────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, skeletonRows } from '../layout.js';
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
@@ -68,14 +69,14 @@ export function createSupplierRoutes(db) {
     try {
       const archived = c.req.query('archived') === '1' ? 0 : 1;
       return c.json(db.prepare('SELECT * FROM suppliers WHERE active=? ORDER BY name').all(archived));
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // C2 — búsqueda de proveedores (JSON). ANTES de '/:id' (no hay /:id aquí, pero se mantiene el patrón).
   api.get('/search', requirePerm('suppliers.read'), c => {
     try {
       return c.json(searchSuppliers(db, { q: c.req.query('q') || '', limit: c.req.query('limit') }));
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // Paso (e) — resumen de cuenta del proveedor (deuda viva, factura a factura) para el modal
@@ -88,7 +89,7 @@ export function createSupplierRoutes(db) {
       const facturasVivas = liveSupplierPayables(db, sid, new Date().toISOString().slice(0, 10));
       const deudaTotal = Math.round(facturasVivas.reduce((s, f) => s + f.pendiente, 0) * 100) / 100;
       return c.json({ supplier_id: sid, supplier_name: sup.name, deudaTotal, facturasVivas });
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // Paso (e) — PAGO A CUENTA: reparte el importe entre las facturas vivas del proveedor
@@ -100,7 +101,7 @@ export function createSupplierRoutes(db) {
       const r = registerSupplierAccountPayment(db, sid, c.get('validated'), { today: new Date().toISOString().slice(0, 10) });
       logActivity(db, c.get('session'), 'Pago a cuenta de proveedor', ENTITY.SUPPLIER, sid, `${r.supplier_name} · ${r.repartido} en ${r.pagos.length} factura(s)`);
       return c.json(r, 201);
-    } catch (e) { return c.json({ error: e.message }, e.status || 400); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 400); }
   });
 
   // El alta pasa por el servicio compartido (misma validación + guarda de NIF que C2).
@@ -109,7 +110,7 @@ export function createSupplierRoutes(db) {
       const r = createSupplierSvc(db, c.get('validated'));
       logActivity(db, c.get('session'), 'Creó proveedor', ENTITY.SUPPLIER, r.id, r.name);
       return c.json({id:r.id, message:'Proveedor creado'}, 201);
-    } catch(e) { return c.json({error:e.message}, e.status||500); }
+    } catch(e) { return c.json({error:safeError(e)}, e.status||500); }
   });
 
   api.put('/:id', requirePerm('suppliers.edit'), validate(supplierSchema), c => {
@@ -123,7 +124,7 @@ export function createSupplierRoutes(db) {
       if (!info.changes) return c.json({error:'No encontrado'},404);
       logActivity(db, c.get('session'), 'Editó proveedor', ENTITY.SUPPLIER, id, d.name);
       return c.json({message:'Actualizado'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // Archivar (no borrar): soft-delete. Conserva la fila y sus compras; sale de lista y
@@ -136,7 +137,7 @@ export function createSupplierRoutes(db) {
       db.prepare('UPDATE suppliers SET active=0 WHERE id=?').run(id);
       logActivity(db, c.get('session'), 'Archivó proveedor', ENTITY.SUPPLIER, id, s.name||'');
       return c.json({message:'Archivado'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // Restaurar un archivado. Red de seguridad: si por datos heredados existiera otro
@@ -150,7 +151,7 @@ export function createSupplierRoutes(db) {
       db.prepare('UPDATE suppliers SET active=1 WHERE id=?').run(id);
       logActivity(db, c.get('session'), 'Restauró proveedor', ENTITY.SUPPLIER, id, s.name||'');
       return c.json({message:'Restaurado'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   views.get('/', requirePerm('suppliers.read'), c => {

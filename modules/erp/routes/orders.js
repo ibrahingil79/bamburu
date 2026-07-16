@@ -2,6 +2,7 @@
 // Sus `logActivity` conservan el literal 'order' y NO se pasaron al catálogo único de entidades
 // (core/activity-entities.js) a propósito: el código no se ejecuta y no se maquilla lo que está muerto.
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout, can } from '../layout.js';
 import { logActivity, requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
@@ -129,7 +130,7 @@ export function createOrderRoutes(db, cfg = {}) {
 
       logActivity(db, c.get('session'), 'Creó venta POS', 'order', null, num);
       return c.json({order_number: num, message:'Venta completada', total, warehouse_id: wid});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // ── API: ORDERS ────────────────────────────────────────────────
@@ -141,7 +142,7 @@ export function createOrderRoutes(db, cfg = {}) {
       if (status) { q += ' WHERE so.status=?'; params.push(status); }
       q += ' ORDER BY so.id DESC';
       return c.json(db.prepare(q).all(...params));
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.get('/:id', requirePerm('orders.read'), c => {
@@ -152,7 +153,7 @@ export function createOrderRoutes(db, cfg = {}) {
       order.history = db.prepare('SELECT * FROM order_status_history WHERE order_id=? ORDER BY id DESC').all(order.id);
       order.refunds = db.prepare('SELECT * FROM refunds WHERE order_id=? ORDER BY id DESC').all(order.id);
       return c.json(order);
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   const VALID_TRANSITIONS = {
@@ -197,7 +198,7 @@ export function createOrderRoutes(db, cfg = {}) {
       db.prepare('INSERT INTO order_status_history (order_id,status,comment,user_name) VALUES (?,?,?,?)').run(c.req.param('id'), status, comment||'', c.get('session')?.userName||'Admin');
       logActivity(db, c.get('session'), 'Cambió estado pedido', 'order', c.req.param('id'), status);
       return c.json({message:'Estado actualizado'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.post('/:id/notes', requirePerm('orders.edit'), validate(orderNotesSchema), async c => {
@@ -205,7 +206,7 @@ export function createOrderRoutes(db, cfg = {}) {
       const { admin_notes } = c.get('validated');
       db.prepare('UPDATE sales_orders SET admin_notes=? WHERE id=?').run(admin_notes||'', c.req.param('id'));
       return c.json({message:'Nota guardada'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.post('/:id/tracking', requirePerm('orders.edit'), validate(orderTrackingSchema), async c => {
@@ -214,7 +215,7 @@ export function createOrderRoutes(db, cfg = {}) {
       db.prepare('UPDATE sales_orders SET tracking_number=? WHERE id=?').run(tracking_number||'', c.req.param('id'));
       db.prepare('INSERT INTO order_status_history (order_id,status,comment,user_name) VALUES (?,?,?,?)').run(c.req.param('id'), 'enviado', 'Número de seguimiento: ' + tracking_number, c.get('session')?.userName||'Admin');
       return c.json({message:'Tracking guardado'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.post('/:id/refund', requirePerm('orders.edit'), validate(refundSchema), async c => {
@@ -226,7 +227,7 @@ export function createOrderRoutes(db, cfg = {}) {
       db.prepare('INSERT INTO order_status_history (order_id,status,comment,user_name) VALUES (?,?,?,?)').run(c.req.param('id'), 'reembolsado', 'Reembolso: ' + sym + amount + ' — ' + (reason||''), c.get('session')?.userName||'Admin');
       logActivity(db, c.get('session'), 'Reembolso', 'order', c.req.param('id'), sym+amount);
       return c.json({message:'Reembolso registrado'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // ── VIEW: ORDERS LIST ──────────────────────────────────────────
@@ -812,7 +813,7 @@ export function createOrderRoutes(db, cfg = {}) {
       const orderId = createDraft();
       logActivity(db, session, 'Creó borrador', 'order', orderId, orderNumber);
       return c.json({ id: orderId, order_number: orderNumber, message: 'Borrador creado' }, 201);
-    } catch(e) { return c.json({ error: e.message }, 500); }
+    } catch(e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // ── API: CONFIRMAR BORRADOR ────────────────────────────────────
@@ -825,7 +826,7 @@ export function createOrderRoutes(db, cfg = {}) {
       db.prepare('INSERT INTO order_status_history (order_id,status,comment,user_name) VALUES (?,?,?,?)').run(id, 'en_preparacion', 'Borrador confirmado', c.get('session')?.userName || 'Admin');
       logActivity(db, c.get('session'), 'Confirmó borrador', 'order', id, order.order_number);
       return c.json({ message: 'Pedido confirmado', id });
-    } catch(e) { return c.json({ error: e.message }, 500); }
+    } catch(e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // ── API: CANCELAR PEDIDO ───────────────────────────────────────
@@ -853,7 +854,7 @@ export function createOrderRoutes(db, cfg = {}) {
 
       logActivity(db, c.get('session'), 'Canceló pedido', 'order', id, order.order_number);
       return c.json({ message: 'Pedido cancelado', id });
-    } catch(e) { return c.json({ error: e.message }, 500); }
+    } catch(e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // ── VISTA: NUEVO BORRADOR ──────────────────────────────────────

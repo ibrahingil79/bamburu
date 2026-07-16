@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { reverseMovement } from '../stock.js';
 import { ENTITY } from '../../../core/activity-entities.js';
@@ -15,7 +16,7 @@ export function createStockRoutes(db) {
       const res = reverseMovement(db, parseInt(c.req.param('id')));
       logActivity(db, c.get('session'), 'Revirtió movimiento de stock', ENTITY.STOCK_MOVEMENT, res.movement_id, `revierte #${res.reverses}`);
       return c.json(res);
-    } catch (e) { return c.json({ error: e.message }, e.status || 400); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 400); }
   });
 
   return { api };

@@ -8,7 +8,7 @@
 > plataforma al 100 % — ver `docs/contexto/decisiones.md` (2026-07-10).
 >
 > **SIGUIENTE BLOQUE GRANDE: EJE C — SEGURIDAD.** Plan cargado desde la auditoría del 15 jul (ver la
-> sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA) y C2 (verificación con administrador) HECHOS**; siguiente **C3** (victorias rápidas). Eje A (UX) y Eje B (DISA, seis
+> sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador) y C3 (tres victorias rápidas) HECHOS**; siguiente **C4** (XSS + CSP). Eje A (UX) y Eje B (DISA, seis
 > propuestas de proactividad) completos; Pilar 3 (inventario) cerrado.
 >
 > **Inventario (Pilar 3) CERRADO (15 jul 2026):** multi-almacén (`da7871e`/`3af928f`), stock mínimo /
@@ -564,7 +564,7 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
   entera. Limpiado `auth.log`; clave **rotada** y verificada con una llamada real a DISA. La lección
   (nunca un secreto en `argv`) queda en `errores-conocidos.md`.
 
-## Eje C: Seguridad — plan cargado (auditoría del 15 jul)  ⬅️ C1-C2 HECHOS · SIGUIENTE C3
+## Eje C: Seguridad — plan cargado (auditoría del 15 jul)  ⬅️ C1-C3 HECHOS · SIGUIENTE C4
 
 > Origen: **auditoría de seguridad de SOLO LECTURA del 15 jul 2026** (`docs/seguridad/auditoria-ejeC.md`,
 > commit `24dbf2a`). Postura general **buena** (aislamiento entre negocios sólido y fail-closed, DISA no se
@@ -598,17 +598,22 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
   `/var/log/caddy/` vacío; **0** líneas con el token de reset en journald (Caddy y bamburu) → el token no
   acaba en ningún log. Detalle en `docs/seguridad/auditoria-ejeC.md` § "C2 — verificación con administrador".
 
-- ⬜ **C3 — Victorias rápidas (tres arreglos cortos, EN ESTE ORDEN).**
-  - **[M2] Actualizar `hono`** (CVE HIGH de `npm audit`: bypass de restricción por IP en IPv6 no canónica +
-    inyección Set-Cookie por `sameSite`/`priority`) a versión parcheada + correr la regresión. Impacto real
-    bajo con el uso actual, pero es una CVE viva en dependencia de borde. Esfuerzo bajo.
-  - **[M7] Dejar de escribir el email y el estado del 2FA en el log en cada login** —
-    `modules/erp/routes/auth.js:204` (`console.log('[Login] user:', email, '| totp_enabled:', …)`): PII/RGPD
-    + reconocimiento de qué cuentas tienen 2FA. Reducir a `userId`. Esfuerzo bajo.
-  - **[M4] Dejar de enviar `e.message` de SQL al cliente** — ~40 `catch` por-ruta devuelven el mensaje crudo
-    de better-sqlite3 (tablas/columnas/constraints): `modules/store/routes.js`, `routes/categories.js:13-35`,
-    `routes/purchases.js:104-128`, `modules/superadmin/{backups,integridad,salud}.js`, ~30 en
-    `modules/disa/index.js`. Centralizar el saneado del error. Esfuerzo medio.
+- ✅ **C3 — Victorias rápidas (tres arreglos, 16 jul 2026).** VERIFICADO: `npm audit` sin la CVE de `hono`;
+  barrido oficial `run-gates --all` **43/46** — los 3 rojos (`verify-propuestas-dormidos`, `gate-recepciones-c1b`,
+  `gate-c1c-diferencias-cierre`) son **pre-existentes por datos vivos, NO C3**: `dormidos` confirmado por `git stash`
+  (falla igual en el código previo) y los dos de navegador fallan por precondición de datos (`stock 309→309`, el
+  `confirmReceipt is not defined` cae en cascada al aterrizar en la página equivocada) — el diff de esos ficheros es
+  solo server-side y sus gemelos (`gate-propuestas-dormidos`, `gate-orden-compra-c1a`) pasan. App arranca y responde igual.
+  - **[M2] `hono` 4.12.18 → 4.12.30** (parchea la CVE HIGH de restricción por IP). Sin cambios incompatibles con el
+    uso actual; regresión en verde. `package.json` a `^4.12.30`, `npm audit` = 0 vulnerabilidades.
+  - **[M7] El login ya no registra email ni estado de 2FA** — `modules/erp/routes/auth.js`
+    (`console.log('[Login] user:', email, '| totp_enabled:', …)` → `console.log('[Login] ok userId:', user.id)`).
+    Comprobado en vivo: provocado un login real, el journal muestra `[Login] ok userId: N` y CERO email/totp/2FA.
+  - **[M4] Ningún `e.message` de SQL viaja al cliente** — helper central `core/errors.js` `safeError(e)`: un 4xx
+    intencional muestra su mensaje; SQL/inesperado → mensaje genérico y el detalle va SOLO al log del servidor.
+    Aplicado a 236 `catch` en 38 ficheros. Gate `verify-safe-error` (15/0) añadido al grupo `infra` del barrido.
+    Comprobado en vivo: categoría duplicada → el cliente ve "Ha ocurrido un error, inténtalo de nuevo." y el
+    `[error] SqliteError: UNIQUE constraint failed: categories.name` queda en el log del servidor, nunca en el cliente.
 
 - ⬜ **C4 — [M1 + M8] XSS almacenado en campos de texto libre + endurecer la CSP (MISMA tarea: saneado +
   red de seguridad).** Envolver en `escHtml` los campos que el informe lista SIN escapar: notas de cliente

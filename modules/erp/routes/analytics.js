@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout, skeletonRows } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
 import { ventasResumen, topProductos, ventasPorDia, ventasCsvRows } from '../ventas-metrics.js';   // PIEZA C: ventas desde la cadena nueva (facturas)
@@ -20,27 +21,27 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         totalProducts: db.prepare("SELECT COUNT(*) as v FROM products WHERE status='active'").get().v,
         lowStock: db.prepare("SELECT COUNT(*) as v FROM products WHERE stock<5 AND status='active'").get().v,
       });
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.get('/sales-by-period', requirePerm('analytics.read'), c => {
     try {
       const days = parseInt(c.req.query('days') || '30');
       return c.json(ventasPorDia(db, days));   // PIEZA C — ventas/día desde facturas que cuentan
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.get('/best-sellers', requirePerm('analytics.read'), c => {
     try {
       const limit = parseInt(c.req.query('limit') || '10');
       return c.json(topProductos(db, { limit }));   // PIEZA C — top productos desde líneas de facturas que cuentan
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.get('/stock-report', requirePerm('analytics.read'), c => {
     try {
       return c.json(db.prepare("SELECT p.name, p.sku, p.stock, p.price, (p.stock*p.price) as inventory_value, c.name as category FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.status='active' ORDER BY p.stock ASC").all());
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // CSV exports
@@ -52,7 +53,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
       const h = ['Factura','Fecha','Estado','Serie','Cliente','Producto','Cantidad','Precio_Unitario','Total'];
       const r = rows.map(x => [q(x.invoice_number),q(x.issue_date),q(x.status),q(x.series),q(x.client),q(x.product_name),x.quantity,x.unit_price,x.total].join(','));
       return c.body([h.join(','),...r].join('\n'), 200, {'Content-Type':'text/csv','Content-Disposition':'attachment; filename="ventas.csv"'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.get('/export/products', requirePerm('analytics.read'), c => {
@@ -62,7 +63,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
       const h = ['Nombre','SKU','Precio','Stock','Estado','Tipo','Categoria'];
       const r = rows.map(x => [q(x.name),q(x.sku),x.price,x.stock,q(x.status),q(x.type),q(x.category)].join(','));
       return c.body([h.join(','),...r].join('\n'), 200, {'Content-Type':'text/csv','Content-Disposition':'attachment; filename="productos.csv"'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.get('/export/clients', requirePerm('analytics.read'), c => {
@@ -72,7 +73,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
       const h = ['Nombre','ID_Fiscal','Email','Teléfono','Ciudad','País','Grupo','Total_Gastado'];
       const r = rows.map(x => [q(x.name),q(x.fiscal_id),q(x.email),q(x.phone),q(x.city),q(x.country),q(x.grupo),x.total_spent].join(','));
       return c.body([h.join(','),...r].join('\n'), 200, {'Content-Type':'text/csv','Content-Disposition':'attachment; filename="clientes.csv"'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   views.get('/', requirePerm('analytics.read'), c => {

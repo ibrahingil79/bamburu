@@ -1,4 +1,5 @@
 import { renderEmail, TONO_UNICO } from '../email-templates.js';
+import { safeError } from '../../../core/errors.js';
 import { Hono } from 'hono';
 import { adminLayout, can, docShell, printableShell, estadoTabs, emptyRow, errorShell, ERR } from '../layout.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';   // PDF real: mismo HTML imprimible → Chromium
@@ -391,7 +392,7 @@ export function createQuoteRoutes(db) {
       const q = getQuote(db, parseInt(c.req.param('id')));
       if (!q) return c.json({ error: 'No encontrado' }, 404);
       return c.json({ ...q, items: getItems(db, q.id) });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // Pie en vivo (mismo patrón que /invoices/compute-totals).
@@ -401,7 +402,7 @@ export function createQuoteRoutes(db) {
       const resolved = resolveQuoteLines(db, lines);
       const t = quoteTotals(db, client_id, resolved);
       return c.json({ subtotal: t.subtotal, taxByRate: t.taxByRate, taxAmount: t.tax_amount, irpfRate: t.irpf_rate, irpfAmount: t.irpf_amount, total: t.total });
-    } catch (e) { return c.json({ error: e.message }, 400); }
+    } catch (e) { return c.json({ error: safeError(e) }, 400); }
   });
 
   api.post('/', requirePerm('quotes.create'), validate(quoteCreateSchema), c => {
@@ -409,7 +410,7 @@ export function createQuoteRoutes(db) {
       const id = createQuoteSvc(db, c.get('validated'));
       logActivity(db, c.get('session'), 'Creó borrador de presupuesto', ENTITY.QUOTE, id, '');
       return c.json({ id, message: 'Borrador guardado' }, 201);
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.put('/:id', requirePerm('quotes.edit'), validate(quoteCreateSchema), c => {
@@ -417,7 +418,7 @@ export function createQuoteRoutes(db) {
       const r = updateQuoteSvc(db, parseInt(c.req.param('id')), c.get('validated'));
       logActivity(db, c.get('session'), 'Editó borrador de presupuesto', ENTITY.QUOTE, r.id, '');
       return c.json({ ...r, message: 'Borrador actualizado' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.post('/:id/emitir', requirePerm('quotes.edit'), c => {
@@ -425,7 +426,7 @@ export function createQuoteRoutes(db) {
       const r = emitQuoteSvc(db, parseInt(c.req.param('id')));
       logActivity(db, c.get('session'), 'Emitió presupuesto', ENTITY.QUOTE, r.id, r.quote_number);
       return c.json({ ...r, message: 'Presupuesto ' + r.quote_number + ' emitido' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.post('/:id/email', requirePerm('quotes.edit'), validate(quoteEmailSchema), async c => {
@@ -433,7 +434,7 @@ export function createQuoteRoutes(db) {
       const r = await emailQuoteSvc(db, parseInt(c.req.param('id')), { to: c.get('validated').to, sendEmail });
       logActivity(db, c.get('session'), 'Envió presupuesto por email', ENTITY.QUOTE, parseInt(c.req.param('id')), r.quote_number + ' → ' + r.to);
       return c.json({ ...r, message: 'Presupuesto enviado por email a ' + r.to });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.post('/:id/follow', requirePerm('quotes.edit'), validate(quoteFollowSchema), c => {
@@ -441,7 +442,7 @@ export function createQuoteRoutes(db) {
       const r = setFollowStatusSvc(db, parseInt(c.req.param('id')), c.get('validated').follow_status);
       logActivity(db, c.get('session'), 'Actualizó seguimiento de presupuesto', ENTITY.QUOTE, r.id, r.follow_status || 'sin estado');
       return c.json({ ...r, message: 'Seguimiento actualizado' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.post('/:id/anular', requirePerm('quotes.edit'), validate(quoteAnularSchema), c => {
@@ -449,7 +450,7 @@ export function createQuoteRoutes(db) {
       const r = anularQuoteSvc(db, parseInt(c.req.param('id')), c.get('validated').motivo);
       logActivity(db, c.get('session'), 'Anuló presupuesto', ENTITY.QUOTE, r.id, (r.quote_number || '') + ' — ' + c.get('validated').motivo);
       return c.json({ ...r, message: 'Presupuesto anulado' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.post('/:id/anular-y-rehacer', requirePerm('quotes.create'), validate(quoteAnularSchema), c => {
@@ -457,7 +458,7 @@ export function createQuoteRoutes(db) {
       const r = anularYRehacerQuoteSvc(db, parseInt(c.req.param('id')), c.get('validated').motivo);
       logActivity(db, c.get('session'), 'Anuló y rehízo presupuesto', ENTITY.QUOTE, r.id, 'sustituye a ' + (r.anulada_number || ('#' + r.anulada_id)));
       return c.json({ ...r, message: 'Presupuesto anulado; borrador nuevo creado' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // MOTOR DE CONVERSIÓN. A factura: aplica el MISMO gate de exceso de stock que la pantalla de
@@ -485,7 +486,7 @@ export function createQuoteRoutes(db) {
       }
       logActivity(db, c.get('session'), 'Convirtió presupuesto a factura', ENTITY.QUOTE, id, r.invoice_number || '');
       return c.json({ ...r, message: 'Presupuesto convertido a la factura ' + r.invoice_number });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // ── VISTAS ──

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, skeletonRows } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
@@ -10,7 +11,7 @@ export function createCategoryRoutes(db) {
 
   api.get('/', requirePerm('categories.read'), c => {
     try { return c.json(db.prepare('SELECT c.*, COUNT(p.id) as product_count FROM categories c LEFT JOIN products p ON p.category_id=c.id GROUP BY c.id ORDER BY c.name').all()); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.post('/', requirePerm('categories.create'), validate(categorySchema), async c => {
@@ -19,7 +20,7 @@ export function createCategoryRoutes(db) {
       if (!d.name) return c.json({error:'Nombre requerido'},400);
       const r = db.prepare('INSERT INTO categories (name,description) VALUES (?,?)').run(d.name.trim(), d.description||'');
       return c.json({id:r.lastInsertRowid, message:'Creada'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.put('/:id', requirePerm('categories.edit'), validate(categorySchema), async c => {
@@ -27,12 +28,12 @@ export function createCategoryRoutes(db) {
       const d = c.get('validated');
       db.prepare('UPDATE categories SET name=?,description=? WHERE id=?').run(d.name, d.description||'', c.req.param('id'));
       return c.json({message:'Actualizada'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.delete('/:id', requirePerm('categories.delete'), c => {
     try { db.prepare('DELETE FROM categories WHERE id=?').run(c.req.param('id')); return c.json({message:'Eliminada'}); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   views.get('/', requirePerm('categories.read'), c => {

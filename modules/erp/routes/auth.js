@@ -201,7 +201,9 @@ export function createAuthRoutes(db) {
       db.prepare('UPDATE admin_users SET password_hash=? WHERE id=?').run(await hashPassword(password), user.id);
     }
 
-    console.log('[Login] user:', email, '| totp_enabled:', user.totp_enabled, '| has_secret:', !!user.totp_secret);
+    // C3/M7 (Eje C): NO se registra el email ni el estado de 2FA (PII + reconocimiento de qué cuentas
+    // tienen 2FA). Solo un id interno para depurar, sin dato identificable ni de seguridad.
+    console.log('[Login] ok userId:', user.id);
 
     // Si tiene 2FA activo, mostrar formulario TOTP
     if (user.totp_enabled === 1 && user.totp_secret) {

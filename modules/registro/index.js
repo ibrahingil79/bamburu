@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../core/errors.js';
 import { rateLimit } from '../../core/rate-limit.js';
 import { autologinStore } from '../../core/autologin-store.js';
 import { randomBytes } from 'crypto';
@@ -222,7 +223,7 @@ export function register(app) {
       try {
         result = await createTenantSvc({ ...sessionData.draft, password });
       } catch (e) {
-        return c.json({ error: e.message || 'No se pudo crear el negocio.', field: e.field || null }, e.status || 400);
+        return c.json({ error: safeError(e) || 'No se pudo crear el negocio.', field: e.field || null }, e.status || 400);
       }
 
       onboardingSessions.delete(sessionId);

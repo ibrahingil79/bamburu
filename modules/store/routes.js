@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../core/errors.js';
 import { hashPassword, verifyPassword, createCustomerSession, getCustomerSession, destroyCustomerSession } from '../../core/auth.js';
 import { escHtml, escHtmlMultiline, safeUrl } from '../../core/escape.js';
 import { rateLimit } from '../../core/rate-limit.js';
@@ -960,7 +961,7 @@ export function createRoutes(app, db) {
         }
       }
       return c.json(products);
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.get('/products/:idOrSlug', c => {
@@ -974,17 +975,17 @@ export function createRoutes(app, db) {
       p.avg_rating = p.reviews.length ? (p.reviews.reduce((a,b)=>a+b.rating,0)/p.reviews.length).toFixed(1) : null;
       p.tags = db.prepare('SELECT t.name FROM tags t JOIN product_tags pt ON pt.tag_id=t.id WHERE pt.product_id=?').all(p.id).map(t=>t.name);
       return c.json(p);
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.get('/categories', c => {
     try { return c.json(db.prepare('SELECT * FROM categories ORDER BY name').all()); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.get('/shipping', c => {
     try { return c.json(db.prepare("SELECT * FROM shipping_methods WHERE active=1 ORDER BY price").all()); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.post('/validate-coupon', validate(validateCouponSchema), async c => {
@@ -996,7 +997,7 @@ export function createRoutes(app, db) {
       if (dc.max_uses !== null && dc.uses_count >= dc.max_uses) return c.json({error:'Cupón agotado'},400);
       const amount = dc.type === 'percentage' ? subtotal * (dc.value/100) : dc.value;
       return c.json({valid:true, discount:{id:dc.id, type:dc.type, value:dc.value}, amount, message:`Cupón aplicado: -€${amount.toFixed(2)}`});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.post('/checkout', checkoutLimiter, validate(checkoutSchema), async c => {
@@ -1080,7 +1081,7 @@ export function createRoutes(app, db) {
       });
       run();
       return c.json({success:true, order_number:orderNum, total});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // Newsletter subscribe
@@ -1089,7 +1090,7 @@ export function createRoutes(app, db) {
       const { email, name } = c.get('validated');
       db.prepare('INSERT OR IGNORE INTO newsletter_subscribers (email,name) VALUES (?,?)').run(email, name||'');
       return c.json({success:true, message:'Suscripción confirmada'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // Reviews submit
@@ -1098,7 +1099,7 @@ export function createRoutes(app, db) {
       const { product_id, customer_name, rating, comment } = c.get('validated');
       db.prepare('INSERT INTO product_reviews (product_id,customer_name,rating,comment,status) VALUES (?,?,?,?,?)').run(product_id, customer_name||'Anónimo', rating, comment||'', 'pending');
       return c.json({success:true, message:'Reseña enviada, pendiente de moderación'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // ── CUSTOMER ACCOUNTS ──────────────────────────────────────────
@@ -1120,7 +1121,7 @@ export function createRoutes(app, db) {
       const headers = new Headers({'Content-Type':'application/json'});
       headers.set('Set-Cookie', `csess=${sessionId}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800`);
       return new Response(JSON.stringify({success:true}), {headers});
-    } catch(e) { return c.json({error:e.message.includes('UNIQUE')?'Email ya registrado':e.message},500); }
+    } catch(e) { return c.json({error:safeError(e).includes('UNIQUE')?'Email ya registrado':e.message},500); }
   });
 
   api.post('/account/login', customerLoginLimiter, validate(accountLoginSchema), async c => {
@@ -1137,7 +1138,7 @@ export function createRoutes(app, db) {
       const headers = new Headers({'Content-Type':'application/json'});
       headers.set('Set-Cookie', `csess=${sessionId}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800`);
       return new Response(JSON.stringify({success:true}), {headers});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.post('/account/logout', c => {
@@ -1158,7 +1159,7 @@ export function createRoutes(app, db) {
       const cl = db.prepare('SELECT * FROM clients WHERE id=?').get(acc.client_id);
       const orders = cl ? db.prepare('SELECT so.*,si.product_name,si.quantity,si.unit_price FROM sales_orders so LEFT JOIN sales_items si ON si.order_id=so.id WHERE so.client_id=? ORDER BY so.id DESC').all(cl.id) : [];
       return c.json({client: cl, orders});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // Wishlist
@@ -1177,7 +1178,7 @@ export function createRoutes(app, db) {
       const { product_id } = c.get('validated');
       db.prepare('INSERT OR IGNORE INTO wishlist (customer_id,product_id) VALUES (?,?)').run(sess.customerId, product_id);
       return c.json({success:true});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.delete('/account/wishlist/:pid', c => {
@@ -1186,7 +1187,7 @@ export function createRoutes(app, db) {
       if (!sess) return c.json({error:'No autenticado'},401);
       db.prepare('DELETE FROM wishlist WHERE customer_id=? AND product_id=?').run(sess.customerId, c.req.param('pid'));
       return c.json({success:true});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // ── STORE VIEWS ────────────────────────────────────────────────

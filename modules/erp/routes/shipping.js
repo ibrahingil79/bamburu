@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
@@ -11,7 +12,7 @@ export function createShippingRoutes(db, cfg = {}) {
 
   api.get('/', requirePerm('shipping.read'), c => {
     try { return c.json(db.prepare('SELECT * FROM shipping_methods ORDER BY price').all()); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.post('/', requirePerm('shipping.create'), validate(shippingSchema), async c => {
@@ -19,7 +20,7 @@ export function createShippingRoutes(db, cfg = {}) {
       const d = c.get('validated');
       const r = db.prepare('INSERT INTO shipping_methods (name,description,price,free_from,estimated_days,active) VALUES (?,?,?,?,?,?)').run(d.name, d.description||'', d.price||0, d.free_from||null, d.estimated_days||'', d.active?1:0);
       return c.json({id:r.lastInsertRowid});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.put('/:id', requirePerm('shipping.update'), validate(shippingSchema), async c => {
@@ -27,12 +28,12 @@ export function createShippingRoutes(db, cfg = {}) {
       const d = c.get('validated');
       db.prepare('UPDATE shipping_methods SET name=?,description=?,price=?,free_from=?,estimated_days=?,active=? WHERE id=?').run(d.name, d.description||'', d.price||0, d.free_from||null, d.estimated_days||'', d.active?1:0, c.req.param('id'));
       return c.json({message:'Actualizado'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.delete('/:id', requirePerm('shipping.delete'), c => {
     try { db.prepare('DELETE FROM shipping_methods WHERE id=?').run(c.req.param('id')); return c.json({message:'Eliminado'}); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   views.get('/', requirePerm('shipping.read'), c => {

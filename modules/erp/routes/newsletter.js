@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
 
@@ -8,12 +9,12 @@ export function createNewsletterRoutes(db) {
 
   api.get('/', requirePerm('newsletter.read'), c => {
     try { return c.json(db.prepare('SELECT * FROM newsletter_subscribers ORDER BY id DESC').all()); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.delete('/:id', requirePerm('newsletter.delete'), c => {
     try { db.prepare('DELETE FROM newsletter_subscribers WHERE id=?').run(c.req.param('id')); return c.json({message:'Eliminado'}); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.get('/export', requirePerm('newsletter.read'), c => {
@@ -23,7 +24,7 @@ export function createNewsletterRoutes(db) {
       const h = ['Email','Nombre','Fecha'];
       const r = rows.map(x => [q(x.email),q(x.name),q(x.created_at?.split(' ')[0])].join(','));
       return c.body([h.join(','),...r].join('\n'), 200, {'Content-Type':'text/csv','Content-Disposition':'attachment; filename="newsletter.csv"'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   views.get('/', requirePerm('newsletter.read'), c => {

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../core/errors.js';
 import { bodyLimit } from 'hono/body-limit';
 import { adminAuth, getCsrfToken, requirePerm } from '../../core/auth.js';
 import { checkPermission } from '../../core/permission-check.js';   // Permisos · Paso 2 — MISMO motor que requirePerm (sin lógica paralela)
@@ -2515,7 +2516,7 @@ export function register(app, db) {
           const rows = db.prepare(sql).all();
           return { rows, count: rows.length };
         } catch (e) {
-          return { error: e.message };
+          return { error: safeError(e) };
         }
       }
 
@@ -2547,7 +2548,7 @@ export function register(app, db) {
         } catch (e) {
           console.error('[DISA] API error:', e.message);
           // Tope de gasto alcanzado → mensaje claro al usuario (no el genérico de error de red).
-          if (e.code === 'llm_tenant_cap' || e.code === 'llm_global_cap') return c.json({ error: e.message }, 429);
+          if (e.code === 'llm_tenant_cap' || e.code === 'llm_global_cap') return c.json({ error: safeError(e) }, 429);
           return c.json({ error: 'Error al contactar con DISA. Intentalo de nuevo.' }, 500);
         }
 
@@ -2764,7 +2765,7 @@ export function register(app, db) {
         return c.json({ reply, capture_url: '/admin/purchases/capture?attachment=' + result.attachment_id });
       } catch (e) {
         console.error('[DISA] attach error:', e);
-        return c.json({ error: e.message || 'No se pudo procesar el archivo.' }, e.status || 500);
+        return c.json({ error: safeError(e) || 'No se pudo procesar el archivo.' }, e.status || 500);
       }
     });
 

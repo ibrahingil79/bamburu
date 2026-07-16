@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { requirePerm } from '../../../core/auth.js';
 import { adminLayout, skeletonRows } from '../layout.js';
 import { openPayables } from '../pagos.js';
@@ -16,7 +17,7 @@ export function createPagosRoutes(db) {
   api.get('/', requirePerm('purchases.read'), c => {
     try {
       return c.json(openPayables(db, new Date().toISOString().slice(0, 10)));
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // GET /admin/pagos — torre de control (client-render: se refresca en vivo tras un pago).

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout, can } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
@@ -18,7 +19,7 @@ export function createSettingsRoutes(db, cfg = {}) {
   // ── API: COMPANY ───────────────────────────────────────────────
   api.get('/company', requirePerm('company.read'), c => {
     try { return c.json(db.prepare('SELECT * FROM company_config WHERE id=1').get()); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.put('/company', requirePerm('company.update'), validate(companySchema), async c => {
@@ -43,7 +44,7 @@ export function createSettingsRoutes(db, cfg = {}) {
         ? null : Math.max(0, Math.min(365, Math.floor(Number(d.dias_aviso_pago) || 0)));
       db.prepare('UPDATE company_config SET company_name=?,fiscal_id=?,tax_rate=?,logo_url=?,address=?,postal_code=?,city=?,province=?,phone=?,email=?,website=?,country=?,currency=?,currency_symbol=?,tax_name=?,fiscal_id_label=?,document_name=?,irpf_default=?,dias_recordatorio_impago=COALESCE(?,dias_recordatorio_impago),dias_aviso_pago=COALESCE(?,dias_aviso_pago) WHERE id=1').run(d.company_name||'', d.fiscal_id||'', parseFloat(d.tax_rate)||0, d.logo_url||'', d.address||'', d.postal_code||'', d.city||'', d.province||'', d.phone||'', d.email||'', d.website||'', d.country||'ES', d.currency||'EUR', d.currency_symbol||sym, d.tax_name||'IVA', d.fiscal_id_label||'NIF/CIF', d.document_name||'Factura', parseFloat(d.irpf_default)||0, diasProp, diasPago);
       return c.json({message:'Guardado'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // ── API: SITUACIÓN FISCAL (fiscal_profile) ─────────────────────
@@ -53,7 +54,7 @@ export function createSettingsRoutes(db, cfg = {}) {
   // solo el dueño declara su situación; DISA nunca se la escribe a sí misma.
   api.get('/fiscal-profile', requirePerm('company.read'), c => {
     try { return c.json(db.prepare('SELECT * FROM fiscal_profile WHERE id=1').get() || {}); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.put('/fiscal-profile', requirePerm('company.update'), async c => {
@@ -73,7 +74,7 @@ export function createSettingsRoutes(db, cfg = {}) {
              b(d.tiene_retenciones_alquiler), b(d.situacion_especial),
              String(d.no_cubierto || '').slice(0, 2000), now, now, String(quien));
       return c.json({ message: 'Guardado' });
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // ── API: STORE — D2: editor "Tienda Online" DESMONTADO. Endpoints neutralizados (404).
@@ -82,7 +83,7 @@ export function createSettingsRoutes(db, cfg = {}) {
   api.get('/store', requirePerm('store_settings.read'), c => {
     return c.json({ error: 'Editor de tienda desmontado (D2)' }, 404);
     try { return c.json(db.prepare('SELECT * FROM store_settings WHERE id=1').get()); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.put('/store', requirePerm('store_settings.update'), validate(storeSettingsSchema), async c => {
@@ -91,7 +92,7 @@ export function createSettingsRoutes(db, cfg = {}) {
       const d = c.get('validated');
       db.prepare('UPDATE store_settings SET store_name=?,tagline=?,logo_url=?,banner_url=?,primary_color=?,announcement=?,facebook_url=?,instagram_url=?,twitter_url=?,terms_html=?,privacy_html=?,returns_html=?,seo_title=?,seo_description=?,theme=?,homepage_sections=? WHERE id=1').run(d.store_name||'', d.tagline||'', d.logo_url||'', d.banner_url||'', d.primary_color||'#10b981', d.announcement||'', d.facebook_url||'', d.instagram_url||'', d.twitter_url||'', d.terms_html||'', d.privacy_html||'', d.returns_html||'', d.seo_title||'', d.seo_description||'', d.theme||'minimal_light', d.homepage_sections||null);
       return c.json({message:'Guardado'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // ── VIEW: COMPANY SETTINGS ─────────────────────────────────────
@@ -123,7 +124,7 @@ export function createSettingsRoutes(db, cfg = {}) {
         });
       }
       return c.json(out);
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // Una plantilla concreta: la EN VIGOR (editada o de fábrica) + la de fábrica, para poder comparar.
@@ -141,7 +142,7 @@ export function createSettingsRoutes(db, cfg = {}) {
         huecos: t.huecos, criticos: t.criticos || [], requeridos: t.requeridos || [],
         motivoCritico: t.motivoCritico || null,
       });
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // VISTA PREVIA con datos de ejemplo. Nunca con datos reales de un cliente: una previsualización no
@@ -162,7 +163,7 @@ export function createSettingsRoutes(db, cfg = {}) {
         text: htmlAtexto(html),
         revision: revisarPlantilla(tipo, p),
       });
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // GUARDAR. Aquí vive la RED DE SEGURIDAD, y es distinta por familia:
@@ -186,7 +187,7 @@ export function createSettingsRoutes(db, cfg = {}) {
                     updated_at=excluded.updated_at, updated_by=excluded.updated_by`)
         .run(tipo, tono, subject, html, new Date().toISOString(), String(quien));
       return c.json({ ok: true, avisos: rev.avisos, message: 'Plantilla guardada. A partir de ahora se envía con tu texto.' });
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // VOLVER AL ORIGINAL: borrar la edición. La de fábrica está en el código, así que no hay nada que
@@ -198,7 +199,7 @@ export function createSettingsRoutes(db, cfg = {}) {
       db.prepare('DELETE FROM email_templates WHERE tipo=? AND tono=?').run(tipo, tono);
       const fab = plantillaDeFabrica(tipo, tono);
       return c.json({ ok: true, ...fab, message: 'Restaurada la plantilla original.' });
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   views.get('/', requirePerm('company.read'), c => {

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, docShell, skeletonRows } from '../layout.js';
 import { validate } from '../../../core/validate.js';
 import { requirePerm } from '../../../core/auth.js';
@@ -101,7 +102,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
     try {
       // archived=0: las compras rotas heredadas (sin líneas) quedan fuera del listado.
       return c.json(db.prepare('SELECT p.*,s.name as supplier_name FROM purchases p JOIN suppliers s ON p.supplier_id=s.id WHERE p.archived=0 ORDER BY p.date DESC,p.created_at DESC').all());
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.get('/:id', requirePerm('purchases.read'), c => {
@@ -111,28 +112,28 @@ export function createPurchaseRoutes(db, cfg = {}) {
       if (!purchase) return c.json({error:'No encontrado'},404);
       const items = db.prepare('SELECT pi.*,pr.name as product_name FROM purchase_items pi JOIN products pr ON pi.product_id=pr.id WHERE pi.purchase_id=?').all(id);
       return c.json({...purchase, items});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.post('/', requirePerm('purchases.create'), validate(purchaseSchema), c => {
     try {
       const newId = createDirectPurchaseSvc(db, c.get('validated'));
       return c.json({id:newId, message:'Compra registrada'}, 201);
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.post('/:id/receive', requirePerm('purchases.create'), c => {
     try {
       const r = receivePurchaseSvc(db, parseInt(c.req.param('id')));
       return c.json({ message: 'Compra recibida', ...r });
-    } catch(e) { return c.json({error:e.message}, e.status||500); }
+    } catch(e) { return c.json({error:safeError(e)}, e.status||500); }
   });
 
   api.post('/:id/cancel', requirePerm('purchases.create'), c => {
     try {
       const r = cancelPurchaseSvc(db, parseInt(c.req.param('id')));
       return c.json({ message: 'Compra cancelada', ...r });
-    } catch(e) { return c.json({error:e.message}, e.status||500); }
+    } catch(e) { return c.json({error:safeError(e)}, e.status||500); }
   });
 
   views.get('/', requirePerm('purchases.read'), c => {

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, docShell, printableShell, estadoTabs, emptyRow, errorShell, ERR } from '../layout.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';   // PDF real: mismo HTML imprimible → Chromium
 import { validate } from '../../../core/validate.js';
@@ -335,7 +336,7 @@ export function createAlbaranRoutes(db) {
       const a = getAlbaran(db, parseInt(c.req.param('id')));
       if (!a) return c.json({ error: 'No encontrado' }, 404);
       return c.json(a);
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.post('/', requirePerm('albaranes.create'), validate(albaranCreateSchema), c => {
@@ -343,7 +344,7 @@ export function createAlbaranRoutes(db) {
       const r = createAlbaranSvc(db, c.get('validated'));
       logActivity(db, c.get('session'), 'Confirmó albarán (entrega)', ENTITY.DELIVERY_NOTE, r.id, r.delivery_number + (r.order_id ? ' (pedido #' + r.order_id + ')' : ' (suelto)'));
       return c.json({ ...r, message: 'Albarán ' + r.delivery_number + ' confirmado (stock entregado)' }, 201);
-    } catch (e) { return c.json({ error: e.message, shortfall: e.shortfall }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e), shortfall: e.shortfall }, e.status || 500); }
   });
 
   api.post('/:id/anular', requirePerm('albaranes.edit'), validate(albaranAnularSchema), c => {
@@ -351,7 +352,7 @@ export function createAlbaranRoutes(db) {
       const r = cancelAlbaranSvc(db, parseInt(c.req.param('id')), c.get('validated').motivo);
       logActivity(db, c.get('session'), 'Anuló albarán', ENTITY.DELIVERY_NOTE, r.id, (r.delivery_number || '') + ' — ' + c.get('validated').motivo);
       return c.json({ ...r, message: 'Albarán anulado y stock revertido' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.post('/:id/factura', requirePerm('albaranes.edit'), c => {
@@ -359,7 +360,7 @@ export function createAlbaranRoutes(db) {
       const r = albaranToInvoiceSvc(db, parseInt(c.req.param('id')));
       logActivity(db, c.get('session'), 'Facturó albarán', ENTITY.DELIVERY_NOTE, parseInt(c.req.param('id')), r.invoice_number);
       return c.json({ ...r, message: 'Albarán facturado en ' + r.invoice_number });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // ── VISTAS ──

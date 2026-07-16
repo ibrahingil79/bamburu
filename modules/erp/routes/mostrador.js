@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, printableShell, errorShell, ERR } from '../layout.js';
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
@@ -45,7 +46,7 @@ export function createMostradorRoutes(db) {
       const r = emitTicketSvc(db, { lines: d.lines, warehouse_id: d.warehouse_id, payment_method: d.payment_method });
       logActivity(db, c.get('session'), 'Emitió ticket de mostrador', ENTITY.INVOICE, r.id, r.invoice_number + ' · ' + r.payment_method + (excess.length ? ' (exceso de stock confirmado)' : ''));
       return c.json({ ...r, message: 'Ticket ' + r.invoice_number + ' emitido y cobrado' }, 201);
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // ── VISTA: pantalla de mostrador ──

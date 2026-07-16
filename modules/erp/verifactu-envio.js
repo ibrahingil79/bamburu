@@ -10,6 +10,7 @@
 // el SIMULADOR y el envío real avisa sin romper. Aditivo, idempotente.
 
 import fs from 'fs';
+import { safeError } from '../../core/errors.js';
 import http from 'http';
 import https from 'https';
 import { join } from 'path';
@@ -484,7 +485,7 @@ export async function enviarLote(db, registroIds, opts = {}) {
   } catch (e) {
     // Red caída / AEAT sin responder: NO hubo envío. `http_status` queda NULL a propósito — es lo que
     // la cola mira para saber que el control de flujo no se ha consumido y puede reintentar antes.
-    for (const x of lote) resultados.set(x.registro.id, upsertEnvio(db, x.registro.id, { estado: ESTADO.ERROR_COM, entorno, endpoint, descripcion_error: e.message, aviso: 'Error de comunicación con la AEAT: ' + e.message, request_xml: peticionDe(x), enviado_at: ahora, bumpIntentos: true }));
+    for (const x of lote) resultados.set(x.registro.id, upsertEnvio(db, x.registro.id, { estado: ESTADO.ERROR_COM, entorno, endpoint, descripcion_error: safeError(e), aviso: 'Error de comunicación con la AEAT: ' + e.message, request_xml: peticionDe(x), enviado_at: ahora, bumpIntentos: true }));
     return salida();
   }
 

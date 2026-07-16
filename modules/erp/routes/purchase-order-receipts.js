@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, docShell } from '../layout.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
@@ -206,7 +207,7 @@ export function createPurchaseOrderReceiptRoutes(db) {
       const r = getReceipt(db, parseInt(c.req.param('id')));
       if (!r) return c.json({ error: 'No encontrada' }, 404);
       return c.json(r);
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.post('/:id/cancel', requirePerm('purchases.edit'), validate(purchaseOrderAnularSchema), c => {
@@ -215,7 +216,7 @@ export function createPurchaseOrderReceiptRoutes(db) {
       const r = cancelReceiptSvc(db, parseInt(c.req.param('id')), motivo);
       logActivity(db, c.get('session'), 'Anuló recepción de orden de compra', ENTITY.PO_RECEIPT, r.id, (r.receipt_number || '') + ' — ' + motivo);
       return c.json({ ...r, message: 'Recepción anulada y stock revertido' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // Ficha de recepción: SOLO LECTURA (la recepción confirmada es inmutable) con

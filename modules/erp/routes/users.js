@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout, skeletonRows } from '../layout.js';
 import { hashPassword, requirePerm } from '../../../core/auth.js';
 import { readFileSync } from 'fs';
@@ -16,7 +17,7 @@ export function createUserRoutes(db) {
   // ── API: ADMIN USERS ───────────────────────────────────────────
   api.get('/', requirePerm('admin.manage_users'), c => {
     try { return c.json(db.prepare('SELECT id,name,email,role,active,created_at FROM admin_users ORDER BY id').all()); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.post('/', requirePerm('admin.manage_users'), validate(userCreateSchema), async c => {
@@ -30,7 +31,7 @@ export function createUserRoutes(db) {
       }
       const r = db.prepare('INSERT INTO admin_users (name,email,password_hash,role) VALUES (?,?,?,?)').run(d.name||'', d.email, await hashPassword(d.password), d.role||'employee');
       return c.json({id:r.lastInsertRowid});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.put('/:id', requirePerm('admin.manage_users'), validate(userUpdateSchema), async c => {
@@ -56,7 +57,7 @@ export function createUserRoutes(db) {
         db.prepare('UPDATE admin_users SET name=?,email=?,role=?,active=? WHERE id=?').run(d.name||'', d.email||'', d.role||'employee', d.active?1:0, targetId);
       }
       return c.json({message:'Actualizado'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.delete('/:id', requirePerm('admin.manage_users'), c => {
@@ -75,7 +76,7 @@ export function createUserRoutes(db) {
       if (count <= 1) return c.json({error:'No puedes eliminar el último usuario activo'},400);
       db.prepare('DELETE FROM admin_users WHERE id=?').run(targetId);
       return c.json({message:'Eliminado'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // ── API: PERMISOS DE USUARIO ───────────────────────────────────
@@ -88,7 +89,7 @@ export function createUserRoutes(db) {
         WHERE up.admin_user_id = ?
       `).all(userId).map(r => r.id);
       return c.json({ assigned });
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.post('/:id/permissions', requirePerm('admin.manage_users'), async c => {
@@ -102,7 +103,7 @@ export function createUserRoutes(db) {
       const ins = db.prepare('INSERT OR IGNORE INTO user_permissions (admin_user_id, permission_id) VALUES (?,?)');
       for (const pid of permIds) ins.run(userId, pid);
       return c.json({message:'Permisos actualizados'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // ── API: ACTIVITY LOGS ─────────────────────────────────────────
@@ -129,7 +130,7 @@ export function createUserRoutes(db) {
         + (where.length ? ' WHERE ' + where.join(' AND ') : '')
         + ' ORDER BY id DESC LIMIT 200';
       return c.json(db.prepare(sql).all(...params));
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // ── API: BACKUP ────────────────────────────────────────────────
@@ -140,7 +141,7 @@ export function createUserRoutes(db) {
       const data = readFileSync(dbPath);
       const filename = 'bamburu_backup_' + new Date().toISOString().slice(0,10) + '.db';
       return new Response(data, { headers: {'Content-Type':'application/octet-stream','Content-Disposition':'attachment; filename="'+filename+'"'} });
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // ── VIEWS ──────────────────────────────────────────────────────

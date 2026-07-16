@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, estadoTabs, emptyRow } from '../layout.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
@@ -191,7 +192,7 @@ export function createStockTransferRoutes(db) {
       const t = getTransfer(db, parseInt(c.req.param('id')));
       if (!t) return c.json({ error: 'No encontrado' }, 404);
       return c.json(t);
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.post('/', requirePerm('inventory.edit'), validate(stockTransferSchema), c => {
@@ -199,7 +200,7 @@ export function createStockTransferRoutes(db) {
       const r = createStockTransferSvc(db, c.get('validated'));
       logActivity(db, c.get('session'), 'Registró traslado entre almacenes', TRANSFER_ENTITY, r.id, transferLogDetails(r));
       return c.json({ ...r, message: 'Traslado ' + r.transfer_number + ' confirmado' }, 201);
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.post('/:id/cancel', requirePerm('inventory.edit'), validate(purchaseOrderAnularSchema), c => {
@@ -208,7 +209,7 @@ export function createStockTransferRoutes(db) {
       const r = cancelStockTransferSvc(db, parseInt(c.req.param('id')), motivo);
       logActivity(db, c.get('session'), 'Anuló traslado entre almacenes', TRANSFER_ENTITY, r.id, (r.transfer_number || '') + ' — ' + motivo);
       return c.json({ ...r, message: 'Traslado anulado y stock revertido' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // ── VISTAS ──

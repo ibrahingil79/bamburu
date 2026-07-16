@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, docShell, skeletonRows } from '../layout.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
@@ -381,7 +382,7 @@ export function createSupplierInvoiceRoutes(db) {
         return { ...inv, ...st, pagable: isPayable(inv) };
       });
       return c.json(out);
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // Orígenes elegibles para la creación manual (ANTES de '/:id').
@@ -390,7 +391,7 @@ export function createSupplierInvoiceRoutes(db) {
       const sid = parseInt(c.req.query('supplier_id'));
       if (!sid) return c.json([]);
       return c.json(eligibleOriginsForSupplier(db, sid));
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // Deuda viva de un proveedor (para la cabecera "Le debes X €" — superficie de cuenta).
@@ -400,7 +401,7 @@ export function createSupplierInvoiceRoutes(db) {
       if (!sid) return c.json({ total: 0, oldest: null });
       const d = supplierDebt(db, sid, today());
       return c.json({ total: d.total, oldest: d.oldest });
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   api.get('/:id', requirePerm('purchases.read'), c => {
@@ -408,7 +409,7 @@ export function createSupplierInvoiceRoutes(db) {
       const inv = getSupplierInvoice(db, parseInt(c.req.param('id')), today());
       if (!inv) return c.json({ error: 'No encontrada' }, 404);
       return c.json(inv);
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // Crear MANUAL.
@@ -417,7 +418,7 @@ export function createSupplierInvoiceRoutes(db) {
       const r = createSupplierInvoiceSvc(db, c.get('validated'), { onDuplicate: 'throw', today: today() });
       logActivity(db, c.get('session'), 'Creó factura recibida', ENTITY.SUPPLIER_INVOICE, r.id, r.internal_code || '');
       return c.json({ ...r, message: 'Factura recibida registrada' }, 201);
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // Anular.
@@ -427,7 +428,7 @@ export function createSupplierInvoiceRoutes(db) {
       const r = anularSupplierInvoiceSvc(db, id, c.get('validated').motivo);
       logActivity(db, c.get('session'), 'Anuló factura recibida', ENTITY.SUPPLIER_INVOICE, id, c.get('validated').motivo);
       return c.json({ ...r, message: 'Factura anulada' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // ÚNICO punto de escritura de pagos a proveedor. Espejo de POST /invoices/:id/payments.
@@ -438,7 +439,7 @@ export function createSupplierInvoiceRoutes(db) {
       const inv = db.prepare('SELECT internal_code FROM supplier_invoices WHERE id=?').get(id);
       logActivity(db, c.get('session'), 'Registró pago a proveedor', ENTITY.SUPPLIER_INVOICE, id, `${(inv && inv.internal_code) || ('#' + id)} · ${c.get('validated').amount}`);
       return c.json(r, 201);
-    } catch (e) { return c.json({ error: e.message }, e.status || 400); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 400); }
   });
 
   // Deshacer un pago concreto (corrige un apunte mal metido sin anular la factura).
@@ -449,7 +450,7 @@ export function createSupplierInvoiceRoutes(db) {
       const inv = db.prepare('SELECT internal_code FROM supplier_invoices WHERE id=?').get(id);
       logActivity(db, c.get('session'), 'Deshizo pago a proveedor', ENTITY.SUPPLIER_INVOICE, id, `${(inv && inv.internal_code) || ('#' + id)} · ${r.amount}`);
       return c.json(r);
-    } catch (e) { return c.json({ error: e.message }, e.status || 400); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 400); }
   });
 
   // Paso (c): registrar un REEMBOLSO recibido contra un abono (importe positivo en la
@@ -461,7 +462,7 @@ export function createSupplierInvoiceRoutes(db) {
       const inv = db.prepare('SELECT internal_code FROM supplier_invoices WHERE id=?').get(id);
       logActivity(db, c.get('session'), 'Registró reembolso de proveedor', ENTITY.SUPPLIER_INVOICE, id, `${(inv && inv.internal_code) || ('#' + id)} · ${c.get('validated').amount}`);
       return c.json(r, 201);
-    } catch (e) { return c.json({ error: e.message }, e.status || 400); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 400); }
   });
 
   // ── Vistas ──────────────────────────────────────────────────────────────────

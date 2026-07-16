@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, docShell, printableShell, estadoTabs, emptyRow, errorShell, ERR } from '../layout.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';   // PDF real: mismo HTML imprimible → Chromium
 import { validate } from '../../../core/validate.js';
@@ -320,7 +321,7 @@ export function createPedidoRoutes(db) {
       const o = getOrder(db, parseInt(c.req.param('id')));
       if (!o) return c.json({ error: 'No encontrado' }, 404);
       return c.json({ ...o, items: getItems(db, o.id) });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // Pie en vivo (mismo patrón que /quotes/compute-totals).
@@ -330,7 +331,7 @@ export function createPedidoRoutes(db) {
       const resolved = resolveOrderLines(db, lines);
       const t = orderTotals(db, client_id, resolved);
       return c.json({ subtotal: t.subtotal, taxByRate: t.taxByRate, taxAmount: t.tax_amount, irpfRate: t.irpf_rate, irpfAmount: t.irpf_amount, total: t.total });
-    } catch (e) { return c.json({ error: e.message }, 400); }
+    } catch (e) { return c.json({ error: safeError(e) }, 400); }
   });
 
   api.post('/', requirePerm('pedidos.create'), validate(pedidoCreateSchema), c => {
@@ -338,7 +339,7 @@ export function createPedidoRoutes(db) {
       const id = createPedidoSvc(db, c.get('validated'));
       logActivity(db, c.get('session'), 'Creó borrador de pedido', ENTITY.CUSTOMER_ORDER, id, '');
       return c.json({ id, message: 'Borrador guardado' }, 201);
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.put('/:id', requirePerm('pedidos.edit'), validate(pedidoCreateSchema), c => {
@@ -346,7 +347,7 @@ export function createPedidoRoutes(db) {
       const r = updatePedidoSvc(db, parseInt(c.req.param('id')), c.get('validated'));
       logActivity(db, c.get('session'), 'Editó borrador de pedido', ENTITY.CUSTOMER_ORDER, r.id, '');
       return c.json({ ...r, message: 'Borrador actualizado' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.post('/:id/confirmar', requirePerm('pedidos.edit'), c => {
@@ -354,7 +355,7 @@ export function createPedidoRoutes(db) {
       const r = confirmPedidoSvc(db, parseInt(c.req.param('id')));
       logActivity(db, c.get('session'), 'Confirmó pedido', ENTITY.CUSTOMER_ORDER, r.id, r.order_number);
       return c.json({ ...r, message: 'Pedido ' + r.order_number + ' confirmado (stock reservado)' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.post('/:id/anular', requirePerm('pedidos.edit'), validate(pedidoAnularSchema), c => {
@@ -362,7 +363,7 @@ export function createPedidoRoutes(db) {
       const r = cancelPedidoSvc(db, parseInt(c.req.param('id')), c.get('validated').motivo);
       logActivity(db, c.get('session'), 'Anuló pedido', ENTITY.CUSTOMER_ORDER, r.id, (r.order_number || '') + ' — ' + c.get('validated').motivo);
       return c.json({ ...r, message: 'Pedido anulado (reserva liberada)' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // PIEZA 2b — atajo pedido → FACTURA (cadena suelta: facturar desde el pedido o desde el albarán).
@@ -371,7 +372,7 @@ export function createPedidoRoutes(db) {
       const r = orderToInvoiceSvc(db, parseInt(c.req.param('id')));
       logActivity(db, c.get('session'), 'Facturó pedido', ENTITY.CUSTOMER_ORDER, parseInt(c.req.param('id')), r.invoice_number);
       return c.json({ ...r, message: 'Pedido facturado en ' + r.invoice_number });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.post('/:id/anular-y-rehacer', requirePerm('pedidos.create'), validate(pedidoAnularSchema), c => {
@@ -379,7 +380,7 @@ export function createPedidoRoutes(db) {
       const r = cancelRedoPedidoSvc(db, parseInt(c.req.param('id')), c.get('validated').motivo);
       logActivity(db, c.get('session'), 'Anuló y rehízo pedido', ENTITY.CUSTOMER_ORDER, r.id, 'sustituye a ' + (r.anulada_number || ('#' + r.anulada_id)));
       return c.json({ ...r, message: 'Pedido anulado; borrador nuevo creado' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // ── VISTAS ──

@@ -1,4 +1,5 @@
 import { renderEmail, TONO_UNICO } from '../email-templates.js';
+import { safeError } from '../../../core/errors.js';
 import { Hono } from 'hono';
 import { adminLayout, can, docShell, estadoTabs, emptyRow, errorShell, ERR } from '../layout.js';
 import { validate } from '../../../core/validate.js';
@@ -361,7 +362,7 @@ export function createPurchaseOrderRoutes(db) {
       if (!o) return c.json({ error: 'No encontrada' }, 404);
       const items = getItems(db, id);
       return c.json({ ...o, items, totals: purchaseOrderTotals(items) });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.post('/', requirePerm('purchases.create'), validate(purchaseOrderSchema), c => {
@@ -369,7 +370,7 @@ export function createPurchaseOrderRoutes(db) {
       const id = createPurchaseOrderSvc(db, c.get('validated'));
       logActivity(db, c.get('session'), 'Creó borrador de orden de compra', ENTITY.PURCHASE_ORDER, id, '');
       return c.json({ id, message: 'Borrador guardado' }, 201);
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.put('/:id', requirePerm('purchases.edit'), validate(purchaseOrderSchema), c => {
@@ -377,7 +378,7 @@ export function createPurchaseOrderRoutes(db) {
       const r = updatePurchaseOrderSvc(db, parseInt(c.req.param('id')), c.get('validated'));
       logActivity(db, c.get('session'), 'Editó borrador de orden de compra', ENTITY.PURCHASE_ORDER, r.id, '');
       return c.json({ ...r, message: 'Borrador actualizado' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.post('/:id/enviar', requirePerm('purchases.edit'), c => {
@@ -385,7 +386,7 @@ export function createPurchaseOrderRoutes(db) {
       const r = sendPurchaseOrderSvc(db, parseInt(c.req.param('id')));
       logActivity(db, c.get('session'), 'Envió orden de compra', ENTITY.PURCHASE_ORDER, r.id, r.order_number);
       return c.json({ ...r, message: 'Orden ' + r.order_number + ' enviada' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.post('/:id/email', requirePerm('purchases.edit'), async c => {
@@ -393,7 +394,7 @@ export function createPurchaseOrderRoutes(db) {
       const r = await emailPurchaseOrderSvc(db, parseInt(c.req.param('id')), { sendEmail });
       logActivity(db, c.get('session'), 'Envió orden de compra por email', ENTITY.PURCHASE_ORDER, parseInt(c.req.param('id')), r.order_number + ' → ' + r.to);
       return c.json({ ...r, message: 'Orden enviada por email a ' + r.to });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // C1.b — crear y confirmar una recepción contra la orden (valida estado y
@@ -403,7 +404,7 @@ export function createPurchaseOrderRoutes(db) {
       const r = createReceiptSvc(db, parseInt(c.req.param('id')), c.get('validated'));
       logActivity(db, c.get('session'), 'Registró recepción de orden de compra', ENTITY.PO_RECEIPT, r.id, r.receipt_number + ' (' + r.lines + ' líneas)');
       return c.json({ ...r, message: 'Recepción ' + r.receipt_number + ' confirmada' }, 201);
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // C1.b — lista de recepciones de la orden + estado por línea (pedido/recibido/pendiente).
@@ -412,7 +413,7 @@ export function createPurchaseOrderRoutes(db) {
       const id = parseInt(c.req.param('id'));
       if (!db.prepare('SELECT 1 FROM purchase_orders WHERE id=?').get(id)) return c.json({ error: 'No encontrada' }, 404);
       return c.json({ reception: orderReceptionState(db, id), receipts: receiptsOfOrder(db, id) });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // C1.c — cierre manual con pendiente (motivo obligatorio). No mueve stock.
@@ -422,7 +423,7 @@ export function createPurchaseOrderRoutes(db) {
       const r = closePurchaseOrderSvc(db, parseInt(c.req.param('id')), motivo);
       logActivity(db, c.get('session'), 'Cerró orden de compra con pendiente', ENTITY.PURCHASE_ORDER, r.id, (r.order_number || '') + ' — ' + motivo);
       return c.json({ ...r, message: 'Orden cerrada (incompleta): el pendiente queda declarado como que no va a llegar' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.post('/:id/anular', requirePerm('purchases.edit'), validate(purchaseOrderAnularSchema), c => {
@@ -431,7 +432,7 @@ export function createPurchaseOrderRoutes(db) {
       const r = anularPurchaseOrderSvc(db, parseInt(c.req.param('id')), motivo);
       logActivity(db, c.get('session'), 'Anuló orden de compra', ENTITY.PURCHASE_ORDER, r.id, (r.order_number || '') + ' — ' + motivo);
       return c.json({ ...r, message: 'Orden anulada' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.post('/:id/anular-y-rehacer', requirePerm('purchases.create'), validate(purchaseOrderAnularSchema), c => {
@@ -440,7 +441,7 @@ export function createPurchaseOrderRoutes(db) {
       const r = anularYRehacerSvc(db, parseInt(c.req.param('id')), motivo);
       logActivity(db, c.get('session'), 'Anuló y rehízo orden de compra', ENTITY.PURCHASE_ORDER, r.id, 'sustituye a ' + (r.anulada_number || ('#' + r.anulada_id)));
       return c.json({ ...r, message: 'Orden anulada; borrador nuevo creado' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // ── VISTAS ──

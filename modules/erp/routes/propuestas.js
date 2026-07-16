@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, skeletonRows } from '../layout.js';
 import { hoyLocal } from '../avisos.js';
 import {
@@ -96,7 +97,7 @@ export function createPropuestasRoutes(db) {
   api.get('/', c => {
     if (!puedeVer(c)) return c.json({ error: 'Sin permiso' }, 403);
     try { return c.json({ propuestas: propuestasPendientes(db, today(), tiposVisibles(c)) }); }
-    catch (e) { return c.json({ error: e.message }, 500); }
+    catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // GET /api/erp/propuestas/contador — nº pendientes, para el badge del topbar. Barato (un COUNT).
@@ -104,7 +105,7 @@ export function createPropuestasRoutes(db) {
   api.get('/contador', c => {
     if (!puedeVer(c)) return c.json({ count: 0 });
     try { return c.json({ count: contarPropuestasPendientes(db, tiposVisibles(c)) }); }
-    catch (e) { return c.json({ error: e.message }, 500); }
+    catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // POST /api/erp/propuestas/:id/aprobar — APROBAR Y ENVIAR. Reutiliza registerCollectionAction (el
@@ -139,7 +140,7 @@ export function createPropuestasRoutes(db) {
     } catch (e) {
       // registerCollectionAction lanza con .status (400 sin email, 502 Resend, etc.): mensaje claro,
       // la propuesta NO cambia de estado.
-      return c.json({ error: e.message }, e.status || 500);
+      return c.json({ error: safeError(e) }, e.status || 500);
     }
   });
 
@@ -160,7 +161,7 @@ export function createPropuestasRoutes(db) {
       db.prepare("UPDATE disa_proposals SET status='aprobada_registrada', resolved_at=?, resolved_by=? WHERE id=?")
         .run(new Date().toISOString(), String(quien), id);
       return c.json({ ok: true, message: 'Pago registrado.' });
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // POST /api/erp/propuestas/:id/emitir — APROBAR Y EMITIR la factura recurrente que toca.
@@ -193,7 +194,7 @@ export function createPropuestasRoutes(db) {
         .run(new Date().toISOString(), String(quien), id);
       return c.json({ ok: true, invoice_id: factura.id, invoice_number: factura.invoice_number,
         message: 'Factura ' + (factura.invoice_number || '#' + factura.id) + ' emitida.' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // POST /api/erp/propuestas/:id/redactar — APROBAR una propuesta de cliente dormido.
@@ -210,7 +211,7 @@ export function createPropuestasRoutes(db) {
     try {
       const r = redactarReenganche(db, parseInt(c.req.param('id')));
       return c.json({ ok: true, ...r, message: 'Borrador preparado. Léelo antes de enviarlo.' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // POST /api/erp/propuestas/:id/enviar — ENVIAR el email de reenganche (el segundo clic).
@@ -250,7 +251,7 @@ export function createPropuestasRoutes(db) {
       db.prepare("UPDATE disa_proposals SET status='aprobada_enviada', subject=?, body=?, resolved_at=?, resolved_by=? WHERE id=?")
         .run(subject, text, new Date().toISOString(), String(quien), id);
       return c.json({ ok: true, to: r.email?.to, message: 'Email enviado a ' + (r.email?.to || 'el cliente') + '.' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // POST /api/erp/propuestas/:id/preparar — APROBAR un vencimiento fiscal = dejar el modelo PREPARADO
@@ -282,7 +283,7 @@ export function createPropuestasRoutes(db) {
         message: verModelos
           ? 'Modelo preparado. Revísalo y preséntalo tú desde Contabilidad › Impuestos — Bamburu no presenta nada a la AEAT.'
           : 'Anotado. Su importe se calculará más adelante; preséntalo tú en la AEAT cuando toque.' });
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // POST /api/erp/propuestas/:id/preparar-compra — APROBAR una reposición = CREAR el BORRADOR de orden
@@ -300,7 +301,7 @@ export function createPropuestasRoutes(db) {
       return c.json({ ok: true, ver_orden: '/admin/purchase-orders/' + r.po_id,
         message: 'Borrador de compra preparado (' + r.lineas + ' línea' + (r.lineas === 1 ? '' : 's')
           + '). Revísalo y envíalo tú al proveedor — Bamburu no envía nada.' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // POST /api/erp/propuestas/:id/descartar — marca 'descartada'. Por el índice único (factura,tipo)
@@ -317,7 +318,7 @@ export function createPropuestasRoutes(db) {
       db.prepare("UPDATE disa_proposals SET status='descartada', resolved_at=?, resolved_by=? WHERE id=?")
         .run(new Date().toISOString(), String(quien), id);
       return c.json({ ok: true, message: 'Propuesta descartada.' });
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // POST /api/erp/propuestas/generar — genera a demanda (además del cron diario), para que el panel
@@ -335,7 +336,7 @@ export function createPropuestasRoutes(db) {
       if (tipos.includes(TIPO_FISCAL)) out.fiscal = generarPropuestasFiscales(db, { today: today() });
       if (tipos.includes(TIPO_REPOSICION)) out.reposicion = generarPropuestasReposicion(db, { today: today() });
       return c.json(out);
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // GET /admin/propuestas — la pantalla. Gate de VER; las acciones revalidan su permiso en la API.

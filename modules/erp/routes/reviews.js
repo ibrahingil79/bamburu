@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
@@ -16,7 +17,7 @@ export function createReviewRoutes(db) {
       if (status) { q += ' WHERE r.status=?'; params.push(status); }
       q += ' ORDER BY r.id DESC';
       return c.json(db.prepare(q).all(...params));
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.put('/:id', requirePerm('reviews.update'), validate(reviewStatusSchema), async c => {
@@ -24,12 +25,12 @@ export function createReviewRoutes(db) {
       const d = c.get('validated');
       db.prepare('UPDATE product_reviews SET status=? WHERE id=?').run(d.status, c.req.param('id'));
       return c.json({message:'Actualizado'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.delete('/:id', requirePerm('reviews.delete'), c => {
     try { db.prepare('DELETE FROM product_reviews WHERE id=?').run(c.req.param('id')); return c.json({message:'Eliminado'}); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   views.get('/', requirePerm('reviews.read'), c => {

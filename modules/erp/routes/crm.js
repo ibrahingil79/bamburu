@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, skeletonRows } from '../layout.js';
 import { logActivity, requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
@@ -35,13 +36,13 @@ export function createCrmRoutes(db) {
   // GET /api/erp/crm — el embudo por columnas (con suma de valor por etapa).
   api.get('/', requirePerm('crm.read'), c => {
     try { return c.json(pipelineByStage(db, hoy())); }
-    catch (e) { return c.json({ error: e.message }, 500); }
+    catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // GET /api/erp/crm/worklist — cola de trabajo comercial priorizada. ANTES de '/:id'.
   api.get('/worklist', requirePerm('crm.read'), c => {
     try { return c.json(salesWorklist(db, hoy())); }
-    catch (e) { return c.json({ error: e.message }, 500); }
+    catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // Timeline unificado y resumen CRM de un cliente. Rutas de 3 segmentos: no chocan con '/:id'.
@@ -61,11 +62,11 @@ export function createCrmRoutes(db) {
       };
       return c.json(clientTimeline(db, parseInt(c.req.param('cid')), hoy(), { include }));
     }
-    catch (e) { return c.json({ error: e.message }, 500); }
+    catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
   api.get('/clients/:cid/summary', requirePerm('crm.read'), c => {
     try { return c.json(clientCrmSummary(db, parseInt(c.req.param('cid')), hoy())); }
-    catch (e) { return c.json({ error: e.message }, 500); }
+    catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   api.get('/:id', requirePerm('crm.read'), c => {
@@ -77,7 +78,7 @@ export function createCrmRoutes(db) {
         proximaAccion: opportunityProximaAccion(db, o, hoy()),
         actividad: opportunityActivities(db, o.id).slice().reverse(),
       });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // Plantilla de email de seguimiento, precargada y EDITABLE antes de enviar (espejo del
@@ -91,7 +92,7 @@ export function createCrmRoutes(db) {
       const tono = (prox && prox.tono) || 'primer-contacto';
       const tpl = opportunityEmail(tono, { client: cl, company, opp: o, db });
       return c.json({ subject: tpl.subject, text: tpl.text, tono, to: cl.email || '', has_email: !!cl.email, client_id: cl.id });
-    } catch (e) { return c.json({ error: e.message }, e.status || 400); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 400); }
   });
 
   // ── API: ESCRITURA (todo por servicio validado; crm.manage) ─────
@@ -100,7 +101,7 @@ export function createCrmRoutes(db) {
       const r = createOpportunitySvc(db, c.get('validated'));
       logActivity(db, c.get('session'), 'Creó oportunidad', ENTITY.OPPORTUNITY, r.id, r.title);
       return c.json(r, 201);
-    } catch (e) { return c.json({ error: e.message }, e.status || 400); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 400); }
   });
 
   api.put('/:id', requirePerm('crm.manage'), validate(opportunitySchema), c => {
@@ -108,7 +109,7 @@ export function createCrmRoutes(db) {
       const r = updateOpportunitySvc(db, c.req.param('id'), c.get('validated'));
       logActivity(db, c.get('session'), 'Editó oportunidad', ENTITY.OPPORTUNITY, r.id, r.title);
       return c.json({ message: 'Actualizado' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 400); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 400); }
   });
 
   // Mover de etapa (el drop del Kanban). Solo etapas ABIERTAS: soltar en Ganada/Perdida va
@@ -120,7 +121,7 @@ export function createCrmRoutes(db) {
       logActivity(db, c.get('session'), 'Movió oportunidad de etapa', ENTITY.OPPORTUNITY, r.id,
         r.title + ': ' + (ETAPA_LABEL[r.from] || r.from) + ' → ' + (ETAPA_LABEL[r.to] || r.to));
       return c.json(r);
-    } catch (e) { return c.json({ error: e.message }, e.status || 400); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 400); }
   });
 
   api.post('/:id/close', requirePerm('crm.manage'), validate(closeOpportunitySchema), c => {
@@ -130,7 +131,7 @@ export function createCrmRoutes(db) {
       logActivity(db, c.get('session'), r.status === 'ganada' ? 'Ganó una oportunidad' : 'Perdió una oportunidad',
         ENTITY.OPPORTUNITY, r.id, r.title + (r.lost_reason ? ' — ' + (MOTIVO_PERDIDA_LABEL[r.lost_reason] || r.lost_reason) : ''));
       return c.json(r);
-    } catch (e) { return c.json({ error: e.message }, e.status || 400); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 400); }
   });
 
   api.post('/:id/reopen', requirePerm('crm.manage'), c => {
@@ -138,7 +139,7 @@ export function createCrmRoutes(db) {
       const r = reopenOpportunitySvc(db, c.req.param('id'), { userName: userName(c) });
       logActivity(db, c.get('session'), 'Reabrió oportunidad', ENTITY.OPPORTUNITY, r.id, r.title);
       return c.json(r);
-    } catch (e) { return c.json({ error: e.message }, e.status || 400); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 400); }
   });
 
   // Archivar, NUNCA borrar (regla permanente).
@@ -147,14 +148,14 @@ export function createCrmRoutes(db) {
       const r = archiveOpportunitySvc(db, c.req.param('id'));
       logActivity(db, c.get('session'), 'Archivó oportunidad', ENTITY.OPPORTUNITY, r.id, r.title);
       return c.json({ message: 'Archivada' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 400); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 400); }
   });
   api.post('/:id/restore', requirePerm('crm.manage'), c => {
     try {
       const r = restoreOpportunitySvc(db, c.req.param('id'));
       logActivity(db, c.get('session'), 'Restauró oportunidad', ENTITY.OPPORTUNITY, r.id, r.title);
       return c.json({ message: 'Restaurada' });
-    } catch (e) { return c.json({ error: e.message }, e.status || 400); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 400); }
   });
 
   // Registrar ACTIVIDAD de un cliente (con o sin oportunidad; NUNCA necesita factura).
@@ -168,7 +169,7 @@ export function createCrmRoutes(db) {
         : d.type === 'nota' ? 'Anotó algo de un cliente' : 'Registró contacto con un cliente';
       logActivity(db, c.get('session'), label, ENTITY.CLIENT, r.client_id, r.client_name + (d.note ? ' · ' + d.note : ''));
       return c.json(r, 201);
-    } catch (e) { return c.json({ error: e.message }, e.status || 400); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 400); }
   });
 
   // ── VISTAS ──────────────────────────────────────────────────────

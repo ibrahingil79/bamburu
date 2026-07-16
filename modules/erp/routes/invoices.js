@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { createHash } from 'crypto';
 import QRCode from 'qrcode';
 import { requirePerm, logActivity } from '../../../core/auth.js';
@@ -889,7 +890,7 @@ export function createInvoiceRoutes(db) {
         r.proxima = invoiceProximaAccion(db, r, today);   // Paso 2: misma próxima acción que las otras superficies
       }
       return c.json(rows);
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // GET /api/erp/invoices/:id — single invoice JSON (+ enlaces de ciclo de vida)
@@ -920,7 +921,7 @@ export function createInvoiceRoutes(db) {
       const clientPm = inv.client_id ? db.prepare('SELECT payment_method FROM clients WHERE id=?').get(inv.client_id) : null;
       const payment_method_default = (lastPay && lastPay.payment_method) || (clientPm && clientPm.payment_method) || '';
       return c.json({ ...inv, items, anulacion, rectifiedBy, rectifiesOriginal, payments, cobro, cobrable, proxima, collectionActions, payment_method_default });
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // POST /api/erp/invoices/from-order/:orderId — generate invoice from order
@@ -933,7 +934,7 @@ export function createInvoiceRoutes(db) {
       let code = 500;
       if (e.message === 'Pedido no encontrado') code = 404;
       else if (e.message === 'Solo se pueden facturar pedidos completados') code = 400;
-      return c.json({ error: e.message }, code);
+      return c.json({ error: safeError(e) }, code);
     }
   });
 
@@ -947,7 +948,7 @@ export function createInvoiceRoutes(db) {
       const appliedIrpfRate = country === 'ES' ? (Number(irpf_rate) || 0) : 0;
       return c.json(computeTotals(lines, appliedIrpfRate));
     } catch (e) {
-      return c.json({ error: e.message }, 400);
+      return c.json({ error: safeError(e) }, 400);
     }
   });
 
@@ -973,7 +974,7 @@ export function createInvoiceRoutes(db) {
     } catch (e) {
       let code = 400;
       if (e.message === 'Cliente no existe') code = 404;
-      return c.json({ error: e.message }, code);
+      return c.json({ error: safeError(e) }, code);
     }
   });
 
@@ -986,7 +987,7 @@ export function createInvoiceRoutes(db) {
       return c.json(res);
     } catch (e) {
       const code = e.message === 'Factura no encontrada' ? 404 : 400;
-      return c.json({ error: e.message }, code);
+      return c.json({ error: safeError(e) }, code);
     }
   });
 
@@ -999,7 +1000,7 @@ export function createInvoiceRoutes(db) {
       return c.json(res, 201);
     } catch (e) {
       const code = e.message === 'Factura original no encontrada' ? 404 : 400;
-      return c.json({ error: e.message }, code);
+      return c.json({ error: safeError(e) }, code);
     }
   });
 
@@ -1010,7 +1011,7 @@ export function createInvoiceRoutes(db) {
       const r = emitSustitutivaSvc(db, parseInt(c.req.param('id')), c.get('validated').client_id);
       logActivity(db, c.get('session'), 'Emitió factura completa (sustitutiva de ticket)', ENTITY.INVOICE, r.id, r.invoice_number + ' sustituye a ' + r.ticket_number);
       return c.json({ ...r, message: 'Factura completa ' + r.invoice_number + ' emitida (sustituye al ticket ' + r.ticket_number + ')' }, 201);
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // POST /api/erp/invoices/:id/payments — registrar un cobro (total o parcial)
@@ -1029,7 +1030,7 @@ export function createInvoiceRoutes(db) {
       try { postInvoicePayment(db, res.lastInsertRowid); } catch {}   // asiento de cobro (tesorería/430); no rompe el cobro
       logActivity(db, c.get('session'), 'Registró cobro', ENTITY.INVOICE, id, `${inv.invoice_number} · ${amount}`);
       return c.json({ id: res.lastInsertRowid, cobro: invoiceCobro(db, inv, today) }, 201);
-    } catch (e) { return c.json({ error: e.message }, 400); }
+    } catch (e) { return c.json({ error: safeError(e) }, 400); }
   });
 
   // DELETE /api/erp/invoices/:id/payments/:pid — deshacer un cobro mal metido. Un cobro
@@ -1045,7 +1046,7 @@ export function createInvoiceRoutes(db) {
       db.prepare('DELETE FROM invoice_payments WHERE id=?').run(pid);
       logActivity(db, c.get('session'), 'Deshizo cobro', ENTITY.INVOICE, id, `${inv.invoice_number} · ${pay.amount}`);
       return c.json({ deleted: pid, amount: pay.amount, cobro: invoiceCobro(db, inv, new Date().toISOString().slice(0, 10)) });
-    } catch (e) { return c.json({ error: e.message }, 400); }
+    } catch (e) { return c.json({ error: safeError(e) }, 400); }
   });
 
   // GET /api/erp/invoices/:id/collection-email-preview — plantilla precargada (editable
@@ -1062,7 +1063,7 @@ export function createInvoiceRoutes(db) {
       const tono = (prox && prox.tono) || 'amable';
       const tpl = collectionEmail(tono, { inv, client, cobro, company, db });
       return c.json({ subject: tpl.subject, text: tpl.text, tono, to: client && client.email || '', has_email: !!(client && client.email) });
-    } catch (e) { return c.json({ error: e.message }, 400); }
+    } catch (e) { return c.json({ error: safeError(e) }, 400); }
   });
 
   // POST /api/erp/invoices/:id/collection-actions — registrar una acción de cobro.
@@ -1077,7 +1078,7 @@ export function createInvoiceRoutes(db) {
         : input.type === 'promesa_pago' ? 'Registró promesa de pago' : 'Registró contacto';
       logActivity(db, c.get('session'), label, ENTITY.INVOICE, res.id, `${res.invoice_number} · ${res.stage}`);
       return c.json(res, 201);
-    } catch (e) { return c.json({ error: e.message }, e.status || 400); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 400); }
   });
 
   // GET /admin/invoices — list view

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
 
@@ -21,7 +22,7 @@ export function createFeedbackRoutes(db) {
       db.prepare('INSERT INTO feedback (rating, message, user_name) VALUES (?, ?, ?)')
         .run(r, message.trim(), userName);
       return c.json({ message: 'Gracias por tu comentario' });
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // ── VIEW: GET /admin/feedback ──────────────────────────────────

@@ -1,3 +1,4 @@
+import { safeError } from '../../core/errors.js';
 // ── VERI*FACTU · COLA DE ENVÍO AUTOMÁTICO POR NEGOCIO ────────────────────────────────────────
 //
 // Al emitir una factura, su registro de facturación queda con la huella CONGELADA (Tarea 1). La AEAT
@@ -178,7 +179,7 @@ export async function vaciar(db, opts = {}) {
     const soltar = db.prepare('UPDATE verifactu_envios SET next_retry_at=? WHERE registro_id=?');
     const reintento = iso(ahoraMs + BACKOFF_SEG[0] * 1000);
     db.transaction(() => { for (const id of ids) soltar.run(reintento, id); }).immediate();
-    return { enviados: 0, error: e.message };
+    return { enviados: 0, error: safeError(e) };
   }
 
   // Programar (o cerrar) cada registro según lo que dijo la AEAT.

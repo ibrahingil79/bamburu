@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, rowMenu, emptyRow, skeletonRows } from '../layout.js';
 import { logActivity, requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
@@ -98,14 +99,14 @@ export function createProductRoutes(db, cfg = {}) {
         return { ...p, variants, reserved, available: (p.stock || 0) - reserved };
       });
       return c.json(result);
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // C2 — búsqueda de productos (JSON). ANTES de '/:id' para que no la capture como id.
   api.get('/search', requirePerm('products.read'), c => {
     try {
       return c.json(searchProducts(db, { q: c.req.query('q') || '', limit: c.req.query('limit') }));
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.get('/:id', requirePerm('products.read'), c => {
@@ -116,7 +117,7 @@ export function createProductRoutes(db, cfg = {}) {
       p.variants = db.prepare('SELECT * FROM product_variants WHERE product_id=? ORDER BY id').all(p.id);
       p.tags = db.prepare('SELECT t.* FROM tags t JOIN product_tags pt ON pt.tag_id=t.id WHERE pt.product_id=?').all(p.id);
       return c.json(p);
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.post('/', requirePerm('products.create'), validate(productSchema), async c => {
@@ -124,7 +125,7 @@ export function createProductRoutes(db, cfg = {}) {
       const r = createProductSvc(db, c.get('validated'));
       logActivity(db, c.get('session'), 'Creó producto', ENTITY.PRODUCT, r.id, r.name);
       return c.json({id:r.id, message:'Creado'});
-    } catch(e) { return c.json({error:e.message}, e.status||500); }
+    } catch(e) { return c.json({error:safeError(e)}, e.status||500); }
   });
 
   // ── Pilar 3 · Paso 1 — stock de un producto (caché + kardex) ──────────────
@@ -148,7 +149,7 @@ export function createProductRoutes(db, cfg = {}) {
       const reserved = reservedOfProduct(db, id);
       const stock = productStock(db, id);
       return c.json({ physical: true, stock, reserved, available: stock - reserved, movements, by_warehouse: warehouseBreakdown(db, id) });
-    } catch(e) { return c.json({ error: e.message }, 500); }
+    } catch(e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // POST ajuste manual: crea UN movimiento type='ajuste' con el delta (poner/sumar/restar).
@@ -160,7 +161,7 @@ export function createProductRoutes(db, cfg = {}) {
       const res = adjustStock(db, id, { mode: d.mode, value: d.value, reason: d.reason, note: d.note, warehouse_id: d.warehouse_id }, { confirmBelowReserved: d.confirm_below_reserved });
       logActivity(db, c.get('session'), 'Ajustó stock', ENTITY.PRODUCT, id, `${d.mode} ${d.value} (${d.reason}) → ${res.stock}`);
       return c.json(res);
-    } catch(e) { return c.json({ error: e.message }, e.status || 400); }
+    } catch(e) { return c.json({ error: safeError(e) }, e.status || 400); }
   });
 
   api.put('/:id', requirePerm('products.edit'), validate(productSchema), async c => {
@@ -191,7 +192,7 @@ export function createProductRoutes(db, cfg = {}) {
       }
       logActivity(db, c.get('session'), 'Editó producto', ENTITY.PRODUCT, id, d.name);
       return c.json({message:'Actualizado'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // ── Pilar 3 · Stock mínimo / punto de pedido — NIVELES DE REPOSICIÓN por almacén ──────────
@@ -204,7 +205,7 @@ export function createProductRoutes(db, cfg = {}) {
       if (!p) return c.json({ error: 'Producto no encontrado' }, 404);
       if (!isPhysical(db, p)) return c.json({ fisico: false, niveles: [] });
       return c.json({ fisico: true, niveles: nivelesDeProducto(db, id) });
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
   api.put('/:id/niveles', requirePerm('products.edit'), validate(stockLevelsSchema), c => {
     try {
@@ -216,7 +217,7 @@ export function createProductRoutes(db, cfg = {}) {
       setNivelesProducto(db, id, c.get('validated').levels, quien);
       logActivity(db, c.get('session'), 'Editó niveles de reposición', ENTITY.PRODUCT, id, p.name || '');
       return c.json({ ok: true, message: 'Niveles guardados' });
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // ── Pilar 3 · Trazabilidad — LOTES / SERIES de un producto (informe) ──────────
@@ -228,7 +229,7 @@ export function createProductRoutes(db, cfg = {}) {
       const lotId = c.req.query('lot');
       if (lotId) return c.json({ traza: trazaDeLote(db, parseInt(lotId)) });
       return c.json({ tracking: trackingDe(db, id), lotes: lotesDeProducto(db, id) });
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   api.delete('/:id', requirePerm('products.delete'), c => {
@@ -237,13 +238,13 @@ export function createProductRoutes(db, cfg = {}) {
       db.prepare('DELETE FROM products WHERE id=?').run(c.req.param('id'));
       logActivity(db, c.get('session'), 'Eliminó producto', ENTITY.PRODUCT, c.req.param('id'), p?.name||'');
       return c.json({message:'Eliminado'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // ── API: IMAGES ────────────────────────────────────────────────
   api.get('/:id/images', requirePerm('products.read'), c => {
     try { return c.json(db.prepare('SELECT * FROM product_images WHERE product_id=? ORDER BY position').all(c.req.param('id'))); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.post('/:id/images', requirePerm('products.edit'), validate(productImageSchema), async c => {
@@ -251,18 +252,18 @@ export function createProductRoutes(db, cfg = {}) {
       const d = c.get('validated');
       const r = db.prepare('INSERT INTO product_images (product_id,url,alt,position) VALUES (?,?,?,?)').run(c.req.param('id'), d.url, d.alt||'', d.position||0);
       return c.json({id:r.lastInsertRowid});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.delete('/:id/images/:imgId', requirePerm('products.edit'), c => {
     try { db.prepare('DELETE FROM product_images WHERE id=? AND product_id=?').run(c.req.param('imgId'), c.req.param('id')); return c.json({message:'Eliminada'}); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // ── API: VARIANTS ──────────────────────────────────────────────
   api.get('/:id/variants', requirePerm('products.read'), c => {
     try { return c.json(db.prepare('SELECT * FROM product_variants WHERE product_id=? ORDER BY id').all(c.req.param('id'))); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.post('/:id/variants', requirePerm('products.edit'), validate(variantSchema), async c => {
@@ -270,7 +271,7 @@ export function createProductRoutes(db, cfg = {}) {
       const d = c.get('validated');
       const r = db.prepare('INSERT INTO product_variants (product_id,name,option1_name,option1_value,option2_name,option2_value,sku,price,stock) VALUES (?,?,?,?,?,?,?,?,?)').run(c.req.param('id'), d.name, d.option1_name||'', d.option1_value||'', d.option2_name||'', d.option2_value||'', d.sku||'', d.price||null, d.stock||0);
       return c.json({id:r.lastInsertRowid});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.put('/:id/variants/:vid', requirePerm('products.edit'), validate(variantSchema), async c => {
@@ -278,18 +279,18 @@ export function createProductRoutes(db, cfg = {}) {
       const d = c.get('validated');
       db.prepare('UPDATE product_variants SET name=?,option1_name=?,option1_value=?,option2_name=?,option2_value=?,sku=?,price=?,stock=? WHERE id=? AND product_id=?').run(d.name, d.option1_name||'', d.option1_value||'', d.option2_name||'', d.option2_value||'', d.sku||'', d.price||null, d.stock||0, c.req.param('vid'), c.req.param('id'));
       return c.json({message:'Actualizado'});
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.delete('/:id/variants/:vid', requirePerm('products.edit'), c => {
     try { db.prepare('DELETE FROM product_variants WHERE id=? AND product_id=?').run(c.req.param('vid'), c.req.param('id')); return c.json({message:'Eliminado'}); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // ── API: TAGS ──────────────────────────────────────────────────
   api.get('/tags/all', requirePerm('tags.read'), c => {
     try { return c.json(db.prepare('SELECT * FROM tags ORDER BY name').all()); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.post('/tags/create', requirePerm('tags.create'), validate(tagSchema), async c => {
@@ -298,12 +299,12 @@ export function createProductRoutes(db, cfg = {}) {
       const r = db.prepare('INSERT OR IGNORE INTO tags (name) VALUES (?)').run(d.name.trim());
       const tag = db.prepare('SELECT * FROM tags WHERE name=?').get(d.name.trim());
       return c.json(tag);
-    } catch(e) { return c.json({error:e.message},500); }
+    } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   api.delete('/tags/:id', requirePerm('tags.delete'), c => {
     try { db.prepare('DELETE FROM tags WHERE id=?').run(c.req.param('id')); return c.json({message:'Eliminada'}); }
-    catch(e) { return c.json({error:e.message},500); }
+    catch(e) { return c.json({error:safeError(e)},500); }
   });
 
   // ── VIEWS ──────────────────────────────────────────────────────

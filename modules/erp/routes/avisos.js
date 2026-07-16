@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { rateLimit } from '../../../core/rate-limit.js';
 import { adminLayout, skeletonRows, can, fuentesPermitidas } from '../layout.js';
 import { estadoAvisos, avisoKey, aplicarVisto, hoyLocal, detalleAviso } from '../avisos.js';
@@ -104,7 +105,7 @@ export function createAvisosRoutes(db) {
     try {
       const est = estadoAvisos(db, today(), c.get('session')?.userId, fuentesPermitidas(c));
       return c.json(comoJson(est));
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // GET /api/erp/avisos/contador — SOLO el conteo, para el refresco en vivo de la campana en
@@ -117,7 +118,7 @@ export function createAvisosRoutes(db) {
     try {
       const est = estadoAvisos(db, today(), c.get('session')?.userId, fuentesPermitidas(c));
       return c.json({ count: est.count, estado: est.estado, sinVer: (est.nuevos || []).length });
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // POST /api/erp/avisos/visto — marca como VISTOS los avisos cuyas claves lleguen en `keys`.
@@ -130,7 +131,7 @@ export function createAvisosRoutes(db) {
       const est = aplicarVisto(db, { keys: body.keys || [], marcar: true,
         today: today(), userId: c.get('session')?.userId, tipos: fuentesPermitidas(c) });
       return c.json(comoJson(est));
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // POST /api/erp/avisos/no-visto — lo contrario: "esto todavía lo tengo que mirar".
@@ -140,7 +141,7 @@ export function createAvisosRoutes(db) {
       const est = aplicarVisto(db, { keys: body.keys || [], marcar: false,
         today: today(), userId: c.get('session')?.userId, tipos: fuentesPermitidas(c) });
       return c.json(comoJson(est));
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // GET /admin/avisos — la pantalla. Sin requirePerm: muestra exactamente lo que ya cuenta el

@@ -19,6 +19,7 @@
 //    apellidos falsos. Arranca vacío y lo rellena el usuario.
 
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { adminLayout } from '../layout.js';
 import { changeOwnPassword, logActivity } from '../../../core/auth.js';
 import { escHtml } from '../../../core/escape.js';
@@ -380,7 +381,7 @@ export function createPerfilRoutes(db) {
       logActivity(db, session, 'Actualizó su perfil', ENTITY.ADMIN_USER, session.userId);
 
       return c.json({ ok: true, ...loadPerfil(db, session.userId) });
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // ── API: foto ───────────────────────────────────────────────────────────────
@@ -409,7 +410,7 @@ export function createPerfilRoutes(db) {
       logActivity(db, session, 'Cambió su foto de perfil', ENTITY.ADMIN_USER, session.userId);
 
       return c.json({ ok: true, foto_url });
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.delete('/foto', c => {
@@ -436,7 +437,7 @@ export function createPerfilRoutes(db) {
           'X-Content-Type-Options': 'nosniff',
         },
       });
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   return { views, api };

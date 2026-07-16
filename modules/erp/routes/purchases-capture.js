@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import { adminLayout, can } from '../layout.js';
@@ -398,7 +399,7 @@ export function createPurchaseCaptureRoutes(db) {
 
         const result = await runCapture(db, c.get('tenant'), c.get('session'), { buffer, mime, originalName: file.name || '' });
         return c.json(result);
-      } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+      } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
     });
 
   // Órdenes enviadas con pendiente de un proveedor (para el bloque "Destino").
@@ -407,7 +408,7 @@ export function createPurchaseCaptureRoutes(db) {
       const sid = parseInt(c.req.query('supplier_id'));
       if (!sid) return c.json([]);
       return c.json(supplierOpenOrders(db, sid));
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // Servir el documento original: SOLO con sesión + permiso de lectura de compras.
@@ -426,7 +427,7 @@ export function createPurchaseCaptureRoutes(db) {
           'X-Content-Type-Options': 'nosniff',
         },
       });
-    } catch (e) { return c.json({ error: e.message }, 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   // Confirmar / aterrizar.
@@ -435,7 +436,7 @@ export function createPurchaseCaptureRoutes(db) {
       const r = confirmCaptureSvc(db, c.get('validated'));
       logActivity(db, c.get('session'), 'Aterrizó factura de proveedor capturada', r.entity_type, r.entity_id, r.label || '');
       return c.json({ ...r, message: 'Factura registrada' }, 201);
-    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // ── Página de revisión ───────────────────────────────────────────────────
