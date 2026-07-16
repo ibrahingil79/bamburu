@@ -277,3 +277,49 @@ del bug de Verifactu y de los hallazgos MEDIA que se firman aquí.
 
 > Esta auditoría es el **arranque del Eje C (Seguridad)**. No implica cambios de código: es el inventario de
 > partida. Cada arreglo se abordará como tarea propia, con su verificación, cuando el dueño lo priorice.
+
+---
+
+## C2 — Verificación con administrador (16 jul 2026)
+
+Verificación con permisos de administrador de los 4 puntos que la revisión de solo lectura dejó como "no
+verificado". Solo comprobación (sin cambios de config ni código). **Regla cumplida:** no se imprimió el
+VALOR de ningún secreto; del fichero de secretos solo se comprobó el continente; el token de reset se
+manejó redactado. **Resultado: los 4 verificados OK. Ningún problema que registrar.**
+
+### 1. Redirect http→https en runtime — ✅ VERIFICADO OK
+Petición real por `:80` a Caddy (`curl -sSI --resolve <host>:80:127.0.0.1 http://<host>/`): responde **308
+Permanent Redirect → `Location: https://`**, tanto para el apex (`bamburu.com`) como para un subdominio con
+ruta y query (`/admin/reset-password?token=…` → `https://…?token=…`, preservando ruta y query). Es el
+redirect automático de Caddy (escucha confirmada en `*:80` y `*:443`). La app solo escucha en loopback
+(`127.0.0.1:3000`) → no es accesible sin pasar por Caddy/TLS.
+
+### 2. Validez del remoto rclone y llegada real de las copias — ✅ VERIFICADO OK
+`rclone listremotes` → `gdrive:`. `rclone about gdrive:` devuelve cuota (100 GiB; 16 usados) → remoto
+válido, autenticado y ALCANZABLE. `rclone lsl gdrive:Bamburu-backup/daily` ordenado por fecha: la copia MÁS
+RECIENTE es de **hoy 2026-07-16 03:34–03:37** — los 8 archivos (control + 6 tenants + `uploads.tar.gz`)
+están en Drive. Distribución DIARIA sin huecos del 05-jul al 16-jul. El journal de `bamburu-backup.service`
+confirma el ciclo completo: snapshot consistente → subida → **prueba de restore REAL (descarga +
+integrity_check) de cada archivo** → retención 14 días → email OK → "backup completado correctamente (8
+archivos)". No se expusieron credenciales del remoto (solo comandos de listado/estado). *(La falsa alarma
+inicial —un `tail` con archivos del 03-jul— era orden no cronológico de `lsl`, no un fallo.)*
+
+### 3. Fichero de secretos `/etc/bamburu.env` — ✅ VERIFICADO OK (solo continente)
+`stat`: **modo 600, dueño `ubuntu`, grupo `ubuntu`** (635 bytes). Solo lo pueden leer el usuario del
+servicio (`ubuntu`, que es quien corre `bamburu.service` vía `EnvironmentFile`) y root. **No es legible por
+ningún otro usuario** (ni world- ni group-readable). Presencia de claves comprobada por NOMBRE (nunca por
+valor): `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `NOTION_TOKEN`, `HEALTHCHECKS_URL`, `PUBLIC_BASE_DOMAIN`,
+`VERIFACTU_PRODUCTOR_NIF`, `VERIFACTU_PRODUCTOR_NOMBRE`. El `CF_API_TOKEN` de Cloudflare que usa el Caddyfile
+vive en el ENTORNO de Caddy (referencia `{env.CF_API_TOKEN}`), no en este fichero — correcto (separación
+app/proxy). No se leyó ni imprimió ninguna línea de su contenido.
+
+### 4. ¿Un proxy delante registra la URL completa con el token de reset? — ✅ VERIFICADO OK (no ocurre)
+El Caddyfile **no tiene directiva `log`** → Caddy no escribe log de accesos (por defecto está desactivado);
+`/var/log/caddy/` está vacío. En journald: **0** líneas con `reset-password` en `caddy` y **0** con
+`reset-password?token` en `bamburu` (la app ya documentaba en `auth.js` que no lo loguea). El token de
+recuperación **no acaba en ningún log**, ni del proxy ni de la app. *Nota menor (no es hallazgo, no se pide
+arreglar):* el 308 preserva el token en la cabecera `Location`, y si alguien accediera al enlace por
+`http://`, el token viajaría en claro en ese primer salto antes del redirect; mitigado porque los enlaces se
+generan con `https` (`PUBLIC_BASE_DOMAIN`) y HSTS está activo.
+
+**Conclusión C2:** los 4 puntos verificados OK. **No hay ningún problema que registrar como tarea nueva.**

@@ -8,7 +8,7 @@
 > plataforma al 100 % — ver `docs/contexto/decisiones.md` (2026-07-10).
 >
 > **SIGUIENTE BLOQUE GRANDE: EJE C — SEGURIDAD.** Plan cargado desde la auditoría del 15 jul (ver la
-> sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA) HECHO** (`2fdc9bf`); siguiente **C2**. Eje A (UX) y Eje B (DISA, seis
+> sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA) y C2 (verificación con administrador) HECHOS**; siguiente **C3** (victorias rápidas). Eje A (UX) y Eje B (DISA, seis
 > propuestas de proactividad) completos; Pilar 3 (inventario) cerrado.
 >
 > **Inventario (Pilar 3) CERRADO (15 jul 2026):** multi-almacén (`da7871e`/`3af928f`), stock mínimo /
@@ -564,7 +564,7 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
   entera. Limpiado `auth.log`; clave **rotada** y verificada con una llamada real a DISA. La lección
   (nunca un secreto en `argv`) queda en `errores-conocidos.md`.
 
-## Eje C: Seguridad — plan cargado (auditoría del 15 jul)  ⬅️ C1 HECHO · SIGUIENTE C2
+## Eje C: Seguridad — plan cargado (auditoría del 15 jul)  ⬅️ C1-C2 HECHOS · SIGUIENTE C3
 
 > Origen: **auditoría de seguridad de SOLO LECTURA del 15 jul 2026** (`docs/seguridad/auditoria-ejeC.md`,
 > commit `24dbf2a`). Postura general **buena** (aislamiento entre negocios sólido y fail-closed, DISA no se
@@ -588,12 +588,15 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
   mostrador 24/0, cola 62/0). *(De paso, hallazgo nuevo: `verify-mostrador-overstock.mjs` emite tickets al
   tenant VIVO y no limpia sus registros Verifactu — higiene de gate a arreglar; anotable como BAJA del Eje C.)*
 
-- ⬜ **C2 — Verificación con permisos de administrador (`sudo`) de los 4 puntos que la auditoría de solo
-  lectura NO pudo comprobar.** Es VERIFICACIÓN, no arreglo: **(1)** redirect http→https efectivo en runtime
-  (escucha real en `:80`; es el default de Caddy, no explícito en el Caddyfile); **(2)** validez del remoto
-  rclone / token de Google Drive (`~/.config/rclone/rclone.conf`, fuera del repo); **(3)** contenido de
-  `/etc/bamburu.env` (no leído a propósito); **(4)** si un reverse-proxy delante registra la URL completa
-  con el token de reset (viaja como query param). Los hallazgos que salgan se añaden como **tareas nuevas**.
+- ✅ **C2 — Verificación con administrador de los 4 puntos "no verificados" (16 jul 2026).** VERIFICACIÓN
+  (sin cambios de config/código), regla de oro cumplida (ningún valor de secreto impreso). **Los 4 salieron
+  OK — ningún problema, ninguna tarea nueva.** (1) Redirect http→https en runtime: petición real por `:80` →
+  **308 → https://** (apex y subdominio con query). (2) Remoto rclone `gdrive:` válido y alcanzable, con la
+  copia MÁS RECIENTE de HOY (8 archivos en Drive, diaria sin huecos, restore-test real en el journal). (3)
+  `/etc/bamburu.env` = **600 ubuntu:ubuntu**, no legible por terceros; claves presentes por nombre (sin
+  valores); el CF_API_TOKEN va en el entorno de Caddy, no aquí. (4) Caddy **sin directiva `log`** y
+  `/var/log/caddy/` vacío; **0** líneas con el token de reset en journald (Caddy y bamburu) → el token no
+  acaba en ningún log. Detalle en `docs/seguridad/auditoria-ejeC.md` § "C2 — verificación con administrador".
 
 - ⬜ **C3 — Victorias rápidas (tres arreglos cortos, EN ESTE ORDEN).**
   - **[M2] Actualizar `hono`** (CVE HIGH de `npm audit`: bypass de restricción por IP en IPv6 no canónica +
