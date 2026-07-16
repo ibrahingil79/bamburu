@@ -52,20 +52,43 @@ Notion quede al día sin que el fundador toque nada. Cuatro pasos, a/b/c/d:
 - La siguiente queda como primera en `🔵 POR HACER`.
 
 **b) Actualizar `CANON.md` si se cerró una pieza**
-- En la tabla de estado (sección 9), cambiar la fila de `❌ Falta` a `✅ Funciona`.
-- Si se descubrió algo no previsto del producto (decisión, hueco, dependencia),
-  añadirlo al CANON antes de cerrar.
+- **CANON v2 NO tiene tabla de estado.** Son 7 secciones de estrategia (identidad, fase,
+  reglas, quién decide, mapa de capas) y el estado de las piezas vive en `TABLERO.md`, que
+  es la fuente única. No busques filas `❌ Falta` → `✅ Funciona`: se fueron al reescribir el
+  CANON para la fase de optimización. **La mayoría de las sesiones NO tocan CANON.**
+- Solo se toca si la sesión cambia la ESTRATEGIA: una decisión de producto, un hueco o una
+  dependencia no prevista (§4 fase y ejes, §6 quién decide). Cerrar una tarea no es eso.
+- Si no hay nada estratégico que anotar, este paso se salta y se dice: "b) CANON sin cambios".
 
 **c) Actualizar Notion** — página "Control de Proyecto — Bamburu"
 (ID `36e18b04-bb1f-812f-99ee-f96789ac2909`, token en `/etc/bamburu.env`
-como `NOTION_TOKEN`). Tres bloques:
+como `NOTION_TOKEN`).
 
-  1. **"Dónde lo dejé / Dónde sigo"** (sección `📍 Dónde estoy`):
-     - "Hecho y funcionando" → última tarea terminada (más las anteriores).
-     - "Siguiente tarea" → la primera de POR HACER en el TABLERO.
-  2. **KPI "Tareas de Capa 1 completadas"** → `X / 11`.
-  3. **"Registro de tiempo"** → AÑADIR una línea nueva con
-     `AAAA-MM-DD · ~Xh · resumen de 1 línea`. (No editar líneas previas.)
+> Los nombres de abajo son los EXACTOS de la página. Cópialos, no los reconstruyas de
+> memoria: si el bloque que buscas no aparece tal cual, **es que cambió la página — para y
+> mira, no lo inventes**. Esta regla nace de que durante semanas se mandó actualizar un KPI
+> ("Tareas de Capa 1 completadas") que no existía: el ritual se cumplía sobre un fantasma y
+> el indicador real se quedó seis días diciendo que el Pilar 3 estaba en curso cuando ya
+> estaba cerrado. Un panel que miente es peor que no tener panel.
+
+  1. **`🚦 DÓNDE LO DEJÉ / DÓNDE SIGO`** (arriba del todo, NO confundir con `📍 Dónde estoy`,
+     que es un histórico más abajo y no se toca). Es una lista de citas, la más nueva primera:
+     AÑADIR arriba una `> ✅ HECHO (D mes AAAA) — <código> — <resumen>. Commit <hash>.`, y que
+     termine en `· SIGUIENTE TAREA: <la primera de POR HACER en el TABLERO>`.
+  2. **KPIs** (sección `📊 KPIs`) — solo si la sesión mueve alguno. Los que existen:
+     - **`Fase del producto`** → qué pilar está cerrado y cuál en curso. Se mueve al cerrar
+       un pilar (Catálogo · Cliente · Inventario · Ventas). Espejo de él: la sección
+       `🧭 Los 4 pilares` — si cambia uno, cambia el otro, o se contradicen.
+     - **`Cumplimiento España (Verifactu)`** → al avanzar el envío a la AEAT o Facturae.
+     - **`Código respaldado en GitHub`** · **`Clientes de pago`** · **`Ingreso recurrente
+       mensual`** → hoy fijos; se mueven al lanzar, no al programar.
+     - **Si la tarea no mueve ninguno, NO se inventa un KPI.** En la fase actual
+       (optimización por ejes A/B/C, CANON §4) lo normal es que **ninguno se mueva**: un eje
+       no es un pilar. Esa sesión solo hace los bloques 1 y 3 — y eso es correcto, no un
+       descuido.
+  3. **`⏱️ Registro de tiempo`** → AÑADIR una línea nueva **al FINAL** (es cronológico, el
+     último es el más reciente) con `D mes AAAA · ~Xh · resumen de 1 línea`. No editar las
+     previas ni reordenarlas.
 
 **d) Commit + push** (SSH, sin tokens)
 - `git add` los archivos de docs y código modificados.
@@ -79,16 +102,18 @@ como `NOTION_TOKEN`). Tres bloques:
   ejecutivo (KPIs + registro de tiempo + "dónde sigo"). No duplicar la tabla
   de tareas en Notion.
 - **Código + nombre, siempre.** En cualquier referencia a una tarea dentro
-  de Notion (KPI, "Hecho y funcionando", "Siguiente tarea", entradas del
-  Registro de tiempo) escribir SIEMPRE el código y el nombre real:
+  de Notion (`🚦 DÓNDE LO DEJÉ / DÓNDE SIGO`, "SIGUIENTE TAREA", KPIs, entradas
+  del `⏱️ Registro de tiempo`) escribir SIEMPRE el código y el nombre real:
   `A3 — Catálogo mixto de servicios`, no `A3` a secas. Esto permite que un
   chat sin contexto lea Notion y entienda qué es cada tarea sin inventar.
 - **No se mide en líneas de código.** La métrica de progreso es tareas
   completadas y tiempo invertido.
 - **Idempotencia.** Si la rutina se ejecuta dos veces seguidas, no debe
-  duplicar nada: el bloque "Dónde estoy" y el KPI se sobreescriben con el
-  mismo valor; al Registro de tiempo solo se añade entrada cuando hay
-  trabajo nuevo que reportar.
+  duplicar nada: los KPIs se sobreescriben con el mismo valor; a
+  `🚦 DÓNDE LO DEJÉ / DÓNDE SIGO` y al `⏱️ Registro de tiempo` solo se añade
+  entrada cuando hay trabajo nuevo que reportar — los dos son listas que
+  CRECEN, así que repetir la rutina sin trabajo nuevo duplicaría. Antes de
+  añadir, comprueba si la entrada de esa tarea ya está.
 
 ---
 
