@@ -704,12 +704,78 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
     la causa de que estos fallos se repitan. Quedan parciales fuera del inventario en `layout.js:111,186,300`,
     `email-templates.js:28` y `contabilidad-export.js:136` (este último es escape XML, otro contexto).
 
-- ⬜ **C4b — [M8] Quitar `'unsafe-inline'` de la CSP (esfuerzo ALTO, tarea propia).** Es la mitigación
-  SISTÉMICA del XSS: hoy la CSP no frenaría ninguno de los de M1. Medido el 16 jul: **414 `onclick` + 109
-  otros handlers inline + 81 `<script>` inline** (y **2027 `style="..."`** para `style-src`). Los nonces
-  **no cubren los handlers de atributo**, así que exige eliminar los 523 uno a uno → refactor de todo el
-  admin. Planificar aparte; no cabe en una sesión. El saneado (C4a/C4a-bis) es la línea de fondo; la CSP,
-  el cinturón.
+- ⬜ **C4b — [M8] Quitar `'unsafe-inline'` de `script-src`. PLAN CARGADO (16 jul 2026) — por SUPERFICIE,
+  no de golpe.**
+
+  > **La premisa que lo cambia todo: la CSP es una cabecera POR RESPUESTA.** No hay que migrar los 522
+  > handlers para empezar a proteger — se puede endurecer superficie a superficie. Y **las superficies
+  > críticas son diminutas: registro 2 handlers, superadmin 11.** El 90% del problema (470) está en el ERP,
+  > que es justo donde menos urge. Esto convierte "refactor de todo el admin" en "13 handlers y dos
+  > superficies", con el ERP como decisión aparte y con datos.
+
+  **Regla técnica que manda el diseño:** en cuanto una respuesta lleva un **nonce** en `script-src`, el
+  navegador **IGNORA `'unsafe-inline'`** en esa respuesta. No existe migración parcial DENTRO de una página:
+  es todo-o-nada **por respuesta**. Por eso el corte es por superficie, y por eso no se puede "ir soltando"
+  el `unsafe-inline` poco a poco en la misma página.
+
+  **Medido el 16 jul (no de memoria):**
+  - **522** handlers son **atributo HTML** (`on…="…"`) → los bloquea la CSP. Otros **8** son asignaciones JS
+    (`el.onclick = fn`) y **NO** las bloquea: el número real es **522**, no 530.
+  - Reparto: **registro 2** · **superadmin 11** · **store 20** · **disa 19** · **ERP 470**.
+  - **DISA NO es superficie separable:** su widget se inyecta en `adminLayout` (`layout.js:1178`) → comparte
+    respuesta, y por tanto CSP, con el ERP. Van juntos (489).
+  - **83** `<script>` inline (68 en el ERP) y solo **2** externos.
+  - `base-uri 'self'` y `object-src 'none'` **ya están puestos**, y no hay `'unsafe-eval'`: de M8 solo queda
+    el `'unsafe-inline'`.
+
+  ### C4b-0 — Fontanería + INSTRUMENTO DE MEDIDA (no cambia producción)
+  Nonce por petición en `core/security-headers.js`: generarlo **antes** de `next()` y dejarlo en
+  `c.set('cspNonce')`; **después** de `next()`, elegir política según la superficie (el middleware ya corre
+  ahí, `index.js:22`). Y un gate que recorra las pantallas sirviendo la política estricta como
+  **`Content-Security-Policy-Report-Only`**, apuntando las violaciones REALES del navegador.
+  **Por qué esto va primero:** esta semana un inventario por `grep` ha mentido dos veces (los "58" que eran
+  43; 12 puntos en código muerto). El navegador no miente: dice qué bloquea y dónde.
+  *Hecho cuando:* existe el inventario real de violaciones por pantalla y **producción sigue con la política
+  de hoy** (Report-Only no bloquea nada).
+
+  ### C4b-1 — registro (2) + superadmin (11) — las dos superficies que más duelen
+  `/registro` es **público y anónimo**; superadmin es **la cuenta que ve todos los negocios** — donde C4a
+  encontró el peor agujero del proyecto. Son **13 handlers**, todos de forma simple (`saCap(id)`,
+  `runBackup()`, `crear()`). Ninguna de las dos usa jsdelivr → su CSP puede ser más estricta que la del ERP:
+  `script-src 'self' 'nonce-…'`. Migración: `onclick="fn(args)"` → `addEventListener` (o `data-action` + un
+  delegado), y `nonce` en sus 6 `<script>`.
+  *Hecho cuando:* ambas sirven `script-src` sin `'unsafe-inline'`; `gate-xss-escape` —que ya conduce
+  superadmin— pasa y **no reporta ninguna violación CSP**; y los 13 botones se prueban **uno a uno** en
+  navegador (un handler que se escape = un botón muerto en silencio).
+
+  ### C4b-2 — Los 2 scripts de CDN van SIN SRI (independiente y barato — se puede hacer ya)
+  `settings.js:750` (Sortable) y `analytics.js:124` (Chart.js) se cargan de `cdn.jsdelivr.net` **sin
+  `integrity=`**. `script-src` confía en jsdelivr a ciegas: **si comprometen ese CDN, ejecutan JS arbitrario
+  en el admin** — y eso no lo tapa ningún escapado. Arreglo: servirlos desde `'self'` (dos ficheros al repo)
+  → además cae `cdn.jsdelivr.net` de `script-src`. Mínimo alternativo: `integrity=` + `crossorigin`.
+  **No depende de los handlers y vale por sí solo.**
+
+  ### C4b-3 — store (20) — Capa 2 CONGELADA: preguntar antes
+  Superficie pública de cara al cliente, con su propio shell (separable). Está congelada → decisión expresa
+  del dueño, como en C4a-bis.
+
+  ### C4b-4 — ERP + DISA (489) — LA MONTAÑA. NO comprometerse sin los datos de C4b-0
+  470 + 19 handlers, 39 ficheros, 68 `<script>`. Las piezas compartidas cubren poco (~43 vía
+  `rowMenu`/`emptyRow`/`cta:onclick`): el resto son **~470 ediciones a mano**. Los handlers son simples
+  (`addLine()`, `descartar(3)`, `closeModal('x')`) → transformables a `data-action` + delegación, pero uno
+  a uno.
+  **El coste que hay que mirar de frente NO son las líneas, es el riesgo:** un handler que se escape es un
+  **botón muerto, en silencio**. Los gates cubren ~48 escenarios, no 470 botones.
+  **Y el valor hay que decirlo honesto:** M1 está CERRADO y con gate — la CSP aquí es cinturón contra un XSS
+  **futuro**, no contra uno vivo. Decidir **con los datos de C4b-0**; terminar en "deuda aceptada y anotada"
+  es un resultado legítimo, no un fracaso.
+
+  ### NO entra en C4b: `style-src`
+  Son **2027** `style="..."` y el valor es muy inferior (inyección de ESTILO, no ejecución de código). Se
+  queda `'unsafe-inline'` en `style-src`, a propósito y por escrito.
+
+  **Orden sugerido:** C4b-2 (barato e independiente) → C4b-0 (medir) → C4b-1 (las dos superficies) → decidir
+  C4b-3 y C4b-4 con datos.
 
 - ⬜ **C5 — Endurecer el acceso (tres, EN ESTE ORDEN).**
   - **[M5] Revocar las sesiones activas al desactivar un usuario** — hoy aguantan ≤24 h porque
