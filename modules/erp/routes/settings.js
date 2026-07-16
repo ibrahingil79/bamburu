@@ -747,7 +747,7 @@ export function createSettingsRoutes(db, cfg = {}) {
 </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script src="/public/vendor/sortablejs/Sortable.min.js"></script>
 <script>
 const CSRF = ${JSON.stringify(csrfToken)};
 const HAS_CUSTOM = ${hasCustom ? 'true' : 'false'};

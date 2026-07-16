@@ -125,7 +125,7 @@ export function register(app) {
   // ── Cambio de contraseña (obligatorio al primer login) ────────────────────
   sa.get('/change-password', c => {
     const sess = c.get('sa');
-    return c.html(changePasswordPage(sess));
+    return c.html(changePasswordPage(sess, c.get('cspNonce')));
   });
   sa.post('/change-password', async c => {
     const sess = c.get('sa');
@@ -151,8 +151,8 @@ export function register(app) {
         : `<span class="badge b-gray">${escHtml(t.status || '')}</span>`;
       const alta = (t.created_at || '').slice(0, 10);
       const actions = t.status === 'active'
-        ? `<button class="btn" onclick="saCap(${t.id})">Tope IA</button> <button class="btn btn-red" onclick="saSuspend(${t.id})">Suspender</button>`
-        : `<button class="btn" onclick="saCap(${t.id})">Tope IA</button> <button class="btn btn-amber" onclick="saReactivar(${t.id})">Reactivar</button>`;
+        ? `<button class="btn" data-act="cap">Tope IA</button> <button class="btn btn-red" data-act="suspend">Suspender</button>`
+        : `<button class="btn" data-act="cap">Tope IA</button> <button class="btn btn-amber" data-act="reactivar">Reactivar</button>`;
       return `<tr data-id="${t.id}" data-name="${escHtml(t.name)}" data-cap="${capVal}">
         <td><strong>${escHtml(t.name)}</strong><br><span style="color:#64748b;font-size:11px">${escHtml(t.slug)}.bamburu.com</span></td>
         <td>${escHtml(alta || '-')}</td>
@@ -171,13 +171,27 @@ export function register(app) {
           <tbody>${rows || '<tr><td colspan="5" style="text-align:center;padding:24px;color:#64748b">Sin negocios</td></tr>'}</tbody>
         </table>
       </div>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
+        // C4b-1: los botones de cada fila se atienden por DELEGACIÓN. La CSP estricta bloquea los
+        // handlers de atributo (el nonce solo cubre el bloque de script), y la fila ya lleva data-id.
+        document.addEventListener('DOMContentLoaded', function(){
+          document.querySelector('table tbody').addEventListener('click', function(e){
+            const b = e.target.closest('button[data-act]');
+            if (!b) return;
+            const id = Number(b.closest('tr').dataset.id);
+            if (b.dataset.act === 'cap') saCap(id);
+            else if (b.dataset.act === 'suspend') saSuspend(id);
+            else if (b.dataset.act === 'reactivar') saReactivar(id);
+          });
+        });
         function saCap(id){
           const tr=document.querySelector('tr[data-id="'+id+'"]');
           saOpenModal('<h3>Tope de IA · '+saEsc(tr.dataset.name)+'</h3>'
             +'<label>Tope de gasto de IA al mes (€)</label>'
             +'<input id="capVal" type="number" min="0" step="0.5" value="'+tr.dataset.cap+'">'
-            +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px"><button class="btn" onclick="saCloseModal()">Cancelar</button><button class="btn btn-amber" onclick="saCapSave('+id+')">Guardar</button></div>');
+            +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px"><button class="btn" id="capCancel">Cancelar</button><button class="btn btn-amber" id="capSave">Guardar</button></div>');
+          document.getElementById('capCancel').onclick=saCloseModal;
+          document.getElementById('capSave').onclick=function(){ saCapSave(id); };
         }
         async function saCapSave(id){
           const v=parseFloat(document.getElementById('capVal').value);
@@ -193,8 +207,9 @@ export function register(app) {
             +'<div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">'
             +'<button class="btn btn-amber" id="susAdmin">Administrativo / impago → entra en SOLO LECTURA</button>'
             +'<button class="btn btn-red" id="susSec">Seguridad / cuenta comprometida → acceso CORTADO</button>'
-            +'</div><div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn" onclick="saCloseModal()">Cancelar</button></div>';
+            +'</div><div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn" id="susCancel">Cancelar</button></div>';
           saOpenModal(h);
+          document.getElementById('susCancel').onclick=saCloseModal;
           document.getElementById('susAdmin').onclick=function(){ saSuspendDo(id,'admin'); };
           document.getElementById('susSec').onclick=function(){ saSuspendDo(id,'security'); };
         }
@@ -206,7 +221,7 @@ export function register(app) {
           try{ await saApi('POST','/superadmin/negocios/'+id+'/reactivate'); location.reload(); }catch(e){ alert(e.message); }
         }
       </script>`;
-    return c.html(saLayout('Negocios', content, 'negocios', sess, sess.csrfToken));
+    return c.html(saLayout('Negocios', content, 'negocios', sess, sess.csrfToken, c.get('cspNonce')));
   });
 
   sa.post('/negocios/:id/cap', async c => {
@@ -271,15 +286,16 @@ function loginPage(err) {
       <button class="btn" type="submit">Entrar</button>
     </form>`);
 }
-function changePasswordPage(sess) {
+function changePasswordPage(sess, nonce = '') {
   return shell('Cambiar contraseña', `<h1>Elige una contraseña nueva</h1>
     <p style="color:#94a3b8;font-size:13px;text-align:center;margin-bottom:8px">${escHtml(sess.email)} — cambio obligatorio.</p>
     <label>Contraseña nueva (mín. 8)</label><input id="pw1" type="password" autocomplete="new-password">
     <label>Repite la contraseña</label><input id="pw2" type="password" autocomplete="new-password">
-    <button class="btn" onclick="save()">Guardar y continuar</button>
+    <button class="btn" id="btnSavePw">Guardar y continuar</button>
     <div class="ok" id="msg"></div>
-    <script>
+    <script nonce="${nonce}">
       window.SA_CSRF=${JSON.stringify(sess.csrfToken)};
+      window.addEventListener('DOMContentLoaded', function(){ document.getElementById('btnSavePw').onclick = save; });
       async function save(){
         const a=document.getElementById('pw1').value,b=document.getElementById('pw2').value;
         if(a.length<8){ msg.textContent='Mínimo 8 caracteres.'; msg.style.color='#fca5a5'; return; }

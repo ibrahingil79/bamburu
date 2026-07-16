@@ -69,7 +69,7 @@ function buildSystemPrompt() {
 export function register(app) {
 
   // GET /registro — pantalla de onboarding (la bienvenida la trae /api/registro/init).
-  app.get('/registro', (c) => c.html(onboardingHtml()));
+  app.get('/registro', (c) => c.html(onboardingHtml(c.get('cspNonce'))));
 
   // Arranca una sesión y devuelve la bienvenida, ya guardada en el historial del backend.
   app.post('/api/registro/init',
@@ -244,7 +244,7 @@ export function register(app) {
 // ── HTML del onboarding con DISA ──────────────────────────────────────────
 // (Mismo aspecto que antes; el rediseño visual llegará con el sistema de diseño.)
 
-function onboardingHtml() {
+function onboardingHtml(nonce = '') {
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -332,11 +332,11 @@ function onboardingHtml() {
       <div class="pw-help">Mínimo 8 caracteres. No se comparte en el chat.</div>
       <div class="pw-row">
         <input id="pw1" type="password" placeholder="Contraseña" autocomplete="new-password">
-        <button type="button" id="pw-toggle" class="pw-toggle" onclick="togglePw()">Mostrar</button>
+        <button type="button" id="pw-toggle" class="pw-toggle">Mostrar</button>
       </div>
       <input id="pw2" type="password" class="pw-rep" placeholder="Repite la contraseña" autocomplete="new-password">
       <p class="pw-err" id="pw-err"></p>
-      <button type="button" id="pw-submit" class="create-btn" onclick="crear()">Crear mi negocio y entrar</button>
+      <button type="button" id="pw-submit" class="create-btn">Crear mi negocio y entrar</button>
     </div>
 
     <div class="redirect-banner" id="redirect-banner">
@@ -351,12 +351,19 @@ function onboardingHtml() {
 
   <p class="ya-tienes">¿Ya tienes cuenta? <a href="/acceso">Accede desde aquí</a></p>
 
-  <script>
+  <script nonce="${nonce}">
     let sessionId = null, creating = false;
     const msgsDiv = document.getElementById('messages');
     const typing  = document.getElementById('typing');
     const input   = document.getElementById('input');
     const sendBtn = document.getElementById('send');
+    // C4b-1: enganchados aquí, no con handlers en el HTML: la CSP estricta los bloquea y el
+    // nonce solo cubre el bloque de script. Se llaman DENTRO de la función flecha a propósito:
+    // togglePw y crear se asignan a window (no son declaraciones que se hoisten), así que
+    // aún no existen en esta línea. Con el envoltorio, la búsqueda ocurre al pulsar y el orden
+    // del script deja de importar.
+    document.getElementById('pw-toggle').addEventListener('click', () => window.togglePw());
+    document.getElementById('pw-submit').addEventListener('click', () => window.crear());
 
     function escHtml(s){
       return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');

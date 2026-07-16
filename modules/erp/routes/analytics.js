@@ -121,7 +121,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         </table></div>
       </div>
 
-      <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+      <script src="/public/vendor/chartjs/chart.umd.min.js"></script>
       <script>
       let salesChartInst=null,topChartInst=null;
       async function loadCharts(){

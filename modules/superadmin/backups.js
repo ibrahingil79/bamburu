@@ -42,11 +42,13 @@ export function mountBackups(sa) {
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:14px">
           <div style="color:#94a3b8;font-size:13px">Lanzar una copia ahora (snapshot + subida verificada + prueba de restore). Tarda ~1–2 min; refresca esta página al terminar.</div>
-          <button class="btn btn-amber" id="runBtn" onclick="runBackup()">Lanzar copia ahora</button>
+          <button class="btn btn-amber" id="runBtn" id="btnRunBackup">Lanzar copia ahora</button>
         </div>
         <div id="runMsg" style="margin-top:12px;color:#34d399;font-size:13px"></div>
       </div>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
+      // C4b-1: enganchado aquí; la CSP estricta bloquea onclick de atributo.
+      window.addEventListener('DOMContentLoaded', () => document.getElementById('btnRunBackup').addEventListener('click', runBackup));
         async function runBackup(){
           const b=document.getElementById('runBtn'); b.disabled=true; b.textContent='Lanzando…';
           const m=document.getElementById('runMsg');
@@ -57,7 +59,7 @@ export function mountBackups(sa) {
           b.disabled=false; b.textContent='Lanzar copia ahora';
         }
       </script>`;
-    return c.html(saLayout('Copias', content, 'backups', sess, sess.csrfToken));
+    return c.html(saLayout('Copias', content, 'backups', sess, sess.csrfToken, c.get('cspNonce')));
   });
 
   sa.post('/backups/run', c => {

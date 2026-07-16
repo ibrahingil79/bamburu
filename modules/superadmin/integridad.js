@@ -59,19 +59,21 @@ export function mountIntegridad(sa) {
       <div class="sa-sub">Recorre la cadena de hash de cada negocio y detecta si una factura legal se dañó. Solo lee y verifica.</div>
       <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:14px">
         <div style="color:#94a3b8;font-size:13px">${results.length ? (anyAlarm ? '<span style="color:#f87171;font-weight:700">⚠ Hay alarmas — revísalas abajo.</span>' : '<span style="color:#34d399;font-weight:700">Todo cuadra en el último chequeo.</span>') : 'Aún no se ha lanzado ningún chequeo.'}</div>
-        <button class="btn btn-amber" id="runBtn" onclick="runCheck()">Lanzar chequeo ahora</button>
+        <button class="btn btn-amber" id="runBtn" id="btnRunCheck">Lanzar chequeo ahora</button>
       </div>
       ${results.length ? `<div class="card" style="padding:0;overflow:hidden"><table>
         <thead><tr><th>Negocio</th><th>Facturas</th><th>Resultado</th><th>Detalle</th><th>Chequeado</th></tr></thead>
         <tbody>${rows}</tbody></table></div>` : ''}
-      <script>
+      <script nonce="${c.get('cspNonce')}">
+      // C4b-1: enganchado aquí; la CSP estricta bloquea onclick de atributo.
+      window.addEventListener('DOMContentLoaded', () => document.getElementById('btnRunCheck').addEventListener('click', runCheck));
         async function runCheck(){
           const b=document.getElementById('runBtn'); b.disabled=true; b.textContent='Chequeando…';
           try{ await saApi('POST','/superadmin/integridad/run'); location.reload(); }
           catch(e){ alert(e.message); b.disabled=false; b.textContent='Lanzar chequeo ahora'; }
         }
       </script>`;
-    return c.html(saLayout('Integridad', content, 'integridad', sess, sess.csrfToken));
+    return c.html(saLayout('Integridad', content, 'integridad', sess, sess.csrfToken, c.get('cspNonce')));
   });
 
   sa.post('/integridad/run', c => {

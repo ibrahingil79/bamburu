@@ -63,6 +63,6 @@ export function mountAvance(sa) {
       <div class="sa-sub">Reflejo de SOLO LECTURA del panel de control en Notion (no se edita aquí).
         <a href="https://www.notion.so/${NOTION_PAGE.replace(/-/g, '')}" target="_blank" rel="noopener" style="color:#f59e0b;text-decoration:none">Abrir en Notion ↗</a></div>
       ${body}`;
-    return c.html(saLayout('Avance', content, 'avance', sess, sess.csrfToken));
+    return c.html(saLayout('Avance', content, 'avance', sess, sess.csrfToken, c.get('cspNonce')));
   });
 }

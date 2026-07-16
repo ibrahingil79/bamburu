@@ -24,6 +24,6 @@ export function mountErrores(sa) {
         <table><thead><tr><th>Cuándo</th><th>Negocio</th><th>Petición</th><th>Mensaje</th></tr></thead>
         <tbody>${rows || '<tr><td colspan="4" style="text-align:center;padding:24px;color:#64748b">Sin errores registrados 🎉</td></tr>'}</tbody></table>
       </div>`;
-    return c.html(saLayout('Errores', content, 'errores', sess, sess.csrfToken));
+    return c.html(saLayout('Errores', content, 'errores', sess, sess.csrfToken, c.get('cspNonce')));
   });
 }

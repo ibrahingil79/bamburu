@@ -13,7 +13,7 @@ const ZONES = [
   { key: 'avance',     href: '/superadmin/avance',     label: 'Avance',     icon: '📊', ready: true  },
 ];
 
-export function saLayout(title, content, active = '', sa = {}, csrf = '') {
+export function saLayout(title, content, active = '', sa = {}, csrf = '', nonce = '') {
   const nav = ZONES.map(z => {
     const on = z.key === active;
     if (!z.ready) return `<span class="sa-nav-item sa-soon" title="Próximo bloque">${z.icon} ${z.label} <small>pronto</small></span>`;
@@ -58,14 +58,14 @@ input,select{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,
   <div class="sa-brand">Bam<span>buru</span> · Superadmin</div>
   <div class="sa-who"><span>${escHtml(sa.email || '')}</span>
     <a href="/superadmin/change-password">Cambiar contraseña</a>
-    <a href="#" onclick="saLogout();return false">Salir</a></div>
+    <a href="#" id="saLogoutLink">Salir</a></div>
 </div>
 <div class="sa-wrap">
   <nav class="sa-side">${nav}</nav>
   <main class="sa-main">${content}</main>
 </div>
 <div class="modal-bg" id="modalBg"><div class="modal" id="modalBox"></div></div>
-<script>
+<script nonce="${nonce}">
   window.SA_CSRF = ${JSON.stringify(csrf)};
   async function saApi(method, url, body){
     const r = await fetch(url, { method, headers:{ 'Content-Type':'application/json','x-csrf-token':window.SA_CSRF }, body: body?JSON.stringify(body):undefined });
@@ -83,6 +83,9 @@ input,select{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,
   }
   function saOpenModal(html){ document.getElementById('modalBox').innerHTML=html; document.getElementById('modalBg').style.display='flex'; }
   function saCloseModal(){ document.getElementById('modalBg').style.display='none'; }
+  // C4b-1: enganchado aquí, no desde el HTML. La CSP estricta bloquea los handlers de atributo,
+  // y el nonce solo cubre el bloque de script, no los atributos.
+  document.getElementById('saLogoutLink').addEventListener('click', e => { e.preventDefault(); saLogout(); });
   document.getElementById('modalBg').addEventListener('click',e=>{ if(e.target.id==='modalBg') saCloseModal(); });
 </script>
 </body></html>`;

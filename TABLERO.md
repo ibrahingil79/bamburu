@@ -9,9 +9,11 @@
 >
 > **SIGUIENTE BLOQUE GRANDE: EJE C — SEGURIDAD.** Plan cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
-> victorias rápidas), C4a (saneado del XSS + los 3 más graves) y C4a-bis (los 44 restantes) HECHOS** →
-> **M1 (XSS almacenado) CERRADO ENTERO**. Siguiente: **C4b** — quitar `'unsafe-inline'` de la CSP, que es
-> un refactor de todo el admin y NO cabe en una sesión. Eje A (UX) y Eje B (DISA, seis
+> victorias rápidas), C4a + C4a-bis HECHOS** → **M1 (XSS almacenado) CERRADO ENTERO**. **C4b: hechos
+> C4b-0 (nonce + sonda), C4b-1 (registro y superadmin ya sirven `script-src` SIN `'unsafe-inline'`) y
+> C4b-2 (los 4 scripts de CDN, autoalojados)**. Quedan por DECIDIR C4b-3 (store, Capa 2) y **C4b-4 (el
+> ERP: recomendación = NO hacerlo, deuda aceptada — ver el dato medido)**. Siguiente tarea real:
+> **C5** (M5 sesiones / M6 forgot-password / M3 2FA del superadmin). Eje A (UX) y Eje B (DISA, seis
 > propuestas de proactividad) completos; Pilar 3 (inventario) cerrado.
 >
 > **Inventario (Pilar 3) CERRADO (15 jul 2026):** multi-almacén (`da7871e`/`3af928f`), stock mínimo /
@@ -567,7 +569,7 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
   entera. Limpiado `auth.log`; clave **rotada** y verificada con una llamada real a DISA. La lección
   (nunca un secreto en `argv`) queda en `errores-conocidos.md`.
 
-## Eje C: Seguridad — plan cargado (auditoría del 15 jul)  ⬅️ C1-C3 + C4a + C4a-bis HECHOS · SIGUIENTE C4b
+## Eje C: Seguridad — plan cargado (auditoría del 15 jul)  ⬅️ C1-C3 + C4a + C4a-bis + C4b(0,1,2) HECHOS · DECIDIR C4b-3/C4b-4 · SIGUIENTE C5
 
 > Origen: **auditoría de seguridad de SOLO LECTURA del 15 jul 2026** (`docs/seguridad/auditoria-ejeC.md`,
 > commit `24dbf2a`). Postura general **buena** (aislamiento entre negocios sólido y fail-closed, DISA no se
@@ -704,8 +706,15 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
     la causa de que estos fallos se repitan. Quedan parciales fuera del inventario en `layout.js:111,186,300`,
     `email-templates.js:28` y `contabilidad-export.js:136` (este último es escape XML, otro contexto).
 
-- ⬜ **C4b — [M8] Quitar `'unsafe-inline'` de `script-src`. PLAN CARGADO (16 jul 2026) — por SUPERFICIE,
-  no de golpe.**
+- 🟡 **C4b — [M8] Quitar `'unsafe-inline'` de `script-src`. C4b-0, C4b-1 y C4b-2 HECHOS (16 jul 2026).
+  Falta decidir C4b-3 (store) y C4b-4 (ERP) — AHORA CON DATOS MEDIDOS.**
+
+  > **EL DATO QUE DECIDE C4b-4, ya no es una opinión: `CSP_PROBE=1` sobre las 23 pantallas del ERP da
+  > 108 violaciones, TODAS `script-src-elem` (bloques `<script>`) y CERO de handlers. Porque los
+  > `onclick` NO violan al cargar: solo al PULSARLOS.** Comprobado en `/admin/categories`: 5 violaciones
+  > al cargar, **25 botones con `onclick` en el DOM sin delatar ni una**, y al primer clic aparece
+  > `script-src-attr`. Traducido: **una pantalla del ERP puede parecer perfecta y tener 25 botones
+  > muertos.** Verificar C4b-4 exige PULSAR los ~470, uno a uno. Ese es el coste real, y ahora está medido.
 
   > **La premisa que lo cambia todo: la CSP es una cabecera POR RESPUESTA.** No hay que migrar los 522
   > handlers para empezar a proteger — se puede endurecer superficie a superficie. Y **las superficies
@@ -728,54 +737,82 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
   - `base-uri 'self'` y `object-src 'none'` **ya están puestos**, y no hay `'unsafe-eval'`: de M8 solo queda
     el `'unsafe-inline'`.
 
-  ### C4b-0 — Fontanería + INSTRUMENTO DE MEDIDA (no cambia producción)
-  Nonce por petición en `core/security-headers.js`: generarlo **antes** de `next()` y dejarlo en
-  `c.set('cspNonce')`; **después** de `next()`, elegir política según la superficie (el middleware ya corre
-  ahí, `index.js:22`). Y un gate que recorra las pantallas sirviendo la política estricta como
-  **`Content-Security-Policy-Report-Only`**, apuntando las violaciones REALES del navegador.
-  **Por qué esto va primero:** esta semana un inventario por `grep` ha mentido dos veces (los "58" que eran
-  43; 12 puntos en código muerto). El navegador no miente: dice qué bloquea y dónde.
-  *Hecho cuando:* existe el inventario real de violaciones por pantalla y **producción sigue con la política
-  de hoy** (Report-Only no bloquea nada).
+  ### ✅ C4b-0 — Fontanería + instrumento de medida — HECHO
+  Nonce por petición en `core/security-headers.js` (se genera ANTES de `next()`, va a `c.set('cspNonce')`
+  y la política se elige DESPUÉS según `SUPERFICIES_ESTRICTAS`). Y la sonda: **`CSP_PROBE=1`** añade la
+  política estricta en `Content-Security-Policy-Report-Only` a las superficies NO endurecidas — no bloquea
+  nada, solo apunta. Apagada por defecto: producción no la ve.
+  **Resultado de medir el ERP (23 pantallas): 108 violaciones, todas `script-src-elem`.** O sea, los
+  bloques `<script>` (4-5 por pantalla, porque casi todas comparten `adminLayout`), NO los 470 handlers
+  — esos solo se delatan al pulsar. La sonda mide media montaña; la otra media exige clics.
+  *(Para correrla: `set -a; . /etc/bamburu.env; set +a` y arrancar una instancia con `CSP_PROBE=1` en otro
+  puerto. Sin las variables de entorno el módulo ERP no carga y todo da 404 — parece que no hay
+  violaciones cuando lo que pasa es que no hay app.)*
 
-  ### C4b-1 — registro (2) + superadmin (11) — las dos superficies que más duelen
+  ### ✅ C4b-1 — registro (2) + superadmin (11) — HECHO. Las dos superficies que más duelen
   `/registro` es **público y anónimo**; superadmin es **la cuenta que ve todos los negocios** — donde C4a
-  encontró el peor agujero del proyecto. Son **13 handlers**, todos de forma simple (`saCap(id)`,
-  `runBackup()`, `crear()`). Ninguna de las dos usa jsdelivr → su CSP puede ser más estricta que la del ERP:
-  `script-src 'self' 'nonce-…'`. Migración: `onclick="fn(args)"` → `addEventListener` (o `data-action` + un
-  delegado), y `nonce` en sus 6 `<script>`.
-  *Hecho cuando:* ambas sirven `script-src` sin `'unsafe-inline'`; `gate-xss-escape` —que ya conduce
-  superadmin— pasa y **no reporta ninguna violación CSP**; y los 13 botones se prueban **uno a uno** en
-  navegador (un handler que se escape = un botón muerto en silencio).
+  encontró el peor agujero del proyecto. **Ambas sirven ya `script-src 'self' 'nonce-…'`, SIN
+  `'unsafe-inline'`.** El ERP conserva la política de siempre, a propósito.
+  - **Cómo se migró cada tipo de handler** (respetando el idioma de cada fichero, sin inventar un
+    framework): los botones de FILA de superadmin → **delegación** sobre `tbody` leyendo `data-act` (la
+    fila ya tenía `data-id`); los botones de MODAL (los que nacen del `innerHTML` de `saOpenModal`) →
+    `id` + `.onclick=`, que es **el idioma que ese fichero YA usaba** en `susAdmin`/`susSec`; registro →
+    `addEventListener` en el script.
+  - **Nonce**: uno por petición (`randomBytes(16)`), pasado a `saLayout(...,nonce)`, a
+    `changePasswordPage(sess,nonce)` y a `onboardingHtml(nonce)`; las vistas con `<script>` propio lo
+    leen de `c.get('cspNonce')`.
+  - **DOS FALLOS QUE CAZÓ EL GATE, y que son la lección de C4b:** (1) el enganche de registro quedó dentro
+    de `showCreateButton()`, que solo corre al final del alta → los 2 botones **muertos al cargar**, sin
+    error y sin violación de CSP; (2) al moverlo arriba, `ReferenceError`: `togglePw`/`crear` son
+    `window.x = function(){}` (asignaciones, **no** declaraciones), así que no se hoistean → se enganchan
+    con una función flecha para que la búsqueda ocurra al PULSAR. **Ninguno de los dos se ve al cargar la
+    página.** Esto es exactamente lo que pasaría ×470 en el ERP.
+  - **Verificado:** `gate-csp-estricta` **19/0** (en el grupo `infra`). Comprueba la cabecera, que el nonce
+    CAMBIA en cada petición, que el ERP NO se ha endurecido de rebote, y **pulsa los botones** de verdad
+    («Mostrar» cambia a «Ocultar»; «Tope IA» abre su modal por delegación; «Cancelar» lo cierra), con CERO
+    violaciones. **Demuestra el fallo**: contra el código previo (`git stash` de solo `modules/ core/`) da
+    **8 rojos limpios**, sin reventar.
 
-  ### C4b-2 — Los 2 scripts de CDN van SIN SRI (independiente y barato — se puede hacer ya)
-  `settings.js:750` (Sortable) y `analytics.js:124` (Chart.js) se cargan de `cdn.jsdelivr.net` **sin
-  `integrity=`**. `script-src` confía en jsdelivr a ciegas: **si comprometen ese CDN, ejecutan JS arbitrario
-  en el admin** — y eso no lo tapa ningún escapado. Arreglo: servirlos desde `'self'` (dos ficheros al repo)
-  → además cae `cdn.jsdelivr.net` de `script-src`. Mínimo alternativo: `integrity=` + `crossorigin`.
-  **No depende de los handlers y vale por sí solo.**
+  ### ✅ C4b-2 — Los scripts de CDN, autoalojados — HECHO. **Eran 4, no 2**
+  El plan decía 2 porque el `grep` miró en `modules/` y **no en `index.js`**: la **landing pública** cargaba
+  además **gsap + ScrollTrigger** (`index.js:343-344`), también sin `integrity=`. Los 4 iban a pelo desde
+  `cdn.jsdelivr.net`: comprometer ese CDN = **JS arbitrario en el panel Y en la landing**, y eso no lo tapa
+  ningún escapado.
+  - Ahora se sirven desde `'self'` en `public/vendor/` (misma convención que `tabler`, que ya estaba
+    autoalojado): `gsap/` (gsap 3.12.5 + ScrollTrigger), `chartjs/` (chart.js **4.5.1**), `sortablejs/`
+    (1.15.0). **Bajados con `npm pack`, NO con curl del CDN**: así la integridad la verifica el registro de
+    npm y no el mismo CDN del que se desconfía.
+  - **`cdn.jsdelivr.net` fuera de `script-src`, `style-src` y `font-src`.** `fonts.googleapis/gstatic` SE
+    QUEDAN: los usan la tienda, la landing y `public/bamburu.css`.
+  - De paso se **congela la versión**: `chart.js@4` flotaba a la última 4.x sola, en cada carga.
+  - **Verificado en navegador:** landing (`window.gsap` + `ScrollTrigger`) y Analítica (`window.Chart`, 2
+    gráficos pintando) — 200, sin errores JS, sin violaciones. **Sortable NO se pudo probar: vive en
+    `/admin/store-settings`, que da 404** (constructor de tienda desmontado por D2, `routes/index.js:115`).
+    Cuarta vez que aparece código muerto en este eje.
 
-  ### C4b-3 — store (20) — Capa 2 CONGELADA: preguntar antes
-  Superficie pública de cara al cliente, con su propio shell (separable). Está congelada → decisión expresa
-  del dueño, como en C4a-bis.
+  ### ⬜ C4b-3 — store (20 handlers) — Capa 2 CONGELADA: preguntar antes
+  Superficie pública de cara al cliente, con su propio shell (separable). Congelada → decisión expresa del
+  dueño, como en C4a-bis.
 
-  ### C4b-4 — ERP + DISA (489) — LA MONTAÑA. NO comprometerse sin los datos de C4b-0
+  ### ⬜ C4b-4 — ERP + DISA (489) — DECIDIR. Ya no faltan datos: faltan ganas de pagar el precio
   470 + 19 handlers, 39 ficheros, 68 `<script>`. Las piezas compartidas cubren poco (~43 vía
-  `rowMenu`/`emptyRow`/`cta:onclick`): el resto son **~470 ediciones a mano**. Los handlers son simples
-  (`addLine()`, `descartar(3)`, `closeModal('x')`) → transformables a `data-action` + delegación, pero uno
-  a uno.
-  **El coste que hay que mirar de frente NO son las líneas, es el riesgo:** un handler que se escape es un
-  **botón muerto, en silencio**. Los gates cubren ~48 escenarios, no 470 botones.
-  **Y el valor hay que decirlo honesto:** M1 está CERRADO y con gate — la CSP aquí es cinturón contra un XSS
-  **futuro**, no contra uno vivo. Decidir **con los datos de C4b-0**; terminar en "deuda aceptada y anotada"
-  es un resultado legítimo, no un fracaso.
+  `rowMenu`/`emptyRow`/`cta:onclick`): el resto son **~470 ediciones a mano**.
+  - **Lo que dice la sonda (medido, no estimado):** 23 pantallas, **108 violaciones al cargar, todas
+    `script-src-elem`** — o sea, los BLOQUES `<script>` (4-5 por pantalla, casi todos de `adminLayout`).
+    Esa parte es **barata**: marcar con nonce ~68 etiquetas.
+  - **Lo que la sonda NO puede medir, y es el problema:** en `/admin/categories` hay **25 botones con
+    `onclick` en el DOM y CERO violaciones al cargar**; al primer clic aparece `script-src-attr`. Los
+    handlers **solo se delatan al pulsarlos**. Verificar los 470 exige pulsarlos uno a uno; los gates
+    cubren ~49 escenarios, no 470 botones.
+  - **Y el valor, dicho honesto:** M1 está CERRADO y con gate. Aquí la CSP es cinturón contra un XSS
+    **futuro**, no contra uno vivo. Las dos superficies donde un XSS de verdad dolía (registro anónimo y
+    superadmin) **ya están protegidas** — que era el 90% del valor por el 2% del trabajo.
+  - **Recomendación: NO hacerlo por ahora.** Terminar en "deuda aceptada y anotada" es el resultado
+    honesto, no un fracaso. Si algún día se hace: por pantalla, con `CSP_PROBE=1` y pulsando todo.
 
   ### NO entra en C4b: `style-src`
   Son **2027** `style="..."` y el valor es muy inferior (inyección de ESTILO, no ejecución de código). Se
   queda `'unsafe-inline'` en `style-src`, a propósito y por escrito.
-
-  **Orden sugerido:** C4b-2 (barato e independiente) → C4b-0 (medir) → C4b-1 (las dos superficies) → decidir
-  C4b-3 y C4b-4 con datos.
 
 - ⬜ **C5 — Endurecer el acceso (tres, EN ESTE ORDEN).**
   - **[M5] Revocar las sesiones activas al desactivar un usuario** — hoy aguantan ≤24 h porque

@@ -82,6 +82,6 @@ export function mountSalud(sa) {
       </div>
       <div class="card" style="padding:6px 0"><table>${rows}</table></div>
       <meta http-equiv="refresh" content="15">`;
-    return c.html(saLayout('Salud', content, 'salud', sess, sess.csrfToken));
+    return c.html(saLayout('Salud', content, 'salud', sess, sess.csrfToken, c.get('cspNonce')));
   });
 }

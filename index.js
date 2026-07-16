@@ -340,8 +340,8 @@ footer a:hover{text-decoration:underline}
   .countries-inner,.invoice-inner,.web-inner,.telegram-inner{grid-template-columns:1fr;gap:48px}
 }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+<script src="/public/vendor/gsap/gsap.min.js"></script>
+<script src="/public/vendor/gsap/ScrollTrigger.min.js"></script>
 </head>
 <body>
 
