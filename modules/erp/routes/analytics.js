@@ -3,7 +3,14 @@ import { safeError } from '../../../core/errors.js';
 import { adminLayout, skeletonRows, can } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
 import { ventasResumen, topProductos, ventasPorDia, ventasCsvRows, margenResumen, margenPorProducto,
-         ventasPorResponsable, clientesPorResponsable } from '../ventas-metrics.js';   // PIEZA C: ventas desde la cadena nueva (facturas) · PASO 2: margen · CRM: responsable
+         ventasPorResponsable, clientesPorResponsable, ventasPorPeriodo, ventasPorCliente,
+         cobradoVsPendiente, clientesNuevosPorMes, clientesDormidos, PERIODOS } from '../ventas-metrics.js';   // PIEZA C: ventas · PASO 2: margen · CRM: responsable · PASO 3: informes
+import { comprasPorProveedor, gastoPorCategoria, pendientePagoPorVencimiento } from '../pagos.js';   // PASO 3: informes de compras (misma regla de conteo que Pagos)
+import { openDebts } from '../cobros.js';   // PASO 3: deuda vencida — el motor que ya usa Cobros
+import { hoyLocal } from '../avisos.js';    // fecha local Europe/Madrid (en UTC, a las 00-02 h una factura recién vencida desaparecía)
+import { planFinanciero, fijarObjetivo } from '../plan-financiero.js';   // PASO 3 · bloque 2: objetivos vs. real
+import { logActivity } from '../../../core/auth.js';
+import { ENTITY } from '../../../core/activity-entities.js';
 
 export function createAnalyticsRoutes(db, cfg = {}) {
   const sym = cfg.sym || '€';
@@ -69,6 +76,81 @@ export function createAnalyticsRoutes(db, cfg = {}) {
     } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
+  // ── ESCALERA · PASO 3 — INFORMES POR ÁREA ──────────────────────────────────────────────────────
+  // Diez informes predefinidos, cada uno tras `analytics.read` **Y el permiso de su área** (las dos
+  // puertas, CANON §3-bis). El endpoint sirve lo que el usuario puede ver y **dice qué le falta** en
+  // vez de callarse: un hueco mudo se lee como "no hay datos", y eso es mentir por omisión.
+  // INVENTARIO y CONTABILIDAD quedan FUERA a propósito: ya se ven en Stock y en Libros y modelos.
+  // Duplicarlos aquí crearía dos sitios que dicen lo mismo — y el día que discreparan, nadie sabría
+  // cuál creer. Es la regla de la única verdad, la misma que gobierna `ventas-metrics.js`.
+  api.get('/informes', requirePerm('analytics.read'), c => {
+    try {
+      const from = c.req.query('from') || null, to = c.req.query('to') || null;
+      const periodo = PERIODOS.includes(c.req.query('periodo')) ? c.req.query('periodo') : 'mes';
+      const hoy = hoyLocal();
+      const out = { periodo }, falta = [];
+
+      if (can(c, 'invoices.read')) {
+        out.ventas = {
+          porPeriodo: ventasPorPeriodo(db, { periodo, from, to }),
+          porCliente: ventasPorCliente(db, { from, to, limit: 20 }),
+          porResponsable: ventasPorResponsable(db, { from, to }),
+          cobrado: cobradoVsPendiente(db, { from, to }),
+        };
+      } else falta.push('ventas');
+
+      if (can(c, 'purchases.read')) {
+        out.compras = {
+          porProveedor: comprasPorProveedor(db, { from, to, limit: 20 }),
+          porCategoria: gastoPorCategoria(db, { from, to }),
+          pendientePorVencimiento: pendientePagoPorVencimiento(db, hoy),
+        };
+      } else falta.push('compras');
+
+      if (can(c, 'clients.read')) {
+        // Ranking, dormidos y deuda salen de los motores que YA existen (`ventasPorCliente`,
+        // `clientesDormidos` con su ritmo aprendido, `openDebts`). Ni una regla nueva.
+        const deuda = openDebts(db, hoy);
+        out.clientes = {
+          ranking: ventasPorCliente(db, { from, to, limit: 20 }).filter(x => x.client_id),
+          dormidos: clientesDormidos(db, hoy).slice(0, 20),
+          deudaVencida: (deuda.rows || []).filter(r => Number(r.maxVencida) > 0).slice(0, 20),
+          nuevosPorMes: clientesNuevosPorMes(db, { meses: 12 }),
+          porResponsable: clientesPorResponsable(db),
+        };
+      } else falta.push('clientes');
+
+      out.sinPermiso = falta;
+      return c.json(out);
+    } catch(e) { return c.json({error:safeError(e)},500); }
+  });
+
+  // ── PASO 3 · BLOQUE 2 — PLAN FINANCIERO (objetivos vs. real) ───────────────────────────────────
+  // VER el plan: `analytics.read` + `invoices.read` (son cifras de venta y de margen).
+  // FIJAR una meta: **solo owner/admin**. Es quien manda quien pone los objetivos — no se crea un
+  // permiso nuevo (CANON: el candado más estricto que ya existe), y un empleado no se pone sus
+  // propias metas ni las de otro. Decisión del dueño.
+  const mandaAqui = c => c.get('isAdmin') || ['owner', 'admin'].includes(c.get('session')?.role);
+
+  api.get('/plan', requirePerm('analytics.read'), c => {
+    try {
+      if (!can(c, 'invoices.read')) return c.json({ error: 'No tienes permiso para ver las cifras de venta' }, 403);
+      const periodo = PERIODOS.includes(c.req.query('periodo')) ? c.req.query('periodo') : null;
+      return c.json({ filas: planFinanciero(db, { periodo }), puedeFijar: mandaAqui(c) });
+    } catch(e) { return c.json({error:safeError(e)},500); }
+  });
+
+  api.post('/plan', requirePerm('analytics.read'), async c => {
+    try {
+      if (!mandaAqui(c)) return c.json({ error: 'Solo el dueño o un administrador fijan los objetivos del negocio' }, 403);
+      const d = await c.req.json();
+      const r = fijarObjetivo(db, d);
+      logActivity(db, c.get('session'), r.borrado ? 'Quitó un objetivo del plan' : 'Fijó un objetivo del plan',
+                  ENTITY.COMPANY_CONFIG, null, `${d.tipo} · ${d.periodo} ${d.clave} · ${d.alcance}${d.user_id ? ' #' + d.user_id : ''}`);
+      return c.json({ ...r, filas: planFinanciero(db, {}) });
+    } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
+  });
+
   api.get('/stock-report', requirePerm('analytics.read'), c => {
     try {
       return c.json(db.prepare("SELECT p.name, p.sku, p.stock, p.price, (p.stock*p.price) as inventory_value, c.name as category FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.status='active' ORDER BY p.stock ASC").all());
@@ -103,6 +185,52 @@ export function createAnalyticsRoutes(db, cfg = {}) {
       // a mano y a equivocarse — y el total NO es la suma de la columna de margen (ver informe).
       const tot = ['TOTAL', '', resumen.ingresos, resumen.coste, resumen.beneficio, n(resumen.margenPct), resumen.sinCoste, ''].join(',');
       return c.body([h.join(','), ...r, tot].join('\n'), 200, {'Content-Type':'text/csv','Content-Disposition':'attachment; filename="rentabilidad.csv"'});
+    } catch(e) { return c.json({error:safeError(e)},500); }
+  });
+
+  // PASO 3 — export de los informes. **CSV**, como todo lo que exporta esta pantalla. Un solo fichero
+  // con los diez, separados por su cabecera: quien lo abre quiere sus números, no diez descargas.
+  // Mismos candados que la vista: un área sin permiso NO sale en el CSV — el export no es la puerta de
+  // atrás del permiso.
+  api.get('/export/informes', requirePerm('analytics.read'), c => {
+    try {
+      const from = c.req.query('from') || null, to = c.req.query('to') || null;
+      const periodo = PERIODOS.includes(c.req.query('periodo')) ? c.req.query('periodo') : 'mes';
+      const hoy = hoyLocal();
+      const q = v => '"'+String(v??'').replace(/"/g,'""')+'"';
+      const L = [];
+      const bloque = (titulo, cabecera, filas) => { L.push('', '# ' + titulo, cabecera.join(','), ...filas); };
+
+      if (can(c, 'invoices.read')) {
+        bloque('VENTAS por ' + periodo, ['Periodo','Facturas','Base_sin_IVA'],
+          ventasPorPeriodo(db, { periodo, from, to }).map(r => [q(r.periodo), r.facturas, r.base].join(',')));
+        bloque('VENTAS por cliente', ['Cliente','Facturas','Base_sin_IVA'],
+          ventasPorCliente(db, { from, to, limit: 500 }).map(r => [q(r.cliente), r.facturas, r.base].join(',')));
+        bloque('VENTAS por responsable', ['Responsable','Facturas','Base_sin_IVA'],
+          ventasPorResponsable(db, { from, to }).map(r => [q(r.responsable), r.facturas, r.base].join(',')));
+        const cb = cobradoVsPendiente(db, { from, to });
+        bloque('COBRADO vs PENDIENTE', ['Facturas','Facturado','Cobrado','Pendiente','Cobrado_%'],
+          [[cb.facturas, cb.facturado, cb.cobrado, cb.pendiente, cb.cobradoPct].join(',')]);
+      }
+      if (can(c, 'purchases.read')) {
+        bloque('COMPRAS por proveedor', ['Proveedor','Facturas','Base_sin_IVA'],
+          comprasPorProveedor(db, { from, to, limit: 500 }).map(r => [q(r.proveedor), r.facturas, r.base].join(',')));
+        bloque('GASTO por categoria', ['Categoria','Facturas','Base_sin_IVA'],
+          gastoPorCategoria(db, { from, to }).map(r => [q(r.categoria), r.facturas, r.base].join(',')));
+        bloque('PENDIENTE de pago por vencimiento', ['Tramo','Facturas','Pendiente','Max_dias_vencida'],
+          pendientePagoPorVencimiento(db, hoy).map(r => [q(r.etiqueta), r.facturas, r.pendiente, r.maxDiasVencida].join(',')));
+      }
+      if (can(c, 'clients.read')) {
+        bloque('CLIENTES ranking por facturacion', ['Cliente','Facturas','Base_sin_IVA'],
+          ventasPorCliente(db, { from, to, limit: 500 }).filter(x => x.client_id).map(r => [q(r.cliente), r.facturas, r.base].join(',')));
+        bloque('CLIENTES dormidos', ['Cliente','Dias_sin_comprar','Umbral','Compras','Ultima_compra'],
+          clientesDormidos(db, hoy).map(r => [q(r.name || r.cliente), r.dias ?? '', r.umbral ?? '', r.compras ?? '', q(r.ultima ?? '')].join(',')));
+        bloque('CLIENTES deuda vencida', ['Cliente','Deuda_total','Dias_mas_vencida'],
+          (openDebts(db, hoy).rows || []).filter(r => Number(r.maxVencida) > 0).map(r => [q(r.name), r.deudaTotal, r.maxVencida].join(',')));
+        bloque('CLIENTES nuevos por mes', ['Mes','Clientes'],
+          clientesNuevosPorMes(db, { meses: 24 }).map(r => [q(r.periodo), r.clientes].join(',')));
+      }
+      return c.body(L.slice(1).join('\n'), 200, {'Content-Type':'text/csv','Content-Disposition':'attachment; filename="informes.csv"'});
     } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
@@ -176,6 +304,42 @@ export function createAnalyticsRoutes(db, cfg = {}) {
           <thead><tr><th>Producto</th><th>Unidades</th><th>Ingresos sin IVA</th><th>Coste</th><th>Beneficio</th><th>Margen</th></tr></thead>
           <tbody id="mgBody">${skeletonRows(5)}</tbody>
         </table></div>
+      </div>
+
+      <div class="card" style="margin-bottom:1.5rem">
+        <div class="card-head"><h3>Plan financiero — objetivos vs. real</h3>
+          <div style="display:flex;gap:.5rem" id="planNuevoWrap"></div>
+        </div>
+        <div class="card-body">
+          <div id="planAviso" style="display:none;margin-bottom:.6rem"></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Qué</th><th>Periodo</th><th>Alcance</th><th>Objetivo</th><th>Real</th><th>Desviación</th></tr></thead>
+            <tbody id="planBody">${skeletonRows(4)}</tbody>
+          </table></div>
+          <p style="font-size:.72rem;color:var(--muted);margin-top:.6rem">
+            Cada meta se fija por su cuenta y se compara con lo real de ese periodo. <strong>Que tus meses no
+            sumen tu trimestre no es un error</strong>: son metas, no contabilidad — decides el nivel que quieras.
+          </p>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:1.5rem">
+        <div class="card-head"><h3>Informes por área</h3>
+          <div style="display:flex;gap:.5rem;align-items:center">
+            <select class="form-control" id="infPeriodo" style="width:auto;font-size:.8rem">
+              <option value="mes">Por mes</option><option value="trimestre">Por trimestre</option><option value="anio">Por año</option>
+            </select>
+            <a href="/api/erp/analytics/export/informes" class="btn btn-secondary btn-sm" id="infCsv">CSV Informes</a>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="tabs" id="infTabs">
+            <button type="button" class="tab active" data-area="ventas">Ventas</button>
+            <button type="button" class="tab" data-area="compras">Compras</button>
+            <button type="button" class="tab" data-area="clientes">Clientes</button>
+          </div>
+          <div id="infBody" style="margin-top:.75rem">${skeletonRows(4)}</div>
+        </div>
       </div>
 
       <div class="card" style="margin-bottom:1.5rem">
@@ -275,15 +439,130 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         s.onchange=pintarResponsable;
       }
 
+      // PASO 3 — INFORMES POR ÁREA. Tres pestañas (Ventas · Compras · Clientes) con sus diez informes.
+      // Inventario y Contabilidad NO están, a propósito: ya se ven en Stock y en Libros y modelos, y
+      // duplicarlos crearía dos verdades. Si falta un permiso se DICE, no se deja un hueco mudo.
+      let infCache=null, infArea='ventas';
+      const tabla=(cabs,filas)=>'<div class="table-wrap"><table><thead><tr>'+cabs.map(c=>'<th>'+c+'</th>').join('')+
+        '</tr></thead><tbody>'+(filas.length?filas.join(''):'<tr><td colspan="'+cabs.length+'" style="color:var(--muted)">Sin datos en este periodo.</td></tr>')+'</tbody></table></div>';
+      const h3=t=>'<h4 style="margin:1rem 0 .4rem;font-size:.85rem;color:var(--text2)">'+t+'</h4>';
+      function pintarInformes(){
+        const b=document.getElementById('infBody');
+        if(!infCache){ b.innerHTML='<div style="color:var(--muted)">No he podido cargar los informes.</div>'; return; }
+        if((infCache.sinPermiso||[]).includes(infArea)){
+          b.innerHTML='<div style="color:var(--muted);padding:.5rem 0">No ves los informes de '+escHtml(infArea)+' porque no tienes su permiso.</div>'; return; }
+        const d=infCache[infArea]; if(!d){ b.innerHTML='<div style="color:var(--muted)">Sin datos.</div>'; return; }
+        let h='';
+        if(infArea==='ventas'){
+          h+=h3('Ventas por '+infCache.periodo+' (sin IVA)')+tabla(['Periodo','Facturas','Base'],
+            d.porPeriodo.map(r=>'<tr><td><strong>'+escHtml(r.periodo)+'</strong></td><td>'+r.facturas+'</td><td>'+eur(r.base)+'</td></tr>'));
+          h+=h3('Ventas por cliente')+tabla(['Cliente','Facturas','Base'],
+            d.porCliente.map(r=>'<tr><td>'+escHtml(r.cliente)+'</td><td>'+r.facturas+'</td><td>'+eur(r.base)+'</td></tr>'));
+          h+=h3('Ventas por responsable')+tabla(['Responsable','Facturas','Base'],
+            d.porResponsable.map(r=>'<tr><td>'+escHtml(r.responsable)+'</td><td>'+r.facturas+'</td><td>'+eur(r.base)+'</td></tr>'));
+          const c=d.cobrado;
+          h+=h3('Cobrado vs pendiente (con IVA — es lo que entra en caja)')+tabla(['Facturado','Cobrado','Pendiente','% cobrado'],
+            ['<tr><td>'+eur(c.facturado)+'</td><td style="color:var(--ok)">'+eur(c.cobrado)+'</td><td style="color:var(--warn)">'+eur(c.pendiente)+'</td><td><strong>'+Number(c.cobradoPct).toFixed(1)+'%</strong></td></tr>']);
+        } else if(infArea==='compras'){
+          h+=h3('Compras por proveedor (sin IVA)')+tabla(['Proveedor','Facturas','Base'],
+            d.porProveedor.map(r=>'<tr><td>'+escHtml(r.proveedor)+'</td><td>'+r.facturas+'</td><td>'+eur(r.base)+'</td></tr>'));
+          h+=h3('Gasto por categoría (sin IVA)')+tabla(['Categoría','Facturas','Base'],
+            d.porCategoria.map(r=>'<tr><td>'+escHtml(r.categoria)+'</td><td>'+r.facturas+'</td><td>'+eur(r.base)+'</td></tr>'));
+          h+=h3('Pendiente de pago por vencimiento')+tabla(['Tramo','Facturas','Pendiente'],
+            d.pendientePorVencimiento.map(r=>'<tr><td>'+escHtml(r.etiqueta)+'</td><td>'+r.facturas+'</td><td>'+eur(r.pendiente)+'</td></tr>'));
+        } else {
+          h+=h3('Ranking por facturación (sin IVA)')+tabla(['Cliente','Facturas','Base'],
+            d.ranking.map(r=>'<tr><td>'+escHtml(r.cliente)+'</td><td>'+r.facturas+'</td><td>'+eur(r.base)+'</td></tr>'));
+          h+=h3('Clientes dormidos (con su ritmo aprendido)')+tabla(['Cliente','Días sin comprar','Su umbral','Compras'],
+            d.dormidos.map(r=>'<tr><td>'+escHtml(r.name||r.cliente||'')+'</td><td>'+(r.dias??'—')+'</td><td>'+(r.umbral??'—')+'</td><td>'+(r.compras??'—')+'</td></tr>'));
+          h+=h3('Deuda vencida por cliente')+tabla(['Cliente','Deuda','Días de la más vencida'],
+            d.deudaVencida.map(r=>'<tr><td>'+escHtml(r.name||'')+'</td><td style="color:var(--danger)">'+eur(r.deudaTotal)+'</td><td>'+r.maxVencida+'</td></tr>'));
+          h+=h3('Clientes nuevos por mes')+tabla(['Mes','Nuevos'],
+            d.nuevosPorMes.map(r=>'<tr><td>'+escHtml(r.periodo)+'</td><td>'+r.clientes+'</td></tr>'));
+        }
+        b.innerHTML=h;
+      }
+      function engancharTabs(){
+        document.querySelectorAll('#infTabs .tab').forEach(t=>t.addEventListener('click',()=>{
+          document.querySelectorAll('#infTabs .tab').forEach(x=>x.classList.remove('active'));
+          t.classList.add('active'); infArea=t.dataset.area; pintarInformes();
+        }));
+        document.getElementById('infPeriodo').addEventListener('change',async e=>{
+          const p=e.target.value;
+          document.getElementById('infCsv').href='/api/erp/analytics/export/informes?periodo='+p;
+          infCache=await api('GET','/api/erp/analytics/informes?periodo='+p).catch(()=>null);
+          pintarInformes();
+        });
+      }
+
+      // PASO 3 · BLOQUE 2 — PLAN FINANCIERO. Solo salen las metas que el dueño FIJÓ: un plan lleno de
+      // ceros que nadie puso sería ruido disfrazado de información. Fijar es de owner/admin; quien no
+      // puede, ve el plan pero no el botón (y el servidor lo vuelve a comprobar: el botón no es el
+      // candado).
+      let planCache=null;
+      const TIPO_LABEL={facturacion:'Facturación',beneficio:'Beneficio'};
+      function pintarPlan(){
+        const body=document.getElementById('planBody'), av=document.getElementById('planAviso');
+        const wrap=document.getElementById('planNuevoWrap');
+        if(!planCache){ body.innerHTML=window.emptyRow(6,'No he podido cargar el plan.'); return; }
+        wrap.innerHTML = planCache.puedeFijar
+          ? '<button type="button" class="btn btn-sm" id="btnMeta">Fijar objetivo</button>' : '';
+        if(planCache.puedeFijar) document.getElementById('btnMeta').onclick=nuevaMeta;
+        const f=planCache.filas||[];
+        if(!f.length){
+          body.innerHTML=window.emptyRow(6, planCache.puedeFijar
+            ? 'Todavía no has fijado ningún objetivo. Pon una meta y aquí verás cómo vas.'
+            : 'El dueño aún no ha fijado objetivos.');
+          av.style.display='none'; return;
+        }
+        // El aviso del beneficio es el mismo de Rentabilidad y por el mismo motivo: sin él, un
+        // beneficio bajo se lee como "voy fatal" cuando media facturación ni se está juzgando.
+        const conAviso=f.filter(x=>x.aviso);
+        if(conAviso.length){
+          const s=Math.max(...conAviso.map(x=>x.aviso.sinCoste));
+          av.style.display='';
+          av.innerHTML='<div style="background:var(--accent-soft);border:1px solid var(--border2);border-radius:8px;padding:.6rem .75rem;font-size:.78rem;color:var(--text2)">'+
+            '<strong style="color:var(--text)">El beneficio solo juzga lo que tiene coste.</strong> '+
+            'Hay hasta '+eur(s)+' de ventas sin coste registrado (servicios, conceptos libres o productos nunca comprados) que no cuentan como beneficio. No es que pierdas: es que su coste no se sabe.</div>';
+        } else av.style.display='none';
+        body.innerHTML=f.map(x=>{
+          const col=x.cumplido?'var(--ok)':'var(--danger)';
+          const signo=x.desviacion>=0?'+':'';
+          return '<tr>'+
+            '<td><strong>'+TIPO_LABEL[x.tipo]+'</strong></td>'+
+            '<td>'+escHtml(x.clave)+' <span style="color:var(--muted);font-size:.7rem">('+x.periodo+')</span></td>'+
+            '<td>'+escHtml(x.responsable)+'</td>'+
+            '<td>'+eur(x.objetivo)+'</td>'+
+            '<td>'+eur(x.real)+'</td>'+
+            '<td style="color:'+col+'"><strong>'+signo+eur(x.desviacion)+'</strong>'+
+              (x.desviacionPct==null?'':' <span style="font-size:.72rem">('+signo+Number(x.desviacionPct).toFixed(1)+'%)</span>')+'</td>'+
+          '</tr>';
+        }).join('');
+      }
+      async function nuevaMeta(){
+        const tipo=prompt('¿Qué objetivo? Escribe: facturacion  o  beneficio'); if(!tipo) return;
+        const periodo=prompt('¿Periodo? Escribe: mes, trimestre o anio'); if(!periodo) return;
+        const ej=periodo==='mes'?'2026-07':periodo==='trimestre'?'2026-T3':'2026';
+        const clave=prompt('¿Cuál en concreto? Ejemplo para '+periodo+': '+ej); if(!clave) return;
+        const quien=prompt('¿De quién? Deja vacío para TODO EL NEGOCIO, o pon el nº de usuario del responsable')||'';
+        const valor=prompt('¿Cuánto (sin IVA)? Pon 0 para quitar la meta'); if(valor===null) return;
+        const body={tipo:tipo.trim(),periodo:periodo.trim(),clave:clave.trim(),
+          alcance:quien.trim()?'responsable':'global',user_id:quien.trim()?Number(quien.trim()):null,valor:Number(valor)};
+        try{ const r=await api('POST','/api/erp/analytics/plan',body); planCache={...planCache,filas:r.filas}; pintarPlan(); toast('Objetivo guardado'); }
+        catch(e){ /* api() ya enseña el error del servidor en un toast */ }
+      }
+
       async function loadCharts(){
         const days=document.getElementById('periodSel').value;
-        const [ov,period,top,stock,mg,resp]=await Promise.all([
+        const [ov,period,top,stock,mg,resp,inf,plan]=await Promise.all([
           api('GET','/api/erp/analytics/overview').catch(()=>({})),
           api('GET','/api/erp/analytics/sales-by-period?days='+days).catch(()=>[]),
           api('GET','/api/erp/analytics/best-sellers?limit=8').catch(()=>[]),
           api('GET','/api/erp/analytics/stock-report').catch(()=>[]),
           api('GET','/api/erp/analytics/margen').catch(()=>null),
-          api('GET','/api/erp/analytics/responsable').catch(()=>null)
+          api('GET','/api/erp/analytics/responsable').catch(()=>null),
+          api('GET','/api/erp/analytics/informes').catch(()=>null),
+          api('GET','/api/erp/analytics/plan').catch(()=>null)
         ]);
         document.getElementById('kRev').textContent='${sym}'+Number(ov.totalRevenue||0).toFixed(2);
         document.getElementById('kOrd').textContent=ov.totalOrders||0;
@@ -292,6 +571,8 @@ export function createAnalyticsRoutes(db, cfg = {}) {
 
         pintarMargen(mg);
         respCache=resp; llenarSelResponsable(); pintarResponsable();
+        infCache=inf; pintarInformes();
+        planCache=plan; pintarPlan();
 
         if(salesChartInst)salesChartInst.destroy();
         salesChartInst=new Chart(document.getElementById('salesChart').getContext('2d'),{type:'bar',data:{labels:period.map(d=>d.date),datasets:[{label:'${sym}',data:period.map(d=>d.total),backgroundColor:'rgba(16,185,129,.6)',borderColor:'#10b981',borderWidth:1,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'${sym}'+v}}}}});
@@ -308,6 +589,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
           '<td style="color:var(--ok);font-weight:600">${sym}'+Number(p.inventory_value||0).toFixed(2)+'</td>'+
           '</tr>').join(''):window.emptyRow(6,'Sin datos de stock todavía: aparecerán cuando tengas productos con movimiento.');
       }
+      engancharTabs();
       loadCharts();
       </script>`;
     return c.html(adminLayout('Analítica', content, 'analytics', c.get('session')?.csrfToken || '', c));

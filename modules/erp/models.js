@@ -1187,6 +1187,41 @@ export function runMigrations(db) {
   addCol(db, 'invoice_items', 'tax_rate',   'REAL NOT NULL DEFAULT 0');
   addCol(db, 'invoice_items', 'tax_amount', 'REAL NOT NULL DEFAULT 0');
 
+  // ── ESCALERA · PASO 3 · BLOQUE 2 — PLAN FINANCIERO: los objetivos (aditivo, reversible) ───────
+  // El lado "real" ya existe (ventasPorPeriodo / margenResumen). Esto es el lado "objetivo", que es
+  // dato NUEVO: las metas las teclea el dueño, no salen de ninguna parte.
+  //   · tipo    — 'facturacion' | 'beneficio'.
+  //   · periodo — 'mes' | 'trimestre' | 'anio'.
+  //   · clave   — el periodo concreto, con la MISMA forma que devuelve `clavePeriodo()`:
+  //               '2026-07' · '2026-T3' · '2026'. Una sola gramática para la meta y para lo real; si
+  //               fueran dos, compararlas exigiría traducir, y ahí es donde se cuela el error.
+  //   · alcance — 'global' | 'responsable'.
+  //   · user_id — NULL si global; el usuario si es de un responsable.
+  //   · valor   — el importe SIN IVA (decisión del dueño: el IVA es de Hacienda).
+  // BENEFICIO = MARGEN (venta − coste congelado), NO el resultado del P&G. Decisión del dueño
+  // (17 jul): así cuadra en los tres alcances (global = Σ responsables + sin asignar) y es lo que un
+  // comercial puede mover — un objetivo que sube o baja porque el dueño cambió de local no es suyo.
+  // El P&G se queda en Contabilidad como única verdad del resultado del negocio; no se duplica aquí.
+  // ÍNDICE ÚNICO: una meta por (tipo, periodo, clave, alcance, usuario). Fijar dos veces la misma
+  // meta la SUSTITUYE, no la duplica. `COALESCE(user_id,0)` porque en SQLite dos NULL son distintos
+  // entre sí — sin eso, "global" admitiría filas repetidas y la pantalla mostraría dos metas.
+  // LOS NIVELES NO SE FUERZAN A CUADRAR, a propósito: el dueño fija el que quiera y la pantalla
+  // enseña lo real al lado. Son metas, no contabilidad — que enero+febrero+marzo no sumen el T1 no es
+  // un error, es que decidió otra cosa. Forzarlo obligaría a inventar metas que nadie puso.
+  db.exec(`CREATE TABLE IF NOT EXISTS financial_targets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT NOT NULL CHECK (tipo IN ('facturacion','beneficio')),
+    periodo TEXT NOT NULL CHECK (periodo IN ('mes','trimestre','anio')),
+    clave TEXT NOT NULL,
+    alcance TEXT NOT NULL CHECK (alcance IN ('global','responsable')),
+    user_id INTEGER,
+    valor REAL NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT
+  )`);
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_financial_targets_unico
+           ON financial_targets (tipo, periodo, clave, alcance, COALESCE(user_id, 0))`);
+
   // ── CRM · RESPONSABLE DE CLIENTE + atribución de la venta (aditivo, reversible) ──────────────
   // Quién lleva a cada cliente. Se asigna A MANO (no hay reparto automático, y DISA no lo toca).
   // NULL = "sin asignar", que es un estado legítimo y el de arranque de TODOS los existentes: la

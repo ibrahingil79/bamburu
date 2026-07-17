@@ -6,6 +6,11 @@
 >
 > **Estado: 91 piezas · 85 con dato hoy · 4 a habilitar · 2 con la columna vacía.**
 >
+> **Construido sobre este catálogo (17 jul 2026):** los **11 informes por área** (`/admin/analytics`,
+> tres pestañas + CSV) y el **plan financiero** (objetivos vs. real). Ver `TABLERO.md` § paso 3. Lo de
+> abajo sigue siendo el inventario completo — incluidas las piezas que **aún no** tienen informe: son
+> las que el constructor del paso 4 podrá cruzar libremente.
+>
 > **Ninguna pieza sin dato se descarta** — se marca *a habilitar* con lo que haría falta.
 
 ## Cómo se lee

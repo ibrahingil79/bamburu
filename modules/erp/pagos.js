@@ -227,3 +227,79 @@ export function supplierAccountsSummary(db, today) {
   rows.sort((a, b) => (b.maxVencida - a.maxVencida) || (b.deudaTotal - a.deudaTotal));
   return { total: r2(total), rows };
 }
+
+// ── ESCALERA · PASO 3 — INFORMES DE COMPRAS ──────────────────────────────────
+// Los tres informes predefinidos del área. Se apoyan en `countsAsPayable` y `openPayables` de este
+// mismo fichero — la MISMA regla que decide qué se debe en la pantalla de Pagos. Aquí solo se agrupa:
+// si el informe reimplantara la regla, un día diría una cifra distinta y las dos parecerían ciertas.
+// **El dinero, sin IVA** (`base`), por decisión del dueño.
+
+// COMPRAS POR PROVEEDOR. Las anuladas quedan fuera (countsAsPayable); los abonos NETEAN por su base
+// negativa, igual que las rectificativas en ventas.
+export function comprasPorProveedor(db, { from = null, to = null, limit = 100 } = {}) {
+  const where = [], params = [];
+  if (from) { where.push('invoice_date >= ?'); params.push(from); }
+  if (to)   { where.push('invoice_date <= ?'); params.push(to); }
+  const sql = 'SELECT * FROM supplier_invoices' + (where.length ? ' WHERE ' + where.join(' AND ') : '');
+  const map = new Map();
+  for (const inv of db.prepare(sql).all(...params)) {
+    if (!countsAsPayable(inv)) continue;
+    const k = inv.supplier_id ?? 0;
+    const e = map.get(k) || { supplier_id: inv.supplier_id ?? null,
+                              proveedor: inv.supplier_name || '(sin proveedor)', base: 0, facturas: 0 };
+    e.base += Number(inv.base) || 0; e.facturas++;
+    map.set(k, e);
+  }
+  return [...map.values()].map(e => ({ ...e, base: r2(e.base) }))
+                          .sort((a, b) => b.base - a.base).slice(0, limit);
+}
+
+// GASTO POR CATEGORÍA — `expense_category`, que ya se rellena en la ficha de la factura recibida.
+// Lo que no tiene categoría sale como "Sin categorizar" y NO se esconde: es lo que le falta al dueño
+// por clasificar, y esconderlo descuadraría el total contra Compras por proveedor.
+export function gastoPorCategoria(db, { from = null, to = null } = {}) {
+  const where = [], params = [];
+  if (from) { where.push('invoice_date >= ?'); params.push(from); }
+  if (to)   { where.push('invoice_date <= ?'); params.push(to); }
+  const sql = 'SELECT * FROM supplier_invoices' + (where.length ? ' WHERE ' + where.join(' AND ') : '');
+  const map = new Map();
+  for (const inv of db.prepare(sql).all(...params)) {
+    if (!countsAsPayable(inv)) continue;
+    const k = (inv.expense_category || '').trim() || 'Sin categorizar';
+    const e = map.get(k) || { categoria: k, base: 0, facturas: 0 };
+    e.base += Number(inv.base) || 0; e.facturas++;
+    map.set(k, e);
+  }
+  return [...map.values()].map(e => ({ ...e, base: r2(e.base) })).sort((a, b) => b.base - a.base);
+}
+
+// PENDIENTE DE PAGO POR VENCIMIENTO. Reutiliza `openPayables`, que ya clasifica cada factura en su
+// tramo y sus días vencidos — no se recalcula ni un día ni se inventa un tramo nuevo.
+// LOS TRAMOS SON LOS DEL MOTOR, leídos del código (pagos.js:69), no de la cabeza: '0-30', '30-60' y
+// '+60' para lo vencido, y `tramo = null` para lo que aún NO ha vencido — que aquí sale como
+// 'al corriente'. Si el motor cambiara sus tramos, este informe los seguiría solo.
+export const TRAMOS_ORDEN = ['+60', '30-60', '0-30', 'al corriente', 'abono'];
+export const TRAMO_LABEL = {
+  '+60': 'Vencida hace más de 60 días', '30-60': 'Vencida 30-60 días',
+  '0-30': 'Vencida menos de 30 días', 'al corriente': 'Aún no vencida',
+  'abono': 'Abono a tu favor (no es una deuda)',
+};
+export function pendientePagoPorVencimiento(db, today = null) {
+  const hoy = today || new Date().toISOString().slice(0, 10);
+  const { rows } = openPayables(db, hoy);
+  const map = new Map();
+  for (const r of rows) {
+    // LOS ABONOS VAN APARTE, y no es cosmético. `openPayables` los incluye (con `pendiente` NEGATIVO)
+    // para que Σ(filas) cuadre con el total de cabecera, y `pagoState` les deja `tramo = null` porque
+    // **un abono no vence**. Sin esta rama caerían en "aún no vencida" —una etiqueta que sería falsa:
+    // no es un pago que todavía no toca, es dinero que el proveedor te debe a TI—. Y el importe
+    // negativo, sumado ahí, restaría de lo que aún no vence y descuadraría el tramo.
+    const k = (r.estado === 'abono' || r.estado === 'reembolsado') ? 'abono' : (r.tramo || 'al corriente');
+    const e = map.get(k) || { tramo: k, etiqueta: TRAMO_LABEL[k] || k, pendiente: 0, facturas: 0, maxDiasVencida: 0 };
+    e.pendiente += Number(r.pendiente) || 0; e.facturas++;
+    e.maxDiasVencida = Math.max(e.maxDiasVencida, Number(r.dias_vencida) || 0);
+    map.set(k, e);
+  }
+  return [...map.values()].map(e => ({ ...e, pendiente: r2(e.pendiente) }))
+    .sort((a, b) => TRAMOS_ORDEN.indexOf(a.tramo) - TRAMOS_ORDEN.indexOf(b.tramo));
+}

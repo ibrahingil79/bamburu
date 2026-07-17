@@ -15,9 +15,10 @@
 > La fase de optimización quedó cerrada y la sucede una **escalera numerada** donde cada peldaño se
 > apoya en el anterior: **1 sincerar → 2 margen → 3 informes → 4a/4b constructor de analíticas (la
 > puerta visual) → 5 DISA predictiva → 6 dashboards → 7-9 oficios → 10-19 el resto.** **Se acabaron
-> "El Foso" y el "Roadmap futuro"**: cada módulo tiene número. **Pasos 1 (sincerar) y 2 (margen) HECHOS
-> (17 jul); del paso 3, HECHOS el catálogo de las 5 áreas (91 piezas) y el RESPONSABLE de cliente.**
-> **Siguiente: 3-bis — informes por área + plan financiero. No se inicia sin tu encargo.** El **Backlog** de abajo NO
+> "El Foso" y el "Roadmap futuro"**: cada módulo tiene número. **Pasos 1 (sincerar), 2 (margen) y 3
+> (catálogo de las 5 áreas + responsable + informes por área + plan financiero) HECHOS (17 jul).**
+> **Siguiente: paso 4a — el constructor de analíticas, LA PIEZA MAYOR: se planifica en su propio
+> mini-plan al llegar su turno. No se inicia sin tu encargo.** El **Backlog** de abajo NO
 > compite con la escalera: es lo que le falta a El Suelo (el umbral) más la deuda. Plan del Eje C
 > cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
@@ -1602,7 +1603,8 @@ Bamburu ya calcula solo desde las compras.
      del dueño (17-jul) y coherente con CANON §3-bis (las dos puertas): la puerta visual necesita
      puerta. El §3.3 se queda como regla para lo que venga; esta excepción está por escrito.
 
-### 🟡 3 — Informes por área + plan financiero · **Catálogo HECHO · Responsable HECHO (17 jul 2026)**
+### ✅ 3 — Informes por área + plan financiero · **COMPLETO (17 jul 2026)**
+Catálogo de las 5 áreas · Responsable de cliente · Bloque 1 (informes) · Bloque 2 (plan financiero).
 
 #### ✅ Catálogo de piezas de las 5 áreas — **91 piezas inventariadas**
 Con qué podrá montar informes el constructor del paso 4. Cada pieza, con su fuente y su permiso.
@@ -1670,7 +1672,63 @@ automático ni DISA — anotado como peldaño futuro por si algún día se quier
   responsable: uno es *quién la hizo*, el otro *de quién es el cliente*. Exige decidir qué es una
   factura recurrente emitida por un cron ("automático") antes de tocar código.
 
-### ⬜ 3-bis — Lo que queda del peldaño 3: informes por área + plan financiero
+#### ✅ BLOQUE 1 — Informes por área (17 jul 2026)
+**Once informes** en `/admin/analytics` (los 10 nuevos + el de responsable, ya construido), en tres
+pestañas, con **CSV único** y cada área tras `analytics.read` **+ el permiso de su área**.
+- **Ventas**: por periodo (mes/trimestre/año, con su evolución) · por cliente · por responsable ·
+  cobrado vs. pendiente. **Compras**: por proveedor · gasto por categoría (`expense_category`, ya
+  poblada) · pendiente de pago por vencimiento. **Clientes**: ranking · dormidos (con su ritmo
+  aprendido) · deuda vencida · nuevos por mes.
+- **INVENTARIO y CONTABILIDAD, fuera a propósito**: ya se ven en Stock y en Libros y modelos.
+  Duplicarlos crearía dos sitios que dicen lo mismo, y el día que discrepasen nadie sabría cuál creer.
+- **Fuente única, ni una regla nueva**: todo se apoya en `countingSalesInvoices` (ventas),
+  `countsAsPayable`/`openPayables` (compras) y `openDebts` (deuda). `ventasPorMes()` **no se tocó** —lo
+  consume DISA y suma con IVA—: se le dio un hermano, `ventasPorPeriodo()`, que agrega por
+  mes/trimestre/año, filtra por responsable y devuelve la **base sin IVA**.
+- **Hallazgo del camino:** los tramos de vencimiento son los DEL MOTOR (`0-30`/`30-60`/`+60`, leídos de
+  `pagos.js:69`), no unos inventados. Y **los abonos van en su propio tramo**: `openPayables` los
+  incluye con importe NEGATIVO para que Σ cuadre, y `pagoState` les deja `tramo=null` porque **un abono
+  no vence** — sin esa rama caían en "aún no vencida", una etiqueta falsa (no es un pago que no toca:
+  es dinero que te deben) que además restaba y descuadraba el tramo.
+- Verificado: `verify-informes` **27/0** — el gate no comprueba que "responda", comprueba que **CUADRE**:
+  Σ por periodo == Σ por cliente == Σ por responsable == `ventasResumen.base`; mes/trimestre/año suman
+  igual y agrupan distinto; el IVA fuera; la anulada no cuenta; Σ tramos == `openPayables.total`;
+  y lo que no tiene dueño ni categoría **no se esconde** (o el total dejaría de cuadrar).
+
+#### ✅ BLOQUE 2 — Plan financiero: objetivos vs. real (17 jul 2026)
+El dueño fija metas de **facturación** y **beneficio**, por **mes/trimestre/año**, **globales o por
+responsable**; la pantalla compara contra lo real y da la desviación en importe y en %.
+- **LA DECISIÓN QUE LO SOSTIENE — beneficio = MARGEN, no el P&G.** El PASO 0 destapó que el encargo
+  pedía las dos cosas y **son números distintos**: `cuentaPyG` resta TODOS los gastos (alquiler,
+  software, sueldos); el margen solo el coste de lo vendido. Se eligió el margen (decisión del dueño)
+  porque **(a)** cuadra en los tres alcances —global = Σ responsables + sin asignar— y el P&G **no
+  puede**: el libro contable no sabe de responsables (un asiento de alquiler no es de nadie); y **(b)**
+  es lo que un comercial puede mover. **El P&G se queda en Contabilidad como única verdad del resultado
+  del negocio.** Con el mismo aviso de Rentabilidad: el margen solo juzga lo que tiene coste.
+- **Migración aditiva**: `financial_targets` (tipo · periodo · clave · alcance · user_id · valor) con
+  índice único por `(tipo, periodo, clave, alcance, COALESCE(user_id,0))` — el `COALESCE` porque en
+  SQLite dos NULL son distintos y sin él "global" admitiría filas repetidas. Fijar dos veces
+  **sustituye**; valor 0 **quita** la meta (sin botón aparte ni un estado "meta a cero" ilegible).
+- **La clave habla la MISMA gramática que `clavePeriodo()`** (`2026-07` · `2026-T3` · `2026`) y su forma
+  se valida al fijar. Si no, una meta con clave rara compararía contra nada y el plan diría "0 € real"
+  tan tranquilo — el modo de fallo más silencioso de esta función.
+- **Los niveles NO se fuerzan a cuadrar** (decisión del dueño): cada uno se fija a mano y la pantalla
+  enseña lo real al lado, **con un texto que dice que un descuadre no es un error — son metas, no
+  contabilidad**. Un periodo sin meta **no sale**: un plan lleno de ceros que nadie puso sería ruido.
+- **Permisos:** ver el plan → `analytics.read` + `invoices.read`. **Fijar → solo owner/admin**, sin
+  crear permiso nuevo (el candado más estricto que ya existe). El botón no es el candado: el servidor
+  lo vuelve a comprobar (403 afirmado en el gate).
+- Verificado: `verify-plan-financiero` **35/0** (los tres periodos, los dos alcances, el rango derivado
+  de la clave —febrero bisiesto incluido—, **el global == Ana + el resto**, el aviso de sin-coste,
+  sustituir sin duplicar, quitar con 0, las 5 claves imposibles rechazadas, idempotencia) +
+  `gate-margen-pantalla` ampliado a **44/0** (navegador: las tres pestañas pulsadas, el plan y su 403).
+  Probado además **por HTTP contra el servidor real** (meta de 500.000 € → −208.430,50 €, −41,7 %),
+  limpiando las metas de prueba al terminar.
+
+### Anotado del peldaño 3 (no bloquea; cada uno cuando toque)
+- Las **4 piezas a habilitar** del catálogo (usuario que teclea · producto en gasto puro · IRPF
+  soportado · provincia sin rellenar). Ver `docs/analitica/catalogo-piezas.md`.
+- **Reparto automático / que DISA asigne el responsable** — hoy NO, por decisión del dueño.
 Módulo de **informes predefinidos por área** (ventas, compras, clientes…) + **plan financiero**
 (objetivos mes a mes vs. real). Va más allá de los KPIs sueltos del panel actual.
 *Origen: auditoría Bamburu vs Holded (9 jul 2026), repaso con el manual funcional completo de Holded

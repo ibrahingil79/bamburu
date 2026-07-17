@@ -9,7 +9,7 @@
 //   · rectificativas / abonos → NETEAN (un total negativo resta).
 // Una sola fuente → dashboard, analítica, contexto de DISA e historial de cliente comparten
 // el MISMO criterio (no se duplica la regla con matices distintos). Solo LEE; no escribe nada.
-import { countsAsReceivable } from './cobros.js';
+import { countsAsReceivable, paymentsSum, openDebts } from './cobros.js';
 
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
 const daysAgoISO = d => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
@@ -45,6 +45,88 @@ export function topProductos(db, { from = null, to = null, limit = 10 } = {}) {
        FROM invoice_items WHERE invoice_id IN (${ph})
       GROUP BY description ORDER BY total_val DESC LIMIT ?`
   ).all(...ids, limit);
+}
+
+// ── ESCALERA · PASO 3 — INFORMES POR ÁREA ────────────────────────────────────
+// Los informes predefinidos de Ventas y Clientes. TODOS se apoyan en `countingSalesInvoices`, así que
+// ninguno puede discrepar del total de ventas ni entre sí: la regla de qué cuenta (anuladas fuera,
+// tickets sustituidos fuera, rectificativas netean) se escribe UNA vez, arriba, y aquí solo se agrupa.
+// **El dinero va sin IVA** (base), por decisión del dueño: el IVA es de Hacienda, no del negocio.
+
+// Periodo natural de una fecha ISO. Trimestre y año salen de la propia fecha — no hay tabla de
+// calendario que se quede vieja.
+export const PERIODOS = ['mes', 'trimestre', 'anio'];
+export function clavePeriodo(iso, periodo = 'mes') {
+  const s = String(iso || '');
+  const y = s.slice(0, 4), m = Number(s.slice(5, 7)) || 1;
+  if (periodo === 'anio') return y;
+  if (periodo === 'trimestre') return y + '-T' + Math.ceil(m / 3);
+  return s.slice(0, 7);
+}
+
+// VENTAS POR PERIODO — hermano de `ventasPorMes`, que NO se toca (lo consume DISA y suma con IVA en
+// una ventana de días). Este agrega por mes/trimestre/año, filtra por responsable y devuelve la BASE.
+// Es el "real" que el plan financiero (bloque 2) compara contra los objetivos.
+export function ventasPorPeriodo(db, { periodo = 'mes', responsable_id = undefined, from = null, to = null } = {}) {
+  const facturas = countingSalesInvoices(db, { from, to });
+  if (!facturas.length) return [];
+  const ph = facturas.map(() => '?').join(',');
+  const filas = db.prepare(
+    `SELECT i.id, i.issue_date, i.subtotal, ${SQL_RESPONSABLE}
+       FROM invoices i ${SQL_RESPONSABLE_JOIN}
+      WHERE i.id IN (${ph})`
+  ).all(...facturas.map(f => f.id));
+  const map = new Map();
+  for (const f of filas) {
+    // `undefined` = todos; `null` = SOLO los de "sin asignar". Son cosas distintas a propósito: sin
+    // esa diferencia no habría forma de pedir el objetivo de lo que no tiene dueño.
+    if (responsable_id !== undefined && (f.responsable_id ?? null) !== responsable_id) continue;
+    const k = clavePeriodo(f.issue_date, periodo);
+    const e = map.get(k) || { periodo: k, base: 0, facturas: 0 };
+    e.base += Number(f.subtotal) || 0; e.facturas++;
+    map.set(k, e);
+  }
+  return [...map.values()].map(e => ({ ...e, base: r2(e.base) })).sort((a, b) => a.periodo < b.periodo ? -1 : 1);
+}
+
+// VENTAS POR CLIENTE. Las de mostrador (sin cliente) se agrupan como "Mostrador (sin cliente)" en vez
+// de desaparecer: son ventas reales y el informe tiene que cuadrar con el total.
+export function ventasPorCliente(db, { from = null, to = null, limit = 100 } = {}) {
+  const map = new Map();
+  for (const i of countingSalesInvoices(db, { from, to })) {
+    const k = i.client_id ?? 0;
+    const e = map.get(k) || { client_id: i.client_id ?? null,
+                              cliente: i.client_id ? (i.client_name || '(sin nombre)') : 'Mostrador (sin cliente)',
+                              base: 0, facturas: 0 };
+    e.base += Number(i.subtotal) || 0; e.facturas++;
+    map.set(k, e);
+  }
+  return [...map.values()].map(e => ({ ...e, base: r2(e.base) }))
+                          .sort((a, b) => b.base - a.base).slice(0, limit);
+}
+
+// COBRADO vs PENDIENTE. Se apoya en `paymentsSum` y `countsAsReceivable` (cobros.js) — el mismo motor
+// que decide qué es deuda en la pantalla de Cobros. Aquí NO se reinventa: se agrega.
+export function cobradoVsPendiente(db, { from = null, to = null } = {}) {
+  let facturado = 0, cobrado = 0, n = 0;
+  for (const i of countingSalesInvoices(db, { from, to })) {
+    const pagado = paymentsSum(db, i.id);
+    facturado += Number(i.total) || 0; cobrado += pagado; n++;
+  }
+  const pendiente = facturado - cobrado;
+  return { facturas: n, facturado: r2(facturado), cobrado: r2(cobrado), pendiente: r2(pendiente),
+           cobradoPct: facturado ? r2(cobrado / facturado * 100) : 0 };
+}
+
+// CLIENTES NUEVOS POR MES — por `created_at` de la ficha, no por su primera compra: "nuevo" es cuando
+// entró en tu cartera. Solo activos.
+export function clientesNuevosPorMes(db, { meses = 12 } = {}) {
+  const desde = daysAgoISO(meses * 31);
+  const filas = db.prepare(
+    `SELECT substr(created_at,1,7) AS periodo, COUNT(*) AS clientes
+       FROM clients WHERE active=1 AND created_at >= ? GROUP BY periodo ORDER BY periodo`
+  ).all(desde);
+  return filas;
 }
 
 // ── CRM · RESPONSABLE DE LA VENTA — la cascada de tres ───────────────────────

@@ -173,7 +173,43 @@ try {
   ok(ficha.sinAsignar, 'y ofrece "Sin asignar" (no es obligatorio)');
   ok(ficha.usuarios > 1, 'lista los usuarios del negocio', ficha.usuarios + ' opciones');
 
-  console.log('\n[8] NO SE RESUCITA NADA DE LO DESENLAZADO A PROPÓSITO');
+  console.log('\n[8] PASO 3 — INFORMES POR ÁREA: las tres pestañas pintan');
+  await page.goto(BASE + '/admin/analytics', { waitUntil: 'networkidle2' });
+  await page.waitForSelector('#infBody table', { timeout: 10000 }).catch(() => {});
+  const tabs = await page.$$eval('#infTabs .tab', ts => ts.map(t => t.textContent.trim()));
+  ok(tabs.join(',') === 'Ventas,Compras,Clientes', 'las tres pestañas existen', tabs.join(' · '));
+  const ventasTablas = await page.$$eval('#infBody table', ts => ts.length);
+  ok(ventasTablas >= 4, 'Ventas trae sus 4 informes', ventasTablas + ' tablas');
+  // Se PULSA: que una pestaña exista no demuestra que pinte.
+  await page.click('#infTabs .tab[data-area="compras"]');
+  await new Promise(r => setTimeout(r, 300));
+  const comprasTxt = await page.$eval('#infBody', e => e.textContent);
+  ok(/Gasto por categoría/i.test(comprasTxt), 'al pulsar Compras, pinta sus informes');
+  ok(/Abono a tu favor|Vencida|Aún no vencida/i.test(comprasTxt), 'y los tramos llevan su etiqueta en cristiano');
+  await page.click('#infTabs .tab[data-area="clientes"]');
+  await new Promise(r => setTimeout(r, 300));
+  const cliTxt = await page.$eval('#infBody', e => e.textContent);
+  ok(/dormidos/i.test(cliTxt) && /Ranking/i.test(cliTxt), 'al pulsar Clientes, pinta los suyos');
+  ok(errores.length === 0, '0 errores JS tras pulsar las tres', errores.join(' | '));
+
+  console.log('\n[9] PASO 3 — PLAN FINANCIERO: la pantalla y su candado');
+  const plan = await page.evaluate(() => ({
+    tabla: !!document.getElementById('planBody'),
+    botonFijar: !!document.getElementById('btnMeta'),
+    nota: (document.querySelector('#planBody') ? document.body.textContent : '').includes('son metas, no contabilidad'),
+  }));
+  ok(plan.tabla, 'la tarjeta del plan está');
+  ok(plan.botonFijar, 'el owner SÍ ve el botón de fijar objetivo');
+  ok(plan.nota, 'y la nota explica que un descuadre entre niveles NO es un error');
+  const planEmp = await page2.evaluate(async b => (await fetch(b + '/api/erp/analytics/plan')).status, BASE);
+  ok(planEmp === 403, 'el empleado sin analytics.read no ve el plan (403)', String(planEmp));
+  // El botón NO es el candado: el servidor lo vuelve a comprobar.
+  const postEmp = await page2.evaluate(async b => (await fetch(b + '/api/erp/analytics/plan', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tipo: 'facturacion', periodo: 'mes', clave: '2026-07', alcance: 'global', valor: 1 }) })).status, BASE);
+  ok(postEmp === 403, 'y TAMPOCO puede fijar una meta por la API (403)', String(postEmp));
+
+  console.log('\n[10] NO SE RESUCITA NADA DE LO DESENLAZADO A PROPÓSITO');
   const muertas = await page.evaluate(() => ['/admin/discounts', '/admin/tags', '/admin/orders', '/admin/shipping']
     .filter(h => !!document.querySelector('a[href="' + h + '"]')));
   ok(muertas.length === 0, 'descuentos, etiquetas, pedidos viejos y envíos siguen fuera del menú', muertas.join(', ') || 'ninguno asomó');
