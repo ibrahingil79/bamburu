@@ -400,6 +400,22 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       { href: '/admin/products', label: 'Productos', key: 'products', icon: 'ti-box' },
       { href: '/admin/categories', label: 'Categorías', key: 'categories', icon: 'ti-category' },
     ]},
+    // ── ANALÍTICA — reenganchada al menú (17 jul 2026, escalera paso 2) ────────────────────────
+    // La pantalla llevaba VIVA y sin enlace desde que U7 la encontró (8-jul): existía, respondía 200
+    // y no había forma de llegar salvo tecleando la URL. `navPerms.analytics` ya estaba declarado
+    // aquí sin ningún item que lo usara — U7 lo anotó como hallazgo. Ahora lo usa este.
+    // POR QUÉ ES UN ÁREA y no un enlace directo (`g.home`): (a) `g.home` NO pasa por `navFilter`, así
+    // que la entrada se vería SIN permiso y solo fallaría al pulsar — justo lo contrario del candado
+    // que se pide; (b) es la casa de los peldaños 3 (informes por área + plan financiero) y 4
+    // (constructor de analíticas), que entrarán aquí como hermanos de "Informes".
+    // NO se reengancha nada más: `/admin/discounts` y `/admin/tags` siguen sin enlace a propósito
+    // (decisión del dueño en U7), y el clúster de e-commerce (`/admin/orders`, `/admin/shipping`)
+    // está desmontado y da 404 — resucitarlo por el menú sería revivir lo que D1/D2 apagaron.
+    // Verificado antes de enganchar: la Analítica NO lee una sola tabla del clúster viejo; sus
+    // cifras salen de `ventas-metrics.js` (PIEZA C) y de las tablas vivas de catálogo y clientes.
+    { label: 'Analítica', icon: 'ti-chart-histogram', items: [
+      { href: '/admin/analytics', label: 'Informes', key: 'analytics', icon: 'ti-report-analytics' },
+    ]},
   ];
 
   // ── Barra de Cuenta (desplegable del avatar, mockup): items reales + Documentación + salir ──
@@ -429,6 +445,9 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   // (filtrados por permiso). Un área se marca activa si la pantalla actual es uno de sus hijos.
   const navHTML = nav.map(g => {
     if (g.home) {
+      // ⚠️ OJO si vas a usar esto: esta rama NO pasa por `navFilter`, así que la entrada se pinta
+      // para TODO EL MUNDO y el permiso solo salta al pulsar (403). Hoy no la usa nadie. Si añades
+      // aquí una pantalla gateada, filtra antes — o el menú enseñará puertas que no se abren.
       return `<a href="${g.href}" class="nav-item${active === g.key ? ' active' : ''}" title="${g.label}"><i class="ti ${g.icon}"></i></a>`;
     }
     const items = g.items.filter(navFilter);

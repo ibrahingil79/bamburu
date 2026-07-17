@@ -1581,6 +1581,25 @@ Bamburu ya calcula solo desde las compras.
 - **Realidad medida en el tenant de pruebas:** 113 líneas · base 985.106,95 € · **con coste solo
   63.460,90 € (6,4 %)**. *(El PASO 0 dijo 159 líneas: mi `LEFT JOIN` por nombre multiplicaba las de
   los 25 homónimos. El ratio aguantaba; el conteo no.)*
+- ✅ **Reenganchada al menú (17 jul 2026).** La Analítica llevaba **viva y sin enlace desde U7
+  (8-jul)**: respondía 200 y no había forma de llegar salvo tecleando la URL — por eso el informe no
+  se encontraba. Área nueva **"Analítica" → "Informes"** (`/admin/analytics`), la **casa de los pasos
+  3 y 4**. Usa `navPerms.analytics`, que **ya estaba declarado sin item que lo usara** (hallazgo de U7,
+  ahora saldado). **Es un área y no un enlace directo por una razón de seguridad:** la rama `g.home`
+  del riel **no pasa por `navFilter`**, así que la entrada se vería sin permiso y solo fallaría al
+  pulsar; queda avisado en el código para quien la use algún día. **No se reenganchó nada más**:
+  `/admin/discounts` y `/admin/tags` siguen fuera por decisión del dueño (U7), y `/admin/orders` y
+  `/admin/shipping` siguen desmontados (404, D1/D2) — el gate lo afirma. **Verificado antes de
+  enganchar:** la Analítica no lee **ni una tabla** del clúster viejo.
+  Solo navegación: sin tocar el cálculo. Gate ampliado a **26/0**.
+- **Dos hallazgos del reenganche, anotados y NO tocados (preexistentes, ajenos a este paso):**
+  1. **Un empleado con CERO permisos ve el menú entero.** El filtro es
+     `hasCustomPerms = !isAdmin && !isOwner && perms.length > 0`: sin permisos propios no se filtra
+     nada. La puerta sigue cerrada (403 al pulsar), pero el menú enseña puertas que no se abren. Vale
+     para TODAS las entradas, no solo esta.
+  2. **`DISEÑO.md` §3.3 decía "no se fuerza una sexta área"** — y esta es la sexta. Decisión expresa
+     del dueño (17-jul) y coherente con CANON §3-bis (las dos puertas): la puerta visual necesita
+     puerta. El §3.3 se queda como regla para lo que venga; esta excepción está por escrito.
 
 ### ⬜ 3 — Informes por área + plan financiero
 Módulo de **informes predefinidos por área** (ventas, compras, clientes…) + **plan financiero**

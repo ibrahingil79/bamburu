@@ -34,9 +34,21 @@ try {
   empId = db.prepare("INSERT INTO admin_users (name, email, password_hash, role, active) VALUES (?,?,?,'employee',1)")
             .run('Gate Margen', EMAIL, bcrypt.hashSync('Test1234!', 10)).lastInsertRowid;
   db.prepare('DELETE FROM user_permissions WHERE admin_user_id=?').run(empId);
+  // SE LE DA UN PERMISO CUALQUIERA, y no es un capricho: el filtro del menú es
+  // `hasCustomPerms = !isAdmin && !isOwner && perms.length > 0`. Con CERO permisos, `hasCustomPerms`
+  // es false y el menú NO se filtra — se pintaría entero y este gate probaría lo contrario de lo que
+  // cree. Con un permiso ajeno (clients.read) el filtro sí corre y la ausencia de la entrada
+  // significa algo. (El agujero de UX de "cero permisos ve todo el menú" es PREEXISTENTE y ajeno a
+  // este paso: la puerta sigue cerrada con 403 al pulsar. Anotado, no tocado.)
+  const permClientes = db.prepare("SELECT id FROM permissions WHERE module='clients' AND action='read'").get();
+  if (permClientes) db.prepare('INSERT OR IGNORE INTO user_permissions (admin_user_id, permission_id) VALUES (?,?)').run(empId, permClientes.id);
 
   const browser = await puppeteer.launch(launchOpts());
   const page = await browser.newPage();
+  // ESCRITORIO explícito. Puppeteer arranca en 800×600 y por debajo de 768px el riel se convierte en
+  // drawer (U5): el menú existe pero está fuera de pantalla, así que `hover` no lo alcanza y el gate
+  // fallaría culpando al menú de un problema de ancho. El riel es lo que se prueba aquí.
+  await page.setViewport({ width: 1400, height: 900 });
   const errores = [];
   page.on('pageerror', e => errores.push(e.message));
 
@@ -78,8 +90,15 @@ try {
   ok(/Producto,Unidades,Ingresos_sin_IVA,Coste,Beneficio/.test(csv.t), 'el CSV trae coste y beneficio');
   ok(/TOTAL/.test((await page.evaluate(async b => (await (await fetch(b + '/api/erp/analytics/export/margen')).text()), BASE))), 'el CSV cierra con la fila TOTAL');
 
-  // Ahora el empleado SIN permiso
-  const page2 = await browser.newPage();
+  // Ahora el empleado SIN permiso, en un CONTEXTO AISLADO.
+  // ⚠️ NO vale `browser.newPage()`: las cookies son del NAVEGADOR, no de la pestaña, así que la
+  // sesión del empleado PISA la del owner y todo lo que se comprobara después con `page` estaría
+  // mirando el menú del empleado creyendo que es el del owner. Costó un falso verde encontrarlo: las
+  // dos aserciones del menú del owner pasaban porque leían un DOM ya renderizado ANTES del cambio de
+  // cookie — verdes, y midiendo lo que no era.
+  const ctxEmp = await browser.createBrowserContext();
+  const page2 = await ctxEmp.newPage();
+  await page2.setViewport({ width: 1400, height: 900 });
   const tok2 = 'gate-margen-emp-' + Date.now();
   db.prepare('INSERT INTO admin_sessions (token, user_id, created_at, expires_at, csrf_token) VALUES (?,?,?,?,?)')
     .run(tok2, empId, ahora, ahora + 3600, 'csrf-' + tok2);
@@ -96,6 +115,45 @@ try {
   ok(tres.vista === 403, 'el empleado sin permiso NO ve la Analítica (403)', String(tres.vista));
   ok(tres.export === 403, 'y TAMPOCO saca el coste por el export (403)', String(tres.export));
   ok(tres.api === 403, 'ni por el API de margen (403)', String(tres.api));
+
+  console.log('\n[5] EL MENÚ — la entrada "Analítica" existe, lleva al informe y respeta el candado');
+  // La pantalla llevaba viva y SIN ENLACE desde U7 (8-jul): existía y no había forma de llegar.
+  const menuOwner = await page.evaluate(() => ({
+    area: !!document.querySelector('.nav-item[title="Analítica"]'),
+    href: !!document.querySelector('a.fly-item[href="/admin/analytics"]'),
+  }));
+  ok(menuOwner.area, 'el owner ve el área "Analítica" en el riel');
+  ok(menuOwner.href, 'y su entrada apunta a /admin/analytics');
+  // Se PULSA de verdad, y COMO LO HARÍA EL DUEÑO: un enlace en el DOM no demuestra que se pueda
+  // llegar. El flyout está oculto hasta pasar el ratón por el área, así que primero se abre y luego
+  // se pulsa — si solo se hiciera `querySelector`, el gate pasaría aunque el menú fuese inalcanzable.
+  await page.goto(BASE + '/admin', { waitUntil: 'networkidle2' });
+  await page.waitForSelector('.nav-item[title="Analítica"]', { timeout: 8000 });
+  await page.hover('.nav-item[title="Analítica"]');
+  await page.waitForSelector('a.fly-item[href="/admin/analytics"]', { visible: true, timeout: 5000 });
+  ok(true, 'el flyout se abre al pasar el ratón y la entrada es VISIBLE');
+  await page.click('a.fly-item[href="/admin/analytics"]');
+  await page.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => {});
+  ok(page.url().endsWith('/admin/analytics'), 'al pulsarla, se llega al informe', page.url());
+  ok(await page.$('#mBen') !== null, 'y la Rentabilidad está ahí');
+
+  const menuEmp = await page2.evaluate(() => ({
+    area: !!document.querySelector('.nav-item[title="Analítica"]'),
+    href: !!document.querySelector('a.fly-item[href="/admin/analytics"]'),
+    otras: !!document.querySelector('a.fly-item[href="/admin/clients"]'),
+  }));
+  // GUARDIÁN DEL PROPIO GATE: que los dos contextos sigan siendo QUIEN DICEN SER. Si el aislamiento
+  // se rompiera otra vez (una cookie pisando a la otra), los dos menús serían idénticos y las
+  // aserciones de abajo pasarían sin probar nada. Que sean DISTINTOS es lo que las hace válidas.
+  ok(menuOwner.area && !menuEmp.area, 'los dos contextos NO son el mismo usuario (owner ve el área, empleado no)');
+  ok(menuEmp.otras, 'el empleado SÍ ve el menú (su filtro está activo: tiene clients.read)');
+  ok(!menuEmp.area, 'pero NO ve el área "Analítica"');
+  ok(!menuEmp.href, 'ni el enlace al informe');
+
+  console.log('\n[6] NO SE RESUCITA NADA DE LO DESENLAZADO A PROPÓSITO');
+  const muertas = await page.evaluate(() => ['/admin/discounts', '/admin/tags', '/admin/orders', '/admin/shipping']
+    .filter(h => !!document.querySelector('a[href="' + h + '"]')));
+  ok(muertas.length === 0, 'descuentos, etiquetas, pedidos viejos y envíos siguen fuera del menú', muertas.join(', ') || 'ninguno asomó');
 
   await browser.close();
 } catch (e) {
