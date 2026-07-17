@@ -15,8 +15,8 @@
 > La fase de optimización quedó cerrada y la sucede una **escalera numerada** donde cada peldaño se
 > apoya en el anterior: **1 sincerar → 2 margen → 3 informes → 4a/4b constructor de analíticas (la
 > puerta visual) → 5 DISA predictiva → 6 dashboards → 7-9 oficios → 10-19 el resto.** **Se acabaron
-> "El Foso" y el "Roadmap futuro"**: cada módulo tiene número. **Paso 1 HECHO** en este mismo encargo.
-> **Siguiente: el paso 2 (margen) — pero no se inicia sin tu encargo.** El **Backlog** de abajo NO
+> "El Foso" y el "Roadmap futuro"**: cada módulo tiene número. **Pasos 1 (sincerar) y 2 (margen) HECHOS
+> (17 jul).** **Siguiente: el paso 3 — informes por área + plan financiero. No se inicia sin tu encargo.** El **Backlog** de abajo NO
 > compite con la escalera: es lo que le falta a El Suelo (el umbral) más la deuda. Plan del Eje C
 > cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
@@ -1531,14 +1531,56 @@ falsa de margen en la ayuda pública, el "Analítica lee el clúster viejo" de `
 desde CDN" de `MAPA_FUNCIONAL.md`. Origen: `docs/backlog-auditoria.md` (§8, 14 textos obsoletos) — el
 resto de esa lista sigue ahí y se salda cuando toque.
 
-### ⬜ 2 — Margen
-Enchufar a la analítica el coste que **ya existe**: `products.average_cost` (caché derivada del WAC,
-`models.js:215-219`) y `lastKnownCost()` (`purchase-orders.js:68`). **No hay dato que inventar.**
-- **Ojo, verificado el 17-jul:** el coste **no es un campo que el usuario teclee** — se gana desde las
-  compras y la ficha lo muestra en solo lectura (*"Se gana desde las compras (no editable)"*,
-  `products.js:452`). Cualquier diseño que pida "añade tu precio de coste" está mal planteado.
-- Hoy `analytics.js` y `ventas-metrics.js` **no tienen ni una línea** de margen/coste/beneficio.
-- Un negocio **solo de servicios** no tiene compras que den coste: decidir qué se le enseña.
+### ✅ 2 — Margen  ·  HECHO (2026-07-17)
+El dueño ve **cuánto gana**, no solo cuánto factura. Sin pedirle ni un dato nuevo: usa el WAC que
+Bamburu ya calcula solo desde las compras.
+- **PASO 0 (solo lectura) — el hallazgo que cambió la forma de la tarea:** la línea de venta no
+  guardaba el coste… **ni siquiera de qué producto era**. `createInvoice` *recibía* el `product_id`
+  (`schemas.js:196`) y lo **tiraba** al insertar, así que la analítica agrupaba por descripción
+  (`ventas-metrics.js` lo confesaba en un comentario). No se puede congelar el WAC sin saber de quién
+  es → el snapshot son **dos columnas**, no una.
+- **Migración aditiva** (`models.js`, tras los addCol de A2): `invoice_items.product_id` ·
+  `unit_cost` (WAC congelado) · `cost_source` (`'snapshot'` vs `'backfill'`) + índice. **Backfill una
+  sola vez por bandera** (`migration_invoice_items_coste_backfill_2026_v1`), casando por descripción
+  —el único puente que existía— con el WAC de HOY, **marcado `backfill`** porque no es el del día de
+  la venta. Reversible: las columnas son aditivas y nada se reescribe.
+- **Los 4 caminos vivos congelan** (`invoices.js`, helper único `snapshotCoste`): `createInvoice`
+  (embudo de recurrentes/presupuestos/albaranes/pedidos), `createRectificativa`, `emitTicketSvc`
+  (mostrador) y `emitSustitutivaSvc`. El muerto (`generateInvoice`, 410 por D1) se deja.
+  **La F3 HEREDA el coste congelado del ticket** en vez de re-fotografiar: la venta ocurrió al emitir
+  el ticket, y es el mismo hecho económico con otro papel.
+  **No toca la huella:** `calcHash` come número, fecha, NIF, total y huella previa — nunca las líneas.
+- **`NULL` no es cero, y esa es toda la tarea.** Servicio, digital, línea libre o físico nunca
+  comprado → `unit_cost = NULL` = *"no lo sé"*. Se apartan como **"sin coste registrado"**: no entran
+  en el beneficio y el informe **dice qué parte de las ventas queda fuera**. El margen % se calcula
+  **solo sobre lo que tiene coste**, nunca sobre el total. Sin esto, este tenant declararía 985.106 €
+  de beneficio al 93,5 % — una cifra preciosa y falsa.
+- **Motor en `ventas-metrics.js`** (`margenResumen` · `margenPorProducto`), sobre el MISMO
+  `countingSalesInvoices` que el resto: el ingreso del informe y el de la home no pueden discrepar.
+  IVA fuera (se opera sobre `total_price`, la base). Los abonos **netean solos** (cantidad negativa →
+  ingreso y coste restan a la vez).
+- **Pantalla + export**: informe de Rentabilidad en `/admin/analytics` (beneficio, margen %, ingresos
+  con coste, coste, aviso de lo que queda fuera, y desglose por producto con "—" donde no se sabe).
+  **CSV**, con su fila TOTAL — *el encargo decía "XLSX/CSV/PDF", pero la Analítica **solo exporta
+  CSV** (XLSX/PDF es de Contabilidad); añadirlos habría sido inventar el formato nuevo que el propio
+  encargo prohibía.* Candado **`analytics.read`, el que ya existía**: sin permiso, 403 en vista,
+  API y export — el export no es la puerta de atrás del permiso (CANON §3-bis, las dos puertas).
+- **Verificado:** `verify-margen` **38/0** (BD desechable: IVA fuera, coste congelado, WAC que se
+  mueve después y NO reescribe el pasado, los tres casos sin coste apartados, cuadre total vs. suma
+  por producto, abono que netea, mostrador, idempotencia ×2, huella intacta) + `gate-margen-pantalla`
+  **16/0** (navegador real, empleado sin permiso creado y borrado, idempotente en dos pasadas).
+  Grupo nuevo del runner: `node scripts/run-gates.mjs margen`. Barrido `--all` **45/50**: los 5 rojos
+  son ajenos — 3 pre-existentes por datos vivos y 2 por **precondición de datos** (0 propuestas
+  pendientes en el tenant); `gate-nav-inicio-disa` **demostrado con `git stash`**: falla idéntico
+  (32 OK, 2 fallos) con el código anterior, y `gate-propuestas-dormidos` pasa **39/0** al correrlo solo.
+- **Cabos anotados, no descubiertos tarde:** (a) un **abono** congela el WAC de hoy, así que si el
+  coste se movió entre la venta y la devolución, el neteo lo arrastra; (b) el backfill casa por
+  nombre y **hay 25 productos homónimos** ("Difusor de bambú artesanal premium") → elige uno
+  arbitrario; por eso va marcado `backfill`; (c) un negocio **solo de servicios** no tendrá margen:
+  todo su ingreso caerá en "sin coste registrado" — correcto, pero hay que decidir qué se le enseña.
+- **Realidad medida en el tenant de pruebas:** 113 líneas · base 985.106,95 € · **con coste solo
+  63.460,90 € (6,4 %)**. *(El PASO 0 dijo 159 líneas: mi `LEFT JOIN` por nombre multiplicaba las de
+  los 25 homónimos. El ratio aguantaba; el conteo no.)*
 
 ### ⬜ 3 — Informes por área + plan financiero
 Módulo de **informes predefinidos por área** (ventas, compras, clientes…) + **plan financiero**

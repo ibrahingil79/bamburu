@@ -51,6 +51,10 @@ const GRUPOS = {
   inventario: ['test-transfers', 'verify-traslado-auditoria', 'gate-almacenes', 'verify-propuestas-reposicion', 'gate-propuestas-reposicion',
                'verify-trazabilidad', 'verify-trazabilidad-flujos', 'gate-trazabilidad'],
   avisos: ['verify-avisos-permisos', 'gate-avisos-badge'],
+  // Escalera · paso 2 — MARGEN. Vigila que la cifra de "cuánto gano" no mienta: IVA fuera, coste
+  // CONGELADO (no el WAC de hoy), lo que no tiene coste apartado en vez de regalado al 100%, y el
+  // total cuadrando con la suma del desglose.
+  margen: ['verify-margen', 'gate-margen-pantalla'],
   // Plantillas de email editables: tocan TODOS los correos que el negocio manda.
   plantillas: ['verify-plantillas-email', 'gate-plantillas-email'],
   // Sala de máquinas: superadmin, conexiones a la BD, el fichero -wal, el saneo de errores al cliente,

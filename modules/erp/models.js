@@ -1186,6 +1186,49 @@ export function runMigrations(db) {
   // global intacto, así que la vista imprimible sigue cuadrando.
   addCol(db, 'invoice_items', 'tax_rate',   'REAL NOT NULL DEFAULT 0');
   addCol(db, 'invoice_items', 'tax_amount', 'REAL NOT NULL DEFAULT 0');
+
+  // ── ESCALERA · PASO 2 (MARGEN) — el coste, congelado en la línea (aditivo, reversible) ──
+  // La línea de venta guardaba SOLO el precio: ni el coste, ni SIQUIERA de qué producto era. El
+  // enlace existía en la petición (schemas: `product_id`) y se tiraba al insertar, así que la
+  // analítica agrupaba por DESCRIPCIÓN (texto libre) y el margen era imposible de calcular.
+  //   · `product_id` — qué se vendió. NULL = línea libre (concepto tecleado, sin catálogo).
+  //   · `unit_cost`  — el WAC del producto CONGELADO al emitir. NULL = **sin coste registrado**.
+  //   · `cost_source`— 'snapshot' (congelado al emitir) | 'backfill' (aproximado, ver abajo).
+  // POR QUÉ SE CONGELA: `products.average_cost` es una caché VIVA que se mueve con cada compra. Si
+  // el informe leyera el WAC de hoy, el margen de una factura de enero cambiaría solo porque en
+  // marzo compraste más caro. Un documento emitido es inmutable: su coste también. Mismo patrón
+  // que ya congela empresa y cliente en `invoices`.
+  // NULL NO ES CERO: un servicio, un digital, una línea libre o un físico nunca comprado no tienen
+  // coste CONOCIDO. Contarlos a 0 les daría un margen del 100% y la cifra total mentiría. El
+  // informe los aparta como "sin coste registrado" (ver `margenResumen` en ventas-metrics.js).
+  // NO toca la huella Verifactu: `calcHash` come número, fecha, NIF, total y huella previa — nunca
+  // las líneas. Añadir columnas a la línea no puede mover una cadena legal.
+  addCol(db, 'invoice_items', 'product_id',  'INTEGER');
+  addCol(db, 'invoice_items', 'unit_cost',   'REAL');
+  addCol(db, 'invoice_items', 'cost_source', 'TEXT');
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_invoice_items_product ON invoice_items(product_id)`);
+
+  // Backfill histórico, UNA sola vez (bandera). Las líneas viejas no tienen product_id, así que el
+  // único puente posible es la DESCRIPCIÓN — que es exactamente como la analítica venía agrupando.
+  // Se casa por nombre exacto contra el catálogo; lo que no case, se queda sin coste (correcto: una
+  // línea libre nunca fue un producto). El coste que se pone es el WAC de HOY, que NO es el del día
+  // de la venta: por eso queda marcado `cost_source='backfill'` y el informe puede distinguirlo de
+  // lo congelado de verdad. Aproximación honesta y etiquetada > cifra limpia y falsa.
+  // Los documentos NUEVOS nacen con 'snapshot' y no pasan por aquí.
+  const costeBackfillKey = 'migration_invoice_items_coste_backfill_2026_v1';
+  if (!db.prepare('SELECT value FROM settings WHERE key=?').get(costeBackfillKey)) {
+    db.transaction(() => {
+      db.prepare(`UPDATE invoice_items SET product_id = (
+                    SELECT p.id FROM products p WHERE p.name = invoice_items.description LIMIT 1)
+                  WHERE product_id IS NULL`).run();
+      db.prepare(`UPDATE invoice_items SET unit_cost = (
+                    SELECT p.average_cost FROM products p WHERE p.id = invoice_items.product_id),
+                      cost_source = 'backfill'
+                  WHERE unit_cost IS NULL AND product_id IS NOT NULL
+                    AND (SELECT COALESCE(p.average_cost,0) FROM products p WHERE p.id = invoice_items.product_id) > 0`).run();
+      db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)').run(costeBackfillKey, 'done');
+    })();
+  }
   addCol(db, 'invoices',      'irpf_rate',   'REAL NOT NULL DEFAULT 0');
   addCol(db, 'invoices',      'irpf_amount', 'REAL NOT NULL DEFAULT 0');
 

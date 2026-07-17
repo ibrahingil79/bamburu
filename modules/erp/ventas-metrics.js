@@ -47,6 +47,94 @@ export function topProductos(db, { from = null, to = null, limit = 10 } = {}) {
   ).all(...ids, limit);
 }
 
+// ── ESCALERA · PASO 2 — MARGEN ───────────────────────────────────────────────
+// Cuánto GANA el negocio, no cuánto factura. Vive aquí porque las ventas se cuentan aquí: el margen
+// usa EXACTAMENTE el mismo conjunto de facturas (`countingSalesInvoices`) que el resto de cifras, así
+// que el ingreso del informe de rentabilidad y el de la home NO pueden discrepar.
+//
+// LAS TRES REGLAS QUE LO SOSTIENEN:
+//  1. **El IVA se queda fuera, siempre.** Se opera sobre `total_price`, que es la BASE de la línea
+//     (qty × precio neto; el IVA vive aparte en `tax_amount`). El IVA no es tuyo: es de Hacienda.
+//     Meterlo inflaría el margen con dinero que vas a devolver.
+//  2. **El coste es el CONGELADO en la línea** (`unit_cost`), no el WAC de hoy. Si leyéramos el WAC
+//     vivo, el margen de enero cambiaría porque en marzo compraste más caro.
+//  3. **Sin coste registrado ≠ margen del 100%.** `unit_cost IS NULL` (servicio, digital, línea libre
+//     o físico nunca comprado) significa "no lo sé", no "me costó 0". Esas líneas NO entran en el
+//     beneficio: se apartan y se enseñan, para que el total no mienta. Es la diferencia entre un
+//     informe útil y uno bonito.
+//
+// Los abonos NETEAN solos: su línea lleva cantidad negativa, así que ingreso y coste restan a la vez.
+const lineasDeVenta = (db, opts = {}) => {
+  const ids = countingSalesInvoices(db, opts).map(i => i.id);
+  if (!ids.length) return [];
+  const ph = ids.map(() => '?').join(',');
+  return db.prepare(
+    `SELECT ii.description, ii.quantity, ii.total_price, ii.product_id, ii.unit_cost, ii.cost_source
+       FROM invoice_items ii WHERE ii.invoice_id IN (${ph})`
+  ).all(...ids);
+};
+
+// Rentabilidad del periodo. `sinCoste*` es la parte que NO se puede juzgar; `margenPct` se calcula
+// SOLO sobre lo que sí tiene coste (`ingresosConCoste`), nunca sobre el total — dividir el beneficio
+// entre todos los ingresos, incluidos los que no tienen coste, hundiría el margen con una división
+// sobre algo que no participó.
+export function margenResumen(db, opts = {}) {
+  let ingresos = 0, ingresosConCoste = 0, coste = 0, sinCoste = 0, nConCoste = 0, nSinCoste = 0, nAprox = 0;
+  for (const l of lineasDeVenta(db, opts)) {
+    const base = Number(l.total_price) || 0;
+    ingresos += base;
+    if (l.unit_cost == null) { sinCoste += base; nSinCoste++; continue; }
+    ingresosConCoste += base;
+    coste += (Number(l.unit_cost) || 0) * (Number(l.quantity) || 0);
+    nConCoste++;
+    if (l.cost_source === 'backfill') nAprox++;
+  }
+  const beneficio = ingresosConCoste - coste;
+  return {
+    ingresos: r2(ingresos),                       // base sin IVA de TODO lo vendido
+    ingresosConCoste: r2(ingresosConCoste),       // la parte que sí se puede juzgar
+    coste: r2(coste),
+    beneficio: r2(beneficio),
+    margenPct: ingresosConCoste ? r2(beneficio / ingresosConCoste * 100) : null,
+    sinCoste: r2(sinCoste),                       // ventas sin coste conocido (NO son beneficio)
+    sinCostePct: ingresos ? r2(sinCoste / ingresos * 100) : 0,
+    lineas: nConCoste + nSinCoste, lineasConCoste: nConCoste, lineasSinCoste: nSinCoste,
+    lineasAproximadas: nAprox,                    // coste de backfill (WAC de hoy), no congelado
+  };
+}
+
+// Desglose por producto. Agrupa por `product_id` cuando lo hay y cae a la DESCRIPCIÓN cuando no
+// (líneas libres, y las históricas que el backfill no pudo casar) — así ninguna venta desaparece del
+// informe por no tener catálogo detrás. `margenPct` es null si esa fila no tiene coste: null se pinta
+// como "—", que dice la verdad; un 0 diría que no ganas nada, y un 100 que es todo beneficio.
+export function margenPorProducto(db, { from = null, to = null, limit = 100 } = {}) {
+  const map = new Map();
+  for (const l of lineasDeVenta(db, { from, to })) {
+    const key = l.product_id ? 'p' + l.product_id : 'd' + l.description;
+    const e = map.get(key) || { product_name: l.description, product_id: l.product_id || null,
+                                qty: 0, ingresos: 0, coste: 0, ingresosConCoste: 0, sinCoste: 0, aproximado: false };
+    const base = Number(l.total_price) || 0;
+    e.qty += Number(l.quantity) || 0;
+    e.ingresos += base;
+    if (l.unit_cost == null) e.sinCoste += base;
+    else {
+      e.ingresosConCoste += base;
+      e.coste += (Number(l.unit_cost) || 0) * (Number(l.quantity) || 0);
+      if (l.cost_source === 'backfill') e.aproximado = true;
+    }
+    map.set(key, e);
+  }
+  return [...map.values()].map(e => {
+    const beneficio = e.ingresosConCoste - e.coste;
+    const tiene = e.ingresosConCoste !== 0;
+    return { product_name: e.product_name, product_id: e.product_id, qty: r2(e.qty),
+             ingresos: r2(e.ingresos), coste: tiene ? r2(e.coste) : null,
+             beneficio: tiene ? r2(beneficio) : null,
+             margenPct: tiene ? r2(beneficio / e.ingresosConCoste * 100) : null,
+             sinCoste: r2(e.sinCoste), aproximado: e.aproximado };
+  }).sort((a, b) => b.ingresos - a.ingresos).slice(0, limit);
+}
+
 // Ventas por DÍA (últimos N días) — total con IVA. Para el gráfico de analítica.
 export function ventasPorDia(db, days = 30) {
   const map = new Map();

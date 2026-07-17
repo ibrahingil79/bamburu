@@ -204,6 +204,20 @@ export function generateInvoice(db, orderId) {
 // de IVA; el IRPF es global y solo aplica si country='ES'. Asigna correlativo
 // y hash encadenado igual que generateInvoice, pero sin tocar sales_orders.
 // order_id queda NULL.
+// ESCALERA · PASO 2 — congela el coste (WAC) de una línea EN EL MOMENTO DE EMITIR.
+// Devuelve NULL cuando no hay coste CONOCIDO: línea libre (sin product_id), servicio, digital o
+// físico que nunca se compró (WAC 0). **NULL no es 0**: cero significaría "me costó nada" y le
+// regalaría a esa línea un margen del 100%; NULL significa "no lo sé", y el informe la aparta como
+// "sin coste registrado" en vez de mentir. Esa distinción es toda la honestidad de este paso.
+// Lee `products.average_cost` (caché del WAC, mantenida por recomputeStock) — NO lo recalcula ni lo
+// toca: aquí solo se le hace la foto.
+function snapshotCoste(db, productId) {
+  if (!productId) return null;
+  const p = db.prepare('SELECT average_cost FROM products WHERE id=?').get(productId);
+  const c = Number(p?.average_cost) || 0;
+  return c > 0 ? c : null;
+}
+
 export function createInvoice(db, invoiceData) {
   const { client_id, lines, issue_date, notes = '', irpf_rate = 0, tipo_factura = 'F1' } = invoiceData;
 
@@ -264,14 +278,17 @@ export function createInvoice(db, invoiceData) {
     );
     const invoiceId = result.lastInsertRowid;
 
-    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price, tax_rate, tax_amount) VALUES (?,?,?,?,?,?,?)');
+    // PASO 2 — la línea guarda ADEMÁS qué producto es y cuánto costaba HOY (snapshot del WAC).
+    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price, tax_rate, tax_amount, product_id, unit_cost, cost_source) VALUES (?,?,?,?,?,?,?,?,?,?)');
     for (const line of lines) {
       const qty   = Number(line.quantity);
       const price = Number(line.unit_price);
       const rate  = Number(line.tax_rate) || 0;
       const base  = Math.round(qty * price * 100) / 100;
       const tax   = Math.round(base * rate / 100 * 100) / 100;
-      insItem.run(invoiceId, line.description, qty, price, base, rate, tax);
+      const pid   = line.product_id || null;
+      const coste = snapshotCoste(db, pid);
+      insItem.run(invoiceId, line.description, qty, price, base, rate, tax, pid, coste, coste == null ? null : 'snapshot');
     }
     // VERI*FACTU T1: registro de ALTA oficial (huella encadenada) en la MISMA transacción.
     const reg = recordVerifactuAlta(db, {
@@ -404,14 +421,20 @@ export function createRectificativa(db, data) {
     );
     const invoiceId = result.lastInsertRowid;
 
-    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price, tax_rate, tax_amount) VALUES (?,?,?,?,?,?,?)');
+    // PASO 2 — mismo snapshot que en la emisión. Un abono lleva importes NEGATIVOS, así que su
+    // coste también resta: el margen NETEA solo, sin caso especial. (Se congela el WAC de HOY, que
+    // es la regla del paso; si el coste se movió entre la venta y el abono, el neteo lo arrastra —
+    // anotado a conciencia, no descubierto tarde.)
+    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price, tax_rate, tax_amount, product_id, unit_cost, cost_source) VALUES (?,?,?,?,?,?,?,?,?,?)');
     for (const line of lines) {
       const qty   = Number(line.quantity);
       const price = Number(line.unit_price);
       const rate  = Number(line.tax_rate) || 0;
       const base  = Math.round(qty * price * 100) / 100;
       const tax   = Math.round(base * rate / 100 * 100) / 100;
-      insItem.run(invoiceId, line.description, qty, price, base, rate, tax);
+      const pid   = line.product_id || null;
+      const coste = snapshotCoste(db, pid);
+      insItem.run(invoiceId, line.description, qty, price, base, rate, tax, pid, coste, coste == null ? null : 'snapshot');
     }
 
     db.prepare("UPDATE invoices SET status='rectificada' WHERE id=?").run(original.id);
@@ -706,11 +729,14 @@ export function emitTicketSvc(db, { lines, warehouse_id, payment_method, paid_da
     );
     const invoiceId = result.lastInsertRowid;
 
-    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price, tax_rate, tax_amount) VALUES (?,?,?,?,?,?,?)');
+    // PASO 2 — el mostrador es donde MÁS importa el snapshot: vende físicos y mueve stock, así que
+    // el WAC cambia por debajo constantemente. `resolveTicketLines` ya trae el product_id resuelto.
+    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price, tax_rate, tax_amount, product_id, unit_cost, cost_source) VALUES (?,?,?,?,?,?,?,?,?,?)');
     for (const l of resolved) {
       const base = Math.round(l.quantity * l.unit_price * 100) / 100;
       const tax = Math.round(base * l.tax_rate / 100 * 100) / 100;
-      insItem.run(invoiceId, l.description, l.quantity, l.unit_price, base, l.tax_rate, tax);
+      const coste = snapshotCoste(db, l.product_id || null);
+      insItem.run(invoiceId, l.description, l.quantity, l.unit_price, base, l.tax_rate, tax, l.product_id || null, coste, coste == null ? null : 'snapshot');
     }
 
     // Alta Verifactu con TIPO F2 (simplificada), misma cadena de huella del emisor.
@@ -799,7 +825,11 @@ export function emitSustitutivaSvc(db, ticketId, client_id) {
   const items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id=? ORDER BY id').all(ticketId);
   // Líneas ARRASTRADAS del ticket (mismos productos, mismas bases e IVA por tipo). SIN IRPF: el
   // importe debe coincidir EXACTO con el del ticket ya cobrado (no se recalcula a la baja/alza).
-  const lines = items.map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price, tax_rate: i.tax_rate }));
+  // PASO 2 — se arrastra TAMBIÉN el product_id y el coste YA CONGELADO del ticket; NO se re-fotografía
+  // el WAC de hoy, a propósito: la venta ocurrió al emitir el ticket y esto es el MISMO hecho económico
+  // con otro papel. Re-fotografiar movería el margen de una venta pasada solo porque el cliente pidió
+  // la factura completa una semana después. Es la misma razón por la que el importe tampoco se recalcula.
+  const lines = items.map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price, tax_rate: i.tax_rate, product_id: i.product_id || null, unit_cost: i.unit_cost ?? null, cost_source: i.cost_source || null }));
   const totals = computeTotals(lines, 0);
   const headerTaxRate = mainTaxRate(totals.taxByRate);
   const series = cfg.invoice_series || 'F';   // serie ordinaria de facturas completas
@@ -837,11 +867,11 @@ export function emitSustitutivaSvc(db, ticketId, client_id) {
     );
     const invoiceId = result.lastInsertRowid;
 
-    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price, tax_rate, tax_amount) VALUES (?,?,?,?,?,?,?)');
+    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price, tax_rate, tax_amount, product_id, unit_cost, cost_source) VALUES (?,?,?,?,?,?,?,?,?,?)');
     for (const line of lines) {
       const base = Math.round(line.quantity * line.unit_price * 100) / 100;
       const tax = Math.round(base * line.tax_rate / 100 * 100) / 100;
-      insItem.run(invoiceId, line.description, line.quantity, line.unit_price, base, line.tax_rate, tax);
+      insItem.run(invoiceId, line.description, line.quantity, line.unit_price, base, line.tax_rate, tax, line.product_id || null, line.unit_cost ?? null, line.cost_source || null);
     }
     // Alta Verifactu TIPO F3 (sustitución de simplificadas), misma cadena de huella del emisor.
     const reg = recordVerifactuAlta(db, { id: invoiceId, company_fiscal_id: cfg.fiscal_id || '', invoice_number, issue_date: issueDate, record_type: 'alta', tipo_factura: 'F3', subtotal: totals.subtotal, tax_amount: totals.taxAmount });
