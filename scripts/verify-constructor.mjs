@@ -23,7 +23,8 @@ import { createClientSvc } from '../modules/erp/routes/clients.js';
 import { recordMovement } from '../modules/erp/stock.js';
 import { ventasResumen } from '../modules/erp/ventas-metrics.js';
 import { cruzar, camposPara, filasVenta, guardarPanel, listarPaneles, borrarPanel,
-         DIMENSIONES, MEDIDAS } from '../modules/erp/constructor-analitica.js';
+         DIMENSIONES, MEDIDAS, AREAS, areasPara } from '../modules/erp/constructor-analitica.js';
+const MEDIDAS_INV = Object.keys(AREAS.inventario.medidas);
 
 let ok = 0, fail = 0;
 const check = (label, cond, extra = '') => {
@@ -143,7 +144,65 @@ try {
     const l = listarPaneles(db, ana); return l.length === 1 && l[0].nombre === 'Renombrado'; })());
   check('Ana borra el suyo', (() => { borrarPanel(db, ana, p1.id); return listarPaneles(db, ana).length === 0; })());
 
-  console.log('\n[8] IDEMPOTENCIA y NO-DAÑO');
+  console.log('\n[8] 4a-bis — LAS OTRAS TRES ÁREAS cuadran cada una con SU fuente');
+  // COMPRAS: dos facturas + una anulada + un gasto puro. Σ base por proveedor == por categoría, y la
+  // anulada no cuenta (misma regla que Pagos).
+  const s1c = db.prepare("INSERT INTO suppliers (name,active) VALUES ('Prov A',1)").run().lastInsertRowid;
+  const s2c = db.prepare("INSERT INTO suppliers (name,active) VALUES ('Prov B',1)").run().lastInsertRowid;
+  const SI = (sid, nom, base, cat, entity = 'purchase', st = 'vigente') =>
+    db.prepare("INSERT INTO supplier_invoices (supplier_id,supplier_name,invoice_date,due_date,base,tax,total,status,expense_category,entity_type) VALUES (?,?,?,?,?,?,?,?,?,?)")
+      .run(sid, nom, '2026-03-01', '2026-04-01', base, base * 0.21, base * 1.21, st, cat, entity);
+  SI(s1c, 'Prov A', 1000, 'Alquiler', null);       // gasto puro (entity null)
+  SI(s2c, 'Prov B', 500, 'Software', 'purchase');  // mercancía
+  SI(s1c, 'Prov A', 999, 'Alquiler', null, 'anulada');   // NO cuenta
+  const compP = cruzar(db, { area: 'compras', dimension: 'proveedor', medidas: ['base', 'facturas'], hasPerm: TODO });
+  const compC = cruzar(db, { area: 'compras', dimension: 'categoria', medidas: ['base'], hasPerm: TODO });
+  const compT = cruzar(db, { area: 'compras', dimension: 'tipo', medidas: ['base'], hasPerm: TODO });
+  check('COMPRAS: Σ por proveedor == Σ por categoría', near(total(compP), total(compC)) && near(total(compP), 1500), total(compP) + ' €');
+  check('la ANULADA no cuenta (con ella serían 2499)', near(total(compP), 1500));
+  check('distingue gasto puro (1000) de mercancía (500)', (() => {
+    const gp = compT.filas.find(f => f.clave === 'Gasto puro'), mc = compT.filas.find(f => f.clave === 'Compra de mercancía');
+    return near(gp.base, 1000) && near(mc.base, 500); })());
+
+  // CLIENTES: grano cliente. nº clientes == activos; facturación reutiliza la regla de ventas.
+  const cli = cruzar(db, { area: 'clientes', dimension: 'tipo_cliente', medidas: ['clientes', 'facturado', 'compras', 'ticket_medio'], hasPerm: TODO });
+  const nAct = db.prepare('SELECT COUNT(*) n FROM clients WHERE active=1').get().n;
+  check('CLIENTES: Σ nº clientes == activos', total(cli, 'clientes') === nAct, total(cli, 'clientes') + ' de ' + nAct);
+  // 800, no 850: el ticket de MOSTRADOR (50 €) no tiene cliente, así que en un informe "por cliente"
+  // no se atribuye a nadie — correcto. La anulada tampoco cuenta (regla de ventas intacta).
+  check('facturación por cliente = ventas CON cliente (el mostrador no es de nadie)', near(total(cli, 'facturado'), 800), total(cli, 'facturado') + ' € (850 − 50 del mostrador sin cliente)');
+  check('el ticket medio del grupo es facturado/compras, no media de medias', cli.filas.every(f => f.ticket_medio === null || f.ticket_medio > 0));
+
+  // INVENTARIO: grano movimiento. Σ neto == Σ(quantity) del libro; entradas − salidas == neto.
+  const inv = cruzar(db, { area: 'inventario', dimension: 'tipo', medidas: ['movimientos', 'entradas', 'salidas', 'neto', 'valor_movido'], hasPerm: TODO });
+  const libro = db.prepare('SELECT ROUND(SUM(quantity),2) s, COUNT(*) n FROM stock_movements').get();
+  check('INVENTARIO: Σ movimientos == el libro', total(inv, 'movimientos') === libro.n, total(inv, 'movimientos') + ' de ' + libro.n);
+  check('Σ neto == Σ(quantity) del libro', near(total(inv, 'neto'), libro.s), total(inv, 'neto') + ' vs ' + libro.s);
+  check('entradas − salidas == neto (es FLUJO, no stock)', near(total(inv, 'entradas') - total(inv, 'salidas'), total(inv, 'neto')));
+  check('NO hay medida de "stock actual" (no es sumable)', !MEDIDAS_INV.includes('stock') && !MEDIDAS_INV.includes('nivel'),
+        'el nivel depende del orden del libro: vive en Stock, no aquí');
+
+  console.log('\n[9] CADA ÁREA TIENE SUS CAMPOS, y un campo de otra área no vale');
+  check('compras no ofrece "responsable" (es de ventas/clientes)', !camposPara(TODO, 'compras').dimensiones.responsable);
+  check('pedir una dimensión de otra área se rechaza', (() => {
+    try { cruzar(db, { area: 'compras', dimension: 'serie', medidas: ['base'], hasPerm: TODO }); return false; }
+    catch (e) { return e.status === 400; } })(), 'serie es de ventas');
+  check('un área inventada se rechaza', (() => {
+    try { cruzar(db, { area: 'marte', dimension: 'fecha', medidas: ['base'], hasPerm: TODO }); return false; }
+    catch (e) { return e.status === 400; } })());
+  // El candado por ÁREA: sin purchases.read no se cruza compras, ni a mano. (`soloVentas` se declaró
+  // en [4]: solo invoices.read.)
+  check('sin purchases.read, el área compras se deniega (403)', (() => {
+    try { cruzar(db, { area: 'compras', dimension: 'proveedor', medidas: ['base'], hasPerm: soloVentas }); return false; }
+    catch (e) { return e.status === 403; } })());
+  check('areasPara solo ofrece las áreas que el usuario puede', (() => {
+    const a = areasPara(soloVentas); return a.ventas && !a.compras && !a.clientes; })());
+
+  console.log('\n[10] EL PERIODO no aplica en clientes (grano cliente, no temporal)');
+  check('clientes NO usa periodo', camposPara(TODO, 'clientes').usaPeriodo === false);
+  check('ventas y compras e inventario SÍ', camposPara(TODO, 'ventas').usaPeriodo && camposPara(TODO, 'compras').usaPeriodo && camposPara(TODO, 'inventario').usaPeriodo);
+
+  console.log('\n[11] IDEMPOTENCIA y NO-DAÑO');
   const antes = listarPaneles(db, otro).length;
   runMigrations(db); runMigrations(db);
   check('re-ejecutar runMigrations no toca los paneles', listarPaneles(db, otro).length === antes);

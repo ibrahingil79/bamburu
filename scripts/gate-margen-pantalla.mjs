@@ -275,7 +275,47 @@ try {
   ok(consEmp.campos === 403 && consEmp.cruzar === 403 && consEmp.paneles === 403,
      'el empleado sin analytics.read no entra por ninguna de las tres puertas', JSON.stringify(consEmp));
 
-  console.log('\n[13] NO SE RESUCITA NADA DE LO DESENLAZADO A PROPÓSITO');
+  console.log('\n[13] 4a-bis — EL SELECTOR DE ÁREA: cambia de área y redibuja');
+  await page.goto(BASE + '/admin/analytics', { waitUntil: 'networkidle2' });
+  await page.waitForSelector('#cArea option', { timeout: 10000 }).catch(() => {});
+  const areas = await page.$$eval('#cArea option', os => os.map(o => o.value));
+  ok(areas.join(',') === 'ventas,compras,clientes,inventario', 'el owner ve las 4 áreas', areas.join(' · '));
+  // Cambiar a Compras debe recargar SUS dimensiones (proveedor no está en ventas).
+  await page.select('#cArea', 'compras');
+  await new Promise(r => setTimeout(r, 800));
+  const dimsCompras = await page.$$eval('#cDim option', os => os.map(o => o.value));
+  ok(dimsCompras.includes('proveedor') && !dimsCompras.includes('serie'), 'al cambiar a Compras salen SUS dimensiones', dimsCompras.join(','));
+  const medsCompras = await page.$$eval('#cMed option', os => os.map(o => o.textContent.trim()));
+  ok(medsCompras.some(m => /Pendiente de pago/i.test(m)), 'y sus medidas (pendiente de pago)');
+  // Inventario: el "agrupado por" reaparece (usa periodo); Clientes: desaparece (grano cliente).
+  await page.select('#cArea', 'clientes');
+  await new Promise(r => setTimeout(r, 800));
+  const dimsCli = await page.$$eval('#cDim option', os => os.map(o => o.value));
+  ok(dimsCli.includes('perfil_cobro') && !dimsCli.includes('fecha'), 'Clientes: sus dimensiones, sin fecha', dimsCli.join(','));
+  const perOcultoCli = await page.$eval('#cPeriodoWrap', e => e.style.display === 'none');
+  ok(perOcultoCli, 'el "agrupado por" NO aparece en Clientes (grano cliente, no temporal)');
+  ok(errores.length === 0, '0 errores JS cambiando de área', errores.join(' | '));
+
+  console.log('\n[14] LAS 4 ÁREAS CRUZAN contra el servidor real, y un área inventada falla');
+  // (El candado POR ÁREA —403 sin el permiso del área— lo prueba con precisión el gate de motor, que
+  // controla los permisos exactos. Aquí se comprueba que el HTTP responde y que un área rara se corta.)
+  const cruces = await page.evaluate(async b => {
+    const post = body => fetch(b + '/api/erp/analytics/constructor/cruzar', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': window.CSRF_TOKEN }, body: JSON.stringify(body) });
+    const out = {};
+    for (const [area, dim, med] of [['compras','proveedor','base'],['clientes','responsable','facturado'],['inventario','tipo','entradas']]) {
+      const j = await (await post({ area, dimension: dim, medidas: [med] })).json();
+      out[area] = j.filas ? j.filas.length : ('ERR:' + (j.error || '?'));
+    }
+    out._marte = (await post({ area: 'marte', dimension: 'x', medidas: ['base'] })).status;
+    return out;
+  }, BASE);
+  ok(typeof cruces.compras === 'number' && cruces.compras > 0, 'Compras cruza y trae filas', String(cruces.compras));
+  ok(typeof cruces.clientes === 'number', 'Clientes cruza', String(cruces.clientes));
+  ok(typeof cruces.inventario === 'number' && cruces.inventario > 0, 'Inventario cruza y trae filas', String(cruces.inventario));
+  ok(cruces._marte === 400, 'un área inventada se corta (400)', String(cruces._marte));
+
+  console.log('\n[15] NO SE RESUCITA NADA DE LO DESENLAZADO A PROPÓSITO');
   const muertas = await page.evaluate(() => ['/admin/discounts', '/admin/tags', '/admin/orders', '/admin/shipping']
     .filter(h => !!document.querySelector('a[href="' + h + '"]')));
   ok(muertas.length === 0, 'descuentos, etiquetas, pedidos viejos y envíos siguen fuera del menú', muertas.join(', ') || 'ninguno asomó');

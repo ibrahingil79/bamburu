@@ -17,9 +17,10 @@
 > puerta visual) → 5 DISA predictiva → 6 dashboards → 7-9 oficios → 10-19 el resto.** **Se acabaron
 > "El Foso" y el "Roadmap futuro"**: cada módulo tiene número. **Pasos 1 (sincerar), 2 (margen) y 3
 > (catálogo de las 5 áreas + responsable + informes por área + plan financiero) HECHOS (17 jul).**
-> **Del paso 4a, HECHO el constructor para VENTAS** (9 dimensiones × 6 medidas × 4 gráficos, paneles
-> guardados). **Siguiente: 4a-bis — las otras 4 áreas del constructor (Compras · Clientes ·
-> Inventario · Contabilidad), a ejecutar INMEDIATAMENTE (decisión del dueño, 17 jul).** El **Backlog** de abajo NO
+> **Del paso 4a, HECHO el constructor para VENTAS + COMPRAS + CLIENTES + INVENTARIO** (selector de
+> área; 9/4/5/5 dimensiones; paneles guardados). **Contabilidad queda FUERA, pendiente de tu decisión**
+> (arriesga dos verdades del resultado). **Siguiente: 4b — constructor avanzado (combinar fuentes,
+> cálculos propios, compartir paneles). No se inicia sin tu encargo.** El **Backlog** de abajo NO
 > compite con la escalera: es lo que le falta a El Suelo (el umbral) más la deuda. Plan del Eje C
 > cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
@@ -1769,21 +1770,39 @@ hacía; si un negocio llegara a cientos de miles, se acota por fecha.
   `gate-margen-pantalla` **56/0** (navegador: se cambia el cruce de verdad, el "—" en tabla, y las 5
   dimensiones == el informe de Ventas contra el servidor real).
 
-#### ⬜ 4a-bis — LAS OTRAS CUATRO ÁREAS · **ejecutar INMEDIATAMENTE después** (decisión del dueño, 17 jul)
-El constructor cubre hoy **solo VENTAS**, que es donde está el conjunto enriquecido (margen +
-responsable). Faltan **Compras · Clientes · Inventario · Contabilidad**, y el dueño quiere que entren
-**a continuación, sin esperar**.
-**Lo que hay que saber antes de empezar** (sale del mini-plan de 4a): **cada área tiene un GRANO
-distinto** — una línea de venta, una factura de compra, un movimiento de stock, un asiento contable.
-No es "repetir lo de ventas ×4": es **un conjunto enriquecido por área**, cada uno con su regla de
-conteo ya escrita y verificada, que se reutiliza igual que aquí:
-- **Compras** → `countsAsPayable` / `openPayables` (`pagos.js`). Grano: factura recibida.
-- **Clientes** → `clientesDormidos` / `openDebts`. Grano: cliente (no línea).
-- **Inventario** → el libro `stock_movements`. Grano: movimiento.
-- **Contabilidad** → `ledger_lines`. Grano: apunte. *Ojo: aquí ya existe su pantalla (Libros y
-  modelos) — hay que decidir qué aporta cruzarlo aquí sin romper la única verdad.*
-**Cruzar ENTRE áreas es 4b** ("combinar fuentes"), no esto: granos distintos no se suman sin decidir
-antes cómo.
+#### 🟡 4a-bis — LAS OTRAS ÁREAS · **Compras · Clientes · Inventario HECHOS (17 jul). Contabilidad, decisión pendiente**
+El constructor ya cubre **cuatro áreas**, cada una con su GRANO propio y su regla de conteo ya
+verificada — **no es "repetir ventas ×4"**: el motor se generalizó a un registro de áreas (`AREAS` en
+`constructor-analitica.js`) manteniendo Ventas **idéntico** (su gate siguió en 34/0 tras el refactor).
+- ✅ **COMPRAS** — grano: factura recibida. Regla: `countsAsPayable` (anuladas fuera; abonos netean);
+  el pendiente, de `supplierInvoicePago` (el mismo que Pagos). Dimensiones: fecha · proveedor ·
+  categoría de gasto · tipo (gasto puro / mercancía, por `entity_type`). Medidas: comprado sin IVA ·
+  nº facturas · pendiente de pago. **Cuadra:** Σ por proveedor == Σ por categoría == 2.042,55 € (dato
+  vivo), la anulada no cuenta.
+- ✅ **CLIENTES** — grano: cliente activo (no línea). Facturación de `ventasPorCliente` (regla intacta),
+  deuda de `clientDebt`. Dimensiones: tipo · provincia · forma de pago · perfil de cobro · responsable.
+  Medidas: nº clientes · facturación · deuda · nº compras · **ticket medio del grupo** (facturado/compras,
+  NO media de medias). **El mostrador sin cliente no se atribuye a nadie** — 800 €, no 850: correcto.
+- ✅ **INVENTARIO** — grano: movimiento de stock. **Mide FLUJO, no niveles**, y es una verdad técnica
+  del PASO 0: el stock actual y el WAC dependen del ORDEN del libro (media móvil) y **no se reconstruyen
+  sumando** un periodo — el nivel ya vive en Stock. Medidas: nº movimientos · entradas · salidas · neto ·
+  valor movido a coste. **Cuadra:** Σ neto == Σ(quantity) del libro (743 uds, 168 movimientos);
+  entradas − salidas == neto.
+- ⬜ **CONTABILIDAD — FUERA, pendiente de decisión del dueño.** Su cuenta de resultados ya vive en Libros
+  y modelos, y el libro tiene 4 grupos de cuenta (verificado: 365 apuntes del grupo 4, 93 del 5) mientras
+  `cuentaPyG` solo mira 6 y 7 con `haber−debe`. Un constructor que sume el libro daría **otra cifra que el
+  P&G**. Si entra, **reutilizando `cuentaPyG`** (no tocando `ledger_lines`) — pero entonces sería el P&G
+  con filtros, que ya es una pantalla. **No se construye sin que el dueño lo pida.**
+- **Candado por área:** cada una tras su permiso base (invoices/purchases/clients/inventory `.read`);
+  `areasPara` solo ofrece las que el usuario puede, y `cruzar()` lo revalida (403 a mano, probado). Un
+  campo de otra área no vale (`serie` en compras → 400); un área inventada, 400.
+- **Cruzar ENTRE áreas es 4b** ("combinar fuentes"): granos distintos no se suman sin decidir antes cómo.
+- Verificado: `verify-constructor` **51/0** (Ventas intacto + las tres áreas cuadran cada una con su
+  fuente + candado por área + el periodo que no aplica en clientes) · `gate-margen-pantalla` **66/0**
+  (navegador: selector de área que redibuja, las 4 áreas cruzando contra el servidor real, área
+  inventada cortada).
+
+> **Ficha original del 4a (referencia):**
 Motor tipo Power BI: **catálogo de campos en cristiano** (ventas, márgenes, clientes, compras, stock,
 caja…), el usuario **elige cómo cruzarlos**, **elige el tipo de gráfico a su estilo** (no gráficos
 cerrados) y **guarda los suyos**. **Pantalla de panel propia = la puerta del usuario visual**

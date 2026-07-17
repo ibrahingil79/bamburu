@@ -11,7 +11,7 @@ import { hoyLocal } from '../avisos.js';    // fecha local Europe/Madrid (en UTC
 import { planFinanciero, fijarObjetivo } from '../plan-financiero.js';   // PASO 3 · bloque 2: objetivos vs. real
 import { logActivity } from '../../../core/auth.js';
 import { ENTITY } from '../../../core/activity-entities.js';
-import { camposPara, cruzar, guardarPanel, listarPaneles, borrarPanel } from '../constructor-analitica.js';   // PASO 4a: la puerta visual
+import { camposPara, cruzar, guardarPanel, listarPaneles, borrarPanel, areasPara, areaPerm } from '../constructor-analitica.js';   // PASO 4a + 4a-bis: la puerta visual
 
 export function createAnalyticsRoutes(db, cfg = {}) {
   const sym = cfg.sym || '€';
@@ -152,45 +152,51 @@ export function createAnalyticsRoutes(db, cfg = {}) {
     } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
   });
 
-  // ── ESCALERA · PASO 4a — CONSTRUCTOR DE ANALÍTICAS (área: VENTAS) ──────────────────────────────
-  // La puerta visual: el usuario elige qué cruzar y se dibuja SUS gráficos, no los cuatro que alguien
-  // decidió por él (CANON §3-bis, "las dos puertas").
-  // CANDADO: `analytics.read` + `invoices.read` (es el área de ventas). Cada CAMPO puede exigir un
-  // permiso extra (cliente/provincia → clients.read; producto/categoría → products.read), y el
-  // servidor lo revalida en `cruzar()`: el desplegable filtrado NO es el candado, solo la cortesía.
+  // ── ESCALERA · PASO 4a + 4a-bis — CONSTRUCTOR DE ANALÍTICAS ────────────────────────────────────
+  // La puerta visual: el usuario elige qué cruzar y se dibuja SUS gráficos (CANON §3-bis, las dos
+  // puertas). CUATRO ÁREAS: ventas · compras · clientes · inventario. Cada una tras SU permiso base
+  // (invoices/purchases/clients/inventory .read), y cada campo puede exigir uno extra. El servidor lo
+  // revalida en `cruzar()`: el desplegable filtrado NO es el candado, solo la cortesía.
   const permDe = c => (p) => can(c, p);
-  const exigeVentas = c => {
-    if (!can(c, 'invoices.read')) { const e = new Error('No tienes permiso para ver las cifras de venta'); e.status = 403; throw e; }
+  const exigeArea = (c, area) => {
+    const perm = areaPerm(area || 'ventas');
+    if (perm && !can(c, perm)) { const e = new Error('No tienes permiso para el área ' + (area || 'ventas')); e.status = 403; throw e; }
   };
+
+  // Qué áreas puede el usuario (para el selector de área de la pantalla).
+  api.get('/constructor/areas', requirePerm('analytics.read'), c => {
+    try { return c.json(areasPara(permDe(c))); }
+    catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
+  });
 
   api.get('/constructor/campos', requirePerm('analytics.read'), c => {
     try {
-      exigeVentas(c);
-      return c.json(camposPara(permDe(c)));
+      const area = c.req.query('area') || 'ventas';
+      exigeArea(c, area);
+      return c.json(camposPara(permDe(c), area));
     } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
   });
 
   api.post('/constructor/cruzar', requirePerm('analytics.read'), async c => {
     try {
-      exigeVentas(c);
       const d = await c.req.json();
+      exigeArea(c, d.area);   // el área base; los campos los revalida cruzar()
       return c.json(cruzar(db, { ...d, hasPerm: permDe(c) }));
     } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
   });
 
-  // PANELES — de quien los crea. El `user_id` sale de la SESIÓN, nunca del cuerpo de la petición:
-  // si viniera de fuera, cualquiera guardaría paneles en el nombre de otro.
+  // PANELES — de quien los crea. `user_id` de la SESIÓN, nunca del cuerpo (si no, cualquiera guardaría
+  // en el nombre de otro). Solo `analytics.read`: guardan la RECETA, y al abrirlos `cruzar()` revalida
+  // el permiso del área — no hace falta el permiso del área para tener la receta guardada.
   api.get('/constructor/paneles', requirePerm('analytics.read'), c => {
-    try {
-      exigeVentas(c);
-      return c.json(listarPaneles(db, c.get('session')?.userId));
-    } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
+    try { return c.json(listarPaneles(db, c.get('session')?.userId)); }
+    catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
   });
 
   api.post('/constructor/paneles', requirePerm('analytics.read'), async c => {
     try {
-      exigeVentas(c);
       const d = await c.req.json();
+      exigeArea(c, d.config?.area);   // no guardas un panel de un área que no puedes ver
       const r = guardarPanel(db, c.get('session')?.userId, d);
       return c.json({ ...r, paneles: listarPaneles(db, c.get('session')?.userId) });
     } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
@@ -198,7 +204,6 @@ export function createAnalyticsRoutes(db, cfg = {}) {
 
   api.delete('/constructor/paneles/:id', requirePerm('analytics.read'), c => {
     try {
-      exigeVentas(c);
       borrarPanel(db, c.get('session')?.userId, c.req.param('id'));
       return c.json({ ok: true, paneles: listarPaneles(db, c.get('session')?.userId) });
     } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
@@ -368,6 +373,8 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         </div>
         <div class="card-body">
           <div class="form-row" style="align-items:flex-end;gap:.6rem;flex-wrap:wrap">
+            <div class="form-group" style="min-width:130px"><label class="form-label">Área</label>
+              <select class="form-control" id="cArea"></select></div>
             <div class="form-group" style="min-width:150px"><label class="form-label">Mirar por</label>
               <select class="form-control" id="cDim"></select></div>
             <div class="form-group" id="cPeriodoWrap" style="min-width:120px"><label class="form-label">Agrupado</label>
@@ -639,29 +646,47 @@ export function createAnalyticsRoutes(db, cfg = {}) {
       // servidor lo revalida (probado en el gate).
       let cCampos=null, cChartInst=null, cPaneles=[];
       const PALETA=['#0ea5e9','#10b981','#f59e0b','#8b5cf6','#ef4444','#14b8a6','#ec4899','#64748b'];
-      function llenarConstructor(){
+      // El constructor arranca en Ventas y cambia de área sin recargar la página. Al cambiar de área se
+      // vuelven a pedir SUS campos (dimensiones y medidas distintas) — y como el catálogo lo filtra el
+      // servidor por permiso, el usuario solo ve las áreas y campos que puede.
+      let cArea='ventas';
+      function llenarAreas(areas){
+        const sel=document.getElementById('cArea');
+        const ks=Object.keys(areas||{});
+        sel.innerHTML=ks.map(k=>'<option value="'+k+'">'+escHtml(areas[k].etiqueta)+'</option>').join('');
+        if(!ks.length){ document.getElementById('cChartWrap').innerHTML='<div style="color:var(--muted);padding:1rem 0">No tienes acceso a ninguna área para construir gráficos.</div>'; }
+      }
+      function rellenarCampos(){
         if(!cCampos||cCampos.error){ return; }
-        const dim=document.getElementById('cDim'), med=document.getElementById('cMed');
-        dim.innerHTML=Object.entries(cCampos.dimensiones).map(([k,v])=>'<option value="'+k+'">'+escHtml(v.etiqueta)+'</option>').join('');
-        med.innerHTML=Object.entries(cCampos.medidas).map(([k,v])=>'<option value="'+k+'">'+escHtml(v.etiqueta)+'</option>').join('');
+        document.getElementById('cDim').innerHTML=Object.entries(cCampos.dimensiones).map(([k,v])=>'<option value="'+k+'">'+escHtml(v.etiqueta)+'</option>').join('');
+        document.getElementById('cMed').innerHTML=Object.entries(cCampos.medidas).map(([k,v])=>'<option value="'+k+'">'+escHtml(v.etiqueta)+'</option>').join('');
+      }
+      function engancharConstructor(){
+        // Listeners UNA sola vez (los <select> conservan su listener aunque cambien sus <option>).
         for(const id of ['cDim','cPeriodo','cMed','cTipo']) document.getElementById(id).addEventListener('change',dibujar);
+        document.getElementById('cArea').addEventListener('change',async e=>{
+          cArea=e.target.value;
+          cCampos=await api('GET','/api/erp/analytics/constructor/campos?area='+cArea).catch(()=>null);
+          rellenarCampos(); dibujar();
+        });
         document.getElementById('cGuardar').onclick=guardarPanelUI;
         document.getElementById('cPanel').onchange=abrirPanel;
-        dibujar();
+        rellenarCampos(); dibujar();
       }
       function recetaActual(){
-        return { dimension:document.getElementById('cDim').value, periodo:document.getElementById('cPeriodo').value,
+        return { area:cArea, dimension:document.getElementById('cDim').value, periodo:document.getElementById('cPeriodo').value,
                  medidas:[document.getElementById('cMed').value], grafico:document.getElementById('cTipo').value };
       }
       async function dibujar(){
         const r=recetaActual();
-        // El selector de agrupación solo tiene sentido en la dimensión fecha: enseñarlo en "cliente"
-        // sugeriría que hace algo, y no haría nada.
-        document.getElementById('cPeriodoWrap').style.display = r.dimension==='fecha' ? '' : 'none';
+        // El "agrupado por" solo tiene sentido en la dimensión fecha Y en áreas que agrupan por tiempo
+        // (ventas/compras/inventario; clientes no). Enseñarlo donde no hace nada sugeriría que hace algo.
+        document.getElementById('cPeriodoWrap').style.display = (r.dimension==='fecha' && cCampos && cCampos.usaPeriodo) ? '' : 'none';
         let d; try{ d=await api('POST','/api/erp/analytics/constructor/cruzar',r); }catch(e){ return; }
-        const med=r.medidas[0], meta=cCampos.medidas[med]||{};
+        const med=r.medidas[0], meta=(cCampos.medidas||{})[med]||{};
         const av=document.getElementById('cAviso');
-        if(d.aviso){ av.style.display='';
+        // El aviso de "sin coste" solo existe en Ventas (el margen). En las demás áreas viene a null.
+        if(d.aviso&&d.aviso.sinCoste){ av.style.display='';
           av.innerHTML='<div style="background:var(--accent-soft);border:1px solid var(--border2);border-radius:8px;padding:.55rem .7rem;font-size:.75rem;color:var(--text2)">'+
             '<strong style="color:var(--text)">El margen solo juzga lo que tiene coste.</strong> Quedan fuera '+eur(d.aviso.sinCoste)+
             ' de ventas sin coste registrado. No es que pierdas: es que su coste no se sabe.</div>';
@@ -703,20 +728,25 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         document.getElementById('cPanel').innerHTML='<option value="">Mis paneles…</option>'+
           cPaneles.map(p=>'<option value="'+p.id+'">'+escHtml(p.nombre)+'</option>').join('');
       }
-      function abrirPanel(e){
+      async function abrirPanel(e){
         const p=cPaneles.find(x=>String(x.id)===e.target.value); if(!p||!p.config) return;
         // Se re-CRUZA, no se pinta lo guardado: un panel guarda la receta, no los datos, así que los
-        // permisos se revalidan al abrirlo. Si guardara resultados, sería una fuga con fecha.
+        // permisos se revalidan al abrirlo. Si guardara resultados, sería una fuga con fecha. Como el
+        // panel puede ser de OTRA área, primero se cambia de área y se cargan SUS campos.
+        cArea=p.config.area||'ventas';
+        document.getElementById('cArea').value=cArea;
+        cCampos=await api('GET','/api/erp/analytics/constructor/campos?area='+cArea).catch(()=>cCampos);
+        rellenarCampos();
         document.getElementById('cDim').value=p.config.dimension;
         document.getElementById('cPeriodo').value=p.config.periodo||'mes';
-        document.getElementById('cMed').value=(p.config.medidas||['base'])[0];
+        document.getElementById('cMed').value=(p.config.medidas||[Object.keys(cCampos.medidas)[0]])[0];
         document.getElementById('cTipo').value=p.config.grafico||'barras';
         dibujar();
       }
 
       async function loadCharts(){
         const days=document.getElementById('periodSel').value;
-        const [ov,period,top,stock,mg,resp,inf,plan,campos,paneles]=await Promise.all([
+        const [ov,period,top,stock,mg,resp,inf,plan,campos,paneles,areas]=await Promise.all([
           api('GET','/api/erp/analytics/overview').catch(()=>({})),
           api('GET','/api/erp/analytics/sales-by-period?days='+days).catch(()=>[]),
           api('GET','/api/erp/analytics/best-sellers?limit=8').catch(()=>[]),
@@ -726,7 +756,8 @@ export function createAnalyticsRoutes(db, cfg = {}) {
           api('GET','/api/erp/analytics/informes').catch(()=>null),
           api('GET','/api/erp/analytics/plan').catch(()=>null),
           api('GET','/api/erp/analytics/constructor/campos').catch(()=>null),
-          api('GET','/api/erp/analytics/constructor/paneles').catch(()=>[])
+          api('GET','/api/erp/analytics/constructor/paneles').catch(()=>[]),
+          api('GET','/api/erp/analytics/constructor/areas').catch(()=>({}))
         ]);
         document.getElementById('kRev').textContent='${sym}'+Number(ov.totalRevenue||0).toFixed(2);
         document.getElementById('kOrd').textContent=ov.totalOrders||0;
@@ -737,7 +768,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         respCache=resp; llenarSelResponsable(); pintarResponsable();
         infCache=inf; pintarInformes();
         planCache=plan; pintarPlan();
-        if(!cCampos){ cCampos=campos; cPaneles=Array.isArray(paneles)?paneles:[]; llenarPaneles(); llenarConstructor(); }
+        if(!cCampos){ cCampos=campos; cPaneles=Array.isArray(paneles)?paneles:[]; llenarPaneles(); llenarAreas(areas); engancharConstructor(); }
 
         if(salesChartInst)salesChartInst.destroy();
         salesChartInst=new Chart(document.getElementById('salesChart').getContext('2d'),{type:'bar',data:{labels:period.map(d=>d.date),datasets:[{label:'${sym}',data:period.map(d=>d.total),backgroundColor:'rgba(16,185,129,.6)',borderColor:'#10b981',borderWidth:1,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'${sym}'+v}}}}});
