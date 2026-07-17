@@ -5,7 +5,8 @@
 ## Producto y marco estratégico
 - **DISA** — la IA del producto (`modules/disa/`). Forma principal de uso: el dueño le habla y ella prepara/propone; el humano valida lo que tiene consecuencia.
 - **Los 4 pilares (el Núcleo):** **Catálogo** ✅ · **Cliente** ✅ · **Inventario** 🟡 · **Ventas** (Pilar 4). Orden por dependencia técnica.
-- **El Núcleo / El Suelo / El Foso** — las tres capas (CANON §2-bis). Suelo = umbral de admisión al mercado (cumplimiento, contabilidad, multiusuario). Foso = la ventaja (DISA predictiva, caras por oficio).
+- **El Núcleo / El Suelo** — las dos capas que quedan (**CANON §7**). Núcleo = lo ya construido (Pilares 1–4). Suelo = umbral de admisión al mercado (cumplimiento, contabilidad, multiusuario). *(Este puntero decía "CANON §2-bis", que no existe: el mapa de capas vive en §7.)*
+- **La escalera** — el orden vigente (**CANON §4**), una secuencia numerada donde cada peldaño se apoya en el anterior; el detalle y la colocación de cada módulo, en `TABLERO.md`. **Sustituye a "El Foso"**, que no era una capa sino una lista de espera sin orden: la ventaja que prometía (DISA predictiva, caras por oficio, API, móvil) sigue entera, pero repartida en peldaños con número.
 - **Tipo de producto** — `físico` (ciclo completo con stock), `servicio` (se factura, sin stock), `digital` (se entrega, sin stock físico).
 - **Tenant / slug** — un negocio y su identificador; cada uno tiene su `data/tenants/<slug>.db`.
 

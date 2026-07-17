@@ -79,8 +79,20 @@
 - CERRADA — **Contabilidad · Pieza 4 — Modelos 303 (IVA) y 130 (IRPF), borradores** (`f70925f`): motor `contabilidad-modelos.js`, vistas derivadas de los libros (Piezas 1–3), SOLO LECTURA. Casillas verificadas contra instrucciones oficiales AEAT (303-2026 y 130). 303: devengado por tipo → casillas oficiales, deducible separando corrientes (28/29) de bienes de inversión (30/31) vía `investment_goods.purchase_id`, resultado 46/66/71 con compensación automática de trimestres negativos (78). 130: acumulado del año (ingresos, gastos+amortización, 20%, pagos y negativos previos encadenados, retenciones soportadas, minoración según año anterior). Pestaña "Modelos (303/130)" + export PDF/CSV. Bamburu PREPARA, nunca presenta (§0-ter); lo incierto va a 0 con AVISO. Verificado 28/28 + regresión. Script `test-contabilidad-modelos`.
 - ⬜ Contabilidad — siguiente: P&G/balance, conciliación bancaria, modelos 111/115/123/349/347/390/200, cuentas anuales/legalización, acceso gestoría, subcuentas, asientos de amortización al diario. (Backlog detallado en TABLERO.md.)
 
-## El Foso  (ventaja — comprometido, sin construir)
-- DISA predictiva/agéntica, caras por oficio (CRM comercial, agenda, control horario), API/integraciones, app móvil: ⬜.
+## La escalera  (la ventaja — comprometida, ahora en peldaños)
+
+> Esto era **"El Foso"**. **Ya no es una capa**: es la escalera numerada de **CANON §4**, con el detalle
+> y la colocación de cada módulo en `TABLERO.md`. **Nada se ha perdido** — cada función tiene ahora su
+> número y su dependencia. Se conserva la lista para que quien buscara "El Foso" encuentre dónde fue.
+
+- **DISA predictiva/agéntica** (previsión de caja, anomalías, agente que avisa): ⬜ — **paso 5**.
+  *(No confundir con el Eje B ✅ COMPLETO: aquello era DISA que prepara y propone; esto es predecir.)*
+- **Caras por oficio**: ⬜ — **pasos 7-9** (servicios profesionales · salud/bienestar · belleza/estética).
+- **CRM comercial**: **embudo/oportunidades ✅ HECHO (2026-07-09)**; su **agenda/calendario**: ⬜ — **paso 7**.
+- **Control horario** (registro de jornada): ⬜ — **paso 7**, junto al tiempo facturable.
+- **API/integraciones**: ⬜ — **pasos 16-17**. **App móvil**: ⬜ — **paso 15**.
+- **La puerta visual** (constructor de analíticas + dashboards propios): ⬜ — **pasos 4a/4b/6**. No
+  estaba en la lista vieja, y era el hueco: sin ella "¿cómo va mi negocio?" solo se podía preguntar.
 
 ## Infraestructura / plataforma  ✅ CERRADO
 - CERRADA — Producción + HTTPS (systemd + Caddy + comodín Let's Encrypt vía Cloudflare) (2026-06-19).

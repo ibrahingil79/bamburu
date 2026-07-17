@@ -9,9 +9,16 @@
 >
 > **EJE C — SEGURIDAD: ✅ COMPLETO (C1–C6, 16 jul) + C5-bis (rescate de los dueños) + C5-ter (cerrojo del
 > superadmin y email fuera de los eventos, 17 jul).** Los tres ejes de la fase de optimización quedan
-> cerrados (A: UX · B: DISA · C: Seguridad), y no queda ningún cabo anotado del Eje C. **Sin tarea
-> siguiente asignada: la próxima la decides tú** — candidatas: B10 (hardening systemd, va solo y puede
-> tirar el servicio) y el Backlog. Plan cargado desde la auditoría del 15 jul (ver la
+> cerrados (A: UX · B: DISA · C: Seguridad), y no queda ningún cabo anotado del Eje C.
+>
+> **ORDEN VIGENTE (17 jul 2026): LA ESCALERA — ver la sección `## LA ESCALERA` al final, y CANON §4.**
+> La fase de optimización quedó cerrada y la sucede una **escalera numerada** donde cada peldaño se
+> apoya en el anterior: **1 sincerar → 2 margen → 3 informes → 4a/4b constructor de analíticas (la
+> puerta visual) → 5 DISA predictiva → 6 dashboards → 7-9 oficios → 10-19 el resto.** **Se acabaron
+> "El Foso" y el "Roadmap futuro"**: cada módulo tiene número. **Paso 1 HECHO** en este mismo encargo.
+> **Siguiente: el paso 2 (margen) — pero no se inicia sin tu encargo.** El **Backlog** de abajo NO
+> compite con la escalera: es lo que le falta a El Suelo (el umbral) más la deuda. Plan del Eje C
+> cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
 > victorias rápidas), C4a + C4a-bis HECHOS** → **M1 (XSS almacenado) CERRADO ENTERO**. **C4b: hechos
 > C4b-0 (nonce + sonda), C4b-1 (registro y superadmin ya sirven `script-src` SIN `'unsafe-inline'`) y
@@ -1329,9 +1336,12 @@ tanda cierra el motor y las pantallas; la voz de DISA queda para el Eje B.
 > **Histórico de lo ya construido** (piezas cerradas, decisiones D1–D6, estructura NÚCLEO/SUELO/FOSO):
 > `docs/contexto/piezas-cerradas.md` y el resto de `docs/contexto/`, más el TABLERO anterior en `git log`.
 
-## Backlog / otras capas
-Todas las tareas pendientes anteriores, **conservadas**. No se inician sin encargo del dueño; en la
-fase actual ceden prioridad a la optimización (Ejes A/B/C).
+## Backlog — El Suelo y deuda (NO es la escalera)
+Todas las tareas pendientes anteriores, **conservadas**. No se inician sin encargo del dueño.
+**Esto NO es una lista de espera rival de la escalera:** es lo que le falta a **El Suelo** (el umbral de
+admisión al mercado — Verifactu, contabilidad, permisos) más la deuda técnica y los riesgos abiertos.
+La escalera (§LA ESCALERA, CANON §4) es **la ventaja**; esto es **el suelo bajo los pies**. Son cosas
+distintas y por eso viven en sitios distintos.
 
 ### Contabilidad y cumplimiento fiscal
 
@@ -1499,21 +1509,125 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
 - ~~Arreglar `scripts/gate-avisos-badge.mjs`~~ — **ya no reproduce**: ejecutado el 2026-07-10 pasa **25 OK**.
   Si vuelve a fallar por la ruta de BD fija, reabrir con la salida del fallo.
 
-### Roadmap futuro — módulos (decisión del dueño, NO iniciar sin encargo)
-DISA como producto proactivo · **Citas / Agenda** (🔺 prioritaria) · CRM comercial (**embudo/oportunidades ✅ HECHO 2026-07-09**; agenda/calendario pendiente) · Control horario (registro de jornada) · TPV / POS módulo completo · Parte de obra · Cobro recurrente + domiciliación SEPA · Telegram como canal · Mapas (OpenStreetMap) · Documentos / suite ofimática ligera · App móvil nativa · API pública / webhooks · Integraciones / marketplace · Dashboards personalizables · Multiempresa · Fabricación · Multi-moneda · Firma digital de documentos · Previsión de caja 3/6/12 meses · Proyectos / rentabilidad · Partes de horas · Servicio de campo / órdenes de trabajo · Helpdesk.
+## LA ESCALERA — el orden vigente (CANON §4)
 
-### Auditoría Bamburu vs Holded (9 jul 2026) — módulos y mejoras nuevas
-> Origen: **auditoría Bamburu vs Holded del 9 jul 2026**, repaso con el **manual funcional completo de
-> Holded** (más detallado que la auditoría del 4 jul 2026). Solo documentación, sin fecha comprometida.
+> **Sustituye al "Roadmap futuro — módulos" y a la lista de la auditoría vs Holded.** No se ha perdido
+> nada: **cada módulo de las dos listas está colocado abajo, en el peldaño que le toca por dependencia
+> técnica**. El orden vive en `CANON.md` §4; aquí vive el detalle y la colocación.
+>
+> **Ya no hay "roadmap", ni "espera", ni capa aparte.** Lo que no está hecho está en un peldaño. Un
+> módulo sin número no existe — y si aparece uno nuevo, se le busca peldaño, no una lista.
+>
+> **Sigue mandando la regla de siempre: no se inicia un paso sin encargo del dueño** (CANON §6). La
+> escalera dice en qué ORDEN se apoyan las cosas, no que se construyan solas.
+>
+> *(Lo pendiente de **El Suelo** —Verifactu colaborador social, Balance, modelos AEAT, permisos Paso
+> 1/2, conciliación…— NO está en la escalera: sigue en el Backlog de abajo. El Suelo es el umbral de
+> admisión al mercado, no un peldaño de la ventaja.)*
 
-- **RRHH:** ficha de empleado (datos fiscales/contrato) + nóminas + organigrama. Se suma al **control
-  horario** que ya estaba anotado en El Foso.
-- **Proyectos:** gestión de tareas internas tipo kanban — distinto del **CRM** ya registrado.
-- **Analítica:** módulo de informes predefinidos por área (ventas, compras, clientes…) + **plan financiero**
-  (objetivos vs. real). Va más allá de los KPIs sueltos del panel actual.
-- **Mejoras menores de UX/plataforma** (sin pilar propio, encajar donde toque): importar contactos en bloque
-  desde archivo · buzón de email propio para reenviar tickets de gasto · calendario fiscal de vencimientos ·
-  búsqueda global + botón de creación rápida universal + sidebar personalizable.
+### ⬜ 1 — Sincerar
+Que los textos digan la verdad sobre lo construido. **HECHO en este encargo (17 jul 2026)**: la promesa
+falsa de margen en la ayuda pública, el "Analítica lee el clúster viejo" de `DISEÑO.md` y el "Chart.js
+desde CDN" de `MAPA_FUNCIONAL.md`. Origen: `docs/backlog-auditoria.md` (§8, 14 textos obsoletos) — el
+resto de esa lista sigue ahí y se salda cuando toque.
+
+### ⬜ 2 — Margen
+Enchufar a la analítica el coste que **ya existe**: `products.average_cost` (caché derivada del WAC,
+`models.js:215-219`) y `lastKnownCost()` (`purchase-orders.js:68`). **No hay dato que inventar.**
+- **Ojo, verificado el 17-jul:** el coste **no es un campo que el usuario teclee** — se gana desde las
+  compras y la ficha lo muestra en solo lectura (*"Se gana desde las compras (no editable)"*,
+  `products.js:452`). Cualquier diseño que pida "añade tu precio de coste" está mal planteado.
+- Hoy `analytics.js` y `ventas-metrics.js` **no tienen ni una línea** de margen/coste/beneficio.
+- Un negocio **solo de servicios** no tiene compras que den coste: decidir qué se le enseña.
+
+### ⬜ 3 — Informes por área + plan financiero
+Módulo de **informes predefinidos por área** (ventas, compras, clientes…) + **plan financiero**
+(objetivos mes a mes vs. real). Va más allá de los KPIs sueltos del panel actual.
+*Origen: auditoría Bamburu vs Holded (9 jul 2026), repaso con el manual funcional completo de Holded
+(más detallado que la del 4 jul). Era "Analítica" en esa lista.*
+
+### ⬜ 4a — Constructor de analíticas · **LA PUERTA VISUAL**  🔶 PIEZA MAYOR
+Motor tipo Power BI: **catálogo de campos en cristiano** (ventas, márgenes, clientes, compras, stock,
+caja…), el usuario **elige cómo cruzarlos**, **elige el tipo de gráfico a su estilo** (no gráficos
+cerrados) y **guarda los suyos**. **Pantalla de panel propia = la puerta del usuario visual**
+(CANON §3-bis, "Las dos puertas").
+> **PIEZA MAYOR: se planifica en su propio mini-plan al llegar su turno.** No se detalla aquí.
+> Dos cosas que ese mini-plan tendrá que resolver, anotadas para que no se descubran tarde:
+> **(1)** dónde vive la pantalla — `DISEÑO.md` §3.3 dice *"no se fuerza una sexta área"*, así que habrá
+> que decidir si el panel es área, o vive como Inicio/DISA en el riel (que no son áreas). **(2)** los
+> permisos: un constructor de gráficos es un lector de datos, y CANON §3-bis exige que no saque por un
+> gráfico lo que la pantalla te niega — mismo problema que resolvió D1 con `query_database` de DISA
+> (allowlist, falla cerrado); hay solución de la que copiar.
+
+### ⬜ 4b — Constructor avanzado
+Cálculos propios del usuario · más tipos de gráfico · combinar fuentes · compartir paneles.
+
+### ⬜ 5 — DISA predictiva
+Previsión de caja **3/6/12 meses** · detección de anomalías · agente que avisa. Es "DISA como producto
+proactivo/predictivo" — lo que el mapa de capas prometía y nunca tuvo número.
+**Usa el motor de 4a para MOSTRAR: DISA analiza, no dibuja.**
+*No reabre el Eje B (✅ COMPLETO, D0–D5f, seis propuestas de proactividad): aquello era DISA que
+**prepara y propone**; esto es DISA que **predice**.*
+
+### ⬜ 6 — Dashboards personalizables
+El usuario compone su **Inicio** con sus propios gráficos guardados en 4a. Aquí entra también el
+**sidebar personalizable** (ocultar/reordenar módulos) — *de las "mejoras menores" de la auditoría vs
+Holded*: es la misma idea (que el usuario ordene su casa) y comparte la decisión de dónde se guarda la
+preferencia.
+
+### ⬜ 7 — Servicios profesionales · **1er oficio**
+**Agenda** + **control de tiempo facturable** + **rentabilidad por proyecto**. Es la primera "cara por
+oficio" (CANON §7: interfaces por profesión).
+Aquí aterrizan, de las listas viejas:
+- **Citas / Agenda** (iba marcada 🔺 prioritaria en el roadmap).
+- **CRM comercial → su agenda/calendario** *(el **embudo/oportunidades** está **✅ HECHO 2026-07-09** —
+  no se reabre; lo que quedaba pendiente era su agenda)*.
+- **Control horario (registro de jornada)** — el fichaje, hermano del tiempo facturable.
+- **Rentabilidad por proyecto** (era "Proyectos / rentabilidad").
+
+### ⬜ 8 — Salud / bienestar · **2º oficio**
+Agenda presencial.
+
+### ⬜ 9 — Belleza / estética · **3er oficio**
+Agenda + caja del día.
+
+### ⬜ 10 — Proyectos · partes de horas · servicio de campo
+**Proyectos**: gestión de tareas internas **tipo kanban** — distinto del CRM *(de la auditoría vs
+Holded)*. **Partes de horas** · **Servicio de campo / órdenes de trabajo** · **Parte de obra**.
+
+### ⬜ 11 — TPV / POS módulo completo
+
+### ⬜ 12 — Cobro recurrente + domiciliación SEPA
+
+### ⬜ 13 — Telegram como canal de DISA
+
+### ⬜ 14 — Mapas (OpenStreetMap)
+
+### ⬜ 15 — App móvil nativa
+
+### ⬜ 16 — API pública / webhooks
+
+### ⬜ 17 — Integraciones / marketplace
+*(Descartado a propósito y por escrito el 9-jul: el marketplace de asesorías/gestorías de Holded — es
+un canal de leads, no una función de gestión.)*
+
+### ⬜ 18 — Documentos / suite ofimática ligera
+
+### ⬜ 19 — Multiempresa · Multi-moneda · Fabricación · Firma digital de documentos · Helpdesk
+Aquí entra también **RRHH**: ficha de empleado (datos fiscales/contrato) + **nóminas** + organigrama
+*(de la auditoría vs Holded)*. Va aquí y no en el 7 a propósito: el **control horario** sí es del oficio
+(paso 7), pero nóminas y organigrama son un módulo de plantilla, no una cara por profesión.
+
+### Sin peldaño propio — entran donde toquen (anotadas, no perdidas)
+De las **"mejoras menores de UX/plataforma"** de la auditoría vs Holded. No son módulos: son mejoras
+sueltas que se enganchan a lo que ya existe, y por eso no ocupan peldaño.
+- **Importar contactos en bloque desde archivo** (clientes/proveedores) → cuelga de Clientes/Proveedores.
+  *Hermana del **importador CSV de productos**, que la ayuda pública ya promete (`docs.html.js:630`).*
+- **Buzón de email propio para reenviar tickets de gasto** → cuelga de la captura de compras que ya existe.
+- **Búsqueda global + botón de creación rápida universal** → cuelgan del chrome del panel (`layout.js`).
+- **Calendario fiscal de vencimientos** → **YA CONSTRUIDO** el 15-jul: `calendario-fiscal.js` lo hizo
+  **D5e** y alimenta las propuestas de DISA. Lo que falta es enchufarlo a la **campana** como fuente de
+  avisos (ver §Eje B). *Esta línea de la auditoría vs Holded quedó saldada sin que la lista se enterara.*
 
 ---
 

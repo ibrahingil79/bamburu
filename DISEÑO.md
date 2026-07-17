@@ -178,7 +178,7 @@ pantalla:
 | **Presupuestos** y **Recurrentes** | en **Ventas** (y conceptualmente cuelgan de Facturas) |
 | **Conciliación** | en **Contabilidad** — y la **empuja DISA** |
 | **Impuestos, modelos, libros, P&G** | en **Contabilidad** → "Libros y modelos" |
-| **Analítica** | **no es menú**: DISA responde "¿cómo va mi negocio?" desde **Inicio** |
+| **Analítica** | **dos puertas** (CANON §3-bis): DISA la responde desde **Inicio**, *y* tiene **panel propio alcanzable** — el constructor de analíticas. La pantalla y su enlace **se crean en el paso 4a** de la escalera; hasta entonces `/admin/analytics` sigue viva y sin enlace |
 
 ### 3.3 Regla de colocación (permanente)
 
@@ -278,13 +278,22 @@ La regla de densidad del §1, aterrizada en cada pantalla:
 | Pedidos viejos (lista/ficha/borrador) | `/admin/orders` · `/:id` · `/draft/new` | D4 |
 | Reembolsos | `/admin/orders/refunds` | D4 |
 | Descuentos (cupones + automáticos) | `/admin/discounts` · `/auto` | D4 |
-| Analítica → **Informes** | `/admin/analytics` (+ overview, best-sellers, exports…) | Sección REAL, **no** un resto; hoy lee el clúster viejo (D4) |
+| Analítica → **Informes** | `/admin/analytics` (+ overview, best-sellers, exports…) | Sección REAL, **no** un resto. **Ya NO lee el clúster viejo**: PIEZA C la recableó a la cadena nueva (`analytics.js:5` importa `ventas-metrics.js`, que cuenta desde las facturas). Es el arranque de la puerta visual — escalera pasos 2-4a |
 
 Notas de esta zona:
-- **Analítica NO es basura de e-commerce:** es una sección reservada — **Informes, en
-  espera del Pilar 4** — porque su fuente de datos es el clúster que se va a decidir. En el
-  menú lean del día a día, "¿cómo va mi negocio?" lo responde **DISA desde Inicio** (§3.2, §4);
-  los Informes de detalle quedan para cuando se decida el Pilar 4.
+- **Analítica NO es basura de e-commerce:** es una sección REAL. ~~Reservada, en espera del Pilar 4,
+  porque su fuente de datos es el clúster que se va a decidir.~~ **Esa espera terminó:** el Pilar 4
+  cerró y **PIEZA C la recableó** a la cadena nueva (`ventas-metrics.js`, ventas contadas desde las
+  facturas). Ya no espera a nadie: es el arranque de **la puerta visual** (escalera, pasos 2 → 4a).
+- **Y la línea de arriba cambió de sentido (17 jul 2026).** Decía *"Analítica no es menú: DISA la
+  responde desde Inicio"*. Era verdad a medias y se quedó corta: DISA es **una** puerta, no la única.
+  CANON §3-bis fija ahora **las dos puertas** — la conversacional (DISA desde Inicio, §3.2 y §4, que
+  **no se toca**) y la **visual** (panel propio donde el usuario **construye sus gráficos**, no elige
+  entre los que alguien cerró por él). Que no hubiera puerta visual no era diseño lean: era un hueco.
+- **Lo que este documento NO decide todavía**, y le toca al mini-plan del paso 4a: **dónde vive esa
+  pantalla**. §3.3 dice *"no se fuerza una sexta área"* y esa regla sigue en pie — pero el panel no es
+  un área de documentos (venta/compra/contabilidad/inventario/catálogo): se parece más a **Inicio** y
+  **DISA**, que ya viven en el riel sin ser áreas. **Se decide al llegar al 4a, no aquí.**
 
 ---
 

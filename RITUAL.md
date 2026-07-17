@@ -10,8 +10,12 @@
 > Este bloque manda sobre lo que siga abajo cuando haya contradicción; el resto se conserva como
 > referencia del ritual de cierre.
 
-- Estamos en **fase de optimización** (CANON v2 §4) sobre **tres ejes: UX, DISA, Seguridad**. Las
-  **funciones nuevas ceden prioridad al pulido**, salvo decisión expresa del dueño.
+- Estamos en **la escalera** (CANON §4): un orden numerado donde cada peldaño se apoya en el anterior,
+  con el detalle en `TABLERO.md` (§LA ESCALERA). **No hay lista de "espera" ni capa aparte.** No se
+  inicia un paso sin encargo del dueño.
+- La **fase de optimización** (ejes UX · DISA · Seguridad) quedó **✅ CERRADA**, los tres completos. Sus
+  reglas rectoras siguen vigentes (CANON §4-bis); lo que caducó es "las funciones nuevas ceden al
+  pulido", porque el pulido terminó.
 - **Cuándo salir al mercado lo decide el dueño.** El asistente y Code no lo recomiendan ni lo usan
   como argumento; solo ejecutan lo que el dueño prioriza.
 - **Al empezar** cada sesión, lee la biblia: `CANON.md`, `TABLERO.md`, `RITUAL.md`, `CLAUDE.md` y

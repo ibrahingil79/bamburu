@@ -5,11 +5,17 @@
 
 ---
 
-## Fase actual: OPTIMIZACIÓN (v2)
+## Fase actual: LA ESCALERA (CANON §4)
 
-- El proyecto está en **fase de optimización** (CANON v2 §4) sobre **tres ejes: UX, DISA, Seguridad**.
-  Las **funciones nuevas ceden prioridad al pulido**, salvo decisión expresa del dueño. La tarea activa
-  arranca por el **Eje A — UX** en `TABLERO.md`.
+- El orden vigente es **una escalera numerada** (CANON §4) donde cada peldaño se apoya en el anterior:
+  sincerar → margen → informes → **constructor de analíticas (la puerta visual)** → DISA predictiva →
+  dashboards → oficios → el resto. **No hay lista de "espera" ni capa aparte**; el detalle y la
+  colocación de cada módulo están en `TABLERO.md` (§LA ESCALERA). **No se inicia un paso sin encargo.**
+- La **fase de optimización** (tres ejes: UX, DISA, Seguridad) quedó **✅ CERRADA** — los tres completos.
+  Sus reglas rectoras siguen vigentes (CANON §4-bis) y se aplican a lo que se construya; lo que caducó
+  es su prioridad ("las funciones nuevas ceden al pulido"), porque el pulido terminó.
+- **Las dos puertas** (CANON §3-bis): toda información de negocio se alcanza por DISA **y** por la vía
+  visual; ninguna sustituye a la otra, y **las dos respetan los mismos permisos**.
 - **Cuándo salir al mercado lo decide el dueño.** El asistente y Code no lo recomiendan ni lo usan como
   argumento; solo ejecutan lo que el dueño prioriza.
 - **Fuente única de tareas: `TABLERO.md`.** Notion es solo panel; no dupliques tareas ni toques sus tablas.

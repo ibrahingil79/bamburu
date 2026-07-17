@@ -211,7 +211,7 @@ code{background:rgba(13,148,136,0.1);color:var(--teal-l);border-radius:4px;paddi
     <ol class="steps">
       <li>Ve a <strong>Catálogo → Productos</strong> y haz clic en "+ Nuevo producto".</li>
       <li>Introduce el <strong>nombre</strong> (aparecerá en facturas y tienda web), descripción y precio de venta.</li>
-      <li>Añade el <strong>precio de coste</strong> si quieres ver el margen en los reportes.</li>
+      <li>El <strong>coste medio</strong> no se teclea: Bamburu lo calcula solo a partir de tus compras y lo muestra en la ficha.</li>
       <li>Selecciona o crea una <strong>categoría</strong> para organizar tu catálogo.</li>
       <li>Define el <strong>stock inicial</strong>. Bamburu lo irá descontando automáticamente con cada venta.</li>
       <li>Si necesitas vender el producto en diferentes tallas, colores u opciones, activa la pestaña <strong>Variantes</strong>.</li>
@@ -335,7 +335,7 @@ code{background:rgba(13,148,136,0.1);color:var(--teal-l);border-radius:4px;paddi
       <li><strong>Nombre</strong>: aparece en facturas, pedidos y tienda web</li>
       <li><strong>Descripción</strong>: texto libre para la tienda web</li>
       <li><strong>Precio de venta</strong>: con o sin IVA según tu configuración</li>
-      <li><strong>Precio de coste</strong>: para calcular márgenes en analytics</li>
+      <li><strong>Coste medio</strong>: lo calcula Bamburu desde tus compras (no editable)</li>
       <li><strong>Stock</strong>: se descuenta automáticamente al confirmar pedidos</li>
       <li><strong>Stock mínimo</strong>: umbral para alertas de reposición</li>
       <li><strong>Categoría</strong>: clasificación principal del catálogo</li>
@@ -492,7 +492,7 @@ code{background:rgba(13,148,136,0.1);color:var(--teal-l);border-radius:4px;paddi
       <li>Ve a <strong>Compras → Proveedores</strong> y crea tu proveedor con sus datos fiscales.</li>
       <li>Crea un <strong>pedido de compra</strong>: selecciona el proveedor, añade los productos y las cantidades que pides.</li>
       <li>Cuando recibes la mercancía, abre el pedido de compra y márcalo como <strong>"Recibido"</strong>. El stock sube automáticamente.</li>
-      <li>Registra la <strong>factura del proveedor</strong> con el importe real para tener control de costes y márgenes.</li>
+      <li>Registra la <strong>factura del proveedor</strong> con el importe real: es lo que le da a Bamburu el coste real de cada producto.</li>
     </ol>
     <div class="tip"><strong>Tip DISA</strong>: <em>"¿Qué productos necesito reponer?"</em> — DISA te lista todos los artículos que están por debajo de su stock mínimo.</div>
   </section>
