@@ -59,8 +59,8 @@ export function createClientSvc(db, input) {
   const d = parseClient(input);
   if (fiscalIdConflict(db, d.fiscal_id)) { const e = new Error('Ya existe un cliente con ese NIF'); e.status = 409; throw e; }
   const code = nextCode(db, 'client');   // código interno CLI-NNNN, tras la guarda de NIF (no editable)
-  const r = db.prepare('INSERT INTO clients (name,fiscal_id,email,phone,address,city,country,postal_code,province,group_id,notes,accepts_newsletter,client_type,payment_term_days,payment_method,collections_profile,client_code) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-    .run(d.name, d.fiscal_id || '', d.email || '', d.phone || '', d.address || '', d.city || '', d.country || '', d.postal_code || '', d.province || '', d.group_id || null, d.notes || '', d.accepts_newsletter ? 1 : 0, d.client_type || 'particular', d.payment_term_days || 0, d.payment_method || '', d.collections_profile || 'estandar', code);
+  const r = db.prepare('INSERT INTO clients (name,fiscal_id,email,phone,address,city,country,postal_code,province,group_id,notes,accepts_newsletter,client_type,payment_term_days,payment_method,collections_profile,client_code,responsable_user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(d.name, d.fiscal_id || '', d.email || '', d.phone || '', d.address || '', d.city || '', d.country || '', d.postal_code || '', d.province || '', d.group_id || null, d.notes || '', d.accepts_newsletter ? 1 : 0, d.client_type || 'particular', d.payment_term_days || 0, d.payment_method || '', d.collections_profile || 'estandar', code, d.responsable_user_id || null);
   syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
   return { id: r.lastInsertRowid, name: d.name, client_code: code };
 }
@@ -70,8 +70,8 @@ export function updateClientSvc(db, id, input) {
   if (!exists) { const e = new Error('Cliente no encontrado'); e.status = 404; throw e; }
   const d = parseClient(input);
   if (fiscalIdConflict(db, d.fiscal_id, id)) { const e = new Error('Ya existe un cliente con ese NIF'); e.status = 409; throw e; }
-  db.prepare('UPDATE clients SET name=?,fiscal_id=?,email=?,phone=?,address=?,city=?,country=?,postal_code=?,province=?,group_id=?,notes=?,accepts_newsletter=?,client_type=?,payment_term_days=?,payment_method=?,collections_profile=? WHERE id=?')
-    .run(d.name, d.fiscal_id || '', d.email || '', d.phone || '', d.address || '', d.city || '', d.country || '', d.postal_code || '', d.province || '', d.group_id || null, d.notes || '', d.accepts_newsletter ? 1 : 0, d.client_type || 'particular', d.payment_term_days || 0, d.payment_method || '', d.collections_profile || 'estandar', id);
+  db.prepare('UPDATE clients SET name=?,fiscal_id=?,email=?,phone=?,address=?,city=?,country=?,postal_code=?,province=?,group_id=?,notes=?,accepts_newsletter=?,client_type=?,payment_term_days=?,payment_method=?,collections_profile=?,responsable_user_id=? WHERE id=?')
+    .run(d.name, d.fiscal_id || '', d.email || '', d.phone || '', d.address || '', d.city || '', d.country || '', d.postal_code || '', d.province || '', d.group_id || null, d.notes || '', d.accepts_newsletter ? 1 : 0, d.client_type || 'particular', d.payment_term_days || 0, d.payment_method || '', d.collections_profile || 'estandar', d.responsable_user_id || null, id);
   syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
   return { id: Number(id), name: d.name };
 }
@@ -298,6 +298,12 @@ export function createClientRoutes(db, cfg = {}) {
     // Opciones de grupo para el modal (server-render, sin fetch en cliente).
     const groupOptions = db.prepare('SELECT id, name FROM client_groups ORDER BY name').all()
       .map(g => '<option value="' + g.id + '">' + escHtml(g.name) + '</option>').join('');
+    // CRM — usuarios ACTIVOS del negocio para el desplegable de responsable. Solo los activos: no
+    // tiene sentido asignarle una cartera a alguien que ya no entra. Un cliente ya asignado a un
+    // usuario que luego se desactiva conserva su id (nada se pierde) y la analítica lo resolverá
+    // como "sin asignar" hasta que el dueño lo reasigne. Escapado: el nombre lo teclea una persona.
+    const userOptions = db.prepare("SELECT id, name FROM admin_users WHERE active=1 ORDER BY name").all()
+      .map(u => '<option value="' + u.id + '">' + escHtml(u.name) + '</option>').join('');
 
     // Conserva q y archivados al cambiar de página.
     const buildQs = (p) => {
@@ -376,6 +382,10 @@ export function createClientRoutes(db, cfg = {}) {
               <div class="form-group"><label class="form-label">Ciudad</label><input class="form-control" id="cCity"></div>
               <div class="form-group"><label class="form-label">País</label><input class="form-control" id="cCountry"></div>
               <div class="form-group"><label class="form-label">Grupo</label><select class="form-control" id="cGroup"><option value="">Sin grupo</option>${groupOptions}</select></div>
+            </div>
+            <div class="form-group"><label class="form-label">Responsable</label>
+              <select class="form-control" id="cResp"><option value="">Sin asignar</option>${userOptions}</select>
+              <div style="font-size:.7rem;color:var(--muted);margin-top:.25rem">Quién lleva a este cliente. Sus ventas se atribuyen aquí — si lo reasignas, su histórico se reatribuye solo.</div>
             </div>
 
             <!-- Dirección fiscal completa: OPCIONAL y PLEGADA. Solo hace falta para exportar la
@@ -468,6 +478,7 @@ export function createClientRoutes(db, cfg = {}) {
         ['cName','cFiscal','cEmail','cPhone','cAddress','cCity','cCountry','cNotes','cPostal','cProvince'].forEach(id=>document.getElementById(id).value='');
         setFiscal(false);
         document.getElementById('cGroup').value='';
+        document.getElementById('cResp').value='';
         document.getElementById('cType').value='particular';
         document.getElementById('cTermDays').value=0;
         document.getElementById('cPayMethod').value='';
@@ -490,6 +501,7 @@ export function createClientRoutes(db, cfg = {}) {
         document.getElementById('cProvince').value=c.province||'';
         setFiscal(!!(c.postal_code||c.province));
         document.getElementById('cGroup').value=c.group_id||'';
+        document.getElementById('cResp').value=c.responsable_user_id||'';
         document.getElementById('cNotes').value=c.notes||'';
         document.getElementById('cType').value=c.client_type||'particular';
         document.getElementById('cTermDays').value=Number(c.payment_term_days||0);
@@ -499,7 +511,7 @@ export function createClientRoutes(db, cfg = {}) {
       }
       async function saveClient(){
         const id=document.getElementById('clientId').value;
-        const body={name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,address:document.getElementById('cAddress').value,city:document.getElementById('cCity').value,country:document.getElementById('cCountry').value,postal_code:document.getElementById('cPostal').value,province:document.getElementById('cProvince').value,group_id:document.getElementById('cGroup').value||null,notes:document.getElementById('cNotes').value,accepts_newsletter: id ? !!(currentClient&&currentClient.accepts_newsletter) : false,client_type:document.getElementById('cType').value,payment_term_days:parseInt(document.getElementById('cTermDays').value)||0,payment_method:document.getElementById('cPayMethod').value,collections_profile:document.getElementById('cProfile').value};
+        const body={name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,address:document.getElementById('cAddress').value,city:document.getElementById('cCity').value,country:document.getElementById('cCountry').value,postal_code:document.getElementById('cPostal').value,province:document.getElementById('cProvince').value,group_id:document.getElementById('cGroup').value||null,notes:document.getElementById('cNotes').value,accepts_newsletter: id ? !!(currentClient&&currentClient.accepts_newsletter) : false,client_type:document.getElementById('cType').value,payment_term_days:parseInt(document.getElementById('cTermDays').value)||0,payment_method:document.getElementById('cPayMethod').value,collections_profile:document.getElementById('cProfile').value,responsable_user_id:document.getElementById('cResp').value||null};
         try{if(id)await api('PUT','/api/erp/clients/'+id,body);else await api('POST','/api/erp/clients',body);closeModal('clientModal');toast(id?'Actualizado':'Creado');location.reload();}catch(e){toast(e.message,'err')}
       }
       async function delClient(id){if(!confirm('¿Archivar este cliente? Dejará de aparecer en la lista, pero no se borra.'))return;try{await api('DELETE','/api/erp/clients/'+id);toast('Archivado');location.reload();}catch(e){toast(e.message,'err')}}

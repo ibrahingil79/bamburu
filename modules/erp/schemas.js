@@ -93,6 +93,10 @@ export const clientSchema = z.object({
   payment_method: z.enum(['', 'transferencia', 'efectivo', 'tarjeta', 'domiciliacion']).optional().default(''),
   // T4 Paso 2 — perfil de cobro: gobierna la cadencia de la próxima acción (motor en cobros.js).
   collections_profile: z.enum(['suave', 'estandar', 'firme', 'manual']).optional().default('estandar'),
+  // CRM — RESPONSABLE (dueño comercial de la ficha). `optId` acepta vacío/0 → null = "sin asignar",
+  // que es un estado legítimo y NO un error: los clientes existentes nacen así y el dueño reparte
+  // cuando quiera. Se asigna a mano; ni reparto automático ni DISA (decisión del dueño).
+  responsable_user_id: optId,
 });
 
 // T5 — valores EXACTOS permitidos en los campos de lista cerrada del cliente, extraídos del

@@ -43,7 +43,10 @@ export function createMostradorRoutes(db) {
         if (!(c.get('isAdmin') || checkPermission(db, c.get('session'), 'sales', 'emit_over_stock')))
           return c.json({ error: 'No tienes permiso para vender por encima del stock. Solo el dueño o un administrador pueden hacerlo; baja la cantidad a lo disponible.' }, 403);
       }
-      const r = emitTicketSvc(db, { lines: d.lines, warehouse_id: d.warehouse_id, payment_method: d.payment_method });
+      // CRM — quién cobra queda congelado en el ticket (rama 2 de la cascada del responsable): un
+      // ticket anónimo no tiene cliente del que derivarlo, pero sí una persona en la caja. La sesión
+      // ya estaba aquí — la usa el logActivity de la línea de abajo desde siempre.
+      const r = emitTicketSvc(db, { lines: d.lines, warehouse_id: d.warehouse_id, payment_method: d.payment_method, emitted_by: c.get('session')?.userId || null });
       logActivity(db, c.get('session'), 'Emitió ticket de mostrador', ENTITY.INVOICE, r.id, r.invoice_number + ' · ' + r.payment_method + (excess.length ? ' (exceso de stock confirmado)' : ''));
       return c.json({ ...r, message: 'Ticket ' + r.invoice_number + ' emitido y cobrado' }, 201);
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }

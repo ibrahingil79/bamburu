@@ -684,7 +684,12 @@ function resolveTicketLines(db, lines) {
 // alta Verifactu (F2, huella encadenada) + salida de stock por línea física + cobro total. Si
 // algo falla, NO se confirma NADA (ni venta huérfana, ni stock movido sin ticket, ni ticket sin
 // alta). Nace EMITIDA e inmutable; corregir = anular/rectificar por la vía legal ya existente.
-export function emitTicketSvc(db, { lines, warehouse_id, payment_method, paid_date } = {}) {
+// CRM — `emitted_by`: quién cobró. Es la RAMA 2 de la cascada del responsable y solo la rellena el
+// mostrador, a propósito: un ticket anónimo no tiene cliente del que derivar el responsable, pero sí
+// tiene una persona sentada en la caja. En los demás documentos se deja NULL porque su responsable se
+// deriva EN VIVO del cliente (rama 1) — congelarlo ahí impediría que reasignar un cliente
+// reatribuyera su histórico, que es justo lo que un CRM tiene que hacer.
+export function emitTicketSvc(db, { lines, warehouse_id, payment_method, paid_date, emitted_by = null } = {}) {
   if (!['efectivo', 'tarjeta'].includes(payment_method)) { const e = new Error('Método de pago no válido (efectivo o tarjeta)'); e.status = 400; throw e; }
   const resolved = resolveTicketLines(db, lines || []);
   if (!resolved.length) { const e = new Error('El ticket no tiene líneas'); e.status = 400; throw e; }
@@ -714,8 +719,8 @@ export function emitTicketSvc(db, { lines, warehouse_id, payment_method, paid_da
        subtotal, tax_rate, tax_name, tax_amount, total,
        currency, currency_symbol, document_name,
        verifactu_hash, prev_hash, notes,
-       irpf_rate, irpf_amount, due_date, tipo_factura)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       irpf_rate, irpf_amount, due_date, tipo_factura, emitted_by)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       invoice_number, null, null,
       SIMPLIFIED_SERIES, year, seq, issueDate,
@@ -725,7 +730,7 @@ export function emitTicketSvc(db, { lines, warehouse_id, payment_method, paid_da
       totals.subtotal, headerTaxRate, cfg.tax_name || 'IVA', totals.taxAmount, totals.total,
       cfg.currency || 'EUR', cfg.currency_symbol || '€', 'Factura simplificada',
       verifactu_hash, prev_hash, 'Venta de mostrador (' + payment_method + ')',
-      0, 0, issueDate, 'F2'
+      0, 0, issueDate, 'F2', emitted_by || null
     );
     const invoiceId = result.lastInsertRowid;
 

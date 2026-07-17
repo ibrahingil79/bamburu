@@ -47,6 +47,91 @@ export function topProductos(db, { from = null, to = null, limit = 10 } = {}) {
   ).all(...ids, limit);
 }
 
+// ── CRM · RESPONSABLE DE LA VENTA — la cascada de tres ───────────────────────
+// FUENTE ÚNICA de "¿de quién es esta venta?". Vive aquí, junto al resto de métricas de venta, para
+// que la analítica, los filtros y cualquier informe futuro respondan lo MISMO. La regla la fijó el
+// dueño (17 jul 2026):
+//   1) HAY CLIENTE  → el responsable del cliente, **derivado EN VIVO** (`clients.responsable_user_id`).
+//      No se congela a propósito: si reasignas un cliente, su histórico se reatribuye solo — es lo
+//      que espera un CRM. Es seguro: los clientes se ARCHIVAN, nunca se borran (0 facturas con un
+//      client_id inexistente, verificado el 17-jul).
+//   2) NO HAY CLIENTE pero SÍ `emitted_by` → quien cobró, **congelado** (mostrador anónimo: no hay
+//      cliente del que derivar, pero había una persona en la caja).
+//   3) NI LO UNO NI LO OTRO → **sin asignar** (`null`). No es un error: es el estado de arranque de
+//      todos los clientes, y también donde caen las ventas sin cliente que no son de mostrador
+//      (hay 4 así en el tenant de desarrollo: serie F, sin cliente y sin tipo, de junio).
+// El SQL de abajo ES la cascada, en ese orden. Un `LEFT JOIN` a `clients` y a `admin_users` para
+// resolver el nombre; si el usuario responsable está desactivado o ya no existe, cae en (3) — nada
+// se pierde (el id sigue en la ficha) y el dueño lo reasigna cuando quiera.
+export const SIN_ASIGNAR = 'Sin asignar';
+
+// Fragmento SQL reutilizable: resuelve el responsable de una fila de `invoices` con alias `i`.
+// Se exporta para que ningún consumidor reescriba la regla con matices propios.
+export const SQL_RESPONSABLE = `
+  COALESCE(uc.id, ue.id)                       AS responsable_id,
+  COALESCE(uc.name, ue.name)                   AS responsable_nombre`;
+export const SQL_RESPONSABLE_JOIN = `
+  LEFT JOIN clients     cl ON cl.id = i.client_id
+  LEFT JOIN admin_users uc ON uc.id = cl.responsable_user_id AND uc.active = 1
+  LEFT JOIN admin_users ue ON ue.id = i.emitted_by           AND ue.active = 1`;
+
+// Resuelve el responsable de UNA factura ya cargada (misma cascada, en JS). Para quien tenga la fila
+// a mano y no quiera repetir el join.
+export function responsableDeVenta(db, invoice) {
+  if (invoice?.client_id) {
+    const u = db.prepare(`SELECT u.id, u.name FROM clients c
+                            JOIN admin_users u ON u.id = c.responsable_user_id AND u.active = 1
+                           WHERE c.id = ?`).get(invoice.client_id);
+    if (u) return { id: u.id, nombre: u.name };
+  }
+  if (invoice?.emitted_by) {
+    const u = db.prepare('SELECT id, name FROM admin_users WHERE id=? AND active=1').get(invoice.emitted_by);
+    if (u) return { id: u.id, nombre: u.name };
+  }
+  return { id: null, nombre: SIN_ASIGNAR };
+}
+
+// VENTAS POR RESPONSABLE. Mismo conjunto de facturas que todo lo demás (`countingSalesInvoices`), así
+// que la suma por responsable CUADRA con el total de ventas. `null` = sin asignar, y sale como una
+// fila más: esconderla haría que los totales no cuadraran y nadie sabría por qué.
+export function ventasPorResponsable(db, opts = {}) {
+  const facturas = countingSalesInvoices(db, opts);
+  if (!facturas.length) return [];
+  const ph = facturas.map(() => '?').join(',');
+  const filas = db.prepare(
+    `SELECT i.id, i.subtotal, i.total, ${SQL_RESPONSABLE}
+       FROM invoices i ${SQL_RESPONSABLE_JOIN}
+      WHERE i.id IN (${ph})`
+  ).all(...facturas.map(f => f.id));
+  const map = new Map();
+  for (const f of filas) {
+    const key = f.responsable_id ?? 0;
+    const e = map.get(key) || { responsable_id: f.responsable_id ?? null,
+                                responsable: f.responsable_nombre || SIN_ASIGNAR,
+                                facturas: 0, base: 0, total: 0 };
+    e.facturas++; e.base += Number(f.subtotal) || 0; e.total += Number(f.total) || 0;
+    map.set(key, e);
+  }
+  return [...map.values()].map(e => ({ ...e, base: r2(e.base), total: r2(e.total) }))
+                          .sort((a, b) => b.base - a.base);
+}
+
+// CLIENTES POR RESPONSABLE. Aquí no hay cascada: un cliente ES de su responsable o de nadie (la rama
+// 2 solo existe para ventas sin cliente). Solo clientes activos.
+export function clientesPorResponsable(db) {
+  const filas = db.prepare(
+    `SELECT u.id AS responsable_id, u.name AS responsable_nombre, COUNT(c.id) AS clientes
+       FROM clients c
+       LEFT JOIN admin_users u ON u.id = c.responsable_user_id AND u.active = 1
+      WHERE c.active = 1
+      GROUP BY u.id, u.name
+      ORDER BY clientes DESC`
+  ).all();
+  return filas.map(f => ({ responsable_id: f.responsable_id ?? null,
+                           responsable: f.responsable_nombre || SIN_ASIGNAR,
+                           clientes: f.clientes }));
+}
+
 // ── ESCALERA · PASO 2 — MARGEN ───────────────────────────────────────────────
 // Cuánto GANA el negocio, no cuánto factura. Vive aquí porque las ventas se cuentan aquí: el margen
 // usa EXACTAMENTE el mismo conjunto de facturas (`countingSalesInvoices`) que el resto de cifras, así

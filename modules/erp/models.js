@@ -1187,6 +1187,46 @@ export function runMigrations(db) {
   addCol(db, 'invoice_items', 'tax_rate',   'REAL NOT NULL DEFAULT 0');
   addCol(db, 'invoice_items', 'tax_amount', 'REAL NOT NULL DEFAULT 0');
 
+  // ── CRM · RESPONSABLE DE CLIENTE + atribución de la venta (aditivo, reversible) ──────────────
+  // Quién lleva a cada cliente. Se asigna A MANO (no hay reparto automático, y DISA no lo toca).
+  // NULL = "sin asignar", que es un estado legítimo y el de arranque de TODOS los existentes: la
+  // analítica por responsable se llena a medida que el dueño reparte.
+  //   · `clients.responsable_user_id` — el dueño comercial de la ficha.
+  //   · `invoices.emitted_by`         — quién EMITIÓ el documento. Solo lo rellena el mostrador.
+  // LA CASCADA (resuelta en ventas-metrics.js, fuente única — aquí solo viven los datos):
+  //   1) hay cliente  → responsable del cliente, DERIVADO EN VIVO (no congelado).
+  //   2) si no, hay emitted_by → quien cobró, CONGELADO (mostrador anónimo).
+  //   3) si no → sin asignar.
+  // POR QUÉ EL (1) SE DERIVA Y NO SE CONGELA, al revés que el coste del paso 2: el coste es un
+  // HECHO del día de la venta (lo que te costó entonces) y no puede cambiar; el responsable es una
+  // RELACIÓN VIVA (quién lleva a este cliente HOY). Si reasignas un cliente, su histórico debe
+  // reatribuirse solo — es lo que espera cualquier CRM. Verificado que es seguro: los clientes se
+  // ARCHIVAN (active=0), nunca se borran, y hay 0 facturas con un client_id inexistente.
+  // NO toca la huella: `emitted_by` es identificación, no entra en `calcHash` (número, fecha, NIF,
+  // total, huella previa) ni en ningún campo firmado.
+  addCol(db, 'clients',  'responsable_user_id', 'INTEGER');
+  addCol(db, 'invoices', 'emitted_by',          'INTEGER');
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_clients_responsable ON clients(responsable_user_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_invoices_emitted_by ON invoices(emitted_by)`);
+
+  // Backfill del histórico del MOSTRADOR, una sola vez (bandera). El dato ya existe: `activity_logs`
+  // registra "Emitió ticket de mostrador" con su `user_id` desde siempre. No se inventa nada — se
+  // recupera lo que ya estaba escrito, y solo para tickets (`client_id IS NULL`, que es la rama 2 de
+  // la cascada). Si un ticket no tiene log, se queda NULL → "sin asignar", que es la verdad.
+  // Los clientes NO se backfillean: nacen "sin asignar" a propósito (decisión del dueño).
+  const respBackfillKey = 'migration_mostrador_emitted_by_backfill_2026_v1';
+  if (!db.prepare('SELECT value FROM settings WHERE key=?').get(respBackfillKey)) {
+    db.transaction(() => {
+      db.prepare(`UPDATE invoices SET emitted_by = (
+                    SELECT a.user_id FROM activity_logs a
+                     WHERE a.entity='invoice' AND a.entity_id = invoices.id
+                       AND a.action LIKE 'Emitió ticket%' AND a.user_id IS NOT NULL
+                     ORDER BY a.id LIMIT 1)
+                  WHERE emitted_by IS NULL AND client_id IS NULL`).run();
+      db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)').run(respBackfillKey, 'done');
+    })();
+  }
+
   // ── ESCALERA · PASO 2 (MARGEN) — el coste, congelado en la línea (aditivo, reversible) ──
   // La línea de venta guardaba SOLO el precio: ni el coste, ni SIQUIERA de qué producto era. El
   // enlace existía en la petición (schemas: `product_id`) y se tiraba al insertar, así que la

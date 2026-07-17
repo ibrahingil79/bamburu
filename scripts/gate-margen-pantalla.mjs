@@ -150,7 +150,30 @@ try {
   ok(!menuEmp.area, 'pero NO ve el área "Analítica"');
   ok(!menuEmp.href, 'ni el enlace al informe');
 
-  console.log('\n[6] NO SE RESUCITA NADA DE LO DESENLAZADO A PROPÓSITO');
+  console.log('\n[6] CRM — POR RESPONSABLE: la tarjeta pinta y el candado cruza áreas');
+  await page.goto(BASE + '/admin/analytics', { waitUntil: 'networkidle2' });
+  await page.waitForSelector('#respBody tr', { timeout: 10000 }).catch(() => {});
+  const resp = await page.$$eval('#respBody tr', trs => trs.map(t => [...t.querySelectorAll('td')].map(d => d.textContent.trim())));
+  ok(resp.length > 0, 'la tarjeta "Por responsable" pinta filas', resp.length + ' filas');
+  ok(resp.some(f => /Sin asignar/i.test(f[0] || '')), '"Sin asignar" aparece como una fila más (no se esconde)');
+  const opciones = await page.$$eval('#respSel option', os => os.map(o => o.textContent.trim()));
+  ok(opciones.includes('Todos'), 'el filtro por responsable existe', opciones.join(' · '));
+  // El candado CRUZA ÁREAS: el empleado tiene clients.read pero NO invoices.read ni analytics.read.
+  const respEmp = await page2.evaluate(async b => (await fetch(b + '/api/erp/analytics/responsable')).status, BASE);
+  ok(respEmp === 403, 'sin analytics.read no saca el reparto por responsable (403)', String(respEmp));
+
+  console.log('\n[7] LA FICHA DE CLIENTE tiene el desplegable de responsable');
+  await page.goto(BASE + '/admin/clients', { waitUntil: 'networkidle2' });
+  const ficha = await page.evaluate(() => {
+    const s = document.getElementById('cResp');
+    return { existe: !!s, sinAsignar: s ? [...s.options].some(o => o.textContent.trim() === 'Sin asignar') : false,
+             usuarios: s ? s.options.length : 0 };
+  });
+  ok(ficha.existe, 'el desplegable "Responsable" está en la ficha');
+  ok(ficha.sinAsignar, 'y ofrece "Sin asignar" (no es obligatorio)');
+  ok(ficha.usuarios > 1, 'lista los usuarios del negocio', ficha.usuarios + ' opciones');
+
+  console.log('\n[8] NO SE RESUCITA NADA DE LO DESENLAZADO A PROPÓSITO');
   const muertas = await page.evaluate(() => ['/admin/discounts', '/admin/tags', '/admin/orders', '/admin/shipping']
     .filter(h => !!document.querySelector('a[href="' + h + '"]')));
   ok(muertas.length === 0, 'descuentos, etiquetas, pedidos viejos y envíos siguen fuera del menú', muertas.join(', ') || 'ninguno asomó');

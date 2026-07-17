@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { safeError } from '../../../core/errors.js';
-import { adminLayout, skeletonRows } from '../layout.js';
+import { adminLayout, skeletonRows, can } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
-import { ventasResumen, topProductos, ventasPorDia, ventasCsvRows, margenResumen, margenPorProducto } from '../ventas-metrics.js';   // PIEZA C: ventas desde la cadena nueva (facturas) · PASO 2: margen
+import { ventasResumen, topProductos, ventasPorDia, ventasCsvRows, margenResumen, margenPorProducto,
+         ventasPorResponsable, clientesPorResponsable } from '../ventas-metrics.js';   // PIEZA C: ventas desde la cadena nueva (facturas) · PASO 2: margen · CRM: responsable
 
 export function createAnalyticsRoutes(db, cfg = {}) {
   const sym = cfg.sym || '€';
@@ -46,6 +47,25 @@ export function createAnalyticsRoutes(db, cfg = {}) {
     try {
       const from = c.req.query('from') || null, to = c.req.query('to') || null;
       return c.json({ resumen: margenResumen(db, { from, to }), productos: margenPorProducto(db, { from, to }) });
+    } catch(e) { return c.json({error:safeError(e)},500); }
+  });
+
+  // CRM — VENTAS Y CLIENTES POR RESPONSABLE (dimensión del catálogo del peldaño 3).
+  // DOS PUERTAS, DOS CANDADOS: las ventas por responsable exigen `analytics.read` **y**
+  // `invoices.read`; los clientes por responsable, `analytics.read` **y** `clients.read`. Es la regla
+  // de CANON §3-bis llevada al detalle: una pieza que cruza áreas exige TODOS los permisos que toca —
+  // si no, el informe sería el atajo para ver por la puerta de atrás lo que la pantalla te niega.
+  // `?from=&to=` opcionales. El filtro por responsable (incluido "sin asignar") se resuelve en el
+  // cliente sobre estas filas: son pocas por naturaleza (una por usuario).
+  api.get('/responsable', requirePerm('analytics.read'), c => {
+    try {
+      const from = c.req.query('from') || null, to = c.req.query('to') || null;
+      const out = {};
+      if (can(c, 'invoices.read')) out.ventas = ventasPorResponsable(db, { from, to });
+      if (can(c, 'clients.read'))  out.clientes = clientesPorResponsable(db);
+      // Se dice QUÉ falta y por qué, en vez de devolver un hueco mudo que se lea como "no hay datos".
+      out.sinPermiso = [!can(c, 'invoices.read') && 'ventas', !can(c, 'clients.read') && 'clientes'].filter(Boolean);
+      return c.json(out);
     } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
@@ -159,6 +179,18 @@ export function createAnalyticsRoutes(db, cfg = {}) {
       </div>
 
       <div class="card" style="margin-bottom:1.5rem">
+        <div class="card-head"><h3>Por responsable</h3>
+          <div style="display:flex;gap:.5rem;align-items:center">
+            <select class="form-control" id="respSel" style="width:auto;font-size:.8rem"><option value="">Todos</option></select>
+          </div>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Responsable</th><th>Clientes</th><th>Facturas</th><th>Facturado sin IVA</th></tr></thead>
+          <tbody id="respBody">${skeletonRows(3)}</tbody>
+        </table></div>
+      </div>
+
+      <div class="card" style="margin-bottom:1.5rem">
         <div class="card-head"><h3>Informe de stock</h3>
           <div style="display:flex;gap:.5rem">
             <a href="/api/erp/analytics/export/products" class="btn btn-secondary btn-sm">CSV Productos</a>
@@ -211,14 +243,47 @@ export function createAnalyticsRoutes(db, cfg = {}) {
           '</tr>').join(''):window.emptyRow(6,'Todavía no has vendido nada. Cuando emitas tu primera factura, aquí verás lo que ganas de verdad.');
       }
 
+      // CRM — POR RESPONSABLE. Cruza dos áreas (ventas y clientes), así que puede llegar a medias si
+      // el usuario solo tiene una: se dice cuál falta en vez de pintar un hueco que se lea como "no
+      // hay datos". "Sin asignar" es una fila más y NO se esconde: ocultarla descuadraría el total
+      // contra Ventas y nadie sabría por qué.
+      let respCache=null;
+      function pintarResponsable(){
+        const body=document.getElementById('respBody');
+        if(!respCache){ body.innerHTML=window.emptyRow(4,'No he podido cargar el reparto por responsable.'); return; }
+        const sel=document.getElementById('respSel').value;
+        const cli=new Map((respCache.clientes||[]).map(x=>[String(x.responsable_id??''),x.clientes]));
+        let filas=(respCache.ventas||[]).map(v=>({...v, clientes: cli.get(String(v.responsable_id??''))??0}));
+        // Un responsable con clientes pero sin ventas todavía también existe: si no, la cartera
+        // recién repartida parecería no estar.
+        for(const [k,n] of cli) if(!filas.some(f=>String(f.responsable_id??'')===k))
+          filas.push({responsable_id:k===''?null:Number(k), responsable:(respCache.clientes.find(x=>String(x.responsable_id??'')===k)||{}).responsable, facturas:0, base:0, clientes:n});
+        if(sel!=='') filas=filas.filter(f=>String(f.responsable_id??'sin')===sel);
+        if(!filas.length){ body.innerHTML=window.emptyRow(4,'Nadie tiene ventas ni clientes con ese filtro.'); return; }
+        body.innerHTML=filas.map(f=>'<tr>'+
+          '<td><strong>'+escHtml(f.responsable||'Sin asignar')+'</strong></td>'+
+          '<td>'+f.clientes+'</td><td>'+f.facturas+'</td><td>'+eur(f.base)+'</td></tr>').join('');
+        if((respCache.sinPermiso||[]).length)
+          body.innerHTML+='<tr><td colspan="4" style="color:var(--muted);font-size:.75rem">No ves '+respCache.sinPermiso.join(' ni ')+' porque no tienes su permiso.</td></tr>';
+      }
+      function llenarSelResponsable(){
+        const s=document.getElementById('respSel'); if(!respCache) return;
+        const vistos=new Map();
+        for(const v of (respCache.ventas||[])) vistos.set(String(v.responsable_id??'sin'), v.responsable);
+        for(const c of (respCache.clientes||[])) vistos.set(String(c.responsable_id??'sin'), c.responsable);
+        s.innerHTML='<option value="">Todos</option>'+[...vistos].map(([k,n])=>'<option value="'+k+'">'+escHtml(n||'Sin asignar')+'</option>').join('');
+        s.onchange=pintarResponsable;
+      }
+
       async function loadCharts(){
         const days=document.getElementById('periodSel').value;
-        const [ov,period,top,stock,mg]=await Promise.all([
+        const [ov,period,top,stock,mg,resp]=await Promise.all([
           api('GET','/api/erp/analytics/overview').catch(()=>({})),
           api('GET','/api/erp/analytics/sales-by-period?days='+days).catch(()=>[]),
           api('GET','/api/erp/analytics/best-sellers?limit=8').catch(()=>[]),
           api('GET','/api/erp/analytics/stock-report').catch(()=>[]),
-          api('GET','/api/erp/analytics/margen').catch(()=>null)
+          api('GET','/api/erp/analytics/margen').catch(()=>null),
+          api('GET','/api/erp/analytics/responsable').catch(()=>null)
         ]);
         document.getElementById('kRev').textContent='${sym}'+Number(ov.totalRevenue||0).toFixed(2);
         document.getElementById('kOrd').textContent=ov.totalOrders||0;
@@ -226,6 +291,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         document.getElementById('kCli').textContent=ov.totalClients||0;
 
         pintarMargen(mg);
+        respCache=resp; llenarSelResponsable(); pintarResponsable();
 
         if(salesChartInst)salesChartInst.destroy();
         salesChartInst=new Chart(document.getElementById('salesChart').getContext('2d'),{type:'bar',data:{labels:period.map(d=>d.date),datasets:[{label:'${sym}',data:period.map(d=>d.total),backgroundColor:'rgba(16,185,129,.6)',borderColor:'#10b981',borderWidth:1,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'${sym}'+v}}}}});

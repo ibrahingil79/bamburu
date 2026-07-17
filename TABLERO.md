@@ -16,7 +16,8 @@
 > apoya en el anterior: **1 sincerar → 2 margen → 3 informes → 4a/4b constructor de analíticas (la
 > puerta visual) → 5 DISA predictiva → 6 dashboards → 7-9 oficios → 10-19 el resto.** **Se acabaron
 > "El Foso" y el "Roadmap futuro"**: cada módulo tiene número. **Pasos 1 (sincerar) y 2 (margen) HECHOS
-> (17 jul).** **Siguiente: el paso 3 — informes por área + plan financiero. No se inicia sin tu encargo.** El **Backlog** de abajo NO
+> (17 jul); del paso 3, HECHOS el catálogo de las 5 áreas (91 piezas) y el RESPONSABLE de cliente.**
+> **Siguiente: 3-bis — informes por área + plan financiero. No se inicia sin tu encargo.** El **Backlog** de abajo NO
 > compite con la escalera: es lo que le falta a El Suelo (el umbral) más la deuda. Plan del Eje C
 > cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
@@ -1601,7 +1602,75 @@ Bamburu ya calcula solo desde las compras.
      del dueño (17-jul) y coherente con CANON §3-bis (las dos puertas): la puerta visual necesita
      puerta. El §3.3 se queda como regla para lo que venga; esta excepción está por escrito.
 
-### ⬜ 3 — Informes por área + plan financiero
+### 🟡 3 — Informes por área + plan financiero · **Catálogo HECHO · Responsable HECHO (17 jul 2026)**
+
+#### ✅ Catálogo de piezas de las 5 áreas — **91 piezas inventariadas**
+Con qué podrá montar informes el constructor del paso 4. Cada pieza, con su fuente y su permiso.
+**Ninguna pieza sin dato se descartó**: se marcó "a habilitar" con lo que haría falta.
+- **VENTAS 20/21** (`invoices.read` · fuente `ventas-metrics.js`) — todo existe salvo **vendedor**.
+  *Producto y categoría solo son posibles gracias al paso 2* (`invoice_items.product_id`).
+- **COMPRAS 14/17** (`purchases.read`) — falta **usuario que compró**; producto/categoría **parcial**:
+  `supplier_invoice_items` solo tiene `concepto` libre — pero **un gasto puro no tiene producto por
+  naturaleza** (un alquiler no es un artículo). No es carencia: es el dominio.
+- **INVENTARIO 17/17** (`inventory.read`) — completo, lote/serie y bajo mínimo incluidos.
+- **CONTABILIDAD 16/17** — completo salvo **IRPF soportado en compras**: `supplier_invoices` no guarda
+  retención **por decisión explícita del código**, y es lo que bloquea el modelo 111 (ya en el Backlog).
+- **CLIENTES 18/19** (`clients.read`) — completo; `clientesDormidos`/`umbralDormido` ya dan frecuencia
+  y última compra.
+- **○ Zona/provincia (ventas y clientes): el caso a no confundir.** La columna **existe** (la trajo
+  Facturae) y está **vacía en 15 de 15**. No es pieza a habilitar: es captura de datos. Marcarla como
+  "existe" engañaría al constructor del paso 4; hoy daría un único grupo "(sin provincia)".
+
+#### 📋 Piezas a habilitar — su propio peldaño, ninguna era "barata y directa"
+1. **Usuario en los documentos (ventas + compras).** Es UNA pieza, no dos: ningún documento guardaba
+   quién lo hizo. **Resuelta a medias por el responsable, abajo** — el mostrador ya guarda quién cobra.
+   Lo que queda (¿quién *tecleó* una factura con cliente?) exige pasar la sesión por 5 puntos de
+   emisión, y uno es un **cron** (recurrentes: no tiene vendedor, tiene "automático"). Decisión de
+   producto, no columna.
+2. **Producto/categoría en facturas de gasto** — ver arriba: es el dominio, no una carencia.
+3. **IRPF soportado en compras** — ya tiene sitio en el Backlog (modelo 111).
+
+#### ✅ CRM — RESPONSABLE DE CLIENTE + atribución de la venta (17 jul 2026)
+Función nueva de CRM que la analítica del paso 4 aprovechará. **Asignación solo a mano** (ni reparto
+automático ni DISA — anotado como peldaño futuro por si algún día se quiere).
+- **LA CASCADA DE TRES** (decisión del dueño), fuente única en `ventas-metrics.js`:
+  **(1)** hay cliente → responsable del cliente, **derivado EN VIVO** · **(2)** si no, `emitted_by` →
+  quien cobró, **congelado** (solo mostrador) · **(3)** si no → **sin asignar**.
+- **La asimetría es el diseño, no un descuido.** El coste (paso 2) se congela porque es un HECHO del
+  día de la venta; el responsable se deriva porque es una RELACIÓN VIVA: reasignar un cliente
+  **reatribuye su histórico**, que es lo que un CRM debe hacer. Verificado que derivar es seguro: los
+  clientes se **archivan**, nunca se borran, y hay **0 facturas con un `client_id` inexistente**.
+- **La rama 3 salió del PASO 0, y el encargo no la preveía:** hay **4 facturas de serie F sin cliente
+  y sin tipo** (junio) que no son mostrador **ni** tienen cliente — no las cubría ninguna de las dos
+  reglas. Caen en "sin asignar" y el modelo queda cerrado ante cualquier caso futuro.
+- **Migración aditiva**: `clients.responsable_user_id` + `invoices.emitted_by` + índices. Los clientes
+  **nacen sin asignar** a propósito; la analítica se llena a medida que el dueño reparte.
+- **Backfill del histórico del mostrador**: el dato ya existía en `activity_logs` ("Emitió ticket de
+  mostrador" con `user_id`). **41 de 42 tickets** recuperados (1 sin log) — no nace vacío. Los 4 raros,
+  correctamente sin emisor. No toca la huella: `emitted_by` no entra en `calcHash`.
+- **Dimensión + filtro** en Analítica (Ventas y Clientes), con **"Sin asignar" como fila más**:
+  esconderla descuadraría el total contra Ventas y nadie sabría por qué.
+- **Dos puertas, dos candados:** ventas por responsable exige `analytics.read` **Y** `invoices.read`;
+  clientes por responsable, `analytics.read` **Y** `clients.read`. Una pieza que cruza áreas exige
+  **todos** los permisos que toca (CANON §3-bis), y si falta uno **se dice cuál** en vez de pintar un
+  hueco mudo que se lea como "no hay datos".
+- **Un responsable desactivado** cae en "sin asignar" sin perder el dato (el id sigue en la ficha) y su
+  cartera vuelve sola al reactivarlo.
+- Verificado: `verify-responsable` **27/0** (BD desechable, usuarios propios: asignar atribuye ·
+  reasignar reatribuye el histórico · mostrador congelado que NO se mueve al cambiar el cliente · rama
+  3 · cuadre Σ por responsable == total · desactivar/reactivar · idempotencia · huella y margen
+  intactos) + `gate-margen-pantalla` ampliado a **33/0** (navegador: tarjeta, filtro, ficha con su
+  desplegable, y el 403 cruzando áreas). Grupo `margen` del runner: **3/3**.
+
+#### ⬜ Anotado como peldaño FUTURO (decisión del dueño: hoy NO)
+- **Reparto automático de clientes / que DISA asigne el responsable.** La asignación es **solo a mano**
+  a propósito. Si algún día se quiere, encaja aquí: el dato y la cascada ya existen, y DISA tendría que
+  pasar por el servicio validado (`updateClientSvc`), nunca escribir la columna directa — patrón T5.
+- **Usuario que TECLEA una factura con cliente** (el "vendedor" del catálogo, pieza ⚠ 1). Distinto del
+  responsable: uno es *quién la hizo*, el otro *de quién es el cliente*. Exige decidir qué es una
+  factura recurrente emitida por un cron ("automático") antes de tocar código.
+
+### ⬜ 3-bis — Lo que queda del peldaño 3: informes por área + plan financiero
 Módulo de **informes predefinidos por área** (ventas, compras, clientes…) + **plan financiero**
 (objetivos mes a mes vs. real). Va más allá de los KPIs sueltos del panel actual.
 *Origen: auditoría Bamburu vs Holded (9 jul 2026), repaso con el manual funcional completo de Holded
