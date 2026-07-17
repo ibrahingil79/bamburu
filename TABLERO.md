@@ -17,10 +17,10 @@
 > puerta visual) → 5 DISA predictiva → 6 dashboards → 7-9 oficios → 10-19 el resto.** **Se acabaron
 > "El Foso" y el "Roadmap futuro"**: cada módulo tiene número. **Pasos 1 (sincerar), 2 (margen) y 3
 > (catálogo de las 5 áreas + responsable + informes por área + plan financiero) HECHOS (17 jul).**
-> **Del paso 4a, HECHO el constructor para VENTAS + COMPRAS + CLIENTES + INVENTARIO** (selector de
-> área; 9/4/5/5 dimensiones; paneles guardados). **Contabilidad queda FUERA, pendiente de tu decisión**
-> (arriesga dos verdades del resultado). **Siguiente: 4b — constructor avanzado (combinar fuentes,
-> cálculos propios, compartir paneles). No se inicia sin tu encargo.** El **Backlog** de abajo NO
+> **HECHO el constructor completo: 4a (ventas) + 4a-bis (compras/clientes/inventario) + 4b (cálculos
+> propios, combinar fuentes, compartir paneles).** **Contabilidad sigue FUERA, pendiente de tu decisión.**
+> **Siguiente: paso 5 (DISA predictiva) o paso 6 (dashboards personalizables — ya posible: los paneles
+> existen). No se inicia sin tu encargo.** El **Backlog** de abajo NO
 > compite con la escalera: es lo que le falta a El Suelo (el umbral) más la deuda. Plan del Eje C
 > cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
@@ -1815,8 +1815,39 @@ cerrados) y **guarda los suyos**. **Pantalla de panel propia = la puerta del usu
 > gráfico lo que la pantalla te niega — mismo problema que resolvió D1 con `query_database` de DISA
 > (allowlist, falla cerrado); hay solución de la que copiar.
 
-### ⬜ 4b — Constructor avanzado
-Cálculos propios del usuario · más tipos de gráfico · combinar fuentes · compartir paneles.
+### ✅ 4b — Constructor avanzado · HECHO (17 jul 2026)
+Cálculos propios · combinar fuentes · compartir paneles. *(Más tipos de gráfico: los 4 de 4a bastan;
+ampliar es aditivo cuando se pida.)*
+- ✅ **CÁLCULOS PROPIOS con evaluador SEGURO (sin `eval`).** El usuario escribe una fórmula sobre las
+  medidas de su área (`beneficio / base * 100`). **No se usa `eval` ni `new Function`** —el proyecto no
+  los usa en ningún sitio y no los introduzco: una fórmula es texto del usuario, y `eval` sobre eso es
+  ejecución de código arbitrario en el servidor—. Se tokeniza, se valida contra las medidas del área
+  (variable desconocida → 400), se comprueba que el RPN esté completo (`base /` → 400) y se evalúa con
+  un mini-intérprete de aritmética. **Un valor sin dato propaga NULL** (margen sin coste no da 100 %);
+  **división por cero → null, no Infinity.** Se compila al GUARDAR también: no se guarda una receta rota.
+- ✅ **COMBINAR FUENTES = comparar áreas EN EL TIEMPO.** La única dimensión común a
+  ventas/compras/inventario es la **fecha**, así que "combinar" **no es sumar granos distintos** (una
+  línea de venta y una factura de compra no se suman): es poner cada área como **su propia serie** sobre
+  el eje temporal — "facturación vs. gasto por mes". Cada serie sale del `cruzar` de SU área (regla
+  intacta) y **revalida su permiso**; clientes no entra (no tiene fecha). Donde un área no tiene dato
+  ese periodo, va **NULL** (un hueco, no un 0). Afirmado: comparar ventas+compras deja ventas en 850,
+  no la contamina.
+- ✅ **COMPARTIR PANELES.** `analytics_panels.compartido` (aditivo). Un panel compartido lo ve el
+  equipo, pero **guarda la RECETA, no los datos**: al abrirlo se re-cruza y **se revalidan los permisos
+  de hoy** — un panel de Compras compartido **no se abre** para quien no tenga `purchases.read` (falla
+  cerrado, ya lo hacía la arquitectura de 4a). Solo el dueño comparte/descomparte/borra (WHERE
+  user_id); compartir no es ceder el control. La lista separa "los míos" de "compartidos contigo (autor)".
+- Verificado: `verify-constructor` **72/0** (evaluador: inyección/variable falsa/incompleta/÷0 todas
+  cortadas; comparar sin sumar granos + revalida permiso; compartir la receta no los datos) +
+  `gate-margen-pantalla` **76/0** (navegador: cálculo propio con su ayuda, comparar 2 series, candado
+  de 4b). Grupo margen 6/6.
+- **Bug propio cazado, la lección de C4b otra vez:** un `\n` dentro de un `confirm(...)` en el JS de la
+  pantalla se convirtió en salto de línea REAL al emitirse desde el template literal, rompiendo todo el
+  script de cliente (invisible a `node --check`, que valida el template como string). Quitado el `\n`.
+
+> **La escalera de analítica (pasos 2-4b) queda cerrada** salvo el paso 6 (dashboards personalizables:
+> componer el Inicio con paneles guardados — ahora es posible porque los paneles existen) y la decisión
+> pendiente de **Contabilidad en el constructor**.
 
 ### ⬜ 5 — DISA predictiva
 Previsión de caja **3/6/12 meses** · detección de anomalías · agente que avisa. Es "DISA como producto

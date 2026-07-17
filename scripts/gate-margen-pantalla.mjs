@@ -315,7 +315,55 @@ try {
   ok(typeof cruces.inventario === 'number' && cruces.inventario > 0, 'Inventario cruza y trae filas', String(cruces.inventario));
   ok(cruces._marte === 400, 'un área inventada se corta (400)', String(cruces._marte));
 
-  console.log('\n[15] NO SE RESUCITA NADA DE LO DESENLAZADO A PROPÓSITO');
+  console.log('\n[15] 4b · CÁLCULO PROPIO en la pantalla');
+  await page.goto(BASE + '/admin/analytics', { waitUntil: 'networkidle2' });
+  await page.waitForSelector('#cCalcOn', { timeout: 10000 }).catch(() => {});
+  await page.select('#cArea', 'ventas');
+  await new Promise(r => setTimeout(r, 500));
+  await page.click('#cCalcOn');
+  await new Promise(r => setTimeout(r, 300));
+  const formVisible = await page.$eval('#cFormula', e => e.style.display !== 'none');
+  ok(formVisible, 'al marcar "Cálculo propio" aparece el campo de fórmula');
+  const ayuda = await page.$eval('#cFormulaAyuda', e => e.textContent);
+  ok(/base|beneficio/.test(ayuda), 'y una ayuda con las medidas disponibles', ayuda.slice(0, 50));
+  await page.type('#cFormula', 'beneficio / base * 100');
+  await new Promise(r => setTimeout(r, 900));
+  ok(errores.length === 0, '0 errores JS al escribir la fórmula', errores.join(' | '));
+  // El cálculo se computa en el servidor: comprobamos que responde con `calculo:true`.
+  const calcResp = await page.evaluate(async b => (await (await fetch(b + '/api/erp/analytics/constructor/cruzar', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-csrf-token': window.CSRF_TOKEN },
+    body: JSON.stringify({ area: 'ventas', dimension: 'producto', medidas: ['base'], formula: 'beneficio / base * 100' }) })).json()), BASE);
+  ok(calcResp.calculo === true && calcResp.filas.some(f => f.calculo != null), 'el cálculo se resuelve en el servidor');
+  const inyecc = await page.evaluate(async b => (await fetch(b + '/api/erp/analytics/constructor/cruzar', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-csrf-token': window.CSRF_TOKEN },
+    body: JSON.stringify({ area: 'ventas', dimension: 'producto', medidas: ['base'], formula: 'base; DROP TABLE invoices' }) })).status, BASE);
+  ok(inyecc === 400, 'una fórmula con inyección se corta (400)', String(inyecc));
+
+  console.log('\n[16] 4b · COMPARAR ÁREAS EN EL TIEMPO');
+  const cmp = await page.evaluate(() => ({
+    series: document.querySelectorAll('.cmp-serie').length,
+    lienzo: !!document.getElementById('cmpChart'),
+    areas: [...document.querySelectorAll('.cmp-serie .cmp-area option')].map(o => o.value).filter((v, i, a) => a.indexOf(v) === i),
+  }));
+  ok(cmp.series >= 2, 'arranca con 2 series', cmp.series + ' series');
+  ok(cmp.lienzo, 'y su gráfico');
+  ok(cmp.areas.includes('ventas') && cmp.areas.includes('compras') && !cmp.areas.includes('clientes'), 'las series ofrecen áreas comparables (no clientes)', cmp.areas.join(','));
+  const cmpResp = await page.evaluate(async b => (await (await fetch(b + '/api/erp/analytics/constructor/comparar', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-csrf-token': window.CSRF_TOKEN },
+    body: JSON.stringify({ series: [{ area: 'ventas', medida: 'base' }, { area: 'compras', medida: 'base' }], periodo: 'mes' }) })).json()), BASE);
+  ok(cmpResp.series && cmpResp.series.length === 2, 'compara ventas vs compras como 2 series (no las suma)', (cmpResp.series || []).map(s => s.etiqueta).join(' · '));
+
+  console.log('\n[17] 4b · COMPARTIR — el empleado sin analytics.read sigue sin entrar');
+  // El candado fino (compartido re-valida permisos por área) lo prueba el gate de motor. Aquí basta
+  // con que las puertas nuevas de 4b sigan cerradas para quien no tiene analytics.read.
+  const emp4b = await page2.evaluate(async b => ({
+    comparables: (await fetch(b + '/api/erp/analytics/constructor/comparables')).status,
+    comparar: (await fetch(b + '/api/erp/analytics/constructor/comparar', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ series: [{ area: 'ventas', medida: 'base' }, { area: 'compras', medida: 'base' }] }) })).status,
+  }), BASE);
+  ok(emp4b.comparables === 403 && emp4b.comparar === 403, 'comparables y comparar: 403 para el empleado', JSON.stringify(emp4b));
+
+  console.log('\n[18] NO SE RESUCITA NADA DE LO DESENLAZADO A PROPÓSITO');
   const muertas = await page.evaluate(() => ['/admin/discounts', '/admin/tags', '/admin/orders', '/admin/shipping']
     .filter(h => !!document.querySelector('a[href="' + h + '"]')));
   ok(muertas.length === 0, 'descuentos, etiquetas, pedidos viejos y envíos siguen fuera del menú', muertas.join(', ') || 'ninguno asomó');

@@ -285,7 +285,7 @@ export function camposPara(hasPerm, areaKey = 'ventas') {
 // Genérico: agrupa las filas del área por la dimensión y acumula las medidas con los ganchos del área.
 // `area` por defecto 'ventas' → los llamadores del paso 4a (sin `area`) siguen funcionando igual.
 export function cruzar(db, { area = 'ventas', dimension = 'fecha', medidas = ['base'], periodo = 'mes',
-                            filtros = {}, from = null, to = null, limit = 100, hasPerm } = {}) {
+                            filtros = {}, from = null, to = null, limit = 100, formula = null, hasPerm } = {}) {
   const A = AREAS[area];
   if (!A) { const e = new Error('No conozco el área "' + area + '"'); e.status = 400; throw e; }
   if (A.perm && hasPerm && !hasPerm(A.perm)) { const e = new Error('No tienes permiso para el área ' + A.etiqueta.toLowerCase()); e.status = 403; throw e; }
@@ -294,6 +294,11 @@ export function cruzar(db, { area = 'ventas', dimension = 'fecha', medidas = ['b
   if (dim.perm && hasPerm && !hasPerm(dim.perm)) { const e = new Error('No tienes permiso para cruzar por ' + dim.etiqueta.toLowerCase()); e.status = 403; throw e; }
   const meds = (Array.isArray(medidas) ? medidas : [medidas]).filter(m => A.medidas[m]);
   if (!meds.length) { const e = new Error('Elige al menos una medida'); e.status = 400; throw e; }
+  // PASO 4b — cálculo propio: se compila UNA vez (valida contra las medidas del área o lanza 400) y se
+  // evalúa por grupo. Para evaluarlo hacen falta TODAS las medidas del grupo, aunque el usuario solo
+  // pinte el cálculo — por eso se calculan todas cuando hay fórmula.
+  const rpn = formula ? compilarFormula(formula, Object.keys(A.medidas)) : null;
+  const medsSalida = rpn ? Object.keys(A.medidas) : meds;
   for (const k of Object.keys(filtros || {})) {
     const d = A.dimensiones[k];
     if (!d) { const e = new Error('No sé filtrar por "' + k + '"'); e.status = 400; throw e; }
@@ -316,16 +321,115 @@ export function cruzar(db, { area = 'ventas', dimension = 'fecha', medidas = ['b
     map.set(clave, acc);
   }
 
-  const filas = [...map.values()].map(acc => A.salida(acc, meds));
-  const ord = A.ordenar;
+  const filas = [...map.values()].map(acc => {
+    const fila = A.salida(acc, medsSalida);
+    if (rpn) fila.calculo = evalRPN(rpn, fila);   // el cálculo propio, sobre las medidas del grupo
+    return fila;
+  });
+  const ord = rpn ? 'calculo' : A.ordenar;
   // Por fecha, orden cronológico (una serie temporal desordenada no es una serie). Por lo demás, de
   // mayor a menor según la medida de referencia del área (ranking).
   filas.sort((a, b) => dimension === 'fecha' ? (a.clave < b.clave ? -1 : 1) : ((b[ord] ?? 0) - (a[ord] ?? 0)));
 
   return {
     area, dimension, dimensionEtiqueta: dim.etiqueta, medidas: meds, periodo, usaPeriodo: !!A.usaPeriodo,
+    calculo: !!rpn,
     filas: filas.slice(0, limit), truncado: filas.length > limit,
     aviso: A.aviso ? A.aviso(map, meds) : null,
+  };
+}
+
+// ── PASO 4b · CÁLCULOS PROPIOS — evaluador SEGURO (sin eval) ──────────────────
+// El usuario escribe una fórmula sobre las medidas de su área ("beneficio / base * 100",
+// "pendiente / base"). NO se usa `eval` ni `new Function` — el proyecto no los usa en NINGÚN sitio y
+// no los introduzco: una fórmula es texto del usuario, y `eval` sobre texto del usuario es ejecución
+// de código arbitrario en el servidor. Se tokeniza, se valida contra la lista de medidas del área
+// (una variable que no sea una medida conocida → 400), y se evalúa con un mini-intérprete de
+// aritmética (+ − × ÷ y paréntesis). Se compila UNA vez (a RPN) y se evalúa por grupo.
+const _PREC = { '+': 1, '-': 1, '*': 2, '/': 2 };
+export function compilarFormula(expr, medidasValidas) {
+  const src = String(expr || '').trim();
+  if (!src) { const e = new Error('La fórmula está vacía'); e.status = 400; throw e; }
+  if (src.length > 200) { const e = new Error('La fórmula es demasiado larga'); e.status = 400; throw e; }
+  const toks = src.match(/\s*([0-9]*\.?[0-9]+|[a-zA-Z_][a-zA-Z0-9_]*|[()+\-*/])\s*/g);
+  // Reconstruir sin espacios y comprobar que NADA quedó fuera (un carácter raro no matchea).
+  if (!toks || toks.map(t => t.trim()).join('') !== src.replace(/\s+/g, '')) {
+    const e = new Error('La fórmula tiene caracteres que no entiendo (usa medidas, números y + − × ÷)'); e.status = 400; throw e;
+  }
+  const out = [], ops = [];
+  for (let raw of toks) {
+    const t = raw.trim();
+    if (/^[0-9]*\.?[0-9]+$/.test(t)) out.push({ n: Number(t) });
+    else if (/^[a-zA-Z_]/.test(t)) {
+      if (!medidasValidas.includes(t)) { const e = new Error('"' + t + '" no es una medida de esta área'); e.status = 400; throw e; }
+      out.push({ v: t });
+    } else if (t === '(') ops.push(t);
+    else if (t === ')') {
+      while (ops.length && ops[ops.length - 1] !== '(') out.push({ op: ops.pop() });
+      if (!ops.length) { const e = new Error('Paréntesis sin cerrar en la fórmula'); e.status = 400; throw e; }
+      ops.pop();
+    } else { // operador
+      while (ops.length && ops[ops.length - 1] !== '(' && _PREC[ops[ops.length - 1]] >= _PREC[t]) out.push({ op: ops.pop() });
+      ops.push(t);
+    }
+  }
+  while (ops.length) { const o = ops.pop(); if (o === '(') { const e = new Error('Paréntesis sin cerrar en la fórmula'); e.status = 400; throw e; } out.push({ op: o }); }
+  // El RPN tiene que estar COMPLETO: cada número/medida aporta 1 a la pila, cada operador consume 2 y
+  // deja 1. Si "base / " se colara, daría null en silencio en cada grupo — el usuario merece un aviso
+  // claro ("fórmula incompleta"), no una serie muda de ceros.
+  let prof = 0;
+  for (const t of out) { prof += ('op' in t) ? -1 : 1; if (prof < 1) { const e = new Error('La fórmula está incompleta'); e.status = 400; throw e; } }
+  if (prof !== 1) { const e = new Error('La fórmula está incompleta'); e.status = 400; throw e; }
+  return out;   // RPN
+}
+// Evalúa el RPN con los valores de un grupo. Un valor NULL (medida sin dato, p. ej. margen sin coste)
+// hace la fórmula NULL: no se inventa un 0. Dividir por 0 → null, no Infinity (un gráfico con Infinity
+// no dice nada).
+function evalRPN(rpn, valores) {
+  const st = [];
+  for (const t of rpn) {
+    if ('n' in t) st.push(t.n);
+    else if ('v' in t) { const x = valores[t.v]; if (x == null) return null; st.push(Number(x)); }
+    else {
+      const b = st.pop(), a = st.pop();
+      if (a == null || b == null) return null;
+      let r; if (t.op === '+') r = a + b; else if (t.op === '-') r = a - b; else if (t.op === '*') r = a * b;
+      else { if (b === 0) return null; r = a / b; }
+      st.push(r);
+    }
+  }
+  return st.length === 1 ? st[0] : null;
+}
+
+// ── PASO 4b · COMBINAR FUENTES — comparar áreas EN EL TIEMPO ──────────────────
+// La única dimensión común a ventas/compras/inventario es la FECHA. "Combinar" NO es sumar granos
+// distintos (una línea de venta y una factura de compra no se suman): es poner cada área como su
+// PROPIA SERIE sobre el mismo eje temporal — "facturación vs gasto por mes". Cada serie se calcula por
+// el `cruzar` de SU área (regla intacta), y se alinean por periodo. Clientes NO entra: no tiene fecha.
+export function areasComparables() {
+  return Object.entries(AREAS).filter(([, a]) => a.usaPeriodo && a.dimensiones.fecha)
+    .map(([k, a]) => ({ area: k, etiqueta: a.etiqueta, medidas: Object.fromEntries(Object.entries(a.medidas).map(([mk, m]) => [mk, { etiqueta: m.etiqueta, dinero: !!m.dinero }])) }));
+}
+export function compararEnTiempo(db, { series = [], periodo = 'mes', from = null, to = null, hasPerm } = {}) {
+  if (!Array.isArray(series) || series.length < 2) { const e = new Error('Elige al menos dos series para comparar'); e.status = 400; throw e; }
+  if (series.length > 6) { const e = new Error('Como mucho 6 series a la vez'); e.status = 400; throw e; }
+  const claves = new Set();
+  const resueltas = series.map(s => {
+    const A = AREAS[s.area];
+    if (!A || !A.usaPeriodo || !A.dimensiones.fecha) { const e = new Error('El área "' + s.area + '" no se puede comparar en el tiempo'); e.status = 400; throw e; }
+    // cruzar() revalida el permiso del área — comparar no es una puerta trasera.
+    const r = cruzar(db, { area: s.area, dimension: 'fecha', medidas: [s.medida], periodo, from, to, limit: 100000, hasPerm });
+    const meta = A.medidas[s.medida] || {};
+    const porClave = new Map(r.filas.map(f => [f.clave, f[s.medida]]));
+    r.filas.forEach(f => claves.add(f.clave));
+    return { area: s.area, medida: s.medida, etiqueta: A.etiqueta + ' · ' + (meta.etiqueta || s.medida), dinero: !!meta.dinero, porClave };
+  });
+  const labels = [...claves].sort();
+  return {
+    periodo, labels,
+    series: resueltas.map(s => ({ etiqueta: s.etiqueta, area: s.area, medida: s.medida, dinero: s.dinero,
+      // null donde esa área no tiene dato ese periodo: un hueco es la verdad, un 0 sería una afirmación.
+      datos: labels.map(k => s.porClave.has(k) ? s.porClave.get(k) : null) })),
   };
 }
 
@@ -333,28 +437,48 @@ export function cruzar(db, { area = 'ventas', dimension = 'fecha', medidas = ['b
 // De QUIEN LOS CREA (decisión del dueño). Compartir es el paso 4b.
 // Guardan la RECETA (qué área, qué cruzar), NO los datos: al abrirlos se vuelve a pasar por `cruzar`,
 // que revalida los permisos de HOY. Si guardara resultados, un panel sería una fuga con fecha.
-export function guardarPanel(db, userId, { id = null, nombre, config }) {
+export function guardarPanel(db, userId, { id = null, nombre, config, compartido = null }) {
   const n = String(nombre || '').trim();
   if (!n) { const e = new Error('El panel necesita un nombre'); e.status = 400; throw e; }
   const area = (config && config.area) || 'ventas';   // por defecto ventas (compat. paso 4a)
   const A = AREAS[area];
   if (!A) { const e = new Error('El panel apunta a un área que no existe'); e.status = 400; throw e; }
-  if (!config || !A.dimensiones[config.dimension]) { const e = new Error('El panel necesita una dimensión válida de su área'); e.status = 400; throw e; }
+  // Un panel es de dimensión O de comparación (varias series). Se valida el que sea.
+  const esComparar = config && config.modo === 'comparar';
+  if (esComparar) {
+    if (!Array.isArray(config.series) || config.series.length < 2) { const e = new Error('Una comparación necesita al menos dos series'); e.status = 400; throw e; }
+  } else if (!config || !A.dimensiones[config.dimension]) { const e = new Error('El panel necesita una dimensión válida de su área'); e.status = 400; throw e; }
   if (!TIPOS_GRAFICO.includes(config.grafico || 'tabla')) { const e = new Error('Ese tipo de gráfico no existe'); e.status = 400; throw e; }
+  // Si trae fórmula, se COMPILA aquí para no guardar una receta rota que reventaría al abrirla.
+  if (config.formula) compilarFormula(config.formula, Object.keys(A.medidas));
   const json = JSON.stringify({ ...config, area });
   if (id) {
     // El WHERE lleva el user_id: sin él, cambiar el id en la petición editaría el panel de otro.
-    const r = db.prepare('UPDATE analytics_panels SET nombre=?, config=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?').run(n, json, id, userId);
+    const set = compartido == null ? 'nombre=?, config=?, updated_at=CURRENT_TIMESTAMP'
+                                   : 'nombre=?, config=?, compartido=?, updated_at=CURRENT_TIMESTAMP';
+    const args = compartido == null ? [n, json, id, userId] : [n, json, compartido ? 1 : 0, id, userId];
+    const r = db.prepare('UPDATE analytics_panels SET ' + set + ' WHERE id=? AND user_id=?').run(...args);
     if (!r.changes) { const e = new Error('Panel no encontrado'); e.status = 404; throw e; }
     return { id: Number(id) };
   }
-  const r = db.prepare('INSERT INTO analytics_panels (user_id, nombre, config) VALUES (?,?,?)').run(userId, n, json);
+  const r = db.prepare('INSERT INTO analytics_panels (user_id, nombre, config, compartido) VALUES (?,?,?,?)').run(userId, n, json, compartido ? 1 : 0);
   return { id: r.lastInsertRowid };
 }
 
+// Devuelve los panels PROPIOS + los COMPARTIDOS por otros. `propio`/`autor` para que la pantalla sepa
+// cuáles puede editar. Abrir un compartido re-cruza (revalida permisos): compartir la receta no filtra.
 export function listarPaneles(db, userId) {
-  return db.prepare('SELECT id, nombre, config, created_at FROM analytics_panels WHERE user_id=? ORDER BY id')
-    .all(userId).map(p => { try { return { ...p, config: JSON.parse(p.config) }; } catch { return { ...p, config: null }; } });
+  return db.prepare(
+    `SELECT p.id, p.nombre, p.config, p.created_at, p.compartido, p.user_id,
+            (p.user_id = ?) AS propio, u.name AS autor
+       FROM analytics_panels p LEFT JOIN admin_users u ON u.id = p.user_id
+      WHERE p.user_id = ? OR p.compartido = 1
+      ORDER BY propio DESC, p.id`
+  ).all(userId, userId).map(p => {
+    let config = null; try { config = JSON.parse(p.config); } catch {}
+    return { id: p.id, nombre: p.nombre, created_at: p.created_at, config,
+             compartido: !!p.compartido, propio: !!p.propio, autor: p.propio ? null : (p.autor || null) };
+  });
 }
 
 export function borrarPanel(db, userId, id) {

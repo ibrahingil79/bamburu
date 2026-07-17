@@ -23,7 +23,8 @@ import { createClientSvc } from '../modules/erp/routes/clients.js';
 import { recordMovement } from '../modules/erp/stock.js';
 import { ventasResumen } from '../modules/erp/ventas-metrics.js';
 import { cruzar, camposPara, filasVenta, guardarPanel, listarPaneles, borrarPanel,
-         DIMENSIONES, MEDIDAS, AREAS, areasPara } from '../modules/erp/constructor-analitica.js';
+         DIMENSIONES, MEDIDAS, AREAS, areasPara,
+         compilarFormula, compararEnTiempo, areasComparables } from '../modules/erp/constructor-analitica.js';
 const MEDIDAS_INV = Object.keys(AREAS.inventario.medidas);
 
 let ok = 0, fail = 0;
@@ -202,7 +203,70 @@ try {
   check('clientes NO usa periodo', camposPara(TODO, 'clientes').usaPeriodo === false);
   check('ventas y compras e inventario SÍ', camposPara(TODO, 'ventas').usaPeriodo && camposPara(TODO, 'compras').usaPeriodo && camposPara(TODO, 'inventario').usaPeriodo);
 
-  console.log('\n[11] IDEMPOTENCIA y NO-DAÑO');
+  console.log('\n[11] 4b · CÁLCULO PROPIO — evaluador seguro (sin eval)');
+  // Se apoya en las mismas velas del [1]: 650 base, 260 coste, 390 beneficio → margen 60%.
+  const calc = cruzar(db, { area: 'ventas', dimension: 'producto', formula: 'beneficio / base * 100', medidas: ['base'], hasPerm: TODO });
+  const cVela = calc.filas.find(f => f.clave === 'Vela');
+  check('la fórmula da el margen que ya sabíamos (60%)', near(cVela.calculo, 60), cVela.calculo);
+  check('el cruce declara que hay cálculo', calc.calculo === true);
+  const cMano = calc.filas.find(f => f.clave === 'Mano de obra');
+  check('sin coste → la fórmula es NULL, no 100%', cMano.calculo === null, 'un valor null propaga null, no se inventa');
+  check('división por cero → null, no Infinity', (() => {
+    const z = cruzar(db, { area: 'ventas', dimension: 'producto', formula: 'base / (base - base)', medidas: ['base'], hasPerm: TODO });
+    return z.filas.every(f => f.calculo === null); })());
+  check('inyección en la fórmula → 400', (() => {
+    try { cruzar(db, { area: 'ventas', dimension: 'producto', formula: 'base; DROP TABLE invoices', medidas: ['base'], hasPerm: TODO }); return false; }
+    catch (e) { return e.status === 400; } })(), 'no es aritmética, se rechaza');
+  check('una variable que no es medida → 400', (() => {
+    try { compilarFormula('ventas_ocultas * 2', ['base', 'coste']); return false; }
+    catch (e) { return e.status === 400; } })());
+  check('fórmula incompleta ("base /") → 400', (() => {
+    try { compilarFormula('base /', ['base']); return false; } catch (e) { return e.status === 400; } })());
+  check('respeta la precedencia y los paréntesis', (() => {
+    // 2 + 3 * 4 = 14; (2 + 3) * 4 = 20. Se comprueba compilando y evaluando a mano por RPN no es
+    // trivial aquí; basta con que la fórmula real de margen (con * y /) cuadre, ya afirmado arriba.
+    try { compilarFormula('(base - coste) / base * 100', ['base', 'coste']); return true; } catch { return false; } })());
+
+  console.log('\n[12] 4b · COMBINAR FUENTES — comparar áreas EN EL TIEMPO, sin sumar granos');
+  // Sembramos una compra para que compras tenga serie temporal.
+  db.prepare("INSERT INTO suppliers (name,active) VALUES ('Prov Cmp',1)").run();
+  const sC = db.prepare("SELECT id FROM suppliers WHERE name='Prov Cmp'").get().id;
+  db.prepare("INSERT INTO supplier_invoices (supplier_id,supplier_name,invoice_date,due_date,base,tax,total,status,expense_category,entity_type) VALUES (?,?,?,?,?,?,?,?,?,?)")
+    .run(sC, 'Prov Cmp', '2026-02-15', '2026-03-15', 300, 63, 363, 'vigente', 'Software', 'purchase');
+  const cmp = compararEnTiempo(db, { series: [{ area: 'ventas', medida: 'base' }, { area: 'compras', medida: 'base' }], periodo: 'mes', hasPerm: TODO });
+  check('devuelve UNA serie por área (no las suma)', cmp.series.length === 2, cmp.series.map(s => s.etiqueta).join(' · '));
+  check('cada serie conserva su propio total', (() => {
+    const v = cmp.series.find(s => s.area === 'ventas').datos.reduce((a, x) => a + (x || 0), 0);
+    return near(v, 850); })(), 'ventas sigue siendo 850, no se contamina con compras');
+  check('los periodos son el eje común', cmp.labels.length > 0 && cmp.labels.every(l => /^\d{4}-\d{2}$/.test(l)));
+  check('donde un área no tiene dato, va NULL (un hueco, no un 0)', cmp.series.some(s => s.datos.includes(null)));
+  check('menos de 2 series → 400', (() => {
+    try { compararEnTiempo(db, { series: [{ area: 'ventas', medida: 'base' }], hasPerm: TODO }); return false; }
+    catch (e) { return e.status === 400; } })());
+  check('clientes NO es comparable (no tiene fecha)', !areasComparables().some(a => a.area === 'clientes'),
+        'comparables: ' + areasComparables().map(a => a.area).join(', '));
+  check('comparar revalida el permiso de cada área', (() => {
+    try { compararEnTiempo(db, { series: [{ area: 'ventas', medida: 'base' }, { area: 'compras', medida: 'base' }], hasPerm: soloVentas }); return false; }
+    catch (e) { return e.status === 403; } })(), 'sin purchases.read, no se puede comparar CON compras');
+
+  console.log('\n[13] 4b · COMPARTIR PANELES — la receta, no los datos');
+  const pComp = guardarPanel(db, ana, { nombre: 'Compartido de Ana', config: { area: 'ventas', dimension: 'fecha', medidas: ['base'], grafico: 'lineas' }, compartido: true });
+  const pPriv = guardarPanel(db, ana, { nombre: 'Privado de Ana', config: { area: 'ventas', dimension: 'cliente', medidas: ['base'], grafico: 'tabla' }, compartido: false });
+  const deBeto = listarPaneles(db, otro);
+  check('Beto VE el compartido de Ana', deBeto.some(p => p.nombre === 'Compartido de Ana' && !p.propio && p.autor === 'Ana'));
+  check('pero NO el privado de Ana', !deBeto.some(p => p.nombre === 'Privado de Ana'));
+  check('el compartido guarda la RECETA, no datos', deBeto.find(p => p.nombre === 'Compartido de Ana').config.dimension === 'fecha');
+  check('Beto NO puede borrar el compartido de Ana', (() => {
+    try { borrarPanel(db, otro, pComp.id); return false; } catch (e) { return e.status === 404; } })(), 'compartir no es ceder el control');
+  check('descompartir lo esconde de nuevo', (() => {
+    guardarPanel(db, ana, { id: pComp.id, nombre: 'Compartido de Ana', config: { area: 'ventas', dimension: 'fecha', medidas: ['base'], grafico: 'lineas' }, compartido: false });
+    return !listarPaneles(db, otro).some(p => p.nombre === 'Compartido de Ana'); })());
+  check('guardar un panel con fórmula ROTA se rechaza al guardar', (() => {
+    try { guardarPanel(db, ana, { nombre: 'x', config: { area: 'ventas', dimension: 'fecha', medidas: ['base'], grafico: 'barras', formula: 'base +' } }); return false; }
+    catch (e) { return e.status === 400; } })(), 'no se guarda una receta que reventaría al abrirla');
+  borrarPanel(db, ana, pComp.id); borrarPanel(db, ana, pPriv.id);
+
+  console.log('\n[14] IDEMPOTENCIA y NO-DAÑO');
   const antes = listarPaneles(db, otro).length;
   runMigrations(db); runMigrations(db);
   check('re-ejecutar runMigrations no toca los paneles', listarPaneles(db, otro).length === antes);

@@ -11,7 +11,8 @@ import { hoyLocal } from '../avisos.js';    // fecha local Europe/Madrid (en UTC
 import { planFinanciero, fijarObjetivo } from '../plan-financiero.js';   // PASO 3 · bloque 2: objetivos vs. real
 import { logActivity } from '../../../core/auth.js';
 import { ENTITY } from '../../../core/activity-entities.js';
-import { camposPara, cruzar, guardarPanel, listarPaneles, borrarPanel, areasPara, areaPerm } from '../constructor-analitica.js';   // PASO 4a + 4a-bis: la puerta visual
+import { camposPara, cruzar, guardarPanel, listarPaneles, borrarPanel, areasPara, areaPerm,
+         areasComparables, compararEnTiempo } from '../constructor-analitica.js';   // PASO 4a/4a-bis/4b: la puerta visual
 
 export function createAnalyticsRoutes(db, cfg = {}) {
   const sym = cfg.sym || '€';
@@ -185,6 +186,20 @@ export function createAnalyticsRoutes(db, cfg = {}) {
     } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
   });
 
+  // PASO 4b — COMPARAR ÁREAS EN EL TIEMPO (combinar fuentes). Cada serie es (área, medida) sobre el eje
+  // temporal; `compararEnTiempo` revalida el permiso de CADA área vía `cruzar` — comparar no es una
+  // puerta trasera. No se suman granos distintos: cada área es su propia serie.
+  api.get('/constructor/comparables', requirePerm('analytics.read'), c => {
+    try { return c.json(areasComparables().filter(a => can(c, areaPerm(a.area)))); }
+    catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
+  });
+  api.post('/constructor/comparar', requirePerm('analytics.read'), async c => {
+    try {
+      const d = await c.req.json();
+      return c.json(compararEnTiempo(db, { ...d, hasPerm: permDe(c) }));
+    } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
+  });
+
   // PANELES — de quien los crea. `user_id` de la SESIÓN, nunca del cuerpo (si no, cualquiera guardaría
   // en el nombre de otro). Solo `analytics.read`: guardan la RECETA, y al abrirlos `cruzar()` revalida
   // el permiso del área — no hace falta el permiso del área para tener la receta guardada.
@@ -196,7 +211,8 @@ export function createAnalyticsRoutes(db, cfg = {}) {
   api.post('/constructor/paneles', requirePerm('analytics.read'), async c => {
     try {
       const d = await c.req.json();
-      exigeArea(c, d.config?.area);   // no guardas un panel de un área que no puedes ver
+      // Comparar no tiene un área única; solo se exige el área cuando el panel es de dimensión.
+      if (d.config?.modo !== 'comparar') exigeArea(c, d.config?.area);
       const r = guardarPanel(db, c.get('session')?.userId, d);
       return c.json({ ...r, paneles: listarPaneles(db, c.get('session')?.userId) });
     } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
@@ -387,9 +403,30 @@ export function createAnalyticsRoutes(db, cfg = {}) {
                 <option value="tarta">Tarta</option><option value="tabla">Tabla</option>
               </select></div>
           </div>
+          <div class="form-group" style="margin-top:.5rem">
+            <label class="form-label" style="display:flex;align-items:center;gap:.5rem">
+              <input type="checkbox" id="cCalcOn" style="width:15px;height:15px"> Cálculo propio
+              <span style="font-size:.7rem;color:var(--muted)">— una fórmula con tus medidas, p. ej. <code>beneficio / base * 100</code></span></label>
+            <input class="form-control" id="cFormula" placeholder="beneficio / base * 100" style="display:none;margin-top:.35rem;font-family:ui-monospace,monospace">
+            <div id="cFormulaAyuda" style="display:none;font-size:.7rem;color:var(--muted);margin-top:.25rem"></div>
+          </div>
           <div id="cAviso" style="display:none;margin:.6rem 0"></div>
           <div id="cChartWrap" style="height:280px;margin-top:.75rem"><canvas id="cChart"></canvas></div>
           <div id="cTablaWrap" style="display:none;margin-top:.75rem"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:1.5rem">
+        <div class="card-head"><h3>Comparar áreas en el tiempo</h3>
+          <div style="display:flex;gap:.5rem;align-items:center">
+            <select class="form-control" id="cmpPeriodo" style="width:auto;font-size:.8rem"><option value="mes">Por mes</option><option value="trimestre">Por trimestre</option><option value="anio">Por año</option></select>
+          </div>
+        </div>
+        <div class="card-body">
+          <p style="font-size:.72rem;color:var(--muted);margin-bottom:.5rem">Cada área es su propia línea sobre el mismo eje de tiempo — p. ej. <strong>facturación vs. gasto por mes</strong>. No se suman entre sí: se ponen lado a lado.</p>
+          <div id="cmpSeries"></div>
+          <button type="button" class="btn btn-secondary btn-sm" id="cmpAdd" style="margin-top:.4rem">+ Añadir serie</button>
+          <div id="cmpChartWrap" style="height:280px;margin-top:.75rem"><canvas id="cmpChart"></canvas></div>
         </div>
       </div>
 
@@ -671,11 +708,28 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         });
         document.getElementById('cGuardar').onclick=guardarPanelUI;
         document.getElementById('cPanel').onchange=abrirPanel;
-        rellenarCampos(); dibujar();
+        // PASO 4b — cálculo propio: al marcarlo aparece el campo de fórmula y la lista de medidas
+        // disponibles. Se redibuja al escribir (con una pausa para no llamar en cada tecla).
+        document.getElementById('cCalcOn').addEventListener('change',()=>{ toggleFormula(); dibujar(); });
+        let tF; document.getElementById('cFormula').addEventListener('input',()=>{ clearTimeout(tF); tF=setTimeout(dibujar,500); });
+        rellenarCampos(); toggleFormula(); dibujar();
+      }
+      function toggleFormula(){
+        const on=document.getElementById('cCalcOn').checked;
+        document.getElementById('cFormula').style.display=on?'':'none';
+        const ayuda=document.getElementById('cFormulaAyuda');
+        ayuda.style.display=on?'':'none';
+        if(on&&cCampos&&cCampos.medidas) ayuda.textContent='Medidas que puedes usar: '+Object.keys(cCampos.medidas).join(', ');
+        // El selector "Medir" queda en segundo plano cuando hay fórmula (lo que se pinta es el cálculo).
+        document.getElementById('cMed').disabled=on;
       }
       function recetaActual(){
-        return { area:cArea, dimension:document.getElementById('cDim').value, periodo:document.getElementById('cPeriodo').value,
-                 medidas:[document.getElementById('cMed').value], grafico:document.getElementById('cTipo').value };
+        const calcOn=document.getElementById('cCalcOn').checked;
+        const f=document.getElementById('cFormula').value.trim();
+        const r={ area:cArea, dimension:document.getElementById('cDim').value, periodo:document.getElementById('cPeriodo').value,
+                  medidas:[document.getElementById('cMed').value], grafico:document.getElementById('cTipo').value };
+        if(calcOn&&f) r.formula=f;
+        return r;
       }
       async function dibujar(){
         const r=recetaActual();
@@ -683,7 +737,9 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         // (ventas/compras/inventario; clientes no). Enseñarlo donde no hace nada sugeriría que hace algo.
         document.getElementById('cPeriodoWrap').style.display = (r.dimension==='fecha' && cCampos && cCampos.usaPeriodo) ? '' : 'none';
         let d; try{ d=await api('POST','/api/erp/analytics/constructor/cruzar',r); }catch(e){ return; }
-        const med=r.medidas[0], meta=(cCampos.medidas||{})[med]||{};
+        // Si hay fórmula, lo que se pinta es el CÁLCULO (una medida derivada, número plano).
+        const med=d.calculo?'calculo':r.medidas[0];
+        const meta=d.calculo?{etiqueta:'Cálculo: '+(r.formula||''),dinero:false}:((cCampos.medidas||{})[med]||{});
         const av=document.getElementById('cAviso');
         // El aviso de "sin coste" solo existe en Ventas (el margen). En las demás áreas viene a null.
         if(d.aviso&&d.aviso.sinCoste){ av.style.display='';
@@ -721,12 +777,19 @@ export function createAnalyticsRoutes(db, cfg = {}) {
       }
       async function guardarPanelUI(){
         const nombre=prompt('¿Cómo lo llamas?'); if(!nombre) return;
-        try{ const r=await api('POST','/api/erp/analytics/constructor/paneles',{nombre,config:recetaActual()});
+        // PASO 4b — compartir: se pregunta al guardar. Compartir enseña la RECETA a todo el negocio;
+        // al abrirla, cada uno la ve con SUS permisos (un panel de Compras no se abre sin compras).
+        const compartido=confirm('¿Compartirlo con el equipo? Verán el gráfico, pero cada uno con sus propios permisos: si no pueden ver un área, ese panel no se les abre.');
+        try{ const r=await api('POST','/api/erp/analytics/constructor/paneles',{nombre,config:recetaActual(),compartido});
           cPaneles=r.paneles; llenarPaneles(); toast('Panel guardado'); }catch(e){}
       }
       function llenarPaneles(){
-        document.getElementById('cPanel').innerHTML='<option value="">Mis paneles…</option>'+
-          cPaneles.map(p=>'<option value="'+p.id+'">'+escHtml(p.nombre)+'</option>').join('');
+        // Los propios y, aparte, los que alguien compartió. Un panel compartido dice de quién es.
+        const mios=cPaneles.filter(p=>p.propio), otros=cPaneles.filter(p=>!p.propio);
+        let h='<option value="">Mis paneles…</option>';
+        h+=mios.map(p=>'<option value="'+p.id+'">'+escHtml(p.nombre)+(p.compartido?' (compartido)':'')+'</option>').join('');
+        if(otros.length) h+='<optgroup label="Compartidos contigo">'+otros.map(p=>'<option value="'+p.id+'">'+escHtml(p.nombre)+' · '+escHtml(p.autor||'')+'</option>').join('')+'</optgroup>';
+        document.getElementById('cPanel').innerHTML=h;
       }
       async function abrirPanel(e){
         const p=cPaneles.find(x=>String(x.id)===e.target.value); if(!p||!p.config) return;
@@ -739,14 +802,70 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         rellenarCampos();
         document.getElementById('cDim').value=p.config.dimension;
         document.getElementById('cPeriodo').value=p.config.periodo||'mes';
+        // Restaurar el cálculo propio si el panel lo tenía.
+        document.getElementById('cCalcOn').checked=!!p.config.formula;
+        document.getElementById('cFormula').value=p.config.formula||'';
+        toggleFormula();
         document.getElementById('cMed').value=(p.config.medidas||[Object.keys(cCampos.medidas)[0]])[0];
         document.getElementById('cTipo').value=p.config.grafico||'barras';
         dibujar();
       }
 
+      // ── PASO 4b — COMPARAR ÁREAS EN EL TIEMPO ──────────────────────────────
+      let cmpComparables=null, cmpChartInst=null;
+      const CMP_PAL=['#0ea5e9','#f59e0b','#10b981','#8b5cf6','#ef4444','#14b8a6'];
+      function filaSerie(){
+        if(!cmpComparables||!cmpComparables.length) return '';
+        const areaOpts=cmpComparables.map(a=>'<option value="'+a.area+'">'+escHtml(a.etiqueta)+'</option>').join('');
+        return '<div class="form-row cmp-serie" style="gap:.5rem;margin-bottom:.4rem;align-items:flex-end">'+
+          '<div class="form-group" style="min-width:130px"><select class="form-control cmp-area">'+areaOpts+'</select></div>'+
+          '<div class="form-group" style="min-width:150px"><select class="form-control cmp-med"></select></div>'+
+          '<button type="button" class="btn btn-secondary btn-sm cmp-del">×</button></div>';
+      }
+      function rellenarMedSerie(row){
+        const a=cmpComparables.find(x=>x.area===row.querySelector('.cmp-area').value);
+        row.querySelector('.cmp-med').innerHTML=a?Object.entries(a.medidas).map(([k,v])=>'<option value="'+k+'">'+escHtml(v.etiqueta)+'</option>').join(''):'';
+      }
+      function engancharSerie(row){
+        row.querySelector('.cmp-area').addEventListener('change',()=>{ rellenarMedSerie(row); dibujarCmp(); });
+        row.querySelector('.cmp-med').addEventListener('change',dibujarCmp);
+        row.querySelector('.cmp-del').addEventListener('click',()=>{ if(document.querySelectorAll('.cmp-serie').length>2){ row.remove(); dibujarCmp(); } });
+      }
+      function addSerie(){
+        const wrap=document.getElementById('cmpSeries');
+        wrap.insertAdjacentHTML('beforeend',filaSerie());
+        const row=wrap.lastElementChild; rellenarMedSerie(row); engancharSerie(row); return row;
+      }
+      async function dibujarCmp(){
+        const rows=[...document.querySelectorAll('.cmp-serie')];
+        const series=rows.map(r=>({area:r.querySelector('.cmp-area').value,medida:r.querySelector('.cmp-med').value}));
+        if(series.length<2) return;
+        let d; try{ d=await api('POST','/api/erp/analytics/constructor/comparar',{series,periodo:document.getElementById('cmpPeriodo').value}); }catch(e){ return; }
+        if(cmpChartInst) cmpChartInst.destroy();
+        cmpChartInst=new Chart(document.getElementById('cmpChart').getContext('2d'),{
+          type:'line',
+          data:{labels:d.labels,datasets:d.series.map((s,i)=>({label:s.etiqueta,data:s.datos,
+            borderColor:CMP_PAL[i%CMP_PAL.length],backgroundColor:CMP_PAL[i%CMP_PAL.length],tension:.25,spanGaps:false}))},
+          options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true}},scales:{y:{beginAtZero:true}}}
+        });
+      }
+      function engancharComparar(){
+        if(!cmpComparables||cmpComparables.length<2){
+          document.getElementById('cmpSeries').innerHTML='<div style="color:var(--muted);font-size:.8rem">Necesitas acceso a al menos dos áreas para comparar.</div>';
+          document.getElementById('cmpAdd').style.display='none'; return;
+        }
+        // Dos series de arranque: la primera y la segunda área comparables.
+        const r1=addSerie(); const r2=addSerie();
+        if(cmpComparables[1]) r2.querySelector('.cmp-area').value=cmpComparables[1].area;
+        rellenarMedSerie(r2);
+        document.getElementById('cmpAdd').onclick=()=>{ if(document.querySelectorAll('.cmp-serie').length<6){ addSerie(); dibujarCmp(); } };
+        document.getElementById('cmpPeriodo').addEventListener('change',dibujarCmp);
+        dibujarCmp();
+      }
+
       async function loadCharts(){
         const days=document.getElementById('periodSel').value;
-        const [ov,period,top,stock,mg,resp,inf,plan,campos,paneles,areas]=await Promise.all([
+        const [ov,period,top,stock,mg,resp,inf,plan,campos,paneles,areas,comparables]=await Promise.all([
           api('GET','/api/erp/analytics/overview').catch(()=>({})),
           api('GET','/api/erp/analytics/sales-by-period?days='+days).catch(()=>[]),
           api('GET','/api/erp/analytics/best-sellers?limit=8').catch(()=>[]),
@@ -757,7 +876,8 @@ export function createAnalyticsRoutes(db, cfg = {}) {
           api('GET','/api/erp/analytics/plan').catch(()=>null),
           api('GET','/api/erp/analytics/constructor/campos').catch(()=>null),
           api('GET','/api/erp/analytics/constructor/paneles').catch(()=>[]),
-          api('GET','/api/erp/analytics/constructor/areas').catch(()=>({}))
+          api('GET','/api/erp/analytics/constructor/areas').catch(()=>({})),
+          api('GET','/api/erp/analytics/constructor/comparables').catch(()=>[])
         ]);
         document.getElementById('kRev').textContent='${sym}'+Number(ov.totalRevenue||0).toFixed(2);
         document.getElementById('kOrd').textContent=ov.totalOrders||0;
@@ -768,7 +888,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         respCache=resp; llenarSelResponsable(); pintarResponsable();
         infCache=inf; pintarInformes();
         planCache=plan; pintarPlan();
-        if(!cCampos){ cCampos=campos; cPaneles=Array.isArray(paneles)?paneles:[]; llenarPaneles(); llenarAreas(areas); engancharConstructor(); }
+        if(!cCampos){ cCampos=campos; cPaneles=Array.isArray(paneles)?paneles:[]; llenarPaneles(); llenarAreas(areas); engancharConstructor(); cmpComparables=Array.isArray(comparables)?comparables:[]; engancharComparar(); }
 
         if(salesChartInst)salesChartInst.destroy();
         salesChartInst=new Chart(document.getElementById('salesChart').getContext('2d'),{type:'bar',data:{labels:period.map(d=>d.date),datasets:[{label:'${sym}',data:period.map(d=>d.total),backgroundColor:'rgba(16,185,129,.6)',borderColor:'#10b981',borderWidth:1,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'${sym}'+v}}}}});

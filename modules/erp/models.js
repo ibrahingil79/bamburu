@@ -1202,6 +1202,11 @@ export function runMigrations(db) {
     updated_at TEXT
   )`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_analytics_panels_user ON analytics_panels(user_id)`);
+  // Paso 4b — COMPARTIR. Un panel compartido lo ven todos, pero guarda la RECETA, no los datos: al
+  // abrirlo se vuelve a cruzar y se revalidan los permisos de HOY. Compartir la receta NO filtra — un
+  // panel de Compras compartido no se abre para quien no tiene `purchases.read` (falla cerrado). Solo
+  // el dueño del panel lo comparte/descomparte (WHERE user_id).
+  addCol(db, 'analytics_panels', 'compartido', 'INTEGER DEFAULT 0');
 
   // ── ESCALERA · PASO 3 · BLOQUE 2 — PLAN FINANCIERO: los objetivos (aditivo, reversible) ───────
   // El lado "real" ya existe (ventasPorPeriodo / margenResumen). Esto es el lado "objetivo", que es
