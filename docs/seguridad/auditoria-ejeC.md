@@ -428,3 +428,66 @@ inventado, y el login por correo sigue funcionando). Regresión: `test-c5-forgot
 18/0. *(`gate-registro-alta` sigue en 11/3: ya estaba rojo ANTES de C6 —comprobado restaurando el código
 anterior— por lo que responde el modelo real en el alta conversacional. No es regresión de C6; queda como
 tarea del Eje B.)*
+
+---
+
+## C5-ter — Dos cabos del Eje C (17 jul 2026)
+
+Cierre de los dos cabos que quedaron anotados el 16-jul. Sin producto nuevo: es coherencia con lo que ya
+se hizo en C5-bis y C6. Con esto **el Eje C no deja ningún cabo suelto anotado**.
+
+### T1 · El cerrojo "he guardado mis códigos", también en el superadmin
+
+La pantalla de códigos de rescate del superadmin cerraba con un **enlace normal** ("Ya los he guardado —
+continuar"): se pasaba de largo sin confirmar nada. El cliente sí tenía cerrojo desde C5-bis, así que **la
+cuenta más poderosa de la plataforma era la única sin él** — justo al revés de lo que tendría que ser.
+
+Es el estándar del sector: GitHub, Google, AWS y Stripe no te dejan abandonar la pantalla de códigos de
+respaldo sin una acción afirmativa explícita, y el botón de continuar está deshabilitado hasta entonces.
+
+**Mecanismo reutilizado, no inventado:** la misma casilla + `pointer-events` que `perfil.js` (C5-bis).
+Condicionante que decidió la forma: `/superadmin` va con **CSP estricta**, así que el JS tiene que vivir
+dentro de los `<script nonce>` que ya existían. Por eso `cerrojoCodigosJs` devuelve el **cuerpo** de la
+función y no una etiqueta `<script>`: el nonce lo pone quien lo inserta, y así no se le puede olvidar. Un
+`onclick` de atributo ahí no habría corrido, y el botón habría muerto en silencio.
+
+### T2 · El email, fuera de `security_events`
+
+**Era la contradicción del Eje C.** En C6 cerramos que nadie pudiera sonsacar por HTTP "¿existe este
+email?" (respuesta idéntica, dos frenos, oráculo de reloj medido y cerrado)… y la tabla de eventos lo
+guardaba **en claro**: la lista de los emails que se probaron y, cruzándola con los negocios, cuáles
+existen. La puerta cerrada y la ventana abierta.
+
+**Un solo punto de escritura**, de los 11 que hay en el proyecto: `modules/erp/routes/auth.js`, dentro de
+`fallar()`. Los otros diez ya pasaban detalles seguros (rutas, cuántos códigos quedan, ms de espera).
+
+Minimización de datos (RGPD): en auditoría no se guarda el identificador fuerte en claro.
+- **Cuenta conocida** → `usuario #<id>`: la referencia estable que ya usa el resto del sistema.
+- **Email desconocido** → no se guarda. Solo `cuenta desconocida`, que es la señal útil (alguien barriendo)
+  sin el dato personal.
+- **Sin hash.** La opción quedaba abierta "si algún flujo necesita correlacionar", y **ninguno lo hace**:
+  `detail` solo se PINTA en el panel de Seguridad y `securityCounts` agrupa por `type`. Un hash habría sido
+  mecanismo nuevo sin nadie que lo use.
+
+Sin migración: la tabla no cambia de forma. **La vigilancia no pierde nada** — sigue teniendo la IP, el
+negocio, y si el intento iba contra una cuenta real o inventada.
+
+**El comentario que mentía.** `auth.js` enunciaba desde C3/M7 que "NO se registra el email". Era cierto de
+la línea que tenía debajo (el `console.log` del login correcto) y **falso como regla**: quince líneas más
+arriba, el email sí iba a la tabla. Un comentario que enuncia una regla que el propio fichero incumple es
+peor que no tener comentario — deja tranquilo a quien lo lee. Ahora es cierto, y explica por qué lo dice.
+
+**Filas existentes:** solo 2 (6-jul y 16-jul), residuo de pruebas. La tabla es **rodante** (se autopoda a
+las últimas ~1000 filas), así que se van solas. No se tocan, por decisión del dueño: hoy no hay clientes
+reales, no hay histórico que rascar, y lo que importa es que las nuevas nazcan sin email. Nacen.
+
+**Verificado:** `test-c5ter-sin-email` **16/0** · `gate-c5ter-cerrojo-superadmin` **15/0** en navegador real
+con cuenta desechable (el "Terminar" nace bloqueado, se pulsa de verdad y no lleva a ninguna parte, marcar
+lo desbloquea, y un código de rescate vale una sola vez). Comprobado además **contra el servidor vivo**: un
+login fallido con la cuenta real deja `usuario #2`, no el email. Regresión verde: C5-bis 52/0 + 19/0,
+superadmin 44/0 + 18/0, C6 32/0 + 28/0, forgot 25/0, sesiones 10/0, registro 26/0, CSP 19/0.
+
+*Papercut de gates arreglado de paso:* todos los gates comparten la IP de loopback y el freno del login de
+superadmin son 8/15 min, así que **encadenar la suite ponía rojo al siguiente gate** por un fallo que no era
+suyo (pasó, y se persiguió hasta confirmar que era el freno de C6 funcionando). El gate nuevo declara IP
+propia, como ya hacía el de C5-bis. Verificado encadenando los dos gates de superadmin dos veces: 4/4 verde.

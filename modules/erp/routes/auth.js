@@ -275,10 +275,21 @@ export function createAuthRoutes(db) {
     const attempts = Number(c.req.query('attempts') || 0) + 1;
     const slug = c.get('tenant')?.slug;
     // C6/B4 — el fallo se apunta con el email TECLEADO, exista la cuenta o no. Si solo se apuntaran
-    // los de cuentas reales, la espera diría cuáles existen: el freno sería el chivato.
-    const fallar = () => {
+    // los de cuentas reales, la espera diría cuáles existen: el freno sería el chivato. Ese email es
+    // una clave EN MEMORIA que se olvida sola; no se persiste en ningún sitio.
+    //
+    // C5-ter/T2 — al evento de vigilancia NO va el email. Iba, y era la contradicción de todo el Eje
+    // C: en C6 cerramos que nadie pudiera sonsacar "¿existe este email?" por HTTP… y la tabla lo
+    // guardaba en claro, con la lista de los que se probaron y cuáles existían. Minimización de
+    // datos: si el evento es de una cuenta CONOCIDA se guarda la referencia que ya usa el resto del
+    // sistema (su id); si es un email desconocido, no se guarda el email — solo que alguien probó
+    // una cuenta que no existe, que es la señal útil (alguien barriendo) sin el dato personal.
+    // No se hashea: nada correlaciona por aquí (el detail solo se PINTA en el panel de Seguridad,
+    // y securityCounts agrupa por `type`), así que un hash sería mecanismo nuevo sin nadie que lo use.
+    const fallar = (user = null) => {
       registrarFallo(LOGIN_CUENTA, email, slug || 'global');
-      recordSecurityEvent('login_failed', getClientIp(c), slug, email);
+      recordSecurityEvent('login_failed', getClientIp(c), slug,
+        user ? `usuario #${user.id}` : 'cuenta desconocida');
       return c.redirect(`/admin/login?error=1&attempts=${attempts}`);
     };
     const user = db.prepare(
@@ -286,7 +297,7 @@ export function createAuthRoutes(db) {
     ).get(email);
     if (!user) return fallar();
     const result = await verifyPassword(password, user.password_hash);
-    if (!result.valid) return fallar();
+    if (!result.valid) return fallar(user);
     if (result.needsRehash) {
       db.prepare('UPDATE admin_users SET password_hash=? WHERE id=?').run(await hashPassword(password), user.id);
     }
@@ -294,8 +305,13 @@ export function createAuthRoutes(db) {
     // los intentos de nadie — es lo que impide que esto se convierta en un bloqueo de facto.
     limpiarFallos(LOGIN_CUENTA, email, slug || 'global');
 
-    // C3/M7 (Eje C): NO se registra el email ni el estado de 2FA (PII + reconocimiento de qué cuentas
-    // tienen 2FA). Solo un id interno para depurar, sin dato identificable ni de seguridad.
+    // C3/M7 + C5-ter/T2 (Eje C): el email NO se registra en NINGÚN sitio del login — ni en este log
+    // ni en la tabla de eventos (ver `fallar`, arriba). Tampoco el estado del 2FA: diría qué cuentas
+    // lo tienen. Solo un id interno para depurar, sin dato identificable ni de seguridad.
+    //
+    // Este comentario decía lo mismo desde C3/M7 y era FALSO como regla: valía para esta línea, pero
+    // quince más arriba el email sí iba a la tabla. Un comentario que enuncia una regla que el propio
+    // fichero incumple es peor que no tener comentario: deja tranquilo a quien lo lee. Ahora es cierto.
     console.log('[Login] ok userId:', user.id);
 
     // Si tiene 2FA activo, mostrar formulario TOTP

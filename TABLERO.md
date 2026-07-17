@@ -7,11 +7,11 @@
 > certificado de Bamburu + autorización de representación del cliente), y está **aparcado** hasta tener la
 > plataforma al 100 % — ver `docs/contexto/decisiones.md` (2026-07-10).
 >
-> **EJE C — SEGURIDAD: ✅ COMPLETO (C1–C6, 16 jul) + C5-bis (rescate de los dueños, 16 jul).** Los tres
-> ejes de la fase de optimización quedan cerrados (A: UX · B: DISA · C: Seguridad). **Sin tarea siguiente
-> asignada: la próxima la decides tú** — candidatas anotadas: C5-ter (el paso "he guardado" del
-> superadmin, bajo), B10 (hardening systemd, va solo y puede tirar el servicio), y el Backlog. Plan
-> cargado desde la auditoría del 15 jul (ver la
+> **EJE C — SEGURIDAD: ✅ COMPLETO (C1–C6, 16 jul) + C5-bis (rescate de los dueños) + C5-ter (cerrojo del
+> superadmin y email fuera de los eventos, 17 jul).** Los tres ejes de la fase de optimización quedan
+> cerrados (A: UX · B: DISA · C: Seguridad), y no queda ningún cabo anotado del Eje C. **Sin tarea
+> siguiente asignada: la próxima la decides tú** — candidatas: B10 (hardening systemd, va solo y puede
+> tirar el servicio) y el Backlog. Plan cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
 > victorias rápidas), C4a + C4a-bis HECHOS** → **M1 (XSS almacenado) CERRADO ENTERO**. **C4b: hechos
 > C4b-0 (nonce + sonda), C4b-1 (registro y superadmin ya sirven `script-src` SIN `'unsafe-inline'`) y
@@ -911,12 +911,44 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
     Regresión verde: **2FA del superadmin intacto** (gate 18/0, test 44/0), login sin 2FA sin cambios,
     forgot 25/0, sesiones 10/0, C6 32/0 + 28/0, registro 26/0, CSP 19/0.
 
-- ⬜ **C5-ter — El alta del superadmin no tiene el paso "he guardado mis códigos".** Sale de C5-bis: en el
-  superadmin, "Ya los he guardado — continuar" (`modules/superadmin/index.js:473`) es un **enlace normal**,
-  no un cerrojo — se puede pasar de largo sin leer. El dueño sí lo tiene (casilla que desbloquea el
-  "Terminar"). No se le añadió al superadmin **a propósito**: el encargo de C5-bis lo prohibía
-  expresamente para no tocarlo. Esfuerzo bajo (la casilla ya está escrita en `perfil.js`, es copiarla).
-  Anotado el 16 jul.
+- ✅ **C5-ter — Dos cabos del Eje C (17 jul 2026).** Coherencia con lo hecho en C5-bis y C6; sin producto
+  nuevo. Los dos salían del "Dónde lo dejé" del 16-jul.
+  - ✅ **T1 · El cerrojo "he guardado mis códigos", ahora también en el superadmin.** Era un **enlace
+    normal** que se pasaba de largo sin leer, mientras el cliente sí tenía cerrojo desde C5-bis: la cuenta
+    MÁS poderosa de la plataforma era la única sin él. Es el estándar del sector (GitHub, Google, AWS,
+    Stripe no te dejan salir de la pantalla de códigos sin una acción afirmativa). **Mecanismo reutilizado,
+    no inventado:** la misma casilla + `pointer-events` de `perfil.js`. Detalle que condicionaba:
+    `/superadmin` va con **CSP estricta**, así que el JS vive dentro de los `<script nonce>` que ya
+    existían (`cerrojoCodigosJs` devuelve el CUERPO, no la etiqueta, para que el nonce lo ponga quien
+    inserta y no se le pueda olvidar). Un `onclick` de atributo ahí habría muerto en silencio.
+  - ✅ **T2 · El email fuera de la tabla de eventos de seguridad.** Era **la contradicción del Eje C**: en
+    C6 cerramos que nadie pudiera sonsacar por HTTP "¿existe este email?" y la tabla lo guardaba **en
+    claro**, con la lista de los probados y cuáles existían. **Un solo punto de escritura** de los 11 que
+    hay (`routes/auth.js`, dentro de `fallar()`); los otros 10 ya eran seguros. Minimización de datos:
+    cuenta conocida → `usuario #<id>` (la referencia estable que ya usa el resto del sistema); email
+    desconocido → **no se guarda** (solo "cuenta desconocida", que es la señal útil —alguien barriendo—
+    sin el dato personal). **Sin hash:** nada correlaciona por `detail` (solo se PINTA en el panel;
+    `securityCounts` agrupa por `type`), así que habría sido mecanismo nuevo sin nadie que lo use.
+    Sin migración: la tabla no cambia de forma. La vigilancia no pierde nada — sigue la IP, el negocio, y
+    si el intento iba contra una cuenta real o inventada.
+  - ✅ **Y el comentario que mentía.** `auth.js` enunciaba desde C3/M7 que "NO se registra el email": era
+    cierto de la línea de debajo (el `console.log`) y **falso como regla** —15 líneas más arriba sí iba a
+    la tabla—. Un comentario que enuncia una regla que el propio fichero incumple es peor que no tenerlo:
+    deja tranquilo a quien lo lee. Ahora es cierto, y lo dice.
+  - **Filas viejas:** solo 2 (6-jul y 16-jul), residuo de pruebas, en una tabla **rodante** (se autopoda a
+    ~1000 filas) → se van solas. No se tocan, por instrucción del dueño: hoy no hay clientes reales, así
+    que no hay histórico que rascar. Lo que importa es que las nuevas nazcan sin email, y nacen.
+  - Verificado: `test-c5ter-sin-email` **16/0** + `gate-c5ter-cerrojo-superadmin` **15/0** en navegador real
+    con cuenta desechable (no se puede terminar sin marcar, se pulsa de verdad y no lleva a ninguna parte;
+    marcar desbloquea; y un código de rescate vale una sola vez). Comprobado además **contra el servidor
+    vivo**: un login fallido con la cuenta real deja `usuario #2`, no el email. Regresión verde (C5-bis
+    52/0 + 19/0, superadmin 44/0 + 18/0, C6 32/0 + 28/0, forgot 25/0, sesiones 10/0, registro 26/0,
+    CSP 19/0).
+  - *Papercut de gates arreglado de paso:* los gates comparten la IP de loopback y el freno del login de
+    superadmin son 8/15 min, así que **encadenar la suite ponía rojo al siguiente gate** por un fallo que
+    no era suyo (me pasó y lo perseguí: el freno de C6 haciendo su trabajo). El gate nuevo declara IP
+    propia, como ya hacía el de C5-bis. Verificado encadenando los dos gates de superadmin dos veces: 4/4
+    en verde.
 
 - ✅ **C6 — Los 12 hallazgos BAJA (16 jul 2026).** **8 arreglados · 3 asumidos por escrito · 1 aplazado con
   aviso.** Cierra el Eje C. El detalle, las decisiones y el porqué de cada "no", en

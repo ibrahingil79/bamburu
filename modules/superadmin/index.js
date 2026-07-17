@@ -459,9 +459,14 @@ function verify2faPage(pending, err = '') {
     </form>`);
 }
 
-// Los códigos de rescate se enseñan aquí y NUNCA más. Por eso la pantalla insiste tanto y por eso
-// el botón de copiar existe: el modo de fallo real no es que alguien los robe, es que se cierre la
+// Los códigos de rescate se enseñan aquí y NUNCA más. Por eso la pantalla insiste tanto, por eso
+// existe el botón de copiar, y por eso (C5-ter) el "Terminar" está BLOQUEADO hasta que se marque
+// que se han guardado: el modo de fallo real no es que alguien los robe, es que se cierre la
 // pestaña sin guardarlos y nadie lo note hasta el día del apuro.
+//
+// Hasta C5-ter esto era un enlace normal — se pasaba de largo sin leer. El cliente sí tenía el
+// cerrojo desde C5-bis (perfil.js), así que la cuenta MÁS poderosa de la plataforma era la única
+// sin él. Es el mismo mecanismo, no uno nuevo: casilla + pointer-events, igual que allí.
 function bloqueCodigos() {
   return `<div id="codigosBox" style="display:none">
       <div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35);border-radius:9px;padding:12px;margin:14px 0">
@@ -470,9 +475,30 @@ function bloqueCodigos() {
       </div>
       <pre id="codigos" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:12px;color:#e2e8f0;font-size:13px;line-height:1.9;text-align:center;font-family:ui-monospace,monospace;white-space:pre-wrap"></pre>
       <button class="btn" id="btnCopiar" style="background:rgba(255,255,255,.08);color:#e2e8f0">Copiar al portapapeles</button>
-      <a href="/superadmin/negocios" class="btn" style="display:block;text-align:center;text-decoration:none;margin-top:10px">Ya los he guardado — continuar</a>
+      <label style="display:flex;align-items:flex-start;gap:9px;margin:14px 0;font-size:13px;color:#e2e8f0;cursor:pointer">
+        <input type="checkbox" id="rcOk" style="margin-top:2px;width:16px;height:16px;flex-shrink:0">
+        <span>He guardado mis códigos de rescate en un sitio seguro.</span>
+      </label>
+      <a href="/superadmin/negocios" class="btn" id="rcFin" style="display:block;text-align:center;text-decoration:none;pointer-events:none;opacity:.45">Terminar</a>
     </div>`;
 }
+
+// C5-ter — engancha el cerrojo. Se llama desde los <script nonce> de las dos pantallas que usan
+// bloqueCodigos(): /superadmin va con CSP ESTRICTA, así que el JS TIENE que vivir dentro de un
+// bloque con nonce — un onclick de atributo aquí no correría, y el botón moriría en silencio.
+//
+// Devuelve el CUERPO de la función, no una etiqueta <script>: así el nonce lo pone quien lo inserta
+// y esto no puede olvidárselo.
+const cerrojoCodigosJs = `
+      function engancharCerrojo(){
+        var ok = document.getElementById('rcOk');
+        var fin = document.getElementById('rcFin');
+        if (!ok || !fin) return;
+        ok.addEventListener('change', function(e){
+          fin.style.pointerEvents = e.target.checked ? 'auto' : 'none';
+          fin.style.opacity = e.target.checked ? '1' : '.45';
+        });
+      }`;
 
 function altaDosFactoresPage(sess, secret, qr, nonce = '') {
   return shell('Activar 2FA', `<h1>Activar doble factor</h1>
@@ -493,7 +519,8 @@ function altaDosFactoresPage(sess, secret, qr, nonce = '') {
       window.addEventListener('DOMContentLoaded', function(){
         document.getElementById('btnActivar').onclick = activar;
         document.getElementById('btnCopiar').onclick = copiar;
-      });
+        engancharCerrojo();
+      });${cerrojoCodigosJs}
       function pinta(codigos){
         document.getElementById('paso1').style.display='none';
         document.getElementById('codigos').textContent = codigos.join('\\n');
@@ -544,7 +571,8 @@ function dosFactoresActivoPage(sess, quedan, nonce = '') {
         document.getElementById('btnRegen').onclick = regenerar;
         document.getElementById('btnOff').onclick = desactivar;
         document.getElementById('btnCopiar').onclick = copiar;
-      });
+        engancharCerrojo();
+      });${cerrojoCodigosJs}
       function copiar(){
         navigator.clipboard.writeText(document.getElementById('codigos').textContent)
           .then(function(){ document.getElementById('btnCopiar').textContent='Copiados ✓'; });
