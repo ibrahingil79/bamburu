@@ -17,8 +17,9 @@
 > puerta visual) → 5 DISA predictiva → 6 dashboards → 7-9 oficios → 10-19 el resto.** **Se acabaron
 > "El Foso" y el "Roadmap futuro"**: cada módulo tiene número. **Pasos 1 (sincerar), 2 (margen) y 3
 > (catálogo de las 5 áreas + responsable + informes por área + plan financiero) HECHOS (17 jul).**
-> **Siguiente: paso 4a — el constructor de analíticas, LA PIEZA MAYOR: se planifica en su propio
-> mini-plan al llegar su turno. No se inicia sin tu encargo.** El **Backlog** de abajo NO
+> **Del paso 4a, HECHO el constructor para VENTAS** (9 dimensiones × 6 medidas × 4 gráficos, paneles
+> guardados). **Siguiente: 4a-bis — las otras 4 áreas del constructor (Compras · Clientes ·
+> Inventario · Contabilidad), a ejecutar INMEDIATAMENTE (decisión del dueño, 17 jul).** El **Backlog** de abajo NO
 > compite con la escalera: es lo que le falta a El Suelo (el umbral) más la deuda. Plan del Eje C
 > cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
@@ -1734,7 +1735,55 @@ Módulo de **informes predefinidos por área** (ventas, compras, clientes…) + 
 *Origen: auditoría Bamburu vs Holded (9 jul 2026), repaso con el manual funcional completo de Holded
 (más detallado que la del 4 jul). Era "Analítica" en esa lista.*
 
-### ⬜ 4a — Constructor de analíticas · **LA PUERTA VISUAL**  🔶 PIEZA MAYOR
+### 🟡 4a — Constructor de analíticas · **VENTAS HECHO (17 jul 2026)** · faltan las otras 4 áreas
+
+**La puerta visual ya existe**: el dueño cruza lo que quiere y elige cómo verlo, sobre sus datos.
+Vive en `/admin/analytics` (el área "Analítica" que se creó al reengancharla — la duda del "dónde"
+quedó zanjada ahí). Motor: `modules/erp/constructor-analitica.js`.
+
+**LA DECISIÓN QUE DEFINE LA PIEZA — el constructor NO arma SQL.** Salió del mini-plan y es lo único
+que impide que esta función rompa el proyecto: armar SQL con una allowlist (el patrón de
+`query_database`, D1) protege los **permisos** pero **no las reglas de negocio**. Un gráfico que
+consultara `invoices` por su cuenta contaría **anuladas**, contaría **tickets sustituidos** y las
+**rectificativas no netearían** — y el dueño tendría un gráfico, hecho por él, que dice un total de
+ventas distinto del de la pantalla de Ventas. No sospecharía nunca. Aquí la regla de conteo se aplica
+**UNA vez en el origen** (`countingSalesInvoices`) y todo lo demás es agrupar sobre ese conjunto ya
+verificado. **Afirmado contra el servidor real: las 5 dimensiones dan 973.267,93 €, lo mismo que el
+informe de Ventas.** El coste es cargar líneas en memoria — que es lo que `countingSalesInvoices` ya
+hacía; si un negocio llegara a cientos de miles, se acota por fecha.
+
+- **9 dimensiones · 6 medidas · 4 gráficos** (barras · líneas · tarta · tabla), del catálogo del paso 3
+  — ni una pieza inventada. Un campo sin `valor` en el mapa **no existe**: falla cerrado.
+- **Permisos por campo**: cliente/tipo/provincia/forma de pago → `clients.read`; producto/categoría →
+  `products.read`; todo el constructor → `analytics.read` + `invoices.read`. El desplegable filtrado
+  **NO es el candado**: `cruzar()` lo revalida (probado pidiéndolo a mano → 403). **Filtrar** por un
+  campo que no ves también se deniega: acotar y mirar el total sería deducir el dato.
+- **El margen no se regala** ni cruzando por lo que sea: sin coste conocido → `—`, nunca 0 ni 100 %, y
+  el aviso viaja con el cruce (solo si pides margen; si miras facturación sería ruido).
+- **Paneles: de quien los crea** (decisión del dueño; compartir es 4b). Guardan la **RECETA, no los
+  datos** — al abrirlos se vuelve a cruzar y **se revalidan los permisos de HOY**. Si guardaran
+  resultados, un panel sería una fuga con fecha: perder un permiso y seguir viendo lo de antes. El
+  `user_id` sale de la sesión, nunca del cuerpo; y va en el `WHERE` (nadie edita ni borra el de otro).
+- Verificado: `verify-constructor` **34/0** (las 9 dimensiones dan el mismo total; una factura anulada
+  de 5.000 € **no aparece**; permisos por campo y por filtro; paneles ajenos; idempotencia) +
+  `gate-margen-pantalla` **56/0** (navegador: se cambia el cruce de verdad, el "—" en tabla, y las 5
+  dimensiones == el informe de Ventas contra el servidor real).
+
+#### ⬜ 4a-bis — LAS OTRAS CUATRO ÁREAS · **ejecutar INMEDIATAMENTE después** (decisión del dueño, 17 jul)
+El constructor cubre hoy **solo VENTAS**, que es donde está el conjunto enriquecido (margen +
+responsable). Faltan **Compras · Clientes · Inventario · Contabilidad**, y el dueño quiere que entren
+**a continuación, sin esperar**.
+**Lo que hay que saber antes de empezar** (sale del mini-plan de 4a): **cada área tiene un GRANO
+distinto** — una línea de venta, una factura de compra, un movimiento de stock, un asiento contable.
+No es "repetir lo de ventas ×4": es **un conjunto enriquecido por área**, cada uno con su regla de
+conteo ya escrita y verificada, que se reutiliza igual que aquí:
+- **Compras** → `countsAsPayable` / `openPayables` (`pagos.js`). Grano: factura recibida.
+- **Clientes** → `clientesDormidos` / `openDebts`. Grano: cliente (no línea).
+- **Inventario** → el libro `stock_movements`. Grano: movimiento.
+- **Contabilidad** → `ledger_lines`. Grano: apunte. *Ojo: aquí ya existe su pantalla (Libros y
+  modelos) — hay que decidir qué aporta cruzarlo aquí sin romper la única verdad.*
+**Cruzar ENTRE áreas es 4b** ("combinar fuentes"), no esto: granos distintos no se suman sin decidir
+antes cómo.
 Motor tipo Power BI: **catálogo de campos en cristiano** (ventas, márgenes, clientes, compras, stock,
 caja…), el usuario **elige cómo cruzarlos**, **elige el tipo de gráfico a su estilo** (no gráficos
 cerrados) y **guarda los suyos**. **Pantalla de panel propia = la puerta del usuario visual**

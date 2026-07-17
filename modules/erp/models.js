@@ -1187,6 +1187,22 @@ export function runMigrations(db) {
   addCol(db, 'invoice_items', 'tax_rate',   'REAL NOT NULL DEFAULT 0');
   addCol(db, 'invoice_items', 'tax_amount', 'REAL NOT NULL DEFAULT 0');
 
+  // ── ESCALERA · PASO 4a — CONSTRUCTOR DE ANALÍTICAS: los paneles guardados (aditivo) ───────────
+  // De QUIEN LOS CREA (decisión del dueño, 17 jul 2026); compartir es el paso 4b.
+  // `config` guarda la RECETA en JSON (qué dimensión, qué medidas, qué filtros, qué gráfico), **NO
+  // los datos**. Es deliberado: al abrir el panel se vuelve a pasar por `cruzar()`, que revalida los
+  // permisos de HOY. Si se guardaran los resultados, un panel sería una fuga con fecha — bastaría
+  // perder un permiso y seguir viendo lo de antes tan tranquilo.
+  db.exec(`CREATE TABLE IF NOT EXISTS analytics_panels (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    nombre TEXT NOT NULL,
+    config TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_analytics_panels_user ON analytics_panels(user_id)`);
+
   // ── ESCALERA · PASO 3 · BLOQUE 2 — PLAN FINANCIERO: los objetivos (aditivo, reversible) ───────
   // El lado "real" ya existe (ventasPorPeriodo / margenResumen). Esto es el lado "objetivo", que es
   // dato NUEVO: las metas las teclea el dueño, no salen de ninguna parte.

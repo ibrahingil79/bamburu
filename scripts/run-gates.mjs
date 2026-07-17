@@ -54,8 +54,10 @@ const GRUPOS = {
   // Escalera · paso 2 — MARGEN. Vigila que la cifra de "cuánto gano" no mienta: IVA fuera, coste
   // CONGELADO (no el WAC de hoy), lo que no tiene coste apartado en vez de regalado al 100%, y el
   // total cuadrando con la suma del desglose.
+  // Escalera · pasos 2-4a: margen, informes, plan financiero y el constructor. Vigilan lo mismo: que
+  // ninguna cifra de la Analítica pueda contradecir a Ventas, ni regalar margen donde no hay coste.
   margen: ['verify-margen', 'gate-margen-pantalla', 'verify-responsable', 'verify-informes',
-           'verify-plan-financiero'],
+           'verify-plan-financiero', 'verify-constructor'],
   // Plantillas de email editables: tocan TODOS los correos que el negocio manda.
   plantillas: ['verify-plantillas-email', 'gate-plantillas-email'],
   // Sala de máquinas: superadmin, conexiones a la BD, el fichero -wal, el saneo de errores al cliente,

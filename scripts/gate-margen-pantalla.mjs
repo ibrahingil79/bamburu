@@ -209,7 +209,73 @@ try {
     body: JSON.stringify({ tipo: 'facturacion', periodo: 'mes', clave: '2026-07', alcance: 'global', valor: 1 }) })).status, BASE);
   ok(postEmp === 403, 'y TAMPOCO puede fijar una meta por la API (403)', String(postEmp));
 
-  console.log('\n[10] NO SE RESUCITA NADA DE LO DESENLAZADO A PROPÓSITO');
+  console.log('\n[10] PASO 4a — EL CONSTRUCTOR: cruzar, dibujar y guardar');
+  await page.goto(BASE + '/admin/analytics', { waitUntil: 'networkidle2' });
+  await page.waitForSelector('#cDim option', { timeout: 10000 }).catch(() => {});
+  const cons = await page.evaluate(() => ({
+    dims: [...document.querySelectorAll('#cDim option')].map(o => o.textContent.trim()),
+    meds: [...document.querySelectorAll('#cMed option')].map(o => o.textContent.trim()),
+    tipos: [...document.querySelectorAll('#cTipo option')].map(o => o.value),
+    lienzo: !!document.getElementById('cChart'),
+  }));
+  ok(cons.dims.length === 9, 'ofrece las 9 dimensiones en cristiano', cons.dims.join(' · '));
+  ok(cons.meds.length === 6, 'y las 6 medidas', cons.meds.join(' · '));
+  ok(cons.tipos.join(',') === 'barras,lineas,tarta,tabla', 'los 4 tipos de gráfico', cons.tipos.join(','));
+  ok(cons.lienzo, 'y el gráfico se dibuja');
+  // Se CAMBIA el cruce de verdad: que el desplegable exista no demuestra que redibuje.
+  await page.select('#cDim', 'producto');
+  await page.select('#cMed', 'beneficio');
+  await new Promise(r => setTimeout(r, 700));
+  const avisoCons = await page.$eval('#cAviso', e => e.style.display !== 'none' && /sin coste/i.test(e.textContent)).catch(() => false);
+  ok(avisoCons, 'al pedir margen, sale el aviso de "sin coste"');
+  await page.select('#cTipo', 'tabla');
+  await new Promise(r => setTimeout(r, 700));
+  const tabla = await page.$eval('#cTablaWrap', e => e.style.display !== 'none' && e.textContent).catch(() => '');
+  ok(!!tabla && /—/.test(tabla), 'en tabla, lo que no tiene coste se pinta "—", no 0 ni 100%');
+  // El selector de agrupación solo tiene sentido en fecha.
+  const perOculto = await page.$eval('#cPeriodoWrap', e => e.style.display === 'none');
+  ok(perOculto, 'el "agrupado por" se oculta cuando no cruzas por fecha', 'enseñarlo sugeriría que hace algo');
+  ok(errores.length === 0, '0 errores JS en todo el constructor', errores.join(' | '));
+
+  console.log('\n[11] EL CONSTRUCTOR NO PUEDE CONTRADECIR A VENTAS');
+  // La prueba de fondo, contra el SERVIDOR REAL: cruzar por cualquier dimensión da el mismo total.
+  const totales = await page.evaluate(async b => {
+    const out = {};
+    for (const d of ['fecha', 'cliente', 'producto', 'responsable', 'serie']) {
+      const r = await fetch(b + '/api/erp/analytics/constructor/cruzar', { method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': window.CSRF_TOKEN },
+        body: JSON.stringify({ dimension: d, medidas: ['base'] }) });
+      const j = await r.json();
+      out[d] = Math.round(j.filas.reduce((a, f) => a + f.base, 0) * 100) / 100;
+    }
+    const ov = await (await fetch(b + '/api/erp/analytics/informes')).json();
+    out._ventas = Math.round(ov.ventas.porPeriodo.reduce((a, f) => a + f.base, 0) * 100) / 100;
+    return out;
+  }, BASE);
+  const iguales = ['fecha', 'cliente', 'producto', 'responsable', 'serie'].every(d => Math.abs(totales[d] - totales._ventas) < 0.02);
+  ok(iguales, 'las 5 dimensiones dan el MISMO total que el informe de Ventas', JSON.stringify(totales));
+
+  console.log('\n[12] PANELES — de quien los crea, y el candado del constructor');
+  const panel = await page.evaluate(async b => {
+    const r = await fetch(b + '/api/erp/analytics/constructor/paneles', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': window.CSRF_TOKEN },
+      body: JSON.stringify({ nombre: 'gate-panel', config: { dimension: 'fecha', periodo: 'mes', medidas: ['base'], grafico: 'lineas' } }) });
+    return { s: r.status, j: await r.json() };
+  }, BASE);
+  ok(panel.s === 200 && panel.j.paneles.some(p => p.nombre === 'gate-panel'), 'el owner guarda su panel');
+  ok(panel.j.paneles.every(p => p.config && !p.config.filas), 'el panel guarda la RECETA, no los datos',
+     'si guardara resultados, sería una fuga con fecha');
+  const consEmp = await page2.evaluate(async b => ({
+    campos: (await fetch(b + '/api/erp/analytics/constructor/campos')).status,
+    cruzar: (await fetch(b + '/api/erp/analytics/constructor/cruzar', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': window.CSRF_TOKEN },
+      body: JSON.stringify({ dimension: 'cliente', medidas: ['base'] }) })).status,
+    paneles: (await fetch(b + '/api/erp/analytics/constructor/paneles')).status,
+  }), BASE);
+  ok(consEmp.campos === 403 && consEmp.cruzar === 403 && consEmp.paneles === 403,
+     'el empleado sin analytics.read no entra por ninguna de las tres puertas', JSON.stringify(consEmp));
+
+  console.log('\n[13] NO SE RESUCITA NADA DE LO DESENLAZADO A PROPÓSITO');
   const muertas = await page.evaluate(() => ['/admin/discounts', '/admin/tags', '/admin/orders', '/admin/shipping']
     .filter(h => !!document.querySelector('a[href="' + h + '"]')));
   ok(muertas.length === 0, 'descuentos, etiquetas, pedidos viejos y envíos siguen fuera del menú', muertas.join(', ') || 'ninguno asomó');
@@ -222,6 +288,7 @@ try {
   // mitad, sus sesiones se quedarían vivas para siempre y la siguiente pasada añadiría dos más.
   // (Es el pecado de `gate-almacenes`, que se envenenaba solo — ya pagado una vez en este repo.)
   db.prepare("DELETE FROM admin_sessions WHERE token LIKE 'gate-margen%'").run();
+  db.prepare("DELETE FROM analytics_panels WHERE nombre='gate-panel'").run();   // el panel de la pasada [12]
   if (empId) {
     db.prepare('DELETE FROM user_permissions WHERE admin_user_id=?').run(empId);
     db.prepare('DELETE FROM admin_users WHERE id=?').run(empId);

@@ -11,6 +11,7 @@ import { hoyLocal } from '../avisos.js';    // fecha local Europe/Madrid (en UTC
 import { planFinanciero, fijarObjetivo } from '../plan-financiero.js';   // PASO 3 · bloque 2: objetivos vs. real
 import { logActivity } from '../../../core/auth.js';
 import { ENTITY } from '../../../core/activity-entities.js';
+import { camposPara, cruzar, guardarPanel, listarPaneles, borrarPanel } from '../constructor-analitica.js';   // PASO 4a: la puerta visual
 
 export function createAnalyticsRoutes(db, cfg = {}) {
   const sym = cfg.sym || '€';
@@ -148,6 +149,58 @@ export function createAnalyticsRoutes(db, cfg = {}) {
       logActivity(db, c.get('session'), r.borrado ? 'Quitó un objetivo del plan' : 'Fijó un objetivo del plan',
                   ENTITY.COMPANY_CONFIG, null, `${d.tipo} · ${d.periodo} ${d.clave} · ${d.alcance}${d.user_id ? ' #' + d.user_id : ''}`);
       return c.json({ ...r, filas: planFinanciero(db, {}) });
+    } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
+  });
+
+  // ── ESCALERA · PASO 4a — CONSTRUCTOR DE ANALÍTICAS (área: VENTAS) ──────────────────────────────
+  // La puerta visual: el usuario elige qué cruzar y se dibuja SUS gráficos, no los cuatro que alguien
+  // decidió por él (CANON §3-bis, "las dos puertas").
+  // CANDADO: `analytics.read` + `invoices.read` (es el área de ventas). Cada CAMPO puede exigir un
+  // permiso extra (cliente/provincia → clients.read; producto/categoría → products.read), y el
+  // servidor lo revalida en `cruzar()`: el desplegable filtrado NO es el candado, solo la cortesía.
+  const permDe = c => (p) => can(c, p);
+  const exigeVentas = c => {
+    if (!can(c, 'invoices.read')) { const e = new Error('No tienes permiso para ver las cifras de venta'); e.status = 403; throw e; }
+  };
+
+  api.get('/constructor/campos', requirePerm('analytics.read'), c => {
+    try {
+      exigeVentas(c);
+      return c.json(camposPara(permDe(c)));
+    } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
+  });
+
+  api.post('/constructor/cruzar', requirePerm('analytics.read'), async c => {
+    try {
+      exigeVentas(c);
+      const d = await c.req.json();
+      return c.json(cruzar(db, { ...d, hasPerm: permDe(c) }));
+    } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
+  });
+
+  // PANELES — de quien los crea. El `user_id` sale de la SESIÓN, nunca del cuerpo de la petición:
+  // si viniera de fuera, cualquiera guardaría paneles en el nombre de otro.
+  api.get('/constructor/paneles', requirePerm('analytics.read'), c => {
+    try {
+      exigeVentas(c);
+      return c.json(listarPaneles(db, c.get('session')?.userId));
+    } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
+  });
+
+  api.post('/constructor/paneles', requirePerm('analytics.read'), async c => {
+    try {
+      exigeVentas(c);
+      const d = await c.req.json();
+      const r = guardarPanel(db, c.get('session')?.userId, d);
+      return c.json({ ...r, paneles: listarPaneles(db, c.get('session')?.userId) });
+    } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
+  });
+
+  api.delete('/constructor/paneles/:id', requirePerm('analytics.read'), c => {
+    try {
+      exigeVentas(c);
+      borrarPanel(db, c.get('session')?.userId, c.req.param('id'));
+      return c.json({ ok: true, paneles: listarPaneles(db, c.get('session')?.userId) });
     } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
   });
 
@@ -304,6 +357,33 @@ export function createAnalyticsRoutes(db, cfg = {}) {
           <thead><tr><th>Producto</th><th>Unidades</th><th>Ingresos sin IVA</th><th>Coste</th><th>Beneficio</th><th>Margen</th></tr></thead>
           <tbody id="mgBody">${skeletonRows(5)}</tbody>
         </table></div>
+      </div>
+
+      <div class="card" style="margin-bottom:1.5rem">
+        <div class="card-head"><h3>Construye tu gráfico</h3>
+          <div style="display:flex;gap:.5rem;align-items:center">
+            <select class="form-control" id="cPanel" style="width:auto;font-size:.8rem"><option value="">Mis paneles…</option></select>
+            <button type="button" class="btn btn-secondary btn-sm" id="cGuardar">Guardar</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="form-row" style="align-items:flex-end;gap:.6rem;flex-wrap:wrap">
+            <div class="form-group" style="min-width:150px"><label class="form-label">Mirar por</label>
+              <select class="form-control" id="cDim"></select></div>
+            <div class="form-group" id="cPeriodoWrap" style="min-width:120px"><label class="form-label">Agrupado</label>
+              <select class="form-control" id="cPeriodo"><option value="mes">Por mes</option><option value="trimestre">Por trimestre</option><option value="anio">Por año</option></select></div>
+            <div class="form-group" style="min-width:170px"><label class="form-label">Medir</label>
+              <select class="form-control" id="cMed"></select></div>
+            <div class="form-group" style="min-width:130px"><label class="form-label">Gráfico</label>
+              <select class="form-control" id="cTipo">
+                <option value="barras">Barras</option><option value="lineas">Líneas</option>
+                <option value="tarta">Tarta</option><option value="tabla">Tabla</option>
+              </select></div>
+          </div>
+          <div id="cAviso" style="display:none;margin:.6rem 0"></div>
+          <div id="cChartWrap" style="height:280px;margin-top:.75rem"><canvas id="cChart"></canvas></div>
+          <div id="cTablaWrap" style="display:none;margin-top:.75rem"></div>
+        </div>
       </div>
 
       <div class="card" style="margin-bottom:1.5rem">
@@ -552,9 +632,91 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         catch(e){ /* api() ya enseña el error del servidor en un toast */ }
       }
 
+      // ── PASO 4a — EL CONSTRUCTOR. La puerta visual: el usuario cruza lo que quiere y elige cómo
+      // verlo. No pide gráficos cerrados: pide una receta (dimensión × medida × gráfico) y el
+      // servidor la cruza sobre el conjunto YA verificado — por eso ningún panel puede contradecir a
+      // Ventas. Los desplegables solo ofrecen lo que el usuario puede ver, pero eso es cortesía: el
+      // servidor lo revalida (probado en el gate).
+      let cCampos=null, cChartInst=null, cPaneles=[];
+      const PALETA=['#0ea5e9','#10b981','#f59e0b','#8b5cf6','#ef4444','#14b8a6','#ec4899','#64748b'];
+      function llenarConstructor(){
+        if(!cCampos||cCampos.error){ return; }
+        const dim=document.getElementById('cDim'), med=document.getElementById('cMed');
+        dim.innerHTML=Object.entries(cCampos.dimensiones).map(([k,v])=>'<option value="'+k+'">'+escHtml(v.etiqueta)+'</option>').join('');
+        med.innerHTML=Object.entries(cCampos.medidas).map(([k,v])=>'<option value="'+k+'">'+escHtml(v.etiqueta)+'</option>').join('');
+        for(const id of ['cDim','cPeriodo','cMed','cTipo']) document.getElementById(id).addEventListener('change',dibujar);
+        document.getElementById('cGuardar').onclick=guardarPanelUI;
+        document.getElementById('cPanel').onchange=abrirPanel;
+        dibujar();
+      }
+      function recetaActual(){
+        return { dimension:document.getElementById('cDim').value, periodo:document.getElementById('cPeriodo').value,
+                 medidas:[document.getElementById('cMed').value], grafico:document.getElementById('cTipo').value };
+      }
+      async function dibujar(){
+        const r=recetaActual();
+        // El selector de agrupación solo tiene sentido en la dimensión fecha: enseñarlo en "cliente"
+        // sugeriría que hace algo, y no haría nada.
+        document.getElementById('cPeriodoWrap').style.display = r.dimension==='fecha' ? '' : 'none';
+        let d; try{ d=await api('POST','/api/erp/analytics/constructor/cruzar',r); }catch(e){ return; }
+        const med=r.medidas[0], meta=cCampos.medidas[med]||{};
+        const av=document.getElementById('cAviso');
+        if(d.aviso){ av.style.display='';
+          av.innerHTML='<div style="background:var(--accent-soft);border:1px solid var(--border2);border-radius:8px;padding:.55rem .7rem;font-size:.75rem;color:var(--text2)">'+
+            '<strong style="color:var(--text)">El margen solo juzga lo que tiene coste.</strong> Quedan fuera '+eur(d.aviso.sinCoste)+
+            ' de ventas sin coste registrado. No es que pierdas: es que su coste no se sabe.</div>';
+        } else av.style.display='none';
+        const fmt=v=>v==null?'—':(meta.dinero?eur(v):(meta.pct?Number(v).toFixed(1)+'%':Number(v)));
+        if(r.grafico==='tabla'){
+          document.getElementById('cChartWrap').style.display='none';
+          const w=document.getElementById('cTablaWrap'); w.style.display='';
+          w.innerHTML='<div class="table-wrap"><table><thead><tr><th>'+escHtml(d.dimensionEtiqueta)+'</th><th>'+escHtml(meta.etiqueta||med)+'</th></tr></thead><tbody>'+
+            (d.filas.length?d.filas.map(f=>'<tr><td>'+escHtml(f.clave)+'</td><td>'+fmt(f[med])+'</td></tr>').join('')
+             :'<tr><td colspan="2" style="color:var(--muted)">Sin datos.</td></tr>')+'</tbody></table></div>';
+          return;
+        }
+        document.getElementById('cTablaWrap').style.display='none';
+        document.getElementById('cChartWrap').style.display='';
+        if(cChartInst) cChartInst.destroy();
+        const tipo=r.grafico==='lineas'?'line':r.grafico==='tarta'?'pie':'bar';
+        // Los null (sin coste conocido) NO se pintan como 0: en un gráfico, un 0 es una afirmación
+        // ("no ganó nada") y null es un hueco, que es la verdad.
+        const datos=d.filas.map(f=>f[med]);
+        cChartInst=new Chart(document.getElementById('cChart').getContext('2d'),{
+          type:tipo,
+          data:{labels:d.filas.map(f=>String(f.clave).substring(0,22)),
+                datasets:[{label:meta.etiqueta||med,data:datos,
+                  backgroundColor:tipo==='pie'?PALETA:'rgba(14,165,233,.6)',
+                  borderColor:tipo==='pie'?'#0b1220':'#0ea5e9',borderWidth:1,borderRadius:tipo==='bar'?4:0,
+                  tension:tipo==='line'?.25:0,spanGaps:false}]},
+          options:{responsive:true,maintainAspectRatio:false,
+            plugins:{legend:{display:tipo==='pie'},tooltip:{callbacks:{label:x=>' '+fmt(x.parsed.y ?? x.parsed)}}},
+            scales:tipo==='pie'?{}:{y:{beginAtZero:true,ticks:{callback:v=>meta.dinero?'${sym}'+v:(meta.pct?v+'%':v)}}}}
+        });
+      }
+      async function guardarPanelUI(){
+        const nombre=prompt('¿Cómo lo llamas?'); if(!nombre) return;
+        try{ const r=await api('POST','/api/erp/analytics/constructor/paneles',{nombre,config:recetaActual()});
+          cPaneles=r.paneles; llenarPaneles(); toast('Panel guardado'); }catch(e){}
+      }
+      function llenarPaneles(){
+        document.getElementById('cPanel').innerHTML='<option value="">Mis paneles…</option>'+
+          cPaneles.map(p=>'<option value="'+p.id+'">'+escHtml(p.nombre)+'</option>').join('');
+      }
+      function abrirPanel(e){
+        const p=cPaneles.find(x=>String(x.id)===e.target.value); if(!p||!p.config) return;
+        // Se re-CRUZA, no se pinta lo guardado: un panel guarda la receta, no los datos, así que los
+        // permisos se revalidan al abrirlo. Si guardara resultados, sería una fuga con fecha.
+        document.getElementById('cDim').value=p.config.dimension;
+        document.getElementById('cPeriodo').value=p.config.periodo||'mes';
+        document.getElementById('cMed').value=(p.config.medidas||['base'])[0];
+        document.getElementById('cTipo').value=p.config.grafico||'barras';
+        dibujar();
+      }
+
       async function loadCharts(){
         const days=document.getElementById('periodSel').value;
-        const [ov,period,top,stock,mg,resp,inf,plan]=await Promise.all([
+        const [ov,period,top,stock,mg,resp,inf,plan,campos,paneles]=await Promise.all([
           api('GET','/api/erp/analytics/overview').catch(()=>({})),
           api('GET','/api/erp/analytics/sales-by-period?days='+days).catch(()=>[]),
           api('GET','/api/erp/analytics/best-sellers?limit=8').catch(()=>[]),
@@ -562,7 +724,9 @@ export function createAnalyticsRoutes(db, cfg = {}) {
           api('GET','/api/erp/analytics/margen').catch(()=>null),
           api('GET','/api/erp/analytics/responsable').catch(()=>null),
           api('GET','/api/erp/analytics/informes').catch(()=>null),
-          api('GET','/api/erp/analytics/plan').catch(()=>null)
+          api('GET','/api/erp/analytics/plan').catch(()=>null),
+          api('GET','/api/erp/analytics/constructor/campos').catch(()=>null),
+          api('GET','/api/erp/analytics/constructor/paneles').catch(()=>[])
         ]);
         document.getElementById('kRev').textContent='${sym}'+Number(ov.totalRevenue||0).toFixed(2);
         document.getElementById('kOrd').textContent=ov.totalOrders||0;
@@ -573,6 +737,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         respCache=resp; llenarSelResponsable(); pintarResponsable();
         infCache=inf; pintarInformes();
         planCache=plan; pintarPlan();
+        if(!cCampos){ cCampos=campos; cPaneles=Array.isArray(paneles)?paneles:[]; llenarPaneles(); llenarConstructor(); }
 
         if(salesChartInst)salesChartInst.destroy();
         salesChartInst=new Chart(document.getElementById('salesChart').getContext('2d'),{type:'bar',data:{labels:period.map(d=>d.date),datasets:[{label:'${sym}',data:period.map(d=>d.total),backgroundColor:'rgba(16,185,129,.6)',borderColor:'#10b981',borderWidth:1,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'${sym}'+v}}}}});
