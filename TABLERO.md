@@ -1770,7 +1770,7 @@ hacía; si un negocio llegara a cientos de miles, se acota por fecha.
   `gate-margen-pantalla` **56/0** (navegador: se cambia el cruce de verdad, el "—" en tabla, y las 5
   dimensiones == el informe de Ventas contra el servidor real).
 
-#### 🟡 4a-bis — LAS OTRAS ÁREAS · **Compras · Clientes · Inventario HECHOS (17 jul). Contabilidad, decisión pendiente**
+#### ✅ 4a-bis — LAS OTRAS ÁREAS · **Compras · Clientes · Inventario (17 jul) + Contabilidad (18 jul) — COMPLETO**
 El constructor ya cubre **cuatro áreas**, cada una con su GRANO propio y su regla de conteo ya
 verificada — **no es "repetir ventas ×4"**: el motor se generalizó a un registro de áreas (`AREAS` en
 `constructor-analitica.js`) manteniendo Ventas **idéntico** (su gate siguió en 34/0 tras el refactor).
@@ -1788,11 +1788,26 @@ verificada — **no es "repetir ventas ×4"**: el motor se generalizó a un regi
   sumando** un periodo — el nivel ya vive en Stock. Medidas: nº movimientos · entradas · salidas · neto ·
   valor movido a coste. **Cuadra:** Σ neto == Σ(quantity) del libro (743 uds, 168 movimientos);
   entradas − salidas == neto.
-- ⬜ **CONTABILIDAD — FUERA, pendiente de decisión del dueño.** Su cuenta de resultados ya vive en Libros
-  y modelos, y el libro tiene 4 grupos de cuenta (verificado: 365 apuntes del grupo 4, 93 del 5) mientras
-  `cuentaPyG` solo mira 6 y 7 con `haber−debe`. Un constructor que sume el libro daría **otra cifra que el
-  P&G**. Si entra, **reutilizando `cuentaPyG`** (no tocando `ledger_lines`) — pero entonces sería el P&G
-  con filtros, que ya es una pantalla. **No se construye sin que el dueño lo pida.**
+- ✅ **CONTABILIDAD — 5ª área, HECHA (18 jul 2026, encargo del dueño).** El riesgo era que diera **otro
+  beneficio que el P&G**; se evita por diseño: se **cuelga de `cuentaPyG`** (el motor del P&G, la misma
+  fuente que Libros y modelos), **NO de `ledger_lines`** — la regla contable (solo grupos 6/7, importe =
+  `haber−debe`, clasificación PGC) se aplica una sola vez, en el motor, y el constructor **solo agrupa**
+  sus importes.
+  - **Grano:** (mes, partida). `filas()` llama a `cuentaPyG` **por mes** (periodo atómico, recortado a
+    `[from,to]`) y emite una fila por partida con importe ≠ 0. La contabilidad es **aditiva** sobre
+    rangos disjuntos → agrupar por fecha (mes/trim/año) o por partida da el mismo total que el P&G.
+  - **Dimensiones:** Periodo · Partida (las 17 líneas del PGC) · Sección (Explotación/Financiero/
+    Impuestos). **Medidas:** Resultado (beneficio) · Ingresos · Gastos — es partir el MISMO importe
+    neto por su signo, no medidas inventadas. **Solo se listan las partidas con dato** (3 de 17 hoy).
+  - **CUADRE AL CÉNTIMO, dato vivo:** cruzar por periodo, por partida y por sección da **1.273.511,38 €**
+    — exactamente `resultadoEjercicio` del P&G. `ingresos − gastos == resultado`. Un rango acotado (T2)
+    también cuadra con el P&G de ese rango (679.063,86 €).
+  - **Candado:** `invoices.read` (el mismo que la pantalla de Libros); sin él, 403 a mano. Un panel de
+    Contabilidad guarda la RECETA: al abrirlo sin permiso → 403; con permiso se **recalcula** al P&G de
+    hoy (probado con datos vivos). Y es **comparable en el tiempo** en 4b (tiene fecha).
+  - Verificado: `verify-constructor` **82/0** (los 10 casos de Contabilidad: cuadre por las 3
+    dimensiones, ingresos−gastos, solo-con-dato, candado, rango acotado, comparable) + `gate-margen-
+    pantalla` **79/0** (navegador: la 5ª área cuadra con el P&G contra el servidor real).
 - **Candado por área:** cada una tras su permiso base (invoices/purchases/clients/inventory `.read`);
   `areasPara` solo ofrece las que el usuario puede, y `cruzar()` lo revalida (403 a mano, probado). Un
   campo de otra área no vale (`serie` en compras → 400); un área inventada, 400.

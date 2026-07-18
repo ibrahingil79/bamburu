@@ -22,6 +22,7 @@ import { createInvoice, emitTicketSvc } from '../modules/erp/routes/invoices.js'
 import { createClientSvc } from '../modules/erp/routes/clients.js';
 import { recordMovement } from '../modules/erp/stock.js';
 import { ventasResumen } from '../modules/erp/ventas-metrics.js';
+import { cuentaPyG } from '../modules/erp/contabilidad-pyg.js';
 import { cruzar, camposPara, filasVenta, guardarPanel, listarPaneles, borrarPanel,
          DIMENSIONES, MEDIDAS, AREAS, areasPara,
          compilarFormula, compararEnTiempo, areasComparables } from '../modules/erp/constructor-analitica.js';
@@ -266,7 +267,33 @@ try {
     catch (e) { return e.status === 400; } })(), 'no se guarda una receta que reventaría al abrirla');
   borrarPanel(db, ana, pComp.id); borrarPanel(db, ana, pPriv.id);
 
-  console.log('\n[14] IDEMPOTENCIA y NO-DAÑO');
+  console.log('\n[14] CONTABILIDAD — imposible que contradiga al P&G (regla de oro)');
+  // Se apoya en las ventas ya emitidas: emitir factura postea al diario (ledger). El P&G del gate es
+  // pequeño pero real. LA prueba: cruzar por CUALQUIER dimensión da el mismo resultado que cuentaPyG.
+  const pyg = cuentaPyG(db, '0000-01-01', '9999-12-31');
+  const objetivo = pyg.resultadoEjercicio;
+  const sRes = r => Math.round(r.filas.reduce((a, f) => a + (Number(f.resultado) || 0), 0) * 100) / 100;
+  check('el P&G del gate tiene un resultado', typeof objetivo === 'number', objetivo + ' €');
+  check('cruzar por PERIODO == resultado del P&G', near(sRes(cruzar(db, { area: 'contabilidad', dimension: 'fecha', medidas: ['resultado'], hasPerm: TODO })), objetivo), 'al céntimo');
+  check('cruzar por PARTIDA == resultado del P&G', near(sRes(cruzar(db, { area: 'contabilidad', dimension: 'partida', medidas: ['resultado'], hasPerm: TODO })), objetivo), 'la Σ de partidas ES el resultado');
+  check('cruzar por SECCIÓN == resultado del P&G', near(sRes(cruzar(db, { area: 'contabilidad', dimension: 'seccion', medidas: ['resultado'], hasPerm: TODO })), objetivo));
+  const cont = cruzar(db, { area: 'contabilidad', dimension: 'partida', medidas: ['resultado', 'ingresos', 'gastos'], hasPerm: TODO });
+  const ing = Math.round(cont.filas.reduce((a, f) => a + f.ingresos, 0) * 100) / 100;
+  const gas = Math.round(cont.filas.reduce((a, f) => a + f.gastos, 0) * 100) / 100;
+  check('ingresos − gastos == resultado (partir el mismo número por signo)', near(ing - gas, objetivo));
+  check('solo se listan las partidas CON dato (no las 17 vacías)', cont.filas.length === pyg.partidas.filter(p => p.importe !== 0).length,
+        cont.filas.length + ' partidas con importe');
+  check('el mismo candado por área: sin invoices.read, 403', (() => {
+    try { cruzar(db, { area: 'contabilidad', dimension: 'partida', medidas: ['resultado'], hasPerm: p => p === 'analytics.read' }); return false; }
+    catch (e) { return e.status === 403; } })(), 'contabilidad va tras invoices.read, como su pantalla');
+  check('un rango acotado también cuadra con el P&G de ese rango', (() => {
+    const r = sRes(cruzar(db, { area: 'contabilidad', dimension: 'partida', medidas: ['resultado'], from: '2026-03-01', to: '2026-03-31', hasPerm: TODO }));
+    const p = cuentaPyG(db, '2026-03-01', '2026-03-31').resultadoEjercicio;
+    return near(r, p); })(), 'la contabilidad es aditiva sobre rangos disjuntos');
+  check('Contabilidad entra en el desplegable de áreas', !!areasPara(TODO).contabilidad);
+  check('y es comparable en el tiempo (tiene fecha)', areasComparables().some(a => a.area === 'contabilidad'));
+
+  console.log('\n[15] IDEMPOTENCIA y NO-DAÑO');
   const antes = listarPaneles(db, otro).length;
   runMigrations(db); runMigrations(db);
   check('re-ejecutar runMigrations no toca los paneles', listarPaneles(db, otro).length === antes);

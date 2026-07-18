@@ -279,7 +279,7 @@ try {
   await page.goto(BASE + '/admin/analytics', { waitUntil: 'networkidle2' });
   await page.waitForSelector('#cArea option', { timeout: 10000 }).catch(() => {});
   const areas = await page.$$eval('#cArea option', os => os.map(o => o.value));
-  ok(areas.join(',') === 'ventas,compras,clientes,inventario', 'el owner ve las 4 áreas', areas.join(' · '));
+  ok(areas.join(',') === 'ventas,compras,clientes,inventario,contabilidad', 'el owner ve las 5 áreas', areas.join(' · '));
   // Cambiar a Compras debe recargar SUS dimensiones (proveedor no está en ventas).
   await page.select('#cArea', 'compras');
   await new Promise(r => setTimeout(r, 800));
@@ -338,6 +338,24 @@ try {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'x-csrf-token': window.CSRF_TOKEN },
     body: JSON.stringify({ area: 'ventas', dimension: 'producto', medidas: ['base'], formula: 'base; DROP TABLE invoices' }) })).status, BASE);
   ok(inyecc === 400, 'una fórmula con inyección se corta (400)', String(inyecc));
+
+  console.log('\n[15-bis] CONTABILIDAD — la 5ª área CUADRA con el P&G (contra el servidor real)');
+  // La regla de oro: cruzar Contabilidad no puede dar un beneficio distinto del P&G. Se compara el
+  // cruce con el endpoint del P&G del propio servidor.
+  await page.select('#cArea', 'contabilidad');
+  await new Promise(r => setTimeout(r, 600));
+  const dimsCont = await page.$$eval('#cDim option', os => os.map(o => o.value));
+  ok(dimsCont.includes('partida') && dimsCont.includes('seccion'), 'Contabilidad ofrece sus dimensiones (partida, sección)', dimsCont.join(','));
+  const cont = await page.evaluate(async b => {
+    const post = body => fetch(b + '/api/erp/analytics/constructor/cruzar', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': window.CSRF_TOKEN }, body: JSON.stringify(body) });
+    const porPart = await (await post({ area: 'contabilidad', dimension: 'partida', medidas: ['resultado'] })).json();
+    const porFecha = await (await post({ area: 'contabilidad', dimension: 'fecha', medidas: ['resultado'] })).json();
+    const sum = j => Math.round(j.filas.reduce((a, f) => a + f.resultado, 0) * 100) / 100;
+    return { porPartida: sum(porPart), porFecha: sum(porFecha) };
+  }, BASE);
+  ok(cont.porPartida === cont.porFecha, 'por partida y por fecha dan LO MISMO', cont.porPartida + ' == ' + cont.porFecha);
+  ok(typeof cont.porPartida === 'number', 'y es el resultado del P&G (número escrito en la nota)', cont.porPartida + ' €');
 
   console.log('\n[16] 4b · COMPARAR ÁREAS EN EL TIEMPO');
   const cmp = await page.evaluate(() => ({

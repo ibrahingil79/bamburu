@@ -1,7 +1,8 @@
 // ════════════════════════════════════════════════════════════════════════════
-// CONSTRUCTOR DE ANALÍTICAS — el motor. Escalera · paso 4a + 4a-bis.
-// Áreas: VENTAS · COMPRAS · CLIENTES · INVENTARIO. (Contabilidad, fuera: su resultado vive en Libros
-// y modelos y meterla aquí arriesga dos verdades del beneficio — decisión pendiente del dueño.)
+// CONSTRUCTOR DE ANALÍTICAS — el motor. Escalera · paso 4a + 4a-bis + 4b.
+// Áreas: VENTAS · COMPRAS · CLIENTES · INVENTARIO · CONTABILIDAD. Contabilidad entró (18 jul 2026)
+// colgándose de `cuentaPyG` (el motor del P&G), NO de `ledger_lines`: así es imposible que dé un
+// beneficio distinto del de Libros y modelos (ver el área CONTABILIDAD, abajo).
 //
 // LA DECISIÓN QUE LO SOSTIENE (dueño, 17 jul 2026): **el constructor NO arma SQL.** Cruza sobre un
 // conjunto de filas YA VERIFICADO, uno POR ÁREA. Armar SQL con allowlist (patrón `query_database`,
@@ -22,6 +23,7 @@
 import { countingSalesInvoices, ventasPorCliente, clientesDormidos,
          SQL_RESPONSABLE, SQL_RESPONSABLE_JOIN, SIN_ASIGNAR, clavePeriodo } from './ventas-metrics.js';
 import { countsAsPayable, supplierInvoicePago } from './pagos.js';
+import { cuentaPyG } from './contabilidad-pyg.js';   // PASO 4a-bis: Contabilidad se cuelga del P&G, no de ledger_lines
 import { clientDebt } from './cobros.js';
 
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
@@ -255,7 +257,74 @@ const AREA_INVENTARIO = {
   ordenar: 'movimientos',
 };
 
-export const AREAS = { ventas: AREA_VENTAS, compras: AREA_COMPRAS, clientes: AREA_CLIENTES, inventario: AREA_INVENTARIO };
+// ── ÁREA: CONTABILIDAD ───────────────────────────────────────────────────────
+// LA REGLA DE ORO: el constructor NO arma consultas contables. Se cuelga del motor del P&G
+// (`cuentaPyG`) — la MISMA fuente que Libros y modelos — y solo AGRUPA sus importes. `cuentaPyG` ya
+// aplica toda la regla contable UNA vez (solo grupos 6/7, importe = haber−debe, clasificación PGC).
+// GRANO: (mes, partida). Se llama a `cuentaPyG` por MES (el periodo atómico) y se emite una fila por
+// partida con importe ≠ 0. La contabilidad es ADITIVA sobre rangos de fecha disjuntos, así que:
+//   · agrupar esas filas por FECHA (mes/trim/año) = re-agrupar meses → cuadra con el P&G del periodo.
+//   · agrupar por PARTIDA = sumar los meses de cada partida = el importe del P&G de esa partida.
+//   · Σ de todas las filas = Σ de las 17 partidas = `resultadoEjercicio`. IMPOSIBLE que discrepe.
+// `importe` es el NETO con signo (ingreso +, gasto −); por eso "resultado" = Σ importe, "ingresos" =
+// Σ de los positivos y "gastos" = Σ |negativos| — es partir los MISMOS números por su signo, no
+// inventar medidas nuevas.
+const _SECCION_LABEL = { explotacion: 'Explotación', financiero: 'Financiero', impuesto: 'Impuestos' };
+const AREA_CONTABILIDAD = {
+  etiqueta: 'Contabilidad',
+  // Mismo candado que la pantalla de Libros y modelos (`contabilidad-routes.js`): invoices.read.
+  perm: 'invoices.read',
+  filas: (db, { from = null, to = null } = {}) => {
+    const w = [], p = [];
+    if (from) { w.push('entry_date >= ?'); p.push(from); }
+    if (to)   { w.push('entry_date <= ?'); p.push(to); }
+    const meses = db.prepare('SELECT DISTINCT substr(entry_date,1,7) m FROM ledger_entries'
+                             + (w.length ? ' WHERE ' + w.join(' AND ') : '') + ' ORDER BY m').all(...p).map(r => r.m);
+    const out = [];
+    for (const mes of meses) {
+      // Rango del mes, RECORTADO a [from,to] para que la suma de meses cubra EXACTAMENTE el periodo
+      // pedido (ni una línea de más ni de menos → el cuadre con el P&G del rango se mantiene).
+      let mFrom = mes + '-01', mTo = mes + '-31';
+      if (from && from > mFrom) mFrom = from;
+      if (to && to < mTo) mTo = to;
+      const pyg = cuentaPyG(db, mFrom, mTo);
+      for (const par of pyg.partidas) {
+        if (par.importe === 0) continue;   // "sin dato no se lista" (regla común a todas las áreas)
+        out.push({ mes, partida: par.nombre, seccion: par.seccion, importe: par.importe });
+      }
+    }
+    return out;
+  },
+  dimensiones: {
+    fecha:    { etiqueta: 'Periodo',   valor: (f, o) => clavePeriodo(f.mes + '-01', o.periodo || 'mes') },
+    partida:  { etiqueta: 'Partida (P&G)', valor: f => f.partida || VACIO },
+    seccion:  { etiqueta: 'Sección',   valor: f => _SECCION_LABEL[f.seccion] || f.seccion || VACIO },
+  },
+  medidas: {
+    resultado: { etiqueta: 'Resultado (beneficio)', dinero: true },
+    ingresos:  { etiqueta: 'Ingresos',              dinero: true },
+    gastos:    { etiqueta: 'Gastos',                dinero: true },
+  },
+  usaPeriodo: true,
+  nuevoAcc: clave => ({ clave, resultado: 0, ingresos: 0, gastos: 0 }),
+  sumar: (a, f) => {
+    const imp = Number(f.importe) || 0;
+    a.resultado += imp;
+    if (imp >= 0) a.ingresos += imp; else a.gastos += -imp;
+  },
+  salida: (a, meds) => {
+    const o = { clave: a.clave };
+    for (const m of meds) {
+      if (m === 'resultado') o.resultado = r2(a.resultado);
+      else if (m === 'ingresos') o.ingresos = r2(a.ingresos);
+      else if (m === 'gastos') o.gastos = r2(a.gastos);
+    }
+    return o;
+  },
+  ordenar: 'resultado',
+};
+
+export const AREAS = { ventas: AREA_VENTAS, compras: AREA_COMPRAS, clientes: AREA_CLIENTES, inventario: AREA_INVENTARIO, contabilidad: AREA_CONTABILIDAD };
 
 // El permiso BASE de un área (para que las rutas no tengan que conocer el registro). null si no existe.
 export function areaPerm(area) { return AREAS[area]?.perm || null; }

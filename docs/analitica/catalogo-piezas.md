@@ -6,14 +6,15 @@
 >
 > **Estado: 91 piezas · 85 con dato hoy · 4 a habilitar · 2 con la columna vacía.**
 >
-> **Construido sobre este catálogo (17 jul 2026):** los **11 informes por área** (`/admin/analytics`,
+> **Construido sobre este catálogo (17-18 jul 2026):** los **11 informes por área** (`/admin/analytics`,
 > tres pestañas + CSV) · el **plan financiero** (objetivos vs. real) · y **el constructor de analíticas**
-> (la puerta visual), que deja cruzar libremente **cuatro áreas** — Ventas · Compras · Clientes ·
-> Inventario — con 9/4/5/5 dimensiones, sus medidas y 4 tipos de gráfico, guardando paneles.
-> **Contabilidad NO entra en el constructor** (su resultado vive en Libros y modelos; cruzarla
-> arriesgaría dos verdades — decisión del dueño pendiente). **Inventario mide FLUJO, no niveles**: el
-> stock actual depende del orden del libro y no se reconstruye sumando; su nivel vive en Stock.
-> Ver `TABLERO.md` § pasos 3 y 4.
+> (la puerta visual), que deja cruzar libremente **las CINCO áreas** — Ventas · Compras · Clientes ·
+> Inventario · **Contabilidad** — con sus dimensiones/medidas y 4 tipos de gráfico, cálculos propios,
+> comparar áreas en el tiempo y paneles guardados/compartidos.
+> **Contabilidad (18 jul) se cuelga del motor del P&G (`cuentaPyG`), no de `ledger_lines`:** cruzar por
+> periodo/partida/sección da al céntimo el `resultadoEjercicio` del P&G — imposible que contradiga los
+> Libros. **Inventario mide FLUJO, no niveles**: el stock actual depende del orden del libro y no se
+> reconstruye sumando; su nivel vive en Stock. Ver `TABLERO.md` § pasos 3 y 4.
 >
 > **Ninguna pieza sin dato se descarta** — se marca *a habilitar* con lo que haría falta.
 
