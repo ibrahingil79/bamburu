@@ -12,6 +12,7 @@ import { safeError } from '../../../core/errors.js';
 import { adminLayout, can } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
 import { detectar, catalogoDetectores } from '../vigia.js';
+import { narrar } from '../voz.js';   // Escalera · paso 5 — DISA predictiva · PIEZA 2: la voz
 
 export function createVigiaRoutes(db) {
   const api = new Hono();
@@ -35,6 +36,21 @@ export function createVigiaRoutes(db) {
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
+  // LA VOZ (PIEZA 2). Mismos hallazgos que /hallazgos pero VESTIDOS: cada uno con su (a) qué pasa +
+  // desde cuándo y (b) decisión propuesta, compuestos determinísticamente en `voz.js` (server-side).
+  // Hereda permisos del vigía (viste solo lo que `detectar` entregó a este usuario); `?detector=` sin
+  // permiso da 403 igual que en /hallazgos. Devuelve `avisos` + todo lo del barrido (hallazgos crudos,
+  // sinPermiso, umbrales) para que la pantalla pinte la voz Y el detalle crudo desde UNA sola llamada.
+  api.get('/avisos', requirePerm('analytics.read'), c => {
+    try {
+      const soloDetector = c.req.query('detector') || null;
+      const hoyQ = c.req.query('hoy');
+      const hoy = /^\d{4}-\d{2}-\d{2}$/.test(hoyQ || '') ? hoyQ : null;
+      const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
+      return c.json(narrar(detectar(db, { hasPerm: permDe(c), hoy, soloDetector }), sym));
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+  });
+
   // La pantalla. Lista cruda por detector: Qué · Cifra · Fecha · Motivo. Render en cliente desde el
   // JSON de arriba (mismo patrón que el resto de la Analítica), para que sea la MISMA cifra sin copiarla.
   views.get('/', requirePerm('analytics.read'), c => {
@@ -44,14 +60,23 @@ export function createVigiaRoutes(db) {
       <div class="card" style="margin-bottom:1rem">
         <div class="card-body">
           <p style="margin:0;color:var(--text2);font-size:.85rem">
-            El vigía recorre tus motores de área y marca lo que conviene mirar. <strong>No hace sus
-            propias cuentas</strong>: cada cifra sale del mismo motor que pinta la pantalla de esa área
-            (Cobros, Pagos, Ventas, Plan) — no puede contradecirla. Solo lee.</p>
+            El vigía recorre tus motores de área y marca lo que conviene mirar. DISA te lo cuenta en
+            llano y te <strong>propone una decisión</strong>. <strong>No hace sus propias cuentas</strong>:
+            cada cifra sale del mismo motor que pinta la pantalla de esa área (Cobros, Pagos, Ventas,
+            Plan) — no puede contradecirla. Solo lee y te lo explica: <strong>no ejecuta nada</strong>.</p>
           <p id="vigMeta" style="margin:.5rem 0 0;color:var(--muted);font-size:.78rem"></p>
         </div>
       </div>
       <div id="vigAviso" style="display:none;margin-bottom:1rem"></div>
-      <div id="vigBody">${'<div class="card"><div class="card-body" style="color:var(--muted)">Cargando hallazgos…</div></div>'}</div>
+
+      <!-- LA VOZ (PIEZA 2): narración + decisión propuesta. Es lo que ve el autónomo. -->
+      <div id="vozBody">${'<div class="card"><div class="card-body" style="color:var(--muted)">Cargando avisos…</div></div>'}</div>
+
+      <!-- EL DETALLE CRUDO (PIEZA 1): la tabla del vigía, para verificar que las cifras cuadran. -->
+      <details style="margin-top:1.25rem">
+        <summary style="cursor:pointer;color:var(--muted);font-size:.82rem">Ver el detalle crudo del vigía (la cifra tal cual del motor de cada área)</summary>
+        <div id="vigBody" style="margin-top:.75rem">${'<div class="card"><div class="card-body" style="color:var(--muted)">Cargando hallazgos…</div></div>'}</div>
+      </details>
 
       <script>
       const SYM = ${JSON.stringify(sym)};
@@ -93,8 +118,34 @@ export function createVigiaRoutes(db) {
         }
         body.innerHTML = html;
       }
+      // ── LA VOZ: una tarjeta por aviso, con (a) qué pasa y (b) decisión propuesta. El texto ya viene
+      // compuesto del servidor (voz.js, determinístico); aquí solo se ESCAPA y se pinta. Sin botones ni
+      // formularios: la voz narra y propone, no ejecuta.
+      function pintarVoz(data){
+        const body = document.getElementById('vozBody');
+        if(!body) return;
+        if(!data){ body.innerHTML = '<div class="card"><div class="card-body" style="color:var(--muted)">No he podido cargar los avisos. Vuelve a cargar la página.</div></div>'; return; }
+        const avisos = data.avisos||[];
+        if(!avisos.length){
+          body.innerHTML = '<div class="card"><div class="card-body" style="color:var(--muted)">'
+            + 'Nada que te avise ahora mismo en las áreas que puedes ver. DISA no inventa: si no hay problema, no dice nada.</div></div>';
+          return;
+        }
+        body.innerHTML = avisos.map(a =>
+          '<div class="card" style="margin-bottom:.85rem"><div class="card-body">'
+          + '<div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-bottom:.15rem">'+escHtml(a.detectorEtiqueta)+' · '+escHtml(a.areaEtiqueta)+'</div>'
+          + '<div style="font-weight:600;margin-bottom:.35rem">'+escHtml(a.encabezado||'')+'</div>'
+          + '<p style="margin:0 0 .5rem;color:var(--text)">'+escHtml(a.quePasa||'')+'</p>'
+          + '<p style="margin:0;padding:.55rem .7rem;background:var(--accent-soft);border-left:3px solid var(--accent);border-radius:6px;color:var(--text)">'
+            + '<strong>Decisión propuesta:</strong> '+escHtml(a.decision||'')+'</p>'
+          + (a.porque ? '<p style="margin:.5rem 0 0;color:var(--muted);font-size:.76rem">El dato del vigía: '+escHtml(a.porque)+'</p>' : '')
+          + '</div></div>'
+        ).join('');
+      }
       (async function(){
-        const data = await api('GET','/api/erp/vigia/hallazgos').catch(()=>null);
+        // Una sola llamada: /avisos trae la voz (avisos) Y el barrido crudo (hallazgos, sinPermiso…).
+        const data = await api('GET','/api/erp/vigia/avisos').catch(()=>null);
+        pintarVoz(data);
         pintarVigia(data);
       })();
       </script>`;

@@ -1889,6 +1889,34 @@ proactivo/predictivo" — lo que el mapa de capas prometía y nunca tuvo número
   previsión de caja, persistencia visto/descartado (en tabla `disa_*` fuera de WRITABLE_TABLES) y el
   agente que avisa.
 
+- **PIEZA 2 — LA VOZ (narración + decisión propuesta) · ⬜ ENTREGADA, PENDIENTE DE VALIDACIÓN DE IBRAHIM.**
+  Módulo `modules/erp/voz.js` (función PURA `hallazgo → aviso`) + ruta/vista en `modules/erp/routes/vigia.js`
+  (API `/api/erp/vigia/avisos` + tarjetas en `/admin/vigia`, encima del detalle crudo). Viste cada
+  hallazgo del vigía con **(a) qué pasa + desde cuándo** y **(b) decisión propuesta** (jamás un hueco
+  vacío). **CERO CIFRAS INVENTADAS:** el texto se compone por PLANTILLAS por tipo de detector, rellenadas
+  SOLO con los campos limpios del hallazgo (`cifra`, `fecha`, códigos de `ref`); ningún número sale de
+  IA ni se recalcula. El nombre del cliente/proveedor y el detalle exacto (de X a Y, objetivo/real) se
+  muestran VERBATIM desde el `titulo`/`motivo` del propio vigía (su texto, sus números → imposible
+  contradecirle); la decisión referencia la factura por su código, no por un nombre reparseado (que en
+  datos reales puede llevar payload XSS: se escapa siempre al pintar). **NO EJECUTA:** solo texto, sin
+  botón/formulario/enlace de acción; no manda nada ni toca datos de negocio. **Sin persistencia, sin
+  consultas propias a BD, sin reabrir permisos:** hereda el filtrado del vigía (sin permiso de un área
+  no hay hallazgo → no hay aviso; forzarlo da 403). **No toca** el motor del vigía, los motores de área,
+  el constructor, Verifactu, KPIs ni WRITABLE_TABLES.
+  Verificado: `test-voz` (87/0, lógica: cero cifras inventadas + cuadre aviso↔hallazgo + siempre decide
+  + no ejecuta + permisos + trazable), `verify-voz` (datos reales *desarrollo*: 58/58 avisos cuadran con
+  su motor y 0 dígitos inventados), `gate-voz-pantalla` (16/0, navegador: 58 tarjetas con su decisión,
+  importe idéntico a la API, 0 controles de acción, candado heredado + 403, 0 errores JS/CSP).
+  Regresión: `gate-vigia-pantalla` 13/0 y grupos `infra` (XSS/CSP/safe-error) + `margen` (motores) 14/14
+  en verde; los 2 rojos preexistentes (`gate-avisos-pantalla`, `verify-avisos-crm-riesgo`) son ajenos
+  (campana/CRM), documentados en `run-gates`. **NOTA DE PRODUCTO para validación:** las plantillas de
+  decisión del encargo nombran al `[cliente]`/`[proveedor]` y el valor `[X]` del mes anterior; el vigía
+  NO los expone como campos limpios (solo dentro de `titulo`/`motivo`), así que la decisión nombra la
+  factura por su código y el nombre aparece en la cabecera del aviso (verbatim). Si se prefiere el nombre
+  DENTRO de la frase de decisión, la vía limpia sería un campo `datos:{}` aditivo en el vigía (relajar
+  "no tocar el vigía") — queda a decisión de Ibrahim. Pieza posterior: previsión de caja + la capa de
+  EJECUCIÓN (recordatorios, correos) que sí acciona la decisión que la voz solo propone.
+
 ### ⬜ 6 — Dashboards personalizables
 El usuario compone su **Inicio** con sus propios gráficos guardados en 4a. Aquí entra también el
 **sidebar personalizable** (ocultar/reordenar módulos) — *de las "mejoras menores" de la auditoría vs
