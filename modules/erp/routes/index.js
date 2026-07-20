@@ -12,6 +12,7 @@ import { createStockRoutes } from './stock.js';
 import { createDiscountRoutes } from './discounts.js';
 import { createShippingRoutes } from './shipping.js';
 import { createAnalyticsRoutes } from './analytics.js';
+import { createVigiaRoutes } from './vigia.js';   // Escalera · paso 5 — DISA predictiva · PIEZA 1: el vigía
 import { createSettingsRoutes } from './settings.js';
 import { createUserRoutes } from './users.js';
 import { createNewsletterRoutes } from './newsletter.js';
@@ -64,6 +65,7 @@ export function mountRoutes(app, db) {
   const { api: discApi, views: discViews } = createDiscountRoutes(db);
   const { api: shipApi, views: shipViews } = createShippingRoutes(db);
   const { api: analytApi, views: analytViews } = createAnalyticsRoutes(db);
+  const { api: vigiaApi, views: vigiaViews } = createVigiaRoutes(db);
   const { api: settApi, views: settViews, storeViews: storeSettViews } = createSettingsRoutes(db);
   const { api: userApi, views: userViews, activityViews } = createUserRoutes(db);
   const { api: nlApi, views: nlViews } = createNewsletterRoutes(db);
@@ -111,6 +113,7 @@ export function mountRoutes(app, db) {
   // D2 — resto e-commerce DESMONTADO (envíos): comentado, no borrado; shipping.js permanece. /admin/shipping → 404.
   // admin.route('/shipping', shipViews);
   admin.route('/analytics', analytViews);
+  admin.route('/vigia', vigiaViews);     // ← DISA predictiva · el vigía (motor de detección)
   admin.route('/settings', settViews);   // ← /admin/settings (config de EMPRESA) SE QUEDA (núcleo vivo)
   // D2 — store-builder DESMONTADO (UI): /admin/store-settings → 404. store_settings NO se archiva (se conserva el diseño, tienda Capa 2).
   // admin.route('/store-settings', storeSettViews);
@@ -165,6 +168,7 @@ export function mountRoutes(app, db) {
   // D2 — API de envíos DESMONTADA: comentada, no borrada. /api/erp/shipping/* → 404.
   // apiApp.route('/shipping', shipApi);
   apiApp.route('/analytics', analytApi);
+  apiApp.route('/vigia', vigiaApi);     // ← DISA predictiva · hallazgos del vigía (solo lectura)
   apiApp.route('/perfil', perfilApi);   // ← datos personales del usuario logueado (+ su foto)
   apiApp.route('/settings', settApi);   // ← /api/erp/settings SE QUEDA (config de empresa); solo /settings/store se neutraliza en settings.js
   apiApp.route('/users', userApi);

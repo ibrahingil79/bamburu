@@ -1871,6 +1871,24 @@ proactivo/predictivo" — lo que el mapa de capas prometía y nunca tuvo número
 *No reabre el Eje B (✅ COMPLETO, D0–D5f, seis propuestas de proactividad): aquello era DISA que
 **prepara y propone**; esto es DISA que **predice**.*
 
+- **PIEZA 1 — EL VIGÍA (motor de detección) · ⬜ ENTREGADA, PENDIENTE DE VALIDACIÓN DE IBRAHIM.**
+  Motor `modules/erp/vigia.js` + ruta/pantalla `modules/erp/routes/vigia.js` (`/admin/vigia`, gate
+  `analytics.read`) + entrada de menú en Analítica. **NO hace sus propias cuentas:** cada hallazgo toma
+  la cifra TAL CUAL del motor de su área —el mismo que pinta la pantalla— así que es imposible que
+  contradiga a Cobros/Pagos/Ventas/Plan. Seis detectores: deuda de cliente vencida (`openDebts`,
+  `cobros.read`) · cliente que se duerme (`clientesDormidos`, `clients.read`) · caída de facturación y
+  de margen mes vs. mes anterior (`cruzar`, área Ventas, `invoices.read`) · desvío del plan
+  (`planFinanciero`, `invoices.read`) · pago a proveedor que vence pronto (`openPayables`,
+  `purchases.read`). **Solo lectura**, sin persistencia (se calcula en vivo) y **sin tocar
+  WRITABLE_TABLES**. Permisos por detector: un empleado sin el permiso de un área no recibe sus
+  hallazgos (van a `sinPermiso`) y forzarlos da 403. Umbrales fijos documentados en el código (vencida
+  ≥1 d · caída ≥20% · desvío ≥10% · pago ≤7 d); su pantalla de configuración es pieza posterior.
+  Verificado: `test-vigia` (33/0, lógica: cuadre + no-inventa + detecta + permisos), `verify-vigia`
+  (cuadre sobre datos reales: deuda €232,75 = Cobros, pago €55 = Pagos), `gate-vigia-pantalla` (13/0,
+  navegador: pinta 58 hallazgos reales, menú, candado por pantalla, 0 errores JS/CSP). Pieza posterior:
+  previsión de caja, persistencia visto/descartado (en tabla `disa_*` fuera de WRITABLE_TABLES) y el
+  agente que avisa.
+
 ### ⬜ 6 — Dashboards personalizables
 El usuario compone su **Inicio** con sus propios gráficos guardados en 4a. Aquí entra también el
 **sidebar personalizable** (ocultar/reordenar módulos) — *de las "mejoras menores" de la auditoría vs

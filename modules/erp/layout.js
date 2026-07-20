@@ -337,6 +337,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     'client-groups':  'clients.read',
     crm:              'crm.read',
     analytics:        'analytics.read',
+    vigia:            'analytics.read',   // DISA predictiva · el vigía (dentro filtra por detector)
     disa:             null,
     perfil:           null,   // todo usuario gestiona su propio perfil
     users:            'admin.manage_users',
@@ -415,6 +416,9 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     // cifras salen de `ventas-metrics.js` (PIEZA C) y de las tablas vivas de catálogo y clientes.
     { label: 'Analítica', icon: 'ti-chart-histogram', items: [
       { href: '/admin/analytics', label: 'Informes', key: 'analytics', icon: 'ti-report-analytics' },
+      // Escalera · paso 5 — DISA predictiva. El vigía analiza sobre los motores del constructor; por
+      // eso vive aquí, junto a Informes, y no en el rail de chat de DISA.
+      { href: '/admin/vigia', label: 'Vigía (DISA)', key: 'vigia', icon: 'ti-radar' },
     ]},
   ];
 
