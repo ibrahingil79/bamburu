@@ -1917,6 +1917,34 @@ proactivo/predictivo" — lo que el mapa de capas prometía y nunca tuvo número
   "no tocar el vigía") — queda a decisión de Ibrahim. Pieza posterior: previsión de caja + la capa de
   EJECUCIÓN (recordatorios, correos) que sí acciona la decisión que la voz solo propone.
 
+- **PIEZA 3 — EL DIBUJO (gráfico de apoyo por aviso) · ⬜ ENTREGADA, PENDIENTE DE VALIDACIÓN DE IBRAHIM.**
+  Módulo `modules/erp/dibujo.js` (compone una RECETA por tipo de aviso) + `public/js/grafico-constructor.js`
+  (el render del constructor alojado UNA vez, para reutilizarlo sin duplicarlo) + enganche en
+  `modules/erp/routes/vigia.js` (la API `/avisos` adjunta la receta; la vista pinta bajo cada aviso un
+  gráfico perezoso). **REUTILIZA EL MOTOR DEL CONSTRUCTOR, no construye uno nuevo:** el gráfico se obtiene
+  pasando la receta al MISMO endpoint `/api/erp/analytics/constructor/cruzar` y dibujándolo con la MISMA
+  librería (Chart.js, mismo vendor local) — imposible que dé una cifra distinta del constructor hecho a
+  mano. **NO se toca `analytics.js`** (el constructor): el render se aloja aparte y se reutiliza; `vigia.js`
+  no hace ni un `new Chart(`. Recetas por tipo: caída de facturación/margen → `ventas·fecha·(base|beneficio)·mes`
+  (EXACTAS: es la misma `cruzar` que dio la cifra del vigía); desvío del plan → serie real por periodo
+  (hueco: el constructor no tiene medida "objetivo"); pago → `compras·proveedor·pendiente` (hueco: no hay
+  dimensión "vencimiento"; misma fuente que Pagos); deuda/dormido → `ventas·fecha·base` filtrado por ese
+  cliente (hueco: el constructor no tiene área de cobros/antigüedad; el nombre del filtro se resuelve
+  `client_id→name`, solo lectura, un rótulo — no una cifra). **Permisos heredados:** `cruzar` revalida el
+  permiso del área; quien ve un aviso pero no el área de su gráfico recibe una nota honesta ("no puedes ver
+  este gráfico"), no un gráfico inventado. **Solo lectura**, sin persistencia, sin tocar motores/Verifactu/
+  KPIs/WRITABLE_TABLES. Verificado: `test-dibujo` (32/0: receta==cruce a mano + punto==cifra + mismo motor),
+  `verify-dibujo` (real *desarrollo*: 58/58 recetas cuadran; deuda María García López y pago Gabriela Gil
+  55 € = Σ openPayables), `gate-dibujo-pantalla` (13/0: gráfico dibujado por Chart.js del constructor,
+  pintado==API, un solo motor, candado heredado + nota de 403, 0 errores). Regresión: `gate-vigia-pantalla`
+  13/0, `gate-voz-pantalla` 16/0, `gate-margen-pantalla` 79/0 + `verify-constructor` 82/0 (el constructor
+  INTACTO), `infra` (XSS/CSP) 15/15 verde. **NOTA DE PRODUCTO para validación:** solo caída de facturación y
+  de margen son EXACTAS; los otros 4 son el gráfico expresable más cercano con su hueco anotado en pantalla,
+  porque el constructor no tiene hoy área de cobros/antigüedad, medida de objetivo ni dimensión de
+  vencimiento. Si se quiere el gráfico "ideal" de esos tipos, es un paso posterior (ampliar el constructor).
+  Alternativa señalada: extraer `dibujar()` de `analytics.js` al módulo compartido (fuente única real de
+  render, tocando el constructor) — queda a decisión de Ibrahim.
+
 ### ⬜ 6 — Dashboards personalizables
 El usuario compone su **Inicio** con sus propios gráficos guardados en 4a. Aquí entra también el
 **sidebar personalizable** (ocultar/reordenar módulos) — *de las "mejoras menores" de la auditoría vs

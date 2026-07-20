@@ -13,11 +13,21 @@ import { adminLayout, can } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
 import { detectar, catalogoDetectores } from '../vigia.js';
 import { narrar } from '../voz.js';   // Escalera · paso 5 — DISA predictiva · PIEZA 2: la voz
+import { graficoDe } from '../dibujo.js';   // Escalera · paso 5 — DISA predictiva · PIEZA 3: el dibujo
 
 export function createVigiaRoutes(db) {
   const api = new Hono();
   const views = new Hono();
   const permDe = c => (p) => can(c, p);
+
+  // PIEZA 3: resolvedores de rótulo para el filtro del gráfico (solo lectura, un nombre — NO una cifra).
+  // El nombre ya es visible en el aviso; `cruzar` sigue exigiendo el permiso del área al pintar. Ojo: se
+  // construyen DENTRO del handler (por petición) — `db` es un proxy por tenant y solo acepta `prepare`
+  // con el contexto de tenant puesto, no al montar las rutas.
+  const resolversDe = () => ({
+    nombreCliente: id => db.prepare('SELECT name FROM clients WHERE id=?').get(id)?.name || null,
+    nombreProveedor: id => db.prepare('SELECT name FROM suppliers WHERE id=?').get(id)?.name || null,
+  });
 
   // Catálogo de detectores (metadatos, sin datos): qué hay y qué permiso pide cada uno.
   api.get('/detectores', requirePerm('analytics.read'), c => {
@@ -47,7 +57,12 @@ export function createVigiaRoutes(db) {
       const hoyQ = c.req.query('hoy');
       const hoy = /^\d{4}-\d{2}-\d{2}$/.test(hoyQ || '') ? hoyQ : null;
       const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
-      return c.json(narrar(detectar(db, { hasPerm: permDe(c), hoy, soloDetector }), sym));
+      const narrado = narrar(detectar(db, { hasPerm: permDe(c), hoy, soloDetector }), sym);
+      // PIEZA 3: a cada aviso se le adjunta la RECETA de su gráfico de apoyo (para el motor del
+      // constructor). No se pinta ni se calcula nada aquí; el render lo hace `cruzar` + Chart.js.
+      const resolvers = resolversDe();
+      narrado.avisos = narrado.avisos.map(a => ({ ...a, grafico: graficoDe(a, resolvers) }));
+      return c.json(narrado);
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
@@ -63,7 +78,9 @@ export function createVigiaRoutes(db) {
             El vigía recorre tus motores de área y marca lo que conviene mirar. DISA te lo cuenta en
             llano y te <strong>propone una decisión</strong>. <strong>No hace sus propias cuentas</strong>:
             cada cifra sale del mismo motor que pinta la pantalla de esa área (Cobros, Pagos, Ventas,
-            Plan) — no puede contradecirla. Solo lee y te lo explica: <strong>no ejecuta nada</strong>.</p>
+            Plan) — no puede contradecirla, y cada aviso trae un <strong>gráfico de apoyo</strong>
+            dibujado por tu propio constructor de analíticas. Solo lee y te lo explica: <strong>no
+            ejecuta nada</strong>.</p>
           <p id="vigMeta" style="margin:.5rem 0 0;color:var(--muted);font-size:.78rem"></p>
         </div>
       </div>
@@ -78,6 +95,10 @@ export function createVigiaRoutes(db) {
         <div id="vigBody" style="margin-top:.75rem">${'<div class="card"><div class="card-body" style="color:var(--muted)">Cargando hallazgos…</div></div>'}</div>
       </details>
 
+      <!-- PIEZA 3 (el dibujo): el MISMO motor de render del constructor — Chart.js (mismo vendor local)
+           + el endpoint /constructor/cruzar. No hay motor de dibujo nuevo. -->
+      <script src="/public/vendor/chartjs/chart.umd.min.js"></script>
+      <script src="/public/js/grafico-constructor.js"></script>
       <script>
       const SYM = ${JSON.stringify(sym)};
       const eur = v => SYM + Number(v||0).toFixed(2);
@@ -131,7 +152,8 @@ export function createVigiaRoutes(db) {
             + 'Nada que te avise ahora mismo en las áreas que puedes ver. DISA no inventa: si no hay problema, no dice nada.</div></div>';
           return;
         }
-        body.innerHTML = avisos.map(a =>
+        window.__avisos = avisos;
+        body.innerHTML = avisos.map((a,i) =>
           '<div class="card" style="margin-bottom:.85rem"><div class="card-body">'
           + '<div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-bottom:.15rem">'+escHtml(a.detectorEtiqueta)+' · '+escHtml(a.areaEtiqueta)+'</div>'
           + '<div style="font-weight:600;margin-bottom:.35rem">'+escHtml(a.encabezado||'')+'</div>'
@@ -139,8 +161,77 @@ export function createVigiaRoutes(db) {
           + '<p style="margin:0;padding:.55rem .7rem;background:var(--accent-soft);border-left:3px solid var(--accent);border-radius:6px;color:var(--text)">'
             + '<strong>Decisión propuesta:</strong> '+escHtml(a.decision||'')+'</p>'
           + (a.porque ? '<p style="margin:.5rem 0 0;color:var(--muted);font-size:.76rem">El dato del vigía: '+escHtml(a.porque)+'</p>' : '')
+          + graficoHtml(a,i)
           + '</div></div>'
         ).join('');
+        montarGraficos();
+      }
+      // ── EL DIBUJO (PIEZA 3): bajo cada aviso, su gráfico de apoyo, dibujado por el MOTOR DEL
+      // CONSTRUCTOR (Chart.js + /constructor/cruzar). Aquí NO se calcula ninguna cifra ni se pinta con
+      // un motor nuevo: se pasa la receta (que trae el aviso) al constructor y se dibuja con su render
+      // compartido (public/js/grafico-constructor.js). Perezoso: cada gráfico se dibuja al hacerse visible.
+      function graficoHtml(a,i){
+        const g = a.grafico;
+        if(!g) return '';
+        if(!g.receta){
+          return g.gap ? '<p style="margin:.5rem 0 0;color:var(--muted);font-size:.74rem">Sin gráfico de apoyo del constructor para este tipo: '+escHtml(g.gap)+'</p>' : '';
+        }
+        return '<div class="voz-graf" data-i="'+i+'" style="margin-top:.6rem;padding-top:.5rem;border-top:1px solid var(--border2)">'
+          + '<div class="voz-graf-canvas" style="height:180px"><canvas id="vg'+i+'"></canvas></div>'
+          + '<p style="margin:.35rem 0 0;color:var(--muted);font-size:.73rem">'+escHtml(g.explica||'')
+            + (g.gap ? ' <span style="opacity:.75">('+escHtml(g.gap)+')</span>' : '') + '</p>'
+          + '<p class="voz-graf-nota" style="display:none;margin:.35rem 0 0;color:var(--muted);font-size:.73rem"></p>'
+          + '</div>';
+      }
+      const grafCache = new Map();   // receta -> respuesta de cruzar (dedupe: recetas repetidas = una sola llamada)
+      function cruzarReceta(receta){
+        const key = JSON.stringify(receta);
+        if(!grafCache.has(key)){
+          grafCache.set(key, (async () => {
+            try{
+              // fetch DIRECTO al endpoint del constructor (no el api() compartido): un gráfico de apoyo
+              // es una LECTURA; no debe disparar el rescan de la campana ni el modal de "acceso denegado"
+              // al pasar por un aviso cuya área no ves. El 403 se enseña como nota discreta (permiso heredado).
+              const r = await fetch('/api/erp/analytics/constructor/cruzar', {
+                method:'POST', headers:{'Content-Type':'application/json','x-csrf-token':window.CSRF_TOKEN||''},
+                body: JSON.stringify(receta) });
+              if(r.status===403) return { status:403 };
+              const d = await r.json().catch(()=>null);
+              if(!r.ok || !d || d.error) return { error:true };
+              return { ok:d };
+            }catch(e){ return { error:true }; }
+          })());
+        }
+        return grafCache.get(key);
+      }
+      const grafInst = {};
+      async function dibujarAviso(cont){
+        const i = cont.getAttribute('data-i');
+        const a = (window.__avisos||[])[i], g = a && a.grafico;
+        if(!g || !g.receta) return;
+        const canvas = document.getElementById('vg'+i);
+        const wrap = cont.querySelector('.voz-graf-canvas');
+        const nota = cont.querySelector('.voz-graf-nota');
+        const fallo = txt => { if(wrap) wrap.style.display='none'; if(nota){ nota.style.display=''; nota.textContent=txt; } };
+        const res = await cruzarReceta(g.receta);
+        if(res.status===403){ fallo('No puedes ver este gráfico: te falta el permiso del área.'); return; }
+        if(res.error){ fallo('No he podido cargar este gráfico ahora mismo.'); return; }
+        const d = res.ok;
+        if(!d || !d.filas || !d.filas.length){ fallo('Sin datos suficientes para el gráfico.'); return; }
+        if(grafInst[i]){ try{ grafInst[i].destroy(); }catch(e){} }
+        try{ grafInst[i] = GraficoConstructor.dibujarCruce(canvas, { filas:d.filas, medida:g.medida, meta:g.meta, grafico:g.grafico }, { sym:SYM }); }
+        catch(e){ fallo('No he podido dibujar este gráfico.'); }
+      }
+      let grafObs = null;
+      function montarGraficos(){
+        if(grafObs){ grafObs.disconnect(); }
+        const conts = document.querySelectorAll('#vozBody .voz-graf');
+        if(typeof GraficoConstructor==='undefined' || typeof Chart==='undefined'){ return; }   // sin render: no se fuerza
+        if(!('IntersectionObserver' in window)){ conts.forEach(dibujarAviso); return; }
+        grafObs = new IntersectionObserver((entries)=>{
+          for(const e of entries){ if(e.isIntersecting){ dibujarAviso(e.target); grafObs.unobserve(e.target); } }
+        },{ rootMargin:'150px' });
+        conts.forEach(el => grafObs.observe(el));
       }
       (async function(){
         // Una sola llamada: /avisos trae la voz (avisos) Y el barrido crudo (hallazgos, sinPermiso…).
