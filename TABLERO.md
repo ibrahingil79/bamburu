@@ -1979,6 +1979,39 @@ El usuario compone su **Inicio** con sus propios gráficos guardados en 4a. Aqu�
 Holded*: es la misma idea (que el usuario ordene su casa) y comparte la decisión de dónde se guarda la
 preferencia.
 
+- **INICIO PERSONALIZABLE (opción C · híbrido) · ⬜ ENTREGADO, PENDIENTE DE VALIDAR EN PANTALLA POR
+  IBRAHIM. Al validarlo, el peldaño 6 queda CERRADO.**
+  El Inicio se compone en una **rejilla** de bloques: los **paneles guardados del constructor** (4a/4b) +
+  los **bloques nativos** que el Inicio ya tenía (cifras del negocio, avisos, vigía de DISA). Colocar =
+  añadir/quitar, reordenar (drag, Sortable.js ya vendido) y **redimensionar** (ancho/alto en la rejilla).
+  **DEFAULT POR EMPRESA (no por rol):** en PASO 0 se comprobó que los permisos se aplican POR USUARIO
+  (`user_permissions`; las tablas de roles con nombre existen pero NO gobiernan el acceso — `requirePerm`/
+  `can()` solo miran `user_permissions`), así que el default del dueño es uno de empresa, con filtrado por
+  permiso de usuario. **Cascada:** `usuario:<id>` > `empresa` > `fábrica` (semilla en código, nunca lienzo
+  en blanco). **Dos niveles de edición:** el dueño edita el default de empresa; cada usuario retoca su
+  capa. **Reset** en los dos: usuario → "volver al de mi empresa"; dueño → "volver al de fábrica".
+  Módulos: `modules/erp/inicio-layout.js` (cascada + persistencia + paleta + saneo por permiso) +
+  `modules/erp/routes/inicio.js` (API `/api/erp/inicio/{layout,bloques,datos,empresa}`) + tabla nueva
+  `dashboard_layouts` (`scope` PK: `fabrica`|`empresa`|`usuario:<id>`, `blocks` JSON) — **FUERA de
+  WRITABLE_TABLES**, es config de presentación por tenant. La vista `views/disaHome.html.js` cambia SOLO
+  la región de "esto pide tu atención" (las viejas cifras/fila-de-avisos/#dhVigia) por la rejilla; el
+  saludo, la tarjeta de DISA y el chat quedan intactos. **REUTILIZA el motor del constructor:** un panel
+  se pinta pasando su receta a `/constructor/cruzar` + `grafico-constructor.js` (Chart.js, mismo vendor) —
+  **cero cifras propias, cuadra al céntimo** con el constructor. **PERMISOS heredados:** un bloque de un
+  área que el usuario no ve NO aparece en la paleta, NO se pinta y NO se le cuela (ni el del default del
+  dueño); 403 al forzar (`PUT /inicio/layout` con panel ajeno, o `cruzar area=`). Solo lectura de negocio:
+  guarda la COLOCACIÓN, no deriva ni escribe cifras. Verificado: `test-inicio` (22/0: cascada + dos
+  niveles + reset + omisión por permiso + paleta + normalizar + no-escribe), `gate-inicio-pantalla` (19/0,
+  los 8 criterios con datos reales: fábrica montada, colocar/redimensionar/persistir un panel, cuadre al
+  céntimo con el constructor, default de empresa visto por un empleado, retoque propio, resets, y permisos
+  con 403). Regresión: `gate-espera-pantalla` 20/0 (actualizado: la vigía asoma ahora como bloque de la
+  rejilla), `gate-vigia/voz/dibujo-pantalla`, `infra` (XSS/CSP) 15/15, `verify-constructor` verde. **Rojo
+  AJENO (no propio):** `gate-nav-inicio-disa` deja 2 rojos por 0 propuestas de DISA pendientes en el tenant
+  (badge de `disa_proposals`, dato vivo); "cero errores JS al cargar /admin" PASA (la rejilla carga limpia).
+  Pieza posterior (anotada, no en esta tarea): el **sidebar personalizable** (ocultar/reordenar módulos).
+  **Al validar Ibrahim en pantalla, el peldaño 6 queda cerrado; después, el peldaño 7 (primer oficio:
+  servicios profesionales).**
+
 ### ⬜ 7 — Servicios profesionales · **1er oficio**
 **Agenda** + **control de tiempo facturable** + **rentabilidad por proyecto**. Es la primera "cara por
 oficio" (CANON §7: interfaces por profesión).

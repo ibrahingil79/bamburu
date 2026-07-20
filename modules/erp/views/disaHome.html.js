@@ -200,6 +200,44 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboardin
       .dh-vigia-more { display: block; padding: 8px 12px; font-size: 11.5px; color: var(--accent); text-decoration: none; border-top: 0.5px solid var(--bg3); }
       .dh-vigia-more:hover { background: var(--bg3); }
 
+      /* ── PASO 6 · INICIO PERSONALIZABLE — la rejilla componible. Reutiliza los tokens de la app. ── */
+      .ig-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; min-height: 24px; }
+      .ig-scope { font-size: 11.5px; color: var(--text2); }
+      .ig-scope b { color: var(--text); font-weight: 600; }
+      .ig-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+      .ig-btn { background: var(--bg2); border: 1px solid var(--border2); color: var(--text2); font-size: 11.5px; padding: 5px 11px; border-radius: 8px; cursor: pointer; font-family: inherit; transition: all .15s; }
+      .ig-btn:hover { background: var(--bg3); color: var(--text); }
+      .ig-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+      .ig-btn.primary:hover { background: var(--accent-d); color: #fff; }
+      .ig-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; grid-auto-rows: 118px; }
+      .ig-block { background: var(--bg2); border: 1px solid var(--border2); border-radius: 12px; padding: 13px 14px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+      .ig-block.w1 { grid-column: span 1; } .ig-block.w2 { grid-column: span 2; } .ig-block.w3 { grid-column: span 3; } .ig-block.w4 { grid-column: span 4; }
+      .ig-block.h1 { grid-row: span 1; } .ig-block.h2 { grid-row: span 2; } .ig-block.h3 { grid-row: span 3; } .ig-block.h4 { grid-row: span 4; }
+      .ig-block-head { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--text2); margin-bottom: 8px; }
+      .ig-block-head i { font-size: 14px; color: var(--accent); }
+      .ig-block-body { flex: 1; min-height: 0; overflow: auto; }
+      .ig-note, .ig-empty { color: var(--muted); font-size: 12px; padding: 6px 2px; }
+      .ig-empty { text-align: center; padding: 28px 10px; }
+      /* KPIs dentro de un bloque */
+      .ig-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+      .ig-kpi-label { font-size: 11px; color: var(--text2); display: flex; align-items: center; gap: 5px; margin: 0 0 5px; }
+      .ig-kpi-value { font-size: 20px; font-weight: 600; margin: 0; color: var(--text); letter-spacing: -.5px; }
+      /* Modo edición */
+      .ig-grid.editing .ig-block { border-style: dashed; border-color: var(--accent); cursor: grab; }
+      .ig-block-tools { display: none; gap: 4px; margin-left: auto; }
+      .ig-grid.editing .ig-block-tools { display: flex; }
+      .ig-tool { background: var(--bg3); border: 1px solid var(--border2); color: var(--text2); font-size: 10px; width: 20px; height: 20px; border-radius: 5px; cursor: pointer; line-height: 1; padding: 0; font-family: inherit; }
+      .ig-tool:hover { background: var(--accent-soft); color: var(--accent-d); }
+      .ig-sortable-ghost { opacity: .4; }
+      /* Paleta */
+      .ig-palette { border: 1px dashed var(--border2); border-radius: 12px; padding: 12px; margin-bottom: 14px; background: var(--bg2); }
+      .ig-palette-title { font-size: 11px; font-weight: 600; color: var(--text2); margin-bottom: 8px; }
+      .ig-palette-items { display: flex; flex-wrap: wrap; gap: 6px; }
+      .ig-chip { background: var(--bg3); border: 1px solid var(--border2); color: var(--text); font-size: 11.5px; padding: 6px 11px; border-radius: 8px; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 5px; }
+      .ig-chip:hover { background: var(--accent-soft); border-color: var(--accent); }
+      .ig-chip i { font-size: 13px; color: var(--accent); }
+      @media (max-width: 900px) { .ig-grid { grid-template-columns: repeat(2, 1fr); } .ig-block.w3, .ig-block.w4 { grid-column: span 2; } }
+
       /* ── U6 · Onboarding — "Configura tu negocio" (nivel Stripe/Shopify): anillo de progreso +
          timeline de pasos con iconos; el paso ACTUAL desplegado con la guía de DISA + su acción;
          los hechos y los futuros plegados. Reutiliza los tokens de la app. ── */
@@ -487,36 +525,16 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboardin
             </div>
           </div>`}
 ${onbHtml}
-          ${onboarding ? '' : `<div class="disa-figs">
-            <div class="disa-fig">
-              <p class="disa-fig-label"><i class="ti ti-arrow-down-left" style="color:var(--accent)"></i>Ventas del mes</p>
-              <p class="disa-fig-value">${kpis?.verVentas ? sym + (kpis?.ventas ?? 0) : '—'}</p>
-            </div>
-            <div class="disa-fig">
-              <p class="disa-fig-label"><i class="ti ti-receipt" style="color:var(--warn)"></i>Pedidos</p>
-              <p class="disa-fig-value">${kpis?.verPedidos ? (kpis?.pedidos ?? 0) : '—'}</p>
-            </div>
-            <div class="disa-fig">
-              <p class="disa-fig-label"><i class="ti ti-clock-hour-4" style="color:var(--text2)"></i>Pendientes</p>
-              <p class="disa-fig-value">${kpis?.verPedidos ? (kpis?.pendiente ?? 0) : '—'}</p>
-            </div>
-            <a class="disa-fig disa-fig-link" href="/admin/avisos" title="Ver y resolver tus avisos">
-              <p class="disa-fig-label"><i class="ti ti-alert-triangle" style="color:var(--danger)"></i>Avisos</p>
-              <p class="disa-fig-value">${alertState !== 'apagado' ? (alertCount ?? 0) : 0}</p>
-            </a>
+          ${onboarding ? '' : `
+          <!-- PASO 6 · INICIO PERSONALIZABLE: rejilla componible (paneles guardados del constructor +
+               bloques nativos: cifras, avisos, vigía). Se resuelve por cascada usuario > empresa >
+               fábrica; el contenido y los permisos se cargan por fetch. -->
+          <div class="ig-bar">
+            <span id="igScope" class="ig-scope"></span>
+            <div class="ig-actions" id="igActions"></div>
           </div>
-
-          ${alertState !== 'apagado' && alertCount > 0 ? `
-          <div class="disa-rows">
-            <a class="disa-row" href="/admin/avisos">
-              <span class="disa-row-label"><i class="ti ti-bell"></i>${alertCount} ${alertCount === 1 ? 'aviso pendiente' : 'avisos pendientes'} · resolverlos</span>
-              <span class="disa-pill ${alertState === 'visto' ? 'aldia' : 'vencida'}">${alertState === 'visto' ? 'Visto' : 'Requiere atención'}</span>
-            </a>
-          </div>
-          ` : ''}`}
-
-          <!-- PIEZA 5 (Dónde te espera): asoman los avisos del vigía más importantes; se rellena por fetch. -->
-          <div id="dhVigia" class="dh-vigia" style="display:none"></div>
+          <div id="inicioGrid" class="ig-grid"><div class="ig-empty">Cargando tu Inicio…</div></div>
+          `}
         </div>
 
         <!-- Mensajes -->
@@ -605,6 +623,11 @@ ${onbHtml}
       </div>
     </div>
 
+    <!-- PASO 6 · el gráfico de un panel se pinta reutilizando EL MISMO motor del constructor (Chart.js
+         del mismo vendor + /constructor/cruzar). Sortable.js (ya vendido) para reordenar los bloques. -->
+    <script src="/public/vendor/chartjs/chart.umd.min.js"></script>
+    <script src="/public/js/grafico-constructor.js"></script>
+    <script src="/public/vendor/sortablejs/Sortable.min.js"></script>
     <script>
       let dhStarted = false;
       // ARREGLO 2 — el dashboard recupera la conversación de DISA al recargar: recuerda el
@@ -1058,36 +1081,214 @@ ${onbHtml}
 
       dhLoadChips();
 
-      // ── PIEZA 5 · "Dónde te espera": asoma en el Inicio los avisos del vigía MÁS IMPORTANTES (top 5),
-      // cada uno con su prioridad, y enlaza a la lista completa en /admin/vigia. Hereda permisos: si el
-      // usuario no tiene analytics.read (o no ve ningún área), la API filtra y el bloque no se muestra.
-      // Es lo MISMO que /admin/vigia (misma fuente, mismo orden) — no puede discrepar.
-      (async function dhVigiaAvisos(){
-        const box = document.getElementById('dhVigia');
-        if (!box) return;
-        try {
-          const r = await fetch('/api/erp/vigia/avisos?top=5', { headers: { 'x-csrf-token': dhGetCsrf() } });
-          if (!r.ok) return;                       // 403 (sin analytics.read) u otro → el bloque no asoma
-          const d = await r.json();
-          const avisos = (d && d.avisos) || [];
-          if (!avisos.length) return;              // nada que asome (sin avisos en las áreas que ve)
-          const esc = window.escHtml || function(s){ return s == null ? '' : String(s); };
-          const colores = { alta: ['var(--danger-s)','var(--danger)'], media: ['var(--warn-s)','var(--warn)'], baja: ['var(--bg3)','var(--text3)'] };
-          const pill = function(p){
-            if (!p) return '';
-            const c = colores[p.grupo] || colores.media;
-            return '<span class="dh-vigia-pill" style="background:' + c[0] + ';color:' + c[1] + '">' + esc(p.etiqueta) + '</span>';
-          };
-          box.innerHTML =
-            '<div class="dh-vigia-head"><i class="ti ti-radar"></i>Vigía de DISA · lo más importante</div>'
-            + avisos.map(function(a){
-                return '<a class="dh-vigia-row" href="/admin/vigia">'
-                  + '<span class="dh-vigia-tx">' + esc(a.encabezado || a.quePasa || '') + '</span>'
-                  + pill(a.prioridad) + '</a>';
-              }).join('')
-            + '<a class="dh-vigia-more" href="/admin/vigia">Ver todos en el Vigía →</a>';
-          box.style.display = '';
-        } catch (e) { /* silencioso, como el resto de la home */ }
+      // ── PASO 6 · INICIO PERSONALIZABLE — la rejilla componible. El vigía de DISA (pieza 5), las cifras
+      // y los avisos son ahora BLOQUES colocables; se suman los paneles guardados del constructor. La
+      // cascada (usuario > empresa > fábrica) y los permisos los resuelve el servidor; el gráfico de un
+      // panel se pinta reutilizando el MOTOR del constructor (/constructor/cruzar + Chart.js). Solo se
+      // guarda la COLOCACIÓN — cero cifras propias, no puede discrepar del constructor.
+      (function initInicio(){
+        var grid = document.getElementById('inicioGrid');
+        if (!grid) return;                                   // (en onboarding no hay rejilla)
+        var IG_SYM = '${sym}';
+        var esc = window.escHtml || function(s){ return s == null ? '' : String(s); };
+        var eur = function(v){ return IG_SYM + Number(v || 0).toFixed(2); };
+        var IG = { blocks: [], datos: null, esDuenyo: false, origen: 'fabrica', tieneCapaPropia: false,
+                   editing: false, scope: 'usuario', vigia: undefined, paleta: null, sortable: null, uidSeq: 0 };
+        window.__IG = IG;
+
+        function api(method, url, body){
+          // no-store: tras guardar o resetear se vuelve a pedir el layout; sin esto el navegador podría
+          // servir de su caché la versión anterior y no verse el cambio hasta recargar a mano.
+          var opts = { method: method, cache: 'no-store', headers: { 'x-csrf-token': dhGetCsrf() } };
+          if (body){ opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+          return fetch(url, opts).then(function(r){ if (!r.ok){ var e = new Error('http'); e.status = r.status; throw e; } return r.json().catch(function(){ return {}; }); });
+        }
+        function aviso(msg){ if (typeof window.toast === 'function') window.toast(msg); }
+
+        function cargar(scope){
+          IG.scope = scope || 'usuario';
+          var q = IG.scope === 'empresa' ? '?scope=empresa' : '';
+          return api('GET', '/api/erp/inicio/layout' + q).then(function(d){
+            IG.blocks = d.blocks || []; IG.blocks.forEach(function(b){ b._uid = ++IG.uidSeq; });
+            IG.esDuenyo = !!d.esDuenyo; IG.origen = d.origen; IG.tieneCapaPropia = !!d.tieneCapaPropia;
+            if (IG.datos) return null;
+            return api('GET', '/api/erp/inicio/datos').then(function(x){ IG.datos = x; }).catch(function(){ IG.datos = { kpis: {}, avisos: {} }; });
+          }).then(render).catch(function(){ grid.innerHTML = '<div class="ig-empty">No he podido cargar tu Inicio.</div>'; });
+        }
+
+        function renderBar(){
+          var s = document.getElementById('igScope'), a = document.getElementById('igActions');
+          if (!s || !a) return;
+          if (IG.editing){
+            s.innerHTML = IG.scope === 'empresa' ? 'Editando el <b>Inicio de la empresa</b> · lo verán quienes no lo hayan personalizado' : 'Editando <b>tu Inicio</b>';
+            var b = btn('guardar', '', 'Guardar', 'primary') + btn('cancelar', '', 'Cancelar', '');
+            if (IG.scope === 'empresa') b += btn('reset', '', 'Volver al de fábrica', '');
+            else if (IG.tieneCapaPropia) b += btn('reset', '', 'Volver al de mi empresa', '');
+            a.innerHTML = b;
+          } else {
+            var nombre = IG.origen === 'usuario' ? 'Tu Inicio' : IG.origen === 'empresa' ? 'Inicio de la empresa' : 'Inicio de fábrica';
+            s.innerHTML = '<b>' + esc(nombre) + '</b>';
+            var b2 = btn('editar', 'usuario', 'Personalizar', '');
+            if (IG.esDuenyo) b2 += btn('editar', 'empresa', 'Editar el de la empresa', '');
+            a.innerHTML = b2;
+          }
+        }
+        function btn(act, arg, label, cls){ return '<button type="button" class="ig-btn ' + (cls || '') + '" data-igact="' + act + '" data-arg="' + esc(arg) + '">' + esc(label) + '</button>'; }
+
+        function render(){
+          renderBar();
+          grid.className = 'ig-grid' + (IG.editing ? ' editing' : '');
+          if (!IG.blocks.length){
+            grid.innerHTML = '<div class="ig-empty">Tu Inicio está vacío.' + (IG.editing ? ' Añade bloques desde la paleta de arriba.' : ' Pulsa «Personalizar» para añadir bloques.') + '</div>';
+          } else {
+            grid.innerHTML = IG.blocks.map(bloqueHtml).join('');
+            IG.blocks.forEach(function(b){ pintar(b, grid.querySelector('[data-uid="' + b._uid + '"]')); });
+          }
+          if (IG.editing){ montarPaleta(); montarSortable(); } else quitarPaleta();
+        }
+
+        function bloqueHtml(b){
+          var w = Math.min(4, Math.max(1, b.w || 2)), h = Math.min(4, Math.max(1, b.h || 1));
+          var titulo, icon;
+          if (b.tipo === 'panel'){ titulo = b.nombre || 'Panel'; icon = 'ti-chart-dots'; }
+          else if (b.tipo === 'kpis'){ titulo = 'Cifras del negocio'; icon = 'ti-layout-dashboard'; }
+          else if (b.tipo === 'avisos'){ titulo = 'Avisos pendientes'; icon = 'ti-bell'; }
+          else if (b.tipo === 'vigia'){ titulo = 'Vigía de DISA'; icon = 'ti-radar'; }
+          else { titulo = b.tipo; icon = 'ti-square'; }
+          var tools = '<span class="ig-block-tools">'
+            + tool(b._uid, 'w', -1, '‹') + tool(b._uid, 'w', 1, '›') + tool(b._uid, 'h', -1, '–') + tool(b._uid, 'h', 1, '+')
+            + '<button class="ig-tool" data-igact="remove" data-uid="' + b._uid + '" title="Quitar">✕</button></span>';
+          return '<div class="ig-block w' + w + ' h' + h + '" data-uid="' + b._uid + '">'
+            + '<div class="ig-block-head"><i class="ti ' + icon + '"></i><span>' + esc(titulo) + '</span>' + tools + '</div>'
+            + '<div class="ig-block-body"><div class="ig-note">…</div></div></div>';
+        }
+        function tool(uid, dim, d, lbl){ return '<button class="ig-tool" data-igact="resize" data-uid="' + uid + '" data-dim="' + dim + '" data-d="' + d + '" title="Tamaño">' + lbl + '</button>'; }
+
+        function pintar(b, el){
+          if (!el) return; var body = el.querySelector('.ig-block-body'); if (!body) return;
+          if (b.tipo === 'kpis') return pintarKpis(body);
+          if (b.tipo === 'avisos') return pintarAvisos(body);
+          if (b.tipo === 'vigia') return pintarVigia(body);
+          if (b.tipo === 'panel') return pintarPanel(b, body);
+          body.innerHTML = '';
+        }
+        function pintarKpis(body){
+          var k = (IG.datos && IG.datos.kpis) || {}, av = (IG.datos && IG.datos.avisos) || {};
+          function fig(icon, color, label, val){ return '<div><p class="ig-kpi-label"><i class="ti ' + icon + '" style="color:' + color + '"></i>' + label + '</p><p class="ig-kpi-value">' + val + '</p></div>'; }
+          body.innerHTML = '<div class="ig-kpis">'
+            + fig('ti-arrow-down-left', 'var(--accent)', 'Ventas del mes', k.verVentas ? IG_SYM + (k.ventas || 0) : '—')
+            + fig('ti-receipt', 'var(--warn)', 'Pedidos', k.verPedidos ? (k.pedidos || 0) : '—')
+            + fig('ti-clock-hour-4', 'var(--text2)', 'Pendientes', k.verPedidos ? (k.pendiente || 0) : '—')
+            + fig('ti-alert-triangle', 'var(--danger)', 'Avisos', (av.estado && av.estado !== 'apagado') ? (av.count || 0) : 0)
+            + '</div>';
+        }
+        function pintarAvisos(body){
+          var av = (IG.datos && IG.datos.avisos) || {};
+          if (!av.count || av.estado === 'apagado'){ body.innerHTML = '<div class="ig-note">Todo en orden: no hay avisos pendientes.</div>'; return; }
+          var visto = av.estado === 'visto';
+          body.innerHTML = '<a class="dh-vigia-row" href="/admin/avisos" style="border-radius:8px">'
+            + '<span class="dh-vigia-tx">' + av.count + (av.count === 1 ? ' aviso pendiente' : ' avisos pendientes') + ' · resolverlos</span>'
+            + '<span class="dh-vigia-pill" style="background:' + (visto ? 'var(--accent-soft)' : 'var(--danger-s)') + ';color:' + (visto ? 'var(--accent-d)' : 'var(--danger)') + '">' + (visto ? 'Visto' : 'Requiere atención') + '</span></a>';
+        }
+        function pintarVigia(body){
+          function paint(avisos){
+            if (!avisos || !avisos.length){ body.innerHTML = '<div class="ig-note">Nada que te avise ahora mismo.</div>'; return; }
+            var col = { alta: ['var(--danger-s)', 'var(--danger)'], media: ['var(--warn-s)', 'var(--warn)'], baja: ['var(--bg3)', 'var(--text3)'] };
+            body.innerHTML = avisos.map(function(a){ var c = col[a.prioridad && a.prioridad.grupo] || col.media;
+              return '<a class="dh-vigia-row" href="/admin/vigia"><span class="dh-vigia-tx">' + esc(a.encabezado || a.quePasa || '') + '</span><span class="dh-vigia-pill" style="background:' + c[0] + ';color:' + c[1] + '">' + esc(a.prioridad ? a.prioridad.etiqueta : '') + '</span></a>'; }).join('')
+              + '<a class="dh-vigia-more" href="/admin/vigia">Ver todos →</a>';
+          }
+          if (IG.vigia !== undefined){ paint(IG.vigia); return; }
+          api('GET', '/api/erp/vigia/avisos?top=5').then(function(d){ IG.vigia = (d && d.avisos) || []; paint(IG.vigia); })
+            .catch(function(e){ IG.vigia = []; body.innerHTML = '<div class="ig-note">' + (e.status === 403 ? 'No puedes ver el vigía (te falta permiso).' : 'No he podido cargar el vigía.') + '</div>'; });
+        }
+        function pintarPanel(b, body){
+          var cfg = b.config || {};
+          if (cfg.modo === 'comparar'){ body.innerHTML = '<div class="ig-note">Panel comparativo: se abre en el <a href="/admin/analytics" style="color:var(--accent)">constructor</a>.</div>'; return; }
+          var receta = { area: cfg.area, dimension: cfg.dimension, medidas: cfg.medidas, periodo: cfg.periodo || 'mes', filtros: cfg.filtros || null, formula: cfg.formula || null, grafico: cfg.grafico };
+          api('POST', '/api/erp/analytics/constructor/cruzar', receta).then(function(d){
+            var med = b.medida || (cfg.medidas && cfg.medidas[0]) || 'base', meta = b.meta || {};
+            if (!d.filas || !d.filas.length){ body.innerHTML = '<div class="ig-note">Sin datos.</div>'; return; }
+            if (cfg.grafico === 'tabla'){
+              body.innerHTML = '<div style="overflow:auto"><table style="width:100%;font-size:11px;border-collapse:collapse">'
+                + d.filas.map(function(f){ var v = f[med]; return '<tr><td style="padding:2px 6px;color:var(--text2)">' + esc(f.clave) + '</td><td style="padding:2px 6px;text-align:right">' + (v == null ? '—' : (meta.dinero ? eur(v) : (meta.pct ? Number(v).toFixed(1) + '%' : v))) + '</td></tr>'; }).join('')
+                + '</table></div>';
+              return;
+            }
+            body.innerHTML = '<div style="position:relative;height:100%;min-height:90px"><canvas></canvas></div>';
+            if (typeof GraficoConstructor !== 'undefined' && typeof Chart !== 'undefined')
+              GraficoConstructor.dibujarCruce(body.querySelector('canvas'), { filas: d.filas, medida: med, meta: meta, grafico: cfg.grafico }, { sym: IG_SYM });
+          }).catch(function(e){ body.innerHTML = '<div class="ig-note">' + (e.status === 403 ? 'No puedes ver este panel (te falta permiso del área).' : 'No he podido cargar este panel.') + '</div>'; });
+        }
+
+        // ── edición ──
+        function porUid(uid){ for (var i = 0; i < IG.blocks.length; i++) if (String(IG.blocks[i]._uid) === String(uid)) return IG.blocks[i]; return null; }
+        function resize(uid, dim, d){
+          var b = porUid(uid); if (!b) return;
+          var v = Math.min(4, Math.max(1, ((dim === 'w' ? b.w : b.h) || (dim === 'w' ? 2 : 1)) + d));
+          if (dim === 'w') b.w = v; else b.h = v;
+          var el = grid.querySelector('[data-uid="' + uid + '"]'); if (el) el.className = 'ig-block w' + Math.min(4, Math.max(1, b.w || 2)) + ' h' + Math.min(4, Math.max(1, b.h || 1));
+        }
+        function quitar(uid){ IG.blocks = IG.blocks.filter(function(b){ return String(b._uid) !== String(uid); }); render(); }
+        function anadir(tipo, ref){
+          var pal = IG.paleta || { nativos: [], paneles: [] }, meta;
+          if (tipo === 'panel'){ meta = (pal.paneles || []).filter(function(p){ return String(p.refId) === String(ref); })[0]; if (!meta) return; }
+          else { meta = (pal.nativos || []).filter(function(n){ return n.tipo === tipo; })[0]; if (!meta) return; }
+          var b = { tipo: tipo, refId: tipo === 'panel' ? Number(ref) : null, w: meta.w || 2, h: meta.h || 2, _uid: ++IG.uidSeq };
+          if (tipo === 'panel'){ b.nombre = meta.etiqueta; b.area = meta.area; b.config = meta.config; b.medida = meta.medida; b.meta = meta.meta; }
+          IG.blocks.push(b); render();
+        }
+        function montarSortable(){
+          if (IG.sortable){ try { IG.sortable.destroy(); } catch (e) {} IG.sortable = null; }
+          if (typeof Sortable === 'undefined') return;
+          IG.sortable = Sortable.create(grid, { animation: 150, filter: '.ig-tool', preventOnFilter: false, ghostClass: 'ig-sortable-ghost',
+            onEnd: function(){ var order = [].slice.call(grid.children).map(function(el){ return el.getAttribute('data-uid'); });
+              IG.blocks.sort(function(a, b){ return order.indexOf(String(a._uid)) - order.indexOf(String(b._uid)); }); } });
+        }
+        function montarPaleta(){
+          quitarPaleta();
+          function paint(pal){
+            var el = document.createElement('div'); el.className = 'ig-palette'; el.id = 'igPalette';
+            var items = (pal.nativos || []).map(function(n){ return chip(n.tipo, '', n.icon || 'ti-square', n.etiqueta); })
+              .concat((pal.paneles || []).map(function(p){ return chip('panel', p.refId, 'ti-chart-dots', p.etiqueta + (p.propio ? '' : ' · ' + (p.autor || 'compartido'))); }));
+            el.innerHTML = '<div class="ig-palette-title">Añadir un bloque</div><div class="ig-palette-items">' + (items.join('') || '<span class="ig-note">No tienes bloques disponibles para añadir.</span>') + '</div>';
+            grid.parentNode.insertBefore(el, grid);
+          }
+          if (IG.paleta){ paint(IG.paleta); return; }
+          api('GET', '/api/erp/inicio/bloques').then(function(p){ IG.paleta = p; paint(p); }).catch(function(){});
+        }
+        function chip(tipo, ref, icon, label){ return '<button type="button" class="ig-chip" data-igact="add" data-tipo="' + esc(tipo) + '" data-ref="' + esc(ref) + '"><i class="ti ' + icon + '"></i>' + esc(label) + '</button>'; }
+        function quitarPaleta(){ var e = document.getElementById('igPalette'); if (e) e.remove(); }
+
+        function guardar(){
+          var payload = { blocks: IG.blocks.map(function(b){ return { tipo: b.tipo, refId: b.tipo === 'panel' ? b.refId : null, w: b.w, h: b.h }; }) };
+          var url = IG.scope === 'empresa' ? '/api/erp/inicio/empresa' : '/api/erp/inicio/layout';
+          api('PUT', url, payload).then(function(){ IG.editing = false; IG.vigia = undefined; IG.paleta = null; aviso('Inicio guardado'); cargar('usuario'); })
+            .catch(function(e){ aviso(e.status === 403 ? 'No puedes colocar un panel de un área que no ves.' : 'No se pudo guardar.'); });
+        }
+        function resetear(){
+          var url = IG.scope === 'empresa' ? '/api/erp/inicio/empresa' : '/api/erp/inicio/layout';
+          api('DELETE', url).then(function(){ IG.editing = false; IG.vigia = undefined; IG.paleta = null; cargar('usuario'); })
+            .catch(function(){ aviso('No se pudo restablecer.'); });
+        }
+
+        // exposición mínima (la barra/tools llaman por delegación, pero cancelar/guardar se referencian aquí)
+        IG.guardar = guardar; IG.cancelar = function(){ IG.editing = false; IG.vigia = undefined; cargar('usuario'); }; IG.reset = resetear;
+
+        // delegación de clics de la rejilla + la barra + la paleta (evita comillas dentro de onclick)
+        document.addEventListener('click', function(ev){
+          var t = ev.target.closest ? ev.target.closest('[data-igact]') : null; if (!t) return;
+          var act = t.getAttribute('data-igact');
+          if (act === 'editar'){ ev.preventDefault(); IG.editing = true; cargar(t.getAttribute('data-arg') || 'usuario'); }
+          else if (act === 'guardar'){ ev.preventDefault(); guardar(); }
+          else if (act === 'cancelar'){ ev.preventDefault(); IG.editing = false; cargar('usuario'); }
+          else if (act === 'reset'){ ev.preventDefault(); resetear(); }
+          else if (act === 'resize'){ ev.preventDefault(); resize(t.getAttribute('data-uid'), t.getAttribute('data-dim'), parseInt(t.getAttribute('data-d'), 10)); }
+          else if (act === 'remove'){ ev.preventDefault(); quitar(t.getAttribute('data-uid')); }
+          else if (act === 'add'){ ev.preventDefault(); anadir(t.getAttribute('data-tipo'), t.getAttribute('data-ref')); }
+        });
+
+        cargar('usuario');
       })();
 
       // La HOME (/admin) es el DASHBOARD del molde 1 (saludo + cifras + tarjeta DISA + lista +

@@ -1208,6 +1208,18 @@ export function runMigrations(db) {
   // el dueño del panel lo comparte/descomparte (WHERE user_id).
   addCol(db, 'analytics_panels', 'compartido', 'INTEGER DEFAULT 0');
 
+  // ── ESCALERA · PASO 6 — INICIO PERSONALIZABLE: layouts del Inicio (aditivo, reversible) ──────
+  // Un layout por ÁMBITO (`scope`): 'fabrica' (semilla en código, no se persiste) · 'empresa' (el
+  // default que edita el dueño) · 'usuario:<id>' (el retoque de cada usuario). `blocks` = JSON con la
+  // lista ordenada de bloques { tipo, refId, x, y, w, h }. La resolución elige el ámbito MÁS específico.
+  // NO es tabla de DISA (DISA sigue fuera de WRITABLE_TABLES); esto es config de presentación por tenant.
+  db.exec(`CREATE TABLE IF NOT EXISTS dashboard_layouts (
+    scope TEXT PRIMARY KEY,
+    blocks TEXT NOT NULL,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_by INTEGER
+  )`);
+
   // ── ESCALERA · PASO 3 · BLOQUE 2 — PLAN FINANCIERO: los objetivos (aditivo, reversible) ───────
   // El lado "real" ya existe (ventasPorPeriodo / margenResumen). Esto es el lado "objetivo", que es
   // dato NUEVO: las metas las teclea el dueño, no salen de ninguna parte.

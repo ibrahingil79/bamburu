@@ -82,17 +82,19 @@ try {
   console.log('\n[2] LOS AVISOS TOP ASOMAN EN EL INICIO Y COINCIDEN CON LA LISTA (dueño)');
   const home = await page.goto(BASE + '/admin', { waitUntil: 'networkidle2' });
   ok(home.status() === 200, '/admin (Inicio) responde 200', String(home.status()));
-  await page.waitForFunction(() => { const b = document.getElementById('dhVigia'); return b && b.style.display !== 'none' && b.querySelector('.dh-vigia-row'); }, { timeout: 10000 }).catch(() => {});
+  // Peldaño 6: la vigía asoma en el Inicio como BLOQUE de la rejilla componible (ya no como #dhVigia).
+  await page.waitForFunction(() => document.querySelector('#inicioGrid .dh-vigia-row'), { timeout: 10000 }).catch(() => {});
   const inicio = await page.evaluate(async () => {
-    const box = document.getElementById('dhVigia');
-    const filas = box ? Array.from(box.querySelectorAll('.dh-vigia-row .dh-vigia-tx')).map(e => e.textContent) : [];
+    const box = document.getElementById('inicioGrid');
+    // Solo las filas del bloque VIGÍA (enlazan a /admin/vigia); el bloque de avisos reusa la clase pero enlaza a /admin/avisos.
+    const filas = box ? Array.from(box.querySelectorAll('.dh-vigia-row')).filter(a => a.getAttribute('href') === '/admin/vigia').map(a => { const t = a.querySelector('.dh-vigia-tx'); return t ? t.textContent : ''; }) : [];
     const link = box ? box.querySelector('.dh-vigia-more') : null;
     // coincidencia: el top de la API == los primeros de la lista completa
     const top = await (await fetch('/api/erp/vigia/avisos?top=5', { headers: { 'x-csrf-token': window.CSRF_TOKEN || '' } })).json();
     const full = await (await fetch('/api/erp/vigia/avisos', { headers: { 'x-csrf-token': window.CSRF_TOKEN || '' } })).json();
     const topEnc = (top.avisos || []).map(a => a.encabezado);
     const fullEnc = (full.avisos || []).slice(0, topEnc.length).map(a => a.encabezado);
-    return { visible: box ? box.style.display !== 'none' : false, filas, link: link ? link.getAttribute('href') : null,
+    return { visible: filas.length > 0, filas, link: link ? link.getAttribute('href') : null,
              coincideConLista: JSON.stringify(topEnc) === JSON.stringify(fullEnc),
              coincideDom: JSON.stringify(filas) === JSON.stringify(topEnc) };
   });
