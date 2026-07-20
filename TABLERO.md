@@ -1945,6 +1945,34 @@ proactivo/predictivo" — lo que el mapa de capas prometía y nunca tuvo número
   Alternativa señalada: extraer `dibujar()` de `analytics.js` al módulo compartido (fuente única real de
   render, tocando el constructor) — queda a decisión de Ibrahim.
 
+- **PIEZA 5 — DÓNDE TE ESPERA (priorización + Inicio + barrido de permisos) · ⬜ ENTREGADA, PENDIENTE
+  DE VALIDACIÓN DE IBRAHIM. Al validarla, el peldaño 5 (detección proactiva) queda CERRADO.**
+  Módulo `modules/erp/prioridad.js` (ordena y etiqueta los avisos ya producidos por las piezas 1-3) +
+  enganche en `routes/vigia.js` (la API `/avisos` ordena; la lista sale por grupos con píldora) + bloque
+  nuevo en el Inicio (`views/disaHome.html.js`). **Solo ordena y coloca; no toca la detección, la voz ni
+  el dibujo, ni crea cifras.** (A) PRIORIZACIÓN — grupos: ALTA = deuda·pago·desvío · MEDIA = caídas ·
+  BAJA = dormido; dentro del grupo, por importe (€) de mayor a menor, y sin € (dormido) por urgencia
+  (días); desempate estable. La lista de `/admin/vigia` sale ordenada, el de más impacto arriba, con
+  cabecera de grupo y píldora Alta/Media/Baja por aviso. (B) INICIO — bloque compacto "Vigía de DISA ·
+  lo más importante" con los top 5 (texto + prioridad) y enlace a `/admin/vigia`; carga por `fetch`
+  `/avisos?top=5`, es lo MISMO que la lista (misma fuente, mismo orden) — no puede discrepar; **no se
+  reestructura el resto del Inicio**, solo se añade el bloque. **Permisos heredados en los 4 puntos**
+  (lista cruda, voz, gráfico, Inicio): quien no ve un área no ve su aviso por ningún lado, ni asoma en
+  su Inicio, y da 403 al forzar (`?detector=` y `cruzar area=`). **`?top=N` no adjunta gráfico** (el
+  Inicio no dibuja). Solo lectura, sin persistencia, sin tocar el constructor/motores/Verifactu/KPIs/
+  WRITABLE_TABLES. Verificado: `test-prioridad` (13/0: grupos + orden + no inventa), `gate-espera-pantalla`
+  (20/0: [1] orden Alta→Media→Baja con cabeceras y píldoras; [2] Inicio asoma top 5 y COINCIDE con la
+  lista; [3] BARRIDO DE PERMISOS en un solo pase — sin `purchases.read` el pago no aparece en voz/tabla/
+  gráfico/Inicio y da 403 en `/avisos?detector=pago` y `cruzar area=compras`). Regresión: `gate-vigia`
+  13/0, `gate-voz` 16/0, `gate-dibujo` 13/0, `infra` (XSS/CSP) 15/15, `verify-constructor` verde.
+  **Rojo AJENO (no propio):** `gate-nav-inicio-disa` deja 2 rojos porque el tenant *desarrollo* tiene
+  **0 propuestas de DISA pendientes** (1 enviada + 27 descartadas) y ese gate necesita ≥1 para probar el
+  badge de `disa_proposals` (dato vivo, nada que ver con esta pieza; "cero errores JS al cargar /admin"
+  pasa — el bloque nuevo carga limpio). Ejemplo real (desarrollo): arriba, prioridad ALTA, las deudas de
+  María García López de mayor importe (F2026-0023 €60493,95, F2026-0022 €12100, …); pagos y caídas
+  intercalados por €; el cliente dormido, al final (BAJA). **Al validar Ibrahim en pantalla, el peldaño 5
+  (detección proactiva) queda cerrado.**
+
 ### ⬜ 6 — Dashboards personalizables
 El usuario compone su **Inicio** con sus propios gráficos guardados en 4a. Aquí entra también el
 **sidebar personalizable** (ocultar/reordenar módulos) — *de las "mejoras menores" de la auditoría vs

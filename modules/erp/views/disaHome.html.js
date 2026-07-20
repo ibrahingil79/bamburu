@@ -187,6 +187,19 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboardin
       .disa-pill.porvencer { background: var(--warn-s); color: var(--warn); }
       .disa-pill.aldia { background: var(--accent-soft); color: var(--accent-d); }
 
+      /* ── PIEZA 5 · "Dónde te espera": asoman en el Inicio los avisos del vigía más importantes. Bloque
+         NUEVO (no reestructura el resto); reutiliza los tokens de la app y el patrón de la lista. ── */
+      .dh-vigia { background: var(--bg2); border: 1px solid var(--border2); border-radius: 12px; padding: 6px 4px; margin-bottom: 18px; }
+      .dh-vigia-head { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--text2); padding: 9px 12px 6px; }
+      .dh-vigia-head i { font-size: 15px; color: var(--accent); }
+      .dh-vigia-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; font-size: 12.5px; text-decoration: none; color: inherit; }
+      .dh-vigia-row + .dh-vigia-row { border-top: 0.5px solid var(--bg3); }
+      .dh-vigia-row:hover { background: var(--bg3); }
+      .dh-vigia-tx { color: var(--body-tx); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .dh-vigia-pill { font-size: 10px; font-weight: 700; padding: 1px 8px; border-radius: 20px; white-space: nowrap; flex-shrink: 0; }
+      .dh-vigia-more { display: block; padding: 8px 12px; font-size: 11.5px; color: var(--accent); text-decoration: none; border-top: 0.5px solid var(--bg3); }
+      .dh-vigia-more:hover { background: var(--bg3); }
+
       /* ── U6 · Onboarding — "Configura tu negocio" (nivel Stripe/Shopify): anillo de progreso +
          timeline de pasos con iconos; el paso ACTUAL desplegado con la guía de DISA + su acción;
          los hechos y los futuros plegados. Reutiliza los tokens de la app. ── */
@@ -501,6 +514,9 @@ ${onbHtml}
             </a>
           </div>
           ` : ''}`}
+
+          <!-- PIEZA 5 (Dónde te espera): asoman los avisos del vigía más importantes; se rellena por fetch. -->
+          <div id="dhVigia" class="dh-vigia" style="display:none"></div>
         </div>
 
         <!-- Mensajes -->
@@ -1041,6 +1057,39 @@ ${onbHtml}
       }
 
       dhLoadChips();
+
+      // ── PIEZA 5 · "Dónde te espera": asoma en el Inicio los avisos del vigía MÁS IMPORTANTES (top 5),
+      // cada uno con su prioridad, y enlaza a la lista completa en /admin/vigia. Hereda permisos: si el
+      // usuario no tiene analytics.read (o no ve ningún área), la API filtra y el bloque no se muestra.
+      // Es lo MISMO que /admin/vigia (misma fuente, mismo orden) — no puede discrepar.
+      (async function dhVigiaAvisos(){
+        const box = document.getElementById('dhVigia');
+        if (!box) return;
+        try {
+          const r = await fetch('/api/erp/vigia/avisos?top=5', { headers: { 'x-csrf-token': dhGetCsrf() } });
+          if (!r.ok) return;                       // 403 (sin analytics.read) u otro → el bloque no asoma
+          const d = await r.json();
+          const avisos = (d && d.avisos) || [];
+          if (!avisos.length) return;              // nada que asome (sin avisos en las áreas que ve)
+          const esc = window.escHtml || function(s){ return s == null ? '' : String(s); };
+          const colores = { alta: ['var(--danger-s)','var(--danger)'], media: ['var(--warn-s)','var(--warn)'], baja: ['var(--bg3)','var(--text3)'] };
+          const pill = function(p){
+            if (!p) return '';
+            const c = colores[p.grupo] || colores.media;
+            return '<span class="dh-vigia-pill" style="background:' + c[0] + ';color:' + c[1] + '">' + esc(p.etiqueta) + '</span>';
+          };
+          box.innerHTML =
+            '<div class="dh-vigia-head"><i class="ti ti-radar"></i>Vigía de DISA · lo más importante</div>'
+            + avisos.map(function(a){
+                return '<a class="dh-vigia-row" href="/admin/vigia">'
+                  + '<span class="dh-vigia-tx">' + esc(a.encabezado || a.quePasa || '') + '</span>'
+                  + pill(a.prioridad) + '</a>';
+              }).join('')
+            + '<a class="dh-vigia-more" href="/admin/vigia">Ver todos en el Vigía →</a>';
+          box.style.display = '';
+        } catch (e) { /* silencioso, como el resto de la home */ }
+      })();
+
       // La HOME (/admin) es el DASHBOARD del molde 1 (saludo + cifras + tarjeta DISA + lista +
       // input): aterriza SIEMPRE en el hero, no en el chat. La conversación a pantalla completa
       // vive en /admin/disa (DISEÑO.md §3.2). Por eso ya NO se auto-restaura el hilo aquí; al

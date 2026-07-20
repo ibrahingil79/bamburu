@@ -14,6 +14,7 @@ import { requirePerm } from '../../../core/auth.js';
 import { detectar, catalogoDetectores } from '../vigia.js';
 import { narrar } from '../voz.js';   // Escalera · paso 5 — DISA predictiva · PIEZA 2: la voz
 import { graficoDe } from '../dibujo.js';   // Escalera · paso 5 — DISA predictiva · PIEZA 3: el dibujo
+import { priorizar } from '../prioridad.js';   // Escalera · paso 5 — DISA predictiva · PIEZA 5: dónde te espera
 
 export function createVigiaRoutes(db) {
   const api = new Hono();
@@ -58,10 +59,18 @@ export function createVigiaRoutes(db) {
       const hoy = /^\d{4}-\d{2}-\d{2}$/.test(hoyQ || '') ? hoyQ : null;
       const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
       const narrado = narrar(detectar(db, { hasPerm: permDe(c), hoy, soloDetector }), sym);
-      // PIEZA 3: a cada aviso se le adjunta la RECETA de su gráfico de apoyo (para el motor del
-      // constructor). No se pinta ni se calcula nada aquí; el render lo hace `cruzar` + Chart.js.
-      const resolvers = resolversDe();
-      narrado.avisos = narrado.avisos.map(a => ({ ...a, grafico: graficoDe(a, resolvers) }));
+      // PIEZA 5: se ordenan por prioridad (el de más impacto arriba) y se etiqueta cada uno con su grupo.
+      const ordenados = priorizar(narrado.avisos);
+      // `?top=N` → solo los N primeros, SIN gráfico: lo usa el bloque de Inicio (compacto, no dibuja).
+      const topN = parseInt(c.req.query('top'), 10);
+      if (Number.isInteger(topN) && topN > 0) {
+        narrado.avisos = ordenados.slice(0, topN);
+      } else {
+        // PIEZA 3: a cada aviso se le adjunta la RECETA de su gráfico de apoyo (para el motor del
+        // constructor). No se pinta ni se calcula nada aquí; el render lo hace `cruzar` + Chart.js.
+        const resolvers = resolversDe();
+        narrado.avisos = ordenados.map(a => ({ ...a, grafico: graficoDe(a, resolvers) }));
+      }
       return c.json(narrado);
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
@@ -153,18 +162,38 @@ export function createVigiaRoutes(db) {
           return;
         }
         window.__avisos = avisos;
-        body.innerHTML = avisos.map((a,i) =>
-          '<div class="card" style="margin-bottom:.85rem"><div class="card-body">'
-          + '<div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-bottom:.15rem">'+escHtml(a.detectorEtiqueta)+' · '+escHtml(a.areaEtiqueta)+'</div>'
-          + '<div style="font-weight:600;margin-bottom:.35rem">'+escHtml(a.encabezado||'')+'</div>'
-          + '<p style="margin:0 0 .5rem;color:var(--text)">'+escHtml(a.quePasa||'')+'</p>'
-          + '<p style="margin:0;padding:.55rem .7rem;background:var(--accent-soft);border-left:3px solid var(--accent);border-radius:6px;color:var(--text)">'
-            + '<strong>Decisión propuesta:</strong> '+escHtml(a.decision||'')+'</p>'
-          + (a.porque ? '<p style="margin:.5rem 0 0;color:var(--muted);font-size:.76rem">El dato del vigía: '+escHtml(a.porque)+'</p>' : '')
-          + graficoHtml(a,i)
-          + '</div></div>'
-        ).join('');
+        // PIEZA 5: la lista sale ORDENADA por prioridad (el servidor ya la ordenó). Se separan por grupo
+        // (Alta/Media/Baja) con una cabecera y cada tarjeta lleva su píldora de prioridad — se ve claro
+        // a qué grupo pertenece cada aviso.
+        let html = '', grupoActual = null;
+        avisos.forEach((a,i) => {
+          const p = a.prioridad;
+          if (p && p.grupo !== grupoActual) {
+            grupoActual = p.grupo;
+            const n = avisos.filter(x => x.prioridad && x.prioridad.grupo === grupoActual).length;
+            html += '<div style="font-size:.82rem;font-weight:600;color:var(--text2);margin:'+(i?'1.1rem':'0')+' 0 .5rem">Prioridad '+escHtml(p.etiqueta.toLowerCase())+' <span style="color:var(--muted);font-weight:400">('+n+')</span></div>';
+          }
+          html += '<div class="card" style="margin-bottom:.85rem"><div class="card-body">'
+            + '<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.15rem">'
+              + '<span style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;flex:1">'+escHtml(a.detectorEtiqueta)+' · '+escHtml(a.areaEtiqueta)+'</span>'
+              + pillPrioridad(p) + '</div>'
+            + '<div style="font-weight:600;margin-bottom:.35rem">'+escHtml(a.encabezado||'')+'</div>'
+            + '<p style="margin:0 0 .5rem;color:var(--text)">'+escHtml(a.quePasa||'')+'</p>'
+            + '<p style="margin:0;padding:.55rem .7rem;background:var(--accent-soft);border-left:3px solid var(--accent);border-radius:6px;color:var(--text)">'
+              + '<strong>Decisión propuesta:</strong> '+escHtml(a.decision||'')+'</p>'
+            + (a.porque ? '<p style="margin:.5rem 0 0;color:var(--muted);font-size:.76rem">El dato del vigía: '+escHtml(a.porque)+'</p>' : '')
+            + graficoHtml(a,i)
+            + '</div></div>';
+        });
+        body.innerHTML = html;
         montarGraficos();
+      }
+      // Píldora de prioridad: alta (rojo) · media (ámbar) · baja (gris). Solo color + texto, sin acción.
+      function pillPrioridad(p){
+        if(!p) return '';
+        const col = p.grupo==='alta' ? 'var(--danger)' : p.grupo==='media' ? 'var(--warn)' : 'var(--text3)';
+        const bg  = p.grupo==='alta' ? 'var(--danger-s)' : p.grupo==='media' ? 'var(--warn-s)' : 'var(--bg3)';
+        return '<span style="font-size:.66rem;font-weight:700;padding:1px 9px;border-radius:20px;white-space:nowrap;background:'+bg+';color:'+col+'">'+escHtml(p.etiqueta)+'</span>';
       }
       // ── EL DIBUJO (PIEZA 3): bajo cada aviso, su gráfico de apoyo, dibujado por el MOTOR DEL
       // CONSTRUCTOR (Chart.js + /constructor/cruzar). Aquí NO se calcula ninguna cifra ni se pinta con
