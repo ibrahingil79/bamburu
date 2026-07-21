@@ -117,6 +117,24 @@ export const proyectoSchema = z.object({
   notas: strOpt(2000),
 });
 
+// ── Peldaño 7 · PIEZA 2 — REGISTRO DE TIEMPO ─────────────────────────────────────────────────────
+// Arrancar cronómetro: solo proyecto + descripción (la duración la cuenta el servidor al parar).
+export const tiempoStartSchema = z.object({
+  proyecto_id: z.coerce.number().int().positive(),
+  descripcion: strOpt(300),
+});
+// Entrada MANUAL o EDICIÓN: proyecto + descripción + fecha (YYYY-MM-DD) + duración (horas + minutos, sin
+// redondeos → el servidor la pasa a segundos) + facturable. La duración total debe ser > 0 (lo valida el
+// servicio). NO se pide tarifa: el importe se calcula con la de la persona.
+export const tiempoManualSchema = z.object({
+  proyecto_id: z.coerce.number().int().positive(),
+  descripcion: strOpt(300),
+  fecha: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha debe ser AAAA-MM-DD'),
+  horas: z.coerce.number().int().min(0).max(999).optional().default(0),
+  minutos: z.coerce.number().int().min(0).max(59).optional().default(0),
+  facturable: z.coerce.boolean().optional().default(true),
+});
+
 // T5 — valores EXACTOS permitidos en los campos de lista cerrada del cliente, extraídos del
 // propio clientSchema (fuente única: no se escriben a mano → no se desincronizan). Los usa
 // DISA para no inventar valores. Desenvuelve los wrappers default/optional hasta el enum.
@@ -501,6 +519,8 @@ export const userUpdateSchema = z.object({
   password: z.string().min(10).max(200).optional(),
   role: z.enum(['owner', 'admin', 'employee', 'readonly']).optional(),
   active: z.coerce.boolean().optional(),
+  // Peldaño 7 · PIEZA 2 — tarifa/hora de la persona (la fija el dueño/admin desde Usuarios).
+  tarifa_hora: priceOpt,
 });
 
 // ── Settings ───────────────────────────────────────────────────

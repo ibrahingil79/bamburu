@@ -2045,6 +2045,28 @@ Aquí aterrizan, de las listas viejas:
   PIEZA 2 — registro de tiempo (con la tarifa de la persona). **Al validar Ibrahim, esta pieza se cierra;
   el peldaño 7 sigue abierto hasta completar sus piezas.**
 
+- **PIEZA 2 — REGISTRO DE TIEMPO · ⬜ ENTREGADA, PENDIENTE DE VALIDACIÓN DE IBRAHIM (21 jul 2026).**
+  Registro por **cronómetro** (empezar/parar) y por **entrada manual**; **un solo cronómetro activo por
+  persona** (arrancar uno nuevo finaliza el anterior). Cada entrada = proyecto (Pieza 1) + descripción +
+  **duración EXACTA en segundos, sin redondeos** + **facturable/no facturable**. El **importe se calcula
+  EN VIVO con la tarifa de la PERSONA** (nueva columna `admin_users.tarifa_hora`, la fija el dueño/admin en
+  Usuarios), con la **tarifa del proyecto de respaldo** si la persona no tiene, o "— sin tarifa" si no hay
+  ninguna (no inventa un 0). Vive **dentro de la ficha del proyecto** (lista + total de horas + total
+  facturable) y en **pantalla propia `/admin/tiempo` con vista semanal** (cronómetro en vivo + lista por
+  día + totales). Tabla nueva `time_entries` (aditiva, idempotente, sin DROP; índice único parcial = un
+  cronómetro por persona; **FUERA de WRITABLE_TABLES**). Servicio validado `modules/erp/routes/tiempo.js`
+  (start/stop/create/update/delete con `.status`). **Permisos nuevos `tiempo.read`/`tiempo.edit` +
+  PROPIEDAD:** cada uno edita las suyas; dueño/admin (bypass) las de cualquiera; `requirePerm` en TODAS
+  las rutas incluida la vista; sin `tiempo.read` no ve la entrada ni entra por URL (403). Eliminar =
+  **ocultar** (no destruir). **FUERA:** facturar horas, rentabilidad, calendario (piezas 3-5); no se
+  enlaza `project_id` a facturas. Verificado: `test-tiempo` 23/0 (cronómetro sin redondeo · un solo activo
+  por persona · manual · facturable · importe con respaldo del proyecto / sin tarifa · propiedad + edición
+  dueño/admin · ocultar · total por proyecto · migración idempotente), `gate-tiempo-pantalla` 17/0
+  (cronómetro y manual desde pantalla, importe cuadrado, ficha de proyecto con total, vista semanal,
+  permisos con 403 y propiedad, 0 errores JS). Regresión 9/9 verde (actividad-etiquetas 32, XSS/CSP,
+  `gate-proyectos` 18/0) + constructor. **Ventas (facturado sin IVA) sigue 973.267,93 €**; Verifactu
+  intacto. Pieza siguiente: PIEZA 3 — facturar horas. **NO se cierra sin que Ibrahim valide en pantalla.**
+
 ### ⬜ 8 — Salud / bienestar · **2º oficio**
 Agenda presencial.
 

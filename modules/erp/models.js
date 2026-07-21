@@ -1245,6 +1245,30 @@ export function runMigrations(db) {
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_proyectos_codigo ON proyectos(codigo)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_proyectos_active ON proyectos(active)`);
 
+  // ── ESCALERA · PASO 7 · PIEZA 2 — REGISTRO DE TIEMPO (aditivo, idempotente, sin DROP) ────────────
+  // Una entrada de tiempo por trabajo hecho en un proyecto. `duracion_seg` es EXACTA (segundos, sin
+  // redondeos); NULL = cronómetro CORRIENDO (`started_at` puesto, aún sin parar). `fecha` es el día de
+  // la entrada (para la vista semanal). `facturable` marca si cuenta para facturar; el importe NO se
+  // guarda: se calcula EN VIVO con la tarifa de la persona (respaldo la del proyecto). `active` =
+  // ocultar-no-destruir. FUERA de WRITABLE_TABLES (DISA no la escribe).
+  db.exec(`CREATE TABLE IF NOT EXISTS time_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    proyecto_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    descripcion TEXT DEFAULT '',
+    fecha TEXT NOT NULL,
+    started_at TEXT,
+    duracion_seg INTEGER,
+    facturable INTEGER NOT NULL DEFAULT 1,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_time_entries_user ON time_entries(user_id, fecha)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_time_entries_proy ON time_entries(proyecto_id)`);
+  // Un solo cronómetro ACTIVO por persona: como mucho una fila corriendo (duracion NULL) y viva por user.
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_time_entries_running ON time_entries(user_id) WHERE duracion_seg IS NULL AND active=1`);
+
   // ── ESCALERA · PASO 3 · BLOQUE 2 — PLAN FINANCIERO: los objetivos (aditivo, reversible) ───────
   // El lado "real" ya existe (ventasPorPeriodo / margenResumen). Esto es el lado "objetivo", que es
   // dato NUEVO: las metas las teclea el dueño, no salen de ninguna parte.
@@ -2192,6 +2216,10 @@ export function runMigrations(db) {
     // Peldaño 7 · servicios profesionales — Proyectos. `edit` cubre crear/editar/archivar/restaurar.
     { module: 'proyectos', action: 'read',   description: 'Ver proyectos' },
     { module: 'proyectos', action: 'edit',   description: 'Crear/editar/archivar/restaurar proyectos' },
+    // Peldaño 7 · PIEZA 2 — Registro de tiempo. `edit` = registrar/editar; la PROPIEDAD restringe a las
+    // propias (dueño/admin, por bypass, gestionan las de cualquiera).
+    { module: 'tiempo',    action: 'read',   description: 'Ver el registro de tiempo' },
+    { module: 'tiempo',    action: 'edit',   description: 'Registrar y editar entradas de tiempo (las propias)' },
   ];
   for (const p of permissionsData) {
     db.prepare('INSERT OR IGNORE INTO permissions (module, action, description) VALUES (?, ?, ?)').run(p.module, p.action, p.description);
@@ -2421,6 +2449,10 @@ Sé preciso con los números y siempre redondea correctamente.`,
   // para decidir textos hasta que exista ese motor.
   addCol(db, 'admin_users', 'idioma',        "TEXT DEFAULT 'es'");
   addCol(db, 'admin_users', 'foto_url',      'TEXT');
+  // Peldaño 7 · PIEZA 2 — tarifa/hora de la persona (dato de coste/facturación del negocio). La fija el
+  // dueño/admin en Usuarios; con ella se calcula EN VIVO el importe de cada entrada de tiempo (con la
+  // tarifa del proyecto de respaldo si la persona no tiene). El empleado no se la edita a sí mismo.
+  addCol(db, 'admin_users', 'tarifa_hora',   'REAL');
 
   // ── Facturae ──────────────────────────────────────────────────────────────────
   // Facturae 3.2.2 exige dirección fiscal ESTRUCTURADA (Address · PostCode · Town · Province ·

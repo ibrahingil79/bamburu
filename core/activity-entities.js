@@ -62,6 +62,7 @@ export const ENTITY = {
   DISCOUNT_CODE:    'discount_code',
   ATTACHMENT:       'attachment',
   PROJECT:          'proyecto',
+  TIME_ENTRY:       'registro_tiempo',
 };
 
 // Tabla → entidad, para la vía GENÉRICA de DISA (`insert_record`/`update_record`/`delete_record`

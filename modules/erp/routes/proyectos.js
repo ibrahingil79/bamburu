@@ -276,6 +276,7 @@ export function createProyectoRoutes(db) {
 
       <script>
       const PROY_SYM = ${JSON.stringify(sym)};
+      const PUEDE_TIEMPO = ${can(c, 'tiempo.read') ? 'true' : 'false'};   // sección de registro de tiempo (peldaño 7 · pieza 2)
       function proyToggleCobro(){
         const horas = document.getElementById('pModo').value === 'horas';
         document.getElementById('pTarifaWrap').style.display = horas ? '' : 'none';
@@ -344,8 +345,25 @@ export function createProyectoRoutes(db) {
           +'<div><div class="form-label">Modo de cobro</div><div>'+cobro+'</div></div>'
           +'<div><div class="form-label">Fechas</div><div>'+(p.fecha_inicio||'—')+' → '+(p.fecha_fin_prevista||'—')+'</div></div>'
           +'</div>'
-          +(p.notas?'<div class="alert alert-ok">'+escHtml(p.notas)+'</div>':'');
+          +(p.notas?'<div class="alert alert-ok">'+escHtml(p.notas)+'</div>':'')
+          +(PUEDE_TIEMPO?'<div id="proyTiempo" style="margin-top:1.25rem;color:var(--muted)">Cargando registro de tiempo…</div>':'');
         openModal('proyDetail');
+        if(PUEDE_TIEMPO) loadTiempoProy(id);
+      }
+      // PIEZA 2 — dentro de la ficha del proyecto: lista de tiempo + total de horas + total facturable.
+      async function loadTiempoProy(id){
+        const box=document.getElementById('proyTiempo'); if(!box) return;
+        let d; try{ d=await api('GET','/api/erp/tiempo/proyecto/'+id); }catch(e){ box.innerHTML=''; return; }
+        const dinero=n=>(n==null?'—':PROY_SYM+Number(n).toFixed(2));
+        const fmtDur=s=>{ s=Math.max(0,Math.round(s||0)); const m=Math.floor((s%3600)/60); return Math.floor(s/3600)+'h '+(m<10?'0':'')+m+'m'; };
+        const rows=(d.entradas||[]).filter(e=>!e.corriendo);
+        box.style.color='';
+        box.innerHTML='<h4 style="margin:0 0 .5rem">Registro de tiempo</h4>'
+          +'<div class="alert '+(d.total_seg>0?'alert-ok':'')+'" style="margin-bottom:.75rem">Total: <strong>'+fmtDur(d.total_seg)+'</strong> · Facturable: <strong>'+dinero(d.total_importe_facturable)+'</strong></div>'
+          +(rows.length?'<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Persona</th><th>Descripción</th><th>Duración</th><th>Fact.</th><th>Importe</th></tr></thead><tbody>'
+            +rows.map(e=>'<tr><td style="color:var(--muted);font-size:.8rem">'+escHtml(e.fecha)+'</td><td>'+escHtml(e.user_nombre||'')+'</td><td>'+escHtml(e.descripcion||'—')+'</td><td style="white-space:nowrap">'+fmtDur(e.duracion_seg)+'</td><td>'+(e.facturable?'Sí':'No')+'</td><td style="white-space:nowrap">'+(e.sin_tarifa?'<span style="color:var(--muted)">—</span>':dinero(e.importe))+'</td></tr>').join('')
+            +'</tbody></table></div>'
+            :'<div style="color:var(--muted);font-size:.85rem">Aún no hay tiempo registrado en este proyecto.</div>');
       }
       </script>`;
     return c.html(adminLayout('Proyectos', content, 'proyectos', c.get('session')?.csrfToken || '', c));

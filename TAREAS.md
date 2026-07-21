@@ -2,6 +2,12 @@
 > Roadmap viejo de 6 sprints. La fuente de verdad estratégica es **CANON.md**
 > y el plan de trabajo activo es **TABLERO.md**. Este archivo se conserva como
 > registro de lo hecho, no como guía de lo siguiente.
+>
+> **Último trabajo (registro, no plan) — 21 jul 2026:** escalera (CANON §4) con peldaños 1-6 cerrados y
+> validados. **Peldaño 7 (servicios profesionales · 1er oficio) en curso:** PIEZA 1 (el proyecto: entidad
+> + pantalla) validada y cerrada; PIEZA 2 (registro de tiempo: cronómetro + manual, importe con la tarifa
+> de la persona, vista semanal) **entregada, pendiente de validación de Ibrahim**. Detalle vivo en
+> **TABLERO.md** y **session.json** — esta es solo la nota de "qué se hizo".
 
 # TAREAS BAMBURU — Roadmap Estratégico
 

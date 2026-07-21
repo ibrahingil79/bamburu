@@ -337,6 +337,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     'client-groups':  'clients.read',
     crm:              'crm.read',
     proyectos:        'proyectos.read',   // peldaño 7 · servicios profesionales
+    tiempo:           'tiempo.read',      // peldaño 7 · PIEZA 2 · registro de tiempo
     analytics:        'analytics.read',
     vigia:            'analytics.read',   // DISA predictiva · el vigía (dentro filtra por detector)
     disa:             null,
@@ -380,6 +381,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       { href: '/admin/crm', label: 'Oportunidades', key: 'crm', icon: 'ti-target-arrow' },
       // Peldaño 7 · servicios profesionales — colocación PROVISIONAL en Ventas (se puede mover luego).
       { href: '/admin/proyectos', label: 'Proyectos', key: 'proyectos', icon: 'ti-folders' },
+      { href: '/admin/tiempo', label: 'Registro de tiempo', key: 'tiempo', icon: 'ti-clock-play' },
     ]},
     { label: 'Compras y gastos', icon: 'ti-receipt', items: [
       { href: '/admin/supplier-invoices', label: 'Facturas recibidas', key: 'supplier-invoices', icon: 'ti-file-dollar' },
