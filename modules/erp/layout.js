@@ -372,6 +372,11 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       { href: '/admin/cobros', label: 'Cobros', key: 'cobros', icon: 'ti-cash' },
       { href: '/admin/mostrador', label: 'TPV', key: 'mostrador', icon: 'ti-cash-register' },
       { href: '/admin/portal', label: 'Portal de cliente', key: 'portal', icon: 'ti-external-link' },
+    ]},
+    // «A quién le vendes» — ÁREA PROPIA en el rail (sacada de Ventas a petición de Ibrahim, 21 jul 2026):
+    // Clientes, sus Grupos y el embudo comercial (Oportunidades) viven juntos, no sueltos dentro de Ventas,
+    // que queda solo con los documentos de venta.
+    { label: 'Clientes', icon: 'ti-address-book', items: [
       { href: '/admin/clients', label: 'Clientes', key: 'clients', icon: 'ti-users' },
       { href: '/admin/clients/groups', label: 'Grupos', key: 'client-groups', icon: 'ti-users-group' },
       // Era un cartel gris (`disabled:true`, sin ruta ni tabla). Ahora es el embudo comercial real.
