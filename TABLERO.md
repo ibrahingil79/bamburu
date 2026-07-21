@@ -2045,7 +2045,7 @@ Aquí aterrizan, de las listas viejas:
   PIEZA 2 — registro de tiempo (con la tarifa de la persona). **Al validar Ibrahim, esta pieza se cierra;
   el peldaño 7 sigue abierto hasta completar sus piezas.**
 
-- **PIEZA 2 — REGISTRO DE TIEMPO · ⬜ ENTREGADA, PENDIENTE DE VALIDACIÓN DE IBRAHIM (21 jul 2026).**
+- **PIEZA 2 — REGISTRO DE TIEMPO · ✅ VALIDADA por Ibrahim en pantalla (21 jul 2026).**
   Registro por **cronómetro** (empezar/parar) y por **entrada manual**; **un solo cronómetro activo por
   persona** (arrancar uno nuevo finaliza el anterior). Cada entrada = proyecto (Pieza 1) + descripción +
   **duración EXACTA en segundos, sin redondeos** + **facturable/no facturable**. El **importe se calcula
