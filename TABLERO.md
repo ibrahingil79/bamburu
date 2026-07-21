@@ -21,9 +21,9 @@
 > propios, combinar fuentes, compartir paneles).** **Contabilidad sigue FUERA, pendiente de tu decisión.**
 > **Pasos 5 (DISA predictiva: vigía + voz + dibujo + priorización/Inicio) y 6 (Inicio personalizable)
 > HECHOS y VALIDADOS por Ibrahim en pantalla (21 jul 2026). Paso 7 (servicios profesionales · 1er oficio)
-> EN CURSO: Piezas 1 (proyecto) y 2 (registro de tiempo) VALIDADAS; Pieza 3 (facturar horas) ENTREGADA y
-> pendiente de validación en pantalla. Siguiente tras validar: Pieza 4 (rentabilidad por proyecto). No se
-> inicia nada sin tu encargo.** El **Backlog** de abajo NO
+> EN CURSO: Piezas 1 (proyecto), 2 (registro de tiempo) y 3 (facturar horas) VALIDADAS por Ibrahim en
+> pantalla (21 jul; «Proyectos» ya es área propia del rail). Siguiente: Pieza 4 (rentabilidad por
+> proyecto). No se inicia nada sin tu encargo.** El **Backlog** de abajo NO
 > compite con la escalera: es lo que le falta a El Suelo (el umbral) más la deuda. Plan del Eje C
 > cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
@@ -2069,7 +2069,8 @@ Aquí aterrizan, de las listas viejas:
   `gate-proyectos` 18/0) + constructor. **Ventas (facturado sin IVA) sigue 973.267,93 €**; Verifactu
   intacto. Pieza siguiente: PIEZA 3 — facturar horas. **NO se cierra sin que Ibrahim valide en pantalla.**
 
-- **PIEZA 3 — FACTURAR HORAS · 🟡 ENTREGADA (21 jul 2026), pendiente de validación en pantalla.**
+- **PIEZA 3 — FACTURAR HORAS · ✅ VALIDADA por Ibrahim en pantalla (21 jul 2026).** *(Además, a petición
+  suya, «Proyectos» pasó a ÁREA PROPIA del rail, fuera de Ventas — commit da86ccd.)*
   Lleva las **horas facturables** de un proyecto (Pieza 2) a una **factura REAL**. **Cero camino nuevo de
   emisión**: reutiliza `createInvoice` del motor (correlativo + hash Verifactu + asiento contable + cola
   T2). Pantalla `/admin/facturar-horas`: eliges proyecto (+ rango de fechas opcional) → salen sus horas
