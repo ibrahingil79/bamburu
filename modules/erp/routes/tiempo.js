@@ -131,8 +131,11 @@ export function createTiempoRoutes(db) {
   const actorDe = c => ({ userId: c.get('session')?.userId, esAdmin: !!(c.get('isOwner') || c.get('isAdmin')) });
 
   // ── API ──────────────────────────────────────────────────────────────────────
+  // Se envuelve en un objeto { corriendo } A PROPÓSITO: el helper `api()` compartido convierte un cuerpo
+  // JSON `null` en `{}` (trata el 200 vacío como éxito), y eso haría creer a la pantalla que SIEMPRE hay
+  // un cronómetro en marcha (deshabilitando "Empezar"). Con el objeto, `corriendo` es la entrada o null.
   api.get('/activo', requirePerm('tiempo.read'), c => {
-    try { return c.json(corriendoDe(db, c.get('session')?.userId)); }
+    try { return c.json({ corriendo: corriendoDe(db, c.get('session')?.userId) }); }
     catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
   api.get('/', requirePerm('tiempo.read'), c => {
@@ -250,7 +253,7 @@ export function createTiempoRoutes(db) {
       async function tCargar(){
         const d=await api('GET','/api/erp/tiempo?desde='+T_LUNES).catch(()=>({entradas:[]}));
         T_ENTRIES=d.entradas||[]; tRender();
-        if(T_EDIT){ T_RUN=await api('GET','/api/erp/tiempo/activo').catch(()=>null); tRenderRun(); }
+        if(T_EDIT){ const _a=await api('GET','/api/erp/tiempo/activo').catch(()=>null); T_RUN=(_a&&_a.corriendo)?_a.corriendo:null; tRenderRun(); }
       }
       function tRenderRun(){
         const box=document.getElementById('tRunning'); if(!box) return;

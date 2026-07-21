@@ -78,6 +78,10 @@ try {
   await Promise.all([ po.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => {}), po.evaluate(() => document.querySelector('a[href="/admin/tiempo"]').click()) ]);
   ok(po.url().endsWith('/admin/tiempo'), 'pulsando la entrada se llega a /admin/tiempo', po.url());
   await po.waitForFunction(() => typeof tSaveManual === 'function', { timeout: 8000 }).catch(() => {});
+  // Sin cronómetro en marcha, el botón "Empezar" debe estar HABILITADO y la caja "corriendo" oculta
+  // (regresión del bug: /activo devolvía null y el api() lo volvía {} → botón deshabilitado de salida).
+  const inicial = await po.evaluate(() => ({ disabled: document.getElementById('tBtnStart')?.disabled, running: (() => { const x = document.getElementById('tRunning'); return !!(x && x.style.display !== 'none'); })() }));
+  ok(inicial.disabled === false && inicial.running === false, 'sin cronómetro: "Empezar" habilitado y sin caja "corriendo"', JSON.stringify(inicial));
 
   // Entrada MANUAL (2h, facturable) → aparece y su importe cuadra (2h × 60 = 120).
   await po.evaluate((pid) => { tOpenManual(); document.getElementById('tmProyecto').value = String(pid); document.getElementById('tmHoras').value = '2'; document.getElementById('tmMin').value = '0'; document.getElementById('tmFact').checked = true; }, proyId);
@@ -89,17 +93,18 @@ try {
   const filaVista = await po.$$eval('#tBody table tbody tr', rs => rs.some(r => /2h 00m|2h 0m/.test(r.textContent))).catch(() => false);
   ok(filaVista, 'la entrada aparece en la vista semanal con su duración');
 
-  // CRONÓMETRO: arrancar → caja "corriendo" visible; parar → se oculta y queda una entrada.
-  await po.evaluate((pid) => { document.getElementById('tProyecto').value = String(pid); document.getElementById('tDesc').value = 'cronometrando'; tStart(); }, proyId);
+  // CRONÓMETRO: se PULSA el botón real (no evaluate) → caja "corriendo" visible; parar → se oculta.
+  await po.evaluate((pid) => { document.getElementById('tProyecto').value = String(pid); document.getElementById('tDesc').value = 'cronometrando'; }, proyId);
+  await po.click('#tBtnStart');
   await po.waitForFunction(() => { const b = document.getElementById('tRunning'); return b && b.style.display !== 'none'; }, { timeout: 8000 }).catch(() => {});
   const corriendo = await po.evaluate(() => { const b = document.getElementById('tRunning'); return !!(b && b.style.display !== 'none'); });
-  ok(corriendo, 'al arrancar el cronómetro se ve la caja "en marcha"');
+  ok(corriendo, 'PULSANDO "Empezar" arranca el cronómetro (caja "en marcha" visible)');
   const activo = await call(po, 'GET', '/api/erp/tiempo/activo');
   ok(activo.body && activo.body.corriendo, 'la API confirma un cronómetro activo');
   await po.evaluate(() => tStop());
   await po.waitForFunction(() => { const b = document.getElementById('tRunning'); return b && b.style.display === 'none'; }, { timeout: 8000 }).catch(() => {});
   const activo2 = await call(po, 'GET', '/api/erp/tiempo/activo');
-  ok(activo2.body === null, 'al parar, ya no hay cronómetro activo');
+  ok(activo2.body && activo2.body.corriendo === null, 'al parar, ya no hay cronómetro activo');
   ok(errs.length === 0, 'la pantalla no lanza errores de JS/CSP', errs.join(' | ') || 'limpio');
   await po.screenshot({ path: join(SHOTS, 'tiempo-semana.png') }).catch(() => {});
 
