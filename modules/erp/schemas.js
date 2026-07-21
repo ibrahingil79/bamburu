@@ -135,6 +135,18 @@ export const tiempoManualSchema = z.object({
   facturable: z.coerce.boolean().optional().default(true),
 });
 
+// ── Peldaño 7 · PIEZA 3 — FACTURAR HORAS ─────────────────────────────────────────────────────────
+// Selección de entradas de tiempo a facturar (el cliente sale del proyecto). `tax_rate`/`irpf_rate` son
+// opcionales (si no vienen: el IVA general de la empresa y 0 de IRPF). La agrupación en líneas por
+// (tarea + tarifa) y las guardas (proyecto con cliente, entradas facturables/no facturadas) las hace el servicio.
+export const facturarHorasSchema = z.object({
+  proyecto_id: z.coerce.number().int().positive(),
+  entry_ids: z.array(z.coerce.number().int().positive()).min(1),
+  issue_date: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal('')),
+  tax_rate: z.coerce.number().min(0).max(100).optional(),
+  irpf_rate: z.coerce.number().min(0).max(60).optional().default(0),
+});
+
 // T5 — valores EXACTOS permitidos en los campos de lista cerrada del cliente, extraídos del
 // propio clientSchema (fuente única: no se escriben a mano → no se desincronizan). Los usa
 // DISA para no inventar valores. Desenvuelve los wrappers default/optional hasta el enum.

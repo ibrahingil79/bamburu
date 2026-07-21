@@ -31,12 +31,17 @@ function conImporte(row) {
     facturable: !!row.facturable, corriendo: row.duracion_seg == null,
     proyecto_nombre: row.proyecto_nombre, proyecto_codigo: row.proyecto_codigo, user_nombre: row.user_nombre,
     tarifa_efectiva: tarifa, sin_tarifa: tarifa == null, importe,
+    // PIEZA 3 — facturada EN VIVO: enlazada a una factura 'emitida'. Si se anula, vuelve a estar libre.
+    invoice_id: row.invoice_id || null, facturada: !!(row.invoice_id && row.invoice_status === 'emitida'),
+    invoice_number: (row.invoice_id && row.invoice_status === 'emitida') ? row.invoice_number : null,
   };
 }
 const SELECT_BASE =
   `SELECT te.*, p.nombre AS proyecto_nombre, p.codigo AS proyecto_codigo, p.tarifa_hora AS proy_tarifa,
-          u.name AS user_nombre, u.tarifa_hora AS user_tarifa
-     FROM time_entries te JOIN proyectos p ON p.id=te.proyecto_id JOIN admin_users u ON u.id=te.user_id`;
+          u.name AS user_nombre, u.tarifa_hora AS user_tarifa,
+          inv.status AS invoice_status, inv.invoice_number AS invoice_number
+     FROM time_entries te JOIN proyectos p ON p.id=te.proyecto_id JOIN admin_users u ON u.id=te.user_id
+     LEFT JOIN invoices inv ON inv.id=te.invoice_id`;
 
 // ── SERVICIO VALIDADO ─────────────────────────────────────────────────────────
 // Valida con `.status=400` (como clientes/proyectos), para que el servicio se defienda igual lo llame la
@@ -57,6 +62,13 @@ function cargar(db, id) { return db.prepare(SELECT_BASE + ' WHERE te.id=?').get(
 function guarda(actor, row) {
   if (!row) { const e = new Error('Entrada de tiempo no encontrada'); e.status = 404; throw e; }
   if (!actor.esAdmin && row.user_id !== actor.userId) { const e = new Error('Solo puedes editar tus propias entradas'); e.status = 403; throw e; }
+}
+// PIEZA 3 — una entrada ya FACTURADA (enlazada a una factura emitida) no se edita ni elimina: lo cobrado
+// no se toca. Se libera sola si la factura se anula.
+function noFacturada(row, verbo) {
+  if (row.invoice_id && row.invoice_status === 'emitida') {
+    const e = new Error('No se puede ' + verbo + ' una entrada ya facturada (' + row.invoice_number + ')'); e.status = 409; throw e;
+  }
 }
 
 export function corriendoDe(db, userId) {
@@ -95,7 +107,7 @@ export function createEntry(db, userId, input) {
   return conImporte(cargar(db, r.lastInsertRowid));
 }
 export function updateEntry(db, actor, id, input) {
-  const row = cargar(db, id); guarda(actor, row);
+  const row = cargar(db, id); guarda(actor, row); noFacturada(row, 'editar');
   const d = parseCon(tiempoManualSchema, input);
   proyectoVivo(db, d.proyecto_id);
   const seg = (d.horas || 0) * 3600 + (d.minutos || 0) * 60;
@@ -105,7 +117,7 @@ export function updateEntry(db, actor, id, input) {
   return conImporte(cargar(db, id));
 }
 export function deleteEntry(db, actor, id) {
-  const row = cargar(db, id); guarda(actor, row);
+  const row = cargar(db, id); guarda(actor, row); noFacturada(row, 'eliminar');
   db.prepare('UPDATE time_entries SET active=0, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(id);   // ocultar, no destruir
   return { id: Number(id) };
 }
@@ -288,8 +300,10 @@ export function createTiempoRoutes(db) {
       }
       function tRow(e){
         const imp = e.corriendo ? '<span style="color:var(--muted)">en marcha…</span>' : (e.sin_tarifa?'<span style="color:var(--muted)" title="Sin tarifa: pon la tarifa/hora de la persona en Usuarios">— sin tarifa</span>':eur(e.importe));
-        const fact = e.facturable?'<span class="badge b-green">Sí</span>':'<span class="badge b-gray">No</span>';
-        const acc = (T_EDIT && !e.corriendo) ? '<button class="btn btn-secondary btn-sm" onclick="tEdit('+e.id+')">Editar</button> <button class="btn btn-danger btn-sm" onclick="tDel('+e.id+')">Eliminar</button>' : '';
+        // Facturada = ya cobrada en una factura emitida: candado, no botones (se libera sola si se anula la factura).
+        const fact = e.facturada?('<span class="badge b-blue" title="Facturada en '+escHtml(e.invoice_number||'')+'">🔒 Facturada</span>')
+          : (e.facturable?'<span class="badge b-green">Sí</span>':'<span class="badge b-gray">No</span>');
+        const acc = (T_EDIT && !e.corriendo && !e.facturada) ? '<button class="btn btn-secondary btn-sm" onclick="tEdit('+e.id+')">Editar</button> <button class="btn btn-danger btn-sm" onclick="tDel('+e.id+')">Eliminar</button>' : '';
         return '<tr><td><strong>'+escHtml(e.proyecto_nombre||'')+'</strong>'+(e.proyecto_codigo?'<br><span style="color:var(--muted);font-size:.75rem;font-family:monospace">'+escHtml(e.proyecto_codigo)+'</span>':'')+'</td>'
           +'<td>'+escHtml(e.descripcion||'—')+'</td>'
           +'<td style="white-space:nowrap">'+(e.corriendo?'<span style="color:var(--accent)">⏱ corriendo</span>':fmtDur(e.duracion_seg))+'</td>'

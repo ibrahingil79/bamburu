@@ -361,7 +361,7 @@ export function createProyectoRoutes(db) {
         box.innerHTML='<h4 style="margin:0 0 .5rem">Registro de tiempo</h4>'
           +'<div class="alert '+(d.total_seg>0?'alert-ok':'')+'" style="margin-bottom:.75rem">Total: <strong>'+fmtDur(d.total_seg)+'</strong> · Facturable: <strong>'+dinero(d.total_importe_facturable)+'</strong></div>'
           +(rows.length?'<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Persona</th><th>Descripción</th><th>Duración</th><th>Fact.</th><th>Importe</th></tr></thead><tbody>'
-            +rows.map(e=>'<tr><td style="color:var(--muted);font-size:.8rem">'+escHtml(e.fecha)+'</td><td>'+escHtml(e.user_nombre||'')+'</td><td>'+escHtml(e.descripcion||'—')+'</td><td style="white-space:nowrap">'+fmtDur(e.duracion_seg)+'</td><td>'+(e.facturable?'Sí':'No')+'</td><td style="white-space:nowrap">'+(e.sin_tarifa?'<span style="color:var(--muted)">—</span>':dinero(e.importe))+'</td></tr>').join('')
+            +rows.map(e=>'<tr><td style="color:var(--muted);font-size:.8rem">'+escHtml(e.fecha)+'</td><td>'+escHtml(e.user_nombre||'')+'</td><td>'+escHtml(e.descripcion||'—')+'</td><td style="white-space:nowrap">'+fmtDur(e.duracion_seg)+'</td><td>'+(e.facturada?'<span class="badge b-blue" title="Facturada en '+escHtml(e.invoice_number||'')+'">🔒</span>':(e.facturable?'Sí':'No'))+'</td><td style="white-space:nowrap">'+(e.sin_tarifa?'<span style="color:var(--muted)">—</span>':dinero(e.importe))+'</td></tr>').join('')
             +'</tbody></table></div>'
             :'<div style="color:var(--muted);font-size:.85rem">Aún no hay tiempo registrado en este proyecto.</div>');
       }

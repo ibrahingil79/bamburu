@@ -1268,6 +1268,11 @@ export function runMigrations(db) {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_time_entries_proy ON time_entries(proyecto_id)`);
   // Un solo cronómetro ACTIVO por persona: como mucho una fila corriendo (duracion NULL) y viva por user.
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_time_entries_running ON time_entries(user_id) WHERE duracion_seg IS NULL AND active=1`);
+  // PIEZA 3 — enlace entrada → factura que la cobró. "Facturada" se deriva EN VIVO (invoice_id puesto Y la
+  // factura enlazada está 'emitida'): si la factura se anula, la entrada vuelve a estar disponible sola, sin
+  // tocar el motor de anulación. (Es entrada→factura, distinto del factura→proyecto que llega en la pieza 4.)
+  addCol(db, 'time_entries', 'invoice_id', 'INTEGER');
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_time_entries_invoice ON time_entries(invoice_id)`);
 
   // ── ESCALERA · PASO 3 · BLOQUE 2 — PLAN FINANCIERO: los objetivos (aditivo, reversible) ───────
   // El lado "real" ya existe (ventasPorPeriodo / margenResumen). Esto es el lado "objetivo", que es

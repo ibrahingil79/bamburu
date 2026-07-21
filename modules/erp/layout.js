@@ -338,6 +338,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     crm:              'crm.read',
     proyectos:        'proyectos.read',   // peldaño 7 · servicios profesionales
     tiempo:           'tiempo.read',      // peldaño 7 · PIEZA 2 · registro de tiempo
+    'facturar-horas': 'invoices.create',  // peldaño 7 · PIEZA 3 · facturar horas (mismo permiso que emitir factura)
     analytics:        'analytics.read',
     vigia:            'analytics.read',   // DISA predictiva · el vigía (dentro filtra por detector)
     disa:             null,
@@ -382,6 +383,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       // Peldaño 7 · servicios profesionales — colocación PROVISIONAL en Ventas (se puede mover luego).
       { href: '/admin/proyectos', label: 'Proyectos', key: 'proyectos', icon: 'ti-folders' },
       { href: '/admin/tiempo', label: 'Registro de tiempo', key: 'tiempo', icon: 'ti-clock-play' },
+      { href: '/admin/facturar-horas', label: 'Facturar horas', key: 'facturar-horas', icon: 'ti-clock-dollar' },
     ]},
     { label: 'Compras y gastos', icon: 'ti-receipt', items: [
       { href: '/admin/supplier-invoices', label: 'Facturas recibidas', key: 'supplier-invoices', icon: 'ti-file-dollar' },

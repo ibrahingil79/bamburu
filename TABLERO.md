@@ -20,8 +20,10 @@
 > **HECHO el constructor completo: 4a (ventas) + 4a-bis (compras/clientes/inventario) + 4b (cálculos
 > propios, combinar fuentes, compartir paneles).** **Contabilidad sigue FUERA, pendiente de tu decisión.**
 > **Pasos 5 (DISA predictiva: vigía + voz + dibujo + priorización/Inicio) y 6 (Inicio personalizable)
-> HECHOS y VALIDADOS por Ibrahim en pantalla (21 jul 2026). Siguiente: paso 7 (servicios profesionales ·
-> 1er oficio). No se inicia sin tu encargo.** El **Backlog** de abajo NO
+> HECHOS y VALIDADOS por Ibrahim en pantalla (21 jul 2026). Paso 7 (servicios profesionales · 1er oficio)
+> EN CURSO: Piezas 1 (proyecto) y 2 (registro de tiempo) VALIDADAS; Pieza 3 (facturar horas) ENTREGADA y
+> pendiente de validación en pantalla. Siguiente tras validar: Pieza 4 (rentabilidad por proyecto). No se
+> inicia nada sin tu encargo.** El **Backlog** de abajo NO
 > compite con la escalera: es lo que le falta a El Suelo (el umbral) más la deuda. Plan del Eje C
 > cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
@@ -2066,6 +2068,34 @@ Aquí aterrizan, de las listas viejas:
   permisos con 403 y propiedad, 0 errores JS). Regresión 9/9 verde (actividad-etiquetas 32, XSS/CSP,
   `gate-proyectos` 18/0) + constructor. **Ventas (facturado sin IVA) sigue 973.267,93 €**; Verifactu
   intacto. Pieza siguiente: PIEZA 3 — facturar horas. **NO se cierra sin que Ibrahim valide en pantalla.**
+
+- **PIEZA 3 — FACTURAR HORAS · 🟡 ENTREGADA (21 jul 2026), pendiente de validación en pantalla.**
+  Lleva las **horas facturables** de un proyecto (Pieza 2) a una **factura REAL**. **Cero camino nuevo de
+  emisión**: reutiliza `createInvoice` del motor (correlativo + hash Verifactu + asiento contable + cola
+  T2). Pantalla `/admin/facturar-horas`: eliges proyecto (+ rango de fechas opcional) → salen sus horas
+  facturables con importe → seleccionas → **vista previa** que agrupa **una línea por (tarea + tarifa)**
+  (cantidad = horas sumadas, precio = tarifa/hora) → IVA (por defecto el de la empresa) e **IRPF** editables
+  → "Generar factura" → te lleva a la factura. **Cliente = el del proyecto** (sin cliente → 400 "asigna un
+  cliente"; se avisa en la propia pantalla). **Entrada sin tarifa no se factura** (400). **"Facturada" se
+  deriva EN VIVO**: `time_entries.invoice_id` puesto **Y** la factura enlazada `emitida`; si la factura se
+  **anula, la entrada se libera sola** (sin tocar el motor de anulación). Una entrada facturada **no se
+  edita ni elimina** (409, guarda en `tiempo.js`) y luce **🔒 Facturada** en la vista semanal y en la ficha
+  del proyecto. **Migración aditiva**: columna `time_entries.invoice_id` + índice (sin DROP; `time_entries`
+  sigue **FUERA de WRITABLE_TABLES**). **Permiso `invoices.create` en TODAS las rutas incluida la vista**
+  (no por propiedad: quien puede facturar factura las horas del equipo). Ficheros: `models.js` (columna +
+  índice), `schemas.js` (`facturarHorasSchema`), `routes/facturar-horas.js` (nuevo: servicio + vista),
+  `routes/tiempo.js` (`SELECT_BASE` con LEFT JOIN a `invoices`, `facturada` en `conImporte`, guarda
+  `noFacturada`), `routes/proyectos.js` (badge en la ficha), `layout.js` (nav + permiso), `routes/index.js`
+  (mount). Verificado: `test-facturar-horas` 31/0 (qué entra/qué no · agrupación tarea+tarifa · **cuadra al
+  céntimo** · marcado/bloqueo · **anular libera** · sin tarifa/sin cliente → 400 · otro proyecto → 400 ·
+  IVA override + IRPF · migración idempotente), `gate-facturar-horas-pantalla` 21/0 (menú + pantalla ·
+  facturables · previa cuadrada · **factura REAL emitida cuadrando 300+63=363** · entradas facturadas y
+  bloqueadas · permisos 403 y candado por permiso, no por bypass · 0 errores JS · **neto-cero en Ventas**
+  tras crear+anular). Nuevo grupo de regresión `servicios` en `run-gates.mjs` (proyectos + tiempo + facturar
+  horas + `verify-constructor`): **7/7 verde**. **Ventas (facturado sin IVA) sigue 973.267,93 €**; Verifactu
+  y el constructor intactos. **RESIDUO por diseño**: la factura de prueba del gate se anula (permanece en la
+  cadena inmutable, neto-cero en Ventas). **FUERA:** rentabilidad por proyecto (pieza 4, ahí se enlaza
+  `project_id` a facturas/compras) y calendario (pieza 5). **NO cerrar en Notion sin validación en pantalla.**
 
 ### ⬜ 8 — Salud / bienestar · **2º oficio**
 Agenda presencial.
