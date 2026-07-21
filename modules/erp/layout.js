@@ -380,7 +380,10 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       // llama. La ruta sigue siendo /admin/crm (es el módulo), pero el usuario lee "Oportunidades",
       // que es la palabra de Holded ("embudos de venta" y "oportunidades"), no "negocios"/"deals".
       { href: '/admin/crm', label: 'Oportunidades', key: 'crm', icon: 'ti-target-arrow' },
-      // Peldaño 7 · servicios profesionales — colocación PROVISIONAL en Ventas (se puede mover luego).
+    ]},
+    // Peldaño 7 · servicios profesionales — ÁREA PROPIA en el rail (sacada de Ventas a petición de Ibrahim,
+    // 21 jul 2026): proyectos, sus horas y la facturación de esas horas viven juntos, no mezclados con Ventas.
+    { label: 'Proyectos', icon: 'ti-briefcase', items: [
       { href: '/admin/proyectos', label: 'Proyectos', key: 'proyectos', icon: 'ti-folders' },
       { href: '/admin/tiempo', label: 'Registro de tiempo', key: 'tiempo', icon: 'ti-clock-play' },
       { href: '/admin/facturar-horas', label: 'Facturar horas', key: 'facturar-horas', icon: 'ti-clock-dollar' },
