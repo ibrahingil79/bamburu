@@ -2023,6 +2023,28 @@ Aquí aterrizan, de las listas viejas:
 - **Control horario (registro de jornada)** — el fichaje, hermano del tiempo facturable.
 - **Rentabilidad por proyecto** (era "Proyectos / rentabilidad").
 
+- **PIEZA 1 — EL PROYECTO (entidad + pantalla) · ⬜ ENTREGADA, PENDIENTE DE VALIDACIÓN DE IBRAHIM
+  (21 jul 2026).** Primera pieza del peldaño 7: SOLO la entidad "proyecto" y su pantalla de gestión;
+  el registro de tiempo, facturar horas, rentabilidad y calendario son piezas 2-5 y NO entran hoy.
+  Espejo EXACTO del patrón de clientes. Tabla `proyectos` (migración aditiva e idempotente, sin DROP):
+  `codigo` PRY-NNNN (contador `code_counters`, no editable), `nombre`, `cliente_id`/`responsable_id`
+  (FK lógicas OPCIONALES, resueltas EN VIVO por LEFT JOIN como el responsable del peldaño 3), `modo_cobro`
+  (lista cerrada `horas`|`precio_cerrado`), `tarifa_hora`/`precio_cerrado` (según modo; el otro a null),
+  `fecha_inicio`/`fecha_fin_prevista`, `estado` (`abierto`|`cerrado`), `active` (archivar-no-borrar),
+  `notas`. **FUERA de WRITABLE_TABLES** (DISA no la escribe). Servicio validado compartido
+  `modules/erp/routes/proyectos.js` (create/update/archive/restore con zod + `.status`), pantalla
+  `/admin/proyectos` (buscador nombre/código, filtro Activos/Archivados, paginación 25, alta/edición/
+  ficha/archivar/restaurar), permisos nuevos `proyectos.read`/`proyectos.edit` (bypass owner/admin,
+  `requirePerm` en TODAS las rutas incluidas las VISTAS — M2), entrada "Proyectos" en el rail (provisional,
+  en Ventas; oculta sin `proyectos.read`). Verificado: `test-proyectos` 20/0 (alta horas/precio, modo
+  fuera de lista → 400, código correlativo/único/no-editable, editar, archivar+restaurar, cliente/
+  responsable en vivo, migración idempotente sin DROP), `gate-proyectos-pantalla` 18/0 (entrada aparece y
+  se llega pulsándola, CRUD desde pantalla, buscador/filtro, permisos con 403, 0 errores JS). Regresión
+  14/14 verde (actividad-etiquetas 32, XSS/CSP, constructor 82). **Ventas (facturado sin IVA) sigue
+  973.267,93 €**; Verifactu y las 5 áreas del constructor intactas. Commit `dfd20ca`. Pieza siguiente:
+  PIEZA 2 — registro de tiempo (con la tarifa de la persona). **Al validar Ibrahim, esta pieza se cierra;
+  el peldaño 7 sigue abierto hasta completar sus piezas.**
+
 ### ⬜ 8 — Salud / bienestar · **2º oficio**
 Agenda presencial.
 
