@@ -2023,8 +2023,8 @@ Aquí aterrizan, de las listas viejas:
 - **Control horario (registro de jornada)** — el fichaje, hermano del tiempo facturable.
 - **Rentabilidad por proyecto** (era "Proyectos / rentabilidad").
 
-- **PIEZA 1 — EL PROYECTO (entidad + pantalla) · ⬜ ENTREGADA, PENDIENTE DE VALIDACIÓN DE IBRAHIM
-  (21 jul 2026).** Primera pieza del peldaño 7: SOLO la entidad "proyecto" y su pantalla de gestión;
+- **PIEZA 1 — EL PROYECTO (entidad + pantalla) · ✅ VALIDADA por Ibrahim en pantalla (21 jul 2026).**
+  Primera pieza del peldaño 7: SOLO la entidad "proyecto" y su pantalla de gestión;
   el registro de tiempo, facturar horas, rentabilidad y calendario son piezas 2-5 y NO entran hoy.
   Espejo EXACTO del patrón de clientes. Tabla `proyectos` (migración aditiva e idempotente, sin DROP):
   `codigo` PRY-NNNN (contador `code_counters`, no editable), `nombre`, `cliente_id`/`responsable_id`
