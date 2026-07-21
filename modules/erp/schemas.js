@@ -99,6 +99,24 @@ export const clientSchema = z.object({
   responsable_user_id: optId,
 });
 
+// ── Peldaño 7 · PIEZA 1 — PROYECTO (entidad de servicios profesionales) ──────────────────────────
+// El `codigo` (PRY-NNNN) NO se valida aquí: lo asigna el servidor con el contador (no editable). `cliente_id`
+// y `responsable_id` son FK OPCIONALES (optId: vacío/0 → null = sin asignar), leídas EN VIVO al pintar.
+// `modo_cobro` es LISTA CERRADA (z.enum rechaza cualquier otro valor → 400). `tarifa_hora`/`precio_cerrado`
+// son opcionales aquí; el servicio guarda solo la que corresponde al modo (la otra a null).
+export const proyectoSchema = z.object({
+  nombre: str(200),
+  cliente_id: optId,
+  responsable_id: optId,
+  modo_cobro: z.enum(['horas', 'precio_cerrado']),
+  tarifa_hora: priceOpt,
+  precio_cerrado: priceOpt,
+  fecha_inicio: strOpt(10),
+  fecha_fin_prevista: strOpt(10),
+  estado: z.enum(['abierto', 'cerrado']).optional().default('abierto'),
+  notas: strOpt(2000),
+});
+
 // T5 — valores EXACTOS permitidos en los campos de lista cerrada del cliente, extraídos del
 // propio clientSchema (fuente única: no se escriben a mano → no se desincronizan). Los usa
 // DISA para no inventar valores. Desenvuelve los wrappers default/optional hasta el enum.

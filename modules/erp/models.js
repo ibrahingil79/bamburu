@@ -1220,6 +1220,31 @@ export function runMigrations(db) {
     updated_by INTEGER
   )`);
 
+  // ── ESCALERA · PASO 7 (servicios profesionales) · PIEZA 1 — PROYECTO (aditivo, idempotente, sin DROP) ──
+  // Una entidad "proyecto" por tenant. `codigo` PRY-NNNN (contador `code_counters`, no editable). `cliente_id`
+  // y `responsable_id` son FK LÓGICAS opcionales (se resuelven EN VIVO por LEFT JOIN al pintar, como el
+  // responsable de cliente del peldaño 3): reasignar cambia la ficha, no se congela. `modo_cobro` y `estado`
+  // son listas cerradas (se validan en el servidor). `active` = archivar-no-borrar. FUERA de WRITABLE_TABLES.
+  db.exec(`CREATE TABLE IF NOT EXISTS proyectos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    codigo TEXT,
+    nombre TEXT NOT NULL,
+    cliente_id INTEGER,
+    responsable_id INTEGER,
+    modo_cobro TEXT NOT NULL DEFAULT 'horas',
+    tarifa_hora REAL,
+    precio_cerrado REAL,
+    fecha_inicio TEXT,
+    fecha_fin_prevista TEXT,
+    estado TEXT NOT NULL DEFAULT 'abierto',
+    active INTEGER NOT NULL DEFAULT 1,
+    notas TEXT DEFAULT '',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT
+  )`);
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_proyectos_codigo ON proyectos(codigo)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_proyectos_active ON proyectos(active)`);
+
   // ── ESCALERA · PASO 3 · BLOQUE 2 — PLAN FINANCIERO: los objetivos (aditivo, reversible) ───────
   // El lado "real" ya existe (ventasPorPeriodo / margenResumen). Esto es el lado "objetivo", que es
   // dato NUEVO: las metas las teclea el dueño, no salen de ninguna parte.
@@ -2164,6 +2189,9 @@ export function runMigrations(db) {
     // el primero sin el segundo). `manage` cubre crear/mover/cerrar oportunidad y registrar actividad.
     { module: 'crm',       action: 'read',   description: 'Ver el CRM: embudo de oportunidades y actividad de cliente' },
     { module: 'crm',       action: 'manage', description: 'Crear/mover/cerrar oportunidades y registrar actividad de cliente' },
+    // Peldaño 7 · servicios profesionales — Proyectos. `edit` cubre crear/editar/archivar/restaurar.
+    { module: 'proyectos', action: 'read',   description: 'Ver proyectos' },
+    { module: 'proyectos', action: 'edit',   description: 'Crear/editar/archivar/restaurar proyectos' },
   ];
   for (const p of permissionsData) {
     db.prepare('INSERT OR IGNORE INTO permissions (module, action, description) VALUES (?, ?, ?)').run(p.module, p.action, p.description);

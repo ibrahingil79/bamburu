@@ -6,6 +6,7 @@ import { createDashboardRoutes } from './dashboard.js';
 import { createProductRoutes } from './products.js';
 import { createCategoryRoutes } from './categories.js';
 import { createClientRoutes } from './clients.js';
+import { createProyectoRoutes } from './proyectos.js';   // Escalera · paso 7 — servicios profesionales · PIEZA 1
 import { createOrderRoutes } from './orders.js';
 import { createInventoryRoutes } from './inventory.js';
 import { createStockRoutes } from './stock.js';
@@ -60,6 +61,7 @@ export function mountRoutes(app, db) {
   const { api: prodApi, views: prodViews, tagsViews } = createProductRoutes(db);
   const { api: catApi, views: catViews } = createCategoryRoutes(db);
   const { api: clientApi, views: clientViews } = createClientRoutes(db);
+  const { api: proyApi, views: proyViews } = createProyectoRoutes(db);   // paso 7 · proyectos
   const { api: orderApi, views: orderViews } = createOrderRoutes(db);
   const { api: invApi, views: invViews } = createInventoryRoutes(db);
   const { api: stockApi } = createStockRoutes(db);
@@ -106,6 +108,7 @@ export function mountRoutes(app, db) {
   admin.route('/tags', tagsViews);
   admin.route('/categories', catViews);
   admin.route('/clients', clientViews);
+  admin.route('/proyectos', proyViews);   // ← /admin/proyectos (vista con candado proyectos.read)
   // PIEZA C — POS viejo RETIRADO del admin (clúster sales_orders, sin Verifactu). Desmontado, no
   // borrado: orders.js sigue en el repo. Cae con él la falsa "FACTURA" (D3, /admin/orders/:id/invoice),
   // el POS, los borradores y los reembolsos viejos. Archivado de tablas y corte de escritura de DISA = D1.
@@ -163,6 +166,7 @@ export function mountRoutes(app, db) {
   apiApp.route('/products', prodApi);
   apiApp.route('/categories', catApi);
   apiApp.route('/clients', clientApi);
+  apiApp.route('/proyectos', proyApi);   // ← /api/erp/proyectos (CRUD con proyectos.read/edit)
   // PIEZA C — API del POS viejo RETIRADA (ver nota arriba). Desmontado, no borrado.
   // apiApp.route('/orders', orderApi);
   apiApp.route('/inventory', invApi);

@@ -4,7 +4,7 @@
 // al crear. Formato PREFIJO + 4 cifras con ceros; si se superan 9999, crece a 5+ sin romper.
 // Cada tenant tiene su BD → el contador es por tenant automáticamente.
 
-export const CODE_PREFIX = { client: 'CLI-', supplier: 'PROV-', product: 'PROD-', purchase_order: 'OC-', purchase_order_receipt: 'RC-', supplier_return: 'DEV-', stock_transfer: 'TR-', supplier_invoice: 'FRP-', supplier_credit: 'ABP-', quote: 'PRE-', order: 'PED-', delivery_note: 'DEL-' };
+export const CODE_PREFIX = { client: 'CLI-', supplier: 'PROV-', product: 'PROD-', purchase_order: 'OC-', purchase_order_receipt: 'RC-', supplier_return: 'DEV-', stock_transfer: 'TR-', supplier_invoice: 'FRP-', supplier_credit: 'ABP-', quote: 'PRE-', order: 'PED-', delivery_note: 'DEL-', project: 'PRY-' };
 
 export function formatCode(prefix, seq) {
   return prefix + String(seq).padStart(4, '0');   // 9999→'9999', 10000→'10000' (no rompe)

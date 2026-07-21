@@ -61,6 +61,7 @@ export const ENTITY = {
   COMPANY_CONFIG:   'company_config',
   DISCOUNT_CODE:    'discount_code',
   ATTACHMENT:       'attachment',
+  PROJECT:          'proyecto',
 };
 
 // Tabla → entidad, para la vía GENÉRICA de DISA (`insert_record`/`update_record`/`delete_record`
