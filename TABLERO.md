@@ -19,8 +19,9 @@
 > (catálogo de las 5 áreas + responsable + informes por área + plan financiero) HECHOS (17 jul).**
 > **HECHO el constructor completo: 4a (ventas) + 4a-bis (compras/clientes/inventario) + 4b (cálculos
 > propios, combinar fuentes, compartir paneles).** **Contabilidad sigue FUERA, pendiente de tu decisión.**
-> **Siguiente: paso 5 (DISA predictiva) o paso 6 (dashboards personalizables — ya posible: los paneles
-> existen). No se inicia sin tu encargo.** El **Backlog** de abajo NO
+> **Pasos 5 (DISA predictiva: vigía + voz + dibujo + priorización/Inicio) y 6 (Inicio personalizable)
+> HECHOS y VALIDADOS por Ibrahim en pantalla (21 jul 2026). Siguiente: paso 7 (servicios profesionales ·
+> 1er oficio). No se inicia sin tu encargo.** El **Backlog** de abajo NO
 > compite con la escalera: es lo que le falta a El Suelo (el umbral) más la deuda. Plan del Eje C
 > cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
@@ -1864,14 +1865,14 @@ ampliar es aditivo cuando se pida.)*
 > componer el Inicio con paneles guardados — ahora es posible porque los paneles existen) y la decisión
 > pendiente de **Contabilidad en el constructor**.
 
-### ⬜ 5 — DISA predictiva
+### ✅ 5 — DISA predictiva · VALIDADO por Ibrahim en pantalla (21 jul 2026)
 Previsión de caja **3/6/12 meses** · detección de anomalías · agente que avisa. Es "DISA como producto
 proactivo/predictivo" — lo que el mapa de capas prometía y nunca tuvo número.
 **Usa el motor de 4a para MOSTRAR: DISA analiza, no dibuja.**
 *No reabre el Eje B (✅ COMPLETO, D0–D5f, seis propuestas de proactividad): aquello era DISA que
 **prepara y propone**; esto es DISA que **predice**.*
 
-- **PIEZA 1 — EL VIGÍA (motor de detección) · ⬜ ENTREGADA, PENDIENTE DE VALIDACIÓN DE IBRAHIM.**
+- **PIEZA 1 — EL VIGÍA (motor de detección) · ✅ VALIDADA por Ibrahim (21 jul 2026).**
   Motor `modules/erp/vigia.js` + ruta/pantalla `modules/erp/routes/vigia.js` (`/admin/vigia`, gate
   `analytics.read`) + entrada de menú en Analítica. **NO hace sus propias cuentas:** cada hallazgo toma
   la cifra TAL CUAL del motor de su área —el mismo que pinta la pantalla— así que es imposible que
@@ -1889,7 +1890,7 @@ proactivo/predictivo" — lo que el mapa de capas prometía y nunca tuvo número
   previsión de caja, persistencia visto/descartado (en tabla `disa_*` fuera de WRITABLE_TABLES) y el
   agente que avisa.
 
-- **PIEZA 2 — LA VOZ (narración + decisión propuesta) · ⬜ ENTREGADA, PENDIENTE DE VALIDACIÓN DE IBRAHIM.**
+- **PIEZA 2 — LA VOZ (narración + decisión propuesta) · ✅ VALIDADA por Ibrahim (21 jul 2026).**
   Módulo `modules/erp/voz.js` (función PURA `hallazgo → aviso`) + ruta/vista en `modules/erp/routes/vigia.js`
   (API `/api/erp/vigia/avisos` + tarjetas en `/admin/vigia`, encima del detalle crudo). Viste cada
   hallazgo del vigía con **(a) qué pasa + desde cuándo** y **(b) decisión propuesta** (jamás un hueco
@@ -1917,7 +1918,7 @@ proactivo/predictivo" — lo que el mapa de capas prometía y nunca tuvo número
   "no tocar el vigía") — queda a decisión de Ibrahim. Pieza posterior: previsión de caja + la capa de
   EJECUCIÓN (recordatorios, correos) que sí acciona la decisión que la voz solo propone.
 
-- **PIEZA 3 — EL DIBUJO (gráfico de apoyo por aviso) · ⬜ ENTREGADA, PENDIENTE DE VALIDACIÓN DE IBRAHIM.**
+- **PIEZA 3 — EL DIBUJO (gráfico de apoyo por aviso) · ✅ VALIDADA por Ibrahim (21 jul 2026).**
   Módulo `modules/erp/dibujo.js` (compone una RECETA por tipo de aviso) + `public/js/grafico-constructor.js`
   (el render del constructor alojado UNA vez, para reutilizarlo sin duplicarlo) + enganche en
   `modules/erp/routes/vigia.js` (la API `/avisos` adjunta la receta; la vista pinta bajo cada aviso un
@@ -1945,8 +1946,8 @@ proactivo/predictivo" — lo que el mapa de capas prometía y nunca tuvo número
   Alternativa señalada: extraer `dibujar()` de `analytics.js` al módulo compartido (fuente única real de
   render, tocando el constructor) — queda a decisión de Ibrahim.
 
-- **PIEZA 5 — DÓNDE TE ESPERA (priorización + Inicio + barrido de permisos) · ⬜ ENTREGADA, PENDIENTE
-  DE VALIDACIÓN DE IBRAHIM. Al validarla, el peldaño 5 (detección proactiva) queda CERRADO.**
+- **PIEZA 5 — DÓNDE TE ESPERA (priorización + Inicio + barrido de permisos) · ✅ VALIDADA por Ibrahim
+  (21 jul 2026). Con ella, el peldaño 5 (detección proactiva) queda CERRADO.**
   Módulo `modules/erp/prioridad.js` (ordena y etiqueta los avisos ya producidos por las piezas 1-3) +
   enganche en `routes/vigia.js` (la API `/avisos` ordena; la lista sale por grupos con píldora) + bloque
   nuevo en el Inicio (`views/disaHome.html.js`). **Solo ordena y coloca; no toca la detección, la voz ni
@@ -1973,14 +1974,14 @@ proactivo/predictivo" — lo que el mapa de capas prometía y nunca tuvo número
   intercalados por €; el cliente dormido, al final (BAJA). **Al validar Ibrahim en pantalla, el peldaño 5
   (detección proactiva) queda cerrado.**
 
-### ⬜ 6 — Dashboards personalizables
+### ✅ 6 — Dashboards personalizables · INICIO PERSONALIZABLE VALIDADO por Ibrahim en pantalla (21 jul 2026)
 El usuario compone su **Inicio** con sus propios gráficos guardados en 4a. Aquí entra también el
 **sidebar personalizable** (ocultar/reordenar módulos) — *de las "mejoras menores" de la auditoría vs
 Holded*: es la misma idea (que el usuario ordene su casa) y comparte la decisión de dónde se guarda la
 preferencia.
 
-- **INICIO PERSONALIZABLE (opción C · híbrido) · ⬜ ENTREGADO, PENDIENTE DE VALIDAR EN PANTALLA POR
-  IBRAHIM. Al validarlo, el peldaño 6 queda CERRADO.**
+- **INICIO PERSONALIZABLE (opción C · híbrido) · ✅ VALIDADO por Ibrahim en pantalla (21 jul 2026).
+  Con ello, el peldaño 6 queda CERRADO.**
   El Inicio se compone en una **rejilla** de bloques: los **paneles guardados del constructor** (4a/4b) +
   los **bloques nativos** que el Inicio ya tenía (cifras del negocio, avisos, vigía de DISA). Colocar =
   añadir/quitar, reordenar (drag, Sortable.js ya vendido) y **redimensionar** (ancho/alto en la rejilla).
