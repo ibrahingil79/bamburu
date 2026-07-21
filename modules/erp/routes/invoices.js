@@ -438,6 +438,9 @@ export function createRectificativa(db, data) {
     }
 
     db.prepare("UPDATE invoices SET status='rectificada' WHERE id=?").run(original.id);
+    // PIEZA 4 — la rectificativa HEREDA el proyecto de la original (campo no fiscal, fuera del hash): así el
+    // abono netea DENTRO del mismo proyecto en la rentabilidad. Reasignable después como cualquier factura.
+    if (original.project_id != null) db.prepare('UPDATE invoices SET project_id=? WHERE id=?').run(original.project_id, invoiceId);
     // VERI*FACTU T1: la rectificativa es un ALTA en serie 'R' (TipoFactura = R1..R5); su registro
     // de alta oficial (huella encadenada) va en la MISMA transacción.
     const reg = recordVerifactuAlta(db, {
@@ -1024,6 +1027,23 @@ export function createInvoiceRoutes(db) {
       const code = e.message === 'Factura no encontrada' ? 404 : 400;
       return c.json({ error: safeError(e) }, code);
     }
+  });
+
+  // PIEZA 4 — asignar/reasignar el PROYECTO de una factura (etiqueta NO fiscal, fuera del hash Verifactu:
+  // no toca la cadena). Quien puede emitir facturas (invoices.create). Reasignable: recoloca su importe en
+  // la rentabilidad, en vivo. La rectificativa hereda el proyecto de la original al crearse.
+  api.post('/:id/proyecto', requirePerm('invoices.create'), async c => {
+    try {
+      const id = parseInt(c.req.param('id'));
+      const inv = db.prepare('SELECT id, invoice_number FROM invoices WHERE id=?').get(id);
+      if (!inv) return c.json({ error: 'Factura no encontrada' }, 404);
+      const body = await c.req.json().catch(() => ({}));
+      const pid = body.project_id ? Number(body.project_id) : null;
+      if (pid != null && !db.prepare('SELECT 1 FROM proyectos WHERE id=? AND active=1').get(pid)) return c.json({ error: 'Proyecto no válido' }, 400);
+      db.prepare('UPDATE invoices SET project_id=? WHERE id=?').run(pid, id);
+      logActivity(db, c.get('session'), 'Asignó proyecto a factura', ENTITY.INVOICE, id, inv.invoice_number + ' → ' + (pid ? 'proyecto #' + pid : 'sin proyecto'));
+      return c.json({ ok: true, project_id: pid });
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   // POST /api/erp/invoices/:id/rectificativa — crea factura rectificativa (serie R)
@@ -1817,6 +1837,15 @@ export function createInvoiceRoutes(db) {
                ? `<div style="margin-top:.6rem"><a href="/admin/settings" class="btn btn-secondary btn-sm">Completar datos del negocio</a></div>` : ''}
            </div>`;
 
+      // PIEZA 4 — etiqueta de proyecto (rentabilidad). Solo quien puede emitir facturas la asigna/reasigna.
+      const puedeProyecto = can(c, 'invoices.create');
+      const proyRows = db.prepare("SELECT id, codigo, nombre FROM proyectos WHERE active=1 ORDER BY nombre").all();
+      const proyOptions = proyRows.map(p => `<option value="${p.id}"${inv.project_id === p.id ? ' selected' : ''}>${escHtml((p.codigo ? p.codigo + ' · ' : '') + p.nombre)}</option>`).join('');
+      const proyNombreActual = inv.project_id ? (db.prepare('SELECT codigo, nombre FROM proyectos WHERE id=?').get(inv.project_id)) : null;
+      const proyRowHtml = puedeProyecto
+        ? `<div class="dp-row"><span class="k">Proyecto</span><span class="v"><select id="invProyecto" class="form-control" style="max-width:230px" onchange="guardarProyecto()"><option value="">— Sin proyecto —</option>${proyOptions}</select></span></div>`
+        : (proyNombreActual ? `<div class="dp-row"><span class="k">Proyecto</span><span class="v">${escHtml((proyNombreActual.codigo ? proyNombreActual.codigo + ' · ' : '') + proyNombreActual.nombre)}</span></div>` : '');
+
       const panel = `
 <style>
   .fe-nota{border-radius:8px;padding:.7rem .9rem;font-size:12px;line-height:1.5;margin-top:12px}
@@ -1830,6 +1859,7 @@ export function createInvoiceRoutes(db) {
   <div class="dp-row"><span class="k">Fecha</span><span class="v">${inv.issue_date}</span></div>
   <div class="dp-row"><span class="k">Cliente</span><span class="v">${escHtml(inv.client_name || 'Cliente general')}</span></div>
   <div class="dp-row"><span class="k">Total</span><span class="v">${sym}${inv.total.toFixed(2)}</span></div>
+  ${proyRowHtml}
   <div class="dp-actions" style="margin-top:14px">
     <button onclick="window.print()" class="btn btn-primary">Imprimir</button>
     <a href="/admin/invoices/${inv.id}/pdf" class="btn btn-secondary">Descargar PDF</a>
@@ -1867,6 +1897,11 @@ ${esTicketSustituible ? `
 </div>` : ''}
 <script>
   const CSRF = ${JSON.stringify(csrfToken)};
+  ${puedeProyecto ? `async function guardarProyecto(){
+    const pid = document.getElementById('invProyecto').value;
+    try { await api('POST','/api/erp/invoices/${inv.id}/proyecto',{ project_id: pid || null }); toast('Proyecto actualizado'); }
+    catch(e){ toast(e.message,'err'); }
+  }` : ''}
   async function anularFactura(){
     const motivo = prompt('Motivo de anulación de la factura ${inv.invoice_number}:');
     if (motivo === null) return;

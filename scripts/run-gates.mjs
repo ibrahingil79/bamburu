@@ -55,7 +55,8 @@ const GRUPOS = {
   // va incluido a propósito: facturar horas EMITE facturas reales, así que la regresión tiene que probar
   // que Ventas (la "única verdad") no se mueve por ello.
   servicios: ['test-proyectos', 'gate-proyectos-pantalla', 'test-tiempo', 'gate-tiempo-pantalla',
-              'test-facturar-horas', 'gate-facturar-horas-pantalla', 'verify-constructor'],
+              'test-facturar-horas', 'gate-facturar-horas-pantalla',
+              'test-rentabilidad-proyecto', 'gate-rentabilidad-pantalla', 'verify-constructor'],
   // Escalera · paso 2 — MARGEN. Vigila que la cifra de "cuánto gano" no mienta: IVA fuera, coste
   // CONGELADO (no el WAC de hoy), lo que no tiene coste apartado en vez de regalado al 100%, y el
   // total cuadrando con la suma del desglose.

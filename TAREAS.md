@@ -5,12 +5,12 @@
 >
 > **Último trabajo (registro, no plan) — 21 jul 2026:** escalera (CANON §4) con peldaños 1-6 cerrados y
 > validados. **Peldaño 7 (servicios profesionales · 1er oficio) en curso:** PIEZA 1 (el proyecto: entidad
-> + pantalla) y PIEZA 2 (registro de tiempo: cronómetro + manual, importe con la tarifa de la persona,
-> vista semanal) validadas y cerradas; PIEZA 3 (facturar horas: horas facturables → factura REAL
-> reutilizando el motor createInvoice; agrupa una línea por tarea+tarifa; "facturada" en vivo; anular
-> libera) **entregada, pendiente de validación de Ibrahim** (test-facturar-horas 31/0, gate 21/0, grupo
-> `servicios` 7/7, Ventas 973.267,93 € intacto). Detalle vivo en **TABLERO.md** y **session.json** — esta
-> es solo la nota de "qué se hizo".
+> + pantalla), PIEZA 2 (registro de tiempo) y PIEZA 3 (facturar horas) validadas y cerradas; PIEZA 4
+> parte 1 (rentabilidad por proyecto: etiqueta project_id en facturas de venta y recibidas, P&G filtrable
+> por proyecto derivado del diario EN VIVO, panel en la ficha y comparativa que marca en rojo a los que
+> pierden) **entregada, pendiente de validación de Ibrahim** (test-rentabilidad-proyecto 22/0, gate 15/0
+> con neto-cero en Ventas y P&G, test-contabilidad-pyg 36/0, grupo `servicios` 9/9, Ventas 973.267,93 €
+> intacto). Detalle vivo en **TABLERO.md** y **session.json** — esta es solo la nota de "qué se hizo".
 
 # TAREAS BAMBURU — Roadmap Estratégico
 

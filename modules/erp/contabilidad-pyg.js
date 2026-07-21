@@ -70,12 +70,36 @@ export function pygPartida(code) {
 }
 
 // ── Cuenta de Pérdidas y Ganancias del periodo [from, to], derivada del diario ──
-export function cuentaPyG(db, from, to) {
-  const rows = db.prepare(
+// PIEZA 4 (parte 1) — filas del diario (haber/debe por cuenta) del periodo. `opts.project` ACOTA sin
+// cambiar el cálculo (solo el WHERE): undefined → todo (idéntico a siempre); <id> → asientos cuyo documento
+// origen (factura de venta o recibida) es de ese proyecto; null/0/'estructura' → asientos NO atribuibles a
+// ningún proyecto (estructura). La atribución resuelve el asiento → su documento por (origin_type,
+// origin_id) → project_id, EN VIVO (no se guarda proyecto en el diario). invoices cubre venta+abono;
+// supplier_invoices cubre compra+gasto+abono de proveedor. Partición limpia ⇒ Σ proyectos + estructura = total.
+function pygRows(db, from, to, opts = {}) {
+  const p = opts.project;
+  if (p === undefined) {
+    return db.prepare(
+      `SELECT l.account_code code, ROUND(SUM(l.debit),2) debe, ROUND(SUM(l.credit),2) haber
+         FROM ledger_lines l JOIN ledger_entries e ON e.id = l.entry_id
+        WHERE e.entry_date BETWEEN ? AND ?
+        GROUP BY l.account_code`).all(from, to);
+  }
+  const proj = 'COALESCE(iv.project_id, si.project_id)';
+  const noAsignado = (p === null || p === 0 || p === 'estructura' || p === 'none');
+  const where = noAsignado ? `${proj} IS NULL` : `${proj} = ?`;
+  const args = noAsignado ? [from, to] : [from, to, Number(p)];
+  return db.prepare(
     `SELECT l.account_code code, ROUND(SUM(l.debit),2) debe, ROUND(SUM(l.credit),2) haber
        FROM ledger_lines l JOIN ledger_entries e ON e.id = l.entry_id
-      WHERE e.entry_date BETWEEN ? AND ?
-      GROUP BY l.account_code`).all(from, to);
+       LEFT JOIN invoices iv ON e.origin_type='invoice' AND iv.id = e.origin_id
+       LEFT JOIN supplier_invoices si ON e.origin_type='supplier_invoice' AND si.id = e.origin_id
+      WHERE e.entry_date BETWEEN ? AND ? AND ${where}
+      GROUP BY l.account_code`).all(...args);
+}
+
+export function cuentaPyG(db, from, to, opts = {}) {
+  const rows = pygRows(db, from, to, opts);
 
   const imp = {};
   for (const p of PARTIDAS) imp[p.key] = 0;

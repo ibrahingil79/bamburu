@@ -339,6 +339,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     proyectos:        'proyectos.read',   // peldaño 7 · servicios profesionales
     tiempo:           'tiempo.read',      // peldaño 7 · PIEZA 2 · registro de tiempo
     'facturar-horas': 'invoices.create',  // peldaño 7 · PIEZA 3 · facturar horas (mismo permiso que emitir factura)
+    rentabilidad:     ['proyectos.read', 'invoices.read'],   // peldaño 7 · PIEZA 4 · exige AMBOS (proyectos + P&G)
     analytics:        'analytics.read',
     vigia:            'analytics.read',   // DISA predictiva · el vigía (dentro filtra por detector)
     disa:             null,
@@ -392,6 +393,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       { href: '/admin/proyectos', label: 'Proyectos', key: 'proyectos', icon: 'ti-folders' },
       { href: '/admin/tiempo', label: 'Registro de tiempo', key: 'tiempo', icon: 'ti-clock-play' },
       { href: '/admin/facturar-horas', label: 'Facturar horas', key: 'facturar-horas', icon: 'ti-clock-dollar' },
+      { href: '/admin/rentabilidad', label: 'Rentabilidad', key: 'rentabilidad', icon: 'ti-chart-pie' },
     ]},
     { label: 'Compras y gastos', icon: 'ti-receipt', items: [
       { href: '/admin/supplier-invoices', label: 'Facturas recibidas', key: 'supplier-invoices', icon: 'ti-file-dollar' },
@@ -457,7 +459,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   const hasCustomPerms = !isAdmin && !isOwner && perms.length > 0;
   const navFilter = i => {
     if (roleFilters[i.key] && !roleFilters[i.key](role)) return false;
-    if (hasCustomPerms) { const req = navPerms[i.key]; if (req != null && !perms.includes(req)) return false; }
+    if (hasCustomPerms) { const req = navPerms[i.key]; if (req != null) { const reqs = Array.isArray(req) ? req : [req]; if (!reqs.every(r => perms.includes(r))) return false; } }
     return true;
   };
   // Rail: Inicio (enlace directo) + un icono por ÁREA. Cada área abre un flyout con sus hijos

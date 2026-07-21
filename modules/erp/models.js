@@ -1273,6 +1273,16 @@ export function runMigrations(db) {
   // tocar el motor de anulación. (Es entrada→factura, distinto del factura→proyecto que llega en la pieza 4.)
   addCol(db, 'time_entries', 'invoice_id', 'INTEGER');
   db.exec(`CREATE INDEX IF NOT EXISTS idx_time_entries_invoice ON time_entries(invoice_id)`);
+  // PIEZA 4 (parte 1) — RENTABILIDAD POR PROYECTO: etiqueta de proyecto (FK nullable, opcional, leída EN
+  // VIVO) en los DOS documentos que postean al P&G: factura de venta (+abono/rectificativa) y factura
+  // recibida (compra de mercadería + gasto + abono de proveedor). La "compra directa" (tabla `purchases`)
+  // NO se etiqueta: es STOCK, no postea a grupos 6/7. El P&G se filtra por proyecto resolviendo el asiento
+  // → su documento (origin_type/origin_id, ya indexado) → project_id, sin columna nueva en el diario ni
+  // tocar el posteo/Verifactu. Aditivo, idempotente, sin DROP; ambas tablas siguen FUERA de WRITABLE_TABLES.
+  addCol(db, 'invoices', 'project_id', 'INTEGER');
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_invoices_project ON invoices(project_id)`);
+  addCol(db, 'supplier_invoices', 'project_id', 'INTEGER');
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_supplier_invoices_project ON supplier_invoices(project_id)`);
 
   // ── ESCALERA · PASO 3 · BLOQUE 2 — PLAN FINANCIERO: los objetivos (aditivo, reversible) ───────
   // El lado "real" ya existe (ventasPorPeriodo / margenResumen). Esto es el lado "objetivo", que es

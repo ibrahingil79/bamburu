@@ -22,8 +22,9 @@
 > **Pasos 5 (DISA predictiva: vigía + voz + dibujo + priorización/Inicio) y 6 (Inicio personalizable)
 > HECHOS y VALIDADOS por Ibrahim en pantalla (21 jul 2026). Paso 7 (servicios profesionales · 1er oficio)
 > EN CURSO: Piezas 1 (proyecto), 2 (registro de tiempo) y 3 (facturar horas) VALIDADAS por Ibrahim en
-> pantalla (21 jul; «Proyectos» ya es área propia del rail). Siguiente: Pieza 4 (rentabilidad por
-> proyecto). No se inicia nada sin tu encargo.** El **Backlog** de abajo NO
+> pantalla (21 jul; «Proyectos» ya es área propia del rail). Pieza 4 (parte 1: rentabilidad por proyecto)
+> ENTREGADA y pendiente de validar en pantalla. Siguiente: Pieza 4 parte 2 (reparto de nóminas) y Pieza 5
+> (calendario). No se inicia nada sin tu encargo.** El **Backlog** de abajo NO
 > compite con la escalera: es lo que le falta a El Suelo (el umbral) más la deuda. Plan del Eje C
 > cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
@@ -2097,6 +2098,40 @@ Aquí aterrizan, de las listas viejas:
   y el constructor intactos. **RESIDUO por diseño**: la factura de prueba del gate se anula (permanece en la
   cadena inmutable, neto-cero en Ventas). **FUERA:** rentabilidad por proyecto (pieza 4, ahí se enlaza
   `project_id` a facturas/compras) y calendario (pieza 5). **NO cerrar en Notion sin validación en pantalla.**
+
+- **PIEZA 4 (parte 1) — RENTABILIDAD POR PROYECTO · 🟡 ENTREGADA (21 jul 2026), pendiente de validación en
+  pantalla.** Etiqueta de proyecto (`project_id`, FK nullable, leída EN VIVO) en las **dos** tablas que
+  postean al P&G: **factura de venta** (`invoices`, cubre venta + abono/rectificativa) y **factura recibida**
+  (`supplier_invoices`, cubre compra-mercadería + gasto + abono de proveedor). La "compra directa"
+  (`purchases`) queda FUERA a propósito: es stock/activo, no postea a grupos 6/7. **Hallazgo clave de la
+  auditoría:** `cuentaPyG` es una vista del **libro diario**, no de los documentos → el filtro por proyecto
+  resuelve el asiento → su documento (`origin_type`/`origin_id`, ya indexado) → `project_id`, **EN VIVO**
+  (sin columna nueva en el diario, sin tocar el posteo ni Verifactu). `cuentaPyG(db,from,to,{project})`
+  ACOTA sin cambiar la matemática: `<id>` = ese proyecto; `null` = estructura (no asignado); sin opts =
+  todo. **Regla dura verificada: Σ(P&G de cada proyecto) + estructura = P&G total, al céntimo.** Motor nuevo
+  `modules/erp/rentabilidad.js` (rentabilidadProyecto/comparativaProyectos, única fuente = P&G filtrado).
+  **Panel** en la ficha del proyecto (ingresos facturado sin IVA − gastos = resultado + margen %; **cobrado**
+  aparte como caja, no cambia el resultado). **Comparativa** `/admin/rentabilidad` (lista por proyecto +
+  estructura + TOTAL, marca en **rojo** los que pierden). **Selector "Proyecto"** en el detalle de la factura
+  de venta y de la recibida (reasignable, en vivo; en venta es campo NO fiscal fuera del hash) + en el alta
+  de factura recibida. **Auto-etiqueta:** la factura de "Facturar horas" nace con su proyecto; la
+  rectificativa hereda el de la original (el abono netea dentro del proyecto). **Permisos:** la etiqueta la
+  pone quien edita el documento (invoices.create / purchases.create); el panel y la comparativa exigen
+  **proyectos.read Y invoices.read** (candado AND en TODAS las rutas incluida la vista; navFilter admite
+  array de permisos; sin ambos: ni menú ni URL, 403). Migración aditiva/idempotente, sin DROP; ambas tablas
+  siguen FUERA de WRITABLE_TABLES. Ficheros: `models.js` (2 columnas + índices), `contabilidad-pyg.js`
+  (`pygRows` + opts), `rentabilidad.js` (motor, nuevo), `routes/rentabilidad.js` (nuevo), `routes/proyectos.js`
+  (panel), `routes/invoices.js` (endpoint proyecto + selector + rectificativa hereda), `routes/supplier-invoices.js`
+  (esquema + svc + endpoint + selector), `routes/facturar-horas.js` (auto-etiqueta), `schemas.js`, `layout.js`
+  (nav + permiso AND), `routes/index.js` (mount). Verificado: `test-rentabilidad-proyecto` 22/0 (filtro cuadra
+  · Σ+estructura=total al céntimo · reasignar mueve en vivo · cobrado aparte · comparativa marca perdedores ·
+  migración idempotente), `gate-rentabilidad-pantalla` 15/0 (asignar desde pantalla venta+gasto · panel ·
+  comparativa en rojo · permisos AND 403 · 0 errores JS · **neto-cero en Ventas Y en P&G total**),
+  `test-contabilidad-pyg` 36/0 (matemática del P&G intacta), grupo `servicios` **9/9** + `margen` 6/6.
+  **Ventas sigue 973.267,93 €**; Verifactu, P&G total, las 5 áreas del constructor y los KPIs intactos.
+  **FUERA (parte 2 y pieza 5):** reparto de nóminas por horas entre proyectos, "Proyectos" como área del
+  constructor, coste/hora por persona (descartado), calendario. **El peldaño 7 SIGUE ABIERTO. NO cerrar en
+  Notion sin validación en pantalla.**
 
 ### ⬜ 8 — Salud / bienestar · **2º oficio**
 Agenda presencial.

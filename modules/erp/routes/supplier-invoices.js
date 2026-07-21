@@ -144,13 +144,14 @@ export function createSupplierInvoiceSvc(db, d, opts = {}) {
   const s = db.prepare('SELECT name, fiscal_id, address, payment_term_days FROM suppliers WHERE id=?').get(supplierId) || {};
   const dueDate = dueOverride || addDays(d.invoice_date, s.payment_term_days || 0);
   const code = nextCode(db, 'supplier_invoice');
+  const projectId = d.project_id ? Number(d.project_id) : null;   // PIEZA 4 · etiqueta de proyecto (opcional)
   const r = db.prepare(`INSERT INTO supplier_invoices
       (supplier_id, internal_code, supplier_invoice_number, invoice_date, due_date, base, tax, total, status,
-       supplier_name, supplier_fiscal_id, supplier_address, entity_type, entity_id, expense_category, notes)
-      VALUES (?,?,?,?,?,?,?,?, 'vigente', ?,?,?,?,?,?,?)`)
+       supplier_name, supplier_fiscal_id, supplier_address, entity_type, entity_id, expense_category, notes, project_id)
+      VALUES (?,?,?,?,?,?,?,?, 'vigente', ?,?,?,?,?,?,?,?)`)
     .run(supplierId, code, number, d.invoice_date, dueDate, base, tax, total,
          s.name || '', s.fiscal_id || '', s.address || '',
-         isExpense ? null : d.entity_type, isExpense ? null : d.entity_id, category, d.notes || '');
+         isExpense ? null : d.entity_type, isExpense ? null : d.entity_id, category, d.notes || '', projectId);
   const invId = r.lastInsertRowid;
   if (lines) {
     const ins = db.prepare('INSERT INTO supplier_invoice_items (supplier_invoice_id, concepto, base, tax_rate, cuota) VALUES (?,?,?,?,?)');
@@ -428,6 +429,22 @@ export function createSupplierInvoiceRoutes(db) {
       const r = anularSupplierInvoiceSvc(db, id, c.get('validated').motivo);
       logActivity(db, c.get('session'), 'Anuló factura recibida', ENTITY.SUPPLIER_INVOICE, id, c.get('validated').motivo);
       return c.json({ ...r, message: 'Factura anulada' });
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+  });
+
+  // PIEZA 4 — asignar/reasignar el PROYECTO de una factura recibida (etiqueta no fiscal). Quien puede
+  // editar el documento (purchases.create). Reasignable: recoloca su importe en la rentabilidad, en vivo.
+  api.post('/:id/proyecto', requirePerm('purchases.create'), async c => {
+    try {
+      const id = parseInt(c.req.param('id'));
+      const inv = db.prepare('SELECT id, internal_code FROM supplier_invoices WHERE id=?').get(id);
+      if (!inv) return c.json({ error: 'Factura no encontrada' }, 404);
+      const body = await c.req.json().catch(() => ({}));
+      const pid = body.project_id ? Number(body.project_id) : null;
+      if (pid != null && !db.prepare('SELECT 1 FROM proyectos WHERE id=? AND active=1').get(pid)) return c.json({ error: 'Proyecto no válido' }, 400);
+      db.prepare('UPDATE supplier_invoices SET project_id=? WHERE id=?').run(pid, id);
+      logActivity(db, c.get('session'), 'Asignó proyecto a factura recibida', ENTITY.SUPPLIER_INVOICE, id, (inv.internal_code || ('#' + id)) + ' → ' + (pid ? 'proyecto #' + pid : 'sin proyecto'));
+      return c.json({ ok: true, project_id: pid });
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
@@ -872,6 +889,14 @@ export function createSupplierInvoiceRoutes(db) {
         <tbody>${inv.payments.length ? inv.payments.map(p => `<tr><td>${esc(p.paid_date)}</td><td style="text-align:right">${s}${Number(p.amount).toFixed(2)}</td><td>${esc(p.payment_method || '—')}</td><td>${esc(p.note || '')}</td><td style="text-align:right">${canCreate ? `<button class="btn btn-secondary btn-sm" onclick="deshacerPago(${inv.id},${p.id})">Deshacer</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin pagos registrados</td></tr>'}</tbody>
       </table>`;
 
+    // PIEZA 4 — etiqueta de proyecto (rentabilidad). La pone quien puede editar el documento (purchases.create).
+    const proyRows = db.prepare("SELECT id, codigo, nombre FROM proyectos WHERE active=1 ORDER BY nombre").all();
+    const proyOptions = proyRows.map(p => `<option value="${p.id}"${inv.project_id === p.id ? ' selected' : ''}>${esc((p.codigo ? p.codigo + ' · ' : '') + p.nombre)}</option>`).join('');
+    const proyActual = inv.project_id ? db.prepare('SELECT codigo, nombre FROM proyectos WHERE id=?').get(inv.project_id) : null;
+    const proyRowHtml = canCreate
+      ? `<div class="dp-row"><span class="k">Proyecto</span><span class="v"><select id="siProyecto" class="form-control" style="max-width:230px" onchange="guardarProyecto()"><option value="">— Sin proyecto —</option>${proyOptions}</select></span></div>`
+      : (proyActual ? `<div class="dp-row"><span class="k">Proyecto</span><span class="v">${esc((proyActual.codigo ? proyActual.codigo + ' · ' : '') + proyActual.nombre)}</span></div>` : '');
+
     const panel = `
       <div class="card"><div class="card-body">
         <div style="margin-bottom:12px">${statusBadge}</div>
@@ -880,6 +905,7 @@ export function createSupplierInvoiceRoutes(db) {
         <div class="dp-row"><span class="k">Fecha</span><span class="v">${esc(inv.invoice_date)}</span></div>
         <div class="dp-row"><span class="k">Vencimiento</span><span class="v">${esc(inv.due_date || '-')}</span></div>
         <div class="dp-row"><span class="k">Total</span><span class="v">${s}${Number(inv.total).toFixed(2)}</span></div>
+        ${proyRowHtml}
         <div class="dp-actions" style="margin-top:14px">
           ${actionBtns}
           <a href="/admin/supplier-invoices" class="btn btn-secondary">Volver</a>
@@ -889,6 +915,11 @@ export function createSupplierInvoiceRoutes(db) {
       <script>
       ${pagoModalScript(s)}
       window.pagoOnSaved = function(){ location.reload(); };
+      ${canCreate ? `async function guardarProyecto(){
+        const pid = document.getElementById('siProyecto').value;
+        try { await api('POST','/api/erp/supplier-invoices/${inv.id}/proyecto',{ project_id: pid || null }); toast('Proyecto actualizado'); }
+        catch(e){ toast(e.message||'Error','err'); }
+      }` : ''}
       var INV_HAS_PAYMENTS = ${inv.payments.length};
       async function anular(){
         var aviso = 'Motivo de la anulación (mín. 3 caracteres):';

@@ -613,6 +613,7 @@ export const supplierInvoiceSchema = z.object({
   tax:                     z.coerce.number().min(0).max(100_000_000).optional().default(0),
   total:                   z.coerce.number().min(0).max(100_000_000).optional(),
   notes:                   strOpt(1000),
+  project_id:              z.union([z.coerce.number().int().positive(), z.literal(''), z.null()]).optional(),   // PIEZA 4 · etiqueta de proyecto (opcional)
 })
   .refine(d => d.entity_type ? !!d.entity_id : true, { message: 'Falta el documento de origen', path: ['entity_id'] })
   .refine(d => d.entity_type || d.supplier_id, { message: 'Indica el proveedor (factura de gasto) o el documento de origen', path: ['supplier_id'] })

@@ -157,6 +157,8 @@ export function facturarHoras(db, input) {
       irpf_rate: d.irpf_rate || 0,
       notes: 'Horas del proyecto ' + (proy.codigo ? proy.codigo + ' · ' : '') + proy.nombre,
     });
+    // PIEZA 4 — auto-etiqueta la factura a SU proyecto (rentabilidad sin trabajo manual; reasignable después).
+    db.prepare('UPDATE invoices SET project_id=? WHERE id=?').run(proy.id, inv.id);
     const marcar = db.prepare('UPDATE time_entries SET invoice_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?');
     for (const id of ids) marcar.run(inv.id, id);
     return { invoice_id: inv.id, invoice_number: inv.invoice_number, n_entradas: ids.length, n_lineas: lineas.length };

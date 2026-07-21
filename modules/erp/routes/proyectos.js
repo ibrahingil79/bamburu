@@ -277,6 +277,7 @@ export function createProyectoRoutes(db) {
       <script>
       const PROY_SYM = ${JSON.stringify(sym)};
       const PUEDE_TIEMPO = ${can(c, 'tiempo.read') ? 'true' : 'false'};   // sección de registro de tiempo (peldaño 7 · pieza 2)
+      const PUEDE_RENT = ${(can(c, 'proyectos.read') && can(c, 'invoices.read')) ? 'true' : 'false'};   // panel de rentabilidad (peldaño 7 · pieza 4): exige proyectos.read + P&G
       function proyToggleCobro(){
         const horas = document.getElementById('pModo').value === 'horas';
         document.getElementById('pTarifaWrap').style.display = horas ? '' : 'none';
@@ -346,9 +347,28 @@ export function createProyectoRoutes(db) {
           +'<div><div class="form-label">Fechas</div><div>'+(p.fecha_inicio||'—')+' → '+(p.fecha_fin_prevista||'—')+'</div></div>'
           +'</div>'
           +(p.notas?'<div class="alert alert-ok">'+escHtml(p.notas)+'</div>':'')
+          +(PUEDE_RENT?'<div id="proyRent" style="margin-top:1.25rem;color:var(--muted)">Cargando rentabilidad…</div>':'')
           +(PUEDE_TIEMPO?'<div id="proyTiempo" style="margin-top:1.25rem;color:var(--muted)">Cargando registro de tiempo…</div>':'');
         openModal('proyDetail');
+        if(PUEDE_RENT) loadRentProy(id);
         if(PUEDE_TIEMPO) loadTiempoProy(id);
+      }
+      // PIEZA 4 — panel de rentabilidad: ingresos (facturado sin IVA) − gastos = resultado, con margen. El
+      // cobrado se muestra aparte (dato de caja). Sale del P&G filtrado por proyecto (única fuente de verdad).
+      async function loadRentProy(id){
+        const box=document.getElementById('proyRent'); if(!box) return;
+        let d; try{ d=await api('GET','/api/erp/rentabilidad/proyecto/'+id); }catch(e){ box.innerHTML=''; return; }
+        const dinero=n=>PROY_SYM+Number(n||0).toFixed(2);
+        const col=n=>(n<0?'var(--danger,#b23)':(n>0?'var(--ok,#1a7f37)':'var(--muted)'));
+        box.style.color='';
+        box.innerHTML='<h4 style="margin:0 0 .5rem">Rentabilidad</h4>'
+          +'<div class="grid g2" style="gap:.5rem 1rem">'
+          +'<div><div class="form-label">Ingresos (facturado, sin IVA)</div><div>'+dinero(d.ingresos)+'</div></div>'
+          +'<div><div class="form-label">Gastos asignados</div><div>'+dinero(d.gastos)+'</div></div>'
+          +'<div><div class="form-label">Resultado</div><div style="font-weight:700;color:'+col(d.resultado)+'">'+dinero(d.resultado)+'</div></div>'
+          +'<div><div class="form-label">Margen</div><div style="color:'+col(d.resultado)+'">'+(d.margenPct==null?'—':Number(d.margenPct).toFixed(1)+'%')+'</div></div>'
+          +'</div>'
+          +'<div style="margin-top:.5rem;color:var(--muted);font-size:.85rem">Cobrado (caja): <strong>'+dinero(d.cobrado)+'</strong> · no cambia el resultado</div>';
       }
       // PIEZA 2 — dentro de la ficha del proyecto: lista de tiempo + total de horas + total facturable.
       async function loadTiempoProy(id){
