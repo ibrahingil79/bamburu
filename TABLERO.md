@@ -2135,7 +2135,7 @@ Aquí aterrizan, de las listas viejas:
   es que cada trabajo NO lo mueve, vía neto-cero.)*
 
 - **PIEZA 4 (parte 2) — COSTE DE LAS HORAS EN LA RENTABILIDAD · ✅ ENTREGADA y verificada (22 jul 2026,
-  commit `PENDIENTE`).** Valora a COSTE cada entrada de tiempo y suma por proyecto para dar, junto al
+  commit `3d19945`).** Valora a COSTE cada entrada de tiempo y suma por proyecto para dar, junto al
   "resultado contable" de la parte 1 (INTACTO), un **"resultado de gestión"** que resta también el coste de
   las horas. **Cascada del panel:** Ingresos − Gastos directos = **Resultado contable** (parte 1, del P&G
   filtrado) − **Coste de las horas** (Σ horas × coste-hora congelado) = **Resultado de gestión** (nuevo).
