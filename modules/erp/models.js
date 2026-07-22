@@ -1273,6 +1273,14 @@ export function runMigrations(db) {
   // tocar el motor de anulación. (Es entrada→factura, distinto del factura→proyecto que llega en la pieza 4.)
   addCol(db, 'time_entries', 'invoice_id', 'INTEGER');
   db.exec(`CREATE INDEX IF NOT EXISTS idx_time_entries_invoice ON time_entries(invoice_id)`);
+  // PIEZA 4 (parte 2) — COSTE DE LAS HORAS: coste-hora CONGELADO en la entrada al crearla (misma filosofía
+  // que el WAC del peldaño 2: cambiar el coste-hora de una persona HOY no reescribe la rentabilidad de un
+  // proyecto pasado). `coste_hora_congelado` = coste/hora de la persona (admin_users.coste_hora) en el
+  // instante de crear la entrada; NULL/0 = "sin coste registrado" (NO es coste 0). `coste_backfill`=1 marca
+  // las entradas anteriores a la función (retro-rellenadas al coste-hora del momento, NO el del día real).
+  // Es coste (gestión), separado del importe FACTURABLE (venta, en vivo con tarifa_hora). Aditivo, sin DROP.
+  addCol(db, 'time_entries', 'coste_hora_congelado', 'REAL');
+  addCol(db, 'time_entries', 'coste_backfill', 'INTEGER NOT NULL DEFAULT 0');
   // PIEZA 4 (parte 1) — RENTABILIDAD POR PROYECTO: etiqueta de proyecto (FK nullable, opcional, leída EN
   // VIVO) en los DOS documentos que postean al P&G: factura de venta (+abono/rectificativa) y factura
   // recibida (compra de mercadería + gasto + abono de proveedor). La "compra directa" (tabla `purchases`)
@@ -2464,10 +2472,28 @@ Sé preciso con los números y siempre redondea correctamente.`,
   // para decidir textos hasta que exista ese motor.
   addCol(db, 'admin_users', 'idioma',        "TEXT DEFAULT 'es'");
   addCol(db, 'admin_users', 'foto_url',      'TEXT');
-  // Peldaño 7 · PIEZA 2 — tarifa/hora de la persona (dato de coste/facturación del negocio). La fija el
-  // dueño/admin en Usuarios; con ella se calcula EN VIVO el importe de cada entrada de tiempo (con la
-  // tarifa del proyecto de respaldo si la persona no tiene). El empleado no se la edita a sí mismo.
+  // Peldaño 7 · PIEZA 2 — tarifa/hora de FACTURACIÓN (precio de VENTA) de la persona. La fija el
+  // dueño/admin en Usuarios; con ella se calcula EN VIVO el importe facturable de cada entrada de tiempo
+  // (con la del proyecto de respaldo si la persona no tiene) y se factura en la pieza 3. El empleado no se
+  // la edita a sí mismo. NO es un coste: el coste-hora va aparte (coste_hora, abajo).
   addCol(db, 'admin_users', 'tarifa_hora',   'REAL');
+  // Peldaño 7 · PIEZA 4 (parte 2) — COSTE/hora de la persona (precio de COSTE, ESPEJO de tarifa_hora). La fija
+  // quien gestiona Usuarios (mismo permiso que la tarifa). Se congela en cada entrada de tiempo al crearla y
+  // alimenta el "resultado de gestión" del panel de rentabilidad. Es capa de GESTIÓN: NO entra en el P&G ni en
+  // el diario. Por defecto vacío/0 = "sin coste registrado". Separado de la tarifa (venta) a propósito.
+  addCol(db, 'admin_users', 'coste_hora',    'REAL');
+  // Backfill idempotente (una sola vez): estampa en las entradas de tiempo YA existentes el coste-hora ACTUAL
+  // de su persona, marcándolas como backfill (no es el coste del día real). Al introducirse la función el
+  // coste-hora suele estar vacío, así que casi siempre estampa NULL (= "sin coste"): el flag distingue "sin
+  // coste porque es anterior a la función" de "sin coste porque la persona no tiene coste-hora". No reescribe
+  // entradas ya estampadas en vivo. Guardado con una clave en settings para no repetirse.
+  if (!db.prepare('SELECT value FROM settings WHERE key=?').get('migration_time_entries_coste_backfill_2026_v1')) {
+    db.prepare(`UPDATE time_entries
+                   SET coste_hora_congelado = (SELECT u.coste_hora FROM admin_users u WHERE u.id = time_entries.user_id),
+                       coste_backfill = 1
+                 WHERE coste_hora_congelado IS NULL`).run();
+    db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run('migration_time_entries_coste_backfill_2026_v1', new Date().toISOString());
+  }
 
   // ── Facturae ──────────────────────────────────────────────────────────────────
   // Facturae 3.2.2 exige dirección fiscal ESTRUCTURADA (Address · PostCode · Town · Province ·

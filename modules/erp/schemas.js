@@ -531,8 +531,10 @@ export const userUpdateSchema = z.object({
   password: z.string().min(10).max(200).optional(),
   role: z.enum(['owner', 'admin', 'employee', 'readonly']).optional(),
   active: z.coerce.boolean().optional(),
-  // Peldaño 7 · PIEZA 2 — tarifa/hora de la persona (la fija el dueño/admin desde Usuarios).
+  // Peldaño 7 · PIEZA 2 — tarifa/hora de FACTURACIÓN (venta) de la persona (la fija el dueño/admin en Usuarios).
   tarifa_hora: priceOpt,
+  // Peldaño 7 · PIEZA 4 (parte 2) — coste/hora (coste, ESPEJO de la tarifa; mismo permiso). Capa de gestión.
+  coste_hora: priceOpt,
 });
 
 // ── Settings ───────────────────────────────────────────────────

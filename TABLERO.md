@@ -22,9 +22,10 @@
 > **Pasos 5 (DISA predictiva: vigía + voz + dibujo + priorización/Inicio) y 6 (Inicio personalizable)
 > HECHOS y VALIDADOS por Ibrahim en pantalla (21 jul 2026). Paso 7 (servicios profesionales · 1er oficio)
 > EN CURSO: Piezas 1 (proyecto), 2 (registro de tiempo) y 3 (facturar horas) VALIDADAS por Ibrahim en
-> pantalla (21 jul; «Proyectos» ya es área propia del rail). Pieza 4 (parte 1: rentabilidad por proyecto)
-> ENTREGADA y pendiente de validar en pantalla. Siguiente: Pieza 4 parte 2 (reparto de nóminas) y Pieza 5
-> (calendario). No se inicia nada sin tu encargo.** El **Backlog** de abajo NO
+> pantalla (21 jul; «Proyectos» ya es área propia del rail). **Pieza 4 COMPLETA (parte 1: rentabilidad
+> por proyecto — resultado contable; parte 2: coste de las horas — resultado de gestión), ENTREGADA y
+> verificada por test + gate en navegador real (22 jul).** Siguiente: **Pieza 5 (calendario)**, a la
+> espera de tu encargo. No se inicia nada sin tu encargo.** El **Backlog** de abajo NO
 > compite con la escalera: es lo que le falta a El Suelo (el umbral) más la deuda. Plan del Eje C
 > cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
@@ -2128,10 +2129,44 @@ Aquí aterrizan, de las listas viejas:
   migración idempotente), `gate-rentabilidad-pantalla` 15/0 (asignar desde pantalla venta+gasto · panel ·
   comparativa en rojo · permisos AND 403 · 0 errores JS · **neto-cero en Ventas Y en P&G total**),
   `test-contabilidad-pyg` 36/0 (matemática del P&G intacta), grupo `servicios` **9/9** + `margen` 6/6.
-  **Ventas sigue 973.267,93 €**; Verifactu, P&G total, las 5 áreas del constructor y los KPIs intactos.
-  **FUERA (parte 2 y pieza 5):** reparto de nóminas por horas entre proyectos, "Proyectos" como área del
-  constructor, coste/hora por persona (descartado), calendario. **El peldaño 7 SIGUE ABIERTO. NO cerrar en
-  Notion sin validación en pantalla.**
+  **Ventas seguía 973.267,93 €**; Verifactu, P&G total, las 5 áreas del constructor y los KPIs intactos.
+  *(Nota 22 jul: el tenant de desarrollo se reseeded con datos "taller" tras esta validación, así que su
+  base de Ventas hoy es ~115.497 €, no 973.267,93 €; el número absoluto ya no aplica — lo que se verifica
+  es que cada trabajo NO lo mueve, vía neto-cero.)*
+
+- **PIEZA 4 (parte 2) — COSTE DE LAS HORAS EN LA RENTABILIDAD · ✅ ENTREGADA y verificada (22 jul 2026,
+  commit `PENDIENTE`).** Valora a COSTE cada entrada de tiempo y suma por proyecto para dar, junto al
+  "resultado contable" de la parte 1 (INTACTO), un **"resultado de gestión"** que resta también el coste de
+  las horas. **Cascada del panel:** Ingresos − Gastos directos = **Resultado contable** (parte 1, del P&G
+  filtrado) − **Coste de las horas** (Σ horas × coste-hora congelado) = **Resultado de gestión** (nuevo).
+  **Coste-hora por persona:** columna nueva `admin_users.coste_hora` (ESPEJO de `tarifa_hora`; la tarifa es
+  VENTA/facturación, el coste es COSTE), editable en la misma pantalla de Usuarios y con el mismo permiso
+  (`admin.manage_users`). **Congelado (filosofía WAC):** cada entrada guarda `time_entries.coste_hora_congelado`
+  al crearla (columnas nuevas `coste_hora_congelado` + `coste_backfill`); cambiar el coste-hora de una persona
+  HOY **no reescribe** un proyecto pasado. Backfill idempotente de las entradas previas (estampa el coste-hora
+  del momento, marcado `coste_backfill=1`). **Sin coste-hora (0/vacío) = "sin coste registrado", NO coste 0:**
+  esas horas se **apartan** y el panel avisa cuántas quedan fuera (idéntico al aviso "sin tarifa" de la pieza 2).
+  **Capa de GESTIÓN, no contable:** el coste de horas **NO entra en `cuentaPyG`, ni en el diario, ni toca
+  Verifactu**; aviso honesto y visible ("el resultado de gestión incluye el coste estimado de las horas y NO es
+  el resultado contable; tu P&G no cambia"). **Comparativa** `/admin/rentabilidad`: columnas nuevas **Coste
+  horas** y **Resultado gestión** + aviso agregado de horas sin coste; badge "pierde con horas" (gana en
+  contable, pierde tras el coste). **Permisos:** el panel y la comparativa mantienen el candado AND de la parte 1
+  (`proyectos.read` Y `invoices.read`); editar el coste-hora exige `admin.manage_users`; el coste-hora congelado
+  NO se filtra por la API de tiempo. Migración aditiva/idempotente, sin DROP; `time_entries` y `proyectos` siguen
+  FUERA de WRITABLE_TABLES. Ficheros: `models.js` (2 cols en time_entries + col en admin_users + backfill),
+  `schemas.js` (`coste_hora` en userUpdate), `routes/users.js` (campo + guardado + aclaración tarifa=venta),
+  `routes/tiempo.js` (congela el coste al crear la entrada), `rentabilidad.js` (`costeHorasProyecto` + cascada
+  en rentabilidadProyecto/comparativaProyectos), `routes/rentabilidad.js` (columnas + avisos en la comparativa),
+  `routes/proyectos.js` (cascada en el panel de la ficha). Verificado: **`test-coste-horas-proyecto` 28/0**
+  (coste = Σ horas×coste congelado · sin coste apartado · congelado no altera el pasado · gestión = contable −
+  coste · contable intacto · cuadre Σ+estructura=total intacto · backfill marcado · migración idempotente),
+  **`gate-coste-horas-pantalla` 17/0** (cascada en pantalla · coste horas · aviso horas sin coste · aviso honesto
+  gestión≠contable · columnas en la comparativa · permisos del coste-hora 403 · sin fuga por la API de tiempo ·
+  0 errores JS · **neto-cero en Ventas Y P&G total**). Regresión: `test-rentabilidad-proyecto` 22/0,
+  `test-tiempo` 23/0, `test-facturar-horas` 31/0, `test-contabilidad-pyg` 36/0, `verify-constructor` 82/0,
+  `test-contabilidad` 38/0, `test-proyectos` 20/0, `test-coste-wac` 19/0 — todo verde. **La pieza 4 queda
+  COMPLETA (parte 1 + parte 2). El peldaño 7 SIGUE ABIERTO: siguiente pieza 5 (calendario), a la espera de
+  encargo.**
 
 ### ⬜ 8 — Salud / bienestar · **2º oficio**
 Agenda presencial.

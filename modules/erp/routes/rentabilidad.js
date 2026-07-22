@@ -33,13 +33,18 @@ export function createRentabilidadRoutes(db) {
     const signo = n => (n < 0 ? 'color:var(--danger,#b23);font-weight:600' : (n > 0 ? 'color:var(--ok,#1a7f37)' : 'color:var(--muted)'));
     const pct = n => (n == null ? '—' : Number(n).toFixed(1) + '%');
 
+    const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
+    const totalGestion = r2(cmp.total.resultado - cmp.coste_horas_total);   // gestión total = contable − Σ coste horas
+
     const filas = cmp.filas.map(f => `<tr${f.pierde ? ' style="background:var(--danger-soft,rgba(220,50,50,.07))"' : ''}>
         <td style="font-family:monospace;font-size:.8rem;color:var(--muted)">${escHtml(f.codigo || '-')}</td>
-        <td><strong>${escHtml(f.nombre)}</strong>${f.activo ? '' : ' <span class="badge b-gray">archivado</span>'}${f.pierde ? ' <span class="badge b-red">pierde</span>' : ''}</td>
+        <td><strong>${escHtml(f.nombre)}</strong>${f.activo ? '' : ' <span class="badge b-gray">archivado</span>'}${f.pierde ? ' <span class="badge b-red">pierde</span>' : (f.pierde_gestion ? ' <span class="badge b-yellow" title="Gana en contable pero pierde al restar el coste de las horas">pierde con horas</span>' : '')}</td>
         <td style="white-space:nowrap;text-align:right">${dinero(f.ingresos)}</td>
         <td style="white-space:nowrap;text-align:right">${dinero(f.gastos)}</td>
         <td style="white-space:nowrap;text-align:right;${signo(f.resultado)}">${dinero(f.resultado)}</td>
         <td style="white-space:nowrap;text-align:right">${pct(f.margenPct)}</td>
+        <td style="white-space:nowrap;text-align:right;color:var(--muted)">${dinero(f.coste_horas)}</td>
+        <td style="white-space:nowrap;text-align:right;${signo(f.resultado_gestion)}">${dinero(f.resultado_gestion)}</td>
         <td style="white-space:nowrap;text-align:right;color:var(--muted)">${dinero(f.cobrado)}</td>
       </tr>`).join('');
 
@@ -48,24 +53,35 @@ export function createRentabilidadRoutes(db) {
         <td style="text-align:right">${dinero(cmp.estructura.ingresos)}</td>
         <td style="text-align:right">${dinero(cmp.estructura.gastos)}</td>
         <td style="text-align:right;${signo(cmp.estructura.resultado)}">${dinero(cmp.estructura.resultado)}</td>
-        <td></td><td></td></tr>`;
+        <td></td><td style="text-align:right" title="La estructura no tiene horas imputadas">—</td><td style="text-align:right">—</td><td></td></tr>`;
     const filaTotal = `<tr style="border-top:2px solid var(--border);font-weight:700">
         <td></td><td>TOTAL (= P&amp;G de la empresa)</td>
         <td style="text-align:right">${dinero(cmp.total.ingresos)}</td>
         <td style="text-align:right">${dinero(cmp.total.gastos)}</td>
         <td style="text-align:right;${signo(cmp.total.resultado)}">${dinero(cmp.total.resultado)}</td>
-        <td></td><td></td></tr>`;
+        <td></td>
+        <td style="text-align:right">${dinero(cmp.coste_horas_total)}</td>
+        <td style="text-align:right;${signo(totalGestion)}">${dinero(totalGestion)}</td>
+        <td></td></tr>`;
+
+    const avisoHoras = cmp.hay_horas_sin_coste
+      ? `<div class="alert" style="margin-bottom:1rem;background:var(--warn-s,rgba(200,140,20,.10))">
+          ⚠️ Hay <strong>${Number(cmp.horas_sin_coste).toFixed(2)} h</strong> sin coste-hora registrado: quedan <strong>FUERA</strong> del coste de las horas (no se cuentan como coste 0).
+          Pon el <em>coste por hora</em> de esas personas en <a href="/admin/usuarios">Usuarios</a> para que entren.
+        </div>` : '';
 
     const content = `
       <div class="ph"><h2>Rentabilidad por proyecto</h2></div>
       <div class="alert" style="margin-bottom:1rem;background:var(--info-s,rgba(40,90,200,.08))">
-        Ingresos (facturado sin IVA) − gastos asignados = resultado. Sale del <strong>mismo P&amp;G</strong> filtrado por proyecto:
-        la suma de todos los proyectos más la estructura es el P&amp;G total de la empresa, al céntimo${cmp.cuadra ? '' : ' ⚠️ (descuadre ' + cmp.descuadre + ')'}.
-        El <em>cobrado</em> es dato de caja, no cambia el resultado.
+        <strong>Resultado contable</strong> = ingresos (facturado sin IVA) − gastos asignados. Sale del <strong>mismo P&amp;G</strong> filtrado por proyecto:
+        la suma de todos los proyectos más la estructura es el P&amp;G total de la empresa, al céntimo${cmp.cuadra ? '' : ' ⚠️ (descuadre ' + cmp.descuadre + ')'}.<br>
+        <strong>Resultado de gestión</strong> = resultado contable − <strong>coste de las horas</strong> (Σ horas × coste-hora congelado). Es una capa de <strong>GESTIÓN</strong>:
+        el coste de las horas <strong>NO entra en el P&amp;G</strong> ni en la contabilidad; tu resultado contable no cambia. El <em>cobrado</em> es dato de caja, no cambia el resultado.
       </div>
+      ${avisoHoras}
       <div class="card"><div class="table-wrap"><table>
-        <thead><tr><th>Código</th><th>Proyecto</th><th style="text-align:right">Ingresos</th><th style="text-align:right">Gastos</th><th style="text-align:right">Resultado</th><th style="text-align:right">Margen</th><th style="text-align:right">Cobrado</th></tr></thead>
-        <tbody>${filas || '<tr><td colspan="7" style="color:var(--muted);text-align:center;padding:1.5rem">Aún no hay proyectos con actividad. Etiqueta facturas y gastos a un proyecto para ver su rentabilidad.</td></tr>'}
+        <thead><tr><th>Código</th><th>Proyecto</th><th style="text-align:right">Ingresos</th><th style="text-align:right">Gastos</th><th style="text-align:right">Resultado contable</th><th style="text-align:right">Margen</th><th style="text-align:right">Coste horas</th><th style="text-align:right">Resultado gestión</th><th style="text-align:right">Cobrado</th></tr></thead>
+        <tbody>${filas || '<tr><td colspan="9" style="color:var(--muted);text-align:center;padding:1.5rem">Aún no hay proyectos con actividad. Etiqueta facturas y gastos a un proyecto para ver su rentabilidad.</td></tr>'}
         ${filaEstructura}${filaTotal}</tbody>
       </table></div></div>`;
     return c.html(adminLayout('Rentabilidad por proyecto', content, 'rentabilidad', c.get('session')?.csrfToken || '', c));

@@ -42,7 +42,7 @@ export function createUserRoutes(db) {
 
   // ── API: ADMIN USERS ───────────────────────────────────────────
   api.get('/', requirePerm('admin.manage_users'), c => {
-    try { return c.json(db.prepare('SELECT id,name,email,role,active,created_at,tarifa_hora FROM admin_users ORDER BY id').all()); }
+    try { return c.json(db.prepare('SELECT id,name,email,role,active,created_at,tarifa_hora,coste_hora FROM admin_users ORDER BY id').all()); }
     catch(e) { return c.json({error:safeError(e)},500); }
   });
 
@@ -77,13 +77,16 @@ export function createUserRoutes(db) {
       if (s.role !== 'owner' && PROTECTED_ROLES.includes(d.role||'employee')) {
         return c.json({error:'No puedes asignar ese rol'},403);
       }
-      // Peldaño 7 · PIEZA 2 — tarifa/hora de la persona (dato de coste del negocio: lo fija quien gestiona
-      // usuarios). Siempre viene en el formulario (vacío = null); con ella se calcula el importe del tiempo.
+      // Peldaño 7 · PIEZA 2 — tarifa/hora de FACTURACIÓN (venta) de la persona; la fija quien gestiona usuarios.
+      // PIEZA 4 (parte 2) — coste/hora (coste, ESPEJO de la tarifa; mismo permiso admin.manage_users). Ambas
+      // vienen en el formulario (vacío = null). La tarifa calcula el importe del tiempo (venta); el coste se
+      // congela en cada entrada nueva y alimenta el resultado de gestión (NO toca el P&G).
       const tarifa = d.tarifa_hora == null ? null : d.tarifa_hora;
+      const coste  = d.coste_hora  == null ? null : d.coste_hora;
       if (d.password) {
-        db.prepare('UPDATE admin_users SET name=?,email=?,role=?,active=?,tarifa_hora=?,password_hash=? WHERE id=?').run(d.name||'', d.email||'', d.role||'employee', d.active?1:0, tarifa, await hashPassword(d.password), targetId);
+        db.prepare('UPDATE admin_users SET name=?,email=?,role=?,active=?,tarifa_hora=?,coste_hora=?,password_hash=? WHERE id=?').run(d.name||'', d.email||'', d.role||'employee', d.active?1:0, tarifa, coste, await hashPassword(d.password), targetId);
       } else {
-        db.prepare('UPDATE admin_users SET name=?,email=?,role=?,active=?,tarifa_hora=? WHERE id=?').run(d.name||'', d.email||'', d.role||'employee', d.active?1:0, tarifa, targetId);
+        db.prepare('UPDATE admin_users SET name=?,email=?,role=?,active=?,tarifa_hora=?,coste_hora=? WHERE id=?').run(d.name||'', d.email||'', d.role||'employee', d.active?1:0, tarifa, coste, targetId);
       }
       // C5/M5: quitar el acceso echa AHORA, no dentro de 24 h. Quien lo impide de verdad es
       // getAdminSession (rechaza al desactivado venga por donde venga); esto borra además sus
@@ -252,9 +255,15 @@ export function createUserRoutes(db) {
               </div>
             </div>
 
-            <div class="form-group"><label class="form-label">Tarifa por hora</label>
-              <input class="form-control" type="number" min="0" step="0.01" id="uTarifa" placeholder="p. ej. 45">
-              <div style="font-size:.7rem;color:var(--muted);margin-top:.25rem">Coste/hora de esta persona; con ella se calcula el importe de sus entradas de tiempo (Registro de tiempo). Puede quedar vacía.</div>
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">Tarifa por hora <span style="color:var(--muted);font-size:.75rem">(venta)</span></label>
+                <input class="form-control" type="number" min="0" step="0.01" id="uTarifa" placeholder="p. ej. 45">
+                <div style="font-size:.7rem;color:var(--muted);margin-top:.25rem">Precio al que se FACTURAN sus horas al cliente. Calcula el importe de sus entradas de tiempo y se usa al facturar horas. Puede quedar vacía.</div>
+              </div>
+              <div class="form-group"><label class="form-label">Coste por hora <span style="color:var(--muted);font-size:.75rem">(coste)</span></label>
+                <input class="form-control" type="number" min="0" step="0.01" id="uCoste" placeholder="p. ej. 28">
+                <div style="font-size:.7rem;color:var(--muted);margin-top:.25rem">Lo que te CUESTA su hora. Se congela en cada entrada nueva y alimenta el "resultado de gestión" de rentabilidad. No cambia el P&amp;G ni la factura. Puede quedar vacía.</div>
+              </div>
             </div>
 
             <div style="border-top:1px solid var(--border);padding-top:1rem;margin-top:.25rem">
@@ -353,6 +362,7 @@ export function createUserRoutes(db) {
         document.getElementById('uPwd').value='';
         document.getElementById('uRole').value='employee';
         document.getElementById('uTarifa').value='';
+        document.getElementById('uCoste').value='';
         document.getElementById('uActive').checked=true;
         document.getElementById('pwdHint').style.display='none';
         renderPermsContainer([]);
@@ -368,6 +378,7 @@ export function createUserRoutes(db) {
         document.getElementById('uPwd').value='';
         document.getElementById('uRole').value=u.role;
         document.getElementById('uTarifa').value=(u.tarifa_hora!=null?u.tarifa_hora:'');
+        document.getElementById('uCoste').value=(u.coste_hora!=null?u.coste_hora:'');
         document.getElementById('uActive').checked=!!u.active;
         document.getElementById('pwdHint').style.display='';
         const d=await api('GET','/api/erp/users/'+id+'/permissions').catch(()=>({assigned:[]}));
@@ -378,7 +389,8 @@ export function createUserRoutes(db) {
       async function saveUser(){
         const id=document.getElementById('userId').value;
         const _tv=document.getElementById('uTarifa').value;
-        const body={name:document.getElementById('uName').value,email:document.getElementById('uEmail').value,role:document.getElementById('uRole').value,active:document.getElementById('uActive').checked,tarifa_hora:_tv===''?null:_tv};
+        const _cv=document.getElementById('uCoste').value;
+        const body={name:document.getElementById('uName').value,email:document.getElementById('uEmail').value,role:document.getElementById('uRole').value,active:document.getElementById('uActive').checked,tarifa_hora:_tv===''?null:_tv,coste_hora:_cv===''?null:_cv};
         const pwd=document.getElementById('uPwd').value;
         if(pwd)body.password=pwd;
         try{

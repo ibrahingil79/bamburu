@@ -353,22 +353,34 @@ export function createProyectoRoutes(db) {
         if(PUEDE_RENT) loadRentProy(id);
         if(PUEDE_TIEMPO) loadTiempoProy(id);
       }
-      // PIEZA 4 — panel de rentabilidad: ingresos (facturado sin IVA) − gastos = resultado, con margen. El
-      // cobrado se muestra aparte (dato de caja). Sale del P&G filtrado por proyecto (única fuente de verdad).
+      // PIEZA 4 — panel de rentabilidad en CASCADA:
+      //   Ingresos − Gastos directos = RESULTADO CONTABLE (parte 1, del P&G filtrado, intacto)
+      //                              − Coste de las horas = RESULTADO DE GESTIÓN (parte 2, capa de gestión).
+      // El resultado contable sale del P&G (única verdad). El coste de horas NO toca el P&G: es una estimación
+      // de gestión. El cobrado se muestra aparte (dato de caja).
       async function loadRentProy(id){
         const box=document.getElementById('proyRent'); if(!box) return;
         let d; try{ d=await api('GET','/api/erp/rentabilidad/proyecto/'+id); }catch(e){ box.innerHTML=''; return; }
         const dinero=n=>PROY_SYM+Number(n||0).toFixed(2);
         const col=n=>(n<0?'var(--danger,#b23)':(n>0?'var(--ok,#1a7f37)':'var(--muted)'));
+        const pct=n=>(n==null?'—':Number(n).toFixed(1)+'%');
+        const ch=d.costeHoras||{};
         box.style.color='';
+        const fila=(lbl,val,style)=>'<div style="display:flex;justify-content:space-between;gap:1rem;'+(style||'')+'"><span>'+lbl+'</span><span style="white-space:nowrap;font-variant-numeric:tabular-nums">'+val+'</span></div>';
+        const avisoHoras = ch.hay_horas_sin_coste
+          ? '<div style="color:var(--muted);font-size:.78rem;margin:.15rem 0 .3rem">⚠️ '+Number(ch.horas_sin_coste).toFixed(2)+' h sin coste-hora registrado quedan FUERA del coste (no es coste 0). Pon el coste/hora de esas personas en Usuarios.</div>'
+          : '';
         box.innerHTML='<h4 style="margin:0 0 .5rem">Rentabilidad</h4>'
-          +'<div class="grid g2" style="gap:.5rem 1rem">'
-          +'<div><div class="form-label">Ingresos (facturado, sin IVA)</div><div>'+dinero(d.ingresos)+'</div></div>'
-          +'<div><div class="form-label">Gastos asignados</div><div>'+dinero(d.gastos)+'</div></div>'
-          +'<div><div class="form-label">Resultado</div><div style="font-weight:700;color:'+col(d.resultado)+'">'+dinero(d.resultado)+'</div></div>'
-          +'<div><div class="form-label">Margen</div><div style="color:'+col(d.resultado)+'">'+(d.margenPct==null?'—':Number(d.margenPct).toFixed(1)+'%')+'</div></div>'
+          +'<div style="display:flex;flex-direction:column;gap:.3rem">'
+          +fila('Ingresos (facturado, sin IVA)','<strong>'+dinero(d.ingresos)+'</strong>')
+          +fila('− Gastos directos (facturas de proveedor)',dinero(d.gastos))
+          +fila('= Resultado contable','<strong style="color:'+col(d.resultado)+'">'+dinero(d.resultado)+'</strong> <span style="color:var(--muted);font-size:.8rem">('+pct(d.margenPct)+')</span>','border-top:1px solid var(--border);padding-top:.3rem')
+          +fila('− Coste de las horas'+(ch.horas_con_coste?' <span style="color:var(--muted);font-size:.8rem">('+Number(ch.horas_con_coste).toFixed(2)+' h)</span>':''),dinero(ch.coste))
+          +avisoHoras
+          +fila('= Resultado de gestión','<strong style="color:'+col(d.resultadoGestion)+'">'+dinero(d.resultadoGestion)+'</strong> <span style="color:var(--muted);font-size:.8rem">('+pct(d.margenGestionPct)+')</span>','border-top:2px solid var(--border);padding-top:.3rem;font-weight:600')
           +'</div>'
-          +'<div style="margin-top:.5rem;color:var(--muted);font-size:.85rem">Cobrado (caja): <strong>'+dinero(d.cobrado)+'</strong> · no cambia el resultado</div>';
+          +'<div style="margin-top:.5rem;padding:.5rem .6rem;background:var(--info-s,rgba(40,90,200,.08));border-radius:6px;color:var(--muted);font-size:.78rem">El <strong>resultado de gestión</strong> resta el coste ESTIMADO de las horas y <strong>NO es el resultado contable</strong>: tu P&amp;G no cambia. El resultado contable (arriba) es el que cuadra con la contabilidad.</div>'
+          +'<div style="margin-top:.4rem;color:var(--muted);font-size:.85rem">Cobrado (caja): <strong>'+dinero(d.cobrado)+'</strong> · no cambia el resultado</div>';
       }
       // PIEZA 2 — dentro de la ficha del proyecto: lista de tiempo + total de horas + total facturable.
       async function loadTiempoProy(id){

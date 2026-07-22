@@ -17,6 +17,12 @@ import { hoyLocal } from '../avisos.js';
 import { ENTITY } from '../../../core/activity-entities.js';
 
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
+// PIEZA 4 (parte 2) — coste/hora de la persona a CONGELAR en la entrada al crearla (mismo criterio que el WAC:
+// el coste que había HOY, no el de mañana). NULL/0/negativo → NULL = "sin coste registrado" (NO es coste 0).
+function costeHoraDe(db, userId) {
+  const v = db.prepare('SELECT coste_hora FROM admin_users WHERE id=?').get(userId)?.coste_hora;
+  return (v == null || Number(v) <= 0) ? null : Number(v);
+}
 const lunesDe = iso => { const d = new Date(iso + 'T12:00:00Z'); const dow = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - dow); return d.toISOString().slice(0, 10); };
 const sumarDias = (iso, n) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 
@@ -82,8 +88,9 @@ export function startTimer(db, userId, input) {
   // Un solo cronómetro por persona: finaliza el que estuviera corriendo antes de arrancar el nuevo.
   const yaCorre = db.prepare('SELECT id, started_at FROM time_entries WHERE user_id=? AND active=1 AND duracion_seg IS NULL').get(userId);
   if (yaCorre) finalizar(db, yaCorre);
-  const r = db.prepare('INSERT INTO time_entries (proyecto_id,user_id,descripcion,fecha,started_at,duracion_seg,facturable,active) VALUES (?,?,?,?,?,NULL,1,1)')
-    .run(d.proyecto_id, userId, d.descripcion || '', hoyLocal(), new Date().toISOString());
+  // Congela el coste-hora de la persona en la entrada (backfill=0: es el coste real del día que se creó).
+  const r = db.prepare('INSERT INTO time_entries (proyecto_id,user_id,descripcion,fecha,started_at,duracion_seg,facturable,active,coste_hora_congelado,coste_backfill) VALUES (?,?,?,?,?,NULL,1,1,?,0)')
+    .run(d.proyecto_id, userId, d.descripcion || '', hoyLocal(), new Date().toISOString(), costeHoraDe(db, userId));
   return conImporte(cargar(db, r.lastInsertRowid));
 }
 function finalizar(db, running) {
@@ -102,8 +109,9 @@ export function createEntry(db, userId, input) {
   proyectoVivo(db, d.proyecto_id);
   const seg = (d.horas || 0) * 3600 + (d.minutos || 0) * 60;
   if (seg <= 0) { const e = new Error('La duración debe ser mayor que cero'); e.status = 400; throw e; }
-  const r = db.prepare('INSERT INTO time_entries (proyecto_id,user_id,descripcion,fecha,started_at,duracion_seg,facturable,active) VALUES (?,?,?,?,NULL,?,?,1)')
-    .run(d.proyecto_id, userId, d.descripcion || '', d.fecha, seg, d.facturable ? 1 : 0);
+  // Congela el coste-hora de la persona en la entrada (backfill=0: coste real del momento de crearla).
+  const r = db.prepare('INSERT INTO time_entries (proyecto_id,user_id,descripcion,fecha,started_at,duracion_seg,facturable,active,coste_hora_congelado,coste_backfill) VALUES (?,?,?,?,NULL,?,?,1,?,0)')
+    .run(d.proyecto_id, userId, d.descripcion || '', d.fecha, seg, d.facturable ? 1 : 0, costeHoraDe(db, userId));
   return conImporte(cargar(db, r.lastInsertRowid));
 }
 export function updateEntry(db, actor, id, input) {

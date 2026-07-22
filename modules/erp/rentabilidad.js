@@ -24,6 +24,29 @@ function desglosar(pyg) {
   return { ingresos, gastos, resultado, margenPct };
 }
 
+// PIEZA 4 (parte 2) — COSTE DE LAS HORAS de un proyecto (capa de GESTIÓN, NO contable: no toca el diario ni
+// cuentaPyG). Σ(horas × coste-hora CONGELADO) de las entradas de tiempo del proyecto que SÍ tienen coste. Las
+// entradas sin coste-hora (coste_hora_congelado NULL o 0) NO son coste 0: se APARTAN y se informa cuántas horas
+// quedan fuera (mismo aviso que el "sin tarifa" de la pieza 2). Solo entradas vivas y FINALIZADAS (con duración).
+export function costeHorasProyecto(db, projectId, from = RANGO_TODO[0], to = RANGO_TODO[1]) {
+  const rows = db.prepare(
+    `SELECT coste_hora_congelado AS c, duracion_seg AS seg
+       FROM time_entries
+      WHERE proyecto_id = ? AND active = 1 AND duracion_seg IS NOT NULL AND fecha BETWEEN ? AND ?`)
+    .all(Number(projectId), from, to);
+  let coste = 0, segCon = 0, segSin = 0, nCon = 0, nSin = 0;
+  for (const r of rows) {
+    const seg = Number(r.seg) || 0;
+    if (r.c != null && Number(r.c) > 0) { coste = r2(coste + seg / 3600 * Number(r.c)); segCon += seg; nCon++; }
+    else { segSin += seg; nSin++; }
+  }
+  return {
+    coste, seg_con_coste: segCon, horas_con_coste: r2(segCon / 3600), n_con_coste: nCon,
+    seg_sin_coste: segSin, horas_sin_coste: r2(segSin / 3600), n_sin_coste: nSin,
+    hay_horas_sin_coste: segSin > 0,
+  };
+}
+
 // Cobrado (caja) de un proyecto: suma de cobros de sus facturas de venta en el periodo. Dato aparte.
 function cobradoDe(db, projectId, from, to) {
   const row = db.prepare(
@@ -33,11 +56,20 @@ function cobradoDe(db, projectId, from, to) {
   return r2(row?.c || 0);
 }
 
-// Rentabilidad de UN proyecto en [from,to] (por defecto, toda su vida). Fuente única: cuentaPyG filtrada.
+// Rentabilidad de UN proyecto en [from,to] (por defecto, toda su vida).
+// CASCADA:  ingresos − gastos = RESULTADO CONTABLE (parte 1, fuente única cuentaPyG, INTACTO)
+//                             − coste de las horas = RESULTADO DE GESTIÓN (parte 2, capa de gestión).
+// `resultado` (contable) NO se toca; el coste de horas y el resultado de gestión se AÑADEN aparte.
 export function rentabilidadProyecto(db, projectId, from = RANGO_TODO[0], to = RANGO_TODO[1]) {
   const pyg = cuentaPyG(db, from, to, { project: Number(projectId) });
-  const d = desglosar(pyg);
-  return { project_id: Number(projectId), from, to, ...d, cobrado: cobradoDe(db, projectId, from, to), pyg };
+  const d = desglosar(pyg);   // { ingresos, gastos, resultado (CONTABLE), margenPct }
+  const ch = costeHorasProyecto(db, projectId, from, to);
+  const resultadoGestion = r2(d.resultado - ch.coste);
+  const margenGestionPct = d.ingresos > 0 ? r2(resultadoGestion / d.ingresos * 100) : null;
+  return {
+    project_id: Number(projectId), from, to, ...d, cobrado: cobradoDe(db, projectId, from, to),
+    costeHoras: ch, resultadoGestion, margenGestionPct, pyg,
+  };
 }
 
 // P&G de lo NO asignado a ningún proyecto (la "estructura": alquiler, gestoría, banca… sin proyecto).
@@ -71,8 +103,14 @@ export function comparativaProyectos(db, from = RANGO_TODO[0], to = RANGO_TODO[1
       project_id: id, codigo: meta.codigo || '', nombre: meta.nombre || ('#' + id), activo: !!meta.active,
       ingresos: r.ingresos, gastos: r.gastos, resultado: r.resultado, margenPct: r.margenPct,
       cobrado: r.cobrado, pierde: r.resultado < 0,
+      // PIEZA 4 (parte 2) — coste de horas (gestión) + resultado de gestión. `pierde_gestion` = pierde tras horas.
+      coste_horas: r.costeHoras.coste, resultado_gestion: r.resultadoGestion, margen_gestion_pct: r.margenGestionPct,
+      horas_sin_coste: r.costeHoras.horas_sin_coste, pierde_gestion: r.resultadoGestion < 0,
     };
   }).sort((a, b) => a.resultado - b.resultado);   // los que más pierden, primero
+  // Aviso agregado: horas que quedan FUERA del coste (sin coste-hora registrado) en todos los proyectos mostrados.
+  const horasSinCoste = r2(filas.reduce((s, f) => s + (f.horas_sin_coste || 0), 0));
+  const costeHorasTotal = r2(filas.reduce((s, f) => s + (f.coste_horas || 0), 0));
 
   const estructura = rentabilidadEstructura(db, from, to);
   const total = desglosar(cuentaPyG(db, from, to));   // sin filtro = P&G total (la única verdad)
@@ -82,5 +120,9 @@ export function comparativaProyectos(db, from = RANGO_TODO[0], to = RANGO_TODO[1
   const cuadre = r2(sumaProyectos + estructura.resultado);
   const cuadra = Math.abs(cuadre - total.resultado) < 0.005;
 
-  return { from, to, filas, estructura, total, cuadra, descuadre: r2(cuadre - total.resultado) };
+  return {
+    from, to, filas, estructura, total, cuadra, descuadre: r2(cuadre - total.resultado),
+    // Capa de gestión (NO contable): agregados del coste de horas. El cuadre de arriba es SOLO del contable.
+    coste_horas_total: costeHorasTotal, horas_sin_coste: horasSinCoste, hay_horas_sin_coste: horasSinCoste > 0,
+  };
 }
