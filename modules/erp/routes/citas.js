@@ -1058,7 +1058,7 @@ async function cRecalc(){
   try{
     var q='/api/erp/citas/huecos?fecha='+fecha+'&user_id='+user+'&service_ids='+ids.join(',')+(rec?'&recurso_id='+rec:'');
     var d=await api('GET',q);
-    sel.innerHTML=(d.huecos.length?d.huecos.map(h=>'<option value="'+h.min+'">'+h.hora+'</option>').join(''):'<option value="">Sin huecos ese día</option>');
+    sel.innerHTML=(d.huecos.length?d.huecos.map(h=>'<option value="'+h.min+'">'+h.hora+'</option>').join(''):'<option value="">Sin huecos (lleno, fuera de horario o fecha pasada)</option>');
   }catch(e){ sel.innerHTML='<option value="">'+esc(e.message)+'</option>'; }
 }
 async function cGuardar(){

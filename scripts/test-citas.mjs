@@ -149,6 +149,20 @@ try {
   const trP2 = tramosPersona(db3, P2, Fx);
   ok(trP2.length === 1 && trP2[0][0] === 600 && trP2[0][1] === 780, 'persona CON horario propio (10-13) manda, intersecado con el negocio');
 
+  console.log('\n=== 9. sin horario configurado → día abierto por defecto (arranque sin fricción) ===\n');
+  const db4 = nuevaBD();                       // BD nueva SIN ningún horario de negocio
+  const UU4 = nuevoUsuario(db4, 'Nuevo');
+  const F4 = proximoDow(3);
+  const ahora4 = { fecha: ahoraLocal().fecha, min: 0, dow: dowDeFecha(ahoraLocal().fecha) };
+  const hsDef = huecos(db4, { fecha: F4, user_id: UU4, dur_min: 30, grid: 30, ahora: ahora4 });
+  ok(hsDef.length > 0 && hsDef[0] === 8 * 60, 'negocio SIN horario → hay huecos con el día abierto por defecto (primero 08:00)');
+  ok(hsDef.includes(20 * 60 + 30) && !hsDef.some(s => s >= 21 * 60), 'el día por defecto llega hasta las 21:00 (último 20:30)');
+  db4.prepare("INSERT INTO horario_tramos (scope,user_id,dow,inicio_min,fin_min) VALUES ('negocio',NULL,?,?,?)").run(dowDeFecha(F4), 10 * 60, 12 * 60);
+  const hsConf = huecos(db4, { fecha: F4, user_id: UU4, dur_min: 30, grid: 30, ahora: ahora4 });
+  ok(hsConf.length > 0 && hsConf[0] === 10 * 60 && !hsConf.some(s => s >= 12 * 60), 'al configurar horario (10-12) el default desaparece y manda lo puesto');
+  let otroDow = proximoDow((dowDeFecha(F4) + 1) % 7);
+  ok(huecos(db4, { fecha: otroDow, user_id: UU4, dur_min: 30, grid: 30, ahora: ahora4 }).length === 0, 'con horario ya configurado, un día sin tramos queda cerrado (no vuelve el default)');
+
   console.log('\n' + (fail === 0 ? '✅ TODO VERDE' : '❌ HAY FALLOS') + ` — ${pass} ok, ${fail} fallos`);
 } catch (e) {
   console.error('\n💥 EXCEPCIÓN:', e);

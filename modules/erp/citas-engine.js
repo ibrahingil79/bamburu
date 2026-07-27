@@ -12,6 +12,15 @@
 
 export const ZONA_NEGOCIO = 'Europe/Madrid';
 
+// Cuando el negocio AÚN NO ha configurado ningún horario, la agenda funciona con un DÍA ABIERTO por
+// defecto (8:00–21:00) para no exigir configuración antes de poder reservar (regla "el software
+// trabaja"). Configurar Horarios RESTRINGE este default; en cuanto hay UN tramo de negocio el default
+// desaparece (el negocio ya dijo cuándo abre). Una excepción "cerrado" sigue mandando siempre.
+export const DEFAULT_OPEN = [8 * 60, 21 * 60];
+export function hayHorarioNegocio(db) {
+  return db.prepare("SELECT 1 FROM horario_tramos WHERE scope='negocio' LIMIT 1").get() != null;
+}
+
 // ── helpers de tiempo ────────────────────────────────────────────────────────────────────────────
 export function hhmm(min) {
   min = Math.max(0, Math.round(min));
@@ -88,7 +97,10 @@ export function tramosAmbito(db, scope, userId, fecha) {
     `SELECT inicio_min, fin_min FROM horario_tramos
       WHERE scope=? AND ${userId == null ? 'user_id IS NULL' : 'user_id=?'} AND dow=?`
   ).all(...(userId == null ? [scope, dow] : [scope, userId, dow]));
-  return fusiona(rows.map(r => [r.inicio_min, r.fin_min]));
+  const tr = fusiona(rows.map(r => [r.inicio_min, r.fin_min]));
+  // Negocio sin ningún horario configurado → día abierto por defecto (ver DEFAULT_OPEN).
+  if (!tr.length && scope === 'negocio' && !hayHorarioNegocio(db)) return [DEFAULT_OPEN.slice()];
+  return tr;
 }
 
 // ¿Tiene esta persona un horario propio definido (algún tramo semanal)? Si NO, hereda el del negocio.
