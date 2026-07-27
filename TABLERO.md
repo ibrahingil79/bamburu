@@ -2167,7 +2167,7 @@ Aquí aterrizan, de las listas viejas:
   `test-contabilidad` 38/0, `test-proyectos` 20/0, `test-coste-wac` 19/0 — todo verde. **La pieza 4 queda
   COMPLETA (parte 1 + parte 2).**
 
-- **PIEZA 5 — SISTEMA DE CITAS (motor + agenda interna) · ✅ ENTREGADA y verificada (27 jul 2026, commit `PENDIENTE`).**
+- **PIEZA 5 — SISTEMA DE CITAS (motor + agenda interna) · ✅ ENTREGADA y verificada (27 jul 2026, commit `45dc9c7`).**
   El motor de la cita previa y su agenda interna. **UN solo motor para dos negocios**: cita previa
   (peluquería/estética/salud) y servicios por horas (piezas 1-4). NO es el **calendario FISCAL** (D5e,
   15-jul) — otra cosa, ni se toca ni se reutiliza su nombre.
