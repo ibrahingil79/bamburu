@@ -264,6 +264,8 @@ export const citaAjustesSchema = z.object({
   cita_margen_defecto_min: z.coerce.number().int().min(0).max(600),
   cita_canal_defecto: z.enum(['whatsapp', 'sms', 'email']),
   cita_modo_recordatorio: z.enum(['manual', 'auto_email']),
+  cita_puesto_sing: strOpt(30),
+  cita_puesto_plural: strOpt(30),
 });
 
 // T5 — valores EXACTOS permitidos en los campos de lista cerrada del cliente, extraídos del

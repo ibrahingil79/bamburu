@@ -2220,6 +2220,10 @@ export function runMigrations(db) {
   addCol(db, 'company_config', 'cita_margen_defecto_min', 'INTEGER NOT NULL DEFAULT 0');   // margen posterior por defecto
   addCol(db, 'company_config', 'cita_canal_defecto', "TEXT NOT NULL DEFAULT 'whatsapp'");  // whatsapp | sms | email
   addCol(db, 'company_config', 'cita_modo_recordatorio', "TEXT NOT NULL DEFAULT 'manual'"); // manual | auto_email
+  // AGENDA SENCILLA — cómo llama ESTE negocio a sus "puestos" en su pantalla (silla, cabina, sala…).
+  // Es SOLO una etiqueta de presentación: la tabla sigue siendo `recursos` y el código no se renombra.
+  addCol(db, 'company_config', 'cita_puesto_sing', "TEXT NOT NULL DEFAULT 'Puesto'");
+  addCol(db, 'company_config', 'cita_puesto_plural', "TEXT NOT NULL DEFAULT 'Puestos'");
 
 
   // A3: catálogo de servicios del autónomo. Tabla NUEVA e independiente de

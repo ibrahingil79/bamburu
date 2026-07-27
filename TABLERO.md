@@ -2235,6 +2235,41 @@ Aquí aterrizan, de las listas viejas:
   - **La pieza 5 queda COMPLETA. El peldaño 7 SIGUE ABIERTO: siguiente pieza 6 — PUERTA PÚBLICA DE
     RESERVA (ficha abajo), a la espera de encargo.**
 
+- **AGENDA SENCILLA — ajuste de presentación de la pieza 5, va ANTES de la PIEZA 6 · ✅ ENTREGADA y
+  verificada (27 jul 2026, commit `PENDIENTE2`).** NO es "pieza 5b": es una capa de PRESENTACIÓN sobre el
+  motor intacto. **Regla dura: no se eliminó ni una función** — solo cambió qué se ve de entrada y cómo se
+  llama; lo que estorbaba se guardó tras un clic.
+  - **Llamar a las cosas por su nombre (solo textos; NO se renombró tabla ni código):** «Recurso» →
+    **PUESTO**, con el nombre configurable por el negocio en Ajustes (Sillas/Cabinas/Salas/…), aplicado en
+    TODAS las pantallas y en el menú (nuevas columnas `company_config.cita_puesto_sing`/`_plural`). Los tres
+    campos del servicio pasan a lenguaje normal: **Tiempo contigo** / **Tiempo de espera** (con la frase
+    «Estos minutos aparecerán como hueco libre para atender a otra persona»; se pliega si va a 0) / **Margen
+    después** — re-expresados sobre las MISMAS columnas (`duracion_min`/`muerto_ini`/`muerto_dur`/`margen`).
+    Fuera «recurso», «token», «tiempo muerto» de pantalla.
+  - **La pantalla del día con lo justo:** de entrada HOY, por persona, y **solo quien trabaja hoy** (quien
+    libra no ocupa columna). La vista por puesto, la semana y los filtros van tras «Vistas y filtros» (un
+    clic) y se **recuerda lo último**. La **Cola de envíos** sale de la agenda y tiene **contador en el
+    menú** («Cola de envíos · N»). Cada cita en la rejilla enseña solo hora · cliente · servicio + color de
+    estado, con **leyenda** siempre visible; el resto vive al abrir la cita. El **tramo de espera** se
+    dibuja en otro tono dentro del mismo bloque («Aquí estás libre»).
+  - **Crear en tres toques:** se pulsa el hueco vacío de la rejilla (de ahí salen persona y hora, no se
+    re-preguntan) → panel con SOLO cliente (buscador que filtra; si no existe se usa ahí mismo con nombre y
+    móvil) y servicio (duración/precio solos del catálogo, encadenables). El **puesto se autoasigna** (primer
+    libre) si el servicio lo exige, y se dice cuál. Todo lo demás (puesto, nota, duración, aviso ya, otra
+    persona/hora) va en **«Más opciones»**, plegado, pero **sigue existiendo TODO**. Si algo choca, el aviso
+    **propone huecos cercanos** («Huecos cerca: 11:00, 11:30»), no un error seco.
+  - **El motor NO se tocó** (huecos, solape en servidor, horarios, enlace por llave, avisos, cola, cobro,
+    Verifactu, P&G). Todo lo nuevo (personas-que-trabajan, puesto-libre, sugerencia, huecos-cercanos, contador
+    del menú) se calcula CON el motor, no cambiándolo. De paso se arregló un bug latente desde la pieza 5: la
+    ruta `GET /:id` tragaba `GET /horario` (la pantalla de Horarios no cargaba); se acota `/:id` a numérico.
+  - **Verificado:** `gate-agenda-sencilla` 11/0 (crear desde el hueco vacío con persona/hora heredadas;
+    vista de entrada solo quien trabaja hoy + «Ver todo el equipo»; cliente nuevo sin salir del panel; tramo
+    de espera distinto; choque propone huecos; 0 errores JS), `test-textos-citas` 24/0 (sin «recurso»/«token»/
+    «tiempo muerto» en pantalla; nombre configurable del puesto en todas). Regresión de la pieza 5 y del resto
+    VERDE: test-citas 39/0, test-enlace-cita 14/0, test-avisos-cita 20/0, test-neto-cero-cita 8/0,
+    gate-citas-pantalla 25/0, proyectos 20, tiempo 23, facturar-horas 31, rentabilidad 22, coste-horas 28,
+    contabilidad-pyg 36, contabilidad 38, plantillas 41, XSS 29. **Ninguna función desapareció.**
+
 - **PIEZA 6 — PUERTA PÚBLICA DE RESERVA (⬜, a la espera de encargo).** El cliente final ELIGE hueco y
   reserva SOLO, 24 h, por el **enlace propio del negocio** (no el de una cita concreta: uno de reserva).
   Se apoya en el motor de huecos de la pieza 5 (ya calcula disponibilidad en vivo). Incluye **señal /

@@ -2,6 +2,7 @@ import { getDisaWidget } from '../disa/widget.js';
 import { escHtml } from '../../core/escape.js';
 import { estadoAvisos, hoyLocal, PERM_POR_FUENTE } from './avisos.js';
 import { contarPropuestasPendientes, tiposVisiblesPara } from './propuestas.js';   // D5 — badge de Propuestas de DISA
+import { contarAvisosPendientes } from './citas-avisos.js';   // AGENDA SENCILLA §2.3 — contador de avisos pendientes
 
 export const ROOT_TOKENS = `
     :root{
@@ -455,6 +456,21 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       { href: '/admin/vigia', label: 'Vigía (DISA)', key: 'vigia', icon: 'ti-radar' },
     ]},
   ];
+
+  // AGENDA SENCILLA §1.1/§2.3 — SOLO la ETIQUETA que ve el usuario en el menú (no se renombra código):
+  // "Puestos" con el nombre que el negocio eligió, y un contador de avisos pendientes en la Cola. Barato
+  // y tolerante a fallo: si algo peta, se queda el default y el número a 0 (el chrome nunca se rompe).
+  try {
+    const _db = c?.get?.('db');
+    if (_db) {
+      const plural = (_db.prepare('SELECT cita_puesto_plural FROM company_config WHERE id=1').get()?.cita_puesto_plural) || 'Puestos';
+      const pend = contarAvisosPendientes(_db);
+      for (const g of nav) for (const it of (g.items || [])) {
+        if (it.key === 'citas-recursos') it.label = plural;
+        if (it.key === 'citas-cola') it.label = 'Cola de envíos' + (pend > 0 ? ' · ' + pend : '');
+      }
+    }
+  } catch { /* el menú nunca se rompe por esto */ }
 
   // ── Barra de Cuenta (desplegable del avatar, mockup): items reales + Documentación + salir ──
   const accountItems = [

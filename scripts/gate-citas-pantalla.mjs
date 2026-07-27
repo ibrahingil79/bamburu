@@ -98,20 +98,9 @@ try {
   ok(po.url().endsWith('/admin/citas'), 'pulsando la entrada se llega a /admin/citas', po.url());
   await po.waitForFunction(() => typeof openNuevaCita === 'function', { timeout: 8000 }).catch(() => {});
 
-  await po.evaluate(() => openNuevaCita());
-  await po.waitForFunction(() => document.querySelectorAll('.csvc').length > 0, { timeout: 8000 });
-  await po.evaluate((sid, uid, rid, fecha) => {
-    document.querySelector('.csvc[value="' + sid + '"]').checked = true;
-    document.getElementById('cPersona').value = String(uid);
-    document.getElementById('cRecurso').value = String(rid);
-    document.getElementById('cCliente').value = ''; cToggleSuelto();
-    document.getElementById('cSueltoNombre').value = 'GATE Suelto ' + Date.now();
-    document.getElementById('cFecha').value = fecha;
-    return cRecalc();
-  }, S, owner.id, R, F);
-  await po.waitForFunction(() => { const s = document.getElementById('cHueco'); return s && [...s.options].some(o => o.value); }, { timeout: 8000 });
-  await po.evaluate(() => { const s = document.getElementById('cHueco'); const opt = [...s.options].find(o => o.value); s.value = opt.value; });
-  await po.evaluate(() => cGuardar());
+  // Crear cita A por la API (crear DESDE EL PANEL nuevo lo cubre gate-agenda-sencilla).
+  const crearA = await call(po, 'POST', '/api/erp/citas', { cliente_suelto_nombre: 'GATE Suelto ' + Date.now(), user_id: owner.id, recurso_id: R, fecha: F, inicio_min: 10 * 60, service_ids: [S] });
+  ok(crearA.status === 200, 'cita creada (API)', String(crearA.status));
   // Esperar a que la cita exista en la API.
   let citaA = null;
   for (let i = 0; i < 20 && !citaA; i++) {
@@ -119,7 +108,7 @@ try {
     citaA = (lst.body || []).find(x => x.recurso_id === R);
     if (!citaA) await new Promise(r => setTimeout(r, 200));
   }
-  ok(citaA && /^CITA-\d{4}$/.test(citaA.codigo), 'creada desde el modal: código CITA-NNNN', citaA && citaA.codigo);
+  ok(citaA && /^CITA-\d{4}$/.test(citaA.codigo), 'cita con código CITA-NNNN', citaA && citaA.codigo);
   if (citaA) citaIds.push(citaA.id);
 
   // ── [3] Agenda por PERSONA y por RECURSO ────────────────────────────────────

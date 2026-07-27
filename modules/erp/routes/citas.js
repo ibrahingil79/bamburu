@@ -20,7 +20,7 @@ import {
 } from '../schemas.js';
 import {
   geometriaCadena, comprobarSolape, huecos, ahoraLocal, hhmm, dowDeFecha, diasEntre,
-  ESTADO_LABEL, puedeTransicionar, tramosPersona, tramosAmbito,
+  ESTADO_LABEL, puedeTransicionar, tramosPersona, tramosAmbito, ocupacionRecurso, overlaps,
 } from '../citas-engine.js';
 import {
   contactoDeCita, serviciosDeCita, textoAviso, waLink, smsLink, citaBaseUrl, citaEnlace,
@@ -51,6 +51,8 @@ export function ajustesCitas(db) {
     country: (cfg.country || 'ES').toUpperCase(),
     address: cfg.address || '',
     email: cfg.email || '',
+    puesto_sing: cfg.cita_puesto_sing || 'Puesto',
+    puesto_plural: cfg.cita_puesto_plural || 'Puestos',
   };
 }
 
@@ -97,6 +99,44 @@ function lineasTicket(db, citaId) {
     .map(r => ({ product_id: r.product_id, quantity: 1 }));
 }
 
+// AGENDA SENCILLA — personas que TRABAJAN una fecha (su horario tiene algún tramo ese día). Con el
+// "día abierto por defecto" (negocio sin horario configurado), todas trabajan hasta que se configuren
+// horarios. Se usa para que la vista de entrada no muestre columnas de quien libra.
+export function personasQueTrabajan(db, fecha) {
+  return db.prepare("SELECT id, name FROM admin_users WHERE active=1 ORDER BY name").all()
+    .filter(u => tramosPersona(db, u.id, fecha).length > 0);
+}
+
+// Puestos que EXIGEN los servicios elegidos (unión de service_resources). Vacío = no exigen ninguno.
+function puestosRequeridos(db, ids) {
+  if (!ids.length) return [];
+  const ph = ids.map(() => '?').join(',');
+  return db.prepare(`SELECT DISTINCT recurso_id FROM service_resources WHERE product_id IN (${ph})`).all(...ids).map(r => r.recurso_id);
+}
+// Primer puesto LIBRE de entre los requeridos, para esa franja. null si se exige puesto pero ninguno libre.
+function puestoLibre(db, { fecha, inicio_min, dur_min, margen_min = 0, req_ids, excludeCitaId = null }) {
+  const fin = inicio_min + dur_min + margen_min;
+  for (const rid of req_ids) {
+    const rc = db.prepare('SELECT id, nombre FROM recursos WHERE id=? AND active=1').get(rid);
+    if (!rc) continue;
+    const choca = ocupacionRecurso(db, rid, fecha, excludeCitaId).some(([oi, of]) => overlaps(inicio_min, fin, oi, of));
+    if (!choca) return rc;
+  }
+  return null;
+}
+// Pocos huecos CERCANOS a una hora pedida (para proponer alternativas cuando algo choca).
+function huecosCercanos(db, input, cuantos = 4) {
+  try {
+    const r = citaSchema.safeParse(input); if (!r.success) return [];
+    const d = r.data; if (!d.service_ids.length || !d.user_id) return [];
+    const aj = ajustesCitas(db);
+    const geo = geometriaCadena(resolveServiceConfigs(db, d.service_ids, aj.margen_defecto_min));
+    const hs = huecos(db, { fecha: d.fecha, user_id: d.user_id, recurso_id: d.recurso_id || null, dur_min: geo.dur_total, margen_min: geo.margen_min, grid: aj.grid, antelacion_min: aj.antelacion_min, ventana_dias: aj.ventana_dias, corte_mismo_dia_min: aj.corte_mismo_dia_min, ahora: ahoraLocal() });
+    return hs.map(m => ({ min: m, hora: hhmm(m), dist: Math.abs(m - d.inicio_min) }))
+      .sort((a, b) => a.dist - b.dist).slice(0, cuantos).sort((a, b) => a.min - b.min).map(({ min, hora }) => ({ min, hora }));
+  } catch { return []; }
+}
+
 // ── SERVICIOS VALIDADOS COMPARTIDOS (única fuente de verdad de escritura) ──────────────────────────
 export function createCitaSvc(db, input, ctx = {}) {
   const r = citaSchema.safeParse(input);
@@ -111,8 +151,18 @@ export function createCitaSvc(db, input, ctx = {}) {
   const aj = ajustesCitas(db);
   const configs = resolveServiceConfigs(db, d.service_ids, aj.margen_defecto_min);
   const geo = geometriaCadena(configs);
+  // El puesto se asigna SOLO si el servicio lo exige y no se eligió uno: el primero libre (3.5).
+  let recurso_id = d.recurso_id || null;
+  if (!recurso_id) {
+    const req = puestosRequeridos(db, d.service_ids);
+    if (req.length) {
+      const libre = puestoLibre(db, { fecha: d.fecha, inicio_min: d.inicio_min, dur_min: geo.dur_total, margen_min: geo.margen_min, req_ids: req });
+      if (!libre) throw err('No hay ningún ' + aj.puesto_sing.toLowerCase() + ' libre a esa hora para este servicio', 409);
+      recurso_id = libre.id;
+    }
+  }
   const sol = comprobarSolape(db, {
-    user_id: d.user_id, recurso_id: d.recurso_id || null, fecha: d.fecha, inicio_min: d.inicio_min,
+    user_id: d.user_id, recurso_id, fecha: d.fecha, inicio_min: d.inicio_min,
     dur_min: geo.dur_total, margen_min: geo.margen_min, servicios: geo.servicios,
   });
   if (!sol.ok) throw err(sol.motivo, 409);
@@ -126,7 +176,7 @@ export function createCitaSvc(db, input, ctx = {}) {
     const res = db.prepare(
       `INSERT INTO citas (codigo,cliente_id,cliente_suelto_nombre,cliente_suelto_movil,user_id,recurso_id,fecha,inicio_min,dur_min,margen_min,estado,nota,project_id,token,token_expira,created_by)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-    ).run(codigo, d.cliente_id || null, d.cliente_suelto_nombre || '', movil, d.user_id, d.recurso_id || null,
+    ).run(codigo, d.cliente_id || null, d.cliente_suelto_nombre || '', movil, d.user_id, recurso_id,
           d.fecha, d.inicio_min, geo.dur_total, geo.margen_min, d.estado || 'pedida', d.nota || '', d.project_id || null,
           token, tokenExpira, ctx.created_by || null);
     const citaId = res.lastInsertRowid;
@@ -266,12 +316,18 @@ export function agendaData(db, { desde, hasta }) {
        FROM citas c LEFT JOIN admin_users u ON u.id=c.user_id LEFT JOIN recursos r ON r.id=c.recurso_id
        LEFT JOIN clients cl ON cl.id=c.cliente_id
       WHERE c.fecha>=? AND c.fecha<=? AND c.archived=0 AND c.estado<>'anulada' ORDER BY c.fecha, c.inicio_min`
-  ).all(desde, hasta).map(c => ({
-    id: c.id, codigo: c.codigo, fecha: c.fecha, inicio_min: c.inicio_min, dur_min: c.dur_min, margen_min: c.margen_min,
-    estado: c.estado, user_id: c.user_id, recurso_id: c.recurso_id, persona: c.persona || '—',
-    recurso: c.recurso || null, cliente: c.cliente_nombre || c.cliente_suelto_nombre || 'Cliente',
-    servicios: serviciosDeCita(db, c.id).join(' + '),
-  }));
+  ).all(desde, hasta).map(c => {
+    // Ventanas de ESPERA (la persona libre) relativas al inicio de la cita, para pintarlas en otro tono.
+    const svcs = db.prepare('SELECT offset_min, muerto_ini_min, muerto_dur_min FROM cita_servicios WHERE cita_id=?').all(c.id);
+    const espera = [];
+    for (const s of svcs) if (s.muerto_dur_min > 0) { const ini = s.offset_min + s.muerto_ini_min; espera.push({ ini, fin: ini + s.muerto_dur_min }); }
+    return {
+      id: c.id, codigo: c.codigo, fecha: c.fecha, inicio_min: c.inicio_min, dur_min: c.dur_min, margen_min: c.margen_min,
+      estado: c.estado, user_id: c.user_id, recurso_id: c.recurso_id, persona: c.persona || '—',
+      recurso: c.recurso || null, cliente: c.cliente_nombre || c.cliente_suelto_nombre || 'Cliente',
+      servicios: serviciosDeCita(db, c.id).join(' + '), espera,
+    };
+  });
   const bloqueos = db.prepare(
     `SELECT * FROM agenda_bloqueos WHERE fecha>=? AND fecha<=? ORDER BY fecha, inicio_min`
   ).all(desde, hasta);
@@ -326,11 +382,34 @@ export function createCitasRoutes(db) {
     try {
       const desde = c.req.query('desde') || ahoraLocal().fecha;
       const hasta = c.req.query('hasta') || desde;
-      return c.json(agendaData(db, { desde, hasta }));
+      // personasDia = quién trabaja el día `desde` (para la vista de entrada; el frente decide si filtra).
+      const personasDia = personasQueTrabajan(db, desde).map(p => ({ id: p.id, name: p.name }));
+      return c.json({ ...agendaData(db, { desde, hasta }), personasDia });
     } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
-  api.get('/:id', requirePerm('citas.read'), c => {
+  // Sugerencia para el panel rápido: totales del servicio + puesto que se autoasignaría + si cabe.
+  api.get('/sugerir', requirePerm('citas.read'), c => {
+    try {
+      const fecha = c.req.query('fecha');
+      const user_id = parseInt(c.req.query('user_id'));
+      const inicio_min = parseInt(c.req.query('inicio_min'));
+      const ids = (c.req.query('service_ids') || '').split(',').map(x => parseInt(x)).filter(Boolean);
+      if (!fecha || !user_id || !ids.length || !(inicio_min >= 0)) return c.json({ ok: false });
+      const aj = ajustesCitas(db);
+      const configs = resolveServiceConfigs(db, ids, aj.margen_defecto_min);
+      const geo = geometriaCadena(configs);
+      const precio_total = configs.reduce((s, x) => s + (Number(x.price) || 0), 0);
+      const req = puestosRequeridos(db, ids);
+      let puesto = null, requiere_puesto = req.length > 0;
+      if (requiere_puesto) puesto = puestoLibre(db, { fecha, inicio_min, dur_min: geo.dur_total, margen_min: geo.margen_min, req_ids: req });
+      const sol = comprobarSolape(db, { user_id, recurso_id: puesto ? puesto.id : null, fecha, inicio_min, dur_min: geo.dur_total, margen_min: geo.margen_min, servicios: geo.servicios });
+      const cabe = sol.ok && (!requiere_puesto || !!puesto);
+      return c.json({ ok: true, cabe, dur_total: geo.dur_total, margen: geo.margen_min, precio_total, requiere_puesto, puesto, motivo: cabe ? '' : (requiere_puesto && !puesto ? ('No hay ' + aj.puesto_sing.toLowerCase() + ' libre a esa hora') : sol.motivo) });
+    } catch (e) { return c.json({ ok: false, error: safeError(e) }, e.status || 500); }
+  });
+
+  api.get('/:id{[0-9]+}', requirePerm('citas.read'), c => {
     try {
       const cita = db.prepare(
         `SELECT c.*, u.name AS persona, r.nombre AS recurso, cl.name AS cliente_nombre, pr.codigo AS proyecto_codigo
@@ -357,14 +436,19 @@ export function createCitasRoutes(db) {
 
   // ── Escrituras de citas ───────────────────────────────────────────────────
   api.post('/', requirePerm('citas.edit'), validate(citaSchema), c => {
+    const input = c.get('validated');
     try {
-      const r = createCitaSvc(db, c.get('validated'), { created_by: c.get('session')?.userId });
+      const r = createCitaSvc(db, input, { created_by: c.get('session')?.userId });
       logActivity(db, c.get('session'), 'Creó cita', ENTITY.CITA, r.id, r.codigo);
       return c.json({ id: r.id, codigo: r.codigo, message: 'Cita creada' });
-    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+    } catch (e) {
+      // Si choca (solape / sin puesto), proponemos huecos cercanos en vez de un error seco (3.6).
+      if (e.status === 409) return c.json({ error: safeError(e), huecos: huecosCercanos(db, input) }, 409);
+      return c.json({ error: safeError(e) }, e.status || 500);
+    }
   });
 
-  api.put('/:id', requirePerm('citas.edit'), validate(citaSchema), c => {
+  api.put('/:id{[0-9]+}', requirePerm('citas.edit'), validate(citaSchema), c => {
     try {
       const r = editCitaSvc(db, parseInt(c.req.param('id')), c.get('validated'));
       logActivity(db, c.get('session'), 'Editó cita', ENTITY.CITA, r.id, '');
@@ -398,7 +482,7 @@ export function createCitasRoutes(db) {
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
-  api.delete('/:id', requirePerm('citas.edit'), c => {
+  api.delete('/:id{[0-9]+}', requirePerm('citas.edit'), c => {
     try {
       const r = anularCitaSvc(db, parseInt(c.req.param('id')));
       logActivity(db, c.get('session'), 'Anuló cita', ENTITY.CITA, r.id, '');
@@ -620,10 +704,12 @@ export function createCitasRoutes(db) {
     try {
       const d = c.get('validated');
       const corte = d.cita_corte_mismo_dia_min === '' || d.cita_corte_mismo_dia_min == null ? null : d.cita_corte_mismo_dia_min;
+      const sing = (d.cita_puesto_sing || '').trim() || 'Puesto';
+      const plural = (d.cita_puesto_plural || '').trim() || 'Puestos';
       db.prepare(
         `UPDATE company_config SET cita_grid_min=?, cita_antelacion_min=?, cita_ventana_dias=?, cita_corte_mismo_dia_min=?,
-           cita_margen_defecto_min=?, cita_canal_defecto=?, cita_modo_recordatorio=? WHERE id=1`
-      ).run(d.cita_grid_min, d.cita_antelacion_min, d.cita_ventana_dias, corte, d.cita_margen_defecto_min, d.cita_canal_defecto, d.cita_modo_recordatorio);
+           cita_margen_defecto_min=?, cita_canal_defecto=?, cita_modo_recordatorio=?, cita_puesto_sing=?, cita_puesto_plural=? WHERE id=1`
+      ).run(d.cita_grid_min, d.cita_antelacion_min, d.cita_ventana_dias, corte, d.cita_margen_defecto_min, d.cita_canal_defecto, d.cita_modo_recordatorio, sing, plural);
       return c.json({ message: 'Ajustes guardados' });
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
@@ -757,24 +843,33 @@ function paginaCita(db, cita, token) {
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 function vistaAgenda(c, db) {
   const editable = can(c, 'citas.edit');
+  const aj = ajustesCitas(db);
+  const dot = (col, lbl) => '<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.78rem;color:var(--muted)"><span style="width:10px;height:10px;border-radius:3px;background:' + col + '"></span>' + lbl + '</span>';
   const content = `
     <div class="ph"><h2>Agenda</h2>
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-secondary btn-sm" onclick="agHoy()">Hoy</button>
         <input class="form-control" type="date" id="agFecha" style="width:auto" onchange="agCargar()">
-        <select class="form-control" id="agVista" style="width:auto" onchange="agCargar()"><option value="dia">Día</option><option value="semana">Semana</option></select>
-        <select class="form-control" id="agEje" style="width:auto" onchange="agCargar()"><option value="persona">Por persona</option><option value="recurso">Por recurso</option></select>
-        <a class="btn btn-secondary" href="/admin/citas/cola">Cola de envíos</a>
+        <button class="btn btn-secondary btn-sm" onclick="toggleControles()">Vistas y filtros</button>
         ${editable ? '<button class="btn btn-secondary" onclick="openBloqueo()">Bloquear un rato</button><button class="btn btn-primary" onclick="openNuevaCita()">Nueva cita</button>' : ''}
       </div>
     </div>
+    <div id="agControles" style="display:none;gap:.75rem;flex-wrap:wrap;align-items:center;margin-bottom:.75rem;padding:.6rem .8rem;background:var(--bg2,rgba(0,0,0,.02));border-radius:8px">
+      <select class="form-control" id="agVista" style="width:auto" onchange="agCargar()"><option value="dia">Día</option><option value="semana">Semana</option></select>
+      <select class="form-control" id="agEje" style="width:auto" onchange="agCargar()"><option value="persona">Por persona</option><option value="recurso">Por ${escHtml(aj.puesto_sing.toLowerCase())}</option></select>
+      <label style="font-size:.85rem;display:flex;align-items:center;gap:.35rem"><input type="checkbox" id="agVerTodo" onchange="agCargar()"> Ver todo el equipo</label>
+    </div>
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:.6rem">${dot(COLORS.pedida, 'Pedida')}${dot(COLORS.confirmada, 'Confirmada')}${dot(COLORS.atendida, 'Atendida')}${dot(COLORS.no_show, 'No se presentó')}</div>
     <div class="card"><div id="agenda" style="overflow-x:auto">Cargando…</div></div>
-    ${modalNuevaCita()}
+    ${modalNuevaCita(aj.puesto_sing)}
     ${modalDetalle()}
-    ${modalBloqueo()}
+    ${modalBloqueo(aj.puesto_sing)}
     ${modalAvisos()}
-    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};${JS_AGENDA}</script>`;
+    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};window.PUESTO_SING=${JSON.stringify(aj.puesto_sing)};window.PUESTO_PLURAL=${JSON.stringify(aj.puesto_plural)};${JS_AGENDA}</script>`;
   return adminLayout('Agenda', content, 'citas', c.get('session')?.csrfToken || '', c);
 }
+// Colores de estado, compartidos por la leyenda (server) y los bloques (cliente, var COLOR en JS_AGENDA).
+const COLORS = { pedida: '#64748b', confirmada: '#16a34a', atendida: '#2563eb', no_show: '#b91c1c' };
 
 function vistaCola(c, db) {
   const content = `
@@ -788,25 +883,27 @@ function vistaCola(c, db) {
 
 function vistaServicios(c, db) {
   const editable = can(c, 'citas.edit');
+  const aj = ajustesCitas(db);
   const content = `
-    <div class="ph"><h2>Servicios reservables</h2><div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/citas">← Agenda</a>${editable ? '<button class="btn btn-primary" onclick="openNuevoServicio()">Nuevo servicio</button>' : ''}</div></div>
-    <div class="alert" style="margin-bottom:1rem">Son los productos de tipo <strong>servicio</strong> de tu catálogo. Aquí defines lo que la cita necesita: duración, tiempo muerto interior (la persona queda libre ese rato) y margen posterior. <strong>El precio y el IVA siguen viniendo del catálogo.</strong> Un servicio no aparece al pedir cita hasta que tenga <strong>duración</strong> (pulsa «Configurar»). ¿No está en el catálogo? Créalo aquí con «Nuevo servicio».</div>
-    <div class="card"><div class="table-wrap"><table><thead><tr><th>Servicio</th><th>Reservable</th><th>Duración</th><th>Tiempo muerto</th><th>Margen</th><th></th></tr></thead><tbody id="svcBody"><tr><td colspan="6">Cargando…</td></tr></tbody></table></div></div>
-    ${modalServicio()}
+    <div class="ph"><h2>Servicios</h2><div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/citas">← Agenda</a>${editable ? '<button class="btn btn-primary" onclick="openNuevoServicio()">Nuevo servicio</button>' : ''}</div></div>
+    <div class="alert" style="margin-bottom:1rem">Son los productos de tipo <strong>servicio</strong> de tu catálogo. Aquí defines lo que la cita necesita: el <strong>tiempo contigo</strong>, el <strong>tiempo de espera</strong> (los minutos en que el cliente espera y tú quedas libre, como el tinte) y el <strong>margen después</strong>. <strong>El precio y el IVA siguen viniendo del catálogo.</strong> Un servicio no se puede pedir hasta que tenga tiempo (pulsa «Configurar»). ¿No está en el catálogo? Créalo aquí con «Nuevo servicio».</div>
+    <div class="card"><div class="table-wrap"><table><thead><tr><th>Servicio</th><th>Se pide cita</th><th>Tiempo contigo</th><th>Tiempo de espera</th><th>Margen</th><th></th></tr></thead><tbody id="svcBody"><tr><td colspan="6">Cargando…</td></tr></tbody></table></div></div>
+    ${modalServicio(aj.puesto_sing)}
     ${modalNuevoServicio()}
-    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};${JS_SERVICIOS}</script>`;
-  return adminLayout('Servicios reservables', content, 'citas', c.get('session')?.csrfToken || '', c);
+    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};window.PUESTO_SING=${JSON.stringify(aj.puesto_sing)};window.PUESTO_PLURAL=${JSON.stringify(aj.puesto_plural)};${JS_SERVICIOS}</script>`;
+  return adminLayout('Servicios', content, 'citas', c.get('session')?.csrfToken || '', c);
 }
 
 function vistaRecursos(c, db) {
   const editable = can(c, 'citas.edit');
+  const aj = ajustesCitas(db);
   const content = `
-    <div class="ph"><h2>Recursos</h2><div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/citas">← Agenda</a>${editable ? '<button class="btn btn-primary" onclick="openRecurso()">Nuevo recurso</button>' : ''}</div></div>
-    <div class="alert" style="margin-bottom:1rem">Sillas, cabinas, salas, boxes o equipos. Una cita puede exigir persona <strong>y</strong> recurso; el motor comprueba los dos.</div>
+    <div class="ph"><h2>${escHtml(aj.puesto_plural)}</h2><div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/citas">← Agenda</a>${editable ? '<button class="btn btn-primary" onclick="openRecurso()">Nuevo ' + escHtml(aj.puesto_sing.toLowerCase()) + '</button>' : ''}</div></div>
+    <div class="alert" style="margin-bottom:1rem">Sillas, cabinas, salas, boxes o equipos. Una cita puede exigir persona <strong>y</strong> ${escHtml(aj.puesto_sing.toLowerCase())}; se comprueban los dos. Puedes cambiar cómo los llamas en <a href="/admin/citas/ajustes">Ajustes</a>.</div>
     <div class="card"><div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Tipo</th><th>Notas</th><th></th></tr></thead><tbody id="recBody"><tr><td colspan="4">Cargando…</td></tr></tbody></table></div></div>
-    ${modalRecurso()}
-    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};${JS_RECURSOS}</script>`;
-  return adminLayout('Recursos', content, 'citas', c.get('session')?.csrfToken || '', c);
+    ${modalRecurso(aj.puesto_sing)}
+    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};window.PUESTO_SING=${JSON.stringify(aj.puesto_sing)};window.PUESTO_PLURAL=${JSON.stringify(aj.puesto_plural)};${JS_RECURSOS}</script>`;
+  return adminLayout(aj.puesto_plural, content, 'citas', c.get('session')?.csrfToken || '', c);
 }
 
 function vistaHorarios(c, db) {
@@ -841,6 +938,12 @@ function vistaHorarios(c, db) {
 function vistaAjustes(c, db) {
   const aj = ajustesCitas(db);
   const sel = (v, opt) => v === opt ? ' selected' : '';
+  // §1.1 — cómo llama el negocio a sus puestos. Presets + el actual (por si es a medida).
+  const presets = [['Puesto', 'Puestos'], ['Silla', 'Sillas'], ['Cabina', 'Cabinas'], ['Sala', 'Salas'], ['Box', 'Boxes']];
+  const cur = aj.puesto_sing + '|' + aj.puesto_plural;
+  let found = false;
+  let puestoOpts = presets.map(([s, pl]) => { const v = s + '|' + pl; const on = v === cur; if (on) found = true; return `<option value="${escHtml(v)}"${on ? ' selected' : ''}>${escHtml(pl)}</option>`; }).join('');
+  if (!found) puestoOpts = `<option value="${escHtml(cur)}" selected>${escHtml(aj.puesto_plural)}</option>` + puestoOpts;
   const content = `
     <div class="ph"><h2>Ajustes de citas</h2><a class="btn btn-secondary" href="/admin/citas">← Agenda</a></div>
     <div class="card" style="max-width:640px">
@@ -857,6 +960,11 @@ function vistaAjustes(c, db) {
         <div class="form-group"><label class="form-label">Canal por defecto de avisos</label><select class="form-control" id="ajCanal"><option value="whatsapp"${sel(aj.canal_defecto,'whatsapp')}>WhatsApp</option><option value="sms"${sel(aj.canal_defecto,'sms')}>SMS</option><option value="email"${sel(aj.canal_defecto,'email')}>Email</option></select></div>
         <div class="form-group"><label class="form-label">Modo del recordatorio</label><select class="form-control" id="ajModo"><option value="manual"${sel(aj.modo_recordatorio,'manual')}>Los envío yo a mano</option><option value="auto_email"${sel(aj.modo_recordatorio,'auto_email')}>Que el recordatorio salga solo por email</option></select></div>
       </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">¿Cómo llamas a tus puestos?</label>
+          <select class="form-control" id="ajPuesto">${puestoOpts}</select>
+          <div style="font-size:.7rem;color:var(--muted)">Así los llamarás en tus pantallas (silla, cabina, sala…). No cambia nada por dentro.</div></div>
+      </div>
       <div class="alert" style="font-size:.85rem">Los avisos por WhatsApp y SMS <strong>siempre van a mano</strong> (se abre el mensaje ya escrito). Solo el <strong>email</strong> puede salir solo, por el envío diario. Nunca decimos "entregado": solo "marcado como enviado".</div>
       <button class="btn btn-primary" onclick="ajGuardar()">Guardar ajustes</button>
     </div>
@@ -865,30 +973,40 @@ function vistaAjustes(c, db) {
 }
 
 // ── Modales (HTML) ────────────────────────────────────────────────────────────────────────────────
-const modalNuevaCita = () => `
-  <div class="modal-overlay" id="mCita"><div class="modal" style="max-width:640px">
+const modalNuevaCita = (puestoSing = 'Puesto') => `
+  <div class="modal-overlay" id="mCita"><div class="modal" style="max-width:520px">
     <div class="modal-head"><h3 id="mCitaTitle">Nueva cita</h3><button class="modal-close" onclick="closeModal('mCita')">✕</button></div>
     <div class="modal-body">
-      <input type="hidden" id="cId">
-      <div class="form-group"><label class="form-label">Cliente</label>
-        <select class="form-control" id="cCliente" onchange="cToggleSuelto()"><option value="">— Cliente suelto —</option></select></div>
-      <div class="form-row" id="cSueltoWrap">
-        <div class="form-group"><label class="form-label">Nombre (cliente suelto)</label><input class="form-control" id="cSueltoNombre"></div>
-        <div class="form-group"><label class="form-label">Móvil (+34…)</label><input class="form-control" id="cSueltoMovil" placeholder="+34600000000"></div>
+      <input type="hidden" id="cId"><input type="hidden" id="cCliente"><input type="hidden" id="cSueltoNombre"><input type="hidden" id="cSueltoMovilVal">
+      <div id="cContexto" style="font-size:.9rem;font-weight:600;margin-bottom:.75rem"></div>
+      <div class="form-group"><label class="form-label">Cliente *</label>
+        <input class="form-control" id="cBusca" placeholder="Escribe el nombre…" autocomplete="off" oninput="cFiltra()">
+        <div id="cResultados"></div>
+        <div id="cNuevo" style="display:none;margin-top:.4rem">
+          <input class="form-control" id="cSueltoMovil" placeholder="Móvil (+34…, opcional)" style="margin-bottom:.35rem">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="cUsarNuevo()">＋ Usar «<span id="cNuevoNombre"></span>» como cliente nuevo</button>
+        </div>
+        <div id="cElegido" style="display:none;font-size:.85rem;margin-top:.35rem;color:var(--ok)"></div>
       </div>
-      <div class="form-group"><label class="form-label">Servicios *</label><div id="cServicios" style="display:flex;flex-direction:column;gap:.25rem;max-height:160px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:.5rem"></div></div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">Persona *</label><select class="form-control" id="cPersona" onchange="cRecalc()"></select></div>
-        <div class="form-group"><label class="form-label">Recurso</label><select class="form-control" id="cRecurso" onchange="cRecalc()"><option value="">— Ninguno —</option></select></div>
+      <div class="form-group"><label class="form-label">Servicio *</label>
+        <div id="cServicios" style="display:flex;flex-direction:column;gap:.25rem;max-height:150px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:.5rem"></div>
+        <div id="cResumen" style="font-size:.85rem;margin-top:.35rem"></div>
       </div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">Fecha *</label><input class="form-control" type="date" id="cFecha" onchange="cRecalc()"></div>
-        <div class="form-group"><label class="form-label">Hueco *</label><select class="form-control" id="cHueco"><option value="">Elige servicios, persona y fecha…</option></select></div>
-      </div>
-      <div class="form-group"><label class="form-label">Proyecto (opcional)</label><select class="form-control" id="cProyecto"><option value="">— Ninguno —</option></select></div>
-      <div class="form-group"><label class="form-label">Nota</label><textarea class="form-control" id="cNota" rows="2"></textarea></div>
+      <details id="cMas"><summary style="cursor:pointer;font-weight:600;font-size:.85rem;color:var(--accent)">Más opciones</summary>
+        <div class="form-row" style="margin-top:.6rem">
+          <div class="form-group"><label class="form-label">Persona</label><select class="form-control" id="cPersona" onchange="cRecalc()"></select></div>
+          <div class="form-group"><label class="form-label">Fecha</label><input class="form-control" type="date" id="cFecha" onchange="cRecalc()"></div>
+          <div class="form-group"><label class="form-label">Hora</label><select class="form-control" id="cHueco" onchange="cSugerir()"></select></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label" id="cPuestoLbl">${escHtml(puestoSing)}</label><select class="form-control" id="cRecurso" onchange="cSugerir()"><option value="">— Automático —</option></select></div>
+          <div class="form-group"><label class="form-label">Proyecto</label><select class="form-control" id="cProyecto"><option value="">— Ninguno —</option></select></div>
+        </div>
+        <div class="form-group"><label class="form-label">Nota</label><textarea class="form-control" id="cNota" rows="2"></textarea></div>
+        <div class="form-group"><label style="font-size:.85rem"><input type="checkbox" id="cAvisar"> Avisar al cliente al guardar</label></div>
+      </details>
     </div>
-    <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('mCita')">Cancelar</button><button class="btn btn-primary" onclick="cGuardar()">Guardar cita</button></div>
+    <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('mCita')">Cancelar</button><button class="btn btn-primary" onclick="cGuardar()">Guardar</button></div>
   </div></div>`;
 
 const modalDetalle = () => `
@@ -897,13 +1015,13 @@ const modalDetalle = () => `
     <div class="modal-body" id="mDetBody"></div>
   </div></div>`;
 
-const modalBloqueo = () => `
+const modalBloqueo = (puestoSing = 'Puesto') => `
   <div class="modal-overlay" id="mBloq"><div class="modal" style="max-width:520px">
     <div class="modal-head"><h3>Bloquear un rato</h3><button class="modal-close" onclick="closeModal('mBloq')">✕</button></div>
     <div class="modal-body">
       <div class="form-row">
         <div class="form-group"><label class="form-label">Persona</label><select class="form-control" id="bPersona"><option value="">— Ninguna —</option></select></div>
-        <div class="form-group"><label class="form-label">Recurso</label><select class="form-control" id="bRecurso"><option value="">— Ninguno —</option></select></div>
+        <div class="form-group"><label class="form-label">${escHtml(puestoSing)}</label><select class="form-control" id="bRecurso"><option value="">— Ninguno —</option></select></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Fecha</label><input class="form-control" type="date" id="bFecha"></div>
@@ -921,22 +1039,29 @@ const modalAvisos = () => `
     <div class="modal-body" id="mAvisoBody"></div>
   </div></div>`;
 
-const modalServicio = () => `
+const campoEspera = (pref) => `
+  <div class="form-group">
+    <a href="#" id="${pref}EsperaAdd" onclick="esperaShow('${pref}');return false" style="font-size:.85rem;color:var(--accent);font-weight:600">＋ Añadir tiempo de espera (el tinte)</a>
+    <div id="${pref}EsperaWrap" style="display:none">
+      <label class="form-label">Tiempo de espera (min)</label>
+      <input class="form-control" type="number" min="0" id="${pref}Espera" value="0">
+      <div style="font-size:.72rem;color:var(--muted)">Estos minutos aparecerán como hueco libre para atender a otra persona.</div>
+    </div>
+  </div>`;
+
+const modalServicio = (puestoSing = 'Puesto') => `
   <div class="modal-overlay" id="mSvc"><div class="modal" style="max-width:560px">
-    <div class="modal-head"><h3 id="mSvcTitle">Servicio reservable</h3><button class="modal-close" onclick="closeModal('mSvc')">✕</button></div>
+    <div class="modal-head"><h3 id="mSvcTitle">Servicio</h3><button class="modal-close" onclick="closeModal('mSvc')">✕</button></div>
     <div class="modal-body">
       <input type="hidden" id="svcId">
-      <div class="form-group"><label><input type="checkbox" id="svcReservable" checked> Reservable (aparece al pedir cita)</label></div>
+      <div class="form-group"><label><input type="checkbox" id="svcReservable" checked> Se puede pedir cita para este servicio</label></div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Duración (min) *</label><input class="form-control" type="number" min="1" id="svcDur" value="30"></div>
-        <div class="form-group"><label class="form-label">Margen posterior (min)</label><input class="form-control" type="number" min="0" id="svcMargen" value="0"></div>
+        <div class="form-group"><label class="form-label">Tiempo contigo (min) *</label><input class="form-control" type="number" min="1" id="svcContigo" value="30"><div style="font-size:.72rem;color:var(--muted)">Los minutos que estás trabajando con el cliente.</div></div>
+        <div class="form-group"><label class="form-label">Margen después (min)</label><input class="form-control" type="number" min="0" id="svcMargen" value="0"><div style="font-size:.72rem;color:var(--muted)">Para recoger y cobrar.</div></div>
       </div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">Tiempo muerto: empieza al minuto</label><input class="form-control" type="number" min="0" id="svcMuertoIni" value="0"></div>
-        <div class="form-group"><label class="form-label">…y dura (min)</label><input class="form-control" type="number" min="0" id="svcMuertoDur" value="0"><div style="font-size:.7rem;color:var(--muted)">Rato en que la persona queda libre (el tinte). 0 = sin tiempo muerto.</div></div>
-      </div>
+      ${campoEspera('svc')}
       <div class="form-group"><label class="form-label">Quién puede prestarlo</label><div id="svcProviders" style="display:flex;flex-wrap:wrap;gap:.5rem"></div></div>
-      <div class="form-group"><label class="form-label">Recurso necesario</label><div id="svcResources" style="display:flex;flex-wrap:wrap;gap:.5rem"></div></div>
+      <div class="form-group"><label class="form-label">${escHtml(puestoSing)} necesario</label><div id="svcResources" style="display:flex;flex-wrap:wrap;gap:.5rem"></div></div>
     </div>
     <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('mSvc')">Cancelar</button><button class="btn btn-primary" onclick="svcGuardar()">Guardar</button></div>
   </div></div>`;
@@ -952,20 +1077,17 @@ const modalNuevoServicio = () => `
         <div class="form-group"><label class="form-label">IVA</label><select class="form-control" id="nsIva"><option value="general">General (21%)</option><option value="reducido">Reducido (10%)</option><option value="superreducido">Superreducido (4%)</option><option value="exento">Exento (0%)</option></select></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Duración (min) *</label><input class="form-control" type="number" min="1" id="nsDur" value="30"></div>
-        <div class="form-group"><label class="form-label">Margen posterior (min)</label><input class="form-control" type="number" min="0" id="nsMargen" value="0"></div>
+        <div class="form-group"><label class="form-label">Tiempo contigo (min) *</label><input class="form-control" type="number" min="1" id="nsContigo" value="30"><div style="font-size:.72rem;color:var(--muted)">Los minutos que estás con el cliente.</div></div>
+        <div class="form-group"><label class="form-label">Margen después (min)</label><input class="form-control" type="number" min="0" id="nsMargen" value="0"><div style="font-size:.72rem;color:var(--muted)">Para recoger y cobrar.</div></div>
       </div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">Tiempo muerto: empieza al min</label><input class="form-control" type="number" min="0" id="nsMuertoIni" value="0"></div>
-        <div class="form-group"><label class="form-label">…y dura (min)</label><input class="form-control" type="number" min="0" id="nsMuertoDur" value="0"><div style="font-size:.7rem;color:var(--muted)">Rato en que la persona queda libre (el tinte). 0 = ninguno.</div></div>
-      </div>
+      ${campoEspera('ns')}
     </div>
     <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('mNuevoSvc')">Cancelar</button><button class="btn btn-primary" onclick="svcCrear()">Crear servicio</button></div>
   </div></div>`;
 
-const modalRecurso = () => `
+const modalRecurso = (puestoSing = 'Puesto') => `
   <div class="modal-overlay" id="mRec"><div class="modal" style="max-width:480px">
-    <div class="modal-head"><h3 id="mRecTitle">Nuevo recurso</h3><button class="modal-close" onclick="closeModal('mRec')">✕</button></div>
+    <div class="modal-head"><h3 id="mRecTitle">Nuevo ${escHtml(puestoSing.toLowerCase())}</h3><button class="modal-close" onclick="closeModal('mRec')">✕</button></div>
     <div class="modal-body">
       <input type="hidden" id="recId">
       <div class="form-group"><label class="form-label">Nombre *</label><input class="form-control" id="recNombre"></div>
@@ -982,48 +1104,68 @@ function ymd(d){return d.toISOString().slice(0,10);}
 function fhhmm(m){var h=Math.floor(m/60),mm=m%60;return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm;}
 async function ensureMeta(){ if(!META) META=await api('GET','/api/erp/citas/meta'); return META; }
 function initDate(){ var el=document.getElementById('agFecha'); if(!el.value) el.value=ymd(new Date()); }
+var COLOR={pedida:'#64748b',confirmada:'#16a34a',atendida:'#2563eb',no_show:'#b91c1c'};
+function loadPrefs(){ try{ return JSON.parse(localStorage.getItem('agPrefs')||'{}'); }catch(e){ return {}; } }
+function savePrefs(){ try{ localStorage.setItem('agPrefs', JSON.stringify({vista:document.getElementById('agVista').value, eje:document.getElementById('agEje').value, verTodo:document.getElementById('agVerTodo').checked})); }catch(e){} }
+function agHoy(){ document.getElementById('agFecha').value=ymd(new Date()); agCargar(); }
+function toggleControles(){ var c=document.getElementById('agControles'); c.style.display=(c.style.display==='none'||!c.style.display)?'flex':'none'; }
 async function agCargar(){
-  initDate(); await ensureMeta();
+  initDate(); await ensureMeta(); savePrefs();
   var vista=document.getElementById('agVista').value, eje=document.getElementById('agEje').value;
   var f0=document.getElementById('agFecha').value; var desde=f0, hasta=f0;
   if(vista==='semana'){ var d=new Date(f0+'T00:00:00Z'); var dow=d.getUTCDay(); var mon=new Date(d.getTime()-((dow+6)%7)*86400000); desde=ymd(mon); hasta=ymd(new Date(mon.getTime()+6*86400000)); }
   var data=await api('GET','/api/erp/citas/agenda?desde='+desde+'&hasta='+hasta);
   render(data, desde, hasta, vista, eje);
 }
-function colDefs(eje){ if(eje==='recurso'){ return [{id:null,nombre:'Sin recurso'}].concat(META.recursos.map(r=>({id:r.id,nombre:r.nombre}))); } return META.personas.map(p=>({id:p.id,nombre:p.name})); }
+function colDefs(eje, data){
+  if(eje==='recurso'){ return [{id:null,nombre:'Sin '+(window.PUESTO_SING||'puesto').toLowerCase()}].concat(META.recursos.map(r=>({id:r.id,nombre:r.nombre}))); }
+  var verTodo=document.getElementById('agVerTodo').checked;
+  var base = (!verTodo && data && data.personasDia) ? data.personasDia : META.personas;
+  var list = base.map(p=>({id:p.id,nombre:p.name}));
+  return list.length ? list : META.personas.map(p=>({id:p.id,nombre:p.name}));   // nunca dejar la agenda sin columnas
+}
 function render(data, desde, hasta, vista, eje){
   var box=document.getElementById('agenda');
   var dates=[]; var d0=new Date(desde+'T00:00:00Z'); var dN=new Date(hasta+'T00:00:00Z');
   for(var d=new Date(d0); d<=dN; d=new Date(d.getTime()+86400000)) dates.push(ymd(d));
   var START=8*60, END=21*60, STEP=30, PXMIN=0.9;
-  var cols = vista==='semana' ? dates.map(dt=>({key:dt,label:DIAS[new Date(dt+'T00:00:00Z').getUTCDay()]+' '+dt.slice(8)})) : colDefs(eje).map(c=>({key:c.id===null?'null':String(c.id),label:c.nombre,colId:c.id}));
+  var clickable = vista==='dia' && eje==='persona' && window.CITAS_EDIT;
+  var cols = vista==='semana' ? dates.map(dt=>({key:dt,label:DIAS[new Date(dt+'T00:00:00Z').getUTCDay()]+' '+dt.slice(8)})) : colDefs(eje,data).map(c=>({key:c.id===null?'null':String(c.id),label:c.nombre,colId:c.id}));
   var html='<table style="border-collapse:collapse;min-width:'+(80+cols.length*150)+'px"><thead><tr><th style="width:60px"></th>'+cols.map(c=>'<th style="padding:.4rem;font-size:.85rem;border-bottom:1px solid var(--border)">'+esc(c.label)+'</th>').join('')+'</tr></thead><tbody>';
   for(var t=START;t<END;t+=STEP){
     html+='<tr><td style="font-size:.7rem;color:var(--muted);vertical-align:top;height:'+(STEP*PXMIN)+'px">'+fhhmm(t)+'</td>';
     for(var ci=0;ci<cols.length;ci++){ var col=cols[ci];
       var attrs = vista==='semana' ? 'data-fecha="'+col.key+'"' : ('data-fecha="'+desde+'" data-col="'+(col.colId==null?'':col.colId)+'"');
-      html+='<td class="agcell" '+attrs+' data-min="'+t+'" style="border:1px solid var(--border);height:'+(STEP*PXMIN)+'px;vertical-align:top;position:relative" ondragover="event.preventDefault()" ondrop="onDrop(event)"></td>';
+      html+='<td class="agcell" '+attrs+' data-min="'+t+'"'+(clickable?' onclick="cellNueva(this)"':'')+' style="border:1px solid var(--border);height:'+(STEP*PXMIN)+'px;vertical-align:top;position:relative'+(clickable?';cursor:pointer':'')+'" ondragover="event.preventDefault()" ondrop="onDrop(event)"></td>';
     }
     html+='</tr>';
   }
   html+='</tbody></table>';
   box.innerHTML=html;
   (data.citas||[]).forEach(function(ci){
-    var colKey = vista==='semana' ? ci.fecha : (eje==='recurso' ? (ci.recurso_id==null?'null':String(ci.recurso_id)) : String(ci.user_id));
     var cell = box.querySelector('.agcell[data-min="'+(Math.floor(ci.inicio_min/STEP)*STEP)+'"]'+(vista==='semana'?'[data-fecha="'+ci.fecha+'"]':'[data-col="'+(eje==='recurso'?(ci.recurso_id==null?'':ci.recurso_id):ci.user_id)+'"]'));
     if(!cell) return;
     var top=(ci.inicio_min-Math.floor(ci.inicio_min/STEP)*STEP)*PXMIN;
     var h=Math.max(18,(ci.dur_min)*PXMIN);
-    var color = ci.estado==='confirmada'?'#16a34a':(ci.estado==='atendida'?'#2563eb':(ci.estado==='no_show'?'#b91c1c':'#64748b'));
+    var color = COLOR[ci.estado]||'#64748b';
     var el=document.createElement('div');
     el.className='citaBlock'; el.dataset.id=ci.id;
     if(window.CITAS_EDIT){ el.draggable=true; el.ondragstart=function(ev){ev.dataTransfer.setData('text/plain',ci.id);}; }
     el.style.cssText='position:absolute;left:2px;right:2px;top:'+top+'px;height:'+h+'px;background:'+color+';color:#fff;border-radius:6px;padding:2px 5px;font-size:.72rem;overflow:hidden;cursor:pointer;z-index:2';
-    el.innerHTML='<b>'+fhhmm(ci.inicio_min)+'</b> '+esc(ci.cliente)+'<br>'+esc(ci.servicios)+(eje==='persona'&&ci.recurso?'<br>· '+esc(ci.recurso):'');
+    // Solo lo justo (2.4): hora · cliente · servicio. El resto vive DENTRO de la cita, al abrirla.
+    el.innerHTML='<b>'+fhhmm(ci.inicio_min)+'</b> '+esc(ci.cliente)+'<br>'+esc(ci.servicios);
+    // Tramo(s) de ESPERA en otro tono, dentro del MISMO bloque (1.3): "Aquí estás libre".
+    (ci.espera||[]).forEach(function(w){
+      var b=document.createElement('div');
+      b.title='Aquí estás libre';
+      b.style.cssText='position:absolute;left:0;right:0;top:'+(w.ini*PXMIN)+'px;height:'+((w.fin-w.ini)*PXMIN)+'px;background:repeating-linear-gradient(45deg,rgba(255,255,255,.28),rgba(255,255,255,.28) 5px,rgba(255,255,255,.12) 5px,rgba(255,255,255,.12) 10px);border-top:1px dashed rgba(255,255,255,.6);border-bottom:1px dashed rgba(255,255,255,.6);pointer-events:none';
+      el.appendChild(b);
+    });
     el.onclick=function(){verCita(ci.id);};
     cell.appendChild(el);
   });
 }
+function cellNueva(cell){ if(!window.CITAS_EDIT) return; var uid=cell.dataset.col; if(!uid) return; openQuickCita(uid, cell.dataset.fecha, parseInt(cell.dataset.min)); }
 function esc(s){return String(s==null?'':s).replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));}
 async function onDrop(ev){
   ev.preventDefault(); if(!window.CITAS_EDIT) return;
@@ -1033,43 +1175,107 @@ async function onDrop(ev){
   if(cell.dataset.col!==undefined){ var eje=document.getElementById('agEje').value; if(document.getElementById('agVista').value!=='semana'){ if(eje==='recurso') body.recurso_id=cell.dataset.col||null; else body.user_id=cell.dataset.col||null; } }
   try{ await api('POST','/api/erp/citas/'+id+'/mover',body); toast('Cita movida'); agCargar(); }catch(e){ toast(e.message,'err'); }
 }
-// Nueva cita
+// ── NUEVA CITA — panel rápido (3 toques desde un hueco de la rejilla) ─────────
 function fillSelect(el,rows,val,label,placeholder){ el.innerHTML=(placeholder!=null?'<option value="">'+placeholder+'</option>':'')+rows.map(r=>'<option value="'+r[val]+'">'+esc(r[label])+'</option>').join(''); }
-async function openNuevaCita(){
-  await ensureMeta();
-  document.getElementById('cId').value=''; document.getElementById('mCitaTitle').textContent='Nueva cita';
-  fillSelect(document.getElementById('cCliente'),META.clientes,'id','name','— Cliente suelto —');
+function SYM(){ return (META&&META.ajustes&&META.ajustes.currency_symbol)||'€'; }
+function svcMin(s){ return s.muerto_dur_min ? (s.muerto_ini_min||s.duracion_min) : s.duracion_min; }   // "tiempo contigo" para el listado
+var QUICK_MIN=null;   // hora FIJA cuando se abre pulsando un hueco de la rejilla (no se vuelve a preguntar)
+function cRellenaComunes(){
   fillSelect(document.getElementById('cPersona'),META.personas.map(p=>({id:p.id,name:p.name})),'id','name',null);
-  fillSelect(document.getElementById('cRecurso'),META.recursos.map(r=>({id:r.id,name:r.nombre})),'id','name','— Ninguno —');
+  fillSelect(document.getElementById('cRecurso'),META.recursos.map(r=>({id:r.id,name:r.nombre})),'id','name','— Automático —');
   fillSelect(document.getElementById('cProyecto'),META.proyectos.map(p=>({id:p.id,name:(p.codigo||'')+' '+p.nombre})),'id','name','— Ninguno —');
-  document.getElementById('cServicios').innerHTML=META.servicios.map(s=>'<label style="font-size:.85rem"><input type="checkbox" class="csvc" value="'+s.id+'" onchange="cRecalc()"> '+esc(s.name)+' ('+s.duracion_min+' min)</label>').join('')||'<div style="color:var(--muted);font-size:.85rem;line-height:1.5">Aún no tienes servicios reservables.<br><a href="/admin/citas/servicios" style="color:var(--accent);font-weight:600">＋ Crear o configurar tus servicios →</a></div>';
-  document.getElementById('cSueltoNombre').value=''; document.getElementById('cSueltoMovil').value='';
-  document.getElementById('cFecha').value=document.getElementById('agFecha').value||ymd(new Date());
-  document.getElementById('cNota').value='';
-  document.getElementById('cHueco').innerHTML='<option value="">Elige servicios, persona y fecha…</option>';
-  cToggleSuelto(); openModal('mCita');
+  document.getElementById('cServicios').innerHTML=META.servicios.map(s=>'<label style="font-size:.85rem"><input type="checkbox" class="csvc" value="'+s.id+'" onchange="cServChange()"> '+esc(s.name)+' ('+svcMin(s)+' min)</label>').join('')||'<div style="color:var(--muted);font-size:.85rem;line-height:1.5">Aún no tienes servicios.<br><a href="/admin/citas/servicios" style="color:var(--accent);font-weight:600">＋ Crear o configurar tus servicios →</a></div>';
 }
-function cToggleSuelto(){ document.getElementById('cSueltoWrap').style.display=document.getElementById('cCliente').value?'none':'flex'; }
+function cReset(){
+  document.getElementById('cId').value=''; document.getElementById('cCliente').value=''; document.getElementById('cSueltoNombre').value=''; document.getElementById('cSueltoMovilVal').value='';
+  document.getElementById('cBusca').value=''; document.getElementById('cResultados').innerHTML=''; document.getElementById('cNuevo').style.display='none'; document.getElementById('cElegido').style.display='none';
+  document.getElementById('cSueltoMovil').value=''; document.getElementById('cNota').value=''; document.getElementById('cAvisar').checked=false;
+  document.getElementById('cResumen').textContent=''; document.getElementById('cHueco').innerHTML=''; document.getElementById('cRecurso').value='';
+  cRellenaComunes();
+}
+function fLargo(f){ try{ return new Date(f+'T00:00:00Z').toLocaleDateString('es-ES',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'}); }catch(e){ return f; } }
+async function openNuevaCita(){ await ensureMeta(); cReset(); QUICK_MIN=null; document.getElementById('mCitaTitle').textContent='Nueva cita';
+  document.getElementById('cFecha').value=document.getElementById('agFecha').value||ymd(new Date()); document.getElementById('cContexto').textContent='';
+  document.getElementById('cMas').open=true; openModal('mCita'); document.getElementById('cBusca').focus(); }
+async function openQuickCita(user_id, fecha, min){ await ensureMeta(); cReset(); QUICK_MIN=min; document.getElementById('mCitaTitle').textContent='Nueva cita';
+  document.getElementById('cPersona').value=String(user_id); document.getElementById('cFecha').value=fecha; document.getElementById('cMas').open=false;
+  var per=(META.personas.find(p=>String(p.id)===String(user_id))||{}).name||''; document.getElementById('cContexto').textContent=per+' · '+fLargo(fecha)+' · '+fhhmm(min);
+  openModal('mCita'); document.getElementById('cBusca').focus(); }
+// Cliente: buscador que filtra según escribes; si no existe, se usa ahí mismo con nombre y móvil.
+function cFiltra(){
+  var q=document.getElementById('cBusca').value.trim().toLowerCase();
+  document.getElementById('cCliente').value=''; document.getElementById('cSueltoNombre').value=''; document.getElementById('cElegido').style.display='none';
+  var box=document.getElementById('cResultados'), nuevo=document.getElementById('cNuevo');
+  if(!q){ box.innerHTML=''; nuevo.style.display='none'; return; }
+  var m=META.clientes.filter(c=>(c.name||'').toLowerCase().includes(q)).slice(0,6);
+  box.innerHTML=m.map(c=>'<div class="cliOpt" style="padding:.35rem .5rem;cursor:pointer;border-bottom:1px solid var(--border);font-size:.9rem" onclick="cPick('+c.id+',this)">'+esc(c.name)+'</div>').join('');
+  document.getElementById('cNuevoNombre').textContent=document.getElementById('cBusca').value.trim();
+  nuevo.style.display='';
+}
+function cPick(id, el){
+  document.getElementById('cCliente').value=id; document.getElementById('cSueltoNombre').value='';
+  document.getElementById('cBusca').value=el.textContent; document.getElementById('cResultados').innerHTML=''; document.getElementById('cNuevo').style.display='none';
+  var e=document.getElementById('cElegido'); e.textContent='✓ '+el.textContent; e.style.display='';
+}
+function cUsarNuevo(){
+  var nombre=document.getElementById('cBusca').value.trim(); if(!nombre){ toast('Escribe un nombre','err'); return; }
+  document.getElementById('cCliente').value=''; document.getElementById('cSueltoNombre').value=nombre; document.getElementById('cSueltoMovilVal').value=document.getElementById('cSueltoMovil').value;
+  document.getElementById('cResultados').innerHTML=''; document.getElementById('cNuevo').style.display='none';
+  var e=document.getElementById('cElegido'); e.textContent='✓ '+nombre+' (cliente nuevo)'; e.style.display='';
+}
 function cSelServicios(){ return [...document.querySelectorAll('.csvc:checked')].map(x=>parseInt(x.value)); }
+function cServChange(){ if(QUICK_MIN!=null && document.getElementById('cHueco').value==='') cSugerir(); else cRecalc(); }
 async function cRecalc(){
   var ids=cSelServicios(), user=document.getElementById('cPersona').value, fecha=document.getElementById('cFecha').value, rec=document.getElementById('cRecurso').value;
   var sel=document.getElementById('cHueco');
-  if(!ids.length||!user||!fecha){ sel.innerHTML='<option value="">Elige servicios, persona y fecha…</option>'; return; }
+  if(!ids.length||!user||!fecha){ sel.innerHTML='<option value="">Elige servicio y persona…</option>'; document.getElementById('cResumen').textContent=''; return; }
   try{
     var q='/api/erp/citas/huecos?fecha='+fecha+'&user_id='+user+'&service_ids='+ids.join(',')+(rec?'&recurso_id='+rec:'');
     var d=await api('GET',q);
-    sel.innerHTML=(d.huecos.length?d.huecos.map(h=>'<option value="'+h.min+'">'+h.hora+'</option>').join(''):'<option value="">Sin huecos (lleno, fuera de horario o fecha pasada)</option>');
+    var head=QUICK_MIN!=null?'<option value="">Hora: '+fhhmm(QUICK_MIN)+'</option>':'<option value="">Elige hora…</option>';
+    sel.innerHTML=head+(d.huecos.length?d.huecos.map(h=>'<option value="'+h.min+'">'+h.hora+'</option>').join(''):'');
   }catch(e){ sel.innerHTML='<option value="">'+esc(e.message)+'</option>'; }
+  cSugerir();
+}
+function cHora(){ var v=document.getElementById('cHueco').value; return v!==''?parseInt(v):QUICK_MIN; }
+async function cSugerir(){
+  var ids=cSelServicios(), user=document.getElementById('cPersona').value, fecha=document.getElementById('cFecha').value, min=cHora();
+  var box=document.getElementById('cResumen'); if(!ids.length||!user||fecha===''||min==null){ box.textContent=''; return; }
+  try{
+    var d=await api('GET','/api/erp/citas/sugerir?fecha='+fecha+'&user_id='+user+'&inicio_min='+min+'&service_ids='+ids.join(','));
+    if(!d.ok){ box.textContent=''; return; }
+    var s=(d.dur_total||0)+' min · '+SYM()+Number(d.precio_total||0).toFixed(2);
+    if(d.requiere_puesto) s+= d.puesto? (' · '+(window.PUESTO_SING||'Puesto')+': '+esc(d.puesto.nombre)) : (' · ⚠️ sin '+(window.PUESTO_SING||'Puesto').toLowerCase()+' libre');
+    box.innerHTML='<span style="color:'+(d.cabe?'var(--muted)':'var(--danger)')+'">'+s+(d.cabe?'':' · '+esc(d.motivo))+'</span>';
+  }catch(e){ box.textContent=''; }
 }
 async function cGuardar(){
-  var body={ cliente_id:document.getElementById('cCliente').value||null, cliente_suelto_nombre:document.getElementById('cSueltoNombre').value, cliente_suelto_movil:document.getElementById('cSueltoMovil').value,
+  var min=cHora();
+  if(min==null){ toast('Elige una hora (Más opciones)','err'); document.getElementById('cMas').open=true; return; }
+  if(!document.getElementById('cCliente').value && !document.getElementById('cSueltoNombre').value){ toast('Elige o crea un cliente','err'); return; }
+  if(!cSelServicios().length){ toast('Elige un servicio','err'); return; }
+  var body={ cliente_id:document.getElementById('cCliente').value||null, cliente_suelto_nombre:document.getElementById('cSueltoNombre').value, cliente_suelto_movil:document.getElementById('cSueltoMovilVal').value,
     user_id:document.getElementById('cPersona').value, recurso_id:document.getElementById('cRecurso').value||null, fecha:document.getElementById('cFecha').value,
-    inicio_min:parseInt(document.getElementById('cHueco').value), service_ids:cSelServicios(), project_id:document.getElementById('cProyecto').value||null, nota:document.getElementById('cNota').value };
-  if(!body.inicio_min && body.inicio_min!==0){ toast('Elige un hueco','err'); return; }
+    inicio_min:min, service_ids:cSelServicios(), project_id:document.getElementById('cProyecto').value||null, nota:document.getElementById('cNota').value };
   var id=document.getElementById('cId').value;
-  try{ if(id) await api('PUT','/api/erp/citas/'+id,body); else await api('POST','/api/erp/citas',body); closeModal('mCita'); toast('Cita guardada'); agCargar(); }
-  catch(e){ toast(e.message,'err'); }
+  // fetch directo para poder LEER los huecos cercanos que trae el 409 (el helper api() no los expone).
+  try{
+    var res=await fetch('/api/erp/citas'+(id?'/'+id:''),{method:id?'PUT':'POST',headers:{'Content-Type':'application/json','x-csrf-token':window.CSRF_TOKEN},body:JSON.stringify(body)});
+    var d=await res.json().catch(()=>({}));
+    if(!res.ok){ if(res.status===409){ cErrorChoque(d); } else { toast(d.error||'No se pudo guardar','err'); } return; }
+    var avisar=document.getElementById('cAvisar').checked;
+    closeModal('mCita'); toast('Cita guardada'); agCargar();
+    if(avisar && d.id) abrirAvisos(d.id);
+  }catch(e){ toast('Error de red','err'); }
 }
+// Choque de horas → mensaje claro + huecos cercanos que propone el servidor (no un error seco).
+function cErrorChoque(d){
+  var alt=d.huecos||[];
+  var box=document.getElementById('cResumen');
+  box.innerHTML='<span style="color:var(--danger)">'+esc(d.error||'No cabe a esa hora')+'</span>'+(alt.length?'<br><span style="font-size:.85rem">Huecos cerca: '+alt.map(h=>'<a href="#" onclick="cElegirHora('+h.min+');return false" style="color:var(--accent);font-weight:600;margin-right:.5rem">'+h.hora+'</a>').join('')+'</span>':'');
+  document.getElementById('cMas').open=true;
+}
+function cElegirHora(min){ QUICK_MIN=min; var sel=document.getElementById('cHueco'); var opt=[...sel.options].find(o=>o.value==String(min)); if(!opt){ opt=document.createElement('option'); opt.value=String(min); opt.textContent=fhhmm(min); sel.appendChild(opt); } sel.value=String(min); document.getElementById('cContexto').textContent=document.getElementById('cContexto').textContent.replace(/·[^·]*$/, '· '+fhhmm(min)); cSugerir(); }
 async function verCita(id){
   var c=await api('GET','/api/erp/citas/'+id);
   document.getElementById('mDetTitle').textContent=c.codigo+' · '+(ESTLBL[c.estado]||c.estado);
@@ -1087,7 +1293,7 @@ async function verCita(id){
     +'<div><div class="form-label">Cliente</div>'+e(c.cliente_nombre||c.cliente_suelto_nombre||'—')+'</div>'
     +'<div><div class="form-label">Móvil</div>'+e(c.contacto&&c.contacto.movil_e164||'—')+(c.contacto&&c.contacto.movil_e164&&!c.contacto.movil_valido?' <span style="color:var(--danger)">(sin móvil válido)</span>':'')+'</div>'
     +'<div><div class="form-label">Persona</div>'+e(c.persona||'—')+'</div>'
-    +'<div><div class="form-label">Recurso</div>'+e(c.recurso||'—')+'</div>'
+    +'<div><div class="form-label">'+(window.PUESTO_SING||'Puesto')+'</div>'+e(c.recurso||'—')+'</div>'
     +'<div><div class="form-label">Fecha</div>'+e(c.fecha)+'</div>'
     +'<div><div class="form-label">Hora</div>'+e(c.hora)+' ('+c.dur_min+' min)</div>'
     +(c.proyecto_codigo?'<div><div class="form-label">Proyecto</div>'+e(c.proyecto_codigo)+'</div>':'')
@@ -1109,14 +1315,16 @@ async function atender(id){
 }
 async function editCita(id){
   await ensureMeta(); var c=await api('GET','/api/erp/citas/'+id);
-  openNuevaCita();
-  document.getElementById('cId').value=id; document.getElementById('mCitaTitle').textContent='Editar cita';
-  document.getElementById('cCliente').value=c.cliente_id||''; cToggleSuelto();
-  document.getElementById('cSueltoNombre').value=c.cliente_suelto_nombre||''; document.getElementById('cSueltoMovil').value=c.cliente_suelto_movil||'';
+  cReset(); QUICK_MIN=null; document.getElementById('cId').value=id; document.getElementById('mCitaTitle').textContent='Editar cita';
+  document.getElementById('cMas').open=true; document.getElementById('cContexto').textContent='';
+  if(c.cliente_id){ document.getElementById('cCliente').value=c.cliente_id; document.getElementById('cBusca').value=c.cliente_nombre||''; var e=document.getElementById('cElegido'); e.textContent='✓ '+(c.cliente_nombre||''); e.style.display=''; }
+  else if(c.cliente_suelto_nombre){ document.getElementById('cSueltoNombre').value=c.cliente_suelto_nombre; document.getElementById('cSueltoMovilVal').value=c.cliente_suelto_movil||''; document.getElementById('cBusca').value=c.cliente_suelto_nombre; var e2=document.getElementById('cElegido'); e2.textContent='✓ '+c.cliente_suelto_nombre+' (cliente nuevo)'; e2.style.display=''; }
   document.getElementById('cPersona').value=c.user_id; document.getElementById('cRecurso').value=c.recurso_id||'';
   document.getElementById('cProyecto').value=c.project_id||''; document.getElementById('cFecha').value=c.fecha; document.getElementById('cNota').value=c.nota||'';
   (c.service_ids||[]).forEach(function(sid){ var el=document.querySelector('.csvc[value="'+sid+'"]'); if(el) el.checked=true; });
-  await cRecalc(); document.getElementById('cHueco').value=c.inicio_min;
+  await cRecalc();
+  var sel=document.getElementById('cHueco'); var opt=[...sel.options].find(o=>o.value==String(c.inicio_min)); if(!opt){ opt=document.createElement('option'); opt.value=String(c.inicio_min); opt.textContent=fhhmm(c.inicio_min); sel.appendChild(opt);} sel.value=String(c.inicio_min);
+  cSugerir(); openModal('mCita');
 }
 async function abrirAvisos(id){
   var d=await api('GET','/api/erp/citas/'+id+'/aviso-links');
@@ -1143,7 +1351,8 @@ async function bGuardar(){
   var body={ user_id:document.getElementById('bPersona').value||null, recurso_id:document.getElementById('bRecurso').value||null, fecha:document.getElementById('bFecha').value, inicio_min:toMin(document.getElementById('bIni').value), fin_min:toMin(document.getElementById('bFin').value), motivo:document.getElementById('bMotivo').value };
   try{ await api('POST','/api/erp/citas/bloqueo',body); closeModal('mBloq'); toast('Bloqueado'); agCargar(); }catch(e){ toast(e.message,'err'); }
 }
-agCargar();
+// De entrada: HOY, por persona, solo quien trabaja hoy (2.1). Se recuerda lo último que se eligió (2.2).
+(function initAgenda(){ var p=loadPrefs(); if(p.vista)document.getElementById('agVista').value=p.vista; if(p.eje)document.getElementById('agEje').value=p.eje; var vt=document.getElementById('agVerTodo'); if(vt)vt.checked=!!p.verTodo; if((p.vista&&p.vista!=='dia')||(p.eje&&p.eje!=='persona')||p.verTodo){ document.getElementById('agControles').style.display='flex'; } agCargar(); })();
 `;
 
 const JS_COLA = String.raw`
@@ -1180,43 +1389,50 @@ cargar();
 const JS_SERVICIOS = String.raw`
 function esc(s){return String(s==null?'':s).replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));}
 var LIST=[],META=null;
+// El "tiempo de espera" va PLEGADO: aparece un enlace y solo se despliega si hace falta.
+function esperaShow(pref){ document.getElementById(pref+'EsperaAdd').style.display='none'; document.getElementById(pref+'EsperaWrap').style.display=''; document.getElementById(pref+'Espera').focus(); }
+function esperaReset(pref,val){ var w=document.getElementById(pref+'EsperaWrap'),a=document.getElementById(pref+'EsperaAdd'); document.getElementById(pref+'Espera').value=val||0; if(val>0){ w.style.display=''; a.style.display='none'; } else { w.style.display='none'; a.style.display=''; } }
+function esperaVal(pref){ return document.getElementById(pref+'EsperaWrap').style.display==='none'?0:(parseInt(document.getElementById(pref+'Espera').value)||0); }
 async function cargar(){ META=await api('GET','/api/erp/citas/meta'); LIST=await api('GET','/api/erp/citas/servicios/list'); render(); }
 function render(){
   var b=document.getElementById('svcBody');
-  if(!LIST.length){ b.innerHTML='<tr><td colspan="6" style="color:var(--muted)">No hay productos de tipo servicio en el catálogo. Créalos en Catálogo.</td></tr>'; return; }
+  if(!LIST.length){ b.innerHTML='<tr><td colspan="6" style="color:var(--muted)">No hay productos de tipo servicio en el catálogo. Créalos con «Nuevo servicio».</td></tr>'; return; }
   b.innerHTML=LIST.map(function(s){
-    return '<tr><td>'+esc(s.name)+'</td><td>'+(s.reservable?'Sí':(s.configurado?'No':'—'))+'</td><td>'+(s.duracion_min!=null?s.duracion_min+' min':'<span style="color:var(--muted)">sin configurar</span>')+'</td><td>'+(s.muerto_dur_min?('+'+s.muerto_dur_min+' min libre'):'—')+'</td><td>'+(s.margen_min||0)+' min</td><td>'+(window.CITAS_EDIT?'<button class="btn btn-secondary btn-sm" onclick="edit('+s.id+')">Configurar</button>':'')+'</td></tr>';
+    var contigo = s.muerto_dur_min ? s.muerto_ini_min : s.duracion_min;
+    return '<tr><td>'+esc(s.name)+'</td><td>'+(s.reservable?'Sí':(s.configurado?'No':'—'))+'</td><td>'+(s.duracion_min!=null?(contigo+' min'):'<span style="color:var(--muted)">sin configurar</span>')+'</td><td>'+(s.muerto_dur_min?(s.muerto_dur_min+' min libre'):'—')+'</td><td>'+(s.margen_min||0)+' min</td><td>'+(window.CITAS_EDIT?'<button class="btn btn-secondary btn-sm" onclick="edit('+s.id+')">Configurar</button>':'')+'</td></tr>';
   }).join('');
 }
 function edit(id){
   var s=LIST.find(x=>x.id===id);
   document.getElementById('svcId').value=id; document.getElementById('mSvcTitle').textContent=s.name;
   document.getElementById('svcReservable').checked=s.reservable!==0;
-  document.getElementById('svcDur').value=s.duracion_min||30; document.getElementById('svcMargen').value=s.margen_min||0;
-  document.getElementById('svcMuertoIni').value=s.muerto_ini_min||0; document.getElementById('svcMuertoDur').value=s.muerto_dur_min||0;
+  var espera = s.muerto_dur_min||0;
+  var contigo = espera>0 ? (s.muerto_ini_min||0) : (s.duracion_min||30);
+  document.getElementById('svcContigo').value=contigo||30; document.getElementById('svcMargen').value=s.margen_min||0;
+  esperaReset('svc', espera);
   document.getElementById('svcProviders').innerHTML=META.personas.map(p=>'<label style="font-size:.85rem"><input type="checkbox" class="svcprov" value="'+p.id+'" '+((s.providers||[]).includes(p.id)?'checked':'')+'> '+esc(p.name)+'</label>').join('')||'<span style="color:var(--muted)">Sin personas</span>';
-  document.getElementById('svcResources').innerHTML=META.recursos.map(r=>'<label style="font-size:.85rem"><input type="checkbox" class="svcres" value="'+r.id+'" '+((s.resources||[]).includes(r.id)?'checked':'')+'> '+esc(r.nombre)+'</label>').join('')||'<span style="color:var(--muted)">Sin recursos</span>';
+  document.getElementById('svcResources').innerHTML=META.recursos.map(r=>'<label style="font-size:.85rem"><input type="checkbox" class="svcres" value="'+r.id+'" '+((s.resources||[]).includes(r.id)?'checked':'')+'> '+esc(r.nombre)+'</label>').join('')||'<span style="color:var(--muted)">Sin '+(window.PUESTO_PLURAL||'puestos').toLowerCase()+'</span>';
   openModal('mSvc');
 }
 async function svcGuardar(){
   var id=document.getElementById('svcId').value;
-  var body={ reservable:document.getElementById('svcReservable').checked, duracion_min:parseInt(document.getElementById('svcDur').value), margen_min:parseInt(document.getElementById('svcMargen').value)||0,
-    muerto_ini_min:parseInt(document.getElementById('svcMuertoIni').value)||0, muerto_dur_min:parseInt(document.getElementById('svcMuertoDur').value)||0,
+  var contigo=parseInt(document.getElementById('svcContigo').value)||0, espera=esperaVal('svc');
+  if(contigo<1){ toast('El «tiempo contigo» debe ser al menos 1 minuto','err'); return; }
+  var body={ reservable:document.getElementById('svcReservable').checked, duracion_min:contigo+espera, muerto_ini_min:contigo, muerto_dur_min:espera, margen_min:parseInt(document.getElementById('svcMargen').value)||0,
     provider_ids:[...document.querySelectorAll('.svcprov:checked')].map(x=>parseInt(x.value)), resource_ids:[...document.querySelectorAll('.svcres:checked')].map(x=>parseInt(x.value)) };
   try{ await api('PUT','/api/erp/citas/servicios/'+id,body); closeModal('mSvc'); toast('Guardado'); cargar(); }catch(e){ toast(e.message,'err'); }
 }
 function openNuevoServicio(){
-  ['nsNombre'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('nsPrecio').value='0'; document.getElementById('nsIva').value='general';
-  document.getElementById('nsDur').value='30'; document.getElementById('nsMargen').value='0';
-  document.getElementById('nsMuertoIni').value='0'; document.getElementById('nsMuertoDur').value='0';
+  document.getElementById('nsNombre').value=''; document.getElementById('nsPrecio').value='0'; document.getElementById('nsIva').value='general';
+  document.getElementById('nsContigo').value='30'; document.getElementById('nsMargen').value='0'; esperaReset('ns',0);
   openModal('mNuevoSvc');
 }
 async function svcCrear(){
+  var contigo=parseInt(document.getElementById('nsContigo').value)||0, espera=esperaVal('ns');
+  if(!document.getElementById('nsNombre').value.trim()){ toast('Ponle un nombre','err'); return; }
+  if(contigo<1){ toast('El «tiempo contigo» debe ser al menos 1 minuto','err'); return; }
   var body={ nombre:document.getElementById('nsNombre').value, precio:document.getElementById('nsPrecio').value||0, tax_band:document.getElementById('nsIva').value,
-    duracion_min:parseInt(document.getElementById('nsDur').value), margen_min:parseInt(document.getElementById('nsMargen').value)||0,
-    muerto_ini_min:parseInt(document.getElementById('nsMuertoIni').value)||0, muerto_dur_min:parseInt(document.getElementById('nsMuertoDur').value)||0 };
-  if(!body.nombre.trim()){ toast('Ponle un nombre','err'); return; }
+    duracion_min:contigo+espera, muerto_ini_min:contigo, muerto_dur_min:espera, margen_min:parseInt(document.getElementById('nsMargen').value)||0 };
   try{ await api('POST','/api/erp/citas/servicios',body); closeModal('mNuevoSvc'); toast('Servicio creado'); cargar(); }catch(e){ toast(e.message,'err'); }
 }
 cargar();
@@ -1228,13 +1444,13 @@ var LIST=[];
 async function cargar(){ LIST=await api('GET','/api/erp/citas/recursos/list'); render(); }
 function render(){
   var b=document.getElementById('recBody');
-  b.innerHTML=LIST.length?LIST.map(r=>'<tr><td>'+esc(r.nombre)+'</td><td>'+esc(r.tipo)+'</td><td style="color:var(--muted)">'+esc(r.notas||'—')+'</td><td>'+(window.CITAS_EDIT?'<button class="btn btn-secondary btn-sm" onclick="edit('+r.id+')">Editar</button> <button class="btn btn-danger btn-sm" onclick="del('+r.id+')">Archivar</button>':'')+'</td></tr>').join(''):'<tr><td colspan="4" style="color:var(--muted)">Aún no hay recursos.</td></tr>';
+  b.innerHTML=LIST.length?LIST.map(r=>'<tr><td>'+esc(r.nombre)+'</td><td>'+esc(r.tipo)+'</td><td style="color:var(--muted)">'+esc(r.notas||'—')+'</td><td>'+(window.CITAS_EDIT?'<button class="btn btn-secondary btn-sm" onclick="edit('+r.id+')">Editar</button> <button class="btn btn-danger btn-sm" onclick="del('+r.id+')">Archivar</button>':'')+'</td></tr>').join(''):'<tr><td colspan="4" style="color:var(--muted)">Aún no hay '+(window.PUESTO_PLURAL||'puestos').toLowerCase()+'.</td></tr>';
 }
-function openRecurso(){ document.getElementById('recId').value=''; document.getElementById('mRecTitle').textContent='Nuevo recurso'; document.getElementById('recNombre').value=''; document.getElementById('recTipo').value='silla'; document.getElementById('recNotas').value=''; openModal('mRec'); }
-function edit(id){ var r=LIST.find(x=>x.id===id); document.getElementById('recId').value=id; document.getElementById('mRecTitle').textContent='Editar recurso'; document.getElementById('recNombre').value=r.nombre; document.getElementById('recTipo').value=r.tipo; document.getElementById('recNotas').value=r.notas||''; openModal('mRec'); }
+function openRecurso(){ document.getElementById('recId').value=''; document.getElementById('mRecTitle').textContent='Nuevo '+(window.PUESTO_SING||'Puesto').toLowerCase(); document.getElementById('recNombre').value=''; document.getElementById('recTipo').value='silla'; document.getElementById('recNotas').value=''; openModal('mRec'); }
+function edit(id){ var r=LIST.find(x=>x.id===id); document.getElementById('recId').value=id; document.getElementById('mRecTitle').textContent='Editar '+(window.PUESTO_SING||'Puesto').toLowerCase(); document.getElementById('recNombre').value=r.nombre; document.getElementById('recTipo').value=r.tipo; document.getElementById('recNotas').value=r.notas||''; openModal('mRec'); }
 async function recGuardar(){ var id=document.getElementById('recId').value; var body={nombre:document.getElementById('recNombre').value,tipo:document.getElementById('recTipo').value,notas:document.getElementById('recNotas').value};
   try{ if(id) await api('PUT','/api/erp/citas/recursos/'+id,body); else await api('POST','/api/erp/citas/recursos',body); closeModal('mRec'); toast('Guardado'); cargar(); }catch(e){ toast(e.message,'err'); } }
-async function del(id){ if(!confirm('¿Archivar este recurso?'))return; try{ await api('DELETE','/api/erp/citas/recursos/'+id); toast('Archivado'); cargar(); }catch(e){ toast(e.message,'err'); } }
+async function del(id){ if(!confirm('¿Archivar?'))return; try{ await api('DELETE','/api/erp/citas/recursos/'+id); toast('Archivado'); cargar(); }catch(e){ toast(e.message,'err'); } }
 cargar();
 `;
 
@@ -1293,9 +1509,11 @@ hToggle(); hCargar();
 const JS_AJUSTES = String.raw`
 function toMin(t){ if(!t)return ''; var p=t.split(':'); return parseInt(p[0])*60+parseInt(p[1]); }
 async function ajGuardar(){
+  var pu=(document.getElementById('ajPuesto').value||'Puesto|Puestos').split('|');
   var body={ cita_grid_min:parseInt(document.getElementById('ajGrid').value), cita_antelacion_min:parseInt(document.getElementById('ajAntel').value)||0,
     cita_ventana_dias:parseInt(document.getElementById('ajVentana').value)||60, cita_corte_mismo_dia_min:toMin(document.getElementById('ajCorte').value),
-    cita_margen_defecto_min:parseInt(document.getElementById('ajMargen').value)||0, cita_canal_defecto:document.getElementById('ajCanal').value, cita_modo_recordatorio:document.getElementById('ajModo').value };
-  try{ await api('POST','/api/erp/citas/ajustes',body); toast('Ajustes guardados'); }catch(e){ toast(e.message,'err'); }
+    cita_margen_defecto_min:parseInt(document.getElementById('ajMargen').value)||0, cita_canal_defecto:document.getElementById('ajCanal').value, cita_modo_recordatorio:document.getElementById('ajModo').value,
+    cita_puesto_sing:pu[0], cita_puesto_plural:pu[1]||pu[0] };
+  try{ await api('POST','/api/erp/citas/ajustes',body); toast('Ajustes guardados'); setTimeout(function(){location.reload();},400); }catch(e){ toast(e.message,'err'); }
 }
 `;

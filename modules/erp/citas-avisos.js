@@ -9,7 +9,7 @@
 
 import { renderEmail, TONO_UNICO } from './email-templates.js';
 import { PREFIJOS_VALIDOS } from './paises-telefono.js';
-import { hhmm } from './citas-engine.js';
+import { hhmm, ahoraLocal } from './citas-engine.js';
 
 // ── 1.13 Móvil en formato internacional (+34…): validar al escribir y sanear los existentes ────────
 // Devuelve { e164, valido }. Acepta '+CC...' / '00CC...' / un número nacional español de 9 cifras (se
@@ -104,6 +104,20 @@ export function avisoHecho(db, citaId, tipo) {
 export function registrarAviso(db, { cita_id, tipo, canal, estado = 'marcado', por_user_id = null, nota = '' }) {
   db.prepare('INSERT INTO cita_avisos (cita_id, tipo, canal, estado, por_user_id, nota) VALUES (?,?,?,?,?,?)')
     .run(cita_id, tipo, canal, estado, por_user_id, nota);
+}
+
+// Nº de avisos PENDIENTES (para el contador del menú, AGENDA SENCILLA §2.3): citas de mañana sin
+// recordatorio + de hoy sin confirmación. Barato y tolerante a fallo (0 nunca rompe el chrome del layout).
+export function contarAvisosPendientes(db) {
+  try {
+    const hoy = ahoraLocal().fecha;
+    const manana = new Date(Date.parse(hoy + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10);
+    const q = (fecha, tipo) => db.prepare(
+      `SELECT COUNT(*) n FROM citas c WHERE c.fecha=? AND c.archived=0 AND c.estado IN ('pedida','confirmada')
+         AND NOT EXISTS (SELECT 1 FROM cita_avisos a WHERE a.cita_id=c.id AND a.tipo=?)`
+    ).get(fecha, tipo).n;
+    return q(manana, 'recordatorio') + q(hoy, 'confirmacion');
+  } catch { return 0; }
 }
 
 // ── 1.11 LA COLA DE ENVÍOS ─────────────────────────────────────────────────────────────────────
