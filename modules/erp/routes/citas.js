@@ -16,7 +16,7 @@ import { ENTITY } from '../../../core/activity-entities.js';
 import { resolveVatRate } from '../../../core/vat-bands.js';
 import {
   citaSchema, citaMoverSchema, citaEstadoSchema, citaAtenderSchema, bloqueoSchema,
-  recursoSchema, serviceConfigSchema, horarioSchema, excepcionSchema, avisoMarcarSchema, citaAjustesSchema,
+  recursoSchema, serviceConfigSchema, serviceCreateSchema, horarioSchema, excepcionSchema, avisoMarcarSchema, citaAjustesSchema,
 } from '../schemas.js';
 import {
   geometriaCadena, comprobarSolape, huecos, ahoraLocal, hhmm, dowDeFecha, diasEntre,
@@ -27,6 +27,7 @@ import {
   enviarEmailCita, registrarAviso, avisoHecho, colaEnvios, normalizeMovil,
 } from '../citas-avisos.js';
 import { createInvoice, emitTicketSvc, anularInvoice } from './invoices.js';
+import { createProductSvc } from './products.js';   // "Nuevo servicio" nace como producto de catálogo (fuente única)
 import { createEntry } from './tiempo.js';
 import { sendEmail } from '../../../core/mailer.js';
 import { rateLimit } from '../../../core/rate-limit.js';
@@ -509,6 +510,26 @@ export function createCitasRoutes(db) {
       return c.json(rows);
     } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
+  // Crear un servicio reservable DE CERO: nace como producto de catálogo (type=service, fuente única) +
+  // su configuración de reserva, en un paso. Así no hay que ir antes a Catálogo. Precio e IVA del catálogo.
+  api.post('/servicios', requirePerm('citas.edit'), validate(serviceCreateSchema), c => {
+    try {
+      const d = c.get('validated');
+      const sku = (d.nombre.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)) || 'servicio';
+      const prod = createProductSvc(db, { name: d.nombre, sku, price: d.precio, tax_band: d.tax_band, type: 'service', status: 'active', stock: 0, tags: [] });
+      db.transaction(() => {
+        db.prepare(`INSERT INTO service_config (product_id,reservable,duracion_min,muerto_ini_min,muerto_dur_min,margen_min,updated_at) VALUES (?,1,?,?,?,?,CURRENT_TIMESTAMP)`)
+          .run(prod.id, d.duracion_min, d.muerto_ini_min, d.muerto_dur_min, d.margen_min);
+        const insP = db.prepare('INSERT OR IGNORE INTO service_providers (product_id,user_id) VALUES (?,?)');
+        for (const u of d.provider_ids) insP.run(prod.id, u);
+        const insR = db.prepare('INSERT OR IGNORE INTO service_resources (product_id,recurso_id) VALUES (?,?)');
+        for (const rr of d.resource_ids) insR.run(prod.id, rr);
+      })();
+      logActivity(db, c.get('session'), 'Creó servicio reservable', ENTITY.PRODUCT, prod.id, d.nombre);
+      return c.json({ id: prod.id, message: 'Servicio creado' });
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+  });
+
   api.put('/servicios/:id', requirePerm('citas.edit'), validate(serviceConfigSchema), c => {
     try {
       const pid = parseInt(c.req.param('id'));
@@ -768,10 +789,11 @@ function vistaCola(c, db) {
 function vistaServicios(c, db) {
   const editable = can(c, 'citas.edit');
   const content = `
-    <div class="ph"><h2>Servicios reservables</h2><a class="btn btn-secondary" href="/admin/citas">← Agenda</a></div>
-    <div class="alert" style="margin-bottom:1rem">Estos son los productos de tipo <strong>servicio</strong> de tu catálogo. Aquí solo defines lo que la cita necesita: duración, tiempo muerto interior (la persona queda libre ese rato) y margen posterior. <strong>El precio y el IVA siguen viniendo del catálogo.</strong></div>
+    <div class="ph"><h2>Servicios reservables</h2><div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/citas">← Agenda</a>${editable ? '<button class="btn btn-primary" onclick="openNuevoServicio()">Nuevo servicio</button>' : ''}</div></div>
+    <div class="alert" style="margin-bottom:1rem">Son los productos de tipo <strong>servicio</strong> de tu catálogo. Aquí defines lo que la cita necesita: duración, tiempo muerto interior (la persona queda libre ese rato) y margen posterior. <strong>El precio y el IVA siguen viniendo del catálogo.</strong> Un servicio no aparece al pedir cita hasta que tenga <strong>duración</strong> (pulsa «Configurar»). ¿No está en el catálogo? Créalo aquí con «Nuevo servicio».</div>
     <div class="card"><div class="table-wrap"><table><thead><tr><th>Servicio</th><th>Reservable</th><th>Duración</th><th>Tiempo muerto</th><th>Margen</th><th></th></tr></thead><tbody id="svcBody"><tr><td colspan="6">Cargando…</td></tr></tbody></table></div></div>
     ${modalServicio()}
+    ${modalNuevoServicio()}
     <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};${JS_SERVICIOS}</script>`;
   return adminLayout('Servicios reservables', content, 'citas', c.get('session')?.csrfToken || '', c);
 }
@@ -919,6 +941,28 @@ const modalServicio = () => `
     <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('mSvc')">Cancelar</button><button class="btn btn-primary" onclick="svcGuardar()">Guardar</button></div>
   </div></div>`;
 
+const modalNuevoServicio = () => `
+  <div class="modal-overlay" id="mNuevoSvc"><div class="modal" style="max-width:560px">
+    <div class="modal-head"><h3>Nuevo servicio</h3><button class="modal-close" onclick="closeModal('mNuevoSvc')">✕</button></div>
+    <div class="modal-body">
+      <div class="alert" style="font-size:.8rem">Se crea como producto de tu catálogo (tipo servicio). El precio y el IVA que pongas aquí son los del catálogo — luego puedes editarlos en Productos.</div>
+      <div class="form-group"><label class="form-label">Nombre *</label><input class="form-control" id="nsNombre" placeholder="Corte de pelo, Manicura…"></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Precio *</label><input class="form-control" type="number" min="0" step="0.01" id="nsPrecio" value="0"></div>
+        <div class="form-group"><label class="form-label">IVA</label><select class="form-control" id="nsIva"><option value="general">General (21%)</option><option value="reducido">Reducido (10%)</option><option value="superreducido">Superreducido (4%)</option><option value="exento">Exento (0%)</option></select></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Duración (min) *</label><input class="form-control" type="number" min="1" id="nsDur" value="30"></div>
+        <div class="form-group"><label class="form-label">Margen posterior (min)</label><input class="form-control" type="number" min="0" id="nsMargen" value="0"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Tiempo muerto: empieza al min</label><input class="form-control" type="number" min="0" id="nsMuertoIni" value="0"></div>
+        <div class="form-group"><label class="form-label">…y dura (min)</label><input class="form-control" type="number" min="0" id="nsMuertoDur" value="0"><div style="font-size:.7rem;color:var(--muted)">Rato en que la persona queda libre (el tinte). 0 = ninguno.</div></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('mNuevoSvc')">Cancelar</button><button class="btn btn-primary" onclick="svcCrear()">Crear servicio</button></div>
+  </div></div>`;
+
 const modalRecurso = () => `
   <div class="modal-overlay" id="mRec"><div class="modal" style="max-width:480px">
     <div class="modal-head"><h3 id="mRecTitle">Nuevo recurso</h3><button class="modal-close" onclick="closeModal('mRec')">✕</button></div>
@@ -998,7 +1042,7 @@ async function openNuevaCita(){
   fillSelect(document.getElementById('cPersona'),META.personas.map(p=>({id:p.id,name:p.name})),'id','name',null);
   fillSelect(document.getElementById('cRecurso'),META.recursos.map(r=>({id:r.id,name:r.nombre})),'id','name','— Ninguno —');
   fillSelect(document.getElementById('cProyecto'),META.proyectos.map(p=>({id:p.id,name:(p.codigo||'')+' '+p.nombre})),'id','name','— Ninguno —');
-  document.getElementById('cServicios').innerHTML=META.servicios.map(s=>'<label style="font-size:.85rem"><input type="checkbox" class="csvc" value="'+s.id+'" onchange="cRecalc()"> '+esc(s.name)+' ('+s.duracion_min+' min)</label>').join('')||'<span style="color:var(--muted)">No hay servicios reservables. Configúralos en «Servicios reservables».</span>';
+  document.getElementById('cServicios').innerHTML=META.servicios.map(s=>'<label style="font-size:.85rem"><input type="checkbox" class="csvc" value="'+s.id+'" onchange="cRecalc()"> '+esc(s.name)+' ('+s.duracion_min+' min)</label>').join('')||'<div style="color:var(--muted);font-size:.85rem;line-height:1.5">Aún no tienes servicios reservables.<br><a href="/admin/citas/servicios" style="color:var(--accent);font-weight:600">＋ Crear o configurar tus servicios →</a></div>';
   document.getElementById('cSueltoNombre').value=''; document.getElementById('cSueltoMovil').value='';
   document.getElementById('cFecha').value=document.getElementById('agFecha').value||ymd(new Date());
   document.getElementById('cNota').value='';
@@ -1160,6 +1204,20 @@ async function svcGuardar(){
     muerto_ini_min:parseInt(document.getElementById('svcMuertoIni').value)||0, muerto_dur_min:parseInt(document.getElementById('svcMuertoDur').value)||0,
     provider_ids:[...document.querySelectorAll('.svcprov:checked')].map(x=>parseInt(x.value)), resource_ids:[...document.querySelectorAll('.svcres:checked')].map(x=>parseInt(x.value)) };
   try{ await api('PUT','/api/erp/citas/servicios/'+id,body); closeModal('mSvc'); toast('Guardado'); cargar(); }catch(e){ toast(e.message,'err'); }
+}
+function openNuevoServicio(){
+  ['nsNombre'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('nsPrecio').value='0'; document.getElementById('nsIva').value='general';
+  document.getElementById('nsDur').value='30'; document.getElementById('nsMargen').value='0';
+  document.getElementById('nsMuertoIni').value='0'; document.getElementById('nsMuertoDur').value='0';
+  openModal('mNuevoSvc');
+}
+async function svcCrear(){
+  var body={ nombre:document.getElementById('nsNombre').value, precio:document.getElementById('nsPrecio').value||0, tax_band:document.getElementById('nsIva').value,
+    duracion_min:parseInt(document.getElementById('nsDur').value), margen_min:parseInt(document.getElementById('nsMargen').value)||0,
+    muerto_ini_min:parseInt(document.getElementById('nsMuertoIni').value)||0, muerto_dur_min:parseInt(document.getElementById('nsMuertoDur').value)||0 };
+  if(!body.nombre.trim()){ toast('Ponle un nombre','err'); return; }
+  try{ await api('POST','/api/erp/citas/servicios',body); closeModal('mNuevoSvc'); toast('Servicio creado'); cargar(); }catch(e){ toast(e.message,'err'); }
 }
 cargar();
 `;

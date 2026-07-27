@@ -1,7 +1,8 @@
 export function getDisaWidget() {
   return `
 <style>
-#disaFab{position:fixed;bottom:24px;right:24px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-d));color:var(--bg2);border:none;cursor:pointer;z-index:99999;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:500;box-shadow:0 4px 24px rgba(58,65,80,0.45);font-family:inherit}
+#disaFab{position:fixed;bottom:24px;right:24px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-d));color:var(--bg2);border:none;cursor:grab;z-index:99999;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:500;box-shadow:0 4px 24px rgba(58,65,80,0.45);font-family:inherit;touch-action:none}
+#disaFab.dragging{cursor:grabbing;box-shadow:0 8px 32px rgba(58,65,80,0.6)}
 #disaModal{display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:99999;pointer-events:none}
 #disaModal.open{display:block}
 #disaBox{background:var(--bg2);border:1px solid var(--border);border-radius:16px;box-shadow:0 20px 70px rgba(0,0,0,0.75);display:flex;flex-direction:column;width:400px;height:500px;min-height:300px;max-height:80vh;resize:both;overflow:auto;min-width:320px;min-height:300px;cursor:default;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:all}
@@ -27,7 +28,7 @@ export function getDisaWidget() {
 #dpAttachBtn:hover{border-color:var(--accent);color:var(--accent)}
 </style>
 
-<button id="disaFab" onclick="disaOpen()">D</button>
+<button id="disaFab" title="Arrástrame para moverme · púlsame para abrir DISA">D</button>
 
 <div id="disaModal">
   <div id="disaBox">
@@ -110,6 +111,49 @@ export function getDisaWidget() {
     box.style.top=(by+e.clientY-oy)+'px';
   });
   document.addEventListener('mouseup', function(){ drag=false; });
+
+  // FAB (botón redondo) ARRASTRABLE — se puede colocar donde se quiera; la posición se guarda por
+  // navegador (localStorage). Se distingue ARRASTRAR de PULSAR: si apenas se movió, abre DISA.
+  (function(){
+    var fab = document.getElementById('disaFab');
+    var SZ = 52, saved;
+    try { saved = JSON.parse(localStorage.getItem('disaFabPos') || 'null'); } catch(e){}
+    function clamp(x, max){ return Math.min(Math.max(0, x), Math.max(0, max)); }
+    function place(p){
+      if(!p) return;
+      fab.style.left = clamp(p.x, window.innerWidth - SZ) + 'px';
+      fab.style.top  = clamp(p.y, window.innerHeight - SZ) + 'px';
+      fab.style.right = 'auto'; fab.style.bottom = 'auto';
+    }
+    place(saved);
+    window.addEventListener('resize', function(){ if(saved) place(saved); });
+
+    var fdrag=false, moved=false, sx, sy, fx, fy;
+    function start(cx, cy){
+      fdrag=true; moved=false; sx=cx; sy=cy;
+      var r=fab.getBoundingClientRect(); fx=r.left; fy=r.top;
+      fab.style.right='auto'; fab.style.bottom='auto'; fab.classList.add('dragging');
+    }
+    function moveTo(cx, cy){
+      if(!fdrag) return;
+      var dx=cx-sx, dy=cy-sy;
+      if(Math.abs(dx)>4 || Math.abs(dy)>4) moved=true;
+      fab.style.left = clamp(fx+dx, window.innerWidth - SZ) + 'px';
+      fab.style.top  = clamp(fy+dy, window.innerHeight - SZ) + 'px';
+    }
+    function finish(){
+      if(!fdrag) return; fdrag=false; fab.classList.remove('dragging');
+      if(moved){ var r=fab.getBoundingClientRect(); saved={x:r.left, y:r.top}; try{ localStorage.setItem('disaFabPos', JSON.stringify(saved)); }catch(e){} }
+    }
+    fab.addEventListener('mousedown', function(e){ if(e.button!==0) return; start(e.clientX, e.clientY); e.preventDefault(); });
+    document.addEventListener('mousemove', function(e){ moveTo(e.clientX, e.clientY); });
+    document.addEventListener('mouseup', finish);
+    fab.addEventListener('touchstart', function(e){ var t=e.touches[0]; start(t.clientX, t.clientY); }, {passive:true});
+    document.addEventListener('touchmove', function(e){ if(fdrag){ var t=e.touches[0]; moveTo(t.clientX, t.clientY); e.preventDefault(); } }, {passive:false});
+    document.addEventListener('touchend', finish);
+    // Pulsar (sin arrastrar) abre DISA. Si se arrastró, NO abre.
+    fab.addEventListener('click', function(e){ if(moved){ e.preventDefault(); e.stopPropagation(); moved=false; return; } disaOpen(); });
+  })();
 
   // Click fuera cierra
   document.getElementById('disaModal').addEventListener('click', function(e){

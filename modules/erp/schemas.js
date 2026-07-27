@@ -171,6 +171,20 @@ export const serviceConfigSchema = z.object({
   resource_ids: z.array(intPos).optional().default([]),    // qué recurso necesita (vacío = ninguno)
 });
 
+// Crear un servicio reservable DE CERO desde la Agenda: nace como producto de catálogo (type=service,
+// fuente única) + su configuración de reserva, en un paso. Precio e IVA siguen siendo del catálogo.
+export const serviceCreateSchema = z.object({
+  nombre: str(200),
+  precio: price,
+  tax_band: str(40),
+  duracion_min: z.coerce.number().int().min(1).max(1440),
+  muerto_ini_min: z.coerce.number().int().min(0).max(1440).optional().default(0),
+  muerto_dur_min: z.coerce.number().int().min(0).max(1440).optional().default(0),
+  margen_min: z.coerce.number().int().min(0).max(1440).optional().default(0),
+  provider_ids: z.array(intPos).optional().default([]),
+  resource_ids: z.array(intPos).optional().default([]),
+});
+
 // Horario semanal de un ámbito (negocio o una persona): la UI manda la rejilla ENTERA; el servicio
 // reemplaza los tramos de ese ámbito. Cada tramo es un intervalo abierto de un día (descansos = huecos).
 const tramoSchema = z.object({ dow: z.coerce.number().int().min(0).max(6), inicio_min: minDia, fin_min: minDia });
