@@ -340,6 +340,12 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     tiempo:           'tiempo.read',      // peldaño 7 · PIEZA 2 · registro de tiempo
     'facturar-horas': 'invoices.create',  // peldaño 7 · PIEZA 3 · facturar horas (mismo permiso que emitir factura)
     rentabilidad:     ['proyectos.read', 'invoices.read'],   // peldaño 7 · PIEZA 4 · exige AMBOS (proyectos + P&G)
+    citas:            'citas.read',        // peldaño 7 · PIEZA 5 · agenda de citas
+    'citas-cola':     'citas.read',
+    'citas-servicios':'citas.read',
+    'citas-recursos': 'citas.read',
+    'citas-horarios': 'citas.read',
+    'citas-ajustes':  'citas.edit',
     analytics:        'analytics.read',
     vigia:            'analytics.read',   // DISA predictiva · el vigía (dentro filtra por detector)
     disa:             null,
@@ -394,6 +400,17 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       { href: '/admin/tiempo', label: 'Registro de tiempo', key: 'tiempo', icon: 'ti-clock-play' },
       { href: '/admin/facturar-horas', label: 'Facturar horas', key: 'facturar-horas', icon: 'ti-clock-dollar' },
       { href: '/admin/rentabilidad', label: 'Rentabilidad', key: 'rentabilidad', icon: 'ti-chart-pie' },
+    ]},
+    // Peldaño 7 · PIEZA 5 — SISTEMA DE CITAS. Área propia: la agenda y todo lo que la alimenta
+    // (servicios reservables, recursos, horarios) y la cola de envíos de avisos. NO es el calendario
+    // FISCAL (ese vive en Contabilidad/Ajustes). Candado citas.read/edit en todas las rutas.
+    { label: 'Agenda', icon: 'ti-calendar', items: [
+      { href: '/admin/citas', label: 'Agenda', key: 'citas', icon: 'ti-calendar-event' },
+      { href: '/admin/citas/cola', label: 'Cola de envíos', key: 'citas-cola', icon: 'ti-send' },
+      { href: '/admin/citas/servicios', label: 'Servicios reservables', key: 'citas-servicios', icon: 'ti-clock-hour-4' },
+      { href: '/admin/citas/recursos', label: 'Recursos', key: 'citas-recursos', icon: 'ti-armchair' },
+      { href: '/admin/citas/horarios', label: 'Horarios', key: 'citas-horarios', icon: 'ti-calendar-time' },
+      { href: '/admin/citas/ajustes', label: 'Ajustes de citas', key: 'citas-ajustes', icon: 'ti-settings' },
     ]},
     { label: 'Compras y gastos', icon: 'ti-receipt', items: [
       { href: '/admin/supplier-invoices', label: 'Facturas recibidas', key: 'supplier-invoices', icon: 'ti-file-dollar' },

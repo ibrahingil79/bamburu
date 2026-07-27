@@ -1,0 +1,14 @@
+[Unit]
+Description=Bamburu — disparador diario del recordatorio automático de citas por email
+
+[Timer]
+# Diario a las 09:00 DE ESPAÑA (una hora después del resumen de avisos): el recordatorio del día
+# antes llega por la mañana. Zona EXPLÍCITA porque el servidor corre en UTC (requiere systemd ≥252).
+OnCalendar=*-*-* 09:00:00 Europe/Madrid
+# Si el servidor estaba apagado a esa hora, ejecuta al arrancar. La guarda de idempotencia
+# (cita_avisos con tipo='recordatorio') evita que un arranque tardío reenvíe lo ya avisado.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

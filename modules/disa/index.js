@@ -16,6 +16,7 @@ import { createStockTransferSvc, TRANSFER_ENTITY, transferLogDetails } from '../
 import { activeWarehouses, inventoryValuation } from '../erp/routes/warehouses.js';
 import { collectionsWorklist, registerCollectionAction, accountsSummary, registerAccountAction } from '../erp/cobros.js';
 import { ventasResumen, topProductos, ventasPorMes, clientesInactivos, pedidosSinEntregar } from '../erp/ventas-metrics.js';   // PIEZA C: cifras de venta desde la cadena nueva (facturas)
+import { ahoraLocal, hhmm } from '../erp/citas-engine.js';   // PIEZA 5: DISA solo-lectura de la agenda ("qué hay mañana")
 import { supplierAccountsSummary } from '../erp/pagos.js';                                  // Paso (d): índice de deuda con proveedores para la voz de DISA
 import { registerSupplierAccountPayment } from '../erp/routes/supplier-invoices.js';       // Paso (d): pago a proveedor por voz (reparto a cuenta)
 import { resumirAvisos, hoyLocal } from '../erp/avisos.js';                                 // Paso (d): resumen-primero del badge (motor de avisos)
@@ -71,6 +72,10 @@ export const QUERY_TABLE_READ_PERMS = {
   purchase_order_receipts: 'purchases.read', purchase_order_receipt_items: 'purchases.read', supplier_invoice_items: 'purchases.read',
   stock_transfers: 'inventory.read', stock_transfer_items: 'inventory.read',
   company_config: 'company.read', store_settings: 'store_settings.read',             // config de empresa/tienda (efectivo owner/admin)
+  // PIEZA 5 — DISA SOLO LECTURA sobre la agenda (mismo patrón que pedidos: responde "qué hay mañana",
+  // no crea ni mueve citas; citas NO está en WRITABLE_TABLES, así que escribir ya es imposible).
+  citas: 'citas.read', cita_servicios: 'citas.read', recursos: 'citas.read', agenda_bloqueos: 'citas.read',
+  horario_tramos: 'citas.read', horario_excepciones: 'citas.read', service_config: 'citas.read', cita_avisos: 'citas.read',
 };
 
 // Una tabla se considera REFERIDA si su nombre aparece como palabra completa (\b). '_' es carácter de
@@ -1150,6 +1155,17 @@ export function register(app, db) {
          WHERE o.status='borrador' ORDER BY o.id DESC LIMIT 10
       `).all() || [];
 
+      // PIEZA 5 — agenda de HOY y MAÑANA (Europe/Madrid), para responder "qué hay mañana". Solo lectura.
+      const _hoyMad = ahoraLocal().fecha;
+      const _manaMad = new Date(Date.parse(_hoyMad + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10);
+      const citasProx = db.prepare(`
+        SELECT c.fecha, c.inicio_min, c.estado, u.name AS persona,
+               COALESCE(NULLIF(c.cliente_suelto_nombre,''), cl.name, 'Cliente') AS cliente
+          FROM citas c LEFT JOIN admin_users u ON u.id=c.user_id LEFT JOIN clients cl ON cl.id=c.cliente_id
+         WHERE c.fecha IN (?,?) AND c.archived=0 AND c.estado NOT IN ('anulada')
+         ORDER BY c.fecha, c.inicio_min LIMIT 40
+      `).all(_hoyMad, _manaMad) || [];
+
       const lowStock = db.prepare(`
         SELECT name, stock FROM products
         WHERE status='active' AND stock <= 5 ORDER BY stock ASC LIMIT 5
@@ -1193,6 +1209,14 @@ export function register(app, db) {
         ...(pedidosBorradores.length ? ['  ' + pedidosBorradores.map(p => '#' + p.id + ' · ' + p.cliente + ' · ' + sym + Number(p.total || 0).toFixed(2)).join(' | ')] : []),
         'Usa SIEMPRE estos numeros y estos clientes (no recalcules "pendientes" con otra definicion ni inventes/cambies el cliente de un borrador).',
         'GESTION DE PEDIDOS POR CHAT: NO disponible en esta version. NO crees, confirmes, anules ni elimines pedidos por chat (ni con insert/update/delete_record sobre customer_orders/customer_order_items). Ante esa peticion, DECLINA con un mensaje claro y redirige a la pantalla de Pedidos (/admin/pedidos), SIN pedir confirmacion. LEER pedidos SI esta permitido.',
+        ] : []),
+        '',
+        // PIEZA 5 — AGENDA de citas. DISA SOLO LEE (responde "que hay manana"); no crea ni mueve citas.
+        ...(canRead('citas.read') ? [
+        'AGENDA DE CITAS (Europe/Madrid; solo lectura):',
+        '- Hoy (' + _hoyMad + '): ' + (citasProx.filter(x => x.fecha === _hoyMad).length ? citasProx.filter(x => x.fecha === _hoyMad).map(x => hhmm(x.inicio_min) + ' ' + x.cliente + (x.persona ? ' con ' + x.persona : '') + ' [' + x.estado + ']').join(' | ') : 'sin citas'),
+        '- Manana (' + _manaMad + '): ' + (citasProx.filter(x => x.fecha === _manaMad).length ? citasProx.filter(x => x.fecha === _manaMad).map(x => hhmm(x.inicio_min) + ' ' + x.cliente + (x.persona ? ' con ' + x.persona : '') + ' [' + x.estado + ']').join(' | ') : 'sin citas'),
+        'GESTION DE CITAS POR CHAT: NO disponible. NO crees, muevas, confirmes ni anules citas por chat (ni con insert/update/delete_record). Ante esa peticion, DECLINA y redirige a la Agenda (/admin/citas). LEER la agenda SI esta permitido.',
         ] : []),
         '',
         ...((canRead('inventory.read') || canRead('clients.read')) ? [

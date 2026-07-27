@@ -2165,8 +2165,106 @@ Aquí aterrizan, de las listas viejas:
   0 errores JS · **neto-cero en Ventas Y P&G total**). Regresión: `test-rentabilidad-proyecto` 22/0,
   `test-tiempo` 23/0, `test-facturar-horas` 31/0, `test-contabilidad-pyg` 36/0, `verify-constructor` 82/0,
   `test-contabilidad` 38/0, `test-proyectos` 20/0, `test-coste-wac` 19/0 — todo verde. **La pieza 4 queda
-  COMPLETA (parte 1 + parte 2). El peldaño 7 SIGUE ABIERTO: siguiente pieza 5 (calendario), a la espera de
-  encargo.**
+  COMPLETA (parte 1 + parte 2).**
+
+- **PIEZA 5 — SISTEMA DE CITAS (motor + agenda interna) · ✅ ENTREGADA y verificada (27 jul 2026, commit `PENDIENTE`).**
+  El motor de la cita previa y su agenda interna. **UN solo motor para dos negocios**: cita previa
+  (peluquería/estética/salud) y servicios por horas (piezas 1-4). NO es el **calendario FISCAL** (D5e,
+  15-jul) — otra cosa, ni se toca ni se reutiliza su nombre.
+  - **Servicio reservable = capa SOBRE el catálogo existente**, NO un segundo catálogo: se añade al
+    producto de tipo `service` la geometría de la reserva en `service_config` (`duracion_min`, tiempo
+    muerto interior `muerto_ini/dur_min` —la persona queda LIBRE ese rato, el tinte—, `margen_min`
+    posterior), quién puede prestarlo (`service_providers`) y qué recurso exige (`service_resources`).
+    **Precio e IVA SIGUEN viniendo del catálogo** (fuente única).
+  - **Recursos** (`recursos`): silla, cabina, sala, box, equipo. Una cita puede exigir persona Y recurso.
+  - **Horarios** (`horario_tramos` negocio/persona, descansos = hueco entre tramos; `horario_excepciones`
+    con fecha: vacaciones/festivo/cierre/horario especial). **La excepción manda** sobre la regla semanal;
+    persona sin horario propio hereda el del negocio.
+  - **Huecos EN VIVO** (no en tabla): horario − citas − márgenes, devolviendo LIBRE el tiempo muerto
+    interior de otra cita. Rejilla 15/30, antelación mínima, ventana máxima, corte del mismo día.
+  - **La cita** (`citas` + `cita_servicios`, geometría CONGELADA al reservar): cliente de la ficha o
+    **cliente suelto** (nombre + móvil), servicios encadenados, persona, recurso, fecha, hora, nota.
+    Estados pedida→confirmada→atendida|no_show|anulada. Archivar-no-borrar. **Guarda de solape en
+    SERVIDOR** (409 por persona o por recurso; el tiempo muerto interior es la única excepción, y solo
+    para la persona: la silla no se libera). **Bloquear un rato** sin cita (`agenda_bloqueos`).
+  - **Agenda** día/semana, por persona y por recurso, arrastrar para mover **revalidando en servidor**.
+  - **Salida al dinero (1.8):** "Atendida" cobra **reutilizando los motores existentes** (TPV
+    `emitTicketSvc` para cliente suelto / `createInvoice` para factura completa). **CERO camino de emisión
+    nuevo, cero hash propio.** Si la cita cuelga de un proyecto, puede generar su entrada de tiempo
+    reutilizando el registro de la pieza 2 (`createEntry`, no facturable si ya se cobró).
+  - **Enlace de la cita (1.9):** cada cita lleva una LLAVE no adivinable (`randomBytes(32)`), ruta pública
+    `/cita/<token>` (sin sesión, sin CSRF; el token ES la defensa; rate-limit propio 40/min; caduca pasada
+    la cita). Solo abre SU cita: CONFIRMAR o AVISAR de que no puede ir. No lista ni adivina otra.
+  - **Avisos (1.10-1.12):** confirmación y recordatorio, **todos pueden ir A MANO**. WhatsApp por enlace
+    OFICIAL `wa.me` (coste cero, sin cuenta Meta; **PROHIBIDO** WhatsApp Web / librerías no oficiales),
+    SMS por `sms:` nativo, y EMAIL —el único que además sale SOLO por el cron + plantillas Resend que YA
+    existen (2 plantillas nuevas SISTEMA con `{{enlace}}` crítico). Ajustes: canal por defecto y modo
+    (manual / auto_email). **Estado HONESTO**: "marcado como enviado" (con canal y hora), NUNCA
+    "entregado"/"leído". **La cola de envíos** (`/admin/citas/cola`): citas de mañana pendientes de
+    recordatorio + de hoy pendientes de confirmación, doce en doce clics.
+  - **Dato listo para el canal automático (1.13):** móvil E.164 (`clients.movil_e164` + marca "sin móvil
+    válido") y consentimiento RGPD con fecha. NO se construye capa de canales; solo el DATO.
+  - **DISA solo lectura sobre la agenda (1.14):** añadida a `QUERY_TABLE_READ_PERMS` con `citas.read`
+    (mismo patrón que pedidos) y contexto "qué hay hoy/mañana"; `citas` FUERA de WRITABLE_TABLES → no crea
+    ni mueve citas.
+  - **Permisos:** `citas.read`/`citas.edit`, `requirePerm` en TODAS las rutas (incluida la vista); el
+    enlace va por llave, no por sesión. Área "Agenda" propia en el rail (agenda, cola, servicios
+    reservables, recursos, horarios, ajustes).
+  - **Cron automático:** `bamburu-recordatorios-cita` (timer systemd 09:00 Europe/Madrid) manda el
+    recordatorio por email SOLO a los tenants con `cita_modo_recordatorio='auto_email'`; idempotente.
+  - Migración aditiva e idempotente, sin DROP; **todas las tablas nuevas FUERA de WRITABLE_TABLES**. NO se
+    tocó Verifactu, P&G, diario, proyectos/tiempo/facturar-horas/rentabilidad ni el constructor.
+  - Ficheros: `models.js` (10 tablas + cols en clients/company_config + permisos citas), `codes.js`
+    (prefijo CITA-), `citas-engine.js` (huecos/solape/horarios/estados, PURO), `citas-avisos.js`
+    (móvil E.164, wa/sms/email, cola), `routes/citas.js` (API + vistas + rutas públicas), `schemas.js`,
+    `email-templates.js` (2 plantillas), `routes/index.js`, `layout.js` (nav), `routes/users.js` (label),
+    `disa/index.js` (lectura agenda), `activity-entities.js`, `scripts/bamburu-recordatorios-cita.mjs` +
+    unit/timer systemd.
+  - **Verificado:** `test-citas` 35/0 (huecos con horario+margen+tiempo muerto; solape por persona y
+    recurso; excepción manda; antelación/ventana/corte; estados; zona Europe/Madrid), `test-enlace-cita`
+    14/0 (la llave solo abre SU cita; no se lista ni adivina; caduca; rate-limit), `test-avisos-cita`
+    20/0 (texto+enlace en los 3 canales; sin móvil cae a email; nunca "entregado"), `test-neto-cero-cita`
+    8/0 (crear+cobrar+anular deja Ventas y P&G EXACTAMENTE igual), `gate-citas-pantalla` 24/0 (crear desde
+    modal, mover con 409, agenda por persona y por recurso, cobro cuadrando, cola con botón WhatsApp que
+    lleva el enlace, marcar="marcado", 403 sin permiso, 0 errores JS). **Regresión verde**: proyectos 20,
+    tiempo 23, facturar-horas 31, rentabilidad 22, contabilidad-pyg 36, contabilidad 38, cobros 47,
+    disa-clientes 30, disa-stock 22, gate-proyectos 18, gate-rentabilidad 15, gate-tiempo 18,
+    gate-plantillas-email 41 (10 tipos/20 variantes), gate-xss 29, verify-actividad 32, verify-disa-query
+    43. (gate-nav-inicio-disa: 30/32 — los 2 fallos son precondición de datos, el tenant reseeded no tiene
+    propuestas de impago pendientes para encender el badge; no lo toca esta pieza.)
+  - **La pieza 5 queda COMPLETA. El peldaño 7 SIGUE ABIERTO: siguiente pieza 6 — PUERTA PÚBLICA DE
+    RESERVA (ficha abajo), a la espera de encargo.**
+
+- **PIEZA 6 — PUERTA PÚBLICA DE RESERVA (⬜, a la espera de encargo).** El cliente final ELIGE hueco y
+  reserva SOLO, 24 h, por el **enlace propio del negocio** (no el de una cita concreta: uno de reserva).
+  Se apoya en el motor de huecos de la pieza 5 (ya calcula disponibilidad en vivo). Incluye **señal /
+  prepago** y **política de cancelación** (cancelación cobrada). La pieza 5 es SOLO confirmación, no
+  reserva: elegir hueco es esto. **Decisión del dueño: NO depende del constructor de páginas web** — la
+  página de reserva la publica el sistema de citas (verificado jul 2026 contra Square, Fresha y Acuity).
+
+- **CONSTRUCTOR DE PÁGINAS WEB (⬜, sin turno asignado — pendiente de que el dueño lo ordene).** Antes solo
+  vivía en `TAREAS.md` (histórico, Capa 2, backlog); se sube aquí para que no quede suelto. Su ÚNICA
+  relación con las citas es **EMBEBER el botón de reserva** de la pieza 6 — **nunca requisito previo**.
+  Verificado jul 2026 (Square/Fresha/Acuity): la página de reserva la publica el sistema de citas, no el
+  constructor. *(Nota: el "agendado automático de citas (13 jun)" que citaba el encargo NO existe en
+  TABLERO ni en el código — no había nada suelto que consolidar; "Citas / Agenda" era la pieza 5, ya
+  entregada.)*
+
+- **ENVÍO AUTOMÁTICO DESATENDIDO POR WHATSAPP / SMS (⬜, peldaño propio — a la espera de encargo).**
+  · **NO es requisito de lanzamiento.** Con la vía manual de la pieza 5, un negocio opera entero sin él;
+    es una MEJORA para quien tenga volumen o no quiera pulsar un botón por cita.
+  · **WhatsApp SOLO por la plataforma OFICIAL de Meta.** PROHIBIDO WhatsApp Web y librerías no oficiales
+    (las del QR): incumplen las condiciones y pueden costarle al cliente su número. No se reabre.
+  · **Modelo de coste decidido por el DUEÑO:** Bamburu NO asume el coste. La cuenta es del negocio, que
+    decide si contrata y paga; Bamburu pone el mensaje y el enlace.
+  · Referencia jul 2026: ~0,0166 €/mensaje de aviso en España (tarifa Meta, revisable cada trimestre);
+    desde el 1-oct-2026 Meta cobra también las respuestas dentro de la ventana de 24 h. SMS: 3-4× más caro.
+  · Lo caro no es enviar: es que el **alta en Meta** (verificación de empresa, número dedicado, plantillas
+    aprobadas) ocurra DENTRO de Bamburu sin que el autónomo se pelee con Meta.
+
+- **DISA PROACTIVA SOBRE LA AGENDA (⬜, pendiente de que el dueño le dé número).** Huecos sin llenar,
+  cliente que dejó de reservar. Hoy DISA solo LEE la agenda (pieza 1.14); esto sería el paso proactivo
+  (avisar/proponer), apoyado en el vigía (peldaño 5).
 
 ### ⬜ 8 — Salud / bienestar · **2º oficio**
 Agenda presencial.

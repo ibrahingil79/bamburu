@@ -288,7 +288,7 @@ export function createUserRoutes(db) {
 
       <script>
       const SYSTEM_ROLES={owner:'Propietario',admin:'Administrador',employee:'Empleado',readonly:'Solo lectura'};
-      const MODULE_LABELS={activity:'Actividad',admin:'Administración',analytics:'Analítica',categories:'Categorías',clients:'Clientes',cobros:'Cobros',discounts:'Descuentos',inventory:'Inventario',invoices:'Facturas',orders:'Pedidos',products:'Productos',purchases:'Compras',quotes:'Presupuestos',pedidos:'Pedidos de venta',albaranes:'Albaranes',sales:'Ventas',feedback:'Feedback',suppliers:'Proveedores',tags:'Etiquetas'};
+      const MODULE_LABELS={activity:'Actividad',admin:'Administración',analytics:'Analítica',categories:'Categorías',clients:'Clientes',cobros:'Cobros',discounts:'Descuentos',inventory:'Inventario',invoices:'Facturas',orders:'Pedidos',products:'Productos',purchases:'Compras',quotes:'Presupuestos',pedidos:'Pedidos de venta',albaranes:'Albaranes',sales:'Ventas',feedback:'Feedback',suppliers:'Proveedores',tags:'Etiquetas',proyectos:'Proyectos',tiempo:'Registro de tiempo',citas:'Citas y agenda',crm:'Oportunidades (CRM)',conciliacion:'Conciliación',recurrentes:'Recurrentes'};
       const ALL_PERMS=${permsJson};
       let users=[], selectedPermIds=new Set();
 

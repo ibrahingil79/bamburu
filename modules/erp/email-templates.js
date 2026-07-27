@@ -341,6 +341,69 @@ export const CATALOGO = {
     },
   },
 
+  // ══ PIEZA 5 · CITAS — confirmación y recordatorio (SISTEMA: el enlace es crítico) ═══════════
+  confirmacion_cita: {
+    familia: FAMILIA_SISTEMA,
+    label: 'Confirmación de cita',
+    descripcion: 'Se lo mandas al cliente al crear o confirmar una cita. Lleva el enlace por el que puede confirmar o avisar de que no puede ir. Sin el enlace, el cliente no puede responder.',
+    tonos: null,
+    huecos: [
+      { clave: 'cliente', label: 'Nombre del cliente' },
+      { clave: 'empresa', label: 'Tu negocio' },
+      { clave: 'servicio', label: 'Servicio(s)' },
+      { clave: 'fecha', label: 'Día de la cita' },
+      { clave: 'hora', label: 'Hora de la cita' },
+      { clave: 'direccion', label: 'Dirección del negocio' },
+      { clave: 'enlace', label: 'Enlace de la cita', critico: true },
+    ],
+    requeridos: [],
+    criticos: ['enlace'],
+    motivoCritico: 'Sin el enlace, tu cliente no puede confirmar la cita ni avisarte de que no puede ir: el correo no serviría de nada.',
+    ejemplo: { cliente: 'María García', empresa: 'Tu Negocio', servicio: 'Corte + tinte', fecha: '2026-08-03', hora: '10:00', direccion: 'C/ Mayor 1, Madrid', enlace: 'https://tunegocio.bamburu.com/cita/EJEMPLO' },
+    fabrica: {
+      _: {
+        subject: 'Tu cita en {{empresa}} — {{fecha}} a las {{hora}}',
+        html: MARCO('<p>Hola {{cliente}},</p>'
+          + '<p>Te confirmamos tu cita en <b>{{empresa}}</b>:</p>'
+          + CAJA('<strong>Servicio:</strong> {{servicio}}<br><strong>Día:</strong> {{fecha}}<br><strong>Hora:</strong> {{hora}}<br><strong>Dónde:</strong> {{direccion}}')
+          + '<p>Confírmala o avísanos si no puedes venir con un solo clic:</p>'
+          + BOTON('Ver mi cita')
+          + '<p style="color:#6b7280;font-size:12px">Este enlace es solo para tu cita. Si no la has solicitado, ignora este correo.</p>'),
+      },
+    },
+  },
+
+  recordatorio_cita: {
+    familia: FAMILIA_SISTEMA,
+    label: 'Recordatorio de cita',
+    descripcion: 'El aviso del día antes. Puede salir solo por email (si lo activas en Ajustes) o mandarlo tú a mano. Lleva el mismo enlace de la cita.',
+    tonos: null,
+    huecos: [
+      { clave: 'cliente', label: 'Nombre del cliente' },
+      { clave: 'empresa', label: 'Tu negocio' },
+      { clave: 'servicio', label: 'Servicio(s)' },
+      { clave: 'fecha', label: 'Día de la cita' },
+      { clave: 'hora', label: 'Hora de la cita' },
+      { clave: 'direccion', label: 'Dirección del negocio' },
+      { clave: 'enlace', label: 'Enlace de la cita', critico: true },
+    ],
+    requeridos: [],
+    criticos: ['enlace'],
+    motivoCritico: 'Sin el enlace, tu cliente no puede confirmar ni avisarte de que no puede ir desde el recordatorio.',
+    ejemplo: { cliente: 'María García', empresa: 'Tu Negocio', servicio: 'Corte + tinte', fecha: '2026-08-03', hora: '10:00', direccion: 'C/ Mayor 1, Madrid', enlace: 'https://tunegocio.bamburu.com/cita/EJEMPLO' },
+    fabrica: {
+      _: {
+        subject: 'Recordatorio: tu cita en {{empresa}} es mañana a las {{hora}}',
+        html: MARCO('<p>Hola {{cliente}},</p>'
+          + '<p>Te recordamos tu cita en <b>{{empresa}}</b>:</p>'
+          + CAJA('<strong>Servicio:</strong> {{servicio}}<br><strong>Día:</strong> {{fecha}}<br><strong>Hora:</strong> {{hora}}<br><strong>Dónde:</strong> {{direccion}}')
+          + '<p>Si no puedes venir, avísanos con un clic para poder dar tu hueco a otra persona:</p>'
+          + BOTON('Ver mi cita')
+          + '<p style="color:#6b7280;font-size:12px">Este enlace es solo para tu cita.</p>'),
+      },
+    },
+  },
+
   resumen_avisos: {
     familia: FAMILIA_SISTEMA,
     label: 'Tu resumen diario',

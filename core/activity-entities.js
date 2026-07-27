@@ -63,6 +63,8 @@ export const ENTITY = {
   ATTACHMENT:       'attachment',
   PROJECT:          'proyecto',
   TIME_ENTRY:       'registro_tiempo',
+  CITA:             'cita',
+  RECURSO:          'recurso',
 };
 
 // Tabla → entidad, para la vía GENÉRICA de DISA (`insert_record`/`update_record`/`delete_record`

@@ -2035,6 +2035,193 @@ export function runMigrations(db) {
     PRIMARY KEY (series, year)
   )`);
 
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // ESCALERA · PASO 7 · PIEZA 5 — SISTEMA DE CITAS (motor + agenda interna)
+  // Un SOLO motor para dos negocios: cita previa (peluquería/estética/salud) y servicios por horas.
+  // TODO aditivo, idempotente, SIN DROP. TODAS estas tablas van FUERA de WRITABLE_TABLES (DISA solo
+  // LEE la agenda, nunca la escribe: pieza 1.14). NO tocan Verifactu, P&G, proyectos ni el calendario
+  // FISCAL (calendario-fiscal.js, otra cosa). El cobro y el registro de tiempo REUTILIZAN los motores
+  // ya existentes (createInvoice / emitTicketSvc / time_entries); aquí no nace ningún camino de emisión.
+  // Horas guardadas como MINUTOS desde medianoche (enteros) en hora local del negocio (Europe/Madrid):
+  // sin husos ni DST dentro de la aritmética; la zona solo se aplica al resolver "hoy"/"ahora".
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+
+  // 1.2 RECURSOS — silla, cabina, sala, box, equipo. Una cita puede exigir persona Y recurso.
+  db.exec(`CREATE TABLE IF NOT EXISTS recursos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT NOT NULL,
+    tipo TEXT NOT NULL DEFAULT 'otro',
+    notas TEXT DEFAULT '',
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_recursos_active ON recursos(active)`);
+
+  // 1.1 SERVICIO RESERVABLE — capa de gestión SOBRE el producto-servicio que YA existe (products.type
+  // ='service'). NO es un segundo catálogo: precio e IVA SIGUEN viniendo de products (fuente única).
+  // Aquí solo lo que la reserva necesita: duración, tiempo muerto INTERIOR (la persona queda LIBRE ese
+  // rato — el tinte), margen posterior (limpieza/cobro). product_id es la PK: relación 1-a-1 con la
+  // fila de catálogo. Se borra en cascada lógica: si el producto deja de ser servicio, esta fila queda
+  // inerte (reservable=0). Minutos, enteros.
+  db.exec(`CREATE TABLE IF NOT EXISTS service_config (
+    product_id INTEGER PRIMARY KEY,
+    reservable INTEGER NOT NULL DEFAULT 1,
+    duracion_min INTEGER NOT NULL DEFAULT 30,
+    muerto_ini_min INTEGER NOT NULL DEFAULT 0,
+    muerto_dur_min INTEGER NOT NULL DEFAULT 0,
+    margen_min INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT
+  )`);
+  // Quién puede prestar el servicio (persona) y qué recurso necesita. Vacío = "cualquiera" / "ninguno".
+  db.exec(`CREATE TABLE IF NOT EXISTS service_providers (
+    product_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    PRIMARY KEY (product_id, user_id)
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS service_resources (
+    product_id INTEGER NOT NULL,
+    recurso_id INTEGER NOT NULL,
+    PRIMARY KEY (product_id, recurso_id)
+  )`);
+
+  // 1.3 HORARIOS — del negocio y de cada persona. Cada FILA es un TRAMO abierto de un día de la semana
+  // (dow 0=domingo … 6=sábado, como JS Date.getDay). Los DESCANSOS son el hueco ENTRE dos tramos del
+  // mismo día (9-14 y 16-20 → dos filas; 14-16 es el descanso). scope='negocio' (user_id NULL) o
+  // scope='user'. Una persona SIN filas hereda el horario del negocio; con filas, manda el suyo
+  // (intersecado con el del negocio). Minutos desde medianoche.
+  db.exec(`CREATE TABLE IF NOT EXISTS horario_tramos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scope TEXT NOT NULL DEFAULT 'negocio',
+    user_id INTEGER,
+    dow INTEGER NOT NULL,
+    inicio_min INTEGER NOT NULL,
+    fin_min INTEGER NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_horario_scope ON horario_tramos(scope, user_id, dow)`);
+
+  // Excepciones con FECHA (vacaciones, festivo, cierre puntual, horario especial). LA EXCEPCIÓN MANDA
+  // sobre la regla semanal para ese día+ámbito. tipo='cerrado' → cerrado todo el día; tipo='horario'
+  // → estos tramos EN LUGAR de los semanales (una fila por tramo). scope negocio/user igual que arriba.
+  db.exec(`CREATE TABLE IF NOT EXISTS horario_excepciones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scope TEXT NOT NULL DEFAULT 'negocio',
+    user_id INTEGER,
+    fecha TEXT NOT NULL,
+    tipo TEXT NOT NULL DEFAULT 'cerrado',
+    inicio_min INTEGER,
+    fin_min INTEGER,
+    motivo TEXT DEFAULT '',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_horario_exc ON horario_excepciones(scope, user_id, fecha)`);
+
+  // 1.5 LA CITA. Cliente de la ficha (cliente_id) o cliente SUELTO (nombre + móvil). Uno o varios
+  // servicios encadenados (tabla cita_servicios). Persona SIEMPRE; recurso opcional. Horas en minutos
+  // locales. La GEOMETRÍA (duración/tiempo muerto/margen) se CONGELA en cita_servicios al reservar
+  // (misma filosofía que el coste-hora: cambiar el default de un servicio HOY no mueve una cita ya
+  // puesta). Estados: pedida → confirmada → atendida | no_show | anulada. Archivar-no-borrar.
+  // 1.9 token = LLAVE no adivinable del enlace público; token_expira caduca pasada la cita.
+  // 1.8 invoice_id / time_entry_id se rellenan si al ATENDER se cobró / se generó entrada de tiempo.
+  db.exec(`CREATE TABLE IF NOT EXISTS citas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    codigo TEXT,
+    cliente_id INTEGER,
+    cliente_suelto_nombre TEXT DEFAULT '',
+    cliente_suelto_movil TEXT DEFAULT '',
+    user_id INTEGER NOT NULL,
+    recurso_id INTEGER,
+    fecha TEXT NOT NULL,
+    inicio_min INTEGER NOT NULL,
+    dur_min INTEGER NOT NULL DEFAULT 0,
+    margen_min INTEGER NOT NULL DEFAULT 0,
+    estado TEXT NOT NULL DEFAULT 'pedida',
+    nota TEXT DEFAULT '',
+    project_id INTEGER,
+    token TEXT,
+    token_expira INTEGER,
+    invoice_id INTEGER,
+    time_entry_id INTEGER,
+    confirmada_at TEXT,
+    atendida_at TEXT,
+    anulada_at TEXT,
+    archived INTEGER NOT NULL DEFAULT 0,
+    created_by INTEGER,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT
+  )`);
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_citas_codigo ON citas(codigo)`);
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_citas_token ON citas(token) WHERE token IS NOT NULL`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_citas_fecha ON citas(fecha)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_citas_user ON citas(user_id, fecha)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_citas_recurso ON citas(recurso_id, fecha)`);
+
+  // Servicios ENCADENADOS de una cita, en orden. Geometría CONGELADA al reservar (ver arriba). El
+  // nombre y el precio del servicio se leen EN VIVO del catálogo al pintar/cobrar (fuente única).
+  //   offset_min  — inicio del servicio relativo al inicio de la cita.
+  //   muerto_*    — ventana interior en la que la PERSONA queda libre (relativa al inicio del servicio).
+  db.exec(`CREATE TABLE IF NOT EXISTS cita_servicios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cita_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL,
+    orden INTEGER NOT NULL DEFAULT 0,
+    offset_min INTEGER NOT NULL DEFAULT 0,
+    dur_min INTEGER NOT NULL DEFAULT 0,
+    muerto_ini_min INTEGER NOT NULL DEFAULT 0,
+    muerto_dur_min INTEGER NOT NULL DEFAULT 0
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_cita_servicios_cita ON cita_servicios(cita_id)`);
+
+  // 1.7 BLOQUEAR un rato sin cita (comida, recado, mantenimiento de un recurso). Cuenta como ocupado
+  // para los huecos y para la guarda de solape. Puede colgar de una persona y/o de un recurso.
+  db.exec(`CREATE TABLE IF NOT EXISTS agenda_bloqueos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    recurso_id INTEGER,
+    fecha TEXT NOT NULL,
+    inicio_min INTEGER NOT NULL,
+    fin_min INTEGER NOT NULL,
+    motivo TEXT DEFAULT '',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_bloqueos_fecha ON agenda_bloqueos(fecha)`);
+
+  // 1.10/1.12 RASTRO DE AVISOS. Un aviso = confirmación o recordatorio, por un canal. estado honesto:
+  // por la vía MANUAL solo sabemos que se pulsó el botón → 'marcado' (con canal y hora); por email
+  // automático → 'email_enviado' / 'email_fallo'. PROHIBIDO 'entregado'/'leído' por estas vías.
+  db.exec(`CREATE TABLE IF NOT EXISTS cita_avisos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cita_id INTEGER NOT NULL,
+    tipo TEXT NOT NULL,
+    canal TEXT NOT NULL,
+    estado TEXT NOT NULL DEFAULT 'marcado',
+    enviado_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    por_user_id INTEGER,
+    nota TEXT DEFAULT ''
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_cita_avisos_cita ON cita_avisos(cita_id, tipo)`);
+
+  // 1.13 EL DATO listo para cuando llegue el canal automático (NO se construye capa de canales; solo
+  // el DATO). Móvil en formato internacional + marca de "sin móvil válido" + consentimiento RGPD con
+  // fecha. Aditivo sobre clients.
+  addCol(db, 'clients', 'movil_e164', "TEXT DEFAULT ''");
+  addCol(db, 'clients', 'movil_invalido', 'INTEGER NOT NULL DEFAULT 0');
+  addCol(db, 'clients', 'consiente_avisos', 'INTEGER NOT NULL DEFAULT 0');
+  addCol(db, 'clients', 'consiente_avisos_fecha', 'TEXT');
+
+  // 1.4/1.10 AJUSTES de citas del negocio (en company_config, junto al resto de config). Rejilla,
+  // antelación mínima, ventana máxima, corte del mismo día, canal por defecto y modo de recordatorio.
+  addCol(db, 'company_config', 'cita_grid_min', 'INTEGER NOT NULL DEFAULT 30');            // rejilla 15/30
+  addCol(db, 'company_config', 'cita_antelacion_min', 'INTEGER NOT NULL DEFAULT 0');       // antelación mínima (min)
+  addCol(db, 'company_config', 'cita_ventana_dias', 'INTEGER NOT NULL DEFAULT 60');        // ventana máxima (días)
+  addCol(db, 'company_config', 'cita_corte_mismo_dia_min', 'INTEGER');                     // hora de corte del mismo día (min desde medianoche); NULL = sin corte
+  addCol(db, 'company_config', 'cita_margen_defecto_min', 'INTEGER NOT NULL DEFAULT 0');   // margen posterior por defecto
+  addCol(db, 'company_config', 'cita_canal_defecto', "TEXT NOT NULL DEFAULT 'whatsapp'");  // whatsapp | sms | email
+  addCol(db, 'company_config', 'cita_modo_recordatorio', "TEXT NOT NULL DEFAULT 'manual'"); // manual | auto_email
+
+
   // A3: catálogo de servicios del autónomo. Tabla NUEVA e independiente de
   // `products` (e-commerce, Capa 2 congelada). El autónomo guarda lo que repite
   // (nombre + precio + IVA + IRPF) y lo reutiliza al facturar. Las líneas de
@@ -2243,6 +2430,11 @@ export function runMigrations(db) {
     // propias (dueño/admin, por bypass, gestionan las de cualquiera).
     { module: 'tiempo',    action: 'read',   description: 'Ver el registro de tiempo' },
     { module: 'tiempo',    action: 'edit',   description: 'Registrar y editar entradas de tiempo (las propias)' },
+    // Peldaño 7 · PIEZA 5 — Sistema de citas. `edit` cubre crear/mover/confirmar/atender/anular citas,
+    // gestionar recursos, horarios, servicios reservables y la cola de envíos. El enlace público de la
+    // cita va por LLAVE (token), no por este permiso: no expone nada más que su propia cita.
+    { module: 'citas',     action: 'read',   description: 'Ver la agenda de citas, recursos y horarios' },
+    { module: 'citas',     action: 'edit',   description: 'Crear/mover/confirmar/atender/anular citas y gestionar recursos, horarios y avisos' },
   ];
   for (const p of permissionsData) {
     db.prepare('INSERT OR IGNORE INTO permissions (module, action, description) VALUES (?, ?, ?)').run(p.module, p.action, p.description);

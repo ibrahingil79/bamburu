@@ -54,9 +54,9 @@ try {
   ok(/sin ese enlace no te dejamos guardar/i.test(await page.$eval('#tplLista', el => el.innerHTML)),
      'y avisa, EN LA PANTALLA, de que los de sistema no se guardan sin su enlace');
   const nTarjetas = await page.$$eval('.tpl-card', els => els.length);
-  ok(nTarjetas === 8, 'están los 8 tipos de email que este sistema puede enviar (' + nTarjetas + ')');
+  ok(nTarjetas === 10, 'están los 10 tipos de email que este sistema puede enviar (' + nTarjetas + ')');   // +2: confirmacion_cita, recordatorio_cita (PIEZA 5)
   const nVariantes = await page.$$eval('.tpl-vars button', els => els.length);
-  ok(nVariantes === 18, 'con sus 18 variantes editables (los 4 tonos del recordatorio, los 5 del comercial…): ' + nVariantes);
+  ok(nVariantes === 20, 'con sus 20 variantes editables (los 4 tonos del recordatorio, los 5 del comercial…, + confirmación/recordatorio de cita): ' + nVariantes);
   ok(/Recuperar contraseña/.test(txt) && /Enlace del portal/.test(txt), 'los operativos se ven y se identifican como tales');
   await page.screenshot({ path: '/tmp/tpl-1-lista.png' });
 

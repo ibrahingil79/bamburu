@@ -1,0 +1,17 @@
+[Unit]
+Description=Bamburu — recordatorio automático de citas por email (el día antes)
+Documentation=file:///home/ubuntu/bamburu/deploy/systemd/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/bamburu
+# Secretos (RESEND_API_KEY) y PUBLIC_BASE_DOMAIN (para el enlace de la cita) — mismo EnvironmentFile que la app.
+EnvironmentFile=/etc/bamburu.env
+# El .mjs itera TODOS los tenants (data/tenants/*.db) y solo actúa en los que tengan
+# cita_modo_recordatorio='auto_email'. Idempotente (una cita ya avisada no se reenvía).
+ExecStart=/usr/bin/node /home/ubuntu/bamburu/scripts/bamburu-recordatorios-cita.mjs
+SyslogIdentifier=bamburu-recordatorios-cita

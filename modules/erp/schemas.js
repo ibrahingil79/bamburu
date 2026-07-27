@@ -147,6 +147,111 @@ export const facturarHorasSchema = z.object({
   irpf_rate: z.coerce.number().min(0).max(60).optional().default(0),
 });
 
+// ── Peldaño 7 · PIEZA 5 — SISTEMA DE CITAS ───────────────────────────────────────────────────────
+const fechaISO = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha debe ser AAAA-MM-DD');
+const minDia = z.coerce.number().int().min(0).max(1439);        // minuto del día [0..1439]
+const CITA_ESTADOS = ['pedida', 'confirmada', 'atendida', 'no_show', 'anulada'];
+
+// Recurso (silla, cabina, sala, box, equipo). tipo = lista cerrada; nombre obligatorio.
+export const recursoSchema = z.object({
+  nombre: str(100),
+  tipo: z.enum(['silla', 'cabina', 'sala', 'box', 'equipo', 'otro']).default('otro'),
+  notas: strOpt(500),
+});
+
+// Servicio RESERVABLE = capa sobre el producto-servicio existente (precio e IVA SIGUEN en el catálogo).
+// muerto_* = ventana interior en la que la persona queda LIBRE; margen = limpieza posterior.
+export const serviceConfigSchema = z.object({
+  reservable: z.coerce.boolean().optional().default(true),
+  duracion_min: z.coerce.number().int().min(1).max(1440),
+  muerto_ini_min: z.coerce.number().int().min(0).max(1440).optional().default(0),
+  muerto_dur_min: z.coerce.number().int().min(0).max(1440).optional().default(0),
+  margen_min: z.coerce.number().int().min(0).max(1440).optional().default(0),
+  provider_ids: z.array(intPos).optional().default([]),    // quién puede prestarlo (vacío = cualquiera)
+  resource_ids: z.array(intPos).optional().default([]),    // qué recurso necesita (vacío = ninguno)
+});
+
+// Horario semanal de un ámbito (negocio o una persona): la UI manda la rejilla ENTERA; el servicio
+// reemplaza los tramos de ese ámbito. Cada tramo es un intervalo abierto de un día (descansos = huecos).
+const tramoSchema = z.object({ dow: z.coerce.number().int().min(0).max(6), inicio_min: minDia, fin_min: minDia });
+export const horarioSchema = z.object({
+  scope: z.enum(['negocio', 'user']),
+  user_id: optId,
+  tramos: z.array(tramoSchema).max(200).default([]),
+});
+
+// Excepción con fecha (vacaciones, festivo, cierre puntual, horario especial). La excepción manda.
+export const excepcionSchema = z.object({
+  scope: z.enum(['negocio', 'user']),
+  user_id: optId,
+  fecha: fechaISO,
+  tipo: z.enum(['cerrado', 'horario']),
+  inicio_min: z.union([z.null(), z.literal(''), minDia]).optional(),
+  fin_min: z.union([z.null(), z.literal(''), minDia]).optional(),
+  motivo: strOpt(200),
+});
+
+// La cita. Cliente de la ficha (cliente_id) o cliente suelto (nombre + móvil). service_ids = servicios
+// encadenados, en orden. inicio_min = minuto del día. project_id opcional (cuelga de un proyecto).
+export const citaSchema = z.object({
+  cliente_id: optId,
+  cliente_suelto_nombre: strOpt(200),
+  cliente_suelto_movil: strOpt(30),
+  user_id: z.coerce.number().int().positive(),
+  recurso_id: optId,
+  fecha: fechaISO,
+  inicio_min: minDia,
+  service_ids: z.array(intPos).max(20).optional().default([]),
+  nota: strOpt(1000),
+  project_id: optId,
+  estado: z.enum(CITA_ESTADOS).optional(),
+});
+
+// Mover una cita (arrastrar en la agenda): revalida en servidor. Mantiene sus servicios.
+export const citaMoverSchema = z.object({
+  fecha: fechaISO,
+  inicio_min: minDia,
+  user_id: optId,
+  recurso_id: optId,
+});
+
+export const citaEstadoSchema = z.object({ estado: z.enum(CITA_ESTADOS) });
+
+// Al ATENDER: opciones de salida al dinero (reutiliza TPV o createInvoice) y de registro de tiempo.
+export const citaAtenderSchema = z.object({
+  cobrar: z.coerce.boolean().optional().default(false),
+  via: z.enum(['ticket', 'factura']).optional().default('ticket'),
+  payment_method: z.enum(['efectivo', 'tarjeta', 'transferencia']).optional().default('efectivo'),
+  registrar_tiempo: z.coerce.boolean().optional().default(false),
+});
+
+// Bloquear un rato sin cita (comida, recado, mantenimiento). Persona y/o recurso.
+export const bloqueoSchema = z.object({
+  user_id: optId,
+  recurso_id: optId,
+  fecha: fechaISO,
+  inicio_min: minDia,
+  fin_min: minDia,
+  motivo: strOpt(200),
+});
+
+// Marcar un aviso como enviado a mano (WhatsApp/SMS/email). Estado HONESTO: 'marcado', nunca 'entregado'.
+export const avisoMarcarSchema = z.object({
+  tipo: z.enum(['confirmacion', 'recordatorio']),
+  canal: z.enum(['whatsapp', 'sms', 'email']),
+});
+
+// Ajustes de citas del negocio (viven en company_config).
+export const citaAjustesSchema = z.object({
+  cita_grid_min: z.coerce.number().int().min(5).max(120),
+  cita_antelacion_min: z.coerce.number().int().min(0).max(525600),
+  cita_ventana_dias: z.coerce.number().int().min(1).max(3650),
+  cita_corte_mismo_dia_min: z.union([z.null(), z.literal(''), minDia]).optional(),
+  cita_margen_defecto_min: z.coerce.number().int().min(0).max(600),
+  cita_canal_defecto: z.enum(['whatsapp', 'sms', 'email']),
+  cita_modo_recordatorio: z.enum(['manual', 'auto_email']),
+});
+
 // T5 — valores EXACTOS permitidos en los campos de lista cerrada del cliente, extraídos del
 // propio clientSchema (fuente única: no se escriben a mano → no se desincronizan). Los usa
 // DISA para no inventar valores. Desenvuelve los wrappers default/optional hasta el enum.

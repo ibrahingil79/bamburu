@@ -10,6 +10,7 @@ import { createProyectoRoutes } from './proyectos.js';   // Escalera · paso 7 �
 import { createTiempoRoutes } from './tiempo.js';         // Escalera · paso 7 — PIEZA 2: registro de tiempo
 import { createFacturarHorasRoutes } from './facturar-horas.js'; // Escalera · paso 7 — PIEZA 3: facturar horas
 import { createRentabilidadRoutes } from './rentabilidad.js';    // Escalera · paso 7 — PIEZA 4: rentabilidad por proyecto
+import { createCitasRoutes, createCitasPublicRoutes } from './citas.js';   // Escalera · paso 7 — PIEZA 5: sistema de citas
 import { createOrderRoutes } from './orders.js';
 import { createInventoryRoutes } from './inventory.js';
 import { createStockRoutes } from './stock.js';
@@ -68,6 +69,7 @@ export function mountRoutes(app, db) {
   const { api: tiempoApi, views: tiempoViews } = createTiempoRoutes(db); // paso 7 · registro de tiempo
   const { api: fhApi, views: fhViews } = createFacturarHorasRoutes(db);  // paso 7 · facturar horas
   const { api: rentApi, views: rentViews } = createRentabilidadRoutes(db); // paso 7 · rentabilidad por proyecto
+  const { api: citasApi, views: citasViews } = createCitasRoutes(db);      // paso 7 · PIEZA 5 · sistema de citas
   const { api: orderApi, views: orderViews } = createOrderRoutes(db);
   const { api: invApi, views: invViews } = createInventoryRoutes(db);
   const { api: stockApi } = createStockRoutes(db);
@@ -118,6 +120,7 @@ export function mountRoutes(app, db) {
   admin.route('/tiempo', tiempoViews);    // ← /admin/tiempo (vista semanal, candado tiempo.read)
   admin.route('/facturar-horas', fhViews); // ← /admin/facturar-horas (candado invoices.create)
   admin.route('/rentabilidad', rentViews); // ← /admin/rentabilidad (candado proyectos.read + invoices.read)
+  admin.route('/citas', citasViews);       // ← /admin/citas (agenda, cola, servicios, recursos, horarios, ajustes · candado citas.read/edit)
   // PIEZA C — POS viejo RETIRADO del admin (clúster sales_orders, sin Verifactu). Desmontado, no
   // borrado: orders.js sigue en el repo. Cae con él la falsa "FACTURA" (D3, /admin/orders/:id/invoice),
   // el POS, los borradores y los reembolsos viejos. Archivado de tablas y corte de escritura de DISA = D1.
@@ -179,6 +182,7 @@ export function mountRoutes(app, db) {
   apiApp.route('/tiempo', tiempoApi);    // ← /api/erp/tiempo (cronómetro + entradas, tiempo.read/edit)
   apiApp.route('/facturar-horas', fhApi); // ← /api/erp/facturar-horas (preview + emitir, invoices.create)
   apiApp.route('/rentabilidad', rentApi); // ← /api/erp/rentabilidad (panel + comparativa, proyectos.read+invoices.read)
+  apiApp.route('/citas', citasApi);       // ← /api/erp/citas (agenda, huecos, citas, avisos, cola, config · citas.read/edit)
   // PIEZA C — API del POS viejo RETIRADA (ver nota arriba). Desmontado, no borrado.
   // apiApp.route('/orders', orderApi);
   apiApp.route('/inventory', invApi);
@@ -219,4 +223,9 @@ export function mountRoutes(app, db) {
   apiApp.route('/contabilidad', contabApi);
   apiApp.route('/stock', stockApi);
   app.route('/api/erp', apiApp);
+
+  // ── PIEZA 5 · ENLACE PÚBLICO DE LA CITA (1.9) ──────────────────────────────────
+  // Sin /admin ni auth de panel, sin CSRF: la LLAVE (token, 256 bits) es la defensa. El tenant lo
+  // resuelve tenantMiddleware por subdominio. Solo abre SU cita; confirmar / avisar de que no puede ir.
+  app.route('/cita', createCitasPublicRoutes(db));
 }
