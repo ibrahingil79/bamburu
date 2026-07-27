@@ -2236,7 +2236,7 @@ Aquí aterrizan, de las listas viejas:
     RESERVA (ficha abajo), a la espera de encargo.**
 
 - **AGENDA SENCILLA — ajuste de presentación de la pieza 5, va ANTES de la PIEZA 6 · ✅ ENTREGADA y
-  verificada (27 jul 2026, commit `PENDIENTE2`).** NO es "pieza 5b": es una capa de PRESENTACIÓN sobre el
+  verificada (27 jul 2026, commit `4679d62`).** NO es "pieza 5b": es una capa de PRESENTACIÓN sobre el
   motor intacto. **Regla dura: no se eliminó ni una función** — solo cambió qué se ve de entrada y cómo se
   llama; lo que estorbaba se guardó tras un clic.
   - **Llamar a las cosas por su nombre (solo textos; NO se renombró tabla ni código):** «Recurso» →
