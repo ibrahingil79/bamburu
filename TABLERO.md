@@ -19,13 +19,16 @@
 > (catálogo de las 5 áreas + responsable + informes por área + plan financiero) HECHOS (17 jul).**
 > **HECHO el constructor completo: 4a (ventas) + 4a-bis (compras/clientes/inventario) + 4b (cálculos
 > propios, combinar fuentes, compartir paneles).** **Contabilidad sigue FUERA, pendiente de tu decisión.**
-> **Pasos 5 (DISA predictiva: vigía + voz + dibujo + priorización/Inicio) y 6 (Inicio personalizable)
-> HECHOS y VALIDADOS por Ibrahim en pantalla (21 jul 2026). Paso 7 (servicios profesionales · 1er oficio)
-> EN CURSO: Piezas 1 (proyecto), 2 (registro de tiempo) y 3 (facturar horas) VALIDADAS por Ibrahim en
-> pantalla (21 jul; «Proyectos» ya es área propia del rail). **Pieza 4 COMPLETA (parte 1: rentabilidad
-> por proyecto — resultado contable; parte 2: coste de las horas — resultado de gestión), ENTREGADA y
-> verificada por test + gate en navegador real (22 jul).** Siguiente: **Pieza 5 (calendario)**, a la
-> espera de tu encargo. No se inicia nada sin tu encargo.** El **Backlog** de abajo NO
+> **PASO 7 (servicios profesionales · 1er oficio) ✅ CERRADO el 28 jul 2026** con la pieza 6 (puerta
+> pública de reserva): las 6 piezas entregadas y verificadas. **El puntero de la escalera está en el
+> PELDAÑO 8 (Salud / bienestar · 2º oficio), a la espera de encargo.**
+> Pasos 5 (DISA predictiva: vigía + voz + dibujo + priorización/Inicio) y 6 (Inicio personalizable)
+> HECHOS y VALIDADOS por Ibrahim en pantalla (21 jul 2026). **Paso 7 CERRADO (28 jul 2026):** piezas 1
+> (proyecto), 2 (registro de tiempo) y 3 (facturar horas) VALIDADAS por Ibrahim en pantalla (21 jul;
+> «Proyectos» ya es área propia del rail); pieza 4 completa (rentabilidad contable + coste de las horas,
+> 22 jul); pieza 5 (sistema de citas: motor + agenda interna) + Agenda sencilla (27 jul); **pieza 6
+> (puerta pública de reserva, 28 jul) — la que cierra el peldaño.** Siguiente: **peldaño 8 (Salud /
+> bienestar · 2º oficio)**, a la espera de tu encargo. No se inicia nada sin tu encargo. El **Backlog** de abajo NO
 > compite con la escalera: es lo que le falta a El Suelo (el umbral) más la deuda. Plan del Eje C
 > cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
@@ -2017,9 +2020,19 @@ preferencia.
   **Al validar Ibrahim en pantalla, el peldaño 6 queda cerrado; después, el peldaño 7 (primer oficio:
   servicios profesionales).**
 
-### ⬜ 7 — Servicios profesionales · **1er oficio**
+### ✅ 7 — Servicios profesionales · **1er oficio** · **CERRADO (28 jul 2026)**
 **Agenda** + **control de tiempo facturable** + **rentabilidad por proyecto**. Es la primera "cara por
 oficio" (CANON §7: interfaces por profesión).
+
+> **PELDAÑO CERRADO el 28 jul 2026 con la PIEZA 6 (puerta pública de reserva).** Las seis piezas
+> entregadas y verificadas: **1** el proyecto · **2** registro de tiempo · **3** facturar horas ·
+> **4** rentabilidad (contable + coste de las horas) · **5** sistema de citas (motor + agenda interna),
+> más **Agenda sencilla** (capa de presentación) · **6** puerta pública de reserva. Un negocio de
+> servicios puede hoy: publicar su página de reservas, recibir citas 24 h, atenderlas, cobrarlas por los
+> motores de siempre y ver qué le renta. **Queda anotado y NO bloquea:** el **control horario (fichaje)**
+> y la **agenda del CRM** de la lista de abajo no se construyeron — no estaban en ningún encargo, y el
+> dueño decide si les da número propio o entran en otro peldaño.
+> **⬅️ EL PUNTERO DE LA ESCALERA PASA AL PELDAÑO 8 (Salud / bienestar · 2º oficio).**
 Aquí aterrizan, de las listas viejas:
 - **Citas / Agenda** (iba marcada 🔺 prioritaria en el roadmap).
 - **CRM comercial → su agenda/calendario** *(el **embudo/oportunidades** está **✅ HECHO 2026-07-09** —
@@ -2270,12 +2283,140 @@ Aquí aterrizan, de las listas viejas:
     gate-citas-pantalla 25/0, proyectos 20, tiempo 23, facturar-horas 31, rentabilidad 22, coste-horas 28,
     contabilidad-pyg 36, contabilidad 38, plantillas 41, XSS 29. **Ninguna función desapareció.**
 
-- **PIEZA 6 — PUERTA PÚBLICA DE RESERVA (⬜, a la espera de encargo).** El cliente final ELIGE hueco y
-  reserva SOLO, 24 h, por el **enlace propio del negocio** (no el de una cita concreta: uno de reserva).
-  Se apoya en el motor de huecos de la pieza 5 (ya calcula disponibilidad en vivo). Incluye **señal /
-  prepago** y **política de cancelación** (cancelación cobrada). La pieza 5 es SOLO confirmación, no
-  reserva: elegir hueco es esto. **Decisión del dueño: NO depende del constructor de páginas web** — la
-  página de reserva la publica el sistema de citas (verificado jul 2026 contra Square, Fresha y Acuity).
+- **PIEZA 6 — PUERTA PÚBLICA DE RESERVA · ✅ ENTREGADA y verificada (28 jul 2026).** El cliente final
+  ELIGE hueco y reserva SOLO, 24 h, por la **dirección propia del negocio** (no el enlace de una cita
+  concreta). **Decisión del dueño confirmada: NO depende del constructor de páginas web** — la página de
+  reserva la publica el sistema de citas (verificado jul 2026 contra Square, Fresha y Acuity).
+  **CORRECCIÓN DE ESTA FICHA:** decía «Incluye señal / prepago (cancelación cobrada)». El encargo del
+  28-jul lo deja **EXPRESAMENTE FUERA** (no hay pasarela de pago) y **prohíbe dejar ganchos**. Manda el
+  encargo; la señal no entra y no hay nada dormido esperándola (se comprueba en test-neto-cero-reserva).
+
+  - **LO QUE DESTAPÓ EL PASO 0 (auditoría de solo lectura, antes de escribir una línea):**
+    1. **El «alta de cliente al vuelo» de la pieza 5 NO da de alta clientes.** Lo que la agenda llama
+       «usar como cliente nuevo» escribe nombre y móvil DENTRO de la fila de `citas`
+       (`cliente_suelto_nombre`/`_movil`); no crea fila en `clients`, no tiene email y **no deduplica por
+       nada**. El encargo pedía «reutilizar esa alta y deduplicar por teléfono y email»: no existía eso que
+       reutilizar. **Decisión del dueño (28 jul): la puerta pública NO crea fichas** (simétrica con la
+       agenda), pero **sí busca antes**: si el móvil normalizado (E.164) o el email ya son de una ficha
+       ACTIVA, la reserva se **ENLAZA** a ella (`cliente_id`); si no, nace suelta. Así «si ya existe, se
+       enlaza, NO se duplica» se cumple entero sin sembrar fichas basura.
+    2. **El enlace `/cita/<token>` de la pieza 5 NO identifica al negocio.** El token se busca en la BD que
+       el `tenantMiddleware` YA resolvió (por subdominio en producción; por cookie en desarrollo). No sirve
+       como dirección pública fija por negocio, y **no había ninguna dirección configurable**. Cambio
+       mínimo aplicado: `/reservar/<handle>` bajo el subdominio del negocio, sin tocar la resolución de
+       tenant ni `control.db`.
+    3. **`citas.token_expira` se escribe y NUNCA se lee.** La caducidad real del enlace es `fecha < hoy`.
+       Es código muerto de la pieza 5; se anota, no se toca (fuera de alcance).
+    4. **La «cola de envíos» no es una cola:** es una vista calculada en vivo (`colaEnvios`). Para avisar al
+       NEGOCIO el canal que existe es otro: el colector de fuentes de `avisos.js`.
+  - **La dirección (A):** `https://<negocio>.bamburu.com/reservar/<handle>`. `handle` en
+    `company_config.cita_pub_handle`, editable por el dueño y **generado del nombre del negocio** si lo deja
+    vacío. El negocio lo sigue resolviendo el SUBDOMINIO; el handle se **comprueba** contra el del tenant y
+    si no cuadra → 404. De paso tapa un agujero de desarrollo (un solo host, donde la cookie de sesión gana
+    al subdominio). **Interruptor general `cita_pub_activa` APAGADO por defecto**: hasta que el dueño lo
+    enciende, la dirección responde 404 — no «vacío», 404.
+  - **El flujo (B), primero móvil y con el mismo idioma visual de la página pública de la pieza 5:**
+    servicio → profesional («cualquiera disponible» o uno concreto) → día y hora → datos y confirmar.
+    **Precio, IVA y duración salen del catálogo** (`products` + `service_config`), sin recalcular nada.
+    **Varios servicios en una cita SÍ**, porque el motor ya los encadena. Al confirmar se **revalida en
+    servidor** y, si el hueco se ocupó, **409 con huecos cercanos**, igual que dentro.
+  - **Los huecos salen DEL MOTOR DE LA PIEZA 5** (`huecos()` de `citas-engine.js`), llamado con otros
+    ARGUMENTOS de política (antelación 2 h, ventana 60 días), **nunca con otro cálculo**. La rejilla y el
+    corte del mismo día se toman de los ajustes de dentro: son cómo trabaja el negocio, no escaparate.
+    «Cualquiera disponible» es la unión de `huecos()` por persona pública elegible — usando el motor, no
+    cambiándolo. **NO se filtra por puesto libre**, a propósito: dentro tampoco se filtra al listar, y si al
+    confirmar no hay puesto, `createCitaSvc` responde 409 con alternativas.
+  - **Los mandos del dueño (C)**, dentro del área de Agenda (`/admin/citas/publica`): qué servicios se
+    reservan desde fuera (`service_config.publico`, **por servicio, defecto NO**), quién aparece y **con qué
+    nombre** (`cita_pub_personas`, **por persona, defecto NO**), antelación mínima (**2 h**) y máxima
+    (**60 días**), modo **automático** (defecto) o **«yo apruebo»** —donde la solicitud **RETIENE el hueco**
+    y **caduca sola a las 24 h**—, ventana de cambio/anulación del cliente (**24 h**, configurable,
+    desactivable) y **texto de política de cancelación**.
+  - **El cliente (D):** alta al vuelo simétrica con la agenda (**no se crean fichas**) + **enlace** si el
+    móvil normalizado o el email ya existen. **La pantalla NUNCA revela si un teléfono o un email ya está en
+    la base**: el resultado de la búsqueda no sale del servidor. **Casilla obligatoria de consentimiento**
+    con enlace a la política de privacidad; se archiva el **texto exacto aceptado con fecha y hora**
+    (`cita_reserva_publica.consent_texto`/`consent_at`) y **la política tal como se mostró**, no la de hoy.
+  - **Avisos (E) — cero mensajería nueva.** Al cliente: la plantilla `confirmacion_cita` de la pieza 5, con
+    **su enlace por llave** (confirmar / no puedo ir) y la política repetida (hueco `{{politica}}`, opcional
+    y no crítico: sin política, el correo sale idéntico al de la pieza 5). Al negocio: **una fuente nueva en
+    el colector de `avisos.js`** (`reserva_publica`, permiso `citas.read`), y con eso aparece sola en la
+    campana, en `/admin/avisos`, en Inicio y en el email diario. Si el email al cliente falla, **la reserva
+    NO se cae**: queda hecha y el fallo se archiva como `email_fallo`.
+  - **Seguridad (F):** las rutas sin sesión solo devuelven servicios públicos, personas públicas y huecos —
+    nunca clientes, nunca otras citas, nunca nombres de terceros. **El nombre visible del profesional es el
+    que pone el dueño**; sin nombre público se enseña «Profesional N», **jamás `admin_users.name`**. Freno
+    **por IP** (90/min) **y por teléfono/email** (6/hora) + **campo trampa** oculto y fuera del recorrido del
+    teclado. El **404 de la puerta es el mismo** para apagada, handle equivocado y servicio no público: no es
+    un oráculo. **`/reservar` entra en las superficies de CSP ESTRICTA** (`script-src` con nonce, sin
+    `unsafe-inline`), como `/registro`: un solo `<script>` con nonce y cero handlers de atributo.
+  - **La pieza 5 NO se tocó donde el encargo lo prohíbe** (huecos, solapes, horarios). Lo que sí cambió es
+    aditivo y condicional: `resolverCitaPorToken` se saca de una clausura a función exportada (mismo
+    comportamiento, letra por letra) y `paginaCita` gana una rama que **solo se enciende si la cita nació
+    fuera**. **Decisión del dueño: la ventana de cambio/anulación rige SOLO para las nacidas fuera** — el
+    enlace de una cita creada en la agenda se comporta exactamente como antes (se prueba: sección 9 de
+    `test-reserva-publica`).
+  - **Migración aditiva e idempotente, sin DROP:** 10 columnas `cita_pub_*` en `company_config`,
+    `service_config.publico`, y **dos tablas nuevas** (`cita_pub_personas`, `cita_reserva_publica`), ambas
+    **FUERA de WRITABLE_TABLES**. **La tabla `citas` no gana ni una columna**: el origen público es la MERA
+    EXISTENCIA de la fila en `cita_reserva_publica`.
+  - **Cron:** `bamburu-caducar-reservas` (timer systemd **horario**, no diario: la retención la fija el
+    dueño y puede ser de 2 h; un barrido diario dejaría el hueco retenido más de lo configurado).
+    Idempotente.
+  - Ficheros: `models.js` (migración), `schemas.js` (2 esquemas), **`reserva-publica-config.js`** (módulo
+    HOJA: config, ventana, quién/qué se enseña, fuente de avisos — separado a propósito para no cerrar el
+    círculo de imports `avisos → routes/citas → layout → avisos`), **`reserva-publica.js`** (servicios
+    validados; escribe SIEMPRE por `createCitaSvc`/`moverCitaSvc`/`anularCitaSvc`), **`routes/reserva-publica.js`**
+    (rutas públicas + enlace + mandos + la pantalla), `routes/citas.js` (rama aditiva), `citas-avisos.js`
+    (`politica` opcional), `email-templates.js` (hueco `{{politica}}`), `avisos.js` (fuente),
+    `layout.js` (nav), `routes/index.js` (montaje), `core/security-headers.js` (CSP estricta),
+    `scripts/bamburu-caducar-reservas.mjs` + unit/timer systemd.
+  - **Verificado:** `test-reserva-publica` **130/0** (puerta apagada por defecto · el 404 no es oráculo ·
+    solo sale lo marcado · reserva completa · 409 con huecos cercanos · antelación mín/máx en servidor ·
+    consentimiento y campo trampa · cliente enlazado sin duplicar y sin crear ficha · «yo apruebo» retiene y
+    caduca · cambiar/anular dentro y fuera de ventana · la pieza 5 intacta · cualquiera-disponible · cero
+    fuga · migración idempotente), **`test-coincidencia-huecos` 40/0** — **LA PRUEBA DE COINCIDENCIA**:
+    barrido de **183/183 combinaciones día×servicio y 1993 huecos comparados**, idénticos AL MINUTO, con
+    descansos, excepciones, tiempo de espera interior, márgenes, bloqueos, horario propio, rejilla de 15 y
+    corte del mismo día; y con políticas distintas, la lista pública es SUBCONJUNTO de la interna, nunca algo
+    distinto. **`test-neto-cero-reserva` 21/0** (reservar/cambiar/anular/aprobar/rechazar/caducar no mueven
+    Ventas, P&G, facturas ni Verifactu; no hay gancho de pago en el código; y cuando el dueño SÍ cobra,
+    cuadra y la anulación lo revierte). **`gate-reserva-publica-pantalla` 51/0** (móvil 390×844 y escritorio
+    1400×900: 4 pasos, 0 errores JS/CSP, política visible ANTES de confirmar, cero fuga medida sobre el HTML
+    Y sobre todo lo que viaja por la red, cita dentro de la agenda, enlace del cliente, permisos 403).
+  - **Regresión VERDE**: test-citas 39/0, test-enlace-cita 14/0, test-avisos-cita 20/0, test-neto-cero-cita
+    8/0, test-textos-citas 24/0, gate-citas-pantalla 25/0, gate-agenda-sencilla 11/0, gate-plantillas-email
+    41/0, verify-xss-escape 49/0, gate-xss-escape 29/0, verify-disa-query-permisos 43/0,
+    verify-avisos-permisos 16/0, gate-avisos-contador-vivo 17/0, verify-actividad-etiquetas 32/0,
+    verify-constructor 82/0, proyectos 20/0, tiempo 23/0, facturar-horas 31/0, rentabilidad 22/0,
+    coste-horas 28/0, contabilidad-pyg 36/0, contabilidad 38/0.
+  - **BARRIDO COMPLETO de los 122 scripts `test-*`/`verify-*`: 21 en rojo, TODOS PREVIOS.** No se supone:
+    se **revirtieron los 9 ficheros seguidos a HEAD, se reinició el servidor y se reejecutaron los 18 que
+    fallan de verdad** (los otros 3 —`verify-dibujo`, `verify-vigia`, `verify-voz`— no fallan: exigen
+    argumentos y el barrido los llamó sin ellos). **Fallan IGUAL, uno por uno, sin una línea de esta pieza:**
+    `test-pago-voz-avisos`, `verify-albaranes-browser`, `verify-avisos-crm-riesgo`,
+    `verify-inventory-fix-browser`, `verify-llm-migracion`, `verify-mostrador-browser`,
+    `verify-over-stock-ui`, `verify-pedidos-browser`, `verify-pedidos-disa`, `verify-pieza-c-http`,
+    `verify-plantillas-email`, `verify-propuestas-dormidos`, `verify-propuestas-fiscales`,
+    `verify-quotes-browser`, `verify-suggest-legible`, `verify-sustitutiva-browser`,
+    `verify-traslado-auditoria`, `verify-u3-errores`. Más los gates `gate-avisos-pantalla` (3),
+    `gate-avisos-badge` (4), comprobados igual. La mayoría son **precondiciones de datos del tenant
+    reseeded** (no existe el pedido/presupuesto/stock que el gate espera), el mismo patrón que el TABLERO ya
+    anotó para `gate-nav-inicio-disa` en la pieza 5.
+    **DOS son deuda con nombre, y conviene no perderlos:**
+    · **`verify-plantillas-email` 3 fallos** — cuenta 8 tipos / 3 SISTEMA / 18 variantes; la **pieza 5** los
+    dejó en **10 / 5 / 20** y no actualizó ese script. El guardián vigente es `gate-plantillas-email`
+    (41/0 verde). No se toca aquí: es deuda de la pieza 5, y arreglarla es afirmar números de trabajo ajeno.
+    · **`test-pago-voz-avisos` 1 fallo** — el asunto de fábrica del resumen dice **«1 avisos»** (plural mal
+    con n=1) y el test espera «1 aviso». Es un bug de TEXTO real, previo, en `resumen_avisos`.
+  - **DE PASO SE CERRÓ UN AGUJERO DEL MOTOR DE AVISOS que esta pieza destapó:** `resumenAvisos` solo recorre
+    `TIPO_ORDEN`, así que una fuente registrada en `SOURCES` pero ausente de esa lista **existe y no se
+    cuenta, EN SILENCIO**; y `avisoKey` caía al genérico (JSON de todo el `ref`), que incluye
+    `horas_restantes` — la identidad del aviso habría cambiado **cada hora** y habría reaparecido como nuevo
+    después de marcarlo visto. Añadidos `TIPO_ORDEN`, `TIPO_FRASE` y un caso propio en `avisoKey`
+    (`rp:<cita_id>`), con su comentario de por qué, y las tres cosas quedan **probadas** en
+    `test-reserva-publica` (secciones de la 7).
+  - **CON ESTO EL PELDAÑO 7 QUEDA CERRADO** (piezas 1-6 + Agenda sencilla). Siguiente: **PELDAÑO 8**.
 
 - **CONSTRUCTOR DE PÁGINAS WEB (⬜, sin turno asignado — pendiente de que el dueño lo ordene).** Antes solo
   vivía en `TAREAS.md` (histórico, Capa 2, backlog); se sube aquí para que no quede suelto. Su ÚNICA
@@ -2301,8 +2442,10 @@ Aquí aterrizan, de las listas viejas:
   cliente que dejó de reservar. Hoy DISA solo LEE la agenda (pieza 1.14); esto sería el paso proactivo
   (avisar/proponer), apoyado en el vigía (peldaño 5).
 
-### ⬜ 8 — Salud / bienestar · **2º oficio**
-Agenda presencial.
+### ⬜ 8 — Salud / bienestar · **2º oficio**  ⬅️ **AQUÍ ES DONDE VAMOS** (a la espera de encargo del dueño)
+Agenda presencial. **Se apoya en el peldaño 7, que quedó cerrado el 28 jul 2026**: el motor de citas, la
+agenda interna y la puerta pública de reserva ya existen y son de USO GENERAL, no de un oficio. Lo que
+este peldaño añade es la cara propia del sector, no otro motor. **No se inicia sin encargo.**
 
 ### ⬜ 9 — Belleza / estética · **3er oficio**
 Agenda + caja del día.

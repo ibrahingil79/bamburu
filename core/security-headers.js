@@ -9,10 +9,14 @@ import { randomBytes } from 'crypto';
 // duelen son diminutas —registro (2 handlers, pública y anónima) y superadmin (11, la cuenta que ve
 // todos los negocios)—, se endurecen esas y el ERP se queda con la política de siempre hasta que se
 // decida (C4b-4). Meter aquí una ruta cuyo HTML aún tenga onclick="..." = botones muertos EN SILENCIO.
+// PIEZA 6 (28 jul 2026) — /reservar entra aquí desde el primer día. Es el mismo perfil que /registro:
+// superficie PÚBLICA y ANÓNIMA, escrita entera de cero, con UN solo <script> con nonce y CERO
+// handlers de atributo. Endurecerla ahora es gratis; hacerlo después de que crezca, no.
 const SUPERFICIES_ESTRICTAS = [
   /^\/superadmin(\/|$)/,
   /^\/registro(\/|$)/,
   /^\/api\/registro(\/|$)/,
+  /^\/reservar(\/|$)/,
 ];
 
 export function securityHeaders() {

@@ -347,6 +347,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     'citas-recursos': 'citas.read',
     'citas-horarios': 'citas.read',
     'citas-ajustes':  'citas.edit',
+    'citas-publica':  'citas.edit',   // peldaño 7 · PIEZA 6 · mandos de la puerta pública de reserva
     analytics:        'analytics.read',
     vigia:            'analytics.read',   // DISA predictiva · el vigía (dentro filtra por detector)
     disa:             null,
@@ -412,6 +413,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       { href: '/admin/citas/recursos', label: 'Recursos', key: 'citas-recursos', icon: 'ti-armchair' },
       { href: '/admin/citas/horarios', label: 'Horarios', key: 'citas-horarios', icon: 'ti-calendar-time' },
       { href: '/admin/citas/ajustes', label: 'Ajustes de citas', key: 'citas-ajustes', icon: 'ti-settings' },
+      { href: '/admin/citas/publica', label: 'Reservas por Internet', key: 'citas-publica', icon: 'ti-world' },
     ]},
     { label: 'Compras y gastos', icon: 'ti-receipt', items: [
       { href: '/admin/supplier-invoices', label: 'Facturas recibidas', key: 'supplier-invoices', icon: 'ti-file-dollar' },

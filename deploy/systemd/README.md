@@ -5,8 +5,28 @@
 | `bamburu-backup` + `bamburu-backup-heartbeat` | Copia diaria a Google Drive, blindada | abajo |
 | `bamburu-avisos` | Resumen diario de avisos por email (08:00 Europe/Madrid) | `scripts/bamburu-avisos.mjs` |
 | `bamburu-recordatorios-cita` | Recordatorio de citas por email, el día antes (09:00 Europe/Madrid) | `scripts/bamburu-recordatorios-cita.mjs` |
+| `bamburu-caducar-reservas` | Caduca las solicitudes de cita por Internet sin responder y **libera el hueco** (cada hora) | abajo |
 | `bamburu-propuestas` | Genera las **Propuestas de DISA** del día (07:45 Europe/Madrid) | abajo |
 | `bamburu-verifactu-cola` | **Red de seguridad** de la cola de envío a la AEAT (cada 2 min) | `docs/verifactu/tarea2-cola-envio-automatico.md` |
+
+## Caducar reservas por Internet (peldaño 7 · pieza 6) — INSTALADO
+
+Solo actúa en los negocios con la **puerta pública ENCENDIDA** y en modo **«yo apruebo»**.
+
+En ese modo una solicitud **retiene el hueco**: la cita ya existe y ocupa sitio en la agenda, porque si
+no lo retuviera, aprobar podría fallar por un solape aparecido entre medias y el cliente se enteraría el
+día de la cita. El precio de retener es que hay que **soltar**: una solicitud sin respuesta se cae sola
+pasadas las horas que fije el dueño (`cita_pub_retencion_horas`, 24 por defecto) y devuelve el hueco.
+
+**Por qué cada hora y no una vez al día:** la retención la fija el dueño y puede bajarla a 2 h. Con un
+barrido diario, un hueco podría quedar retenido hasta 24 h más de lo configurado — y el cliente que
+quería ese hueco lo vería ocupado por una solicitud ya muerta. Es un `UPDATE` sobre una tabla diminuta.
+
+**Idempotente:** solo mira las `pendiente` con su `retiene_hasta` cumplido y las marca `caducada`.
+Pasar dos veces no cambia nada, así que `Persistent=true` (arranque tardío) es inofensivo.
+
+    sudo systemctl start bamburu-caducar-reservas.service    # ejecutar ahora
+    RESERVAS_DRY=1 node scripts/bamburu-caducar-reservas.mjs  # simular sin escribir
 
 ## Propuestas de DISA (D5 + D5b) — INSTALADO
 

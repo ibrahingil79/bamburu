@@ -1,0 +1,18 @@
+[Unit]
+Description=Bamburu — caduca las solicitudes de cita por Internet sin responder (libera el hueco)
+Documentation=file:///home/ubuntu/bamburu/deploy/systemd/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/bamburu
+# Mismo EnvironmentFile que la app. Este script NO envía correo (solo libera huecos), pero se mantiene
+# por coherencia con el resto de las unidades y porque runMigrations puede necesitar el entorno.
+EnvironmentFile=/etc/bamburu.env
+# Itera TODOS los tenants (data/tenants/*.db) y solo actúa en los que tengan la puerta pública
+# ENCENDIDA y en modo "yo apruebo". Idempotente: una solicitud ya caducada no se vuelve a tocar.
+ExecStart=/usr/bin/node /home/ubuntu/bamburu/scripts/bamburu-caducar-reservas.mjs
+SyslogIdentifier=bamburu-caducar-reservas

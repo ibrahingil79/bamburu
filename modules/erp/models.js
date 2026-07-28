@@ -2225,6 +2225,71 @@ export function runMigrations(db) {
   addCol(db, 'company_config', 'cita_puesto_sing', "TEXT NOT NULL DEFAULT 'Puesto'");
   addCol(db, 'company_config', 'cita_puesto_plural', "TEXT NOT NULL DEFAULT 'Puestos'");
 
+  // ══ PIEZA 6 — PUERTA PÚBLICA DE RESERVA ══════════════════════════════════════════════════════
+  // Todo lo de abajo es ADITIVO sobre la pieza 5: ni una columna se reescribe, ni una tabla se
+  // recrea, ningún DROP. El motor (huecos/solape/horarios) NO se toca: se USA.
+  //
+  // EL INTERRUPTOR ESTÁ APAGADO. `cita_pub_activa` nace en 0: hasta que el dueño lo enciende, las
+  // rutas públicas responden 404 — no "vacío", 404. Un negocio que actualiza no publica nada por
+  // sorpresa, y esa es la propiedad que hay que poder demostrar en una migración de este tipo.
+  addCol(db, 'company_config', 'cita_pub_activa', 'INTEGER NOT NULL DEFAULT 0');
+  // La dirección propia: https://<negocio>.bamburu.com/reservar/<handle>. El negocio lo sigue
+  // resolviendo el SUBDOMINIO (no se toca tenant-middleware ni control.db); el handle se comprueba
+  // contra el del tenant ya resuelto y, si no cuadra, 404. Vacío = se genera del nombre del negocio.
+  addCol(db, 'company_config', 'cita_pub_handle', "TEXT NOT NULL DEFAULT ''");
+  // Antelación mínima y máxima PROPIAS de la puerta pública (defectos del encargo: 2 h y 60 días).
+  // No pisan `cita_antelacion_min`/`cita_ventana_dias` (las de dentro): se pasan como ARGUMENTOS al
+  // mismo huecos() del motor, así que no hay un segundo cálculo que pueda desviarse del primero.
+  addCol(db, 'company_config', 'cita_pub_antelacion_min', 'INTEGER NOT NULL DEFAULT 120');
+  addCol(db, 'company_config', 'cita_pub_ventana_dias', 'INTEGER NOT NULL DEFAULT 60');
+  // 'auto' = confirmación automática (defecto) · 'aprobar' = el dueño aprueba. En 'aprobar' la
+  // solicitud RETIENE el hueco (la cita existe y ocupa) y caduca sola a las N horas sin respuesta.
+  addCol(db, 'company_config', 'cita_pub_modo', "TEXT NOT NULL DEFAULT 'auto'");
+  addCol(db, 'company_config', 'cita_pub_retencion_horas', 'INTEGER NOT NULL DEFAULT 24');
+  // Ventana en que el cliente puede cambiar o anular desde su enlace. `_activo`=0 lo desactiva.
+  addCol(db, 'company_config', 'cita_pub_cancelar_horas', 'INTEGER NOT NULL DEFAULT 24');
+  addCol(db, 'company_config', 'cita_pub_cancelar_activo', 'INTEGER NOT NULL DEFAULT 1');
+  // Texto de la política de cancelación (se MUESTRA antes de confirmar y se repite en el email) y
+  // enlace a la política de privacidad que acompaña a la casilla de consentimiento.
+  addCol(db, 'company_config', 'cita_pub_politica', "TEXT NOT NULL DEFAULT ''");
+  addCol(db, 'company_config', 'cita_pub_privacidad_url', "TEXT NOT NULL DEFAULT ''");
+
+  // Un servicio reservable DENTRO no es reservable DESDE FUERA. Son dos permisos distintos y el de
+  // fuera nace en 0: el dueño elige uno a uno qué enseña. `reservable` (pieza 5) sigue significando
+  // exactamente lo que significaba.
+  addCol(db, 'service_config', 'publico', 'INTEGER NOT NULL DEFAULT 0');
+
+  // Quién aparece fuera, y CON QUÉ NOMBRE. Tabla propia en vez de columnas en `admin_users`: esa es
+  // la tabla de autenticación y no se le añaden campos de escaparate. Por defecto NO aparece nadie.
+  // `nombre_publico` es el nombre que pone el DUEÑO; si está vacío, la puerta pública NO cae al
+  // admin_users.name — enseña "Profesional" (F: el usuario del sistema no se filtra jamás).
+  db.exec(`CREATE TABLE IF NOT EXISTS cita_pub_personas (
+    user_id INTEGER PRIMARY KEY,
+    visible INTEGER NOT NULL DEFAULT 0,
+    nombre_publico TEXT NOT NULL DEFAULT '',
+    updated_at TEXT
+  )`);
+
+  // La cita NACIDA FUERA. Fila 1-a-1 con `citas`; su MERA EXISTENCIA es la marca de origen público,
+  // así que la tabla `citas` de la pieza 5 no cambia ni un bit y sus citas se comportan como hoy.
+  // Aquí vive lo que solo tiene sentido en una reserva de fuera:
+  //   · email        — el cliente suelto de la pieza 5 no tiene email y aquí hace falta para confirmar
+  //   · consent_*    — casilla obligatoria: se guarda el TEXTO EXACTO aceptado y la fecha y hora
+  //   · politica_texto — la política de cancelación TAL COMO SE MOSTRÓ (no la de hoy: la de entonces)
+  //   · aprobacion   — 'auto' | 'pendiente' | 'aprobada' | 'rechazada' | 'caducada'
+  //   · retiene_hasta— epoch en que la solicitud pendiente caduca sola (modo "yo apruebo")
+  db.exec(`CREATE TABLE IF NOT EXISTS cita_reserva_publica (
+    cita_id INTEGER PRIMARY KEY,
+    email TEXT NOT NULL DEFAULT '',
+    consent_texto TEXT NOT NULL DEFAULT '',
+    consent_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    politica_texto TEXT NOT NULL DEFAULT '',
+    aprobacion TEXT NOT NULL DEFAULT 'auto',
+    retiene_hasta INTEGER,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_cita_reserva_pub_aprob ON cita_reserva_publica(aprobacion)`);
+
 
   // A3: catálogo de servicios del autónomo. Tabla NUEVA e independiente de
   // `products` (e-commerce, Capa 2 congelada). El autónomo guarda lo que repite

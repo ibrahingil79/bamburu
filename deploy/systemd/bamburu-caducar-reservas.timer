@@ -1,0 +1,16 @@
+[Unit]
+Description=Bamburu — disparador del barrido de solicitudes de cita caducadas
+
+[Timer]
+# CADA HORA, no una vez al día. La retención por defecto son 24 h, pero el dueño puede bajarla a 2 h;
+# un barrido diario dejaría un hueco retenido hasta 24 h más de lo que él configuró, y el cliente que
+# quería ese hueco lo vería ocupado por una solicitud ya muerta. Es un UPDATE sobre una tabla diminuta:
+# barrer cada hora no cuesta nada y hace que el número que el dueño escribe signifique lo que dice.
+OnCalendar=hourly
+# Si el servidor estaba apagado, ejecuta al arrancar. La idempotencia (aprobacion='caducada') hace que
+# un arranque tardío no pueda tocar dos veces la misma solicitud.
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

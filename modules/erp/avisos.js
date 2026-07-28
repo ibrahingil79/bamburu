@@ -16,6 +16,10 @@ import { openDebts } from './cobros.js';
 import { MAX_INTENTOS } from './verifactu-cola.js';
 import { salesWorklist } from './crm.js';
 import { productosBajoMinimo } from './reposicion.js';
+// PIEZA 6 · solicitudes de cita por Internet. Se importa del módulo HOJA a propósito: reserva-publica.js
+// depende de routes/citas.js → layout.js → este mismo fichero, y el círculo dejaría PERM_POR_FUENTE en
+// zona muerta al arrancar. La hoja solo depende de citas-engine.js.
+import { reservasPublicasPendientes } from './reserva-publica-config.js';
 
 const r2 = n => Math.round(n * 100) / 100;
 
@@ -236,6 +240,10 @@ export function clientesEnRiesgo(db, today) {
 //   stock_bajo            → /admin/inventory         (inventory.read)
 //   factura_recurrente    → /admin/recurrentes       (recurrentes.read)
 //   cliente_en_riesgo     → /admin/crm/cola          (crm.read)
+//   reserva_publica       → /admin/citas              (citas.read)
+// (reserva_publica lleva citas.read, no citas.edit, PORQUE ESE ES SU ORIGEN: lo que el aviso enseña
+//  —cliente, día y hora— es exactamente lo que ya se ve en la agenda con citas.read. Los BOTONES de
+//  aprobar/rechazar viven en /admin/citas/publica y sí exigen citas.edit; el aviso solo avisa.)
 export const PERM_POR_FUENTE = {
   envio_verifactu:       'invoices.read',
   vencimiento_proveedor: 'purchases.read',
@@ -243,6 +251,7 @@ export const PERM_POR_FUENTE = {
   stock_bajo:            'inventory.read',
   factura_recurrente:    'recurrentes.read',
   cliente_en_riesgo:     'crm.read',
+  reserva_publica:       'citas.read',
 };
 
 // Fuentes registradas. Añadir una fuente = escribir la función, registrarla aquí y darle su permiso
@@ -254,6 +263,10 @@ const SOURCES = [
   { tipo: 'cliente_en_riesgo',     fn: clientesEnRiesgo },
   { tipo: 'stock_bajo',            fn: stockBajo },
   { tipo: 'factura_recurrente',    fn: borradoresRecurrentes },
+  // PIEZA 6 — registrar la fuente aquí es TODO lo que hace falta para que las solicitudes de cita por
+  // Internet aparezcan en la campana, en /admin/avisos, en el Inicio y en el email diario. Esos son
+  // "los canales que ya hay": cero mensajería nueva.
+  { tipo: 'reserva_publica',       fn: reservasPublicasPendientes },
 ];
 
 // Todos los avisos del día, ordenados por urgencia (más urgente arriba). Robusto: si una fuente
@@ -289,6 +302,7 @@ export function avisosEmail(ctx) {
     cobro_vencido: 'Facturas de cliente vencidas (te deben)',
     cliente_en_riesgo: 'Clientes en riesgo (seguimiento comercial vencido)',
     factura_recurrente: 'Facturas recurrentes en borrador',
+    reserva_publica: 'Solicitudes de cita por Internet (pendientes de aprobar)',
     stock_bajo: 'Productos bajo su mínimo de stock',
   };
   const filaDetalle = a => detalleAviso(a, sym, { compacto: true });
@@ -386,6 +400,10 @@ export function avisoKey(a) {
   // Identidad = la oportunidad, no su gravedad: si pasa de "toca seguimiento" a "cierre vencido",
   // conserva su clave y no reaparece como nueva (mismo criterio que la factura que empeora).
   if (r.source === 'clientes_en_riesgo') return 'cr:' + r.opportunity_id;
+  // Igual aquí: la identidad es la SOLICITUD, no lo que le queda de vida. Sin este caso la clave caía
+  // al genérico (JSON de todo el ref, con horas_restantes dentro) y el aviso reaparecía como nuevo cada
+  // hora por mucho que el dueño lo hubiera marcado visto.
+  if (r.source === 'reserva_publica') return 'rp:' + r.cita_id;
   return (r.source || (a && a.tipo) || '?') + ':' + (r.id != null ? r.id : JSON.stringify(r));
 }
 
@@ -397,11 +415,14 @@ const TIPO_FRASE = {
   cliente_en_riesgo: n => n + ' oportunidad' + (n === 1 ? '' : 'es') + ' del CRM con el seguimiento vencido',
   stock_bajo: n => n + ' producto' + (n === 1 ? '' : 's') + ' bajo su mínimo de stock',
   factura_recurrente: n => n + ' factura' + (n === 1 ? '' : 's') + ' recurrente' + (n === 1 ? '' : 's') + ' en borrador para revisar',
+  reserva_publica: n => n + ' solicitud' + (n === 1 ? '' : 'es') + ' de cita por Internet pendiente' + (n === 1 ? '' : 's') + ' de aprobar',
 };
 // Orden estable del resumen. `envio_verifactu` abre porque es lo único con consecuencia legal.
 // `cobro_vencido` va tras proveedor para no reordenar lo que ya veía el dueño; dentro de la LISTA
 // el orden real lo manda `urgencia` (días vencida), donde cobros y pagos se intercalan por gravedad.
-const TIPO_ORDEN = ['envio_verifactu', 'vencimiento_proveedor', 'cobro_vencido', 'cliente_en_riesgo', 'factura_recurrente', 'stock_bajo'];
+// OJO: resumenAvisos SOLO recorre esta lista. Un tipo que falte aquí desaparece del resumen y del email
+// aunque su fuente lo devuelva — y desaparece EN SILENCIO. Añadir fuente = añadirla también aquí.
+const TIPO_ORDEN = ['envio_verifactu', 'vencimiento_proveedor', 'cobro_vencido', 'cliente_en_riesgo', 'reserva_publica', 'factura_recurrente', 'stock_bajo'];
 
 // Resumen de CONTEOS por fuente (grupos no vacíos), en orden estable. Σ counts = total avisos
 // (== número del badge). NO incluye detalle ni ofrece acciones.

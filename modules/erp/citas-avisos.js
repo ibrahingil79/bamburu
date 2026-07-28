@@ -10,6 +10,7 @@
 import { renderEmail, TONO_UNICO } from './email-templates.js';
 import { PREFIJOS_VALIDOS } from './paises-telefono.js';
 import { hhmm, ahoraLocal } from './citas-engine.js';
+import { escHtml as escapeHtmlEmail } from '../../core/escape.js';
 
 // ── 1.13 Móvil en formato internacional (+34…): validar al escribir y sanear los existentes ────────
 // Devuelve { e164, valido }. Acepta '+CC...' / '00CC...' / un número nacional español de 9 cifras (se
@@ -84,10 +85,18 @@ export function smsLink(movilE164, texto) {
 
 // ── EMAIL — el único que además puede salir SOLO. Render + envío por la vía Resend que YA existe. ──
 // tipo ∈ 'confirmacion' | 'recordatorio'. sendEmailImpl se inyecta (tests mockean; prod = core/mailer).
-export async function enviarEmailCita(db, { tipo, destinatario, empresa, replyTo, servicio, fecha, hora, direccion, enlace, cliente }, sendEmailImpl) {
+// PIEZA 6 — `politica` es OPCIONAL: la puerta pública manda el texto de cancelación que el cliente
+// leyó antes de confirmar, y la agenda no manda nada. Sin política, el hueco {{politica}} se resuelve
+// a cadena vacía y el correo sale exactamente igual que en la pieza 5. El texto lo escribe el DUEÑO,
+// así que se ESCAPA aquí antes de envolverlo (el hueco está declarado esHtml: el bloque es el dato).
+export async function enviarEmailCita(db, { tipo, destinatario, empresa, replyTo, servicio, fecha, hora, direccion, enlace, cliente, politica = '' }, sendEmailImpl) {
   if (!destinatario) { const e = new Error('El cliente no tiene email'); e.status = 400; throw e; }
   const tplId = tipo === 'recordatorio' ? 'recordatorio_cita' : 'confirmacion_cita';
-  const tpl = renderEmail(db, tplId, TONO_UNICO, { cliente, empresa, servicio, fecha, hora, direccion, enlace });
+  const bloquePolitica = String(politica || '').trim()
+    ? { esHtml: true, valor: '<p style="margin:16px 0 6px;font-weight:700">Política de cancelación</p>'
+        + '<p style="color:#374151;font-size:13px;line-height:1.6;white-space:pre-wrap">' + escapeHtmlEmail(politica) + '</p>' }
+    : '';
+  const tpl = renderEmail(db, tplId, TONO_UNICO, { cliente, empresa, servicio, fecha, hora, direccion, enlace, politica: bloquePolitica });
   const res = await sendEmailImpl({
     from: `${empresa} <noreply@bamburu.com>`, to: destinatario, replyTo: replyTo || undefined,
     subject: tpl.subject, html: tpl.html, text: tpl.text,

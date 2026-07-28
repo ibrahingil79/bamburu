@@ -31,6 +31,9 @@ import { createProductSvc } from './products.js';   // "Nuevo servicio" nace com
 import { createEntry } from './tiempo.js';
 import { sendEmail } from '../../../core/mailer.js';
 import { rateLimit } from '../../../core/rate-limit.js';
+// PIEZA 6 — SOLO el módulo HOJA de la puerta pública (config + reglas de ventana + a quién se enseña).
+// No se importa reserva-publica.js: ese sí depende de este fichero y cerraría el círculo.
+import { reservaDeCita, ventanaCliente, personasPublicas } from '../reserva-publica-config.js';
 
 const genToken = () => randomBytes(32).toString('base64url');
 const err = (msg, status) => { const e = new Error(msg); e.status = status; return e; };
@@ -582,7 +585,8 @@ export function createCitasRoutes(db) {
   api.get('/servicios/list', requirePerm('citas.read'), c => {
     try {
       const rows = db.prepare(
-        `SELECT p.id, p.name, p.price, p.tax_band, sc.reservable, sc.duracion_min, sc.muerto_ini_min, sc.muerto_dur_min, sc.margen_min
+        `SELECT p.id, p.name, p.price, p.tax_band, sc.reservable, sc.duracion_min, sc.muerto_ini_min, sc.muerto_dur_min, sc.margen_min,
+                COALESCE(sc.publico,0) AS publico
            FROM products p LEFT JOIN service_config sc ON sc.product_id=p.id
           WHERE p.type='service' AND (p.status IS NULL OR p.status<>'archived') ORDER BY p.name`
       ).all();
@@ -721,6 +725,8 @@ export function createCitasRoutes(db) {
   views.get('/recursos', requirePerm('citas.read'), c => c.html(vistaRecursos(c, db)));
   views.get('/horarios', requirePerm('citas.read'), c => c.html(vistaHorarios(c, db)));
   views.get('/ajustes', requirePerm('citas.edit'), c => c.html(vistaAjustes(c, db)));
+  // PIEZA 6 — los mandos de la puerta pública, dentro del área de Agenda que ya existe.
+  views.get('/publica', requirePerm('citas.edit'), c => c.html(vistaPublica(c, db)));
 
   return { api, views };
 }
@@ -729,6 +735,19 @@ export function createCitasRoutes(db) {
 // 1.9 RUTAS PÚBLICAS DEL ENLACE DE LA CITA (sin sesión, por LLAVE). Solo esa cita; confirmar o avisar.
 // Se montan en app.route('/cita', …) — FUERA de /admin y /api (sin auth ni CSRF; el token ES la defensa).
 // ════════════════════════════════════════════════════════════════════════════════════════════════
+// Resuelve una cita por su token, vigente (no anulada, no archivada, no pasada). Nada más se expone.
+// PIEZA 6: se saca de la clausura a función exportada para que las acciones nuevas del enlace
+// (cambiar / anular con ventana) usen EXACTAMENTE esta regla y no una copia que pueda desviarse.
+// El comportamiento es idéntico al de la pieza 5, letra por letra.
+export function resolverCitaPorToken(db, token) {
+  if (!token || token.length < 20) return null;
+  const cita = db.prepare('SELECT * FROM citas WHERE token=?').get(token);
+  if (!cita) return null;
+  if (cita.estado === 'anulada' || cita.archived) return null;
+  if (cita.fecha < ahoraLocal().fecha) return null;   // caduca pasada la cita (a nivel de día)
+  return cita;
+}
+
 export function createCitasPublicRoutes(db) {
   const app = new Hono();
 
@@ -737,15 +756,7 @@ export function createCitasPublicRoutes(db) {
   // molestar a nadie. (En producción el tenant lo resuelve el subdominio, antes de este handler.)
   app.use('*', rateLimit({ windowMs: 60_000, max: 40, keyPrefix: 'cita-link', message: 'Demasiadas peticiones. Espera un momento e inténtalo de nuevo.' }));
 
-  // Resuelve una cita por su token, vigente (no anulada, no archivada, no pasada). Nada más se expone.
-  const resolver = (token) => {
-    if (!token || token.length < 20) return null;
-    const cita = db.prepare('SELECT * FROM citas WHERE token=?').get(token);
-    if (!cita) return null;
-    if (cita.estado === 'anulada' || cita.archived) return null;
-    if (cita.fecha < ahoraLocal().fecha) return null;   // caduca pasada la cita (a nivel de día)
-    return cita;
-  };
+  const resolver = (token) => resolverCitaPorToken(db, token);
 
   app.get('/:token', c => {
     const cita = resolver(c.req.param('token'));
@@ -783,10 +794,24 @@ function paginaCitaError() {
 function paginaCita(db, cita, token) {
   const aj = ajustesCitas(db);
   const servicios = serviciosDeCita(db, cita.id).join(' + ');
-  const persona = db.prepare('SELECT name FROM admin_users WHERE id=?').get(cita.user_id)?.name || '';
   const contacto = contactoDeCita(db, cita);
   const yaConfirmada = cita.estado === 'confirmada' || cita.estado === 'atendida';
   const E = escHtml;
+
+  // ── PIEZA 6 · rama ADITIVA para las citas NACIDAS FUERA ──────────────────────────────────────
+  // `res` sólo existe si la cita entró por la puerta pública. Si no existe, TODO lo de abajo queda a
+  // cero y la página es exactamente la de la pieza 5, botón por botón (decisión del dueño: la ventana
+  // de cambio/anulación rige sólo para las nacidas fuera).
+  const res = reservaDeCita(db, cita.id);
+  const esPub = res != null;
+  const v = ventanaCliente(db, cita);
+  const pendiente = esPub && res.aprobacion === 'pendiente';
+  // El nombre visible del profesional: dentro, el del sistema; para una cita de la puerta pública, el
+  // que puso el DUEÑO — nunca admin_users.name (F: el usuario del sistema no se filtra jamás).
+  const persona = esPub
+    ? (personasPublicas(db, []).find(p => p.id === cita.user_id)?.nombre || '')
+    : (db.prepare('SELECT name FROM admin_users WHERE id=?').get(cita.user_id)?.name || '');
+
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Tu cita — ${E(aj.company_name)}</title>
     <style>
@@ -802,36 +827,98 @@ function paginaCita(db, cita, token) {
       .ok{background:#16a34a;color:#fff}.no{background:transparent;color:#dc2626;border:1px solid #dc2626}
       .estado{display:inline-block;padding:.15rem .6rem;border-radius:20px;font-size:.8rem;font-weight:600;background:#dbeafe;color:#1d4ed8}
       #msg{display:none;padding:.8rem;border-radius:10px;margin-top:1rem;text-align:center;font-weight:600}
+      .sec{background:transparent;color:#1d4ed8;border:1px solid #1d4ed8}
+      .nota{font-size:.85rem;color:#64748b;background:rgba(100,116,139,.1);padding:.7rem .8rem;border-radius:10px;margin-top:.75rem;line-height:1.5}
+      .pol{font-size:.85rem;line-height:1.55;white-space:pre-wrap}
+      .pol b{display:block;margin-bottom:.3rem;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:#64748b}
+      select,input[type=date]{width:100%;box-sizing:border-box;padding:.75rem;border-radius:10px;border:1px solid #cbd5e1;font-size:1rem;background:#fff;color:#0f172a;margin-top:.5rem}
+      @media (prefers-color-scheme:dark){select,input[type=date]{background:#0f172a;color:#e2e8f0;border-color:#334155}}
     </style></head>
     <body><div class="wrap">
       <h1>Tu cita en ${E(aj.company_name)}</h1>
-      <div class="muted">Hola${contacto.nombre ? ' ' + E(contacto.nombre) : ''}, esta es tu cita. Puedes confirmarla o avisarnos si no puedes venir.</div>
+      <div class="muted">Hola${contacto.nombre ? ' ' + E(contacto.nombre) : ''}, esta es tu cita.${pendiente
+        ? ' Está pendiente de que el negocio la confirme; te avisaremos.'
+        : ' Puedes confirmarla o avisarnos si no puedes venir.'}</div>
       <div class="card">
         <div class="row"><span class="muted">Servicio</span><b>${E(servicios)}</b></div>
-        <div class="row"><span class="muted">Día</span><b>${E(cita.fecha)}</b></div>
-        <div class="row"><span class="muted">Hora</span><b>${E(hhmm(cita.inicio_min))}</b></div>
+        <div class="row"><span class="muted">Día</span><b id="vFecha">${E(cita.fecha)}</b></div>
+        <div class="row"><span class="muted">Hora</span><b id="vHora">${E(hhmm(cita.inicio_min))}</b></div>
         ${persona ? `<div class="row"><span class="muted">Te atiende</span><b>${E(persona)}</b></div>` : ''}
         ${aj.address ? `<div class="row"><span class="muted">Dónde</span><b>${E(aj.address)}</b></div>` : ''}
-        <div class="row"><span class="muted">Estado</span><span class="estado" id="estado">${E(ESTADO_LABEL[cita.estado] || cita.estado)}</span></div>
+        <div class="row"><span class="muted">Estado</span><span class="estado" id="estado">${E(pendiente ? 'Pendiente de confirmar' : (ESTADO_LABEL[cita.estado] || cita.estado))}</span></div>
       </div>
+      ${esPub && res.politica_texto ? `<div class="card pol"><b>Política de cancelación</b>${E(res.politica_texto)}</div>` : ''}
       <div id="acciones">
-        <button class="btn ok" id="btnOk" onclick="accion('confirmar')"${yaConfirmada ? ' style="display:none"' : ''}>Confirmar mi cita</button>
-        <button class="btn no" onclick="accion('avisar')">No puedo ir</button>
+        ${esPub ? '' : `<button class="btn ok" id="btnOk" onclick="accion('confirmar')"${yaConfirmada ? ' style="display:none"' : ''}>Confirmar mi cita</button>
+        <button class="btn no" onclick="accion('avisar')">No puedo ir</button>`}
+        ${esPub && v.puede ? `<button class="btn sec" id="btnCambiar" onclick="abrirCambio()">Cambiar el día o la hora</button>
+        <button class="btn no" onclick="anular()">Anular mi cita</button>` : ''}
+        ${esPub && !v.puede ? `<div class="nota">${E(v.motivo)}</div>` : ''}
       </div>
+      ${esPub && v.puede ? `<div class="card" id="cajaCambio" style="display:none">
+        <b style="font-size:.9rem">Elige otro día y otra hora</b>
+        <input type="date" id="nvFecha" onchange="cargarHuecos()">
+        <select id="nvHora"><option value="">Elige el día primero</option></select>
+        <button class="btn ok" onclick="guardarCambio()">Guardar el cambio</button>
+      </div>` : ''}
       <div id="msg"></div>
       <script>
         var TOKEN = ${JSON.stringify(token)};
+        function pinta(color, fondo, texto, estado){
+          var msg = document.getElementById('msg');
+          msg.style.background=fondo; msg.style.color=color; msg.textContent=texto; msg.style.display='block';
+          if(estado) document.getElementById('estado').textContent=estado;
+        }
         async function accion(a){
           if(a==='avisar' && !confirm('¿Seguro que no puedes venir? Se liberará tu hueco.')) return;
           try{
             var res = await fetch('/cita/'+TOKEN+'/'+a,{method:'POST'});
             var d = await res.json();
             if(!res.ok) throw new Error(d.error||'Error');
-            var msg = document.getElementById('msg');
             document.getElementById('acciones').style.display='none';
-            if(a==='confirmar'){ msg.style.background='#dcfce7'; msg.style.color='#166534'; msg.textContent='¡Gracias! Tu cita está confirmada.'; document.getElementById('estado').textContent='Confirmada'; }
-            else { msg.style.background='#fee2e2'; msg.style.color='#991b1b'; msg.textContent='Gracias por avisar. Hemos anulado tu cita.'; document.getElementById('estado').textContent='Anulada'; }
-            msg.style.display='block';
+            if(a==='confirmar') pinta('#166534','#dcfce7','¡Gracias! Tu cita está confirmada.','Confirmada');
+            else pinta('#991b1b','#fee2e2','Gracias por avisar. Hemos anulado tu cita.','Anulada');
+          }catch(e){ alert(e.message); }
+        }
+        // ── PIEZA 6: cambiar / anular con ventana (solo citas nacidas en la puerta pública) ──
+        function abrirCambio(){
+          var caja = document.getElementById('cajaCambio');
+          caja.style.display = caja.style.display==='none' ? '' : 'none';
+        }
+        async function cargarHuecos(){
+          var sel = document.getElementById('nvHora'), f = document.getElementById('nvFecha').value;
+          sel.innerHTML='<option value="">Buscando…</option>';
+          if(!f){ sel.innerHTML='<option value="">Elige el día primero</option>'; return; }
+          try{
+            var r = await fetch('/cita/'+TOKEN+'/huecos?fecha='+encodeURIComponent(f));
+            var d = await r.json();
+            if(!r.ok) throw new Error(d.error||'Error');
+            if(!d.huecos || !d.huecos.length){ sel.innerHTML='<option value="">Ese día no queda hueco</option>'; return; }
+            sel.innerHTML = d.huecos.map(function(h){ return '<option value="'+h.min+'">'+h.hora+'</option>'; }).join('');
+          }catch(e){ sel.innerHTML='<option value="">No hemos podido cargar las horas</option>'; }
+        }
+        async function guardarCambio(){
+          var f = document.getElementById('nvFecha').value, m = document.getElementById('nvHora').value;
+          if(!f || !m){ alert('Elige un día y una hora.'); return; }
+          try{
+            var r = await fetch('/cita/'+TOKEN+'/cambiar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fecha:f,inicio_min:parseInt(m)})});
+            var d = await r.json();
+            if(!r.ok) throw new Error((d.error||'Error')+(d.huecos&&d.huecos.length?' Huecos cerca: '+d.huecos.map(function(h){return h.hora}).join(', '):''));
+            document.getElementById('vFecha').textContent=d.fecha;
+            document.getElementById('vHora').textContent=d.hora;
+            document.getElementById('cajaCambio').style.display='none';
+            pinta('#166534','#dcfce7','Hecho. Tu cita queda el '+d.fecha+' a las '+d.hora+'.');
+          }catch(e){ alert(e.message); }
+        }
+        async function anular(){
+          if(!confirm('¿Seguro que quieres anular tu cita?')) return;
+          try{
+            var r = await fetch('/cita/'+TOKEN+'/anular',{method:'POST'});
+            var d = await r.json();
+            if(!r.ok) throw new Error(d.error||'Error');
+            document.getElementById('acciones').style.display='none';
+            var caja = document.getElementById('cajaCambio'); if(caja) caja.style.display='none';
+            pinta('#991b1b','#fee2e2','Tu cita queda anulada. Gracias por avisar.','Anulada');
           }catch(e){ alert(e.message); }
         }
       </script>
@@ -886,8 +973,8 @@ function vistaServicios(c, db) {
   const aj = ajustesCitas(db);
   const content = `
     <div class="ph"><h2>Servicios</h2><div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/citas">← Agenda</a>${editable ? '<button class="btn btn-primary" onclick="openNuevoServicio()">Nuevo servicio</button>' : ''}</div></div>
-    <div class="alert" style="margin-bottom:1rem">Son los productos de tipo <strong>servicio</strong> de tu catálogo. Aquí defines lo que la cita necesita: el <strong>tiempo contigo</strong>, el <strong>tiempo de espera</strong> (los minutos en que el cliente espera y tú quedas libre, como el tinte) y el <strong>margen después</strong>. <strong>El precio y el IVA siguen viniendo del catálogo.</strong> Un servicio no se puede pedir hasta que tenga tiempo (pulsa «Configurar»). ¿No está en el catálogo? Créalo aquí con «Nuevo servicio».</div>
-    <div class="card"><div class="table-wrap"><table><thead><tr><th>Servicio</th><th>Se pide cita</th><th>Tiempo contigo</th><th>Tiempo de espera</th><th>Margen</th><th></th></tr></thead><tbody id="svcBody"><tr><td colspan="6">Cargando…</td></tr></tbody></table></div></div>
+    <div class="alert" style="margin-bottom:1rem">Son los productos de tipo <strong>servicio</strong> de tu catálogo. Aquí defines lo que la cita necesita: el <strong>tiempo contigo</strong>, el <strong>tiempo de espera</strong> (los minutos en que el cliente espera y tú quedas libre, como el tinte) y el <strong>margen después</strong>. <strong>El precio y el IVA siguen viniendo del catálogo.</strong> Un servicio no se puede pedir hasta que tenga tiempo (pulsa «Configurar»). ¿No está en el catálogo? Créalo aquí con «Nuevo servicio». <strong>«Se pide por Internet»</strong> es otra cosa: es lo que tus clientes ven en tu <a href="/admin/citas/publica">página de reservas</a>, y viene <strong>apagado</strong> hasta que tú lo enciendas servicio a servicio.</div>
+    <div class="card"><div class="table-wrap"><table><thead><tr><th>Servicio</th><th>Se pide cita</th><th>Se pide por Internet</th><th>Tiempo contigo</th><th>Tiempo de espera</th><th>Margen</th><th></th></tr></thead><tbody id="svcBody"><tr><td colspan="7">Cargando…</td></tr></tbody></table></div></div>
     ${modalServicio(aj.puesto_sing)}
     ${modalNuevoServicio()}
     <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};window.PUESTO_SING=${JSON.stringify(aj.puesto_sing)};window.PUESTO_PLURAL=${JSON.stringify(aj.puesto_plural)};${JS_SERVICIOS}</script>`;
@@ -945,7 +1032,7 @@ function vistaAjustes(c, db) {
   let puestoOpts = presets.map(([s, pl]) => { const v = s + '|' + pl; const on = v === cur; if (on) found = true; return `<option value="${escHtml(v)}"${on ? ' selected' : ''}>${escHtml(pl)}</option>`; }).join('');
   if (!found) puestoOpts = `<option value="${escHtml(cur)}" selected>${escHtml(aj.puesto_plural)}</option>` + puestoOpts;
   const content = `
-    <div class="ph"><h2>Ajustes de citas</h2><a class="btn btn-secondary" href="/admin/citas">← Agenda</a></div>
+    <div class="ph"><h2>Ajustes de citas</h2><div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/citas">← Agenda</a><a class="btn btn-secondary" href="/admin/citas/publica">Reservas por Internet</a></div></div>
     <div class="card" style="max-width:640px">
       <div class="form-row">
         <div class="form-group"><label class="form-label">Rejilla (minutos)</label><select class="form-control" id="ajGrid"><option value="15"${sel(aj.grid,15)}>15</option><option value="30"${sel(aj.grid,30)}>30</option><option value="60"${sel(aj.grid,60)}>60</option></select></div>
@@ -971,6 +1058,179 @@ function vistaAjustes(c, db) {
     <script>${JS_AJUSTES}</script>`;
   return adminLayout('Ajustes de citas', content, 'citas', c.get('session')?.csrfToken || '', c);
 }
+
+// ── PIEZA 6 · MANDOS DE LA PUERTA PÚBLICA ─────────────────────────────────────────────────────────
+// Vive dentro del área de Agenda (no es una sección nueva del menú). Todo lo de aquí nace APAGADO o
+// en "no": el dueño enciende, no apaga. Y la dirección se enseña ENTERA y copiable, porque una puerta
+// pública cuyo dueño no sabe repartir su URL no sirve de nada.
+function vistaPublica(c, db) {
+  const content = `
+    <div class="ph"><h2>Reservas por Internet</h2>
+      <div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/citas">← Agenda</a><a class="btn btn-secondary" href="/admin/citas/servicios">Servicios</a></div>
+    </div>
+    <div class="alert" style="margin-bottom:1rem">Tu página de reservas: el cliente elige servicio, con quién, día y hora, y la cita entra <strong>en tu agenda</strong> con las mismas reglas de dentro (mismos huecos, mismos solapes). <strong>Está apagada hasta que la enciendas</strong>, y solo se ve lo que marques: los servicios en <a href="/admin/citas/servicios">Servicios</a> («Se pide por Internet») y las personas aquí abajo. Reservar <strong>no cobra ni emite factura</strong>: eso sigue siendo tu «Atender».</div>
+
+    <div class="card">
+      <label style="display:flex;gap:.6rem;align-items:flex-start;font-weight:600">
+        <input type="checkbox" id="pbActiva" style="margin-top:.25rem">
+        <span>Mi página de reservas está abierta<div style="font-weight:400;font-size:.8rem;color:var(--muted)">Mientras esté apagada, la dirección responde «no encontrado» a cualquiera.</div></span>
+      </label>
+      <div class="form-group" style="margin-top:1rem"><label class="form-label">Tu dirección</label>
+        <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
+          <span style="font-size:.85rem;color:var(--muted)" id="pbBase"></span>
+          <input class="form-control" id="pbHandle" style="width:auto;min-width:180px" placeholder="mi-negocio">
+        </div>
+        <div style="font-size:.75rem;color:var(--muted);margin-top:.3rem">Corta y fácil de decir por teléfono. Si la dejas vacía, se genera del nombre de tu negocio.</div>
+        <div style="margin-top:.5rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+          <code id="pbUrl" style="font-size:.85rem;word-break:break-all"></code>
+          <button class="btn btn-secondary btn-sm" onclick="pbCopiar()">Copiar</button>
+          <a class="btn btn-secondary btn-sm" id="pbAbrir" href="#" target="_blank" rel="noopener">Abrir</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Con cuánto tiempo se puede pedir</h3>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Antelación mínima (horas)</label><input class="form-control" type="number" min="0" step="1" id="pbAntel">
+          <div style="font-size:.7rem;color:var(--muted)">Nadie puede pedir cita para dentro de menos.</div></div>
+        <div class="form-group"><label class="form-label">Con cuánta antelación como máximo (días)</label><input class="form-control" type="number" min="1" id="pbVentana">
+          <div style="font-size:.7rem;color:var(--muted)">Más allá, el calendario no deja elegir.</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">¿Se confirma sola o la apruebas tú?</h3>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Modo</label>
+          <select class="form-control" id="pbModo" onchange="pbModoToggle()">
+            <option value="auto">Se confirma sola</option>
+            <option value="aprobar">La apruebo yo</option>
+          </select></div>
+        <div class="form-group" id="pbRetWrap"><label class="form-label">Caduca sola a las (horas)</label><input class="form-control" type="number" min="1" max="168" id="pbRet">
+          <div style="font-size:.7rem;color:var(--muted)">La solicitud <strong>te guarda el hueco</strong> mientras esperas; si no respondes, se cae sola y el hueco vuelve.</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">¿Puede el cliente cambiar o anular?</h3>
+      <label style="display:flex;gap:.6rem;align-items:center;font-size:.9rem"><input type="checkbox" id="pbCancAct" onchange="pbCancToggle()"> Sí, desde su enlace</label>
+      <div class="form-group" id="pbCancWrap" style="margin-top:.75rem"><label class="form-label">Hasta cuántas horas antes</label><input class="form-control" type="number" min="0" id="pbCancH" style="max-width:160px">
+        <div style="font-size:.7rem;color:var(--muted)">Pasado ese plazo, su enlace le dice que te llame. <strong>Las citas que creas tú en la agenda no cambian</strong>: su enlace sigue igual que siempre.</div></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Tu política de cancelación</h3>
+      <div style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem">Se le <strong>muestra antes de confirmar</strong> y se repite en el correo. Si lo dejas vacío, no se muestra nada.</div>
+      <textarea class="form-control" id="pbPolitica" rows="4" maxlength="2000" placeholder="Si no puedes venir, avísanos con 24 h de antelación…"></textarea>
+      <div class="form-group" style="margin-top:.75rem"><label class="form-label">Enlace a tu política de privacidad</label><input class="form-control" id="pbPriv" placeholder="https://…"></div>
+      <div class="alert" style="font-size:.8rem;margin-top:.75rem">Casilla que el cliente <strong>tiene que marcar</strong> (se guarda con fecha y hora el texto exacto que aceptó):<br><em id="pbConsent"></em></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Quién aparece en la página</h3>
+      <div style="font-size:.8rem;color:var(--muted);margin-bottom:.75rem">Por defecto <strong>no aparece nadie</strong>. El nombre que pongas aquí es el que ve el cliente — nunca el usuario del sistema.</div>
+      <div id="pbPersonas"></div>
+    </div>
+
+    <button class="btn btn-primary" onclick="pbGuardar()">Guardar</button>
+
+    <div class="card" id="pbSolWrap" style="display:none;margin-top:1.5rem">
+      <h3 style="margin-top:0">Solicitudes pendientes de aprobar</h3>
+      <div id="pbSolicitudes">Cargando…</div>
+    </div>
+    <script>${JS_PUBLICA}</script>`;
+  return adminLayout('Reservas por Internet', content, 'citas-publica', c.get('session')?.csrfToken || '', c);
+}
+
+const JS_PUBLICA = String.raw`
+function esc(s){return String(s==null?'':s).replace(/[<>&"]/g,function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c];});}
+var PB=null;
+function pbUrlActual(){
+  var h=(document.getElementById('pbHandle').value||'').trim();
+  var slug=h?h.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40):'';
+  return (PB.base_url||location.origin)+'/reservar/'+(slug||PB.handle_efectivo);
+}
+function pbPintaUrl(){ var u=pbUrlActual(); document.getElementById('pbUrl').textContent=u; document.getElementById('pbAbrir').href=u; }
+function pbModoToggle(){ document.getElementById('pbRetWrap').style.display = document.getElementById('pbModo').value==='aprobar' ? '' : 'none'; }
+function pbCancToggle(){ document.getElementById('pbCancWrap').style.display = document.getElementById('pbCancAct').checked ? '' : 'none'; }
+async function pbCopiar(){
+  try{ await navigator.clipboard.writeText(pbUrlActual()); toast('Dirección copiada'); }
+  catch(e){ toast('Copia la dirección a mano: '+pbUrlActual(),'err'); }
+}
+async function pbCargar(){
+  PB = await api('GET','/api/erp/reserva-publica/ajustes');
+  var a = PB.ajustes;
+  document.getElementById('pbActiva').checked = !!a.activa;
+  document.getElementById('pbHandle').value = a.handle||'';
+  document.getElementById('pbBase').textContent = (PB.base_url||location.origin)+'/reservar/';
+  // La antelación se guarda en MINUTOS (lo que come el motor) y se enseña en HORAS (lo que piensa el
+  // dueño). El defecto del encargo son 2 h = 120 min.
+  document.getElementById('pbAntel').value = Math.round((a.antelacion_min||0)/60);
+  document.getElementById('pbVentana').value = a.ventana_dias;
+  document.getElementById('pbModo').value = a.modo;
+  document.getElementById('pbRet').value = a.retencion_horas;
+  document.getElementById('pbCancAct').checked = !!a.cancelar_activo;
+  document.getElementById('pbCancH').value = a.cancelar_horas;
+  document.getElementById('pbPolitica').value = a.politica||'';
+  document.getElementById('pbPriv').value = a.privacidad_url||'';
+  document.getElementById('pbConsent').textContent = PB.consentimiento;
+  document.getElementById('pbPersonas').innerHTML = (PB.personas||[]).map(function(p){
+    return '<div style="display:flex;gap:.6rem;align-items:center;margin-bottom:.5rem;flex-wrap:wrap">'
+      +'<label style="display:flex;gap:.4rem;align-items:center;font-size:.9rem;min-width:170px"><input type="checkbox" class="pbP" data-id="'+p.id+'" '+(p.visible?'checked':'')+'> '+esc(p.name)+'</label>'
+      +'<input class="form-control pbN" data-id="'+p.id+'" style="max-width:220px" maxlength="120" placeholder="Nombre que ve el cliente" value="'+esc(p.nombre_publico)+'">'
+      +'</div>';
+  }).join('') || '<span style="color:var(--muted)">No hay personas activas.</span>';
+  pbModoToggle(); pbCancToggle(); pbPintaUrl();
+  document.getElementById('pbHandle').addEventListener('input', pbPintaUrl);
+  document.getElementById('pbSolWrap').style.display = a.modo==='aprobar' ? '' : 'none';
+  if(a.modo==='aprobar') pbSolicitudes();
+}
+async function pbGuardar(){
+  var personas=[].map.call(document.querySelectorAll('.pbP'), function(cb){
+    var id=cb.getAttribute('data-id');
+    var n=document.querySelector('.pbN[data-id="'+id+'"]');
+    return { user_id:parseInt(id), visible:cb.checked, nombre_publico:(n?n.value:'').trim() };
+  });
+  var body={
+    cita_pub_activa:document.getElementById('pbActiva').checked,
+    cita_pub_handle:document.getElementById('pbHandle').value,
+    cita_pub_antelacion_min:(parseInt(document.getElementById('pbAntel').value)||0)*60,
+    cita_pub_ventana_dias:parseInt(document.getElementById('pbVentana').value)||60,
+    cita_pub_modo:document.getElementById('pbModo').value,
+    cita_pub_retencion_horas:parseInt(document.getElementById('pbRet').value)||24,
+    cita_pub_cancelar_horas:parseInt(document.getElementById('pbCancH').value)||0,
+    cita_pub_cancelar_activo:document.getElementById('pbCancAct').checked,
+    cita_pub_politica:document.getElementById('pbPolitica').value,
+    cita_pub_privacidad_url:document.getElementById('pbPriv').value,
+    personas:personas,
+  };
+  try{ await api('POST','/api/erp/reserva-publica/ajustes',body); toast('Guardado'); pbCargar(); }
+  catch(e){ toast(e.message,'err'); }
+}
+async function pbSolicitudes(){
+  var box=document.getElementById('pbSolicitudes');
+  try{
+    var list=await api('GET','/api/erp/reserva-publica/solicitudes');
+    if(!list.length){ box.innerHTML='<span style="color:var(--muted)">Nada pendiente.</span>'; return; }
+    box.innerHTML='<div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Cuándo</th><th>Servicio</th><th>Caduca en</th><th></th></tr></thead><tbody>'
+      +list.map(function(r){ return '<tr><td>'+esc(r.cliente)+'<div style="font-size:.75rem;color:var(--muted)">'+esc(r.email||r.cliente_suelto_movil||'')+'</div></td>'
+        +'<td>'+esc(r.fecha)+' '+esc(r.hora)+'</td><td>'+esc(r.servicios)+'</td>'
+        +'<td>'+(r.horas_restantes==null?'—':(r.horas_restantes+' h'))+'</td>'
+        +'<td style="white-space:nowrap"><button class="btn btn-primary btn-sm" onclick="pbAprobar('+r.id+')">Aprobar</button> '
+        +'<button class="btn btn-secondary btn-sm" onclick="pbRechazar('+r.id+')">Rechazar</button></td></tr>'; }).join('')
+      +'</tbody></table></div>';
+  }catch(e){ box.textContent='No hemos podido cargar las solicitudes.'; }
+}
+async function pbAprobar(id){
+  try{ var r=await api('POST','/api/erp/reserva-publica/solicitudes/'+id+'/aprobar'); toast(r.message); pbSolicitudes(); }catch(e){ toast(e.message,'err'); }
+}
+async function pbRechazar(id){
+  if(!confirm('¿Rechazar la solicitud? Se libera el hueco y la cita queda anulada.')) return;
+  try{ var r=await api('POST','/api/erp/reserva-publica/solicitudes/'+id+'/rechazar'); toast(r.message); pbSolicitudes(); }catch(e){ toast(e.message,'err'); }
+}
+pbCargar();
+`;
 
 // ── Modales (HTML) ────────────────────────────────────────────────────────────────────────────────
 const modalNuevaCita = (puestoSing = 'Puesto') => `
@@ -1396,10 +1656,13 @@ function esperaVal(pref){ return document.getElementById(pref+'EsperaWrap').styl
 async function cargar(){ META=await api('GET','/api/erp/citas/meta'); LIST=await api('GET','/api/erp/citas/servicios/list'); render(); }
 function render(){
   var b=document.getElementById('svcBody');
-  if(!LIST.length){ b.innerHTML='<tr><td colspan="6" style="color:var(--muted)">No hay productos de tipo servicio en el catálogo. Créalos con «Nuevo servicio».</td></tr>'; return; }
+  if(!LIST.length){ b.innerHTML='<tr><td colspan="7" style="color:var(--muted)">No hay productos de tipo servicio en el catálogo. Créalos con «Nuevo servicio».</td></tr>'; return; }
   b.innerHTML=LIST.map(function(s){
     var contigo = s.muerto_dur_min ? s.muerto_ini_min : s.duracion_min;
-    return '<tr><td>'+esc(s.name)+'</td><td>'+(s.reservable?'Sí':(s.configurado?'No':'—'))+'</td><td>'+(s.duracion_min!=null?(contigo+' min'):'<span style="color:var(--muted)">sin configurar</span>')+'</td><td>'+(s.muerto_dur_min?(s.muerto_dur_min+' min libre'):'—')+'</td><td>'+(s.margen_min||0)+' min</td><td>'+(window.CITAS_EDIT?'<button class="btn btn-secondary btn-sm" onclick="edit('+s.id+')">Configurar</button>':'')+'</td></tr>';
+    var pub = window.CITAS_EDIT
+      ? '<label style="font-size:.85rem;display:inline-flex;gap:.35rem;align-items:center"><input type="checkbox" '+(s.publico?'checked':'')+' onchange="svcPublico('+s.id+',this)"> '+(s.publico?'Sí':'No')+'</label>'
+      : (s.publico?'Sí':'No');
+    return '<tr><td>'+esc(s.name)+'</td><td>'+(s.reservable?'Sí':(s.configurado?'No':'—'))+'</td><td>'+pub+'</td><td>'+(s.duracion_min!=null?(contigo+' min'):'<span style="color:var(--muted)">sin configurar</span>')+'</td><td>'+(s.muerto_dur_min?(s.muerto_dur_min+' min libre'):'—')+'</td><td>'+(s.margen_min||0)+' min</td><td>'+(window.CITAS_EDIT?'<button class="btn btn-secondary btn-sm" onclick="edit('+s.id+')">Configurar</button>':'')+'</td></tr>';
   }).join('');
 }
 function edit(id){
@@ -1413,6 +1676,11 @@ function edit(id){
   document.getElementById('svcProviders').innerHTML=META.personas.map(p=>'<label style="font-size:.85rem"><input type="checkbox" class="svcprov" value="'+p.id+'" '+((s.providers||[]).includes(p.id)?'checked':'')+'> '+esc(p.name)+'</label>').join('')||'<span style="color:var(--muted)">Sin personas</span>';
   document.getElementById('svcResources').innerHTML=META.recursos.map(r=>'<label style="font-size:.85rem"><input type="checkbox" class="svcres" value="'+r.id+'" '+((s.resources||[]).includes(r.id)?'checked':'')+'> '+esc(r.nombre)+'</label>').join('')||'<span style="color:var(--muted)">Sin '+(window.PUESTO_PLURAL||'puestos').toLowerCase()+'</span>';
   openModal('mSvc');
+}
+async function svcPublico(id, cb){
+  var quiere = cb.checked;
+  try{ var r = await api('POST','/api/erp/reserva-publica/servicio/'+id+'?publico='+(quiere?'1':'0')); toast(r.message); cargar(); }
+  catch(e){ cb.checked = !quiere; toast(e.message,'err'); }
 }
 async function svcGuardar(){
   var id=document.getElementById('svcId').value;

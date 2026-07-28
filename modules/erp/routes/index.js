@@ -11,6 +11,7 @@ import { createTiempoRoutes } from './tiempo.js';         // Escalera · paso 7 
 import { createFacturarHorasRoutes } from './facturar-horas.js'; // Escalera · paso 7 — PIEZA 3: facturar horas
 import { createRentabilidadRoutes } from './rentabilidad.js';    // Escalera · paso 7 — PIEZA 4: rentabilidad por proyecto
 import { createCitasRoutes, createCitasPublicRoutes } from './citas.js';   // Escalera · paso 7 — PIEZA 5: sistema de citas
+import { createReservaPublicaRoutes, createReservaEnlaceRoutes, createReservaAdminRoutes } from './reserva-publica.js';   // paso 7 — PIEZA 6: puerta pública de reserva
 import { createOrderRoutes } from './orders.js';
 import { createInventoryRoutes } from './inventory.js';
 import { createStockRoutes } from './stock.js';
@@ -70,6 +71,7 @@ export function mountRoutes(app, db) {
   const { api: fhApi, views: fhViews } = createFacturarHorasRoutes(db);  // paso 7 · facturar horas
   const { api: rentApi, views: rentViews } = createRentabilidadRoutes(db); // paso 7 · rentabilidad por proyecto
   const { api: citasApi, views: citasViews } = createCitasRoutes(db);      // paso 7 · PIEZA 5 · sistema de citas
+  const reservaPubApi = createReservaAdminRoutes(db);                      // paso 7 · PIEZA 6 · mandos del dueño
   const { api: orderApi, views: orderViews } = createOrderRoutes(db);
   const { api: invApi, views: invViews } = createInventoryRoutes(db);
   const { api: stockApi } = createStockRoutes(db);
@@ -183,6 +185,7 @@ export function mountRoutes(app, db) {
   apiApp.route('/facturar-horas', fhApi); // ← /api/erp/facturar-horas (preview + emitir, invoices.create)
   apiApp.route('/rentabilidad', rentApi); // ← /api/erp/rentabilidad (panel + comparativa, proyectos.read+invoices.read)
   apiApp.route('/citas', citasApi);       // ← /api/erp/citas (agenda, huecos, citas, avisos, cola, config · citas.read/edit)
+  apiApp.route('/reserva-publica', reservaPubApi);   // ← PIEZA 6 · mandos de la puerta pública (citas.read/edit)
   // PIEZA C — API del POS viejo RETIRADA (ver nota arriba). Desmontado, no borrado.
   // apiApp.route('/orders', orderApi);
   apiApp.route('/inventory', invApi);
@@ -227,5 +230,16 @@ export function mountRoutes(app, db) {
   // ── PIEZA 5 · ENLACE PÚBLICO DE LA CITA (1.9) ──────────────────────────────────
   // Sin /admin ni auth de panel, sin CSRF: la LLAVE (token, 256 bits) es la defensa. El tenant lo
   // resuelve tenantMiddleware por subdominio. Solo abre SU cita; confirmar / avisar de que no puede ir.
+  //
+  // PIEZA 6 añade en el MISMO prefijo las acciones con ventana (huecos / cambiar / anular). Son rutas
+  // de DOS segmentos, así que no compiten con el `/:token` de la pieza 5, y solo actúan sobre citas
+  // NACIDAS FUERA: para una cita creada en la agenda devuelven 403 y su enlace sigue como estaba.
+  app.route('/cita', createReservaEnlaceRoutes(db));
   app.route('/cita', createCitasPublicRoutes(db));
+
+  // ── PIEZA 6 · LA PUERTA PÚBLICA DE RESERVA ─────────────────────────────────────
+  // https://<negocio>.bamburu.com/reservar/<handle>. Sin sesión y sin CSRF; el negocio lo resuelve el
+  // subdominio (igual que el enlace de la cita) y el <handle> se comprueba contra el del tenant ya
+  // resuelto. APAGADA por defecto: sin encenderla, todo esto responde 404.
+  app.route('/reservar', createReservaPublicaRoutes(db));
 }

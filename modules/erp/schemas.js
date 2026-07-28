@@ -268,6 +268,49 @@ export const citaAjustesSchema = z.object({
   cita_puesto_plural: strOpt(30),
 });
 
+// ── PIEZA 6 · PUERTA PÚBLICA DE RESERVA ────────────────────────────────────────────────────────
+// Mandos del dueño. Viven en company_config junto al resto de ajustes de agenda (cita_pub_*).
+export const citaPublicaAjustesSchema = z.object({
+  cita_pub_activa: z.coerce.boolean(),
+  cita_pub_handle: strOpt(60),
+  cita_pub_antelacion_min: z.coerce.number().int().min(0).max(525600),
+  cita_pub_ventana_dias: z.coerce.number().int().min(1).max(3650),
+  cita_pub_modo: z.enum(['auto', 'aprobar']),
+  cita_pub_retencion_horas: z.coerce.number().int().min(1).max(168),
+  cita_pub_cancelar_horas: z.coerce.number().int().min(0).max(8760),
+  cita_pub_cancelar_activo: z.coerce.boolean(),
+  cita_pub_politica: strOpt(2000),
+  cita_pub_privacidad_url: strOpt(500),
+  // Quién aparece fuera y con qué nombre (tabla cita_pub_personas). Lista completa: lo que no
+  // venga marcado queda en visible=0 — "por defecto NO" también al guardar, no solo al migrar.
+  personas: z.array(z.object({
+    user_id: z.coerce.number().int().positive(),
+    visible: z.coerce.boolean(),
+    nombre_publico: strOpt(120),
+  })).max(200).optional().default([]),
+});
+
+// La reserva que llega DE FUERA, sin sesión. `user_id` ausente/null = "cualquiera disponible".
+// `consent` es OBLIGATORIO (se rechaza en false) y `trampa` es el campo señuelo: debe venir vacío.
+export const reservaPublicaSchema = z.object({
+  service_ids: z.array(intPos).min(1).max(20),
+  user_id: optId,
+  fecha: fechaISO,
+  inicio_min: minDia,
+  nombre: str(120),
+  movil: strOpt(30),
+  email: strOpt(200),
+  nota: strOpt(500),
+  consent: z.coerce.boolean(),
+  trampa: strOpt(100),
+});
+
+// Cambiar la hora de una reserva desde el enlace del cliente (solo citas nacidas fuera).
+export const reservaCambioSchema = z.object({
+  fecha: fechaISO,
+  inicio_min: minDia,
+});
+
 // T5 — valores EXACTOS permitidos en los campos de lista cerrada del cliente, extraídos del
 // propio clientSchema (fuente única: no se escriben a mano → no se desincronizan). Los usa
 // DISA para no inventar valores. Desenvuelve los wrappers default/optional hasta el enum.

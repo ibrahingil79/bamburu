@@ -355,11 +355,16 @@ export const CATALOGO = {
       { clave: 'hora', label: 'Hora de la cita' },
       { clave: 'direccion', label: 'Dirección del negocio' },
       { clave: 'enlace', label: 'Enlace de la cita', critico: true },
+      // PIEZA 6 — la política de cancelación que el cliente leyó ANTES de confirmar se REPITE aquí.
+      // Es un bloque que pone el sistema (no lo teclea el dueño) y que desaparece solo cuando no hay
+      // política escrita: una cita creada desde la agenda manda '' y el correo sale exactamente como
+      // salía en la pieza 5. Por eso no es requerido ni crítico.
+      { clave: 'politica', label: 'Política de cancelación (si la tienes escrita)', esHtml: true, bloque: true },
     ],
     requeridos: [],
     criticos: ['enlace'],
     motivoCritico: 'Sin el enlace, tu cliente no puede confirmar la cita ni avisarte de que no puede ir: el correo no serviría de nada.',
-    ejemplo: { cliente: 'María García', empresa: 'Tu Negocio', servicio: 'Corte + tinte', fecha: '2026-08-03', hora: '10:00', direccion: 'C/ Mayor 1, Madrid', enlace: 'https://tunegocio.bamburu.com/cita/EJEMPLO' },
+    ejemplo: { cliente: 'María García', empresa: 'Tu Negocio', servicio: 'Corte + tinte', fecha: '2026-08-03', hora: '10:00', direccion: 'C/ Mayor 1, Madrid', enlace: 'https://tunegocio.bamburu.com/cita/EJEMPLO', politica: '' },
     fabrica: {
       _: {
         subject: 'Tu cita en {{empresa}} — {{fecha}} a las {{hora}}',
@@ -368,6 +373,7 @@ export const CATALOGO = {
           + CAJA('<strong>Servicio:</strong> {{servicio}}<br><strong>Día:</strong> {{fecha}}<br><strong>Hora:</strong> {{hora}}<br><strong>Dónde:</strong> {{direccion}}')
           + '<p>Confírmala o avísanos si no puedes venir con un solo clic:</p>'
           + BOTON('Ver mi cita')
+          + '{{politica}}'
           + '<p style="color:#6b7280;font-size:12px">Este enlace es solo para tu cita. Si no la has solicitado, ignora este correo.</p>'),
       },
     },
