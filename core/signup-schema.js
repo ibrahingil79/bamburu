@@ -14,6 +14,11 @@ export const COUNTRY_DEFAULT = 'ES';
 export const signupDraftSchema = z.object({
   businessName: str(120),
   sector: strOpt(80),                                  // opcional; materia prima de DISA (defecto F)
+  // PASO 8 — OFICIO: lo elige el usuario pulsando uno de seis botones, NO se adivina de `sector` (que
+  // es texto libre escrito por un LLM). Aquí solo viaja; quien decide si vale es normalizaOficio() en
+  // modules/erp/oficios.js, que convierte cualquier cosa rara —o el paso saltado— en 'otro'. Se valida
+  // como texto suelto a propósito: este fichero no depende de BD ni del ERP, para no crear ciclos.
+  oficio: strOpt(40),
   ownerName: str(120),
   email: emailField,                                   // formato válido obligatorio (defecto D)
   country: z.enum(['ES', 'MX', 'CO']).catch(COUNTRY_DEFAULT),  // valor desconocido → ES (España por defecto)
@@ -52,6 +57,7 @@ export function parseSignup(input, { draft = false } = {}) {
   d.email = d.email.toLowerCase();
   if (d.sector === undefined) d.sector = '';
   if (d.phone === undefined) d.phone = '';
+  if (d.oficio === undefined) d.oficio = '';   // vacío = paso saltado → 'otro' al fijarlo
   return d;
 }
 

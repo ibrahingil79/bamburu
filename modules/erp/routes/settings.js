@@ -9,6 +9,10 @@ import {
   CATALOGO, TONO_UNICO, esTonoValido, plantillaEnVigor, plantillaDeFabrica,
   renderPlantilla, htmlAtexto, revisarPlantilla,
 } from '../email-templates.js';
+// PASO 8 — PERFIL DE OFICIO. Se cambia desde aquí ("los ajustes del negocio"). El módulo es HOJA; el
+// creador de productos se le pasa como argumento (ver el porqué en modules/erp/oficios.js).
+import { OFICIOS, oficioDe, fijarOficio, serviciosQueFaltan, sembrarCatalogo } from '../oficios.js';
+import { createProductSvc } from './products.js';
 
 export function createSettingsRoutes(db, cfg = {}) {
   const sym = cfg.sym || '€';
@@ -20,6 +24,41 @@ export function createSettingsRoutes(db, cfg = {}) {
   api.get('/company', requirePerm('company.read'), c => {
     try { return c.json(db.prepare('SELECT * FROM company_config WHERE id=1').get()); }
     catch(e) { return c.json({error:safeError(e)},500); }
+  });
+
+  // ── API: OFICIO (PASO 8) ───────────────────────────────────────
+  // El oficio hace DOS cosas y solo dos: cambia palabras de pantalla y precarga servicios. Aquí no se
+  // enciende ni se apaga nada, y el motor de citas ni se entera.
+  api.get('/oficio', requirePerm('company.read'), c => {
+    try {
+      const actual = oficioDe(db);
+      return c.json({
+        oficio: actual,
+        oficios: OFICIOS.map(o => ({ id: o.id, label: o.label, servicios: o.servicios.length })),
+        faltan: serviciosQueFaltan(db, actual),
+      });
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+
+  // Cambiar de oficio. NO siembra: solo cambia las palabras y dice qué servicios faltarían. Sembrar es
+  // un segundo botón, a propósito — cambiar cómo se llaman las cosas no debe crearte productos de golpe.
+  api.put('/oficio', requirePerm('company.update'), c => {
+    return c.req.json().then(body => {
+      try {
+        const fijado = fijarOficio(db, body?.oficio);   // normaliza: lo que no sea de los seis → 'otro'
+        return c.json({ ok: true, oficio: fijado, faltan: serviciosQueFaltan(db, fijado) });
+      } catch (e) { return c.json({ error: safeError(e) }, 500); }
+    }).catch(() => c.json({ error: 'Petición inválida.' }, 400));
+  });
+
+  // Añadir SOLO los que falten. Nunca borra, nunca pisa, nunca archiva: lo que el negocio ya tenga
+  // —creado por él o sembrado y luego editado— se queda exactamente como está. Idempotente.
+  api.post('/oficio/sembrar', requirePerm('company.update'), c => {
+    try {
+      const actual = oficioDe(db);
+      const creados = sembrarCatalogo(db, actual, createProductSvc);
+      return c.json({ ok: true, creados, faltan: serviciosQueFaltan(db, actual) });
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   api.put('/company', requirePerm('company.update'), validate(companySchema), async c => {
@@ -221,6 +260,14 @@ export function createSettingsRoutes(db, cfg = {}) {
             <input type="hidden" id="countryCode" value="${config.country || 'ES'}">
             <small style="color:var(--text2);font-size:12px;margin-top:4px;display:block">El país se configura al crear el negocio y no puede cambiarse.</small>
           </div>
+          <!-- PASO 8 — PERFIL DE OFICIO. Cambia las palabras de tu agenda y te precarga los servicios
+               típicos. Nada más: no enciende ni apaga funciones, y no toca lo que ya tengas. -->
+          <div class="form-group">
+            <label class="form-label">¿A qué te dedicas?</label>
+            <select class="form-control" id="cOficio"></select>
+            <small style="color:var(--text2);font-size:12px;margin-top:4px;display:block">Cambia cómo se llaman las cosas en tu agenda (por ejemplo «paciente» en salud) y te ofrece los servicios típicos de tu oficio. <strong>Nunca borra ni cambia los servicios que ya tengas</strong>: solo te ofrece añadir los que falten.</small>
+            <div id="oficioFaltan" style="margin-top:.6rem"></div>
+          </div>
           <div class="form-row">
             <div class="form-group"><label class="form-label">Moneda (código)</label><input class="form-control" id="currencyCode"></div>
             <div class="form-group"><label class="form-label">Símbolo de moneda</label><input class="form-control" id="currencySymbol" style="max-width:120px"></div>
@@ -294,6 +341,47 @@ export function createSettingsRoutes(db, cfg = {}) {
         document.getElementById('cProvince').value=d.province||'';
         document.getElementById('cLogo').value=d.logo_url||'';
       });
+
+      // ── PASO 8 — PERFIL DE OFICIO ────────────────────────────────────────────────────────────
+      // Dos botones separados a propósito: cambiar de oficio SOLO cambia las palabras; los servicios
+      // se añaden pulsando aparte. Así nadie se encuentra ocho productos nuevos por tocar un select.
+      var OFICIOS_LISTA=[];
+      function escOf(s){return String(s==null?'':s).replace(/[<>&"]/g,function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c];});}
+      function pintaFaltan(faltan){
+        var box=document.getElementById('oficioFaltan');
+        if(!faltan||!faltan.length){ box.innerHTML='<span style="color:var(--text2);font-size:12px">Ya tienes todos los servicios de arranque de tu oficio.</span>'; return; }
+        box.innerHTML='<div style="font-size:12px;color:var(--text2);margin-bottom:.4rem">Te faltan <strong>'+faltan.length+'</strong> servicios de arranque: '
+          +faltan.map(function(s){return escOf(s.nombre)+' ('+s.duracion_min+' min)';}).join(' · ')
+          +'</div><button type="button" class="btn btn-secondary btn-sm" id="btnSembrar">Añadir los que faltan</button>';
+        document.getElementById('btnSembrar').addEventListener('click',sembrarOficio);
+      }
+      async function cargarOficio(){
+        try{
+          var d=await api('GET','/api/erp/settings/oficio');
+          OFICIOS_LISTA=d.oficios||[];
+          var sel=document.getElementById('cOficio');
+          sel.innerHTML=OFICIOS_LISTA.map(function(o){return '<option value="'+escOf(o.id)+'"'+(o.id===d.oficio?' selected':'')+'>'+escOf(o.label)+'</option>';}).join('');
+          pintaFaltan(d.faltan);
+        }catch(e){ /* los ajustes nunca se rompen por esto */ }
+      }
+      async function cambiarOficio(){
+        try{
+          var d=await api('PUT','/api/erp/settings/oficio',{oficio:document.getElementById('cOficio').value});
+          toast('Oficio guardado ✓');
+          pintaFaltan(d.faltan);
+        }catch(e){ toast(e.message,'err'); }
+      }
+      async function sembrarOficio(){
+        var b=document.getElementById('btnSembrar'); if(b){ b.disabled=true; b.textContent='Añadiendo…'; }
+        try{
+          var d=await api('POST','/api/erp/settings/oficio/sembrar',{});
+          toast((d.creados||[]).length+' servicios añadidos ✓');
+          pintaFaltan(d.faltan);
+        }catch(e){ toast(e.message,'err'); if(b){ b.disabled=false; b.textContent='Añadir los que faltan'; } }
+      }
+      document.getElementById('cOficio').addEventListener('change',cambiarOficio);
+      cargarOficio();
+
       async function saveCompany(){
         try{await api('PUT','/api/erp/settings/company',{company_name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,country:document.getElementById('countryCode').value,currency:document.getElementById('currencyCode').value,currency_symbol:document.getElementById('currencySymbol').value,tax_name:document.getElementById('taxName').value,fiscal_id_label:document.getElementById('fiscalIdLabel').value,document_name:document.getElementById('documentName').value,tax_rate:document.getElementById('cTax').value,irpf_default:document.getElementById('cIrpfDefault').value,dias_recordatorio_impago:document.getElementById('cDiasImpago').value,dias_aviso_pago:document.getElementById('cDiasPago').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,website:document.getElementById('cWeb').value,address:document.getElementById('cAddr').value,postal_code:document.getElementById('cPostal').value,city:document.getElementById('cCity').value,province:document.getElementById('cProvince').value,logo_url:document.getElementById('cLogo').value});toast('Guardado ✓');}catch(e){toast(e.message,'err')}
       }

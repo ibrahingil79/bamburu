@@ -6,6 +6,12 @@ import { restringirBd } from './db-file-perms.js';
 import { runMigrations } from '../modules/erp/models.js';
 import { getTenantBySlug, createTenant, getCountryConfig } from './control-db.js';
 import { parseSignup } from './signup-schema.js';
+// PASO 8 — PERFIL DE OFICIO. El catálogo de arranque nace por el MISMO camino que "Nuevo servicio" de la
+// agenda (createProductSvc): un servicio es un producto de catálogo, y no hay una segunda puerta para
+// crearlos. createProductSvc se le pasa a sembrarCatalogo como argumento porque oficios.js es un módulo
+// HOJA y no puede importar routes/ sin cerrar el círculo con layout.js.
+import { fijarOficio, sembrarCatalogo } from '../modules/erp/oficios.js';
+import { createProductSvc } from '../modules/erp/routes/products.js';
 
 // Borra el .db de un tenant a medio crear (y sus ficheros WAL/SHM). Idempotente.
 function cleanupTenantDbFiles(absolutePath) {
@@ -28,7 +34,7 @@ function toSlug(text) {
 export async function provisionTenant(input) {
   // 0. Defensa en profundidad: nadie crea un tenant con datos sin validar (defecto C).
   //    Lanza Error { status:400, field } si algo no es válido.
-  const { businessName, ownerName, email, password, phone = '', country = 'ES', sector = '' } =
+  const { businessName, ownerName, email, password, phone = '', country = 'ES', sector = '', oficio = '' } =
     parseSignup(input, { draft: false });
 
   // 1. Generar slug unico
@@ -94,8 +100,17 @@ export async function provisionTenant(input) {
     tenantDb.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES ('country', ?)`)
       .run(country);
     // Sector: se guarda como materia prima para la personalización futura de DISA (defecto F).
+    // NO se toca ni se lee para el oficio: son dos cosas distintas y siguen siéndolo. Este es texto
+    // libre que escribió un LLM; el oficio es un enum que eligió el usuario pulsando un botón.
     tenantDb.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES ('business_sector', ?)`)
       .run(sector);
+
+    // PASO 8 — el oficio y su catálogo de arranque. fijarOficio normaliza (paso saltado o valor raro →
+    // 'otro') y, si nadie ha tocado cómo se llaman los puestos, les pone las palabras del oficio.
+    // sembrarCatalogo solo AÑADE: en un negocio recién creado no hay nada que pisar, y la función es la
+    // misma que usa el cambio de oficio desde Ajustes, donde sí lo hay. 'otro' no siembra nada.
+    const oficioFijado = fijarOficio(tenantDb, oficio);
+    sembrarCatalogo(tenantDb, oficioFijado, createProductSvc);
 
     tenantDb.close();
   } catch (err) {

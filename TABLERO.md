@@ -27,8 +27,12 @@
 > (proyecto), 2 (registro de tiempo) y 3 (facturar horas) VALIDADAS por Ibrahim en pantalla (21 jul;
 > «Proyectos» ya es área propia del rail); pieza 4 completa (rentabilidad contable + coste de las horas,
 > 22 jul); pieza 5 (sistema de citas: motor + agenda interna) + Agenda sencilla (27 jul); **pieza 6
-> (puerta pública de reserva, 28 jul) — la que cierra el peldaño.** Siguiente: **peldaño 8 (Salud /
-> bienestar · 2º oficio)**, a la espera de tu encargo. No se inicia nada sin tu encargo. El **Backlog** de abajo NO
+> (puerta pública de reserva, 28 jul) — la que cierra el peldaño.**
+> **PELDAÑO 8 EN CURSO: PIEZA 1 (perfil de oficio en la agenda) ✅ ENTREGADA el 15 ago 2026.** Al crear
+> el negocio se elige entre SEIS oficios y la agenda habla su idioma desde el primer minuto: cambia las
+> palabras de pantalla y precarga el catálogo de servicios (duraciones reales de España, con fuente
+> anotada). Nada más: no toca el motor, no enciende ni apaga funciones, no quita nada. Los negocios que
+> ya existen quedan en «Otro» y no cambian. **El peldaño 8 sigue ABIERTO.** No se inicia nada sin tu encargo. El **Backlog** de abajo NO
 > compite con la escalera: es lo que le falta a El Suelo (el umbral) más la deuda. Plan del Eje C
 > cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
@@ -2442,10 +2446,94 @@ Aquí aterrizan, de las listas viejas:
   cliente que dejó de reservar. Hoy DISA solo LEE la agenda (pieza 1.14); esto sería el paso proactivo
   (avisar/proponer), apoyado en el vigía (peldaño 5).
 
-### ⬜ 8 — Salud / bienestar · **2º oficio**  ⬅️ **AQUÍ ES DONDE VAMOS** (a la espera de encargo del dueño)
+### 🟡 8 — Salud / bienestar · **2º oficio**  ⬅️ **AQUÍ ES DONDE VAMOS** · **EN CURSO (pieza 1 entregada, 15 ago 2026)**
 Agenda presencial. **Se apoya en el peldaño 7, que quedó cerrado el 28 jul 2026**: el motor de citas, la
 agenda interna y la puerta pública de reserva ya existen y son de USO GENERAL, no de un oficio. Lo que
-este peldaño añade es la cara propia del sector, no otro motor. **No se inicia sin encargo.**
+este peldaño añade es la cara propia del sector, no otro motor.
+
+- **PIEZA 1 — PERFIL DE OFICIO EN LA AGENDA · ✅ ENTREGADA y verificada (15 ago 2026).** Al crear el
+  negocio se ELIGE a qué se dedica, y la agenda habla su idioma desde el primer minuto sin configurar
+  nada. **OJO AL ALCANCE:** el encargo no fue solo salud — son **SEIS oficios** (Peluquería y barbería ·
+  Estética y belleza · Fisioterapia y salud · Taller mecánico · Asesoría y consultoría · Otro). Da la
+  «cara propia del sector» que prometía esta ficha para el 2º oficio y, de paso, para los peldaños 9
+  (belleza) y parte del 7. **El peldaño 8 SIGUE ABIERTO**: esto es la cara, no el oficio entero.
+  - **EL OFICIO HACE EXACTAMENTE DOS COSAS, y está escrito así en el código:** (1) cambia palabras de
+    pantalla; (2) precarga el catálogo de servicios. **NO toca el motor, NO enciende ni apaga funciones,
+    NO quita nada.** Se demuestra: `test-oficio` sección 9 comprueba que no crea citas, ni puestos, ni
+    horarios, que `citas` no gana una columna y que la puerta pública **sigue apagada**.
+  - **LO QUE DESTAPÓ EL PASO 0 (auditoría de solo lectura, antes de escribir una línea):**
+    1. **El vocabulario YA estaba partido en dos.** `cita_puesto_plural` se leía en `ajustesCitas()`
+       (`routes/citas.js`) y OTRA VEZ, por su cuenta, en el parche del menú de `layout.js:465-475`. Con
+       una palabra se notaba poco; con un diccionario por oficio, el menú habría dicho una cosa y la
+       pantalla otra. **Se unificó ANTES de meter nada** (orden exigido por el dueño): ahora las dos
+       lecturas salen de `vocabulario()`.
+    2. **Ya existían DOS conceptos de sector, y ninguno lo lee el producto.** `settings.business_sector`
+       (texto libre que escribe el LLM del alta, `tenant-provisioning.js:97`) — sus ÚNICOS consumidores
+       en todo el repo eran dos scripts de prueba — y `disa_profile.sector`/`business_type`, que solo usa
+       DISA en su prompt. **Decisión del dueño: NO se tocan, NO se migran, NO se leen para esto.** El
+       oficio es un enum propio (`company_config.oficio`), elegido pulsando un botón.
+    3. **La agenda preguntaba por la persona aunque el negocio tuviera una sola.** No había ni un
+       `if` sobre el número de personas en `routes/citas.js` ni en `routes/reserva-publica.js`.
+  - **CONTRADICCIÓN DEL ENCARGO, RESUELTA POR EL DUEÑO ANTES DE TOCAR NADA.** El encargo pedía que la
+    pantalla de crear cita enseñara de entrada quién/qué/cuándo/con quién, y su prueba 2 exigía «3 o 4
+    campos». Eso **contradecía la Agenda Sencilla** (27 jul), donde desde el hueco de la rejilla se piden
+    DOS cosas y persona/hora **se heredan de la celda pulsada** — afirmado por `gate-agenda-sencilla`
+    11/0. **Decisión del dueño (15 ago): se recorta SOLO el panel del botón «Nueva cita»; el panel del
+    hueco NO se toca.** Prueba 2 corregida por él y cumplida al pie de la letra.
+  - **Lo que se ve ahora:** desde **«Nueva cita»**, negocio de UNA persona → **TRES campos** (cliente ·
+    servicio · día y hora); de VARIAS → **CUATRO** (+ «Con quién»). Con una sola persona el campo **no se
+    pinta y la cita se le asigna sola** — el `<select>` sigue en el DOM, oculto y preseleccionado, para
+    que `cGuardar`/`cRecalc`/`cSugerir` no necesiten ni un caso especial. Desde el **hueco**, siguen
+    siendo **DOS**. Puesto, proyecto, nota y avisar quedan tras **«Más opciones»**, cerrado de entrada:
+    **nada se eliminó**, solo dejó de estar delante.
+  - **El catálogo NO está inventado.** Cada duración viene de lo que se publica hoy en España, anotada
+    servicio a servicio en `oficios.js`: agendas públicas de **Fresha** (barberías de Madrid, peluquerías
+    de Barcelona) y **Booksy** (estética/uñas de Barcelona), tarifas de clínica de fisioterapia, tiempos
+    de taller y duraciones de cita de gestoría. **El tiempo de espera y el margen nacen a 0 a propósito**:
+    las fuentes publican el TOTAL de la cita, no su reparto interno, y ese reparto sí sería inventárselo.
+    Peluquería 8 · Estética 8 · Salud 4 · Taller 5 · Asesoría 4 · **Otro 0** (no se inventa a qué se dedica).
+    **Salud nace EXENTA de IVA** (asistencia sanitaria de profesional titulado, art. 20.Uno.3º LIVA), no al 21%.
+  - **Los que YA existen no se rompen, y se demuestra:** la columna nace en `'otro'`, cuyo puesto es
+    `Puesto/Puestos` — **literalmente el default histórico** — y cuyo catálogo está vacío. Un tenant
+    migrado sin pasar por el alta ve exactamente lo que veía ayer (`test-oficio` §3).
+  - **Cambiar de oficio después** (Datos del negocio): **NUNCA borra ni pisa**. Cambiar el selector solo
+    cambia palabras y **dice** qué falta; añadirlos es un **segundo botón**, a propósito. Un servicio
+    sembrado y luego editado (o renombrado) se respeta y el de fábrica se añade al lado. Idempotente.
+    Y el nombre de los puestos **solo sigue al oficio si nadie lo escribió a mano** (`puestoEsDeFabrica`).
+  - **Módulo HOJA `modules/erp/oficios.js`**, por la misma razón que `reserva-publica-config.js`:
+    `layout.js` (menú) y `routes/citas.js` (pantallas) necesitan las mismas palabras, y si el diccionario
+    viviera en `routes/` se cerraría el círculo. `createProductSvc` entra como **argumento**, no como
+    import. Los servicios nacen por el MISMO camino que «Nuevo servicio»: cero puerta nueva de creación.
+  - **Alcance del vocabulario (decisión del dueño):** SOLO las pantallas de `/admin/citas` y su menú.
+    **`email-templates.js`, `citas-avisos.js` y `reserva-publica.js` NO se tocan** — el cliente final
+    nunca ve «paciente». Los mandos de `/admin/citas/publica` se dejan también con «Cliente», por ser la
+    pantalla de la pieza 6. `gate-plantillas-email` y `test-reserva-publica` siguen verdes **sin tocarlos**.
+  - **Migración aditiva:** UNA columna (`company_config.oficio`, `DEFAULT 'otro'`). Sin DROP, sin
+    reescribir, sin tabla nueva. Verifactu, cadenas de hash, libro de stock y WRITABLE_TABLES, intactos.
+  - Ficheros: **`oficios.js`** (nuevo, HOJA), `models.js` (1 columna), `routes/citas.js` (unificación +
+    panel + diccionario), `layout.js` (el menú deja de consultar por su cuenta), `routes/settings.js`
+    (mandos + 3 endpoints), `core/signup-schema.js`, `core/tenant-provisioning.js`, `modules/registro/index.js`.
+  - **Verificado:** `test-oficio` **94/0** (los 6 oficios arrancan solos · «otro» = lo de siempre · una
+    sola fuente de palabras · cambiar de oficio no borra ni pisa · el puesto a mano no se pisa · siembra
+    idempotente · duraciones al minuto · el motor sin tocar), `test-oficio-alta` **52/0** (los 6 botones
+    salen de la misma lista que el ERP · alta real con cada oficio · paso saltado/texto libre/inventado →
+    «otro» · `business_sector` y `disa_profile.sector` intactos · mandos de Ajustes),
+    `gate-oficio-pantalla` **28/0** (4 campos con varias · 3 con una y se asigna sola · cita creada de
+    verdad con esos tres · nada desapareció · **el panel del hueco sigue pidiendo DOS** · pantalla y menú
+    dicen lo mismo · móvil 390×844 sin desbordar · **0 errores JS**).
+  - **Regresión de las piezas 5 y 6, VERDE y en su número exacto**: test-citas 39/0, test-enlace-cita
+    14/0, test-avisos-cita 20/0, test-neto-cero-cita 8/0, test-textos-citas 24/0, **test-reserva-publica
+    130/0**, **test-coincidencia-huecos 40/0** (los huecos de dentro y los de la página pública siguen
+    coincidiendo AL MINUTO), test-neto-cero-reserva 21/0, gate-citas-pantalla 25/0, **gate-agenda-sencilla
+    11/0**, gate-reserva-publica-pantalla 51/0, **gate-plantillas-email 41/0**. Y alrededor:
+    verify-xss-escape 49/0, gate-xss-escape 29/0, test-registro-alta 26/0, verify-constructor 82/0,
+    proyectos 20/0, tiempo 23/0, facturar-horas 31/0, rentabilidad 22/0, coste-horas 28/0,
+    contabilidad-pyg 36/0, contabilidad 38/0, verify-avisos-permisos 16/0, verify-actividad-etiquetas
+    32/0, verify-disa-query-permisos 43/0.
+  - **UN ROJO QUE NO ES DE ESTA PIEZA, comprobado como manda el ritual:** `gate-registro-alta` da 11/3.
+    Se revirtieron los 7 ficheros a HEAD, se reinició el servidor y se reejecutó: **falla IGUAL, 11/3,
+    sin una línea de este trabajo.** Los 3 fallos son de la conversación con el LLM («No se alcanzó
+    ready»), no del alta. Se anota, no se toca.
 
 ### ⬜ 9 — Belleza / estética · **3er oficio**
 Agenda + caja del día.

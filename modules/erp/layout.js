@@ -3,6 +3,7 @@ import { escHtml } from '../../core/escape.js';
 import { estadoAvisos, hoyLocal, PERM_POR_FUENTE } from './avisos.js';
 import { contarPropuestasPendientes, tiposVisiblesPara } from './propuestas.js';   // D5 — badge de Propuestas de DISA
 import { contarAvisosPendientes } from './citas-avisos.js';   // AGENDA SENCILLA §2.3 — contador de avisos pendientes
+import { vocabulario } from './oficios.js';                   // PASO 8 — fuente ÚNICA de las palabras de pantalla
 
 export const ROOT_TOKENS = `
     :root{
@@ -462,10 +463,14 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   // AGENDA SENCILLA §1.1/§2.3 — SOLO la ETIQUETA que ve el usuario en el menú (no se renombra código):
   // "Puestos" con el nombre que el negocio eligió, y un contador de avisos pendientes en la Cola. Barato
   // y tolerante a fallo: si algo peta, se queda el default y el número a 0 (el chrome nunca se rompe).
+  //
+  // PASO 8 — la palabra sale de vocabulario(), NO de una consulta propia. Antes este parche leía
+  // cita_puesto_plural por su cuenta, en paralelo a ajustesCitas(): dos lecturas de lo mismo. Con el
+  // diccionario de oficio eso sería el menú diciendo una cosa y la pantalla otra. Una fuente, un canal.
   try {
     const _db = c?.get?.('db');
     if (_db) {
-      const plural = (_db.prepare('SELECT cita_puesto_plural FROM company_config WHERE id=1').get()?.cita_puesto_plural) || 'Puestos';
+      const plural = vocabulario(_db).puesto_plural;
       const pend = contarAvisosPendientes(_db);
       for (const g of nav) for (const it of (g.items || [])) {
         if (it.key === 'citas-recursos') it.label = plural;

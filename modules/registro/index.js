@@ -5,6 +5,7 @@ import { autologinStore } from '../../core/autologin-store.js';
 import { randomBytes } from 'crypto';
 import { callClaude, hasAnthropicKey } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
 import { createTenantSvc, validateSignupDraft, emailTaken } from '../../core/tenant-signup.js';
+import { OFICIOS, normalizaOficio } from '../erp/oficios.js';   // PASO 8 — los seis oficios del alta
 import { checkEmailFormat } from '../../core/signup-schema.js';
 
 // Sesiones de onboarding EN MEMORIA: sessionId -> { messages, draft, ready, created }.
@@ -77,7 +78,10 @@ export function register(app) {
     (c) => {
       const sessionId = randomBytes(16).toString('hex');   // crypto, no Math.random (defecto I)
       onboardingSessions.set(sessionId, newSession());
-      return c.json({ session_id: sessionId, reply: WELCOME });
+      // PASO 8 — los seis oficios salen de la MISMA lista que usa el ERP (modules/erp/oficios.js). Si un
+      // día cambian, cambian en un sitio: aquí no hay una segunda copia de los nombres.
+      const oficios = OFICIOS.map(o => ({ id: o.id, label: o.label }));
+      return c.json({ session_id: sessionId, reply: WELCOME, oficios });
     }
   );
 
@@ -218,10 +222,14 @@ export function register(app) {
         return c.json({ error: 'Aún no hemos terminado de preparar tu negocio. Vuelve al chat y completa los datos.', field: 'session' }, 409);
       }
 
+      // PASO 8 — el oficio llega AQUÍ, del botón que se pulsó, no del texto libre de la conversación.
+      // Se normaliza en el servidor: si el paso se saltó o llega cualquier otra cosa, queda 'otro'.
+      const oficio = normalizaOficio(body?.oficio);
+
       // Revalida TODO contra el esquema (no confiamos en lo pendiente) + unicidad de email.
       let result;
       try {
-        result = await createTenantSvc({ ...sessionData.draft, password });
+        result = await createTenantSvc({ ...sessionData.draft, oficio, password });
       } catch (e) {
         return c.json({ error: safeError(e) || 'No se pudo crear el negocio.', field: e.field || null }, e.status || 400);
       }
@@ -290,6 +298,13 @@ function onboardingHtml(nonce = '') {
     .create-btn{background:linear-gradient(135deg,#14B8A6,#0F766E);color:#fff;border:none;border-radius:12px;padding:12px 18px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;width:100%;transition:all .15s}
     .create-btn:hover{box-shadow:0 6px 20px rgba(20,184,166,0.35);transform:translateY(-1px)}
     .create-btn:disabled{opacity:.6;cursor:not-allowed;transform:none;box-shadow:none}
+    /* PASO 8 — paso de oficio: seis botones, con "Otro" marcado de salida (es lo que queda si se salta) */
+    .oficio-step{padding:6px 2px 2px}
+    .oficio-q{font-size:12px;color:rgba(255,255,255,0.55);margin-bottom:8px;line-height:1.5}
+    .oficio-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+    .oficio-btn{background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.8);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:9px 10px;font-size:12px;font-family:inherit;cursor:pointer;text-align:left;transition:all .15s}
+    .oficio-btn:hover{border-color:rgba(20,184,166,0.5);color:#fff}
+    .oficio-btn[aria-pressed="true"]{background:rgba(20,184,166,0.15);border-color:#14B8A6;color:#5EEAD4;font-weight:700}
     .pw-panel{display:none;padding:14px;border-top:1px solid rgba(255,255,255,0.07);background:#0D1220;flex-shrink:0}
     .pw-title{font-size:13px;font-weight:700;color:#fff;margin-bottom:4px}
     .pw-help{font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:10px}
@@ -353,6 +368,8 @@ function onboardingHtml(nonce = '') {
 
   <script nonce="${nonce}">
     let sessionId = null, creating = false;
+    // PASO 8 — los seis oficios llegan del backend (fuente única); 'otro' es lo que vale si no se pulsa.
+    let OFICIOS = [], oficioElegido = 'otro';
     const msgsDiv = document.getElementById('messages');
     const typing  = document.getElementById('typing');
     const input   = document.getElementById('input');
@@ -383,6 +400,41 @@ function onboardingHtml(nonce = '') {
     function removeCreateBtn(){
       const w=document.getElementById('create-wrap');
       if(w) w.remove();
+    }
+
+    function removeOficioStep(){
+      const w=document.getElementById('oficio-wrap');
+      if(w) w.remove();
+    }
+
+    // PASO 8 — PASO EXPLÍCITO. No se adivina el oficio de lo que se haya escrito en el chat: se pulsa.
+    // Sin handlers en atributos (la CSP estricta los bloquea y el nonce solo cubre este bloque).
+    function showOficioStep(){
+      removeOficioStep();
+      if(!OFICIOS.length) return;
+      const wrap=document.createElement('div');
+      wrap.className='oficio-step'; wrap.id='oficio-wrap';
+      const q=document.createElement('div');
+      q.className='oficio-q';
+      q.textContent='¿A qué se dedica tu negocio? Con esto tu agenda arranca con tus palabras y tus servicios ya cargados. Puedes cambiarlo cuando quieras.';
+      wrap.appendChild(q);
+      const grid=document.createElement('div');
+      grid.className='oficio-grid';
+      OFICIOS.forEach(function(o){
+        const b=document.createElement('button');
+        b.type='button'; b.className='oficio-btn';
+        b.setAttribute('aria-pressed', o.id===oficioElegido ? 'true' : 'false');
+        b.textContent=o.label;
+        b.addEventListener('click',function(){
+          oficioElegido=o.id;
+          Array.prototype.forEach.call(grid.children,function(x){ x.setAttribute('aria-pressed','false'); });
+          b.setAttribute('aria-pressed','true');
+        });
+        grid.appendChild(b);
+      });
+      wrap.appendChild(grid);
+      msgsDiv.insertBefore(wrap,typing);
+      msgsDiv.scrollTop=msgsDiv.scrollHeight;
     }
 
     function showCreateButton(){
@@ -426,7 +478,7 @@ function onboardingHtml(nonce = '') {
       try{
         const r=await fetch('/api/registro/crear',{
           method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({session_id:sessionId,password:p1})
+          body:JSON.stringify({session_id:sessionId,password:p1,oficio:oficioElegido})
         });
         const d=await r.json();
         if(!r.ok){
@@ -452,6 +504,7 @@ function onboardingHtml(nonce = '') {
       const msg=input.value.trim();
       if(!msg)return;
       removeCreateBtn();
+      removeOficioStep();
       document.getElementById('pw-panel').style.display='none';
       addMsg('user',msg);
       input.value='';
@@ -477,7 +530,9 @@ function onboardingHtml(nonce = '') {
 
         if(data.session_id) sessionId=data.session_id;
         addMsg('assistant',data.reply||'');
-        if(data.ready) showCreateButton();
+        // El oficio se pregunta JUSTO ANTES de crear, cuando ya están los cuatro datos: así el paso no
+        // interrumpe la conversación y se ve al lado del botón que lo va a usar.
+        if(data.ready){ showOficioStep(); showCreateButton(); }
       } catch(err){
         typing.classList.remove('visible');
         sendBtn.disabled=false;
@@ -501,6 +556,7 @@ function onboardingHtml(nonce = '') {
         const d=await r.json();
         typing.classList.remove('visible');
         if(d.session_id) sessionId=d.session_id;
+        if(Array.isArray(d.oficios)) OFICIOS=d.oficios;
         addMsg('assistant', d.reply || '¡Hola! Soy DISA, tu asistente en Bamburu.');
         input.focus();
       }catch(e){

@@ -2225,6 +2225,16 @@ export function runMigrations(db) {
   addCol(db, 'company_config', 'cita_puesto_sing', "TEXT NOT NULL DEFAULT 'Puesto'");
   addCol(db, 'company_config', 'cita_puesto_plural', "TEXT NOT NULL DEFAULT 'Puestos'");
 
+  // ══ PASO 8 — PERFIL DE OFICIO ════════════════════════════════════════════════════════════════
+  // A qué se dedica el negocio. Enum de 6 resuelto en modules/erp/oficios.js (peluqueria, estetica,
+  // salud, taller, asesoria, otro). Hace EXACTAMENTE DOS COSAS: cambia palabras de pantalla y precarga
+  // el catálogo de servicios. No enciende ni apaga nada, no toca el motor de citas.
+  //
+  // NACE EN 'otro' A PROPÓSITO: los negocios que YA existen no se enteran de esto. 'otro' llama a los
+  // puestos "Puesto/Puestos" —el mismo default histórico de las dos columnas de arriba— y no trae
+  // catálogo, así que ven exactamente lo que veían ayer. Aditiva: una columna, sin DROP, sin reescribir.
+  addCol(db, 'company_config', 'oficio', "TEXT NOT NULL DEFAULT 'otro'");
+
   // ══ PIEZA 6 — PUERTA PÚBLICA DE RESERVA ══════════════════════════════════════════════════════
   // Todo lo de abajo es ADITIVO sobre la pieza 5: ni una columna se reescribe, ni una tabla se
   // recrea, ningún DROP. El motor (huecos/solape/horarios) NO se toca: se USA.

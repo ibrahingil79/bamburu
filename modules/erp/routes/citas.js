@@ -34,6 +34,9 @@ import { rateLimit } from '../../../core/rate-limit.js';
 // PIEZA 6 — SOLO el módulo HOJA de la puerta pública (config + reglas de ventana + a quién se enseña).
 // No se importa reserva-publica.js: ese sí depende de este fichero y cerraría el círculo.
 import { reservaDeCita, ventanaCliente, personasPublicas } from '../reserva-publica-config.js';
+// PASO 8 — PERFIL DE OFICIO. Otro módulo HOJA (solo `db`), por la misma razón que el de arriba: layout.js
+// también lo importa para el menú, y si el diccionario viviera aquí se cerraría el círculo.
+import { vocabulario } from '../oficios.js';
 
 const genToken = () => randomBytes(32).toString('base64url');
 const err = (msg, status) => { const e = new Error(msg); e.status = status; return e; };
@@ -41,6 +44,10 @@ const err = (msg, status) => { const e = new Error(msg); e.status = status; retu
 // ── Ajustes de citas del negocio (company_config), con defaults seguros ────────────────────────────
 export function ajustesCitas(db) {
   const cfg = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
+  // Las PALABRAS no se resuelven aquí: salen de vocabulario(), el único sitio que las decide (lo llama
+  // también layout.js para el menú). Antes esta función leía cita_puesto_* por su cuenta y layout.js
+  // repetía la consulta; con un diccionario por oficio eso habría acabado diciendo dos cosas distintas.
+  const voz = vocabulario(db);
   return {
     grid: cfg.cita_grid_min || 30,
     antelacion_min: cfg.cita_antelacion_min || 0,
@@ -54,8 +61,13 @@ export function ajustesCitas(db) {
     country: (cfg.country || 'ES').toUpperCase(),
     address: cfg.address || '',
     email: cfg.email || '',
-    puesto_sing: cfg.cita_puesto_sing || 'Puesto',
-    puesto_plural: cfg.cita_puesto_plural || 'Puestos',
+    puesto_sing: voz.puesto_sing,
+    puesto_plural: voz.puesto_plural,
+    // PASO 8 — el resto del diccionario del oficio, para las pantallas de la agenda.
+    oficio: voz.oficio,
+    oficio_label: voz.oficio_label,
+    cliente_sing: voz.cliente_sing,
+    cliente_plural: voz.cliente_plural,
   };
 }
 
@@ -928,6 +940,12 @@ function paginaCita(db, cita, token) {
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 // VISTAS DEL PANEL (server-rendered). Se apoyan en adminLayout + el helper api()/toast() del layout.
 // ════════════════════════════════════════════════════════════════════════════════════════════════
+// PASO 8 — el diccionario del oficio, servido al JS de cliente. Un solo sitio lo emite para que ninguna
+// pantalla se quede con la palabra vieja; los defaults del lado cliente (|| 'Cliente') son solo cinturón.
+const jsVoz = (aj) =>
+  `window.PUESTO_SING=${JSON.stringify(aj.puesto_sing)};window.PUESTO_PLURAL=${JSON.stringify(aj.puesto_plural)};`
+  + `window.CLIENTE_SING=${JSON.stringify(aj.cliente_sing)};window.CLIENTE_PLURAL=${JSON.stringify(aj.cliente_plural)};`;
+
 function vistaAgenda(c, db) {
   const editable = can(c, 'citas.edit');
   const aj = ajustesCitas(db);
@@ -948,23 +966,24 @@ function vistaAgenda(c, db) {
     </div>
     <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:.6rem">${dot(COLORS.pedida, 'Pedida')}${dot(COLORS.confirmada, 'Confirmada')}${dot(COLORS.atendida, 'Atendida')}${dot(COLORS.no_show, 'No se presentó')}</div>
     <div class="card"><div id="agenda" style="overflow-x:auto">Cargando…</div></div>
-    ${modalNuevaCita(aj.puesto_sing)}
+    ${modalNuevaCita(aj.puesto_sing, aj.cliente_sing)}
     ${modalDetalle()}
     ${modalBloqueo(aj.puesto_sing)}
     ${modalAvisos()}
-    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};window.PUESTO_SING=${JSON.stringify(aj.puesto_sing)};window.PUESTO_PLURAL=${JSON.stringify(aj.puesto_plural)};${JS_AGENDA}</script>`;
+    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};${jsVoz(aj)}${JS_AGENDA}</script>`;
   return adminLayout('Agenda', content, 'citas', c.get('session')?.csrfToken || '', c);
 }
 // Colores de estado, compartidos por la leyenda (server) y los bloques (cliente, var COLOR en JS_AGENDA).
 const COLORS = { pedida: '#64748b', confirmada: '#16a34a', atendida: '#2563eb', no_show: '#b91c1c' };
 
 function vistaCola(c, db) {
+  const aj = ajustesCitas(db);
   const content = `
     <div class="ph"><h2>Cola de envíos</h2><a class="btn btn-secondary" href="/admin/citas">← Agenda</a></div>
     <div class="alert" style="margin-bottom:1rem">Doce citas se despachan en doce clics desde aquí, sin abrir doce fichas. Al pulsar el botón de WhatsApp/SMS se abre el mensaje ya escrito con el enlace; el email puede salir solo. <strong>El estado dice "marcado como enviado"</strong> — sabemos que se pulsó el botón, no que el mensaje llegó (nunca "entregado").</div>
     <div class="card"><h3 style="margin-top:0">Mañana — pendientes de recordatorio</h3><div id="colaRec">Cargando…</div></div>
     <div class="card"><h3 style="margin-top:0">Hoy — pendientes de confirmación</h3><div id="colaConf">Cargando…</div></div>
-    <script>${JS_COLA}</script>`;
+    <script>${jsVoz(aj)}${JS_COLA}</script>`;
   return adminLayout('Cola de envíos', content, 'citas', c.get('session')?.csrfToken || '', c);
 }
 
@@ -973,11 +992,11 @@ function vistaServicios(c, db) {
   const aj = ajustesCitas(db);
   const content = `
     <div class="ph"><h2>Servicios</h2><div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/citas">← Agenda</a>${editable ? '<button class="btn btn-primary" onclick="openNuevoServicio()">Nuevo servicio</button>' : ''}</div></div>
-    <div class="alert" style="margin-bottom:1rem">Son los productos de tipo <strong>servicio</strong> de tu catálogo. Aquí defines lo que la cita necesita: el <strong>tiempo contigo</strong>, el <strong>tiempo de espera</strong> (los minutos en que el cliente espera y tú quedas libre, como el tinte) y el <strong>margen después</strong>. <strong>El precio y el IVA siguen viniendo del catálogo.</strong> Un servicio no se puede pedir hasta que tenga tiempo (pulsa «Configurar»). ¿No está en el catálogo? Créalo aquí con «Nuevo servicio». <strong>«Se pide por Internet»</strong> es otra cosa: es lo que tus clientes ven en tu <a href="/admin/citas/publica">página de reservas</a>, y viene <strong>apagado</strong> hasta que tú lo enciendas servicio a servicio.</div>
+    <div class="alert" style="margin-bottom:1rem">Son los productos de tipo <strong>servicio</strong> de tu catálogo. Aquí defines lo que la cita necesita: el <strong>tiempo contigo</strong>, el <strong>tiempo de espera</strong> (los minutos en que el ${escHtml(aj.cliente_sing.toLowerCase())} espera y tú quedas libre, como el tinte) y el <strong>margen después</strong>. <strong>El precio y el IVA siguen viniendo del catálogo.</strong> Un servicio no se puede pedir hasta que tenga tiempo (pulsa «Configurar»). ¿No está en el catálogo? Créalo aquí con «Nuevo servicio». <strong>«Se pide por Internet»</strong> es otra cosa: es lo que ven tus ${escHtml(aj.cliente_plural.toLowerCase())} en tu <a href="/admin/citas/publica">página de reservas</a>, y viene <strong>apagado</strong> hasta que tú lo enciendas servicio a servicio.</div>
     <div class="card"><div class="table-wrap"><table><thead><tr><th>Servicio</th><th>Se pide cita</th><th>Se pide por Internet</th><th>Tiempo contigo</th><th>Tiempo de espera</th><th>Margen</th><th></th></tr></thead><tbody id="svcBody"><tr><td colspan="7">Cargando…</td></tr></tbody></table></div></div>
     ${modalServicio(aj.puesto_sing)}
     ${modalNuevoServicio()}
-    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};window.PUESTO_SING=${JSON.stringify(aj.puesto_sing)};window.PUESTO_PLURAL=${JSON.stringify(aj.puesto_plural)};${JS_SERVICIOS}</script>`;
+    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};${jsVoz(aj)}${JS_SERVICIOS}</script>`;
   return adminLayout('Servicios', content, 'citas', c.get('session')?.csrfToken || '', c);
 }
 
@@ -989,7 +1008,7 @@ function vistaRecursos(c, db) {
     <div class="alert" style="margin-bottom:1rem">Sillas, cabinas, salas, boxes o equipos. Una cita puede exigir persona <strong>y</strong> ${escHtml(aj.puesto_sing.toLowerCase())}; se comprueban los dos. Puedes cambiar cómo los llamas en <a href="/admin/citas/ajustes">Ajustes</a>.</div>
     <div class="card"><div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Tipo</th><th>Notas</th><th></th></tr></thead><tbody id="recBody"><tr><td colspan="4">Cargando…</td></tr></tbody></table></div></div>
     ${modalRecurso(aj.puesto_sing)}
-    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};window.PUESTO_SING=${JSON.stringify(aj.puesto_sing)};window.PUESTO_PLURAL=${JSON.stringify(aj.puesto_plural)};${JS_RECURSOS}</script>`;
+    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};${jsVoz(aj)}${JS_RECURSOS}</script>`;
   return adminLayout(aj.puesto_plural, content, 'citas', c.get('session')?.csrfToken || '', c);
 }
 
@@ -1233,18 +1252,18 @@ pbCargar();
 `;
 
 // ── Modales (HTML) ────────────────────────────────────────────────────────────────────────────────
-const modalNuevaCita = (puestoSing = 'Puesto') => `
+const modalNuevaCita = (puestoSing = 'Puesto', clienteSing = 'Cliente') => `
   <div class="modal-overlay" id="mCita"><div class="modal" style="max-width:520px">
     <div class="modal-head"><h3 id="mCitaTitle">Nueva cita</h3><button class="modal-close" onclick="closeModal('mCita')">✕</button></div>
     <div class="modal-body">
       <input type="hidden" id="cId"><input type="hidden" id="cCliente"><input type="hidden" id="cSueltoNombre"><input type="hidden" id="cSueltoMovilVal">
       <div id="cContexto" style="font-size:.9rem;font-weight:600;margin-bottom:.75rem"></div>
-      <div class="form-group"><label class="form-label">Cliente *</label>
+      <div class="form-group"><label class="form-label">${escHtml(clienteSing)} *</label>
         <input class="form-control" id="cBusca" placeholder="Escribe el nombre…" autocomplete="off" oninput="cFiltra()">
         <div id="cResultados"></div>
         <div id="cNuevo" style="display:none;margin-top:.4rem">
           <input class="form-control" id="cSueltoMovil" placeholder="Móvil (+34…, opcional)" style="margin-bottom:.35rem">
-          <button type="button" class="btn btn-secondary btn-sm" onclick="cUsarNuevo()">＋ Usar «<span id="cNuevoNombre"></span>» como cliente nuevo</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="cUsarNuevo()">＋ Usar «<span id="cNuevoNombre"></span>» como ${escHtml(clienteSing.toLowerCase())} nuevo</button>
         </div>
         <div id="cElegido" style="display:none;font-size:.85rem;margin-top:.35rem;color:var(--ok)"></div>
       </div>
@@ -1252,13 +1271,17 @@ const modalNuevaCita = (puestoSing = 'Puesto') => `
         <div id="cServicios" style="display:flex;flex-direction:column;gap:.25rem;max-height:150px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:.5rem"></div>
         <div id="cResumen" style="font-size:.85rem;margin-top:.35rem"></div>
       </div>
+      <!-- PASO 8 — CUÁNDO y CON QUIÉN viven FUERA de "Más opciones" (encargo C). Se enseñan u ocultan
+           por JS según de dónde se abra el panel; el select de persona NUNCA se saca del DOM aunque no
+           se pinte, para que cGuardar/cRecalc/cSugerir sigan leyendo user_id sin un solo caso especial
+           ("se asigna solo" sale de que el select ya trae preseleccionada a la única persona). -->
+      <div class="form-row" id="cCuando">
+        <div class="form-group"><label class="form-label">Día</label><input class="form-control" type="date" id="cFecha" onchange="cRecalc()"></div>
+        <div class="form-group"><label class="form-label">Hora</label><select class="form-control" id="cHueco" onchange="cSugerir()"></select></div>
+      </div>
+      <div class="form-group" id="cQuien"><label class="form-label">Con quién</label><select class="form-control" id="cPersona" onchange="cRecalc()"></select></div>
       <details id="cMas"><summary style="cursor:pointer;font-weight:600;font-size:.85rem;color:var(--accent)">Más opciones</summary>
         <div class="form-row" style="margin-top:.6rem">
-          <div class="form-group"><label class="form-label">Persona</label><select class="form-control" id="cPersona" onchange="cRecalc()"></select></div>
-          <div class="form-group"><label class="form-label">Fecha</label><input class="form-control" type="date" id="cFecha" onchange="cRecalc()"></div>
-          <div class="form-group"><label class="form-label">Hora</label><select class="form-control" id="cHueco" onchange="cSugerir()"></select></div>
-        </div>
-        <div class="form-row">
           <div class="form-group"><label class="form-label" id="cPuestoLbl">${escHtml(puestoSing)}</label><select class="form-control" id="cRecurso" onchange="cSugerir()"><option value="">— Automático —</option></select></div>
           <div class="form-group"><label class="form-label">Proyecto</label><select class="form-control" id="cProyecto"><option value="">— Ninguno —</option></select></div>
         </div>
@@ -1454,11 +1477,22 @@ function cReset(){
   cRellenaComunes();
 }
 function fLargo(f){ try{ return new Date(f+'T00:00:00Z').toLocaleDateString('es-ES',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'}); }catch(e){ return f; } }
+// PASO 8 — QUÉ SE VE DE ENTRADA. "cuando" = día y hora. "quien" = la persona que atiende, y solo se
+// pinta si el negocio tiene MÁS DE UNA: con una sola, el select sigue en el DOM con ella
+// preseleccionada, así que la cita se le asigna sola y ni cGuardar ni cRecalc necesitan un caso aparte.
+function cCampos(cuando, quien){
+  document.getElementById('cCuando').style.display = cuando ? '' : 'none';
+  var varias = !!(META && META.personas && META.personas.length > 1);
+  document.getElementById('cQuien').style.display = (quien && varias) ? '' : 'none';
+}
 async function openNuevaCita(){ await ensureMeta(); cReset(); QUICK_MIN=null; document.getElementById('mCitaTitle').textContent='Nueva cita';
   document.getElementById('cFecha').value=document.getElementById('agFecha').value||ymd(new Date()); document.getElementById('cContexto').textContent='';
-  document.getElementById('cMas').open=true; openModal('mCita'); document.getElementById('cBusca').focus(); }
+  // Delante: cliente, servicio y día/hora (+ persona si hay varias). Detrás: puesto, proyecto, nota y avisar.
+  cCampos(true,true); document.getElementById('cMas').open=false; openModal('mCita'); document.getElementById('cBusca').focus(); }
 async function openQuickCita(user_id, fecha, min){ await ensureMeta(); cReset(); QUICK_MIN=min; document.getElementById('mCitaTitle').textContent='Nueva cita';
   document.getElementById('cPersona').value=String(user_id); document.getElementById('cFecha').value=fecha; document.getElementById('cMas').open=false;
+  // AGENDA SENCILLA, INTACTA: desde el hueco, persona y hora se HEREDAN de la celda y no se re-preguntan.
+  cCampos(false,false);
   var per=(META.personas.find(p=>String(p.id)===String(user_id))||{}).name||''; document.getElementById('cContexto').textContent=per+' · '+fLargo(fecha)+' · '+fhhmm(min);
   openModal('mCita'); document.getElementById('cBusca').focus(); }
 // Cliente: buscador que filtra según escribes; si no existe, se usa ahí mismo con nombre y móvil.
@@ -1481,7 +1515,7 @@ function cUsarNuevo(){
   var nombre=document.getElementById('cBusca').value.trim(); if(!nombre){ toast('Escribe un nombre','err'); return; }
   document.getElementById('cCliente').value=''; document.getElementById('cSueltoNombre').value=nombre; document.getElementById('cSueltoMovilVal').value=document.getElementById('cSueltoMovil').value;
   document.getElementById('cResultados').innerHTML=''; document.getElementById('cNuevo').style.display='none';
-  var e=document.getElementById('cElegido'); e.textContent='✓ '+nombre+' (cliente nuevo)'; e.style.display='';
+  var e=document.getElementById('cElegido'); e.textContent='✓ '+nombre+' ('+(window.CLIENTE_SING||'Cliente').toLowerCase()+' nuevo)'; e.style.display='';
 }
 function cSelServicios(){ return [...document.querySelectorAll('.csvc:checked')].map(x=>parseInt(x.value)); }
 function cServChange(){ if(QUICK_MIN!=null && document.getElementById('cHueco').value==='') cSugerir(); else cRecalc(); }
@@ -1511,9 +1545,12 @@ async function cSugerir(){
 }
 async function cGuardar(){
   var min=cHora();
-  if(min==null){ toast('Elige una hora (Más opciones)','err'); document.getElementById('cMas').open=true; return; }
-  if(!document.getElementById('cCliente').value && !document.getElementById('cSueltoNombre').value){ toast('Elige o crea un cliente','err'); return; }
+  // PASO 8 — se avisa en el ORDEN en que se lee el panel: quién, qué y cuándo. La hora ya no vive
+  // detrás de "Más opciones", así que el mensaje ya no manda abrirlas (y desde el hueco nunca falta:
+  // la trae la celda pulsada).
+  if(!document.getElementById('cCliente').value && !document.getElementById('cSueltoNombre').value){ toast('Elige o crea un '+(window.CLIENTE_SING||'cliente').toLowerCase(),'err'); return; }
   if(!cSelServicios().length){ toast('Elige un servicio','err'); return; }
+  if(min==null){ toast('Elige una hora','err'); return; }
   var body={ cliente_id:document.getElementById('cCliente').value||null, cliente_suelto_nombre:document.getElementById('cSueltoNombre').value, cliente_suelto_movil:document.getElementById('cSueltoMovilVal').value,
     user_id:document.getElementById('cPersona').value, recurso_id:document.getElementById('cRecurso').value||null, fecha:document.getElementById('cFecha').value,
     inicio_min:min, service_ids:cSelServicios(), project_id:document.getElementById('cProyecto').value||null, nota:document.getElementById('cNota').value };
@@ -1550,7 +1587,7 @@ async function verCita(id){
   }
   document.getElementById('mDetBody').innerHTML=
     '<div class="row" style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:1rem">'
-    +'<div><div class="form-label">Cliente</div>'+e(c.cliente_nombre||c.cliente_suelto_nombre||'—')+'</div>'
+    +'<div><div class="form-label">'+e(window.CLIENTE_SING||'Cliente')+'</div>'+e(c.cliente_nombre||c.cliente_suelto_nombre||'—')+'</div>'
     +'<div><div class="form-label">Móvil</div>'+e(c.contacto&&c.contacto.movil_e164||'—')+(c.contacto&&c.contacto.movil_e164&&!c.contacto.movil_valido?' <span style="color:var(--danger)">(sin móvil válido)</span>':'')+'</div>'
     +'<div><div class="form-label">Persona</div>'+e(c.persona||'—')+'</div>'
     +'<div><div class="form-label">'+(window.PUESTO_SING||'Puesto')+'</div>'+e(c.recurso||'—')+'</div>'
@@ -1576,7 +1613,9 @@ async function atender(id){
 async function editCita(id){
   await ensureMeta(); var c=await api('GET','/api/erp/citas/'+id);
   cReset(); QUICK_MIN=null; document.getElementById('cId').value=id; document.getElementById('mCitaTitle').textContent='Editar cita';
-  document.getElementById('cMas').open=true; document.getElementById('cContexto').textContent='';
+  // Editando se enseña todo lo que se puede cambiar (incluidas las opciones), con la misma regla de la
+  // persona: si solo hay una, no hay nada que elegir.
+  cCampos(true,true); document.getElementById('cMas').open=true; document.getElementById('cContexto').textContent='';
   if(c.cliente_id){ document.getElementById('cCliente').value=c.cliente_id; document.getElementById('cBusca').value=c.cliente_nombre||''; var e=document.getElementById('cElegido'); e.textContent='✓ '+(c.cliente_nombre||''); e.style.display=''; }
   else if(c.cliente_suelto_nombre){ document.getElementById('cSueltoNombre').value=c.cliente_suelto_nombre; document.getElementById('cSueltoMovilVal').value=c.cliente_suelto_movil||''; document.getElementById('cBusca').value=c.cliente_suelto_nombre; var e2=document.getElementById('cElegido'); e2.textContent='✓ '+c.cliente_suelto_nombre+' (cliente nuevo)'; e2.style.display=''; }
   document.getElementById('cPersona').value=c.user_id; document.getElementById('cRecurso').value=c.recurso_id||'';
@@ -1622,7 +1661,7 @@ async function cargar(){ DATA=await api('GET','/api/erp/citas/cola/data'); rende
 function render(elId,rows,tipo){
   var box=document.getElementById(elId);
   if(!rows.length){ box.innerHTML='<div style="color:var(--muted);padding:.5rem">No hay nada pendiente.</div>'; return; }
-  box.innerHTML='<div class="table-wrap"><table><thead><tr><th>Hora</th><th>Cliente</th><th>Servicio</th><th>Persona</th><th>Estado aviso</th><th></th></tr></thead><tbody>'
+  box.innerHTML='<div class="table-wrap"><table><thead><tr><th>Hora</th><th>'+esc(window.CLIENTE_SING||'Cliente')+'</th><th>Servicio</th><th>Persona</th><th>Estado aviso</th><th></th></tr></thead><tbody>'
     +rows.map(function(r){
       var estado = r.aviso_hecho ? ('<span class="badge b-green">'+(r.aviso_estado==='email_enviado'?'email enviado':(r.aviso_estado==='email_fallo'?'fallo email':'marcado ('+esc(r.aviso_canal||'')+')'))+'</span>') : '<span class="badge b-gray">pendiente</span>';
       return '<tr><td>'+esc(r.hora)+'</td><td>'+esc(r.cliente)+(r.movil_e164&&!r.movil_valido?' <span style="color:var(--danger);font-size:.75rem">(móvil no válido)</span>':'')+'</td><td>'+esc(r.servicios)+'</td><td>'+esc(r.persona)+'</td><td>'+estado+'</td><td style="white-space:nowrap">'+botones(r,tipo)+'</td></tr>';
