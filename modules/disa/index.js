@@ -26,7 +26,7 @@ import { runCapture, captureFromExtraction } from '../erp/routes/purchases-captu
 import { createProductSvc } from '../erp/routes/products.js';   // alta validada (banda de IVA obligatoria, sin defecto silencioso)
 import { getVatBands } from '../../core/vat-bands.js';   // [D5] lista cerrada de bandas legales (misma fuente que el formulario/API)
 import { ALLOWED_MIME, MAX_UPLOAD_BYTES } from '../erp/attachments.js';
-import { callClaude, hasAnthropicKey } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
+import { callClaude, hasAnthropicKey, textFromResponse } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
 import { rateLimit } from '../../core/rate-limit.js';   // freno por IP del endpoint caro de DISA
 import { ENTITY, entityForTable } from '../../core/activity-entities.js';
 import { escHtml } from '../../core/escape.js';
@@ -2161,7 +2161,9 @@ export function register(app, db) {
       const data = await callClaude({
         model: 'claude-haiku-4-5-20251001', max_tokens: 800, system: systemPrompt, messages, billDb: db,
       });
-      const raw = data.content?.[0]?.text || 'Sin respuesta.';
+      // Mismo defecto que tiró el alta el 15 ago 2026: `content[0]` no tiene por qué ser el texto (el
+      // modelo puede meter delante un bloque `thinking`). Se filtra por tipo, no por posición.
+      const raw = textFromResponse(data) || 'Sin respuesta.';
       let action = null;
       let reply = raw;
       const match = raw.match(/\[ACCION:(\{[\s\S]*?\})\]/);
@@ -2619,7 +2621,9 @@ export function register(app, db) {
           });
           toolCalls++;
         } else {
-          reply = data.content?.find(b => b.type === 'text')?.text || '';
+          // Ya filtraba por tipo (bien), pero se unifica en el helper: un solo sitio decide cómo se
+          // saca el texto de una respuesta, para que no vuelva a haber tres formas distintas.
+          reply = textFromResponse(data);
           break;
         }
       }

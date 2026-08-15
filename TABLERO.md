@@ -2534,6 +2534,34 @@ este peldaño añade es la cara propia del sector, no otro motor.
     Se revirtieron los 7 ficheros a HEAD, se reinició el servidor y se reejecutó: **falla IGUAL, 11/3,
     sin una línea de este trabajo.** Los 3 fallos son de la conversación con el LLM («No se alcanzó
     ready»), no del alta. Se anota, no se toca.
+    **⚠️ ESTE ROJO ERA EL ALTA CAÍDA, Y NO SE VIO (ver la ficha de la INCIDENCIA, abajo).** Demostrar que
+    un rojo no es tuyo NO es lo mismo que saber qué es. Ese paso faltó.
+
+- **INCIDENCIA · EL ALTA CAÍDA EN PRODUCCIÓN · ✅ RESUELTA (15 ago 2026, `bfd0a24`).** El usuario
+  escribía «peluqería» en el asistente de bienvenida y DISA **no contestaba nunca**.
+  - **Síntoma engañoso:** no había error, ni traza, ni 500. La ruta devolvía **HTTP 200 con la respuesta
+    VACÍA**, el cliente pintaba una burbuja vacía y parecía que DISA «pensaba» sin fin. **Log limpio.**
+  - **Causa:** el modelo empezó a devolver un bloque **`thinking` DELANTE** del texto. El código leía
+    `apiData.content[0].text` → `undefined` → `|| ''` → respuesta vacía. **Cambio de FORMA en la
+    respuesta de la API, sin un solo cambio en nuestro código.** No lo provocó el commit `369173f`
+    (perfil de oficio): se comprobó revirtiendo a HEAD antes de tocar nada.
+  - **El arreglo ya estaba escrito:** `core/llm.js` **ya exportaba `textFromResponse()`**, que filtra por
+    `type === 'text'`. El alta nunca lo usó. Había **tres formas distintas** de sacar el texto conviviendo
+    en el repo; ahora hay una. Corregidos `modules/registro/index.js`, `modules/disa/index.js` (dos
+    sitios) y `scripts/verify-llm-migracion.mjs`.
+  - **LA PRUEBA QUE FALTABA — `test-llm-texto-respuesta` 13/0.** No es que no hubiera pruebas:
+    `gate-registro-alta` y `verify-llm-migracion` §2 **estaban en rojo y avisaban** desde el barrido de
+    la pieza 6. Fallaron por otra cosa: **las dos necesitan el modelo de verdad**, así que son lentas,
+    cuestan dinero y fallan por motivos ajenos — y un rojo así se tolera y se cataloga como «previo».
+    La nueva es **determinista, offline y en milisegundos**: fabrica la respuesta de la API a mano
+    (`fetchImpl`), reproduce la caída, y añade una **GUARDIA que barre `modules/`, `core/` y `scripts/`
+    y se pone roja si algún fichero vuelve a leer `content[0].text`** (probada mordiendo: se reintrodujo
+    el bug a propósito en los dos módulos y lo cazó). Ignora comentarios, para poder explicarse.
+  - **Verificado:** `gate-registro-alta` **34/0** (era 11/3) — alta completa: conversación → resumen →
+    negocio creado → login; `verify-llm-migracion` **6/0** (era rojo); `test-llm-texto-respuesta` 13/0;
+    `test-registro-alta` 26/0, `verify-disa-query-permisos` 43/0, `test-oficio` 94/0, `test-oficio-alta`
+    52/0, `gate-oficio-pantalla` 28/0.
+  - **De los 21 rojos «previos» del barrido de la pieza 6, DOS eran esto.** Los otros siguen anotados.
 
 ### ⬜ 9 — Belleza / estética · **3er oficio**
 Agenda + caja del día.

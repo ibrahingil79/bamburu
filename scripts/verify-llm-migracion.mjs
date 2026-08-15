@@ -1,7 +1,7 @@
 // Prueba REAL (no simulada) de las 3 llamadas LLM migradas a core/llm.js.
 // Ejercita el camino migrado (callClaude → modelo de verdad) con la config EXACTA
 // (modelo, max_tokens, system, tools) de cada sitio: store builder, registro y DISA.
-import { callClaude } from '../core/llm.js';
+import { callClaude, textFromResponse } from '../core/llm.js';
 
 let ok = 0, fail = 0;
 const check = (label, cond, extra = '') => {
@@ -22,7 +22,7 @@ console.log('\n[1] Store builder — haiku, max_tokens 800');
     model: 'claude-haiku-4-5-20251001', max_tokens: 800, system,
     messages: [{ role: 'user', content: 'Cambia el tema de mi tienda a nordic forest, por favor.' }],
   });
-  const raw = data.content?.[0]?.text || '';
+  const raw = textFromResponse(data);   // por TIPO de bloque, nunca por posición (ver test-llm-texto-respuesta)
   console.log('  modelo devuelto:', data.model);
   console.log('  texto:', JSON.stringify(raw.slice(0, 220)));
   check('responde texto no vacío', raw.length > 0);
@@ -42,7 +42,7 @@ console.log('\n[2] Registro/onboarding — sonnet, max_tokens 1024');
     model: 'claude-sonnet-5', max_tokens: 1024, system,
     messages: [{ role: 'user', content: 'Hola, quiero registrar mi negocio. Se llama Fontanería Gómez.' }],
   });
-  const reply = data.content?.[0]?.text || '';
+  const reply = textFromResponse(data);   // por TIPO de bloque, nunca por posición (ver test-llm-texto-respuesta)
   console.log('  modelo devuelto:', data.model);
   console.log('  reply:', JSON.stringify(reply.slice(0, 220)));
   check('responde texto conversacional no vacío', reply.length > 20);

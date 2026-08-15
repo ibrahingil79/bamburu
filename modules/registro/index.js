@@ -3,7 +3,7 @@ import { safeError } from '../../core/errors.js';
 import { rateLimit } from '../../core/rate-limit.js';
 import { autologinStore } from '../../core/autologin-store.js';
 import { randomBytes } from 'crypto';
-import { callClaude, hasAnthropicKey } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
+import { callClaude, hasAnthropicKey, textFromResponse } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
 import { createTenantSvc, validateSignupDraft, emailTaken } from '../../core/tenant-signup.js';
 import { OFICIOS, normalizaOficio } from '../erp/oficios.js';   // PASO 8 — los seis oficios del alta
 import { checkEmailFormat } from '../../core/signup-schema.js';
@@ -134,7 +134,13 @@ export function register(app) {
           console.error('[DISA onboarding] API error:', err.message);
           return c.json({ error: 'He tenido un problema para responderte. Inténtalo de nuevo en un momento.' }, 500);
         }
-        const raw = apiData.content?.[0]?.text || '';
+        // EL TEXTO SE SACA CON textFromResponse, NUNCA CON content[0].
+        // Esto tiró el alta en producción (15 ago 2026): `content[0]` dejó de ser el texto porque el
+        // modelo empezó a devolver un bloque `thinking` DELANTE. `content[0].text` era undefined, la
+        // respuesta salía VACÍA y con HTTP 200 — sin error en el log y sin nada en pantalla, así que
+        // parecía que DISA "pensaba" sin fin. El helper filtra por `type === 'text'`: el número de
+        // bloques que mande el modelo, y en qué orden, deja de importar.
+        const raw = textFromResponse(apiData);
 
         // (a) Verificación del email: validar formato + unicidad y devolver el resultado a
         //     la IA — ANTES de cualquier resumen (corrige el "resumen y luego error").
