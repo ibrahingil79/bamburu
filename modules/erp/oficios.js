@@ -26,9 +26,16 @@ export const OFICIO_DEFECTO = 'otro';
 
 // Los seis. `puesto_sing`/`puesto_plural` son solo el ARRANQUE: en cuanto se escriben en company_config,
 // manda lo guardado (el dueño puede renombrarlos en Ajustes de citas y nadie se lo pisa).
+//
+// `usa_proyectos` — si el panel de cita PINTA el campo «Proyecto» (peldaño 7). Es solo pintar: el campo
+// NUNCA se saca del DOM ni se borra el dato, porque `editCitaSvc` escribe `project_id=?` con lo que
+// llegue, y un campo ausente le borraría el proyecto a la cita al editarla. Un peluquero no tiene
+// proyectos; una asesoría sí. **'otro' lo mantiene EN true a propósito**: son los negocios que ya
+// existían, que hoy ven ese campo, y a esos no se les quita nada de la pantalla por una migración.
 export const OFICIOS = [
   {
     id: 'peluqueria',
+    usa_proyectos: false,
     label: 'Peluquería y barbería',
     cliente_sing: 'Cliente', cliente_plural: 'Clientes',
     puesto_sing: 'Silla', puesto_plural: 'Sillas',
@@ -46,6 +53,7 @@ export const OFICIOS = [
   },
   {
     id: 'estetica',
+    usa_proyectos: false,
     label: 'Estética y belleza',
     cliente_sing: 'Cliente', cliente_plural: 'Clientes',
     puesto_sing: 'Cabina', puesto_plural: 'Cabinas',
@@ -63,6 +71,7 @@ export const OFICIOS = [
   },
   {
     id: 'salud',
+    usa_proyectos: false,
     label: 'Fisioterapia y salud',
     cliente_sing: 'Paciente', cliente_plural: 'Pacientes',
     puesto_sing: 'Sala', puesto_plural: 'Salas',
@@ -79,6 +88,7 @@ export const OFICIOS = [
   },
   {
     id: 'taller',
+    usa_proyectos: false,
     label: 'Taller mecánico',
     cliente_sing: 'Cliente', cliente_plural: 'Clientes',
     puesto_sing: 'Box', puesto_plural: 'Boxes',
@@ -93,6 +103,7 @@ export const OFICIOS = [
   },
   {
     id: 'asesoria',
+    usa_proyectos: true,
     label: 'Asesoría y consultoría',
     cliente_sing: 'Cliente', cliente_plural: 'Clientes',
     puesto_sing: 'Sala', puesto_plural: 'Salas',
@@ -108,6 +119,7 @@ export const OFICIOS = [
   },
   {
     id: 'otro',
+    usa_proyectos: true,
     label: 'Otro',
     cliente_sing: 'Cliente', cliente_plural: 'Clientes',
     // 'Puesto/Puestos' es EXACTAMENTE el default histórico de company_config: por eso los negocios que
@@ -150,6 +162,7 @@ export function vocabulario(db) {
     oficio_label: of.label,
     cliente_sing: of.cliente_sing,
     cliente_plural: of.cliente_plural,
+    usa_proyectos: of.usa_proyectos !== false,
     puesto_sing: (cfg.cita_puesto_sing || '').trim() || of.puesto_sing,
     puesto_plural: (cfg.cita_puesto_plural || '').trim() || of.puesto_plural,
   };

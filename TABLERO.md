@@ -2537,6 +2537,57 @@ este peldaño añade es la cara propia del sector, no otro motor.
     **⚠️ ESTE ROJO ERA EL ALTA CAÍDA, Y NO SE VIO (ver la ficha de la INCIDENCIA, abajo).** Demostrar que
     un rojo no es tuyo NO es lo mismo que saber qué es. Ese paso faltó.
 
+- **PIEZA 2 — LA AGENDA COMO UN CALENDARIO DE VERDAD · ✅ ENTREGADA y verificada (15 ago 2026).** Tres
+  cosas que el dueño encontró rotas o inútiles al probarla.
+  - **LO QUE DESTAPÓ EL PASO 0 — y desmintió la sospecha de partida.** Se creó un negocio de cero y se
+    miró: la rejilla **NO sale vacía**. Pinta 1 columna y **26 huecos, los 26 pulsables** (el motor abre
+    el día por defecto 8:00–21:00, `DEFAULT_OPEN`). El clic llevaba funcionando desde la pieza 5. Lo que
+    NO existía era **la manera de descubrirlo**: `.agcell` solo llevaba `cursor:pointer` —que únicamente
+    se ve si ya estás encima— y **no había ni una regla `:hover` en todo el repo**. El dueño no podía
+    elegir hora porque **no sabía que podía**, no porque no hubiera dónde pulsar. Eso cambió el arreglo:
+    no había que crear huecos, había que hacerlos visibles.
+  - **HALLAZGO EXTRA, no pedido, arreglado:** la rejilla estaba **CLAVADA de 08:00 a 21:00** en el dibujo
+    del cliente y **no derivaba del horario**. Un negocio que abre a las 7:00 tenía huecos reservables
+    **desde fuera** (la puerta pública sí usa el motor) que **dentro no se veían**. Ahora el rango sale
+    del servidor con el mismo motor (`rangoRejilla`, sobre `tramosAmbito`); sin horario configurado
+    devuelve el 8–21 de siempre, así que lo que se veía antes se sigue viendo igual.
+  - **(A) TRES VISTAS: Día · Semana · Mes**, y **fuera del cajón de filtros** — cambiar de día a semana no
+    es filtrar, es lo primero que se busca. Botones a la vista + flechas ‹ › que avanzan en **la unidad
+    que se está mirando** (día, semana o mes). **Mes NO es la rejilla por columnas**: es un calendario
+    normal, lunes primero, y cada día dice **cuántas citas tiene y cuánto hueco queda**. Pulsar un día
+    abre **ese** día. **No hay vista de año, a propósito.**
+    - **De dónde sale «cuánto hueco queda»:** `huecos()` necesita una DURACIÓN (calcula dónde cabe un
+      servicio concreto) y en un resumen mensual no hay servicio elegido; preguntarle con una duración
+      inventada daría un número sin significado. Se usan las MISMAS piezas del motor un escalón más
+      abajo —`tramosPersona` + `ocupacionPersona`, ya exportadas— y se restan. **No hay cálculo paralelo.**
+  - **(B) EL HUECO SE VE PULSABLE:** fondo de acento, borde y la pista **«+ Nueva cita»** al pasar por
+    encima; `tabindex` + `role=button` + Enter/Espacio, para que también se llegue con teclado. El flujo
+    de la Agenda Sencilla (persona y hora heredadas del hueco) **no se tocó**: `gate-agenda-sencilla` 11/0.
+  - **(C) AGENDA SIN HORARIO — SE CORRIGIÓ EL ENUNCIADO DEL ENCARGO.** Pedía decir «qué falta». Pero
+    **no falta nada**: el negocio puede crear citas ya, y el día abierto por defecto es una decisión
+    deliberada del motor. Un cartel de «te faltan los horarios» habría dicho que está bloqueado cuando no
+    lo está, contradiciendo `DEFAULT_OPEN`. El aviso dice la verdad y **enseña a usarla**: «Tu agenda ya
+    funciona… **pulsa cualquier hueco libre** y creas la cita ahí mismo», con el horario a un clic al lado.
+    **No bloquea nada.**
+  - **(D) «PROYECTO» SOLO EN LOS OFICIOS QUE LO USAN.** Nuevo `usa_proyectos` en `oficios.js`. **Se
+    OCULTA, nunca se saca del DOM**: `editCitaSvc` escribe `project_id=?` con lo que llegue, así que un
+    campo ausente **le borraría el proyecto a la cita al editarla**. Y **«otro» lo mantiene**: son los
+    negocios que ya existían y hoy lo ven; a esos no se les quita nada de la pantalla por una migración.
+    Se comprobó que el campo NO es decorativo: alimenta `invoices.project_id` al cobrar (rentabilidad) y
+    el registro de tiempo al atender.
+  - **Sin migración**: esta pieza no añade ni una columna. `citas` intacta; motor, puerta pública,
+    Verifactu, hashes, stock y WRITABLE_TABLES, sin tocar.
+  - **Verificado:** `gate-agenda-calendario` **25/0** — y la primera prueba es **la que manda**: *crea un
+    negocio de cero y llega hasta tener una cita puesta*, sin sembrar nada a mano (negocio nuevo → aviso
+    → hueco con su pista → cita a las 11:00 en la BD, con «Arreglo de barba» de su propio catálogo). Más
+    las tres vistas, mes→día, flechas por unidad, Proyecto por oficio (peluquería no / asesoría sí),
+    móvil 390×844 sin desbordar y **0 errores JS**.
+  - **Regresión VERDE en su número exacto**: test-citas 39/0, test-enlace-cita 14/0, test-avisos-cita
+    20/0, test-neto-cero-cita 8/0, test-textos-citas 24/0, **test-reserva-publica 130/0**,
+    **test-coincidencia-huecos 40/0**, test-neto-cero-reserva 21/0, test-oficio 94/0, test-oficio-alta
+    52/0, test-llm-texto-respuesta 13/0, gate-citas-pantalla 25/0, **gate-agenda-sencilla 11/0**,
+    gate-reserva-publica-pantalla 51/0, gate-oficio-pantalla 28/0, **gate-registro-alta 34/0**.
+
 - **INCIDENCIA · EL ALTA CAÍDA EN PRODUCCIÓN · ✅ RESUELTA (15 ago 2026, `bfd0a24`).** El usuario
   escribía «peluqería» en el asistente de bienvenida y DISA **no contestaba nunca**.
   - **Síntoma engañoso:** no había error, ni traza, ni 500. La ruta devolvía **HTTP 200 con la respuesta

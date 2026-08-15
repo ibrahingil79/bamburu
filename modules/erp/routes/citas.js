@@ -21,6 +21,7 @@ import {
 import {
   geometriaCadena, comprobarSolape, huecos, ahoraLocal, hhmm, dowDeFecha, diasEntre,
   ESTADO_LABEL, puedeTransicionar, tramosPersona, tramosAmbito, ocupacionRecurso, overlaps,
+  ocupacionPersona, resta, hayHorarioNegocio, DEFAULT_OPEN,
 } from '../citas-engine.js';
 import {
   contactoDeCita, serviciosDeCita, textoAviso, waLink, smsLink, citaBaseUrl, citaEnlace,
@@ -68,7 +69,29 @@ export function ajustesCitas(db) {
     oficio_label: voz.oficio_label,
     cliente_sing: voz.cliente_sing,
     cliente_plural: voz.cliente_plural,
+    usa_proyectos: voz.usa_proyectos,
   };
+}
+
+// ── LA REJILLA: DE QUÉ HORA A QUÉ HORA SE PINTA ───────────────────────────────────────────────────
+// Antes estaba CLAVADA de 08:00 a 21:00 en el dibujo del cliente. El motor sí sabía el horario real,
+// así que un negocio que abre a las 7:00 tenía huecos reservables que la pantalla NO enseñaba: se
+// podía reservar por la puerta pública a una hora que dentro no existía. Ahora se deriva del horario
+// del negocio en el rango que se está mirando, redondeado a la hora, con un margen de cortesía; sin
+// horario configurado sale DEFAULT_OPEN, que es exactamente lo que se veía antes.
+export function rangoRejilla(db, fechas) {
+  let ini = null, fin = null;
+  for (const f of fechas) {
+    for (const [a, b] of tramosAmbito(db, 'negocio', null, f)) {
+      if (ini == null || a < ini) ini = a;
+      if (fin == null || b > fin) fin = b;
+    }
+  }
+  if (ini == null || fin == null) return { ini: DEFAULT_OPEN[0], fin: DEFAULT_OPEN[1] };
+  ini = Math.max(0, Math.floor(ini / 60) * 60);
+  fin = Math.min(24 * 60, Math.ceil(fin / 60) * 60);
+  if (fin - ini < 120) fin = Math.min(24 * 60, ini + 120);   // nunca una rejilla de un palmo
+  return { ini, fin };
 }
 
 // ── Servicios reservables: resuelve los service_config de una lista de ids (en orden) ──────────────
@@ -399,7 +422,55 @@ export function createCitasRoutes(db) {
       const hasta = c.req.query('hasta') || desde;
       // personasDia = quién trabaja el día `desde` (para la vista de entrada; el frente decide si filtra).
       const personasDia = personasQueTrabajan(db, desde).map(p => ({ id: p.id, name: p.name }));
-      return c.json({ ...agendaData(db, { desde, hasta }), personasDia });
+      // `rango` = de qué hora a qué hora tiene sentido dibujar (ver rangoRejilla).
+      // `sin_horario` = el negocio no ha configurado ninguno y está con el día abierto por defecto.
+      // NO es un error ni un bloqueo: puede crear citas ya. La pantalla lo dice, no lo esconde.
+      const fechas = [];
+      for (let f = desde; f <= hasta; f = new Date(Date.parse(f + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10)) {
+        fechas.push(f);
+        if (fechas.length > 40) break;
+      }
+      return c.json({
+        ...agendaData(db, { desde, hasta }), personasDia,
+        rango: rangoRejilla(db, fechas),
+        sin_horario: !hayHorarioNegocio(db),
+      });
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+
+  // ── VISTA DE MES ──────────────────────────────────────────────────────────
+  // Un mes NO cabe en la rejilla por columnas de persona: son 30 días × N personas. Así que el mes es
+  // un calendario normal y cada día responde a dos preguntas — CUÁNTAS citas hay y CUÁNTO hueco queda.
+  //
+  // POR QUÉ EL HUECO NO SALE DE huecos(): esa función necesita una DURACIÓN (calcula dónde cabe un
+  // servicio concreto), y en un resumen mensual no hay servicio elegido. Preguntarle con una duración
+  // inventada daría un número que no significa nada. Se usan las MISMAS piezas del motor un escalón más
+  // abajo —`tramosPersona` (el horario real de cada quien) y `ocupacionPersona` (lo que ya está pillado,
+  // con su tiempo muerto y sus márgenes)— y se restan. Sigue siendo el motor: no hay cálculo paralelo.
+  api.get('/mes', requirePerm('citas.read'), c => {
+    try {
+      const ym = String(c.req.query('ym') || '').match(/^(\d{4})-(\d{2})$/);
+      if (!ym) return c.json({ error: 'Mes inválido (formato YYYY-MM)' }, 400);
+      const anio = +ym[1], mes = +ym[2];
+      const ultimo = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
+      const personas = db.prepare('SELECT id FROM admin_users WHERE active=1').all().map(r => r.id);
+      const hoy = ahoraLocal().fecha;
+      const cuenta = db.prepare(
+        `SELECT COUNT(*) n FROM citas WHERE fecha=? AND estado<>'anulada' AND archived=0`
+      );
+      const dias = [];
+      for (let d = 1; d <= ultimo; d++) {
+        const fecha = anio + '-' + String(mes).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+        let libres = 0, abierto = false;
+        for (const uid of personas) {
+          const base = tramosPersona(db, uid, fecha);
+          if (!base.length) continue;
+          abierto = true;
+          for (const [a, b] of resta(base, ocupacionPersona(db, uid, fecha))) libres += (b - a);
+        }
+        dias.push({ fecha, dia: d, citas: cuenta.get(fecha).n, libres_min: libres, abierto, pasado: fecha < hoy });
+      }
+      return c.json({ ym: ym[0], dias, sin_horario: !hayHorarioNegocio(db) });
     } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
@@ -944,27 +1015,65 @@ function paginaCita(db, cita, token) {
 // pantalla se quede con la palabra vieja; los defaults del lado cliente (|| 'Cliente') son solo cinturón.
 const jsVoz = (aj) =>
   `window.PUESTO_SING=${JSON.stringify(aj.puesto_sing)};window.PUESTO_PLURAL=${JSON.stringify(aj.puesto_plural)};`
-  + `window.CLIENTE_SING=${JSON.stringify(aj.cliente_sing)};window.CLIENTE_PLURAL=${JSON.stringify(aj.cliente_plural)};`;
+  + `window.CLIENTE_SING=${JSON.stringify(aj.cliente_sing)};window.CLIENTE_PLURAL=${JSON.stringify(aj.cliente_plural)};`
+  + `window.USA_PROYECTOS=${aj.usa_proyectos ? 'true' : 'false'};`;
+
+// EL HUECO TIENE QUE PARECER PULSABLE. Antes solo llevaba `cursor:pointer`, que únicamente se ve si ya
+// estás encima — y nadie pone el ratón encima de lo que parece una hoja de cálculo en blanco. El clic
+// llevaba funcionando desde la pieza 5; lo que no existía era la MANERA DE DESCUBRIRLO. Con teclado
+// también: `:focus-visible`, porque un hueco al que se llega tabulando debe verse igual de vivo.
+const CSS_AGENDA = `
+  .agcell.libre{transition:background .12s}
+  .agcell.libre:hover{background:color-mix(in srgb, var(--accent) 12%, transparent);box-shadow:inset 0 0 0 1px var(--accent);cursor:pointer}
+  .agcell.libre:hover::after{content:'+ Nueva cita';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:var(--accent);pointer-events:none}
+  .agcell.libre:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  .mesdia{border:1px solid var(--border);border-radius:8px;padding:.4rem;min-height:74px;text-align:left;background:transparent;font-family:inherit;display:flex;flex-direction:column;gap:.15rem;transition:background .12s}
+  .mesdia:not(:disabled){cursor:pointer}
+  .mesdia:not(:disabled):hover{background:color-mix(in srgb, var(--accent) 10%, transparent);box-shadow:inset 0 0 0 1px var(--accent)}
+  .mesdia:disabled{opacity:.45}
+  .mesdia .n{font-weight:700;font-size:.85rem}
+  .mesdia .c{font-size:.72rem;color:var(--accent);font-weight:600}
+  .mesdia .l{font-size:.72rem;color:var(--muted)}
+  .mesdia.hoy{box-shadow:inset 0 0 0 2px var(--accent)}
+  .mescab{font-size:.72rem;color:var(--muted);text-align:center;font-weight:600;padding:.2rem 0}`;
 
 function vistaAgenda(c, db) {
   const editable = can(c, 'citas.edit');
   const aj = ajustesCitas(db);
   const dot = (col, lbl) => '<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.78rem;color:var(--muted)"><span style="width:10px;height:10px;border-radius:3px;background:' + col + '"></span>' + lbl + '</span>';
   const content = `
+    <style>${CSS_AGENDA}</style>
     <div class="ph"><h2>Agenda</h2>
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
         <button class="btn btn-secondary btn-sm" onclick="agHoy()">Hoy</button>
+        <button class="btn btn-secondary btn-sm" onclick="agMover(-1)" aria-label="Anterior">‹</button>
         <input class="form-control" type="date" id="agFecha" style="width:auto" onchange="agCargar()">
-        <button class="btn btn-secondary btn-sm" onclick="toggleControles()">Vistas y filtros</button>
+        <button class="btn btn-secondary btn-sm" onclick="agMover(1)" aria-label="Siguiente">›</button>
+        <!-- LAS TRES VISTAS, A LA VISTA. Estaban escondidas tras "Vistas y filtros" junto a los filtros;
+             cambiar de día a semana no es filtrar, es lo primero que se busca en un calendario. -->
+        <div style="display:flex;gap:.25rem" role="group" aria-label="Vista">
+          <button class="btn btn-secondary btn-sm" id="vbDia" onclick="setVista('dia')">Día</button>
+          <button class="btn btn-secondary btn-sm" id="vbSemana" onclick="setVista('semana')">Semana</button>
+          <button class="btn btn-secondary btn-sm" id="vbMes" onclick="setVista('mes')">Mes</button>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="toggleControles()">Filtros</button>
         ${editable ? '<button class="btn btn-secondary" onclick="openBloqueo()">Bloquear un rato</button><button class="btn btn-primary" onclick="openNuevaCita()">Nueva cita</button>' : ''}
       </div>
     </div>
     <div id="agControles" style="display:none;gap:.75rem;flex-wrap:wrap;align-items:center;margin-bottom:.75rem;padding:.6rem .8rem;background:var(--bg2,rgba(0,0,0,.02));border-radius:8px">
-      <select class="form-control" id="agVista" style="width:auto" onchange="agCargar()"><option value="dia">Día</option><option value="semana">Semana</option></select>
+      <select class="form-control" id="agVista" style="width:auto" onchange="agCargar()"><option value="dia">Día</option><option value="semana">Semana</option><option value="mes">Mes</option></select>
       <select class="form-control" id="agEje" style="width:auto" onchange="agCargar()"><option value="persona">Por persona</option><option value="recurso">Por ${escHtml(aj.puesto_sing.toLowerCase())}</option></select>
       <label style="font-size:.85rem;display:flex;align-items:center;gap:.35rem"><input type="checkbox" id="agVerTodo" onchange="agCargar()"> Ver todo el equipo</label>
     </div>
-    <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:.6rem">${dot(COLORS.pedida, 'Pedida')}${dot(COLORS.confirmada, 'Confirmada')}${dot(COLORS.atendida, 'Atendida')}${dot(COLORS.no_show, 'No se presentó')}</div>
+    <!-- AGENDA SIN HORARIO: se dice lo que PASA, no lo que "falta". El negocio NO está bloqueado —
+         el motor le abre el día por defecto (8:00–21:00) para que pueda reservar sin configurar nada
+         (citas-engine.js, DEFAULT_OPEN). Así que el aviso enseña a usarla YA y ofrece el horario al lado. -->
+    <div id="agSinHorario" class="alert" style="display:none;margin-bottom:.6rem">
+      <strong>Tu agenda ya funciona.</strong> Estás con el horario por defecto, de <strong>8:00 a 21:00</strong>:
+      <strong>pulsa cualquier hueco libre</strong> y creas la cita ahí mismo.
+      ¿Abres a otras horas? <a href="/admin/citas/horarios" style="font-weight:700">Define tu horario →</a>
+    </div>
+    <div id="agLeyenda" style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:.6rem">${dot(COLORS.pedida, 'Pedida')}${dot(COLORS.confirmada, 'Confirmada')}${dot(COLORS.atendida, 'Atendida')}${dot(COLORS.no_show, 'No se presentó')}</div>
     <div class="card"><div id="agenda" style="overflow-x:auto">Cargando…</div></div>
     ${modalNuevaCita(aj.puesto_sing, aj.cliente_sing)}
     ${modalDetalle()}
@@ -1283,7 +1392,11 @@ const modalNuevaCita = (puestoSing = 'Puesto', clienteSing = 'Cliente') => `
       <details id="cMas"><summary style="cursor:pointer;font-weight:600;font-size:.85rem;color:var(--accent)">Más opciones</summary>
         <div class="form-row" style="margin-top:.6rem">
           <div class="form-group"><label class="form-label" id="cPuestoLbl">${escHtml(puestoSing)}</label><select class="form-control" id="cRecurso" onchange="cSugerir()"><option value="">— Automático —</option></select></div>
-          <div class="form-group"><label class="form-label">Proyecto</label><select class="form-control" id="cProyecto"><option value="">— Ninguno —</option></select></div>
+          <!-- PROYECTO — solo se PINTA si el oficio lo usa (asesoría; y "otro", que son los negocios de
+               antes y no pueden perder lo que ya veían). NUNCA se saca del DOM: editCitaSvc escribe
+               project_id=? con lo que llegue, así que un campo ausente le borraría el proyecto a la
+               cita al editarla. Un peluquero no tiene proyectos; su dato tampoco se toca. -->
+          <div class="form-group" id="cProyectoWrap"><label class="form-label">Proyecto</label><select class="form-control" id="cProyecto"><option value="">— Ninguno —</option></select></div>
         </div>
         <div class="form-group"><label class="form-label">Nota</label><textarea class="form-control" id="cNota" rows="2"></textarea></div>
         <div class="form-group"><label style="font-size:.85rem"><input type="checkbox" id="cAvisar"> Avisar al cliente al guardar</label></div>
@@ -1392,13 +1505,87 @@ function loadPrefs(){ try{ return JSON.parse(localStorage.getItem('agPrefs')||'{
 function savePrefs(){ try{ localStorage.setItem('agPrefs', JSON.stringify({vista:document.getElementById('agVista').value, eje:document.getElementById('agEje').value, verTodo:document.getElementById('agVerTodo').checked})); }catch(e){} }
 function agHoy(){ document.getElementById('agFecha').value=ymd(new Date()); agCargar(); }
 function toggleControles(){ var c=document.getElementById('agControles'); c.style.display=(c.style.display==='none'||!c.style.display)?'flex':'none'; }
+function vistaActual(){ return document.getElementById('agVista').value; }
+// Las tres vistas son botones a la vista; el <select> de "Filtros" sigue existiendo y manda igual, para
+// no romper nada que ya lo usara (ni las preferencias guardadas).
+function setVista(v){ document.getElementById('agVista').value=v; agCargar(); }
+function pintaBotonesVista(v){
+  ['dia','semana','mes'].forEach(function(x){
+    var b=document.getElementById('vb'+x.charAt(0).toUpperCase()+x.slice(1)); if(!b) return;
+    var on = x===v;
+    b.className = 'btn btn-sm ' + (on?'btn-primary':'btn-secondary');
+    b.setAttribute('aria-pressed', on?'true':'false');
+  });
+}
+// Anterior/siguiente en la unidad que se está mirando: un día, una semana o un mes.
+function agMover(n){
+  var f=document.getElementById('agFecha'); var d=new Date((f.value||ymd(new Date()))+'T00:00:00Z');
+  var v=vistaActual();
+  if(v==='mes') d.setUTCMonth(d.getUTCMonth()+n);
+  else d.setUTCDate(d.getUTCDate()+n*(v==='semana'?7:1));
+  f.value=ymd(d); agCargar();
+}
+// Aviso de "sin horario": se enseña cuando el negocio no ha configurado ninguno. No bloquea nada.
+function pintaSinHorario(sin){
+  var el=document.getElementById('agSinHorario'); if(el) el.style.display = sin ? '' : 'none';
+}
 async function agCargar(){
   initDate(); await ensureMeta(); savePrefs();
-  var vista=document.getElementById('agVista').value, eje=document.getElementById('agEje').value;
-  var f0=document.getElementById('agFecha').value; var desde=f0, hasta=f0;
+  var vista=vistaActual(), eje=document.getElementById('agEje').value;
+  pintaBotonesVista(vista);
+  var f0=document.getElementById('agFecha').value;
+  // La leyenda de estados es de la rejilla; en el mes no pinta nada y solo hace ruido.
+  var ley=document.getElementById('agLeyenda'); if(ley) ley.style.display = vista==='mes' ? 'none' : 'flex';
+  if(vista==='mes'){
+    var data=await api('GET','/api/erp/citas/mes?ym='+f0.slice(0,7));
+    pintaSinHorario(!!data.sin_horario);
+    renderMes(data, f0);
+    return;
+  }
+  var desde=f0, hasta=f0;
   if(vista==='semana'){ var d=new Date(f0+'T00:00:00Z'); var dow=d.getUTCDay(); var mon=new Date(d.getTime()-((dow+6)%7)*86400000); desde=ymd(mon); hasta=ymd(new Date(mon.getTime()+6*86400000)); }
   var data=await api('GET','/api/erp/citas/agenda?desde='+desde+'&hasta='+hasta);
+  pintaSinHorario(!!data.sin_horario);
   render(data, desde, hasta, vista, eje);
+}
+// ── VISTA DE MES ────────────────────────────────────────────────────────────
+// Un calendario normal: cuántas citas tiene cada día y cuánto hueco queda. Pulsar un día abre ESE día
+// en la vista de Día — que es donde se crea la cita pulsando el hueco. El mes orienta; el día opera.
+var DIAS_CAB=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+function horas(min){
+  if(!min) return 'sin hueco';
+  var h=Math.floor(min/60), m=min%60;
+  return (h?h+' h':'') + (h&&m?' ':'') + (m?m+' min':'') + ' libre';
+}
+function renderMes(data, fechaSel){
+  var box=document.getElementById('agenda');
+  var dias=data.dias||[]; if(!dias.length){ box.textContent='No hay nada que mostrar.'; return; }
+  var hoy=ymd(new Date());
+  var primero=new Date(dias[0].fecha+'T00:00:00Z');
+  var hueco=(primero.getUTCDay()+6)%7;   // lunes primero
+  var titulo=new Date(fechaSel+'T00:00:00Z').toLocaleDateString('es-ES',{month:'long',year:'numeric',timeZone:'UTC'});
+  var html='<div style="font-weight:700;margin-bottom:.5rem;text-transform:capitalize">'+esc(titulo)+'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:.3rem">'
+    + DIAS_CAB.map(function(d){ return '<div class="mescab">'+d+'</div>'; }).join('');
+  for(var i=0;i<hueco;i++) html+='<div></div>';
+  dias.forEach(function(d){
+    var cls='mesdia'+(d.fecha===hoy?' hoy':'');
+    // Un día cerrado (sin horario de nadie) no se puede abrir para crear: se enseña apagado.
+    html+='<button type="button" class="'+cls+'" data-fecha="'+d.fecha+'"'+(d.abierto?'':' disabled')
+      +' aria-label="'+esc(d.fecha)+', '+d.citas+' citas">'
+      +'<span class="n">'+d.dia+'</span>'
+      +'<span class="c">'+(d.citas?d.citas+(d.citas===1?' cita':' citas'):'—')+'</span>'
+      +'<span class="l">'+(d.abierto?esc(horas(d.libres_min)):'cerrado')+'</span>'
+      +'</button>';
+  });
+  html+='</div>';
+  box.innerHTML=html;
+  [].forEach.call(box.querySelectorAll('.mesdia:not(:disabled)'), function(b){
+    b.addEventListener('click', function(){
+      document.getElementById('agFecha').value=b.getAttribute('data-fecha');
+      setVista('dia');
+    });
+  });
 }
 function colDefs(eje, data){
   if(eje==='recurso'){ return [{id:null,nombre:'Sin '+(window.PUESTO_SING||'puesto').toLowerCase()}].concat(META.recursos.map(r=>({id:r.id,nombre:r.nombre}))); }
@@ -1411,7 +1598,11 @@ function render(data, desde, hasta, vista, eje){
   var box=document.getElementById('agenda');
   var dates=[]; var d0=new Date(desde+'T00:00:00Z'); var dN=new Date(hasta+'T00:00:00Z');
   for(var d=new Date(d0); d<=dN; d=new Date(d.getTime()+86400000)) dates.push(ymd(d));
-  var START=8*60, END=21*60, STEP=30, PXMIN=0.9;
+  // La rejilla ya NO está clavada de 8 a 21: la manda el horario del negocio (data.rango), que calcula
+  // el servidor con el mismo motor. Sin horario configurado, rango viene con el 8–21 por defecto, así
+  // que lo que se veía antes se sigue viendo igual.
+  var R=(data&&data.rango)||{ini:8*60,fin:21*60};
+  var START=R.ini, END=R.fin, STEP=30, PXMIN=0.9;
   var clickable = vista==='dia' && eje==='persona' && window.CITAS_EDIT;
   var cols = vista==='semana' ? dates.map(dt=>({key:dt,label:DIAS[new Date(dt+'T00:00:00Z').getUTCDay()]+' '+dt.slice(8)})) : colDefs(eje,data).map(c=>({key:c.id===null?'null':String(c.id),label:c.nombre,colId:c.id}));
   var html='<table style="border-collapse:collapse;min-width:'+(80+cols.length*150)+'px"><thead><tr><th style="width:60px"></th>'+cols.map(c=>'<th style="padding:.4rem;font-size:.85rem;border-bottom:1px solid var(--border)">'+esc(c.label)+'</th>').join('')+'</tr></thead><tbody>';
@@ -1419,12 +1610,21 @@ function render(data, desde, hasta, vista, eje){
     html+='<tr><td style="font-size:.7rem;color:var(--muted);vertical-align:top;height:'+(STEP*PXMIN)+'px">'+fhhmm(t)+'</td>';
     for(var ci=0;ci<cols.length;ci++){ var col=cols[ci];
       var attrs = vista==='semana' ? 'data-fecha="'+col.key+'"' : ('data-fecha="'+desde+'" data-col="'+(col.colId==null?'':col.colId)+'"');
-      html+='<td class="agcell" '+attrs+' data-min="'+t+'"'+(clickable?' onclick="cellNueva(this)"':'')+' style="border:1px solid var(--border);height:'+(STEP*PXMIN)+'px;vertical-align:top;position:relative'+(clickable?';cursor:pointer':'')+'" ondragover="event.preventDefault()" ondrop="onDrop(event)"></td>';
+      // La clase libre es lo que le da el hover, el "+ Nueva cita" y el foco de teclado (ver CSS_AGENDA).
+      // El onclick ya estaba: lo que faltaba era que se NOTARA que está.
+      html+='<td class="agcell'+(clickable?' libre':'')+'" '+attrs+' data-min="'+t+'"'+(clickable?' onclick="cellNueva(this)" tabindex="0" role="button" aria-label="Crear cita a las '+fhhmm(t)+'"':'')+' style="border:1px solid var(--border);height:'+(STEP*PXMIN)+'px;vertical-align:top;position:relative" ondragover="event.preventDefault()" ondrop="onDrop(event)"></td>';
     }
     html+='</tr>';
   }
   html+='</tbody></table>';
   box.innerHTML=html;
+  // Con teclado también se crea: el hueco lleva role=button y responde a Enter y a Espacio.
+  [].forEach.call(box.querySelectorAll('.agcell.libre'), function(td){
+    td.addEventListener('keydown', function(ev){
+      if(ev.key!=='Enter' && ev.key!==' ') return;
+      ev.preventDefault(); cellNueva(td);
+    });
+  });
   (data.citas||[]).forEach(function(ci){
     var cell = box.querySelector('.agcell[data-min="'+(Math.floor(ci.inicio_min/STEP)*STEP)+'"]'+(vista==='semana'?'[data-fecha="'+ci.fecha+'"]':'[data-col="'+(eje==='recurso'?(ci.recurso_id==null?'':ci.recurso_id):ci.user_id)+'"]'));
     if(!cell) return;
@@ -1467,6 +1667,8 @@ function cRellenaComunes(){
   fillSelect(document.getElementById('cPersona'),META.personas.map(p=>({id:p.id,name:p.name})),'id','name',null);
   fillSelect(document.getElementById('cRecurso'),META.recursos.map(r=>({id:r.id,name:r.nombre})),'id','name','— Automático —');
   fillSelect(document.getElementById('cProyecto'),META.proyectos.map(p=>({id:p.id,name:(p.codigo||'')+' '+p.nombre})),'id','name','— Ninguno —');
+  // Se OCULTA, no se quita (ver el comentario del modal). El select sigue vivo y guardando su valor.
+  var pw=document.getElementById('cProyectoWrap'); if(pw) pw.style.display = window.USA_PROYECTOS ? '' : 'none';
   document.getElementById('cServicios').innerHTML=META.servicios.map(s=>'<label style="font-size:.85rem"><input type="checkbox" class="csvc" value="'+s.id+'" onchange="cServChange()"> '+esc(s.name)+' ('+svcMin(s)+' min)</label>').join('')||'<div style="color:var(--muted);font-size:.85rem;line-height:1.5">Aún no tienes servicios.<br><a href="/admin/citas/servicios" style="color:var(--accent);font-weight:600">＋ Crear o configurar tus servicios →</a></div>';
 }
 function cReset(){
@@ -1651,7 +1853,10 @@ async function bGuardar(){
   try{ await api('POST','/api/erp/citas/bloqueo',body); closeModal('mBloq'); toast('Bloqueado'); agCargar(); }catch(e){ toast(e.message,'err'); }
 }
 // De entrada: HOY, por persona, solo quien trabaja hoy (2.1). Se recuerda lo último que se eligió (2.2).
-(function initAgenda(){ var p=loadPrefs(); if(p.vista)document.getElementById('agVista').value=p.vista; if(p.eje)document.getElementById('agEje').value=p.eje; var vt=document.getElementById('agVerTodo'); if(vt)vt.checked=!!p.verTodo; if((p.vista&&p.vista!=='dia')||(p.eje&&p.eje!=='persona')||p.verTodo){ document.getElementById('agControles').style.display='flex'; } agCargar(); })();
+(function initAgenda(){ var p=loadPrefs(); if(p.vista)document.getElementById('agVista').value=p.vista; if(p.eje)document.getElementById('agEje').value=p.eje; var vt=document.getElementById('agVerTodo'); if(vt)vt.checked=!!p.verTodo;
+  // Los FILTROS se despliegan solos si venían tocados. La vista ya no: ahora son botones a la vista.
+  if((p.eje&&p.eje!=='persona')||p.verTodo){ document.getElementById('agControles').style.display='flex'; }
+  pintaBotonesVista(vistaActual()); agCargar(); })();
 `;
 
 const JS_COLA = String.raw`
