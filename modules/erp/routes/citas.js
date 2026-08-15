@@ -1036,15 +1036,35 @@ const CSS_AGENDA = `
   .agcell.libre:hover{background:color-mix(in srgb, var(--accent) 12%, transparent);box-shadow:inset 0 0 0 1px var(--accent);cursor:pointer}
   .agcell.libre:hover::after{content:'+ Nueva cita';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:var(--accent);pointer-events:none}
   .agcell.libre:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
-  .mesdia{border:1px solid var(--border);border-radius:8px;padding:.4rem;min-height:74px;text-align:left;background:transparent;font-family:inherit;display:flex;flex-direction:column;gap:.15rem;transition:background .12s}
-  .mesdia:not(:disabled){cursor:pointer}
-  .mesdia:not(:disabled):hover{background:color-mix(in srgb, var(--accent) 10%, transparent);box-shadow:inset 0 0 0 1px var(--accent)}
-  .mesdia:disabled{opacity:.45}
-  .mesdia .n{font-weight:700;font-size:.85rem}
-  .mesdia .c{font-size:.72rem;color:var(--accent);font-weight:600}
-  .mesdia .l{font-size:.72rem;color:var(--muted)}
-  .mesdia.hoy{box-shadow:inset 0 0 0 2px var(--accent)}
-  .mescab{font-size:.72rem;color:var(--muted);text-align:center;font-weight:600;padding:.2rem 0}`;
+  /* MES — calendario, no hoja de cálculo. Es el patrón de la app de Calendario del sistema: SIN cajas
+     ni cuadrícula, el día es un NÚMERO con aire alrededor, hoy va en círculo lleno, y las citas se
+     cuentan con PUNTOS debajo en vez de con texto. Antes cada día era un recuadro con "—" y
+     "13 h libre" escritos dentro: 31 cajas con dos líneas de texto cada una, que es exactamente lo
+     que un calendario no debe parecer. El dato exacto no se pierde: va al pie, que sigue al día que
+     tocas o señalas, y al title/aria-label de cada día. */
+  .mes{max-width:760px;margin:0 auto}
+  .mes-tit{font-size:1.35rem;font-weight:700;letter-spacing:-.02em;margin-bottom:.9rem}
+  .mes-cab,.mes-rej{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+  .mes-cab span{text-align:center;font-size:.66rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);padding-bottom:.5rem}
+  .mes-rej{row-gap:.1rem}
+  .mesdia{appearance:none;border:0;background:transparent;font-family:inherit;padding:.3rem 0 .35rem;display:flex;flex-direction:column;align-items:center;gap:.25rem;cursor:pointer}
+  .mesdia .num{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.98rem;color:var(--text);transition:background .15s,color .15s}
+  .mesdia:hover .num{background:var(--bg3)}
+  .mesdia:focus-visible{outline:none}
+  .mesdia:focus-visible .num{outline:2px solid var(--accent);outline-offset:2px}
+  .mesdia.hoy .num{background:var(--accent);color:#fff;font-weight:600}
+  .mesdia.sel .num{background:var(--text);color:#fff;font-weight:600}
+  .mesdia.hoy.sel .num{background:var(--accent-d);color:#fff}
+  .mesdia:disabled{cursor:default}
+  .mesdia:disabled .num{color:var(--text3)}
+  .mesdia .pts{display:flex;gap:3px;height:5px;align-items:center}
+  .mesdia .pt{width:5px;height:5px;border-radius:50%;background:var(--accent)}
+  .mesdia.hoy .pt{background:var(--accent)}
+  .mes-pie{margin-top:1rem;padding-top:.8rem;border-top:1px solid var(--border);display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap;min-height:1.6rem}
+  .mes-pie .d{font-weight:600}
+  .mes-pie .s{color:var(--text2);font-size:.85rem}
+  .mes-pie .a{margin-left:auto;font-size:.85rem;font-weight:600;color:var(--accent)}
+  @media (max-width:480px){ .mesdia .num{width:32px;height:32px;font-size:.9rem} .mes-tit{font-size:1.15rem} }`;
 
 function vistaAgenda(c, db) {
   const editable = can(c, 'citas.edit');
@@ -1560,41 +1580,70 @@ async function agCargar(){
 // ── VISTA DE MES ────────────────────────────────────────────────────────────
 // Un calendario normal: cuántas citas tiene cada día y cuánto hueco queda. Pulsar un día abre ESE día
 // en la vista de Día — que es donde se crea la cita pulsando el hueco. El mes orienta; el día opera.
-var DIAS_CAB=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+var DIAS_CAB=['L','M','X','J','V','S','D'];
 function horas(min){
-  if(!min) return 'sin hueco';
+  if(!min) return 'sin hueco libre';
   var h=Math.floor(min/60), m=min%60;
   return (h?h+' h':'') + (h&&m?' ':'') + (m?m+' min':'') + ' libre';
+}
+function citasTxt(n){ return n ? (n===1?'1 cita':n+' citas') : 'sin citas'; }
+// Solo la PRIMERA letra. El text-transform capitalize de CSS ponía «Agosto De 2026» y «Sábado, 15 De Agosto».
+function cap(s){ return s ? s.charAt(0).toUpperCase()+s.slice(1) : s; }
+function fLargoDia(f){
+  try{ return cap(new Date(f+'T00:00:00Z').toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long',timeZone:'UTC'})); }
+  catch(e){ return f; }
 }
 function renderMes(data, fechaSel){
   var box=document.getElementById('agenda');
   var dias=data.dias||[]; if(!dias.length){ box.textContent='No hay nada que mostrar.'; return; }
   var hoy=ymd(new Date());
   var primero=new Date(dias[0].fecha+'T00:00:00Z');
-  var hueco=(primero.getUTCDay()+6)%7;   // lunes primero
-  var titulo=new Date(fechaSel+'T00:00:00Z').toLocaleDateString('es-ES',{month:'long',year:'numeric',timeZone:'UTC'});
-  var html='<div style="font-weight:700;margin-bottom:.5rem;text-transform:capitalize">'+esc(titulo)+'</div>'
-    +'<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:.3rem">'
-    + DIAS_CAB.map(function(d){ return '<div class="mescab">'+d+'</div>'; }).join('');
-  for(var i=0;i<hueco;i++) html+='<div></div>';
+  var hueco=(primero.getUTCDay()+6)%7;   // el lunes va primero (locale ES)
+  var _d=new Date(fechaSel+'T00:00:00Z');
+  // 'agosto 2026', no 'agosto de 2026': el mes y el año, como en el calendario del sistema.
+  var titulo=cap(_d.toLocaleDateString('es-ES',{month:'long',timeZone:'UTC'}))+' '+_d.getUTCFullYear();
+  var html='<div class="mes"><div class="mes-tit">'+esc(titulo)+'</div>'
+    +'<div class="mes-cab">'+DIAS_CAB.map(function(d){ return '<span>'+d+'</span>'; }).join('')+'</div>'
+    +'<div class="mes-rej">';
+  for(var i=0;i<hueco;i++) html+='<span></span>';
   dias.forEach(function(d){
-    var cls='mesdia'+(d.fecha===hoy?' hoy':'');
-    // Un día cerrado (sin horario de nadie) no se puede abrir para crear: se enseña apagado.
-    html+='<button type="button" class="'+cls+'" data-fecha="'+d.fecha+'"'+(d.abierto?'':' disabled')
-      +' aria-label="'+esc(d.fecha)+', '+d.citas+' citas">'
-      +'<span class="n">'+d.dia+'</span>'
-      +'<span class="c">'+(d.citas?d.citas+(d.citas===1?' cita':' citas'):'—')+'</span>'
-      +'<span class="l">'+(d.abierto?esc(horas(d.libres_min)):'cerrado')+'</span>'
-      +'</button>';
+    var cls='mesdia'+(d.fecha===hoy?' hoy':'')+(d.fecha===fechaSel?' sel':'');
+    // Las citas se cuentan con PUNTOS, como en el calendario del sistema. Más de cuatro no se dibujan
+    // una a una: el número exacto vive en el pie y en el aria-label, que es donde se puede leer.
+    var n=Math.min(d.citas,4), pts='';
+    for(var k=0;k<n;k++) pts+='<span class="pt"></span>';
+    var resumen=citasTxt(d.citas)+(d.abierto?', '+horas(d.libres_min):', cerrado');
+    html+='<button type="button" class="'+cls+'" data-fecha="'+d.fecha+'"'
+      +' data-res="'+esc(resumen)+'"'+(d.abierto?'':' disabled')
+      +' title="'+esc(fLargoDia(d.fecha)+' · '+resumen)+'"'
+      +' aria-label="'+esc(fLargoDia(d.fecha)+', '+resumen)+'">'
+      +'<span class="num">'+d.dia+'</span><span class="pts">'+pts+'</span></button>';
   });
-  html+='</div>';
+  html+='</div><div class="mes-pie" id="mesPie"></div></div>';
   box.innerHTML=html;
-  [].forEach.call(box.querySelectorAll('.mesdia:not(:disabled)'), function(b){
+
+  // EL PIE — aquí van los números exactos que antes ensuciaban las 31 casillas. Sigue al día que
+  // señalas o enfocas, y arranca en el día seleccionado. Un solo renglón en vez de 62 líneas de texto.
+  var pie=document.getElementById('mesPie');
+  function pintaPie(f){
+    var b=box.querySelector('.mesdia[data-fecha="'+f+'"]');
+    if(!b){ pie.innerHTML=''; return; }
+    pie.innerHTML='<span class="d">'+esc(fLargoDia(f))+'</span>'
+      +'<span class="s">'+esc(b.getAttribute('data-res'))+'</span>'
+      +(b.disabled?'':'<span class="a">Abrir el día →</span>');
+  }
+  pintaPie(fechaSel);
+  [].forEach.call(box.querySelectorAll('.mesdia'), function(b){
+    var f=b.getAttribute('data-fecha');
+    b.addEventListener('mouseenter', function(){ pintaPie(f); });
+    b.addEventListener('focus', function(){ pintaPie(f); });
+    if(b.disabled) return;
     b.addEventListener('click', function(){
-      document.getElementById('agFecha').value=b.getAttribute('data-fecha');
+      document.getElementById('agFecha').value=f;
       setVista('dia');
     });
   });
+  box.addEventListener('mouseleave', function(){ pintaPie(document.getElementById('agFecha').value); });
 }
 function colDefs(eje, data){
   if(eje==='recurso'){ return [{id:null,nombre:'Sin '+(window.PUESTO_SING||'puesto').toLowerCase()}].concat(META.recursos.map(r=>({id:r.id,nombre:r.nombre}))); }

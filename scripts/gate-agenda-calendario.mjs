@@ -158,11 +158,28 @@ try {
   ok(azules.segmentado, 'las tres vistas van en un control segmentado');
   ok(azules.primarios === 1 && azules.segmentosAzules === 0,
     'y solo hay UN botón primario azul en la cabecera (DISEÑO §6)', 'primarios=' + azules.primarios);
-  // La cita creada se ve en el mes.
-  const mesConCita = await p.evaluate(() => [...document.querySelectorAll('.mesdia')].some(d => /1 cita/.test(d.textContent)));
-  ok(mesConCita, 'el mes cuenta la cita recién creada («1 cita»)');
-  const libres = await p.evaluate(() => [...document.querySelectorAll('.mesdia')].map(d => d.textContent).filter(t => /libre/.test(t)).length);
-  ok(libres > 0, 'y cada día dice cuánto hueco queda (' + libres + ' días con hueco)');
+  // El mes es un CALENDARIO, no una hoja de cálculo: número + puntos, sin cuadrícula ni texto dentro.
+  // El dato exacto vive en el aria-label de cada día y en el pie, que sigue al día que señalas.
+  const mes = await p.evaluate(() => {
+    const dias = [...document.querySelectorAll('.mesdia')];
+    const hoy = document.querySelector('.mesdia.hoy');
+    return {
+      conPuntos: dias.filter(d => d.querySelectorAll('.pt').length > 0).length,
+      conCita: dias.filter(d => /1 cita/.test(d.getAttribute('aria-label') || '')).length,
+      conHueco: dias.filter(d => /libre/.test(d.getAttribute('aria-label') || '')).length,
+      sinTextoDentro: dias.every(d => !/libre|cita/.test(d.textContent)),
+      hoyEnCirculo: !!hoy && getComputedStyle(hoy.querySelector('.num')).borderRadius.startsWith('50%'),
+      pie: (document.getElementById('mesPie') || {}).textContent || '',
+      titulo: (document.querySelector('.mes-tit') || {}).textContent || '',
+    };
+  });
+  ok(mes.conCita === 1, 'el mes cuenta la cita recién creada (aria-label «1 cita»)');
+  ok(mes.conPuntos === 1, 'y la dibuja con un PUNTO, no con texto (' + mes.conPuntos + ' día con punto)');
+  ok(mes.sinTextoDentro, 'ninguna casilla lleva texto dentro: es un calendario, no una tabla');
+  ok(mes.conHueco > 0, 'cada día dice cuánto hueco queda (' + mes.conHueco + ' días), en su etiqueta');
+  ok(mes.hoyEnCirculo, 'hoy va en círculo, como en el calendario del sistema');
+  ok(/^[A-ZÁÉÍÓÚ]\S* \d{4}$/.test(mes.titulo.trim()), 'el título es «Mes AAAA», sin “de” capitalizado: «' + mes.titulo.trim() + '»');
+  ok(/libre|cita/.test(mes.pie), 'y el pie lleva los números exactos del día seleccionado: «' + mes.pie.trim().slice(0, 60) + '»');
 
   // ── [2] Desde mes, pulsar un día abre ese día ──────────────────────────────
   console.log('\n[2] desde mes, pulsar un día abre ESE día');
