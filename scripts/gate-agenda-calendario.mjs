@@ -96,14 +96,25 @@ try {
   ok(ctx.split('·').length === 3, 'al pulsarlo se abre la cita con persona · día · hora: «' + ctx + '»');
   ok(/11:00/.test(ctx), 'con la hora del hueco que se pulsó (11:00)');
 
-  // [5] peluquería NO ve Proyecto.
-  const proyPel = await p.evaluate(() => {
+  // [5] El panel pide SOLO lo que este negocio tiene: ni Proyecto, ni Silla, ni persona.
+  const campos = await p.evaluate(() => {
     document.getElementById('cMas').open = true;
-    const w = document.getElementById('cProyectoWrap');
-    return { pintado: !!w && w.offsetParent !== null, enElDom: !!document.getElementById('cProyecto') };
+    const v = id => { const e = document.getElementById(id); return !!e && e.offsetParent !== null; };
+    return {
+      proyecto: v('cProyectoWrap'), silla: v('cRecursoWrap'), quien: v('cQuien'),
+      enElDom: !!document.getElementById('cProyecto') && !!document.getElementById('cRecurso'),
+      visibles: [...document.querySelectorAll('#mCita .form-group')].filter(g => g.offsetParent !== null)
+        .map(g => (g.querySelector('.form-label') || {}).textContent || '').filter(Boolean),
+    };
   });
-  ok(!proyPel.pintado, 'peluquería: «Proyecto» NO se pinta');
-  ok(proyPel.enElDom, '…pero sigue en el DOM (si se quitara, editar una cita le borraría el proyecto)');
+  ok(!campos.proyecto, 'peluquería: «Proyecto» NO se pinta');
+  ok(!campos.silla, 'sin sillas dadas de alta, el selector de «Silla» tampoco se pinta');
+  ok(!campos.quien, 'con una sola persona, «Con quién» tampoco');
+  ok(campos.enElDom, '…los tres siguen en el DOM (si se quitaran, editar una cita borraría sus datos)');
+  // Ojo al contexto: esto es el panel abierto DESDE EL HUECO, donde día y hora se heredan de la celda
+  // y no se re-preguntan (Agenda Sencilla). Así que aquí lo correcto es cliente + servicio, y nada más.
+  ok(campos.visibles.join(' · ') === 'Cliente * · Servicio * · Nota',
+    'así que desde el hueco el panel pide solo lo que este negocio tiene: ' + campos.visibles.join(' · '));
 
   // Y se crea la cita de verdad, con lo que hay: cliente + servicio del catálogo del oficio.
   const creada = await p.evaluate(async () => {
@@ -134,9 +145,19 @@ try {
       const n = document.getElementById('agenda');
       return v === 'mes' ? n.querySelectorAll('.mesdia').length > 0 : n.querySelectorAll('.agcell').length > 0;
     }, { timeout: 8000 }, v);
-    const activo = await p.evaluate(() => ['vbDia', 'vbSemana', 'vbMes'].filter(id => document.getElementById(id).getAttribute('aria-pressed') === 'true'));
-    ok(activo.length === 1, 'vista «' + v + '» carga y su botón queda marcado (' + activo[0] + ')');
+    const activo = await p.evaluate(() => ['vbDia', 'vbSemana', 'vbMes'].filter(id => document.getElementById(id).getAttribute('aria-selected') === 'true'));
+    ok(activo.length === 1, 'vista «' + v + '» carga y su segmento queda marcado (' + activo[0] + ')');
   }
+  // DISEÑO §6: un solo primario azul por pantalla. El selector de vista es UN control segmentado,
+  // no tres botones compitiendo con «Nueva cita».
+  const azules = await p.evaluate(() => ({
+    primarios: document.querySelectorAll('.ph .btn-primary').length,
+    segmentado: !!document.querySelector('.segmented'),
+    segmentosAzules: [...document.querySelectorAll('.segmented button')].filter(b => b.classList.contains('btn-primary')).length,
+  }));
+  ok(azules.segmentado, 'las tres vistas van en un control segmentado');
+  ok(azules.primarios === 1 && azules.segmentosAzules === 0,
+    'y solo hay UN botón primario azul en la cabecera (DISEÑO §6)', 'primarios=' + azules.primarios);
   // La cita creada se ve en el mes.
   const mesConCita = await p.evaluate(() => [...document.querySelectorAll('.mesdia')].some(d => /1 cita/.test(d.textContent)));
   ok(mesConCita, 'el mes cuenta la cita recién creada («1 cita»)');
@@ -179,6 +200,20 @@ try {
   await p.waitForFunction(() => document.getElementById('mCita').classList.contains('open'), { timeout: 8000 });
   const proyAse = await p.evaluate(() => { document.getElementById('cMas').open = true; const w = document.getElementById('cProyectoWrap'); return !!w && w.offsetParent !== null; });
   ok(proyAse, 'asesoría: «Proyecto» SÍ se pinta');
+
+  // Y el puesto reaparece en cuanto el negocio da de alta uno: se oculta por VACÍO, no por oficio.
+  console.log('\n[5-bis] el puesto vuelve en cuanto existe');
+  ase.db.prepare("INSERT INTO recursos (nombre,tipo,active) VALUES ('Sala 1','sala',1)").run();
+  await abrirAgenda(p, ase);
+  await p.waitForFunction(() => typeof openNuevaCita === 'function', { timeout: 8000 });
+  await p.evaluate(() => openNuevaCita());
+  await p.waitForFunction(() => document.getElementById('mCita').classList.contains('open'), { timeout: 8000 });
+  const conPuesto = await p.evaluate(() => { document.getElementById('cMas').open = true; const w = document.getElementById('cRecursoWrap'); return !!w && w.offsetParent !== null; });
+  ok(conPuesto, 'tras dar de alta una «Sala», el selector de puesto vuelve a pintarse');
+
+  // Y la puerta a las PERSONAS existe desde el área de Agenda (antes lo más parecido era «Sillas»).
+  const puerta = await p.evaluate(() => [...document.querySelectorAll('a')].some(a => /Qui[eé]n atiende/i.test(a.textContent)));
+  ok(puerta, 'el menú de Agenda tiene «Quién atiende» para dar de alta a las personas');
 
   console.log('\n[7] errores de JavaScript');
   ok(errs.length === 0, '0 errores JS en móvil y escritorio', errs.slice(0, 3).join(' | '));

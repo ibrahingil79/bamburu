@@ -346,6 +346,9 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     'citas-cola':     'citas.read',
     'citas-servicios':'citas.read',
     'citas-recursos': 'citas.read',
+    // Mismo candado que la pantalla a la que lleva (/admin/users): quien no administra usuarios
+    // tampoco ve la entrada desde la Agenda. Es un atajo, no un permiso nuevo.
+    'citas-personas': 'admin.manage_users',
     'citas-horarios': 'citas.read',
     'citas-ajustes':  'citas.edit',
     'citas-publica':  'citas.edit',   // peldaño 7 · PIEZA 6 · mandos de la puerta pública de reserva
@@ -411,6 +414,11 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       { href: '/admin/citas', label: 'Agenda', key: 'citas', icon: 'ti-calendar-event' },
       { href: '/admin/citas/cola', label: 'Cola de envíos', key: 'citas-cola', icon: 'ti-send' },
       { href: '/admin/citas/servicios', label: 'Servicios reservables', key: 'citas-servicios', icon: 'ti-clock-hour-4' },
+      // QUIÉN ATIENDE — faltaba. En el área de Agenda solo había "Recursos" (que con el oficio pasa a
+      // llamarse "Sillas", "Cabinas"…), así que un peluquero que quería dar de alta a su segunda
+      // estilista se encontraba "Sillas" como lo más parecido a una persona. Las personas son
+      // `admin_users` y se gestionan en /admin/users; lo que faltaba era la puerta desde aquí.
+      { href: '/admin/users', label: 'Quién atiende', key: 'citas-personas', icon: 'ti-users' },
       { href: '/admin/citas/recursos', label: 'Recursos', key: 'citas-recursos', icon: 'ti-armchair' },
       { href: '/admin/citas/horarios', label: 'Horarios', key: 'citas-horarios', icon: 'ti-calendar-time' },
       { href: '/admin/citas/ajustes', label: 'Ajustes de citas', key: 'citas-ajustes', icon: 'ti-settings' },

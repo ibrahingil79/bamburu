@@ -1023,6 +1023,15 @@ const jsVoz = (aj) =>
 // llevaba funcionando desde la pieza 5; lo que no existía era la MANERA DE DESCUBRIRLO. Con teclado
 // también: `:focus-visible`, porque un hueco al que se llega tabulando debe verse igual de vivo.
 const CSS_AGENDA = `
+  /* CONTROL SEGMENTADO — un solo control con la selección dentro, en vez de tres botones sueltos.
+     Tokens de DISEÑO §2: superficie --bg3 de canal, --bg2 para el segmento activo, radio 9px en
+     controles (§2.7), tipografía del sistema (heredada). Sin azul: el único azul de la pantalla es
+     el botón primario "Nueva cita" (§6). */
+  .segmented{display:inline-flex;background:var(--bg3);border:1px solid var(--border2);border-radius:9px;padding:2px;gap:2px}
+  .segmented button{appearance:none;border:0;background:transparent;color:var(--text2);font-family:inherit;font-size:.82rem;font-weight:500;padding:.32rem .8rem;border-radius:7px;cursor:pointer;transition:background .15s,color .15s,box-shadow .15s;line-height:1.4}
+  .segmented button:hover{color:var(--text)}
+  .segmented button[aria-selected="true"]{background:var(--bg2);color:var(--text);font-weight:600;box-shadow:0 1px 2px rgba(20,22,27,.10)}
+  .segmented button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
   .agcell.libre{transition:background .12s}
   .agcell.libre:hover{background:color-mix(in srgb, var(--accent) 12%, transparent);box-shadow:inset 0 0 0 1px var(--accent);cursor:pointer}
   .agcell.libre:hover::after{content:'+ Nueva cita';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:var(--accent);pointer-events:none}
@@ -1049,12 +1058,14 @@ function vistaAgenda(c, db) {
         <button class="btn btn-secondary btn-sm" onclick="agMover(-1)" aria-label="Anterior">‹</button>
         <input class="form-control" type="date" id="agFecha" style="width:auto" onchange="agCargar()">
         <button class="btn btn-secondary btn-sm" onclick="agMover(1)" aria-label="Siguiente">›</button>
-        <!-- LAS TRES VISTAS, A LA VISTA. Estaban escondidas tras "Vistas y filtros" junto a los filtros;
-             cambiar de día a semana no es filtrar, es lo primero que se busca en un calendario. -->
-        <div style="display:flex;gap:.25rem" role="group" aria-label="Vista">
-          <button class="btn btn-secondary btn-sm" id="vbDia" onclick="setVista('dia')">Día</button>
-          <button class="btn btn-secondary btn-sm" id="vbSemana" onclick="setVista('semana')">Semana</button>
-          <button class="btn btn-secondary btn-sm" id="vbMes" onclick="setVista('mes')">Mes</button>
+        <!-- LAS TRES VISTAS, en un CONTROL SEGMENTADO (el patrón de la app de Calendario del sistema),
+             no tres botones sueltos. Es UN control, no una fila de botones azules compitiendo: DISEÑO
+             §6 manda "UN botón primario por pantalla" —aquí, "Nueva cita"— y prohíbe las filas de
+             azules. El segmento activo se marca con superficie elevada, no con color de acción. -->
+        <div class="segmented" role="tablist" aria-label="Vista">
+          <button type="button" role="tab" id="vbDia" onclick="setVista('dia')">Día</button>
+          <button type="button" role="tab" id="vbSemana" onclick="setVista('semana')">Semana</button>
+          <button type="button" role="tab" id="vbMes" onclick="setVista('mes')">Mes</button>
         </div>
         <button class="btn btn-secondary btn-sm" onclick="toggleControles()">Filtros</button>
         ${editable ? '<button class="btn btn-secondary" onclick="openBloqueo()">Bloquear un rato</button><button class="btn btn-primary" onclick="openNuevaCita()">Nueva cita</button>' : ''}
@@ -1391,7 +1402,7 @@ const modalNuevaCita = (puestoSing = 'Puesto', clienteSing = 'Cliente') => `
       <div class="form-group" id="cQuien"><label class="form-label">Con quién</label><select class="form-control" id="cPersona" onchange="cRecalc()"></select></div>
       <details id="cMas"><summary style="cursor:pointer;font-weight:600;font-size:.85rem;color:var(--accent)">Más opciones</summary>
         <div class="form-row" style="margin-top:.6rem">
-          <div class="form-group"><label class="form-label" id="cPuestoLbl">${escHtml(puestoSing)}</label><select class="form-control" id="cRecurso" onchange="cSugerir()"><option value="">— Automático —</option></select></div>
+          <div class="form-group" id="cRecursoWrap"><label class="form-label" id="cPuestoLbl">${escHtml(puestoSing)}</label><select class="form-control" id="cRecurso" onchange="cSugerir()"><option value="">— Automático —</option></select></div>
           <!-- PROYECTO — solo se PINTA si el oficio lo usa (asesoría; y "otro", que son los negocios de
                antes y no pueden perder lo que ya veían). NUNCA se saca del DOM: editCitaSvc escribe
                project_id=? con lo que llegue, así que un campo ausente le borraría el proyecto a la
@@ -1512,9 +1523,7 @@ function setVista(v){ document.getElementById('agVista').value=v; agCargar(); }
 function pintaBotonesVista(v){
   ['dia','semana','mes'].forEach(function(x){
     var b=document.getElementById('vb'+x.charAt(0).toUpperCase()+x.slice(1)); if(!b) return;
-    var on = x===v;
-    b.className = 'btn btn-sm ' + (on?'btn-primary':'btn-secondary');
-    b.setAttribute('aria-pressed', on?'true':'false');
+    b.setAttribute('aria-selected', x===v ? 'true' : 'false');
   });
 }
 // Anterior/siguiente en la unidad que se está mirando: un día, una semana o un mes.
@@ -1669,6 +1678,12 @@ function cRellenaComunes(){
   fillSelect(document.getElementById('cProyecto'),META.proyectos.map(p=>({id:p.id,name:(p.codigo||'')+' '+p.nombre})),'id','name','— Ninguno —');
   // Se OCULTA, no se quita (ver el comentario del modal). El select sigue vivo y guardando su valor.
   var pw=document.getElementById('cProyectoWrap'); if(pw) pw.style.display = window.USA_PROYECTOS ? '' : 'none';
+  // EL PUESTO, IGUAL QUE LA PERSONA: solo se pinta si HAY de eso. Un negocio sin sillas/cabinas/boxes
+  // veía un desplegable «Silla» con un único «— Automático —» dentro, y encima era lo ÚNICO que
+  // quedaba en «Más opciones» al ocultarse persona y proyecto: parecía que ahí se elegía QUIÉN atiende.
+  // Si no hay puestos, el motor ya no exige ninguno y no hay nada que elegir.
+  var rw=document.getElementById('cRecursoWrap');
+  if(rw) rw.style.display = (META.recursos && META.recursos.length) ? '' : 'none';
   document.getElementById('cServicios').innerHTML=META.servicios.map(s=>'<label style="font-size:.85rem"><input type="checkbox" class="csvc" value="'+s.id+'" onchange="cServChange()"> '+esc(s.name)+' ('+svcMin(s)+' min)</label>').join('')||'<div style="color:var(--muted);font-size:.85rem;line-height:1.5">Aún no tienes servicios.<br><a href="/admin/citas/servicios" style="color:var(--accent);font-weight:600">＋ Crear o configurar tus servicios →</a></div>';
 }
 function cReset(){
