@@ -60,7 +60,9 @@ export function createVigiaRoutes(db) {
       const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
       const narrado = narrar(detectar(db, { hasPerm: permDe(c), hoy, soloDetector }), sym);
       // PIEZA 5: se ordenan por prioridad (el de más impacto arriba) y se etiqueta cada uno con su grupo.
-      const ordenados = priorizar(narrado.avisos);
+      // PIEZA 3 del peldaño 8: se le pasa el día del barrido para que los avisos de AGENDA —que no
+      // llevan importe— se ordenen por cercanía a hoy y no por tamaño.
+      const ordenados = priorizar(narrado.avisos, narrado.hoy);
       // `?top=N` → solo los N primeros, SIN gráfico: lo usa el bloque de Inicio (compacto, no dibuja).
       const topN = parseInt(c.req.query('top'), 10);
       if (Number.isInteger(topN) && topN > 0) {

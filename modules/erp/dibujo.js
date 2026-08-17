@@ -47,7 +47,22 @@ function receta(area, dimension, medida, grafico, { periodo = 'mes', filtros = n
 // no se puede componer una receta honesta (p. ej. no se pudo resolver el nombre para el filtro).
 const sinGrafico = gap => ({ receta: null, medida: null, meta: null, grafico: null, explica: null, gap });
 
+// PELDAÑO 8 · PIEZA 3 — LOS AVISOS DE AGENDA VAN SIN GRÁFICO, Y SE DICE POR QUÉ. El constructor de
+// analíticas tiene cinco áreas —ventas, compras, clientes, inventario y contabilidad— y NINGUNA sabe
+// expresar citas: no hay dimensión de agenda ni medida de ocupación. Sin área no hay receta honesta, y
+// dibujar la ocupación por libre sería exactamente lo que el vigía tiene prohibido: una cifra que no
+// viene del motor que la posee. Se declaran igualmente, en vez de dejar que caigan en el mensaje
+// genérico de `graficoDe`, para que el hueco quede EXPLICADO y no parezca un olvido. Crear el área de
+// agenda en el constructor es otro encargo (queda anotado en el TABLERO).
+const SIN_AREA_CITAS = 'El constructor de analíticas todavía no tiene un área de agenda, así que este '
+  + 'aviso no lleva gráfico de apoyo. Las cifras salen del motor de citas, que sí es el dueño del dato.';
+
 export const RECETAS = {
+  hueco_perdido:     () => sinGrafico(SIN_AREA_CITAS),
+  fuera_de_ritmo:    () => sinGrafico(SIN_AREA_CITAS),
+  sin_proxima_cita:  () => sinGrafico(SIN_AREA_CITAS),
+  ausencias:         () => sinGrafico(SIN_AREA_CITAS),
+
   caida_facturacion: (h) =>
     receta('ventas', 'fecha', 'base', 'lineas', {
       periodo: 'mes',

@@ -28,6 +28,13 @@ import { clientesDormidos } from './ventas-metrics.js';        // cliente que se
 import { cruzar } from './constructor-analitica.js';           // el motor del constructor (área Ventas)
 import { planFinanciero } from './plan-financiero.js';         // objetivo vs. real
 import { hoyLocal } from './avisos.js';                        // hoy en Europe/Madrid (no en UTC)
+// PELDAÑO 8 · PIEZA 3 — los cuatro detectores de agenda. El cálculo vive en su propio fichero (lee del
+// motor de citas); aquí solo se registran y se les da su permiso, como a los seis de arriba.
+import {
+  huecosQueSePierden, clientesFueraDeRitmo, seFueSinProxima, ausenciasRecientes,
+  clientesConRitmoDeCitas, OCUPACION_FLOJA_PCT, RITMO_FACTOR, RITMO_MIN_CITAS,
+  SIN_PROXIMA_DIAS, AUSENCIA_DIAS, DIAS_VISTA,
+} from './vigia-agenda.js';
 
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
 const DIA = 86400000;
@@ -90,7 +97,17 @@ export const DETECTORES = [
       // `clientesDormidos` ya aplica el ritmo aprendido de cada cliente y devuelve su `motivo`. No se
       // recalcula nada: se marca cada uno que el motor da por dormido. La "cifra" es cuántos días
       // lleva sin comprar (no es dinero) — el importe no es lo relevante aquí, el silencio sí.
-      return clientesDormidos(db, hoy).map(d => ({
+      //
+      // PELDAÑO 8 · PIEZA 3 — LA CESIÓN DE JURISDICCIÓN. Este detector mide por FACTURAS; el nuevo
+      // `fuera_de_ritmo` mide por CITAS ATENDIDAS. En un negocio de agenda que factura cada visita son
+      // la misma persona y casi el mismo mensaje, y sus umbrales NI SIQUIERA COINCIDEN (aquí ×2 con
+      // suelo de 30 días; allí ×1,5 sin suelo): el mismo cliente saldría dos veces diciendo cosas
+      // distintas. Así que todo cliente con ritmo aprendible por citas queda bajo el detector de
+      // citas —haya saltado o no—, y aquí se le retira. Que el motor de citas diga "va en su ritmo" y
+      // este diga "está dormido" a la vez es peor que no avisar. Los clientes que compran sin pedir
+      // cita (mostrador) no tienen historial de citas y siguen vigilados aquí, intactos.
+      const mandaCitas = clientesConRitmoDeCitas(db);
+      return clientesDormidos(db, hoy).filter(d => !mandaCitas.has(d.client_id)).map(d => ({
         area: 'clientes', areaEtiqueta: 'Clientes',
         detector: 'cliente_dormido', detectorEtiqueta: 'Cliente que se duerme',
         titulo: (d.client_name || 'Cliente #' + d.client_id) + ' lleva ' + d.dias_sin_comprar + ' días sin comprar',
@@ -177,6 +194,92 @@ export const DETECTORES = [
         .sort((a, b) => diasEntre(a.fecha, hoy) - diasEntre(b.fecha, hoy));   // lo que antes vence, arriba
     },
   },
+
+  // ══ PELDAÑO 8 · PIEZA 3 — EL VIGÍA APRENDE DE AGENDA ═══════════════════════════════════════════
+  // Cuatro detectores que leen del MOTOR DE CITAS (citas-engine.js, vía vigia-agenda.js), el mismo que
+  // pinta la agenda y la puerta pública. Todos exigen `citas.read` —el permiso de la pantalla que
+  // posee el dato— así que quien no puede ver la agenda no los recibe: ni en la lista, ni en el
+  // texto, ni en el Inicio, y 403 al forzar por URL. Es el mismo mecanismo de los seis de arriba: no
+  // hay código de permisos nuevo.
+  //
+  // NINGUNO LLEVA IMPORTE EN EUROS, y es deliberado: un hueco libre no vale un número hasta que
+  // alguien lo llena, y estimarlo sería inventarse dinero. Su `cifra` es lo que sí se sabe (horas
+  // libres, días sin venir, faltas), con `moneda:false`.
+  {
+    key: 'hueco_perdido', etiqueta: 'Hueco que se va a perder',
+    area: 'agenda', areaEtiqueta: 'Agenda', perm: 'citas.read',
+    correr(db, { hoy }) {
+      return huecosQueSePierden(db, hoy).map(h => ({
+        area: 'agenda', areaEtiqueta: 'Agenda',
+        detector: 'hueco_perdido', detectorEtiqueta: 'Hueco que se va a perder',
+        titulo: 'El ' + h.fecha + ' tienes ' + h.horas_libres + ' h libres (ocupación ' + h.pct + '%)',
+        cifra: h.horas_libres, moneda: false,
+        fecha: h.fecha,
+        motivo: 'Ese día abres ' + Math.round(h.abierto_min / 60 * 10) / 10 + ' h en total y solo hay '
+          + h.pct + '% ocupado (umbral ' + OCUPACION_FLOJA_PCT + '%). Libre: ' + h.detalle + '.',
+        ref: { fecha: h.fecha, horas_libres: h.horas_libres, pct: h.pct, dias_para: h.dias_para,
+               tramos: h.detalle, personas: h.personas.length },
+      }));
+    },
+  },
+  {
+    key: 'fuera_de_ritmo', etiqueta: 'Cliente fuera de su ritmo',
+    area: 'agenda', areaEtiqueta: 'Agenda', perm: 'citas.read',
+    correr(db, { hoy }) {
+      // El ritmo es SUYO: la mediana de días entre sus visitas atendidas. Con menos de 3 visitas no se
+      // inventa ritmo y no hay aviso — un cliente nuevo que tarda tres semanas no es un cliente que se
+      // va, es un cliente del que aún no se sabe nada.
+      return clientesFueraDeRitmo(db, hoy).map(d => ({
+        area: 'agenda', areaEtiqueta: 'Agenda',
+        detector: 'fuera_de_ritmo', detectorEtiqueta: 'Cliente fuera de su ritmo',
+        titulo: (d.client_name || 'Cliente #' + d.client_id) + ' lleva ' + d.dias_sin_venir + ' días sin venir',
+        cifra: d.dias_sin_venir, moneda: false,
+        fecha: d.ultima_visita,
+        motivo: 'Suele venir cada ' + d.ritmo_dias + ' días (mediana de ' + d.visitas
+          + ' visitas) y lleva ' + d.dias_sin_venir + '; el umbral es ×' + RITMO_FACTOR + ' = '
+          + d.umbral_dias + ' días.' + (d.ultimo_servicio ? ' Última vez: ' + d.ultimo_servicio + '.' : ''),
+        ref: { client_id: d.client_id, ritmo_dias: d.ritmo_dias, dias_sin_venir: d.dias_sin_venir,
+               visitas: d.visitas, ultimo_servicio: d.ultimo_servicio, ultima_visita: d.ultima_visita },
+      }));
+    },
+  },
+  {
+    key: 'sin_proxima_cita', etiqueta: 'Se fue sin próxima cita',
+    area: 'agenda', areaEtiqueta: 'Agenda', perm: 'citas.read',
+    correr(db, { hoy }) {
+      return seFueSinProxima(db, hoy).map(d => ({
+        area: 'agenda', areaEtiqueta: 'Agenda',
+        detector: 'sin_proxima_cita', detectorEtiqueta: 'Se fue sin próxima cita',
+        titulo: (d.client_name || 'Cliente #' + d.client_id) + ' vino el ' + d.ultima_visita + ' y no dejó otra cita',
+        cifra: d.dias_desde, moneda: false,
+        fecha: d.ultima_visita,
+        motivo: 'Atendido hace ' + d.dias_desde + ' día' + (d.dias_desde === 1 ? '' : 's')
+          + ' (' + d.ultima_visita + ') y no tiene ninguna cita futura.'
+          + (d.ultimo_servicio ? ' Última vez: ' + d.ultimo_servicio + '.' : ''),
+        ref: { client_id: d.client_id, ultima_visita: d.ultima_visita, dias_desde: d.dias_desde,
+               ultimo_servicio: d.ultimo_servicio },
+      }));
+    },
+  },
+  {
+    key: 'ausencias', etiqueta: 'Faltó a su cita',
+    area: 'agenda', areaEtiqueta: 'Agenda', perm: 'citas.read',
+    correr(db, { hoy }) {
+      // El estado 'no_show' EXISTE en el motor (citas-engine.js · ESTADOS), con su etiqueta y su
+      // transición: esto se LEE, no se deduce. Si no existiera, este detector no estaría aquí.
+      return ausenciasRecientes(db, hoy).map(d => ({
+        area: 'agenda', areaEtiqueta: 'Agenda',
+        detector: 'ausencias', detectorEtiqueta: 'Faltó a su cita',
+        titulo: (d.client_name || 'Cliente #' + d.client_id) + ' faltó ' + d.faltas + ' vez'
+          + (d.faltas === 1 ? '' : 'ces') + ' en los últimos ' + AUSENCIA_DIAS + ' días',
+        cifra: d.faltas, moneda: false,
+        fecha: d.ultima_falta,
+        motivo: 'Marcada' + (d.faltas === 1 ? '' : 's') + ' como "No se presentó" en la agenda; la última, el '
+          + d.ultima_falta + ' (hace ' + d.dias_desde + ' día' + (d.dias_desde === 1 ? '' : 's') + ').',
+        ref: { client_id: d.client_id, faltas: d.faltas, ultima_falta: d.ultima_falta, dias_desde: d.dias_desde },
+      }));
+    },
+  },
 ];
 
 // Caída mes-a-mes de una medida del área Ventas, vía el motor del constructor. Devuelve 0 o 1
@@ -242,7 +345,8 @@ export function detectar(db, { hasPerm = null, hoy = null, soloDetector = null }
 
   return { generado: new Date(Date.parse(dia + 'T00:00:00Z')).toISOString(), hoy: dia,
            total: hallazgos.length, hallazgos, porDetector, sinPermiso,
-           umbrales: { VENCIDA_DIAS_MIN, CAIDA_FACTURACION_PCT, CAIDA_MARGEN_PCT, DESVIO_PLAN_PCT, PAGO_VENCE_DIAS } };
+           umbrales: { VENCIDA_DIAS_MIN, CAIDA_FACTURACION_PCT, CAIDA_MARGEN_PCT, DESVIO_PLAN_PCT, PAGO_VENCE_DIAS,
+                       OCUPACION_FLOJA_PCT, DIAS_VISTA, RITMO_FACTOR, RITMO_MIN_CITAS, SIN_PROXIMA_DIAS, AUSENCIA_DIAS } };
 }
 
 // Catálogo de detectores para la pantalla (sin datos): qué hay y qué permiso pide cada uno.

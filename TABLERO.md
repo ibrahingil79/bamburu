@@ -33,6 +33,11 @@
 > palabras de pantalla y precarga el catálogo de servicios (duraciones reales de España, con fuente
 > anotada). Nada más: no toca el motor, no enciende ni apaga funciones, no quita nada. Los negocios que
 > ya existen quedan en «Otro» y no cambian. **El peldaño 8 sigue ABIERTO.** No se inicia nada sin tu encargo.
+> **PELDAÑO 8 · PIEZA 3 ✅ ENTREGADA (17 ago 2026): EL VIGÍA APRENDE DE AGENDA.** Cuatro detectores
+> nuevos —hueco que se va a perder, cliente fuera de su ritmo, se fue sin próxima cita, y ausencias
+> (el estado `no_show` existía de verdad)— leyendo del motor de citas, sin cifras propias y sin
+> escribir nada. El PASO 0 tumbó el método que pedía el encargo: `huecos()` **no puede** dar ocupación
+> ni horas libres. **El peldaño 8 sigue ABIERTO.**
 > **ENCARGO SUELTO ✅ HECHO (17 ago 2026): AVISOS Y CORREOS.** El resumen por correo deja de ser una
 > tarea fija de las 8:00 al correo del negocio y pasa a ser **de cada persona**: se apaga, se cambia de
 > hora, se recorta por fuente, **filtra por permisos** y cuenta **un parte en frases** en vez de «233
@@ -2698,6 +2703,74 @@ este peldaño añade es la cara propia del sector, no otro motor.
     `test-registro-alta` 26/0, `verify-disa-query-permisos` 43/0, `test-oficio` 94/0, `test-oficio-alta`
     52/0, `gate-oficio-pantalla` 28/0.
   - **De los 21 rojos «previos» del barrido de la pieza 6, DOS eran esto.** Los otros siguen anotados.
+
+- **PIEZA 3 — EL VIGÍA APRENDE DE AGENDA · ✅ ENTREGADA y verificada (17 ago 2026).** Cuatro detectores
+  nuevos en el vigía del peldaño 5, **solo lectura**, texto por plantilla, **sin IA** y **sin una sola
+  cifra propia**: cada número sale del motor de citas, el mismo que pinta la agenda y la puerta pública.
+  **Ni una columna nueva, ni una escritura** (el gate lo demuestra con foto de tablas antes/después).
+  - **EL PASO 0 TUMBÓ EL MÉTODO QUE PEDÍA EL ENCARGO, y era el corazón de la pieza.** Pedía sacar los
+    huecos de `huecos()`, «el mismo motor que pinta la agenda». **No se puede**: `huecos()` responde a
+    otra pregunta —*¿dónde cabe un servicio de X minutos para la persona Y?*— y devuelve minutos de
+    inicio alineados a la rejilla. Necesita una duración (aquí no hay servicio elegido), **sus
+    resultados se solapan** (un bloque libre de 3 h con rejilla de 30 min da 6 inicios, que no son 6
+    horas) y **no coincidiría con la agenda**, que dibuja rango menos citas. Se usan las piezas un
+    escalón más abajo —`tramosPersona` y `ocupacionPersona`, que son las que `huecos()` llama por
+    dentro—, exactamente como ya hizo la vista de mes de la pieza 2 y por el mismo motivo escrito.
+    **Sigue siendo el motor: no hay cálculo paralelo.** Decisión del dueño.
+  - **(A) HUECO QUE SE VA A PERDER** — los próximos 3 días **abiertos** (desde mañana: el hueco de esta
+    mañana ya se perdió) con ocupación **< 60 %**. Dice qué día, cuántas horas y **en qué tramos y de
+    quién**. Grupo **ALTA**: es dinero de mañana y **caduca**.
+  - **(B) CLIENTE FUERA DE SU RITMO** — ritmo propio = **mediana** de días entre visitas atendidas
+    (días distintos: dos citas el mismo día son una visita, la misma lección que ya aprendió el
+    detector de facturas). Con **menos de 3 visitas no se inventa ritmo**. Avisa a **×1,5**, y el texto
+    dice el ritmo real y **qué servicio hizo la última vez**.
+  - **(C) SE FUE SIN PRÓXIMA CITA** — atendido en los últimos 7 días y sin ninguna cita futura viva. Uno
+    por cliente (agrupado en la consulta: no puede repetirse).
+  - **(D) AUSENCIAS — SE CONSTRUYÓ porque el estado EXISTE.** `citas-engine.js` declara
+    `ESTADOS = ['pedida','confirmada','atendida','no_show','anulada']` con su etiqueta «No se presentó»
+    y su transición: **se lee, no se deduce**. Se mide por `citas.fecha` porque no hay sello
+    `no_show_at` — y es el dato correcto de todas formas.
+  - **EL SOLAPE, RESUELTO CEDIENDO JURISDICCIÓN.** El viejo «cliente que se duerme» mide por FACTURAS
+    (×2, suelo de 30 días) y el nuevo por CITAS (×1,5, sin suelo): en un negocio que factura cada visita
+    son la misma persona **con umbrales que ni coinciden** — el mismo cliente saldría dos veces diciendo
+    cosas distintas. Ahora **todo cliente con ritmo aprendible por citas queda bajo el detector de
+    citas, haya saltado o no**, y se le retira del de facturas. El que compra **sin pedir cita**
+    (mostrador) no tiene historial de citas y **sigue vigilado por el viejo, intacto**.
+  - **ORDEN POR PROXIMIDAD (`prioridad.js`, aditivo).** Los avisos de agenda **no llevan importe en
+    euros** —un hueco libre no vale un número hasta que alguien lo llena, y estimarlo sería inventarse
+    dinero—, así que ordenarlos por su `cifra` pondría arriba el día más vacío en vez del más cercano.
+    Dentro de cada grupo: **primero los de importe** (por importe, como siempre), **después los de
+    agenda por distancia a hoy**. Se mide en **valor absoluto**, que vale igual para lo que viene (un
+    hueco de mañana) que para lo que pasó (una visita de hace tres días).
+  - **SI EL NEGOCIO NO USA AGENDA, LOS CUATRO CALLAN**, y no es cortesía: **sin horario configurado el
+    motor abre TODOS los días de 8:00 a 21:00** (`DEFAULT_OPEN`, decisión deliberada de la pieza 5), así
+    que un negocio que jamás toca la agenda tendría 13 h libres por persona y día — el detector A sería
+    una máquina de ruido perpetuo. Guarda doble: sin horario de negocio **Y** sin ninguna cita.
+  - **SIN GRÁFICO, Y SE DICE POR QUÉ.** El constructor tiene cinco áreas (ventas, compras, clientes,
+    inventario, contabilidad) y **ninguna sabe expresar citas**. Se declara la receta «sin gráfico» con
+    ese motivo exacto, en vez de dejar que caiga en el mensaje genérico: el hueco queda **explicado**, no
+    parece un olvido. **No se crea el área de agenda en este encargo** (queda anotado abajo).
+  - **Permisos:** los cuatro exigen `citas.read`, el permiso de la pantalla dueña del dato. Quien no
+    puede ver la agenda no los recibe **ni en la lista, ni en el texto, ni en el Inicio**, se le **dice**
+    qué detectores no puede ver, y forzar por URL da **403**. Cero código de permisos nuevo: es el
+    mecanismo que ya tenían los seis detectores del peldaño 5.
+  - **Verificado:** `gate-vigia-agenda` **41/0**. La primera prueba es la que manda y es la del encargo:
+    **negocio creado de cero → oficio peluquería → catálogo sembrado → citas → los avisos en /admin/vigia
+    y asomando en el Inicio**, sin datos precargados. Y la que de verdad importa: **las horas libres del
+    aviso son idénticas AL MINUTO a las de la agenda** —contrastadas contra `/api/erp/citas/mes`, que es
+    OTRO camino de código llegando al mismo número—, más «meter una cita de 2 h resta exactamente 120
+    min». Cliente cada 5 semanas con 4 → **no avisa**; a las 8 → **sí**; con 2 visitas → **nunca**.
+    Ningún cliente en los dos detectores a la vez. Móvil 390×844 y **0 errores JS**.
+  - **Regresión VERDE en su número exacto** (medida antes y después): test-vigia **37/0** (era 33/0: +4,
+    uno por detector nuevo), gate-vigia-pantalla 13/0, test-citas 39/0, test-enlace-cita 14/0,
+    test-avisos-cita 20/0, test-neto-cero-cita 8/0, test-textos-citas 24/0, test-reserva-publica 130/0,
+    test-coincidencia-huecos 40/0, test-neto-cero-reserva 21/0, gate-citas-pantalla 25/0,
+    gate-reserva-publica-pantalla 51/0, gate-agenda-sencilla 11/0, gate-agenda-calendario 37/0,
+    test-oficio 94/0, test-oficio-alta 52/0, gate-oficio-pantalla 28/0.
+  - **ANOTADO, no construido:** el **área de agenda en el constructor de analíticas** (sin ella estos
+    avisos no pueden llevar gráfico). Y `citas` no guarda **quién** anula: `anulada_at` dice cuándo, no
+    si fue el cliente o el negocio — hoy no hace falta para nada, pero el día que se quiera distinguir
+    «me lo canceló el cliente» de «lo cancelé yo», ese dato **no existe**.
 
 ### ⬜ 9 — Belleza / estética · **3er oficio**
 Agenda + caja del día.

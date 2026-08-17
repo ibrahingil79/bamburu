@@ -99,6 +99,60 @@ export const PLANTILLAS = {
         : `Conviene tener saldo o programar el pago de ${importe} de ${fac}, que vence el ${fecha}.`;
     },
   },
+
+  // ── PELDAÑO 8 · PIEZA 3 — LOS CUATRO DE AGENDA ────────────────────────────────────────────────
+  // Estos avisos NO llevan euros: su `importe` es lo que sí se sabe (horas libres, días, faltas), sin
+  // símbolo de moneda porque `moneda:false`. Se respeta la regla de arriba —las cifras no se calculan
+  // aquí, se ECHAN de lo que ya trajo el vigía—; las que no caben en `importe` viajan en `ref`, que es
+  // exactamente lo que la regla permite. Ninguna frase propone enviar nada a nadie: DISA propone y el
+  // dueño decide, y aquí ni siquiera hay a quién escribir.
+  hueco_perdido: {
+    quePasa: (h, { importe, fecha }) => {
+      const pct = h.ref && h.ref.pct != null ? h.ref.pct : null;
+      return pct == null
+        ? `El ${fecha} te quedan ${importe} horas libres en la agenda.`
+        : `El ${fecha} tu agenda está al ${pct}% y te quedan ${importe} horas libres.`;
+    },
+    decision: (h, { importe, fecha }) => {
+      const tramos = h.ref && h.ref.tramos ? ` Libre: ${h.ref.tramos}.` : '';
+      return `Conviene llenar el ${fecha}: hay ${importe} horas sin reservar y ese día no se repite.${tramos}`;
+    },
+  },
+
+  fuera_de_ritmo: {
+    quePasa: (h, { importe, fecha }) => {
+      const r = (h.ref && h.ref.ritmo_dias) || null;
+      const base = r
+        ? `Este cliente suele venir cada ${r} días y lleva ${importe} sin aparecer.`
+        : `Este cliente lleva ${importe} días sin aparecer, más de lo que acostumbra.`;
+      const serv = h.ref && h.ref.ultimo_servicio ? ` La última vez vino a ${h.ref.ultimo_servicio}.` : '';
+      return base + ` Su última visita fue el ${fecha}.` + serv;
+    },
+    decision: (h, { importe, fecha }) => {
+      const r = (h.ref && h.ref.ritmo_dias) || null;
+      return r
+        ? `Conviene llamarle: viene cada ${r} días y ya lleva ${importe} desde el ${fecha}.`
+        : `Conviene llamarle: lleva ${importe} días desde su última visita, del ${fecha}.`;
+    },
+  },
+
+  sin_proxima_cita: {
+    quePasa: (h, { fecha }) => {
+      const serv = h.ref && h.ref.ultimo_servicio ? ` Vino a ${h.ref.ultimo_servicio}.` : '';
+      return `Este cliente estuvo aquí el ${fecha} y se fue sin dejar la siguiente cita.` + serv;
+    },
+    decision: (h, { fecha }) =>
+      `Conviene proponerle día para la próxima: estuvo el ${fecha} y no tiene ninguna cita puesta.`,
+  },
+
+  ausencias: {
+    quePasa: (h, { importe, fecha }) => {
+      const n = (h.ref && h.ref.faltas) || 0;
+      return `Este cliente no se presentó ${importe} ${n === 1 ? 'vez' : 'veces'} en el último mes; la última, el ${fecha}.`;
+    },
+    decision: (h, { fecha }) =>
+      `Conviene confirmarle la cita antes de reservarle otra vez: la última falta fue el ${fecha}.`,
+  },
 };
 
 // ── VESTIR UN HALLAZGO ────────────────────────────────────────────────────────
