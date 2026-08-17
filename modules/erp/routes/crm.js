@@ -7,6 +7,7 @@ import { escHtml } from '../../../core/escape.js';
 import { sendEmail } from '../../../core/mailer.js';
 import { opportunitySchema, opportunityStageSchema, closeOpportunitySchema, clientActivitySchema } from '../schemas.js';
 import { ENTITY } from '../../../core/activity-entities.js';
+import { exigirCorreoActivo } from '../avisos-preferencias.js';   // interruptor de Ajustes → Avisos y correos
 import {
   ETAPAS, ETAPA_LABEL, ORIGENES, ORIGEN_LABEL, MOTIVOS_PERDIDA, MOTIVO_PERDIDA_LABEL,
   CANALES, CANAL_LABEL, URGENCIA_LABEL,
@@ -163,6 +164,9 @@ export function createCrmRoutes(db) {
   api.post('/clients/:cid/activities', requirePerm('crm.manage'), validate(clientActivitySchema), async c => {
     try {
       const d = c.get('validated');
+      // Interruptor de Ajustes → Avisos y correos: solo cuando la actividad ES un envío de correo
+      // (una nota o un compromiso no mandan nada y no tienen por qué mirar el interruptor).
+      if (d.type === 'email') exigirCorreoActivo(db, 'comercial');
       const r = await registerClientActivitySvc(db, parseInt(c.req.param('cid')), d, { sendEmail, userName: userName(c) });
       const label = d.type === 'email' ? 'Envió email a un cliente'
         : d.type === 'compromiso' ? 'Registró un compromiso con un cliente'

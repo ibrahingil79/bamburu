@@ -12,6 +12,7 @@ import { sendEmail } from '../../../core/mailer.js';
 import { nextCode } from '../codes.js';
 import { clientVentas } from '../ventas-metrics.js';   // PIEZA C: historial = facturas del cliente, no sales_orders viejos
 import { ENTITY } from '../../../core/activity-entities.js';
+import { exigirCorreoActivo } from '../avisos-preferencias.js';   // interruptor de Ajustes → Avisos y correos
 
 // Comprobación reutilizable de NIF duplicado (regla de integridad — sin duplicados).
 // Devuelve el cliente ACTIVO en conflicto (otro id con el mismo fiscal_id normalizado)
@@ -221,6 +222,8 @@ export function createClientRoutes(db, cfg = {}) {
   api.post('/:id/account-actions', requirePerm('cobros.manage'), validate(accountActionSchema), async c => {
     try {
       const input = c.get('validated');
+      // Interruptor de Ajustes → Avisos y correos (ver el gemelo en invoices.js).
+      if (input.type === 'recordatorio_cuenta') exigirCorreoActivo(db, 'cobro_cuenta');
       const res = await registerAccountAction(db, parseInt(c.req.param('id')), input, { sendEmail });
       const label = input.type === 'recordatorio_cuenta' ? 'Envió recordatorio de cuenta'
         : input.type === 'promesa_cuenta' ? 'Registró promesa de cuenta' : 'Registró cobro a cuenta';

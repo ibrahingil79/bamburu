@@ -13,6 +13,15 @@ import {
 // creador de productos se le pasa como argumento (ver el porqué en modules/erp/oficios.js).
 import { OFICIOS, oficioDe, fijarOficio, serviciosQueFaltan, sembrarCatalogo } from '../oficios.js';
 import { createProductSvc } from './products.js';
+// AVISOS Y CORREOS. La preferencia por persona y los interruptores del negocio; el parte lo redacta
+// parte-diario.js y los permisos los resuelve avisos.js — aquí no se calcula ninguna de las dos cosas.
+import {
+  getPref, setPref, FRECUENCIAS, DIAS,
+  CORREOS, CORREOS_SIN_INTERRUPTOR, correoActivo, correoBloqueado, setCorreoActivo,
+} from '../avisos-preferencias.js';
+import { lineas, parteDelDia } from '../parte-diario.js';
+import { permisosDeUsuario, puedeDe } from '../avisos.js';
+import { sendEmail } from '../../../core/mailer.js';
 
 export function createSettingsRoutes(db, cfg = {}) {
   const sym = cfg.sym || '€';
@@ -205,6 +214,117 @@ export function createSettingsRoutes(db, cfg = {}) {
     } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
+  // ════════════════════════════════════════════════════════════════════════════════════════════
+  // AVISOS Y CORREOS — dos bloques, dos candados distintos, y la diferencia importa.
+  //
+  // BLOQUE 1 (mi resumen) va SIN `requirePerm`. Es deliberado y es el corazón del encargo: el resto
+  // de Ajustes exige `company.read`, que en la práctica significa dueño o administrador (`company`
+  // ni siquiera existe en la tabla `permissions`, así que un empleado nunca pasa). Si esta parte
+  // llevara ese candado, un empleado no podría apagar SU PROPIO correo ni usar el enlace del pie —
+  // el correo que recibe él, en su bandeja. Eso no es un ajuste del negocio: es su bandeja.
+  // Cada endpoint solo toca las filas del usuario de la sesión; nadie puede leer ni cambiar la
+  // preferencia de otro, porque el id NO viaja en la petición: se toma de la sesión.
+  //
+  // BLOQUE 2 (los correos a clientes) sí es del negocio → `company.read` para mirar, y
+  // `company.update` para tocar, como el resto de Ajustes.
+  // ════════════════════════════════════════════════════════════════════════════════════════════
+
+  api.get('/avisos/mias', c => {
+    try {
+      const userId = c.get('session')?.userId;
+      const { role, perms } = permisosDeUsuario(db, userId);
+      const puede = puedeDe({ role, perms });
+      const pref = getPref(db, userId);
+      // Solo se le enseñan las fuentes que puede ver: una casilla de algo que tiene prohibido sería
+      // ofrecerle recibir por correo lo que la pantalla le niega.
+      const mias = lineas().filter(l => puede(l.perm));
+      const marcada = id => !pref.fuentes.length || pref.fuentes.includes(id);
+      return c.json({
+        pref: { activo: pref.activo, frecuencia: pref.frecuencia, dia_semana: pref.dia_semana, hora: pref.hora },
+        lineas: mias.map(l => ({ id: l.id, label: l.label, marcada: marcada(l.id) })),
+        email: db.prepare('SELECT email FROM admin_users WHERE id=?').get(userId)?.email || '',
+        frecuencias: FRECUENCIAS, dias: DIAS,
+      });
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+
+  api.put('/avisos/mias', async c => {
+    try {
+      const userId = c.get('session')?.userId;
+      const body = await c.req.json().catch(() => ({}));
+      const pref = setPref(db, userId, body);
+      return c.json({ ok: true, pref });
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 400); }
+  });
+
+  // Cómo se vería HOY su parte. Sirve para que la pantalla no sea un formulario a ciegas: se ve el
+  // resultado de las casillas antes de guardar nada. Y enseña el veredicto de la regla innegociable
+  // ("hoy no habría correo"), calculado por el MISMO `parteDelDia` que decide el envío de verdad.
+  api.get('/avisos/mi-parte', c => {
+    try {
+      const userId = c.get('session')?.userId;
+      const { role, perms } = permisosDeUsuario(db, userId);
+      const pref = getPref(db, userId);
+      const sym = db.prepare('SELECT currency_symbol s FROM company_config WHERE id=1').get()?.s || '€';
+      const parte = parteDelDia(db, { puede: puedeDe({ role, perms }), elegidas: pref.fuentes, sym });
+      return c.json({ n: parte.n, titular: parte.titular, frases: parte.frases.map(f => ({ texto: f.texto, enlace: f.enlace })) });
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+
+  // ── BLOQUE 2 · los correos que el negocio manda a sus clientes ─────────────────────────────────
+  api.get('/avisos/correos', requirePerm('company.read'), c => {
+    try {
+      return c.json({
+        correos: CORREOS.map(x => ({
+          ...x,
+          label: CATALOGO[x.tipo]?.label || x.tipo,
+          descripcion: CATALOGO[x.tipo]?.descripcion || '',
+          activo: correoActivo(db, x.tipo),
+          bloqueo: correoBloqueado(db, x.tipo),
+        })),
+        sinInterruptor: CORREOS_SIN_INTERRUPTOR.map(x => ({ ...x, label: CATALOGO[x.tipo]?.label || x.tipo })),
+        puedeEditar: can(c, 'company.update'),
+      });
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+
+  api.put('/avisos/correos/:tipo', requirePerm('company.update'), async c => {
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      const activo = setCorreoActivo(db, c.req.param('tipo'), !!body.activo, c.get('session')?.userId || null);
+      return c.json({ ok: true, activo });
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 400); }
+  });
+
+  // "MÁNDAME UNA PRUEBA A MÍ" — a la dirección de QUIEN PULSA, sacada de la sesión, nunca de la
+  // petición: si el destinatario viajara en el body, esto sería un formulario para mandar correo a
+  // quien quisieras desde el dominio del negocio. Y con los datos de EJEMPLO de la plantilla, jamás
+  // con los de un cliente real.
+  api.post('/avisos/correos/:tipo/prueba', requirePerm('company.read'), async c => {
+    try {
+      const tipo = c.req.param('tipo');
+      const t = CATALOGO[tipo];
+      if (!t) return c.json({ error: 'Ese correo no existe' }, 404);
+      const userId = c.get('session')?.userId;
+      const yo = db.prepare('SELECT email, name FROM admin_users WHERE id=?').get(userId);
+      const destino = String(yo?.email || '').trim();
+      if (!destino) return c.json({ error: 'Tu usuario no tiene una dirección de correo donde recibir la prueba.' }, 400);
+
+      const tono = t.tonos ? t.tonos[0].clave : TONO_UNICO;
+      const p = plantillaEnVigor(db, tipo, tono);
+      const html = renderPlantilla(p.html, t.ejemplo, { html: true });
+      const subject = '[PRUEBA] ' + renderPlantilla(p.subject, t.ejemplo, { html: false });
+      const company = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
+      const { error } = await sendEmail({
+        from: (company.company_name || 'Bamburu') + ' <noreply@bamburu.com>',
+        to: destino, subject, html, text: htmlAtexto(html),
+        ...(company.email ? { replyTo: company.email } : {}),
+      });
+      if (error) return c.json({ error: 'No hemos podido enviar la prueba. Inténtalo más tarde.' }, 502);
+      return c.json({ ok: true, to: destino });
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+  });
+
   // GUARDAR. Aquí vive la RED DE SEGURIDAD, y es distinta por familia:
   //   · cliente → avisa (200 con `avisos`), pero guarda. Es su voz.
   //   · sistema → BLOQUEA (400) si falta el elemento crítico. No se guarda nada.
@@ -301,6 +421,13 @@ export function createSettingsRoutes(db, cfg = {}) {
           <small style="color:var(--text2);font-size:12px;margin:-8px 0 16px;display:block">Dirección completa: obligatoria para generar la factura electrónica <strong>Facturae</strong>.</small>
           <div class="form-group"><label class="form-label">URL Logo empresa</label><input class="form-control" id="cLogo"></div>
           <button class="btn btn-primary" onclick="saveCompany()">Guardar cambios</button>
+        </div>
+      </div>
+      <div class="card" style="max-width:700px;margin-top:1rem">
+        <div class="card-body">
+          <h3 style="margin:0 0 .3rem;font-size:1rem">Avisos y correos</h3>
+          <p style="color:var(--text2);font-size:13px;margin:0 0 .8rem">Cuándo (y si) quieres tu resumen por correo, qué lleva, y qué correos automáticos salen hacia tus clientes. Aquí se enciende y se apaga; el texto se escribe en Plantillas.</p>
+          <a class="btn btn-secondary" href="/admin/settings/avisos"><i class="ti ti-bell-cog"></i> Avisos y correos</a>
         </div>
       </div>
       <div class="card" style="max-width:700px;margin-top:1rem">
@@ -589,6 +716,241 @@ export function createSettingsRoutes(db, cfg = {}) {
   // deriva DISA los vencimientos fiscales (calendario-fiscal.js). En blanco = no se recuerda nada: por
   // eso el aviso mientras `configured_at` sea NULL. El caso ambiguo (módulos, recargo de equivalencia,
   // otro régimen) NO se deriva: se marca "situación especial" y se anota, para no INVENTAR un modelo.
+  // ── AJUSTES → AVISOS Y CORREOS ────────────────────────────────────────────────────────────────
+  // SIN `requirePerm`, a propósito (ver el porqué largo en la API): el bloque de arriba es la
+  // bandeja de entrada de quien mira, no una configuración del negocio. El de abajo sí lo es, y solo
+  // se pinta para quien tiene `company.read`. Una pantalla, dos audiencias, cada una con lo suyo.
+  views.get('/avisos', c => {
+    const csrf = c.get('session')?.csrfToken || '';
+    const verNegocio = can(c, 'company.read');
+    const puedeEditar = can(c, 'company.update');
+    const content = `
+      <div class="ph"><h2>Avisos y correos</h2>
+        <a class="btn btn-secondary" href="/admin/settings"><i class="ti ti-arrow-left"></i> Volver a Ajustes</a>
+      </div>
+
+      <div class="card" style="margin-bottom:1rem"><div class="card-body">
+        <h3 style="margin:0 0 .2rem;font-size:1.05rem">Lo que Bamburu te cuenta a ti</h3>
+        <p style="color:var(--muted);font-size:.87rem;margin:0 0 1rem">
+          Tu resumen por correo, a tu manera. Es <strong>tuyo</strong>: lo que cambies aquí no afecta a nadie más
+          del negocio, y solo se te cuenta lo que tú puedes ver en pantalla.
+          <span id="avMiEmail"></span>
+        </p>
+
+        <label class="switch-row" style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem">
+          <input type="checkbox" id="avActivo">
+          <span><strong>Recibir el resumen por correo</strong></span>
+        </label>
+
+        <div id="avDetalle">
+          <div class="av-grid">
+            <div class="form-group">
+              <label class="form-label" for="avFrecuencia">Cada cuánto</label>
+              <select class="form-control" id="avFrecuencia">
+                <option value="diaria">Cada día</option>
+                <option value="semanal">Una vez por semana</option>
+              </select>
+            </div>
+            <div class="form-group" id="avDiaBox" style="display:none">
+              <label class="form-label" for="avDia">Qué día</label>
+              <select class="form-control" id="avDia"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="avHora">A qué hora</label>
+              <select class="form-control" id="avHora"></select>
+            </div>
+          </div>
+
+          <div style="margin-top:.4rem">
+            <div class="form-label">Qué quieres que lleve</div>
+            <div id="avLineas" class="av-lineas"><p style="color:var(--muted)">Cargando…</p></div>
+          </div>
+
+          <div class="av-previa" id="avPrevia"></div>
+        </div>
+
+        <div style="margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap">
+          <button class="btn btn-primary" id="avGuardar">Guardar</button>
+        </div>
+        <p style="color:var(--muted);font-size:.8rem;margin:.8rem 0 0">
+          Si un día no hay nada que contar, <strong>no se envía nada</strong>. Ni un correo diciendo que no hay avisos.
+        </p>
+      </div></div>
+
+      ${verNegocio ? `
+      <div class="card"><div class="card-body">
+        <h3 style="margin:0 0 .2rem;font-size:1.05rem">Lo que Bamburu envía a tus clientes</h3>
+        <p style="color:var(--muted);font-size:.87rem;margin:0 0 1rem">
+          Los correos que salen de tu negocio hacia fuera. Aquí se encienden y se apagan;
+          el <strong>texto</strong> de cada uno se cambia en <a href="/admin/settings/plantillas">Plantillas de email</a>.
+          ${puedeEditar ? '' : '<br><strong>Solo lectura:</strong> necesitas permiso de administración de Ajustes para cambiarlos.'}
+        </p>
+        <div id="avCorreos"><p style="color:var(--muted)">Cargando…</p></div>
+      </div></div>` : ''}
+
+      <style>
+        .av-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.8rem}
+        .av-lineas{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.4rem .9rem;margin-top:.4rem}
+        .av-lineas label{display:flex;align-items:center;gap:.5rem;font-size:.9rem;cursor:pointer}
+        .av-previa{margin-top:1rem;padding:.8rem 1rem;border:1px dashed var(--border2);border-radius:10px;background:var(--bg);font-size:.88rem}
+        .av-previa h4{margin:0 0 .4rem;font-size:.8rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+        .av-previa ul{margin:.2rem 0 0;padding-left:1.1rem}
+        .av-previa li{margin:0 0 .3rem}
+        .av-correo{border:1px solid var(--border2);border-radius:12px;padding:.9rem 1rem;margin-bottom:.6rem;background:var(--card)}
+        .av-correo .top{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+        .av-correo h4{margin:0 0 .15rem;font-size:.95rem}
+        .av-correo .quien{color:var(--muted);font-size:.83rem}
+        .av-correo .acciones{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+        .av-bloqueo{margin-top:.5rem;font-size:.82rem;color:#b45309;background:rgba(180,83,9,.08);border-radius:8px;padding:.4rem .6rem}
+        .av-apagado{opacity:.62}
+        .av-etiqueta{font-size:.7rem;font-weight:600;padding:.1rem .45rem;border-radius:5px}
+        .av-auto{color:#047857;background:rgba(16,185,129,.14)}
+        .av-boton{color:#1d4ed8;background:rgba(37,99,235,.12)}
+        @media (max-width:620px){ .av-correo .top{flex-direction:column} }
+      </style>
+      <script>
+      (function(){
+        const HORAS = Array.from({length:24},(_,h)=>h);
+        let LINEAS = [], PREF = null;
+
+        function pintarPref(d){
+          PREF = d.pref; LINEAS = d.lineas;
+          document.getElementById('avActivo').checked = !!d.pref.activo;
+          document.getElementById('avFrecuencia').value = d.pref.frecuencia;
+          const dia = document.getElementById('avDia');
+          dia.innerHTML = d.dias.map(x=>'<option value="'+x.n+'">'+escHtml(x.label)+'</option>').join('');
+          dia.value = String(d.pref.dia_semana);
+          const hora = document.getElementById('avHora');
+          hora.innerHTML = HORAS.map(h=>'<option value="'+h+'">'+String(h).padStart(2,'0')+':00</option>').join('');
+          hora.value = String(d.pref.hora);
+          document.getElementById('avMiEmail').innerHTML = d.email
+            ? 'Te llega a <strong>'+escHtml(d.email)+'</strong>.' : '';
+          document.getElementById('avLineas').innerHTML = d.lineas.length
+            ? d.lineas.map(l=>'<label><input type="checkbox" data-linea="'+escHtml(l.id)+'"'+(l.marcada?' checked':'')+'> '+escHtml(l.label)+'</label>').join('')
+            : '<p style="color:var(--muted)">No tienes permiso para ver ninguna de las fuentes de aviso, así que no hay nada que enviarte.</p>';
+          sincronizar();
+        }
+
+        // El día solo tiene sentido si es semanal, y el detalle entero solo si lo quiere recibir.
+        function sincronizar(){
+          const activo = document.getElementById('avActivo').checked;
+          document.getElementById('avDetalle').style.opacity = activo ? '1' : '.5';
+          document.getElementById('avDetalle').style.pointerEvents = activo ? '' : 'none';
+          document.getElementById('avDiaBox').style.display =
+            document.getElementById('avFrecuencia').value === 'semanal' ? '' : 'none';
+        }
+
+        async function pintarPrevia(){
+          const box = document.getElementById('avPrevia');
+          try {
+            const p = await api('GET','/api/erp/settings/avisos/mi-parte');
+            if (!p.n) {
+              box.innerHTML = '<h4>Tu parte de hoy</h4><p style="margin:0;color:var(--muted)">'
+                + 'Hoy no hay nada que contarte, así que <strong>hoy no te llegaría ningún correo</strong>.</p>';
+              return;
+            }
+            box.innerHTML = '<h4>Tu parte de hoy</h4><ul>'
+              + p.frases.map(f=>'<li>'+escHtml(f.texto)+'</li>').join('') + '</ul>';
+          } catch(e){ box.innerHTML = ''; }
+        }
+
+        async function guardar(){
+          const fuentes = Array.prototype.slice.call(document.querySelectorAll('[data-linea]'))
+            .filter(x=>x.checked).map(x=>x.getAttribute('data-linea'));
+          try {
+            await api('PUT','/api/erp/settings/avisos/mias',{
+              activo: document.getElementById('avActivo').checked,
+              frecuencia: document.getElementById('avFrecuencia').value,
+              dia_semana: Number(document.getElementById('avDia').value),
+              hora: Number(document.getElementById('avHora').value),
+              fuentes,
+            });
+            toast('Guardado ✓');
+            pintarPrevia();
+          } catch(e){ toast(e.message,'err'); }
+        }
+
+        function pintarCorreos(d){
+          const box = document.getElementById('avCorreos');
+          if (!box) return;
+          const etiqueta = x => x.clase === 'automatico'
+            ? '<span class="av-etiqueta av-auto">automático</span>'
+            : '<span class="av-etiqueta av-boton">lo mandas tú</span>';
+          let h = d.correos.map(x =>
+            '<div class="av-correo'+(x.activo?'':' av-apagado')+'">'
+              + '<div class="top"><div>'
+                + '<h4>'+escHtml(x.label)+' '+etiqueta(x)+'</h4>'
+                + '<div class="quien">'+escHtml(x.quien)+'</div>'
+              + '</div><div class="acciones">'
+                + '<button class="btn btn-secondary btn-sm" data-prueba="'+escHtml(x.tipo)+'">Mándame una prueba a mí</button>'
+                + '<label class="switch-row" style="display:flex;align-items:center;gap:.4rem">'
+                  + '<input type="checkbox" data-correo="'+escHtml(x.tipo)+'"'+(x.activo?' checked':'')
+                  + ((!d.puedeEditar || x.bloqueo) ? ' disabled' : '')+'>'
+                  + '<span>'+(x.activo?'Encendido':'Apagado')+'</span>'
+                + '</label>'
+              + '</div></div>'
+              + (x.bloqueo ? '<div class="av-bloqueo">🔒 '+escHtml(x.bloqueo)+'</div>' : '')
+            + '</div>').join('');
+          if (d.sinInterruptor && d.sinInterruptor.length) {
+            h += '<p style="color:var(--muted);font-size:.83rem;margin:.9rem 0 .3rem">'
+               + 'Estos no se pueden apagar, y es a propósito:</p>';
+            h += d.sinInterruptor.map(x =>
+              '<div class="av-correo"><h4>'+escHtml(x.label)+'</h4>'
+              + '<div class="quien">'+escHtml(x.porque)+'</div></div>').join('');
+          }
+          box.innerHTML = h;
+        }
+
+        async function cambiarCorreo(tipo, activo, el){
+          try {
+            await api('PUT','/api/erp/settings/avisos/correos/'+encodeURIComponent(tipo),{activo});
+            toast(activo ? 'Encendido ✓' : 'Apagado ✓');
+            cargarCorreos();
+          } catch(e){ el.checked = !activo; toast(e.message,'err'); }
+        }
+
+        async function mandarPrueba(tipo, btn){
+          const antes = btn.textContent;
+          btn.disabled = true; btn.textContent = 'Enviando…';
+          try {
+            const r = await api('POST','/api/erp/settings/avisos/correos/'+encodeURIComponent(tipo)+'/prueba',{});
+            toast('Prueba enviada a ' + r.to);
+          } catch(e){ toast(e.message,'err'); }
+          btn.disabled = false; btn.textContent = antes;
+        }
+
+        async function cargarCorreos(){
+          if (!document.getElementById('avCorreos')) return;
+          try { pintarCorreos(await api('GET','/api/erp/settings/avisos/correos')); }
+          catch(e){ document.getElementById('avCorreos').innerHTML = '<p style="color:var(--muted)">'+escHtml(e.message)+'</p>'; }
+        }
+
+        // Un solo enganche por delegación: las tarjetas de correo se repintan enteras cada vez que
+        // se toca un interruptor, así que enganchar botón por botón dejaría botones muertos tras el
+        // primer clic (la lección de C4b-1, que costó dos gates).
+        document.addEventListener('click', function(ev){
+          const p = ev.target.closest && ev.target.closest('[data-prueba]');
+          if (p) { mandarPrueba(p.getAttribute('data-prueba'), p); return; }
+          if (ev.target && ev.target.id === 'avGuardar') guardar();
+        });
+        document.addEventListener('change', function(ev){
+          const t = ev.target;
+          if (!t) return;
+          if (t.id === 'avActivo' || t.id === 'avFrecuencia') sincronizar();
+          if (t.hasAttribute && t.hasAttribute('data-correo')) cambiarCorreo(t.getAttribute('data-correo'), t.checked, t);
+        });
+
+        (async function(){
+          try { pintarPref(await api('GET','/api/erp/settings/avisos/mias')); }
+          catch(e){ toast(e.message,'err'); }
+          pintarPrevia();
+          cargarCorreos();
+        })();
+      })();
+      </script>`;
+    return c.html(adminLayout('Avisos y correos', content, 'settings', csrf, c));
+  });
+
   views.get('/situacion-fiscal', requirePerm('company.read'), c => {
     const csrf = c.get('session')?.csrfToken || '';
     const puedeEditar = can(c, 'company.update');

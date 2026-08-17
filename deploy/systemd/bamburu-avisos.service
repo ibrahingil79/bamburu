@@ -1,5 +1,5 @@
 [Unit]
-Description=Bamburu — resumen diario de avisos por email (cobros vencidos, pagos, stock, recurrentes)
+Description=Bamburu — resumen por email: el parte del negocio, por persona y a su hora
 Documentation=file:///home/ubuntu/bamburu/deploy/systemd/README.md
 After=network-online.target
 Wants=network-online.target

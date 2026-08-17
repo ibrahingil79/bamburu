@@ -254,6 +254,47 @@ export const PERM_POR_FUENTE = {
   reserva_publica:       'citas.read',
 };
 
+// ── EL MISMO PERMISO, TAMBIÉN FUERA DE UNA PETICIÓN ─────────────────────────────────────────────
+// `fuentesPermitidas(c)` (layout.js) resuelve esto desde el CONTEXTO de Hono — `c.get('isOwner')`,
+// `c.get('userPerms')`—, y eso sirve a la campana pero NO al cron del correo, que no tiene contexto:
+// abre ficheros .db y recorre usuarios. La tentación era escribir allí "el mismo" filtro; sería un
+// SEGUNDO sistema de permisos, y el día que alguien añada una fuente, uno de los dos se queda atrás.
+//
+// Así que la decisión de quién ve qué se queda AQUÍ, en dos funciones puras que no saben de HTTP, y
+// `fuentesPermitidas(c)` pasa a ser un envoltorio que les pasa lo que sacó del contexto. Mismo
+// PERM_POR_FUENTE, misma respuesta, un solo sitio que cambiar. Es la forma que ya usa `datosNativos`
+// del Inicio, que recibe `puede` como función en vez de un contexto.
+//
+// Regla del dueño y del admin: pasan siempre, igual que en `can()` de layout.js y en `requirePerm`.
+export function puedeDe({ role, perms }) {
+  const esJefe = role === 'owner' || role === 'admin';
+  const lista = perms || [];
+  return perm => esJefe || lista.includes(perm);
+}
+
+export function fuentesDe({ role, perms }) {
+  const puede = puedeDe({ role, perms });
+  const s = new Set();
+  for (const [tipo, perm] of Object.entries(PERM_POR_FUENTE)) if (puede(perm)) s.add(tipo);
+  return s;
+}
+
+// Rol + permisos de un usuario LEÍDOS DE LA BD, con la MISMA consulta que monta `c.get('userPerms')`
+// en core/auth.js. Un usuario inactivo o inexistente devuelve rol vacío y cero permisos → cero
+// fuentes: falla cerrado, como todo lo demás de este fichero.
+export function permisosDeUsuario(db, userId) {
+  let role = '', perms = [];
+  try {
+    const u = db.prepare('SELECT role FROM admin_users WHERE id=? AND active=1').get(userId);
+    if (!u) return { role: '', perms: [] };
+    role = u.role || '';
+    perms = db.prepare(`SELECT p.module, p.action FROM user_permissions up
+                        JOIN permissions p ON up.permission_id = p.id
+                       WHERE up.admin_user_id = ?`).all(userId).map(p => p.module + '.' + p.action);
+  } catch { return { role: '', perms: [] }; }
+  return { role, perms };
+}
+
 // Fuentes registradas. Añadir una fuente = escribir la función, registrarla aquí y darle su permiso
 // en PERM_POR_FUENTE. Sin permiso declarado, la fuente NO se sirve a nadie (falla cerrado).
 const SOURCES = [
@@ -323,8 +364,23 @@ export function avisosEmail(ctx) {
       + '<table style="border-collapse:collapse;width:100%;background:#f9fafb;border-radius:8px">' + rows + '</table>');
   }
 
+  // EL PARTE manda; la lista de avisos pasa a ser el respaldo. Quien llama (el cron, la vista previa
+  // de la pantalla) trae el parte ya redactado por parte-diario.js — no se importa desde aquí porque
+  // ese módulo importa este, y el círculo dejaría a medio cargar justo lo que la campana necesita.
+  //
+  // Si NO llega parte, esto sigue construyendo un correo válido con lo que hay (la lista de avisos y
+  // un titular sacado de los conteos). Eso mantiene la función utilizable a solas, que es como la
+  // usan las pruebas del motor, y evita que un fallo al calcular el parte deje un correo sin cuerpo.
+  const titular = ctx.titular || groups.slice(0, 2).map(g => g.frase).join(' · ');
+  const cuerpo = ctx.parteHtml || bloquesHtml.join('');
+
   const vars = {
     empresa: (company && company.company_name) || 'tu negocio',
+    parte: { esHtml: true, valor: cuerpo },
+    titular,
+    ajustes: ctx.ajustesUrl || 'https://bamburu.com',
+    // Huecos de la versión anterior, rellenados igual que siempre: una plantilla personalizada que
+    // todavía use {{n}}, {{resumen}} o {{avisos}} sigue saliendo entera.
     n: String(n),
     resumen: groups.map(g => g.frase).join('; '),
     avisos: { esHtml: true, valor: bloquesHtml.join('') },

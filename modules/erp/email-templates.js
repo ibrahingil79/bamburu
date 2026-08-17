@@ -412,30 +412,45 @@ export const CATALOGO = {
 
   resumen_avisos: {
     familia: FAMILIA_SISTEMA,
-    label: 'Tu resumen diario',
-    descripcion: 'El correo que TE llega a ti cada mañana con lo urgente del día. El bloque {{avisos}} es la lista: si lo quitas, el correo llega vacío de contenido.',
+    label: 'Tu resumen',
+    descripcion: 'El correo que TE llega a ti con el parte del negocio: qué pasa hoy, en frases, con enlace a cada cosa. Cuándo llega (o si no llega) lo decides en Ajustes → Avisos y correos. El bloque {{parte}} es el parte: si lo quitas, el correo llega vacío de contenido.',
     tonos: null,
     huecos: [
       { clave: 'empresa', label: 'Tu negocio' },
-      { clave: 'n', label: 'Nº de avisos' },
-      { clave: 'resumen', label: 'Resumen en una frase' },
-      { clave: 'avisos', label: 'La lista de avisos', esHtml: true, bloque: true, critico: true },
+      { clave: 'parte', label: 'El parte del día', esHtml: true, bloque: true, critico: true },
+      { clave: 'titular', label: 'El titular (para el asunto)' },
+      { clave: 'ajustes', label: 'Enlace para cambiar o dejar de recibirlo' },
+      // Huecos de la versión anterior (cuando el correo era un RECUENTO). Se conservan y se siguen
+      // rellenando: si alguien había reescrito esta plantilla con {{n}} o {{avisos}}, su texto sigue
+      // funcionando el día que actualice. Quitarlos habría dejado su correo con agujeros vacíos.
+      { clave: 'n', label: 'Nº de avisos (versión anterior)' },
+      { clave: 'resumen', label: 'Resumen en una frase (versión anterior)' },
+      { clave: 'avisos', label: 'La lista de avisos (versión anterior)', esHtml: true, bloque: true },
     ],
     requeridos: [],
-    criticos: ['avisos'],
-    motivoCritico: 'Sin la lista de avisos, el resumen diario llega VACÍO: no te enterarías de nada de lo urgente.',
+    criticos: ['parte'],
+    motivoCritico: 'Sin el parte, el resumen llega VACÍO: no te enterarías de nada de lo que pasa hoy.',
     ejemplo: {
-      empresa: 'Tu Negocio', n: '3', resumen: '2 cobros vencidos; 1 producto con stock bajo',
+      empresa: 'Tu Negocio', n: '3', titular: '6 citas hoy · 380,00 € vencidos',
+      resumen: '2 cobros vencidos; 1 producto con stock bajo',
+      ajustes: 'https://tunegocio.bamburu.com/admin/settings/avisos',
+      parte: { esHtml: true, valor: '<ul style="padding-left:1.1rem;margin:16px 0;line-height:1.5"><li style="margin:0 0 10px"><a href="#" style="color:#1f2937;text-decoration:none">Hoy tienes 6 citas, de 9:00 a 19:30. <span style="color:#2563eb">→</span></a></li><li style="margin:0 0 10px"><a href="#" style="color:#1f2937;text-decoration:none">Te deben 1.240,00 €, de los que 380,00 € están vencidos. <span style="color:#2563eb">→</span></a></li><li style="margin:0 0 10px"><a href="#" style="color:#1f2937;text-decoration:none">2 personas esperan que apruebes su reserva. <span style="color:#2563eb">→</span></a></li></ul>' },
       avisos: { esHtml: true, valor: '<p style="margin:16px 0 6px;font-weight:700">Facturas de cliente vencidas (2)</p><table style="border-collapse:collapse;width:100%;background:#f9fafb;border-radius:8px"><tr><td style="padding:6px 8px;font-weight:600">María García</td><td style="padding:6px 8px;color:#b42318">F2026-0042 · 363,00 € · 12 días</td></tr></table>' },
     },
     fabrica: {
       _: {
-        subject: 'Bamburu · {{n}} avisos que requieren tu atención',
-        html: MARCO('<p>Hola,</p>'
-          + '<p>Buenos días. Esto es lo que requiere tu atención hoy: {{resumen}}.</p>'
-          + '{{avisos}}'
-          + '<p style="margin-top:16px"><a href="https://bamburu.com" style="color:#2563eb">Entra en Bamburu</a> para gestionarlos.</p>'
-          + '<p style="margin-top:24px;color:#6b7280;font-size:.85rem">Un saludo,<br>Bamburu (por {{empresa}})</p>'),
+        // EL ASUNTO LLEVA LA NOTICIA. Antes decía "{{n}} avisos que requieren tu atención", y con 233
+        // avisos eso no es un asunto: es el tamaño del montón. Ahora se lee entero en la notificación
+        // del móvil sin abrir nada: "Tu negocio hoy · 6 citas hoy · 380,00 € vencidos".
+        subject: 'Tu negocio hoy · {{titular}}',
+        html: MARCO('<p>Buenos días.</p>'
+          + '<p>Esto es lo que pasa hoy en {{empresa}}:</p>'
+          + '{{parte}}'
+          + '<p style="margin-top:24px;color:#6b7280;font-size:.85rem">Un saludo,<br>Bamburu (por {{empresa}})</p>'
+          // El pie que pedía el encargo: quien recibe esto puede cambiarlo o dejar de recibirlo desde
+          // el propio correo, en un toque. Un aviso que no se puede apagar desde donde llega no es un
+          // aviso, es correo no deseado.
+          + '<p style="margin-top:16px;color:#9ca3af;font-size:.78rem"><a href="{{ajustes}}" style="color:#9ca3af">Cambiar o dejar de recibir estos avisos</a></p>'),
       },
     },
   },

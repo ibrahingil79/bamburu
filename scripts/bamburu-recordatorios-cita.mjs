@@ -24,7 +24,13 @@ const HOY = hoyLocal();
 const MANANA = new Date(Date.parse(HOY + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10);
 const log = (m) => console.log('[recordatorios-cita] ' + m);
 
+// CITAS_DB = un solo negocio, para pruebas y gates. Es el mismo seguro que ya tenía AVISOS_DB en
+// bamburu-avisos.mjs, y aquí hace falta por una razón concreta: sin él, un gate que quiera
+// comprobar el interruptor del recordatorio tendría que ejecutar este cron sobre TODOS los
+// negocios —incluidos los de verdad— y le mandaría recordatorios a clientes reales. Un gate no
+// puede escribirle a nadie.
 function tenantDbs() {
+  if (process.env.CITAS_DB) return [process.env.CITAS_DB];
   try { return readdirSync(TENANTS_DIR).filter(f => f.endsWith('.db')).map(f => join(TENANTS_DIR, f)); }
   catch { return []; }
 }

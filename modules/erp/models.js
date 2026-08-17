@@ -2865,5 +2865,58 @@ Sé preciso con los números y siempre redondea correctamente.`,
   db.exec(`CREATE INDEX IF NOT EXISTS idx_client_activities_client ON client_activities(client_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_client_activities_opp    ON client_activities(opportunity_id)`);
 
+  // ── AVISOS Y CORREOS — el dueño manda sobre su bandeja de entrada (aditivo, sin DROP) ───────────
+  //
+  // TRES TABLAS NUEVAS Y NINGUNA COLUMNA RENOMBRADA. `daily_alert_log` se queda EXACTAMENTE como
+  // está: su clave primaria es `fecha` a secas, así que no admite una fila por persona, y recrearla
+  // para ampliarle la clave sería destruir datos. Se le deja su trabajo de siempre (la marca del
+  // negocio) y la idempotencia POR PERSONA se lleva a `resumen_envios`.
+
+  // (1) La preferencia de CADA PERSONA sobre el resumen que recibe. LA AUSENCIA DE FILA ES EL
+  // DEFECTO —activado, cada día, a las 8:00, todas sus fuentes—, así que esta migración no siembra
+  // una fila por usuario ni deja a nadie sin correo el primer día: quien no ha tocado nada, sigue
+  // igual. `fuentes` vacío = "todas las que pueda ver"; si el usuario recorta, aquí se guarda la
+  // lista elegida, pero el permiso manda igual al enviar (una fuente marcada que ya no puede ver
+  // NO se le manda). El filtro es una intersección, nunca una puerta trasera.
+  db.exec(`CREATE TABLE IF NOT EXISTS avisos_pref_usuario (
+    admin_user_id INTEGER PRIMARY KEY,
+    activo      INTEGER NOT NULL DEFAULT 1,          -- 0 = no quiere el resumen por correo
+    frecuencia  TEXT    NOT NULL DEFAULT 'diaria',   -- 'diaria' | 'semanal'
+    dia_semana  INTEGER NOT NULL DEFAULT 1,          -- 1=lunes … 7=domingo (ISO); solo si 'semanal'
+    hora        INTEGER NOT NULL DEFAULT 8,          -- 0..23, hora local del negocio (Europe/Madrid)
+    fuentes     TEXT    NOT NULL DEFAULT '',         -- '' = todas; si no, tipos separados por comas
+    updated_at  TEXT    DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (admin_user_id) REFERENCES admin_users(id)
+  )`);
+
+  // (2) IDEMPOTENCIA POR PERSONA Y CONSTANCIA DE QUE SE EVALUÓ. Una fila por día y persona, con
+  // UNIQUE(fecha, admin_user_id): dos pasadas del temporizador a la misma hora no pueden mandar dos
+  // correos. Y se escribe TAMBIÉN cuando no se envía (`enviado=0` + motivo), que es justo lo que
+  // hoy no queda registrado: un día sin avisos era indistinguible de un día en que el cron no corrió.
+  db.exec(`CREATE TABLE IF NOT EXISTS resumen_envios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha         DATE    NOT NULL,                  -- AAAA-MM-DD local del negocio
+    admin_user_id INTEGER NOT NULL,
+    enviado       INTEGER NOT NULL DEFAULT 0,        -- 1 = salió el correo · 0 = se evaluó y no salió
+    motivo        TEXT    NOT NULL DEFAULT '',       -- enviado | sin_nada_que_contar | apagado | no_toca | sin_email | error
+    lineas        INTEGER NOT NULL DEFAULT 0,        -- cuántas frases llevaba el parte
+    sent_at       TEXT    DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (fecha, admin_user_id)
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_resumen_envios_fecha ON resumen_envios(fecha)`);
+
+  // (3) Los correos AUTOMÁTICOS y de botón que el negocio manda a sus clientes, encendidos o
+  // apagados. Otra vez: LA AUSENCIA DE FILA ES "ENCENDIDO". Ningún negocio deja de enviar nada por
+  // actualizar; lo que gana es poder apagarlo. `recordatorio_cita` NO vive aquí — su interruptor de
+  // verdad es `company_config.cita_modo_recordatorio`, que ya existía y nace apagado; duplicarlo
+  // habría creado dos mandos para una sola cosa (y el nuevo, encendido, habría empezado a mandar
+  // recordatorios que hoy no se mandan).
+  db.exec(`CREATE TABLE IF NOT EXISTS email_tipo_pref (
+    tipo       TEXT PRIMARY KEY,                     -- id del CATALOGO de email-templates.js
+    activo     INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_by INTEGER
+  )`);
+
   console.log('✅ ERP: Migraciones completadas');
 }

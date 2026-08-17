@@ -13,6 +13,7 @@ import { activeWarehouses } from './warehouses.js';
 import { sendEmail } from '../../../core/mailer.js';
 import { ENTITY } from '../../../core/activity-entities.js';
 import { jsonForScript } from '../../../core/escape.js';
+import { exigirCorreoActivo } from '../avisos-preferencias.js';   // interruptor de Ajustes → Avisos y correos
 
 // ════════════════════════════════════════════════════════════════════════════
 // C1.a — ORDEN DE COMPRA como documento. Es un PEDIDO al proveedor: aquí NO se
@@ -198,6 +199,8 @@ export function anularYRehacerSvc(db, id, motivo, opts = {}) {
 // → se chequea error. Es una acción que pulsa el usuario (confirm-first), nunca
 // automática. opts.sendEmail se inyecta (mock en tests).
 export async function emailPurchaseOrderSvc(db, id, opts = {}) {
+  // Interruptor de Ajustes → Avisos y correos (ver el gemelo en quotes.js).
+  exigirCorreoActivo(db, 'orden_compra');
   const o = getOrder(db, id);
   if (!o) { const e = new Error('Orden no encontrada'); e.status = 404; throw e; }
   if (o.status !== 'enviada') { const e = new Error('Solo se puede enviar por email una orden enviada'); e.status = 400; throw e; }

@@ -14,6 +14,7 @@ import { sendEmail } from '../../../core/mailer.js';
 import { createPedidoSvc } from './pedidos.js';   // PIEZA 2a: presupuesto → pedido (motor de conversión)
 import { ENTITY } from '../../../core/activity-entities.js';
 import { jsonForScript } from '../../../core/escape.js';
+import { exigirCorreoActivo } from '../avisos-preferencias.js';   // interruptor de Ajustes → Avisos y correos
 
 // ════════════════════════════════════════════════════════════════════════════
 // PILAR 4 · VENTAS · PIEZA 1 — PRESUPUESTO + MOTOR DE CONVERSIÓN.
@@ -233,6 +234,9 @@ export function convertQuoteSvc(db, id, dest) {
 // EMAIL AL CLIENTE: solo un emitido y solo si el cliente tiene email. Confirm-first (lo pulsa el
 // usuario). Resend devuelve {data,error} sin lanzar. opts.sendEmail se inyecta (mock en tests).
 export async function emailQuoteSvc(db, id, opts = {}) {
+  // Interruptor de Ajustes → Avisos y correos. Va lo primero, ANTES de generar el PDF: si este
+  // correo está apagado, no tiene sentido gastar el render para acabar sin enviarlo.
+  exigirCorreoActivo(db, 'presupuesto');
   const q = db.prepare('SELECT * FROM quotes WHERE id=?').get(id);
   if (!q) { const e = new Error('Presupuesto no encontrado'); e.status = 404; throw e; }
   if (q.status !== 'emitido') { const e = new Error('Solo se puede enviar por email un presupuesto emitido'); e.status = 400; throw e; }

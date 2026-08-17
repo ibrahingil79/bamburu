@@ -168,7 +168,14 @@ console.log('8. avisosDelDia + avisosEmail');
   const avs = avisosDelDia(db, TODAY);
   eq(avs.length, 1, 'una factura vencida → 1 aviso');
   const tpl = avisosEmail({ avisos: avs, company: { company_name: 'Esencias SL', currency_symbol: '€' } });
-  ok(/1 aviso /.test(tpl.subject), 'el asunto refleja 1 aviso');
+  // EL ASUNTO YA NO ES UN RECUENTO. Antes decía "Bamburu · {{n}} avisos que requieren tu atención",
+  // y este test esperaba "1 aviso " mientras la plantilla escribía "1 avisos": llevaba en rojo desde
+  // entonces por una 's'. El encargo de "avisos y correos" (17 ago 2026) reescribió el asunto para
+  // que lleve LA NOTICIA —lo único que se lee en la notificación del móvil sin abrir nada—, así que
+  // lo que hay que comprobar cambia: que el asunto diga QUÉ pasa, no CUÁNTAS cosas pasan.
+  ok(/^Tu negocio hoy · /.test(tpl.subject), 'el asunto abre con el parte, no con un recuento: ' + JSON.stringify(tpl.subject));
+  ok(/1 vencimiento de proveedor|proveedor/i.test(tpl.subject), 'y el asunto nombra la noticia concreta');
+  ok(!/\d+ avisos\b/.test(tpl.subject), 'el asunto ya NO cuenta "N avisos" (era el rojo previo: decía "1 avisos")');
   ok(tpl.text.includes(avs[0].titulo) && tpl.html.includes('Esencias'), 'el cuerpo lista el aviso y el negocio');
   db.close();
 }
@@ -182,8 +189,11 @@ console.log('13. Email unificado (bloques por fuente)');
   addLowProduct(db, { stock: 2 }); addLowProduct(db, { stock: 0 });   // 2 stock bajo
   const avs = avisosDelDia(db, TODAY);
   const tpl = avisosEmail({ avisos: avs, company: { company_name: 'X', currency_symbol: '€' } });
-  // El email cuenta EXACTAMENTE lo mismo que el flag (misma fuente avisosDelDia).
-  ok(/3 avisos/.test(tpl.subject), 'el email cuenta los 3 avisos = lo que dice el flag');
+  // El email cuenta EXACTAMENTE lo mismo que el flag (misma fuente avisosDelDia). Lo que cambia con
+  // el encargo de "avisos y correos" es DÓNDE se comprueba: el conteo por fuente sigue viviendo en
+  // el cuerpo (los bloques de abajo), y el asunto pasa a llevar el titular. Las cifras son las mismas.
+  ok(/Tu negocio hoy/.test(tpl.subject), 'el asunto lleva el parte');
+  eq(avs.length, 3, 'el flag y el email parten de los mismos 3 avisos');
   ok(/Facturas de proveedor.*\(1\)/.test(tpl.text) && /Productos bajo su mínimo de stock \(2\)/.test(tpl.text), 'el email lleva LOS DOS bloques con sus conteos (1 / 2)');
   ok(tpl.html.includes('Facturas de proveedor') && tpl.html.includes('Productos bajo su mínimo de stock'), 'el HTML también muestra ambos bloques');
 

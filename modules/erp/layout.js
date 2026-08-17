@@ -1,6 +1,6 @@
 import { getDisaWidget } from '../disa/widget.js';
 import { escHtml } from '../../core/escape.js';
-import { estadoAvisos, hoyLocal, PERM_POR_FUENTE } from './avisos.js';
+import { estadoAvisos, hoyLocal, fuentesDe } from './avisos.js';
 import { contarPropuestasPendientes, tiposVisiblesPara } from './propuestas.js';   // D5 — badge de Propuestas de DISA
 import { contarAvisosPendientes } from './citas-avisos.js';   // AGENDA SENCILLA §2.3 — contador de avisos pendientes
 import { vocabulario } from './oficios.js';                   // PASO 8 — fuente ÚNICA de las palabras de pantalla
@@ -227,10 +227,13 @@ export function can(c, perm) {
 // Qué FUENTES de avisos puede ver este usuario. Cada fuente exige el mismo permiso que su pantalla
 // de origen (PERM_POR_FUENTE), así que un aviso nunca es una puerta trasera a datos que la pantalla
 // te niega. Falla cerrado: una fuente sin permiso declarado no se sirve a nadie.
+//
+// El CÁLCULO vive en avisos.js (`fuentesDe`), no aquí: el correo diario necesita exactamente esta
+// respuesta y no tiene contexto de Hono del que sacarla. Aquí solo se traduce el contexto a los dos
+// datos que hacen falta —rol y lista de permisos—, que es lo único que esta función sabe y el cron no.
 export function fuentesPermitidas(c) {
-  const s = new Set();
-  for (const [tipo, perm] of Object.entries(PERM_POR_FUENTE)) if (can(c, perm)) s.add(tipo);
-  return s;
+  const role = c.get('isOwner') ? 'owner' : (c.get('isAdmin') ? 'admin' : (c.get('session')?.role || ''));
+  return fuentesDe({ role, perms: c.get('userPerms') || [] });
 }
 
 export function adminLayout(title, content, active = '', csrfToken = '', c = null, hideDisaSidebar = false) {

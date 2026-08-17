@@ -32,7 +32,14 @@
 > el negocio se elige entre SEIS oficios y la agenda habla su idioma desde el primer minuto: cambia las
 > palabras de pantalla y precarga el catálogo de servicios (duraciones reales de España, con fuente
 > anotada). Nada más: no toca el motor, no enciende ni apaga funciones, no quita nada. Los negocios que
-> ya existen quedan en «Otro» y no cambian. **El peldaño 8 sigue ABIERTO.** No se inicia nada sin tu encargo. El **Backlog** de abajo NO
+> ya existen quedan en «Otro» y no cambian. **El peldaño 8 sigue ABIERTO.** No se inicia nada sin tu encargo.
+> **ENCARGO SUELTO ✅ HECHO (17 ago 2026): AVISOS Y CORREOS.** El resumen por correo deja de ser una
+> tarea fija de las 8:00 al correo del negocio y pasa a ser **de cada persona**: se apaga, se cambia de
+> hora, se recorta por fuente, **filtra por permisos** y cuenta **un parte en frases** en vez de «233
+> avisos». Y cada correo automático o de botón que sale hacia los clientes gana su interruptor (con la
+> confirmación de reserva **bloqueada** mientras la puerta pública esté encendida). Ver su ficha en
+> «Función por encargo del dueño». Descubrimiento del PASO 0: **`company_config.email` estaba vacío en
+> 6 de 7 negocios**, así que el correo diario solo llegaba a uno. El **Backlog** de abajo NO
 > compite con la escalera: es lo que le falta a El Suelo (el umbral) más la deuda. Plan del Eje C
 > cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
@@ -1288,6 +1295,84 @@ toca el hash de facturas, ni el stock, ni la lógica de los motores que ya calcu
   diagnóstico; ahora que existe `window.bellSync` es un `fetch` por pantalla) · fuente de **CRM** en riesgo ·
   coste de `estadoAvisos()` en cada render (4,05 ms con 72 facturas, de los que 3,06 ms son `openDebts()`;
   es lineal en nº de facturas y `layout.js` lo llama en TODA página admin).
+
+### Avisos y correos — que el dueño mande sobre su bandeja de entrada  ✅ HECHO (2026-08-17)
+Encargo expreso del dueño. Cierra los dos cabos que dejó abiertos el correo diario del 9-jul y las
+plantillas editables del 14-jul: **el resumen no se podía apagar, ni mover de hora, ni recortar, ni
+filtraba por permisos** (iba al correo del NEGOCIO), y **ningún correo automático tenía interruptor**.
+Aditivo: tres tablas nuevas, ni un DROP, ninguna columna renombrada.
+
+- **EL PASO 0 TUMBÓ CUATRO SUPOSICIONES DEL ENCARGO, y las cuatro cambiaron el plan:**
+  1. **No existe una fuente de «vencimientos fiscales».** Las 7 fuentes reales son `envio_verifactu`,
+     `vencimiento_proveedor`, `cobro_vencido`, `cliente_en_riesgo`, `stock_bajo`, `factura_recurrente`
+     y `reserva_publica`. La séptima que se creía fiscal es **Verifactu**, y no avisa de plazos con
+     Hacienda: avisa de que **un envío concreto a la AEAT falló**. Avisos de plazos fiscales **no
+     existen** y serían función nueva.
+  2. **El correo vacío ya no salía.** `bamburu-avisos.mjs:59` ya cortaba con cero avisos —comprobado
+     ejecutándolo, no leyéndolo—. Lo que faltaba era **constancia de que se evaluó**: un día sin avisos
+     y un día en que el cron no llegó a correr se veían **exactamente igual** desde fuera.
+  3. **`fuentesPermitidas(c)` NO era reutilizable «tal cual»**: lee del CONTEXTO de Hono y el cron no
+     tiene contexto. Se extrajo el cálculo a `fuentesDe({role, perms})` + `permisosDeUsuario(db, id)`
+     en `avisos.js`, y `layout.js` **delega**. Un solo sistema de permisos, no dos.
+  4. **No son 8 tipos / 18 variantes: son 10 / 20** (la pieza 5 añadió confirmación y recordatorio de
+     cita). Y la «variante» es **el tono del mismo correo** (amable/firme/formal/última), que elige
+     quien envía → **el interruptor va por TIPO**, como se pedía.
+- **EL HALLAZGO QUE MÁS CAMBIÓ LA TAREA: `company_config.email` está VACÍO en 6 de los 7 negocios.**
+  El correo diario solo podía llegar a **uno**. `admin_users.email` es la identidad de login y existe
+  en el **100 %** de los usuarios. Así que el destinatario **se invierte**: va a la dirección personal
+  siempre, y el correo del negocio queda como respaldo **solo del dueño** y **se reporta** cuando se
+  usa. Al encender esto, `helados-ibrahin` recibió su primer parte: llevaba meses con avisos que no
+  veía nadie.
+- **BLOQUE 1 · lo que Bamburu te cuenta a ti** (`avisos_pref_usuario`, **la ausencia de fila es el
+  defecto**: activado, cada día, 8:00, todas las fuentes → nadie deja de recibir por la migración).
+  Interruptor maestro, diaria/semanal con día, hora, y casillas por fuente **de las que puede ver**.
+  El filtro es una **intersección** con el permiso VIVO: una casilla marcada de algo que ya no puede
+  ver no se le manda.
+- **EL CONTENIDO PASA DE RECUENTO A PARTE** (`parte-diario.js`). Decía «233 avisos que requieren tu
+  atención» —que no es información, es el tamaño del montón—; ahora dice *«Te deben 1.240,00 €, de los
+  que 380,00 € están vencidos. 2 personas esperan que apruebes su reserva»*, con **enlace directo a
+  cada cosa**. Las cifras salen del **mismo `avisosDelDia`** que la campana: cero criterios nuevos.
+  Dos frases NO son avisos —**la agenda del día y la deuda total**— y se leen de `citas` y de
+  `openDebts()`, **solo lectura, autorizado por el dueño**: sin ellas «380 € vencidos» es media noticia.
+  **Y el asunto lleva la noticia** (`Tu negocio hoy · 6 citas hoy · 380,00 € vencidos`): es lo único
+  que se lee en la notificación del móvil sin abrir nada.
+- **EL TEMPORIZADOR PASA A HORARIO**, sin planificador nuevo. Y no pregunta «¿es tu hora exacta?» sino
+  **«¿tu hora ya pasó y aún no te he escrito hoy?»**: con `Persistent=true`, un servidor apagado siete
+  horas provoca **UNA** pasada de recuperación, no siete, y con la igualdad se quedaba fuera todo el
+  que tuviera una hora intermedia. La idempotencia (`resumen_envios`, UNIQUE por fecha+persona) impide
+  el duplicado. `daily_alert_log` **no se toca**: su clave primaria es `fecha` a secas y ampliarla
+  habría exigido recrear la tabla.
+- **BLOQUE 2 · lo que Bamburu envía a tus clientes** (`email_tipo_pref`, otra vez ausencia = encendido).
+  Interruptor en los **2 automáticos** y en los **5 de botón** (decisión del dueño). Los **2
+  transaccionales** (recuperar contraseña, portal) **no lo llevan y se explica por qué**: apagar el de
+  la contraseña deja a alguien fuera de su cuenta, que es lo mismo que el editor de plantillas **ya
+  bloquea**. Botón **«Mándame una prueba a mí»**: a la dirección **de la sesión**, nunca del body, y con
+  datos de ejemplo.
+  - **DOS CHOQUES RESUELTOS SIN CREAR UN SEGUNDO MANDO:** (a) `recordatorio_cita` **ya tenía**
+    interruptor (`cita_modo_recordatorio`, que **nace apagado**); el nuevo **lo refleja**, porque uno
+    nuevo «encendido por defecto» habría empezado a mandar recordatorios que hoy no se mandan. (b) la
+    **confirmación de reserva** queda **bloqueada** mientras la puerta pública esté encendida —lo
+    prometido en la pieza 6: la política de cancelación se repite en ese correo— y el **servidor
+    devuelve 409**, no solo la pantalla.
+- **Una sola pantalla, `/admin/settings/avisos`, y SIN `requirePerm` en el bloque 1 — a propósito.**
+  El resto de Ajustes exige `company.read`, que en la práctica es dueño o admin (`company` ni siquiera
+  está en la tabla `permissions`). Con ese candado, **un empleado no podría apagar su propio correo**
+  ni usar el enlace del pie. El bloque 2 sí lo lleva. Cada endpoint toma el id **de la sesión**: nadie
+  puede leer ni cambiar la preferencia de otro.
+- **Deuda saldada:** `test-pago-voz-avisos` llevaba en rojo desde el 14-jul porque el asunto decía
+  «1 avisos» y la prueba esperaba «1 aviso». Como este encargo reescribe el asunto, **entraba**: 50/0.
+- **Verificado:** `gate-avisos-correos` **45/0** — negocio **creado desde cero** y borrado al final,
+  correos **enviados de verdad** al buzón sumidero de Resend (cero correos a personas): apagar → no
+  llega · encender a otra hora → llega a esa hora y **con los datos reales del negocio** · sin nada que
+  contar → no se envía **pero consta** · dos usuarios, misma pasada, **la de cobros prohibido no recibe
+  ni una cifra de deuda** · dos pasadas seguidas → **un solo correo** · recordatorio de cita apagado →
+  no sale, encendido → sale · confirmación **bloqueada con la puerta pública** (409) · cobro apagado →
+  el envío se niega con el motivo · móvil 390×844 y escritorio, **0 errores JS**.
+- **Regresión VERDE en su número exacto**: gate-plantillas-email 41/0, gate-agenda-sencilla 11/0,
+  test-reserva-publica 130/0, gate-registro-alta 34/0, test-oficio 94/0, test-oficio-alta 52/0,
+  gate-oficio-pantalla 28/0, verify-disa-query-permisos 43/0, **test-pago-voz-avisos 50/0** (era 46/1).
+- **Anotado, no tocado:** `verify-plantillas-email` sigue en rojo previo (cuenta 8 tipos/18 variantes;
+  la pieza 5 los dejó en 10/20 y no lo actualizó). El guardián vigente es `gate-plantillas-email`, 41/0.
 
 ### CRM comercial — embudo de oportunidades + actividad de cliente  ✅ HECHO (2026-07-09)
 Encargo expreso del dueño (estaba en el roadmap futuro). **Motor primero, DISA después** (RITUAL): esta

@@ -24,6 +24,7 @@ import { paymentsSum, invoiceCobro, cobroState, isCobrable, ESTADO_LABEL,
   invoiceProximaAccion, invoiceActionHistory, registerCollectionAction, collectionEmail } from '../cobros.js';
 import { sendEmail } from '../../../core/mailer.js';
 import { ENTITY } from '../../../core/activity-entities.js';
+import { exigirCorreoActivo } from '../avisos-preferencias.js';   // interruptor de Ajustes → Avisos y correos
 
 // T4 Paso 1 — fecha de vencimiento de una factura = fecha de emisión + plazo de pago
 // del cliente (días). Se guarda en la factura al emitir; cada factura conserva el suyo.
@@ -1128,6 +1129,9 @@ export function createInvoiceRoutes(db) {
   api.post('/:id/collection-actions', requirePerm('cobros.manage'), validate(collectionActionSchema), async c => {
     try {
       const input = c.get('validated');
+      // El interruptor de Ajustes → Avisos y correos. Se consulta AQUÍ, donde se envía de verdad:
+      // un interruptor que la pantalla enseña pero el envío no mira es peor que no tenerlo.
+      if (input.type === 'recordatorio_email') exigirCorreoActivo(db, 'cobro_factura');
       const res = await registerCollectionAction(db, parseInt(c.req.param('id')), input, { sendEmail });
       const label = input.type === 'recordatorio_email' ? 'Envió recordatorio'
         : input.type === 'promesa_pago' ? 'Registró promesa de pago' : 'Registró contacto';

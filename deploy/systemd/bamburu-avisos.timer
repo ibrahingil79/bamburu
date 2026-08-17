@@ -1,15 +1,22 @@
 [Unit]
-Description=Bamburu — disparador diario del resumen de avisos por email
+Description=Bamburu — disparador HORARIO del resumen por correo (cada quien a su hora)
 
 [Timer]
-# Diario a las 08:00 DE ESPAÑA: el dueño abre el día con el resumen ya en el correo.
-# La zona va EXPLÍCITA porque el servidor corre en UTC: sin ella, "08:00" serían las 10:00 en
-# España en verano. Con Europe/Madrid, systemd absorbe el cambio de hora (requiere systemd ≥252).
-OnCalendar=*-*-* 08:00:00 Europe/Madrid
-# Si el servidor estaba apagado a esa hora, ejecuta en el siguiente arranque (la guarda de
-# idempotencia daily_alert_log evita que un arranque tardío reenvíe lo de un día ya cubierto).
+# CADA HORA EN PUNTO, hora DE ESPAÑA. Antes era "*-*-* 08:00:00": una sola pasada diaria, y por eso
+# la hora del resumen no se podía elegir. Ahora el reparto lo decide cada persona en Ajustes →
+# Avisos y correos, y esta pasada horaria solo pregunta a quién le toca. NO hay planificador nuevo:
+# el temporizador es el mismo, solo late más a menudo.
+#
+# La zona va EXPLÍCITA porque el servidor corre en UTC: sin ella, "las 8" serían las 10 en España en
+# verano. Con Europe/Madrid, systemd absorbe el cambio de hora (requiere systemd ≥252).
+OnCalendar=*-*-* *:00:00 Europe/Madrid
+# Si el servidor estuvo apagado, systemd ejecuta UNA pasada de recuperación al arrancar — no una por
+# cada hora perdida. Por eso el script no pregunta "¿es tu hora exacta?" sino "¿tu hora ya ha
+# pasado y aún no te he escrito hoy?": así la pasada tardía recoge a todo el que se quedó por el
+# camino, y el registro por persona (resumen_envios) impide que nadie reciba dos veces.
 Persistent=true
-# Pequeño desfase aleatorio para no clavar siempre el mismo segundo.
+# Pequeño desfase aleatorio para no clavar siempre el mismo segundo. Se queda MUY por debajo de la
+# hora: un desfase que cruzara al siguiente tramo movería el correo de la gente.
 RandomizedDelaySec=300
 
 [Install]
