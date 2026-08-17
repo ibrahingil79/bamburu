@@ -20,6 +20,7 @@ import { createShippingRoutes } from './shipping.js';
 import { createAnalyticsRoutes } from './analytics.js';
 import { createVigiaRoutes } from './vigia.js';   // Escalera · paso 5 — DISA predictiva · PIEZA 1: el vigía
 import { createInicioRoutes } from './inicio.js';   // Escalera · paso 6 — Inicio personalizable
+import { createMenuRoutes } from './menu-routes.js';   // Navegación — anclas del menú (por usuario)
 import { createSettingsRoutes } from './settings.js';
 import { createUserRoutes } from './users.js';
 import { createNewsletterRoutes } from './newsletter.js';
@@ -80,6 +81,7 @@ export function mountRoutes(app, db) {
   const { api: analytApi, views: analytViews } = createAnalyticsRoutes(db);
   const { api: vigiaApi, views: vigiaViews } = createVigiaRoutes(db);
   const { api: inicioApi } = createInicioRoutes(db);   // Escalera · paso 6 — Inicio personalizable
+  const { api: menuApi } = createMenuRoutes(db);       // Navegación — anclas del menú (por usuario)
   const { api: settApi, views: settViews, storeViews: storeSettViews } = createSettingsRoutes(db);
   const { api: userApi, views: userViews, activityViews } = createUserRoutes(db);
   const { api: nlApi, views: nlViews } = createNewsletterRoutes(db);
@@ -195,6 +197,7 @@ export function mountRoutes(app, db) {
   apiApp.route('/analytics', analytApi);
   apiApp.route('/vigia', vigiaApi);     // ← DISA predictiva · hallazgos del vigía (solo lectura)
   apiApp.route('/inicio', inicioApi);   // ← Inicio personalizable (layout por usuario/empresa/fábrica)
+  apiApp.route('/menu', menuApi);       // ← anclas del menú de CADA usuario (solo colocación, sin datos)
   apiApp.route('/perfil', perfilApi);   // ← datos personales del usuario logueado (+ su foto)
   apiApp.route('/settings', settApi);   // ← /api/erp/settings SE QUEDA (config de empresa); solo /settings/store se neutraliza en settings.js
   apiApp.route('/users', userApi);

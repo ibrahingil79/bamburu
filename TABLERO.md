@@ -44,7 +44,15 @@
 > avisos». Y cada correo automático o de botón que sale hacia los clientes gana su interruptor (con la
 > confirmación de reserva **bloqueada** mientras la puerta pública esté encendida). Ver su ficha en
 > «Función por encargo del dueño». Descubrimiento del PASO 0: **`company_config.email` estaba vacío en
-> 6 de 7 negocios**, así que el correo diario solo llegaba a uno. El **Backlog** de abajo NO
+> 6 de 7 negocios**, así que el correo diario solo llegaba a uno.
+> **TAREA TRANSVERSAL DE PRESENTACIÓN ✅ HECHA (17 ago 2026): NAVEGACIÓN — MENOS RUIDO SIN PERDER NADA.**
+> Como la «Agenda sencilla», **no es pieza de ningún peldaño** y no mueve el puntero de la escalera.
+> Cada desplegable se parte en dos bloques (día a día arriba · «Ajustes de \<Área\>» abajo) **sin plegar
+> nada**; el buscador del topbar —que era decorado, sin `input` ni destino— pasa a navegar por el menú
+> con Ctrl/⌘+K; y cada uno se ancla sus atajos arriba del rail (máx. 8, **por usuario**). **N antes = N
+> después = 50 puertas**, pulsadas una a una. Del PASO 0: la tabla de preferencias que el encargo mandaba
+> reutilizar **no servía** (se reutiliza `dashboard_layouts`, cero tablas nuevas), y las etiquetas del
+> menú **se pintaban sin escapar** con texto libre del dueño dentro. El **Backlog** de abajo NO
 > compite con la escalera: es lo que le falta a El Suelo (el umbral) más la deuda. Plan del Eje C
 > cargado desde la auditoría del 15 jul (ver la
 > sección "Eje C: Seguridad"). **C1 (Verifactu, ALTA), C2 (verificación con administrador), C3 (tres
@@ -1378,6 +1386,92 @@ Aditivo: tres tablas nuevas, ni un DROP, ninguna columna renombrada.
   gate-oficio-pantalla 28/0, verify-disa-query-permisos 43/0, **test-pago-voz-avisos 50/0** (era 46/1).
 - **Anotado, no tocado:** `verify-plantillas-email` sigue en rojo previo (cuenta 8 tipos/18 variantes;
   la pieza 5 los dejó en 10/20 y no lo actualizó). El guardián vigente es `gate-plantillas-email`, 41/0.
+
+### Navegación: menos ruido sin perder nada — **TAREA TRANSVERSAL de presentación**  ✅ HECHO (2026-08-17)
+**NO es pieza del peldaño 8** — es capa de presentación que cruza toda la app, como en su día la
+**Agenda sencilla**. El puntero de la escalera NO se mueve: el peldaño 8 sigue ABIERTO donde estaba.
+
+**La regla que mandó en toda la tarea:** no se elimina, no se esconde y no se aplaza NI UNA función.
+En julio se probó un menú "lean" que escondía funciones y se revirtió a propósito (U1, `494d2ab`). El
+objetivo era que se vieran menos cosas A LA VEZ, no que hubiera menos cosas.
+
+**EL PASO 0 TUMBÓ DOS SUPOSICIONES DEL ENCARGO Y DESTAPÓ DOS AGUJEROS**
+- **No existe la tabla de preferencias por usuario reutilizable que pedía usar.** `avisos_pref_usuario`
+  (`299a15d`) es una tabla TIPADA de un solo propósito (activo/frecuencia/día/hora/fuentes): no cabe en
+  ella una lista ordenada de anclas sin añadirle una columna que no pinta nada ahí. Lo reutilizable es
+  el patrón del **peldaño 6**: `dashboard_layouts` (`scope` TEXT como clave, JSON dentro, **ausencia de
+  fila = fábrica**) con sus `getLayout/setLayout/delLayout`, que aceptan cualquier ámbito. Decisión del
+  dueño: **reutilizarla tal cual**, con ámbito `menu:usuario:<id>`. **Cero tablas nuevas, cero
+  migración.** Queda escrito en los dos ficheros que **nadie puede borrar por prefijo** en esa tabla.
+- **La "caja de búsqueda que ya existe" no era una caja de búsqueda.** Era decorado: un `<div>` con un
+  `<span>` de texto fijo, sin `input`, sin JS y sin destino — y su reclamo prometía *«Buscar cliente,
+  factura, producto…»*, o sea DATOS. No se le podía "añadir" navegación: había que hacerla real.
+  Decisión del dueño: se hace real **para el menú** y el reclamo pasa a decir la verdad («Buscar en el
+  menú… ⌘K»). **ANOTADO Y NO CONSTRUIDO: la búsqueda de datos** (clientes, facturas, productos).
+- **AGUJERO 1 (anotado, NO arreglado, por orden del encargo):** `contabilidad` es la única de las 40
+  claves del rail SIN entrada en `navPerms`, mientras `/admin/contabilidad` exige `invoices.read`. Un
+  empleado con permisos propios y sin ese permiso **ve «Libros y modelos» y se come un 403 al pulsar**.
+  El buscador lo hereda igual —ni mejor ni peor— para que los dos se arreglen a la vez.
+- **AGUJERO 2 (arreglado de paso, decisión del dueño):** las etiquetas del menú se pintaban SIN escapar,
+  y una de ellas es texto libre del dueño (`cita_puesto_plural` → la entrada «Puestos»). Un dueño que
+  escribiera `<img onerror=…>` dejaba **XSS almacenado en todas las pantallas de todos sus empleados**.
+  Caía en la línea exacta que había que reescribir. Comprobado con carga real: sale como texto.
+
+**LO QUE SE CONSTRUYÓ — tres cosas y UN SOLO SITIO.** La definición del menú sale de `adminLayout` a
+**`modules/erp/menu.js`**, y de ahí comen las tres caras: el rail, el buscador y las anclas. **No hay
+una segunda lista de destinos** — se quedaría vieja y acabaría enseñando puertas que el menú esconde.
+- **(A) Jerarquía dentro de cada área.** Cada desplegable se parte en dos bloques: arriba y sin rótulo
+  lo del día a día; abajo, bajo «Ajustes de \<Área\>», la configuración y los maestros. **Es SEPARAR, no
+  plegar:** todo sigue visible en la misma pantalla y al mismo número de clics. Ante la duda, ARRIBA
+  (por eso «Portal de cliente» y «Envío Verifactu» se quedan arriba). Ajustes: Clientes→Grupos ·
+  **Agenda→6 de 8** · Compras→Proveedores · Inventario→Almacenes · Catálogo→Categorías.
+- **(B) Buscador que navega.** Coincidencia **por nombre**, sin sinónimos ni difusa; solo se normalizan
+  mayúsculas y tildes («almacen» encuentra «Almacenes»). Atajo Ctrl/⌘+K, flechas y Enter. Se alimenta
+  del menú YA filtrado, así que por construcción no puede enseñar lo que el rail esconde. **«Cerrar
+  sesión» queda fuera del buscador a propósito**: un destino que se dispara con Enter no puede ser el
+  que te echa. Sigue exactamente donde estaba.
+- **(C) Anclar y ordenar lo propio.** Frontera de Salesforce: la casa viene ordenada y el usuario pone
+  sus atajos ENCIMA. Chincheta en cada entrada, bloque propio arriba del rail, se reordenan
+  arrastrando, **máximo 8**, **por usuario** (nunca por negocio). Las áreas de fábrica no se reordenan,
+  no se renombran y no se quitan; **anclar no saca la entrada de su área**. Quien no ancla nada ve el
+  menú de hoy, byte por byte. Si una entrada anclada deja de estar permitida, **el ancla calla**: no se
+  pinta, no se borra y vuelve sola al devolverle el permiso.
+
+**NO SE TOCÓ:** ni una ruta, ni un endpoint, ni un permiso, ni un dato. Ningún área nueva, ninguna
+entrada movida de área. El único endpoint nuevo (`PUT/GET /api/erp/menu/anclas`) guarda **colocación**,
+no datos de negocio.
+
+**VERIFICACIÓN — `gate-menu-navegacion` 72/0**, en navegador real, sobre un negocio **creado desde
+cero** (oficio «peluquería»), entrando por el formulario de login y pulsando como pulsaría el dueño:
+- **LA PRUEBA QUE MANDA — no amputación: N ANTES = N DESPUÉS = 50 puertas** (42 en el rail + Inicio +
+  Ayuda + 6 de cuenta), identidad comprobada UNA A UNA contra el inventario del PASO 0, y **las 41 con
+  pantalla pulsadas de verdad: todas HTTP 200**. Agenda enseña sus 8 entradas **a la vez** (8/8
+  visibles): separar, no plegar. La etiqueta del oficio sigue llegando al menú («Sillas» en peluquería).
+- Buscar «presupuesto», «almacen» y «conciliaci» → las tres rutas correctas con Enter; flecha+Enter va
+  al 2º resultado; Ctrl+K enfoca.
+- Anclar tres, reordenar, **cerrar sesión pulsando y volver a entrar**: siguen ancladas y en su orden.
+  Quitarlas todas → menú **idéntico al de fábrica** y **sin fila** en la tabla. El servidor rechaza la 9ª.
+- Segundo usuario con MENOS permisos (9 de 42 entradas): **el buscador no enseña ni una puerta que no
+  esté en su menú**; sus anclas son suyas; anclar lo que no ve → **403**.
+- Móvil a 390 px: cajón, ancladas arriba, acordeón con su rótulo, ninguna entrada se sale, buscador
+  usable, **0 errores de JS**.
+- **Regresión en su número exacto, CERO rojos nuevos: 21/23.** Verde: `gate-nav-inicio-disa` 34/0,
+  `gate-inicio-pantalla`, `gate-citas-pantalla`, `gate-agenda-sencilla`, `gate-agenda-calendario`,
+  `gate-oficio-pantalla`, `gate-vigia-agenda`, `gate-vigia-pantalla`, `gate-espera-pantalla`,
+  `gate-proyectos/tiempo/facturar-horas/rentabilidad/coste-horas/margen-pantalla`,
+  `gate-reserva-publica-pantalla` 51/0, `gate-avisos-contador-vivo`, `gate-xss-escape` 29/0,
+  `verify-xss-escape` 49/0, `gate-csp-estricta` 19/0.
+- **Los 2 rojos son PREVIOS, demostrado y con su CAUSA** (revertidos los ficheros a HEAD, reiniciado y
+  reejecutado: salida IDÉNTICA; restaurado y verificado con `diff -q`):
+  · `gate-avisos-badge` (4 fallos, 12 OK) — **CADUCADO**: busca `a.disa-fig-link` y `.disa-row`, que son
+    del Inicio FIJO anterior al peldaño 6 (`7fda12a`). El dato sigue estando, ahora en el bloque «Avisos
+    pendientes» de la rejilla.
+  · `gate-avisos-pantalla` (3 fallos, 1 OK) — **dato de partida caducado**: apunta a la factura
+    `F2026-0017`, que tras resembrar el tenant quedó **anulada**, así que no genera aviso de cobro ni
+    tiene botón «Registrar cobro».
+
+**ANOTADO Y NO CONSTRUIDO:** el **orden por defecto del menú según el oficio del negocio** · la
+**búsqueda de datos** en el buscador del topbar · el **candado de `contabilidad`** (AGUJERO 1).
 
 ### CRM comercial — embudo de oportunidades + actividad de cliente  ✅ HECHO (2026-07-09)
 Encargo expreso del dueño (estaba en el roadmap futuro). **Motor primero, DISA después** (RITUAL): esta

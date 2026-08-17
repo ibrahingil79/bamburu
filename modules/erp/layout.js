@@ -1,9 +1,12 @@
 import { getDisaWidget } from '../disa/widget.js';
-import { escHtml } from '../../core/escape.js';
+import { escHtml, jsonForScript } from '../../core/escape.js';
 import { estadoAvisos, hoyLocal, fuentesDe } from './avisos.js';
 import { contarPropuestasPendientes, tiposVisiblesPara } from './propuestas.js';   // D5 — badge de Propuestas de DISA
-import { contarAvisosPendientes } from './citas-avisos.js';   // AGENDA SENCILLA §2.3 — contador de avisos pendientes
-import { vocabulario } from './oficios.js';                   // PASO 8 — fuente ÚNICA de las palabras de pantalla
+// NAVEGACIÓN — la definición del menú vive en `menu.js`, en un solo sitio, y la comparten el rail, el
+// buscador del topbar y las anclas del usuario. Aquí solo se pinta. `vocabulario()` (las palabras del
+// oficio) y `contarAvisosPendientes()` (el contador de la Cola) se consultan allí, no aquí: eran las
+// dos lecturas que este fichero hacía por su cuenta.
+import { menuDeUsuario, anclasDeUsuario, destinosBuscador, MAX_ANCLAS } from './menu.js';
 
 export const ROOT_TOKENS = `
     :root{
@@ -307,260 +310,92 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     ? `<div style="background:#7c2d12;color:#fed7aa;padding:11px 18px;font-size:13px;font-weight:500;text-align:center">⚠️ Tu cuenta está en <strong>SOLO LECTURA</strong> por regularizar. Puedes ver tus datos y facturas, pero no crear ni modificar nada hasta reactivarla.${_note ? ' · ' + _note : ''}</div>`
     : '';
 
-  // Nav permission map: key → required perm (null = always visible to all logged-in users)
-  const navPerms = {
-    dashboard:        null,
-    activity:         'activity.read',
-    products:         'products.read',
-    categories:       'categories.read',
-    tags:             'tags.read',
-    orders:           'orders.read',
-    pos:              'orders.create',
-    'store-settings': null,
-    refunds:          'orders.edit',
-    'supplier-returns': 'purchases.read',
-    'stock-transfers': 'inventory.read',
-    discounts:        'discounts.read',
-    quotes:           'quotes.read',
-    pedidos:          'pedidos.read',
-    albaranes:        'albaranes.read',
-    mostrador:        'invoices.create',
-    invoices:         'invoices.read',
-    recurrentes:      'recurrentes.read',
-    'verifactu-envio': 'invoices.read',
-    conciliacion:     'conciliacion.read',
-    cobros:           'invoices.read',
-    portal:           'invoices.read',
-    pagos:            'purchases.read',
-    'supplier-invoices': 'purchases.read',
-    inventory:        'inventory.read',
-    warehouses:       'inventory.read',
-    suppliers:        'suppliers.read',
-    purchases:        'purchases.read',
-    'purchase-orders': 'purchases.read',
-    clients:          'clients.read',
-    'client-groups':  'clients.read',
-    crm:              'crm.read',
-    proyectos:        'proyectos.read',   // peldaño 7 · servicios profesionales
-    tiempo:           'tiempo.read',      // peldaño 7 · PIEZA 2 · registro de tiempo
-    'facturar-horas': 'invoices.create',  // peldaño 7 · PIEZA 3 · facturar horas (mismo permiso que emitir factura)
-    rentabilidad:     ['proyectos.read', 'invoices.read'],   // peldaño 7 · PIEZA 4 · exige AMBOS (proyectos + P&G)
-    citas:            'citas.read',        // peldaño 7 · PIEZA 5 · agenda de citas
-    'citas-cola':     'citas.read',
-    'citas-servicios':'citas.read',
-    'citas-recursos': 'citas.read',
-    // Mismo candado que la pantalla a la que lleva (/admin/users): quien no administra usuarios
-    // tampoco ve la entrada desde la Agenda. Es un atajo, no un permiso nuevo.
-    'citas-personas': 'admin.manage_users',
-    'citas-horarios': 'citas.read',
-    'citas-ajustes':  'citas.edit',
-    'citas-publica':  'citas.edit',   // peldaño 7 · PIEZA 6 · mandos de la puerta pública de reserva
-    analytics:        'analytics.read',
-    vigia:            'analytics.read',   // DISA predictiva · el vigía (dentro filtra por detector)
-    disa:             null,
-    perfil:           null,   // todo usuario gestiona su propio perfil
-    users:            'admin.manage_users',
-    settings:         'admin.settings',
-    security:         'admin.settings',
-    'change-password': null,
-    'purchases-capture': 'purchases.create',
+  // ── EL MENÚ DE ESTE USUARIO ───────────────────────────────────────────────────────────────────
+  // La definición ya NO vive aquí: está en `menu.js`, en UN solo sitio, y de ahí comen las TRES caras
+  // de la navegación —el rail, el buscador del topbar y las anclas del usuario—. Aquí solo se PINTA.
+  // Escribir una segunda lista de destinos para el buscador se quedaría vieja y acabaría enseñando
+  // puertas que el menú esconde; por eso no hay dos listas, hay una.
+  const _dbNav = c?.get?.('db') || null;
+  const menu = menuDeUsuario(_dbNav, { role, perms });
+  // Las anclas NUNCA rompen el chrome: si algo falla, se sale con el menú de fábrica y ya está.
+  let anclas = [];
+  try { if (_dbNav && session.userId) anclas = anclasDeUsuario(_dbNav, session.userId, menu); }
+  catch { anclas = []; }
+  const anclado = new Set(anclas.map(a => a.key));
+
+  // Una entrada del desplegable. El botón de anclar va DENTRO del enlace, asoma al pasar por encima y
+  // NO navega (el listener delegado hace preventDefault antes de que el enlace se entere).
+  // Las etiquetas van ESCAPADAS: una de ellas —«Puestos»— es texto libre que escribe el dueño
+  // (`cita_puesto_plural`) y aquí se pintaba en crudo, o sea XSS almacenado hacia sus empleados.
+  const flyItem = i => {
+    const act = i.key === active ? ' active' : '';
+    const ic = `<i class="ti ${i.icon}"></i><span class="fly-tx">${escHtml(i.label)}</span>`;
+    // Cartel gris "pendiente": hoy no lo usa ninguna entrada, pero la capacidad se conserva. Sin esta
+    // rama, poner `disabled: true` mañana pintaría un enlace normal a una pantalla que no existe.
+    if (i.disabled) return `<span class="fly-item disabled" title="Pendiente — aún no disponible">${ic}<span class="nav-pending">pendiente</span></span>`;
+    if (!i.href) return `<button type="button" class="fly-item${act}" onclick="${i.accion}">${ic}</button>`;
+    const on = anclado.has(i.key);
+    const t = on ? 'Quitar de anclados' : 'Anclar arriba del menú';
+    const pin = `<button type="button" class="fly-pin${on ? ' on' : ''}" data-anc="${escHtml(i.key)}" title="${t}" aria-label="${t}" aria-pressed="${on}"><i class="ti ${on ? 'ti-pin-filled' : 'ti-pin'}"></i></button>`;
+    return `<a href="${i.href}" class="fly-item${act}">${ic}${pin}</a>`;
   };
 
-  const roleFilters = {
-    users:            r => r === 'owner' || r === 'admin',
-    settings:         r => r === 'owner',
-    'store-settings': r => r === 'owner' || r === 'admin',
-    security:         r => r === 'owner' || r === 'admin',
+  // (A) JERARQUÍA DENTRO DEL ÁREA — dos bloques separados por una línea y un rótulo. Es SEPARAR, NO
+  // plegar: las dos mitades se pintan en el mismo desplegable, a la vez, y nada gana un clic. Arriba,
+  // sin rótulo, lo del día a día; abajo, bajo «Ajustes de <Área>», la configuración y los maestros.
+  const flyBloques = a => {
+    const arriba = a.diario.map(flyItem).join('');
+    if (!a.ajustes.length) return arriba;
+    return arriba
+      + (arriba ? '<div class="fly-sep"></div>' : '')
+      + `<div class="fly-grp">Ajustes de ${escHtml(a.label)}</div>`
+      + a.ajustes.map(flyItem).join('');
   };
 
-  // ── MENÚ estilo HOLDED — rail de iconos por ÁREA + submenú FLOTANTE (flyout) ──────────
-  // (Dirección UX 2026-07-06, revisada: el "lean estricto" escondía demasiado. Ahora NINGUNA
-  //  función se esconde: el rail muestra un icono por área y, al pasar/pulsar, abre un flyout
-  //  con TODAS sus funciones.) Inicio es enlace directo (la home de DISA, §4). El resto son
-  //  grupos desplegables. Cada hijo apunta a su ruta real; nada se crea ni se renombra.
-  const nav = [
-    { label: 'Ventas', icon: 'ti-shopping-cart', items: [
-      { href: '/admin/invoices', label: 'Facturas', key: 'invoices', icon: 'ti-file-invoice' },
-      { href: '/admin/quotes', label: 'Presupuestos', key: 'quotes', icon: 'ti-file-text' },
-      { href: '/admin/recurrentes', label: 'Recurrentes', key: 'recurrentes', icon: 'ti-repeat' },
-      { href: '/admin/pedidos', label: 'Pedidos', key: 'pedidos', icon: 'ti-clipboard-list' },
-      { href: '/admin/albaranes', label: 'Albaranes', key: 'albaranes', icon: 'ti-truck-delivery' },
-      { href: '/admin/cobros', label: 'Cobros', key: 'cobros', icon: 'ti-cash' },
-      { href: '/admin/mostrador', label: 'TPV', key: 'mostrador', icon: 'ti-cash-register' },
-      { href: '/admin/portal', label: 'Portal de cliente', key: 'portal', icon: 'ti-external-link' },
-    ]},
-    // «A quién le vendes» — ÁREA PROPIA en el rail (sacada de Ventas a petición de Ibrahim, 21 jul 2026):
-    // Clientes, sus Grupos y el embudo comercial (Oportunidades) viven juntos, no sueltos dentro de Ventas,
-    // que queda solo con los documentos de venta.
-    { label: 'Clientes', icon: 'ti-address-book', items: [
-      { href: '/admin/clients', label: 'Clientes', key: 'clients', icon: 'ti-users' },
-      { href: '/admin/clients/groups', label: 'Grupos', key: 'client-groups', icon: 'ti-users-group' },
-      // Era un cartel gris (`disabled:true`, sin ruta ni tabla). Ahora es el embudo comercial real.
-      // NO se llama "CRM": ese nombre colisionaba con "Clientes", que es donde vive el CRM básico
-      // (ficha, grupos, historial) y que ya estaba CERRADO. Lo pendiente era el embudo, y así se
-      // llama. La ruta sigue siendo /admin/crm (es el módulo), pero el usuario lee "Oportunidades",
-      // que es la palabra de Holded ("embudos de venta" y "oportunidades"), no "negocios"/"deals".
-      { href: '/admin/crm', label: 'Oportunidades', key: 'crm', icon: 'ti-target-arrow' },
-    ]},
-    // Peldaño 7 · servicios profesionales — ÁREA PROPIA en el rail (sacada de Ventas a petición de Ibrahim,
-    // 21 jul 2026): proyectos, sus horas y la facturación de esas horas viven juntos, no mezclados con Ventas.
-    { label: 'Proyectos', icon: 'ti-briefcase', items: [
-      { href: '/admin/proyectos', label: 'Proyectos', key: 'proyectos', icon: 'ti-folders' },
-      { href: '/admin/tiempo', label: 'Registro de tiempo', key: 'tiempo', icon: 'ti-clock-play' },
-      { href: '/admin/facturar-horas', label: 'Facturar horas', key: 'facturar-horas', icon: 'ti-clock-dollar' },
-      { href: '/admin/rentabilidad', label: 'Rentabilidad', key: 'rentabilidad', icon: 'ti-chart-pie' },
-    ]},
-    // Peldaño 7 · PIEZA 5 — SISTEMA DE CITAS. Área propia: la agenda y todo lo que la alimenta
-    // (servicios reservables, recursos, horarios) y la cola de envíos de avisos. NO es el calendario
-    // FISCAL (ese vive en Contabilidad/Ajustes). Candado citas.read/edit en todas las rutas.
-    { label: 'Agenda', icon: 'ti-calendar', items: [
-      { href: '/admin/citas', label: 'Agenda', key: 'citas', icon: 'ti-calendar-event' },
-      { href: '/admin/citas/cola', label: 'Cola de envíos', key: 'citas-cola', icon: 'ti-send' },
-      { href: '/admin/citas/servicios', label: 'Servicios reservables', key: 'citas-servicios', icon: 'ti-clock-hour-4' },
-      // QUIÉN ATIENDE — faltaba. En el área de Agenda solo había "Recursos" (que con el oficio pasa a
-      // llamarse "Sillas", "Cabinas"…), así que un peluquero que quería dar de alta a su segunda
-      // estilista se encontraba "Sillas" como lo más parecido a una persona. Las personas son
-      // `admin_users` y se gestionan en /admin/users; lo que faltaba era la puerta desde aquí.
-      { href: '/admin/users', label: 'Quién atiende', key: 'citas-personas', icon: 'ti-users' },
-      { href: '/admin/citas/recursos', label: 'Recursos', key: 'citas-recursos', icon: 'ti-armchair' },
-      { href: '/admin/citas/horarios', label: 'Horarios', key: 'citas-horarios', icon: 'ti-calendar-time' },
-      { href: '/admin/citas/ajustes', label: 'Ajustes de citas', key: 'citas-ajustes', icon: 'ti-settings' },
-      { href: '/admin/citas/publica', label: 'Reservas por Internet', key: 'citas-publica', icon: 'ti-world' },
-    ]},
-    { label: 'Compras y gastos', icon: 'ti-receipt', items: [
-      { href: '/admin/supplier-invoices', label: 'Facturas recibidas', key: 'supplier-invoices', icon: 'ti-file-dollar' },
-      { href: '/admin/purchases', label: 'Compra directa', key: 'purchases', icon: 'ti-shopping-cart' },
-      { href: '/admin/purchase-orders', label: 'Órdenes de compra', key: 'purchase-orders', icon: 'ti-clipboard-list' },
-      { href: '/admin/pagos', label: 'Pagos a proveedores', key: 'pagos', icon: 'ti-cash' },
-      { href: '/admin/supplier-returns', label: 'Devoluciones', key: 'supplier-returns', icon: 'ti-arrow-back-up' },
-      { href: '/admin/purchases/capture', label: 'Captura de factura', key: 'purchases-capture', icon: 'ti-camera' },
-      { href: '/admin/suppliers', label: 'Proveedores', key: 'suppliers', icon: 'ti-building-store' },
-    ]},
-    { label: 'Contabilidad', icon: 'ti-book', items: [
-      { href: '/admin/contabilidad', label: 'Libros y modelos', key: 'contabilidad', icon: 'ti-book' },
-      { href: '/admin/conciliacion', label: 'Conciliación bancaria', key: 'conciliacion', icon: 'ti-arrows-exchange' },
-      { href: '/admin/verifactu/envios', label: 'Envío Verifactu (AEAT)', key: 'verifactu-envio', icon: 'ti-cloud-upload' },
-    ]},
-    { label: 'Inventario', icon: 'ti-building-warehouse', items: [
-      { href: '/admin/inventory', label: 'Stock', key: 'inventory', icon: 'ti-building-warehouse' },
-      { href: '/admin/warehouses', label: 'Almacenes', key: 'warehouses', icon: 'ti-buildings' },
-      { href: '/admin/stock-transfers', label: 'Traslados', key: 'stock-transfers', icon: 'ti-transfer' },
-    ]},
-    { label: 'Catálogo', icon: 'ti-box', items: [
-      { href: '/admin/products', label: 'Productos', key: 'products', icon: 'ti-box' },
-      { href: '/admin/categories', label: 'Categorías', key: 'categories', icon: 'ti-category' },
-    ]},
-    // ── ANALÍTICA — reenganchada al menú (17 jul 2026, escalera paso 2) ────────────────────────
-    // La pantalla llevaba VIVA y sin enlace desde que U7 la encontró (8-jul): existía, respondía 200
-    // y no había forma de llegar salvo tecleando la URL. `navPerms.analytics` ya estaba declarado
-    // aquí sin ningún item que lo usara — U7 lo anotó como hallazgo. Ahora lo usa este.
-    // POR QUÉ ES UN ÁREA y no un enlace directo (`g.home`): (a) `g.home` NO pasa por `navFilter`, así
-    // que la entrada se vería SIN permiso y solo fallaría al pulsar — justo lo contrario del candado
-    // que se pide; (b) es la casa de los peldaños 3 (informes por área + plan financiero) y 4
-    // (constructor de analíticas), que entrarán aquí como hermanos de "Informes".
-    // NO se reengancha nada más: `/admin/discounts` y `/admin/tags` siguen sin enlace a propósito
-    // (decisión del dueño en U7), y el clúster de e-commerce (`/admin/orders`, `/admin/shipping`)
-    // está desmontado y da 404 — resucitarlo por el menú sería revivir lo que D1/D2 apagaron.
-    // Verificado antes de enganchar: la Analítica NO lee una sola tabla del clúster viejo; sus
-    // cifras salen de `ventas-metrics.js` (PIEZA C) y de las tablas vivas de catálogo y clientes.
-    { label: 'Analítica', icon: 'ti-chart-histogram', items: [
-      { href: '/admin/analytics', label: 'Informes', key: 'analytics', icon: 'ti-report-analytics' },
-      // Escalera · paso 5 — DISA predictiva. El vigía analiza sobre los motores del constructor; por
-      // eso vive aquí, junto a Informes, y no en el rail de chat de DISA.
-      { href: '/admin/vigia', label: 'Vigía (DISA)', key: 'vigia', icon: 'ti-radar' },
-    ]},
-  ];
+  // ── DISA en el riel (2º icono, debajo de Inicio) ─────────────────────────────
+  // Ve el panel de Propuestas quien pueda ver AL MENOS UN tipo: cobros (invoices.read/cobros.read) o
+  // pagos a proveedor (purchases.read). Esa regla vive ahora en `menu.js` (`permAlguno`), así que el
+  // badge se limita a preguntar si la entrada sobrevivió al filtro: una sola fuente para las dos cosas.
+  // Antes eran dos expresiones distintas de la misma regla, aquí mismo, y podían separarse.
+  const verPropuestas = menu.areas.some(a => a.id === 'disa' && a.todos.some(i => i.key === 'propuestas'));
+  const disaBadge = verPropuestas
+    ? `<span class="rail-count" id="propCount"${propuestasPend ? '' : ' style="display:none"'}>${propuestasPend || ''}</span>`
+    : '';
 
-  // AGENDA SENCILLA §1.1/§2.3 — SOLO la ETIQUETA que ve el usuario en el menú (no se renombra código):
-  // "Puestos" con el nombre que el negocio eligió, y un contador de avisos pendientes en la Cola. Barato
-  // y tolerante a fallo: si algo peta, se queda el default y el número a 0 (el chrome nunca se rompe).
-  //
-  // PASO 8 — la palabra sale de vocabulario(), NO de una consulta propia. Antes este parche leía
-  // cita_puesto_plural por su cuenta, en paralelo a ajustesCitas(): dos lecturas de lo mismo. Con el
-  // diccionario de oficio eso sería el menú diciendo una cosa y la pantalla otra. Una fuente, un canal.
-  try {
-    const _db = c?.get?.('db');
-    if (_db) {
-      const plural = vocabulario(_db).puesto_plural;
-      const pend = contarAvisosPendientes(_db);
-      for (const g of nav) for (const it of (g.items || [])) {
-        if (it.key === 'citas-recursos') it.label = plural;
-        if (it.key === 'citas-cola') it.label = 'Cola de envíos' + (pend > 0 ? ' · ' + pend : '');
-      }
-    }
-  } catch { /* el menú nunca se rompe por esto */ }
-
-  // ── Barra de Cuenta (desplegable del avatar, mockup): items reales + Documentación + salir ──
-  const accountItems = [
-    // PERFIL absorbe lo personal: datos, contraseña y verificación en dos pasos. Por eso ya no
-    // están "Mi cuenta" (era la pantalla-cerrojo de contraseña obligatoria, sigue viva pero fuera
-    // del menú) ni "Seguridad" (solo tenía el 2FA; su ruta redirige a /admin/perfil).
-    { href: '/admin/perfil', label: 'Perfil', key: 'perfil', icon: 'ti-user' },
-    // Una sola entrada de empresa: /admin/settings ES la "Configuración Empresa". Antes había dos
-    // ("Ajustes" + "Datos del negocio"), y la segunda colgaba de una subruta `/company` que solo
-    // existe bajo /api/erp/settings → daba 404; además ambas compartían key 'settings' (marcaba dos
-    // items activos). Arreglado en U8 (`9cf2e46`, 8-jul) y reverificado pulsando el enlace el 10-jul:
-    // HTTP 200, "Configuración Empresa". El onboarding (disaHome.html.js) ya apuntaba bien.
-    // OJO al buscar: la ruta 404 de aquel bug NO aparece ya en ningún href de este fichero.
-    { href: '/admin/settings', label: 'Datos del negocio', key: 'settings', icon: 'ti-building' },
-    { href: '/admin/users', label: 'Usuarios', key: 'users', icon: 'ti-user-cog' },
-    { href: '/admin/activity', label: 'Actividad', key: 'activity', icon: 'ti-history' },
-  ];
-
-  const hasCustomPerms = !isAdmin && !isOwner && perms.length > 0;
-  const navFilter = i => {
-    if (roleFilters[i.key] && !roleFilters[i.key](role)) return false;
-    if (hasCustomPerms) { const req = navPerms[i.key]; if (req != null) { const reqs = Array.isArray(req) ? req : [req]; if (!reqs.every(r => perms.includes(r))) return false; } }
-    return true;
-  };
-  // Rail: Inicio (enlace directo) + un icono por ÁREA. Cada área abre un flyout con sus hijos
-  // (filtrados por permiso). Un área se marca activa si la pantalla actual es uno de sus hijos.
-  const navHTML = nav.map(g => {
-    if (g.home) {
-      // ⚠️ OJO si vas a usar esto: esta rama NO pasa por `navFilter`, así que la entrada se pinta
-      // para TODO EL MUNDO y el permiso solo salta al pulsar (403). Hoy no la usa nadie. Si añades
-      // aquí una pantalla gateada, filtra antes — o el menú enseñará puertas que no se abren.
-      return `<a href="${g.href}" class="nav-item${active === g.key ? ' active' : ''}" title="${g.label}"><i class="ti ${g.icon}"></i></a>`;
-    }
-    const items = g.items.filter(navFilter);
-    if (!items.length) return '';
-    const groupActive = items.some(i => i.key === active);
-    const fly = items.map(i => i.disabled
-      ? `<span class="fly-item disabled" title="Pendiente — aún no disponible"><i class="ti ${i.icon}"></i>${i.label}<span class="nav-pending">pendiente</span></span>`
-      : `<a href="${i.href}" class="fly-item${i.key === active ? ' active' : ''}"><i class="ti ${i.icon}"></i>${i.label}</a>`
-    ).join('');
+  // Rail: un icono por ÁREA, cada una con su flyout. Un área se marca activa si la pantalla actual es
+  // una de sus entradas. DISA es la primera del rail y lleva su badge sobre el icono.
+  const navHTML = menu.areas.map(a => {
+    const esDisa = a.id === 'disa';
+    const groupActive = a.todos.some(i => i.key === active) || (esDisa && (active === 'propuestas' || active === 'disa'));
+    const ic = esDisa
+      ? `<span class="rail-ic"><i class="ti ${a.icon}"></i>${disaBadge}</span>`
+      : `<i class="ti ${a.icon}"></i>`;
     return `<div class="navg" onmouseenter="openFly(this)" onmouseleave="scheduleCloseFly()">`
-      + `<button type="button" class="nav-item${groupActive ? ' active' : ''}" title="${g.label}" aria-label="${g.label}" onclick="toggleFly(this.closest('.navg'))"><i class="ti ${g.icon}"></i><span class="nav-label">${g.label}</span><i class="ti ti-chevron-right nav-chev"></i></button>`
-      + `<div class="flyout" onmouseenter="cancelCloseFly()" onmouseleave="scheduleCloseFly()"><div class="flyout-h">${g.label}</div>${fly}</div>`
+      + `<button type="button"${esDisa ? ' id="disaRailBtn"' : ''} class="nav-item${groupActive ? ' active' : ''}" title="${escHtml(a.label)}" aria-label="${escHtml(a.label)}" onclick="toggleFly(this.closest('.navg'))">${ic}<span class="nav-label">${escHtml(a.label)}</span><i class="ti ti-chevron-right nav-chev"></i></button>`
+      + `<div class="flyout" onmouseenter="cancelCloseFly()" onmouseleave="scheduleCloseFly()"><div class="flyout-h">${escHtml(a.label)}</div>${flyBloques(a)}</div>`
       + `</div>`;
   }).join('');
 
-  // ── DISA en el riel (2º icono, debajo de Inicio) ─────────────────────────────
-  // Sigue EXACTAMENTE el patrón .navg > .nav-item + .flyout de arriba (no se inventa
-  // estilo). Dos entradas: "Propuestas" (panel de cobros de D5, gateado igual que su
-  // pantalla: invoices.read O cobros.read) y "Hablar con DISA" (abre el MISMO chat
-  // flotante de siempre vía disaOpen(); no crea hilo nuevo ni toca el widget). El badge
-  // de pendientes vive aquí, sobre el icono, con el número que ya calcula D5.
-  const disaActive = active === 'propuestas' || active === 'disa';
-  // Ve el panel quien pueda ver AL MENOS UN tipo de propuesta: cobros (invoices.read/cobros.read) o
-  // pagos a proveedor (purchases.read). Mismo criterio que el gate de la pantalla y el del badge.
-  const puedePropuestas = can(c, 'invoices.read') || can(c, 'cobros.read') || can(c, 'purchases.read');
-  const disaFly =
-    (puedePropuestas
-      ? `<a href="/admin/propuestas" class="fly-item${active === 'propuestas' ? ' active' : ''}"><i class="ti ti-checklist"></i>Propuestas</a>`
-      : '')
-    + `<button type="button" class="fly-item" onclick="closeFly();if(window.disaOpen){disaOpen();}else{location.href='/admin/disa';}"><i class="ti ti-message-2"></i>Hablar con DISA</button>`;
-  const disaBadge = puedePropuestas
-    ? `<span class="rail-count" id="propCount"${propuestasPend ? '' : ' style="display:none"'}>${propuestasPend || ''}</span>`
+  // (C) LO ANCLADO — bloque propio arriba del rail, encima de las áreas. Quien no ancla nada no ve
+  // este bloque y su menú es EXACTAMENTE el de siempre. Anclar NO saca la entrada de su área: sigue
+  // estando donde estaba, y las áreas de fábrica no se reordenan ni se renombran ni se quitan.
+  const anclasHTML = anclas.length
+    ? `<div class="rail-anc" id="railAnc">`
+      + anclas.map(i => `<a href="${i.href}" class="nav-item anc${i.key === active ? ' active' : ''}" data-anc="${escHtml(i.key)}" draggable="true" title="${escHtml(i.label)}"><i class="ti ${i.icon}"></i><span class="nav-label">${escHtml(i.label)}</span></a>`).join('')
+      + `</div><div class="anc-sep"></div>`
     : '';
-  const disaNavHTML =
-    `<div class="navg" onmouseenter="openFly(this)" onmouseleave="scheduleCloseFly()">`
-    + `<button type="button" id="disaRailBtn" class="nav-item${disaActive ? ' active' : ''}" title="DISA" aria-label="DISA" onclick="toggleFly(this.closest('.navg'))"><span class="rail-ic"><i class="ti ti-sparkles"></i>${disaBadge}</span><span class="nav-label">DISA</span><i class="ti ti-chevron-right nav-chev"></i></button>`
-    + `<div class="flyout" onmouseenter="cancelCloseFly()" onmouseleave="scheduleCloseFly()"><div class="flyout-h">DISA</div>${disaFly}</div>`
-    + `</div>`;
+
+  // (B) BUSCADOR — se alimenta del MISMO menú ya filtrado por permisos. Por construcción no puede
+  // enseñar una puerta que el rail esconda: no existe otra lista de la que sacarla.
+  const destinos = destinosBuscador(menu);
+
+  // Las dos entradas FIJAS del rail (Inicio arriba del todo, Ayuda al pie) también salen de `menu.js`,
+  // que es lo que permite encontrarlas en el buscador y anclarlas como cualquier otra.
+  const fijaPin = menu.fijas.find(f => f.sitio === 'pin') || { href: '/admin', label: 'Inicio', icon: 'ti-home', key: 'dashboard' };
+  const fijaPie = menu.fijas.find(f => f.sitio === 'pie') || { href: '/docs', label: 'Ayuda y soporte', icon: 'ti-lifebuoy' };
 
   // ── Avatar + barra de Cuenta (mockup): cabecera + items gateados + Documentación + salir ──
-  const acctVisible = accountItems.filter(navFilter);
+  const acctVisible = menu.cuenta;
   const userName = session.userName || 'Cuenta';
   const escName = String(userName).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const initial = (String(userName).trim().charAt(0) || 'U').toUpperCase();
@@ -596,6 +431,13 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     window.USER_IS_OWNER=${isOwner};
     window.USER_IS_ADMIN=${isAdmin};
     window.canDo=function(p){if(window.USER_IS_OWNER||window.USER_IS_ADMIN)return true;return window.USER_PERMS.includes(p);};
+    // NAVEGACIÓN — el menú de ESTE usuario, YA filtrado por permisos en el servidor. El buscador y las
+    // anclas leen de aquí y de ningún otro sitio: por eso no pueden enseñar una puerta que el rail
+    // esconda. No es una lista de permisos ni una llave: es lo mismo que ya está pintado en el rail.
+    window.MENU_DESTINOS=${jsonForScript(destinos)};
+    window.MENU_ANCLAS=${jsonForScript(anclas.map(a => a.key))};
+    window.MENU_MAX_ANCLAS=${MAX_ANCLAS};
+    window.MENU_ACTIVE=${jsonForScript(active || '')};
   </script>
   <script>
     function openModal(id){document.getElementById(id).classList.add('open')}
@@ -744,6 +586,179 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     document.addEventListener('click',function(e){if(!e.target.closest('.navg'))window.closeFly();});
     window.addEventListener('scroll',function(){window.closeFly();},true);
     document.addEventListener('keydown',function(e){if(e.key==='Escape')window.closeFly();});
+
+    // ══ (B) BUSCADOR QUE NAVEGA ═══════════════════════════════════════════════════════════════
+    // Come de window.MENU_DESTINOS: el menú de ESTE usuario, ya filtrado por permisos en el servidor.
+    // No hay una segunda lista de destinos —se quedaría vieja y acabaría enseñando puertas que el menú
+    // esconde—, así que lo que no está en el rail tampoco está aquí.
+    // OJO: este <script> vive en el <head>, así que al ejecutarse el topbar TODAVÍA NO EXISTE. Hay que
+    // esperar al DOM o los listeners no se enganchan a nada y el buscador queda mudo — sin error, sin
+    // aviso, sin nada. (Las anclas de abajo no lo necesitan: van por delegación en document.)
+    (function(){
+    function arrancaBuscador(){
+      var wrap=document.getElementById('tbSearch'), inp=document.getElementById('tbq'), pan=document.getElementById('tbres');
+      if(!wrap||!inp||!pan) return;
+      var DEST=window.MENU_DESTINOS||[];
+      // Coincidencia POR NOMBRE: sin sinónimos y sin búsqueda difusa (así lo pide la pieza). Lo único
+      // que se normaliza son mayúsculas y tildes — quien teclea "analitica" busca "Analítica", y eso
+      // no es adivinar: es escribir en español sin acentos.
+      function norm(s){return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');}
+      for(var k=0;k<DEST.length;k++) DEST[k]._n=norm(DEST[k].label);
+      var res=[], sel=-1;
+      function buscar(q){
+        var n=norm(q).trim();
+        if(!n) return [];
+        var empieza=[], contiene=[];
+        for(var i=0;i<DEST.length;i++){
+          var p=DEST[i]._n.indexOf(n);
+          if(p===0) empieza.push(DEST[i]); else if(p>0) contiene.push(DEST[i]);
+        }
+        return empieza.concat(contiene).slice(0,8);   // los que EMPIEZAN por lo tecleado, primero
+      }
+      function pintar(){
+        if(!res.length){ pan.innerHTML='<p class="tb-res-none">Nada del menú se llama así.</p>'; return; }
+        pan.innerHTML=res.map(function(d,i){
+          var ar=d.area?'<span class="tb-res-ar">'+escHtml(d.area)+'</span>':'';
+          return '<a class="tb-res-i'+(i===sel?' sel':'')+'" role="option" aria-selected="'+(i===sel)+'" data-i="'+i+'" href="'+escHtml(d.href||'#')+'">'
+            +'<i class="ti '+escHtml(d.icon||'ti-arrow-right')+'"></i><span class="tb-res-tx">'+escHtml(d.label)+'</span>'+ar+'</a>';
+        }).join('');
+      }
+      function abrir(){ pan.classList.add('open'); inp.setAttribute('aria-expanded','true'); }
+      function cerrar(){ pan.classList.remove('open'); inp.setAttribute('aria-expanded','false'); }
+      function ir(d){
+        if(!d) return;
+        cerrar();
+        if(d.href){ location.href=d.href; return; }
+        // «Hablar con DISA» no es una pantalla: es el chat flotante de siempre. Se abre igual que desde
+        // el menú —sin hilo nuevo y sin duplicar el widget—, no se navega a ningún sitio.
+        if(window.disaOpen){ window.disaOpen(); } else { location.href='/admin/disa'; }
+      }
+      inp.addEventListener('input',function(){
+        wrap.classList.toggle('busca',!!inp.value);
+        res=buscar(inp.value); sel=res.length?0:-1;
+        if(inp.value){ pintar(); abrir(); } else { cerrar(); }
+      });
+      inp.addEventListener('keydown',function(e){
+        if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+          if(!res.length) return;
+          e.preventDefault();
+          sel=((sel<0?0:sel)+(e.key==='ArrowDown'?1:res.length-1))%res.length;
+          pintar();
+          var el=pan.querySelector('.tb-res-i.sel'); if(el&&el.scrollIntoView) el.scrollIntoView({block:'nearest'});
+        } else if(e.key==='Enter'){
+          if(res.length){ e.preventDefault(); ir(res[sel<0?0:sel]); }
+        } else if(e.key==='Escape'){
+          // Con texto, Esc limpia el buscador y NO cierra nada más (por eso se corta la propagación:
+          // si no, el mismo Esc cerraría también el flyout y el cajón del móvil).
+          if(inp.value){ e.stopPropagation(); inp.value=''; wrap.classList.remove('busca'); res=[]; sel=-1; cerrar(); }
+          else inp.blur();
+        }
+      });
+      inp.addEventListener('focus',function(){ if(res.length) abrir(); });
+      pan.addEventListener('click',function(e){
+        var a=e.target.closest('.tb-res-i'); if(!a) return;
+        e.preventDefault(); ir(res[parseInt(a.getAttribute('data-i'),10)]);
+      });
+      document.addEventListener('click',function(e){ if(!e.target.closest('#tbSearch')) cerrar(); });
+      // Atajo de teclado. Ctrl+K está tomado por la barra de direcciones en Chrome: hay que cortarlo.
+      var esMac=/Mac|iPhone|iPad/.test((navigator.platform||'')+' '+(navigator.userAgent||''));
+      var kbd=document.getElementById('tbkbd'); if(kbd&&esMac) kbd.textContent='⌘K';
+      document.addEventListener('keydown',function(e){
+        if((e.ctrlKey||e.metaKey)&&(e.key==='k'||e.key==='K')){ e.preventDefault(); inp.focus(); inp.select(); }
+      });
+    }
+    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',arrancaBuscador);
+    else arrancaBuscador();
+    })();
+
+    // ══ (C) ANCLAR Y ORDENAR LO PROPIO ════════════════════════════════════════════════════════
+    // La casa viene ordenada y el usuario se pone sus atajos ENCIMA: las áreas de fábrica no se
+    // reordenan, no se renombran y no se quitan, y anclar NO saca la entrada de su área.
+    (function(){
+      var MAX=window.MENU_MAX_ANCLAS||8;
+      function porClave(k){
+        var D=window.MENU_DESTINOS||[];
+        for(var i=0;i<D.length;i++) if(D[i].key===k&&D[i].href) return D[i];
+        return null;   // ya no está permitida (o no es un destino): el ancla CALLA
+      }
+      function pintarPins(){
+        var claves=window.MENU_ANCLAS||[];
+        document.querySelectorAll('.fly-pin').forEach(function(b){
+          var on=claves.indexOf(b.getAttribute('data-anc'))>=0;
+          b.classList.toggle('on',on);
+          b.setAttribute('aria-pressed',on?'true':'false');
+          b.title=on?'Quitar de anclados':'Anclar arriba del menú';
+          b.setAttribute('aria-label',b.title);
+          var ic=b.querySelector('i'); if(ic) ic.className='ti '+(on?'ti-pin-filled':'ti-pin');
+        });
+      }
+      function pintar(){
+        var nav=document.querySelector('.sb-nav'); if(!nav) return;
+        var claves=window.MENU_ANCLAS||[];
+        var box=document.getElementById('railAnc'), sep=nav.querySelector('.anc-sep');
+        if(!claves.length){ if(box) box.remove(); if(sep) sep.remove(); pintarPins(); return; }
+        if(!box){
+          box=document.createElement('div'); box.className='rail-anc'; box.id='railAnc';
+          nav.insertBefore(box,nav.firstChild);
+          sep=document.createElement('div'); sep.className='anc-sep';
+          nav.insertBefore(sep,box.nextSibling);
+        }
+        box.innerHTML=claves.map(function(k){
+          var d=porClave(k); if(!d) return '';
+          var act=(window.MENU_ACTIVE&&d.key===window.MENU_ACTIVE)?' active':'';
+          return '<a href="'+escHtml(d.href)+'" class="nav-item anc'+act+'" data-anc="'+escHtml(d.key)+'" draggable="true" title="'+escHtml(d.label)+'">'
+            +'<i class="ti '+escHtml(d.icon)+'"></i><span class="nav-label">'+escHtml(d.label)+'</span></a>';
+        }).join('');
+        pintarPins();
+      }
+      function guardar(claves){
+        return api('PUT','/api/erp/menu/anclas',{claves:claves})
+          .then(function(){ window.MENU_ANCLAS=claves; pintar(); })
+          .catch(function(e){ toast((e&&e.message)||window.ERR.GEN_SHORT,'err'); });
+      }
+      // Anclar / desanclar desde el desplegable. El botón vive DENTRO del enlace, así que hay que
+      // cortar la navegación antes de que el <a> se la lleve.
+      document.addEventListener('click',function(e){
+        var b=e.target.closest('.fly-pin'); if(!b) return;
+        e.preventDefault(); e.stopPropagation();
+        var k=b.getAttribute('data-anc'), claves=(window.MENU_ANCLAS||[]).slice(), i=claves.indexOf(k);
+        if(i>=0) claves.splice(i,1);
+        else {
+          if(claves.length>=MAX){ toast('Puedes tener '+MAX+' anclados como mucho. Quita uno para poner otro.','warn'); return; }
+          claves.push(k);
+        }
+        guardar(claves);
+      });
+      // Reordenar arrastrando ENTRE ELLAS. Solo se arrastran las anclas: el rail de fábrica no se mueve.
+      var arrastrada=null;
+      function limpiar(){ document.querySelectorAll('.nav-item.anc').forEach(function(x){x.classList.remove('dragging','over');}); }
+      document.addEventListener('dragstart',function(e){
+        var a=e.target.closest&&e.target.closest('.nav-item.anc'); if(!a) return;
+        arrastrada=a.getAttribute('data-anc'); a.classList.add('dragging');
+        try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',arrastrada); }catch(_e){}
+      });
+      document.addEventListener('dragend',function(){ arrastrada=null; limpiar(); });
+      document.addEventListener('dragover',function(e){
+        if(!arrastrada) return;
+        var a=e.target.closest&&e.target.closest('.nav-item.anc'); if(!a) return;
+        e.preventDefault();
+        document.querySelectorAll('.nav-item.anc.over').forEach(function(x){x.classList.remove('over');});
+        a.classList.add('over');
+      });
+      document.addEventListener('drop',function(e){
+        if(!arrastrada) return;
+        var a=e.target.closest&&e.target.closest('.nav-item.anc'); if(!a) return;
+        e.preventDefault();
+        var destino=a.getAttribute('data-anc'), origen=arrastrada;
+        arrastrada=null; limpiar();
+        if(destino===origen) return;
+        var claves=(window.MENU_ANCLAS||[]).slice();
+        var de=claves.indexOf(origen), aI=claves.indexOf(destino);
+        if(de<0||aI<0) return;
+        claves.splice(de,1); claves.splice(aI,0,origen);
+        guardar(claves);
+      });
+    })();
   </script>
   <style>
 ${ROOT_TOKENS}
@@ -799,13 +814,47 @@ ${ROOT_TOKENS}
     .fly-item i.ti{flex-shrink:0;font-size:16px;width:16px;color:var(--text3)}
     .fly-item.active i.ti{color:var(--accent)}
     .nav-pending{margin-left:auto;font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);border:.5px solid var(--border2);border-radius:7px;padding:1px 5px}
+    /* (A) Los DOS bloques del desplegable: día a día arriba (sin rótulo) y ajustes abajo, con una
+       línea y su nombre. Son 15 px de aire y una etiqueta: nada se pliega, nada gana un clic. */
+    .fly-tx{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+    .fly-sep{height:1px;background:var(--border);margin:6px 8px 2px}
+    .fly-grp{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);padding:4px 10px 4px}
+    /* (C) El botón de anclar: vive dentro del enlace, asoma al pasar por encima y se queda fijo si ya
+       está anclado. En táctil no hay hover, así que ahí se ve siempre (ver la media query de móvil). */
+    .fly-pin{flex-shrink:0;margin-left:6px;background:none;border:none;padding:2px;border-radius:6px;cursor:pointer;color:var(--text3);opacity:0;transition:opacity .12s,color .12s;line-height:0}
+    .fly-item:hover .fly-pin,.fly-pin:focus-visible{opacity:1}
+    .fly-pin.on{opacity:1;color:var(--accent)}
+    .fly-pin:hover{background:var(--border);color:var(--accent)}
+    .fly-pin i.ti{font-size:14px!important;width:14px!important;color:inherit!important}
+    /* (C) El bloque de lo anclado, arriba del rail. Sin anclas no existe: quien no ancla nada ve el
+       menú de siempre, byte por byte. */
+    .rail-anc{display:flex;flex-direction:column;gap:3px}
+    .anc-sep{height:1px;background:var(--chrome-div);margin:5px 6px}
+    .nav-item.anc{cursor:grab}
+    .nav-item.anc.dragging{opacity:.4;cursor:grabbing}
+    .nav-item.anc.over{box-shadow:inset 0 2px 0 var(--accent)}
 
     /* ── Topbar CLARO (dirección UX 2026-07-06): buscador · campana · avatar ── */
     .wrap{margin-left:var(--sw);flex:1;display:flex;flex-direction:column;min-height:100vh;min-height:100dvh}
     .topbar{background:var(--chrome);border-bottom:1px solid var(--chrome-div);padding:.6rem 1.1rem;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:50}
-    .tb-search{flex:1;max-width:430px;display:flex;align-items:center;gap:8px;background:var(--bg3);border:.5px solid var(--border2);border-radius:9px;padding:7px 12px;color:var(--text3);font-size:13px;cursor:text}
+    .tb-search{flex:1;max-width:430px;display:flex;align-items:center;gap:8px;background:var(--bg3);border:.5px solid var(--border2);border-radius:9px;padding:7px 12px;color:var(--text3);font-size:13px;cursor:text;position:relative}
     .tb-search i.ti{font-size:16px}
     .tb-search:focus-within{border-color:var(--accent);background:#fff}
+    /* (B) El buscador, ya con input de verdad. El <kbd> del atajo se aparta en cuanto se escribe. */
+    .tb-search input{flex:1;min-width:0;background:none;border:none;outline:none;font-family:inherit;font-size:13px;color:var(--text)}
+    .tb-search input::placeholder{color:var(--text3)}
+    .tb-kbd{flex-shrink:0;font-family:inherit;font-size:10px;font-weight:600;color:var(--text3);border:.5px solid var(--border2);border-radius:5px;padding:1px 5px;background:var(--bg2)}
+    .tb-search.busca .tb-kbd{display:none}
+    .tb-res{display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:12px;box-shadow:0 12px 34px rgba(16,24,40,.16);padding:6px;z-index:300;max-height:min(60vh,420px);overflow-y:auto}
+    .tb-res.open{display:block}
+    .tb-res-i{display:flex;align-items:center;gap:10px;width:100%;padding:7px 10px;border-radius:8px;background:none;border:none;cursor:pointer;font-family:inherit;font-size:13px;color:var(--body-tx);text-align:left;text-decoration:none}
+    .tb-res-i:hover,.tb-res-i.sel{background:var(--accent-soft);color:var(--accent)}
+    .tb-res-i i.ti{flex-shrink:0;font-size:16px;width:16px;color:var(--text3)}
+    .tb-res-i.sel i.ti{color:var(--accent)}
+    .tb-res-tx{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .tb-res-ar{flex-shrink:0;font-size:11px;color:var(--text3)}
+    .tb-res-i.sel .tb-res-ar{color:var(--accent)}
+    .tb-res-none{padding:10px 12px;font-size:12.5px;color:var(--text3)}
     /* La campana ABRE un panel de notificaciones (antes era un div decorativo con el punto rojo
        siempre encendido y sin destino). Desde el panel se marca cada aviso como visto, o todos. */
     .tb-bell-wrap{position:relative;margin-left:auto;display:flex}
@@ -1019,23 +1068,31 @@ ${ROOT_TOKENS}
       /* El buscador del topbar se mantiene en UNA línea (si no, el texto se parte en dos y engorda
          la barra, descuadrando cualquier alto calculado). */
       .tb-search{min-width:0}
-      .tb-search span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      /* El atajo de teclado no pinta nada en un móvil, y en 390 px se come el sitio del texto. */
+      .tb-kbd{display:none}
+      /* En táctil no hay hover: el botón de anclar tiene que verse siempre o no existe. */
+      .fly-pin{opacity:.55}
       /* Pantallas a pantalla completa (el chat de DISA): el contenido RELLENA el hueco bajo el
          topbar con flexbox, sin restar una altura fija de topbar → el compositor queda siempre a la
          vista, sin scroll, sea cual sea el alto real del topbar o del navegador móvil. */
       .content-flush{padding:0;display:flex;flex-direction:column;overflow:hidden;min-height:0}
       /* ── Navegación: el rail pasa a DRAWER off-canvas que abre la hamburguesa ── */
       .nav-toggle{display:inline-flex}
-      .sidebar{transform:translateX(-100%);width:250px;transition:transform .2s ease;overflow-y:auto}
-      .sidebar.open{transform:translateX(0);box-shadow:8px 0 30px rgba(16,24,40,.22)}
+      /* 280 px (antes 250): el bloque de ajustes va indentado y ahora cada entrada lleva su chincheta,
+         así que con 250 se cortaban nombres como "Servicios reservables". Siguen quedando 110 px de
+         fondo que tocar para cerrar el cajón. */
+      .sidebar{transform:translateX(-100%);width:280px;transition:transform .2s ease;overflow-y:auto}
+      /* La regla .sidebar.flyopen (216 px) es del rail de ESCRITORIO y le ganaba por especificidad al cajón:
+         abrir un acordeón en el móvil ENCOGÍA el cajón y partía los nombres. Aquí manda el cajón. */
+      .sidebar.open,.sidebar.open.flyopen{transform:translateX(0);width:280px;box-shadow:8px 0 30px rgba(16,24,40,.22)}
       /* Con el drawer abierto se muestran los nombres (en táctil no hay hover que los despliegue) */
-      .sidebar.open .nav-label{opacity:1;max-width:170px}
+      .sidebar.open .nav-label{opacity:1;max-width:200px}
       .sidebar.open .nav-item,.sidebar.open .disa-pin{justify-content:flex-start;gap:12px}
       .sidebar.open .nav-item{padding-left:.7rem}
       .sidebar.open .disa-pin{padding-left:1.05rem}
       .sidebar.open .nav-chev{opacity:.45}
       /* Submenús: en acordeón INLINE dentro del drawer (no popovers flotantes que se saldrían) */
-      .sidebar.open .flyout{position:static;min-width:0;width:auto;box-shadow:none;border:none;background:transparent;padding:2px 0 6px 34px;z-index:auto;top:auto!important;left:auto!important}
+      .sidebar.open .flyout{position:static;min-width:0;width:auto;box-shadow:none;border:none;background:transparent;padding:2px 0 6px 24px;z-index:auto;top:auto!important;left:auto!important}
       .sidebar.open .flyout-h{display:none}
       body.nav-open .nav-backdrop{display:block}
       .wrap{margin-left:0;min-width:0}
@@ -1058,21 +1115,33 @@ ${ROOT_TOKENS}
 </head>
 <body>
   <aside class="sidebar">
-    <a href="/admin" class="disa-pin${active === 'dashboard' ? ' active' : ''}" title="Inicio">
-      <i class="ti ti-home"></i>
-      <span class="nav-label">Inicio</span>
+    <a href="${fijaPin.href}" class="disa-pin${active === fijaPin.key ? ' active' : ''}" title="${escHtml(fijaPin.label)}">
+      <i class="ti ${fijaPin.icon}"></i>
+      <span class="nav-label">${escHtml(fijaPin.label)}</span>
     </a>
     <nav class="sb-nav">
-      ${disaNavHTML}${navHTML}
+      ${anclasHTML}${navHTML}
       <span class="rail-spacer"></span>
-      <a href="/docs" target="_blank" class="nav-item" title="Ayuda y soporte"><i class="ti ti-lifebuoy"></i><span class="nav-label">Ayuda y soporte</span></a>
+      <a href="${fijaPie.href}"${fijaPie.target ? ` target="${fijaPie.target}"` : ''} class="nav-item" title="${escHtml(fijaPie.label)}"><i class="ti ${fijaPie.icon}"></i><span class="nav-label">${escHtml(fijaPie.label)}</span></a>
     </nav>
   </aside>
   <div class="nav-backdrop" onclick="closeNav()" aria-hidden="true"></div>
   <div class="wrap">
     <div class="topbar">
       <button type="button" class="nav-toggle" aria-label="Abrir menú" aria-expanded="false" onclick="toggleNav()"><i class="ti ti-menu-2"></i></button>
-      <div class="tb-search"><i class="ti ti-search"></i><span>Buscar cliente, factura, producto…</span></div>
+      <!-- (B) BUSCADOR QUE NAVEGA. Hasta hoy esto era DECORADO: un div con un <span> de texto fijo, sin
+           input, sin JS y sin destino, cuyo reclamo («Buscar cliente, factura, producto…») prometía
+           buscar DATOS. Ahora es un buscador de verdad, pero del MENÚ —áreas y entradas—, así que el
+           reclamo dice lo que hace. La búsqueda de datos queda ANOTADA y sin construir: sería otra
+           tarea, y tocaría endpoints y consultas que este encargo declara intocables. -->
+      <div class="tb-search" id="tbSearch">
+        <i class="ti ti-search"></i>
+        <input type="text" id="tbq" placeholder="Buscar en el menú…" autocomplete="off" spellcheck="false"
+               role="combobox" aria-expanded="false" aria-controls="tbres" aria-autocomplete="list"
+               aria-label="Buscar en el menú">
+        <kbd class="tb-kbd" id="tbkbd" aria-hidden="true">Ctrl K</kbd>
+        <div class="tb-res" id="tbres" role="listbox" aria-label="Resultados del menú"></div>
+      </div>
       <div class="tb-bell-wrap">
         <button type="button" class="tb-bell" id="tbBell" title="${bellTitle}" aria-label="${bellTitle}"
                 aria-haspopup="true" aria-expanded="false" onclick="toggleBell(event)">
