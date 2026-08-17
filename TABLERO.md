@@ -1473,6 +1473,12 @@ cero** (oficio «peluquería»), entrando por el formulario de login y pulsando 
 **ANOTADO Y NO CONSTRUIDO:** el **orden por defecto del menú según el oficio del negocio** · la
 **búsqueda de datos** en el buscador del topbar · el **candado de `contabilidad`** (AGUJERO 1).
 
+**HALLAZGO SUELTO, DE OTRO MÓDULO (anotado, NO tocado aquí):** en un negocio **recién creado**,
+`GET /api/disa/threads` responde **500** — `SqliteError: no such column: t.pinned`
+(`modules/disa/index.js:2051`). La columna la añade un `ALTER TABLE` en `modules/disa/index.js:127`
+que en un tenant nuevo **aún no ha corrido** cuando la pantalla ya pregunta. Salió a la luz porque
+`gate-menu-navegacion` crea negocios de cero; no es de esta tarea y no se ha tocado nada de DISA.
+
 ### CRM comercial — embudo de oportunidades + actividad de cliente  ✅ HECHO (2026-07-09)
 Encargo expreso del dueño (estaba en el roadmap futuro). **Motor primero, DISA después** (RITUAL): esta
 tanda cierra el motor y las pantallas; la voz de DISA queda para el Eje B.
