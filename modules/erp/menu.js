@@ -326,13 +326,21 @@ export function destinosBuscador(menu) {
   return out;
 }
 
-// Toda entrada del menú de este usuario que tiene DESTINO, indexada por clave. Es lo anclable: el rail
-// ancla sitios a los que ir, así que «Hablar con DISA» (sin ruta) no entra — se busca, no se ancla.
+// Lo ANCLABLE de este usuario, indexado por clave. «Cualquier entrada del menú» es literal: entran
+// **las áreas del rail** (clave `area:<id>`) **y** las entradas de sus desplegables, más las fijas y
+// las de cuenta. Lo único que no entra es «Hablar con DISA»: no tiene ruta, y el bloque de anclados
+// ancla sitios a los que ir — se busca, no se ancla.
+//
+// Anclar un área NO la mueve, ni la renombra, ni la saca del rail: sigue en su sitio y en su orden.
+// Lo que aparece arriba es un ATAJO que abre el MISMO desplegable.
 export function anclablesPorClave(menu) {
   const m = new Map();
-  for (const a of menu.areas) for (const i of a.todos) if (i.href) m.set(i.key, i);
-  for (const i of menu.fijas)  m.set(i.key, i);
-  for (const i of menu.cuenta) m.set(i.key, i);
+  for (const a of menu.areas) {
+    m.set('area:' + a.id, { tipo: 'area', key: 'area:' + a.id, label: a.label, icon: a.icon, area: a });
+    for (const i of a.todos) if (i.href) m.set(i.key, { tipo: 'entrada', ...i });
+  }
+  for (const i of menu.fijas)  m.set(i.key, { tipo: 'entrada', ...i });
+  for (const i of menu.cuenta) m.set(i.key, { tipo: 'entrada', ...i });
   return m;
 }
 

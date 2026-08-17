@@ -239,6 +239,79 @@ export function fuentesPermitidas(c) {
   return fuentesDe({ role, perms: c.get('userPerms') || [] });
 }
 
+// ══ PINTAR EL RAIL — UN SOLO RENDERIZADOR ═════════════════════════════════════════════════════════
+// Lo usan `adminLayout` (al servir la página) y la ruta de anclas (que devuelve el bloque YA repintado
+// tras anclar o reordenar). Si el HTML del rail se escribiera además en el JavaScript del navegador
+// serían DOS renderizadores, y el día que uno cambie el otro se queda viejo en silencio.
+//
+// `ctx` = { active, anclado:Set, disaBadge }.
+
+// La chincheta. Misma pieza para las entradas del desplegable y para las ÁREAS; lo único que cambia es
+// dónde se coloca (`extra`), porque el área tiene chevron a la derecha y la entrada no.
+function pinBtn(clave, on, extra = '') {
+  const t = on ? 'Quitar de anclados' : 'Anclar arriba del menú';
+  return `<button type="button" class="fly-pin${extra ? ' ' + extra : ''}${on ? ' on' : ''}" data-anc="${escHtml(clave)}"`
+    + ` title="${t}" aria-label="${t}" aria-pressed="${on}"><i class="ti ${on ? 'ti-pin-filled' : 'ti-pin'}"></i></button>`;
+}
+
+// Una entrada del desplegable. La chincheta va DENTRO del enlace, asoma al pasar por encima y NO
+// navega (el listener delegado hace preventDefault antes de que el enlace se entere).
+// Las etiquetas van ESCAPADAS: una de ellas —«Puestos»— es texto libre que escribe el dueño
+// (`cita_puesto_plural`) y aquí se pintaba en crudo, o sea XSS almacenado hacia sus empleados.
+function flyItemHTML(i, ctx) {
+  const act = i.key === ctx.active ? ' active' : '';
+  const ic = `<i class="ti ${i.icon}"></i><span class="fly-tx">${escHtml(i.label)}</span>`;
+  // Cartel gris "pendiente": hoy no lo usa ninguna entrada, pero la capacidad se conserva. Sin esta
+  // rama, poner `disabled: true` mañana pintaría un enlace normal a una pantalla que no existe.
+  if (i.disabled) return `<span class="fly-item disabled" title="Pendiente — aún no disponible">${ic}<span class="nav-pending">pendiente</span></span>`;
+  if (!i.href) return `<button type="button" class="fly-item${act}" onclick="${i.accion}">${ic}</button>`;
+  return `<a href="${i.href}" class="fly-item${act}">${ic}${pinBtn(i.key, ctx.anclado.has(i.key))}</a>`;
+}
+
+// (A) JERARQUÍA DENTRO DEL ÁREA — dos bloques separados por una línea y un rótulo. Es SEPARAR, NO
+// plegar: las dos mitades se pintan en el mismo desplegable, a la vez, y nada gana un clic. Arriba,
+// sin rótulo, lo del día a día; abajo, bajo «Ajustes de <Área>», la configuración y los maestros.
+function flyBloquesHTML(a, ctx) {
+  const arriba = a.diario.map(i => flyItemHTML(i, ctx)).join('');
+  if (!a.ajustes.length) return arriba;
+  return arriba
+    + (arriba ? '<div class="fly-sep"></div>' : '')
+    + `<div class="fly-grp">Ajustes de ${escHtml(a.label)}</div>`
+    + a.ajustes.map(i => flyItemHTML(i, ctx)).join('');
+}
+
+// Un ÁREA del rail: su icono, su nombre y su desplegable. Con `ancla:true` es la COPIA que vive en el
+// bloque de anclados: se comporta igual (abre el mismo desplegable) pero se puede arrastrar, y **no
+// lleva el id ni el badge de DISA** — dos elementos con el mismo id serían HTML inválido y el contador
+// solo se actualizaría en uno. El área de siempre no se mueve de su sitio: arriba hay un atajo, no un
+// traslado.
+function areaNavgHTML(a, ctx, { ancla = false } = {}) {
+  const esDisa = a.id === 'disa';
+  const groupActive = a.todos.some(i => i.key === ctx.active) || (esDisa && (ctx.active === 'propuestas' || ctx.active === 'disa'));
+  const ic = (esDisa && !ancla)
+    ? `<span class="rail-ic"><i class="ti ${a.icon}"></i>${ctx.disaBadge || ''}</span>`
+    : `<i class="ti ${a.icon}"></i>`;
+  const clave = 'area:' + a.id;
+  return `<div class="navg${ancla ? ' anc' : ''}"${ancla ? ` data-anc="${escHtml(clave)}" draggable="true"` : ''} onmouseenter="openFly(this)" onmouseleave="scheduleCloseFly()">`
+    + `<button type="button"${esDisa && !ancla ? ' id="disaRailBtn"' : ''} class="nav-item${groupActive ? ' active' : ''}" title="${escHtml(a.label)}" aria-label="${escHtml(a.label)}" onclick="toggleFly(this.closest('.navg'))">${ic}<span class="nav-label">${escHtml(a.label)}</span><i class="ti ti-chevron-right nav-chev"></i></button>`
+    + pinBtn(clave, ctx.anclado.has(clave), 'nav-pin')
+    + `<div class="flyout" onmouseenter="cancelCloseFly()" onmouseleave="scheduleCloseFly()"><div class="flyout-h">${escHtml(a.label)}</div>${flyBloquesHTML(a, ctx)}</div>`
+    + `</div>`;
+}
+
+// (C) EL BLOQUE DE LO ANCLADO — el CONTENIDO de `#railAnc` (el envoltorio lo pinta el layout y existe
+// siempre, vacío o no, para que repintarlo sea cambiarle el interior).
+// Se ancla CUALQUIER entrada del menú: las de los desplegables **y las áreas**. Un área anclada trae
+// su desplegable entero; una entrada anclada es un enlace. Ni una ni otra sale de su sitio de origen.
+export function anclasBloqueHTML(anclas, ctx) {
+  if (!anclas.length) return '';
+  return anclas.map(i => i.tipo === 'area'
+    ? areaNavgHTML(i.area, ctx, { ancla: true })
+    : `<a href="${i.href}" class="nav-item anc${i.key === ctx.active ? ' active' : ''}" data-anc="${escHtml(i.key)}" draggable="true" title="${escHtml(i.label)}">`
+      + `<i class="ti ${i.icon}"></i><span class="nav-label">${escHtml(i.label)}</span>${pinBtn(i.key, true, 'nav-pin')}</a>`
+  ).join('') + `<div class="anc-sep"></div>`;
+}
+
 export function adminLayout(title, content, active = '', csrfToken = '', c = null, hideDisaSidebar = false) {
   const session = c?.get?.('session') || {};
   const role = session.role || '';
@@ -323,35 +396,6 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   catch { anclas = []; }
   const anclado = new Set(anclas.map(a => a.key));
 
-  // Una entrada del desplegable. El botón de anclar va DENTRO del enlace, asoma al pasar por encima y
-  // NO navega (el listener delegado hace preventDefault antes de que el enlace se entere).
-  // Las etiquetas van ESCAPADAS: una de ellas —«Puestos»— es texto libre que escribe el dueño
-  // (`cita_puesto_plural`) y aquí se pintaba en crudo, o sea XSS almacenado hacia sus empleados.
-  const flyItem = i => {
-    const act = i.key === active ? ' active' : '';
-    const ic = `<i class="ti ${i.icon}"></i><span class="fly-tx">${escHtml(i.label)}</span>`;
-    // Cartel gris "pendiente": hoy no lo usa ninguna entrada, pero la capacidad se conserva. Sin esta
-    // rama, poner `disabled: true` mañana pintaría un enlace normal a una pantalla que no existe.
-    if (i.disabled) return `<span class="fly-item disabled" title="Pendiente — aún no disponible">${ic}<span class="nav-pending">pendiente</span></span>`;
-    if (!i.href) return `<button type="button" class="fly-item${act}" onclick="${i.accion}">${ic}</button>`;
-    const on = anclado.has(i.key);
-    const t = on ? 'Quitar de anclados' : 'Anclar arriba del menú';
-    const pin = `<button type="button" class="fly-pin${on ? ' on' : ''}" data-anc="${escHtml(i.key)}" title="${t}" aria-label="${t}" aria-pressed="${on}"><i class="ti ${on ? 'ti-pin-filled' : 'ti-pin'}"></i></button>`;
-    return `<a href="${i.href}" class="fly-item${act}">${ic}${pin}</a>`;
-  };
-
-  // (A) JERARQUÍA DENTRO DEL ÁREA — dos bloques separados por una línea y un rótulo. Es SEPARAR, NO
-  // plegar: las dos mitades se pintan en el mismo desplegable, a la vez, y nada gana un clic. Arriba,
-  // sin rótulo, lo del día a día; abajo, bajo «Ajustes de <Área>», la configuración y los maestros.
-  const flyBloques = a => {
-    const arriba = a.diario.map(flyItem).join('');
-    if (!a.ajustes.length) return arriba;
-    return arriba
-      + (arriba ? '<div class="fly-sep"></div>' : '')
-      + `<div class="fly-grp">Ajustes de ${escHtml(a.label)}</div>`
-      + a.ajustes.map(flyItem).join('');
-  };
-
   // ── DISA en el riel (2º icono, debajo de Inicio) ─────────────────────────────
   // Ve el panel de Propuestas quien pueda ver AL MENOS UN tipo: cobros (invoices.read/cobros.read) o
   // pagos a proveedor (purchases.read). Esa regla vive ahora en `menu.js` (`permAlguno`), así que el
@@ -361,29 +405,16 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   const disaBadge = verPropuestas
     ? `<span class="rail-count" id="propCount"${propuestasPend ? '' : ' style="display:none"'}>${propuestasPend || ''}</span>`
     : '';
+  const ctxRail = { active, anclado, disaBadge };
 
-  // Rail: un icono por ÁREA, cada una con su flyout. Un área se marca activa si la pantalla actual es
-  // una de sus entradas. DISA es la primera del rail y lleva su badge sobre el icono.
-  const navHTML = menu.areas.map(a => {
-    const esDisa = a.id === 'disa';
-    const groupActive = a.todos.some(i => i.key === active) || (esDisa && (active === 'propuestas' || active === 'disa'));
-    const ic = esDisa
-      ? `<span class="rail-ic"><i class="ti ${a.icon}"></i>${disaBadge}</span>`
-      : `<i class="ti ${a.icon}"></i>`;
-    return `<div class="navg" onmouseenter="openFly(this)" onmouseleave="scheduleCloseFly()">`
-      + `<button type="button"${esDisa ? ' id="disaRailBtn"' : ''} class="nav-item${groupActive ? ' active' : ''}" title="${escHtml(a.label)}" aria-label="${escHtml(a.label)}" onclick="toggleFly(this.closest('.navg'))">${ic}<span class="nav-label">${escHtml(a.label)}</span><i class="ti ti-chevron-right nav-chev"></i></button>`
-      + `<div class="flyout" onmouseenter="cancelCloseFly()" onmouseleave="scheduleCloseFly()"><div class="flyout-h">${escHtml(a.label)}</div>${flyBloques(a)}</div>`
-      + `</div>`;
-  }).join('');
+  // Rail: un icono por ÁREA, cada una con su flyout y su chincheta. Las áreas de fábrica siguen en su
+  // orden, con su nombre y todas: anclar una NO la mueve de aquí, pone un atajo arriba.
+  const navHTML = menu.areas.map(a => areaNavgHTML(a, ctxRail)).join('');
 
-  // (C) LO ANCLADO — bloque propio arriba del rail, encima de las áreas. Quien no ancla nada no ve
-  // este bloque y su menú es EXACTAMENTE el de siempre. Anclar NO saca la entrada de su área: sigue
-  // estando donde estaba, y las áreas de fábrica no se reordenan ni se renombran ni se quitan.
-  const anclasHTML = anclas.length
-    ? `<div class="rail-anc" id="railAnc">`
-      + anclas.map(i => `<a href="${i.href}" class="nav-item anc${i.key === active ? ' active' : ''}" data-anc="${escHtml(i.key)}" draggable="true" title="${escHtml(i.label)}"><i class="ti ${i.icon}"></i><span class="nav-label">${escHtml(i.label)}</span></a>`).join('')
-      + `</div><div class="anc-sep"></div>`
-    : '';
+  // (C) LO ANCLADO — bloque propio arriba del rail, encima de las áreas. El envoltorio existe SIEMPRE
+  // (vacío si no hay anclas) para que repintarlo tras anclar sea cambiarle el interior por el que
+  // devuelve el servidor; vacío no ocupa nada, así que quien no ancla nada ve el menú de siempre.
+  const anclasHTML = `<div class="rail-anc" id="railAnc">${anclasBloqueHTML(anclas, ctxRail)}</div>`;
 
   // (B) BUSCADOR — se alimenta del MISMO menú ya filtrado por permisos. Por construcción no puede
   // enseñar una puerta que el rail esconda: no existe otra lista de la que sacarla.
@@ -570,10 +601,10 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       var fly=g.querySelector('.flyout'); if(!fly) return;
       document.querySelectorAll('.flyout.open').forEach(function(f){if(f!==fly)f.classList.remove('open');});
       var sb=document.querySelector('.sidebar'); if(sb) sb.classList.add('flyopen');
-      // El rail queda anclado a 216px (.sidebar.flyopen); el flyout va justo a su derecha.
+      // El rail queda anclado a 240px (.sidebar.flyopen); el flyout va justo a su derecha.
       // Usamos la constante (no getBoundingClientRect) porque el ancho está a mitad de transición.
       var icon=g.querySelector('.nav-item'), r=icon.getBoundingClientRect();
-      fly.style.left='222px';
+      fly.style.left='246px';
       fly.style.top='0px';
       fly.classList.add('open');
       var oh=fly.offsetHeight;
@@ -674,13 +705,12 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     // ══ (C) ANCLAR Y ORDENAR LO PROPIO ════════════════════════════════════════════════════════
     // La casa viene ordenada y el usuario se pone sus atajos ENCIMA: las áreas de fábrica no se
     // reordenan, no se renombran y no se quitan, y anclar NO saca la entrada de su área.
+    // Se ancla CUALQUIER entrada del menú: las de los desplegables Y LAS ÁREAS. Un área anclada trae
+    // su desplegable entero, así que el bloque NO se pinta aquí: lo pinta el servidor con el mismo
+    // renderizador del rail y lo devuelve ya hecho. Un segundo renderizador en el navegador acabaría
+    // diciendo algo distinto del primero el día que uno de los dos cambie.
     (function(){
       var MAX=window.MENU_MAX_ANCLAS||8;
-      function porClave(k){
-        var D=window.MENU_DESTINOS||[];
-        for(var i=0;i<D.length;i++) if(D[i].key===k&&D[i].href) return D[i];
-        return null;   // ya no está permitida (o no es un destino): el ancla CALLA
-      }
       function pintarPins(){
         var claves=window.MENU_ANCLAS||[];
         document.querySelectorAll('.fly-pin').forEach(function(b){
@@ -692,28 +722,14 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
           var ic=b.querySelector('i'); if(ic) ic.className='ti '+(on?'ti-pin-filled':'ti-pin');
         });
       }
-      function pintar(){
-        var nav=document.querySelector('.sb-nav'); if(!nav) return;
-        var claves=window.MENU_ANCLAS||[];
-        var box=document.getElementById('railAnc'), sep=nav.querySelector('.anc-sep');
-        if(!claves.length){ if(box) box.remove(); if(sep) sep.remove(); pintarPins(); return; }
-        if(!box){
-          box=document.createElement('div'); box.className='rail-anc'; box.id='railAnc';
-          nav.insertBefore(box,nav.firstChild);
-          sep=document.createElement('div'); sep.className='anc-sep';
-          nav.insertBefore(sep,box.nextSibling);
-        }
-        box.innerHTML=claves.map(function(k){
-          var d=porClave(k); if(!d) return '';
-          var act=(window.MENU_ACTIVE&&d.key===window.MENU_ACTIVE)?' active':'';
-          return '<a href="'+escHtml(d.href)+'" class="nav-item anc'+act+'" data-anc="'+escHtml(d.key)+'" draggable="true" title="'+escHtml(d.label)+'">'
-            +'<i class="ti '+escHtml(d.icon)+'"></i><span class="nav-label">'+escHtml(d.label)+'</span></a>';
-        }).join('');
-        pintarPins();
-      }
       function guardar(claves){
-        return api('PUT','/api/erp/menu/anclas',{claves:claves})
-          .then(function(){ window.MENU_ANCLAS=claves; pintar(); })
+        return api('PUT','/api/erp/menu/anclas',{claves:claves,activa:window.MENU_ACTIVE||''})
+          .then(function(r){
+            window.MENU_ANCLAS=(r&&r.anclas)||claves;
+            var box=document.getElementById('railAnc');
+            if(box) box.innerHTML=(r&&typeof r.html==='string')?r.html:'';
+            pintarPins();
+          })
           .catch(function(e){ toast((e&&e.message)||window.ERR.GEN_SHORT,'err'); });
       }
       // Anclar / desanclar desde el desplegable. El botón vive DENTRO del enlace, así que hay que
@@ -729,25 +745,32 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
         }
         guardar(claves);
       });
-      // Reordenar arrastrando ENTRE ELLAS. Solo se arrastran las anclas: el rail de fábrica no se mueve.
+      // Reordenar arrastrando ENTRE ELLAS. Solo se arrastran las anclas —el rail de fábrica no se
+      // mueve— y solo cuentan las que son HIJAS DIRECTAS del bloque: dentro de un área anclada hay un
+      // desplegable entero, y soltar sobre una de sus entradas no es reordenar el bloque.
       var arrastrada=null;
-      function limpiar(){ document.querySelectorAll('.nav-item.anc').forEach(function(x){x.classList.remove('dragging','over');}); }
+      function ancDe(e){
+        var el=e.target.closest&&e.target.closest('.anc');
+        return (el&&el.parentElement&&el.parentElement.id==='railAnc')?el:null;
+      }
+      function limpiar(){ document.querySelectorAll('.anc').forEach(function(x){x.classList.remove('dragging','over');}); }
       document.addEventListener('dragstart',function(e){
-        var a=e.target.closest&&e.target.closest('.nav-item.anc'); if(!a) return;
+        var a=ancDe(e); if(!a) return;
+        window.closeFly();   // si se arrastra un área, su desplegable no viaja detrás del cursor
         arrastrada=a.getAttribute('data-anc'); a.classList.add('dragging');
         try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',arrastrada); }catch(_e){}
       });
       document.addEventListener('dragend',function(){ arrastrada=null; limpiar(); });
       document.addEventListener('dragover',function(e){
         if(!arrastrada) return;
-        var a=e.target.closest&&e.target.closest('.nav-item.anc'); if(!a) return;
+        var a=ancDe(e); if(!a) return;
         e.preventDefault();
-        document.querySelectorAll('.nav-item.anc.over').forEach(function(x){x.classList.remove('over');});
+        document.querySelectorAll('.anc.over').forEach(function(x){x.classList.remove('over');});
         a.classList.add('over');
       });
       document.addEventListener('drop',function(e){
         if(!arrastrada) return;
-        var a=e.target.closest&&e.target.closest('.nav-item.anc'); if(!a) return;
+        var a=ancDe(e); if(!a) return;
         e.preventDefault();
         var destino=a.getAttribute('data-anc'), origen=arrastrada;
         arrastrada=null; limpiar();
@@ -773,7 +796,10 @@ ${ROOT_TOKENS}
        se ensancha y muestra el nombre de cada área, con la actual resaltada. El flyout sigue
        abriendo las sub-funciones a la derecha. */
     .sidebar{width:var(--sw);background:var(--chrome);border-right:1px solid var(--chrome-div);position:fixed;top:0;left:0;height:100vh;overflow-x:hidden;overflow-y:auto;z-index:100;display:flex;flex-direction:column;transition:width .16s ease}
-    .sidebar:hover,.sidebar.flyopen{width:216px;box-shadow:6px 0 24px rgba(16,24,40,.10)}
+    /* 240 px (antes 216): cada fila del rail desplegado lleva ahora su chincheta, y con 216 el nombre
+       del área más largo («Compras y gastos») se quedaba sin sitio y salía cortado. Si se cambia este
+       número hay que cambiar TAMBIÉN el left del flyout en openFly() — van pegados. */
+    .sidebar:hover,.sidebar.flyopen{width:240px;box-shadow:6px 0 24px rgba(16,24,40,.10)}
     .sidebar::-webkit-scrollbar{width:6px}
     .sidebar::-webkit-scrollbar-thumb{background:rgba(0,0,0,.12);border-radius:6px}
     /* DISA fija arriba — la marca y el Inicio. YA NO lleva contador de avisos: la única señal
@@ -826,13 +852,26 @@ ${ROOT_TOKENS}
     .fly-pin.on{opacity:1;color:var(--accent)}
     .fly-pin:hover{background:var(--border);color:var(--accent)}
     .fly-pin i.ti{font-size:14px!important;width:14px!important;color:inherit!important}
-    /* (C) El bloque de lo anclado, arriba del rail. Sin anclas no existe: quien no ancla nada ve el
+    /* La chincheta de un ÁREA va SUELTA dentro del .navg, no dentro de su botón: un <button> dentro de
+       otro <button> es HTML inválido. Y solo asoma con el rail desplegado — en 62 px no hay sitio.
+       El hueco se lo QUITA AL PADDING de la fila, no al nombre: si se posiciona encima, la chincheta
+       tapa la última letra («Compras y gasto📌») y parece que el menú corta las palabras. */
+    .nav-pin{position:absolute;right:5px;top:50%;transform:translateY(-50%);margin:0;display:none}
+    .sidebar:hover .nav-pin,.sidebar.flyopen .nav-pin,.sidebar.open .nav-pin{display:block}
+    .sidebar:hover .navg>.nav-item,.sidebar.flyopen .navg>.nav-item,.sidebar.open .navg>.nav-item,
+    .sidebar:hover a.nav-item.anc,.sidebar.flyopen a.nav-item.anc,.sidebar.open a.nav-item.anc{padding-right:30px}
+    .navg:hover .nav-pin,a.nav-item.anc:hover .nav-pin{opacity:1}
+    /* (C) El bloque de lo anclado, arriba del rail. VACÍO no ocupa nada: quien no ancla nada ve el
        menú de siempre, byte por byte. */
     .rail-anc{display:flex;flex-direction:column;gap:3px}
+    .rail-anc:empty{display:none}
     .anc-sep{height:1px;background:var(--chrome-div);margin:5px 6px}
-    .nav-item.anc{cursor:grab}
-    .nav-item.anc.dragging{opacity:.4;cursor:grabbing}
-    .nav-item.anc.over{box-shadow:inset 0 2px 0 var(--accent)}
+    /* La entrada anclada tiene que ser su propio marco de posición: sin esto, su chincheta (absolute)
+       se colgaba del .sidebar —el ancestro posicionado más cercano— y se iba a la esquina de arriba. */
+    a.nav-item.anc{position:relative}
+    .anc{cursor:grab}
+    .anc.dragging{opacity:.4;cursor:grabbing}
+    .anc.over{box-shadow:inset 0 2px 0 var(--accent)}
 
     /* ── Topbar CLARO (dirección UX 2026-07-06): buscador · campana · avatar ── */
     .wrap{margin-left:var(--sw);flex:1;display:flex;flex-direction:column;min-height:100vh;min-height:100dvh}
@@ -1072,6 +1111,11 @@ ${ROOT_TOKENS}
       .tb-kbd{display:none}
       /* En táctil no hay hover: el botón de anclar tiene que verse siempre o no existe. */
       .fly-pin{opacity:.55}
+      /* En el cajón el submenú es INLINE, así que el .navg CRECE con el acordeón abierto y un
+         top:50% mandaría la chincheta del área al centro del grupo entero, flotando entre sus
+         entradas. Aquí se ata a la fila del área. (En escritorio no pasa: el flyout es fixed y
+         no cuenta para el alto del .navg.) */
+      .sidebar.open .nav-pin{top:10px;transform:none}
       /* Pantallas a pantalla completa (el chat de DISA): el contenido RELLENA el hueco bajo el
          topbar con flexbox, sin restar una altura fija de topbar → el compositor queda siempre a la
          vista, sin scroll, sea cual sea el alto real del topbar o del navegador móvil. */

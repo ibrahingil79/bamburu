@@ -130,7 +130,15 @@ const leerMenu = page => page.evaluate(() => {
     pin: { label: txt(sb.querySelector('.disa-pin .nav-label')), href: sb.querySelector('.disa-pin').getAttribute('href') },
     pie: { label: txt(nav.querySelector('a[href="/docs"] .nav-label')), href: '/docs' },
     cuenta: [...document.querySelectorAll('.acct-menu .acct-item')].map(a => ({ label: txt(a.querySelector('span')), href: a.getAttribute('href') })),
-    anclas: [...document.querySelectorAll('#railAnc .anc')].map(a => ({ key: a.dataset.anc, href: a.getAttribute('href') })),
+    // Hijas DIRECTAS del bloque: un área anclada trae su desplegable dentro, y sus entradas no son anclas.
+    anclas: [...document.querySelectorAll('#railAnc > .anc')].map(a => ({
+      key: a.dataset.anc, href: a.getAttribute('href'),
+      tipo: a.classList.contains('navg') ? 'area' : 'entrada',
+      subentradas: a.querySelectorAll('.flyout .fly-item').length,
+      label: a.querySelector('.nav-label')?.textContent.trim() || null,
+    })),
+    // ¿Tiene chincheta cada ÁREA del rail? (el encargo: se ancla CUALQUIER entrada, áreas incluidas)
+    areasConPin: [...nav.querySelectorAll(':scope > .navg')].filter(g => g.querySelector(':scope > .nav-pin')).length,
     destinos: (window.MENU_DESTINOS || []).map(d => ({ key: d.key, label: d.label, href: d.href })),
   };
 });
@@ -207,6 +215,10 @@ try {
        'área "' + a.area + '": el bloque de ajustes es el esperado', vis.length ? vis.join(', ') : '(ninguno)');
     if (esp.length) ok(a.rotulo === 'Ajustes de ' + a.area, 'área "' + a.area + '": el rótulo lo dice con su nombre', a.rotulo);
   }
+  ok(menu.areasConPin === menu.areas.length,
+     'CADA ÁREA del rail tiene su chincheta: se ancla cualquier entrada del menú, áreas incluidas',
+     menu.areasConPin + ' de ' + menu.areas.length);
+
   const nadaPlegado = await page.evaluate(() => {
     // Todas las entradas del área de Agenda tienen que estar en el MISMO desplegable y a la vez.
     const g = [...document.querySelectorAll('.navg')].find(x => x.querySelector('.nav-label')?.textContent.trim() === 'Agenda');
@@ -339,6 +351,14 @@ try {
     await page.click('.flyout.open a.fly-item[href="' + href + '"] .fly-pin');
     await dormir(350);
   };
+  // Anclar un ÁREA se hace con la chincheta del área, la que vive en el rail junto a su nombre.
+  const anclarArea = async nombre => {
+    await page.evaluate(a => {
+      const g = [...document.querySelectorAll('.sb-nav > .navg')].find(x => x.querySelector('.nav-label')?.textContent.trim() === a);
+      g.querySelector(':scope > .nav-pin').click();
+    }, nombre);
+    await dormir(350);
+  };
   await page.goto(BASE + '/admin', { waitUntil: 'networkidle0' });
   await anclar('Ventas', '/admin/invoices');
   await anclar('Agenda', '/admin/citas');
@@ -349,8 +369,38 @@ try {
   ok(m.areas.reduce((n, a) => n + a.diario.length + a.ajustes.length, 0) === BASE_RAIL.length,
      'anclar NO saca la entrada de su área: el rail sigue con sus ' + BASE_RAIL.length + ' entradas');
 
-  // Reordenar: se guarda el orden nuevo por la misma puerta que usa el arrastre.
-  const nuevoOrden = ['clients', 'invoices', 'citas'];
+  // ── Y AHORA UN ÁREA ENTERA: el menú principal también se ancla ────────────────────────────────
+  const areasAntes = m.areas.map(a => a.area);
+  await anclarArea('Compras y gastos');
+  m = await leerMenu(page);
+  const ancArea = m.anclas.find(a => a.key === 'area:compras');
+  ok(!!ancArea && ancArea.tipo === 'area', 'un ÁREA del rail se ancla igual que una entrada',
+     JSON.stringify(m.anclas.map(a => a.key + ':' + a.tipo)));
+  ok(ancArea && ancArea.label === 'Compras y gastos', 'y llega arriba con su nombre', ancArea && ancArea.label);
+  ok(ancArea && ancArea.subentradas === 7,
+     'el área anclada trae su desplegable ENTERO (no se convierte en un enlace suelto)',
+     (ancArea && ancArea.subentradas) + ' entradas');
+  ok(JSON.stringify(m.areas.map(a => a.area)) === JSON.stringify(areasAntes),
+     'las áreas de fábrica NO se reordenan, NO se renombran y NO se quitan al anclar una',
+     m.areas.map(a => a.area).join(' · '));
+  ok(m.areas.reduce((n, a) => n + a.diario.length + a.ajustes.length, 0) === BASE_RAIL.length,
+     'y el rail sigue con sus ' + BASE_RAIL.length + ' entradas: anclar un área es un ATAJO, no un traslado');
+  // Y su desplegable de arriba ABRE, igual que el de siempre.
+  const flyAncla = await page.evaluate(() => {
+    const g = document.querySelector('#railAnc > .navg.anc');
+    g.querySelector(':scope > .nav-item').click();
+    const fly = g.querySelector('.flyout');
+    return { abierto: fly.classList.contains('open'),
+             primera: fly.querySelector('.fly-item .fly-tx')?.textContent.trim(),
+             rotulo: fly.querySelector('.fly-grp')?.textContent.trim() };
+  });
+  await dormir(150);
+  ok(flyAncla.abierto && flyAncla.primera === 'Facturas recibidas' && flyAncla.rotulo === 'Ajustes de Compras y gastos',
+     'el área anclada abre el MISMO desplegable, con sus dos bloques', JSON.stringify(flyAncla));
+
+  // Reordenar: se guarda el orden nuevo por la misma puerta que usa el arrastre. Un área y tres
+  // entradas se reordenan MEZCLADAS, que es de lo que va el bloque.
+  const nuevoOrden = ['area:compras', 'clients', 'invoices', 'citas'];
   await page.evaluate(async o => {
     await api('PUT', '/api/erp/menu/anclas', { claves: o });
   }, nuevoOrden);
@@ -375,8 +425,11 @@ try {
   await page.evaluate(async () => { await api('PUT', '/api/erp/menu/anclas', { claves: [] }); });
   await page.reload({ waitUntil: 'networkidle0' });
   m = await leerMenu(page);
-  ok(m.anclas.length === 0, 'al quitarlas todas no queda ni bloque de anclados');
-  ok(!(await page.evaluate(() => !!document.getElementById('railAnc'))), 'y el bloque desaparece del DOM');
+  ok(m.anclas.length === 0, 'al quitarlas todas no queda ni un ancla');
+  ok(await page.evaluate(() => {
+       const b = document.getElementById('railAnc');
+       return !!b && b.children.length === 0 && b.getBoundingClientRect().height === 0;
+     }), 'y el bloque queda VACÍO y sin ocupar un solo píxel');
   ok(JSON.stringify(m.areas) === antesFabrica, 'el menú queda IDÉNTICO al de fábrica');
   const filas = db.prepare("SELECT COUNT(*) n FROM dashboard_layouts WHERE scope LIKE 'menu:usuario:%'").get().n;
   ok(filas === 0, 'la preferencia se borra: la ausencia de fila ES el defecto', filas + ' filas');

@@ -1436,12 +1436,23 @@ una segunda lista de destinos** — se quedaría vieja y acabaría enseñando pu
   no se renombran y no se quitan; **anclar no saca la entrada de su área**. Quien no ancla nada ve el
   menú de hoy, byte por byte. Si una entrada anclada deja de estar permitida, **el ancla calla**: no se
   pinta, no se borra y vuelve sola al devolverle el permiso.
+  **CORRECCIÓN DE IBRAHIN (misma sesión):** la primera entrega solo ponía chincheta en las entradas de
+  los desplegables, y «cualquier entrada del menú» incluye **las ÁREAS**. Ahora se ancla **también un
+  menú principal**: su atajo aparece arriba y **abre el MISMO desplegable, con sus dos bloques**; el
+  área sigue en su sitio, en su orden y con su nombre. Los dos tipos se **reordenan mezclados** en el
+  mismo bloque. Para que no hubiera dos HTML del rail (uno en el servidor y otro en el navegador), el
+  pintado se extrajo a un **renderizador único** (`anclasBloqueHTML`) y el endpoint devuelve el bloque
+  **ya pintado**. De paso, tres arreglos de colocación que salieron al probarlo en pantalla: el rail
+  desplegado pasa de 216 a **240 px** (con 216 la chincheta partía «Compras y gastos»); en el cajón del
+  móvil la chincheta de un área se iba **al centro del acordeón abierto** (el `.navg` crece con el
+  submenú inline); y la de una entrada anclada se colgaba del `.sidebar` y **saltaba a la esquina**
+  (el `<a>` no era `position:relative`).
 
 **NO SE TOCÓ:** ni una ruta, ni un endpoint, ni un permiso, ni un dato. Ningún área nueva, ninguna
 entrada movida de área. El único endpoint nuevo (`PUT/GET /api/erp/menu/anclas`) guarda **colocación**,
 no datos de negocio.
 
-**VERIFICACIÓN — `gate-menu-navegacion` 72/0**, en navegador real, sobre un negocio **creado desde
+**VERIFICACIÓN — `gate-menu-navegacion` 79/0**, en navegador real, sobre un negocio **creado desde
 cero** (oficio «peluquería»), entrando por el formulario de login y pulsando como pulsaría el dueño:
 - **LA PRUEBA QUE MANDA — no amputación: N ANTES = N DESPUÉS = 50 puertas** (42 en el rail + Inicio +
   Ayuda + 6 de cuenta), identidad comprobada UNA A UNA contra el inventario del PASO 0, y **las 41 con
@@ -1449,26 +1460,39 @@ cero** (oficio «peluquería»), entrando por el formulario de login y pulsando 
   visibles): separar, no plegar. La etiqueta del oficio sigue llegando al menú («Sillas» en peluquería).
 - Buscar «presupuesto», «almacen» y «conciliaci» → las tres rutas correctas con Enter; flecha+Enter va
   al 2º resultado; Ctrl+K enfoca.
-- Anclar tres, reordenar, **cerrar sesión pulsando y volver a entrar**: siguen ancladas y en su orden.
-  Quitarlas todas → menú **idéntico al de fábrica** y **sin fila** en la tabla. El servidor rechaza la 9ª.
+- **CADA ÁREA tiene su chincheta** (10 de 10). Anclar tres entradas **y un área entera**: el área llega
+  arriba con su nombre, **trae su desplegable de 7 entradas** y lo abre igual; las áreas de fábrica
+  siguen en su orden y el rail sigue con sus 42 entradas — es un atajo, no un traslado.
+- Reordenar (área y entradas **mezcladas**), **cerrar sesión pulsando y volver a entrar**: siguen
+  ancladas y en su orden. Quitarlas todas → menú **idéntico al de fábrica**, bloque **vacío y sin
+  ocupar un píxel**, y **sin fila** en la tabla. El servidor rechaza la 9ª.
 - Segundo usuario con MENOS permisos (9 de 42 entradas): **el buscador no enseña ni una puerta que no
   esté en su menú**; sus anclas son suyas; anclar lo que no ve → **403**.
 - Móvil a 390 px: cajón, ancladas arriba, acordeón con su rótulo, ninguna entrada se sale, buscador
   usable, **0 errores de JS**.
-- **Regresión en su número exacto, CERO rojos nuevos: 21/23.** Verde: `gate-nav-inicio-disa` 34/0,
-  `gate-inicio-pantalla`, `gate-citas-pantalla`, `gate-agenda-sencilla`, `gate-agenda-calendario`,
-  `gate-oficio-pantalla`, `gate-vigia-agenda`, `gate-vigia-pantalla`, `gate-espera-pantalla`,
+- **Regresión en su número exacto, CERO rojos nuevos: 19/23** (21/23 en la pasada de la mañana; los
+  dos de agenda se cayeron por la hora, ver abajo). Verde: `gate-nav-inicio-disa` 34/0,
+  `gate-inicio-pantalla`, `gate-citas-pantalla`, `gate-agenda-calendario`,
+  `gate-vigia-agenda` 41/0, `gate-vigia-pantalla`, `gate-espera-pantalla`,
   `gate-proyectos/tiempo/facturar-horas/rentabilidad/coste-horas/margen-pantalla`,
   `gate-reserva-publica-pantalla` 51/0, `gate-avisos-contador-vivo`, `gate-xss-escape` 29/0,
   `verify-xss-escape` 49/0, `gate-csp-estricta` 19/0.
-- **Los 2 rojos son PREVIOS, demostrado y con su CAUSA** (revertidos los ficheros a HEAD, reiniciado y
-  reejecutado: salida IDÉNTICA; restaurado y verificado con `diff -q`):
+- **Los rojos son PREVIOS/AJENOS, demostrado y con su CAUSA** (revertidos los ficheros a HEAD,
+  reiniciado y reejecutado: salida IDÉNTICA; restaurado y verificado con `diff -q`):
   · `gate-avisos-badge` (4 fallos, 12 OK) — **CADUCADO**: busca `a.disa-fig-link` y `.disa-row`, que son
     del Inicio FIJO anterior al peldaño 6 (`7fda12a`). El dato sigue estando, ahora en el bloque «Avisos
     pendientes» de la rejilla.
   · `gate-avisos-pantalla` (3 fallos, 1 OK) — **dato de partida caducado**: apunta a la factura
     `F2026-0017`, que tras resembrar el tenant quedó **anulada**, así que no genera aviso de cobro ni
     tiene botón «Registrar cobro».
+  · `gate-agenda-sencilla` (2 fallos, 9 OK) y `gate-oficio-pantalla` (2 fallos, 26 OK) — **DEPENDEN DE
+    LA HORA DEL DÍA, y no se sabía.** Los dos pasaron VERDES dos veces esta misma sesión y se pusieron
+    rojos por la tarde con el MISMO código (y siguen rojos con los ficheros revertidos a HEAD). Causa
+    medida, no supuesta: sin horario configurado el día abre 8:00–21:00 (`DEFAULT_OPEN`) y el motor
+    **descarta los huecos ya pasados** (`citas-engine.js:222`); la zona del negocio es Madrid, así que
+    a las **20:40** quedaban **0 huecos hoy** para cualquier duración —a las 09:00 habrían sido 24—, y
+    sus dos aserciones piden justamente que el motor **proponga un hueco de hoy**. **Anotado: son
+    gates de ventana horaria**; correrlos de día, o fijarles la fecha de prueba a mañana.
 
 **ANOTADO Y NO CONSTRUIDO:** el **orden por defecto del menú según el oficio del negocio** · la
 **búsqueda de datos** en el buscador del topbar · el **candado de `contabilidad`** (AGUJERO 1).

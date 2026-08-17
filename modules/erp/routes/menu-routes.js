@@ -10,7 +10,8 @@
 // segundo sistema de preferencias y la migración no añade ni una tabla: la que hace falta ya existe.
 import { Hono } from 'hono';
 import { safeError } from '../../../core/errors.js';
-import { menuDeUsuario, anclablesPorClave, getAnclas, setAnclas, MAX_ANCLAS } from '../menu.js';
+import { menuDeUsuario, anclablesPorClave, anclasDeUsuario, getAnclas, setAnclas, MAX_ANCLAS } from '../menu.js';
+import { anclasBloqueHTML } from '../layout.js';   // el MISMO renderizador que pinta el rail
 
 export function createMenuRoutes(db) {
   const api = new Hono();
@@ -44,11 +45,23 @@ export function createMenuRoutes(db) {
       // tiene sentido y valdría de sonda. OJO: esto es la comprobación al GUARDAR. Si mañana le
       // retiran el permiso, el ancla NO se borra ni da error: calla al pintarse y vuelve sola el día
       // que se lo devuelvan (`anclasDeUsuario`).
-      const anclables = anclablesPorClave(menuDeUsuario(db, quien(c)));
+      const menu = menuDeUsuario(db, quien(c));
+      const anclables = anclablesPorClave(menu);
       for (const k of claves) {
         if (!anclables.has(k)) { const e = new Error('Esa entrada no está en tu menú'); e.status = 403; throw e; }
       }
-      return c.json(setAnclas(db, userId, claves));
+      const r = setAnclas(db, userId, claves);
+      // Se devuelve el bloque YA PINTADO por el mismo renderizador del rail, en vez de que el navegador
+      // se lo fabrique con su propia copia del HTML: un área anclada arrastra su desplegable entero, y
+      // dos renderizadores del mismo rail acabarían diciendo cosas distintas. `activa` es la pantalla
+      // en la que está el usuario (solo se compara, para marcar el atajo actual).
+      const resueltas = anclasDeUsuario(db, userId, menu);
+      const html = anclasBloqueHTML(resueltas, {
+        active: typeof body.activa === 'string' ? body.activa : '',
+        anclado: new Set(resueltas.map(a => a.key)),
+        disaBadge: '',
+      });
+      return c.json({ ...r, html });
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
