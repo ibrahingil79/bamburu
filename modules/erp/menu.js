@@ -124,7 +124,7 @@ export const MENU = [
     { href: '/admin/albaranes', label: 'Albaranes', key: 'albaranes', icon: 'ti-truck-delivery' },
     { href: '/admin/cobros', label: 'Cobros', key: 'cobros', icon: 'ti-cash' },
     { href: '/admin/mostrador', label: 'TPV', key: 'mostrador', icon: 'ti-cash-register' },
-    { href: '/admin/portal', label: 'Portal de cliente', key: 'portal', icon: 'ti-external-link' },
+    // «Portal de cliente» YA NO ESTÁ AQUÍ: se fue a Clientes el 18 ago 2026, por decisión de Ibrahin.
   ]},
   // «A quién le vendes» — ÁREA PROPIA en el rail (sacada de Ventas a petición de Ibrahim, 21 jul 2026):
   // Clientes, sus Grupos y el embudo comercial (Oportunidades) viven juntos, no sueltos dentro de Ventas,
@@ -137,6 +137,12 @@ export const MENU = [
     // llama. La ruta sigue siendo /admin/crm (es el módulo), pero el usuario lee "Oportunidades",
     // que es la palabra de Holded ("embudos de venta" y "oportunidades"), no "negocios"/"deals".
     { href: '/admin/crm', label: 'Oportunidades', key: 'crm', icon: 'ti-target-arrow' },
+    // MOVIDO DESDE VENTAS (18 ago 2026, decisión de Ibrahin). Es la puerta por la que un CLIENTE entra
+    // a ver sus facturas, y desde aquí se le manda su enlace: pertenece a «a quién le vendes», no a los
+    // documentos de venta. ⚠️ SU CANDADO NO CAMBIA: sigue exigiendo `invoices.read`, el de su pantalla
+    // (/admin/portal), NO el de Clientes. Mover una entrada de área no puede cambiar quién puede
+    // entrar por ella — eso sería abrir o cerrar una puerta de tapadillo.
+    { href: '/admin/portal', label: 'Portal de cliente', key: 'portal', icon: 'ti-external-link' },
     { href: '/admin/clients/groups', label: 'Grupos', key: 'client-groups', icon: 'ti-users-group', ajustes: true },
   ]},
   // Peldaño 7 · servicios profesionales — ÁREA PROPIA en el rail (sacada de Ventas a petición de Ibrahim,

@@ -1463,12 +1463,22 @@ una segunda lista de destinos** — se quedaría vieja y acabaría enseñando pu
   submenú inline); y la de una entrada anclada se colgaba del `.sidebar` y **saltaba a la esquina**
   (el `<a>` no era `position:relative`).
 
-**NO SE TOCÓ:** ni una ruta, ni un endpoint de datos, ni un permiso, ni un dato. Ningún área nueva,
-ninguna entrada movida de área. Los endpoints nuevos (`GET/PUT /api/erp/menu/anclas`,
+**CORRECCIÓN 3 DE IBRAHIN (18 ago 2026) — «Portal de cliente» se muda de Ventas a CLIENTES.** Cambia
+otra regla del encargo («no se mueve ninguna entrada de área»), y por eso se anota. Es la puerta por la
+que un CLIENTE entra a ver sus facturas, y desde ella se le manda su enlace: pertenece a «a quién le
+vendes», no a los documentos de venta. **El inventario NO encoge: siguen siendo 42 entradas de rail y
+50 puertas**, una de ellas en otra área — el gate lo comprueba igual. **Su candado NO cambia:** sigue
+exigiendo `invoices.read`, el de su pantalla, no el de Clientes; mover una entrada de sitio no puede
+abrir ni cerrar una puerta de tapadillo. Y a quien ya la tuviera colocada a mano en Ventas **no se le
+rompe nada**: la clave vieja se ignora y la entrada aparece en Clientes, en su sitio de fábrica (es la
+misma regla del orden que envejece).
+
+**NO SE TOCÓ:** ni una ruta, ni un endpoint de datos, ni un permiso, ni un dato. Ningún área nueva. Los endpoints nuevos (`GET/PUT /api/erp/menu/anclas`,
 `PUT/DELETE /api/erp/menu/orden`) guardan **colocación**, no datos de negocio, y **cero tablas nuevas**:
 una fila por usuario en `dashboard_layouts` con todo lo suyo del menú (`{anclas, areas, entradas}`).
 
-**VERIFICACIÓN — `gate-menu-navegacion` 96/0**, en navegador real, sobre un negocio **creado desde
+**VERIFICACIÓN — `gate-menu-navegacion` 96/0** (línea base actualizada: «Portal de cliente» cuenta ya
+en Clientes, y el total sigue siendo 50), en navegador real, sobre un negocio **creado desde
 cero** (oficio «peluquería»), entrando por el formulario de login y pulsando como pulsaría el dueño:
 - **LA PRUEBA QUE MANDA — no amputación: N ANTES = N DESPUÉS = 50 puertas** (42 en el rail + Inicio +
   Ayuda + 6 de cuenta), identidad comprobada UNA A UNA contra el inventario del PASO 0, y **las 41 con

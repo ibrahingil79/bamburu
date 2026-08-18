@@ -38,9 +38,12 @@ const BASE_RAIL = [
   ['Ventas', 'Albaranes', '/admin/albaranes'],
   ['Ventas', 'Cobros', '/admin/cobros'],
   ['Ventas', 'TPV', '/admin/mostrador'],
-  ['Ventas', 'Portal de cliente', '/admin/portal'],
   ['Clientes', 'Clientes', '/admin/clients'],
   ['Clientes', 'Oportunidades', '/admin/crm'],
+  // MOVIDA DESDE VENTAS el 18 ago 2026 (decisión de Ibrahin). El inventario NO cambia de tamaño: son
+  // las mismas 42 entradas del rail, una de ellas en otra área. Si algún día desaparece, este gate
+  // se pone rojo igual.
+  ['Clientes', 'Portal de cliente', '/admin/portal'],
   ['Clientes', 'Grupos', '/admin/clients/groups'],
   ['Proyectos', 'Proyectos', '/admin/proyectos'],
   ['Proyectos', 'Registro de tiempo', '/admin/tiempo'],
@@ -505,7 +508,7 @@ try {
     window.openFly(g);
   });
   await dormir(300);
-  const rP = await cajaDe('.flyout.open .fly-item[data-ord="portal"]');
+  const rP = await cajaDe('.flyout.open .fly-item[data-ord="albaranes"]');
   const dt = await page.mouse.drag({ x: rP.x + 30, y: rP.y + rP.height / 2 }, { x: rP.x + 30, y: rP.y + rP.height / 2 + 15 });
   const rG = await cajaDe('.flyout.open .fly-grp[data-drop="ajustes"]');
   ok(!!rG, 'la línea «Ajustes de …» de un área sin ajustes APARECE al arrastrar (si no, sería un viaje sin vuelta)');
@@ -515,7 +518,7 @@ try {
   await page.mouse.up();
   await dormir(700);
   m = await leerMenu(page);
-  ok(m.ordenEntradas['Ventas'].includes('portal:ajustes'),
+  ok(m.ordenEntradas['Ventas'].includes('albaranes:ajustes'),
      'soltar una entrada sobre la línea la pasa al bloque de AJUSTES', m.ordenEntradas['Ventas'].join(' '));
   ok(m.ordenEntradas['Ventas'].length === fabricaVentas.length,
      'cruzar la línea NO la pierde: sigue estando, en el otro bloque', m.ordenEntradas['Ventas'].length + '');
