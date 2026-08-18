@@ -1410,6 +1410,11 @@ reservables) · **Mi equipo** (Quién atiende, sin el atajo de Agenda) · **Cóm
 (Ajustes de citas) · **Mi página de reservas** (Reservas por Internet) · **los puestos** (nombre del
 oficio: Sillas/Cabinas/Salas/Boxes). **Las rutas NO cambian** y **los permisos NO cambian.**
 
+**CORRECCIÓN DE IBRAHIN (18 ago 2026):** la sección de la agenda va **AL FINAL** de la pantalla, detrás
+de los datos del negocio, avisos, plantillas y situación fiscal. Estaba la primera y no debía: esta
+pantalla es la configuración DEL NEGOCIO, y lo de la agenda es una sección suya, no su portada. El
+orden INTERNO de las seis no cambia (sigue siendo el orden en que se monta un negocio).
+
 **UNA SOLA LISTA, NO DOS.** La sección **no** se escribe a mano en `routes/settings.js`: vive en
 `CONFIG_NEGOCIO` (`modules/erp/menu.js`), la misma mesa de la que comen el rail, el buscador y las
 anclas, y la pinta `configNegocioHTML()` en `layout.js`. Escribirla en la pantalla habría creado la

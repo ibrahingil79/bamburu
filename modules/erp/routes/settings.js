@@ -404,8 +404,8 @@ export function createSettingsRoutes(db, cfg = {}) {
     const sym = config.currency_symbol || '€';
     const countryInfo = getCountryConfig(config.country || 'ES');
     const countryName = countryInfo ? countryInfo.name : (config.country || 'España');
-    // La sección mudada. Se pinta ANTES que lo demás porque es lo que un negocio nuevo viene a montar,
-    // y porque su orden interno ya es el orden en que se monta un negocio.
+    // La sección mudada desde Agenda. Va AL FINAL de la pantalla (ver el orden más abajo); su orden
+    // INTERNO sí es el orden en que se monta un negocio, y ese no cambia.
     const seccionCitas = configNegocioHTML(seccionesDe(c), { active: '' });
     const bloqueEmpresa = !verEmpresa ? '' : `
       <div class="card" style="max-width:700px">
@@ -553,13 +553,16 @@ export function createSettingsRoutes(db, cfg = {}) {
         try{await api('PUT','/api/erp/settings/company',{company_name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,country:document.getElementById('countryCode').value,currency:document.getElementById('currencyCode').value,currency_symbol:document.getElementById('currencySymbol').value,tax_name:document.getElementById('taxName').value,fiscal_id_label:document.getElementById('fiscalIdLabel').value,document_name:document.getElementById('documentName').value,tax_rate:document.getElementById('cTax').value,irpf_default:document.getElementById('cIrpfDefault').value,dias_recordatorio_impago:document.getElementById('cDiasImpago').value,dias_aviso_pago:document.getElementById('cDiasPago').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,website:document.getElementById('cWeb').value,address:document.getElementById('cAddr').value,postal_code:document.getElementById('cPostal').value,city:document.getElementById('cCity').value,province:document.getElementById('cProvince').value,logo_url:document.getElementById('cLogo').value});toast('Guardado ✓');}catch(e){toast(e.message,'err')}
       }
       </script>`;
-    // EL ORDEN DE LA PANTALLA: cabecera · la sección mudada · lo de siempre. Quien no tenga
-    // `company.read` recibe cabecera + su sección, y punto — ni el formulario de empresa, ni avisos,
-    // ni plantillas, ni situación fiscal, ni el <script> que los pide a la API.
+    // EL ORDEN DE LA PANTALLA: cabecera · lo del NEGOCIO · la sección mudada, AL FINAL.
+    // Corrección de Ibrahin (18 ago 2026): los ajustes de la agenda no pueden ir por delante de los
+    // del negocio. Esta pantalla es la configuración DEL NEGOCIO; lo de la agenda es una sección
+    // suya, no su portada. Quien no tenga `company.read` recibe cabecera + su sección, y punto — ni
+    // el formulario de empresa, ni avisos, ni plantillas, ni situación fiscal, ni el <script> que
+    // los pide a la API.
     const content = `
       <div class="ph"><h2>Configuración Empresa</h2></div>
-      ${seccionCitas}
-      ${bloqueEmpresa}`;
+      ${bloqueEmpresa}
+      ${seccionCitas}`;
     return c.html(adminLayout('Configuración Empresa', content, 'settings', c.get('session')?.csrfToken || '', c));
   });
 
