@@ -90,7 +90,11 @@ try {
   await p.evaluate((A) => { document.querySelector('.agcell[data-col="' + A + '"][data-min="720"]').click(); }, A);   // 12:00
   await p.waitForFunction(() => document.getElementById('mCita').classList.contains('open'), { timeout: 8000 });
   const NUEVO = 'GATE Walkin ' + TS;
-  await p.evaluate((nom) => { var i = document.getElementById('cBusca'); i.value = nom; cFiltra(); }, NUEVO);
+  // SE TECLEA DE VERDAD, no se le mete el valor al input y se llama a cFiltra() a mano. Un gate que
+  // se salta lo que hace una persona puede dar verde sobre una pantalla rota — y eso es justo lo que
+  // pasó con el alta el 18 ago 2026.
+  await p.click('#cBusca');
+  await p.type('#cBusca', NUEVO, { delay: 20 });
   await p.waitForFunction(() => document.getElementById('cNuevo').style.display !== 'none', { timeout: 5000 });
   await p.evaluate(() => { document.getElementById('cSueltoMovil').value = '600111222'; cUsarNuevo(); });
   await p.evaluate((sid) => document.querySelector('.csvc[value="' + sid + '"]').click(), S);
@@ -98,6 +102,46 @@ try {
   await new Promise(r => setTimeout(r, 500));
   const c3 = db.prepare("SELECT * FROM citas WHERE user_id=? AND cliente_suelto_nombre=? ORDER BY id DESC LIMIT 1").get(A, NUEVO);
   ok(!!c3, 'cita con cliente nuevo creada sin salir del panel', c3 ? c3.cliente_suelto_movil : '(no)');
+
+  // ── [3-bis] EL ALTA NO SE PIERDE AL CORREGIR EL NOMBRE ──────────────────────
+  // Regresión REAL encontrada el 18 ago 2026 y anterior a esa semana: cFiltra() corría en cada tecla y
+  // borraba el cliente elegido, así que bastaba con elegirlo y luego añadir el apellido para que al
+  // guardar saliera «Elige o crea un cliente» y la cita NO se creara. Sin esta prueba el gate seguía
+  // verde con el alta rota.
+  console.log('\n[3-bis] elegir el cliente y DESPUÉS corregir el nombre: la cita se crea igual');
+  await p.evaluate((A) => { document.querySelector('.agcell[data-col="' + A + '"][data-min="780"]').click(); }, A);   // 13:00
+  await p.waitForFunction(() => document.getElementById('mCita').classList.contains('open'), { timeout: 8000 });
+  await p.click('#cBusca');
+  await p.type('#cBusca', 'GATE Corregido ' + TS, { delay: 20 });
+  await p.waitForFunction(() => document.getElementById('cNuevo').style.display !== 'none', { timeout: 5000 });
+  await p.evaluate(() => document.querySelector('#cNuevo button').click());
+  await new Promise(r => setTimeout(r, 250));
+  // …y ahora se sigue escribiendo, que es lo que rompía el alta.
+  await p.click('#cBusca'); await p.keyboard.press('End');
+  await p.type('#cBusca', ' Apellido', { delay: 20 });
+  await new Promise(r => setTimeout(r, 250));
+  await p.evaluate((sid) => document.querySelector('.csvc[value="' + sid + '"]').click(), S);
+  await p.evaluate(() => cGuardar());
+  await new Promise(r => setTimeout(r, 900));
+  const cCorr = db.prepare("SELECT * FROM citas WHERE user_id=? AND cliente_suelto_nombre=? ORDER BY id DESC LIMIT 1").get(A, 'GATE Corregido ' + TS + ' Apellido');
+  ok(!!cCorr, 'la cita se crea con el nombre CORREGIDO, sin volver a pulsar nada', cCorr ? cCorr.codigo : '(no se creó: el alta vuelve a estar rota)');
+  ok(!(await p.evaluate(() => document.getElementById('mCita').classList.contains('open'))), 'y el panel se cierra: no se queda colgado con un error');
+
+  // ── [3-ter] EL BUSCADOR VE A LOS CLIENTES DADOS DE ALTA DESPUÉS DE CARGAR ───
+  // META se pedía UNA vez y se guardaba: un cliente creado luego no aparecía, y desde fuera eso se lee
+  // como «ese cliente no está registrado».
+  console.log('\n[3-ter] el buscador encuentra a un cliente dado de alta DESPUÉS de cargar la pantalla');
+  const TARDE = 'GATE Tardio ' + TS;
+  db.prepare("INSERT INTO clients (name,created_at) VALUES (?,datetime('now'))").run(TARDE);
+  await p.evaluate((A) => { document.querySelector('.agcell[data-col="' + A + '"][data-min="840"]').click(); }, A);   // 14:00
+  await p.waitForFunction(() => document.getElementById('mCita').classList.contains('open'), { timeout: 8000 });
+  await p.click('#cBusca');
+  await p.type('#cBusca', TARDE, { delay: 20 });
+  await new Promise(r => setTimeout(r, 600));
+  const hallado = await p.evaluate(() => [...document.querySelectorAll('#cResultados .cliOpt')].map(o => o.textContent.trim()));
+  ok(hallado.includes(TARDE), 'sale en el buscador sin recargar la pantalla', JSON.stringify(hallado));
+  await p.evaluate(() => closeModal('mCita'));
+  await new Promise(r => setTimeout(r, 300));
 
   // ── [4] El tramo de ESPERA se dibuja distinto ───────────────────────────────
   console.log('\n[4] el tramo de espera se ve distinto ("Aquí estás libre")');

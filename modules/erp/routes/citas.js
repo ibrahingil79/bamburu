@@ -1673,6 +1673,11 @@ let META=null, DIAS=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 function ymd(d){return d.toISOString().slice(0,10);}
 function fhhmm(m){var h=Math.floor(m/60),mm=m%60;return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm;}
 async function ensureMeta(){ if(!META) META=await api('GET','/api/erp/citas/meta'); return META; }
+// P1 · segunda mitad: META se pedía UNA vez y se guardaba para siempre, así que el buscador NO
+// encontraba a un cliente dado de alta después de cargar la pantalla —desde otra pestaña, o por la
+// cita anterior—. Desde fuera eso se lee como «ese cliente no está registrado». Al abrir el panel de
+// cita se refresca; si la red falla, se sigue con lo que había (el panel nunca se queda sin abrir).
+async function refrescaMeta(){ try{ META=await api('GET','/api/erp/citas/meta'); }catch(e){} return META; }
 function initDate(){ var el=document.getElementById('agFecha'); if(!el.value) el.value=ymd(new Date()); }
 var COLOR={pedida:'#64748b',confirmada:'#16a34a',atendida:'#2563eb',no_show:'#b91c1c'};
 function loadPrefs(){ try{ return JSON.parse(localStorage.getItem('agPrefs')||'{}'); }catch(e){ return {}; } }
@@ -2069,20 +2074,30 @@ function cCampos(cuando, quien){
   var varias = !!(META && META.personas && META.personas.length > 1);
   document.getElementById('cQuien').style.display = (quien && varias) ? '' : 'none';
 }
-async function openNuevaCita(){ await ensureMeta(); cReset(); QUICK_MIN=null; document.getElementById('mCitaTitle').textContent='Nueva cita';
+async function openNuevaCita(){ await ensureMeta(); await refrescaMeta(); cReset(); QUICK_MIN=null; document.getElementById('mCitaTitle').textContent='Nueva cita';
   document.getElementById('cFecha').value=document.getElementById('agFecha').value||ymd(new Date()); document.getElementById('cContexto').textContent='';
   // Delante: cliente, servicio y día/hora (+ persona si hay varias). Detrás: puesto, proyecto, nota y avisar.
   cCampos(true,true); document.getElementById('cMas').open=false; openModal('mCita'); document.getElementById('cBusca').focus(); }
-async function openQuickCita(user_id, fecha, min){ await ensureMeta(); cReset(); QUICK_MIN=min; document.getElementById('mCitaTitle').textContent='Nueva cita';
+async function openQuickCita(user_id, fecha, min){ await ensureMeta(); await refrescaMeta(); cReset(); QUICK_MIN=min; document.getElementById('mCitaTitle').textContent='Nueva cita';
   document.getElementById('cPersona').value=String(user_id); document.getElementById('cFecha').value=fecha; document.getElementById('cMas').open=false;
   // AGENDA SENCILLA, INTACTA: desde el hueco, persona y hora se HEREDAN de la celda y no se re-preguntan.
   cCampos(false,false);
   var per=(META.personas.find(p=>String(p.id)===String(user_id))||{}).name||''; document.getElementById('cContexto').textContent=per+' · '+fLargo(fecha)+' · '+fhhmm(min);
   openModal('mCita'); document.getElementById('cBusca').focus(); }
 // Cliente: buscador que filtra según escribes; si no existe, se usa ahí mismo con nombre y móvil.
+// P1 (18 ago 2026) — EL ALTA SE PERDÍA POR AQUÍ, y llevaba así desde antes de esta semana.
+// cFiltra corre en CADA tecla y borraba la elección de cliente. Bastaba con elegir a alguien y
+// después corregir el texto —añadir el apellido, arreglar una letra— para quedarse sin cliente
+// elegido sin que nada lo dijera: al guardar salía «Elige o crea un cliente» y la cita NO se creaba.
+// Ahora la elección solo se suelta cuando el texto DEJA de ser el nombre elegido, y aun así el
+// nombre escrito no se pierde: cResuelveCliente() lo recoge al guardar.
 function cFiltra(){
   var q=document.getElementById('cBusca').value.trim().toLowerCase();
-  document.getElementById('cCliente').value=''; document.getElementById('cSueltoNombre').value=''; document.getElementById('cElegido').style.display='none';
+  var eleg=document.getElementById('cElegido');
+  var yaElegido=(eleg.textContent||'').replace(/^✓\s*/,'').replace(/\s*\([^)]*\)\s*$/,'').trim().toLowerCase();
+  if(!yaElegido || yaElegido!==q){
+    document.getElementById('cCliente').value=''; document.getElementById('cSueltoNombre').value=''; eleg.style.display='none';
+  }
   var box=document.getElementById('cResultados'), nuevo=document.getElementById('cNuevo');
   if(!q){ box.innerHTML=''; nuevo.style.display='none'; return; }
   var m=META.clientes.filter(c=>(c.name||'').toLowerCase().includes(q)).slice(0,6);
@@ -2100,6 +2115,15 @@ function cUsarNuevo(){
   document.getElementById('cCliente').value=''; document.getElementById('cSueltoNombre').value=nombre; document.getElementById('cSueltoMovilVal').value=document.getElementById('cSueltoMovil').value;
   document.getElementById('cResultados').innerHTML=''; document.getElementById('cNuevo').style.display='none';
   var e=document.getElementById('cElegido'); e.textContent='✓ '+nombre+' ('+(window.CLIENTE_SING||'Cliente').toLowerCase()+' nuevo)'; e.style.display='';
+}
+// El nombre escrito en el buscador vale como cliente aunque no se haya pulsado nada. Clavado con uno
+// de la ficha → ese cliente; si no → cliente nuevo, igual que el botón «usar como nuevo».
+function cResuelveCliente(){
+  if(document.getElementById('cCliente').value || document.getElementById('cSueltoNombre').value) return;
+  var nombre=document.getElementById('cBusca').value.trim(); if(!nombre) return;
+  var ex=(META&&META.clientes||[]).find(function(c){ return (c.name||'').trim().toLowerCase()===nombre.toLowerCase(); });
+  if(ex){ document.getElementById('cCliente').value=ex.id; }
+  else { document.getElementById('cSueltoNombre').value=nombre; document.getElementById('cSueltoMovilVal').value=document.getElementById('cSueltoMovil').value||''; }
 }
 function cSelServicios(){ return [...document.querySelectorAll('.csvc:checked')].map(x=>parseInt(x.value)); }
 function cServChange(){ if(QUICK_MIN!=null && document.getElementById('cHueco').value==='') cSugerir(); else cRecalc(); }
@@ -2132,7 +2156,11 @@ async function cGuardar(){
   // PASO 8 — se avisa en el ORDEN en que se lee el panel: quién, qué y cuándo. La hora ya no vive
   // detrás de "Más opciones", así que el mensaje ya no manda abrirlas (y desde el hueco nunca falta:
   // la trae la celda pulsada).
-  if(!document.getElementById('cCliente').value && !document.getElementById('cSueltoNombre').value){ toast('Elige o crea un '+(window.CLIENTE_SING||'cliente').toLowerCase(),'err'); return; }
+  // Si hay un nombre ESCRITO y no se pulsó nada, no se rechaza: se resuelve. Es lo que la persona ve
+  // en la pantalla —el nombre está ahí escrito—, así que la cita tiene que salir. Si el nombre es
+  // clavado el de un cliente de la ficha, se usa ESE; si no, entra como cliente nuevo.
+  cResuelveCliente();
+  if(!document.getElementById('cCliente').value && !document.getElementById('cSueltoNombre').value){ toast('Escribe el nombre del '+(window.CLIENTE_SING||'cliente').toLowerCase(),'err'); return; }
   if(!cSelServicios().length){ toast('Elige un servicio','err'); return; }
   if(min==null){ toast('Elige una hora','err'); return; }
   var body={ cliente_id:document.getElementById('cCliente').value||null, cliente_suelto_nombre:document.getElementById('cSueltoNombre').value, cliente_suelto_movil:document.getElementById('cSueltoMovilVal').value,
