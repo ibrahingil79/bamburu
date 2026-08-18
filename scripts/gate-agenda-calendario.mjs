@@ -181,15 +181,27 @@ try {
   ok(/^[A-ZÁÉÍÓÚ]\S* \d{4}$/.test(mes.titulo.trim()), 'el título es «Mes AAAA», sin “de” capitalizado: «' + mes.titulo.trim() + '»');
   ok(/libre|cita/.test(mes.pie), 'y el pie lleva los números exactos del día seleccionado: «' + mes.pie.trim().slice(0, 60) + '»');
 
-  // ── [2] Desde mes, pulsar un día abre ese día ──────────────────────────────
-  console.log('\n[2] desde mes, pulsar un día abre ESE día');
+  // ── [2] Desde mes, llegar a ese día ────────────────────────────────────────
+  // CAMBIO DELIBERADO (AGENDA · ACABADO VISUAL, 18 ago 2026): un clic SELECCIONA el día y actualiza la
+  // franja de abajo; abrir el día son dos clics (o «Abrir el día →»). Antes un clic abría directamente.
+  // La aserción no se debilita: se sigue exigiendo llegar a ESE día desde el mes.
+  console.log('\n[2] desde mes se llega a ESE día (un clic selecciona, dos abren)');
   const objetivo = await p.evaluate(() => {
     const d = [...document.querySelectorAll('.mesdia:not(:disabled)')].find(x => x.getAttribute('data-fecha'));
-    const f = d.getAttribute('data-fecha'); d.click(); return f;
+    const f = d.getAttribute('data-fecha');
+    d.click();                                    // selecciona, sin salir del mes
+    return f;
   });
+  await new Promise(r => setTimeout(r, 300));
+  const siguesEnMes = await p.evaluate(() => document.getElementById('agVista').value === 'mes');
+  ok(siguesEnMes, 'un clic SELECCIONA el día y no se sale del mes');
+  await p.evaluate((f) => {
+    const d = document.querySelector('.mesdia[data-fecha="' + f + '"]');
+    d.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+  }, objetivo);
   await p.waitForFunction(() => document.querySelectorAll('.agcell').length > 0, { timeout: 8000 });
   const tras = await p.evaluate(() => ({ fecha: document.getElementById('agFecha').value, vista: document.getElementById('agVista').value }));
-  ok(tras.vista === 'dia' && tras.fecha === objetivo, 'pulsar el día ' + objetivo + ' abre la vista de Día en esa fecha', JSON.stringify(tras));
+  ok(tras.vista === 'dia' && tras.fecha === objetivo, 'y pulsándolo dos veces se abre la vista de Día en esa fecha (' + objetivo + ')', JSON.stringify(tras));
 
   // Navegación adelante/atrás en la unidad correcta.
   const antes = await p.evaluate(() => document.getElementById('agFecha').value);

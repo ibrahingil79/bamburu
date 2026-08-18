@@ -50,13 +50,16 @@ try {
   console.log('\n[1] vista de entrada (hoy · por persona · solo quien trabaja hoy)');
   await p.goto(BASE + '/admin/citas', { waitUntil: 'networkidle2' });
   await p.waitForFunction(() => document.querySelectorAll('#agenda th').length > 1, { timeout: 8000 }).catch(() => {});
-  const heads = () => p.$$eval('#agenda thead th', ths => ths.map(t => t.textContent.trim()));
+  // La rejilla dejó de ser una <table> (AGENDA · ACABADO VISUAL): las cabeceras de columna llevan
+  // ahora la clase ESTABLE .agcol-head con su data-col, y se leen por ahí. La aserción es la misma y
+  // no se debilita: sigue exigiendo que aparezca quien trabaja hoy y no aparezca quien libra.
+  const heads = () => p.$$eval('#agenda .agcol-head', ths => ths.map(t => t.textContent.trim()));
   let h = await heads();
   ok(h.some(x => x.includes('Ana ' + TS)), 'la columna de quien trabaja hoy (Ana) aparece');
   ok(!h.some(x => x.includes('Berta ' + TS)), 'quien libra hoy (Berta) NO ocupa columna');
   // "Ver todo el equipo" la trae de vuelta (un clic).
   await p.evaluate(() => { toggleControles(); document.getElementById('agVerTodo').checked = true; agCargar(); });
-  await p.waitForFunction((ts) => [...document.querySelectorAll('#agenda thead th')].some(t => t.textContent.includes('Berta ' + ts)), { timeout: 8000 }, TS).catch(() => {});
+  await p.waitForFunction((ts) => [...document.querySelectorAll('#agenda .agcol-head')].some(t => t.textContent.includes('Berta ' + ts)), { timeout: 8000 }, TS).catch(() => {});
   h = await heads();
   ok(h.some(x => x.includes('Berta ' + TS)), 'con "Ver todo el equipo" reaparece Berta (nada se elimina)');
   // Volver a la vista de entrada.

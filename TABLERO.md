@@ -1388,6 +1388,75 @@ Aditivo: tres tablas nuevas, ni un DROP, ninguna columna renombrada.
 - **Anotado, no tocado:** `verify-plantillas-email` sigue en rojo previo (cuenta 8 tipos/18 variantes;
   la pieza 5 los dejó en 10/20 y no lo actualizó). El guardián vigente es `gate-plantillas-email`, 41/0.
 
+### Agenda: acabado visual (día, semana y mes) — **TAREA TRANSVERSAL de presentación**  ✅ HECHO (2026-08-18)
+**NO es pieza del peldaño 8** y **no mueve el puntero de la escalera**: es presentación, como la
+«Agenda sencilla» y como la navegación de ayer. **No se tocó el motor**: ni `huecos()`, ni
+`tramosPersona`/`ocupacionPersona`, ni la guarda de solape (409), ni el horario con excepciones, ni los
+permisos, ni la puerta pública, ni los avisos, ni el alta en 3 toques.
+
+**LO QUE DESTAPÓ EL PASO 0, y decidió cómo se construyó**
+- **La rejilla era una `<table>` de filas de 30 min** (`citas.js`, bucle `for(t=START;t<END;t+=STEP)`),
+  con las celdas a 27 px y la cita colgada de la media hora anterior — por eso una cita de más de 30
+  min se desbordaba de su `<td>`. Ahora es un **lienzo**: cada cita se coloca por sus **minutos
+  reales**. Una cita a las 9:10 se dibuja a las 9:10 (medido: 12 px con la hora a 72 px).
+- **Tres gates dependían de esa tabla.** Se avisó ANTES de construir y se acordó con Ibrahin:
+  · Las **zonas de clic siguen siendo de 30 min** (`.agcell.libre` con su `data-col`/`data-min`), y van
+    **por DEBAJO** de las citas en el apilado (z-index 1 frente a 3). Si quedaran encima, pulsar una
+    cita abriría el alta de una nueva y arrastrar para mover dejaría de funcionar. **Va en el gate.**
+  · Las cabeceras llevan clase **estable `.agcol-head`** con su `data-col`, y `gate-agenda-sencilla`
+    lee por ahí en vez de por `#agenda thead th`. **La aserción no se debilita.**
+  · Y lo que la `<table>` daba gratis y hubo que pedir a mano: **cabeceras fijas arriba y columna de
+    horas fija a la izquierda** al hacer scroll. También va en el gate.
+- **El color de estado estaba DUPLICADO** —`COLORS` en el servidor para la leyenda y `var COLOR` en el
+  cliente para los bloques, los mismos cuatro valores copiados—. Ahora hay **UNA tabla**
+  (`ESTADOS_COLOR`) de la que salen los **tres tonos** (suave = fondo · fuerte = barra y punto ·
+  oscuro = texto), y el cliente la recibe serializada. **Los cuatro estados conservan nombre y
+  familia**: pedida gris · confirmada verde · atendida azul · no se presentó rojo. Los valores
+  «fuerte» son los DE SIEMPRE: cambia cómo se expresan, no lo que significan.
+- **La vista Mes no tenía de dónde sacar las citas**: `/api/erp/citas/mes` devolvía solo el número.
+  Se amplió, acotado como pidió Ibrahin: **4 citas por día como mucho**, ordenadas por hora, y **tres
+  campos** (hora, cliente, estado). Y **hereda los mismos filtros que Día**: quien no tiene columna en
+  Día tampoco sale en Mes. El candado sigue siendo `citas.read`, intacto.
+- El «globo flotante» del mes **no era un globo**: era el `title=` nativo del navegador más un pie que
+  seguía al ratón. Fuera los dos; el pie es del día **seleccionado**.
+
+**LO CONSTRUIDO** — (1) lienzo con `--alto-hora` y **zoom de 3 pasos** (48/72/96) recordado por usuario
+en `agPrefs`, rasantes de hora y media hora, columna de horas de 44 px con **etiqueta solo en punto** y
+formato «9:00», **línea de ahora** en rojo con su punto y su pastilla que se recoloca sola cada minuto,
+**scroll de apertura** con la hora actual a un tercio, y **fuera de horario atenuado pero clicable**.
+(2) La cita como **bloque**: fondo suave, barra de 3 px, esquinas 0/6 px, texto en el tono oscuro y
+**degradación por altura** sin cortar palabras (≥60 px tres líneas · 40-59 dos · 22-39 solo el cliente,
+con el servicio al `title`). El tramo de espera, gris y **sin barra**. (3) Cabecera con el **mes en
+grande** (mes negro, año gris; el selector de fecha lo abre el título), «Hoy» en rojo, **tira de 7
+días** en vista Día, el aviso de sin-horario **cerrable y recordado**, la leyenda replegada tras una
+(i), y un solo primario. (4) Mes con **hasta 3 citas escritas** y «+N más», días sin citas en silencio,
+días de otros meses en gris claro, y **un clic selecciona / dos abren**.
+
+**VERIFICACIÓN — `gate-agenda-visual` 47/0**, negocio creado desde cero, con las 10 del encargo y las
+**3 que pidió Ibrahin**: pulsar encima de una cita alcanza y abre ESA cita (no el alta) · cabeceras y
+columna de horas fijas al hacer scroll · el mes respeta los filtros (con «ver todo el equipo» aparece
+la cita de quien libra; sin él, no) y no viaja más de 4 citas por día.
+**PRUEBA DE HUMO de extremo a extremo, en navegador:** negocio nuevo → horario 9:00-18:00 → cita a las
+**9:10** → se ve en **Día** (top 12 px), **Semana** (idéntica) y **Mes** («9:10 · Marta Gómez», sin
+globo) → se cambia el estado y **la barra pasa de gris a verde**. 0 errores de JS.
+**REGRESIÓN 15/15 VERDE, cero rojos nuevos:** `gate-agenda-sencilla` 11/0, `gate-citas-pantalla` 25/0,
+`test-textos-citas` 24/0, `test-citas` 39/0, `test-enlace-cita` 14/0, `test-avisos-cita` 20/0,
+`test-neto-cero-cita` 8/0, `gate-menu-navegacion` 105/0, `gate-agenda-calendario` 38/0,
+`gate-reserva-publica-pantalla` 51/0, `gate-vigia-agenda` 41/0, `gate-inicio-pantalla` 19/0,
+`gate-xss-escape` 29/0, `gate-csp-estricta` 19/0.
+
+**DOS ASERCIONES ACTUALIZADAS, y se dice en vez de darlo por hecho.** No son rojos maquillados: son
+conductas que este encargo cambia a propósito.
+- `gate-agenda-sencilla`: leía las columnas por `#agenda thead th`. Sin `<table>` ese selector no
+  existe; pasa a `.agcol-head`. **Mismo enunciado, misma exigencia.**
+- `gate-agenda-calendario`: exigía que **un** clic en el mes abriera el día. El encargo pide que un
+  clic **seleccione** y dos abran. La prueba ahora comprueba las dos cosas (que un clic no se salga
+  del mes, y que dos abran ESE día), así que exige **más** que antes, no menos.
+
+**ANOTADO Y NO CONSTRUIDO:** arrastrar para REDIMENSIONAR una cita por su borde (hoy se arrastra para
+mover, que ya existía y sigue igual); y el solape de dos citas a la misma hora en la misma columna, que
+se sigue pintando una encima de otra como hasta ahora — el encargo no lo pedía.
+
 ### Navegación: menos ruido sin perder nada — **TAREA TRANSVERSAL de presentación**  ✅ HECHO (2026-08-17)
 **NO es pieza del peldaño 8** — es capa de presentación que cruza toda la app, como en su día la
 **Agenda sencilla**. El puntero de la escalera NO se mueve: el peldaño 8 sigue ABIERTO donde estaba.

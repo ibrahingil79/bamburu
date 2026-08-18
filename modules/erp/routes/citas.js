@@ -10,7 +10,7 @@ import { safeError } from '../../../core/errors.js';
 import { adminLayout, can } from '../layout.js';
 import { logActivity, requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
-import { escHtml } from '../../../core/escape.js';
+import { escHtml, jsonForScript } from '../../../core/escape.js';
 import { nextCode } from '../codes.js';
 import { ENTITY } from '../../../core/activity-entities.js';
 import { resolveVatRate } from '../../../core/vat-bands.js';
@@ -430,8 +430,18 @@ export function createCitasRoutes(db) {
         fechas.push(f);
         if (fechas.length > 40) break;
       }
+      // `tramos` = a qué horas se trabaja de verdad cada día, para ATENUAR lo de fuera. Sale de las
+      // mismas funciones del motor que ya usa todo lo demás (tramosAmbito / tramosPersona): no hay
+      // cálculo paralelo ni horario inventado. Es solo lectura y solo sirve para pintar: las franjas
+      // atenuadas siguen siendo clicables, se puede citar fuera de horario igual que hasta ahora.
+      const tramos = {};
+      for (const f of fechas) {
+        const personas = {};
+        for (const p of personasDia) personas[p.id] = tramosPersona(db, p.id, f);
+        tramos[f] = { negocio: tramosAmbito(db, 'negocio', null, f), personas };
+      }
       return c.json({
-        ...agendaData(db, { desde, hasta }), personasDia,
+        ...agendaData(db, { desde, hasta }), personasDia, tramos,
         rango: rangoRejilla(db, fechas),
         sin_horario: !hayHorarioNegocio(db),
       });
@@ -455,8 +465,21 @@ export function createCitasRoutes(db) {
       const ultimo = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
       const personas = db.prepare('SELECT id FROM admin_users WHERE active=1').all().map(r => r.id);
       const hoy = ahoraLocal().fecha;
-      const cuenta = db.prepare(
-        `SELECT COUNT(*) n FROM citas WHERE fecha=? AND estado<>'anulada' AND archived=0`
+      // ── LO QUE PASA CADA DÍA, sin tener que pasar el ratón ────────────────────────────────────
+      // El mes ya no dice solo "3 citas": enseña las primeras. Acotado a propósito:
+      //   · como mucho CUATRO por día (se pintan 3 + «+N más»), ordenadas por hora. Traer el mes
+      //     entero sería peso que nadie mira.
+      //   · TRES campos por cita —hora, cliente y estado—. Nada más viaja al navegador.
+      //   · los MISMOS filtros que la vista Día. Si en Día no ves una cita porque su columna no está,
+      //     en Mes tampoco. El candado sigue siendo el de la ruta (`citas.read`), intacto.
+      const eje = c.req.query('eje') === 'recurso' ? 'recurso' : 'persona';
+      const verTodo = c.req.query('verTodo') === '1';
+      const primeras = db.prepare(
+        `SELECT c.inicio_min, c.estado, c.user_id, c.recurso_id,
+                COALESCE(cl.name, c.cliente_suelto_nombre, 'Cliente') AS cliente
+           FROM citas c LEFT JOIN clients cl ON cl.id = c.cliente_id
+          WHERE c.fecha = ? AND c.estado <> 'anulada' AND c.archived = 0
+          ORDER BY c.inicio_min`
       );
       const dias = [];
       for (let d = 1; d <= ultimo; d++) {
@@ -468,7 +491,18 @@ export function createCitasRoutes(db) {
           abierto = true;
           for (const [a, b] of resta(base, ocupacionPersona(db, uid, fecha))) libres += (b - a);
         }
-        dias.push({ fecha, dia: d, citas: cuenta.get(fecha).n, libres_min: libres, abierto, pasado: fecha < hoy });
+        // Mismo criterio de columnas que la vista Día: por persona, si no se pide "ver todo el
+        // equipo", solo quien TRABAJA ese día (`personasQueTrabajan`, la misma función). Por puesto
+        // no hay filtro de columnas en Día —se listan todos los puestos y el «sin puesto»—, así que
+        // aquí tampoco se filtra: se hereda el comportamiento, no se mejora.
+        const visibles = (eje === 'persona' && !verTodo)
+          ? new Set(personasQueTrabajan(db, fecha).map(p => p.id))
+          : null;
+        const delDia = primeras.all(fecha).filter(x => !visibles || visibles.has(x.user_id));
+        dias.push({
+          fecha, dia: d, citas: delDia.length, libres_min: libres, abierto, pasado: fecha < hoy,
+          primeras: delDia.slice(0, 4).map(x => ({ min: x.inicio_min, cliente: x.cliente, estado: x.estado })),
+        });
       }
       return c.json({ ym: ym[0], dias, sin_horario: !hayHorarioNegocio(db) });
     } catch (e) { return c.json({ error: safeError(e) }, 500); }
@@ -1032,39 +1066,115 @@ const CSS_AGENDA = `
   .segmented button:hover{color:var(--text)}
   .segmented button[aria-selected="true"]{background:var(--bg2);color:var(--text);font-weight:600;box-shadow:0 1px 2px rgba(20,22,27,.10)}
   .segmented button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+  /* ══ CABECERA (BLOQUE 3) ═══════════════════════════════════════════════════════════════════════
+     El mes y el año en grande mandan; el 18/08/2026 deja de ser el elemento principal (sigue estando:
+     el título ABRE el selector). "Hoy" en rojo junto a las flechas. Un solo primario: "Nueva cita". */
+  .ag-tit{appearance:none;border:0;background:transparent;font-family:inherit;padding:0;cursor:pointer;font-size:1.5rem;font-weight:700;letter-spacing:-.02em;color:var(--text);line-height:1.15;text-align:left}
+  .ag-tit .anio{color:var(--text3);font-weight:600;margin-left:.28em}
+  .ag-tit:hover .mes{text-decoration:underline;text-underline-offset:3px}
+  .ag-tit:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+  .ag-hoy{appearance:none;background:transparent;border:0;font-family:inherit;font-size:.82rem;font-weight:600;color:#D2452F;cursor:pointer;padding:.32rem .55rem;border-radius:7px}
+  .ag-hoy:hover{background:rgba(210,69,47,.08)}
+  .ag-nav{appearance:none;background:transparent;border:0;font-family:inherit;font-size:1.05rem;color:var(--text2);cursor:pointer;padding:.15rem .5rem;border-radius:7px;line-height:1}
+  .ag-nav:hover{background:var(--bg3);color:var(--text)}
+  /* Filtros / Bloquear un rato / la (i) de la leyenda: del mismo peso que las flechas, no botones. */
+  .ag-disc{appearance:none;background:transparent;border:0;font-family:inherit;font-size:.82rem;color:var(--text2);cursor:pointer;padding:.32rem .55rem;border-radius:7px}
+  .ag-disc:hover{background:var(--bg3);color:var(--text)}
+  .ag-leyenda{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:.6rem}
+  .ag-leyenda[hidden]{display:none}
+  /* TIRA DE 7 DÍAS (solo en vista Día) — saltar de día sin abrir el selector. */
+  .ag-tira{display:flex;gap:.15rem;margin:.15rem 0 .8rem}
+  .ag-tira button{appearance:none;border:0;background:transparent;font-family:inherit;cursor:pointer;flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:.2rem;padding:.35rem 0;border-radius:9px}
+  .ag-tira button:hover{background:var(--bg3)}
+  .ag-tira .dow{font-size:.62rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text3)}
+  .ag-tira .n{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.9rem;color:var(--text)}
+  .ag-tira .findes .dow,.ag-tira .findes .n{color:var(--text3)}
+  .ag-tira .hoy .n{color:#D2452F;font-weight:700}
+  .ag-tira .sel .n{background:var(--text);color:#fff;font-weight:600}
+  .ag-tira .sel.hoy .n{background:#D2452F;color:#fff}
+  .ag-tira button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+  /* ══ EL LIENZO (BLOQUE 1) ══════════════════════════════════════════════════════════════════════
+     Se acabó la tabla de filas de media hora: una cita a las 9:10 se dibuja a las 9:10. El alto de
+     una hora es --alto-hora (zoom en 3 pasos, recordado por usuario) y TODO se deriva de ahí.
+     Las rasantes son fondo, no bordes: dos líneas de 0.5px, la de la hora en punto con el doble de
+     contraste que la de la media. Fuera el fondo alterno y fuera los bordes verticales marcados. */
+  .ag-wrap{--alto-hora:72px;position:relative;overflow:auto;max-height:70vh;background:var(--bg2)}
+  .ag-head{position:sticky;top:0;z-index:6;display:flex;background:var(--bg2);border-bottom:1px solid var(--border2)}
+  .ag-head .esq{position:sticky;left:0;z-index:7;flex:0 0 44px;background:var(--bg2)}
+  .agcol-head{flex:1 1 0;min-width:110px;padding:.5rem .4rem;font-size:.8rem;font-weight:600;color:var(--text2);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ag-body{position:relative;display:flex;min-height:1px;padding:8px 0}
+  /* El aire de arriba y abajo es para las etiquetas de hora: van a caballo de su línea (-6px), así que
+     la primera se saldría por arriba y la última por abajo. Lo llevan las DOS columnas (horas y datos),
+     que son hermanas flex, así que no se descuadra ni un píxel. */
+  .ag-horas{position:sticky;left:0;z-index:5;flex:0 0 44px;background:var(--bg2)}
+  /* Las etiquetas van absolute DENTRO de la columna de horas, así que necesita ser su propio marco de
+     posición. Sin esto se cuelgan de .ag-body y se van al otro extremo del lienzo: no se ve ni una hora. */
+  .ag-horas>.ag-hrel{position:relative;height:100%}
+  .ag-hora{position:absolute;right:6px;transform:translateY(-6px);font-size:11px;color:var(--text3);white-space:nowrap}
+  .ag-cols{flex:1 1 auto;display:flex;position:relative}
+  .ag-col{flex:1 1 0;min-width:110px;position:relative;border-left:.5px solid var(--border)}
+  .ag-col:first-child{border-left:0}
+  /* Rasantes: hora en punto y media hora, las dos de 0.5px, la media a la mitad de contraste. */
+  .ag-col,.ag-horas{background-image:
+      repeating-linear-gradient(to bottom, var(--linea-hora) 0 .5px, transparent .5px var(--alto-hora)),
+      repeating-linear-gradient(to bottom, transparent 0 calc(var(--alto-hora)/2), var(--linea-media) calc(var(--alto-hora)/2) calc(var(--alto-hora)/2 + .5px), transparent calc(var(--alto-hora)/2 + .5px) var(--alto-hora))}
+  .ag-wrap{--linea-hora:#E4E6EA;--linea-media:#F1F3F5}
+  /* FUERA DE HORARIO: se atenúa, NO se bloquea. Se sigue pudiendo citar ahí, como hasta ahora. */
+  .ag-fuera{position:absolute;left:0;right:0;background:rgba(20,22,27,.028);pointer-events:none;z-index:0}
+  /* ZONAS DE CLIC de 30 min. Van POR DEBAJO de las citas (z-index 1 < 3): si quedaran encima,
+     pulsar una cita abriría el alta de una cita NUEVA y arrastrar para mover dejaría de funcionar. */
+  .agcell{position:absolute;left:0;right:0;z-index:1}
   .agcell.libre{transition:background .12s}
   .agcell.libre:hover{background:color-mix(in srgb, var(--accent) 12%, transparent);box-shadow:inset 0 0 0 1px var(--accent);cursor:pointer}
   .agcell.libre:hover::after{content:'+ Nueva cita';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:var(--accent);pointer-events:none}
   .agcell.libre:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
-  /* MES — calendario, no hoja de cálculo. Es el patrón de la app de Calendario del sistema: SIN cajas
-     ni cuadrícula, el día es un NÚMERO con aire alrededor, hoy va en círculo lleno, y las citas se
-     cuentan con PUNTOS debajo en vez de con texto. Antes cada día era un recuadro con "—" y
-     "13 h libre" escritos dentro: 31 cajas con dos líneas de texto cada una, que es exactamente lo
-     que un calendario no debe parecer. El dato exacto no se pierde: va al pie, que sigue al día que
-     tocas o señalas, y al title/aria-label de cada día. */
-  .mes{max-width:760px;margin:0 auto}
+  /* LÍNEA DE AHORA — solo si el rango visible contiene hoy; se recoloca sola cada minuto. */
+  .ag-ahora{position:absolute;left:0;right:0;height:1.5px;background:#D2452F;z-index:4;pointer-events:none}
+  .ag-ahora::before{content:'';position:absolute;left:-4px;top:-3.75px;width:9px;height:9px;border-radius:50%;background:#D2452F}
+  .ag-ahora-h{position:absolute;left:2px;transform:translateY(-50%);z-index:8;background:#D2452F;color:#fff;font-size:10px;font-weight:700;line-height:1;padding:2px 4px;border-radius:4px;pointer-events:none}
+
+  /* ══ LA CITA COMO BLOQUE (BLOQUE 2) ════════════════════════════════════════════════════════════
+     Fondo suave de su estado + barra de 3px en el tono fuerte + texto en el tono oscuro (nunca
+     negro). Esquinas: 0 a la izquierda —donde está la barra— y 6px a la derecha. */
+  .citaBlock{position:absolute;left:4px;right:4px;z-index:3;border-radius:0 6px 6px 0;border-left:3px solid var(--c-fuerte);background:var(--c-suave);color:var(--c-oscuro);padding:5px 8px;overflow:hidden;cursor:pointer;line-height:1.25}
+  .citaBlock:hover{filter:brightness(.97)}
+  .citaBlock .cli{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .citaBlock .svc,.citaBlock .hra{font-size:11px;opacity:.82;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* El tramo de ESPERA es el mismo bloque, gris neutro y SIN barra: a un metro se ve que no es cita. */
+  .citaBlock.espera{border-left:0;border-radius:6px;background:var(--bg3);color:var(--text2);--c-fuerte:transparent}
+  .ag-espera{position:absolute;left:0;right:0;background:var(--bg3);opacity:.85;pointer-events:none;border-radius:3px}
+
+  /* ══ MES (BLOQUE 4) ════════════════════════════════════════════════════════════════════════════
+     El mes dice qué pasa cada día SIN pasar el ratón: hasta 3 citas escritas y «+N más». Si el día
+     no tiene nada, la celda calla — el silencio es información. Fuera el title nativo y fuera el pie
+     que seguía al ratón: el pie es del día SELECCIONADO. */
+  .mes{max-width:980px;margin:0 auto}
   .mes-tit{font-size:1.35rem;font-weight:700;letter-spacing:-.02em;margin-bottom:.9rem}
   .mes-cab,.mes-rej{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
   .mes-cab span{text-align:center;font-size:.66rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);padding-bottom:.5rem}
-  .mes-rej{row-gap:.1rem}
-  .mesdia{appearance:none;border:0;background:transparent;font-family:inherit;padding:.3rem 0 .35rem;display:flex;flex-direction:column;align-items:center;gap:.25rem;cursor:pointer}
-  .mesdia .num{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.98rem;color:var(--text);transition:background .15s,color .15s}
-  .mesdia:hover .num{background:var(--bg3)}
+  .mes-rej{row-gap:.15rem;column-gap:.15rem}
+  .mesdia{appearance:none;border:0;background:transparent;font-family:inherit;padding:.25rem .2rem .35rem;display:flex;flex-direction:column;align-items:stretch;gap:.2rem;cursor:pointer;border-radius:9px;min-height:78px;text-align:left}
+  .mesdia .num{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.88rem;color:var(--text);align-self:center;transition:background .15s,color .15s;flex:0 0 auto}
+  .mesdia:hover{background:var(--bg3)}
   .mesdia:focus-visible{outline:none}
   .mesdia:focus-visible .num{outline:2px solid var(--accent);outline-offset:2px}
-  .mesdia.hoy .num{background:var(--accent);color:#fff;font-weight:600}
+  .mesdia.hoy .num{color:#D2452F;font-weight:700}
   .mesdia.sel .num{background:var(--text);color:#fff;font-weight:600}
-  .mesdia.hoy.sel .num{background:var(--accent-d);color:#fff}
+  .mesdia.hoy.sel .num{background:#D2452F;color:#fff}
+  .mesdia.otro{opacity:.45}
+  .mesdia.otro .num{color:var(--text3)}
   .mesdia:disabled{cursor:default}
   .mesdia:disabled .num{color:var(--text3)}
-  .mesdia .pts{display:flex;gap:3px;height:5px;align-items:center}
-  .mesdia .pt{width:5px;height:5px;border-radius:50%;background:var(--accent)}
-  .mesdia.hoy .pt{background:var(--accent)}
+  .mesdia .lin{display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 2px}
+  .mesdia .pt{flex:0 0 auto;width:5px;height:5px;border-radius:50%}
+  .mesdia .mas{font-size:10px;color:var(--text3);padding:0 2px}
   .mes-pie{margin-top:1rem;padding-top:.8rem;border-top:1px solid var(--border);display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap;min-height:1.6rem}
   .mes-pie .d{font-weight:600}
   .mes-pie .s{color:var(--text2);font-size:.85rem}
-  .mes-pie .a{margin-left:auto;font-size:.85rem;font-weight:600;color:var(--accent)}
-  @media (max-width:480px){ .mesdia .num{width:32px;height:32px;font-size:.9rem} .mes-tit{font-size:1.15rem} }`;
+  .mes-pie .a{margin-left:auto;font-size:.85rem;font-weight:600;color:var(--accent);cursor:pointer;background:none;border:0;font-family:inherit}
+  @media (max-width:480px){ .mesdia{min-height:62px} .mesdia .num{width:26px;height:26px;font-size:.82rem} .mes-tit{font-size:1.15rem} .mesdia .lin{font-size:9.5px} }`;
 
 function vistaAgenda(c, db) {
   const editable = can(c, 'citas.edit');
@@ -1072,23 +1182,35 @@ function vistaAgenda(c, db) {
   const dot = (col, lbl) => '<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.78rem;color:var(--muted)"><span style="width:10px;height:10px;border-radius:3px;background:' + col + '"></span>' + lbl + '</span>';
   const content = `
     <style>${CSS_AGENDA}</style>
-    <div class="ph"><h2>Agenda</h2>
-      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-        <button class="btn btn-secondary btn-sm" onclick="agHoy()">Hoy</button>
-        <button class="btn btn-secondary btn-sm" onclick="agMover(-1)" aria-label="Anterior">‹</button>
-        <input class="form-control" type="date" id="agFecha" style="width:auto" onchange="agCargar()">
-        <button class="btn btn-secondary btn-sm" onclick="agMover(1)" aria-label="Siguiente">›</button>
-        <!-- LAS TRES VISTAS, en un CONTROL SEGMENTADO (el patrón de la app de Calendario del sistema),
-             no tres botones sueltos. Es UN control, no una fila de botones azules compitiendo: DISEÑO
-             §6 manda "UN botón primario por pantalla" —aquí, "Nueva cita"— y prohíbe las filas de
-             azules. El segmento activo se marca con superficie elevada, no con color de acción. -->
+    <!-- CABECERA (BLOQUE 3). El elemento principal es el MES EN GRANDE, no el 18/08/2026: el campo de
+         fecha sigue existiendo y lo abre el propio título. "Hoy" en rojo junto a las flechas. Un solo
+         primario azul —"Nueva cita"—; Filtros y Bloquear un rato quedan del peso de las flechas. -->
+    <div class="ph" style="align-items:flex-start">
+      <div>
+        <button type="button" class="ag-tit" id="agTitulo" onclick="abrirFecha()" aria-label="Cambiar de fecha">
+          <span class="mes">Agenda</span>
+        </button>
+        <input class="form-control" type="date" id="agFecha" style="width:auto;margin-top:.35rem;display:none" onchange="agCargar();document.getElementById('agFecha').style.display='none'">
+      </div>
+      <div style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center">
+        <button type="button" class="ag-hoy" onclick="agHoy()">Hoy</button>
+        <button type="button" class="ag-nav" onclick="agMover(-1)" aria-label="Anterior">&lsaquo;</button>
+        <button type="button" class="ag-nav" onclick="agMover(1)" aria-label="Siguiente">&rsaquo;</button>
         <div class="segmented" role="tablist" aria-label="Vista">
           <button type="button" role="tab" id="vbDia" onclick="setVista('dia')">Día</button>
           <button type="button" role="tab" id="vbSemana" onclick="setVista('semana')">Semana</button>
           <button type="button" role="tab" id="vbMes" onclick="setVista('mes')">Mes</button>
         </div>
-        <button class="btn btn-secondary btn-sm" onclick="toggleControles()">Filtros</button>
-        ${editable ? '<button class="btn btn-secondary" onclick="openBloqueo()">Bloquear un rato</button><button class="btn btn-primary" onclick="openNuevaCita()">Nueva cita</button>' : ''}
+        <!-- ZOOM: compacto / normal / amplio. El paso se recuerda por usuario, en agPrefs, con la
+             vista y los filtros — el mismo sitio, no un segundo sistema de preferencias. -->
+        <div class="segmented" role="group" aria-label="Alto de la hora">
+          <button type="button" id="zb48" onclick="setZoom(48)" title="Compacto" aria-label="Compacto">S</button>
+          <button type="button" id="zb72" onclick="setZoom(72)" title="Normal" aria-label="Normal">M</button>
+          <button type="button" id="zb96" onclick="setZoom(96)" title="Amplio" aria-label="Amplio">L</button>
+        </div>
+        <button type="button" class="ag-disc" id="agLeyBtn" onclick="toggleLeyenda()" aria-expanded="false" title="Qué significa cada color" aria-label="Qué significa cada color"><i class="ti ti-info-circle"></i></button>
+        <button type="button" class="ag-disc" onclick="toggleControles()">Filtros</button>
+        ${editable ? '<button type="button" class="ag-disc" onclick="openBloqueo()">Bloquear un rato</button><button class="btn btn-primary" onclick="openNuevaCita()">Nueva cita</button>' : ''}
       </div>
     </div>
     <div id="agControles" style="display:none;gap:.75rem;flex-wrap:wrap;align-items:center;margin-bottom:.75rem;padding:.6rem .8rem;background:var(--bg2,rgba(0,0,0,.02));border-radius:8px">
@@ -1099,22 +1221,43 @@ function vistaAgenda(c, db) {
     <!-- AGENDA SIN HORARIO: se dice lo que PASA, no lo que "falta". El negocio NO está bloqueado —
          el motor le abre el día por defecto (8:00–21:00) para que pueda reservar sin configurar nada
          (citas-engine.js, DEFAULT_OPEN). Así que el aviso enseña a usarla YA y ofrece el horario al lado. -->
-    <div id="agSinHorario" class="alert" style="display:none;margin-bottom:.6rem">
+    <div id="agSinHorario" class="alert" style="display:none;margin-bottom:.6rem;position:relative;padding-right:2rem">
       <strong>Tu agenda ya funciona.</strong> Estás con el horario por defecto, de <strong>8:00 a 21:00</strong>:
       <strong>pulsa cualquier hueco libre</strong> y creas la cita ahí mismo.
       ¿Abres a otras horas? <a href="/admin/citas/horarios" style="font-weight:700">Define tu horario →</a>
+      <!-- Se puede cerrar, y se recuerda. Sigue apareciendo solo mientras NO haya horario propio: el
+           día que el negocio defina el suyo, el aviso deja de tener sentido y desaparece por sí. -->
+      <button type="button" class="ag-disc" onclick="cerrarSinHorario()" aria-label="Cerrar este aviso"
+              style="position:absolute;top:.3rem;right:.35rem;font-size:1rem;line-height:1;padding:.15rem .35rem">&times;</button>
     </div>
-    <div id="agLeyenda" style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:.6rem">${dot(COLORS.pedida, 'Pedida')}${dot(COLORS.confirmada, 'Confirmada')}${dot(COLORS.atendida, 'Atendida')}${dot(COLORS.no_show, 'No se presentó')}</div>
-    <div class="card"><div id="agenda" style="overflow-x:auto">Cargando…</div></div>
+    <div id="agTira" class="ag-tira" hidden></div>
+    <div id="agLeyenda" class="ag-leyenda" hidden>${Object.values(ESTADOS_COLOR).map(e => dot(e.fuerte, e.label)).join('')}</div>
+    <div class="card" style="padding:0;overflow:hidden"><div id="agenda">Cargando…</div></div>
     ${modalNuevaCita(aj.puesto_sing, aj.cliente_sing)}
     ${modalDetalle()}
     ${modalBloqueo(aj.puesto_sing)}
     ${modalAvisos()}
-    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};${jsVoz(aj)}${JS_AGENDA}</script>`;
+    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};window.CITA_ESTADOS=${jsonForScript(ESTADOS_COLOR)};${jsVoz(aj)}${JS_AGENDA}</script>`;
   return adminLayout('Agenda', content, 'citas', c.get('session')?.csrfToken || '', c);
 }
-// Colores de estado, compartidos por la leyenda (server) y los bloques (cliente, var COLOR en JS_AGENDA).
-const COLORS = { pedida: '#64748b', confirmada: '#16a34a', atendida: '#2563eb', no_show: '#b91c1c' };
+// ── COLOR DE ESTADO — FUENTE ÚNICA ───────────────────────────────────────────────────────────────
+// Antes esto vivía DOS veces: `COLORS` aquí (para la leyenda) y `var COLOR` dentro de JS_AGENDA (para
+// los bloques), con los mismos cuatro valores copiados. Dos tablas de lo mismo se separan en cuanto
+// alguien toca una: la leyenda diría un color y la cita otro. Ahora hay UNA, y el cliente la recibe
+// serializada (window.CITA_ESTADOS) en vez de tener la suya.
+//
+// Cada estado tiene TRES tonos de la MISMA familia, que es lo que la cita necesita para dejar de ser
+// un rectángulo de color plano con texto blanco:
+//   · fuerte — la barra de 3px de la izquierda y el punto de la leyenda. Son los valores DE SIEMPRE:
+//              el significado del color no cambia, solo cómo se expresa.
+//   · suave  — el fondo del bloque.
+//   · oscuro — el texto, para que se lea sobre el fondo suave. Nunca negro: de la misma familia.
+export const ESTADOS_COLOR = {
+  pedida:     { fuerte: '#64748b', suave: '#EEF1F5', oscuro: '#3F4A5A', label: 'Pedida' },
+  confirmada: { fuerte: '#16a34a', suave: '#E4F6EA', oscuro: '#146C34', label: 'Confirmada' },
+  atendida:   { fuerte: '#2563eb', suave: '#E4EDFF', oscuro: '#1E439E', label: 'Atendida' },
+  no_show:    { fuerte: '#b91c1c', suave: '#FBE3E3', oscuro: '#8C1616', label: 'No se presentó' },
+};
 
 function vistaCola(c, db) {
   const aj = ajustesCitas(db);
@@ -1533,7 +1676,9 @@ async function ensureMeta(){ if(!META) META=await api('GET','/api/erp/citas/meta
 function initDate(){ var el=document.getElementById('agFecha'); if(!el.value) el.value=ymd(new Date()); }
 var COLOR={pedida:'#64748b',confirmada:'#16a34a',atendida:'#2563eb',no_show:'#b91c1c'};
 function loadPrefs(){ try{ return JSON.parse(localStorage.getItem('agPrefs')||'{}'); }catch(e){ return {}; } }
-function savePrefs(){ try{ localStorage.setItem('agPrefs', JSON.stringify({vista:document.getElementById('agVista').value, eje:document.getElementById('agEje').value, verTodo:document.getElementById('agVerTodo').checked})); }catch(e){} }
+// Las preferencias de la agenda viven TODAS en el mismo sitio (agPrefs): vista, eje, ver-todo, el
+// paso de ZOOM y si se cerró el aviso de "sin horario". Un solo sitio, no un segundo sistema.
+function savePrefs(extra){ try{ var p=loadPrefs(); var n=Object.assign({}, p, {vista:document.getElementById('agVista').value, eje:document.getElementById('agEje').value, verTodo:document.getElementById('agVerTodo').checked}, extra||{}); localStorage.setItem('agPrefs', JSON.stringify(n)); }catch(e){} }
 function agHoy(){ document.getElementById('agFecha').value=ymd(new Date()); agCargar(); }
 function toggleControles(){ var c=document.getElementById('agControles'); c.style.display=(c.style.display==='none'||!c.style.display)?'flex':'none'; }
 function vistaActual(){ return document.getElementById('agVista').value; }
@@ -1556,17 +1701,69 @@ function agMover(n){
 }
 // Aviso de "sin horario": se enseña cuando el negocio no ha configurado ninguno. No bloquea nada.
 function pintaSinHorario(sin){
-  var el=document.getElementById('agSinHorario'); if(el) el.style.display = sin ? '' : 'none';
+  var el=document.getElementById('agSinHorario'); if(!el) return;
+  // Solo mientras NO haya horario propio, Y si el usuario no lo ha cerrado.
+  el.style.display = (sin && loadPrefs().avisoHorario!=='off') ? '' : 'none';
 }
+// ── CABECERA (BLOQUE 3) ─────────────────────────────────────────────────────
+// El título grande manda: "Agosto 2026", mes en negro y año en gris. El selector de fecha sigue
+// existiendo — lo abre el propio título.
+function abrirFecha(){ var el=document.getElementById('agFecha'); el.style.display = el.style.display==='none' ? '' : 'none'; if(el.style.display==='') el.focus(); }
+function pintaTitulo(){
+  var f=document.getElementById('agFecha').value || ymd(new Date());
+  var d=new Date(f+'T00:00:00Z');
+  var t=document.getElementById('agTitulo'); if(!t) return;
+  t.innerHTML='<span class="mes">'+esc(cap(d.toLocaleDateString('es-ES',{month:'long',timeZone:'UTC'})))+'</span>'
+    +'<span class="anio">'+d.getUTCFullYear()+'</span>';
+}
+// ZOOM en tres pasos. Se recuerda con el resto de preferencias y repinta.
+function setZoom(px){ savePrefs({zoom:px}); pintaZoom(); agCargar(); }
+function pintaZoom(){
+  var z=altoHora();
+  [48,72,96].forEach(function(x){ var b=document.getElementById('zb'+x); if(b) b.setAttribute('aria-selected', x===z?'true':'false'); });
+}
+// La leyenda deja de ocupar línea fija: la despliega la (i) de la barra. No se quita ningún estado.
+function toggleLeyenda(){
+  var l=document.getElementById('agLeyenda'), b=document.getElementById('agLeyBtn');
+  var abierta=!l.hasAttribute('hidden');
+  if(abierta) l.setAttribute('hidden',''); else l.removeAttribute('hidden');
+  b.setAttribute('aria-expanded', abierta?'false':'true');
+}
+// El aviso de "sin horario" se puede cerrar, y se recuerda. Sigue apareciendo solo mientras el
+// negocio NO tenga horario propio: el día que lo defina, desaparece por sí solo.
+function cerrarSinHorario(){ savePrefs({avisoHorario:'off'}); document.getElementById('agSinHorario').style.display='none'; }
+// TIRA DE 7 DÍAS (solo en vista Día): saltar de día sin abrir el selector.
+function pintaTira(vista){
+  var t=document.getElementById('agTira'); if(!t) return;
+  if(vista!=='dia'){ t.setAttribute('hidden',''); t.innerHTML=''; return; }
+  t.removeAttribute('hidden');
+  var sel=document.getElementById('agFecha').value||ymd(new Date()), hoy=ymd(new Date());
+  var d=new Date(sel+'T00:00:00Z'); var lun=new Date(d.getTime()-((d.getUTCDay()+6)%7)*86400000);
+  var lab=['L','M','X','J','V','S','D'];
+  var noLab=(window.AG_TRAMOS_DOW||null);
+  var h='';
+  for(var i=0;i<7;i++){
+    var f=ymd(new Date(lun.getTime()+i*86400000));
+    var findes=(noLab&&noLab.indexOf((i+1)%7)<0) || (!noLab && i>=5);
+    h+='<button type="button" class="'+(f===hoy?'hoy ':'')+(f===sel?'sel ':'')+(findes?'findes':'')+'" data-fecha="'+f+'" onclick="irA(\''+f+'\')" aria-label="'+esc(fLargoDia(f))+'">'
+      +'<span class="dow">'+lab[i]+'</span><span class="n">'+f.slice(8).replace(/^0/,'')+'</span></button>';
+  }
+  t.innerHTML=h;
+}
+function irA(f){ document.getElementById('agFecha').value=f; agCargar(); }
 async function agCargar(){
   initDate(); await ensureMeta(); savePrefs();
   var vista=vistaActual(), eje=document.getElementById('agEje').value;
-  pintaBotonesVista(vista);
+  pintaBotonesVista(vista); pintaZoom(); pintaTitulo(); pintaTira(vista);
   var f0=document.getElementById('agFecha').value;
-  // La leyenda de estados es de la rejilla; en el mes no pinta nada y solo hace ruido.
-  var ley=document.getElementById('agLeyenda'); if(ley) ley.style.display = vista==='mes' ? 'none' : 'flex';
+  // La leyenda es de la rejilla; en el mes no pinta nada. Y ya no ocupa línea fija: se despliega
+  // con la (i), así que aquí solo se esconde su botón cuando no aplica.
+  var lb=document.getElementById('agLeyBtn'); if(lb) lb.style.display = vista==='mes' ? 'none' : '';
+  var ley=document.getElementById('agLeyenda'); if(ley && vista==='mes') ley.setAttribute('hidden','');
   if(vista==='mes'){
-    var data=await api('GET','/api/erp/citas/mes?ym='+f0.slice(0,7));
+    // El mes hereda los MISMOS filtros que Día: si aquí no ves una cita, en Mes tampoco.
+    var q='?ym='+f0.slice(0,7)+'&eje='+encodeURIComponent(eje)+'&verTodo='+(document.getElementById('agVerTodo').checked?'1':'0');
+    var data=await api('GET','/api/erp/citas/mes'+q);
     pintaSinHorario(!!data.sin_horario);
     renderMes(data, f0);
     return;
@@ -1593,6 +1790,12 @@ function fLargoDia(f){
   try{ return cap(new Date(f+'T00:00:00Z').toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long',timeZone:'UTC'})); }
   catch(e){ return f; }
 }
+// ══ MES (BLOQUE 4) ════════════════════════════════════════════════════════════════════════════════
+// El mes tiene que decir QUÉ PASA cada día sin pasar el ratón por encima: hasta 3 citas escritas
+// («9:00 · Ana Ruiz» con el punto de su estado) y «+N más» si hay cuarta. Si el día no tiene citas la
+// celda no dice nada — el silencio es información.
+// FUERA el title nativo del navegador (era el "globo" que había que esperar) y FUERA el pie que
+// seguía al ratón: el pie es del día SELECCIONADO. Un clic selecciona; dos (o «Abrir el día») abren.
 function renderMes(data, fechaSel){
   var box=document.getElementById('agenda');
   var dias=data.dias||[]; if(!dias.length){ box.textContent='No hay nada que mostrar.'; return; }
@@ -1600,51 +1803,66 @@ function renderMes(data, fechaSel){
   var primero=new Date(dias[0].fecha+'T00:00:00Z');
   var hueco=(primero.getUTCDay()+6)%7;   // el lunes va primero (locale ES)
   var _d=new Date(fechaSel+'T00:00:00Z');
-  // 'agosto 2026', no 'agosto de 2026': el mes y el año, como en el calendario del sistema.
   var titulo=cap(_d.toLocaleDateString('es-ES',{month:'long',timeZone:'UTC'}))+' '+_d.getUTCFullYear();
   var html='<div class="mes"><div class="mes-tit">'+esc(titulo)+'</div>'
     +'<div class="mes-cab">'+DIAS_CAB.map(function(d){ return '<span>'+d+'</span>'; }).join('')+'</div>'
     +'<div class="mes-rej">';
-  for(var i=0;i<hueco;i++) html+='<span></span>';
+  // Los días del mes ANTERIOR que completan la primera semana: gris muy claro, no ocultos.
+  for(var i=hueco;i>0;i--){
+    var pf=ymd(new Date(primero.getTime()-i*86400000));
+    html+='<button type="button" class="mesdia otro" data-fecha="'+pf+'" data-res="Otro mes" aria-label="'+esc(fLargoDia(pf))+'"><span class="num">'+pf.slice(8)+'</span></button>';
+  }
   dias.forEach(function(d){
     var cls='mesdia'+(d.fecha===hoy?' hoy':'')+(d.fecha===fechaSel?' sel':'');
-    // Las citas se cuentan con PUNTOS, como en el calendario del sistema. Más de cuatro no se dibujan
-    // una a una: el número exacto vive en el pie y en el aria-label, que es donde se puede leer.
-    var n=Math.min(d.citas,4), pts='';
-    for(var k=0;k<n;k++) pts+='<span class="pt"></span>';
     var resumen=citasTxt(d.citas)+(d.abierto?', '+horas(d.libres_min):', cerrado');
+    // Hasta TRES escritas; la cuarta se resume. El total exacto sigue en el aria-label y en el pie.
+    var lineas='';
+    (d.primeras||[]).slice(0,3).forEach(function(x){
+      var col=(window.CITA_ESTADOS||{})[x.estado]||{fuerte:'#64748b'};
+      lineas+='<span class="lin"><span class="pt" style="background:'+col.fuerte+'"></span>'
+        +hcorta(x.min)+' · '+esc(x.cliente)+'</span>';
+    });
+    if(d.citas>3) lineas+='<span class="mas">+'+(d.citas-3)+' más</span>';
     html+='<button type="button" class="'+cls+'" data-fecha="'+d.fecha+'"'
       +' data-res="'+esc(resumen)+'"'+(d.abierto?'':' disabled')
-      +' title="'+esc(fLargoDia(d.fecha)+' · '+resumen)+'"'
       +' aria-label="'+esc(fLargoDia(d.fecha)+', '+resumen)+'">'
-      +'<span class="num">'+d.dia+'</span><span class="pts">'+pts+'</span></button>';
+      +'<span class="num">'+d.dia+'</span>'+lineas+'</button>';
   });
+  // Y los del mes SIGUIENTE hasta cerrar la última semana.
+  var ultimo=new Date(dias[dias.length-1].fecha+'T00:00:00Z');
+  var sobran=(7-((hueco+dias.length)%7))%7;
+  for(var j=1;j<=sobran;j++){
+    var nf=ymd(new Date(ultimo.getTime()+j*86400000));
+    html+='<button type="button" class="mesdia otro" data-fecha="'+nf+'" data-res="Otro mes" aria-label="'+esc(fLargoDia(nf))+'"><span class="num">'+nf.slice(8)+'</span></button>';
+  }
   html+='</div><div class="mes-pie" id="mesPie"></div></div>';
   box.innerHTML=html;
 
-  // EL PIE — aquí van los números exactos que antes ensuciaban las 31 casillas. Sigue al día que
-  // señalas o enfocas, y arranca en el día seleccionado. Un solo renglón en vez de 62 líneas de texto.
+  // EL PIE — del día SELECCIONADO, no del que señala el ratón. Los números exactos viven aquí.
   var pie=document.getElementById('mesPie');
   function pintaPie(f){
     var b=box.querySelector('.mesdia[data-fecha="'+f+'"]');
     if(!b){ pie.innerHTML=''; return; }
     pie.innerHTML='<span class="d">'+esc(fLargoDia(f))+'</span>'
       +'<span class="s">'+esc(b.getAttribute('data-res'))+'</span>'
-      +(b.disabled?'':'<span class="a">Abrir el día →</span>');
+      +(b.disabled?'':'<button type="button" class="a" onclick="abrirDia(\''+f+'\')">Abrir el día &rarr;</button>');
   }
   pintaPie(fechaSel);
   [].forEach.call(box.querySelectorAll('.mesdia'), function(b){
     var f=b.getAttribute('data-fecha');
-    b.addEventListener('mouseenter', function(){ pintaPie(f); });
-    b.addEventListener('focus', function(){ pintaPie(f); });
+    b.addEventListener('focus', function(){ selDia(f); });
     if(b.disabled) return;
-    b.addEventListener('click', function(){
-      document.getElementById('agFecha').value=f;
-      setVista('dia');
-    });
+    // UN clic selecciona (y actualiza el pie). DOS abren el día.
+    b.addEventListener('click', function(){ selDia(f); });
+    b.addEventListener('dblclick', function(){ abrirDia(f); });
   });
-  box.addEventListener('mouseleave', function(){ pintaPie(document.getElementById('agFecha').value); });
+  function selDia(f){
+    [].forEach.call(box.querySelectorAll('.mesdia'), function(x){ x.classList.toggle('sel', x.getAttribute('data-fecha')===f); });
+    pintaPie(f);
+  }
+  window.__mesSel=selDia;
 }
+function abrirDia(f){ document.getElementById('agFecha').value=f; setVista('dia'); }
 function colDefs(eje, data){
   if(eje==='recurso'){ return [{id:null,nombre:'Sin '+(window.PUESTO_SING||'puesto').toLowerCase()}].concat(META.recursos.map(r=>({id:r.id,nombre:r.nombre}))); }
   var verTodo=document.getElementById('agVerTodo').checked;
@@ -1652,30 +1870,65 @@ function colDefs(eje, data){
   var list = base.map(p=>({id:p.id,nombre:p.name}));
   return list.length ? list : META.personas.map(p=>({id:p.id,nombre:p.name}));   // nunca dejar la agenda sin columnas
 }
+// ══ EL LIENZO (BLOQUE 1 + 2) ══════════════════════════════════════════════════════════════════════
+// Ya no es una tabla de filas de media hora: es un lienzo continuo donde cada cita se coloca por sus
+// MINUTOS REALES. Una cita a las 9:10 se dibuja a las 9:10.
+//
+// LO QUE SIGUE SIENDO DE 30 MINUTOS, A PROPÓSITO: las zonas de clic (.agcell.libre). Al pulsar un
+// hueco la cita se crea en punto o y media, que es lo que la gente espera. Lo que pasó a minutos
+// reales es el DIBUJO, no el alta.
+//
+// EL APILADO IMPORTA Y NO ES COSMÉTICO: las zonas de clic van en z-index 1 y las citas en z-index 3.
+// Si las zonas quedaran encima, pulsar una cita abriría el alta de una cita NUEVA en vez de esa cita,
+// y arrastrar para mover dejaría de funcionar. El gate lo comprueba.
+function altoHora(){ var z=parseInt(loadPrefs().zoom); return (z===48||z===72||z===96)?z:72; }
 function render(data, desde, hasta, vista, eje){
   var box=document.getElementById('agenda');
   var dates=[]; var d0=new Date(desde+'T00:00:00Z'); var dN=new Date(hasta+'T00:00:00Z');
   for(var d=new Date(d0); d<=dN; d=new Date(d.getTime()+86400000)) dates.push(ymd(d));
-  // La rejilla ya NO está clavada de 8 a 21: la manda el horario del negocio (data.rango), que calcula
-  // el servidor con el mismo motor. Sin horario configurado, rango viene con el 8–21 por defecto, así
-  // que lo que se veía antes se sigue viendo igual.
+  // La rejilla la manda el horario del negocio (data.rango), que calcula el servidor con el mismo
+  // motor. Sin horario configurado viene con el 8–21 por defecto.
   var R=(data&&data.rango)||{ini:8*60,fin:21*60};
-  var START=R.ini, END=R.fin, STEP=30, PXMIN=0.9;
+  var START=R.ini, END=R.fin, H=altoHora(), PXMIN=H/60, STEP=30;
   var clickable = vista==='dia' && eje==='persona' && window.CITAS_EDIT;
-  var cols = vista==='semana' ? dates.map(dt=>({key:dt,label:DIAS[new Date(dt+'T00:00:00Z').getUTCDay()]+' '+dt.slice(8)})) : colDefs(eje,data).map(c=>({key:c.id===null?'null':String(c.id),label:c.nombre,colId:c.id}));
-  var html='<table style="border-collapse:collapse;min-width:'+(80+cols.length*150)+'px"><thead><tr><th style="width:60px"></th>'+cols.map(c=>'<th style="padding:.4rem;font-size:.85rem;border-bottom:1px solid var(--border)">'+esc(c.label)+'</th>').join('')+'</tr></thead><tbody>';
-  for(var t=START;t<END;t+=STEP){
-    html+='<tr><td style="font-size:.7rem;color:var(--muted);vertical-align:top;height:'+(STEP*PXMIN)+'px">'+fhhmm(t)+'</td>';
-    for(var ci=0;ci<cols.length;ci++){ var col=cols[ci];
+  var cols = vista==='semana'
+    ? dates.map(dt=>({key:dt,label:DIAS[new Date(dt+'T00:00:00Z').getUTCDay()]+' '+dt.slice(8),fecha:dt,colId:undefined}))
+    : colDefs(eje,data).map(c=>({key:c.id===null?'null':String(c.id),label:c.nombre,colId:c.id,fecha:desde}));
+  var alto=(END-START)*PXMIN;
+
+  // Cabeceras: clase ESTABLE .agcol-head con su data-col. Y se quedan fijas al hacer scroll, junto
+  // con la columna de horas — lo que la <table> daba gratis y en un lienzo hay que pedir a mano: a
+  // las 18:00 tienes que seguir sabiendo de quién es cada columna.
+  var html='<div class="ag-wrap" id="agWrap" style="--alto-hora:'+H+'px">'
+    +'<div class="ag-head"><div class="esq"></div>'
+    + cols.map(function(c){ return '<div class="agcol-head" data-col="'+esc(c.colId==null?(vista==='semana'?c.key:''):c.colId)+'" title="'+esc(c.label)+'">'+esc(c.label)+'</div>'; }).join('')
+    +'</div><div class="ag-body" style="height:'+alto+'px">';
+
+  // Columna de horas: SOLO la hora en punto lleva texto, formato 9:00 (no 09:00), a caballo de su
+  // línea (-6px) y no dentro de una celda con borde.
+  var horasHtml='';
+  for(var t=Math.ceil(START/60)*60; t<=END; t+=60) horasHtml+='<div class="ag-hora" style="top:'+((t-START)*PXMIN)+'px">'+hcorta(t)+'</div>';
+  html+='<div class="ag-horas" style="height:'+alto+'px"><div class="ag-hrel">'+horasHtml+'</div></div><div class="ag-cols">';
+
+  for(var ci=0;ci<cols.length;ci++){
+    var col=cols[ci];
+    var fecha = vista==='semana' ? col.key : desde;
+    var celdas='';
+    // Fuera de horario: se atenúa, no se bloquea. Se sigue pudiendo citar ahí.
+    (fueraDe(data, fecha, col, eje, vista, START, END)||[]).forEach(function(f){
+      celdas+='<div class="ag-fuera" style="top:'+((f[0]-START)*PXMIN)+'px;height:'+((f[1]-f[0])*PXMIN)+'px"></div>';
+    });
+    for(var t2=START;t2<END;t2+=STEP){
       var attrs = vista==='semana' ? 'data-fecha="'+col.key+'"' : ('data-fecha="'+desde+'" data-col="'+(col.colId==null?'':col.colId)+'"');
-      // La clase libre es lo que le da el hover, el "+ Nueva cita" y el foco de teclado (ver CSS_AGENDA).
-      // El onclick ya estaba: lo que faltaba era que se NOTARA que está.
-      html+='<td class="agcell'+(clickable?' libre':'')+'" '+attrs+' data-min="'+t+'"'+(clickable?' onclick="cellNueva(this)" tabindex="0" role="button" aria-label="Crear cita a las '+fhhmm(t)+'"':'')+' style="border:1px solid var(--border);height:'+(STEP*PXMIN)+'px;vertical-align:top;position:relative" ondragover="event.preventDefault()" ondrop="onDrop(event)"></td>';
+      celdas+='<div class="agcell'+(clickable?' libre':'')+'" '+attrs+' data-min="'+t2+'"'
+        +(clickable?' onclick="cellNueva(this)" tabindex="0" role="button" aria-label="Crear cita a las '+fhhmm(t2)+'"':'')
+        +' style="top:'+((t2-START)*PXMIN)+'px;height:'+(STEP*PXMIN)+'px" ondragover="event.preventDefault()" ondrop="onDrop(event)"></div>';
     }
-    html+='</tr>';
+    html+='<div class="ag-col" data-colkey="'+esc(col.key)+'" data-fecha="'+esc(fecha)+'">'+celdas+'</div>';
   }
-  html+='</tbody></table>';
+  html+='</div></div></div>';
   box.innerHTML=html;
+
   // Con teclado también se crea: el hueco lleva role=button y responde a Enter y a Espacio.
   [].forEach.call(box.querySelectorAll('.agcell.libre'), function(td){
     td.addEventListener('keydown', function(ev){
@@ -1683,28 +1936,93 @@ function render(data, desde, hasta, vista, eje){
       ev.preventDefault(); cellNueva(td);
     });
   });
+
+  // ── LAS CITAS, por minutos reales ──────────────────────────────────────────
   (data.citas||[]).forEach(function(ci){
-    var cell = box.querySelector('.agcell[data-min="'+(Math.floor(ci.inicio_min/STEP)*STEP)+'"]'+(vista==='semana'?'[data-fecha="'+ci.fecha+'"]':'[data-col="'+(eje==='recurso'?(ci.recurso_id==null?'':ci.recurso_id):ci.user_id)+'"]'));
-    if(!cell) return;
-    var top=(ci.inicio_min-Math.floor(ci.inicio_min/STEP)*STEP)*PXMIN;
-    var h=Math.max(18,(ci.dur_min)*PXMIN);
-    var color = COLOR[ci.estado]||'#64748b';
+    var sel = vista==='semana' ? '.ag-col[data-colkey="'+ci.fecha+'"]'
+                               : '.ag-col[data-colkey="'+(eje==='recurso'?(ci.recurso_id==null?'null':ci.recurso_id):ci.user_id)+'"]';
+    var colEl = box.querySelector(sel);
+    if(!colEl) return;
+    var top=(ci.inicio_min-START)*PXMIN;
+    var h=Math.max(22,(ci.dur_min)*PXMIN);        // 22px mínimo: una cita de 10 min sigue siendo clicable
     var el=document.createElement('div');
-    el.className='citaBlock'; el.dataset.id=ci.id;
+    el.className='citaBlock'; el.dataset.id=ci.id; el.dataset.estado=ci.estado;
+    var col=(window.CITA_ESTADOS||{})[ci.estado]||{fuerte:'#64748b',suave:'#EEF1F5',oscuro:'#3F4A5A'};
+    el.style.setProperty('--c-fuerte',col.fuerte);
+    el.style.setProperty('--c-suave',col.suave);
+    el.style.setProperty('--c-oscuro',col.oscuro);
+    el.style.top=top+'px'; el.style.height=h+'px';
     if(window.CITAS_EDIT){ el.draggable=true; el.ondragstart=function(ev){ev.dataTransfer.setData('text/plain',ci.id);}; }
-    el.style.cssText='position:absolute;left:2px;right:2px;top:'+top+'px;height:'+h+'px;background:'+color+';color:#fff;border-radius:6px;padding:2px 5px;font-size:.72rem;overflow:hidden;cursor:pointer;z-index:2';
-    // Solo lo justo (2.4): hora · cliente · servicio. El resto vive DENTRO de la cita, al abrirla.
-    el.innerHTML='<b>'+fhhmm(ci.inicio_min)+'</b> '+esc(ci.cliente)+'<br>'+esc(ci.servicios);
-    // Tramo(s) de ESPERA en otro tono, dentro del MISMO bloque (1.3): "Aquí estás libre".
+    // JERARQUÍA POR ALTURA, sin cortar palabras a media letra: se quitan LÍNEAS enteras.
+    var linCli='<div class="cli">'+esc(ci.cliente)+'</div>';
+    var linSvc='<div class="svc">'+esc(ci.servicios)+'</div>';
+    var linHra='<div class="hra">'+hcorta(ci.inicio_min)+'–'+hcorta(ci.inicio_min+ci.dur_min)+'</div>';
+    if(h>=60){ el.innerHTML=linCli+linSvc+linHra; }
+    else if(h>=40){ el.innerHTML=linCli+linSvc; }
+    else { el.innerHTML=linCli; el.title=ci.cliente+' · '+ci.servicios+' · '+hcorta(ci.inicio_min); }
+    // Tramo(s) de ESPERA: el mismo bloque, gris neutro y SIN barra de color, para que a un metro se
+    // vea que ahí no hay cita.
     (ci.espera||[]).forEach(function(w){
       var b=document.createElement('div');
-      b.title='Aquí estás libre';
-      b.style.cssText='position:absolute;left:0;right:0;top:'+(w.ini*PXMIN)+'px;height:'+((w.fin-w.ini)*PXMIN)+'px;background:repeating-linear-gradient(45deg,rgba(255,255,255,.28),rgba(255,255,255,.28) 5px,rgba(255,255,255,.12) 5px,rgba(255,255,255,.12) 10px);border-top:1px dashed rgba(255,255,255,.6);border-bottom:1px dashed rgba(255,255,255,.6);pointer-events:none';
+      b.className='ag-espera'; b.title='Aquí estás libre';
+      b.style.top=(w.ini*PXMIN)+'px'; b.style.height=((w.fin-w.ini)*PXMIN)+'px';
       el.appendChild(b);
     });
     el.onclick=function(){verCita(ci.id);};
-    cell.appendChild(el);
+    colEl.appendChild(el);
   });
+
+  pintaAhora(START, END, PXMIN, dates);
+  colocaScroll(START, PXMIN, dates);
+}
+// De qué a qué minuto NO se trabaja, para atenuarlo. Sale del mismo rango del servidor y de los
+// tramos que ya viajan con la agenda; si no hay dato, no se atenúa nada (nunca se inventa horario).
+function fueraDe(data, fecha, col, eje, vista, START, END){
+  var tr = data && data.tramos && data.tramos[fecha];
+  if(!tr) return [];
+  var abiertos = (eje==='persona' && vista!=='semana' && col.colId!=null && tr.personas && tr.personas[col.colId]) ? tr.personas[col.colId] : tr.negocio;
+  if(!abiertos || !abiertos.length) return [];
+  var out=[], cur=START;
+  abiertos.slice().sort(function(a,b){return a[0]-b[0];}).forEach(function(t){
+    if(t[0]>cur) out.push([cur, Math.min(t[0],END)]);
+    cur=Math.max(cur, t[1]);
+  });
+  if(cur<END) out.push([cur, END]);
+  return out.filter(function(f){ return f[1]>f[0]; });
+}
+// «9:00», no «09:00».
+function hcorta(m){ var h=Math.floor(m/60)%24, mm=m%60; return h+':'+(mm<10?'0':'')+mm; }
+// LÍNEA DE AHORA — solo si el rango visible contiene HOY. Se recoloca sola cada 60 s, sin recargar.
+var _ahoraTimer=null;
+function pintaAhora(START, END, PXMIN, dates){
+  if(_ahoraTimer){ clearInterval(_ahoraTimer); _ahoraTimer=null; }
+  var wrap=document.getElementById('agWrap'); if(!wrap) return;
+  var hoy=ymd(new Date());
+  if(dates.indexOf(hoy)<0) return;                       // el día visible no es hoy: no se pinta
+  var cols=wrap.querySelector('.ag-cols'), horas=wrap.querySelector('.ag-horas');
+  var linea=document.createElement('div'); linea.className='ag-ahora'; linea.id='agAhora';
+  var pill=document.createElement('div'); pill.className='ag-ahora-h'; pill.id='agAhoraH';
+  cols.appendChild(linea); (horas.querySelector('.ag-hrel')||horas).appendChild(pill);
+  function coloca(){
+    var n=new Date(), min=n.getHours()*60+n.getMinutes();
+    var dentro = min>=START && min<=END;
+    linea.style.display = dentro ? '' : 'none';
+    pill.style.display  = dentro ? '' : 'none';
+    if(!dentro) return;
+    var y=(min-START)*PXMIN;
+    linea.style.top=y+'px'; pill.style.top=y+'px'; pill.textContent=hcorta(min);
+  }
+  coloca();
+  _ahoraTimer=setInterval(coloca, 60000);
+}
+// AL ABRIR: la hora actual a un tercio de lo que se ve. Si el día mostrado no es hoy, al inicio del
+// horario del negocio (que es scroll 0).
+function colocaScroll(START, PXMIN, dates){
+  var wrap=document.getElementById('agWrap'); if(!wrap) return;
+  if(dates.indexOf(ymd(new Date()))<0){ wrap.scrollTop=0; return; }
+  var n=new Date(), min=n.getHours()*60+n.getMinutes();
+  if(min<START){ wrap.scrollTop=0; return; }
+  wrap.scrollTop=Math.max(0, (min-START)*PXMIN - wrap.clientHeight/3);
 }
 function cellNueva(cell){ if(!window.CITAS_EDIT) return; var uid=cell.dataset.col; if(!uid) return; openQuickCita(uid, cell.dataset.fecha, parseInt(cell.dataset.min)); }
 function esc(s){return String(s==null?'':s).replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));}
@@ -1918,6 +2236,7 @@ async function bGuardar(){
 }
 // De entrada: HOY, por persona, solo quien trabaja hoy (2.1). Se recuerda lo último que se eligió (2.2).
 (function initAgenda(){ var p=loadPrefs(); if(p.vista)document.getElementById('agVista').value=p.vista; if(p.eje)document.getElementById('agEje').value=p.eje; var vt=document.getElementById('agVerTodo'); if(vt)vt.checked=!!p.verTodo;
+  initDate(); pintaTitulo(); pintaZoom();
   // Los FILTROS se despliegan solos si venían tocados. La vista ya no: ahora son botones a la vista.
   if((p.eje&&p.eje!=='persona')||p.verTodo){ document.getElementById('agControles').style.display='flex'; }
   pintaBotonesVista(vistaActual()); agCargar(); })();
