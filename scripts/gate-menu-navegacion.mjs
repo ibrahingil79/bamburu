@@ -139,6 +139,15 @@ const leerMenu = page => page.evaluate(() => {
     })),
     // ¿Tiene chincheta cada ÁREA del rail? (el encargo: se ancla CUALQUIER entrada, áreas incluidas)
     areasConPin: [...nav.querySelectorAll(':scope > .navg')].filter(g => g.querySelector(':scope > .nav-pin')).length,
+    // (D) claves en el ORDEN en que se pintan, y qué es arrastrable
+    ordenAreas: [...nav.querySelectorAll(':scope > .navg[data-ord]')].map(g => g.getAttribute('data-ord')),
+    areasArrastrables: [...nav.querySelectorAll(':scope > .navg')].filter(g => g.getAttribute('draggable') === 'true').length,
+    entradasArrastrables: [...nav.querySelectorAll(':scope > .navg .fly-item[data-ord][draggable="true"]')].length,
+    ordenEntradas: Object.fromEntries([...nav.querySelectorAll(':scope > .navg')].map(g => [
+      g.querySelector('.nav-label').textContent.trim(),
+      [...g.querySelectorAll('.fly-item[data-ord]')].map(e => e.getAttribute('data-ord') + ':' + e.getAttribute('data-bloque')),
+    ])),
+    reset: !!document.getElementById('railReset'),
     destinos: (window.MENU_DESTINOS || []).map(d => ({ key: d.key, label: d.label, href: d.href })),
   };
 });
@@ -218,6 +227,11 @@ try {
   ok(menu.areasConPin === menu.areas.length,
      'CADA ÁREA del rail tiene su chincheta: se ancla cualquier entrada del menú, áreas incluidas',
      menu.areasConPin + ' de ' + menu.areas.length);
+  ok(menu.areasArrastrables === menu.areas.length,
+     'y CADA ÁREA se puede arrastrar para moverla de orden', menu.areasArrastrables + ' de ' + menu.areas.length);
+  ok(menu.entradasArrastrables === BASE_RAIL.length,
+     'y las ' + BASE_RAIL.length + ' entradas de los desplegables también', menu.entradasArrastrables + '');
+  ok(!menu.reset, 'de fábrica NO hay botón de restablecer: no hay nada que restablecer');
 
   const nadaPlegado = await page.evaluate(() => {
     // Todas las entradas del área de Agenda tienen que estar en el MISMO desplegable y a la vez.
@@ -443,6 +457,101 @@ try {
   ok(await page.evaluate(() => window.__tope) === 400, 'el servidor rechaza más de 8 anclas (400)');
 
   // ══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n[3-bis] MOVER DE ORDEN — los menús Y los submenús');
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // CAMBIO DE REGLA pedido por Ibrahin: el encargo decía «las áreas de fábrica NO se reordenan». Ahora
+  // SÍ. Lo que sigue intacto: nada se esconde, nada se quita, y ninguna entrada se muda de área.
+  await page.goto(BASE + '/admin', { waitUntil: 'networkidle0' });
+  const fabricaAreas = (await leerMenu(page)).ordenAreas;
+  const fabricaVentas = (await leerMenu(page)).ordenEntradas['Ventas'];
+
+  // ── ARRASTRE DE VERDAD: el área "Analítica" encima de "Ventas" ────────────────────────────────
+  await page.setDragInterception(true);
+  await page.evaluate(() => { document.querySelector('.sidebar').classList.add('flyopen'); });
+  await dormir(250);
+  const cajaDe = async sel => { const h = await page.$(sel); return h ? h.boundingBox() : null; };
+  const rA = await cajaDe('#sbNav > .navg[data-ord="area:analitica"] > .nav-item');
+  const rV = await cajaDe('#sbNav > .navg[data-ord="area:ventas"] > .nav-item');
+  await page.mouse.dragAndDrop({ x: rA.x + rA.width / 2, y: rA.y + rA.height / 2 }, { x: rV.x + rV.width / 2, y: rV.y + 4 });
+  await dormir(700);
+  m = await leerMenu(page);
+  const espAreas = fabricaAreas.filter(a => a !== 'area:analitica');
+  espAreas.splice(espAreas.indexOf('area:ventas'), 0, 'area:analitica');
+  ok(JSON.stringify(m.ordenAreas) === JSON.stringify(espAreas),
+     'ARRASTRANDO un ÁREA se mueve de orden en el rail', m.ordenAreas.join(' '));
+  ok(m.areas.reduce((n, a) => n + a.diario.length + a.ajustes.length, 0) === BASE_RAIL.length,
+     'y no se pierde ni una entrada al moverla', BASE_RAIL.length + '');
+  ok(m.reset, 'aparece el botón «Restablecer mi menú» en cuanto hay algo que restablecer');
+
+  // ── ARRASTRE DE VERDAD: una ENTRADA dentro de su desplegable ──────────────────────────────────
+  await page.evaluate(() => {
+    const g = [...document.querySelectorAll('#sbNav > .navg')].find(x => x.querySelector('.nav-label').textContent.trim() === 'Ventas');
+    window.openFly(g);
+  });
+  await dormir(300);
+  const rT = await cajaDe('.flyout.open .fly-item[data-ord="mostrador"]');
+  const rF = await cajaDe('.flyout.open .fly-item[data-ord="invoices"]');
+  await page.mouse.dragAndDrop({ x: rT.x + 30, y: rT.y + rT.height / 2 }, { x: rF.x + 30, y: rF.y + 3 });
+  await dormir(700);
+  m = await leerMenu(page);
+  ok(m.ordenEntradas['Ventas'][0] === 'mostrador:diario',
+     'ARRASTRANDO una ENTRADA se mueve de orden dentro de su desplegable', m.ordenEntradas['Ventas'].join(' '));
+  ok(m.ordenEntradas['Ventas'].length === fabricaVentas.length,
+     'y su área sigue con todas sus entradas', m.ordenEntradas['Ventas'].length + ' de ' + fabricaVentas.length);
+
+  // ── CRUZAR LA LÍNEA: una entrada pasa al bloque de ajustes (y su rótulo aparece al arrastrar) ──
+  await page.evaluate(() => {
+    const g = [...document.querySelectorAll('#sbNav > .navg')].find(x => x.querySelector('.nav-label').textContent.trim() === 'Ventas');
+    window.openFly(g);
+  });
+  await dormir(300);
+  const rP = await cajaDe('.flyout.open .fly-item[data-ord="portal"]');
+  const dt = await page.mouse.drag({ x: rP.x + 30, y: rP.y + rP.height / 2 }, { x: rP.x + 30, y: rP.y + rP.height / 2 + 15 });
+  const rG = await cajaDe('.flyout.open .fly-grp[data-drop="ajustes"]');
+  ok(!!rG, 'la línea «Ajustes de …» de un área sin ajustes APARECE al arrastrar (si no, sería un viaje sin vuelta)');
+  await page.mouse.dragEnter({ x: rG.x + 30, y: rG.y + 2 }, dt);
+  await page.mouse.dragOver({ x: rG.x + 30, y: rG.y + 2 }, dt);
+  await page.mouse.drop({ x: rG.x + 30, y: rG.y + 2 }, dt);
+  await page.mouse.up();
+  await dormir(700);
+  m = await leerMenu(page);
+  ok(m.ordenEntradas['Ventas'].includes('portal:ajustes'),
+     'soltar una entrada sobre la línea la pasa al bloque de AJUSTES', m.ordenEntradas['Ventas'].join(' '));
+  ok(m.ordenEntradas['Ventas'].length === fabricaVentas.length,
+     'cruzar la línea NO la pierde: sigue estando, en el otro bloque', m.ordenEntradas['Ventas'].length + '');
+  await page.setDragInterception(false);
+
+  // ── EL ORDEN GUARDADO ENVEJECE: lo que no está en la lista va DETRÁS, no desaparece ────────────
+  // Es la regla que hace que un menú personalizado en agosto siga enseñando la función que se
+  // construya en septiembre. Se simula guardando un orden con UNA sola entrada listada.
+  await page.evaluate(async () => { await api('PUT', '/api/erp/menu/orden', { entradas: { ventas: { diario: ['cobros'], ajustes: [] } } }); });
+  await page.reload({ waitUntil: 'networkidle0' });
+  m = await leerMenu(page);
+  const v = m.ordenEntradas['Ventas'];
+  ok(v[0] === 'cobros:diario' && v.length === fabricaVentas.length,
+     'un orden guardado INCOMPLETO no amputa: lo listado va delante y el resto detrás, en orden de fábrica',
+     v.join(' '));
+
+  // ── Persiste al recargar, y sobrevive a cerrar sesión ─────────────────────────────────────────
+  await page.evaluate(async () => { await api('PUT', '/api/erp/menu/orden', { areas: ['analitica', 'disa', 'ventas', 'clientes', 'proyectos', 'agenda', 'compras', 'contabilidad', 'inventario', 'catalogo'] }); });
+  await page.click('#acctBtn'); await dormir(120);
+  await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle0' }), page.click('.acct-menu a[href="/admin/logout"]')]);
+  await page.type('#email', email); await page.type('#password', PASS);
+  await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle0' }), page.click('button[type="submit"]')]);
+  m = await leerMenu(page);
+  ok(m.ordenAreas[0] === 'area:analitica', 'el orden sobrevive a cerrar sesión y volver', m.ordenAreas.join(' '));
+
+  // ── RESTABLECER: el menú vuelve a ser EXACTAMENTE el de fábrica ───────────────────────────────
+  await page.evaluate(async () => { await api('DELETE', '/api/erp/menu/orden', {}); });
+  await page.reload({ waitUntil: 'networkidle0' });
+  m = await leerMenu(page);
+  ok(JSON.stringify(m.ordenAreas) === JSON.stringify(fabricaAreas), 'restablecer devuelve el orden de las áreas', m.ordenAreas.join(' '));
+  ok(JSON.stringify(m.ordenEntradas['Ventas']) === JSON.stringify(fabricaVentas), 'y el de las entradas, con sus bloques');
+  ok(!menu.reset || !m.reset, 'y el botón de restablecer desaparece: no queda nada personalizado');
+  ok(db.prepare("SELECT COUNT(*) n FROM dashboard_layouts WHERE scope LIKE 'menu:usuario:%'").get().n === 0,
+     'sin fila en la tabla: la ausencia de fila ES el menú de fábrica');
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
   console.log('\n[4] SEGUNDO USUARIO CON MENOS PERMISOS');
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   // OJO: tiene que tener ALGÚN permiso. Con cero, el filtro del menú se salta entero (hallazgo
@@ -513,7 +622,10 @@ try {
   db.prepare('DELETE FROM user_permissions WHERE admin_user_id=? AND permission_id=?').run(empId, pidCitas);
   await pEmp.reload({ waitUntil: 'networkidle0' });
   const mudo = await leerMenu(pEmp);
-  const guardadas = JSON.parse(db.prepare("SELECT blocks b FROM dashboard_layouts WHERE scope=?").get('menu:usuario:' + empId).b);
+  // Una fila de menú guarda TODO lo del usuario: {anclas, areas, entradas}. (El formato viejo era una
+  // lista suelta de anclas; se sigue leyendo, por si queda alguna fila de antes.)
+  const filaEmp = JSON.parse(db.prepare("SELECT blocks b FROM dashboard_layouts WHERE scope=?").get('menu:usuario:' + empId).b);
+  const guardadas = Array.isArray(filaEmp) ? filaEmp : filaEmp.anclas;
   ok(mudo.anclas.length === 0, 'sin permiso, el ancla CALLA: no se pinta');
   ok(errsEmp.length === 0 || !errsEmp.join('').includes('citas'), 'y no da ningún error');
   ok(JSON.stringify(guardadas) === JSON.stringify(['citas']), 'pero la preferencia NO se borra: vuelve sola al devolverle el permiso', JSON.stringify(guardadas));

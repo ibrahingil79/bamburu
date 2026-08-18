@@ -16,7 +16,7 @@
 // dos se arreglen a la vez el día que se aborde. Ver el comentario de `filtroDeUsuario`.
 import { vocabulario } from './oficios.js';                   // PASO 8 — fuente ÚNICA de las palabras de pantalla
 import { contarAvisosPendientes } from './citas-avisos.js';   // AGENDA SENCILLA §2.3 — contador de la Cola
-import { getLayout, setLayout, delLayout } from './inicio-layout.js';
+import { getLayoutRaw, setLayout, delLayout } from './inicio-layout.js';
 
 // ── Nav permission map: key → permiso exigido (null = visible para cualquiera con sesión) ──────────
 // Copiado TAL CUAL de layout.js. Se conservan las claves de pantallas que hoy no cuelgan de ninguna
@@ -271,7 +271,7 @@ export function filtroDeUsuario({ role = '', perms = [] } = {}) {
 // leía `cita_puesto_plural` por su cuenta, en paralelo a `ajustesCitas()`: dos lecturas de lo mismo.
 // Barato y tolerante a fallo: si algo peta, se queda el default y el contador a 0 — el chrome nunca se
 // rompe por esto.
-export function menuDeUsuario(db, { role = '', perms = [] } = {}) {
+export function menuDeUsuario(db, { role = '', perms = [], userId = null } = {}) {
   let plural = null, pend = 0;
   try {
     if (db) {
@@ -300,7 +300,54 @@ export function menuDeUsuario(db, { role = '', perms = [] } = {}) {
   }
   const cuenta = CUENTA.filter(pasa).map(it => ({ ...it, area: 'Cuenta', areaId: 'cuenta' }));
   const fijas  = FIJAS.map(it => ({ ...it, area: '', areaId: 'fijas' }));
-  return { areas, cuenta, fijas };
+  // El ORDEN de este usuario se aplica al final, sobre el menú ya filtrado. Nunca quita nada: lo que
+  // no esté en su lista se coloca detrás, en el orden de fábrica (ver `aplicarOrden`).
+  let pref = { areas: [], entradas: {} };
+  try { if (db && userId) pref = leerPref(db, userId); } catch { /* el menú nunca se rompe por esto */ }
+  return { areas: aplicarOrden(areas, pref), cuenta, fijas };
+}
+
+// ── (D) ORDEN PROPIO — mover de sitio los menús y los submenús ────────────────────────────────────
+// CAMBIO DE REGLA, pedido por Ibrahin (17 ago 2026): el encargo original decía «las áreas de fábrica NO
+// se reordenan». Ahora SÍ se reordenan, y las entradas dentro de su área también. Lo que NO cambia:
+// nada se esconde, nada se quita, y ninguna entrada se muda a otra área.
+//
+// LA REGLA QUE PROTEGE EL INVENTARIO: el orden guardado es una lista de CLAVES, y una lista de claves
+// envejece —mañana hay una entrada nueva que nadie tenía guardada—. Por eso lo que no está en la lista
+// NO desaparece: se coloca DETRÁS, en su orden de fábrica. Un menú personalizado en agosto tiene que
+// seguir enseñando la función que se construya en septiembre, sin que el usuario toque nada.
+//
+// La línea de «Ajustes de <Área>» es un DESTINO de verdad: soltar una entrada encima de la línea la
+// pasa a ajustes, y soltarla arriba la devuelve al día a día. Es una preferencia de ESTE usuario; la
+// clasificación de fábrica (`ajustes: true`) no se toca.
+function porOrden(items, claves) {
+  const porClave = new Map(items.map(i => [i.key, i]));
+  const out = [];
+  for (const k of (Array.isArray(claves) ? claves : [])) {
+    const it = porClave.get(k);
+    if (it) { out.push(it); porClave.delete(k); }
+  }
+  return { colocados: out, resto: porClave };
+}
+
+export function aplicarOrden(areas, pref) {
+  const { colocados, resto } = porOrden(areas.map(a => ({ ...a, key: a.id })), pref.areas);
+  const ordenadas = colocados.concat([...resto.values()]);   // lo no listado (áreas nuevas), detrás
+  return ordenadas.map(a => {
+    const o = (pref.entradas || {})[a.id];
+    if (!o) return a;
+    const enDiario = new Set(Array.isArray(o.diario) ? o.diario : []);
+    const enAjustes = new Set(Array.isArray(o.ajustes) ? o.ajustes : []);
+    // El bucket lo decide el usuario si opinó sobre esa entrada; si no, el de fábrica.
+    const bucket = i => (enDiario.has(i.key) ? 'diario' : enAjustes.has(i.key) ? 'ajustes' : (i.ajustes ? 'ajustes' : 'diario'));
+    const diarioF = a.todos.filter(i => bucket(i) === 'diario');
+    const ajustesF = a.todos.filter(i => bucket(i) === 'ajustes');
+    const d = porOrden(diarioF, o.diario);
+    const j = porOrden(ajustesF, o.ajustes);
+    return { ...a,
+      diario: d.colocados.concat([...d.resto.values()]),
+      ajustes: j.colocados.concat([...j.resto.values()]) };
+  });
 }
 
 // ── EL CATÁLOGO DE DESTINOS — lo que ve el buscador y lo que se puede anclar ──────────────────────
@@ -344,53 +391,97 @@ export function anclablesPorClave(menu) {
   return m;
 }
 
-// ── ANCLAR Y ORDENAR LO PROPIO ───────────────────────────────────────────────────────────────────
-// Frontera de Salesforce: la casa viene ordenada, el usuario se pone sus atajos ENCIMA. Las áreas de
-// fábrica NO se reordenan, NO se renombran y NO se quitan; anclar NO saca la entrada de su área.
+// ── LO PROPIO DE CADA USUARIO: ANCLAS (C) + ORDEN (D) ────────────────────────────────────────────
+// Frontera de Salesforce: la casa viene ordenada y el usuario la ajusta ENCIMA. Anclar NO saca la
+// entrada de su área, y reordenar NO renombra ni quita nada ni muda entradas de un área a otra.
 //
 // DÓNDE VIVE: en `dashboard_layouts`, la tabla de preferencias por usuario del peldaño 6, con ámbito
-// `menu:usuario:<id>` — y con SUS funciones (`getLayout/setLayout/delLayout`, que aceptan cualquier
-// ámbito), no con SQL copiado. No se crea un segundo sistema de preferencias.
+// `menu:usuario:<id>` — y con SUS funciones (getLayoutRaw/setLayout/delLayout, que aceptan cualquier
+// ámbito), no con SQL copiado. No se crea un segundo sistema de preferencias. UNA fila por usuario
+// guarda TODO lo suyo del menú: sus anclas y su orden.
 //   ⚠️ AVISO A QUIEN TOQUE `inicio-layout.js`: esta tabla YA NO guarda solo layouts del Inicio. Los
-//   ámbitos del Inicio son 'empresa' y 'usuario:<id>'; los de aquí, 'menu:usuario:<id>'. Hoy nadie
-//   borra por prefijo (los tres DELETE son por ámbito exacto) y así tiene que seguir: un
-//   `DELETE ... WHERE scope LIKE 'usuario:%'` se llevaría por delante las anclas de todo el mundo.
+//   ámbitos del Inicio son 'empresa' y 'usuario:<id>'; el de aquí, 'menu:usuario:<id>'. Hoy nadie
+//   borra por prefijo (los DELETE son por ámbito exacto) y así tiene que seguir: un
+//   `DELETE ... WHERE scope LIKE 'usuario:%'` se llevaría por delante el menú de todo el mundo.
 //
-// LA AUSENCIA DE FILA ES EL DEFECTO: quien no ancla nada ve EXACTAMENTE el menú de hoy. Por eso
-// quitar todas las anclas BORRA la fila en vez de guardar una lista vacía.
+// LA AUSENCIA DE FILA ES EL DEFECTO: quien no toca nada ve EXACTAMENTE el menú de fábrica. Por eso
+// una preferencia vacía BORRA la fila en vez de guardar listas vacías.
 export const MAX_ANCLAS = 8;
-const scopeAnclas = userId => 'menu:usuario:' + userId;
+const scopeMenu = userId => 'menu:usuario:' + userId;
 
-export function getAnclas(db, userId) {
-  if (!userId) return [];
-  const guardado = getLayout(db, scopeAnclas(userId));
-  if (!Array.isArray(guardado)) return [];
-  const vistas = new Set();
-  const out = [];
-  for (const k of guardado) {
+const listaLimpia = (v, tope = Infinity) => {
+  const vistas = new Set(); const out = [];
+  for (const k of (Array.isArray(v) ? v : [])) {
     if (typeof k !== 'string' || !k || vistas.has(k)) continue;
     vistas.add(k); out.push(k);
-    if (out.length >= MAX_ANCLAS) break;
+    if (out.length >= tope) break;
   }
   return out;
+};
+
+// Lee la preferencia de menú de este usuario. Acepta el formato VIEJO (una lista suelta = solo anclas)
+// porque la pieza de las anclas salió antes que la del orden y puede haber filas así guardadas.
+export function leerPref(db, userId) {
+  const vacia = { anclas: [], areas: [], entradas: {} };
+  if (!db || !userId) return vacia;
+  const g = getLayoutRaw(db, scopeMenu(userId));
+  if (Array.isArray(g)) return { anclas: listaLimpia(g, MAX_ANCLAS), areas: [], entradas: {} };
+  if (!g || typeof g !== 'object') return vacia;
+  const entradas = {};
+  for (const [areaId, o] of Object.entries(g.entradas || {})) {
+    if (!o || typeof o !== 'object') continue;
+    const d = listaLimpia(o.diario), j = listaLimpia(o.ajustes);
+    if (d.length || j.length) entradas[areaId] = { diario: d, ajustes: j };
+  }
+  return { anclas: listaLimpia(g.anclas, MAX_ANCLAS), areas: listaLimpia(g.areas), entradas };
 }
+
+export function escribirPref(db, userId, pref) {
+  const limpia = {
+    anclas: listaLimpia(pref.anclas, MAX_ANCLAS),
+    areas: listaLimpia(pref.areas),
+    entradas: {},
+  };
+  for (const [areaId, o] of Object.entries(pref.entradas || {})) {
+    if (!o || typeof o !== 'object') continue;
+    const d = listaLimpia(o.diario), j = listaLimpia(o.ajustes);
+    if (d.length || j.length) limpia.entradas[areaId] = { diario: d, ajustes: j };
+  }
+  const vacia = !limpia.anclas.length && !limpia.areas.length && !Object.keys(limpia.entradas).length;
+  if (vacia) { delLayout(db, scopeMenu(userId)); return { ok: true, ...limpia }; }
+  setLayout(db, scopeMenu(userId), limpia, userId);
+  return { ok: true, ...limpia };
+}
+
+// Vuelta al menú DE FÁBRICA: se borra la fila entera, anclas y orden. No hay medias tintas — el
+// usuario pide "como venía", y como venía es sin fila.
+export function borrarPref(db, userId) { delLayout(db, scopeMenu(userId)); return { ok: true }; }
+
+// ¿Este usuario ha tocado algo? Lo usa el rail para enseñar (o no) el botón de restablecer.
+export function tienePref(db, userId) {
+  const p = leerPref(db, userId);
+  return !!(p.anclas.length || p.areas.length || Object.keys(p.entradas).length);
+}
+
+export function getAnclas(db, userId) { return leerPref(db, userId).anclas; }
 
 export function setAnclas(db, userId, claves) {
-  const limpias = [];
-  const vistas = new Set();
-  for (const k of (Array.isArray(claves) ? claves : [])) {
-    if (typeof k !== 'string' || !k || vistas.has(k)) continue;
-    vistas.add(k); limpias.push(k);
-    if (limpias.length >= MAX_ANCLAS) break;
-  }
-  if (!limpias.length) { delLayout(db, scopeAnclas(userId)); return { ok: true, anclas: [] }; }
-  setLayout(db, scopeAnclas(userId), limpias, userId);
-  return { ok: true, anclas: limpias };
+  const pref = leerPref(db, userId);
+  const r = escribirPref(db, userId, { ...pref, anclas: claves });
+  return { ok: true, anclas: r.anclas };
 }
 
-// Las anclas de este usuario, resueltas contra SU menú y EN SU ORDEN. Si una entrada anclada deja de
-// estar permitida, el ancla CALLA: se omite al pintar y la preferencia se queda guardada intacta —
-// no se borra, no da error, y vuelve sola el día que le devuelvan el permiso.
+// (D) Guardar el ORDEN. `areas` = ids de área en su orden; `entradas` = por área, sus dos bloques.
+export function setOrden(db, userId, { areas, entradas }) {
+  const pref = leerPref(db, userId);
+  const r = escribirPref(db, userId, {
+    anclas: pref.anclas,
+    areas: areas === undefined ? pref.areas : areas,
+    entradas: entradas === undefined ? pref.entradas : entradas,
+  });
+  return { ok: true, areas: r.areas, entradas: r.entradas };
+}
+
 export function anclasDeUsuario(db, userId, menu) {
   const claves = getAnclas(db, userId);
   if (!claves.length) return [];

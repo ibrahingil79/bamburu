@@ -49,8 +49,9 @@
 > Como la «Agenda sencilla», **no es pieza de ningún peldaño** y no mueve el puntero de la escalera.
 > Cada desplegable se parte en dos bloques (día a día arriba · «Ajustes de \<Área\>» abajo) **sin plegar
 > nada**; el buscador del topbar —que era decorado, sin `input` ni destino— pasa a navegar por el menú
-> con Ctrl/⌘+K; y cada uno se ancla sus atajos arriba del rail (máx. 8, **por usuario**). **N antes = N
-> después = 50 puertas**, pulsadas una a una. Del PASO 0: la tabla de preferencias que el encargo mandaba
+> con Ctrl/⌘+K; y cada uno **se ancla sus atajos** arriba del rail (máx. 8, **por usuario**) **y mueve
+> de orden lo que quiera** —las áreas del rail y las entradas de cada desplegable, arrastrando—, con un
+> botón para volver al menú de fábrica. **N antes = N después = 50 puertas**, pulsadas una a una. Del PASO 0: la tabla de preferencias que el encargo mandaba
 > reutilizar **no servía** (se reutiliza `dashboard_layouts`, cero tablas nuevas), y las etiquetas del
 > menú **se pintaban sin escapar** con texto libre del dueño dentro. El **Backlog** de abajo NO
 > compite con la escalera: es lo que le falta a El Suelo (el umbral) más la deuda. Plan del Eje C
@@ -1425,6 +1426,20 @@ una segunda lista de destinos** — se quedaría vieja y acabaría enseñando pu
   plegar:** todo sigue visible en la misma pantalla y al mismo número de clics. Ante la duda, ARRIBA
   (por eso «Portal de cliente» y «Envío Verifactu» se quedan arriba). Ajustes: Clientes→Grupos ·
   **Agenda→6 de 8** · Compras→Proveedores · Inventario→Almacenes · Catálogo→Categorías.
+- **(D) MOVER DE ORDEN — CORRECCIÓN 2 DE IBRAHIN, y CAMBIA UNA REGLA DEL ENCARGO.** El encargo decía
+  «las áreas de fábrica **NO se reordenan**»; Ibrahin pidió que **sí**, y que también se ordenen las
+  entradas de cada desplegable. Queda así: **se arrastra todo** —las áreas del rail, las entradas
+  dentro de su área y los anclados entre ellos—, con la marca de si se suelta antes o después según por
+  qué mitad se entre. **La línea de «Ajustes de \<Área\>» es un destino de verdad:** soltar una entrada
+  encima la pasa a ajustes y soltarla arriba la devuelve al día a día; en las áreas que hoy no tienen
+  ajustes la línea **aparece al arrastrar** (si no, vaciar ese bloque sería un viaje sin vuelta).
+  **Lo que NO cambia:** nada se esconde, nada se quita, y **ninguna entrada se muda a otra área** (el
+  servidor da 403 si se fuerza). Botón **«Restablecer mi menú»** al pie del rail, que solo aparece si
+  hay algo que restablecer y devuelve el menú de fábrica borrando la fila entera.
+  **LA REGLA QUE PROTEGE EL INVENTARIO:** un orden guardado es una lista de claves, y una lista de
+  claves **envejece** —mañana hay una función nueva que nadie tenía guardada—. Por eso lo que no está
+  en la lista **no desaparece: se coloca detrás, en su orden de fábrica.** Un menú personalizado en
+  agosto tiene que seguir enseñando la función que se construya en septiembre, sin tocar nada.
 - **(B) Buscador que navega.** Coincidencia **por nombre**, sin sinónimos ni difusa; solo se normalizan
   mayúsculas y tildes («almacen» encuentra «Almacenes»). Atajo Ctrl/⌘+K, flechas y Enter. Se alimenta
   del menú YA filtrado, así que por construcción no puede enseñar lo que el rail esconde. **«Cerrar
@@ -1436,7 +1451,7 @@ una segunda lista de destinos** — se quedaría vieja y acabaría enseñando pu
   no se renombran y no se quitan; **anclar no saca la entrada de su área**. Quien no ancla nada ve el
   menú de hoy, byte por byte. Si una entrada anclada deja de estar permitida, **el ancla calla**: no se
   pinta, no se borra y vuelve sola al devolverle el permiso.
-  **CORRECCIÓN DE IBRAHIN (misma sesión):** la primera entrega solo ponía chincheta en las entradas de
+  **CORRECCIÓN 1 DE IBRAHIN:** la primera entrega solo ponía chincheta en las entradas de
   los desplegables, y «cualquier entrada del menú» incluye **las ÁREAS**. Ahora se ancla **también un
   menú principal**: su atajo aparece arriba y **abre el MISMO desplegable, con sus dos bloques**; el
   área sigue en su sitio, en su orden y con su nombre. Los dos tipos se **reordenan mezclados** en el
@@ -1448,11 +1463,12 @@ una segunda lista de destinos** — se quedaría vieja y acabaría enseñando pu
   submenú inline); y la de una entrada anclada se colgaba del `.sidebar` y **saltaba a la esquina**
   (el `<a>` no era `position:relative`).
 
-**NO SE TOCÓ:** ni una ruta, ni un endpoint, ni un permiso, ni un dato. Ningún área nueva, ninguna
-entrada movida de área. El único endpoint nuevo (`PUT/GET /api/erp/menu/anclas`) guarda **colocación**,
-no datos de negocio.
+**NO SE TOCÓ:** ni una ruta, ni un endpoint de datos, ni un permiso, ni un dato. Ningún área nueva,
+ninguna entrada movida de área. Los endpoints nuevos (`GET/PUT /api/erp/menu/anclas`,
+`PUT/DELETE /api/erp/menu/orden`) guardan **colocación**, no datos de negocio, y **cero tablas nuevas**:
+una fila por usuario en `dashboard_layouts` con todo lo suyo del menú (`{anclas, areas, entradas}`).
 
-**VERIFICACIÓN — `gate-menu-navegacion` 79/0**, en navegador real, sobre un negocio **creado desde
+**VERIFICACIÓN — `gate-menu-navegacion` 96/0**, en navegador real, sobre un negocio **creado desde
 cero** (oficio «peluquería»), entrando por el formulario de login y pulsando como pulsaría el dueño:
 - **LA PRUEBA QUE MANDA — no amputación: N ANTES = N DESPUÉS = 50 puertas** (42 en el rail + Inicio +
   Ayuda + 6 de cuenta), identidad comprobada UNA A UNA contra el inventario del PASO 0, y **las 41 con
@@ -1466,14 +1482,20 @@ cero** (oficio «peluquería»), entrando por el formulario de login y pulsando 
 - Reordenar (área y entradas **mezcladas**), **cerrar sesión pulsando y volver a entrar**: siguen
   ancladas y en su orden. Quitarlas todas → menú **idéntico al de fábrica**, bloque **vacío y sin
   ocupar un píxel**, y **sin fila** en la tabla. El servidor rechaza la 9ª.
+- **(D) ARRASTRANDO DE VERDAD** (arrastre real del navegador, no una llamada a la API): un **área** se
+  mueve de sitio en el rail y no se pierde ni una de las 42 entradas; una **entrada** se mueve dentro
+  de su desplegable y su área sigue completa; soltar una entrada **sobre la línea** la pasa al bloque de
+  ajustes **sin perderla** —y esa línea, en un área que no tiene ajustes, **aparece al arrastrar**—.
+  Un orden guardado **incompleto** (una sola entrada listada) **no amputa**: lo listado va delante y el
+  resto detrás, en orden de fábrica. El orden **sobrevive a cerrar sesión**, y **restablecer** devuelve
+  áreas y entradas a fábrica, hace desaparecer el botón y **borra la fila**.
 - Segundo usuario con MENOS permisos (9 de 42 entradas): **el buscador no enseña ni una puerta que no
   esté en su menú**; sus anclas son suyas; anclar lo que no ve → **403**.
 - Móvil a 390 px: cajón, ancladas arriba, acordeón con su rótulo, ninguna entrada se sale, buscador
   usable, **0 errores de JS**.
-- **Regresión en su número exacto, CERO rojos nuevos: 19/23** (21/23 en la pasada de la mañana; los
-  dos de agenda se cayeron por la hora, ver abajo). Verde: `gate-nav-inicio-disa` 34/0,
-  `gate-inicio-pantalla`, `gate-citas-pantalla`, `gate-agenda-calendario`,
-  `gate-vigia-agenda` 41/0, `gate-vigia-pantalla`, `gate-espera-pantalla`,
+- **Regresión en su número exacto, CERO rojos nuevos: 21/23.** Verde: `gate-nav-inicio-disa` 34/0,
+  `gate-inicio-pantalla`, `gate-citas-pantalla`, `gate-agenda-sencilla` 11/0, `gate-agenda-calendario`,
+  `gate-oficio-pantalla` 28/0, `gate-vigia-agenda` 41/0, `gate-vigia-pantalla`, `gate-espera-pantalla`,
   `gate-proyectos/tiempo/facturar-horas/rentabilidad/coste-horas/margen-pantalla`,
   `gate-reserva-publica-pantalla` 51/0, `gate-avisos-contador-vivo`, `gate-xss-escape` 29/0,
   `verify-xss-escape` 49/0, `gate-csp-estricta` 19/0.
@@ -1485,8 +1507,9 @@ cero** (oficio «peluquería»), entrando por el formulario de login y pulsando 
   · `gate-avisos-pantalla` (3 fallos, 1 OK) — **dato de partida caducado**: apunta a la factura
     `F2026-0017`, que tras resembrar el tenant quedó **anulada**, así que no genera aviso de cobro ni
     tiene botón «Registrar cobro».
-  · `gate-agenda-sencilla` (2 fallos, 9 OK) y `gate-oficio-pantalla` (2 fallos, 26 OK) — **DEPENDEN DE
-    LA HORA DEL DÍA, y no se sabía.** Los dos pasaron VERDES dos veces esta misma sesión y se pusieron
+  · `gate-agenda-sencilla` y `gate-oficio-pantalla` — **DEPENDEN DE LA HORA DEL DÍA, y no se sabía.**
+    (2 fallos / 9 OK y 2 fallos / 26 OK por la noche; **11/0 y 28/0 a la mañana siguiente**, con el
+    código ya cerrado: el diagnóstico quedó confirmado.) Los dos pasaron VERDES dos veces esta misma sesión y se pusieron
     rojos por la tarde con el MISMO código (y siguen rojos con los ficheros revertidos a HEAD). Causa
     medida, no supuesta: sin horario configurado el día abre 8:00–21:00 (`DEFAULT_OPEN`) y el motor
     **descarta los huecos ya pasados** (`citas-engine.js:222`); la zona del negocio es Madrid, así que

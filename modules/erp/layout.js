@@ -6,7 +6,7 @@ import { contarPropuestasPendientes, tiposVisiblesPara } from './propuestas.js';
 // buscador del topbar y las anclas del usuario. Aquí solo se pinta. `vocabulario()` (las palabras del
 // oficio) y `contarAvisosPendientes()` (el contador de la Cola) se consultan allí, no aquí: eran las
 // dos lecturas que este fichero hacía por su cuenta.
-import { menuDeUsuario, anclasDeUsuario, destinosBuscador, MAX_ANCLAS } from './menu.js';
+import { menuDeUsuario, anclasDeUsuario, destinosBuscador, tienePref, MAX_ANCLAS } from './menu.js';
 
 export const ROOT_TOKENS = `
     :root{
@@ -258,26 +258,32 @@ function pinBtn(clave, on, extra = '') {
 // navega (el listener delegado hace preventDefault antes de que el enlace se entere).
 // Las etiquetas van ESCAPADAS: una de ellas —«Puestos»— es texto libre que escribe el dueño
 // (`cita_puesto_plural`) y aquí se pintaba en crudo, o sea XSS almacenado hacia sus empleados.
-function flyItemHTML(i, ctx) {
+function flyItemHTML(i, ctx, bloque = 'diario') {
   const act = i.key === ctx.active ? ' active' : '';
   const ic = `<i class="ti ${i.icon}"></i><span class="fly-tx">${escHtml(i.label)}</span>`;
   // Cartel gris "pendiente": hoy no lo usa ninguna entrada, pero la capacidad se conserva. Sin esta
   // rama, poner `disabled: true` mañana pintaría un enlace normal a una pantalla que no existe.
   if (i.disabled) return `<span class="fly-item disabled" title="Pendiente — aún no disponible">${ic}<span class="nav-pending">pendiente</span></span>`;
-  if (!i.href) return `<button type="button" class="fly-item${act}" onclick="${i.accion}">${ic}</button>`;
-  return `<a href="${i.href}" class="fly-item${act}">${ic}${pinBtn(i.key, ctx.anclado.has(i.key))}</a>`;
+  // (D) ARRASTRABLE: la entrada se mueve de sitio dentro de SU área. `data-ord` es su clave y
+  // `data-bloque` el lado de la línea en el que está — soltarla al otro lado la cambia de bloque.
+  const arr = ` draggable="true" data-ord="${escHtml(i.key)}" data-area="${escHtml(i.areaId || '')}" data-bloque="${bloque}"`;
+  if (!i.href) return `<button type="button" class="fly-item${act}"${arr} onclick="${i.accion}">${ic}</button>`;
+  return `<a href="${i.href}" class="fly-item${act}"${arr}>${ic}${pinBtn(i.key, ctx.anclado.has(i.key))}</a>`;
 }
 
 // (A) JERARQUÍA DENTRO DEL ÁREA — dos bloques separados por una línea y un rótulo. Es SEPARAR, NO
 // plegar: las dos mitades se pintan en el mismo desplegable, a la vez, y nada gana un clic. Arriba,
 // sin rótulo, lo del día a día; abajo, bajo «Ajustes de <Área>», la configuración y los maestros.
 function flyBloquesHTML(a, ctx) {
-  const arriba = a.diario.map(i => flyItemHTML(i, ctx)).join('');
-  if (!a.ajustes.length) return arriba;
-  return arriba
-    + (arriba ? '<div class="fly-sep"></div>' : '')
-    + `<div class="fly-grp">Ajustes de ${escHtml(a.label)}</div>`
-    + a.ajustes.map(i => flyItemHTML(i, ctx)).join('');
+  const arriba = a.diario.map(i => flyItemHTML(i, ctx, 'diario')).join('');
+  const abajo = a.ajustes.map(i => flyItemHTML(i, ctx, 'ajustes')).join('');
+  // La línea SIEMPRE se pinta, aunque un bloque se quede vacío: es el destino con el que se pasa una
+  // entrada de un lado al otro. Sin ella, vaciar «Ajustes» sería un viaje sin vuelta.
+  // Si un bloque se queda vacío la línea se pinta igual pero MARCADA: el CSS la esconde en reposo y la
+  // enseña mientras se arrastra. Sin ella, vaciar «Ajustes» sería un viaje sin vuelta.
+  const sep = `<div class="fly-sep${arriba ? '' : ' vacio'}" data-drop="diario" data-area="${escHtml(a.id)}"></div>`;
+  const grp = `<div class="fly-grp${abajo ? '' : ' vacio'}" data-drop="ajustes" data-area="${escHtml(a.id)}">Ajustes de ${escHtml(a.label)}</div>`;
+  return arriba + sep + grp + abajo;
 }
 
 // Un ÁREA del rail: su icono, su nombre y su desplegable. Con `ancla:true` es la COPIA que vive en el
@@ -292,7 +298,12 @@ function areaNavgHTML(a, ctx, { ancla = false } = {}) {
     ? `<span class="rail-ic"><i class="ti ${a.icon}"></i>${ctx.disaBadge || ''}</span>`
     : `<i class="ti ${a.icon}"></i>`;
   const clave = 'area:' + a.id;
-  return `<div class="navg${ancla ? ' anc' : ''}"${ancla ? ` data-anc="${escHtml(clave)}" draggable="true"` : ''} onmouseenter="openFly(this)" onmouseleave="scheduleCloseFly()">`
+  // (D) El ÁREA se mueve de sitio en el rail: `data-ord` la identifica como pieza reordenable. La
+  // copia ANCLADA no: esa se ordena dentro del bloque de anclados, con `data-anc`.
+  const arr = ancla
+    ? ` data-anc="${escHtml(clave)}" draggable="true"`
+    : ` data-ord="area:${escHtml(a.id)}" data-area="__rail__" draggable="true"`;
+  return `<div class="navg${ancla ? ' anc' : ''}"${arr} onmouseenter="openFly(this)" onmouseleave="scheduleCloseFly()">`
     + `<button type="button"${esDisa && !ancla ? ' id="disaRailBtn"' : ''} class="nav-item${groupActive ? ' active' : ''}" title="${escHtml(a.label)}" aria-label="${escHtml(a.label)}" onclick="toggleFly(this.closest('.navg'))">${ic}<span class="nav-label">${escHtml(a.label)}</span><i class="ti ti-chevron-right nav-chev"></i></button>`
     + pinBtn(clave, ctx.anclado.has(clave), 'nav-pin')
     + `<div class="flyout" onmouseenter="cancelCloseFly()" onmouseleave="scheduleCloseFly()"><div class="flyout-h">${escHtml(a.label)}</div>${flyBloquesHTML(a, ctx)}</div>`
@@ -310,6 +321,21 @@ export function anclasBloqueHTML(anclas, ctx) {
     : `<a href="${i.href}" class="nav-item anc${i.key === ctx.active ? ' active' : ''}" data-anc="${escHtml(i.key)}" draggable="true" title="${escHtml(i.label)}">`
       + `<i class="ti ${i.icon}"></i><span class="nav-label">${escHtml(i.label)}</span>${pinBtn(i.key, true, 'nav-pin')}</a>`
   ).join('') + `<div class="anc-sep"></div>`;
+}
+
+// EL RAIL ENTERO — lo que va dentro de `<nav class="sb-nav">`. Lo pinta el servidor y punto: cuando el
+// usuario ancla o reordena, el endpoint devuelve ESTO ya hecho y el navegador solo lo sustituye. Un
+// segundo renderizador en el JavaScript acabaría diciendo algo distinto del primero.
+export function railHTML(menu, anclas, ctx, fijaPie, hayPref) {
+  return `<div class="rail-anc" id="railAnc">${anclasBloqueHTML(anclas, ctx)}</div>`
+    + menu.areas.map(a => areaNavgHTML(a, ctx)).join('')
+    + `<span class="rail-spacer"></span>`
+    // (D) Volver al menú de fábrica. Solo aparece si el usuario ha tocado algo: quien no ha movido
+    // nada no tiene nada que restablecer, y un botón que no hace falta es ruido.
+    + (hayPref
+        ? `<button type="button" class="nav-item rail-reset" id="railReset" title="Restablecer mi menú" aria-label="Restablecer mi menú" onclick="menuRestablecer()"><i class="ti ti-rotate"></i><span class="nav-label">Restablecer mi menú</span></button>`
+        : '')
+    + `<a href="${fijaPie.href}"${fijaPie.target ? ` target="${fijaPie.target}"` : ''} class="nav-item" title="${escHtml(fijaPie.label)}"><i class="ti ${fijaPie.icon}"></i><span class="nav-label">${escHtml(fijaPie.label)}</span></a>`;
 }
 
 export function adminLayout(title, content, active = '', csrfToken = '', c = null, hideDisaSidebar = false) {
@@ -389,7 +415,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   // Escribir una segunda lista de destinos para el buscador se quedaría vieja y acabaría enseñando
   // puertas que el menú esconde; por eso no hay dos listas, hay una.
   const _dbNav = c?.get?.('db') || null;
-  const menu = menuDeUsuario(_dbNav, { role, perms });
+  const menu = menuDeUsuario(_dbNav, { role, perms, userId: session.userId });
   // Las anclas NUNCA rompen el chrome: si algo falla, se sale con el menú de fábrica y ya está.
   let anclas = [];
   try { if (_dbNav && session.userId) anclas = anclasDeUsuario(_dbNav, session.userId, menu); }
@@ -406,15 +432,9 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     ? `<span class="rail-count" id="propCount"${propuestasPend ? '' : ' style="display:none"'}>${propuestasPend || ''}</span>`
     : '';
   const ctxRail = { active, anclado, disaBadge };
-
-  // Rail: un icono por ÁREA, cada una con su flyout y su chincheta. Las áreas de fábrica siguen en su
-  // orden, con su nombre y todas: anclar una NO la mueve de aquí, pone un atajo arriba.
-  const navHTML = menu.areas.map(a => areaNavgHTML(a, ctxRail)).join('');
-
-  // (C) LO ANCLADO — bloque propio arriba del rail, encima de las áreas. El envoltorio existe SIEMPRE
-  // (vacío si no hay anclas) para que repintarlo tras anclar sea cambiarle el interior por el que
-  // devuelve el servidor; vacío no ocupa nada, así que quien no ancla nada ve el menú de siempre.
-  const anclasHTML = `<div class="rail-anc" id="railAnc">${anclasBloqueHTML(anclas, ctxRail)}</div>`;
+  // ¿Ha tocado algo este usuario? Decide si el rail enseña «Restablecer mi menú».
+  let hayPref = false;
+  try { if (_dbNav && session.userId) hayPref = tienePref(_dbNav, session.userId); } catch { hayPref = false; }
 
   // (B) BUSCADOR — se alimenta del MISMO menú ya filtrado por permisos. Por construcción no puede
   // enseñar una puerta que el rail esconda: no existe otra lista de la que sacarla.
@@ -424,6 +444,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   // que es lo que permite encontrarlas en el buscador y anclarlas como cualquier otra.
   const fijaPin = menu.fijas.find(f => f.sitio === 'pin') || { href: '/admin', label: 'Inicio', icon: 'ti-home', key: 'dashboard' };
   const fijaPie = menu.fijas.find(f => f.sitio === 'pie') || { href: '/docs', label: 'Ayuda y soporte', icon: 'ti-lifebuoy' };
+  const railInner = railHTML(menu, anclas, ctxRail, fijaPie, hayPref);
 
   // ── Avatar + barra de Cuenta (mockup): cabecera + items gateados + Documentación + salir ──
   const acctVisible = menu.cuenta;
@@ -702,13 +723,15 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     else arrancaBuscador();
     })();
 
-    // ══ (C) ANCLAR Y ORDENAR LO PROPIO ════════════════════════════════════════════════════════
-    // La casa viene ordenada y el usuario se pone sus atajos ENCIMA: las áreas de fábrica no se
-    // reordenan, no se renombran y no se quitan, y anclar NO saca la entrada de su área.
-    // Se ancla CUALQUIER entrada del menú: las de los desplegables Y LAS ÁREAS. Un área anclada trae
-    // su desplegable entero, así que el bloque NO se pinta aquí: lo pinta el servidor con el mismo
-    // renderizador del rail y lo devuelve ya hecho. Un segundo renderizador en el navegador acabaría
-    // diciendo algo distinto del primero el día que uno de los dos cambie.
+    // ══ (C)+(D) EL MENÚ DE CADA UNO — anclar, y mover de orden ═══════════════════════════════════
+    // La casa viene ordenada y el usuario la ajusta ENCIMA. Se ancla CUALQUIER entrada —las de los
+    // desplegables Y las áreas— y se MUEVE DE ORDEN cualquiera de las dos. Lo que no cambia: nada se
+    // esconde, nada se quita, ninguna entrada se muda a otra área, y quien no toca nada ve el menú de
+    // fábrica.
+    //
+    // EL RAIL NO SE PINTA AQUÍ. Lo pinta el servidor con su renderizador y lo devuelve ya hecho; aquí
+    // solo se sustituye. Un segundo renderizador en el navegador acabaría diciendo algo distinto del
+    // primero el día que uno de los dos cambie — y un área anclada arrastra su desplegable entero.
     (function(){
       var MAX=window.MENU_MAX_ANCLAS||8;
       function pintarPins(){
@@ -722,14 +745,21 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
           var ic=b.querySelector('i'); if(ic) ic.className='ti '+(on?'ti-pin-filled':'ti-pin');
         });
       }
+      // Sustituye el rail entero por el que devuelve el servidor. Se cierra el desplegable antes:
+      // los nodos que tenía abiertos dejan de existir.
+      function pintarRail(r){
+        if (!r) return;
+        if (Array.isArray(r.anclas)) window.MENU_ANCLAS = r.anclas;
+        if (typeof r.rail === 'string') {
+          window.closeFly();
+          var nav = document.getElementById('sbNav');
+          if (nav) nav.innerHTML = r.rail;
+        }
+        pintarPins();
+      }
       function guardar(claves){
         return api('PUT','/api/erp/menu/anclas',{claves:claves,activa:window.MENU_ACTIVE||''})
-          .then(function(r){
-            window.MENU_ANCLAS=(r&&r.anclas)||claves;
-            var box=document.getElementById('railAnc');
-            if(box) box.innerHTML=(r&&typeof r.html==='string')?r.html:'';
-            pintarPins();
-          })
+          .then(function(r){ if(r && !Array.isArray(r.anclas)) r.anclas = claves; pintarRail(r); })
           .catch(function(e){ toast((e&&e.message)||window.ERR.GEN_SHORT,'err'); });
       }
       // Anclar / desanclar desde el desplegable. El botón vive DENTRO del enlace, así que hay que
@@ -745,42 +775,123 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
         }
         guardar(claves);
       });
-      // Reordenar arrastrando ENTRE ELLAS. Solo se arrastran las anclas —el rail de fábrica no se
-      // mueve— y solo cuentan las que son HIJAS DIRECTAS del bloque: dentro de un área anclada hay un
-      // desplegable entero, y soltar sobre una de sus entradas no es reordenar el bloque.
-      var arrastrada=null;
-      function ancDe(e){
-        var el=e.target.closest&&e.target.closest('.anc');
-        return (el&&el.parentElement&&el.parentElement.id==='railAnc')?el:null;
+      // ══ (D) MOVER DE ORDEN — anclas, ÁREAS y ENTRADAS de submenú ══════════════════════════════
+    // Tres cosas que se arrastran, un solo mecanismo. Cada pieza arrastrable dice quién es:
+    //   · bloque de anclados → data-anc  (hija directa de #railAnc)
+    //   · área del rail      → data-ord="area:<id>"  data-area="__rail__"
+    //   · entrada de submenú → data-ord="<clave>"    data-area="<id de su área>"  data-bloque=diario|ajustes
+    // Una entrada NO se muda a otra área: solo se ordena dentro de la suya, y cruzar la línea de
+    // «Ajustes de …» la cambia de bloque. Se suelta ANTES o DESPUÉS según por qué mitad se entre.
+    var arr = null;       // { tipo:'anc'|'ord', clave, area, bloque }
+    function limpiarMarcas(){
+      document.querySelectorAll('.arr-src,.over-a,.over-b').forEach(function(x){ x.classList.remove('arr-src','over-a','over-b'); });
+    }
+    function pieza(e){
+      var el = e.target.closest && e.target.closest('[data-anc],[data-ord]');
+      if (!el) return null;
+      if (el.hasAttribute('data-anc') && el.parentElement && el.parentElement.id === 'railAnc')
+        return { el: el, tipo: 'anc', clave: el.getAttribute('data-anc') };
+      if (el.hasAttribute('data-ord'))
+        return { el: el, tipo: 'ord', clave: el.getAttribute('data-ord'),
+                 area: el.getAttribute('data-area'), bloque: el.getAttribute('data-bloque') || '' };
+      return null;
+    }
+    document.addEventListener('dragstart', function(e){
+      var p = pieza(e); if (!p) return;
+      // Arrastrar un área con su desplegable abierto lo dejaría flotando detrás del cursor.
+      if (p.tipo === 'anc' || p.area === '__rail__') window.closeFly();
+      arr = p; p.el.classList.add('arr-src');
+      document.body.classList.add('arrastrando');
+      try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', p.clave); } catch(_e){}
+    });
+    document.addEventListener('dragend', function(){ arr = null; document.body.classList.remove('arrastrando'); limpiarMarcas(); });
+    // ¿Sobre qué se puede soltar lo que llevo? Solo sobre piezas de SU MISMA familia y su misma área.
+    function destino(e){
+      if (!arr) return null;
+      if (arr.tipo === 'anc') { var p = pieza(e); return (p && p.tipo === 'anc' && p.el !== arr.el) ? { el: p.el } : null; }
+      // La línea de ajustes (y su rótulo) son destino: mueven la entrada de bloque.
+      var linea = e.target.closest && e.target.closest('[data-drop]');
+      if (linea && arr.area !== '__rail__' && linea.getAttribute('data-area') === arr.area)
+        return { el: linea, linea: linea.getAttribute('data-drop') };
+      var q = pieza(e);
+      if (!q || q.tipo !== 'ord' || q.el === arr.el) return null;
+      if (q.area !== arr.area) return null;            // ni entre áreas, ni entrada contra área
+      return { el: q.el };
+    }
+    document.addEventListener('dragover', function(e){
+      var d = destino(e); if (!d) return;
+      e.preventDefault();
+      limpiarMarcas();
+      if (arr) arr.el.classList.add('arr-src');
+      var r = d.el.getBoundingClientRect();
+      d.el.classList.add((e.clientY - r.top) < r.height / 2 ? 'over-a' : 'over-b');
+    });
+    document.addEventListener('drop', function(e){
+      var d = destino(e); if (!d) return;
+      e.preventDefault();
+      var antes = d.el.classList.contains('over-a');
+      var mia = arr;
+      arr = null; document.body.classList.remove('arrastrando'); limpiarMarcas();
+      if (mia.tipo === 'anc') return soltarAncla(mia, d.el, antes);
+      soltarOrden(mia, d, antes);
+    });
+    // Reordenar el bloque de anclados.
+    function soltarAncla(mia, elDestino, antes){
+      var claves = (window.MENU_ANCLAS||[]).slice();
+      var de = claves.indexOf(mia.clave), a = claves.indexOf(elDestino.getAttribute('data-anc'));
+      if (de < 0 || a < 0) return;
+      claves.splice(de, 1);
+      var pos = claves.indexOf(elDestino.getAttribute('data-anc'));
+      claves.splice(antes ? pos : pos + 1, 0, mia.clave);
+      guardar(claves);
+    }
+    // Reordenar áreas del rail, o entradas dentro de un área (con su bloque).
+    function soltarOrden(mia, d, antes){
+      if (mia.area === '__rail__') {
+        var ids = [...document.querySelectorAll('#sbNav > .navg[data-ord]')].map(function(x){ return x.getAttribute('data-ord'); });
+        var destinoId = d.el.getAttribute('data-ord');
+        return menuOrden({ areas: mover(ids, mia.clave, destinoId, antes).map(function(k){ return k.replace(/^area:/, ''); }) });
       }
-      function limpiar(){ document.querySelectorAll('.anc').forEach(function(x){x.classList.remove('dragging','over');}); }
-      document.addEventListener('dragstart',function(e){
-        var a=ancDe(e); if(!a) return;
-        window.closeFly();   // si se arrastra un área, su desplegable no viaja detrás del cursor
-        arrastrada=a.getAttribute('data-anc'); a.classList.add('dragging');
-        try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',arrastrada); }catch(_e){}
-      });
-      document.addEventListener('dragend',function(){ arrastrada=null; limpiar(); });
-      document.addEventListener('dragover',function(e){
-        if(!arrastrada) return;
-        var a=ancDe(e); if(!a) return;
-        e.preventDefault();
-        document.querySelectorAll('.anc.over').forEach(function(x){x.classList.remove('over');});
-        a.classList.add('over');
-      });
-      document.addEventListener('drop',function(e){
-        if(!arrastrada) return;
-        var a=ancDe(e); if(!a) return;
-        e.preventDefault();
-        var destino=a.getAttribute('data-anc'), origen=arrastrada;
-        arrastrada=null; limpiar();
-        if(destino===origen) return;
-        var claves=(window.MENU_ANCLAS||[]).slice();
-        var de=claves.indexOf(origen), aI=claves.indexOf(destino);
-        if(de<0||aI<0) return;
-        claves.splice(de,1); claves.splice(aI,0,origen);
-        guardar(claves);
-      });
+      var fly = mia.el.closest('.flyout');
+      var lista = function(b){ return [...fly.querySelectorAll('.fly-item[data-bloque="' + b + '"]')].map(function(x){ return x.getAttribute('data-ord'); }); };
+      var diario = lista('diario'), ajustes = lista('ajustes');
+      var quita = function(a){ var i = a.indexOf(mia.clave); if (i >= 0) a.splice(i, 1); };
+      quita(diario); quita(ajustes);
+      if (d.linea) {
+        // Soltada SOBRE la línea: cambia de bloque. Arriba de la línea = final del día a día;
+        // sobre el rótulo = principio de los ajustes.
+        if (d.linea === 'ajustes') ajustes.unshift(mia.clave); else diario.push(mia.clave);
+      } else {
+        var destBloque = d.el.getAttribute('data-bloque');
+        var arrLista = destBloque === 'ajustes' ? ajustes : diario;
+        var pos = arrLista.indexOf(d.el.getAttribute('data-ord'));
+        if (pos < 0) pos = arrLista.length;
+        arrLista.splice(antes ? pos : pos + 1, 0, mia.clave);
+      }
+      var entradas = {}; entradas[mia.area] = { diario: diario, ajustes: ajustes };
+      menuOrden({ entradas: entradas });
+    }
+    function mover(lista, clave, destinoClave, antes){
+      var out = lista.slice(), de = out.indexOf(clave);
+      if (de >= 0) out.splice(de, 1);
+      var pos = out.indexOf(destinoClave);
+      if (pos < 0) pos = out.length;
+      out.splice(antes ? pos : pos + 1, 0, clave);
+      return out;
+    }
+    // Guardar el orden y repintar el rail con lo que devuelve el servidor (un solo renderizador).
+    function menuOrden(cambio){
+      cambio.activa = window.MENU_ACTIVE || '';
+      return api('PUT','/api/erp/menu/orden',cambio)
+        .then(pintarRail)
+        .catch(function(e){ toast((e&&e.message)||window.ERR.GEN_SHORT,'err'); });
+    }
+    window.menuRestablecer = function(){
+      if (!confirm('¿Dejar el menú como venía de fábrica? Se quitan tus anclados y tu orden.')) return;
+      api('DELETE','/api/erp/menu/orden',{activa:window.MENU_ACTIVE||''})
+        .then(function(r){ pintarRail(r); toast('Menú restablecido'); })
+        .catch(function(e){ toast((e&&e.message)||window.ERR.GEN_SHORT,'err'); });
+    };
     })();
   </script>
   <style>
@@ -869,9 +980,21 @@ ${ROOT_TOKENS}
     /* La entrada anclada tiene que ser su propio marco de posición: sin esto, su chincheta (absolute)
        se colgaba del .sidebar —el ancestro posicionado más cercano— y se iba a la esquina de arriba. */
     a.nav-item.anc{position:relative}
-    .anc{cursor:grab}
-    .anc.dragging{opacity:.4;cursor:grabbing}
-    .anc.over{box-shadow:inset 0 2px 0 var(--accent)}
+    /* (D) MOVER DE ORDEN — la misma señal para las tres cosas que se arrastran: anclas, áreas y
+       entradas de submenú. over-a = se suelta ANTES (línea arriba) · over-b = DESPUÉS. */
+    .anc,[data-ord]{cursor:grab}
+    .arr-src{opacity:.4;cursor:grabbing}
+    .over-a{box-shadow:inset 0 2px 0 var(--accent)}
+    .over-b{box-shadow:inset 0 -2px 0 var(--accent)}
+    .fly-sep.over-a,.fly-sep.over-b,.fly-grp.over-a,.fly-grp.over-b{background:var(--accent-soft);border-radius:6px}
+    /* La línea de «Ajustes de …» de un área SIN ajustes no se ve en reposo (sería un rótulo vacío),
+       pero aparece mientras se arrastra: es el destino con el que se pasa una entrada al otro bloque. */
+    .fly-sep.vacio,.fly-grp.vacio{display:none}
+    body.arrastrando .fly-sep.vacio,body.arrastrando .fly-grp.vacio{display:block;opacity:.6}
+    body.arrastrando .fly-sep,body.arrastrando .fly-grp{min-height:14px}
+    /* Volver al menú de fábrica. Solo se pinta si el usuario ha tocado algo. */
+    .rail-reset{color:var(--text3)}
+    .rail-reset:hover{color:var(--accent)}
 
     /* ── Topbar CLARO (dirección UX 2026-07-06): buscador · campana · avatar ── */
     .wrap{margin-left:var(--sw);flex:1;display:flex;flex-direction:column;min-height:100vh;min-height:100dvh}
@@ -1163,11 +1286,7 @@ ${ROOT_TOKENS}
       <i class="ti ${fijaPin.icon}"></i>
       <span class="nav-label">${escHtml(fijaPin.label)}</span>
     </a>
-    <nav class="sb-nav">
-      ${anclasHTML}${navHTML}
-      <span class="rail-spacer"></span>
-      <a href="${fijaPie.href}"${fijaPie.target ? ` target="${fijaPie.target}"` : ''} class="nav-item" title="${escHtml(fijaPie.label)}"><i class="ti ${fijaPie.icon}"></i><span class="nav-label">${escHtml(fijaPie.label)}</span></a>
-    </nav>
+    <nav class="sb-nav" id="sbNav">${railInner}</nav>
   </aside>
   <div class="nav-backdrop" onclick="closeNav()" aria-hidden="true"></div>
   <div class="wrap">

@@ -60,6 +60,15 @@ export function getLayout(db, scope) {
   if (!row) return null;
   try { const b = JSON.parse(row.blocks); return Array.isArray(b) ? b : null; } catch { return null; }
 }
+// Igual que getLayout pero SIN exigir que el JSON sea una LISTA. La guarda `Array.isArray` de arriba
+// es del INICIO (sus layouts son listas de bloques), no de la tabla: las preferencias de menú por
+// usuario (`menu:usuario:<id>`) guardan un OBJETO —anclas + orden—, y con getLayout se leerían como
+// null. Misma tabla, mismas funciones, sin SQL copiado en otro fichero.
+export function getLayoutRaw(db, scope) {
+  const row = db.prepare('SELECT blocks FROM dashboard_layouts WHERE scope=?').get(scope);
+  if (!row) return null;
+  try { return JSON.parse(row.blocks); } catch { return null; }
+}
 export function setLayout(db, scope, blocks, userId = null) {
   db.prepare(`INSERT INTO dashboard_layouts (scope, blocks, updated_at, updated_by) VALUES (?,?,CURRENT_TIMESTAMP,?)
               ON CONFLICT(scope) DO UPDATE SET blocks=excluded.blocks, updated_at=CURRENT_TIMESTAMP, updated_by=excluded.updated_by`)
