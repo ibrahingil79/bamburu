@@ -237,8 +237,13 @@ try {
     return { cita: +getComputedStyle(b).zIndex, celda: +getComputedStyle(c).zIndex };
   });
   ok(apilado.cita > apilado.celda, 'la cita se apila POR ENCIMA de las zonas de clic', 'cita z=' + apilado.cita + ' · zona z=' + apilado.celda);
+  // Se lleva la cita a la vista ANTES de apuntarle: por la tarde el lienzo arranca desplazado a la
+  // hora actual y una cita de las 9:10 queda encima del viewport, debajo de la cabecera fija. El
+  // gate no puede depender de qué hora sea — es la misma trampa que tumbó a los gates de agenda.
   const alPulsar = await page.evaluate(() => {
-    const b = document.querySelector('.citaBlock'); const r = b.getBoundingClientRect();
+    const b = document.querySelector('.citaBlock');
+    b.scrollIntoView({ block: 'center' });
+    const r = b.getBoundingClientRect();
     const enc = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
     return { esCita: !!(enc && enc.closest('.citaBlock')), etiqueta: enc ? enc.className : '' };
   });
@@ -388,6 +393,10 @@ try {
   await page.waitForFunction(() => !!document.getElementById('agWrap'), { timeout: 8000 });
   await page.evaluate(() => setZoom(96)); await dormir(700);
   const cw = await (await page.$('#agWrap')).boundingBox();
+  // Arriba del todo: si el lienzo ya está al final (por la tarde lo está), la rueda no tiene adónde
+  // desplazar y la prueba mediría el tope, no el comportamiento.
+  await page.evaluate(() => { document.getElementById('agWrap').scrollTop = 0; });
+  await dormir(200);
   const s0 = await page.evaluate(() => ({ sc: document.getElementById('agWrap').scrollTop, f: document.getElementById('agFecha').value }));
   await page.mouse.move(cw.x + cw.width / 2, cw.y + cw.height / 2);
   await page.mouse.wheel({ deltaY: 250 }); await dormir(500);
@@ -441,6 +450,46 @@ try {
   ok(mm.finde > 0 && mm.otros > 0, 'fin de semana y días de otro mes van marcados', mm.finde + ' findes · ' + mm.otros + ' de otro mes');
 
   ok(errs.length === 0, 'CERO errores de JavaScript en todo el recorrido', errs.join(' | '));
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n[7] LA ÚLTIMA, Y LA QUE FALTABA: ¿ESTO SE VE EN LA DIRECCIÓN PÚBLICA?');
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // Todo lo de arriba corre contra :3000, que ES el proceso que Caddy proxya al público — no hay
+  // instancia de laboratorio. Pero eso no lo demuestra por sí solo, y el 18 ago 2026 pasó justo eso:
+  // el commit empujado y la pantalla real sin cambiar. Así que la última comprobación sale a la calle:
+  // se pide por HTTPS a un negocio REAL con DNS y se mira si el código nuevo está ahí.
+  // Si el negocio de referencia no existe en esta máquina, se DICE, no se da por bueno en silencio.
+  const REF = 'peluqueria-gil';
+  const refT = controlDb.prepare('SELECT slug, db_filename FROM tenants WHERE slug=?').get(REF);
+  if (!refT) {
+    ok(false, 'no se pudo comprobar la dirección pública: no existe el negocio de referencia «' + REF + '» en esta máquina');
+  } else {
+    const refDb = new Database(path.isAbsolute(refT.db_filename) ? refT.db_filename : path.join(APP, refT.db_filename));
+    let tokRef = null;
+    try {
+      const u = refDb.prepare("SELECT id FROM admin_users WHERE role='owner' AND active=1").get()
+             || refDb.prepare('SELECT id FROM admin_users WHERE active=1 LIMIT 1').get();
+      tokRef = randomBytes(32).toString('base64url');
+      refDb.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)')
+        .run(tokRef, u.id, Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000) + 300, randomBytes(32).toString('base64url'));
+      const r = await fetch('https://' + REF + '.bamburu.com/admin/citas', {
+        headers: { cookie: 'asess=' + tokRef, 'Cache-Control': 'no-cache' },
+      });
+      const html = await r.text();
+      ok(r.status === 200, 'la dirección pública responde', 'HTTP ' + r.status);
+      // Marcadores del lienzo y del mes nuevo. Si falta uno, el público está viendo lo de antes.
+      const faltan = ['ag-wrap', 'agcol-head', 'ag-ahora', 'ruedaMes', 'agZoom', 'cResuelveCliente']
+        .filter(m => !html.includes(m));
+      ok(faltan.length === 0, 'y sirve el código NUEVO de la agenda, no el anterior',
+         faltan.length ? 'FALTAN en el público: ' + faltan.join(', ') : 'los 6 marcadores presentes');
+      ok(!html.includes('class="mes-tit"'), 'y ya no lleva el segundo título del mes que se quitó');
+    } catch (e) {
+      ok(false, 'no se pudo pedir a la dirección pública', String(e.message || e).slice(0, 90));
+    } finally {
+      try { if (tokRef) refDb.prepare('DELETE FROM admin_sessions WHERE token=?').run(tokRef); } catch {}
+      try { refDb.close(); } catch {}
+    }
+  }
 } catch (e) {
   fail++;
   console.error('\n✗ EXCEPCIÓN: ' + (e && e.stack || e));

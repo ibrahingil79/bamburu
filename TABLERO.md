@@ -1388,6 +1388,46 @@ Aditivo: tres tablas nuevas, ni un DROP, ninguna columna renombrada.
 - **Anotado, no tocado:** `verify-plantillas-email` sigue en rojo previo (cuenta 8 tipos/18 variantes;
   la pieza 5 los dejó en 10/20 y no lo actualizó). El guardián vigente es `gate-plantillas-email`, 41/0.
 
+### El despliegue entra en la entrega: «empujado» ≠ «se ve»  ✅ HECHO (2026-08-18)
+
+**EL FALLO, con nombre:** tres commits empujados (`3f051b0`, `21e62bc`, `083657a`), los gates en verde,
+y `peluqueria-gil.bamburu.com` enseñando la agenda de antes. **Node carga los módulos AL ARRANCAR**, así
+que un fichero editado y no reiniciado **no existe para nadie**.
+
+**LO QUE SE COMPROBÓ, en este orden:**
+- El servicio corre desde `/home/ubuntu/bamburu` (`WorkingDirectory` del unit) y hay **UN solo proceso**
+  de la aplicación en `127.0.0.1:3000`. **Caddy** escucha en 80/443 con `reverse_proxy 127.0.0.1:3000`,
+  y `peluqueria-gil.bamburu.com` resuelve a la IP de **esta** máquina. **No hay caché intermedia**: se
+  pidió lo mismo al proceso y por HTTPS y el cuerpo es idéntico.
+- El proceso había arrancado a las **11:16:12** y `citas.js` estaba tocado a las **11:16:13** — un
+  segundo después. **Ahí estaba la carrera.**
+- Se reinició y se verificó **contra la dirección pública** que sirve el código nuevo (los seis
+  marcadores del lienzo y del mes presentes; el segundo título del mes, ausente).
+
+**RESPUESTA A LA PREGUNTA DE LOS GATES (punto 3): SÍ prueban contra el proceso que atiende al público.**
+Todos apuntan a `:3000`, que es el que Caddy proxya; **ninguno levanta una instancia aparte**. Pero eso
+**no bastaba**, y conviene que quede escrito: el gate prueba **el proceso**, no **el código de disco**.
+Editar sin reiniciar da un verde sobre el código VIEJO, y ese verde se apunta en un commit que contiene
+código que nadie ha ejecutado. **Ese era el agujero real.**
+
+**LAS TRES REDES QUE LO CIERRAN**
+1. `scripts/lib/gate-env.mjs` — **ABORTA cualquier gate de navegador** (código 2, «no ha verificado
+   NADA») si el proceso lleva levantado desde antes del último cambio en `modules/`, `core/` o
+   `index.js`. Pasa por `launchOpts()`, así que **ningún gate se la puede saltar**. Probado: tocando un
+   fichero sin reiniciar, el gate corta en seco.
+2. `gate-agenda-visual` termina **saliendo a la calle**: pide `/admin/citas` por **HTTPS a
+   `peluqueria-gil.bamburu.com`** con sesión y comprueba que trae el código nuevo. 68/0.
+3. `scripts/desplegar.mjs` — **el último paso de toda tarea que toque código servido.** Reinicia si hace
+   falta y verifica contra la dirección pública. Si sale rojo, la tarea no está hecha. Añadido al
+   `RITUAL.md` como paso 0 del cierre.
+
+**DE PASO, dos gates dejan de depender del reloj** — la misma trampa de ayer: `gate-agenda-visual` y
+`gate-agenda-calendario` apuntaban con el ratón a un punto del lienzo que, por la tarde, queda fuera de
+vista o debajo de la cabecera fija (el lienzo arranca desplazado a la hora actual). Ahora llevan el
+elemento al centro antes de tocarlo.
+
+**REGRESIÓN 15/15 VERDE** con la guarda nueva activa.
+
 ### Agenda · corrección 2 (P1 alta de cita · P2 cambiar de mes · P3 layout del mes)  ✅ HECHO (2026-08-18)
 
 **P1 — EL ALTA DE CITA. Reproducido en navegador antes de tocar nada.** De los tres caminos del

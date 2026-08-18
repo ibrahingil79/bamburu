@@ -5,6 +5,28 @@
 
 ---
 
+
+## PASO 0 DEL CIERRE — DESPLEGAR (obligatorio, antes de decir "hecho")
+
+**Una tarea NO está hecha cuando el commit está empujado. Está hecha cuando se ve en la dirección
+pública.** El 18 ago 2026 hubo tres commits empujados, los gates en verde y `peluqueria-gil.bamburu.com`
+enseñando la agenda de antes: Node carga los módulos **al arrancar**, así que un fichero editado y no
+reiniciado no existe para nadie.
+
+```
+node scripts/desplegar.mjs
+```
+
+Reinicia el servicio si el proceso es más viejo que el código, y **verifica contra la dirección pública
+de verdad** (HTTPS, por Caddy, con sesión) que la pantalla trae el código nuevo. Si sale rojo, la tarea
+no está hecha — da igual lo verdes que estén los gates.
+
+Dos redes de seguridad más, para que esto no dependa de acordarse:
+- `scripts/lib/gate-env.mjs` **aborta cualquier gate de navegador** (código 2, "no ha verificado NADA")
+  si el proceso lleva levantado desde antes del último cambio en `modules/`, `core/` o `index.js`.
+- `gate-agenda-visual` termina pidiendo la pantalla **a la dirección pública** y comprobando que sirve
+  el código nuevo.
+
 ## Actualización — FASE DE OPTIMIZACIÓN (v2)
 
 > Este bloque manda sobre lo que siga abajo cuando haya contradicción; el resto se conserva como

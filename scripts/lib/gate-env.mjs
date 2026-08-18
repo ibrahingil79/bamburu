@@ -11,7 +11,8 @@
 //   2. Si falta algo imprescindible (la BD, el Chromium), el gate ABORTA con un mensaje explícito y
 //      código != 0. Un gate que no puede arrancar no ha verificado NADA: tiene que decirlo a gritos,
 //      no morir con una traza que un barrido de regresión pueda confundir con ruido.
-import { existsSync } from 'fs';
+import { existsSync, statSync, readdirSync } from 'fs';
+import { execSync } from 'child_process';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -116,11 +117,60 @@ export async function esperarToast(page, re, timeout = 15000) {
   return todos.find(t => re.test(t.msg)) || null;
 }
 
+// ── EL CÓDIGO DE DISCO TIENE QUE SER EL QUE SE ESTÁ SIRVIENDO ────────────────────────────────────
+//
+// NACE DE UN FALLO REAL (18 ago 2026) y su único trabajo es que no se repita. Los gates apuntan a
+// :3000, que es EXACTAMENTE el proceso que Caddy proxya al público (reverse_proxy 127.0.0.1:3000):
+// no hay instancia de laboratorio. Pero eso no basta, porque Node carga los módulos AL ARRANCAR:
+// si se edita un fichero y no se reinicia el servicio, el gate prueba el código VIEJO y da verde —
+// y ese verde se apunta en un commit que contiene código que nadie ha ejecutado. La pantalla real
+// sigue igual y el TABLERO dice "hecho".
+//
+// Así que antes de abrir el navegador se compara el fichero MÁS NUEVO de la aplicación con el
+// arranque del proceso. Si el proceso es más viejo, el gate ABORTA (código 2, "no ha verificado
+// NADA") y dice qué hay que hacer. No avisa: corta.
+function ficheroMasNuevo() {
+  const dirs = ['modules', 'core', 'index.js'];
+  let max = 0, cual = '';
+  const mirar = (ruta) => {
+    let st; try { st = statSync(ruta); } catch { return; }
+    if (st.isDirectory()) { for (const f of readdirSync(ruta)) mirar(join(ruta, f)); return; }
+    if (!/\.(js|mjs)$/.test(ruta)) return;
+    if (st.mtimeMs > max) { max = st.mtimeMs; cual = ruta; }
+  };
+  for (const d of dirs) mirar(join(APP_DIR, d));
+  return { ms: max, fichero: cual.replace(APP_DIR + '/', '') };
+}
+
+export function exigeCodigoServido() {
+  let arranque;
+  try {
+    const salida = execSync('systemctl show bamburu -p ActiveEnterTimestamp --value', { encoding: 'utf8' }).trim();
+    arranque = Date.parse(salida);
+  } catch { return; }                       // sin systemd (otra máquina): no se estorba
+  if (!arranque || Number.isNaN(arranque)) return;
+  const nuevo = ficheroMasNuevo();
+  if (!nuevo.ms) return;
+  // Un margen de 2 s: `systemctl restart` devuelve en cuanto el proceso arranca y los relojes de
+  // mtime y de systemd no tienen por qué cuadrar al milisegundo.
+  if (nuevo.ms > arranque + 2000) {
+    abortar(
+      'EL PROCESO NO ESTÁ SIRVIENDO EL CÓDIGO DE DISCO.',
+      'El servicio arrancó el ' + new Date(arranque).toISOString() + ' y ' + nuevo.fichero +
+      ' se tocó el ' + new Date(nuevo.ms).toISOString() + '.\n' +
+      '  Node carga los módulos al arrancar: este gate probaría el código VIEJO y daría un verde falso.\n' +
+      '  Reinicia y vuelve a lanzarlo:  sudo systemctl restart bamburu');
+  }
+}
+
 // Opciones de lanzamiento comunes. Se esparcen sobre las de cada gate: launch({ ...launchOpts(), ... }).
+// Aquí se exige, de paso, que lo que se va a probar sea lo que hay escrito: NINGÚN gate de navegador
+// puede saltarse la comprobación, porque todos pasan por aquí.
 export function launchOpts() {
   if (!existsSync(CHROMIUM)) {
     abortar('No hay Chromium ejecutable en: ' + CHROMIUM,
             'Instálalo (snap install chromium) o apunta PUPPETEER_EXECUTABLE_PATH a uno que funcione.');
   }
+  exigeCodigoServido();
   return { headless: 'new', executablePath: CHROMIUM, args: ['--no-sandbox'] };
 }

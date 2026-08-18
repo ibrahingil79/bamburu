@@ -78,8 +78,14 @@ try {
   // [3] el hueco se ve pulsable Y lo es.
   const huecos = await p.evaluate(() => document.querySelectorAll('.agcell.libre').length);
   ok(huecos > 0, 'hay ' + huecos + ' huecos pulsables de entrada');
+  // Se lleva el hueco al CENTRO antes de pasarle el ratón: desde que la rejilla es un lienzo con
+  // scroll propio y cabecera fija, por la tarde arranca desplazada a la hora actual y el hueco de las
+  // 11:00 queda fuera de vista o justo debajo de la cabecera — y el ratón caería sobre ella, no sobre
+  // el hueco. El gate no puede depender de qué hora sea.
+  await p.evaluate(() => document.querySelector('.agcell.libre[data-min="660"]').scrollIntoView({ block: 'center' }));
+  await new Promise(r => setTimeout(r, 200));
   await p.hover('.agcell.libre[data-min="660"]');
-  await new Promise(r => setTimeout(r, 250));
+  await new Promise(r => setTimeout(r, 300));
   const afford = await p.evaluate(() => {
     const c = document.querySelector('.agcell.libre[data-min="660"]');
     const s = getComputedStyle(c), a = getComputedStyle(c, '::after');
