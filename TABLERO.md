@@ -1421,11 +1421,19 @@ objetivo era que se vieran menos cosas A LA VEZ, no que hubiera menos cosas.
 **LO QUE SE CONSTRUYÓ — tres cosas y UN SOLO SITIO.** La definición del menú sale de `adminLayout` a
 **`modules/erp/menu.js`**, y de ahí comen las tres caras: el rail, el buscador y las anclas. **No hay
 una segunda lista de destinos** — se quedaría vieja y acabaría enseñando puertas que el menú esconde.
-- **(A) Jerarquía dentro de cada área.** Cada desplegable se parte en dos bloques: arriba y sin rótulo
-  lo del día a día; abajo, bajo «Ajustes de \<Área\>», la configuración y los maestros. **Es SEPARAR, no
-  plegar:** todo sigue visible en la misma pantalla y al mismo número de clics. Ante la duda, ARRIBA
-  (por eso «Portal de cliente» y «Envío Verifactu» se quedan arriba). Ajustes: Clientes→Grupos ·
-  **Agenda→6 de 8** · Compras→Proveedores · Inventario→Almacenes · Catálogo→Categorías.
+- **(A) Jerarquía dentro de cada área.** El desplegable se parte en dos bloques —arriba y sin rótulo lo
+  del día a día; abajo, bajo «Ajustes de \<Área\>», la configuración y los maestros— **pero solo donde
+  merece la pena**. **Es SEPARAR, no plegar:** todo sigue visible en la misma pantalla y al mismo número
+  de clics. Ante la duda, ARRIBA (por eso «Envío Verifactu» se queda arriba).
+  **CORRECCIÓN 4 DE IBRAHIN (18 ago 2026): «en el desplegable de Clientes hay como dos secciones,
+  quiero una sola».** Tenía razón: con 3 entradas arriba y 1 abajo, dos rótulos son más cartel que
+  menú. Se añade un umbral (`MIN_AJUSTES = 3`): por debajo de tres entradas de ajuste el área va de
+  **UNA pieza**, con sus ajustes al final y **sin rótulo**. Hoy solo **Agenda** se parte (6 de sus 8
+  entradas son de configurar, que es donde se ganaba algo); **Clientes, Compras y gastos, Inventario y
+  Catálogo van enteros**. La marca `ajustes: true` de cada entrada NO se toca: dice lo que la entrada
+  ES, y el día que un área junte tres ajustes su bloque aparece solo. **No se pierde nada:** las cuatro
+  entradas afectadas (Grupos, Proveedores, Almacenes, Categorías) siguen ahí, las últimas de su lista,
+  y el gate lo comprueba una a una.
 - **(D) MOVER DE ORDEN — CORRECCIÓN 2 DE IBRAHIN, y CAMBIA UNA REGLA DEL ENCARGO.** El encargo decía
   «las áreas de fábrica **NO se reordenan**»; Ibrahin pidió que **sí**, y que también se ordenen las
   entradas de cada desplegable. Queda así: **se arrastra todo** —las áreas del rail, las entradas
@@ -1477,7 +1485,7 @@ misma regla del orden que envejece).
 `PUT/DELETE /api/erp/menu/orden`) guardan **colocación**, no datos de negocio, y **cero tablas nuevas**:
 una fila por usuario en `dashboard_layouts` con todo lo suyo del menú (`{anclas, areas, entradas}`).
 
-**VERIFICACIÓN — `gate-menu-navegacion` 96/0** (línea base actualizada: «Portal de cliente» cuenta ya
+**VERIFICACIÓN — `gate-menu-navegacion` 105/0** (línea base actualizada: «Portal de cliente» cuenta ya
 en Clientes, y el total sigue siendo 50), en navegador real, sobre un negocio **creado desde
 cero** (oficio «peluquería»), entrando por el formulario de login y pulsando como pulsaría el dueño:
 - **LA PRUEBA QUE MANDA — no amputación: N ANTES = N DESPUÉS = 50 puertas** (42 en el rail + Inicio +

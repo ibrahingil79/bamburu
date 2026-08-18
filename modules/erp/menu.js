@@ -102,8 +102,13 @@ export const ROLE_FILTERS = {
 // pantalla, a la misma distancia. Es una línea y un rótulo, nada más.
 //
 // LA REGLA DE LA DUDA: si no está claro si una entrada es del día a día o de ajuste, va ARRIBA. El
-// valor por defecto es visible. Por eso «Portal de cliente» (configura el IBAN pero también manda
-// enlaces a clientes) y «Envío Verifactu» (es una cola operativa, no un ajuste) se quedan arriba.
+// valor por defecto es visible. Por eso «Envío Verifactu» (es una cola operativa, no un ajuste) se
+// queda arriba.
+//
+// ⚠️ MARCAR NO ES PARTIR. `ajustes: true` dice lo que la entrada ES; que el desplegable se parta en dos
+// bloques lo decide `MIN_AJUSTES` al pintar (ver abajo). Un área con una sola entrada de ajuste se
+// pinta como UNA lista, sin rótulo: dos carteles para separar tres cosas de una es más cartel que menú.
+// La marca se conserva igual, para que el día que esa área tenga tres ajustes el bloque aparezca solo.
 export const MENU = [
   // DISA — 1er grupo del rail. Estaba escrito a mano en layout.js, fuera de esta lista: por eso sus
   // dos entradas no existían para nadie más. Ahora vive aquí y el buscador y las anclas las ven.
@@ -412,6 +417,13 @@ export function anclablesPorClave(menu) {
 //
 // LA AUSENCIA DE FILA ES EL DEFECTO: quien no toca nada ve EXACTAMENTE el menú de fábrica. Por eso
 // una preferencia vacía BORRA la fila en vez de guardar listas vacías.
+// Cuántas entradas de ajuste tiene que haber para que el desplegable se parta en DOS bloques con su
+// rótulo. Por debajo de esto se pinta UNA sola lista (los ajustes al final, sin rótulo): nada se
+// esconde y nada gana un clic — lo único que desaparece es el cartel.
+// Decisión de Ibrahin (18 ago 2026): «en el desplegable de Clientes hay como dos secciones, quiero
+// una sola». Con este umbral solo Agenda se parte, que es donde se ganaba algo (6 ajustes de 8).
+export const MIN_AJUSTES = 3;
+
 export const MAX_ANCLAS = 8;
 const scopeMenu = userId => 'menu:usuario:' + userId;
 

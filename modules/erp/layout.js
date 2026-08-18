@@ -6,7 +6,7 @@ import { contarPropuestasPendientes, tiposVisiblesPara } from './propuestas.js';
 // buscador del topbar y las anclas del usuario. Aquí solo se pinta. `vocabulario()` (las palabras del
 // oficio) y `contarAvisosPendientes()` (el contador de la Cola) se consultan allí, no aquí: eran las
 // dos lecturas que este fichero hacía por su cuenta.
-import { menuDeUsuario, anclasDeUsuario, destinosBuscador, tienePref, MAX_ANCLAS } from './menu.js';
+import { menuDeUsuario, anclasDeUsuario, destinosBuscador, tienePref, MIN_AJUSTES, MAX_ANCLAS } from './menu.js';
 
 export const ROOT_TOKENS = `
     :root{
@@ -277,12 +277,16 @@ function flyItemHTML(i, ctx, bloque = 'diario') {
 function flyBloquesHTML(a, ctx) {
   const arriba = a.diario.map(i => flyItemHTML(i, ctx, 'diario')).join('');
   const abajo = a.ajustes.map(i => flyItemHTML(i, ctx, 'ajustes')).join('');
-  // La línea SIEMPRE se pinta, aunque un bloque se quede vacío: es el destino con el que se pasa una
-  // entrada de un lado al otro. Sin ella, vaciar «Ajustes» sería un viaje sin vuelta.
-  // Si un bloque se queda vacío la línea se pinta igual pero MARCADA: el CSS la esconde en reposo y la
-  // enseña mientras se arrastra. Sin ella, vaciar «Ajustes» sería un viaje sin vuelta.
+  // UNA SOLA LISTA cuando el bloque de ajustes no da para tanto (MIN_AJUSTES): los ajustes se pintan
+  // al final, sin línea y sin rótulo. Siguen visibles, en la misma pantalla y a los mismos clics — lo
+  // único que se va es el cartel. Partir tres entradas y una en dos secciones con título era más
+  // cartel que menú (decisión de Ibrahin, 18 ago 2026).
+  if (a.ajustes.length < MIN_AJUSTES) return arriba + abajo;
+  // Cuando SÍ se parte, la línea es además el destino con el que se pasa una entrada de un bloque al
+  // otro. Si el de arriba se queda vacío se pinta MARCADA: el CSS la esconde en reposo y la enseña al
+  // arrastrar, para que se pueda deshacer.
   const sep = `<div class="fly-sep${arriba ? '' : ' vacio'}" data-drop="diario" data-area="${escHtml(a.id)}"></div>`;
-  const grp = `<div class="fly-grp${abajo ? '' : ' vacio'}" data-drop="ajustes" data-area="${escHtml(a.id)}">Ajustes de ${escHtml(a.label)}</div>`;
+  const grp = `<div class="fly-grp" data-drop="ajustes" data-area="${escHtml(a.id)}">Ajustes de ${escHtml(a.label)}</div>`;
   return arriba + sep + grp + abajo;
 }
 

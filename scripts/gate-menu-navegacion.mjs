@@ -81,15 +81,19 @@ const BASE_CUENTA = [['Perfil', '/admin/perfil'], ['Datos del negocio', '/admin/
                      ['Documentación', '/docs'], ['Cerrar sesión', '/admin/logout']];
 const N_BASE = BASE_RAIL.length + BASE_FIJAS.length + BASE_CUENTA.length;   // 42 + 2 + 6 = 50
 
-// Qué entradas quedan ABAJO, bajo el rótulo «Ajustes de <Área>». No cambia el inventario: solo dónde
-// se pinta cada una dentro del MISMO desplegable.
+// Qué áreas se parten en DOS bloques, y qué entradas quedan bajo el rótulo «Ajustes de <Área>». No
+// cambia el inventario: solo dónde se pinta cada una dentro del MISMO desplegable.
+//
+// El desplegable se parte SOLO si hay al menos MIN_AJUSTES (3) entradas de ajuste — decisión de
+// Ibrahin (18 ago 2026): «en el desplegable de Clientes hay como dos secciones, quiero una sola».
+// Por debajo de eso se pinta UNA lista con los ajustes al final, sin rótulo. Hoy solo Agenda se parte.
+// Clientes, Compras y gastos, Inventario y Catálogo tienen UNA entrada de ajuste cada uno y van
+// enteros: siguen ahí, en su sitio y a los mismos clics, sin cartel.
 const AJUSTES_ESPERADOS = {
-  'Clientes': ['Grupos'],
   'Agenda': ['Servicios reservables', 'Quién atiende', '(puesto_plural)', 'Horarios', 'Ajustes de citas', 'Reservas por Internet'],
-  'Compras y gastos': ['Proveedores'],
-  'Inventario': ['Almacenes'],
-  'Catálogo': ['Categorías'],
 };
+// Áreas con un solo ajuste: NO se parten, y su entrada de ajuste tiene que seguir estando, la última.
+const SIN_PARTIR = { 'Clientes': 'Grupos', 'Compras y gastos': 'Proveedores', 'Inventario': 'Almacenes', 'Catálogo': 'Categorías' };
 
 let pass = 0, fail = 0;
 const ok = (c, m, extra = '') => {
@@ -224,8 +228,16 @@ try {
     const esp = (AJUSTES_ESPERADOS[a.area] || []).map(l => (l === '(puesto_plural)' ? PUESTOS : l));
     const vis = a.ajustes.map(i => i.label);
     ok(JSON.stringify(vis) === JSON.stringify(esp),
-       'área "' + a.area + '": el bloque de ajustes es el esperado', vis.length ? vis.join(', ') : '(ninguno)');
+       'área "' + a.area + '": el bloque de ajustes es el esperado', vis.length ? vis.join(', ') : '(ninguno, va de una pieza)');
     if (esp.length) ok(a.rotulo === 'Ajustes de ' + a.area, 'área "' + a.area + '": el rótulo lo dice con su nombre', a.rotulo);
+    else ok(a.rotulo === null, 'área "' + a.area + '": UNA sola lista, sin segundo rótulo', String(a.rotulo));
+  }
+  // Las áreas que ya no se parten no han perdido su entrada de ajuste: sigue ahí, la última de la lista.
+  for (const [area, ultima] of Object.entries(SIN_PARTIR)) {
+    const a = menu.areas.find(x => x.area === area);
+    ok(!!a && a.diario[a.diario.length - 1]?.label === ultima,
+       'área "' + area + '" va de una pieza y "' + ultima + '" sigue ahí, al final',
+       a ? a.diario.map(i => i.label).join(' · ') : '(sin área)');
   }
   ok(menu.areasConPin === menu.areas.length,
      'CADA ÁREA del rail tiene su chincheta: se ancla cualquier entrada del menú, áreas incluidas',
@@ -407,13 +419,14 @@ try {
     const g = document.querySelector('#railAnc > .navg.anc');
     g.querySelector(':scope > .nav-item').click();
     const fly = g.querySelector('.flyout');
-    return { abierto: fly.classList.contains('open'),
-             primera: fly.querySelector('.fly-item .fly-tx')?.textContent.trim(),
-             rotulo: fly.querySelector('.fly-grp')?.textContent.trim() };
+    const it = [...fly.querySelectorAll('.fly-item .fly-tx')].map(e => e.textContent.trim());
+    return { abierto: fly.classList.contains('open'), primera: it[0], ultima: it[it.length - 1], n: it.length };
   });
   await dormir(150);
-  ok(flyAncla.abierto && flyAncla.primera === 'Facturas recibidas' && flyAncla.rotulo === 'Ajustes de Compras y gastos',
-     'el área anclada abre el MISMO desplegable, con sus dos bloques', JSON.stringify(flyAncla));
+  // Compras y gastos va de UNA pieza (un solo ajuste), así que el desplegable del atajo es su lista
+  // entera, de «Facturas recibidas» a «Proveedores» — la misma que la del área en su sitio.
+  ok(flyAncla.abierto && flyAncla.primera === 'Facturas recibidas' && flyAncla.ultima === 'Proveedores' && flyAncla.n === 7,
+     'el área anclada abre el MISMO desplegable, entero', JSON.stringify(flyAncla));
 
   // Reordenar: se guarda el orden nuevo por la misma puerta que usa el arrastre. Un área y tres
   // entradas se reordenan MEZCLADAS, que es de lo que va el bloque.
@@ -502,26 +515,29 @@ try {
   ok(m.ordenEntradas['Ventas'].length === fabricaVentas.length,
      'y su área sigue con todas sus entradas', m.ordenEntradas['Ventas'].length + ' de ' + fabricaVentas.length);
 
-  // ── CRUZAR LA LÍNEA: una entrada pasa al bloque de ajustes (y su rótulo aparece al arrastrar) ──
+  // ── CRUZAR LA LÍNEA: una entrada pasa al bloque de ajustes (solo donde el desplegable se parte) ──
+  // Se prueba en AGENDA, que es la única área con bloque propio (6 ajustes). En las que van de una
+  // pieza no hay línea que cruzar porque no hay dos bloques que ver.
   await page.evaluate(() => {
-    const g = [...document.querySelectorAll('#sbNav > .navg')].find(x => x.querySelector('.nav-label').textContent.trim() === 'Ventas');
+    const g = [...document.querySelectorAll('#sbNav > .navg')].find(x => x.querySelector('.nav-label').textContent.trim() === 'Agenda');
     window.openFly(g);
   });
   await dormir(300);
-  const rP = await cajaDe('.flyout.open .fly-item[data-ord="albaranes"]');
-  const dt = await page.mouse.drag({ x: rP.x + 30, y: rP.y + rP.height / 2 }, { x: rP.x + 30, y: rP.y + rP.height / 2 + 15 });
+  const fabricaAgenda = (await leerMenu(page)).ordenEntradas['Agenda'];
+  const rC = await cajaDe('.flyout.open .fly-item[data-ord="citas-cola"]');
+  const dt = await page.mouse.drag({ x: rC.x + 30, y: rC.y + rC.height / 2 }, { x: rC.x + 30, y: rC.y + rC.height / 2 + 15 });
   const rG = await cajaDe('.flyout.open .fly-grp[data-drop="ajustes"]');
-  ok(!!rG, 'la línea «Ajustes de …» de un área sin ajustes APARECE al arrastrar (si no, sería un viaje sin vuelta)');
+  ok(!!rG, 'el área que SÍ se parte tiene su línea «Ajustes de …» como destino de soltado');
   await page.mouse.dragEnter({ x: rG.x + 30, y: rG.y + 2 }, dt);
   await page.mouse.dragOver({ x: rG.x + 30, y: rG.y + 2 }, dt);
   await page.mouse.drop({ x: rG.x + 30, y: rG.y + 2 }, dt);
   await page.mouse.up();
   await dormir(700);
   m = await leerMenu(page);
-  ok(m.ordenEntradas['Ventas'].includes('albaranes:ajustes'),
-     'soltar una entrada sobre la línea la pasa al bloque de AJUSTES', m.ordenEntradas['Ventas'].join(' '));
-  ok(m.ordenEntradas['Ventas'].length === fabricaVentas.length,
-     'cruzar la línea NO la pierde: sigue estando, en el otro bloque', m.ordenEntradas['Ventas'].length + '');
+  ok(m.ordenEntradas['Agenda'].includes('citas-cola:ajustes'),
+     'soltar una entrada sobre la línea la pasa al bloque de AJUSTES', m.ordenEntradas['Agenda'].join(' '));
+  ok(m.ordenEntradas['Agenda'].length === fabricaAgenda.length,
+     'cruzar la línea NO la pierde: sigue estando, en el otro bloque', m.ordenEntradas['Agenda'].length + '');
   await page.setDragInterception(false);
 
   // ── EL ORDEN GUARDADO ENVEJECE: lo que no está en la lista va DETRÁS, no desaparece ────────────
