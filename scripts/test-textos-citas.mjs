@@ -18,18 +18,26 @@ const now = Math.floor(Date.now() / 1000), tok = 'txt-' + Date.now();
 db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)').run(tok, owner.id, now, now + 3600, 'x');
 // Guardamos el label actual para restaurarlo; probamos con "Cabinas".
 const prev = db.prepare('SELECT cita_puesto_sing, cita_puesto_plural FROM company_config WHERE id=1').get() || {};
-let b;
+let b, recursoTmp = null;
 const VISIBLE = html => html
   .replace(/<script[\s\S]*?<\/script>/gi, ' ')   // el JS del cliente lleva variables como recurso_id/token: NO es texto en pantalla
   .replace(/<[^>]+>/g, ' ');                       // quitar etiquetas → solo el texto visible
 
 try {
   db.prepare("UPDATE company_config SET cita_puesto_sing='Cabina', cita_puesto_plural='Cabinas' WHERE id=1").run();
+  // La entrada de puestos es CONDICIONAL desde el 18 ago 2026: no existe en un negocio sin puestos.
+  // El tenant de desarrollo no tiene ninguno, así que se le da uno de alta para poder comprobar cómo
+  // se llama, y se retira al final. Sin esto la comprobación pasaría por no encontrar nada.
+  if (!db.prepare('SELECT 1 FROM recursos WHERE active=1 LIMIT 1').get()) {
+    recursoTmp = db.prepare("INSERT INTO recursos (nombre,tipo,active) VALUES ('Cabina de prueba','cabina',1)").run().lastInsertRowid;
+  }
   b = await puppeteer.launch(launchOpts());
   const p = await b.newPage();
   await p.setCookie({ name: 'asess', value: tok, domain: HOST, path: '/' });
 
-  const paginas = { agenda: '/admin/citas', servicios: '/admin/citas/servicios', puestos: '/admin/citas/recursos', horarios: '/admin/citas/horarios', ajustes: '/admin/citas/ajustes', cola: '/admin/citas/cola' };
+  // «configuracion» es la pantalla que aloja, desde el 18 ago 2026, las seis entradas mudadas desde
+  // Agenda. Entra en el barrido con las demás: la jerga tampoco se cuela ahí.
+  const paginas = { agenda: '/admin/citas', servicios: '/admin/citas/servicios', puestos: '/admin/citas/recursos', horarios: '/admin/citas/horarios', ajustes: '/admin/citas/ajustes', cola: '/admin/citas/cola', configuracion: '/admin/settings' };
   const textos = {};
   for (const [k, path] of Object.entries(paginas)) {
     await p.goto(BASE + path, { waitUntil: 'networkidle2' });
@@ -49,8 +57,20 @@ try {
   ok(/Cabina/.test(textos.servicios), 'la pantalla de servicios pide la «Cabina necesaria»');
   ok(/Por cabina/i.test(textos.agenda) || /Cabina/.test(textos.agenda), 'la agenda ofrece el eje «Por cabina»');
   ok(/Cabina/.test(textos.ajustes), 'ajustes muestra el nombre del puesto');
-  // En el menú (cualquiera de las páginas lleva el nav): la entrada de puestos se llama "Cabinas".
-  ok(/Cabinas/.test(textos.agenda), 'el menú lateral llama "Cabinas" a los puestos');
+  // ⚠️ ESTA LÍNEA HA CAMBIADO DE PANTALLA, y se dice para que no parezca una comprobación perdida.
+  // Comprobaba que el RAIL llamaba "Cabinas" a los puestos. El 18 ago 2026 esa entrada se mudó del
+  // desplegable de Agenda a la configuración del negocio (decisión de producto de Ibrahin). Lo que
+  // esta línea protege no era el rail: era que el nombre que elige el dueño MANDA en el menú, esté
+  // el menú donde esté. Así que se comprueba donde vive la entrada ahora.
+  //
+  // Y SE MIRA LA ENTRADA, NO LA PÁGINA. Buscar /Cabinas/ en el texto de /admin/settings daba VERDE
+  // incluso con el cambio deshecho, porque esa pantalla también pinta el rail y el rail tenía la
+  // entrada: pasaba por el motivo equivocado. Se pregunta por la fila concreta de la sección.
+  await p.goto(BASE + '/admin/settings', { waitUntil: 'networkidle2' });
+  const filasCfg = await p.evaluate(() =>
+    [...document.querySelectorAll('.cfg-item .cfg-tx strong')].map(e => e.textContent.trim()));
+  ok(filasCfg.includes('Cabinas'),
+     'la entrada de puestos de la configuración del negocio se llama "Cabinas"', filasCfg.join(' · ') || '(sección vacía)');
 
   console.log('\n=== 3. el enlace de la cita se llama "enlace" (no "token") ===\n');
   ok(/enlace/i.test(textos.cola), 'la cola habla de "enlace", no de "token"');
@@ -60,6 +80,8 @@ try {
 } catch (e) { console.error('💥', e.stack || e.message); fail++; try { await b.close(); } catch {} }
 finally {
   try { db.prepare('UPDATE company_config SET cita_puesto_sing=?, cita_puesto_plural=? WHERE id=1').run(prev.cita_puesto_sing || 'Puesto', prev.cita_puesto_plural || 'Puestos'); } catch {}
+  // Se retira SOLO el puesto que ha creado este test, y solo si lo creó él.
+  try { if (recursoTmp) db.prepare('DELETE FROM recursos WHERE id=?').run(recursoTmp); } catch {}
   try { db.prepare('DELETE FROM admin_sessions WHERE token=?').run(tok); } catch {}
   db.close();
 }

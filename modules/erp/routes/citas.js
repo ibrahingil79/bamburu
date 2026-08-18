@@ -34,7 +34,7 @@ import { sendEmail } from '../../../core/mailer.js';
 import { rateLimit } from '../../../core/rate-limit.js';
 // PIEZA 6 — SOLO el módulo HOJA de la puerta pública (config + reglas de ventana + a quién se enseña).
 // No se importa reserva-publica.js: ese sí depende de este fichero y cerraría el círculo.
-import { reservaDeCita, ventanaCliente, personasPublicas } from '../reserva-publica-config.js';
+import { reservaDeCita, ventanaCliente, personasPublicas, autoEncenderReservas } from '../reserva-publica-config.js';
 // PASO 8 — PERFIL DE OFICIO. Otro módulo HOJA (solo `db`), por la misma razón que el de arriba: layout.js
 // también lo importa para el menú, y si el diccionario viviera aquí se cerraría el círculo.
 import { vocabulario } from '../oficios.js';
@@ -731,6 +731,7 @@ export function createCitasRoutes(db) {
         for (const rr of d.resource_ids) insR.run(prod.id, rr);
       })();
       logActivity(db, c.get('session'), 'Creó servicio reservable', ENTITY.PRODUCT, prod.id, d.nombre);
+      autoEncenderReservas(db);   // §4 — un servicio con precio y duración es la otra condición
       return c.json({ id: prod.id, message: 'Servicio creado' });
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
@@ -755,6 +756,7 @@ export function createCitasRoutes(db) {
         const insR = db.prepare('INSERT OR IGNORE INTO service_resources (product_id,recurso_id) VALUES (?,?)');
         for (const rr of d.resource_ids) insR.run(pid, rr);
       })();
+      autoEncenderReservas(db);   // §4 — ponerle duración a un servicio que ya tenía precio cumple (b)
       return c.json({ message: 'Servicio reservable guardado' });
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
@@ -784,6 +786,10 @@ export function createCitasRoutes(db) {
         const ins = db.prepare('INSERT INTO horario_tramos (scope,user_id,dow,inicio_min,fin_min) VALUES (?,?,?,?,?)');
         for (const t of d.tramos) ins.run(d.scope, user_id, t.dow, t.inicio_min, t.fin_min);
       })();
+      // §4 — guardar el horario del NEGOCIO es una de las dos condiciones para que la página de
+      // reservas se encienda sola. Se pregunta aquí, en el camino de guardar, y no en un cron: el
+      // dueño se entera en el momento, no doce horas después. Nunca lanza (ver la función).
+      if (d.scope !== 'user') autoEncenderReservas(db);
       return c.json({ message: 'Horario guardado' });
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
@@ -1283,32 +1289,32 @@ function vistaCola(c, db) {
     <div class="card"><h3 style="margin-top:0">Mañana — pendientes de recordatorio</h3><div id="colaRec">Cargando…</div></div>
     <div class="card"><h3 style="margin-top:0">Hoy — pendientes de confirmación</h3><div id="colaConf">Cargando…</div></div>
     <script>${jsVoz(aj)}${JS_COLA}</script>`;
-  return adminLayout('Cola de envíos', content, 'citas', c.get('session')?.csrfToken || '', c);
+  return adminLayout('Recordatorios a clientes', content, 'citas-cola', c.get('session')?.csrfToken || '', c);
 }
 
 function vistaServicios(c, db) {
   const editable = can(c, 'citas.edit');
   const aj = ajustesCitas(db);
   const content = `
-    <div class="ph"><h2>Servicios</h2><div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/citas">← Agenda</a>${editable ? '<button class="btn btn-primary" onclick="openNuevoServicio()">Nuevo servicio</button>' : ''}</div></div>
+    <div class="ph"><h2>Cuánto dura cada servicio</h2><div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/settings#cfg-agenda">← Configuración</a>${editable ? '<button class="btn btn-primary" onclick="openNuevoServicio()">Nuevo servicio</button>' : ''}</div></div>
     <div class="alert" style="margin-bottom:1rem">Son los productos de tipo <strong>servicio</strong> de tu catálogo. Aquí defines lo que la cita necesita: el <strong>tiempo contigo</strong>, el <strong>tiempo de espera</strong> (los minutos en que el ${escHtml(aj.cliente_sing.toLowerCase())} espera y tú quedas libre, como el tinte) y el <strong>margen después</strong>. <strong>El precio y el IVA siguen viniendo del catálogo.</strong> Un servicio no se puede pedir hasta que tenga tiempo (pulsa «Configurar»). ¿No está en el catálogo? Créalo aquí con «Nuevo servicio». <strong>«Se pide por Internet»</strong> es otra cosa: es lo que ven tus ${escHtml(aj.cliente_plural.toLowerCase())} en tu <a href="/admin/citas/publica">página de reservas</a>, y viene <strong>apagado</strong> hasta que tú lo enciendas servicio a servicio.</div>
     <div class="card"><div class="table-wrap"><table><thead><tr><th>Servicio</th><th>Se pide cita</th><th>Se pide por Internet</th><th>Tiempo contigo</th><th>Tiempo de espera</th><th>Margen</th><th></th></tr></thead><tbody id="svcBody"><tr><td colspan="7">Cargando…</td></tr></tbody></table></div></div>
     ${modalServicio(aj.puesto_sing)}
     ${modalNuevoServicio()}
     <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};${jsVoz(aj)}${JS_SERVICIOS}</script>`;
-  return adminLayout('Servicios', content, 'citas', c.get('session')?.csrfToken || '', c);
+  return adminLayout('Cuánto dura cada servicio', content, 'citas-servicios', c.get('session')?.csrfToken || '', c);
 }
 
 function vistaRecursos(c, db) {
   const editable = can(c, 'citas.edit');
   const aj = ajustesCitas(db);
   const content = `
-    <div class="ph"><h2>${escHtml(aj.puesto_plural)}</h2><div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/citas">← Agenda</a>${editable ? '<button class="btn btn-primary" onclick="openRecurso()">Nuevo ' + escHtml(aj.puesto_sing.toLowerCase()) + '</button>' : ''}</div></div>
-    <div class="alert" style="margin-bottom:1rem">Sillas, cabinas, salas, boxes o equipos. Una cita puede exigir persona <strong>y</strong> ${escHtml(aj.puesto_sing.toLowerCase())}; se comprueban los dos. Puedes cambiar cómo los llamas en <a href="/admin/citas/ajustes">Ajustes</a>.</div>
+    <div class="ph"><h2>${escHtml(aj.puesto_plural)}</h2><div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/settings#cfg-agenda">← Configuración</a>${editable ? '<button class="btn btn-primary" onclick="openRecurso()">Nuevo ' + escHtml(aj.puesto_sing.toLowerCase()) + '</button>' : ''}</div></div>
+    <div class="alert" style="margin-bottom:1rem">Sillas, cabinas, salas, boxes o equipos. Una cita puede exigir persona <strong>y</strong> ${escHtml(aj.puesto_sing.toLowerCase())}; se comprueban los dos. Puedes cambiar cómo los llamas en <a href="/admin/citas/ajustes">Cómo se piden las citas</a>.</div>
     <div class="card"><div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Tipo</th><th>Notas</th><th></th></tr></thead><tbody id="recBody"><tr><td colspan="4">Cargando…</td></tr></tbody></table></div></div>
     ${modalRecurso(aj.puesto_sing)}
     <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};${jsVoz(aj)}${JS_RECURSOS}</script>`;
-  return adminLayout(aj.puesto_plural, content, 'citas', c.get('session')?.csrfToken || '', c);
+  return adminLayout(aj.puesto_plural, content, 'citas-recursos', c.get('session')?.csrfToken || '', c);
 }
 
 function vistaHorarios(c, db) {
@@ -1316,7 +1322,7 @@ function vistaHorarios(c, db) {
   const personas = db.prepare("SELECT id, name FROM admin_users WHERE active=1 ORDER BY name").all();
   const opts = personas.map(p => '<option value="' + p.id + '">' + escHtml(p.name) + '</option>').join('');
   const content = `
-    <div class="ph"><h2>Horarios</h2><a class="btn btn-secondary" href="/admin/citas">← Agenda</a></div>
+    <div class="ph"><h2>Cuándo abro</h2><a class="btn btn-secondary" href="/admin/settings#cfg-agenda">← Configuración</a></div>
     <div class="alert" style="margin-bottom:1rem">El horario del negocio y el de cada persona. Los descansos son el hueco entre dos tramos del mismo día. Una persona sin horario propio hereda el del negocio. Las excepciones (vacaciones, festivos, cierres) mandan sobre la regla semanal.</div>
     <div class="card">
       <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
@@ -1337,7 +1343,7 @@ function vistaHorarios(c, db) {
       <div id="excList"></div>
     </div>
     <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};${JS_HORARIOS}</script>`;
-  return adminLayout('Horarios', content, 'citas', c.get('session')?.csrfToken || '', c);
+  return adminLayout('Cuándo abro', content, 'citas-horarios', c.get('session')?.csrfToken || '', c);
 }
 
 function vistaAjustes(c, db) {
@@ -1350,7 +1356,7 @@ function vistaAjustes(c, db) {
   let puestoOpts = presets.map(([s, pl]) => { const v = s + '|' + pl; const on = v === cur; if (on) found = true; return `<option value="${escHtml(v)}"${on ? ' selected' : ''}>${escHtml(pl)}</option>`; }).join('');
   if (!found) puestoOpts = `<option value="${escHtml(cur)}" selected>${escHtml(aj.puesto_plural)}</option>` + puestoOpts;
   const content = `
-    <div class="ph"><h2>Ajustes de citas</h2><div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/citas">← Agenda</a><a class="btn btn-secondary" href="/admin/citas/publica">Reservas por Internet</a></div></div>
+    <div class="ph"><h2>Cómo se piden las citas</h2><div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/settings#cfg-agenda">← Configuración</a><a class="btn btn-secondary" href="/admin/citas/publica">Mi página de reservas</a></div></div>
     <div class="card" style="max-width:640px">
       <div class="form-row">
         <div class="form-group"><label class="form-label">Rejilla (minutos)</label><select class="form-control" id="ajGrid"><option value="15"${sel(aj.grid,15)}>15</option><option value="30"${sel(aj.grid,30)}>30</option><option value="60"${sel(aj.grid,60)}>60</option></select></div>
@@ -1374,7 +1380,7 @@ function vistaAjustes(c, db) {
       <button class="btn btn-primary" onclick="ajGuardar()">Guardar ajustes</button>
     </div>
     <script>${JS_AJUSTES}</script>`;
-  return adminLayout('Ajustes de citas', content, 'citas', c.get('session')?.csrfToken || '', c);
+  return adminLayout('Cómo se piden las citas', content, 'citas-ajustes', c.get('session')?.csrfToken || '', c);
 }
 
 // ── PIEZA 6 · MANDOS DE LA PUERTA PÚBLICA ─────────────────────────────────────────────────────────
@@ -1383,10 +1389,10 @@ function vistaAjustes(c, db) {
 // pública cuyo dueño no sabe repartir su URL no sirve de nada.
 function vistaPublica(c, db) {
   const content = `
-    <div class="ph"><h2>Reservas por Internet</h2>
-      <div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/citas">← Agenda</a><a class="btn btn-secondary" href="/admin/citas/servicios">Servicios</a></div>
+    <div class="ph"><h2>Mi página de reservas</h2>
+      <div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/settings#cfg-agenda">← Configuración</a><a class="btn btn-secondary" href="/admin/citas/servicios">Cuánto dura cada servicio</a></div>
     </div>
-    <div class="alert" style="margin-bottom:1rem">Tu página de reservas: el cliente elige servicio, con quién, día y hora, y la cita entra <strong>en tu agenda</strong> con las mismas reglas de dentro (mismos huecos, mismos solapes). <strong>Está apagada hasta que la enciendas</strong>, y solo se ve lo que marques: los servicios en <a href="/admin/citas/servicios">Servicios</a> («Se pide por Internet») y las personas aquí abajo. Reservar <strong>no cobra ni emite factura</strong>: eso sigue siendo tu «Atender».</div>
+    <div class="alert" style="margin-bottom:1rem">Tu página de reservas: el cliente elige servicio, con quién, día y hora, y la cita entra <strong>en tu agenda</strong> con las mismas reglas de dentro (mismos huecos, mismos solapes). <strong>Está apagada hasta que la enciendas</strong>, y solo se ve lo que marques: los servicios en <a href="/admin/citas/servicios">Cuánto dura cada servicio</a> («Se pide por Internet») y las personas aquí abajo. Reservar <strong>no cobra ni emite factura</strong>: eso sigue siendo tu «Atender».</div>
 
     <div class="card">
       <label style="display:flex;gap:.6rem;align-items:flex-start;font-weight:600">
@@ -1458,7 +1464,7 @@ function vistaPublica(c, db) {
       <div id="pbSolicitudes">Cargando…</div>
     </div>
     <script>${JS_PUBLICA}</script>`;
-  return adminLayout('Reservas por Internet', content, 'citas-publica', c.get('session')?.csrfToken || '', c);
+  return adminLayout('Mi página de reservas', content, 'citas-publica', c.get('session')?.csrfToken || '', c);
 }
 
 const JS_PUBLICA = String.raw`
@@ -1647,7 +1653,22 @@ const modalServicio = (puestoSing = 'Puesto') => `
       </div>
       ${campoEspera('svc')}
       <div class="form-group"><label class="form-label">Quién puede prestarlo</label><div id="svcProviders" style="display:flex;flex-wrap:wrap;gap:.5rem"></div></div>
-      <div class="form-group"><label class="form-label">${escHtml(puestoSing)} necesario</label><div id="svcResources" style="display:flex;flex-wrap:wrap;gap:.5rem"></div></div>
+      <!-- ── LA PUERTA DE ENTRADA A LOS PUESTOS ─────────────────────────────────────────────────
+           «Sillas y aparatos» nace OCULTA en la configuración del negocio y aparece sola cuando hay
+           al menos uno de alta. Para el negocio que lo necesita y aún no lo sabe (el taller con dos
+           elevadores), la puerta está AQUÍ: al decir que un servicio necesita un sitio o un aparato,
+           se da de alta en el sitio, sin salir del modal y sin recargar. Es la única forma de que
+           esconder la entrada no sea esconder la función. -->
+      <div class="form-group"><label class="form-label">${escHtml(puestoSing)} necesario</label>
+        <div id="svcResources" style="display:flex;flex-wrap:wrap;gap:.5rem"></div>
+        <div id="svcAltaWrap" style="display:none;margin-top:.6rem;gap:.4rem;flex-wrap:wrap;align-items:flex-end">
+          <div style="flex:1;min-width:150px"><label class="form-label" style="font-size:.72rem">Nombre</label><input class="form-control" id="svcAltaNombre" placeholder="${escHtml(puestoSing)} 1"></div>
+          <div><label class="form-label" style="font-size:.72rem">Tipo</label><select class="form-control" id="svcAltaTipo"><option value="silla">Silla</option><option value="cabina">Cabina</option><option value="sala">Sala</option><option value="box">Box</option><option value="equipo">Equipo</option><option value="otro">Otro</option></select></div>
+          <button type="button" class="btn btn-secondary btn-sm" id="svcAltaOk" onclick="svcAltaPuesto()">Dar de alta</button>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" id="svcAltaBtn" style="margin-top:.5rem" onclick="svcAltaAbrir()">＋ Dar de alta ${escHtml(puestoSing.toLowerCase())}</button>
+        <div id="svcAltaAviso" style="display:none;margin-top:.5rem;font-size:.75rem;color:var(--muted)"></div>
+      </div>
     </div>
     <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('mSvc')">Cancelar</button><button class="btn btn-primary" onclick="svcGuardar()">Guardar</button></div>
   </div></div>`;
@@ -2364,8 +2385,46 @@ function edit(id){
   document.getElementById('svcContigo').value=contigo||30; document.getElementById('svcMargen').value=s.margen_min||0;
   esperaReset('svc', espera);
   document.getElementById('svcProviders').innerHTML=META.personas.map(p=>'<label style="font-size:.85rem"><input type="checkbox" class="svcprov" value="'+p.id+'" '+((s.providers||[]).includes(p.id)?'checked':'')+'> '+esc(p.name)+'</label>').join('')||'<span style="color:var(--muted)">Sin personas</span>';
-  document.getElementById('svcResources').innerHTML=META.recursos.map(r=>'<label style="font-size:.85rem"><input type="checkbox" class="svcres" value="'+r.id+'" '+((s.resources||[]).includes(r.id)?'checked':'')+'> '+esc(r.nombre)+'</label>').join('')||'<span style="color:var(--muted)">Sin '+(window.PUESTO_PLURAL||'puestos').toLowerCase()+'</span>';
+  pintaPuestos(s.resources||[]);
+  // El alta vuelve a su estado plegado cada vez que se abre el modal.
+  document.getElementById('svcAltaWrap').style.display='none';
+  document.getElementById('svcAltaBtn').style.display=window.CITAS_EDIT?'':'none';
+  document.getElementById('svcAltaAviso').style.display='none';
   openModal('mSvc');
+}
+// ── DAR DE ALTA UN PUESTO SIN SALIR DE AQUÍ ───────────────────────────────────────────────────
+// Al terminar NO se recarga la pantalla: se vuelve a pedir META, se repintan las casillas con la
+// nueva ya marcada, y se dice en voz alta que la entrada ya está en la configuración del negocio.
+// Recargar habría perdido lo que el dueño llevaba escrito en el modal.
+function svcAltaAbrir(){
+  document.getElementById('svcAltaBtn').style.display='none';
+  var w=document.getElementById('svcAltaWrap'); w.style.display='flex';
+  document.getElementById('svcAltaNombre').focus();
+}
+function pintaPuestos(marcados){
+  var sel=new Set(marcados||[]);
+  document.getElementById('svcResources').innerHTML=META.recursos.map(function(r){
+    return '<label style="font-size:.85rem"><input type="checkbox" class="svcres" value="'+r.id+'" '+(sel.has(r.id)?'checked':'')+'> '+esc(r.nombre)+'</label>';
+  }).join('')||'<span style="color:var(--muted)">Aún no tienes '+(window.PUESTO_PLURAL||'puestos').toLowerCase()+'</span>';
+}
+async function svcAltaPuesto(){
+  var nombre=(document.getElementById('svcAltaNombre').value||'').trim();
+  if(!nombre){ toast('Ponle un nombre','err'); return; }
+  var b=document.getElementById('svcAltaOk'); b.disabled=true;
+  try{
+    var marcados=[...document.querySelectorAll('.svcres:checked')].map(x=>parseInt(x.value));
+    var r=await api('POST','/api/erp/citas/recursos',{nombre:nombre,tipo:document.getElementById('svcAltaTipo').value,notas:''});
+    META=await api('GET','/api/erp/citas/meta');
+    var nuevo=(META.recursos.find(function(x){return x.nombre===nombre;})||{}).id;
+    if(nuevo) marcados.push(nuevo);
+    pintaPuestos(marcados);
+    document.getElementById('svcAltaNombre').value='';
+    var av=document.getElementById('svcAltaAviso');
+    av.style.display='';
+    av.innerHTML='Ya tienes «'+esc(window.PUESTO_PLURAL||'Puestos')+'» en la configuración de tu negocio. <a href="/admin/settings#cfg-agenda">Verlos →</a>';
+    toast(esc(window.PUESTO_SING||'Puesto')+' dado de alta');
+  }catch(e){ toast(e.message,'err'); }
+  finally{ b.disabled=false; }
 }
 async function svcPublico(id, cb){
   var quiere = cb.checked;

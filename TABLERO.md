@@ -51,7 +51,13 @@
 > nada**; el buscador del topbar —que era decorado, sin `input` ni destino— pasa a navegar por el menú
 > con Ctrl/⌘+K; y cada uno **se ancla sus atajos** arriba del rail (máx. 8, **por usuario**) **y mueve
 > de orden lo que quiera** —las áreas del rail y las entradas de cada desplegable, arrastrando—, con un
-> botón para volver al menú de fábrica. **N antes = N después = 50 puertas**, pulsadas una a una. Del PASO 0: la tabla de preferencias que el encargo mandaba
+> botón para volver al menú de fábrica. **N antes = N después = 50 puertas**, pulsadas una a una.
+> **AMPLIADA EL 18 AGO 2026 (decisión de producto de Ibrahin):** en Agenda solo vive lo que se usa
+> atendiendo clientes — se queda con 2 entradas y las otras 6 se mudan, renombradas, a una sección
+> propia de la configuración del negocio, **con su permiso exacto cada una** y sin heredar el candado
+> de la pantalla que las aloja. Los puestos nacen ocultos y aparecen solos; la página de reservas se
+> enciende sola cuando hay horario y precios. **Siguen siendo 50 puertas**, ahora en dos superficies.
+> Del PASO 0: la tabla de preferencias que el encargo mandaba
 > reutilizar **no servía** (se reutiliza `dashboard_layouts`, cero tablas nuevas), y las etiquetas del
 > menú **se pintaban sin escapar** con texto libre del dueño dentro. El **Backlog** de abajo NO
 > compite con la escalera: es lo que le falta a El Suelo (el umbral) más la deuda. Plan del Eje C
@@ -1387,6 +1393,89 @@ Aditivo: tres tablas nuevas, ni un DROP, ninguna columna renombrada.
   gate-oficio-pantalla 28/0, verify-disa-query-permisos 43/0, **test-pago-voz-avisos 50/0** (era 46/1).
 - **Anotado, no tocado:** `verify-plantillas-email` sigue en rojo previo (cuenta 8 tipos/18 variantes;
   la pieza 5 los dejó en 10/20 y no lo actualizó). El guardián vigente es `gate-plantillas-email`, 41/0.
+
+### Reorganizar el menú: Agenda se queda con lo que se usa atendiendo clientes  ✅ HECHO (2026-08-18)
+
+**DECISIÓN DE PRODUCTO DE IBRAHIN, y es la regla que decide todo lo demás:** *en Agenda solo vive lo
+que se usa atendiendo clientes; todo lo que se monta una vez y se olvida vive en la configuración del
+negocio*. **No se eliminó ninguna función**: seis entradas se mudan de sitio y se renombran.
+
+**AGENDA SE QUEDA CON DOS:** «Agenda» y «Recordatorios a clientes» (era «Cola de envíos» — mismo sitio,
+mismo contador al lado cuando hay pendientes). Con 0 entradas de ajuste el desplegable **va de una
+pieza solo**: lo decide `MIN_AJUSTES` (3), que ya existía. No se tocó ningún umbral.
+
+**LAS SEIS MUDADAS**, en el orden en que se monta un negocio, dentro de la sección «Cómo funciona mi
+agenda» de `/admin/settings`: **Cuándo abro** (Horarios) · **Cuánto dura cada servicio** (Servicios
+reservables) · **Mi equipo** (Quién atiende, sin el atajo de Agenda) · **Cómo se piden las citas**
+(Ajustes de citas) · **Mi página de reservas** (Reservas por Internet) · **los puestos** (nombre del
+oficio: Sillas/Cabinas/Salas/Boxes). **Las rutas NO cambian** y **los permisos NO cambian.**
+
+**UNA SOLA LISTA, NO DOS.** La sección **no** se escribe a mano en `routes/settings.js`: vive en
+`CONFIG_NEGOCIO` (`modules/erp/menu.js`), la misma mesa de la que comen el rail, el buscador y las
+anclas, y la pinta `configNegocioHTML()` en `layout.js`. Escribirla en la pantalla habría creado la
+segunda lista que la cabecera de `menu.js` lleva meses prohibiendo.
+
+**CORRECCIÓN DE IBRAHIN sobre el hallazgo de la auditoría previa, y es el corazón de la pieza: LA
+SECCIÓN NO HEREDA EL CANDADO DE LA PÁGINA QUE LA CONTIENE.** `/admin/settings` exigía `company.read`
+en seco; con eso, mudar habría **cerrado** seis puertas a quien tiene `citas.read` y no es dueño. Ahora
+entra quien tenga **algo** que ver ahí y ve **exactamente eso**: cada entrada conserva su permiso
+exacto (`citas.read`, `citas.edit`, `admin.manage_users`), y el bloque de empresa —y su `<script>`—
+solo se pinta con `company.read`, con las APIs negando igual que antes. Ni se abre ni se cierra nada.
+
+**«SILLAS Y APARATOS» NACE OCULTA.** Es la única entrada condicional del menú: aparece sola cuando hay
+un puesto de alta **o** algún servicio exige uno. Para el negocio que la necesita y aún no lo sabe, la
+puerta está **dentro de «Cuánto dura cada servicio»**: al marcar que un servicio necesita un sitio, se
+da de alta ahí mismo, **sin recargar y sin cerrar el modal**, y la entrada aparece.
+
+**LA PÁGINA DE RESERVAS SE ENCIENDE SOLA** cuando el negocio tiene (a) horario propio y (b) al menos un
+servicio con precio ≠ 0 y con duración. **No antes**, y por un motivo concreto: los servicios sembrados
+nacen a 0 € y el horario de fábrica es 8:00–21:00 los siete días — encenderla antes publicaría precios
+en blanco y domingos que el negocio no cumple. Al encenderse **avisa al dueño por los canales que ya
+hay** (campana, pantalla de avisos, Inicio, correo diario) con el enlace, qué se ve y **un interruptor
+para apagarla en un clic**. Es de **una sola vez** (`cita_pub_auto`): si el automatismo pudiera volver a
+encenderla, el interruptor de apagado sería mentira. Y **solo se publica lo que tiene precio y
+duración** (`SQL_PUBLICABLE`, en un solo sitio para que la lista pública y la validación de cada reserva
+no puedan discrepar).
+
+**EL BUSCADOR ENCUENTRA LAS 8 POR SU NOMBRE NUEVO Y POR EL VIEJO** (`alias`): quien lleva un año
+tecleando «Cola de envíos» u «Horarios» sigue llegando, y ve en el resultado el nombre nuevo. Un alias
+nunca crea un destino ni salta un permiso.
+
+**VERIFICACIÓN — `gate-menu-navegacion` 154/0** (era 105/0). **N ANTES = N DESPUÉS = 50 puertas**,
+comprobadas **una a una por identidad** sumando las dos superficies (36 del rail + 6 de la
+configuración + 2 fijas + 6 de cuenta); en un negocio recién creado son 49, porque la de puestos es
+condicional, y la 50ª se comprueba al darla de alta. Las seis responden **200 desde su sitio nuevo y
+desde su ruta vieja**. Un segundo usuario con `citas.read` y **sin** `company.read` entra, ve solo sus
+dos, pulsa y recibe 200, y no ve —ni encuentra— nada más de esa pantalla (sus APIs, 403).
+Además: `test-textos-citas` 27/0 · `gate-agenda-calendario` 38/0 · `gate-agenda-sencilla` 14/0 ·
+`gate-agenda-visual` 68/0 · `gate-citas-pantalla` 25/0.
+
+**DOS COMPROBACIONES CAMBIARON DE SITIO, y se dice para que no parezcan perdidas:**
+- *Arrastrar una entrada al bloque de ajustes* se hacía en Agenda, la única área que llegaba al umbral.
+  Ya no se parte ninguna de fábrica, así que el escenario se **fabrica con la preferencia de orden del
+  propio usuario** (que es lo que hoy puede partir un desplegable). Bajar `MIN_AJUSTES` para que la
+  prueba siguiera valiendo habría sido cambiar el producto para que el gate no se queje.
+- *El nombre del puesto en el menú* (`test-textos-citas`) se comprobaba en el rail. Ahora se comprueba
+  en la sección — **y mirando la fila concreta**, porque buscar el texto en la página daba verde con el
+  cambio deshecho: esa pantalla también pinta el rail. Pasaba por el motivo equivocado.
+
+**VALIDADO DESHACIENDO EL ARREGLO** (regla de `session.json`): con el producto en `HEAD` y los gates
+nuevos, `gate-menu-navegacion` cae a **78/20** y `gate-agenda-calendario` a **37/1**. `test-textos-citas`
+daba **27/0 igual** hasta apretar la aserción; ahora cae a **26/1**.
+
+**Regresión completa:** `run-gates.mjs --all` 50/63. **Los 13 rojos son previos**: los mismos 13, por
+nombre, con el árbol revertido a `HEAD` (comprobado con copia del árbol y `diff -q` al restaurar).
+Causa del más cercano a lo tocado, `gate-avisos-badge`: **gate caducado** — busca `a.disa-fig-link` en
+el Inicio y esa clase ya no la usa ningún elemento (solo queda su CSS), así que la tarjeta no se
+encuentra; no es un fallo del producto. **Anotado, no arreglado** (otro tema).
+
+**HALLAZGO, no tocado:** ninguno de los seis gates de agenda/menú está en los grupos de
+`run-gates.mjs`, así que **no entran en `--all`**. Hoy se corren a mano. Si se quiere que la regresión
+completa los cubra, hay que meterlos en un grupo — decisión del dueño, porque alarga el barrido.
+
+**Capturas:** `/home/ubuntu/menu-shots/` (Agenda con sus dos entradas · la sección en su sitio · sin
+puestos frente a con un puesto). **Desplegado y verificado por HTTPS** en `peluqueria-gil.bamburu.com`:
+Agenda con 2 entradas, la sección con sus 5, y las 7 rutas viejas a 200.
 
 ### El despliegue entra en la entrega: «empujado» ≠ «se ve»  ✅ HECHO (2026-08-18)
 

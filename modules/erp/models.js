@@ -2264,6 +2264,15 @@ export function runMigrations(db) {
   addCol(db, 'company_config', 'cita_pub_politica', "TEXT NOT NULL DEFAULT ''");
   addCol(db, 'company_config', 'cita_pub_privacidad_url', "TEXT NOT NULL DEFAULT ''");
 
+  // ── LA PÁGINA DE RESERVAS SE ENCIENDE SOLA (decisión de Ibrahin, 18 ago 2026) ────────────────────
+  // `cita_pub_auto` = el encendido automático YA SE INTENTÓ en este negocio. Es un pestillo de UNA
+  // SOLA VEZ, y es lo que hace honesto el interruptor de apagado: si el automatismo pudiera volver a
+  // encenderla, apagarla sería mentira. Nace en 0 → todavía no ha pasado.
+  // `cita_pub_auto_visto` = el dueño ya vio el aviso de que se encendió (lo apagó o dijo "vale"), así
+  // que el aviso deja de aparecer. Separado del pestillo porque son dos hechos distintos.
+  addCol(db, 'company_config', 'cita_pub_auto', 'INTEGER NOT NULL DEFAULT 0');
+  addCol(db, 'company_config', 'cita_pub_auto_visto', 'INTEGER NOT NULL DEFAULT 0');
+
   // Un servicio reservable DENTRO no es reservable DESDE FUERA. Son dos permisos distintos y el de
   // fuera nace en 0: el dueño elige uno a uno qué enseña. `reservable` (pieza 5) sigue significando
   // exactamente lo que significaba.

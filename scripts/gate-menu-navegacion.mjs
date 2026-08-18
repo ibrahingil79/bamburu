@@ -49,14 +49,12 @@ const BASE_RAIL = [
   ['Proyectos', 'Registro de tiempo', '/admin/tiempo'],
   ['Proyectos', 'Facturar horas', '/admin/facturar-horas'],
   ['Proyectos', 'Rentabilidad', '/admin/rentabilidad'],
+  // ── AGENDA, DESPUÉS DE LA MUDANZA (18 ago 2026) ───────────────────────────────────────────────
+  // EN AGENDA SOLO VIVE LO QUE SE USA ATENDIENDO CLIENTES. Las otras SEIS no se han borrado: están
+  // en BASE_CONFIG, dentro de la configuración del negocio. El inventario NO encoge — lo comprueba
+  // la prueba [1], sumando las dos listas y comparándolas UNA A UNA por identidad.
   ['Agenda', 'Agenda', '/admin/citas'],
-  ['Agenda', 'Cola de envíos', '/admin/citas/cola'],
-  ['Agenda', 'Servicios reservables', '/admin/citas/servicios'],
-  ['Agenda', 'Quién atiende', '/admin/users'],
-  ['Agenda', '(puesto_plural)', '/admin/citas/recursos'],               // la etiqueta la pone el OFICIO
-  ['Agenda', 'Horarios', '/admin/citas/horarios'],
-  ['Agenda', 'Ajustes de citas', '/admin/citas/ajustes'],
-  ['Agenda', 'Reservas por Internet', '/admin/citas/publica'],
+  ['Agenda', 'Recordatorios a clientes', '/admin/citas/cola'],
   ['Compras y gastos', 'Facturas recibidas', '/admin/supplier-invoices'],
   ['Compras y gastos', 'Compra directa', '/admin/purchases'],
   ['Compras y gastos', 'Órdenes de compra', '/admin/purchase-orders'],
@@ -75,11 +73,37 @@ const BASE_RAIL = [
   ['Analítica', 'Informes', '/admin/analytics'],
   ['Analítica', 'Vigía (DISA)', '/admin/vigia'],
 ];
+// ── LAS SEIS MUDADAS — la sección propia dentro de la configuración del negocio ─────────────────
+// Mismo contrato que BASE_RAIL: nombre nuevo, nombre VIEJO (el que hay que seguir encontrando en el
+// buscador), ruta —que NO cambia— y el permiso EXACTO que tenían en Agenda.
+// El ORDEN importa y se comprueba: es el orden en que se monta un negocio, no el alfabético.
+const BASE_CONFIG = [
+  ['Cuándo abro',               'Horarios',              '/admin/citas/horarios',  'citas.read'],
+  ['Cuánto dura cada servicio', 'Servicios reservables', '/admin/citas/servicios', 'citas.read'],
+  ['Mi equipo',                 'Quién atiende',         '/admin/users',           'admin.manage_users'],
+  ['Cómo se piden las citas',   'Ajustes de citas',      '/admin/citas/ajustes',   'citas.edit'],
+  ['Mi página de reservas',     'Reservas por Internet', '/admin/citas/publica',   'citas.edit'],
+  // CONDICIONAL: no aparece sin puestos. Por eso NO está en la comprobación de orden de [1] —
+  // tiene su propio apartado, [6].
+];
+const CONFIG_PUESTOS = ['(puesto_plural)', 'Recursos', '/admin/citas/recursos', 'citas.read'];
+const SECCION_CONFIG = 'Cómo funciona mi agenda';
+
 const BASE_FIJAS  = [['Inicio', '/admin'], ['Ayuda y soporte', '/docs']];
 const BASE_CUENTA = [['Perfil', '/admin/perfil'], ['Datos del negocio', '/admin/settings'],
                      ['Usuarios', '/admin/users'], ['Actividad', '/admin/activity'],
                      ['Documentación', '/docs'], ['Cerrar sesión', '/admin/logout']];
-const N_BASE = BASE_RAIL.length + BASE_FIJAS.length + BASE_CUENTA.length;   // 42 + 2 + 6 = 50
+// EL NÚMERO QUE NO PUEDE BAJAR. Antes de la mudanza: 42 del rail + 2 fijas + 6 de cuenta = 50.
+// Después: 36 del rail + 6 en la configuración del negocio + 2 + 6 = las MISMAS 50.
+//
+// Con un matiz que se dice en voz alta en vez de esconderlo en el recuento: una de las seis —los
+// puestos— es CONDICIONAL y nace oculta, así que un negocio recién creado enseña 49 y no 50. Por eso
+// hay dos números y dos comprobaciones: [1] verifica las 49 de un negocio sin puestos, y [6] da uno
+// de alta y verifica que aparece la 50ª. En ningún momento se comprueba «que salgan 50 cosas»: se
+// comprueban UNA A UNA por identidad (área » nombre » ruta), que es lo que detecta una amputación
+// disfrazada de entrada nueva.
+const N_TOTAL       = BASE_RAIL.length + BASE_CONFIG.length + 1 + BASE_FIJAS.length + BASE_CUENTA.length;   // 36+5+1+2+6 = 50
+const N_SIN_PUESTOS = N_TOTAL - 1;                                                                          // 49
 
 // Qué áreas se parten en DOS bloques, y qué entradas quedan bajo el rótulo «Ajustes de <Área>». No
 // cambia el inventario: solo dónde se pinta cada una dentro del MISMO desplegable.
@@ -89,9 +113,11 @@ const N_BASE = BASE_RAIL.length + BASE_FIJAS.length + BASE_CUENTA.length;   // 4
 // Por debajo de eso se pinta UNA lista con los ajustes al final, sin rótulo. Hoy solo Agenda se parte.
 // Clientes, Compras y gastos, Inventario y Catálogo tienen UNA entrada de ajuste cada uno y van
 // enteros: siguen ahí, en su sitio y a los mismos clics, sin cartel.
-const AJUSTES_ESPERADOS = {
-  'Agenda': ['Servicios reservables', 'Quién atiende', '(puesto_plural)', 'Horarios', 'Ajustes de citas', 'Reservas por Internet'],
-};
+// TRAS LA MUDANZA NO SE PARTE NINGUNA. Agenda era la única que llegaba al umbral (6 ajustes de 8) y
+// se ha quedado en dos entradas del día a día. Las demás siguen con una sola entrada de ajuste, por
+// debajo de MIN_AJUSTES (3). Que este mapa esté VACÍO es el resultado esperado, no un descuido: el
+// desplegable de Agenda «va de una pieza» porque el umbral que ya existía lo decide solo.
+const AJUSTES_ESPERADOS = {};
 // Áreas con un solo ajuste: NO se parten, y su entrada de ajuste tiene que seguir estando, la última.
 const SIN_PARTIR = { 'Clientes': 'Grupos', 'Compras y gastos': 'Proveedores', 'Inventario': 'Almacenes', 'Catálogo': 'Categorías' };
 
@@ -159,6 +185,31 @@ const leerMenu = page => page.evaluate(() => {
   };
 });
 
+// Lee la SECCIÓN de la configuración del negocio tal y como la ve el navegador, más qué OTRAS
+// partes de esa pantalla se están pintando. Lo segundo es la mitad que demuestra la corrección de
+// Ibrahin: que quien entra por `citas.read` vea SU sección no puede significar que vea el resto.
+const leerConfig = page => page.evaluate(() => {
+  const txt = el => (el ? el.textContent.trim() : null);
+  const secs = [...document.querySelectorAll('.cfg-sec')].map(sec => ({
+    id: sec.id,
+    label: txt(sec.querySelector('h3')),
+    items: [...sec.querySelectorAll('.cfg-item')].map(a => ({
+      label: txt(a.querySelector('.cfg-tx strong')),
+      desc: txt(a.querySelector('.cfg-tx small')),
+      href: a.getAttribute('href'),
+    })),
+  }));
+  const cuerpo = document.body.innerText;
+  return {
+    secs,
+    // Las OTRAS partes de la pantalla, las que exigen company.read.
+    empresa: !!document.getElementById('cName'),
+    avisos: /Avisos y correos/.test(cuerpo),
+    plantillas: /Plantillas de email/.test(cuerpo),
+    fiscal: /Situación fiscal/.test(cuerpo),
+  };
+});
+
 try {
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   console.log('\n[0] DE CERO — negocio nuevo y oficio elegido, como en el alta real');
@@ -194,8 +245,12 @@ try {
   ok(page.url().includes('/admin') && !page.url().includes('/login'), 'el dueño entra con su email y su contraseña', page.url());
 
   // ══════════════════════════════════════════════════════════════════════════════════════════════
-  console.log('\n[1] LA PRUEBA QUE MANDA — NO AMPUTACIÓN: las ' + N_BASE + ' puertas siguen ahí');
+  console.log('\n[1] LA PRUEBA QUE MANDA — NO AMPUTACIÓN: las ' + N_TOTAL + ' puertas siguen ahí');
   // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // LA MUDANZA DEL 18 AGO 2026 movió SEIS entradas de Agenda a la configuración del negocio. Esta
+  // prueba es la que dice si se movieron o si se perdieron, y lo hace SUMANDO LAS DOS SUPERFICIES y
+  // comparando la lista entera UNA A UNA por identidad. Un recuento no valdría: 36+6 y 37+5 dan el
+  // mismo número y son cosas distintas.
   const menu = await leerMenu(page);
   ok(!!menu, 'el rail se renderiza');
 
@@ -204,15 +259,32 @@ try {
   for (const a of menu.areas) for (const i of a.diario.concat(a.ajustes)) vistoRail.push([a.area, i.label, i.href]);
 
   ok(vistoRail.length === BASE_RAIL.length,
-     'el rail tiene EXACTAMENTE las ' + BASE_RAIL.length + ' entradas del inventario del PASO 0', 'hay ' + vistoRail.length);
+     'el rail tiene EXACTAMENTE las ' + BASE_RAIL.length + ' entradas que le quedan tras la mudanza', 'hay ' + vistoRail.length);
   const clave = x => x[0] + ' » ' + x[1] + ' » ' + (x[2] || '(acción)');
-  const setVisto = new Set(vistoRail.map(clave));
-  const faltan = esperado.filter(e => !setVisto.has(clave(e)));
-  const sobran = vistoRail.filter(v => !new Set(esperado.map(clave)).has(clave(v)));
-  ok(faltan.length === 0, 'ninguna entrada del inventario ha desaparecido',
-     faltan.length ? 'FALTAN: ' + faltan.map(clave).join(' | ') : 'las ' + esperado.length + ', una a una');
+
+  // ── LA OTRA MITAD DEL INVENTARIO: la sección dentro de la configuración del negocio ────────────
+  await page.goto(BASE + '/admin/settings', { waitUntil: 'networkidle0' });
+  const cfg = await leerConfig(page);
+  ok(cfg.secs.length === 1 && cfg.secs[0].label === SECCION_CONFIG,
+     'la configuración del negocio tiene UNA sección propia para las mudadas', cfg.secs.map(x => x.label).join(' · '));
+  const vistoConfig = (cfg.secs[0] ? cfg.secs[0].items : []).map(i => [SECCION_CONFIG, i.label, i.href]);
+  // El negocio acaba de nacer y no tiene puestos, así que aquí se esperan CINCO (ver N_SIN_PUESTOS).
+  const espConfig = BASE_CONFIG.map(([nuevo, , h]) => [SECCION_CONFIG, nuevo, h]);
+  ok(JSON.stringify(vistoConfig.map(x => x[1])) === JSON.stringify(espConfig.map(x => x[1])),
+     'y sus 5 entradas están EN EL ORDEN en que se monta un negocio',
+     vistoConfig.map(x => x[1]).join(' → '));
+
+  // ── LA SUMA: ni una menos que antes de la mudanza ──────────────────────────────────────────────
+  const todoEsperado = esperado.concat(espConfig);
+  const todoVisto = vistoRail.concat(vistoConfig);
+  const setVisto = new Set(todoVisto.map(clave));
+  const faltan = todoEsperado.filter(e => !setVisto.has(clave(e)));
+  const sobran = todoVisto.filter(v => !new Set(todoEsperado.map(clave)).has(clave(v)));
+  ok(faltan.length === 0, 'ninguna entrada del inventario ha desaparecido al mudarse',
+     faltan.length ? 'FALTAN: ' + faltan.map(clave).join(' | ') : 'las ' + todoEsperado.length + ', una a una');
   ok(sobran.length === 0, 'no ha aparecido ninguna entrada que no estuviera',
      sobran.length ? 'SOBRAN: ' + sobran.map(clave).join(' | ') : 'ninguna de más');
+  await page.goto(BASE + '/admin', { waitUntil: 'networkidle0' });
 
   ok(menu.pin.label === 'Inicio' && menu.pin.href === '/admin', 'sigue el pin de Inicio arriba del rail');
   ok(menu.pie.label === 'Ayuda y soporte', 'sigue Ayuda y soporte al pie del rail');
@@ -220,8 +292,9 @@ try {
   const cuentaEsp = BASE_CUENTA.map(([l, h]) => l + ' » ' + h);
   ok(cuentaEsp.every(x => cuentaVista.includes(x)) && cuentaVista.length === cuentaEsp.length,
      'el menú de cuenta conserva sus ' + cuentaEsp.length + ' entradas', cuentaVista.join(' · '));
-  const N_VISTO = vistoRail.length + 2 + menu.cuenta.length;
-  ok(N_VISTO === N_BASE, 'N ANTES = N DESPUÉS', N_BASE + ' puertas antes · ' + N_VISTO + ' ahora');
+  const N_VISTO = vistoRail.length + vistoConfig.length + 2 + menu.cuenta.length;
+  ok(N_VISTO === N_SIN_PUESTOS, 'N ANTES = N DESPUÉS (menos la condicional, que aparece en [6])',
+     N_TOTAL + ' puertas antes · ' + N_VISTO + ' ahora + 1 condicional');
 
   // ── Separadas en dos bloques, pero SIN plegar: todas visibles en el mismo desplegable ──────────
   for (const a of menu.areas) {
@@ -248,17 +321,27 @@ try {
      'y las ' + BASE_RAIL.length + ' entradas de los desplegables también', menu.entradasArrastrables + '');
   ok(!menu.reset, 'de fábrica NO hay botón de restablecer: no hay nada que restablecer');
 
-  const nadaPlegado = await page.evaluate(() => {
-    // Todas las entradas del área de Agenda tienen que estar en el MISMO desplegable y a la vez.
+  // ── AGENDA: DOS ENTRADAS Y DE UNA PIEZA ───────────────────────────────────────────────────────
+  const ag = await page.evaluate(() => {
     const g = [...document.querySelectorAll('.navg')].find(x => x.querySelector('.nav-label')?.textContent.trim() === 'Agenda');
     window.openFly(g);
     const items = [...g.querySelectorAll('.flyout .fly-item')];
-    return { total: items.length, visibles: items.filter(el => el.offsetParent !== null).length };
+    return {
+      total: items.length,
+      visibles: items.filter(el => el.offsetParent !== null).length,
+      etiquetas: items.map(el => el.querySelector('.fly-tx').textContent.trim()),
+      sep: g.querySelectorAll('.flyout .fly-sep').length,
+      rotulo: g.querySelector('.flyout .fly-grp')?.textContent.trim() || null,
+    };
   });
   await dormir(150);
-  ok(nadaPlegado.total === 8 && nadaPlegado.visibles === 8,
-     'Agenda: sus 8 entradas se ven A LA VEZ al abrir el desplegable (separar, no plegar)',
-     nadaPlegado.visibles + '/' + nadaPlegado.total + ' visibles');
+  ok(ag.total === 2 && ag.visibles === 2, 'Agenda muestra EXACTAMENTE 2 entradas', ag.etiquetas.join(' · '));
+  ok(JSON.stringify(ag.etiquetas) === JSON.stringify(['Agenda', 'Recordatorios a clientes']),
+     'y son la agenda y los recordatorios: solo lo que se usa atendiendo clientes', ag.etiquetas.join(' · '));
+  // «De una pieza» es literal: ni línea separadora ni rótulo «Ajustes de Agenda». Y no se ha tocado
+  // ningún umbral para conseguirlo — con 0 entradas de ajuste, MIN_AJUSTES lo decide solo.
+  ok(ag.sep === 0 && ag.rotulo === null,
+     'y el desplegable va DE UNA PIEZA: sin línea y sin rótulo de ajustes', 'sep=' + ag.sep + ' rotulo=' + ag.rotulo);
 
   // ── PULSAR una a una. Que el enlace exista no demuestra que se pueda llegar. ───────────────────
   console.log('\n  ... pulsando las entradas una a una (esto tarda)');
@@ -283,8 +366,35 @@ try {
       rotos.push(label + ' (' + href + ') → ' + (e.message || e).slice(0, 80));
     }
   }
-  ok(rotos.length === 0, 'las ' + pulsables.length + ' entradas con pantalla se PULSAN y responden 200',
+  ok(rotos.length === 0, 'las ' + pulsables.length + ' entradas del rail se PULSAN y responden 200',
      rotos.length ? 'ROTAS: ' + rotos.join(' | ') : 'todas');
+
+  // ── LAS SEIS MUDADAS: 200 DESDE SU SITIO NUEVO Y DESDE SU RUTA VIEJA ───────────────────────────
+  // Las dos mitades importan. Desde el sitio nuevo, porque una entrada que se pinta y no lleva a
+  // ningún sitio es peor que no tenerla. Desde la ruta vieja, porque el encargo promete que quien
+  // tenga un enlace guardado (o un botón del vigía, o un aviso de DISA) sigue llegando: las rutas NO
+  // han cambiado, y esto es lo que lo demuestra en vez de darlo por hecho.
+  const rotosCfg = [], rotosViejo = [];
+  for (const [nuevo, , href] of BASE_CONFIG) {
+    try {
+      await page.goto(BASE + '/admin/settings', { waitUntil: 'networkidle0' });
+      await page.waitForSelector('.cfg-item[href="' + href + '"]', { timeout: 4000 });
+      const [res] = await Promise.all([
+        page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }),
+        page.click('.cfg-item[href="' + href + '"]'),
+      ]);
+      const st = res ? res.status() : 0;
+      const tieneRail = await page.evaluate(() => !!document.querySelector('.sidebar'));
+      if (st !== 200 || !tieneRail) rotosCfg.push(nuevo + ' (' + href + ') → HTTP ' + st + (tieneRail ? '' : ', sin rail'));
+    } catch (e) { rotosCfg.push(nuevo + ' (' + href + ') → ' + (e.message || e).slice(0, 80)); }
+    // Y la MISMA ruta, tecleada a pelo como haría quien la tiene en favoritos.
+    const r = await page.goto(BASE + href, { waitUntil: 'domcontentloaded' });
+    if (!r || r.status() !== 200) rotosViejo.push(href + ' → HTTP ' + (r ? r.status() : 0));
+  }
+  ok(rotosCfg.length === 0, 'las ' + BASE_CONFIG.length + ' mudadas se PULSAN desde su sitio nuevo y responden 200',
+     rotosCfg.length ? 'ROTAS: ' + rotosCfg.join(' | ') : 'todas');
+  ok(rotosViejo.length === 0, 'y sus rutas VIEJAS siguen respondiendo 200: un enlace guardado sigue llegando',
+     rotosViejo.length ? 'ROTAS: ' + rotosViejo.join(' | ') : BASE_CONFIG.map(x => x[2]).join(' · '));
 
   // «Hablar con DISA» no es pantalla: abre el chat de siempre. Se comprueba pulsándola.
   await page.goto(BASE + '/admin/clients', { waitUntil: 'networkidle0' });
@@ -351,6 +461,47 @@ try {
   ok(r3.some(x => x.href === '/admin/conciliacion'), '"conciliaci" encuentra Conciliación bancaria', JSON.stringify(r3));
   const u3 = await irConEnter('conciliaci');
   ok(u3.endsWith('/admin/conciliacion'), 'y con Enter LLEVA a /admin/conciliacion', u3);
+
+  // ── LAS 8 DE LA AGENDA, POR SU NOMBRE NUEVO **Y** POR EL VIEJO ────────────────────────────────
+  // Es la comprobación que impide que renombrar sea perder. Quien lleva un año escribiendo «Cola de
+  // envíos» tiene que seguir llegando a su pantalla — y ver en el resultado el nombre NUEVO, que es
+  // como se llama ahora y como la buscará la próxima vez.
+  //
+  // Se buscan las OCHO: las dos que se quedan en Agenda y las seis mudadas. Los puestos van aparte,
+  // en [6], porque de fábrica no existen y buscar algo que aún no existe tiene que dar cero.
+  const OCHO = [
+    ['Agenda', null, '/admin/citas'],
+    ['Recordatorios a clientes', 'Cola de envíos', '/admin/citas/cola'],
+    ...BASE_CONFIG.map(([nuevo, viejo, href]) => [nuevo, viejo, href]),
+  ];
+  const malNuevo = [], malViejo = [], malEtiqueta = [];
+  for (const [nuevo, viejo, href] of OCHO) {
+    const rn = await buscar(nuevo.slice(0, 12));
+    if (!rn.some(x => x.href === href)) malNuevo.push(nuevo + ' (' + href + ')');
+    if (!viejo) continue;
+    const rv = await buscar(viejo.slice(0, 12));
+    const hit = rv.find(x => x.href === href);
+    if (!hit) malViejo.push(viejo + ' → ' + href);
+    // Y lo que se PINTA es el nombre nuevo, no el alias por el que se ha llegado.
+    else if (hit.label.replace(/ · \d+$/, '') !== nuevo) malEtiqueta.push(viejo + ' → enseña "' + hit.label + '"');
+  }
+  ok(malNuevo.length === 0, 'las 8 de la agenda se encuentran por su nombre NUEVO',
+     malNuevo.length ? 'NO SALEN: ' + malNuevo.join(' | ') : OCHO.map(x => x[0]).join(' · '));
+  ok(malViejo.length === 0, 'y las 7 renombradas también por el VIEJO: quien buscaba «Cola de envíos» la encuentra',
+     malViejo.length ? 'NO SALEN: ' + malViejo.join(' | ') : OCHO.filter(x => x[1]).map(x => x[1]).join(' · '));
+  ok(malEtiqueta.length === 0, 'y el resultado enseña el nombre NUEVO, no el alias tecleado',
+     malEtiqueta.length ? malEtiqueta.join(' | ') : 'los 7');
+
+  // Buscar por el nombre viejo LLEVA de verdad, no solo pinta.
+  const uViejo = await irConEnter('Cola de env');
+  ok(uViejo.endsWith('/admin/citas/cola'), '«Cola de envíos» + Enter sigue llevando a los recordatorios', uViejo);
+  const uHor = await irConEnter('Horarios');
+  ok(uHor.endsWith('/admin/citas/horarios'), '«Horarios» + Enter sigue llevando a «Cuándo abro»', uHor);
+
+  // Un alias NO crea un destino de más: sigue habiendo UNA entrada por pantalla.
+  const dupe = await buscar('Cuándo abro');
+  ok(dupe.filter(x => x.href === '/admin/citas/horarios').length === 1,
+     'un alias no duplica el destino: sigue habiendo UNA entrada por pantalla', JSON.stringify(dupe.map(x => x.label)));
 
   // Teclado: flechas + Enter llevan al SEGUNDO resultado, no al primero.
   await page.goto(BASE + '/admin', { waitUntil: 'networkidle0' });
@@ -515,16 +666,34 @@ try {
   ok(m.ordenEntradas['Ventas'].length === fabricaVentas.length,
      'y su área sigue con todas sus entradas', m.ordenEntradas['Ventas'].length + ' de ' + fabricaVentas.length);
 
-  // ── CRUZAR LA LÍNEA: una entrada pasa al bloque de ajustes (solo donde el desplegable se parte) ──
-  // Se prueba en AGENDA, que es la única área con bloque propio (6 ajustes). En las que van de una
-  // pieza no hay línea que cruzar porque no hay dos bloques que ver.
+  // ── CRUZAR LA LÍNEA: una entrada pasa al bloque de ajustes ────────────────────────────────────
+  // ⚠️ ESTA PRUEBA HA CAMBIADO DE ÁREA, Y SE DICE AQUÍ PARA QUE NO PAREZCA UNA COMPROBACIÓN PERDIDA.
+  // Se hacía en AGENDA, que era la única área que llegaba al umbral (6 ajustes de 8). Tras la mudanza
+  // del 18 ago 2026 Agenda tiene dos entradas y NINGUNA de ajuste, así que ya no se parte — y con
+  // MIN_AJUSTES=3 ninguna área de fábrica lo hace. La CAPACIDAD sigue viva y sigue teniendo que
+  // probarse: lo que se hace es fabricar el escenario con la preferencia del propio usuario, que es
+  // exactamente lo que hoy puede provocar que un desplegable se parta. Bajar MIN_AJUSTES para que la
+  // prueba siguiera valiendo habría sido cambiar el producto para que el gate no se queje.
+  await page.evaluate(async () => {
+    await api('PUT', '/api/erp/menu/orden', { entradas: { compras: {
+      diario: ['supplier-invoices', 'purchases', 'purchase-orders', 'pagos'],
+      ajustes: ['suppliers', 'supplier-returns', 'purchases-capture'],
+    } } });
+  });
+  await page.reload({ waitUntil: 'networkidle0' });
+  await page.evaluate(() => { document.querySelector('.sidebar').classList.add('flyopen'); });
+  await dormir(250);
   await page.evaluate(() => {
-    const g = [...document.querySelectorAll('#sbNav > .navg')].find(x => x.querySelector('.nav-label').textContent.trim() === 'Agenda');
+    const g = [...document.querySelectorAll('#sbNav > .navg')].find(x => x.querySelector('.nav-label').textContent.trim() === 'Compras y gastos');
     window.openFly(g);
   });
   await dormir(300);
-  const fabricaAgenda = (await leerMenu(page)).ordenEntradas['Agenda'];
-  const rC = await cajaDe('.flyout.open .fly-item[data-ord="citas-cola"]');
+  const mParte = await leerMenu(page);
+  const aCompras = mParte.areas.find(a => a.area === 'Compras y gastos');
+  ok(aCompras && aCompras.rotulo === 'Ajustes de Compras y gastos',
+     'con 3 entradas de ajuste el desplegable SÍ se parte: el umbral sigue vivo', aCompras && aCompras.rotulo);
+  const fabricaCompras = mParte.ordenEntradas['Compras y gastos'];
+  const rC = await cajaDe('.flyout.open .fly-item[data-ord="pagos"]');
   const dt = await page.mouse.drag({ x: rC.x + 30, y: rC.y + rC.height / 2 }, { x: rC.x + 30, y: rC.y + rC.height / 2 + 15 });
   const rG = await cajaDe('.flyout.open .fly-grp[data-drop="ajustes"]');
   ok(!!rG, 'el área que SÍ se parte tiene su línea «Ajustes de …» como destino de soltado');
@@ -534,10 +703,10 @@ try {
   await page.mouse.up();
   await dormir(700);
   m = await leerMenu(page);
-  ok(m.ordenEntradas['Agenda'].includes('citas-cola:ajustes'),
-     'soltar una entrada sobre la línea la pasa al bloque de AJUSTES', m.ordenEntradas['Agenda'].join(' '));
-  ok(m.ordenEntradas['Agenda'].length === fabricaAgenda.length,
-     'cruzar la línea NO la pierde: sigue estando, en el otro bloque', m.ordenEntradas['Agenda'].length + '');
+  ok(m.ordenEntradas['Compras y gastos'].includes('pagos:ajustes'),
+     'soltar una entrada sobre la línea la pasa al bloque de AJUSTES', m.ordenEntradas['Compras y gastos'].join(' '));
+  ok(m.ordenEntradas['Compras y gastos'].length === fabricaCompras.length,
+     'cruzar la línea NO la pierde: sigue estando, en el otro bloque', m.ordenEntradas['Compras y gastos'].length + '');
   await page.setDragInterception(false);
 
   // ── EL ORDEN GUARDADO ENVEJECE: lo que no está en la lista va DETRÁS, no desaparece ────────────
@@ -603,14 +772,47 @@ try {
   await pEmp.goto(BASE + '/admin', { waitUntil: 'networkidle0' });
   const mEmp = await leerMenu(pEmp);
 
+  // Su menú son las DOS superficies: el rail y su sección de la configuración del negocio.
+  await pEmp.goto(BASE + '/admin/settings', { waitUntil: 'networkidle0' });
+  const cfgEmp = await leerConfig(pEmp);
+  await pEmp.goto(BASE + '/admin', { waitUntil: 'networkidle0' });
   const enMenu = new Set();
   for (const a of mEmp.areas) for (const i of a.diario.concat(a.ajustes)) if (i.href) enMenu.add(i.href);
+  for (const sec of cfgEmp.secs) for (const i of sec.items) enMenu.add(i.href);
   enMenu.add(mEmp.pin.href); enMenu.add('/docs');
   for (const i of mEmp.cuenta) enMenu.add(i.href);
   const enBuscador = mEmp.destinos.filter(d => d.href).map(d => d.href);
   const colados = enBuscador.filter(h => !enMenu.has(h));
   ok(colados.length === 0, 'el buscador NO enseña ni una puerta que no esté en su menú',
      colados.length ? 'COLADAS: ' + colados.join(' | ') : enBuscador.length + ' destinos, todos en el menú');
+
+  // ── CADA UNA CONSERVA SU PERMISO EXACTO, TAMBIÉN EN EL SITIO NUEVO ────────────────────────────
+  // La empleada tiene `citas.read` y nada más de citas. De las seis mudadas le tocan exactamente DOS:
+  // «Cuándo abro» y «Cuánto dura cada servicio». NO le toca «Mi equipo» (es `admin.manage_users`), ni
+  // «Cómo se piden las citas» ni «Mi página de reservas» (las dos son `citas.edit`). Mudar de sitio no
+  // puede aflojarle un candado — que es la mitad del riesgo de una mudanza, y la que no se ve.
+  const suyas = (cfgEmp.secs[0] ? cfgEmp.secs[0].items : []).map(i => i.label);
+  ok(JSON.stringify(suyas) === JSON.stringify(['Cuándo abro', 'Cuánto dura cada servicio']),
+     've SOLO las mudadas cuyo permiso tiene, ni una más', suyas.join(' · ') || '(ninguna)');
+  const negadas = ['/admin/users', '/admin/citas/ajustes', '/admin/citas/publica'];
+  ok(negadas.every(h => !enMenu.has(h)),
+     'sin admin.manage_users ni citas.edit, esas tres no le aparecen en el sitio nuevo',
+     negadas.filter(h => enMenu.has(h)).join(' | ') || 'ninguna de las tres');
+  ok(negadas.every(h => !enBuscador.includes(h)),
+     'y tampoco se las encuentra el buscador: la sección nueva no es una puerta trasera',
+     negadas.filter(h => enBuscador.includes(h)).join(' | ') || 'ninguna de las tres');
+  // Y por el nombre VIEJO tampoco: un alias no puede colar lo que el permiso niega.
+  const busEmp = await pEmp.evaluate(async () => {
+    document.getElementById('tbq').value = '';
+    const inp = document.getElementById('tbq');
+    inp.focus(); inp.value = 'Ajustes de citas';
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 200));
+    return [...document.querySelectorAll('#tbres .tb-res-i')].map(a => a.getAttribute('href'));
+  });
+  ok(!busEmp.includes('/admin/citas/ajustes'),
+     'ni buscándola por su nombre viejo: el alias hereda el candado', JSON.stringify(busEmp));
+
   const totalEmp = mEmp.areas.reduce((n, a) => n + a.diario.length + a.ajustes.length, 0);
   ok(totalEmp < BASE_RAIL.length, 've MENOS entradas que el dueño (el filtro de permisos sigue funcionando)',
      totalEmp + ' de ' + BASE_RAIL.length);
@@ -651,6 +853,66 @@ try {
   db.prepare('INSERT OR IGNORE INTO user_permissions (admin_user_id,permission_id) VALUES (?,?)').run(empId, pidCitas);
   await pEmp.reload({ waitUntil: 'networkidle0' });
   ok((await leerMenu(pEmp)).anclas.length === 1, 'devuelto el permiso, el ancla vuelve sola');
+  // ── [4-bis] LA SECCIÓN NO HEREDA EL CANDADO DE LA PÁGINA QUE LA CONTIENE ──────────────────────
+  // CORRECCIÓN DE IBRAHIN sobre el hallazgo de la auditoría, y es el corazón de que la mudanza no
+  // cierre puertas: esta empleada tiene `citas.read` y NO tiene `company.read` ni es dueña. Tiene que
+  // ENTRAR en la configuración del negocio y ver SU sección — y absolutamente nada más de esa
+  // pantalla. Si heredase el candado de la página, la mudanza le habría cerrado dos puertas que hoy
+  // abre desde el desplegable de Agenda; si la página se abriera entera, le habría abierto seis.
+  console.log('\n[4-bis] citas.read SIN company.read: entra, ve lo suyo y NADA más');
+  const permEmpLista = db.prepare(`SELECT p.module || '.' || p.action k FROM user_permissions up
+                                     JOIN permissions p ON p.id = up.permission_id
+                                    WHERE up.admin_user_id = ?`).all(empId).map(r => r.k);
+  ok(!permEmpLista.includes('company.read'), 'la empleada NO tiene company.read (la premisa de la prueba)',
+     permEmpLista.join(' · '));
+
+  const res4 = await pEmp.goto(BASE + '/admin/settings', { waitUntil: 'networkidle0' });
+  ok(res4.status() === 200, 'ENTRA en la configuración del negocio sin company.read', 'HTTP ' + res4.status());
+  const soloSuyo = await leerConfig(pEmp);
+  ok(soloSuyo.secs.length === 1 && soloSuyo.secs[0].label === SECCION_CONFIG,
+     've la sección de su agenda', soloSuyo.secs.map(x => x.label).join(' · '));
+  ok(soloSuyo.secs[0].items.some(i => i.label === 'Cuándo abro'),
+     'y dentro, «Cuándo abro»', soloSuyo.secs[0].items.map(i => i.label).join(' · '));
+  ok(!soloSuyo.empresa && !soloSuyo.avisos && !soloSuyo.plantillas && !soloSuyo.fiscal,
+     'y NO ve ninguna otra parte de la configuración del negocio',
+     'empresa=' + soloSuyo.empresa + ' avisos=' + soloSuyo.avisos + ' plantillas=' + soloSuyo.plantillas + ' fiscal=' + soloSuyo.fiscal);
+
+  // PULSA la entrada desde su sitio nuevo: 200 de verdad, no un enlace pintado.
+  const [res4b] = await Promise.all([
+    pEmp.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }),
+    pEmp.click('.cfg-item[href="/admin/citas/horarios"]'),
+  ]);
+  ok(res4b && res4b.status() === 200 && pEmp.url().endsWith('/admin/citas/horarios'),
+     'y al pulsarla responde 200 y llega a su pantalla', pEmp.url() + ' HTTP ' + (res4b ? res4b.status() : 0));
+
+  // Y NO ES SOLO QUE NO SE PINTE: los datos siguen negados. Dejar de pintar un formulario y dejar la
+  // API abierta es la forma clásica de que una pantalla «no se vea» y sus datos sí. Se pregunta a las
+  // tres puertas de datos de esa pantalla, con SU sesión.
+  const apis = await pEmp.evaluate(async () => {
+    const out = {};
+    for (const u of ['/api/erp/settings/company', '/api/erp/settings/fiscal-profile', '/api/erp/settings/email-templates']) {
+      const r = await fetch(u, { headers: { 'Accept': 'application/json' } });
+      out[u] = r.status;
+    }
+    return out;
+  });
+  const abiertas = Object.entries(apis).filter(([, st]) => st === 200);
+  ok(abiertas.length === 0, 'y las APIs de esa pantalla le siguen diciendo que no (no se pinta Y no se sirve)',
+     JSON.stringify(apis));
+
+  // Lo que SÍ tiene que poder es llegar: la entrada «Datos del negocio» está en su menú porque tiene
+  // contenido propio detrás. Es lo único de esa pantalla que ve, y es lo que hace que no pierda el
+  // camino visual a sus seis puertas.
+  const veLaEntrada = mEmp.cuenta.some(i => i.href === '/admin/settings');
+  ok(veLaEntrada, 've la entrada que la lleva ahí: el camino visual no se ha perdido',
+     mEmp.cuenta.map(i => i.label).join(' · '));
+
+  // Se la devuelve al Inicio antes de seguir. NO es cosmético: el gate le retira `citas.read` más
+  // abajo y vuelve a cargar la página en la que esté. Si se quedara en «Cuándo abro», esa recarga
+  // daría el 403 de `requirePerm`, cuyo HTML llama a `alert()` — y un alert BLOQUEA el render, así
+  // que `networkidle0` no llega nunca y el gate muere por timeout fingiendo un fallo del producto.
+  await pEmp.goto(BASE + '/admin', { waitUntil: 'networkidle0' });
+
   ok(errsEmp.length === 0, 'cero errores JS en las pantallas de la empleada', errsEmp.join(' | '));
   await pEmp.close();
   await ctxEmp.close();
@@ -705,7 +967,12 @@ try {
     };
   });
   ok(acor.abierto && acor.estatico, 'el submenú se abre en ACORDEÓN dentro del cajón, no flotando');
-  ok(acor.total === 8 && acor.rotulo === 'Ajustes de Agenda', 'con sus 8 entradas y su rótulo de ajustes', acor.rotulo);
+  // En móvil Agenda también va de UNA PIEZA con sus dos entradas: el cajón no tiene una regla propia,
+  // pinta lo mismo que el rail. (Antes esta línea esperaba 8 entradas y el rótulo «Ajustes de Agenda»,
+  // que es justo lo que la mudanza se ha llevado.)
+  ok(acor.total === 2 && acor.rotulo === null,
+     'Agenda enseña sus 2 entradas y SIN rótulo de ajustes, igual que en escritorio',
+     acor.total + ' entradas · rotulo=' + acor.rotulo);
   ok(acor.seSalen === 0, 'y ninguna entrada se sale del cajón', 'cajón de ' + Math.round(acor.anchoCajon) + ' px');
   // El buscador, usable a 390.
   await mob.evaluate(() => { document.querySelector('.nav-backdrop').click(); });
@@ -724,6 +991,150 @@ try {
   ok(errsMob.length === 0, 'CERO errores de JS en móvil', errsMob.join(' | '));
   await mob.close();
   await ctxMob.close();
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n[6] «' + PUESTOS + '» NACE OCULTA Y APARECE SOLA');
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // La entrada de los puestos es la única condicional del menú. No se ve en un negocio que no los
+  // usa —la peluquera que trabaja sola— y tiene que aparecer en cuanto hay uno, porque el taller con
+  // dos elevadores la necesita para no vender un sitio que no tiene. Esconder no es eliminar, y esto
+  // es lo que separa una cosa de la otra.
+  await page.goto(BASE + '/admin/settings', { waitUntil: 'networkidle0' });
+  let cfgAhora = await leerConfig(page);
+  ok(!cfgAhora.secs[0].items.some(i => i.href === '/admin/citas/recursos'),
+     'en un negocio SIN puestos, «' + PUESTOS + '» NO aparece en la configuración',
+     cfgAhora.secs[0].items.map(i => i.label).join(' · '));
+  const busSin = await buscar(PUESTOS);
+  ok(!busSin.some(x => x.href === '/admin/citas/recursos'),
+     'y el buscador tampoco la ofrece: esconderla es esconderla en las dos superficies', JSON.stringify(busSin.map(x => x.label)));
+
+  // Un servicio con el que trabajar. Nace a PRECIO CERO a propósito: así [7] puede demostrar que la
+  // página de reservas NO se enciende antes de tiempo.
+  await page.goto(BASE + '/admin/citas/servicios', { waitUntil: 'networkidle0' });
+  await page.evaluate(async () => {
+    await api('POST', '/api/erp/citas/servicios', { nombre: 'Corte de gate', precio: 0, tax_band: 'general', duracion_min: 30 });
+  });
+  await page.reload({ waitUntil: 'networkidle0' });
+
+  // ── LA PUERTA DE ENTRADA: se da de alta DENTRO de «Cuánto dura cada servicio», sin recargar ────
+  await page.waitForSelector('#svcBody button.btn-secondary', { timeout: 8000 });
+  await page.click('#svcBody button.btn-secondary');
+  await page.waitForSelector('#mSvc.open', { timeout: 5000 });
+  const antesAlta = await page.evaluate(() => document.querySelectorAll('#svcResources .svcres').length);
+  ok(antesAlta === 0, 'el servicio no tiene ningún ' + PUESTOS.toLowerCase() + ' que marcar todavía', antesAlta + '');
+  await page.click('#svcAltaBtn');
+  await page.type('#svcAltaNombre', 'Silla del gate', { delay: 20 });
+  await page.click('#svcAltaOk');
+  await page.waitForFunction(() => document.querySelectorAll('#svcResources .svcres').length > 0, { timeout: 8000 });
+  const trasAlta = await page.evaluate(() => ({
+    casillas: [...document.querySelectorAll('#svcResources .svcres')].map(x => ({ v: x.value, on: x.checked })),
+    aviso: document.getElementById('svcAltaAviso').offsetParent !== null,
+    avisoTx: document.getElementById('svcAltaAviso').textContent.trim(),
+    modalAbierto: document.getElementById('mSvc').classList.contains('open'),
+  }));
+  ok(trasAlta.casillas.length === 1 && trasAlta.casillas[0].on,
+     'se da de alta AHÍ MISMO y la casilla aparece ya marcada, SIN RECARGAR', JSON.stringify(trasAlta.casillas));
+  ok(trasAlta.modalAbierto, 'y sin perder lo que el dueño llevaba escrito: el modal sigue abierto');
+  ok(trasAlta.aviso && /configuración de tu negocio/i.test(trasAlta.avisoTx),
+     'y se le dice que la entrada ya está en la configuración de su negocio', trasAlta.avisoTx);
+
+  // ── Y AHORA SÍ: la entrada existe, con el nombre de su oficio ─────────────────────────────────
+  await page.goto(BASE + '/admin/settings', { waitUntil: 'networkidle0' });
+  cfgAhora = await leerConfig(page);
+  const laDePuestos = cfgAhora.secs[0].items.find(i => i.href === '/admin/citas/recursos');
+  ok(!!laDePuestos, 'dado de alta uno, «' + PUESTOS + '» YA aparece en la configuración',
+     cfgAhora.secs[0].items.map(i => i.label).join(' · '));
+  ok(laDePuestos && laDePuestos.label === PUESTOS,
+     'y se llama como manda el oficio, no "Recursos"', laDePuestos && laDePuestos.label);
+  ok(cfgAhora.secs[0].items.length === BASE_CONFIG.length + 1,
+     'la sección pasa a tener las ' + (BASE_CONFIG.length + 1) + ': el inventario llega a ' + N_TOTAL,
+     cfgAhora.secs[0].items.length + '');
+  const [resPu] = await Promise.all([
+    page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }),
+    page.click('.cfg-item[href="/admin/citas/recursos"]'),
+  ]);
+  ok(resPu && resPu.status() === 200, 'y se pulsa y responde 200', 'HTTP ' + (resPu ? resPu.status() : 0));
+  const busCon = await buscar(PUESTOS);
+  ok(busCon.some(x => x.href === '/admin/citas/recursos'),
+     'y ahora el buscador SÍ la encuentra, por su nombre de oficio', JSON.stringify(busCon.map(x => x.label)));
+  const busViejo = await buscar('Recursos');
+  ok(busViejo.some(x => x.href === '/admin/citas/recursos'),
+     'y por «Recursos», que es como se llamaba', JSON.stringify(busViejo.map(x => x.label)));
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n[7] LA PÁGINA DE RESERVAS SE ENCIENDE SOLA — PERO NO ANTES DE TIEMPO');
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  const pub = () => db.prepare('SELECT cita_pub_activa a, cita_pub_auto au, cita_pub_auto_visto v FROM company_config WHERE id=1').get();
+  ok(pub().a === 0, 'en un negocio recién creado la página de reservas está APAGADA', JSON.stringify(pub()));
+
+  // (a) sin horario: el negocio tiene el de fábrica (8:00–21:00, siete días), que NO es suyo.
+  db.prepare("DELETE FROM horario_tramos WHERE scope='negocio'").run();
+  ok(pub().a === 0, 'con un servicio de alta pero sin horario propio, sigue apagada', JSON.stringify(pub()));
+
+  // Ahora el horario, por la pantalla de verdad. Sigue apagada: el servicio vale 0 €.
+  await page.goto(BASE + '/admin/citas/horarios', { waitUntil: 'networkidle0' });
+  await page.evaluate(async () => {
+    await api('POST', '/api/erp/citas/horario', { scope: 'negocio', tramos: [
+      { dow: 1, inicio_min: 600, fin_min: 1140 }, { dow: 2, inicio_min: 600, fin_min: 1140 },
+    ] });
+  });
+  ok(pub().a === 0,
+     'con horario pero con el servicio a 0 €, SIGUE APAGADA: publicar precios en blanco sería peor que no publicar',
+     JSON.stringify(pub()));
+
+  // Y ahora el precio. Esta es la segunda condición, y se pone donde de verdad vive: en el catálogo.
+  const svcId = db.prepare("SELECT id FROM products WHERE name='Corte de gate'").get().id;
+  await page.goto(BASE + '/admin/products', { waitUntil: 'networkidle0' });
+  await page.evaluate(async id => {
+    await api('PUT', '/api/erp/products/' + id, {
+      name: 'Corte de gate', sku: 'corte-de-gate', price: 18, tax_band: 'general', type: 'service', status: 'active',
+    });
+  }, svcId);
+  const trasPrecio = pub();
+  ok(trasPrecio.a === 1 && trasPrecio.au === 1,
+     'con horario propio Y un servicio con precio y duración, se ENCIENDE SOLA', JSON.stringify(trasPrecio));
+  ok(db.prepare('SELECT publico FROM service_config WHERE product_id=?').get(svcId).publico === 1,
+     'y publica el servicio que ya es publicable: encender la puerta sin nada detrás sería encender nada');
+
+  // La página pública responde de verdad, no solo el flag.
+  const handle = db.prepare('SELECT cita_pub_handle h, company_name n FROM company_config WHERE id=1').get();
+  const slugPub = (handle.h || handle.n || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'reservar';
+  const rPub = await page.goto(BASE + '/reservar/' + slugPub, { waitUntil: 'domcontentloaded' });
+  ok(rPub && rPub.status() === 200, 'y la dirección pública responde 200 de verdad', '/reservar/' + slugPub + ' → HTTP ' + (rPub ? rPub.status() : 0));
+
+  // ── EL AVISO Y SU INTERRUPTOR DE UN CLIC ──────────────────────────────────────────────────────
+  await page.goto(BASE + '/admin/avisos', { waitUntil: 'networkidle0' });
+  await dormir(600);
+  const avi = await page.evaluate(() => {
+    const filas = [...document.querySelectorAll('table tbody tr')];
+    const f = filas.find(r => /página de reservas/i.test(r.textContent));
+    return f ? { texto: f.textContent.replace(/\s+/g, ' ').trim(), apagar: !!f.querySelector('button[onclick*="apagarReservas"]') } : null;
+  });
+  ok(!!avi, 'al encenderse se AVISA al dueño por los canales que ya hay', avi && avi.texto.slice(0, 120));
+  ok(avi && /\/reservar\//.test(avi.texto), 'y el aviso trae el ENLACE y qué se ve', avi && avi.texto.slice(0, 160));
+  ok(avi && avi.apagar, 'y un interruptor para apagarla en UN CLIC');
+
+  // Se PULSA el botón de verdad (con el confirm respondido que sí), no se llama al endpoint por
+  // debajo: lo que hay que demostrar es que el interruptor funciona desde donde está el dueño.
+  await page.evaluate(() => { window.confirm = () => true; });
+  await page.evaluate(() => document.querySelector('button[onclick*="apagarReservas"]').click());
+  await dormir(800);
+  ok(pub().a === 0, 'pulsarlo la APAGA, en un clic', JSON.stringify(pub()));
+
+  // EL PESTILLO: y no se vuelve a encender sola nunca más. Sin esto, el interruptor sería mentira.
+  await page.goto(BASE + '/admin/citas/horarios', { waitUntil: 'networkidle0' });
+  await page.evaluate(async () => {
+    await api('POST', '/api/erp/citas/horario', { scope: 'negocio', tramos: [{ dow: 3, inicio_min: 600, fin_min: 1140 }] });
+  });
+  ok(pub().a === 0,
+     'y NO se vuelve a encender sola al guardar otra vez: el interruptor de apagado no es un adorno',
+     JSON.stringify(pub()));
+  await page.goto(BASE + '/admin/avisos', { waitUntil: 'networkidle0' });
+  await dormir(500);
+  const aviTras = await page.evaluate(() =>
+    [...document.querySelectorAll('table tbody tr')].some(r => /página de reservas/i.test(r.textContent)));
+  ok(!aviTras, 'y el aviso se calla: era una noticia, no una tarea pendiente que repetir');
 
   ok(errsGlobal.length === 0, 'cero errores JS en todo el recorrido de escritorio', errsGlobal.join(' | '));
 

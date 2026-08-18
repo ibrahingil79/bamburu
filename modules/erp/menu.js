@@ -158,23 +158,22 @@ export const MENU = [
     { href: '/admin/facturar-horas', label: 'Facturar horas', key: 'facturar-horas', icon: 'ti-clock-dollar' },
     { href: '/admin/rentabilidad', label: 'Rentabilidad', key: 'rentabilidad', icon: 'ti-chart-pie' },
   ]},
-  // Peldaño 7 · PIEZA 5 — SISTEMA DE CITAS. Área propia: la agenda y todo lo que la alimenta
-  // (servicios reservables, recursos, horarios) y la cola de envíos de avisos. NO es el calendario
-  // FISCAL (ese vive en Contabilidad/Ajustes). Candado citas.read/edit en todas las rutas.
-  // Es el área que más gana con la separación: de 8 entradas en fila, 2 son del día a día.
+  // Peldaño 7 · PIEZA 5 — SISTEMA DE CITAS. EN AGENDA SOLO VIVE LO QUE SE USA ATENDIENDO CLIENTES
+  // (decisión de producto de Ibrahin, 18 ago 2026). Lo que se monta una vez y se olvida —cuándo abro,
+  // cuánto dura cada servicio, mi equipo, cómo se piden las citas, mi página de reservas y los
+  // puestos— se mudó a la CONFIGURACIÓN DEL NEGOCIO: vive en `CONFIG_NEGOCIO`, más abajo en este
+  // mismo fichero. NO SE ELIMINÓ NI UNA: son las mismas seis puertas, con las mismas rutas y los
+  // mismos permisos, en otro sitio. Mudar no es esconder, y este fichero sigue teniendo UNA lista.
+  //
+  // Con DOS entradas y NINGUNA de ajuste el desplegable va de UNA PIEZA, y eso no se decide aquí: lo
+  // decide `MIN_AJUSTES` al pintar. No es el calendario FISCAL (ese vive en Contabilidad/Ajustes).
   { id: 'agenda', label: 'Agenda', icon: 'ti-calendar', items: [
     { href: '/admin/citas', label: 'Agenda', key: 'citas', icon: 'ti-calendar-event' },
-    { href: '/admin/citas/cola', label: 'Cola de envíos', key: 'citas-cola', icon: 'ti-send' },
-    { href: '/admin/citas/servicios', label: 'Servicios reservables', key: 'citas-servicios', icon: 'ti-clock-hour-4', ajustes: true },
-    // QUIÉN ATIENDE — faltaba. En el área de Agenda solo había "Recursos" (que con el oficio pasa a
-    // llamarse "Sillas", "Cabinas"…), así que un peluquero que quería dar de alta a su segunda
-    // estilista se encontraba "Sillas" como lo más parecido a una persona. Las personas son
-    // `admin_users` y se gestionan en /admin/users; lo que faltaba era la puerta desde aquí.
-    { href: '/admin/users', label: 'Quién atiende', key: 'citas-personas', icon: 'ti-users', ajustes: true },
-    { href: '/admin/citas/recursos', label: 'Recursos', key: 'citas-recursos', icon: 'ti-armchair', ajustes: true },
-    { href: '/admin/citas/horarios', label: 'Horarios', key: 'citas-horarios', icon: 'ti-calendar-time', ajustes: true },
-    { href: '/admin/citas/ajustes', label: 'Ajustes de citas', key: 'citas-ajustes', icon: 'ti-settings', ajustes: true },
-    { href: '/admin/citas/publica', label: 'Reservas por Internet', key: 'citas-publica', icon: 'ti-world', ajustes: true },
+    // «Recordatorios a clientes» era «Cola de envíos». MISMO SITIO Y MISMO CONTADOR al lado cuando hay
+    // pendientes: lo único que cambia es el nombre, porque «cola de envíos» es la palabra del que lo
+    // programó, no la del que lo usa. El nombre viejo se sigue encontrando en el buscador (`alias`).
+    { href: '/admin/citas/cola', label: 'Recordatorios a clientes', key: 'citas-cola', icon: 'ti-send',
+      alias: ['Cola de envíos'] },
   ]},
   { id: 'compras', label: 'Compras y gastos', icon: 'ti-receipt', items: [
     { href: '/admin/supplier-invoices', label: 'Facturas recibidas', key: 'supplier-invoices', icon: 'ti-file-dollar' },
@@ -213,6 +212,96 @@ export const MENU = [
     { href: '/admin/vigia', label: 'Vigía (DISA)', key: 'vigia', icon: 'ti-radar' },
   ]},
 ];
+
+// ── LA CONFIGURACIÓN DEL NEGOCIO — lo que se monta una vez y se olvida ────────────────────────────
+// DECISIÓN DE PRODUCTO DE IBRAHIN (18 ago 2026), y es la regla que decide todo lo demás:
+//
+//        EN AGENDA SOLO VIVE LO QUE SE USA ATENDIENDO CLIENTES.
+//        TODO LO QUE SE MONTA UNA VEZ Y SE OLVIDA VIVE EN LA CONFIGURACIÓN DEL NEGOCIO.
+//
+// Estas seis ESTABAN en el desplegable de Agenda y se han mudado aquí. NO SE ELIMINA NINGUNA FUNCIÓN:
+// mismas rutas (quien tenga un enlace guardado sigue llegando), mismos permisos, otro sitio.
+//
+// POR QUÉ VIVEN EN ESTE FICHERO Y NO ESCRITAS A MANO EN `routes/settings.js`. Porque el buscador y las
+// anclas comen de aquí. Si la sección se escribiera en la pantalla de ajustes habría DOS listas —la
+// del buscador y la de la pantalla— y el día que una cambie, la otra se queda vieja en silencio. Es
+// exactamente el error contra el que está escrita la cabecera de este fichero: aquí no hay dos listas.
+//
+// ⚠️ LA SECCIÓN NO HEREDA EL CANDADO DE LA PÁGINA QUE LA CONTIENE. `/admin/settings` exige
+// `company.read` para SU contenido (empresa, fiscal, plantillas), pero cada entrada de aquí conserva
+// EXACTAMENTE el permiso que tenía en Agenda, ni uno más: `citas-horarios` sigue siendo `citas.read`
+// y `citas-personas` sigue siendo `admin.manage_users`. Quien tenga `citas.read` y no `company.read`
+// ve ESTA sección y nada más de esa pantalla; quien no tenga ninguna de las seis no ve la sección.
+// Un cambio de sitio no puede abrir ni cerrar una puerta — la misma regla que se aplicó al mudar
+// «Portal de cliente» de Ventas a Clientes.
+//
+// `alias` = los nombres VIEJOS. No se pintan en ningún sitio: solo los busca el buscador, para que
+// quien lleva un año escribiendo «Cola de envíos» u «Horarios» siga encontrando su pantalla.
+//
+// `siHay` = la entrada solo existe si la condición se cumple (ver `condicionesConfig`). Hoy solo la
+// usan los puestos. Es la ÚNICA entrada condicional del menú, y por eso lleva su regla escrita al
+// lado en vez de en un mapa lejano.
+export const CONFIG_NEGOCIO = [
+  {
+    id: 'cfg-agenda',
+    label: 'Cómo funciona mi agenda',
+    icon: 'ti-calendar-cog',
+    descripcion: 'Lo que montas una vez y se queda montado: cuándo abres, cuánto dura cada cosa, quién atiende y cómo te piden cita.',
+    // EL ORDEN NO ES ALFABÉTICO NI CAPRICHOSO: es el orden en que se monta un negocio. Primero cuándo
+    // abro, luego qué vendo y cuánto dura, luego quién lo hace, luego cómo me lo piden.
+    items: [
+      { href: '/admin/citas/horarios', label: 'Cuándo abro', key: 'citas-horarios', icon: 'ti-calendar-time',
+        alias: ['Horarios'],
+        desc: 'Tu horario semanal, los descansos y las excepciones (vacaciones, festivos, cierres).' },
+      { href: '/admin/citas/servicios', label: 'Cuánto dura cada servicio', key: 'citas-servicios', icon: 'ti-clock-hour-4',
+        alias: ['Servicios reservables', 'Servicios'],
+        desc: 'El tiempo que ocupa cada servicio en tu agenda. El precio y el IVA siguen viniendo de tu catálogo.' },
+      // «Mi equipo» lleva a /admin/users, que es donde viven las personas. Sigue siendo un ATAJO con el
+      // candado de SU pantalla (`admin.manage_users`), no un permiso nuevo. Lo que se ha quitado es el
+      // atajo desde Agenda, que es de donde venía.
+      { href: '/admin/users', label: 'Mi equipo', key: 'citas-personas', icon: 'ti-users',
+        alias: ['Quién atiende', 'Personas', 'Usuarios'],
+        desc: 'Quién atiende en tu negocio. Cada persona puede tener su propio horario.' },
+      { href: '/admin/citas/ajustes', label: 'Cómo se piden las citas', key: 'citas-ajustes', icon: 'ti-settings',
+        alias: ['Ajustes de citas'],
+        desc: 'Antelación mínima, hasta cuándo se puede reservar, margen entre citas y cómo salen los recordatorios.' },
+      { href: '/admin/citas/publica', label: 'Mi página de reservas', key: 'citas-publica', icon: 'ti-world',
+        alias: ['Reservas por Internet', 'Reserva pública'],
+        desc: 'La dirección donde tus clientes piden cita solos, y qué se ve en ella.' },
+      // ── LA ÚNICA ENTRADA CONDICIONAL DEL MENÚ ───────────────────────────────────────────────────
+      // NACE OCULTA y aparece sola cuando el negocio tiene al menos un puesto de alta, o cuando algún
+      // servicio exige uno. NO SE ELIMINA LA FUNCIÓN: un taller con dos elevadores la necesita para no
+      // vender un sitio que no tiene; lo que no tiene sentido es enseñársela a la peluquera que trabaja
+      // sola. Para el negocio que la necesita y aún no lo sabe, la puerta de entrada está DENTRO de
+      // «Cuánto dura cada servicio»: al marcar que un servicio necesita un sitio o un aparato, se da de
+      // alta ahí mismo y la entrada aparece.
+      //
+      // El NOMBRE lo pone el oficio (Sillas / Cabinas / Salas / Boxes) y sigue siendo editable en
+      // «Cómo se piden las citas» — igual que cuando vivía en Agenda. Ver `etiqueta()`.
+      { href: '/admin/citas/recursos', label: 'Puestos', key: 'citas-recursos', icon: 'ti-armchair',
+        siHay: 'puestos',
+        alias: ['Recursos', 'Puestos', 'Sillas', 'Cabinas', 'Salas', 'Boxes'],
+        desc: 'Las sillas, cabinas, salas o aparatos que una cita ocupa además de la persona.' },
+    ],
+  },
+];
+
+// ¿Qué condiciones `siHay` se cumplen en ESTE negocio? Una sola consulta por condición, y tolerante a
+// fallo: si algo peta, la condición se da por NO cumplida y la entrada no aparece — el menú nunca se
+// rompe por esto, y fallar cerrado es lo correcto para algo que decide si se ve una puerta.
+//
+// `puestos`: hay al menos un puesto de alta O algún servicio exige uno. La segunda mitad importa: un
+// servicio puede exigir un puesto que luego se archivó, y esconder la pantalla dejaría ese servicio
+// sin forma de arreglarse.
+export function condicionesConfig(db) {
+  const hay = sql => { try { return db.prepare(sql).get() != null; } catch { return false; } };
+  if (!db) return { puestos: false };
+  return {
+    puestos: hay('SELECT 1 FROM recursos WHERE active=1 LIMIT 1')
+          || hay('SELECT 1 FROM service_resources LIMIT 1'),
+  };
+}
+
 
 // ── ENTRADAS FIJAS DEL RAIL — fuera de las áreas, arriba y abajo del todo ─────────────────────────
 // Estaban escritas a mano en el HTML de `adminLayout`. Se declaran aquí para que el buscador las
@@ -292,8 +381,11 @@ export function menuDeUsuario(db, { role = '', perms = [], userId = null } = {})
   } catch { plural = null; pend = 0; }
 
   const etiqueta = it => {
+    // El nombre del puesto lo pone el OFICIO y lo puede reescribir el dueño. Sigue igual que cuando la
+    // entrada vivía en Agenda: mudarla de sitio no le cambia el nombre.
     if (it.key === 'citas-recursos' && plural) return plural;
-    if (it.key === 'citas-cola') return 'Cola de envíos' + (pend > 0 ? ' · ' + pend : '');
+    // Mismo contador de siempre, nombre nuevo (era «Cola de envíos»).
+    if (it.key === 'citas-cola') return 'Recordatorios a clientes' + (pend > 0 ? ' · ' + pend : '');
     return it.label;
   };
 
@@ -309,13 +401,37 @@ export function menuDeUsuario(db, { role = '', perms = [], userId = null } = {})
       todos,
     });
   }
-  const cuenta = CUENTA.filter(pasa).map(it => ({ ...it, area: 'Cuenta', areaId: 'cuenta' }));
+
+  // ── LA CONFIGURACIÓN DEL NEGOCIO, filtrada DOS veces ─────────────────────────────────────────────
+  // (1) por el permiso PROPIO de cada entrada —el mismo `pasa` que el rail, ni mejor ni peor—, y
+  // (2) por su condición `siHay`, que hoy solo usan los puestos.
+  // Una sección sin entradas visibles NO se devuelve: quien no tiene ninguna de las seis no ve ni el
+  // título. Así la pantalla de ajustes no tiene que decidir nada — pinta lo que le llega.
+  const cond = condicionesConfig(db);
+  const config = [];
+  for (const sec of CONFIG_NEGOCIO) {
+    const items = sec.items
+      .filter(pasa)
+      .filter(it => !it.siHay || cond[it.siHay] === true)
+      .map(it => ({ ...it, label: etiqueta(it), area: sec.label, areaId: sec.id }));
+    if (!items.length) continue;
+    config.push({ id: sec.id, label: sec.label, icon: sec.icon, descripcion: sec.descripcion, items });
+  }
+
+  // «Datos del negocio» abre la pantalla que ALOJA esa sección. Si el usuario tiene algo dentro, la
+  // entrada tiene que estar: si no, la mudanza le CERRARÍA el camino visual a seis puertas que hoy
+  // abre desde Agenda — y un cambio de sitio no puede cerrar una puerta. NO abre nada: el contenido
+  // propio de esa pantalla (empresa, fiscal, plantillas) sigue exigiendo `company.read`, y lo que
+  // este usuario verá al entrar es exactamente su sección y nada más.
+  const cuenta = CUENTA
+    .filter(it => pasa(it) || (it.key === 'settings' && config.length > 0))
+    .map(it => ({ ...it, area: 'Cuenta', areaId: 'cuenta' }));
   const fijas  = FIJAS.map(it => ({ ...it, area: '', areaId: 'fijas' }));
   // El ORDEN de este usuario se aplica al final, sobre el menú ya filtrado. Nunca quita nada: lo que
   // no esté en su lista se coloca detrás, en el orden de fábrica (ver `aplicarOrden`).
   let pref = { areas: [], entradas: {} };
   try { if (db && userId) pref = leerPref(db, userId); } catch { /* el menú nunca se rompe por esto */ }
-  return { areas: aplicarOrden(areas, pref), cuenta, fijas };
+  return { areas: aplicarOrden(areas, pref), cuenta, fijas, config };
 }
 
 // ── (D) ORDEN PROPIO — mover de sitio los menús y los submenús ────────────────────────────────────
@@ -364,9 +480,17 @@ export function aplicarOrden(areas, pref) {
 // ── EL CATÁLOGO DE DESTINOS — lo que ve el buscador y lo que se puede anclar ──────────────────────
 // Sale del menú YA FILTRADO: por construcción es imposible que el buscador enseñe una puerta que el
 // menú esconde, porque no hay otra lista de la que sacarla.
-// Se incluyen las áreas mismas (buscar "Agenda" lleva a la Agenda) y todas sus entradas.
+// Se incluyen las áreas mismas (buscar "Agenda" lleva a la Agenda), todas sus entradas Y las de la
+// configuración del negocio — que están en otra pantalla, pero son entradas del menú igual.
+//
+// `alias` = los nombres VIEJOS de una entrada renombrada. Viajan hasta el buscador y NO se pintan: se
+// buscan. Sin esto, mudar y renombrar seis entradas dejaría a quien lleva un año tecleando «Cola de
+// envíos» delante de un «Nada del menú se llama así» — que es exactamente perder la función aunque el
+// enlace siga existiendo.
 export function destinosBuscador(menu) {
   const out = [];
+  const dest = (i, area) => ({ tipo: 'entrada', key: i.key, label: i.label, area, href: i.href || '',
+                               icon: i.icon, accion: i.accion || '', alias: i.alias || [] });
   for (const a of menu.areas) {
     // El área como destino: lleva a su PRIMERA entrada del día a día (la que abre el desplegable).
     // Salvo que una entrada suya se llame IGUAL que el área («Agenda» dentro de Agenda, «Clientes»
@@ -375,12 +499,16 @@ export function destinosBuscador(menu) {
     const primera = a.diario[0] || a.todos[0];
     const seLlamaIgual = a.todos.some(i => i.label === a.label);
     if (primera && primera.href && !seLlamaIgual) {
-      out.push({ tipo: 'area', key: 'area:' + a.id, label: a.label, area: '', href: primera.href, icon: a.icon });
+      out.push({ tipo: 'area', key: 'area:' + a.id, label: a.label, area: '', href: primera.href, icon: a.icon, alias: [] });
     }
-    for (const i of a.todos) out.push({ tipo: 'entrada', key: i.key, label: i.label, area: i.area, href: i.href || '', icon: i.icon, accion: i.accion || '' });
+    for (const i of a.todos) out.push(dest(i, i.area));
   }
-  for (const i of menu.fijas)  out.push({ tipo: 'entrada', key: i.key, label: i.label, area: '', href: i.href, icon: i.icon });
-  for (const i of menu.cuenta) out.push({ tipo: 'entrada', key: i.key, label: i.label, area: i.area, href: i.href, icon: i.icon });
+  // Las de la configuración del negocio. Se etiquetan con el nombre de SU sección, para que el
+  // resultado diga de dónde sale («Cuándo abro · Cómo funciona mi agenda») y no parezca que están en
+  // el rail. Ya vienen filtradas por permiso y por condición desde `menuDeUsuario`.
+  for (const sec of (menu.config || [])) for (const i of sec.items) out.push(dest(i, sec.label));
+  for (const i of menu.fijas)  out.push({ tipo: 'entrada', key: i.key, label: i.label, area: '', href: i.href, icon: i.icon, alias: [] });
+  for (const i of menu.cuenta) out.push({ tipo: 'entrada', key: i.key, label: i.label, area: i.area, href: i.href, icon: i.icon, alias: [] });
   return out;
 }
 
@@ -397,6 +525,9 @@ export function anclablesPorClave(menu) {
     m.set('area:' + a.id, { tipo: 'area', key: 'area:' + a.id, label: a.label, icon: a.icon, area: a });
     for (const i of a.todos) if (i.href) m.set(i.key, { tipo: 'entrada', ...i });
   }
+  // Las de la configuración del negocio se anclan igual que las demás. Es lo que impide que la mudanza
+  // les quite una capacidad que hoy tienen: quien se subía «Horarios» al rail puede seguir haciéndolo.
+  for (const sec of (menu.config || [])) for (const i of sec.items) if (i.href) m.set(i.key, { tipo: 'entrada', ...i });
   for (const i of menu.fijas)  m.set(i.key, { tipo: 'entrada', ...i });
   for (const i of menu.cuenta) m.set(i.key, { tipo: 'entrada', ...i });
   return m;

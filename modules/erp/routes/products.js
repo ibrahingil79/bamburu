@@ -8,6 +8,9 @@ import { getVatBands } from '../../../core/vat-bands.js';
 import { adjustStock, kardex, productStock, isPhysical, recordMovement, resolveWarehouseId, reservedOfProduct, availableOfProduct, TYPE_LABEL, REASON_LABEL } from '../stock.js';
 import { warehouseBreakdown, activeWarehouses } from './warehouses.js';
 import { nivelesDeProducto, setNivelesProducto } from '../reposicion.js';
+// §4 · el precio del servicio vive aquí. Módulo HOJA (solo depende de db + citas-engine), así que
+// importarlo desde products.js no cierra ningún círculo.
+import { autoEncenderReservas } from '../reserva-publica-config.js';
 import { lotesDeProducto, trazaDeLote, trackingDe } from '../trazabilidad.js';
 import { stockModalHtml, stockModalScript } from '../views/stock-modal.js';
 import { nextCode } from '../codes.js';
@@ -191,6 +194,11 @@ export function createProductRoutes(db, cfg = {}) {
         }
       }
       logActivity(db, c.get('session'), 'Editó producto', ENTITY.PRODUCT, id, d.name);
+      // §4 — el PRECIO de un servicio vive aquí, en el catálogo, no en la agenda. Ponérselo es lo que
+      // cumple la segunda condición para que la página de reservas se encienda sola, así que el
+      // enganche tiene que estar también en esta puerta o el automatismo se queda cojo por el lado más
+      // natural: crear el servicio a 0 € y ponerle precio en Productos.
+      if ((d.type || 'physical') === 'service') autoEncenderReservas(db);
       return c.json({message:'Actualizado'});
     } catch(e) { return c.json({error:safeError(e)},500); }
   });

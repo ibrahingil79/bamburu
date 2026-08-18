@@ -55,6 +55,9 @@ export function createAvisosRoutes(db) {
     // El CRM no tiene página por oportunidad: la cola de trabajo comercial ES su sitio de origen,
     // porque lista justo las que piden acción, con su motivo y ya ordenadas por urgencia.
     cliente_en_riesgo:     { etiqueta: 'Cliente en riesgo', badge: 'b-yellow', href: () => '/admin/crm/cola' },
+    // §4 — no es trabajo pendiente: es una NOTICIA. Va en azul (informativo), y su "Ver" lleva a los
+    // mandos de la página, que es donde está todo lo demás que puede querer tocar.
+    reserva_publica_encendida: { etiqueta: 'Página de reservas', badge: 'b-blue', href: () => '/admin/citas/publica' },
   };
 
   // `nuevos` = claves que este usuario aún no ha marcado como vistas.
@@ -239,7 +242,29 @@ export function createAvisosRoutes(db) {
         if (a.tipo === 'cliente_en_riesgo') {
           return '<a class="btn btn-primary btn-sm" href="/admin/crm/cola">Revisar en el CRM</a>';
         }
+        // §4 — EL INTERRUPTOR EN UN CLIC. Es la única acción de esta pantalla que APAGA algo, y por eso
+        // es la única que no manda a otra pantalla: si para apagar la puerta que se abrió sola hubiera
+        // que ir a los ajustes, buscar la casilla y guardar, "un clic" sería mentira. La fuente ya
+        // exige citas.edit para verse, y el endpoint lo revalida.
+        if (a.tipo === 'reserva_publica_encendida') {
+          return '<button class="btn btn-secondary btn-sm" onclick="apagarReservas()">Apágala</button>'
+               + ' <button class="btn btn-primary btn-sm" onclick="dejarReservas()">Déjala abierta</button>'
+               + ' ' + ver;
+        }
         return ver;
+      }
+
+      // §4 — las dos respuestas al aviso de que la página se encendió sola. Las dos lo callan para
+      // siempre; la primera, además, apaga la puerta. Se recarga la lista para que el aviso desaparezca
+      // en el acto: quien contesta tiene que VER que su respuesta ha servido de algo.
+      async function apagarReservas(){
+        if(!confirm('Tu página de reservas dejará de estar disponible. ¿La apago?')) return;
+        try{ await api('POST','/api/erp/reserva-publica/aviso-encendido/apagar',{}); toast('Página de reservas apagada'); loadAvisos(); }
+        catch(e){ toast(e.message,'err'); }
+      }
+      async function dejarReservas(){
+        try{ await api('POST','/api/erp/reserva-publica/aviso-encendido/vale',{}); toast('Perfecto, se queda abierta'); loadAvisos(); }
+        catch(e){ toast(e.message,'err'); }
       }
 
       function pintar(data){

@@ -284,6 +284,27 @@ export function createReservaAdminRoutes(db) {
 
   // Un servicio se abre o se cierra al público de uno en uno. Exige estar configurado como reservable:
   // abrir al público algo sin tiempo definido sería publicar un hueco que el motor no sabe calcular.
+  // ── §4 · LAS DOS RESPUESTAS AL AVISO DE QUE SE ENCENDIÓ SOLA ────────────────────────────────────
+  // El encargo pide «un interruptor para apagarla en un clic si no la quiere». Un clic es un clic: no
+  // vale mandarle a los ajustes a buscar una casilla. Por eso son dos endpoints tontos, sin cuerpo.
+  //
+  // Las dos echan `cita_pub_auto_visto`: la noticia se da UNA vez y se calla, conteste lo que conteste.
+  // Y ninguna toca `cita_pub_auto`, el pestillo: ya estaba echado desde el encendido, y es lo que
+  // garantiza que apagarla aquí sea definitivo y no se la vuelva a encontrar abierta mañana.
+  api.post('/aviso-encendido/apagar', requirePerm('citas.edit'), c => {
+    try {
+      db.prepare('UPDATE company_config SET cita_pub_activa=0, cita_pub_auto_visto=1 WHERE id=1').run();
+      logActivity(db, c.get('session'), 'Apagó la página de reservas', ENTITY.CITA, 0, 'desde el aviso de encendido automático');
+      return c.json({ ok: true, message: 'Página de reservas apagada' });
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+  api.post('/aviso-encendido/vale', requirePerm('citas.edit'), c => {
+    try {
+      db.prepare('UPDATE company_config SET cita_pub_auto_visto=1 WHERE id=1').run();
+      return c.json({ ok: true, message: 'De acuerdo, se queda abierta' });
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+
   api.post('/servicio/:id', requirePerm('citas.edit'), c => {
     try {
       const pid = parseInt(c.req.param('id'), 10);

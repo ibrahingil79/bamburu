@@ -28,7 +28,7 @@ import { reservaPublicaSchema, reservaCambioSchema } from './schemas.js';
 import {
   ajustesPublicos, cerrada, textoConsentimiento, reservaDeCita, esCitaPublica, ventanaCliente,
   esServicioPublico, exigirServiciosPublicos, personasPublicas, esPersonaPublica,
-  reservasPublicasPendientes,
+  reservasPublicasPendientes, SQL_PUBLICABLE,
 } from './reserva-publica-config.js';
 
 // Se reexportan para que quien importe "el módulo de la puerta" tenga todo en un sitio, aunque las
@@ -38,16 +38,19 @@ export { esServicioPublico, exigirServiciosPublicos, personasPublicas, esPersona
 const err = (msg, status) => { const e = new Error(msg); e.status = status; return e; };
 
 // ── Qué se enseña fuera ───────────────────────────────────────────────────────────────────────────
-// Servicios: reservable (pieza 5) Y publico (pieza 6) Y no archivado. Precio e IVA SALEN DEL
-// CATÁLOGO — aquí no se recalcula nada, solo se resuelve el % de la banda igual que hace la factura.
+// Servicios: reservable (pieza 5) Y publico (pieza 6) Y no archivado Y —desde el 18 ago 2026— CON
+// PRECIO Y CON DURACIÓN. Esa última mitad es `SQL_PUBLICABLE`, y viene del módulo hoja para que la
+// lista de fuera y el `esServicioPublico` que valida cada reserva digan EXACTAMENTE lo mismo: si una
+// dijera que sí y la otra que no, el cliente vería un servicio que al reservar da "no encontrado".
+// Precio e IVA SALEN DEL CATÁLOGO — aquí no se recalcula nada, solo se resuelve el % de la banda
+// igual que hace la factura.
 export function serviciosPublicos(db) {
   const aj = ajustesCitas(db);
   return db.prepare(
     `SELECT p.id, p.name, p.price, p.tax_band, p.tax_rate,
             sc.duracion_min, sc.muerto_ini_min, sc.muerto_dur_min, sc.margen_min
        FROM products p JOIN service_config sc ON sc.product_id = p.id
-      WHERE p.type='service' AND sc.reservable=1 AND sc.publico=1
-        AND (p.status IS NULL OR p.status<>'archived')
+      WHERE sc.publico=1 AND ${SQL_PUBLICABLE}
       ORDER BY p.name`
   ).all().map(s => {
     const iva = resolveVatRate(aj.country, s.tax_band, Number(s.tax_rate) || 0).rate;

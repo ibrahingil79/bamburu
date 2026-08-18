@@ -248,9 +248,21 @@ try {
   const conPuesto = await p.evaluate(() => { document.getElementById('cMas').open = true; const w = document.getElementById('cRecursoWrap'); return !!w && w.offsetParent !== null; });
   ok(conPuesto, 'tras dar de alta una «Sala», el selector de puesto vuelve a pintarse');
 
-  // Y la puerta a las PERSONAS existe desde el área de Agenda (antes lo más parecido era «Sillas»).
-  const puerta = await p.evaluate(() => [...document.querySelectorAll('a')].some(a => /Qui[eé]n atiende/i.test(a.textContent)));
-  ok(puerta, 'el menú de Agenda tiene «Quién atiende» para dar de alta a las personas');
+  // ── LA PUERTA A LAS PERSONAS SIGUE EXISTIENDO — EN SU SITIO NUEVO ─────────────────────────────
+  // ⚠️ ESTA COMPROBACIÓN HA CAMBIADO DE PANTALLA, y se dice para que no parezca que se ha perdido.
+  // Nació porque en el área de Agenda no había ninguna puerta a las PERSONAS: la peluquera que quería
+  // dar de alta a su segunda estilista se encontraba «Sillas» como lo más parecido. Se resolvió
+  // metiendo «Quién atiende» en el desplegable de Agenda. El 18 ago 2026 esa entrada se mudó a la
+  // configuración del negocio y se llama «Mi equipo» (decisión de producto de Ibrahin: en Agenda solo
+  // vive lo que se usa atendiendo clientes). Lo que esta línea protege NO era el sitio: era que la
+  // puerta exista y se pueda pulsar. Así que se comprueba donde vive ahora.
+  await p.goto('http://' + ase.slug + '.localhost:3000/admin/settings', { waitUntil: 'networkidle0' });
+  const puerta = await p.evaluate(() => {
+    const a = [...document.querySelectorAll('.cfg-item')].find(x => /Mi equipo/i.test(x.textContent));
+    return a ? a.getAttribute('href') : null;
+  });
+  ok(puerta === '/admin/users',
+     'la puerta a las personas sigue existiendo: «Mi equipo» en la configuración del negocio', String(puerta));
 
   console.log('\n[7] errores de JavaScript');
   ok(errs.length === 0, '0 errores JS en móvil y escritorio', errs.slice(0, 3).join(' | '));

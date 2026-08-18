@@ -19,7 +19,7 @@ import { productosBajoMinimo } from './reposicion.js';
 // PIEZA 6 · solicitudes de cita por Internet. Se importa del módulo HOJA a propósito: reserva-publica.js
 // depende de routes/citas.js → layout.js → este mismo fichero, y el círculo dejaría PERM_POR_FUENTE en
 // zona muerta al arrancar. La hoja solo depende de citas-engine.js.
-import { reservasPublicasPendientes } from './reserva-publica-config.js';
+import { reservasPublicasPendientes, reservaPublicaEncendida } from './reserva-publica-config.js';
 
 const r2 = n => Math.round(n * 100) / 100;
 
@@ -252,6 +252,10 @@ export const PERM_POR_FUENTE = {
   factura_recurrente:    'recurrentes.read',
   cliente_en_riesgo:     'crm.read',
   reserva_publica:       'citas.read',
+  // §4 — el aviso de que la página de reservas se encendió sola. Lleva `citas.edit`, NO `citas.read`,
+  // y no por copiar: su pantalla de origen (/admin/citas/publica) exige `citas.edit`, y el aviso trae
+  // el interruptor para apagarla. Enseñárselo a quien no puede apagarla sería un botón muerto.
+  reserva_publica_encendida: 'citas.edit',
 };
 
 // ── EL MISMO PERMISO, TAMBIÉN FUERA DE UNA PETICIÓN ─────────────────────────────────────────────
@@ -308,6 +312,7 @@ const SOURCES = [
   // Internet aparezcan en la campana, en /admin/avisos, en el Inicio y en el email diario. Esos son
   // "los canales que ya hay": cero mensajería nueva.
   { tipo: 'reserva_publica',       fn: reservasPublicasPendientes },
+  { tipo: 'reserva_publica_encendida', fn: reservaPublicaEncendida },
 ];
 
 // Todos los avisos del día, ordenados por urgencia (más urgente arriba). Robusto: si una fuente
@@ -344,6 +349,7 @@ export function avisosEmail(ctx) {
     cliente_en_riesgo: 'Clientes en riesgo (seguimiento comercial vencido)',
     factura_recurrente: 'Facturas recurrentes en borrador',
     reserva_publica: 'Solicitudes de cita por Internet (pendientes de aprobar)',
+    reserva_publica_encendida: 'Tu página de reservas se ha abierto sola',
     stock_bajo: 'Productos bajo su mínimo de stock',
   };
   const filaDetalle = a => detalleAviso(a, sym, { compacto: true });
@@ -460,6 +466,10 @@ export function avisoKey(a) {
   // al genérico (JSON de todo el ref, con horas_restantes dentro) y el aviso reaparecía como nuevo cada
   // hora por mucho que el dueño lo hubiera marcado visto.
   if (r.source === 'reserva_publica') return 'rp:' + r.cita_id;
+  // Identidad = el hecho, que ocurre UNA vez por negocio. Sin este caso la clave caería al genérico
+  // (JSON con el número de servicios dentro) y el aviso reaparecería como nuevo al publicar el
+  // siguiente servicio, cuando la noticia ya se dio.
+  if (r.source === 'reserva_publica_encendida') return 'rpe:1';
   return (r.source || (a && a.tipo) || '?') + ':' + (r.id != null ? r.id : JSON.stringify(r));
 }
 
@@ -472,13 +482,14 @@ const TIPO_FRASE = {
   stock_bajo: n => n + ' producto' + (n === 1 ? '' : 's') + ' bajo su mínimo de stock',
   factura_recurrente: n => n + ' factura' + (n === 1 ? '' : 's') + ' recurrente' + (n === 1 ? '' : 's') + ' en borrador para revisar',
   reserva_publica: n => n + ' solicitud' + (n === 1 ? '' : 'es') + ' de cita por Internet pendiente' + (n === 1 ? '' : 's') + ' de aprobar',
+  reserva_publica_encendida: () => 'tu página de reservas se ha abierto sola (ya tienes horario y precios)',
 };
 // Orden estable del resumen. `envio_verifactu` abre porque es lo único con consecuencia legal.
 // `cobro_vencido` va tras proveedor para no reordenar lo que ya veía el dueño; dentro de la LISTA
 // el orden real lo manda `urgencia` (días vencida), donde cobros y pagos se intercalan por gravedad.
 // OJO: resumenAvisos SOLO recorre esta lista. Un tipo que falte aquí desaparece del resumen y del email
 // aunque su fuente lo devuelva — y desaparece EN SILENCIO. Añadir fuente = añadirla también aquí.
-const TIPO_ORDEN = ['envio_verifactu', 'vencimiento_proveedor', 'cobro_vencido', 'cliente_en_riesgo', 'reserva_publica', 'factura_recurrente', 'stock_bajo'];
+const TIPO_ORDEN = ['reserva_publica_encendida', 'envio_verifactu', 'vencimiento_proveedor', 'cobro_vencido', 'cliente_en_riesgo', 'reserva_publica', 'factura_recurrente', 'stock_bajo'];
 
 // Resumen de CONTEOS por fuente (grupos no vacíos), en orden estable. Σ counts = total avisos
 // (== número del badge). NO incluye detalle ni ofrece acciones.

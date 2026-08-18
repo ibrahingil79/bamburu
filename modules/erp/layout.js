@@ -342,6 +342,38 @@ export function railHTML(menu, anclas, ctx, fijaPie, hayPref) {
     + `<a href="${fijaPie.href}"${fijaPie.target ? ` target="${fijaPie.target}"` : ''} class="nav-item" title="${escHtml(fijaPie.label)}"><i class="ti ${fijaPie.icon}"></i><span class="nav-label">${escHtml(fijaPie.label)}</span></a>`;
 }
 
+// ══ PINTAR LA CONFIGURACIÓN DEL NEGOCIO ═══════════════════════════════════════════════════════════
+// La sección (o secciones) de `CONFIG_NEGOCIO` que este usuario ve, tal y como se pintan dentro de
+// /admin/settings. Vive AQUÍ, junto a `railHTML`, y no en routes/settings.js, por la misma razón por
+// la que el rail no se pinta en el navegador: si el HTML del menú se escribiera en dos sitios, el día
+// que cambie uno el otro se queda viejo en silencio. La pantalla de ajustes llama a esto y ya está.
+//
+// Lo que llega ya viene FILTRADO por permiso y por condición (`menuDeUsuario`): aquí no se decide
+// quién ve qué, solo cómo se ve. Si `config` viene vacío, esto devuelve cadena vacía y la pantalla no
+// pinta ni el título.
+//
+// Las etiquetas van ESCAPADAS: una de ellas —el nombre del puesto— es texto libre que escribe el
+// dueño (`cita_puesto_plural`), o sea XSS almacenado hacia sus empleados si se pinta en crudo.
+export function configNegocioHTML(config, ctx = {}) {
+  if (!config || !config.length) return '';
+  const act = ctx.active || '';
+  return config.map(sec => {
+    const filas = sec.items.map(i => {
+      const on = i.key === act ? ' cfg-on' : '';
+      return `<a class="cfg-item${on}" href="${i.href}">`
+        + `<span class="cfg-ic"><i class="ti ${i.icon}"></i></span>`
+        + `<span class="cfg-tx"><strong>${escHtml(i.label)}</strong>`
+        + (i.desc ? `<small>${escHtml(i.desc)}</small>` : '')
+        + `</span><i class="ti ti-chevron-right cfg-chev"></i></a>`;
+    }).join('');
+    return `<div class="card cfg-sec" id="${escHtml(sec.id)}" style="max-width:700px;margin-top:1rem"><div class="card-body">`
+      + `<h3 style="margin:0 0 .3rem;font-size:1rem"><i class="ti ${sec.icon}" style="margin-right:.35rem"></i>${escHtml(sec.label)}</h3>`
+      + (sec.descripcion ? `<p style="color:var(--text2);font-size:13px;margin:0 0 .9rem">${escHtml(sec.descripcion)}</p>` : '')
+      + `<div class="cfg-list">${filas}</div>`
+      + `</div></div>`;
+  }).join('');
+}
+
 export function adminLayout(title, content, active = '', csrfToken = '', c = null, hideDisaSidebar = false) {
   const session = c?.get?.('session') || {};
   const role = session.role || '';
@@ -662,18 +694,40 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       var wrap=document.getElementById('tbSearch'), inp=document.getElementById('tbq'), pan=document.getElementById('tbres');
       if(!wrap||!inp||!pan) return;
       var DEST=window.MENU_DESTINOS||[];
-      // Coincidencia POR NOMBRE: sin sinónimos y sin búsqueda difusa (así lo pide la pieza). Lo único
-      // que se normaliza son mayúsculas y tildes — quien teclea "analitica" busca "Analítica", y eso
-      // no es adivinar: es escribir en español sin acentos.
+      // Coincidencia POR NOMBRE: sin búsqueda difusa (así lo pide la pieza). Lo único que se normaliza
+      // son mayúsculas y tildes — quien teclea "analitica" busca "Analítica", y eso no es adivinar: es
+      // escribir en español sin acentos.
+      //
+      // SÍ hay nombres VIEJOS (alias), y no son sinónimos inventados: son el nombre que esa misma
+      // entrada tuvo hasta que se renombró. Quien lleva un año buscando «Cola de envíos» la encuentra,
+      // y lo que ve en el resultado es el nombre NUEVO — que es como se llama ahora y como la va a
+      // encontrar la próxima vez. Un alias nunca crea un destino: solo abre otra puerta al mismo.
       function norm(s){return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');}
-      for(var k=0;k<DEST.length;k++) DEST[k]._n=norm(DEST[k].label);
+      for(var k=0;k<DEST.length;k++){
+        DEST[k]._n=norm(DEST[k].label);
+        DEST[k]._a=(DEST[k].alias||[]).map(norm);
+      }
       var res=[], sel=-1;
+      // Posición de la coincidencia MÁS TEMPRANA entre el nombre y sus alias: 0 = empieza por lo
+      // tecleado, >0 = lo contiene, -1 = no coincide. Así un alias que empieza por el término pesa
+      // igual que el nombre — buscar "cola" tiene que dejar arriba «Recordatorios a clientes».
+      function donde(d, n){
+        var mejor=-1, p=d._n.indexOf(n);
+        if(p===0) return 0;
+        if(p>0) mejor=p;
+        for(var j=0;j<d._a.length;j++){
+          var q=d._a[j].indexOf(n);
+          if(q===0) return 0;
+          if(q>0 && (mejor<0 || q<mejor)) mejor=q;
+        }
+        return mejor;
+      }
       function buscar(q){
         var n=norm(q).trim();
         if(!n) return [];
         var empieza=[], contiene=[];
         for(var i=0;i<DEST.length;i++){
-          var p=DEST[i]._n.indexOf(n);
+          var p=donde(DEST[i], n);
           if(p===0) empieza.push(DEST[i]); else if(p>0) contiene.push(DEST[i]);
         }
         return empieza.concat(contiene).slice(0,8);   // los que EMPIEZAN por lo tecleado, primero
@@ -1028,6 +1082,22 @@ ${ROOT_TOKENS}
     .tb-res-ar{flex-shrink:0;font-size:11px;color:var(--text3)}
     .tb-res-i.sel .tb-res-ar{color:var(--accent)}
     .tb-res-none{padding:10px 12px;font-size:12.5px;color:var(--text3)}
+    /* LA CONFIGURACIÓN DEL NEGOCIO — las entradas mudadas desde Agenda (18 ago 2026). Lista de filas
+       pulsables con nombre y una frase de qué es: en el rail cabía un nombre y aquí cabe la
+       explicación, que es medio motivo por el que se mudaron. No es un menú flotante: es contenido de
+       la pantalla, así que se pinta ancho y con aire. */
+    .cfg-list{display:flex;flex-direction:column;gap:2px}
+    .cfg-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;color:var(--body-tx);text-decoration:none;border:1px solid transparent}
+    .cfg-item:hover{background:var(--accent-soft);border-color:var(--border2)}
+    .cfg-item.cfg-on{background:var(--accent-soft);border-color:var(--accent)}
+    .cfg-ic{flex-shrink:0;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;background:var(--bg3);color:var(--text2)}
+    .cfg-item:hover .cfg-ic,.cfg-item.cfg-on .cfg-ic{background:var(--accent);color:#fff}
+    .cfg-ic i.ti{font-size:17px}
+    .cfg-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+    .cfg-tx strong{font-size:13.5px;font-weight:600}
+    .cfg-tx small{font-size:12px;color:var(--text2);line-height:1.35}
+    .cfg-chev{flex-shrink:0;color:var(--text3);font-size:16px}
+    @media (max-width:600px){ .cfg-tx small{display:none} }
     /* La campana ABRE un panel de notificaciones (antes era un div decorativo con el punto rojo
        siempre encendido y sin destino). Desde el panel se marca cada aviso como visto, o todos. */
     .tb-bell-wrap{position:relative;margin-left:auto;display:flex}

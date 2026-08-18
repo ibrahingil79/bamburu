@@ -1,6 +1,10 @@
 import { Hono } from 'hono';
 import { safeError } from '../../../core/errors.js';
-import { adminLayout, can } from '../layout.js';
+import { adminLayout, can, configNegocioHTML } from '../layout.js';
+// LA SECCIÓN DE CITAS DE ESTA PANTALLA NO SE ESCRIBE AQUÍ. Su lista vive en menu.js, que es la
+// misma de la que comen el buscador y las anclas. Escribirla a mano aquí sería la segunda lista
+// que la cabecera de menu.js lleva meses prohibiendo: el día que cambie una, la otra miente.
+import { menuDeUsuario } from '../menu.js';
 import { requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { companySchema, storeSettingsSchema } from '../schemas.js';
@@ -361,13 +365,49 @@ export function createSettingsRoutes(db, cfg = {}) {
     } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
-  views.get('/', requirePerm('company.read'), c => {
+  // ── PANTALLA: LA CONFIGURACIÓN DEL NEGOCIO ────────────────────────────────────────────────────
+  // Desde el 18 ago 2026 esta pantalla aloja DOS cosas con candados DISTINTOS:
+  //   · lo suyo de siempre —empresa, oficio, impuestos, avisos, plantillas, situación fiscal—, que
+  //     exige `company.read`;
+  //   · la sección de citas mudada desde Agenda, donde CADA ENTRADA conserva su propio permiso.
+  //
+  // Por eso la puerta ya no puede ser un `requirePerm('company.read')` seco: dejaría fuera a quien
+  // tiene `citas.read` y no `company.read`, y la mudanza le habría CERRADO seis puertas que hoy abre
+  // desde el desplegable de Agenda. Un cambio de sitio no puede abrir ni cerrar una puerta.
+  //
+  // Entra quien tenga ALGO que ver aquí, y ve EXACTAMENTE eso. No se afloja ni un candado: el bloque
+  // de empresa —y su <script>, que llama a /api/erp/settings/company— solo se PINTA con `company.read`,
+  // y la API sigue exigiéndolo por su cuenta. Quien entre sin ese permiso ve su sección y nada más.
+  // Se resuelve UNA vez por petición y se guarda en el contexto: la guardia la necesita para decidir
+  // si deja entrar, y la vista para pintar. Sin esto se recorría el menú entero dos veces por carga.
+  const seccionesDe = c => {
+    const ya = c.get('cfgNegocio');
+    if (ya) return ya;
+    let secs = [];
+    try {
+      secs = menuDeUsuario(db, {
+        role: c.get('session')?.role || '', perms: c.get('userPerms') || [], userId: c.get('session')?.userId,
+      }).config || [];
+    } catch { secs = []; }
+    c.set('cfgNegocio', secs);
+    return secs;
+  };
+  const puedeVerAjustes = async (c, next) => {
+    if (!c.get('session')) return c.redirect('/admin/login');
+    if (can(c, 'company.read') || seccionesDe(c).length) return next();
+    return c.html('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body><script>window.addEventListener("DOMContentLoaded",function(){if(typeof showAccessDenied==="function")showAccessDenied();else alert("Acceso no permitido");});<\/script></body></html>', 403);
+  };
+
+  views.get('/', puedeVerAjustes, c => {
+    const verEmpresa = can(c, 'company.read');
     const config = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
     const sym = config.currency_symbol || '€';
     const countryInfo = getCountryConfig(config.country || 'ES');
     const countryName = countryInfo ? countryInfo.name : (config.country || 'España');
-    const content = `
-      <div class="ph"><h2>Configuración Empresa</h2></div>
+    // La sección mudada. Se pinta ANTES que lo demás porque es lo que un negocio nuevo viene a montar,
+    // y porque su orden interno ya es el orden en que se monta un negocio.
+    const seccionCitas = configNegocioHTML(seccionesDe(c), { active: '' });
+    const bloqueEmpresa = !verEmpresa ? '' : `
       <div class="card" style="max-width:700px">
         <div class="card-body">
           <div class="form-row">
@@ -513,6 +553,13 @@ export function createSettingsRoutes(db, cfg = {}) {
         try{await api('PUT','/api/erp/settings/company',{company_name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,country:document.getElementById('countryCode').value,currency:document.getElementById('currencyCode').value,currency_symbol:document.getElementById('currencySymbol').value,tax_name:document.getElementById('taxName').value,fiscal_id_label:document.getElementById('fiscalIdLabel').value,document_name:document.getElementById('documentName').value,tax_rate:document.getElementById('cTax').value,irpf_default:document.getElementById('cIrpfDefault').value,dias_recordatorio_impago:document.getElementById('cDiasImpago').value,dias_aviso_pago:document.getElementById('cDiasPago').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,website:document.getElementById('cWeb').value,address:document.getElementById('cAddr').value,postal_code:document.getElementById('cPostal').value,city:document.getElementById('cCity').value,province:document.getElementById('cProvince').value,logo_url:document.getElementById('cLogo').value});toast('Guardado ✓');}catch(e){toast(e.message,'err')}
       }
       </script>`;
+    // EL ORDEN DE LA PANTALLA: cabecera · la sección mudada · lo de siempre. Quien no tenga
+    // `company.read` recibe cabecera + su sección, y punto — ni el formulario de empresa, ni avisos,
+    // ni plantillas, ni situación fiscal, ni el <script> que los pide a la API.
+    const content = `
+      <div class="ph"><h2>Configuración Empresa</h2></div>
+      ${seccionCitas}
+      ${bloqueEmpresa}`;
     return c.html(adminLayout('Configuración Empresa', content, 'settings', c.get('session')?.csrfToken || '', c));
   });
 

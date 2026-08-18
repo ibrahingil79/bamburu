@@ -9,7 +9,7 @@
 // sitio. Si hubiera dos copias, un día dirían cosas distintas y el botón enseñado no sería el botón
 // permitido.
 
-import { ahoraLocal, diasEntre, hhmm } from './citas-engine.js';
+import { ahoraLocal, diasEntre, hhmm, hayHorarioNegocio } from './citas-engine.js';
 
 // El 404 de la puerta cerrada. SIEMPRE el mismo texto y el mismo código: apagada, handle que no
 // cuadra o servicio no público responden IGUAL. Una respuesta distinta por caso sería un oráculo que
@@ -31,7 +31,63 @@ export function ajustesPublicos(db) {
     cancelar_activo: cfg.cita_pub_cancelar_activo == null ? true : !!cfg.cita_pub_cancelar_activo,
     politica: cfg.cita_pub_politica || '',
     privacidad_url: cfg.cita_pub_privacidad_url || '',
+    // El encendido automático (§4): si ya se intentó y si el dueño ya vio el aviso.
+    auto: !!cfg.cita_pub_auto,
+    auto_visto: !!cfg.cita_pub_auto_visto,
   };
+}
+
+// ── §4 · LA PÁGINA DE RESERVAS SE ENCIENDE SOLA ───────────────────────────────────────────────────
+// DECISIÓN DE IBRAHIN (18 ago 2026): que no haya que descubrirla. Se enciende automáticamente en
+// cuanto el negocio tiene (a) horario propio definido y (b) al menos un servicio con precio distinto
+// de cero y con duración.
+//
+// NO ANTES, y esto no es negociable por una razón concreta: los servicios sembrados nacen a precio
+// cero y el horario de fábrica es de 8:00 a 21:00 los siete días (`DEFAULT_OPEN`). Encenderla antes
+// publicaría al mundo una página con los precios en blanco y horarios de domingo que el negocio no
+// cumple. Se enciende sola, sí, pero cuando hay algo publicable.
+//
+// ES DE UNA SOLA VEZ (`cita_pub_auto`). En cuanto se intenta, el pestillo se echa y el automatismo no
+// vuelve a tocar el interruptor jamás. Sin eso, el dueño que la apaga se la encontraría encendida otra
+// vez al guardar el siguiente servicio: el interruptor de apagado sería un adorno, y perder el control
+// de tu propia puerta pública es peor que no tenerla.
+//
+// LO QUE PUBLICA: los servicios que YA son publicables (`SQL_PUBLICABLE`) se marcan `publico=1` en ese
+// mismo momento — encender la puerta y no enseñar nada detrás sería encender nada. Los demás esperan a
+// tener precio y duración; a partir de aquí, quien decide qué se enseña es el dueño, servicio a
+// servicio, como siempre.
+//
+// NUNCA LANZA: se llama desde el camino de guardar un horario o un servicio, y un fallo aquí no puede
+// tumbar ese guardado. Devuelve qué pasó, para quien quiera contarlo.
+export function servicioPublicableCount(db) {
+  try {
+    return db.prepare(
+      `SELECT COUNT(*) n FROM products p JOIN service_config sc ON sc.product_id=p.id WHERE ${SQL_PUBLICABLE}`
+    ).get().n;
+  } catch { return 0; }
+}
+
+export function autoEncenderReservas(db) {
+  try {
+    const cfg = db.prepare('SELECT cita_pub_activa, cita_pub_auto FROM company_config WHERE id=1').get() || {};
+    // El pestillo ya echado, o una puerta que el dueño abrió a mano: no se toca nada nunca más.
+    if (cfg.cita_pub_auto) return { encendida: false, motivo: 'ya se intentó' };
+    if (cfg.cita_pub_activa) {
+      db.prepare('UPDATE company_config SET cita_pub_auto=1, cita_pub_auto_visto=1 WHERE id=1').run();
+      return { encendida: false, motivo: 'ya estaba encendida a mano' };
+    }
+    if (!hayHorarioNegocio(db)) return { encendida: false, motivo: 'sin horario propio' };
+    const publicables = servicioPublicableCount(db);
+    if (!publicables) return { encendida: false, motivo: 'sin servicios con precio y duración' };
+
+    db.transaction(() => {
+      db.prepare(`UPDATE service_config SET publico=1, updated_at=CURRENT_TIMESTAMP
+                   WHERE product_id IN (SELECT p.id FROM products p JOIN service_config sc ON sc.product_id=p.id
+                                         WHERE ${SQL_PUBLICABLE})`).run();
+      db.prepare('UPDATE company_config SET cita_pub_activa=1, cita_pub_auto=1, cita_pub_auto_visto=0 WHERE id=1').run();
+    })();
+    return { encendida: true, servicios: publicables, handle: handleEfectivo(db) };
+  } catch { return { encendida: false, motivo: 'error' }; }
 }
 
 // ── La dirección: /reservar/<handle> ──────────────────────────────────────────────────────────────
@@ -58,13 +114,60 @@ export function exigirPuerta(db, handle) {
   return aj;
 }
 
+// ── §4 · EL AVISO DE QUE SE ENCENDIÓ SOLA ─────────────────────────────────────────────────────────
+// FUENTE DE AVISOS, como las otras siete. Se avisa por LOS CANALES QUE YA HAY —la campana, la pantalla
+// de avisos, el Inicio y el correo diario— y no se inventa una mensajería nueva: es el mismo criterio
+// con el que entraron las solicitudes de cita por Internet en la pieza 6.
+//
+// Dice tres cosas, que son las tres que el encargo pide: QUE se encendió, CUÁL es la dirección y QUÉ
+// se ve en ella. El interruptor de apagado en un clic lo pinta la pantalla de avisos (`accionesHtml`),
+// porque un botón necesita un sitio donde vivir y el motor solo redacta.
+//
+// Aparece MIENTRAS siga encendida y el dueño no haya contestado (`cita_pub_auto_visto`). En cuanto
+// pulsa cualquiera de los dos botones, se calla para siempre: no es una tarea pendiente que repetir,
+// es una noticia que se da una vez.
+export function reservaPublicaEncendida(db) {
+  try {
+    const aj = ajustesPublicos(db);
+    if (!aj.auto || aj.auto_visto || !aj.activa) return [];
+    const n = servicioPublicableCount(db);
+    const personas = personasPublicas(db).length;
+    return [{
+      tipo: 'reserva_publica_encendida',
+      // Por encima de todo lo vencido: es una puerta que se abrió al mundo y el dueño tiene que
+      // enterarse HOY, no cuando baje del resto de la lista.
+      urgencia: 100000,
+      titulo: 'Tu página de reservas ya está abierta',
+      detalle: 'Se ha encendido sola porque ya tienes horario y servicios con precio. Tus clientes pueden pedir cita en /reservar/'
+        + handleEfectivo(db) + ' · se ven ' + n + ' servicio' + (n === 1 ? '' : 's')
+        + (personas ? ' y ' + personas + ' persona' + (personas === 1 ? '' : 's') : ' y ninguna persona todavía')
+        + '. Si no la quieres, apágala aquí mismo.',
+      ref: { source: 'reserva_publica_encendida', handle: handleEfectivo(db), servicios: n, personas },
+    }];
+  } catch { return []; }
+}
+
 // ── Quién y qué se enseña fuera (lecturas puras; viven aquí para que routes/citas.js las use) ──────
-// Un servicio reservable DENTRO no es reservable DESDE FUERA: hacen falta las DOS marcas.
+// ── QUÉ ES PUBLICABLE ─────────────────────────────────────────────────────────────────────────────
+// Un servicio reservable DENTRO no es reservable DESDE FUERA: hacen falta las DOS marcas. Y desde el
+// 18 ago 2026, además, PRECIO Y DURACIÓN.
+//
+// POR QUÉ, y no es una manía: los servicios que siembra el perfil de oficio nacen a PRECIO CERO. Una
+// página de reservas que enseña «Corte de pelo — 0,00 €» no es una página incompleta, es una página
+// que MIENTE al cliente sobre lo que va a pagar. Y sin duración no hay hueco que ofrecer. Los demás no
+// se pierden: esperan a tener precio y duración, y entonces se publican como cualquier otro.
+//
+// Esta condición vive en UN SOLO SITIO, `SQL_PUBLICABLE`, porque la usan tres cosas —esta función, la
+// lista de `serviciosPublicos` y el encendido automático— y el día que discrepen, la puerta pública
+// enseñaría un servicio que el motor luego rechaza (o al revés).
+export const SQL_PUBLICABLE =
+  `p.type='service' AND sc.reservable=1 AND sc.duracion_min > 0 AND p.price > 0
+   AND (p.status IS NULL OR p.status<>'archived')`;
+
 export function esServicioPublico(db, id) {
   return db.prepare(
     `SELECT 1 FROM products p JOIN service_config sc ON sc.product_id=p.id
-      WHERE p.id=? AND p.type='service' AND sc.reservable=1 AND sc.publico=1
-        AND (p.status IS NULL OR p.status<>'archived')`
+      WHERE p.id=? AND sc.publico=1 AND ${SQL_PUBLICABLE}`
   ).get(id) != null;
 }
 // Los ids pedidos, validados contra lo público. Cualquier id que no lo sea → el 404 de la puerta
