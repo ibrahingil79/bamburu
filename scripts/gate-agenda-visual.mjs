@@ -286,7 +286,8 @@ try {
       pie: (document.getElementById('mesPie') || {}).textContent || '',
     };
   });
-  ok(mes.lineas.length >= 1 && /^\d{1,2}:\d{2} · /.test(mes.lineas[0]), 'el mes pinta las citas REALES en la celda («9:10 · Marta Gómez»)', mes.lineas.join(' | '));
+  // El formato lo fija P3 (18 ago 2026): «9:10 Marta Gómez», la hora en negrita y sin punto medio.
+  ok(mes.lineas.length >= 1 && /^\d{1,2}:\d{2}\s+\S/.test(mes.lineas[0]), 'el mes pinta las citas REALES en la celda («9:10 Marta Gómez»)', mes.lineas.join(' | '));
   ok(mes.puntos === mes.lineas.length, 'cada línea lleva el punto de color de su estado', mes.puntos + ' puntos');
   ok(mes.globos === 0, 'y ya NO existe el globo flotante (title) sobre los días');
   ok(mes.vacias > 0, 'los días sin citas no dicen nada: el silencio es información', mes.vacias + ' días callados');
@@ -332,6 +333,112 @@ try {
      'y con «ver todo el equipo» sí aparece: hereda el filtro, no lo inventa', JSON.stringify(conVerTodo.nombres));
   ok(conVerTodo.total > sinVerTodo.total, 'el total del día también respeta el filtro', sinVerTodo.total + ' → ' + conVerTodo.total);
   ok((conVerTodo.nombres.length <= 4), 'y no viaja el mes entero: como mucho 4 citas por día', conVerTodo.nombres.length + '');
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n[5] P2 — CAMBIAR DE MES');
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  await abrir();
+  await page.evaluate(() => setVista('mes'));
+  await page.waitForFunction(() => document.querySelectorAll('.mesdia').length > 0, { timeout: 8000 });
+  await dormir(400);
+  const sitio = await page.evaluate(() => {
+    const t = document.getElementById('agTitulo').getBoundingClientRect();
+    const f = [...document.querySelectorAll('.ag-nav')].map(b => b.getBoundingClientRect());
+    return { dist: Math.round(f[0].x - t.x), mismaFila: Math.abs(f[0].y - t.y) < 24, n: f.length };
+  });
+  // Las flechas RESPONDÍAN, pero estaban a 624 px del título, en el otro extremo de la barra.
+  ok(sitio.n === 2 && sitio.mismaFila && sitio.dist < 260,
+     'las flechas ‹ › van PEGADAS al título, no al otro extremo de la barra', sitio.dist + 'px del título');
+  const mesA = await page.evaluate(() => document.getElementById('agFecha').value.slice(0, 7));
+  await page.evaluate(() => document.querySelector('.ag-nav').click());
+  await dormir(900);
+  const mesB = await page.evaluate(() => document.getElementById('agFecha').value.slice(0, 7));
+  ok(mesA !== mesB && mesB < mesA, 'pulsar ‹ retrocede UN MES', mesA + ' → ' + mesB);
+  await page.evaluate(() => document.querySelectorAll('.ag-nav')[1].click());
+  await dormir(900);
+  ok(await page.evaluate(m => document.getElementById('agFecha').value.slice(0, 7) === m, mesA), 'y › vuelve a avanzarlo');
+  // Rueda del ratón sobre la rejilla: un mes por gesto, con freno.
+  const caja = await (await page.$('.mes')).boundingBox();
+  await page.mouse.move(caja.x + caja.width / 2, caja.y + caja.height / 2);
+  const antesRueda = await page.evaluate(() => document.getElementById('agFecha').value.slice(0, 7));
+  await page.mouse.wheel({ deltaY: 300 }); await dormir(900);
+  const trasRueda = await page.evaluate(() => document.getElementById('agFecha').value.slice(0, 7));
+  ok(trasRueda !== antesRueda, 'la rueda del ratón sobre la rejilla cambia de mes', antesRueda + ' → ' + trasRueda);
+  // EL FRENO. Se prueba con una RÁFAGA de verdad —diez eventos seguidos, que es lo que manda un
+  // trackpad en un solo gesto—, no con tres `mouse.wheel` de puppeteer: entre esos pasa tanto tiempo
+  // por el protocolo que el freno ni se entera y la prueba no probaría nada.
+  const desdeRafaga = await page.evaluate(() => document.getElementById('agFecha').value.slice(0, 7));
+  await page.evaluate(() => {
+    const d = document.querySelector('.mesdia');
+    for (let i = 0; i < 10; i++) d.dispatchEvent(new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true }));
+  });
+  await dormir(900);
+  const trasRafaga = await page.evaluate(() => document.getElementById('agFecha').value.slice(0, 7));
+  const saltos = (new Date(trasRafaga + '-01') - new Date(desdeRafaga + '-01')) / (28 * 86400000);
+  ok(saltos >= 0.9 && saltos <= 1.2, 'y lleva freno: diez eventos de un mismo gesto avanzan UN mes, no diez',
+     desdeRafaga + ' → ' + trasRafaga);
+  await page.evaluate(() => agHoy()); await dormir(800);
+  ok(await page.evaluate(() => document.getElementById('agFecha').value.slice(0, 7) === new Date().toISOString().slice(0, 7)),
+     '«Hoy» vuelve al mes actual');
+  ok(await page.evaluate(() => { document.getElementById('agTitulo').click(); return document.getElementById('agFecha').style.display !== 'none'; }),
+     'y pulsar el título abre el selector de fecha');
+  await page.evaluate(() => { document.getElementById('agFecha').style.display = 'none'; });
+  // En Día la rueda NO secuestra: desplaza el lienzo y no cambia de fecha.
+  await page.evaluate(() => setVista('dia'));
+  await page.waitForFunction(() => !!document.getElementById('agWrap'), { timeout: 8000 });
+  await page.evaluate(() => setZoom(96)); await dormir(700);
+  const cw = await (await page.$('#agWrap')).boundingBox();
+  const s0 = await page.evaluate(() => ({ sc: document.getElementById('agWrap').scrollTop, f: document.getElementById('agFecha').value }));
+  await page.mouse.move(cw.x + cw.width / 2, cw.y + cw.height / 2);
+  await page.mouse.wheel({ deltaY: 250 }); await dormir(500);
+  const s1 = await page.evaluate(() => ({ sc: document.getElementById('agWrap').scrollTop, f: document.getElementById('agFecha').value }));
+  ok(s1.sc > s0.sc && s1.f === s0.f, 'en Día la rueda desplaza el lienzo y NO cambia de fecha', s0.sc + ' → ' + s1.sc);
+  await page.evaluate(() => setZoom(72)); await dormir(500);
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n[6] P3 — EL LAYOUT DEL MES');
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // Datos de verdad: cinco citas un mismo día y citas en otros días distintos. Un mes vacío no prueba nada.
+  const diaLleno = HOY.slice(0, 8) + '12';
+  const insCita = db.prepare("INSERT INTO citas (codigo,cliente_id,user_id,fecha,inicio_min,dur_min,margen_min,estado,created_at,updated_at) VALUES (?,?,?,?,?,30,0,?,datetime('now'),datetime('now'))");
+  const est4 = ['pedida', 'confirmada', 'atendida', 'no_show'];
+  [560, 620, 700, 800, 900].forEach((m, i) => insCita.run('CITA-L' + RID + i, cliente('Lleno ' + i), owner.id, diaLleno, m, est4[i % 4]));
+  [[HOY.slice(0, 8) + '05', 570], [HOY.slice(0, 8) + '06', 660], [HOY.slice(0, 8) + '19', 780], [HOY.slice(0, 8) + '26', 900]]
+    .forEach(([f, m], i) => insCita.run('CITA-O' + RID + i, cliente('Otro ' + i), owner.id, f, m, est4[i % 4]));
+  await abrir();
+  await page.evaluate(() => setVista('mes'));
+  await page.waitForFunction(() => document.querySelectorAll('.mesdia').length > 0, { timeout: 8000 });
+  await dormir(600);
+  const mm = await page.evaluate(() => {
+    const c = [...document.querySelectorAll('.mesdia')];
+    const cs = getComputedStyle(c[8]);
+    const lleno = c.find(x => x.querySelector('.mas'));
+    return {
+      casillas: c.length, alto: Math.round(c[8].getBoundingClientRect().height),
+      separador: cs.borderRightWidth !== '0px' && cs.borderBottomWidth !== '0px',
+      numAlineado: getComputedStyle(c[8].querySelector('.num')).alignSelf,
+      numTam: getComputedStyle(c[8].querySelector('.num')).fontSize,
+      diasConCitas: c.filter(x => x.querySelector('.lin')).length,
+      vacias: c.filter(x => !x.querySelector('.lin')).length,
+      lineasDelLleno: lleno ? lleno.querySelectorAll('.lin').length : 0,
+      mas: lleno ? lleno.querySelector('.mas').textContent.trim() : '',
+      puntos: lleno ? lleno.querySelectorAll('.pt').length : 0,
+      segundoTitulo: !!document.querySelector('.mes-tit'),
+      zoom: document.getElementById('agZoom').style.display,
+      finde: c.filter(x => x.classList.contains('finde')).length,
+      otros: c.filter(x => x.classList.contains('otro')).length,
+    };
+  });
+  ok(mm.separador, 'las casillas del mes tienen separadores (antes no había ni una línea)');
+  ok(mm.alto >= 84, 'la casilla mide al menos 84px de alto', mm.alto + 'px');
+  ok(mm.numAlineado === 'flex-start' && mm.numTam === '12px', 'el número del día va arriba a la IZQUIERDA, a 12px', mm.numAlineado + ' · ' + mm.numTam);
+  ok(mm.diasConCitas >= 5, 'los días con citas las llevan escritas dentro', mm.diasConCitas + ' días');
+  ok(mm.lineasDelLleno === 3 && /^\+2 más$/.test(mm.mas), 'un día con CINCO citas enseña 3 y resume el resto', mm.lineasDelLleno + ' + «' + mm.mas + '»');
+  ok(mm.puntos === 3, 'cada línea con su punto de color de estado', mm.puntos + '');
+  ok(mm.vacias > 0, 'los días sin citas se quedan callados', mm.vacias + ' casillas vacías');
+  ok(!mm.segundoTitulo, 'ya no hay un SEGUNDO «Agosto 2026» dentro de la tarjeta');
+  ok(mm.zoom === 'none', 'el zoom S/M/L no se enseña en Mes');
+  ok(mm.finde > 0 && mm.otros > 0, 'fin de semana y días de otro mes van marcados', mm.finde + ' findes · ' + mm.otros + ' de otro mes');
 
   ok(errs.length === 0, 'CERO errores de JavaScript en todo el recorrido', errs.join(' | '));
 } catch (e) {

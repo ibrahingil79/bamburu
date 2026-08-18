@@ -1150,31 +1150,42 @@ const CSS_AGENDA = `
      El mes dice qué pasa cada día SIN pasar el ratón: hasta 3 citas escritas y «+N más». Si el día
      no tiene nada, la celda calla — el silencio es información. Fuera el title nativo y fuera el pie
      que seguía al ratón: el pie es del día SELECCIONADO. */
-  .mes{max-width:980px;margin:0 auto}
-  .mes-tit{font-size:1.35rem;font-weight:700;letter-spacing:-.02em;margin-bottom:.9rem}
+  .mes{max-width:none}
   .mes-cab,.mes-rej{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
-  .mes-cab span{text-align:center;font-size:.66rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);padding-bottom:.5rem}
-  .mes-rej{row-gap:.15rem;column-gap:.15rem}
-  .mesdia{appearance:none;border:0;background:transparent;font-family:inherit;padding:.25rem .2rem .35rem;display:flex;flex-direction:column;align-items:stretch;gap:.2rem;cursor:pointer;border-radius:9px;min-height:78px;text-align:left}
-  .mesdia .num{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.88rem;color:var(--text);align-self:center;transition:background .15s,color .15s;flex:0 0 auto}
+  .mes-cab span{text-align:center;font-size:.66rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);padding:0 0 .45rem}
+  /* P3 — REJILLA DE VERDAD. Las separaciones se pintan con los bordes de cada casilla (0.5px muy
+     claros) y la línea ENTRE SEMANAS algo más marcada, que es lo que deja leer el mes por filas.
+     Antes no había ni una línea: 42 números flotando. */
+  .mes-rej{border-top:1px solid var(--border2)}
+  .mesdia{appearance:none;background:transparent;font-family:inherit;cursor:pointer;text-align:left;
+          display:flex;flex-direction:column;gap:2px;min-height:84px;padding:4px 5px 6px;
+          border:0;border-right:.5px solid var(--border);border-bottom:1px solid var(--border2)}
+  .mesdia:nth-child(7n){border-right:0}
+  /* El NÚMERO arriba a la izquierda de su casilla, 12px. No centrado: así la casilla es un espacio
+     donde caben cosas, no un contenedor de un número. */
+  .mesdia .num{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+               font-size:12px;color:var(--text);align-self:flex-start;flex:0 0 auto;transition:background .15s,color .15s}
   .mesdia:hover{background:var(--bg3)}
   .mesdia:focus-visible{outline:none}
   .mesdia:focus-visible .num{outline:2px solid var(--accent);outline-offset:2px}
   .mesdia.hoy .num{color:#D2452F;font-weight:700}
   .mesdia.sel .num{background:var(--text);color:#fff;font-weight:600}
   .mesdia.hoy.sel .num{background:#D2452F;color:#fff}
-  .mesdia.otro{opacity:.45}
-  .mesdia.otro .num{color:var(--text3)}
+  /* Fin de semana y días de otro mes: número gris y fondo apenas más apagado. Se ven, no se esconden. */
+  .mesdia.finde,.mesdia.otro{background:rgba(20,22,27,.018)}
+  .mesdia.finde .num{color:var(--text3)}
+  .mesdia.otro .num{color:var(--text3);opacity:.7}
+  .mesdia.otro .lin,.mesdia.otro .mas{opacity:.5}
   .mesdia:disabled{cursor:default}
   .mesdia:disabled .num{color:var(--text3)}
-  .mesdia .lin{display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 2px}
+  .mesdia .lin{display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35}
   .mesdia .pt{flex:0 0 auto;width:5px;height:5px;border-radius:50%}
-  .mesdia .mas{font-size:10px;color:var(--text3);padding:0 2px}
+  .mesdia .mas{font-size:10px;color:var(--text3);line-height:1.3}
   .mes-pie{margin-top:1rem;padding-top:.8rem;border-top:1px solid var(--border);display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap;min-height:1.6rem}
   .mes-pie .d{font-weight:600}
   .mes-pie .s{color:var(--text2);font-size:.85rem}
   .mes-pie .a{margin-left:auto;font-size:.85rem;font-weight:600;color:var(--accent);cursor:pointer;background:none;border:0;font-family:inherit}
-  @media (max-width:480px){ .mesdia{min-height:62px} .mesdia .num{width:26px;height:26px;font-size:.82rem} .mes-tit{font-size:1.15rem} .mesdia .lin{font-size:9.5px} }`;
+  @media (max-width:480px){ .mesdia{min-height:66px;padding:3px} .mesdia .lin{font-size:9px} }`;
 
 function vistaAgenda(c, db) {
   const editable = can(c, 'citas.edit');
@@ -1187,15 +1198,20 @@ function vistaAgenda(c, db) {
          primario azul —"Nueva cita"—; Filtros y Bloquear un rato quedan del peso de las flechas. -->
     <div class="ph" style="align-items:flex-start">
       <div>
-        <button type="button" class="ag-tit" id="agTitulo" onclick="abrirFecha()" aria-label="Cambiar de fecha">
-          <span class="mes">Agenda</span>
-        </button>
+        <!-- P2: las flechas y «Hoy» van PEGADAS al título, no al otro extremo de la barra. Respondían
+             —pulsar ‹ pasaba de agosto a julio—, pero estaban a 624 px de lo que mueven, así que no
+             había forma de saber que servían para cambiar de mes. -->
+        <div style="display:flex;align-items:center;gap:.15rem;flex-wrap:wrap">
+          <button type="button" class="ag-tit" id="agTitulo" onclick="abrirFecha()" aria-label="Cambiar de fecha">
+            <span class="mes">Agenda</span>
+          </button>
+          <button type="button" class="ag-nav" onclick="agMover(-1)" aria-label="Mes o día anterior">&lsaquo;</button>
+          <button type="button" class="ag-nav" onclick="agMover(1)" aria-label="Mes o día siguiente">&rsaquo;</button>
+          <button type="button" class="ag-hoy" onclick="agHoy()">Hoy</button>
+        </div>
         <input class="form-control" type="date" id="agFecha" style="width:auto;margin-top:.35rem;display:none" onchange="agCargar();document.getElementById('agFecha').style.display='none'">
       </div>
       <div style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center">
-        <button type="button" class="ag-hoy" onclick="agHoy()">Hoy</button>
-        <button type="button" class="ag-nav" onclick="agMover(-1)" aria-label="Anterior">&lsaquo;</button>
-        <button type="button" class="ag-nav" onclick="agMover(1)" aria-label="Siguiente">&rsaquo;</button>
         <div class="segmented" role="tablist" aria-label="Vista">
           <button type="button" role="tab" id="vbDia" onclick="setVista('dia')">Día</button>
           <button type="button" role="tab" id="vbSemana" onclick="setVista('semana')">Semana</button>
@@ -1203,7 +1219,7 @@ function vistaAgenda(c, db) {
         </div>
         <!-- ZOOM: compacto / normal / amplio. El paso se recuerda por usuario, en agPrefs, con la
              vista y los filtros — el mismo sitio, no un segundo sistema de preferencias. -->
-        <div class="segmented" role="group" aria-label="Alto de la hora">
+        <div class="segmented" role="group" id="agZoom" aria-label="Alto de la hora">
           <button type="button" id="zb48" onclick="setZoom(48)" title="Compacto" aria-label="Compacto">S</button>
           <button type="button" id="zb72" onclick="setZoom(72)" title="Normal" aria-label="Normal">M</button>
           <button type="button" id="zb96" onclick="setZoom(96)" title="Amplio" aria-label="Amplio">L</button>
@@ -1718,7 +1734,9 @@ function pintaTitulo(){
   var f=document.getElementById('agFecha').value || ymd(new Date());
   var d=new Date(f+'T00:00:00Z');
   var t=document.getElementById('agTitulo'); if(!t) return;
-  t.innerHTML='<span class="mes">'+esc(cap(d.toLocaleDateString('es-ES',{month:'long',timeZone:'UTC'})))+'</span>'
+  // El espacio entre mes y año es REAL, no solo un margen del CSS: así el título se lee «Agosto 2026»
+  // también para un lector de pantalla y para quien lo compruebe por textContent.
+  t.innerHTML='<span class="mes">'+esc(cap(d.toLocaleDateString('es-ES',{month:'long',timeZone:'UTC'})))+'</span> '
     +'<span class="anio">'+d.getUTCFullYear()+'</span>';
 }
 // ZOOM en tres pasos. Se recuerda con el resto de preferencias y repinta.
@@ -1756,6 +1774,19 @@ function pintaTira(vista){
   t.innerHTML=h;
 }
 function irA(f){ document.getElementById('agFecha').value=f; agCargar(); }
+// P2 — RUEDA / GESTO VERTICAL sobre la rejilla del mes: un mes por gesto, con freno. Solo en Mes: en
+// Día y Semana la rueda tiene que seguir desplazando el lienzo, que es lo que se espera de ella.
+var _ruedaFreno=0;
+function ruedaMes(ev){
+  if(vistaActual()!=='mes') return;
+  if(!ev.target.closest || !ev.target.closest('.mes')) return;
+  if(Math.abs(ev.deltaY) < 12) return;
+  ev.preventDefault();
+  var ahora=Date.now();
+  if(ahora-_ruedaFreno < 450) return;      // el freno: un trackpad manda decenas de eventos por gesto
+  _ruedaFreno=ahora;
+  agMover(ev.deltaY>0 ? 1 : -1);
+}
 async function agCargar(){
   initDate(); await ensureMeta(); savePrefs();
   var vista=vistaActual(), eje=document.getElementById('agEje').value;
@@ -1764,6 +1795,8 @@ async function agCargar(){
   // La leyenda es de la rejilla; en el mes no pinta nada. Y ya no ocupa línea fija: se despliega
   // con la (i), así que aquí solo se esconde su botón cuando no aplica.
   var lb=document.getElementById('agLeyBtn'); if(lb) lb.style.display = vista==='mes' ? 'none' : '';
+  // P3 — el zoom es del LIENZO: en Mes no pinta nada, así que no se enseña.
+  var zc=document.getElementById('agZoom'); if(zc) zc.style.display = vista==='mes' ? 'none' : '';
   var ley=document.getElementById('agLeyenda'); if(ley && vista==='mes') ley.setAttribute('hidden','');
   if(vista==='mes'){
     // El mes hereda los MISMOS filtros que Día: si aquí no ves una cita, en Mes tampoco.
@@ -1807,25 +1840,26 @@ function renderMes(data, fechaSel){
   var hoy=ymd(new Date());
   var primero=new Date(dias[0].fecha+'T00:00:00Z');
   var hueco=(primero.getUTCDay()+6)%7;   // el lunes va primero (locale ES)
-  var _d=new Date(fechaSel+'T00:00:00Z');
-  var titulo=cap(_d.toLocaleDateString('es-ES',{month:'long',timeZone:'UTC'}))+' '+_d.getUTCFullYear();
-  var html='<div class="mes"><div class="mes-tit">'+esc(titulo)+'</div>'
+  // P3 — FUERA el segundo «Agosto 2026» dentro de la tarjeta: el título grande de la cabecera ya lo
+  // dice, y repetirlo a 20 px era decir dos veces lo mismo.
+  var html='<div class="mes">'
     +'<div class="mes-cab">'+DIAS_CAB.map(function(d){ return '<span>'+d+'</span>'; }).join('')+'</div>'
     +'<div class="mes-rej">';
   // Los días del mes ANTERIOR que completan la primera semana: gris muy claro, no ocultos.
+  var esFinde=function(f){ var d=new Date(f+'T00:00:00Z').getUTCDay(); return d===0||d===6; };
   for(var i=hueco;i>0;i--){
     var pf=ymd(new Date(primero.getTime()-i*86400000));
-    html+='<button type="button" class="mesdia otro" data-fecha="'+pf+'" data-res="Otro mes" aria-label="'+esc(fLargoDia(pf))+'"><span class="num">'+pf.slice(8)+'</span></button>';
+    html+='<button type="button" class="mesdia otro'+(esFinde(pf)?' finde':'')+'" data-fecha="'+pf+'" data-res="Otro mes" aria-label="'+esc(fLargoDia(pf))+'"><span class="num">'+(+pf.slice(8))+'</span></button>';
   }
   dias.forEach(function(d){
-    var cls='mesdia'+(d.fecha===hoy?' hoy':'')+(d.fecha===fechaSel?' sel':'');
+    var cls='mesdia'+(d.fecha===hoy?' hoy':'')+(d.fecha===fechaSel?' sel':'')+(esFinde(d.fecha)?' finde':'');
     var resumen=citasTxt(d.citas)+(d.abierto?', '+horas(d.libres_min):', cerrado');
     // Hasta TRES escritas; la cuarta se resume. El total exacto sigue en el aria-label y en el pie.
     var lineas='';
     (d.primeras||[]).slice(0,3).forEach(function(x){
       var col=(window.CITA_ESTADOS||{})[x.estado]||{fuerte:'#64748b'};
       lineas+='<span class="lin"><span class="pt" style="background:'+col.fuerte+'"></span>'
-        +hcorta(x.min)+' · '+esc(x.cliente)+'</span>';
+        +'<b style="font-weight:600">'+hcorta(x.min)+'</b> '+esc(x.cliente)+'</span>';
     });
     if(d.citas>3) lineas+='<span class="mas">+'+(d.citas-3)+' más</span>';
     html+='<button type="button" class="'+cls+'" data-fecha="'+d.fecha+'"'
@@ -1838,7 +1872,7 @@ function renderMes(data, fechaSel){
   var sobran=(7-((hueco+dias.length)%7))%7;
   for(var j=1;j<=sobran;j++){
     var nf=ymd(new Date(ultimo.getTime()+j*86400000));
-    html+='<button type="button" class="mesdia otro" data-fecha="'+nf+'" data-res="Otro mes" aria-label="'+esc(fLargoDia(nf))+'"><span class="num">'+nf.slice(8)+'</span></button>';
+    html+='<button type="button" class="mesdia otro'+(esFinde(nf)?' finde':'')+'" data-fecha="'+nf+'" data-res="Otro mes" aria-label="'+esc(fLargoDia(nf))+'"><span class="num">'+(+nf.slice(8))+'</span></button>';
   }
   html+='</div><div class="mes-pie" id="mesPie"></div></div>';
   box.innerHTML=html;
@@ -2267,6 +2301,7 @@ async function bGuardar(){
   initDate(); pintaTitulo(); pintaZoom();
   // Los FILTROS se despliegan solos si venían tocados. La vista ya no: ahora son botones a la vista.
   if((p.eje&&p.eje!=='persona')||p.verTodo){ document.getElementById('agControles').style.display='flex'; }
+  document.addEventListener('wheel', ruedaMes, { passive:false });
   pintaBotonesVista(vistaActual()); agCargar(); })();
 `;
 

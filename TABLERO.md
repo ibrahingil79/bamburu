@@ -1388,6 +1388,58 @@ Aditivo: tres tablas nuevas, ni un DROP, ninguna columna renombrada.
 - **Anotado, no tocado:** `verify-plantillas-email` sigue en rojo previo (cuenta 8 tipos/18 variantes;
   la pieza 5 los dejó en 10/20 y no lo actualizó). El guardián vigente es `gate-plantillas-email`, 41/0.
 
+### Agenda · corrección 2 (P1 alta de cita · P2 cambiar de mes · P3 layout del mes)  ✅ HECHO (2026-08-18)
+
+**P1 — EL ALTA DE CITA. Reproducido en navegador antes de tocar nada.** De los tres caminos del
+encargo, **los tres funcionaban**: (a) hueco → cliente que ya existe ✓ · (b) hueco → cliente nuevo al
+vuelo ✓ · (c) botón «Nueva cita» ✓. **El que fallaba era un cuarto** que no estaba en la lista y que se
+hace a diario: **elegir el cliente y después seguir escribiendo** —añadir el apellido, corregir una
+letra—. Mensaje exacto: **«Elige o crea un cliente»**, y la cita no se creaba. Y un segundo fallo con el
+mismo síntoma: un cliente dado de alta **después** de cargar la pantalla **no aparecía en el buscador**,
+que desde fuera se lee igual de mal.
+- **NO ES REGRESIÓN DE `3f051b0` NI DE LA CORRECCIÓN 1, y se demuestra:** `git diff 3550e48 da5a73b --
+  routes/citas.js` está **vacío** (la tanda de navegación no tocó el fichero), y con `citas.js`
+  revertido a `3550e48` el fallo **se reproduce idéntico**. Viene de antes de esta semana.
+- **Causas:** `cFiltra()` corría en cada tecla y **borraba** el cliente elegido; ahora solo lo suelta
+  cuando el texto deja de ser el nombre elegido, y aun así **el nombre escrito ya no se pierde**
+  (`cResuelveCliente()` lo recoge al guardar: si es clavado el de un cliente de la ficha se usa ESE, si
+  no entra como cliente nuevo). Y `META` se pedía **una** vez y se guardaba para siempre: ahora se
+  refresca al abrir el panel, y si la red falla se sigue con lo que había.
+- **EL GATE ESTABA VERDE SOBRE UNA FUNCIÓN ROTA, y era por dónde probaba:** metía el valor en el input
+  y llamaba a `cFiltra()` a mano, o sea saltándose lo que hace una persona. Ahora **teclea de verdad**
+  (`p.type`) y añade las dos comprobaciones que faltaban. **Probado que prueban: con el arreglo
+  deshecho el gate da 11 OK / 3 FALLOS; con él, 14 OK / 0.**
+
+**P2 — CAMBIAR DE MES. Respuesta a la pregunta: las flechas SÍ respondían** (pulsar ‹ pasaba de agosto
+a julio). Lo que pasaba es que estaban **a 624 px del título**, en el otro extremo de la barra, así que
+no había forma de saber que servían para eso. Ahora van **pegadas al título** junto a «Hoy» (166 px), y
+se añade **rueda del ratón / gesto vertical** sobre la rejilla: un mes por gesto, **con freno** de
+450 ms —un trackpad manda decenas de eventos por gesto—. En Día y Semana la rueda **sigue desplazando
+el lienzo** y no cambia de fecha. El título ya abría el selector y «Hoy» ya volvía al mes actual: se
+comprueban igualmente.
+
+**P3 — EL LAYOUT DEL MES.** Rejilla de verdad: casillas con separador de 0.5px y **línea entre semanas
+más marcada** (antes no había ni una línea), **altura mínima 84 px**, el **número arriba a la izquierda
+a 12 px** (no centrado), hasta **3 citas escritas** por día con su punto de estado y **«+N más»**, los
+días sin citas **callados**, **fuera el segundo «Agosto 2026»** de dentro de la tarjeta, el **zoom
+S/M/L solo en Día y Semana**, y fin de semana y días de otro mes con número gris y fondo apagado.
+
+**UN FALLO PROPIO QUE DESTAPÓ LA REGRESIÓN, y que afectaba al usuario:** desde que la agenda es un
+lienzo con scroll propio, **colocarse en la hora actual cerraba solo el desplegable del menú lateral**.
+El listener de `layout.js` iba con `capture:true` y veía **todos** los scrolls, no solo el de la página.
+Ahora solo cierra con el scroll de la página. `gate-menu-navegacion` lo cazó (104 OK · 1 fallo) y
+vuelve a 105/0.
+
+**VERIFICACIÓN — `gate-agenda-visual` 65/0** (era 47/0) con las comprobaciones nuevas de P2 y P3, y
+`gate-agenda-sencilla` **14/0** (era 11/0) con las de P1. **Probado que las nuevas prueban:** con P2 y
+P3 deshechos el gate da **57 OK / 8 FALLOS**; con ellos, 65/0. **Datos de prueba de verdad:** 11 citas,
+**6 días distintos** y **5 en un mismo día** — un mes vacío no demuestra nada.
+**REGRESIÓN 15/15 VERDE, cero rojos nuevos.**
+
+**UNA ASERCIÓN ACTUALIZADA, y se dice:** `gate-agenda-calendario` leía el título del mes por `.mes-tit`,
+el segundo título que P3 manda quitar; pasa a leer el grande de la cabecera. **Misma exigencia:** sigue
+teniendo que decir «Mes AAAA».
+
 ### Agenda: acabado visual (día, semana y mes) — **TAREA TRANSVERSAL de presentación**  ✅ HECHO (2026-08-18)
 **NO es pieza del peldaño 8** y **no mueve el puntero de la escalera**: es presentación, como la
 «Agenda sencilla» y como la navegación de ayer. **No se tocó el motor**: ni `huecos()`, ni

@@ -640,7 +640,14 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       if(fly&&fly.classList.contains('open')) fly.classList.remove('open'); else window.openFly(g);
     };
     document.addEventListener('click',function(e){if(!e.target.closest('.navg'))window.closeFly();});
-    window.addEventListener('scroll',function(){window.closeFly();},true);
+    // El flyout se cierra al hacer scroll DE LA PÁGINA, no al desplazar un panel de dentro. Con
+    // capture:true este listener veía TODOS los scrolls, incluidos los de cualquier contenedor con
+    // overflow — y desde que la agenda es un lienzo con scroll propio, colocarse en la hora actual
+    // cerraba el menú lateral solo. Se abría el desplegable y se cerraba en la cara.
+    window.addEventListener('scroll',function(e){
+      var t=e.target;
+      if(t===document||t===document.documentElement||t===document.body||t===window) window.closeFly();
+    },true);
     document.addEventListener('keydown',function(e){if(e.key==='Escape')window.closeFly();});
 
     // ══ (B) BUSCADOR QUE NAVEGA ═══════════════════════════════════════════════════════════════

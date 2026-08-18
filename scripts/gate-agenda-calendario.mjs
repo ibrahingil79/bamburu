@@ -170,7 +170,9 @@ try {
       sinTextoDentro: dias.every(d => !/libre|cita/.test(d.textContent)),
       hoyEnCirculo: !!hoy && getComputedStyle(hoy.querySelector('.num')).borderRadius.startsWith('50%'),
       pie: (document.getElementById('mesPie') || {}).textContent || '',
-      titulo: (document.querySelector('.mes-tit') || {}).textContent || '',
+      // P3 (18 ago 2026) quitó el SEGUNDO título de dentro de la tarjeta: el que manda es el grande
+      // de la cabecera. La exigencia no cambia — sigue teniendo que decir «Mes AAAA».
+      titulo: (document.getElementById('agTitulo') || {}).textContent || '',
     };
   });
   ok(mes.conCita === 1, 'el mes cuenta la cita recién creada (aria-label «1 cita»)');
