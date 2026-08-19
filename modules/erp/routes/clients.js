@@ -15,8 +15,13 @@ import { ENTITY } from '../../../core/activity-entities.js';
 import { exigirCorreoActivo } from '../avisos-preferencias.js';   // interruptor de Ajustes → Avisos y correos
 // FICHA 360 — todo lo nuevo LEE de motores que ya existían; aquí no se calcula ni una cifra.
 import { cabecera360, contadoresDe, queCompra, avisosDisaDe, recomendacionesDisa,
-  detalleTarjeta, CLAVES_TARJETA } from '../cliente-360.js';
-import { fichaClienteCSS, fichaClienteJS, fichaVentanaJS } from '../ficha-cliente-ui.js';
+  detalleTarjeta, CLAVES_TARJETA, periodoDeUsuario, guardarPeriodoDeUsuario, PERIODOS_FICHA,
+  chipsForzados, encenderChip } from '../cliente-360.js';
+import { fichaClienteCSS, fichaClienteJS, fichaVentanaJS,
+  fichaCompletaJS, fichaCompletaCSS } from '../ficha-cliente-ui.js';
+// REGISTRO DE CONTACTOS (bloque D). Tabla propia, FUERA de WRITABLE_TABLES: la escribe una persona o
+// la deriva un documento real. DISA no apunta conversaciones que no ha visto.
+import { contactosDe, apuntarContacto, TIPOS as TIPOS_CONTACTO, DIRECCIONES } from '../contactos.js';
 import { clientTimeline, clientCrmSummary } from '../crm.js';
 import { detectar } from '../vigia.js';
 
@@ -148,7 +153,10 @@ export function createClientRoutes(db, cfg = {}) {
       const cli = clienteOr404(c);
       if (!cli) return c.json({ error: 'No encontrado' }, 404);
       const puede = puedeDe(c);
-      const cab = cabecera360(db, cli, puede);
+      // C4 — el periodo de la tarjeta configurable es del USUARIO, no del negocio: dos personas
+      // pueden mirar el mismo cliente con ventanas de tiempo distintas sin pisarse.
+      const periodo = periodoDeUsuario(db, c.get('session')?.userId || null);
+      const cab = cabecera360(db, cli, puede, { periodo });
       return c.json({
         cliente: { id: cli.id, name: cli.name, client_code: cli.client_code, created_at: cli.created_at, notes: cli.notes || '' },
         // B1.1 — la cabecera compacta de la ventana: quién es, en una línea.
@@ -162,6 +170,7 @@ export function createClientRoutes(db, cfg = {}) {
         disa: avisosDisaDe(db, cli.id, puede, detectar),
         recomienda: recomendacionesDisa(db, cli.id, puede, detectar),
         crm: can(c, 'crm.read') ? clientCrmSummary(db, cli.id, new Date().toISOString().slice(0, 10)) : null,
+        periodo, periodos: PERIODOS_FICHA, chips_extra: chipsForzados(db),
       });
     } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
@@ -176,7 +185,8 @@ export function createClientRoutes(db, cfg = {}) {
       if (!cli) return c.json({ error: 'No encontrado' }, 404);
       const clave = String(c.req.param('clave') || '');
       if (!CLAVES_TARJETA.includes(clave)) return c.json({ error: 'Esa tarjeta no existe' }, 404);
-      const d = detalleTarjeta(db, cli, clave, puedeDe(c));
+      const d = detalleTarjeta(db, cli, clave, puedeDe(c),
+        { periodo: periodoDeUsuario(db, c.get('session')?.userId || null) });
       if (!d) return c.json({ error: 'Sin permiso' }, 403);
       return c.json(d);
     } catch (e) { return c.json({ error: safeError(e) }, 500); }
@@ -209,6 +219,67 @@ export function createClientRoutes(db, cfg = {}) {
         hay_mas: desde + cuantos < filtrados.length,
       });
     } catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+
+  // ── C4 · EL PERIODO DE LA TARJETA CONFIGURABLE ───────────────────────────────────────────────
+  // Se guarda POR USUARIO en `dashboard_layouts`, la tabla que ya guarda preferencias personales.
+  // No nace una tabla nueva para recordar un desplegable.
+  api.put('/periodo-ficha', requirePerm('clients.read'), async c => {
+    try {
+      const d = await c.req.json();
+      const uid = c.get('session')?.userId || null;
+      if (!uid) return c.json({ error: 'Sin sesión' }, 401);
+      return c.json(guardarPeriodoDeUsuario(db, uid, { clave: d.clave, desde: d.desde, hasta: d.hasta }));
+    } catch (e) { return c.json({ error: safeError(e) }, e?.status || 500); }
+  });
+
+  // ── F2 · ENCENDER UN CHIP QUE EL OFICIO NO TRAE ──────────────────────────────────────────────
+  // NADA SE ELIMINA (R6): lo que el oficio no usa se OCULTA, y desde «Más opciones» se enciende de
+  // un clic. Es una decisión sobre cómo trabaja el negocio, así que se guarda por negocio.
+  api.put('/chips-ficha', requirePerm('clients.edit'), async c => {
+    try {
+      const d = await c.req.json();
+      if (!['citas', 'proyectos'].includes(d.key)) return c.json({ error: 'Ese no se puede encender' }, 400);
+      return c.json({ ok: true, extra: encenderChip(db, d.key, d.encender !== false) });
+    } catch (e) { return c.json({ error: safeError(e) }, e?.status || 500); }
+  });
+
+  // ── EL REGISTRO DE CONTACTOS (D5) ────────────────────────────────────────────────────────────
+  // Leer va con `clients.read`; apuntar, con `clients.edit` (D6). El catálogo de tipos viaja con la
+  // lista para que la pantalla no lo tenga escrito a mano — incluida la coletilla honesta de
+  // WhatsApp, que NO está conectado a Bamburu y así se dice.
+  api.get('/:id{[0-9]+}/contactos', requirePerm('clients.read'), c => {
+    try {
+      const cli = clienteOr404(c);
+      if (!cli) return c.json({ error: 'No encontrado' }, 404);
+      const soloVisitas = c.req.query('visitas') === '1';
+      const r = contactosDe(db, cli.id, {
+        tipo: String(c.req.query('tipo') || ''),
+        soloVisitas,
+        desde: Math.max(0, parseInt(c.req.query('desde') || '0', 10) || 0),
+        cuantos: Math.min(200, Math.max(5, parseInt(c.req.query('cuantos') || '50', 10) || 50)),
+      });
+      return c.json({ ...r, catalogo: TIPOS_CONTACTO, direcciones: DIRECCIONES,
+                      puede_apuntar: can(c, 'clients.edit') });
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+
+  api.post('/:id{[0-9]+}/contactos', requirePerm('clients.edit'), async c => {
+    try {
+      const cli = clienteOr404(c);
+      if (!cli) return c.json({ error: 'No encontrado' }, 404);
+      const d = await c.req.json();
+      const s = c.get('session') || {};
+      // `automatico` NO se acepta de fuera: lo automático solo lo marca Bamburu al mandarlo él. Si
+      // una pantalla pudiera declararlo, un contacto apuntado a mano podría esconderse del dueño.
+      const r = apuntarContacto(db, {
+        client_id: cli.id, tipo: d.tipo, fecha: d.fecha || null,
+        direccion: d.direccion || 'saliente', resultado: d.resultado || '',
+        user_id: s.userId || null, user_name: s.userName || '',
+        automatico: false, origen: 'manual',
+      });
+      return c.json({ ok: true, ...r });
+    } catch (e) { return c.json({ error: safeError(e) }, e?.status || 500); }
   });
 
   // ── NOTAS A MANO — lo único que esta tarea escribe ──────────────────────────────────────────
@@ -589,10 +660,11 @@ export function createClientRoutes(db, cfg = {}) {
            armazon y no puedan divergir. Aqui solo queda el hueco que necesita la maquinaria de
            cobro compartida. -->
       ${cobroModalHtml()}
-      <style>${fichaClienteCSS()}</style>
+      <style>${fichaClienteCSS()}${fichaCompletaCSS()}</style>
       <script>
       ${fichaClienteJS({ sym })}
       ${fichaVentanaJS({ montaje: 'ventana' })}
+      ${fichaCompletaJS()}
       ${cobroModalScript(sym)}
       const PUEDE_CRM = ${can(c, 'crm.read') ? 'true' : 'false'};   // la sección CRM de la ficha solo si tiene la llave
       let currentDetailClientId=null;   // cliente abierto en la ficha (para refrescar tras un cobro)
@@ -703,212 +775,77 @@ export function createClientRoutes(db, cfg = {}) {
     const content = `
     <style>
       ${fichaClienteCSS()}
-      /* Lo propio de la PÁGINA: la historia, las notas y la tabla larga de facturas. Las tarjetas,
-         los chips, la recomendación de DISA y las capas vienen del componente compartido. */
-      .f360-tabs{display:flex;gap:.3rem;flex-wrap:wrap;margin-bottom:.75rem}
-      .f360-tabs button{appearance:none;border:1px solid var(--border2);background:var(--bg2);color:var(--text2);font-family:inherit;font-size:.78rem;padding:.25rem .6rem;border-radius:999px;cursor:pointer}
-      .f360-tabs button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
-      .f360-ev{display:flex;gap:.65rem;padding:.6rem 0;border-bottom:1px solid var(--border);min-width:0}
-      .f360-ev i.ti{color:var(--text3);margin-top:.15rem;flex-shrink:0}
-      .f360-ev .t{font-size:.87rem;color:var(--text)}
-      .f360-ev .d{font-size:.78rem;color:var(--text2);margin-top:.1rem}
-      .f360-ev .f{font-size:.74rem;color:var(--text3);white-space:nowrap;margin-left:auto}
-      .f360-nota{border:1px solid var(--border2);border-radius:10px;padding:.6rem .75rem;margin-bottom:.5rem;background:var(--bg2)}
-      .f360-nota .meta{font-size:.72rem;color:var(--text3);margin-top:.3rem}
-      .f360-col{min-width:0}
+      ${fichaCompletaCSS()}
     </style>
     <div class="ph">
       <div>
         <div style="font-size:.75rem;color:var(--text3)"><a href="/admin/clients" style="color:inherit">Clientes</a> ›</div>
         <h2 style="margin:0">${escHtml(cli.name)}</h2>
-        <div style="font-size:.78rem;color:var(--text3)">${escHtml([cli.client_code, cli.fiscal_id, cli.phone, cli.email].filter(Boolean).join(' · '))}</div>
       </div>
       <div style="display:flex;gap:.5rem;flex-wrap:wrap">
         <a class="btn btn-secondary btn-sm" href="/admin/clients">← Volver</a>
       </div>
     </div>
 
-    <!-- A3 · LA CAPA DE DETALLE. Es la MISMA que la de la ventana flotante: las tarjetas de aquí y
+    <!-- A3 · La capa de detalle. Es la MISMA que la de la ventana flotante: las tarjetas de aquí y
          las de allí abren el mismo contenido, servido por el mismo endpoint. Empieza oculta. -->
-    <div id="f360capa" class="card" style="display:none"></div>
+    <div id="f360capa" class="card bf-caja" style="display:none"></div>
 
     <div id="f360resumen">
-      <div id="f360cifras"><div class="skel skel-block" style="height:5rem"></div></div>
-      <div id="f360cont"></div>
+      <div class="card bf-caja" style="margin-bottom:1rem">
+        <div id="f360datos"></div>
+        <div id="f360cifras"><div class="skel skel-block" style="height:5rem"></div></div>
+        <div id="f360cont"></div>
+      </div>
       <div id="f360disa"></div>
-      <div class="grid g2" style="align-items:start;gap:1rem">
-        <div class="f360-col">
-          <div class="card" id="historia">
-            <h4 style="margin-top:0">Su historia</h4>
-            <div id="f360tabs" class="f360-tabs"></div>
-            <div id="f360tl">Cargando…</div>
-            <div style="text-align:center;padding:.6rem"><button class="btn btn-secondary btn-sm" id="f360mas" style="display:none" onclick="tlMas()">Ver más</button></div>
-          </div>
-        </div>
-        <div class="f360-col">
-          <div class="card">
-            <h4 style="margin-top:0">Qué te compra</h4>
-            <div id="f360compra">Cargando…</div>
-          </div>
-          <div class="card">
-            <h4 style="margin-top:0">Notas</h4>
-            <div id="f360notaFija"></div>
-            <textarea class="form-control" id="f360nueva" rows="2" maxlength="4000" placeholder="Escribe una nota…"></textarea>
-            <button class="btn btn-primary btn-sm" style="margin-top:.4rem" onclick="notaGuardar()">Añadir nota</button>
-            <div id="f360notas" style="margin-top:.75rem"></div>
-          </div>
-        </div>
-      </div>
-      <!-- B2 · LA TABLA LARGA DE FACTURAS VIVE AQUÍ. Salió de la ventana flotante (que es el
-           resumen) pero NO desapareció del producto: está entera, con su estado de cobro y sus
-           botones. A lo ancho de la página y no en media columna: seis columnas de datos y dos
-           botones no caben en la mitad de la pantalla sin obligar a arrastrar. -->
-      <div class="card" id="f360facBox" style="display:none">
-        <h4 style="margin-top:0">Todas sus facturas</h4>
-        <div id="f360fac"></div>
-      </div>
+      <div id="f360full"></div>
     </div>
     ${cobroModalHtml()}
     <script>
     ${fichaClienteJS({ sym })}
     ${fichaVentanaJS({ montaje: 'pagina' })}
+    ${fichaCompletaJS()}
     ${cobroModalScript(sym)}
-    var CID=${cli.id}, SYM=${JSON.stringify(sym)}, D=null, TIPO='', DESDE=0;
+    var CID=${cli.id}, SYM=${JSON.stringify(sym)}, D=null;
     window.BF_CLIENTE_ID = CID;
     window.BF_CLIENTE_NOMBRE = ${JSON.stringify(cli.name)};
-    var TIPO_LBL={documento:'Documentos',cobro:'Cobros',cita:'Citas',oportunidad:'Oportunidades',actividad:'Actividad',proyecto:'Proyectos',tiempo:'Horas',aviso:'Avisos',nota:'Notas'};
-    // El dinero se escribe UNA vez, en el componente compartido, y en español. El "€4018.00" de
-    // antes salía de un SYM+toFixed(2) escrito a mano aquí: formato inglés en una ficha española.
-    var eur = function(n){ return BF.eur(n); };
 
-    // Las OCHO tarjetas y los chips los pinta el componente compartido: los mismos que en la
-    // ventana flotante, con las mismas reglas de recorte y de altura. Aquí no se pinta ninguna caja
-    // a mano — es lo que impide que las dos pantallas vuelvan a divergir.
-    function pintaCifras(){
+    // Las tarjetas, los datos y los chips los pinta el componente compartido: los mismos que en la
+    // ventana flotante, con las mismas reglas de recorte, de aire y de altura. Aquí no se pinta ni
+    // una caja a mano — es lo que impide que las dos pantallas vuelvan a divergir.
+    function pintaCabecera(){
+      document.getElementById('f360datos').innerHTML  = BF.datosHTML(D);
       document.getElementById('f360cifras').innerHTML = BF.tarjetasHTML(D);
-      document.getElementById('f360cont').innerHTML   = BF.chipsHTML(D.contadores);
+      document.getElementById('f360cont').innerHTML   = BF.chipsHTML(D.contadores, D.chips_extra);
       // C1 — Muere el listado de seis avisos iguales. Una recomendación por familia, con su decisión.
       var recs = D.recomienda || [];
       document.getElementById('f360disa').innerHTML = recs.length
-        ? '<div class="card" style="margin-bottom:1rem"><h4 style="margin-top:0">Lo que te recomiendo</h4>'
+        ? '<div class="card bf-caja" style="margin-bottom:1rem"><h4>Lo que te recomiendo</h4>'
           + BF.recomiendaHTML(recs)
           + '<a href="/admin/vigia" style="font-size:.8rem">Ver todo en el vigía →</a></div>'
         : '';
-      var q=D.compra;
-      document.getElementById('f360compra').innerHTML = q==null
-        ? '<div style="color:var(--text3);font-size:.85rem">—</div>'
-        : (q.length ? BF.queCompraHTML(q, 0)
-            : '<div style="color:var(--text3);font-size:.85rem">Todavía no te ha comprado nada en los últimos 12 meses.</div>');
-      document.getElementById('f360notaFija').innerHTML = D.cliente.notes
-        ? '<div class="alert alert-ok" style="margin-bottom:.6rem">'+escHtml(D.cliente.notes)+'</div>' : '';
     }
-
-    // ── B2 · LA TABLA LARGA DE FACTURAS ──────────────────────────────────────────────────────────
-    // Con su estado de cobro en vivo y sus botones, igual que estaba en el modal. Va dentro de
-    // .bf-scroll: una tabla de seis columnas no puede volver a salirse de su caja.
-    async function facturasCargar(){
-      var box=document.getElementById('f360fac'), caja=document.getElementById('f360facBox');
-      if(!box) return;
-      var deb; try{ deb = await api('GET','/api/erp/clients/'+CID+'/invoices'); }catch(e){ return; }
-      caja.style.display='';
-      var badge={pendiente:'b-yellow',parcial:'b-blue',cobrada:'b-green',vencida:'b-red',abono:'b-gray'};
-      var label={pendiente:'Pendiente',parcial:'Cobrada en parte',cobrada:'Cobrada',vencida:'Vencida',abono:'Abono'};
-      var filas=(deb.invoices||[]).map(function(f){
-        var est=!f.counts
-          ? '<span class="badge b-gray" title="No computa como deuda (anulada o rectificada por sustitución)">no computa</span>'
-          : '<span class="badge '+(badge[f.estado]||'')+'">'+(label[f.estado]||f.estado)+(f.estado==='vencida'&&f.dias_vencida?' '+f.dias_vencida+'d':'')+'</span>';
-        var acc=(f.cobrable && Number(f.pendiente)>0.0049)
-          ? '<button type="button" class="btn btn-primary btn-sm" data-cobro="'+f.id+'">Registrar cobro</button> '
-            +'<button type="button" class="btn btn-secondary btn-sm" data-gestion="'+f.id+'">Gestionar</button>'
-          : '';
-        return '<tr><td><a href="/admin/invoices/'+f.id+'">'+escHtml(f.invoice_number)+'</a></td>'
-          +'<td style="color:var(--text3);font-size:.8rem;white-space:nowrap">'+escHtml(f.due_date||f.issue_date||'-')+'</td>'
-          +'<td style="white-space:nowrap">'+eur(f.total)+'</td>'
-          +'<td style="white-space:nowrap">'+(f.counts?eur(f.pendiente):'—')+'</td>'
-          +'<td>'+est+'</td><td style="text-align:right;white-space:nowrap">'+acc+'</td></tr>';
-      }).join('');
-      box.innerHTML = filas
-        ? '<div class="bf-scroll"><table><thead><tr><th>Factura</th><th>Vence</th><th>Total</th><th>Pendiente</th><th>Cobro</th><th></th></tr></thead><tbody>'+filas+'</tbody></table></div>'
-        : '<div class="bf-vacio">Este cliente aún no tiene facturas.</div>';
-    }
-    // Tras registrar un cobro, la tabla y las tarjetas se refrescan solas: si el "Te debe" de arriba
-    // y la tabla de abajo dijeran cifras distintas, una de las dos estaría mintiendo.
-    window.cobroOnSaved = function(){ recargar(); };
-
-    // Sin onclick inline con comillas anidadas: se marca el botón con data-tipo y se escucha una vez.
-    // (Las comillas escapadas dentro de un template literal del servidor llegan ya desescapadas al
-    //  navegador y parten la cadena — pasa en silencio y se lleva el script entero por delante.)
-    function pintaTabs(tipos){
-      var h='<button data-tipo="" aria-pressed="'+(TIPO===''?'true':'false')+'">Todo</button>';
-      h+=(tipos||[]).map(function(t){ return '<button data-tipo="'+escHtml(t)+'" aria-pressed="'+(TIPO===t?'true':'false')+'">'+escHtml(TIPO_LBL[t]||t)+'</button>'; }).join('');
-      document.getElementById('f360tabs').innerHTML=h;
-    }
-    document.getElementById('f360tabs').addEventListener('click', function(ev){
-      var b=ev.target.closest('button[data-tipo]'); if(!b) return;
-      tlFiltro(b.getAttribute('data-tipo'));
-    });
-    function tlFiltro(t){ TIPO=t; DESDE=0; document.getElementById('f360tl').innerHTML=''; tlCargar(); }
-    function tlMas(){ tlCargar(); }
-    async function tlCargar(){
-      var r=await api('GET','/api/erp/clients/'+CID+'/360/timeline?tipo='+encodeURIComponent(TIPO)+'&desde='+DESDE+'&cuantos=25');
-      pintaTabs(r.tipos);
-      var box=document.getElementById('f360tl');
-      if(DESDE===0) box.innerHTML='';                 // la primera página sustituye; las siguientes añaden
-      if(DESDE===0 && !r.eventos.length){
-        box.innerHTML='<div style="color:var(--text3);font-size:.87rem;padding:.5rem 0">Aquí no hay nada todavía'+(TIPO?' de ese tipo':'')+'. En cuanto le factures, le des cita o le escribas una nota, aparecerá aquí.</div>';
-      } else {
-        box.innerHTML += r.eventos.map(function(e){
-          var f=String(e.ts||'').slice(0,10);
-          var t=e.href?'<a href="'+e.href+'" style="color:inherit">'+escHtml(e.title)+'</a>':escHtml(e.title);
-          return '<div class="f360-ev"><i class="ti '+(e.icon||'ti-point')+'"></i><div style="flex:1"><div class="t">'+t+'</div>'
-            +(e.detail?'<div class="d">'+escHtml(e.detail)+'</div>':'')+'</div><span class="f">'+f+'</span></div>';
-        }).join('');
-      }
-      DESDE+=r.eventos.length;
-      document.getElementById('f360mas').style.display=r.hay_mas?'':'none';
-    }
-    async function notaGuardar(){
-      var t=document.getElementById('f360nueva').value.trim(); if(!t){ toast('Escribe algo','err'); return; }
-      try{ await api('POST','/api/erp/clients/'+CID+'/notas',{texto:t}); document.getElementById('f360nueva').value=''; toast('Nota guardada'); notasCargar(); tlFiltro(TIPO); }
-      catch(e){ toast(e.message,'err'); }
-    }
-    async function notaEditar(id, actual){
-      var t=prompt('Editar la nota:', actual); if(t==null) return;
-      try{ await api('PUT','/api/erp/clients/'+CID+'/notas/'+id,{texto:t}); toast('Nota actualizada'); notasCargar(); tlFiltro(TIPO); }
-      catch(e){ toast(e.message,'err'); }
-    }
-    async function notaBorrar(id){
-      if(!confirm('¿Quitar esta nota?')) return;
-      try{ await api('DELETE','/api/erp/clients/'+CID+'/notas/'+id); toast('Nota quitada'); notasCargar(); tlFiltro(TIPO); }
-      catch(e){ toast(e.message,'err'); }
-    }
-    async function notasCargar(){
-      var ns=await api('GET','/api/erp/clients/'+CID+'/notas');
-      document.getElementById('f360notas').innerHTML = ns.length ? ns.map(function(n){
-        return '<div class="f360-nota"><div style="white-space:pre-wrap;font-size:.86rem">'+escHtml(n.texto)+'</div>'
-          +'<div class="meta">'+escHtml(n.user_name||'—')+' · '+String(n.created_at||'').slice(0,16).replace('T',' ')
-          +(n.updated_at?' · editada':'')
-          +' <a href="#" data-nedit="'+n.id+'">editar</a>'
-          +' · <a href="#" data-ndel="'+n.id+'">quitar</a></div></div>'; }).join('')
-        : '<div style="color:var(--text3);font-size:.83rem">Sin notas todavía.</div>';
-    }
-    document.getElementById('f360notas').addEventListener('click', function(ev){
-      var e=ev.target.closest('a[data-nedit]'), d=ev.target.closest('a[data-ndel]');
-      if(e){ ev.preventDefault(); var caja=e.closest('.f360-nota'); notaEditar(e.getAttribute('data-nedit'), caja.firstChild.textContent); }
-      else if(d){ ev.preventDefault(); notaBorrar(d.getAttribute('data-ndel')); }
-    });
     async function recargar(){
-      try{ D=await api('GET','/api/erp/clients/'+CID+'/360'); window.BFWin.setDatos(D); pintaCifras(); }
-      catch(e){ document.getElementById('f360cifras').innerHTML='<div class="alert alert-err">'+escHtml(e.message)+'</div>'; }
-      facturasCargar();
+      try {
+        const r = await fetch('/api/erp/clients/'+CID+'/360');
+        D = await r.json();
+        if (D.error) throw new Error(D.error);
+        window.BFWin.setDatos(D); pintaCabecera();
+      } catch(e){
+        document.getElementById('f360cifras').innerHTML='<div class="alert alert-err">'+escHtml(e.message)+'</div>';
+      }
     }
+    // Tras registrar un cobro se vuelve a pedir la ficha entera: si el «Te debe» de arriba y la
+    // tabla de abajo dijeran cifras distintas, una de las dos estaría mintiendo.
+    window.cobroOnSaved = function(){ recargar(); BFFull.pintar(document.getElementById('f360full'), CID); };
+    // El punto por el que el componente compartido repinta esta página (periodo, contacto, chip).
+    window.BFPintaPagina = function(d){ D = d; pintaCabecera(); };
     (async function(){
       await recargar();
-      tlCargar(); notasCargar();
-      // Los avisos de DISA y los enlaces "ver su historia" traen #historia: llevan a la historia
-      // sin que el usuario tenga que buscarla.
+      // A3 · La ficha completa de la PÁGINA la pinta el MISMO código que la capa de la ventana.
+      BFFull.pintar(document.getElementById('f360full'), CID);
       if (location.hash === '#historia') {
-        var h=document.getElementById('historia'); if(h) h.scrollIntoView({block:'start'});
+        var h=document.getElementById('bff'+CID+'_hist'); if(h) h.scrollIntoView({block:'start'});
       }
     })();
     </script>`;

@@ -34,21 +34,64 @@
 // ── LOS ESTILOS ─────────────────────────────────────────────────────────────────────────────────
 export function fichaClienteCSS() {
   return `
+    /* ── B2 · EL AIRE DE LAS CAJAS ───────────────────────────────────────────────────────────────
+       En Bamburu .card NO lleva padding: vive en .card-body. La ficha escribía el contenido
+       directamente dentro de .card, así que TODO su texto tocaba el borde — 17 sitios medidos con
+       padding 0. Esto se lo devuelve a las cajas de la ficha sin tocar .card global (que la usan
+       cuarenta pantallas más y no es asunto de esta tarea). Se marca con .bf-caja. */
+    .bf-caja{padding:1.1rem 1.2rem}
+    .bf-caja>h4:first-child,.bf-caja>h3:first-child{margin-top:0}
+    @media(max-width:520px){ .bf-caja{padding:.9rem} }
+
     /* Tarjetas — el componente único. Alto automático, alturas iguales, texto que jamás se sale. */
     .bf-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.6rem;margin-bottom:1rem}
     .bf-card{display:flex;flex-direction:column;gap:.15rem;text-align:left;width:100%;min-width:0;
-      background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:.7rem .85rem;
+      background:var(--bg2);border:1px solid var(--border2);border-radius:14px;padding:.85rem 1rem;
       font-family:inherit;cursor:pointer;position:relative;transition:border-color .15s,box-shadow .15s}
     .bf-card:hover,.bf-card:focus-visible{border-color:var(--accent);box-shadow:0 2px 10px rgba(47,107,255,.12);outline:none}
     .bf-card[disabled]{cursor:default}
     .bf-card[disabled]:hover{border-color:var(--border2);box-shadow:none}
     .bf-card>span{display:block;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .bf-k{font-size:.68rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text3);padding-right:.9rem}
+    .bf-k{font-size:.68rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text3);padding-right:1.2rem}
     .bf-v{font-size:1.12rem;font-weight:700;letter-spacing:-.01em;color:var(--text)}
     .bf-v.na{font-size:1rem;color:var(--text3);font-weight:600}
     .bf-s{font-size:.72rem;color:var(--text2)}
-    .bf-go{position:absolute;top:.6rem;right:.6rem;color:var(--text3);font-size:.8rem}
+    .bf-go{position:absolute;top:.8rem;right:.8rem;color:var(--text3);font-size:.8rem}
     .bf-card:hover .bf-go{color:var(--accent)}
+
+    /* C2 · Los datos del cliente. Jerarquía por PESO y ESPACIO, no por marcos (CANON, estilo iOS):
+       no llevan caja propia, se apoyan en el aire de la que los contiene. */
+    .bf-datos{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem 1.25rem;margin-bottom:1rem}
+    .bf-datos>div{min-width:0;display:flex;flex-direction:column;gap:.1rem}
+    .bf-datos .k{font-size:.68rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text3)}
+    .bf-datos .v,.bf-datos .s{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .bf-datos .v{font-size:.88rem;color:var(--text)}
+    .bf-datos .s{font-size:.72rem;color:var(--text3)}
+
+    /* D5 · El registro de contactos. Lo AUTOMÁTICO se distingue a simple vista: un correo que mandó
+       la máquina no es señal de que el cliente esté vivo, y quien lee la lista tiene que verlo sin
+       tener que fijarse. */
+    .bf-reg{display:flex;flex-direction:column}
+    .bf-reg .ev{display:flex;gap:.7rem;padding:.6rem 0;border-bottom:1px solid var(--border);min-width:0;align-items:flex-start}
+    .bf-reg .ev:last-child{border-bottom:none}
+    .bf-reg .ev>i.ti{color:var(--text3);margin-top:.15rem;flex-shrink:0}
+    .bf-reg .ev.auto>i.ti{color:var(--text3);opacity:.55}
+    .bf-reg .cuerpo{flex:1;min-width:0}
+    .bf-reg .t{font-size:.87rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .bf-reg .d{font-size:.76rem;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .bf-reg .f{font-size:.74rem;color:var(--text3);white-space:nowrap;text-align:right}
+    .bf-auto{display:inline-block;font-size:.64rem;font-weight:600;letter-spacing:.03em;text-transform:uppercase;
+      background:var(--bg3);color:var(--text3);border-radius:999px;padding:.1rem .45rem;margin-left:.35rem}
+    .bf-visita{display:inline-block;font-size:.64rem;font-weight:600;letter-spacing:.03em;text-transform:uppercase;
+      background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:.1rem .45rem;margin-left:.35rem}
+    .bf-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.6rem;margin-bottom:.6rem}
+    .bf-form label{display:block;font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);margin-bottom:.2rem}
+
+    /* C4 · el selector de periodo, DENTRO de la tarjeta abierta. */
+    .bf-per{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.8rem}
+    .bf-per button{appearance:none;border:1px solid var(--border2);background:var(--bg2);color:var(--text2);
+      font-family:inherit;font-size:.78rem;padding:.3rem .7rem;border-radius:999px;cursor:pointer}
+    .bf-per button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
 
     /* Chips de contador. Siguen visibles a 0, en gris: un 0 es información. */
     .bf-chips{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem}
@@ -57,17 +100,24 @@ export function fichaClienteCSS() {
     .bf-chips a:hover{border-color:var(--accent);color:var(--accent)}
     .bf-chips a .n{font-weight:700;color:var(--text)}
     .bf-chips a.cero,.bf-chips a.cero .n{color:var(--text3)}
+    .bf-mas{appearance:none;border:1px dashed var(--border2);background:transparent;color:var(--text3);
+      font-family:inherit;font-size:.8rem;padding:.35rem .7rem;border-radius:999px;cursor:pointer}
+    .bf-mas:hover{border-color:var(--accent);color:var(--accent)}
 
     /* DISA recomienda: UNA caja por familia, con la decisión y sus botones. */
     .bf-rec{border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 10px 10px 0;
-      padding:.7rem .9rem;margin-bottom:.6rem}
+      padding:.7rem .9rem;margin-bottom:.6rem;min-width:0}
     .bf-rec .q{font-size:.87rem;color:var(--text);line-height:1.45}
     .bf-rec .r{font-size:.87rem;color:var(--text);font-weight:600;margin-top:.2rem}
     .bf-rec .acts{display:flex;gap:.45rem;flex-wrap:wrap;margin-top:.55rem}
     .bf-rec .porque{margin-top:.45rem;font-size:.76rem;color:var(--text2)}
     .bf-rec .porque summary{cursor:pointer;color:var(--accent)}
-    .bf-rec .porque ul{margin:.35rem 0 0 1rem;padding:0}
-    .bf-rec .porque li{margin-bottom:.15rem}
+    .bf-rec .porque ul{margin:.35rem 0 0 1rem;padding:0;min-width:0;max-width:100%}
+    /* Los documentos de detrás llevan el nombre del cliente dentro, así que son largos por
+       naturaleza: se recortan como todo lo demás en vez de salirse de la caja del aviso. */
+    .bf-rec .porque li{margin-bottom:.15rem;min-width:0;max-width:100%;overflow:hidden;
+      text-overflow:ellipsis;white-space:nowrap}
+    .bf-rec{min-width:0}
 
     /* Ranking "Qué te compra" */
     .bf-rank{display:flex;flex-direction:column}
@@ -78,7 +128,11 @@ export function fichaClienteCSS() {
     .bf-rank .im{font-weight:600;white-space:nowrap;font-size:.86rem}
 
     /* Listas de detalle (las capas). Cualquier cosa ancha, a su propio scroll. */
+    /* Una tabla ancha tiene que hacer scroll DENTRO de su caja, no salirse por el borde. Sin
+       width:max-content en la tabla, las celdas desbordaban sin ensanchar la tabla y el contenedor
+       nunca llegaba a tener scroll: medido, 44 px de celdas fuera de la caja a 390 px. */
     .bf-scroll{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
+    .bf-scroll>table{width:max-content;min-width:100%}
     .bf-list{display:flex;flex-direction:column}
     .bf-li{display:flex;align-items:baseline;gap:.6rem;padding:.5rem 0;border-bottom:1px solid var(--border);min-width:0}
     .bf-li:last-child{border-bottom:none}
@@ -130,7 +184,9 @@ export function fichaClienteCSS() {
 // ── EL COMPORTAMIENTO ───────────────────────────────────────────────────────────────────────────
 // `sym` es el símbolo de moneda del negocio; `base` es la dirección de la lista a la que volver.
 export function fichaClienteJS({ sym = '€' } = {}) {
-  return `
+  // String.raw a propósito: sin él, el motor se come los escapes de los regex (\s, \*) y al
+  // navegador le llega un regex distinto del escrito. Es lo que ya hace JS_AGENDA en citas.js.
+  return String.raw`
   (function(){
     var SYM = ${JSON.stringify(sym)};
     // Mismo formato que el servidor (margen.js): español de verdad, con punto de millar SIEMPRE.
@@ -155,50 +211,86 @@ export function fichaClienteJS({ sym = '€' } = {}) {
         + '<span class="bf-k" title="'+esc(o.k)+'">'+esc(o.k)+'</span>'
         + '<span class="bf-v'+na+'" title="'+esc(o.vTxt||o.v)+'">'+esc(o.v)+'</span>'
         + (o.s ? '<span class="bf-s" title="'+esc(o.sTxt||o.s)+'">'+esc(o.s)+'</span>' : '')
-        + (pulsable ? '<i class="ti ti-chevron-right bf-go" aria-hidden="true"></i>' : '')
+        + (pulsable ? '<i class="ti '+(o.periodo?'ti-adjustments-horizontal':'ti-chevron-right')+' bf-go" aria-hidden="true"></i>' : '')
         + '</button>';
     }
 
-    // Las OCHO tarjetas, en el orden de siempre. Cada subtítulo es CORTO a propósito (D4): la frase
-    // larga vive en el detalle, no en una caja de 190 px.
+    // ── C1 · LAS OCHO TARJETAS, EN ORDEN DE URGENCIA ─────────────────────────────────────────────
+    // Primero lo que exige una decisión hoy, luego lo que describe, y al final lo que sitúa en el
+    // tiempo. «Cliente desde» ya no está: no pide ninguna acción, así que baja a los datos del
+    // cliente (C2) — no se pierde, cambia de sitio.
+    //
+    // Cada subtítulo es CORTO a propósito (C6): la frase larga vive en el detalle, no en una caja
+    // estrecha. Y donde no hay dato, se dice QUÉ FALTA — nunca un 0 fingido.
     function tarjetasHTML(D){
       var c = D.cabecera || {}, out = [];
       var mm = c.margen_modo || 'venta';
-      out.push(tarjeta({ clave:'desde', k:'Cliente desde',
-        v: c.desde && c.desde.fecha ? c.desde.fecha : '—', na: !(c.desde && c.desde.fecha),
-        s: c.desde && c.desde.fecha ? null : (c.desde && c.desde.nota) || 'Aún no te ha comprado' }));
-      out.push(tarjeta({ clave:'ultima', k:'Última vez que vino',
-        v: c.ultima ? c.ultima.fecha : '—', na: !c.ultima,
-        s: c.ultima ? ('hace '+c.ultima.dias+' días') : 'Todavía no ha venido' }));
-      if (c.ritmo) {
-        out.push(tarjeta({ clave:'ritmo', k:'Cada cuánto viene',
-          v: c.ritmo.ritmo_dias ? ('cada '+c.ritmo.ritmo_dias+' días') : '—', na: !c.ritmo.ritmo_dias,
-          s: c.ritmo.ritmo_dias ? (c.ritmo.visitas+' visitas') : (c.ritmo.falta ? ('Faltan '+c.ritmo.falta+' visitas') : 'Aún no ha venido'),
-          sTxt: c.ritmo.motivo || null }));
-      }
-      if (c.gasto) {
-        out.push(tarjeta({ clave:'gasto', k:'Gasto total', v: eur(c.gasto.total),
-          s: c.gasto.facturas+' facturas · sin IVA' }));
-        out.push(tarjeta({ clave:'doce', k:'Últimos 12 meses', v: eur(c.gasto.doce_meses), s:'sin IVA' }));
-        out.push(tarjeta({ clave:'ticket', k:'Ticket medio',
-          v: c.ticket_medio==null ? '—' : eur(c.ticket_medio), na: c.ticket_medio==null,
-          s: c.ticket_medio==null ? 'Todavía sin facturas' : 'por factura' }));
-      }
       if (c.deuda) {
         out.push(tarjeta({ clave:'deuda', k:'Te debe', v: eur(c.deuda.total),
           s: c.deuda.total>0 ? (c.deuda.oldest ? ('la más antigua: '+c.deuda.oldest.invoice_number) : 'pendiente')
                              : 'no te debe nada' }));
       }
-      if (c.margen) {
-        // EL PORCENTAJE NUNCA VA DESNUDO (G3): el subtítulo dice sobre qué se divide, aquí mismo.
-        var t = mm==='coste' ? c.margen.pctCoste : c.margen.pctVenta;
+      if (c.gasto) {
+        // La tarjeta se pinta SIEMPRE que el usuario pueda ver dinero: sin datos dice «—» y qué
+        // falta (C6). Esconderla dejaba la fila de tarjetas con un hueco según el cliente.
+        // Y EL PORCENTAJE NUNCA VA DESNUDO (I3): el subtítulo dice sobre qué se divide, aquí mismo.
+        var t = c.margen ? (mm==='coste' ? c.margen.pctCoste : c.margen.pctVenta) : null;
         var suf = mm==='coste' ? 'sobre lo que te costó' : 'sobre lo que cobras';
+        var euros = c.margen ? c.margen.euros : null;
         out.push(tarjeta({ clave:'margen', k:'Margen que deja',
-          v: c.margen.euros==null ? '—' : eur(c.margen.euros), na: c.margen.euros==null,
-          s: t==null ? 'sin coste conocido' : (pct(t)+' '+suf),
-          sTxt: t==null ? 'Ninguna línea suya tiene coste conocido' : (pct(t)+' '+suf) }));
+          v: euros==null ? '—' : eur(euros), na: euros==null,
+          s: t==null ? (c.gasto.facturas ? 'sin coste conocido' : 'todavía no le has facturado') : (pct(t)+' '+suf),
+          sTxt: t==null ? 'Sin coste apuntado no se puede saber el margen. No es 0: es que no se sabe.' : (pct(t)+' '+suf) }));
+      }
+      if (c.gasto) {
+        out.push(tarjeta({ clave:'gasto', k:'Gasto total', v: eur(c.gasto.total),
+          s: c.gasto.facturas+' facturas · sin IVA' }));
+        // C4 · la tarjeta configurable. El TÍTULO cambia con la elección, no solo la cifra.
+        out.push(tarjeta({ clave:'periodo', k: (c.periodo && c.periodo.titulo) || 'Últimos 12 meses',
+          v: eur(c.gasto.periodo),
+          s: (c.gasto.facturas_periodo||0)+' documentos · sin IVA', periodo: true }));
+        out.push(tarjeta({ clave:'ticket', k:'Ticket medio',
+          v: c.ticket_medio==null ? '—' : eur(c.ticket_medio), na: c.ticket_medio==null,
+          s: c.ticket_medio==null ? 'todavía sin facturas' : 'por factura' }));
+      }
+      out.push(tarjeta({ clave:'ultima', k:'Última vez que vino',
+        v: c.ultima ? c.ultima.fecha : '—', na: !c.ultima,
+        s: c.ultima ? (c.ultima.dias===0 ? 'hoy' : 'hace '+c.ultima.dias+' días') : 'todavía no ha venido' }));
+      // D5 · la segunda fecha. Es OTRA cosa que la de arriba, y por eso hay dos tarjetas.
+      out.push(tarjeta({ clave:'contacto', k:'Último contacto',
+        v: c.contacto ? c.contacto.fecha.slice(0,10) : '—', na: !c.contacto,
+        s: c.contacto
+            ? (c.contacto.etiqueta + (c.contacto.es_automatico ? ' · automático' : '') + ' · hace '+c.contacto.dias+' días')
+            : 'nada apuntado todavía',
+        sTxt: c.contacto && c.contacto.es_automatico
+            ? 'Lo mandó Bamburu solo: no cuenta como que el cliente haya aparecido' : null }));
+      if (c.ritmo) {
+        out.push(tarjeta({ clave:'ritmo', k:'Cada cuánto viene',
+          v: c.ritmo.ritmo_dias ? ('cada '+c.ritmo.ritmo_dias+' días') : '—', na: !c.ritmo.ritmo_dias,
+          s: c.ritmo.ritmo_dias ? (c.ritmo.visitas+' visitas')
+             : (c.ritmo.falta ? ('faltan '+c.ritmo.falta+' visitas') : 'aún no ha venido'),
+          sTxt: c.ritmo.motivo || null }));
       }
       return '<div class="bf-cards">'+out.join('')+'</div>';
+    }
+
+    // ── C2 · LOS DATOS DEL CLIENTE, CON «CLIENTE DESDE» DENTRO ───────────────────────────────────
+    // Aquí van los datos de identidad: los que no piden acción. «Cliente desde» baja aquí desde las
+    // tarjetas — sigue siendo su primer documento real, y sigue diciendo la fecha de alta al lado.
+    function datosHTML(D){
+      var f = D.fijos || {}, c = D.cabecera || {}, cli = D.cliente || {};
+      var filas = [
+        ['Código', cli.client_code || '—'],
+        ['NIF', f.fiscal_id || '—'],
+        ['Teléfono', f.phone || '—'],
+        ['Email', f.email || '—'],
+        ['Cliente desde', c.desde && c.desde.fecha ? c.desde.fecha : ((c.desde && c.desde.nota) || '—'),
+          c.desde && c.desde.alta ? 'de alta desde '+c.desde.alta : ''],
+      ];
+      return '<div class="bf-datos">'+filas.map(function(r){
+        return '<div><span class="k">'+esc(r[0])+'</span><span class="v" title="'+esc(r[1])+'">'+esc(r[1])+'</span>'
+          + (r[2] ? '<span class="s" title="'+esc(r[2])+'">'+esc(r[2])+'</span>' : '')+'</div>';
+      }).join('')+'</div>';
     }
 
     // ── DISA RECOMIENDA (bloque C) ────────────────────────────────────────────────────────────────
@@ -219,15 +311,35 @@ export function fichaClienteJS({ sym = '€' } = {}) {
       }).join('');
     }
 
-    function chipsHTML(cont){
+    // ── F · LOS CHIPS ────────────────────────────────────────────────────────────────────────────
+    // Se ocultan por lo que el negocio USA, nunca por valer 0: a la asesoría con cero proyectos hay
+    // que enseñárselos, porque son su trabajo y ese 0 le dice que puede empezar.
+    // Y NADA SE ELIMINA (R6): lo oculto sale en «Más opciones» y se enciende de un clic.
+    function chipsHTML(cont, extra){
       if (!cont || !cont.length) return '';
-      return '<div class="bf-chips">'+cont.map(function(x){
-        // "Te debe" ya es una tarjeta: el chip de deuda desaparece para no decir lo mismo dos veces.
-        if (x.key === 'deuda') return '';
-        var cero = (x.n===0) ? ' cero' : '';
-        return '<a class="'+cero.trim()+'" href="'+esc(x.href)+'"><i class="ti '+esc(x.icon)+'"></i> '
+      var ext = new Set(extra || []);
+      var vivos = cont.filter(function(x){ return !x.oculto || ext.has(x.key); });
+      var dormidos = cont.filter(function(x){ return x.oculto && !ext.has(x.key); });
+      var h = '<div class="bf-chips">'+vivos.map(function(x){
+        return '<a class="'+(x.n===0?'cero':'')+'" href="'+esc(x.href)+'"><i class="ti '+esc(x.icon)+'"></i> '
           + esc(x.etiqueta)+' <span class="n">'+x.n+'</span></a>';
-      }).join('')+'</div>';
+      }).join('');
+      if (dormidos.length) {
+        h += '<button type="button" class="bf-mas" data-mas-chips="1" '
+          + 'title="'+esc(dormidos.map(function(x){ return x.etiqueta+': '+(x.porque||''); }).join(' · '))+'">'
+          + '<i class="ti ti-dots"></i> Más opciones</button>';
+      }
+      h += '</div>';
+      if (dormidos.length) {
+        h += '<div id="bfMasChips" style="display:none" class="bf-nota">'
+          + dormidos.map(function(x){
+              return '<div style="display:flex;align-items:center;gap:.5rem;justify-content:space-between;padding:.25rem 0;flex-wrap:wrap">'
+                + '<span><strong>'+esc(x.etiqueta)+'</strong> — '+esc(x.porque||'no se usa en este negocio')+'</span>'
+                + '<button type="button" class="btn btn-secondary btn-sm" data-chip-on="'+esc(x.key)+'">Enseñarlo igualmente</button></div>';
+            }).join('')
+          + '</div>';
+      }
+      return h;
     }
 
     function queCompraHTML(compra, n){
@@ -281,10 +393,91 @@ export function fichaClienteJS({ sym = '€' } = {}) {
       }).join('')+'</div>';
     }
 
+    // ── D5 · EL REGISTRO DE CONTACTOS ────────────────────────────────────────────────────────────
+    // Lo AUTOMÁTICO va marcado a simple vista, y las VISITAS también: son las dos cosas que hay que
+    // poder distinguir de un vistazo, porque de esa distinción depende que el aviso de cliente
+    // dormido siga significando algo.
+    // Convierte los **así** del texto del servidor en negrita, sin regex.
+    function negrita(txt){
+      var partes = String(txt||'').split('**');
+      return partes.map(function(p,i){ return i%2 ? '<strong>'+esc(p)+'</strong>' : esc(p); }).join('');
+    }
+
+    function registroHTML(d){
+      var h = '';
+      if (d.resumen) h += '<div class="bf-resumen">'+esc(d.resumen)+'</div>';
+      // Sin regex a propósito: dentro de una plantilla del servidor, el \\* de /\\*\\*.../ se lo come el
+      // motor y al navegador le llega /**(.+?)**/ — que lee como comentario de bloque. Partir por
+      // '**' hace lo mismo y no se puede romper por un escape.
+      if (d.nota) h += '<div class="bf-nota">'+negrita(d.nota)+'</div>';
+      // Filtro por tipo. Solo salen los tipos que ESE cliente tiene: un filtro con opciones vacías
+      // es ruido que promete cosas que no están.
+      if ((d.tipos||[]).length > 1) {
+        h += '<div class="bf-per" data-filtro-tipo>'
+          + '<button type="button" data-tipo="" aria-pressed="true">Todo</button>'
+          + d.tipos.map(function(t){ return '<button type="button" data-tipo="'+esc(t)+'" aria-pressed="false">'
+              + esc((d.catalogo&&d.catalogo[t]&&d.catalogo[t].etiqueta)||t)+'</button>'; }).join('')
+          + '</div>';
+      }
+      if (d.puede_apuntar) {
+        h += '<div style="margin-bottom:.8rem"><button type="button" class="btn btn-secondary btn-sm" data-apuntar="1">'
+          + '<i class="ti ti-plus"></i> Apuntar contacto</button></div><div id="bfApuntar"></div>';
+      }
+      if (!(d.eventos||[]).length) return h + '<div class="bf-vacio">'+esc(d.vacio||'Nada todavía.')+'</div>';
+      h += '<div class="bf-reg">'+d.eventos.map(function(e){
+        var tit = e.href ? '<a href="'+esc(e.href)+'" target="_blank" rel="noopener">'+esc(e.resultado||e.etiqueta)+'</a>'
+                         : esc(e.resultado||e.etiqueta);
+        var marcas = (e.es_automatico ? '<span class="bf-auto" title="Lo mandó Bamburu solo: no cuenta como que el cliente haya aparecido">automático</span>' : '')
+                   + (e.es_visita && !d.soloVisitas ? '<span class="bf-visita" title="Cuenta como que vino">visita</span>' : '');
+        var abajo = [e.etiqueta, e.quien && e.quien !== '—' ? e.quien : '', 
+                     e.hueco_dias!=null ? (e.hueco_dias+' días después de la anterior') : ''].filter(Boolean).join(' · ');
+        return '<div class="ev'+(e.es_automatico?' auto':'')+'"><i class="ti '+esc(e.icon||'ti-point')+'"></i>'
+          + '<div class="cuerpo"><div class="t" title="'+esc(e.resultado||e.etiqueta)+'">'+tit+marcas+'</div>'
+          + (abajo ? '<div class="d" title="'+esc(abajo)+'">'+esc(abajo)+'</div>' : '')+'</div>'
+          + '<span class="f">'+esc(String(e.fecha||'').slice(0,16))+'</span></div>';
+      }).join('')+'</div>';
+      return h;
+    }
+
+    // D3 · APUNTAR A MANO, EN DOS CLICS. Y la verdad sobre WhatsApp dicha en pantalla: no está
+    // conectado a Bamburu, así que esto lo apunta una persona. No se finge una integración.
+    function apuntarHTML(catalogo){
+      var manuales = Object.keys(catalogo||{}).filter(function(k){ return catalogo[k].manual; });
+      return '<div class="bf-nota" style="background:var(--bg2);border:1px solid var(--border2)">'
+        + '<div class="bf-form">'
+        +   '<div><label>Qué fue</label><select class="form-control" id="bfcTipo">'
+        +     manuales.map(function(k){ return '<option value="'+esc(k)+'">'+esc(catalogo[k].etiqueta)+'</option>'; }).join('')
+        +   '</select></div>'
+        +   '<div><label>Dirección</label><select class="form-control" id="bfcDir">'
+        +     '<option value="saliente">Yo le escribí o llamé</option><option value="entrante">Me contactó él</option>'
+        +   '</select></div>'
+        + '</div>'
+        + '<div><label style="display:block;font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);margin-bottom:.2rem">Qué pasó (opcional)</label>'
+        +   '<input class="form-control" id="bfcRes" maxlength="500" placeholder="Ej.: dice que paga la semana que viene"></div>'
+        + '<div id="bfcAviso" style="font-size:.74rem;color:var(--text2);margin-top:.45rem"></div>'
+        + '<div style="margin-top:.6rem;display:flex;gap:.5rem">'
+        +   '<button type="button" class="btn btn-primary btn-sm" data-apuntar-ok="1">Apuntar</button>'
+        +   '<button type="button" class="btn btn-secondary btn-sm" data-apuntar-no="1">Cancelar</button>'
+        + '</div></div>';
+    }
+
+    // C4 · el selector de periodo, dentro de la tarjeta.
+    function periodoHTML(actual){
+      var ops = [['m3','3 meses'],['m6','6 meses'],['m12','12 meses'],['anio','Este año'],['libre','Fechas propias']];
+      return '<div class="bf-per" data-periodo>'+ops.map(function(o){
+        return '<button type="button" data-per="'+o[0]+'" aria-pressed="'+(actual===o[0]?'true':'false')+'">'+esc(o[1])+'</button>';
+      }).join('')+'</div>'
+      + '<div id="bfPerLibre" style="display:'+(actual==='libre'?'flex':'none')+';gap:.5rem;margin-bottom:.8rem;flex-wrap:wrap">'
+      +   '<input type="date" class="form-control" id="bfPerD" style="max-width:170px">'
+      +   '<input type="date" class="form-control" id="bfPerH" style="max-width:170px">'
+      +   '<button type="button" class="btn btn-secondary btn-sm" data-per-libre="1">Aplicar</button></div>';
+    }
+
     window.BF = {
       eur: eur, pct: pct, esc: esc, num: num,
-      tarjeta: tarjeta, tarjetasHTML: tarjetasHTML, recomiendaHTML: recomiendaHTML,
+      tarjeta: tarjeta, tarjetasHTML: tarjetasHTML, datosHTML: datosHTML, recomiendaHTML: recomiendaHTML,
       chipsHTML: chipsHTML, queCompraHTML: queCompraHTML, margenHTML: margenHTML, listaHTML: listaHTML,
+      registroHTML: registroHTML, apuntarHTML: apuntarHTML, periodoHTML: periodoHTML,
     };
   })();
   `;
@@ -300,7 +493,7 @@ export function fichaClienteJS({ sym = '€' } = {}) {
 // LA INVARIANTE: NUNCA hay dos ventanas apiladas. `capa()` SUSTITUYE el contenido de la única
 // ventana viva; no crea otra. El gate lo comprueba contando `.bf-win-overlay.open` en el DOM.
 export function fichaVentanaJS({ montaje = 'ventana' } = {}) {
-  return `
+  return String.raw`
   (function(){
     var MONTAJE = ${JSON.stringify(montaje)};
     var D = null;              // los datos del cliente abierto
@@ -313,9 +506,13 @@ export function fichaVentanaJS({ montaje = 'ventana' } = {}) {
     var profundidad = 0;
 
     function $(s, r){ return (r||document).querySelector(s); }
+    // El token CSRF va SIEMPRE en lo que no es GET. Sin él, el servidor devuelve 403 y el botón
+    // parece no hacer nada: el endpoint responde, pero rechaza. Me ha mordido dos veces en esta
+    // tarea (el paso del alta y el selector de periodo), así que aquí queda dentro del helper.
     function api(m, u, b){
-      return fetch(u, { method:m, headers:{'Content-Type':'application/json'},
-        body: b?JSON.stringify(b):undefined })
+      var h = { 'Content-Type':'application/json' };
+      if (['GET','HEAD'].indexOf(m.toUpperCase()) === -1) h['x-csrf-token'] = window.CSRF_TOKEN;
+      return fetch(u, { method:m, headers:h, body: b?JSON.stringify(b):undefined })
         .then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.error||r.status); return j; }); });
     }
 
@@ -335,7 +532,11 @@ export function fichaVentanaJS({ montaje = 'ventana' } = {}) {
         + '<div class="bf-win-body" id="bfBody"></div>'
         // B1.5 — el pie. Va abajo del todo porque es lo ultimo del orden que manda la ventana:
         // cabecera, DISA, tarjetas, que te compra, y la salida hacia el detalle largo.
-        + '<div class="bf-win-foot" id="bfFoot"><a class="btn btn-secondary btn-sm" id="bfFull" href="#">Ver ficha completa →</a></div>'
+        // A3 — «Ver ficha completa» ABRE UNA CAPA, no una página. Navegando por la app nunca se sale
+        // de la ventana; la página entera existe solo para cuando alguien recarga la dirección.
+        // Sigue siendo un <a> con href de verdad para que se pueda abrir en pestaña nueva con el
+        // botón central o con Ctrl+clic — el clic normal se queda en la ventana.
+        + '<div class="bf-win-foot" id="bfFoot"><a class="btn btn-secondary btn-sm" id="bfFull" href="#" data-tarjeta="completa">Ver ficha completa →</a></div>'
         + '</div>';
       document.body.appendChild(o);
       // Se cierra pulsando FUERA (en el overlay, no en la ventana).
@@ -415,15 +616,19 @@ export function fichaVentanaJS({ montaje = 'ventana' } = {}) {
       var c = D.cliente || {};
       var o = armazon();
       $('#bfTit', o).textContent = c.name || '';
-      var datos = [c.client_code, D.fijos && D.fijos.fiscal_id, D.fijos && D.fijos.phone, D.fijos && D.fijos.email]
-        .filter(Boolean).join(' · ');
+      // B1.1 · la cabecera compacta: quién es, en una línea. C2 mete aquí «Cliente desde», que salió
+      // de las tarjetas porque no pide ninguna acción — es identidad, como el NIF o el teléfono.
+      var f = D.fijos || {}, cab = D.cabecera || {};
+      var desde = cab.desde && cab.desde.fecha ? 'cliente desde ' + cab.desde.fecha
+                : (cab.desde && cab.desde.nota ? cab.desde.nota.toLowerCase() : '');
+      var datos = [c.client_code, f.fiscal_id, f.phone, f.email, desde].filter(Boolean).join(' · ');
       $('#bfSub', o).textContent = datos;
       $('#bfAtras', o).style.display = 'none';
       $('#bfFoot', o).style.display = '';
       var html = '';
       html += BF.recomiendaHTML(D.recomienda);
       html += BF.tarjetasHTML(D);
-      html += BF.chipsHTML(D.contadores);
+      html += BF.chipsHTML(D.contadores, D.chips_extra);
       if (D.compra && D.compra.length) {
         html += '<div class="bf-h">Qué te compra</div>' + BF.queCompraHTML(D.compra, 5);
       }
@@ -502,9 +707,10 @@ export function fichaVentanaJS({ montaje = 'ventana' } = {}) {
     });
 
     // ── EL DETALLE DE UNA TARJETA ─────────────────────────────────────────────────────────────────
-    var TITULOS = { desde:'Cliente desde', ultima:'Última vez que vino', ritmo:'Cada cuánto viene',
-                    gasto:'Gasto total', doce:'Últimos 12 meses', ticket:'Ticket medio',
-                    deuda:'Te debe', margen:'Margen que deja' };
+    var TITULOS = { deuda:'Te debe', margen:'Margen que deja', gasto:'Gasto total',
+                    periodo:'En el periodo elegido', ticket:'Ticket medio',
+                    ultima:'Última vez que vino', contacto:'Último contacto', ritmo:'Cada cuánto viene',
+                    compra:'Qué te compra', completa:'Ficha completa' };
 
     // Pinta una capa SIN tocar el historial. Lo llama popstate (que ya está donde toca) y
     // abrirTarjeta (que empuja antes).
@@ -515,9 +721,18 @@ export function fichaVentanaJS({ montaje = 'ventana' } = {}) {
         capa('compra', 'Qué te compra', BF.queCompraHTML((D && D.compra) || window.BF_COMPRA || [], 0));
         return;
       }
+      // A3 · LA FICHA COMPLETA, DENTRO DE LA VENTANA. El mismo contenido que la página entera,
+      // pintado por el MISMO código (BFFull): si algún día divergen, será porque alguien escribió
+      // una segunda copia, y aquí no hay dónde ponerla.
+      if (clave === 'completa') {
+        capa('completa', 'Ficha completa', '<div id="bfFullCaja"><div class="skel skel-block" style="height:6rem"></div></div>');
+        if (window.BFFull) window.BFFull.pintar(document.getElementById('bfFullCaja'), id);
+        return;
+      }
       capa(clave, TITULOS[clave] || 'Detalle', '<div class="skel skel-block" style="height:5rem"></div>');
       api('GET','/api/erp/clients/'+id+'/360/tarjeta/'+clave).then(function(d){
         if (capaActual !== clave) return;          // el usuario ya se ha ido a otro sitio
+        if (d.catalogo) ultimoCatalogo = d.catalogo;
         capa(clave, TITULOS[clave] || d.titulo, detalleHTML(d));
         if (d.gestion) pintaGestionCobro(id);
       }).catch(function(e){
@@ -539,7 +754,12 @@ export function fichaVentanaJS({ montaje = 'ventana' } = {}) {
     }
 
     function detalleHTML(d){
+      // D5 · las tres tarjetas de tiempo abren EL REGISTRO, no una lista de facturas.
+      if (d.registro) return BF.registroHTML(d);
       var h = '';
+      // C4 · el selector de periodo va DENTRO de la tarjeta abierta, arriba del todo: es lo primero
+      // que se toca al entrar, y desde ahí se ve cambiar la lista.
+      if (d.periodo && d.clave === 'periodo') h += BF.periodoHTML(d.periodo.clave);
       if (d.clave === 'margen') h += BF.margenHTML(d.margen, d.modo);
       if (d.resumen) h += '<div class="bf-resumen">'+BF.esc(d.resumen)+'</div>';
       if (d.nota) h += '<div class="bf-nota">'+BF.esc(d.nota)+'</div>';
@@ -602,18 +822,122 @@ export function fichaVentanaJS({ montaje = 'ventana' } = {}) {
       location.href = '/admin/disa?q=' + encodeURIComponent(q);
     }
 
+    // Catálogo de tipos de la última capa de registro pintada (lo trae el servidor: la pantalla no
+    // tiene la lista escrita a mano, ni la coletilla de WhatsApp).
+    var ultimoCatalogo = null;
+
+    function avisoTipo(){
+      var sel = document.getElementById('bfcTipo'), av = document.getElementById('bfcAviso');
+      if (!sel || !av || !ultimoCatalogo) return;
+      var t = ultimoCatalogo[sel.value];
+      av.textContent = (t && t.aviso) || '';
+    }
+
+    function guardarPeriodo(p){
+      api('PUT', '/api/erp/clients/periodo-ficha', p).then(function(){
+        pintaTarjeta('periodo');                      // la capa, con la lista nueva
+        if (window.BFRecarga) window.BFRecarga();      // y el resumen, con el título nuevo
+      }).catch(function(x){ if (window.toast) toast(x.message, 'err'); });
+    }
+
+    function filtrarRegistro(tipo){
+      var id = ID || window.BF_CLIENTE_ID; if (!id) return;
+      var solo = capaActual !== 'contacto';
+      api('GET', '/api/erp/clients/' + id + '/contactos?visitas=' + (solo ? 1 : 0) + '&tipo=' + encodeURIComponent(tipo || ''))
+        .then(function(r){
+          var caja = document.querySelector('#bfBody .bf-reg, #f360capaBody .bf-reg');
+          var d = { eventos: r.eventos, tipos: [], catalogo: r.catalogo, soloVisitas: solo, puede_apuntar: false, vacio: 'Nada de ese tipo.' };
+          var nuevo = BF.registroHTML(d);
+          if (caja) caja.outerHTML = nuevo.replace(/^[\s\S]*?(<div class="bf-reg">)/, '$1') || nuevo;
+        }).catch(function(){});
+    }
+
     // ── UN SOLO ESCUCHADOR PARA TODO ──────────────────────────────────────────────────────────────
     // Delegado, en el documento: el HTML se repinta constantemente y enganchar listeners a cada
     // boton repintado es como se pierden los clics. Ademas evita el onclick inline dentro de un
     // template del servidor, que es donde se cuelan las comillas escapadas que revientan la página.
     document.addEventListener('click', function(e){
-      var t = e.target.closest('[data-tarjeta],[data-rec],[data-cobro],[data-gestion],[data-cuenta]');
+      // La lista TIENE que llevar todos los atributos que el escuchador maneja abajo: si falta uno,
+      // ese botón deja de responder en silencio y no hay error que lo delate. Le pasó al selector de
+      // periodo: el endpoint respondía 200 y el botón no llamaba a nadie.
+      var t = e.target.closest('[data-tarjeta],[data-rec],[data-cobro],[data-gestion],[data-cuenta],'
+        + '[data-per],[data-per-libre],[data-apuntar],[data-apuntar-ok],[data-apuntar-no],'
+        + '[data-tipo],[data-mas-chips],[data-chip-on]');
       if (!t) return;
       var id = ID || window.BF_CLIENTE_ID;
       if (t.hasAttribute('data-tarjeta')) { e.preventDefault(); abrirTarjeta(t.getAttribute('data-tarjeta')); return; }
       if (t.hasAttribute('data-cobro'))   { e.preventDefault(); if (window.openCobros) window.openCobros(+t.getAttribute('data-cobro')); return; }
       if (t.hasAttribute('data-gestion')) { e.preventDefault(); if (window.openGestion) window.openGestion(+t.getAttribute('data-gestion')); return; }
       if (t.hasAttribute('data-cuenta'))  { e.preventDefault(); if (window.openGestionCuenta) window.openGestionCuenta(+t.getAttribute('data-cuenta')); return; }
+      // ── C4 · CAMBIAR EL PERIODO ────────────────────────────────────────────────────────────────
+      // Se guarda al instante y se repinta la capa Y el resumen: la tarjeta de fuera tiene que
+      // enseñar ya el título nuevo, o el usuario no sabría si le ha hecho caso.
+      if (t.hasAttribute('data-per')) {
+        e.preventDefault();
+        var per = t.getAttribute('data-per');
+        if (per === 'libre') {
+          var lib = document.getElementById('bfPerLibre'); if (lib) lib.style.display = 'flex';
+          var ps = t.parentElement.querySelectorAll('[data-per]');
+          for (var i = 0; i < ps.length; i++) ps[i].setAttribute('aria-pressed', ps[i] === t ? 'true' : 'false');
+          return;
+        }
+        guardarPeriodo({ clave: per });
+        return;
+      }
+      if (t.hasAttribute('data-per-libre')) {
+        e.preventDefault();
+        var d1 = document.getElementById('bfPerD'), d2 = document.getElementById('bfPerH');
+        if (!d1 || !d2 || !d1.value || !d2.value) { if (window.toast) toast('Pon las dos fechas','err'); return; }
+        guardarPeriodo({ clave: 'libre', desde: d1.value, hasta: d2.value });
+        return;
+      }
+
+      // ── D3 · APUNTAR UN CONTACTO A MANO ────────────────────────────────────────────────────────
+      if (t.hasAttribute('data-apuntar')) {
+        e.preventDefault();
+        var caja = document.getElementById('bfApuntar'); if (!caja) return;
+        caja.innerHTML = BF.apuntarHTML(ultimoCatalogo);
+        avisoTipo();
+        var sel = document.getElementById('bfcTipo'); if (sel) sel.addEventListener('change', avisoTipo);
+        return;
+      }
+      if (t.hasAttribute('data-apuntar-no')) { e.preventDefault(); var cx = document.getElementById('bfApuntar'); if (cx) cx.innerHTML = ''; return; }
+      if (t.hasAttribute('data-apuntar-ok')) {
+        e.preventDefault();
+        api('POST', '/api/erp/clients/' + id + '/contactos', {
+          tipo: document.getElementById('bfcTipo').value,
+          direccion: document.getElementById('bfcDir').value,
+          resultado: document.getElementById('bfcRes').value,
+        }).then(function(){
+          if (window.toast) toast('Apuntado');
+          pintaTarjeta(capaActual);          // se repinta la capa donde estaba, no se le echa de ella
+          if (window.BFRecarga) window.BFRecarga();
+        }).catch(function(x){ if (window.toast) toast(x.message, 'err'); });
+        return;
+      }
+      if (t.hasAttribute('data-tipo')) {     // filtro del registro
+        e.preventDefault();
+        var hs = t.parentElement.querySelectorAll('[data-tipo]');
+        for (var j = 0; j < hs.length; j++) hs[j].setAttribute('aria-pressed', hs[j] === t ? 'true' : 'false');
+        filtrarRegistro(t.getAttribute('data-tipo'));
+        return;
+      }
+
+      // ── F2 · ENSEÑAR UN CHIP QUE EL OFICIO NO TRAE ─────────────────────────────────────────────
+      if (t.hasAttribute('data-mas-chips')) {
+        e.preventDefault();
+        var m = document.getElementById('bfMasChips');
+        if (m) m.style.display = m.style.display === 'none' ? '' : 'none';
+        return;
+      }
+      if (t.hasAttribute('data-chip-on')) {
+        e.preventDefault();
+        api('PUT', '/api/erp/clients/chips-ficha', { key: t.getAttribute('data-chip-on'), encender: true })
+          .then(function(){ if (window.BFRecarga) window.BFRecarga(); else location.reload(); })
+          .catch(function(x){ if (window.toast) toast(x.message, 'err'); });
+        return;
+      }
+
       if (t.hasAttribute('data-rec')) {
         e.preventDefault();
         var tipo = t.getAttribute('data-rec');
@@ -647,9 +971,189 @@ export function fichaVentanaJS({ montaje = 'ventana' } = {}) {
       caja.scrollIntoView({ block:'start', behavior:'smooth' });
     }
 
+    // Un punto ÚNICO para repintar el resumen desde cualquier sitio (guardar un periodo, apuntar un
+    // contacto, encender un chip). Lo define cada montaje según lo que tenga a mano.
+    window.BFRecarga = function(){
+      var id = ID || window.BF_CLIENTE_ID; if (!id) return;
+      api('GET','/api/erp/clients/'+id+'/360').then(function(d){
+        D = d;
+        if (MONTAJE === 'ventana') { if (capaActual === 'resumen') pintaResumen(); }
+        else if (typeof window.BFPintaPagina === 'function') window.BFPintaPagina(d);
+      }).catch(function(){});
+    };
+
     window.BFWin = { abrir: abrir, cerrar: cerrar, capa: capa, abrirTarjeta: abrirTarjeta,
                      resumen: function(){ capa('resumen'); },
                      datos: function(){ return D; }, setDatos: function(d){ D = d; } };
   })();
+  `;
+}
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// LA FICHA COMPLETA — UN SOLO renderizador para la capa de la ventana y para la página entera
+//
+// POR QUÉ ESTO EXISTE. «Ver ficha completa» sacaba al usuario de la ventana y lo mandaba a otra
+// página; se perdía el sitio, el filtro y la lista, y volver era un viaje. Ahora abre EN LA MISMA
+// ventana, en capa, con su flecha de volver — y la página entera queda solo para cuando alguien
+// recarga la dirección o la comparte, que es justo cuando sí quieres una página.
+//
+// Para que las dos superficies no puedan divergir NUNCA, las dos llaman a `BFFull.pintar(caja, id)`.
+// No hay una segunda copia del HTML en ninguna parte: si algún día hay que arreglar la tabla de
+// facturas, se arregla aquí y queda arreglada en los dos sitios.
+//
+// EL AIRE (B2): cada caja lleva `.bf-caja`, porque `.card` de Bamburu NO tiene padding —vive en
+// `.card-body`— y la ficha escribía dentro de `.card` a pelo. Ese era el «texto pegado al borde».
+export function fichaCompletaJS() {
+  return String.raw`
+  (function(){
+    var TIPO_LBL = { documento:'Documentos', cobro:'Cobros', cita:'Citas', oportunidad:'Oportunidades',
+                     actividad:'Actividad', proyecto:'Proyectos', tiempo:'Horas', aviso:'Avisos', nota:'Notas' };
+    function api(m, u, b){
+      var o = { method:m, headers:{'Content-Type':'application/json'} };
+      if (!['GET','HEAD'].includes(m)) o.headers['x-csrf-token'] = window.CSRF_TOKEN;
+      if (b) o.body = JSON.stringify(b);
+      return fetch(u, o).then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.error||r.status); return j; }); });
+    }
+
+    // El armazón. Los ids llevan el prefijo de la caja para que la capa y la página puedan convivir
+    // en el mismo documento sin pisarse los identificadores.
+    function armazon(pfx){
+      return '<div class="' + 'bf-full">'
+        + '<div class="card bf-caja" id="'+pfx+'hist"><h4>Su historia</h4>'
+        +   '<div class="bf-per" id="'+pfx+'tabs"></div><div id="'+pfx+'tl">Cargando…</div>'
+        +   '<div style="text-align:center;padding:.6rem"><button type="button" class="btn btn-secondary btn-sm" id="'+pfx+'mas" style="display:none">Ver más</button></div>'
+        + '</div>'
+        + '<div class="bf-full-2">'
+        +   '<div class="card bf-caja"><h4>Qué te compra</h4><div id="'+pfx+'compra">Cargando…</div></div>'
+        +   '<div class="card bf-caja"><h4>Notas</h4><div id="'+pfx+'notaFija"></div>'
+        +     '<textarea class="form-control" id="'+pfx+'nueva" rows="2" maxlength="4000" placeholder="Escribe una nota…"></textarea>'
+        +     '<button type="button" class="btn btn-primary btn-sm" style="margin-top:.4rem" id="'+pfx+'addNota">Añadir nota</button>'
+        +     '<div id="'+pfx+'notas" style="margin-top:.75rem"></div></div>'
+        + '</div>'
+        + '<div class="card bf-caja" id="'+pfx+'facBox" style="display:none"><h4>Todas sus facturas</h4><div id="'+pfx+'fac"></div></div>'
+        + '</div>';
+    }
+
+    function pintar(caja, id){
+      if (!caja) return;
+      var pfx = 'bff' + id + '_';
+      caja.innerHTML = armazon(pfx);
+      var $ = function(x){ return document.getElementById(pfx + x); };
+      var TIPO = '', DESDE = 0;
+
+      // ── Su historia ──────────────────────────────────────────────────────────────────────────
+      function tabs(tipos){
+        $('tabs').innerHTML = '<button type="button" data-tl="" aria-pressed="'+(TIPO===''?'true':'false')+'">Todo</button>'
+          + (tipos||[]).map(function(t){ return '<button type="button" data-tl="'+BF.esc(t)+'" aria-pressed="'+(TIPO===t?'true':'false')+'">'+BF.esc(TIPO_LBL[t]||t)+'</button>'; }).join('');
+      }
+      function cargarTl(){
+        api('GET','/api/erp/clients/'+id+'/360/timeline?tipo='+encodeURIComponent(TIPO)+'&desde='+DESDE+'&cuantos=25').then(function(r){
+          tabs(r.tipos);
+          var box = $('tl');
+          if (DESDE === 0) box.innerHTML = '';
+          if (DESDE === 0 && !r.eventos.length) {
+            box.innerHTML = '<div class="bf-vacio">Aquí no hay nada todavía'+(TIPO?' de ese tipo':'')+'. En cuanto le factures, le des cita o le escribas una nota, aparecerá aquí.</div>';
+          } else {
+            box.innerHTML += r.eventos.map(function(e){
+              var f = String(e.ts||'').slice(0,10);
+              var t = e.href ? '<a href="'+BF.esc(e.href)+'" target="_blank" rel="noopener">'+BF.esc(e.title)+'</a>' : BF.esc(e.title);
+              return '<div class="bf-reg"><div class="ev"><i class="ti '+BF.esc(e.icon||'ti-point')+'"></i>'
+                + '<div class="cuerpo"><div class="t" title="'+BF.esc(e.title)+'">'+t+'</div>'
+                + (e.detail?'<div class="d" title="'+BF.esc(e.detail)+'">'+BF.esc(e.detail)+'</div>':'')+'</div>'
+                + '<span class="f">'+BF.esc(f)+'</span></div></div>';
+            }).join('');
+          }
+          DESDE += r.eventos.length;
+          $('mas').style.display = r.hay_mas ? '' : 'none';
+        }).catch(function(){});
+      }
+      $('tabs').addEventListener('click', function(ev){
+        var b = ev.target.closest('button[data-tl]'); if(!b) return;
+        TIPO = b.getAttribute('data-tl'); DESDE = 0; $('tl').innerHTML = ''; cargarTl();
+      });
+      $('mas').addEventListener('click', cargarTl);
+
+      // ── Notas ────────────────────────────────────────────────────────────────────────────────
+      function cargarNotas(){
+        api('GET','/api/erp/clients/'+id+'/notas').then(function(ns){
+          $('notas').innerHTML = ns.length ? ns.map(function(n){
+            return '<div class="bf-nota" style="background:var(--bg2);border:1px solid var(--border2)">'
+              + '<div style="white-space:pre-wrap;font-size:.86rem">'+BF.esc(n.texto)+'</div>'
+              + '<div style="font-size:.72rem;color:var(--text3);margin-top:.3rem">'+BF.esc(n.user_name||'—')+' · '
+              + BF.esc(String(n.created_at||'').slice(0,16).replace('T',' '))+(n.updated_at?' · editada':'')
+              + ' <a href="#" data-nedit="'+n.id+'">editar</a> · <a href="#" data-ndel="'+n.id+'">quitar</a></div></div>';
+          }).join('') : '<div class="bf-vacio">Sin notas todavía.</div>';
+        }).catch(function(){});
+      }
+      $('addNota').addEventListener('click', function(){
+        var t = $('nueva').value.trim(); if(!t){ if(window.toast) toast('Escribe algo','err'); return; }
+        api('POST','/api/erp/clients/'+id+'/notas',{texto:t}).then(function(){
+          $('nueva').value=''; if(window.toast) toast('Nota guardada'); cargarNotas(); DESDE=0; cargarTl();
+        }).catch(function(e){ if(window.toast) toast(e.message,'err'); });
+      });
+      $('notas').addEventListener('click', function(ev){
+        var e = ev.target.closest('a[data-nedit]'), d = ev.target.closest('a[data-ndel]');
+        if (e) { ev.preventDefault();
+          var actual = e.closest('.bf-nota').firstChild.textContent;
+          var t = prompt('Editar la nota:', actual); if (t==null) return;
+          api('PUT','/api/erp/clients/'+id+'/notas/'+e.getAttribute('data-nedit'),{texto:t})
+            .then(function(){ cargarNotas(); DESDE=0; cargarTl(); }).catch(function(x){ if(window.toast) toast(x.message,'err'); });
+        } else if (d) { ev.preventDefault();
+          if (!confirm('¿Quitar esta nota?')) return;
+          api('DELETE','/api/erp/clients/'+id+'/notas/'+d.getAttribute('data-ndel'))
+            .then(function(){ cargarNotas(); DESDE=0; cargarTl(); }).catch(function(x){ if(window.toast) toast(x.message,'err'); });
+        }
+      });
+
+      // ── Qué te compra y la tabla larga de facturas ───────────────────────────────────────────
+      api('GET','/api/erp/clients/'+id+'/360').then(function(D){
+        $('notaFija').innerHTML = D.cliente && D.cliente.notes
+          ? '<div class="alert alert-ok" style="margin-bottom:.6rem">'+BF.esc(D.cliente.notes)+'</div>' : '';
+        $('compra').innerHTML = D.compra == null ? '<div class="bf-vacio">—</div>'
+          : (D.compra.length ? BF.queCompraHTML(D.compra, 0)
+             : '<div class="bf-vacio">Todavía no te ha comprado nada en los últimos 12 meses.</div>');
+      }).catch(function(){});
+
+      api('GET','/api/erp/clients/'+id+'/invoices').then(function(deb){
+        var badge={pendiente:'b-yellow',parcial:'b-blue',cobrada:'b-green',vencida:'b-red',abono:'b-gray'};
+        var label={pendiente:'Pendiente',parcial:'Cobrada en parte',cobrada:'Cobrada',vencida:'Vencida',abono:'Abono'};
+        $('facBox').style.display = '';
+        var filas = (deb.invoices||[]).map(function(f){
+          var est = !f.counts
+            ? '<span class="badge b-gray" title="No computa como deuda (anulada o rectificada por sustitución)">no computa</span>'
+            : '<span class="badge '+(badge[f.estado]||'')+'">'+(label[f.estado]||f.estado)+(f.estado==='vencida'&&f.dias_vencida?' '+f.dias_vencida+'d':'')+'</span>';
+          var acc = (f.cobrable && Number(f.pendiente)>0.0049)
+            ? '<button type="button" class="btn btn-primary btn-sm" data-cobro="'+f.id+'">Registrar cobro</button> '
+              + '<button type="button" class="btn btn-secondary btn-sm" data-gestion="'+f.id+'">Gestionar</button>' : '';
+          return '<tr><td><a href="/admin/invoices/'+f.id+'" target="_blank" rel="noopener">'+BF.esc(f.invoice_number)+'</a></td>'
+            + '<td style="color:var(--text3);font-size:.8rem;white-space:nowrap">'+BF.esc(f.due_date||f.issue_date||'-')+'</td>'
+            + '<td style="white-space:nowrap">'+BF.eur(f.total)+'</td>'
+            + '<td style="white-space:nowrap">'+(f.counts?BF.eur(f.pendiente):'—')+'</td>'
+            + '<td>'+est+'</td><td style="text-align:right;white-space:nowrap">'+acc+'</td></tr>';
+        }).join('');
+        $('fac').innerHTML = filas
+          ? '<div class="bf-scroll"><table><thead><tr><th>Factura</th><th>Vence</th><th>Total</th><th>Pendiente</th><th>Cobro</th><th></th></tr></thead><tbody>'+filas+'</tbody></table></div>'
+          : '<div class="bf-vacio">Este cliente aún no tiene facturas.</div>';
+      }).catch(function(){});
+
+      cargarTl(); cargarNotas();
+    }
+
+    window.BFFull = { pintar: pintar };
+  })();
+  `;
+}
+
+export function fichaCompletaCSS() {
+  return `
+    .bf-full{display:flex;flex-direction:column;gap:1rem}
+    .bf-full .card{min-width:0}
+    .bf-full-2{display:grid;grid-template-columns:1fr 1fr;gap:1rem;align-items:start}
+    .bf-full-2>.card{min-width:0}
+    @media(max-width:900px){ .bf-full-2{grid-template-columns:1fr} }
+    /* Dentro de la ventana la ficha completa no lleva marcos dobles: la ventana ya es el marco. */
+    .bf-win-body .bf-full .card{border:none;background:transparent;padding:0}
+    .bf-win-body .bf-full{gap:1.5rem}
+    .bf-win-body .bf-full-2{gap:1.5rem;grid-template-columns:1fr}
   `;
 }

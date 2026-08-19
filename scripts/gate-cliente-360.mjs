@@ -163,11 +163,23 @@ try {
   // ── [12] Cliente recién creado y vacío: la pantalla NO se queda en blanco ─────────────────────
   await irFicha(OTRO);
   const vacio = await page.evaluate(() => ({
-    cifras: [...document.querySelectorAll('.bf-card')].map(c => c.querySelector('.bf-v').textContent
-      + ' / ' + (c.querySelector('.bf-s') ? c.querySelector('.bf-s').textContent : '')),
-    tl: document.getElementById('f360tl').textContent.trim(),
+    cifras: Object.fromEntries([...document.querySelectorAll('.bf-card')].map(c => [
+      c.getAttribute('data-tarjeta'),
+      c.querySelector('.bf-v').textContent + ' / ' + (c.querySelector('.bf-s') ? c.querySelector('.bf-s').textContent : '')])),
+    // «Cliente desde» dejó de ser tarjeta y bajó a los datos del cliente (C2): no pide ninguna
+    // acción, así que ocupaba un sitio que necesitaba lo urgente. Lo que se comprueba sigue siendo
+    // LO MISMO —que un cliente vacío dice qué falta y no finge un 0—, en su sitio nuevo.
+    datos: document.querySelector('.bf-datos') ? document.querySelector('.bf-datos').textContent : '',
+    tl: (document.querySelector('[id$="_tl"]') || { textContent: '' }).textContent.trim(),
   }));
-  ok(vacio.cifras.some(v => /Aún no te ha comprado/i.test(v)), 'un cliente sin nada dice «Aún no te ha comprado», no un 0', vacio.cifras[0]);
+  ok(/Aún no te ha comprado/i.test(vacio.datos), 'un cliente sin nada dice «Aún no te ha comprado», no un 0',
+     vacio.datos.slice(0, 80));
+  // OJO CON QUÉ CERO ES EL PROHIBIDO. Un cliente sin facturas **debe 0,00 € de verdad** y ha gastado
+  // 0,00 € de verdad: ese cero es un dato, no un invento. El cero que R3 prohíbe es el que TAPA UN
+  // DATO DESCONOCIDO — margen sin coste, ticket medio sin facturas—, y esos tienen que decir «—».
+  ok(['margen', 'ticket'].every(k => String(vacio.cifras[k] || '').startsWith('—')),
+     'lo que NO se sabe (margen y ticket medio) sale «—», nunca 0 ni 100 %',
+     'margen: ' + vacio.cifras.margen + ' · ticket: ' + vacio.cifras.ticket);
   ok(vacio.tl.length > 20 && !/^\s*$/.test(vacio.tl), 'y la línea de tiempo explica qué falta, no queda en blanco', vacio.tl.slice(0, 60));
 
   // ── [9] Cada contador coincide con las filas de su lista ──────────────────────────────────────
@@ -194,7 +206,9 @@ try {
   // La nota de siempre (el campo del cliente) sigue intacta.
   db.prepare("UPDATE clients SET notes='Nota de toda la vida' WHERE id=?").run(CLI);
   await irFicha(CLI);
-  ok(await page.evaluate(() => /Nota de toda la vida/.test(document.getElementById('f360notaFija').textContent)),
+  await dormir(900);
+  ok(await page.evaluate(() => /Nota de toda la vida/.test(
+       (document.querySelector('[id$="_notaFija"]') || { textContent: '' }).textContent)),
      'y la nota de texto libre que ya existía sigue en su sitio, sin migrar ni pisar');
 
   // ── [11] Los avisos de DISA de la ficha son los del vigía ─────────────────────────────────────
@@ -263,7 +277,14 @@ try {
   }, CLI);
   ok(!v2.conts.some(x => /cita/i.test(x)), 'sin permiso de citas no hay contador de citas', v2.conts.join(' · '));
   ok(!v2.kinds.includes('cita'), 'ni citas en su línea de tiempo', v2.kinds.join(', '));
-  ok(!v2.ritmo.some(k => /cada cuánto/i.test(k)), 'ni el «cada cuánto viene», que sale de la agenda');
+  // «Cada cuánto viene» ya NO sale solo de la agenda: una visita es también una factura o un
+  // presencial apuntado. Así que a quien ve facturas pero no citas SÍ le sale la tarjeta — pero
+  // calculada solo con lo que puede ver. Lo que se comprueba es eso: que la agenda no se cuela.
+  const ritmoSinCitas = ritmoDelCliente(db, CLI, p => p !== 'citas.read');
+  const ritmoConTodo  = ritmoDelCliente(db, CLI, () => true);
+  ok(ritmoSinCitas.visitas < ritmoConTodo.visitas,
+     'el «cada cuánto viene» de quien no ve citas se calcula SIN la agenda: no se cuela por detrás',
+     ritmoSinCitas.visitas + ' visitas frente a ' + ritmoConTodo.visitas);
   await ctx1.close();
 
   // ── [13] NETO-CERO ────────────────────────────────────────────────────────────────────────────

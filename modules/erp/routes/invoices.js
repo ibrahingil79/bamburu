@@ -25,6 +25,7 @@ import { paymentsSum, invoiceCobro, cobroState, isCobrable, ESTADO_LABEL,
 import { sendEmail } from '../../../core/mailer.js';
 import { ENTITY } from '../../../core/activity-entities.js';
 import { exigirCorreoActivo } from '../avisos-preferencias.js';   // interruptor de Ajustes → Avisos y correos
+import { contactoDeFactura } from '../contactos.js';   // D2: facturar deja constancia de que vino
 
 // T4 Paso 1 — fecha de vencimiento de una factura = fecha de emisión + plazo de pago
 // del cliente (días). Se guarda en la factura al emitir; cada factura conserva el suyo.
@@ -302,6 +303,10 @@ export function createInvoice(db, invoiceData) {
 
   const out = create();
   try { postInvoice(db, out.id); } catch {}   // asiento contable (en su propio try: un fallo de posteo NO rompe la factura; la red de seguridad reconcilia)
+  // D2 — la factura deja su rastro en el registro de contactos, como PRESENCIAL y como VISITA. En su
+  // propio try y sin lanzar: un contacto que no se pudo apuntar NO puede tumbar una factura emitida.
+  // Es idempotente por el índice único (doc_tipo, doc_id, tipo): reintentar no duplica.
+  try { contactoDeFactura(db, db.prepare('SELECT id, client_id, invoice_number, issue_date FROM invoices WHERE id=?').get(out.id)); } catch {}
   encolarSiProcede(db, out.registro_id);      // VERI*FACTU T2: a la cola de remisión (240 s de ventana). No lanza.
   return out;
 }

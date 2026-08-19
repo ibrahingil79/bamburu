@@ -68,6 +68,16 @@ mira a la competencia directa.)
   manda siempre "sobre la venta", porque un resultado contable no cambia de definición por un gusto.
   Y esas pantallas lo dicen en voz alta.*
   *Extiende "una sola verdad, siempre limpia": un dato es el bueno cuando además se puede comprobar.*
+- **Contacto no es visita.** Saber de un cliente y que el cliente venga son cosas distintas, y
+  juntarlas rompe lo que más trabaja para el dueño. Un correo que manda Bamburu solo **no** dice que
+  el cliente esté vivo: si contara, tres recordatorios automáticos harían parecer activo a quien
+  lleva año y medio sin aparecer, y el detector de clientes que se enfrían dejaría de avisar justo
+  de los que se están yendo. **Un aviso que no salta es peor que no tener aviso: nadie lo echa de
+  menos.** Por eso «visita» es y seguirá siendo *pisó el negocio o compró* —cita atendida, factura,
+  venta de mostrador, presencial apuntado a mano—, y todo lo demás se registra, se enseña y se
+  distingue a simple vista, pero no cuenta.
+  *De aquí sale también la honestidad sobre lo que Bamburu NO hace: WhatsApp no está conectado, así
+  que se apunta a mano y la pantalla lo dice. Nunca se finge una integración que no existe.*
 - **Las dos puertas.** Toda información de negocio tiene **dos puertas**: la **conversacional** (DISA)
   y la **visual** (panel / constructor de analíticas). **Ninguna sustituye a la otra** — quien prefiere
   preguntar, pregunta; quien prefiere ver, ve. **Los gráficos no son cerrados:** el usuario construye

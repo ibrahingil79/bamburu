@@ -38,6 +38,8 @@ import { reservaDeCita, ventanaCliente, personasPublicas, autoEncenderReservas }
 // PASO 8 — PERFIL DE OFICIO. Otro módulo HOJA (solo `db`), por la misma razón que el de arriba: layout.js
 // también lo importa para el menú, y si el diccionario viviera aquí se cerraría el círculo.
 import { vocabulario } from '../oficios.js';
+import { contactoDeCita as apuntarContactoDeCita } from '../contactos.js';   // D2: rastro en el registro
+// (alias a propósito: `contactoDeCita` ya existe aquí y significa el teléfono/correo del cliente)
 
 const genToken = () => randomBytes(32).toString('base64url');
 const err = (msg, status) => { const e = new Error(msg); e.status = status; return e; };
@@ -284,6 +286,12 @@ export function cambiarEstadoSvc(db, id, estado) {
   if (!puedeTransicionar(cita.estado, estado)) throw err('No se puede pasar de «' + cita.estado + '» a «' + estado + '»', 400);
   const stamp = estado === 'confirmada' ? 'confirmada_at' : (estado === 'atendida' ? 'atendida_at' : (estado === 'anulada' ? 'anulada_at' : null));
   db.prepare(`UPDATE citas SET estado=?, ${stamp ? stamp + '=CURRENT_TIMESTAMP,' : ''} updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(estado, id);
+  // D2 — atendida, anulada o plantón dejan rastro en el registro de contactos. Solo la ATENDIDA es
+  // visita (D4): un plantón es que NO vino, y contarlo como visita mentiría al detector. En su propio
+  // try y sin lanzar: el registro no puede impedir que una cita cambie de estado.
+  if (['atendida', 'anulada', 'no_show'].includes(estado)) {
+    try { apuntarContactoDeCita(db, { ...cita, estado }); } catch {}
+  }
   return { id: Number(id), estado };
 }
 

@@ -2946,6 +2946,58 @@ Sé preciso con los números y siempre redondea correctamente.`,
   )`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_client_notes_client ON client_notes(client_id, created_at DESC)`);
 
+  // ── REGISTRO DE CONTACTOS (aditivo, idempotente, sin DROP) ─────────────────────────────────────
+  //
+  // POR QUÉ EXISTE Y POR QUÉ ES UNA TABLA APARTE. «Última vez que vino» contestaba solo con la
+  // agenda, y en un negocio que no lleva agenda eso deja al dueño sin saber cuándo habló con nadie.
+  // Pero mezclar «hablé con él» con «vino» rompería el detector de enfriamiento: tres correos
+  // automáticos harían parecer vivo a un cliente que lleva año y medio sin aparecer. Por eso hay
+  // DOS cosas separadas —contacto y visita— y esta tabla las distingue con dos columnas:
+  //
+  //   `es_visita`     1 = pisó el negocio o compró. SOLO cuenta para ritmo y «última vez que vino».
+  //   `es_automatico` 1 = lo mandó Bamburu solo (recordatorio, confirmación). NUNCA es visita, y se
+  //                   distingue a simple vista en pantalla: un correo que mandó la máquina no es
+  //                   señal de que el cliente esté vivo.
+  //
+  // FUERA de WRITABLE_TABLES a propósito: los contactos los apunta una persona o los deriva un
+  // documento REAL. DISA no escribe aquí — inventarse un contacto es inventarse una conversación.
+  //
+  // NADA SE RECALCULA HACIA ATRÁS (R4): esta tabla nace vacía y se llena con lo que pase desde hoy.
+  // Lo histórico ya está en sus documentos y la ficha lo sigue leyendo de ellos.
+  db.exec(`CREATE TABLE IF NOT EXISTS client_contacts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id     INTEGER NOT NULL,
+    fecha         TEXT    NOT NULL,                    -- 'YYYY-MM-DD HH:MM' hora local del negocio
+    tipo          TEXT    NOT NULL,                    -- presencial|telefono|whatsapp|correo|mensaje|cita
+    direccion     TEXT    NOT NULL DEFAULT 'saliente', -- entrante|saliente
+    es_visita     INTEGER NOT NULL DEFAULT 0,          -- ¿pisó el negocio o compró? (D4)
+    es_automatico INTEGER NOT NULL DEFAULT 0,          -- ¿lo mandó Bamburu solo? (D2)
+    resultado     TEXT    NOT NULL DEFAULT '',         -- texto libre, opcional
+    doc_tipo      TEXT,                                -- factura|cita|oportunidad|… si cuelga de un documento
+    doc_id        INTEGER,
+    user_id       INTEGER,                             -- quién lo hizo; NULL = Bamburu
+    user_name     TEXT    NOT NULL DEFAULT '',         -- copiado al escribir: sobrevive al usuario
+    origen        TEXT    NOT NULL DEFAULT 'manual',   -- manual|auto (de dónde salió la fila)
+    created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+    active        INTEGER NOT NULL DEFAULT 1,          -- archivar-no-borrar (regla permanente)
+    FOREIGN KEY (client_id) REFERENCES clients(id)
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_client_contacts_cli ON client_contacts(client_id, fecha DESC)`);
+  // El índice que impide DUPLICAR un contacto derivado: una factura o una cita generan UNA fila y
+  // solo una, aunque el disparador se ejecute dos veces (reintento, doble guardado, migración).
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_client_contacts_doc
+             ON client_contacts(doc_tipo, doc_id, tipo) WHERE doc_id IS NOT NULL`);
+
+  // Y LA LIMPIEZA, AUTOMÁTICA. Un contacto sin cliente no significa nada: si alguna vez se borra un
+  // cliente de verdad, sus contactos se van con él. **El producto NUNCA borra un cliente** —archiva
+  // con active=0, que es la regla permanente— así que esto no destruye nada en uso normal; existe
+  // porque la clave foránea, sin esto, impide el borrado y deja el fallo en manos de quien lo haga.
+  // Es lo que habría hecho un ON DELETE CASCADE, que no se puede añadir a una tabla ya creada sin
+  // reconstruirla (y reconstruir tablas está prohibido: R4). Aditivo, idempotente y reversible.
+  db.exec(`CREATE TRIGGER IF NOT EXISTS trg_client_contacts_borrar_cliente
+             BEFORE DELETE ON clients
+             BEGIN DELETE FROM client_contacts WHERE client_id = OLD.id; END`);
+
   // (2) LOS ÍNDICES QUE FALTABAN. La ficha 360 hace ocho o diez consultas POR CLIENTE en una sola
   // pantalla; sin índice, cada una es un barrido de la tabla entera. De las diez tablas implicadas
   // solo dos lo tenían (oportunidades y actividad). Aditivo puro: un índice no cambia un dato.

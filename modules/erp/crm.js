@@ -621,7 +621,10 @@ export function clientTimeline(db, clientId, hoy, opts = {}) {
   const ev = [];
   const push = e => { if (e.ts) ev.push(e); };
   const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
-  const money = n => sym + Number(n || 0).toFixed(2);
+  // En español: 286,77 € — no «€286.77». La línea de tiempo es de las pocas superficies que
+  // escribían el dinero al revés, y se veía en la ficha de cliente entera.
+  const money = n => Number(n || 0).toLocaleString('es-ES',
+    { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' }) + ' ' + sym;
 
   // 1) OPORTUNIDADES — apertura y cierre.
   for (const o of (inc.oportunidades ? db.prepare('SELECT * FROM opportunities WHERE client_id=? AND active=1 ORDER BY created_at').all(clientId) : [])) {

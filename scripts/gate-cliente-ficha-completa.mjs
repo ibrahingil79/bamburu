@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════════════════════════════════════
-// GATE — FICHA DE CLIENTE (ventana flotante + tarjetas + DISA que recomienda) Y LOS DOS MÁRGENES.
+// GATE — FICHA DE CLIENTE COMPLETA: ventana + tarjetas + registro de contactos + los dos márgenes.
 // Tarea TRANSVERSAL: el puntero de la escalera NO se mueve.
 //
 // LO QUE ESTE GATE EXISTE PARA IMPEDIR es que vuelva el fallo de origen: un porcentaje correcto que
@@ -11,7 +11,7 @@
 // su base", no "el número existe". Y por eso el criterio 12 barre pantallas enteras buscando un %
 // de margen huérfano: si aparece uno, el gate cae aunque el cálculo sea perfecto.
 //
-//   node scripts/gate-cliente-ficha-margen.mjs
+//   node scripts/gate-cliente-ficha-completa.mjs
 import puppeteer from 'puppeteer';
 import path from 'path';
 import { unlinkSync } from 'fs';
@@ -23,6 +23,10 @@ import { provisionTenant } from '../core/tenant-provisioning.js';
 import { fijarOficio, sembrarCatalogo } from '../modules/erp/oficios.js';
 import { createProductSvc } from '../modules/erp/routes/products.js';
 import { margen as margenMotor, modoDeEmpresa, setModoDeEmpresa, MODO_POR_DEFECTO } from '../modules/erp/margen.js';
+import { clientesFueraDeRitmo, RITMO_MIN_CITAS } from '../modules/erp/vigia-agenda.js';
+import { ritmoDelCliente, contadoresDe, cabecera360 as cabecera360Gate,
+  chipsForzados as chipsForzadosGate, encenderChip } from '../modules/erp/cliente-360.js';
+import { apuntarContacto, contactoDeCorreo, ultimoContacto, diasDeVisita } from '../modules/erp/contactos.js';
 import { margenResumen, ventasResumen, countingSalesInvoices } from '../modules/erp/ventas-metrics.js';
 import { cruzar } from '../modules/erp/constructor-analitica.js';
 import { cuentaPyG } from '../modules/erp/contabilidad-pyg.js';
@@ -99,6 +103,7 @@ try {
   const api = (m, u, b) => page.evaluate(async (m, u, b) => {
     try { return await window.api(m, u, b); } catch (e) { return { __err: e.message }; }
   }, m, u, b);
+  const cabeceraDe = (id) => cabecera360Gate(db, db.prepare('SELECT * FROM clients WHERE id=?').get(id), () => true);
   const irLista = async (qs = '') => { await page.goto(BASE + '/admin/clients' + qs, { waitUntil: 'networkidle0' }); await dormir(500); };
   const irFicha = async (id) => { await page.goto(BASE + '/admin/clients/' + id, { waitUntil: 'networkidle0' }); await dormir(1000); };
   const abrirVentana = async (id) => { await page.evaluate(i => window.viewDetail(i), id); await dormir(1400); };
@@ -141,7 +146,7 @@ try {
   const esPagina = await page.evaluate(() => ({
     sinVentana: !document.querySelector('.bf-win-overlay.open'),
     hayResumen: !!document.getElementById('f360resumen'),
-    hayHistoria: !!document.getElementById('historia'),
+    hayHistoria: !!document.querySelector('[id$="_hist"]'),
   }));
   ok(esPagina.sinVentana && esPagina.hayResumen && esPagina.hayHistoria,
      'copiar esa dirección y recargarla abre la FICHA COMPLETA a página entera', JSON.stringify(esPagina));
@@ -161,9 +166,40 @@ try {
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   await irLista(QS);
   await abrirVentana(CLI);
-  const CLAVES = ['desde', 'ultima', 'ritmo', 'gasto', 'doce', 'ticket', 'deuda', 'margen'];
+  // C1 — el orden manda lo urgente. Se comprueba el ORDEN, no solo que estén: una tarjeta de deuda
+  // la novena es una tarjeta que nadie mira.
+  const CLAVES = ['deuda', 'margen', 'gasto', 'periodo', 'ticket', 'ultima', 'contacto', 'ritmo'];
   const pintadas = await page.evaluate(() => [...document.querySelectorAll('.bf-card')].map(c => c.getAttribute('data-tarjeta')));
-  ok(CLAVES.every(k => pintadas.includes(k)), 'las ocho tarjetas están y las ocho son pulsables', pintadas.join(', '));
+  ok(JSON.stringify(pintadas) === JSON.stringify(CLAVES),
+     'las ocho tarjetas están, EN EL ORDEN de urgencia, y todas son pulsables', pintadas.join(' → '));
+  ok(!pintadas.includes('desde'), '«Cliente desde» ya NO es una tarjeta: no pide ninguna acción');
+  const cabTxt = await page.evaluate(() => document.querySelector('.bf-win-head .sub').textContent);
+  ok(/cliente desde \d{4}-\d{2}-\d{2}|no te ha comprado/i.test(cabTxt),
+     'pero sigue estando, en los datos del cliente junto al NIF y el teléfono', cabTxt);
+
+  // ── CRITERIO 2 · «VER FICHA COMPLETA» ABRE EN LA VENTANA, NO EN OTRA PÁGINA ───────────────────
+  // Antes te sacaba de la ventana: se perdía el sitio, el filtro y la lista, y volver era un viaje.
+  await page.evaluate(() => document.getElementById('bfFull').click());
+  await dormir(2400);
+  const vf = await page.evaluate(() => ({
+    overlays: document.querySelectorAll('.bf-win-overlay.open').length,
+    dentro: !!document.querySelector('#bfBody .bf-full'),
+    historia: !!document.querySelector('#bfBody [id$="_hist"]'),
+    notas: !!document.querySelector('#bfBody [id$="_notas"]'),
+    facturas: document.querySelectorAll('#bfBody [id$="_fac"] tbody tr').length,
+    atras: document.getElementById('bfAtras').style.display !== 'none',
+    url: location.pathname,
+  }));
+  ok(vf.overlays === 1 && vf.dentro,
+     '«Ver ficha completa» abre DENTRO de la ventana, no en otra página', vf.overlays + ' ventana(s)');
+  ok(vf.url === '/admin/clients/' + CLI, 'sin salir de la dirección del cliente', vf.url);
+  ok(vf.historia && vf.notas && vf.facturas >= 8,
+     'y trae TODO: su historia, sus notas y la tabla larga de facturas (criterio 22)',
+     vf.facturas + ' filas de factura');
+  ok(vf.atras, 'con su flecha para volver al resumen');
+  await page.evaluate(() => document.getElementById('bfAtras').click());
+  await dormir(900);
+  ok(await page.evaluate(() => document.querySelectorAll('.bf-card').length) === 8, 'y vuelve al resumen');
   let capasOk = 0, apiladas = 0, volvioOk = 0;
   for (const k of CLAVES) {
     await page.evaluate(k => document.querySelector('.bf-card[data-tarjeta="' + k + '"]').click(), k);
@@ -221,29 +257,52 @@ try {
     await page.setViewport({ width: w, height: 1000 });
     if (donde === 'ventana') { await irLista(QS); await abrirVentana(CLI); }
     else { await irFicha(CLI); }
+    // Se ABREN los desplegables: «Ver los N documentos» de DISA es contenido que el usuario ve de
+    // verdad, y medir solo con todo cerrado dejaría sin mirar justo el trozo que más crece.
+    await page.evaluate(() => { for (const d of document.querySelectorAll('details')) d.open = true; });
+    await dormir(700);
     return page.evaluate(() => {
-      const sale = [], filas = {}, sinRecorte = [], sinTitulo = [];
-      for (const c of document.querySelectorAll('.bf-card')) {
-        for (const el of c.querySelectorAll('span')) {
-          const st = getComputedStyle(el);
-          if (st.whiteSpace !== 'nowrap' || st.textOverflow !== 'ellipsis' || st.overflow === 'visible')
-            sinRecorte.push({ t: el.textContent.slice(0, 24), ws: st.whiteSpace, to: st.textOverflow, ov: st.overflow });
-          if (!el.getAttribute('title')) sinTitulo.push(el.textContent.slice(0, 24));
+      const AIRE = 6;                       // mínimo de aire entre el texto y el borde de su caja
+      const sale = [], pegado = [], filas = {}, sinRecorte = [], sinTitulo = [];
+      const raiz = document.querySelector('.bf-win-overlay.open') || document.body;
+      // Las CAJAS son las que dibujan un marco alrededor del contenido. Una fila con solo un borde
+      // inferior (un separador) NO es una caja: su texto no tiene que respetarle los lados. Sin esta
+      // distinción la medida acusaba a 19 sitios que estaban perfectamente.
+      const CAJAS = '.bf-card, .bf-caja, .bf-win, .card, .bf-nota, .bf-rec, .alert';
+      const enScroller = el => { let n = el; while (n && n !== raiz) { const o = getComputedStyle(n).overflowX; if (o === 'auto' || o === 'scroll') return true; n = n.parentElement; } return false; };
+      for (const caja of raiz.querySelectorAll(CAJAS)) {
+        if (caja.querySelector(CAJAS)) continue;         // solo la caja MÁS INTERNA
+        const rc = caja.getBoundingClientRect();
+        if (!rc.width) continue;
+        for (const el of caja.querySelectorAll('*')) {
+          if (el.children.length) continue;
+          const txt = (el.textContent || '').trim(); if (!txt) continue;
+          // SOLO LO QUE SE VE. Chrome deja rectángulos vivos dentro de un <details> CERRADO
+          // (content-visibility), y medir a ciegas acusaba de desbordar a texto que nadie ve.
+          if (el.checkVisibility && !el.checkVisibility({ checkVisibilityCSS: true, contentVisibilityAuto: true })) continue;
+          if (el.closest('details:not([open])')) continue;
+          if (enScroller(el)) continue;                  // lo que scrollea, scrollea: no se sale
+          const r = el.getBoundingClientRect(); if (!r.width || !r.height) continue;
+          const cls = (el.className || el.tagName).toString().slice(0, 22) + ' en ' + (caja.className || caja.tagName).toString().slice(0, 22);
+          if (r.right > rc.right + 0.5 || r.left < rc.left - 0.5 || r.bottom > rc.bottom + 0.5) { sale.push({ t: txt.slice(0, 28), cls }); continue; }
+          const holgura = Math.min(r.left - rc.left, rc.right - r.right, r.top - rc.top, rc.bottom - r.bottom);
+          if (holgura < AIRE) pegado.push({ t: txt.slice(0, 28), cls, holgura: Math.round(holgura) });
         }
+      }
+      // Y EL MECANISMO, no solo el resultado: con textos cortos, quitarle el recorte al componente no
+      // se nota — así di verde sobre un componente ya roto la vez anterior.
+      for (const c of document.querySelectorAll('.bf-card')) {
         const rc = c.getBoundingClientRect();
         (filas[Math.round(rc.top)] = filas[Math.round(rc.top)] || []).push(Math.round(rc.height));
         for (const el of c.querySelectorAll('span')) {
-          if (el.scrollWidth > el.clientWidth + 1) sale.push({ t: el.textContent.slice(0, 30), sw: el.scrollWidth, cw: el.clientWidth, motivo: 'no cabe' });
-          const r = el.getBoundingClientRect();
-          if (r.right > rc.right + 1) sale.push({ t: el.textContent.slice(0, 30), motivo: 'se sale de la tarjeta' });
+          const st = getComputedStyle(el);
+          if (st.whiteSpace !== 'nowrap' || st.textOverflow !== 'ellipsis' || st.overflow === 'visible')
+            sinRecorte.push({ t: el.textContent.slice(0, 22), ws: st.whiteSpace, to: st.textOverflow, ov: st.overflow });
+          if (!el.getAttribute('title')) sinTitulo.push(el.textContent.slice(0, 22));
         }
       }
       const desiguales = Object.entries(filas).filter(([, hs]) => new Set(hs).size > 1);
-      // La cabecera de la ventana lleva el nombre del cliente, que lo teclea una persona y puede ser
-      // larguísimo: es el sitio más fácil por donde se sale un texto.
-      const tit = document.querySelector('.bf-win-head .tit');
-      const titSale = tit ? tit.scrollWidth > tit.clientWidth + 1 && getComputedStyle(tit).textOverflow !== 'ellipsis' : false;
-      return { sale, desiguales, sinRecorte, sinTitulo, titSale,
+      return { sale, pegado, desiguales, sinRecorte, sinTitulo,
                tarjetas: document.querySelectorAll('.bf-card').length,
                scrollH: document.documentElement.scrollWidth > window.innerWidth };
     });
@@ -251,20 +310,134 @@ try {
   for (const w of [390, 768, 1024, 1440]) {
     for (const donde of ['ventana', 'pagina']) {
       const m = await medir(w, donde);
-      ok(m.tarjetas === 8 && m.sale.length === 0,
-         'a ' + w + ' px (' + donde + '): ningún texto se sale de su tarjeta',
-         m.sale.length ? JSON.stringify(m.sale.slice(0, 2)) : m.tarjetas + ' tarjetas medidas');
-      ok(m.sinRecorte.length === 0, 'a ' + w + ' px (' + donde + '): las tres líneas siguen recortando con puntos suspensivos',
-         m.sinRecorte.length ? JSON.stringify(m.sinRecorte.slice(0, 2)) : 'nowrap + ellipsis + hidden en las 24 líneas');
-      ok(m.sinTitulo.length === 0, 'a ' + w + ' px (' + donde + '): y el valor completo sigue estando al pasar por encima',
+      ok(m.sale.length === 0, 'a ' + w + ' px (' + donde + '): ningún texto se sale de su caja',
+         m.sale.length ? JSON.stringify(m.sale.slice(0, 3)) : 'medido en todas las cajas');
+      ok(m.pegado.length === 0, 'a ' + w + ' px (' + donde + '): ni toca el borde (6 px de aire mínimo)',
+         m.pegado.length ? JSON.stringify(m.pegado.slice(0, 3)) : 'aire suficiente en todas');
+      ok(m.tarjetas === 8 && m.sinRecorte.length === 0,
+         'a ' + w + ' px (' + donde + '): las tarjetas siguen recortando con puntos suspensivos',
+         m.sinRecorte.length ? JSON.stringify(m.sinRecorte.slice(0, 2)) : m.tarjetas + ' tarjetas · 24 líneas');
+      ok(m.sinTitulo.length === 0, 'a ' + w + ' px (' + donde + '): y el valor completo sigue al pasar por encima',
          m.sinTitulo.length ? m.sinTitulo.join(' | ') : 'title en todas');
       ok(m.desiguales.length === 0, 'a ' + w + ' px (' + donde + '): todas las de una fila miden lo mismo',
          m.desiguales.length ? JSON.stringify(m.desiguales) : 'filas uniformes');
-      ok(!m.titSale, 'a ' + w + ' px (' + donde + '): el nombre largo del cliente tampoco se sale de la cabecera');
       ok(!m.scrollH, 'a ' + w + ' px (' + donde + '): la página no hace scroll horizontal');
     }
   }
   await page.setViewport({ width: 1440, height: 1000 });
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n[6-7] CADA TARJETA ABRE LO QUE EXPLICA SU CIFRA · EL PERIODO SE ELIGE Y SE RECUERDA');
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  await irLista(QS); await abrirVentana(CLI);
+  // «Última vez que vino» abre EL REGISTRO DE CONTACTOS, no una lista de facturas.
+  await page.evaluate(() => document.querySelector('.bf-card[data-tarjeta="ultima"]').click());
+  await dormir(1600);
+  const capaUltima = await page.evaluate(() => ({
+    registro: !!document.querySelector('#bfBody .bf-reg'),
+    eventos: document.querySelectorAll('#bfBody .bf-reg .ev').length,
+    esTablaFacturas: !!document.querySelector('#bfBody table thead'),
+    apuntar: !!document.querySelector('#bfBody [data-apuntar]'),
+  }));
+  ok(capaUltima.registro && !capaUltima.esTablaFacturas,
+     '«Última vez que vino» abre el REGISTRO DE CONTACTOS, no una lista de facturas',
+     capaUltima.eventos + ' entradas');
+  ok(capaUltima.eventos >= 8, 'y la lista CUADRA con la fecha que enseña la tarjeta', capaUltima.eventos + ' visitas');
+  ok(capaUltima.apuntar, 'con su botón para apuntar un contacto a mano');
+  await page.evaluate(() => document.getElementById('bfAtras').click()); await dormir(700);
+
+  // C4 — el periodo se elige DENTRO de la tarjeta, cambia título y cifra, y se recuerda al reabrir.
+  const tituloPeriodo = () => page.evaluate(() => {
+    const c = [...document.querySelectorAll('.bf-card')].find(x => x.getAttribute('data-tarjeta') === 'periodo');
+    return c ? { k: c.querySelector('.bf-k').textContent, v: c.querySelector('.bf-v').textContent } : null;
+  });
+  const antesPer = await tituloPeriodo();
+  await page.evaluate(() => document.querySelector('.bf-card[data-tarjeta="periodo"]').click());
+  await dormir(1400);
+  ok(await page.evaluate(() => document.querySelectorAll('#bfBody [data-per]').length) >= 5,
+     'la tarjeta del periodo trae sus opciones dentro: 3, 6, 12 meses, este año y fechas propias');
+  await page.evaluate(() => document.querySelector('#bfBody [data-per="m3"]').click());
+  await dormir(1600);
+  await page.evaluate(() => document.getElementById('bfAtras').click()); await dormir(900);
+  const trasPer = await tituloPeriodo();
+  ok(trasPer && /3 meses/i.test(trasPer.k), 'elegirlo cambia EL TÍTULO de la tarjeta, no solo la cifra',
+     antesPer.k + ' → ' + trasPer.k);
+  ok(trasPer.v !== antesPer.v, 'y la cifra', antesPer.v + ' → ' + trasPer.v);
+  // Y se recuerda: se cierra todo, se vuelve a abrir, y sigue en 3 meses.
+  await irLista(QS); await abrirVentana(CLI);
+  const recordado = await tituloPeriodo();
+  ok(recordado && /3 meses/i.test(recordado.k), 'y se recuerda al reabrir la ficha', recordado.k);
+  const guardado = db.prepare("SELECT blocks FROM dashboard_layouts WHERE scope=?").get('ficha-cliente:' + owner.id);
+  ok(!!guardado && /m3/.test(guardado.blocks), 'guardado POR USUARIO, en la tabla de preferencias que ya existía',
+     guardado ? guardado.blocks : '(nada)');
+  await api('PUT', '/api/erp/clients/periodo-ficha', { clave: 'm12' });   // se deja como estaba
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n[8-10] LA REGLA QUE PROTEGE A DISA: CONTACTO NO ES VISITA');
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // EL CASO QUE NO PUEDE ROMPERSE: un cliente con correos automáticos y ninguna visita en 18 meses
+  // tiene que SEGUIR pareciendo dormido. Si los contactos contaran como visita, el detector dejaría
+  // de avisar justo de los clientes que se están yendo — y un aviso que no salta no lo echa nadie
+  // de menos, así que el fallo viviría años.
+  const DORMIDO = db.prepare("INSERT INTO clients (name,active,created_at) VALUES ('Rosa Dormida',1,datetime('now'))").run().lastInsertRowid;
+  const insC = db.prepare("INSERT INTO citas (codigo,cliente_id,user_id,fecha,inicio_min,dur_min,margen_min,estado,archived,created_at,updated_at) VALUES (?,?,?,?,?,30,0,'atendida',0,datetime('now'),datetime('now'))");
+  [-620, -590, -560, -545].forEach((d, i) => insC.run('CITA-D' + RID + i, DORMIDO, owner.id, dias(d), 600 + i * 30));
+  const ritmoAntes = ritmoDelCliente(db, DORMIDO);
+  const vigiaAntes = clientesFueraDeRitmo(db, HOY).find(x => x.client_id === DORMIDO);
+  ok(!!vigiaAntes, 'el vigía ve dormido a un cliente con 4 visitas y 18 meses sin aparecer',
+     vigiaAntes ? vigiaAntes.dias_sin_venir + ' días sin venir' : '(no lo ve)');
+  // Tres correos AUTOMÁTICOS y una llamada apuntada a mano. Ninguno es visita.
+  for (let i = 0; i < 3; i++) contactoDeCorreo(db, { client_id: DORMIDO, asunto: 'Recordatorio ' + i, automatico: true, doc_id: 77000 + i });
+  apuntarContacto(db, { client_id: DORMIDO, tipo: 'telefono', resultado: 'Le llamé, no contesta', user_name: 'Dueña Gate' });
+  const ritmoDespues = ritmoDelCliente(db, DORMIDO);
+  const vigiaDespues = clientesFueraDeRitmo(db, HOY).find(x => x.client_id === DORMIDO);
+  ok(!!vigiaDespues && vigiaDespues.dias_sin_venir === vigiaAntes.dias_sin_venir,
+     'tras 3 correos automáticos y una llamada, SIGUE dormido y con los mismos días',
+     vigiaDespues ? vigiaDespues.dias_sin_venir + ' días' : '(ha dejado de verlo)');
+  ok(ritmoAntes.ritmo_dias === ritmoDespues.ritmo_dias && ritmoAntes.visitas === ritmoDespues.visitas,
+     'y su ritmo NO se ha movido ni un día', ritmoAntes.ritmo_dias + ' → ' + ritmoDespues.ritmo_dias);
+  // Y las dos tarjetas dan fechas DISTINTAS, que es de lo que va tener dos.
+  const cabD = cabeceraDe(DORMIDO);
+  ok(cabD.ultima && cabD.contacto && cabD.ultima.fecha.slice(0, 10) !== cabD.contacto.fecha.slice(0, 10),
+     '«Último contacto» y «Última vez que vino» dan fechas distintas en ese cliente',
+     'vino ' + (cabD.ultima && cabD.ultima.fecha) + ' · contacto ' + (cabD.contacto && cabD.contacto.fecha));
+  ok(cabD.contacto && !cabD.contacto.es_automatico, 'y el último contacto es la llamada, no el correo de la máquina',
+     cabD.contacto ? cabD.contacto.etiqueta : '—');
+  // Lo automático se distingue A SIMPLE VISTA en el registro.
+  await irLista(); await abrirVentana(DORMIDO);
+  await page.evaluate(() => document.querySelector('.bf-card[data-tarjeta="contacto"]').click());
+  await dormir(1600);
+  const reg = await page.evaluate(() => ({
+    ev: document.querySelectorAll('#bfBody .bf-reg .ev').length,
+    autos: document.querySelectorAll('#bfBody .bf-auto').length,
+    llamada: /Le llamé/.test(document.getElementById('bfBody').textContent),
+  }));
+  ok(reg.ev >= 4 && reg.autos === 3,
+     'en el registro, lo automático va marcado a simple vista', reg.autos + ' marcados de ' + reg.ev);
+  ok(reg.llamada, 'y la llamada apuntada a mano está ahí con su resultado');
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n[11] LOS CHIPS SE OCULTAN POR LO QUE EL NEGOCIO USA, NUNCA POR VALER 0');
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // Se lee el perfil de oficio que YA existe (`usa_proyectos`) y `usaAgenda`. No hay un sistema nuevo.
+  const chipsDe = () => contadoresDe(db, CLI, () => true, null)
+    .map(x => x.key + (x.oculto ? ':oculto' : ':visible'));
+  fijarOficio(db, 'taller');
+  const enTaller = chipsDe();
+  ok(enTaller.includes('proyectos:oculto'), 'en un TALLER el chip de Proyectos viene oculto', enTaller.join(' · '));
+  encenderChip(db, 'proyectos', true);
+  const trasEncender = contadoresDe(db, CLI, () => true, null).find(x => x.key === 'proyectos');
+  ok(!!trasEncender && chipsForzadosGate(db).includes('proyectos'),
+     'y encenderlo en «Más opciones» lo devuelve: nada se elimina, se oculta',
+     chipsForzadosGate(db).join(',') || '(vacío)');
+  encenderChip(db, 'proyectos', false);
+  fijarOficio(db, 'asesoria');
+  const enAsesoria = chipsDe();
+  const nProy = contadoresDe(db, CLI, () => true, null).find(x => x.key === 'proyectos');
+  ok(enAsesoria.includes('proyectos:visible') && nProy.n === 0,
+     'en una ASESORÍA con 0 proyectos SÍ aparece: es su trabajo, y el 0 le enseña que puede empezar',
+     'n=' + nProy.n);
+  fijarOficio(db, 'peluqueria');
 
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   console.log('\n[6-8] DISA RECOMIENDA: UNA LÍNEA POR FAMILIA, NO UNA POR DOCUMENTO');
@@ -517,11 +690,11 @@ try {
   await irFicha(CLI);
   await dormir(900);
   const completa = await page.evaluate(() => ({
-    historia: document.querySelectorAll('#f360tl .f360-ev').length,
-    tabla: document.querySelectorAll('#f360fac tbody tr').length,
-    cobrarEnTabla: document.querySelectorAll('#f360fac [data-cobro]').length,
-    notas: document.querySelectorAll('#f360notas .f360-nota').length,
-    compra: document.querySelectorAll('#f360compra .fila').length,
+    historia: document.querySelectorAll('[id$="_tl"] .bf-reg .ev').length,
+    tabla: document.querySelectorAll('[id$="_fac"] tbody tr').length,
+    cobrarEnTabla: document.querySelectorAll('[id$="_fac"] [data-cobro]').length,
+    notas: document.querySelectorAll('[id$="_notas"] .bf-nota').length,
+    compra: document.querySelectorAll('[id$="_compra"] .fila').length,
     tarjetas: document.querySelectorAll('.bf-card').length,
   }));
   ok(completa.historia > 0, 'la historia sigue entera', completa.historia + ' eventos');

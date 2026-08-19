@@ -30,6 +30,17 @@ const TIMEOUT_MS = 300000;
 
 // Grupos. Un gate puede estar en varios (la regresión de Pagos incluye los de compras/proveedor).
 const GRUPOS = {
+  // ── PANTALLAS DEL CLIENTE Y DE LA NAVEGACIÓN ─────────────────────────────────────────────────
+  // NACE DE UN DESCUIDO MÍO: estos cuatro gates existían, se corrían A MANO al entregarlos, y NO
+  // estaban en el barrido. Un gate fuera del barrido es un gate que nadie ejecuta, y esa es la
+  // historia exacta que cuenta la cabecera de este fichero: catorce gates muertos tres semanas.
+  // Añadir uno nuevo y no meterlo aquí es dejarlo muerto desde el primer día.
+  clientes: [
+    'gate-cliente-ficha-completa',   // ventana, tarjetas, registro de contactos y los dos márgenes
+    'gate-cliente-360',              // la ficha cuadra al céntimo con la pantalla de la que sale
+    'gate-menu-navegacion',          // ni una función del menú se pierde por el camino
+    'gate-agenda-visual',            // el lienzo de la agenda, y que se sirve desde la dirección real
+  ],
   pagos: [
     'test-pagos-proveedor', 'gate-pagos-proveedor', 'gate-pago-cuenta', 'gate-abono-proveedor',
     'gate-gasto-proveedor', 'test-devoluciones-proveedor', 'test-compras-motor',

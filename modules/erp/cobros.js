@@ -4,6 +4,7 @@
 //
 // Fuera de alcance (Paso 2): perfiles de cobro, próxima acción, DISA. Aquí solo el motor.
 import { renderEmail, renderEmailFabrica } from './email-templates.js';
+import { contactoDeCorreo } from './contactos.js';   // D2: el correo enviado deja rastro
 
 const r2 = n => Math.round(n * 100) / 100;
 
@@ -419,6 +420,11 @@ export async function registerCollectionAction(db, invoiceId, input, opts = {}) 
     const { data, error } = await opts.sendEmail(payload);
     if (error) { const e = new Error('No hemos podido enviar el email. Comprueba la dirección del destinatario e inténtalo más tarde.'); e.status = 502; throw e; }   // U3: sin volcar el objeto de Resend
     emailInfo = { sent: true, to: client.email, subject, id: data && data.id };
+    // D2 — el correo enviado se apunta como contacto SALIENTE. `automatico` distingue lo que manda
+    // Bamburu solo (cola de avisos) de lo que envía una persona pulsando el botón: la pantalla lo
+    // enseña distinto, y ninguno de los dos cuenta como visita (D4).
+    try { contactoDeCorreo(db, { client_id: inv.client_id, asunto: subject,
+      automatico: !!opts.automatico, user_id: opts.user_id || null, user_name: opts.user_name || '' }); } catch {}
   }
 
   const res = db.prepare(
@@ -590,6 +596,8 @@ export async function registerAccountAction(db, clientId, input, opts = {}) {
         });
       }
     })();
+    try { contactoDeCorreo(db, { client_id: clientId, asunto: subject,
+      automatico: !!opts.automatico, user_id: opts.user_id || null, user_name: opts.user_name || '' }); } catch {}
     return { batch_id: batchId, type, email: { sent: true, to: client.email, subject, id: data && data.id }, facturas: vivas.length };
   }
 

@@ -1482,6 +1482,96 @@ completa los cubra, hay que meterlos en un grupo — decisión del dueño, porqu
 puestos frente a con un puesto). **Desplegado y verificado por HTTPS** en `peluqueria-gil.bamburu.com`:
 Agenda con 2 entradas, la sección con sus 5, y las 7 rutas viejas a 200.
 
+### Ficha de cliente completa: la ficha entera en la ventana, registro de contactos y estética de tarjetas — **TAREA TRANSVERSAL** (el puntero de la escalera NO se mueve)  ✅ HECHO (2026-08-19)
+
+**LO QUE EL PASO 0 DESTAPÓ, Y ERA CULPA MÍA.** La entrega anterior dejó las tarjetas bien y **la
+pantalla que las rodea mal**. Medido: en Bamburu `.card` **no lleva padding** —vive en `.card-body`—
+y yo había escrito el contenido dentro de `.card` a pelo, así que **17 sitios de la ficha completa
+tenían el texto pegado al borde**, en los cuatro anchos. Y a 390 px las celdas de la tabla de
+facturas se pintaban **44 px fuera de su caja**, sin llegar a hacer scroll.
+
+**POR QUÉ NO LO CACÉ:** mi gate medía **solo `.bf-card`** —el componente que yo había construido— y
+no midió nunca la pantalla que lo contiene. El mismo error de siempre: verificar mi pieza en vez de
+lo que el usuario ve. El gate nuevo mide **todo elemento con texto de las dos superficies**, cae
+también si el texto solo *toca* el borde, y **abre los desplegables antes de medir**.
+
+**LA VENTANA YA NO TE ECHA.** «Ver ficha completa» abría otra página: se perdía el sitio, el filtro y
+la lista, y volver era un viaje. Ahora es **una capa más de la misma ventana**, con su flecha. La
+página entera queda para cuando alguien recarga la dirección o la comparte — que es justo cuando sí
+se quiere una página. Las dos superficies llaman al **mismo renderizador**: no hay una segunda copia
+del HTML en ninguna parte.
+
+**LAS TARJETAS, EN ORDEN DE URGENCIA** — te debe · margen · gasto · **periodo elegible** · ticket ·
+última visita · **último contacto** · cada cuánto viene. **«Cliente desde» sale de las tarjetas**: no
+pide ninguna acción, así que baja a los datos del cliente junto al NIF y el teléfono. No se pierde.
+**Cada tarjeta abre lo que EXPLICA su cifra**, no todas a facturas: las tres del tiempo abren el
+registro de contactos, la del margen su desglose documento a documento, la de la deuda la gestión de
+cobro. Y **«Últimos 12 meses» dejó de ser una decisión nuestra**: 3, 6, 12 meses, este año o fechas
+propias, elegido dentro de la tarjeta, con el título cambiando y **recordado por usuario** en la
+tabla de preferencias que ya existía.
+
+**EL REGISTRO DE CONTACTOS (entidad nueva) Y LA REGLA QUE PROTEGE A DISA.** `client_contacts`, fuera
+de WRITABLE_TABLES. Se apuntan **solos** —factura, cita atendida, cancelada o plantón, correo del CRM,
+y lo que manda Bamburu **marcado como automático**— y **a mano en dos clics** el teléfono, el
+presencial y el WhatsApp. **WhatsApp no está conectado a Bamburu y la pantalla lo dice**: no se finge
+una integración que no existe.
+
+La trampa evidente habría sido juntarlo todo en «última vez que supimos de él». Sería un desastre:
+**tres recordatorios automáticos harían parecer vivo a un cliente que lleva 18 meses sin aparecer**, y
+el detector de enfriamiento dejaría de avisar justo de los que se están yendo. Por eso hay **dos
+cosas y dos tarjetas**: contacto (todo) y visita (*pisó el negocio o compró*). **El detector sigue
+leyendo exactamente la misma consulta que ayer**, sin una coma cambiada. El gate lo comprueba con un
+cliente real: 4 visitas, 18 meses parado, tres correos automáticos y una llamada — **sigue dormido,
+su ritmo no se mueve un día, y las dos tarjetas dan fechas distintas**.
+
+**LOS CHIPS, POR LO QUE EL NEGOCIO USA, NUNCA POR VALER 0.** Se lee el perfil de oficio que YA existe
+(`usa_proyectos`) y `usaAgenda`, sin inventar otro sistema. Taller sin Proyectos; negocio sin agenda
+sin Citas; **asesoría con 0 proyectos SÍ los ve** — es su trabajo, y ese 0 le enseña que puede
+empezar. Y **nada se elimina**: lo oculto vive en «Más opciones» y se enciende de un clic.
+
+**VERIFICACIÓN — `gate-cliente-ficha-completa` 150/0.** Los cuatro sabotajes están demostrados:
+hacer que un correo automático cuente como visita, quitarle el aire a las cajas, devolver «Ver ficha
+completa» a otra página y ocultar los chips por valer 0 **hacen caer el gate**, comprobado deshaciendo
+cada cambio y volviéndolo a poner.
+
+**LA HERRAMIENTA APRENDIÓ TRES TRAMPAS MÁS.** `scripts/lint-plantillas.mjs` ahora caza también:
+el backtick en un comentario **de bloque** (`/* */`, que se me coló y me rompió el fichero igual que
+los de `//`); y **el escape que la plantilla se come** — `\s` dentro de un regex escrito en una
+plantilla llega al navegador como `s`, y `/\*\*…\*\*/g` llega como `/**…**/g`, que el navegador lee
+como comentario. Eso último dejó la capa de visitas **en blanco con el endpoint devolviendo 200**. El
+remedio ya estaba en el propio proyecto y yo no lo usaba: **`String.raw`**, como `JS_AGENDA` en
+citas.js. De paso el lint aprendió a saltarse los regex y a contar llaves, porque su primera versión
+acusaba en falso a cuatro ficheros — y **un lint que grita en falso se acaba ignorando**.
+
+**Y DOS FALLOS DE CSRF DEL MISMO TIPO:** el paso del alta y el selector de periodo llamaban con
+`fetch` a pelo, sin el token. El servidor respondía 403 y el botón **parecía no hacer nada**. Ahora el
+token va dentro del helper compartido, no en cada llamada.
+
+**Y DOS COSAS QUE DESTAPÓ LA REGRESIÓN, LAS DOS MÍAS.**
+- **`gate-propuestas-dormidos` se puso rojo** —verde en HEAD, rojo con mi árbol: mío sin discusión—.
+  Sus 39 comprobaciones pasaban; lo que fallaba era su **limpieza**: al borrar el cliente de prueba,
+  la clave foránea de `client_contacts` lo impedía. El producto **nunca borra un cliente** (archiva
+  con `active=0`), así que no es un fallo de uso real, pero seis gates lo hacen. Arreglado donde toca
+  y no gate a gate: un **trigger** que se lleva los contactos con el cliente, que es lo que habría
+  hecho un `ON DELETE CASCADE` de haberlo escrito al crear la tabla. Aditivo e idempotente.
+- **CUATRO GATES MÍOS NO ESTABAN EN EL BARRIDO.** `gate-cliente-360`, `gate-menu-navegacion`,
+  `gate-agenda-visual` y el de esta tarea: los corría a mano al entregarlos y `--all` **no los
+  ejecutaba nunca**. Es literalmente la historia que cuenta la cabecera de `run-gates.mjs` (catorce
+  gates muertos tres semanas sin que nadie se enterara), y la estaba repitiendo. Grupo `clientes`
+  nuevo, y la regresión pasa de 63 a **67 gates**.
+- Al meterlos, `gate-cliente-360` cayó y destapó **una fuga de permisos que era mía**: el «cada
+  cuánto viene» leía la agenda **sin comprobar `citas.read`**, así que quien no puede ver citas
+  obtenía fechas sacadas de ellas. Ahora cada fuente pide su permiso: sin citas, el ritmo sale solo
+  de los documentos que sí puede ver.
+
+**REGRESIÓN COMPLETA: 54/67, y los 13 rojos son los MISMOS de siempre** (demostrado en la entrega
+anterior revirtiendo el árbol, y confirmado aquí porque el rojo nuevo desapareció al arreglarlo).
+
+**ANOTADO Y NO CONSTRUIDO:** el eje de los gráficos del constructor sigue rotulando el dinero en
+formato inglés (viene del ayudante de gráficos compartido); el registro de contactos **nace vacío** y
+se llena con lo que pase desde hoy — lo histórico se sigue leyendo de las facturas y de la agenda, y
+no se ha reescrito ni un dato (R4).
+
 ### Ficha de cliente (ventana flotante + tarjetas + DISA que recomienda) y **los dos márgenes en toda la plataforma** — **TAREA TRANSVERSAL** (el puntero de la escalera NO se mueve)  ✅ HECHO (2026-08-19)
 
 **EL FALLO QUE DESTAPÓ EL PASO 0, Y ERA PEOR DE LO QUE PARECÍA.** Ibrahin vio «36,3 % de margen» en un
