@@ -26,6 +26,7 @@ import {
 import { lineas, parteDelDia } from '../parte-diario.js';
 import { permisosDeUsuario, puedeDe } from '../avisos.js';
 import { sendEmail } from '../../../core/mailer.js';
+import { MODOS, MODO_POR_DEFECTO, modoDeEmpresa, setModoDeEmpresa, marcarModoPreguntado } from '../margen.js';
 
 export function createSettingsRoutes(db, cfg = {}) {
   const sym = cfg.sym || '€';
@@ -71,6 +72,39 @@ export function createSettingsRoutes(db, cfg = {}) {
       const actual = oficioDe(db);
       const creados = sembrarCatalogo(db, actual, createProductSvc);
       return c.json({ ok: true, creados, faltan: serviciosQueFaltan(db, actual) });
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+
+  // ── G2 · CÓMO CALCULO MI MARGEN ──────────────────────────────────────────────────────────────
+  // Decide qué porcentaje manda como TITULAR en todas las pantallas. No recalcula nada ni reescribe
+  // ningún dato: las dos cifras se calculan siempre, y esto solo elige cuál se enseña primero.
+  // Por eso cambiarlo se ve al instante en todas partes y volver atrás no cuesta nada.
+  //
+  // CONTABILIDAD Y P&G NO OBEDECEN A ESTO (R1): ahí manda «sobre la venta», elija lo que elija el
+  // dueño, y la pantalla lo dice. Un resultado contable no cambia de definición por una preferencia.
+  api.get('/margen', requirePerm('company.read'), c =>
+    c.json({ modo: modoDeEmpresa(db), por_defecto: MODO_POR_DEFECTO, modos: MODOS }));
+
+  // G4 · la respuesta del paso del alta. Tres salidas y las tres TERMINAN el paso: elegir A,
+  // elegir B y SALTAR. Saltar no escribe el modo —la ausencia ya vale «sobre la venta»— y solo
+  // apunta que se preguntó, así que «no contestó» y «contestó venta» siguen siendo distinguibles.
+  // No bloquea el alta jamás: si esto falla, la pantalla lo dice y el paso se queda ahí.
+  api.post('/margen/alta', requirePerm('company.update'), async c => {
+    try {
+      const d = await c.req.json();
+      if (d && d.saltar) { marcarModoPreguntado(db); return c.json({ ok: true, modo: MODO_POR_DEFECTO, saltado: true }); }
+      if (!MODOS[d?.modo]) return c.json({ error: 'Modo desconocido' }, 400);
+      setModoDeEmpresa(db, d.modo);
+      return c.json({ ok: true, modo: d.modo });
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+
+  api.put('/margen', requirePerm('company.update'), async c => {
+    try {
+      const { modo } = await c.req.json();
+      if (!MODOS[modo]) return c.json({ error: 'Modo desconocido' }, 400);
+      setModoDeEmpresa(db, modo);
+      return c.json({ ok: true, modo });
     } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
@@ -463,6 +497,19 @@ export function createSettingsRoutes(db, cfg = {}) {
           <button class="btn btn-primary" onclick="saveCompany()">Guardar cambios</button>
         </div>
       </div>
+      <!-- G2 — El ajuste vive AQUÍ y no escondido en un informe: es una decisión del dueño sobre
+           cómo lee su propio negocio, no una opción de una pantalla. -->
+      <div class="card" style="max-width:700px;margin-top:1rem">
+        <div class="card-body">
+          <h3 style="margin:0 0 .3rem;font-size:1rem">Cómo calculo mi margen</h3>
+          <p style="color:var(--text2);font-size:13px;margin:0 0 .8rem">Hay dos formas de decir lo mismo y las dos son correctas; cambia la que se enseña primero en toda la plataforma. <strong>Ningún número cambia de valor</strong>: las dos cifras se calculan siempre, y al abrir el detalle salen las dos.</p>
+          <div style="background:var(--bg3);border-radius:10px;padding:.7rem .85rem;font-size:.84rem;margin-bottom:.85rem">
+            Algo que te cuesta <strong>100 ${sym}</strong> y vendes por <strong>140 ${sym}</strong>: ganas 40 ${sym}. Eso es un <strong>28,6 % sobre lo que cobras</strong> o un <strong>40 % sobre lo que te costó</strong>.
+          </div>
+          <div id="mgOpciones" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.6rem"></div>
+          <p style="color:var(--text2);font-size:12px;margin:.8rem 0 0">La <strong>Contabilidad</strong> y la <strong>Cuenta de resultados</strong> no cambian nunca: por definición contable el margen va sobre la venta, y ahí manda esa regla elijas lo que elijas. Esas pantallas lo dicen en voz alta.</p>
+        </div>
+      </div>
       <div class="card" style="max-width:700px;margin-top:1rem">
         <div class="card-body">
           <h3 style="margin:0 0 .3rem;font-size:1rem">Avisos y correos</h3>
@@ -487,6 +534,32 @@ export function createSettingsRoutes(db, cfg = {}) {
 
 
       <script>
+      // G2 — dos botones grandes, no un desplegable escondido: es una decisión, no un ajuste fino.
+      var MG_MODO = null;
+      function mgPinta(){
+        var defs = { venta:{t:'Sobre lo que cobras', e:'Gano un 28,6 %', p:'De cada 100 ${sym} que facturas, lo que te queda después de pagar lo que vendiste.'},
+                     coste:{t:'Sobre lo que te costó', e:'Le meto un 40 %', p:'Lo que le sumas al precio de compra para poner el precio de venta.'} };
+        document.getElementById('mgOpciones').innerHTML = Object.keys(defs).map(function(k){
+          var sel = MG_MODO === k;
+          return '<button type="button" data-mg="'+k+'" aria-pressed="'+sel+'" style="text-align:left;font-family:inherit;cursor:pointer;'
+            + 'border:2px solid '+(sel?'var(--accent)':'var(--border2)')+';background:'+(sel?'var(--accent-soft)':'var(--bg2)')+';'
+            + 'border-radius:12px;padding:.75rem .9rem">'
+            + '<div style="font-weight:700;font-size:.92rem;color:'+(sel?'var(--accent)':'var(--text)')+'">'+defs[k].e+'</div>'
+            + '<div style="font-size:.78rem;color:var(--text2);margin-top:.1rem">'+defs[k].t.toLowerCase()+'</div>'
+            + '<div style="font-size:.75rem;color:var(--text3);margin-top:.35rem">'+defs[k].p+'</div>'
+            + (sel?'<div style="font-size:.72rem;color:var(--accent);font-weight:600;margin-top:.35rem">✓ Es el que ves ahora</div>':'')
+            + '</button>';
+        }).join('');
+      }
+      api('GET','/api/erp/settings/margen').then(function(d){ MG_MODO = d.modo; mgPinta(); }).catch(function(){});
+      document.getElementById('mgOpciones').addEventListener('click', function(ev){
+        var b = ev.target.closest('button[data-mg]'); if(!b) return;
+        var k = b.getAttribute('data-mg'); if (k === MG_MODO) return;
+        api('PUT','/api/erp/settings/margen',{modo:k}).then(function(){
+          MG_MODO = k; mgPinta();
+          toast('Hecho. Ahora el margen se enseña ' + (k==='coste'?'sobre lo que te costó':'sobre lo que cobras') + ' en toda la plataforma.');
+        }).catch(function(e){ toast(e.message,'err'); });
+      });
       api('GET','/api/erp/settings/company').then(d=>{
         document.getElementById('cName').value=d.company_name||'';
         document.getElementById('cFiscal').value=d.fiscal_id||'';

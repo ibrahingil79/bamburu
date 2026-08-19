@@ -374,12 +374,12 @@ export function createProyectoRoutes(db) {
           +'<div style="display:flex;flex-direction:column;gap:.3rem">'
           +fila('Ingresos (facturado, sin IVA)','<strong>'+dinero(d.ingresos)+'</strong>')
           +fila('− Gastos directos (facturas de proveedor)',dinero(d.gastos))
-          +fila('= Resultado contable','<strong style="color:'+col(d.resultado)+'">'+dinero(d.resultado)+'</strong> <span style="color:var(--muted);font-size:.8rem">('+pct(d.margenPct)+')</span>','border-top:1px solid var(--border);padding-top:.3rem')
+          +fila('= Resultado contable','<strong style="color:'+col(d.resultado)+'">'+dinero(d.resultado)+'</strong> <span style="color:var(--muted);font-size:.8rem">('+pct(d.margenPct)+' sobre lo que cobras)</span>','border-top:1px solid var(--border);padding-top:.3rem')
           +fila('− Coste de las horas'+(ch.horas_con_coste?' <span style="color:var(--muted);font-size:.8rem">('+Number(ch.horas_con_coste).toFixed(2)+' h)</span>':''),dinero(ch.coste))
           +avisoHoras
-          +fila('= Resultado de gestión','<strong style="color:'+col(d.resultadoGestion)+'">'+dinero(d.resultadoGestion)+'</strong> <span style="color:var(--muted);font-size:.8rem">('+pct(d.margenGestionPct)+')</span>','border-top:2px solid var(--border);padding-top:.3rem;font-weight:600')
+          +fila('= Resultado de gestión','<strong style="color:'+col(d.resultadoGestion)+'">'+dinero(d.resultadoGestion)+'</strong> <span style="color:var(--muted);font-size:.8rem">('+pct(d.margenGestionPct)+' sobre lo que cobras)</span>','border-top:2px solid var(--border);padding-top:.3rem;font-weight:600')
           +'</div>'
-          +'<div style="margin-top:.5rem;padding:.5rem .6rem;background:var(--info-s,rgba(40,90,200,.08));border-radius:6px;color:var(--muted);font-size:.78rem">El <strong>resultado de gestión</strong> resta el coste ESTIMADO de las horas y <strong>NO es el resultado contable</strong>: tu P&amp;G no cambia. El resultado contable (arriba) es el que cuadra con la contabilidad.</div>'
+          +'<div style="margin-top:.5rem;padding:.5rem .6rem;background:var(--info-s,rgba(40,90,200,.08));border-radius:6px;color:var(--muted);font-size:.78rem">El <strong>resultado de gestión</strong> resta el coste ESTIMADO de las horas y <strong>NO es el resultado contable</strong>: tu P&amp;G no cambia. El resultado contable (arriba) es el que cuadra con la contabilidad.<br>Estos dos porcentajes van <strong>siempre sobre lo que cobras</strong> (resultado ÷ ingresos), aunque en Ajustes hayas elegido ver el margen sobre el coste: esto es una cuenta de resultados, y ahí la definición contable manda.</div>'
           +'<div style="margin-top:.4rem;color:var(--muted);font-size:.85rem">Cobrado (caja): <strong>'+dinero(d.cobrado)+'</strong> · no cambia el resultado</div>';
       }
       // PIEZA 2 — dentro de la ficha del proyecto: lista de tiempo + total de horas + total facturable.

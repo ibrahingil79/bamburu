@@ -25,6 +25,7 @@ import { countingSalesInvoices, ventasPorCliente, clientesDormidos,
 import { countsAsPayable, supplierInvoicePago } from './pagos.js';
 import { cuentaPyG } from './contabilidad-pyg.js';   // PASO 4a-bis: Contabilidad se cuelga del P&G, no de ledger_lines
 import { clientDebt } from './cobros.js';
+import { margen as margenDe, MODOS, modoDeEmpresa, MODO_POR_DEFECTO } from './margen.js';
 
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
 const VACIO = '(sin dato)';
@@ -87,17 +88,23 @@ const AREA_VENTAS = {
     if (f.unit_cost == null) a.sinCoste += base;
     else { a._conCoste += base; a.coste += (Number(f.unit_cost) || 0) * (Number(f.quantity) || 0); }
   },
-  salida: (a, meds) => {
-    const beneficio = a._conCoste - a.coste, tiene = a._conCoste !== 0, o = { clave: a.clave };
+  salida: (a, meds, modoMargen) => {
+    // La división la hace el MOTOR ÚNICO (`margen.js`). Sale exactamente el mismo número que antes
+    // —misma base `_conCoste`, mismo redondeo—, pero ahora viaja acompañado: `margen` lleva LAS DOS
+    // cifras y la parte que queda fuera, para que ninguna pantalla pueda enseñar el % desnudo.
+    const mg = margenDe({ venta: a._conCoste, coste: a.coste, fuera: a.sinCoste });
+    const o = { clave: a.clave };
     for (const m of meds) {
       if (m === 'base') o.base = r2(a.base);
       else if (m === 'unidades') o.unidades = r2(a.unidades);
       else if (m === 'lineas') o.lineas = a.lineas;
-      else if (m === 'coste') o.coste = tiene ? r2(a.coste) : null;
-      else if (m === 'beneficio') o.beneficio = tiene ? r2(beneficio) : null;
-      else if (m === 'margenPct') o.margenPct = tiene ? r2(beneficio / a._conCoste * 100) : null;
+      else if (m === 'coste') o.coste = mg.coste;
+      else if (m === 'beneficio') o.beneficio = mg.euros;
+      // El titular obedece al ajuste de empresa; las dos cifras viajan igualmente en `o.margen`.
+      else if (m === 'margenPct') o.margenPct = modoMargen === 'coste' ? mg.pctCoste : mg.pctVenta;
     }
     o.sinCoste = r2(a.sinCoste);
+    o.margen = mg;
     return o;
   },
   // Solo sale si se pide margen: si miras facturación, "sin coste" no te afecta y sería ruido.
@@ -342,12 +349,19 @@ export function areasPara(hasPerm) {
   for (const [k, a] of Object.entries(AREAS)) if (!a.perm || hasPerm(a.perm)) out[k] = { etiqueta: a.etiqueta };
   return out;
 }
-export function camposPara(hasPerm, areaKey = 'ventas') {
+// `modo` es el ajuste de margen de la empresa (G2). Se usa SOLO para nombrar la medida "Margen %"
+// con su base: un porcentaje llamado "Margen %" a secas es exactamente el fallo que esta tarea viene
+// a cerrar. La cuenta no cambia por esto; el nombre, sí.
+export function camposPara(hasPerm, areaKey = 'ventas', modo = MODO_POR_DEFECTO) {
   const a = AREAS[areaKey]; if (!a) return { dimensiones: {}, medidas: {}, graficos: TIPOS_GRAFICO };
+  const usa = MODOS[modo] ? modo : MODO_POR_DEFECTO;
   const dims = {}, meds = {};
   for (const [k, d] of Object.entries(a.dimensiones)) if (!d.perm || hasPerm(d.perm)) dims[k] = { etiqueta: d.etiqueta };
-  for (const [k, m] of Object.entries(a.medidas)) meds[k] = { etiqueta: m.etiqueta, dinero: !!m.dinero, pct: !!m.pct };
-  return { dimensiones: dims, medidas: meds, graficos: TIPOS_GRAFICO, usaPeriodo: !!a.usaPeriodo };
+  for (const [k, m] of Object.entries(a.medidas)) {
+    const etiqueta = k === 'margenPct' ? 'Margen ' + MODOS[usa].sufijo : m.etiqueta;
+    meds[k] = { etiqueta, dinero: !!m.dinero, pct: !!m.pct };
+  }
+  return { dimensiones: dims, medidas: meds, graficos: TIPOS_GRAFICO, usaPeriodo: !!a.usaPeriodo, modoMargen: usa };
 }
 
 // ── EL CRUCE ─────────────────────────────────────────────────────────────────
@@ -355,6 +369,9 @@ export function camposPara(hasPerm, areaKey = 'ventas') {
 // `area` por defecto 'ventas' → los llamadores del paso 4a (sin `area`) siguen funcionando igual.
 export function cruzar(db, { area = 'ventas', dimension = 'fecha', medidas = ['base'], periodo = 'mes',
                             filtros = {}, from = null, to = null, limit = 100, formula = null, hasPerm } = {}) {
+  // G2 — qué porcentaje manda como TITULAR en esta empresa. No cambia ninguna cuenta: `margen` sigue
+  // llevando las dos cifras en cada fila; esto solo decide cuál se copia a `margenPct`.
+  const modoMargen = modoDeEmpresa(db);
   const A = AREAS[area];
   if (!A) { const e = new Error('No conozco el área "' + area + '"'); e.status = 400; throw e; }
   if (A.perm && hasPerm && !hasPerm(A.perm)) { const e = new Error('No tienes permiso para el área ' + A.etiqueta.toLowerCase()); e.status = 403; throw e; }
@@ -391,7 +408,7 @@ export function cruzar(db, { area = 'ventas', dimension = 'fecha', medidas = ['b
   }
 
   const filas = [...map.values()].map(acc => {
-    const fila = A.salida(acc, medsSalida);
+    const fila = A.salida(acc, medsSalida, modoMargen);
     if (rpn) fila.calculo = evalRPN(rpn, fila);   // el cálculo propio, sobre las medidas del grupo
     return fila;
   });
@@ -475,9 +492,14 @@ function evalRPN(rpn, valores) {
 // distintos (una línea de venta y una factura de compra no se suman): es poner cada área como su
 // PROPIA SERIE sobre el mismo eje temporal — "facturación vs gasto por mes". Cada serie se calcula por
 // el `cruzar` de SU área (regla intacta), y se alinean por periodo. Clientes NO entra: no tiene fecha.
-export function areasComparables() {
+// `modo` nombra "Margen %" con su base, igual que `camposPara`. Un desplegable de comparación que
+// ofrece "Margen %" a secas vuelve a dejar el porcentaje desnudo en el gráfico que salga de él.
+export function areasComparables(modo = MODO_POR_DEFECTO) {
+  const usa = MODOS[modo] ? modo : MODO_POR_DEFECTO;
+  const nombre = (mk, m) => mk === 'margenPct' ? 'Margen ' + MODOS[usa].sufijo : m.etiqueta;
   return Object.entries(AREAS).filter(([, a]) => a.usaPeriodo && a.dimensiones.fecha)
-    .map(([k, a]) => ({ area: k, etiqueta: a.etiqueta, medidas: Object.fromEntries(Object.entries(a.medidas).map(([mk, m]) => [mk, { etiqueta: m.etiqueta, dinero: !!m.dinero }])) }));
+    .map(([k, a]) => ({ area: k, etiqueta: a.etiqueta,
+      medidas: Object.fromEntries(Object.entries(a.medidas).map(([mk, m]) => [mk, { etiqueta: nombre(mk, m), dinero: !!m.dinero }])) }));
 }
 export function compararEnTiempo(db, { series = [], periodo = 'mes', from = null, to = null, hasPerm } = {}) {
   if (!Array.isArray(series) || series.length < 2) { const e = new Error('Elige al menos dos series para comparar'); e.status = 400; throw e; }

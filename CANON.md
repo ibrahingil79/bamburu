@@ -54,6 +54,20 @@ mira a la competencia directa.)
 - **Estándar, no Frankenstein.** Bamburu es un producto estándar y mantenible, no un traje a medida
   por cliente que genere dependencia de por vida. La adaptación al oficio se hace por diseño
   (interfaces por profesión, DISA), nunca personalizando el núcleo cliente a cliente.
+- **Todo porcentaje dice su base.** Un número que no se puede comprobar es una mentira aunque esté
+  bien calculado. Ningún porcentaje de margen —ni de nada que mida rentabilidad— se enseña sin decir
+  **sobre qué se divide**, y donde haya dos formas legítimas de contarlo se enseñan **las dos** al
+  abrir el detalle, con el importe en euros y con la parte que queda fuera por no tener coste
+  conocido. **Sin coste conocido no hay margen: se dice «—», nunca 0 y nunca 100 %** — un 0 diría
+  "no ganas nada" y un 100 "es todo beneficio", y las dos cosas serían inventadas.
+  *Nace de un fallo publicado (19-ago-2026): la plataforma enseñaba "36,3 % de margen" a un cliente
+  con 4.018 € de venta y 1.577 € de coste. Ninguna cuenta con esos dos números da 36,3, porque el
+  divisor era un tercero —2.475 €, la parte de la venta con coste conocido— que no aparecía en
+  ninguna pantalla. El dueño no podía llegar a esa cifra con lo que tenía delante.*
+  *La CONTABILIDAD y la CUENTA DE RESULTADOS quedan fuera de cualquier preferencia del dueño: ahí
+  manda siempre "sobre la venta", porque un resultado contable no cambia de definición por un gusto.
+  Y esas pantallas lo dicen en voz alta.*
+  *Extiende "una sola verdad, siempre limpia": un dato es el bueno cuando además se puede comprobar.*
 - **Las dos puertas.** Toda información de negocio tiene **dos puertas**: la **conversacional** (DISA)
   y la **visual** (panel / constructor de analíticas). **Ninguna sustituye a la otra** — quien prefiere
   preguntar, pregunta; quien prefiere ver, ve. **Los gráficos no son cerrados:** el usuario construye

@@ -13,6 +13,7 @@ import { logActivity } from '../../../core/auth.js';
 import { ENTITY } from '../../../core/activity-entities.js';
 import { camposPara, cruzar, guardarPanel, listarPaneles, borrarPanel, areasPara, areaPerm,
          areasComparables, compararEnTiempo } from '../constructor-analitica.js';   // PASO 4a/4a-bis/4b: la puerta visual
+import { modoDeEmpresa } from '../margen.js';   // G2: qué porcentaje manda como titular
 
 export function createAnalyticsRoutes(db, cfg = {}) {
   const sym = cfg.sym || '€';
@@ -55,7 +56,9 @@ export function createAnalyticsRoutes(db, cfg = {}) {
   api.get('/margen', requirePerm('analytics.read'), c => {
     try {
       const from = c.req.query('from') || null, to = c.req.query('to') || null;
-      return c.json({ resumen: margenResumen(db, { from, to }), productos: margenPorProducto(db, { from, to }) });
+      // El MODO viaja con los datos: la pantalla no puede pintar un % sin saber cuál está pintando.
+      return c.json({ resumen: margenResumen(db, { from, to }), productos: margenPorProducto(db, { from, to }),
+                      modo: modoDeEmpresa(db) });
     } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
@@ -174,7 +177,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
     try {
       const area = c.req.query('area') || 'ventas';
       exigeArea(c, area);
-      return c.json(camposPara(permDe(c), area));
+      return c.json(camposPara(permDe(c), area, modoDeEmpresa(db)));
     } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
   });
 
@@ -190,7 +193,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
   // temporal; `compararEnTiempo` revalida el permiso de CADA área vía `cruzar` — comparar no es una
   // puerta trasera. No se suman granos distintos: cada área es su propia serie.
   api.get('/constructor/comparables', requirePerm('analytics.read'), c => {
-    try { return c.json(areasComparables().filter(a => can(c, areaPerm(a.area)))); }
+    try { return c.json(areasComparables(modoDeEmpresa(db)).filter(a => can(c, areaPerm(a.area)))); }
     catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
   });
   api.post('/constructor/comparar', requirePerm('analytics.read'), async c => {
@@ -368,14 +371,17 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         <div class="card-body">
           <div class="grid ga" id="mgRow">
             <div class="kpi"><div class="kpi-label">Beneficio</div><div class="kpi-val" id="mBen" style="color:var(--ok)">-</div></div>
-            <div class="kpi"><div class="kpi-label">Margen</div><div class="kpi-val" id="mPct">-</div></div>
-            <div class="kpi"><div class="kpi-label">Ingresos sin IVA</div><div class="kpi-val" id="mIng">-</div></div>
+            <div class="kpi"><div class="kpi-label" id="mPctLbl">Margen</div><div class="kpi-val" id="mPct">-</div></div>
+            <div class="kpi"><div class="kpi-label">Base del margen</div><div class="kpi-val" id="mIng">-</div></div>
             <div class="kpi"><div class="kpi-label">Coste</div><div class="kpi-val" id="mCos">-</div></div>
           </div>
+          <!-- G3 — las DOS cifras, siempre, debajo del titular. Ni una pantalla enseña un % de
+               margen sin decir sobre qué se divide. -->
+          <div id="mgDoble" style="margin-top:.6rem;font-size:.82rem;color:var(--text2)"></div>
           <div id="mgAviso" style="display:none;margin-top:.75rem"></div>
         </div>
         <div class="table-wrap"><table>
-          <thead><tr><th>Producto</th><th>Unidades</th><th>Ingresos sin IVA</th><th>Coste</th><th>Beneficio</th><th>Margen</th></tr></thead>
+          <thead><tr><th>Producto</th><th>Unidades</th><th>Ingresos sin IVA</th><th>Coste</th><th>Beneficio</th><th id="mgColLbl">Margen</th></tr></thead>
           <tbody id="mgBody">${skeletonRows(5)}</tbody>
         </table></div>
       </div>
@@ -500,22 +506,40 @@ export function createAnalyticsRoutes(db, cfg = {}) {
       // Un margen null se pinta "—" (no 0, que diría "no ganas nada", ni 100, que diría "todo
       // beneficio"), y si hay ventas sin coste conocido se avisa ARRIBA y con su importe: el dueño
       // tiene que saber sobre qué parte de su facturación está mirando el beneficio.
-      const eur=v=>'${sym}'+Number(v||0).toFixed(2);
+      const eur=v=>(v==null?'—':Number(v).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2,useGrouping:'always'})+' ${sym}');
+      const pctEs=v=>(v==null?'—':Number(v).toLocaleString('es-ES',{minimumFractionDigits:1,maximumFractionDigits:1,useGrouping:'always'})+' %');
       function pintarMargen(mg){
         const body=document.getElementById('mgBody'), aviso=document.getElementById('mgAviso');
         if(!mg||!mg.resumen){ body.innerHTML=window.emptyRow(6,'No he podido calcular la rentabilidad ahora mismo. Vuelve a cargar la página.'); return; }
         const r=mg.resumen;
-        document.getElementById('mBen').textContent=r.margenPct==null?'—':eur(r.beneficio);
-        document.getElementById('mPct').textContent=r.margenPct==null?'—':Number(r.margenPct).toFixed(1)+'%';
+        // G3 — EL PORCENTAJE NUNCA VA DESNUDO. El titular obedece al ajuste de empresa y la etiqueta
+        // dice sobre qué se divide. Este es el mismo fallo del 36,3 % de la ficha de cliente: el
+        // número era correcto y aun así engañaba, porque su denominador no aparecía en pantalla.
+        var MG = mg.modo === 'coste' ? 'coste' : 'venta';
+        var m = r.margen || {};
+        var titular = MG === 'coste' ? m.pctCoste : m.pctVenta;
+        document.getElementById('mBen').textContent = m.euros==null?'—':eur(m.euros);
+        document.getElementById('mPct').textContent = titular==null?'—':pctEs(titular);
+        var suf = MG==='coste' ? 'sobre lo que te costó' : 'sobre lo que cobras';
+        document.getElementById('mPctLbl').textContent = 'Margen ' + suf;
+        var colLbl = document.getElementById('mgColLbl'); if (colLbl) colLbl.textContent = 'Margen ' + suf;
         document.getElementById('mIng').textContent=eur(r.ingresosConCoste);
         document.getElementById('mCos').textContent=eur(r.coste);
+        // Y las DOS cifras juntas, siempre, con el importe en euros: es el detalle que exige G3.
+        var doble = document.getElementById('mgDoble');
+        if (doble) doble.innerHTML = m.hay
+          ? '<span'+(MG==='venta'?' style="font-weight:700;color:var(--text)"':'')+'>'+pctEs(m.pctVenta)+' sobre lo que cobras</span>'
+            + ' &nbsp;·&nbsp; <span'+(MG==='coste'?' style="font-weight:700;color:var(--text)"':'')+'>'+pctEs(m.pctCoste)+' sobre lo que te costó</span>'
+            + ' &nbsp;·&nbsp; los dos son '+eur(m.euros)+' sobre una base de '+eur(m.venta)
+            + '. <a href="/admin/settings" style="font-size:.78rem">Cambiar cuál mando</a>'
+          : 'Sin ninguna línea con coste conocido no se puede calcular margen. No es un 0: es que no se sabe.';
         // El aviso NO es decorativo: sin él, "beneficio 6.000 €" sobre 985.000 € facturados se lee
         // como un desastre, cuando en realidad el beneficio solo mide 63.000 € de esa facturación.
         if(r.sinCoste>0){
           aviso.style.display='';
           aviso.innerHTML='<div style="background:var(--accent-soft);border:1px solid var(--border2);border-radius:8px;padding:.6rem .75rem;font-size:.8rem;color:var(--text2)">'+
             '<strong style="color:var(--text)">El beneficio mira solo la parte que tiene coste.</strong> '+
-            'Quedan fuera <strong>'+eur(r.sinCoste)+'</strong> ('+Number(r.sinCostePct).toFixed(1)+'% de tus ventas) '+
+            'Quedan fuera <strong>'+eur(r.sinCoste)+'</strong> ('+pctEs(r.sinCostePct)+' de tus ventas) '+
             'sin coste registrado: servicios, conceptos libres o productos que nunca compraste. '+
             'No son beneficio — es que su coste no se sabe.'+
             (r.lineasAproximadas?' <em>'+r.lineasAproximadas+' línea(s) usan un coste aproximado (anteriores a esta función).</em>':'')+
@@ -527,7 +551,9 @@ export function createAnalyticsRoutes(db, cfg = {}) {
           '<td>'+eur(p.ingresos)+'</td>'+
           '<td>'+(p.coste==null?'<span style="color:var(--muted)">sin coste</span>':eur(p.coste))+'</td>'+
           '<td>'+(p.beneficio==null?'<span style="color:var(--muted)">—</span>':eur(p.beneficio))+'</td>'+
-          '<td>'+(p.margenPct==null?'<span style="color:var(--muted)">—</span>':'<strong>'+Number(p.margenPct).toFixed(1)+'%</strong>')+'</td>'+
+          '<td>'+(p.margen&&p.margen.hay
+            ? '<strong>'+pctEs(MG==='coste'?p.margen.pctCoste:p.margen.pctVenta)+'</strong>'
+            : '<span style="color:var(--muted)">—</span>')+'</td>'+
           '</tr>').join(''):window.emptyRow(6,'Todavía no has vendido nada. Cuando emitas tu primera factura, aquí verás lo que ganas de verdad.');
       }
 
@@ -747,7 +773,9 @@ export function createAnalyticsRoutes(db, cfg = {}) {
             '<strong style="color:var(--text)">El margen solo juzga lo que tiene coste.</strong> Quedan fuera '+eur(d.aviso.sinCoste)+
             ' de ventas sin coste registrado. No es que pierdas: es que su coste no se sabe.</div>';
         } else av.style.display='none';
-        const fmt=v=>v==null?'—':(meta.dinero?eur(v):(meta.pct?Number(v).toFixed(1)+'%':Number(v)));
+        // En español: 30,0 % — no "30.0%". La etiqueta de la medida ya dice la base (viene de
+        // camposPara con el modo de la empresa), así que el porcentaje no queda desnudo.
+        const fmt=v=>v==null?'—':(meta.dinero?eur(v):(meta.pct?pctEs(v):Number(v)));
         if(r.grafico==='tabla'){
           document.getElementById('cChartWrap').style.display='none';
           const w=document.getElementById('cTablaWrap'); w.style.display='';

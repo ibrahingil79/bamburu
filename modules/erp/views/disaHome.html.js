@@ -1,4 +1,4 @@
-export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboarding = null }) {
+export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboarding = null, simbolo = '€' }) {
   const sym = kpis?.sym || '€';
 
   // Fecha de hoy en español (presentación; server-side, no toca datos del tenant).
@@ -22,6 +22,11 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboardin
   // dashboard NO pasa onboarding → el Inicio queda como el home normal (el checklist se retira solo).
   // Cada paso trae su icono, tiempo estimado y la GUÍA de DISA (qué · por qué · cómo, en su voz) +
   // la acción. Textos fijos de producto (por eso llevan <b>): no son entrada de usuario.
+  // CÓMO SE AÑADE UN PASO (respuesta a 0.6). Hasta hoy no era aditivo: el 3 estaba escrito A MANO
+  // en cinco sitios —el corte de `done < 3` en dashboard.js, el "te quedan N", el anillo, su
+  // aria-label y el "/3"—, así que meter un cuarto paso sin cazarlos todos dejaba el anillo en 4/3 y
+  // el checklist no se retiraba nunca. Ahora TODO sale de `onbSteps.length`: añadir un paso es
+  // añadir una entrada a este array y su booleano en dashboard.js. Nada más.
   const onbSteps = onboarding ? [
     { done: onboarding.companyDone, icon: 'ti-building-store', label: 'Datos de tu empresa', time: '~1 min', href: '/admin/settings', cta: 'Ir a mis datos',
       guide: `Necesito tu <b>NIF</b> y tu <b>tipo de IRPF</b> para que tus facturas salgan legales y con los importes exactos desde la primera. Añade también el <b>nombre fiscal</b>, que aparece en cada documento. Te llevo al formulario con esos campos y, en cuanto guardes, este paso se marca solo.` },
@@ -29,9 +34,22 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboardin
       guide: `Un cliente es <b>a quién le facturas</b>: su nombre y su NIF, y si quieres su email para enviarle las facturas. Con uno basta para arrancar; los demás los añades cuando los necesites. Te abro el alta directamente.` },
     { done: onboarding.invoiceDone, icon: 'ti-file-invoice', label: 'Tu primera factura', time: '~2 min', href: '/admin/invoices/new', cta: 'Emitir factura',
       guide: `Aquí nace tu <b>primer documento legal</b>. Eliges el cliente, añades una línea (concepto, importe e IVA) y emites; del resto me encargo yo: numeración, IVA/IRPF y la <b>huella Verifactu</b>. Te llevo a la factura nueva ya preparada.` },
+    // ── G4 · CÓMO CUENTAS TU MARGEN ────────────────────────────────────────────────────────────
+    // Va AL FINAL y NO BLOQUEA: se puede saltar, y saltar deja «sobre la venta». Es el único paso
+    // que se resuelve aquí mismo en vez de llevarte a otra pantalla, porque es una pregunta de una
+    // sola respuesta, no un formulario.
+    //
+    // DISA PROPONE, NUNCA MARCA (CANON). Si el oficio suele trabajar con markup —taller, tienda,
+    // estética— lo dice en su guía; la opción sigue sin premarcar y el dueño elige.
+    { done: onboarding.margenDone, icon: 'ti-percentage', label: 'Cómo cuentas tu margen', time: '~20 s',
+      href: '/admin/settings', cta: 'Elegir', margen: true,
+      guide: onboarding.margenSugerido === 'coste'
+        ? `Hay dos formas de decir lo mismo y las dos son correctas. En tu oficio <b>se suele hablar del segundo</b>, pero eso lo decides tú — no marco nada por ti. Elige cuál quieres ver primero en toda la plataforma; los dos números se calculan igual.`
+        : `Hay dos formas de decir lo mismo y las dos son correctas: contar lo que ganas <b>sobre lo que cobras</b> o <b>sobre lo que te costó</b>. Elige cuál quieres ver primero; los dos números se calculan igual y puedes cambiarlo cuando quieras.` },
   ] : [];
+  const onbTotal = onbSteps.length;
   const onbNext = onbSteps.findIndex(s => !s.done);   // primer paso pendiente = el que se despliega
-  const _onbRem = onboarding ? 3 - onboarding.done : 0;
+  const _onbRem = onboarding ? onbTotal - onboarding.done : 0;
   const onbSub = onboarding
     ? (_onbRem === 1 ? 'Te queda 1 paso para emitir tu primera factura.' : `Estás a ${_onbRem} pasos de emitir tu primera factura.`)
     : '';
@@ -41,17 +59,27 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboardin
         : `${_onbRem === 1 ? 'Un último empujón' : 'Vas muy bien'}, ${userName}: te guío en lo que falta y cuando terminemos, esto desaparece.`)
     : '';
   const _ringC = 150.8;   // circunferencia (2π·24)
-  const _ringOff = (onboarding ? _ringC * (1 - onboarding.done / 3) : _ringC).toFixed(1);
+  const _ringOff = (onboarding ? _ringC * (1 - onboarding.done / onbTotal) : _ringC).toFixed(1);
   const onbStep = (s, i) => {
     const state = s.done ? 'done' : (i === onbNext ? 'now' : 'soon');
     const ico = s.done ? 'ti-check' : s.icon;
     const right = s.done ? '<span class="onb-tag">Hecho</span>' : (state === 'soon' ? `<span class="onb-time">${s.time}</span>` : '');
+    // El paso del margen se contesta AQUÍ: dos opciones y un "ahora no". El texto del ejemplo es
+    // literal y no se toca — es lo que hace la pregunta entendible sin saber contabilidad.
+    const acciones = s.margen ? `
+                <div class="onb-mg-ej">Algo que te cuesta <b>100 ${simbolo}</b> y vendes por <b>140 ${simbolo}</b>.</div>
+                <div class="onb-mg">
+                  <button type="button" class="onb-mg-op" data-margen="venta"><span class="n">Gano un 28,6 %</span><span class="p">sobre lo que cobro</span></button>
+                  <button type="button" class="onb-mg-op" data-margen="coste"><span class="n">Le meto un 40 %</span><span class="p">sobre lo que me costó</span></button>
+                </div>
+                <div class="onb-mg-pie"><button type="button" class="onb-saltar" data-margen="saltar">Ahora no</button><span>Puedes cambiarlo cuando quieras en Ajustes.</span></div>`
+      : `<a class="onb-cta" href="${s.href}">${s.cta} <i class="ti ti-arrow-right"></i></a>`;
     const expand = state === 'now' ? `
                 <div class="onb-when">Ahora · ${s.time}</div>
-                <p class="onb-guide">${s.guide}</p>
-                <a class="onb-cta" href="${s.href}">${s.cta} <i class="ti ti-arrow-right"></i></a>` : '';
-    const tag = state === 'soon' ? 'a' : 'div';
-    const attr = state === 'soon' ? ` href="${s.href}"` : '';
+                <p class="onb-guide">${s.guide}</p>${acciones}` : '';
+    // El paso del margen NUNCA es un enlace: se contesta en el sitio, no lleva a otra pantalla.
+    const tag = (state === 'soon' && !s.margen) ? 'a' : 'div';
+    const attr = (state === 'soon' && !s.margen) ? ` href="${s.href}"` : '';
     return `
             <${tag} class="onb-step ${state}"${attr}>
               <span class="onb-node"><span class="onb-ic"><i class="ti ${ico}"></i></span></span>
@@ -63,9 +91,9 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboardin
   const onbHtml = onboarding ? `
           <div class="onb-card">
             <div class="onb-hero">
-              <div class="onb-ring" role="img" aria-label="${onboarding.done} de 3 pasos completados">
+              <div class="onb-ring" role="img" aria-label="${onboarding.done} de ${onbTotal} pasos completados">
                 <svg viewBox="0 0 56 56" width="56" height="56"><circle class="onb-ring-bg" cx="28" cy="28" r="24"/><circle class="onb-ring-fg" cx="28" cy="28" r="24" style="stroke-dasharray:${_ringC};stroke-dashoffset:${_ringOff}"/></svg>
-                <span class="onb-ring-n">${onboarding.done}<i>/3</i></span>
+                <span class="onb-ring-n">${onboarding.done}<i>/${onbTotal}</i></span>
               </div>
               <div>
                 <h3 class="onb-title">Configura tu negocio</h3>
@@ -78,6 +106,16 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboardin
 
   return `
     <style>
+      /* G4 · el paso del margen. Dos opciones grandes, ninguna premarcada, y una salida. */
+      .onb-mg-ej{font-size:.83rem;color:var(--text2);background:var(--bg3);border-radius:8px;padding:.5rem .65rem;margin:.5rem 0 .55rem}
+      .onb-mg{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.5rem}
+      .onb-mg-op{display:flex;flex-direction:column;gap:.1rem;text-align:left;font-family:inherit;cursor:pointer;
+        border:2px solid var(--border2);background:var(--bg2);border-radius:10px;padding:.6rem .75rem;min-width:0}
+      .onb-mg-op:hover{border-color:var(--accent)}
+      .onb-mg-op .n{font-weight:700;font-size:.9rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .onb-mg-op .p{font-size:.75rem;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .onb-mg-pie{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-top:.55rem;font-size:.76rem;color:var(--text3)}
+      .onb-saltar{background:none;border:none;padding:0;font-family:inherit;font-size:.78rem;color:var(--accent);cursor:pointer;text-decoration:underline}
       .disa-home {
         min-height: calc(100vh - 60px);
         display: flex;
@@ -104,7 +142,11 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboardin
       /* Hero = saludo + tarjeta DISA + cifras (estado inicial; el JS lo oculta al hablar) */
       .disa-hero {
         transition: opacity 0.25s ease, max-height 0.35s ease, margin 0.3s ease;
-        max-height: 640px;
+        /* El max-height existe SOLO para que el hero pueda plegarse a 0 con animación al abrir el
+           chat: no es una medida de diseño. Estaba en 640px, justo para tres pasos del alta, y el
+           cuarto (G4) quedaba cortado por abajo — la opción "Ahora no" se veía a medias. Se sube a
+           un valor que no pueda volver a quedarse corto; el pliegue sigue siendo a 0. */
+        max-height: 1200px;
         overflow: hidden;
       }
       .disa-hero.hidden {
@@ -1290,6 +1332,22 @@ ${onbHtml}
 
         cargar('usuario');
       })();
+
+      // ── G4 · GUARDAR LA RESPUESTA DEL PASO DEL MARGEN ──────────────────────────────────────────
+      // Las tres salidas terminan el paso: elegir A, elegir B y SALTAR. Saltar deja «sobre la venta»
+      // (que es lo que vale la ausencia del ajuste) y solo apunta que ya se preguntó, para no volver
+      // a preguntarlo. NUNCA bloquea el alta: si la llamada falla, se dice y el paso sigue ahí.
+      document.addEventListener('click', function(ev){
+        var b = ev.target.closest('[data-margen]'); if (!b) return;
+        ev.preventDefault();
+        var v = b.getAttribute('data-margen');
+        var cuerpo = v === 'saltar' ? { saltar: true } : { modo: v };
+        // Por api() y no por fetch a pelo: es el helper que pone el token CSRF. Un POST sin él
+        // vuelve 403 y el paso se quedaría clavado sin que nadie supiera por qué.
+        api('POST','/api/erp/settings/margen/alta', cuerpo)
+          .then(function(){ location.reload(); })
+          .catch(function(e){ if (window.toast) toast('No se ha podido guardar: '+e.message+'. Puedes elegirlo en Ajustes.','err'); });
+      });
 
       // La HOME (/admin) es el DASHBOARD del molde 1 (saludo + cifras + tarjeta DISA + lista +
       // input): aterriza SIEMPRE en el hero, no en el chat. La conversación a pantalla completa

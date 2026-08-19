@@ -18,6 +18,7 @@ import { countingSalesInvoices } from './ventas-metrics.js';
 import { cruzar } from './constructor-analitica.js';
 import { clientCrmSummary } from './crm.js';
 import { RITMO_MIN_CITAS, usaAgenda } from './vigia-agenda.js';
+import { margen as margenMotor, modoDeEmpresa, fmtEur } from './margen.js';
 
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
 const hoyISO = () => new Date().toISOString().slice(0, 10);
@@ -40,26 +41,53 @@ function medianaDe(xs) {
   const m = s.length >> 1;
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
-export function ritmoDelCliente(db, clientId) {
-  if (!usaAgenda(db)) return { ritmo_dias: null, visitas: 0, motivo: 'este negocio no usa agenda' };
-  let filas = [];
+// QUÉ CUENTA COMO VISITA. Hasta hoy: una cita de agenda marcada como atendida, y NADA MÁS. En un
+// negocio que factura sin usar agenda eso producía una frase falsa —«con 0 visitas todavía» a un
+// cliente con 21 facturas y su última compra hace 39 días—, y una ficha que dice algo demostrablemente
+// falso deja de creerse entera.
+//
+// La regla ahora es: **si el negocio lleva agenda, manda la agenda; si no, mandan sus documentos.**
+//   · Con agenda (`usaAgenda`) → días con cita ATENDIDA. Idéntico a antes, y por tanto idéntico a lo
+//     que calcula `clientesFueraDeRitmo`: el vigía y la ficha no pueden discrepar en un negocio de
+//     citas, que es donde el vigía opera.
+//   · Sin agenda, o con agenda pero sin ninguna cita suya → días en los que compró (facturas que
+//     cuentan como venta). Es la única definición de «vino» que ese negocio tiene.
+// Un día = una visita, aunque haya varias citas o varias facturas: dos facturas del mismo martes no
+// son dos visitas.
+function visitasDelCliente(db, clientId) {
+  const dedup = (xs) => { const d = []; for (const f of xs.filter(Boolean).sort()) if (d[d.length - 1] !== f) d.push(f); return d; };
+  if (usaAgenda(db)) {
+    try {
+      const filas = db.prepare(
+        `SELECT fecha FROM citas
+          WHERE cliente_id=? AND estado='atendida' AND archived=0
+          ORDER BY fecha, id`).all(clientId);
+      const dias = dedup(filas.map(f => f.fecha));
+      if (dias.length) return { dias, fuente: 'citas' };
+    } catch { /* sin tabla de agenda: se cae a documentos */ }
+  }
   try {
-    filas = db.prepare(
-      `SELECT fecha FROM citas
-        WHERE cliente_id=? AND estado='atendida' AND archived=0
-        ORDER BY fecha, id`).all(clientId);
-  } catch { return { ritmo_dias: null, visitas: 0, motivo: 'sin datos de agenda' }; }
-  const dias = [];
-  for (const f of filas) if (dias[dias.length - 1] !== f.fecha) dias.push(f.fecha);
-  if (dias.length < RITMO_MIN_CITAS) {
-    return { ritmo_dias: null, visitas: dias.length,
-             motivo: 'con ' + dias.length + ' visita' + (dias.length === 1 ? '' : 's') + ' todavía no se puede saber su ritmo (hacen falta ' + RITMO_MIN_CITAS + ')' };
+    const dias = dedup(countingSalesInvoices(db, {}).filter(i => Number(i.client_id) === Number(clientId))
+      .map(i => String(i.issue_date).slice(0, 10)));
+    return { dias, fuente: 'facturas' };
+  } catch { return { dias: [], fuente: 'facturas' }; }
+}
+
+export function ritmoDelCliente(db, clientId) {
+  const r = visitasDelCliente(db, clientId);
+  if (r.dias.length < RITMO_MIN_CITAS) {
+    return { ritmo_dias: null, visitas: r.dias.length, fuente: r.fuente, dias: r.dias,
+             motivo: r.dias.length
+               ? 'con ' + r.dias.length + ' visita' + (r.dias.length === 1 ? '' : 's') + ' no se puede aún; hacen falta ' + RITMO_MIN_CITAS
+               : 'todavía no ha venido ninguna vez',
+             falta: RITMO_MIN_CITAS - r.dias.length };
   }
   const huecos = [];
-  for (let i = 1; i < dias.length; i++) huecos.push(diasEntre(dias[i], dias[i - 1]));
+  for (let i = 1; i < r.dias.length; i++) huecos.push(diasEntre(r.dias[i], r.dias[i - 1]));
   const ritmo = medianaDe(huecos);
-  if (!(ritmo > 0)) return { ritmo_dias: null, visitas: dias.length, motivo: 'todas sus visitas son del mismo día' };
-  return { ritmo_dias: Math.round(ritmo), visitas: dias.length, motivo: null };
+  if (!(ritmo > 0)) return { ritmo_dias: null, visitas: r.dias.length, fuente: r.fuente, dias: r.dias,
+                             motivo: 'todas sus visitas son del mismo día' };
+  return { ritmo_dias: Math.round(ritmo), visitas: r.dias.length, fuente: r.fuente, dias: r.dias, motivo: null };
 }
 
 // ── CUÁNDO EMPEZÓ Y CUÁNDO VINO LA ÚLTIMA VEZ ───────────────────────────────────────────────────
@@ -109,9 +137,9 @@ function margenDe(db, clientId, nombre, puede) {
     });
     const fila = (r.filas || []).find(f => f.clave === nombre);
     if (!fila) return null;
-    // `beneficio`/`margenPct` vienen a null cuando no hay coste conocido: se respeta tal cual.
-    if (fila.beneficio == null || fila.margenPct == null) return { beneficio: null, pct: null, sinCoste: true };
-    return { beneficio: r2(fila.beneficio), pct: fila.margenPct, sinCoste: false };
+    // `fila.margen` viene del MOTOR ÚNICO: las DOS cifras, la base sobre la que se dividen y lo que
+    // queda fuera por no tener coste. Se pasa entero — la pantalla NO puede enseñar el % desnudo.
+    return { ...fila.margen, ventaTotal: r2(fila.base), beneficio: fila.margen.euros, pct: fila.margen.pctVenta };
   } catch { return null; }
 }
 
@@ -181,8 +209,106 @@ export function avisosDisaDe(db, clientId, puede, detectar) {
       .filter(h => Number(h?.ref?.client_id) === Number(clientId))
       .map(h => ({ detector: h.detector, etiqueta: h.detectorEtiqueta, area: h.areaEtiqueta || '',
                    titulo: h.titulo || '', detalle: h.motivo || '',
-                   cifra: h.cifra ?? null, moneda: !!h.moneda, fecha: h.fecha || null }));
+                   cifra: h.cifra ?? null, moneda: !!h.moneda, fecha: h.fecha || null,
+                   ref: h.ref || {} }));
   } catch { return null; }
+}
+
+// ── DISA RECOMIENDA, NO INFORMA (bloque C) ──────────────────────────────────────────────────────
+// LO QUE MUERE AQUÍ: seis avisos idénticos en fila —«Factura F2026-0184 de Ana Suárez Campos
+// vencida», «Factura F2026-0269 de Ana Suárez Campos vencida»…— uno por documento. Eso es un
+// listado, y un listado no es una asistente: obliga al dueño a hacer la suma, sacar la conclusión y
+// decidir él qué hacer, que era justo el trabajo que DISA tenía que ahorrarle.
+//
+// LO QUE SE PONE: una línea POR FAMILIA con la decisión ya formulada. Seis facturas vencidas se
+// convierten en «Tiene 6 facturas vencidas por 1.255,30 €. La más antigua lleva 737 días. Te
+// recomiendo gestionar el cobro de la cuenta entera», con los botones para hacerlo.
+//
+// CERO CÁLCULO NUEVO (C5): la cifra es la SUMA de las cifras que el vigía ya publicó y los días
+// salen de su misma fecha. Si un detector cambia de criterio, esto cambia con él. Lo único que se
+// añade es la frase — y la frase no es un dato, es la recomendación.
+//
+// Sin nada que recomendar (C6) devuelve lista vacía y el bloque NO se pinta. Nunca una caja que
+// diga "todo en orden": el silencio ya lo dice, y una frase vacía ocupa el sitio de una que importe.
+const FAMILIAS = [
+  {
+    key: 'deuda', detectores: ['deuda_vencida'],
+    titulo: (n, tot, sym) => 'Tiene ' + n + ' factura' + (n === 1 ? '' : 's') + ' vencida' + (n === 1 ? '' : 's') + ' por ' + tot + ' ' + sym + '.',
+    recomienda: n => n === 1 ? 'Te recomiendo reclamarla.' : 'Te recomiendo gestionar el cobro de la cuenta entera.',
+    accion: { texto: 'Gestionar cuenta', tipo: 'cuenta' },
+    suma: true,
+  },
+  {
+    key: 'pago_pronto', detectores: ['pago_vence_pronto'],
+    titulo: (n, tot, sym) => n + ' factura' + (n === 1 ? '' : 's') + ' está' + (n === 1 ? '' : 'n') + ' a punto de vencer (' + tot + ' ' + sym + ').',
+    recomienda: () => 'Te recomiendo avisarle antes de que se pase la fecha.',
+    accion: { texto: 'Gestionar cuenta', tipo: 'cuenta' },
+    suma: true,
+  },
+  {
+    key: 'dormido', detectores: ['cliente_dormido', 'fuera_de_ritmo'],
+    titulo: (n, tot, sym, hs) => hs[0].titulo || 'Hace tiempo que no viene.',
+    recomienda: () => 'Te recomiendo escribirle antes de que se vaya del todo.',
+    accion: { texto: 'Ver su historia', tipo: 'historia' },
+    suma: false,
+  },
+  {
+    key: 'plantones', detectores: ['ausencias'],
+    titulo: (n, tot, sym, hs) => hs[0].titulo || 'Ha faltado a citas.',
+    recomienda: () => 'Te recomiendo confirmarle la próxima cita por teléfono.',
+    accion: { texto: 'Ver sus citas', tipo: 'citas' },
+    suma: false,
+  },
+  {
+    key: 'sin_cita', detectores: ['sin_proxima_cita'],
+    titulo: (n, tot, sym, hs) => hs[0].titulo || 'No tiene próxima cita.',
+    recomienda: () => 'Te recomiendo cerrarle la siguiente antes de que se le olvide.',
+    accion: { texto: 'Abrir la agenda', tipo: 'citas' },
+    suma: false,
+  },
+];
+
+export function recomendacionesDisa(db, clientId, puede, detectar) {
+  const avisos = avisosDisaDe(db, clientId, puede, detectar);
+  if (!avisos || !avisos.length) return [];
+  const sym = db.prepare('SELECT currency_symbol s FROM company_config WHERE id=1').get()?.s || '€';
+  const out = [];
+  const usados = new Set();
+  for (const fam of FAMILIAS) {
+    const hs = avisos.filter(a => fam.detectores.includes(a.detector));
+    if (!hs.length) continue;
+    hs.forEach(h => usados.add(h));
+    const total = r2(hs.reduce((x, h) => x + (Number(h.cifra) || 0), 0));
+    // Los días de la MÁS ANTIGUA salen de la fecha que el propio vigía publicó. Sin fecha, no se
+    // inventa una antigüedad: la frase se queda sin esa parte.
+    const fechas = hs.map(h => h.fecha).filter(Boolean).sort();
+    const dias = fechas.length ? diasEntre(hoyISO(), fechas[0]) : null;
+    out.push({
+      key: fam.key,
+      n: hs.length,
+      titulo: fam.titulo(hs.length, fam.suma ? fmtEur(total, '').trim() : null, sym, hs),
+      antiguedad: (fam.suma && dias != null && dias > 0)
+        ? 'La más antigua lleva ' + dias + ' día' + (dias === 1 ? '' : 's') + '.' : null,
+      recomienda: fam.recomienda(hs.length),
+      accion: fam.accion,
+      total: fam.suma ? total : null,
+      // Los documentos que hay detrás, para el detalle. NO se pintan en fila: se abren si se piden.
+      detras: hs.map(h => ({ titulo: h.titulo, detalle: h.detalle, fecha: h.fecha, cifra: h.cifra,
+                             invoice_id: h.ref?.invoice_id || null })),
+    });
+  }
+  // Un detector que no encaje en ninguna familia NO se pierde: sale con su propio texto, uno por
+  // detector (no por documento). Preferimos una línea genérica a esconder un aviso.
+  const sueltos = new Map();
+  for (const a of avisos) {
+    if (usados.has(a)) continue;
+    const e = sueltos.get(a.detector) || { key: a.detector, n: 0, titulo: a.titulo, recomienda: null,
+                                           accion: null, antiguedad: null, total: null, detras: [] };
+    e.n++; e.detras.push({ titulo: a.titulo, detalle: a.detalle, fecha: a.fecha, cifra: a.cifra });
+    if (e.n > 1) e.titulo = a.etiqueta + ': ' + e.n + ' avisos';
+    sueltos.set(a.detector, e);
+  }
+  return out.concat([...sueltos.values()]);
 }
 
 // ── LA CABECERA DE CIFRAS ───────────────────────────────────────────────────────────────────────
@@ -210,9 +336,159 @@ export function cabecera360(db, cliente, puede) {
     const d = clientDebt(db, clientId, hoy);
     out.deuda = { total: r2(d.total), oldest: d.oldest || null };
     out.margen = margenDe(db, clientId, cliente.name, puede);
+    out.margen_modo = modoDeEmpresa(db);   // qué porcentaje manda como titular (G2)
   } else {
     // Sin permiso de facturas no viaja NADA de dinero. Ni a 0: no llega.
     out.gasto = null; out.ticket_medio = null; out.deuda = null; out.margen = null;
   }
   return out;
+}
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// EL DETALLE DE CADA TARJETA (D2) — por qué esa cifra vale eso
+//
+// Una tarjeta que no se puede abrir es un número que hay que creerse. Cada una de las ocho abre la
+// lista de documentos de la que sale, para que el dueño pueda sumarla a mano si le apetece — que es
+// exactamente el remedio del fallo de 0.2: el 36,3 % dejaba de ser comprobable porque su denominador
+// no aparecía en ninguna parte.
+//
+// NO SE CALCULA NADA NUEVO AQUÍ. Se listan las mismas facturas que ya sumaron las cifras de la
+// cabecera, con la misma regla de venta (`countingSalesInvoices`). Si la lista y el titular no
+// cuadraran, el titular estaría mal, no la lista.
+//
+// PERMISOS: la clave que no tenga permiso devuelve null y la ruta responde 403. `clients.read` no
+// abre facturas.
+const TARJETAS = ['desde', 'ultima', 'ritmo', 'gasto', 'doce', 'ticket', 'deuda', 'margen'];
+export const CLAVES_TARJETA = TARJETAS;
+
+// Las facturas de este cliente que cuentan como venta, ya ordenadas de la más nueva a la más vieja.
+function facturasDe(db, clientId, desde = null) {
+  return countingSalesInvoices(db, desde ? { from: desde } : {})
+    .filter(i => Number(i.client_id) === Number(clientId))
+    .sort((a, b) => (a.issue_date < b.issue_date ? 1 : a.issue_date > b.issue_date ? -1 : b.id - a.id));
+}
+
+const filaFactura = i => ({
+  clave: 'F' + i.id,
+  titulo: i.invoice_number || ('Factura ' + i.id),
+  fecha: String(i.issue_date || '').slice(0, 10),
+  importe: r2(Number(i.subtotal) || 0),
+  detalle: 'sin IVA',
+  href: '/admin/invoices/' + i.id,
+});
+
+export function detalleTarjeta(db, cliente, clave, puede) {
+  const clientId = cliente.id;
+  const sym = db.prepare('SELECT currency_symbol s FROM company_config WHERE id=1').get()?.s || '€';
+  const dinero = k => (k === 'desde' || k === 'ultima' || k === 'ritmo') ? false : true;
+  if (!TARJETAS.includes(clave)) return null;
+  if (dinero(clave) && !puede('invoices.read')) return null;
+
+  if (clave === 'desde' || clave === 'ultima') {
+    // El primer / último documento REAL. Aquí sí entran las citas: en una peluquería el primer
+    // contacto es una cita, y contar solo facturas diría que un cliente de dos años es de ayer.
+    const eventos = [];
+    if (puede('invoices.read')) for (const i of facturasDe(db, clientId)) eventos.push(filaFactura(i));
+    if (puede('citas.read')) {
+      try {
+        for (const r of db.prepare(
+          "SELECT id,fecha,hora_inicio FROM citas WHERE cliente_id=? AND estado='atendida' AND archived=0").all(clientId))
+          eventos.push({ clave: 'C' + r.id, titulo: 'Cita atendida', fecha: r.fecha,
+                         detalle: r.hora_inicio || '', importe: null, href: '/admin/citas?fecha=' + r.fecha });
+      } catch { /* sin agenda */ }
+    }
+    eventos.sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0));
+    if (!eventos.length) return { clave, titulo: clave === 'desde' ? 'Cliente desde' : 'Última vez que vino',
+                                  vacio: 'Todavía no tiene ningún documento ni ninguna cita atendida.', filas: [] };
+    const uno = clave === 'desde' ? eventos[eventos.length - 1] : eventos[0];
+    return {
+      clave,
+      titulo: clave === 'desde' ? 'Su primer documento' : 'Lo último que hizo contigo',
+      nota: clave === 'desde'
+        ? 'La fecha de «Cliente desde» es la de este documento, no la del alta en la base (' + ((cliente.created_at || '').slice(0, 10) || 'sin fecha de alta') + ').'
+        : 'De aquí sale «Última vez que vino».',
+      filas: [uno],
+      // El resto, por si quiere ver el contexto sin salir de la capa.
+      masTitulo: eventos.length > 1 ? 'Todo lo demás, de lo más reciente a lo más antiguo' : null,
+      mas: eventos.filter(e => e !== uno).slice(0, 50),
+      sym,
+    };
+  }
+
+  if (clave === 'ritmo') {
+    // Sus visitas CON EL HUECO entre cada una: la mediana de esos huecos es el ritmo. Se enseña la
+    // lista para que se vea de dónde sale la mediana y por qué no es la media.
+    const r = ritmoDelCliente(db, clientId);
+    const filas = [];
+    for (let i = r.dias.length - 1; i >= 0; i--) {
+      const hueco = i > 0 ? diasEntre(r.dias[i], r.dias[i - 1]) : null;
+      filas.push({ clave: 'V' + r.dias[i], titulo: hueco == null ? 'Primera visita' : hueco + ' días después',
+                   fecha: r.dias[i], importe: null, detalle: '' });
+    }
+    return {
+      clave, titulo: 'Sus visitas',
+      nota: r.fuente === 'citas'
+        ? 'Una visita = un día con cita atendida. El ritmo es la MEDIANA de los huecos, no la media: una visita rara no puede mover el ritmo de nadie.'
+        : 'Este negocio no lleva agenda, así que una visita = un día en el que te compró. El ritmo es la MEDIANA de los huecos, no la media.',
+      vacio: filas.length ? null : 'Todavía no ha venido ninguna vez.',
+      resumen: r.ritmo_dias ? 'Viene cada ' + r.ritmo_dias + ' días de media' : (r.motivo || null),
+      filas, sym,
+    };
+  }
+
+  if (clave === 'gasto' || clave === 'doce' || clave === 'ticket') {
+    const desde = clave === 'doce' ? haceMeses(12) : null;
+    const fac = facturasDe(db, clientId, desde);
+    const suma = r2(fac.reduce((x, i) => x + (Number(i.subtotal) || 0), 0));
+    const titulos = { gasto: 'Todas sus facturas', doce: 'Sus facturas de los últimos 12 meses',
+                      ticket: 'Las facturas que forman la media' };
+    return {
+      clave, titulo: titulos[clave],
+      nota: clave === 'ticket'
+        ? 'El ticket medio es esta suma dividida entre el número de facturas: ' + suma + ' / ' + fac.length + '.'
+        : 'Base sin IVA. Las facturas anuladas no suman —aunque siguen en su historia—, y los abonos restan.',
+      resumen: clave === 'ticket' && fac.length
+        ? 'Media de ' + r2(suma / fac.length) + ' ' + sym + ' por factura'
+        : suma + ' ' + sym + ' en ' + fac.length + ' factura' + (fac.length === 1 ? '' : 's'),
+      vacio: fac.length ? null : (clave === 'doce' ? 'No te ha comprado nada en los últimos 12 meses.' : 'Todavía no le has facturado nada.'),
+      filas: fac.map(filaFactura), total: suma, sym,
+    };
+  }
+
+  if (clave === 'deuda') {
+    // Esta tarjeta NO devuelve una lista muerta: la pinta la pantalla con la maquinaria de cobro que
+    // ya existe (registrar cobro, gestionar, gestionar cuenta). Aquí solo va lo que hace falta para
+    // encabezarla; el detalle lo pide el navegador al endpoint de siempre.
+    if (!puede('cobros.read') && !puede('invoices.read')) return null;
+    const d = clientDebt(db, clientId, hoyISO());
+    return { clave, titulo: 'Gestión de cobro', gestion: true, sym,
+             total: r2(d.total), oldest: d.oldest || null,
+             vacio: r2(d.total) > 0 ? null : 'No te debe nada ahora mismo.' };
+  }
+
+  // ── MARGEN: el desglose que faltaba ────────────────────────────────────────────────────────────
+  // Documento a documento, con las dos bases separadas: lo que tiene coste y lo que no. Es la
+  // respuesta física a «de dónde sale ese porcentaje»: el denominador está aquí, sumable a mano.
+  const fac = facturasDe(db, clientId);
+  const filas = [];
+  let venta = 0, coste = 0, fuera = 0;
+  for (const i of fac) {
+    let lineas = [];
+    try { lineas = db.prepare('SELECT quantity, total_price, unit_cost FROM invoice_items WHERE invoice_id=?').all(i.id); }
+    catch { lineas = []; }
+    let v = 0, c = 0, f = 0;
+    for (const l of lineas) {
+      const base = Number(l.total_price) || 0;
+      if (l.unit_cost == null) { f += base; continue; }
+      v += base; c += (Number(l.unit_cost) || 0) * (Number(l.quantity) || 0);
+    }
+    venta += v; coste += c; fuera += f;
+    filas.push({ clave: 'F' + i.id, titulo: i.invoice_number || ('Factura ' + i.id),
+                 fecha: String(i.issue_date || '').slice(0, 10), href: '/admin/invoices/' + i.id,
+                 venta: r2(v), coste: r2(c), euros: v ? r2(v - c) : null, fuera: r2(f) });
+  }
+  const m = margenMotor({ venta, coste, fuera });
+  return { clave, titulo: 'De dónde sale el margen', margen: m, modo: modoDeEmpresa(db), sym,
+           vacio: filas.length ? null : 'Todavía no le has facturado nada.',
+           filas };
 }

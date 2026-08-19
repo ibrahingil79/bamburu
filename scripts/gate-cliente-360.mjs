@@ -118,10 +118,13 @@ try {
   // ── [3] Sin coste → margen «—», nunca 0 ni 100% ───────────────────────────────────────────────
   const sinCoste = db.prepare('SELECT COUNT(*) n FROM invoice_items it JOIN invoices i ON i.id=it.invoice_id WHERE i.client_id=? AND (it.unit_cost IS NULL OR it.unit_cost=0)').get(CLI).n;
   ok(sinCoste > 0, 'sus líneas no tienen coste conocido', sinCoste + ' líneas');
-  ok(D.cabecera.margen && D.cabecera.margen.sinCoste === true && D.cabecera.margen.beneficio === null,
+  // `hay:false` es la forma que tiene el motor único de decir "ninguna línea con coste conocido":
+  // los dos porcentajes a null y el beneficio a null. Nunca 0, nunca 100 %.
+  ok(D.cabecera.margen && D.cabecera.margen.hay === false
+     && D.cabecera.margen.euros === null && D.cabecera.margen.pctVenta === null && D.cabecera.margen.pctCoste === null,
      'el margen sale «—» y NO 0 ni 100%', JSON.stringify(D.cabecera.margen));
-  const pintado = await page.evaluate(() => [...document.querySelectorAll('.f360-c')]
-    .filter(c => /margen/i.test(c.querySelector('.k').textContent)).map(c => c.querySelector('.v').textContent)[0]);
+  const pintado = await page.evaluate(() => [...document.querySelectorAll('.bf-card')]
+    .filter(c => /margen/i.test(c.querySelector('.bf-k').textContent)).map(c => c.querySelector('.bf-v').textContent)[0]);
   ok(pintado === '—', 'y en pantalla se ve «—»', pintado);
 
   // ── [4] Factura, cobro, cita y nota: los cuatro en la línea de tiempo ─────────────────────────
@@ -160,7 +163,8 @@ try {
   // ── [12] Cliente recién creado y vacío: la pantalla NO se queda en blanco ─────────────────────
   await irFicha(OTRO);
   const vacio = await page.evaluate(() => ({
-    cifras: [...document.querySelectorAll('.f360-c')].map(c => c.querySelector('.v').textContent),
+    cifras: [...document.querySelectorAll('.bf-card')].map(c => c.querySelector('.bf-v').textContent
+      + ' / ' + (c.querySelector('.bf-s') ? c.querySelector('.bf-s').textContent : '')),
     tl: document.getElementById('f360tl').textContent.trim(),
   }));
   ok(vacio.cifras.some(v => /Aún no te ha comprado/i.test(v)), 'un cliente sin nada dice «Aún no te ha comprado», no un 0', vacio.cifras[0]);
@@ -228,9 +232,9 @@ try {
   await p1.goto(BASE + '/admin/clients/' + CLI, { waitUntil: 'networkidle0' });
   await dormir(900);
   const v1 = await p1.evaluate(() => ({
-    entra: !!document.getElementById('f360cifras'),
-    textos: [...document.querySelectorAll('.f360-c .k')].map(k => k.textContent),
-    conts: [...document.querySelectorAll('.f360-cont a')].map(a => a.textContent.trim()),
+    entra: !!document.getElementById('f360resumen'),
+    textos: [...document.querySelectorAll('.bf-card .bf-k')].map(k => k.textContent),
+    conts: [...document.querySelectorAll('.bf-chips a')].map(a => a.textContent.trim()),
     cuerpo: document.body.textContent,
   }));
   ok(v1.entra, 'quien ve clientes pero no facturas ENTRA en la ficha');
@@ -253,9 +257,9 @@ try {
   await dormir(900);
   const v2 = await p2.evaluate(async id => {
     const tl = await (await fetch('/api/erp/clients/' + id + '/360/timeline?cuantos=100')).json();
-    return { conts: [...document.querySelectorAll('.f360-cont a')].map(a => a.textContent.trim()),
+    return { conts: [...document.querySelectorAll('.bf-chips a')].map(a => a.textContent.trim()),
              kinds: [...new Set((tl.eventos || []).map(e => e.kind))],
-             ritmo: [...document.querySelectorAll('.f360-c .k')].map(k => k.textContent) };
+             ritmo: [...document.querySelectorAll('.bf-card .bf-k')].map(k => k.textContent) };
   }, CLI);
   ok(!v2.conts.some(x => /cita/i.test(x)), 'sin permiso de citas no hay contador de citas', v2.conts.join(' · '));
   ok(!v2.kinds.includes('cita'), 'ni citas en su línea de tiempo', v2.kinds.join(', '));
@@ -285,25 +289,29 @@ try {
   await dormir(1200);
   const m = await movil.evaluate(() => ({
     ancho: document.documentElement.scrollWidth, viewport: window.innerWidth,
-    cifras: document.querySelectorAll('.f360-c').length,
+    cifras: document.querySelectorAll('.bf-card').length,
   }));
   ok(m.ancho <= m.viewport + 1, 'a 390 px NO hay scroll horizontal', m.ancho + ' ≤ ' + m.viewport);
   ok(m.cifras > 0, 'y la cabecera de cifras se pinta igual', m.cifras + ' celdas');
   ok(errsM.length === 0, 'sin errores de JS en móvil', errsM.join(' | '));
   await movil.close();
 
-  // ── El modal no pierde nada, y gana su enlace ─────────────────────────────────────────────────
+  // ── Abrir desde la lista sigue funcionando, y nada se ha perdido por el camino ────────────────
+  // El modal de detalle pasó a ser la VENTANA FLOTANTE del componente compartido (bloque A). Lo que
+  // este gate defiende no es el armazón sino lo que había dentro: que abrir un cliente desde la
+  // lista siga dando su deuda a un clic y siga habiendo camino a la ficha completa. Las dos cosas
+  // siguen, así que la comprobación sigue — con el selector nuevo.
   await page.goto(BASE + '/admin/clients', { waitUntil: 'networkidle0' });
   await page.evaluate(id => viewDetail(id), CLI);
-  await dormir(900);
+  await dormir(1400);
   const md = await page.evaluate(() => ({
-    abierto: !!document.querySelector('#detailModal.open'),
-    deuda: /Te debe/.test(document.getElementById('detailBody').textContent),
-    cobrar: !!document.querySelector('#detailBody button, #detailBody a'),
-    ficha: (document.getElementById('detailFicha') || {}).href || '',
+    abierto: !!document.querySelector('.bf-win-overlay.open'),
+    deuda: /Te debe/.test(document.getElementById('bfBody').textContent),
+    cobrar: !!document.querySelector('#bfBody button, #bfBody a'),
+    ficha: (document.getElementById('bfFull') || {}).href || '',
   }));
-  ok(md.abierto && md.deuda, 'el modal de siempre sigue abriéndose desde la lista, con su deuda');
-  ok(/\/admin\/clients\/\d+$/.test(md.ficha), 'y gana el enlace «Ver ficha completa»', md.ficha.replace(/^https?:\/\/[^/]+/, ''));
+  ok(md.abierto && md.deuda, 'abrir un cliente desde la lista sigue dando su deuda a un clic');
+  ok(/\/admin\/clients\/\d+$/.test(md.ficha), 'y sigue habiendo enlace a la ficha completa', md.ficha.replace(/^https?:\/\/[^/]+/, ''));
 } catch (e) { fail++; console.error('\n✗ EXCEPCIÓN: ' + (e && e.stack || e)); }
 finally {
   try { if (browser) await browser.close(); } catch {}

@@ -1482,6 +1482,91 @@ completa los cubra, hay que meterlos en un grupo — decisión del dueño, porqu
 puestos frente a con un puesto). **Desplegado y verificado por HTTPS** en `peluqueria-gil.bamburu.com`:
 Agenda con 2 entradas, la sección con sus 5, y las 7 rutas viejas a 200.
 
+### Ficha de cliente (ventana flotante + tarjetas + DISA que recomienda) y **los dos márgenes en toda la plataforma** — **TAREA TRANSVERSAL** (el puntero de la escalera NO se mueve)  ✅ HECHO (2026-08-19)
+
+**EL FALLO QUE DESTAPÓ EL PASO 0, Y ERA PEOR DE LO QUE PARECÍA.** Ibrahin vio «36,3 % de margen» en un
+cliente con **4.018 € de venta** y **1.577 € de coste** y no encontró ninguna cuenta que lo diera:
+898/4018 = 22,3 %, 898/1577 = 56,9 %. Ninguna de las dos. **El divisor era un tercer número que no
+estaba en pantalla:** 2.475 €, la parte de la venta cuyas líneas tienen coste conocido. Los otros
+1.543 € (el 38,4 % de lo que ese cliente compró) quedaban fuera del cálculo entero, sin decirlo.
+
+La regla en sí es defendible —dividir 898 € entre 4.018 € hundiría el margen con una venta que no
+participó—, pero **el número publicado no era ni «sobre la venta» ni «sobre el coste»: era un tercero
+sin nombre**. Y no era un caso raro: en el mismo negocio, **«Mostrador» enseñaba un 40,0 %** sobre una
+venta de 151.095 € de la que solo **45 €** tenían coste. Un porcentaje calculado sobre el 0,03 % de la
+venta, presentado como el margen del conjunto. **Cinco pantallas hacían lo mismo y ninguna lo decía.**
+
+**LO DEMÁS DEL PASO 0**
+- **«Cada cuánto viene: con 0 visitas todavía»** en un cliente con 21 facturas. «Visita» era, y solo
+  era, *cita de agenda atendida*: en un negocio que factura sin agenda la frase era falsa. Ahora **si
+  el negocio lleva agenda manda la agenda** (idéntico al vigía, que es donde opera) **y si no, mandan
+  sus documentos**. Ese cliente pasó de «0 visitas» a «cada 26 días, 21 visitas».
+- **El texto no se salía por «alto fijo»** —no había ninguno—: la rejilla daba columnas de 150 px
+  donde una frase de 60 caracteres ocupaba cuatro líneas y estiraba **las ocho tarjetas a 120 px**.
+  Donde **sí** se cortaba texto era en la ventana: la tabla de facturas medía **1.071 px dentro de un
+  modal de 1.047** y partía el botón «Gestionar» por el borde. Medido, no mirado.
+- **«Actividad y embudo»** se llamaba «Actividad y oportunidades» y su pie decía `tl.length > 15`:
+  miraba el largo del **timeline**, no si había oportunidades. Con **0 oportunidades y 21 facturas**
+  el enlace «Ver todo en Oportunidades» salía igual, colgando de una lista de facturas y llevando a
+  un embudo vacío. Verificado en el DOM antes de tocarlo.
+- **El alta (U6) no era ampliable:** el `3` estaba escrito **a mano en cinco sitios**. Añadir un paso
+  sin cazarlos todos dejaba el anillo en 4/3 y el checklist no se retiraba nunca. Ahora todo sale de
+  `onbSteps.length` y añadir un paso son **dos** cosas: una entrada en el array y su booleano.
+- Y el dinero se imprimía **en inglés**: `€4018.00` en vez de `4.018,00 €`, con el formato español
+  correcto ya escrito en otro fichero del propio proyecto.
+
+**EL MOTOR ÚNICO DE MARGEN** (`modules/erp/margen.js`) devuelve **siempre las dos cifras** sobre el
+**mismo conjunto de líneas** —las que tienen coste—, que es la única pareja donde el importe en euros
+es **idéntico** en los dos modos. **Las siete superficies pasan por él**: ficha de cliente,
+constructor, informes (resumen y por producto), rentabilidad por proyecto, plan financiero y avisos.
+Cero fórmulas sueltas. **Ni un número cambió de valor** al conectarlas.
+
+**AJUSTE DE EMPRESA «Cómo calculo mi margen»**, de fábrica *sobre la venta*. Decide el **titular** en
+todas las pantallas a la vez. **R1: Contabilidad y P&G no obedecen** —ahí manda «sobre la venta»
+elija lo que elija el dueño, y la pantalla lo dice—. **R2: las empresas que ya existen no cambian ni
+un número**: la ausencia del ajuste ya vale «sobre la venta», así que **no hubo migración de datos**.
+
+**LA VENTANA FLOTANTE** con dirección propia (`/admin/clients/<id>`): se copia, se comparte y al
+recargar abre la ficha completa, que es una página de verdad. Atrás cierra y devuelve a la lista **con
+su filtro y su página**. Se navega **en capas** (resumen → detalle → volver), nunca ventanas apiladas.
+En móvil, hoja inferior arrastrable. **Las ocho tarjetas se abren** y enseñan de dónde sale su cifra —
+la de margen lista **factura a factura** con la base y lo que queda fuera, que es la respuesta física
+al 36,3 %. **«Te debe» abre la gestión de cobro**, no una lista muerta.
+
+**DISA RECOMIENDA, NO INFORMA.** Mueren los seis avisos idénticos en fila («Factura F2026-0184 de Ana
+Suárez Campos vencida», y otras cinco iguales). En su lugar, **una línea por familia con la decisión
+tomada**: «Tiene 6 facturas vencidas por 1.255,30 €. La más antigua lleva 737 días. Te recomiendo
+gestionar el cobro de la cuenta entera», con sus botones. **Cero cálculo nuevo**: la cifra es la suma
+de lo que el vigía ya publicó. Sin nada que recomendar, **el bloque no aparece** — ni una frase vacía.
+
+**NADA DESAPARECE.** La tabla larga de facturas salió de la ventana (que es el resumen) y está entera
+en la ficha completa, con sus botones de cobro; la historia, las notas y el ranking siguen donde
+estaban. El chip de «Deuda» sí desaparece: ya es una tarjeta, y decirlo dos veces no es informar.
+
+**VERIFICACIÓN — `gate-cliente-ficha-margen` 125/0** sobre un negocio creado desde cero (1.200 € con
+coste, 840 € de coste, 400 € sin coste conocido → 360 €, 30,0 % / 42,9 %). Incluye el **barrido que
+cierra el fallo de origen**: recorre las pantallas buscando un % de margen huérfano y **cae si
+encuentra uno**, aunque el cálculo sea perfecto. Y **el sabotaje está demostrado**: deshacer el sufijo
+de la base, igualar los dos porcentajes, volver a listar un aviso por documento o quitarle el recorte
+a la tarjeta **hacen caer el gate** — comprobado revirtiendo cada cambio y volviéndolo a poner.
+
+**UN AGUJERO DEL PROPIO GATE, ENCONTRADO Y TAPADO.** La primera versión medía solo el *resultado*
+(«¿se sale el texto?») y con textos cortos daba verde **sobre un componente ya roto**: le quité el
+recorte y no se enteró. Ahora mide **el mecanismo** —que las tres líneas siguen siendo nowrap +
+ellipsis + overflow:hidden y que el valor entero sigue en `title`— y además hay un cliente de prueba
+con nombre de 92 caracteres. El primer nombre largo de un cliente real lo habría destapado en
+producción, no aquí.
+
+**RED NUEVA CONTRA UNA TRAMPA DEL PROYECTO** — `scripts/lint-plantillas.mjs`. Un backtick dentro de un
+comentario que va dentro de una plantilla **cierra la plantilla**; me pasó **tres veces en esta misma
+tarea**. El lint lo caza antes del reinicio, distinguiendo el caso malo del inocente (`https://` no es
+un comentario; un backtick escapado es correcto). La cuarta vez la cazó él, no un arranque roto.
+
+**ANOTADO Y NO CONSTRUIDO:** el eje de los gráficos del constructor sigue rotulando el dinero en
+formato inglés (`€0.9`) — viene del ayudante de gráficos compartido, no de estas pantallas; y el
+ranking «Qué te compra» agrupa por descripción de línea, así que dos productos con el mismo nombre se
+suman (era así antes y sigue igual).
+
 ### Ficha de cliente 360 — **TAREA TRANSVERSAL** (el puntero de la escalera NO se mueve)  ✅ HECHO (2026-08-19)
 
 **NO es pieza del peldaño 8.** La ficha era una **ficha de cobros**: deuda, facturas y poco más. Ahora

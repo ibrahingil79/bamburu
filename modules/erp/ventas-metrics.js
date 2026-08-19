@@ -10,6 +10,7 @@
 // Una sola fuente → dashboard, analítica, contexto de DISA e historial de cliente comparten
 // el MISMO criterio (no se duplica la regla con matices distintos). Solo LEE; no escribe nada.
 import { countsAsReceivable, paymentsSum, openDebts } from './cobros.js';
+import { margen } from './margen.js';
 
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
 const daysAgoISO = d => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
@@ -256,13 +257,17 @@ export function margenResumen(db, opts = {}) {
     nConCoste++;
     if (l.cost_source === 'backfill') nAprox++;
   }
-  const beneficio = ingresosConCoste - coste;
+  // La división la hace el MOTOR ÚNICO (`margen.js`), no este fichero: el mismo cálculo que la ficha
+  // de cliente, el constructor y los informes. `m.pctVenta` sale idéntico al margenPct de siempre —
+  // misma base (`ingresosConCoste`), mismo redondeo—, así que ni un número cambia de valor aquí.
+  const m = margen({ venta: ingresosConCoste, coste, fuera: sinCoste });
   return {
     ingresos: r2(ingresos),                       // base sin IVA de TODO lo vendido
     ingresosConCoste: r2(ingresosConCoste),       // la parte que sí se puede juzgar
     coste: r2(coste),
-    beneficio: r2(beneficio),
-    margenPct: ingresosConCoste ? r2(beneficio / ingresosConCoste * 100) : null,
+    beneficio: m.euros ?? 0,
+    margenPct: m.pctVenta,
+    margen: m,                                    // las DOS cifras + la base, para quien las pinte
     sinCoste: r2(sinCoste),                       // ventas sin coste conocido (NO son beneficio)
     sinCostePct: ingresos ? r2(sinCoste / ingresos * 100) : 0,
     lineas: nConCoste + nSinCoste, lineasConCoste: nConCoste, lineasSinCoste: nSinCoste,
@@ -292,12 +297,13 @@ export function margenPorProducto(db, { from = null, to = null, limit = 100 } = 
     map.set(key, e);
   }
   return [...map.values()].map(e => {
-    const beneficio = e.ingresosConCoste - e.coste;
-    const tiene = e.ingresosConCoste !== 0;
+    // Misma división que arriba y que todo lo demás: el motor único.
+    const m = margen({ venta: e.ingresosConCoste, coste: e.coste, fuera: e.sinCoste });
     return { product_name: e.product_name, product_id: e.product_id, qty: r2(e.qty),
-             ingresos: r2(e.ingresos), coste: tiene ? r2(e.coste) : null,
-             beneficio: tiene ? r2(beneficio) : null,
-             margenPct: tiene ? r2(beneficio / e.ingresosConCoste * 100) : null,
+             ingresos: r2(e.ingresos), coste: m.coste,
+             beneficio: m.euros,
+             margenPct: m.pctVenta,
+             margen: m,
              sinCoste: r2(e.sinCoste), aproximado: e.aproximado };
   }).sort((a, b) => b.ingresos - a.ingresos).slice(0, limit);
 }

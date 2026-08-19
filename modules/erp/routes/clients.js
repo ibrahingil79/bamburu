@@ -14,7 +14,9 @@ import { clientVentas } from '../ventas-metrics.js';   // PIEZA C: historial = f
 import { ENTITY } from '../../../core/activity-entities.js';
 import { exigirCorreoActivo } from '../avisos-preferencias.js';   // interruptor de Ajustes → Avisos y correos
 // FICHA 360 — todo lo nuevo LEE de motores que ya existían; aquí no se calcula ni una cifra.
-import { cabecera360, contadoresDe, queCompra, avisosDisaDe } from '../cliente-360.js';
+import { cabecera360, contadoresDe, queCompra, avisosDisaDe, recomendacionesDisa,
+  detalleTarjeta, CLAVES_TARJETA } from '../cliente-360.js';
+import { fichaClienteCSS, fichaClienteJS, fichaVentanaJS } from '../ficha-cliente-ui.js';
 import { clientTimeline, clientCrmSummary } from '../crm.js';
 import { detectar } from '../vigia.js';
 
@@ -149,12 +151,34 @@ export function createClientRoutes(db, cfg = {}) {
       const cab = cabecera360(db, cli, puede);
       return c.json({
         cliente: { id: cli.id, name: cli.name, client_code: cli.client_code, created_at: cli.created_at, notes: cli.notes || '' },
+        // B1.1 — la cabecera compacta de la ventana: quién es, en una línea.
+        fijos: { fiscal_id: cli.fiscal_id || '', phone: cli.phone || '', email: cli.email || '',
+                 city: cli.city || '', client_type: cli.client_type || '' },
         cabecera: cab,
         contadores: contadoresDe(db, cli.id, puede, cab.deuda),
         compra: queCompra(db, cli.id, puede),
+        // Los avisos en crudo siguen viajando (los usa quien ya los pintaba); `recomienda` es lo que
+        // se ENSEÑA: una línea por familia con la decisión, no una por documento (C1/C4).
         disa: avisosDisaDe(db, cli.id, puede, detectar),
+        recomienda: recomendacionesDisa(db, cli.id, puede, detectar),
         crm: can(c, 'crm.read') ? clientCrmSummary(db, cli.id, new Date().toISOString().slice(0, 10)) : null,
       });
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+
+  // ── EL DETALLE DE UNA TARJETA (D2) ───────────────────────────────────────────────────────────
+  // Por qué esa cifra vale eso. Una clave desconocida es 404, no una lista vacía; y una clave de
+  // dinero sin `invoices.read` es 403 — `clients.read` NO es la llave maestra que abre las facturas
+  // por una puerta lateral. Es la misma regla que ya rige la cabecera y el timeline.
+  api.get('/:id/360/tarjeta/:clave', requirePerm('clients.read'), c => {
+    try {
+      const cli = clienteOr404(c);
+      if (!cli) return c.json({ error: 'No encontrado' }, 404);
+      const clave = String(c.req.param('clave') || '');
+      if (!CLAVES_TARJETA.includes(clave)) return c.json({ error: 'Esa tarjeta no existe' }, 404);
+      const d = detalleTarjeta(db, cli, clave, puedeDe(c));
+      if (!d) return c.json({ error: 'Sin permiso' }, 403);
+      return c.json(d);
     } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
@@ -560,28 +584,27 @@ export function createClientRoutes(db, cfg = {}) {
         </div>
       </div>
 
-      <!-- Detail Modal -->
-      <div class="modal-overlay" id="detailModal">
-        <div class="modal" style="max-width:700px">
-          <!-- El modal es la VISTA RÁPIDA y se queda exactamente como estaba: misma deuda, mismas
-               facturas, mismo «Registrar cobro» a los mismos clics. Gana UNA cosa y solo una: el
-               enlace a la ficha completa. Todo lo del 360 vive allí, no aquí — dos sitios pintando
-               lo mismo acaban discrepando. -->
-          <div class="modal-head"><h3 id="detailName">Detalle Cliente</h3>
-            <a class="btn btn-secondary btn-sm" id="detailFicha" href="/admin/clients" style="margin-left:auto;margin-right:.5rem">Ver ficha completa →</a>
-            <button class="modal-close" onclick="closeModal('detailModal')">✕</button></div>
-          <div class="modal-body" id="detailBody"></div>
-        </div>
-      </div>
-
+      <!-- A1 — La VENTANA FLOTANTE no se escribe aquí: la construye fichaVentanaJS en el propio
+           navegador, para que la lista de clientes y la ficha completa usen exactamente el mismo
+           armazon y no puedan divergir. Aqui solo queda el hueco que necesita la maquinaria de
+           cobro compartida. -->
       ${cobroModalHtml()}
+      <style>${fichaClienteCSS()}</style>
       <script>
+      ${fichaClienteJS({ sym })}
+      ${fichaVentanaJS({ montaje: 'ventana' })}
       ${cobroModalScript(sym)}
       const PUEDE_CRM = ${can(c, 'crm.read') ? 'true' : 'false'};   // la sección CRM de la ficha solo si tiene la llave
       let currentDetailClientId=null;   // cliente abierto en la ficha (para refrescar tras un cobro)
-      // Punto de extensión del modal compartido: tras un cobro, refresca la ficha del cliente
-      // (su "Te debe X €", deuda más antigua y la tabla de facturas).
-      window.cobroOnSaved = function(id){ if(currentDetailClientId) viewDetail(currentDetailClientId); };
+      // Punto de extensión del modal compartido: tras un cobro, se vuelve a pedir la ficha entera.
+      // Si el usuario estaba en la capa de gestión de cobro, se queda en ella con el dato nuevo:
+      // registrar un cobro y que te eche al resumen sería perder el sitio.
+      window.cobroOnSaved = function(){
+        if (!currentDetailClientId) return;
+        fetch('/api/erp/clients/'+currentDetailClientId+'/360').then(function(r){ return r.json(); })
+          .then(function(d){ window.BFWin.setDatos(d); window.BFWin.abrirTarjeta('deuda'); })
+          .catch(function(){ window.BFWin.abrir(currentDetailClientId); });
+      };
       let currentClient=null;   // cliente en edición (conserva accepts_newsletter sin tocar la API)
       // Bloque de dirección fiscal (Facturae): plegado por defecto; se despliega solo si el cliente
       // ya tiene alguno de esos datos, para que al editar no queden escondidos.
@@ -637,115 +660,20 @@ export function createClientRoutes(db, cfg = {}) {
       }
       async function delClient(id){if(!confirm('¿Archivar este cliente? Dejará de aparecer en la lista, pero no se borra.'))return;try{await api('DELETE','/api/erp/clients/'+id);toast('Archivado');location.reload();}catch(e){toast(e.message,'err')}}
       async function restoreClient(id){try{await api('POST','/api/erp/clients/'+id+'/restore');toast('Restaurado');location.reload();}catch(e){toast(e.message,'err')}}
-      async function viewDetail(id){
-        currentDetailClientId=id;   // para que cobroOnSaved refresque esta misma ficha
-        const c=await api('GET','/api/erp/clients/'+id);
-        const deb=await api('GET','/api/erp/clients/'+id+'/invoices').catch(()=>({total:0,oldest:null,invoices:[]}));
-        document.getElementById('detailName').textContent=c.name;
-        const ordRows=c.orders?.length?c.orders.map(o=>'<tr><td>'+o.order_number+'</td><td>${sym}'+Number(o.total||0).toFixed(2)+'</td><td><span class="badge b-gray">'+o.status+'</span></td><td style="color:var(--muted);font-size:.8rem">'+(o.created_at?.split(' ')[0]||'-')+'</td></tr>').join(''):window.emptyRow(4,'Este cliente aún no tiene pedidos.');
-        // Facturas del cliente con estado de cobro en vivo (T4).
-        const cobroBadge={pendiente:'b-yellow',parcial:'b-blue',cobrada:'b-green',vencida:'b-red',abono:'b-gray'};
-        const cobroLabel={pendiente:'Pendiente',parcial:'Cobrada en parte',cobrada:'Cobrada',vencida:'Vencida',abono:'Abono'};
-        const invRows=deb.invoices?.length?deb.invoices.map(f=>{
-          const estadoCell=!f.counts
-            ?'<span class="badge b-gray" title="No computa como deuda (anulada o rectificada por sustitución)">no computa</span>'
-            :'<span class="badge '+(cobroBadge[f.estado]||'')+'">'+(cobroLabel[f.estado]||f.estado)+(f.estado==='vencida'&&f.dias_vencida?' '+f.dias_vencida+'d':'')+'</span>';
-          // U4: acción directa "Registrar cobro" (abre el formulario ya precargado) + "Gestionar"
-          // (centro compartido: próxima acción + recordatorios) a un clic. Mismo flag del motor
-          // (f.cobrable) y solo si queda pendiente. Antes solo estaba "Gestionar" (un clic más).
-          const cobrarCell = (f.cobrable && Number(f.pendiente)>0.0049)
-            ? '<button class="btn btn-primary btn-sm" onclick="openCobros('+f.id+')">Registrar cobro</button> <button class="btn btn-secondary btn-sm" onclick="openGestion('+f.id+')">Gestionar</button>'
-            : '';
-          // Próxima acción (misma que en Cobros y listado de facturas).
-          const p=f.proxima;
-          const proxCell = p
-            ? (window.proximaBadgeHtml?window.proximaBadgeHtml(p):'')+' <span style="font-size:.8rem">'+(p.accion==='recordatorio_email'?'recordatorio':((window.STAGE_LABEL&&window.STAGE_LABEL[p.etapa])||p.etapa))+'</span>'+(p.fechaObjetivo?'<br><span style="color:var(--muted);font-size:.75rem">'+p.fechaObjetivo+'</span>':'')
-            : '<span style="color:var(--muted)">—</span>';
-          return '<tr><td><a href="/admin/invoices/'+f.id+'" target="_blank">'+escHtml(f.invoice_number)+'</a></td>'+
-            '<td style="color:var(--muted);font-size:.8rem">'+(f.due_date||f.issue_date||'-')+'</td>'+
-            '<td>${sym}'+Number(f.total||0).toFixed(2)+'</td>'+
-            '<td>'+(f.counts?'${sym}'+Number(f.pendiente||0).toFixed(2):'—')+'</td>'+
-            '<td>'+estadoCell+'</td>'+
-            '<td>'+proxCell+'</td>'+
-            '<td style="text-align:right">'+cobrarCell+'</td></tr>';
-        }).join(''):window.emptyRow(7,'Este cliente aún no tiene facturas.');
-        const o=deb.oldest;
-        // Paso 2.1 — "Gestionar cuenta" (toda la deuda viva a la vez), junto al "Te debe X".
-        const gestionarCuentaBtn = Number(deb.total||0)>0.0049
-          ? ' <button class="btn btn-primary btn-sm" style="margin-left:.5rem" onclick="openGestionCuenta('+id+')">Gestionar cuenta</button>'
-          : '';
-        const debtBlock='<div class="alert '+(Number(deb.total||0)>0?'alert-warn':'alert-ok')+'" style="margin-bottom:1rem">'+
-          'Te debe <strong>${sym}'+Number(deb.total||0).toFixed(2)+'</strong>'+
-          (o?' · Deuda más antigua: <a href="/admin/invoices/'+o.invoice_id+'" target="_blank">'+escHtml(o.invoice_number)+'</a> (${sym}'+Number(o.pendiente||0).toFixed(2)+', vence '+(o.due_date||'-')+(o.dias_vencida>0?' · '+o.dias_vencida+' días vencida':'')+')':' · sin deuda pendiente')+
-          gestionarCuentaBtn+
-          '</div>';
-        document.getElementById('detailBody').innerHTML=
-          '<div class="grid g2" style="margin-bottom:1rem">'+
-          '<div><div class="form-label">Código</div><div style="font-family:monospace">'+escHtml(c.client_code||'-')+'</div></div>'+
-          '<div><div class="form-label">Email</div><div>'+escHtml(c.email||'-')+'</div></div>'+
-          '<div><div class="form-label">Teléfono</div><div>'+escHtml(c.phone||'-')+'</div></div>'+
-          '<div><div class="form-label">Dirección</div><div>'+escHtml(c.address||'-')+(c.city?' · '+escHtml(c.city):'')+'</div></div>'+
-          '<div><div class="form-label">NIF</div><div>'+escHtml(c.fiscal_id||'-')+'</div></div>'+
-          '<div><div class="form-label">Tipo de cliente</div><div>'+(c.client_type==='empresa'?'Empresa o profesional':'Particular')+'</div></div>'+
-          '<div><div class="form-label">Plazo de pago</div><div>'+(Number(c.payment_term_days||0)>0?Number(c.payment_term_days)+' días':'Contado')+'</div></div>'+
-          '<div><div class="form-label">Forma de pago</div><div>'+({transferencia:"Transferencia",efectivo:"Efectivo",tarjeta:"Tarjeta",domiciliacion:"Domiciliación"}[c.payment_method]||'—')+'</div></div>'+
-          '<div><div class="form-label">Perfil de cobro</div><div>'+({suave:"Suave",estandar:"Estándar",firme:"Firme",manual:"Manual"}[c.collections_profile||'estandar'])+'</div></div>'+
-          '</div>'+
-          (c.notes?'<div class="alert alert-ok" style="margin-bottom:1rem">'+escHtml(c.notes)+'</div>':'')+
-          '<h4 style="margin-bottom:.75rem">Facturas y cobro</h4>'+
-          debtBlock+
-          '<div class="table-wrap" style="margin-bottom:1.25rem"><table><thead><tr><th>Factura</th><th>Vence</th><th>Total</th><th>Pendiente</th><th>Cobro</th><th>Próxima acción</th><th></th></tr></thead><tbody>'+invRows+'</tbody></table></div>'+
-          '<h4 style="margin-bottom:.75rem">Historial de pedidos</h4>'+
-          '<div class="table-wrap"><table><thead><tr><th>Orden</th><th>Total</th><th>Estado</th><th>Fecha</th></tr></thead><tbody>'+ordRows+'</tbody></table></div>'+
-          (PUEDE_CRM?'<div id="crmSection" style="margin-top:1.5rem"><div class="skel" style="display:block;height:1.1rem;width:45%"></div></div>':'');
-        var _vf=document.getElementById('detailFicha'); if(_vf) _vf.href='/admin/clients/'+id;
-        openModal('detailModal');
-        if(PUEDE_CRM) loadCrm(id);
-      }
-      // ── CRM en la ficha: oportunidades abiertas (con próxima acción) + línea de tiempo unificada.
-      // Da superficie a los dos endpoints que ya existían sin ella (summary + timeline). El timeline
-      // llega YA troceado por permisos desde el servidor (crm.read no revela facturas/cobros sin su
-      // llave): aquí solo se pinta lo que vino. Fallo silencioso: si no hay permiso, la ficha no cambia.
-      async function loadCrm(id){
-        const box=document.getElementById('crmSection'); if(!box) return;
-        let sum, tl=[];
-        try{ sum=await api('GET','/api/erp/crm/clients/'+id+'/summary'); }
-        catch(e){ box.innerHTML=''; return; }
-        try{ tl=await api('GET','/api/erp/crm/clients/'+id+'/timeline'); }catch(e){ tl=[]; }
-        const eur=n=>'${sym}'+Number(n||0).toFixed(2);
-        const head='<div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.75rem">'
-          +'<h4 style="margin:0">Actividad y oportunidades</h4>'
-          +'<a class="btn btn-secondary btn-sm" href="/admin/crm">Ver embudo</a></div>';
-        const resumen='<div class="alert '+(sum.abiertas.length?'alert-warn':'alert-ok')+'" style="margin-bottom:1rem">'
-          +'<strong>'+sum.abiertas.length+'</strong> abierta'+(sum.abiertas.length===1?'':'s')+' · '+eur(sum.valorAbierto)+' en juego'
-          +' · Ganadas <strong>'+sum.ganadas.count+'</strong> ('+eur(sum.ganadas.total)+')'
-          +' · Perdidas '+sum.perdidas.count+' ('+eur(sum.perdidas.total)+')</div>';
-        const opps=sum.abiertas.map(function(o){
-          const p=o.proximaAccion; const due=!!(p&&p.accion);
-          return '<a href="/admin/crm" style="display:block;text-decoration:none;color:inherit;border:1px solid var(--border2);border-radius:10px;padding:.6rem .75rem;margin-bottom:.5rem">'
-            +'<div style="display:flex;justify-content:space-between;gap:.5rem">'
-            +'<strong style="color:var(--text)">'+escHtml(o.title)+'</strong>'
-            +'<span style="white-space:nowrap"><strong>'+eur(o.amount)+'</strong> <span style="color:var(--muted);font-size:.75rem">'+o.probability+'%</span></span></div>'
-            +'<div style="display:flex;align-items:center;gap:.4rem;margin-top:.3rem">'
-            +'<span class="badge b-blue">'+escHtml(o.stage_label||o.stage)+'</span>'
-            +'<span style="font-size:.8rem;color:'+(due?'var(--accent)':'var(--muted)')+'">'
-            +(due?'<i class="ti ti-bell"></i> ':'<i class="ti ti-clock"></i> ')+escHtml((p&&p.motivo)||'Al día')+'</span></div></a>';
-        }).join('');
-        const evs=(tl||[]).slice(0,15).map(function(e){
-          const date=String(e.ts||'').slice(0,10);
-          const t=e.href?'<a href="'+e.href+'" target="_blank" style="color:inherit">'+escHtml(e.title)+'</a>':escHtml(e.title);
-          return '<div style="display:flex;gap:.6rem;padding:.5rem 0;border-bottom:1px solid var(--border)">'
-            +'<i class="ti '+(e.icon||'ti-point')+'" style="color:var(--muted);margin-top:.15rem"></i>'
-            +'<div style="flex:1"><div style="font-size:.85rem">'+t+'</div>'
-            +(e.detail?'<div style="color:var(--muted);font-size:.78rem">'+escHtml(e.detail)+'</div>':'')+'</div>'
-            +'<span style="color:var(--muted);font-size:.75rem;white-space:nowrap">'+date+'</span></div>';
-        }).join('');
-        const timeline=evs
-          ? ('<h5 style="margin:1rem 0 .25rem;font-size:.82rem;color:var(--muted)">Línea de tiempo</h5>'+evs
-             +(tl.length>15?'<div style="text-align:center;padding:.5rem"><a href="/admin/crm" style="font-size:.8rem">Ver todo en Oportunidades</a></div>':''))
-          : (sum.abiertas.length?'':'<div style="color:var(--muted);font-size:.85rem">Aún no hay actividad comercial con este cliente. Ábrele una oportunidad cuando te pida precio.</div>');
-        box.innerHTML=head+resumen+opps+timeline;
-      }
+      // ── A1 · ABRIR UN CLIENTE ABRE LA VENTANA FLOTANTE ──────────────────────────────────────
+      // Mismo nombre de función que antes a propósito: la llaman la fila de la lista y el modal de
+      // cobro compartido. Lo que cambia es qué abre.
+      function viewDetail(id){ currentDetailClientId = id; window.BFWin.abrir(id); }
+      window.viewDetail = viewDetail;
+
+      // A2 · Entrar directamente por /admin/clients?ficha=<id> (o volver hacia delante en el
+      // historial) abre la ventana sin pasar por la lista. La direccion propia de la ventana es
+      // /admin/clients/<id>, que es una PAGINA de verdad: recargar da la ficha completa.
+      (function(){
+        var f = new URLSearchParams(location.search).get('ficha');
+        if (f && /^[0-9]+$/.test(f)) viewDetail(parseInt(f, 10));
+      })();
+
       // U6 · Onboarding: al llegar con ?nuevo=1 (enlace "Vamos →" del checklist de Inicio) se abre
       // directo el alta de cliente. Limpia la query para que un refresco no lo reabra. Solo UI.
       if (new URLSearchParams(location.search).get('nuevo') === '1') {
@@ -774,113 +702,139 @@ export function createClientRoutes(db, cfg = {}) {
     if (!cli) return c.html(adminLayout('Cliente', '<div class="card"><p>Ese cliente no existe o se archivó. <a href="/admin/clients">Volver a Clientes</a></p></div>', 'clients', c.get('session')?.csrfToken || '', c), 404);
     const content = `
     <style>
-      .f360-cifras{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem;margin-bottom:1rem}
-      .f360-c{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:.7rem .85rem}
-      .f360-c .k{font-size:.7rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text3);margin-bottom:.25rem}
-      .f360-c .v{font-size:1.15rem;font-weight:700;letter-spacing:-.01em;color:var(--text)}
-      .f360-c .v.na{color:var(--text3);font-weight:600}
-      .f360-c .s{font-size:.72rem;color:var(--text2);margin-top:.15rem}
-      .f360-cont{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.25rem}
-      .f360-cont a{display:flex;align-items:center;gap:.45rem;border:1px solid var(--border2);border-radius:10px;padding:.45rem .7rem;text-decoration:none;color:var(--text2);background:var(--bg2);font-size:.83rem}
-      .f360-cont a:hover{border-color:var(--accent);color:var(--accent)}
-      .f360-cont a .n{font-weight:700;color:var(--text)}
-      .f360-cont a.cero{color:var(--text3)}
-      .f360-cont a.cero .n{color:var(--text3)}
+      ${fichaClienteCSS()}
+      /* Lo propio de la PÁGINA: la historia, las notas y la tabla larga de facturas. Las tarjetas,
+         los chips, la recomendación de DISA y las capas vienen del componente compartido. */
       .f360-tabs{display:flex;gap:.3rem;flex-wrap:wrap;margin-bottom:.75rem}
       .f360-tabs button{appearance:none;border:1px solid var(--border2);background:var(--bg2);color:var(--text2);font-family:inherit;font-size:.78rem;padding:.25rem .6rem;border-radius:999px;cursor:pointer}
       .f360-tabs button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
-      .f360-ev{display:flex;gap:.65rem;padding:.6rem 0;border-bottom:1px solid var(--border)}
+      .f360-ev{display:flex;gap:.65rem;padding:.6rem 0;border-bottom:1px solid var(--border);min-width:0}
       .f360-ev i.ti{color:var(--text3);margin-top:.15rem;flex-shrink:0}
       .f360-ev .t{font-size:.87rem;color:var(--text)}
       .f360-ev .d{font-size:.78rem;color:var(--text2);margin-top:.1rem}
       .f360-ev .f{font-size:.74rem;color:var(--text3);white-space:nowrap;margin-left:auto}
       .f360-nota{border:1px solid var(--border2);border-radius:10px;padding:.6rem .75rem;margin-bottom:.5rem;background:var(--bg2)}
       .f360-nota .meta{font-size:.72rem;color:var(--text3);margin-top:.3rem}
-      .f360-disa{border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0;padding:.55rem .75rem;margin-bottom:.5rem}
-      @media(max-width:480px){ .f360-cifras{grid-template-columns:repeat(2,1fr)} }
+      .f360-col{min-width:0}
     </style>
     <div class="ph">
       <div>
         <div style="font-size:.75rem;color:var(--text3)"><a href="/admin/clients" style="color:inherit">Clientes</a> ›</div>
         <h2 style="margin:0">${escHtml(cli.name)}</h2>
+        <div style="font-size:.78rem;color:var(--text3)">${escHtml([cli.client_code, cli.fiscal_id, cli.phone, cli.email].filter(Boolean).join(' · '))}</div>
       </div>
       <div style="display:flex;gap:.5rem;flex-wrap:wrap">
         <a class="btn btn-secondary btn-sm" href="/admin/clients">← Volver</a>
       </div>
     </div>
-    <div id="f360cifras" class="f360-cifras"><div class="skel skel-block"></div></div>
-    <div id="f360cont" class="f360-cont"></div>
-    <div id="f360disa"></div>
-    <div class="grid g2" style="align-items:start;gap:1rem">
-      <div class="card">
-        <h4 style="margin-top:0">Su historia</h4>
-        <div id="f360tabs" class="f360-tabs"></div>
-        <div id="f360tl">Cargando…</div>
-        <div style="text-align:center;padding:.6rem"><button class="btn btn-secondary btn-sm" id="f360mas" style="display:none" onclick="tlMas()">Ver más</button></div>
+
+    <!-- A3 · LA CAPA DE DETALLE. Es la MISMA que la de la ventana flotante: las tarjetas de aquí y
+         las de allí abren el mismo contenido, servido por el mismo endpoint. Empieza oculta. -->
+    <div id="f360capa" class="card" style="display:none"></div>
+
+    <div id="f360resumen">
+      <div id="f360cifras"><div class="skel skel-block" style="height:5rem"></div></div>
+      <div id="f360cont"></div>
+      <div id="f360disa"></div>
+      <div class="grid g2" style="align-items:start;gap:1rem">
+        <div class="f360-col">
+          <div class="card" id="historia">
+            <h4 style="margin-top:0">Su historia</h4>
+            <div id="f360tabs" class="f360-tabs"></div>
+            <div id="f360tl">Cargando…</div>
+            <div style="text-align:center;padding:.6rem"><button class="btn btn-secondary btn-sm" id="f360mas" style="display:none" onclick="tlMas()">Ver más</button></div>
+          </div>
+        </div>
+        <div class="f360-col">
+          <div class="card">
+            <h4 style="margin-top:0">Qué te compra</h4>
+            <div id="f360compra">Cargando…</div>
+          </div>
+          <div class="card">
+            <h4 style="margin-top:0">Notas</h4>
+            <div id="f360notaFija"></div>
+            <textarea class="form-control" id="f360nueva" rows="2" maxlength="4000" placeholder="Escribe una nota…"></textarea>
+            <button class="btn btn-primary btn-sm" style="margin-top:.4rem" onclick="notaGuardar()">Añadir nota</button>
+            <div id="f360notas" style="margin-top:.75rem"></div>
+          </div>
+        </div>
       </div>
-      <div>
-        <div class="card">
-          <h4 style="margin-top:0">Qué te compra</h4>
-          <div id="f360compra">Cargando…</div>
-        </div>
-        <div class="card">
-          <h4 style="margin-top:0">Notas</h4>
-          <div id="f360notaFija"></div>
-          <textarea class="form-control" id="f360nueva" rows="2" maxlength="4000" placeholder="Escribe una nota…"></textarea>
-          <button class="btn btn-primary btn-sm" style="margin-top:.4rem" onclick="notaGuardar()">Añadir nota</button>
-          <div id="f360notas" style="margin-top:.75rem"></div>
-        </div>
+      <!-- B2 · LA TABLA LARGA DE FACTURAS VIVE AQUÍ. Salió de la ventana flotante (que es el
+           resumen) pero NO desapareció del producto: está entera, con su estado de cobro y sus
+           botones. A lo ancho de la página y no en media columna: seis columnas de datos y dos
+           botones no caben en la mitad de la pantalla sin obligar a arrastrar. -->
+      <div class="card" id="f360facBox" style="display:none">
+        <h4 style="margin-top:0">Todas sus facturas</h4>
+        <div id="f360fac"></div>
       </div>
     </div>
+    ${cobroModalHtml()}
     <script>
+    ${fichaClienteJS({ sym })}
+    ${fichaVentanaJS({ montaje: 'pagina' })}
+    ${cobroModalScript(sym)}
     var CID=${cli.id}, SYM=${JSON.stringify(sym)}, D=null, TIPO='', DESDE=0;
+    window.BF_CLIENTE_ID = CID;
+    window.BF_CLIENTE_NOMBRE = ${JSON.stringify(cli.name)};
     var TIPO_LBL={documento:'Documentos',cobro:'Cobros',cita:'Citas',oportunidad:'Oportunidades',actividad:'Actividad',proyecto:'Proyectos',tiempo:'Horas',aviso:'Avisos',nota:'Notas'};
-    var eur=function(n){ return SYM+Number(n||0).toFixed(2); };
-    // «—» y NUNCA 0: un cero inventado en una ficha se cree; un hueco se pregunta.
-    function celda(k,v,s,na){ return '<div class="f360-c"><div class="k">'+escHtml(k)+'</div><div class="v'+(na?' na':'')+'">'+v+'</div>'+(s?'<div class="s">'+s+'</div>':'')+'</div>'; }
+    // El dinero se escribe UNA vez, en el componente compartido, y en español. El "€4018.00" de
+    // antes salía de un SYM+toFixed(2) escrito a mano aquí: formato inglés en una ficha española.
+    var eur = function(n){ return BF.eur(n); };
+
+    // Las OCHO tarjetas y los chips los pinta el componente compartido: los mismos que en la
+    // ventana flotante, con las mismas reglas de recorte y de altura. Aquí no se pinta ninguna caja
+    // a mano — es lo que impide que las dos pantallas vuelvan a divergir.
     function pintaCifras(){
-      var c=D.cabecera, h=[];
-      if(c.desde.fecha) h.push(celda('Cliente desde', c.desde.fecha, c.desde.alta?'de alta desde '+c.desde.alta:''));
-      else h.push(celda('Cliente desde','Aún no te ha comprado', c.desde.alta?'de alta desde '+c.desde.alta:'',true));
-      h.push(c.ultima ? celda('Última vez que vino', c.ultima.fecha, c.ultima.dias===0?'hoy':'hace '+c.ultima.dias+' días')
-                      : celda('Última vez que vino','—','todavía no ha venido',true));
-      if(c.ritmo) h.push(c.ritmo.ritmo_dias!=null
-        ? celda('Cada cuánto viene','cada '+c.ritmo.ritmo_dias+' días', c.ritmo.visitas+' visitas')
-        : celda('Cada cuánto viene','—', c.ritmo.motivo||'', true));
-      if(c.gasto){
-        h.push(celda('Gasto total', eur(c.gasto.total), c.gasto.facturas+' factura'+(c.gasto.facturas===1?'':'s')+' · sin IVA'));
-        h.push(celda('En los últimos 12 meses', eur(c.gasto.doce_meses), 'sin IVA'));
-        h.push(c.ticket_medio!=null ? celda('Ticket medio', eur(c.ticket_medio),'') : celda('Ticket medio','—','aún no hay facturas',true));
-        h.push(celda('Te debe', eur(c.deuda.total), c.deuda.oldest?'la más antigua: '+c.deuda.oldest.invoice_number:'sin deuda pendiente'));
-        h.push(!c.margen ? celda('Margen que deja','—','no se puede calcular',true)
-          : c.margen.sinCoste ? celda('Margen que deja','—','sus líneas no tienen coste conocido',true)
-          : celda('Margen que deja', eur(c.margen.beneficio), c.margen.pct!=null?Number(c.margen.pct).toFixed(1)+'%':''));
-      }
-      document.getElementById('f360cifras').innerHTML=h.join('');
-      // Contadores: con 0 se enseñan igual, en gris. Un 0 es información.
-      document.getElementById('f360cont').innerHTML=(D.contadores||[]).map(function(x){
-        var v = x.key==='deuda' ? eur(x.eur) : x.n;
-        var cero = x.key==='deuda' ? !(x.eur>0) : !x.n;
-        return '<a class="'+(cero?'cero':'')+'" href="'+x.href+'"><i class="ti '+x.icon+'"></i>'+escHtml(x.etiqueta)+' <span class="n">'+v+'</span></a>';
-      }).join('');
-      // Lo que DISA ve de él: los MISMOS avisos que en el vigía, con su decisión propuesta.
-      var d=D.disa;
-      document.getElementById('f360disa').innerHTML = (d&&d.length)
-        ? '<div class="card" style="margin-bottom:1rem"><h4 style="margin-top:0">Lo que DISA ve de este cliente</h4>'
-          + d.map(function(a){ return '<div class="f360-disa"><strong>'+escHtml(a.etiqueta)+'</strong><div style="font-size:.85rem">'+escHtml(a.titulo||'')+'</div>'
-            +(a.detalle?'<div style="font-size:.8rem;color:var(--text2)">'+escHtml(a.detalle)+'</div>':'')
-            +'</div>'; }).join('')
+      document.getElementById('f360cifras').innerHTML = BF.tarjetasHTML(D);
+      document.getElementById('f360cont').innerHTML   = BF.chipsHTML(D.contadores);
+      // C1 — Muere el listado de seis avisos iguales. Una recomendación por familia, con su decisión.
+      var recs = D.recomienda || [];
+      document.getElementById('f360disa').innerHTML = recs.length
+        ? '<div class="card" style="margin-bottom:1rem"><h4 style="margin-top:0">Lo que te recomiendo</h4>'
+          + BF.recomiendaHTML(recs)
           + '<a href="/admin/vigia" style="font-size:.8rem">Ver todo en el vigía →</a></div>'
         : '';
       var q=D.compra;
       document.getElementById('f360compra').innerHTML = q==null
         ? '<div style="color:var(--text3);font-size:.85rem">—</div>'
-        : (q.length ? '<table style="width:100%;font-size:.84rem"><tbody>'+q.map(function(x){
-              return '<tr><td>'+escHtml(x.nombre)+'</td><td style="text-align:right;color:var(--text2)">'+x.veces+'×</td><td style="text-align:right;font-weight:600">'+eur(x.base)+'</td></tr>'; }).join('')+'</tbody></table>'
+        : (q.length ? BF.queCompraHTML(q, 0)
             : '<div style="color:var(--text3);font-size:.85rem">Todavía no te ha comprado nada en los últimos 12 meses.</div>');
       document.getElementById('f360notaFija').innerHTML = D.cliente.notes
         ? '<div class="alert alert-ok" style="margin-bottom:.6rem">'+escHtml(D.cliente.notes)+'</div>' : '';
     }
+
+    // ── B2 · LA TABLA LARGA DE FACTURAS ──────────────────────────────────────────────────────────
+    // Con su estado de cobro en vivo y sus botones, igual que estaba en el modal. Va dentro de
+    // .bf-scroll: una tabla de seis columnas no puede volver a salirse de su caja.
+    async function facturasCargar(){
+      var box=document.getElementById('f360fac'), caja=document.getElementById('f360facBox');
+      if(!box) return;
+      var deb; try{ deb = await api('GET','/api/erp/clients/'+CID+'/invoices'); }catch(e){ return; }
+      caja.style.display='';
+      var badge={pendiente:'b-yellow',parcial:'b-blue',cobrada:'b-green',vencida:'b-red',abono:'b-gray'};
+      var label={pendiente:'Pendiente',parcial:'Cobrada en parte',cobrada:'Cobrada',vencida:'Vencida',abono:'Abono'};
+      var filas=(deb.invoices||[]).map(function(f){
+        var est=!f.counts
+          ? '<span class="badge b-gray" title="No computa como deuda (anulada o rectificada por sustitución)">no computa</span>'
+          : '<span class="badge '+(badge[f.estado]||'')+'">'+(label[f.estado]||f.estado)+(f.estado==='vencida'&&f.dias_vencida?' '+f.dias_vencida+'d':'')+'</span>';
+        var acc=(f.cobrable && Number(f.pendiente)>0.0049)
+          ? '<button type="button" class="btn btn-primary btn-sm" data-cobro="'+f.id+'">Registrar cobro</button> '
+            +'<button type="button" class="btn btn-secondary btn-sm" data-gestion="'+f.id+'">Gestionar</button>'
+          : '';
+        return '<tr><td><a href="/admin/invoices/'+f.id+'">'+escHtml(f.invoice_number)+'</a></td>'
+          +'<td style="color:var(--text3);font-size:.8rem;white-space:nowrap">'+escHtml(f.due_date||f.issue_date||'-')+'</td>'
+          +'<td style="white-space:nowrap">'+eur(f.total)+'</td>'
+          +'<td style="white-space:nowrap">'+(f.counts?eur(f.pendiente):'—')+'</td>'
+          +'<td>'+est+'</td><td style="text-align:right;white-space:nowrap">'+acc+'</td></tr>';
+      }).join('');
+      box.innerHTML = filas
+        ? '<div class="bf-scroll"><table><thead><tr><th>Factura</th><th>Vence</th><th>Total</th><th>Pendiente</th><th>Cobro</th><th></th></tr></thead><tbody>'+filas+'</tbody></table></div>'
+        : '<div class="bf-vacio">Este cliente aún no tiene facturas.</div>';
+    }
+    // Tras registrar un cobro, la tabla y las tarjetas se refrescan solas: si el "Te debe" de arriba
+    // y la tabla de abajo dijeran cifras distintas, una de las dos estaría mintiendo.
+    window.cobroOnSaved = function(){ recargar(); };
+
     // Sin onclick inline con comillas anidadas: se marca el botón con data-tipo y se escucha una vez.
     // (Las comillas escapadas dentro de un template literal del servidor llegan ya desescapadas al
     //  navegador y parten la cadena — pasa en silencio y se lleva el script entero por delante.)
@@ -943,10 +897,19 @@ export function createClientRoutes(db, cfg = {}) {
       if(e){ ev.preventDefault(); var caja=e.closest('.f360-nota'); notaEditar(e.getAttribute('data-nedit'), caja.firstChild.textContent); }
       else if(d){ ev.preventDefault(); notaBorrar(d.getAttribute('data-ndel')); }
     });
-    (async function(){
-      try{ D=await api('GET','/api/erp/clients/'+CID+'/360'); pintaCifras(); }
+    async function recargar(){
+      try{ D=await api('GET','/api/erp/clients/'+CID+'/360'); window.BFWin.setDatos(D); pintaCifras(); }
       catch(e){ document.getElementById('f360cifras').innerHTML='<div class="alert alert-err">'+escHtml(e.message)+'</div>'; }
+      facturasCargar();
+    }
+    (async function(){
+      await recargar();
       tlCargar(); notasCargar();
+      // Los avisos de DISA y los enlaces "ver su historia" traen #historia: llevan a la historia
+      // sin que el usuario tenga que buscarla.
+      if (location.hash === '#historia') {
+        var h=document.getElementById('historia'); if(h) h.scrollIntoView({block:'start'});
+      }
     })();
     </script>`;
     return c.html(adminLayout(cli.name, content, 'clients', c.get('session')?.csrfToken || '', c));

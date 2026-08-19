@@ -6,6 +6,7 @@
 // atribución particiona los MISMOS asientos, se cumple al céntimo: Σ(P&G de cada proyecto) + P&G de lo NO
 // asignado (estructura) = P&G total. El "cobrado" es un dato de CAJA aparte (no cambia el resultado).
 import { cuentaPyG } from './contabilidad-pyg.js';
+import { margen } from './margen.js';
 
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
 // Rango "todo" para la rentabilidad total de un proyecto (el filtro real es el proyecto, no la fecha).
@@ -20,8 +21,15 @@ function desglosar(pyg) {
     else if (p.importe < 0) gastos = r2(gastos - p.importe);   // −importe → gasto en positivo
   }
   const resultado = r2(pyg.resultadoEjercicio);
-  const margenPct = ingresos > 0 ? r2(resultado / ingresos * 100) : null;
-  return { ingresos, gastos, resultado, margenPct };
+  // El % pasa por el MOTOR ÚNICO igual que el resto de la plataforma. Aquí la "venta" son los
+  // ingresos del P&G y el "coste" los gastos, y por construcción ingresos − gastos = resultado, así
+  // que `m.euros` es el resultado contable y `m.pctVenta` es EXACTAMENTE el margenPct de siempre:
+  // ni un número de rentabilidad por proyecto cambia de valor.
+  //
+  // R1 — ESTA SUPERFICIE NO OBEDECE AL AJUSTE DEL DUEÑO. Es P&G: aquí manda «sobre la venta», elija
+  // lo que elija. El titular se pide con `{contable:true}` y la pantalla dice por qué.
+  const m = margen({ venta: ingresos, coste: gastos, fuera: 0 });
+  return { ingresos, gastos, resultado, margenPct: m.pctVenta, margen: m, contable: true };
 }
 
 // PIEZA 4 (parte 2) — COSTE DE LAS HORAS de un proyecto (capa de GESTIÓN, NO contable: no toca el diario ni
