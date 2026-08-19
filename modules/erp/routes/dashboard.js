@@ -3,8 +3,6 @@ import { adminLayout, fuentesPermitidas, can } from '../layout.js';
 import { disaHomeHtml } from '../views/disaHome.html.js';
 import { estadoAvisos, hoyLocal } from '../avisos.js';
 import { ventasResumen, pedidosResumen } from '../ventas-metrics.js';   // PIEZA C: ventas desde la cadena nueva (facturas), pedidos desde customer_orders
-import { modoYaPreguntado } from '../margen.js';   // G4: el paso del margen del alta
-import { oficioDe } from '../oficios.js';          // para que DISA PROPONGA (nunca marque)
 
 export function createDashboardRoutes(db) {
   const r = new Hono();
@@ -58,45 +56,12 @@ export function createDashboardRoutes(db) {
       }
     } catch {}
 
-    // U6 — Onboarding / primeros pasos. Estado DERIVADO del estado real del negocio (solo lectura,
-    // sin flags que mantener a mano): datos de empresa (NIF puesto), ≥1 cliente, ≥1 factura y —G4—
-    // haber contestado (o saltado) cómo cuenta su margen. Solo para el dueño/admin (es la bienvenida
-    // del dueño). Con todos hechos, onboarding=null → el Inicio queda como el home normal de DISA y
-    // el checklist se retira solo.
-    //
-    // AÑADIR UN PASO son DOS cosas y ninguna más: un booleano aquí y una entrada en `onbSteps`
-    // (disaHome.html.js). El total ya no está escrito a mano en ningún sitio.
-    let onboarding = null;
-    try {
-      const role = session?.role;
-      if (role === 'owner' || role === 'admin') {
-        const cc = db.prepare('SELECT fiscal_id FROM company_config WHERE id=1').get() || {};
-        const companyDone = !!(cc.fiscal_id && String(cc.fiscal_id).trim());
-        const clientDone = (db.prepare('SELECT COUNT(*) AS n FROM clients').get()?.n || 0) > 0;
-        const invoiceDone = (db.prepare('SELECT COUNT(*) AS n FROM invoices').get()?.n || 0) > 0;
-        // Hecho = contestado O saltado. Saltar TERMINA el paso: no puede quedarse pinchado para
-        // siempre en la pantalla de alguien que ya dijo que ahora no.
-        const margenDone = modoYaPreguntado(db);
-        const pasos = [companyDone, clientDone, invoiceDone, margenDone];
-        const done = pasos.filter(Boolean).length;
-        if (done < pasos.length) {
-          // DISA PROPONE según el oficio, NUNCA marca (CANON). Quien compra material para
-          // revenderlo —taller, estética— suele hablar de markup ("le meto un 40 %"); quien vende
-          // sobre todo su tiempo, de margen sobre la venta. Es UNA FRASE en la guía de DISA y nada
-          // más: ninguna de las dos opciones queda premarcada, en ningún oficio.
-          let margenSugerido = null;
-          try {
-            const of = oficioDe(db);
-            const id = typeof of === 'string' ? of : (of?.id || '');
-            if (['taller', 'estetica'].includes(id)) margenSugerido = 'coste';
-          } catch {}
-          onboarding = { companyDone, clientDone, invoiceDone, margenDone, done, margenSugerido };
-        }
-      }
-    } catch {}
+    // (El checklist de U6 vivía aquí. Ahora el panel «Pon en marcha tu negocio» se deriva en
+    // `arranque.js` y se sirve por /api/erp/inicio/arranque, así que esta pantalla no calcula nada:
+    // el Inicio se pinta igual para todos y el panel decide solo si tiene algo que decir.)
 
     const simbolo = db.prepare('SELECT currency_symbol s FROM company_config WHERE id=1').get()?.s || '€';
-    return c.html(adminLayout('Dashboard', disaHomeHtml({ userName, alertCount, alertState, kpis, onboarding, simbolo }), 'dashboard', session?.csrfToken || '', c, true));
+    return c.html(adminLayout('Dashboard', disaHomeHtml({ userName, alertCount, alertState, kpis, simbolo }), 'dashboard', session?.csrfToken || '', c, true));
   });
 
   return r;

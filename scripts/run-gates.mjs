@@ -40,6 +40,7 @@ const GRUPOS = {
     'gate-cliente-360',              // la ficha cuadra al céntimo con la pantalla de la que sale
     'gate-menu-navegacion',          // ni una función del menú se pierde por el camino
     'gate-agenda-visual',            // el lienzo de la agenda, y que se sirve desde la dirección real
+    'gate-inicio-arranque',          // el Inicio de un negocio que arranca: panel, «Hoy» y migración
     'gate-vigia-pantalla',           // el vigía en su pantalla
     'gate-vigia-agenda',             // los detectores de agenda (1 aserción EN ROJO desde antes: ver DEUDA)
   ],

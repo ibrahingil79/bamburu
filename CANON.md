@@ -78,6 +78,14 @@ mira a la competencia directa.)
   distingue a simple vista, pero no cuenta.
   *De aquí sale también la honestidad sobre lo que Bamburu NO hace: WhatsApp no está conectado, así
   que se apunta a mano y la pantalla lo dice. Nunca se finge una integración que no existe.*
+- **Lo que se marca solo no puede mentir.** Toda casilla, checklist o indicador de «esto ya está
+  hecho» se **deriva del estado real** del negocio —hay NIF, hay horario, hay servicios con precio,
+  la página de reservas está encendida—, **nunca de una bandera que alguien pulsa**. Una casilla que
+  se marca a mano se marca por error, por prisa o por probar, y a partir de ese momento el panel deja
+  de significar nada: dice «hecho» de algo que no está y el dueño no vuelve a mirarlo. Si un estado
+  no se puede derivar, **el paso no se ofrece** hasta que se pueda.
+  *Corolario: si un paso lleva a una pantalla, esa pantalla tiene que EXISTIR. Un enlace a un 404 en
+  la primera pantalla que ve un dueño nuevo es peor que no ofrecer el paso.*
 - **Las dos puertas.** Toda información de negocio tiene **dos puertas**: la **conversacional** (DISA)
   y la **visual** (panel / constructor de analíticas). **Ninguna sustituye a la otra** — quien prefiere
   preguntar, pregunta; quien prefiere ver, ve. **Los gráficos no son cerrados:** el usuario construye

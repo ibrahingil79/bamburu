@@ -2988,6 +2988,35 @@ Sé preciso con los números y siempre redondea correctamente.`,
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_client_contacts_doc
              ON client_contacts(doc_tipo, doc_id, tipo) WHERE doc_id IS NOT NULL`);
 
+  // ── PETICIONES DE MIGRACIÓN ASISTIDA (aditivo, idempotente, sin DROP) ──────────────────────────
+  //
+  // «Trae tus datos del programa anterior» tiene que llevar a algún sitio de verdad. Y ese sitio NO
+  // es un importador automático: **la migración la hace el equipo de Bamburu, a mano y gratis**.
+  // Esta tabla es el buzón de esa petición — de dónde viene, qué quiere traer, y el fichero si ya lo
+  // tenía—, para que quede constancia en el negocio y no solo en un correo que alguien puede perder.
+  //
+  // NO SE INSINÚA UN IMPORTADOR QUE NO EXISTE: es la misma regla que se aplicó con WhatsApp en la
+  // ficha de cliente. Prometer una automatización que no está es peor que no ofrecer nada, porque el
+  // dueño deja de buscar la solución que sí tiene.
+  //
+  // FUERA de WRITABLE_TABLES a propósito: esto lo escribe una persona pidiendo ayuda, no DISA.
+  db.exec(`CREATE TABLE IF NOT EXISTS migracion_peticiones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    origen      TEXT    NOT NULL,                  -- holded | quipu | excel | otro
+    origen_otro TEXT    NOT NULL DEFAULT '',       -- si origen='otro', qué programa
+    quiere      TEXT    NOT NULL DEFAULT '',       -- lista separada por comas: clientes,productos,facturas,proveedores
+    comentario  TEXT    NOT NULL DEFAULT '',
+    fichero     TEXT,                              -- nombre del fichero adjunto, si lo hubo
+    fichero_bytes INTEGER,
+    estado      TEXT    NOT NULL DEFAULT 'pedida', -- pedida | en_curso | hecha  (lo mueve el equipo)
+    user_id     INTEGER,
+    user_name   TEXT    NOT NULL DEFAULT '',
+    email_ok    INTEGER NOT NULL DEFAULT 0,        -- ¿salió el correo al equipo?
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+    active      INTEGER NOT NULL DEFAULT 1
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_migracion_peticiones_fecha ON migracion_peticiones(created_at DESC)`);
+
   // Y LA LIMPIEZA, AUTOMÁTICA. Un contacto sin cliente no significa nada: si alguna vez se borra un
   // cliente de verdad, sus contactos se van con él. **El producto NUNCA borra un cliente** —archiva
   // con active=0, que es la regla permanente— así que esto no destruye nada en uso normal; existe

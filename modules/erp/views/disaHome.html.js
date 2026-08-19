@@ -1,4 +1,4 @@
-export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboarding = null, simbolo = '€' }) {
+export function disaHomeHtml({ userName, alertCount, alertState, kpis, simbolo = '€' }) {
   const sym = kpis?.sym || '€';
 
   // Fecha de hoy en español (presentación; server-side, no toca datos del tenant).
@@ -17,95 +17,55 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboardin
     : `Todo en orden por ahora. ¿En qué quieres trabajar hoy en tu negocio? Puedo crear facturas, registrar gastos o darte un resumen.`;
 
   // ── U6 · Onboarding — primeros pasos (solo presentación; el estado llega derivado del negocio) ──
-  // Cuando `onboarding` viene (dueño/admin con algún paso pendiente), el hero muestra una bienvenida
-  // de DISA + el checklist de 3 pasos; cada pendiente lleva a su pantalla. Con los 3 hechos, el
-  // dashboard NO pasa onboarding → el Inicio queda como el home normal (el checklist se retira solo).
+  // (El antiguo checklist de U6 vivía aquí; ahora vive en arranque.js y se pinta en el navegador.)
   // Cada paso trae su icono, tiempo estimado y la GUÍA de DISA (qué · por qué · cómo, en su voz) +
   // la acción. Textos fijos de producto (por eso llevan <b>): no son entrada de usuario.
-  // CÓMO SE AÑADE UN PASO (respuesta a 0.6). Hasta hoy no era aditivo: el 3 estaba escrito A MANO
-  // en cinco sitios —el corte de `done < 3` en dashboard.js, el "te quedan N", el anillo, su
-  // aria-label y el "/3"—, así que meter un cuarto paso sin cazarlos todos dejaba el anillo en 4/3 y
-  // el checklist no se retiraba nunca. Ahora TODO sale de `onbSteps.length`: añadir un paso es
-  // añadir una entrada a este array y su booleano en dashboard.js. Nada más.
-  const onbSteps = onboarding ? [
-    { done: onboarding.companyDone, icon: 'ti-building-store', label: 'Datos de tu empresa', time: '~1 min', href: '/admin/settings', cta: 'Ir a mis datos',
-      guide: `Necesito tu <b>NIF</b> y tu <b>tipo de IRPF</b> para que tus facturas salgan legales y con los importes exactos desde la primera. Añade también el <b>nombre fiscal</b>, que aparece en cada documento. Te llevo al formulario con esos campos y, en cuanto guardes, este paso se marca solo.` },
-    { done: onboarding.clientDone, icon: 'ti-user-plus', label: 'Tu primer cliente', time: '~1 min', href: '/admin/clients?nuevo=1', cta: 'Crear cliente',
-      guide: `Un cliente es <b>a quién le facturas</b>: su nombre y su NIF, y si quieres su email para enviarle las facturas. Con uno basta para arrancar; los demás los añades cuando los necesites. Te abro el alta directamente.` },
-    { done: onboarding.invoiceDone, icon: 'ti-file-invoice', label: 'Tu primera factura', time: '~2 min', href: '/admin/invoices/new', cta: 'Emitir factura',
-      guide: `Aquí nace tu <b>primer documento legal</b>. Eliges el cliente, añades una línea (concepto, importe e IVA) y emites; del resto me encargo yo: numeración, IVA/IRPF y la <b>huella Verifactu</b>. Te llevo a la factura nueva ya preparada.` },
-    // ── G4 · CÓMO CUENTAS TU MARGEN ────────────────────────────────────────────────────────────
-    // Va AL FINAL y NO BLOQUEA: se puede saltar, y saltar deja «sobre la venta». Es el único paso
-    // que se resuelve aquí mismo en vez de llevarte a otra pantalla, porque es una pregunta de una
-    // sola respuesta, no un formulario.
-    //
-    // DISA PROPONE, NUNCA MARCA (CANON). Si el oficio suele trabajar con markup —taller, tienda,
-    // estética— lo dice en su guía; la opción sigue sin premarcar y el dueño elige.
-    { done: onboarding.margenDone, icon: 'ti-percentage', label: 'Cómo cuentas tu margen', time: '~20 s',
-      href: '/admin/settings', cta: 'Elegir', margen: true,
-      guide: onboarding.margenSugerido === 'coste'
-        ? `Hay dos formas de decir lo mismo y las dos son correctas. En tu oficio <b>se suele hablar del segundo</b>, pero eso lo decides tú — no marco nada por ti. Elige cuál quieres ver primero en toda la plataforma; los dos números se calculan igual.`
-        : `Hay dos formas de decir lo mismo y las dos son correctas: contar lo que ganas <b>sobre lo que cobras</b> o <b>sobre lo que te costó</b>. Elige cuál quieres ver primero; los dos números se calculan igual y puedes cambiarlo cuando quieras.` },
-  ] : [];
-  const onbTotal = onbSteps.length;
-  const onbNext = onbSteps.findIndex(s => !s.done);   // primer paso pendiente = el que se despliega
-  const _onbRem = onboarding ? onbTotal - onboarding.done : 0;
-  const onbSub = onboarding
-    ? (_onbRem === 1 ? 'Te queda 1 paso para emitir tu primera factura.' : `Estás a ${_onbRem} pasos de emitir tu primera factura.`)
-    : '';
-  const onbDisaLine = onboarding
-    ? (onboarding.done === 0
-        ? `¡Bienvenida, ${userName}! Soy DISA. Te llevo de la mano por cada paso y a la pantalla ya preparada — sin manuales que memorizar.`
-        : `${_onbRem === 1 ? 'Un último empujón' : 'Vas muy bien'}, ${userName}: te guío en lo que falta y cuando terminemos, esto desaparece.`)
-    : '';
-  const _ringC = 150.8;   // circunferencia (2π·24)
-  const _ringOff = (onboarding ? _ringC * (1 - onboarding.done / onbTotal) : _ringC).toFixed(1);
-  const onbStep = (s, i) => {
-    const state = s.done ? 'done' : (i === onbNext ? 'now' : 'soon');
-    const ico = s.done ? 'ti-check' : s.icon;
-    const right = s.done ? '<span class="onb-tag">Hecho</span>' : (state === 'soon' ? `<span class="onb-time">${s.time}</span>` : '');
-    // El paso del margen se contesta AQUÍ: dos opciones y un "ahora no". El texto del ejemplo es
-    // literal y no se toca — es lo que hace la pregunta entendible sin saber contabilidad.
-    const acciones = s.margen ? `
-                <div class="onb-mg-ej">Algo que te cuesta <b>100 ${simbolo}</b> y vendes por <b>140 ${simbolo}</b>.</div>
-                <div class="onb-mg">
-                  <button type="button" class="onb-mg-op" data-margen="venta"><span class="n">Gano un 28,6 %</span><span class="p">sobre lo que cobro</span></button>
-                  <button type="button" class="onb-mg-op" data-margen="coste"><span class="n">Le meto un 40 %</span><span class="p">sobre lo que me costó</span></button>
-                </div>
-                <div class="onb-mg-pie"><button type="button" class="onb-saltar" data-margen="saltar">Ahora no</button><span>Puedes cambiarlo cuando quieras en Ajustes.</span></div>`
-      : `<a class="onb-cta" href="${s.href}">${s.cta} <i class="ti ti-arrow-right"></i></a>`;
-    const expand = state === 'now' ? `
-                <div class="onb-when">Ahora · ${s.time}</div>
-                <p class="onb-guide">${s.guide}</p>${acciones}` : '';
-    // El paso del margen NUNCA es un enlace: se contesta en el sitio, no lleva a otra pantalla.
-    const tag = (state === 'soon' && !s.margen) ? 'a' : 'div';
-    const attr = (state === 'soon' && !s.margen) ? ` href="${s.href}"` : '';
-    return `
-            <${tag} class="onb-step ${state}"${attr}>
-              <span class="onb-node"><span class="onb-ic"><i class="ti ${ico}"></i></span></span>
-              <div class="onb-sbody">
-                <div class="onb-shead"><span class="onb-stitle">${s.label}</span>${right}</div>${expand}
-              </div>
-            </${tag}>`;
-  };
-  const onbHtml = onboarding ? `
-          <div class="onb-card">
-            <div class="onb-hero">
-              <div class="onb-ring" role="img" aria-label="${onboarding.done} de ${onbTotal} pasos completados">
-                <svg viewBox="0 0 56 56" width="56" height="56"><circle class="onb-ring-bg" cx="28" cy="28" r="24"/><circle class="onb-ring-fg" cx="28" cy="28" r="24" style="stroke-dasharray:${_ringC};stroke-dashoffset:${_ringOff}"/></svg>
-                <span class="onb-ring-n">${onboarding.done}<i>/${onbTotal}</i></span>
-              </div>
-              <div>
-                <h3 class="onb-title">Configura tu negocio</h3>
-                <p class="onb-sub">${onbSub}</p>
-              </div>
-            </div>
-            <div class="onb-disa"><span class="onb-disa-ic"><i class="ti ti-sparkles"></i></span><span>${onbDisaLine}</span></div>
-            <div class="onb-steps">${onbSteps.map((s, i) => onbStep(s, i)).join('')}</div>
-          </div>` : '';
+  // ── PON EN MARCHA TU NEGOCIO ────────────────────────────────────────────────────────────────
+  // ABSORBE el checklist de U6, no lo duplica: sus pasos viven ahora en `modules/erp/arranque.js`,
+  // repartidos en tres bloques y derivados del estado real del negocio. Aquí solo queda el HUECO:
+  // el panel se pinta en el navegador desde /api/erp/inicio/arranque.
+  //
+  // POR QUÉ SE FUE AL CLIENTE. El panel de antes era HTML del servidor metido con un condicional
+  // que, de paso, **apagaba la rejilla entera**: mientras faltara un paso, el dueño no veía
+  // su Inicio, y en cuanto los terminaba el panel desaparecía para siempre. Ahora conviven: la
+  // rejilla se pinta SIEMPRE y el panel se pliega en una línea cuando ya no hace falta.
+  const _ringC = 150.8;   // circunferencia (2π·24) — la misma del anillo de U6, que se reutiliza tal cual
+
 
   return `
     <style>
+      /* PON EN MARCHA TU NEGOCIO — lo nuevo sobre el estilo de U6, que se reutiliza tal cual. */
+      .onb-bloque { margin-top: 14px; }
+      .onb-bloque h4 { margin: 0; font-size: .82rem; font-weight: 700; color: var(--text); letter-spacing: -.005em; }
+      .onb-bsub { margin: .1rem 0 .5rem; font-size: .76rem; color: var(--text3); line-height: 1.45; }
+      .onb-plegar { background: none; border: none; cursor: pointer; color: var(--text3); padding: .3rem .4rem;
+        border-radius: 8px; line-height: 1; font-size: 1rem; flex: none; }
+      .onb-plegar:hover { color: var(--text); background: var(--bg3); }
+      /* Plegado = UNA LÍNEA, no desaparecido: sigue diciendo el progreso y se abre de un clic. */
+      .onb-plegado { display: flex; align-items: center; gap: .55rem; width: 100%; cursor: pointer;
+        background: var(--bg2); border: 1px solid var(--border2); border-radius: 12px;
+        padding: .7rem .95rem; font-family: inherit; font-size: .86rem; color: var(--text2);
+        margin-bottom: 18px; text-align: left; }
+      .onb-plegado:hover { border-color: var(--accent); }
+      .onb-plegado strong { color: var(--text); font-weight: 600; }
+      .onb-plegado span { margin-left: auto; color: var(--text3); font-size: .8rem; white-space: nowrap; }
+      .onb-plegado > i.ti:first-child { color: var(--ok); }
+      .onb-extra { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border2); }
+      .onb-mas { appearance: none; border: 1px dashed var(--border2); background: transparent; color: var(--text3);
+        font-family: inherit; font-size: .8rem; padding: .35rem .7rem; border-radius: 999px; cursor: pointer; }
+      .onb-mas:hover { border-color: var(--accent); color: var(--accent); }
+
+      /* Bloque nativo «Hoy» de la rejilla. */
+      .ig-hoy { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
+      .ig-hoy-cab { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; font-size: .82rem; color: var(--text2); }
+      .ig-hoy-cab strong { color: var(--text); font-size: .95rem; }
+      .ig-hoy-fila { display: flex; align-items: baseline; gap: .55rem; padding: .35rem 0;
+        border-bottom: 1px solid var(--border); min-width: 0; }
+      .ig-hoy-fila:last-child { border-bottom: none; }
+      .ig-hoy-fila .h { font-variant-numeric: tabular-nums; font-weight: 600; font-size: .82rem; white-space: nowrap; }
+      .ig-hoy-fila .c { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .84rem; }
+      .ig-hoy-fila .q { color: var(--text3); font-size: .75rem; white-space: nowrap; }
+
       /* G4 · el paso del margen. Dos opciones grandes, ninguna premarcada, y una salida. */
       .onb-mg-ej{font-size:.83rem;color:var(--text2);background:var(--bg3);border-radius:8px;padding:.5rem .65rem;margin:.5rem 0 .55rem}
       .onb-mg{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.5rem}
@@ -142,15 +102,18 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboardin
       /* Hero = saludo + tarjeta DISA + cifras (estado inicial; el JS lo oculta al hablar) */
       .disa-hero {
         transition: opacity 0.25s ease, max-height 0.35s ease, margin 0.3s ease;
-        /* El max-height existe SOLO para que el hero pueda plegarse a 0 con animación al abrir el
-           chat: no es una medida de diseño. Estaba en 640px, justo para tres pasos del alta, y el
-           cuarto (G4) quedaba cortado por abajo — la opción "Ahora no" se veía a medias. Se sube a
-           un valor que no pueda volver a quedarse corto; el pliegue sigue siendo a 0. */
-        max-height: 1200px;
-        overflow: hidden;
+        /* SIN TOPE EN ABIERTO. El max-height existía solo para poder plegar el hero con animación al
+           abrir el chat, pero al ser un número fijo RECORTABA el contenido en cuanto crecía: primero
+           se comió el cuarto paso del alta (640px), y luego, con el panel de arranque, la rejilla
+           entera (1200px). Perseguir el número es perder siempre. Ahora en abierto no hay tope, y el
+           pixel exacto se mide en JS justo antes de plegar (plegarHero), que es lo que la
+           animación necesita de verdad. Así no se puede volver a quedar corto. */
+        max-height: none;
+        overflow: visible;
       }
       .disa-hero.hidden {
         opacity: 0;
+        overflow: hidden;
         max-height: 0;
         margin-bottom: 0;
         pointer-events: none;
@@ -557,17 +520,20 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, onboardin
         <!-- Hero: saludo + DISA + cifras + lista (estado inicial) -->
         <div class="disa-hero" id="dh-hero">
           <h3 class="disa-greeting">${_saludo}, ${userName}</h3>
-          <p class="disa-question">${onboarding ? 'Vamos a dejar tu negocio a punto — tú decides, yo te acompaño.' : `${fechaHoy} · esto es lo que pide tu atención hoy`}</p>
+          <p class="disa-question">${fechaHoy} · esto es lo que pide tu atención hoy</p>
 
-          ${onboarding ? '' : `<div class="disa-card-main">
+          <div class="disa-card-main">
             <div class="disa-card-icon"><i class="ti ti-sparkles"></i></div>
             <div>
               <p class="disa-card-title">DISA</p>
               <p class="disa-card-text">${disaProactivo}</p>
             </div>
-          </div>`}
-${onbHtml}
-          ${onboarding ? '' : `
+          </div>
+
+          <!-- PON EN MARCHA TU NEGOCIO. Va ANTES de la rejilla y CONVIVE con ella: lo que falta por
+               montar se mira primero, pero el Inicio del negocio no se apaga por eso. Se pinta en el
+               navegador desde /api/erp/inicio/arranque; si no hay nada que hacer, no ocupa nada. -->
+          <div id="onbPanel"></div>
           <!-- PASO 6 · INICIO PERSONALIZABLE: rejilla componible (paneles guardados del constructor +
                bloques nativos: cifras, avisos, vigía). Se resuelve por cascada usuario > empresa >
                fábrica; el contenido y los permisos se cargan por fetch. -->
@@ -576,7 +542,6 @@ ${onbHtml}
             <div class="ig-actions" id="igActions"></div>
           </div>
           <div id="inicioGrid" class="ig-grid"><div class="ig-empty">Cargando tu Inicio…</div></div>
-          `}
         </div>
 
         <!-- Mensajes -->
@@ -671,6 +636,26 @@ ${onbHtml}
     <script src="/public/js/grafico-constructor.js"></script>
     <script src="/public/vendor/sortablejs/Sortable.min.js"></script>
     <script>
+      // ── PLEGAR EL HERO SIN RECORTAR NADA ─────────────────────────────────────────────────────
+      // La animación necesita un número del que partir, pero fijarlo en el CSS convierte ese número
+      // en un TOPE que recorta el contenido en cuanto crece. Así que se mide en el momento: se pone
+      // el alto real, se deja pintar un frame, y se pliega a 0. En abierto no hay tope ninguno.
+      function plegarHero(){
+        var h = document.getElementById('dh-hero');
+        if (!h || h.classList.contains('hidden')) return;
+        h.style.maxHeight = h.scrollHeight + 'px';
+        h.style.overflow = 'hidden';
+        requestAnimationFrame(function(){ requestAnimationFrame(function(){
+          h.style.maxHeight = ''; h.classList.add('hidden');
+        }); });
+      }
+      function desplegarHero(){
+        var h = document.getElementById('dh-hero');
+        if (!h) return;
+        h.classList.remove('hidden');
+        h.style.maxHeight = ''; h.style.overflow = '';
+      }
+
       let dhStarted = false;
       // ARREGLO 2 — el dashboard recupera la conversación de DISA al recargar: recuerda el
       // hilo activo (como el widget) para enviar al MISMO hilo y recuperar su historial al
@@ -679,7 +664,7 @@ ${onbHtml}
 
       function dhDock() {
         if (dhStarted) return;
-        document.getElementById('dh-hero').classList.add('hidden');
+        plegarHero();
         document.getElementById('dh-cards').classList.add('hidden');
         document.getElementById('dh-chips').style.display = 'none';
         document.getElementById('dh-messages').classList.add('visible');
@@ -701,7 +686,7 @@ ${onbHtml}
       // toca el punto de la campana: apagarlo a mano sería mentir sobre el estado del servidor.
       window.disaShowAlerts = async function() {
         if (!dhStarted) {
-          document.getElementById('dh-hero').classList.add('hidden');
+          plegarHero();
           document.getElementById('dh-cards').classList.add('hidden');
           document.getElementById('dh-chips').style.display = 'none';
           document.getElementById('dh-messages').classList.add('visible');
@@ -734,7 +719,7 @@ ${onbHtml}
         const msgs = document.getElementById('dh-messages');
         msgs.innerHTML = '';
         msgs.classList.remove('visible');
-        document.getElementById('dh-hero').classList.remove('hidden');
+        desplegarHero();
         document.getElementById('dh-cards').classList.remove('hidden');
         document.getElementById('dh-chips').style.display = '';
         document.getElementById('dh-input-area').classList.remove('docked');
@@ -750,7 +735,7 @@ ${onbHtml}
         if (!msg || btn.disabled) return;
 
         if (!dhStarted) {
-          document.getElementById('dh-hero').classList.add('hidden');
+          plegarHero();
           document.getElementById('dh-cards').classList.add('hidden');
           document.getElementById('dh-chips').style.display = 'none';
           document.getElementById('dh-messages').classList.add('visible');
@@ -800,7 +785,7 @@ ${onbHtml}
         if (!f) return;
         fileInput.value = '';
         if (!dhStarted) {
-          document.getElementById('dh-hero').classList.add('hidden');
+          plegarHero();
           document.getElementById('dh-cards').classList.add('hidden');
           document.getElementById('dh-chips').style.display = 'none';
           document.getElementById('dh-messages').classList.add('visible');
@@ -1130,7 +1115,7 @@ ${onbHtml}
       // guarda la COLOCACIÓN — cero cifras propias, no puede discrepar del constructor.
       (function initInicio(){
         var grid = document.getElementById('inicioGrid');
-        if (!grid) return;                                   // (en onboarding no hay rejilla)
+        if (!grid) return;
         var IG_SYM = '${sym}';
         var esc = window.escHtml || function(s){ return s == null ? '' : String(s); };
         var eur = function(v){ return IG_SYM + Number(v || 0).toFixed(2); };
@@ -1194,6 +1179,7 @@ ${onbHtml}
           var titulo, icon;
           if (b.tipo === 'panel'){ titulo = b.nombre || 'Panel'; icon = 'ti-chart-dots'; }
           else if (b.tipo === 'kpis'){ titulo = 'Cifras del negocio'; icon = 'ti-layout-dashboard'; }
+          else if (b.tipo === 'hoy'){ titulo = 'Hoy en la agenda'; icon = 'ti-calendar-event'; }
           else if (b.tipo === 'avisos'){ titulo = 'Avisos pendientes'; icon = 'ti-bell'; }
           else if (b.tipo === 'vigia'){ titulo = 'Vigía de DISA'; icon = 'ti-radar'; }
           else { titulo = b.tipo; icon = 'ti-square'; }
@@ -1209,19 +1195,59 @@ ${onbHtml}
         function pintar(b, el){
           if (!el) return; var body = el.querySelector('.ig-block-body'); if (!body) return;
           if (b.tipo === 'kpis') return pintarKpis(body);
+          if (b.tipo === 'hoy') return pintarHoy(body);
           if (b.tipo === 'avisos') return pintarAvisos(body);
           if (b.tipo === 'vigia') return pintarVigia(body);
           if (b.tipo === 'panel') return pintarPanel(b, body);
           body.innerHTML = '';
         }
+        // En español: 1.234 € — no «€1234». Es la misma corrección que ya se hizo en la ficha de
+        // cliente y en Informes; esta cifra se había quedado atrás.
+        function eurEs(n){
+          return Number(n).toLocaleString('es-ES', { maximumFractionDigits: 0, useGrouping: 'always' }) + ' ' + IG_SYM;
+        }
         function pintarKpis(body){
           var k = (IG.datos && IG.datos.kpis) || {}, av = (IG.datos && IG.datos.avisos) || {};
           function fig(icon, color, label, val){ return '<div><p class="ig-kpi-label"><i class="ti ' + icon + '" style="color:' + color + '"></i>' + label + '</p><p class="ig-kpi-value">' + val + '</p></div>'; }
           body.innerHTML = '<div class="ig-kpis">'
-            + fig('ti-arrow-down-left', 'var(--accent)', 'Ventas del mes', k.verVentas ? IG_SYM + (k.ventas || 0) : '—')
+            + fig('ti-arrow-down-left', 'var(--accent)', 'Ventas del mes', k.verVentas ? eurEs(k.ventas || 0) : '—')
             + fig('ti-receipt', 'var(--warn)', 'Pedidos', k.verPedidos ? (k.pedidos || 0) : '—')
             + fig('ti-clock-hour-4', 'var(--text2)', 'Pendientes', k.verPedidos ? (k.pendiente || 0) : '—')
             + fig('ti-alert-triangle', 'var(--danger)', 'Avisos', (av.estado && av.estado !== 'apagado') ? (av.count || 0) : 0)
+            + '</div>';
+        }
+        // ── BLOQUE «HOY» ─────────────────────────────────────────────────────────────────────────
+        // Cero cifra propia: las citas vienen de la misma función que pinta la vista día de la
+        // agenda, y las horas libres de la misma que alimenta el aviso de huecos del vigía. Aquí
+        // solo se ordenan y se escriben.
+        function pintarHoy(body){
+          var h = IG.datos && IG.datos.hoy;
+          if (!h){ body.innerHTML = '<div class="ig-note">No tienes permiso para ver la agenda.</div>'; return; }
+          var libre = h.libre_h == null ? null : (h.libre_h + (h.libre_h === 1 ? ' h libre' : ' h libres'));
+          var cab = '<div class="ig-hoy-cab"><strong>' + h.n + (h.n === 1 ? ' cita' : ' citas') + '</strong>'
+            + (libre ? '<span>· ' + esc(libre) + '</span>' : '')
+            + (h.pct != null ? '<span>· ' + h.pct + '% ocupado</span>' : '') + '</div>';
+          // SIN HORARIO PUESTO NO SE MIENTE: el motor abre de 8 a 21 por defecto, así que las horas
+          // libres no significan nada todavía. Se dice y se manda a ponerlo.
+          if (h.sin_horario) {
+            cab += '<div class="ig-note" style="margin:.2rem 0 .4rem">Todavía no has puesto tu horario, así que doy por abierto de 8 a 21 y las horas libres no significan nada. '
+              + '<a href="/admin/citas/horarios">Ponlo aquí</a>.</div>';
+          }
+          if (!h.citas.length){
+            body.innerHTML = '<div class="ig-hoy">' + cab
+              + '<div class="ig-note">' + (h.abre ? 'Hoy no tienes ninguna cita.' : 'Hoy no abres.') + ' <a href="/admin/citas">Ver la agenda</a></div></div>';
+            return;
+          }
+          var LBL = { pedida:'Pedida', confirmada:'Confirmada', atendida:'Atendida', no_show:'No vino', anulada:'Anulada' };
+          body.innerHTML = '<div class="ig-hoy">' + cab
+            + h.citas.map(function(c){
+                return '<a class="ig-hoy-fila" href="/admin/citas?fecha=' + esc(h.fecha) + '" style="text-decoration:none;color:inherit">'
+                  + '<span class="h">' + esc(c.hora) + '</span>'
+                  + '<span class="c" title="' + esc(c.cliente + ' · ' + c.servicios) + '">' + esc(c.cliente)
+                  + (c.servicios ? ' <span class="q">' + esc(c.servicios) + '</span>' : '') + '</span>'
+                  + '<span class="q">' + esc(c.persona) + '</span>'
+                  + '<span class="q">' + esc(LBL[c.estado] || c.estado) + '</span></a>';
+              }).join('')
             + '</div>';
         }
         function pintarAvisos(body){
@@ -1333,6 +1359,123 @@ ${onbHtml}
         cargar('usuario');
       })();
 
+      // ══════════════════════════════════════════════════════════════════════════════════════════
+      // PON EN MARCHA TU NEGOCIO — el panel, pintado con lo que devuelve el servidor
+      // ══════════════════════════════════════════════════════════════════════════════════════════
+      // Reutiliza el anillo y el patrón de guía de U6 (.onb-*): mismo estilo, mismo lenguaje. Lo que
+      // cambia es que ahora son TRES BLOQUES con título, que la lista se adapta al oficio sin perder
+      // ningún paso, y que el panel se pliega en vez de desaparecer.
+      //
+      // NINGÚN PASO SE MARCA A MANO: no hay endpoint para hacerlo. Todo viene derivado del estado
+      // real del negocio, y lo único que se guarda es si este usuario quiere el panel plegado.
+      (function(){
+        var caja = document.getElementById('onbPanel');
+        if (!caja) return;
+        var D = null, verExtra = false;
+        var RC = ${_ringC};
+
+        function paso(p, abierto){
+          var estado = p.done ? 'done' : (abierto ? 'now' : 'soon');
+          var ico = p.done ? 'ti-check' : p.icon;
+          var der = p.done ? '<span class="onb-tag">Hecho</span>'
+                  : (estado === 'soon' ? '<span class="onb-time">' + escHtml(p.time) + '</span>' : '');
+          var acciones = '';
+          if (estado === 'now') {
+            acciones = p.margen
+              ? '<div class="onb-mg-ej">Algo que te cuesta <b>100 ${simbolo}</b> y vendes por <b>140 ${simbolo}</b>.</div>'
+                + '<div class="onb-mg">'
+                +   '<button type="button" class="onb-mg-op" data-margen="venta"><span class="n">Gano un 28,6 %</span><span class="p">sobre lo que cobro</span></button>'
+                +   '<button type="button" class="onb-mg-op" data-margen="coste"><span class="n">Le meto un 40 %</span><span class="p">sobre lo que me costó</span></button>'
+                + '</div>'
+                + '<div class="onb-mg-pie"><button type="button" class="onb-saltar" data-margen="saltar">Ahora no</button><span>Puedes cambiarlo cuando quieras en Ajustes.</span></div>'
+              : '<a class="onb-cta" href="' + escHtml(p.href) + '">' + escHtml(p.cta) + ' <i class="ti ti-arrow-right"></i></a>';
+          }
+          var cuerpo = estado === 'now'
+            ? '<div class="onb-when">Ahora · ' + escHtml(p.time) + '</div><p class="onb-guide">' + p.guia + '</p>' + acciones
+            : '';
+          // El paso del margen se contesta en el sitio, así que NUNCA es un enlace.
+          var esEnlace = estado === 'soon' && !p.margen;
+          var t = esEnlace ? 'a' : 'div';
+          return '<' + t + ' class="onb-step ' + estado + '"' + (esEnlace ? ' href="' + escHtml(p.href) + '"' : '') + '>'
+            + '<span class="onb-node"><span class="onb-ic"><i class="ti ' + escHtml(ico) + '"></i></span></span>'
+            + '<div class="onb-sbody"><div class="onb-shead"><span class="onb-stitle">' + escHtml(p.label) + '</span>' + der + '</div>'
+            + cuerpo + '</div></' + t + '>';
+        }
+
+        function pinta(){
+          if (!D) { caja.innerHTML = ''; return; }
+          if (!D.total) { caja.innerHTML = ''; return; }        // nada que ofrecer: no ocupa sitio
+          var falta = D.total - D.hechos;
+          if (D.plegado) {
+            // PLEGADO NO ES DESAPARECIDO: queda una línea con el progreso y se abre de un clic.
+            caja.innerHTML = '<button type="button" class="onb-plegado" data-onb-toggle="1">'
+              + '<i class="ti ti-rosette-discount-check"></i> <strong>Pon en marcha tu negocio</strong>'
+              + '<span>' + D.hechos + ' de ' + D.total + (falta ? ' · te faltan ' + falta : ' · todo hecho') + '</span>'
+              + '<i class="ti ti-chevron-down"></i></button>';
+            return;
+          }
+          var off = (RC * (1 - D.hechos / D.total)).toFixed(1);
+          var linea = D.completo
+            ? 'Ya está todo. Lo dejo plegado, pero puedes abrirlo cuando quieras.'
+            : (D.hechos === 0
+                ? 'Vamos a dejar tu negocio a punto — tú decides, yo te acompaño.'
+                : (falta === 1 ? 'Te queda un último paso. Yo te lo enseño.'
+                               : 'Vas muy bien: te faltan ' + falta + ' y te guío en cada uno.'));
+          var abierto = false;
+          var bloques = D.bloques.map(function(b){
+            var pasos = b.pasos.map(function(p){
+              var esAhora = !p.done && !abierto;               // solo el PRIMER pendiente se despliega
+              if (esAhora) abierto = true;
+              return paso(p, esAhora);
+            }).join('');
+            return '<div class="onb-bloque"><h4>' + escHtml(b.titulo) + '</h4>'
+              + '<p class="onb-bsub">' + escHtml(b.sub) + '</p>'
+              + '<div class="onb-steps">' + pasos + '</div></div>';
+          }).join('');
+          var extra = '';
+          if (D.extra && D.extra.length) {
+            extra = '<div class="onb-extra">'
+              + '<button type="button" class="onb-mas" data-onb-extra="1">'
+              +   '<i class="ti ti-dots"></i> Más opciones (' + D.extra.length + ')</button>'
+              + (verExtra
+                  ? '<div class="onb-steps" style="margin-top:.6rem">'
+                    + D.extra.map(function(p){ return paso(p, false); }).join('')
+                    + '<p class="onb-bsub" style="margin:.4rem 0 0">' + escHtml(D.extra[0].porque || '') + ', pero aquí los tienes.</p></div>'
+                  : '')
+              + '</div>';
+          }
+          caja.innerHTML = '<div class="onb-card">'
+            + '<div class="onb-hero">'
+            +   '<div class="onb-ring" role="img" aria-label="' + D.hechos + ' de ' + D.total + ' pasos completados">'
+            +     '<svg viewBox="0 0 56 56" width="56" height="56"><circle class="onb-ring-bg" cx="28" cy="28" r="24"/>'
+            +     '<circle class="onb-ring-fg" cx="28" cy="28" r="24" style="stroke-dasharray:' + RC + ';stroke-dashoffset:' + off + '"/></svg>'
+            +     '<span class="onb-ring-n">' + D.hechos + '<i>/' + D.total + '</i></span></div>'
+            +   '<div style="flex:1;min-width:0"><h3 class="onb-title">Pon en marcha tu negocio</h3>'
+            +     '<p class="onb-sub">' + escHtml(linea) + '</p></div>'
+            +   '<button type="button" class="onb-plegar" data-onb-toggle="1" title="Plegar"><i class="ti ti-chevron-up"></i></button>'
+            + '</div>'
+            + bloques + extra + '</div>';
+        }
+
+        function cargar(){
+          fetch('/api/erp/inicio/arranque').then(function(r){ return r.json(); })
+            .then(function(d){ if (d && !d.error) { D = d; pinta(); } })
+            .catch(function(){});
+        }
+        window.onbRecargar = cargar;
+
+        document.addEventListener('click', function(e){
+          var t = e.target.closest('[data-onb-toggle],[data-onb-extra]');
+          if (!t || !caja.contains(t)) return;
+          e.preventDefault();
+          if (t.hasAttribute('data-onb-extra')) { verExtra = !verExtra; pinta(); return; }
+          D.plegado = !D.plegado; pinta();
+          api('PUT', '/api/erp/inicio/arranque/plegado', { plegado: D.plegado }).catch(function(){});
+        });
+
+        cargar();
+      })();
+
       // ── G4 · GUARDAR LA RESPUESTA DEL PASO DEL MARGEN ──────────────────────────────────────────
       // Las tres salidas terminan el paso: elegir A, elegir B y SALTAR. Saltar deja «sobre la venta»
       // (que es lo que vale la ausencia del ajuste) y solo apunta que ya se preguntó, para no volver
@@ -1345,7 +1488,7 @@ ${onbHtml}
         // Por api() y no por fetch a pelo: es el helper que pone el token CSRF. Un POST sin él
         // vuelve 403 y el paso se quedaría clavado sin que nadie supiera por qué.
         api('POST','/api/erp/settings/margen/alta', cuerpo)
-          .then(function(){ location.reload(); })
+          .then(function(){ if (window.onbRecargar) window.onbRecargar(); })
           .catch(function(e){ if (window.toast) toast('No se ha podido guardar: '+e.message+'. Puedes elegirlo en Ajustes.','err'); });
       });
 

@@ -45,9 +45,17 @@ const bellState = () => page.evaluate(() => {
   if (!dot) return { present: false };
   return { present: true, visto: dot.classList.contains('visto') };
 });
-// El NÚMERO vive en la tarjeta "Avisos" del Inicio, que además es un enlace a /admin/avisos.
+// El NÚMERO vive en el Inicio, en un enlace a /admin/avisos.
+//
+// EL SELECTOR CAMBIÓ Y ESTE GATE NO SE ENTERÓ. Buscaba `a.disa-fig-link`, la tarjeta de figuras del
+// Inicio ANTERIOR al peldaño 6. Desde que el Inicio es una rejilla componible, el número vive en el
+// bloque nativo «Avisos pendientes» (`.dh-vigia-row`) y en la cifra de «Cifras del negocio». Lo que
+// este gate protege —que el número se vea y lleve a resolverlo— sigue siendo verdad; lo que caducó
+// fue dónde mirarlo. Se busca por el DESTINO (/admin/avisos), que es lo que de verdad importa y lo
+// que no va a cambiar con el próximo rediseño.
 const tarjetaAvisos = () => page.evaluate(() => {
-  const a = document.querySelector('a.disa-fig-link');
+  // La fila del bloque nativo «Avisos pendientes» de la rejilla: es la que lleva el número.
+  const a = document.querySelector('.dh-vigia-row[href="/admin/avisos"]');
   if (!a) return { present: false };
   return { present: true, href: a.getAttribute('href'), text: a.textContent.replace(/\s+/g, ' ').trim() };
 });
@@ -81,7 +89,10 @@ try {
   const duplicados = await page.evaluate(() => ({
     pinBadge: !!document.querySelector('.disa-pin-badge'),
     pillFlotante: !!document.querySelector('#dh-alerts-badge'),
-    filas: document.querySelectorAll('.disa-row').length,
+    // `.disa-row` era la fila del Inicio anterior al peldaño 6; hoy la fila de avisos es la del
+    // bloque nativo de la rejilla. Se cuentan las que llevan a /admin/avisos, que es lo que el gate
+    // vigila de verdad: que no haya DOS sitios diciendo el mismo número.
+    filas: document.querySelectorAll('a[href="/admin/avisos"].dh-vigia-row').length,
   }));
   ok(!duplicados.pinBadge, 'el contador del pin de DISA ya NO existe');
   ok(!duplicados.pillFlotante, 'el badge flotante "N alertas" del Inicio ya NO existe');

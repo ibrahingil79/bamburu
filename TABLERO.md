@@ -1482,6 +1482,73 @@ completa los cubra, hay que meterlos en un grupo — decisión del dueño, porqu
 puestos frente a con un puesto). **Desplegado y verificado por HTTPS** en `peluqueria-gil.bamburu.com`:
 Agenda con 2 entradas, la sección con sus 5, y las 7 rutas viejas a 200.
 
+### El Inicio de un negocio que arranca: panel «Pon en marcha tu negocio», bloque «Hoy» y migración asistida — **TAREA TRANSVERSAL** (el puntero del peldaño 8 NO se mueve)  ✅ HECHO (2026-08-19)
+
+**LO QUE DESTAPÓ EL PASO 0: el panel de U6 y la rejilla del Inicio COMPETÍAN.** `disaHome.html.js`
+envolvía la rejilla en un `onboarding ? '' : …`, así que **mientras faltara un paso la rejilla no se
+pintaba** y, en cuanto se completaban, **el panel desaparecía para siempre**. Un dueño nuevo no veía
+nunca su Inicio; uno rodado no podía volver a lo que dejó a medias. Ahora conviven: la rejilla se
+pinta siempre y el panel se **pliega en una línea** cuando ya no hace falta, con el pliegue recordado
+por usuario.
+
+**PANEL «PON EN MARCHA TU NEGOCIO» — absorbe el de U6, no lo duplica.** Sus cuatro pasos viven ahora
+en `arranque.js`, repartidos en tres bloques que dicen para qué sirven: *para poder facturar* · *para
+empezar a trabajar* · *para que el negocio ande solo*. Reutiliza el anillo y el patrón de guía de
+DISA tal cual. **Ningún paso se marca a mano: no existe el endpoint**, y el gate lo prueba forzando
+tres rutas distintas. Cada uno se deriva de un dato real —NIF puesto, logo, horario, servicios con
+precio Y duración, equipo, reservas encendidas, recordatorios encendidos, primera factura, migración
+pedida— sin añadir una sola bandera al esquema.
+
+**UN DETALLE QUE SALIÓ AL PROBARLO Y ESTÁ BIEN COMO ESTÁ:** sembrar el catálogo del oficio **no**
+marca «tus servicios», porque la semilla los crea con duración pero **a precio 0 a propósito** («las
+fuentes publican duraciones, no precios»). El paso pide las dos cosas, así que solo se marca cuando
+el dueño pone el precio — que es exactamente para lo que existe el paso. El gate lo comprueba en los
+dos sentidos.
+
+**LA LISTA SE ADAPTA AL OFICIO SIN PERDER NADA.** Peluquería: 11 pasos. Asesoría: 7 arriba y **4 en
+«Más opciones»**, cada uno diciendo por qué está ahí. Se usa el perfil que YA existe (`usa_proyectos`)
+y `usaAgenda`, que mira el estado real: a quien ya usa la agenda nunca se le esconden sus pasos.
+
+**Y NI UN ENLACE A UN 404:** los destinos no se declaran a mano, **se le preguntan a la propia
+aplicación** por su tabla de rutas montadas. Si una ruta desaparece, el paso deja de ofrecerse solo.
+
+**BLOQUE «HOY» EN LA REJILLA — cero cifra propia.** Las citas salen de `agendaData`, la MISMA función
+que sirve la vista día de la agenda; las horas libres, de `ocupacionDia`, de donde come el detector de
+huecos del vigía. Contrastado por otro camino de código en el gate: 3 = 3 citas y 405 = 405 minutos.
+**Sin agenda no existe ni en la paleta** —misma guarda que los cuatro detectores de agenda—, y con
+`citas.read` filtrado en el servidor: sin permiso **el dato ni se calcula**, y forzar la ruta da 403.
+Entra en el default de fábrica de los oficios con agenda.
+
+**Un matiz que no se esconde:** sin horario puesto el motor abre de 8 a 21 todos los días, así que
+«te quedan N horas libres» sería un número inventado. El bloque **lo dice** y manda a ponerlo.
+
+**MIGRACIÓN ASISTIDA — el destino real de «trae tus datos».** Pantalla propia, tabla aditiva fuera de
+WRITABLE_TABLES, correo al equipo con el adjunto y acuse en pantalla y por correo. **La pantalla dice
+que la migración la hace el equipo de Bamburu, a mano y gratis, y NO insinúa un importador automático
+que no existe** — la misma regla que con WhatsApp. El registro se guarda **aunque el correo falle**, y
+entonces la pantalla lo dice en vez de fingir que todo fue bien.
+
+**VERIFICACIÓN — `gate-inicio-arranque` 65/0**, con los **cuatro sabotajes demostrados**: quitar la
+derivación del estado, quitar la guarda de agenda, quitar el filtro de permiso y quitar el plegado
+hacen caer el gate. El tercero enseña en su salida **el día entero de citas viajando a un navegador
+que no debía verlo**, que es como se ve una fuga.
+
+**DE PASO, TRES ARREGLOS:**
+- **`gate-avisos-badge` sale de los rojos previos.** Buscaba `a.disa-fig-link`, la tarjeta del Inicio
+  anterior al peldaño 6. Ahora busca por el DESTINO (`/admin/avisos`), que es lo que de verdad
+  protege y lo que no cambia con el próximo rediseño. **25 OK.**
+- **El `max-height` fijo del hero, cortado de raíz.** Recortaba el contenido en cuanto crecía: primero
+  se comió el cuarto paso del alta (640 px) y luego la rejilla entera (1200 px). Perseguir el número
+  es perder siempre: ahora en abierto **no hay tope** y el píxel exacto se mide en JS justo antes de
+  plegar, que es lo único que la animación necesitaba.
+- **«Ventas del mes» se escribía en inglés** (`€30`). Ya está en español, como el resto.
+
+**Regresión completa: 58/70 y los 12 rojos son un SUBCONJUNTO de los 13 previos.** Por el camino, dos
+falsos rojos que conviene no confundir con deuda: una corrida abortó **porque yo estaba editando
+ficheros mientras corría** —la red de `exigeCodigoServido` funcionando, negándose a dar verde sobre
+código que el proceso no servía— y dejó residuo (cuatro proyectos y un usuario de prueba) que puso en
+rojo a otros cinco gates hasta limpiarlo.
+
 ### Ficha de cliente: rendimiento, contraste y el chip de Proyectos — correcciones sobre la entrega del día  ✅ HECHO (2026-08-19)
 
 **«VER» TARDABA 2-3 SEGUNDOS. Medido: `/360` tardaba 1.000 ms**, y todo lo demás iba por debajo de

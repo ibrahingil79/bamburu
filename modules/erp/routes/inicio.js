@@ -11,8 +11,9 @@ import { safeError } from '../../../core/errors.js';
 import { can, fuentesPermitidas } from '../layout.js';
 import { listarPaneles } from '../constructor-analitica.js';
 import * as IL from '../inicio-layout.js';
+import { pasosDe, plegadoDeUsuario, guardarPlegado } from '../arranque.js';
 
-export function createInicioRoutes(db) {
+export function createInicioRoutes(db, { rutaExiste = () => true } = {}) {
   const api = new Hono();
   const puedeDe = c => (p) => can(c, p);
   const esDuenyo = c => c.get('session')?.role === 'owner';
@@ -39,12 +40,12 @@ export function createInicioRoutes(db) {
       if (c.req.query('scope') === 'empresa') {
         if (!esDuenyo(c)) { const e = new Error('Solo el dueño'); e.status = 403; throw e; }
         const guardado = IL.getLayout(db, 'empresa');
-        const blocks = IL.sanear(guardado || IL.FABRICA, { puede, panelesById });
+        const blocks = IL.sanear(guardado || IL.fabricaDe(db), { puede, panelesById, aplica: t => IL.bloqueAplica(db, t) });
         return c.json({ blocks, origen: guardado ? 'empresa' : 'fabrica', editandoEmpresa: true,
                         esDuenyo: true, empresaExiste: !!guardado });
       }
       const res = IL.resolver(db, userId);
-      const blocks = IL.sanear(res.blocks, { puede, panelesById });
+      const blocks = IL.sanear(res.blocks, { puede, panelesById, aplica: t => IL.bloqueAplica(db, t) });
       return c.json({ blocks, origen: res.origen, tieneCapaPropia: res.tieneCapaPropia,
                       esDuenyo: esDuenyo(c), empresaExiste: !!IL.getLayout(db, 'empresa') });
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
@@ -61,6 +62,30 @@ export function createInicioRoutes(db) {
     try {
       return c.json(IL.datosNativos(db, { puede: puedeDe(c), userId: c.get('session')?.userId,
                                           fuentes: fuentesPermitidas(c), sym: symbol() }));
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+  });
+
+  // ── EL PANEL «PON EN MARCHA TU NEGOCIO» ──────────────────────────────────────────────────────
+  // Todo derivado: no hay ningún endpoint para MARCAR un paso, ni aquí ni en ningún sitio. Lo único
+  // que se guarda es si el usuario lo quiere plegado, que es una preferencia de vista.
+  //
+  // `existe(href)` no adivina: consulta las rutas REALMENTE montadas en esta aplicación. Un paso
+  // cuyo destino no responde no se pinta — ni un enlace a un 404 en la primera pantalla que ve un
+  // dueño nuevo.
+  api.get('/arranque', c => {
+    try {
+      const userId = c.get('session')?.userId;
+      const p = pasosDe(db, { existe: rutaExiste });
+      return c.json({ ...p, plegado: plegadoDeUsuario(db, userId, p.completo) });
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+  });
+
+  api.put('/arranque/plegado', async c => {
+    try {
+      const userId = c.get('session')?.userId;
+      if (!userId) { const e = new Error('Sin sesión'); e.status = 401; throw e; }
+      const d = await c.req.json().catch(() => ({}));
+      return c.json(guardarPlegado(db, userId, !!d.plegado));
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 

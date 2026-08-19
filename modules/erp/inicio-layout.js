@@ -17,6 +17,9 @@
 import { listarPaneles, areaPerm, AREAS } from './constructor-analitica.js';
 import { ventasResumen, pedidosResumen } from './ventas-metrics.js';
 import { estadoAvisos, hoyLocal } from './avisos.js';
+import { usaAgenda, ocupacionDia } from './vigia-agenda.js';
+import { hayHorarioNegocio } from './citas-engine.js';
+import { agendaData } from './routes/citas.js';   // LA MISMA función que sirve la vista día
 
 // Datos de render de un panel guardado: su receta (config), la medida a pintar y el meta de esa medida
 // (etiqueta/dinero/%), tomados del catálogo REAL del constructor — para que el Inicio lo pinte con SU
@@ -34,16 +37,41 @@ function enriquecerPanel(p) {
 // `perm` = permiso que exige para verse (null = todos; los datos internos se filtran igual por permiso).
 export const NATIVOS = {
   kpis:   { etiqueta: 'Cifras del negocio', desc: 'Ventas del mes, pedidos, pendientes y avisos.', perm: null,             icon: 'ti-layout-dashboard', w: 4, h: 1 },
+  // `soloAgenda` — el bloque NI SE OFRECE si el negocio no lleva agenda. Es la misma guarda que
+  // llevan los cuatro detectores de agenda del vigía y por el mismo motivo: sin horario puesto, el
+  // motor da por abierto de 8 a 21 todos los días, así que «te quedan 13 h libres» sería un número
+  // inventado con pinta de dato. Antes que enseñar eso, no se enseña nada.
+  hoy:    { etiqueta: 'Hoy en la agenda',   desc: 'Las citas de hoy y las horas que te quedan libres.', perm: 'citas.read', icon: 'ti-calendar-event', w: 2, h: 2, soloAgenda: true },
   vigia:  { etiqueta: 'Vigía de DISA',      desc: 'Lo que más conviene mirar, ordenado por prioridad.', perm: 'analytics.read', icon: 'ti-radar',           w: 2, h: 2 },
   avisos: { etiqueta: 'Avisos pendientes',  desc: 'Cobros, pagos, stock y recurrentes por resolver.', perm: null,             icon: 'ti-bell',            w: 2, h: 2 },
 };
 
+// ¿Se puede ofrecer este bloque en ESTE negocio? Separa «no tienes permiso» de «esto aquí no aplica»:
+// son dos motivos distintos de no verlo y conviene no confundirlos al leer el código.
+export function bloqueAplica(db, tipo) {
+  const n = NATIVOS[tipo];
+  if (!n) return false;
+  if (!n.soloAgenda) return true;
+  try { return usaAgenda(db); } catch { return false; }
+}
+
 // ── INICIO DE FÁBRICA — sensato y ya montado. Semilla en código (no se persiste). ───────────────
+// El de fábrica se resuelve CON EL NEGOCIO DELANTE: un negocio con agenda arranca viendo su día,
+// que es lo primero que mira quien atiende con cita. Sigue siendo semilla en código, no se persiste.
 export const FABRICA = [
   { tipo: 'kpis',   refId: null, x: 0, y: 0, w: 4, h: 1 },
   { tipo: 'vigia',  refId: null, x: 0, y: 1, w: 2, h: 2 },
   { tipo: 'avisos', refId: null, x: 2, y: 1, w: 2, h: 2 },
 ];
+export function fabricaDe(db) {
+  if (!bloqueAplica(db, 'hoy')) return FABRICA;
+  return [
+    { tipo: 'kpis',   refId: null, x: 0, y: 0, w: 4, h: 1 },
+    { tipo: 'hoy',    refId: null, x: 0, y: 1, w: 2, h: 2 },
+    { tipo: 'vigia',  refId: null, x: 2, y: 1, w: 2, h: 2 },
+    { tipo: 'avisos', refId: null, x: 0, y: 3, w: 4, h: 2 },
+  ];
+}
 
 // El permiso que exige un bloque: nativo → su `perm`; panel → el permiso de su área.
 export function permDeBloque(b, panelesById) {
@@ -86,13 +114,13 @@ export function resolver(db, userId) {
   if (propio) return { blocks: propio, origen: 'usuario', tieneCapaPropia: true };
   const empresa = getLayout(db, 'empresa');
   if (empresa) return { blocks: empresa, origen: 'empresa', tieneCapaPropia: false };
-  return { blocks: FABRICA, origen: 'fabrica', tieneCapaPropia: false };
+  return { blocks: fabricaDe(db), origen: 'fabrica', tieneCapaPropia: false };
 }
 
 // Deja SOLO los bloques que este usuario puede ver (permiso heredado). Un panel que no ve, o un bloque
 // de un área sin permiso, se OMITE (no se le cuela ni el del default del dueño). Enriquece los de panel
 // con su nombre/área para que la pantalla los pinte sin volver a preguntar.
-export function sanear(blocks, { puede, panelesById }) {
+export function sanear(blocks, { puede, panelesById, aplica = () => true }) {
   const out = [];
   for (const b of (blocks || [])) {
     if (b.tipo === 'panel') {
@@ -106,6 +134,7 @@ export function sanear(blocks, { puede, panelesById }) {
       const nat = NATIVOS[b.tipo];
       if (!nat) continue;                                 // bloque desconocido → fuera
       if (nat.perm && !puede(nat.perm)) continue;         // nativo sin permiso → fuera (no se cuela)
+      if (!aplica(b.tipo)) continue;                      // no aplica a este negocio → fuera
       out.push({ tipo: b.tipo, refId: null, x: b.x | 0, y: b.y | 0, w: b.w, h: b.h, etiqueta: nat.etiqueta });
     }
   }
@@ -115,7 +144,7 @@ export function sanear(blocks, { puede, panelesById }) {
 // ── PALETA — los bloques que este usuario PUEDE añadir (nativos permitidos + sus paneles visibles) ─
 export function bloquesDisponibles(db, userId, puede) {
   const nativos = Object.entries(NATIVOS)
-    .filter(([, n]) => !n.perm || puede(n.perm))
+    .filter(([tipo, n]) => (!n.perm || puede(n.perm)) && bloqueAplica(db, tipo))
     .map(([tipo, n]) => ({ tipo, etiqueta: n.etiqueta, desc: n.desc, icon: n.icon, w: n.w, h: n.h }));
   const paneles = listarPaneles(db, userId)
     .filter(p => puede(areaPerm(p.config?.area || 'ventas')))
@@ -143,6 +172,46 @@ export function normalizar(blocks) {
   }).filter(Boolean);
 }
 
+// ── EL BLOQUE «HOY» — CERO CIFRA PROPIA ─────────────────────────────────────────────────────────
+// Las citas salen de `agendaData`, que es EXACTAMENTE la función que sirve la vista día de la
+// agenda (`GET /api/erp/citas/agenda`). Las horas libres salen de `ocupacionDia`, que es de donde
+// come el detector de huecos del vigía (`huecosQueSePierden` → `proximosDiasAbiertos` → `ocupacionDia`).
+//
+// UN MATIZ QUE CONVIENE NO ESCONDER: el AVISO del vigía empieza en MAÑANA a propósito —«el hueco de
+// esta mañana ya se perdió»—, así que del día de hoy el vigía no avisa nunca. La CIFRA, en cambio,
+// sale de la misma función con la fecha de hoy: mismo camino de código, mismo número, distinto día.
+//
+// Permiso `citas.read`, filtrado AQUÍ (servidor): lo que no se puede ver no viaja al navegador.
+export function datosHoy(db, { puede, fecha }) {
+  if (!puede('citas.read')) return null;
+  const hoy = fecha || hoyLocal();
+  let citas = [];
+  try {
+    citas = (agendaData(db, { desde: hoy, hasta: hoy }).citas || [])
+      .sort((a, b) => a.inicio_min - b.inicio_min)
+      .map(c => ({
+        id: c.id, hora: hhmmDe(c.inicio_min), fin: hhmmDe(c.inicio_min + c.dur_min),
+        cliente: c.cliente, servicios: c.servicios || '', persona: c.persona || '—', estado: c.estado,
+      }));
+  } catch { citas = []; }
+  let ocupacion = null;
+  try { ocupacion = ocupacionDia(db, hoy); } catch { ocupacion = null; }
+  return {
+    fecha: hoy,
+    citas,
+    n: citas.length,
+    // SIN HORARIO PUESTO, EL MOTOR ABRE DE 8 A 21 TODOS LOS DÍAS. Eso convierte «te quedan 13 h
+    // libres» en un número inventado con pinta de dato. No se esconde ni se maquilla: el bloque lo
+    // dice y manda a ponerlo, igual que ya hace la pantalla de la agenda con su `sin_horario`.
+    sin_horario: (() => { try { return !hayHorarioNegocio(db); } catch { return true; } })(),
+    abre: !!(ocupacion && ocupacion.abre),
+    libre_min: ocupacion ? ocupacion.libre_min : null,
+    libre_h: ocupacion ? Math.round(ocupacion.libre_min / 60 * 10) / 10 : null,
+    pct: ocupacion ? ocupacion.pct : null,
+  };
+}
+const hhmmDe = m => String(Math.floor((Number(m) || 0) / 60)).padStart(2, '0') + ':' + String((Number(m) || 0) % 60).padStart(2, '0');
+
 // ── DATOS de los bloques nativos (KPIs + avisos), filtrados por permiso — MISMA lógica que el Inicio ─
 export function datosNativos(db, { puede, userId, fuentes, sym }) {
   const verVentas = puede('invoices.read'), verPedidos = puede('pedidos.read');
@@ -154,5 +223,6 @@ export function datosNativos(db, { puede, userId, fuentes, sym }) {
   return {
     kpis: { sym, verVentas, verPedidos, ventas, pedidos, pendiente },
     avisos: { count, estado },
+    hoy: bloqueAplica(db, 'hoy') ? datosHoy(db, { puede }) : null,
   };
 }

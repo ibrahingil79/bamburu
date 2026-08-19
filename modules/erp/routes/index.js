@@ -20,6 +20,7 @@ import { createShippingRoutes } from './shipping.js';
 import { createAnalyticsRoutes } from './analytics.js';
 import { createVigiaRoutes } from './vigia.js';   // Escalera · paso 5 — DISA predictiva · PIEZA 1: el vigía
 import { createInicioRoutes } from './inicio.js';   // Escalera · paso 6 — Inicio personalizable
+import { createMigracionRoutes } from './migracion.js';   // Trae tus datos: la migración la hace el equipo
 import { createMenuRoutes } from './menu-routes.js';   // Navegación — anclas del menú (por usuario)
 import { createSettingsRoutes } from './settings.js';
 import { createUserRoutes } from './users.js';
@@ -80,8 +81,16 @@ export function mountRoutes(app, db) {
   const { api: shipApi, views: shipViews } = createShippingRoutes(db);
   const { api: analytApi, views: analytViews } = createAnalyticsRoutes(db);
   const { api: vigiaApi, views: vigiaViews } = createVigiaRoutes(db);
-  const { api: inicioApi } = createInicioRoutes(db);   // Escalera · paso 6 — Inicio personalizable
+  // El panel de arranque solo ofrece pasos cuyo destino EXISTE. En vez de mantener una lista a mano
+  // —que caduca el día que alguien mueve una ruta y deja al dueño nuevo enlaces a un 404—, se le
+  // pregunta a la propia aplicación por su tabla de rutas ya montadas.
+  const rutaExiste = (href) => {
+    const ruta = String(href || '').split('?')[0];
+    return (app.routes || []).some(r => r.method === 'GET' && (r.path === ruta || r.path === ruta + '/'));
+  };
+  const { api: inicioApi } = createInicioRoutes(db, { rutaExiste });   // Escalera · paso 6 — Inicio personalizable
   const { api: menuApi } = createMenuRoutes(db);       // Navegación — anclas del menú (por usuario)
+  const { api: migracionApi, views: migracionViews } = createMigracionRoutes(db);
   const { api: settApi, views: settViews, storeViews: storeSettViews } = createSettingsRoutes(db);
   const { api: userApi, views: userViews, activityViews } = createUserRoutes(db);
   const { api: nlApi, views: nlViews } = createNewsletterRoutes(db);
@@ -136,6 +145,7 @@ export function mountRoutes(app, db) {
   admin.route('/analytics', analytViews);
   admin.route('/vigia', vigiaViews);     // ← DISA predictiva · el vigía (motor de detección)
   admin.route('/settings', settViews);   // ← /admin/settings (config de EMPRESA) SE QUEDA (núcleo vivo)
+  admin.route('/migracion', migracionViews);   // ← /admin/migracion (trae tus datos · candado company.read)
   // D2 — store-builder DESMONTADO (UI): /admin/store-settings → 404. store_settings NO se archiva (se conserva el diseño, tienda Capa 2).
   // admin.route('/store-settings', storeSettViews);
   admin.route('/users', userViews);
@@ -197,6 +207,7 @@ export function mountRoutes(app, db) {
   apiApp.route('/analytics', analytApi);
   apiApp.route('/vigia', vigiaApi);     // ← DISA predictiva · hallazgos del vigía (solo lectura)
   apiApp.route('/inicio', inicioApi);   // ← Inicio personalizable (layout por usuario/empresa/fábrica)
+  apiApp.route('/migracion', migracionApi);   // ← Trae tus datos: la migración la hace el equipo, a mano
   apiApp.route('/menu', menuApi);       // ← anclas del menú de CADA usuario (solo colocación, sin datos)
   apiApp.route('/perfil', perfilApi);   // ← datos personales del usuario logueado (+ su foto)
   apiApp.route('/settings', settApi);   // ← /api/erp/settings SE QUEDA (config de empresa); solo /settings/store se neutraliza en settings.js

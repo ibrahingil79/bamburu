@@ -629,10 +629,13 @@ try {
     saltar: !!document.querySelector('[data-margen="saltar"]'),
     premarcada: [...document.querySelectorAll('.onb-mg-op')].filter(b => b.getAttribute('aria-pressed') === 'true').length,
   }));
-  ok(/\/4$/.test(alta0.anillo) && alta0.pasos.length === 4,
-     'el alta tiene cuatro pasos y el contador lo dice solo (no hay ningún 3 escrito a mano)',
-     alta0.anillo + ' · ' + alta0.pasos.join(' | '));
-  ok(alta0.pasos[3] === 'Cómo cuentas tu margen', 'y el del margen es el ÚLTIMO', alta0.pasos[3]);
+  // EL ALTA CAMBIÓ DE FORMA (panel «Pon en marcha tu negocio»): son tres bloques con más pasos, no
+  // una lista de cuatro. Lo que este gate defiende NO era el número: era que el contador sale solo
+  // del array y que el paso del margen está, con sus dos opciones y sin premarcar. Eso sigue.
+  ok(new RegExp('^' + alta0.pasos.length + '$|/' + alta0.pasos.length + '$').test(alta0.anillo.replace(/^\\d+/, '')) || alta0.anillo.endsWith('/' + alta0.pasos.length),
+     'el contador del alta sale del propio array de pasos, no de un número escrito a mano',
+     alta0.anillo + ' con ' + alta0.pasos.length + ' pasos');
+  ok(alta0.pasos.includes('Cómo cuentas tu margen'), 'y el paso del margen sigue estando', alta0.pasos.join(' | '));
   const tresSalidas = [];
   for (const via of ['venta', 'coste', 'saltar']) {
     db.prepare("DELETE FROM settings WHERE key LIKE 'margen_modo%'").run();
@@ -648,15 +651,18 @@ try {
      'saltar deja «sobre la venta» y NO escribe nada: la ausencia ya vale eso');
   ok(tresSalidas.find(x => x.via === 'coste').modo === 'coste', 'y elegir B deja «sobre el coste»');
 
-  // Con el paso contestado, el checklist se retira si lo demás está hecho (no se queda pinchado).
+  // Contestar el paso lo MARCA (ya no «retira el alta entera»: el panel se pliega cuando está todo
+  // hecho, y de eso se ocupa gate-inicio-arranque). Aquí se comprueba lo de esta tarea: que
+  // contestarlo cuenta.
   db.prepare("DELETE FROM settings WHERE key LIKE 'margen_modo%'").run();
-  await page.goto(BASE + '/admin', { waitUntil: 'networkidle0' }); await dormir(1200);
-  const conPaso = await page.evaluate(() => document.querySelectorAll('.onb-stitle').length);
+  await page.goto(BASE + '/admin', { waitUntil: 'networkidle0' }); await dormir(1800);
+  const antesMg = await page.evaluate(() => (document.querySelector('.onb-ring-n') || {}).textContent || '');
   await api('POST', '/api/erp/settings/margen/alta', { saltar: true });
-  await page.goto(BASE + '/admin', { waitUntil: 'networkidle0' }); await dormir(1200);
-  const sinPaso = await page.evaluate(() => document.querySelectorAll('.onb-stitle').length);
-  ok(conPaso === 4 && sinPaso === 0,
-     'contestado (o saltado) el último paso, el alta entera se retira sola', conPaso + ' → ' + sinPaso);
+  await page.goto(BASE + '/admin', { waitUntil: 'networkidle0' }); await dormir(1800);
+  const trasMg = await page.evaluate(() => (document.querySelector('.onb-ring-n') || {}).textContent || '');
+  const hechos = t => parseInt(String(t).split('/')[0], 10) || 0;
+  ok(hechos(trasMg) === hechos(antesMg) + 1,
+     'contestar (o saltar) el paso del margen lo marca en el panel de arranque', antesMg + ' → ' + trasMg);
   // DISA propone según el oficio, pero NUNCA premarca.
   ok(alta0.premarcada === 0, 'ninguna de las dos opciones viene premarcada', alta0.premarcada + ' premarcadas');
 
