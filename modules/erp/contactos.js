@@ -172,7 +172,7 @@ export function contactosDe(db, clientId, { tipo = '', soloVisitas = false, desd
 // no hubiera ninguna, la ficha se estaría contradiciendo a sí misma en dos clics — y eso es peor que
 // no tener el detalle. Así que la lista de visitas se compone de las MISMAS tres fuentes que
 // `diasDeVisita`, y por construcción cuadra con ella.
-export function visitasDetalle(db, clientId, puede = () => true) {
+export function visitasDetalle(db, clientId, puede = () => true, ventas = null) {
   const ev = [];
   if (puede('citas.read')) {
     try {
@@ -184,7 +184,7 @@ export function visitasDetalle(db, clientId, puede = () => true) {
   }
   if (puede('invoices.read')) {
     try {
-      for (const i of countingSalesInvoices(db, {})) {
+      for (const i of (ventas || countingSalesInvoices(db, {}))) {
         if (Number(i.client_id) !== Number(clientId)) continue;
         ev.push({ fecha: String(i.issue_date).slice(0, 10) + ' 00:00', tipo: 'presencial',
                   resultado: 'Compró: ' + (i.invoice_number || 'factura ' + i.id),
@@ -240,7 +240,9 @@ export function ultimoContacto(db, clientId, puede) {
 // Los días en los que el cliente VINO, de más antiguo a más nuevo, sin repetir día. Une tres fuentes
 // que dicen lo mismo desde sitios distintos: la agenda (que es la que manda donde hay agenda), las
 // facturas que cuentan como venta, y los presenciales apuntados a mano.
-export function diasDeVisita(db, clientId, puede = () => true) {
+// `ventas` permite pasar la lista de facturas YA calculada: quien llama (la ficha) la tiene, y
+// volver a barrer la tabla entera aquí eran 55 ms de repetir el mismo trabajo.
+export function diasDeVisita(db, clientId, puede = () => true, ventas = null) {
   const dias = new Set();
   // CADA FUENTE, SU PERMISO. La agenda solo se lee con `citas.read`: sin él, una fecha de visita
   // sacada de una cita sería información de agenda entrando por la puerta de atrás. Quien no puede
@@ -255,7 +257,7 @@ export function diasDeVisita(db, clientId, puede = () => true) {
   }
   if (puede('invoices.read')) {
     try {
-      for (const i of countingSalesInvoices(db, {}))
+      for (const i of (ventas || countingSalesInvoices(db, {})))
         if (Number(i.client_id) === Number(clientId)) dias.add(String(i.issue_date).slice(0, 10));
     } catch { /* sin facturas */ }
   }

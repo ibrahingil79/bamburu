@@ -53,9 +53,19 @@ export function fichaClienteCSS() {
     .bf-card[disabled]:hover{border-color:var(--border2);box-shadow:none}
     .bf-card>span{display:block;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .bf-k{font-size:.68rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text3);padding-right:1.2rem}
+    /* EL COLOR DICE ALGO, no adorna. El estilo de la casa es jerarquía por peso y espacio (CANON),
+       así que el color se reserva para lo que exige una decisión: una deuda viva en rojo y un margen
+       en verde se leen de un vistazo sin tener que buscar la cifra. Lo demás se queda en negro: si
+       se colorea todo, no destaca nada. */
     .bf-v{font-size:1.12rem;font-weight:700;letter-spacing:-.01em;color:var(--text)}
     .bf-v.na{font-size:1rem;color:var(--text3);font-weight:600}
-    .bf-s{font-size:.72rem;color:var(--text2)}
+    .bf-v.debe{color:var(--danger)}
+    .bf-v.gana{color:var(--ok)}
+    .bf-v.pierde{color:var(--danger)}
+    /* El subtítulo con el porcentaje sube de contraste: es el dato que acompaña al titular, no una
+       nota al pie. Antes se leía en gris claro contra blanco y se perdía. */
+    .bf-s{font-size:.73rem;color:var(--text2)}
+    .bf-s strong,.bf-s b{color:var(--text)}
     .bf-go{position:absolute;top:.8rem;right:.8rem;color:var(--text3);font-size:.8rem}
     .bf-card:hover .bf-go{color:var(--accent)}
 
@@ -203,7 +213,7 @@ export function fichaClienteJS({ sym = '€' } = {}) {
     // Tres líneas, las tres recortadas con puntos suspensivos y con el valor entero en \`title\`.
     // \`clave\` la hace pulsable; sin clave sale inerte (y sin flecha), no rota.
     function tarjeta(o){
-      var na = o.na ? ' na' : '';
+      var na = o.na ? ' na' : (o.tono ? ' ' + o.tono : '');
       var pulsable = !!o.clave;
       return '<button type="button" class="bf-card"'
         + (pulsable ? ' data-tarjeta="'+esc(o.clave)+'"' : ' disabled')
@@ -226,7 +236,9 @@ export function fichaClienteJS({ sym = '€' } = {}) {
       var c = D.cabecera || {}, out = [];
       var mm = c.margen_modo || 'venta';
       if (c.deuda) {
+        // Rojo SOLO si debe de verdad: un «0,00 €» en rojo asustaría por nada.
         out.push(tarjeta({ clave:'deuda', k:'Te debe', v: eur(c.deuda.total),
+          tono: c.deuda.total > 0 ? 'debe' : null,
           s: c.deuda.total>0 ? (c.deuda.oldest ? ('la más antigua: '+c.deuda.oldest.invoice_number) : 'pendiente')
                              : 'no te debe nada' }));
       }
@@ -239,6 +251,8 @@ export function fichaClienteJS({ sym = '€' } = {}) {
         var euros = c.margen ? c.margen.euros : null;
         out.push(tarjeta({ clave:'margen', k:'Margen que deja',
           v: euros==null ? '—' : eur(euros), na: euros==null,
+          // Verde si gana, rojo si pierde. Un margen negativo tiene que saltar a la cara.
+          tono: euros == null ? null : (euros < 0 ? 'pierde' : 'gana'),
           s: t==null ? (c.gasto.facturas ? 'sin coste conocido' : 'todavía no le has facturado') : (pct(t)+' '+suf),
           sTxt: t==null ? 'Sin coste apuntado no se puede saber el margen. No es 0: es que no se sabe.' : (pct(t)+' '+suf) }));
       }
@@ -726,7 +740,7 @@ export function fichaVentanaJS({ montaje = 'ventana' } = {}) {
       // una segunda copia, y aquí no hay dónde ponerla.
       if (clave === 'completa') {
         capa('completa', 'Ficha completa', '<div id="bfFullCaja"><div class="skel skel-block" style="height:6rem"></div></div>');
-        if (window.BFFull) window.BFFull.pintar(document.getElementById('bfFullCaja'), id);
+        if (window.BFFull) window.BFFull.pintar(document.getElementById('bfFullCaja'), id, D);
         return;
       }
       capa(clave, TITULOS[clave] || 'Detalle', '<div class="skel skel-block" style="height:5rem"></div>');
@@ -1034,7 +1048,9 @@ export function fichaCompletaJS() {
         + '</div>';
     }
 
-    function pintar(caja, id){
+    // D es lo que la ventana YA ha cargado. Si viene, no se vuelve a pedir /360: era la petición
+    // más cara de la pantalla y se estaba pagando dos veces seguidas para pintar lo mismo.
+    function pintar(caja, id, D){
       if (!caja) return;
       var pfx = 'bff' + id + '_';
       caja.innerHTML = armazon(pfx);
@@ -1105,14 +1121,16 @@ export function fichaCompletaJS() {
         }
       });
 
-      // ── Qué te compra y la tabla larga de facturas ───────────────────────────────────────────
-      api('GET','/api/erp/clients/'+id+'/360').then(function(D){
+      // ── Qué te compra y la nota fija ─────────────────────────────────────────────────────────
+      function pintaDe(D){
         $('notaFija').innerHTML = D.cliente && D.cliente.notes
           ? '<div class="alert alert-ok" style="margin-bottom:.6rem">'+BF.esc(D.cliente.notes)+'</div>' : '';
         $('compra').innerHTML = D.compra == null ? '<div class="bf-vacio">—</div>'
           : (D.compra.length ? BF.queCompraHTML(D.compra, 0)
              : '<div class="bf-vacio">Todavía no te ha comprado nada en los últimos 12 meses.</div>');
-      }).catch(function(){});
+      }
+      if (D) pintaDe(D);
+      else api('GET','/api/erp/clients/'+id+'/360').then(pintaDe).catch(function(){});
 
       api('GET','/api/erp/clients/'+id+'/invoices').then(function(deb){
         var badge={pendiente:'b-yellow',parcial:'b-blue',cobrada:'b-green',vencida:'b-red',abono:'b-gray'};

@@ -100,6 +100,12 @@ const leerFlyDisa = page => page.evaluate(() => {
 });
 
 try {
+  // EL ORDEN DE FÁBRICA SE COMPRUEBA SOBRE EL ORDEN DE FÁBRICA. Desde que el menú se puede reordenar
+  // por usuario, una preferencia guardada —de una prueba a mano o del propio dueño— dejaba este gate
+  // en rojo con el producto perfectamente sano. Se retira la del usuario que se va a mirar, y así el
+  // gate mide lo que dice medir en vez de heredar lo que hubiera en la base.
+  db.prepare('DELETE FROM dashboard_layouts WHERE scope=?').run('menu:usuario:' + OWNER);
+
   // ── OWNER: orden del riel, submenú, badge, topbar limpio ─────────────────────
   const { page, errs } = await pageFor(tokOwner);
   await page.goto(BASE + '/admin', { waitUntil: 'networkidle0' });

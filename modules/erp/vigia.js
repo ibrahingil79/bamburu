@@ -71,7 +71,7 @@ export const PAGO_VENCE_DIAS        = 7;    // pago a proveedor que vence en ≤
 // ya se le dejó correr.
 export const DETECTORES = [
   {
-    key: 'deuda_vencida', etiqueta: 'Deuda de cliente vencida',
+    key: 'deuda_vencida', porCliente: true, etiqueta: 'Deuda de cliente vencida',
     area: 'cobros', areaEtiqueta: 'Cobros', perm: 'cobros.read',
     correr(db, { hoy }) {
       // openDebts = LA MISMA fuente que la pantalla de Cobros (torre de control). Una fila por
@@ -91,7 +91,7 @@ export const DETECTORES = [
     },
   },
   {
-    key: 'cliente_dormido', etiqueta: 'Cliente que se duerme',
+    key: 'cliente_dormido', porCliente: true, etiqueta: 'Cliente que se duerme',
     area: 'clientes', areaEtiqueta: 'Clientes', perm: 'clients.read',
     correr(db, { hoy }) {
       // `clientesDormidos` ya aplica el ritmo aprendido de cada cliente y devuelve su `motivo`. No se
@@ -223,7 +223,7 @@ export const DETECTORES = [
     },
   },
   {
-    key: 'fuera_de_ritmo', etiqueta: 'Cliente fuera de su ritmo',
+    key: 'fuera_de_ritmo', porCliente: true, etiqueta: 'Cliente fuera de su ritmo',
     area: 'agenda', areaEtiqueta: 'Agenda', perm: 'citas.read',
     correr(db, { hoy }) {
       // El ritmo es SUYO: la mediana de días entre sus visitas atendidas. Con menos de 3 visitas no se
@@ -244,7 +244,7 @@ export const DETECTORES = [
     },
   },
   {
-    key: 'sin_proxima_cita', etiqueta: 'Se fue sin próxima cita',
+    key: 'sin_proxima_cita', porCliente: true, etiqueta: 'Se fue sin próxima cita',
     area: 'agenda', areaEtiqueta: 'Agenda', perm: 'citas.read',
     correr(db, { hoy }) {
       return seFueSinProxima(db, hoy).map(d => ({
@@ -262,7 +262,7 @@ export const DETECTORES = [
     },
   },
   {
-    key: 'ausencias', etiqueta: 'Faltó a su cita',
+    key: 'ausencias', porCliente: true, etiqueta: 'Faltó a su cita',
     area: 'agenda', areaEtiqueta: 'Agenda', perm: 'citas.read',
     correr(db, { hoy }) {
       // El estado 'no_show' EXISTE en el motor (citas-engine.js · ESTADOS), con su etiqueta y su
@@ -322,11 +322,20 @@ function caidaMensual(db, { hoy, hasPerm, medida, umbralPct, area, areaEtiqueta,
 // Devuelve { generado, hoy, hallazgos, porDetector, sinPermiso, umbrales }. Los detectores sin
 // permiso NO corren (no filtran su dato) y se listan en `sinPermiso` — se dice qué falta, no se
 // deja un hueco mudo (la regla del resto de la Analítica).
-export function detectar(db, { hasPerm = null, hoy = null, soloDetector = null } = {}) {
+// Los detectores que PUEDEN señalar a un cliente concreto. Lo declara cada detector con
+// `porCliente: true`, no una lista escrita aparte: si mañana nace uno nuevo, lo marca su autor y la
+// ficha de cliente lo recoge sola. Sin esto, la ficha corría los diez detectores —análisis del
+// negocio entero, unos 300 ms— para quedarse con los de UN cliente.
+export const DETECTORES_POR_CLIENTE = DETECTORES.filter(d => d.porCliente).map(d => d.key);
+
+// `soloCliente:true` corre SOLO los detectores que pueden referirse a un cliente. El resultado para
+// ese cliente es EL MISMO —los demás detectores nunca ponen `ref.client_id`, así que la ficha los
+// descartaba igual—, pero sin pagar el análisis del negocio entero.
+export function detectar(db, { hasPerm = null, hoy = null, soloDetector = null, soloCliente = false } = {}) {
   const dia = hoy || hoyLocal();
   const puede = det => !hasPerm || hasPerm(det.perm);
 
-  let lista = DETECTORES;
+  let lista = soloCliente ? DETECTORES.filter(d => d.porCliente) : DETECTORES;
   if (soloDetector) {
     const det = DETECTORES.find(d => d.key === soloDetector);
     if (!det) { const e = new Error('No conozco el detector "' + soloDetector + '"'); e.status = 400; throw e; }
@@ -335,8 +344,9 @@ export function detectar(db, { hasPerm = null, hoy = null, soloDetector = null }
   }
 
   const hallazgos = [], porDetector = {}, sinPermiso = [];
-  for (const det of DETECTORES) {
-    if (soloDetector && det.key !== soloDetector) continue;
+  // Se recorre `lista`, NO `DETECTORES`: la variable existía y el bucle la ignoraba, así que pedir
+  // un subconjunto no ahorraba nada — se ejecutaban los diez y se descartaba lo demás después.
+  for (const det of lista) {
     if (!puede(det)) { sinPermiso.push({ key: det.key, etiqueta: det.etiqueta, area: det.area, perm: det.perm }); continue; }
     const salida = det.correr(db, { hoy: dia, hasPerm }) || [];
     porDetector[det.key] = salida.length;

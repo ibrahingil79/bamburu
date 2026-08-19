@@ -40,6 +40,8 @@ const GRUPOS = {
     'gate-cliente-360',              // la ficha cuadra al céntimo con la pantalla de la que sale
     'gate-menu-navegacion',          // ni una función del menú se pierde por el camino
     'gate-agenda-visual',            // el lienzo de la agenda, y que se sirve desde la dirección real
+    'gate-vigia-pantalla',           // el vigía en su pantalla
+    'gate-vigia-agenda',             // los detectores de agenda (1 aserción EN ROJO desde antes: ver DEUDA)
   ],
   pagos: [
     'test-pagos-proveedor', 'gate-pagos-proveedor', 'gate-pago-cuenta', 'gate-abono-proveedor',
@@ -109,6 +111,16 @@ const GRUPOS = {
 // La moraleja, para el que venga: un gate que se apoya en datos vivos ajenos, o en el saldo de una
 // cuenta, no se pudre por culpa del producto. Se pudre porque no era suyo lo que pisaba.
 const DEUDA = {};
+
+// ROJOS CONOCIDOS de gates que SÍ se ejecutan. No son deuda (el gate corre y verifica), pero su rojo
+// es anterior y de otro tema: se declara aquí para que salga por su nombre en cada barrido en vez de
+// perderse entre los demás. Un rojo con dueño y motivo es información; un rojo anónimo es ruido.
+const ROJOS_CONOCIDOS = {
+  'gate-vigia-agenda':
+    '1 aserción EN ROJO desde antes de meterlo al barrido (19-ago-2026): los hallazgos de agenda no '
+    + 'asoman en el bloque del vigía del Inicio. Comprobado que NO es del cambio que lo destapó '
+    + '(idéntico con vigia.js revertido a HEAD). Las otras 40 aserciones pasan. Otro tema.',
+};
 
 // Excluidos por naturaleza, no por estar rotos: no son deuda, simplemente no van en un barrido.
 const EXCLUIDOS = {
@@ -227,6 +239,10 @@ for (const [g, motivo] of Object.entries(ENTORNO)) console.log('  · ' + g + '\n
 
 // La deuda va la ÚLTIMA y con banderita: es lo que el runner NO puede prometer. Un barrido "verde"
 // que calle esto valdría lo mismo que el falso verde que lo hizo nacer.
+for (const [g, motivo] of Object.entries(ROJOS_CONOCIDOS)) {
+  console.log('\n⚠️  ROJO CONOCIDO, con dueño y motivo (el gate SÍ se ejecuta):');
+  console.log('  · ' + g + '\n      ' + motivo);
+}
 const deuda = Object.keys(DEUDA).length;
 if (deuda) {
   console.log('\n🚧 DEUDA — ' + deuda + ' gates de navegador ROTOS o CADUCADOS, NO se están ejecutando:');

@@ -1482,6 +1482,51 @@ completa los cubra, hay que meterlos en un grupo — decisión del dueño, porqu
 puestos frente a con un puesto). **Desplegado y verificado por HTTPS** en `peluqueria-gil.bamburu.com`:
 Agenda con 2 entradas, la sección con sus 5, y las 7 rutas viejas a 200.
 
+### Ficha de cliente: rendimiento, contraste y el chip de Proyectos — correcciones sobre la entrega del día  ✅ HECHO (2026-08-19)
+
+**«VER» TARDABA 2-3 SEGUNDOS. Medido: `/360` tardaba 1.000 ms**, y todo lo demás iba por debajo de
+120 ms. Tres causas, las tres de repetir trabajo:
+- **El vigía entero se ejecutaba DOS VECES** por petición (≈600 ms de los 1.000): una para `disa` y
+  otra para `recomienda`, para sacar exactamente el mismo resultado. Ahora corre una vez y se reparte.
+- **La lista de ventas del negocio se barría CUATRO veces** (primer documento, gasto total, gasto del
+  periodo, días de visita): 4 × 55 ms del mismo trabajo. Memorizada por petición — misma lista, misma
+  regla, pedida una vez.
+- **Y un `let lista` MUERTO en el vigía**: la variable existía desde siempre y el bucle recorría
+  `DETECTORES` ignorándola, así que pedir un subconjunto no ahorraba nada. Ahora la ficha pide solo
+  los detectores que pueden señalar a un cliente (`porCliente`, declarado por cada detector, no una
+  lista aparte). **Comprobado que el resultado para ese cliente es idéntico**, hallazgo a hallazgo.
+
+**1.000 ms → 280 ms**, y del clic a las ocho tarjetas pintadas: **356 ms**.
+
+**«VER FICHA COMPLETA» pedía `/360` OTRA VEZ** para lo mismo que la ventana ya tenía. Ahora recibe
+esos datos. **Del clic a la tabla de facturas: 42 ms.**
+
+**CONTRASTE.** Color donde dice algo, no de adorno: **la deuda viva en rojo y el margen en verde**
+(rojo si es negativo). El resto se queda en negro — si se colorea todo, no destaca nada. Y el
+subtítulo del porcentaje sube de contraste: era el dato que acompaña al titular y se leía en gris
+claro sobre blanco.
+
+**EL CHIP DE PROYECTOS EN DESARROLLO: aparecía por dos motivos, los dos correctos.** El oficio de ese
+negocio es **«otro»**, que mantiene `usa_proyectos` en **true a propósito** (los negocios que ya
+existían no pierden nada de su pantalla por una migración); y además **el negocio tiene 4 proyectos
+vivos**. Se refina la regla para que diga lo que F1 dice de verdad: *«se ocultan si el negocio NO USA
+esa función»* — y **tener proyectos ES usarla**, así que el chip se enseña aunque el oficio no lo
+traiga. Esconder un chip que lleva a datos reales sería esconderle al dueño lo suyo. Comprobado:
+oficio taller **con** proyectos → visible; taller **sin** proyectos → oculto (y encendible en «Más
+opciones»).
+
+**DOS GATES MÁS AL BARRIDO, Y LO QUE DESTAPARON.** `gate-vigia-pantalla` y `gate-vigia-agenda`
+tampoco estaban. Al meterlos:
+- `gate-vigia-agenda` sale **rojo en 1 aserción de 41**, y está **demostrado que es previo** (idéntico
+  con `vigia.js` revertido a HEAD). Se declara en `ROJOS_CONOCIDOS` del runner **con su motivo**, para
+  que salga por su nombre en cada barrido: un rojo con dueño es información, uno anónimo es ruido.
+- `gate-nav-inicio-disa` se puso rojo por **cruce entre gates**: comprobaba el orden de fábrica del
+  menú y heredaba **una preferencia de reordenación que yo dejé en el tenant compartido** probando a
+  mano la tarea de navegación. Arreglado en el gate (retira la preferencia del usuario que mira antes
+  de medir): un gate que comprueba el orden de fábrica no puede depender de lo que haya en la base.
+
+**Regresión completa: 55/69**, con los 13 rojos de siempre más `gate-vigia-agenda`, declarado.
+
 ### Ficha de cliente completa: la ficha entera en la ventana, registro de contactos y estética de tarjetas — **TAREA TRANSVERSAL** (el puntero de la escalera NO se mueve)  ✅ HECHO (2026-08-19)
 
 **LO QUE EL PASO 0 DESTAPÓ, Y ERA CULPA MÍA.** La entrega anterior dejó las tarjetas bien y **la

@@ -157,6 +157,14 @@ export function createClientRoutes(db, cfg = {}) {
       // pueden mirar el mismo cliente con ventanas de tiempo distintas sin pisarse.
       const periodo = periodoDeUsuario(db, c.get('session')?.userId || null);
       const cab = cabecera360(db, cli, puede, { periodo });
+      let delVigia = null;
+      if (puede('analytics.read')) {
+        // `soloCliente` corre solo los detectores que pueden señalar a un cliente. El resultado para
+        // ESTE cliente es idéntico —los demás nunca ponen `ref.client_id`— y ahorra el análisis del
+        // negocio entero, que es lo más caro de esta pantalla con diferencia.
+        try { delVigia = detectar(db, { hoy: new Date().toISOString().slice(0, 10), soloCliente: true }); }
+        catch { delVigia = null; }
+      }
       return c.json({
         cliente: { id: cli.id, name: cli.name, client_code: cli.client_code, created_at: cli.created_at, notes: cli.notes || '' },
         // B1.1 — la cabecera compacta de la ventana: quién es, en una línea.
@@ -167,8 +175,10 @@ export function createClientRoutes(db, cfg = {}) {
         compra: queCompra(db, cli.id, puede),
         // Los avisos en crudo siguen viajando (los usa quien ya los pintaba); `recomienda` es lo que
         // se ENSEÑA: una línea por familia con la decisión, no una por documento (C1/C4).
-        disa: avisosDisaDe(db, cli.id, puede, detectar),
-        recomienda: recomendacionesDisa(db, cli.id, puede, detectar),
+        // EL VIGÍA SE CORRE UNA SOLA VEZ y se reparte: es lo más caro de esta pantalla (~300 ms) y
+        // se estaba ejecutando dos veces seguidas para sacar exactamente el mismo resultado.
+        disa: avisosDisaDe(db, cli.id, puede, detectar, delVigia),
+        recomienda: recomendacionesDisa(db, cli.id, puede, detectar, delVigia),
         crm: can(c, 'crm.read') ? clientCrmSummary(db, cli.id, new Date().toISOString().slice(0, 10)) : null,
         periodo, periodos: PERIODOS_FICHA, chips_extra: chipsForzados(db),
       });
@@ -837,13 +847,13 @@ export function createClientRoutes(db, cfg = {}) {
     }
     // Tras registrar un cobro se vuelve a pedir la ficha entera: si el «Te debe» de arriba y la
     // tabla de abajo dijeran cifras distintas, una de las dos estaría mintiendo.
-    window.cobroOnSaved = function(){ recargar(); BFFull.pintar(document.getElementById('f360full'), CID); };
+    window.cobroOnSaved = function(){ recargar(); BFFull.pintar(document.getElementById('f360full'), CID, D); };
     // El punto por el que el componente compartido repinta esta página (periodo, contacto, chip).
     window.BFPintaPagina = function(d){ D = d; pintaCabecera(); };
     (async function(){
       await recargar();
       // A3 · La ficha completa de la PÁGINA la pinta el MISMO código que la capa de la ventana.
-      BFFull.pintar(document.getElementById('f360full'), CID);
+      BFFull.pintar(document.getElementById('f360full'), CID, D);
       if (location.hash === '#historia') {
         var h=document.getElementById('bff'+CID+'_hist'); if(h) h.scrollIntoView({block:'start'});
       }

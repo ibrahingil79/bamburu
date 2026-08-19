@@ -26,6 +26,33 @@ import { vocabulario } from './oficios.js';
 import { getLayoutRaw, setLayout } from './inicio-layout.js';
 
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
+
+// ── LA LISTA DE VENTAS, UNA SOLA VEZ POR PETICIÓN ───────────────────────────────────────────────
+// `countingSalesInvoices(db, {})` recorre TODAS las facturas del negocio y decide una por una si
+// cuentan como venta. Cuesta unos 55 ms en un tenant mediano — y esta pantalla la pedía CUATRO
+// veces (la fecha del primer documento, el gasto total, el gasto del periodo y los días de visita),
+// que son 220 ms de repetir el mismo trabajo. Se memoriza por `db`, con la lista congelada mientras
+// dure la petición; entre peticiones se vuelve a pedir, porque para entonces puede haber cambiado.
+//
+// NO cambia ni una regla: es exactamente la misma lista, pedida una vez en vez de cuatro.
+const _cacheVentas = new WeakMap();
+function ventasDelNegocio(db) {
+  if (_cacheVentas.has(db)) return _cacheVentas.get(db);
+  const lista = countingSalesInvoices(db, {});
+  _cacheVentas.set(db, lista);
+  // La caché vive lo que tarda el turno actual del bucle de eventos: en una petición síncrona de
+  // better-sqlite3 eso es exactamente «esta petición», y ni un milisegundo más.
+  queueMicrotask(() => _cacheVentas.delete(db));
+  return lista;
+}
+// Con filtro de fechas: se filtra la lista ya calculada en vez de volver a barrer la tabla.
+function ventasEntre(db, desde = null, hasta = null) {
+  if (!desde && !hasta) return ventasDelNegocio(db);
+  return ventasDelNegocio(db).filter(i => {
+    const f = String(i.issue_date || '').slice(0, 10);
+    return (!desde || f >= desde) && (!hasta || f <= hasta);
+  });
+}
 const hoyISO = () => new Date().toISOString().slice(0, 10);
 const haceMeses = (n, ref = hoyISO()) => {
   const d = new Date(ref + 'T00:00:00Z');
@@ -61,7 +88,7 @@ function medianaDe(xs) {
 // son dos visitas. La unión de las tres fuentes la hace `diasDeVisita` (contactos.js), que es el
 // MISMO sitio del que come el registro; aquí solo se calcula la mediana.
 function visitasDelCliente(db, clientId, puede = () => true) {
-  const dias = diasDeVisita(db, clientId, puede);
+  const dias = diasDeVisita(db, clientId, puede, ventasDelNegocio(db));
   // La fuente se dice en pantalla para que el dueño sepa qué está mirando.
   return { dias, fuente: usaAgenda(db) ? 'citas y documentos' : 'documentos' };
 }
@@ -95,7 +122,7 @@ export function ritmoDelCliente(db, clientId, puede = () => true) {
 function fechasDeDocumentos(db, clientId, puede) {
   const fac = [], citas = [];
   if (puede('invoices.read')) {
-    for (const i of countingSalesInvoices(db, {})) if (i.client_id === clientId) fac.push(i.issue_date);
+    for (const i of ventasDelNegocio(db)) if (i.client_id === clientId) fac.push(i.issue_date);
   }
   if (puede('citas.read')) {
     try {
@@ -113,8 +140,7 @@ function fechasDeDocumentos(db, clientId, puede) {
 // tiempo, marcada, porque pasó. Las rectificativas netean por su total, como en Ventas.
 function gastoDe(db, clientId, desde, hasta = null) {
   let base = 0, n = 0;
-  const opts = {}; if (desde) opts.from = desde; if (hasta) opts.to = hasta;
-  for (const i of countingSalesInvoices(db, opts)) {
+  for (const i of ventasEntre(db, desde, hasta)) {
     if (i.client_id !== clientId) continue;
     base += Number(i.subtotal) || 0; n++;
   }
@@ -146,7 +172,7 @@ function margenDe(db, clientId, nombre, puede) {
 export function queCompra(db, clientId, puede, meses = 12) {
   if (!puede('invoices.read')) return null;
   const desde = haceMeses(meses);
-  const ids = countingSalesInvoices(db, { from: desde }).filter(i => i.client_id === clientId).map(i => i.id);
+  const ids = ventasEntre(db, desde).filter(i => i.client_id === clientId).map(i => i.id);
   if (!ids.length) return [];
   const map = new Map();
   const ph = ids.map(() => '?').join(',');
@@ -243,6 +269,8 @@ export function contadoresDe(db, clientId, puede, deuda) {
 
   if (puede('citas.read')) c.push({ key: 'citas', etiqueta: 'Citas', icon: 'ti-calendar-event',
     n: cuenta("SELECT COUNT(*) n FROM citas WHERE cliente_id=? AND archived=0", clientId),
+    // `usaAgenda` ya mira el estado real (hay horario o hay citas), así que un negocio con citas
+    // nunca se queda sin el chip.
     href: '/admin/citas', oculto: !conAgenda && !extra.has('citas'),
     porque: 'Este negocio no lleva agenda' });
   if (puede('invoices.read')) c.push({ key: 'facturas', etiqueta: 'Facturas', icon: 'ti-file-invoice',
@@ -253,7 +281,12 @@ export function contadoresDe(db, clientId, puede, deuda) {
     href: '/admin/crm' });
   if (puede('proyectos.read')) c.push({ key: 'proyectos', etiqueta: 'Proyectos', icon: 'ti-folders',
     n: cuenta('SELECT COUNT(*) n FROM proyectos WHERE cliente_id=? AND active=1', clientId),
-    href: '/admin/proyectos', oculto: !voc.usa_proyectos && !extra.has('proyectos'),
+    href: '/admin/proyectos',
+    // F1 dice «se ocultan si el negocio NO USA esa función». Tener proyectos ES usarla: esconder un
+    // chip que lleva a datos reales sería esconderle al dueño lo suyo, y eso no lo hace ninguna
+    // regla de esta tarea. Así que se oculta solo si el oficio no la trae Y además no hay ninguno.
+    oculto: !voc.usa_proyectos && !extra.has('proyectos')
+            && cuenta('SELECT COUNT(*) n FROM proyectos WHERE active=1') === 0,
     porque: 'En tu oficio no se suele trabajar por proyectos' });
   // El chip de «Deuda» ya NO viaja: es una tarjeta, y decir lo mismo dos veces no es informar (C5).
   return c;
@@ -279,10 +312,13 @@ export function encenderChip(db, key, encender = true) {
 // Los avisos que el vigía YA calcula, filtrados por este cliente. Mismo texto y misma cifra que en
 // la pantalla del vigía: se le pide a él y se filtra, no se vuelve a detectar nada. Si algún día un
 // detector cambia de criterio, la ficha cambia con él sin que nadie la toque.
-export function avisosDisaDe(db, clientId, puede, detectar) {
+// `yaDetectado` permite pasar el resultado del vigía si quien llama YA lo tiene. Correr los
+// detectores es lo más caro de esta pantalla (unos 300 ms sobre un tenant mediano) y se hacía DOS
+// VECES por petición —una aquí y otra en `recomendacionesDisa`— para sacar exactamente lo mismo.
+export function avisosDisaDe(db, clientId, puede, detectar, yaDetectado = null) {
   if (!puede('analytics.read')) return null;
   try {
-    const res = detectar(db, { hoy: hoyISO() });
+    const res = yaDetectado || detectar(db, { hoy: hoyISO() });
     // El cliente del hallazgo vive en `ref`, no en la raíz: `ref.client_id`. Buscarlo arriba devolvía
     // cero avisos SIEMPRE, y una ficha que nunca dice nada parece una ficha tranquila.
     return (res.hallazgos || [])
@@ -348,8 +384,8 @@ const FAMILIAS = [
   },
 ];
 
-export function recomendacionesDisa(db, clientId, puede, detectar) {
-  const avisos = avisosDisaDe(db, clientId, puede, detectar);
+export function recomendacionesDisa(db, clientId, puede, detectar, yaDetectado = null) {
+  const avisos = avisosDisaDe(db, clientId, puede, detectar, yaDetectado);
   if (!avisos || !avisos.length) return [];
   const sym = db.prepare('SELECT currency_symbol s FROM company_config WHERE id=1').get()?.s || '€';
   const out = [];
@@ -410,7 +446,7 @@ export function cabecera360(db, cliente, puede, { periodo = null } = {}) {
   // «Último contacto»     = último trato de cualquier tipo, incluido lo que mandó Bamburu solo.
   // En un cliente con tres correos automáticos y ninguna visita en 18 meses dan fechas DISTINTAS, y
   // esa diferencia es justo lo que el dueño necesita ver.
-  const vis = diasDeVisita(db, clientId, puede);
+  const vis = diasDeVisita(db, clientId, puede, ventasDelNegocio(db));
   const ultimaVisita = vis.length ? vis[vis.length - 1] : null;
   out.ultima = ultimaVisita ? { fecha: ultimaVisita, dias: diasEntre(hoy, ultimaVisita) } : null;
   out.contacto = ultimoContacto(db, clientId, puede);
@@ -459,8 +495,7 @@ export const CLAVES_TARJETA = TARJETAS;
 
 // Las facturas de este cliente que cuentan como venta, ya ordenadas de la más nueva a la más vieja.
 function facturasDe(db, clientId, desde = null, hasta = null) {
-  const opts = {}; if (desde) opts.from = desde; if (hasta) opts.to = hasta;
-  return countingSalesInvoices(db, opts)
+  return ventasEntre(db, desde, hasta)
     .filter(i => Number(i.client_id) === Number(clientId))
     .sort((a, b) => (a.issue_date < b.issue_date ? 1 : a.issue_date > b.issue_date ? -1 : b.id - a.id));
 }
@@ -491,7 +526,7 @@ export function detalleTarjeta(db, cliente, clave, puede, { periodo = null } = {
     // Las visitas se componen de las tres fuentes (agenda, facturas, presenciales a mano) para que
     // la lista CUADRE con la fecha que enseña la tarjeta; el registro completo sale de la tabla.
     const reg = soloVisitas
-      ? (() => { const v = visitasDetalle(db, clientId, puede);
+      ? (() => { const v = visitasDetalle(db, clientId, puede, ventasDelNegocio(db));
                  return { eventos: v, total: v.length, tipos: [...new Set(v.map(x => x.tipo))].sort() }; })()
       : contactosDe(db, clientId, { cuantos: 200 });
     const r = clave === 'ritmo' ? ritmoDelCliente(db, clientId, puede) : null;
