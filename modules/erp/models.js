@@ -2927,5 +2927,35 @@ Sé preciso con los números y siempre redondea correctamente.`,
     updated_by INTEGER
   )`);
 
+  // ── FICHA DE CLIENTE 360 (aditivo, idempotente, sin DROP) ───────────────────────────────────────
+  //
+  // (1) NOTAS A MANO, con autor e historial. El campo `clients.notes` que ya existía NO se toca:
+  // sigue en su sitio, con su contenido, y se pinta donde se pintaba. Aquella era UNA nota que se
+  // pisaba a sí misma —sin autor y sin fecha—; esto es el cuaderno. Conviven: no se migra nada.
+  // FUERA de WRITABLE_TABLES a propósito: esto lo escribe una persona, no DISA.
+  db.exec(`CREATE TABLE IF NOT EXISTS client_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id  INTEGER NOT NULL,
+    texto      TEXT    NOT NULL,
+    user_id    INTEGER,                        -- quién la escribió (admin_users.id)
+    user_name  TEXT    NOT NULL DEFAULT '',    -- copiado al escribir: la nota sobrevive al usuario
+    created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT,
+    active     INTEGER NOT NULL DEFAULT 1,     -- archivar-no-borrar (regla permanente)
+    FOREIGN KEY (client_id) REFERENCES clients(id)
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_client_notes_client ON client_notes(client_id, created_at DESC)`);
+
+  // (2) LOS ÍNDICES QUE FALTABAN. La ficha 360 hace ocho o diez consultas POR CLIENTE en una sola
+  // pantalla; sin índice, cada una es un barrido de la tabla entera. De las diez tablas implicadas
+  // solo dos lo tenían (oportunidades y actividad). Aditivo puro: un índice no cambia un dato.
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_invoices_client        ON invoices(client_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_citas_cliente          ON citas(cliente_id, fecha)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_collection_act_client  ON collection_actions(client_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_proyectos_cliente      ON proyectos(cliente_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_quotes_client          ON quotes(client_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_customer_orders_client ON customer_orders(client_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_delivery_notes_client  ON delivery_notes(client_id)`);
+
   console.log('✅ ERP: Migraciones completadas');
 }

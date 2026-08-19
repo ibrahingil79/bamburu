@@ -1482,6 +1482,65 @@ completa los cubra, hay que meterlos en un grupo — decisión del dueño, porqu
 puestos frente a con un puesto). **Desplegado y verificado por HTTPS** en `peluqueria-gil.bamburu.com`:
 Agenda con 2 entradas, la sección con sus 5, y las 7 rutas viejas a 200.
 
+### Ficha de cliente 360 — **TAREA TRANSVERSAL** (el puntero de la escalera NO se mueve)  ✅ HECHO (2026-08-19)
+
+**NO es pieza del peldaño 8.** La ficha era una **ficha de cobros**: deuda, facturas y poco más. Ahora
+cuenta la historia del cliente.
+
+**LO QUE DESTAPÓ EL PASO 0**
+- **La ficha no existía como pantalla:** era un **modal** dentro de la lista. Sin dirección propia no
+  se podía enlazar, ni pasar a un empleado, ni volver con el botón atrás, ni recibir los enlaces de
+  los avisos de DISA. Por eso ahora es también una **página**.
+- **Ya había una línea de tiempo** en el CRM, con troceo por permisos y una nota escrita en el propio
+  código: *«ver CRM no puede ser la llave maestra que revele facturas y cobros»*. **Se extendió esa**,
+  no se escribió una segunda.
+- **El «cada cuánto viene» ya estaba calculado** por el detector de enfriamiento (mediana de días
+  entre visitas atendidas, y con menos de 3 visitas **no se inventa ritmo**). Se reutiliza; no se
+  recalcula.
+- **Las horas no tienen cliente:** cuelgan del proyecto. Se leen **a través del proyecto** — decisión
+  de Ibrahin: no se añade cliente a las entradas de tiempo.
+- **De diez tablas implicadas, solo DOS tenían índice por cliente.** La ficha hace ocho o diez
+  consultas por cliente en una pantalla: los siete que faltaban entran en la migración.
+- Y una que ahorró trabajo: **las ventas de mostrador con cliente ya son facturas**, así que no son
+  una fuente aparte. Las de mostrador **sin** cliente no son de nadie — y eso hay que **no** romperlo.
+
+**LO CONSTRUIDO** — (A) cabecera de siete cifras, cada una de su motor. (B) línea de tiempo única,
+**paginada y con filtro por tipo**, con las cuatro fuentes nuevas: agenda (incluidas canceladas y
+plantones), proyectos, horas y notas. (C) **notas con autor, fecha e historial** en tabla propia,
+fuera de las que DISA puede escribir — y **el campo de texto libre de siempre sigue intacto**, sin
+migrar ni pisar. (D) contadores que abren su lista, **incluidos los que están a 0**. (E) qué compra,
+últimos 12 meses. (F) los avisos que el vigía ya calcula para ese cliente.
+
+**«CLIENTE DESDE» = SU PRIMER DOCUMENTO REAL** (factura que cuenta como venta o **cita atendida**), no
+la fecha de alta: en una peluquería el primer contacto es una cita, y contarla desde el alta diría que
+un cliente de dos años es de ayer. **Nunca en blanco:** sin documentos dice «Aún no te ha comprado», y
+la fecha de alta sigue visible donde estaba.
+
+**EL MODAL NO PIERDE NADA.** Sigue abriéndose desde la lista con su deuda, sus facturas y su
+«Registrar cobro» a los mismos clics. Gana **una** cosa: el enlace «Ver ficha completa». Todo lo del
+360 vive **solo** en la página — dos sitios pintando lo mismo acaban discrepando.
+
+**PERMISOS: el filtro es del SERVIDOR.** Lo que un usuario no puede ver **no viaja**; no se pinta en
+gris ni se esconde con CSS. Y pedirlo a mano da 403.
+
+**VERIFICACIÓN — `gate-cliente-360` 47/0** sobre un negocio creado desde cero. La deuda cuadra **al
+céntimo** con el motor de cobros y el gasto con el informe de ventas por cliente; el ritmo es el mismo
+número que usa el vigía para avisar (contrastado por **otro camino de código**); sin coste el margen
+sale **«—», nunca 0 ni 100 %**; la factura anulada **sigue en la línea de tiempo, marcada, y ya no
+suma**; la venta de mostrador sin cliente no aparece en la ficha de nadie; un cliente vacío **no deja
+la pantalla en blanco**; los avisos de la ficha son **los mismos cuatro** que los del vigía; neto-cero
+comprobado (ni una factura, ni un hash, ni una línea cambian al abrirla); y a 390 px **sin scroll
+horizontal** y sin errores de JS.
+**REGRESIÓN COMPLETA VERDE.**
+
+**DE PASO, un gate deja de depender del reloj** —la tercera vez con la misma trampa—:
+`gate-agenda-visual` comprobaba la línea de ahora contra un horario de 9–18 mientras el navegador va
+en UTC, así que a las 8:50 medía el reloj y no el producto.
+
+**ANOTADO Y NO CONSTRUIDO:** enganchar los avisos de DISA y las demás pantallas a la ficha completa
+(hoy siguen abriendo lo que abrían); los contadores de Citas y Oportunidades llevan a su lista **sin
+filtrar por cliente** porque esas pantallas todavía no aceptan ese filtro.
+
 ### El despliegue entra en la entrega: «empujado» ≠ «se ve»  ✅ HECHO (2026-08-18)
 
 **EL FALLO, con nombre:** tres commits empujados (`3f051b0`, `21e62bc`, `083657a`), los gates en verde,

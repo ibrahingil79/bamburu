@@ -13,6 +13,10 @@ import { nextCode } from '../codes.js';
 import { clientVentas } from '../ventas-metrics.js';   // PIEZA C: historial = facturas del cliente, no sales_orders viejos
 import { ENTITY } from '../../../core/activity-entities.js';
 import { exigirCorreoActivo } from '../avisos-preferencias.js';   // interruptor de Ajustes → Avisos y correos
+// FICHA 360 — todo lo nuevo LEE de motores que ya existían; aquí no se calcula ni una cifra.
+import { cabecera360, contadoresDe, queCompra, avisosDisaDe } from '../cliente-360.js';
+import { clientTimeline, clientCrmSummary } from '../crm.js';
+import { detectar } from '../vigia.js';
 
 // Comprobación reutilizable de NIF duplicado (regla de integridad — sin duplicados).
 // Devuelve el cliente ACTIVO en conflicto (otro id con el mismo fiscal_id normalizado)
@@ -125,6 +129,114 @@ export function createClientRoutes(db, cfg = {}) {
     try {
       return c.json(searchClients(db, { q: c.req.query('q') || '', city: c.req.query('city') || '', limit: c.req.query('limit') }));
     } catch(e) { return c.json({error:safeError(e)},500); }
+  });
+
+  // ══ FICHA 360 ═══════════════════════════════════════════════════════════════════════════════
+  // Rutas de 3 segmentos: van ANTES de '/:id' para que no las capture como si fueran un id.
+  //
+  // PERMISOS: `clients.read` abre la ficha, y nada más. Cada bloque se calcula solo si su permiso
+  // está, EN EL SERVIDOR: lo que este usuario no puede ver no viaja al navegador. No se pinta en
+  // gris ni se esconde con CSS — no llega. Y pedir el endpoint a mano tampoco lo saca.
+  const puedeDe = c => (p) => can(c, p);
+  const clienteOr404 = c => db.prepare('SELECT * FROM clients WHERE id=?').get(c.req.param('id'));
+
+  // La cabecera de cifras: cada una de su motor, y `null` donde no hay dato (la pantalla pinta «—»).
+  api.get('/:id/360', requirePerm('clients.read'), c => {
+    try {
+      const cli = clienteOr404(c);
+      if (!cli) return c.json({ error: 'No encontrado' }, 404);
+      const puede = puedeDe(c);
+      const cab = cabecera360(db, cli, puede);
+      return c.json({
+        cliente: { id: cli.id, name: cli.name, client_code: cli.client_code, created_at: cli.created_at, notes: cli.notes || '' },
+        cabecera: cab,
+        contadores: contadoresDe(db, cli.id, puede, cab.deuda),
+        compra: queCompra(db, cli.id, puede),
+        disa: avisosDisaDe(db, cli.id, puede, detectar),
+        crm: can(c, 'crm.read') ? clientCrmSummary(db, cli.id, new Date().toISOString().slice(0, 10)) : null,
+      });
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+
+  // La línea de tiempo, PAGINADA y con filtro por tipo. Un solo endpoint: se pide una vez y se
+  // devuelve una página, no una consulta por fila.
+  api.get('/:id/360/timeline', requirePerm('clients.read'), c => {
+    try {
+      const cli = clienteOr404(c);
+      if (!cli) return c.json({ error: 'No encontrado' }, 404);
+      // El mismo contrato de troceo que ya usaba el timeline del CRM: cada fuente, su permiso.
+      // `clients.read` NO puede ser la llave maestra que revele facturas, cobros o citas.
+      const include = {
+        oportunidades: can(c, 'crm.read'), actividad: can(c, 'crm.read'),
+        quotes: can(c, 'quotes.read'), orders: can(c, 'pedidos.read'), albaranes: can(c, 'albaranes.read'),
+        invoices: can(c, 'invoices.read'), cobros: can(c, 'cobros.read'),
+        citas: can(c, 'citas.read'), proyectos: can(c, 'proyectos.read'), tiempo: can(c, 'tiempo.read'),
+        notas: true,                                    // las notas son del cliente: van con clients.read
+      };
+      const todos = clientTimeline(db, cli.id, new Date().toISOString().slice(0, 10), { include });
+      const tipo = String(c.req.query('tipo') || '').trim();
+      const filtrados = tipo ? todos.filter(e => e.kind === tipo) : todos;
+      const desde = Math.max(0, parseInt(c.req.query('desde') || '0', 10) || 0);
+      const cuantos = Math.min(100, Math.max(5, parseInt(c.req.query('cuantos') || '25', 10) || 25));
+      return c.json({
+        total: filtrados.length,
+        tipos: [...new Set(todos.map(e => e.kind))].sort(),
+        eventos: filtrados.slice(desde, desde + cuantos),
+        hay_mas: desde + cuantos < filtrados.length,
+      });
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+
+  // ── NOTAS A MANO — lo único que esta tarea escribe ──────────────────────────────────────────
+  // Permiso: el mismo que editar el cliente. Cada uno edita las SUYAS (el dueño y el administrador,
+  // cualquiera: son ellos quienes responden del negocio). Se archiva, no se borra.
+  api.get('/:id/notas', requirePerm('clients.read'), c => {
+    try {
+      return c.json(db.prepare(
+        'SELECT id, texto, user_id, user_name, created_at, updated_at FROM client_notes WHERE client_id=? AND active=1 ORDER BY created_at DESC'
+      ).all(c.req.param('id')));
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+  api.post('/:id/notas', requirePerm('clients.edit'), async c => {
+    try {
+      const cli = clienteOr404(c);
+      if (!cli) return c.json({ error: 'No encontrado' }, 404);
+      const texto = String((await c.req.json().catch(() => ({}))).texto || '').trim();
+      if (!texto) return c.json({ error: 'Escribe algo en la nota' }, 400);
+      if (texto.length > 4000) return c.json({ error: 'La nota es demasiado larga (máximo 4000 caracteres)' }, 400);
+      const s = c.get('session') || {};
+      const r = db.prepare('INSERT INTO client_notes (client_id, texto, user_id, user_name) VALUES (?,?,?,?)')
+        .run(cli.id, texto, s.userId || null, s.userName || '');
+      return c.json({ ok: true, id: r.lastInsertRowid }, 201);
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+  api.put('/:id/notas/:nid', requirePerm('clients.edit'), async c => {
+    try {
+      const n = db.prepare('SELECT * FROM client_notes WHERE id=? AND client_id=? AND active=1').get(c.req.param('nid'), c.req.param('id'));
+      if (!n) return c.json({ error: 'No encontrada' }, 404);
+      const s = c.get('session') || {};
+      // Cada uno edita las suyas. Owner y admin pueden con todas: responden del negocio entero.
+      if (n.user_id && s.userId && n.user_id !== s.userId && !c.get('isAdmin')) {
+        return c.json({ error: 'Esa nota la escribió otra persona' }, 403);
+      }
+      const texto = String((await c.req.json().catch(() => ({}))).texto || '').trim();
+      if (!texto) return c.json({ error: 'Escribe algo en la nota' }, 400);
+      db.prepare("UPDATE client_notes SET texto=?, updated_at=datetime('now') WHERE id=?").run(texto, n.id);
+      return c.json({ ok: true });
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+  api.delete('/:id/notas/:nid', requirePerm('clients.edit'), c => {
+    try {
+      const n = db.prepare('SELECT * FROM client_notes WHERE id=? AND client_id=? AND active=1').get(c.req.param('nid'), c.req.param('id'));
+      if (!n) return c.json({ error: 'No encontrada' }, 404);
+      const s = c.get('session') || {};
+      if (n.user_id && s.userId && n.user_id !== s.userId && !c.get('isAdmin')) {
+        return c.json({ error: 'Esa nota la escribió otra persona' }, 403);
+      }
+      // Archivar, no destruir (regla permanente del proyecto).
+      db.prepare("UPDATE client_notes SET active=0, updated_at=datetime('now') WHERE id=?").run(n.id);
+      return c.json({ ok: true });
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
   api.get('/:id', requirePerm('clients.read'), c => {
@@ -451,7 +563,13 @@ export function createClientRoutes(db, cfg = {}) {
       <!-- Detail Modal -->
       <div class="modal-overlay" id="detailModal">
         <div class="modal" style="max-width:700px">
-          <div class="modal-head"><h3 id="detailName">Detalle Cliente</h3><button class="modal-close" onclick="closeModal('detailModal')">✕</button></div>
+          <!-- El modal es la VISTA RÁPIDA y se queda exactamente como estaba: misma deuda, mismas
+               facturas, mismo «Registrar cobro» a los mismos clics. Gana UNA cosa y solo una: el
+               enlace a la ficha completa. Todo lo del 360 vive allí, no aquí — dos sitios pintando
+               lo mismo acaban discrepando. -->
+          <div class="modal-head"><h3 id="detailName">Detalle Cliente</h3>
+            <a class="btn btn-secondary btn-sm" id="detailFicha" href="/admin/clients" style="margin-left:auto;margin-right:.5rem">Ver ficha completa →</a>
+            <button class="modal-close" onclick="closeModal('detailModal')">✕</button></div>
           <div class="modal-body" id="detailBody"></div>
         </div>
       </div>
@@ -580,6 +698,7 @@ export function createClientRoutes(db, cfg = {}) {
           '<h4 style="margin-bottom:.75rem">Historial de pedidos</h4>'+
           '<div class="table-wrap"><table><thead><tr><th>Orden</th><th>Total</th><th>Estado</th><th>Fecha</th></tr></thead><tbody>'+ordRows+'</tbody></table></div>'+
           (PUEDE_CRM?'<div id="crmSection" style="margin-top:1.5rem"><div class="skel" style="display:block;height:1.1rem;width:45%"></div></div>':'');
+        var _vf=document.getElementById('detailFicha'); if(_vf) _vf.href='/admin/clients/'+id;
         openModal('detailModal');
         if(PUEDE_CRM) loadCrm(id);
       }
@@ -642,6 +761,195 @@ export function createClientRoutes(db, cfg = {}) {
       }
       </script>`;
     return c.html(adminLayout('Clientes', content, 'clients', c.get('session')?.csrfToken || '', c));
+  });
+
+  // ══ LA FICHA COMPLETA — página con su propia dirección ══════════════════════════════════════
+  // POR QUÉ UNA PÁGINA Y NO SOLO EL MODAL: una ficha sin dirección no se puede enlazar, ni pasar a
+  // un empleado, ni volver a ella con el botón atrás, ni recibir los enlaces de los avisos de DISA.
+  // EL MODAL SE QUEDA EXACTAMENTE COMO ESTÁ —con su deuda, sus facturas y su «Registrar cobro» a los
+  // mismos clics— y gana UNA sola cosa: el enlace para venir aquí. Todo lo del 360 vive SOLO aquí:
+  // dos sitios pintando lo mismo acaban discrepando.
+  views.get('/:id{[0-9]+}', requirePerm('clients.read'), c => {
+    const cli = db.prepare('SELECT c.*, g.name AS group_name FROM clients c LEFT JOIN client_groups g ON c.group_id=g.id WHERE c.id=?').get(c.req.param('id'));
+    if (!cli) return c.html(adminLayout('Cliente', '<div class="card"><p>Ese cliente no existe o se archivó. <a href="/admin/clients">Volver a Clientes</a></p></div>', 'clients', c.get('session')?.csrfToken || '', c), 404);
+    const content = `
+    <style>
+      .f360-cifras{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem;margin-bottom:1rem}
+      .f360-c{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:.7rem .85rem}
+      .f360-c .k{font-size:.7rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text3);margin-bottom:.25rem}
+      .f360-c .v{font-size:1.15rem;font-weight:700;letter-spacing:-.01em;color:var(--text)}
+      .f360-c .v.na{color:var(--text3);font-weight:600}
+      .f360-c .s{font-size:.72rem;color:var(--text2);margin-top:.15rem}
+      .f360-cont{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.25rem}
+      .f360-cont a{display:flex;align-items:center;gap:.45rem;border:1px solid var(--border2);border-radius:10px;padding:.45rem .7rem;text-decoration:none;color:var(--text2);background:var(--bg2);font-size:.83rem}
+      .f360-cont a:hover{border-color:var(--accent);color:var(--accent)}
+      .f360-cont a .n{font-weight:700;color:var(--text)}
+      .f360-cont a.cero{color:var(--text3)}
+      .f360-cont a.cero .n{color:var(--text3)}
+      .f360-tabs{display:flex;gap:.3rem;flex-wrap:wrap;margin-bottom:.75rem}
+      .f360-tabs button{appearance:none;border:1px solid var(--border2);background:var(--bg2);color:var(--text2);font-family:inherit;font-size:.78rem;padding:.25rem .6rem;border-radius:999px;cursor:pointer}
+      .f360-tabs button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+      .f360-ev{display:flex;gap:.65rem;padding:.6rem 0;border-bottom:1px solid var(--border)}
+      .f360-ev i.ti{color:var(--text3);margin-top:.15rem;flex-shrink:0}
+      .f360-ev .t{font-size:.87rem;color:var(--text)}
+      .f360-ev .d{font-size:.78rem;color:var(--text2);margin-top:.1rem}
+      .f360-ev .f{font-size:.74rem;color:var(--text3);white-space:nowrap;margin-left:auto}
+      .f360-nota{border:1px solid var(--border2);border-radius:10px;padding:.6rem .75rem;margin-bottom:.5rem;background:var(--bg2)}
+      .f360-nota .meta{font-size:.72rem;color:var(--text3);margin-top:.3rem}
+      .f360-disa{border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0;padding:.55rem .75rem;margin-bottom:.5rem}
+      @media(max-width:480px){ .f360-cifras{grid-template-columns:repeat(2,1fr)} }
+    </style>
+    <div class="ph">
+      <div>
+        <div style="font-size:.75rem;color:var(--text3)"><a href="/admin/clients" style="color:inherit">Clientes</a> ›</div>
+        <h2 style="margin:0">${escHtml(cli.name)}</h2>
+      </div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <a class="btn btn-secondary btn-sm" href="/admin/clients">← Volver</a>
+      </div>
+    </div>
+    <div id="f360cifras" class="f360-cifras"><div class="skel skel-block"></div></div>
+    <div id="f360cont" class="f360-cont"></div>
+    <div id="f360disa"></div>
+    <div class="grid g2" style="align-items:start;gap:1rem">
+      <div class="card">
+        <h4 style="margin-top:0">Su historia</h4>
+        <div id="f360tabs" class="f360-tabs"></div>
+        <div id="f360tl">Cargando…</div>
+        <div style="text-align:center;padding:.6rem"><button class="btn btn-secondary btn-sm" id="f360mas" style="display:none" onclick="tlMas()">Ver más</button></div>
+      </div>
+      <div>
+        <div class="card">
+          <h4 style="margin-top:0">Qué te compra</h4>
+          <div id="f360compra">Cargando…</div>
+        </div>
+        <div class="card">
+          <h4 style="margin-top:0">Notas</h4>
+          <div id="f360notaFija"></div>
+          <textarea class="form-control" id="f360nueva" rows="2" maxlength="4000" placeholder="Escribe una nota…"></textarea>
+          <button class="btn btn-primary btn-sm" style="margin-top:.4rem" onclick="notaGuardar()">Añadir nota</button>
+          <div id="f360notas" style="margin-top:.75rem"></div>
+        </div>
+      </div>
+    </div>
+    <script>
+    var CID=${cli.id}, SYM=${JSON.stringify(sym)}, D=null, TIPO='', DESDE=0;
+    var TIPO_LBL={documento:'Documentos',cobro:'Cobros',cita:'Citas',oportunidad:'Oportunidades',actividad:'Actividad',proyecto:'Proyectos',tiempo:'Horas',aviso:'Avisos',nota:'Notas'};
+    var eur=function(n){ return SYM+Number(n||0).toFixed(2); };
+    // «—» y NUNCA 0: un cero inventado en una ficha se cree; un hueco se pregunta.
+    function celda(k,v,s,na){ return '<div class="f360-c"><div class="k">'+escHtml(k)+'</div><div class="v'+(na?' na':'')+'">'+v+'</div>'+(s?'<div class="s">'+s+'</div>':'')+'</div>'; }
+    function pintaCifras(){
+      var c=D.cabecera, h=[];
+      if(c.desde.fecha) h.push(celda('Cliente desde', c.desde.fecha, c.desde.alta?'de alta desde '+c.desde.alta:''));
+      else h.push(celda('Cliente desde','Aún no te ha comprado', c.desde.alta?'de alta desde '+c.desde.alta:'',true));
+      h.push(c.ultima ? celda('Última vez que vino', c.ultima.fecha, c.ultima.dias===0?'hoy':'hace '+c.ultima.dias+' días')
+                      : celda('Última vez que vino','—','todavía no ha venido',true));
+      if(c.ritmo) h.push(c.ritmo.ritmo_dias!=null
+        ? celda('Cada cuánto viene','cada '+c.ritmo.ritmo_dias+' días', c.ritmo.visitas+' visitas')
+        : celda('Cada cuánto viene','—', c.ritmo.motivo||'', true));
+      if(c.gasto){
+        h.push(celda('Gasto total', eur(c.gasto.total), c.gasto.facturas+' factura'+(c.gasto.facturas===1?'':'s')+' · sin IVA'));
+        h.push(celda('En los últimos 12 meses', eur(c.gasto.doce_meses), 'sin IVA'));
+        h.push(c.ticket_medio!=null ? celda('Ticket medio', eur(c.ticket_medio),'') : celda('Ticket medio','—','aún no hay facturas',true));
+        h.push(celda('Te debe', eur(c.deuda.total), c.deuda.oldest?'la más antigua: '+c.deuda.oldest.invoice_number:'sin deuda pendiente'));
+        h.push(!c.margen ? celda('Margen que deja','—','no se puede calcular',true)
+          : c.margen.sinCoste ? celda('Margen que deja','—','sus líneas no tienen coste conocido',true)
+          : celda('Margen que deja', eur(c.margen.beneficio), c.margen.pct!=null?Number(c.margen.pct).toFixed(1)+'%':''));
+      }
+      document.getElementById('f360cifras').innerHTML=h.join('');
+      // Contadores: con 0 se enseñan igual, en gris. Un 0 es información.
+      document.getElementById('f360cont').innerHTML=(D.contadores||[]).map(function(x){
+        var v = x.key==='deuda' ? eur(x.eur) : x.n;
+        var cero = x.key==='deuda' ? !(x.eur>0) : !x.n;
+        return '<a class="'+(cero?'cero':'')+'" href="'+x.href+'"><i class="ti '+x.icon+'"></i>'+escHtml(x.etiqueta)+' <span class="n">'+v+'</span></a>';
+      }).join('');
+      // Lo que DISA ve de él: los MISMOS avisos que en el vigía, con su decisión propuesta.
+      var d=D.disa;
+      document.getElementById('f360disa').innerHTML = (d&&d.length)
+        ? '<div class="card" style="margin-bottom:1rem"><h4 style="margin-top:0">Lo que DISA ve de este cliente</h4>'
+          + d.map(function(a){ return '<div class="f360-disa"><strong>'+escHtml(a.etiqueta)+'</strong><div style="font-size:.85rem">'+escHtml(a.titulo||'')+'</div>'
+            +(a.detalle?'<div style="font-size:.8rem;color:var(--text2)">'+escHtml(a.detalle)+'</div>':'')
+            +'</div>'; }).join('')
+          + '<a href="/admin/vigia" style="font-size:.8rem">Ver todo en el vigía →</a></div>'
+        : '';
+      var q=D.compra;
+      document.getElementById('f360compra').innerHTML = q==null
+        ? '<div style="color:var(--text3);font-size:.85rem">—</div>'
+        : (q.length ? '<table style="width:100%;font-size:.84rem"><tbody>'+q.map(function(x){
+              return '<tr><td>'+escHtml(x.nombre)+'</td><td style="text-align:right;color:var(--text2)">'+x.veces+'×</td><td style="text-align:right;font-weight:600">'+eur(x.base)+'</td></tr>'; }).join('')+'</tbody></table>'
+            : '<div style="color:var(--text3);font-size:.85rem">Todavía no te ha comprado nada en los últimos 12 meses.</div>');
+      document.getElementById('f360notaFija').innerHTML = D.cliente.notes
+        ? '<div class="alert alert-ok" style="margin-bottom:.6rem">'+escHtml(D.cliente.notes)+'</div>' : '';
+    }
+    // Sin onclick inline con comillas anidadas: se marca el botón con data-tipo y se escucha una vez.
+    // (Las comillas escapadas dentro de un template literal del servidor llegan ya desescapadas al
+    //  navegador y parten la cadena — pasa en silencio y se lleva el script entero por delante.)
+    function pintaTabs(tipos){
+      var h='<button data-tipo="" aria-pressed="'+(TIPO===''?'true':'false')+'">Todo</button>';
+      h+=(tipos||[]).map(function(t){ return '<button data-tipo="'+escHtml(t)+'" aria-pressed="'+(TIPO===t?'true':'false')+'">'+escHtml(TIPO_LBL[t]||t)+'</button>'; }).join('');
+      document.getElementById('f360tabs').innerHTML=h;
+    }
+    document.getElementById('f360tabs').addEventListener('click', function(ev){
+      var b=ev.target.closest('button[data-tipo]'); if(!b) return;
+      tlFiltro(b.getAttribute('data-tipo'));
+    });
+    function tlFiltro(t){ TIPO=t; DESDE=0; document.getElementById('f360tl').innerHTML=''; tlCargar(); }
+    function tlMas(){ tlCargar(); }
+    async function tlCargar(){
+      var r=await api('GET','/api/erp/clients/'+CID+'/360/timeline?tipo='+encodeURIComponent(TIPO)+'&desde='+DESDE+'&cuantos=25');
+      pintaTabs(r.tipos);
+      var box=document.getElementById('f360tl');
+      if(DESDE===0) box.innerHTML='';                 // la primera página sustituye; las siguientes añaden
+      if(DESDE===0 && !r.eventos.length){
+        box.innerHTML='<div style="color:var(--text3);font-size:.87rem;padding:.5rem 0">Aquí no hay nada todavía'+(TIPO?' de ese tipo':'')+'. En cuanto le factures, le des cita o le escribas una nota, aparecerá aquí.</div>';
+      } else {
+        box.innerHTML += r.eventos.map(function(e){
+          var f=String(e.ts||'').slice(0,10);
+          var t=e.href?'<a href="'+e.href+'" style="color:inherit">'+escHtml(e.title)+'</a>':escHtml(e.title);
+          return '<div class="f360-ev"><i class="ti '+(e.icon||'ti-point')+'"></i><div style="flex:1"><div class="t">'+t+'</div>'
+            +(e.detail?'<div class="d">'+escHtml(e.detail)+'</div>':'')+'</div><span class="f">'+f+'</span></div>';
+        }).join('');
+      }
+      DESDE+=r.eventos.length;
+      document.getElementById('f360mas').style.display=r.hay_mas?'':'none';
+    }
+    async function notaGuardar(){
+      var t=document.getElementById('f360nueva').value.trim(); if(!t){ toast('Escribe algo','err'); return; }
+      try{ await api('POST','/api/erp/clients/'+CID+'/notas',{texto:t}); document.getElementById('f360nueva').value=''; toast('Nota guardada'); notasCargar(); tlFiltro(TIPO); }
+      catch(e){ toast(e.message,'err'); }
+    }
+    async function notaEditar(id, actual){
+      var t=prompt('Editar la nota:', actual); if(t==null) return;
+      try{ await api('PUT','/api/erp/clients/'+CID+'/notas/'+id,{texto:t}); toast('Nota actualizada'); notasCargar(); tlFiltro(TIPO); }
+      catch(e){ toast(e.message,'err'); }
+    }
+    async function notaBorrar(id){
+      if(!confirm('¿Quitar esta nota?')) return;
+      try{ await api('DELETE','/api/erp/clients/'+CID+'/notas/'+id); toast('Nota quitada'); notasCargar(); tlFiltro(TIPO); }
+      catch(e){ toast(e.message,'err'); }
+    }
+    async function notasCargar(){
+      var ns=await api('GET','/api/erp/clients/'+CID+'/notas');
+      document.getElementById('f360notas').innerHTML = ns.length ? ns.map(function(n){
+        return '<div class="f360-nota"><div style="white-space:pre-wrap;font-size:.86rem">'+escHtml(n.texto)+'</div>'
+          +'<div class="meta">'+escHtml(n.user_name||'—')+' · '+String(n.created_at||'').slice(0,16).replace('T',' ')
+          +(n.updated_at?' · editada':'')
+          +' <a href="#" data-nedit="'+n.id+'">editar</a>'
+          +' · <a href="#" data-ndel="'+n.id+'">quitar</a></div></div>'; }).join('')
+        : '<div style="color:var(--text3);font-size:.83rem">Sin notas todavía.</div>';
+    }
+    document.getElementById('f360notas').addEventListener('click', function(ev){
+      var e=ev.target.closest('a[data-nedit]'), d=ev.target.closest('a[data-ndel]');
+      if(e){ ev.preventDefault(); var caja=e.closest('.f360-nota'); notaEditar(e.getAttribute('data-nedit'), caja.firstChild.textContent); }
+      else if(d){ ev.preventDefault(); notaBorrar(d.getAttribute('data-ndel')); }
+    });
+    (async function(){
+      try{ D=await api('GET','/api/erp/clients/'+CID+'/360'); pintaCifras(); }
+      catch(e){ document.getElementById('f360cifras').innerHTML='<div class="alert alert-err">'+escHtml(e.message)+'</div>'; }
+      tlCargar(); notasCargar();
+    })();
+    </script>`;
+    return c.html(adminLayout(cli.name, content, 'clients', c.get('session')?.csrfToken || '', c));
   });
 
   views.get('/groups', requirePerm('clients.read'), c => {

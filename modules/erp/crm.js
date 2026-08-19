@@ -611,7 +611,10 @@ export function opportunityEmail(tono, ctx) {
 const CANAL_ICON = { email: 'ti-mail', telefono: 'ti-phone', whatsapp: 'ti-brand-whatsapp', reunion: 'ti-users', nota: 'ti-note', otro: 'ti-dots' };
 const TIPO_ACT_ICON = { contacto: 'ti-phone', nota: 'ti-note', compromiso: 'ti-calendar-event', email: 'ti-mail', cambio_etapa: 'ti-arrow-right-circle', cierre: 'ti-flag' };
 
-export const TIMELINE_ALL = { oportunidades: true, actividad: true, quotes: true, orders: true, albaranes: true, invoices: true, cobros: true };
+// Las fuentes del timeline, cada una con su permiso propio aguas arriba. Las cuatro últimas las
+// añade la FICHA 360: agenda, proyectos, horas y notas.
+export const TIMELINE_ALL = { oportunidades: true, actividad: true, quotes: true, orders: true, albaranes: true, invoices: true, cobros: true,
+                              citas: true, proyectos: true, tiempo: true, notas: true };
 
 export function clientTimeline(db, clientId, hoy, opts = {}) {
   const inc = { ...TIMELINE_ALL, ...(opts.include || {}) };
@@ -718,6 +721,90 @@ export function clientTimeline(db, clientId, hoy, opts = {}) {
              title: titulo, detail: ['Factura ' + (invNum.get(a.invoice_id) || ''), a.note || ''].filter(Boolean).join(' · '),
              badge: 'b-yellow', href: '/admin/invoices/' + a.invoice_id });
     }
+  }
+
+  // 5) AGENDA — las citas del cliente, incluidas las que NO salieron bien. Una cancelada y un
+  // plantón son parte de su historia: esconderlos dejaría una ficha que solo cuenta lo bonito.
+  // El estado sale tal cual del motor de agenda; aquí no se deduce ninguno.
+  if (inc.citas) {
+    let citas = [];
+    try {
+      citas = db.prepare(
+        `SELECT c.*, GROUP_CONCAT(p.name, ' + ') AS servicios
+           FROM citas c
+           LEFT JOIN cita_servicios cs ON cs.cita_id = c.id
+           LEFT JOIN products p ON p.id = cs.product_id
+          WHERE c.cliente_id=? AND c.archived=0
+          GROUP BY c.id`).all(clientId);
+    } catch { citas = []; }
+    const EST = { pedida: ['Cita pedida', 'b-yellow'], confirmada: ['Cita confirmada', 'b-blue'],
+                  atendida: ['Vino a su cita', 'b-green'], no_show: ['NO SE PRESENTÓ', 'b-red'],
+                  anulada: ['Cita anulada', 'b-gray'] };
+    for (const c of citas) {
+      const [tit, badge] = EST[c.estado] || ['Cita', 'b-gray'];
+      push({ ts: c.fecha + 'T' + String(Math.floor(c.inicio_min / 60)).padStart(2, '0') + ':' + String(c.inicio_min % 60).padStart(2, '0') + ':00',
+             kind: 'cita', icon: c.estado === 'no_show' ? 'ti-user-x' : 'ti-calendar-event',
+             title: tit + (c.codigo ? ' · ' + c.codigo : ''),
+             detail: [c.servicios || '', c.dur_min ? c.dur_min + ' min' : ''].filter(Boolean).join(' · '),
+             badge, href: '/admin/citas' });
+    }
+  }
+
+  // 6) PROYECTOS Y HORAS. Las horas NO tienen cliente: cuelgan del proyecto, y el proyecto sí lo
+  // tiene. Se leen A TRAVÉS DEL PROYECTO — no se añade cliente a las entradas de tiempo, que sería
+  // duplicar un dato que ya se sabe. Cada permiso por separado: se pueden ver proyectos sin ver horas.
+  if (inc.proyectos || inc.tiempo) {
+    let proys = [];
+    try { proys = db.prepare('SELECT * FROM proyectos WHERE cliente_id=? AND active=1').all(clientId); } catch { proys = []; }
+    if (inc.proyectos) for (const p of proys)
+      push({ ts: p.created_at || (p.fecha_inicio ? p.fecha_inicio + 'T00:00:00' : null), kind: 'proyecto', icon: 'ti-folders',
+             title: 'Proyecto ' + (p.codigo || '') + (p.nombre ? ' · ' + p.nombre : ''),
+             detail: [p.estado || '', p.modo_cobro || ''].filter(Boolean).join(' · '),
+             badge: p.estado === 'cerrado' ? 'b-gray' : 'b-blue', href: '/admin/proyectos' });
+    if (inc.tiempo && proys.length) {
+      const ph = proys.map(() => '?').join(',');
+      const nom = new Map(proys.map(p => [p.id, p.codigo || p.nombre || '']));
+      let ent = [];
+      try {
+        ent = db.prepare(
+          `SELECT * FROM time_entries WHERE active=1 AND duracion_seg IS NOT NULL AND proyecto_id IN (${ph}) ORDER BY fecha DESC LIMIT 200`
+        ).all(...proys.map(p => p.id));
+      } catch { ent = []; }
+      for (const t of ent) {
+        const h = Math.floor((t.duracion_seg || 0) / 3600), m = Math.round(((t.duracion_seg || 0) % 3600) / 60);
+        push({ ts: t.fecha + 'T00:00:00', kind: 'tiempo', icon: 'ti-clock-play',
+               title: (h ? h + ' h ' : '') + (m ? m + ' min' : (h ? '' : '—')) + ' en ' + (nom.get(t.proyecto_id) || 'un proyecto'),
+               detail: [t.descripcion || '', t.facturable ? 'facturable' : 'no facturable'].filter(Boolean).join(' · '),
+               badge: t.facturable ? 'b-blue' : 'b-gray', href: '/admin/tiempo' });
+      }
+    }
+  }
+
+  // 7) CORREOS DE CITA. Ojo con lo que se promete: el sistema sabe que se PULSÓ el botón, no que el
+  // mensaje llegara. Por eso pone «marcado como enviado» y nunca «entregado» — el mismo texto que
+  // usa la cola de envíos. Los correos del CRM ya entran arriba, como actividad.
+  if (inc.citas) {
+    let avisos = [];
+    try {
+      avisos = db.prepare(
+        `SELECT a.*, c.codigo FROM cita_avisos a JOIN citas c ON c.id = a.cita_id
+          WHERE c.cliente_id=? ORDER BY a.id DESC LIMIT 100`).all(clientId);
+    } catch { avisos = []; }
+    const CANAL = { whatsapp: 'WhatsApp', sms: 'SMS', email: 'email' };
+    for (const a of avisos)
+      push({ ts: a.created_at || a.enviado_at, kind: 'aviso', icon: 'ti-send',
+             title: (a.tipo === 'recordatorio' ? 'Recordatorio' : 'Confirmación') + ' por ' + (CANAL[a.canal] || a.canal || '—'),
+             detail: 'marcado como enviado' + (a.codigo ? ' · ' + a.codigo : ''), badge: 'b-gray', href: '/admin/citas/cola' });
+  }
+
+  // 8) NOTAS A MANO — lo único que esta ficha escribe. Van con autor y fecha.
+  if (inc.notas) {
+    let notas = [];
+    try { notas = db.prepare('SELECT * FROM client_notes WHERE client_id=? AND active=1').all(clientId); } catch { notas = []; }
+    for (const n of notas)
+      push({ ts: n.created_at, kind: 'nota', icon: 'ti-note',
+             title: n.texto.length > 90 ? n.texto.slice(0, 90) + '…' : n.texto,
+             detail: (n.user_name || 'alguien') + (n.updated_at ? ' · editada' : ''), badge: 'b-yellow', nota_id: n.id });
   }
 
   // Más reciente arriba. `created_at` de las tablas viejas es 'YYYY-MM-DD HH:MM:SS' y el de las

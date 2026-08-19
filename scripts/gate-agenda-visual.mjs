@@ -139,11 +139,20 @@ try {
   ok(zebra === 0, 'no existe ninguna regla de fondo alterno en las filas de la rejilla', zebra + ' reglas');
 
   // ── [4] La línea de ahora ─────────────────────────────────────────────────────────────────────
+  // La jornada se abre de par en par para este trozo: el navegador va en UTC y el horario de prueba
+  // es 9–18, así que a las 8:50 UTC «ahora» cae FUERA de la rejilla y la línea se oculta — que es lo
+  // correcto, pero deja la prueba midiendo el reloj en vez del producto. Tercera vez con la misma
+  // trampa: aquí no se vuelve a caer.
+  db.prepare("DELETE FROM horario_tramos WHERE scope='negocio'").run();
+  for (let dow = 0; dow <= 6; dow++) insTramo.run('negocio', null, dow, 0, 24 * 60 - 1);
+  await abrir();
   ok(await page.evaluate(() => !!document.getElementById('agAhora')), 'con HOY a la vista, la línea de ahora se pinta');
   ok(await page.evaluate(() => { const p = document.getElementById('agAhoraH'); return !!p && /^\d{1,2}:\d{2}$/.test(p.textContent); }),
      'con su pastilla de la hora actual sobre la columna de horas');
   await abrir(otroDia(7));
   ok(!(await page.evaluate(() => !!document.getElementById('agAhora'))), 'en un día que NO es hoy, la línea de ahora NO aparece');
+  db.prepare("DELETE FROM horario_tramos WHERE scope='negocio'").run();
+  for (let dow = 0; dow <= 6; dow++) insTramo.run('negocio', null, dow, 9 * 60, 18 * 60);
 
   // ── [5] El scroll de apertura ─────────────────────────────────────────────────────────────────
   // Se abre la jornada de par en par (0:00–23:59) para este trozo: con un horario de 9 a 18 y siendo
