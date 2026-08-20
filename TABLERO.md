@@ -89,6 +89,58 @@
 
 <!-- BARRIDO:FIN -->
 
+## 🧭 ORDEN DE TRABAJO ACORDADO (20 ago 2026) — nada de esto está iniciado
+
+> **Sesión de decisión: cero código, cero commits de producto.** Aquí queda el orden que se acordó y
+> el detalle de cada tarea. Ninguna se inicia sin encargo. **El puntero del Peldaño 8 NO se mueve:**
+> las tres son transversales o previas, y el peldaño sigue ABIERTO esperando su encargo.
+
+**EL ORDEN:** (1) sanear las comprobaciones automáticas · (2) cerrar los cabos sueltos de la Agenda,
+como **UNA sola tarea entera** · (3) funciones nuevas · (4) volver al **Peldaño 8 — Salud/bienestar**.
+
+### ⬜ TAREA 1 — Sanear las comprobaciones automáticas  (la siguiente, a la espera de encargo)
+
+Tres piezas. **Dos de ellas cambiaron al auditarlas el 20 ago**, y se dejan escritas como están de
+verdad y no como se suponía — que es justo el problema que esta tarea viene a resolver.
+
+- **(a) `gate-vigia-agenda` YA NO FALLA.** ⚙️ *Corregido en el Paso 0.* Se daba por «falla siempre,
+  1 de 41». **Hoy pasa 41/41**, comprobado tres veces: suelto, y en los dos barridos completos del día
+  (serie y paralelo). Lo arregló **de rebote el rediseño del Inicio**: la aserción que estaba en rojo
+  era que *los hallazgos de agenda no asomaban en el bloque del vigía del Inicio*, y ahora asoman en
+  «DISA decide». **Lo que queda no es arreglar el gate: es RETIRAR la declaración caducada** de
+  `ROJOS_CONOCIDOS` en `run-gates.mjs`, que sigue anunciando en cada pasada un rojo que ya no existe.
+  Un puntero rancio manda al siguiente chat al sitio equivocado con toda la confianza del mundo.
+- **(b) Quitar la dependencia de la HORA DEL DÍA** a `gate-agenda-sencilla` y `gate-oficio-pantalla`:
+  con el mismo código dan resultado distinto por la tarde. Un gate que depende del reloj no es un
+  gate, es una moneda al aire. *(Observación de Ibrahin; no reproducida en esta sesión.)*
+- **(c) Las comprobaciones de agenda y menú entran en el barrido.** ⚙️ *Corregido en el Paso 0:* de
+  las seis, **DOS YA ESTÁN DENTRO** desde el 19 ago (`gate-agenda-visual` y `gate-menu-navegacion`,
+  en el grupo `clientes`). **Quedan CUATRO fuera** — `gate-agenda-sencilla`, `gate-agenda-calendario`,
+  `gate-citas-pantalla` y `gate-oficio-pantalla` — y **ni siquiera están declaradas** como excluidas
+  ni como deuda: cero menciones en el runner, o sea **invisibles para el barrido**. Decisión de
+  Ibrahin: **esas cuatro entran**. Se aparcaron el 18 ago porque alargaban la revisión; desde que el
+  barrido corre **en paralelo y en dos modos** ese argumento ya no pesa, y una comprobación que nadie
+  ejecuta acaba mintiendo.
+
+### ⬜ TAREA 2 — Cabos sueltos de la Agenda  (apuntada, no empezada)
+
+**Va ENTERA, no en trozos.** Cinco cabos:
+- Dos citas **a la misma hora** se pintan una encima de otra.
+- **No se puede estirar una cita** por el borde.
+- En **móvil** solo se cambia de mes en vertical: falta el gesto horizontal.
+- Las citas **no guardan quién las anuló**. `anulada_at` dice *cuándo*, no *si fue el cliente o el
+  negocio* — y sin eso **no se puede separar el plantón del cierre del negocio**, que son dos cosas
+  distintas y una de ellas es un dato de negocio.
+- Desde la **ficha del cliente**, sus citas se abren **sin filtrar por él**.
+
+### ⬜ TAREA 3 — Funciones nuevas  (apuntadas, sin encargo)
+
+- **Área de agenda en el constructor de analítica.** Sin ella, los cuatro avisos de agenda de DISA
+  **no pueden llevar gráfico**.
+- **Control horario (fichaje).**
+- **Agenda del CRM.**
+
+
 
 ## Eje A: UX  ✅ COMPLETO (U0–U9)
 Objetivo: acercar cada pantalla y flujo a "el dueño no opera, decide". Método: auditoría primero, luego ejecución en piezas pequeñas. Cada tarea define cómo se verifica y cierra con regresión 0.
