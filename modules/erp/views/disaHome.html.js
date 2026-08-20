@@ -375,7 +375,10 @@ export function disaHomeHtml({ userName, simbolo = '€' }) {
           if (!cmp || !cmp.hay) return '<span class="cm-cmp neutro">— sin comparación</span>';
           var f = cmp.tono === 'bien' ? 'ti-trending-up' : cmp.tono === 'mal' ? 'ti-trending-down' : 'ti-minus';
           var txt;
-          if (cmp.puntos) txt = (cmp.delta > 0 ? '+' : '') + num(cmp.delta, 1) + ' p.p.';
+          // Un «— 0,00 €» se lee igual que el «—» de «no hay dato», y son cosas distintas: una es
+          // «no lo sé» y la otra «lo sé, y es lo mismo». Se dice con palabras.
+          if (cmp.delta === 0) txt = 'igual que el mes pasado';
+          else if (cmp.puntos) txt = (cmp.delta > 0 ? '+' : '') + num(cmp.delta, 1) + ' p.p.';
           else if (cmp.pct != null) txt = (cmp.pct > 0 ? '+' : '') + num(cmp.pct, 1) + ' %';
           else txt = (cmp.delta > 0 ? '+' : '') + (unidad === 'eur' ? eur(cmp.delta) : ent(cmp.delta));
           return '<span class="cm-cmp ' + cmp.tono + '"><i class="ti ' + f + '"></i>' + esc(txt) + '</span>';
@@ -560,7 +563,11 @@ export function disaHomeHtml({ userName, simbolo = '€' }) {
               plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } },
                 tooltip: { callbacks: { label: function(ctx){ return ctx.dataset.label + ': ' + eur(ctx.parsed.y); } } } },
               scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: true } },
-                        y: { beginAtZero: true, ticks: { font: { size: 10 }, callback: function(v){ return eur0(v); } } } },
+                        y: { beginAtZero: true, ticks: { font: { size: 10 }, maxTicksLimit: 7,
+                             // Con un negocio sin ventas, Chart.js reparte el eje entre 0 y 1 y todos
+                             // los tramos se redondeaban al mismo texto («0 €, 0 €, 1 €, 1 €…»). Se
+                             // rotulan solo los enteros; los demás quedan mudos, que es la verdad.
+                             callback: function(v){ return Number.isInteger(v) ? eur0(v) : ''; } } } },
             },
           });
         }
@@ -643,7 +650,7 @@ export function disaHomeHtml({ userName, simbolo = '€' }) {
                 if (l.codigo) partes.push(esc(l.codigo));
                 if (l.fecha) partes.push(esc(cuando(l.fecha)));
                 return '<div class="cm-dec' + (i === 0 ? ' primera' : '') + '">'
-                  + '<span class="cifra">' + (l.moneda ? eur(l.cifra) : ent(l.cifra)) + '</span>'
+                  + '<span class="cifra">' + (l.moneda ? eur(l.cifra) : ent(l.cifra) + (l.unidad ? ' ' + esc(l.unidad) : '')) + '</span>'
                   + '<span class="cm-pill" style="background:' + c[0] + ';color:' + c[1] + '">' + esc(l.areaEtiqueta) + '</span>'
                   + '<span class="tx"><b style="color:var(--text);font-weight:600">' + esc(l.etiqueta) + '</b>'
                   + (partes.length ? ' · ' + partes.join(' · ') : '') + '</span>'

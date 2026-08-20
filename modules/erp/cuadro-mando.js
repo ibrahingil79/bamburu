@@ -294,7 +294,7 @@ export const SECCIONES = {
       const lineas = priorizar(res.hallazgos || [], res.hoy).slice(0, 3).map(a => ({
         detector: a.detector, area: a.area, areaEtiqueta: a.areaEtiqueta,
         etiqueta: a.detectorEtiqueta,
-        cifra: a.cifra, moneda: !!a.moneda,
+        cifra: a.cifra, moneda: !!a.moneda, unidad: a.moneda ? null : (UNIDAD[a.detector] || null),
         fecha: a.fecha || null,
         quien: nombreDeRef(db, a.ref),
         codigo: (a.ref && (a.ref.invoice_number || a.ref.internal_code || a.ref.supplier_invoice_number)) || null,
@@ -304,6 +304,18 @@ export const SECCIONES = {
       return { lineas };
     },
   },
+};
+
+// LA UNIDAD DE LA CIFRA. El vigía manda el número y si es dinero o no, pero no QUÉ MIDE: un «13» a
+// secas delante de «hueco que se va a perder» no dice nada. La unidad es un rótulo de producto por
+// detector —no un cálculo—, y sale de lo que cada uno ya declara en su cabecera (horas libres, días,
+// faltas). Un detector nuevo sin entrada aquí se pinta sin unidad, como hasta ahora: nunca inventa.
+const UNIDAD = {
+  hueco_perdido:    'h libres',
+  cliente_dormido:  'días',
+  fuera_de_ritmo:   'días',
+  sin_proxima_cita: 'días',
+  ausencias:        'faltas',
 };
 
 // El NOMBRE de quien va el aviso, resuelto igual que en la pantalla del vigía (`resolversDe`): una

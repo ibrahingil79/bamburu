@@ -1593,6 +1593,14 @@ no puede verla**.
 comprobaron **revirtiendo `settings.js` a `HEAD`**: fallan idénticos sin mi cambio (un 409 de Resend y
 un catálogo de 10 tipos donde el gate espera 8). Otro tema.
 
+**TRES DETALLES QUE SALIERON AL MIRARLO EN LA DIRECCIÓN PÚBLICA** (negocio sin ventas todavía), los
+tres arreglados: el chip de comparación decía «— 0,00 €», que se lee igual que el «—» de «no hay
+dato» siendo cosas distintas (ahora dice «igual que el mes pasado»); el eje del gráfico repetía
+«0 € · 0 € · 1 € · 1 €» porque con todo a cero Chart.js reparte el eje en fracciones que se
+redondeaban al mismo texto (ahora solo se rotulan los enteros); y la cifra de «DISA decide» salía sin
+unidad —un «13» delante de «hueco que se va a perder»—, así que cada detector no monetario lleva
+ahora su rótulo (h libres · días · faltas), tomado de lo que él mismo declara.
+
 **QUÉ NO SE HA TOCADO:** los motores de cálculo, el esquema de base de datos (**ninguna tabla nueva**),
 las pantallas de Agenda, CRM, Facturas y Oportunidades, el detector de enfriamiento y WRITABLE_TABLES.
 
