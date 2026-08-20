@@ -1482,6 +1482,82 @@ completa los cubra, hay que meterlos en un grupo — decisión del dueño, porqu
 puestos frente a con un puesto). **Desplegado y verificado por HTTPS** en `peluqueria-gil.bamburu.com`:
 Agenda con 2 entradas, la sección con sus 5, y las 7 rutas viejas a 200.
 
+### La regresión, de 11 min 30 s a 6 min — en paralelo, con dos modos y sin bajar el listón  ✅ HECHO (2026-08-20)
+
+**LA AUDITORÍA PRIMERO, Y DESMINTIÓ LO QUE PARECÍA.** El barrido tardaba **11 min 30 s** (medido con
+`time`, 71 gates). El tiempo NO se iba donde uno diría: arrancar Chromium son **0,6 s** (26 s en todo
+el barrido, un **3 %**) y dar de alta un negocio de prueba **0,36 s** (3 s en total, un **0,4 %**).
+Optimizar cualquiera de las dos cosas no habría cambiado nada. Donde se va el tiempo es en el trabajo
+de verdad: **176 cargas de página a ~0,9 s (158 s, 22 %)** y **101 s de esperas fijas** declaradas
+dentro de los propios gates (14 %) — `gate-cliente-ficha-completa` duerme 38 s a propósito de sus 122.
+El resto son aserciones, siembra y quince gates que mandan correo real al buzón sumidero de Resend.
+Contra eso no hay truco de arranque: hay que hacer varias cosas a la vez.
+
+**Consecuencia directa: «el negocio de prueba se prepara una vez y se reutiliza» AHORRA 2,5 s.** Se
+dice porque es la verdad medida, no lo que se esperaba. Lo que sí valía —y es lo que se ha hecho— era
+la otra mitad de esa frase: **declarar cuáles empiezan de cero**, porque sin esa declaración no se
+puede paralelizar sin romper nada. Son siete, en `EMPIEZAN_DE_CERO`, y la declaración **se comprueba
+contra el código en cada pasada**: si un gate llama a `provisionTenant` y no está en la lista (o al
+revés), el runner lo dice. Una declaración que nadie verifica se pudre en dos semanas.
+
+**EL PLANIFICADOR: tres clases y tres topes.** 43 de los 71 gates escriben en el MISMO negocio de
+desarrollo, así que a lo bruto no es «más rápido», es un gate contando las facturas que le crea otro.
+Cada gate cae en una clase: **empieza de cero** (negocio propio, paralelismo libre), **solo**
+(necesita el negocio en silencio) o **compartido** (toca solo lo suyo, con su producto de sufijo único
+y borrado por ID — el patrón que `gate-fixtures.mjs` ya traía escrito «para que dos gates a la vez no
+puedan pisarse»).
+
+**LOS CUATRO NÚMEROS, Y NINGUNO ES UN CAPRICHO:**
+- **2 con navegador a la vez.** Dos motivos, los dos medidos. (1) `index.js` frena a **600
+  peticiones/min por IP** y todos los gates salen de 127.0.0.1: con 4 a la vez se frenaron **7
+  peticiones en un solo minuto** —apenas por encima del tope— y **eso tumbó SEIS gates**, porque un
+  429 en una carga de página deja la pantalla sin su script. **Ese freno no se toca: es un control de
+  seguridad.** (2) Con 3, una pasada de cada cuatro moría con `TargetCloseError: Target.createTarget`
+  (Chromium sin poder abrir pestaña con tres navegadores para cuatro núcleos); el gate suelto pasa
+  6/0, así que no era suyo. **Un rojo que sale una vez de cada cuatro es peor que uno fijo**: enseña a
+  desconfiar del barrido.
+- **2 sobre el negocio compartido** · **4 procesos en total** · **los SOLOS, de uno en uno.**
+- El barrido guarda los tiempos en `data/tiempos-gates.json` (fuera del repo) y arranca por lo más
+  lento: si `gate-cliente-ficha-completa` (2 min) entrara el último, todos esperarían por él.
+
+**SEIS ROJOS REALES DE CONCURRENCIA, DECLARADOS UNO A UNO. Ningún gate se ha tocado.** Salieron al
+paralelizar y cada uno tenía razón; lo que se ha escrito es POR QUÉ corre solo:
+- `gate-facturar-horas-pantalla` y `gate-rentabilidad-pantalla` miden el **total de ventas del negocio
+  entero** antes y después y exigen neto-cero al céntimo: salió `340.087,01 → 341.087,01`, y la
+  diferencia era **una factura de otro gate**.
+- `gate-nav-inicio-disa` cuenta las **propuestas pendientes** y las compara con el badge del riel: los
+  seis gates de propuestas se las movían entre las dos lecturas (39 → 40).
+- `gate-avisos-badge` y `verify-avisos-permisos` cuentan **todos los avisos** del negocio.
+- `gate-devoluciones-proveedor` afirma que el stock y el WAC del **producto 1 —el vivo, el compartido—**
+  vuelven al valor de partida: otro gate se lo dejó en 47 donde esperaba 52.
+
+**Y UN FALLO QUE ERA MÍO, NO DE LOS GATES.** La bandera que bloquea a los compartidos se calculaba UNA
+vez al entrar en la pasada del planificador, así que al arrancar un «solo» el bucle **seguía admitiendo
+compartidos detrás de él**. `gate-avisos-badge` y `gate-nav-inicio-disa` arrancaron juntos y los dos
+contaron mal. Se vio porque el barrido se corrió **cinco veces**, no una: un fallo de concurrencia que
+sale una vez de cada tres no aparece en la primera pasada.
+
+**LOS DOS MODOS (RITUAL.md actualizado):**
+- **`--tocado`, antes de cada commit.** Sale de `git diff` y de tres fuentes que se SUMAN: la tabla
+  `AFECTA`, **el grafo de imports** (todo gate que importe un fichero cambiado — automático, no se
+  pudre; cubre el 58 % del árbol, y el 42 % restante son rutas y vistas que los gates ejercitan por
+  HTTP sin importarlas, de ahí la tabla) y los gates que hayas cambiado tú. **Un fichero que no cubra
+  ninguna regla NO se adivina: corre el barrido entero y dice qué fichero lo obligó.** Medido: tocar
+  la vista del Inicio → 8 gates, **2 min 50 s**; una ruta de compras → 22 gates; un motor troncal →
+  todo. `--lista` enseña la selección sin correr nada.
+- **`--all`, una vez, al cerrar.** **6 minutos.** Es EL veredicto; el corto no cierra una tarea.
+
+**LA COMPROBACIÓN QUE PEDÍA EL ENCARGO: mismo resultado, gate por gate, por nombre.** El barrido en
+serie de partida (**11 min 30 s**, 59/71) se guardó como veredicto ordenado y se comparó con `diff`
+contra **dos pasadas consecutivas en paralelo**: **idénticas las dos**, y **idénticas entre sí**.
+Mismos 59 verdes, mismos 12 rojos por nombre —los mismos 12 previos— y **cero peticiones frenadas**
+(`security_events` no sumó ni una en ninguna de las dos). **11 min 30 s → 6 min 00 s: 1,9×.**
+
+**Lo que NO se ha hecho, a propósito:** no se ha tocado el freno de peticiones, no se ha bajado ni una
+aserción, no se ha sacado ni un gate del barrido y no se ha silenciado ni un rojo. Con 3 navegadores
+el barrido baja a 4 min 30 s, pero es inestable; **se prefiere un minuto y medio más y que el verde
+signifique algo**.
+
 ### El Inicio deja de ser una lista de deberes: EL CUADRO DE MANDO DEL DÍA — **TAREA TRANSVERSAL** (el puntero del peldaño 8 NO se mueve)  ✅ HECHO (2026-08-20)
 
 **QUÉ ERA EL INICIO Y QUÉ ES AHORA.** Era un saludo, una tarjeta de DISA, cuatro cifras sueltas

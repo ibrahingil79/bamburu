@@ -6,6 +6,64 @@
 ---
 
 
+## LA REGRESIÓN TIENE DOS MODOS: EL CORTO Y EL COMPLETO
+
+> Antes iba uno solo, entero, en serie, y tardaba **11 min 30 s**. Correrlo antes de cada commit era
+> impensable, así que no se corría — y los rojos aparecían todos juntos al final. Ahora son dos.
+
+**ANTES DE CADA COMMIT — el corto. Solo los gates de lo que has tocado.**
+
+```
+node scripts/run-gates.mjs --tocado
+```
+
+Sale de `git diff` y de tres sitios que se SUMAN, nunca se restan: la tabla `AFECTA` del runner, el
+grafo de imports (todo gate que importe un fichero cambiado, automático y sin mantenimiento) y los
+gates que hayas cambiado tú. **Un fichero que no cubra ninguna regla NO se adivina:** el modo corto
+se convierte en barrido completo y dice qué fichero lo obligó. Con `--lista` enseña la selección sin
+correr nada.
+
+Cuánto tarda, medido: tocar la vista del Inicio → 8 gates, **2 min 50 s**. Tocar una ruta de compras
+→ 22 gates. Tocar un motor troncal (`margen.js`, `models.js`, cualquier cosa de `core/`) → **corre
+todo**, que es lo correcto.
+
+**AL CERRAR LA TAREA — el completo. Una vez, y es EL veredicto.**
+
+```
+node scripts/run-gates.mjs --all
+node scripts/limpiar-residuo-gates.mjs --hazlo
+```
+
+**6 minutos** (eran 11 min 30 s). El corto NO cierra una tarea: es un cinturón para no empujar una
+rotura evidente. Lo que se apunta en el TABLERO y en Notion es el completo.
+
+**Por qué el barrido va a la velocidad que va, y no más rápido.** Los gates corren varios a la vez,
+con tres topes que NO son caprichos:
+- **2 con navegador a la vez**, por dos motivos distintos y los dos medidos:
+  - `index.js` frena a **600 peticiones/min por IP** y todos los gates salen de 127.0.0.1. Con 4 a la
+    vez se frenaron 7 peticiones en un minuto y eso tumbó SEIS gates (un 429 en una carga de página
+    deja la pantalla sin su script). Ese freno **no se toca**: es un control de seguridad. Se mide
+    con `security_events` (`type = 'ratelimit:global'`): un barrido sano no añade ni uno.
+  - con **3**, una pasada de cada cuatro moría con `TargetCloseError: Target.createTarget` —
+    Chromium sin poder abrir pestaña con tres navegadores peleando por cuatro núcleos. El gate suelto
+    pasa 6/0: no era suyo. **Un rojo que sale una vez de cada cuatro es peor que uno fijo**, porque
+    enseña a desconfiar del barrido. Con 2 van dos pasadas seguidas idénticas.
+- **2 a la vez sobre el negocio de desarrollo**, que es de todos. Los que se traen SU PROPIO negocio
+  (`provisionTenant`) están declarados en `EMPIEZAN_DE_CERO` y no se miran entre ellos.
+- **Los que miden un TOTAL del negocio corren SOLOS** — seis, declarados en `SOLOS` con su motivo
+  escrito: los avisos, los permisos de avisos, el neto-cero de facturar horas y de rentabilidad, el
+  badge de propuestas de DISA y el stock del producto vivo en devoluciones.
+
+**LA REGLA DURA, y no se negocia:** ningún gate se elimina, ninguno se ablanda, ningún rojo se
+silencia. Si al paralelizar sale un rojo que en serie no salía, **es un rojo real de concurrencia**:
+se declara con su motivo en `SOLOS` (o se baja un tope) y el gate se queda **exactamente como está**.
+Ajustar el gate para que deje de quejarse sería cambiar el termómetro para no tener fiebre.
+
+Ajustes: `--jobs=N` (global) · `--jobs-navegador=N` · `--jobs-compartido=N` · `--serie` (uno detrás
+de otro, como antes: sirve para comparar dos barridos cuando algo huele a concurrencia).
+
+---
+
 ## PASO 0 DEL CIERRE — DESPLEGAR (obligatorio, antes de decir "hecho")
 
 **Una tarea NO está hecha cuando el commit está empujado. Está hecha cuando se ve en la dirección
@@ -48,6 +106,7 @@ Dos redes de seguridad más, para que esto no dependa de acordarse:
   confirmación (nunca escritura silenciosa).
 - **Simplicidad y cambios quirúrgicos.** Código/edición mínima; no "mejores" lo adyacente.
 - **Verificación siempre:** cada tarea define su test/gate propio y cierra con **regresión 0** en lo vivo.
+  Dos modos: **`--tocado` antes de cada commit** y **`--all` una vez, al cerrar** (ver la sección de arriba).
 - **Legal/regulatorio:** verificado contra fuente oficial en la web, nunca de memoria.
 - **Al terminar:** `commit` + `push` con mensaje claro y actualiza el bloque **"DÓNDE LO DEJÉ / DÓNDE
   SIGO"** de Notion. **Un tema por chat**: al cerrar, avisa para abrir chat nuevo.
@@ -125,6 +184,9 @@ como `NOTION_TOKEN`).
      previas ni reordenarlas.
 
 **d) Commit + push** (SSH, sin tokens)
+- **Antes de cada commit:** `node scripts/run-gates.mjs --tocado` (el corto).
+- **Una vez, al cerrar:** `node scripts/run-gates.mjs --all` (el completo) — ese es el veredicto que
+  se apunta en el TABLERO y en Notion.
 - `git add` los archivos de docs y código modificados.
 - Mensaje claro: qué se cerró, qué commits incluye.
 - `git push origin master`.
