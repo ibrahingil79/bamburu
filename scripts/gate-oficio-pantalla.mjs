@@ -26,7 +26,7 @@ db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf
 // Estado previo, para devolverlo TAL CUAL al terminar.
 const CFG0 = db.prepare('SELECT oficio, cita_puesto_sing, cita_puesto_plural FROM company_config WHERE id=1').get();
 const OTROS = db.prepare('SELECT id FROM admin_users WHERE active=1 AND id<>?').all(owner.id).map(r => r.id);
-let apagados = [], SVC = 0, b;
+let apagados = [], SVC = 0, RECURSO = 0, b;
 
 // Cuántos campos se ven DELANTE (sin abrir "Más opciones"), y cuáles.
 const visibles = p => p.evaluate(() => {
@@ -139,15 +139,41 @@ try {
   // ── [5] El vocabulario del oficio, en pantalla y en el menú ────────────────
   console.log('\n[5] el vocabulario del oficio llega a la pantalla Y al menú');
   db.prepare("UPDATE company_config SET oficio='salud', cita_puesto_sing='Sala', cita_puesto_plural='Salas' WHERE id=1").run();
+  // ── EL GATE SE TRAE SU PROPIO PUESTO ──────────────────────────────────────────────────────────
+  // POR QUÉ. La aserción de abajo comprueba que el MENÚ llama a los puestos como los llama la
+  // pantalla («Salas»). Pero la entrada del menú es CONDICIONAL desde el 18 ago (`siHay: 'puestos'`
+  // en menu.js: existe si hay algún recurso activo o algún servicio que exija uno). El tenant de
+  // desarrollo no tiene ninguno, así que la entrada no se pintaba y el gate leía «» — llevaba en
+  // rojo desde entonces sin que nadie lo viera, porque estaba FUERA del barrido. Es el argumento
+  // entero de esta tarea en un solo caso: una comprobación que nadie ejecuta acaba mintiendo.
+  //
+  // LA ASERCIÓN NO CAMBIA: sigue siendo «el menú dice Salas». Lo que cambia es que el gate deja de
+  // depender de que el negocio tenga puestos por casualidad y se trae el suyo, con nombre único, y
+  // lo borra al salir. Mismo patrón que `productoDePrueba` en los gates de compras.
+  RECURSO = db.prepare("INSERT INTO recursos (nombre,tipo,active) VALUES (?,'otro',1)").run('GATE Puesto ' + TS).lastInsertRowid;
   await abrirNueva();
   const voz = await p.evaluate(() => ({
     etiqueta: [...document.querySelectorAll('#mCita .form-label')].map(l => l.textContent.trim())[0],
     win: window.CLIENTE_SING,
-    menu: [...document.querySelectorAll('a[href="/admin/citas/recursos"]')].map(a => a.textContent.trim()).join(''),
   }));
   ok(/Paciente/.test(voz.etiqueta), 'la pantalla dice «Paciente»: «' + voz.etiqueta + '»');
   ok(voz.win === 'Paciente', 'y el JS de la pantalla recibe la misma palabra');
-  ok(/Salas/.test(voz.menu), 'el MENÚ dice «Salas» — misma fuente que la pantalla: «' + voz.menu + '»');
+
+  // ── LA SEGUNDA CAUSA DEL ROJO: LA ENTRADA SE MUDÓ, Y EL GATE SEGUÍA MIRANDO DONDE ESTABA ──────
+  // Esta línea buscaba el enlace en la pantalla de la agenda. El 18 ago 2026 (`921bbe1`, «en Agenda
+  // solo vive lo que se usa atendiendo clientes») las seis entradas de configuración se mudaron a la
+  // configuración del negocio, MISMA RUTA y MISMOS PERMISOS, otro sitio. Así que aquí ya no hay nada
+  // que encontrar: comprobado sirviendo las dos pantallas con un puesto dado de alta —
+  // /admin/citas → 0 enlaces, /admin/settings → 1.
+  //
+  // LA ASERCIÓN NO CAMBIA, ni se relaja: sigue exigiendo que el MENÚ diga «Salas», la misma palabra
+  // que la pantalla. Lo único que se corrige es DÓNDE se mira, que es una caducidad del gate y no una
+  // decisión de producto. Es lo mismo que se hizo con `gate-avisos-badge` cuando el Inicio cambió:
+  // buscar por el DESTINO, que es lo que de verdad protege, y no por el sitio de ayer.
+  await p.goto(BASE + '/admin/settings', { waitUntil: 'networkidle2' });
+  const menu = await p.evaluate(() =>
+    [...document.querySelectorAll('a[href="/admin/citas/recursos"]')].map(a => a.textContent.trim()).join(''));
+  ok(/Salas/.test(menu), 'el MENÚ dice «Salas» — misma fuente que la pantalla: «' + menu + '»');
 
   db.prepare("UPDATE company_config SET oficio='otro', cita_puesto_sing='Puesto', cita_puesto_plural='Puestos' WHERE id=1").run();
   await abrirNueva();
@@ -200,6 +226,7 @@ try {
   try { for (const id of apagados) db.prepare('UPDATE admin_users SET active=1 WHERE id=?').run(id); } catch {}
   try { db.prepare('UPDATE company_config SET oficio=?, cita_puesto_sing=?, cita_puesto_plural=? WHERE id=1').run(CFG0.oficio, CFG0.cita_puesto_sing, CFG0.cita_puesto_plural); } catch {}
   try { if (SVC) { db.prepare('DELETE FROM service_config WHERE product_id=?').run(SVC); db.prepare('DELETE FROM products WHERE id=?').run(SVC); } } catch {}
+  try { if (RECURSO) db.prepare('DELETE FROM recursos WHERE id=?').run(RECURSO); } catch {}
   try { db.prepare('DELETE FROM admin_sessions WHERE token=?').run(tok); } catch {}
   try { db.close(); } catch {}
   try { if (b) await b.close(); } catch {}

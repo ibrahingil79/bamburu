@@ -79,16 +79,21 @@ const ROJOS_CONOCIDOS = {
   // ajenos no se pudre por culpa del producto; se pudre porque no era suyo lo que pisaba». El
   // arreglo bueno es que el gate se traiga SU propia propuesta —como ya hacen los de compras con
   // `productoDePrueba`—, y eso es tocar el gate: tarea aparte, con su verificación.
-  'gate-nav-inicio-disa':
+  // CADA ENTRADA LLEVA SU FECHA. No es burocracia: sin ella, el barrido no puede decir «esto se
+  // declaró hace tres semanas y hoy pasa», que es justo lo que la Pieza D existe para cantar.
+  'gate-nav-inicio-disa': { desde: '2026-08-20', motivo:
     'PRECONDICIÓN AJENA, no concurrencia: exige que el negocio de desarrollo tenga propuestas de DISA '
     + 'pendientes y no las crea él. Se quedó a cero el 20-ago-2026 al resolverlas a mano, y el '
     + 'generador diario no las recrea (es idempotente por documento). Comprobado que falla IGUAL en '
     + 'serie y suelto: no lo trajo la paralelización. Arreglo bueno: que el gate se traiga su propia '
-    + 'propuesta, como los de compras se traen su producto. Otro tema.',
-  'gate-vigia-agenda':
-    '1 aserción EN ROJO desde antes de meterlo al barrido (19-ago-2026): los hallazgos de agenda no '
-    + 'asoman en el bloque del vigía del Inicio. Comprobado que NO es del cambio que lo destapó '
-    + '(idéntico con vigia.js revertido a HEAD). Las otras 40 aserciones pasan. Otro tema.',
+    + 'propuesta, como los de compras se traen su producto. Otro tema.' },
+  // 20 ago 2026 · AQUÍ VIVÍA `gate-vigia-agenda`, y se ha RETIRADO. No se ha tocado el gate: el gate
+  // está bien y pasa 41/41. Lo que sobraba era esta nota. Su aserción en rojo era que «los hallazgos
+  // de agenda no asoman en el bloque del vigía del Inicio», y el rediseño del Inicio (cuadro de mando,
+  // commit 144a01d) los sacó a la vista en «DISA decide»: el rojo se arregló de rebote y la
+  // declaración se quedó anunciando un rojo que ya no existía. Un puntero rancio manda al siguiente
+  // chat al sitio equivocado con toda la confianza del mundo. La Pieza D de esta tarea existe para
+  // que la próxima vez lo cante el propio barrido en vez de descubrirse dos semanas después.
 };
 
 // Excluidos por naturaleza, no por estar rotos: no son deuda, simplemente no van en un barrido.
@@ -444,9 +449,28 @@ for (const [g, motivo] of Object.entries(ENTORNO)) console.log('  · ' + g + '\n
 
 // La deuda va la ÚLTIMA y con banderita: es lo que el runner NO puede prometer. Un barrido "verde"
 // que calle esto valdría lo mismo que el falso verde que lo hizo nacer.
-for (const [g, motivo] of Object.entries(ROJOS_CONOCIDOS)) {
+for (const [g, d] of Object.entries(ROJOS_CONOCIDOS)) {
   console.log('\n⚠️  ROJO CONOCIDO, con dueño y motivo (el gate SÍ se ejecuta):');
-  console.log('  · ' + g + '\n      ' + motivo);
+  console.log('  · ' + g + '  (declarado el ' + d.desde + ')\n      ' + d.motivo);
+}
+
+// ── PIEZA D · DECLARACIONES CADUCADAS ───────────────────────────────────────────────────────────
+// NACE DE UN CASO REAL. `gate-vigia-agenda` se declaró rojo el 19-ago; el rediseño del Inicio lo
+// arregló de rebote al día siguiente y la nota se quedó ahí, anunciando en cada pasada un rojo que
+// ya no existía. Se descubrió de casualidad, auditando otra cosa. Una declaración es una promesa
+// («esto falla, y sé por qué»): cuando deja de ser verdad, el barrido tiene que decirlo él, no
+// esperar a que alguien lo note.
+//
+// NO TUMBA EL BARRIDO a propósito: esto es contabilidad de las declaraciones, no un fallo del
+// producto. Pero se pinta al final y en su propio bloque, donde no se pueda pasar por alto.
+const caducadas = Object.entries(ROJOS_CONOCIDOS)
+  .filter(([g]) => (resultados.find(r => r.gate === g) || {}).estado === 'PASA');
+if (caducadas.length) {
+  console.log('\n🧹 DECLARACIÓN CADUCADA — se declara roja y HOY PASA. Retírala:');
+  for (const [g, d] of caducadas) {
+    console.log('  · ' + g + ' — declarada roja desde el ' + d.desde + ' y hoy termina en VERDE.');
+    console.log('      Retira su entrada de ROJOS_CONOCIDOS en scripts/run-gates.mjs y di en el commit por qué dejó de fallar.');
+  }
 }
 const deuda = Object.keys(DEUDA).length;
 if (deuda) {

@@ -24,7 +24,18 @@ export const GRUPOS = {
     'gate-inicio-arranque',          // el Inicio de un negocio que arranca: panel, «Hoy» y migración
     'gate-inicio-cuadro-mando',      // el Inicio es el cuadro de mando del día (contra la dirección pública)
     'gate-vigia-pantalla',           // el vigía en su pantalla
-    'gate-vigia-agenda',             // los detectores de agenda (1 aserción EN ROJO desde antes: ver DEUDA)
+    'gate-vigia-agenda',             // los detectores de agenda
+    // ── LOS CUATRO HUÉRFANOS, DENTRO DEL BARRIDO (20 ago 2026) ───────────────────────────────
+    // Existían, se corrían a mano y NO estaban en ningún grupo: ni ejecutadas ni declaradas como
+    // excluidas — invisibles. Se aparcaron el 18 ago porque alargaban la revisión; desde que el
+    // barrido corre en paralelo y en dos modos ese argumento ya no pesa. Y el precio de tenerlas
+    // fuera se vio al meterlas: `gate-oficio-pantalla` llevaba EN ROJO desde el 18 ago —la entrada
+    // de «Puestos» se había mudado y encima nació condicional— y nadie se enteró en dos días.
+    // Una comprobación que nadie ejecuta acaba mintiendo.
+    'gate-agenda-sencilla',          // la vista de entrada de la agenda y el alta desde el hueco
+    'gate-agenda-calendario',        // el calendario de la agenda (negocio propio)
+    'gate-citas-pantalla',           // la pantalla de citas: atender, cobrar y anular (neto-cero)
+    'gate-oficio-pantalla',          // el vocabulario del oficio, en la pantalla y en el menú
   ],
   pagos: [
     'test-pagos-proveedor', 'gate-pagos-proveedor', 'gate-pago-cuenta', 'gate-abono-proveedor',
@@ -106,6 +117,7 @@ export const EMPIEZAN_DE_CERO = new Set([
   'gate-inicio-arranque',          // negocio RECIÉN CREADO: es justo lo que prueba
   'gate-inicio-cuadro-mando',      // negocio nuevo + uno vacío + un empleado sin permisos
   'gate-vigia-agenda',             // negocio nuevo: los cuatro detectores de agenda
+  'gate-agenda-calendario',        // negocio nuevo: el calendario, sin datos ajenos
 ]);
 
 // Los que necesitan el negocio de desarrollo en silencio. Cada uno con su MOTIVO: un gate marcado
@@ -137,6 +149,22 @@ export const SOLOS = new Map([
    'además de su producto propio, prueba a propósito el BLOQUEO sobre el producto 1 —el vivo, el que '
    + 'tiene traslados— y afirma que su stock y su WAC vuelven al valor de partida. Ese producto es de '
    + 'todos: otro gate moviéndolo a la vez lo dejó en 47 donde esperaba 52. Rojo REAL de concurrencia.'],
+  // ── LOS QUE ENTRAN EL 20 AGO Y NO PUEDEN COMPARTIR ────────────────────────────────────────────
+  // Estos tres no es que necesiten silencio: es que HACEN RUIDO. Cambian ajustes del negocio entero
+  // mientras corren y lo devuelven al salir. Con otro gate leyendo a la vez, el que se equivoca es
+  // el otro — y el rojo aparecería lejos de la causa, que es la peor clase de rojo.
+  ['gate-citas-pantalla',
+   'atiende una cita, la COBRA emitiendo una factura de verdad y luego la anula para comprobar el '
+   + 'neto-cero. Mientras tanto el total de ventas del negocio se mueve y vuelve: cualquier gate que '
+   + 'mida ese total a la vez leería un número que no es el suyo.'],
+  ['gate-oficio-pantalla',
+   'DESACTIVA a todos los demás usuarios del negocio para probar la pantalla con una sola persona, y '
+   + 'cambia el oficio y el nombre de los puestos en `company_config`. Lo devuelve todo al salir, pero '
+   + 'mientras corre el negocio entero está tocado: no puede compartir.'],
+  ['gate-agenda-sencilla',
+   'abre el negocio de 00:00 a 24:00 SOLO PARA HOY (excepción de fecha) para que su aserción de '
+   + '«huecos cerca» no dependa de la hora a la que se lance, y la borra al salir. Es un ajuste del '
+   + 'negocio entero mientras dura: otro gate de agenda leyendo a la vez vería un horario que no es.'],
 ]);
 
 export const claseDe = g => EMPIEZAN_DE_CERO.has(g) ? 'propio' : (SOLOS.has(g) ? 'solo' : 'compartido');

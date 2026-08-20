@@ -25,7 +25,7 @@ const owner = db.prepare("SELECT id FROM admin_users WHERE role='owner' AND acti
 const HOY = new Date().toISOString().slice(0, 10);
 const tok = 'gas-' + TS, now = Math.floor(Date.now() / 1000);
 db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)').run(tok, owner.id, now, now + 3600, 'x');
-const emps = []; let S = 0, Sesp = 0, CLI = 0, excId = 0;
+const emps = []; let S = 0, Sesp = 0, CLI = 0, excId = 0, excDiaId = 0;
 function emp(n) { const id = db.prepare("INSERT INTO admin_users (name,email,password_hash,role,active) VALUES (?,?,?,'employee',1)").run(n, 'gas-' + TS + '-' + emps.length + '@t.local', 'x').lastInsertRowid; emps.push(id); return id; }
 let b;
 const call = (p, m, u, body) => p.evaluate(async (m, u, b) => { const o = { method: m, headers: { 'x-csrf-token': window.CSRF_TOKEN || '' } }; if (b) { o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(b); } const r = await fetch(u, o); let j = null; try { j = await r.json(); } catch (e) {} return { status: r.status, body: j }; }, m, u, body);
@@ -34,6 +34,27 @@ try {
   const A = emp('GATE Ana ' + TS);          // trabaja hoy (hereda el día abierto por defecto)
   const B = emp('GATE Berta ' + TS);         // NO trabaja hoy (excepción "cerrado")
   excId = db.prepare("INSERT INTO horario_excepciones (scope,user_id,fecha,tipo,motivo) VALUES ('user',?,?,'cerrado','Libra')").run(B, HOY).lastInsertRowid;
+
+  // ── EL GATE SE TRAE SU PROPIO HORARIO PARA HOY ────────────────────────────────────────────────
+  // POR QUÉ. El paso [5] afirma que, al chocar, la pantalla PROPONE huecos cercanos (> 0). Esos
+  // huecos los calcula el SERVIDOR con `huecos()`, que del día de hoy descarta todo lo anterior a
+  // «ahora» (`minInicioHoy = ahora.min + antelacion`). Sin horario propio, el negocio hereda el día
+  // por defecto del motor —8:00 a 21:00—, así que a partir de las 21:00 no queda ni un hueco y la
+  // aserción caía. El mismo código, el mismo gate, distinto veredicto según la hora del reloj.
+  //
+  // LA ASERCIÓN NO CAMBIA: sigue siendo «al chocar, propone huecos cercanos (> 0)». Lo que cambia es
+  // que el escenario deja de apoyarse en una precondición que no es suya (el horario por defecto del
+  // motor) y se trae el suyo: HOY abierto de 00:00 a 24:00, por excepción de fecha, que se borra al
+  // salir. Es el mismo patrón que ya usa este gate con la excepción de Berta, y el mismo que usan los
+  // gates de compras con `productoDePrueba`: cada uno se trae lo suyo.
+  //
+  // OJO, Y QUEDA ANOTADO EN EL TABLERO: esto no llega hasta la medianoche. `huecos()` solo propone
+  // huecos del MISMO día, así que con la rejilla de 30 min el último arranque posible es a las 23:30
+  // y el gate deja de sostenerse si se lanza después. MEDIDO: antes aguantaba hasta las 20:30 (3 h 30
+  // de ventana mala); ahora hasta las 23:30 (29 min). Ese resto NO es del gate: es el límite del
+  // producto que se anota como hallazgo, y se cerrará solo el día que `huecos()` ofrezca el día
+  // siguiente en vez de devolver cero.
+  excDiaId = db.prepare("INSERT INTO horario_excepciones (scope,user_id,fecha,tipo,inicio_min,fin_min,motivo) VALUES ('negocio',NULL,?,'horario',0,1440,'GATE agenda sencilla')").run(HOY).lastInsertRowid;
   S = db.prepare("INSERT INTO products (name,price,type,tax_band,tax_rate,status) VALUES (?,20,'service','general',21,'active')").run('GATE Corte ' + TS).lastInsertRowid;
   db.prepare("INSERT INTO service_config (product_id,reservable,duracion_min,muerto_ini_min,muerto_dur_min,margen_min) VALUES (?,1,30,0,0,0)").run(S);
   Sesp = db.prepare("INSERT INTO products (name,price,type,tax_band,tax_rate,status) VALUES (?,30,'service','general',21,'active')").run('GATE Tinte ' + TS).lastInsertRowid;
@@ -174,6 +195,7 @@ finally {
   try { db.prepare('DELETE FROM admin_sessions WHERE token=?').run(tok); } catch {}
   for (const uid of emps) { try { db.prepare('DELETE FROM cita_servicios WHERE cita_id IN (SELECT id FROM citas WHERE user_id=?)').run(uid); } catch {} try { db.prepare('DELETE FROM cita_avisos WHERE cita_id IN (SELECT id FROM citas WHERE user_id=?)').run(uid); } catch {} try { db.prepare('DELETE FROM citas WHERE user_id=?').run(uid); } catch {} }
   try { if (excId) db.prepare('DELETE FROM horario_excepciones WHERE id=?').run(excId); } catch {}
+  try { if (excDiaId) db.prepare('DELETE FROM horario_excepciones WHERE id=?').run(excDiaId); } catch {}
   for (const sid of [S, Sesp]) { try { db.prepare('DELETE FROM service_config WHERE product_id=?').run(sid); } catch {} try { db.prepare('DELETE FROM products WHERE id=?').run(sid); } catch {} }
   try { if (CLI) db.prepare('DELETE FROM clients WHERE id=?').run(CLI); } catch {}
   for (const uid of emps) { try { db.prepare('DELETE FROM admin_users WHERE id=?').run(uid); } catch {} }

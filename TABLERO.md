@@ -84,8 +84,8 @@
 > un sí de Ibrahin. Si dice que no, queda pendiente aquí y se vuelve a proponer al abrir la
 > siguiente sesión, diciendo desde cuándo no se corre.
 
-- **Último barrido completo:** 2026-08-20 · `7f40e1d` · **58/71**
-- **Estado:** ⚠️ **PENDIENTE desde 2026-08-20** — se propuso y Ibrahin dijo que no el 2026-08-20. Se vuelve a proponer al abrir la siguiente sesión.
+- **Último barrido completo:** 2026-08-20 · `5329109` · **62/75** · 425 s
+- **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
 
@@ -98,7 +98,7 @@
 **EL ORDEN:** (1) sanear las comprobaciones automáticas · (2) cerrar los cabos sueltos de la Agenda,
 como **UNA sola tarea entera** · (3) funciones nuevas · (4) volver al **Peldaño 8 — Salud/bienestar**.
 
-### ⬜ TAREA 1 — Sanear las comprobaciones automáticas  (la siguiente, a la espera de encargo)
+### ✅ TAREA 1 — Sanear las comprobaciones automáticas  ✅ HECHA (2026-08-20) — ver su ficha abajo
 
 Tres piezas. **Dos de ellas cambiaron al auditarlas el 20 ago**, y se dejan escritas como están de
 verdad y no como se suponía — que es justo el problema que esta tarea viene a resolver.
@@ -1548,6 +1548,83 @@ completa los cubra, hay que meterlos en un grupo — decisión del dueño, porqu
 **Capturas:** `/home/ubuntu/menu-shots/` (Agenda con sus dos entradas · la sección en su sitio · sin
 puestos frente a con un puesto). **Desplegado y verificado por HTTPS** en `peluqueria-gil.bamburu.com`:
 Agenda con 2 entradas, la sección con sus 5, y las 7 rutas viejas a 200.
+
+### TAREA 1 — Sanear las comprobaciones automáticas (las cuatro piezas)  ✅ HECHO (2026-08-20)
+
+**Tarea transversal: el puntero del Peldaño 8 NO se mueve.** Cero código de producto tocado — solo
+infraestructura de pruebas. **71 comprobaciones → 75.**
+
+**EL PASO 0 TUMBÓ EL DIAGNÓSTICO DE PARTIDA, y se paró antes de escribir nada.** El encargo daba por
+hecho que los dos gates «dependen de la hora» y que la cura era congelar el reloj del navegador. Al
+medirlo, ninguna de las dos cosas era cierta:
+- **`gate-oficio-pantalla` no fallaba por la hora: fallaba SIEMPRE**, y llevaba en rojo desde el
+  18 ago sin que nadie lo viera, porque estaba fuera del barrido.
+- **`gate-agenda-sencilla` pasaba «por la tarde»** (14/14 a las 13:30). Su dependencia del reloj era
+  real pero mordía **a partir de las 21:00**, y la calculaba **el servidor** (`huecos()` descarta lo
+  anterior a «ahora»), no el navegador. **Congelar el reloj del navegador no podía arreglarlo**, y
+  congelar el del servidor exigía mover el reloj del sistema o levantar el servicio bajo `faketime`
+  en la máquina que sirve negocios reales por HTTPS — o sea, tocar producción.
+
+**La causa real de los dos era la misma: se apoyaban en precondiciones que no eran suyas.** Ibrahin
+cambió el método (no el listón) y el arreglo pasó a ser el patrón que este repo ya usa con
+`productoDePrueba`: **cada gate se trae lo suyo.**
+
+**PIEZA A — Retirada la declaración caducada de `gate-vigia-agenda`.** El gate NO se ha tocado: pasa
+**41/41**, comprobado suelto y en el barrido. Su aserción en rojo era que «los hallazgos de agenda no
+asoman en el bloque del vigía del Inicio», y **el rediseño del Inicio (`144a01d`) los sacó a la vista
+en “DISA decide”**: el rojo se arregló de rebote y la nota se quedó anunciando un rojo inexistente.
+
+**PIEZA B — Quitada la dependencia de la hora, atacando la causa.**
+- **`gate-agenda-sencilla`** se trae **su propio horario**: abre el negocio de 00:00 a 24:00 **solo
+  para hoy**, por excepción de fecha, y la borra al salir (mismo patrón que la excepción de Berta que
+  ya tenía). **La aserción no cambia**: sigue siendo «al chocar, propone huecos cercanos (> 0)».
+  **Medido sobre el motor**, huecos disponibles según la hora simulada:
+
+  | «ahora» | 06:00 | 12:00 | 18:00 | 20:00 | **21:00** | **22:00** | **23:00** |
+  |---|---|---|---|---|---|---|---|
+  | antes | 26 | 18 | 6 | 2 | **0 ✗** | **0 ✗** | **0 ✗** |
+  | ahora | 35 | 23 | 11 | 7 | **5 ✓** | **3 ✓** | **1 ✓** |
+
+  La ventana mala pasa de **3 h 30 min a 29 min** (23:31–24:00), y ese resto **no es del gate**: es el
+  límite del producto que se anota más abajo como hallazgo.
+- **`gate-oficio-pantalla`** se trae **su propio puesto**. Y tenía **una segunda causa que el Paso 0
+  no vio**: la entrada de menú **se mudó** el 18 ago (`921bbe1`) de la agenda a la configuración del
+  negocio, y el gate seguía buscándola en `/admin/citas`. Comprobado sirviendo las dos pantallas con
+  un puesto de alta: **`/admin/citas` → 0 enlaces, `/admin/settings` → 1**. Se corrige **dónde mira**,
+  que es una caducidad del gate; **la aserción no cambia**: sigue exigiendo que el menú diga «Salas».
+  **27 OK + 1 fallo → 28 OK**, las mismas 28 aserciones.
+
+**PIEZA C — Las cuatro huérfanas, dentro del barrido**, con su clase declarada:
+`gate-agenda-calendario` → **empieza de cero** (negocio propio) · `gate-agenda-sencilla`,
+`gate-citas-pantalla` y `gate-oficio-pantalla` → **corren SOLAS**, con el motivo escrito: la primera
+abre el negocio entero para hoy; la segunda **emite y anula una factura real** (mueve el total de
+ventas); la tercera **desactiva a todos los demás usuarios** y cambia el oficio en `company_config`.
+No es que necesiten silencio: **es que hacen ruido**. **Ninguna salió roja al entrar.**
+
+**PIEZA D — Que una declaración caducada la cante el barrido.** `ROJOS_CONOCIDOS` gana **fecha**
+(`{ desde, motivo }`) y, cuando un gate declarado rojo termina en VERDE, el parte lo dice al final:
+*«DECLARACIÓN CADUCADA — se declara roja desde el X y hoy termina en VERDE. Retírala»*. **No tumba el
+barrido** (es contabilidad, no producto). Verificado declarando a propósito un gate verde y viéndolo
+cantar; declaración de prueba retirada después.
+
+**VERIFICACIÓN.** `gate-vigia-agenda` 41/41 y fuera de `ROJOS_CONOCIDOS` (0 resultados en el grep) ·
+los dos de la Pieza B, verdes en dos momentos reales y demostrada la invariancia sobre el motor ·
+**prueba de reversión de los dos**: sin su puesto propio, `gate-oficio-pantalla` vuelve a 27/1
+*siempre*; sin su horario propio, el motor vuelve a dar **0 huecos a las 21:00, 22:00 y 23:00** ·
+`--tocado` selecciona los cuatro, probados **uno a uno** (`citas-engine.js`, `routes/citas.js`,
+`citas-avisos.js`, `oficios.js`) · **barrido completo 62/75 en 7 min 05 s**, y el `diff` contra el
+veredicto conocido **es exactamente los cuatro nuevos, los cuatro en verde**, y nada más. Cero
+peticiones frenadas.
+
+**NINGÚN GATE ELIMINADO, NINGUNO ABLANDADO, NINGÚN ROJO SILENCIADO.** Aserciones antes → después:
+vigia-agenda 41 → 41 · agenda-sencilla 14 → 14 · oficio-pantalla 28 → 28 · agenda-calendario 38 → 38 ·
+citas-pantalla 25 → 25. Los 13 rojos del barrido son **los mismos 13 por nombre** que antes.
+
+**🔎 HALLAZGO ANOTADO, NO ARREGLADO (no es de esta tarea).** `huecos()` solo propone huecos del
+**MISMO día**: a las 22:00 devuelve 0 en lugar de ofrecer el día siguiente. Medido con el día por
+defecto (8-21): **12:00 → 18 huecos · 18:00 → 6 · 20:00 → 2 · 21:00 → 0**. Puede ser un límite
+deliberado del producto o un cabo suelto; se anota con la medida. Es también lo que deja los últimos
+29 minutos del día fuera del alcance del arreglo de la Pieza B.
 
 ### El barrido completo pasa a ser A DEMANDA (y sigue acelerado)  ✅ HECHO (2026-08-20)
 
