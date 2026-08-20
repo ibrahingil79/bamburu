@@ -271,7 +271,8 @@ export function contadoresDe(db, clientId, puede, deuda) {
     n: cuenta("SELECT COUNT(*) n FROM citas WHERE cliente_id=? AND archived=0", clientId),
     // `usaAgenda` ya mira el estado real (hay horario o hay citas), así que un negocio con citas
     // nunca se queda sin el chip.
-    href: '/admin/citas', oculto: !conAgenda && !extra.has('citas'),
+    // CABO 5: se llega a SUS citas, no a la agenda entera. El filtro se ve y se quita allí.
+    href: '/admin/citas?cliente=' + clientId, oculto: !conAgenda && !extra.has('citas'),
     porque: 'Este negocio no lleva agenda' });
   if (puede('invoices.read')) c.push({ key: 'facturas', etiqueta: 'Facturas', icon: 'ti-file-invoice',
     n: cuenta('SELECT COUNT(*) n FROM invoices WHERE client_id=?', clientId),

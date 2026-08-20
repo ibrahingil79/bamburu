@@ -2157,6 +2157,21 @@ export function runMigrations(db) {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_citas_fecha ON citas(fecha)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_citas_user ON citas(user_id, fecha)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_citas_recurso ON citas(recurso_id, fecha)`);
+  // ── QUIÉN ANULÓ LA CITA (Tarea 2 · cabo 4, 20 ago 2026) ─────────────────────────────────────
+  // ADITIVA Y NADA MÁS: `anulada_at` NO se toca ni se renombra — sigue diciendo CUÁNDO. Esta columna
+  // dice QUIÉN, que es otra pregunta y hasta hoy no se guardaba en ninguna parte.
+  //
+  // TRES VALORES Y NI UNO MÁS: 'cliente' · 'negocio' · 'automatico'. Sin texto libre: un motivo
+  // escrito a mano no se puede contar, y lo que no se puede contar no sirve para separar el plantón
+  // del cierre del negocio, que es para lo que existe este dato.
+  //
+  // NULL SIGNIFICA «SIN REGISTRAR», Y ESO SE RESPETA. Las citas anuladas antes de esta migración se
+  // quedan en NULL para siempre: no se les adivina un autor. Inventar el pasado para que la columna
+  // quede bonita es exactamente cómo un dato empieza a mentir.
+  //
+  // OJO: «no se presentó» NO vive aquí. Es un ESTADO de la cita (`no_show`, en citas-engine.js) desde
+  // el peldaño 8, y se queda donde está: nadie anuló nada, sencillamente no vino.
+  addCol(db, 'citas', 'anulada_por', "TEXT");
 
   // Servicios ENCADENADOS de una cita, en orden. Geometría CONGELADA al reservar (ver arriba). El
   // nombre y el precio del servicio se leen EN VIVO del catálogo al pintar/cobrar (fuente única).

@@ -270,6 +270,26 @@ export function moverCitaSvc(db, id, input) {
   const user_id = d.user_id || cita.user_id;
   const recurso_id = d.recurso_id === undefined ? cita.recurso_id : (d.recurso_id || null);
   const servicios = db.prepare('SELECT offset_min,dur_min,muerto_ini_min,muerto_dur_min FROM cita_servicios WHERE cita_id=? ORDER BY orden,id').all(id);
+
+  // ── ESTIRAR POR EL BORDE (Tarea 2 · cabo 2) ───────────────────────────────────────────────────
+  // Mismo gesto y mismo camino de guardado que arrastrar: es el dueño moviendo su cita en el lienzo,
+  // solo que por abajo. Por eso vive aquí y no en un endpoint nuevo.
+  //
+  // Y AQUÍ NO SE COMPRUEBA EL SOLAPE, A PROPÓSITO. Mover una cita ENCIMA de otra sigue dando 409:
+  // eso es un error del que arrastra. Pero alargar la suya hasta pisar la siguiente es una decisión
+  // legítima del dueño —«hoy este corte me va a llevar más»— y bloquearla sería que el programa le
+  // discuta su propia agenda. El lienzo las pinta lado a lado (cabo 1), así que la cita pisada no
+  // desaparece: se ve. Decisión de producto del encargo, escrita aquí para que no se «arregle» sola.
+  //
+  // La duración se ajusta a la MISMA rejilla que ya usa la agenda (ajustesCitas().grid) y no baja
+  // de un paso de esa rejilla: no hay número nuevo que inventar, y una cita de cero minutos no es
+  // una cita.
+  if (d.dur_min !== undefined) {
+    const grid = Math.max(5, ajustesCitas(db).grid || 30);
+    const dur = Math.max(grid, Math.round(d.dur_min / grid) * grid);
+    db.prepare('UPDATE citas SET dur_min=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(dur, id);
+    return { id: Number(id), dur_min: dur };
+  }
   const sol = comprobarSolape(db, {
     user_id, recurso_id, fecha: d.fecha, inicio_min: d.inicio_min,
     dur_min: cita.dur_min, margen_min: cita.margen_min, servicios, excludeCitaId: id,
@@ -280,12 +300,23 @@ export function moverCitaSvc(db, id, input) {
   return { id: Number(id) };
 }
 
-export function cambiarEstadoSvc(db, id, estado) {
+// ── QUIÉN ANULA ─────────────────────────────────────────────────────────────────────────────────
+// Tres valores y ni uno más. Cada camino de anulación dice el suyo; el que no puede saberlo (una
+// caducidad automática) dice 'automatico', que es la verdad y no un hueco. Lo que NUNCA se hace es
+// dejar que el dato se rellene solo con un valor por defecto: una anulación sin autor conocido se
+// queda en NULL y la pantalla dice «sin registrar».
+export const ANULADA_POR = ['cliente', 'negocio', 'automatico'];
+const quienValido = q => (ANULADA_POR.includes(q) ? q : null);
+
+export function cambiarEstadoSvc(db, id, estado, quien = null) {
   const cita = db.prepare('SELECT * FROM citas WHERE id=?').get(id);
   if (!cita) throw err('Cita no encontrada', 404);
   if (!puedeTransicionar(cita.estado, estado)) throw err('No se puede pasar de «' + cita.estado + '» a «' + estado + '»', 400);
   const stamp = estado === 'confirmada' ? 'confirmada_at' : (estado === 'atendida' ? 'atendida_at' : (estado === 'anulada' ? 'anulada_at' : null));
-  db.prepare(`UPDATE citas SET estado=?, ${stamp ? stamp + '=CURRENT_TIMESTAMP,' : ''} updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(estado, id);
+  // El QUIÉN solo se escribe al anular: en cualquier otro cambio de estado no significa nada.
+  const porSql = estado === 'anulada' ? 'anulada_por=?,' : '';
+  const args = estado === 'anulada' ? [estado, quienValido(quien), id] : [estado, id];
+  db.prepare(`UPDATE citas SET estado=?, ${porSql}${stamp ? stamp + '=CURRENT_TIMESTAMP,' : ''} updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(...args);
   // D2 — atendida, anulada o plantón dejan rastro en el registro de contactos. Solo la ATENDIDA es
   // visita (D4): un plantón es que NO vino, y contarlo como visita mentiría al detector. En su propio
   // try y sin lanzar: el registro no puede impedir que una cita cambie de estado.
@@ -339,7 +370,7 @@ export function atenderCitaSvc(db, id, opts, ctx = {}) {
 
 // Anular: revierte el cobro por SU motor (anularInvoice → NETO-CERO) y suelta la entrada de tiempo.
 // Archivar-no-borrar: la fila queda como 'anulada'. Idempotente.
-export function anularCitaSvc(db, id, motivo = 'Cita anulada') {
+export function anularCitaSvc(db, id, motivo = 'Cita anulada', quien = null) {
   const cita = db.prepare('SELECT * FROM citas WHERE id=?').get(id);
   if (!cita) throw err('Cita no encontrada', 404);
   if (cita.estado === 'anulada') return { id: Number(id), estado: 'anulada' };
@@ -350,19 +381,25 @@ export function anularCitaSvc(db, id, motivo = 'Cita anulada') {
       if (inv && !yaAnulada) anularInvoice(db, cita.invoice_id, motivo);
     }
     if (cita.time_entry_id) db.prepare('UPDATE time_entries SET active=0, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(cita.time_entry_id);
-    db.prepare("UPDATE citas SET estado='anulada', anulada_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(id);
+    db.prepare("UPDATE citas SET estado='anulada', anulada_at=CURRENT_TIMESTAMP, anulada_por=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
+      .run(quienValido(quien), id);
   })();
-  return { id: Number(id), estado: 'anulada' };
+  return { id: Number(id), estado: 'anulada', anulada_por: quienValido(quien) };
 }
 
 // ── Datos de la agenda (para la vista día/semana, por persona o por recurso) ───────────────────────
-export function agendaData(db, { desde, hasta }) {
+// `cliente_id` OPCIONAL (Tarea 2 · cabo 5): sin él, todo sigue exactamente igual — lo que importa,
+// porque de esta función come también el bloque «Hoy» del Inicio. Con él, la agenda enseña solo las
+// citas de esa persona, que es lo que se pide desde su ficha.
+export function agendaData(db, { desde, hasta, cliente_id = null }) {
+  const filtro = cliente_id ? ' AND c.cliente_id=?' : '';
+  const args = cliente_id ? [desde, hasta, cliente_id] : [desde, hasta];
   const citas = db.prepare(
     `SELECT c.*, u.name AS persona, r.nombre AS recurso, cl.name AS cliente_nombre
        FROM citas c LEFT JOIN admin_users u ON u.id=c.user_id LEFT JOIN recursos r ON r.id=c.recurso_id
        LEFT JOIN clients cl ON cl.id=c.cliente_id
-      WHERE c.fecha>=? AND c.fecha<=? AND c.archived=0 AND c.estado<>'anulada' ORDER BY c.fecha, c.inicio_min`
-  ).all(desde, hasta).map(c => {
+      WHERE c.fecha>=? AND c.fecha<=? AND c.archived=0 AND c.estado<>'anulada'${filtro} ORDER BY c.fecha, c.inicio_min`
+  ).all(...args).map(c => {
     // Ventanas de ESPERA (la persona libre) relativas al inicio de la cita, para pintarlas en otro tono.
     const svcs = db.prepare('SELECT offset_min, muerto_ini_min, muerto_dur_min FROM cita_servicios WHERE cita_id=?').all(c.id);
     const espera = [];
@@ -428,6 +465,10 @@ export function createCitasRoutes(db) {
     try {
       const desde = c.req.query('desde') || ahoraLocal().fecha;
       const hasta = c.req.query('hasta') || desde;
+      // CABO 5 · filtro por cliente. Viaja el NOMBRE además del id para que la pantalla pueda pintar
+      // el chip sin una segunda llamada; si el id no existe, no se filtra y se dice (cliente: null).
+      const cliId = parseInt(c.req.query('cliente'), 10) || null;
+      const cliente = cliId ? (db.prepare('SELECT id, name FROM clients WHERE id=?').get(cliId) || null) : null;
       // personasDia = quién trabaja el día `desde` (para la vista de entrada; el frente decide si filtra).
       const personasDia = personasQueTrabajan(db, desde).map(p => ({ id: p.id, name: p.name }));
       // `rango` = de qué hora a qué hora tiene sentido dibujar (ver rangoRejilla).
@@ -449,7 +490,7 @@ export function createCitasRoutes(db) {
         tramos[f] = { negocio: tramosAmbito(db, 'negocio', null, f), personas };
       }
       return c.json({
-        ...agendaData(db, { desde, hasta }), personasDia, tramos,
+        ...agendaData(db, { desde, hasta, cliente_id: cliente ? cliente.id : null }), cliente, personasDia, tramos,
         rango: rangoRejilla(db, fechas),
         sin_horario: !hayHorarioNegocio(db),
       });
@@ -558,6 +599,10 @@ export function createCitasRoutes(db) {
     try {
       const desde = c.req.query('desde') || ahoraLocal().fecha;
       const hasta = c.req.query('hasta') || desde;
+      // CABO 5 · filtro por cliente. Viaja el NOMBRE además del id para que la pantalla pueda pintar
+      // el chip sin una segunda llamada; si el id no existe, no se filtra y se dice (cliente: null).
+      const cliId = parseInt(c.req.query('cliente'), 10) || null;
+      const cliente = cliId ? (db.prepare('SELECT id, name FROM clients WHERE id=?').get(cliId) || null) : null;
       return c.json(agendaData(db, { desde, hasta }).citas);
     } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
@@ -595,7 +640,14 @@ export function createCitasRoutes(db) {
   api.post('/:id/estado', requirePerm('citas.edit'), validate(citaEstadoSchema), c => {
     try {
       const estado = c.get('validated').estado;
-      if (estado === 'anulada') { anularCitaSvc(db, parseInt(c.req.param('id'))); return c.json({ message: 'Cita anulada' }); }
+      // CAMINO 1 · la pantalla del negocio cambia el estado a «anulada». Elegir quién es OBLIGATORIO
+      // (la pantalla no preselecciona nada); si no llega, se rechaza en vez de inventar un autor.
+      if (estado === 'anulada') {
+        const quien = (c.get('validated') || {}).anulada_por;
+        if (!ANULADA_POR.includes(quien)) return c.json({ error: 'Di quién anula la cita: el cliente o el negocio.' }, 400);
+        anularCitaSvc(db, parseInt(c.req.param('id')), 'Cita anulada', quien);
+        return c.json({ message: 'Cita anulada' });
+      }
       const r = cambiarEstadoSvc(db, parseInt(c.req.param('id')), estado);
       logActivity(db, c.get('session'), 'Cambió estado de cita a ' + estado, ENTITY.CITA, r.id, '');
       return c.json({ message: 'Estado actualizado', estado });
@@ -610,9 +662,12 @@ export function createCitasRoutes(db) {
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
-  api.delete('/:id{[0-9]+}', requirePerm('citas.edit'), c => {
+  api.delete('/:id{[0-9]+}', requirePerm('citas.edit'), async c => {
     try {
-      const r = anularCitaSvc(db, parseInt(c.req.param('id')));
+      // CAMINO 2 · el botón «Anular» de la pantalla del negocio. Mismo candado: sin quién, no se anula.
+      const quien2 = (await c.req.json().catch(() => ({}))).anulada_por;
+      if (!ANULADA_POR.includes(quien2)) return c.json({ error: 'Di quién anula la cita: el cliente o el negocio.' }, 400);
+      const r = anularCitaSvc(db, parseInt(c.req.param('id')), 'Cita anulada', quien2);
       logActivity(db, c.get('session'), 'Anuló cita', ENTITY.CITA, r.id, '');
       return c.json({ message: 'Cita anulada' });
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
@@ -906,7 +961,8 @@ export function createCitasPublicRoutes(db) {
     const cita = resolver(c.req.param('token'));
     if (!cita) return c.json({ error: 'Enlace no válido' }, 403);
     // El cliente avisa de que NO puede ir → la cita se anula (libera el hueco). Registra el aviso.
-    anularCitaSvc(db, cita.id, 'El cliente avisó de que no puede asistir');
+    // CAMINO 6 · el cliente avisa por el enlace de su cita. Lo anula ÉL: no se le pregunta nada.
+    anularCitaSvc(db, cita.id, 'El cliente avisó de que no puede asistir', 'cliente');
     db.prepare("INSERT INTO cita_avisos (cita_id,tipo,canal,estado,nota) VALUES (?,?,?,?,?)").run(cita.id, 'recordatorio', 'email', 'cliente_no_puede', 'Avisó desde el enlace');
     return c.json({ ok: true, message: 'Aviso recibido' });
   });
@@ -1084,6 +1140,10 @@ const CSS_AGENDA = `
   /* ══ CABECERA (BLOQUE 3) ═══════════════════════════════════════════════════════════════════════
      El mes y el año en grande mandan; el 18/08/2026 deja de ser el elemento principal (sigue estando:
      el título ABRE el selector). "Hoy" en rojo junto a las flechas. Un solo primario: "Nueva cita". */
+  .ag-chip{display:inline-flex;align-items:center;gap:.5rem;background:var(--accent-soft);color:var(--accent-d);border:1px solid #cfe0ff;border-radius:999px;padding:.35rem .5rem .35rem .85rem;font-size:.85rem}
+  .ag-chip b{font-weight:700}
+  .ag-chip button{appearance:none;border:0;background:transparent;color:var(--accent-d);cursor:pointer;font-size:1rem;line-height:1;padding:.1rem .3rem;border-radius:50%}
+  .ag-chip button:hover{background:#cfe0ff}
   .ag-tit{appearance:none;border:0;background:transparent;font-family:inherit;padding:0;cursor:pointer;font-size:1.5rem;font-weight:700;letter-spacing:-.02em;color:var(--text);line-height:1.15;text-align:left}
   .ag-tit .anio{color:var(--text3);font-weight:600;margin-left:.28em}
   .ag-tit:hover .mes{text-decoration:underline;text-underline-offset:3px}
@@ -1158,13 +1218,30 @@ const CSS_AGENDA = `
   .citaBlock .svc,.citaBlock .hra{font-size:11px;opacity:.82;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   /* El tramo de ESPERA es el mismo bloque, gris neutro y SIN barra: a un metro se ve que no es cita. */
   .citaBlock.espera{border-left:0;border-radius:6px;background:var(--bg3);color:var(--text2);--c-fuerte:transparent}
+  /* Cuando una cita comparte hora con otra, un filo claro a la derecha para que se vean DOS bloques
+     y no uno partido. Solo aparece si de verdad hay choque. */
+  .citaBlock[data-choque]{box-shadow:1px 0 0 var(--bg2)}
+  /* ── EL ASA DE ESTIRAR (cabo 2) ──────────────────────────────────────────────────────────────
+     14 px de alto: es la medida a partir de la cual un dedo acierta sin pelearse (los 4-6 px que
+     bastan con un ratón son inservibles en táctil). Sobresale 3 px por debajo del bloque para que en
+     una cita corta siga habiendo dónde agarrar. touch-action:none es lo que impide que el navegador
+     se quede el gesto para hacer scroll. */
+  .cita-asa{position:absolute;left:0;right:0;bottom:-3px;height:14px;cursor:ns-resize;touch-action:none;z-index:5}
+  .cita-asa::after{content:'';position:absolute;left:50%;transform:translateX(-50%);bottom:4px;width:26px;height:3px;border-radius:2px;background:var(--c-fuerte);opacity:0}
+  .citaBlock:hover .cita-asa::after,.cita-asa.tirando::after{opacity:.55}
+  /* La etiqueta con la hora de fin mientras se estira: se ve SIEMPRE lo que va a quedar guardado. */
+  .cita-fin{position:absolute;right:4px;bottom:2px;z-index:6;background:var(--c-fuerte);color:#fff;font-size:10px;font-weight:700;line-height:1;padding:2px 5px;border-radius:4px;pointer-events:none}
   .ag-espera{position:absolute;left:0;right:0;background:var(--bg3);opacity:.85;pointer-events:none;border-radius:3px}
 
   /* ══ MES (BLOQUE 4) ════════════════════════════════════════════════════════════════════════════
      El mes dice qué pasa cada día SIN pasar el ratón: hasta 3 citas escritas y «+N más». Si el día
      no tiene nada, la celda calla — el silencio es información. Fuera el title nativo y fuera el pie
      que seguía al ratón: el pie es del día SELECCIONADO. */
-  .mes{max-width:none}
+  /* CABO 3 · el deslizamiento horizontal es NUESTRO, no del navegador. Sin esto, arrastrar el dedo
+     de lado sobre el mes hace que Chromium se lo quede como gesto de «atrás» y la pantalla se va a
+     otra página (se vio en la prueba: la pantalla acababa en about:blank). El valor contain corta la cadena
+     de overscroll AQUÍ, sin tocar el gesto de atrás en el resto de la aplicación, que sigue igual. */
+  .mes{max-width:none;overscroll-behavior-x:contain}
   .mes-cab,.mes-rej{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
   .mes-cab span{text-align:center;font-size:.66rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);padding:0 0 .45rem}
   /* P3 — REJILLA DE VERDAD. Las separaciones se pintan con los bordes de cada casilla (0.5px muy
@@ -1243,6 +1320,9 @@ function vistaAgenda(c, db) {
         ${editable ? '<button type="button" class="ag-disc" onclick="openBloqueo()">Bloquear un rato</button><button class="btn btn-primary" onclick="openNuevaCita()">Nueva cita</button>' : ''}
       </div>
     </div>
+    <!-- CABO 5 · el filtro por cliente, VISIBLE y quitable. Fuera de la caja de los filtros de eje:
+         son dos cosas distintas y confundirlas haría que quitar uno pareciera quitar el otro. -->
+    <div id="agChipCliente" style="display:none;gap:.5rem;align-items:center;margin-bottom:.75rem"></div>
     <div id="agControles" style="display:none;gap:.75rem;flex-wrap:wrap;align-items:center;margin-bottom:.75rem;padding:.6rem .8rem;background:var(--bg2,rgba(0,0,0,.02));border-radius:8px">
       <select class="form-control" id="agVista" style="width:auto" onchange="agCargar()"><option value="dia">Día</option><option value="semana">Semana</option><option value="mes">Mes</option></select>
       <select class="form-control" id="agEje" style="width:auto" onchange="agCargar()"><option value="persona">Por persona</option><option value="recurso">Por ${escHtml(aj.puesto_sing.toLowerCase())}</option></select>
@@ -1267,7 +1347,7 @@ function vistaAgenda(c, db) {
     ${modalDetalle()}
     ${modalBloqueo(aj.puesto_sing)}
     ${modalAvisos()}
-    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};window.CITA_ESTADOS=${jsonForScript(ESTADOS_COLOR)};${jsVoz(aj)}${JS_AGENDA}</script>`;
+    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};window.CITA_ESTADOS=${jsonForScript(ESTADOS_COLOR)};window.AG_GRID=${Number(aj.grid) || 30};${jsVoz(aj)}${JS_AGENDA}</script>`;
   return adminLayout('Agenda', content, 'citas', c.get('session')?.csrfToken || '', c);
 }
 // ── COLOR DE ESTADO — FUENTE ÚNICA ───────────────────────────────────────────────────────────────
@@ -1613,6 +1693,23 @@ const modalDetalle = () => `
   <div class="modal-overlay" id="mDet"><div class="modal" style="max-width:560px">
     <div class="modal-head"><h3 id="mDetTitle">Cita</h3><button class="modal-close" onclick="closeModal('mDet')">✕</button></div>
     <div class="modal-body" id="mDetBody"></div>
+  </div></div>
+  <!-- CABO 4 · QUIÉN ANULA. Dos botones, ninguno preseleccionado: sin elegir no se anula. Si hubiera
+       una opción marcada de fábrica, en dos semanas todas las anulaciones dirían lo mismo y el dato
+       no serviría para separar el plantón del cierre del negocio, que es para lo que existe. -->
+  <div class="modal-overlay" id="mQuien" style="display:none"><div class="modal" style="max-width:460px">
+    <div class="modal-head"><h3>¿Quién anula esta cita?</h3></div>
+    <div class="modal-body">
+      <p style="color:var(--text2);font-size:.9rem;margin:0 0 .9rem">Hace falta saberlo para poder distinguir después un plantón de un cierre tuyo. Si estaba cobrada, se anulará también su factura.</p>
+      <div id="mQuienBody" style="display:grid;gap:.6rem">
+        <button type="button" class="btn btn-secondary" data-quien="cliente" style="text-align:left;padding:.8rem 1rem">
+          <strong>La anula el cliente</strong><br><span style="color:var(--text2);font-size:.85rem">Ha avisado de que no puede venir.</span></button>
+        <button type="button" class="btn btn-secondary" data-quien="negocio" style="text-align:left;padding:.8rem 1rem">
+          <strong>La anulo yo</strong><br><span style="color:var(--text2);font-size:.85rem">Cierro, cambio de planes o la muevo por mi cuenta.</span></button>
+      </div>
+      <p style="color:var(--text3);font-size:.82rem;margin:.9rem 0 0">¿No vino y no avisó? Eso no es anular: ciérrala con <strong>«No se presentó»</strong>.</p>
+      <div style="margin-top:1rem;text-align:right"><button type="button" class="btn btn-secondary" id="mQuienNo">Dejarlo</button></div>
+    </div>
   </div></div>`;
 
 const modalBloqueo = (puestoSing = 'Puesto') => `
@@ -1806,6 +1903,47 @@ function irA(f){ document.getElementById('agFecha').value=f; agCargar(); }
 // P2 — RUEDA / GESTO VERTICAL sobre la rejilla del mes: un mes por gesto, con freno. Solo en Mes: en
 // Día y Semana la rueda tiene que seguir desplazando el lienzo, que es lo que se espera de ella.
 var _ruedaFreno=0;
+var _toque=null;
+// ── CABO 5 · LAS CITAS DE UN CLIENTE ─────────────────────────────────────────────────────────────
+// Se llega desde su ficha con ?cliente=<id>. El filtro se VE (un chip encima del lienzo) y se QUITA
+// de un clic. A propósito NO se mete entre los filtros de eje («por persona / por puesto» y «ver todo
+// el equipo»): aquellos son cómo se reparte la rejilla y este es qué citas entran — mezclarlos haría
+// que quitar uno pareciera quitar el otro. Y no toca la URL con history.replaceState para no
+// romperle el «atrás» a quien viene de la ficha: se recarga limpia.
+var AG_CLIENTE=(function(){ try{ return parseInt(new URLSearchParams(location.search).get('cliente'),10)||0; }catch(e){ return 0; } })();
+function pintaChipCliente(cli){
+  var box=document.getElementById('agChipCliente'); if(!box) return;
+  if(!AG_CLIENTE || !cli){ box.style.display='none'; box.innerHTML=''; return; }
+  box.style.display='flex';
+  box.innerHTML='<span class="ag-chip">Solo las citas de <b>'+esc(cli.name)+'</b>'
+    +'<button type="button" title="Quitar el filtro" onclick="quitaChipCliente()">✕</button></span>';
+}
+function quitaChipCliente(){ location.href='/admin/citas'; }
+function mesToqueIni(ev){
+  _toque=null;
+  if(vistaActual()!=='mes') return;
+  if(!ev.target.closest || !ev.target.closest('.mes')) return;
+  if(ev.touches.length!==1) return;                       // dos dedos son un zoom, no un deslizamiento
+  var t=ev.touches[0];
+  if(t.clientX < 24 || t.clientX > window.innerWidth-24) return;   // borde: es del navegador, no nuestro
+  _toque={ x:t.clientX, y:t.clientY, t:Date.now() };
+}
+function mesToqueMueve(ev){
+  if(!_toque || vistaActual()!=='mes') return;
+  var t=ev.touches && ev.touches[0]; if(!t) return;
+  var dx=Math.abs(t.clientX-_toque.x), dy=Math.abs(t.clientY-_toque.y);
+  if(dx > 24 && dx > dy*1.5 && ev.cancelable) ev.preventDefault();
+}
+function mesToqueFin(ev){
+  var ini=_toque; _toque=null;
+  if(!ini || vistaActual()!=='mes') return;
+  var t=(ev.changedTouches&&ev.changedTouches[0]); if(!t) return;
+  var dx=t.clientX-ini.x, dy=t.clientY-ini.y;
+  if(Math.abs(dx) < 60) return;                            // recorrido corto: no es un gesto
+  if(Math.abs(dx) < Math.abs(dy)*1.5) return;              // más vertical que horizontal: es scroll
+  if(Date.now()-ini.t > 800) return;                       // arrastre lento: tampoco es un gesto
+  agMover(dx < 0 ? 1 : -1);                                // hacia la izquierda = mes siguiente
+}
 function ruedaMes(ev){
   if(vistaActual()!=='mes') return;
   if(!ev.target.closest || !ev.target.closest('.mes')) return;
@@ -1837,7 +1975,8 @@ async function agCargar(){
   }
   var desde=f0, hasta=f0;
   if(vista==='semana'){ var d=new Date(f0+'T00:00:00Z'); var dow=d.getUTCDay(); var mon=new Date(d.getTime()-((dow+6)%7)*86400000); desde=ymd(mon); hasta=ymd(new Date(mon.getTime()+6*86400000)); }
-  var data=await api('GET','/api/erp/citas/agenda?desde='+desde+'&hasta='+hasta);
+  var data=await api('GET','/api/erp/citas/agenda?desde='+desde+'&hasta='+hasta+(AG_CLIENTE?('&cliente='+AG_CLIENTE):''));
+  pintaChipCliente(data.cliente);
   pintaSinHorario(!!data.sin_horario);
   render(data, desde, hasta, vista, eje);
 }
@@ -2005,6 +2144,99 @@ function render(data, desde, hasta, vista, eje){
     });
   });
 
+  // ── EL REPARTO DE LAS QUE CHOCAN (cabo 1) ──────────────────────────────────
+  // ANTES: toda cita se pintaba a left:4px + right:4px, o sea el ancho entero de su columna. Dos a
+  // la misma hora quedaban UNA ENCIMA DE OTRA y la de abajo desaparecía. Medido antes de tocar nada:
+  // mismas coordenadas, 36 px tapados.
+  //
+  // AHORA, el algoritmo de siempre (el de Google Calendar y Outlook; no se inventa otro):
+  //   1. Se agrupan las que chocan ENTRE SÍ. Un grupo se cierra cuando una empieza en o después del
+  //      final más lejano visto hasta ahora — por eso «empieza justo cuando la otra acaba» NO es
+  //      choque: la comparación es estricta.
+  //   2. Dentro del grupo, cada cita cae en la primera sub-columna libre a su hora.
+  //   3. TODAS las del grupo salen con el MISMO ancho: 1/n del ancho de la columna, con n = cuántas
+  //      sub-columnas hicieron falta. Es el mayor ancho posible sin que ninguna se pise.
+  // Encadenadas (A choca con B, B con C, A no con C) caen solas: A y C comparten sub-columna porque
+  // no se pisan, y el grupo entero mide 2. Una larga que cruza varias cortas, igual.
+  //
+  // ESTO NO TOCA EL REPARTO POR PERSONA/PUESTO: se aplica DENTRO de cada columna, sea la columna una
+  // persona, un puesto o —en la vista SEMANA— un día. En semana eso significa, de regalo, que dos
+  // citas de PERSONAS DISTINTAS a la misma hora dejan de taparse y se ven las dos.
+  function repartirChoques(lista){
+    var xs = lista.slice().sort(function(a,b){
+      return (a.inicio_min-b.inicio_min) || ((b.dur_min||0)-(a.dur_min||0)) || (a.id-b.id);
+    });
+    var grupos=[], actual=[], finMax=-1;
+    xs.forEach(function(c){
+      var fin = c.inicio_min + Math.max(1, c.dur_min||0);
+      if(actual.length && c.inicio_min >= finMax){ grupos.push(actual); actual=[]; finMax=-1; }
+      actual.push(c); finMax = Math.max(finMax, fin);
+    });
+    if(actual.length) grupos.push(actual);
+    grupos.forEach(function(g){
+      var libres=[];                                  // libres[k] = fin de la última puesta en la sub-columna k
+      g.forEach(function(c){
+        var fin = c.inicio_min + Math.max(1, c.dur_min||0);
+        var k=0; while(k<libres.length && libres[k] > c.inicio_min) k++;
+        libres[k]=fin; c.__col=k;
+      });
+      g.forEach(function(c){ c.__cols = libres.length; });
+    });
+  }
+  var porColumna={};
+  (data.citas||[]).forEach(function(ci){
+    var key = vista==='semana' ? ci.fecha : (eje==='recurso'?(ci.recurso_id==null?'null':ci.recurso_id):ci.user_id);
+    (porColumna[key]=porColumna[key]||[]).push(ci);
+  });
+  Object.keys(porColumna).forEach(function(k){ repartirChoques(porColumna[k]); });
+
+  // ── ESTIRAR UNA CITA POR EL BORDE (cabo 2) ─────────────────────────────────
+  // Con pointerdown/move/up en vez de mouse y touch por separado: un solo camino para dedo, ratón y lápiz.
+  // Mientras se arrastra NO se guarda nada: se pinta el alto y la hora de fin que quedaría. Al
+  // soltar se guarda por el MISMO endpoint que mover (POST /:id/mover), y si el guardado falla la
+  // cita vuelve a su alto de antes — nunca se queda enseñando algo que no está en la base.
+  function estirarInicio(ev, el, ci){
+    if(ev.button!==undefined && ev.button!==0) return;          // solo el botón principal
+    ev.preventDefault(); ev.stopPropagation();
+    var asa=ev.currentTarget; asa.classList.add('tirando');
+    var y0=ev.clientY, altoIni=el.offsetHeight, durIni=ci.dur_min;
+    var grid=(window.AG_GRID||30), pasoPx=grid*PXMIN, minPx=Math.max(22,pasoPx);
+    var etiqueta=document.createElement('div'); etiqueta.className='cita-fin'; el.appendChild(etiqueta);
+    var durNueva=durIni;
+    var pinta=function(dur){
+      durNueva=dur;
+      el.style.height=Math.max(22, dur*PXMIN)+'px';
+      etiqueta.textContent=hcorta(ci.inicio_min+dur);
+    };
+    pinta(durIni);
+    var mover=function(e){
+      var alto=Math.max(minPx, altoIni+(e.clientY-y0));
+      // Se ajusta a la MISMA rejilla de la agenda, y nunca por debajo de un paso: no hay cita de cero.
+      pinta(Math.max(grid, Math.round((alto/PXMIN)/grid)*grid));
+    };
+    var soltar=function(e){
+      document.removeEventListener('pointermove',mover);
+      document.removeEventListener('pointerup',soltar);
+      document.removeEventListener('pointercancel',soltar);
+      asa.classList.remove('tirando');
+      if(etiqueta.parentNode) etiqueta.parentNode.removeChild(etiqueta);
+      if(durNueva===durIni) return;                              // ni se movió: no se molesta al servidor
+      var alturaPrevia=Math.max(22, durIni*PXMIN)+'px';
+      api('POST','/api/erp/citas/'+ci.id+'/mover',
+          { fecha: ci.fecha, inicio_min: ci.inicio_min, dur_min: durNueva })
+        .then(function(){ ci.dur_min=durNueva; agCargar(); })
+        .catch(function(err){
+          // SE DESHACE LO QUE SE VE. Una cita pintada con una duración que no se guardó es peor que
+          // el propio fallo: el dueño creería que su agenda dice algo que no dice.
+          el.style.height=alturaPrevia;
+          toast((err&&err.message)||'No se ha podido cambiar la duración','err');
+        });
+    };
+    document.addEventListener('pointermove',mover);
+    document.addEventListener('pointerup',soltar);
+    document.addEventListener('pointercancel',soltar);
+  }
+
   // ── LAS CITAS, por minutos reales ──────────────────────────────────────────
   (data.citas||[]).forEach(function(ci){
     var sel = vista==='semana' ? '.ag-col[data-colkey="'+ci.fecha+'"]'
@@ -2020,6 +2252,13 @@ function render(data, desde, hasta, vista, eje){
     el.style.setProperty('--c-suave',col.suave);
     el.style.setProperty('--c-oscuro',col.oscuro);
     el.style.top=top+'px'; el.style.height=h+'px';
+    // El ancho sale del reparto. Con una sola sub-columna queda exactamente como antes (4 px a cada
+    // lado): las citas que no chocan con nadie no cambian ni un píxel.
+    var nCols=ci.__cols||1, iCol=ci.__col||0;
+    el.style.left='calc('+(iCol*100/nCols)+'% + 4px)';
+    el.style.width='calc('+(100/nCols)+'% - 8px)';
+    el.style.right='auto';
+    if(nCols>1) el.dataset.choque=nCols;
     if(window.CITAS_EDIT){ el.draggable=true; el.ondragstart=function(ev){ev.dataTransfer.setData('text/plain',ci.id);}; }
     // JERARQUÍA POR ALTURA, sin cortar palabras a media letra: se quitan LÍNEAS enteras.
     var linCli='<div class="cli">'+esc(ci.cliente)+'</div>';
@@ -2036,6 +2275,17 @@ function render(data, desde, hasta, vista, eje){
       b.style.top=(w.ini*PXMIN)+'px'; b.style.height=((w.fin-w.ini)*PXMIN)+'px';
       el.appendChild(b);
     });
+    // ── EL ASA DE ESTIRAR (cabo 2) ──────────────────────────────────────────
+    // VA AQUÍ, DESPUÉS del innerHTML, y no antes: el innerHTML de arriba reescribe el bloque entero y
+    // se llevaría por delante cualquier hijo añadido antes (pasó en la primera pasada, y el asa no
+    // aparecía sin dar ningún error). Los tramos de espera se añaden aquí por lo mismo.
+    // No se pinta en las que ya no se tocan (anulada / atendida) ni sin permiso de edición.
+    if(window.CITAS_EDIT && ci.estado!=='anulada' && ci.estado!=='atendida'){
+      var asa=document.createElement('div');
+      asa.className='cita-asa'; asa.title='Arrastra para cambiar la duración';
+      asa.addEventListener('pointerdown', function(ev){ estirarInicio(ev, el, ci); });
+      el.appendChild(asa);
+    }
     el.onclick=function(){verCita(ci.id);};
     colEl.appendChild(el);
   });
@@ -2270,6 +2520,9 @@ async function verCita(id){
     +'<div><div class="form-label">Hora</div>'+e(c.hora)+' ('+c.dur_min+' min)</div>'
     +(c.proyecto_codigo?'<div><div class="form-label">Proyecto</div>'+e(c.proyecto_codigo)+'</div>':'')
     +(c.invoice_id?'<div><div class="form-label">Cobro</div><a href="/admin/invoices/'+c.invoice_id+'" target="_blank">Ver factura</a></div>':'')
+    // CABO 4 · quién la anuló. «Sin registrar» para las anuladas ANTES de que se guardara el dato:
+    // no se les adivina un autor, se dice que no consta. Inventarlo sería peor que el hueco.
+    +(c.estado==='anulada'?'<div><div class="form-label">Anulada por</div>'+e(QUIEN_ANULA[c.anulada_por]||'Sin registrar')+'</div>':'')
     +'</div>'
     +'<div class="form-label">Servicios</div><div style="margin-bottom:1rem">'+e((c.servicios||[]).map(s=>s.nombre).join(' + '))+'</div>'
     +(c.nota?'<div class="alert" style="margin-bottom:1rem">'+e(c.nota)+'</div>':'')
@@ -2278,8 +2531,35 @@ async function verCita(id){
   openModal('mDet');
 }
 var ESTLBL={pedida:'Pedida',confirmada:'Confirmada',atendida:'Atendida',no_show:'No se presentó',anulada:'Anulada'};
-async function estado(id,e){ try{ await api('POST','/api/erp/citas/'+id+'/estado',{estado:e}); closeModal('mDet'); toast('Actualizado'); agCargar(); }catch(x){ toast(x.message,'err'); } }
-async function anular(id){ if(!confirm('¿Anular esta cita? Si estaba cobrada, se anulará también su factura.')) return; try{ await api('DELETE','/api/erp/citas/'+id); closeModal('mDet'); toast('Cita anulada'); agCargar(); }catch(x){ toast(x.message,'err'); } }
+// Los tres valores del cabo 4, en cristiano. Lo que no esté aquí (incluido null) se lee «Sin registrar».
+var QUIEN_ANULA={cliente:'El cliente',negocio:'El negocio',automatico:'Caducó sola, sin respuesta'};
+async function estado(id,e){
+  var extra={};
+  if(e==='anulada'){ var q=await quienAnula(); if(!q) return; extra.anulada_por=q; }
+  try{ await api('POST','/api/erp/citas/'+id+'/estado',Object.assign({estado:e},extra)); closeModal('mDet'); toast('Actualizado'); agCargar(); }catch(x){ toast(x.message,'err'); }
+}
+// ── CABO 4 · AL ANULAR, ELEGIR QUIÉN. SIN OPCIÓN POR DEFECTO ─────────────────────────────────────
+// Dos botones y ninguno preseleccionado: si hubiera uno marcado de fábrica, en dos semanas TODAS las
+// anulaciones dirían lo mismo y el dato no valdría para nada — que es justo lo contrario de para lo
+// que se guarda. Cerrar el diálogo sin elegir NO anula.
+// «No se presentó» NO está aquí: es un ESTADO de la cita y tiene su propio botón. Nadie anuló nada.
+function quienAnula(){
+  return new Promise(function(res){
+    var f=document.getElementById('mQuien');
+    document.getElementById('mQuienBody').onclick=function(ev){
+      var b=ev.target.closest('[data-quien]'); if(!b) return;
+      f.classList.remove('open'); f.style.display='none'; res(b.getAttribute('data-quien'));
+    };
+    document.getElementById('mQuienNo').onclick=function(){ f.classList.remove('open'); f.style.display='none'; res(null); };
+    f.style.display='flex'; f.classList.add('open');
+  });
+}
+async function anular(id){
+  var quien = await quienAnula();
+  if(!quien) return;                                   // cerró sin elegir: no se anula nada
+  try{ await api('DELETE','/api/erp/citas/'+id,{anulada_por:quien}); closeModal('mDet'); toast('Cita anulada'); agCargar(); }
+  catch(x){ toast(x.message,'err'); }
+}
 async function atender(id){
   var cobrar=confirm('¿Cobrar ahora? (Aceptar = cobrar con un ticket en efectivo; Cancelar = marcar atendida sin cobrar)');
   var body={cobrar:cobrar, via:'ticket', payment_method:'efectivo', registrar_tiempo:false};
@@ -2331,6 +2611,25 @@ async function bGuardar(){
   // Los FILTROS se despliegan solos si venían tocados. La vista ya no: ahora son botones a la vista.
   if((p.eje&&p.eje!=='persona')||p.verTodo){ document.getElementById('agControles').style.display='flex'; }
   document.addEventListener('wheel', ruedaMes, { passive:false });
+  // ── CABO 3 · DESLIZAR EN HORIZONTAL PARA CAMBIAR DE MES (móvil) ─────────────────────────────
+  // LO QUE HABÍA: solo el evento wheel, que un DEDO NO DISPARA. O sea que en un móvil no había ningún gesto
+  // — ni vertical ni horizontal. La rueda sigue igual para escritorio y no se toca.
+  //
+  // EL VERTICAL SE QUEDA COMO ESTÁ, a propósito: en móvil hace scroll de la página. Convertirlo en
+  // cambio de mes sería robarle al dueño el gesto con el que se mueve por su propia pantalla.
+  //
+  // EL UMBRAL, y por qué es así: hace falta recorrer 60 px en horizontal Y que el movimiento sea
+  // claramente más horizontal que vertical (1,5 veces) para que un scroll con la muñeca torcida no
+  // cambie de mes sin querer. Y se ignora todo lo que empiece cerca del borde izquierdo (24 px),
+  // que es donde el navegador tiene su gesto de volver atras: ahí no se compite, se cede.
+  document.addEventListener('touchstart', mesToqueIni, { passive:true });
+  // NO PASIVO A PROPÓSITO: hace falta poder llamar a preventDefault(). Sin eso, Chromium se queda el
+  // arrastre horizontal como su gesto de «atrás» y la pantalla se va de la aplicación — comprobado en
+  // la prueba, que acababa en about:blank. La propiedad overscroll-behavior no basta porque quien desborda aquí
+  // es el documento, no la rejilla. Solo se corta cuando el gesto YA es claramente horizontal y ha
+  // empezado sobre el mes: el resto de deslizamientos de la aplicación no se tocan.
+  document.addEventListener('touchmove', mesToqueMueve, { passive:false });
+  document.addEventListener('touchend', mesToqueFin, { passive:true });
   pintaBotonesVista(vistaActual()); agCargar(); })();
 `;
 

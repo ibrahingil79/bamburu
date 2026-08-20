@@ -958,7 +958,7 @@ export function fichaVentanaJS({ montaje = 'ventana' } = {}) {
         if (tipo === 'disa')     { preguntarDisa(t.getAttribute('data-fam')); return; }
         if (tipo === 'cuenta')   { abrirTarjeta('deuda'); return; }
         if (tipo === 'historia') { location.href = '/admin/clients/' + id + '#historia'; return; }
-        if (tipo === 'citas')    { location.href = '/admin/citas'; return; }
+        if (tipo === 'citas')    { location.href = '/admin/citas?cliente=' + ID; return; }
       }
     });
 

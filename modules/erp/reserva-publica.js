@@ -259,7 +259,10 @@ export function anularReservaPublica(db, citaId, ctx = {}) {
   if (!esCitaPublica(db, citaId)) throw err('Esta cita no se gestiona desde aquí.', 403);
   const v = ventanaCliente(db, cita, ctx.ahora || ahoraLocal());
   if (!v.puede) throw err(v.motivo, 403);
-  anularCitaSvc(db, citaId, 'El cliente anuló su cita desde el enlace');
+  // CAMINO 3 · el cliente anula desde su enlace. Se rellena SOLO: al cliente no se le pregunta quién
+  // anula, porque es él — preguntárselo sería pedirle que rellene un formulario para decir lo que ya
+  // sabemos por el camino que ha usado.
+  anularCitaSvc(db, citaId, 'El cliente anuló su cita desde el enlace', 'cliente');
   return { id: Number(citaId), estado: 'anulada' };
 }
 
@@ -279,7 +282,8 @@ export function rechazarReserva(db, citaId, motivo = 'El negocio no pudo atender
   if (!res) throw err('Esta cita no viene de la puerta pública.', 404);
   if (res.aprobacion !== 'pendiente') return { id: Number(citaId), aprobacion: res.aprobacion };
   db.transaction(() => {
-    anularCitaSvc(db, citaId, motivo);
+    // CAMINO 4 · el negocio RECHAZA una solicitud de cita. Lo decide él, así que es suya.
+    anularCitaSvc(db, citaId, motivo, 'negocio');
     db.prepare("UPDATE cita_reserva_publica SET aprobacion='rechazada', retiene_hasta=NULL WHERE cita_id=?").run(citaId);
   })();
   return { id: Number(citaId), aprobacion: 'rechazada' };
@@ -294,7 +298,10 @@ export function caducarReservasPendientes(db, nowEpoch = Math.floor(Date.now() /
   let n = 0;
   for (const p of pend) {
     db.transaction(() => {
-      anularCitaSvc(db, p.cita_id, 'La solicitud de cita caducó sin respuesta');
+      // CAMINO 5 · la solicitud caduca sola sin que nadie conteste. Aquí NO hay autor humano, y eso se
+      // escribe tal cual ('automatico') en vez de dejarlo en blanco: «lo anuló el reloj» es un dato,
+      // «no se sabe» sería otro distinto y no es este.
+      anularCitaSvc(db, p.cita_id, 'La solicitud de cita caducó sin respuesta', 'automatico');
       db.prepare("UPDATE cita_reserva_publica SET aprobacion='caducada', retiene_hasta=NULL WHERE cita_id=?").run(p.cita_id);
     })();
     n++;

@@ -140,7 +140,9 @@ try {
   ok(at.status === 200 && at.body.invoice_id, 'atender con cobro emite por el motor existente', 'factura ' + (at.body && at.body.invoice_id));
   const inv = at.body.invoice_id ? db.prepare('SELECT total, status FROM invoices WHERE id=?').get(at.body.invoice_id) : null;
   ok(inv && Math.abs(inv.total - 24.2) < 0.01, 'el cobro CUADRA: 20 € + 21% IVA = 24,20 €', inv && String(inv.total));
-  const anu = await call(po, 'DELETE', '/api/erp/citas/' + citaA.id);
+  // Desde el 20 ago (Tarea 2 · cabo 4) anular exige decir QUIÉN. Aquí anula el negocio desde su
+  // pantalla, así que va 'negocio'. La aserción de neto-cero de abajo no cambia ni un ápice.
+  const anu = await call(po, 'DELETE', '/api/erp/citas/' + citaA.id, { anulada_por: 'negocio' });
   ok(anu.status === 200, 'anular la cita atendida → 200', String(anu.status));
   const invTras = at.body.invoice_id ? db.prepare('SELECT status FROM invoices WHERE id=?').get(at.body.invoice_id) : null;
   ok(invTras && invTras.status === 'anulada', 'al anular la cita, su factura queda anulada (neto-cero)', invTras && invTras.status);
@@ -184,6 +186,99 @@ try {
   ok(rlista.status() === 200, 'con citas.read: ve la agenda (200)', String(rlista.status()));
   const postSinEdit = await call(pre, 'POST', '/api/erp/citas', { cliente_suelto_nombre: 'X', user_id: owner.id, fecha: F, inicio_min: 600, service_ids: [S] });
   ok(postSinEdit.status === 403, 'sin citas.edit: crear por la API → 403', String(postSinEdit.status));
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // [6] QUIÉN ANULÓ LA CITA (Tarea 2 · cabo 4)
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // Lo que se protege: que el dato NAZCA COMPLETO. Un dato de autoría que se puede dejar en blanco
+  // desde la pantalla no sirve para nada tres meses después, porque la mitad de las filas dirán
+  // «no consta» y nadie sabrá si es que no se supo o que no se preguntó.
+  console.log('\n[6] quién anuló la cita');
+  const pag = await paginaDe(owner.id);
+  await pag.goto(BASE + '/admin/citas', { waitUntil: 'networkidle2' });   // los fetch de abajo son relativos
+  const nuevaCita = async (min) => {
+    const r = await call(pag, 'POST', '/api/erp/citas', { cliente_id: CLI, user_id: owner.id, fecha: F, inicio_min: min, service_ids: [S] });
+    if (r.body && r.body.id) citaIds.push(r.body.id);
+    return r.body && r.body.id;
+  };
+  const filaDe = id => db.prepare('SELECT estado, anulada_por, anulada_at FROM citas WHERE id=?').get(id);
+
+  const cA = await nuevaCita(9 * 60);
+  const sinQuien = await call(pag, 'POST', '/api/erp/citas/' + cA + '/estado', { estado: 'anulada' });
+  ok(sinQuien.status === 400, 'anular SIN decir quién se RECHAZA (400): elegir es obligatorio', 'HTTP ' + sinQuien.status);
+  ok(filaDe(cA).estado === 'confirmada' || filaDe(cA).estado === 'pedida',
+     'y la cita NO se queda anulada a medias', filaDe(cA).estado);
+
+  const conCliente = await call(pag, 'POST', '/api/erp/citas/' + cA + '/estado', { estado: 'anulada', anulada_por: 'cliente' });
+  const fA = filaDe(cA);
+  ok(conCliente.status === 200 && fA.estado === 'anulada' && fA.anulada_por === 'cliente',
+     'la anula el CLIENTE: queda registrado', JSON.stringify(fA));
+  ok(!!fA.anulada_at, 'y anulada_at sigue guardando el CUÁNDO, intacto', fA.anulada_at);
+
+  const cB = await nuevaCita(10 * 60);
+  const sinQuien2 = await call(pag, 'DELETE', '/api/erp/citas/' + cB, {});
+  ok(sinQuien2.status === 400, 'el botón «Anular» tampoco cuela sin quién (400)', 'HTTP ' + sinQuien2.status);
+  await call(pag, 'DELETE', '/api/erp/citas/' + cB, { anulada_por: 'negocio' });
+  ok(filaDe(cB).anulada_por === 'negocio', 'la anula el NEGOCIO: queda registrado', JSON.stringify(filaDe(cB)));
+
+  // «No se presentó» NO es una anulación: es su propio estado y no escribe autor de anulación.
+  const cC = await nuevaCita(11 * 60);
+  const ns = await call(pag, 'POST', '/api/erp/citas/' + cC + '/estado', { estado: 'no_show' });
+  const fC = filaDe(cC);
+  ok(ns.status === 200 && fC.estado === 'no_show' && fC.anulada_por === null,
+     'NO SE PRESENTÓ sigue siendo un ESTADO, no una anulación: sin autor y sin anulada_at', JSON.stringify(fC));
+  ok(!fC.anulada_at, 'y no se le pone sello de anulación a algo que nadie anuló');
+
+  // Una cita anulada ANTES de que existiera el dato: se enseña «sin registrar», no se le inventa autor.
+  const cD = await nuevaCita(12 * 60);
+  await call(pag, 'POST', '/api/erp/citas/' + cD + '/estado', { estado: 'anulada', anulada_por: 'negocio' });
+  db.prepare('UPDATE citas SET anulada_por=NULL WHERE id=?').run(cD);          // simula el pasado
+  await pag.goto(BASE + '/admin/citas', { waitUntil: 'networkidle2' });
+  await pag.evaluate(id => verCita(id), cD);
+  await pag.waitForFunction(() => document.getElementById('mDet').classList.contains('open'), { timeout: 8000 }).catch(() => {});
+  const textoDet = await pag.evaluate(() => (document.getElementById('mDetBody') || {}).textContent || '');
+  ok(/Sin registrar/.test(textoDet), 'una anulada de ANTES del cambio se lee «Sin registrar» — no se le adivina autor',
+     (textoDet.match(/Anulada por\s*\S+[^·]*/) || ['(no sale)'])[0].slice(0, 60));
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // [7] LAS CITAS DE UN CLIENTE, FILTRADAS (Tarea 2 · cabo 5)
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n[7] desde la ficha del cliente, sus citas llegan filtradas');
+  const otroCli = db.prepare("INSERT INTO clients (name,active) VALUES (?,1)").run('GATE Otro ' + TS).lastInsertRowid;
+  const cOtro = await call(pag, 'POST', '/api/erp/citas', { cliente_id: otroCli, user_id: owner.id, fecha: F, inicio_min: 13 * 60, service_ids: [S] });
+  if (cOtro.body && cOtro.body.id) citaIds.push(cOtro.body.id);
+
+  // Las citas de este gate están en F (pasado mañana), así que se navega ahí por la propia pantalla.
+  const verDia = async (url) => {
+    await pag.goto(BASE + url, { waitUntil: 'networkidle2' });
+    await pag.waitForFunction(() => typeof irA === 'function', { timeout: 8000 });
+    await pag.evaluate(f => irA(f), F);
+    await new Promise(r => setTimeout(r, 1400));
+  };
+  await verDia('/admin/citas');
+  const sinFiltro = await pag.evaluate(() => ({ n: document.querySelectorAll('.citaBlock').length, chip: !!document.querySelector('.ag-chip') }));
+  ok(!sinFiltro.chip, 'sin filtro, no hay chip que quitar');
+  ok(sinFiltro.n > 1, 'y se ven las citas de varios clientes', sinFiltro.n + ' citas');
+
+  await verDia('/admin/citas?cliente=' + CLI);
+  const conFiltro = await pag.evaluate(() => ({
+    n: document.querySelectorAll('.citaBlock').length,
+    chip: (document.querySelector('.ag-chip') || {}).textContent || '',
+    quitar: !!document.querySelector('.ag-chip button'),
+  }));
+  ok(conFiltro.n < sinFiltro.n, 'con el filtro se ven MENOS citas que sin él', conFiltro.n + ' de ' + sinFiltro.n);
+  ok(conFiltro.n > 0, 'pero se siguen viendo las suyas', conFiltro.n + ' citas');
+  ok(/Solo las citas de/.test(conFiltro.chip), 'el filtro SE VE, con el nombre del cliente', conFiltro.chip.trim().slice(0, 50));
+  ok(conFiltro.quitar, 'y tiene su aspa para quitarlo');
+  const dejaVerLaDelOtro = await pag.evaluate(id => !document.querySelector('.citaBlock[data-id="' + id + '"]'), cOtro.body && cOtro.body.id);
+  ok(dejaVerLaDelOtro, 'la cita de OTRO cliente no aparece con el filtro puesto');
+  await Promise.all([pag.waitForNavigation({ waitUntil: 'networkidle2' }),
+                     pag.evaluate(() => document.querySelector('.ag-chip button').click())]);
+  await pag.evaluate(f => irA(f), F);
+  await new Promise(r => setTimeout(r, 1400));
+  const trasQuitar = await pag.evaluate(() => ({ n: document.querySelectorAll('.citaBlock').length, chip: !!document.querySelector('.ag-chip') }));
+  ok(!trasQuitar.chip && trasQuitar.n === sinFiltro.n, 'al quitarlo vuelven todas', trasQuitar.n + ' citas');
+  try { db.prepare('DELETE FROM clients WHERE id=?').run(otroCli); } catch {}
 
   await browser.close();
 } catch (e) {

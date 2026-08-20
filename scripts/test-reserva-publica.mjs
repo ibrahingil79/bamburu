@@ -27,6 +27,10 @@ import {
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ FALLO: ' + m); } };
+// Tarea 2 · cabo 4: quién anuló. Los tres caminos que NO pasan por la pantalla del negocio se
+// rellenan solos, y cada uno con su autor: el cliente por su enlace, el negocio al rechazar, y el
+// reloj cuando la solicitud caduca sin que nadie conteste.
+const quienAnulo = (db, id) => db.prepare('SELECT anulada_por FROM citas WHERE id=?').get(id).anulada_por;
 const dbs = [];
 function nuevaBD() {
   const f = join(tmpdir(), 'reserva-pub-' + randomBytes(4).toString('hex') + '.db');
@@ -371,6 +375,7 @@ try {
     ok(caducarReservasPendientes(db, T0 + 25 * 3600) === 0, 'y es idempotente: pasar dos veces no vuelve a tocarla');
     ok(db.prepare('SELECT estado FROM citas WHERE id=?').get(r.id).estado === 'anulada', 'la cita caducada queda ANULADA');
     ok(reservaDeCita(db, r.id).aprobacion === 'caducada', 'y la solicitud marcada como caducada');
+    ok(quienAnulo(db, r.id) === 'automatico', 'y queda escrito que la anuló el RELOJ, no una persona: automatico');
     ok(huecosPublicos(db, { fecha, service_ids: [corte], ahora }).some(h => h.min === 10 * 60), 'el hueco VUELVE a estar libre');
     ok(reservasPublicasPendientes(db, proximoLunes(0), T0 + 25 * 3600).length === 0, 'y desaparece de los avisos del negocio');
 
@@ -384,6 +389,7 @@ try {
     const r3 = crearReservaPublica(db, { ...base, inicio_min: 13 * 60 }, { ahora, nowEpoch: T0 });
     rechazarReserva(db, r3.id);
     ok(db.prepare('SELECT estado FROM citas WHERE id=?').get(r3.id).estado === 'anulada', 'rechazar anula la cita');
+    ok(quienAnulo(db, r3.id) === 'negocio', 'y la anulación es del NEGOCIO: la decidió él al rechazar');
     ok(huecosPublicos(db, { fecha, service_ids: [corte], ahora }).some(h => h.min === 13 * 60), 'y devuelve el hueco');
   }
 
@@ -425,6 +431,7 @@ try {
     // Anular dentro de la ventana sí.
     anularReservaPublica(db, r.id, { ahora: lejos });
     ok(cita().estado === 'anulada', 'anular dentro de la ventana funciona');
+    ok(quienAnulo(db, r.id) === 'cliente', 'y consta como anulada por el CLIENTE, sin preguntarle: lo dice el camino que ha usado');
 
     // Desactivar la ventana del todo.
     const r2 = crearReservaPublica(db, { ...base, inicio_min: 9 * 60 }, { ahora: lejos });

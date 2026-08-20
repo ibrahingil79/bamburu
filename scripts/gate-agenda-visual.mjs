@@ -458,7 +458,126 @@ try {
   ok(mm.zoom === 'none', 'el zoom S/M/L no se enseña en Mes');
   ok(mm.finde > 0 && mm.otros > 0, 'fin de semana y días de otro mes van marcados', mm.finde + ' findes · ' + mm.otros + ' de otro mes');
 
-  ok(errs.length === 0, 'CERO errores de JavaScript en todo el recorrido', errs.join(' | '));
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n[8] DOS CITAS A LA MISMA HORA SE VEN LAS DOS (Tarea 2 · cabo 1)');
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // LO QUE VENÍA A ARREGLAR: toda cita se pintaba al ancho entero de su columna, así que dos a la
+  // misma hora quedaban una ENCIMA de otra y la de abajo desaparecía. Medido antes de tocar nada:
+  // mismas coordenadas, 36 px tapados. Se mide en PÍXELES, no a ojo.
+  // Cinco días por delante: lejos de las citas de los pasos anteriores y de la hora de hoy.
+  const D2 = new Date(Date.parse(HOY + 'T00:00:00Z') + 5 * 86400000).toISOString().slice(0, 10);
+  const cSolape = cliente('Gate Solape ' + RID);
+  const insS = db.prepare("INSERT INTO citas (codigo,cliente_id,user_id,fecha,inicio_min,dur_min,margen_min,estado,created_at,updated_at) VALUES (?,?,?,?,?,?,0,'confirmada',datetime('now'),datetime('now'))");
+  //  A 10:00-11:00 · B 10:30-11:30 (choca con A) · C 11:15-12:15 (choca con B, NO con A) → encadenadas
+  //  X 13:00-13:30 · Y 13:30-14:00 → consecutivas: NO chocan, van a ancho completo
+  //  L 15:00-17:00 larga, con S1 15:00-15:30 y S2 16:00-16:30 cruzándola
+  const ID = {};
+  [['A', 600, 60], ['B', 630, 60], ['C', 675, 60], ['X', 780, 30], ['Y', 810, 30],
+   ['L', 900, 120], ['S1', 900, 30], ['S2', 960, 30]].forEach(([k, ini, dur]) => {
+    ID[k] = insS.run('SOL' + k + RID, cSolape, owner.id, D2, ini, dur).lastInsertRowid;
+  });
+  // El paso anterior dejó la vista en MES (se recuerda en agPrefs), y en el mes no hay bloques que
+  // medir. Se vuelve al DÍA explícitamente: el lienzo es lo que este paso comprueba.
+  const verDia = async () => {
+    await page.goto(BASE + '/admin/citas', { waitUntil: 'networkidle0' });
+    await page.waitForFunction(() => typeof irA === 'function', { timeout: 8000 });
+    await page.evaluate(f => { document.getElementById('agVista').value = 'dia'; irA(f); }, D2);
+    await dormir(1600);
+  };
+  await verDia();
+  const rects = await page.evaluate((ID) => {
+    const out = {};
+    for (const k of Object.keys(ID)) {
+      const el = document.querySelector('.citaBlock[data-id="' + ID[k] + '"]');
+      out[k] = el ? (r => ({ l: Math.round(r.left), w: Math.round(r.width), t: Math.round(r.top), h: Math.round(r.height) }))(el.getBoundingClientRect()) : null;
+    }
+    return out;
+  }, ID);
+  const todas = Object.keys(ID).every(k => rects[k]);
+  ok(todas, 'las ocho citas del escenario se pintan, ninguna se pierde', Object.keys(ID).filter(k => !rects[k]).join(',') || 'las ocho');
+  // [1] dos que chocan: ambas visibles, mismo ancho, ninguna tapada.
+  ok(rects.A.w === rects.B.w, 'DOS QUE CHOCAN: mismo ancho las dos', rects.A.w + ' px y ' + rects.B.w + ' px');
+  ok(rects.A.l !== rects.B.l, 'y en sitios distintos: ninguna tapa a la otra',
+     'left ' + rects.A.l + ' vs ' + rects.B.l);
+  ok(rects.A.l + rects.A.w <= rects.B.l + 1, 'no se pisan ni un píxel',
+     'A acaba en ' + (rects.A.l + rects.A.w) + ', B empieza en ' + rects.B.l);
+  // [2] tres a la vez / encadenadas A-B-C.
+  ok(rects.A.w === rects.C.w && rects.B.w === rects.C.w, 'ENCADENADAS A-B-C: las tres con el mismo ancho', rects.C.w + ' px');
+  ok(rects.A.l === rects.C.l, 'y A y C comparten sitio porque entre ellas NO chocan', 'left ' + rects.C.l);
+  // [3] una larga cruzando dos cortas.
+  ok(rects.L.w === rects.S1.w && rects.S1.w === rects.S2.w, 'UNA LARGA CRUZANDO DOS CORTAS: mismo ancho las tres', rects.L.w + ' px');
+  ok(rects.L.l !== rects.S1.l && rects.S1.l === rects.S2.l, 'la larga a un lado y las dos cortas al otro',
+     'L en ' + rects.L.l + ', cortas en ' + rects.S1.l);
+  // [4] consecutivas: NO es choque.
+  ok(rects.X.w === rects.Y.w && rects.X.w > rects.A.w,
+     'CONSECUTIVAS (una empieza cuando la otra acaba): NO es choque, ancho completo las dos',
+     rects.X.w + ' px frente a los ' + rects.A.w + ' px de las que sí chocan');
+
+  // [5] VISTA SEMANA: ahí la columna es el DÍA, así que dos citas de PERSONAS DISTINTAS a la misma
+  // hora compartían columna y una tapaba a la otra. Con el reparto también se ven las dos. Esto es
+  // consecuencia buscada del cabo 1, no un efecto colateral.
+  const otroEmp = db.prepare("INSERT INTO admin_users (name,email,password_hash,role,active) VALUES (?,?,'x','employee',1)")
+    .run('Gate Otra ' + RID, 'go-' + RID + '@t.local').lastInsertRowid;
+  const idSem = insS.run('SEM' + RID, cSolape, otroEmp, D2, 600, 60).lastInsertRowid;   // MISMA hora que A
+  await page.goto(BASE + '/admin/citas', { waitUntil: 'networkidle0' });
+  await page.waitForFunction(() => typeof irA === 'function', { timeout: 8000 });
+  await page.evaluate(f => { document.getElementById('agVista').value = 'semana'; irA(f); }, D2);
+  await dormir(1600);
+  const sem = await page.evaluate((a, b2) => {
+    const r = id => { const e = document.querySelector('.citaBlock[data-id="' + id + '"]');
+      return e ? (x => ({ l: Math.round(x.left), w: Math.round(x.width) }))(e.getBoundingClientRect()) : null; };
+    return { a: r(a), b: r(b2) };
+  }, ID.A, idSem);
+  ok(sem.a && sem.b, 'SEMANA: las dos citas de personas distintas a la misma hora se pintan',
+     JSON.stringify(sem));
+  ok(sem.a && sem.b && sem.a.l !== sem.b.l && sem.a.w === sem.b.w,
+     'y se ven LAS DOS, lado a lado y del mismo ancho: ninguna tapa a la otra',
+     sem.a ? ('left ' + sem.a.l + ' y ' + sem.b.l + ', ancho ' + sem.a.w) : '');
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n[9] ESTIRAR UNA CITA POR EL BORDE (Tarea 2 · cabo 2)');
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  const asa = await page.evaluate((id) => {
+    const el = document.querySelector('.citaBlock[data-id="' + id + '"] .cita-asa');
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { alto: Math.round(r.height), x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+  }, ID.X);
+  ok(!!asa, 'la cita trae su asa de estirar en el borde de abajo');
+  ok(asa && asa.alto >= 12, 'con zona de agarre para un DEDO, no solo para el ratón', (asa ? asa.alto : 0) + ' px de alto');
+  const durAntes = db.prepare('SELECT dur_min FROM citas WHERE id=?').get(ID.X).dur_min;
+  await page.mouse.move(asa.x, asa.y); await page.mouse.down();
+  await page.mouse.move(asa.x, asa.y + 70, { steps: 10 });
+  const finVivo = await page.evaluate(() => { const e = document.querySelector('.cita-fin'); return e ? e.textContent.trim() : null; });
+  ok(!!finVivo, 'mientras se arrastra se ve la HORA DE FIN que va a quedar', finVivo || '(no se ve)');
+  await page.mouse.up(); await dormir(1800);
+  const durTras = db.prepare('SELECT dur_min FROM citas WHERE id=?').get(ID.X).dur_min;
+  ok(durTras > durAntes, 'al soltar, la duración queda GUARDADA', durAntes + ' → ' + durTras + ' min');
+  ok(durTras % 30 === 0, 'y ajustada a la rejilla que ya usa la agenda (30 min)', durTras + ' min');
+  await verDia();
+  const altoTras = await page.evaluate(id => { const e = document.querySelector('.citaBlock[data-id="' + id + '"]'); return e ? Math.round(e.getBoundingClientRect().height) : 0; }, ID.X);
+  ok(altoTras > rects.X.h, 'y AL RECARGAR la página sigue cambiada', rects.X.h + ' → ' + altoTras + ' px');
+  // Si el guardado FALLA, la cita vuelve a lo que estaba: nunca enseña algo que no está guardado.
+  const asa2 = await page.evaluate((id) => {
+    const el = document.querySelector('.citaBlock[data-id="' + id + '"] .cita-asa'); const r = el.getBoundingClientRect();
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+  }, ID.Y);
+  const altoY = await page.evaluate(id => Math.round(document.querySelector('.citaBlock[data-id="' + id + '"]').getBoundingClientRect().height), ID.Y);
+  await page.evaluate(() => { window.__api = window.api; window.api = function () { return Promise.reject(new Error('fallo simulado de guardado')); }; });
+  await page.mouse.move(asa2.x, asa2.y); await page.mouse.down();
+  await page.mouse.move(asa2.x, asa2.y + 70, { steps: 10 }); await page.mouse.up();
+  await dormir(1200);
+  const altoYTras = await page.evaluate(id => Math.round(document.querySelector('.citaBlock[data-id="' + id + '"]').getBoundingClientRect().height), ID.Y);
+  const durY = db.prepare('SELECT dur_min FROM citas WHERE id=?').get(ID.Y).dur_min;
+  ok(altoYTras === altoY, 'si el guardado FALLA, la cita vuelve a su alto de antes', altoY + ' px, sigue en ' + altoYTras);
+  ok(durY === 30, 'y en la base no ha cambiado nada', durY + ' min');
+  await page.evaluate(() => { window.api = window.__api; });
+
+  // El fallo de guardado lo provoca ESTE gate a propósito (arriba), así que su eco en la consola no
+  // es un error del producto: se descuenta por su texto exacto y NADA más. Cualquier otro sigue
+  // tumbando la aserción, que es para lo que está.
+  const errsReales = errs.filter(e => !/fallo simulado de guardado/.test(e));
+  ok(errsReales.length === 0, 'CERO errores de JavaScript en todo el recorrido', errsReales.join(' | '));
 
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   console.log('\n[7] LA ÚLTIMA, Y LA QUE FALTABA: ¿ESTO SE VE EN LA DIRECCIÓN PÚBLICA?');

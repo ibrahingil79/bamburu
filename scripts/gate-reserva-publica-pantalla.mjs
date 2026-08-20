@@ -339,6 +339,10 @@ try {
     await cli.evaluate(() => anular());
     await new Promise(r => setTimeout(r, 900));
     ok(db.prepare('SELECT estado FROM citas WHERE id=?').get(cita.id).estado === 'anulada', 'anular desde el enlace funciona');
+    // Tarea 2 · cabo 4: por este camino no se le pregunta a nadie quién anula — se sabe por dónde
+    // ha entrado. Aquí se comprueba entero: navegador → ruta pública → base de datos.
+    ok(db.prepare('SELECT anulada_por FROM citas WHERE id=?').get(cita.id).anulada_por === 'cliente',
+       'y queda registrada como anulada por el CLIENTE, sin preguntárselo');
     ok(errsCli.length === 0, '0 errores JS en el enlace del cliente', errsCli.join(' | ') || 'limpio');
     await cli.close();
   }

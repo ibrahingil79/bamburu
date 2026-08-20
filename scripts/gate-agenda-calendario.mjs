@@ -265,6 +265,69 @@ try {
      'la puerta a las personas sigue existiendo: «Mi equipo» en la configuración del negocio', String(puerta));
 
   console.log('\n[7] errores de JavaScript');
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n[9] EN MÓVIL, DESLIZAR EN HORIZONTAL CAMBIA DE MES (Tarea 2 · cabo 3)');
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // LO QUE HABÍA: solo un listener de `wheel`, que un DEDO NO DISPARA. O sea que en un móvil no se
+  // podía cambiar de mes con ningún gesto. El vertical NO se toca: en móvil sigue haciendo scroll de
+  // la página, que es del usuario, y en escritorio la rueda sigue igual.
+  const pm = await b.newPage();
+  await pm.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+  await pm.setCookie({ name: 'asess', value: pel.tok, domain: pel.slug + '.localhost', path: '/' });
+  await pm.goto('http://' + pel.slug + '.localhost:3000/admin/citas', { waitUntil: 'networkidle0' });
+  await pm.waitForFunction(() => typeof irA === 'function', { timeout: 8000 });
+  await pm.evaluate(() => { document.getElementById('agVista').value = 'mes'; agCargar(); });
+  await pm.waitForFunction(() => document.querySelectorAll('.mesdia').length > 0, { timeout: 8000 });
+  await new Promise(r => setTimeout(r, 500));
+
+  // Un deslizamiento de verdad, con eventos táctiles: los mismos que manda un dedo.
+  // Un negocio recién creado tarda más en repintar el mes que el de desarrollo (fetch en frío), así
+  // que se espera de verdad en vez de dormir un número fijo.
+  // Un negocio recién creado tarda más en repintar el mes que el de desarrollo (fetch en frío), así
+  // que se espera de verdad en vez de dormir un número fijo.
+  const esperaMes = () => pm.waitForFunction(
+    () => !!document.querySelector('.mesdia') && !!document.getElementById('agFecha'), { timeout: 15000 });
+  const desliza = async (dx, dy) => {
+    await esperaMes();
+    const p0 = await pm.evaluate(() => { const r = document.querySelector('.mes').getBoundingClientRect();
+      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; });
+    await pm.touchscreen.touchStart(p0.x, p0.y);
+    await pm.touchscreen.touchMove(p0.x + dx, p0.y + dy);
+    await pm.touchscreen.touchEnd();
+    await new Promise(r => setTimeout(r, 1200));
+    await esperaMes();
+    return pm.evaluate(() => document.getElementById('agFecha').value.slice(0, 7));
+  };
+  const mes0 = await pm.evaluate(() => document.getElementById('agFecha').value.slice(0, 7));
+  const mesIzq = await desliza(-140, 0);
+  ok(mesIzq !== mes0, 'deslizar a la IZQUIERDA pasa al mes siguiente', mes0 + ' → ' + mesIzq);
+  const mesDer = await desliza(140, 0);
+  // `mesDer === mes0` a secas daba VERDE si el gesto no hacía nada: quieto también es «igual que al
+  // principio». Se exige además que se haya movido DESDE donde lo dejó el gesto anterior.
+  ok(mesDer === mes0 && mesDer !== mesIzq, 'y deslizar a la DERECHA vuelve al anterior',
+     mesIzq + ' → ' + mesDer);
+  // El vertical NO cambia de mes: sigue siendo del usuario para hacer scroll.
+  const mesVert = await desliza(0, -160);
+  ok(mesVert === mes0, 'un deslizamiento VERTICAL no cambia de mes: el scroll sigue siendo suyo', mesVert);
+  // Un movimiento corto tampoco: el umbral está para que un roce no mueva la pantalla.
+  const mesCorto = await desliza(-30, 0);
+  ok(mesCorto === mes0, 'y un roce corto (30 px) tampoco lo mueve: hay umbral', mesCorto);
+  // Y la rueda de escritorio sigue funcionando exactamente igual que antes.
+  const pd = await b.newPage();
+  await pd.setViewport({ width: 1400, height: 950 });
+  await pd.setCookie({ name: 'asess', value: pel.tok, domain: pel.slug + '.localhost', path: '/' });
+  await pd.goto('http://' + pel.slug + '.localhost:3000/admin/citas', { waitUntil: 'networkidle0' });
+  await pd.waitForFunction(() => typeof agCargar === 'function', { timeout: 8000 });
+  await pd.evaluate(() => { document.getElementById('agVista').value = 'mes'; agCargar(); });
+  await pd.waitForFunction(() => document.querySelectorAll('.mesdia').length > 0, { timeout: 15000 });
+  const rmes0 = await pd.evaluate(() => document.getElementById('agFecha').value.slice(0, 7));
+  await pd.evaluate(() => document.querySelector('.mes').dispatchEvent(
+    new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true })));
+  await new Promise(r => setTimeout(r, 900));
+  const rmes1 = await pd.evaluate(() => document.getElementById('agFecha').value.slice(0, 7));
+  ok(rmes1 !== rmes0, 'y en ESCRITORIO la rueda sigue cambiando de mes, como antes', rmes0 + ' → ' + rmes1);
+  await pm.close(); await pd.close();
+
   ok(errs.length === 0, '0 errores JS en móvil y escritorio', errs.slice(0, 3).join(' | '));
 
   try { pel.db.close(); ase.db.close(); } catch {}

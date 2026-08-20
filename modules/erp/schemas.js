@@ -222,14 +222,24 @@ export const citaSchema = z.object({
 });
 
 // Mover una cita (arrastrar en la agenda): revalida en servidor. Mantiene sus servicios.
+// `dur_min` OPCIONAL: es el mismo gesto de arrastrar, pero por el borde de abajo — estirar la cita.
+// Cuando viene, la cita no se mueve: solo cambia de duración (ver moverCitaSvc). No hay endpoint
+// nuevo a propósito: estirar y mover son la misma acción del dueño sobre el lienzo.
 export const citaMoverSchema = z.object({
   fecha: fechaISO,
   inicio_min: minDia,
   user_id: optId,
   recurso_id: optId,
+  dur_min: z.coerce.number().int().positive().max(1440).optional(),
 });
 
-export const citaEstadoSchema = z.object({ estado: z.enum(CITA_ESTADOS) });
+// Al cambiar el estado. `anulada_por` solo tiene sentido —y solo se exige— cuando el estado es
+// 'anulada'; el candado de «es obligatorio elegir» está en la ruta, que es quien sabe si la anulación
+// viene de la pantalla del negocio (hay que preguntar) o del portal del cliente (se rellena solo).
+export const citaEstadoSchema = z.object({
+  estado: z.enum(CITA_ESTADOS),
+  anulada_por: z.enum(['cliente', 'negocio', 'automatico']).optional(),
+});
 
 // Al ATENDER: opciones de salida al dinero (reutiliza TPV o createInvoice) y de registro de tiempo.
 export const citaAtenderSchema = z.object({

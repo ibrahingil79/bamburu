@@ -95,8 +95,8 @@
 > el detalle de cada tarea. Ninguna se inicia sin encargo. **El puntero del Peldaño 8 NO se mueve:**
 > las tres son transversales o previas, y el peldaño sigue ABIERTO esperando su encargo.
 
-**EL ORDEN:** (1) sanear las comprobaciones automáticas · (2) cerrar los cabos sueltos de la Agenda,
-como **UNA sola tarea entera** · (3) funciones nuevas · (4) volver al **Peldaño 8 — Salud/bienestar**.
+**EL ORDEN:** (1) sanear las comprobaciones automáticas ✅ · (2) cerrar los cabos sueltos de la Agenda,
+como **UNA sola tarea entera** ✅ · (3) funciones nuevas ← **AQUÍ** · (4) volver al **Peldaño 8 — Salud/bienestar**.
 
 ### ✅ TAREA 1 — Sanear las comprobaciones automáticas  ✅ HECHA (2026-08-20) — ver su ficha abajo
 
@@ -122,7 +122,7 @@ verdad y no como se suponía — que es justo el problema que esta tarea viene a
   barrido corre **en paralelo y en dos modos** ese argumento ya no pesa, y una comprobación que nadie
   ejecuta acaba mintiendo.
 
-### ⬜ TAREA 2 — Cabos sueltos de la Agenda  (apuntada, no empezada)
+### ✅ TAREA 2 — Cabos sueltos de la Agenda  ✅ HECHA (2026-08-20) — ver su ficha abajo
 
 **Va ENTERA, no en trozos.** Cinco cabos:
 - Dos citas **a la misma hora** se pintan una encima de otra.
@@ -1548,6 +1548,105 @@ completa los cubra, hay que meterlos en un grupo — decisión del dueño, porqu
 **Capturas:** `/home/ubuntu/menu-shots/` (Agenda con sus dos entradas · la sección en su sitio · sin
 puestos frente a con un puesto). **Desplegado y verificado por HTTPS** en `peluqueria-gil.bamburu.com`:
 Agenda con 2 entradas, la sección con sus 5, y las 7 rutas viejas a 200.
+
+### TAREA 2 — Cabos sueltos de la Agenda (los cinco, una sola entrega)  ✅ HECHO (2026-08-20)
+
+**Fue ENTERA: cinco cabos, un cierre.** Aserciones **312 → 357** en las cinco comprobaciones tocadas.
+Una sola columna nueva en la base de datos, ninguna API nueva, ningún motor tocado.
+
+**EL PASO 0 CORRIGIÓ DOS PREMISAS DEL ENCARGO** (confirmadas por Ibrahin antes de escribir nada):
+- El **plantón ya se distingue**: existe el estado `no_show` y el vigía lo lee (`gate-vigia-agenda`,
+  detector D). Así que el cabo 4 **no** era «separar plantón de anulación» sino **quién anuló**, y
+  `no_show` se queda **exactamente como estaba**: no se toca, no se renombra, no se fusiona.
+- En **móvil el vertical ya es scroll del usuario** y así se queda: solo se añade el **horizontal**.
+  Convertir el vertical en cambio de mes habría sido robarle el scroll.
+
+**CABO 1 · DOS CITAS A LA MISMA HORA.** Algoritmo estándar de Google Calendar y Outlook, no uno
+propio: se ordena por inicio, se agrupan las que **se solapan en cadena** (un grupo se cierra cuando
+una cita empieza después del final máximo del grupo), y dentro del grupo cada cita cae en la primera
+columna libre. Ancho = `100/nCols`, sin huecos ni superposición. **Dos consecutivas NO son un choque**:
+la que empieza cuando la otra acaba conserva el ancho completo.
+**Y en vista SEMANA la columna es el DÍA**, así que dos citas de **personas distintas** a la misma
+hora, que antes se tapaban, ahora se ven **lado a lado**. Es lo buscado, y va como criterio propio.
+
+**CABO 2 · ESTIRAR POR EL BORDE.** Asa en el borde de abajo, **14 px** (dedo, no solo ratón),
+`touch-action:none`. Mientras se arrastra se ve la **hora de fin en vivo**, y suelta pegada a la
+rejilla del negocio (`window.AG_GRID`). **Guarda por el mismo camino que mover una cita**
+(`POST /api/erp/citas/:id/mover`, con `dur_min` añadido a su esquema): **sin API nueva**. Si el
+guardado falla, la cita **vuelve a su alto anterior** — y eso está probado simulando el fallo.
+Solo aparece con permiso de edición y **no** en citas anuladas ni atendidas.
+
+**CABO 3 · GESTO HORIZONTAL EN MÓVIL.** Deslizar a la izquierda = mes siguiente; a la derecha = mes
+anterior. Con **umbral** (60 px, más horizontal que vertical ×1,5, menos de 800 ms) y **24 px de
+margen muerto en los bordes**, para no pelearse con el gesto de «atrás» del sistema. El **vertical
+sigue siendo scroll** y la **rueda del escritorio sigue igual**: las dos cosas están afirmadas.
+⚠️ Hizo falta `touchmove` **no pasivo** con `preventDefault()` cuando el gesto es claramente
+horizontal: sin eso Chromium se quedaba el deslizamiento como navegación «atrás» y la página acababa
+en `about:blank`. `overscroll-behavior-x: contain` en la rejilla **no basta** — quien desborda es el
+documento, no la rejilla.
+
+**CABO 4 · QUIÉN ANULÓ.** Columna **`anulada_por`** en `citas`, **aditiva e idempotente**
+(`addCol`): `anulada_at` **no se toca ni se renombra**, y `no_show` sigue siendo un estado aparte,
+**sin autor y sin sello de anulación**. Tres valores y ninguno más: `cliente`, `negocio`,
+`automatico`. **Cinco caminos, y cada uno sabe lo suyo:**
+| Camino | Autor | Se pregunta |
+|---|---|---|
+| El negocio anula desde su pantalla (aspa o cambio de estado) | `negocio` o `cliente` | **SÍ, obligatorio** |
+| El cliente anula desde su enlace | `cliente` | no: lo dice el camino |
+| El negocio **rechaza** una solicitud | `negocio` | no: la decidió él |
+| La solicitud **caduca** sin respuesta | `automatico` | no hay persona: lo anuló el reloj |
+| «No se presentó» | *(ninguno)* | no es una anulación |
+**Cuando anula el negocio, elegir es OBLIGATORIO y no hay opción preseleccionada**: el servidor
+devuelve **400** si no viene autor, y la cita **no se queda anulada a medias**. **A las citas
+anuladas ANTES de este cambio no se les inventa autor**: se enseñan como **«Sin registrar»**.
+
+**CABO 5 · CITAS DEL CLIENTE, FILTRADAS.** Desde la ficha del cliente (los dos sitios: el botón de
+la ficha completa y el de `cliente-360`) la agenda se abre en `/admin/citas?cliente=<id>`. **El filtro
+se aplica en el SERVIDOR** —lo que no es de ese cliente no viaja al navegador—, **se ve** con el
+nombre y **tiene su aspa** para quitarlo. Es un chip aparte: **no toca ni se parece a los filtros de
+eje** del constructor.
+
+**CÓMO SE COMPROBÓ (y cómo se demostró que las comprobaciones sirven).** Los cinco cabos tienen
+**prueba de reversión**: se deshizo cada uno, se reinició y se volvió a pasar la comprobación, que se
+puso **roja**; después se restauró.
+| Se rompió a propósito | Comprobación | Resultado |
+|---|---|---|
+| El reparto de choques devuelve cada cita sola | `gate-agenda-visual` | **5 rojos** (incluido el de semana) |
+| La cita se queda sin asa | `gate-agenda-visual` | **3 rojos** |
+| El deslizamiento ya no cambia de mes | `gate-agenda-calendario` | **2 rojos** |
+| Se puede anular sin decir quién | `gate-citas-pantalla` | **3 rojos** |
+| La agenda ignora el `?cliente=` | `gate-citas-pantalla` | **4 rojos** |
+
+Aserciones **antes → después**: `gate-citas-pantalla` 25 → **42** · `gate-agenda-visual` 68 → **87** ·
+`gate-agenda-calendario` 38 → **43** · `gate-reserva-publica-pantalla` 51 → **52** ·
+`test-reserva-publica` 130 → **133**. **Ninguna aserción vieja se relajó ni se borró.**
+
+**🔧 UNA ASERCIÓN QUE DABA VERDE POR EL MOTIVO EQUIVOCADO, ARREGLADA.** El sabotaje del cabo 3 la
+destapó: «deslizar a la DERECHA vuelve al anterior» comparaba solo contra el mes de partida, así que
+**si el gesto no hacía nada también pasaba** («quieto» es igual que «al principio»). Ahora exige
+además haberse movido **desde donde lo dejó el gesto anterior**. Con el sabotaje puesto caen las dos.
+
+**⚠️ CAMBIO DE CONTRATO DECLARADO.** La versión vieja de `gate-citas-pantalla`, pasada contra el
+código de hoy, da **23 OK / 2 FALLOS**: anulaba **sin decir quién** y ahora eso es un 400. Es
+exactamente el cambio pedido, no una regresión — y **la aserción de neto-cero no cambió ni un ápice**
+(la factura del cobro sigue quedando anulada al anular la cita).
+
+**🔎 HALLAZGOS ANOTADOS, NO ARREGLADOS (no son de esta tarea):**
+- **`test-reserva-publica` lleva 2 rojos desde el 18 ago (`921bbe1`).** Afirma que `company_config`
+  tiene **10** columnas `cita_pub_*` y hoy tiene **12**: aquel commit añadió `cita_pub_auto` y
+  `cita_pub_auto_visto` y no actualizó la cuenta. Nadie se enteró en dos días **porque esa prueba está
+  fuera del barrido**.
+- **Tres comprobaciones de la puerta pública están FUERA de `--all`**: `test-reserva-publica`,
+  `gate-reserva-publica-pantalla` y `test-neto-cero-reserva`. Es el mismo agujero que la Pieza C de la
+  Tarea 1 cerró para las cuatro de agenda; **meterlas es decisión de Ibrahin** y no se hizo por cuenta
+  propia. (Hay más scripts fuera de los grupos, casi todos de Capa 2 congelada; sin inventariar.)
+- **`huecos()` sigue proponiendo solo huecos del MISMO día** (ya anotado en la Tarea 1); no se tocó.
+- **El barrido CORTO de hoy corrió los 75 gates enteros y el registro no se enteró.** `models.js` y
+  `schemas.js` están declarados como «tocan todo», así que una migración escala el corto a todo —
+  correcto. Pero el auto-registro solo salta con `--all`, de modo que el bloque de arriba sigue
+  apuntando al barrido anterior aunque hoy se hayan pasado los mismos 75. Falla del lado prudente
+  (propone de más, nunca de menos), pero dice «no ha corrido» de algo que sí corrió. **Anotado, no
+  arreglado**: es mecanismo de la Tarea 1, no de esta.
 
 ### TAREA 1 — Sanear las comprobaciones automáticas (las cuatro piezas)  ✅ HECHO (2026-08-20)
 
