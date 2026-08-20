@@ -1584,8 +1584,11 @@ de estado, ni una línea de producto, ni nada de la Tarea 2.
 **LO NUEVO: UN ENCARGO NO PUEDE EXIGIR UN BARRIDO EN SUS CRITERIOS DE VERIFICACIÓN** (RITUAL.md §3).
 Un criterio que pide «regresión en verde» es el mismo automatismo colado por la puerta de atrás. Si
 una tarea necesita ejecutar gates, **se dice arriba del todo del encargo y visible**, para que Ibrahin
-lo apruebe al leerlo. El **gate propio de la tarea** sí se corre: lo que no se da por supuesto es la
-**regresión**.
+lo apruebe al leerlo. ~~El **gate propio de la tarea** sí se corre: lo que no se da por supuesto es la
+**regresión**.~~ ← **RETIRADO EL MISMO DÍA: era otra excepción que Ibrahin no acordó.** Es el mismo
+fallo por segunda vez —partir su norma en dos y quedarme la mitad conveniente—, y por eso la norma
+pasó a estar escrita **entera y en un solo sitio** (RITUAL.md · «LA REGRESIÓN»): **ningún barrido y
+ningún gate se ejecuta solo, ni el de la tarea.**
 
 **VERIFICADO:**
 - **Un commit no dispara nada.** Commit de prueba `2b24f99` (`--allow-empty`, a propósito, para que

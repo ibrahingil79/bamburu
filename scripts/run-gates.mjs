@@ -389,7 +389,7 @@ if (informeTocado) {
   for (const l of informeTocado) console.log('   ' + l);
   console.log('   → ' + objetivo.length + ' gates de ' + TODOS.length);
   console.log('   Esto NO es el veredicto: el barrido completo se PROPONE al cerrar y solo se lanza');
-  console.log('   con un sí de Ibrahin (RITUAL.md · «Los barridos son a demanda. Ninguno automático»).');
+  console.log('   con un sí de Ibrahin. La norma, entera, en RITUAL.md · «LA REGRESIÓN».');
   console.log('─'.repeat(78));
 }
 console.log('· ' + objetivo.length + ' gates · ' + (EN_SERIE ? 'EN SERIE'

@@ -37,6 +37,17 @@ export const GRUPOS = {
     'gate-citas-pantalla',           // la pantalla de citas: atender, cobrar y anular (neto-cero)
     'gate-oficio-pantalla',          // el vocabulario del oficio, en la pantalla y en el menú
   ],
+  // ── LA PUERTA PÚBLICA DE RESERVA (peldaño 7 · pieza 6) — DENTRO DEL BARRIDO (20 ago 2026) ────
+  // SEGUNDA ZONA ENTERA que aparece fuera del mapa en el mismo día (la primera fue la agenda). Las
+  // tres existían desde el 8 ago, se corrieron el día de la entrega y NADIE las volvió a ejecutar.
+  // El precio se vio al mirarlas: `test-reserva-publica` llevaba DOS DÍAS en rojo —`921bbe1` añadió
+  // dos columnas `cita_pub_*` y no actualizó la cuenta— y nadie se enteró. Igual que pasó con
+  // `gate-oficio-pantalla`. Una comprobación que nadie ejecuta acaba mintiendo.
+  reserva: [
+    'test-reserva-publica',          // 133 aserciones de lógica, sin servidor ni negocio (38 s)
+    'test-neto-cero-reserva',        // reservar NO es vender; y cuando se vende, cuadra (3 s)
+    'gate-reserva-publica-pantalla', // navegador contra el servidor real: reservar sin sesión (17 s)
+  ],
   pagos: [
     'test-pagos-proveedor', 'gate-pagos-proveedor', 'gate-pago-cuenta', 'gate-abono-proveedor',
     'gate-gasto-proveedor', 'test-devoluciones-proveedor', 'test-compras-motor',
@@ -161,6 +172,12 @@ export const SOLOS = new Map([
    'DESACTIVA a todos los demás usuarios del negocio para probar la pantalla con una sola persona, y '
    + 'cambia el oficio y el nombre de los puestos en `company_config`. Lo devuelve todo al salir, pero '
    + 'mientras corre el negocio entero está tocado: no puede compartir.'],
+  ['gate-reserva-publica-pantalla',
+   'reescribe la configuración de la PUERTA PÚBLICA del negocio entero (`cita_pub_*`: la apaga para probar '
+   + 'el 404, la enciende, le cambia handle, ventana y política) y luego la restaura. Y sus aserciones de '
+   + 'CERO FUGA enumeran TODOS los clientes y TODOS los usuarios activos en ese instante para exigir que '
+   + 'ninguno asome en la calle. Con otro gate escribiendo a la vez, ni la configuración ni el censo son '
+   + 'estables. Misma familia que gate-oficio-pantalla, que también mueve company_config.'],
   ['gate-agenda-sencilla',
    'abre el negocio de 00:00 a 24:00 SOLO PARA HOY (excepción de fecha) para que su aserción de '
    + '«huecos cerca» no dependa de la hora a la que se lance, y la borra al salir. Es un ajuste del '
@@ -202,7 +219,12 @@ export const AFECTA = [
   { re: /^modules\/erp\/routes\/(settings)/, grupos: ['plantillas', 'clientes'] },
   { re: /^modules\/(disa|erp\/(propuestas|voz|vigia|prioridad|dibujo))/, grupos: ['disa', 'clientes'] },
   { re: /^modules\/erp\/(cobros|crm|cliente-360|ficha-cliente-ui|contactos)/, grupos: ['clientes', 'avisos'] },
-  { re: /^modules\/erp\/(citas-engine|citas-avisos|vigia-agenda|reserva-publica)/, grupos: ['clientes'] },
+  { re: /^modules\/erp\/(citas-engine|citas-avisos|vigia-agenda)/, grupos: ['clientes'] },
+  // La puerta pública: su motor y sus rutas. Antes `routes/reserva-publica.js` no lo cubría NINGUNA
+  // regla, así que tocarlo mandaba el corto a correr los 75 — prudente, pero a ciegas. Va con
+  // `clientes` porque la cita reservada acaba en la agenda de dentro y allí se atiende.
+  { re: /^modules\/erp\/reserva-publica/, grupos: ['reserva', 'clientes'] },
+  { re: /^modules\/erp\/routes\/reserva-publica/, grupos: ['reserva', 'clientes'] },
   { re: /^modules\/erp\/(layout|menu|inicio-layout|cuadro-mando|arranque|oficios)/, grupos: ['clientes'] },
   { re: /^modules\/erp\/(routes\/(dashboard|inicio|clients|crm|cobros|citas|menu-routes|migracion|vigia)|views\/)/, grupos: ['clientes'] },
   { re: /^modules\/erp\/(verifactu|facturae)/, grupos: ['margen', 'clientes'] },

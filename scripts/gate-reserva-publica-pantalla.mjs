@@ -179,11 +179,17 @@ try {
 
   // ── [1] APAGADA POR DEFECTO ────────────────────────────────────────────────
   console.log('\n[1] la puerta nace apagada');
-  db.prepare("UPDATE company_config SET cita_pub_activa=0 WHERE id=1").run();
+  // EL HANDLE SE PONE **AQUÍ**, ANTES DE APAGAR, Y NO ES UN DETALLE. Hasta el 20 ago esta línea solo
+  // apagaba la puerta, y el handle se escribía después (en el paso [2], desde la pantalla del dueño).
+  // Resultado: el 404 de abajo llegaba porque **el handle no coincidía**, no porque la puerta
+  // estuviera apagada — verde por el motivo equivocado. Se destapó con la prueba de reversión: al
+  // quitarle a `exigirPuerta` la comprobación de `activa`, el gate seguía en 52/52. Con el handle ya
+  // puesto, la ÚNICA razón que queda para el 404 es que la puerta está apagada.
+  db.prepare("UPDATE company_config SET cita_pub_activa=0, cita_pub_handle=? WHERE id=1").run(HANDLE);
   {
     const anon = await paginaAnonima({ width: 390, height: 844 });
     const r1 = await anon.goto(BASE + '/reservar/' + HANDLE, { waitUntil: 'domcontentloaded' });
-    ok(r1.status() === 404, 'con la puerta apagada, la dirección responde 404', String(r1.status()));
+    ok(r1.status() === 404, 'con la puerta apagada, la dirección responde 404 (y el handle SÍ es el bueno: el 404 es de la puerta)', String(r1.status()));
     const r2 = await anon.goto(BASE + '/reservar', { waitUntil: 'domcontentloaded' });
     ok(r2.status() === 404, 'y /reservar a secas, también', String(r2.status()));
     await anon.close();

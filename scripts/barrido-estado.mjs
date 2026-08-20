@@ -3,15 +3,12 @@
 // EL BARRIDO COMPLETO ES A DEMANDA — y este script es lo que impide que «a demanda» acabe siendo
 // «nunca».
 //
-// LA NORMA (RITUAL.md), una sola y sin letra pequeña: **NINGÚN BARRIDO SE EJECUTA SOLO. NI CORTO, NI
-// COMPLETO, NI ANTES DE UN COMMIT. Se ejecutan cuando Ibrahin lo pide, y solo entonces.** Al cerrar
-// una entrega Code lo **propone** —qué se ha tocado, qué modo recomienda y desde cuándo no se corre—
-// y espera un SÍ. Si dice que no, queda **PENDIENTE** y se vuelve a proponer al abrir la siguiente
-// sesión.
-//
-// (Corregido el 20 ago 2026: aquí llegó a estar escrito que el corto iba «antes de cada commit,
-// siempre y sin preguntar». Esa norma NUNCA la acordó Ibrahin — salió de interpretar en dos un
-// acuerdo que era uno. Se retira.)
+// LA NORMA VIVE EN UN SOLO SITIO: **RITUAL.md · sección «LA REGRESIÓN»**. Aquí NO se reescribe, y no
+// es puntillismo: este comentario ya llegó a contener una versión propia de la norma —«el corto va
+// antes de cada commit, siempre y sin preguntar»— que Ibrahin nunca acordó, y que sobrevivió a la
+// primera corrección precisamente por estar copiada en cuatro sitios. Lo único que hace falta saber
+// aquí: **nada se ejecuta solo; se ejecuta cuando él lo pide**, y este script sirve para PROPONERLO
+// y para que un «no» no se olvide.
 //
 // POR QUÉ HACE FALTA UN SCRIPT Y NO BASTA CON ACORDARSE. Porque «me acuerdo» es exactamente lo que
 // falló antes en este repo: catorce gates muertos tres semanas, un KPI de Notion actualizado durante
@@ -133,10 +130,11 @@ function escribir(cuerpo) {
 const CABECERA = `## 🔁 EL BARRIDO — A DEMANDA
 
 > **Este bloque lo mantiene \`scripts/barrido-estado.mjs\`. No se edita a mano.**
-> **Ningún barrido se ejecuta solo: ni corto, ni completo, ni antes de un commit.** Se ejecutan
-> cuando Ibrahin lo pide, y solo entonces. Al cerrar una entrega **se propone** —qué se ha tocado,
-> qué modo se recomienda y desde cuándo no se corre— y se espera un sí. Si dice que no, queda
-> pendiente aquí y se vuelve a proponer al abrir la siguiente sesión.
+> **Ningún barrido y ningún gate se ejecuta solo. Ni el de la tarea.** Se ejecutan cuando Ibrahin
+> lo pide. La norma, entera y sin resumir, está en **RITUAL.md · «LA REGRESIÓN»**; aquí solo se
+> apunta. Al cerrar una entrega **se propone** —qué se ha tocado, qué modo se recomienda y desde
+> cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
+> proponer al abrir la siguiente sesión.
 
 `;
 

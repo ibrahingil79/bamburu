@@ -106,19 +106,19 @@ estado `errored` y no es la instancia productiva — ignorarla.
 
 ## Reglas de trabajo (de RITUAL.md)
 
-- **LOS BARRIDOS SON A DEMANDA. NINGUNO AUTOMÁTICO** (RITUAL.md §«Los barridos son a demanda»):
-  - **NINGÚN BARRIDO SE EJECUTA SOLO. NI CORTO, NI COMPLETO, NI ANTES DE UN COMMIT.**
-    **Se ejecutan cuando Ibrahin lo pide, y solo entonces.**
-  - Los dos modos siguen existiendo y funcionan invocados a mano: `--tocado` (el corto) y `--all`
-    (los 75). `--lista` enseña qué correría sin correr nada.
-  - **Al cerrar una entrega lo PROPONES**, diciendo qué se ha tocado, qué modo recomiendas y desde
-    cuándo no se corre (`node scripts/barrido-estado.mjs` lo prepara), y **esperas un sí explícito**.
-    Si dice que no: `node scripts/barrido-estado.mjs --registrar-pendiente`, y se vuelve a proponer
-    al ABRIR la siguiente sesión.
-  - **Ningún encargo puede exigir un barrido en sus criterios de verificación.** Si una tarea
-    necesita ejecutar gates, se dice ARRIBA DEL TODO del encargo, visible, para que él lo apruebe al
-    leerlo. El gate propio de la tarea sí se corre: lo que no se da por supuesto es la regresión.
-  - Y nunca se presenta el corto como si fuera el completo: si el completo no se ha corrido, se dice.
+- 📍 **LOS BARRIDOS Y LOS GATES SON A DEMANDA — la norma está escrita ENTERA en `RITUAL.md`,
+  sección «LA REGRESIÓN», y aquí NO se reescribe.** Lo justo para saber que existe:
+  **ningún barrido y ningún gate se ejecuta solo. Ni el de la tarea. Se ejecutan cuando Ibrahin lo
+  pide.** Si un encargo los necesita, lo dice arriba del todo y **con eso queda pedido**.
+  Al cerrar una entrega **se propone** (`node scripts/barrido-estado.mjs` prepara el parte) y se
+  espera un sí; si dice que no, `--registrar-pendiente` y se vuelve a proponer al abrir.
+- 🚩 **SI UNA NORMA DE IBRAHIN ADMITE DOS LECTURAS, NO ELIJAS UNA: PREGUNTA.** Van dos veces que
+  parto una norma suya en dos y me quedo con la mitad conveniente — su «barridos a demanda» acabó
+  siendo «corto automático + completo a demanda», y al corregirlo, «gate propio automático +
+  regresión a demanda». Las dos veces la mitad inventada era la que me daba permiso para algo.
+  **Cuando el texto que escribo crece más que lo que él dijo, lo que sobra es mío**: va marcado como
+  propuesta, o se pregunta. Preguntar cuesta diez segundos; una norma inventada se ejecuta sola
+  durante semanas.
 - UNA tarea del TABLERO en curso a la vez. Terminar antes de empezar otra.
 - MOTORES antes que la cara de DISA.
 - NADA de Capa 2 (e-commerce: productos, inventario, POS, tienda) ni Capa 3 hasta

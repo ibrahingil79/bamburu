@@ -8,13 +8,23 @@
 
 ## LA REGRESIÓN: LOS BARRIDOS SON A DEMANDA. NINGUNO AUTOMÁTICO.
 
-> **NINGÚN BARRIDO SE EJECUTA SOLO. NI CORTO, NI COMPLETO, NI ANTES DE UN COMMIT.**
-> **Se ejecutan cuando Ibrahin lo pide, y solo entonces.**
+> ### 📍 LA NORMA — ESTE ES EL ÚNICO SITIO DONDE ESTÁ ESCRITA ENTERA
+>
+> **NINGÚN BARRIDO Y NINGÚN GATE SE EJECUTA SOLO. NI EL DE LA TAREA, NI EL CORTO, NI EL COMPLETO,**
+> **NI ANTES DE UN COMMIT. Se ejecutan cuando Ibrahin lo pide. Si un encargo necesita ejecutarlos,**
+> **lo dice ARRIBA DEL TODO y visible, y con eso queda pedido.**
+>
+> Los demás sitios (CLAUDE.md, `barrido-estado.mjs`, `run-gates.mjs`) **apuntan aquí**: no la
+> reescriben con sus palabras. Una norma contada dos veces son dos normas en cuanto una se retoca.
 
-**Esto CORRIGE lo que se escribió el 20 ago 2026.** Aquel día Ibrahin dijo «barridos a demanda» y
-aquí se registró como **dos** normas: un corto automático antes de cada commit y un completo a
-demanda. **Esa segunda parte nadie la acordó** — salió de mí, no de él. La norma es **una sola** y es
-la de arriba. Un acuerdo del dueño no se «interpreta» en dos: se copia tal cual.
+**ESTO SE HA CORREGIDO DOS VECES EL MISMO DÍA, Y LAS DOS POR EL MISMO MOTIVO.** Ibrahin dijo
+«barridos a demanda». **(1)** Lo escribí como dos normas —un corto **automático** antes de cada commit
+y un completo a demanda—; esa primera parte nadie la acordó. **(2)** Al corregirlo dejé otra
+excepción: «el gate propio de la tarea sí se corre». **Tampoco la acordó nadie.** Es el mismo fallo
+otra vez: partir una norma suya en dos y quedarme con la mitad conveniente.
+
+**Ya no hay excepciones.** Ni el gate de la tarea. Si un encargo necesita ejecutar comprobaciones, se
+dice arriba del todo del encargo y visible — y **con eso queda pedido**, sin volver a preguntar.
 
 ### 1. LOS DOS MODOS SIGUEN EXISTIENDO — lo que se retira es el automatismo
 
@@ -69,9 +79,10 @@ esta norma retira, colado por la puerta de atrás.
 encargo** —no enterrado en el criterio 12— para que **Ibrahin lo apruebe al leerlo**. Aprobar el
 encargo es entonces aprobar el barrido; sin esa línea arriba, no hay barrido.
 
-Esto **no** afecta al gate propio de la tarea: cada tarea define su comprobación y **esa** se corre
-entera, porque es la que demuestra lo que se acaba de construir. Lo que no se da por supuesto es la
-**regresión**.
+**Tampoco el gate de la propia tarea.** Cada tarea sigue definiendo su comprobación —eso no cambia—,
+pero **escribirla no autoriza a ejecutarla**: se ejecuta cuando el encargo lo pide arriba, como todo
+lo demás. Aquí estuvo escrita la excepción contraria («el gate propio de la tarea sí se corre») y se
+retira: **era una excepción que Ibrahin no acordó.**
 
 ### 3. Por qué el completo va a la velocidad que va, y no más
 
@@ -143,11 +154,9 @@ Dos redes de seguridad más, para que esto no dependa de acordarse:
   facturas/cobros/ledger salvo autorización expresa de la tarea, y siempre por su flujo con
   confirmación (nunca escritura silenciosa).
 - **Simplicidad y cambios quirúrgicos.** Código/edición mínima; no "mejores" lo adyacente.
-- **Verificación siempre:** cada tarea define su test/gate propio, y ese gate se corre entero. La
-  REGRESIÓN es otra cosa: **ningún barrido se ejecuta solo — ni corto, ni completo, ni antes de un
-  commit**. Se propone al cerrar y **solo se lanza cuando Ibrahin lo pide** (ver la sección de
-  arriba). Y **ningún encargo puede exigir un barrido en sus criterios de verificación**: si hace
-  falta, se dice arriba del todo del encargo para que él lo apruebe al leerlo.
+- **Verificación siempre:** cada tarea define su test/gate propio. **Ejecutarlo —ese o cualquier
+  otro— se rige por LA NORMA**, que está escrita entera en la sección «La regresión» de este mismo
+  fichero y **no se resume aquí**.
 - **Legal/regulatorio:** verificado contra fuente oficial en la web, nunca de memoria.
 - **Al terminar:** `commit` + `push` con mensaje claro y actualiza el bloque **"DÓNDE LO DEJÉ / DÓNDE
   SIGO"** de Notion. **Un tema por chat**: al cerrar, avisa para abrir chat nuevo.

@@ -530,7 +530,12 @@ try {
     const db = nuevaBD();
     const cols = (t) => db.pragma('table_info(' + t + ')').map(c => c.name);
     ok(cols('service_config').includes('publico'), 'service_config gana la columna `publico`');
-    ok(cols('company_config').filter(c => c.startsWith('cita_pub_')).length === 10, 'company_config gana las 10 columnas cita_pub_*');
+    // La cuenta es CERRADA a propósito: si alguien añade una columna y no pasa por aquí, este test se
+    // pone rojo y hay que mirar por qué. Eso funcionó — pero nadie lo vio, porque este fichero estaba
+    // FUERA del barrido. Eran 10 el 8 ago; el 18 ago (`921bbe1`) llegaron `cita_pub_auto` y
+    // `cita_pub_auto_visto` (el pestillo del encendido automático de la puerta y su aviso al dueño) y
+    // la cuenta se quedó vieja. Se actualiza a 12: mismo listón, número al día.
+    ok(cols('company_config').filter(c => c.startsWith('cita_pub_')).length === 12, 'company_config gana las 12 columnas cita_pub_*');
     ok(cols('cita_pub_personas').length === 4, 'existe la tabla cita_pub_personas');
     ok(cols('cita_reserva_publica').includes('consent_texto'), 'existe la tabla cita_reserva_publica');
     // Nada de la pieza 5 cambió.
@@ -538,7 +543,7 @@ try {
     ok(!citasCols.some(c => c.startsWith('cita_pub') || c === 'origen'), 'la tabla `citas` de la pieza 5 NO gana ninguna columna');
     // Re-migrar no rompe ni duplica.
     runMigrations(db); runMigrations(db);
-    ok(cols('company_config').filter(c => c.startsWith('cita_pub_')).length === 10, 'runMigrations x3 es idempotente');
+    ok(cols('company_config').filter(c => c.startsWith('cita_pub_')).length === 12, 'runMigrations x3 es idempotente');
     ok(db.prepare('SELECT COUNT(*) n FROM company_config').get().n === 1, 'y no duplica la fila de configuración');
   }
 
