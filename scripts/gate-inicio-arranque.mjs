@@ -83,12 +83,19 @@ try {
     bloques: [...document.querySelectorAll('.onb-bloque h4')].map(x => x.textContent),
     rejilla: !!document.getElementById('inicioGrid'),
     bloquesRejilla: [...document.querySelectorAll('.ig-block')].length,
+    cuadro: !!document.getElementById('cmNumeros'),
   }));
   ok(v1.panel, 'el panel «Pon en marcha tu negocio» aparece en un negocio recién creado');
   ok(/^0\//.test(v1.anillo), 'con el progreso a 0', v1.anillo);
   ok(v1.bloques.length === 3, 'y sus tres bloques con título', v1.bloques.join(' · '));
-  ok(v1.rejilla && v1.bloquesRejilla >= 3,
+  // 20-ago-2026 · EL CUADRO DE MANDO. La rejilla de fábrica ya no trae tres bloques: sus «Cifras del
+  // negocio», «Hoy en la agenda» y «Vigía de DISA» pasaron ARRIBA, fijos, y duplicarlos en la rejilla
+  // era enseñar la misma cifra dos veces. De fábrica queda «Avisos pendientes». Lo que este gate
+  // protege NO cambia —que el panel de arranque no APAGUE el Inicio—, así que se comprueba eso: la
+  // rejilla está y pinta, y además el cuadro de mando está.
+  ok(v1.rejilla && v1.bloquesRejilla >= 1,
      'Y LA REJILLA SE PINTA IGUAL: el panel no la apaga (antes sí lo hacía)', v1.bloquesRejilla + ' bloques');
+  ok(v1.cuadro, 'y el cuadro de mando del día se pinta con ella, no en su lugar');
 
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   console.log('\n[2] CADA PASO SE MARCA SOLO AL HACER LA ACCIÓN REAL. NINGUNO A MANO.');
@@ -261,8 +268,13 @@ try {
      fabricaDe(A.db).map(b => b.tipo).join(', '));
   ok(!bloquesDisponibles(A.db, A.owner.id, () => true).nativos.some(n => n.tipo === 'hoy'),
      'NI EN LA PALETA: no se le ofrece siquiera');
-  ok(bloqueAplica(P.db, 'hoy') && fabricaDe(P.db).some(b => b.tipo === 'hoy'),
-     'y el que sí lleva agenda lo trae de fábrica', fabricaDe(P.db).map(b => b.tipo).join(', '));
+  // 20-ago-2026 · EL CUADRO DE MANDO. «Hoy» ya no viene en la rejilla de FÁBRICA porque ahora es un
+  // bloque FIJO del Inicio, arriba del todo (lo comprueba gate-inicio-cuadro-mando). Lo que sigue
+  // vivo aquí, y es lo que protege esta línea, es que a un negocio CON agenda sí se le ofrece.
+  ok(bloqueAplica(P.db, 'hoy')
+     && bloquesDisponibles(P.db, P.owner.id, () => true).nativos.some(n => n.tipo === 'hoy'),
+     'y al que sí lleva agenda se le ofrece en la paleta',
+     bloquesDisponibles(P.db, P.owner.id, () => true).nativos.map(n => n.tipo).join(', '));
   ok(NATIVOS.hoy.perm === 'citas.read', 'el bloque exige `citas.read`');
   ok(datosHoy(P.db, { puede: p => p !== 'citas.read', fecha: HOY }) === null,
      'y sin ese permiso el dato NO SE CALCULA siquiera: no es que se esconda, es que no llega');

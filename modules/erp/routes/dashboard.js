@@ -1,8 +1,22 @@
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// EL INICIO (/admin) — la ruta. Sirve el CUADRO DE MANDO DEL DÍA.
+//
+// AQUÍ YA NO SE CALCULA NINGUNA CIFRA. Antes esta ruta sacaba las ventas del mes, los pedidos y los
+// pendientes para pintarlos en el HTML, y encima el motor de avisos. Ahora las cifras las pide la
+// pantalla a /api/erp/inicio/cuadro, que es UNA sola puerta con UNA sola lista de permisos: sin ella
+// había dos sitios calculando lo mismo con dos filtros distintos, y el día que uno cambiara el otro
+// se quedaría viejo en silencio.
+//
+// LO ÚNICO QUE SE HACE AQUÍ, y por un motivo concreto: una pasada del motor de avisos por carga de
+// /admin, dejada en el contexto para que `adminLayout` pinte la campana sin repetir el escaneo (que
+// es caro). No se pinta ninguna cifra con ella.
+//
+// `hideDisaSidebar = true` se conserva: el Inicio no lleva el chat de DISA, ni en línea ni flotando.
+// DISA no se pierde — está en su entrada del menú y en /admin/disa, que es a donde lleva.
 import { Hono } from 'hono';
-import { adminLayout, fuentesPermitidas, can } from '../layout.js';
+import { adminLayout, fuentesPermitidas } from '../layout.js';
 import { disaHomeHtml } from '../views/disaHome.html.js';
 import { estadoAvisos, hoyLocal } from '../avisos.js';
-import { ventasResumen, pedidosResumen } from '../ventas-metrics.js';   // PIEZA C: ventas desde la cadena nueva (facturas), pedidos desde customer_orders
 
 export function createDashboardRoutes(db) {
   const r = new Hono();
@@ -11,57 +25,21 @@ export function createDashboardRoutes(db) {
     const session = c.get('session');
 
     let userName = 'Ibrahin';
-    let alertCount = 0;
-    let alertState = 'apagado';
-    const kpis = { ventas: 0, pedidos: 0, pendiente: 0 };
-
     try {
       const user = db.prepare('SELECT name FROM admin_users WHERE id = ?').get(session?.userId);
       if (user?.name) userName = user.name.split(' ')[0];
     } catch {}
-    // Paso (d) — el badge sale ENTERO del motor de avisos (fuentes: vencimientos de proveedor,
-    // cobros de cliente vencidos, stock bajo, recurrentes en borrador). count = total de avisos;
-    // estado = rojo (algo nuevo PARA ESTE USUARIO) / visto / apagado (Opción C). Una sola fuente
-    // de verdad → el número del badge, el del resumen-primero y el de /admin/avisos coinciden.
-    try {
-      // Una sola pasada del motor por carga de /admin: se deja en el contexto y adminLayout la
-      // reutiliza para la campana en vez de recalcular lo mismo con los mismos argumentos.
-      // Solo las fuentes que este usuario puede ver.
-      const est = estadoAvisos(db, hoyLocal(), session?.userId, fuentesPermitidas(c));
-      c.set('avisosEstado', est);
-      alertCount = est.count;
-      alertState = est.estado;
-    } catch {}
-    try {
-      const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
-      kpis.sym = sym;
-      // D2 — los KPIs se filtran por permiso, IGUAL que el chat: "Ventas del mes" (facturado) exige
-      // invoices.read y "Pedidos"/"Pendientes" exigen pedidos.read (mismos permisos que gatea
-      // buildBusinessContext en disa/index.js). Antes se calculaban SIEMPRE, así que un empleado sin
-      // invoices.read veía la cifra total facturada en la home. `verVentas`/`verPedidos` distinguen
-      // "sin permiso" (la vista pinta "—") de un cero legítimo (pinta 0). Owner/admin: can() hace bypass.
-      kpis.verVentas = can(c, 'invoices.read');
-      kpis.verPedidos = can(c, 'pedidos.read');
-      if (kpis.verVentas) {
-        // PIEZA C — ventas del mes desde la cadena NUEVA (facturas: F1 ordinaria + F2 ticket + F3
-        // sustitutiva, neteando rectificativas, sin anuladas ni tickets sustituidos). Titular = total
-        // facturado con IVA.
-        const monthStart = new Date().toISOString().slice(0, 7) + '-01';
-        kpis.ventas = Math.round(ventasResumen(db, { from: monthStart }).total);
-      }
-      if (kpis.verPedidos) {
-        const ped = pedidosResumen(db);   // pedidos/pendientes desde customer_orders
-        kpis.pedidos = ped.confirmadosMes;
-        kpis.pendiente = ped.pendientes;
-      }
-    } catch {}
 
-    // (El checklist de U6 vivía aquí. Ahora el panel «Pon en marcha tu negocio» se deriva en
-    // `arranque.js` y se sirve por /api/erp/inicio/arranque, así que esta pantalla no calcula nada:
-    // el Inicio se pinta igual para todos y el panel decide solo si tiene algo que decir.)
+    // Una sola pasada del motor de avisos por carga de /admin: se deja en el contexto y adminLayout
+    // la reutiliza para la campana en vez de recalcular lo mismo con los mismos argumentos. Solo las
+    // fuentes que este usuario puede ver.
+    try {
+      c.set('avisosEstado', estadoAvisos(db, hoyLocal(), session?.userId, fuentesPermitidas(c)));
+    } catch {}
 
     const simbolo = db.prepare('SELECT currency_symbol s FROM company_config WHERE id=1').get()?.s || '€';
-    return c.html(adminLayout('Dashboard', disaHomeHtml({ userName, alertCount, alertState, kpis, simbolo }), 'dashboard', session?.csrfToken || '', c, true));
+    return c.html(adminLayout('Inicio', disaHomeHtml({ userName, simbolo }), 'dashboard',
+                              session?.csrfToken || '', c, true));
   });
 
   return r;

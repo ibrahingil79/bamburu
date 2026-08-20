@@ -1482,6 +1482,127 @@ completa los cubra, hay que meterlos en un grupo — decisión del dueño, porqu
 puestos frente a con un puesto). **Desplegado y verificado por HTTPS** en `peluqueria-gil.bamburu.com`:
 Agenda con 2 entradas, la sección con sus 5, y las 7 rutas viejas a 200.
 
+### El Inicio deja de ser una lista de deberes: EL CUADRO DE MANDO DEL DÍA — **TAREA TRANSVERSAL** (el puntero del peldaño 8 NO se mueve)  ✅ HECHO (2026-08-20)
+
+**QUÉ ERA EL INICIO Y QUÉ ES AHORA.** Era un saludo, una tarjeta de DISA, cuatro cifras sueltas
+(ventas · pedidos · pendientes · avisos), el panel de arranque, la rejilla componible y **medio
+pantallazo de chat**: compositor, accesos rápidos, cuatro tarjetas de sugerencia y su hilo. Ahora es
+lo que un dueño mira a primera hora, en este orden: **HOY** (la franja del día) · **TUS NÚMEROS**
+(cuatro tarjetas grandes) · **EL GRÁFICO** (ventas por día, con el mes anterior detrás) · **TU
+NEGOCIO EN CIFRAS** (tres listas cortas) · **OPORTUNIDADES** · **DISA DECIDE** · **PON EN MARCHA TU
+NEGOCIO** (plegado) · **TUS PANELES** (la rejilla del paso 6, intacta).
+
+**LO QUE DESTAPÓ EL PASO 0 — cuatro cosas que había que decidir antes de escribir una línea:**
+- **Serie por día: existe UN motor y devuelve el total CON IVA.** `ventasPorDia` (ventas-metrics)
+  suma `invoices.total`; el **constructor NO sabe agrupar por día** — `clavePeriodo` solo entiende
+  mes/trimestre/año. Así que el gráfico grande se pinta con lo que hay y **lo dice en su pie**; el
+  titular de la tarjeta va **sin IVA** (base), que es lo que cuadra con el informe de ventas, y la
+  cifra con IVA viaja a su lado para que las dos se reconcilien de un vistazo. **No se ha inventado
+  una serie en base**, que es lo que habría hecho falta para tenerlo todo en la misma magnitud.
+- **Dos cifras no tienen motor para compararse, y se dice.** La **deuda** (`openDebts`) se mide a día
+  de hoy y **nada reconstruye la deuda de una fecha pasada**; los **clientes nuevos**
+  (`clientesNuevosPorMes`) se cuentan **por meses completos**, así que no hay forma honesta de
+  comparar medio mes con medio mes. Las dos tarjetas enseñan «— sin comparación» **y el motivo**,
+  nunca un 0 ni un porcentaje inventado.
+- **La migración solo tenía UNA puerta**, y se pliega. `/admin/migracion` se alcanzaba únicamente
+  desde el paso «trae tus datos» del panel de arranque — no está en el menú ni en ninguna otra
+  pantalla. Confirmado leyendo la tabla de rutas y el fichero del menú.
+- **El chat del Inicio usaba dos endpoints en exclusiva**: `/api/disa/chips` (GET+POST) y
+  `/api/disa/alerts/open`. Los demás (`/message`, `/threads`, `/attach`) los siguen usando el widget
+  flotante y la pantalla `/admin/disa`.
+
+**CERO CÁLCULO NUEVO, Y SE PUEDE COMPROBAR.** Nace `modules/erp/cuadro-mando.js`, que **no es un
+motor: es un camarero**. Cada cifra sale del motor de su pantalla —`ventasResumen`, `openDebts`,
+`margenResumen` → el motor único, `clientesNuevosPorMes`, `margenPorProducto`, `ventasPorCliente`,
+`pipelineByStage`, `datosHoy` (→ `agendaData` + `ocupacionDia`), `detectar` + `priorizar`— y el gate
+las contrasta **por otro camino** contra el informe de ventas, la torre de Cobros, el informe de
+margen y el informe de clientes. **Ni una tabla nueva. Ni una columna nueva.**
+
+**PERMISOS POR LISTA BLANCA, FILTRADOS EN EL SERVIDOR.** Diez secciones, cada una con **todos** los
+permisos que exige. La composición **ni siquiera llama al motor** de una sección que este usuario no
+puede ver: no es que se esconda al pintar, es que el dato no existe en la respuesta. Forzar
+`/api/erp/inicio/cuadro/<sección>` da **403** si le falta un permiso y **404** si la sección no
+existe. El gate lo prueba con un empleado de verdad y busca la cifra exacta en el cuerpo Y en el HTML.
+
+**EL SUELO DE LOS RANKINGS, DICHO EN VOZ ALTA.** `SUELO_UNIDADES = 3`: para entrar en «lo que más
+vendes» o «lo que más te deja» hay que haber vendido **al menos 3 unidades en el periodo**, y la
+pantalla escribe ese número y **cuántos productos se han quedado fuera por él**. Sin suelo, «el que
+peor va» sería siempre el que diste de alta ayer. Los sin coste conocido no entran en el ranking de
+rentabilidad —sin coste no hay margen que juzgar, ni 0 % ni 100 %— y también se dice cuántos son.
+
+**NINGÚN PORCENTAJE DE MARGEN SIN SU BASE (CANON).** La tarjeta de margen lleva el sufijo del modo de
+la empresa («sobre lo que cobras» / «sobre lo que te costó»), **sobre cuánto** se divide y **cuánto
+queda fuera** por no tener coste. Cada fila del ranking de rentabilidad, igual.
+
+**DISA DECIDE SE COMPONE, NO SE COPIA — y por un motivo que conviene dejar escrito.** `voz.js` escribe
+el dinero en **formato inglés** (`€232.75`) y las fechas en **ISO** (`2026-07-28`). Esta pantalla tiene
+la regla dura de español, así que la línea se arma de **campos estructurados** (cifra · etiqueta del
+detector · nombre · código del documento · fecha) y se escribe cada uno en español al pintarlo. Las
+dos salidas malas estaban descartadas: tocar la voz cambia también la pantalla del vigía y cuatro
+gates (otra tarea), y reescribir su texto con expresiones regulares es **reparsear** — justo lo que su
+cabecera prohíbe, y lo que destroza un nombre de cliente con caracteres raros.
+
+**EL PANEL DE ARRANQUE CAMBIA DE CRITERIO.** Antes se plegaba solo cuando estaban **todos** los pasos
+hechos; ahora se pliega cuando el negocio **tiene actividad real** (`hayActividad`: alguna factura o
+alguna cita). Un negocio que lleva un año facturando pero no ha encendido los recordatorios abría su
+Inicio con la lista de deberes por delante de sus cifras. El pliegue **se sigue recordando por
+usuario** y la preferencia de la persona gana siempre.
+
+**DE PASO, DOS DUPLICADOS CAZADOS EN PANTALLA:**
+- **La rejilla de fábrica enseñaba lo mismo dos veces.** Traía «Cifras del negocio», «Hoy en la
+  agenda» y el «Vigía de DISA», que ahora están arriba, fijos y más grandes. De fábrica queda **solo
+  «Avisos pendientes»**, que no lo pinta nadie más. Los otros tres **siguen en la paleta** para quien
+  los quiera colocar, y **los layouts ya guardados se respetan**: esto es la semilla, no una migración.
+- **Dos «Ventas del mes» distintas en la misma pantalla.** El bloque nativo iba **con IVA** y la
+  tarjeta nueva **sin IVA**. Ahora los dos leen `base` del mismo motor y el bloque lo dice en su
+  rótulo.
+
+**LA MIGRACIÓN GANA SU SEGUNDA PUERTA:** entrada fija en **Datos del negocio** (`/admin/settings`),
+con el mismo candado que la pantalla (`company.read`) — un cambio de sitio no abre ni cierra puertas.
+La del panel de arranque sigue donde estaba. **Dos puertas, y ninguna depende de la otra.**
+
+**EL CHAT SE VA DEL INICIO, Y SOLO DEL INICIO.** DISA sigue entera en `/admin/disa` y en su entrada
+del menú, que es a donde lleva ahora. **Los endpoints que quedan sin uso NO se han borrado**: se
+señalan aquí (`/api/disa/chips` GET+POST y `/api/disa/alerts/open`), que es otra decisión y de otro día.
+
+**VERIFICACIÓN — `gate-inicio-cuadro-mando` 60/0, contra la DIRECCIÓN PÚBLICA** (`https://<negocio>.
+bamburu.com`, navegador de verdad, nada por localhost ni por atajo de API). Los once casos del encargo,
+más el bloque HOY contrastado contra la agenda y la comprobación de que ni una fecha ISO ni un importe
+en formato inglés se cuelan en «DISA decide».
+
+**VALIDADO SABOTEANDO — los cuatro sabotajes tumban el gate:** quitar el suelo del ranking → **4
+rojos** (y «Extensiones», vendida una sola vez, aparece como el farolillo); quitar la base del margen
+→ **3 rojos**; dejar el panel siempre desplegado → **2 rojos**; quitar el filtro de permisos → **2
+rojos**, y el segundo enseña **la cifra de ventas del negocio viajando al navegador de un empleado que
+no puede verla**.
+
+**TRES GATES DE ANTES SE ADAPTAN AL REDISEÑO, y ninguno se afloja:**
+- **`gate-inicio-arranque` 66/0** (era 65/0). Dos aserciones miraban la rejilla de FÁBRICA buscando
+  tres bloques y el bloque «Hoy». Lo que protegían —que el panel no APAGUE el Inicio y que a un
+  negocio con agenda se le ofrezca «Hoy»— sigue comprobándose, ahora contra la rejilla real y contra
+  la PALETA; y se le añade una aserción nueva: que el cuadro de mando se pinta **con** la rejilla, no
+  en su lugar.
+- **`gate-cliente-ficha-completa` 150/0.** Miraba dentro del panel de arranque dándolo por
+  desplegado; ahora lo **abre** primero, que es lo que hace un dueño.
+- **`gate-avisos-badge` 25/0.** Disparaba el resumen desde la tarjeta del chat, que ya no existe. Lo
+  que protegía —**que pedir el resumen NO marque los avisos como vistos**— se comprueba pidiéndoselo
+  al endpoint, que sigue existiendo: si algún día se vuelve a enganchar a un botón, la red ya está.
+
+**Regresión completa: `run-gates.mjs --all` 59/71, y los 12 rojos son EXACTAMENTE los 12 previos**
+(los mismos, por nombre, que dejó `f683781`). Ninguno toca el Inicio. Los de plantillas de email se
+comprobaron **revirtiendo `settings.js` a `HEAD`**: fallan idénticos sin mi cambio (un 409 de Resend y
+un catálogo de 10 tipos donde el gate espera 8). Otro tema.
+
+**QUÉ NO SE HA TOCADO:** los motores de cálculo, el esquema de base de datos (**ninguna tabla nueva**),
+las pantallas de Agenda, CRM, Facturas y Oportunidades, el detector de enfriamiento y WRITABLE_TABLES.
+
+**ANOTADO Y NO CONSTRUIDO** (no es de esta tarea):
+- **`voz.js` escribe dinero en inglés y fechas en ISO.** Afecta a la pantalla del vigía y a cuatro
+  gates; arreglarlo es una tarea con su propia verificación.
+- **No hay motor de serie diaria en base (sin IVA)** ni de deuda a fecha pasada ni de altas de cliente
+  por tramo de mes. Los tres se enseñan hoy como «—» o con su magnitud declarada.
+- Los dos endpoints del chat que quedan sin uso.
+
 ### El Inicio de un negocio que arranca: panel «Pon en marcha tu negocio», bloque «Hoy» y migración asistida — **TAREA TRANSVERSAL** (el puntero del peldaño 8 NO se mueve)  ✅ HECHO (2026-08-19)
 
 **LO QUE DESTAPÓ EL PASO 0: el panel de U6 y la rejilla del Inicio COMPETÍAN.** `disaHome.html.js`

@@ -11,7 +11,8 @@ import { safeError } from '../../../core/errors.js';
 import { can, fuentesPermitidas } from '../layout.js';
 import { listarPaneles } from '../constructor-analitica.js';
 import * as IL from '../inicio-layout.js';
-import { pasosDe, plegadoDeUsuario, guardarPlegado } from '../arranque.js';
+import { pasosDe, plegadoDeUsuario, guardarPlegado, hayActividad } from '../arranque.js';
+import { cuadro, seccion, SECCIONES } from '../cuadro-mando.js';   // El cuadro de mando del día
 
 export function createInicioRoutes(db, { rutaExiste = () => true } = {}) {
   const api = new Hono();
@@ -65,6 +66,30 @@ export function createInicioRoutes(db, { rutaExiste = () => true } = {}) {
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
+  // ── EL CUADRO DE MANDO DEL DÍA ───────────────────────────────────────────────────────────────
+  // Una sola llamada trae el Inicio entero YA FILTRADO: solo se calculan las secciones cuyos
+  // permisos tiene este usuario, así que lo que no puede ver NO VIAJA — no es que se esconda al
+  // pintar, es que el motor no llegó a llamarse. `sinPermiso` dice QUÉ falta y por qué, en vez de
+  // devolver un hueco mudo que se leería como «no hay datos».
+  api.get('/cuadro', c => {
+    try {
+      return c.json(cuadro(db, { puede: puedeDe(c), sym: symbol(), rutaExiste }));
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+  });
+
+  // UNA sección suelta. Esta es la puerta que se fuerza a mano, y por eso es la que tiene que
+  // cerrarse bien: sección desconocida → 404; sección para la que falta un permiso → 403. El
+  // desplegable filtrado nunca es el candado (misma regla que el constructor).
+  api.get('/cuadro/:seccion', c => {
+    try {
+      const nombre = c.req.param('seccion');
+      if (!Object.prototype.hasOwnProperty.call(SECCIONES, nombre)) {
+        const e = new Error('No conozco esa parte del Inicio'); e.status = 404; throw e;
+      }
+      return c.json({ seccion: nombre, datos: seccion(db, nombre, { puede: puedeDe(c), sym: symbol(), rutaExiste }) });
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+  });
+
   // ── EL PANEL «PON EN MARCHA TU NEGOCIO» ──────────────────────────────────────────────────────
   // Todo derivado: no hay ningún endpoint para MARCAR un paso, ni aquí ni en ningún sitio. Lo único
   // que se guarda es si el usuario lo quiere plegado, que es una preferencia de vista.
@@ -76,7 +101,11 @@ export function createInicioRoutes(db, { rutaExiste = () => true } = {}) {
     try {
       const userId = c.get('session')?.userId;
       const p = pasosDe(db, { existe: rutaExiste });
-      return c.json({ ...p, plegado: plegadoDeUsuario(db, userId, p.completo) });
+      // NACE PLEGADO SI EL NEGOCIO YA ANDA (alguna factura o alguna cita), y desplegado si no ha
+      // hecho nada todavía. Que falte un paso ya NO manda: un negocio en marcha abre su Inicio
+      // viendo sus cifras, no sus deberes. La preferencia del usuario, si la hay, gana siempre.
+      const anda = hayActividad(db);
+      return c.json({ ...p, hayActividad: anda, plegado: plegadoDeUsuario(db, userId, anda) });
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 

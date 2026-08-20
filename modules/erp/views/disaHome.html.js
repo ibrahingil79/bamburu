@@ -1,5 +1,30 @@
-export function disaHomeHtml({ userName, alertCount, alertState, kpis, simbolo = '€' }) {
-  const sym = kpis?.sym || '€';
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// EL INICIO — EL CUADRO DE MANDO DEL DÍA
+//
+// QUÉ CAMBIA Y POR QUÉ. El Inicio era una lista de deberes con un chat encima: saludo, tarjeta de
+// DISA, cuatro cifras sueltas y un compositor de conversación que ocupaba media pantalla. Ahora es
+// lo que un dueño mira a primera hora: SU DÍA, SUS NÚMEROS y LO QUE CONVIENE DECIDIR.
+//
+// EL ORDEN, de arriba abajo, y es el orden del encargo:
+//   1. HOY .................. la franja del día, la próxima cita y los eventos del calendario.
+//   2. TUS NÚMEROS .......... ventas · pendiente de cobro · margen · clientes nuevos.
+//   3. GRÁFICO PRINCIPAL .... ventas por día del mes, con el mes anterior detrás en gris.
+//   4. TU NEGOCIO EN CIFRAS . lo que más vendes · lo que más te deja · tus mejores clientes.
+//   5. OPORTUNIDADES ........ cuántas y por cuánto, con su enlace.
+//   6. DISA DECIDE .......... tres líneas como mucho, con la cifra delante y su botón.
+//   7. PON EN MARCHA ........ el panel de arranque, plegado en una línea (se recuerda por usuario).
+//   8. TUS PANELES .......... la rejilla componible del paso 6, que sigue viva con su paleta.
+//
+// EL CHAT DE DISA SE VA DEL INICIO, Y SOLO DEL INICIO. Su compositor, sus mensajes, sus accesos
+// rápidos y sus tarjetas de sugerencia vivían aquí y ya no. DISA sigue estando entera: en su pantalla
+// (/admin/disa) y en la entrada del menú, que es a donde lleva ahora. Los endpoints que se quedan sin
+// uso NO se borran — se señalan en el informe, que es otra decisión y de otro día.
+//
+// CERO CIFRA PROPIA. Esta pantalla no calcula nada: pide /api/erp/inicio/cuadro, que ya trae cada
+// número de su motor y solo las secciones que este usuario puede ver. Lo que viene null se pinta
+// «—», nunca un 0.
+export function disaHomeHtml({ userName, simbolo = '€' }) {
+  const sym = simbolo || '€';
 
   // Fecha de hoy en español (presentación; server-side, no toca datos del tenant).
   const _now = new Date();
@@ -8,32 +33,123 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, simbolo =
   const _h = _now.getHours();
   const _saludo = _h < 6 ? 'Hola' : _h < 13 ? 'Buenos días' : _h < 21 ? 'Buenas tardes' : 'Buenas noches';
   const fechaHoy = `${_dias[_now.getDay()]}, ${_now.getDate()} de ${_meses[_now.getMonth()]}`;
-
-  // Texto proactivo de DISA, derivado de los avisos reales que ya calcula el motor.
-  // No promete "¿quieres que te los enseñe?" (eso obligaba a pasar por el chat): señala dónde se
-  // resuelven. La acción vive en /admin/avisos, no en una conversación.
-  const disaProactivo = (alertState !== 'apagado' && alertCount > 0)
-    ? `Tienes ${alertCount} ${alertCount === 1 ? 'aviso que pide' : 'avisos que piden'} tu atención (cobros vencidos, pagos a proveedor, stock y recurrentes). Los tienes en Avisos, cada uno con su acción al lado.`
-    : `Todo en orden por ahora. ¿En qué quieres trabajar hoy en tu negocio? Puedo crear facturas, registrar gastos o darte un resumen.`;
-
-  // ── U6 · Onboarding — primeros pasos (solo presentación; el estado llega derivado del negocio) ──
-  // (El antiguo checklist de U6 vivía aquí; ahora vive en arranque.js y se pinta en el navegador.)
-  // Cada paso trae su icono, tiempo estimado y la GUÍA de DISA (qué · por qué · cómo, en su voz) +
-  // la acción. Textos fijos de producto (por eso llevan <b>): no son entrada de usuario.
-  // ── PON EN MARCHA TU NEGOCIO ────────────────────────────────────────────────────────────────
-  // ABSORBE el checklist de U6, no lo duplica: sus pasos viven ahora en `modules/erp/arranque.js`,
-  // repartidos en tres bloques y derivados del estado real del negocio. Aquí solo queda el HUECO:
-  // el panel se pinta en el navegador desde /api/erp/inicio/arranque.
-  //
-  // POR QUÉ SE FUE AL CLIENTE. El panel de antes era HTML del servidor metido con un condicional
-  // que, de paso, **apagaba la rejilla entera**: mientras faltara un paso, el dueño no veía
-  // su Inicio, y en cuanto los terminaba el panel desaparecía para siempre. Ahora conviven: la
-  // rejilla se pinta SIEMPRE y el panel se pliega en una línea cuando ya no hace falta.
   const _ringC = 150.8;   // circunferencia (2π·24) — la misma del anillo de U6, que se reutiliza tal cual
-
 
   return `
     <style>
+      /* ══════════════════════════════════════════════════════════════════════════════════════════
+         EL CUADRO DE MANDO DEL DÍA — el Inicio deja de ser una lista de deberes.
+         Todo con los tokens de la app; nada mide en píxeles fijos que no quepan en 390 px.
+         ══════════════════════════════════════════════════════════════════════════════════════════ */
+      .cm { max-width: 1040px; margin: 0 auto; width: 100%; box-sizing: border-box; min-width: 0; }
+      .cm-hola { font-size: 18px; font-weight: 600; color: var(--text); margin: 0 0 2px; letter-spacing: -.2px; }
+      .cm-fecha { font-size: 13px; color: var(--text2); margin: 0 0 16px; }
+      .cm-card { background: var(--bg2); border: 1px solid var(--border2); border-radius: 14px;
+        padding: 14px 16px; margin-bottom: 14px; min-width: 0; box-sizing: border-box; }
+      .cm-h { display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700;
+        letter-spacing: .06em; text-transform: uppercase; color: var(--text3); margin: 0 0 10px; flex-wrap: wrap; }
+      .cm-h i { font-size: 14px; color: var(--accent); }
+      .cm-h .x { margin-left: auto; font-size: 11px; font-weight: 500; letter-spacing: 0;
+        text-transform: none; color: var(--text2); }
+
+      /* ── HOY: la franja del día ─────────────────────────────────────────────────────────────── */
+      .cm-hoy-res { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 13px; color: var(--text2); margin-bottom: 10px; }
+      .cm-hoy-res b { color: var(--text); font-weight: 600; }
+      .cm-franja { position: relative; height: 34px; border-radius: 9px; background: var(--bg3);
+        overflow: hidden; margin: 4px 0 5px; }
+      .cm-fr-seg { position: absolute; top: 3px; bottom: 3px; border-radius: 5px; }
+      .cm-fr-cita { background: var(--accent); }
+      .cm-fr-cita.pedida { background: var(--warn); }
+      .cm-fr-cita.atendida { background: var(--ok); }
+      .cm-fr-cita.no_show { background: var(--danger); }
+      .cm-fr-blq { background: repeating-linear-gradient(45deg, var(--text3) 0 4px, transparent 4px 8px); }
+      .cm-fr-ahora { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--danger); }
+      .cm-fr-esc { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text3);
+        font-variant-numeric: tabular-nums; }
+      .cm-ley { display: flex; flex-wrap: wrap; gap: 3px 12px; font-size: 11px; color: var(--text3); margin-top: 6px; }
+      .cm-ley span { display: inline-flex; align-items: center; gap: 5px; }
+      .cm-ley i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+      .cm-prox { display: flex; align-items: center; gap: 10px; background: var(--accent-soft);
+        border: 1px solid #cfe0ff; border-radius: 11px; padding: 9px 11px; margin-top: 10px;
+        text-decoration: none; color: inherit; min-width: 0; }
+      .cm-prox .hh { font-weight: 700; font-size: 15px; color: var(--accent-d); white-space: nowrap;
+        font-variant-numeric: tabular-nums; }
+      .cm-prox .tx { min-width: 0; flex: 1; }
+      .cm-prox .tx b { display: block; font-size: 13px; color: var(--text); overflow: hidden;
+        text-overflow: ellipsis; white-space: nowrap; }
+      .cm-prox .tx span { display: block; font-size: 11.5px; color: var(--text2); overflow: hidden;
+        text-overflow: ellipsis; white-space: nowrap; }
+      .cm-ev { display: flex; gap: 9px; align-items: baseline; font-size: 12px; color: var(--text2);
+        padding: 5px 0; border-top: 1px solid var(--border); min-width: 0; }
+      .cm-ev .h { font-variant-numeric: tabular-nums; color: var(--text3); white-space: nowrap; }
+      .cm-ev .m { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+      /* ── TUS NÚMEROS: cuatro tarjetas grandes ───────────────────────────────────────────────── */
+      .cm-nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 14px; }
+      .cm-num { background: var(--bg2); border: 1px solid var(--border2); border-radius: 14px;
+        padding: 13px 15px; min-width: 0; display: flex; flex-direction: column; gap: 3px; box-sizing: border-box; }
+      .cm-num-l { font-size: 11.5px; color: var(--text2); display: flex; align-items: center; gap: 5px; margin: 0; }
+      .cm-num-l i { font-size: 14px; }
+      .cm-num-v { font-size: 23px; font-weight: 700; color: var(--text); margin: 1px 0 0;
+        letter-spacing: -.6px; line-height: 1.15; overflow-wrap: anywhere; }
+      .cm-num-b { font-size: 11.5px; color: var(--text3); margin: 0; line-height: 1.45; overflow-wrap: anywhere; }
+      .cm-cmp { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600;
+        border-radius: 20px; padding: 1px 9px; align-self: flex-start; white-space: nowrap; }
+      .cm-cmp.bien { background: var(--ok-s); color: var(--ok); }
+      .cm-cmp.mal { background: var(--danger-s); color: var(--danger); }
+      .cm-cmp.neutro { background: var(--bg3); color: var(--text2); }
+      .cm-chispa { margin-top: 4px; }
+      .cm-chispa svg { display: block; width: 100%; height: 26px; }
+
+      /* ── EL GRÁFICO PRINCIPAL ───────────────────────────────────────────────────────────────── */
+      .cm-graf { position: relative; height: 240px; min-width: 0; }
+
+      /* ── TU NEGOCIO EN CIFRAS: tres listas cortas ───────────────────────────────────────────── */
+      .cm-listas { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
+      .cm-lista { min-width: 0; }
+      .cm-lista h4 { margin: 0 0 4px; font-size: 12.5px; font-weight: 700; color: var(--text); }
+      .cm-fila { display: flex; align-items: baseline; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border);
+        min-width: 0; font-size: 12.5px; text-decoration: none; color: inherit; }
+      .cm-fila.primera { border-top: none; }
+      .cm-fila .p { color: var(--text3); font-size: 11px; font-weight: 700; min-width: 1.5em; flex: none;
+        font-variant-numeric: tabular-nums; }
+      .cm-fila .n { flex: 1; min-width: 0; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .cm-fila .v { color: var(--text2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+      .cm-fila.ultimo { margin-top: 5px; border-top: 1px dashed var(--border2); }
+      .cm-fila.ultimo .p { color: var(--danger); }
+      .cm-pie { font-size: 11px; color: var(--text3); margin: 9px 0 0; line-height: 1.55; }
+
+      /* ── OPORTUNIDADES ABIERTAS: una línea ──────────────────────────────────────────────────── */
+      .cm-oport { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+        text-decoration: none; color: inherit; min-width: 0; }
+      .cm-oport .big { font-size: 16px; font-weight: 700; color: var(--text); }
+      .cm-oport .cta { margin-left: auto; font-size: 12.5px; color: var(--accent); font-weight: 600; white-space: nowrap; }
+
+      /* ── DISA DECIDE: máximo tres líneas, cifra delante y botón ─────────────────────────────── */
+      .cm-dec { display: flex; align-items: center; gap: 10px; padding: 10px 0;
+        border-top: 1px solid var(--border); min-width: 0; flex-wrap: wrap; }
+      .cm-dec.primera { border-top: none; }
+      .cm-dec .cifra { font-weight: 700; font-size: 14.5px; color: var(--text); white-space: nowrap;
+        font-variant-numeric: tabular-nums; }
+      .cm-dec .tx { flex: 1; min-width: 150px; font-size: 12.5px; color: var(--text2); line-height: 1.45; }
+      .cm-dec .btn { font-size: 12px; font-weight: 600; color: #fff; background: var(--accent);
+        border-radius: 9px; padding: 6px 13px; text-decoration: none; white-space: nowrap; }
+      .cm-dec .btn:hover { background: var(--accent-d); color: #fff; }
+      .cm-pill { font-size: 10px; font-weight: 700; border-radius: 20px; padding: 1px 8px; white-space: nowrap; }
+
+      /* ── TUS PANELES: la rejilla componible del paso 6, que sigue viva ──────────────────────── */
+      .cm-paneles { margin-top: 4px; }
+
+      @media (max-width: 560px) {
+        .cm-graf { height: 200px; }
+        .cm-dec .btn { width: 100%; text-align: center; }
+        .cm-num-v { font-size: 21px; }
+        /* La barra de la rejilla se parte en dos líneas: en 390 px el rótulo y los dos botones no
+           caben en una, y apretados el rótulo se leía en columna de dos letras. */
+        .ig-bar { flex-wrap: wrap; }
+        .ig-actions { width: 100%; }
+      }
+
       /* PON EN MARCHA TU NEGOCIO — lo nuevo sobre el estilo de U6, que se reutiliza tal cual. */
       .onb-bloque { margin-top: 14px; }
       .onb-bloque h4 { margin: 0; font-size: .82rem; font-weight: 700; color: var(--text); letter-spacing: -.005em; }
@@ -76,122 +192,6 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, simbolo =
       .onb-mg-op .p{font-size:.75rem;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .onb-mg-pie{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-top:.55rem;font-size:.76rem;color:var(--text3)}
       .onb-saltar{background:none;border:none;padding:0;font-family:inherit;font-size:.78rem;color:var(--accent);cursor:pointer;text-decoration:underline}
-      .disa-home {
-        min-height: calc(100vh - 60px);
-        display: flex;
-        flex-direction: column;
-        margin: -1.5rem;
-        position: relative;
-      }
-
-      /* El badge flotante de alertas se retiró: la única señal del chrome es la campana del
-         topbar, y en el Inicio el aviso vive en la tarjeta "Avisos" (clicable) y en su fila. */
-
-      /* Stage central */
-      .disa-stage {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        padding: 20px 22px 24px;
-        width: 100%;
-        max-width: 920px;
-        margin: 0 auto;
-        box-sizing: border-box;
-      }
-
-      /* Hero = saludo + tarjeta DISA + cifras (estado inicial; el JS lo oculta al hablar) */
-      .disa-hero {
-        transition: opacity 0.25s ease, max-height 0.35s ease, margin 0.3s ease;
-        /* SIN TOPE EN ABIERTO. El max-height existía solo para poder plegar el hero con animación al
-           abrir el chat, pero al ser un número fijo RECORTABA el contenido en cuanto crecía: primero
-           se comió el cuarto paso del alta (640px), y luego, con el panel de arranque, la rejilla
-           entera (1200px). Perseguir el número es perder siempre. Ahora en abierto no hay tope, y el
-           pixel exacto se mide en JS justo antes de plegar (plegarHero), que es lo que la
-           animación necesita de verdad. Así no se puede volver a quedar corto. */
-        max-height: none;
-        overflow: visible;
-      }
-      .disa-hero.hidden {
-        opacity: 0;
-        overflow: hidden;
-        max-height: 0;
-        margin-bottom: 0;
-        pointer-events: none;
-      }
-
-      /* Saludo */
-      .disa-greeting { color: var(--text); font-size: 18px; font-weight: 600; margin: 0 0 2px; letter-spacing: -0.2px; }
-      .disa-question { color: var(--text2); font-size: 13px; margin: 0 0 18px; }
-
-      /* Tarjeta DISA (borde izquierdo acento) */
-      .disa-card-main {
-        background: var(--bg2);
-        border: 0.5px solid var(--border-disa);
-        border-left: 3px solid var(--accent);
-        border-radius: 12px;
-        padding: 14px 16px;
-        display: flex;
-        gap: 11px;
-        margin-bottom: 18px;
-      }
-      .disa-card-icon {
-        width: 34px; height: 34px;
-        border-radius: 9px;
-        background: var(--accent-soft);
-        color: var(--accent);
-        display: flex; align-items: center; justify-content: center;
-        font-size: 19px;
-        flex-shrink: 0;
-      }
-      .disa-card-icon i { font-size: 19px; }
-      .disa-card-title { font-size: 13px; font-weight: 600; color: var(--accent-d); margin: 0 0 3px; }
-      .disa-card-text { font-size: 13px; color: var(--body-tx); margin: 0; line-height: 1.55; }
-
-      /* Rejilla de cifras */
-      .disa-figs {
-        display: grid;
-        grid-template-columns: repeat(4,1fr);
-        gap: 12px;
-        margin-bottom: 18px;
-      }
-      .disa-fig {
-        background: var(--bg2);
-        border: 1px solid var(--border2);
-        border-radius: 12px;
-        padding: 13px 14px;
-      }
-      /* La tarjeta de Avisos es un <a> a /admin/avisos: se ve el número y se va a resolverlo. */
-      .disa-fig-link { display: block; text-decoration: none; color: inherit; transition: border-color .15s, background .15s; }
-      .disa-fig-link:hover { border-color: var(--accent); background: var(--bg3); }
-      .disa-fig-label { font-size: 11.5px; color: var(--text2); margin: 0 0 7px; display: flex; align-items: center; gap: 5px; }
-      .disa-fig-label i { font-size: 14px; }
-      .disa-fig-value { font-size: 21px; font-weight: 600; margin: 0; letter-spacing: -0.5px; color: var(--text); }
-
-      /* Lista de avisos / accesos */
-      .disa-rows {
-        background: var(--bg2);
-        border: 1px solid var(--border2);
-        border-radius: 12px;
-        padding: 6px 4px;
-        margin-bottom: 18px;
-      }
-      .disa-row {
-        display: flex; align-items: center; justify-content: space-between;
-        padding: 10px 12px; font-size: 13px;
-        width: 100%; box-sizing: border-box;
-        background: none; border: none; font-family: inherit;
-        text-align: left; cursor: pointer; color: inherit;
-        text-decoration: none;   /* la fila también se usa como <a> (→ /admin/avisos) */
-      }
-      .disa-row + .disa-row { border-top: 0.5px solid var(--bg3); }
-      .disa-row:hover { background: var(--bg3); }
-      .disa-row-label { color: var(--body-tx); display: flex; align-items: center; gap: 9px; }
-      .disa-row-label i { font-size: 16px; color: var(--text3); }
-      .disa-pill { font-size: 11px; font-weight: 500; padding: 2px 9px; border-radius: 20px; }
-      .disa-pill.vencida { background: var(--danger-s); color: var(--danger); }
-      .disa-pill.porvencer { background: var(--warn-s); color: var(--warn); }
-      .disa-pill.aldia { background: var(--accent-soft); color: var(--accent-d); }
-
       /* ── PIEZA 5 · "Dónde te espera": asoman en el Inicio los avisos del vigía más importantes. Bloque
          NUEVO (no reestructura el resto); reutiliza los tokens de la app y el patrón de la lista. ── */
       .dh-vigia { background: var(--bg2); border: 1px solid var(--border2); border-radius: 12px; padding: 6px 4px; margin-bottom: 18px; }
@@ -242,7 +242,6 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, simbolo =
       .ig-chip:hover { background: var(--accent-soft); border-color: var(--accent); }
       .ig-chip i { font-size: 13px; color: var(--accent); }
       @media (max-width: 900px) { .ig-grid { grid-template-columns: repeat(2, 1fr); } .ig-block.w3, .ig-block.w4 { grid-column: span 2; } }
-
       /* ── U6 · Onboarding — "Configura tu negocio" (nivel Stripe/Shopify): anillo de progreso +
          timeline de pasos con iconos; el paso ACTUAL desplegado con la guía de DISA + su acción;
          los hechos y los futuros plegados. Reutiliza los tokens de la app. ── */
@@ -285,828 +284,390 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, simbolo =
       .onb-cta:hover { background: var(--accent-d); transform: translateY(-1px); box-shadow: 0 6px 18px var(--teal-glow); }
       .onb-cta i { font-size: 15px; }
       @media (prefers-reduced-motion: reduce) { .onb-card { animation: none; } .onb-ring-fg { transition: none; } .onb-cta:hover { transform: none; } }
-
-      /* Mensajes */
-      .disa-messages {
-        width: 100%;
-        flex: 1;
-        overflow-y: auto;
-        padding: 12px 0 8px;
-        display: none;
-        flex-direction: column;
-        gap: 14px;
-        max-height: calc(100vh - 280px);
-      }
-      .disa-messages.visible { display: flex; }
-
-      .disa-msg { display: flex; gap: 10px; max-width: 100%; }
-      .disa-msg.user { justify-content: flex-end; }
-      .disa-msg-bubble {
-        padding: 11px 15px;
-        border-radius: 14px;
-        font-size: 13px;
-        line-height: 1.55;
-        max-width: 78%;
-        white-space: pre-wrap;
-        word-break: break-word;
-      }
-      .disa-msg.user .disa-msg-bubble {
-        background: var(--accent); color: var(--bg2); border-bottom-right-radius: 4px;
-      }
-      .disa-msg.assistant .disa-msg-bubble {
-        background: var(--bg2); border: 1px solid var(--border2); color: var(--text); border-top-left-radius: 4px;
-      }
-      .disa-msg-avatar {
-        width: 28px; height: 28px;
-        background: linear-gradient(135deg,var(--accent),var(--accent-d));
-        border-radius: 8px;
-        display: flex; align-items: center; justify-content: center;
-        font-weight: 500; color: var(--bg2); font-size: 11px;
-        flex-shrink: 0; margin-top: 2px;
-      }
-
-      /* Typing indicator */
-      .disa-typing { display: flex; gap: 4px; padding: 4px 0; align-items: center; }
-      .disa-typing span {
-        width: 6px; height: 6px; background: var(--accent);
-        border-radius: 50%; opacity: 0.4; animation: dh-typing 1.2s infinite;
-      }
-      .disa-typing span:nth-child(2) { animation-delay: 0.2s; }
-      .disa-typing span:nth-child(3) { animation-delay: 0.4s; }
-      @keyframes dh-typing {
-        0%,60%,100% { opacity: 0.4; transform: scale(0.85); }
-        30% { opacity: 1; transform: scale(1.1); }
-      }
-
-      /* Input area */
-      .disa-input-area {
-        width: 100%;
-        max-width: 680px;
-        margin: 0 auto;
-        flex-shrink: 0;
-      }
-      .disa-input-area.docked {
-        position: sticky;
-        bottom: 0;
-        padding-bottom: 16px;
-        padding-top: 12px;
-        background: linear-gradient(to bottom, transparent 0%, var(--bg2) 35%);
-      }
-
-      /* Chips */
-      .disa-chips {
-        display: flex; gap: 6px; justify-content: center;
-        margin-bottom: 10px; flex-wrap: wrap;
-      }
-      .disa-chip {
-        background: var(--bg3);
-        border: 1px solid var(--border2);
-        color: var(--text2); font-size: 11px;
-        padding: 5px 12px; border-radius: 14px;
-        cursor: pointer; transition: all 0.15s; font-family: inherit;
-      }
-      .disa-chip:hover { background: var(--accent-soft); border-color: var(--border2); color: var(--accent-d); }
-
-      /* Input box */
-      .disa-input-box {
-        display: flex; align-items: center; gap: 8px;
-        background: var(--bg2);
-        border: 1px solid var(--border2);
-        border-radius: 24px;
-        padding: 8px 8px 8px 18px;
-        box-shadow: 0 1px 3px rgba(16,24,40,0.06);
-        transition: border-color 0.15s, box-shadow 0.15s;
-      }
-      .disa-input-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(51,65,85,0.10); }
-      .disa-input {
-        flex: 1; background: transparent; border: none; outline: none;
-        color: var(--text); font-size: 13px; padding: 6px 0; font-family: inherit;
-      }
-      .disa-input::placeholder { color: var(--text2); }
-      .disa-send-btn {
-        background: var(--accent);
-        border: none; color: var(--bg2);
-        padding: 9px 11px; border-radius: 18px;
-        cursor: pointer; display: flex; align-items: center; justify-content: center;
-        transition: background 0.15s, opacity 0.15s;
-        flex-shrink: 0;
-      }
-      .disa-send-btn:hover { background: var(--accent-d); }
-      .disa-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-
-      .disa-disclaimer { color: var(--text2); font-size: 10px; text-align: center; margin-top: 8px; }
-
-      /* Cards (accesos rápidos) */
-      .disa-cards {
-        display: grid;
-        grid-template-columns: repeat(4,1fr);
-        gap: 12px;
-        width: 100%;
-        max-width: 920px;
-        margin: 18px auto 0;
-        transition: opacity 0.25s ease, max-height 0.3s ease, margin 0.3s ease;
-        max-height: 200px;
-        overflow: hidden;
-      }
-      .disa-cards.hidden {
-        opacity: 0; max-height: 0; margin: 0; pointer-events: none;
-      }
-      .disa-card {
-        background: var(--bg2);
-        border: 1px solid var(--border2);
-        border-radius: 12px; padding: 13px 14px;
-        cursor: pointer; transition: border-color 0.15s, background 0.15s;
-        text-align: left; color: inherit; font-family: inherit;
-      }
-      .disa-card:hover {
-        background: var(--bg3);
-        border-color: var(--border2);
-      }
-      .disa-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-      .disa-card-head i { font-size: 16px; color: var(--accent); }
-      .disa-card-title { color: var(--text); font-size: 12.5px; font-weight: 600; }
-      .disa-card-desc { color: var(--text2); font-size: 11px; line-height: 1.4; }
-
-      @media (max-width: 900px) {
-        .disa-cards { grid-template-columns: repeat(2,1fr); }
-        .disa-figs { grid-template-columns: repeat(2,1fr); }
-      }
-      /* Móvil: el bloque rompe el padding del contenido con margin:-1.5rem (−24px) pero el
-         padding horizontal es 22px → sobresalía 2px y desbordaba. Se cuadra al padding (−22px)
-         y se aprieta un poco el stage para dar aire al compositor. Solo móvil. */
-      @media (max-width: 768px) {
-        .disa-home { margin-left: -22px; margin-right: -22px; }
-        .disa-stage { padding-left: 16px; padding-right: 16px; }
-      }
-
-      /* ── Artifacts ── */
-      .disa-artifact {
-        background: var(--bg2);
-        border: 1px solid var(--border2);
-        border-radius: 12px;
-        padding: 14px;
-        max-width: 560px;
-        width: 100%;
-        max-height: 400px;
-        overflow-y: auto;
-        margin-top: 6px;
-      }
-      .disa-artifact-title {
-        color: var(--text2); font-size: 11px; text-transform: uppercase;
-        letter-spacing: 0.8px; font-weight: 500; margin-bottom: 12px;
-      }
-      .disa-artifact-link {
-        display: inline-flex; align-items: center; gap: 4px;
-        color: var(--accent); font-size: 11px; text-decoration: none;
-        margin-top: 10px; padding: 5px 10px;
-        background: var(--accent-soft); border: 0.5px solid var(--border2);
-        border-radius: 6px; transition: background 0.15s;
-      }
-      .disa-artifact-link:hover { background: var(--bg3); }
-
-      /* kpi_dashboard */
-      .disa-kpis-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(110px,1fr)); gap: 8px; margin-bottom: 10px; }
-      .disa-kpi-card { background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px; padding: 10px; }
-      .disa-kpi-card-value { color: var(--text); font-size: 17px; font-weight: 600; line-height: 1.1; }
-      .disa-kpi-card-value.positive { color: var(--accent); }
-      .disa-kpi-card-value.warn { color: var(--warn); }
-      .disa-kpi-card-value.danger { color: var(--danger); }
-      .disa-kpi-card-label { color: var(--text2); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 3px; }
-      .disa-kpi-card-delta { font-size: 10px; margin-top: 4px; font-weight: 500; }
-      .disa-kpi-card-delta.positive { color: var(--ok); }
-      .disa-kpi-card-delta.danger { color: var(--danger); }
-      .disa-kpi-card-delta.neutral { color: var(--text2); }
-
-      .disa-chart-bars { display: flex; align-items: flex-end; gap: 5px; height: 72px; padding: 8px; background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px; }
-      .disa-chart-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
-      .disa-chart-bar { width: 100%; background: linear-gradient(180deg,var(--accent),var(--accent-d)); border-radius: 3px 3px 0 0; min-height: 2px; }
-      .disa-chart-label { color: var(--text2); font-size: 9px; }
-
-      /* action_list */
-      .disa-list { display: flex; flex-direction: column; gap: 6px; }
-      .disa-list-item { background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px; padding: 10px; display: flex; align-items: center; gap: 10px; }
-      .disa-list-item.danger { border-left: 2px solid var(--danger); }
-      .disa-list-item.warn { border-left: 2px solid var(--warn); }
-      .disa-list-item.positive { border-left: 2px solid var(--accent); }
-      .disa-list-item-body { flex: 1; min-width: 0; }
-      .disa-list-item-title { color: var(--text); font-size: 12px; font-weight: 500; }
-      .disa-list-item-subtitle { color: var(--text2); font-size: 11px; margin-top: 2px; }
-      .disa-list-item-meta { color: var(--text2); font-size: 10px; margin-top: 2px; }
-      .disa-list-item-actions { display: flex; gap: 5px; flex-shrink: 0; }
-      .disa-list-btn { border: none; font-size: 10px; padding: 4px 9px; border-radius: 5px; cursor: pointer; font-weight: 500; transition: opacity 0.15s; font-family: inherit; }
-      .disa-list-btn.primary { background: var(--accent); color: var(--bg2); }
-      .disa-list-btn.secondary { background: transparent; color: var(--text2); border: 1px solid var(--border2); }
-      .disa-list-btn:hover { opacity: 0.8; }
-
-      /* big_number */
-      .disa-bignum { text-align: center; padding: 14px 8px; }
-      .disa-bignum-value { color: var(--text); font-size: 40px; font-weight: 500; line-height: 1; letter-spacing: -1.5px; }
-      .disa-bignum-value.positive { color: var(--accent); }
-      .disa-bignum-value.warn { color: var(--warn); }
-      .disa-bignum-value.danger { color: var(--danger); }
-      .disa-bignum-label { color: var(--text2); font-size: 13px; margin-top: 6px; }
-      .disa-bignum-context { color: var(--text2); font-size: 11px; margin-top: 4px; }
-
-      /* Assistant col with artifact */
-      .disa-msg-col { display: flex; flex-direction: column; gap: 6px; max-width: 82%; }
     </style>
 
-    <div class="disa-home">
+    <div class="cm">
+      <h3 class="cm-hola">${_saludo}, ${userName}</h3>
+      <p class="cm-fecha">${fechaHoy}</p>
 
+      <!-- 1 · HOY. Sin agenda este hueco se queda vacío: el servidor no manda la sección siquiera. -->
+      <div id="cmHoy"></div>
+      <!-- 2 · TUS NÚMEROS -->
+      <div id="cmNumeros"></div>
+      <!-- 3 · EL GRÁFICO PRINCIPAL -->
+      <div id="cmGrafico"></div>
+      <!-- 4 · TU NEGOCIO EN CIFRAS -->
+      <div id="cmCifras"></div>
+      <!-- 5 · OPORTUNIDADES ABIERTAS -->
+      <div id="cmOport"></div>
+      <!-- 6 · DISA DECIDE. Sin nada que recomendar, no aparece. -->
+      <div id="cmDecide"></div>
 
-      <!-- Stage -->
-      <div class="disa-stage" id="dh-stage">
+      <!-- 7 · PON EN MARCHA TU NEGOCIO. Se pinta en el navegador desde /api/erp/inicio/arranque;
+           nace desplegado si el negocio no tiene actividad real y plegado si la tiene, y el pliegue
+           se recuerda por usuario. Si no hay nada que ofrecer, no ocupa nada. -->
+      <div id="onbPanel"></div>
 
-        <!-- Hero: saludo + DISA + cifras + lista (estado inicial) -->
-        <div class="disa-hero" id="dh-hero">
-          <h3 class="disa-greeting">${_saludo}, ${userName}</h3>
-          <p class="disa-question">${fechaHoy} · esto es lo que pide tu atención hoy</p>
-
-          <div class="disa-card-main">
-            <div class="disa-card-icon"><i class="ti ti-sparkles"></i></div>
-            <div>
-              <p class="disa-card-title">DISA</p>
-              <p class="disa-card-text">${disaProactivo}</p>
-            </div>
-          </div>
-
-          <!-- PON EN MARCHA TU NEGOCIO. Va ANTES de la rejilla y CONVIVE con ella: lo que falta por
-               montar se mira primero, pero el Inicio del negocio no se apaga por eso. Se pinta en el
-               navegador desde /api/erp/inicio/arranque; si no hay nada que hacer, no ocupa nada. -->
-          <div id="onbPanel"></div>
-          <!-- PASO 6 · INICIO PERSONALIZABLE: rejilla componible (paneles guardados del constructor +
-               bloques nativos: cifras, avisos, vigía). Se resuelve por cascada usuario > empresa >
-               fábrica; el contenido y los permisos se cargan por fetch. -->
-          <div class="ig-bar">
-            <span id="igScope" class="ig-scope"></span>
-            <div class="ig-actions" id="igActions"></div>
-          </div>
-          <div id="inicioGrid" class="ig-grid"><div class="ig-empty">Cargando tu Inicio…</div></div>
+      <!-- 8 · TUS PANELES — la rejilla componible del paso 6, intacta: cascada usuario > empresa >
+           fábrica, su paleta y su modo edición. Baja al final porque el cuadro de mando manda; lo
+           que cada uno se monte encima sigue estando y sigue guardándose igual. -->
+      <div class="cm-paneles">
+        <p class="cm-h" style="margin-bottom:8px"><i class="ti ti-layout-board"></i>Tus paneles<span class="x">lo que tú montas encima</span></p>
+        <div class="ig-bar">
+          <span id="igScope" class="ig-scope"></span>
+          <div class="ig-actions" id="igActions"></div>
         </div>
-
-        <!-- Mensajes -->
-        <div class="disa-messages" id="dh-messages"></div>
-
-        <!-- Input -->
-        <div class="disa-input-area" id="dh-input-area">
-          <div style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-            <div class="disa-chips" id="dh-chips" style="margin-bottom:0"></div>
-            <button onclick="disaEditChips()" title="Editar accesos rápidos"
-              style="background:none;border:none;cursor:pointer;color:var(--text3);padding:3px;border-radius:4px;line-height:1;transition:color 0.15s;flex-shrink:0"
-              onmouseover="this.style.color='var(--text2)'" onmouseout="this.style.color='var(--text3)'">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-              </svg>
-            </button>
-            <button onclick="dhNewThread()" title="Nueva conversación"
-              style="background:none;border:none;cursor:pointer;color:var(--text3);padding:3px 8px;border-radius:6px;font-size:11px;line-height:1;display:flex;align-items:center;gap:4px;flex-shrink:0;font-family:inherit"
-              onmouseover="this.style.color='var(--text2)'" onmouseout="this.style.color='var(--text3)'">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Nueva
-            </button>
-          </div>
-          <form onsubmit="event.preventDefault(); disaSubmitHome();">
-            <div class="disa-input-box">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
-              <input type="text" id="dh-input" class="disa-input"
-                placeholder="Pregunta a DISA o pídele que haga algo..."
-                autocomplete="off" />
-              <input type="file" id="dh-file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" style="display:none" onchange="dhAttach()" />
-              <button type="button" id="dh-attach" title="Adjuntar factura (foto o PDF)"
-                onclick="document.getElementById('dh-file').click()"
-                style="background:none;border:none;cursor:pointer;color:var(--text2);padding:6px;display:flex;align-items:center;flex-shrink:0">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-              </button>
-              <button type="submit" class="disa-send-btn" id="dh-send">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="22" y1="2" x2="11" y2="13"/>
-                  <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                </svg>
-              </button>
-            </div>
-          </form>
-          <div class="disa-disclaimer">DISA puede crear, editar y analizar — siempre te pide confirmación antes de actuar</div>
-        </div>
-
-        <!-- Cards -->
-        <div class="disa-cards" id="dh-cards">
-          <button class="disa-card" onclick="disaQuickSend('Resumen del día')">
-            <div class="disa-card-head">
-              <i class="ti ti-chart-line"></i>
-              <div class="disa-card-title">Resumen del día</div>
-            </div>
-            <div class="disa-card-desc">Ventas, pedidos y métricas de hoy</div>
-          </button>
-          <button class="disa-card" onclick="disaShowAlerts()">
-            <div class="disa-card-head">
-              <i class="ti ti-alert-triangle"></i>
-              <div class="disa-card-title">¿Qué requiere mi atención?</div>
-            </div>
-            <div class="disa-card-desc">Cobros vencidos, pagos, stock y recurrentes</div>
-          </button>
-          <button class="disa-card" onclick="disaQuickSend('Crea un producto nuevo')">
-            <div class="disa-card-head">
-              <i class="ti ti-plus"></i>
-              <div class="disa-card-title">Crear nuevo producto</div>
-            </div>
-            <div class="disa-card-desc">Te guío paso a paso</div>
-          </button>
-          <!-- D3 — Tarjeta "Construir mi tienda web" OCULTA: empujaba el prompt 'Construir mi tienda web',
-               que va a /api/disa/store-message → 404 (el builder de tienda está desmontado, D2). No se
-               borra la idea: se vuelve a mostrar cuando la función de tienda esté construida (Capa 2).
-          <button class="disa-card" onclick="disaQuickSend('Construir mi tienda web')">
-            <div class="disa-card-head">
-              <i class="ti ti-world"></i>
-              <div class="disa-card-title">Construir mi tienda web</div>
-            </div>
-            <div class="disa-card-desc">Catálogo + checkout en minutos</div>
-          </button>
-          -->
-        </div>
-
+        <div id="inicioGrid" class="ig-grid"><div class="ig-empty">Cargando tus paneles…</div></div>
       </div>
     </div>
 
-    <!-- PASO 6 · el gráfico de un panel se pinta reutilizando EL MISMO motor del constructor (Chart.js
-         del mismo vendor + /constructor/cruzar). Sortable.js (ya vendido) para reordenar los bloques. -->
+    <!-- El gráfico principal y los de panel se pintan con el MISMO Chart.js del vendor que ya usa el
+         constructor. Sortable.js (ya vendido) para reordenar los bloques de la rejilla. -->
     <script src="/public/vendor/chartjs/chart.umd.min.js"></script>
     <script src="/public/js/grafico-constructor.js"></script>
     <script src="/public/vendor/sortablejs/Sortable.min.js"></script>
     <script>
-      // ── PLEGAR EL HERO SIN RECORTAR NADA ─────────────────────────────────────────────────────
-      // La animación necesita un número del que partir, pero fijarlo en el CSS convierte ese número
-      // en un TOPE que recorta el contenido en cuanto crece. Así que se mide en el momento: se pone
-      // el alto real, se deja pintar un frame, y se pliega a 0. En abierto no hay tope ninguno.
-      function plegarHero(){
-        var h = document.getElementById('dh-hero');
-        if (!h || h.classList.contains('hidden')) return;
-        h.style.maxHeight = h.scrollHeight + 'px';
-        h.style.overflow = 'hidden';
-        requestAnimationFrame(function(){ requestAnimationFrame(function(){
-          h.style.maxHeight = ''; h.classList.add('hidden');
-        }); });
-      }
-      function desplegarHero(){
-        var h = document.getElementById('dh-hero');
-        if (!h) return;
-        h.classList.remove('hidden');
-        h.style.maxHeight = ''; h.style.overflow = '';
-      }
-
-      let dhStarted = false;
-      // ARREGLO 2 — el dashboard recupera la conversación de DISA al recargar: recuerda el
-      // hilo activo (como el widget) para enviar al MISMO hilo y recuperar su historial al
-      // cargar. No toca el motor de hilos/guardado (que ya funciona); solo lo usa.
-      let dhThreadId = null;
-
-      function dhDock() {
-        if (dhStarted) return;
-        plegarHero();
-        document.getElementById('dh-cards').classList.add('hidden');
-        document.getElementById('dh-chips').style.display = 'none';
-        document.getElementById('dh-messages').classList.add('visible');
-        document.getElementById('dh-input-area').classList.add('docked');
-        document.getElementById('dh-stage').style.justifyContent = 'flex-end';
-        dhStarted = true;
-      }
-
-      function disaQuickSend(text) {
-        document.getElementById('dh-input').value = text;
-        disaSubmitHome();
-      }
-
-      // Tarjeta "¿Qué requiere mi atención?" (Paso d · resumen-primero): NO lanza una pregunta
-      // abierta al modelo. Pide al motor de avisos un RESUMEN DE CONTEOS (determinista, sin
-      // modelo, sin ofrecer acciones). YA NO marca nada como visto: un resumen de conteos no es
-      // descartar avisos, y marcarlos borraba los "no visto" que el usuario había puesto a mano.
-      // Marcar es suyo, en /admin/avisos o en el panel de la campana. Por eso este código tampoco
-      // toca el punto de la campana: apagarlo a mano sería mentir sobre el estado del servidor.
-      window.disaShowAlerts = async function() {
-        if (!dhStarted) {
-          plegarHero();
-          document.getElementById('dh-cards').classList.add('hidden');
-          document.getElementById('dh-chips').style.display = 'none';
-          document.getElementById('dh-messages').classList.add('visible');
-          document.getElementById('dh-input-area').classList.add('docked');
-          document.getElementById('dh-stage').style.justifyContent = 'flex-end';
-          dhStarted = true;
-        }
-        dhAppendMsg('user', '¿Qué requiere mi atención?');
-        const typingId = dhAppendTyping();
-        try {
-          const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || window.CSRF_TOKEN || '';
-          const res = await fetch('/api/disa/alerts/open', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf } });
-          const data = await res.json();
-          dhRemoveTyping(typingId);
-          dhAppendMsg('assistant', data.reply || 'Ahora mismo no tienes nada pendiente.');
-        } catch {
-          dhRemoveTyping(typingId);
-          dhAppendMsg('assistant', 'No pude cargar tus avisos. Intenta de nuevo.');
-        }
-      };
-
-      // Nueva conversación: crea un hilo nuevo (mismo motor que el asistente IA) y vuelve a
-      // la pantalla inicial (hero + accesos), sin mensajes.
-      window.dhNewThread = async function() {
-        try {
-          const res = await fetch('/api/disa/threads', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-csrf-token': dhGetCsrf() } });
-          const t = await res.json();
-          dhThreadId = t.id || null;
-        } catch { dhThreadId = null; }
-        const msgs = document.getElementById('dh-messages');
-        msgs.innerHTML = '';
-        msgs.classList.remove('visible');
-        desplegarHero();
-        document.getElementById('dh-cards').classList.remove('hidden');
-        document.getElementById('dh-chips').style.display = '';
-        document.getElementById('dh-input-area').classList.remove('docked');
-        document.getElementById('dh-stage').style.justifyContent = '';
-        dhStarted = false;
-        document.getElementById('dh-input').focus();
-      };
-
-      async function disaSubmitHome() {
-        const input = document.getElementById('dh-input');
-        const btn = document.getElementById('dh-send');
-        const msg = input.value.trim();
-        if (!msg || btn.disabled) return;
-
-        if (!dhStarted) {
-          plegarHero();
-          document.getElementById('dh-cards').classList.add('hidden');
-          document.getElementById('dh-chips').style.display = 'none';
-          document.getElementById('dh-messages').classList.add('visible');
-          document.getElementById('dh-input-area').classList.add('docked');
-          document.getElementById('dh-stage').style.justifyContent = 'flex-end';
-          dhStarted = true;
-        }
-
-        dhAppendMsg('user', msg);
-        input.value = '';
-        btn.disabled = true;
-
-        const typingId = dhAppendTyping();
-
-        try {
-          const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || window.CSRF_TOKEN || '';
-          const res = await fetch('/api/disa/message', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf },
-            // ARREGLO 2: manda el hilo activo para que la conversación sea UNA sola y recuperable.
-            // body: JSON.stringify({ message: msg })   // (antes: sin thread_id → el dashboard no recuperaba al recargar)
-            body: JSON.stringify({ message: msg, thread_id: dhThreadId })
-          });
-          const data = await res.json();
-          dhRemoveTyping(typingId);
-          if (data.thread_id) dhThreadId = data.thread_id;   // recuerda el hilo para las siguientes
-          const reply = data.reply || data.response || data.message || 'Sin respuesta.';
-          dhAppendMsg('assistant', reply, data.artifact || null);
-          // Handoff a pantalla (p.ej. dictar una compra por voz): navega al enlace que devuelve
-          // la acción (mismo mecanismo que el adjunto de factura).
-          if (data.capture_url) setTimeout(() => { window.location.href = data.capture_url; }, 900);
-        } catch {
-          dhRemoveTyping(typingId);
-          dhAppendMsg('assistant', 'Error al contactar con DISA. Intenta de nuevo.');
-        } finally {
-          btn.disabled = false;
-          input.focus();
-        }
-      }
-
-      // Adjuntar factura de proveedor: la sube a DISA (mismo endpoint que el widget), que la
-      // lee con el extractor de C2 y devuelve un enlace a la pantalla de revisión EDITABLE
-      // precargada. Nada se guarda hasta confirmar allí (confirm-first).
-      async function dhAttach() {
-        const fileInput = document.getElementById('dh-file');
-        const f = fileInput.files[0];
-        if (!f) return;
-        fileInput.value = '';
-        if (!dhStarted) {
-          plegarHero();
-          document.getElementById('dh-cards').classList.add('hidden');
-          document.getElementById('dh-chips').style.display = 'none';
-          document.getElementById('dh-messages').classList.add('visible');
-          document.getElementById('dh-input-area').classList.add('docked');
-          document.getElementById('dh-stage').style.justifyContent = 'flex-end';
-          dhStarted = true;
-        }
-        dhAppendMsg('user', '📄 ' + f.name);
-        const typingId = dhAppendTyping();
-        try {
-          const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || window.CSRF_TOKEN || '';
-          const fd = new FormData(); fd.append('file', f);
-          const res = await fetch('/api/disa/attach', { method: 'POST', headers: { 'x-csrf-token': csrf }, body: fd });
-          const data = await res.json();
-          dhRemoveTyping(typingId);
-          if (!res.ok || data.error) { dhAppendMsg('assistant', data.error || 'No pude procesar el archivo.'); return; }
-          dhAppendMsg('assistant', data.reply || 'Listo.');
-          if (data.capture_url) setTimeout(() => { window.location.href = data.capture_url; }, 900);
-        } catch {
-          dhRemoveTyping(typingId);
-          dhAppendMsg('assistant', 'Error al subir la factura.');
-        }
-      }
-
-      function dhAppendMsg(role, text, artifact) {
-        const msgs = document.getElementById('dh-messages');
-        const wrap = document.createElement('div');
-        wrap.className = 'disa-msg ' + role;
-
-        if (role === 'assistant') {
-          const av = document.createElement('div');
-          av.className = 'disa-msg-avatar';
-          av.textContent = 'D';
-          wrap.appendChild(av);
-
-          const col = document.createElement('div');
-          col.className = 'disa-msg-col';
-
-          if (text) {
-            const bubble = document.createElement('div');
-            bubble.className = 'disa-msg-bubble';
-            bubble.textContent = text;
-            col.appendChild(bubble);
-          }
-
-          if (artifact) {
-            const artNode = dhRenderArtifact(artifact);
-            if (artNode) col.appendChild(artNode);
-          }
-
-          wrap.appendChild(col);
-        } else {
-          const bubble = document.createElement('div');
-          bubble.className = 'disa-msg-bubble';
-          bubble.textContent = text;
-          wrap.appendChild(bubble);
-        }
-
-        msgs.appendChild(wrap);
-        msgs.scrollTop = msgs.scrollHeight;
-      }
-
-      function dhRenderArtifact(artifact) {
-        if (!artifact || !artifact.type) return null;
-        const wrap = document.createElement('div');
-        wrap.className = 'disa-artifact';
-        const d = artifact.data || {};
-
-        if (artifact.type === 'kpi_dashboard') {
-          if (d.title) { const t = document.createElement('div'); t.className = 'disa-artifact-title'; t.textContent = d.title; wrap.appendChild(t); }
-          if (d.kpis && d.kpis.length) {
-            const grid = document.createElement('div');
-            grid.className = 'disa-kpis-grid';
-            d.kpis.forEach(k => {
-              const card = document.createElement('div');
-              card.className = 'disa-kpi-card';
-              const val = document.createElement('div');
-              val.className = 'disa-kpi-card-value ' + (k.tone || 'neutral');
-              val.textContent = k.value;
-              const lbl = document.createElement('div');
-              lbl.className = 'disa-kpi-card-label';
-              lbl.textContent = k.label;
-              card.appendChild(val);
-              card.appendChild(lbl);
-              if (k.delta) {
-                const delt = document.createElement('div');
-                const isPos = /^\\+|↑/.test(String(k.delta));
-                const isNeg = /^-|↓/.test(String(k.delta));
-                delt.className = 'disa-kpi-card-delta ' + (isPos ? 'positive' : isNeg ? 'danger' : 'neutral');
-                delt.textContent = k.delta;
-                card.appendChild(delt);
-              }
-              grid.appendChild(card);
-            });
-            wrap.appendChild(grid);
-          }
-          if (d.chart && d.chart.type === 'bars' && d.chart.data && d.chart.data.length) {
-            const maxV = Math.max(...d.chart.data.map(p => p.value || 0)) || 1;
-            const chart = document.createElement('div');
-            chart.className = 'disa-chart-bars';
-            d.chart.data.forEach(p => {
-              const col = document.createElement('div');
-              col.className = 'disa-chart-bar-col';
-              const bar = document.createElement('div');
-              bar.className = 'disa-chart-bar';
-              bar.style.height = Math.max(4, Math.round((p.value / maxV) * 100)) + '%';
-              const lbl = document.createElement('div');
-              lbl.className = 'disa-chart-label';
-              lbl.textContent = p.label || '';
-              col.appendChild(bar);
-              col.appendChild(lbl);
-              chart.appendChild(col);
-            });
-            wrap.appendChild(chart);
-          }
-
-        } else if (artifact.type === 'action_list') {
-          if (d.title) { const t = document.createElement('div'); t.className = 'disa-artifact-title'; t.textContent = d.title; wrap.appendChild(t); }
-          if (d.items && d.items.length) {
-            const list = document.createElement('div');
-            list.className = 'disa-list';
-            d.items.forEach(item => {
-              const row = document.createElement('div');
-              row.className = 'disa-list-item ' + (item.tone || '');
-              const body = document.createElement('div');
-              body.className = 'disa-list-item-body';
-              const title = document.createElement('div');
-              title.className = 'disa-list-item-title';
-              title.textContent = item.title || '';
-              body.appendChild(title);
-              if (item.subtitle) { const s = document.createElement('div'); s.className = 'disa-list-item-subtitle'; s.textContent = item.subtitle; body.appendChild(s); }
-              if (item.meta) { const m = document.createElement('div'); m.className = 'disa-list-item-meta'; m.textContent = item.meta; body.appendChild(m); }
-              row.appendChild(body);
-              if (item.actions && item.actions.length) {
-                const acts = document.createElement('div');
-                acts.className = 'disa-list-item-actions';
-                item.actions.forEach(a => {
-                  const btn = document.createElement('button');
-                  btn.className = 'disa-list-btn ' + (a.intent || 'secondary');
-                  btn.textContent = a.label;
-                  const act = a.action, params = a.params || {};
-                  btn.onclick = () => dhArtifactAction(act, params);
-                  acts.appendChild(btn);
-                });
-                row.appendChild(acts);
-              }
-              list.appendChild(row);
-            });
-            wrap.appendChild(list);
-          }
-
-        } else if (artifact.type === 'big_number') {
-          const box = document.createElement('div');
-          box.className = 'disa-bignum';
-          const val = document.createElement('div');
-          val.className = 'disa-bignum-value ' + (d.tone || 'neutral');
-          val.textContent = d.value || '';
-          box.appendChild(val);
-          if (d.label) { const l = document.createElement('div'); l.className = 'disa-bignum-label'; l.textContent = d.label; box.appendChild(l); }
-          if (d.context) { const ctx = document.createElement('div'); ctx.className = 'disa-bignum-context'; ctx.textContent = d.context; box.appendChild(ctx); }
-          wrap.appendChild(box);
-          if (d.link) wrap.appendChild(dhMakeLink(d.link));
-          return wrap;
-        } else {
-          return null;
-        }
-
-        if (d.link) wrap.appendChild(dhMakeLink(d.link));
-        return wrap;
-      }
-
-      function dhMakeLink(link) {
-        if (!link || !link.url) return document.createDocumentFragment();
-        const allowedExact = [
-          '/admin/products','/admin/categories','/admin/tags',
-          // PIEZA C — POS viejo retirado: quitados '/admin/orders', '/admin/orders/pos', '/refunds', '/draft/new'.
-          '/admin/discounts','/admin/inventory','/admin/suppliers','/admin/purchases',
-          '/admin/purchases/new','/admin/invoices','/admin/clients','/admin/clients/groups',
-          '/admin/analytics','/admin/settings','/admin/users',
-          '/admin/activity','/admin/security','/admin/disa',
-          // D2 — restos e-commerce desmontados: quitados '/admin/store-settings', '/admin/newsletter',
-          // '/admin/reviews', '/admin/feedback' (darían 404). '/admin/tags' SE QUEDA (función de catálogo).
-        ];
-        const allowedPatterns = [
-          // PIEZA C — POS viejo retirado: quitados los patrones /admin/orders/:id y /admin/orders/:id/invoice.
-          /^\\/admin\\/purchases\\/\\d+$/,
-          /^\\/admin\\/invoices\\/\\d+$/,
-        ];
-        const url = link.url;
-        if (!allowedExact.includes(url) && !allowedPatterns.some(re => re.test(url))) {
-          console.warn('[DISA] URL bloqueada en frontend:', url);
-          return document.createDocumentFragment();
-        }
-        const a = document.createElement('a');
-        a.className = 'disa-artifact-link';
-        a.href = url;
-        a.textContent = (link.label || 'Ver más') + ' →';
-        return a;
-      }
-
-      function dhArtifactAction(action, params) {
-        const navMap = {
-          view_product: p => '/admin/products/' + p.product_id,
-          // PIEZA C — POS viejo retirado: 'view_order' eliminado (apuntaba a /admin/orders/:id, ahora 404).
-          view_client: p => '/admin/clients/' + p.client_id,
-        };
-        if (navMap[action] && Object.values(params)[0]) {
-          window.location.href = navMap[action](params);
-          return;
-        }
-        // For non-nav actions, send as chat message to DISA
-        const labels = {
-          restock: 'Reponer stock del producto ' + (params.product_id || ''),
-          order_stock: 'Pedir stock del producto ' + (params.product_id || ''),
-        };
-        const msg = labels[action] || (action + ' ' + JSON.stringify(params));
-        document.getElementById('dh-input').value = msg;
-        disaSubmitHome();
-      }
-
-      function dhAppendTyping() {
-        const msgs = document.getElementById('dh-messages');
-        const id = 'dh-typing-' + Date.now();
-        const wrap = document.createElement('div');
-        wrap.className = 'disa-msg assistant';
-        wrap.id = id;
-        const av = document.createElement('div');
-        av.className = 'disa-msg-avatar';
-        av.textContent = 'D';
-        const bubble = document.createElement('div');
-        bubble.className = 'disa-msg-bubble';
-        bubble.innerHTML = '<div class="disa-typing"><span></span><span></span><span></span></div>';
-        wrap.appendChild(av);
-        wrap.appendChild(bubble);
-        msgs.appendChild(wrap);
-        msgs.scrollTop = msgs.scrollHeight;
-        return id;
-      }
-
-      function dhRemoveTyping(id) {
-        document.getElementById(id)?.remove();
-      }
-
-      document.getElementById('dh-input')?.focus();
-
-      const DH_DEFAULT_CHIPS = ['Resumen del día', 'Top productos', 'Clientes inactivos'];
-
+      // El token CSRF para las llamadas que MUTAN (guardar el layout, plegar el panel). Vivía en el
+      // bloque del chat; se conserva aquí porque la rejilla y el panel de arranque lo usan.
       function dhGetCsrf() {
         return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || window.CSRF_TOKEN || '';
       }
 
-      function dhRenderChips(chips) {
-        const el = document.getElementById('dh-chips');
-        if (!el) return;
-        el.innerHTML = chips.map(function(c) {
-          return '<button class="disa-chip" onclick="disaQuickSend(' + JSON.stringify(c).replace(/"/g, '&quot;') + ')">'
-            + c.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;') + '</button>';
-        }).join('');
-      }
+      // ══════════════════════════════════════════════════════════════════════════════════════════
+      // EL CUADRO DE MANDO DEL DÍA — se pinta con lo que devuelve /api/erp/inicio/cuadro
+      // ══════════════════════════════════════════════════════════════════════════════════════════
+      // CERO CIFRA PROPIA. Aquí no se suma, no se divide y no se compara nada: el servidor manda
+      // cada número ya sacado de su motor (ventas, cobros, margen, CRM, agenda, vigía) y esto solo
+      // lo escribe en español. Si un dato viene null se pinta «—», nunca un 0.
+      //
+      // LO QUE NO PUEDE VER ESTE USUARIO NI SIQUIERA LLEGA: el servidor no calcula las secciones
+      // cuyos permisos le faltan, así que no hay nada que esconder al pintar.
+      (function initCuadro(){
+        var esc = window.escHtml || function(s){ return s == null ? '' : String(s); };
+        var SYM = '${simbolo}';
+        var D = null;
 
-      async function dhLoadChips() {
-        try {
-          const res = await fetch('/api/disa/chips', { headers: { 'x-csrf-token': dhGetCsrf() } });
-          const chips = res.ok ? await res.json() : DH_DEFAULT_CHIPS;
-          dhRenderChips(Array.isArray(chips) && chips.length ? chips : DH_DEFAULT_CHIPS);
-        } catch { dhRenderChips(DH_DEFAULT_CHIPS); }
-      }
-
-      window.disaEditChips = async function() {
-        let chips = DH_DEFAULT_CHIPS;
-        try {
-          const res = await fetch('/api/disa/chips', { headers: { 'x-csrf-token': dhGetCsrf() } });
-          if (res.ok) { const d = await res.json(); if (Array.isArray(d) && d.length) chips = d; }
-        } catch {}
-        for (var i = 0; i < 3; i++) {
-          var inp = document.getElementById('dh-chip-' + i);
-          if (inp) inp.value = chips[i] || '';
+        // ── Español de verdad: 1.234,50 € y 36,3 %. Un «€1234.5» no es una cifra de esta casa. ──
+        function num(n, d){
+          return Number(n).toLocaleString('es-ES', { minimumFractionDigits: d, maximumFractionDigits: d, useGrouping: 'always' });
         }
-        document.getElementById('dh-chips-modal').style.display = 'flex';
-      };
+        function eur(n){ return n == null ? '—' : num(n, 2) + ' ' + SYM; }
+        function eur0(n){ return n == null ? '—' : num(n, 0) + ' ' + SYM; }
+        function pct(n){ return n == null ? '—' : num(n, 1) + ' %'; }
+        function ent(n){ return n == null ? '—' : num(n, 0); }
+        var MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+        function mesLargo(k){ var p = String(k).split('-'); return (MESES[Number(p[1]) - 1] || k); }
+        function fechaEs(iso){ var p = String(iso).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+        // El vigía fecha unos avisos por DÍA (un vencimiento) y otros por MES (una caída de
+        // facturación). Los dos se escriben en español, cada uno con su forma.
+        // (Sin expresiones regulares a propósito: dentro de una plantilla del servidor la barra de
+        // un \\d se la come la plantilla y el regex llega roto. Se mira el largo, que basta.)
+        function cuando(iso){
+          var s = String(iso || '');
+          if (s.length === 10) return fechaEs(s);
+          if (s.length === 7) return mesLargo(s) + ' de ' + s.slice(0, 4);
+          return s;
+        }
 
-      window.disaSaveChips = async function() {
-        var chips = [0,1,2].map(function(i){ return (document.getElementById('dh-chip-'+i)?.value||'').trim(); }).filter(Boolean);
-        if (!chips.length) return;
-        try {
-          var res = await fetch('/api/disa/chips', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-csrf-token': dhGetCsrf() },
-            body: JSON.stringify({ chips: chips })
+        // La comparación, en su chip de color. Sin comparación no hay chip de color: hay un «—» y el
+        // motivo al lado, que es la verdad y no un empate inventado.
+        function chip(cmp, unidad){
+          if (!cmp || !cmp.hay) return '<span class="cm-cmp neutro">— sin comparación</span>';
+          var f = cmp.tono === 'bien' ? 'ti-trending-up' : cmp.tono === 'mal' ? 'ti-trending-down' : 'ti-minus';
+          var txt;
+          if (cmp.puntos) txt = (cmp.delta > 0 ? '+' : '') + num(cmp.delta, 1) + ' p.p.';
+          else if (cmp.pct != null) txt = (cmp.pct > 0 ? '+' : '') + num(cmp.pct, 1) + ' %';
+          else txt = (cmp.delta > 0 ? '+' : '') + (unidad === 'eur' ? eur(cmp.delta) : ent(cmp.delta));
+          return '<span class="cm-cmp ' + cmp.tono + '"><i class="ti ' + f + '"></i>' + esc(txt) + '</span>';
+        }
+
+        // Minigráfica: una polilínea normalizada, sin ejes ni números. No afirma una magnitud —para
+        // eso están la cifra de arriba y el gráfico grande—, solo enseña la forma.
+        function chispa(vals, color){
+          if (!vals || vals.length < 2) return '';
+          var max = Math.max.apply(null, vals), min = Math.min.apply(null, vals);
+          var rango = (max - min) || 1;
+          var pasos = vals.length - 1;
+          var pts = vals.map(function(v, i){
+            var x = (i / pasos) * 100;
+            var y = 24 - ((v - min) / rango) * 22;
+            return x.toFixed(2) + ',' + y.toFixed(2);
+          }).join(' ');
+          return '<div class="cm-chispa"><svg viewBox="0 0 100 26" preserveAspectRatio="none" aria-hidden="true">'
+            + '<polyline fill="none" stroke="' + color + '" stroke-width="1.6" vector-effect="non-scaling-stroke" points="' + pts + '"/>'
+            + '</svg></div>';
+        }
+
+        function tarjeta(o){
+          return '<div class="cm-num">'
+            + '<p class="cm-num-l"><i class="ti ' + o.icon + '" style="color:' + o.color + '"></i>' + esc(o.label) + '</p>'
+            + '<p class="cm-num-v">' + o.valor + '</p>'
+            + (o.base ? '<p class="cm-num-b">' + o.base + '</p>' : '')
+            + o.chip
+            + (o.chispa || '')
+            + '</div>';
+        }
+
+        // ── HOY ─────────────────────────────────────────────────────────────────────────────────
+        // La franja: el horario abierto de fondo, las citas y los eventos encima. Los minutos son
+        // los que da la agenda (agendaData) y las horas libres las que da ocupacionDia — dibujar no
+        // es calcular, y aquí no se calcula nada.
+        function hhmm(m){ return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
+        function pintaHoy(h){
+          var box = document.getElementById('cmHoy');
+          if (!h) { box.innerHTML = ''; return; }
+          var res = '<div class="cm-hoy-res"><span><b>' + h.n + '</b> ' + (h.n === 1 ? 'cita' : 'citas') + '</span>'
+            + (h.libre_h != null ? '<span><b>' + num(h.libre_h, 1) + ' h</b> libres</span>' : '')
+            + (h.pct != null ? '<span><b>' + h.pct + ' %</b> ocupado</span>' : '')
+            + (h.bloqueos && h.bloqueos.length ? '<span><b>' + h.bloqueos.length + '</b> ' + (h.bloqueos.length === 1 ? 'evento' : 'eventos') + '</span>' : '')
+            + '</div>';
+          // SIN HORARIO PUESTO NO SE MIENTE: el motor abre de 8 a 21 por defecto, así que las horas
+          // libres no significan nada todavía. Se dice y se manda a ponerlo.
+          if (h.sin_horario) {
+            res += '<div class="cm-pie" style="margin:0 0 8px">Todavía no has puesto tu horario, así que doy por abierto de 8 a 21 '
+              + 'y las horas libres no significan nada. <a href="/admin/citas/horarios">Ponlo aquí</a>.</div>';
+          }
+          var franja = '';
+          var tr = h.tramos || [];
+          var ini = null, fin = null;
+          tr.forEach(function(t){ ini = ini == null ? t.ini : Math.min(ini, t.ini); fin = fin == null ? t.fin : Math.max(fin, t.fin); });
+          (h.citas || []).forEach(function(c){ ini = ini == null ? c.inicio_min : Math.min(ini, c.inicio_min); fin = fin == null ? c.fin_min : Math.max(fin, c.fin_min); });
+          (h.bloqueos || []).forEach(function(b){ ini = ini == null ? b.inicio_min : Math.min(ini, b.inicio_min); fin = fin == null ? b.fin_min : Math.max(fin, b.fin_min); });
+          if (ini != null && fin != null && fin > ini) {
+            var span = fin - ini;
+            var pos = function(a, b){
+              var x = ((a - ini) / span) * 100, w = ((b - a) / span) * 100;
+              return 'left:' + Math.max(0, x).toFixed(2) + '%;width:' + Math.max(0.6, Math.min(100 - x, w)).toFixed(2) + '%';
+            };
+            var segs = (h.citas || []).map(function(c){
+              return '<span class="cm-fr-seg cm-fr-cita ' + esc(c.estado) + '" style="' + pos(c.inicio_min, c.fin_min) + '" '
+                + 'title="' + esc(c.hora + '–' + c.fin + ' · ' + c.cliente) + '"></span>';
+            }).join('') + (h.bloqueos || []).map(function(b){
+              return '<span class="cm-fr-seg cm-fr-blq" style="' + pos(b.inicio_min, b.fin_min) + '" '
+                + 'title="' + esc(b.hora + '–' + b.fin + (b.motivo ? ' · ' + b.motivo : '')) + '"></span>';
+            }).join('');
+            var ahora = (h.ahora != null && h.ahora >= ini && h.ahora <= fin)
+              ? '<span class="cm-fr-ahora" style="left:' + (((h.ahora - ini) / span) * 100).toFixed(2) + '%" title="Ahora"></span>' : '';
+            franja = '<div class="cm-franja">' + segs + ahora + '</div>'
+              + '<div class="cm-fr-esc"><span>' + hhmm(ini) + '</span><span>' + hhmm(fin) + '</span></div>'
+              + '<div class="cm-ley"><span><i style="background:var(--accent)"></i>Ocupado</span>'
+              + '<span><i style="background:var(--bg3);border:1px solid var(--border2)"></i>Libre</span>'
+              + (h.bloqueos && h.bloqueos.length ? '<span><i style="background:var(--text3)"></i>Evento del calendario</span>' : '')
+              + '</div>';
+          }
+          var prox = '';
+          if (h.proxima) {
+            prox = '<a class="cm-prox" href="/admin/citas?fecha=' + esc(h.fecha) + '">'
+              + '<span class="hh">' + esc(h.proxima.hora) + '</span>'
+              + '<span class="tx"><b>' + esc(h.proxima.cliente) + '</b>'
+              + '<span>' + esc((h.proxima.servicios || 'Cita') + ' · ' + h.proxima.persona) + '</span></span>'
+              + '<i class="ti ti-chevron-right" style="color:var(--accent)"></i></a>';
+          } else if (!h.citas.length) {
+            prox = '<div class="cm-pie">' + (h.abre ? 'Hoy no tienes ninguna cita.' : 'Hoy no abres.')
+              + ' <a href="/admin/citas">Ver la agenda</a></div>';
+          } else {
+            prox = '<div class="cm-pie">Ya no te queda ninguna cita por delante hoy. <a href="/admin/citas">Ver la agenda</a></div>';
+          }
+          var eventos = (h.bloqueos || []).map(function(b){
+            return '<div class="cm-ev"><span class="h">' + esc(b.hora + '–' + b.fin) + '</span>'
+              + '<span class="m">' + esc(b.motivo || 'Evento del calendario') + '</span></div>';
+          }).join('');
+          box.innerHTML = '<div class="cm-card">'
+            + '<p class="cm-h"><i class="ti ti-calendar-event"></i>Hoy<span class="x">' + esc(fechaEs(h.fecha)) + '</span></p>'
+            + res + franja + prox + eventos + '</div>';
+        }
+
+        // ── TUS NÚMEROS ─────────────────────────────────────────────────────────────────────────
+        function pintaNumeros(s, per){
+          var box = document.getElementById('cmNumeros'), cards = [];
+          if (s.ventas) {
+            cards.push(tarjeta({
+              icon: 'ti-cash', color: 'var(--accent)', label: 'Ventas del mes',
+              valor: eur(s.ventas.base),
+              base: 'sin IVA · ' + eur(s.ventas.total) + ' facturado con IVA · ' + ent(s.ventas.facturas)
+                + (s.ventas.facturas === 1 ? ' factura' : ' facturas'),
+              chip: chip(s.ventas.comparacion, 'eur'),
+              chispa: chispa(s.ventas.chispa, 'var(--accent)'),
+            }));
+          }
+          if (s.cobro) {
+            cards.push(tarjeta({
+              icon: 'ti-clock-dollar', color: 'var(--warn)', label: 'Pendiente de cobro',
+              valor: eur(s.cobro.total),
+              base: ent(s.cobro.facturas) + ' facturas vivas'
+                + (s.cobro.vencidas ? ' · <b style="color:var(--danger)">' + ent(s.cobro.vencidas) + ' vencidas por ' + eur(s.cobro.vencido) + '</b>' : ' · ninguna vencida'),
+              chip: chip(s.cobro.comparacion, 'eur'),
+              chispa: '<p class="cm-num-b">' + esc(s.cobro.porQueNoHayComparacion) + '</p>',
+            }));
+          }
+          if (s.margen) {
+            // NINGÚN PORCENTAJE DE MARGEN SIN SU BASE (CANON). El sufijo dice sobre qué se divide y
+            // la línea de abajo dice sobre CUÁNTO — y cuánto queda fuera por no tener coste.
+            var m = s.margen.margen || {};
+            var base = 'sobre ' + eur(m.venta) + ' con coste conocido';
+            if (m.fuera > 0) base += ' · quedan fuera ' + eur(m.fuera) + ' (' + pct(m.fueraPct) + ' de lo vendido) sin coste';
+            else if (m.hay) base += ' · todo lo vendido tiene coste';
+            cards.push(tarjeta({
+              icon: 'ti-percentage', color: 'var(--ok)', label: 'Margen del mes',
+              valor: (s.margen.pct == null ? '—' : pct(s.margen.pct) + ' <span style="font-size:12px;font-weight:600;color:var(--text2)">' + esc(s.margen.sufijo) + '</span>'),
+              base: (s.margen.euros == null ? 'Ninguna línea tiene coste conocido todavía.' : eur(s.margen.euros) + ' · ' + base),
+              chip: chip(s.margen.comparacion),
+              chispa: chispa(s.margen.chispa, 'var(--ok)'),
+            }));
+          }
+          if (s.clientes) {
+            cards.push(tarjeta({
+              icon: 'ti-user-plus', color: 'var(--accent-purple)', label: 'Clientes nuevos',
+              valor: ent(s.clientes.nuevos),
+              base: 'en ' + esc(mesLargo(per.mes))
+                + (s.clientes.mesAnteriorCompleto == null ? '' : ' · ' + ent(s.clientes.mesAnteriorCompleto) + ' en ' + esc(mesLargo(per.mesAnt)) + ' completo'),
+              chip: chip(s.clientes.comparacion),
+              chispa: chispa(s.clientes.chispa, 'var(--accent-purple)'),
+            }));
+          }
+          box.innerHTML = cards.length ? '<div class="cm-nums">' + cards.join('') + '</div>' : '';
+        }
+
+        // ── EL GRÁFICO PRINCIPAL ────────────────────────────────────────────────────────────────
+        // Uno solo y grande: las ventas de cada día del mes, con el mes anterior detrás en gris. La
+        // serie sale de ventasPorDia(), el ÚNICO motor de serie diaria que existe — y devuelve el
+        // total CON IVA. Se dice en el rótulo; no se disimula ni se inventa una serie en base.
+        function pintaGrafico(g, per){
+          var box = document.getElementById('cmGrafico');
+          if (!g || !g.actual || !g.actual.length) { box.innerHTML = ''; return; }
+          box.innerHTML = '<div class="cm-card">'
+            + '<p class="cm-h"><i class="ti ti-chart-bar"></i>Ventas por día<span class="x">'
+            + esc(mesLargo(g.mes)) + ' · en gris, ' + esc(mesLargo(g.mesAnt)) + '</span></p>'
+            + '<div class="cm-graf"><canvas id="cmGrafCanvas"></canvas></div>'
+            + '<p class="cm-pie">Facturado con IVA, día a día. El titular de arriba va sin IVA porque es lo que cuadra con el informe de ventas.</p>'
+            + '</div>';
+          if (typeof Chart === 'undefined') return;
+          var dias = Math.max(g.actual.length, g.anterior.length);
+          var etiquetas = [], serieA = [], serieB = [];
+          for (var i = 0; i < dias; i++) {
+            etiquetas.push(String(i + 1));
+            serieA.push(i < g.actual.length ? g.actual[i].total : null);
+            serieB.push(i < g.anterior.length ? g.anterior[i].total : null);
+          }
+          new Chart(document.getElementById('cmGrafCanvas'), {
+            type: 'bar',
+            data: { labels: etiquetas, datasets: [
+              { label: mesLargo(g.mesAnt), data: serieB, backgroundColor: 'rgba(138,143,153,.28)', borderRadius: 3, order: 2 },
+              { label: mesLargo(g.mes), data: serieA, backgroundColor: '#2F6BFF', borderRadius: 3, order: 1 },
+            ] },
+            options: {
+              responsive: true, maintainAspectRatio: false,
+              plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } },
+                tooltip: { callbacks: { label: function(ctx){ return ctx.dataset.label + ': ' + eur(ctx.parsed.y); } } } },
+              scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: true } },
+                        y: { beginAtZero: true, ticks: { font: { size: 10 }, callback: function(v){ return eur0(v); } } } },
+            },
           });
-          if (res.ok) {
-            dhRenderChips(chips);
-            document.getElementById('dh-chips-modal').style.display = 'none';
-          }
-        } catch {}
-      };
+        }
 
-      // ARREGLO 2 — al cargar el dashboard, recupera y pinta el historial del hilo activo
-      // (equivalente a loadActiveThread del widget). Solo LEE los endpoints de hilos ya
-      // existentes; no toca el guardado. Silencioso si falla (como el widget).
-      async function dhLoadActiveThread() {
-        try {
-          const r = await fetch('/api/disa/threads', { headers: { 'x-csrf-token': dhGetCsrf() } });
-          if (!r.ok) return;
-          const threads = await r.json();
-          if (!Array.isArray(threads) || !threads.length) return;
-          dhThreadId = threads[0].id;
-          const r2 = await fetch('/api/disa/threads/' + dhThreadId, { headers: { 'x-csrf-token': dhGetCsrf() } });
-          if (!r2.ok) return;
-          const t = await r2.json();
-          if (t.messages && t.messages.length > 0) {
-            dhDock();
-            const msgs = document.getElementById('dh-messages');
-            msgs.innerHTML = '';
-            t.messages.forEach(function(m) { dhAppendMsg(m.role, m.content, null); });
-            msgs.scrollTop = msgs.scrollHeight;
+        // ── TU NEGOCIO EN CIFRAS ────────────────────────────────────────────────────────────────
+        function fila(i, puesto, nombre, valor, ultimo, href){
+          var cls = 'cm-fila' + (i === 0 ? ' primera' : '') + (ultimo ? ' ultimo' : '');
+          var t = href ? 'a' : 'div';
+          return '<' + t + ' class="' + cls + '"' + (href ? ' href="' + esc(href) + '"' : '') + '>'
+            + '<span class="p">' + (ultimo ? '↓' : puesto + '.') + '</span>'
+            + '<span class="n">' + esc(nombre) + '</span>'
+            + '<span class="v">' + valor + '</span></' + t + '>';
+        }
+        function pintaCifras(s){
+          var box = document.getElementById('cmCifras'), cols = [];
+          if (s.productos) {
+            var P = s.productos;
+            var vend = P.vendidos.length
+              ? P.vendidos.map(function(p, i){ return fila(i, p.puesto, p.nombre, ent(p.qty) + ' uds', p.ultimo); }).join('')
+              : '<div class="cm-pie">Todavía no hay ningún producto con ' + esc(P.sueloTexto) + '.</div>';
+            var rent = P.rentables.length
+              ? P.rentables.map(function(p, i){
+                  // El % NUNCA va desnudo: lleva su sufijo (sobre qué se divide) y su base (sobre cuánto).
+                  return fila(i, p.puesto, p.nombre,
+                    (p.pct == null ? '—' : pct(p.pct) + ' <span style="color:var(--text3)">' + esc(p.sufijo) + ' · sobre ' + eur(p.base) + '</span>'),
+                    p.ultimo);
+                }).join('')
+              : '<div class="cm-pie">Todavía no hay ningún producto con coste conocido y ' + esc(P.sueloTexto) + '.</div>';
+            cols.push('<div class="cm-lista"><h4>Lo que más vendes</h4>' + vend + '</div>');
+            cols.push('<div class="cm-lista"><h4>Lo que más te deja</h4>' + rent + '</div>');
           }
-        } catch (e) { /* silencioso, como el widget */ }
-      }
+          if (s.mejores) {
+            var cl = s.mejores.clientes.length
+              ? s.mejores.clientes.map(function(x, i){ return fila(i, i + 1, x.nombre, eur(x.base), false, '/admin/clients/' + x.client_id); }).join('')
+              : '<div class="cm-pie">Ningún cliente ha comprado todavía este mes.</div>';
+            cols.push('<div class="cm-lista"><h4>Tus mejores clientes</h4>' + cl + '</div>');
+          }
+          if (!cols.length) { box.innerHTML = ''; return; }
+          // EL SUELO SE DICE. Un filtro que no se ve es un filtro en el que no se puede confiar.
+          var pie = '';
+          if (s.productos) {
+            pie = '<p class="cm-pie">En los dos rankings de productos solo entran los que llevan <b>' + esc(s.productos.sueloTexto)
+              + '</b>: un producto vendido una vez no es «el que peor va». '
+              + (s.productos.fuera ? 'Se quedan fuera por eso <b>' + ent(s.productos.fuera) + '</b> de ' + ent(s.productos.total) + '. ' : '')
+              + (s.productos.sinCosteFuera ? 'Y <b>' + ent(s.productos.sinCosteFuera) + '</b> más no entran en «lo que más te deja» porque no tienen coste conocido: sin coste no hay margen que juzgar (ni 0 % ni 100 %).' : '')
+              + '</p>';
+          }
+          box.innerHTML = '<div class="cm-card">'
+            + '<p class="cm-h"><i class="ti ti-list-numbers"></i>Tu negocio en cifras<span class="x">este mes</span></p>'
+            + '<div class="cm-listas">' + cols.join('') + '</div>' + pie + '</div>';
+        }
 
-      dhLoadChips();
+        // ── OPORTUNIDADES ABIERTAS ──────────────────────────────────────────────────────────────
+        function pintaOport(o){
+          var box = document.getElementById('cmOport');
+          if (!o) { box.innerHTML = ''; return; }
+          box.innerHTML = '<a class="cm-card cm-oport" href="' + esc(o.href) + '" style="display:flex">'
+            + '<i class="ti ti-target-arrow" style="font-size:18px;color:var(--accent)"></i>'
+            + '<span class="big">' + ent(o.abiertas) + ' ' + (o.abiertas === 1 ? 'oportunidad abierta' : 'oportunidades abiertas') + '</span>'
+            + '<span style="color:var(--text2);font-size:13px">por ' + eur(o.importe) + '</span>'
+            + '<span class="cta">Ver el embudo →</span></a>';
+        }
+
+        // ── DISA DECIDE ─────────────────────────────────────────────────────────────────────────
+        // Tres líneas como mucho, con la cifra YA CALCULADA delante (la del vigía, sin recalcular) y
+        // el botón que lleva a donde se resuelve. Sin nada que recomendar, el bloque NO APARECE.
+        //
+        // La línea se COMPONE de campos: cifra · quién · documento · cuándo. No se pinta la prosa de
+        // la voz porque escribe el dinero en inglés y las fechas en ISO, y aquí manda el español.
+        function pintaDecide(d){
+          var box = document.getElementById('cmDecide');
+          if (!d || !d.lineas || !d.lineas.length) { box.innerHTML = ''; return; }
+          var col = { alta: ['var(--danger-s)', 'var(--danger)'], media: ['var(--warn-s)', 'var(--warn)'], baja: ['var(--bg3)', 'var(--text3)'] };
+          box.innerHTML = '<div class="cm-card">'
+            + '<p class="cm-h"><i class="ti ti-sparkles"></i>DISA decide</p>'
+            + d.lineas.map(function(l, i){
+                var c = col[l.prioridad] || col.media;
+                var partes = [];
+                if (l.quien) partes.push(esc(l.quien));
+                if (l.codigo) partes.push(esc(l.codigo));
+                if (l.fecha) partes.push(esc(cuando(l.fecha)));
+                return '<div class="cm-dec' + (i === 0 ? ' primera' : '') + '">'
+                  + '<span class="cifra">' + (l.moneda ? eur(l.cifra) : ent(l.cifra)) + '</span>'
+                  + '<span class="cm-pill" style="background:' + c[0] + ';color:' + c[1] + '">' + esc(l.areaEtiqueta) + '</span>'
+                  + '<span class="tx"><b style="color:var(--text);font-weight:600">' + esc(l.etiqueta) + '</b>'
+                  + (partes.length ? ' · ' + partes.join(' · ') : '') + '</span>'
+                  + '<a class="btn" href="' + esc(l.href) + '">' + esc(l.cta) + '</a></div>';
+              }).join('')
+            + '</div>';
+        }
+
+        function pinta(){
+          if (!D) return;
+          var s = D.secciones || {};
+          try { pintaHoy(s.hoy); } catch (e) {}
+          try { pintaNumeros(s, D.periodo); } catch (e) {}
+          try { pintaGrafico(s.grafico, D.periodo); } catch (e) {}
+          try { pintaCifras(s); } catch (e) {}
+          try { pintaOport(s.oportunidades); } catch (e) {}
+          try { pintaDecide(s.decide); } catch (e) {}
+        }
+
+        fetch('/api/erp/inicio/cuadro', { cache: 'no-store' })
+          .then(function(r){ return r.json(); })
+          .then(function(d){ if (d && !d.error) { D = d; window.__cuadro = d; pinta(); } })
+          .catch(function(){});
+      })();
 
       // ── PASO 6 · INICIO PERSONALIZABLE — la rejilla componible. El vigía de DISA (pieza 5), las cifras
       // y los avisos son ahora BLOQUES colocables; se suman los paneles guardados del constructor. La
@@ -1210,7 +771,7 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, simbolo =
           var k = (IG.datos && IG.datos.kpis) || {}, av = (IG.datos && IG.datos.avisos) || {};
           function fig(icon, color, label, val){ return '<div><p class="ig-kpi-label"><i class="ti ' + icon + '" style="color:' + color + '"></i>' + label + '</p><p class="ig-kpi-value">' + val + '</p></div>'; }
           body.innerHTML = '<div class="ig-kpis">'
-            + fig('ti-arrow-down-left', 'var(--accent)', 'Ventas del mes', k.verVentas ? eurEs(k.ventas || 0) : '—')
+            + fig('ti-arrow-down-left', 'var(--accent)', 'Ventas del mes (sin IVA)', k.verVentas ? eurEs(k.ventas || 0) : '—')
             + fig('ti-receipt', 'var(--warn)', 'Pedidos', k.verPedidos ? (k.pedidos || 0) : '—')
             + fig('ti-clock-hour-4', 'var(--text2)', 'Pendientes', k.verPedidos ? (k.pendiente || 0) : '—')
             + fig('ti-alert-triangle', 'var(--danger)', 'Avisos', (av.estado && av.estado !== 'apagado') ? (av.count || 0) : 0)
@@ -1491,30 +1052,6 @@ export function disaHomeHtml({ userName, alertCount, alertState, kpis, simbolo =
           .then(function(){ if (window.onbRecargar) window.onbRecargar(); })
           .catch(function(e){ if (window.toast) toast('No se ha podido guardar: '+e.message+'. Puedes elegirlo en Ajustes.','err'); });
       });
-
-      // La HOME (/admin) es el DASHBOARD del molde 1 (saludo + cifras + tarjeta DISA + lista +
-      // input): aterriza SIEMPRE en el hero, no en el chat. La conversación a pantalla completa
-      // vive en /admin/disa (DISEÑO.md §3.2). Por eso ya NO se auto-restaura el hilo aquí; al
-      // escribir en el input, la home abre el chat en línea (disaSubmitHome). dhLoadActiveThread()
-      // se conserva por si /admin/disa lo reutiliza, pero la home no lo invoca al cargar.
     </script>
-
-    <div id="dh-chips-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center">
-      <div style="background:var(--bg2);border: 1px solid var(--border2);border-radius:12px;padding:24px;width:360px;max-width:90vw">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-          <div style="color:var(--text);font-weight:500;font-size:14px">Accesos rápidos</div>
-          <button onclick="document.getElementById('dh-chips-modal').style.display='none'" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:18px;line-height:1;padding:0">✕</button>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">
-          <input id="dh-chip-0" placeholder="Chip 1" style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);font-family:inherit;outline:none;width:100%;box-sizing:border-box">
-          <input id="dh-chip-1" placeholder="Chip 2" style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);font-family:inherit;outline:none;width:100%;box-sizing:border-box">
-          <input id="dh-chip-2" placeholder="Chip 3" style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);font-family:inherit;outline:none;width:100%;box-sizing:border-box">
-        </div>
-        <div style="display:flex;gap:8px;justify-content:flex-end">
-          <button onclick="document.getElementById('dh-chips-modal').style.display='none'" style="padding:7px 14px;border:1px solid var(--border2);border-radius:7px;background:none;color:var(--text2);cursor:pointer;font-size:13px;font-family:inherit">Cancelar</button>
-          <button onclick="disaSaveChips()" style="padding:7px 14px;background:var(--accent);border:none;border-radius:7px;color:var(--bg2);cursor:pointer;font-size:13px;font-weight:500;font-family:inherit">Guardar</button>
-        </div>
-      </div>
-    </div>
   `;
 }

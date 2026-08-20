@@ -620,8 +620,21 @@ try {
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   console.log('\n[14] EL ALTA: ELEGIR A, ELEGIR B Y SALTAR — LOS TRES TERMINAN EL PASO');
   // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // 20-ago-2026 · EL CUADRO DE MANDO. El panel de arranque ya NO nace desplegado en un negocio con
+  // actividad (facturas o citas): el Inicio enseña primero las cifras y el panel se pliega en una
+  // línea. Este gate mira DENTRO del panel, así que lo abre — y el pliegue se recuerda por usuario,
+  // así que basta con abrirlo una vez.
+  const abrirPanel = async () => {
+    const plegado = await page.evaluate(() => {
+      const b = document.querySelector('.onb-plegado');
+      if (b) { b.click(); return true; }
+      return false;
+    });
+    if (plegado) await dormir(1200);
+  };
   db.prepare("DELETE FROM settings WHERE key LIKE 'margen_modo%'").run();
   await page.goto(BASE + '/admin', { waitUntil: 'networkidle0' }); await dormir(1300);
+  await abrirPanel();
   const alta0 = await page.evaluate(() => ({
     anillo: document.querySelector('.onb-ring-n')?.textContent || '',
     pasos: [...document.querySelectorAll('.onb-stitle')].map(x => x.textContent),
@@ -656,9 +669,11 @@ try {
   // contestarlo cuenta.
   db.prepare("DELETE FROM settings WHERE key LIKE 'margen_modo%'").run();
   await page.goto(BASE + '/admin', { waitUntil: 'networkidle0' }); await dormir(1800);
+  await abrirPanel();
   const antesMg = await page.evaluate(() => (document.querySelector('.onb-ring-n') || {}).textContent || '');
   await api('POST', '/api/erp/settings/margen/alta', { saltar: true });
   await page.goto(BASE + '/admin', { waitUntil: 'networkidle0' }); await dormir(1800);
+  await abrirPanel();
   const trasMg = await page.evaluate(() => (document.querySelector('.onb-ring-n') || {}).textContent || '');
   const hechos = t => parseInt(String(t).split('/')[0], 10) || 0;
   ok(hechos(trasMg) === hechos(antesMg) + 1,

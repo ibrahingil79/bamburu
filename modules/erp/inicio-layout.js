@@ -18,7 +18,7 @@ import { listarPaneles, areaPerm, AREAS } from './constructor-analitica.js';
 import { ventasResumen, pedidosResumen } from './ventas-metrics.js';
 import { estadoAvisos, hoyLocal } from './avisos.js';
 import { usaAgenda, ocupacionDia } from './vigia-agenda.js';
-import { hayHorarioNegocio } from './citas-engine.js';
+import { hayHorarioNegocio, tramosAmbito, ahoraLocal } from './citas-engine.js';
 import { agendaData } from './routes/citas.js';   // LA MISMA función que sirve la vista día
 
 // Datos de render de un panel guardado: su receta (config), la medida a pintar y el meta de esa medida
@@ -56,21 +56,20 @@ export function bloqueAplica(db, tipo) {
 }
 
 // ── INICIO DE FÁBRICA — sensato y ya montado. Semilla en código (no se persiste). ───────────────
-// El de fábrica se resuelve CON EL NEGOCIO DELANTE: un negocio con agenda arranca viendo su día,
-// que es lo primero que mira quien atiende con cita. Sigue siendo semilla en código, no se persiste.
+// CAMBIA CON EL CUADRO DE MANDO, y por un motivo que se vio en pantalla: la rejilla de fábrica traía
+// «Cifras del negocio», «Hoy en la agenda» y el «Vigía de DISA», que ahora están ARRIBA, fijos y más
+// grandes. El resultado era la misma cifra dos veces en la misma pantalla — y dos «Ventas del mes»
+// que no se parecen es exactamente lo que esta tarea viene a matar.
+//
+// Así que de fábrica queda SOLO «Avisos pendientes», que no lo pinta nadie más (sale del motor de
+// avisos: cobros, pagos, stock y recurrentes; el vigía es otro motor y otra pregunta). Los otros tres
+// NO se eliminan: siguen en la PALETA, para quien los quiera colocar a mano. Y los layouts que un
+// usuario ya haya guardado se respetan tal cual: esto es la semilla, no una migración.
 export const FABRICA = [
-  { tipo: 'kpis',   refId: null, x: 0, y: 0, w: 4, h: 1 },
-  { tipo: 'vigia',  refId: null, x: 0, y: 1, w: 2, h: 2 },
-  { tipo: 'avisos', refId: null, x: 2, y: 1, w: 2, h: 2 },
+  { tipo: 'avisos', refId: null, x: 0, y: 0, w: 4, h: 2 },
 ];
 export function fabricaDe(db) {
-  if (!bloqueAplica(db, 'hoy')) return FABRICA;
-  return [
-    { tipo: 'kpis',   refId: null, x: 0, y: 0, w: 4, h: 1 },
-    { tipo: 'hoy',    refId: null, x: 0, y: 1, w: 2, h: 2 },
-    { tipo: 'vigia',  refId: null, x: 2, y: 1, w: 2, h: 2 },
-    { tipo: 'avisos', refId: null, x: 0, y: 3, w: 4, h: 2 },
-  ];
+  return FABRICA;
 }
 
 // El permiso que exige un bloque: nativo → su `perm`; panel → el permiso de su área.
@@ -185,26 +184,53 @@ export function normalizar(blocks) {
 export function datosHoy(db, { puede, fecha }) {
   if (!puede('citas.read')) return null;
   const hoy = fecha || hoyLocal();
-  let citas = [];
+  let citas = [], bloqueos = [];
   try {
-    citas = (agendaData(db, { desde: hoy, hasta: hoy }).citas || [])
+    const dia = agendaData(db, { desde: hoy, hasta: hoy });
+    citas = (dia.citas || [])
       .sort((a, b) => a.inicio_min - b.inicio_min)
       .map(c => ({
         id: c.id, hora: hhmmDe(c.inicio_min), fin: hhmmDe(c.inicio_min + c.dur_min),
+        // La GEOMETRÍA de la cita, tal cual la da la agenda: la franja del día se dibuja con estos
+        // minutos, no con una cuenta propia. Dibujar no es calcular.
+        inicio_min: c.inicio_min, dur_min: c.dur_min, fin_min: c.inicio_min + c.dur_min,
         cliente: c.cliente, servicios: c.servicios || '', persona: c.persona || '—', estado: c.estado,
       }));
-  } catch { citas = []; }
+    // Los EVENTOS del día (vacaciones, cierres, reuniones): la misma consulta que sirve la vista día.
+    bloqueos = (dia.bloqueos || []).map(b => ({
+      id: b.id, inicio_min: b.inicio_min, fin_min: b.fin_min,
+      hora: hhmmDe(b.inicio_min), fin: hhmmDe(b.fin_min),
+      motivo: b.motivo || '', user_id: b.user_id || null,
+    }));
+  } catch { citas = []; bloqueos = []; }
   let ocupacion = null;
   try { ocupacion = ocupacionDia(db, hoy); } catch { ocupacion = null; }
+  // Los tramos ABIERTOS del negocio ese día — el fondo de la franja. Es la MISMA función de la que
+  // come `ocupacionDia` por dentro (`tramosPersona` → `tramosAmbito`), no una segunda lectura.
+  let tramos = [];
+  try { tramos = (tramosAmbito(db, 'negocio', null, hoy) || []).map(([a, b]) => ({ ini: a, fin: b })); } catch { tramos = []; }
+  // La hora AHORA, en la zona del negocio, solo si la franja es la de hoy de verdad.
+  let ahora = null;
+  try { const a = ahoraLocal(); if (a.fecha === hoy) ahora = a.min; } catch { ahora = null; }
+  // La PRÓXIMA cita: la primera que aún no ha terminado. Si el día ya pasó (o es otro), no hay
+  // «próxima» que destacar y se dice con null en vez de destacar la primera de la mañana.
+  const proxima = ahora == null ? null : (citas.find(c => c.fin_min > ahora) || null);
   return {
     fecha: hoy,
     citas,
+    bloqueos,
     n: citas.length,
+    tramos,
+    ahora,
+    proxima_id: proxima ? proxima.id : null,
+    proxima,
     // SIN HORARIO PUESTO, EL MOTOR ABRE DE 8 A 21 TODOS LOS DÍAS. Eso convierte «te quedan 13 h
     // libres» en un número inventado con pinta de dato. No se esconde ni se maquilla: el bloque lo
     // dice y manda a ponerlo, igual que ya hace la pantalla de la agenda con su `sin_horario`.
     sin_horario: (() => { try { return !hayHorarioNegocio(db); } catch { return true; } })(),
     abre: !!(ocupacion && ocupacion.abre),
+    abierto_min: ocupacion ? ocupacion.abierto_min : null,
+    ocupado_min: ocupacion ? ocupacion.ocupado_min : null,
     libre_min: ocupacion ? ocupacion.libre_min : null,
     libre_h: ocupacion ? Math.round(ocupacion.libre_min / 60 * 10) / 10 : null,
     pct: ocupacion ? ocupacion.pct : null,
@@ -216,7 +242,10 @@ const hhmmDe = m => String(Math.floor((Number(m) || 0) / 60)).padStart(2, '0') +
 export function datosNativos(db, { puede, userId, fuentes, sym }) {
   const verVentas = puede('invoices.read'), verPedidos = puede('pedidos.read');
   let ventas = null, pedidos = null, pendiente = null;
-  try { if (verVentas) ventas = Math.round(ventasResumen(db, { from: new Date().toISOString().slice(0, 7) + '-01' }).total); } catch {}
+  // LA MISMA BASE QUE EL CUADRO DE MANDO: sin IVA. Antes esta cifra iba con IVA y la de arriba sin
+  // él, así que la misma pantalla enseñaba dos «Ventas del mes» distintas y ninguna decía cuál era
+  // cuál. Es el mismo motor y el mismo periodo; lo único que cambia es qué campo se lee.
+  try { if (verVentas) ventas = Math.round(ventasResumen(db, { from: new Date().toISOString().slice(0, 7) + '-01' }).base); } catch {}
   try { if (verPedidos) { const ped = pedidosResumen(db); pedidos = ped.confirmadosMes; pendiente = ped.pendientes; } } catch {}
   let count = 0, estado = 'apagado';
   try { const est = estadoAvisos(db, hoyLocal(), userId, fuentes); count = est.count; estado = est.estado; } catch {}

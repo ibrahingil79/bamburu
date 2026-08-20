@@ -153,21 +153,41 @@ export function pasosDe(db, { existe = () => true } = {}) {
   return { bloques, extra, total, hechos, completo: total > 0 && hechos === total, conCitas };
 }
 
+// ── ¿ESTE NEGOCIO YA ANDA? ──────────────────────────────────────────────────────────────────────
+// «Actividad real» = ha facturado alguna vez O tiene alguna cita. Es la pregunta que decide si el
+// panel de arranque manda en la pantalla o se aparta: a un negocio que ya factura, el Inicio tiene
+// que enseñarle SUS NÚMEROS, no sus deberes. A uno que aún no ha hecho nada, al revés.
+//
+// Se responde con datos que ya existen —ni una bandera nueva, ni una tabla nueva—, y tolera que el
+// esquema de agenda no esté todavía (un tenant recién creado). Un negocio a medio montar no tiene
+// ninguna de las dos cosas, así que la respuesta es «no» y el panel nace abierto.
+export function hayActividad(db) {
+  if (cuenta(db, 'SELECT COUNT(*) n FROM invoices') > 0) return true;
+  return cuenta(db, 'SELECT COUNT(*) n FROM citas WHERE archived=0') > 0;
+}
+
 // ── PLEGADO: SE RECUERDA POR USUARIO ────────────────────────────────────────────────────────────
-// Al terminarlo todo, el panel NO desaparece: se pliega en una línea y sigue ahí. Y se puede plegar
-// y desplegar a mano cuando se quiera. La preferencia es de la PERSONA, no del negocio —dos socios
-// pueden querer cosas distintas—, y se guarda en `dashboard_layouts`, la misma tabla que ya guarda
-// las preferencias de usuario del Inicio y del menú. No nace una tabla para recordar un pliegue.
+// El panel NUNCA desaparece: se pliega en una línea y sigue ahí, y se puede plegar y desplegar a
+// mano cuando se quiera. La preferencia es de la PERSONA, no del negocio —dos socios pueden querer
+// cosas distintas—, y se guarda en `dashboard_layouts`, la misma tabla que ya guarda las
+// preferencias de usuario del Inicio y del menú. No nace una tabla para recordar un pliegue.
+//
+// QUÉ CAMBIA CON EL CUADRO DE MANDO: el pliegue POR DEFECTO ya no depende de si los pasos están
+// todos hechos, sino de si el negocio TIENE ACTIVIDAD REAL. Antes, un negocio que llevaba un año
+// facturando pero al que le faltaba encender los recordatorios abría su Inicio con la lista de
+// deberes desplegada por delante de sus cifras. El criterio bueno no es «te falta un paso», es
+// «¿esto ya anda?».
 const scopeArranque = userId => 'arranque:usuario:' + Number(userId);
 
-export function plegadoDeUsuario(db, userId, completo) {
-  if (!db || !userId) return !!completo;
+export function plegadoDeUsuario(db, userId, porDefecto) {
+  const def = !!porDefecto;
+  if (!db || !userId) return def;
   try {
     const g = getLayoutRaw(db, scopeArranque(userId));
-    // Sin preferencia: se pliega solo cuando está todo hecho, y se queda abierto mientras falte algo.
-    if (!g || typeof g !== 'object' || Array.isArray(g) || typeof g.plegado !== 'boolean') return !!completo;
+    // Sin preferencia guardada manda el defecto; con preferencia manda SIEMPRE la persona.
+    if (!g || typeof g !== 'object' || Array.isArray(g) || typeof g.plegado !== 'boolean') return def;
     return g.plegado;
-  } catch { return !!completo; }
+  } catch { return def; }
 }
 
 export function guardarPlegado(db, userId, plegado) {

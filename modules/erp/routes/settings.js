@@ -531,6 +531,21 @@ export function createSettingsRoutes(db, cfg = {}) {
           <a class="btn btn-secondary" href="/admin/settings/situacion-fiscal"><i class="ti ti-calendar"></i> Declarar mi situación fiscal</a>
         </div>
       </div>
+      <!-- ── LA SEGUNDA PUERTA DE LA MIGRACIÓN ASISTIDA ────────────────────────────────────────
+           La migración solo se alcanzaba desde un paso del panel «Pon en marcha tu negocio», y ese
+           panel se pliega. Una función a la que solo se llega por una puerta que puede plegarse es
+           una función que desaparece. Aquí gana entrada FIJA, en la configuración del negocio, que
+           es donde se busca lo que se monta una vez. La otra puerta sigue donde estaba: son dos, y
+           ninguna depende de la otra.
+           MISMO CANDADO, NO UNO NUEVO: este bloque solo se pinta con company.read, que es
+           exactamente lo que exige /admin/migracion. Un cambio de sitio no abre ni cierra puertas. -->
+      <div class="card" style="max-width:700px;margin-top:1rem">
+        <div class="card-body">
+          <h3 style="margin:0 0 .3rem;font-size:1rem">Trae tus datos del programa anterior</h3>
+          <p style="color:var(--text2);font-size:13px;margin:0 0 .8rem">Si vienes de Holded, Quipu, un Excel o cualquier otro programa, <strong>no vuelvas a teclear nada</strong>: dinos de dónde vienes y qué quieres traer. <strong>La migración la hace el equipo de Bamburu, a mano y gratis.</strong></p>
+          <a class="btn btn-secondary" href="/admin/migracion"><i class="ti ti-file-import"></i> Pedir la migración</a>
+        </div>
+      </div>
 
 
       <script>

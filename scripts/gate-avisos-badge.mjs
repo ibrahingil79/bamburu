@@ -98,15 +98,18 @@ try {
   ok(!duplicados.pillFlotante, 'el badge flotante "N alertas" del Inicio ya NO existe');
   ok(duplicados.filas === 1, 'en el Inicio queda UNA sola fila de avisos (got ' + duplicados.filas + ')');
 
-  // ── 2. Resumen-primero (tarjeta "¿Qué requiere mi atención?") → campana a gris ──
-  await page.evaluate(() => window.disaShowAlerts());
-  await page.waitForFunction(() => {
-    const m = document.querySelectorAll('#dh-messages .disa-msg.assistant');
-    return m.length && /que mirar|nada pendiente/.test(m[m.length - 1].textContent);
-  }, { timeout: 8000 });
-  const reply = await page.evaluate(() => {
-    const m = document.querySelectorAll('#dh-messages .disa-msg.assistant');
-    return m[m.length - 1].textContent;
+  // ── 2. Resumen-primero: el resumen NO descarta nada ─────────────────────────
+  // 20-ago-2026 · EL CUADRO DE MANDO. Esto se disparaba desde la tarjeta «¿Qué requiere mi atención?»
+  // del CHAT del Inicio, y ese chat ya no está ahí (vive en /admin/disa). Lo que este gate protege
+  // NO era la tarjeta: era que **pedir el resumen no marca los avisos como vistos** — el bug que
+  // pisaba la huella entera y borraba los «no visto» que el usuario había puesto a mano. El endpoint
+  // sigue existiendo, así que se le pide DIRECTAMENTE y se comprueba lo mismo. Si algún día se
+  // vuelve a enganchar a un botón, la protección ya está puesta.
+  const reply = await page.evaluate(async () => {
+    const r = await fetch('/api/disa/alerts/open', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': window.CSRF_TOKEN } });
+    const d = await r.json();
+    return d.reply || '';
   });
   ok(/Tienes .* que mirar/.test(reply), 'el resumen-primero sale del motor ("' + reply.slice(0, 70) + '…")');
   // Conteos del resumen == los del badge (cada grupo aparece con su número).
