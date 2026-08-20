@@ -75,6 +75,21 @@
 > **Inventario (Pilar 3) CERRADO (15 jul 2026):** multi-almacén (`da7871e`/`3af928f`), stock mínimo /
 > punto de pedido (`8b4fbe4`) y trazabilidad por lote / nº de serie (`f56ad84`). Ver el Backlog.
 
+<!-- BARRIDO:INICIO -->
+## 🔁 EL BARRIDO COMPLETO — A DEMANDA
+
+> **Este bloque lo mantiene `scripts/barrido-estado.mjs`. No se edita a mano.**
+> El barrido CORTO (`--tocado`) va antes de cada commit, siempre y sin preguntar. El COMPLETO
+> (`--all`) **no lo lanza Code por su cuenta**: se propone al cerrar la sesión y solo se lanza con
+> un sí de Ibrahin. Si dice que no, queda pendiente aquí y se vuelve a proponer al abrir la
+> siguiente sesión, diciendo desde cuándo no se corre.
+
+- **Último barrido completo:** 2026-08-20 · `7f40e1d` · **58/71** · 688 s
+- **Estado:** ✅ al día
+
+<!-- BARRIDO:FIN -->
+
+
 ## Eje A: UX  ✅ COMPLETO (U0–U9)
 Objetivo: acercar cada pantalla y flujo a "el dueño no opera, decide". Método: auditoría primero, luego ejecución en piezas pequeñas. Cada tarea define cómo se verifica y cierra con regresión 0.
 
@@ -1481,6 +1496,48 @@ completa los cubra, hay que meterlos en un grupo — decisión del dueño, porqu
 **Capturas:** `/home/ubuntu/menu-shots/` (Agenda con sus dos entradas · la sección en su sitio · sin
 puestos frente a con un puesto). **Desplegado y verificado por HTTPS** en `peluqueria-gil.bamburu.com`:
 Agenda con 2 entradas, la sección con sus 5, y las 7 rutas viejas a 200.
+
+### El barrido completo pasa a ser A DEMANDA (y sigue acelerado)  ✅ HECHO (2026-08-20)
+
+**LA NORMA VIEJA SE CUMPLÍA A MEDIAS, Y POR ESO SE SUSTITUYE.** «Cada entrega termina con un barrido
+completo» sonaba bien y era mentira a ratos: costaba 11 min 30 s, así que o la entrega se paraba once
+minutos o la norma no se cumplía. Ahora son dos cosas con **dueños distintos**:
+- **El CORTO lo decide Code y va SIEMPRE**, sin preguntar, antes de cada commit (`--tocado`).
+- **El COMPLETO lo decide Ibrahin.** Code **no lo lanza nunca por su cuenta**: lo **propone** al cerrar
+  la sesión, con el resumen de lo que ha cambiado, y solo se lanza con un **sí explícito**.
+
+**Y SI DICE QUE NO, NO SE OLVIDA.** Queda **PENDIENTE en `TABLERO.md`**, en un bloque delimitado que
+mantiene `scripts/barrido-estado.mjs` —no se edita a mano—, y **al abrir la siguiente sesión Code lo
+vuelve a proponer diciendo desde cuándo no se corre**: fecha del último barrido, **cuántos días y
+cuántos commits** han pasado, y qué áreas se han tocado desde entonces. **Correr el barrido completo
+lo registra solo**: si dependiera de acordarse, en dos semanas el bloque estaría mintiendo — que es
+exactamente cómo nació el runner (catorce gates muertos tres semanas) y cómo se estuvo actualizando
+durante semanas un KPI de Notion que no existía.
+
+**UNA SOLA LISTA, NO DOS.** El mapa de los gates (grupos, clases y la tabla `AFECTA`) se saca a
+`scripts/lib/gates-mapa.mjs`, que leen el runner **y** el parte. No se podía importar `run-gates.mjs`:
+ese fichero **ejecuta al importarlo**. Y se añade una regla: **si cambia el runner o el propio mapa,
+el modo corto corre TODO** — son los ficheros que deciden qué se cubre, así que no puede fiarse de su
+propia selección.
+
+**LA VERIFICACIÓN, HECHA COMO PEDÍA EL ENCARGO Y CON UNA SORPRESA HONESTA.** El mismo día y con el
+MISMO estado del negocio de pruebas: **en serie 11 min 28 s · 58/71** y **en paralelo 6 min 06 s ·
+58/71**, comparados con `diff` gate por gate: **IDÉNTICOS**. Cero peticiones frenadas.
+
+**LA SORPRESA:** contra el barrido de referencia de la mañana hay **un** gate distinto,
+`gate-nav-inicio-disa` — y **no lo trajo la paralelización**. Se comprobó de las dos maneras que hay
+que comprobarlo: **falla igual en serie y falla igual suelto**. La causa real es que el gate exige que
+el negocio tenga **propuestas de DISA pendientes** y **no las crea él**: ese día se resolvieron a mano
+las 39 que quedaban (10:13-10:14) y el **generador diario no puede recrearlas** porque es idempotente
+por documento. Es la fragilidad que avisa la cabecera del runner: *un gate que se apoya en datos vivos
+ajenos no se pudre por culpa del producto, se pudre porque no era suyo lo que pisaba*. **Declarado en
+`ROJOS_CONOCIDOS` con su motivo** (el gate sigue corriendo y su rojo sigue contando); el arreglo bueno
+—que se traiga su propia propuesta, como los de compras se traen su producto— es **tarea aparte**.
+
+**Lo demás no se ha tocado:** ningún gate eliminado, ninguno ablandado, ningún rojo silenciado. Siguen
+en pie los seis rojos de concurrencia declarados en `SOLOS` y los topes medidos (2 navegadores por el
+freno de 600 pet./min, 2 sobre el negocio compartido). `RITUAL.md` y `CLAUDE.md` actualizados con la
+norma nueva.
 
 ### La regresión, de 11 min 30 s a 6 min — en paralelo, con dos modos y sin bajar el listón  ✅ HECHO (2026-08-20)
 

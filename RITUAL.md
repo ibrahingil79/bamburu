@@ -6,40 +6,71 @@
 ---
 
 
-## LA REGRESIÓN TIENE DOS MODOS: EL CORTO Y EL COMPLETO
+## LA REGRESIÓN: EL CORTO SIEMPRE, EL COMPLETO A DEMANDA
 
-> Antes iba uno solo, entero, en serie, y tardaba **11 min 30 s**. Correrlo antes de cada commit era
-> impensable, así que no se corría — y los rojos aparecían todos juntos al final. Ahora son dos.
+> **Esto SUSTITUYE a la norma anterior de «cada entrega termina con un barrido completo».** Aquella
+> norma tenía un problema práctico: el barrido entero costaba 11 min 30 s, así que o se corría y la
+> entrega se paraba once minutos, o no se corría y la norma era mentira. Ahora son dos cosas
+> distintas, con dueños distintos: **el corto lo decide Code y va siempre; el completo lo decide
+> Ibrahin y solo va cuando él dice que sí.**
 
-**ANTES DE CADA COMMIT — el corto. Solo los gates de lo que has tocado.**
+### 1. EL CORTO — antes de CADA commit, siempre, sin preguntar
 
 ```
 node scripts/run-gates.mjs --tocado
 ```
 
-Sale de `git diff` y de tres sitios que se SUMAN, nunca se restan: la tabla `AFECTA` del runner, el
-grafo de imports (todo gate que importe un fichero cambiado, automático y sin mantenimiento) y los
-gates que hayas cambiado tú. **Un fichero que no cubra ninguna regla NO se adivina:** el modo corto
-se convierte en barrido completo y dice qué fichero lo obligó. Con `--lista` enseña la selección sin
-correr nada.
+Corre **solo los gates de lo que se ha tocado**. Lo lanza Code por su cuenta, sin consultar, antes
+de cada commit. No es negociable y no se salta.
 
-Cuánto tarda, medido: tocar la vista del Inicio → 8 gates, **2 min 50 s**. Tocar una ruta de compras
-→ 22 gates. Tocar un motor troncal (`margen.js`, `models.js`, cualquier cosa de `core/`) → **corre
-todo**, que es lo correcto.
+Sale de `git diff` y de tres fuentes que se SUMAN, nunca se restan: la tabla `AFECTA`
+(`scripts/lib/gates-mapa.mjs`), el **grafo de imports** —todo gate que importe un fichero cambiado,
+automático y sin mantenimiento— y los gates que se hayan cambiado. **Un fichero que no cubra ninguna
+regla NO se adivina:** el corto se convierte en barrido entero y dice qué fichero lo obligó. Con
+`--lista` enseña la selección sin correr nada.
 
-**AL CERRAR LA TAREA — el completo. Una vez, y es EL veredicto.**
+Medido: tocar la vista del Inicio → 8 gates, **2 min 50 s**. Una ruta de compras → 22 gates. Un
+motor troncal (`margen.js`, `models.js`, cualquier cosa de `core/`) → **corre todo**, que es lo
+correcto.
+
+### 2. EL COMPLETO — NO se lanza por iniciativa de Code. SE PIDE.
 
 ```
-node scripts/run-gates.mjs --all
-node scripts/limpiar-residuo-gates.mjs --hazlo
+node scripts/run-gates.mjs --all          # ← solo con un SÍ de Ibrahin
 ```
 
-**6 minutos** (eran 11 min 30 s). El corto NO cierra una tarea: es un cinturón para no empujar una
-rotura evidente. Lo que se apunta en el TABLERO y en Notion es el completo.
+**Code no lanza nunca el barrido completo por su cuenta.** Lo que hace es **proponerlo**:
 
-**Por qué el barrido va a la velocidad que va, y no más rápido.** Los gates corren varios a la vez,
-con tres topes que NO son caprichos:
-- **2 con navegador a la vez**, por dos motivos distintos y los dos medidos:
+**AL CERRAR la sesión de trabajo**, Code resume qué ha cambiado —qué se ha tocado, qué áreas cubre,
+cuántos gates— y **pregunta si lo lanza**. Solo lo lanza con un **sí explícito**. Un «vale, cierra»
+no es un sí; un silencio, tampoco.
+
+**Si Ibrahin dice que NO**, queda registrado como **pendiente** en `TABLERO.md`:
+
+```
+node scripts/barrido-estado.mjs --registrar-pendiente
+```
+
+**AL ABRIR la siguiente sesión**, Code lo consulta y **lo vuelve a proponer, diciendo desde cuándo
+no se corre**:
+
+```
+node scripts/barrido-estado.mjs
+```
+
+que responde con la fecha del último barrido, **cuántos días y cuántos commits** han pasado y qué
+áreas se han tocado desde entonces. **Ese bloque de `TABLERO.md` no se edita a mano**: lo escribe el
+script, y **correr el barrido completo lo registra solo** — si dependiera de acordarse, en dos
+semanas estaría mintiendo.
+
+**6 minutos** dura hoy (eran 11 min 30 s). El corto NO sustituye al completo: es un cinturón para no
+empujar una rotura evidente. **El veredicto que se apunta en el TABLERO y en Notion es el completo**,
+y si no se ha corrido, se dice que no se ha corrido — nunca se presenta el corto como si lo fuera.
+
+### 3. Por qué el completo va a la velocidad que va, y no más
+
+Los gates corren varios a la vez, con topes que NO son caprichos:
+- **2 con navegador a la vez**, por dos motivos y los dos medidos:
   - `index.js` frena a **600 peticiones/min por IP** y todos los gates salen de 127.0.0.1. Con 4 a la
     vez se frenaron 7 peticiones en un minuto y eso tumbó SEIS gates (un 429 en una carga de página
     deja la pantalla sin su script). Ese freno **no se toca**: es un control de seguridad. Se mide
@@ -47,9 +78,10 @@ con tres topes que NO son caprichos:
   - con **3**, una pasada de cada cuatro moría con `TargetCloseError: Target.createTarget` —
     Chromium sin poder abrir pestaña con tres navegadores peleando por cuatro núcleos. El gate suelto
     pasa 6/0: no era suyo. **Un rojo que sale una vez de cada cuatro es peor que uno fijo**, porque
-    enseña a desconfiar del barrido. Con 2 van dos pasadas seguidas idénticas.
-- **2 a la vez sobre el negocio de desarrollo**, que es de todos. Los que se traen SU PROPIO negocio
-  (`provisionTenant`) están declarados en `EMPIEZAN_DE_CERO` y no se miran entre ellos.
+    enseña a desconfiar del barrido.
+- **2 a la vez sobre el negocio de desarrollo**, que es de todos. Los que **empiezan de cero** (se
+  traen su propio negocio con `provisionTenant`) están declarados uno a uno en `EMPIEZAN_DE_CERO` y
+  no se miran entre ellos; la declaración **se comprueba contra el código en cada pasada**.
 - **Los que miden un TOTAL del negocio corren SOLOS** — seis, declarados en `SOLOS` con su motivo
   escrito: los avisos, los permisos de avisos, el neto-cero de facturar horas y de rentabilidad, el
   badge de propuestas de DISA y el stock del producto vivo en devoluciones.
@@ -105,8 +137,11 @@ Dos redes de seguridad más, para que esto no dependa de acordarse:
   facturas/cobros/ledger salvo autorización expresa de la tarea, y siempre por su flujo con
   confirmación (nunca escritura silenciosa).
 - **Simplicidad y cambios quirúrgicos.** Código/edición mínima; no "mejores" lo adyacente.
-- **Verificación siempre:** cada tarea define su test/gate propio y cierra con **regresión 0** en lo vivo.
-  Dos modos: **`--tocado` antes de cada commit** y **`--all` una vez, al cerrar** (ver la sección de arriba).
+- **Verificación siempre:** cada tarea define su test/gate propio, y ese gate se corre entero. Lo que
+  cambia es la REGRESIÓN: **`--tocado` antes de cada commit, siempre**, y el **barrido completo A
+  DEMANDA** — se propone al cerrar y solo se lanza con un sí de Ibrahin (ver la sección de arriba).
+  Ya NO vale «cada entrega termina con barrido completo»: esa norma se cumplía a medias, y por eso se
+  ha sustituido por una que sí se puede cumplir entera.
 - **Legal/regulatorio:** verificado contra fuente oficial en la web, nunca de memoria.
 - **Al terminar:** `commit` + `push` con mensaje claro y actualiza el bloque **"DÓNDE LO DEJÉ / DÓNDE
   SIGO"** de Notion. **Un tema por chat**: al cerrar, avisa para abrir chat nuevo.
@@ -119,6 +154,8 @@ Dos redes de seguridad más, para que esto no dependa de acordarse:
 3. Leer `session.json` para saber dónde se quedó la sesión anterior.
 4. Coger la primera tarea de "POR HACER" en el TABLERO y moverla a "HACIENDO".
 5. Releer su criterio de "HECHO CUANDO" y confirmarlo antes de tocar código.
+6. **Mirar si el barrido completo está pendiente** y, si lo está, PROPONERLO diciendo desde cuándo no
+   se corre: `node scripts/barrido-estado.mjs`. Se propone; no se lanza sin un sí.
 
 ## DURANTE la sesión
 6. Trabajar SOLO esa tarea. Nunca dos en "HACIENDO" a la vez.
@@ -184,9 +221,11 @@ como `NOTION_TOKEN`).
      previas ni reordenarlas.
 
 **d) Commit + push** (SSH, sin tokens)
-- **Antes de cada commit:** `node scripts/run-gates.mjs --tocado` (el corto).
-- **Una vez, al cerrar:** `node scripts/run-gates.mjs --all` (el completo) — ese es el veredicto que
-  se apunta en el TABLERO y en Notion.
+- **Antes de cada commit:** `node scripts/run-gates.mjs --tocado` (el corto). Siempre, sin preguntar.
+- **Al cerrar la sesión: PROPONER el barrido completo**, con el resumen de lo que ha cambiado
+  (`node scripts/barrido-estado.mjs` lo prepara). **Solo se lanza con un sí.** Si es que no:
+  `node scripts/barrido-estado.mjs --registrar-pendiente`, y se vuelve a proponer al abrir la
+  siguiente sesión.
 - `git add` los archivos de docs y código modificados.
 - Mensaje claro: qué se cerró, qué commits incluye.
 - `git push origin master`.

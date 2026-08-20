@@ -106,6 +106,13 @@ estado `errored` y no es la instancia productiva — ignorarla.
 
 ## Reglas de trabajo (de RITUAL.md)
 
+- **LA REGRESIÓN TIENE DUEÑOS DISTINTOS** (RITUAL.md §«El corto siempre, el completo a demanda»):
+  - **El CORTO va SIEMPRE, sin preguntar, antes de cada commit:** `node scripts/run-gates.mjs --tocado`.
+  - **El COMPLETO (`--all`) NO lo lanzas por tu cuenta NUNCA.** Se PROPONE al cerrar la sesión, con
+    un resumen de lo que ha cambiado, y solo se lanza con un **sí explícito** de Ibrahin. Si dice que
+    no: `node scripts/barrido-estado.mjs --registrar-pendiente`, y se vuelve a proponer al ABRIR la
+    siguiente sesión diciendo desde cuándo no se corre (`node scripts/barrido-estado.mjs`).
+  - Y nunca se presenta el corto como si fuera el completo: si el completo no se ha corrido, se dice.
 - UNA tarea del TABLERO en curso a la vez. Terminar antes de empezar otra.
 - MOTORES antes que la cara de DISA.
 - NADA de Capa 2 (e-commerce: productos, inventario, POS, tienda) ni Capa 3 hasta
