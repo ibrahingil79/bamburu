@@ -84,8 +84,8 @@
 > un sí de Ibrahin. Si dice que no, queda pendiente aquí y se vuelve a proponer al abrir la
 > siguiente sesión, diciendo desde cuándo no se corre.
 
-- **Último barrido completo:** 2026-08-20 · `7f40e1d` · **58/71** · 688 s
-- **Estado:** ✅ al día
+- **Último barrido completo:** 2026-08-20 · `7f40e1d` · **58/71**
+- **Estado:** ⚠️ **PENDIENTE desde 2026-08-20** — se propuso y Ibrahin dijo que no el 2026-08-20. Se vuelve a proponer al abrir la siguiente sesión.
 
 <!-- BARRIDO:FIN -->
 
