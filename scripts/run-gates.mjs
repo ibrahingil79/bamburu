@@ -260,10 +260,13 @@ if (inexistentes.length) {
 }
 
 // Un "resumen" que demuestre que el gate corrió aserciones. Los gates de este repo no siguen UN solo
-// formato: hay "22 OK", "PASS: 30   FAIL: 0", "48 OK, 0 fallos", "=== RESULTADO: 44 OK / 0 FALLOS ===".
-// Si aquí falta un formato, el gate sale SOSPECHOSO — molesto, pero es el error seguro: prefiere
-// desconfiar de un gate bueno antes que dar por bueno uno que no probó nada.
-const RESUMEN = /\d+\s+OK\b|\bOK[,:]\s*\d+|\bPASS:\s*\d+/i;
+// formato: hay "22 OK", "PASS: 30   FAIL: 0", "48 OK, 0 fallos", "=== RESULTADO: 44 OK / 0 FALLOS ==="
+// y "21 comprobaciones, 0 fallos". Si aquí falta un formato, el gate sale SOSPECHOSO — molesto, pero
+// es el error seguro: prefiere desconfiar de un gate bueno antes que dar por bueno uno que no probó
+// nada. (El formato "N comprobaciones" se añadió el 20 ago 2026 al meter las tres de la puerta
+// pública: `test-reserva-publica` y `test-neto-cero-reserva` salían SOSPECHOSOS pasando 133/133 y
+// 21/21. El listón no baja: sigue exigiendo que el gate DIGA cuántas aserciones corrió.)
+const RESUMEN = /\d+\s+OK\b|\bOK[,:]\s*\d+|\bPASS:\s*\d+|\d+\s+comprobaciones\b/i;
 
 function correr(gate) {
   return new Promise(resolve => {

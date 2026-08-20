@@ -79,12 +79,13 @@
 ## 🔁 EL BARRIDO — A DEMANDA
 
 > **Este bloque lo mantiene `scripts/barrido-estado.mjs`. No se edita a mano.**
-> **Ningún barrido se ejecuta solo: ni corto, ni completo, ni antes de un commit.** Se ejecutan
-> cuando Ibrahin lo pide, y solo entonces. Al cerrar una entrega **se propone** —qué se ha tocado,
-> qué modo se recomienda y desde cuándo no se corre— y se espera un sí. Si dice que no, queda
-> pendiente aquí y se vuelve a proponer al abrir la siguiente sesión.
+> **Ningún barrido y ningún gate se ejecuta solo. Ni el de la tarea.** Se ejecutan cuando Ibrahin
+> lo pide. La norma, entera y sin resumir, está en **RITUAL.md · «LA REGRESIÓN»**; aquí solo se
+> apunta. Al cerrar una entrega **se propone** —qué se ha tocado, qué modo se recomienda y desde
+> cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
+> proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-08-20 · `5329109` · **62/75** · 425 s
+- **Último barrido completo:** 2026-08-20 · `9790ba9` · **66/78** · 456 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -1548,6 +1549,125 @@ completa los cubra, hay que meterlos en un grupo — decisión del dueño, porqu
 **Capturas:** `/home/ubuntu/menu-shots/` (Agenda con sus dos entradas · la sección en su sitio · sin
 puestos frente a con un puesto). **Desplegado y verificado por HTTPS** en `peluqueria-gil.bamburu.com`:
 Agenda con 2 entradas, la sección con sus 5, y las 7 rutas viejas a 200.
+
+### ENCARGO — Cerrar lo que quedó abierto (la norma sin excepciones · la puerta pública)  ✅ HECHO (2026-08-20)
+
+**Cero código de producto. El puntero del Peldaño 8 no se mueve.** Barrido **75 → 78** comprobaciones,
+**66/78**.
+
+---
+
+#### PARTE A — la norma no tiene excepciones
+
+**EL MISMO FALLO, DOS VECES EL MISMO DÍA.** Al corregir el automatismo del barrido dejé escrito: *«El
+gate propio de la tarea sí se corre: lo que no se da por supuesto es la regresión»*. **Eso tampoco lo
+acordó Ibrahin.** Primera vez: su «barridos a demanda» acabó siendo *corto automático + completo a
+demanda*. Segunda: *gate propio automático + regresión a demanda*. **Las dos veces la mitad inventada
+era la que me daba permiso para ejecutar algo.**
+
+**La norma pasa a estar escrita ENTERA en un solo sitio** — `RITUAL.md` § «LA REGRESIÓN»:
+
+> **NINGÚN BARRIDO Y NINGÚN GATE SE EJECUTA SOLO. NI EL DE LA TAREA, NI EL CORTO, NI EL COMPLETO, NI
+> ANTES DE UN COMMIT. Se ejecutan cuando Ibrahin lo pide. Si un encargo necesita ejecutarlos, lo dice
+> ARRIBA DEL TODO y visible, y con eso queda pedido.**
+
+`CLAUDE.md`, `barrido-estado.mjs` y `run-gates.mjs` **apuntan ahí y ya no la reescriben**. No es
+puntillismo: la primera versión inventada sobrevivió a la primera corrección **precisamente por estar
+copiada en cuatro sitios**. Una norma contada dos veces son dos normas en cuanto una se retoca.
+
+**Y la regla de método, en `CLAUDE.md`:** *si una norma de Ibrahin admite dos lecturas, no se elige
+una — se pregunta*. Cuando el texto que escribo crece más que lo que él dijo, **lo que sobra es mío**.
+
+---
+
+#### PARTE B — la puerta pública entra en el barrido
+
+**PASO 0 · Los 2 rojos eran SOLO el conteo.** `test-reserva-publica` exigía **10** columnas
+`cita_pub_*` y hay **12**: `921bbe1` (18 ago) añadió `cita_pub_auto` (pestillo de una sola vez del
+encendido automático) y `cita_pub_auto_visto` (el dueño ya vio el aviso) sin actualizar la cuenta. Lo
+que la aserción quería demostrar **sigue siendo cierto**, comprobado: `runMigrations` ×3 → **12·12·12**
+(idempotente) y la tabla `citas` **intacta**. Cuenta actualizada a 12, mismo listón. **131/133 → 133/133.**
+
+**Las tres, dentro, con su clase declarada:**
+| Comprobación | Qué cubre | Tarda | Clase |
+|---|---|---|---|
+| `test-reserva-publica` | 133 aserciones sin servidor: nace apagada, handle malo = mismo 404, reserva completa, hueco pisado → 409, antelación **en servidor**, «yo apruebo» retiene y caduca solo, cliente existente se enlaza y no se duplica | 38-60 s | compartida |
+| `test-neto-cero-reserva` | 21: **reservar no es vender** (ni factura, ni Verifactu, ni diario, ni P&G) y cuando sí se vende, Ventas y P&G vuelven al valor exacto | 5 s | compartida |
+| `gate-reserva-publica-pantalla` | 52 de navegador: apagada da 404, los mandos del dueño, reservar en móvil y escritorio, política y consentimiento, **cero fuga**, la cita entra en la agenda | 17 s | **SOLA** |
+
+**Por qué la de navegador va SOLA:** reescribe la configuración pública del negocio **entero**
+(`cita_pub_*`: la apaga, la enciende, le cambia handle, ventana y política) y sus aserciones de cero
+fuga **enumeran todos los clientes y todos los usuarios activos** en ese instante. Con otro gate
+escribiendo a la vez, ni la configuración ni el censo son estables. Misma familia que
+`gate-oficio-pantalla`.
+
+**Tabla `AFECTA`:** `modules/erp/reserva-publica*` y `modules/erp/routes/reserva-publica*` → grupo
+`reserva` + `clientes`. Antes **`routes/reserva-publica.js` no lo cubría ninguna regla**, así que
+tocarlo mandaba el corto a correr los 75: prudente, pero a ciegas.
+
+**🔧 LA PRUEBA DE REVERSIÓN DESTAPÓ UNA ASERCIÓN QUE DABA VERDE POR EL MOTIVO EQUIVOCADO.** *«Con la
+puerta apagada, la dirección responde 404»*: el 404 llegaba porque **el handle todavía no coincidía**
+—el gate lo escribía después, en el paso [2]—, no porque la puerta estuviera apagada. Con el guardián
+`exigirPuerta` saboteado, el gate **seguía en 52/52**. Ahora el handle se pone **antes** de apagar, y
+el sabotaje la tumba (`200` en vez de `404`). **Segunda vez hoy** que un sabotaje destapa esto: la
+otra fue el «volver al mes anterior» del calendario.
+
+**🔧 Y el runner no reconocía su resumen.** Las dos de lógica dicen *«133 comprobaciones, 0 fallos»* y
+`RESUMEN` no conocía ese formato: salían **SOSPECHOSAS** pasando 133/133 y 21/21. Añadido
+`\d+\s+comprobaciones` — **el listón no baja**: sigue exigiendo que la comprobación DIGA cuántas
+aserciones corrió. Lo causó la propia incorporación, por eso se arregla aquí.
+
+---
+
+#### 🔎 EL HALLAZGO GORDO: 97 COMPROBACIONES QUE NADIE EJECUTA
+
+**Van dos zonas enteras invisibles en el mismo día** (la agenda por la mañana, la puerta pública por
+la tarde), así que se barrió el repositorio entero comparando los ficheros que existen contra las dos
+listas que gobiernan el barrido. **De 182 ficheros de comprobación, 78 están dentro, 9 declarados
+fuera con motivo, y 97 no están en ninguna de las dos: ni corren, ni consta que no corran.**
+
+**91 de las 97 llevan sin tocarse desde junio o julio.** El inventario completo, con coste estimado y
+zona, está en **`docs/comprobaciones-fuera-del-barrido.md`**. **NO se ha metido ninguna**: es material
+para que Ibrahin decida, y meterlas de golpe puede destapar decenas de rojos caducados a la vez.
+
+---
+
+#### VERIFICACIÓN
+
+1. **Cero excepciones escritas.** El grep en `RITUAL.md`, `CLAUDE.md`, `barrido-estado.mjs` y
+   `run-gates.mjs` solo devuelve **el texto que declara la excepción retirada**.
+2. **La norma entera aparece en UN sitio**: `RITUAL.md:13`. Los demás apuntan.
+3. **Un commit no dispara nada** (`data/tiempos-gates.json` con la misma marca antes y después).
+4. **`test-reserva-publica` 131/133 → 133/133.**
+5. **Las tres salen por nombre en el veredicto de `--all`:** `test-reserva-publica` 133 ·
+   `test-neto-cero-reserva` 21 · `gate-reserva-publica-pantalla` 52 OK. **75 → 78 · 66/78.**
+6. **`--tocado` las selecciona:** tocando `reserva-publica.js` → 15 de 78 · `reserva-publica-config.js`
+   → 53 de 78 (arrastra el grafo de imports) · `routes/reserva-publica.js` → 15 de 78. Las tres salen
+   en las tres sondas.
+7. **Reversión de las tres:** la puerta deja de nacer apagada → `test-reserva-publica` **1 fallo** ·
+   la cita reservada cuelga de una factura → `test-neto-cero-reserva` **1 fallo** · se quita el
+   guardián de la puerta → `gate-reserva-publica-pantalla` **1 fallo**.
+8. El inventario de las 97, entregado en `docs/comprobaciones-fuera-del-barrido.md`.
+9. **Aserciones: 133+21+52 = 206 entran al barrido.** Antes → después: `test-reserva-publica`
+   131/133 → **133/133** · `test-neto-cero-reserva` 21 → **21** · `gate-reserva-publica-pantalla`
+   52 → **52**. **Ninguna eliminada, ninguna ablandada** — una reforzada.
+
+**⚠️ TRES BARRIDOS COMPLETOS, Y HAY QUE DECIR POR QUÉ.** El primero salió **36/78**: las sondas del
+criterio 6 hacen `git checkout` de ficheros de producto y eso **mueve su mtime**, así que
+`exigeCodigoServido` abortó 42 gates — la red de seguridad funcionando. El segundo, **62/78**, con
+cuatro rojos que **eran residuo del primero** (cuatro proyectos `GATE-*` y un usuario de gate con sus
+permisos, de las 14:21). Limpiado el residuo, los cuatro pasan sueltos (18/0, 21/0, 15/0, 79/0). El
+tercero y bueno: **66/78**.
+
+**🔎 ANOTADO, NO ARREGLADO (no es de esta tarea):**
+- **La red de seguridad de `gate-margen-pantalla` no funciona.** Su línea *«por si una pasada anterior
+  murió antes»* borra `admin_users` pero **no sus `user_permissions`**, así que la FOREIGN KEY la
+  bloquea y el gate muere **en la limpieza, con sus 18 pasos en verde**. Justo en el caso para el que
+  se escribió.
+- **`gate-nav-inicio-disa` hoy PASA (34 OK)** y el propio barrido lo canta: *«declarada roja desde el
+  2026-08-20 y hoy termina en VERDE. Retírala»*. El encargo dice que sigue declarado, así que **no se
+  toca**: la decisión de retirar la declaración es de Ibrahin.
+- `huecos()` sigue proponiendo solo huecos del mismo día.
 
 ### ENCARGO CORRECTIVO — Los barridos son a demanda. Ninguno automático.  ✅ HECHO (2026-08-20)
 
