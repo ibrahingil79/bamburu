@@ -106,12 +106,18 @@ estado `errored` y no es la instancia productiva — ignorarla.
 
 ## Reglas de trabajo (de RITUAL.md)
 
-- **LA REGRESIÓN TIENE DUEÑOS DISTINTOS** (RITUAL.md §«El corto siempre, el completo a demanda»):
-  - **El CORTO va SIEMPRE, sin preguntar, antes de cada commit:** `node scripts/run-gates.mjs --tocado`.
-  - **El COMPLETO (`--all`) NO lo lanzas por tu cuenta NUNCA.** Se PROPONE al cerrar la sesión, con
-    un resumen de lo que ha cambiado, y solo se lanza con un **sí explícito** de Ibrahin. Si dice que
-    no: `node scripts/barrido-estado.mjs --registrar-pendiente`, y se vuelve a proponer al ABRIR la
-    siguiente sesión diciendo desde cuándo no se corre (`node scripts/barrido-estado.mjs`).
+- **LOS BARRIDOS SON A DEMANDA. NINGUNO AUTOMÁTICO** (RITUAL.md §«Los barridos son a demanda»):
+  - **NINGÚN BARRIDO SE EJECUTA SOLO. NI CORTO, NI COMPLETO, NI ANTES DE UN COMMIT.**
+    **Se ejecutan cuando Ibrahin lo pide, y solo entonces.**
+  - Los dos modos siguen existiendo y funcionan invocados a mano: `--tocado` (el corto) y `--all`
+    (los 75). `--lista` enseña qué correría sin correr nada.
+  - **Al cerrar una entrega lo PROPONES**, diciendo qué se ha tocado, qué modo recomiendas y desde
+    cuándo no se corre (`node scripts/barrido-estado.mjs` lo prepara), y **esperas un sí explícito**.
+    Si dice que no: `node scripts/barrido-estado.mjs --registrar-pendiente`, y se vuelve a proponer
+    al ABRIR la siguiente sesión.
+  - **Ningún encargo puede exigir un barrido en sus criterios de verificación.** Si una tarea
+    necesita ejecutar gates, se dice ARRIBA DEL TODO del encargo, visible, para que él lo apruebe al
+    leerlo. El gate propio de la tarea sí se corre: lo que no se da por supuesto es la regresión.
   - Y nunca se presenta el corto como si fuera el completo: si el completo no se ha corrido, se dice.
 - UNA tarea del TABLERO en curso a la vez. Terminar antes de empezar otra.
 - MOTORES antes que la cara de DISA.

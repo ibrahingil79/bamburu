@@ -76,13 +76,13 @@
 > punto de pedido (`8b4fbe4`) y trazabilidad por lote / nº de serie (`f56ad84`). Ver el Backlog.
 
 <!-- BARRIDO:INICIO -->
-## 🔁 EL BARRIDO COMPLETO — A DEMANDA
+## 🔁 EL BARRIDO — A DEMANDA
 
 > **Este bloque lo mantiene `scripts/barrido-estado.mjs`. No se edita a mano.**
-> El barrido CORTO (`--tocado`) va antes de cada commit, siempre y sin preguntar. El COMPLETO
-> (`--all`) **no lo lanza Code por su cuenta**: se propone al cerrar la sesión y solo se lanza con
-> un sí de Ibrahin. Si dice que no, queda pendiente aquí y se vuelve a proponer al abrir la
-> siguiente sesión, diciendo desde cuándo no se corre.
+> **Ningún barrido se ejecuta solo: ni corto, ni completo, ni antes de un commit.** Se ejecutan
+> cuando Ibrahin lo pide, y solo entonces. Al cerrar una entrega **se propone** —qué se ha tocado,
+> qué modo se recomienda y desde cuándo no se corre— y se espera un sí. Si dice que no, queda
+> pendiente aquí y se vuelve a proponer al abrir la siguiente sesión.
 
 - **Último barrido completo:** 2026-08-20 · `5329109` · **62/75** · 425 s
 - **Estado:** ✅ al día
@@ -1549,6 +1549,57 @@ completa los cubra, hay que meterlos en un grupo — decisión del dueño, porqu
 puestos frente a con un puesto). **Desplegado y verificado por HTTPS** en `peluqueria-gil.bamburu.com`:
 Agenda con 2 entradas, la sección con sus 5, y las 7 rutas viejas a 200.
 
+### ENCARGO CORRECTIVO — Los barridos son a demanda. Ninguno automático.  ✅ HECHO (2026-08-20)
+
+**Cero código de producto. Cero gates tocados.** Solo la norma y los tres sitios donde estaba escrita
+al revés.
+
+**QUÉ SE CORRIGE, Y DE QUIÉN ES EL ERROR.** El 20 ago Ibrahin dijo **«barridos a demanda»**. Yo lo
+registré como **dos** normas: un **corto automático antes de cada commit** y un completo a demanda.
+**La primera nadie la acordó** — salió de interpretar en dos un acuerdo que era uno. La norma es:
+
+> **NINGÚN BARRIDO SE EJECUTA SOLO. NI CORTO, NI COMPLETO, NI ANTES DE UN COMMIT.**
+> **Se ejecutan cuando Ibrahin lo pide, y solo entonces.**
+
+**EL PASO 0 ENCONTRÓ MENOS DE LO ESPERADO, Y ESO IMPORTA.** El encargo buscaba hooks de git, scripts
+de cierre y automatismos. **No hay ninguno.** `.git/hooks` tiene solo los 14 `.sample` que trae git de
+fábrica (**0 activos**); ni crontab ni timer de systemd mencionan gates —los cinco timers de
+`bamburu-*` son de producto: avisos, copias, propuestas, recordatorios y caducar reservas—; y no hay
+hooks de Claude Code. **El único disparador era el texto**: la norma escrita mandándome correr el
+corto. En este repo un documento **es** un automatismo, porque es lo que leo al empezar cada sesión.
+
+**LOS SEIS SITIOS, Y QUÉ SE HIZO EN CADA UNO:**
+| Dónde | Qué decía | Qué dice ahora |
+|---|---|---|
+| `RITUAL.md` §regresión | «EL CORTO — antes de CADA commit, siempre, sin preguntar… No es negociable y no se salta» | La norma única, y los dos modos **existiendo igual** pero invocados a mano |
+| `RITUAL.md` reglas de oro | «`--tocado` antes de cada commit, siempre» | «ningún barrido se ejecuta solo» + la regla de los encargos |
+| `RITUAL.md` cierre, paso d) | «Antes de cada commit: `--tocado`. Siempre, sin preguntar» | «NO se corre ningún barrido para poder commitear» + qué se propone |
+| `CLAUDE.md` reglas de trabajo | «El CORTO va SIEMPRE, sin preguntar, antes de cada commit» | La norma única, los dos modos a mano, y el aviso sobre los criterios de verificación |
+| `scripts/barrido-estado.mjs` | la cabecera y el **texto que escribe en TABLERO** repetían la norma vieja | la norma única, con la corrección fechada dentro del propio fichero |
+| `scripts/run-gates.mjs` | rótulo «MODO CORTO (antes del commit)» | «MODO CORTO (a petición: solo lo tocado)» |
+
+**NO SE HA TOCADO NADA MÁS:** ni un gate, ni el runner (salvo dos rótulos), ni el mapa, ni el registro
+de estado, ni una línea de producto, ni nada de la Tarea 2.
+
+**LO NUEVO: UN ENCARGO NO PUEDE EXIGIR UN BARRIDO EN SUS CRITERIOS DE VERIFICACIÓN** (RITUAL.md §3).
+Un criterio que pide «regresión en verde» es el mismo automatismo colado por la puerta de atrás. Si
+una tarea necesita ejecutar gates, **se dice arriba del todo del encargo y visible**, para que Ibrahin
+lo apruebe al leerlo. El **gate propio de la tarea** sí se corre: lo que no se da por supuesto es la
+**regresión**.
+
+**VERIFICADO:**
+- **Un commit no dispara nada.** Commit de prueba `2b24f99` (`--allow-empty`, a propósito, para que
+  quede en el historial como evidencia): salida sin una sola línea de gates, `data/tiempos-gates.json`
+  con la **misma marca de tiempo** antes y después (13:37:53.836083855), y **0 hooks activos**.
+- **Los dos modos siguen vivos:** `--tocado --lista` → selecciona y **escala sola al barrido entero**
+  porque cambiaron el runner y el mapa (la regla de siempre: quien decide qué se cubre no se fía de su
+  propia selección) · `--all --lista` → los 75. **Cero gates ejecutados** en ambas.
+- **El registro de pendientes sigue en pie:** el parte dice *«última vez 2026-08-20 · 5329109 · 62/75
+  · desde entonces N commits»*, y `--registrar-pendiente` deja el bloque en **⚠️ PENDIENTE desde…**.
+  Probado y **restaurado**: era una prueba, no un «no» de Ibrahin.
+- **Grep en `RITUAL.md` y `CLAUDE.md`: cero menciones a barrido automático u obligatorio.** Las dos
+  únicas apariciones de «antes de cada commit» son **el texto que declara retirada esa norma**.
+
 ### TAREA 2 — Cabos sueltos de la Agenda (los cinco, una sola entrega)  ✅ HECHO (2026-08-20)
 
 **Fue ENTERA: cinco cabos, un cierre.** Aserciones **312 → 357** en las cinco comprobaciones tocadas.
@@ -1727,10 +1778,18 @@ deliberado del producto o un cabo suelto; se anota con la medida. Es también lo
 
 ### El barrido completo pasa a ser A DEMANDA (y sigue acelerado)  ✅ HECHO (2026-08-20)
 
+> ⚠️ **CORREGIDO EL MISMO DÍA — LEE ESTO ANTES QUE LA FICHA.** De lo de abajo, **la mitad no la
+> acordó Ibrahin**. Él dijo «barridos a demanda»; yo lo escribí como **dos** normas —un corto
+> automático antes de cada commit y un completo a demanda— y **el corto automático me lo inventé
+> yo**. La norma vigente es **una sola**: **ningún barrido se ejecuta solo, ni corto, ni completo,
+> ni antes de un commit; se ejecutan cuando Ibrahin lo pide y solo entonces** (RITUAL.md §«Los
+> barridos son a demanda»). Lo demás de esta ficha —la aceleración, el registro de estado, el mapa
+> único— sigue en pie tal cual. Se deja escrita porque **borrar el error sería repetirlo**.
+
 **LA NORMA VIEJA SE CUMPLÍA A MEDIAS, Y POR ESO SE SUSTITUYE.** «Cada entrega termina con un barrido
 completo» sonaba bien y era mentira a ratos: costaba 11 min 30 s, así que o la entrega se paraba once
 minutos o la norma no se cumplía. Ahora son dos cosas con **dueños distintos**:
-- **El CORTO lo decide Code y va SIEMPRE**, sin preguntar, antes de cada commit (`--tocado`).
+- ~~**El CORTO lo decide Code y va SIEMPRE**, sin preguntar, antes de cada commit (`--tocado`).~~ ← **RETIRADO: nunca se acordó.**
 - **El COMPLETO lo decide Ibrahin.** Code **no lo lanza nunca por su cuenta**: lo **propone** al cerrar
   la sesión, con el resumen de lo que ha cambiado, y solo se lanza con un **sí explícito**.
 
@@ -1823,7 +1882,7 @@ contaron mal. Se vio porque el barrido se corrió **cinco veces**, no una: un fa
 sale una vez de cada tres no aparece en la primera pasada.
 
 **LOS DOS MODOS (RITUAL.md actualizado):**
-- **`--tocado`, antes de cada commit.** Sale de `git diff` y de tres fuentes que se SUMAN: la tabla
+- **`--tocado`, cuando se pide** (decía «antes de cada commit»; retirado). Sale de `git diff` y de tres fuentes que se SUMAN: la tabla
   `AFECTA`, **el grafo de imports** (todo gate que importe un fichero cambiado — automático, no se
   pudre; cubre el 58 % del árbol, y el 42 % restante son rutas y vistas que los gates ejercitan por
   HTTP sin importarlas, de ahí la tabla) y los gates que hayas cambiado tú. **Un fichero que no cubra

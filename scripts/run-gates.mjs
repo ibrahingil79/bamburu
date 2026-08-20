@@ -385,11 +385,11 @@ function traza(r) {
 
 const t0Barrido = Date.now();
 if (informeTocado) {
-  console.log('── MODO CORTO (antes del commit) ' + '─'.repeat(46));
+  console.log('── MODO CORTO (a petición: solo lo tocado) ' + '─'.repeat(36));
   for (const l of informeTocado) console.log('   ' + l);
   console.log('   → ' + objetivo.length + ' gates de ' + TODOS.length);
   console.log('   Esto NO es el veredicto: el barrido completo se PROPONE al cerrar y solo se lanza');
-  console.log('   con un sí (RITUAL.md · «El corto siempre, el completo a demanda»).');
+  console.log('   con un sí de Ibrahin (RITUAL.md · «Los barridos son a demanda. Ninguno automático»).');
   console.log('─'.repeat(78));
 }
 console.log('· ' + objetivo.length + ' gates · ' + (EN_SERIE ? 'EN SERIE'

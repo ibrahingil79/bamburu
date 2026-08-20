@@ -3,10 +3,15 @@
 // EL BARRIDO COMPLETO ES A DEMANDA — y este script es lo que impide que «a demanda» acabe siendo
 // «nunca».
 //
-// LA NORMA (RITUAL.md): el barrido CORTO va antes de cada commit, siempre y sin preguntar. El
-// COMPLETO **no se lanza por iniciativa de Code**: se propone al cerrar la sesión, con un resumen de
-// lo que ha cambiado, y solo se lanza con un SÍ de Ibrahin. Si dice que no, queda **PENDIENTE** y se
-// vuelve a proponer al abrir la siguiente sesión, diciendo **desde cuándo** no se corre.
+// LA NORMA (RITUAL.md), una sola y sin letra pequeña: **NINGÚN BARRIDO SE EJECUTA SOLO. NI CORTO, NI
+// COMPLETO, NI ANTES DE UN COMMIT. Se ejecutan cuando Ibrahin lo pide, y solo entonces.** Al cerrar
+// una entrega Code lo **propone** —qué se ha tocado, qué modo recomienda y desde cuándo no se corre—
+// y espera un SÍ. Si dice que no, queda **PENDIENTE** y se vuelve a proponer al abrir la siguiente
+// sesión.
+//
+// (Corregido el 20 ago 2026: aquí llegó a estar escrito que el corto iba «antes de cada commit,
+// siempre y sin preguntar». Esa norma NUNCA la acordó Ibrahin — salió de interpretar en dos un
+// acuerdo que era uno. Se retira.)
 //
 // POR QUÉ HACE FALTA UN SCRIPT Y NO BASTA CON ACORDARSE. Porque «me acuerdo» es exactamente lo que
 // falló antes en este repo: catorce gates muertos tres semanas, un KPI de Notion actualizado durante
@@ -125,13 +130,13 @@ function escribir(cuerpo) {
   writeFileSync(TABLERO, s.slice(0, i) + INICIO + '\n' + cuerpo + s.slice(j));
 }
 
-const CABECERA = `## 🔁 EL BARRIDO COMPLETO — A DEMANDA
+const CABECERA = `## 🔁 EL BARRIDO — A DEMANDA
 
 > **Este bloque lo mantiene \`scripts/barrido-estado.mjs\`. No se edita a mano.**
-> El barrido CORTO (\`--tocado\`) va antes de cada commit, siempre y sin preguntar. El COMPLETO
-> (\`--all\`) **no lo lanza Code por su cuenta**: se propone al cerrar la sesión y solo se lanza con
-> un sí de Ibrahin. Si dice que no, queda pendiente aquí y se vuelve a proponer al abrir la
-> siguiente sesión, diciendo desde cuándo no se corre.
+> **Ningún barrido se ejecuta solo: ni corto, ni completo, ni antes de un commit.** Se ejecutan
+> cuando Ibrahin lo pide, y solo entonces. Al cerrar una entrega **se propone** —qué se ha tocado,
+> qué modo se recomienda y desde cuándo no se corre— y se espera un sí. Si dice que no, queda
+> pendiente aquí y se vuelve a proponer al abrir la siguiente sesión.
 
 `;
 

@@ -169,7 +169,7 @@ export const SOLOS = new Map([
 
 export const claseDe = g => EMPIEZAN_DE_CERO.has(g) ? 'propio' : (SOLOS.has(g) ? 'solo' : 'compartido');
 
-// ── QUÉ TOCA QUÉ — el modo corto (antes de cada commit) ─────────────────────────────────────────
+// ── QUÉ TOCA QUÉ — el modo corto, cuando se pide ────────────────────────────────────────────────
 // Traduce «qué ficheros has cambiado» a «qué grupos hay que correr». La tabla es a mano A PROPÓSITO:
 // es una decisión de cobertura, y una decisión de cobertura tiene que poder leerse y discutirse.
 //

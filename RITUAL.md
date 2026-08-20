@@ -6,66 +6,72 @@
 ---
 
 
-## LA REGRESIÓN: EL CORTO SIEMPRE, EL COMPLETO A DEMANDA
+## LA REGRESIÓN: LOS BARRIDOS SON A DEMANDA. NINGUNO AUTOMÁTICO.
 
-> **Esto SUSTITUYE a la norma anterior de «cada entrega termina con un barrido completo».** Aquella
-> norma tenía un problema práctico: el barrido entero costaba 11 min 30 s, así que o se corría y la
-> entrega se paraba once minutos, o no se corría y la norma era mentira. Ahora son dos cosas
-> distintas, con dueños distintos: **el corto lo decide Code y va siempre; el completo lo decide
-> Ibrahin y solo va cuando él dice que sí.**
+> **NINGÚN BARRIDO SE EJECUTA SOLO. NI CORTO, NI COMPLETO, NI ANTES DE UN COMMIT.**
+> **Se ejecutan cuando Ibrahin lo pide, y solo entonces.**
 
-### 1. EL CORTO — antes de CADA commit, siempre, sin preguntar
+**Esto CORRIGE lo que se escribió el 20 ago 2026.** Aquel día Ibrahin dijo «barridos a demanda» y
+aquí se registró como **dos** normas: un corto automático antes de cada commit y un completo a
+demanda. **Esa segunda parte nadie la acordó** — salió de mí, no de él. La norma es **una sola** y es
+la de arriba. Un acuerdo del dueño no se «interpreta» en dos: se copia tal cual.
+
+### 1. LOS DOS MODOS SIGUEN EXISTIENDO — lo que se retira es el automatismo
 
 ```
-node scripts/run-gates.mjs --tocado
+node scripts/run-gates.mjs --tocado       # el corto: solo los gates de lo que se ha tocado
+node scripts/run-gates.mjs --all          # el completo: los 75
+node scripts/run-gates.mjs --lista        # enseña QUÉ correría, sin correr nada (con cualquier modo)
 ```
 
-Corre **solo los gates de lo que se ha tocado**. Lo lanza Code por su cuenta, sin consultar, antes
-de cada commit. No es negociable y no se salta.
+Los dos funcionan igual que siempre y se invocan **a mano, cuando Ibrahin lo pide**. Lo que
+desaparece es el disparo por iniciativa de Code: **no hay barrido «no negociable»**, ni antes del
+commit ni en ningún otro sitio.
 
-Sale de `git diff` y de tres fuentes que se SUMAN, nunca se restan: la tabla `AFECTA`
+El **corto** sale de `git diff` y de tres fuentes que se SUMAN, nunca se restan: la tabla `AFECTA`
 (`scripts/lib/gates-mapa.mjs`), el **grafo de imports** —todo gate que importe un fichero cambiado,
 automático y sin mantenimiento— y los gates que se hayan cambiado. **Un fichero que no cubra ninguna
-regla NO se adivina:** el corto se convierte en barrido entero y dice qué fichero lo obligó. Con
-`--lista` enseña la selección sin correr nada.
+regla NO se adivina:** el corto se convierte en barrido entero y dice qué fichero lo obligó. Medido:
+tocar la vista del Inicio → 8 gates, **2 min 50 s**. Una ruta de compras → 22 gates. Un motor troncal
+(`margen.js`, `models.js`, cualquier cosa de `core/`) → **corre todo**, que es lo correcto.
 
-Medido: tocar la vista del Inicio → 8 gates, **2 min 50 s**. Una ruta de compras → 22 gates. Un
-motor troncal (`margen.js`, `models.js`, cualquier cosa de `core/`) → **corre todo**, que es lo
-correcto.
+El **completo** dura **unos 7 minutos** (eran 11 min 30 s). El corto **no** sustituye al completo, y
+**el veredicto que se apunta en el TABLERO y en Notion es el completo**: si no se ha corrido, se dice
+que no se ha corrido — nunca se presenta el corto como si lo fuera.
 
-### 2. EL COMPLETO — NO se lanza por iniciativa de Code. SE PIDE.
+### 2. AL CERRAR UNA ENTREGA SE PROPONE. NUNCA SE LANZA SOLO.
 
-```
-node scripts/run-gates.mjs --all          # ← solo con un SÍ de Ibrahin
-```
+Code **propone** el barrido diciendo tres cosas:
 
-**Code no lanza nunca el barrido completo por su cuenta.** Lo que hace es **proponerlo**:
-
-**AL CERRAR la sesión de trabajo**, Code resume qué ha cambiado —qué se ha tocado, qué áreas cubre,
-cuántos gates— y **pregunta si lo lanza**. Solo lo lanza con un **sí explícito**. Un «vale, cierra»
-no es un sí; un silencio, tampoco.
-
-**Si Ibrahin dice que NO**, queda registrado como **pendiente** en `TABLERO.md`:
+1. **qué se ha tocado** (ficheros y áreas),
+2. **qué modo recomienda** (`--tocado` o `--all`) y por qué,
+3. **desde cuándo no se corre**, con la fecha del último barrido, cuántos días y cuántos commits.
 
 ```
-node scripts/barrido-estado.mjs --registrar-pendiente
+node scripts/barrido-estado.mjs                          # prepara el parte: qué falta y desde cuándo
+node scripts/barrido-estado.mjs --registrar-pendiente    # Ibrahin ha dicho que no
 ```
 
-**AL ABRIR la siguiente sesión**, Code lo consulta y **lo vuelve a proponer, diciendo desde cuándo
-no se corre**:
+Y entonces **espera**. Solo se lanza con un **sí explícito**: un «vale, cierra» no es un sí; un
+silencio, tampoco. **Si no hay sí, no se corre** y queda registrado como **pendiente** en
+`TABLERO.md`; **al abrir la siguiente sesión se vuelve a proponer diciendo desde cuándo no se corre**.
 
-```
-node scripts/barrido-estado.mjs
-```
+**Ese bloque de `TABLERO.md` no se edita a mano**: lo escribe el script, y **correr el barrido
+completo lo registra solo** — si dependiera de acordarse, en dos semanas estaría mintiendo.
 
-que responde con la fecha del último barrido, **cuántos días y cuántos commits** han pasado y qué
-áreas se han tocado desde entonces. **Ese bloque de `TABLERO.md` no se edita a mano**: lo escribe el
-script, y **correr el barrido completo lo registra solo** — si dependiera de acordarse, en dos
-semanas estaría mintiendo.
+### 3. UN ENCARGO NO PUEDE EXIGIR UN BARRIDO EN SUS CRITERIOS DE VERIFICACIÓN
 
-**6 minutos** dura hoy (eran 11 min 30 s). El corto NO sustituye al completo: es un cinturón para no
-empujar una rotura evidente. **El veredicto que se apunta en el TABLERO y en Notion es el completo**,
-y si no se ha corrido, se dice que no se ha corrido — nunca se presenta el corto como si lo fuera.
+Un criterio de verificación **no puede pedir «barrido en verde»**, ni «regresión completa», ni nada
+que obligue a correr gates para poder dar la tarea por cerrada: eso es exactamente el automatismo que
+esta norma retira, colado por la puerta de atrás.
+
+**Si una tarea necesita de verdad ejecutar gates**, se dice **ARRIBA DEL TODO y visible en el
+encargo** —no enterrado en el criterio 12— para que **Ibrahin lo apruebe al leerlo**. Aprobar el
+encargo es entonces aprobar el barrido; sin esa línea arriba, no hay barrido.
+
+Esto **no** afecta al gate propio de la tarea: cada tarea define su comprobación y **esa** se corre
+entera, porque es la que demuestra lo que se acaba de construir. Lo que no se da por supuesto es la
+**regresión**.
 
 ### 3. Por qué el completo va a la velocidad que va, y no más
 
@@ -137,11 +143,11 @@ Dos redes de seguridad más, para que esto no dependa de acordarse:
   facturas/cobros/ledger salvo autorización expresa de la tarea, y siempre por su flujo con
   confirmación (nunca escritura silenciosa).
 - **Simplicidad y cambios quirúrgicos.** Código/edición mínima; no "mejores" lo adyacente.
-- **Verificación siempre:** cada tarea define su test/gate propio, y ese gate se corre entero. Lo que
-  cambia es la REGRESIÓN: **`--tocado` antes de cada commit, siempre**, y el **barrido completo A
-  DEMANDA** — se propone al cerrar y solo se lanza con un sí de Ibrahin (ver la sección de arriba).
-  Ya NO vale «cada entrega termina con barrido completo»: esa norma se cumplía a medias, y por eso se
-  ha sustituido por una que sí se puede cumplir entera.
+- **Verificación siempre:** cada tarea define su test/gate propio, y ese gate se corre entero. La
+  REGRESIÓN es otra cosa: **ningún barrido se ejecuta solo — ni corto, ni completo, ni antes de un
+  commit**. Se propone al cerrar y **solo se lanza cuando Ibrahin lo pide** (ver la sección de
+  arriba). Y **ningún encargo puede exigir un barrido en sus criterios de verificación**: si hace
+  falta, se dice arriba del todo del encargo para que él lo apruebe al leerlo.
 - **Legal/regulatorio:** verificado contra fuente oficial en la web, nunca de memoria.
 - **Al terminar:** `commit` + `push` con mensaje claro y actualiza el bloque **"DÓNDE LO DEJÉ / DÓNDE
   SIGO"** de Notion. **Un tema por chat**: al cerrar, avisa para abrir chat nuevo.
@@ -154,8 +160,8 @@ Dos redes de seguridad más, para que esto no dependa de acordarse:
 3. Leer `session.json` para saber dónde se quedó la sesión anterior.
 4. Coger la primera tarea de "POR HACER" en el TABLERO y moverla a "HACIENDO".
 5. Releer su criterio de "HECHO CUANDO" y confirmarlo antes de tocar código.
-6. **Mirar si el barrido completo está pendiente** y, si lo está, PROPONERLO diciendo desde cuándo no
-   se corre: `node scripts/barrido-estado.mjs`. Se propone; no se lanza sin un sí.
+6. **Mirar si el barrido está pendiente** y, si lo está, PROPONERLO diciendo desde cuándo no se
+   corre: `node scripts/barrido-estado.mjs`. Se propone; **no se lanza sin un sí de Ibrahin**.
 
 ## DURANTE la sesión
 6. Trabajar SOLO esa tarea. Nunca dos en "HACIENDO" a la vez.
@@ -221,9 +227,11 @@ como `NOTION_TOKEN`).
      previas ni reordenarlas.
 
 **d) Commit + push** (SSH, sin tokens)
-- **Antes de cada commit:** `node scripts/run-gates.mjs --tocado` (el corto). Siempre, sin preguntar.
-- **Al cerrar la sesión: PROPONER el barrido completo**, con el resumen de lo que ha cambiado
-  (`node scripts/barrido-estado.mjs` lo prepara). **Solo se lanza con un sí.** Si es que no:
+- **NO se corre ningún barrido para poder commitear.** Ni el corto ni el completo: el commit no
+  depende de un barrido, y nadie lo lanza por su cuenta.
+- **Al cerrar la sesión: PROPONER el barrido**, diciendo **qué se ha tocado**, **qué modo se
+  recomienda** (`--tocado` o `--all`) y **desde cuándo no se corre** (`node scripts/barrido-estado.mjs`
+  lo prepara). **Solo se lanza con un sí de Ibrahin.** Si es que no:
   `node scripts/barrido-estado.mjs --registrar-pendiente`, y se vuelve a proponer al abrir la
   siguiente sesión.
 - `git add` los archivos de docs y código modificados.
