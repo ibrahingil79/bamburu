@@ -111,7 +111,17 @@ async function reservar(page, { nombre, movil, email, sinConsent = false, shot =
   await page.waitForSelector('#listaServicios .opt', { timeout: 8000 });
   if (shot) await page.screenshot({ path: join(SHOTS, shot + '-paso1.png'), fullPage: true }).catch(() => {});
   visto.servicios = await page.$$eval('#listaServicios .opt', els => els.map(e => e.textContent));
-  await page.click('#listaServicios .opt');
+  // SE ELIGE **SU** SERVICIO, NO EL PRIMERO DE LA LISTA. El negocio tiene muchos servicios
+  // reservables, y el primero que salga no tiene por qué tener a nadie que lo preste: el paso
+  // siguiente se quedaba sin personas y el gate moría esperando `#listaPersonas .opt`. Con el
+  // negocio resembrado a datos de taller dejó de coincidir y el rojo parecía del producto.
+  const elegido = await page.evaluate((nombre) => {
+    const el = [...document.querySelectorAll('#listaServicios .opt')].find(e => (e.textContent || '').includes(nombre));
+    if (!el) return false;
+    el.click();
+    return true;
+  }, 'GATE Corte Publico ' + TS);
+  if (!elegido) throw new Error('el servicio del gate no sale en la lista pública: ' + visto.servicios.join(' | ').slice(0, 160));
   await page.click('#a2');
 
   // Paso 2 — profesional
@@ -228,7 +238,15 @@ try {
   const movil = await paginaAnonima({ width: 390, height: 844, isMobile: true, hasTouch: true });
   const v = await reservar(movil, { nombre: 'GATE Cliente ' + TS, movil: '600' + String(TS).slice(-6), email: 'gate' + TS + '@t.local', shot: 'movil' });
 
-  ok(v.servicios.length === 1, 'paso 1: SOLO aparece el servicio publicado (1 de 3)', v.servicios.length + ' opción(es)');
+  // SE MIDE LO QUE IMPORTA, NO EL TOTAL. Esto exigía UNA sola opción, y eso solo era cierto cuando el
+  // negocio de desarrollo no tenía más servicios reservables: al resembrarlo con datos de taller
+  // pasaron a salir seis y el gate cantaba un fallo del producto que no existía. Lo que este paso
+  // tiene que demostrar es que **el publicado sale y el privado NO**, y eso no depende de cuántos
+  // servicios más tenga el negocio.
+  ok(v.servicios.some(x => x.includes('GATE Corte Publico ' + TS)),
+     'paso 1: el servicio publicado SÍ aparece en la puerta pública', v.servicios.length + ' opción(es)');
+  ok(!v.servicios.some(x => x.includes('GATE Servicio Secreto')),
+     'y el que NO está publicado no aparece: la puerta no enseña de más');
   ok(!JSON.stringify(v.servicios).includes('Secreto'), 'el servicio NO publicado no aparece');
   ok(/24,20 €/.test(v.servicios.join(' ')), 'con el precio del catálogo e IVA incluido (20 € + 21 % = 24,20 €)', (v.servicios[0] || '').trim());
   ok(v.personas.length === 2, 'paso 2: "cualquiera disponible" + la ÚNICA persona publicada', v.personas.join(' / '));
