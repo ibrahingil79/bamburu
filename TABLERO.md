@@ -90,6 +90,396 @@
 
 <!-- BARRIDO:FIN -->
 
+## CORRECCIONES DEL DUEÑO — 21 AGO 2026 (registro completo, no trocear sin marcar aquí)
+
+> **POR QUÉ EXISTE ESTE BLOQUE.** Al trocear tareas se pierden requisitos por el camino. Aquí quedan
+> los **once puntos (A–K)** del dueño, **enteros, literales y en un solo sitio**, ANTES de construir
+> nada. **Esta tarea no construyó ni una línea de producto.**
+>
+> **CÓMO SE USA.** Cada ítem lleva su estado — **PENDIENTE / EN CURSO / HECHO + hash**. Cuando una
+> tarea se cierre **se marca AQUÍ**; la línea **no se borra**. Ningún trozo de A–K se da por
+> entregado si no está marcado en este bloque.
+>
+> **SE AÑADE, NO SUSTITUYE.** Lo que ya había en el TABLERO (Verifactu, Peldaño 8, contabilidad,
+> deuda de comprobaciones, TAREA 3) sigue vivo y sin tocar.
+>
+> **LAS MARCAS ⚙️ CORREGIDO** salen del PASO 0 de esta sesión (auditoría de **solo lectura**,
+> 21 ago 2026, sobre el código de hoy — `76a22a8`). El texto del dueño se copia **entero** y el dato
+> real va **debajo**, marcado. No se ha reescrito ni una palabra suya, y nada falso queda escrito
+> como si fuera cierto.
+
+**RECUENTO (V2): 11 ítems (A–K) · 46 subpuntos.**
+`A 8 · B 3 · C 11 · D 5 · E 4 · F 4 · G 5 · H 3 · I 3 · J 0 · K 0` = **46**.
+(J y K son ítems bloqueados sin subpuntos: su texto es una sola afirmación.)
+
+---
+
+### PASO 0 — AUDITORÍA DE SOLO LECTURA (21 ago 2026). Cero código tocado.
+
+#### 0.1 · La migración asistida
+
+- **(a) ¿Dónde vive?** Pantalla: **`/admin/migracion`** — `modules/erp/routes/migracion.js`, montada en
+  `modules/erp/routes/index.js:148`. API: **`/api/erp/migracion`** (`GET` listar, `POST` pedir),
+  montada en `index.js:210`. Tabla **`migracion_peticiones`**, aditiva y **fuera de
+  `WRITABLE_TABLES`**. El `POST` guarda la petición, manda correo al equipo con el adjunto (máx.
+  12 MB) y acusa recibo en pantalla y por correo — **y guarda aunque el correo falle** (`email_ok`).
+  Todo lo que decía el encargo sobre esta pieza es **cierto**.
+- **(b) ¿Tiene entrada en el menú? ¿En qué área?** **NO.** No hay ni una entrada en `MENU`
+  (`modules/erp/menu.js`) que apunte a `/admin/migracion`, y la clave `migracion` **tampoco existe en
+  `NAV_PERMS`**. Como el buscador (Ctrl/⌘+K) y las anclas del rail comen de esa misma lista, la
+  migración **no se puede buscar ni anclar**. Tampoco está en las URLs permitidas de DISA
+  (`DISA_ALLOWED_URLS`, `modules/disa/index.js:2513`), así que **DISA no puede enlazarla** en un
+  artifact aunque se lo pidas.
+- **(c) Caminos reales que existen HOY — son DOS, y los dos tienen pega:**
+  1. **Panel «Pon en marcha tu negocio»** en el Inicio (`/admin`) — paso *«Trae tus datos del programa
+     anterior»*, CTA *«Pedir la migración»* (`modules/erp/arranque.js:97`). **Pegas:** el panel
+     **nace plegado** en cuanto el negocio tiene actividad real (una factura o una cita —
+     `hayActividad`), así que hay que desplegarlo; y **el paso deja de ser un enlace en cuanto está
+     hecho**: un paso `done` se pinta como `div`, no como `<a>`
+     (`modules/erp/views/disaHome.html.js:964`). O sea: **pides la migración una vez y la puerta se
+     cierra sola.**
+  2. **Ajustes → Configuración Empresa** (`/admin/settings`), tarjeta *«Trae tus datos del programa
+     anterior»*, botón *«Pedir la migración»* (`modules/erp/routes/settings.js:546`). Es la puerta
+     **fija**, y se creó justamente porque la otra se plegaba. **Pega:** vive dentro de
+     `bloqueEmpresa`, que **solo se pinta con `company.read`**, y la entrada «Ajustes» del rail está
+     además limitada a `owner` por `ROLE_FILTERS`.
+  - **No hay ningún tercer camino.** Barrido de todo el repo: las únicas referencias a
+    `/admin/migracion` fuera de esos dos sitios están en dos gates (`gate-inicio-cuadro-mando.mjs`,
+    `gate-inicio-arranque.mjs`), que no son producto.
+- **(d) ¿Qué permiso exige? ¿Llega un dueño nuevo sin que le pasen la dirección?**
+  La **vista** exige **`company.read`** (`migracion.js:167`); el **envío** exige **`company.update`**
+  (`migracion.js:60`). Un **dueño** (`owner`) los tiene los dos, así que **SÍ llega solo** — pero solo
+  por los dos caminos de arriba, y **solo mientras no haya pedido la migración ya**: hecho el paso,
+  le queda únicamente la tarjeta de Ajustes. Un **empleado sin `company.read`** no llega por ninguno.
+
+#### 0.2 · Las «tres pantallas sin enlace»
+
+Son las de **U7 (8 jul 2026)**: **`/admin/analytics`**, **`/admin/discounts`** y **`/admin/tags`**
+(TABLERO §U7 y §«Cola del Eje A»; `docs/backlog-auditoria.md:315`, marcada ⚑ *«se abordarán luego»*).
+
+- ⚙️ **CORREGIDO: hoy ya no son tres, son DOS.** **`/admin/analytics` se reenganchó al menú el
+  17 jul 2026** (área «Analítica» → «Informes», `menu.js:209`; consta en el propio TABLERO).
+  **Siguen sin enlace `/admin/discounts` y `/admin/tags`** (montadas en `routes/index.js:129` y `:142`,
+  ausentes de `MENU`). Las dos solo aparecen en la lista blanca de URLs de DISA, que no es un enlace
+  de la interfaz.
+- **La migración es una CUARTA, no una de esas tres.** No estaba en la lista de U7 porque **no
+  existía** entonces: se construyó el **19 ago 2026**.
+- **Y hay más pantallas fuera del menú, pero por diseño y con camino propio** — no son huérfanas:
+  `/admin/avisos` (se llega desde la campana, `layout.js:1400`), `/admin/purchase-order-receipts`
+  (desde órdenes de compra), `/admin/change-password` (pantalla-cerrojo), `/admin/security` (solo
+  redirige a `/admin/perfil`) y las subpantallas de Ajustes (`/plantillas`, `/avisos`,
+  `/situacion-fiscal`). **Se dejan anotadas para que B2 no las confunda con el problema.**
+
+#### 0.3 · Impresión y PDF
+
+- **(a) ¿Motor de plantillas reutilizable, o cada PDF cableado?** **Las dos cosas, a medias.**
+  - **Lo que SÍ es reutilizable y único:** **`core/pdf.js` → `renderPdfFromHtml()`** es el **único
+    punto de la plataforma que produce un PDF** (Chromium en singleton) y es *document-agnostic*; y
+    **`printableShell(bodyHtml,{title})`** (`modules/erp/layout.js:1611`) le pone el envoltorio A4 con
+    la maquetación de pantalla. Eso ya es una **fuente única de RENDERIZADO**.
+  - **Lo que está CABLEADO:** el **cuerpo** de cada documento es una función propia por documento —
+    `quoteDocumentBodyHtml`, `orderDocumentBodyHtml`, `albaranDocumentBodyHtml`, `buildInvoicePaper` —
+    y los informes contables tienen las suyas (`libroHtml`, `diarioHtml`, `mayorHtml`). **No existe
+    ninguna abstracción de LISTADO** (columnas, cabecera, filtros aplicados, totales, paginación) ni
+    ningún concepto de «plantilla de documento» configurable.
+  - **Prior art para C10:** sí hay un motor de plantillas **de correo** con huecos `{{asi}}`,
+    editable por el dueño (`modules/erp/email-templates.js`, U9). Es de EMAIL, no de documento, pero
+    es el patrón «plantilla = dato, no código» que C10 pide.
+- **(b) ¿Se puede HOY imprimir o descargar un LISTADO?** **Parcialmente, y en ningún sitio con los
+  tres verbos.**
+  - **PDF real de listado — SÍ, solo en Contabilidad** (`/admin/contabilidad`,
+    `modules/erp/routes/contabilidad-routes.js`): **libro de ventas, libro de compras, diario y
+    mayor**, cada uno en **XLSX + CSV + PDF**. Cada informe con **su HTML escrito a mano** — que es
+    exactamente lo que C10 viene a matar.
+  - **CSV sin PDF — Analítica** (`/admin/analytics`): `ventas.csv`, `rentabilidad.csv`,
+    `informes.csv`, `productos.csv`, `clientes.csv`. Y **Conciliación**: `export.xlsx` / `export.csv`.
+  - **NADA en:** clientes, productos, compras, gastos y **kardex**. El kardex existe **solo como
+    modal por producto** (`modules/erp/views/stock-modal.js`, motor `stock.js:170`) y **no se
+    imprime ni se descarga**.
+  - **Imprimir (`window.print()`) — solo en DOCUMENTOS**, nunca en un listado: factura,
+    presupuesto, pedido, albarán, orden de compra y ticket. Y el `@media print` del layout
+    (`layout.js:1173`) está escrito **para `.docpaper`**: en una pantalla de listado, un Ctrl+P
+    imprime la tabla en crudo, sin plantilla, sin cabecera y sin pie.
+  - **Enviar por correo** existe **por documento** (factura, presupuesto, orden de compra, enlace del
+    portal), **nunca para un listado**.
+  - ⚙️ **CORREGIDO de paso:** la descarga de `/admin/users` **no es un listado**: es el **backup de
+    la base de datos** del negocio (`routes/users.js:198`, permiso `backup.download`).
+
+---
+
+### LOS ONCE ÍTEMS — texto literal del dueño
+
+## GRUPO 1 — DEFECTOS DE LO YA CONSTRUIDO
+
+#### A. CALENDARIO — VISTA MES · **PENDIENTE** · *siguiente tarea*
+
+> **A. CALENDARIO — VISTA MES. Ocho defectos, una sola entrega:**
+> **A1** El pie del día dice "168 h libre" en un día suelto. 168 = 7x24. Las horas libres deben calcularse sobre el HORARIO DE APERTURA DEL NEGOCIO de ESE día. Si cierra, dice "Cerrado", no "0 h libre".
+> **A2** Selector de vista duplicado: botones Dia/Semana/Mes arriba y desplegable "Mes" debajo. Se queda el grupo de botones. "Por puesto" y "Ver todo el equipo" SE QUEDAN, no son duplicados.
+> **A3** El pie de la vista Dia no debe pintarse en vista Mes.
+> **A4** Dias 7, 14, 20 y 28 en negrita sin criterio. Regla unica: fuera de mes en gris claro; dias del mes en normal; HOY unico destacado; dias con citas se distinguen por sus citas, NO por el numero en negrita.
+> **A5** Filas de semana de alto fijo: un mes vacio es una pared en blanco. Repartir el alto entre las semanas reales del mes.
+> **A6** La celda del 19 sale sombreada sin motivo. Reproducir antes de arreglar; si no se reproduce, decirlo y NO inventar arreglo.
+> **A7** Cada cita de la celda debe mostrar HORA + CLIENTE + SERVICIO con color de estado. Tope 3 por celda y marcador "+N mas" que abre el dia.
+> **A8** En Mes, pasar por encima de una celda debe ofrecer "+ Nueva cita" (raton y teclado) y abrirla con ese dia ya puesto, igual que ya hace la vista Dia.
+
+**⚙️ CORREGIDO / MEDIDO EN EL PASO 0** (el defecto es real en los ocho; lo que cambia es el
+*porqué*, y en tres de ellos parte ya está construida):
+
+- **A1 — 168 no es 7×24. Es 14 × 12.** Medido en el tenant `desarrollo-bamburu`: **14 usuarios
+  activos** × **12 h de apertura** (los tramos del negocio son `dow=5` y `dow=6`, 480→1200 min =
+  08:00–20:00) = **10.080 min = 168 h exactas**. El mecanismo está en
+  `modules/erp/routes/citas.js:536-542`: el pie **suma las horas libres de TODO EL EQUIPO**
+  (`Σ personas (tramosPersona − ocupacionPersona)`), o sea es **capacidad del equipo**, no horario del
+  día. Con 14 personas se pasa de 24 h sin ningún error de cálculo. **La petición del dueño no
+  cambia; su diagnóstico aritmético sí.**
+- **A1 (2ª mitad) — YA HECHO.** Si el día está cerrado el pie **ya dice «cerrado»**
+  (`citas.js:2024`) y con cero huecos dice **«sin hueco libre»** (`citas.js:1988`), nunca «0 h libre».
+  Queda **decidir la palabra exacta** («Cerrado» con mayúscula).
+- **A2 — exacto, y con una trampa de implementación.** Los botones están en `citas.js:1307-1309`
+  y el desplegable duplicado en `citas.js:1327` (`#agVista`, dentro de «Filtros»). **Pero
+  `setVista()` escribe en `#agVista` y `vistaActual()` lo lee**, y las preferencias
+  (`agPrefs` en `localStorage`) también: **quitar el `<select>` a secas rompe las tres vistas.**
+  Hay que dejar el estado en otro sitio. `#agEje` («Por puesto») y `#agVerTodo` («Ver todo el
+  equipo») se quedan, como pide el dueño.
+- **A3 — AMBIGÜEDAD REAL, NO SE ELIGE LECTURA: HAY QUE PREGUNTAR.** En el código **solo existe UN
+  pie**: `.mes-pie` / `#mesPie`, y lo pinta **la propia vista Mes** (`citas.js:2045-2057`) con el
+  resumen del **día SELECCIONADO**. **La vista Día no tiene pie ninguno.** Así que A1 («arregla el
+  número de ese pie») y A3 («ese pie no debe pintarse en Mes») **apuntan al mismo elemento y piden
+  cosas opuestas**. *(Lo que sí es de la vista Día —la tira de 7 días, el zoom S/M/L y la leyenda de
+  colores— ya se oculta en Mes: `citas.js:1963-1967`.)* **Se pregunta a Ibrahin al abrir la tarea A.**
+- **A4 — el efecto es real, la causa no es la negrita.** En el CSS de hoy **no hay ninguna regla que
+  ponga en negrita días sueltos**: solo `.mesdia.hoy .num{font-weight:700}` y
+  `.mesdia.sel .num{font-weight:600}` (`citas.js:1262-1263`). Lo que pasa es **contraste**: `.finde`,
+  `.otro` y `:disabled` pintan el número **en gris** (`citas.js:1266-1271`), así que **los únicos
+  números que quedan en negro son los días abiertos entre semana**. En agosto de 2026 el negocio de
+  pruebas solo abre viernes y sábado → los viernes **7, 14, 21 y 28** salen en negro y todo lo demás
+  gris. **El «20» del encargo es casi con seguridad el 21** (el 20 es jueves; los otros tres son
+  viernes). La regla única que pide el dueño **se mantiene tal cual**.
+- **A5 — exacto.** `.mesdia{min-height:84px}` (`citas.js:1252`), alto fijo por casilla y filas
+  implícitas: un mes de 6 semanas crece y uno vacío es una pared.
+- **A6 — NO SE REPRODUCE DESDE EL CÓDIGO.** No hay ninguna regla que sombree **una** celda: solo
+  `:hover` → `var(--bg3)` (`citas.js:1259`) y el fondo tenue de `.finde`/`.otro` (`.018`). El 19 de
+  agosto de 2026 es **miércoles** (ni finde ni otro mes). El día **seleccionado** solo tiñe el
+  círculo del número, no la celda. **Se reproduce en pantalla antes de tocar nada, y si no aparece,
+  se dice y no se inventa arreglo** — tal como manda el propio A6.
+- **A7 — MEDIO CONSTRUIDO.** Ya se pintan **hasta 3 citas** por celda con **hora + cliente + punto
+  de color del estado**, y el **«+N más»** (`citas.js:2026-2033`). **Faltan dos cosas:** el
+  **SERVICIO** (el endpoint `/api/erp/citas/mes` solo manda `min`, `cliente` y `estado` —
+  `citas.js:552`) y que el **«+N más» abra el día** (hoy no es pulsable: el día se abre con **doble
+  clic** en la celda o con «Abrir el día →» del pie, `citas.js:2062-2064`).
+- **A8 — no existe en Mes.** El «+ Nueva cita» al pasar por encima está **solo en la vista Día**
+  (`.agcell.libre:hover::after`, `citas.js:1205`) y además solo con `eje==='persona'`
+  (`citas.js:2100`). En Mes, el `hover` solo cambia el fondo.
+
+---
+
+#### B. MIGRACIÓN ASISTIDA SIN ACCESO VISIBLE · **PENDIENTE**
+
+> **B. MIGRACION ASISTIDA SIN ACCESO VISIBLE.**
+> Palabras del dueño: "la migracion de datos de otras plataformas no se ha construido o esta a medias". Dato real: la migracion ASISTIDA esta construida; el importador AUTOMATICO no existe. El defecto es que no hay acceso visual a la asistida.
+> **B1** Dar entrada visible y estable a la migracion asistida en el menu.
+> **B2** Resolver tambien las otras pantallas sin enlace localizadas en el Paso 0.
+> **B3** Un dueño de negocio nuevo debe poder llegar sin que nadie le pase la direccion a mano.
+
+**⚙️ CONFIRMADO por el Paso 0**, con dos precisiones:
+- El encabezado del ítem es **correcto**: la asistida está construida (`0.1a`) y el importador
+  automático **no existe** — lo único que importa ficheros hoy es la **conciliación bancaria
+  (Norma 43)**, que es otra cosa.
+- **B2 son DOS pantallas, no tres:** `/admin/discounts` y `/admin/tags` (`0.2`). Y **no se confundan
+  con** las que están fuera del menú **a propósito y con camino propio** (avisos, recepciones,
+  cerrojo de contraseña, subpantallas de Ajustes) — están listadas en `0.2`.
+- **B3 hoy falla por un motivo concreto y arreglable:** el paso del onboarding **deja de ser enlace
+  en cuanto se marca hecho**, así que la puerta se cierra sola tras la primera petición (`0.1c`).
+
+---
+
+## GRUPO 2 — FUNCIONES NUEVAS (solo codigo, sin dependencias externas)
+
+#### C. IMPRESIÓN Y DESCARGA EN PDF DE LISTADOS Y DOCUMENTOS · **PENDIENTE**
+
+> **C. IMPRESION Y DESCARGA EN PDF DE LISTADOS Y DOCUMENTOS.**
+> Palabras del dueño: "debemos ser capaces de imprimir informes como, lista de precios bajo plantilla claro, envio de catalogo de productos y servicios, informes de kardex, listado de clientes productos, compras, facturas, gastos, etc"
+> **C1** Lista de precios, bajo plantilla.
+> **C2** Catalogo de productos y servicios, preparado para ENVIAR al cliente.
+> **C3** Informe de kardex (movimientos de stock).
+> **C4** Listado de clientes.
+> **C5** Listado de productos.
+> **C6** Listado de compras.
+> **C7** Listado de facturas.
+> **C8** Listado de gastos.
+> **C9** Los tres verbos en todos: IMPRIMIR, DESCARGAR EN PDF y ENVIAR POR CORREO.
+> **C10** Motor de plantillas UNICO y reutilizable. Prohibido cablear cada listado a su propio generador: es la regla de fuente unica.
+> **C11** El "etc" del dueño NO se interpreta como cerrado: al construir, dejar el motor abierto a listados nuevos sin reescribirlo.
+
+**⚙️ CONFIRMADO por el Paso 0 (`0.3`), con el punto de partida ya medido:**
+- **Se parte de medio motor, no de cero:** `renderPdfFromHtml` + `printableShell` ya son la fuente
+  única de **renderizado**. Lo que falta es la capa de **listado** (columnas, cabecera del negocio,
+  filtros aplicados, totales, paginación) y la de **plantilla como dato**.
+- **Hay un precedente que C10 tiene que absorber, no ignorar:** los **cuatro informes contables** ya
+  descargan PDF **con su propio HTML a mano**. Si el motor único nace y esos cuatro se quedan fuera,
+  C10 queda incumplido el mismo día.
+- **Nada de C1–C8 existe hoy** salvo exportaciones **CSV/XLSX** sueltas en Analítica y Conciliación,
+  que **no son ninguno de los tres verbos de C9**.
+
+---
+
+#### D. ANALÍTICAS — INFORMES A MEDIDA · **PENDIENTE**
+
+> **D. ANALITICAS — INFORMES A MEDIDA.**
+> Palabras del dueño: "en analiticas lo principal es que el cliente pueda elaborar informes segun su requerimiento y no mostrar una serie de datos donde el mismo se pierde".
+> **D1** El cliente compone SU informe: elige que mide, por que lo agrupa y en que periodo.
+> **D2** Dejar de volcar un muro de datos por defecto.
+> **D3** Guardar informes compuestos para reutilizarlos.
+> **D4** Pendiente conocido de antes: el constructor de analiticas no sabe expresar datos de agenda (los avisos de agenda no tienen grafico que los acompañe). Entra aqui.
+> **D5** Enlaza con C: un informe compuesto debe poder imprimirse y descargarse.
+
+**⚙️ CORREGIDO: D1 y D3 ya están construidos.** El **constructor de analíticas**
+(`modules/erp/constructor-analitica.js`, escalera pasos 4a/4a-bis/4b) ya deja **elegir medida,
+dimensión y periodo** sobre **cinco áreas** (Ventas · Compras · Clientes · Inventario ·
+Contabilidad), con cálculos propios y paneles **guardados y compartibles** (`listarPaneles`).
+- **D1 → lo que falta es el ÁREA DE AGENDA**, que es exactamente **D4** (y ya estaba apuntado en
+  §TAREA 3 de este TABLERO). **D1 y D4 son la misma pieza**, no dos.
+- **D2 sigue entero:** `/admin/analytics` abre con **4 KPIs + gráficos fijos** por defecto
+  (`modules/erp/routes/analytics.js:334-364`) — el muro que el dueño describe.
+- **D5 sigue entero:** hoy un informe compuesto solo sale en **CSV** (`informes.csv`); **no hay PDF
+  ni impresión**. Depende de C.
+
+---
+
+#### E. PANTALLA DE INICIO — FICHAS COMO WIDGETS · **PENDIENTE**
+
+> **E. PANTALLA DE INICIO — FICHAS COMO WIDGETS.**
+> Palabras del dueño: "la pantalla de inicio deberia permitir organizar cada ficha como widgets, bien sea de posicion".
+> **E1** Cada bloque del Inicio se puede mover de posicion.
+> **E2** La colocacion se guarda por usuario.
+> **E3** Poder ocultar y volver a mostrar un bloque.
+> **E4** Volver a la colocacion de fabrica en un clic.
+
+**⚙️ CORREGIDO: E1–E4 ya existen… pero solo para UNA PARTE del Inicio.** El Inicio personalizable es
+el **peldaño 6** de la escalera (`modules/erp/inicio-layout.js`): rejilla arrastrable, paleta de
+bloques, quitar bloque, «Personalizar», «Volver al de fábrica», guardado **por usuario** con cascada
+`usuario > empresa > fábrica` (`routes/inicio.js:122-155`).
+- **Lo que NO se puede mover, ocultar ni reordenar hoy** es justo lo que ocupa la mayor parte de la
+  pantalla: **las 10 secciones fijas del CUADRO DE MANDO** (`modules/erp/cuadro-mando.js:120` —
+  hoy · ventas · cobro · margen · clientes · gráfico · productos · mejores · oportunidades · decide)
+  y el **panel «Pon en marcha tu negocio»** (que solo se pliega). La rejilla personalizable **queda
+  debajo** y de fábrica trae **un solo bloque** («Avisos pendientes»).
+- **La tarea E, por tanto, es EXTENDER lo que ya existe al cuadro de mando** — no construirlo de
+  cero. Y la tabla ya está: `dashboard_layouts`. **Cero tablas nuevas.**
+
+---
+
+#### F. MAPA EN LA FICHA DE CLIENTE · **PENDIENTE**
+
+> **F. MAPA EN LA FICHA DE CLIENTE.**
+> Palabras del dueño: "se puede mejorar la ficha de cliente incluyendo google maps o open maps".
+> **F1** DECISION TECNICA TOMADA: OpenStreetMap. Google Maps obliga a cuenta de facturacion y clave y cobra por vista. NO se usa Google.
+> **F2** Mapa en la ficha con la direccion del cliente.
+> **F3** Enlace para abrir la ruta en la aplicacion de mapas del movil.
+> **F4** Si el cliente no tiene direccion, el bloque no se pinta. No enseñar un mapa del oceano.
+
+**⚙️ CONFIRMADO: no existe ningún mapa en la plataforma.** Cero referencias a OpenStreetMap,
+Leaflet o Google Maps en todo el código. La ficha de cliente ya tiene el campo `direccion`
+(`ficha-cliente-ui.js:923`), así que F4 se puede resolver con el dato que ya hay.
+**Aviso para cuando toque:** el enunciado dice *«sin dependencias externas»* (GRUPO 2) y un mapa
+**carga teselas de un servidor ajeno**; hay además una CSP por superficie en el proyecto. **Es una
+decisión a confirmar con Ibrahin al abrir F**, no aquí.
+
+---
+
+#### G. PORTAL DEL CLIENTE — AMPLIACIÓN · **PENDIENTE**
+
+> **G. PORTAL DEL CLIENTE — AMPLIACION.**
+> Palabras del dueño: "el portal del cliente hoy solamente dice las facturas pendientes, este portal es una ventaja que ofrecemos, tambien debe ofrecer funciones como analiticas, manejo de comunicaciones, pago de facturas etc".
+> **G1** Analiticas propias del cliente (que compra, cuanto, cada cuanto).
+> **G2** Canal de comunicaciones entre el negocio y su cliente.
+> **G3** Historial completo de documentos con descarga en PDF (enlaza con C).
+> **G4** El pago de facturas va al GRUPO 4: necesita pasarela contratada.
+> **G5** El "etc" del dueño NO se da por cerrado.
+
+**⚙️ CORREGIDO: el portal enseña algo más que las pendientes.** Hoy (`modules/portal/index.js:31`)
+lista **TODAS las facturas del cliente** —pagadas y pendientes, con su estado derivado de
+cobros/conciliación, nunca de lo que diga el cliente—, el **total pendiente**, los **datos de
+transferencia (IBAN)** y **descarga en PDF de cada factura** (`/portal/:token/factura/:id/pdf`).
+Acceso por **enlace mágico con token temporal**, solo lectura.
+- **G3 está hecho a medias:** el PDF por factura ya existe; **faltan presupuestos, pedidos y
+  albaranes**, y el «historial completo».
+- **G1 y G2 no existen** en absoluto.
+- **Ojo al puntero caducado:** el Backlog de este TABLERO (§Ventas, portal y recurrentes) dice que el
+  pago con tarjeta es *«el único paso que falta del portal»*. **Con G eso deja de ser cierto** y esa
+  línea queda desmentida por este registro.
+
+---
+
+#### H. IMPORTADOR DE CSV GENÉRICO · **PENDIENTE**
+
+> **H. IMPORTADOR DE CSV GENERICO.**
+> **H1** Clientes, productos y facturas desde CSV.
+> **H2** Previsualizacion antes de importar y posibilidad de deshacer.
+> **H3** Complementa la migracion asistida, NO la sustituye ni la retira.
+
+**⚙️ CONFIRMADO: no existe.** Lo único que importa ficheros hoy es la **conciliación bancaria
+(Norma 43)** (`modules/erp/routes/conciliacion-routes.js`), que no es un importador de datos de
+negocio. Sí hay **exportación** CSV en Analítica y Conciliación, que puede servir de referencia de
+formato al construir H.
+
+---
+
+## GRUPO 3 — BARRIDO
+
+#### I. MEJORA VISUAL GENERAL DE BAMBURU · **PENDIENTE** · *va al final, a propósito*
+
+> **I. MEJORA VISUAL GENERAL DE BAMBURU.**
+> Palabras del dueño: "mejora visual de bamburu en general".
+> **I1** Aplicar el componente de tarjeta nuevo al resto de pantallas (ya estaba anotado como aplazado).
+> **I2** VA DELIBERADAMENTE AL FINAL: si se hace antes que C, D, E, F y G, hay que repetirlo entero cuando lleguen esas pantallas.
+> **I3** Al llegar aqui, listar pantalla por pantalla y no dar por hecho ninguna.
+
+**⚙️ CORREGIDO (parcial): el componente existe, pero el aplazamiento NO consta por escrito.** El
+componente de tarjeta nuevo es **`.bf-card`**, de la ficha de cliente
+(`modules/erp/ficha-cliente-ui.js`, entregado el **19 ago 2026** como «estética de tarjetas»).
+**No hay en `TABLERO.md` ni en `docs/` ninguna nota que diga «aplicar al resto de pantallas,
+aplazado»** — se buscó y no aparece. Si el acuerdo se tomó de viva voz, **queda registrado aquí
+por primera vez y con esa advertencia**, no como si constara de antes.
+*(La lección del 19 ago sigue aplicando a I3: aquel gate medía solo `.bf-card` y no la pantalla que
+lo rodea, y se comieron 17 sitios con el texto pegado al borde.)*
+
+---
+
+## GRUPO 4 — DEPENDE DE ALGO EXTERNO A IBRAHIN
+
+#### J. PAGO DE FACTURAS EN EL PORTAL DEL CLIENTE · **BLOQUEADO** (no es PENDIENTE: no depende de nosotros)
+
+> **J. PAGO DE FACTURAS EN EL PORTAL DEL CLIENTE. Bloqueado: requiere pasarela de pago contratada. Ya constaba fuera de alcance en el tablero.**
+
+**⚙️ CONFIRMADO.** Consta ya en dos sitios: `TABLERO.md` §Backlog → *«Portal de cliente — pago online
+(tarjeta): pasarela (Stripe u otro); necesita decisión de proveedor y coste del dueño»*, y en el
+propio código (`modules/portal/portal.js:5`: *«Pago online (tarjeta) fuera de alcance»*). Además hay
+una norma vigente del **28 jul 2026** que **prohíbe dejar ganchos** preparados para la pasarela.
+
+---
+
+#### K. IMPORTADORES DE HOLDED Y QUIPU · **BLOQUEADO** (no es PENDIENTE: no depende de nosotros)
+
+> **K. IMPORTADORES DE HOLDED Y QUIPU. Bloqueado: hacen falta ficheros de exportacion reales de esas plataformas para construir y probar contra algo cierto. La promesa publica de migracion no se anuncia hasta tener esto.**
+
+**⚙️ CONFIRMADO y con un matiz útil.** `Holded` y `Quipu` **ya son opciones de origen** en la
+migración asistida (`ORIGENES`, `modules/erp/routes/migracion.js:37`), así que **el hueco donde
+enchufar el importador ya existe** y hoy lo cubre el equipo a mano. Lo que falta son **los ficheros
+de exportación reales** para construir y probar contra algo cierto.
+
+---
+
+### LO QUE ESTE ENCARGO NO TOCÓ (y no debe darse por tocado)
+
+- **Cero código de producto.** `git diff` vacío sobre `modules/`, `core/`, `scripts/`, `public/`.
+- **La migración NO se ha enlazado.** Eso es **B**, y B está **PENDIENTE**.
+- **No se tocó** la lista de pendientes que ya existía (Verifactu, Peldaño 8, contabilidad, deuda de
+  comprobaciones, TAREA 3) ni ninguna ficha histórica.
+- **No se corrió** ningún barrido ni ningún gate: el encargo lo dijo arriba del todo.
+
+
 ## 🧭 ORDEN DE TRABAJO ACORDADO (20 ago 2026) — nada de esto está iniciado
 
 > **Sesión de decisión: cero código, cero commits de producto.** Aquí queda el orden que se acordó y
