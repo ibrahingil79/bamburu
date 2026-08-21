@@ -518,13 +518,13 @@ export function createCitasRoutes(db) {
       // El mes ya no dice solo "3 citas": enseña las primeras. Acotado a propósito:
       //   · como mucho CUATRO por día (se pintan 3 + «+N más»), ordenadas por hora. Traer el mes
       //     entero sería peso que nadie mira.
-      //   · TRES campos por cita —hora, cliente y estado—. Nada más viaja al navegador.
+      //   · CUATRO campos por cita —hora, cliente, SERVICIO y estado—. Nada más viaja al navegador.
       //   · los MISMOS filtros que la vista Día. Si en Día no ves una cita porque su columna no está,
       //     en Mes tampoco. El candado sigue siendo el de la ruta (`citas.read`), intacto.
       const eje = c.req.query('eje') === 'recurso' ? 'recurso' : 'persona';
       const verTodo = c.req.query('verTodo') === '1';
       const primeras = db.prepare(
-        `SELECT c.inicio_min, c.estado, c.user_id, c.recurso_id,
+        `SELECT c.id, c.inicio_min, c.estado, c.user_id, c.recurso_id,
                 COALESCE(cl.name, c.cliente_suelto_nombre, 'Cliente') AS cliente
            FROM citas c LEFT JOIN clients cl ON cl.id = c.cliente_id
           WHERE c.fecha = ? AND c.estado <> 'anulada' AND c.archived = 0
@@ -533,11 +533,22 @@ export function createCitasRoutes(db) {
       const dias = [];
       for (let d = 1; d <= ultimo; d++) {
         const fecha = anio + '-' + String(mes).padStart(2, '0') + '-' + String(d).padStart(2, '0');
-        let libres = 0, abierto = false;
+        // ── A1 · EL NÚMERO NO CAMBIA; LO QUE VIAJA AHORA ES SU BASE ────────────────────────────
+        // `libres_min` se calcula EXACTAMENTE igual que antes y no se toca: es la suma de los huecos
+        // de TODAS las personas abiertas ese día. El problema nunca fue el número, era que llegaba
+        // desnudo: 168 h en un negocio de 14 personas se lee como «el día tiene 168 horas».
+        // Así que se mandan también las dos cifras que lo explican —cuántas personas lo componen y
+        // cuánta capacidad había en total— para que la pantalla pueda DECLARAR SU BASE (la misma
+        // regla que CANON impone a los márgenes: ningún porcentaje sin su base).
+        // Cero cálculo nuevo: `capacidad` sale de los MISMOS `tramosPersona` de los que ya salía
+        // `libres`, en el mismo bucle. No hay una segunda fuente que pueda desviarse.
+        let libres = 0, capacidad = 0, personasAbiertas = 0, abierto = false;
         for (const uid of personas) {
           const base = tramosPersona(db, uid, fecha);
           if (!base.length) continue;
           abierto = true;
+          personasAbiertas++;
+          for (const [a, b] of base) capacidad += (b - a);
           for (const [a, b] of resta(base, ocupacionPersona(db, uid, fecha))) libres += (b - a);
         }
         // Mismo criterio de columnas que la vista Día: por persona, si no se pide "ver todo el
@@ -550,7 +561,14 @@ export function createCitasRoutes(db) {
         const delDia = primeras.all(fecha).filter(x => !visibles || visibles.has(x.user_id));
         dias.push({
           fecha, dia: d, citas: delDia.length, libres_min: libres, abierto, pasado: fecha < hoy,
-          primeras: delDia.slice(0, 4).map(x => ({ min: x.inicio_min, cliente: x.cliente, estado: x.estado })),
+          capacidad_min: capacidad, personas_abiertas: personasAbiertas,
+          // A7 · EL SERVICIO, de la MISMA función que lo escribe en la vista Día (`serviciosDeCita`,
+          // unido con « + »). No hay un segundo texto del servicio que pueda decir otra cosa. Solo
+          // se resuelve para las CUATRO que viajan, no para el mes entero.
+          primeras: delDia.slice(0, 4).map(x => ({
+            min: x.inicio_min, cliente: x.cliente, estado: x.estado,
+            servicio: serviciosDeCita(db, x.id).join(' + '),
+          })),
         });
       }
       return c.json({ ym: ym[0], dias, sin_horario: !hayHorarioNegocio(db) });
@@ -1247,11 +1265,22 @@ const CSS_AGENDA = `
   /* P3 — REJILLA DE VERDAD. Las separaciones se pintan con los bordes de cada casilla (0.5px muy
      claros) y la línea ENTRE SEMANAS algo más marcada, que es lo que deja leer el mes por filas.
      Antes no había ni una línea: 42 números flotando. */
-  .mes-rej{border-top:1px solid var(--border2)}
+  /* A5 · LAS FILAS REPARTEN EL ALTO. Antes cada casilla tenía 'min-height:84px' y las filas eran
+     implícitas: un mes de 5 semanas dejaba el mismo hueco muerto que uno de 6 llenaba, y un mes casi
+     vacío era una pared en blanco. Ahora la rejilla tiene un ALTO TOTAL y 'grid-template-rows' se
+     escribe al pintar con TANTAS filas como semanas REALES tenga el mes ('repeat(N,1fr)'): 5 semanas
+     → 5 filas más altas, 6 semanas → 6 filas. Nunca una fila de más ni un hueco al final. */
+  .mes-rej{border-top:1px solid var(--border2);height:var(--mes-alto,540px)}
+  /* La casilla pasa a ser DOS elementos: el envoltorio '.mescel' (que es el hijo de la rejilla y da el
+     marco de posición) y el botón '.mesdia' de siempre dentro. Hace falta porque «+ Nueva cita» (A8)
+     tiene que ser un BOTÓN DE VERDAD —para que se llegue con el teclado— y un botón no puede vivir
+     dentro de otro botón. El día sigue siendo 'button.mesdia', con su 'disabled' y sus bordes. */
+  .mescel{position:relative;display:flex;min-width:0;min-height:0}
   .mesdia{appearance:none;background:transparent;font-family:inherit;cursor:pointer;text-align:left;
-          display:flex;flex-direction:column;gap:2px;min-height:84px;padding:4px 5px 6px;
+          display:flex;flex-direction:column;gap:2px;flex:1;width:100%;min-width:0;min-height:0;
+          overflow:hidden;padding:4px 5px 6px;
           border:0;border-right:.5px solid var(--border);border-bottom:1px solid var(--border2)}
-  .mesdia:nth-child(7n){border-right:0}
+  .mescel:nth-child(7n) .mesdia{border-right:0}
   /* El NÚMERO arriba a la izquierda de su casilla, 12px. No centrado: así la casilla es un espacio
      donde caben cosas, no un contenedor de un número. */
   .mesdia .num{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;
@@ -1262,21 +1291,63 @@ const CSS_AGENDA = `
   .mesdia.hoy .num{color:#D2452F;font-weight:700}
   .mesdia.sel .num{background:var(--text);color:#fff;font-weight:600}
   .mesdia.hoy.sel .num{background:#D2452F;color:#fff}
-  /* Fin de semana y días de otro mes: número gris y fondo apenas más apagado. Se ven, no se esconden. */
-  .mesdia.finde,.mesdia.otro{background:rgba(20,22,27,.018)}
-  .mesdia.finde .num{color:var(--text3)}
-  .mesdia.otro .num{color:var(--text3);opacity:.7}
+  /* ── A4 · EL GRIS DEJABA DE SIGNIFICAR TRES COSAS ───────────────────────────────────────────────
+     ANTES: el MISMO gris ('rgba(20,22,27,.018)' de fondo + número 'var(--text3)') marcaba día de otro
+     mes, fin de semana y día cerrado. Tres cosas distintas con la misma cara, y la peor de las tres
+     era una MENTIRA: una peluquería que abre el sábado veía su mejor día pintado como apagado.
+     AHORA son tres estados con marca propia, y la diferencia NO se apoya solo en el color —se lee
+     igual en blanco y negro— porque cada uno usa un RECURSO distinto:
+       · fuera del mes → tinta plana, la más apagada de las tres. No acepta citas.
+       · CERRADO       → TRAMA diagonal. Una trama no se confunde con una tinta plana ni en escala de
+                         grises ni con daltonismo, y dice «aquí no se trabaja» sin decir «esto no es
+                         de este mes».
+       · fin de semana ABIERTO → NADA. Se lee como cualquier día laborable, que es lo que es.
+     El 'finde' desaparece como estado visual: lo que decide la cara de un día es si está ABIERTO. */
+  .mesdia.otro{background:rgba(20,22,27,.022)}
+  .mesdia.otro .num{color:var(--text3);opacity:.55}
   .mesdia.otro .lin,.mesdia.otro .mas{opacity:.5}
+  .mesdia.cerrado{background-image:repeating-linear-gradient(135deg,transparent 0 5px,rgba(20,22,27,.085) 5px 6px)}
+  .mesdia.cerrado .num{color:var(--text2)}
   .mesdia:disabled{cursor:default}
-  .mesdia:disabled .num{color:var(--text3)}
-  .mesdia .lin{display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35}
-  .mesdia .pt{flex:0 0 auto;width:5px;height:5px;border-radius:50%}
-  .mesdia .mas{font-size:10px;color:var(--text3);line-height:1.3}
+  /* A7 · HORA + CLIENTE + SERVICIO. Y CUANDO NO CABE, SE RECORTA EL SERVICIO, NO EL CLIENTE: el
+     cliente es quien viene ('flex:0 1 auto', se queda con lo que necesita) y el servicio es el que
+     cede ('flex:1 1 0' — arranca en cero y solo crece con lo que sobra, así que es el primero en
+     quedarse con puntos suspensivos). Los dos con 'min-width:0', porque sin eso un nombre largo
+     desborda la casilla en vez de recortarse. */
+  .mesdia .lin{display:flex;align-items:baseline;gap:4px;font-size:10.5px;color:var(--text2);white-space:nowrap;overflow:hidden;line-height:1.35}
+  .mesdia .lin .cli{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .mesdia .lin .svc{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--text3)}
+  .mesdia .pt{flex:0 0 auto;width:5px;height:5px;border-radius:50%;align-self:center}
+  /* «+N más» ABRE EL DÍA (A7). Sigue siendo un 'span' DENTRO del botón del día —moverlo fuera
+     rompería lo que ya mide el gate visual— y su pulsación la recoge el propio botón, que mira si el
+     clic salió de aquí. Se pinta como lo que hace: un enlace, no una etiqueta muerta. */
+  .mesdia .mas{font-size:10px;color:var(--accent);line-height:1.3;font-weight:600;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+  /* A8 · CREAR DESDE EL MES. Botón real (teclado) tapado hasta que hace falta (ratón): aparece al
+     pasar por encima de la casilla y también al llegar con el tabulador. Solo existe en el DOM para
+     los días del mes que están ABIERTOS y con permiso de edición — en los cerrados y en los de otro
+     mes no se ofrece, así que no hay nada que esconder.
+
+     VA ARRIBA A LA DERECHA, Y NO ES ESTÉTICA. La primera versión tapaba la casilla ENTERA
+     ('inset:0') y su propio gate la tumbó: con el ratón encima, el panel se tragaba TODOS los clics
+     de la casilla — ya no se podía pulsar «+N más», ni seleccionar el día, ni abrirlo con dos clics.
+     Un botón nuevo no puede comerse los que ya había. Ahora es una pastilla en la única esquina que
+     siempre está libre (el número vive a la izquierda), como en Google Calendar. */
+  .mes-add{position:absolute;top:2px;right:3px;display:inline-flex;align-items:center;gap:2px;
+           appearance:none;border:0;border-radius:6px;padding:2px 6px;font-family:inherit;
+           font-size:.62rem;font-weight:700;line-height:1.4;cursor:pointer;white-space:nowrap;
+           color:var(--accent);background:color-mix(in srgb, var(--accent) 14%, var(--bg2));
+           box-shadow:inset 0 0 0 1px var(--accent);opacity:0;pointer-events:none;transition:opacity .12s}
+  .mes-add .corta{display:none}
+  .mescel:hover .mes-add{opacity:1;pointer-events:auto}
+  .mes-add:focus-visible{opacity:1;pointer-events:auto;outline:2px solid var(--accent);outline-offset:1px}
+  /* En una casilla de móvil no caben dos palabras: se queda el «+», con su nombre entero en la
+     etiqueta para quien use lector de pantalla. */
+  @media (max-width:700px){ .mes-add .larga{display:none} .mes-add .corta{display:inline} .mes-add{padding:1px 5px;font-size:.7rem} }
   .mes-pie{margin-top:1rem;padding-top:.8rem;border-top:1px solid var(--border);display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap;min-height:1.6rem}
   .mes-pie .d{font-weight:600}
   .mes-pie .s{color:var(--text2);font-size:.85rem}
   .mes-pie .a{margin-left:auto;font-size:.85rem;font-weight:600;color:var(--accent);cursor:pointer;background:none;border:0;font-family:inherit}
-  @media (max-width:480px){ .mesdia{min-height:66px;padding:3px} .mesdia .lin{font-size:9px} }`;
+  @media (max-width:480px){ .mes{--mes-alto:414px} .mesdia{padding:3px} .mesdia .lin{font-size:9px} }`;
 
 function vistaAgenda(c, db) {
   const editable = can(c, 'citas.edit');
@@ -1324,7 +1395,12 @@ function vistaAgenda(c, db) {
          son dos cosas distintas y confundirlas haría que quitar uno pareciera quitar el otro. -->
     <div id="agChipCliente" style="display:none;gap:.5rem;align-items:center;margin-bottom:.75rem"></div>
     <div id="agControles" style="display:none;gap:.75rem;flex-wrap:wrap;align-items:center;margin-bottom:.75rem;padding:.6rem .8rem;background:var(--bg2,rgba(0,0,0,.02));border-radius:8px">
-      <select class="form-control" id="agVista" style="width:auto" onchange="agCargar()"><option value="dia">Día</option><option value="semana">Semana</option><option value="mes">Mes</option></select>
+      <!-- A2 · AQUÍ VIVÍA UN SEGUNDO SELECTOR DE VISTA (Día/Semana/Mes) que hacía exactamente lo
+           mismo que el grupo de botones de arriba. Dos mandos para una decisión: el de arriba es el
+           patrón de Google Calendar, Outlook y Fresha, así que se queda ese y este se va. La vista
+           deja de guardarse en un '<select>' del DOM y pasa a una variable ('AG_VISTA'), que es lo
+           que era en realidad: estado, no un control. «Por puesto» y «Ver todo el equipo» SE QUEDAN
+           —no son duplicados de nada— y por eso esta caja de filtros sigue existiendo. -->
       <select class="form-control" id="agEje" style="width:auto" onchange="agCargar()"><option value="persona">Por persona</option><option value="recurso">Por ${escHtml(aj.puesto_sing.toLowerCase())}</option></select>
       <label style="font-size:.85rem;display:flex;align-items:center;gap:.35rem"><input type="checkbox" id="agVerTodo" onchange="agCargar()"> Ver todo el equipo</label>
     </div>
@@ -1825,13 +1901,18 @@ var COLOR={pedida:'#64748b',confirmada:'#16a34a',atendida:'#2563eb',no_show:'#b9
 function loadPrefs(){ try{ return JSON.parse(localStorage.getItem('agPrefs')||'{}'); }catch(e){ return {}; } }
 // Las preferencias de la agenda viven TODAS en el mismo sitio (agPrefs): vista, eje, ver-todo, el
 // paso de ZOOM y si se cerró el aviso de "sin horario". Un solo sitio, no un segundo sistema.
-function savePrefs(extra){ try{ var p=loadPrefs(); var n=Object.assign({}, p, {vista:document.getElementById('agVista').value, eje:document.getElementById('agEje').value, verTodo:document.getElementById('agVerTodo').checked}, extra||{}); localStorage.setItem('agPrefs', JSON.stringify(n)); }catch(e){} }
+function savePrefs(extra){ try{ var p=loadPrefs(); var n=Object.assign({}, p, {vista:AG_VISTA, eje:document.getElementById('agEje').value, verTodo:document.getElementById('agVerTodo').checked}, extra||{}); localStorage.setItem('agPrefs', JSON.stringify(n)); }catch(e){} }
 function agHoy(){ document.getElementById('agFecha').value=ymd(new Date()); agCargar(); }
 function toggleControles(){ var c=document.getElementById('agControles'); c.style.display=(c.style.display==='none'||!c.style.display)?'flex':'none'; }
-function vistaActual(){ return document.getElementById('agVista').value; }
-// Las tres vistas son botones a la vista; el <select> de "Filtros" sigue existiendo y manda igual, para
-// no romper nada que ya lo usara (ni las preferencias guardadas).
-function setVista(v){ document.getElementById('agVista').value=v; agCargar(); }
+// ── A2 · LA VISTA ES ESTADO, NO UN CONTROL ────────────────────────────────────────────────────────
+// Hasta hoy la vista vivía en el 'value' de un '<select>' escondido en «Filtros», y el grupo de
+// botones de arriba solo lo escribía. Eran DOS mandos para una decisión, y el de abajo sobra.
+// Retirado el '<select>', el estado vive aquí. 'AG_VISTA' es la única fuente: los botones la escriben
+// con 'setVista', todo lo demás la lee con 'vistaActual()', y 'agPrefs' la guarda igual que antes
+// (misma clave 'vista', así que a nadie se le pierde la preferencia que ya tenía).
+var AG_VISTA='dia';
+function vistaActual(){ return AG_VISTA; }
+function setVista(v){ AG_VISTA=v; pintaBotonesVista(v); agCargar(); }
 function pintaBotonesVista(v){
   ['dia','semana','mes'].forEach(function(x){
     var b=document.getElementById('vb'+x.charAt(0).toUpperCase()+x.slice(1)); if(!b) return;
@@ -1987,9 +2068,37 @@ var DIAS_CAB=['L','M','X','J','V','S','D'];
 function horas(min){
   if(!min) return 'sin hueco libre';
   var h=Math.floor(min/60), m=min%60;
-  return (h?h+' h':'') + (h&&m?' ':'') + (m?m+' min':'') + ' libre';
+  var t=(h?h+' h':'') + (h&&m?' ':'') + (m?m+' min':'');
+  // «9 h libres», «1 h libre», «45 min libres». El singular se reserva para cuando de verdad hay UNA.
+  var uno=(h===1&&m===0)||(h===0&&m===1);
+  return t + (uno?' libre':' libres');
 }
 function citasTxt(n){ return n ? (n===1?'1 cita':n+' citas') : 'sin citas'; }
+// ── A1 · NINGUNA CIFRA DESNUDA: EL PIE DICE SU BASE ───────────────────────────────────────────────
+// El número NO cambia y el cálculo NO se toca: 168 h eran correctas —720 min de apertura × 14
+// personas—. Lo que fallaba es que nadie podía saber que estaba leyendo CAPACIDAD DE EQUIPO y no las
+// horas del día, y «168 h libres» en una casilla de un martes se lee como un error del programa.
+// Es la misma regla que CANON ya impone a los márgenes: toda cifra declara sobre qué está calculada.
+//   · una sola persona → no hay base que declarar: son las horas del día. «12 h libres».
+//   · con equipo       → manda la OCUPACIÓN (que sí es comparable entre días) y la capacidad va
+//                        detrás, explícita: «0 % ocupado (168 h libres entre 14 personas)».
+//   · cerrado          → «Cerrado». Nunca «0 h libre»: un negocio cerrado no tiene cero huecos, no
+//                        tiene día.
+function libreTxt(d){
+  if(!d.abierto) return 'Cerrado';
+  var libre=horas(d.libres_min);
+  var n=d.personas_abiertas||1;
+  if(n<=1) return libre;
+  var cap=d.capacidad_min||0;
+  var pct=cap?Math.round(((cap-d.libres_min)/cap)*100):0;
+  return pct+' % ocupado ('+libre+' entre '+n+' personas)';
+}
+// Lo que dice la casilla entera: cuántas citas y cómo está el día. En un día cerrado sin citas el
+// «sin citas» sobra —lo dice ya el «Cerrado»— y quitarlo deja la frase más corta y más clara.
+function resumenDia(d){
+  if(!d.abierto) return d.citas ? citasTxt(d.citas)+' · Cerrado' : 'Cerrado';
+  return citasTxt(d.citas)+' · '+libreTxt(d);
+}
 // Solo la PRIMERA letra. El text-transform capitalize de CSS ponía «Agosto De 2026» y «Sábado, 15 De Agosto».
 function cap(s){ return s ? s.charAt(0).toUpperCase()+s.slice(1) : s; }
 function fLargoDia(f){
@@ -2010,37 +2119,53 @@ function renderMes(data, fechaSel){
   var hueco=(primero.getUTCDay()+6)%7;   // el lunes va primero (locale ES)
   // P3 — FUERA el segundo «Agosto 2026» dentro de la tarjeta: el título grande de la cabecera ya lo
   // dice, y repetirlo a 20 px era decir dos veces lo mismo.
+  // A5 · las filas son las semanas REALES del mes, y se reparten el alto entre ellas.
+  var sobran=(7-((hueco+dias.length)%7))%7;
+  var semanas=(hueco+dias.length+sobran)/7;
   var html='<div class="mes">'
     +'<div class="mes-cab">'+DIAS_CAB.map(function(d){ return '<span>'+d+'</span>'; }).join('')+'</div>'
-    +'<div class="mes-rej">';
-  // Los días del mes ANTERIOR que completan la primera semana: gris muy claro, no ocultos.
-  var esFinde=function(f){ var d=new Date(f+'T00:00:00Z').getUTCDay(); return d===0||d===6; };
+    +'<div class="mes-rej" style="grid-template-rows:repeat('+semanas+',1fr)">';
+  // Una casilla del mes = envoltorio '.mescel' + botón '.mesdia' dentro (+ el botón de crear, si toca).
+  // El envoltorio existe por A8: «+ Nueva cita» tiene que ser un botón de verdad para llegar con el
+  // teclado, y no puede ir dentro del botón del día.
+  function celda(cls, fecha, res, num, lineas, cerrado, ofreceAlta){
+    return '<div class="mescel">'
+      + '<button type="button" class="'+cls+'" data-fecha="'+fecha+'" data-res="'+esc(res)+'"'
+      +   (cerrado?' disabled':'')+' aria-label="'+esc(fLargoDia(fecha)+(res?', '+res:''))+'">'
+      +   '<span class="num">'+num+'</span>'+(lineas||'')
+      + '</button>'
+      + (ofreceAlta ? '<button type="button" class="mes-add" data-nueva="'+fecha+'" tabindex="0"'
+          + ' aria-label="Nueva cita el '+esc(fLargoDia(fecha))+'">'
+          + '<span class="larga">+ Nueva cita</span><span class="corta" aria-hidden="true">+</span></button>' : '')
+      + '</div>';
+  }
+  // Los días del mes ANTERIOR que completan la primera semana: los más apagados, y sin ofrecer alta.
   for(var i=hueco;i>0;i--){
     var pf=ymd(new Date(primero.getTime()-i*86400000));
-    html+='<button type="button" class="mesdia otro'+(esFinde(pf)?' finde':'')+'" data-fecha="'+pf+'" data-res="Otro mes" aria-label="'+esc(fLargoDia(pf))+'"><span class="num">'+(+pf.slice(8))+'</span></button>';
+    html+=celda('mesdia otro', pf, 'Otro mes', +pf.slice(8), '', false, false);
   }
   dias.forEach(function(d){
-    var cls='mesdia'+(d.fecha===hoy?' hoy':'')+(d.fecha===fechaSel?' sel':'')+(esFinde(d.fecha)?' finde':'');
-    var resumen=citasTxt(d.citas)+(d.abierto?', '+horas(d.libres_min):', cerrado');
+    // A4 · la cara del día la decide si está ABIERTO, no si cae en fin de semana. Un sábado abierto
+    // se pinta como cualquier laborable; un día cerrado lleva su trama, sea martes o domingo.
+    var cls='mesdia'+(d.fecha===hoy?' hoy':'')+(d.fecha===fechaSel?' sel':'')+(d.abierto?'':' cerrado');
+    var resumen=resumenDia(d);
     // Hasta TRES escritas; la cuarta se resume. El total exacto sigue en el aria-label y en el pie.
     var lineas='';
     (d.primeras||[]).slice(0,3).forEach(function(x){
       var col=(window.CITA_ESTADOS||{})[x.estado]||{fuerte:'#64748b'};
       lineas+='<span class="lin"><span class="pt" style="background:'+col.fuerte+'"></span>'
-        +'<b style="font-weight:600">'+hcorta(x.min)+'</b> '+esc(x.cliente)+'</span>';
+        +'<b style="font-weight:600">'+hcorta(x.min)+'</b> '
+        +'<span class="cli">'+esc(x.cliente)+'</span>'
+        +(x.servicio?'<span class="svc">'+esc(x.servicio)+'</span>':'')+'</span>';
     });
-    if(d.citas>3) lineas+='<span class="mas">+'+(d.citas-3)+' más</span>';
-    html+='<button type="button" class="'+cls+'" data-fecha="'+d.fecha+'"'
-      +' data-res="'+esc(resumen)+'"'+(d.abierto?'':' disabled')
-      +' aria-label="'+esc(fLargoDia(d.fecha)+', '+resumen)+'">'
-      +'<span class="num">'+d.dia+'</span>'+lineas+'</button>';
+    if(d.citas>3) lineas+='<span class="mas" data-abre="'+d.fecha+'">+'+(d.citas-3)+' más</span>';
+    html+=celda(cls, d.fecha, resumen, d.dia, lineas, !d.abierto, !!(d.abierto && window.CITAS_EDIT));
   });
   // Y los del mes SIGUIENTE hasta cerrar la última semana.
   var ultimo=new Date(dias[dias.length-1].fecha+'T00:00:00Z');
-  var sobran=(7-((hueco+dias.length)%7))%7;
   for(var j=1;j<=sobran;j++){
     var nf=ymd(new Date(ultimo.getTime()+j*86400000));
-    html+='<button type="button" class="mesdia otro'+(esFinde(nf)?' finde':'')+'" data-fecha="'+nf+'" data-res="Otro mes" aria-label="'+esc(fLargoDia(nf))+'"><span class="num">'+(+nf.slice(8))+'</span></button>';
+    html+=celda('mesdia otro', nf, 'Otro mes', +nf.slice(8), '', false, false);
   }
   html+='</div><div class="mes-pie" id="mesPie"></div></div>';
   box.innerHTML=html;
@@ -2060,8 +2185,21 @@ function renderMes(data, fechaSel){
     b.addEventListener('focus', function(){ selDia(f); });
     if(b.disabled) return;
     // UN clic selecciona (y actualiza el pie). DOS abren el día.
-    b.addEventListener('click', function(){ selDia(f); });
+    // A7 · SALVO si el clic salió del «+N más»: eso abre el día directamente, que es lo que promete.
+    // Se resuelve aquí y no con un botón propio porque «+N más» vive DENTRO del botón del día, y un
+    // botón dentro de otro botón no es HTML válido.
+    b.addEventListener('click', function(ev){
+      var mas=ev.target.closest && ev.target.closest('.mas');
+      if(mas && b.contains(mas)){ ev.preventDefault(); ev.stopPropagation(); abrirDia(f); return; }
+      selDia(f);
+    });
     b.addEventListener('dblclick', function(){ abrirDia(f); });
+  });
+  // A8 · CREAR DESDE EL MES. El día se hereda de la casilla, igual que la vista Día hereda hora y
+  // persona del hueco que se pulsa. Solo existe en las casillas abiertas del mes (ver 'celda'), así
+  // que aquí no hay que volver a comprobar si el día admite citas.
+  [].forEach.call(box.querySelectorAll('.mes-add'), function(b){
+    b.addEventListener('click', function(ev){ ev.preventDefault(); ev.stopPropagation(); mesNueva(b.getAttribute('data-nueva')); });
   });
   function selDia(f){
     [].forEach.call(box.querySelectorAll('.mesdia'), function(x){ x.classList.toggle('sel', x.getAttribute('data-fecha')===f); });
@@ -2070,6 +2208,16 @@ function renderMes(data, fechaSel){
   window.__mesSel=selDia;
 }
 function abrirDia(f){ document.getElementById('agFecha').value=f; setVista('dia'); }
+// A8 · «+ Nueva cita» desde una casilla del mes: se pone ESE día como fecha de trabajo y se abre el
+// alta de siempre. No hay un segundo formulario de cita: es 'openNuevaCita', que ya lee '#agFecha'.
+// La hora NO se hereda (una casilla de mes no tiene hora) y por eso el alta la sigue preguntando —
+// al revés que desde un hueco de la vista Día, donde sí se sabe y no se vuelve a preguntar.
+function mesNueva(f){
+  if(!window.CITAS_EDIT) return;
+  document.getElementById('agFecha').value=f;
+  if(window.__mesSel) window.__mesSel(f);
+  openNuevaCita();
+}
 function colDefs(eje, data){
   if(eje==='recurso'){ return [{id:null,nombre:'Sin '+(window.PUESTO_SING||'puesto').toLowerCase()}].concat(META.recursos.map(r=>({id:r.id,nombre:r.nombre}))); }
   var verTodo=document.getElementById('agVerTodo').checked;
@@ -2349,7 +2497,7 @@ async function onDrop(ev){
   var id=ev.dataTransfer.getData('text/plain'); if(!id) return;
   var cell=ev.currentTarget; var fecha=cell.dataset.fecha; var min=parseInt(cell.dataset.min);
   var body={fecha:fecha,inicio_min:min};
-  if(cell.dataset.col!==undefined){ var eje=document.getElementById('agEje').value; if(document.getElementById('agVista').value!=='semana'){ if(eje==='recurso') body.recurso_id=cell.dataset.col||null; else body.user_id=cell.dataset.col||null; } }
+  if(cell.dataset.col!==undefined){ var eje=document.getElementById('agEje').value; if(vistaActual()!=='semana'){ if(eje==='recurso') body.recurso_id=cell.dataset.col||null; else body.user_id=cell.dataset.col||null; } }
   try{ await api('POST','/api/erp/citas/'+id+'/mover',body); toast('Cita movida'); agCargar(); }catch(e){ toast(e.message,'err'); }
 }
 // ── NUEVA CITA — panel rápido (3 toques desde un hueco de la rejilla) ─────────
@@ -2606,7 +2754,7 @@ async function bGuardar(){
   try{ await api('POST','/api/erp/citas/bloqueo',body); closeModal('mBloq'); toast('Bloqueado'); agCargar(); }catch(e){ toast(e.message,'err'); }
 }
 // De entrada: HOY, por persona, solo quien trabaja hoy (2.1). Se recuerda lo último que se eligió (2.2).
-(function initAgenda(){ var p=loadPrefs(); if(p.vista)document.getElementById('agVista').value=p.vista; if(p.eje)document.getElementById('agEje').value=p.eje; var vt=document.getElementById('agVerTodo'); if(vt)vt.checked=!!p.verTodo;
+(function initAgenda(){ var p=loadPrefs(); if(p.vista)AG_VISTA=p.vista; if(p.eje)document.getElementById('agEje').value=p.eje; var vt=document.getElementById('agVerTodo'); if(vt)vt.checked=!!p.verTodo;
   initDate(); pintaTitulo(); pintaZoom();
   // Los FILTROS se despliegan solos si venían tocados. La vista ya no: ahora son botones a la vista.
   if((p.eje&&p.eje!=='persona')||p.verTodo){ document.getElementById('agControles').style.display='flex'; }

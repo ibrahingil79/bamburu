@@ -312,12 +312,12 @@ try {
     d.click(); return d.getAttribute('data-fecha');
   });
   await dormir(400);
-  const trasClic = await page.evaluate(() => ({ vista: document.getElementById('agVista').value, sel: (document.querySelector('.mesdia.sel') || {}).dataset?.fecha, pie: document.getElementById('mesPie').textContent }));
+  const trasClic = await page.evaluate(() => ({ vista: vistaActual(), sel: (document.querySelector('.mesdia.sel') || {}).dataset?.fecha, pie: document.getElementById('mesPie').textContent }));
   ok(trasClic.vista === 'mes' && trasClic.sel === otro, 'UN clic selecciona el día y no se sale del mes', JSON.stringify(trasClic.sel));
   ok(trasClic.pie.includes(String(+otro.slice(8))), 'y la franja de abajo pasa a ser la del día SELECCIONADO, no la del ratón', trasClic.pie.trim().slice(0, 48));
   await page.evaluate(f => abrirDia(f), otro);
   await page.waitForFunction(() => !!document.getElementById('agWrap'), { timeout: 8000 });
-  ok(await page.evaluate(() => document.getElementById('agVista').value === 'dia'), '«Abrir el día →» abre la vista Día');
+  ok(await page.evaluate(() => vistaActual() === 'dia'), '«Abrir el día →» abre la vista Día');
 
   // ── [13] El mes respeta los MISMOS filtros que el día ─────────────────────────────────────────
   // Una segunda persona que NO trabaja hoy, con una cita hoy. En Día no tiene columna (salvo "ver
@@ -443,7 +443,7 @@ try {
       puntos: lleno ? lleno.querySelectorAll('.pt').length : 0,
       segundoTitulo: !!document.querySelector('.mes-tit'),
       zoom: document.getElementById('agZoom').style.display,
-      finde: c.filter(x => x.classList.contains('finde')).length,
+      findeMarcado: c.filter(x => x.classList.contains('finde')).length,
       otros: c.filter(x => x.classList.contains('otro')).length,
     };
   });
@@ -456,7 +456,13 @@ try {
   ok(mm.vacias > 0, 'los días sin citas se quedan callados', mm.vacias + ' casillas vacías');
   ok(!mm.segundoTitulo, 'ya no hay un SEGUNDO «Agosto 2026» dentro de la tarjeta');
   ok(mm.zoom === 'none', 'el zoom S/M/L no se enseña en Mes');
-  ok(mm.finde > 0 && mm.otros > 0, 'fin de semana y días de otro mes van marcados', mm.finde + ' findes · ' + mm.otros + ' de otro mes');
+  // REESCRITA POR A4 (21 ago 2026). Antes exigía que el FIN DE SEMANA fuera marcado, y eso pasó a
+  // ser justo lo contrario de lo correcto: un sábado ABIERTO tiene que leerse como un día normal —
+  // marcarlo apagado era decirle a una peluquería que su mejor día no cuenta. Lo que va marcado
+  // ahora es lo que de verdad se distingue: el día de OTRO MES y el día CERRADO, cada uno con su
+  // marca propia. El gate de la vista Mes (gate-citas-mes) mide las tres firmas una por una.
+  ok(mm.otros > 0 && mm.findeMarcado === 0, 'los días de otro mes van marcados, y el fin de semana ABIERTO ya no (A4)',
+     mm.otros + ' de otro mes · ' + mm.findeMarcado + ' findes marcados');
 
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   console.log('\n[8] DOS CITAS A LA MISMA HORA SE VEN LAS DOS (Tarea 2 · cabo 1)');
@@ -481,7 +487,7 @@ try {
   const verDia = async () => {
     await page.goto(BASE + '/admin/citas', { waitUntil: 'networkidle0' });
     await page.waitForFunction(() => typeof irA === 'function', { timeout: 8000 });
-    await page.evaluate(f => { document.getElementById('agVista').value = 'dia'; irA(f); }, D2);
+    await page.evaluate(f => { setVista('dia'); irA(f); }, D2);
     await dormir(1600);
   };
   await verDia();
@@ -521,7 +527,7 @@ try {
   const idSem = insS.run('SEM' + RID, cSolape, otroEmp, D2, 600, 60).lastInsertRowid;   // MISMA hora que A
   await page.goto(BASE + '/admin/citas', { waitUntil: 'networkidle0' });
   await page.waitForFunction(() => typeof irA === 'function', { timeout: 8000 });
-  await page.evaluate(f => { document.getElementById('agVista').value = 'semana'; irA(f); }, D2);
+  await page.evaluate(f => { setVista('semana'); irA(f); }, D2);
   await dormir(1600);
   const sem = await page.evaluate((a, b2) => {
     const r = id => { const e = document.querySelector('.citaBlock[data-id="' + id + '"]');

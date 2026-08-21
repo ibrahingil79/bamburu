@@ -36,6 +36,13 @@ export const GRUPOS = {
     'gate-agenda-calendario',        // el calendario de la agenda (negocio propio)
     'gate-citas-pantalla',           // la pantalla de citas: atender, cobrar y anular (neto-cero)
     'gate-oficio-pantalla',          // el vocabulario del oficio, en la pantalla y en el menú
+    // ── LA VISTA MES (Tarea A · 21 ago 2026) ─────────────────────────────────────────────────
+    // Se declara AQUÍ el mismo día que nace, no «cuando toque»: un gate fuera de esta lista no lo
+    // ejecuta nadie, y cuatro de los de arriba llevaban semanas invisibles por eso mismo.
+    // DECLARAR NO ES EJECUTAR: entra en el mapa para que el barrido lo alcance CUANDO Ibrahin lo
+    // pida; no se engancha a ningún disparador automático.
+    'gate-citas-mes',                // la vista Mes: base de la cifra, un solo selector, los tres grises,
+                                     // el reparto del alto, el servicio en la casilla y crear desde el mes
   ],
   // ── LA PUERTA PÚBLICA DE RESERVA (peldaño 7 · pieza 6) — DENTRO DEL BARRIDO (20 ago 2026) ────
   // SEGUNDA ZONA ENTERA que aparece fuera del mapa en el mismo día (la primera fue la agenda). Las
@@ -129,6 +136,7 @@ export const EMPIEZAN_DE_CERO = new Set([
   'gate-inicio-cuadro-mando',      // negocio nuevo + uno vacío + un empleado sin permisos
   'gate-vigia-agenda',             // negocio nuevo: los cuatro detectores de agenda
   'gate-agenda-calendario',        // negocio nuevo: el calendario, sin datos ajenos
+  'gate-citas-mes',                // DOS negocios nuevos: uno de una persona y otro de catorce
 ]);
 
 // Los que necesitan el negocio de desarrollo en silencio. Cada uno con su MOTIVO: un gate marcado

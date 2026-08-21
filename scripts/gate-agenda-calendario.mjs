@@ -201,14 +201,14 @@ try {
     return f;
   });
   await new Promise(r => setTimeout(r, 300));
-  const siguesEnMes = await p.evaluate(() => document.getElementById('agVista').value === 'mes');
+  const siguesEnMes = await p.evaluate(() => vistaActual() === 'mes');
   ok(siguesEnMes, 'un clic SELECCIONA el día y no se sale del mes');
   await p.evaluate((f) => {
     const d = document.querySelector('.mesdia[data-fecha="' + f + '"]');
     d.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
   }, objetivo);
   await p.waitForFunction(() => document.querySelectorAll('.agcell').length > 0, { timeout: 8000 });
-  const tras = await p.evaluate(() => ({ fecha: document.getElementById('agFecha').value, vista: document.getElementById('agVista').value }));
+  const tras = await p.evaluate(() => ({ fecha: document.getElementById('agFecha').value, vista: vistaActual() }));
   ok(tras.vista === 'dia' && tras.fecha === objetivo, 'y pulsándolo dos veces se abre la vista de Día en esa fecha (' + objetivo + ')', JSON.stringify(tras));
 
   // Navegación adelante/atrás en la unidad correcta.
@@ -276,7 +276,7 @@ try {
   await pm.setCookie({ name: 'asess', value: pel.tok, domain: pel.slug + '.localhost', path: '/' });
   await pm.goto('http://' + pel.slug + '.localhost:3000/admin/citas', { waitUntil: 'networkidle0' });
   await pm.waitForFunction(() => typeof irA === 'function', { timeout: 8000 });
-  await pm.evaluate(() => { document.getElementById('agVista').value = 'mes'; agCargar(); });
+  await pm.evaluate(() => setVista('mes'));
   await pm.waitForFunction(() => document.querySelectorAll('.mesdia').length > 0, { timeout: 8000 });
   await new Promise(r => setTimeout(r, 500));
 
@@ -318,7 +318,7 @@ try {
   await pd.setCookie({ name: 'asess', value: pel.tok, domain: pel.slug + '.localhost', path: '/' });
   await pd.goto('http://' + pel.slug + '.localhost:3000/admin/citas', { waitUntil: 'networkidle0' });
   await pd.waitForFunction(() => typeof agCargar === 'function', { timeout: 8000 });
-  await pd.evaluate(() => { document.getElementById('agVista').value = 'mes'; agCargar(); });
+  await pd.evaluate(() => setVista('mes'));
   await pd.waitForFunction(() => document.querySelectorAll('.mesdia').length > 0, { timeout: 15000 });
   const rmes0 = await pd.evaluate(() => document.getElementById('agFecha').value.slice(0, 7));
   await pd.evaluate(() => document.querySelector('.mes').dispatchEvent(

@@ -108,9 +108,18 @@
 > real va **debajo**, marcado. No se ha reescrito ni una palabra suya, y nada falso queda escrito
 > como si fuera cierto.
 
-**RECUENTO (V2): 11 ítems (A–K) · 46 subpuntos.**
+**RECUENTO — al registrarse (21 ago 2026): 11 ítems (A–K) · 46 subpuntos.**
 `A 8 · B 3 · C 11 · D 5 · E 4 · F 4 · G 5 · H 3 · I 3 · J 0 · K 0` = **46**.
 (J y K son ítems bloqueados sin subpuntos: su texto es una sola afirmación.)
+
+**RECUENTO VIGENTE — tras la tarea A (21 ago 2026): 43 subpuntos vivos, 6 hechos, 37 pendientes.**
+`A 6 · B 3 · C 11 · D 5 · E 4 · F 4 · G 4 · H 3 · I 3 · J 0 · K 0` = **43**.
+- **3 RETIRADOS**, con su motivo escrito en su sitio y **sin borrar la línea**: **A3** y **A6**
+  (premisas falsas, las tumbó la auditoría del encargo 0) y **G3** (ya estaba hecho).
+- **6 HECHOS**, todos de A: **A1 · A2 · A4 · A5 · A7 · A8** — entrega del 21 ago 2026.
+- Quedan **37 pendientes** y **2 bloqueados** (J y K), que no dependen de Ibrahin.
+- **A1, A4 y A7 fueron REESCRITOS** por el dueño antes de construirse; el recuento no cambia por eso
+  (siguen siendo los mismos subpuntos), solo cambia lo que piden.
 
 ---
 
@@ -211,66 +220,120 @@ Son las de **U7 (8 jul 2026)**: **`/admin/analytics`**, **`/admin/discounts`** y
 
 ## GRUPO 1 — DEFECTOS DE LO YA CONSTRUIDO
 
-#### A. CALENDARIO — VISTA MES · **PENDIENTE** · *siguiente tarea*
+#### A. CALENDARIO — VISTA MES · ✅ **HECHO (21 ago 2026)** · commit `PENDIENTE_HASH`
 
-> **A. CALENDARIO — VISTA MES. Ocho defectos, una sola entrega:**
+> **⚠️ EL ENCARGO DEL 21 AGO SUSTITUYÓ PARTE DE ESTE ÍTEM.** Con la auditoría del encargo 0 delante
+> (`f6c864c`), Ibrahin **reescribió A1, A4 y A7** y **RETIRÓ A3 y A6**. Abajo va el texto VIGENTE,
+> literal. El original no se borra: queda debajo, en «lo que decía antes», porque el registro sirve
+> justo para que no se pierda por el camino lo que se dijo.
+
+> **A. CALENDARIO — VISTA MES.**
+> **A1 — EL PIE DICE SU BASE (sustituye al A1 original).** El número 168 es CORRECTO: 720 min (8:00–20:00) × 14 personas = 10.080 min = 168 h. Comprobado. NO se toca el cálculo. Lo que falla es que el dueño no puede saber que está leyendo capacidad de equipo y no horario del día. Regla, la misma que CANON ya impone a los márgenes: TODA CIFRA DEBE DECLARAR SU BASE. · Negocio de UNA persona → «sin citas · 12 h libres» · Negocio CON EQUIPO → la ocupación manda y la capacidad va detrás, explícita: «sin citas · 0 % ocupado (168 h libres entre 14 personas)» · Día CERRADO → «Cerrado». Nunca «0 h libre». El texto exacto lo eliges tú según el espacio real, pero la BASE debe ser legible sin abrir nada. Prohibido dejar un número desnudo. La segunda mitad del A1 original (que huecos() ya dice «sin hueco libre») está HECHA. No la rehagas.
+> **A2 — UN SOLO SELECTOR DE VISTA.** Se queda el grupo de botones Día/Semana/Mes de arriba (patrón de Google Calendar, Outlook y Fresha). Desaparece el desplegable duplicado de la barra de abajo. «Por puesto» y «Ver todo el equipo» SE QUEDAN: no son duplicados.
+> **A3 — RETIRADO.** Premisa falsa del encargo original: ese pie NO es un resto de la vista Día colándose en Mes; es el pie PROPIO de la vista Mes, y la vista Día ni siquiera tiene uno. Se queda donde está. NO lo quites.
+> **A4 — EL GRIS DEJA DE SIGNIFICAR TRES COSAS (sustituye al A4 original).** No hay «regla de negrita» que borrar: el negro es lo que queda cuando el gris se lleva el resto. El defecto real es que hoy el MISMO gris dice tres cosas y el dueño no las distingue: (a) día de otro mes · (b) fin de semana · (c) día cerrado. Deja los tres estados VISUALMENTE DISTINTOS entre sí, y distinguibles también en blanco y negro (no confíes solo en el color): (a) fuera del mes → el más apagado, y no acepta citas · (b) fin de semana ABIERTO → se lee como día normal. Hoy se pinta gris y eso es MENTIRA: una peluquería que abre sábado tiene ahí su mejor día · (c) cerrado → marca propia e inequívoca (fondo o trama), NO el mismo gris que (a). Un día cerrado debe leerse «cerrado», no «no es de este mes». HOY sigue siendo el único destacado. El círculo rojo actual vale.
+> **A5 — LAS FILAS REPARTEN EL ALTO.** Hoy las filas de semana tienen alto fijo y un mes casi vacío es una pared en blanco. Un mes de 5 semanas pinta 5 filas y reparte el alto disponible entre ellas. Un mes de 6 semanas pinta 6. Nada de fila muerta.
+> **A6 — RETIRADO.** El sombreado de la celda del día 19 NO se reproduce desde el código. No lo persigas y NO inventes un arreglo. Si vuelve a aparecer, se abre tarea propia con captura.
+> **A7 — SOLO LA MITAD QUE FALTA (reducido).** YA ESTÁ HECHO: hora, cliente, punto de estado y tope de 3 citas por celda. No lo rehagas. FALTA y hay que construir: · El SERVICIO junto al cliente. Si no cabe entero, se recorta el nombre del SERVICIO antes que el del cliente. · «+N más» debe ABRIR EL DÍA al pulsarlo. Hoy no hace nada.
+> **A8 — CREAR DESDE LA VISTA MES.** Pasar por encima de una celda ofrece «+ Nueva cita», con ratón y con teclado, y al pulsar abre la cita con ESE día ya puesto. Igual que ya funciona en la vista Día. En días CERRADOS y en días FUERA DEL MES no se ofrece.
+
+**QUÉ SE ENTREGÓ, PIEZA A PIEZA** — todo en `modules/erp/routes/citas.js`:
+
+- **A1 · el número no cambia; ahora dice de dónde sale.** El cálculo (`Σ personas (tramosPersona −
+  ocupacionPersona)`) queda **intacto**. Lo que viaja además son las dos cifras que lo explican
+  —`capacidad_min` y `personas_abiertas`—, sacadas **del mismo bucle** que ya calculaba los huecos,
+  así que no hay una segunda fuente que pueda desviarse. La pantalla decide qué decir:
+  una persona → «**9 h libres**» · con equipo → «**0 % ocupado (168 h libres entre 14 personas)**» ·
+  cerrado → «**Cerrado**», y la cadena «0 h» no aparece en ningún sitio. Con **una sola** persona
+  **no se declara base**: «entre 1 personas» sería ruido, no información.
+- **A2 · un mando, no dos.** Fuera el `<select>` de «Filtros». La vista deja de vivir en el `value`
+  de un elemento del DOM y pasa a ser **estado** (`AG_VISTA`), que es lo que era. Se guarda en
+  `agPrefs` con **la misma clave que antes**, así que a nadie se le pierde su preferencia.
+  «Por puesto» y «Ver todo el equipo» siguen donde estaban.
+- **A4 · tres estados, tres caras, y ninguna depende solo del color.** Fuera del mes = tinta plana
+  apagada · **cerrado = trama diagonal** (se distingue en escala de grises y con daltonismo) ·
+  **fin de semana abierto = un día normal**, sin apagar. El `finde` desaparece como estado visual:
+  lo que decide la cara de un día es **si está abierto**. HOY sigue siendo el único destacado.
+- **A5 · la rejilla tiene alto total y las filas se lo reparten.** `grid-template-rows:repeat(N,1fr)`
+  con N = semanas reales. Medido: 6 semanas → 6 filas de 90 px · 5 semanas → 5 filas de **108 px**,
+  y los dos meses ocupan **540 px exactos**. Ya no hay pared en blanco ni fila muerta.
+- **A7 · el servicio, de la misma función que lo escribe en la vista Día** (`serviciosDeCita`): no
+  hay un segundo texto del servicio que pueda decir otra cosa. Y **cuando no cabe cede el servicio,
+  no el cliente** — el cliente toma su ancho (`flex:0 1 auto`) y el servicio vive de lo que sobra
+  (`flex:1 1 0`). El **«+N más» abre el día** al pulsarlo.
+- **A8 · crear desde el mes**, con ratón y con teclado, heredando el día de la casilla. No se ofrece
+  en días cerrados ni en días de otro mes, y **no existe en el DOM** para ellos: no hay nada que
+  esconder.
+
+**LO QUE EL PROPIO GATE DESTAPÓ, Y ERA MÍO.** La primera versión de A8 tapaba la casilla **entera**
+(`inset:0`). Con el ratón encima, ese panel **se tragaba todos los clics de la casilla**: dejaba de
+poderse pulsar «+N más», seleccionar el día y abrirlo con dos clics. Un botón nuevo no puede comerse
+los que ya había. Ahora es una **pastilla en la esquina de arriba a la derecha** —la única que
+siempre está libre, porque el número vive a la izquierda—, como en Google Calendar.
+
+**VERIFICACIÓN — `gate-citas-mes`: 56 aserciones, 0 fallos, 19 s, contra `https://<slug>.bamburu.com`.**
+Ni barrido corto ni completo: el encargo pedía **este gate y solo este**.
+- **PRUEBA DE REVERSIÓN, las seis piezas por separado** (deshacer → desplegar → repasar → restaurar).
+  Cada una tumba lo suyo, y **ninguna aserción sobrevivió a que le quitaran el producto de debajo**:
+  **sin A1 → 9 rojos · sin A2 → 2 · sin A4 → 2 · sin A5 → 3 · sin A7 → 4 · sin A8 → 7.**
+- **Y la reversión arregló dos aserciones mías, no el producto:** al quitar A7 y A8 el gate **moría
+  con una excepción** en vez de dar rojo, y una excepción se lleva por delante todos los bloques que
+  vienen detrás — o sea que habría tapado regresiones ajenas al fallo. Endurecidas con guardas: hoy
+  las dos reversiones dan **rojo limpio y el gate llega al final** (52+4 y 49+7 de 56).
+
+**⚠️ DOS GATES AJENOS TOCADOS, Y SIN REEJECUTAR.** `gate-agenda-calendario` y `gate-agenda-visual`
+leían y escribían `document.getElementById('agVista').value`, que **A2 retira**: se han pasado a
+`vistaActual()` / `setVista()`, sin cambiar ni una aserción. Y en `gate-agenda-visual` se ha
+**reescrito una aserción que A4 deja falsa** —exigía que el fin de semana fuera marcado, y ahora un
+sábado abierto tiene que leerse como un día normal—; pasa a exigir lo que sí se distingue: otro mes y
+cerrado. **Los dos están en el barrido y NO se han vuelto a correr** (el encargo autorizaba un solo
+gate): su estado hoy es **sin verificar**, y hay que pasarlos en el próximo barrido.
+
+**⚠️ ANOTADO Y NO ARREGLADO — «permiso sobre agenda ajena» NO EXISTE en el producto.** La
+comprobación 17 del encargo lo daba por supuesto. Hoy la agenda tiene **un solo candado, `citas.read`**
+(más `citas.edit` para escribir): quien lo tiene ve las citas de todo el mundo. El gate verifica, en
+la **respuesta del servidor**, las dos cosas que sí existen — sin `citas.read` el servidor devuelve
+**403 y ni un nombre de cliente**, y el filtro por eje **se aplica en el servidor** (la cita de quien
+no trabaja ese día no viaja, y con «ver todo el equipo» sí). **No se ha inventado un permiso nuevo:**
+el encargo prohíbe expresamente tocar el sistema de permisos. Queda para decidir.
+
+**FICHA DE `gate-citas-mes` — DECLARADO, QUE NO ES LO MISMO QUE EJECUTADO.**
+Se declara **el mismo día que nace** y no «cuando toque»: un gate fuera de `GRUPOS` **no lo ejecuta
+nadie**, y cuatro comprobaciones de agenda llevaban semanas invisibles justo por eso. Entrar en el
+mapa **no lo engancha a ningún disparador**: significa que el barrido lo alcanzará **cuando Ibrahin
+lo pida**. Ningún barrido corre solo — ni corto, ni completo, ni antes de un commit.
+
+| | |
+|---|---|
+| **Nombre** | `scripts/gate-citas-mes.mjs` |
+| **Aserciones** | **56** (0 fallos el 21 ago 2026) |
+| **Duración** | **19 s** |
+| **Clase** | **propio** (`EMPIEZAN_DE_CERO`) — levanta **dos negocios suyos** con `provisionTenant` (uno de 1 persona, otro de 14) y los borra al salir. No toca el negocio compartido, así que **puede correr en paralelo**: no necesita ir solo. |
+| **Grupo** | `clientes` — el barrido pasa de **78 a 79** comprobaciones |
+| **Contra** | `https://<slug>.bamburu.com` (la dirección pública, no `:3000`) |
+| **Depende del reloj** | **No.** La vista Mes no llama a `huecos()` (que descarta lo anterior a «ahora») sino a `tramosPersona`/`ocupacionPersona`, que no miran la hora. Da lo mismo a las 9:00 que a las 23:00. |
+| **Cuota de IA** | No la usa. |
+
+**TABLA `AFECTA` — qué lo despierta en modo corto.** No hace falta regla nueva: la que ya existe,
+`/^modules\/erp\/(routes\/(dashboard|inicio|clients|crm|cobros|citas|menu-routes|migracion|vigia)|views\/)/ → clientes`,
+cubre `modules/erp/routes/citas.js`, que es donde vive **todo** lo que este gate mide (el endpoint
+`/api/erp/citas/mes`, el CSS del mes y `renderMes`). Se comprobó ejecutando la regla contra la ruta
+real, no leyéndola. La segunda red —el grafo de imports— también lo alcanza por `citas-engine.js` y
+`citas-avisos.js`.
+
+<details><summary><b>Lo que decía antes (encargo del 21 ago, versión original — se conserva)</b></summary>
+
 > **A1** El pie del día dice "168 h libre" en un día suelto. 168 = 7x24. Las horas libres deben calcularse sobre el HORARIO DE APERTURA DEL NEGOCIO de ESE día. Si cierra, dice "Cerrado", no "0 h libre".
-> **A2** Selector de vista duplicado: botones Dia/Semana/Mes arriba y desplegable "Mes" debajo. Se queda el grupo de botones. "Por puesto" y "Ver todo el equipo" SE QUEDAN, no son duplicados.
 > **A3** El pie de la vista Dia no debe pintarse en vista Mes.
 > **A4** Dias 7, 14, 20 y 28 en negrita sin criterio. Regla unica: fuera de mes en gris claro; dias del mes en normal; HOY unico destacado; dias con citas se distinguen por sus citas, NO por el numero en negrita.
-> **A5** Filas de semana de alto fijo: un mes vacio es una pared en blanco. Repartir el alto entre las semanas reales del mes.
 > **A6** La celda del 19 sale sombreada sin motivo. Reproducir antes de arreglar; si no se reproduce, decirlo y NO inventar arreglo.
 > **A7** Cada cita de la celda debe mostrar HORA + CLIENTE + SERVICIO con color de estado. Tope 3 por celda y marcador "+N mas" que abre el dia.
-> **A8** En Mes, pasar por encima de una celda debe ofrecer "+ Nueva cita" (raton y teclado) y abrirla con ese dia ya puesto, igual que ya hace la vista Dia.
 
-**⚙️ CORREGIDO / MEDIDO EN EL PASO 0** (el defecto es real en los ocho; lo que cambia es el
-*porqué*, y en tres de ellos parte ya está construida):
+**Por qué cambiaron:** la auditoría del encargo 0 midió que el 168 era correcto (14 personas × 12 h,
+no 7×24), que no existe ninguna regla de negrita (era contraste), que el pie es de la propia vista
+Mes y que media A7 ya estaba construida. El dueño reescribió el encargo con ese dato delante.
 
-- **A1 — 168 no es 7×24. Es 14 × 12.** Medido en el tenant `desarrollo-bamburu`: **14 usuarios
-  activos** × **12 h de apertura** (los tramos del negocio son `dow=5` y `dow=6`, 480→1200 min =
-  08:00–20:00) = **10.080 min = 168 h exactas**. El mecanismo está en
-  `modules/erp/routes/citas.js:536-542`: el pie **suma las horas libres de TODO EL EQUIPO**
-  (`Σ personas (tramosPersona − ocupacionPersona)`), o sea es **capacidad del equipo**, no horario del
-  día. Con 14 personas se pasa de 24 h sin ningún error de cálculo. **La petición del dueño no
-  cambia; su diagnóstico aritmético sí.**
-- **A1 (2ª mitad) — YA HECHO.** Si el día está cerrado el pie **ya dice «cerrado»**
-  (`citas.js:2024`) y con cero huecos dice **«sin hueco libre»** (`citas.js:1988`), nunca «0 h libre».
-  Queda **decidir la palabra exacta** («Cerrado» con mayúscula).
-- **A2 — exacto, y con una trampa de implementación.** Los botones están en `citas.js:1307-1309`
-  y el desplegable duplicado en `citas.js:1327` (`#agVista`, dentro de «Filtros»). **Pero
-  `setVista()` escribe en `#agVista` y `vistaActual()` lo lee**, y las preferencias
-  (`agPrefs` en `localStorage`) también: **quitar el `<select>` a secas rompe las tres vistas.**
-  Hay que dejar el estado en otro sitio. `#agEje` («Por puesto») y `#agVerTodo` («Ver todo el
-  equipo») se quedan, como pide el dueño.
-- **A3 — AMBIGÜEDAD REAL, NO SE ELIGE LECTURA: HAY QUE PREGUNTAR.** En el código **solo existe UN
-  pie**: `.mes-pie` / `#mesPie`, y lo pinta **la propia vista Mes** (`citas.js:2045-2057`) con el
-  resumen del **día SELECCIONADO**. **La vista Día no tiene pie ninguno.** Así que A1 («arregla el
-  número de ese pie») y A3 («ese pie no debe pintarse en Mes») **apuntan al mismo elemento y piden
-  cosas opuestas**. *(Lo que sí es de la vista Día —la tira de 7 días, el zoom S/M/L y la leyenda de
-  colores— ya se oculta en Mes: `citas.js:1963-1967`.)* **Se pregunta a Ibrahin al abrir la tarea A.**
-- **A4 — el efecto es real, la causa no es la negrita.** En el CSS de hoy **no hay ninguna regla que
-  ponga en negrita días sueltos**: solo `.mesdia.hoy .num{font-weight:700}` y
-  `.mesdia.sel .num{font-weight:600}` (`citas.js:1262-1263`). Lo que pasa es **contraste**: `.finde`,
-  `.otro` y `:disabled` pintan el número **en gris** (`citas.js:1266-1271`), así que **los únicos
-  números que quedan en negro son los días abiertos entre semana**. En agosto de 2026 el negocio de
-  pruebas solo abre viernes y sábado → los viernes **7, 14, 21 y 28** salen en negro y todo lo demás
-  gris. **El «20» del encargo es casi con seguridad el 21** (el 20 es jueves; los otros tres son
-  viernes). La regla única que pide el dueño **se mantiene tal cual**.
-- **A5 — exacto.** `.mesdia{min-height:84px}` (`citas.js:1252`), alto fijo por casilla y filas
-  implícitas: un mes de 6 semanas crece y uno vacío es una pared.
-- **A6 — NO SE REPRODUCE DESDE EL CÓDIGO.** No hay ninguna regla que sombree **una** celda: solo
-  `:hover` → `var(--bg3)` (`citas.js:1259`) y el fondo tenue de `.finde`/`.otro` (`.018`). El 19 de
-  agosto de 2026 es **miércoles** (ni finde ni otro mes). El día **seleccionado** solo tiñe el
-  círculo del número, no la celda. **Se reproduce en pantalla antes de tocar nada, y si no aparece,
-  se dice y no se inventa arreglo** — tal como manda el propio A6.
-- **A7 — MEDIO CONSTRUIDO.** Ya se pintan **hasta 3 citas** por celda con **hora + cliente + punto
-  de color del estado**, y el **«+N más»** (`citas.js:2026-2033`). **Faltan dos cosas:** el
-  **SERVICIO** (el endpoint `/api/erp/citas/mes` solo manda `min`, `cliente` y `estado` —
-  `citas.js:552`) y que el **«+N más» abra el día** (hoy no es pulsable: el día se abre con **doble
-  clic** en la celda o con «Abrir el día →» del pie, `citas.js:2062-2064`).
-- **A8 — no existe en Mes.** El «+ Nueva cita» al pasar por encima está **solo en la vista Día**
-  (`.agcell.libre:hover::after`, `citas.js:1205`) y además solo con `eje==='persona'`
-  (`citas.js:2100`). En Mes, el `hover` solo cambia el fondo.
+</details>
 
 ---
 
@@ -388,13 +451,13 @@ decisión a confirmar con Ibrahin al abrir F**, no aquí.
 
 ---
 
-#### G. PORTAL DEL CLIENTE — AMPLIACIÓN · **PENDIENTE**
+#### G. PORTAL DEL CLIENTE — AMPLIACIÓN · **PENDIENTE** (G3 retirado)
 
 > **G. PORTAL DEL CLIENTE — AMPLIACION.**
 > Palabras del dueño: "el portal del cliente hoy solamente dice las facturas pendientes, este portal es una ventaja que ofrecemos, tambien debe ofrecer funciones como analiticas, manejo de comunicaciones, pago de facturas etc".
 > **G1** Analiticas propias del cliente (que compra, cuanto, cada cuanto).
 > **G2** Canal de comunicaciones entre el negocio y su cliente.
-> **G3** Historial completo de documentos con descarga en PDF (enlaza con C).
+> **G3** ~~Historial completo de documentos con descarga en PDF (enlaza con C).~~ **RETIRADO (21 ago 2026):** el portal ya lista TODAS las facturas y ya baja el PDF de cada una.
 > **G4** El pago de facturas va al GRUPO 4: necesita pasarela contratada.
 > **G5** El "etc" del dueño NO se da por cerrado.
 
@@ -403,8 +466,10 @@ lista **TODAS las facturas del cliente** —pagadas y pendientes, con su estado 
 cobros/conciliación, nunca de lo que diga el cliente—, el **total pendiente**, los **datos de
 transferencia (IBAN)** y **descarga en PDF de cada factura** (`/portal/:token/factura/:id/pdf`).
 Acceso por **enlace mágico con token temporal**, solo lectura.
-- **G3 está hecho a medias:** el PDF por factura ya existe; **faltan presupuestos, pedidos y
-  albaranes**, y el «historial completo».
+- **G3 · RETIRADO el 21 ago 2026 por decisión de Ibrahin**, por estar ya hecho: el portal **lista
+  todas las facturas** (no solo las pendientes) y **baja el PDF de cada una**. *Queda anotado, sin
+  ser subpunto de G:* presupuestos, pedidos y albaranes no bajan del portal — eso entra con **C**,
+  que es donde vive el motor de documentos.
 - **G1 y G2 no existen** en absoluto.
 - **Ojo al puntero caducado:** el Backlog de este TABLERO (§Ventas, portal y recurrentes) dice que el
   pago con tarjeta es *«el único paso que falta del portal»*. **Con G eso deja de ser cierto** y esa
@@ -471,7 +536,10 @@ de exportación reales** para construir y probar contra algo cierto.
 
 ---
 
-### LO QUE ESTE ENCARGO NO TOCÓ (y no debe darse por tocado)
+### LO QUE NO TOCÓ EL ENCARGO 0 — EL DEL REGISTRO (21 ago 2026, `f6c864c`)
+
+> Esto describe **la tarea que creó este bloque**, no las que vengan después. La tarea **A** sí tocó
+> código, y lo que hizo está en su ficha.
 
 - **Cero código de producto.** `git diff` vacío sobre `modules/`, `core/`, `scripts/`, `public/`.
 - **La migración NO se ha enlazado.** Eso es **B**, y B está **PENDIENTE**.
