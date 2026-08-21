@@ -1194,7 +1194,13 @@ export function createInvoiceRoutes(db) {
           '<span style="display:inline-flex;gap:.4rem;flex-wrap:wrap">'
           + '<a class="btn btn-secondary btn-sm" target="_blank" rel="noopener" href="/admin/listados/facturas/imprimir'+q+'"><i class="ti ti-printer"></i> Imprimir</a>'
           + '<a class="btn btn-secondary btn-sm" href="/admin/listados/facturas/pdf'+q+'"><i class="ti ti-download"></i> Descargar PDF</a>'
-          + '<button type="button" class="btn btn-secondary btn-sm" onclick="enviarListado(\'facturas\',qsListado())"><i class="ti ti-mail"></i> Enviar por correo</button>'
+          // OJO A LA DOBLE BARRA DE ABAJO, que no es un adorno. Esto es una cadena de JS del
+          // NAVEGADOR escrita DENTRO de una plantilla del servidor, así que la plantilla se come una
+          // capa de escape: con una sola barra llegaba al navegador un apóstrofo pelado que CERRABA
+          // la cadena, y la pantalla de facturas moría con «Unexpected identifier facturas». Con dos
+          // llega el escape entero. Lo cazó el barrido, no yo: gate-menu-navegacion vigila que no
+          // haya ni un error de JS en el recorrido, y este no se veía a simple vista.
+          + '<button type="button" class="btn btn-secondary btn-sm" onclick="enviarListado(\\'facturas\\',qsListado())"><i class="ti ti-mail"></i> Enviar por correo</button>'
           + '</span>';
       }
       pintaVerbos();
