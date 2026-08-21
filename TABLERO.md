@@ -112,8 +112,10 @@
 `A 8 · B 3 · C 11 · D 5 · E 4 · F 4 · G 5 · H 3 · I 3 · J 0 · K 0` = **46**.
 (J y K son ítems bloqueados sin subpuntos: su texto es una sola afirmación.)
 
-**RECUENTO VIGENTE — 21 ago 2026, al cerrar C-0: 64 subpuntos vivos · 27 hechos · 37 pendientes.**
-`A 6 · B 3 · C 11 · C-0 4 · D 5 · E 4 · F 4 · G 4 · H 3 · I 3 · J 0 · K 0 · L 8 · M 9` = **64**.
+**RECUENTO VIGENTE — 21 ago 2026: 65 subpuntos vivos · 27 hechos · 38 pendientes.**
+`A 6 · C 12 · C-0 4 · B 3 · D 5 · E 4 · F 4 · G 4 · H 3 · I 3 · J 0 · K 0 · L 8 · M 9` = **65**.
+- **C pasa de 11 a 12** con **C10-f**, que Ibrahin añadió el 21 ago tras cerrar C-0. Los pendientes
+  suben de 37 a 38: el subpunto es nuevo, no estaba antes sin marcar.
 - **4 RETIRADOS**, con su motivo escrito en su sitio y **sin borrar la línea**: **A3** y **A6**
   (premisas falsas, las tumbó la auditoría del encargo 0), **G3** (ya estaba hecho) y **L1** (la
   pantalla ya traía el armazón del panel: lo tumbó el Paso 0 de la tarea L).
@@ -546,7 +548,7 @@ devuelve sus horas, que copiar no abre días cerrados y que un tramo imposible n
 
 ## GRUPO 2 — FUNCIONES NUEVAS (solo codigo, sin dependencias externas)
 
-#### C. IMPRESIÓN Y DESCARGA EN PDF DE LISTADOS Y DOCUMENTOS · **PENDIENTE**
+#### C. IMPRESIÓN Y DESCARGA EN PDF DE LISTADOS Y DOCUMENTOS · **PENDIENTE** (12 subpuntos: los 11 del registro + C10-f)
 
 > **C. IMPRESION Y DESCARGA EN PDF DE LISTADOS Y DOCUMENTOS.**
 > Palabras del dueño: "debemos ser capaces de imprimir informes como, lista de precios bajo plantilla claro, envio de catalogo de productos y servicios, informes de kardex, listado de clientes productos, compras, facturas, gastos, etc"
@@ -561,6 +563,9 @@ devuelve sus horas, que copiar no abre días cerrados y que un tramo imposible n
 > **C9** Los tres verbos en todos: IMPRIMIR, DESCARGAR EN PDF y ENVIAR POR CORREO.
 > **C10** Motor de plantillas UNICO y reutilizable. Prohibido cablear cada listado a su propio generador: es la regla de fuente unica.
 > **C11** El "etc" del dueño NO se interpreta como cerrado: al construir, dejar el motor abierto a listados nuevos sin reescribirlo.
+>
+> **AMPLIACIÓN DE IBRAHIN (21 ago 2026), tras cerrar C-0:**
+> **C10-f** EL MEMBRETE DE LOS LISTADOS ES EL MISMO que el de los documentos, con su logo incluido. No se construye un segundo membrete para listados: C-0 dejó uno solo y esa es la fuente. Si al llegar aquí hiciera falta un campo que el membrete de documentos no tiene, PÁRATE y dilo — se amplía el único, no se crea otro.
 
 **⚙️ CONFIRMADO por el Paso 0 (`0.3`), con el punto de partida ya medido:**
 - **Se parte de medio motor, no de cero:** `renderPdfFromHtml` + `printableShell` ya son la fuente
@@ -652,7 +657,16 @@ cada papel sigue pintando SUS campos.
    quedó con un `?` de más. Cazado contando marcadores contra columnas **en todos los INSERT de los
    cinco ficheros**, no a ojo.
 
-**VERIFICACIÓN — `gate-documentos`: 48 aserciones, 0 fallos, contra la dirección pública.**
+**VERIFICACIÓN — `gate-documentos`: 55 aserciones, 0 fallos, contra la dirección pública.**
+
+**⚙️ CORREGIDO EL 21 AGO, DESPUÉS DE ENTREGAR: EL GATE VIGILABA CUATRO PAPELES, NO SEIS.** La entrega
+afirmó «el logo sale en los seis» y lo comprobado eran **cuatro** — faltaban el **albarán** y el
+**ticket de mostrador**. Medido al revisarlo: **el producto estaba bien, el logo salía en los seis**;
+lo que iba por detrás era la verificación, que es peor que un fallo, porque una afirmación sin
+comprobar detrás se cree. Ampliado: los seis **en pantalla** y los seis **dentro del PDF** (contando
+las imágenes incrustadas: un papel con logo trae una y uno sin logo, ninguna). El ticket no tiene
+pantalla —solo PDF—, así que su papel se mide llamando al mismo constructor que usa esa ruta, y su
+congelado, en la base.
 - **Reversión de C0-1, C0-2 y C0-3** por separado: **sin C0-1 → 2 rojos** (vuelven a ser dos
   definiciones de la regla) · **sin C0-2 → 2** (reaparece el estilo a mano en el presupuesto) ·
   **sin C0-3 → 1, y es el gordo**: el logo desaparece de **los cuatro** papeles a la vez. El gate
@@ -668,12 +682,17 @@ cada papel sigue pintando SUS campos.
   disfrazada de más.** Ahora cada regla lleva sus grupos de siempre **más** `documentos`, y está
   comprobado fichero a fichero que no se pierde ninguno.
 
+**LO QUE C-0 LE DEJA SERVIDO A C.** `membreteHtml()` **es ya la fuente única del membrete**, y eso
+convierte **C10-f** en algo que se hereda en vez de construirse: el motor de listados no necesita su
+propio membrete, usa éste. Si al llegar a C hiciera falta un campo que el membrete de documentos no
+tiene, **se amplía el único** — y eso se para y se dice antes, no se resuelve creando el segundo.
+
 **FICHA DE `gate-documentos` — DECLARADO, QUE NO ES EJECUTADO.**
 
 | | |
 |---|---|
 | **Nombre** | `scripts/gate-documentos.mjs` |
-| **Aserciones** | **48** (0 fallos el 21 ago 2026) |
+| **Aserciones** | **55** (0 fallos el 21 ago 2026) |
 | **Duración** | **~90 s** (genera PDF de verdad, que es lo que más cuesta) |
 | **Clase** | **propio** (`EMPIEZAN_DE_CERO`) — levanta **dos** negocios suyos: uno con logo y otro sin él, y el segundo sirve además para probar que un negocio no ve el logo del otro. |
 | **Grupo** | **`documentos`**, propio y no dentro de `ventas`: lo que vigila cruza venta y compra y además Ajustes. El barrido pasa de **80 a 81** comprobaciones |

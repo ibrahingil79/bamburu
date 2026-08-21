@@ -13,6 +13,7 @@ import { execSync } from 'child_process';
 import { launchOpts, APP_DIR } from './lib/gate-env.mjs';
 import { provisionTenant } from '../core/tenant-provisioning.js';
 import { controlDb, getTenantBySlug } from '../core/control-db.js';
+import { buildTicketPaper } from '../modules/erp/routes/invoices.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 
@@ -197,19 +198,36 @@ try {
   const o2 = await post('/api/erp/pedidos', cuerpoVenta());
   const f2 = await post('/api/erp/invoices', { client_id: s.cli, issue_date: hoy, lines: linea });
   const po2 = await post('/api/erp/purchase-orders', { supplier_id: s.prov, date: hoy, lines: lineaPo, items: lineaPo });
+  // LOS SEIS, NO CUATRO. La primera versión de este gate medía el logo en presupuesto, pedido,
+  // factura y orden de compra, y se dejaba fuera el ALBARÁN y el TICKET DE MOSTRADOR — o sea que la
+  // entrega afirmaba «sale en los seis» con cuatro comprobados. El producto estaba bien; la
+  // verificación iba por detrás de la afirmación, que es peor.
+  const alb2 = await post('/api/erp/albaranes', { client_id: s.cli, date: hoy, lines: [{ product_id: s.prod, description: 'Servicio Gate', quantity: 1, unit_price: 100, tax_rate: 21 }] });
+  const tk2 = await post('/api/erp/mostrador/sale', { lines: [{ product_id: s.prod, description: 'Servicio Gate', quantity: 1, unit_price: 100, tax_rate: 21 }], payment_method: 'efectivo' });
   const nuevos = [
     ['presupuesto', '/admin/quotes/' + q2.body?.id],
     ['pedido', '/admin/pedidos/' + o2.body?.id],
     ['factura', '/admin/invoices/' + f2.body?.id],
   ];
   if (po2.body?.id) nuevos.push(['orden de compra', '/admin/purchase-orders/' + po2.body.id]);
+  if (alb2.body?.id) nuevos.push(['albarán', '/admin/albaranes/' + alb2.body.id]);
+  ok(!!alb2.body?.id, 'el albarán de prueba se crea', 'albarán ' + alb2.body?.id);
+  ok(!!tk2.body?.id, 'y el ticket de mostrador también', 'ticket ' + tk2.body?.id + ' · ' + (tk2.body?.invoice_number || ''));
   let conLogo = 0;
   const sinLogo = [];
   for (const [nom, url] of nuevos) {
     const r = await abre(url);
     if (r.html.includes('data-membrete="logo"')) conLogo++; else sinLogo.push(nom + '(' + r.status + ')');
   }
-  ok(conLogo === nuevos.length, 'el logo sale en pantalla en todos los papeles nuevos', conLogo + '/' + nuevos.length + (sinLogo.length ? ' · sin logo: ' + sinLogo.join(', ') : ''));
+  ok(conLogo === nuevos.length && nuevos.length === 5,
+     'el logo sale en pantalla en los CINCO papeles que tienen pantalla', conLogo + '/' + nuevos.length + (sinLogo.length ? ' · sin logo: ' + sinLogo.join(', ') : ''));
+  // EL TICKET NO TIENE PANTALLA — solo PDF (`/admin/mostrador/:id/pdf`). Así que su papel se mide
+  // llamando al MISMO constructor que usa esa ruta, y su congelado, en la base. Es la única
+  // superficie que tiene; medirlo por el PDF binario diría «hay una imagen», no «es el logo».
+  const invTicket = tk2.body?.id ? n.db.prepare('SELECT * FROM invoices WHERE id=?').get(tk2.body.id) : null;
+  const papelTicket = invTicket ? await buildTicketPaper(n.db, invTicket) : '';
+  ok(papelTicket.includes('data-membrete="logo"'), 'y en el TICKET de mostrador, que es el sexto papel con membrete');
+  ok(invTicket && invTicket.company_logo_id != null, 'que además lo CONGELA al emitirse, como el resto del membrete', 'company_logo_id=' + invTicket?.company_logo_id);
 
   // ── [17] EL PDF NO SALE A INTERNET ──────────────────────────────────────────────────────────
   console.log('\n[17] generar el PDF con logo no produce ni una petición saliente');
@@ -226,6 +244,27 @@ try {
   ok(pdfFactura.slice(0, 4).toString() === '%PDF', 'la factura con logo genera un PDF de verdad', (pdfFactura.length / 1024).toFixed(0) + ' KB');
   const paginas = (pdfFactura.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
   ok(paginas === 1, 'y cabe en UNA página', paginas + ' página(s)');
+  // EN EL PDF, Y NO SOLO EN LA PANTALLA. Se cuentan las imágenes incrustadas: un papel con logo trae
+  // una imagen y uno sin logo, ninguna (medido: 1 vs 0). En la factura hay además el QR, así que se
+  // exige que traiga MÁS de una.
+  const imgs = pdf => (pdf.toString('latin1').match(/\/Subtype\s*\/Image/g) || []).length;
+  const conPdf = [
+    ['presupuesto', '/admin/quotes/' + q2.body?.id + '/pdf', 1],
+    ['pedido', '/admin/pedidos/' + o2.body?.id + '/pdf', 1],
+    ['factura', '/admin/invoices/' + f2.body?.id + '/pdf', 2],
+    ['albarán', alb2.body?.id ? '/admin/albaranes/' + alb2.body.id + '/pdf' : null, 1],
+    ['orden de compra', po2.body?.id ? '/admin/purchase-orders/' + po2.body.id + '/pdf' : null, 1],
+    ['ticket', tk2.body?.id ? '/admin/mostrador/' + tk2.body.id + '/pdf' : null, 2],
+  ];
+  let pdfConLogo = 0, faltan = [];
+  for (const [nom, url, minimo] of conPdf) {
+    if (!url) { faltan.push(nom + '(no creado)'); continue; }
+    const buf = await pdfDe(url);
+    const ni = imgs(buf);
+    if (buf.slice(0, 4).toString() === '%PDF' && ni >= minimo) pdfConLogo++;
+    else faltan.push(nom + '(' + ni + ' img)');
+  }
+  ok(pdfConLogo === 6, 'y el logo viaja también DENTRO del PDF, en los SEIS papeles', pdfConLogo + '/6' + (faltan.length ? ' · ' + faltan.join(', ') : ''));
   // Un logo enorme no puede empujar el documento a una segunda página.
   await subirLogo(n, pngDe(4000, 1200), 'enorme.png', 'image/png');
   const f3 = await post('/api/erp/invoices', { client_id: s.cli, issue_date: hoy, lines: linea });
