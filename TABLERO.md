@@ -457,7 +457,7 @@ vive el dato y de ahí lo leen la agenda y sus comprobaciones.
 
 ---
 
-#### A-ter. «CUÁNDO ABRO», REHECHA · ✅ **HECHO (21 ago 2026)** · commit `PENDIENTE_HASH3`
+#### A-ter. «CUÁNDO ABRO», REHECHA · ✅ **HECHO (21 ago 2026)** · commit `b1094e7`
 
 > Ibrahin, al llegar a la pantalla de horarios desde la vista Mes: *«aquí debes mejorar la visual,
 > está hecha de muy mala calidad, también agregar cosas automáticas como abrir de lunes a viernes y
