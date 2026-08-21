@@ -576,7 +576,7 @@ devuelve sus horas, que copiar no abre días cerrados y que un tramo imposible n
 
 ---
 
-#### C-0. SANEAR LOS DOCUMENTOS ANTES DE CONSTRUIR EL MOTOR · ✅ **HECHO (21 ago 2026)** · commit `PENDIENTE_HASH_C0`
+#### C-0. SANEAR LOS DOCUMENTOS ANTES DE CONSTRUIR EL MOTOR · ✅ **HECHO (21 ago 2026)** · commit `b026022`
 
 > **C0-1** UNA SOLA docParties. Es una REGLA DE NEGOCIO —cuándo manda la foto congelada del documento y cuándo la configuración en vivo—, no maquetación. Vive en un solo sitio y todos la llaman. Si el Paso 0 confirma que la de compras es legítimamente distinta, se admite UNA excepción, escrita y con su motivo en el código. Una, no dos.
 > **C0-2** UN SOLO DIALECTO. Presupuesto, pedido y albarán pasan a las clases .doc-* que ya usa la factura. Los estilos escritos a mano en cada etiqueta desaparecen. No se inventa un dialecto nuevo: se usa el que hay.
