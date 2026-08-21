@@ -851,7 +851,14 @@ export function createPurchaseOrderRoutes(db) {
             const exp = (r.querySelector('.r-lot-expiry')?.value || '').trim();
             item.lotes = [{ code: code, expiry: exp, quantity: qty }];
           } else if (tr === 'serial'){
-            const codes = (r.querySelector('.r-serials')?.value || '').split('\n').map(s => s.trim()).filter(Boolean);
+            // DOBLE BARRA, y no es cosmético: esto es JS **del navegador** escrito dentro de una
+            // plantilla del servidor, así que con una sola barra la plantilla convertía el escape de
+            // salto de línea en un salto DE VERDAD y partía la cadena en dos. Resultado: SyntaxError,
+            // el bloque de script entero sin ejecutar y el botón «Confirmar recepción» MUERTO — sin
+            // error a la vista, sin aviso, sin nada. Lo destapó el barrido del 21 ago 2026.
+            // (Y ojo: en estos comentarios no se puede ESCRIBIR ese escape ni un backtick. La primera
+            // versión de esta nota lo llevaba y volvió a partir el script exactamente igual.)
+            const codes = (r.querySelector('.r-serials')?.value || '').split('\\n').map(s => s.trim()).filter(Boolean);
             if (codes.length !== qty) return { error: '"' + r.cells[0].textContent.trim() + '": pon exactamente ' + qty + ' nº de serie (uno por unidad), hay ' + codes.length };
             item.lotes = codes.map(code => ({ code: code }));
           }

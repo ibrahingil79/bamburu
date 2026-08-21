@@ -46,6 +46,18 @@ await engancharToasts(page);
 await page.setCookie({ name: 'asess', value: token, domain: 'desarrollo-bamburu.localhost', path: '/' });
 
 const dialogQueue = [];
+// ── LOS ERRORES DE JAVASCRIPT DE LA PANTALLA, VIGILADOS ─────────────────────────────────────────
+// POR QUÉ SE AÑADE. El 21 ago 2026 la pantalla «Registrar recepción» estaba MUERTA: un escape que la
+// plantilla se comía partía una cadena, el bloque de script entero dejaba de ejecutarse y el botón
+// «Confirmar recepción» no hacía nada. Este gate lo notó — pero de la peor forma posible: reventando
+// con «confirmReceipt is not defined», que suena a gate roto y no a producto roto. Tardé un rato en
+// distinguirlo. Con los errores enganchados, el gate DICE que la pantalla tiene un error de JS, que
+// es la frase que ahorra ese rato. `gate-menu-navegacion` ya hace esto, pero solo recorre las
+// pantallas del MENÚ, y esta cuelga de una orden de compra: no la ve nadie más.
+const erroresJS = [];
+page.on('pageerror', e => erroresJS.push(String(e && e.message || e)));
+page.on('console', m => { if (m.type() === 'error') erroresJS.push('console: ' + m.text()); });
+
 page.on('dialog', async d => {
   const next = dialogQueue.shift();
   if (next === undefined) await d.accept();
@@ -184,6 +196,11 @@ try {
   const prodAfter = db.prepare('SELECT stock FROM products WHERE id=?').get(PROD.id);
   ok(prodAfter.stock === 4, 'delta de stock del producto del gate = +4 (10 recibidas − 6 anuladas), got ' + prodAfter.stock);
   ok(cuadraLibro(db, [PROD.id]), 'caché products.stock == suma del libro, para el producto del gate');
+
+  // Los errores de JS de la pantalla, dichos en voz alta. Se filtran los ruidos que no son del
+  // producto (un favicon que no existe no rompe nada).
+  const jsMalos = erroresJS.filter(e => !/favicon|net::ERR|Failed to load resource/i.test(e));
+  ok(jsMalos.length === 0, 'cero errores de JavaScript en las pantallas de recepción', jsMalos.slice(0, 2).join(' | ') || 'ninguno');
 
 } finally {
   await browser.close();
