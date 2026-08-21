@@ -180,8 +180,20 @@ try {
      'y las propuestas siguen siendo EXACTAMENTE las mismas, de los mismos clientes');
   ok(!db.prepare('SELECT 1 FROM disa_proposals WHERE type=? AND client_id IS NULL').get(TIPO_DORMIDO),
      'NINGUNA propuesta de dormido apunta a "nadie" (client_id NULL)');
-  ok(clientesDormidos(db, HOY).every(d => d.client_id != null && d.client_email),
-     'todo candidato a dormido tiene ficha Y vía de contacto: no hay fantasmas en la lista');
+  ok(clientesDormidos(db, HOY).every(d => d.client_id != null),
+     'todo candidato a dormido tiene ficha: no hay fantasmas en la lista');
+  // LA VÍA DE CONTACTO SE EXIGE DONDE TOCA: en la PROPUESTA, no en el análisis. `clientesDormidos`
+  // mide quién se ha enfriado, y eso no depende de si tiene correo; el filtro vive en
+  // `generarPropuestasDormidos` («sin email no hay reenganche posible»), que descarta a quien no se
+  // puede reenganchar y lo CUENTA. Esta comprobación se lo pedía al análisis, así que se puso roja
+  // en cuanto el negocio tuvo clientes sin correo — con el producto haciendo lo correcto en el sitio
+  // correcto. Ahora se comprueba lo que de verdad importa: que no salga NI UNA propuesta imposible.
+  const propsDorm = db.prepare(
+    'SELECT p.client_id, c.email FROM disa_proposals p LEFT JOIN clients c ON c.id = p.client_id WHERE p.type = ?'
+  ).all(TIPO_DORMIDO);
+  ok(propsDorm.every(x => !!x.email),
+     'y NINGUNA propuesta apunta a quien no tiene forma de recibirla',
+     propsDorm.length + ' propuestas, ' + propsDorm.filter(x => !x.email).length + ' sin correo');
 
   // (b) LA INVARIANTE: el estado de un cliente REAL es IDÉNTICO con y sin las ventas anónimas.
   //     No se compara "¿sigue dormido?", que sería flojo: se compara su FICHA ENTERA de sueño
@@ -307,6 +319,12 @@ try {
   const resD = await POST(app, '/' + p1.id + '/descartar');
   ok(resD.status === 200, 'descartar → 200');
   ok(db.prepare('SELECT status FROM disa_proposals WHERE id=?').get(p1.id).status === 'descartada', 'queda descartada');
+  // EL DESCARTE LO SELLA LA RUTA CON LA HORA REAL DEL SERVIDOR, y este escenario vive en una fecha
+  // simulada. El descanso de 90 días se contaba entonces desde el HOY de verdad y no desde el del
+  // guion: mientras las dos fechas estuvieron cerca no se notó, y al separarse el cliente seguía «en
+  // descanso» a los 91 días simulados — un fallo cantado con el producto funcionando bien. Se sella
+  // el descarte en la fecha del guion, que es la única con la que este escenario tiene sentido.
+  db.prepare('UPDATE disa_proposals SET resolved_at=? WHERE id=?').run(HOY + 'T10:00:00Z', p1.id);
 
   const r4 = generarPropuestasDormidos(db, { today: HOY });
   ok(!propuestoPara(db, semanalDormido), 'al día siguiente NO se re-propone (está descansando)');
