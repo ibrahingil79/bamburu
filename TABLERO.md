@@ -353,7 +353,7 @@ Mes y que media A7 ya estaba construida. El dueño reescribió el encargo con es
 
 ---
 
-#### A-bis. LA VISTA MES, CORREGIDA SOBRE PANTALLA · ✅ **HECHO (21 ago 2026)** · commit `PENDIENTE_HASH2`
+#### A-bis. LA VISTA MES, CORREGIDA SOBRE PANTALLA · ✅ **HECHO (21 ago 2026)** · commit `3200899`
 
 > **Siete correcciones de Ibrahin mirando la entrega ya desplegada**, más los cabos que la propia
 > entrega había dejado anotados. Sigue siendo TAREA TRANSVERSAL: el puntero del Peldaño 8 no se mueve.
