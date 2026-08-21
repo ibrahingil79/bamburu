@@ -47,6 +47,14 @@ export const GRUPOS = {
                                      // (menú, buscador, permiso), con su contenedor, el orden hoy→mañana,
                                      // el número en la cabecera y la advertencia de «marcado ≠ entregado»
   ],
+  // ── LOS SEIS PAPELES (C-0 · 21 ago 2026) ──────────────────────────────────────────────────────
+  // Grupo propio y no dentro de `ventas`: lo que vigila cruza venta y compra (los seis papeles, del
+  // presupuesto a la orden de compra) y además la pantalla de Ajustes, que es donde vive el logo.
+  // Meterlo en un grupo de área lo dejaría fuera del barrido corto de la otra mitad.
+  documentos: [
+    'gate-documentos',               // una sola regla congelado-vs-vivo, un solo dialecto de membrete,
+                                     // el logo incrustado (sin peticiones fuera) y el PDF de los seis
+  ],
   // ── LA PUERTA PÚBLICA DE RESERVA (peldaño 7 · pieza 6) — DENTRO DEL BARRIDO (20 ago 2026) ────
   // SEGUNDA ZONA ENTERA que aparece fuera del mapa en el mismo día (la primera fue la agenda). Las
   // tres existían desde el 8 ago, se corrieron el día de la entrega y NADIE las volvió a ejecutar.
@@ -141,6 +149,8 @@ export const EMPIEZAN_DE_CERO = new Set([
   'gate-agenda-calendario',        // negocio nuevo: el calendario, sin datos ajenos
   'gate-citas-mes',                // DOS negocios nuevos: uno de una persona y otro de catorce
   'gate-cola-envios',              // negocio nuevo: la cola vacía es justo lo primero que se mide
+  'gate-documentos',               // DOS negocios nuevos: uno con logo y otro sin él (y el de al lado
+                                   // sirve para probar que un negocio no ve el logo del otro)
 ]);
 
 // Los que necesitan el negocio de desarrollo en silencio. Cada uno con su MOTIVO: un gate marcado
@@ -211,6 +221,18 @@ export const claseDe = g => EMPIEZAN_DE_CERO.has(g) ? 'propio' : (SOLOS.has(g) ?
 //      el modo corto se convierte en barrido completo y DICE qué fichero lo ha obligado.
 // El modo corto NUNCA es el veredicto de la tarea: el completo va al cerrar (RITUAL.md).
 export const AFECTA = [
+  // ── C-0 · EL MEMBRETE Y LOS SEIS PAPELES (21 ago 2026) ──────────────────────────────────────────
+  // OJO AL ORDEN Y A LO QUE LLEVA CADA REGLA: aquí manda la PRIMERA que casa, así que una regla
+  // nueva delante no AÑADE cobertura — la SUSTITUYE. La primera versión de esto puso
+  // `routes/(quotes|invoices|…) → ['documentos']` y con eso un cambio en facturas habría dejado de
+  // despertar a `margen` y `clientes`, que es justo donde vive lo que comprueba que una factura
+  // cuadra. Menos cobertura disfrazada de más. Cada regla lleva los grupos de SIEMPRE **más**
+  // `documentos`.
+  { re: /^modules\/erp\/(documentos|attachments)\.js/, grupos: ['documentos', 'margen', 'clientes'] },
+  { re: /^modules\/erp\/routes\/(quotes|pedidos|invoices|mostrador)\.js/, grupos: ['documentos', 'margen', 'clientes'] },
+  { re: /^modules\/erp\/routes\/albaranes\.js/, grupos: ['documentos', 'inventario'] },
+  { re: /^modules\/erp\/routes\/purchase-orders\.js/, grupos: ['documentos', 'pagos'] },
+  { re: /^modules\/erp\/routes\/settings\.js/, grupos: ['documentos', 'plantillas', 'clientes'] },
   { re: /^(docs\/|.*\.md$|Logos\/|deploy\/|PROYECTO\.txt$)/, grupos: [] },        // documentación: no hay gate que correr
   // EL RUNNER Y ESTE MISMO FICHERO DECIDEN QUÉ SE CUBRE: si cambian, el modo corto no puede fiarse de
   // su propia selección. Corre todo. Pasa poco y cuando pasa es justo cuando más falta hace.

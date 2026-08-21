@@ -1,4 +1,5 @@
 import { renderEmail, TONO_UNICO } from '../email-templates.js';
+import { partesDe, membreteHtml } from '../documentos.js';
 import { safeError } from '../../../core/errors.js';
 import { Hono } from 'hono';
 import { adminLayout, can, docShell, printableShell, estadoTabs, emptyRow, errorShell, ERR } from '../layout.js';
@@ -128,11 +129,11 @@ export function emitQuoteSvc(db, id) {
     const cl = db.prepare('SELECT * FROM clients WHERE id=?').get(q.client_id) || {};
     const number = nextCode(db, 'quote');
     db.prepare(`UPDATE quotes SET quote_number=?, status='emitido',
-        company_name=?, company_fiscal_id=?, company_address=?, company_phone=?, company_email=?,
+        company_name=?, company_fiscal_id=?, company_address=?, company_phone=?, company_email=?, company_logo_id=?,
         client_name=?, client_fiscal_id=?, client_address=?, client_email=?
       WHERE id=?`).run(
       number,
-      cfg.company_name || '', cfg.fiscal_id || '', cfg.address || '', cfg.phone || '', cfg.email || '',
+      cfg.company_name || '', cfg.fiscal_id || '', cfg.address || '', cfg.phone || '', cfg.email || '', cfg.company_logo_id || null,
       cl.name || '', cl.fiscal_id || '', cl.address || '', cl.email || '',
       id);
     return { id, quote_number: number };
@@ -283,20 +284,11 @@ export async function emailQuoteSvc(db, id, opts = {}) {
 
 // ── Documento (compartido entre vista imprimible y email) ───────────────────
 // Cabecera de emisor + cliente: el emitido/anulado usa su FOTO CONGELADA; el borrador lee en vivo.
-function docParties(db, q) {
-  if (q.company_name != null) {
-    return {
-      emisor:  { name: q.company_name, fiscal_id: q.company_fiscal_id, address: q.company_address, phone: q.company_phone, email: q.company_email },
-      cliente: { name: q.client_name, fiscal_id: q.client_fiscal_id, address: q.client_address, email: q.client_email },
-    };
-  }
-  const cfg = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
-  const cl = db.prepare('SELECT * FROM clients WHERE id=?').get(q.client_id) || {};
-  return {
-    emisor:  { name: cfg.company_name || '', fiscal_id: cfg.fiscal_id || '', address: cfg.address || '', phone: cfg.phone || '', email: cfg.email || '' },
-    cliente: { name: cl.name || '', fiscal_id: cl.fiscal_id || '', address: cl.address || '', email: cl.email || '' },
-  };
-}
+// La regla «foto congelada o configuración en vivo» YA NO VIVE AQUÍ. Estaba copiada en este
+// fichero y en otros tres, idéntica carácter por carácter, y es una REGLA DE NEGOCIO: el día
+// que alguien tocara una, las otras tres seguirían diciendo lo de antes. Vive en
+// `documentos.js` y aquí solo se dice con qué contraparte se pide.
+const docParties = (db, q) => partesDe(db, q, 'cliente');
 
 // Líneas + pie con base → IVA por tasa → IRPF (si >0) → total. Mismo desglose que la factura.
 function quoteDocumentBodyHtml(q, items, emisor, cliente, sym) {
@@ -331,21 +323,9 @@ function quoteDocumentBodyHtml(q, items, emisor, cliente, sym) {
     ${q.valid_until ? `<div>Válido hasta: <strong style="color:var(--accent-d)">${esc(q.valid_until)}</strong></div>` : ''}
   </div>
 </div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:24px">
-  <div>
-    <div style="font-size:11px;text-transform:uppercase;color:var(--text2);font-weight:600;margin-bottom:4px">Emisor</div>
-    <div><strong>${esc(emisor.name || '')}</strong></div>
-    ${emisor.fiscal_id ? `<div>${esc(emisor.fiscal_id)}</div>` : ''}
-    ${emisor.address ? `<div style="color:var(--text2)">${esc(emisor.address)}</div>` : ''}
-  </div>
-  <div>
-    <div style="font-size:11px;text-transform:uppercase;color:var(--text2);font-weight:600;margin-bottom:4px">Cliente</div>
-    <div><strong>${esc(cliente.name || '')}</strong></div>
-    ${cliente.fiscal_id ? `<div>${esc(cliente.fiscal_id)}</div>` : ''}
-    ${cliente.address ? `<div style="color:var(--text2)">${esc(cliente.address)}</div>` : ''}
-    ${cliente.email ? `<div style="color:var(--text2)">${esc(cliente.email)}</div>` : ''}
-  </div>
-</div>
+${membreteHtml({ emisor, otra: cliente, rotuloOtra: 'Cliente',
+                 camposEmisor: ['fiscal_id', 'address'],
+                 camposOtra: ['fiscal_id', 'address', 'email'] })}
 <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
   <thead><tr>
     <th style="background:var(--bg);padding:8px 12px;text-align:left;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">Descripción</th>

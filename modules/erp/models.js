@@ -61,6 +61,16 @@ export function runMigrations(db) {
   )`);
   db.exec(`INSERT OR IGNORE INTO company_config (id) VALUES (1)`);
   addCol(db, 'company_config', 'logo_url', "TEXT DEFAULT ''");
+  // ── C-0 (21 ago 2026) · EL LOGO DEJA DE SER UNA URL Y PASA A SER UN FICHERO NUESTRO ─────────────
+  // `logo_url` era un campo de texto donde se pegaba una dirección de internet. Nunca se pintó en un
+  // documento, y no podía pintarse: los PDF los genera Chromium EN EL SERVIDOR, así que un `<img
+  // src="https://…">` habría hecho que cada factura disparara una petición saliente al host que
+  // dijera quien editara ese campo. Ahora el logo es un ADJUNTO del propio negocio
+  // (`kind='company_logo'`), se sirve desde aquí y se incrusta en el papel: cero peticiones fuera.
+  // `logo_url` NO SE BORRA — la regla del proyecto es archivar, no destruir—: se queda con lo que
+  // hubiera, sin leerse. Nadie tenía nada dentro (comprobado en los siete negocios), pero eso se
+  // sabe hoy y no dentro de un año.
+  addCol(db, 'company_config', 'company_logo_id', 'INTEGER');
   addCol(db, 'company_config', 'address', "TEXT DEFAULT ''");
   addCol(db, 'company_config', 'phone', "TEXT DEFAULT ''");
   addCol(db, 'company_config', 'email', "TEXT DEFAULT ''");
@@ -3061,4 +3071,14 @@ Sé preciso con los números y siempre redondea correctamente.`,
   db.exec(`CREATE INDEX IF NOT EXISTS idx_delivery_notes_client  ON delivery_notes(client_id)`);
 
   console.log('✅ ERP: Migraciones completadas');
+  // ── C-0 · EL LOGO EN LA FOTO CONGELADA DEL DOCUMENTO ─────────────────────────────────────────
+  // VA AL FINAL, Y NO ES UN DETALLE: la primera versión lo puso arriba, junto al resto de columnas
+  // de `company_config`, y ahí las tablas de documentos TODAVÍA NO EXISTEN. Un negocio nuevo moría
+  // en el alta con «no such table: invoices». Lo cazó el gate al levantar su primer negocio de cero,
+  // que es exactamente para lo que los gates levantan negocios de cero.
+  // Mismo motivo que las demás columnas congeladas: cambiar el logo hoy no puede reescribir una
+  // factura de marzo. Aditivo y NULL para todo lo emitido hasta hoy — correcto: no llevaban logo.
+  for (const t of ['invoices', 'quotes', 'customer_orders', 'delivery_notes', 'purchase_orders']) {
+    addCol(db, t, 'company_logo_id', 'INTEGER');
+  }
 }

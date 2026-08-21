@@ -9,6 +9,8 @@ import { requirePerm } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { companySchema, storeSettingsSchema } from '../schemas.js';
 import { getCountryConfig } from '../../../core/control-db.js';
+import { saveAttachment, getAttachment, readAttachmentBuffer } from '../attachments.js';
+import { LOGO_KIND, LOGO_MIME, LOGO_MAX_BYTES, mimeReal } from '../documentos.js';
 import {
   CATALOGO, TONO_UNICO, esTonoValido, plantillaEnVigor, plantillaDeFabrica,
   renderPlantilla, htmlAtexto, revisarPlantilla,
@@ -108,6 +110,61 @@ export function createSettingsRoutes(db, cfg = {}) {
     } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
+  // ── EL LOGO DEL NEGOCIO ────────────────────────────────────────────────────────────────────────
+  // SE VALIDA POR CONTENIDO, NO POR EXTENSIÓN NI POR LO QUE DIGA EL NAVEGADOR. Un `.exe` renombrado
+  // a `.png` llega con `type: image/png` si el navegador quiere, así que lo único de fiar son los
+  // primeros bytes del fichero (`mimeReal`). Y se exige que los dos coincidan: lo declarado tiene
+  // que ser lo que de verdad es.
+  api.post('/logo', requirePerm('company.update'), async c => {
+    try {
+      const body = await c.req.parseBody();
+      const file = body.logo;
+      if (!file || typeof file === 'string') return c.json({ error: 'Elige una imagen.' }, 400);
+      const buffer = Buffer.from(await file.arrayBuffer());
+      if (!buffer.length) return c.json({ error: 'El archivo está vacío.' }, 400);
+      // EL TOPE ANTES QUE NADA: no tiene sentido mirar los bytes de algo que ya se va a rechazar.
+      if (buffer.length > LOGO_MAX_BYTES) {
+        return c.json({ error: 'El logo ocupa ' + (buffer.length / 1048576).toFixed(1) + ' MB y el máximo son 2 MB. Guárdalo más pequeño y vuelve a subirlo.' }, 413);
+      }
+      const real = mimeReal(buffer);
+      if (!real || !LOGO_MIME.has(real)) {
+        return c.json({ error: 'Ese archivo no es una imagen PNG, JPG o WebP. Cambiarle el nombre no lo convierte en una.' }, 400);
+      }
+      const att = saveAttachment(db, c.get('tenant'), { buffer, originalName: file.name || 'logo', mime: real, kind: LOGO_KIND });
+      // El logo anterior NO se borra del disco (archivar, no destruir): deja de estar referenciado
+      // por la configuración, pero los documentos que lo congelaron lo siguen enseñando.
+      db.prepare('UPDATE company_config SET company_logo_id=? WHERE id=1').run(att.id);
+      return c.json({ company_logo_id: att.id });
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+  });
+
+  // Servir el logo. SOLO acepta adjuntos de este `kind`, para que la ruta no sea una puerta trasera
+  // a las facturas de proveedor. El aislamiento entre negocios es de la BD: `db` es la del tenant de
+  // esta petición, así que un id de otro negocio simplemente no existe aquí.
+  api.get('/logo/:id', requirePerm('company.read'), c => {
+    try {
+      const att = getAttachment(db, parseInt(c.req.param('id'), 10));
+      if (!att || att.kind !== LOGO_KIND) return c.json({ error: 'No encontrado' }, 404);
+      const buf = readAttachmentBuffer(att);
+      if (!buf) return c.json({ error: 'Archivo no disponible' }, 404);
+      return new Response(buf, {
+        headers: {
+          'Content-Type': att.mime || 'application/octet-stream',
+          'Content-Disposition': 'inline',
+          'Cache-Control': 'private, max-age=300',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      });
+    } catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+
+  // Quitarlo es dejar de referenciarlo. El fichero se queda: los documentos que ya lo congelaron
+  // tienen que poder seguir enseñándolo.
+  api.delete('/logo', requirePerm('company.update'), c => {
+    try { db.prepare('UPDATE company_config SET company_logo_id=NULL WHERE id=1').run(); return c.json({ ok: true }); }
+    catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+
   api.put('/company', requirePerm('company.update'), validate(companySchema), async c => {
     try {
       const d = c.get('validated');
@@ -128,7 +185,7 @@ export function createSettingsRoutes(db, cfg = {}) {
       // a un proveedor. Mismo trato: si no viene, se conserva lo guardado.
       const diasPago = (d.dias_aviso_pago === '' || d.dias_aviso_pago == null)
         ? null : Math.max(0, Math.min(365, Math.floor(Number(d.dias_aviso_pago) || 0)));
-      db.prepare('UPDATE company_config SET company_name=?,fiscal_id=?,tax_rate=?,logo_url=?,address=?,postal_code=?,city=?,province=?,phone=?,email=?,website=?,country=?,currency=?,currency_symbol=?,tax_name=?,fiscal_id_label=?,document_name=?,irpf_default=?,dias_recordatorio_impago=COALESCE(?,dias_recordatorio_impago),dias_aviso_pago=COALESCE(?,dias_aviso_pago) WHERE id=1').run(d.company_name||'', d.fiscal_id||'', parseFloat(d.tax_rate)||0, d.logo_url||'', d.address||'', d.postal_code||'', d.city||'', d.province||'', d.phone||'', d.email||'', d.website||'', d.country||'ES', d.currency||'EUR', d.currency_symbol||sym, d.tax_name||'IVA', d.fiscal_id_label||'NIF/CIF', d.document_name||'Factura', parseFloat(d.irpf_default)||0, diasProp, diasPago);
+      db.prepare('UPDATE company_config SET company_name=?,fiscal_id=?,tax_rate=?,logo_url=COALESCE(?,logo_url),address=?,postal_code=?,city=?,province=?,phone=?,email=?,website=?,country=?,currency=?,currency_symbol=?,tax_name=?,fiscal_id_label=?,document_name=?,irpf_default=?,dias_recordatorio_impago=COALESCE(?,dias_recordatorio_impago),dias_aviso_pago=COALESCE(?,dias_aviso_pago) WHERE id=1').run(d.company_name||'', d.fiscal_id||'', parseFloat(d.tax_rate)||0, d.logo_url ?? null, d.address||'', d.postal_code||'', d.city||'', d.province||'', d.phone||'', d.email||'', d.website||'', d.country||'ES', d.currency||'EUR', d.currency_symbol||sym, d.tax_name||'IVA', d.fiscal_id_label||'NIF/CIF', d.document_name||'Factura', parseFloat(d.irpf_default)||0, diasProp, diasPago);
       return c.json({message:'Guardado'});
     } catch(e) { return c.json({error:safeError(e)},500); }
   });
@@ -493,7 +550,23 @@ export function createSettingsRoutes(db, cfg = {}) {
             <div class="form-group"><label class="form-label">Provincia</label><input class="form-control" id="cProvince" placeholder="Madrid"></div>
           </div>
           <small style="color:var(--text2);font-size:12px;margin:-8px 0 16px;display:block">Dirección completa: obligatoria para generar la factura electrónica <strong>Facturae</strong>.</small>
-          <div class="form-group"><label class="form-label">URL Logo empresa</label><input class="form-control" id="cLogo"></div>
+          <!-- EL LOGO ERA UN CAMPO DE TEXTO donde se pegaba una dirección de internet, y no se pintaba
+               en ningún documento. No podía: los PDF los genera Chromium en el servidor, así que una
+               URL de fuera habría hecho que cada factura disparase una petición saliente al host que
+               dijera quien editara este campo. Ahora se SUBE, se guarda como adjunto del negocio y
+               se incrusta en el papel. -->
+          <div class="form-group">
+            <label class="form-label">Logo de tu negocio</label>
+            <div class="cfg-logo">
+              <div class="cfg-logo-caja" id="cLogoCaja"></div>
+              <div class="cfg-logo-acc">
+                <input type="file" id="cLogoFile" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="subirLogo(this)">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('cLogoFile').click()">Subir logo</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="cLogoQuitar" onclick="quitarLogo()" style="display:none">Quitar</button>
+                <div class="cfg-logo-hint">PNG, JPG o WebP · hasta 2 MB. Sale en tus presupuestos, pedidos, albaranes, facturas y órdenes de compra.</div>
+              </div>
+            </div>
+          </div>
           <button class="btn btn-primary" onclick="saveCompany()">Guardar cambios</button>
         </div>
       </div>
@@ -594,7 +667,7 @@ export function createSettingsRoutes(db, cfg = {}) {
         document.getElementById('cPostal').value=d.postal_code||'';
         document.getElementById('cCity').value=d.city||'';
         document.getElementById('cProvince').value=d.province||'';
-        document.getElementById('cLogo').value=d.logo_url||'';
+        pintaLogo(d.company_logo_id||null);
       });
 
       // ── PASO 8 — PERFIL DE OFICIO ────────────────────────────────────────────────────────────
@@ -637,8 +710,37 @@ export function createSettingsRoutes(db, cfg = {}) {
       document.getElementById('cOficio').addEventListener('change',cambiarOficio);
       cargarOficio();
 
+      // ── EL LOGO ───────────────────────────────────────────────────────────────────────────────
+      // Se sube SOLO (no espera al «Guardar cambios»): es un fichero, no un campo de texto, y
+      // guardarlo con el resto obligaría a arrastrar el binario en cada guardado del formulario.
+      function pintaLogo(id){
+        var caja=document.getElementById('cLogoCaja'), quitar=document.getElementById('cLogoQuitar');
+        if(id){
+          caja.innerHTML='<img src="/api/erp/settings/logo/'+id+'?v='+Date.now()+'" alt="Logo de tu negocio">';
+          quitar.style.display='';
+        } else {
+          caja.innerHTML='<span class="cfg-logo-vacio"><i class="ti ti-photo"></i></span>';
+          quitar.style.display='none';
+        }
+      }
+      async function subirLogo(input){
+        var f=input.files && input.files[0]; if(!f) return;
+        var fd=new FormData(); fd.append('logo', f);
+        try{
+          var r=await fetch('/api/erp/settings/logo',{method:'POST',headers:{'x-csrf-token':window.CSRF_TOKEN},body:fd});
+          var d=await r.json();
+          if(!r.ok) throw new Error(d.error||'No se pudo subir');
+          pintaLogo(d.company_logo_id); toast('Logo guardado ✓');
+        }catch(e){ toast(e.message,'err'); }
+        finally{ input.value=''; }
+      }
+      async function quitarLogo(){
+        try{ await api('DELETE','/api/erp/settings/logo'); pintaLogo(null); toast('Logo quitado'); }
+        catch(e){ toast(e.message,'err'); }
+      }
+
       async function saveCompany(){
-        try{await api('PUT','/api/erp/settings/company',{company_name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,country:document.getElementById('countryCode').value,currency:document.getElementById('currencyCode').value,currency_symbol:document.getElementById('currencySymbol').value,tax_name:document.getElementById('taxName').value,fiscal_id_label:document.getElementById('fiscalIdLabel').value,document_name:document.getElementById('documentName').value,tax_rate:document.getElementById('cTax').value,irpf_default:document.getElementById('cIrpfDefault').value,dias_recordatorio_impago:document.getElementById('cDiasImpago').value,dias_aviso_pago:document.getElementById('cDiasPago').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,website:document.getElementById('cWeb').value,address:document.getElementById('cAddr').value,postal_code:document.getElementById('cPostal').value,city:document.getElementById('cCity').value,province:document.getElementById('cProvince').value,logo_url:document.getElementById('cLogo').value});toast('Guardado ✓');}catch(e){toast(e.message,'err')}
+        try{await api('PUT','/api/erp/settings/company',{company_name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,country:document.getElementById('countryCode').value,currency:document.getElementById('currencyCode').value,currency_symbol:document.getElementById('currencySymbol').value,tax_name:document.getElementById('taxName').value,fiscal_id_label:document.getElementById('fiscalIdLabel').value,document_name:document.getElementById('documentName').value,tax_rate:document.getElementById('cTax').value,irpf_default:document.getElementById('cIrpfDefault').value,dias_recordatorio_impago:document.getElementById('cDiasImpago').value,dias_aviso_pago:document.getElementById('cDiasPago').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,website:document.getElementById('cWeb').value,address:document.getElementById('cAddr').value,postal_code:document.getElementById('cPostal').value,city:document.getElementById('cCity').value,province:document.getElementById('cProvince').value});toast('Guardado ✓');}catch(e){toast(e.message,'err')}
       }
       </script>`;
     // EL ORDEN DE LA PANTALLA: cabecera · lo del NEGOCIO · la sección mudada, AL FINAL.
@@ -648,6 +750,16 @@ export function createSettingsRoutes(db, cfg = {}) {
     // el formulario de empresa, ni avisos, ni plantillas, ni situación fiscal, ni el <script> que
     // los pide a la API.
     const content = `
+      <style>
+        /* La caja del logo. Nace aquí porque es de esta pantalla; los tokens son los del panel. */
+        .cfg-logo{display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap}
+        .cfg-logo-caja{width:120px;height:64px;border:1px dashed var(--border2);border-radius:10px;
+                       display:flex;align-items:center;justify-content:center;background:var(--bg3,rgba(20,22,27,.02));overflow:hidden}
+        .cfg-logo-caja img{max-width:100%;max-height:100%;object-fit:contain}
+        .cfg-logo-vacio{color:var(--text3);font-size:1.4rem;line-height:1}
+        .cfg-logo-acc{display:flex;flex-direction:column;gap:.4rem;align-items:flex-start}
+        .cfg-logo-hint{font-size:12px;color:var(--text2);max-width:340px;line-height:1.45}
+      </style>
       <div class="ph"><h2>Configuración Empresa</h2></div>
       ${bloqueEmpresa}
       ${seccionCitas}`;

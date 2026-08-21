@@ -1,7 +1,9 @@
 import { renderEmail, TONO_UNICO } from '../email-templates.js';
+import { partesDe, membreteHtml } from '../documentos.js';
+import { renderPdfFromHtml } from '../../../core/pdf.js';   // PDF real: mismo HTML imprimible → Chromium
 import { safeError } from '../../../core/errors.js';
 import { Hono } from 'hono';
-import { adminLayout, can, docShell, estadoTabs, emptyRow, errorShell, ERR } from '../layout.js';
+import { adminLayout, can, docShell, estadoTabs, emptyRow, errorShell, ERR, printableShell} from '../layout.js';
 import { validate } from '../../../core/validate.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { purchaseOrderSchema, purchaseOrderAnularSchema, purchaseOrderReceiptSchema } from '../schemas.js';
@@ -129,11 +131,11 @@ export function sendPurchaseOrderSvc(db, id) {
     const s = db.prepare('SELECT * FROM suppliers WHERE id=?').get(o.supplier_id) || {};
     const order_number = nextCode(db, 'purchase_order');
     db.prepare(`UPDATE purchase_orders SET order_number=?, status='enviada',
-        company_name=?, company_fiscal_id=?, company_address=?, company_phone=?,
+        company_name=?, company_fiscal_id=?, company_address=?, company_phone=?, company_logo_id=?,
         supplier_name=?, supplier_fiscal_id=?, supplier_address=?
       WHERE id=?`).run(
       order_number,
-      cfg.company_name || '', cfg.fiscal_id || '', cfg.address || '', cfg.phone || '',
+      cfg.company_name || '', cfg.fiscal_id || '', cfg.address || '', cfg.phone || '', cfg.company_logo_id || null,
       s.name || '', s.fiscal_id || '', [s.address, s.city].filter(Boolean).join(', '),
       id
     );
@@ -251,20 +253,11 @@ export async function emailPurchaseOrderSvc(db, id, opts = {}) {
 // Cabecera de emisor y proveedor del documento: la orden ENVIADA/ANULADA usa su
 // FOTO CONGELADA (copiada al enviar); el borrador — y las órdenes enviadas antes
 // de existir la foto (company_name NULL) — leen en vivo.
-function docParties(db, o) {
-  if (o.company_name != null) {
-    return {
-      emisor:    { name: o.company_name, fiscal_id: o.company_fiscal_id, address: o.company_address, phone: o.company_phone },
-      proveedor: { name: o.supplier_name, fiscal_id: o.supplier_fiscal_id, address: o.supplier_address },
-    };
-  }
-  const cfg = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
-  const s = db.prepare('SELECT * FROM suppliers WHERE id=?').get(o.supplier_id) || {};
-  return {
-    emisor:    { name: cfg.company_name || '', fiscal_id: cfg.fiscal_id || '', address: cfg.address || '', phone: cfg.phone || '', email: cfg.email || '' },
-    proveedor: { name: s.name || '', fiscal_id: s.fiscal_id || '', address: [s.address, s.city].filter(Boolean).join(', '), email: s.email || '', phone: s.phone || '' },
-  };
-}
+// La regla «foto congelada o configuración en vivo» vive en `documentos.js`, una sola vez para los
+// seis papeles. Aquí la contraparte es el PROVEEDOR — y ojo, el EMISOR sigue siendo tu negocio:
+// una orden de compra la emites tú al proveedor. Lo que se recibe (una factura de proveedor) es
+// otro documento y no lleva membrete tuyo.
+const docParties = (db, o) => partesDe(db, o, 'proveedor');
 
 // Líneas y pie con desglose de IVA por tasa; cabecera desde docParties.
 function documentBodyHtml(o, items, emisor, proveedor, sym) {
@@ -293,24 +286,9 @@ function documentBodyHtml(o, items, emisor, proveedor, sym) {
     ${o.expected_date ? `<div>Entrega prevista: <strong style="color:var(--accent-d)">${esc(o.expected_date)}</strong></div>` : ''}
   </div>
 </div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:24px">
-  <div>
-    <div style="font-size:11px;text-transform:uppercase;color:var(--text2);font-weight:600;margin-bottom:4px">Emisor</div>
-    <div><strong>${esc(emisor.name || '')}</strong></div>
-    ${emisor.fiscal_id ? `<div>${esc(emisor.fiscal_id)}</div>` : ''}
-    ${emisor.address ? `<div style="color:var(--text2)">${esc(emisor.address)}</div>` : ''}
-    ${emisor.email ? `<div style="color:var(--text2)">${esc(emisor.email)}</div>` : ''}
-    ${emisor.phone ? `<div style="color:var(--text2)">${esc(emisor.phone)}</div>` : ''}
-  </div>
-  <div>
-    <div style="font-size:11px;text-transform:uppercase;color:var(--text2);font-weight:600;margin-bottom:4px">Proveedor</div>
-    <div><strong>${esc(proveedor.name || '')}</strong></div>
-    ${proveedor.fiscal_id ? `<div>${esc(proveedor.fiscal_id)}</div>` : ''}
-    ${proveedor.address ? `<div style="color:var(--text2)">${esc(proveedor.address)}</div>` : ''}
-    ${proveedor.email ? `<div style="color:var(--text2)">${esc(proveedor.email)}</div>` : ''}
-    ${proveedor.phone ? `<div style="color:var(--text2)">${esc(proveedor.phone)}</div>` : ''}
-  </div>
-</div>
+${membreteHtml({ emisor, otra: proveedor, rotuloOtra: 'Proveedor',
+                 camposEmisor: ['fiscal_id', 'address', 'email', 'phone'],
+                 camposOtra: ['fiscal_id', 'address', 'email', 'phone'] })}
 <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
   <thead><tr>
     <th style="background:var(--bg);padding:8px 12px;text-align:left;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">Producto</th>
@@ -911,6 +889,26 @@ export function createPurchaseOrderRoutes(db) {
   // Documento imprimible (patrón factura: página propia + window.print) con las
   // acciones según estado. Cabecera desde docParties: la enviada/anulada muestra
   // su foto congelada del envío; el borrador lee en vivo.
+  // ── DESCARGAR EN PDF ───────────────────────────────────────────────────────────────────────────
+  // La orden de compra era el ÚNICO de los seis papeles sin descarga: solo tenía «Imprimir», que
+  // depende de que quien la mire tenga impresora o sepa guardar como PDF desde el navegador. Mismo
+  // camino que los otros cinco —`printableShell` → Chromium—, mismo cuerpo que se ve en pantalla y
+  // mismo candado que su vista. Ni un generador nuevo.
+  views.get('/:id{[0-9]+}/pdf', requirePerm('purchases.read'), async c => {
+    try {
+      const id = parseInt(c.req.param('id'), 10);
+      const o = getOrder(db, id);
+      if (!o) return c.html(errorShell('No encontramos esta orden de compra', 'Puede que se haya anulado o que el enlace ya no sea válido.', { action: 'Ver órdenes', href: '/admin/purchase-orders' }), 404);
+      const { emisor, proveedor } = docParties(db, o);
+      const cfgPdf = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get() || {};
+      const sym = cfgPdf.currency_symbol || '€';
+      const body = documentBodyHtml(o, getItems(db, id), emisor, proveedor, sym);
+      const pdf = await renderPdfFromHtml(printableShell(body, { title: 'Orden de compra ' + (o.order_number || ('#' + id)) }));
+      const fname = ('Orden-compra-' + (o.order_number || ('' + id)) + '.pdf').replace(/[\/\\]/g, '-');
+      return new Response(pdf, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="' + fname + '"' } });
+    } catch (e) { return c.html(errorShell('No hemos podido generar el PDF', ERR.PDF, { action: 'Ver órdenes', href: '/admin/purchase-orders' }), e.status || 500); }
+  });
+
   views.get('/:id', requirePerm('purchases.read'), c => {
     const id = parseInt(c.req.param('id'));
     const o = getOrder(db, id);
@@ -1038,6 +1036,7 @@ ${receptionBlock}`;
   <div class="dp-row"><span class="k">Proveedor</span><span class="v">${esc(proveedor.name || '')}</span></div>
   <div class="dp-actions" style="margin-top:14px">
     <button onclick="window.print()" class="btn btn-primary">Imprimir</button>
+    <a href="/admin/purchase-orders/${id}/pdf" class="btn btn-secondary">Descargar PDF</a>
     ${actions}
     <a href="/admin/purchase-orders" class="btn btn-secondary">Volver al listado</a>
   </div>

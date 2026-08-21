@@ -112,13 +112,16 @@
 `A 8 · B 3 · C 11 · D 5 · E 4 · F 4 · G 5 · H 3 · I 3 · J 0 · K 0` = **46**.
 (J y K son ítems bloqueados sin subpuntos: su texto es una sola afirmación.)
 
-**RECUENTO VIGENTE — 21 ago 2026, al cerrar la tarea L: 60 subpuntos vivos · 23 hechos · 37 pendientes.**
-`A 6 · B 3 · C 11 · D 5 · E 4 · F 4 · G 4 · H 3 · I 3 · J 0 · K 0 · L 8 · M 9` = **60**.
+**RECUENTO VIGENTE — 21 ago 2026, al cerrar C-0: 64 subpuntos vivos · 27 hechos · 37 pendientes.**
+`A 6 · B 3 · C 11 · C-0 4 · D 5 · E 4 · F 4 · G 4 · H 3 · I 3 · J 0 · K 0 · L 8 · M 9` = **64**.
 - **4 RETIRADOS**, con su motivo escrito en su sitio y **sin borrar la línea**: **A3** y **A6**
   (premisas falsas, las tumbó la auditoría del encargo 0), **G3** (ya estaba hecho) y **L1** (la
   pantalla ya traía el armazón del panel: lo tumbó el Paso 0 de la tarea L).
-- **23 HECHOS:** los 6 de **A** · los 8 de **M** (las dos entregas que se dictaron de viva voz) · los
-  8 vivos de **L** · y el subpunto de DISA de **L2**. Todos del 21 ago 2026.
+- **27 HECHOS:** los 6 de **A** · los 9 de **M** (las dos entregas que se dictaron de viva voz) · los
+  8 vivos de **L** · y los **4 de C-0**. Todos del 21 ago 2026.
+- **C-0 no estaba en el encargo original** y nace del Paso 0 de **C**: sanear los documentos antes de
+  construir el motor de listados encima. **C sigue entero y pendiente** — C-0 le quita el andamio
+  podrido de debajo, no le hace el trabajo.
 - Quedan **37 pendientes** —los de B a I— y **2 bloqueados** (J y K), que no dependen de Ibrahin.
 - **A1, A4 y A7 fueron REESCRITOS** por el dueño antes de construirse; el recuento no cambia por eso
   (siguen siendo los mismos subpuntos), solo cambia lo que piden.
@@ -570,6 +573,117 @@ devuelve sus horas, que copiar no abre días cerrados y que un tramo imposible n
   que **no son ninguno de los tres verbos de C9**.
 
 ---
+
+---
+
+#### C-0. SANEAR LOS DOCUMENTOS ANTES DE CONSTRUIR EL MOTOR · ✅ **HECHO (21 ago 2026)** · commit `PENDIENTE_HASH_C0`
+
+> **C0-1** UNA SOLA docParties. Es una REGLA DE NEGOCIO —cuándo manda la foto congelada del documento y cuándo la configuración en vivo—, no maquetación. Vive en un solo sitio y todos la llaman. Si el Paso 0 confirma que la de compras es legítimamente distinta, se admite UNA excepción, escrita y con su motivo en el código. Una, no dos.
+> **C0-2** UN SOLO DIALECTO. Presupuesto, pedido y albarán pasan a las clases .doc-* que ya usa la factura. Los estilos escritos a mano en cada etiqueta desaparecen. No se inventa un dialecto nuevo: se usa el que hay.
+> **C0-3** EL LOGO SALE. company_config.logo_url se pinta en el membrete de TODOS los papeles, en pantalla y en impresión. · Sin logo → el membrete se pinta igual de bien, sin hueco ni icono roto. · Con logo → tamaño acotado. · Documento ya emitido: manda la foto congelada.
+> **C0-4** EL RESULTADO VISIBLE NO EMPEORA. Salvo el logo, los seis papeles salen igual o mejor.
+
+**⚙️ EL PASO 0, CERRADO — Y LO QUE CORRIGIÓ:**
+
+- **NO SON SEIS PAPELES, SON NUEVE**, y la diferencia importa. Con **membrete**: factura, presupuesto,
+  pedido, albarán, ticket de mostrador y orden de compra — **seis**. Con **papel en pantalla pero sin
+  membrete**: compra directa, factura recibida, devolución a proveedor y recepción — **cuatro más**, y
+  es correcto que no lo lleven: en una compra el emisor es el proveedor. El **portal** no es un papel
+  aparte: reusa `buildInvoicePaper`. *(El «cinco» del informe anterior era un fallo del comando con
+  el que busqué, no un dato del código: escribí cinco ficheros a mano y dejé fuera la orden de compra.)*
+- **LA DE COMPRAS ERA LEGÍTIMAMENTE DISTINTA, PERO NO ENTERA.** Devuelve `proveedor` en vez de
+  `cliente`, lee de `suppliers` y compone la dirección juntando `address + city` (un proveedor guarda
+  la ciudad aparte). **Pero el emisor sigue siendo tu negocio**: una orden de compra **la emites tú**.
+  El matiz de Ibrahin —«el proveedor emite, tú recibes»— vale para la **factura recibida**, que ni
+  siquiera lleva membrete. Así que **no hacía falta una excepción**: la contraparte es un PARÁMETRO y
+  la regla es una sola. **Cero excepciones, no una.**
+- **EL TICKET NO USABA `docParties`… Y LA FACTURA TAMPOCO.** Iban por un **tercer camino**: leían
+  `inv.company_name` a pelo. Así que la misma regla vivía escrita de **tres formas**, no en cuatro
+  copias.
+- **EL LOGO ERA UNA URL ESCRITA A MANO.** Campo de texto «URL Logo empresa», sin subida, **sin
+  validación, sin tope y sin comprobar formato**. No lo tenía ningún negocio. *(Y una hipótesis mía
+  intermedia era falsa y se comprobó antes de escribirla: `logo_url` no está declarado en
+  `companySchema`, pero éste es `.passthrough()`, así que sí se guardaba.)*
+
+**EL HALLAZGO COMPLETO, ANOTADO AUNQUE QUEDE ARREGLADO** — porque el registro es la memoria del
+proyecto, no la lista de lo que falta:
+
+1. **Dos dialectos para pintar lo mismo.** La factura usaba las clases `.doc-*` de `layout.js`; el
+   presupuesto, el pedido, el albarán y la orden de compra repetían el mismo HTML con
+   `style="font-size:11px;text-transform:uppercase;…"` **copiado en cada etiqueta**.
+2. **Una regla de negocio en tres formas y cuatro copias.** `docParties` definida en `quotes.js`,
+   `pedidos.js`, `albaranes.js` y `purchase-orders.js` — las tres de venta **idénticas carácter por
+   carácter**, 14 líneas— más el tercer camino de la factura y el ticket.
+3. **Un logo prometido y no cumplido.** El panel «Pon en marcha tu negocio» dice literalmente *«Tu
+   logo… cambia que tu cliente reciba algo con tu cara en vez de un papel anónimo»*. El dueño lo
+   subía y **no salía en ningún documento**: el único sitio del producto que lo pintaba era la
+   tienda, que está congelada.
+
+**QUÉ SE ENTREGÓ:**
+
+- **C0-1 · `modules/erp/documentos.js`, y `partesDe` definida UNA vez** en todo el producto
+  (comprobado contando definiciones). Los seis papeles la llaman, la factura y el ticket incluidos.
+- **C0-2 · un solo dialecto:** los cuatro papeles que iban a mano pasan a `membreteHtml`, que usa las
+  clases `.doc-*` que ya existían. **No nace un dialecto nuevo.**
+- **C0-3 · el logo sale, y por el único camino que no compromete nada.** Deja de ser una URL: se
+  **sube** (PNG/JPG/WebP, **2 MB**), se valida **por los primeros bytes y no por la extensión** —un
+  `.exe` renombrado a `.png` se rechaza—, se guarda como adjunto del propio negocio y **se incrusta**
+  en el papel (`data:`). **Ni una petición saliente**: enlazarlo habría hecho que cada PDF llamara al
+  host que dijera quien editó ese campo —SSRF de manual— y habría atado tus facturas a un servidor de
+  terceros. Congelado como el resto del membrete (`company_logo_id` en los cinco documentos): cambiar
+  el logo hoy **no reescribe una factura de marzo**.
+- **Y la orden de compra gana PDF**, que era el único de los seis sin descarga: mismo camino que los
+  otros cinco, ni un generador nuevo.
+
+**⚠️ C0-4 · LO QUE SÍ CAMBIA A LA VISTA, DICHO ANTES DE COMMITEAR.** Unificar el dialecto mueve tres
+cosas, y son exactamente lo que significa unificar: el rótulo «Emisor / Cliente» pasa de **peso 600 a
+500 con un pelo de espaciado**, la separación entre columnas de **32 a 28 px** y el margen inferior de
+**24 a 26 px**. Los cuatro papeles pasan a verse **igual que la factura**. **El contenido no cambia**:
+cada papel sigue pintando SUS campos.
+
+**DOS FALLOS MÍOS QUE CAZÓ EL PROPIO GATE, Y LOS DOS ERAN GORDOS:**
+
+1. **Puse la migración del logo ANTES de que existieran las tablas.** Un negocio nuevo moría en el
+   alta con «no such table: invoices». **El alta de negocios estuvo rota** hasta que el gate levantó
+   su primer negocio de cero — que es exactamente para lo que los gates levantan negocios de cero.
+   Movida al final de `runMigrations`, y comprobado creando una base desde cero.
+2. **Rompí un INSERT ajeno.** Al añadir la columna a los cinco INSERT de facturas con una sustitución
+   por patrón, amplié **seis** `VALUES` y solo había cinco: el sexto era `invoice_anulaciones`, que se
+   quedó con un `?` de más. Cazado contando marcadores contra columnas **en todos los INSERT de los
+   cinco ficheros**, no a ojo.
+
+**VERIFICACIÓN — `gate-documentos`: 48 aserciones, 0 fallos, contra la dirección pública.**
+- **Reversión de C0-1, C0-2 y C0-3** por separado: **sin C0-1 → 2 rojos** (vuelven a ser dos
+  definiciones de la regla) · **sin C0-2 → 2** (reaparece el estilo a mano en el presupuesto) ·
+  **sin C0-3 → 1, y es el gordo**: el logo desaparece de **los cuatro** papeles a la vez. El gate
+  llegó al final en las tres.
+- **Y CUATRO ASERCIONES MÍAS ESTABAN MAL, no el producto:** tres buscaban «hay un `data:`» para decir
+  «hay logo» — **y el QR de Veri*Factu también es un `data:image/png`**, así que daban por puesto un
+  logo que no estaba. El `<img>` del logo lleva ahora **marca propia** (`data-membrete="logo"`) y la
+  comprobación dice lo que cree decir. La cuarta usaba `""` dentro de un SQL, que en SQLite es un
+  **identificador y no una cadena**.
+- **Y otra cosa que me cacé al declarar el gate:** mi primera regla `AFECTA` ponía
+  `routes/(quotes|invoices|…) → ['documentos']` **delante**, y como manda la primera regla que casa,
+  un cambio en facturas habría dejado de despertar a `margen` y `clientes`. **Menos cobertura
+  disfrazada de más.** Ahora cada regla lleva sus grupos de siempre **más** `documentos`, y está
+  comprobado fichero a fichero que no se pierde ninguno.
+
+**FICHA DE `gate-documentos` — DECLARADO, QUE NO ES EJECUTADO.**
+
+| | |
+|---|---|
+| **Nombre** | `scripts/gate-documentos.mjs` |
+| **Aserciones** | **48** (0 fallos el 21 ago 2026) |
+| **Duración** | **~90 s** (genera PDF de verdad, que es lo que más cuesta) |
+| **Clase** | **propio** (`EMPIEZAN_DE_CERO`) — levanta **dos** negocios suyos: uno con logo y otro sin él, y el segundo sirve además para probar que un negocio no ve el logo del otro. |
+| **Grupo** | **`documentos`**, propio y no dentro de `ventas`: lo que vigila cruza venta y compra y además Ajustes. El barrido pasa de **80 a 81** comprobaciones |
+| **Contra** | `https://<slug>.bamburu.com` |
+| **Depende del reloj** | **No.** Fecha los documentos con el día de hoy calculado en el momento. |
+
+**TABLA `AFECTA`.** Cinco reglas nuevas, cada una **sumando** `documentos` a los grupos que ese
+fichero ya despertaba: `documentos.js` y `attachments.js` · `quotes|pedidos|invoices|mostrador` ·
+`albaranes` · `purchase-orders` · `settings`. Comprobado **ejecutándolas** contra las siete rutas
+reales y verificando que **ningún grupo anterior se pierde**.
 
 #### D. ANALÍTICAS — INFORMES A MEDIDA · **PENDIENTE**
 

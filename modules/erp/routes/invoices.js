@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { partesDe, membreteHtml } from '../documentos.js';
 import { safeError } from '../../../core/errors.js';
 import { createHash } from 'crypto';
 import QRCode from 'qrcode';
@@ -173,15 +174,15 @@ export function generateInvoice(db, orderId) {
   const emit = db.transaction(() => {
     const result = db.prepare(`INSERT INTO invoices
       (invoice_number,order_id,client_id,series,year,sequence,issue_date,
-       company_name,company_fiscal_id,company_address,
+       company_name,company_fiscal_id,company_address,company_logo_id,
        client_name,client_fiscal_id,client_address,client_email,
        subtotal,tax_rate,tax_name,tax_amount,total,
        currency,currency_symbol,document_name,
        verifactu_hash,prev_hash,due_date)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       inv.invoice_number, inv.order_id, inv.client_id, inv.series, inv.year, inv.sequence, inv.issue_date,
-      inv.company_name, inv.company_fiscal_id, inv.company_address,
+      inv.company_name, inv.company_fiscal_id, inv.company_address, inv.company_logo_id || null,
       inv.client_name, inv.client_fiscal_id, inv.client_address, inv.client_email,
       inv.subtotal, inv.tax_rate, inv.tax_name, inv.tax_amount, inv.total,
       inv.currency, inv.currency_symbol, inv.document_name,
@@ -257,7 +258,7 @@ export function createInvoice(db, invoiceData) {
     // dirección del día de emisión, no la de entonces. Mismo patrón que ya seguía `company_name`.
     const result = db.prepare(`INSERT INTO invoices
       (invoice_number, order_id, client_id, series, year, sequence, issue_date,
-       company_name, company_fiscal_id, company_address,
+       company_name, company_fiscal_id, company_address, company_logo_id,
        company_postal_code, company_city, company_province, company_country,
        client_name, client_fiscal_id, client_address, client_email,
        client_postal_code, client_city, client_province, client_country,
@@ -265,11 +266,11 @@ export function createInvoice(db, invoiceData) {
        currency, currency_symbol, document_name,
        verifactu_hash, prev_hash, notes,
        irpf_rate, irpf_amount, due_date, tipo_factura)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       invoice_number, null, client_id,
       series, year, seq, issueDate,
-      cfg.company_name || 'Mi empresa', cfg.fiscal_id || '', cfg.address || '',
+      cfg.company_name || 'Mi empresa', cfg.fiscal_id || '', cfg.address || '', cfg.company_logo_id || null,
       cfg.postal_code || '', cfg.city || '', cfg.province || '', cfg.country || '',
       client.name, client.fiscal_id || '', client.address || '', client.email || '',
       client.postal_code || '', client.city || '', client.province || '', client.country || '',
@@ -405,7 +406,7 @@ export function createRectificativa(db, data) {
     // debe describir a las mismas partes tal y como estaban el día de la factura rectificada.
     const result = db.prepare(`INSERT INTO invoices
       (invoice_number, order_id, client_id, series, year, sequence, issue_date,
-       company_name, company_fiscal_id, company_address,
+       company_name, company_fiscal_id, company_address, company_logo_id,
        company_postal_code, company_city, company_province, company_country,
        client_name, client_fiscal_id, client_address, client_email,
        client_postal_code, client_city, client_province, client_country,
@@ -413,10 +414,10 @@ export function createRectificativa(db, data) {
        currency, currency_symbol, document_name,
        verifactu_hash, prev_hash, notes, irpf_rate, irpf_amount,
        record_type, rectifies_invoice_id, rectification_type, rectification_mode, status, due_date, tipo_factura)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       invoice_number, null, original.client_id || null, series, year, seq, issueDate,
-      original.company_name, original.company_fiscal_id, original.company_address,
+      original.company_name, original.company_fiscal_id, original.company_address, original.company_logo_id || null,
       original.company_postal_code || '', original.company_city || '', original.company_province || '', original.company_country || '',
       original.client_name, original.client_fiscal_id, original.client_address, original.client_email,
       original.client_postal_code || '', original.client_city || '', original.client_province || '', original.client_country || '',
@@ -632,21 +633,11 @@ ${lifecycle}
 <h1>${escHtml(inv.document_name)}</h1>
 <div class="doc-sub">${escHtml(inv.invoice_number)} · ${inv.status === 'emitida' ? 'Emitida' : inv.status === 'rectificada' ? 'Rectificada' : 'Anulada'} el ${inv.issue_date}</div>
 
-<div class="doc-cols">
-  <div>
-    <div class="doc-label">Emisor</div>
-    <div><strong>${escHtml(inv.company_name)}</strong></div>
-    ${inv.company_fiscal_id ? `<div>${escHtml(inv.company_fiscal_id)}</div>` : ''}
-    ${inv.company_address ? `<div style="color:var(--text2)">${escHtml(inv.company_address)}</div>` : ''}
-  </div>
-  <div>
-    <div class="doc-label">Cliente</div>
-    <div><strong>${escHtml(inv.client_name || 'Cliente general')}</strong></div>
-    ${inv.client_fiscal_id ? `<div>${escHtml(inv.client_fiscal_id)}</div>` : ''}
-    ${inv.client_address ? `<div style="color:var(--text2)">${escHtml(inv.client_address)}</div>` : ''}
-    ${inv.client_email ? `<div style="color:var(--text2)">${escHtml(inv.client_email)}</div>` : ''}
-  </div>
-</div>
+${membreteHtml({ emisor: partesDe(db, inv).emisor,
+                 otra: { ...partesDe(db, inv).cliente, name: inv.client_name || 'Cliente general' },
+                 rotuloOtra: 'Cliente',
+                 camposEmisor: ['fiscal_id', 'address'],
+                 camposOtra: ['fiscal_id', 'address', 'email'] })}
 
 <table>
   <thead><tr><th>Descripción</th><th style="text-align:right">Cant.</th><th style="text-align:right">P. unitario</th><th style="text-align:right">Total</th></tr></thead>
@@ -722,18 +713,18 @@ export function emitTicketSvc(db, { lines, warehouse_id, payment_method, paid_da
     // snapshot de cliente porque no hay cliente. Facturae la bloquea (exige BuyerParty con NIF).
     const result = db.prepare(`INSERT INTO invoices
       (invoice_number, order_id, client_id, series, year, sequence, issue_date,
-       company_name, company_fiscal_id, company_address,
+       company_name, company_fiscal_id, company_address, company_logo_id,
        company_postal_code, company_city, company_province, company_country,
        client_name, client_fiscal_id, client_address, client_email,
        subtotal, tax_rate, tax_name, tax_amount, total,
        currency, currency_symbol, document_name,
        verifactu_hash, prev_hash, notes,
        irpf_rate, irpf_amount, due_date, tipo_factura, emitted_by)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       invoice_number, null, null,
       SIMPLIFIED_SERIES, year, seq, issueDate,
-      cfg.company_name || 'Mi empresa', cfg.fiscal_id || '', cfg.address || '',
+      cfg.company_name || 'Mi empresa', cfg.fiscal_id || '', cfg.address || '', cfg.company_logo_id || null,
       cfg.postal_code || '', cfg.city || '', cfg.province || '', cfg.country || '',
       '', '', '', '',
       totals.subtotal, headerTaxRate, cfg.tax_name || 'IVA', totals.taxAmount, totals.total,
@@ -806,7 +797,8 @@ export async function buildTicketPaper(db, inv) {
   return `${vfHead}
 <h1>Factura simplificada</h1>
 <div class="doc-sub">${escHtml(inv.invoice_number)} · ${escHtml(inv.issue_date)}</div>
-<div class="doc-cols"><div><div class="doc-label">Emisor</div><div><strong>${escHtml(inv.company_name)}</strong></div>${inv.company_fiscal_id ? `<div>${escHtml(inv.company_fiscal_id)}</div>` : ''}${inv.company_address ? `<div style="color:var(--text2)">${escHtml(inv.company_address)}</div>` : ''}</div><div></div></div>
+${membreteHtml({ emisor: partesDe(db, inv).emisor, otra: null,
+                 camposEmisor: ['fiscal_id', 'address'] })}
 <table><thead><tr><th>Concepto</th><th style="text-align:right">Cant.</th><th style="text-align:right">P. unit.</th><th style="text-align:right">Total</th></tr></thead><tbody>${rows}</tbody></table>
 <table class="doc-totals"><tr><td>Base imponible</td><td>${sym}${Number(inv.subtotal).toFixed(2)}</td></tr>${taxRows}<tr class="grand"><td>TOTAL</td><td>${sym}${Number(inv.total).toFixed(2)}</td></tr></table>
 <div style="margin-top:14px"><span class="doc-label">Forma de pago</span><div><strong>${metodo}</strong> · ${sym}${Number(inv.total).toFixed(2)} (pagado)</div></div>
@@ -858,7 +850,7 @@ export function emitSustitutivaSvc(db, ticketId, client_id) {
     const due_date = computeDueDate(db, issueDate, client_id);
     const result = db.prepare(`INSERT INTO invoices
       (invoice_number, order_id, client_id, series, year, sequence, issue_date,
-       company_name, company_fiscal_id, company_address,
+       company_name, company_fiscal_id, company_address, company_logo_id,
        company_postal_code, company_city, company_province, company_country,
        client_name, client_fiscal_id, client_address, client_email,
        client_postal_code, client_city, client_province, client_country,
@@ -866,11 +858,11 @@ export function emitSustitutivaSvc(db, ticketId, client_id) {
        currency, currency_symbol, document_name,
        verifactu_hash, prev_hash, notes,
        irpf_rate, irpf_amount, due_date, substitutes_invoice_id, tipo_factura)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       invoice_number, null, client_id,
       series, year, seq, issueDate,
-      cfg.company_name || 'Mi empresa', cfg.fiscal_id || '', cfg.address || '',
+      cfg.company_name || 'Mi empresa', cfg.fiscal_id || '', cfg.address || '', cfg.company_logo_id || null,
       cfg.postal_code || '', cfg.city || '', cfg.province || '', cfg.country || '',
       client.name, client.fiscal_id || '', client.address || '', client.email || '',
       client.postal_code || '', client.city || '', client.province || '', client.country || '',
