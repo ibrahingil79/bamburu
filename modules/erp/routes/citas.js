@@ -391,9 +391,16 @@ export function anularCitaSvc(db, id, motivo = 'Cita anulada', quien = null) {
 // `cliente_id` OPCIONAL (Tarea 2 · cabo 5): sin él, todo sigue exactamente igual — lo que importa,
 // porque de esta función come también el bloque «Hoy» del Inicio. Con él, la agenda enseña solo las
 // citas de esa persona, que es lo que se pide desde su ficha.
-export function agendaData(db, { desde, hasta, cliente_id = null }) {
-  const filtro = cliente_id ? ' AND c.cliente_id=?' : '';
-  const args = cliente_id ? [desde, hasta, cliente_id] : [desde, hasta];
+export function agendaData(db, { desde, hasta, cliente_id = null, soloUsuario = null }) {
+  // `soloUsuario` = el candado de «cada uno ve lo suyo» (permiso citas.ver_todas, 21 ago 2026).
+  // Se filtra EN EL SQL, no al pintar: lo que no se puede ver no sale de la base, así que no puede
+  // colarse ni en una respuesta ni en un correo ni en un artifact de DISA. Por defecto es null —no
+  // filtra— para que ninguna llamada de las que ya existían cambie sola: quien llama decide, y esa
+  // decisión se ve en el diff.
+  const filtro = (cliente_id ? ' AND c.cliente_id=?' : '') + (soloUsuario ? ' AND c.user_id=?' : '');
+  const args = [desde, hasta];
+  if (cliente_id) args.push(cliente_id);
+  if (soloUsuario) args.push(soloUsuario);
   const citas = db.prepare(
     `SELECT c.*, u.name AS persona, r.nombre AS recurso, cl.name AS cliente_nombre
        FROM citas c LEFT JOIN admin_users u ON u.id=c.user_id LEFT JOIN recursos r ON r.id=c.recurso_id
@@ -470,7 +477,13 @@ export function createCitasRoutes(db) {
       const cliId = parseInt(c.req.query('cliente'), 10) || null;
       const cliente = cliId ? (db.prepare('SELECT id, name FROM clients WHERE id=?').get(cliId) || null) : null;
       // personasDia = quién trabaja el día `desde` (para la vista de entrada; el frente decide si filtra).
-      const personasDia = personasQueTrabajan(db, desde).map(p => ({ id: p.id, name: p.name }));
+      // MISMO CANDADO QUE EL MES: sin `citas.ver_todas`, solo lo suyo. Y las COLUMNAS también: una
+      // columna con el nombre de un compañero, aunque saliera vacía, ya dice quién trabaja hoy.
+      const verTodasAg = can(c, 'citas.ver_todas');
+      const yoAg = c.get('session')?.userId;
+      const personasDia = personasQueTrabajan(db, desde)
+        .filter(p => verTodasAg || String(p.id) === String(yoAg))
+        .map(p => ({ id: p.id, name: p.name }));
       // `rango` = de qué hora a qué hora tiene sentido dibujar (ver rangoRejilla).
       // `sin_horario` = el negocio no ha configurado ninguno y está con el día abierto por defecto.
       // NO es un error ni un bloqueo: puede crear citas ya. La pantalla lo dice, no lo esconde.
@@ -490,7 +503,7 @@ export function createCitasRoutes(db) {
         tramos[f] = { negocio: tramosAmbito(db, 'negocio', null, f), personas };
       }
       return c.json({
-        ...agendaData(db, { desde, hasta, cliente_id: cliente ? cliente.id : null }), cliente, personasDia, tramos,
+        ...agendaData(db, { desde, hasta, cliente_id: cliente ? cliente.id : null, soloUsuario: verTodasAg ? null : yoAg }), cliente, personasDia, tramos,
         rango: rangoRejilla(db, fechas),
         sin_horario: !hayHorarioNegocio(db),
       });
@@ -512,7 +525,16 @@ export function createCitasRoutes(db) {
       if (!ym) return c.json({ error: 'Mes inválido (formato YYYY-MM)' }, 400);
       const anio = +ym[1], mes = +ym[2];
       const ultimo = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
-      const personas = db.prepare('SELECT id FROM admin_users WHERE active=1').all().map(r => r.id);
+      // ── QUIÉN PUEDE VER LA AGENDA DE QUIÉN (21 ago 2026) ────────────────────────────────────
+      // Sin `citas.ver_todas` este mes es SOLO EL SUYO: ni sus citas ni sus horas salen de aquí.
+      // Las DOS cosas, y no solo las citas: decirle «168 h libres entre 14 personas» a quien no
+      // puede ver la agenda de esas 14 sería la misma fuga contada de otra manera. El dueño y los
+      // administradores pasan por el bypass de rol de `can()`, así que a ellos no les cambia nada.
+      const verTodas = can(c, 'citas.ver_todas');
+      const yo = c.get('session')?.userId;
+      const personas = verTodas
+        ? db.prepare('SELECT id FROM admin_users WHERE active=1').all().map(r => r.id)
+        : (yo ? [yo] : []);
       const hoy = ahoraLocal().fecha;
       // ── LO QUE PASA CADA DÍA, sin tener que pasar el ratón ────────────────────────────────────
       // El mes ya no dice solo "3 citas": enseña las primeras. Acotado a propósito:
@@ -555,18 +577,30 @@ export function createCitasRoutes(db) {
         // equipo", solo quien TRABAJA ese día (`personasQueTrabajan`, la misma función). Por puesto
         // no hay filtro de columnas en Día —se listan todos los puestos y el «sin puesto»—, así que
         // aquí tampoco se filtra: se hereda el comportamiento, no se mejora.
-        const visibles = (eje === 'persona' && !verTodo)
-          ? new Set(personasQueTrabajan(db, fecha).map(p => p.id))
-          : null;
-        const delDia = primeras.all(fecha).filter(x => !visibles || visibles.has(x.user_id));
+        // UN DÍA CERRADO YA NO ESCONDE LAS CITAS QUE SÍ TIENE (21 ago 2026). Antes, en un día en que
+        // no trabaja NADIE, este filtro se quedaba vacío y se comía TODAS las citas: la casilla decía
+        // «Cerrado» encima de dos citas reales. Medido en el negocio de desarrollo el 26 de agosto:
+        // con el filtro normal 0 citas, con «ver todo el equipo» 2. Y las dos vistas no coincidían,
+        // porque la de Día ya hacía justo esto: cuando no hay nadie trabajando, `colDefs` cae a
+        // TODAS las personas («nunca dejar la agenda sin columnas»). Ahora Mes hace lo mismo.
+        // LA REGLA: esconder una cita real es siempre peor que enseñar un día raro. El filtro sigue
+        // igual de estricto cuando hay alguien trabajando — que es cuando significa algo.
+        const trabajan = (eje === 'persona' && !verTodo) ? personasQueTrabajan(db, fecha) : null;
+        const visibles = (trabajan && trabajan.length) ? new Set(trabajan.map(p => p.id)) : null;
+        const delDia = primeras.all(fecha)
+          // El candado va PRIMERO y no lo levanta ningún filtro de pantalla: «ver todo el equipo»
+          // enseña todo el equipo QUE SE PUEDE VER, no todo el equipo.
+          .filter(x => verTodas || String(x.user_id) === String(yo))
+          .filter(x => !visibles || visibles.has(x.user_id));
         dias.push({
           fecha, dia: d, citas: delDia.length, libres_min: libres, abierto, pasado: fecha < hoy,
           capacidad_min: capacidad, personas_abiertas: personasAbiertas,
           // A7 · EL SERVICIO, de la MISMA función que lo escribe en la vista Día (`serviciosDeCita`,
           // unido con « + »). No hay un segundo texto del servicio que pueda decir otra cosa. Solo
           // se resuelve para las CUATRO que viajan, no para el mes entero.
+          // `id` viaja para poder ARRASTRAR la cita de un día a otro desde el propio mes.
           primeras: delDia.slice(0, 4).map(x => ({
-            min: x.inicio_min, cliente: x.cliente, estado: x.estado,
+            id: x.id, min: x.inicio_min, cliente: x.cliente, estado: x.estado,
             servicio: serviciosDeCita(db, x.id).join(' + '),
           })),
         });
@@ -604,6 +638,12 @@ export function createCitasRoutes(db) {
            LEFT JOIN clients cl ON cl.id=c.cliente_id LEFT JOIN proyectos pr ON pr.id=c.project_id WHERE c.id=?`
       ).get(c.req.param('id'));
       if (!cita) return c.json({ error: 'No encontrada' }, 404);
+      // LA PUERTA DE ATRÁS DE LA FICHA. Esconder una cita del calendario no sirve de nada si se
+      // llega a ella tecleando su número, así que el candado de «cada uno ve lo suyo» se aplica
+      // TAMBIÉN aquí. Se responde 404, no 403: un 403 confirmaría que esa cita existe.
+      if (!can(c, 'citas.ver_todas') && String(cita.user_id) !== String(c.get('session')?.userId)) {
+        return c.json({ error: 'No encontrada' }, 404);
+      }
       cita.servicios = db.prepare('SELECT cs.*, p.name AS nombre FROM cita_servicios cs LEFT JOIN products p ON p.id=cs.product_id WHERE cs.cita_id=? ORDER BY cs.orden,cs.id').all(cita.id);
       cita.service_ids = cita.servicios.map(s => s.product_id);
       cita.avisos = db.prepare('SELECT tipo,canal,estado,enviado_at FROM cita_avisos WHERE cita_id=? ORDER BY id').all(cita.id);
@@ -621,7 +661,7 @@ export function createCitasRoutes(db) {
       // el chip sin una segunda llamada; si el id no existe, no se filtra y se dice (cliente: null).
       const cliId = parseInt(c.req.query('cliente'), 10) || null;
       const cliente = cliId ? (db.prepare('SELECT id, name FROM clients WHERE id=?').get(cliId) || null) : null;
-      return c.json(agendaData(db, { desde, hasta }).citas);
+      return c.json(agendaData(db, { desde, hasta, soloUsuario: can(c, 'citas.ver_todas') ? null : c.get('session')?.userId }).citas);
     } catch (e) { return c.json({ error: safeError(e) }, 500); }
   });
 
@@ -1166,6 +1206,22 @@ const CSS_AGENDA = `
   .ag-tit .anio{color:var(--text3);font-weight:600;margin-left:.28em}
   .ag-tit:hover .mes{text-decoration:underline;text-underline-offset:3px}
   .ag-tit:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+  /* EL SALTO DE FECHA: doce meses o doce años, en una hoja que cuelga del título. */
+  .ag-salto{position:absolute;z-index:60;margin-top:.4rem;width:264px;background:var(--bg2);
+            border:1px solid var(--border2);border-radius:var(--radius-lg,12px);
+            box-shadow:0 16px 44px rgba(16,24,40,.18);padding:.6rem}
+  .ag-salto[hidden]{display:none}
+  .ag-salto-cab{display:flex;align-items:center;gap:.25rem;margin-bottom:.5rem}
+  .ag-salto-tit{flex:1;appearance:none;border:0;background:transparent;font-family:inherit;
+                font-size:.95rem;font-weight:700;color:var(--text);cursor:pointer;padding:.3rem;border-radius:8px}
+  .ag-salto-tit:hover{background:var(--bg3)}
+  .ag-salto-rej{display:grid;grid-template-columns:repeat(3,1fr);gap:.3rem}
+  .ag-salto-rej button{appearance:none;border:0;background:transparent;font-family:inherit;font-size:.82rem;
+                       color:var(--text);cursor:pointer;padding:.5rem .2rem;border-radius:8px}
+  .ag-salto-rej button:hover{background:var(--bg3)}
+  .ag-salto-rej button.hoy{color:#D2452F;font-weight:700}
+  .ag-salto-rej button.sel{background:var(--text);color:#fff;font-weight:600}
+  .ag-salto-rej button.hoy.sel{background:#D2452F;color:#fff}
   .ag-hoy{appearance:none;background:transparent;border:0;font-family:inherit;font-size:.82rem;font-weight:600;color:#D2452F;cursor:pointer;padding:.32rem .55rem;border-radius:7px}
   .ag-hoy:hover{background:rgba(210,69,47,.08)}
   .ag-nav{appearance:none;background:transparent;border:0;font-family:inherit;font-size:1.05rem;color:var(--text2);cursor:pointer;padding:.15rem .5rem;border-radius:7px;line-height:1}
@@ -1173,8 +1229,18 @@ const CSS_AGENDA = `
   /* Filtros / Bloquear un rato / la (i) de la leyenda: del mismo peso que las flechas, no botones. */
   .ag-disc{appearance:none;background:transparent;border:0;font-family:inherit;font-size:.82rem;color:var(--text2);cursor:pointer;padding:.32rem .55rem;border-radius:7px}
   .ag-disc:hover{background:var(--bg3);color:var(--text)}
-  .ag-leyenda{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:.6rem}
-  .ag-leyenda[hidden]{display:none}
+  /* El rótulo del alto de hora. Se lee «Alto  S M L» en vez de tres letras sueltas que no decían
+     nada. En pantalla estrecha cede el rótulo, nunca los botones. */
+  .ag-zoomwrap{display:flex;align-items:center;gap:.35rem}
+  .ag-zoomlbl{font-size:.72rem;font-weight:600;color:var(--text3);letter-spacing:.02em}
+  @media (max-width:900px){ .ag-zoomlbl{display:none} }
+  /* La ventana de «qué significa cada color». */
+  .ley-lista{display:flex;flex-direction:column;gap:.7rem}
+  .ley-fila{display:flex;gap:.6rem;align-items:flex-start}
+  .ley-fila p{margin:.1rem 0 0;font-size:.82rem;color:var(--text2);line-height:1.45}
+  .ley-pt{flex:0 0 auto;width:14px;height:14px;border-radius:4px;margin-top:.15rem}
+  .ley-trama{flex:0 0 auto;width:14px;height:14px;border-radius:4px;margin-top:.15rem;border:1px solid var(--border2);
+             background-image:repeating-linear-gradient(135deg,transparent 0 3px,rgba(20,22,27,.30) 3px 4px)}
   /* TIRA DE 7 DÍAS (solo en vista Día) — saltar de día sin abrir el selector. */
   .ag-tira{display:flex;gap:.15rem;margin:.15rem 0 .8rem}
   .ag-tira button{appearance:none;border:0;background:transparent;font-family:inherit;cursor:pointer;flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:.2rem;padding:.35rem 0;border-radius:9px}
@@ -1261,7 +1327,10 @@ const CSS_AGENDA = `
      de overscroll AQUÍ, sin tocar el gesto de atrás en el resto de la aplicación, que sigue igual. */
   .mes{max-width:none;overscroll-behavior-x:contain}
   .mes-cab,.mes-rej{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
-  .mes-cab span{text-align:center;font-size:.66rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);padding:0 0 .45rem}
+  /* LAS INICIALES DE LOS DÍAS. Estaban a 0,66 rem y pegadas al borde de arriba de la tarjeta: se
+     leían con esfuerzo y parecían un pie de página, no una cabecera. Más cuerpo, más aire arriba y
+     abajo, y una línea que las separa de la rejilla. */
+  .mes-cab span{text-align:center;font-size:.8rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text2);padding:.85rem 0 .6rem}
   /* P3 — REJILLA DE VERDAD. Las separaciones se pintan con los bordes de cada casilla (0.5px muy
      claros) y la línea ENTRE SEMANAS algo más marcada, que es lo que deja leer el mes por filas.
      Antes no había ni una línea: 42 números flotando. */
@@ -1338,12 +1407,30 @@ const CSS_AGENDA = `
            color:var(--accent);background:color-mix(in srgb, var(--accent) 14%, var(--bg2));
            box-shadow:inset 0 0 0 1px var(--accent);opacity:0;pointer-events:none;transition:opacity .12s}
   .mes-add .corta{display:none}
+  /* ── ARRASTRAR CITAS ────────────────────────────────────────────────────────────────────────────
+     La línea de cita del mes se coge y se suelta en otro día. Se avisa de que se puede antes de
+     intentarlo (el cursor) y de dónde va a caer mientras se arrastra (la diana). */
+  .mesdia .lin.movible{cursor:grab}
+  .mesdia .lin.arrastrando{opacity:.4}
+  .mesdia.diana,.agcell.diana{background:color-mix(in srgb, var(--accent) 18%, transparent);
+                              box-shadow:inset 0 0 0 2px var(--accent)}
+  .citaBlock.arrastrando{opacity:.4}
+  /* El fantasma que sigue al dedo. Va pegado al puntero y NO recibe eventos: si los recibiera,
+     'elementFromPoint' se encontraría a sí mismo y no habría forma de saber sobre qué se suelta. */
+  .ag-fantasma{position:fixed;z-index:9998;pointer-events:none;transform:translate(-50%,-140%);
+               background:var(--text);color:#fff;font-size:.72rem;font-weight:600;padding:.3rem .55rem;
+               border-radius:8px;box-shadow:0 8px 24px rgba(16,24,40,.28);max-width:180px;
+               white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .mescel:hover .mes-add{opacity:1;pointer-events:auto}
   .mes-add:focus-visible{opacity:1;pointer-events:auto;outline:2px solid var(--accent);outline-offset:1px}
   /* En una casilla de móvil no caben dos palabras: se queda el «+», con su nombre entero en la
      etiqueta para quien use lector de pantalla. */
   @media (max-width:700px){ .mes-add .larga{display:none} .mes-add .corta{display:inline} .mes-add{padding:1px 5px;font-size:.7rem} }
-  .mes-pie{margin-top:1rem;padding-top:.8rem;border-top:1px solid var(--border);display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap;min-height:1.6rem}
+  /* EL PIE, CON AIRE. Iba pegado al borde de abajo de la tarjeta: el porcentaje y «Abrir el día»
+     quedaban rozando el filo y la pantalla parecía cortada. Ahora respira por los cuatro lados y se
+     apoya en un fondo propio, que es lo que lo separa de la rejilla sin necesidad de una raya. */
+  .mes-pie{margin-top:0;padding:.85rem 1rem .95rem;border-top:1px solid var(--border);background:var(--bg3,rgba(20,22,27,.02));
+           display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap;min-height:1.6rem}
   .mes-pie .d{font-weight:600}
   .mes-pie .s{color:var(--text2);font-size:.85rem}
   .mes-pie .a{margin-left:auto;font-size:.85rem;font-weight:600;color:var(--accent);cursor:pointer;background:none;border:0;font-family:inherit}
@@ -1352,26 +1439,38 @@ const CSS_AGENDA = `
 function vistaAgenda(c, db) {
   const editable = can(c, 'citas.edit');
   const aj = ajustesCitas(db);
-  const dot = (col, lbl) => '<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.78rem;color:var(--muted)"><span style="width:10px;height:10px;border-radius:3px;background:' + col + '"></span>' + lbl + '</span>';
   const content = `
     <style>${CSS_AGENDA}</style>
     <!-- CABECERA (BLOQUE 3). El elemento principal es el MES EN GRANDE, no el 18/08/2026: el campo de
          fecha sigue existiendo y lo abre el propio título. "Hoy" en rojo junto a las flechas. Un solo
          primario azul —"Nueva cita"—; Filtros y Bloquear un rato quedan del peso de las flechas. -->
     <div class="ph" style="align-items:flex-start">
-      <div>
+      <div style="position:relative">
         <!-- P2: las flechas y «Hoy» van PEGADAS al título, no al otro extremo de la barra. Respondían
              —pulsar ‹ pasaba de agosto a julio—, pero estaban a 624 px de lo que mueven, así que no
              había forma de saber que servían para cambiar de mes. -->
         <div style="display:flex;align-items:center;gap:.15rem;flex-wrap:wrap">
-          <button type="button" class="ag-tit" id="agTitulo" onclick="abrirFecha()" aria-label="Cambiar de fecha">
+          <button type="button" class="ag-tit" id="agTitulo" onclick="abrirFecha()" aria-expanded="false" aria-label="Cambiar de mes o de año">
             <span class="mes">Agenda</span>
           </button>
           <button type="button" class="ag-nav" onclick="agMover(-1)" aria-label="Mes o día anterior">&lsaquo;</button>
           <button type="button" class="ag-nav" onclick="agMover(1)" aria-label="Mes o día siguiente">&rsaquo;</button>
           <button type="button" class="ag-hoy" onclick="agHoy()">Hoy</button>
         </div>
-        <input class="form-control" type="date" id="agFecha" style="width:auto;margin-top:.35rem;display:none" onchange="agCargar();document.getElementById('agFecha').style.display='none'">
+        <input type="hidden" id="agFecha">
+        <!-- EL SALTO DE FECHA — MESES Y AÑOS, no una casilla para teclear una fecha (21 ago 2026).
+             Pulsar «Agosto 2026» abría un campo de fecha del navegador: para ver septiembre había
+             que escribir un día concreto de septiembre, que es justo lo que no se está buscando.
+             Ahora es lo que hace cualquier calendario: pulsas y salen los DOCE MESES; pulsas el año
+             de esa hoja y salen los AÑOS; eliges y bajas de nuevo a meses. Se navega, no se teclea. -->
+        <div id="agSalto" class="ag-salto" hidden>
+          <div class="ag-salto-cab">
+            <button type="button" class="ag-nav" onclick="saltoMueve(-1)" aria-label="Anterior">&lsaquo;</button>
+            <button type="button" class="ag-salto-tit" id="agSaltoTit" onclick="saltoSube()"></button>
+            <button type="button" class="ag-nav" onclick="saltoMueve(1)" aria-label="Siguiente">&rsaquo;</button>
+          </div>
+          <div class="ag-salto-rej" id="agSaltoRej"></div>
+        </div>
       </div>
       <div style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center">
         <div class="segmented" role="tablist" aria-label="Vista">
@@ -1380,13 +1479,21 @@ function vistaAgenda(c, db) {
           <button type="button" role="tab" id="vbMes" onclick="setVista('mes')">Mes</button>
         </div>
         <!-- ZOOM: compacto / normal / amplio. El paso se recuerda por usuario, en agPrefs, con la
-             vista y los filtros — el mismo sitio, no un segundo sistema de preferencias. -->
-        <div class="segmented" role="group" id="agZoom" aria-label="Alto de la hora">
-          <button type="button" id="zb48" onclick="setZoom(48)" title="Compacto" aria-label="Compacto">S</button>
-          <button type="button" id="zb72" onclick="setZoom(72)" title="Normal" aria-label="Normal">M</button>
-          <button type="button" id="zb96" onclick="setZoom(96)" title="Amplio" aria-label="Amplio">L</button>
+             vista y los filtros — el mismo sitio, no un segundo sistema de preferencias.
+             LLEVA SU NOMBRE DELANTE (21 ago 2026). Eran tres letras sueltas —S, M, L— al lado del
+             selector de vista, y no había forma de saber qué hacían: parecían otro selector más.
+             La función NO se toca ni se esconde (regla del menú: no se quita nada); lo que se
+             arregla es que nadie sabía qué era. Ahora se lee «Alto  S M L», y en pantalla estrecha
+             el rótulo cede el sitio antes que los botones. -->
+        <div class="ag-zoomwrap">
+          <span class="ag-zoomlbl" aria-hidden="true">Alto</span>
+          <div class="segmented" role="group" id="agZoom" aria-label="Alto de la hora en la rejilla">
+            <button type="button" id="zb48" onclick="setZoom(48)" title="Horas compactas" aria-label="Horas compactas">S</button>
+            <button type="button" id="zb72" onclick="setZoom(72)" title="Alto normal" aria-label="Alto normal">M</button>
+            <button type="button" id="zb96" onclick="setZoom(96)" title="Horas amplias" aria-label="Horas amplias">L</button>
+          </div>
         </div>
-        <button type="button" class="ag-disc" id="agLeyBtn" onclick="toggleLeyenda()" aria-expanded="false" title="Qué significa cada color" aria-label="Qué significa cada color"><i class="ti ti-info-circle"></i></button>
+        <button type="button" class="ag-disc" id="agLeyBtn" onclick="openModal('mLeyenda')" title="Qué significa cada color" aria-label="Qué significa cada color"><i class="ti ti-info-circle"></i></button>
         <button type="button" class="ag-disc" onclick="toggleControles()">Filtros</button>
         ${editable ? '<button type="button" class="ag-disc" onclick="openBloqueo()">Bloquear un rato</button><button class="btn btn-primary" onclick="openNuevaCita()">Nueva cita</button>' : ''}
       </div>
@@ -1417,12 +1524,37 @@ function vistaAgenda(c, db) {
               style="position:absolute;top:.3rem;right:.35rem;font-size:1rem;line-height:1;padding:.15rem .35rem">&times;</button>
     </div>
     <div id="agTira" class="ag-tira" hidden></div>
-    <div id="agLeyenda" class="ag-leyenda" hidden>${Object.values(ESTADOS_COLOR).map(e => dot(e.fuerte, e.label)).join('')}</div>
     <div class="card" style="padding:0;overflow:hidden"><div id="agenda">Cargando…</div></div>
     ${modalNuevaCita(aj.puesto_sing, aj.cliente_sing)}
     ${modalDetalle()}
     ${modalBloqueo(aj.puesto_sing)}
     ${modalAvisos()}
+    <!-- QUÉ SIGNIFICA CADA COLOR — VENTANA, no una tira que se despliega (21 ago 2026).
+         Antes la (i) abría una fila de puntos encima del lienzo: empujaba la agenda hacia abajo, se
+         leía de refilón y no cabía una sola palabra de explicación. Una ayuda que estorba a lo que
+         viene a explicar no es ayuda. Ahora es la MISMA ventana que usa el resto del panel, con
+         sitio para decir qué es cada estado, no solo cómo se llama. Los colores salen de
+         ESTADOS_COLOR, la fuente única: no hay una segunda tabla que pueda desincronizarse. -->
+    <div class="modal-overlay" id="mLeyenda"><div class="modal" style="max-width:460px">
+      <div class="modal-head"><h3>Qué significa cada color</h3><button class="modal-close" onclick="closeModal('mLeyenda')">✕</button></div>
+      <div class="modal-body">
+        <div class="ley-lista">
+          ${[['pedida', 'La ha pedido el ' + aj.cliente_sing.toLowerCase() + ' o la has apuntado tú, y todavía nadie la ha confirmado.'],
+             ['confirmada', 'Confirmada: cuentas con ella.'],
+             ['atendida', 'Ya se ha atendido. Es la que puedes cobrar.'],
+             ['no_show', 'El ' + aj.cliente_sing.toLowerCase() + ' no vino y no avisó. Se apunta para poder verlo luego en su ficha.']]
+            .map(([k, txt]) => `<div class="ley-fila">
+                 <span class="ley-pt" style="background:${ESTADOS_COLOR[k].fuerte}"></span>
+                 <div><b style="color:${ESTADOS_COLOR[k].oscuro}">${escHtml(ESTADOS_COLOR[k].label)}</b><p>${escHtml(txt)}</p></div>
+               </div>`).join('')}
+        </div>
+        <div class="ley-fila" style="margin-top:.9rem;border-top:1px solid var(--border);padding-top:.9rem">
+          <span class="ley-trama"></span>
+          <div><b>Día cerrado</b><p>En la vista de Mes, los días que no abres van rayados. Los días de otro mes salen apagados y lisos.</p></div>
+        </div>
+        <p style="color:var(--text2);font-size:.8rem;margin:.9rem 0 0">Las citas <b>anuladas</b> no se pintan en la agenda.</p>
+      </div>
+    </div></div>
     <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};window.CITA_ESTADOS=${jsonForScript(ESTADOS_COLOR)};window.AG_GRID=${Number(aj.grid) || 30};${jsVoz(aj)}${JS_AGENDA}</script>`;
   return adminLayout('Agenda', content, 'citas', c.get('session')?.csrfToken || '', c);
 }
@@ -1936,7 +2068,78 @@ function pintaSinHorario(sin){
 // ── CABECERA (BLOQUE 3) ─────────────────────────────────────────────────────
 // El título grande manda: "Agosto 2026", mes en negro y año en gris. El selector de fecha sigue
 // existiendo — lo abre el propio título.
-function abrirFecha(){ var el=document.getElementById('agFecha'); el.style.display = el.style.display==='none' ? '' : 'none'; if(el.style.display==='') el.focus(); }
+// ── EL SALTO DE FECHA, EN DOS ALTURAS ────────────────────────────────────────────────────────────
+// 'SALTO.nivel' dice qué se está enseñando: 'mes' (los doce meses de un año) o 'anio' (doce años).
+// Pulsar el título de la hoja SUBE un nivel; elegir una casilla BAJA. Es exactamente lo que hace el
+// calendario de un teléfono, y por eso no hay que explicarlo.
+var SALTO = { abierto:false, nivel:'mes', anio:0 };
+var MESES_CORTOS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+function abrirFecha(){
+  var caja=document.getElementById('agSalto');
+  if(SALTO.abierto){ cierraSalto(); return; }
+  var f=document.getElementById('agFecha').value||ymd(new Date());
+  SALTO.abierto=true; SALTO.nivel='mes'; SALTO.anio=+f.slice(0,4);
+  caja.removeAttribute('hidden'); pintaSalto();
+  document.getElementById('agTitulo').setAttribute('aria-expanded','true');
+  setTimeout(function(){ document.addEventListener('click', cierraSaltoFuera); }, 0);
+}
+function cierraSalto(){
+  SALTO.abierto=false;
+  var caja=document.getElementById('agSalto'); if(caja) caja.setAttribute('hidden','');
+  var t=document.getElementById('agTitulo'); if(t) t.setAttribute('aria-expanded','false');
+  document.removeEventListener('click', cierraSaltoFuera);
+}
+function cierraSaltoFuera(ev){
+  if(ev.target.closest && (ev.target.closest('#agSalto') || ev.target.closest('#agTitulo'))) return;
+  cierraSalto();
+}
+// Subir de nivel: de los meses a los años. Desde los años no hay más arriba.
+function saltoSube(){ if(SALTO.nivel==='mes'){ SALTO.nivel='anio'; pintaSalto(); } }
+// Las flechas mueven UN año en la hoja de meses y DOCE en la de años, que es lo que enseña cada una.
+function saltoMueve(n){ SALTO.anio += (SALTO.nivel==='mes' ? n : n*12); pintaSalto(); }
+function saltoPrimerAnio(){ return SALTO.anio - ((SALTO.anio % 12) + 12) % 12; }
+
+function pintaSalto(){
+  var tit=document.getElementById('agSaltoTit'), rej=document.getElementById('agSaltoRej');
+  var hoy=new Date(), aHoy=hoy.getUTCFullYear(), mHoy=hoy.getMonth();
+  var act=(document.getElementById('agFecha').value||ymd(hoy));
+  var aAct=+act.slice(0,4), mAct=+act.slice(5,7)-1;
+  if(SALTO.nivel==='mes'){
+    tit.textContent=SALTO.anio;
+    tit.title='Ver los años';
+    rej.className='ag-salto-rej';
+    rej.innerHTML=MESES_CORTOS.map(function(m,i){
+      var cls=(i===mAct&&SALTO.anio===aAct?'sel ':'')+(i===mHoy&&SALTO.anio===aHoy?'hoy':'');
+      return '<button type="button" class="'+cls+'" data-mes="'+i+'">'+m+'</button>';
+    }).join('');
+  } else {
+    var a0=saltoPrimerAnio();
+    tit.textContent=a0+' – '+(a0+11);
+    tit.title='';
+    rej.className='ag-salto-rej';
+    rej.innerHTML=Array.from({length:12},function(_,i){
+      var a=a0+i, cls=(a===aAct?'sel ':'')+(a===aHoy?'hoy':'');
+      return '<button type="button" class="'+cls+'" data-anio="'+a+'">'+a+'</button>';
+    }).join('');
+  }
+}
+document.addEventListener('click', function(ev){
+  var b=ev.target.closest && ev.target.closest('#agSaltoRej button');
+  if(!b) return;
+  ev.preventDefault(); ev.stopPropagation();
+  if(b.hasAttribute('data-anio')){ SALTO.anio=+b.getAttribute('data-anio'); SALTO.nivel='mes'; pintaSalto(); return; }
+  // Elegido el mes: se va al DÍA 1 salvo que el mes elegido sea el de la fecha en curso, en cuyo
+  // caso no tiene sentido perder el día que se estaba mirando.
+  var m=+b.getAttribute('data-mes');
+  var act=document.getElementById('agFecha').value||ymd(new Date());
+  var dia=(+act.slice(0,4)===SALTO.anio && +act.slice(5,7)-1===m) ? act.slice(8) : '01';
+  // Un 31 en un mes de 30 no existe: se recorta al último día real de ese mes.
+  var ultimo=new Date(Date.UTC(SALTO.anio, m+1, 0)).getUTCDate();
+  if(+dia>ultimo) dia=String(ultimo);
+  document.getElementById('agFecha').value=SALTO.anio+'-'+String(m+1).padStart(2,'0')+'-'+String(dia).padStart(2,'0');
+  cierraSalto(); agCargar();
+});
 function pintaTitulo(){
   var f=document.getElementById('agFecha').value || ymd(new Date());
   var d=new Date(f+'T00:00:00Z');
@@ -1951,13 +2154,6 @@ function setZoom(px){ savePrefs({zoom:px}); pintaZoom(); agCargar(); }
 function pintaZoom(){
   var z=altoHora();
   [48,72,96].forEach(function(x){ var b=document.getElementById('zb'+x); if(b) b.setAttribute('aria-selected', x===z?'true':'false'); });
-}
-// La leyenda deja de ocupar línea fija: la despliega la (i) de la barra. No se quita ningún estado.
-function toggleLeyenda(){
-  var l=document.getElementById('agLeyenda'), b=document.getElementById('agLeyBtn');
-  var abierta=!l.hasAttribute('hidden');
-  if(abierta) l.setAttribute('hidden',''); else l.removeAttribute('hidden');
-  b.setAttribute('aria-expanded', abierta?'false':'true');
 }
 // El aviso de "sin horario" se puede cerrar, y se recuerda. Sigue apareciendo solo mientras el
 // negocio NO tenga horario propio: el día que lo defina, desaparece por sí solo.
@@ -2044,8 +2240,7 @@ async function agCargar(){
   // con la (i), así que aquí solo se esconde su botón cuando no aplica.
   var lb=document.getElementById('agLeyBtn'); if(lb) lb.style.display = vista==='mes' ? 'none' : '';
   // P3 — el zoom es del LIENZO: en Mes no pinta nada, así que no se enseña.
-  var zc=document.getElementById('agZoom'); if(zc) zc.style.display = vista==='mes' ? 'none' : '';
-  var ley=document.getElementById('agLeyenda'); if(ley && vista==='mes') ley.setAttribute('hidden','');
+  var zc=document.querySelector('.ag-zoomwrap'); if(zc) zc.style.display = vista==='mes' ? 'none' : 'flex';
   if(vista==='mes'){
     // El mes hereda los MISMOS filtros que Día: si aquí no ves una cita, en Mes tampoco.
     var q='?ym='+f0.slice(0,7)+'&eje='+encodeURIComponent(eje)+'&verTodo='+(document.getElementById('agVerTodo').checked?'1':'0');
@@ -2153,13 +2348,24 @@ function renderMes(data, fechaSel){
     var lineas='';
     (d.primeras||[]).slice(0,3).forEach(function(x){
       var col=(window.CITA_ESTADOS||{})[x.estado]||{fuerte:'#64748b'};
-      lineas+='<span class="lin"><span class="pt" style="background:'+col.fuerte+'"></span>'
+      // ARRASTRABLE (21 ago 2026). Una cita se coge de aquí y se suelta en otro día: cambia de día
+      // y CONSERVA SU HORA. Las anuladas y las atendidas no se mueven — el motor las rechaza, así
+      // que ni se ofrecen (una anulada no llega hasta aquí, pero una atendida sí).
+      var movible = window.CITAS_EDIT && x.estado!=='atendida' && x.estado!=='anulada';
+      lineas+='<span class="lin'+(movible?' movible':'')+'"'
+        +(movible?' draggable="true" data-cita="'+x.id+'" data-min="'+x.min+'" data-quien="'+esc(x.cliente)+'"':'')
+        +'><span class="pt" style="background:'+col.fuerte+'"></span>'
         +'<b style="font-weight:600">'+hcorta(x.min)+'</b> '
         +'<span class="cli">'+esc(x.cliente)+'</span>'
         +(x.servicio?'<span class="svc">'+esc(x.servicio)+'</span>':'')+'</span>';
     });
     if(d.citas>3) lineas+='<span class="mas" data-abre="'+d.fecha+'">+'+(d.citas-3)+' más</span>';
-    html+=celda(cls, d.fecha, resumen, d.dia, lineas, !d.abierto, !!(d.abierto && window.CITAS_EDIT));
+    // UN DÍA CERRADO CON CITAS SÍ SE PUEDE ABRIR. Lo dejó a la vista la pantalla, no una aserción:
+    // el 26 pasó a enseñar sus dos citas y seguía siendo una casilla muerta — se veían y no había
+    // forma de llegar a ellas. Cerrado y sin citas sigue apagado; cerrado CON citas se selecciona y
+    // se abre como cualquier otro. Lo que NO se ofrece es crear: para eso el día tiene que abrir.
+    var muerto = !d.abierto && !d.citas;
+    html+=celda(cls, d.fecha, resumen, d.dia, lineas, muerto, !!(d.abierto && window.CITAS_EDIT));
   });
   // Y los del mes SIGUIENTE hasta cerrar la última semana.
   var ultimo=new Date(dias[dias.length-1].fecha+'T00:00:00Z');
@@ -2201,11 +2407,153 @@ function renderMes(data, fechaSel){
   [].forEach.call(box.querySelectorAll('.mes-add'), function(b){
     b.addEventListener('click', function(ev){ ev.preventDefault(); ev.stopPropagation(); mesNueva(b.getAttribute('data-nueva')); });
   });
+
+  // ── MOVER UNA CITA DE UN DÍA A OTRO, ARRASTRÁNDOLA ────────────────────────────────────────────
+  // Faltaba entera: en Mes no había ni una cita arrastrable ni una zona donde soltarla. Se cambia
+  // el DÍA y se conserva la HORA (una casilla de mes no tiene hora que heredar), y se guarda por el
+  // MISMO endpoint que usan arrastrar y estirar en el lienzo. No hay un segundo camino de guardado.
+  [].forEach.call(box.querySelectorAll('.lin.movible'), function(l){
+    l.addEventListener('dragstart', function(ev){
+      ev.stopPropagation();
+      ev.dataTransfer.setData('text/plain', l.getAttribute('data-cita')+':'+l.getAttribute('data-min'));
+      ev.dataTransfer.effectAllowed='move';
+      l.classList.add('arrastrando');
+    });
+    l.addEventListener('dragend', function(){ l.classList.remove('arrastrando'); limpiaDiana(box); });
+    // Y con el DEDO, que el arrastre de HTML5 no cubre (ver 'arrastreDedo').
+    l.addEventListener('pointerdown', function(ev){
+      arrastreDedo(ev, l, l.getAttribute('data-cita'), parseInt(l.getAttribute('data-min'),10), 'mes');
+    });
+  });
+  [].forEach.call(box.querySelectorAll('.mesdia'), function(cel){
+    if(cel.disabled || cel.classList.contains('otro')) return;      // ni cerrado ni de otro mes
+    cel.addEventListener('dragover', function(ev){ ev.preventDefault(); ev.dataTransfer.dropEffect='move'; cel.classList.add('diana'); });
+    cel.addEventListener('dragleave', function(){ cel.classList.remove('diana'); });
+    cel.addEventListener('drop', function(ev){
+      ev.preventDefault(); ev.stopPropagation(); cel.classList.remove('diana');
+      var dato=(ev.dataTransfer.getData('text/plain')||'').split(':');
+      if(dato.length!==2) return;
+      moverCitaADia(dato[0], cel.getAttribute('data-fecha'), parseInt(dato[1],10));
+    });
+  });
   function selDia(f){
     [].forEach.call(box.querySelectorAll('.mesdia'), function(x){ x.classList.toggle('sel', x.getAttribute('data-fecha')===f); });
     pintaPie(f);
   }
   window.__mesSel=selDia;
+}
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// ARRASTRAR UNA CITA CON EL DEDO — el agujero que dejaba la agenda inservible en tableta y móvil
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// EL PROBLEMA, Y POR QUÉ NO SE VEÍA DESDE UN ESCRITORIO: mover una cita se hacía con el arrastre de
+// HTML5 ('draggable' + 'drop'), que es UN INVENTO DE RATÓN. Con el dedo no dispara NADA: ni un
+// evento, ni un error, ni un aviso. Así que en una tableta la agenda parecía no dejar mover nada, y
+// desde un ordenador funcionaba perfectamente. El arrastre nativo se QUEDA (es el que ya estaba
+// probado para ratón); esto es el camino del dedo, en paralelo, y sirve para las tres vistas.
+//
+// EMPIEZA CON UNA PULSACIÓN MANTENIDA, y no al primer roce. Es el patrón de Google Calendar en
+// móvil, y no es capricho: si el arrastre arrancara al primer movimiento habría que bloquear el
+// scroll de la pantalla sobre cada cita, y entonces una agenda llena de citas sería una agenda por
+// la que no se puede bajar con el dedo. Manteniendo pulsado 350 ms el navegador aún no ha empezado
+// a desplazar nada, así que se le puede quitar el gesto sin pelearse con él.
+//
+// EL ASA DE ESTIRAR NO SE TOCA: su 'pointerdown' hace stopPropagation, así que cuando el dedo cae en
+// el asa esto ni se entera. Y un toque corto tampoco dispara nada: sigue abriendo la cita.
+var ARR = null;                                  // el arrastre en curso (solo puede haber uno)
+var ARR_MS = 350;                                // lo que hay que mantener pulsado para empezar
+
+function limpiaDiana(box){
+  [].forEach.call((box||document).querySelectorAll('.diana'), function(x){ x.classList.remove('diana'); });
+}
+// Qué hay debajo del dedo. El fantasma se aparta un instante: si no, se encuentra a sí mismo.
+function bajoElDedo(x, y, sel){
+  var f = ARR && ARR.fantasma;
+  if(f) f.style.display='none';
+  var el = document.elementFromPoint(x, y);
+  if(f) f.style.display='';
+  return el && el.closest ? el.closest(sel) : null;
+}
+
+function arrastreDedo(ev, el, id, min, modo){
+  if(!window.CITAS_EDIT) return;
+  if(ev.pointerType === 'mouse') return;         // con ratón manda el arrastre nativo, que ya existía
+  if(ARR) return;
+  var x0=ev.clientX, y0=ev.clientY;
+  var sel = modo==='mes' ? '.mesdia:not(.otro):not(:disabled)' : '.agcell';
+  ARR = { id:id, min:min, modo:modo, el:el, sel:sel, vivo:false, fantasma:null, destino:null };
+
+  // Si el dedo se va antes de tiempo, esto NO era un arrastre: era un toque o un scroll.
+  var espera = setTimeout(function(){
+    if(!ARR) return;
+    ARR.vivo = true;
+    el.classList.add('arrastrando');
+    var f = document.createElement('div');
+    f.className='ag-fantasma';
+    f.textContent = el.getAttribute('data-quien') || (el.querySelector && el.querySelector('.cli') ? el.querySelector('.cli').textContent : 'Cita');
+    document.body.appendChild(f);
+    f.style.left=x0+'px'; f.style.top=y0+'px';
+    ARR.fantasma = f;
+    if(navigator.vibrate) { try { navigator.vibrate(12); } catch(e){} }
+  }, ARR_MS);
+
+  var mover=function(e){
+    if(!ARR) return;
+    if(!ARR.vivo){
+      // Se movió antes de tiempo: no hay arrastre, y el navegador se queda con su gesto.
+      if(Math.abs(e.clientX-x0)>8 || Math.abs(e.clientY-y0)>8) { clearTimeout(espera); fin(); }
+      return;
+    }
+    if(e.cancelable) e.preventDefault();          // ya es nuestro: nada de scroll
+    ARR.fantasma.style.left=e.clientX+'px';
+    ARR.fantasma.style.top=e.clientY+'px';
+    var d = bajoElDedo(e.clientX, e.clientY, ARR.sel);
+    if(d !== ARR.destino){
+      limpiaDiana();
+      ARR.destino = d;
+      if(d) d.classList.add('diana');
+    }
+  };
+  var soltar=function(e){
+    clearTimeout(espera);
+    if(!ARR){ return; }
+    var vivo=ARR.vivo, destino=ARR.destino, id=ARR.id, min=ARR.min, modo=ARR.modo;
+    fin();
+    if(!vivo || !destino) return;                 // un toque, o soltó fuera: no pasa nada
+    if(modo==='mes') moverCitaADia(id, destino.getAttribute('data-fecha'), min);
+    else moverCitaAHueco(id, destino);
+  };
+  function fin(){
+    document.removeEventListener('pointermove', mover);
+    document.removeEventListener('pointerup', soltar);
+    document.removeEventListener('pointercancel', soltar);
+    if(ARR){
+      if(ARR.fantasma && ARR.fantasma.parentNode) ARR.fantasma.parentNode.removeChild(ARR.fantasma);
+      ARR.el.classList.remove('arrastrando');
+    }
+    limpiaDiana();
+    ARR=null;
+  }
+  document.addEventListener('pointermove', mover, { passive:false });
+  document.addEventListener('pointerup', soltar);
+  document.addEventListener('pointercancel', soltar);
+}
+
+// GUARDAR — un solo camino para las tres vistas y para los dos gestos (ratón y dedo). Si el servidor
+// dice que no (choca con otra cita, el puesto está pillado), se dice y NO se repinta como si hubiera
+// ido bien: la agenda nunca enseña algo que no está en la base.
+async function moverCitaADia(id, fecha, min){
+  if(!fecha || !id) return;
+  try{ await api('POST','/api/erp/citas/'+id+'/mover',{ fecha:fecha, inicio_min:min }); toast('Cita movida al '+fecha.slice(8).replace(/^0/,'')); agCargar(); }
+  catch(e){ toast(e.message,'err'); }
+}
+async function moverCitaAHueco(id, cel){
+  var body={ fecha:cel.dataset.fecha, inicio_min:parseInt(cel.dataset.min,10) };
+  if(cel.dataset.col!==undefined && vistaActual()!=='semana'){
+    var eje=document.getElementById('agEje').value;
+    if(eje==='recurso') body.recurso_id=cel.dataset.col||null; else body.user_id=cel.dataset.col||null;
+  }
+  try{ await api('POST','/api/erp/citas/'+id+'/mover',body); toast('Cita movida'); agCargar(); }
+  catch(e){ toast(e.message,'err'); }
 }
 function abrirDia(f){ document.getElementById('agFecha').value=f; setVista('dia'); }
 // A8 · «+ Nueva cita» desde una casilla del mes: se pone ESE día como fecha de trabajo y se abre el
@@ -2407,7 +2755,13 @@ function render(data, desde, hasta, vista, eje){
     el.style.width='calc('+(100/nCols)+'% - 8px)';
     el.style.right='auto';
     if(nCols>1) el.dataset.choque=nCols;
-    if(window.CITAS_EDIT){ el.draggable=true; el.ondragstart=function(ev){ev.dataTransfer.setData('text/plain',ci.id);}; }
+    if(window.CITAS_EDIT){
+      el.draggable=true; el.ondragstart=function(ev){ev.dataTransfer.setData('text/plain',ci.id);};
+      // Y el camino del DEDO, que el arrastre de HTML5 no cubre. Mismo motor que en la vista Mes;
+      // aquí el destino es un hueco de la rejilla (día y hora) en vez de una casilla (solo día).
+      el.dataset.quien=ci.cliente;
+      el.addEventListener('pointerdown', function(ev){ arrastreDedo(ev, el, ci.id, ci.inicio_min, 'lienzo'); });
+    }
     // JERARQUÍA POR ALTURA, sin cortar palabras a media letra: se quitan LÍNEAS enteras.
     var linCli='<div class="cli">'+esc(ci.cliente)+'</div>';
     var linSvc='<div class="svc">'+esc(ci.servicios)+'</div>';
@@ -2495,10 +2849,10 @@ function esc(s){return String(s==null?'':s).replace(/[<>&"]/g,c=>({'<':'&lt;','>
 async function onDrop(ev){
   ev.preventDefault(); if(!window.CITAS_EDIT) return;
   var id=ev.dataTransfer.getData('text/plain'); if(!id) return;
-  var cell=ev.currentTarget; var fecha=cell.dataset.fecha; var min=parseInt(cell.dataset.min);
-  var body={fecha:fecha,inicio_min:min};
-  if(cell.dataset.col!==undefined){ var eje=document.getElementById('agEje').value; if(vistaActual()!=='semana'){ if(eje==='recurso') body.recurso_id=cell.dataset.col||null; else body.user_id=cell.dataset.col||null; } }
-  try{ await api('POST','/api/erp/citas/'+id+'/mover',body); toast('Cita movida'); agCargar(); }catch(e){ toast(e.message,'err'); }
+  // Un SOLO camino de guardado para el ratón y para el dedo (ver moverCitaAHueco). Antes esta
+  // función tenía su propia copia del cuerpo de la petición; dos copias de lo mismo se separan en
+  // cuanto alguien toca una, y entonces mover con el dedo y con el ratón dejarían de hacer lo mismo.
+  await moverCitaAHueco(id, ev.currentTarget);
 }
 // ── NUEVA CITA — panel rápido (3 toques desde un hueco de la rejilla) ─────────
 function fillSelect(el,rows,val,label,placeholder){ el.innerHTML=(placeholder!=null?'<option value="">'+placeholder+'</option>':'')+rows.map(r=>'<option value="'+r[val]+'">'+esc(r[label])+'</option>').join(''); }

@@ -319,10 +319,11 @@ lo pida**. Ningún barrido corre solo — ni corto, ni completo, ni antes de un 
 | | |
 |---|---|
 | **Nombre** | `scripts/gate-citas-mes.mjs` |
-| **Aserciones** | **56** (0 fallos el 21 ago 2026) |
-| **Duración** | **19 s** |
+| **Aserciones** | **103** (0 fallos el 21 ago 2026; nació con 56 y creció con las correcciones sobre pantalla) |
+| **Duración** | **~40 s** |
 | **Clase** | **propio** (`EMPIEZAN_DE_CERO`) — levanta **dos negocios suyos** con `provisionTenant` (uno de 1 persona, otro de 14) y los borra al salir. No toca el negocio compartido, así que **puede correr en paralelo**: no necesita ir solo. |
 | **Grupo** | `clientes` — el barrido pasa de **78 a 79** comprobaciones |
+| **Qué vigila además** | El rótulo del «Alto», la ventana de colores, el aire del pie y de las iniciales, el arrastre en Mes (ratón **y** dedo, comprobado en la BASE), el salto de fecha por meses y años, y el candado `citas.ver_todas` en las cuatro puertas. |
 | **Contra** | `https://<slug>.bamburu.com` (la dirección pública, no `:3000`) |
 | **Depende del reloj** | **No.** La vista Mes no llama a `huecos()` (que descarta lo anterior a «ahora») sino a `tramosPersona`/`ocupacionPersona`, que no miran la hora. Da lo mismo a las 9:00 que a las 23:00. |
 | **Cuota de IA** | No la usa. |
@@ -349,6 +350,109 @@ Mes y que media A7 ya estaba construida. El dueño reescribió el encargo con es
 </details>
 
 ---
+
+---
+
+#### A-bis. LA VISTA MES, CORREGIDA SOBRE PANTALLA · ✅ **HECHO (21 ago 2026)** · commit `PENDIENTE_HASH2`
+
+> **Siete correcciones de Ibrahin mirando la entrega ya desplegada**, más los cabos que la propia
+> entrega había dejado anotados. Sigue siendo TAREA TRANSVERSAL: el puntero del Peldaño 8 no se mueve.
+> Se deja fuera **solo el barrido**, por orden expresa suya.
+
+**1 · «HAY BOTONES S, M, L Y NO ENTIENDO QUÉ SON».** Eran tres letras sueltas pegadas al selector de
+vista: parecían un segundo selector. **No se quitan** (regla del menú: no se esconde ni se quita
+nada), se **explican**: ahora se lee «**Alto** S M L», con su nombre delante, y en la vista Mes
+desaparece el grupo entero — el alto de la hora ahí no significa nada.
+
+**2 · «EL BOTÓN INFORMATIVO SERÍA MEJOR QUE SALGA UNA VENTANA».** Hecho. La (i) abría una **tira de
+puntos encima de la agenda**: empujaba el calendario hacia abajo y no cabía una palabra de
+explicación. Ahora abre **la misma ventana que usa el resto del panel**, con sitio para decir qué es
+cada estado y no solo cómo se llama, más el día cerrado y el de otro mes. Los colores siguen saliendo
+de `ESTADOS_COLOR`, la fuente única.
+
+**3 · «LOS DÍAS MARCADOS NO SON CONSISTENTES, HAY ERROR».** ⚙️ **Tenías razón, y el error NO estaba en
+la pantalla: estaba en los DATOS.** El rayado significa «cerrado», y tu negocio de desarrollo solo
+abre viernes y sábado — por eso hay tanto. Pero el **20 de agosto (jueves) salía abierto**, y eso no
+cuadra con nada. Al mirar la base apareció el motivo, y es peor de lo que parecía:
+
+- Había una **excepción de horario con motivo «GATE agenda sencilla»** puesta sobre el 20 de agosto:
+  basura que dejó una comprobación automática y que **nadie limpió**.
+- Y tirando del hilo: **de las 14 personas «activas» del negocio de desarrollo, 10 eran fantasmas de
+  gates** (`Gate dormidos` ×6, `Gate FH Worker` ×2, `GATE Ana`, `GATE Berta`). Personas de verdad: **4**.
+- **Eso es lo que había detrás de las «168 h libres».** La cifra era correcta sobre datos falsos —
+  12 h × 14 personas—, que es la peor clase de cifra: nadie la duda. Con las cuatro personas reales
+  son **48 h**.
+- **POR QUÉ SE ACUMULA:** un gate que muere por `process.exit` —el aborto de `gate-env`, un timeout,
+  un kill— **no ejecuta su `finally`**, así que se deja su empleado y su excepción. Y **ningún paso
+  de `limpiar-residuo-gates.mjs` miraba `admin_users`**: el residuo de personas no lo limpiaba nadie.
+- **ARREGLADO EN LOS DOS SITIOS:** limpiado el negocio de desarrollo (las personas **desactivadas**,
+  `active=0`, no borradas — tienen citas y facturas detrás; las excepciones de horario **sí** se
+  borran, que son reglas de calendario y no datos con historia), y **añadido el paso 3c a
+  `limpiar-residuo-gates.mjs`** para que no se vuelva a acumular. Reconoce el residuo por su correo
+  de laboratorio o su nombre de gate — **nunca por fecha**.
+
+**4 · «EL DÍA, EL PORCENTAJE Y ABRIR DÍA, MUY PEGADO DEL MARGEN INFERIOR».** Hecho. El pie tenía
+`padding-top` y nada más: el texto rozaba el filo de la tarjeta. Ahora respira por los cuatro lados
+(15 px por abajo) y se apoya en un fondo propio, que lo separa de la rejilla sin necesidad de raya.
+
+**5 · «EL CALENDARIO NO ES INTERACTIVO, NO PUEDO ARRASTRAR CITAS».** ⚙️ **Medido antes de tocar, y
+son DOS cosas distintas:**
+- En **Día y Semana el arrastre YA EXISTÍA** y funciona (medido en la pantalla real: 2 citas
+  arrastrables, 364 zonas donde soltarlas, más el asa de estirar por abajo).
+- En **Mes no existía NADA**: ni una cita se podía coger ni había dónde soltarla. **Construido**: se
+  coge una cita de su casilla y se suelta en otro día — **cambia de día y conserva la hora** (una
+  casilla de mes no tiene hora que imponer). El día de destino se marca mientras arrastras.
+- **Y EL AGUJERO DE VERDAD, que explica por qué te parecía que no funcionaba en ningún sitio: el
+  arrastre de HTML5 es un invento de RATÓN. Con el dedo no dispara NADA** — ni un evento, ni un
+  error. En tableta o móvil la agenda parecía no dejar mover nada, y desde un ordenador funcionaba
+  perfectamente. **Construido el camino del dedo** para las tres vistas: se **mantiene pulsado** (350
+  ms, como en Google Calendar) y se arrastra. Empezar al primer roce obligaría a bloquear el scroll
+  sobre cada cita, y entonces por una agenda llena no se podría bajar con el dedo.
+- **Un solo camino de guardado** para el ratón y para el dedo, en las tres vistas: `onDrop` tenía su
+  propia copia del cuerpo de la petición y ahora llama a la misma función. Dos copias de lo mismo se
+  separan en cuanto alguien toca una.
+- **Las iniciales L M X J V S D**: de 10,5 px pegadas al filo a **12,8 px con 13,6 px de aire arriba**.
+
+**6 · «AL SELECCIONAR UN MES, LA NORMA ES QUE SALGAN MESES; SI PRESIONAS AÑO, LOS AÑOS».** Hecho.
+Pulsar «Agosto 2026» abría **un campo de fecha del navegador**: para ver septiembre había que teclear
+un día concreto de septiembre, que es justo lo que no se está buscando. Ahora pulsas y salen **los
+doce meses**; pulsas el año de esa hoja y salen **los años, de doce en doce**; eliges y bajas otra
+vez a meses. Se navega, no se teclea. El campo de fecha sigue existiendo **oculto**, porque es donde
+vive el dato y de ahí lo leen la agenda y sus comprobaciones.
+
+**7 · LOS CABOS QUE LA ENTREGA ANTERIOR DEJÓ ANOTADOS:**
+- ✅ **Un día cerrado ya no esconde sus citas.** Se caían en el filtro por persona, que en un día
+  cerrado no deja pasar a nadie. Ahora, cuando no trabaja nadie, no se filtra — igual que ya hacía la
+  vista Día. La casilla dice las dos cosas: «**1 cita · Cerrado**». Y **un día cerrado con citas se
+  puede abrir** (antes era una casilla muerta: se veían las citas y no había forma de llegar a
+  ellas). Lo que sigue sin ofrecerse ahí es **crear**.
+- ⬜ **Los dos gates ajenos siguen SIN REEJECUTAR** — necesitan barrido, y el barrido lo pides tú.
+- ✅ **EL PERMISO DE «AGENDA AJENA», CONSTRUIDO** — preguntado y decidido por Ibrahin el 21 ago 2026:
+  *«sí, cada uno ve solo la suya»*. Nace **`citas.ver_todas`**. Sin él, el servidor devuelve
+  **únicamente las citas propias**, y **también las horas libres se calculan solo sobre las suyas**:
+  decirle a alguien «168 h libres entre 14 personas» cuando no puede ver la agenda de esas catorce
+  sería la misma fuga contada de otra manera. El candado se aplica en **cuatro puertas** —el mes, el
+  día/semana, las **columnas** (un nombre de compañero en una cabecera ya dice quién trabaja hoy) y
+  **la ficha por su número**, que responde 404 y no 403 (un 403 confirmaría que esa cita existe)—.
+  Y se filtra **en el SQL**, no al pintar: lo que no se puede ver no sale de la base. **El dueño y
+  los administradores lo tienen por bypass de rol**, así que a ellos no les cambia nada.
+  **⚠️ AVISO PARA EL DESPLIEGUE:** a partir de ahora un **empleado** que no tenga ese permiso deja de
+  ver la agenda de sus compañeros. Es lo pedido, pero **hay que avisar al equipo**, y se concede
+  desde la pantalla de usuarios como cualquier otro permiso.
+
+**VERIFICACIÓN — `gate-citas-mes` pasa de 56 a 103 aserciones, 0 fallos.**
+- **Reversión de las NUEVE piezas nuevas por separado** (deshacer → desplegar → repasar → restaurar):
+  sin la ventana de colores → 3 rojos · sin el aire del pie → 2 · sin las iniciales → 2 · sin el
+  arrastre en Mes → 2 · sin el arrastre con el dedo → 3 · sin el salto de fecha → 1 · sin el rótulo
+  «Alto» → 1 · sin el arreglo del día cerrado → 4 · **sin el candado de agenda ajena → 3, y uno de
+  ellos es la fuga entera: la cita del compañero volvía a viajar y las horas pasaban a ser las de 15
+  personas**.
+- **Y el gate volvió a cazarme lo mismo que la vez anterior:** al deshacer la ventana de colores el
+  gate **moría con una excepción** en vez de dar rojo. Tercera vez que aparece este patrón; los dos
+  bloques nuevos que podían caer en él (la ventana y el salto de fecha) van ya con guarda.
+- **Y una aserción mía estaba mal, no el producto:** esperaba 3 citas arrastrables en una casilla y
+  hay 2, porque la tercera está **atendida** y una cita atendida no se mueve. Corregida, y la que no
+  se puede coger tiene ahora su propia comprobación en vez de esconderse dentro de un número.
 
 #### B. MIGRACIÓN ASISTIDA SIN ACCESO VISIBLE · **PENDIENTE**
 

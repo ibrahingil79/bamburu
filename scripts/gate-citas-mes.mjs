@@ -374,6 +374,213 @@ try {
   }
   ok(altaTeclado === D_VACIO, 'y con Intro se abre el alta con ese día, sin tocar el ratón', altaTeclado);
 
+  // ── [19] LA BARRA DE ARRIBA SE ENTIENDE ─────────────────────────────────────────────────────
+  console.log('\n[19] la barra de arriba: el «Alto» tiene nombre y la (i) abre una VENTANA');
+  await abrirMes(p, uno, D_VACIO);
+  const barra = await p.evaluate(() => {
+    const z = document.querySelector('.ag-zoomwrap');
+    const lbl = document.querySelector('.ag-zoomlbl');
+    return {
+      hayZoom: !!document.getElementById('agZoom'),
+      rotulo: lbl ? lbl.textContent.trim() : null,
+      ocultoEnMes: z ? getComputedStyle(z).display === 'none' : null,
+      tiraVieja: !!document.getElementById('agLeyenda'),
+      hayVentana: !!document.getElementById('mLeyenda'),
+      ventanaAbierta: document.getElementById('mLeyenda').classList.contains('open'),
+    };
+  });
+  ok(barra.rotulo === 'Alto', 'el grupo S/M/L lleva su nombre delante y ya no son tres letras sueltas', String(barra.rotulo));
+  ok(barra.ocultoEnMes === true, 'y en la vista Mes no se enseña: el alto de la hora ahí no pinta nada');
+  ok(!barra.tiraVieja && barra.hayVentana, 'la tira de colores que se desplegaba encima de la agenda ya no existe; hay una VENTANA');
+  ok(!barra.ventanaAbierta, 'y nace cerrada: no estorba a nadie que no la pida');
+  await p.evaluate(() => setVista('dia'));
+  await p.waitForFunction(() => document.querySelectorAll('.agcell').length > 0, { timeout: 15000 });
+  await dormir(400);
+  const conZoom = await p.evaluate(() => getComputedStyle(document.querySelector('.ag-zoomwrap')).display !== 'none');
+  ok(conZoom, 'y en Día sí se enseña, que es donde el alto de la hora significa algo');
+  // CON GUARDA: si la (i) no abriera la ventana, esto tiene que dar ROJO LIMPIO y seguir midiendo lo
+  // de detrás. La prueba de reversión ya me pilló este mismo descuido en A7 y A8; no vuelve a pasar.
+  let abrio = true;
+  try {
+    await p.click('#agLeyBtn');
+    await p.waitForFunction(() => document.getElementById('mLeyenda').classList.contains('open'), { timeout: 6000 });
+  } catch (e) { abrio = false; }
+  ok(abrio, 'la (i) de la barra ABRE la ventana');
+  const ley = abrio ? await p.evaluate(() => {
+    const m = document.getElementById('mLeyenda');
+    return { filas: m.querySelectorAll('.ley-fila').length, texto: m.textContent.replace(/\s+/g, ' ').trim(),
+             empuja: !!document.querySelector('#agenda').previousElementSibling?.classList?.contains('ag-leyenda') };
+  }) : { filas: 0, texto: '(no se abrió)', empuja: false };
+  ok(ley.filas >= 5, 'la ventana explica los cuatro estados y el día cerrado', ley.filas + ' filas');
+  ok(/Confirmada/.test(ley.texto) && /rayados/.test(ley.texto), 'y dice qué es cada uno, no solo cómo se llama', ley.texto.slice(0, 70) + '…');
+  ok(!ley.empuja, 'y al abrirse NO empuja la agenda hacia abajo, que es lo que hacía la tira');
+  if (abrio) await p.evaluate(() => closeModal('mLeyenda'));
+
+  // ── [20] EL PIE RESPIRA ─────────────────────────────────────────────────────────────────────
+  console.log('\n[20] el pie del mes ya no va pegado al filo de la tarjeta');
+  await abrirMes(p, uno, D_VACIO);
+  const pie = await p.evaluate(() => {
+    const el = document.getElementById('mesPie');
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    const tarjeta = el.closest('.card').getBoundingClientRect();
+    const txt = el.querySelector('.s');
+    return { padAbajo: parseFloat(cs.paddingBottom), padLados: parseFloat(cs.paddingLeft),
+             holguraAbajo: Math.round(tarjeta.bottom - r.bottom),
+             textoAlFilo: txt ? Math.round(r.bottom - txt.getBoundingClientRect().bottom) : null };
+  });
+  ok(pie.padAbajo >= 12 && pie.padLados >= 12, 'el pie tiene aire por abajo y por los lados', pie.padAbajo + 'px / ' + pie.padLados + 'px');
+  ok(pie.textoAlFilo >= 10, 'y su texto no roza el borde de abajo', pie.textoAlFilo + 'px hasta el filo');
+
+  // ── [21] LAS INICIALES DE LOS DÍAS SE LEEN ──────────────────────────────────────────────────
+  console.log('\n[21] L M X J V S D: con cuerpo y con aire');
+  const cab = await p.evaluate(() => {
+    const sp = document.querySelector('.mes-cab span');
+    const cs = getComputedStyle(sp);
+    const rej = document.querySelector('.mes-rej').getBoundingClientRect();
+    const r = sp.getBoundingClientRect();
+    return { tam: parseFloat(cs.fontSize), padArriba: parseFloat(cs.paddingTop),
+             separacion: Math.round(rej.top - r.bottom), n: document.querySelectorAll('.mes-cab span').length };
+  });
+  ok(cab.n === 7, 'siguen siendo las siete');
+  ok(cab.tam >= 12, 'con cuerpo suficiente para leerse (antes 10,5 px)', cab.tam + 'px');
+  ok(cab.padArriba >= 10, 'y con aire por arriba: ya no van pegadas al filo de la tarjeta', cab.padArriba + 'px');
+
+  // ── [22] UN DÍA CERRADO YA NO ESCONDE SUS CITAS ─────────────────────────────────────────────
+  console.log('\n[22] un día cerrado enseña las citas que sí tiene, y se puede abrir');
+  const cidC = insCli.run('Cliente En Dia Cerrado ' + RID).lastInsertRowid;
+  const citaC = insCita.run('GMC' + RID, cidC, uno.owner.id, D_CERRADO, 10 * 60, 'confirmada').lastInsertRowid;
+  insCS.run(citaC, idCorto);
+  // Primero en la RESPUESTA DEL SERVIDOR, que es donde estaba el fallo: la cita se caía allí.
+  const crudo = await (await fetch(uno.base + '/api/erp/citas/mes?ym=' + MES + '&eje=persona&verTodo=0', { headers: { cookie: 'asess=' + uno.tok } })).json();
+  const diaC = (crudo.dias || []).find(d => d.fecha === D_CERRADO);
+  ok(diaC && diaC.citas === 1 && !diaC.abierto,
+     'el servidor manda la cita de un día CERRADO en vez de comérsela', JSON.stringify({ citas: diaC && diaC.citas, abierto: diaC && diaC.abierto }));
+  await abrirMes(p, uno, D_VACIO);
+  const enCerrado = await p.evaluate(f => {
+    const cel = document.querySelector('.mesdia[data-fecha="' + f + '"]');
+    return { lineas: cel.querySelectorAll('.lin').length, res: cel.getAttribute('data-res'),
+             sigueRayado: cel.classList.contains('cerrado'), abrible: !cel.disabled,
+             sinCrear: !document.querySelector('.mes-add[data-nueva="' + f + '"]') };
+  }, D_CERRADO);
+  ok(enCerrado.lineas === 1, 'y la pantalla la pinta', enCerrado.lineas + ' línea(s)');
+  ok(/1 cita/.test(enCerrado.res) && /Cerrado/.test(enCerrado.res), 'diciendo las dos cosas: que hay una cita y que el día está cerrado', enCerrado.res);
+  ok(enCerrado.sigueRayado && enCerrado.abrible, 'sigue rayado —está cerrado— pero ya se puede abrir para llegar a esa cita');
+  ok(enCerrado.sinCrear, 'lo que NO se ofrece en un día cerrado es crear una cita nueva');
+
+  // ── [23] ARRASTRAR UNA CITA DE UN DÍA A OTRO ────────────────────────────────────────────────
+  console.log('\n[23] arrastrar en Mes: cambia de día y CONSERVA la hora');
+  await abrirMes(p, uno, D_CITAS);
+  // OJO AL NÚMERO, que en la primera pasada me dio rojo y la equivocada era LA ASERCIÓN: de las tres
+  // citas que se pintan, una está ATENDIDA — y una cita atendida no se mueve (el motor la rechaza
+  // con un 400). Así que lo correcto es 3 pintadas y 2 cogibles, y la que no se puede coger merece
+  // su propia comprobación en vez de esconderse en un número.
+  const arrastrables = await p.evaluate(f => {
+    const cel = document.querySelector('.mesdia[data-fecha="' + f + '"]');
+    const todas = [...cel.querySelectorAll('.lin')];
+    return {
+      pintadas: todas.length,
+      cogibles: cel.querySelectorAll('.lin.movible[draggable="true"]').length,
+      conId: !!cel.querySelector('.lin.movible[data-cita]'),
+      quietas: todas.filter(l => !l.classList.contains('movible')).length,
+    };
+  }, D_CITAS);
+  ok(arrastrables.pintadas === 3 && arrastrables.cogibles === 2 && arrastrables.conId,
+     'las citas de la casilla se pueden coger', arrastrables.cogibles + ' de ' + arrastrables.pintadas + ' (la tercera está atendida)');
+  ok(arrastrables.quietas === 1, 'y una cita ATENDIDA no se puede coger: el motor no la dejaría mover, así que ni se ofrece');
+  // EL ARRASTRE, con eventos de arrastre REALES y un DataTransfer de verdad (el navegador sin ratón
+  // físico no genera el gesto). Lo que se prueba es MI cadena: dragstart en la cita → drop en la
+  // casilla → petición al servidor. Se comprueba en la BASE DE DATOS, no en la pantalla.
+  const movida = await p.evaluate((desde, hasta) => {
+    const lin = document.querySelector('.mesdia[data-fecha="' + desde + '"] .lin.movible');
+    const cel = document.querySelector('.mesdia[data-fecha="' + hasta + '"]');
+    if (!lin || !cel) return { id: null, min: null, diana: false };   // rojo limpio, no una excepción
+    const dt = new DataTransfer();
+    lin.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+    cel.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    const diana = cel.classList.contains('diana');
+    cel.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    return { id: lin.getAttribute('data-cita'), min: lin.getAttribute('data-min'), diana };
+  }, D_CITAS, D_VACIO);
+  ok(movida.diana, 'y al pasar por encima de otro día ese día se marca como destino');
+  await dormir(1500);
+  const enBd = movida.id ? uno.db.prepare('SELECT fecha, inicio_min FROM citas WHERE id=?').get(Number(movida.id)) : { fecha: '(no se pudo arrastrar)', inicio_min: null };
+  ok(enBd.fecha === D_VACIO, 'soltarla en otro día la MUEVE de verdad (comprobado en la base, no en la pantalla)', JSON.stringify(enBd));
+  ok(movida.min !== null && String(enBd.inicio_min) === String(movida.min), 'y CONSERVA su hora: una casilla de mes no tiene hora que imponerle', enBd.inicio_min + ' min');
+  // Se devuelve a su sitio para no dejar el negocio tocado a mitad del gate.
+  if (movida.id) uno.db.prepare('UPDATE citas SET fecha=? WHERE id=?').run(D_CITAS, Number(movida.id));
+
+  // ── [24] Y CON EL DEDO, que el arrastre de HTML5 no cubre ───────────────────────────────────
+  console.log('\n[24] el mismo arrastre, con el dedo (pulsación mantenida)');
+  await abrirMes(p, uno, D_CITAS);
+  const dedo = await p.evaluate(async (desde, hasta) => {
+    const lin = document.querySelector('.mesdia[data-fecha="' + desde + '"] .lin.movible');
+    const cel = document.querySelector('.mesdia[data-fecha="' + hasta + '"]');
+    if (!lin || !cel) return { id: null, min: null, antesDeTiempo: false, trasMantener: false, diana: false };
+    const a = lin.getBoundingClientRect(), b = cel.getBoundingClientRect();
+    const ev = (t, x, y, sobre) => (sobre || document).dispatchEvent(new PointerEvent(t, {
+      bubbles: true, cancelable: true, clientX: x, clientY: y, pointerType: 'touch', pointerId: 1, isPrimary: true }));
+    ev('pointerdown', a.left + 10, a.top + 5, lin);
+    const antesDeTiempo = !!document.querySelector('.ag-fantasma');
+    await new Promise(r => setTimeout(r, 500));                       // se mantiene pulsado
+    const trasMantener = !!document.querySelector('.ag-fantasma');
+    ev('pointermove', b.left + b.width / 2, b.top + b.height / 2);
+    const diana = cel.classList.contains('diana');
+    ev('pointerup', b.left + b.width / 2, b.top + b.height / 2);
+    return { id: lin.getAttribute('data-cita'), min: lin.getAttribute('data-min'), antesDeTiempo, trasMantener, diana };
+  }, D_CITAS, D_VACIO);
+  ok(!dedo.antesDeTiempo, 'un toque suelto NO arranca un arrastre: la pantalla sigue pudiendo desplazarse');
+  ok(dedo.trasMantener, 'manteniendo pulsado sí: aparece lo que se está moviendo');
+  ok(dedo.diana, 'y el día de destino se marca al pasar el dedo por encima');
+  await dormir(1500);
+  const enBd2 = dedo.id ? uno.db.prepare('SELECT fecha, inicio_min FROM citas WHERE id=?').get(Number(dedo.id)) : { fecha: '(no se pudo)', inicio_min: null };
+  ok(enBd2.fecha === D_VACIO && String(enBd2.inicio_min) === String(dedo.min),
+     'al levantar el dedo la cita queda movida, con su hora intacta', JSON.stringify(enBd2));
+  if (dedo.id) uno.db.prepare('UPDATE citas SET fecha=? WHERE id=?').run(D_CITAS, Number(dedo.id));
+
+  // ── [25] EL SALTO DE FECHA: MESES Y AÑOS, NO UNA CASILLA PARA TECLEAR ───────────────────────
+  console.log('\n[25] pulsar el título da MESES; pulsar el año da AÑOS');
+  await abrirMes(p, uno, D_VACIO);
+  const noHayCampo = await p.evaluate(() => {
+    const f = document.getElementById('agFecha');
+    return { esCampoVisible: f.type !== 'hidden', hojaCerrada: document.getElementById('agSalto').hasAttribute('hidden') };
+  });
+  ok(!noHayCampo.esCampoVisible, 'ya no hay una casilla de fecha que rellenar a mano');
+  ok(noHayCampo.hojaCerrada, 'y la hoja de meses nace cerrada');
+  await p.click('#agTitulo');
+  await dormir(400);
+  const hojaMeses = await p.evaluate(() => ({
+    abierta: !document.getElementById('agSalto').hasAttribute('hidden'),
+    n: document.querySelectorAll('#agSaltoRej button').length,
+    titulo: document.getElementById('agSaltoTit').textContent.trim(),
+    etiquetas: [...document.querySelectorAll('#agSaltoRej button')].map(b => b.textContent.trim()).slice(0, 3),
+    marcado: (document.querySelector('#agSaltoRej button.sel') || {}).textContent,
+  }));
+  ok(hojaMeses.abierta && hojaMeses.n === 12, 'al pulsar el título salen los DOCE meses', hojaMeses.n + ' casillas');
+  ok(/^\d{4}$/.test(hojaMeses.titulo) && hojaMeses.etiquetas.join(',') === 'Ene,Feb,Mar', 'con el año en la cabecera y los meses por su nombre', hojaMeses.titulo + ' · ' + hojaMeses.etiquetas.join(' '));
+  ok(hojaMeses.marcado === 'Ago', 'y el mes que se está mirando viene marcado', String(hojaMeses.marcado));
+  if (hojaMeses.abierta) await p.click('#agSaltoTit').catch(() => {});
+  await dormir(300);
+  const hojaAnios = await p.evaluate(() => ({
+    n: document.querySelectorAll('#agSaltoRej button').length,
+    titulo: (document.getElementById('agSaltoTit') || {}).textContent ? document.getElementById('agSaltoTit').textContent.trim() : '',
+    abierta: !document.getElementById('agSalto').hasAttribute('hidden'),
+  }));
+  ok(hojaAnios.abierta && hojaAnios.n === 12 && /^\d{4} – \d{4}$/.test(hojaAnios.titulo), 'y pulsando el año salen los AÑOS, de doce en doce', hojaAnios.titulo);
+  // Elegir año → vuelve a meses; elegir mes → cambia el calendario.
+  await p.evaluate(() => { const b = [...document.querySelectorAll('#agSaltoRej button')].find(x => x.textContent.trim() === String(new Date().getFullYear())); if (b) b.click(); });
+  await dormir(300);
+  const deVuelta = await p.evaluate(() => document.querySelectorAll('#agSaltoRej button').length === 12 && /^Ene$/.test(document.querySelector('#agSaltoRej button').textContent.trim()));
+  ok(deVuelta, 'elegir un año baja otra vez a sus meses');
+  let tras = { f: '(no se pudo elegir)', cerrada: null, vista: null };
+  try {
+    await p.evaluate(() => { const b = [...document.querySelectorAll('#agSaltoRej button')].find(x => x.textContent.trim() === 'Dic'); if (!b) throw new Error('sin hoja'); b.click(); });
+    await p.waitForFunction(() => document.getElementById('agFecha').value.slice(5, 7) === '12', { timeout: 6000 });
+    tras = await p.evaluate(() => ({ f: document.getElementById('agFecha').value, cerrada: document.getElementById('agSalto').hasAttribute('hidden'), vista: vistaActual() }));
+  } catch (e) { /* rojo limpio abajo */ }
+  ok(tras.f.slice(5, 7) === '12' && tras.cerrada && tras.vista === 'mes',
+     'y elegir un mes lleva el calendario a ese mes y cierra la hoja', JSON.stringify(tras));
+
   // ── [2] A1 · CON EQUIPO: LA CIFRA DECLARA SU BASE ───────────────────────────────────────────
   console.log('\n[2] A1 · negocio de 14 personas: la cifra declara su base');
   const equipo = await negocio('equipo', { personas: 14 });
@@ -423,6 +630,52 @@ try {
   const rTodo = await (await fetch(equipo.base + '/api/erp/citas/mes?ym=' + MES + '&eje=persona&verTodo=1', { headers: conCookie })).text();
   ok(!rFiltrado.includes(cliLibre), 'la cita de quien NO trabaja ese día no viaja al navegador: la filtra el servidor');
   ok(rTodo.includes(cliLibre), 'y con «ver todo el equipo» sí viaja — el filtro es real, no una casualidad');
+
+  // ── [26] «CADA UNO VE SOLO SU AGENDA» — el permiso nuevo (citas.ver_todas) ─────────────────
+  console.log('\n[26] citas.ver_todas · sin él, un empleado solo ve LO SUYO (y se mira en el servidor)');
+  // Un empleado con citas.read pero SIN citas.ver_todas. Se le da el permiso a mano, como haría la
+  // pantalla de usuarios, para no depender de cómo se pinte ese formulario.
+  const emp = equipo.db.prepare("INSERT INTO admin_users (name,email,password_hash,role,active,must_change_password,created_at) VALUES ('Empleado Curioso',?,'x','employee',1,0,datetime('now'))")
+    .run('curioso-' + TS + '@t.local').lastInsertRowid;
+  const permLeer = equipo.db.prepare("SELECT id FROM permissions WHERE module='citas' AND action='read'").get();
+  const permTodas = equipo.db.prepare("SELECT id FROM permissions WHERE module='citas' AND action='ver_todas'").get();
+  ok(!!permTodas, 'el permiso «ver toda la agenda» existe en el catálogo del negocio');
+  equipo.db.prepare('INSERT OR IGNORE INTO user_permissions (admin_user_id, permission_id) VALUES (?,?)').run(emp, permLeer.id);
+  const tokEmp = randomBytes(24).toString('base64url');
+  equipo.db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)')
+    .run(tokEmp, emp, Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000) + 3600, 'x');
+  // Una cita SUYA y otra AJENA, el mismo día.
+  const cidMia = equipo.db.prepare("INSERT INTO clients (name,active,created_at) VALUES (?,1,datetime('now'))").run('Cliente Mio ' + RID).lastInsertRowid;
+  const cidAjena = equipo.db.prepare("INSERT INTO clients (name,active,created_at) VALUES (?,1,datetime('now'))").run('Cliente Ajeno ' + RID).lastInsertRowid;
+  const insE = equipo.db.prepare("INSERT INTO citas (codigo,cliente_id,user_id,fecha,inicio_min,dur_min,margen_min,estado,created_at,updated_at) VALUES (?,?,?,?,?,30,0,'confirmada',datetime('now'),datetime('now'))");
+  insE.run('GMM' + RID, cidMia, emp, D_VACIO, 9 * 60);
+  const idAjena = insE.run('GMA' + RID, cidAjena, equipo.owner.id, D_VACIO, 11 * 60).lastInsertRowid;
+  const cabEmp = { cookie: 'asess=' + tokEmp };
+  // (a) EL MES. Se mira el JSON crudo, no la pantalla.
+  const mesEmp = await (await fetch(equipo.base + '/api/erp/citas/mes?ym=' + MES + '&eje=persona&verTodo=1', { headers: cabEmp })).text();
+  ok(mesEmp.includes('Cliente Mio ' + RID), 've SU cita en el mes');
+  ok(!mesEmp.includes('Cliente Ajeno ' + RID), 'y la del compañero NO viaja a su navegador — ni con «ver todo el equipo» puesto');
+  // Y las HORAS también son suyas: 12 h de una persona, no 168 de catorce.
+  const jsonEmp = JSON.parse(mesEmp);
+  const dEmp = jsonEmp.dias.find(d => d.fecha === D_VACIO);
+  ok(dEmp.personas_abiertas === 1, 'las horas libres que se le enseñan son las SUYAS, no la capacidad del equipo', dEmp.personas_abiertas + ' persona · ' + dEmp.libres_min + ' min');
+  ok(dEmp.capacidad_min === 12 * 60, 'o sea 12 h de una persona, no 168 de catorce', dEmp.capacidad_min + ' min');
+  // (b) EL DÍA (la otra vista come del mismo candado).
+  const diaEmp = await (await fetch(equipo.base + '/api/erp/citas/agenda?desde=' + D_VACIO + '&hasta=' + D_VACIO, { headers: cabEmp })).text();
+  ok(diaEmp.includes('Cliente Mio ' + RID) && !diaEmp.includes('Cliente Ajeno ' + RID), 'en la vista Día pasa lo mismo: solo la suya');
+  ok(!diaEmp.includes('Persona 1'), 'y las COLUMNAS tampoco delatan quién más trabaja hoy');
+  // (c) LA PUERTA DE ATRÁS: tecleando el número de una cita ajena.
+  const fichaAjena = await fetch(equipo.base + '/api/erp/citas/' + idAjena, { headers: cabEmp });
+  const cuerpoAjena = await fichaAjena.text();
+  ok(fichaAjena.status === 404, 'y entrando por el número de una cita ajena tampoco: 404', 'HTTP ' + fichaAjena.status);
+  ok(!cuerpoAjena.includes('Cliente Ajeno ' + RID), 'sin filtrar ni un dato de esa cita en la respuesta');
+  // (d) CON el permiso, lo ve todo. Si no, el candado estaría cerrado para todos y no probaría nada.
+  equipo.db.prepare('INSERT OR IGNORE INTO user_permissions (admin_user_id, permission_id) VALUES (?,?)').run(emp, permTodas.id);
+  const conPermiso = await (await fetch(equipo.base + '/api/erp/citas/mes?ym=' + MES + '&eje=persona&verTodo=1', { headers: cabEmp })).text();
+  ok(conPermiso.includes('Cliente Ajeno ' + RID), 'y al DARLE el permiso pasa a verlas todas: el candado abre, no solo cierra');
+  // (e) El dueño nunca se queda fuera de su propia agenda.
+  const delDuenyo = await (await fetch(equipo.base + '/api/erp/citas/mes?ym=' + MES + '&eje=persona&verTodo=1', { headers: conCookie })).text();
+  ok(delDuenyo.includes('Cliente Ajeno ' + RID) && delDuenyo.includes('Cliente Mio ' + RID), 'el dueño sigue viéndolo todo sin que nadie le dé nada (bypass de rol)');
 
   // ── [18] MÓVIL ──────────────────────────────────────────────────────────────────────────────
   console.log('\n[18] móvil · 360, 390 y 414 px: sin scroll horizontal ni errores');

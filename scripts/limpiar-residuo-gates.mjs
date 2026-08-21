@@ -87,6 +87,25 @@ const HUERFANOS_SQL = `
 const huerfanosIds = col(HUERFANOS_SQL);
 console.log('  asientos HUÉRFANOS (su documento ya no existe) ... ' + huerfanosIds.length);
 
+// ── 3c. PERSONAS Y HORARIOS FANTASMA (21 ago 2026). Un gate que muere por `process.exit` —el aborto
+//        de `gate-env`, un timeout, un kill— NO ejecuta su `finally`, así que su empleado de prueba y
+//        su excepción de horario se quedan. Y nadie los limpiaba: NINGÚN paso de este script miraba
+//        `admin_users`. El precio, medido el 21 ago en el negocio de desarrollo: de **14 personas
+//        activas, 10 eran fantasmas** de gates viejos — y como la capacidad del día es «personas ×
+//        horas de apertura», la agenda anunciaba **168 h libres** donde había 48. Una cifra correcta
+//        sobre datos falsos es peor que una cifra rota: nadie la duda.
+//        LAS PERSONAS NO SE BORRAN, SE DESACTIVAN (`active=0`), que es lo que hace el producto con
+//        todo lo que tiene historia detrás (citas, facturas). Las EXCEPCIONES de horario sí se
+//        borran: no son un dato con historia, son una regla de calendario, y se reconocen por su
+//        motivo. El filtro es por email de laboratorio o nombre de gate — nunca por fecha.
+const PERSONA_GATE = `(email LIKE '%@bamburu.test' OR email LIKE '%@t.local'
+                       OR name LIKE 'Gate %' OR name LIKE 'GATE %' OR name LIKE 'Gate-%')`;
+const personasFantasma = col(`SELECT id FROM admin_users WHERE active=1 AND ${PERSONA_GATE}`);
+console.log('  PERSONAS fantasma de gates (se DESACTIVAN, no se borran) ... ' + personasFantasma.length);
+const excFantasma = col(`SELECT id FROM horario_excepciones WHERE motivo IN ('GATE agenda sencilla','Libra')
+                          OR motivo LIKE 'GATE %' OR motivo LIKE 'Gate %'`);
+console.log('  EXCEPCIONES de horario dejadas por gates ....... ' + excFantasma.length);
+
 const stockAntes = db.prepare('SELECT id, stock FROM products').all();
 
 if (!HAZLO) {
@@ -97,6 +116,10 @@ if (!HAZLO) {
 
 // ── 4. Borrado, en UNA transacción y en orden de dependencias (hijos antes que padres). ───────────
 const borrar = db.transaction(() => {
+  // Personas y horarios fantasma (3c). Va lo primero porque no depende de nada de lo de abajo.
+  for (const id of personasFantasma) db.prepare('UPDATE admin_users SET active=0 WHERE id=?').run(id);
+  if (personasFantasma.length) db.prepare(`DELETE FROM admin_sessions WHERE user_id IN (SELECT id FROM admin_users WHERE active=0 AND ${PERSONA_GATE})`).run();
+  for (const id of excFantasma) db.prepare('DELETE FROM horario_excepciones WHERE id=?').run(id);
   // Dinero con el proveedor.
   db.exec(`DELETE FROM supplier_payments      WHERE supplier_invoice_id IN (${ids(facturas)})`);
   db.exec(`DELETE FROM supplier_invoice_items WHERE supplier_invoice_id IN (${ids(facturas)})`);

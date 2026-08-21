@@ -2538,6 +2538,13 @@ export function runMigrations(db) {
     // cita va por LLAVE (token), no por este permiso: no expone nada más que su propia cita.
     { module: 'citas',     action: 'read',   description: 'Ver la agenda de citas, recursos y horarios' },
     { module: 'citas',     action: 'edit',   description: 'Crear/mover/confirmar/atender/anular citas y gestionar recursos, horarios y avisos' },
+    // 21 ago 2026 · DECISIÓN DEL DUEÑO. Hasta hoy la agenda tenía UN SOLO candado: quien podía verla
+    // veía las citas de TODO EL EQUIPO — nombres de cliente incluidos. `ver_todas` separa las dos
+    // cosas. SIN este permiso, el servidor solo devuelve LAS CITAS PROPIAS, y también las horas
+    // libres se calculan solo sobre las suyas: enseñar la capacidad de gente cuya agenda no puedes
+    // ver sería la misma fuga por otra puerta. El dueño y los administradores lo tienen por bypass
+    // de rol (`can()`), así que a ellos no les cambia nada.
+    { module: 'citas',     action: 'ver_todas', description: 'Ver la agenda de TODO el equipo (sin este permiso, cada persona ve solo sus citas)' },
   ];
   for (const p of permissionsData) {
     db.prepare('INSERT OR IGNORE INTO permissions (module, action, description) VALUES (?, ?, ?)').run(p.module, p.action, p.description);
