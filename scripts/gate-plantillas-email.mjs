@@ -32,6 +32,14 @@ const rid = RID();
 const creado = { clienteId: null, facturaIds: [], plantillas: [] };
 // Foto de las plantillas de ANTES: al terminar hay que dejarlas exactamente igual.
 const plantillasAntes = JSON.stringify(db.prepare('SELECT tipo,tono,subject,html FROM email_templates ORDER BY tipo,tono').all());
+// EL INTERRUPTOR DE «AVISOS Y CORREOS», que es más nuevo que este gate. Desde que existe
+// `exigirCorreoActivo`, mandar un correo APAGADO devuelve 409 y no sale — y en el negocio de
+// desarrollo están todos apagados, así que este gate llevaba en rojo **culpando al producto de
+// hacer exactamente lo que debe**. Se guarda cómo estaba para devolverlo igual al final.
+const correoAntes = (() => {
+  try { return db.prepare("SELECT activo FROM email_tipo_pref WHERE tipo='cobro_factura'").get() || null; }
+  catch { return null; }
+})();
 
 const browser = await puppeteer.launch({ ...launchOpts() });
 const page = await browser.newPage();
@@ -189,7 +197,18 @@ try {
     creado.plantillas.push(['cobro_factura', tono]);
   }
 
-  // Y ahora se manda el email de cobro POR SU CAMINO DE SIEMPRE (registerCollectionAction → Resend).
+  // EL GUARDIÁN, DE PASO. Con el correo apagado en Ajustes la ruta NO envía y lo dice con un 409.
+  // Se comprueba aquí para que este gate no vuelva a confundir «apagado» con «roto».
+  db.prepare(`INSERT INTO email_tipo_pref (tipo, activo, updated_at) VALUES ('cobro_factura', 0, CURRENT_TIMESTAMP)
+              ON CONFLICT(tipo) DO UPDATE SET activo=0, updated_at=CURRENT_TIMESTAMP`).run();
+  const apagado = await fetch(BASE + '/api/erp/invoices/' + creado.facturaIds[0] + '/collection-actions', {
+    method: 'POST', headers: HJ, body: JSON.stringify({ type: 'recordatorio_email', channel: 'email' }),
+  });
+  ok(apagado.status === 409, 'con el correo APAGADO en Ajustes, el envío no sale y se dice → ' + apagado.status);
+
+  // Y con el correo encendido, se manda POR SU CAMINO DE SIEMPRE (registerCollectionAction → Resend).
+  db.prepare(`INSERT INTO email_tipo_pref (tipo, activo, updated_at) VALUES ('cobro_factura', 1, CURRENT_TIMESTAMP)
+              ON CONFLICT(tipo) DO UPDATE SET activo=1, updated_at=CURRENT_TIMESTAMP`).run();
   const envio = await fetch(BASE + '/api/erp/invoices/' + creado.facturaIds[0] + '/collection-actions', {
     method: 'POST', headers: HJ,
     body: JSON.stringify({ type: 'recordatorio_email', channel: 'email' }),
@@ -226,6 +245,11 @@ try {
 
   // ── Limpieza POR ID: el negocio queda exactamente como estaba ──
   const db2 = new Database(DB_PATH);
+  // El interruptor vuelve a como estaba: si no existía fila, se borra; si existía, su valor.
+  try {
+    if (correoAntes == null) db2.prepare("DELETE FROM email_tipo_pref WHERE tipo='cobro_factura'").run();
+    else db2.prepare("UPDATE email_tipo_pref SET activo=? WHERE tipo='cobro_factura'").run(correoAntes.activo);
+  } catch {}
   db2.transaction(() => {
     for (const [tipo, tono] of creado.plantillas) db2.prepare('DELETE FROM email_templates WHERE tipo=? AND tono=?').run(tipo, tono);
     db2.prepare("DELETE FROM email_templates WHERE tipo='cobro_factura' AND tono='firme-medio'").run();
