@@ -220,7 +220,7 @@ Son las de **U7 (8 jul 2026)**: **`/admin/analytics`**, **`/admin/discounts`** y
 
 ## GRUPO 1 — DEFECTOS DE LO YA CONSTRUIDO
 
-#### A. CALENDARIO — VISTA MES · ✅ **HECHO (21 ago 2026)** · commit `PENDIENTE_HASH`
+#### A. CALENDARIO — VISTA MES · ✅ **HECHO (21 ago 2026)** · commit `fcf07db`
 
 > **⚠️ EL ENCARGO DEL 21 AGO SUSTITUYÓ PARTE DE ESTE ÍTEM.** Con la auditoría del encargo 0 delante
 > (`f6c864c`), Ibrahin **reescribió A1, A4 y A7** y **RETIRÓ A3 y A6**. Abajo va el texto VIGENTE,
