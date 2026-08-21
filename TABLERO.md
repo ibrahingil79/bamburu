@@ -584,7 +584,7 @@ devuelve sus horas, que copiar no abre días cerrados y que un tramo imposible n
 
 ---
 
-#### C · TANDA 1 — CUATRO LISTADOS: C4 clientes · C5 productos · C7 facturas · C1 lista de precios · ✅ **HECHO (21 ago 2026)** · commit `1363090`
+#### C · TANDA 1 — CUATRO LISTADOS: C4 clientes · C5 productos · C7 facturas · C1 lista de precios · ✅ **HECHO (21 ago 2026)** · commit `04657ea`
 
 > **C4** Listado de clientes. **C5** Listado de productos. **C7** Listado de facturas. **C1** Lista de precios bajo plantilla.
 > Cada uno cerrado ENTERO: consulta compartida con su pantalla, declaración de la base, los tres verbos (imprimir · descargar PDF · enviar por correo) y aserciones propias.
