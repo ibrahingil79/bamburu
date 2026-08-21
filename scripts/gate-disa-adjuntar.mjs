@@ -48,6 +48,10 @@ const LECTURA = {
 
 const purchasesBefore = db.prepare('SELECT COUNT(*) c FROM purchases').get().c;
 const movsBefore = db.prepare('SELECT COUNT(*) c FROM stock_movements').get().c;
+// LOS TECHOS DE ANTES DE EMPEZAR. Sirven para poder decir «esto es MÍO» y no «esto ha cambiado en
+// el negocio», que no es lo mismo cuando hay veinte gates corriendo a la vez sobre el mismo tenant.
+const maxCompraAntes = db.prepare('SELECT COALESCE(MAX(id),0) m FROM purchases').get().m;
+const maxMovAntes = db.prepare('SELECT COALESCE(MAX(id),0) m FROM stock_movements').get().m;
 
 const browser = await puppeteer.launch({ ...launchOpts() });
 const page = await browser.newPage();
@@ -129,8 +133,17 @@ try {
   const db2 = new Database(DB_PATH);
   // El adjunto NO se borra: la regla del proyecto es archivar, no destruir, y un adjunto suelto no
   // ensucia nada (no cuelga de ningún documento). Lo que sí se retira es la sesión del gate.
-  ok(db2.prepare('SELECT COUNT(*) c FROM purchases').get().c === purchasesBefore, 'el tenant queda como estaba: ninguna compra nueva');
-  ok(db2.prepare('SELECT COUNT(*) c FROM stock_movements').get().c === movsBefore, 'el tenant queda como estaba: ningún movimiento de stock nuevo');
+  ok(db2.prepare('SELECT COUNT(*) c FROM purchases WHERE id > ?').get(maxCompraAntes).c === 0,
+     'este gate no ha creado ninguna compra');
+  // ESTO MEDÍA EL TENANT ENTERO Y POR ESO ERA INESTABLE: contaba TODOS los movimientos de stock del
+  // negocio, así que si otro gate movía stock a la vez —y en el barrido corren en paralelo— este
+  // cantaba un fallo que no era suyo. Aparecía y desaparecía entre pasadas, que es la peor forma de
+  // fallar: enseña a desconfiar del barrido entero. Ahora mide LO SUYO — que no haya movimientos
+  // nuevos nacidos de una compra suya —, que es lo que esta comprobación siempre quiso decir.
+  const mios = db2.prepare(
+    "SELECT COUNT(*) c FROM stock_movements WHERE id > ? AND origin_type = 'purchase' AND origin_id > ?"
+  ).get(maxMovAntes, maxCompraAntes).c;
+  ok(mios === 0, 'y ningún movimiento de stock que venga de una compra suya', mios + ' movimientos');
   db2.prepare('DELETE FROM admin_sessions WHERE token=?').run(token);
   db2.close();
   db.close();

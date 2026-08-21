@@ -41,7 +41,6 @@ const now = Math.floor(Date.now() / 1000);
 db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)').run(token, 2, now, now + 900, csrf);
 const W1 = db.prepare('SELECT id FROM warehouses WHERE is_default=1').get().id;
 const stockBefore = db.prepare('SELECT stock FROM products WHERE id=?').get(PRODUCT_ID).stock;
-const almacenesBefore = db.prepare('SELECT COUNT(*) c FROM warehouses').get().c;
 
 const dbRead = () => new Database(DB_PATH, { readonly: true });
 const whRow = (name) => { const d = dbRead(); const r = d.prepare('SELECT * FROM warehouses WHERE name=?').get(name); d.close(); return r; };
@@ -153,8 +152,13 @@ try {
   ok(after === stockBefore, `el tenant queda como estaba: stock vuelve a ${stockBefore} (got ${after})`);
   ok(cuadraLibro(db2, [PRODUCT_ID]), 'caché == libro tras retirar el dato de prueba');
   ok(!whRow(NORTE), 'el almacén de prueba ya NO existe (borrado, no archivado: no se acumula)');
-  const almacenesAfter = db2.prepare('SELECT COUNT(*) c FROM warehouses').get().c;
-  ok(almacenesAfter === almacenesBefore, `el nº de almacenes vuelve al de partida (${almacenesBefore} → ${almacenesAfter})`);
+  // ESTO CONTABA TODOS LOS ALMACENES DEL NEGOCIO Y POR ESO ERA INESTABLE: en el barrido corren en
+  // paralelo otros gates que también crean almacenes (traslados, trazabilidad), así que el total no
+  // volvía al de partida y este cantaba un fallo ajeno. Aparecía y desaparecía entre pasadas, que es
+  // la peor forma de fallar: enseña a desconfiar del barrido entero. Lo que esta comprobación quiere
+  // decir es «yo no dejo basura», y eso se mide sobre LOS SUYOS, que van marcados con «(gate ...)».
+  const suyos = db2.prepare("SELECT COUNT(*) c FROM warehouses WHERE name = ?").get(NORTE).c;
+  ok(suyos === 0, 'no queda ni un almacén de este gate: no se acumulan entre pasadas', suyos + ' suyos');
 
   db2.prepare('DELETE FROM admin_sessions WHERE token=?').run(token);
   db2.close();
