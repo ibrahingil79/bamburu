@@ -174,6 +174,26 @@ try {
 
   // ── [5] Choque → propone huecos cercanos ────────────────────────────────────
   console.log('\n[5] al chocar, propone huecos cercanos');
+  // EL CHOQUE SE MONTA EN UN DÍA FUTURO, NO EN HOY. El motor corta el mismo día en cuanto pasa la
+  // hora («si es hoy y ya pasó la hora de corte, no hay huecos hoy», citas-engine.js), así que de
+  // noche el servidor no tiene NADA que proponer y el producto acierta dando el error a secas. Con
+  // el escenario clavado en hoy, este gate era verde de día y rojo de noche — medido a las 23:30.
+  // Se busca un día abierto y sin citas, y se monta allí el choque entero.
+  const dowsOpen = new Set(db.prepare("SELECT DISTINCT dow FROM horario_tramos WHERE scope='negocio'").all().map(r => r.dow));
+  const ocupado = db.prepare('SELECT 1 FROM citas WHERE fecha=? LIMIT 1');
+  let DIA_CHOQUE = null;
+  for (let d = 10; d <= 60 && !DIA_CHOQUE; d++) {
+    const f = new Date(Date.now() + d * 86400000);
+    const iso = f.toISOString().slice(0, 10);
+    if ((!dowsOpen.size || dowsOpen.has(f.getUTCDay())) && !ocupado.get(iso)) DIA_CHOQUE = iso;
+  }
+  ok(!!DIA_CHOQUE, 'hay un día abierto y libre donde montar el choque', DIA_CHOQUE || 'ninguno en 60 días');
+  // La cita que va a estorbar, y la agenda puesta en ese día.
+  await call(p, 'POST', '/api/erp/citas', { cliente_id: CLI, user_id: A, fecha: DIA_CHOQUE, inicio_min: 660, service_ids: [S] });
+  await p.goto(BASE + '/admin/citas', { waitUntil: 'networkidle2' });
+  await p.evaluate((f) => { setVista('dia'); irA(f); }, DIA_CHOQUE);
+  await p.waitForFunction((A) => !!document.querySelector('.agcell[data-col="' + A + '"][data-min="660"]'), { timeout: 8000 }, A);
+  await new Promise(r => setTimeout(r, 500));
   await p.evaluate((A) => { document.querySelector('.agcell[data-col="' + A + '"][data-min="660"]').click(); }, A);   // 11:00, ya ocupado
   await p.waitForFunction(() => document.getElementById('mCita').classList.contains('open'), { timeout: 8000 });
   await p.evaluate((nom) => { var i = document.getElementById('cBusca'); i.value = nom; cFiltra(); }, 'GATE Cli ' + TS);
