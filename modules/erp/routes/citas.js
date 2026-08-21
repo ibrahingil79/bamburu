@@ -2164,6 +2164,11 @@ function pintaBotonesVista(v){
     var b=document.getElementById('vb'+x.charAt(0).toUpperCase()+x.slice(1)); if(!b) return;
     b.setAttribute('aria-selected', x===v ? 'true' : 'false');
   });
+  // EL ZOOM S/M/L ES DE LA REJILLA: gradúa el alto de la HORA, y en el mes no hay horas que estirar.
+  // Se quedaba a la vista sin hacer nada — que es justo lo que Ibrahin preguntó al ver la barra
+  // («otros S,M,L que eso porque no entiendo»). Un control que no responde enseña a desconfiar de
+  // toda la barra, así que en el mes no se enseña.
+  var z=document.getElementById('agZoom'); if(z) z.style.display = (v==='mes') ? 'none' : '';
 }
 // Anterior/siguiente en la unidad que se está mirando: un día, una semana o un mes.
 function agMover(n){
@@ -3223,7 +3228,10 @@ async function bGuardar(){
 }
 // De entrada: HOY, por persona, solo quien trabaja hoy (2.1). Se recuerda lo último que se eligió (2.2).
 (function initAgenda(){ var p=loadPrefs(); if(p.vista)AG_VISTA=p.vista; if(p.eje)document.getElementById('agEje').value=p.eje; var vt=document.getElementById('agVerTodo'); if(vt)vt.checked=!!p.verTodo;
-  initDate(); pintaTitulo(); pintaZoom();
+  // pintaBotonesVista TAMBIÉN en el arranque: la vista se recuerda entre visitas, así que al
+  // entrar directamente en «mes» hay que dejar la barra como corresponde. Sin esta llamada el
+  // zoom aparecía igualmente hasta que tocabas un botón de vista.
+  initDate(); pintaTitulo(); pintaZoom(); pintaBotonesVista(AG_VISTA);
   // Los FILTROS se despliegan solos si venían tocados. La vista ya no: ahora son botones a la vista.
   if((p.eje&&p.eje!=='persona')||p.verTodo){ document.getElementById('agControles').style.display='flex'; }
   document.addEventListener('wheel', ruedaMes, { passive:false });

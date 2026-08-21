@@ -211,7 +211,16 @@ try {
 
   // ── [9] Los cuatro estados conservan color y nombre ───────────────────────────────────────────
   await page.evaluate(() => setZoom(72)); await dormir(600);
-  const ley = await page.evaluate(() => { toggleLeyenda(); return [...document.querySelectorAll('#agLeyenda span span')].map(s => s.parentElement.textContent.trim()); });
+  // LA LEYENDA YA NO SE DESPLIEGA EN LÍNEA: desde la tarea A (21 ago 2026) es una VENTANA, que es lo
+  // que pidió Ibrahin al ver la barra. Este gate se quedó llamando a `toggleLeyenda()`, que ya no
+  // existe, y moría con un ReferenceError — **gate CADUCADO por mi propio cambio**, no fallo del
+  // producto. Se abre la ventana, se leen los cuatro estados y se cierra para no tapar la rejilla.
+  const ley = await page.evaluate(() => {
+    openModal('mLeyenda');
+    const filas = [...document.querySelectorAll('#mLeyenda .ley-fila b')].map(b => b.textContent.trim());
+    closeModal('mLeyenda');
+    return filas;
+  });
   const esperados = Object.values(ESTADOS_COLOR).map(e => e.label);
   ok(esperados.every(l => ley.some(x => x.includes(l))), 'la leyenda conserva los cuatro estados con su nombre', ley.join(' · '));
   const colores = [];
@@ -357,7 +366,13 @@ try {
   await dormir(400);
   const sitio = await page.evaluate(() => {
     const t = document.getElementById('agTitulo').getBoundingClientRect();
-    const f = [...document.querySelectorAll('.ag-nav')].map(b => b.getBoundingClientRect());
+    // SOLO LAS DE LA BARRA. Desde la tarea A hay OTRAS DOS `.ag-nav` dentro del selector de mes/año
+    // (el que Ibrahin pidió: pulsas el mes y salen los doce meses), así que contar todas las de la
+    // pantalla da cuatro y esta comprobación fallaba por eso — con las flechas en su sitio, a 174 px
+    // del título. Aserción caducada por un añadido legítimo, no fallo del producto.
+    const f = [...document.querySelectorAll('.ag-nav')]
+      .filter(b => !b.closest('#agSalto'))
+      .map(b => b.getBoundingClientRect());
     return { dist: Math.round(f[0].x - t.x), mismaFila: Math.abs(f[0].y - t.y) < 24, n: f.length };
   });
   // Las flechas RESPONDÍAN, pero estaban a 624 px del título, en el otro extremo de la barra.
@@ -471,7 +486,17 @@ try {
   // misma hora quedaban una ENCIMA de otra y la de abajo desaparecía. Medido antes de tocar nada:
   // mismas coordenadas, 36 px tapados. Se mide en PÍXELES, no a ojo.
   // Cinco días por delante: lejos de las citas de los pasos anteriores y de la hora de hoy.
-  const D2 = new Date(Date.parse(HOY + 'T00:00:00Z') + 5 * 86400000).toISOString().slice(0, 10);
+  // EL DÍA TIENE QUE ESTAR VACÍO O EL ESCENARIO NO MIDE LO QUE DICE. Con el día fijo en HOY+5, un
+  // paso anterior de ESTE MISMO gate había dejado una cita a las 15:00 justo ahí: el grupo de solape
+  // pasaba a tener CUATRO citas, salían TRES columnas y la comprobación fallaba **con el reparto
+  // funcionando perfectamente**. Se comprobó reproduciendo el algoritmo aparte: con las ocho del
+  // escenario da lo que se pide. Así que se busca el primer día libre en vez de suponerlo.
+  let D2 = null;
+  for (let d = 5; d < 60 && !D2; d++) {
+    const f = new Date(Date.parse(HOY + 'T00:00:00Z') + d * 86400000).toISOString().slice(0, 10);
+    if (!db.prepare('SELECT 1 FROM citas WHERE fecha=? LIMIT 1').get(f)) D2 = f;
+  }
+  ok(!!D2, 'hay un día libre donde montar el escenario de solapes, sin citas de pasos anteriores', D2 || 'ninguno en 60 días');
   const cSolape = cliente('Gate Solape ' + RID);
   const insS = db.prepare("INSERT INTO citas (codigo,cliente_id,user_id,fecha,inicio_min,dur_min,margen_min,estado,created_at,updated_at) VALUES (?,?,?,?,?,?,0,'confirmada',datetime('now'),datetime('now'))");
   //  A 10:00-11:00 · B 10:30-11:30 (choca con A) · C 11:15-12:15 (choca con B, NO con A) → encadenadas
@@ -513,7 +538,7 @@ try {
   // [3] una larga cruzando dos cortas.
   ok(rects.L.w === rects.S1.w && rects.S1.w === rects.S2.w, 'UNA LARGA CRUZANDO DOS CORTAS: mismo ancho las tres', rects.L.w + ' px');
   ok(rects.L.l !== rects.S1.l && rects.S1.l === rects.S2.l, 'la larga a un lado y las dos cortas al otro',
-     'L en ' + rects.L.l + ', cortas en ' + rects.S1.l);
+     'L en ' + rects.L.l + ' (ancho ' + rects.L.w + '), S1 en ' + rects.S1.l + ', S2 en ' + rects.S2.l + ' (anchos ' + rects.S1.w + '/' + rects.S2.w + ')');
   // [4] consecutivas: NO es choque.
   ok(rects.X.w === rects.Y.w && rects.X.w > rects.A.w,
      'CONSECUTIVAS (una empieza cuando la otra acaba): NO es choque, ancho completo las dos',
