@@ -356,5 +356,13 @@ try {
   for (const sl of creados) { try { borrarTenant(sl); } catch {} }
   console.log('\n──────────────────────────────────────────────');
   console.log((fail === 0 ? '✓ GATE VERDE' : '✗ GATE ROJO') + ' — ' + pass + ' pasan · ' + fail + ' fallan');
+  // Y EL MISMO VEREDICTO EN EL IDIOMA DEL RUNNER. `run-gates.mjs` decide PASA/SOSPECHOSO buscando un
+  // resumen reconocible ("N OK", "PASS: n", "N comprobaciones"): un gate que sale 0 pero no dice
+  // cuántas aserciones corrió lo marca SOSPECHOSO y **cuenta como no-pasa**. La línea de arriba, que
+  // me inventé, no casaba con ninguno — así que este gate iba verde por su cuenta y el barrido lo
+  // daba por no-pasado. Lo destapó el barrido del 21 ago: los CUATRO gates nuevos, los cuatro míos,
+  // salían SOSPECHOSOS por esto. Es la hermana del fallo de estar fuera de GRUPOS: allí no lo
+  // ejecutaba nadie, aquí sí lo ejecuta pero no sabe leer lo que contesta.
+  console.log(pass + ' OK · ' + fail + ' fallos');
   process.exit(fail === 0 ? 0 : 1);
 }
