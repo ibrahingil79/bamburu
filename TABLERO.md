@@ -85,7 +85,7 @@
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-08-21 · `5c60fea` · **60/82** · 509 s
+- **Último barrido completo:** 2026-08-21 · `b1b8eae` · **66/82** · 509 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -661,6 +661,59 @@ del primero.
 >   habría dejado de despertar a `margen` y `clientes`. Es exactamente la trampa de C-0.
 > - **`routes/products.js` se deja SIN regla a propósito:** hoy cae en el comodín final y corre todo.
 >   Escribirle `['impresion']` sería cambiar «todo» por «uno»: menos cobertura disfrazada de más.
+
+---
+
+#### 🔁 EL BARRIDO COMPLETO DEL 21 AGO 2026 — **60/82 → 66/82** · commit `b1b8eae`
+
+> Autorizado por Ibrahin al cerrar la tanda 1. Se corrió entero, se investigó rojo por rojo y **se
+> separó lo mío de lo de antes con una prueba, no con una opinión**: volviendo el árbol al commit
+> anterior a la tanda (`078d054`) y reejecutando los mismos gates en serie.
+
+**⚙️ LOS SEIS QUE SUBIERON, Y DE QUIÉN ERA CADA UNO**
+
+- **CUATRO GATES MÍOS ESTABAN VERDES Y EL BARRIDO LOS DABA POR NO PASADOS.** `run-gates.mjs` decide
+  PASA/SOSPECHOSO buscando un resumen reconocible («N OK», «PASS: n», «N comprobaciones»). Los cuatro
+  gates nuevos —`gate-citas-mes`, `gate-cola-envios`, `gate-documentos`, `gate-impresion`— cerraban
+  con un formato **que me inventé** («43 pasan · 0 fallan») y que el runner no sabe leer: salían
+  **SOSPECHOSOS y contaban como no-pasa**. Es la hermana del fallo de estar fuera de `GRUPOS`: allí no
+  los ejecutaba nadie, aquí sí los ejecuta pero no sabía leer lo que contestaban. Commit `3868560`.
+- **UN FALLO DE PRODUCTO, MÍO, QUE SOLO VIO EL BARRIDO** (`gate-menu-navegacion`, commit `b1b8eae`):
+  la pantalla de facturas moría con **«Unexpected identifier facturas»**. El botón de enviar el
+  listado se pinta desde JS del navegador escrito **dentro de una plantilla del servidor**, y la
+  plantilla **se come una capa de escape**: llegaba un apóstrofo pelado que cerraba la cadena. Con el
+  código anterior a la tanda ese gate pasaba y con el mío fallaba — así quedó demostrado que era mío.
+- **DOS ROJOS AJENOS QUE ERAN UNA PRECONDICIÓN DEL TENANT, NO DEL CÓDIGO** (`gate-gasto-proveedor` y
+  `gate-pagos-proveedor`). **`seed-taller.mjs:98` archiva TODOS los proveedores genéricos** al
+  resembrar el negocio de desarrollo (`UPDATE suppliers SET active=0 WHERE active=1`), y con ellos se
+  llevó **«Aromas del Sur SL»** — del que dependen **diez gates** que **no lo crean ellos**. Se
+  reactivó el proveedor (dato de desarrollo archivado en masa, no borrado) y volvieron dos.
+  **El arreglo bueno sigue pendiente y es otro:** que cada gate se traiga su propio proveedor, como
+  los de compras se traen su producto. Es la misma fragilidad ya declarada en `gate-nav-inicio-disa`.
+
+**⚙️ LO QUE SIGUE ROJO — 16, y ninguno es de la tanda 1**
+
+- **CATORCE SON DE ANTES, DEMOSTRADO:** fallan **igual** con el código de `078d054`, anterior a esta
+  tanda: `gate-agenda-visual`, `gate-inicio-cuadro-mando`, `gate-oficio-pantalla`,
+  `gate-reserva-publica-pantalla`, `gate-c1c-diferencias-cierre`, `gate-orden-compra-c1a`,
+  `gate-recepciones-c1b`, `gate-c2-revision`, `verify-propuestas-dormidos`,
+  `verify-propuestas-fiscales`, `gate-disa-dictar-compra`, `gate-disa-adjuntar`,
+  `verify-plantillas-email`, `gate-plantillas-email`.
+- **DOS SON INESTABLES EN PARALELO, NO ROJOS:** `gate-abono-proveedor` y `gate-almacenes` salen rojos
+  en el barrido y **verdes al correrlos solos, en 12 segundos**. Aparecen y desaparecen entre pasadas.
+  Es la fragilidad conocida del paralelismo, no un fallo del producto — pero **es deuda, no ruido**.
+
+**⚙️ DEUDA ANOTADA, MEDIDA HOY Y NO TOCADA (no hay encargo y es otra área)**
+
+> **`lint-plantillas.mjs` no caza la clase de fallo que me acaba de morder.** Vigila los escapes de
+> **regex** que la plantilla destruye (`\d`, `\*`), no los de **comilla**. Ampliarlo a `\'` y `\"`
+> saca **11 avisos más, los 11 preexistentes y los 11 en la pantalla de plantillas de email de
+> Ajustes** (`modules/erp/routes/settings.js`, líneas 1603, 1702, 1706, 1711, 1726, 1727, 1729, 1738,
+> 1739, 1741). Mismo mecanismo que el mío, pero con una diferencia que importa: **el mío rompía al
+> CARGAR y esos rompen al PULSAR**, y por eso ningún gate los ve — es exactamente la lección de C4b
+> («los handlers no se delatan al cargar, solo al pulsar»). **No están verificados como rotos**: está
+> medido el escape, no el síntoma. Merece encargo propio, con el lint ampliado al final y no al
+> principio, para no dejarlo en rojo permanente mientras se arregla.
 
 ---
 
