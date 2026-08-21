@@ -722,7 +722,7 @@ de exportación reales** para construir y probar contra algo cierto.
 
 ---
 
-#### L. LA COLA DE ENVÍOS: DEVOLVERLA AL PANEL Y VESTIRLA · ✅ **HECHO (21 ago 2026)** · commit `PENDIENTE_HASH_L`
+#### L. LA COLA DE ENVÍOS: DEVOLVERLA AL PANEL Y VESTIRLA · ✅ **HECHO (21 ago 2026)** · commit `3296c1f`
 
 > **L. LA COLA DE ENVÍOS: DEVOLVERLA AL PANEL Y VESTIRLA.**
 > **L1** ~~VUELVE AL PANEL. Menú lateral, barra superior y buscador, como el resto de pantallas. El botón «← Agenda» se queda: volver al sitio de donde vienes es útil, pero no puede ser la ÚNICA salida.~~ **RETIRADO: ya estaba hecho** (ver ⚙️ abajo). El «← Agenda» se queda, y ya no es la única salida.
