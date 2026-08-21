@@ -112,14 +112,17 @@
 `A 8 · B 3 · C 11 · D 5 · E 4 · F 4 · G 5 · H 3 · I 3 · J 0 · K 0` = **46**.
 (J y K son ítems bloqueados sin subpuntos: su texto es una sola afirmación.)
 
-**RECUENTO VIGENTE — tras la tarea A (21 ago 2026): 43 subpuntos vivos, 6 hechos, 37 pendientes.**
-`A 6 · B 3 · C 11 · D 5 · E 4 · F 4 · G 4 · H 3 · I 3 · J 0 · K 0` = **43**.
-- **3 RETIRADOS**, con su motivo escrito en su sitio y **sin borrar la línea**: **A3** y **A6**
-  (premisas falsas, las tumbó la auditoría del encargo 0) y **G3** (ya estaba hecho).
-- **6 HECHOS**, todos de A: **A1 · A2 · A4 · A5 · A7 · A8** — entrega del 21 ago 2026.
-- Quedan **37 pendientes** y **2 bloqueados** (J y K), que no dependen de Ibrahin.
+**RECUENTO VIGENTE — 21 ago 2026, al cerrar la tarea L: 60 subpuntos vivos · 23 hechos · 37 pendientes.**
+`A 6 · B 3 · C 11 · D 5 · E 4 · F 4 · G 4 · H 3 · I 3 · J 0 · K 0 · L 8 · M 9` = **60**.
+- **4 RETIRADOS**, con su motivo escrito en su sitio y **sin borrar la línea**: **A3** y **A6**
+  (premisas falsas, las tumbó la auditoría del encargo 0), **G3** (ya estaba hecho) y **L1** (la
+  pantalla ya traía el armazón del panel: lo tumbó el Paso 0 de la tarea L).
+- **23 HECHOS:** los 6 de **A** · los 8 de **M** (las dos entregas que se dictaron de viva voz) · los
+  8 vivos de **L** · y el subpunto de DISA de **L2**. Todos del 21 ago 2026.
+- Quedan **37 pendientes** —los de B a I— y **2 bloqueados** (J y K), que no dependen de Ibrahin.
 - **A1, A4 y A7 fueron REESCRITOS** por el dueño antes de construirse; el recuento no cambia por eso
   (siguen siendo los mismos subpuntos), solo cambia lo que piden.
+- **L nace con 9 subpuntos y se queda con 8 vivos** (L1 retirado). **M nace con 9, los 9 hechos.**
 
 ---
 
@@ -716,6 +719,140 @@ enchufar el importador ya existe** y hoy lo cubre el equipo a mano. Lo que falta
 de exportación reales** para construir y probar contra algo cierto.
 
 ---
+
+---
+
+#### L. LA COLA DE ENVÍOS: DEVOLVERLA AL PANEL Y VESTIRLA · ✅ **HECHO (21 ago 2026)** · commit `PENDIENTE_HASH_L`
+
+> **L. LA COLA DE ENVÍOS: DEVOLVERLA AL PANEL Y VESTIRLA.**
+> **L1** ~~VUELVE AL PANEL. Menú lateral, barra superior y buscador, como el resto de pantallas. El botón «← Agenda» se queda: volver al sitio de donde vienes es útil, pero no puede ser la ÚNICA salida.~~ **RETIRADO: ya estaba hecho** (ver ⚙️ abajo). El «← Agenda» se queda, y ya no es la única salida.
+> **L2** ENTRADA PROPIA. Clave en NAV_PERMS, alcanzable por menú y por Ctrl+K, y enlazable por DISA. Va dentro del área de Agenda (es de uso diario).
+> **L3** CONTENEDOR CON AIRE. Hoy las tarjetas van de borde a borde de la pantalla. Mismo contenedor y mismos márgenes que el resto del panel, con ancho máximo: en pantalla ancha el texto no se estira de lado a lado.
+> **L4** TÍTULO DE PÁGINA DE VERDAD. «Cola de envíos» es hoy texto plano pequeño. Misma jerarquía que «Agosto 2026» en la agenda.
+> **L5** EL MURO DE TEXTO, FUERA. Ese párrafo de tres líneas a ancho completo, en gris y con negritas dentro, no lo lee nadie. Se queda UNA frase visible y el resto va detrás de la (i), en la misma ventana que usa el resto del panel. Lo que NO se pierde, porque es honestidad y no adorno: que «marcado como enviado» significa que se pulsó el botón, NO que el mensaje llegó.
+> **L6** HOY ANTES QUE MAÑANA. Lo urgente primero.
+> **L7** TARJETAS SEPARADAS ENTRE SÍ y con la cabecera de tarjeta del sistema visual, no negrita pequeña suelta.
+> **L8** ESTADO VACÍO QUE ENSEÑA. Hoy dice «No hay nada pendiente.» y ya. Debe decir QUÉ aparecería ahí y CUÁNDO — «Aquí aparecerán las citas de mañana a las que aún no has mandado recordatorio». Con su icono. Un estado vacío es la primera pantalla que ve un negocio nuevo: si no explica nada, la pantalla parece rota.
+> **L9** DECIR CUÁNTAS SON. La cabecera de cada bloque lleva su número («Hoy — 3 pendientes de confirmación»). Si es 0, el estado vacío ya lo dice.
+
+**⚙️ CORREGIDO POR EL PASO 0 — DOS DE LAS NUEVE PREMISAS ERAN FALSAS, y se paró antes de construir:**
+
+- **L1 · EL ARMAZÓN YA ESTABA.** Medido en la dirección pública a 1920 px: `sidebar: true`,
+  `topbar: true`, buscador `true`. En el código, `vistaCola` termina en `adminLayout(...)`, **como
+  todas**. No era otra plantilla, ni estaba fuera del layout, ni se le había quitado. **Lo que la
+  hacía parecer desnuda era el INTERIOR**, y eso sí era real: tarjeta de **1814 px en una ventana de
+  1920** (margen izq. 84 / der. 22), **cero separación** entre las dos, título de **16,8 px / peso
+  500** y el párrafo a ese mismo ancho. Es decir: **L3, L4, L5 y L7 describían bien el síntoma y mal
+  la causa.**
+- **L2 · YA TENÍA ENTRADA PROPIA, y desde el 18 de agosto.** Clave `'citas-cola': 'citas.read'` en
+  `NAV_PERMS`; entrada **en el área Agenda** —justo donde el encargo la pide— con el nombre
+  **«Recordatorios a clientes»**, su icono, **alias «Cola de envíos»** para el buscador y **contador
+  de pendientes** al lado. Ctrl+K la encuentra **por los dos nombres**. **Lo único cierto de L2 era
+  lo de DISA**, y eso sí se ha construido.
+- **NO es una pantalla huérfana** ni la quinta: tiene menú, permiso, alias y contador. Las huérfanas
+  siguen siendo dos (`/admin/discounts` y `/admin/tags`) más la migración.
+- **El orden Mañana→Hoy NO era deliberado:** ni un comentario ni una nota lo justificaban. Era el
+  orden en que se escribieron los dos bloques. **L6 es correcto.**
+
+**QUÉ SE ENTREGÓ:**
+
+- **L2 (la parte viva) · DISA YA PUEDE ENLAZARLA.** `/admin/citas` y `/admin/citas/cola` entran en su
+  lista de destinos permitidos. Leer la agenda ya estaba permitido y DISA la nombraba; lo que no
+  podía era **llevarte**, así que decía «ve a la Agenda» sin poder abrirla. **No abre ninguna puerta
+  nueva** —son destinos de solo lectura con el candado de su pantalla—: quita un callejón sin salida.
+- **L3 · CONTENEDOR CON TOPE.** `max-width: 1080px`. En un monitor de 1920 la tabla se estiraba 1814
+  px y las seis columnas quedaban separadas por medio metro de vacío.
+- **L4 · TÍTULO DE VERDAD**, con la misma jerarquía que el «Agosto 2026» de la agenda (1,5 rem / 700).
+  Y **pasa a llamarse «Recordatorios a clientes»**, que es como se llama en el menú y en la pestaña
+  del navegador desde el 18 de agosto: **no es un cambio de nombre, es terminar aquel**, que dejó
+  este `h2` sin tocar — el menú te llevaba a un sitio y la pantalla se presentaba con otro nombre.
+  El nombre viejo se sigue encontrando en el buscador, que es donde hace falta.
+- **L5 · EL MURO, DETRÁS DE LA (i).** Arriba se queda **una frase**; el resto vive en la ventana del
+  panel, **con la advertencia entera y en su propio recuadro**: «marcado como enviado» **no** es
+  «entregado». No se ha suavizado ni una palabra, y el gate la exige **por texto**.
+- **L6 · HOY PRIMERO**, en el HTML **y** al pedir los datos: si el servidor tarda, lo primero que se
+  pinta es lo de hoy.
+- **L7 · TARJETAS SEPARADAS** (16 px) y con la **cabecera de tarjeta del sistema** (`card-head`), no
+  una negrita suelta.
+- **L8 · EL VACÍO ENSEÑA**, con el bloque de vacío del panel (`emptyState`, U2) y su icono:
+  *«Aquí aparecerán las citas de hoy a las que aún no has pedido confirmación.»*
+- **L9 · EL NÚMERO EN LA CABECERA, Y CUENTA LO QUE HAY QUE CONTAR.** Dice las **pendientes**, no las
+  filas: el motor trae **todas** las citas del día —las ya avisadas también, con su estado—, así que
+  contar filas habría dado un número que no es el que se busca. Medido: 3 citas hoy con una ya
+  marcada → «**Hoy — 2 pendientes de confirmación**», con las 3 filas a la vista. Singular cuando es
+  una. Con 0 filas, la cabecera no inventa un cero: lo dice el estado vacío.
+
+**⚠️ ANOTADO Y NO ARREGLADO — el menú no filtra a quien no tiene NINGÚN permiso propio.** Salió al
+escribir la comprobación 4. `hasCustomPerms` exige `perms.length > 0`: un empleado con **cero**
+permisos ve el menú entero. **La puerta sigue cerrada** (403 al pulsar, comprobado), pero enseña
+puertas que no se abren. **Es preexistente, es general** —vale para todas las entradas, no para ésta—
+y **ya estaba anotado en este TABLERO desde el 17-jul-2026**. El PASO 2 de este encargo deja los
+permisos fuera de alcance, así que el gate mide el caso que sí se puede exigir hoy: **un empleado con
+permisos propios no ve esta entrada**, y sí ve las suyas.
+
+**VERIFICACIÓN — `gate-cola-envios`: 38 aserciones, 0 fallos, contra la dirección pública.**
+- **Reversión de las siete piezas, una a una:** sin L1 → 7 rojos · sin L2 → 3 · sin L3 → 2 ·
+  sin L5 → 2 · sin L6 → 1 · sin L8 → 4 · sin L9 → 2. Ninguna aserción sobrevivió a que le quitaran
+  el producto de debajo, y **el gate llegó al final en las siete** — ni una murió por excepción.
+- **L4 y L7 no venían en la lista de comprobaciones del encargo, y se les añadió la suya:** un punto
+  sin aserción no está verificado por muy a la vista que quede en una captura. Medido: título de
+  **24 px / peso 700** y las **dos cabeceras de tarjeta del sistema**.
+- **Y dos aserciones mías estaban mal, no el producto:** una daba por hecho que el menú filtra a
+  quien no tiene ningún permiso (no lo hace: fallo preexistente, arriba), y otra esperaba a que la
+  agenda arrancara su JavaScript para dar por bueno el botón «← Agenda» — lo que ahí se comprueba es
+  **a dónde lleva el botón**, no cuánto tarda la otra pantalla en despertar. Corregidas las dos.
+
+**FICHA DE `gate-cola-envios` — DECLARADO, QUE NO ES EJECUTADO.**
+
+| | |
+|---|---|
+| **Nombre** | `scripts/gate-cola-envios.mjs` |
+| **Aserciones** | **38** (0 fallos el 21 ago 2026) |
+| **Duración** | **~30 s** |
+| **Clase** | **propio** (`EMPIEZAN_DE_CERO`) — levanta **su** negocio con `provisionTenant` y lo borra al salir. No toca el negocio compartido: **puede correr en paralelo**. |
+| **Grupo** | `clientes` — el barrido pasa de **79 a 80** comprobaciones |
+| **Contra** | `https://<slug>.bamburu.com` |
+| **Depende del reloj** | **No.** Siembra sus citas con las fechas de hoy y mañana calculadas en el momento; no mira la hora. |
+
+**TABLA `AFECTA`.** No hace falta regla nueva: las que ya existen cubren los dos ficheros que este
+gate mira — `modules/erp/routes/citas.js` (la pantalla) y `modules/erp/menu.js` (la entrada y su
+contador), **los dos → `clientes`**. Comprobado **ejecutando las reglas** contra las rutas reales, no
+leyéndolas. **Declarar no es ejecutar:** entra en el mapa para que el barrido lo alcance cuando
+Ibrahin lo pida; no se ha enganchado a ningún disparador.
+
+---
+
+#### M. LO QUE SE DICTÓ DE VIVA VOZ Y NO PASÓ POR EL REGISTRO · ✅ **HECHO (21 ago 2026)**
+
+> **Por qué está aquí.** El registro existe para que no se pierda nada al trocear, y **eso vale
+> también para lo que el dueño dicta mirando la pantalla**. Estas dos entregas del 21 de agosto se
+> ejecutaron sin pasar por este bloque: quedan escritas ahora, con su hash, para que dentro de un mes
+> se pueda saber qué se pidió y qué se hizo sin reconstruirlo de un chat.
+
+**M-a · LAS SIETE CORRECCIONES SOBRE LA VISTA MES** — commits `3200899` · `36de1a8` · `b1567d2`.
+Ver la ficha **A-bis** para el detalle.
+> **M1** Los botones S, M, L no se entienden: explicarlos sin quitarlos.
+> **M2** El botón informativo de los colores, mejor en una ventana.
+> **M3** Los días marcados no son consistentes: hay error.
+> **M4** El día, el porcentaje y «abrir día», muy pegados al margen inferior: baja calidad.
+> **M5** El calendario no es interactivo: no se pueden arrastrar citas ni de horas ni de días, en ningún formato.
+> **M6** Las letras identificadoras de día, muy pegadas al margen superior y muy pequeñas.
+> **M7** Al seleccionar un mes deben salir meses; al pulsar año, los años. No un cuadro para teclear fechas.
+
+**M-b · LA PANTALLA «CUÁNDO ABRO»** — commits `b1094e7` · `f65e352`.
+Ver la ficha **A-ter** para el detalle.
+> **M8** La visual está hecha de muy mala calidad.
+> **M9** Faltan automatismos: abrir de lunes a viernes sin marcar día a día, horario corrido, como lo hace WhatsApp Business.
+
+**LO QUE M3 DESTAPÓ, Y ES LO MÁS IMPORTANTE DE LAS DOS ENTREGAS:** los días marcados sin criterio no
+eran un fallo de la pantalla sino **basura de comprobaciones automáticas en la base**. De las **14
+personas «activas»** del negocio de desarrollo, **10 eran fantasmas de gates**. Reales: **4**. Y de
+ahí salían las famosas «168 h libres»: **una cifra correcta sobre datos falsos**, que es la peor
+clase de cifra porque nadie la duda. Limpiado, y ampliado `limpiar-residuo-gates.mjs`, que **no
+miraba `admin_users`**.
+
+**Y EL PERMISO `citas.ver_todas`**, que no venía en ninguna lista: salió de una pregunta al dueño
+—*«¿cada uno ve solo su agenda?»*— y se construyó con su respuesta. Detalle en **A-bis**.
 
 ### LO QUE NO TOCÓ EL ENCARGO 0 — EL DEL REGISTRO (21 ago 2026, `f6c864c`)
 

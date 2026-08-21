@@ -43,6 +43,9 @@ export const GRUPOS = {
     // pida; no se engancha a ningún disparador automático.
     'gate-citas-mes',                // la vista Mes: base de la cifra, un solo selector, los tres grises,
                                      // el reparto del alto, el servicio en la casilla y crear desde el mes
+    'gate-cola-envios',              // «Recordatorios a clientes»: que siga siendo una pantalla del panel
+                                     // (menú, buscador, permiso), con su contenedor, el orden hoy→mañana,
+                                     // el número en la cabecera y la advertencia de «marcado ≠ entregado»
   ],
   // ── LA PUERTA PÚBLICA DE RESERVA (peldaño 7 · pieza 6) — DENTRO DEL BARRIDO (20 ago 2026) ────
   // SEGUNDA ZONA ENTERA que aparece fuera del mapa en el mismo día (la primera fue la agenda). Las
@@ -137,6 +140,7 @@ export const EMPIEZAN_DE_CERO = new Set([
   'gate-vigia-agenda',             // negocio nuevo: los cuatro detectores de agenda
   'gate-agenda-calendario',        // negocio nuevo: el calendario, sin datos ajenos
   'gate-citas-mes',                // DOS negocios nuevos: uno de una persona y otro de catorce
+  'gate-cola-envios',              // negocio nuevo: la cola vacía es justo lo primero que se mide
 ]);
 
 // Los que necesitan el negocio de desarrollo en silencio. Cada uno con su MOTIVO: un gate marcado

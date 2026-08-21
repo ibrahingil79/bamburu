@@ -2355,6 +2355,7 @@ export function register(app, db) {
       '/admin/inventory /admin/suppliers /admin/purchases /admin/purchases/new',
       '/admin/invoices /admin/clients /admin/clients/groups /admin/analytics',
       '/admin/settings /admin/users /admin/activity',
+      '/admin/citas /admin/citas/cola',
       '/admin/security /admin/disa',
       // D2 — desmontados: quitados /admin/store-settings, /admin/newsletter, /admin/reviews, /admin/feedback.
       '',
@@ -2518,6 +2519,11 @@ export function register(app, db) {
       '/admin/purchases/new','/admin/invoices','/admin/clients','/admin/clients/groups',
       '/admin/analytics','/admin/settings','/admin/users',
       '/admin/activity','/admin/security','/admin/disa',
+      // 21 ago 2026 · La agenda y sus recordatorios. LEER la agenda ya estaba permitido y DISA la
+      // nombra en sus respuestas; lo que no podía era ENLAZARLA, así que decía «ve a la Agenda» sin
+      // poder llevarte. Son destinos de solo lectura y con el mismo candado que su pantalla
+      // (`citas.read`): esto no abre ninguna puerta nueva, quita un callejón sin salida.
+      '/admin/citas','/admin/citas/cola',
       // D2 — desmontados: quitados /admin/store-settings, /admin/newsletter, /admin/reviews, /admin/feedback.
     ]);
     const DISA_DETAIL_PATTERNS = [

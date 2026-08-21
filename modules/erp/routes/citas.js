@@ -1579,11 +1579,57 @@ export const ESTADOS_COLOR = {
 
 function vistaCola(c, db) {
   const aj = ajustesCitas(db);
+  // ── RECORDATORIOS A CLIENTES, VESTIDA (21 ago 2026) ─────────────────────────────────────────────
+  // LO QUE EL PASO 0 CORRIGIÓ DEL ENCARGO, y queda dicho aquí para que no se vuelva a suponer: esta
+  // pantalla YA traía el armazón del panel (sale de `adminLayout`, como todas) y YA tenía entrada de
+  // menú, clave en NAV_PERMS, alias para el buscador y contador de pendientes. Lo que la hacía
+  // parecer desnuda era el INTERIOR: tarjetas de borde a borde (1814 px de 1920), pegadas entre sí,
+  // un título de 16,8 px y un párrafo de tres líneas a ancho completo que no lee nadie.
+  //
+  // EL TÍTULO PASA A SER «Recordatorios a clientes», que es como se llama en el menú y en la pestaña
+  // del navegador desde el 18 de agosto. No es un cambio de nombre: es TERMINAR aquel, que dejó este
+  // `h2` sin tocar — el menú te llevaba a «Recordatorios a clientes» y la pantalla se presentaba como
+  // «Cola de envíos». El nombre viejo sigue encontrándose en el buscador, que es donde hace falta.
   const content = `
-    <div class="ph"><h2>Cola de envíos</h2><a class="btn btn-secondary" href="/admin/citas">← Agenda</a></div>
-    <div class="alert" style="margin-bottom:1rem">Doce citas se despachan en doce clics desde aquí, sin abrir doce fichas. Al pulsar el botón de WhatsApp/SMS se abre el mensaje ya escrito con el enlace; el email puede salir solo. <strong>El estado dice "marcado como enviado"</strong> — sabemos que se pulsó el botón, no que el mensaje llegó (nunca "entregado").</div>
-    <div class="card"><h3 style="margin-top:0">Mañana — pendientes de recordatorio</h3><div id="colaRec">Cargando…</div></div>
-    <div class="card"><h3 style="margin-top:0">Hoy — pendientes de confirmación</h3><div id="colaConf">Cargando…</div></div>
+    ${COLA_CSS}
+    <div class="cola-wrap">
+      <div class="ph cola-ph">
+        <div class="cola-cab">
+          <h2 class="cola-tit">Recordatorios a clientes</h2>
+          <p class="cola-sub">Despacha de una vez los avisos de tus citas, sin abrir ficha por ficha.
+            <button type="button" class="cola-i" onclick="openModal('mColaInfo')" aria-label="Cómo funciona esta pantalla" title="Cómo funciona esta pantalla"><i class="ti ti-info-circle"></i></button>
+          </p>
+        </div>
+        <a class="btn btn-secondary" href="/admin/citas"><i class="ti ti-arrow-left"></i> Agenda</a>
+      </div>
+
+      <!-- HOY VA PRIMERO. Lo de hoy se acaba hoy; lo de mañana puede esperar a mañana. El orden de
+           antes (mañana arriba) no era una decisión: era el orden en que se escribieron los bloques. -->
+      <div class="card cola-card">
+        <div class="card-head"><h3 id="colaConfTit">Hoy — pendientes de confirmación</h3></div>
+        <div class="card-body" id="colaConf">Cargando…</div>
+      </div>
+      <div class="card cola-card">
+        <div class="card-head"><h3 id="colaRecTit">Mañana — pendientes de recordatorio</h3></div>
+        <div class="card-body" id="colaRec">Cargando…</div>
+      </div>
+    </div>
+
+    <!-- EL MURO DE TEXTO, DETRÁS DE LA (i). Eran tres líneas en gris a 1814 px de ancho, con negritas
+         dentro, encima de lo único que se viene a hacer aquí. Se queda UNA frase arriba y el resto
+         vive en la ventana del panel — incluida, ENTERA, la advertencia de que «marcado como
+         enviado» no es «entregado». Esa no se toca ni se suaviza: es honestidad, no adorno. -->
+    <div class="modal-overlay" id="mColaInfo"><div class="modal" style="max-width:480px">
+      <div class="modal-head"><h3>Cómo funciona esta pantalla</h3><button class="modal-close" onclick="closeModal('mColaInfo')">✕</button></div>
+      <div class="modal-body">
+        <p class="cola-p">Doce citas se despachan en doce clics desde aquí, sin abrir doce fichas.</p>
+        <p class="cola-p">Al pulsar el botón de <b>WhatsApp</b> o <b>SMS</b> se abre el mensaje ya escrito, con el enlace de esa cita. El <b>email</b> puede salir solo.</p>
+        <div class="cola-aviso">
+          <b>«Marcado como enviado» no quiere decir «entregado».</b>
+          <p class="cola-p">Sabemos que se pulsó el botón, <b>no que el mensaje llegó</b>. Por eso aquí nunca vas a leer «entregado»: sería decirte algo que no sabemos.</p>
+        </div>
+      </div>
+    </div></div>
     <script>${jsVoz(aj)}${JS_COLA}</script>`;
   return adminLayout('Recordatorios a clientes', content, 'citas-cola', c.get('session')?.csrfToken || '', c);
 }
@@ -3203,13 +3249,73 @@ async function bGuardar(){
   pintaBotonesVista(vistaActual()); agCargar(); })();
 `;
 
+// ── LA CARA DE «RECORDATORIOS A CLIENTES» ────────────────────────────────────────────────────────
+// El armazón ya lo pone `adminLayout`; lo que faltaba era el interior. Todo con tokens del panel.
+const COLA_CSS = `<style>
+  /* ANCHO MÁXIMO. Las tarjetas iban de borde a borde: en un monitor de 1920 px la tabla se estiraba
+     1814 px y la vista quedaba con seis columnas separadas por medio metro de vacío. Con tope, el ojo
+     no tiene que cruzar la pantalla entera para ir de la hora al botón. */
+  .cola-wrap{max-width:1080px}
+  .cola-ph{align-items:flex-start;gap:1rem}
+  .cola-cab{min-width:0}
+  /* TÍTULO DE PÁGINA DE VERDAD, con la misma jerarquía que el «Agosto 2026» de la agenda (1,5rem/700).
+     Antes era el h2 de 16,8 px del sistema, que sirve para un listado pero no para la portada de una
+     pantalla que se abre a diario. */
+  /* Con '.ph h2' delante hace falta el mismo peso de selector: la regla del sistema (1,05rem/500) es
+     de dos partes y una clase suelta pierde. Se escribe '.ph .cola-tit', no '!important'. */
+  .cola-ph .cola-tit{font-size:1.5rem;font-weight:700;letter-spacing:-.02em;color:var(--text);line-height:1.15;margin:0}
+  .cola-sub{margin:.35rem 0 0;font-size:.88rem;color:var(--text2);line-height:1.5}
+  .cola-i{appearance:none;border:0;background:transparent;color:var(--text3);cursor:pointer;padding:0 .15rem;
+          font-size:1rem;line-height:1;vertical-align:-.1em;border-radius:6px}
+  .cola-i:hover{color:var(--accent)}
+  .cola-i:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  /* TARJETAS SEPARADAS. Iban pegadas una a otra, sin margen, así que los dos bloques se leían como
+     uno solo partido por una raya. */
+  .cola-card{margin-bottom:1rem}
+  .cola-card .card-body{padding:0}
+  .cola-card .card-body .empty{padding:2rem 1rem}
+  .cola-card .table-wrap{border-radius:0}
+  .cola-p{margin:0 0 .7rem;font-size:.87rem;color:var(--text2);line-height:1.55}
+  .cola-p:last-child{margin-bottom:0}
+  .cola-aviso{margin-top:.9rem;padding:.8rem .9rem;border-radius:10px;background:#FBEED0;border:1px solid #EBDDB7;color:#8A5B00}
+  .cola-aviso b{color:#8A5B00}
+  .cola-aviso .cola-p{color:#8A5B00;margin-top:.35rem}
+</style>`;
+
 const JS_COLA = String.raw`
 function esc(s){return String(s==null?'':s).replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));}
 var DATA=null;
-async function cargar(){ DATA=await api('GET','/api/erp/citas/cola/data'); render('colaRec',DATA.recordatorios,'recordatorio'); render('colaConf',DATA.confirmaciones,'confirmacion'); }
+// HOY PRIMERO también al pedir los datos, no solo en el HTML: si el servidor tarda, lo primero que
+// se pinta es lo de hoy.
+async function cargar(){ DATA=await api('GET','/api/erp/citas/cola/data'); render('colaConf',DATA.confirmaciones,'confirmacion'); render('colaRec',DATA.recordatorios,'recordatorio'); }
+
+// ── LA CABECERA DICE CUÁNTAS SON ─────────────────────────────────────────────────────────────────
+// Y dice las PENDIENTES, no las filas. El motor trae todas las citas del día —las ya avisadas
+// también, con su estado— así que contar filas daría un número que no es el que se busca: lo que se
+// mira al entrar aquí es cuánto queda por despachar. El motor no se toca; solo se cuenta bien.
+var TITULOS={
+  confirmacion:{ el:'colaConfTit', dia:'Hoy',    que:'confirmación' },
+  recordatorio:{ el:'colaRec'+'Tit', dia:'Mañana', que:'recordatorio' },
+};
+function pintaTitulo(tipo,rows){
+  var t=TITULOS[tipo]; var el=document.getElementById(t.el); if(!el) return;
+  var n=rows.filter(function(r){ return !r.aviso_hecho; }).length;
+  if(!rows.length) el.textContent=t.dia+' — pendientes de '+t.que;
+  else if(n===0)   el.textContent=t.dia+' — sin pendientes de '+t.que;
+  else             el.textContent=t.dia+' — '+n+(n===1?' pendiente de ':' pendientes de ')+t.que;
+}
+// ── EL VACÍO ENSEÑA ──────────────────────────────────────────────────────────────────────────────
+// Decía «No hay nada pendiente.» y punto. Un negocio nuevo abre esto el primer día y ve una pantalla
+// que no explica nada: parece rota. Ahora dice QUÉ va a aparecer ahí y CUÁNDO, con el mismo bloque
+// de vacío que usa el resto del panel ('window.emptyState', U2) — icono incluido, no uno inventado.
+var VACIOS={
+  confirmacion:{ txt:'Aquí aparecerán las citas de <b>hoy</b> a las que aún no has pedido confirmación.', icon:'ti-phone-check' },
+  recordatorio:{ txt:'Aquí aparecerán las citas de <b>mañana</b> a las que aún no has mandado recordatorio.', icon:'ti-send' },
+};
 function render(elId,rows,tipo){
   var box=document.getElementById(elId);
-  if(!rows.length){ box.innerHTML='<div style="color:var(--muted);padding:.5rem">No hay nada pendiente.</div>'; return; }
+  pintaTitulo(tipo,rows);
+  if(!rows.length){ var v=VACIOS[tipo]; box.innerHTML=window.emptyState(v.txt,{icon:v.icon}); return; }
   box.innerHTML='<div class="table-wrap"><table><thead><tr><th>Hora</th><th>'+esc(window.CLIENTE_SING||'Cliente')+'</th><th>Servicio</th><th>Persona</th><th>Estado aviso</th><th></th></tr></thead><tbody>'
     +rows.map(function(r){
       var estado = r.aviso_hecho ? ('<span class="badge b-green">'+(r.aviso_estado==='email_enviado'?'email enviado':(r.aviso_estado==='email_fallo'?'fallo email':'marcado ('+esc(r.aviso_canal||'')+')'))+'</span>') : '<span class="badge b-gray">pendiente</span>';
