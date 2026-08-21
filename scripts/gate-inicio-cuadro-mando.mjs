@@ -31,7 +31,12 @@ import { SUELO_UNIDADES } from '../modules/erp/cuadro-mando.js';
 const RID = randomBytes(3).toString('hex');
 const APP = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const dormir = ms => new Promise(r => setTimeout(r, ms));
-const HOY = new Date().toISOString().slice(0, 10);
+// LA FECHA, TAMBIÉN LA DEL NEGOCIO. El panel pinta el día según `ahoraLocal()`, que va en la zona
+// horaria del negocio; este proceso va en UTC. Entre las 22:00 y las 24:00 UTC son días DISTINTOS:
+// el gate sembraba las citas en un día y el panel miraba el otro, así que enseñaba «0 citas» y el
+// gate cantaba un fallo del producto que era suyo. La hora ya se tomaba de ahí; la fecha faltaba.
+const { ahoraLocal: _ahoraLocalFecha } = await import('../modules/erp/citas-engine.js');
+const HOY = _ahoraLocalFecha().fecha;
 const MES = HOY.slice(0, 7);
 
 let pass = 0, fail = 0;
@@ -148,8 +153,12 @@ try {
   const tProxima = Math.min(Math.max(ahoraMin + 45, tPasada + 60), 23 * 60);  // y otra por delante
   // El horario del negocio se abre lo justo para contener las dos; 13:00–14:00 (la comida) queda
   // dentro siempre, porque el tramo nunca se estrecha respecto al 9:00–18:00 de antes.
-  const hIni = Math.min(9 * 60, tPasada - 60);
-  const hFin = Math.max(18 * 60, tProxima + 60);
+  // ACOTADO A [0, 24 h), y esto NO es defensivo por si acaso: sin el `Math.max(0, …)`, corriendo a
+  // las 00:30 salía un tramo que EMPEZABA en -30 y el negocio se quedaba sin franja — la portada
+  // pintaba «0 barras / 2 citas» y el gate cantaba un fallo del producto que era mío, de este mismo
+  // arreglo. Lo destapó la pasada del barrido de las 00:30.
+  const hIni = Math.max(0, Math.min(9 * 60, tPasada - 60));
+  const hFin = Math.min(24 * 60 - 1, Math.max(18 * 60, tProxima + 60));
   for (let dow = 0; dow < 7; dow++)
     P.db.prepare("INSERT INTO horario_tramos (scope,user_id,dow,inicio_min,fin_min) VALUES ('negocio',NULL,?,?,?)").run(dow, hIni, hFin);
   const insCita = P.db.prepare(
