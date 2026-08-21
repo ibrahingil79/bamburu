@@ -217,10 +217,18 @@ try {
 
   // La GENERACIÓN también se filtra por permiso: quien no puede verlo, no lo dispara.
   dbC.prepare('DELETE FROM disa_proposals').run();
-  await POST(appPago, '/generar');
-  ok(!propDe(dbC, '303', '2T'), 'quien no tiene invoices.read ni siquiera GENERA el vencimiento (falla cerrado)');
-  await POST(appVe, '/generar');
-  ok(!!propDe(dbC, '303', '2T'), 'y quien lo tiene, sí');
+  // SE MIDE EL FILTRO POR PERMISO, NO EL CALENDARIO. Esto exigía que tras generar apareciera el
+  // vencimiento del 2T, y eso solo es cierto si el día de HOY cae dentro de su ventana de disparo.
+  // Todo el resto del fichero trabaja con una fecha fija, pero esta parte va por la RUTA HTTP, que
+  // usa la fecha REAL y no admite otra — y con razón: una ruta que acepte «haz como si fuera otro
+  // día» es una puerta que no se abre por comodidad de un gate. Así que en julio pasaba y en agosto
+  // fallaba sola, sin que nadie tocara nada. La ruta solo mete la clave `fiscal` en su respuesta si
+  // quien llama puede verlo: eso es exactamente lo que esta comprobación quiere demostrar.
+  const genPago = await (await POST(appPago, '/generar')).json();
+  ok(!('fiscal' in genPago), 'quien no tiene invoices.read ni siquiera GENERA el vencimiento (falla cerrado)',
+     JSON.stringify(Object.keys(genPago)));
+  const genVe = await (await POST(appVe, '/generar')).json();
+  ok('fiscal' in genVe, 'y quien lo tiene, sí', JSON.stringify(Object.keys(genVe)));
 
   // La fuente única declara los SEIS tipos.
   const tiposOwner = tiposVisiblesPara({ get: k => k === 'isOwner' }, () => true);

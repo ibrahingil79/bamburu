@@ -18,7 +18,7 @@
 //      terminar.
 import puppeteer from 'puppeteer';
 import { tenantDb, launchOpts, engancharToasts, esperarToast } from './lib/gate-env.mjs';
-import { purgarArtefactos } from './lib/gate-fixtures.mjs';
+import { purgarArtefactos, productoDePrueba } from './lib/gate-fixtures.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 
@@ -54,7 +54,8 @@ await page.setCookie({ name: 'asess', value: token, domain: 'desarrollo-bamburu.
 // Rastro de lo que crea el gate (3 órdenes: la del flujo, la 2ª y el sustituto de anular-y-rehacer).
 // Se purga por ID al final: una orden no mueve stock, pero dejar documentos de prueba tirados en el
 // tenant en cada pasada también es ensuciar.
-const creado = { ordenes: [] };
+const creado = { ordenes: [], productos: [] };
+let correoAntes = null;   // cómo estaba el interruptor de «orden de compra» antes de tocarlo
 
 const dialogQueue = [];
 const dialogosInesperados = [];
@@ -77,6 +78,17 @@ try {
   ok(await page.$('a[href="/admin/purchase-orders/new"]') !== null, 'botón "Nueva orden" visible');
 
   // ── 2. Crear borrador con 2 líneas vía buscador ──
+  // EL GATE SE TRAE SUS PRODUCTOS, no busca dos del negocio por su nombre. Buscaba «Vela Lavanda» y
+  // «Vela Vainilla», y al resembrar el negocio con datos de taller esos dos quedaron ARCHIVADOS: el
+  // buscador de líneas dejó de sugerirlos y el gate moría con un timeout de 30 s, sin decir por qué.
+  // Es la misma trampa que se llevó por delante a los gates que dependían del proveedor «Aromas»:
+  // una precondición ajena que nadie mantiene. Con producto propio, el escenario es del gate.
+  const pA = productoDePrueba(db, 'Compra A');
+  const pB = productoDePrueba(db, 'Compra B');
+  creado.productos.push(pA.id, pB.id);
+  // …Y SE CREAN **ANTES** DE ABRIR LA PANTALLA: el buscador de líneas no consulta al servidor, filtra
+  // sobre un catálogo que la página se lleva cargado al pintarse. Creándolos después no existían
+  // para el buscador, y el timeout era exactamente el mismo — el mismo síntoma por otra causa.
   await page.goto(BASE + '/admin/purchase-orders/new', { waitUntil: 'networkidle0' });
   await page.select('#fSupplier', '1');
 
@@ -100,9 +112,9 @@ try {
     }, rowIndex, String(qty), cost === null ? null : String(cost));
   }
 
-  await fillLine(0, 'Vela Lavanda', 3, '2.50');
+  await fillLine(0, pA.name, 3, '2.50');
   await page.click('.card-head button.btn-secondary');   // + Añadir línea
-  await fillLine(1, 'Vela Vainilla', 2, '1.80');
+  await fillLine(1, pB.name, 2, '1.80');
 
   const pid0 = await page.$eval('#lines-body tr .line-pid', el => el.value);
   ok(pid0 !== '', 'la línea resolvió a un product_id real (sin línea libre)');
@@ -166,6 +178,13 @@ try {
   // ── 5. Enviar por email — envío REAL por Resend, al buzón sumidero ──
   //     El aviso ya no es un alert() sino un toast: se espera al toast REAL, sin dormir a ciegas.
   //     Si Resend fallara, el servicio lanza y la UI pinta un toast de error → la aserción cae.
+  // EL INTERRUPTOR DE «AVISOS Y CORREOS» TIENE QUE ESTAR ENCENDIDO. Desde que existe
+  // `exigirCorreoActivo`, mandar un correo apagado no sale y responde 409 — y en este negocio están
+  // todos apagados. El gate es más viejo que ese guardián y no lo sabía: los tres fallos del envío
+  // eran el producto haciendo lo correcto. Se enciende aquí y se deja como estaba en la limpieza.
+  correoAntes = db.prepare("SELECT activo FROM email_tipo_pref WHERE tipo='orden_compra'").get() || null;
+  db.prepare(`INSERT INTO email_tipo_pref (tipo, activo, updated_at) VALUES ('orden_compra', 1, CURRENT_TIMESTAMP)
+              ON CONFLICT(tipo) DO UPDATE SET activo=1, updated_at=CURRENT_TIMESTAMP`).run();
   await page.goto(BASE + `/admin/purchase-orders/${orderId}`, { waitUntil: 'networkidle0' });
   dialogQueue.push(undefined);                     // confirm() — el resultado llega por toast
   await page.evaluate(() => emailOrden());
@@ -235,6 +254,11 @@ try {
   ok(movAfter === movBefore, `stock_movements intactos (${movBefore} → ${movAfter}): la orden NO mueve stock`);
 
   // Limpieza: se lleva por delante las órdenes que creó el gate (no movieron stock, pero son basura).
+  // El interruptor vuelve a como estaba: si no había fila, se borra; si la había, su valor.
+  try {
+    if (correoAntes == null) db2.prepare("DELETE FROM email_tipo_pref WHERE tipo='orden_compra'").run();
+    else db2.prepare("UPDATE email_tipo_pref SET activo=? WHERE tipo='orden_compra'").run(correoAntes.activo);
+  } catch {}
   purgarArtefactos(db2, creado);
   const poAfter = db2.prepare('SELECT COUNT(*) c FROM purchase_orders').get().c;
   ok(poAfter === poBefore, `el tenant queda como estaba: purchase_orders vuelve a ${poBefore} (got ${poAfter})`);
