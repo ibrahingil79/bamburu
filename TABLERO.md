@@ -297,6 +297,19 @@ la **respuesta del servidor**, las dos cosas que sí existen — sin `citas.read
 no trabaja ese día no viaja, y con «ver todo el equipo» sí). **No se ha inventado un permiso nuevo:**
 el encargo prohíbe expresamente tocar el sistema de permisos. Queda para decidir.
 
+**⚠️ ANOTADO Y NO ARREGLADO — UN DÍA CERRADO ESCONDE LAS CITAS QUE SÍ TIENE.** Salió al mirar la
+pantalla real del tenant de desarrollo, no de una aserción. **Medido en la respuesta del servidor**
+(`/api/erp/citas/mes?ym=2026-08`, día 26, que está cerrado y tiene dos citas):
+`verTodo=0` → `citas: 0` · `verTodo=1` → `citas: 2`. La causa es el filtro por eje, que en Mes deja
+pasar solo a quien **trabaja** ese día (`personasQueTrabajan`) — y en un día cerrado **no trabaja
+nadie**, así que se caen todas. **Es PREEXISTENTE** (el filtro se hereda de la vista Día y esta
+entrega no lo toca) **pero ahora se nota más**, porque la casilla dice «Cerrado» con su trama encima
+de dos citas reales. **Y las dos vistas no coinciden:** la vista Día, cuando no hay nadie trabajando,
+cae a `META.personas` («nunca dejar la agenda sin columnas»), así que **allí sí se ven**.
+**No se arregla aquí**: el PASO 2 del encargo deja el filtro y la vista Día fuera de alcance. Tarea
+propia, y hay que decidir qué manda — que un día cerrado no enseñe nada, o que una cita se vea
+siempre esté el negocio abierto o no.
+
 **FICHA DE `gate-citas-mes` — DECLARADO, QUE NO ES LO MISMO QUE EJECUTADO.**
 Se declara **el mismo día que nace** y no «cuando toque»: un gate fuera de `GRUPOS` **no lo ejecuta
 nadie**, y cuatro comprobaciones de agenda llevaban semanas invisibles justo por eso. Entrar en el
