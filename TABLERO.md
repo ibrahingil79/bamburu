@@ -112,7 +112,7 @@
 `A 8 · B 3 · C 11 · D 5 · E 4 · F 4 · G 5 · H 3 · I 3 · J 0 · K 0` = **46**.
 (J y K son ítems bloqueados sin subpuntos: su texto es una sola afirmación.)
 
-**RECUENTO VIGENTE — 21 ago 2026: 65 subpuntos vivos · 27 hechos · 38 pendientes.**
+**RECUENTO VIGENTE — 21 ago 2026: 65 subpuntos vivos · 31 hechos · 34 pendientes.**
 `A 6 · C 12 · C-0 4 · B 3 · D 5 · E 4 · F 4 · G 4 · H 3 · I 3 · J 0 · K 0 · L 8 · M 9` = **65**.
 - **C pasa de 11 a 12** con **C10-f**, que Ibrahin añadió el 21 ago tras cerrar C-0. Los pendientes
   suben de 37 a 38: el subpunto es nuevo, no estaba antes sin marcar.
@@ -548,7 +548,10 @@ devuelve sus horas, que copiar no abre días cerrados y que un tramo imposible n
 
 ## GRUPO 2 — FUNCIONES NUEVAS (solo codigo, sin dependencias externas)
 
-#### C. IMPRESIÓN Y DESCARGA EN PDF DE LISTADOS Y DOCUMENTOS · **PENDIENTE** (12 subpuntos: los 11 del registro + C10-f)
+#### C. IMPRESIÓN Y DESCARGA EN PDF DE LISTADOS Y DOCUMENTOS · 🟡 **EN CURSO — 4 de 12** (12 subpuntos: los 11 del registro + C10-f)
+
+> **HECHOS (tanda 1, 21 ago 2026): C1 · C4 · C5 · C7.** 
+> **SIGUEN PENDIENTES, y son cinco:** **C2** (catálogo para enviar al cliente), **C3** (kardex), **C6** (listado de compras), **C8** (listado de gastos) y **C10-e** (absorber los cuatro informes contables, que hoy siguen descargando PDF con su HTML a mano). **C9, C10, C10-f y C11** están servidos por el motor pero **no se marcan hechos**: C9 dice «en TODOS» y van cuatro de ocho.
 
 > **C. IMPRESION Y DESCARGA EN PDF DE LISTADOS Y DOCUMENTOS.**
 > Palabras del dueño: "debemos ser capaces de imprimir informes como, lista de precios bajo plantilla claro, envio de catalogo de productos y servicios, informes de kardex, listado de clientes productos, compras, facturas, gastos, etc"
@@ -578,6 +581,86 @@ devuelve sus horas, que copiar no abre días cerrados y que un tramo imposible n
   que **no son ninguno de los tres verbos de C9**.
 
 ---
+
+---
+
+#### C · TANDA 1 — CUATRO LISTADOS: C4 clientes · C5 productos · C7 facturas · C1 lista de precios · ✅ **HECHO (21 ago 2026)** · commit `1363090`
+
+> **C4** Listado de clientes. **C5** Listado de productos. **C7** Listado de facturas. **C1** Lista de precios bajo plantilla.
+> Cada uno cerrado ENTERO: consulta compartida con su pantalla, declaración de la base, los tres verbos (imprimir · descargar PDF · enviar por correo) y aserciones propias.
+
+**⚙️ LO QUE SE CONSTRUYÓ**
+
+- **`modules/erp/impresion.js` — el motor.** Un listado no trae generador: declara columnas, filtros
+  y totales. El membrete, la paginación, la cabecera repetida, el «Página X de Y», la fecha, quién lo
+  generó y los filtros aplicados los pone el motor. **C10-f cumplido sin ampliar nada:** el membrete
+  es el de `documentos.js`, con su logo, tal cual lo dejó C-0.
+- **`modules/erp/listados.js` — el registro.** Una entrada por listado. Añadir uno nuevo **no toca el
+  motor ni las rutas** (C11).
+- **`modules/erp/routes/listados.js` — TRES rutas para los ocho listados**, no tres por listado. El
+  candado es el de la pantalla de cada uno, resuelto en caliente: **quien no puede ver un listado
+  tampoco puede imprimirlo ni mandárselo a nadie** (403 medido, y en esa respuesta no viaja ni un dato).
+
+**⚙️ LO QUE MIDIÓ EL GATE, Y LO QUE CORRIGIÓ**
+
+- **La consulta es la de la pantalla, sin `LIMIT`.** Al revertirlo (dándole al PDF su propio recorte
+  de 25) caen **cuatro** aserciones, entre ellas «manda el listado ENTERO, no la página que se ve».
+- **DOS FALLOS DE PRODUCTO que solo aparecieron al medir**, no al mirar el código:
+  1. **Al correo le faltaba el remitente.** Resend no lanza: devuelve el fallo dentro (`Missing from
+     field`), así que sin mirar el `error` un envío que no sale pasa por bueno.
+  2. **Los importes salían sin separador de miles** (`1234,56` en vez de `1.234,56`): en español
+     moderno `toLocaleString` no agrupa los números de cuatro cifras salvo que se pida. Se pide.
+     El producto ya usaba `useGrouping: 'always'` en 10 sitios (Analítica, DISA, CRM, margen); el
+     papel se alinea con esos. **Queda uno solo sin alinear, `modules/erp/parte-diario.js:30`** — es
+     de antes, está fuera de esta tanda y se anota aquí para no perderlo.
+- **TRES ASERCIONES MÍAS ESTABAN MAL, no el producto** (y una llevaba verde por el motivo equivocado):
+  1. «un listado sin filtro dice Todos» se probaba con **clientes**, que SIEMPRE declara su estado y
+     por tanto nunca puede quedarse sin filtros. Se prueba con productos.
+  2. La tabla de actividad se llama `activity_logs`, no `activity_log`.
+  3. **La del envío que falla estaba verde por el motivo equivocado:** usaba un dominio inexistente,
+     y a eso Resend le dice que **sí** (el rebote llega después). Fallaba… porque faltaba el
+     remitente. Se sondeó la API y se cambió a `x@a.b`, que pasa nuestra validación y **Resend
+     rechaza de verdad en la llamada**. Ahora exige 502 y cero registros.
+- **El total impreso se compara AL CÉNTIMO, no por su tipografía.** La aserción reescribía el formato
+  por su cuenta y se puso roja al añadir el separador de miles **con el producto correcto**. Ahora
+  saca el número del papel y lo compara con la suma cruda de la pantalla.
+
+**⚙️ LA PRUEBA DE REVERSIÓN — Y LA QUE NO TUMBÓ NADA**
+
+| Se rompe a propósito | Aserciones que caen |
+|---|---|
+| El listado se pinta su **propio membrete** en vez del de `documentos.js` | 2 |
+| El papel **deja de declarar** con qué filtros se hizo | 4 |
+| El PDF se trae **su propio `LIMIT`** en vez de la consulta de la pantalla | 4 |
+| `thead` **pisado** con `table-row-group` | 1 |
+
+> **LA REVERSIÓN QUE NO TUMBÓ NADA, Y POR QUÉ NO ERA CULPA DE LA ASERCIÓN.** La primera versión de la
+> prueba **quitaba** la línea `thead{display:table-header-group}` y el gate seguía **verde**. La regla
+> dice que entonces la aserción está mal — pero al medirlo resultó que **la línea es el valor por
+> defecto de un `<thead>`**: quitarla no cambia nada (3 hojas de 3 siguen con cabecera). No era una
+> reversión, era un no-op. Pisada con `table-row-group` la cabecera baja a **1 hoja de 3** y el gate
+> cae. **La aserción sí vigilaba el mecanismo; la reversión era la equivocada.** La línea se deja
+> escrita, con el motivo en el código, para que nadie la «limpie» por redundante.
+>
+> Al medir esto salió **otra aserción que sí estaba mal**: buscaba `/CLIENTE/i` para dar por repetida
+> la cabecera, y esa palabra está en el título del papel **y dentro de los datos** — no podía fallar
+> nunca. Ahora busca la secuencia de los seis rótulos y exige `pdftotext -layout`, porque sin él la
+> fila de cabecera sale partida por bloques de columnas.
+
+**⚙️ EL GATE, DECLARADO** — `gate-impresion`, **43 aserciones, verde**. Grupo propio `impresion` en
+`GRUPOS` (que sin eso **no lo ejecutaría nadie**) y en `EMPIEZAN_DE_CERO`: se trae dos negocios nuevos,
+uno con 240 clientes para ver paginar de verdad y el vecino para probar que su PDF no trae ni un dato
+del primero.
+
+> **`AFECTA`: AÑADIR, NUNCA SUSTITUIR — la lección de C-0, comprobada esta vez con una prueba.** Las
+> reglas que ya existían (`documentos.js`, `routes/invoices.js`, `routes/settings.js`) llevan sus
+> grupos de siempre **más** `impresion`. Se barrieron **los 373 ficheros del repo** comparando el mapa
+> nuevo contra el anterior: **ningún fichero pierde un gate** y 75 ganan `gate-impresion`.
+> - **`listados.js` corre TODOS los gates**, no solo el suyo: parece del motor, pero dentro viven las
+>   consultas de **tres pantallas** del producto. Con `['impresion']`, tocar la consulta de facturas
+>   habría dejado de despertar a `margen` y `clientes`. Es exactamente la trampa de C-0.
+> - **`routes/products.js` se deja SIN regla a propósito:** hoy cae en el comodín final y corre todo.
+>   Escribirle `['impresion']` sería cambiar «todo» por «uno»: menos cobertura disfrazada de más.
 
 ---
 

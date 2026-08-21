@@ -1,0 +1,160 @@
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// LOS TRES VERBOS, UNA SOLA VEZ — imprimir · descargar en PDF · enviar por correo
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// TRES RUTAS PARA LOS OCHO LISTADOS, no tres por listado. Un listado nuevo no añade ni una ruta
+// aquí: se declara en `listados.js` y ya tiene los tres verbos (C11). Esto es lo que impide que
+// dentro de seis meses haya ocho generadores distintos, que es de donde venimos con `docParties`.
+//
+// EL CANDADO ES EL DE SU PANTALLA. Cada listado declara su `perm` y aquí se exige ESE, resuelto en
+// caliente porque la ruta es genérica. No hay un permiso nuevo de «imprimir»: quien no puede ver un
+// listado tampoco puede imprimirlo ni mandárselo a nadie.
+import { Hono } from 'hono';
+import { safeError } from '../../../core/errors.js';
+import { escHtml } from '../../../core/escape.js';
+import { can, printableShell, errorShell, ERR } from '../layout.js';
+import { logActivity } from '../../../core/auth.js';
+import { renderPdfFromHtml } from '../../../core/pdf.js';
+import { sendEmail } from '../../../core/mailer.js';
+import { listadoHtml, pieDePagina } from '../impresion.js';
+import { LISTADOS, filtrosDeUrl } from '../listados.js';
+import { ENTITY } from '../../../core/activity-entities.js';
+
+// El papel, montado. Es el ÚNICO sitio del proyecto que compone un listado imprimible: las tres
+// rutas comen de aquí, así que imprimir, descargar y enviar no pueden dar tres papeles distintos.
+function papelDe(db, clave, q, quien) {
+  const L = LISTADOS[clave];
+  const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
+  const { filas } = L.consulta(db, q);          // MISMA consulta que la pantalla, sin LIMIT
+  return {
+    filas,
+    titulo: L.titulo,
+    html: listadoHtml(db, {
+      titulo: L.titulo,
+      columnas: L.columnas,
+      filas,
+      filtros: L.filtros ? L.filtros(q, db) : [],
+      periodo: L.periodo ? L.periodo(q) : null,
+      totales: L.totales ? L.totales(filas) : [],
+      agrupar: L.agrupar || null,
+      generadoPor: quien || '',
+      vacio: L.vacio,
+      sym,
+    }),
+  };
+}
+
+const nombreFichero = (titulo) =>
+  (titulo.replace(/[^\wáéíóúñÁÉÍÓÚÑ ]+/g, '').trim().replace(/\s+/g, '-') + '-'
+   + new Date().toISOString().slice(0, 10) + '.pdf').replace(/[\/\\]/g, '-');
+
+export function createListadosRoutes(db) {
+  const api = new Hono();
+  const views = new Hono();
+
+  // El candado, resuelto en caliente: la ruta es genérica pero el permiso es el de SU pantalla.
+  const guarda = (c, clave) => {
+    const L = LISTADOS[clave];
+    if (!L) return { error: 'Listado no encontrado', status: 404 };
+    if (!c.get('session')) return { error: 'No autorizado', status: 401 };
+    if (!can(c, L.perm)) return { error: 'No tienes permiso para ver este listado', status: 403 };
+    return { L };
+  };
+  const quienDe = c => c.get('session')?.name || c.get('session')?.email || '';
+
+  // ── IMPRIMIR ──────────────────────────────────────────────────────────────────────────────────
+  // Devuelve el MISMO papel que el PDF, en una página que se manda a la impresora sola. No es una
+  // segunda maquetación: es `papelDe`, igual que los otros dos verbos.
+  views.get('/:clave/imprimir', c => {
+    const clave = c.req.param('clave');
+    const g = guarda(c, clave);
+    if (g.error) return c.html(errorShell('No podemos abrir este listado', g.error, { action: 'Volver', href: '/admin' }), g.status);
+    try {
+      const { html, titulo } = papelDe(db, clave, filtrosDeUrl(c), quienDe(c));
+      return c.html(printableShell(html + '<script>window.addEventListener("load",function(){setTimeout(window.print,250)})<\/script>', { title: titulo }));
+    } catch (e) { return c.html(errorShell('No hemos podido preparar la impresión', ERR.GEN, { action: 'Volver', href: g.L.volver }), e.status || 500); }
+  });
+
+  // ── DESCARGAR EN PDF ──────────────────────────────────────────────────────────────────────────
+  views.get('/:clave/pdf', async c => {
+    const clave = c.req.param('clave');
+    const g = guarda(c, clave);
+    if (g.error) return c.json({ error: g.error }, g.status);
+    try {
+      const { html, titulo } = papelDe(db, clave, filtrosDeUrl(c), quienDe(c));
+      const pdf = await renderPdfFromHtml(printableShell(html, { title: titulo }), { pie: pieDePagina(titulo) });
+      return new Response(pdf, {
+        headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="' + nombreFichero(titulo) + '"' },
+      });
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+  });
+
+  // ── ENVIAR POR CORREO ─────────────────────────────────────────────────────────────────────────
+  // MISMA HONESTIDAD QUE LA COLA DE RECORDATORIOS: pulsar no es llegar. Resend devuelve
+  // `{ data, error }` y NO lanza, así que hay que mirar el `error` — si el envío no sale, se dice en
+  // pantalla y NO se registra como enviado. Marcar como enviado algo que no salió es peor que no
+  // tener la función.
+  api.post('/:clave/enviar', async c => {
+    const clave = c.req.param('clave');
+    const g = guarda(c, clave);
+    if (g.error) return c.json({ error: g.error }, g.status);
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      const to = String(body.to == null ? '' : body.to).trim();
+      if (!to) return c.json({ error: 'Escribe a quién se lo mandas.' }, 400);
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return c.json({ error: 'Ese correo no tiene buena pinta. Revísalo.' }, 400);
+
+      const empresa = db.prepare('SELECT company_name FROM company_config WHERE id=1').get()?.company_name || 'Bamburu';
+      const { html, titulo, filas } = papelDe(db, clave, filtrosDeUrl(c), quienDe(c));
+      const pdf = await renderPdfFromHtml(printableShell(html, { title: titulo }), { pie: pieDePagina(titulo) });
+
+      const r = await sendEmail({
+        // EL REMITENTE, que faltaba y lo cazó el gate: Resend no lanza, devuelve
+        // «Missing `from` field» dentro de la respuesta — así que sin mirar el `error` el envío
+        // habría pasado por bueno sin salir. Mismo remitente que el resto de correos del producto.
+        from: empresa + ' <noreply@bamburu.com>',
+        to,
+        subject: titulo + ' · ' + empresa,
+        html: '<p>Te adjuntamos el <strong>' + escHtml(titulo.toLowerCase()) + '</strong> de <strong>' + escHtml(empresa) + '</strong>'
+            + ' (' + filas.length + (filas.length === 1 ? ' línea' : ' líneas') + ').</p>'
+            + '<p style="color:#667085;font-size:13px">Los filtros aplicados vienen escritos en la cabecera del documento.</p>',
+        attachments: [{ filename: nombreFichero(titulo), content: pdf }],
+      });
+      // Resend NO lanza: devuelve el fallo dentro. Si no se mira, un envío fallido pasaría por bueno.
+      if (r && r.error) {
+        return c.json({ error: 'No hemos podido enviarlo: ' + (r.error.message || 'el correo no salió') + '. No se ha marcado como enviado.' }, 502);
+      }
+      logActivity(db, c.get('session'), 'Envió por correo ' + titulo.toLowerCase(), ENTITY.ACTIVIDAD || 'listado', 0, to);
+      return c.json({ ok: true, to, lineas: filas.length });
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+  });
+
+  return { api, views };
+}
+
+// ── LOS TRES BOTONES, UNA SOLA VEZ ──────────────────────────────────────────────────────────────
+// Los pinta cualquier pantalla de listado con una línea. Salen del mismo sitio y llevan los filtros
+// que la pantalla tenga puestos EN ESE MOMENTO: lo que se imprime es lo que se está viendo.
+export function botonesListado(clave, qs = '') {
+  const q = qs ? ('?' + qs) : '';
+  // Estilos EN LÍNEA a propósito: así este bloque se pega en cualquier pantalla sin depender de que
+  // esa pantalla haya cargado una hoja concreta.
+  return `<div style="display:inline-flex;gap:.4rem;flex-wrap:wrap">
+    <a class="btn btn-secondary btn-sm" href="/admin/listados/${clave}/imprimir${q}" target="_blank" rel="noopener"><i class="ti ti-printer"></i> Imprimir</a>
+    <a class="btn btn-secondary btn-sm" href="/admin/listados/${clave}/pdf${q}"><i class="ti ti-download"></i> Descargar PDF</a>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="enviarListado('${clave}','${escHtml(qs)}')"><i class="ti ti-mail"></i> Enviar por correo</button>
+  </div>`;
+}
+
+// El diálogo de envío. Va aquí y no en cada pantalla por el mismo motivo que todo lo demás.
+export const JS_LISTADO_ENVIAR = `
+async function enviarListado(clave, qs){
+  var to = prompt('¿A qué correo lo mandamos?');
+  if (to === null) return;
+  to = String(to).trim();
+  if (!to) { toast('Escribe a quién se lo mandas.','warn'); return; }
+  try {
+    var d = await api('POST','/api/erp/listados/'+clave+'/enviar'+(qs?('?'+qs):''), { to: to });
+    toast('Enviado a '+d.to+' ('+d.lineas+(d.lineas===1?' línea':' líneas')+') ✓');
+  } catch(e) { toast(e.message,'err'); }
+}
+`;

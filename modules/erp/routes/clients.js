@@ -1,4 +1,6 @@
 import { Hono } from 'hono';
+import { consultaClientes } from '../listados.js';
+import { botonesListado, JS_LISTADO_ENVIAR } from './listados.js';
 import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, rowMenu, emptyRow, skeletonRows } from '../layout.js';
 import { logActivity, requirePerm } from '../../../core/auth.js';
@@ -499,21 +501,17 @@ export function createClientRoutes(db, cfg = {}) {
     let page = parseInt(c.req.query('page') || '1', 10);
     if (!Number.isFinite(page) || page < 1) page = 1;
 
-    // WHERE: estado + búsqueda parcial (LIKE %q% sobre nombre y NIF, insensible a mayúsculas en ASCII).
-    const where = ['c.active = ?'];
-    const params = [activeVal];
-    if (q) { where.push('(c.name LIKE ? OR c.fiscal_id LIKE ?)'); params.push('%' + q + '%', '%' + q + '%'); }
-    const whereSql = 'WHERE ' + where.join(' AND ');
-
-    // COUNT aparte para el total de páginas; SELECT con LIMIT/OFFSET para la página actual.
-    const total = db.prepare('SELECT COUNT(*) AS n FROM clients c ' + whereSql).get(...params).n;
-    const totalPages = Math.max(1, Math.ceil(total / perPage));
+    // ── LA MISMA CONSULTA QUE EL PDF (tarea C, tanda 1) ────────────────────────────────────────
+    // El WHERE, el COUNT y el SELECT vivían aquí dentro. Ahora viven en `listados.js` y esta
+    // pantalla los PIDE, igual que los piden las rutas de imprimir / descargar / enviar. La única
+    // diferencia entre lo que se ve y lo que se imprime es `limit`: la pantalla pide una página, el
+    // papel pide todo. Si cada uno tuviera su consulta, el día que alguien tocara un filtro
+    // empezarían a decir cosas distintas y nadie sabría cuál miente.
+    const totalPrev = consultaClientes(db, { q, archivados: verArchivados, limit: 1 }).total;
+    const totalPages = Math.max(1, Math.ceil(totalPrev / perPage));
     if (page > totalPages) page = totalPages;
     const offset = (page - 1) * perPage;
-    const clientsList = db.prepare(
-      'SELECT c.*, g.name as group_name FROM clients c LEFT JOIN client_groups g ON c.group_id=g.id '
-      + whereSql + ' ORDER BY c.name LIMIT ? OFFSET ?'
-    ).all(...params, perPage, offset);
+    const { filas: clientsList, total } = consultaClientes(db, { q, archivados: verArchivados, limit: perPage, offset });
 
     // Opciones de grupo para el modal (server-render, sin fetch en cliente).
     const groupOptions = db.prepare('SELECT id, name FROM client_groups ORDER BY name').all()
@@ -524,6 +522,14 @@ export function createClientRoutes(db, cfg = {}) {
     // como "sin asignar" hasta que el dueño lo reasigne. Escapado: el nombre lo teclea una persona.
     const userOptions = db.prepare("SELECT id, name FROM admin_users WHERE active=1 ORDER BY name").all()
       .map(u => '<option value="' + u.id + '">' + escHtml(u.name) + '</option>').join('');
+
+    // Los filtros VIGENTES, para que los tres verbos impriman lo que se está viendo.
+    const qsListado = (() => {
+      const u = new URLSearchParams();
+      if (q) u.set('q', q);
+      if (verArchivados) u.set('archivados', '1');
+      return u.toString();
+    })();
 
     // Conserva q y archivados al cambiar de página.
     const buildQs = (p) => {
@@ -568,6 +574,9 @@ export function createClientRoutes(db, cfg = {}) {
           ${can(c, 'clients.create') ? '<button type="button" class="btn btn-primary" onclick="openNewClient()">Nuevo cliente</button>' : ''}
         </form>
       </div>
+      <!-- C9 · LOS TRES VERBOS. Salen del mismo sitio y LLEVAN LOS FILTROS QUE HAY PUESTOS AHORA
+           MISMO: lo que se imprime es lo que se está viendo, no «todos los clientes». -->
+      <div style="margin:-.5rem 0 1rem">${botonesListado('clientes', qsListado)}</div>
 
       <div class="card">
         <div class="table-wrap"><table>
@@ -672,6 +681,7 @@ export function createClientRoutes(db, cfg = {}) {
       ${cobroModalHtml()}
       <style>${fichaClienteCSS()}${fichaCompletaCSS()}</style>
       <script>
+      ${JS_LISTADO_ENVIAR}
       ${fichaClienteJS({ sym })}
       ${fichaVentanaJS({ montaje: 'ventana' })}
       ${fichaCompletaJS()}

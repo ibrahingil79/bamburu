@@ -1,4 +1,6 @@
 import { Hono } from 'hono';
+import { consultaProductos } from '../listados.js';
+import { botonesListado, JS_LISTADO_ENVIAR } from './listados.js';
 import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, rowMenu, emptyRow, skeletonRows } from '../layout.js';
 import { logActivity, requirePerm } from '../../../core/auth.js';
@@ -334,22 +336,16 @@ export function createProductRoutes(db, cfg = {}) {
     let page = parseInt(c.req.query('page') || '1', 10);
     if (!Number.isFinite(page) || page < 1) page = 1;
 
-    // WHERE combinando búsqueda parcial (LIKE %q%, insensible a mayúsculas en ASCII) y categoría.
-    const where = [];
-    const params = [];
-    if (q) { where.push('(p.name LIKE ? OR p.sku LIKE ?)'); params.push('%' + q + '%', '%' + q + '%'); }
-    if (categoria) { where.push('p.category_id = ?'); params.push(categoria); }
-    const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
-
-    // COUNT aparte para el total de páginas; SELECT con LIMIT/OFFSET para la página actual.
-    const total = db.prepare('SELECT COUNT(*) AS n FROM products p ' + whereSql).get(...params).n;
-    const totalPages = Math.max(1, Math.ceil(total / perPage));
+    // ── LA MISMA CONSULTA QUE EL PDF (tarea C, tanda 1) ────────────────────────────────────────
+    // Vive en `listados.js` y la piden por igual esta pantalla y las tres rutas de imprimir /
+    // descargar / enviar. La única diferencia es `limit`: aquí una página, allí todo.
+    const totalPrev = consultaProductos(db, { q, categoria, limit: 1 }).total;
+    const totalPages = Math.max(1, Math.ceil(totalPrev / perPage));
     if (page > totalPages) page = totalPages;
     const offset = (page - 1) * perPage;
-    const products = db.prepare(
-      'SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id '
-      + whereSql + ' ORDER BY p.name LIMIT ? OFFSET ?'
-    ).all(...params, perPage, offset);
+    const { filas: products, total } = consultaProductos(db, { q, categoria, limit: perPage, offset });
+    // Los filtros VIGENTES, para que los tres verbos impriman lo que se está viendo.
+    const qsListado = (() => { const u = new URLSearchParams(); if (q) u.set('q', q); if (categoria) u.set('categoria', categoria); return u.toString(); })();
 
     const categories = db.prepare('SELECT id, name FROM categories ORDER BY name').all();
     const catOptions = categories.map(cat =>
@@ -389,6 +385,13 @@ export function createProductRoutes(db, cfg = {}) {
           <button class="btn btn-secondary" type="submit">Buscar</button>
           ${can(c, 'products.create') ? '<button type="button" class="btn btn-primary" id="btnNuevoProd">Nuevo producto</button>' : ''}
         </form>
+      </div>
+      <!-- C9 · LOS TRES VERBOS, dos veces: el listado interno (con stock) y la LISTA DE PRECIOS, que
+           es la que sale por la puerta — sin coste ni stock y con el IVA ya sumado. Son dos papeles
+           distintos sobre LA MISMA consulta: lo que cambia son las columnas, no los datos. -->
+      <div style="margin:-.5rem 0 1rem;display:flex;gap:1.2rem;flex-wrap:wrap;align-items:center">
+        <span style="display:inline-flex;gap:.4rem;align-items:center"><span style="font-size:.78rem;color:var(--text3);font-weight:600">Listado</span>${botonesListado('productos', qsListado)}</span>
+        <span style="display:inline-flex;gap:.4rem;align-items:center"><span style="font-size:.78rem;color:var(--text3);font-weight:600">Lista de precios</span>${botonesListado('precios', qsListado)}</span>
       </div>
 
       <div class="card">
@@ -536,6 +539,7 @@ export function createProductRoutes(db, cfg = {}) {
 
       ${stockModalHtml()}
       <script>
+      ${JS_LISTADO_ENVIAR}
       ${stockModalScript(sym, warehouses)}
       const A='/api/erp';
       const VAT_BANDS=${vatBandsJson};   // bandas de IVA del país (P1+P2 refinamiento)

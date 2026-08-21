@@ -21,6 +21,7 @@ import { createAnalyticsRoutes } from './analytics.js';
 import { createVigiaRoutes } from './vigia.js';   // Escalera · paso 5 — DISA predictiva · PIEZA 1: el vigía
 import { createInicioRoutes } from './inicio.js';   // Escalera · paso 6 — Inicio personalizable
 import { createMigracionRoutes } from './migracion.js';   // Trae tus datos: la migración la hace el equipo
+import { createListadosRoutes } from './listados.js';   // C · los tres verbos, una sola vez para los ocho listados
 import { createMenuRoutes } from './menu-routes.js';   // Navegación — anclas del menú (por usuario)
 import { createSettingsRoutes } from './settings.js';
 import { createUserRoutes } from './users.js';
@@ -183,6 +184,10 @@ export function mountRoutes(app, db) {
   admin.route('/conciliacion', createConciliacionRoutes(db).views);
   admin.route('/recurrentes', createRecurrentesRoutes(db).views);
   admin.route('/portal', createPortalAdminRoutes(db).views);
+  // C · IMPRIMIR / DESCARGAR / ENVIAR. TRES rutas para los OCHO listados, no tres por listado:
+  // añadir uno es declararlo en `listados.js`, no tocar nada de aquí.
+  const { api: listApi, views: listViews } = createListadosRoutes(db);
+  admin.route('/listados', listViews);          // ← /admin/listados/<clave>/{imprimir,pdf}
   app.route('/admin', admin);
 
   // ── Protected API ──────────────────────────────────────────────
@@ -208,6 +213,7 @@ export function mountRoutes(app, db) {
   apiApp.route('/vigia', vigiaApi);     // ← DISA predictiva · hallazgos del vigía (solo lectura)
   apiApp.route('/inicio', inicioApi);   // ← Inicio personalizable (layout por usuario/empresa/fábrica)
   apiApp.route('/migracion', migracionApi);   // ← Trae tus datos: la migración la hace el equipo, a mano
+  apiApp.route('/listados', listApi);        // ← POST /api/erp/listados/<clave>/enviar
   apiApp.route('/menu', menuApi);       // ← anclas del menú de CADA usuario (solo colocación, sin datos)
   apiApp.route('/perfil', perfilApi);   // ← datos personales del usuario logueado (+ su foto)
   apiApp.route('/settings', settApi);   // ← /api/erp/settings SE QUEDA (config de empresa); solo /settings/store se neutraliza en settings.js

@@ -21,12 +21,17 @@ import { escHtml } from '../../core/escape.js';
 // ── FORMATO ESPAÑOL, EN UN SOLO SITIO ───────────────────────────────────────────────────────────
 // 1.234,56 € y no 1234.56. Vive aquí para que ningún listado se invente el suyo: es exactamente el
 // tipo de cosa que acaba divergiendo entre pantallas si cada una la resuelve por su cuenta.
+// `useGrouping: 'always'` NO es un capricho: por defecto el español moderno NO pone punto en los
+// números de cuatro cifras (1234,56), y en un papel de contabilidad eso se lee mal — una columna
+// donde unas cifras llevan punto y otras no obliga a contar dígitos. El encargo pide separador de
+// miles, así que se pide SIEMPRE. Lo destapó el gate: la aserción del formato falló con «1234,56».
+const GRUPO = { useGrouping: 'always' };
 export function dinero(n, sym = '€') {
   const v = Number(n) || 0;
-  return v.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + sym;
+  return v.toLocaleString('es-ES', { ...GRUPO, minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + sym;
 }
 export function numero(n, dec = 0) {
-  return (Number(n) || 0).toLocaleString('es-ES', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  return (Number(n) || 0).toLocaleString('es-ES', { ...GRUPO, minimumFractionDigits: dec, maximumFractionDigits: dec });
 }
 export function fechaEs(iso) {
   if (!iso) return '';
@@ -59,10 +64,16 @@ export function pieDePagina(titulo) {
 }
 
 // ── LA HOJA DE ESTILOS DEL LISTADO ──────────────────────────────────────────────────────────────
-// `thead { display: table-header-group }` es LA línea importante de todo esto: es lo que hace que la
-// cabecera de columnas se repita sola en cada hoja al paginar. No hay que cortar la tabla a mano ni
-// calcular cuántas filas caben — el navegador lo hace bien desde hace veinte años, y hacerlo a mano
-// sería inventarse un paginador que se rompería con la primera fila alta.
+// `thead { display: table-header-group }` es lo que hace que la cabecera de columnas se repita sola
+// en cada hoja al paginar. No hay que cortar la tabla a mano ni calcular cuántas filas caben — el
+// navegador lo hace bien desde hace veinte años, y hacerlo a mano sería inventarse un paginador que
+// se rompería con la primera fila alta.
+//
+// SE ESCRIBE AUNQUE SEA EL VALOR POR DEFECTO, y conviene saberlo antes de «limpiarla»: quitarla NO
+// cambia nada (medido: 3 hojas de 3 siguen con cabecera), porque es lo que un `<thead>` ya hace.
+// Lo que sí la rompe es pisarla —con `table-row-group` la cabecera baja a 1 hoja de 3—, y por eso
+// se deja escrita: declara la intención y deja el sitio marcado. La prueba de reversión de esta
+// tarea empezó quitándola y no tumbó nada; el fallo era de la reversión, no de la aserción.
 export const LISTADO_CSS = `
   .lst-cab{margin:0 0 14px}
   .lst-tit{font-size:20px;font-weight:600;margin:0 0 2px;color:var(--text)}

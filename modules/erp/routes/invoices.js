@@ -1,4 +1,6 @@
 import { Hono } from 'hono';
+import { consultaFacturas } from '../listados.js';
+import { botonesListado, JS_LISTADO_ENVIAR } from './listados.js';
 import { partesDe, membreteHtml } from '../documentos.js';
 import { safeError } from '../../../core/errors.js';
 import { createHash } from 'crypto';
@@ -912,10 +914,15 @@ export function createInvoiceRoutes(db) {
       // D1 — el clúster viejo se archiva (sales_orders → sales_orders_archived). El JOIN solo sirve para
       // MOSTRAR el nº de pedido origen de facturas legadas: lo hacemos tolerante a la tabla viva, a la
       // archivada o a ninguna (entonces order_ref = NULL y la ficha muestra "—", sin romper).
-      const soTbl = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('sales_orders','sales_orders_archived') ORDER BY (name='sales_orders') DESC LIMIT 1").get()?.name || null;
-      const rows = db.prepare(`SELECT i.*, ${soTbl ? 'o.order_number as order_ref' : 'NULL as order_ref'},
-          (SELECT COALESCE(SUM(p.amount),0) FROM invoice_payments p WHERE p.invoice_id=i.id) AS cobrado
-        FROM invoices i ${soTbl ? `LEFT JOIN ${soTbl} o ON o.id=i.order_id` : ''} ORDER BY i.created_at DESC LIMIT 200`).all();
+      // LA MISMA CONSULTA QUE EL PDF (tarea C, tanda 1). Vivía aquí; ahora vive en `listados.js` y la
+      // piden por igual esta pantalla —con el tope de 200 de siempre— y las tres rutas del papel,
+      // que la piden sin tope. Ni el JOIN ni la subconsulta de `cobrado` cambian.
+      const rows = consultaFacturas(db, {
+        estado: (c.req.query('estado') || '').trim(),
+        desde: (c.req.query('desde') || '').trim(),
+        hasta: (c.req.query('hasta') || '').trim(),
+        limit: 200,
+      }).filas;
       const today = new Date().toISOString().slice(0, 10);
       for (const r of rows) {
         const st = cobroState(r, r.cobrado, today);
@@ -1145,6 +1152,21 @@ export function createInvoiceRoutes(db) {
         <h2>Facturas</h2>
         <a href="/admin/invoices/new" class="btn btn-primary">Nueva factura</a>
       </div>
+      <!-- C9 · LOS TRES VERBOS. Los filtros de estado y periodo se eligen aquí y viajan al papel:
+           un listado de facturas filtrado que no dijera que está filtrado sería un documento que
+           miente, y de eso se encarga el motor escribiéndolos en la cabecera. -->
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
+        <select class="form-control" id="lstEstado" style="width:auto" onchange="pintaVerbos()">
+          <option value="">Todos los estados</option>
+          <option value="emitida">Emitidas</option>
+          <option value="rectificada">Rectificadas</option>
+          <option value="anulada">Anuladas</option>
+        </select>
+        <input class="form-control" type="date" id="lstDesde" style="width:auto" onchange="pintaVerbos()">
+        <span style="color:var(--text3)">–</span>
+        <input class="form-control" type="date" id="lstHasta" style="width:auto" onchange="pintaVerbos()">
+        <span id="lstVerbos"></span>
+      </div>
       <div id="disaBand"></div>
       <div class="card">
         <div class="card-head"><h3>Todas las facturas</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="filterTable()"></div>
@@ -1157,6 +1179,25 @@ export function createInvoiceRoutes(db) {
       <!-- Gestión de cobro (solo en el panel, nunca en el documento/PDF de la factura). -->
       ${cobroModalHtml()}
       <script>
+      ${JS_LISTADO_ENVIAR}
+      // Los tres verbos se repintan al cambiar un filtro: lo que se imprime es lo que se está mirando.
+      function qsListado(){
+        var u=new URLSearchParams();
+        var e=document.getElementById('lstEstado').value; if(e) u.set('estado', e);
+        var d=document.getElementById('lstDesde').value;  if(d) u.set('desde', d);
+        var h=document.getElementById('lstHasta').value;  if(h) u.set('hasta', h);
+        return u.toString();
+      }
+      function pintaVerbos(){
+        var qs=qsListado(), q=qs?('?'+qs):'';
+        document.getElementById('lstVerbos').innerHTML =
+          '<span style="display:inline-flex;gap:.4rem;flex-wrap:wrap">'
+          + '<a class="btn btn-secondary btn-sm" target="_blank" rel="noopener" href="/admin/listados/facturas/imprimir'+q+'"><i class="ti ti-printer"></i> Imprimir</a>'
+          + '<a class="btn btn-secondary btn-sm" href="/admin/listados/facturas/pdf'+q+'"><i class="ti ti-download"></i> Descargar PDF</a>'
+          + '<button type="button" class="btn btn-secondary btn-sm" onclick="enviarListado(\'facturas\',qsListado())"><i class="ti ti-mail"></i> Enviar por correo</button>'
+          + '</span>';
+      }
+      pintaVerbos();
       ${cobroModalScript(sym)}
       window.cobroOnSaved = function(id){ loadInvoices(); };   // refresca la tabla tras un cobro
       let rows=[];
