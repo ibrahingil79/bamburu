@@ -171,8 +171,16 @@ try {
   });
   ok(sc.alto > sc.visible, 'con el día entero abierto, no cabe de una vez (hay que desplazar)', sc.alto + ' > ' + sc.visible);
   ok(sc.top > 0, 'y al abrir NO se queda en 0', 'scrollTop=' + sc.top);
-  ok(sc.ahoraVisible && sc.tercio >= 20 && sc.tercio <= 45,
-     'la hora actual queda a un tercio de lo que se ve, no pegada al borde', 'al ' + sc.tercio + '% del alto visible');
+  // EL TERCIO SOLO SE PUEDE CUMPLIR SI QUEDA DÍA POR DEBAJO. A última hora no hay nada más que
+  // desplazar: el lienzo se topa con el final y la línea de ahora queda necesariamente más abajo del
+  // tercio — el producto está haciendo lo único que puede hacer. Con el listón fijo, este gate era
+  // verde de día y rojo de noche: medido al 52 % pasada la medianoche del negocio. Se exige el
+  // tercio cuando hay sitio, y que la línea siga A LA VISTA cuando ya no lo hay.
+  const topeAbajo = sc.top + sc.visible >= sc.alto - 4;
+  ok(sc.ahoraVisible && (topeAbajo || (sc.tercio >= 20 && sc.tercio <= 45)),
+     'la hora actual queda a un tercio de lo que se ve, no pegada al borde'
+       + (topeAbajo ? ' (o a la vista, si ya no queda día que desplazar)' : ''),
+     'al ' + sc.tercio + '% del alto visible' + (topeAbajo ? ' · el lienzo ya está al tope' : ''));
   db.prepare("DELETE FROM horario_tramos WHERE scope='negocio'").run();
   for (let dow = 0; dow <= 6; dow++) insTramo.run('negocio', null, dow, 9 * 60, 18 * 60);
   await abrir();
