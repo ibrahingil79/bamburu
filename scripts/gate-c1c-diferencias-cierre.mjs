@@ -42,7 +42,15 @@ const post = async (u, body) => { const r = await fetch(BASE + u, { method: 'POS
 
 try {
   // ════ A) SOBRE-RECEPCIÓN ════
-  const a = (await post('/api/erp/purchase-orders', { supplier_id: 1, date: '2026-06-10', items: [{ product_id: PRODUCT_ID, quantity: 10, unit_cost: 1.5 }] })).body;
+  // LOS PROVEEDORES SE ELIGEN ACTIVOS, NO POR SU ID. Estaban clavados al 1 y al 2, y el reseed del
+  // negocio a datos de taller archiva TODOS los proveedores genéricos: el 2 se quedó inactivo, la
+  // orden B no llegaba a crearse y el gate moría al leer sus líneas — pero el fallo que cantaba era
+  // «el delta de stock no cuadra», treinta líneas después y sin relación aparente con la causa.
+  const PROVS = db.prepare('SELECT id FROM suppliers WHERE active=1 ORDER BY id LIMIT 2').all().map(r => r.id);
+  ok(PROVS.length >= 1, 'hay proveedores activos con los que pedir', PROVS.join(', ') || 'ninguno');
+  const PROV_A = PROVS[0], PROV_B = PROVS[1] || PROVS[0];
+
+  const a = (await post('/api/erp/purchase-orders', { supplier_id: PROV_A, date: '2026-06-10', items: [{ product_id: PRODUCT_ID, quantity: 10, unit_cost: 1.5 }] })).body;
   const aSent = (await post('/api/erp/purchase-orders/' + a.id + '/enviar')).body;
   ok(/^OC-/.test(aSent.order_number || ''), 'orden A ' + aSent.order_number + ' enviada');
 
@@ -79,10 +87,13 @@ try {
   await page.screenshot({ path: '/tmp/c1c-2-exceso-ficha.png' });
 
   // ════ B) CIERRE MANUAL ════
-  const b = (await post('/api/erp/purchase-orders', { supplier_id: 2, date: '2026-06-10', items: [{ product_id: PRODUCT_ID, quantity: 8, unit_cost: 1.2 }] })).body;
+  const b = (await post('/api/erp/purchase-orders', { supplier_id: PROV_B, date: '2026-06-10', items: [{ product_id: PRODUCT_ID, quantity: 8, unit_cost: 1.2 }] })).body;
   const bSent = (await post('/api/erp/purchase-orders/' + b.id + '/enviar')).body;
   const bItems = await fetch(BASE + '/api/erp/purchase-orders/' + b.id + '/receipts', { headers: { 'Cookie': 'asess=' + token } }).then(r => r.json());
-  await post('/api/erp/purchase-orders/' + b.id + '/receipts', { date: '2026-06-10', items: [{ order_item_id: bItems.reception.lines[0].order_item_id, quantity: 3, unit_cost: 1.2 }] });
+  // ESTE PASO NO SE COMPROBABA, y por eso un fallo suyo solo se notaba 30 líneas más abajo, en el
+  // delta de stock, sin decir de dónde venía. Un paso que no se verifica es un agujero.
+  const parcial = await post('/api/erp/purchase-orders/' + b.id + '/receipts', { date: '2026-06-10', items: [{ order_item_id: bItems.reception.lines[0].order_item_id, quantity: 3, unit_cost: 1.2 }] });
+  ok(parcial.status === 200 || parcial.status === 201, 'la recepción PARCIAL de 3 unidades se registra → ' + parcial.status + ' ' + JSON.stringify(parcial.body).slice(0, 90));
 
   await page.goto(BASE + `/admin/purchase-orders/${b.id}`, { waitUntil: 'networkidle0' });
   body = await page.content();
