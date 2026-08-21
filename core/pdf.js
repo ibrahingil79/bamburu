@@ -71,7 +71,12 @@ async function getBrowser() {
 //   para que Inter (web font) esté cargada y no salga en la fuente de reserva.
 // - A4, printBackground (chrome grafito + colores de estado), márgenes razonables,
 //   preferCSSPageSize por si el HTML define @page.
-export async function renderPdfFromHtml(html, { filename } = {}) {
+// `pie` — PIE DE PÁGINA DEL PDF, opcional. Existe por el «Página X de Y» de los listados y no por
+// gusto: Chromium **no** implementa las cajas de margen de CSS (`@page { @bottom-right { … } }`), así
+// que un contador de páginas en CSS no se pinta. Lo único que funciona es el `footerTemplate` de
+// puppeteer, con sus clases mágicas `pageNumber` y `totalPages`. Va como opción y por defecto no hay
+// pie: los SEIS documentos siguen saliendo exactamente igual que antes de esta tarea.
+export async function renderPdfFromHtml(html, { filename, pie = null } = {}) {
   if (!html || typeof html !== 'string') {
     const e = new Error('renderPdfFromHtml: HTML vacío'); e.status = 500; throw e;
   }
@@ -82,12 +87,23 @@ export async function renderPdfFromHtml(html, { filename } = {}) {
     // Espera a que las fuentes (Inter) terminen de cargar; si no hay red, fonts.ready
     // resuelve igual con la de reserva y no bloquea (el page.pdf sigue).
     try { await page.evaluate(async () => { if (document.fonts && document.fonts.ready) await document.fonts.ready; }); } catch {}
-    const pdf = await page.pdf({
+    const opciones = {
       format: 'A4',
       printBackground: true,
       preferCSSPageSize: true,
       margin: { top: '12mm', right: '12mm', bottom: '14mm', left: '12mm' },
-    });
+    };
+    if (pie) {
+      // Con pie hay que reservar sitio abajo Y decirle a Chromium que pinte cabecera/pie. El
+      // `headerTemplate` vacío es obligatorio: sin él, Chromium pinta SU cabecera por defecto (la
+      // URL y la fecha del sistema) en cada página.
+      opciones.displayHeaderFooter = true;
+      opciones.headerTemplate = '<div></div>';
+      opciones.footerTemplate = pie;
+      opciones.margin = { ...opciones.margin, bottom: '18mm' };
+      opciones.preferCSSPageSize = false;   // con pie manda el margen de aquí, no el @page del HTML
+    }
+    const pdf = await page.pdf(opciones);
     const buf = Buffer.from(pdf);
     if (!buf.length || buf.slice(0, 4).toString('latin1') !== '%PDF') {
       const e = new Error('renderPdfFromHtml: el PDF generado no es válido'); e.status = 500; throw e;
