@@ -38,6 +38,12 @@ const creados = [];
 let b;
 
 const dormir = ms => new Promise(r => setTimeout(r, ms));
+// PULSAR SIN MORIR. La prueba de reversión me ha pillado TRES veces lo mismo: al quitar una pieza,
+// su botón desaparece, `page.click` lanza y el gate muere ahí — llevándose por delante todo lo que
+// venía detrás, que es justo lo que un gate no puede hacer. Devuelve false y sigue.
+const clic = async (page, sel) => {
+  try { await page.click(sel); return true; } catch { return false; }
+};
 const ymd = d => d.toISOString().slice(0, 10);
 const dow = f => new Date(f + 'T00:00:00Z').getUTCDay();
 
@@ -402,7 +408,7 @@ try {
   // de detrás. La prueba de reversión ya me pilló este mismo descuido en A7 y A8; no vuelve a pasar.
   let abrio = true;
   try {
-    await p.click('#agLeyBtn');
+    await clic(p, '#agLeyBtn');
     await p.waitForFunction(() => document.getElementById('mLeyenda').classList.contains('open'), { timeout: 6000 });
   } catch (e) { abrio = false; }
   ok(abrio, 'la (i) de la barra ABRE la ventana');
@@ -547,7 +553,7 @@ try {
   });
   ok(!noHayCampo.esCampoVisible, 'ya no hay una casilla de fecha que rellenar a mano');
   ok(noHayCampo.hojaCerrada, 'y la hoja de meses nace cerrada');
-  await p.click('#agTitulo');
+  await clic(p, '#agTitulo');
   await dormir(400);
   const hojaMeses = await p.evaluate(() => ({
     abierta: !document.getElementById('agSalto').hasAttribute('hidden'),
@@ -580,6 +586,126 @@ try {
   } catch (e) { /* rojo limpio abajo */ }
   ok(tras.f.slice(5, 7) === '12' && tras.cerrada && tras.vista === 'mes',
      'y elegir un mes lleva el calendario a ese mes y cierra la hoja', JSON.stringify(tras));
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // [27] LA PANTALLA «CUÁNDO ABRO» — atajos, interruptores y un resumen en cristiano
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // Antes eran siete bloques iguales con campos de hora sueltos: para decir «de lunes a viernes de 9
+  // a 2» había que repetir la misma operación cinco veces, y no había forma de cerrar un día sin
+  // borrarle los campos a mano ni de saber de un vistazo qué horario tenía el negocio.
+  console.log('\n[27] «Cuándo abro»: se pone de una vez, se cierra con un interruptor y se lee en una frase');
+  await p.goto(uno.base + '/admin/citas/horarios', { waitUntil: 'networkidle2' });
+  await p.waitForFunction(() => document.querySelectorAll('.hor-dia').length === 7, { timeout: 20000 });
+  await dormir(600);
+  const h0 = await p.evaluate(() => ({
+    dias: document.querySelectorAll('.hor-dia').length,
+    interruptores: document.querySelectorAll('.hor-dia .sw input').length,
+    atajos: [...document.querySelectorAll('.hor-chip-atajo')].map(b => b.textContent.trim()),
+    chips: document.querySelectorAll('.hor-dia-chip').length,
+    resumen: document.getElementById('horResumen').textContent.replace(/\s+/g, ' ').trim(),
+    primero: document.querySelector('.hor-dia .hor-dia-nombre').textContent.trim(),
+  }));
+  ok(h0.dias === 7 && h0.interruptores === 7, 'los siete días, cada uno con su interruptor de abierto/cerrado', h0.dias + ' días');
+  ok(h0.primero === 'Lunes', 'y la semana empieza en lunes', h0.primero);
+  ok(h0.atajos.join('|') === 'Lunes a viernes|Lunes a sábado|Todos los días|Sábado y domingo',
+     'están los atajos para no marcar día a día', h0.atajos.join(' · '));
+  ok(h0.chips === 7, 'y los siete días se pueden elegir de uno en uno', h0.chips + ' chips');
+  // EL RESUMEN. El negocio del gate abre de lunes a sábado de 9 a 18 (lo puso el propio gate).
+  ok(/Abres/.test(h0.resumen) && /lunes a s[áa]bado/i.test(h0.resumen) && /9:00 a 18:00/.test(h0.resumen),
+     'el horario se lee en UNA FRASE, agrupando los días seguidos', h0.resumen.slice(0, 80));
+  ok(/Cierras domingo/i.test(h0.resumen), 'y dice también qué días cierra', h0.resumen.slice(-40));
+
+  // ── El atajo + jornada partida, aplicado de una vez ─────────────────────────────────────────
+  await clic(p, '.hor-chip-atajo[data-atajo="1,2,3,4,5"]');
+  await dormir(200);
+  const elegidos = await p.evaluate(() => [...document.querySelectorAll('.hor-dia-chip[aria-pressed="true"]')].map(b => b.textContent.trim()));
+  ok(elegidos.join('') === 'LMXJV', 'el atajo «lunes a viernes» marca los cinco días de golpe', elegidos.join(''));
+  await clic(p, '#hjPartido');
+  await dormir(200);
+  // SE MIDE SI SE VE, NO SI TIENE EL ATRIBUTO. Miraba `hasAttribute('hidden')` y daba verde con el
+  // tramo de tarde A LA VISTA: `display:flex` le gana a `[hidden]`. Lo destapó una captura.
+  const partido = await p.evaluate(() => ({
+    segundoPar: document.getElementById('hpPar2').offsetParent !== null,
+    etiqueta: document.getElementById('hpLbl1').textContent.trim(),
+    previa: document.getElementById('horPrevia').textContent.trim(),
+    marcado: document.getElementById('hjPartido').getAttribute('aria-selected'),
+  }));
+  ok(partido.segundoPar && partido.etiqueta === 'Por la mañana', '«Mañana y tarde» ENSEÑA el segundo tramo y renombra el primero', partido.etiqueta);
+  const corridoLimpio = await p.evaluate(async () => {
+    horJornada('corrido'); await new Promise(r => setTimeout(r, 150));
+    return { seVe: document.getElementById('hpPar2').offsetParent !== null, lbl: document.getElementById('hpLbl1').textContent.trim() };
+  });
+  ok(!corridoLimpio.seVe && corridoLimpio.lbl === 'Abro', 'y en «horario corrido» el tramo de tarde NO se ve: ni en el DOM ni en la pantalla', 'visible=' + corridoLimpio.seVe);
+  await clic(p, '#hjPartido'); await dormir(200);
+  ok(partido.marcado === 'true', 'y el control segmentado marca cuál está elegido');
+  ok(/lunes a viernes/.test(partido.previa) && /y de/.test(partido.previa), 'y se ve de antemano lo que va a quedar, antes de tocar nada', partido.previa);
+  // APLICAR NO ES GUARDAR: es la regla de esta pantalla y se comprueba contra la BASE.
+  await clic(p, 'button[onclick="horAplica()"]');
+  await dormir(500);
+  const trasAplicar = await p.evaluate(() => ({
+    resumen: document.getElementById('horResumen').textContent.replace(/\s+/g, ' ').trim(),
+    tramosLunes: document.querySelectorAll('.hor-dia[data-dow="1"] .hor-tramo').length,
+    tramosSabado: document.querySelectorAll('.hor-dia[data-dow="6"] .hor-tramo').length,
+    avisa: !document.getElementById('horSucio').hasAttribute('hidden'),
+  }));
+  ok(trasAplicar.tramosLunes === 2, 'aplicarlo pone los DOS tramos en cada día elegido', trasAplicar.tramosLunes + ' tramos el lunes');
+  ok(trasAplicar.tramosSabado === 1, 'y no toca los días que NO estaban elegidos', trasAplicar.tramosSabado + ' tramo el sábado');
+  ok(trasAplicar.avisa, 'y avisa de que hay cambios sin guardar');
+  const enBaseAun = uno.db.prepare("SELECT COUNT(*) n FROM horario_tramos WHERE scope='negocio' AND dow=1").get().n;
+  ok(enBaseAun === 1, 'APLICAR NO ES GUARDAR: la base sigue como estaba hasta que se pulsa el botón', enBaseAun + ' tramo el lunes en la base');
+  await clic(p, '#horGuardar');
+  await dormir(900);
+  const enBase = uno.db.prepare("SELECT inicio_min, fin_min FROM horario_tramos WHERE scope='negocio' AND dow=1 ORDER BY inicio_min").all();
+  ok(enBase.length === 2 && enBase[0].inicio_min === 540 && enBase[1].inicio_min === 1020,
+     'y al guardar sí queda en la base, con sus dos tramos', JSON.stringify(enBase));
+  ok(await p.evaluate(() => document.getElementById('horSucio').hasAttribute('hidden')), 'y el aviso de «sin guardar» desaparece');
+
+  // ── El interruptor: cerrar un día NO le borra las horas ─────────────────────────────────────
+  await p.evaluate(() => { const el = document.querySelector('.hor-dia[data-dow="1"] .sw input'); if (el) el.click(); });
+  await dormir(400);
+  const cerrado = await p.evaluate(() => ({
+    texto: document.querySelector('.hor-dia[data-dow="1"] .hor-dia-cuerpo').textContent.trim(),
+    marcado: document.querySelector('.hor-dia[data-dow="1"]').classList.contains('cerrado'),
+    sinCrear: !document.querySelector('.hor-dia[data-dow="1"] [data-mas]'),
+    resumen: document.getElementById('horResumen').textContent.replace(/\s+/g, ' ').trim(),
+  }));
+  ok(cerrado.texto === 'Cerrado' && cerrado.marcado, 'apagar el interruptor cierra el día, sin borrar campos a mano');
+  ok(cerrado.sinCrear, 'y un día cerrado deja de ofrecer «+ tramo»');
+  ok(/Cierras lunes/i.test(cerrado.resumen) || /lunes/.test(cerrado.resumen.split('Cierras')[1] || ''), 'y el resumen lo recoge al momento', cerrado.resumen.slice(-52));
+  await p.evaluate(() => { const el = document.querySelector('.hor-dia[data-dow="1"] .sw input'); if (el) el.click(); });
+  await dormir(400);
+  const reabierto = await p.evaluate(() => [...document.querySelectorAll('.hor-dia[data-dow="1"] input[type="time"]')].map(i => i.value));
+  ok(reabierto.join(',') === '09:00,14:00,17:00,20:00',
+     'y al volver a abrirlo LE DEVUELVE SUS HORAS: cerrar no castiga por probar', reabierto.join(' '));
+
+  // ── Copiar al resto ─────────────────────────────────────────────────────────────────────────
+  await p.evaluate(() => { const el = document.querySelector('.hor-dia[data-dow="6"] .sw input'); if (el) el.click(); });   // cierro el sábado
+  await dormir(300);
+  await p.evaluate(() => { const el = document.querySelector('.hor-dia[data-dow="1"] [data-copia]'); if (el) el.click(); });
+  await dormir(400);
+  const copiado = await p.evaluate(() => ({
+    martes: document.querySelectorAll('.hor-dia[data-dow="2"] .hor-tramo').length,
+    sabado: document.querySelector('.hor-dia[data-dow="6"] .hor-dia-cuerpo').textContent.trim(),
+  }));
+  ok(copiado.martes === 2, '«Copiar al resto» lleva ese horario a los demás días que abren', copiado.martes + ' tramos el martes');
+  ok(copiado.sabado === 'Cerrado', 'y NO abre los que estaban cerrados: copiar un horario no es abrir un día');
+
+  // ── No se guarda un tramo imposible ─────────────────────────────────────────────────────────
+  await p.evaluate(() => { const i = document.querySelector('.hor-dia[data-dow="2"] input[type="time"]'); i.value = '23:00'; i.dispatchEvent(new Event('change', { bubbles: true })); });
+  await dormir(300);
+  await clic(p, '#horGuardar');
+  await dormir(700);
+  const malo = await p.evaluate(() => !document.getElementById('horSucio').hasAttribute('hidden'));
+  ok(malo, 'un tramo que termina antes de empezar NO se guarda, y el aviso de «sin guardar» sigue puesto');
+  // OJO: mirar solo el PRIMER tramo daría verde por el motivo equivocado — con 23:00 guardado, al
+  // ordenar por hora el 23:00 quedaría el SEGUNDO y la comprobación pasaría igual. Se exige que ese
+  // tramo imposible no esté en NINGUNA posición.
+  const martesEnBase = uno.db.prepare("SELECT inicio_min, fin_min FROM horario_tramos WHERE scope='negocio' AND dow=2 ORDER BY inicio_min").all();
+  ok(!martesEnBase.some(t => t.inicio_min === 1380), 'y ese tramo imposible no está en la base, en ninguna posición', JSON.stringify(martesEnBase));
+  ok(martesEnBase.every(t => t.fin_min > t.inicio_min), 'ni queda en la base ningún tramo que termine antes de empezar', martesEnBase.length + ' tramos, todos coherentes');
+
+  const errsH = errs.length;
+  ok(errsH === 0, 'cero errores de consola en la pantalla de horarios', errs.slice(0, 2).join(' | '));
 
   // ── [2] A1 · CON EQUIPO: LA CIFRA DECLARA SU BASE ───────────────────────────────────────────
   console.log('\n[2] A1 · negocio de 14 personas: la cifra declara su base');

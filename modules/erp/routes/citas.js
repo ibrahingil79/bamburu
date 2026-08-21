@@ -1617,26 +1617,94 @@ function vistaHorarios(c, db) {
   const editable = can(c, 'citas.edit');
   const personas = db.prepare("SELECT id, name FROM admin_users WHERE active=1 ORDER BY name").all();
   const opts = personas.map(p => '<option value="' + p.id + '">' + escHtml(p.name) + '</option>').join('');
+  // ── «CUÁNDO ABRO», REHECHA (21 ago 2026) ────────────────────────────────────────────────────────
+  // LO QUE HABÍA: siete bloques iguales con un par de campos de hora sueltos y un «+ tramo». Para
+  // decir «abro de lunes a viernes de 9 a 2» había que repetir la misma operación CINCO veces, y no
+  // había forma de ver de un vistazo qué días abría el negocio ni de cerrar uno sin borrarle los
+  // campos a mano. Nada de eso era un fallo: era una pantalla sin terminar.
+  //
+  // LO QUE HACE AHORA, y de dónde sale: el patrón de WhatsApp Business y el de cualquier ficha de
+  // negocio (Google, Fresha) — se elige un GRUPO de días, se dice si la jornada es corrida o
+  // partida, se ponen las horas UNA vez y se aplica a todos. Y cada día conserva su interruptor,
+  // para el que abre distinto los jueves.
+  //
+  // APLICAR NO ES GUARDAR. Los atajos rellenan el formulario y ya está; lo que escribe en la base
+  // sigue siendo el botón de guardar, y la pantalla avisa mientras haya cambios sin guardar. Un
+  // atajo que escribiera solo convertiría un clic de más en un horario cambiado sin querer.
   const content = `
     <div class="ph"><h2>Cuándo abro</h2><a class="btn btn-secondary" href="/admin/settings#cfg-agenda">← Configuración</a></div>
-    <div class="alert" style="margin-bottom:1rem">El horario del negocio y el de cada persona. Los descansos son el hueco entre dos tramos del mismo día. Una persona sin horario propio hereda el del negocio. Las excepciones (vacaciones, festivos, cierres) mandan sobre la regla semanal.</div>
-    <div class="card">
-      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
-        <select class="form-control" id="hScope" style="width:auto" onchange="hToggle();hCargar()"><option value="negocio">Negocio</option><option value="user">Una persona</option></select>
-        <select class="form-control" id="hUser" style="width:auto;display:none" onchange="hCargar()">${opts}</select>
-      </div>
-      <div id="hGrid"></div>
-      ${editable ? '<button class="btn btn-primary" style="margin-top:1rem" onclick="hGuardar()">Guardar horario</button>' : ''}
+    ${HOR_CSS}
+    <div class="hor-intro">
+      Tu horario semanal manda sobre todo lo demás: de él salen los huecos que se pueden reservar y
+      las horas libres que ves en la agenda. Una persona sin horario propio <b>hereda el del negocio</b>,
+      y las <b>excepciones</b> (vacaciones, festivos, un cierre suelto) mandan sobre la regla semanal.
     </div>
-    <div class="card"><h3 style="margin-top:0">Excepciones (vacaciones, festivos, cierres)</h3>
-      ${editable ? `<div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:end;margin-bottom:1rem">
-        <div><label class="form-label">Fecha</label><input class="form-control" type="date" id="eFecha"></div>
-        <div><label class="form-label">Tipo</label><select class="form-control" id="eTipo" onchange="eToggle()"><option value="cerrado">Cerrado</option><option value="horario">Horario especial</option></select></div>
-        <div id="eHoras" style="display:none"><label class="form-label">De–a</label><div style="display:flex;gap:.3rem"><input class="form-control" type="time" id="eIni"><input class="form-control" type="time" id="eFin"></div></div>
-        <div><label class="form-label">Motivo</label><input class="form-control" id="eMotivo" placeholder="Festivo…"></div>
-        <button class="btn btn-secondary" onclick="eAdd()">Añadir</button>
+
+    <div class="card hor-card">
+      <div class="card-body">
+        <div class="hor-quien">
+          <label class="form-label" style="margin:0">Horario de</label>
+          <select class="form-control" id="hScope" style="width:auto" onchange="hToggle();hCargar()"><option value="negocio">Todo el negocio</option><option value="user">Una persona en concreto</option></select>
+          <select class="form-control" id="hUser" style="width:auto;display:none" onchange="hCargar()">${opts}</select>
+        </div>
+        <div class="hor-resumen" id="horResumen">Cargando…</div>
+      </div>
+    </div>
+
+    ${editable ? `
+    <div class="card hor-card">
+      <div class="card-head"><h3>Ponlo de una vez</h3></div>
+      <div class="card-body">
+        <p class="hor-ayuda">Elige los días, di a qué hora abres y aplícalo a todos de golpe. Luego puedes retocar cualquier día por separado abajo.</p>
+        <div class="hor-atajos">
+          <button type="button" class="hor-chip-atajo" data-atajo="1,2,3,4,5">Lunes a viernes</button>
+          <button type="button" class="hor-chip-atajo" data-atajo="1,2,3,4,5,6">Lunes a sábado</button>
+          <button type="button" class="hor-chip-atajo" data-atajo="1,2,3,4,5,6,0">Todos los días</button>
+          <button type="button" class="hor-chip-atajo" data-atajo="6,0">Sábado y domingo</button>
+        </div>
+        <div class="hor-dias-sel" id="horDiasSel"></div>
+        <div class="hor-jornada">
+          <div class="segmented" role="group" aria-label="Tipo de jornada">
+            <button type="button" id="hjCorrido" onclick="horJornada('corrido')" aria-selected="true">Horario corrido</button>
+            <button type="button" id="hjPartido" onclick="horJornada('partido')" aria-selected="false">Mañana y tarde</button>
+          </div>
+        </div>
+        <div class="hor-horas">
+          <div class="hor-par"><span class="hor-par-lbl" id="hpLbl1">Abro</span>
+            <input type="time" class="form-control" id="hpA1" value="09:00"> <span class="hor-guion">–</span>
+            <input type="time" class="form-control" id="hpB1" value="14:00"></div>
+          <div class="hor-par" id="hpPar2" hidden><span class="hor-par-lbl">Y por la tarde</span>
+            <input type="time" class="form-control" id="hpA2" value="17:00"> <span class="hor-guion">–</span>
+            <input type="time" class="form-control" id="hpB2" value="20:00"></div>
+        </div>
+        <div class="hor-aplicar">
+          <button type="button" class="btn btn-primary" onclick="horAplica()">Aplicar a los días elegidos</button>
+          <span class="hor-vista-previa" id="horPrevia"></span>
+        </div>
+      </div>
+    </div>` : ''}
+
+    <div class="card hor-card">
+      <div class="card-head"><h3>Día a día</h3>${editable ? '<span class="hor-ayuda" style="margin:0">Apaga un día para cerrarlo. Sus horas se recuerdan.</span>' : ''}</div>
+      <div id="hGrid"></div>
+      ${editable ? `<div class="hor-pie">
+        <button class="btn btn-primary" id="horGuardar" onclick="hGuardar()">Guardar horario</button>
+        <span class="hor-sucio" id="horSucio" hidden>Tienes cambios sin guardar</span>
       </div>` : ''}
-      <div id="excList"></div>
+    </div>
+
+    <div class="card hor-card"><div class="card-head"><h3>Días sueltos: vacaciones, festivos y cierres</h3></div>
+      <div class="card-body">
+        <p class="hor-ayuda">Un día concreto que se sale de la regla semanal. Manda sobre ella.</p>
+        ${editable ? `<div class="hor-exc-alta">
+          <div><label class="form-label">Qué día</label><input class="form-control" type="date" id="eFecha"></div>
+          <div><label class="form-label">Qué pasa</label><select class="form-control" id="eTipo" onchange="eToggle()"><option value="cerrado">Cierro todo el día</option><option value="horario">Abro a otras horas</option></select></div>
+          <div id="eHoras" style="display:none"><label class="form-label">De — a</label><div style="display:flex;gap:.3rem;align-items:center"><input class="form-control" type="time" id="eIni"><span class="hor-guion">–</span><input class="form-control" type="time" id="eFin"></div></div>
+          <div style="flex:1;min-width:160px"><label class="form-label">Motivo (opcional)</label><input class="form-control" id="eMotivo" placeholder="Festivo, vacaciones…"></div>
+          <button class="btn btn-secondary" onclick="eAdd()">Añadir</button>
+        </div>` : ''}
+        <div id="excList"></div>
+      </div>
     </div>
     <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};${JS_HORARIOS}</script>`;
   return adminLayout('Cuándo abro', content, 'citas-horarios', c.get('session')?.csrfToken || '', c);
@@ -3280,56 +3348,293 @@ async function del(id){ if(!confirm('¿Archivar?'))return; try{ await api('DELET
 cargar();
 `;
 
+// ── LA CARA DE «CUÁNDO ABRO» ─────────────────────────────────────────────────────────────────────
+// Vive aquí y no en el CSS de la agenda porque es de ESTA pantalla y de ninguna otra. Se apoya en los
+// tokens del panel (DISEÑO §2): ni un color a mano que no salga de una variable.
+const HOR_CSS = `<style>
+  .hor-intro{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-lg,12px);
+             padding:.9rem 1.1rem;margin-bottom:1rem;font-size:.86rem;color:var(--text2);line-height:1.55;max-width:920px}
+  .hor-card{margin-bottom:1rem;max-width:920px}
+  .hor-ayuda{color:var(--text2);font-size:.82rem;margin:0 0 .9rem;line-height:1.5}
+  .hor-quien{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+  /* EL RESUMEN EN CRISTIANO. Es lo primero que se lee y lo que faltaba: la pantalla enseñaba catorce
+     campos de hora y en ninguna parte decía, en una frase, qué horario tiene el negocio. */
+  .hor-resumen{margin-top:.9rem;padding:.75rem .95rem;border-radius:10px;background:var(--bg3,rgba(20,22,27,.03));
+               font-size:.9rem;color:var(--text);line-height:1.6}
+  .hor-resumen b{font-weight:600}
+  .hor-resumen .cerrados{color:var(--text2)}
+  /* Los atajos: «lunes a viernes» de un clic, que es lo que se pidió. */
+  .hor-atajos{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.9rem}
+  .hor-chip-atajo{appearance:none;font-family:inherit;font-size:.8rem;font-weight:600;cursor:pointer;
+                  padding:.42rem .8rem;border-radius:999px;border:1px solid var(--border2);
+                  background:var(--bg2);color:var(--text)}
+  .hor-chip-atajo:hover{border-color:var(--accent);color:var(--accent)}
+  /* Los siete días, como interruptores redondos. Se ve de un vistazo cuáles están elegidos. */
+  .hor-dias-sel{display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:1rem}
+  .hor-dia-chip{appearance:none;font-family:inherit;font-size:.82rem;font-weight:600;cursor:pointer;
+                width:40px;height:40px;border-radius:50%;border:1px solid var(--border2);
+                background:var(--bg2);color:var(--text2)}
+  .hor-dia-chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+  /* EL CONTROL SEGMENTADO. Existe en la agenda, pero su CSS vive en la hoja de ESA pantalla, que
+     aquí no se carga: sin esto los dos botones salían como texto suelto con un borde raro. Se copian
+     las mismas reglas, con el mismo aspecto, para que un segmentado se vea igual en todo el panel. */
+  .hor-jornada{margin-bottom:.9rem}
+  .hor-jornada .segmented{display:inline-flex;background:var(--bg3);border:1px solid var(--border2);border-radius:9px;padding:2px;gap:2px}
+  .hor-jornada .segmented button{appearance:none;border:0;background:transparent;color:var(--text2);font-family:inherit;font-size:.82rem;font-weight:500;padding:.4rem .9rem;border-radius:7px;cursor:pointer;transition:background .15s,color .15s,box-shadow .15s;line-height:1.4}
+  .hor-jornada .segmented button:hover{color:var(--text)}
+  .hor-jornada .segmented button[aria-selected="true"]{background:var(--bg2);color:var(--text);font-weight:600;box-shadow:0 1px 2px rgba(20,22,27,.10)}
+  .hor-jornada .segmented button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .hor-horas{display:flex;gap:1.2rem;flex-wrap:wrap;margin-bottom:1rem}
+  .hor-par{display:flex;align-items:center;gap:.4rem}
+  /* 'display:flex' GANA a '[hidden]', que solo trae 'display:none' del navegador y con menos peso.
+     Sin esta línea el tramo de tarde se seguía viendo en «horario corrido»: escondido en el DOM y a
+     la vista en la pantalla. Lo cazó una captura, no una aserción — la mía miraba el ATRIBUTO. */
+  .hor-par[hidden]{display:none}
+  .hor-par input{width:auto}
+  .hor-par-lbl{font-size:.82rem;font-weight:600;color:var(--text2);min-width:78px}
+  .hor-guion{color:var(--text3)}
+  .hor-aplicar{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap}
+  .hor-vista-previa{font-size:.82rem;color:var(--text2)}
+  /* LA LISTA DE DÍAS. Una fila por día, con su interruptor a la izquierda: cerrar un martes deja de
+     ser «bórrale los campos» y pasa a ser un clic, y las horas se recuerdan por si se vuelve a abrir. */
+  .hor-dia{display:flex;align-items:flex-start;gap:.9rem;padding:.85rem 1.25rem;border-top:1px solid var(--border)}
+  .hor-dia:first-child{border-top:0}
+  .hor-dia.cerrado{background:var(--bg3,rgba(20,22,27,.02))}
+  .hor-dia-nombre{width:104px;flex:0 0 auto;font-weight:600;font-size:.9rem;padding-top:.35rem}
+  .hor-dia.cerrado .hor-dia-nombre{color:var(--text2)}
+  .hor-dia-cuerpo{flex:1;min-width:0;display:flex;flex-direction:column;gap:.4rem}
+  .hor-dia-acc{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;padding-top:.2rem}
+  .hor-cerrado-txt{font-size:.85rem;color:var(--text3);padding-top:.4rem}
+  .hor-tramo{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
+  .hor-tramo input{width:auto}
+  .hor-mini{appearance:none;font-family:inherit;font-size:.76rem;font-weight:600;cursor:pointer;
+            padding:.3rem .6rem;border-radius:8px;border:1px solid var(--border2);background:var(--bg2);color:var(--text2)}
+  .hor-mini:hover{border-color:var(--accent);color:var(--accent)}
+  .hor-quitar{appearance:none;border:0;background:transparent;color:var(--text3);cursor:pointer;font-size:1rem;line-height:1;padding:.25rem .35rem;border-radius:6px}
+  .hor-quitar:hover{background:var(--danger-soft,#FBE3E3);color:var(--danger,#C0392B)}
+  /* El interruptor. No hay ninguno en el panel todavía, así que nace aquí, pequeño y con foco visible. */
+  .sw{position:relative;display:inline-block;width:38px;height:22px;flex:0 0 auto;margin-top:.3rem}
+  .sw input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
+  .sw span{position:absolute;inset:0;border-radius:999px;background:var(--border2);transition:background .15s}
+  .sw span::after{content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;
+                  background:#fff;box-shadow:0 1px 3px rgba(16,24,40,.25);transition:transform .15s}
+  .sw input:checked + span{background:var(--accent)}
+  .sw input:checked + span::after{transform:translateX(16px)}
+  .sw input:focus-visible + span{outline:2px solid var(--accent);outline-offset:2px}
+  .sw input:disabled{cursor:default}
+  .hor-pie{display:flex;align-items:center;gap:.9rem;padding:1rem 1.25rem;border-top:1px solid var(--border);flex-wrap:wrap}
+  .hor-sucio{font-size:.82rem;font-weight:600;color:#8A5B00}
+  .hor-exc-alta{display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1rem}
+  @media (max-width:640px){
+    .hor-dia{flex-wrap:wrap}
+    .hor-dia-nombre{width:auto}
+    .hor-par-lbl{min-width:0}
+  }
+</style>`;
+
 const JS_HORARIOS = String.raw`
 function esc(s){return String(s==null?'':s).replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));}
 var DIAS=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+var DIAS_CORTO=['D','L','M','X','J','V','S'];
+var ORDEN=[1,2,3,4,5,6,0];                       // la semana empieza en lunes, como en España
 function fhhmm(m){if(m==null)return '';var h=Math.floor(m/60),mm=m%60;return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm;}
+function hcorta(m){ if(m==null)return ''; var h=Math.floor(m/60),mm=m%60; return h+':'+(mm<10?'0':'')+mm; }
 function toMin(t){ if(!t)return null; var p=t.split(':'); return parseInt(p[0])*60+parseInt(p[1]); }
 function hToggle(){ document.getElementById('hUser').style.display=document.getElementById('hScope').value==='user'?'':'none'; }
 function scopeArgs(){ var s=document.getElementById('hScope').value; var u=document.getElementById('hUser').value; return {scope:s,user_id:s==='user'?u:null}; }
+
+var GRID={};          // dow -> [[ini,fin], …]  los tramos ABIERTOS
+var MEMORIA={};       // dow -> lo último que tuvo ese día antes de cerrarlo (para poder devolvérselo)
+var SUCIO=false;      // ¿hay cambios sin guardar?
+var SEL=new Set();    // los días elegidos en «Ponlo de una vez»
+var JORNADA='corrido';
+
+function marcaSucio(v){
+  SUCIO=v;
+  var el=document.getElementById('horSucio'); if(el){ if(v) el.removeAttribute('hidden'); else el.setAttribute('hidden',''); }
+}
+// Aviso al salir con cambios sin guardar. Un horario a medio poner que se pierde al cambiar de
+// pestaña es de las cosas que más rabia dan, y no cuesta nada evitarlo.
+window.addEventListener('beforeunload', function(e){ if(SUCIO){ e.preventDefault(); e.returnValue=''; } });
+
 async function hCargar(){
   var a=scopeArgs(); var q='/api/erp/citas/horario?scope='+a.scope+(a.user_id?'&user_id='+a.user_id:'');
-  var d=await api('GET',q); renderGrid(d.tramos); renderExc(d.excepciones);
+  var d=await api('GET',q);
+  GRID={}; MEMORIA={}; for(var i=0;i<7;i++) GRID[i]=[];
+  (d.tramos||[]).forEach(function(t){ GRID[t.dow].push([t.inicio_min,t.fin_min]); });
+  for(var k=0;k<7;k++) GRID[k].sort(function(x,y){ return x[0]-y[0]; });
+  marcaSucio(false); pintaDias(); pintaResumen(); renderExc(d.excepciones);
 }
-var GRID={};
-function renderGrid(tramos){
-  GRID={}; for(var i=0;i<7;i++) GRID[i]=[];
-  (tramos||[]).forEach(t=>GRID[t.dow].push([t.inicio_min,t.fin_min]));
-  var order=[1,2,3,4,5,6,0]; var h='';
-  order.forEach(function(dow){
-    h+='<div style="border-bottom:1px solid var(--border);padding:.5rem 0"><div style="display:flex;justify-content:space-between;align-items:center"><strong>'+DIAS[dow]+'</strong>'+(window.CITAS_EDIT?'<button class="btn btn-secondary btn-sm" onclick="addTramo('+dow+')">+ tramo</button>':'')+'</div><div id="dow'+dow+'" style="margin-top:.3rem"></div></div>';
+
+// ── EL RESUMEN, EN UNA FRASE ─────────────────────────────────────────────────────────────────────
+// Agrupa los días que tienen EXACTAMENTE el mismo horario y los nombra por su rango cuando son
+// seguidos («lunes a jueves»), que es como lo diría una persona. Sin esto la pantalla obligaba a
+// leer catorce campos de hora para saber algo que cabe en un renglón.
+function textoTramos(ts){ return ts.map(function(t){ return hcorta(t[0])+' a '+hcorta(t[1]); }).join(' y de '); }
+function nombraGrupo(dows){
+  var idx=dows.map(function(d){ return ORDEN.indexOf(d); }).sort(function(a,b){ return a-b; });
+  var seguidos = idx.every(function(v,i){ return i===0 || v===idx[i-1]+1; });
+  if(idx.length>=3 && seguidos) return DIAS[ORDEN[idx[0]]].toLowerCase()+' a '+DIAS[ORDEN[idx[idx.length-1]]].toLowerCase();
+  var n=idx.map(function(i){ return DIAS[ORDEN[i]].toLowerCase(); });
+  return n.length>1 ? n.slice(0,-1).join(', ')+' y '+n[n.length-1] : n[0];
+}
+function pintaResumen(){
+  var box=document.getElementById('horResumen'); if(!box) return;
+  var abiertos=ORDEN.filter(function(d){ return GRID[d] && GRID[d].length; });
+  if(!abiertos.length){
+    box.innerHTML='<b>Ahora mismo no abres ningún día.</b> <span class="cerrados">Mientras no pongas horario, la agenda da el día por abierto de 8:00 a 21:00 para que puedas trabajar igual.</span>';
+    return;
+  }
+  var grupos=[], visto={};
+  abiertos.forEach(function(d){
+    var clave=textoTramos(GRID[d]);
+    if(visto[clave]===undefined){ visto[clave]=grupos.length; grupos.push({clave:clave,dows:[d]}); }
+    else grupos[visto[clave]].dows.push(d);
+  });
+  var frases=grupos.map(function(g){ return '<b>'+esc(nombraGrupo(g.dows))+'</b> de '+esc(g.clave); });
+  var cerrados=ORDEN.filter(function(d){ return !GRID[d] || !GRID[d].length; });
+  var cola = cerrados.length ? ' <span class="cerrados">Cierras '+esc(nombraGrupo(cerrados))+'.</span>' : '';
+  box.innerHTML='Abres '+frases.join('; ')+'.'+cola;
+}
+
+// ── LA LISTA DE DÍAS ─────────────────────────────────────────────────────────────────────────────
+function pintaDias(){
+  var h='';
+  ORDEN.forEach(function(dow){
+    var ts=GRID[dow]||[], abierto=ts.length>0;
+    h+='<div class="hor-dia'+(abierto?'':' cerrado')+'" data-dow="'+dow+'">'
+      + (window.CITAS_EDIT
+          ? '<label class="sw"><input type="checkbox" '+(abierto?'checked':'')+' data-abre="'+dow+'" aria-label="Abrir el '+DIAS[dow]+'"><span></span></label>'
+          : '')
+      + '<div class="hor-dia-nombre">'+DIAS[dow]+'</div>'
+      + '<div class="hor-dia-cuerpo">'
+      + (abierto
+          ? ts.map(function(t,i){
+              return '<div class="hor-tramo">'
+                + '<input type="time" class="form-control" value="'+fhhmm(t[0])+'" '+(window.CITAS_EDIT?'':'disabled')+' data-h="'+dow+':'+i+':0">'
+                + '<span class="hor-guion">–</span>'
+                + '<input type="time" class="form-control" value="'+fhhmm(t[1])+'" '+(window.CITAS_EDIT?'':'disabled')+' data-h="'+dow+':'+i+':1">'
+                + (window.CITAS_EDIT && ts.length>1 ? '<button type="button" class="hor-quitar" data-quita="'+dow+':'+i+'" title="Quitar este tramo" aria-label="Quitar este tramo">✕</button>' : '')
+                + '</div>';
+            }).join('')
+          : '<div class="hor-cerrado-txt">Cerrado</div>')
+      + '</div>'
+      + (window.CITAS_EDIT && abierto
+          ? '<div class="hor-dia-acc">'
+            + '<button type="button" class="hor-mini" data-mas="'+dow+'">+ tramo</button>'
+            + '<button type="button" class="hor-mini" data-copia="'+dow+'">Copiar al resto</button>'
+            + '</div>'
+          : '')
+      + '</div>';
   });
   document.getElementById('hGrid').innerHTML=h;
-  order.forEach(function(dow){ GRID[dow].forEach(function(t,i){ pintaTramo(dow,i,t[0],t[1]); }); });
 }
-function pintaTramo(dow,i,ini,fin){
-  var c=document.getElementById('dow'+dow); var div=document.createElement('div'); div.style.cssText='display:flex;gap:.3rem;align-items:center;margin:.2rem 0';
-  div.innerHTML='<input type="time" class="form-control" style="width:auto" value="'+fhhmm(ini)+'" '+(window.CITAS_EDIT?'':'disabled')+' onchange="GRID['+dow+']['+i+'][0]=toMin(this.value)"> – <input type="time" class="form-control" style="width:auto" value="'+fhhmm(fin)+'" '+(window.CITAS_EDIT?'':'disabled')+' onchange="GRID['+dow+']['+i+'][1]=toMin(this.value)">'+(window.CITAS_EDIT?' <button class="btn btn-danger btn-sm" onclick="delTramo('+dow+','+i+')">✕</button>':'');
-  c.appendChild(div);
+
+// Un solo oyente para toda la lista: los botones nacen y mueren con cada repintado, y colgarles un
+// manejador a cada uno es la forma de que uno se quede sin él sin que nadie se entere.
+document.addEventListener('click', function(ev){
+  var t=ev.target.closest ? ev.target : null; if(!t) return;
+  var b;
+  if((b=t.closest('[data-mas]'))){ var d=+b.getAttribute('data-mas'); GRID[d].push([15*60,20*60]); tocado(); }
+  else if((b=t.closest('[data-quita]'))){ var q=b.getAttribute('data-quita').split(':'); GRID[+q[0]].splice(+q[1],1); tocado(); }
+  else if((b=t.closest('[data-copia]'))){ horCopiar(+b.getAttribute('data-copia')); }
+  else if((b=t.closest('[data-atajo]'))){ horAtajo(b.getAttribute('data-atajo')); }
+  else if((b=t.closest('[data-dia-sel]'))){ horPicaDia(+b.getAttribute('data-dia-sel')); }
+});
+document.addEventListener('change', function(ev){
+  var el=ev.target;
+  if(el.hasAttribute && el.hasAttribute('data-abre')) horAbreDia(+el.getAttribute('data-abre'), el.checked);
+  else if(el.hasAttribute && el.hasAttribute('data-h')){
+    var q=el.getAttribute('data-h').split(':');
+    GRID[+q[0]][+q[1]][+q[2]]=toMin(el.value);
+    marcaSucio(true); pintaResumen();
+  }
+});
+function tocado(){ marcaSucio(true); pintaDias(); pintaResumen(); }
+
+// Cerrar un día NO le borra las horas: se guardan y se le devuelven si lo vuelve a abrir. Un
+// interruptor que además borra lo que había castiga por probar.
+function horAbreDia(dow, abre){
+  if(abre) GRID[dow]=(MEMORIA[dow] && MEMORIA[dow].length) ? MEMORIA[dow].map(function(t){ return t.slice(); }) : [[9*60,14*60]];
+  else { if(GRID[dow].length) MEMORIA[dow]=GRID[dow].map(function(t){ return t.slice(); }); GRID[dow]=[]; }
+  tocado();
 }
-function addTramo(dow){ GRID[dow].push([9*60,14*60]); renderGridKeep(); }
-function delTramo(dow,i){ GRID[dow].splice(i,1); renderGridKeep(); }
-function renderGridKeep(){ var flat=[]; for(var d=0;d<7;d++) GRID[d].forEach(t=>flat.push({dow:d,inicio_min:t[0],fin_min:t[1]})); renderGrid(flat); }
+function horCopiar(dow){
+  var ts=GRID[dow]; if(!ts.length) return;
+  ORDEN.forEach(function(d){ if(d!==dow && GRID[d].length) GRID[d]=ts.map(function(t){ return t.slice(); }); });
+  tocado(); toast('Copiado a los demás días que abres');
+}
+
+// ── «PONLO DE UNA VEZ» ───────────────────────────────────────────────────────────────────────────
+function pintaDiasSel(){
+  var box=document.getElementById('horDiasSel'); if(!box) return;
+  box.innerHTML=ORDEN.map(function(d){
+    return '<button type="button" class="hor-dia-chip" data-dia-sel="'+d+'" aria-pressed="'+(SEL.has(d)?'true':'false')+'" aria-label="'+DIAS[d]+'">'+DIAS_CORTO[d]+'</button>';
+  }).join('');
+  pintaPrevia();
+}
+function horPicaDia(d){ if(SEL.has(d)) SEL.delete(d); else SEL.add(d); pintaDiasSel(); }
+function horAtajo(lista){ SEL=new Set(lista.split(',').map(Number)); pintaDiasSel(); }
+function horJornada(j){
+  JORNADA=j;
+  document.getElementById('hjCorrido').setAttribute('aria-selected', j==='corrido'?'true':'false');
+  document.getElementById('hjPartido').setAttribute('aria-selected', j==='partido'?'true':'false');
+  var p2=document.getElementById('hpPar2'); if(j==='partido') p2.removeAttribute('hidden'); else p2.setAttribute('hidden','');
+  document.getElementById('hpLbl1').textContent = j==='partido' ? 'Por la mañana' : 'Abro';
+  pintaPrevia();
+}
+function tramosDelFormulario(){
+  var a1=toMin(document.getElementById('hpA1').value), b1=toMin(document.getElementById('hpB1').value);
+  var out=[]; if(a1!=null&&b1!=null) out.push([a1,b1]);
+  if(JORNADA==='partido'){
+    var a2=toMin(document.getElementById('hpA2').value), b2=toMin(document.getElementById('hpB2').value);
+    if(a2!=null&&b2!=null) out.push([a2,b2]);
+  }
+  return out;
+}
+function pintaPrevia(){
+  var el=document.getElementById('horPrevia'); if(!el) return;
+  var ts=tramosDelFormulario();
+  if(!SEL.size){ el.textContent='Elige al menos un día.'; return; }
+  if(!ts.length){ el.textContent='Pon las horas.'; return; }
+  el.textContent='Quedará: '+nombraGrupo([...SEL])+' de '+textoTramos(ts)+'.';
+}
+function horAplica(){
+  var ts=tramosDelFormulario();
+  if(!SEL.size){ toast('Elige primero a qué días se lo aplicas','warn'); return; }
+  if(!ts.length){ toast('Faltan las horas','warn'); return; }
+  for(var i=0;i<ts.length;i++) if(ts[i][1]<=ts[i][0]){ toast('Un tramo termina antes de empezar','err'); return; }
+  if(ts.length===2 && ts[1][0]<ts[0][1]){ toast('La tarde empieza antes de que acabe la mañana','err'); return; }
+  SEL.forEach(function(d){ GRID[d]=ts.map(function(t){ return t.slice(); }); });
+  tocado();
+  toast('Aplicado a '+SEL.size+(SEL.size===1?' día':' días')+'. Repásalo y pulsa «Guardar horario».');
+}
+
 async function hGuardar(){
-  var a=scopeArgs(); var tramos=[];
-  for(var d=0;d<7;d++) GRID[d].forEach(function(t){ if(t[0]!=null&&t[1]!=null) tramos.push({dow:d,inicio_min:t[0],fin_min:t[1]}); });
-  try{ await api('POST','/api/erp/citas/horario',{scope:a.scope,user_id:a.user_id,tramos:tramos}); toast('Horario guardado'); }catch(e){ toast(e.message,'err'); }
+  var a=scopeArgs(), tramos=[];
+  for(var d=0;d<7;d++) (GRID[d]||[]).forEach(function(t){ if(t[0]!=null&&t[1]!=null) tramos.push({dow:d,inicio_min:t[0],fin_min:t[1]}); });
+  var malo=tramos.find(function(t){ return t.fin_min<=t.inicio_min; });
+  if(malo){ toast('El '+DIAS[malo.dow].toLowerCase()+' termina antes de empezar ('+hcorta(malo.inicio_min)+'–'+hcorta(malo.fin_min)+')','err'); return; }
+  try{ await api('POST','/api/erp/citas/horario',{scope:a.scope,user_id:a.user_id,tramos:tramos}); marcaSucio(false); toast('Horario guardado'); }
+  catch(e){ toast(e.message,'err'); }
 }
 function eToggle(){ document.getElementById('eHoras').style.display=document.getElementById('eTipo').value==='horario'?'':'none'; }
 async function eAdd(){
   var a=scopeArgs();
   var body={scope:a.scope,user_id:a.user_id,fecha:document.getElementById('eFecha').value,tipo:document.getElementById('eTipo').value,motivo:document.getElementById('eMotivo').value};
+  if(!body.fecha){ toast('Elige el día','warn'); return; }
   if(body.tipo==='horario'){ body.inicio_min=toMin(document.getElementById('eIni').value); body.fin_min=toMin(document.getElementById('eFin').value); }
-  try{ await api('POST','/api/erp/citas/excepcion',body); toast('Excepción añadida'); document.getElementById('eMotivo').value=''; hCargar(); }catch(e){ toast(e.message,'err'); }
+  try{ await api('POST','/api/erp/citas/excepcion',body); toast('Añadido'); document.getElementById('eMotivo').value=''; hCargar(); }catch(e){ toast(e.message,'err'); }
 }
 function renderExc(exc){
   var box=document.getElementById('excList');
-  if(!exc||!exc.length){ box.innerHTML='<div style="color:var(--muted)">Sin excepciones próximas.</div>'; return; }
-  box.innerHTML='<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Horario</th><th>Motivo</th><th></th></tr></thead><tbody>'
-    +exc.map(e=>'<tr><td>'+esc(e.fecha)+'</td><td>'+(e.tipo==='cerrado'?'Cerrado':'Horario especial')+'</td><td>'+(e.tipo==='horario'?fhhmm(e.inicio_min)+'–'+fhhmm(e.fin_min):'—')+'</td><td>'+esc(e.motivo||'')+'</td><td>'+(window.CITAS_EDIT?'<button class="btn btn-danger btn-sm" onclick="eDel('+e.id+')">✕</button>':'')+'</td></tr>').join('')+'</tbody></table></div>';
+  if(!exc||!exc.length){ box.innerHTML='<div style="color:var(--text3);font-size:.85rem">No tienes ningún día suelto apuntado.</div>'; return; }
+  box.innerHTML='<div class="table-wrap"><table><thead><tr><th>Día</th><th>Qué pasa</th><th>Horario</th><th>Motivo</th><th></th></tr></thead><tbody>'
+    +exc.map(e=>'<tr><td>'+esc(e.fecha)+'</td><td>'+(e.tipo==='cerrado'?'Cerrado todo el día':'Abre a otras horas')+'</td><td>'+(e.tipo==='horario'?hcorta(e.inicio_min)+'–'+hcorta(e.fin_min):'—')+'</td><td>'+esc(e.motivo||'')+'</td><td>'+(window.CITAS_EDIT?'<button class="hor-quitar" onclick="eDel('+e.id+')" title="Quitar" aria-label="Quitar">✕</button>':'')+'</td></tr>').join('')+'</tbody></table></div>';
 }
-async function eDel(id){ try{ await api('DELETE','/api/erp/citas/excepcion/'+id); toast('Eliminada'); hCargar(); }catch(e){ toast(e.message,'err'); } }
-hToggle(); hCargar();
+async function eDel(id){ try{ await api('DELETE','/api/erp/citas/excepcion/'+id); toast('Quitado'); hCargar(); }catch(e){ toast(e.message,'err'); } }
+['hpA1','hpB1','hpA2','hpB2'].forEach(function(id){ var el=document.getElementById(id); if(el) el.addEventListener('change', pintaPrevia); });
+hToggle(); pintaDiasSel(); hCargar();
 `;
 
 const JS_AJUSTES = String.raw`

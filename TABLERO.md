@@ -319,11 +319,12 @@ lo pida**. Ningún barrido corre solo — ni corto, ni completo, ni antes de un 
 | | |
 |---|---|
 | **Nombre** | `scripts/gate-citas-mes.mjs` |
-| **Aserciones** | **103** (0 fallos el 21 ago 2026; nació con 56 y creció con las correcciones sobre pantalla) |
-| **Duración** | **~40 s** |
+| **Alcance** | Ya no es solo la vista Mes: cubre **el módulo de citas por la cara del dueño** (Mes, la barra de la agenda, los permisos y la pantalla de horarios). El nombre se conserva porque es el que está declarado en el mapa; renombrarlo es otra tarea. |
+| **Aserciones** | **130** (0 fallos el 21 ago 2026; nació con 56 y creció con cada ronda de correcciones sobre pantalla) |
+| **Duración** | **~55 s** |
 | **Clase** | **propio** (`EMPIEZAN_DE_CERO`) — levanta **dos negocios suyos** con `provisionTenant` (uno de 1 persona, otro de 14) y los borra al salir. No toca el negocio compartido, así que **puede correr en paralelo**: no necesita ir solo. |
 | **Grupo** | `clientes` — el barrido pasa de **78 a 79** comprobaciones |
-| **Qué vigila además** | El rótulo del «Alto», la ventana de colores, el aire del pie y de las iniciales, el arrastre en Mes (ratón **y** dedo, comprobado en la BASE), el salto de fecha por meses y años, y el candado `citas.ver_todas` en las cuatro puertas. |
+| **Qué vigila además** | El rótulo del «Alto», la ventana de colores, el aire del pie y de las iniciales, el arrastre en Mes (ratón **y** dedo, comprobado en la BASE), el salto de fecha por meses y años, el candado `citas.ver_todas` en las cuatro puertas, y **la pantalla «Cuándo abro» entera** (atajos, interruptor por día, memoria de horas, copiar, el resumen en una frase y que aplicar no escriba en la base). |
 | **Contra** | `https://<slug>.bamburu.com` (la dirección pública, no `:3000`) |
 | **Depende del reloj** | **No.** La vista Mes no llama a `huecos()` (que descarta lo anterior a «ahora») sino a `tramosPersona`/`ocupacionPersona`, que no miran la hora. Da lo mismo a las 9:00 que a las 23:00. |
 | **Cuota de IA** | No la usa. |
@@ -453,6 +454,69 @@ vive el dato y de ahí lo leen la agenda y sus comprobaciones.
 - **Y una aserción mía estaba mal, no el producto:** esperaba 3 citas arrastrables en una casilla y
   hay 2, porque la tercera está **atendida** y una cita atendida no se mueve. Corregida, y la que no
   se puede coger tiene ahora su propia comprobación en vez de esconderse dentro de un número.
+
+---
+
+#### A-ter. «CUÁNDO ABRO», REHECHA · ✅ **HECHO (21 ago 2026)** · commit `PENDIENTE_HASH3`
+
+> Ibrahin, al llegar a la pantalla de horarios desde la vista Mes: *«aquí debes mejorar la visual,
+> está hecha de muy mala calidad, también agregar cosas automáticas como abrir de lunes a viernes y
+> no tener que marcar día a día, horario corrido, así como lo hace WhatsApp Business»*.
+
+**LO QUE HABÍA.** Siete bloques iguales con un par de campos de hora sueltos y un «+ tramo». Para
+decir «abro de lunes a viernes de 9 a 2» había que **repetir la misma operación cinco veces**. No
+había forma de **cerrar un día** sin borrarle los campos a mano, ni de saber **de un vistazo** qué
+horario tenía el negocio. Nada de eso era un fallo: era una pantalla **sin terminar**.
+
+**LO QUE HAY AHORA:**
+
+- **«PONLO DE UNA VEZ».** Atajos de un clic —**Lunes a viernes · Lunes a sábado · Todos los días ·
+  Sábado y domingo**—, los siete días como chips por si quieres una combinación tuya, **horario
+  corrido o mañana y tarde**, las horas UNA vez, y **«Aplicar a los días elegidos»**. Antes de
+  aplicar se lee lo que va a quedar. Es el patrón de WhatsApp Business y de cualquier ficha de
+  negocio (Google, Fresha).
+- **APLICAR NO ES GUARDAR**, y es deliberado: los atajos rellenan el formulario y ya está; lo que
+  escribe en la base sigue siendo el botón, y la pantalla **avisa mientras haya cambios sin
+  guardar** (y al salir). Un atajo que escribiera solo convertiría un clic de más en un horario
+  cambiado sin querer.
+- **UN INTERRUPTOR POR DÍA.** Cerrar un martes deja de ser «bórrale los campos» y pasa a ser un
+  clic. Y **cerrar no borra**: las horas se recuerdan y se le devuelven si lo vuelves a abrir —
+  un interruptor que además borra castiga por probar.
+- **«COPIAR AL RESTO»** en cada día. Lleva ese horario a los demás días **que abren**; no abre los
+  que estaban cerrados, porque copiar un horario no es abrir un día.
+- **EL RESUMEN EN UNA FRASE**, arriba del todo: *«Abres lunes a viernes de 9:00 a 14:00 y de 17:00 a
+  20:00. Cierras sábado y domingo.»* Agrupa los días con el mismo horario y los nombra por su rango
+  cuando son seguidos, como lo diría una persona. **Esto es lo que más faltaba**: la pantalla
+  enseñaba catorce campos de hora y en ninguna parte decía, en un renglón, qué horario tienes.
+- **LA VISUAL**, rehecha con los tokens del panel: tarjetas con cabecera, filas de día alineadas con
+  su nombre y sus tramos, un interruptor propio (**no había ninguno en todo el panel**), botones
+  pequeños con jerarquía, y las excepciones con nombres en cristiano («Cierro todo el día» / «Abro a
+  otras horas») en vez de «cerrado / horario».
+- **VALIDACIÓN EN PANTALLA:** un tramo que termina antes de empezar, o una tarde que empieza antes
+  de acabar la mañana, se dicen **antes** de mandar nada al servidor.
+
+**⚙️ UN DETALLE QUE SALIÓ AL MIRAR LA PANTALLA, NO DE UNA ASERCIÓN:** el control segmentado
+(«Horario corrido / Mañana y tarde») **se veía sin estilo**, como texto suelto con un borde raro. El
+CSS de `.segmented` vive en la hoja de la AGENDA, que esta pantalla no carga. Traído aquí, con las
+mismas reglas, para que un segmentado se vea igual en todo el panel.
+
+**VERIFICACIÓN — `gate-citas-mes` pasa de 103 a 130 aserciones, 0 fallos.** Bloque [27], con lo que
+importa comprobado **contra la base**: que aplicar no escribe, que guardar sí, que reabrir un día le
+devuelve sus horas, que copiar no abre días cerrados y que un tramo imposible no llega a la base.
+- **Reversión de cinco piezas, una a una:** sin atajos → 6 rojos · sin interruptor → 5 · sin el
+  resumen → 3 · sin «aplicar» → 4 · sin la memoria de horas → 2.
+- **Y DOS ASERCIONES MÍAS ESTABAN MAL, las dos verdes por el motivo equivocado:**
+  1. Comprobaba solo el PRIMER tramo del martes para decir que el tramo imposible no se guardó — y
+     ordenados por hora, un 23:00 habría quedado el SEGUNDO y habría pasado igual. Ahora se exige
+     que no esté en **ninguna** posición, y que ningún tramo de la base termine antes de empezar.
+  2. Miraba si el tramo de tarde tenía el atributo `hidden`, **no si se veía**. Y no se veía… se
+     VEÍA: `display:flex` le gana a `[hidden]`, que solo trae el `display:none` del navegador y con
+     menos peso. **Lo cazó una captura, no el gate.** Arreglados los dos: el CSS y la aserción, que
+     ahora mide la pantalla (`offsetParent`) y comprueba **las dos direcciones** del interruptor.
+- **Y una tercera vez el patrón de siempre:** al deshacer los atajos y el interruptor, el gate moría
+  con excepción al pulsar un botón que ya no existe. Esta vez no se parchea el sitio: nace el
+  ayudante **`clic(page, sel)`**, que devuelve `false` en vez de tumbar la pasada, y se usa en todos
+  los clics del gate.
 
 #### B. MIGRACIÓN ASISTIDA SIN ACCESO VISIBLE · **PENDIENTE**
 
