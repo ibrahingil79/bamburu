@@ -85,7 +85,7 @@
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-08-21 · `b1b8eae` · **66/82** · 509 s
+- **Último barrido completo:** 2026-08-21 · `102c47c` · **74/82** · 548 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -661,6 +661,72 @@ del primero.
 >   habría dejado de despertar a `margen` y `clientes`. Es exactamente la trampa de C-0.
 > - **`routes/products.js` se deja SIN regla a propósito:** hoy cae en el comodín final y corre todo.
 >   Escribirle `['impresion']` sería cambiar «todo» por «uno»: menos cobertura disfrazada de más.
+
+---
+
+#### 🔧 SANEADO DE LOS ROJOS DEL BARRIDO (21–22 ago 2026) — **de 60/82 a 81/82**
+
+> Encargo de Ibrahin: «soluciona los problemas que encontraste». Se atacaron **los 16 rojos** del
+> barrido, uno a uno, midiendo cada uno antes de tocarlo. **17 gates arreglados y TRES fallos de
+> producto**, dos de ellos con una pantalla muerta que nadie había notado.
+
+**🔴 LOS TRES FALLOS DE PRODUCTO — pantallas que no funcionaban**
+
+1. **La pantalla «Registrar recepción» estaba MUERTA** (`purchase-orders.js`, commit `c516948`). El JS
+   del navegador de esa pantalla parte los números de serie por saltos de línea. Está escrito dentro
+   de una plantilla del servidor, y la plantilla **se comía una capa de escape**: la cadena quedaba
+   partida, el bloque entero era un error de sintaxis y **ninguna de sus funciones existía**.
+   Confirmar una recepción no hacía nada. Sin error a la vista, sin aviso.
+2. **La pantalla de facturas moría al cargar** (`invoices.js`, commit `b1b8eae`) — misma clase de
+   fallo, encontrada horas antes.
+3. **El zoom S/M/L se enseñaba en la vista Mes** (`citas.js`, commit `cbae0d9`), donde no hace nada.
+   Es justo lo que preguntó Ibrahin al ver la barra.
+
+> **LA CLASE DE FALLO MÁS CARA DE ESTE REPO, y hoy costó dos pantallas.** Cuando dentro de una
+> plantilla del servidor se escribe una cadena de JS **del navegador**, la plantilla se come una capa
+> de escape y la cadena se parte. El bloque deja de ejecutarse entero: los botones no responden y no
+> hay ni un error visible. **Volví a caer en ella dentro del comentario que la explicaba.**
+> Se probó ampliar `lint-plantillas.mjs` para cazarla en el fuente y **se descartó tras medirlo**:
+> dentro de una plantilla las comillas suelen ser atributos HTML y no cadenas JS, así que la
+> heurística daba falsos positivos, y un lint que grita en falso se acaba ignorando. **La defensa
+> buena es medir la pantalla, no adivinar el fuente**: `gate-recepciones-c1b` engancha ahora los
+> errores de JS y los DICE. Queda pendiente extenderlo a las demás pantallas que cuelgan de un
+> documento y que hoy no vigila nadie (`gate-menu-navegacion` solo recorre las del menú).
+
+**🟠 LO QUE DE VERDAD PASABA EN LOS OTROS 14: NINGUNO ERA DEL PRODUCTO**
+
+- **Precondiciones ajenas que el reseed se llevó por delante.** `seed-taller.mjs` archiva **todos**
+  los proveedores y productos genéricos al resembrar el negocio. Con ellos se fueron «Aromas del Sur
+  SL» —del que dependen **diez gates** que no lo crean— y las «Vela …», que buscaban tres más.
+  Arreglo aplicado donde era barato (que el gate **se traiga lo suyo**) y, donde no, reactivando el
+  dato. **El arreglo de raíz sigue pendiente para el resto: cada gate con su proveedor y su producto.**
+- **Gates que medían la HORA DEL DÍA, no el producto.** Cinco: sembraban citas a horas fijas, pedían
+  huecos para hoy con el negocio ya cerrado, o exigían que la línea de «ahora» quedara a un tercio
+  del alto cuando ya no queda día que desplazar. **Verdes por la mañana y rojos por la tarde.**
+- **Gates que medían el TENANT ENTERO** (todos los movimientos de stock, todos los almacenes) en un
+  barrido donde corren veinte a la vez: fallaban con rojos **ajenos**.
+- **Gates caducados por cambios deliberados del producto**: la leyenda de la agenda pasó a ser una
+  ventana y el chat de DISA **se fue del Inicio a propósito** (está escrito en el propio código). Los
+  pasos que medían esas superficies **se retiran con su motivo**, no se apuntan a otra pantalla para
+  salvarlos.
+- **Un catálogo que creció**: `verify-plantillas-email` exigía 8 tipos de correo y el producto va por
+  10 desde que entraron las citas y el resumen de avisos. Ahora se declara **por nombre**, para que
+  añadir uno obligue a decidir a qué familia va.
+
+**⚠️ LO QUE QUEDA, DICHO CON DATOS Y NO CON UNA IMPRESIÓN**
+
+> **EL BARRIDO DA 81/82 DE DÍA Y 74/82 DE MADRUGADA.** Medido la misma noche, con el mismo código:
+> 81/82 a las 17:00 · 81/82 a las 22:00 · **74/82 a la 01:00**. Y los nombres **cambian en cada
+> pasada**: `gate-cliente-360`, `gate-citas-pantalla`, `gate-cola-envios`, `gate-vigia-agenda`,
+> `gate-propuestas-pagos-permisos`, `verify-wal-acotado`… No es azar y no es el producto: es que
+> **una familia entera de gates está escrita dando por hecho que se ejecuta de día y a solas**.
+>
+> **NO SE SIGUIÓ ARREGLANDO UNO A UNO A PROPÓSITO.** Cada pasada destapa una combinación distinta de
+> la misma causa, así que perseguirlos de noche es una carrera sin final y sin aprendizaje nuevo.
+> **El arreglo de raíz es de encargo propio y tiene dos patas, las dos ya probadas hoy en pequeño:**
+> **(a)** la fecha y la hora se toman SIEMPRE de `ahoraLocal()` —la del negocio—, nunca del proceso,
+> que va en UTC y a partir de las 22:00 está **en otro día**; **(b)** un gate no mide nunca totales
+> del negocio ni siembra en «hoy»: mide lo suyo y siembra en un día que ha comprobado libre.
 
 ---
 
