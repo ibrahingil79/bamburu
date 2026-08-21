@@ -89,9 +89,22 @@ try {
      'nace VACÍA: la de fábrica vive en el código, aquí solo se guardan las ediciones');
 
   const tipos = Object.keys(CATALOGO);
-  ok(tipos.length === 8, 'el catálogo tiene los 8 tipos de email que este sistema puede enviar (' + tipos.length + ')');
+  // EL CATÁLOGO SE DECLARA POR NOMBRE, NO POR NÚMERO. Estaba clavado en 8 y el producto ya iba por
+  // 10: el sistema de citas trajo `confirmacion_cita` y `recordatorio_cita`, y los avisos
+  // `resumen_avisos`. Crecimiento legítimo, comprobación caducada. Con la lista escrita, añadir un
+  // tipo obliga a pasar por aquí y decidir a qué familia va — que es justo lo que hay que decidir.
+  const TIPOS_ESPERADOS = ['cobro_factura', 'cobro_cuenta', 'comercial', 'presupuesto', 'orden_compra',
+                           'recuperar_password', 'portal_cliente', 'confirmacion_cita', 'recordatorio_cita', 'resumen_avisos'];
+  const faltan = TIPOS_ESPERADOS.filter(t => !tipos.includes(t));
+  const sobran = tipos.filter(t => !TIPOS_ESPERADOS.includes(t));
+  ok(!faltan.length && !sobran.length,
+     'el catálogo tiene exactamente los tipos de email declarados (' + tipos.length + ')',
+     faltan.length ? 'faltan: ' + faltan.join(', ') : (sobran.length ? 'sin declarar: ' + sobran.join(', ') : 'los ' + tipos.length));
+  // Los de SISTEMA son los que el negocio NO elige mandar: salen solos. Son cinco desde que las
+  // citas y el resumen de avisos entraron en el catálogo.
+  const SISTEMA_ESPERADO = ['recuperar_password', 'portal_cliente', 'confirmacion_cita', 'recordatorio_cita', 'resumen_avisos'];
   const sistema = tipos.filter(t => CATALOGO[t].familia === FAMILIA_SISTEMA);
-  ok(sistema.length === 3 && sistema.includes('recuperar_password') && sistema.includes('portal_cliente'),
+  ok(sistema.length === SISTEMA_ESPERADO.length && SISTEMA_ESPERADO.every(t => sistema.includes(t)),
      'los de SISTEMA están identificados: ' + sistema.join(', '));
 
   // Toda plantilla de fábrica debe renderizar sin dejar huecos sin rellenar, y pasar SU PROPIA revisión.
@@ -105,7 +118,8 @@ try {
       renderizadas++;
     }
   }
-  ok(renderizadas === 18, 'las 18 plantillas de fábrica renderizan y pasan su propia red de seguridad');
+  // 20 = tipos × tonos. Sube cuando entra un tipo nuevo; el recuento se dice, no se adivina.
+  ok(renderizadas === 20, 'las plantillas de fábrica renderizan y pasan su propia red de seguridad', renderizadas + ' plantillas');
 
   // ── 2. LA PRUEBA DE VERDAD: lo guardado es lo que se envía ───────────────────
   console.log('\n[2] Lo guardado es lo que se envía (no el código)');

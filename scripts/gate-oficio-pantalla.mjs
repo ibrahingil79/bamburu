@@ -117,20 +117,43 @@ try {
     'la única persona queda preseleccionada: la cita se le asigna sola');
 
   // Y se puede crear la cita de verdad con esos tres campos.
-  const creada = await p.evaluate(async (svc) => {
+  // EL DÍA TIENE QUE SER UNO EN QUE EL NEGOCIO ABRA DE VERDAD. El formulario arranca en HOY, y si
+  // el gate corre con el negocio ya cerrado no queda un solo hueco: fallaba con «sin huecos» **sin
+  // que el producto tuviera nada mal**. Y «mañana» tampoco sirve: la primera versión de este arreglo
+  // cayó en sábado, que este negocio no abre. Se lee el horario y se coge el primer día abierto.
+  const dowsAbiertos = new Set(db.prepare("SELECT DISTINCT dow FROM horario_tramos WHERE scope='negocio'").all().map(r => r.dow));
+  let DIA_CITA = null;
+  for (let d = 1; d <= 14 && !DIA_CITA; d++) {
+    const f = new Date(Date.now() + d * 86400000);
+    if (dowsAbiertos.has(f.getUTCDay())) DIA_CITA = f.toISOString().slice(0, 10);
+  }
+  ok(!!DIA_CITA, 'hay un día abierto por delante donde pedir la cita', DIA_CITA || 'el negocio no abre ningún día');
+
+  const creada = await p.evaluate(async (svc, dia) => {
     document.getElementById('cBusca').value = 'GOF Cliente';
     document.getElementById('cNuevoNombre').textContent = 'GOF Cliente';
     cUsarNuevo();
+    // LA CITA SE PIDE PARA MAÑANA, NO PARA HOY. El formulario arranca en el día de hoy, y si el
+    // gate corre cuando el negocio ya ha cerrado no queda ni un hueco libre: el selector se quedaba
+    // vacío y esto fallaba con «sin huecos», **sin que el producto tuviera nada mal**. Se descubrió
+    // corriéndolo a las 19:43. Mañana siempre hay día entero por delante.
     const cb = document.querySelector('.csvc[value="' + svc + '"]'); cb.checked = true; await cServChange();
+    // Y HAY QUE DISPARAR EL RECÁLCULO A MANO: asignar el valor desde JS **no** lanza el `onchange`
+    // del campo, así que poner la fecha sin más no bastaba: los huecos seguían siendo los de hoy.
+    const fecha = document.getElementById('cFecha');
+    if (fecha) { fecha.value = dia; await cRecalc(); }
+    await new Promise(r => setTimeout(r, 500));
     await new Promise(r => setTimeout(r, 700));
     const sel = document.getElementById('cHueco');
     const opt = [...sel.options].find(o => o.value !== '');
-    if (!opt) return { ok: false, motivo: 'sin huecos' };
+    if (!opt) return { ok: false, motivo: 'sin huecos · fecha=' + (fecha ? fecha.value : '?')
+      + ' · opciones=' + sel.options.length + ' [' + [...sel.options].map(o => o.value + '|' + o.textContent).slice(0,3).join(' , ') + ']'
+      + ' · servicio marcado=' + !!document.querySelector('.csvc:checked') };
     sel.value = opt.value; await cSugerir();
     await cGuardar();
     await new Promise(r => setTimeout(r, 800));
     return { ok: !document.getElementById('mCita').classList.contains('open') };
-  }, SVC);
+  }, SVC, DIA_CITA);
   ok(creada.ok, 'se crea la cita con solo esos tres campos' + (creada.motivo ? ' (' + creada.motivo + ')' : ''));
   const citaNueva = db.prepare("SELECT id,user_id FROM citas WHERE cliente_suelto_nombre='GOF Cliente' ORDER BY id DESC LIMIT 1").get();
   ok(citaNueva != null && String(citaNueva.user_id) === String(asignada), 'y queda guardada a nombre de esa persona');

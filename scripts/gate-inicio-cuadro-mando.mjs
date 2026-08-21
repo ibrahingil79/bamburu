@@ -133,12 +133,29 @@ try {
 
   // Horario del negocio: todos los días de 9 a 18. Sin esto el motor abre de 8 a 21 «por defecto» y
   // las horas libres no significarían nada — y el bloque lo diría, que es otra prueba.
+  // LAS HORAS SE SIEMBRAN RELATIVAS A AHORA, NO CLAVADAS. Con las citas fijas a las 10:00 y las
+  // 16:00 este gate era **verde por la mañana y rojo por la tarde**: pasadas las 16:45 ya no quedaba
+  // ninguna cita por delante, el panel pintaba —correctamente— «Ya no te queda ninguna cita por
+  // delante hoy» y la comprobación de «la próxima cita va destacada» fallaba **sin que el producto
+  // tuviera nada mal**. Se descubrió corriéndolo a las 19:43.
+  // LA HORA, EN LA ZONA DEL NEGOCIO Y NO EN LA DEL PROCESO. El panel calcula la próxima cita con
+  // `ahoraLocal()`, y este servidor va en UTC mientras el negocio está en horario peninsular: con la
+  // hora del proceso me quedaba DOS HORAS corto y la cita «futura» ya había pasado para el panel.
+  // Se usa la MISMA función que el producto, que es la única manera de que no vuelva a desfasarse.
+  const { ahoraLocal } = await import('../modules/erp/citas-engine.js');
+  const ahoraMin = ahoraLocal().min;
+  const tPasada  = Math.max(30, Math.min(ahoraMin - 90, 22 * 60));            // una que ya ocurrió
+  const tProxima = Math.min(Math.max(ahoraMin + 45, tPasada + 60), 23 * 60);  // y otra por delante
+  // El horario del negocio se abre lo justo para contener las dos; 13:00–14:00 (la comida) queda
+  // dentro siempre, porque el tramo nunca se estrecha respecto al 9:00–18:00 de antes.
+  const hIni = Math.min(9 * 60, tPasada - 60);
+  const hFin = Math.max(18 * 60, tProxima + 60);
   for (let dow = 0; dow < 7; dow++)
-    P.db.prepare("INSERT INTO horario_tramos (scope,user_id,dow,inicio_min,fin_min) VALUES ('negocio',NULL,?,?,?)").run(dow, 9 * 60, 18 * 60);
+    P.db.prepare("INSERT INTO horario_tramos (scope,user_id,dow,inicio_min,fin_min) VALUES ('negocio',NULL,?,?,?)").run(dow, hIni, hFin);
   const insCita = P.db.prepare(
     "INSERT INTO citas (codigo, cliente_id, user_id, fecha, inicio_min, dur_min, margen_min, estado, archived, created_at) VALUES (?,?,?,?,?,?,0,?,0,datetime('now'))");
-  insCita.run('C1-' + RID, cAna, P.owner.id, HOY, 10 * 60, 60, 'confirmada');
-  insCita.run('C2-' + RID, cLuis, P.owner.id, HOY, 16 * 60, 45, 'confirmada');
+  insCita.run('C1-' + RID, cAna, P.owner.id, HOY, tPasada, 60, 'confirmada');
+  insCita.run('C2-' + RID, cLuis, P.owner.id, HOY, tProxima, 45, 'confirmada');
   P.db.prepare("INSERT INTO agenda_bloqueos (user_id, fecha, inicio_min, fin_min, motivo) VALUES (?,?,?,?,?)")
     .run(P.owner.id, HOY, 13 * 60, 14 * 60, 'Comida');
   // Una oportunidad abierta, por su servicio real.
