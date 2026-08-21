@@ -121,13 +121,20 @@ try {
   // el gate corre con el negocio ya cerrado no queda un solo hueco: fallaba con «sin huecos» **sin
   // que el producto tuviera nada mal**. Y «mañana» tampoco sirve: la primera versión de este arreglo
   // cayó en sábado, que este negocio no abre. Se lee el horario y se coge el primer día abierto.
+  // ABIERTO **Y LIBRE**, y no solo abierto. La primera versión cogía el primer día abierto y se lo
+  // encontraba lleno: en el barrido corren veinte gates a la vez sobre el mismo negocio y varios
+  // siembran citas, así que el hueco desaparecía y esto fallaba con «sin huecos» — un rojo ajeno que
+  // aparecía y desaparecía entre pasadas. Se busca uno abierto y sin una sola cita, y se empieza a
+  // mirar a DOS SEMANAS vista, lejos de donde siembran los demás.
   const dowsAbiertos = new Set(db.prepare("SELECT DISTINCT dow FROM horario_tramos WHERE scope='negocio'").all().map(r => r.dow));
+  const hayCitas = db.prepare('SELECT 1 FROM citas WHERE fecha=? LIMIT 1');
   let DIA_CITA = null;
-  for (let d = 1; d <= 14 && !DIA_CITA; d++) {
+  for (let d = 14; d <= 60 && !DIA_CITA; d++) {
     const f = new Date(Date.now() + d * 86400000);
-    if (dowsAbiertos.has(f.getUTCDay())) DIA_CITA = f.toISOString().slice(0, 10);
+    const iso = f.toISOString().slice(0, 10);
+    if (dowsAbiertos.has(f.getUTCDay()) && !hayCitas.get(iso)) DIA_CITA = iso;
   }
-  ok(!!DIA_CITA, 'hay un día abierto por delante donde pedir la cita', DIA_CITA || 'el negocio no abre ningún día');
+  ok(!!DIA_CITA, 'hay un día abierto Y libre por delante donde pedir la cita', DIA_CITA || 'ninguno en 60 días');
 
   const creada = await p.evaluate(async (svc, dia) => {
     document.getElementById('cBusca').value = 'GOF Cliente';

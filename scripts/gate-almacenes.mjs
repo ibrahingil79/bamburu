@@ -19,14 +19,17 @@
 //      que romper un dato bueno.
 import puppeteer from 'puppeteer';
 import { tenantDb, launchOpts } from './lib/gate-env.mjs';
-import { purgarArtefactos, cuadraLibro, RID } from './lib/gate-fixtures.mjs';
+import { purgarArtefactos, cuadraLibro, RID, productoDePrueba } from './lib/gate-fixtures.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 import { recordMovement } from '../modules/erp/stock.js';
 
 const DB_PATH = tenantDb('desarrollo-bamburu');
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
-const PRODUCT_ID = 1;            // Vela Lavanda 200g (física)
+// EL GATE SE TRAE SU PRODUCTO. Antes medía el stock del producto 1 del negocio, que es de todos: en
+// el barrido corren veinte gates a la vez y cualquiera que lo mueva tumbaba la comprobación final
+// («stock vuelve a 47, got 53») con un rojo AJENO. Con producto propio, el antes y el después son
+// suyos y nadie más los toca.
 // El "(gate)" es la marca que limpiar-residuo-gates.mjs reconoce si el gate muere antes de limpiar;
 // el sufijo aleatorio es lo que impide que una pasada se enganche a la anterior.
 const NORTE = 'Almacén Norte (gate ' + RID() + ')';
@@ -40,6 +43,14 @@ const csrf = randomBytes(32).toString('base64url');
 const now = Math.floor(Date.now() / 1000);
 db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)').run(token, 2, now, now + 900, csrf);
 const W1 = db.prepare('SELECT id FROM warehouses WHERE is_default=1').get().id;
+const PROD = productoDePrueba(db, 'Vela Almacenes');
+const PRODUCT_ID = PROD.id;
+// EL PRODUCTO NACE A CERO Y AQUÍ HACE FALTA QUE TENGA ALGO EN EL PRINCIPAL: sin eso, «Todos» y
+// «Norte» darían el mismo número y la comprobación de que el filtro suma de verdad no distinguiría
+// nada — daría verde sin demostrar nada, que es peor que fallar.
+const principalId = db.prepare('SELECT id FROM warehouses WHERE active=1 AND is_default=1 LIMIT 1').get()?.id || null;
+recordMovement(db, { product_id: PRODUCT_ID, type: 'entrada', quantity: 10, warehouse_id: principalId,
+                     origin_type: 'manual', note: 'gate almacenes: stock de partida en el principal' });
 const stockBefore = db.prepare('SELECT stock FROM products WHERE id=?').get(PRODUCT_ID).stock;
 
 const dbRead = () => new Database(DB_PATH, { readonly: true });
@@ -112,27 +123,27 @@ try {
   // Filtra por Norte: el producto debe mostrar 6 (lo inyectado en Norte), no su total global.
   await page.select('#whFilter', String(norteId));
   await page.waitForFunction(() => true); await sleep(500);
-  const norteQty = await page.evaluate(() => {
+  const norteQty = await page.evaluate((nombre) => {
     const rows = Array.from(document.querySelectorAll('#invBody tr'));
-    for (const tr of rows) { const t = tr.textContent; if (t.includes('Vela Lavanda')) return tr.querySelectorAll('td')[3].textContent.trim(); }
+    for (const tr of rows) { const t = tr.textContent; if (t.includes(nombre)) return tr.querySelectorAll('td')[3].textContent.trim(); }
     return null;
-  });
-  ok(norteQty === '6', 'con Norte seleccionado, Vela Lavanda muestra 6 (stock de ESE almacén), got ' + norteQty);
+  }, PROD.name);
+  ok(norteQty === '6', 'con Norte seleccionado, el producto muestra 6 (stock de ESE almacén), got ' + norteQty);
   await page.screenshot({ path: '/tmp/wh-3-filtro-norte.png' });
 
   // Vuelve a "Todos": muestra el total global (≠ 6, incluye el principal).
   await page.select('#whFilter', '');
   await sleep(400);
-  const totalQty = await page.evaluate(() => {
+  const totalQty = await page.evaluate((nombre) => {
     const rows = Array.from(document.querySelectorAll('#invBody tr'));
-    for (const tr of rows) { if (tr.textContent.includes('Vela Lavanda')) return tr.querySelectorAll('td')[3].textContent.trim(); }
+    for (const tr of rows) { if (tr.textContent.includes(nombre)) return tr.querySelectorAll('td')[3].textContent.trim(); }
     return null;
-  });
+  }, PROD.name);
   ok(totalQty !== '6' && Number(totalQty) === stockBefore + 6,
      'con "Todos" muestra el total global (' + totalQty + ' = ' + stockBefore + ' del principal + 6 de Norte)');
 
   // Ficha (kardex modal): desglose "Stock por almacén" con los 2 almacenes.
-  await page.evaluate((pid) => openStockKardex(pid, 'Vela Lavanda 200g'), PRODUCT_ID);
+  await page.evaluate((pid, nombre) => openStockKardex(pid, nombre), PRODUCT_ID, PROD.name);
   await page.waitForFunction(() => { const b = document.getElementById('stockKardexBody'); return b && b.innerHTML.includes('Stock por almacén'); }, { timeout: 8000 });
   const fichaTxt = await page.$eval('#stockKardexBody', el => el.textContent);
   ok(fichaTxt.includes('Stock por almacén'), 'ficha: bloque "Stock por almacén" presente');
@@ -145,12 +156,16 @@ try {
   // ── Limpieza: borrar el movimiento inyectado Y el almacén de prueba (no archivarlo: archivarlo es
   //    lo que hizo que se acumularan y que la pasada siguiente se enganchara al rancio). ──
   const db2 = new Database(DB_PATH);
-  const tocadas = purgarArtefactos(db2, { almacenes: norteId ? [norteId] : [] });
+  const tocadas = purgarArtefactos(db2, { almacenes: norteId ? [norteId] : [], productos: [PRODUCT_ID] });
   console.log('  (limpieza: ' + tocadas.movimientos + ' movimiento(s), ' + tocadas.almacenes + ' almacén)');
 
-  const after = db2.prepare('SELECT stock FROM products WHERE id=?').get(PRODUCT_ID).stock;
-  ok(after === stockBefore, `el tenant queda como estaba: stock vuelve a ${stockBefore} (got ${after})`);
-  ok(cuadraLibro(db2, [PRODUCT_ID]), 'caché == libro tras retirar el dato de prueba');
+  // El producto era SUYO y la limpieza se lo lleva: que no quede ni él ni sus movimientos es
+  // exactamente lo que esta comprobación quería decir, y ahora nadie más puede alterarla.
+  const quedaProd = db2.prepare('SELECT COUNT(*) c FROM products WHERE id=?').get(PRODUCT_ID).c;
+  const quedanMovs = db2.prepare('SELECT COUNT(*) c FROM stock_movements WHERE product_id=?').get(PRODUCT_ID).c;
+  ok(quedaProd === 0 && quedanMovs === 0,
+     'el tenant queda como estaba: ni el producto de prueba ni sus movimientos', quedaProd + ' producto, ' + quedanMovs + ' movimientos');
+  ok(quedaProd === 0 || cuadraLibro(db2, [PRODUCT_ID]), 'caché == libro tras retirar el dato de prueba');
   ok(!whRow(NORTE), 'el almacén de prueba ya NO existe (borrado, no archivado: no se acumula)');
   // ESTO CONTABA TODOS LOS ALMACENES DEL NEGOCIO Y POR ESO ERA INESTABLE: en el barrido corren en
   // paralelo otros gates que también crean almacenes (traslados, trazabilidad), así que el total no
