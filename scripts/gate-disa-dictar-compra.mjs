@@ -94,19 +94,15 @@ try {
       .catch(() => ok(false, 'WIDGET: NO navegó (bug)'));
     await page.close();
   }
-  // (b) DASHBOARD (#dh-input / disaSubmitHome)
-  {
-    const page = await newAdminPage();
-    await page.goto(BASE + '/admin', { waitUntil: 'networkidle0' });
-    await page.waitForSelector('#dh-input', { timeout: 10000 });
-    await mockDisaReply(page, navUrl);
-    await page.type('#dh-input', 'apunta una compra a Aromas del Sur SL: 3 velas vainilla a 4');
-    await page.evaluate(() => window.disaSubmitHome && window.disaSubmitHome());
-    await page.waitForFunction(() => location.pathname === '/admin/purchases/capture', { timeout: 8000 })
-      .then(() => ok(true, 'DASHBOARD: el chat de texto auto-navega a la pantalla de captura'))
-      .catch(() => ok(false, 'DASHBOARD: NO navegó (bug)'));
-    await page.close();
-  }
+  // (b) DASHBOARD — RETIRADO, y no por comodidad: ESA SUPERFICIE YA NO EXISTE, a propósito.
+  // El chat de DISA se fue del Inicio en el rediseño de la portada, y está dicho por escrito en el
+  // propio producto (`modules/erp/views/disaHome.html.js`: «EL CHAT DE DISA SE VA DEL INICIO, Y SOLO
+  // DEL INICIO. DISA sigue estando entera: en su pantalla (/admin/disa) y en la entrada del menú»).
+  // El gate seguía escribiendo en `#dh-input`, que ya no se pinta en ninguna parte, y moría con un
+  // timeout de 10 s — un rojo permanente que parecía del producto y era de una pantalla jubilada.
+  // NO se apunta a otra pantalla para salvar el paso: lo que medía era el dictado DESDE la portada,
+  // y eso es justo lo que se decidió quitar. El dictado desde la pantalla de DISA lo cubre el
+  // apartado (c), que sigue vivo aquí abajo con `#msgInput`.
   // (c) ASISTENTE IA (#msgInput / disaSend)
   {
     const page = await newAdminPage();

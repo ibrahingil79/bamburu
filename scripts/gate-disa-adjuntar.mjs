@@ -76,13 +76,17 @@ try {
   ok(attId > 0, 'adjunto sembrado como lo deja DISA al leer una factura (id ' + attId + ')');
 
   // ── 1. SUPERFICIES: las tres entradas de DISA tienen su botón de adjuntar ──
-  console.log('\nSUPERFICIES · botón de adjuntar en widget, pantalla principal y Asistente IA');
+  console.log('\nSUPERFICIES · botón de adjuntar en el widget flotante y en el Asistente IA');
   await page.goto(BASE + '/admin/inventory', { waitUntil: 'networkidle0' });
   ok(await page.$('#dpFile') !== null, 'widget flotante: input de adjuntar presente');
   ok(await page.evaluate(() => typeof window.disaOpen === 'function'), 'widget flotante: se puede abrir (disaOpen)');
 
-  await page.goto(BASE + '/admin', { waitUntil: 'networkidle0' });
-  ok(await page.$('#dh-file') !== null && await page.$('#dh-attach') !== null, 'pantalla principal: botón de adjuntar presente');
+  // LA PORTADA YA NO ES UNA SUPERFICIE DE DISA, y eso fue una decisión, no una regresión: el chat se
+  // fue del Inicio en el rediseño de la portada y está dicho por escrito en el producto
+  // (`disaHome.html.js`: «EL CHAT DE DISA SE VA DEL INICIO, Y SOLO DEL INICIO»). Con él se fue su
+  // botón de adjuntar. Este gate seguía exigiéndolo ahí y cantaba un fallo permanente.
+  // Quedan DOS superficies, no tres, y son las que se comprueban: el widget flotante y la pantalla
+  // de DISA. Lo que sí se comprueba de la portada es que no se haya quedado media cosa colgando.
 
   await page.goto(BASE + '/admin/disa', { waitUntil: 'networkidle0' });
   ok(await page.$('#disaFilePage') !== null, 'Asistente IA: botón de adjuntar presente');
