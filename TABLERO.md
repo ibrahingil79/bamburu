@@ -85,7 +85,7 @@
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-08-22 · `e1f23b1` · **84/84** · 1015 s
+- **Último barrido completo:** 2026-08-22 · `c3302f5` · **84/84** · 592 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -548,9 +548,9 @@ devuelve sus horas, que copiar no abre días cerrados y que un tramo imposible n
 
 ## GRUPO 2 — FUNCIONES NUEVAS (solo codigo, sin dependencias externas)
 
-#### C. IMPRESIÓN Y DESCARGA EN PDF DE LISTADOS Y DOCUMENTOS · 🟡 **EN CURSO — 4 de 12** (12 subpuntos: los 11 del registro + C10-f)
+#### C. IMPRESIÓN Y DESCARGA EN PDF DE LISTADOS Y DOCUMENTOS · 🟡 **EN CURSO — 8 de 12** (12 subpuntos: los 11 del registro + C10-f)
 
-> **HECHOS (tanda 1, 21 ago 2026): C1 · C4 · C5 · C7.** 
+> **HECHOS (tanda 1, 21 ago): C1 · C4 · C5 · C7.** · **HECHOS (22 ago, commits `575e333` + `c3302f5`): C2 catálogo · C3 kardex · C6 compras · C8 gastos.** 
 > **SIGUEN PENDIENTES, y son cinco:** **C2** (catálogo para enviar al cliente), **C3** (kardex), **C6** (listado de compras), **C8** (listado de gastos) y **C10-e** (absorber los cuatro informes contables, que hoy siguen descargando PDF con su HTML a mano). **C9, C10, C10-f y C11** están servidos por el motor pero **no se marcan hechos**: C9 dice «en TODOS» y van cuatro de ocho.
 
 > **C. IMPRESION Y DESCARGA EN PDF DE LISTADOS Y DOCUMENTOS.**
@@ -661,6 +661,78 @@ del primero.
 >   habría dejado de despertar a `margen` y `clientes`. Es exactamente la trampa de C-0.
 > - **`routes/products.js` se deja SIN regla a propósito:** hoy cae en el comodín final y corre todo.
 >   Escribirle `['impresion']` sería cambiar «todo» por «uno»: menos cobertura disfrazada de más.
+
+---
+
+#### C · CUATRO LISTADOS MÁS Y EL MOTOR AMPLIADO · ✅ **HECHO (22 ago 2026)** · commits `575e333` + `c3302f5`
+
+> **C2** Catálogo para enviar al cliente. **C3** Kardex. **C6** Compras. **C8** Gastos.
+> Los tres verbos en los cuatro, con la misma consulta que su pantalla. **C va de 4 a 8 de 12.**
+
+**⚙️ LO QUE TUMBÓ EL PASO 0 — DOS PREMISAS, Y UNA ERA DEL PROPIO TABLERO**
+
+- **NO SON CUATRO INFORMES CONTABLES: SON SIETE.** Ventas, compras, diario, mayor, bienes de
+  inversión, P&G y borradores de modelos, con **seis generadores de HTML propios**
+  (`contabilidad-routes.js`, siete rutas `.pdf`). El texto de C10-e dice «los cuatro» y es falso; se
+  corrige aquí sin reescribir el original.
+- **EL KARDEX SÍ CABE EN EL MOTOR**, al revés de lo que sugería el encargo. Su saldo **no lo acumula
+  la vista**: viene resuelto fila a fila desde el servidor (`stock.js:175`), así que es una columna
+  más. Medido antes de construir, que era justo lo que el Paso 0 mandaba.
+- **QUÉ ES «GASTOS», que el TABLERO solo dice «C8 Listado de gastos»:** en Bamburu un gasto ES una
+  factura recibida. El producto ya lo distingue por dentro (`supplier-invoices.js:99`: «sin origen de
+  stock → factura de GASTO»). Medido: de 270 facturas recibidas, **197 son gasto puro y 73 traen
+  mercancía**. Se resuelve por la regla dura —el papel usa la consulta de SU pantalla—, así que C6
+  sale de `/admin/purchases` y C8 de `/admin/supplier-invoices`.
+
+**⚙️ EL MOTOR, AMPLIADO CON TRES PIEZAS — DECLARATIVAS Y ADITIVAS**
+
+Dos de los siete informes **no son tablas planas**: el P&G lleva subtotales **intercalados** y un
+bloque de avisos, y los modelos son **un papel con dos tablas** (303 y 130), cada una con su título y
+su aviso. La alternativa era un segundo motor, que es lo que C10 prohíbe. Se añaden: **(a)** una fila
+puede declararse subtotal y se pinta destacada **en su sitio**; **(b)** un papel puede llevar varias
+**secciones**; **(c)** un bloque de **notas** al pie. Quien no las declara sale igual que antes —
+comprobado: los cuatro listados de la tanda 1 siguen en **43 OK · 0 fallos** sin tocarles una línea.
+
+**⚙️ EL GATE: 43 → 59 ASERCIONES · REVERSIÓN PIEZA A PIEZA**
+
+| Se rompe a propósito | Rojos |
+|---|---|
+| El catálogo se cuela el **stock** (dato de dentro, y el papel va a un cliente) | 1 |
+| El kardex se trae **su propio recorte** en vez de la lista entera | 1 |
+| El total de gastos vuelve a **contar las anuladas** | 1 |
+| La pantalla deja de ofrecer **los tres verbos** del catálogo | 1 |
+| El motor deja de marcar los **subtotales intercalados** | 1 |
+
+> **DOS FALLOS MÍOS QUE DESTAPÓ ESA REVERSIÓN, y los dos eran verdes por no medir.** La aserción de
+> las anuladas **no tenía ni una factura anulada** con la que medir en el negocio del gate; y las
+> tres piezas nuevas del motor **no las miraba nadie**, porque hoy ningún listado las declara —
+> las usará C10-e. Ahora el gate se trae su gasto anulado y prueba las tres piezas contra el
+> contrato del motor. (De paso: sembrarla reventó el gate, porque el estado válido es `vigente` y no
+> `pendiente`.)
+
+**⚙️ MAPA Y BARRIDO** · cada regla lleva sus grupos de siempre **más** `impresion`, nunca en su
+lugar: barridos los **377 ficheros** contra el mapa anterior, **ninguno pierde un gate** y 17 ganan
+éste. Barrido completo, **una pasada**: **84/84**.
+
+**🔴 LO QUE QUEDA DE C, CON FICHERO Y LÍNEA — C10-e, ENTERO**
+
+Los **siete** informes contables siguen bajando PDF con su HTML a mano. **No se ha empezado**, para
+no dejarlo a medias:
+
+| Informe | Ruta | Generador |
+|---|---|---|
+| Libro de ventas e ingresos | `contabilidad-routes.js:225` | `libroHtml` (`contabilidad-export.js:171`) |
+| Libro de compras y gastos | `:238` | `libroHtml` |
+| Libro diario | `:279` | `diarioHtml` (`:210`) |
+| Libro mayor | `:292` | `mayorHtml` (`:221`) |
+| Libro de bienes de inversión | `:372` | `bienesHtml` (`:268`) |
+| Cuenta de pérdidas y ganancias | `:400` | `pygHtml` (`:294`) — necesita **subtotales + notas** |
+| Borradores de modelos 303/130 | `:454` | `modelosBorradorHtml` (`:438`) — necesita **secciones + notas** |
+
+> **UN AVISO PARA QUIEN LO HAGA:** el CSV/XLSX de esos libros usa **36 columnas** (formato oficial
+> AEAT) y el PDF usa las legibles. **No son la misma tabla y no se pueden intercambiar**: reutilizar
+> la matriz del CSV para el papel lo dejaría ilegible en A4, que es empeorar el resultado visible.
+> Las columnas del papel están en `libroHtml` (`contabilidad-export.js:173-175`).
 
 ---
 
