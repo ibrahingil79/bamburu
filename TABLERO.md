@@ -85,7 +85,7 @@
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-08-22 · `7af7774` · **83/84** · 749 s
+- **Último barrido completo:** 2026-08-22 · `e1f23b1` · **84/84** · 1015 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -661,6 +661,51 @@ del primero.
 >   habría dejado de despertar a `margen` y `clientes`. Es exactamente la trampa de C-0.
 > - **`routes/products.js` se deja SIN regla a propósito:** hoy cae en el comodín final y corre todo.
 >   Escribirle `['impresion']` sería cambiar «todo» por «uno»: menos cobertura disfrazada de más.
+
+---
+
+#### ✅ FASE 0 CERRADA DE VERDAD — EL DIFF, IDÉNTICO (22 ago 2026)
+
+**EL DIFF DE LA SERIE, UNA PASADA, PUBLICADO**
+
+| | comprobaciones | veredicto |
+|---|---|---|
+| Serie · **día** (negocio a las 16:39) | 84 | **84/84** · 16,9 min |
+| Serie · **madrugada** (negocio a las 06:58) | 84 | **84/84** · 16,9 min |
+| `diff` gate por gate | 84 vs 84 | **IDÉNTICOS** |
+
+> **Por qué en serie sí y en paralelo no.** En paralelo quedaba un ruido de ~1 gate por pasada, de
+> una lista rotatoria: gates que se pisan en el único negocio que comparten los 84. En serie no hay
+> con quién chocar, así que el veredicto es determinista y el `diff` significa algo. El paralelo
+> sigue siendo el modo normal del barrido; su ruido está medido y con nombre.
+
+**EL CUARTO ROJO, ARREGLADO POR LA CAUSA — NO CON `SOLOS`**
+
+- **`gate-propuestas-pagos-permisos` no tenía problema de datos:** ya filtraba por SU factura y SU
+  propuesta. Dormía **1.500 ms fijos** tras pulsar «Registrar pago» y bajo carga leía la base antes
+  de que el servidor terminara — las tres aserciones caían de golpe. Ahora **espera a la condición**
+  (a que el pago exista, a que la propuesta se cierre y a que la tarjeta desaparezca del panel), no
+  al reloj. **Sale de `SOLOS`.**
+- **`gate-oficio-pantalla` apagaba a todas las personas del negocio compartido** para probar el caso
+  «una sola persona». Ahora **levanta su propio negocio**, que nace con una: no hay nada que apagar y
+  no toca a nadie. Los pasos [2] y [6] corren allí y el negocio se borra al salir.
+
+> **⚠️ CORRIJO UNA CIFRA QUE DI MAL.** Dije que `SOLOS` había pasado «de 9 a 11». **Eran 10** antes de
+> que yo tocara nada. `gate-oficio-pantalla` **ya estaba declarado** desde antes por mover
+> `company_config`, así que mi entrada era un **duplicado** — y un `Map` con la clave repetida no
+> crece, por eso leí 10 y creí que había subido de 9. El único que añadí de verdad fue el de pagos.
+>
+> **`SOLOS`: 10 → 10.** No he podido bajarlo del número original: `gate-oficio-pantalla` sigue dentro
+> por su **otra** causa, anterior y distinta —cambia el oficio y el nombre de los puestos en
+> `company_config` del negocio—, que este encargo no tocaba. Lo digo en vez de dejarlo insinuado.
+
+**EL DISCO, ANTES Y DESPUÉS** · antes de arrancar: **34 %** usado (66 % libre, muy por encima del
+umbral) · durante las dos series: estable en 35 % · al terminar: **37 %**. Cero perfiles residuales
+de Chromium, confirmado con el gate vivo (1) y tras `SIGTERM` (0).
+
+**ESTADO REAL DE LA FASE 0: CERRADA.** El termómetro da el mismo veredicto en las dos franjas, el
+lint está en 0 avisos con su clase vigilada, las declaraciones caducadas fuera, y la norma de «una
+comprobación pedida una vez se ejecuta una vez» escrita en `CLAUDE.md` con su motivo.
 
 ---
 
