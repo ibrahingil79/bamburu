@@ -11,7 +11,8 @@
 //   2. Si falta algo imprescindible (la BD, el Chromium), el gate ABORTA con un mensaje explícito y
 //      código != 0. Un gate que no puede arrancar no ha verificado NADA: tiene que decirlo a gritos,
 //      no morir con una traza que un barrido de regresión pueda confundir con ruido.
-import { existsSync, statSync, readdirSync } from 'fs';
+import { existsSync, statSync, readdirSync, mkdtempSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
 import { execSync } from 'child_process';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
@@ -166,11 +167,36 @@ export function exigeCodigoServido() {
 // Opciones de lanzamiento comunes. Se esparcen sobre las de cada gate: launch({ ...launchOpts(), ... }).
 // Aquí se exige, de paso, que lo que se va a probar sea lo que hay escrito: NINGÚN gate de navegador
 // puede saltarse la comprobación, porque todos pasan por aquí.
+// ── EL PERFIL DE CHROMIUM SE BORRA AL SALIR, Y ESTO NO ES HIGIENE: ES QUE TUMBÓ EL SERVIDOR ──────
+// El 22 ago 2026 el disco se llenó al 100 % y **el producto se cayó**. La causa: cada gate de
+// navegador lanza Chromium, que se crea un perfil temporal de ~130 MB… y **nadie lo borraba**. Una
+// tarde de barridos dejó **3.074 carpetas y 30 GB** en el temporal privado del snap. Con el disco a
+// cero, una escritura a medias dejó `citas-engine.js` en 0 bytes y el servidor sirvió páginas vacías.
+//
+// El perfil se le da EXPLÍCITAMENTE (`userDataDir`) para saber cuál es el nuestro, y se borra cuando
+// el proceso termina — salga bien, salga mal o lo maten. Puppeteer solo limpia el suyo si el
+// navegador se cierra ordenadamente, y un gate que revienta a medias no lo cierra.
+const perfiles = new Set();
+let engancheLimpieza = false;
+function limpiaPerfiles() {
+  for (const d of perfiles) { try { rmSync(d, { recursive: true, force: true }); } catch {} }
+  perfiles.clear();
+}
+
 export function launchOpts() {
   if (!existsSync(CHROMIUM)) {
     abortar('No hay Chromium ejecutable en: ' + CHROMIUM,
             'Instálalo (snap install chromium) o apunta PUPPETEER_EXECUTABLE_PATH a uno que funcione.');
   }
   exigeCodigoServido();
-  return { headless: 'new', executablePath: CHROMIUM, args: ['--no-sandbox'] };
+  const dir = mkdtempSync(join(tmpdir(), 'gate-chrome-'));
+  perfiles.add(dir);
+  if (!engancheLimpieza) {
+    engancheLimpieza = true;
+    process.on('exit', limpiaPerfiles);
+    for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+      process.on(s, () => { limpiaPerfiles(); process.exit(130); });
+    }
+  }
+  return { headless: 'new', executablePath: CHROMIUM, args: ['--no-sandbox'], userDataDir: dir };
 }
