@@ -81,12 +81,12 @@ const ROJOS_CONOCIDOS = {
   // `productoDePrueba`—, y eso es tocar el gate: tarea aparte, con su verificación.
   // CADA ENTRADA LLEVA SU FECHA. No es burocracia: sin ella, el barrido no puede decir «esto se
   // declaró hace tres semanas y hoy pasa», que es justo lo que la Pieza D existe para cantar.
-  'gate-nav-inicio-disa': { desde: '2026-08-20', motivo:
-    'PRECONDICIÓN AJENA, no concurrencia: exige que el negocio de desarrollo tenga propuestas de DISA '
-    + 'pendientes y no las crea él. Se quedó a cero el 20-ago-2026 al resolverlas a mano, y el '
-    + 'generador diario no las recrea (es idempotente por documento). Comprobado que falla IGUAL en '
-    + 'serie y suelto: no lo trajo la paralelización. Arreglo bueno: que el gate se traiga su propia '
-    + 'propuesta, como los de compras se traen su producto. Otro tema.' },
+  // 22 ago 2026 · AQUÍ VIVÍA `gate-nav-inicio-disa`, y se ha RETIRADO porque HOY PASA. No se ha
+  // tocado el gate: lo que sobraba era la nota. Su rojo era una precondición ajena —exigía que el
+  // negocio tuviera propuestas de DISA pendientes y no las creaba él—, y el barrido de esta fecha lo
+  // da en verde en las dos pasadas (a plena luz y con el reloj del negocio en madrugada). Segunda
+  // declaración que se retira por rancia en tres días: un puntero caducado manda al siguiente chat
+  // al sitio equivocado con toda la confianza del mundo, y por eso se revisan TODAS al barrer.
   // 20 ago 2026 · AQUÍ VIVÍA `gate-vigia-agenda`, y se ha RETIRADO. No se ha tocado el gate: el gate
   // está bien y pasa 41/41. Lo que sobraba era esta nota. Su aserción en rojo era que «los hallazgos
   // de agenda no asoman en el bloque del vigía del Inicio», y el rediseño del Inicio (cuadro de mando,
@@ -106,8 +106,9 @@ const EXCLUIDOS = {
   'gate-disa-captura-chat':
     'llama al MODELO REAL por el chat de DISA (misma familia). Sin cuota ABORTA. '
     + 'Lo que no necesita modelo (superficies de adjuntar, aterrizaje precargado, archivo protegido) va en el barrido: gate-disa-adjuntar.',
-  'verify-avisos-crm-riesgo': 'EN ROJO desde antes (datos de riesgo ya en la BD viva). Otro tema.',
-  'gate-avisos-pantalla': 'EN ROJO desde antes (1 aserción). Otro tema.',
+  // 22 ago 2026 · el número estaba rancio: son TRES aserciones en rojo, no una. Se corrige aquí
+  // porque una cifra vieja en una declaración hace creer que el agujero es más pequeño de lo que es.
+  'gate-avisos-pantalla': 'EN ROJO desde antes (3 aserciones, medidas el 22 ago 2026). Otro tema.',
   'verify-pieza-c-http': 'gate FRÁGIL preexistente (redondeo de céntimos). Otro tema.',
 };
 
