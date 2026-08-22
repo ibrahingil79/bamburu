@@ -1600,7 +1600,7 @@ function sbRenderTpls() {
   grid.innerHTML = TMPLS.map(function(t) {
     var active = (sbState.settings.theme === t.theme && sbState.settings.primary_color === t.color) ? ' active' : '';
     var badge = t.pop ? '<span class="sb-tpl-badge">★ Popular</span>' : '';
-    return '<div class="sb-tpl-card' + active + '" onclick="sbApplyTpl(\'' + t.id + '\')">'
+    return '<div class="sb-tpl-card' + active + '" onclick="sbApplyTpl(\\'' + t.id + '\\')">'
       + badge + '<div class="sb-tpl-mock">' + t.svg + '</div>'
       + '<div class="sb-tpl-info"><div class="sb-tpl-name">' + t.name + '</div><div class="sb-tpl-desc">' + t.desc + '</div></div></div>';
   }).join('');
@@ -1699,16 +1699,16 @@ function sbRenderEditor() {
   function fi(label, key, val, type) {
     type = type || 'text';
     return '<div style="margin-bottom:6px"><label style="font-size:10px;color:var(--text3);display:block;margin-bottom:2px">' + label + '</label>'
-      + '<input class="form-control" style="font-size:12px;padding:5px 8px" type="' + type + '" value="' + esc(val) + '" oninput="sbSetF(' + i + ',\'' + key + '\',this.value)"></div>';
+      + '<input class="form-control" style="font-size:12px;padding:5px 8px" type="' + type + '" value="' + esc(val) + '" oninput="sbSetF(' + i + ',\\'' + key + '\\',this.value)"></div>';
   }
   function ta(label, key, val) {
     return '<div style="margin-bottom:6px"><label style="font-size:10px;color:var(--text3);display:block;margin-bottom:2px">' + label + '</label>'
-      + '<textarea class="form-control" style="font-size:12px;padding:5px 8px;min-height:52px" oninput="sbSetF(' + i + ',\'' + key + '\',this.value)">' + esc(val) + '</textarea></div>';
+      + '<textarea class="form-control" style="font-size:12px;padding:5px 8px;min-height:52px" oninput="sbSetF(' + i + ',\\'' + key + '\\',this.value)">' + esc(val) + '</textarea></div>';
   }
   function sl(label, key, val, opts) {
     var os = opts.map(function(o){ return '<option value="' + o.v + '"' + (String(val) === String(o.v) ? ' selected' : '') + '>' + o.l + '</option>'; }).join('');
     return '<div style="margin-bottom:6px"><label style="font-size:10px;color:var(--text3);display:block;margin-bottom:2px">' + label + '</label>'
-      + '<select class="form-control" style="font-size:12px;padding:5px 8px" onchange="sbSetF(' + i + ',\'' + key + '\',this.value)">' + os + '</select></div>';
+      + '<select class="form-control" style="font-size:12px;padding:5px 8px" onchange="sbSetF(' + i + ',\\'' + key + '\\',this.value)">' + os + '</select></div>';
   }
   var s = sec.settings;
   if (sec.type === 'hero') {
@@ -1723,10 +1723,10 @@ function sbRenderEditor() {
     (s.items||[]).forEach(function(item,j) {
       h += '<div style="border:1px solid var(--border);border-radius:5px;padding:6px;margin-bottom:5px">'
         + '<div style="display:flex;gap:5px;margin-bottom:4px">'
-        + '<div style="flex:0 0 40px"><label style="font-size:9px;color:var(--text3)">Icono</label><input class="form-control" style="font-size:12px;padding:3px;text-align:center" value="' + esc(item.icon) + '" oninput="sbSetItem(' + i + ',' + j + ',\'icon\',this.value)"></div>'
-        + '<div style="flex:1"><label style="font-size:9px;color:var(--text3)">Título</label><input class="form-control" style="font-size:12px;padding:3px" value="' + esc(item.title) + '" oninput="sbSetItem(' + i + ',' + j + ',\'title\',this.value)"></div>'
+        + '<div style="flex:0 0 40px"><label style="font-size:9px;color:var(--text3)">Icono</label><input class="form-control" style="font-size:12px;padding:3px;text-align:center" value="' + esc(item.icon) + '" oninput="sbSetItem(' + i + ',' + j + ',\\'icon\\',this.value)"></div>'
+        + '<div style="flex:1"><label style="font-size:9px;color:var(--text3)">Título</label><input class="form-control" style="font-size:12px;padding:3px" value="' + esc(item.title) + '" oninput="sbSetItem(' + i + ',' + j + ',\\'title\\',this.value)"></div>'
         + '</div>'
-        + '<input class="form-control" style="font-size:12px;padding:3px" placeholder="Descripción" value="' + esc(item.desc) + '" oninput="sbSetItem(' + i + ',' + j + ',\'desc\',this.value)">'
+        + '<input class="form-control" style="font-size:12px;padding:3px" placeholder="Descripción" value="' + esc(item.desc) + '" oninput="sbSetItem(' + i + ',' + j + ',\\'desc\\',this.value)">'
         + '</div>';
     });
   } else if (sec.type === 'testimonials') {
@@ -1735,10 +1735,10 @@ function sbRenderEditor() {
       var stars = [5,4,3,2,1].map(function(n){ return '<option value="' + n + '"' + (item.rating===n?' selected':'') + '>' + n + '⭐</option>'; }).join('');
       h += '<div style="border:1px solid var(--border);border-radius:5px;padding:6px;margin-bottom:5px">'
         + '<div style="display:flex;gap:5px;margin-bottom:4px">'
-        + '<div style="flex:1"><label style="font-size:9px;color:var(--text3)">Nombre</label><input class="form-control" style="font-size:12px;padding:3px" value="' + esc(item.name) + '" oninput="sbSetItem(' + i + ',' + j + ',\'name\',this.value)"></div>'
-        + '<div style="flex:0 0 68px"><label style="font-size:9px;color:var(--text3)">Estrellas</label><select class="form-control" style="font-size:12px;padding:3px" onchange="sbSetItem(' + i + ',' + j + ',\'rating\',parseInt(this.value))">' + stars + '</select></div>'
+        + '<div style="flex:1"><label style="font-size:9px;color:var(--text3)">Nombre</label><input class="form-control" style="font-size:12px;padding:3px" value="' + esc(item.name) + '" oninput="sbSetItem(' + i + ',' + j + ',\\'name\\',this.value)"></div>'
+        + '<div style="flex:0 0 68px"><label style="font-size:9px;color:var(--text3)">Estrellas</label><select class="form-control" style="font-size:12px;padding:3px" onchange="sbSetItem(' + i + ',' + j + ',\\'rating\\',parseInt(this.value))">' + stars + '</select></div>'
         + '</div>'
-        + '<textarea class="form-control" style="font-size:12px;padding:3px;min-height:40px" oninput="sbSetItem(' + i + ',' + j + ',\'comment\',this.value)">' + esc(item.comment||item.quote) + '</textarea>'
+        + '<textarea class="form-control" style="font-size:12px;padding:3px;min-height:40px" oninput="sbSetItem(' + i + ',' + j + ',\\'comment\\',this.value)">' + esc(item.comment||item.quote) + '</textarea>'
         + '</div>';
     });
   } else if (sec.type === 'newsletter') {

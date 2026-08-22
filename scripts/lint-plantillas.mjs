@@ -69,6 +69,28 @@ function revisa(ruta) {
         // Escapes que la plantilla se COME. En texto de plantilla no hay ninguna razón legítima para
         // escribir \d o \* : el motor tira la barra y lo que llega al navegador ya no es lo escrito.
         // `\\/` queda fuera: `<\\/script>` es un idioma legítimo y deliberado, no un despiste.
+        // LA COMILLA ESCAPADA ENTRA EN LA LISTA, y es la que más caro ha salido: el 21 ago 2026 dejó
+        // MUERTAS dos pantallas (facturas y «Registrar recepción»). Cuando dentro de la plantilla se
+        // escribe una cadena de JS **del navegador**, la plantilla se come la barra, llega un
+        // apóstrofo pelado que CIERRA la cadena y el bloque entero deja de ejecutarse: los botones no
+        // responden y no sale ni un error. En texto de plantilla una comilla NO necesita escape, así
+        // que un `\'` aquí es siempre un despiste. El `\\'` bien escrito no llega hasta aquí: el
+        // bucle consume los pares de barras antes.
+        // LA COMILLA SE MIDE POR LA RACHA DE BARRAS, no por «hay una barra». Sale mal solo cuando la
+        // racha es de UNA: la plantilla se la come y llega un apóstrofo pelado que CIERRA la cadena
+        // de JS del navegador. Con dos o más, al menos una sobrevive y el escape llega entero, que es
+        // como está escrito `<button onclick="x(\\\'…')">` en varios sitios y es CORRECTO.
+        let barras = 0;
+        while (s[i + barras] === '\\') barras++;
+        const tras = s[i + barras];
+        const esComilla = tras === "'" || tras === '"';
+        if (!marco().raw && esComilla && barras === 1) {
+          const l0 = s.lastIndexOf('\n', i) + 1;
+          const l1 = s.indexOf('\n', i);
+          avisaEscape(s.slice(l0, l1 === -1 ? s.length : l1));
+          i += barras + 1; continue;
+        }
+        if (esComilla) { i += barras + 1; continue; }
         if (!marco().raw && '*.+?()[]{}|^sdwbSDWB'.includes(d)) {
           const l0 = s.lastIndexOf('\n', i) + 1;
           const l1 = s.indexOf('\n', i);

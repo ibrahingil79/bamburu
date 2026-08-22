@@ -109,6 +109,10 @@ export const GRUPOS = {
   // pagina, declara sus filtros y se manda entero por correo; una factura no hace nada de eso.
   // El grupo nace con cuatro listados y crecerá con los otros cuatro y con C10-e.
   impresion: ['gate-impresion'],
+  // LAS PANTALLAS QUE CUELGAN DE UN DOCUMENTO. Van con `clientes` —el grupo de las pantallas del
+  // panel— y no en uno propio: lo que vigilan es transversal (que ninguna reviente al abrirse), así
+  // que tiene que despertarse con casi cualquier cambio de pantalla, no solo con el suyo.
+  pantallas: ['gate-pantallas-documento'],
   // Sala de máquinas: superadmin, conexiones a la BD, el fichero -wal, el saneo de errores al cliente,
   // el escapado del texto del usuario (que no se vuelva HTML ni JS) y la CSP estricta de las
   // superficies endurecidas (que sigan sin 'unsafe-inline' Y con los botones vivos).
@@ -158,6 +162,8 @@ export const EMPIEZAN_DE_CERO = new Set([
   'gate-cola-envios',              // negocio nuevo: la cola vacía es justo lo primero que se mide
   'gate-documentos',               // DOS negocios nuevos: uno con logo y otro sin él (y el de al lado
                                    // sirve para probar que un negocio no ve el logo del otro)
+  // `gate-pantallas-documento` NO va aquí: necesita el negocio de desarrollo, que es el único con
+  // documentos de los diez tipos que abre. Se trae lo suyo (el presupuesto en borrador) y lo limpia.
   'gate-impresion',                // DOS negocios nuevos: uno siembra 200 facturas para ver paginar
                                    // de verdad, y el vecino existe para probar que su PDF no trae
                                    // ni un dato del primero
@@ -239,9 +245,9 @@ export const AFECTA = [
   // cuadra. Menos cobertura disfrazada de más. Cada regla lleva los grupos de SIEMPRE **más**
   // `documentos`.
   { re: /^modules\/erp\/(documentos|attachments)\.js/, grupos: ['documentos', 'margen', 'clientes', 'impresion'] },
-  { re: /^modules\/erp\/routes\/(quotes|pedidos|invoices|mostrador)\.js/, grupos: ['documentos', 'margen', 'clientes', 'impresion'] },
-  { re: /^modules\/erp\/routes\/albaranes\.js/, grupos: ['documentos', 'inventario'] },
-  { re: /^modules\/erp\/routes\/purchase-orders\.js/, grupos: ['documentos', 'pagos'] },
+  { re: /^modules\/erp\/routes\/(quotes|pedidos|invoices|mostrador)\.js/, grupos: ['documentos', 'margen', 'clientes', 'impresion', 'pantallas'] },
+  { re: /^modules\/erp\/routes\/albaranes\.js/, grupos: ['documentos', 'inventario', 'pantallas'] },
+  { re: /^modules\/erp\/routes\/purchase-orders\.js/, grupos: ['documentos', 'pagos', 'pantallas'] },
   { re: /^modules\/erp\/routes\/settings\.js/, grupos: ['documentos', 'plantillas', 'clientes', 'impresion'] },
   { re: /^(docs\/|.*\.md$|Logos\/|deploy\/|PROYECTO\.txt$)/, grupos: [] },        // documentación: no hay gate que correr
   // EL RUNNER Y ESTE MISMO FICHERO DECIDEN QUÉ SE CUBRE: si cambian, el modo corto no puede fiarse de
@@ -251,9 +257,9 @@ export const AFECTA = [
   { re: /^(modules\/erp\/models\.js|modules\/erp\/schemas\.js|index\.js)$/, grupos: null },   // el tronco: todo
   { re: /^core\//, grupos: null },                                               // auth, CSRF, escapes, cabeceras: todo
   { re: /^modules\/erp\/(pagos|conciliacion|contabilidad)/, grupos: ['pagos'] },
-  { re: /^modules\/erp\/routes\/(pagos|purchases|purchase-order|supplier|conciliacion|contabilidad)/, grupos: ['pagos'] },
+  { re: /^modules\/erp\/routes\/(pagos|purchases|purchase-order|supplier|conciliacion|contabilidad)/, grupos: ['pagos', 'pantallas'] },
   { re: /^modules\/erp\/(stock|trazabilidad|reposicion)/, grupos: ['inventario'] },
-  { re: /^modules\/erp\/routes\/(stock|warehouses|inventory|albaranes|shipping)/, grupos: ['inventario'] },
+  { re: /^modules\/erp\/routes\/(stock|warehouses|inventory|albaranes|shipping)/, grupos: ['inventario', 'pantallas'] },
   { re: /^modules\/erp\/(avisos|avisos-preferencias|calendario-fiscal)/, grupos: ['avisos', 'disa'] },
   { re: /^modules\/erp\/routes\/avisos/, grupos: ['avisos'] },
   { re: /^modules\/erp\/(margen|ventas-metrics|constructor-analitica|plan-financiero|rentabilidad)/, grupos: ['margen', 'servicios'] },
@@ -269,7 +275,7 @@ export const AFECTA = [
   // `clientes` porque la cita reservada acaba en la agenda de dentro y allí se atiende.
   { re: /^modules\/erp\/reserva-publica/, grupos: ['reserva', 'clientes'] },
   { re: /^modules\/erp\/routes\/reserva-publica/, grupos: ['reserva', 'clientes'] },
-  { re: /^modules\/erp\/(layout|menu|inicio-layout|cuadro-mando|arranque|oficios)/, grupos: ['clientes'] },
+  { re: /^modules\/erp\/(layout|menu|inicio-layout|cuadro-mando|arranque|oficios)/, grupos: ['clientes', 'pantallas'] },
   // ── TANDA 1 DE C · LOS LISTADOS IMPRESOS (21 ago 2026) ──────────────────────────────────────
   // EL MOTOR, medido: `impresion.js` lo importan DOS ficheros y los dos son de esta familia
   // (`listados.js` y `routes/listados.js`). No hay ninguna pantalla colgando de él, así que la
@@ -290,9 +296,9 @@ export const AFECTA = [
   // `routes/products.js` NO lleva regla a propósito: hoy no casa con ninguna y cae en el `.*` final,
   // que corre TODOS los gates. Escribirle una con `['impresion']` sería cambiar «todo» por «uno»:
   // menos cobertura disfrazada de más. Se deja como está.
-  { re: /^modules\/erp\/(routes\/(dashboard|inicio|clients|crm|cobros|citas|menu-routes|migracion|vigia)|views\/)/, grupos: ['clientes'] },
+  { re: /^modules\/erp\/(routes\/(dashboard|inicio|clients|crm|cobros|citas|menu-routes|migracion|vigia)|views\/)/, grupos: ['clientes', 'pantallas'] },
   { re: /^modules\/erp\/(verifactu|facturae)/, grupos: ['margen', 'clientes'] },
-  { re: /^modules\/erp\/routes\/(invoices|quotes|pedidos|mostrador|orders)/, grupos: ['margen', 'clientes'] },
+  { re: /^modules\/erp\/routes\/(invoices|quotes|pedidos|mostrador|orders)/, grupos: ['margen', 'clientes', 'pantallas'] },
   { re: /^modules\/store\//, grupos: ['infra'] },
   { re: /.*/, grupos: null },                     // NO SE ADIVINA: lo que no está arriba, corre todo
 ];
