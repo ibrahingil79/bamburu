@@ -23,12 +23,21 @@ const require = createRequire(import.meta.url);
 let pass = 0, fail = 0;
 const ok = (c, m, e = '') => { (c ? pass++ : fail++); console.log((c ? '  ✓ ' : '  ✗ FALLO: ') + m + (e ? ' — ' + e : '')); };
 const TS = Date.now(), RID = String(TS).slice(-6);
+// EL ARTÍCULO DEL KARDEX. Se resuelve al arrancar el gate, contra el negocio que toque, y se exige
+// que tenga movimientos: un kardex vacío pasaría todas las comprobaciones de forma or sin demostrar
+// nada. Si no hay ninguno, el gate lo dice en rojo — «no probado» no es «verde».
+let PRODUCTO_KARDEX = 0;
 const SINK = 'delivered@resend.dev';
 const creados = [];
 let b;
 const dormir = ms => new Promise(r => setTimeout(r, ms));
 const hoy = new Date().toISOString().slice(0, 10);
-const CLAVES = ['clientes', 'productos', 'facturas', 'precios'];
+// LOS OCHO LISTADOS. Los cuatro de la tanda 1 y los cuatro de esta: el gate crece con el producto,
+// no se queda mirando la mitad. El kardex lleva su artículo en la dirección porque es de UNO — un
+// kardex sin decir de qué artículo es no sirve de nada.
+const CLAVES = ['clientes', 'productos', 'facturas', 'precios', 'catalogo', 'compras', 'gastos', 'kardex'];
+const QS = { kardex: () => '?producto_id=' + PRODUCTO_KARDEX };
+const qsDe = k => (QS[k] ? QS[k]() : '');
 
 function borrarTenant(slug) {
   const t = getTenantBySlug(slug);
@@ -81,6 +90,35 @@ try {
   for (let i = 0; i < 40; i++) insCli.run('Cliente ' + i + ' ' + RID, 'X' + i, 'C/' + i, 'c' + i + '@t.local');
   const prod = n.db.prepare("INSERT INTO products (name,sku,price,type,tax_band,tax_rate,status) VALUES ('Revisión completa','REV-1',1234.56,'service','general',21,'active')").run().lastInsertRowid;
   const linea = [{ product_id: prod, description: 'Revisión completa', quantity: 1, unit_price: 1234.56, tax_rate: 21 }];
+
+  // ── EL ARTÍCULO DEL KARDEX, con movimientos de verdad ────────────────────────────────────────
+  // El gate se lo trae él: en un negocio recién nacido no hay stock que enseñar, y un kardex vacío
+  // pasaría todas las comprobaciones sin demostrar nada. Tres movimientos bastan para que el papel
+  // tenga varias líneas y un saldo que comprobar.
+  const { recordMovement } = await import('../modules/erp/stock.js');
+  PRODUCTO_KARDEX = n.db.prepare(
+    "INSERT INTO products (name,sku,price,type,tax_band,tax_rate,status,stock) VALUES (?,?,9.5,'physical','general',21,'active',0)"
+  ).run('Bidón de aceite ' + RID, 'ACE-' + RID).lastInsertRowid;
+  const alm = n.db.prepare('SELECT id FROM warehouses WHERE active=1 ORDER BY is_default DESC, id LIMIT 1').get();
+  for (const [tipo, cant, nota] of [['entrada', 20, 'compra inicial'], ['salida', -6, 'consumo en taller'], ['entrada', 5, 'devolución de cliente']]) {
+    recordMovement(n.db, { product_id: PRODUCTO_KARDEX, type: tipo, quantity: cant,
+                           warehouse_id: alm ? alm.id : null, origin_type: 'manual', note: nota });
+  }
+  const movsKardex = n.db.prepare('SELECT COUNT(*) c FROM stock_movements WHERE product_id=?').get(PRODUCTO_KARDEX).c;
+  ok(movsKardex === 3, 'el gate se trae un artículo con movimientos para el kardex', movsKardex + ' movimientos');
+
+  // ── DOS FACTURAS RECIBIDAS, UNA DE ELLAS ANULADA ─────────────────────────────────────────────
+  // La anulada NO es un adorno: sin ella, la comprobación de «el total de gastos deja fuera las
+  // anuladas» no tendría NADA que medir y estaría verde por no mirar. Lo destapó la prueba de
+  // reversión: al hacer que las anuladas volvieran a sumar, el gate no se enteró.
+  const prov = n.db.prepare("INSERT INTO suppliers (name,fiscal_id,active) VALUES (?,?,1)").run('Proveedor Gate ' + RID, 'B' + RID).lastInsertRowid;
+  const insFR = n.db.prepare(
+    "INSERT INTO supplier_invoices (supplier_id,internal_code,supplier_invoice_number,invoice_date,due_date,base,tax,total,status,supplier_name,created_at)"
+    + " VALUES (?,?,?,date('now'),date('now'),?,?,?,?,?,datetime('now'))");
+  insFR.run(prov, 'FR-' + RID + '-1', 'P-001', 1000, 210, 1210, 'vigente', 'Proveedor Gate ' + RID);
+  insFR.run(prov, 'FR-' + RID + '-2', 'P-002', 500, 105, 605, 'anulada', 'Proveedor Gate ' + RID);
+  const nAnul = n.db.prepare("SELECT COUNT(*) c FROM supplier_invoices WHERE status='anulada'").get().c;
+  ok(nAnul >= 1, 'el gate se trae una factura recibida ANULADA con la que medir el total', nAnul + ' anuladas');
   const facturas = [];
   for (let i = 0; i < 3; i++) facturas.push((await post('/api/erp/invoices', { client_id: cli, issue_date: hoy, lines: linea })).body?.id);
 
@@ -88,11 +126,13 @@ try {
   console.log('\n[1][2] los cuatro listados: PDF y los tres verbos');
   let conPdf = 0, malos = [];
   for (const k of CLAVES) {
-    const { status, buf } = await pdfDe('/admin/listados/' + k + '/pdf');
+    const { status, buf } = await pdfDe('/admin/listados/' + k + '/pdf' + qsDe(k));
     if (status === 200 && buf.slice(0, 4).toString() === '%PDF') conPdf++; else malos.push(k + '(' + status + ')');
   }
-  ok(conPdf === 4, 'los cuatro generan PDF sin error', conPdf + '/4' + (malos.length ? ' · ' + malos.join(', ') : ''));
-  const pantallas = { clientes: '/admin/clients', productos: '/admin/products', precios: '/admin/products', facturas: '/admin/invoices' };
+  ok(conPdf === CLAVES.length, 'los OCHO listados generan PDF sin error', conPdf + '/' + CLAVES.length + (malos.length ? ' · ' + malos.join(', ') : ''));
+  const pantallas = { clientes: '/admin/clients', productos: '/admin/products', precios: '/admin/products',
+                      facturas: '/admin/invoices', catalogo: '/admin/products', compras: '/admin/purchases',
+                      gastos: '/admin/supplier-invoices', kardex: '/admin/inventory' };
   let conVerbos = 0;
   for (const k of CLAVES) {
     const { t } = await txtDe(pantallas[k]);
@@ -102,10 +142,10 @@ try {
     if ((tres || t.includes(k + '/imprimir')) && (pdf || t.includes(k + '/pdf')) && env) conVerbos++;
     else malos.push('verbos:' + k);
   }
-  ok(conVerbos === 4, 'y los cuatro ofrecen imprimir, descargar y enviar en su pantalla', conVerbos + '/4');
+  ok(conVerbos === CLAVES.length, 'y los OCHO ofrecen imprimir, descargar y enviar en su pantalla', conVerbos + '/' + CLAVES.length);
   let imprime = 0;
-  for (const k of CLAVES) { const { status, t } = await txtDe('/admin/listados/' + k + '/imprimir'); if (status === 200 && /window\.print/.test(t)) imprime++; }
-  ok(imprime === 4, 'y la vista de imprimir se manda sola a la impresora', imprime + '/4');
+  for (const k of CLAVES) { const { status, t } = await txtDe('/admin/listados/' + k + '/imprimir' + qsDe(k)); if (status === 200 && /window\.print/.test(t)) imprime++; }
+  ok(imprime === CLAVES.length, 'y la vista de imprimir se manda sola a la impresora', imprime + '/' + CLAVES.length);
 
   // ── [3] EL MEMBRETE SALE DE membreteHtml, NO DE UNA COPIA ───────────────────────────────────
   console.log('\n[3] el membrete es el de los documentos, no una copia');
@@ -115,29 +155,29 @@ try {
   ok(/membreteHtml\(\{\s*emisor/.test(src) && /from '\.\/documentos\.js'/.test(src),
      'y el motor de listados lo LLAMA en vez de pintar el suyo');
   let conMembrete = 0;
-  for (const k of CLAVES) { const { t } = await txtDe('/admin/listados/' + k + '/imprimir'); if (t.includes('doc-cols') && t.includes('Emisor')) conMembrete++; }
-  ok(conMembrete === 4, 'los cuatro papeles llevan el membrete', conMembrete + '/4');
+  for (const k of CLAVES) { const { t } = await txtDe('/admin/listados/' + k + '/imprimir' + qsDe(k)); if (t.includes('doc-cols') && t.includes('Emisor')) conMembrete++; }
+  ok(conMembrete === CLAVES.length, 'los OCHO papeles llevan el membrete', conMembrete + '/' + CLAVES.length);
 
   // ── [4] EL LOGO ─────────────────────────────────────────────────────────────────────────────
   console.log('\n[4] el logo, medido contando imágenes incrustadas');
   let sinLogo = 0;
-  for (const k of CLAVES) { const { buf } = await pdfDe('/admin/listados/' + k + '/pdf'); if (imgs(buf) === 0) sinLogo++; }
-  ok(sinLogo === 4, 'sin logo puesto, los cuatro PDF traen CERO imágenes', sinLogo + '/4');
+  for (const k of CLAVES) { const { buf } = await pdfDe('/admin/listados/' + k + '/pdf' + qsDe(k)); if (imgs(buf) === 0) sinLogo++; }
+  ok(sinLogo === CLAVES.length, 'sin logo puesto, los OCHO PDF traen CERO imágenes', sinLogo + '/' + CLAVES.length);
   const fd = new FormData();
   fd.append('logo', new Blob([png(240, 80)], { type: 'image/png' }), 'l.png');
   const up = await (await fetch(n.base + '/api/erp/settings/logo', { method: 'POST', headers: { ...n.cab, 'x-csrf-token': 'gimp-csrf' }, body: fd })).json();
   ok(!!up.company_logo_id, 'se sube un logo', 'id ' + up.company_logo_id);
   let conLogo = 0;
-  for (const k of CLAVES) { const { buf } = await pdfDe('/admin/listados/' + k + '/pdf'); if (imgs(buf) >= 1) conLogo++; }
-  ok(conLogo === 4, 'y con logo, los cuatro traen al menos una', conLogo + '/4');
+  for (const k of CLAVES) { const { buf } = await pdfDe('/admin/listados/' + k + '/pdf' + qsDe(k)); if (imgs(buf) >= 1) conLogo++; }
+  ok(conLogo === CLAVES.length, 'y con logo, los OCHO traen al menos una', conLogo + '/' + CLAVES.length);
 
   // ── [5] LA PRUEBA DEL MOTOR ÚNICO ───────────────────────────────────────────────────────────
   console.log('\n[5] cambiar el nombre fiscal cambia los cuatro listados Y los documentos');
   const NUEVO = 'Renombrada ' + RID + ' SL';
   n.db.prepare('UPDATE company_config SET company_name=? WHERE id=1').run(NUEVO);
   let cambiaron = 0;
-  for (const k of CLAVES) { const { t } = await txtDe('/admin/listados/' + k + '/imprimir'); if (t.includes(NUEVO)) cambiaron++; }
-  ok(cambiaron === 4, 'los cuatro listados enseñan el nombre nuevo', cambiaron + '/4');
+  for (const k of CLAVES) { const { t } = await txtDe('/admin/listados/' + k + '/imprimir' + qsDe(k)); if (t.includes(NUEVO)) cambiaron++; }
+  ok(cambiaron === CLAVES.length, 'los OCHO listados enseñan el nombre nuevo', cambiaron + '/' + CLAVES.length);
   const q = await post('/api/erp/quotes', { client_id: cli, date: hoy, lines: linea });
   const docNuevo = (await txtDe('/admin/quotes/' + q.body?.id)).t;
   ok(docNuevo.includes(NUEVO), 'y un documento nuevo también: es el MISMO membrete, no dos');
@@ -174,6 +214,80 @@ try {
   ok(norm.includes('Página ' + nPags + ' de ' + nPags), 'y en la ÚLTIMA');
   try { unlinkSync(tmp); unlinkSync(tmp + '.txt'); } catch {}
 
+  // ── [21] LOS CUATRO NUEVOS, CADA UNO POR LO SUYO ────────────────────────────────────────────
+  // Las comprobaciones de arriba valen para los ocho a la vez (PDF, verbos, membrete, negocio nuevo).
+  // Estas son las que solo tienen sentido en los nuevos, y son las que una reversión puede tumbar.
+  console.log('\n[21] lo propio de catálogo, kardex, compras y gastos');
+  // Desformatea un importe del papel para poder compararlo al céntimo, sin depender de la tipografía.
+  const aNum = (t) => Number(String(t).replace(/[^\d.,-]/g, '').replace(/\./g, '').replace(',', '.'));
+  const { consultaGastos, consultaCompras, consultaKardex } = await import('../modules/erp/listados.js');
+
+  // EL CATÁLOGO NO ENSEÑA LO DE DENTRO. Va a un cliente: si se le cuela el coste o el stock, el
+  // fallo no es estético.
+  const catal = (await txtDe('/admin/listados/catalogo/imprimir')).t;
+  ok(/Precio con IVA/.test(catal), 'el catálogo enseña el precio CON IVA, que es el que paga el cliente');
+  ok(!/>Coste<|>Margen<|>Stock</.test(catal), 'y NO enseña coste, margen ni stock: es un papel que sale del negocio');
+
+  // EL KARDEX, CON SU ARTÍCULO Y SU SALDO. El saldo final del papel tiene que ser el stock de verdad.
+  const kard = (await txtDe('/admin/listados/kardex/imprimir?producto_id=' + PRODUCTO_KARDEX)).t;
+  const kdatos = consultaKardex(n.db, { producto_id: PRODUCTO_KARDEX });
+  const stockReal = n.db.prepare('SELECT stock FROM products WHERE id=?').get(PRODUCTO_KARDEX).stock;
+  ok(kdatos.filas.length === 3, 'el kardex trae los tres movimientos', kdatos.filas.length + '');
+  ok(Number(kdatos.filas[0].balance) === Number(stockReal),
+     'y su saldo final es el stock de verdad del artículo', kdatos.filas[0].balance + ' vs ' + stockReal);
+  ok(/Artículo:<\/span>|Artículo/.test(kard), 'el papel dice DE QUÉ artículo es: un kardex anónimo no sirve');
+
+  // COMPRAS Y GASTOS: el papel trae la lista ENTERA, no la página que se ve.
+  const nCompras = consultaCompras(n.db, {}).total;
+  const nGastos = consultaGastos(n.db, {}).total;
+  const compraPapel = (await txtDe('/admin/listados/compras/imprimir')).t;
+  const gastoPapel = (await txtDe('/admin/listados/gastos/imprimir')).t;
+  const filasDe = h => { const m = h.match(/<b>([\d.]+)<\/b> línea/); return m ? Number(m[1].replace(/\./g, '')) : -1; };
+  ok(filasDe(compraPapel) === nCompras, 'el papel de compras trae TODAS las de la pantalla', filasDe(compraPapel) + ' de ' + nCompras);
+  ok(filasDe(gastoPapel) === nGastos, 'y el de gastos también', filasDe(gastoPapel) + ' de ' + nGastos);
+
+  // Y EL TOTAL DE GASTOS NO CUENTA LAS ANULADAS. Si sumaran, el papel diría que se gastó un dinero
+  // que no se gastó — la misma ley que ya cumple el listado de facturas de venta.
+  const gFilas = consultaGastos(n.db, {}).filas;
+  const gVivas = gFilas.filter(f => f.status !== 'anulada');
+  const esperadoGasto = gVivas.reduce((a2, f) => a2 + (Number(f.total) || 0), 0);
+  const mG = gastoPapel.match(/<tr class="grand"><td>[^<]*<\/td><td>([^<]*)<\/td>/);
+  ok(mG && Math.abs(aNum(mG[1]) - esperadoGasto) < 0.005,
+     'el total de gastos deja fuera las anuladas, al céntimo',
+     (mG ? aNum(mG[1]) : '?') + ' vs ' + esperadoGasto.toFixed(2) + ' · ' + (gFilas.length - gVivas.length) + ' anuladas');
+
+  // ── [22] LAS TRES PIEZAS NUEVAS DEL MOTOR, VIGILADAS AUNQUE AÚN NO LAS USE NADIE ────────────
+  // Se construyeron para los informes contables (C10-e) y HOY NINGÚN LISTADO LAS DECLARA. Sin esto
+  // serían código sin gate: la prueba de reversión las tocó y no cayó nada. Se comprueban llamando
+  // al motor directamente con una declaración de prueba — que es su contrato — en vez de esperar a
+  // tener un consumidor.
+  console.log('\n[22] subtotales intercalados, secciones y notas al pie');
+  const { listadoHtml } = await import('../modules/erp/impresion.js');
+  const papelPiezas = listadoHtml(n.db, {
+    titulo: 'Prueba de las tres piezas',
+    columnas: [{ clave: 'a', rotulo: 'Concepto' }, { clave: 'b', rotulo: 'Importe', formato: 'dinero', align: 'right' }],
+    secciones: [
+      { titulo: 'Primera sección', columnas: [{ clave: 'a', rotulo: 'Concepto' }, { clave: 'b', rotulo: 'Importe', formato: 'dinero', align: 'right' }],
+        filas: [{ a: 'Una partida', b: 10 }, { a: 'SUBTOTAL', b: 10, es: true }],
+        esSubtotal: f => !!f.es, notas: ['Un aviso de la primera sección.'] },
+      { titulo: 'Segunda sección', columnas: [{ clave: 'a', rotulo: 'Casilla' }, { clave: 'b', rotulo: 'Importe', formato: 'dinero', align: 'right' }],
+        filas: [{ a: 'Otra partida', b: 5 }] },
+    ],
+    notas: ['Antes de presentarlo, revísalo.'],
+    generadoPor: 'gate', sym: '€',
+  });
+  ok((papelPiezas.match(/class="lst-sec"/g) || []).length === 2, 'un papel puede llevar VARIAS secciones, cada una con su tabla');
+  ok(/Primera sección/.test(papelPiezas) && /Segunda sección/.test(papelPiezas), 'y cada sección lleva su título');
+  ok(/<tr class="sub">/.test(papelPiezas), 'una fila declarada subtotal se pinta destacada EN SU SITIO, no al final');
+  ok(/Un aviso de la primera sección/.test(papelPiezas), 'una sección puede llevar su propio aviso');
+  ok(/Antes de presentarlo, revísalo/.test(papelPiezas), 'y el papel entero, una nota al pie');
+  // Y QUE NO SE ACTIVAN SOLAS: un listado que no las declare sale exactamente igual que antes.
+  const papelLlano = listadoHtml(n.db, {
+    titulo: 'Sin piezas', columnas: [{ clave: 'a', rotulo: 'Concepto' }], filas: [{ a: 'x' }], generadoPor: 'gate',
+  });
+  ok(!/class="lst-sec"|<tr class="sub">|class="lst-notas"/.test(papelLlano),
+     'y quien no las declara no las ve: las tres son aditivas');
+
   // ── [8][9] LA BASE DECLARADA ────────────────────────────────────────────────────────────────
   console.log('\n[8][9] todo impreso declara su base');
   const filtrado = (await txtDe('/admin/listados/facturas/imprimir?estado=emitida&desde=2026-01-01&hasta=2026-12-31')).t;
@@ -195,7 +309,7 @@ try {
   // que es de lo que huye todo este encargo — y se notó: esta aserción se puso roja al añadir el
   // separador de miles al papel, con el producto correcto. Se saca el NÚMERO del papel y se compara
   // con la suma cruda de la pantalla. Cómo se escribe ese número tiene su propia aserción, aparte.
-  const aNum = (t) => Number(String(t).replace(/[^\d.,-]/g, '').replace(/\./g, '').replace(',', '.'));
+  // (`aNum` se declara arriba, en el bloque de los listados nuevos: la usan los dos.)
   const mGrand = papelFac.match(/<tr class="grand"><td>[^<]*<\/td><td>([^<]*)<\/td>/);
   const impreso = mGrand ? aNum(mGrand[1]) : NaN;
   ok(Math.abs(impreso - totalPantalla) < 0.005, 'el total del papel es el MISMO que el de la pantalla, al céntimo',
@@ -223,7 +337,7 @@ try {
   // ── [19] NI UNA PETICIÓN SALIENTE ───────────────────────────────────────────────────────────
   console.log('\n[19] generar un listado no llama a ningún sitio de fuera');
   let externas = 0;
-  for (const k of CLAVES) { const { t } = await txtDe('/admin/listados/' + k + '/imprimir'); externas += (t.match(/<img[^>]+src="https?:\/\//g) || []).length; }
+  for (const k of CLAVES) { const { t } = await txtDe('/admin/listados/' + k + '/imprimir' + qsDe(k)); externas += (t.match(/<img[^>]+src="https?:\/\//g) || []).length; }
   ok(externas === 0, 'ninguno de los cuatro papeles apunta a una imagen de fuera', externas + ' imágenes externas');
 
   // ── [15] PERMISOS ───────────────────────────────────────────────────────────────────────────
@@ -282,7 +396,7 @@ try {
     const buf = Buffer.from(await r.arrayBuffer());
     if (r.status === 200 && buf.slice(0, 4).toString() === '%PDF') nuevos++;
   }
-  ok(nuevos === 4, 'los cuatro, en un negocio que acaba de nacer', nuevos + '/4');
+  ok(nuevos === CLAVES.length, 'los OCHO, en un negocio que acaba de nacer', nuevos + '/' + CLAVES.length);
 
 } catch (e) {
   fail++;

@@ -269,9 +269,9 @@ export const AFECTA = [
   { re: /^(modules\/erp\/models\.js|modules\/erp\/schemas\.js|index\.js)$/, grupos: null },   // el tronco: todo
   { re: /^core\//, grupos: null },                                               // auth, CSRF, escapes, cabeceras: todo
   { re: /^modules\/erp\/(pagos|conciliacion|contabilidad)/, grupos: ['pagos'] },
-  { re: /^modules\/erp\/routes\/(pagos|purchases|purchase-order|supplier|conciliacion|contabilidad)/, grupos: ['pagos', 'pantallas'] },
-  { re: /^modules\/erp\/(stock|trazabilidad|reposicion)/, grupos: ['inventario'] },
-  { re: /^modules\/erp\/routes\/(stock|warehouses|inventory|albaranes|shipping)/, grupos: ['inventario', 'pantallas'] },
+  { re: /^modules\/erp\/routes\/(pagos|purchases|purchase-order|supplier|conciliacion|contabilidad)/, grupos: ['pagos', 'pantallas', 'impresion'] },
+  { re: /^modules\/erp\/(stock|trazabilidad|reposicion)/, grupos: ['inventario', 'impresion'] },
+  { re: /^modules\/erp\/routes\/(stock|warehouses|inventory|albaranes|shipping)/, grupos: ['inventario', 'pantallas', 'impresion'] },
   { re: /^modules\/erp\/(avisos|avisos-preferencias|calendario-fiscal)/, grupos: ['avisos', 'disa'] },
   { re: /^modules\/erp\/routes\/avisos/, grupos: ['avisos'] },
   { re: /^modules\/erp\/(margen|ventas-metrics|constructor-analitica|plan-financiero|rentabilidad)/, grupos: ['margen', 'servicios'] },
@@ -289,6 +289,10 @@ export const AFECTA = [
   { re: /^modules\/erp\/routes\/reserva-publica/, grupos: ['reserva', 'clientes'] },
   { re: /^modules\/erp\/(layout|menu|inicio-layout|cuadro-mando|arranque|oficios)/, grupos: ['clientes', 'pantallas'] },
   // ── TANDA 1 DE C · LOS LISTADOS IMPRESOS (21 ago 2026) ──────────────────────────────────────
+  // AMPLIADO EL 22 AGO 2026 con los cuatro listados nuevos: el kardex come de `stock.js`, y compras
+  // y gastos de las rutas de proveedores. Cada regla lleva sus grupos DE SIEMPRE más `impresion` —
+  // nunca en su lugar: tocar `stock.js` tiene que seguir despertando a `inventario`, que es donde
+  // vive lo que comprueba que el libro de stock cuadra.
   // EL MOTOR, medido: `impresion.js` lo importan DOS ficheros y los dos son de esta familia
   // (`listados.js` y `routes/listados.js`). No hay ninguna pantalla colgando de él, así que la
   // regla estrecha es la correcta, no un recorte.
