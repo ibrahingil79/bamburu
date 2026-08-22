@@ -85,7 +85,7 @@
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-08-22 · `c3302f5` · **84/84** · 592 s
+- **Último barrido completo:** 2026-08-22 · `cda998f` · **84/84** · 610 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -112,7 +112,8 @@
 `A 8 · B 3 · C 11 · D 5 · E 4 · F 4 · G 5 · H 3 · I 3 · J 0 · K 0` = **46**.
 (J y K son ítems bloqueados sin subpuntos: su texto es una sola afirmación.)
 
-**RECUENTO VIGENTE — 21 ago 2026: 65 subpuntos vivos · 31 hechos · 34 pendientes.**
+**RECUENTO VIGENTE — 22 ago 2026: 65 subpuntos vivos · 39 hechos · 26 pendientes.**
+*(el 21 ago iba por 31 hechos · 34 pendientes; **C entera** suma sus 8 restantes)*
 `A 6 · C 12 · C-0 4 · B 3 · D 5 · E 4 · F 4 · G 4 · H 3 · I 3 · J 0 · K 0 · L 8 · M 9` = **65**.
 - **C pasa de 11 a 12** con **C10-f**, que Ibrahin añadió el 21 ago tras cerrar C-0. Los pendientes
   suben de 37 a 38: el subpunto es nuevo, no estaba antes sin marcar.
@@ -548,10 +549,15 @@ devuelve sus horas, que copiar no abre días cerrados y que un tramo imposible n
 
 ## GRUPO 2 — FUNCIONES NUEVAS (solo codigo, sin dependencias externas)
 
-#### C. IMPRESIÓN Y DESCARGA EN PDF DE LISTADOS Y DOCUMENTOS · 🟡 **EN CURSO — 8 de 12** (12 subpuntos: los 11 del registro + C10-f)
+#### C. IMPRESIÓN Y DESCARGA EN PDF DE LISTADOS Y DOCUMENTOS · ✅ **C QUEDA CERRADA — 12 de 12** (los 11 del registro + C10-f)
 
 > **HECHOS (tanda 1, 21 ago): C1 · C4 · C5 · C7.** · **HECHOS (22 ago, commits `575e333` + `c3302f5`): C2 catálogo · C3 kardex · C6 compras · C8 gastos.** 
-> **SIGUEN PENDIENTES, y son cinco:** **C2** (catálogo para enviar al cliente), **C3** (kardex), **C6** (listado de compras), **C8** (listado de gastos) y **C10-e** (absorber los cuatro informes contables, que hoy siguen descargando PDF con su HTML a mano). **C9, C10, C10-f y C11** están servidos por el motor pero **no se marcan hechos**: C9 dice «en TODOS» y van cuatro de ocho.
+> **HECHOS (22 ago, commit `5e05738`): C10-e** (los SIETE informes contables, no cuatro) **· C9 · C10 · C10-f · C11.**
+> ~~SIGUEN PENDIENTES, y son cinco: C2, C3, C6, C8 y C10-e~~ — **línea caducada, corregida el 22 ago:** se quedó
+> nombrando como pendientes cuatro subpuntos que ya estaban marcados hechos arriba. **No queda ninguno.**
+> **C9** se cierra porque los tres verbos están en los QUINCE listados, no en ocho. **C10**, porque ya no hay ni un
+> generador propio: los seis que quedaban se han borrado. **C11**, porque añadir un listado sigue siendo escribir una
+> declaración — los siete informes entraron sin tocar las rutas.
 
 > **C. IMPRESION Y DESCARGA EN PDF DE LISTADOS Y DOCUMENTOS.**
 > Palabras del dueño: "debemos ser capaces de imprimir informes como, lista de precios bajo plantilla claro, envio de catalogo de productos y servicios, informes de kardex, listado de clientes productos, compras, facturas, gastos, etc"
@@ -661,6 +667,74 @@ del primero.
 >   habría dejado de despertar a `margen` y `clientes`. Es exactamente la trampa de C-0.
 > - **`routes/products.js` se deja SIN regla a propósito:** hoy cae en el comodín final y corre todo.
 >   Escribirle `['impresion']` sería cambiar «todo» por «uno»: menos cobertura disfrazada de más.
+
+---
+
+#### C10-e · LOS SIETE INFORMES CONTABLES, POR EL MOTOR · ✅ **HECHO (22 ago 2026)** · commit `5e05738`
+
+> Con esto **C QUEDA CERRADA: 12 de 12.** Quince listados, todos con los tres verbos y todos por la
+> misma pieza. No queda ni un papel que se pinte por su cuenta.
+
+**⚙️ EL PASO 0 CORRIGIÓ DOS COSAS, Y UNA ERA DE ESTE MISMO ENCARGO**
+
+- **«Son 4 subpuntos de 12: C10-e es uno de ellos» — NO.** C10-e **no es uno de los doce**: vive dentro
+  de C10. Los cuatro que quedaban eran **C9, C10, C10-f y C11**, y C10-e era el trabajo pendiente
+  dentro de C10. Manda el TABLERO, como pide el propio encargo.
+- **Y una línea del TABLERO estaba caducada por mi culpa:** seguía diciendo «siguen pendientes, y son
+  cinco: C2, C3, C6, C8…» cuando esos cuatro ya estaban marcados hechos justo encima. Corregida sin
+  borrarla.
+
+**⚙️ LO QUE SE HA HECHO**
+
+- **Desaparecen los SEIS generadores de HTML a mano** —`libroHtml`, `diarioHtml`, `mayorHtml`,
+  `bienesHtml`, `pygHtml` y `modelosBorradorHtml`, 87 líneas—. El papel de los siete lo compone la
+  misma pieza que los otros ocho listados, y con ella ganan membrete, cabecera repetida en cada hoja,
+  «Página X de Y» y periodo declarado.
+- **Y los tres verbos.** Hasta hoy un libro **solo se podía descargar**: no había forma de mandárselo
+  a la gestoría sin bajarlo y adjuntarlo a mano.
+- **Ninguno necesitó una cuarta pieza del motor**, que era lo que el Paso 0 mandaba comprobar antes de
+  construir: los cinco de tabla ya cabían, el P&G con los subtotales intercalados y los modelos con
+  las secciones. Sí nació un **formato de celda** (`dinero0`), y por un motivo medido, no estético.
+
+**⚙️ LA COMPROBACIÓN QUE MANDA: NI UNA CIFRA SE HA MOVIDO**
+
+Los siete papeles de antes se capturaron **antes de tocar nada** y se compararon valor a valor:
+**idénticos los siete**, sin faltar ni sobrar ninguno. Dos diferencias reales que cazó esa comparación:
+
+- **El diario pintaba un `0,00` donde el viejo dejaba la celda EN BLANCO.** En un libro contable eso
+  importa: vacío dice «esta línea no toca esta columna» y cero dice «toca, y vale cero».
+- **El mayor SÍ pinta sus ceros** —usaba `m()` y no `numOrBlank`, y tenía seis—. Al ponerle el mismo
+  formato que al diario, desapareció uno.
+
+**⚙️ EL ARCHIVO OFICIAL, INTACTO** · `ventas.csv`, `ventas.xlsx`, `compras.csv` y `compras.xlsx` salen
+**byte a byte iguales** que antes. Sus 36 columnas en el orden de la AEAT son requisito legal: el
+papel usa las legibles y el archivo las suyas. Dos salidas del mismo dato, a propósito.
+
+**⚙️ PAPELES LARGOS** · el libro diario hace **78 hojas**, así que **avisa antes de bajarlo** y sale
+ENTERO si se confirma — nunca recortado. El listón está medido sobre papeles reales (**30 filas por
+hoja**: ventas 183/7, diario 2401/78, clientes 131/4); mi primera versión puso 60 «a ojo» y el diario
+no avisaba. *(La URL histórica `/admin/contabilidad/*.pdf` sigue bajando directo, sin preguntar: es la
+dirección que la gestoría ya tiene guardada y romperla sería peor que el aviso.)*
+
+**⚙️ EL GATE: 59 → 75 ASERCIONES, LOS QUINCE LISTADOS · REVERSIÓN INFORME A INFORME**
+
+| Se rompe a propósito | Rojos |
+|---|---|
+| Reaparece un generador de HTML propio | 1 |
+| El P&G deja de marcar sus subtotales intercalados | 1 |
+| Los borradores pierden la tabla del 130 | 2 |
+| El libro de ventas se trae una sola fila | 1 |
+| Desaparece el aviso de los papeles de más de 50 hojas | 2 |
+
+> **TRES FALLOS MÍOS QUE DESTAPÓ ESA REVERSIÓN, y ninguno era del producto.** La comprobación del
+> aviso decía «si avisa, entonces…», así que al quitarle el aviso al producto **no comprobaba nada**;
+> el negocio del gate no tenía ningún papel de más de 50 hojas con el que medirlo (ahora se trae un
+> artículo con 1.700 movimientos); y la de «el libro trae todas sus líneas» **le preguntaba a la misma
+> función que alimenta el papel**, así que al recortarla se recortaban las dos a la vez. Una
+> comprobación que se pregunta a sí misma no comprueba nada: el testigo es ahora el archivo oficial.
+
+**⚙️ MAPA Y BARRIDO** · contabilidad despierta también a `impresion`, con sus grupos de siempre. 377
+ficheros comparados: **ninguno pierde un gate**. Barrido completo, **una pasada: 84/84**.
 
 ---
 
