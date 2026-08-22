@@ -140,7 +140,12 @@ try {
   await page.goto(receiptUrl2, { waitUntil: 'networkidle0' });
   dialogQueue.push('bultos dañados en el transporte');   // prompt del motivo
   await page.evaluate(() => anularRecepcion());
-  await page.waitForFunction(() => document.body.innerHTML.includes('Recepción anulada'), { timeout: 10000 });
+  // 30 s Y NO 10, Y NO ES ABLANDAR EL GATE: lo que se exige es exactamente lo mismo —que la ficha
+  // diga «Recepción anulada»—; lo que cambia es cuánto se espera. Anular mueve stock y recalcula el
+  // libro, y en el barrido esto corre con otros veinte gates encima y con el freno de peticiones del
+  // servidor de por medio: con 10 s fallaba SOLO dentro del barrido y pasaba suelto en 25 segundos.
+  // Un tiempo de espera no es un criterio de calidad; es cuánta paciencia se le tiene a la máquina.
+  await page.waitForFunction(() => document.body.innerHTML.includes('Recepción anulada'), { timeout: 30000 });
   body = await page.content();
   ok(body.includes('bultos dañados en el transporte'), 'ficha de recepción: anulada con su motivo');
   await page.screenshot({ path: '/tmp/c1b-5-recepcion-anulada.png' });

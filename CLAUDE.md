@@ -128,6 +128,25 @@ estado `errored` y no es la instancia productiva — ignorarla.
 - La métrica de progreso es TAREAS COMPLETADAS, no líneas de código.
 - Al terminar la sesión, sigue el paso de cierre del RITUAL (resumen + actualizar Notion).
 
+## Gates de pantalla — cómo se da una pantalla por sana
+
+> **Una pantalla solo se da por sana mirando el HTML tal y como sale del SERVIDOR. No vale escuchar
+> errores de consola (un error de sintaxis no avisa) ni compilar lo que ve el navegador (el navegador
+> recorta el trozo roto y lo que queda funciona). Todo gate de pantalla que se apoye en una de esas
+> dos vías está mal escrito.**
+
+De dónde sale (22 ago 2026): dos pantallas —facturas y «Registrar recepción»— estuvieron **muertas**
+sin que nadie se enterara, y las tres primeras versiones del gate que debía cazarlas **daban verde
+con la pantalla rota**. Lo destapó la prueba de reversión, no el razonamiento. El caso de referencia
+está en `scripts/gate-pantallas-documento.mjs`.
+
+Dos avisos que van con la norma:
+- **Que la respuesta sea 200 no significa que sea la pantalla pedida:** media docena de pantallas que
+  cuelgan de un documento **redirigen** cuando el documento no está en el estado que necesitan, y una
+  redirección también responde 200. Hay que exigir que la **URL final** sea la que se pidió.
+- **Antes de meter una pantalla en un gate, comprobar que su ruta existe** (montaje + handler). Una
+  ruta inventada da verde sobre nada.
+
 ## Seguridad (importante)
 
 - NUNCA subir secretos, claves o bases de datos a Git/GitHub.

@@ -128,11 +128,22 @@ try {
   // mirar a DOS SEMANAS vista, lejos de donde siembran los demás.
   const dowsAbiertos = new Set(db.prepare("SELECT DISTINCT dow FROM horario_tramos WHERE scope='negocio'").all().map(r => r.dow));
   const hayCitas = db.prepare('SELECT 1 FROM citas WHERE fecha=? LIMIT 1');
+  // SE BUSCA LEJOS Y SE REVALIDA. A dos semanas seguía chocando: los demás gates siembran citas en
+  // las próximas semanas y le llenaban el día elegido entre que lo elegía y lo usaba. Se arranca a
+  // 45 días —donde no siembra nadie— y, sobre todo, se vuelve a comprobar que sigue libre JUSTO
+  // antes de pedirle huecos: entre las dos cosas, la carrera se cierra.
   let DIA_CITA = null;
-  for (let d = 14; d <= 60 && !DIA_CITA; d++) {
+  for (let d = 45; d <= 120 && !DIA_CITA; d++) {
     const f = new Date(Date.now() + d * 86400000);
     const iso = f.toISOString().slice(0, 10);
     if (dowsAbiertos.has(f.getUTCDay()) && !hayCitas.get(iso)) DIA_CITA = iso;
+  }
+  if (DIA_CITA && hayCitas.get(DIA_CITA)) {           // alguien lo pisó mientras tanto: al siguiente
+    for (let d = 46; d <= 120; d++) {
+      const f = new Date(Date.now() + d * 86400000);
+      const iso = f.toISOString().slice(0, 10);
+      if (dowsAbiertos.has(f.getUTCDay()) && !hayCitas.get(iso)) { DIA_CITA = iso; break; }
+    }
   }
   ok(!!DIA_CITA, 'hay un día abierto Y libre por delante donde pedir la cita', DIA_CITA || 'ninguno en 60 días');
 
