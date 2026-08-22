@@ -268,7 +268,10 @@ export const AFECTA = [
   { re: /^scripts\//, grupos: [] },                                              // los gates cambiados se añaden aparte
   { re: /^(modules\/erp\/models\.js|modules\/erp\/schemas\.js|index\.js)$/, grupos: null },   // el tronco: todo
   { re: /^core\//, grupos: null },                                               // auth, CSRF, escapes, cabeceras: todo
-  { re: /^modules\/erp\/(pagos|conciliacion|contabilidad)/, grupos: ['pagos'] },
+  // C10-e (22 ago 2026): los siete informes contables pasan por el motor de impresión, así que
+  // tocar contabilidad tiene que despertar también a `impresion`. Con sus grupos de siempre, no en
+  // su lugar: lo que comprueba que los libros cuadran vive en `pagos` y ahí se queda.
+  { re: /^modules\/erp\/(pagos|conciliacion|contabilidad)/, grupos: ['pagos', 'impresion'] },
   { re: /^modules\/erp\/routes\/(pagos|purchases|purchase-order|supplier|conciliacion|contabilidad)/, grupos: ['pagos', 'pantallas', 'impresion'] },
   { re: /^modules\/erp\/(stock|trazabilidad|reposicion)/, grupos: ['inventario', 'impresion'] },
   { re: /^modules\/erp\/routes\/(stock|warehouses|inventory|albaranes|shipping)/, grupos: ['inventario', 'pantallas', 'impresion'] },

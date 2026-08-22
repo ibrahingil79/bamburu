@@ -27,6 +27,7 @@ const TS = Date.now(), RID = String(TS).slice(-6);
 // que tenga movimientos: un kardex vacío pasaría todas las comprobaciones de forma or sin demostrar
 // nada. Si no hay ninguno, el gate lo dice en rojo — «no probado» no es «verde».
 let PRODUCTO_KARDEX = 0;
+let PRODUCTO_LARGO = 0;   // el del papel largo, para exigir el aviso de las 50 hojas
 const SINK = 'delivered@resend.dev';
 const creados = [];
 let b;
@@ -128,6 +129,23 @@ try {
   insFR.run(prov, 'FR-' + RID + '-2', 'P-002', 500, 105, 605, 'anulada', 'Proveedor Gate ' + RID);
   const nAnul = n.db.prepare("SELECT COUNT(*) c FROM supplier_invoices WHERE status='anulada'").get().c;
   ok(nAnul >= 1, 'el gate se trae una factura recibida ANULADA con la que medir el total', nAnul + ' anuladas');
+
+  // ── UN ARTÍCULO CON MUCHÍSIMO MOVIMIENTO, PARA EL AVISO DE LOS PAPELES LARGOS ─────────────────
+  // El aviso salta pasadas las 50 hojas, y en un negocio recién nacido no hay ningún papel tan
+  // largo: la primera versión de esta comprobación daba por hecho que el libro diario del gate lo
+  // sería y no lo era. Se siembra un artículo con 1.700 movimientos —unas 57 hojas— para poder
+  // exigir el aviso de verdad en vez de suponerlo. Van por inserción directa y en una transacción:
+  // aquí no se prueba el motor de stock, solo se necesita un listado largo.
+  PRODUCTO_LARGO = n.db.prepare(
+    "INSERT INTO products (name,sku,price,type,tax_band,tax_rate,status,stock) VALUES (?,?,1,'physical','general',21,'active',0)"
+  ).run('Tornillería a granel ' + RID, 'TOR-' + RID).lastInsertRowid;
+  const almL = n.db.prepare('SELECT id FROM warehouses WHERE active=1 ORDER BY is_default DESC, id LIMIT 1').get();
+  const insMov = n.db.prepare(
+    "INSERT INTO stock_movements (product_id,warehouse_id,type,quantity,reason,origin_type,origin_id,note,created_at)"
+    + " VALUES (?,?,'entrada',1,'ajuste','manual',0,?,datetime('now'))");
+  n.db.transaction(() => { for (let i = 0; i < 1700; i++) insMov.run(PRODUCTO_LARGO, almL ? almL.id : null, 'lote ' + i); })();
+  const nMovL = n.db.prepare('SELECT COUNT(*) c FROM stock_movements WHERE product_id=?').get(PRODUCTO_LARGO).c;
+  ok(nMovL === 1700, 'el gate se trae un artículo con movimientos de sobra para pasar de 50 hojas', nMovL + ' movimientos');
   const facturas = [];
   for (let i = 0; i < 3; i++) facturas.push((await post('/api/erp/invoices', { client_id: cli, issue_date: hoy, lines: linea })).body?.id);
 
@@ -325,6 +343,25 @@ try {
   const mc = comprasMatrix(lc(n.db, '2026-01-01', '2026-12-31'));
   ok(mc.headers.length >= 20, 'y el de compras conserva las suyas', mc.headers.length + ' columnas');
 
+  // LOS LIBROS TRAEN TODAS SUS FILAS. Sin esto, un recorte en la consulta de un libro pasaba
+  // inadvertido: la reversión le puso un `.slice(0,5)` al de ventas y el gate no se enteró.
+  // SE COMPARA CONTRA EL ARCHIVO OFICIAL, no contra la misma función que alimenta el papel. La
+  // primera versión de esto llamaba a `ventasAsientos(libroVentas(...))` para saber cuántas líneas
+  // «debería» haber… que es exactamente lo que hace la declaración del listado: al recortarle las
+  // filas en la reversión, las dos se recortaban a la vez y el gate seguía verde. Una comprobación
+  // que se pregunta a sí misma no comprueba nada. El CSV/XLSX oficial sale por otro camino, así que
+  // sirve de testigo independiente — y de paso queda comprobado que las dos salidas cuadran.
+  const { ventasMatrix: vM, comprasMatrix: cM } = await import('../modules/erp/contabilidad-export.js');
+  const { libroVentas: lvv, libroCompras: lcc } = await import('../modules/erp/contabilidad.js');
+  const filasDeP = h => { const m2 = h.match(/<b>([\d.]+)<\/b> línea/); return m2 ? Number(m2[1].replace(/\./g, '')) : -1; };
+  for (const [clave, esperadas] of [
+    ['libro-ventas', vM(lvv(n.db, '2026-01-01', '2026-12-31')).rows.length],
+    ['libro-compras', cM(lcc(n.db, '2026-01-01', '2026-12-31')).rows.length],
+  ]) {
+    const papel = (await txtDe('/admin/listados/' + clave + '/imprimir' + PERIODO)).t;
+    ok(filasDeP(papel) === esperadas, 'el papel de ' + clave + ' trae las MISMAS líneas que el archivo oficial', filasDeP(papel) + ' de ' + esperadas);
+  }
+
   // LOS SUBTOTALES DEL P&G, EN SU SITIO. Y sus avisos, que son una advertencia y no un adorno.
   const pygP = (await txtDe('/admin/listados/pyg/imprimir' + PERIODO)).t;
   ok(/<tr class="sub">/.test(pygP), 'la cuenta de pérdidas y ganancias marca sus subtotales EN SU SITIO');
@@ -337,16 +374,20 @@ try {
   ok(/Bamburu no presenta/.test(modP), 'y la advertencia de que Bamburu NO presenta: es legal, no decorativa');
 
   // EL PAPEL LARGO SE AVISA, NUNCA SE RECORTA.
-  const rLargo = await fetch(n.base + '/admin/listados/libro-diario/pdf' + PERIODO, { headers: n.cab });
-  const avisa = rLargo.status === 409;
-  ok(avisa || rLargo.status === 200, 'el libro diario responde', 'HTTP ' + rLargo.status);
-  if (avisa) {
-    const d = await rLargo.json();
-    ok(d.hojas > 50 && /no se recorta/i.test(d.mensaje || ''), 'avisa de cuántas hojas y de que sale ENTERO', d.hojas + ' hojas');
-    const rEntero = await fetch(n.base + '/admin/listados/libro-diario/pdf' + PERIODO + '&entero=1', { headers: n.cab });
-    const bufE = Buffer.from(await rEntero.arrayBuffer());
-    ok(rEntero.status === 200 && bufE.slice(0, 4).toString() === '%PDF', 'y con la confirmación sale, entero', bufE.length + ' bytes');
-  }
+  // SE EXIGE EL AVISO, NO SE PREGUNTA SI LO HAY. La primera versión decía «if (avisa) …», así que
+  // al quitarle el aviso al producto el gate no comprobaba nada y seguía verde. Lo cazó la
+  // reversión. El negocio del gate siembra 200 facturas y su diario pasa de las 50 hojas: si no
+  // avisa, o el aviso se ha caído o el escenario ha dejado de ser largo, y las dos cosas hay que
+  // saberlas. Se usa el kardex del artículo sembrado arriba, que hace unas 57 hojas.
+  const urlLargo = '/admin/listados/kardex/pdf?producto_id=' + PRODUCTO_LARGO;
+  const rLargo = await fetch(n.base + urlLargo, { headers: n.cab });
+  ok(rLargo.status === 409, 'un papel de más de 50 hojas AVISA antes de bajarlo', 'HTTP ' + rLargo.status);
+  const dLargo = rLargo.status === 409 ? await rLargo.json() : {};
+  ok(dLargo.hojas > 50 && /no se recorta/i.test(dLargo.mensaje || ''),
+     'y dice cuántas hojas son y que sale ENTERO', (dLargo.hojas || '?') + ' hojas');
+  const rEntero = await fetch(n.base + urlLargo + '&entero=1', { headers: n.cab });
+  const bufE = Buffer.from(await rEntero.arrayBuffer());
+  ok(rEntero.status === 200 && bufE.slice(0, 4).toString() === '%PDF', 'y con la confirmación sale, entero', bufE.length + ' bytes');
 
   // ── [8][9] LA BASE DECLARADA ────────────────────────────────────────────────────────────────
   console.log('\n[8][9] todo impreso declara su base');
