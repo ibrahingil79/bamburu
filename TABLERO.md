@@ -85,7 +85,7 @@
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-08-21 · `102c47c` · **74/82** · 548 s
+- **Último barrido completo:** 2026-08-22 · `ddf9aa4` · **84/84** · 574 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -661,6 +661,73 @@ del primero.
 >   habría dejado de despertar a `margen` y `clientes`. Es exactamente la trampa de C-0.
 > - **`routes/products.js` se deja SIN regla a propósito:** hoy cae en el comodín final y corre todo.
 >   Escribirle `['impresion']` sería cambiar «todo» por «uno»: menos cobertura disfrazada de más.
+
+---
+
+#### ✅ TANDA COMPLETA · FASE 0 — SANEAR LAS COMPROBACIONES · **HECHA (22 ago 2026)**
+
+> Va primera y no última por su motivo: con un termómetro que daba 81/82 de día y 74/82 de
+> madrugada, los verdes de las fases siguientes no significarían nada.
+
+**0.1 · LA FAMILIA HORARIA Y DE CONCURRENCIA — CUMPLIDO Y DEMOSTRADO CON `diff`**
+
+- El arreglo de raíz se aplicó el 21-ago a la familia entera (17 gates). Aquí se ha **verificado**:
+  **82/82 con el reloj del negocio a las 11:30 y 82/82 con el reloj a la 01:42**, y el `diff` gate por
+  gate de los dos veredictos sale **idéntico**.
+- **CÓMO SE PUSO EL RELOJ EN MADRUGADA SIN ESPERAR DOCE HORAS**, porque el método importa: no hay
+  `libfaketime` en la máquina y mover el reloj del sistema es tocar todo. Se desplazó **la zona del
+  negocio** (`ZONA_NEGOCIO`, `citas-engine.js` y `avisos.js`) a una donde en ese momento era la
+  01:42, se desplegó, se barrió y se restauró. Eso pone al **producto** en franja nocturna dejando
+  los gates en la hora del proceso, que es exactamente el peor caso.
+
+**0.2 · LOS ONCE AVISOS — LA PREMISA CAYÓ, Y LA DEFENSA ES OTRA** · commit `44dc525`
+
+- **PREMISA CORREGIDA:** el subpunto pedía comprobarlos «en pantalla, pulsando de verdad». **No hay
+  pantalla que pulsar:** los once están en `/admin/orders` y `/admin/store-settings`, cuyo montaje
+  está **comentado** (`index.js:141` y `:151`) y responden 302. **Diez eran bugs reales** —el template
+  literal abre en `settings.js:1295` y no cierra hasta pasada la 1603— y se arreglaron; **el undécimo
+  ya estaba bien escrito** y era falso positivo de la heurística.
+- **EL LINT, AMPLIADO Y PRECISO: 0 avisos.** La regla no es «hay una barra» sino **la racha**: con
+  una, la plantilla se la come y llega un apóstrofo pelado que cierra la cadena; con dos o más, al
+  menos una sobrevive. Demostrado que caza: devolviéndole la barra al escape que mató la pantalla de
+  facturas, salta.
+- **GATE NUEVO — `gate-pantallas-documento` (16 aserciones).** Abre las **13 pantallas que cuelgan de
+  un documento** —las que no están en el menú y por eso no vigilaba nadie— y exige que **todos sus
+  scripts compilen**. Es el hueco por el que se coló la pantalla de recepción muerta.
+
+> **TRES MECANISMOS PROBADOS, DOS DESCARTADOS — Y LOS DESCARTÓ LA REVERSIÓN, NO EL RAZONAMIENTO.**
+> **(1)** Escuchar `pageerror`/`console` **no sirve**: un SyntaxError de un `<script>` inline **no
+> emite ningún evento**; con la pantalla rota, el único evento era el 404 del favicon. **(2)**
+> Compilar lo que hay en el DOM **tampoco**: el parser **trunca** el script en el error —2.380
+> caracteres en vez de 4.888— y el trozo que queda **compila**. **(3)** Lo único que ve el fallo es
+> compilar el **HTML crudo**. Y un cuarto fallo, mío: la consulta elegía una orden ya recibida, el
+> servidor **redirigía** y el gate medía otra pantalla dando verde — ahora exige que la URL final sea
+> la pedida. **Sin la prueba de reversión, las tres primeras versiones habrían sido un verde falso
+> permanente.**
+
+> **⚠️ UN ERROR MÍO CON COSTE, dicho entero.** Para probar una pantalla `/admin/invoices/:id/edit`
+> **que me inventé al inventariar** (no existe), creé una «factura en borrador». En Bamburu las
+> facturas **nacen emitidas**. Fabriqué la factura real **F2026-0973** (9,08 €). **No se ha borrado**
+> —una emitida está en la cadena de huellas y esa no se toca— sino **anulado por el camino del
+> producto**, con su motivo escrito y su documento de anulación (id 184).
+
+**0.3 · DECLARACIONES CADUCADAS — TRES RETIRADAS O CORREGIDAS** · commit siguiente
+
+- **`gate-nav-inicio-disa`** estaba declarado ROJO CONOCIDO desde el 20-ago y **hoy pasa**: se retira
+  la nota, el gate no se toca. Segunda declaración rancia retirada en tres días.
+- **`verify-avisos-crm-riesgo`** estaba EXCLUIDO por «EN ROJO desde antes» y **hoy pasa limpio**: la
+  exclusión escondía una comprobación buena. **Entra al barrido.**
+- **`gate-avisos-pantalla`** sigue rojo, pero su ficha decía «1 aserción» y son **TRES**: una cifra
+  vieja hace creer que el agujero es menor de lo que es. `verify-pieza-c-http` sigue rojo por lo suyo.
+
+**⚙️ CIERRE DE FASE — EL NÚMERO ANTES Y DESPUÉS**
+
+| | antes (21 ago) | después (22 ago) |
+|---|---|---|
+| Barrido de día | 81/82 | **84/84** |
+| Barrido de madrugada | 74/82 | **82/82** (idéntico al de día por `diff`) |
+| Comprobaciones | 82 | **84** (+`gate-pantallas-documento`, +`verify-avisos-crm-riesgo`) |
+| Avisos del lint | 11 sin verificar | **0**, y la clase vigilada |
 
 ---
 
