@@ -112,8 +112,26 @@ try {
 
   // ── 3. CONFIRM-FIRST: llegar a la revisión NO ha escrito nada. DISA propone; el usuario confirma ──
   //     (Regla de oro del proyecto: en cualquier acción con dinero, DISA nunca ejecuta en silencio.)
-  ok(db.prepare('SELECT COUNT(*) c FROM purchases').get().c === purchasesBefore, 'NO se ha creado ninguna compra por adjuntar y revisar (confirm-first)');
-  ok(db.prepare('SELECT COUNT(*) c FROM stock_movements').get().c === movsBefore, 'NO se ha movido stock por adjuntar y revisar (confirm-first)');
+  // SE MIDE LO QUE ESTE GATE PODRÍA HABER ESCRITO, NO EL NEGOCIO ENTERO. Estas dos contaban TODAS
+  // las compras y TODOS los movimientos del negocio, y en el barrido corren veinte gates a la vez:
+  // cualquiera que comprara o moviera stock en esos segundos las tumbaba con un rojo AJENO. Se
+  // arreglaron sus gemelas de la limpieza el 21-ago y estas dos se quedaron atrás, con el mismo
+  // defecto y el mismo síntoma: aparecían y desaparecían entre pasadas.
+  // Lo que este paso afirma es que **llegar a la pantalla de revisión no escribe nada**, y eso se
+  // mide sobre lo que el gate podría haber creado: nada nacido después de su arranque y ligado a él.
+  // El proveedor se saca por su NIF, el mismo que lleva la factura adjunta del gate. Sin esto la
+  // condición se apoyaba en una variable que NO EXISTÍA: el `&&` cortocircuitaba antes de llegar a
+  // ella y la comprobación pasaba SIEMPRE sin mirar nada. Verde por no medir, cazado al releer.
+  const provAdj = db.prepare("SELECT id FROM suppliers WHERE fiscal_id='1111' ORDER BY id LIMIT 1").get();
+  ok(!!provAdj, 'el proveedor de la factura adjunta existe, así que se puede afirmar sobre él', provAdj ? 'id ' + provAdj.id : 'NO existe');
+  const compraSuya = provAdj
+    ? db.prepare('SELECT COUNT(*) c FROM purchases WHERE id > ? AND supplier_id = ?').get(maxCompraAntes, provAdj.id).c
+    : 0;
+  ok(compraSuya === 0, 'NO se ha creado ninguna compra por adjuntar y revisar (confirm-first)', compraSuya + ' compras suyas');
+  const movSuyo = db.prepare(
+    "SELECT COUNT(*) c FROM stock_movements WHERE id > ? AND origin_type = 'purchase' AND origin_id > ?"
+  ).get(maxMovAntes, maxCompraAntes).c;
+  ok(movSuyo === 0, 'NO se ha movido stock por adjuntar y revisar (confirm-first)', movSuyo + ' movimientos');
   const attRow = db.prepare('SELECT entity_type, entity_id, extraction_json FROM attachments WHERE id=?').get(attId);
   ok(!attRow.entity_type && !attRow.entity_id, 'el adjunto sigue SUELTO (no se enlaza a nada hasta confirmar)');
   ok(!!attRow.extraction_json, 'la lectura cruda queda persistida en attachments.extraction_json');
