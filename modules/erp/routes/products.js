@@ -392,6 +392,7 @@ export function createProductRoutes(db, cfg = {}) {
       <div style="margin:-.5rem 0 1rem;display:flex;gap:1.2rem;flex-wrap:wrap;align-items:center">
         <span style="display:inline-flex;gap:.4rem;align-items:center"><span style="font-size:.78rem;color:var(--text3);font-weight:600">Listado</span>${botonesListado('productos', qsListado)}</span>
         <span style="display:inline-flex;gap:.4rem;align-items:center"><span style="font-size:.78rem;color:var(--text3);font-weight:600">Lista de precios</span>${botonesListado('precios', qsListado)}</span>
+        <span style="display:inline-flex;gap:.4rem;align-items:center"><span style="font-size:.78rem;color:var(--text3);font-weight:600">Catálogo</span>${botonesListado('catalogo', qsListado)}</span>
       </div>
 
       <div class="card">

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { botonesListado, JS_LISTADO_ENVIAR } from './listados.js';
 import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, docShell, skeletonRows } from '../layout.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
@@ -499,6 +500,8 @@ export function createSupplierInvoiceRoutes(db) {
           ${canCreate ? '<a href="/admin/supplier-invoices/new" class="btn btn-primary">Registrar factura</a>' : ''}
         </div>
       </div>
+      <!-- C8 · los tres verbos. El listado imprime lo que la pantalla enseña, filtro incluido. -->
+      <div style="margin:-.5rem 0 1rem">${botonesListado('gastos', supplierId ? 'proveedor_id=' + supplierId : '')}</div>
       <div id="disaBand"></div>
       ${supplierId ? `<div class="card" id="debtCard" style="margin-bottom:1rem;display:none"><div class="card-body" id="debtBox"></div></div>` : ''}
       <div class="card">
@@ -521,6 +524,7 @@ export function createSupplierInvoiceRoutes(db) {
       ${pagoModalHtml()}
       ${pagoCuentaModalHtml()}
       <script>
+        ${JS_LISTADO_ENVIAR}
       ${pagoModalScript(s)}
       const SYM = ${JSON.stringify(s)};
       const SUPPLIER_ID = ${supplierId ? supplierId : 'null'};

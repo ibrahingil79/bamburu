@@ -116,8 +116,18 @@ export function stockModalScript(sym, warehouses = []) {
           +'</tbody></table></div></div>'
         : '';
       const resvTxt = (data.reserved||0)>0 ? ' &nbsp;·&nbsp; reservado <strong style="color:var(--accent-purple)">'+data.reserved+'</strong> &nbsp;·&nbsp; disponible <strong style="color:'+((data.available||0)<0?'var(--danger)':'var(--ok)')+'">'+(data.available!=null?data.available:data.stock)+'</strong>' : '';
+      // C3 · LOS TRES VERBOS DEL KARDEX. Van AQUÍ, dentro del modal, porque aquí es donde vive el
+      // kardex: es de UN artículo, así que el papel necesita saber de cuál — de ahí el producto_id
+      // en la dirección. Salen del mismo sitio que los de los otros siete listados; esta pantalla no
+      // se pinta su propio botón ni conoce las rutas.
+      var verbosKardex = '<div style="display:inline-flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.8rem">'
+        + '<a class="btn btn-secondary btn-sm" target="_blank" rel="noopener" href="/admin/listados/kardex/imprimir?producto_id=' + id + '"><i class="ti ti-printer"></i> Imprimir</a>'
+        + '<a class="btn btn-secondary btn-sm" href="/admin/listados/kardex/pdf?producto_id=' + id + '"><i class="ti ti-download"></i> Descargar PDF</a>'
+        + '<button type="button" class="btn btn-secondary btn-sm" onclick="enviarListado(\\'kardex\\',\\'producto_id=' + id + '\\')"><i class="ti ti-mail"></i> Enviar por correo</button>'
+        + '</div>';
       document.getElementById('stockKardexBody').innerHTML =
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">'
+        verbosKardex
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">'
         +'<div>Stock actual: <strong style="font-size:1.4rem">'+data.stock+'</strong>'+resvTxt+'</div>'
         +'<button class="btn btn-primary btn-sm" onclick="openAjustar('+id+',\\''+escHtml((name||'').replace(/\\'/g,''))+'\\','+data.stock+')">Ajustar stock</button>'
         +'</div>'

@@ -101,6 +101,19 @@ export const LISTADO_CSS = `
   .lst-totales td{padding:4px 8px}
   .lst-totales td:last-child{text-align:right;font-weight:600}
   .lst-totales tr.grand td{border-top:1.5px solid var(--text);font-size:13px;padding-top:8px}
+  /* ── LAS TRES PIEZAS QUE PIDIERON LOS INFORMES CONTABLES (22 ago 2026) ────────────────────────
+     Son declarativas y ADITIVAS: un listado que no las declare sale exactamente igual que antes.
+     Nacen porque dos de los siete papeles de contabilidad no eran tablas planas y la alternativa
+     era un segundo motor, que es justo lo que C10 prohíbe. */
+  table.lst tr.sub td{background:var(--bg3,#F4F5F7);font-weight:700}
+  table.lst tr.sub td:first-child{border-left:2px solid var(--text3,#98A2B3)}
+  .lst-sec{margin-top:16px}
+  .lst-sec:first-of-type{margin-top:4px}
+  .lst-sec-tit{font-size:13px;font-weight:600;margin:0 0 4px;color:var(--text)}
+  .lst-notas{margin-top:10px;padding:7px 10px;border-left:3px solid var(--warn,#F79009);
+             background:var(--warn-s,#FFFAEB);font-size:10px;color:var(--text2);line-height:1.6}
+  .lst-notas b{color:var(--text);font-weight:600}
+  .lst-notas ul{margin:4px 0 0;padding-left:16px}
 `;
 
 // ── LA CABECERA QUE DECLARA LA BASE (C10-c + C10-d) ─────────────────────────────────────────────
@@ -129,6 +142,45 @@ function celda(col, fila, sym) {
   return '<td' + clase + '>' + fmt(bruto, sym) + '</td>';
 }
 
+// ── EL CUERPO DE UNA TABLA ──────────────────────────────────────────────────────────────────────
+// Se saca aparte para que un papel pueda llevar VARIAS: los borradores de modelos son un solo
+// documento con la tabla del 303 y la del 130, cada una con su título. Antes esto vivía dentro del
+// motor y solo se podía pintar una vez.
+//
+// `esSubtotal(fila)` marca una fila como total intercalado y la pinta destacada EN SU SITIO. Lo pide
+// la Cuenta de pérdidas y ganancias, donde los subtotales van entre las partidas y no al final: un
+// P&G con sus subtotales movidos al pie deja de ser un P&G.
+function tablaHtml({ columnas, filas, agrupar, esSubtotal, vacio, sym }) {
+  if (!filas.length) return '<div class="lst-vacio">' + escHtml(vacio) + '</div>';
+  let ultimoGrupo = null;
+  const trs = filas.map(fila => {
+    let previa = '';
+    if (agrupar) {
+      const g = typeof agrupar.rotulo === 'function' ? agrupar.rotulo(fila) : fila[agrupar.clave];
+      if (g !== ultimoGrupo) {
+        ultimoGrupo = g;
+        previa = '<tr class="grupo"><td colspan="' + columnas.length + '">' + escHtml(g == null ? '—' : g) + '</td></tr>';
+      }
+    }
+    const clase = (typeof esSubtotal === 'function' && esSubtotal(fila)) ? ' class="sub"' : '';
+    return previa + '<tr' + clase + '>' + columnas.map(c => celda(c, fila, sym)).join('') + '</tr>';
+  }).join('');
+  return '<table class="lst"><thead><tr>'
+    + columnas.map(c => '<th' + (c.align === 'right' ? ' class="r"' : (c.align === 'center' ? ' class="c"' : '')) + '>' + escHtml(c.rotulo) + '</th>').join('')
+    + '</tr></thead><tbody>' + trs + '</tbody></table>';
+}
+
+// ── LAS NOTAS AL PIE ────────────────────────────────────────────────────────────────────────────
+// Un aviso del tipo «antes de presentar, revisa…» es parte del papel, no decoración: quitarlo de un
+// borrador del 303 le retira una advertencia que el obligado tiene que leer. Por eso el motor sabe
+// pintarlo en vez de obligar a cada informe a traerse su propio HTML.
+function notasHtml(notas, titulo) {
+  const lista = (notas || []).filter(Boolean);
+  if (!lista.length) return '';
+  return '<div class="lst-notas"><b>' + escHtml(titulo || 'Antes de darlo por bueno, revisa:') + '</b>'
+    + '<ul>' + lista.map(n => '<li>' + escHtml(n) + '</li>').join('') + '</ul></div>';
+}
+
 // ── EL MOTOR ────────────────────────────────────────────────────────────────────────────────────
 // Recibe DATOS y una declaración; devuelve el papel entero. Añadir un listado nuevo es escribir su
 // declaración: ni una línea de este fichero cambia (C11).
@@ -139,46 +191,58 @@ function celda(col, fila, sym) {
 //   periodo:  { desde, hasta } | null
 //   totales:  [{ etiqueta, valor, formato, grand }]
 //   agrupar:  { clave, rotulo(fila) } | null
+//   esSubtotal: (fila) => bool | null    — la fila se pinta destacada EN SU SITIO
+//   secciones: [{ titulo, columnas, filas, totales, agrupar, esSubtotal, notas, tituloNotas }] | null
+//   notas:    [ 'texto', … ] | null      — aviso al pie del papel
 export function listadoHtml(db, {
   titulo, columnas, filas = [], filtros = [], periodo = null, totales = [],
   agrupar = null, generadoPor = '', vacio = 'No hay datos que mostrar con estos filtros.',
-  sym = '€', cuando = null,
+  sym = '€', cuando = null, esSubtotal = null, secciones = null, notas = null, tituloNotas = null,
 }) {
   const { emisor } = partesDe(db, null);          // configuración EN VIVO: un listado es de hoy
   const ahora = cuando || new Date().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
 
+  // UN LISTADO VACÍO NO ES UN PDF EN BLANCO NI UN ERROR. Es un documento que dice que no hay nada —
+  // que es un dato, y que además demuestra que la consulta se hizo. Lo resuelve `tablaHtml`.
+  //
+  // DOS MODOS, Y EL DE SIEMPRE NO CAMBIA: sin `secciones`, un papel es UNA tabla, exactamente como
+  // antes. Con `secciones`, son varias, cada una con su título, sus columnas y sus notas — que es lo
+  // que necesitan los borradores de modelos (303 y 130 en el mismo documento).
   let cuerpo;
-  if (!filas.length) {
-    // UN LISTADO VACÍO NO ES UN PDF EN BLANCO NI UN ERROR. Es un documento que dice que no hay
-    // nada — que es un dato, y que además demuestra que la consulta se hizo.
-    cuerpo = '<div class="lst-vacio">' + escHtml(vacio) + '</div>';
-  } else {
-    let ultimoGrupo = null;
-    const trs = filas.map(fila => {
-      let previa = '';
-      if (agrupar) {
-        const g = typeof agrupar.rotulo === 'function' ? agrupar.rotulo(fila) : fila[agrupar.clave];
-        if (g !== ultimoGrupo) {
-          ultimoGrupo = g;
-          previa = '<tr class="grupo"><td colspan="' + columnas.length + '">' + escHtml(g == null ? '—' : g) + '</td></tr>';
-        }
-      }
-      return previa + '<tr>' + columnas.map(c => celda(c, fila, sym)).join('') + '</tr>';
+  if (secciones && secciones.length) {
+    cuerpo = secciones.map(sec => {
+      const t = tablaHtml({
+        columnas: sec.columnas || columnas,
+        filas: sec.filas || [],
+        agrupar: sec.agrupar || null,
+        esSubtotal: sec.esSubtotal || esSubtotal,
+        vacio: sec.vacio || vacio,
+        sym,
+      });
+      const totSec = (sec.totales && sec.totales.length) ? totalesHtml(sec.totales, sym) : '';
+      return '<div class="lst-sec">'
+        + (sec.titulo ? '<h2 class="lst-sec-tit">' + escHtml(sec.titulo) + '</h2>' : '')
+        + t + totSec + notasHtml(sec.notas, sec.tituloNotas) + '</div>';
     }).join('');
-    cuerpo = '<table class="lst"><thead><tr>'
-      + columnas.map(c => '<th' + (c.align === 'right' ? ' class="r"' : (c.align === 'center' ? ' class="c"' : '')) + '>' + escHtml(c.rotulo) + '</th>').join('')
-      + '</tr></thead><tbody>' + trs + '</tbody></table>';
+  } else {
+    cuerpo = tablaHtml({ columnas, filas, agrupar, esSubtotal, vacio, sym });
   }
 
-  const tot = totales.length
-    ? '<table class="lst-totales">' + totales.map(t => {
-        const fmt = FORMATOS[t.formato || 'dinero'] || FORMATOS.dinero;
-        return '<tr' + (t.grand ? ' class="grand"' : '') + '><td>' + escHtml(t.etiqueta) + '</td><td>' + fmt(t.valor, sym) + '</td></tr>';
-      }).join('') + '</table>'
-    : '';
+  const tot = totales.length ? totalesHtml(totales, sym) : '';
 
   return '<style>' + LISTADO_CSS + '</style>'
     + membreteHtml({ emisor, otra: null })
-    + cabeceraHtml({ titulo, filtros, periodo, generadoPor, cuando: ahora, filas: filas.length })
-    + cuerpo + tot;
+    + cabeceraHtml({ titulo, filtros, periodo, generadoPor, cuando: ahora,
+                     filas: secciones && secciones.length
+                       ? secciones.reduce((n, s2) => n + ((s2.filas || []).length), 0)
+                       : filas.length })
+    + cuerpo + tot + notasHtml(notas, tituloNotas);
+}
+
+// Los totales del pie, aparte para que puedan pintarse también por sección.
+function totalesHtml(totales, sym) {
+  return '<table class="lst-totales">' + totales.map(t => {
+    const fmt = FORMATOS[t.formato || 'dinero'] || FORMATOS.dinero;
+    return '<tr' + (t.grand ? ' class="grand"' : '') + '><td>' + escHtml(t.etiqueta) + '</td><td>' + fmt(t.valor, sym) + '</td></tr>';
+  }).join('') + '</table>';
 }

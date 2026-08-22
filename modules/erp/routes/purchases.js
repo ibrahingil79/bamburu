@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { botonesListado, JS_LISTADO_ENVIAR } from './listados.js';
 import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, docShell, skeletonRows } from '../layout.js';
 import { validate } from '../../../core/validate.js';
@@ -141,6 +142,8 @@ export function createPurchaseRoutes(db, cfg = {}) {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const content = `
       <div class="ph"><h2>Compras</h2><div style="display:flex;gap:.5rem">${can(c,'purchases.create')?'<a href="/admin/purchases/capture" class="btn btn-secondary">Capturar factura</a><a href="/admin/purchases/new" class="btn btn-primary">Nueva compra</a>':''}</div></div>
+      <!-- C6 · los tres verbos, del mismo sitio que los otros siete listados. -->
+      <div style="margin:-.5rem 0 1rem">${botonesListado('compras', '')}</div>
       <div class="card">
         <div class="card-head"><h3>Registro de compras</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="renderPurchases()"></div>
         <div class="table-wrap"><table>
@@ -149,6 +152,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
         </table></div>
       </div>
       <script>
+        ${JS_LISTADO_ENVIAR}
       var PURCHASES=[];
       var STATUS_MAP={pending:'Pendiente',received:'Recibida',cancelled:'Cancelada'};
       var BADGE_MAP={pending:'b-yellow',received:'b-green',cancelled:'b-red'};
