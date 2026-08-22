@@ -85,7 +85,7 @@
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-08-22 · `ddf9aa4` · **84/84** · 574 s
+- **Último barrido completo:** 2026-08-22 · `7af7774` · **83/84** · 749 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -661,6 +661,62 @@ del primero.
 >   habría dejado de despertar a `margen` y `clientes`. Es exactamente la trampa de C-0.
 > - **`routes/products.js` se deja SIN regla a propósito:** hoy cae en el comodín final y corre todo.
 >   Escribirle `['impresion']` sería cambiar «todo» por «uno»: menos cobertura disfrazada de más.
+
+---
+
+#### 🔁 CIERRE REAL DE LA FASE 0 — LOS CUATRO CABOS (22 ago 2026)
+
+**CABO 1 · EL DIFF DE VERDAD — NO ERA IDÉNTICO, Y SIGUE SIN SERLO. LA FASE NO ESTÁ CERRADA.**
+
+Ibrahin tenía razón: comparé dos pasadas de **82** —las dos anteriores a los gates nuevos— y luego
+las publiqué junto a un 84/84 de día como si el `diff` las cubriera. No las cubría. Rehecho con 84,
+y con los rojos arreglados entre medias, sale esto:
+
+| ronda | día | madrugada | quién cayó |
+|---|---|---|---|
+| A | 84/84 | 82/84 | `gate-oficio-pantalla`, `gate-recepciones-c1b` |
+| B | 83/84 | 84/84 | `gate-oficio-pantalla` |
+| C | 84/84 | 83/84 | `gate-propuestas-pagos-permisos` |
+
+> **LO QUE DICEN ESOS NÚMEROS, Y NO ES LO QUE YO ESPERABA.** El rojo **cambia de franja**: cae de día
+> y pasa de noche, y al revés. O sea que **la hora ya no tiene nada que ver** —eso quedó resuelto— y
+> lo que queda es **la compañía**. Los cuatro rojos son distintos, y **los cuatro pasan en solitario**.
+> El barrido en paralelo tiene un **ruido de fondo de ~1 gate por pasada**, de una lista rotatoria de
+> gates que se pisan en el único negocio de desarrollo que comparten los 84.
+>
+> **ESO NO SE ARREGLA GATE A GATE**, y esta ronda lo demuestra: arreglé tres y salió un cuarto. Lo que
+> se ha hecho es lo que el propio punto 0.1 manda —**declararlos**, con su motivo escrito— y `SOLOS`
+> pasa de 9 a **11**. Pero declarar no elimina el ruido: lo acota.
+
+**CABO 2 · LAS OTRAS DOCE PANTALLAS — COMPROBADAS UNA A UNA, NINGUNA MÁS INVENTADA**
+
+Las trece tienen **montaje y handler** en el código, y las doce con dato responden **HTTP 200 sin
+redirigir** contra la dirección pública (`desarrollo-bamburu.bamburu.com`). La decimotercera
+(`/admin/quotes/:id/edit`) solo existe con un presupuesto en borrador, que el gate se trae y limpia.
+
+**CABO 3 · LA FACTURA F2026-0973 — DÓNDE PASÓ**
+
+- **Negocio: `desarrollo-bamburu`** («Desarrollo Bamburu», control.db id 20, plan starter, país ES).
+  Es **el negocio de desarrollo del proyecto**, el que comparten los 84 gates. **No es de un cliente.**
+- **Serie y correlativo: año 2026, secuencia 973**, número `F2026-0973`. El correlativo **queda
+  consumido**: la numeración siguió (hay F2026-0975 y F2026-0976 posteriores).
+- **Sí entró en la cadena de huellas.** Dos registros en `verifactu_registros`: `alta` (id 1256) y
+  `anulacion` (id 1257), encadenados por `prev_huella`. La anulación por el camino del producto
+  generó su propio registro, así que **la cadena queda íntegra y cerrada**, no rota.
+- **NO salió hacia la AEAT.** `verifactu_envios` tiene dos filas en total, de los registros 53 y 54,
+  ambas en estado `bloqueado_datos` y con `entorno`, `endpoint` y `http_status` a `null` — nunca hubo
+  llamada. **Los registros de esta factura no tienen ninguna fila de envío.**
+
+**CABO 4 · NORMA EN `CLAUDE.md`, Y QUIÉN NO LA CUMPLE HOY**
+
+La norma está escrita literal, en su propia sección. Y el repaso que pedía, **sin arreglar nada**:
+
+- **27 gates afirman «cero errores JS» escuchando `pageerror`/consola.** Matiz que importa y que no
+  conviene inflar: esa vía **sí** caza los errores de EJECUCIÓN (un `ReferenceError` al pulsar); lo
+  que **no** caza es el **error de sintaxis** que mata el bloque entero. Su aserción no es falsa, es
+  **incompleta**, y ninguno de los 27 cubre la clase que dejó dos pantallas muertas.
+- **Ninguno compila scripts del DOM** (la segunda vía prohibida). El único que compila el HTML crudo
+  es `gate-pantallas-documento`.
 
 ---
 

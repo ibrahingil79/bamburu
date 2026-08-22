@@ -204,6 +204,12 @@ export const SOLOS = new Map([
    + 'cambiado, y cualquiera que siembre citas o toque el horario le deja sin huecos con los que '
    + 'crear la suya (falló con «sin huecos» en días libres a 45 y a 60 vista). Rojo REAL de '
    + 'concurrencia; el gate tiene razón y por eso corre solo.'],
+  ['gate-propuestas-pagos-permisos',
+   'REGISTRA UN PAGO REAL de proveedor por el mismo camino que el botón «Pagar» y luego afirma que '
+   + 'ese pago SIGUE ahí, que la propuesta quedó cerrada y que consta quién la aprobó. Los otros '
+   + 'gates de propuestas y de pagos trabajan sobre el mismo negocio y le borran o le mueven la '
+   + 'fila entre que la escribe y la lee (falló las tres aserciones de golpe en la pasada de '
+   + 'madrugada del 22-ago y pasa 32/32 en solitario). Rojo REAL de concurrencia; corre solo.'],
   ['gate-nav-inicio-disa',
    'cuenta las PROPUESTAS PENDIENTES del negocio (`contarPropuestasPendientes`) y exige que el badge '
    + 'del riel enseñe ese mismo número. Los seis gates de propuestas crean y consumen propuestas en '
