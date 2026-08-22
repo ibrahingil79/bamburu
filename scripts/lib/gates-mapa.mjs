@@ -192,6 +192,18 @@ export const SOLOS = new Map([
   ['gate-rentabilidad-pantalla',
    'lo mismo con Ventas Y con el total del P&G (340.387,01 → 340.087,01 y 244.406,77 → 244.106,77 '
    + 'en la primera pasada en paralelo). Corre solo.'],
+  // ── EL QUE DESTAPÓ EL DIFF DE DÍA CONTRA MADRUGADA (22 ago 2026) ────────────────────────
+  // Cayó en una pasada de día y pasó en la de madrugada, y al revés en la anterior: la franja no
+  // tenía nada que ver, era la compañía. No se le ha bajado el listón ni se ha tocado su escenario
+  // más allá de alejarlo en el calendario: se DECLARA, que es lo que toca cuando un gate necesita el
+  // negocio para él solo.
+  ['gate-oficio-pantalla',
+   'APAGA A TODAS LAS PERSONAS DEL NEGOCIO MENOS UNA para comprobar que, con una sola, el alta de '
+   + 'cita enseña TRES campos y no cuatro. Eso es manipular el negocio entero durante su ejecución: '
+   + 'mientras dura, cualquier otro gate que necesite personas activas se encuentra el negocio '
+   + 'cambiado, y cualquiera que siembre citas o toque el horario le deja sin huecos con los que '
+   + 'crear la suya (falló con «sin huecos» en días libres a 45 y a 60 vista). Rojo REAL de '
+   + 'concurrencia; el gate tiene razón y por eso corre solo.'],
   ['gate-nav-inicio-disa',
    'cuenta las PROPUESTAS PENDIENTES del negocio (`contarPropuestasPendientes`) y exige que el badge '
    + 'del riel enseñe ese mismo número. Los seis gates de propuestas crean y consumen propuestas en '
