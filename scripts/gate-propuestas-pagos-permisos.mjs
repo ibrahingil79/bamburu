@@ -198,13 +198,36 @@ try {
 
   console.log('\n[5] E2E — registrar el pago desde la propuesta');
   await dueño.page.click('#pagoBody .btn-primary');          // "Registrar pago"
-  await new Promise(r => setTimeout(r, 1500));
-  const pagos = db.prepare('SELECT * FROM supplier_payments WHERE supplier_invoice_id=?').all(creados.invoice);
+  // SE ESPERA A LA CONDICIÓN, NO AL RELOJ. Aquí había un `setTimeout` de 1.500 ms fijos, y esa era
+  // toda la causa de que este gate cayera en el barrido: registrar el pago va al servidor, y con
+  // otros veinte gates encima y el freno de peticiones de por medio no siempre había terminado a los
+  // 1,5 s — el gate leía la base antes de tiempo y cantaba las TRES aserciones de golpe. Los datos
+  // nunca estuvieron pisados: ya filtran por SU factura y por SU propuesta. Ahora se espera a que el
+  // pago exista, hasta 20 s, y se sale en cuanto está: rápido cuando no hay carga y paciente cuando
+  // la hay. Con esto el gate deja de necesitar correr solo.
+  let pagos = [];
+  for (let i = 0; i < 80; i++) {
+    pagos = db.prepare('SELECT * FROM supplier_payments WHERE supplier_invoice_id=?').all(creados.invoice);
+    if (pagos.length) break;
+    await new Promise(r => setTimeout(r, 250));
+  }
+  // Y un respiro corto para que el servidor termine de cerrar la propuesta, que va en la misma
+  // transacción lógica pero se lee de otra tabla.
+  for (let i = 0; i < 40 && pagos.length; i++) {
+    const p = db.prepare('SELECT status FROM disa_proposals WHERE id=?').get(mia.id);
+    if (p && p.status === 'aprobada_registrada') break;
+    await new Promise(r => setTimeout(r, 250));
+  }
   ok(pagos.length === 1 && Math.abs(pagos[0].amount - 240) < 0.005,
      `queda UN pago real de 240,00 en supplier_payments (el mismo camino que el botón "Pagar")`);
   const tras = db.prepare('SELECT status, resolved_by FROM disa_proposals WHERE id=?').get(mia.id);
   ok(tras.status === 'aprobada_registrada', 'la propuesta queda cerrada (aprobada_registrada)');
   ok(!!tras.resolved_by, `queda rastro de quién la aprobó ("${tras.resolved_by}")`);
+  // Y AL PANEL TAMBIÉN SE LE ESPERA POR CONDICIÓN. El `setTimeout` que había antes le daba de
+  // rebote el tiempo de repintarse; al salir en cuanto el pago está en la base, había que pedírselo
+  // explícitamente. Se espera a que la tarjeta desaparezca, no a que pase un rato.
+  await dueño.page.waitForFunction(id => !document.getElementById('prop' + id), { timeout: 15000 }, mia.id)
+    .catch(() => {});
   const sigueEnPanel = await dueño.page.evaluate(id => !!document.getElementById('prop' + id), mia.id);
   ok(!sigueEnPanel, 'la propuesta desaparece del panel al quedar atendida');
   ok(dueño.errores.length === 0, `0 errores JS en todo el flujo${dueño.errores.length ? ' — ' + dueño.errores[0] : ''}`);

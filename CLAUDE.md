@@ -128,6 +128,13 @@ estado `errored` y no es la instancia productiva — ignorarla.
 - La métrica de progreso es TAREAS COMPLETADAS, no líneas de código.
 - Al terminar la sesión, sigue el paso de cierre del RITUAL (resumen + actualizar Notion).
 
+## Una comprobación pedida una vez se ejecuta UNA vez
+
+> **Una comprobación pedida una vez se ejecuta UNA vez. Si crees que hacen falta más pasadas, paras y
+> preguntas. Repetir un barrido para perseguir un rojo intermitente está prohibido: se declara el
+> rojo con su motivo y se pregunta. El 22 de agosto, ocho barridos encadenados llenaron el disco al
+> 100% y dejaron el motor de citas en 0 bytes.**
+
 ## Gates de pantalla — cómo se da una pantalla por sana
 
 > **Una pantalla solo se da por sana mirando el HTML tal y como sale del SERVIDOR. No vale escuchar

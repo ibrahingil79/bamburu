@@ -192,24 +192,14 @@ export const SOLOS = new Map([
   ['gate-rentabilidad-pantalla',
    'lo mismo con Ventas Y con el total del P&G (340.387,01 → 340.087,01 y 244.406,77 → 244.106,77 '
    + 'en la primera pasada en paralelo). Corre solo.'],
-  // ── EL QUE DESTAPÓ EL DIFF DE DÍA CONTRA MADRUGADA (22 ago 2026) ────────────────────────
-  // Cayó en una pasada de día y pasó en la de madrugada, y al revés en la anterior: la franja no
-  // tenía nada que ver, era la compañía. No se le ha bajado el listón ni se ha tocado su escenario
-  // más allá de alejarlo en el calendario: se DECLARA, que es lo que toca cuando un gate necesita el
-  // negocio para él solo.
-  ['gate-oficio-pantalla',
-   'APAGA A TODAS LAS PERSONAS DEL NEGOCIO MENOS UNA para comprobar que, con una sola, el alta de '
-   + 'cita enseña TRES campos y no cuatro. Eso es manipular el negocio entero durante su ejecución: '
-   + 'mientras dura, cualquier otro gate que necesite personas activas se encuentra el negocio '
-   + 'cambiado, y cualquiera que siembre citas o toque el horario le deja sin huecos con los que '
-   + 'crear la suya (falló con «sin huecos» en días libres a 45 y a 60 vista). Rojo REAL de '
-   + 'concurrencia; el gate tiene razón y por eso corre solo.'],
-  ['gate-propuestas-pagos-permisos',
-   'REGISTRA UN PAGO REAL de proveedor por el mismo camino que el botón «Pagar» y luego afirma que '
-   + 'ese pago SIGUE ahí, que la propuesta quedó cerrada y que consta quién la aprobó. Los otros '
-   + 'gates de propuestas y de pagos trabajan sobre el mismo negocio y le borran o le mueven la '
-   + 'fila entre que la escribe y la lee (falló las tres aserciones de golpe en la pasada de '
-   + 'madrugada del 22-ago y pasa 32/32 en solitario). Rojo REAL de concurrencia; corre solo.'],
+  // ── AQUÍ ESTUVO `gate-propuestas-pagos-permisos`, Y SE HA RETIRADO (22 ago 2026). Lo declaré
+  // «solo» el mismo día al verlo caer en el barrido, y eso era esconder el problema subiendo el
+  // tiempo de la pasada. No tenía problema de datos —ya filtraba por SU factura y SU propuesta—:
+  // dormía 1.500 ms fijos tras pulsar «Registrar pago» y bajo carga leía la base antes de tiempo.
+  // Arreglada la causa (espera a la CONDICIÓN, no al reloj), vuelve a correr en compañía.
+  // A `gate-oficio-pantalla` se le quitó ese mismo día la causa de los usuarios —ahora levanta su
+  // propio negocio de una sola persona—, pero SIGUE declarado más abajo: mueve `company_config` del
+  // negocio compartido, que es una causa distinta y anterior, y esa no se ha tocado.
   ['gate-nav-inicio-disa',
    'cuenta las PROPUESTAS PENDIENTES del negocio (`contarPropuestasPendientes`) y exige que el badge '
    + 'del riel enseñe ese mismo número. Los seis gates de propuestas crean y consumen propuestas en '
@@ -228,9 +218,10 @@ export const SOLOS = new Map([
    + 'neto-cero. Mientras tanto el total de ventas del negocio se mueve y vuelve: cualquier gate que '
    + 'mida ese total a la vez leería un número que no es el suyo.'],
   ['gate-oficio-pantalla',
-   'DESACTIVA a todos los demás usuarios del negocio para probar la pantalla con una sola persona, y '
-   + 'cambia el oficio y el nombre de los puestos en `company_config`. Lo devuelve todo al salir, pero '
-   + 'mientras corre el negocio entero está tocado: no puede compartir.'],
+   'cambia el OFICIO y el nombre de los puestos en `company_config` del negocio, y los devuelve al '
+   + 'salir; mientras corre, el vocabulario del negocio entero está tocado. (El 22 ago 2026 se le '
+   + 'quitó la OTRA causa: desactivaba a todas las demás personas para probar el caso «una sola», y '
+   + 'ahora para eso levanta su propio negocio, que nace con una. Queda solo por `company_config`.)'],
   ['gate-reserva-publica-pantalla',
    'reescribe la configuración de la PUERTA PÚBLICA del negocio entero (`cita_pub_*`: la apaga para probar '
    + 'el 404, la enciende, le cambia handle, ventana y política) y luego la restaura. Y sus aserciones de '

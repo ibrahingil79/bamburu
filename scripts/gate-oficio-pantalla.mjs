@@ -13,6 +13,7 @@ import puppeteer from 'puppeteer';
 import { launchOpts, APP_DIR } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { join } from 'path';
+import { unlinkSync } from 'fs';
 
 const BASE = 'http://desarrollo-bamburu.localhost:3000', HOST = 'desarrollo-bamburu.localhost';
 let pass = 0, fail = 0;
@@ -26,9 +27,43 @@ db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf
 // Estado previo, para devolverlo TAL CUAL al terminar.
 const CFG0 = db.prepare('SELECT oficio, cita_puesto_sing, cita_puesto_plural FROM company_config WHERE id=1').get();
 const OTROS = db.prepare('SELECT id FROM admin_users WHERE active=1 AND id<>?').all(owner.id).map(r => r.id);
-let apagados = [], SVC = 0, RECURSO = 0, b;
+let apagados = [], SVC = 0, RECURSO = 0, b, slugPropio = null;
 
 // Cuántos campos se ven DELANTE (sin abrir "Más opciones"), y cuáles.
+// ── UN NEGOCIO PROPIO, DE UNA SOLA PERSONA ──────────────────────────────────────────────────────
+// POR QUÉ EXISTE ESTO. El paso [2] necesita un negocio con UNA sola persona activa. Antes lo
+// conseguía APAGANDO a todas las demás del negocio de desarrollo… que comparten los 84 gates: se
+// dejaba el negocio cambiado mientras corría, cualquiera que necesitara personas activas se lo
+// encontraba tocado, y a él le llenaban la agenda o le movían el horario. Cayó en el barrido en
+// distintas franjas y acabó DECLARADO como «corre solo», que es esconder el problema subiendo el
+// tiempo del barrido. La causa se arregla aquí: un negocio recién dado de alta **nace con una sola
+// persona**, así que no hay nada que apagar. Y al no tocar a nadie, el gate vuelve a correr en
+// compañía.
+async function negocioDeUnaPersona() {
+  const { provisionTenant } = await import('../core/tenant-provisioning.js');
+  const r = await provisionTenant({
+    businessName: 'GOF Solo ' + TS, ownerName: 'Persona Única',
+    email: 'gof-solo-' + TS + '@t.local', password: 'contrasena-larga-123',
+    country: 'ES', sector: 'peluquería', oficio: 'peluqueria',
+  });
+  const d = new Database(join(APP_DIR, r.db_filename));
+  const own = d.prepare('SELECT id FROM admin_users WHERE active=1').get();
+  // Horario de negocio de lunes a viernes, para que haya huecos con los que crear la cita.
+  for (const dow of [1, 2, 3, 4, 5]) {
+    d.prepare("INSERT INTO horario_tramos (scope,user_id,dow,inicio_min,fin_min) VALUES ('negocio',NULL,?,?,?)").run(dow, 9 * 60, 18 * 60);
+  }
+  // Un servicio reservable suyo.
+  const svc = d.prepare("INSERT INTO products (name,price,type,tax_band,tax_rate,status) VALUES (?,20,'service','general',21,'active')")
+    .run('GOF Servicio Solo ' + TS).lastInsertRowid;
+  d.prepare('INSERT INTO service_config (product_id,reservable,duracion_min,margen_min) VALUES (?,1,30,0)').run(svc);
+  const t = 'gof-solo-' + TS;
+  const n = Math.floor(Date.now() / 1000);
+  d.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)')
+    .run(t, own.id, n, n + 7200, 'csrf-' + TS);
+  return { slug: r.slug, db: d, ownerId: own.id, tok: t, svc,
+           base: 'http://' + r.slug + '.localhost:3000', host: r.slug + '.localhost' };
+}
+
 const visibles = p => p.evaluate(() => {
   const vis = el => !!el && el.offsetParent !== null;
   const dentroDeMas = el => !!(el && el.closest('#cMas'));
@@ -104,78 +139,62 @@ try {
   ok(ctx.split('·').length === 3, 'y la persona/día/hora se heredan del hueco, en la línea de contexto: «' + ctx + '»');
 
   // ── [2] UNA sola persona → TRES campos, y se asigna sola ───────────────────
-  console.log('\n[2] «Nueva cita» con UNA sola persona → TRES campos');
-  for (const id of OTROS) { db.prepare('UPDATE admin_users SET active=0 WHERE id=?').run(id); apagados.push(id); }
-  ok(db.prepare('SELECT COUNT(*) n FROM admin_users WHERE active=1').get().n === 1, 'queda una sola persona activa');
-  await abrirNueva();
-  v = await visibles(p);
+  // TODO ESTE PASO CORRE EN UN NEGOCIO PROPIO, recién dado de alta, que nace con UNA sola persona.
+  // Antes apagaba a todas las del negocio de desarrollo, que comparten los 84 gates: esa era la
+  // causa de que se pisara con los demás y de que acabara declarado «corre solo». Aquí no se apaga
+  // a nadie y no se toca nada de nadie, así que el gate vuelve a correr en compañía.
+  console.log('\n[2] «Nueva cita» con UNA sola persona → TRES campos (en negocio propio)');
+  const solo = await negocioDeUnaPersona();
+  slugPropio = solo.slug;
+  ok(solo.db.prepare('SELECT COUNT(*) n FROM admin_users WHERE active=1').get().n === 1,
+     'el negocio propio nace con una sola persona activa: no hay que apagar a nadie');
+
+  const p2 = await b.newPage();
+  await p2.setViewport({ width: 1280, height: 900 });
+  await p2.setCookie({ name: 'asess', value: solo.tok, domain: solo.host, path: '/' });
+  const abrirNuevaEn2 = async () => {
+    await p2.goto(solo.base + '/admin/citas', { waitUntil: 'networkidle2' });
+    await p2.waitForFunction(() => typeof openNuevaCita === 'function', { timeout: 8000 });
+    await p2.evaluate(() => openNuevaCita());
+    await p2.waitForFunction(() => document.getElementById('mCita').classList.contains('open') && document.querySelectorAll('.csvc').length > 0, { timeout: 8000 });
+  };
+  await abrirNuevaEn2();
+  v = await visibles(p2);
   ok(v.campos.length === 3, 'se ven TRES campos delante: ' + v.campos.join(' · '));
   ok(!v.campos.includes('quien'), 'el campo de persona NO se pinta');
   ok(!v.personaDentroDeMas, '…y tampoco se ha escondido dentro de «Más opciones»: sigue en el panel, oculto');
-  const asignada = await p.evaluate(() => document.getElementById('cPersona').value);
-  ok(String(asignada) === String(db.prepare('SELECT id FROM admin_users WHERE active=1').get().id),
-    'la única persona queda preseleccionada: la cita se le asigna sola');
+  const asignada = await p2.evaluate(() => document.getElementById('cPersona').value);
+  ok(String(asignada) === String(solo.ownerId), 'la única persona queda preseleccionada: la cita se le asigna sola');
 
-  // Y se puede crear la cita de verdad con esos tres campos.
-  // EL DÍA TIENE QUE SER UNO EN QUE EL NEGOCIO ABRA DE VERDAD. El formulario arranca en HOY, y si
-  // el gate corre con el negocio ya cerrado no queda un solo hueco: fallaba con «sin huecos» **sin
-  // que el producto tuviera nada mal**. Y «mañana» tampoco sirve: la primera versión de este arreglo
-  // cayó en sábado, que este negocio no abre. Se lee el horario y se coge el primer día abierto.
-  // ABIERTO **Y LIBRE**, y no solo abierto. La primera versión cogía el primer día abierto y se lo
-  // encontraba lleno: en el barrido corren veinte gates a la vez sobre el mismo negocio y varios
-  // siembran citas, así que el hueco desaparecía y esto fallaba con «sin huecos» — un rojo ajeno que
-  // aparecía y desaparecía entre pasadas. Se busca uno abierto y sin una sola cita, y se empieza a
-  // mirar a DOS SEMANAS vista, lejos de donde siembran los demás.
-  const dowsAbiertos = new Set(db.prepare("SELECT DISTINCT dow FROM horario_tramos WHERE scope='negocio'").all().map(r => r.dow));
-  const hayCitas = db.prepare('SELECT 1 FROM citas WHERE fecha=? LIMIT 1');
-  // SE BUSCA LEJOS Y SE REVALIDA. A dos semanas seguía chocando: los demás gates siembran citas en
-  // las próximas semanas y le llenaban el día elegido entre que lo elegía y lo usaba. Se arranca a
-  // 45 días —donde no siembra nadie— y, sobre todo, se vuelve a comprobar que sigue libre JUSTO
-  // antes de pedirle huecos: entre las dos cosas, la carrera se cierra.
-  let DIA_CITA = null;
-  for (let d = 45; d <= 120 && !DIA_CITA; d++) {
+  // Y se puede crear la cita de verdad con esos tres campos. El día se busca abierto: en un negocio
+  // recién nacido no hay ni una cita, así que no hace falta buscarlo «libre» — no hay nadie más.
+  let DIA2 = null;
+  for (let d = 1; d <= 14 && !DIA2; d++) {
     const f = new Date(Date.now() + d * 86400000);
-    const iso = f.toISOString().slice(0, 10);
-    if (dowsAbiertos.has(f.getUTCDay()) && !hayCitas.get(iso)) DIA_CITA = iso;
+    if ([1, 2, 3, 4, 5].includes(f.getUTCDay())) DIA2 = f.toISOString().slice(0, 10);
   }
-  if (DIA_CITA && hayCitas.get(DIA_CITA)) {           // alguien lo pisó mientras tanto: al siguiente
-    for (let d = 46; d <= 120; d++) {
-      const f = new Date(Date.now() + d * 86400000);
-      const iso = f.toISOString().slice(0, 10);
-      if (dowsAbiertos.has(f.getUTCDay()) && !hayCitas.get(iso)) { DIA_CITA = iso; break; }
-    }
-  }
-  ok(!!DIA_CITA, 'hay un día abierto Y libre por delante donde pedir la cita', DIA_CITA || 'ninguno en 60 días');
-
-  const creada = await p.evaluate(async (svc, dia) => {
+  const creada = await p2.evaluate(async (svc, dia) => {
     document.getElementById('cBusca').value = 'GOF Cliente';
     document.getElementById('cNuevoNombre').textContent = 'GOF Cliente';
     cUsarNuevo();
-    // LA CITA SE PIDE PARA MAÑANA, NO PARA HOY. El formulario arranca en el día de hoy, y si el
-    // gate corre cuando el negocio ya ha cerrado no queda ni un hueco libre: el selector se quedaba
-    // vacío y esto fallaba con «sin huecos», **sin que el producto tuviera nada mal**. Se descubrió
-    // corriéndolo a las 19:43. Mañana siempre hay día entero por delante.
-    const cb = document.querySelector('.csvc[value="' + svc + '"]'); cb.checked = true; await cServChange();
-    // Y HAY QUE DISPARAR EL RECÁLCULO A MANO: asignar el valor desde JS **no** lanza el `onchange`
-    // del campo, así que poner la fecha sin más no bastaba: los huecos seguían siendo los de hoy.
+    const cb = document.querySelector('.csvc[value="' + svc + '"]');
+    if (!cb) return { ok: false, motivo: 'el servicio del gate no sale en el panel' };
+    cb.checked = true; await cServChange();
     const fecha = document.getElementById('cFecha');
     if (fecha) { fecha.value = dia; await cRecalc(); }
-    await new Promise(r => setTimeout(r, 500));
     await new Promise(r => setTimeout(r, 700));
     const sel = document.getElementById('cHueco');
     const opt = [...sel.options].find(o => o.value !== '');
-    if (!opt) return { ok: false, motivo: 'sin huecos · fecha=' + (fecha ? fecha.value : '?')
-      + ' · opciones=' + sel.options.length + ' [' + [...sel.options].map(o => o.value + '|' + o.textContent).slice(0,3).join(' , ') + ']'
-      + ' · servicio marcado=' + !!document.querySelector('.csvc:checked') };
+    if (!opt) return { ok: false, motivo: 'sin huecos · fecha=' + (fecha ? fecha.value : '?') + ' · opciones=' + sel.options.length };
     sel.value = opt.value; await cSugerir();
     await cGuardar();
     await new Promise(r => setTimeout(r, 800));
     return { ok: !document.getElementById('mCita').classList.contains('open') };
-  }, SVC, DIA_CITA);
+  }, solo.svc, DIA2);
   ok(creada.ok, 'se crea la cita con solo esos tres campos' + (creada.motivo ? ' (' + creada.motivo + ')' : ''));
-  const citaNueva = db.prepare("SELECT id,user_id FROM citas WHERE cliente_suelto_nombre='GOF Cliente' ORDER BY id DESC LIMIT 1").get();
-  ok(citaNueva != null && String(citaNueva.user_id) === String(asignada), 'y queda guardada a nombre de esa persona');
-  if (citaNueva) { db.prepare('DELETE FROM cita_servicios WHERE cita_id=?').run(citaNueva.id); db.prepare('DELETE FROM citas WHERE id=?').run(citaNueva.id); }
+  const citaNueva = solo.db.prepare("SELECT id,user_id FROM citas WHERE cliente_suelto_nombre='GOF Cliente' ORDER BY id DESC LIMIT 1").get();
+  ok(citaNueva != null && String(citaNueva.user_id) === String(solo.ownerId), 'y queda guardada a nombre de esa persona');
+  await p2.close();
 
   // ── [5] El vocabulario del oficio, en pantalla y en el menú ────────────────
   console.log('\n[5] el vocabulario del oficio llega a la pantalla Y al menú');
@@ -222,13 +241,22 @@ try {
   ok(/Cliente/.test(voz2.etiqueta) && voz2.win === 'Cliente', 'al volver a «Otro», vuelve a decir «Cliente» (nada se queda pegado)');
 
   // ── [6] Móvil ──────────────────────────────────────────────────────────────
-  console.log('\n[6] móvil 390×844');
-  await p.setViewport({ width: 390, height: 844, isMobile: true });
-  await abrirNueva();
-  v = await visibles(p);
+  // TAMBIÉN EN EL NEGOCIO PROPIO: lo que este paso comprueba es que con UNA sola persona el móvil
+  // sigue pidiendo tres campos, así que necesita el mismo negocio de una persona que el paso [2].
+  // Con el de desarrollo veía cuatro campos, y con razón: allí hay varias personas.
+  console.log('\n[6] móvil 390×844 (en el negocio propio, que es el de una sola persona)');
+  const p6 = await b.newPage();
+  await p6.setViewport({ width: 390, height: 844, isMobile: true });
+  await p6.setCookie({ name: 'asess', value: solo.tok, domain: solo.host, path: '/' });
+  await p6.goto(solo.base + '/admin/citas', { waitUntil: 'networkidle2' });
+  await p6.waitForFunction(() => typeof openNuevaCita === 'function', { timeout: 8000 });
+  await p6.evaluate(() => openNuevaCita());
+  await p6.waitForFunction(() => document.getElementById('mCita').classList.contains('open'), { timeout: 8000 });
+  v = await visibles(p6);
   ok(v.campos.length === 3, 'en móvil, con una persona, siguen siendo TRES campos: ' + v.campos.join(' · '));
-  const desborda = await p.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 2);
+  const desborda = await p6.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 2);
   ok(!desborda, 'el panel no desborda a lo ancho en móvil');
+  await p6.close();
 
   // ── [7] Cambiar de oficio desde los ajustes del negocio ────────────────────
   console.log('\n[7] cambiar de oficio desde «Datos del negocio»');
@@ -265,6 +293,20 @@ try {
 } finally {
   // Devolver el tenant a como estaba, pase lo que pase.
   try { for (const id of apagados) db.prepare('UPDATE admin_users SET active=1 WHERE id=?').run(id); } catch {}
+  // EL NEGOCIO DE MENTIRA SE BORRA. Se da de alta por el camino real y se retira por el mismo sitio
+  // que los demás gates que se traen el suyo: fila de `tenants` y sus ficheros. Si no, cada pasada
+  // del barrido dejaría un negocio más en la máquina.
+  if (slugPropio) {
+    try {
+      const control = new Database(join(APP_DIR, 'data/control.db'));
+      const t = control.prepare('SELECT db_filename FROM tenants WHERE slug=?').get(slugPropio);
+      control.prepare('DELETE FROM tenants WHERE slug=?').run(slugPropio);
+      control.close();
+      if (t) for (const suf of ['', '-wal', '-shm']) {
+        try { unlinkSync(join(APP_DIR, t.db_filename + suf)); } catch {}
+      }
+    } catch {}
+  }
   try { db.prepare('UPDATE company_config SET oficio=?, cita_puesto_sing=?, cita_puesto_plural=? WHERE id=1').run(CFG0.oficio, CFG0.cita_puesto_sing, CFG0.cita_puesto_plural); } catch {}
   try { if (SVC) { db.prepare('DELETE FROM service_config WHERE product_id=?').run(SVC); db.prepare('DELETE FROM products WHERE id=?').run(SVC); } } catch {}
   try { if (RECURSO) db.prepare('DELETE FROM recursos WHERE id=?').run(RECURSO); } catch {}
