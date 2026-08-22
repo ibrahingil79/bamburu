@@ -168,25 +168,6 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
 }
 
 // ── PDF de gestoría (HTML legible, una fila por asiento, columnas esenciales) ─
-export function libroHtml(titulo, periodo, asientos, totals, sym, kind) {
-  const esVentas = kind === 'ventas';
-  const head = esVentas
-    ? '<tr><th>Factura</th><th>F. exped.</th><th>F. oper.</th><th>Tipo</th><th>NIF</th><th>Destinatario</th><th>Base</th><th>Tipo IVA</th><th>Cuota</th><th>Retención</th><th>Total línea</th></tr>'
-    : '<tr><th>Nº recepción</th><th>Nº fra. prov.</th><th>F. exped.</th><th>F. oper.</th><th>NIF</th><th>Expedidor</th><th>Base</th><th>Tipo IVA</th><th>Cuota</th><th>Total línea</th></tr>';
-  const rate = r => r === null ? 'sin desglosar' : (Number(r) === 0 ? '0% (exento)' : r + '%');
-  const m = n => sym + Number(n || 0).toFixed(2);
-  const rows = asientos.map(a => esVentas
-    ? `<tr><td>${escHtml(a.invoice_number)}${a.es_rectificativa ? ' (R' + (a.rect_mode ? '·' + a.rect_mode : '') + ')' : ''}</td><td>${escHtml(a.issue_date || '')}</td><td>${a.operation_date ? escHtml(a.operation_date) : '—'}</td><td>${escHtml(a.tipo_factura || '')}</td><td>${escHtml(a.nif || '')}</td><td>${escHtml(a.nombre || '')}</td><td>${m(a.base)}</td><td>${rate(a.rate)}</td><td>${m(a.cuota)}</td><td>${a.irpf != null && a.irpf !== 0 ? m(a.irpf) : ''}</td><td>${m(a.total_linea)}</td></tr>`
-    : `<tr><td>${escHtml(a.internal_code || '')}</td><td>${escHtml(a.supplier_number || '')}</td><td>${escHtml(a.invoice_date || '')}</td><td>${a.operation_date ? escHtml(a.operation_date) : '—'}</td><td>${escHtml(a.nif || '')}</td><td>${escHtml(a.nombre || '')}</td><td>${m(a.base)}</td><td>${rate(a.rate)}</td><td>${m(a.cuota)}</td><td>${m(a.total_linea)}</td></tr>`).join('');
-  const cols = esVentas ? 11 : 10;
-  return `<!doctype html><html><head><meta charset="utf-8"><style>
-    body{font-family:-apple-system,Segoe UI,sans-serif;font-size:10px;color:#111}h1{font-size:15px;margin:0 0 2px}.sub{color:#555;margin-bottom:8px}
-    table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:2px 4px;text-align:right}th{background:#eee;text-align:center}td:nth-child(-n+6){text-align:left}
-    .tot{font-weight:700;background:#fafafa}</style></head><body>
-    <h1>${escHtml(titulo)}</h1><div class="sub">Periodo ${escHtml(periodo)} · un asiento por línea (formato AEAT) · copia para gestoría</div>
-    <table><thead>${head}</thead><tbody>${rows || `<tr><td colspan="${cols}">Sin operaciones</td></tr>`}</tbody>
-    <tfoot><tr class="tot"><td colspan="6" style="text-align:right">TOTALES</td><td>${m(totals.base)}</td><td></td><td>${m(totals.cuota)}</td>${esVentas ? '<td></td>' : ''}<td>${m(totals.total)}</td></tr></tfoot></table></body></html>`;
-}
 
 // ── PIEZA 2 — Export del LIBRO DIARIO y el LIBRO MAYOR (formato propio limpio) ──
 const numOrBlank = n => (Math.round((Number(n) || 0) * 100) === 0 ? '' : r2(n));
@@ -207,25 +188,6 @@ export function mayorMatrix(mayor) {
   };
 }
 
-export function diarioHtml(periodo, diario, sym) {
-  const m = n => sym + Number(n || 0).toFixed(2);
-  const bloques = diario.rows.map(a => {
-    const ls = a.lines.map(l => `<tr><td>${escHtml(l.account_code)}</td><td>${escHtml(l.account_name || '')}</td><td style="text-align:right">${l.debit ? m(l.debit) : ''}</td><td style="text-align:right">${l.credit ? m(l.credit) : ''}</td></tr>`).join('');
-    return `<tr class="hd"><td colspan="4"><b>${escHtml(a.entry_date)}</b> · asiento ${a.id} · ${escHtml(a.entry_type)} — ${escHtml(a.memo || '')}</td></tr>${ls}`;
-  }).join('');
-  return `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,Segoe UI,sans-serif;font-size:10px;color:#111}h1{font-size:15px;margin:0 0 2px}.sub{color:#555;margin-bottom:8px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:2px 5px}.hd td{background:#eef;font-weight:600}.tot{font-weight:700;background:#fafafa}</style></head><body>
-    <h1>Libro Diario</h1><div class="sub">Periodo ${escHtml(periodo)} · asientos de doble cara</div>
-    <table><thead><tr><th>Cuenta</th><th>Nombre</th><th>Debe</th><th>Haber</th></tr></thead><tbody>${bloques}</tbody>
-    <tfoot><tr class="tot"><td colspan="2" style="text-align:right">TOTALES</td><td style="text-align:right">${m(diario.totals.debe)}</td><td style="text-align:right">${m(diario.totals.haber)}</td></tr></tfoot></table></body></html>`;
-}
-export function mayorHtml(periodo, mayor, sym) {
-  const m = n => sym + Number(n || 0).toFixed(2);
-  const rows = mayor.rows.map(r => `<tr><td>${escHtml(r.code)}</td><td>${escHtml(r.name || '')}</td><td style="text-align:right">${m(r.debe)}</td><td style="text-align:right">${m(r.haber)}</td><td style="text-align:right">${m(r.saldo)}</td></tr>`).join('');
-  return `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,Segoe UI,sans-serif;font-size:10px;color:#111}h1{font-size:15px;margin:0 0 2px}.sub{color:#555;margin-bottom:8px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:2px 5px;text-align:right}th{background:#eee}td:nth-child(-n+2){text-align:left}.tot{font-weight:700;background:#fafafa}</style></head><body>
-    <h1>Libro Mayor</h1><div class="sub">Periodo ${escHtml(periodo)} · saldos por cuenta</div>
-    <table><thead><tr><th>Cuenta</th><th>Nombre</th><th>Debe</th><th>Haber</th><th>Saldo</th></tr></thead><tbody>${rows}</tbody>
-    <tfoot><tr class="tot"><td colspan="2" style="text-align:right">TOTALES</td><td>${m(mayor.totals.debe)}</td><td>${m(mayor.totals.haber)}</td><td>${m(r2(mayor.totals.debe - mayor.totals.haber))}</td></tr></tfoot></table></body></html>`;
-}
 
 // ── PIEZA 3 — Export del LIBRO DE BIENES DE INVERSIÓN (columnas oficiales AEAT) ──
 // Orden/nombres de la hoja BIENES-INVERSIÓN de la plantilla LSI.xlsx (verificada 2026-06-26).
@@ -265,21 +227,6 @@ export function bienesMatrix(libro, from, to) {
   return { headers: COLS_BIENES, rows };
 }
 
-export function bienesHtml(periodo, libro, sym) {
-  const m = n => sym + Number(n || 0).toFixed(2);
-  const rows = libro.rows.map(g => `<tr>
-      <td>${escHtml(g.description || '')}${g.de_baja ? ' <b>(baja ' + escHtml(g.baja_date) + ')</b>' : ''}</td>
-      <td>${escHtml(g.doc_number || '')}</td><td>${escHtml(g.supplier_name || '')}</td><td>${escHtml(g.supplier_fiscal_id || '')}</td>
-      <td>${escHtml(g.start_date || '')}</td><td style="text-align:right">${m(g.acquisition_value)}</td><td style="text-align:right">${m(g.amortizable_base)}</td>
-      <td style="text-align:right">${Number(g.annual_rate)}%</td><td style="text-align:right">${m(g.acuInicio)}</td><td style="text-align:right">${m(g.cuota)}</td>
-      <td style="text-align:right">${m(g.acuFinal)}</td><td style="text-align:right">${m(g.pendiente)}</td></tr>`).join('')
-    || '<tr><td colspan="12" style="text-align:center">Sin bienes registrados</td></tr>';
-  return `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,Segoe UI,sans-serif;font-size:10px;color:#111}h1{font-size:15px;margin:0 0 2px}.sub{color:#555;margin-bottom:8px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:2px 4px;text-align:right}th{background:#eee;text-align:center}td:nth-child(-n+5){text-align:left}.tot{font-weight:700;background:#fafafa}</style></head><body>
-    <h1>Libro registro de bienes de inversión</h1><div class="sub">Periodo ${escHtml(periodo)} · amortización lineal</div>
-    <table><thead><tr><th>Descripción</th><th>Documento</th><th>Proveedor</th><th>NIF</th><th>Puesta func.</th><th>V. adquisición</th><th>V. amortizable</th><th>% anual</th><th>Acum. inicio</th><th>Cuota periodo</th><th>Acum. final</th><th>Pendiente</th></tr></thead>
-    <tbody>${rows}</tbody>
-    <tfoot><tr class="tot"><td colspan="5" style="text-align:right">TOTALES</td><td>${m(libro.totals.adquisicion)}</td><td>${m(libro.totals.amortizable)}</td><td></td><td></td><td>${m(libro.totals.cuota)}</td><td>${m(libro.totals.acumulada)}</td><td>${m(libro.totals.pendiente)}</td></tr></tfoot></table></body></html>`;
-}
 
 // ── PIEZA 5 — Export de la CUENTA DE PÉRDIDAS Y GANANCIAS (PGC PYMES) ──
 // Una fila por partida/subtotal (Partida · Concepto · Importe). Importe con signo (los gastos
@@ -291,16 +238,15 @@ export function pygMatrix(pyg) {
   };
 }
 
-export function pygHtml(periodo, pyg, sym) {
-  // Convención contable: importes negativos entre paréntesis.
-  const m = n => { const v = Number(n || 0); return v < 0 ? `(${sym}${Math.abs(v).toFixed(2)})` : `${sym}${v.toFixed(2)}`; };
-  const rows = filasPyG(pyg).map(([etiqueta, nombre, importe, tipo]) => tipo === 'subtotal'
-    ? `<tr class="tot"><td>${escHtml(etiqueta)}</td><td>${escHtml(nombre)}</td><td style="text-align:right">${m(importe)}</td></tr>`
-    : `<tr><td>${escHtml(etiqueta)}</td><td>${escHtml(nombre)}</td><td style="text-align:right">${m(importe)}</td></tr>`).join('');
-  const avisos = (pyg.warnings && pyg.warnings.length)
-    ? `<div class="avisos"><b>Antes de dar el resultado por bueno, revisa:</b><ul>${pyg.warnings.map(w => `<li>${escHtml(w)}</li>`).join('')}</ul></div>` : '';
-  return `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,Segoe UI,sans-serif;font-size:11px;color:#111}h1{font-size:15px;margin:0 0 2px}.sub{color:#555;margin-bottom:8px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:3px 6px}th{background:#eee}td:first-child{width:3rem}td:last-child,th:last-child{text-align:right}.tot{font-weight:700;background:#f3f4f6}.avisos{margin:8px 0;padding:5px 8px;border-left:3px solid #d97706;background:#fffbeb;color:#92400e;font-size:10px}</style></head><body>
-    <h1>Cuenta de pérdidas y ganancias</h1><div class="sub">Periodo ${escHtml(periodo)} · modelo PGC de PYMES (RD 1515/2007) · derivada del libro diario</div>
-    <table><thead><tr><th>Partida</th><th>Concepto</th><th style="text-align:right">Importe</th></tr></thead><tbody>${rows}</tbody></table>
-    ${avisos}</body></html>`;
-}
+
+// ── AQUÍ VIVÍAN LOS GENERADORES DE HTML DE LOS INFORMES, Y SE HAN IDO (22 ago 2026, C10-e) ────────
+// `libroHtml`, `diarioHtml`, `mayorHtml`, `bienesHtml` y `pygHtml` pintaban a mano el papel de los
+// siete informes contables: cada uno con su `<table>`, su `<style>` y su propio criterio. Eso es
+// exactamente lo que C10 prohíbe — un generador por informe —, así que su papel lo compone ahora el
+// motor único, igual que los otros ocho listados, y ellos sobran.
+//
+// LO QUE SIGUE AQUÍ Y NO SE TOCA: `ventasMatrix`, `comprasMatrix`, `diarioMatrix`, `mayorMatrix`,
+// `bienesMatrix`, `pygMatrix`, `toCSV` y `buildXlsx`. Son EL ARCHIVO OFICIAL para Hacienda, con sus
+// 36 columnas en el orden que exige la AEAT. Es un requisito legal, no una decisión de diseño: el
+// papel impreso usa las columnas legibles y el archivo oficial las suyas. Dos salidas del mismo
+// dato, a propósito. Comprobado que salen byte a byte iguales que antes de esta tarea.

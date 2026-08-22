@@ -29,6 +29,21 @@
 // exporta la consulta para que su pantalla la use. No hay nada más que hacer.
 import { dinero } from './impresion.js';
 import { kardex } from './stock.js';
+import { backfillLedger, libroVentas, libroCompras, libroDiario, libroMayor } from './contabilidad.js';
+import { ventasAsientos, comprasAsientos } from './contabilidad-export.js';
+import { libroBienes } from './contabilidad-bienes.js';
+import { cuentaPyG, filasPyG } from './contabilidad-pyg.js';
+import { modelo303, modelo130, filas303, filas130 } from './contabilidad-modelos.js';
+
+// EL EJERCICIO POR DEFECTO, EL MISMO QUE USA LA PANTALLA DE CONTABILIDAD: el año de la última
+// factura emitida. Se copia de `rangeOf` (contabilidad-routes.js) para que el papel y la pantalla
+// hablen del mismo periodo — si cada uno eligiera el suyo, dirían cosas distintas del mismo negocio.
+function ejercicio(db, q) {
+  if (q && (q.desde || q.hasta)) return { from: q.desde || '1900-01-01', to: q.hasta || '2999-12-31' };
+  const y = (db.prepare('SELECT MAX(issue_date) m FROM invoices').get()?.m || '').slice(0, 4)
+    || String(new Date().getFullYear());
+  return { from: y + '-01-01', to: y + '-12-31' };
+}
 
 // ── C4 · CLIENTES ───────────────────────────────────────────────────────────────────────────────
 // EL PATRÓN, en su forma más simple: filtros por URL, un WHERE que se arma una vez y se usa para
@@ -179,6 +194,25 @@ export function consultaKardex(db, { producto_id = null } = {}) {
   return { filas, total: filas.length, producto };
 }
 
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// C10-e · LOS SIETE INFORMES CONTABLES, ABSORBIDOS POR EL MOTOR
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// Eran SIETE, no cuatro: el registro decía «los cuatro informes contables» y al medirlo salieron
+// ventas, compras, diario, mayor, bienes de inversión, pérdidas y ganancias, y los borradores de
+// modelos — con seis generadores de HTML propios. Todos pasan aquí, y con ellos ganan lo que no
+// tenían: membrete, la cabecera de columnas repetida en cada hoja, «Página X de Y», la declaración
+// del periodo… y los tres verbos, porque hasta hoy solo se podían descargar.
+//
+// ⚠️ EL ARCHIVO OFICIAL NO SE TOCA. El CSV y el XLSX de los libros de ventas y compras llevan 36
+// columnas en el orden que exige la AEAT, y eso es un requisito legal, no una decisión de diseño.
+// Siguen saliendo por su camino de siempre (`ventasMatrix`/`comprasMatrix` → `toCSV`/`buildXlsx`),
+// intactos. El papel usa las columnas legibles. Son dos salidas del MISMO dato y así se quedan.
+//
+// ⚠️ Y NO SE TOCA NI UNA CIFRA. Estas declaraciones no calculan nada: llaman a las mismas funciones
+// de contabilidad que ya alimentaban el papel viejo y solo cambian CÓMO se pinta el resultado.
+const RANGO = q => ({ from: q.desde || '', to: q.hasta || '' });
+const tasa = r => r === null || r === undefined ? 'sin desglosar' : (Number(r) === 0 ? '0% (exento)' : r + '%');
+
 export const LISTADOS = {
   // ══ C4 ══════════════════════════════════════════════════════════════════════════════════════
   clientes: {
@@ -222,6 +256,240 @@ export const LISTADOS = {
     ],
     totales: (filas) => [{ etiqueta: 'Referencias', valor: filas.length, formato: 'numero', grand: true }],
     vacio: 'No hay productos que cumplan estos filtros.',
+  },
+
+  // ══ C10-e · LIBRO DE VENTAS E INGRESOS ═════════════
+  'libro-ventas': {
+    titulo: 'Libro de ventas e ingresos',
+    perm: 'invoices.read',
+    volver: '/admin/contabilidad',
+    periodo: q => RANGO(q).from || RANGO(q).to ? { desde: q.desde, hasta: q.hasta } : null,
+    filtros: () => [{ etiqueta: 'Formato', valor: 'un asiento por línea (AEAT) · copia para gestoría' }],
+    consulta: (db, q) => {
+      const { from, to } = ejercicio(db, q);
+      backfillLedger(db);
+      const libro = libroVentas(db, from, to);
+      return { filas: ventasAsientos(libro), total: libro.rows.length, extra: libro.totals };
+    },
+    columnas: [
+      { valor: a => String(a.invoice_number || '') + (a.es_rectificativa ? ' (R' + (a.rect_mode ? '·' + a.rect_mode : '') + ')' : ''), rotulo: 'Factura' },
+      { clave: 'issue_date', rotulo: 'F. exped.' },
+      { valor: a => a.operation_date || '—', rotulo: 'F. oper.' },
+      { clave: 'tipo_factura', rotulo: 'Tipo' },
+      { clave: 'nif', rotulo: 'NIF' },
+      { clave: 'nombre', rotulo: 'Destinatario' },
+      { clave: 'base', rotulo: 'Base', formato: 'dinero', align: 'right' },
+      { valor: a => tasa(a.rate), rotulo: 'Tipo IVA', align: 'right' },
+      { clave: 'cuota', rotulo: 'Cuota', formato: 'dinero', align: 'right' },
+      { valor: a => (a.irpf != null && a.irpf !== 0) ? a.irpf : '', rotulo: 'Retención', formato: 'texto', align: 'right' },
+      { clave: 'total_linea', rotulo: 'Total línea', formato: 'dinero', align: 'right' },
+    ],
+    totales: (filas, extra) => [
+      { etiqueta: 'Base', valor: (extra && extra.base) || 0 },
+      { etiqueta: 'Cuota', valor: (extra && extra.cuota) || 0 },
+      { etiqueta: 'Total', valor: (extra && extra.total) || 0, grand: true },
+    ],
+    vacio: 'Sin operaciones en el periodo.',
+  },
+
+  // ══ C10-e · LIBRO DE COMPRAS Y GASTOS ══════════════
+  'libro-compras': {
+    titulo: 'Libro de compras y gastos',
+    perm: 'invoices.read',
+    volver: '/admin/contabilidad',
+    periodo: q => RANGO(q).from || RANGO(q).to ? { desde: q.desde, hasta: q.hasta } : null,
+    filtros: () => [{ etiqueta: 'Formato', valor: 'un asiento por línea (AEAT) · copia para gestoría' }],
+    consulta: (db, q) => {
+      const { from, to } = ejercicio(db, q);
+      backfillLedger(db);
+      const libro = libroCompras(db, from, to);
+      return { filas: comprasAsientos(libro), total: libro.rows.length, extra: libro.totals };
+    },
+    columnas: [
+      { clave: 'internal_code', rotulo: 'Nº recepción' },
+      { clave: 'supplier_number', rotulo: 'Nº fra. prov.' },
+      { clave: 'invoice_date', rotulo: 'F. exped.' },
+      { valor: a => a.operation_date || '—', rotulo: 'F. oper.' },
+      { clave: 'nif', rotulo: 'NIF' },
+      { clave: 'nombre', rotulo: 'Expedidor' },
+      { clave: 'base', rotulo: 'Base', formato: 'dinero', align: 'right' },
+      { valor: a => tasa(a.rate), rotulo: 'Tipo IVA', align: 'right' },
+      { clave: 'cuota', rotulo: 'Cuota', formato: 'dinero', align: 'right' },
+      { clave: 'total_linea', rotulo: 'Total línea', formato: 'dinero', align: 'right' },
+    ],
+    totales: (filas, extra) => [
+      { etiqueta: 'Base', valor: (extra && extra.base) || 0 },
+      { etiqueta: 'Cuota', valor: (extra && extra.cuota) || 0 },
+      { etiqueta: 'Total', valor: (extra && extra.total) || 0, grand: true },
+    ],
+    vacio: 'Sin operaciones en el periodo.',
+  },
+
+  // ══ C10-e · LIBRO DIARIO ═══════════════════════════
+  // AGRUPADO POR ASIENTO, que es como se lee un diario: una línea de cabecera con la fecha, el
+  // número y el tipo, y debajo sus apuntes. El motor ya sabe hacer eso — es la misma pieza que
+  // agrupa el catálogo por categoría.
+  'libro-diario': {
+    titulo: 'Libro diario',
+    perm: 'invoices.read',
+    volver: '/admin/contabilidad',
+    periodo: q => RANGO(q).from || RANGO(q).to ? { desde: q.desde, hasta: q.hasta } : null,
+    consulta: (db, q) => {
+      const { from, to } = ejercicio(db, q);
+      backfillLedger(db);
+      const d = libroDiario(db, from, to);
+      const filas = [];
+      for (const a of d.rows) for (const l of a.lines) {
+        filas.push({ ...l, __asiento: a.id, __fecha: a.entry_date, __tipo: a.entry_type, __memo: a.memo || '' });
+      }
+      return { filas, total: filas.length, extra: { ...d.totals, cuadra: d.cuadra } };
+    },
+    agrupar: { rotulo: f => f.__fecha + ' · asiento ' + f.__asiento + ' · ' + f.__tipo + (f.__memo ? ' · ' + f.__memo : '') },
+    columnas: [
+      { clave: 'account_code', rotulo: 'Cuenta' },
+      { clave: 'account_name', rotulo: 'Nombre' },
+      { clave: 'debit', rotulo: 'Debe', formato: 'dinero0', align: 'right' },
+      { clave: 'credit', rotulo: 'Haber', formato: 'dinero0', align: 'right' },
+    ],
+    totales: (filas, extra) => [
+      { etiqueta: 'Debe', valor: (extra && extra.debe) || 0 },
+      { etiqueta: 'Haber', valor: (extra && extra.haber) || 0, grand: true },
+    ],
+    vacio: 'Sin asientos en el periodo.',
+  },
+
+  // ══ C10-e · LIBRO MAYOR ════════════════════════════
+  'libro-mayor': {
+    titulo: 'Libro mayor',
+    perm: 'invoices.read',
+    volver: '/admin/contabilidad',
+    periodo: q => RANGO(q).from || RANGO(q).to ? { desde: q.desde, hasta: q.hasta } : null,
+    consulta: (db, q) => {
+      const { from, to } = ejercicio(db, q);
+      backfillLedger(db);
+      const m = libroMayor(db, from, to);
+      return { filas: m.rows, total: m.rows.length, extra: m.totals };
+    },
+    columnas: [
+      { clave: 'code', rotulo: 'Cuenta' },
+      { clave: 'name', rotulo: 'Nombre' },
+      // EL MAYOR SÍ PINTA LOS CEROS, al revés que el diario: su papel usaba `m()` y no `numOrBlank`,
+      // y tenía seis ceros escritos. Se conserva tal cual — la comparación cifra a cifra lo cazó
+      // cuando puse aquí el mismo formato que en el diario y desapareció uno.
+      { clave: 'debe', rotulo: 'Debe', formato: 'dinero', align: 'right' },
+      { clave: 'haber', rotulo: 'Haber', formato: 'dinero', align: 'right' },
+      { clave: 'saldo', rotulo: 'Saldo', formato: 'dinero', align: 'right' },
+    ],
+    totales: (filas, extra) => [
+      { etiqueta: 'Debe', valor: (extra && extra.debe) || 0 },
+      { etiqueta: 'Haber', valor: (extra && extra.haber) || 0, grand: true },
+    ],
+    vacio: 'Sin movimientos en el periodo.',
+  },
+
+  // ══ C10-e · LIBRO DE BIENES DE INVERSIÓN ═══════════
+  'libro-bienes': {
+    titulo: 'Libro de bienes de inversión',
+    perm: 'invoices.read',
+    volver: '/admin/contabilidad',
+    periodo: q => RANGO(q).from || RANGO(q).to ? { desde: q.desde, hasta: q.hasta } : null,
+    consulta: (db, q) => {
+      const { from, to } = ejercicio(db, q);
+      const l = libroBienes(db, from, to);
+      return { filas: l.rows, total: l.rows.length, extra: l.totals };
+    },
+    columnas: [
+      { valor: g => String(g.description || '') + (g.de_baja ? ' (baja ' + g.baja_date + ')' : ''), rotulo: 'Descripción' },
+      { clave: 'doc_number', rotulo: 'Documento' },
+      { clave: 'supplier_name', rotulo: 'Proveedor' },
+      { clave: 'supplier_fiscal_id', rotulo: 'NIF' },
+      { clave: 'start_date', rotulo: 'Puesta func.' },
+      { clave: 'acquisition_value', rotulo: 'V. adquisición', formato: 'dinero', align: 'right' },
+      { clave: 'amortizable_base', rotulo: 'V. amortizable', formato: 'dinero', align: 'right' },
+      { valor: g => g.annual_rate, rotulo: '% anual', align: 'right' },
+      { clave: 'acuInicio', rotulo: 'Acum. inicio', formato: 'dinero', align: 'right' },
+      { clave: 'cuota', rotulo: 'Cuota periodo', formato: 'dinero', align: 'right' },
+      { clave: 'acuFinal', rotulo: 'Acum. final', formato: 'dinero', align: 'right' },
+      { clave: 'pendiente', rotulo: 'Pendiente', formato: 'dinero', align: 'right' },
+    ],
+    totales: (filas, extra) => [
+      { etiqueta: 'Cuota del periodo', valor: (extra && extra.cuota) || 0 },
+      { etiqueta: 'Pendiente de amortizar', valor: (extra && extra.pendiente) || 0, grand: true },
+    ],
+    vacio: 'Sin bienes registrados.',
+  },
+
+  // ══ C10-e · CUENTA DE PÉRDIDAS Y GANANCIAS ═════════
+  // AQUÍ VIVEN LOS SUBTOTALES INTERCALADOS. Un P&G con sus subtotales movidos al pie deja de ser un
+  // P&G: la lectura es «estas partidas suman ESTO, y de ahí sale lo siguiente». Por eso el motor
+  // aprendió a marcar una fila en su sitio, en vez de obligar a este informe a pintarse solo.
+  'pyg': {
+    titulo: 'Cuenta de pérdidas y ganancias',
+    perm: 'invoices.read',
+    volver: '/admin/contabilidad',
+    periodo: q => RANGO(q).from || RANGO(q).to ? { desde: q.desde, hasta: q.hasta } : null,
+    filtros: () => [{ etiqueta: 'Modelo', valor: 'PGC de PYMES (RD 1515/2007) · derivada del libro diario' }],
+    consulta: (db, q) => {
+      const { from, to } = ejercicio(db, q);
+      backfillLedger(db);
+      const pyg = cuentaPyG(db, from, to);
+      const filas = filasPyG(pyg).map(([etiqueta, nombre, importe, tipo]) => ({ etiqueta, nombre, importe, __sub: tipo === 'subtotal' }));
+      return { filas, total: filas.length, extra: { avisos: pyg.warnings || [] } };
+    },
+    esSubtotal: f => !!f.__sub,
+    columnas: [
+      { clave: 'etiqueta', rotulo: 'Partida' },
+      { clave: 'nombre', rotulo: 'Concepto' },
+      { clave: 'importe', rotulo: 'Importe', formato: 'dinero', align: 'right' },
+    ],
+    notas: (filas, extra) => (extra && extra.avisos) || [],
+    tituloNotas: 'Antes de dar el resultado por bueno, revisa:',
+    vacio: 'Sin movimientos con los que calcular el resultado.',
+  },
+
+  // ══ C10-e · BORRADORES DE MODELOS 303 y 130 ════════
+  // AQUÍ VIVEN LAS SECCIONES: es UN papel con DOS tablas, cada una con su título y su propio aviso.
+  // Y cada una lleva filas de sección (las que en el modelo van con su epígrafe), que son las mismas
+  // filas de grupo que usa el catálogo por categoría.
+  'modelos': {
+    titulo: 'Borradores de modelos trimestrales',
+    perm: 'invoices.read',
+    volver: '/admin/contabilidad',
+    filtros: q => [{ etiqueta: 'Trimestre', valor: (q.trimestre || '1') + 'T ' + (q.anio || new Date().getFullYear()) }],
+    consulta: (db, q) => {
+      const year = Number(q.anio) || new Date().getFullYear();
+      const qt = Number(q.trimestre) || 1;
+      backfillLedger(db);
+      const m303 = modelo303(db, year, qt);
+      const m130 = modelo130(db, year, qt);
+      const aFilas = (fs) => {
+        let sec = '';
+        return fs.map(([casilla, desc, importe]) => {
+          if (casilla === '—') { sec = desc; return null; }
+          return { casilla, desc, importe, __sec: sec };
+        }).filter(Boolean);
+      };
+      const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
+      return { filas: [], total: 0, extra: { m303, m130, sym, f303: aFilas(filas303(m303)), f130: aFilas(filas130(m130)) } };
+    },
+    secciones: (filas, extra) => {
+      const cols = [
+        { clave: 'casilla', rotulo: 'Casilla' },
+        { clave: 'desc', rotulo: 'Concepto' },
+        // La casilla 65 es un PORCENTAJE y no un importe: lleva %, no moneda. Lo hacía así el papel
+        // viejo y se conserva — cambiarlo sería mover lo que el modelo dice.
+        { valor: r => r.importe === '' ? '' : (r.casilla === '65' ? r.importe + ' %' : dinero(r.importe, extra.sym)), rotulo: 'Importe', align: 'right' },
+      ];
+      const agr = { rotulo: r => r.__sec || '' };
+      return [
+        { titulo: 'Modelo 303 · IVA', columnas: cols, filas: extra.f303, agrupar: agr,
+          notas: (extra.m303.warnings || []), tituloNotas: 'Antes de presentar el 303, revisa:' },
+        { titulo: 'Modelo 130 · IRPF', columnas: cols, filas: extra.f130, agrupar: agr,
+          notas: (extra.m130.warnings || []), tituloNotas: 'Antes de presentar el 130, revisa:' },
+      ];
+    },
+    notas: () => ['Calculados por Bamburu desde los libros registro. Documento de trabajo para revisión y presentación por el obligado o su gestoría: Bamburu no presenta.'],
+    vacio: 'Sin datos para el trimestre.',
   },
 
   // ══ C2 · CATÁLOGO PARA ENVIAR AL CLIENTE ═══════════
@@ -417,6 +685,8 @@ export function filtrosDeUrl(c) {
     // tres verbos son genéricas: si cada listado leyera la URL por su cuenta, volveríamos a tener
     // ocho sitios haciendo lo mismo, que es de lo que huye todo este encargo.
     producto_id: parseInt(g('producto_id'), 10) || null,
+    anio: g('anio') || g('year'),
+    trimestre: g('trimestre') || g('q'),
     proveedor_id: parseInt(g('proveedor_id'), 10) || null,
   };
 }

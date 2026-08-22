@@ -7,9 +7,15 @@ import { requirePerm } from '../../../core/auth.js';
 import { adminLayout, rowMenu, emptyRow, errorShell, cleanErrMsg } from '../layout.js';
 import { escHtml } from '../../../core/escape.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';
+import { papelDeListado, botonesListado, JS_LISTADO_ENVIAR } from './listados.js';
+
+// De la clave que usa esta pantalla a la del registro de listados. Se escribe UNA vez: las rutas de
+// los tres verbos son genéricas y no saben de contabilidad.
+const CLAVE_LISTADO = { ventas: 'libro-ventas', compras: 'libro-compras', diario: 'libro-diario',
+                        mayor: 'libro-mayor', bienes: 'libro-bienes', pyg: 'pyg', modelos: 'modelos' };
+import { pieDePagina as pieDeListado } from '../impresion.js';
 import { backfillLedger, libroVentas, libroCompras, libroDiario, libroMayor, mayorCuenta } from '../contabilidad.js';
-import { ventasAsientos, comprasAsientos, ventasMatrix, comprasMatrix, toCSV, buildXlsx, libroHtml,
-         diarioMatrix, mayorMatrix, diarioHtml, mayorHtml, bienesMatrix, bienesHtml, pygMatrix, pygHtml } from '../contabilidad-export.js';
+import { ventasAsientos, comprasAsientos, ventasMatrix, comprasMatrix, toCSV, buildXlsx, diarioMatrix, mayorMatrix, bienesMatrix, pygMatrix } from '../contabilidad-export.js';
 import { libroBienes, createInvestmentGood, updateInvestmentGood, bajaInvestmentGood, reactivarInvestmentGood } from '../contabilidad-bienes.js';
 import { modelo303, modelo130, filas303, filas130, quarterRange } from '../contabilidad-modelos.js';
 import { cuentaPyG, filasPyG } from '../contabilidad-pyg.js';
@@ -60,6 +66,9 @@ function modelosPeriodForm(year, q) {
     <button class="btn" type="submit">Ver periodo</button>
     <span style="flex:1"></span>
     <a class="btn btn-ghost" href="/admin/contabilidad/modelos.pdf?year=${year}&q=${q}">PDF (borrador)</a>
+    <!-- C9 · los tres verbos también en los borradores de modelos, que tienen su propia barra. -->
+    ${botonesListado('modelos', 'anio=' + year + '&trimestre=' + q)}
+    <script>${JS_LISTADO_ENVIAR}<\/script>
     <a class="btn btn-ghost" href="/admin/contabilidad/modelos.csv?year=${year}&q=${q}">CSV</a>
   </form>`;
 }
@@ -86,10 +95,14 @@ function periodForm(kind, from, to) {
     <button class="btn" type="submit">Ver periodo</button>
     <span style="flex:1"></span>
     ${rowMenu([
-      { label: 'Excel (XLSX)', href: `/admin/contabilidad/${kind}.xlsx?${q}` },
-      { label: 'CSV', href: `/admin/contabilidad/${kind}.csv?${q}` },
+      { label: 'Excel (XLSX) · archivo oficial', href: `/admin/contabilidad/${kind}.xlsx?${q}` },
+      { label: 'CSV · archivo oficial', href: `/admin/contabilidad/${kind}.csv?${q}` },
       { label: 'PDF', href: `/admin/contabilidad/${kind}.pdf?${q}` },
     ], { label: 'Exportar' })}
+    <!-- C9 · LOS TRES VERBOS también aquí. Hasta hoy un libro solo se podía DESCARGAR: no había
+         forma de mandárselo a la gestoría sin bajarlo y adjuntarlo a mano. -->
+    ${botonesListado(CLAVE_LISTADO[kind] || kind, q.replace('from=', 'desde=').replace('to=', 'hasta='))}
+    <script>${JS_LISTADO_ENVIAR}<\/script>
   </form>`;
 }
 
@@ -222,10 +235,14 @@ export function createContabilidadRoutes(db) {
     const { from, to } = rangeOf(c, db); backfillLedger(db);
     return fileResp(Buffer.from(toCSV(ventasMatrix(libroVentas(db, from, to))), 'utf8'), 'text/csv; charset=utf-8', `libro-ventas-${tag(from, to)}.csv`);
   });
+  // C10-e · POR EL MOTOR ÚNICO. Aquí vivía el HTML a mano de este informe; ya no queda ni una
+  // línea. El papel lo compone la misma pieza que los otros catorce listados, así que este
+  // informe gana de golpe membrete, cabecera repetida en cada hoja y «Página X de Y».
   views.get('/ventas.pdf', requirePerm('invoices.read'), async c => {
-    const { from, to } = rangeOf(c, db); backfillLedger(db); const libro = libroVentas(db, from, to);
-    const pdf = await renderPdfFromHtml(libroHtml('Libro de ventas e ingresos', `${from} → ${to}`, ventasAsientos(libro), libro.totals, symbolOf(db), 'ventas'));
-    return fileResp(pdf, 'application/pdf', `libro-ventas-${tag(from, to)}.pdf`);
+    const { from, to } = rangeOf(c, db); backfillLedger(db);
+    const { html, titulo } = papelDeListado(db, 'libro-ventas', { desde: from, hasta: to }, c.get('session')?.name || '');
+    const pdf = await renderPdfFromHtml(html, { pie: pieDeListado(titulo) });
+    return fileResp(pdf, 'application/pdf', `ventas-${tag(from, to)}.pdf`);
   });
   views.get('/compras.xlsx', requirePerm('invoices.read'), c => {
     const { from, to } = rangeOf(c, db); backfillLedger(db);
@@ -235,10 +252,14 @@ export function createContabilidadRoutes(db) {
     const { from, to } = rangeOf(c, db); backfillLedger(db);
     return fileResp(Buffer.from(toCSV(comprasMatrix(libroCompras(db, from, to))), 'utf8'), 'text/csv; charset=utf-8', `libro-compras-${tag(from, to)}.csv`);
   });
+  // C10-e · POR EL MOTOR ÚNICO. Aquí vivía el HTML a mano de este informe; ya no queda ni una
+  // línea. El papel lo compone la misma pieza que los otros catorce listados, así que este
+  // informe gana de golpe membrete, cabecera repetida en cada hoja y «Página X de Y».
   views.get('/compras.pdf', requirePerm('invoices.read'), async c => {
-    const { from, to } = rangeOf(c, db); backfillLedger(db); const libro = libroCompras(db, from, to);
-    const pdf = await renderPdfFromHtml(libroHtml('Libro de compras y gastos', `${from} → ${to}`, comprasAsientos(libro), libro.totals, symbolOf(db), 'compras'));
-    return fileResp(pdf, 'application/pdf', `libro-compras-${tag(from, to)}.pdf`);
+    const { from, to } = rangeOf(c, db); backfillLedger(db);
+    const { html, titulo } = papelDeListado(db, 'libro-compras', { desde: from, hasta: to }, c.get('session')?.name || '');
+    const pdf = await renderPdfFromHtml(html, { pie: pieDeListado(titulo) });
+    return fileResp(pdf, 'application/pdf', `compras-${tag(from, to)}.pdf`);
   });
 
   // ── PIEZA 2 — Libro Diario ──────────────────────────────────────────────────
@@ -276,10 +297,14 @@ export function createContabilidadRoutes(db) {
     const { from, to } = rangeOf(c, db); backfillLedger(db);
     return fileResp(Buffer.from(toCSV(diarioMatrix(libroDiario(db, from, to))), 'utf8'), 'text/csv; charset=utf-8', `libro-diario-${tag(from, to)}.csv`);
   });
+  // C10-e · POR EL MOTOR ÚNICO. Aquí vivía el HTML a mano de este informe; ya no queda ni una
+  // línea. El papel lo compone la misma pieza que los otros catorce listados, así que este
+  // informe gana de golpe membrete, cabecera repetida en cada hoja y «Página X de Y».
   views.get('/diario.pdf', requirePerm('invoices.read'), async c => {
     const { from, to } = rangeOf(c, db); backfillLedger(db);
-    const pdf = await renderPdfFromHtml(diarioHtml(`${from} → ${to}`, libroDiario(db, from, to), symbolOf(db)));
-    return fileResp(pdf, 'application/pdf', `libro-diario-${tag(from, to)}.pdf`);
+    const { html, titulo } = papelDeListado(db, 'libro-diario', { desde: from, hasta: to }, c.get('session')?.name || '');
+    const pdf = await renderPdfFromHtml(html, { pie: pieDeListado(titulo) });
+    return fileResp(pdf, 'application/pdf', `diario-${tag(from, to)}.pdf`);
   });
   views.get('/mayor.xlsx', requirePerm('invoices.read'), c => {
     const { from, to } = rangeOf(c, db); backfillLedger(db);
@@ -289,10 +314,14 @@ export function createContabilidadRoutes(db) {
     const { from, to } = rangeOf(c, db); backfillLedger(db);
     return fileResp(Buffer.from(toCSV(mayorMatrix(libroMayor(db, from, to))), 'utf8'), 'text/csv; charset=utf-8', `libro-mayor-${tag(from, to)}.csv`);
   });
+  // C10-e · POR EL MOTOR ÚNICO. Aquí vivía el HTML a mano de este informe; ya no queda ni una
+  // línea. El papel lo compone la misma pieza que los otros catorce listados, así que este
+  // informe gana de golpe membrete, cabecera repetida en cada hoja y «Página X de Y».
   views.get('/mayor.pdf', requirePerm('invoices.read'), async c => {
     const { from, to } = rangeOf(c, db); backfillLedger(db);
-    const pdf = await renderPdfFromHtml(mayorHtml(`${from} → ${to}`, libroMayor(db, from, to), symbolOf(db)));
-    return fileResp(pdf, 'application/pdf', `libro-mayor-${tag(from, to)}.pdf`);
+    const { html, titulo } = papelDeListado(db, 'libro-mayor', { desde: from, hasta: to }, c.get('session')?.name || '');
+    const pdf = await renderPdfFromHtml(html, { pie: pieDeListado(titulo) });
+    return fileResp(pdf, 'application/pdf', `mayor-${tag(from, to)}.pdf`);
   });
 
   // ── PIEZA 3 — Libro de bienes de inversión (DATO NUEVO; amortización en lectura) ──
@@ -369,10 +398,14 @@ export function createContabilidadRoutes(db) {
     const { from, to } = rangeOf(c, db);
     return fileResp(Buffer.from(toCSV(bienesMatrix(libroBienes(db, from, to), from, to)), 'utf8'), 'text/csv; charset=utf-8', `libro-bienes-inversion-${tag(from, to)}.csv`);
   });
+  // C10-e · POR EL MOTOR ÚNICO. Aquí vivía el HTML a mano de este informe; ya no queda ni una
+  // línea. El papel lo compone la misma pieza que los otros catorce listados, así que este
+  // informe gana de golpe membrete, cabecera repetida en cada hoja y «Página X de Y».
   views.get('/bienes.pdf', requirePerm('invoices.read'), async c => {
-    const { from, to } = rangeOf(c, db);
-    const pdf = await renderPdfFromHtml(bienesHtml(`${from} → ${to}`, libroBienes(db, from, to), symbolOf(db)));
-    return fileResp(pdf, 'application/pdf', `libro-bienes-inversion-${tag(from, to)}.pdf`);
+    const { from, to } = rangeOf(c, db); backfillLedger(db);
+    const { html, titulo } = papelDeListado(db, 'libro-bienes', { desde: from, hasta: to }, c.get('session')?.name || '');
+    const pdf = await renderPdfFromHtml(html, { pie: pieDeListado(titulo) });
+    return fileResp(pdf, 'application/pdf', `bienes-${tag(from, to)}.pdf`);
   });
 
   // ── PIEZA 5 — Cuenta de Pérdidas y Ganancias (estado formal PGC PYMES, SOLO LECTURA) ──
@@ -397,10 +430,14 @@ export function createContabilidadRoutes(db) {
     const { from, to } = rangeOf(c, db); backfillLedger(db);
     return fileResp(Buffer.from(toCSV(pygMatrix(cuentaPyG(db, from, to))), 'utf8'), 'text/csv; charset=utf-8', `cuenta-pyg-${tag(from, to)}.csv`);
   });
+  // C10-e · POR EL MOTOR ÚNICO. Aquí vivía el HTML a mano de este informe; ya no queda ni una
+  // línea. El papel lo compone la misma pieza que los otros catorce listados, así que este
+  // informe gana de golpe membrete, cabecera repetida en cada hoja y «Página X de Y».
   views.get('/pyg.pdf', requirePerm('invoices.read'), async c => {
     const { from, to } = rangeOf(c, db); backfillLedger(db);
-    const pdf = await renderPdfFromHtml(pygHtml(`${from} → ${to}`, cuentaPyG(db, from, to), symbolOf(db)));
-    return fileResp(pdf, 'application/pdf', `cuenta-pyg-${tag(from, to)}.pdf`);
+    const { html, titulo } = papelDeListado(db, 'pyg', { desde: from, hasta: to }, c.get('session')?.name || '');
+    const pdf = await renderPdfFromHtml(html, { pie: pieDeListado(titulo) });
+    return fileResp(pdf, 'application/pdf', `pyg-${tag(from, to)}.pdf`);
   });
 
   // ── PIEZA 4 — Modelos AEAT (303 IVA y 130 IRPF), BORRADORES listos para validar ──
@@ -435,26 +472,17 @@ export function createContabilidadRoutes(db) {
   });
 
   // Export del borrador: PDF (para la gestoría) y CSV (casilla·concepto·importe de ambos modelos).
-  const modelosBorradorHtml = (year, q, m303, m130, sym) => {
-    const tabla = (titulo, filas) => `<h2>${escHtml(titulo)}</h2><table><thead><tr><th>Casilla</th><th>Concepto</th><th style="text-align:right">Importe</th></tr></thead><tbody>${
-      filas.map(([cas, desc, imp]) => cas === '—'
-        ? `<tr class="sec"><td colspan="3">${escHtml(desc)}</td></tr>`
-        : `<tr><td>${escHtml(cas)}</td><td>${escHtml(desc)}</td><td style="text-align:right">${imp === '' ? '' : (cas === '65' ? Number(imp) + ' %' : sym + Number(imp).toFixed(2))}</td></tr>`).join('')
-    }</tbody></table>`;
-    const avisos = w => (w && w.length) ? `<div class="avisos"><b>Antes de presentar, revisa:</b><ul>${w.map(x => `<li>${escHtml(x)}</li>`).join('')}</ul></div>` : '';
-    return `<!doctype html><html><head><meta charset="utf-8"><style>
-      body{font-family:-apple-system,Segoe UI,sans-serif;font-size:11px;color:var(--text)}h1{font-size:16px;margin:0 0 2px}h2{font-size:13px;margin:14px 0 4px}
-      .sub{color:var(--text2);margin-bottom:8px}table{border-collapse:collapse;width:100%}td,th{border:1px solid var(--border2);padding:3px 6px}th{background:var(--border)}
-      tr.sec td{background:var(--bg3);font-weight:700}.avisos{margin:6px 0;padding:5px 8px;border-left:3px solid var(--warn);background:var(--warn-s);color:var(--warn);font-size:10px}</style></head><body>
-      <h1>Borradores de modelos — ${q}T ${year}</h1>
-      <div class="sub">Calculados por Bamburu desde los libros registro. Documento de trabajo para revisión/presentación por el obligado o su gestoría; Bamburu no presenta ante la AEAT.</div>
-      ${tabla('Modelo 303 · IVA', filas303(m303))}${avisos(m303.warnings)}
-      ${tabla('Modelo 130 · IRPF', filas130(m130))}${avisos(m130.warnings)}</body></html>`;
-  };
+  // AQUÍ VIVÍA `modelosBorradorHtml`, el sexto y último generador a mano: pintaba las dos tablas del
+  // 303 y el 130 con su HTML propio. Se ha ido con los otros cinco (C10-e): el papel lo compone el
+  // motor, que desde esta tarea sabe llevar varias secciones en un mismo documento.
+  // C10-e · POR EL MOTOR ÚNICO. Aquí vivía el HTML a mano de este informe; ya no queda ni una
+  // línea. El papel lo compone la misma pieza que los otros catorce listados, así que este
+  // informe gana de golpe membrete, cabecera repetida en cada hoja y «Página X de Y».
   views.get('/modelos.pdf', requirePerm('invoices.read'), async c => {
-    const { year, q } = modelosParams(c); backfillLedger(db);
-    const pdf = await renderPdfFromHtml(modelosBorradorHtml(year, q, modelo303(db, year, q), modelo130(db, year, q), symbolOf(db)));
-    return fileResp(pdf, 'application/pdf', `borrador-modelos-${year}-${q}T.pdf`);
+    const { year, q: qt } = modelosParams(c); backfillLedger(db);
+    const { html, titulo } = papelDeListado(db, 'modelos', { anio: String(year), trimestre: String(qt) }, c.get('session')?.name || '');
+    const pdf = await renderPdfFromHtml(html, { pie: pieDeListado(titulo) });
+    return fileResp(pdf, 'application/pdf', `modelos-${`${qt}T-${year}`}.pdf`);
   });
   views.get('/modelos.csv', requirePerm('invoices.read'), c => {
     const { year, q } = modelosParams(c); backfillLedger(db);

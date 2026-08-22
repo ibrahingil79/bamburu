@@ -24,9 +24,16 @@ import { ENTITY } from '../../../core/activity-entities.js';
 function papelDe(db, clave, q, quien) {
   const L = LISTADOS[clave];
   const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
-  const { filas } = L.consulta(db, q);          // MISMA consulta que la pantalla, sin LIMIT
+  // `extra` es lo que la consulta sepa y las columnas no puedan deducir: los totales que ya trae
+  // calculados un libro contable, los avisos de un modelo… Nace con los informes: sus cifras las
+  // calcula contabilidad y AQUÍ NO SE RECALCULA NADA, solo se pinta lo que ella devuelve.
+  const { filas, extra } = L.consulta(db, q);   // MISMA consulta que la pantalla, sin LIMIT
+  // `totales`, `notas` y `secciones` pueden ser función (reciben las filas y el extra) o valor.
+  const resolver = (v) => (typeof v === 'function' ? v(filas, extra) : v);
+  const secciones = L.secciones ? resolver(L.secciones) : null;
   return {
     filas,
+    secciones,
     titulo: L.titulo,
     html: listadoHtml(db, {
       titulo: L.titulo,
@@ -34,8 +41,12 @@ function papelDe(db, clave, q, quien) {
       filas,
       filtros: L.filtros ? L.filtros(q, db) : [],
       periodo: L.periodo ? L.periodo(q) : null,
-      totales: L.totales ? L.totales(filas) : [],
+      totales: L.totales ? resolver(L.totales) : [],
       agrupar: L.agrupar || null,
+      esSubtotal: L.esSubtotal || null,
+      secciones,
+      notas: L.notas ? resolver(L.notas) : null,
+      tituloNotas: L.tituloNotas || null,
       generadoPor: quien || '',
       vacio: L.vacio,
       sym,
@@ -43,9 +54,39 @@ function papelDe(db, clave, q, quien) {
   };
 }
 
+// ── UN PAPEL MUY LARGO SE AVISA, NUNCA SE RECORTA ───────────────────────────────────────────────
+// La regla del proyecto es que un listado sale ENTERO o no sale: recortar en silencio convierte un
+// documento en una mentira. Pero mandar sin avisar un PDF de cien páginas a una impresora o a un
+// correo tampoco está bien, así que se avisa ANTES y decide el usuario.
+//
+// SE ESTIMA POR FILAS y no generando el PDF para contarlo: generar cien páginas para preguntar si
+// se quieren cien páginas es justo el trabajo que se quiere evitar.
+//
+// EL LISTÓN ESTÁ MEDIDO SOBRE PAPELES REALES de este producto, no supuesto: el libro de ventas hace
+// 7 hojas con 183 filas (26 por hoja), el libro diario 78 con 2.401 (31 por hoja, contando que sus
+// filas de asiento ocupan lo suyo) y el de clientes 4 con 131 (33). Se toma 30, que es el caso
+// realista: la primera versión de esto puso 60 «a ojo» y el diario, que hace 78 hojas, no avisaba.
+const FILAS_POR_HOJA = 30;
+const HOJAS_AVISO = 50;
+const paginasEstimadas = (filas, secciones) => {
+  const n = (secciones && secciones.length)
+    ? secciones.reduce((a, s2) => a + ((s2.filas || []).length), 0)
+    : (filas || []).length;
+  return Math.max(1, Math.ceil(n / FILAS_POR_HOJA));
+};
+
 const nombreFichero = (titulo) =>
   (titulo.replace(/[^\wáéíóúñÁÉÍÓÚÑ ]+/g, '').trim().replace(/\s+/g, '-') + '-'
    + new Date().toISOString().slice(0, 10) + '.pdf').replace(/[\/\\]/g, '-');
+
+// EL PAPEL DE UN LISTADO, PARA QUIEN NO PASE POR LAS TRES RUTAS. Lo usan los informes contables,
+// que tienen su propia dirección de descarga desde hace meses y no se les va a cambiar la URL a la
+// gestoría. Es LA MISMA función que sirve a los tres verbos: no hay dos caminos de composición.
+export function papelDeListado(db, clave, q, quien) {
+  return papelDe(db, clave, { ...filtrosVacios(), ...q }, quien);
+}
+const filtrosVacios = () => ({ q: '', categoria: '', estado: '', desde: '', hasta: '', cliente_id: null,
+  archivados: false, producto_id: null, proveedor_id: null, anio: '', trimestre: '' });
 
 export function createListadosRoutes(db) {
   const api = new Hono();
@@ -80,7 +121,19 @@ export function createListadosRoutes(db) {
     const g = guarda(c, clave);
     if (g.error) return c.json({ error: g.error }, g.status);
     try {
-      const { html, titulo } = papelDe(db, clave, filtrosDeUrl(c), quienDe(c));
+      const { html, titulo, filas, secciones } = papelDe(db, clave, filtrosDeUrl(c), quienDe(c));
+      // EL AVISO DE LOS PAPELES LARGOS. Con `?entero=1` sale sin preguntar; sin él, se dice cuántas
+      // hojas van a salir y se deja decidir. No se recorta ni una fila en ninguno de los dos casos.
+      const hojas = paginasEstimadas(filas, secciones);
+      if (hojas > HOJAS_AVISO && c.req.query('entero') !== '1') {
+        return c.json({
+          aviso: 'largo',
+          hojas,
+          mensaje: 'Este papel va a salir con unas ' + hojas + ' hojas. Sale ENTERO, no se recorta nada: '
+                 + 'solo queremos que lo sepas antes de mandarlo a la impresora o por correo.',
+          seguir: c.req.path + '?' + new URLSearchParams({ ...Object.fromEntries(new URL(c.req.url).searchParams), entero: '1' }).toString(),
+        }, 409);
+      }
       const pdf = await renderPdfFromHtml(printableShell(html, { title: titulo }), { pie: pieDePagina(titulo) });
       return new Response(pdf, {
         headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="' + nombreFichero(titulo) + '"' },
@@ -140,13 +193,37 @@ export function botonesListado(clave, qs = '') {
   // esa pantalla haya cargado una hoja concreta.
   return `<div style="display:inline-flex;gap:.4rem;flex-wrap:wrap">
     <a class="btn btn-secondary btn-sm" href="/admin/listados/${clave}/imprimir${q}" target="_blank" rel="noopener"><i class="ti ti-printer"></i> Imprimir</a>
-    <a class="btn btn-secondary btn-sm" href="/admin/listados/${clave}/pdf${q}"><i class="ti ti-download"></i> Descargar PDF</a>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="descargarListado('${clave}','${escHtml(qs)}')"><i class="ti ti-download"></i> Descargar PDF</button>
     <button type="button" class="btn btn-secondary btn-sm" onclick="enviarListado('${clave}','${escHtml(qs)}')"><i class="ti ti-mail"></i> Enviar por correo</button>
   </div>`;
 }
 
 // El diálogo de envío. Va aquí y no en cada pantalla por el mismo motivo que todo lo demás.
 export const JS_LISTADO_ENVIAR = `
+// LA DESCARGA PASA POR AQUÍ Y NO POR UN ENLACE DIRECTO, y el motivo es el aviso de los papeles
+// largos: el servidor responde 409 con «esto son 81 hojas» en vez del PDF, y un <a> dejaría ese
+// aviso en pantalla como un JSON crudo. Así se pregunta en cristiano y, si dices que sí, baja
+// ENTERO — nunca recortado.
+async function descargarListado(clave, qs){
+  var base = '/admin/listados/' + clave + '/pdf' + (qs ? ('?' + qs) : '');
+  try {
+    var r = await fetch(base, { headers: { 'Accept': 'application/pdf' } });
+    if (r.status === 409) {
+      var d = await r.json();
+      if (!confirm(d.mensaje + '\\n\\n¿Lo descargo igualmente?')) return;
+      base = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'entero=1';
+      r = await fetch(base);
+    }
+    if (!r.ok) { toast('No hemos podido preparar el PDF.','err'); return; }
+    var blob = await r.blob();
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (clave + '.pdf');
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+  } catch(e) { toast('No hemos podido preparar el PDF.','err'); }
+}
+
 async function enviarListado(clave, qs){
   var to = prompt('¿A qué correo lo mandamos?');
   if (to === null) return;

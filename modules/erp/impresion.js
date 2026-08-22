@@ -47,6 +47,11 @@ const FORMATOS = {
   decimal: (v) => numero(v, 2),
   fecha:  (v) => escHtml(fechaEs(v)),
   pct:    (v) => numero(v, 1) + ' %',
+  // UN CERO SE DEJA EN BLANCO. En un libro contable la diferencia importa: una celda vacía dice
+  // «esta línea no toca esta columna» y un cero dice «toca, y vale cero». El papel viejo del diario
+  // y del mayor lo hacía así (`numOrBlank`), y la comparación cifra a cifra de C10-e cazó que el
+  // nuevo pintaba un 0,00 de más. No es lo mismo que `dinero`, y por eso es un formato aparte.
+  dinero0: (v, sym) => (Math.round((Number(v) || 0) * 100) === 0 ? '' : dinero(v, sym)),
 };
 
 // ── EL PIE DE PÁGINA ────────────────────────────────────────────────────────────────────────────

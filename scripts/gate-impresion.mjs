@@ -35,8 +35,17 @@ const hoy = new Date().toISOString().slice(0, 10);
 // LOS OCHO LISTADOS. Los cuatro de la tanda 1 y los cuatro de esta: el gate crece con el producto,
 // no se queda mirando la mitad. El kardex lleva su artículo en la dirección porque es de UNO — un
 // kardex sin decir de qué artículo es no sirve de nada.
-const CLAVES = ['clientes', 'productos', 'facturas', 'precios', 'catalogo', 'compras', 'gastos', 'kardex'];
-const QS = { kardex: () => '?producto_id=' + PRODUCTO_KARDEX };
+// LOS QUINCE LISTADOS: los ocho de las tandas anteriores y los SIETE informes contables, que hasta
+// C10-e se pintaban su propio papel a mano. El gate crece con el producto o deja de decir la verdad.
+const CLAVES = ['clientes', 'productos', 'facturas', 'precios', 'catalogo', 'compras', 'gastos', 'kardex',
+                'libro-ventas', 'libro-compras', 'libro-diario', 'libro-mayor', 'libro-bienes', 'pyg', 'modelos'];
+const PERIODO = '?desde=2026-01-01&hasta=2026-12-31';
+const QS = {
+  kardex: () => '?producto_id=' + PRODUCTO_KARDEX,
+  'libro-ventas': () => PERIODO, 'libro-compras': () => PERIODO, 'libro-diario': () => PERIODO,
+  'libro-mayor': () => PERIODO, 'libro-bienes': () => PERIODO, pyg: () => PERIODO,
+  modelos: () => '?anio=2026&trimestre=1',
+};
 const qsDe = k => (QS[k] ? QS[k]() : '');
 
 function borrarTenant(slug) {
@@ -132,12 +141,19 @@ try {
   ok(conPdf === CLAVES.length, 'los OCHO listados generan PDF sin error', conPdf + '/' + CLAVES.length + (malos.length ? ' · ' + malos.join(', ') : ''));
   const pantallas = { clientes: '/admin/clients', productos: '/admin/products', precios: '/admin/products',
                       facturas: '/admin/invoices', catalogo: '/admin/products', compras: '/admin/purchases',
-                      gastos: '/admin/supplier-invoices', kardex: '/admin/inventory' };
+                      gastos: '/admin/supplier-invoices', kardex: '/admin/inventory',
+                      'libro-ventas': '/admin/contabilidad', 'libro-compras': '/admin/contabilidad/compras',
+                      'libro-diario': '/admin/contabilidad/diario', 'libro-mayor': '/admin/contabilidad/mayor',
+                      'libro-bienes': '/admin/contabilidad/bienes', pyg: '/admin/contabilidad/pyg',
+                      modelos: '/admin/contabilidad/modelos' };
   let conVerbos = 0;
   for (const k of CLAVES) {
     const { t } = await txtDe(pantallas[k]);
     const tres = t.includes('/admin/listados/' + k + '/imprimir') || (k === 'facturas' && t.includes("'/admin/listados/facturas/imprimir'"));
-    const pdf = t.includes('/admin/listados/' + k + '/pdf') || (k === 'facturas' && t.includes("facturas/pdf"));
+    // EL BOTÓN DE PDF YA NO ES UN ENLACE: pasa por `descargarListado`, porque el servidor puede
+    // contestar «esto son 81 hojas, ¿sigo?» y un <a> dejaría ese aviso en pantalla como JSON crudo.
+    const pdf = t.includes("descargarListado('" + k + "'") || t.includes('/admin/listados/' + k + '/pdf')
+      || (k === 'facturas' && t.includes('facturas/pdf'));
     const env = t.includes('enviarListado');
     if ((tres || t.includes(k + '/imprimir')) && (pdf || t.includes(k + '/pdf')) && env) conVerbos++;
     else malos.push('verbos:' + k);
@@ -287,6 +303,50 @@ try {
   });
   ok(!/class="lst-sec"|<tr class="sub">|class="lst-notas"/.test(papelLlano),
      'y quien no las declara no las ve: las tres son aditivas');
+
+  // ── [23] C10-e · LOS SIETE INFORMES CONTABLES ───────────────────────────────────────────────
+  console.log('\n[23] los informes contables: sin HTML propio, con el archivo oficial intacto');
+
+  // NI UN GENERADOR A MANO. Si vuelve a aparecer uno, C10 queda incumplido otra vez.
+  const fuente = readFileSync(join(APP_DIR, 'modules/erp/contabilidad-export.js'), 'utf8')
+    + readFileSync(join(APP_DIR, 'modules/erp/routes/contabilidad-routes.js'), 'utf8');
+  const manuales = ['libroHtml', 'diarioHtml', 'mayorHtml', 'bienesHtml', 'pygHtml', 'modelosBorradorHtml']
+    .filter(f => new RegExp('(export function|const)\\s+' + f + '\\s*[=(]').test(fuente));
+  ok(manuales.length === 0, 'no queda NI UN generador de HTML propio en los informes', manuales.join(', ') || 'ninguno');
+  ok(!/renderPdfFromHtml\(\s*[a-z]+Html\(/.test(fuente), 'y ningún PDF de contabilidad se pinta su papel a mano');
+
+  // EL ARCHIVO OFICIAL NO SE TOCA: 36 columnas en el orden de la AEAT. Es requisito legal.
+  const { ventasMatrix, comprasMatrix } = await import('../modules/erp/contabilidad-export.js');
+  const { libroVentas: lv, libroCompras: lc } = await import('../modules/erp/contabilidad.js');
+  const mv = ventasMatrix(lv(n.db, '2026-01-01', '2026-12-31'));
+  ok(mv.headers.length === 36, 'el archivo oficial de ventas conserva sus 36 columnas', mv.headers.length + '');
+  ok(mv.headers[0] === 'Ejercicio' && mv.headers[1] === 'Periodo',
+     'y en el orden que exige la AEAT, empezando por Ejercicio y Periodo', mv.headers.slice(0, 2).join(' · '));
+  const mc = comprasMatrix(lc(n.db, '2026-01-01', '2026-12-31'));
+  ok(mc.headers.length >= 20, 'y el de compras conserva las suyas', mc.headers.length + ' columnas');
+
+  // LOS SUBTOTALES DEL P&G, EN SU SITIO. Y sus avisos, que son una advertencia y no un adorno.
+  const pygP = (await txtDe('/admin/listados/pyg/imprimir' + PERIODO)).t;
+  ok(/<tr class="sub">/.test(pygP), 'la cuenta de pérdidas y ganancias marca sus subtotales EN SU SITIO');
+  ok(/lst-notas/.test(pygP) || !/warning/i.test(pygP), 'y si el motor de contabilidad avisa de algo, el papel lo lleva');
+
+  // LOS MODELOS SON UN PAPEL CON DOS TABLAS.
+  const modP = (await txtDe('/admin/listados/modelos/imprimir?anio=2026&trimestre=1')).t;
+  ok((modP.match(/class="lst-sec"/g) || []).length === 2, 'los borradores llevan las DOS tablas, 303 y 130, en un solo papel');
+  ok(/Modelo 303/.test(modP) && /Modelo 130/.test(modP), 'y cada una con su título');
+  ok(/Bamburu no presenta/.test(modP), 'y la advertencia de que Bamburu NO presenta: es legal, no decorativa');
+
+  // EL PAPEL LARGO SE AVISA, NUNCA SE RECORTA.
+  const rLargo = await fetch(n.base + '/admin/listados/libro-diario/pdf' + PERIODO, { headers: n.cab });
+  const avisa = rLargo.status === 409;
+  ok(avisa || rLargo.status === 200, 'el libro diario responde', 'HTTP ' + rLargo.status);
+  if (avisa) {
+    const d = await rLargo.json();
+    ok(d.hojas > 50 && /no se recorta/i.test(d.mensaje || ''), 'avisa de cuántas hojas y de que sale ENTERO', d.hojas + ' hojas');
+    const rEntero = await fetch(n.base + '/admin/listados/libro-diario/pdf' + PERIODO + '&entero=1', { headers: n.cab });
+    const bufE = Buffer.from(await rEntero.arrayBuffer());
+    ok(rEntero.status === 200 && bufE.slice(0, 4).toString() === '%PDF', 'y con la confirmación sale, entero', bufE.length + ' bytes');
+  }
 
   // ── [8][9] LA BASE DECLARADA ────────────────────────────────────────────────────────────────
   console.log('\n[8][9] todo impreso declara su base');
