@@ -107,6 +107,52 @@ export function delLayout(db, scope) {
   return { ok: true };
 }
 
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// FICHA E — EL CUADRO DE MANDO TAMBIÉN SE COLOCA
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// Lo que pedía el dueño («organizar cada ficha como widgets, bien sea de posición») ya existía para
+// la rejilla de abajo y NO para lo que ocupa la mayor parte de la pantalla: las tarjetas fijas del
+// cuadro de mando. Esto lo extiende, con la MISMA tabla (`dashboard_layouts`) y el mismo patrón de
+// cascada. **Cero tablas nuevas**, como decía el TABLERO.
+//
+// LA UNIDAD ES LA TARJETA QUE SE VE, no la sección del motor. `cuadro-mando.js` tiene diez secciones
+// pero la pantalla las agrupa en SIETE tarjetas (ventas+cobro+margen+clientes son «Tus números», y
+// productos+mejores son «Tu negocio en cifras»). Mover media tarjeta no significa nada, así que la
+// pieza que se arrastra es la tarjeta.
+export const TARJETAS_CUADRO = [
+  { id: 'hoy',      etiqueta: 'Hoy',                    desc: 'La franja del día, la próxima cita y los eventos.' },
+  { id: 'numeros',  etiqueta: 'Tus números',            desc: 'Ventas, pendiente de cobro, margen y clientes nuevos.' },
+  { id: 'grafico',  etiqueta: 'El gráfico del mes',     desc: 'Ventas por día, con el mes anterior detrás.' },
+  { id: 'cifras',   etiqueta: 'Tu negocio en cifras',   desc: 'Lo que más vendes, lo que más te deja y tus mejores clientes.' },
+  { id: 'oport',    etiqueta: 'Oportunidades abiertas', desc: 'Cuántas hay y por cuánto.' },
+  { id: 'decide',   etiqueta: 'DISA decide',            desc: 'Lo que conviene mirar hoy, con su botón.' },
+  { id: 'arranque', etiqueta: 'Pon en marcha tu negocio', desc: 'Los pasos que te faltan por montar.' },
+];
+const IDS_CUADRO = TARJETAS_CUADRO.map(t => t.id);
+export const CUADRO_FABRICA = { orden: IDS_CUADRO.slice(), ocultos: [] };
+const scopeCuadro = userId => 'cuadro:usuario:' + userId;
+
+// Deja el ajuste en un estado siempre válido: sin ids inventados, sin repetidos, y con las tarjetas
+// nuevas que aparezcan en el futuro AL FINAL en vez de desaparecidas. Un ajuste guardado hace meses
+// no puede esconder una tarjeta que se añadió después sin que nadie lo decidiera.
+export function sanearCuadro(cfg) {
+  const orden = [], vistos = new Set();
+  for (const id of (cfg && Array.isArray(cfg.orden) ? cfg.orden : [])) {
+    if (IDS_CUADRO.includes(id) && !vistos.has(id)) { orden.push(id); vistos.add(id); }
+  }
+  for (const id of IDS_CUADRO) if (!vistos.has(id)) orden.push(id);
+  const ocultos = (cfg && Array.isArray(cfg.ocultos) ? cfg.ocultos : []).filter(id => IDS_CUADRO.includes(id));
+  return { orden, ocultos: [...new Set(ocultos)] };
+}
+export function getCuadro(db, userId) {
+  const raw = userId ? getLayoutRaw(db, scopeCuadro(userId)) : null;
+  return { ...sanearCuadro(raw), propio: !!raw };
+}
+export function setCuadro(db, userId, cfg) {
+  return setLayout(db, scopeCuadro(userId), sanearCuadro(cfg), userId);
+}
+export function delCuadro(db, userId) { return delLayout(db, scopeCuadro(userId)); }
+
 // ── RESOLUCIÓN (cascada) — qué layout le toca a este usuario, y de qué ámbito viene ─────────────
 export function resolver(db, userId) {
   const propio = getLayout(db, 'usuario:' + userId);

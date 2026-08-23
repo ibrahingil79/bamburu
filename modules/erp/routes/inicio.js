@@ -77,6 +77,38 @@ export function createInicioRoutes(db, { rutaExiste = () => true } = {}) {
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
+  // ⚠️ VA ANTES DE `/cuadro/:seccion`, y no es un capricho de orden: Hono casa por orden de
+  // registro, así que con la genérica delante `/cuadro/orden` se leería como «la sección
+  // llamada orden» y devolvería 404. Es la misma prioridad que ya obliga a montar
+  // `/purchases/capture` antes que `/purchases`.
+  // ── FICHA E · LA COLOCACIÓN DEL CUADRO DE MANDO (por usuario) ────────────────────────────────
+  // Mismo patrón y MISMA tabla que la rejilla de abajo: no hay tabla nueva. `propio` dice si este
+  // usuario tiene una colocación suya o está viendo la de fábrica, que es lo que decide si el botón
+  // «Volver al de fábrica» tiene algo que deshacer.
+  api.get('/cuadro/orden', c => {
+    try {
+      const userId = c.get('session')?.userId;
+      return c.json({ ...IL.getCuadro(db, userId), tarjetas: IL.TARJETAS_CUADRO, fabrica: IL.CUADRO_FABRICA });
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+  });
+  api.put('/cuadro/orden', async c => {
+    try {
+      const userId = c.get('session')?.userId;
+      if (!userId) { const e = new Error('Sin sesión'); e.status = 401; throw e; }
+      const d = await c.req.json().catch(() => ({}));
+      IL.setCuadro(db, userId, d);
+      return c.json({ ok: true, ...IL.getCuadro(db, userId) });
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+  });
+  api.delete('/cuadro/orden', c => {
+    try {
+      const userId = c.get('session')?.userId;
+      if (!userId) { const e = new Error('Sin sesión'); e.status = 401; throw e; }
+      IL.delCuadro(db, userId);
+      return c.json({ ok: true, ...IL.getCuadro(db, userId) });
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+  });
+
   // UNA sección suelta. Esta es la puerta que se fuerza a mano, y por eso es la que tiene que
   // cerrarse bien: sección desconocida → 404; sección para la que falta un permiso → 403. El
   // desplegable filtrado nunca es el candado (misma regla que el constructor).

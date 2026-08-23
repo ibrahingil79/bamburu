@@ -284,29 +284,48 @@ export function disaHomeHtml({ userName, simbolo = '€' }) {
       .onb-cta:hover { background: var(--accent-d); transform: translateY(-1px); box-shadow: 0 6px 18px var(--teal-glow); }
       .onb-cta i { font-size: 15px; }
       @media (prefers-reduced-motion: reduce) { .onb-card { animation: none; } .onb-ring-fg { transition: none; } .onb-cta:hover { transform: none; } }
+      /* FICHA E — el modo colocar. Fuera de el, ni un pixel cambia: .cm-w no pinta nada. */
+      .cm-barra{display:flex;align-items:center;gap:.6rem;margin:0 0 10px;flex-wrap:wrap}
+      .cm-btn{background:var(--bg2);border:1px solid var(--border2);border-radius:9px;padding:.34rem .7rem;
+        font-size:.78rem;cursor:pointer;color:var(--text)}
+      .cm-btn:hover{border-color:var(--accent)}
+      .cm-btn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+      .cm-barra-x{font-size:.72rem;color:var(--muted)}
+      .cm-w{position:relative}
+      .cm-editando .cm-w{outline:1px dashed var(--border2);outline-offset:4px;border-radius:12px;cursor:grab}
+      .cm-editando .cm-w:hover{outline-color:var(--accent)}
+      .cm-w-tools{display:none;position:absolute;top:-10px;right:6px;gap:.3rem;z-index:5}
+      .cm-editando .cm-w-tools{display:flex}
+      .cm-w-tools button{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;
+        padding:.15rem .45rem;font-size:.72rem;cursor:pointer;color:var(--text);box-shadow:0 2px 8px rgba(16,24,40,.10)}
+      .cm-ocultas{margin:0 0 14px;padding:.6rem .7rem;background:var(--bg2);border:1px dashed var(--border2);
+        border-radius:10px;font-size:.76rem;color:var(--muted);display:flex;gap:.45rem;align-items:center;flex-wrap:wrap}
+      .cm-ocultas button{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;
+        padding:.2rem .55rem;font-size:.74rem;cursor:pointer;color:var(--text)}
     </style>
 
     <div class="cm">
       <h3 class="cm-hola">${_saludo}, ${userName}</h3>
       <p class="cm-fecha">${fechaHoy}</p>
 
-      <!-- 1 · HOY. Sin agenda este hueco se queda vacío: el servidor no manda la sección siquiera. -->
-      <div id="cmHoy"></div>
-      <!-- 2 · TUS NÚMEROS -->
-      <div id="cmNumeros"></div>
-      <!-- 3 · EL GRÁFICO PRINCIPAL -->
-      <div id="cmGrafico"></div>
-      <!-- 4 · TU NEGOCIO EN CIFRAS -->
-      <div id="cmCifras"></div>
-      <!-- 5 · OPORTUNIDADES ABIERTAS -->
-      <div id="cmOport"></div>
-      <!-- 6 · DISA DECIDE. Sin nada que recomendar, no aparece. -->
-      <div id="cmDecide"></div>
-
-      <!-- 7 · PON EN MARCHA TU NEGOCIO. Se pinta en el navegador desde /api/erp/inicio/arranque;
-           nace desplegado si el negocio no tiene actividad real y plegado si la tiene, y el pliegue
-           se recuerda por usuario. Si no hay nada que ofrecer, no ocupa nada. -->
-      <div id="onbPanel"></div>
+      <!-- FICHA E — LAS TARJETAS DEL CUADRO SE COLOCAN. Cada una vive dentro de su envoltorio con
+           su atributo data-cm, y el orden y lo oculto salen de /api/erp/inicio/cuadro/orden (por usuario,
+           misma tabla que la rejilla de abajo). El contenido de cada tarjeta NO cambia: se mueve el
+           envoltorio, no lo de dentro. -->
+      <div class="cm-barra">
+        <button type="button" class="cm-btn" id="cmPers">Colocar mis fichas</button>
+        <span class="cm-barra-x" id="cmScope"></span>
+      </div>
+      <div id="cmOrden">
+        <div class="cm-w" data-cm="hoy"><div id="cmHoy"></div></div>
+        <div class="cm-w" data-cm="numeros"><div id="cmNumeros"></div></div>
+        <div class="cm-w" data-cm="grafico"><div id="cmGrafico"></div></div>
+        <div class="cm-w" data-cm="cifras"><div id="cmCifras"></div></div>
+        <div class="cm-w" data-cm="oport"><div id="cmOport"></div></div>
+        <div class="cm-w" data-cm="decide"><div id="cmDecide"></div></div>
+        <div class="cm-w" data-cm="arranque"><div id="onbPanel"></div></div>
+      </div>
+      <div id="cmOcultas" class="cm-ocultas" style="display:none"></div>
 
       <!-- 8 · TUS PANELES — la rejilla componible del paso 6, intacta: cascada usuario > empresa >
            fábrica, su paleta y su modo edición. Baja al final porque el cuadro de mando manda; lo
@@ -673,6 +692,120 @@ export function disaHomeHtml({ userName, simbolo = '€' }) {
         fetch('/api/erp/inicio/cuadro', { cache: 'no-store' })
           .then(function(r){ return r.json(); })
           .then(function(d){ if (d && !d.error) { D = d; window.__cuadro = d; pinta(); } })
+          .catch(function(){});
+      })();
+
+      // ══════════════════════════════════════════════════════════════════════════════════════════
+      // FICHA E — COLOCAR LAS FICHAS DEL CUADRO DE MANDO
+      // ══════════════════════════════════════════════════════════════════════════════════════════
+      // E1 mover · E2 guardar por usuario · E3 ocultar y volver a mostrar · E4 volver a fábrica.
+      // Reutiliza el MISMO Sortable que ya usa la rejilla de abajo y la MISMA tabla del servidor.
+      // Fuera del modo colocar la pantalla se ve exactamente igual que antes.
+      (function(){
+        var CM = { orden: [], ocultos: [], tarjetas: [], propio: false }, editando = false;
+        var cont = document.getElementById('cmOrden');
+        var barra = document.getElementById('cmScope');
+        var btn = document.getElementById('cmPers');
+        var ocultasBox = document.getElementById('cmOcultas');
+        var sortable = null;
+        if (!cont || !btn) return;
+        var etq = function(id){ var t = CM.tarjetas.find(function(x){ return x.id === id; }); return t ? t.etiqueta : id; };
+
+        function aplicar(){
+          // El ORDEN: se mueve el envoltorio, no lo de dentro. Así una tarjeta que el servidor no
+          // manda (sin permiso, o que no aplica a este negocio) sigue sin pintarse: queda vacía y no
+          // ocupa, igual que antes de esta ficha.
+          CM.orden.forEach(function(id){
+            var el = cont.querySelector('[data-cm="' + id + '"]');
+            if (el) cont.appendChild(el);
+          });
+          cont.querySelectorAll('.cm-w').forEach(function(el){
+            el.style.display = CM.ocultos.indexOf(el.dataset.cm) === -1 ? '' : 'none';
+          });
+          pintarOcultas();
+          barra.textContent = CM.propio ? 'colocación tuya' : 'colocación de fábrica';
+        }
+        function pintarOcultas(){
+          // E3 — lo que se esconde tiene que poder volver, y por eso se LISTA. Un bloque escondido
+          // sin forma de recuperarlo no está oculto: está perdido.
+          if (!CM.ocultos.length) { ocultasBox.style.display = 'none'; return; }
+          ocultasBox.style.display = 'flex';
+          ocultasBox.innerHTML = '<span>Escondidas:</span>' + CM.ocultos.map(function(id){
+            return '<button type="button" data-mostrar="' + id + '">' + etq(id) + ' · volver a mostrar</button>';
+          }).join('');
+          ocultasBox.querySelectorAll('[data-mostrar]').forEach(function(b){
+            b.onclick = function(){ CM.ocultos = CM.ocultos.filter(function(x){ return x !== b.dataset.mostrar; }); guardar(); };
+          });
+        }
+        function pintarHerramientas(){
+          cont.querySelectorAll('.cm-w').forEach(function(el){
+            var vieja = el.querySelector('.cm-w-tools'); if (vieja) vieja.remove();
+            if (!editando) return;
+            var d = document.createElement('div');
+            d.className = 'cm-w-tools';
+            d.innerHTML = '<button type="button" data-arriba="' + el.dataset.cm + '" title="Subir">↑</button>'
+                        + '<button type="button" data-abajo="' + el.dataset.cm + '" title="Bajar">↓</button>'
+                        + '<button type="button" data-ocultar="' + el.dataset.cm + '" title="Esconder">Esconder</button>';
+            el.appendChild(d);
+          });
+          cont.querySelectorAll('[data-ocultar]').forEach(function(b){
+            b.onclick = function(e){ e.stopPropagation();
+              if (CM.ocultos.indexOf(b.dataset.ocultar) === -1) CM.ocultos.push(b.dataset.ocultar);
+              guardar(); };
+          });
+          // Subir y bajar además de arrastrar: arrastrar no funciona con el teclado y en un móvil
+          // pequeño es incómodo. Las dos vías escriben lo mismo.
+          var mover = function(id, paso){
+            var i = CM.orden.indexOf(id), j = i + paso;
+            if (i < 0 || j < 0 || j >= CM.orden.length) return;
+            CM.orden.splice(j, 0, CM.orden.splice(i, 1)[0]); guardar();
+          };
+          cont.querySelectorAll('[data-arriba]').forEach(function(b){ b.onclick = function(e){ e.stopPropagation(); mover(b.dataset.arriba, -1); }; });
+          cont.querySelectorAll('[data-abajo]').forEach(function(b){ b.onclick = function(e){ e.stopPropagation(); mover(b.dataset.abajo, 1); }; });
+        }
+        function guardar(){
+          aplicar(); pintarHerramientas();
+          fetch('/api/erp/inicio/cuadro/orden', { method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': window.CSRF_TOKEN || '' },
+            body: JSON.stringify({ orden: CM.orden, ocultos: CM.ocultos }) })
+            .then(function(r){ return r.json(); })
+            .then(function(d){ if (d && !d.error) { CM.propio = true; barra.textContent = 'colocación tuya';
+              if (window.toast) toast('Colocación guardada'); } else if (window.toast) toast('No hemos podido guardarla', 'err'); })
+            .catch(function(){ if (window.toast) toast('No hemos podido guardarla', 'err'); });
+        }
+        function editar(on){
+          editando = on;
+          document.body.classList.toggle('cm-editando', on);
+          btn.classList.toggle('on', on);
+          btn.textContent = on ? 'Ya está, dejarlo así' : 'Colocar mis fichas';
+          pintarHerramientas();
+          if (on && !sortable && window.Sortable) {
+            sortable = window.Sortable.create(cont, { animation: 140, draggable: '.cm-w',
+              onEnd: function(){ CM.orden = [].slice.call(cont.querySelectorAll('.cm-w')).map(function(e){ return e.dataset.cm; }); guardar(); } });
+          }
+          if (sortable) sortable.option('disabled', !on);
+          if (on) {
+            var b = document.getElementById('cmFabrica');
+            if (!b) {
+              b = document.createElement('button');
+              b.type = 'button'; b.className = 'cm-btn'; b.id = 'cmFabrica'; b.textContent = 'Volver al de fábrica';
+              btn.parentNode.insertBefore(b, btn.nextSibling);
+              b.onclick = function(){
+                fetch('/api/erp/inicio/cuadro/orden', { method: 'DELETE',
+                  headers: { 'x-csrf-token': window.CSRF_TOKEN || '' } })
+                  .then(function(r){ return r.json(); })
+                  .then(function(d){ if (d && !d.error) { CM.orden = d.orden; CM.ocultos = d.ocultos; CM.propio = false;
+                    aplicar(); pintarHerramientas(); if (window.toast) toast('Vuelto al de fábrica'); } })
+                  .catch(function(){});
+              };
+            }
+          } else { var f = document.getElementById('cmFabrica'); if (f) f.remove(); }
+        }
+        btn.onclick = function(){ editar(!editando); };
+        fetch('/api/erp/inicio/cuadro/orden', { cache: 'no-store' })
+          .then(function(r){ return r.json(); })
+          .then(function(d){ if (d && !d.error) { CM.orden = d.orden; CM.ocultos = d.ocultos;
+            CM.tarjetas = d.tarjetas || []; CM.propio = !!d.propio; aplicar(); } })
           .catch(function(){});
       })();
 
