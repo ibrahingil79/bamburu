@@ -18,9 +18,9 @@
 import { Hono } from 'hono';
 import { requirePerm } from '../../../core/auth.js';
 import { safeError } from '../../../core/errors.js';
-import { tesela } from '../mapa-cliente.js';
+import { tesela, sugerir } from '../mapa-cliente.js';
 
-export function createMapaRoutes() {
+export function createMapaRoutes(db) {
   const api = new Hono();
 
   // El candado es `clients.read` porque hoy el único sitio que pinta mapa es la ficha de cliente:
@@ -44,6 +44,22 @@ export function createMapaRoutes() {
         },
       });
     } catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+
+  // ── SUGERENCIAS DE DIRECCIÓN, MIENTRAS SE ESCRIBE ──────────────────────────────────────────
+  // Pasa por aquí y no por el navegador por tres motivos, y ninguno es de estilo: la CSP del panel
+  // lleva `connect-src 'self'` (una llamada directa desde la página la bloquearía el navegador), el
+  // buscador de fuera no tiene por qué saber a quién está fichando este negocio, y la caché del
+  // servidor sirve para TODOS los usuarios en vez de una por pestaña.
+  // Nunca devuelve error al que escribe: si el servicio no contesta, la lista viene vacía y el campo
+  // se comporta como el de siempre. Escribir una dirección no puede romperse porque falle un tercero.
+  api.get('/sugerencias', requirePerm('clients.read'), async c => {
+    try {
+      // El país del NEGOCIO ordena la lista (no la recorta). Si no está configurado, no hay sesgo.
+      let pais = '';
+      try { pais = db.prepare('SELECT country FROM company_config WHERE id=1').get()?.country || ''; } catch {}
+      return c.json({ sugerencias: await sugerir(c.req.query('q') || '', pais) });
+    } catch { return c.json({ sugerencias: [] }); }
   });
 
   return { api };

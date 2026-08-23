@@ -70,7 +70,7 @@ export function mountRoutes(app, db) {
   const dashboard = createDashboardRoutes(db);
   const { api: prodApi, views: prodViews, tagsViews } = createProductRoutes(db);
   const { api: catApi, views: catViews } = createCategoryRoutes(db);
-  const { api: mapaApi } = createMapaRoutes();
+  const { api: mapaApi } = createMapaRoutes(db);
   const { api: clientApi, views: clientViews } = createClientRoutes(db);
   const { api: proyApi, views: proyViews } = createProyectoRoutes(db);   // paso 7 · proyectos
   const { api: tiempoApi, views: tiempoViews } = createTiempoRoutes(db); // paso 7 · registro de tiempo

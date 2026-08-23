@@ -213,6 +213,49 @@ try {
     ok(teselas.length === 0, 'y no se pide ni una tesela para ' + quien);
   }
 
+  // ── [4-bis] LA VENTANA FLOTANTE — el cuadro pequeño del resumen ──────────────────────────────
+  // Es LA PRIMERA PANTALLA del cliente: la que sale al pinchar una fila de la lista. Entró el 23 ago
+  // 2026 por encargo de Ibrahin, reabriendo a propósito el «y nada más» de B1 (que había dejado el
+  // resumen en cinco cosas). Y lo pinta EL MISMO painter que la página —BF.pintaMapa—, no una copia:
+  // el día que haya dos, discreparán. Las dos aserciones que lo defienden son el tamaño (tiene que
+  // seguir siendo un CUADRO PEQUEÑO, o deja de ser un resumen) y que en la página no salgan DOS.
+  console.log('\n[4-bis] EL CUADRO PEQUEÑO DE LA VENTANA');
+  await page.goto(BASE + '/admin/clients', { waitUntil: 'networkidle0' });
+  await dormir(600);
+  await page.evaluate(id => viewDetail(id), CON);
+  await dormir(2200);
+  const vent = await page.evaluate(() => {
+    const box = document.getElementById('bfWinMapa');
+    const lienzo = box && box.querySelector('.bf-mapa');
+    const a = box && box.querySelector('.bf-mapa-pie a');
+    return { visible: !!box && getComputedStyle(box).display !== 'none',
+      chico: !!(box && box.querySelector('.bf-mapa.chico')),
+      alto: lienzo ? lienzo.offsetHeight : -1,
+      chincheta: box ? box.querySelectorAll('.leaflet-marker-icon').length : 0,
+      href: a ? a.getAttribute('href') : '',
+      overlays: document.querySelectorAll('.bf-win-overlay.open').length };
+  });
+  ok(vent.visible && vent.chincheta === 1, 'el resumen de la ventana trae el mapa con su chincheta');
+  ok(vent.chico && vent.alto > 100 && vent.alto <= 170, 'y sigue siendo un CUADRO PEQUEÑO', vent.alto + ' px');
+  ok(vent.href.indexOf('40.4205785,-3.7034263') >= 0, 'con el enlace de ruta al punto del cliente', vent.href);
+  ok(vent.overlays === 1, 'y NO se ha roto la invariante de B1: una sola ventana abierta', String(vent.overlays));
+
+  await page.goto(BASE + '/admin/clients', { waitUntil: 'networkidle0' });
+  await dormir(500);
+  await page.evaluate(id => viewDetail(id), SIN);
+  await dormir(1400);
+  const vent2 = await page.evaluate(() => { const b = document.getElementById('bfWinMapa');
+    return { hay: !!b, display: b ? getComputedStyle(b).display : '', alto: b ? b.offsetHeight : -1 }; });
+  ok(vent2.hay && vent2.display === 'none' && vent2.alto === 0,
+    'y sin dirección tampoco deja hueco en la ventana', 'display=' + vent2.display + ' alto=' + vent2.alto);
+
+  // UN SOLO MAPA POR PANTALLA. La ventana en modo página comparte código con la de la lista: si
+  // algún día pintara también su resumen, saldrían dos mapas y solo se vería mirando.
+  await irFicha(CON);
+  await dormir(1500);
+  ok(await page.evaluate(() => document.querySelectorAll('.leaflet-container').length) === 1,
+    'en la página del cliente hay UN solo mapa, no dos');
+
   // ── [5] LA RUTA DE LAS TESELAS ───────────────────────────────────────────────────────────────
   console.log('\n[5] LA RUTA DE LAS TESELAS');
   const dirT = path.join(APP, 'data', 'teselas', String(TESELA_PRUEBA.z), String(TESELA_PRUEBA.x));
@@ -249,6 +292,87 @@ try {
     'guardar el cliente con la MISMA dirección conserva el punto y no vuelve a preguntar');
   const tras = db.prepare('SELECT phone FROM clients WHERE id=?').get(CON);
   ok(tras.phone === '+34 611 222 333', 'y el guardado del cliente se completa con normalidad', tras.phone);
+  // ── [7] LAS SUGERENCIAS DE DIRECCIÓN ─────────────────────────────────────────────────────────
+  // POR QUÉ EXISTE: el 23 ago 2026 se guardó «Cuesta de San Francisco 8, Getafe» y no salió mapa.
+  // La calle existe, pero en LAS ROZAS: escribiendo a ciegas no hay forma de enterarse.
+  //
+  // LA RESPUESTA DEL BUSCADOR SE FINGE, y es a propósito: el gate NO puede depender de que un
+  // servicio ajeno esté vivo (daría rojos que no son del producto). Lo que se prueba es TODO nuestro
+  // camino —la lista, el teclado, el relleno del formulario y el punto que viaja al guardar— con una
+  // respuesta fija. Que el buscador conteste bien se midió a mano contra el servicio real.
+  console.log('\n[7] SUGERENCIAS DE DIRECCIÓN');
+  const SUG = { etiqueta: 'Calle de Alcalá 45, 28014, Madrid, Comunidad de Madrid, España',
+                calle: 'Calle de Alcalá 45', cp: '28014', ciudad: 'Madrid', pais: 'España',
+                codigoPais: 'ES', lat: 40.4191038, lon: -3.696232 };
+  const lista = await browser.newPage();
+  const errsL = []; lista.on('pageerror', e => errsL.push(String(e.message || e)));
+  await lista.setViewport({ width: 1300, height: 1000 });
+  await lista.setCookie({ name: 'asess', value: sesion(owner.id), domain: slug + '.localhost', path: '/' });
+  await lista.setRequestInterception(true);
+  let pedidas = 0;
+  lista.on('request', r => {
+    if (r.url().indexOf('/api/erp/mapa/sugerencias') >= 0) {
+      pedidas++;
+      return r.respond({ status: 200, contentType: 'application/json',
+                         body: JSON.stringify({ sugerencias: [SUG] }) });
+    }
+    r.continue();
+  });
+  await lista.goto(BASE + '/admin/clients', { waitUntil: 'networkidle0' });
+  await dormir(600);
+  await lista.evaluate(() => openNewClient());
+  await dormir(200);
+  await lista.type('#cName', 'Sugerida SL');
+  await lista.type('#cAddress', 'Calle de Alcala 45', { delay: 20 });
+  let botones = 0;
+  for (let i = 0; i < 20; i++) { await dormir(300);
+    botones = await lista.evaluate(() => document.querySelectorAll('#cAddressSug button[data-sug]').length);
+    if (botones) break; }
+  ok(botones === 1, 'escribir abre la lista de sugerencias', botones + ' opción(es)');
+  ok(pedidas > 0 && pedidas <= 4, 'y NO se dispara una consulta por tecla (hay retardo)', pedidas + ' consultas para 18 teclas');
+
+  // El teclado, que es como se usa un campo así de verdad.
+  await lista.focus('#cAddress');
+  await lista.keyboard.press('ArrowDown');
+  await dormir(120);
+  ok(await lista.evaluate(() => document.querySelector('#cAddressSug button[data-sug="0"]').getAttribute('aria-selected') === 'true'),
+    'la flecha abajo marca la primera opción');
+  await lista.keyboard.press('Enter');
+  await dormir(300);
+  const f = await lista.evaluate(() => ({
+    dir: document.getElementById('cAddress').value,
+    ciudad: document.getElementById('cCity').value,
+    pais: document.getElementById('cCountry').value,
+    cp: document.getElementById('cPostal').value,
+    prov: document.getElementById('cProvince').value,
+    fiscal: document.getElementById('fiscalBlock').style.display !== 'none',
+    abierta: document.getElementById('cAddressSug').style.display !== 'none',
+  }));
+  ok(f.dir === SUG.calle && f.ciudad === 'Madrid' && f.cp === '28014' && f.pais === 'España',
+    'elegir con Intro rellena Dirección, Ciudad, CP y País', JSON.stringify(f));
+  ok(f.fiscal, 'y abre el bloque fiscal, para que el CP no quede escondido');
+  // La PROVINCIA no se toca: el buscador devuelve la comunidad autónoma («Comunidad de Madrid»), no
+  // la provincia («Madrid»), y rellenarla con lo que no es rompería el Facturae de ese cliente.
+  ok(f.prov === '', 'y NO toca Provincia', 'prov="' + f.prov + '"');
+  ok(!f.abierta, 'la lista se cierra al elegir');
+
+  await lista.evaluate(() => saveClient());
+  await dormir(1200);
+  const nuevo = db.prepare("SELECT id FROM clients WHERE name='Sugerida SL'").get();
+  const gs = nuevo ? db.prepare('SELECT * FROM client_geo WHERE client_id=?').get(nuevo.id) : null;
+  ok(!!gs && gs.resuelto === 1 && Math.abs(gs.lat - SUG.lat) < 1e-6 && Math.abs(gs.lon - SUG.lon) < 1e-6,
+    'guardar usa EXACTAMENTE el punto elegido, sin volver a buscar nada',
+    gs ? (gs.lat + ',' + gs.lon) : 'sin punto');
+  ok(errsL.length === 0, 'sin errores de JavaScript en la pantalla de clientes', errsL.join(' | '));
+  await lista.setRequestInterception(false);
+  await lista.close();
+
+  // Y el candado, con una aserción que PUEDE fallar: sin sesión no se contesta. (La primera versión
+  // de esta línea llevaba un `|| true` y habría dado verde con la puerta abierta de par en par.)
+  const anon = await fetch(BASE + '/api/erp/mapa/sugerencias?q=Calle+de+Alcala+45');
+  ok(anon.status === 401 || anon.status === 403 || anon.status === 302,
+    'la ruta de sugerencias NO contesta sin sesión', 'HTTP ' + anon.status);
+
 } catch (e) { fail++; console.error('\n✗ EXCEPCIÓN: ' + (e && e.stack || e)); }
 finally {
   try { if (browser) await browser.close(); } catch {}

@@ -38,6 +38,14 @@ import path from 'path';
 // saber qué cliente se está mirando, y menos aún quién lo mira).
 const AGENTE = 'Bamburu/1.0 (+https://bamburu.com)';
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
+// SUGERENCIAS AL ESCRIBIR: Photon, NO Nominatim. Y no es preferencia — la política de uso de la
+// OSM Foundation lo prohíbe con todas las letras: «Auto-complete search: This is not yet supported
+// by Nominatim and you must not implement such a service»
+// (https://operations.osmfoundation.org/policies/nominatim/, consultada el 23 ago 2026). Montar un
+// tecleo contra Nominatim se arriesga a que bloqueen la IP del servidor, y con ella el mapa entero.
+// Photon es el buscador de la MISMA familia —índice construido sobre datos de OpenStreetMap— y está
+// hecho justo para escribir sobre la marcha. La decisión de OSM no se reabre: sigue siendo OSM.
+const PHOTON = 'https://photon.komoot.io/api';
 const TESELAS = 'https://tile.openstreetmap.org';
 const ESPERA_MS = 8000;
 
@@ -187,6 +195,98 @@ export function mapaDeCliente(db, cli) {
   const lat = Number(g.lat), lon = Number(g.lon);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   return { lat, lon, direccion: d.texto };
+}
+
+// ── SUGERENCIAS MIENTRAS SE ESCRIBE ─────────────────────────────────────────────────────────────
+// De dónde sale (23 ago 2026): Ibrahin guardó «Cuesta de San Francisco 8, Getafe» y no salió mapa.
+// No fallaba la criba: esa calle NO EXISTE en Getafe —está en Las Rozas—, y Nominatim devolvía vacío
+// para las tres formas de la consulta. Escribir una dirección a ciegas y enterarte (o no) después es
+// el fallo; que te la sugieran y elijas la exacta es el arreglo.
+const CACHE_SUG = new Map();          // texto → { ts, lista }
+const SUG_TTL = 10 * 60 * 1000;
+const SUG_TOPE = 500;
+const SUG_MIN = 4;
+
+// Una sugerencia solo vale si trae CALLE: el campo que se rellena es «Dirección», y una ciudad
+// suelta no es una dirección (misma regla que `direccionDeCliente`, para que no puedan discrepar).
+function deFoton(f) {
+  const p = (f && f.properties) || {};
+  const c = (f && f.geometry && f.geometry.coordinates) || [];
+  const lon = Number(c[0]), lat = Number(c[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const calle = p.street ? (p.street + (p.housenumber ? ' ' + p.housenumber : '')) : (p.name || '');
+  if (!calle) return null;
+  const ciudad = p.city || p.district || p.county || '';
+  // LA ETIQUETA ES SOLO DIRECCIÓN. El nombre del sitio NO entra, y esto costó dos fallos seguidos:
+  //   · «Cuesta de San Francisco, Cuesta de San Francisco, 28231…» — cuando el resultado ES la calle,
+  //     el nombre y la calle son lo mismo y salía dos veces.
+  //   · «Lda. Elena Álvarez Ahedo, Calle de Guadalupe 3, 28931…» — en OSM las farmacias españolas se
+  //     llaman por su titular, así que buscar un portal devolvía EL NOMBRE DE UNA PERSONA a la cabeza
+  //     de una sugerencia de dirección. Quien rellena «Dirección» quiere una dirección, no un negocio.
+  // De paso arregla otra cosa: cinco locales del mismo portal ya no son cinco sugerencias iguales —
+  // colapsan en UNA dirección, porque la etiqueta es idéntica y el filtro de repetidas la caza.
+  return {
+    etiqueta: [calle, p.postcode, ciudad, p.state, p.country].filter(Boolean).join(', '),
+    calle, cp: p.postcode || '', ciudad, pais: p.country || '',
+    codigoPais: String(p.countrycode || '').toUpperCase(), lat, lon,
+  };
+}
+
+// `pais` es el país del NEGOCIO (ES, MX…). No FILTRA —quien factura fuera tiene que poder encontrar
+// una calle de fuera— pero sí ORDENA: buscando «Cuesta de San Fran» el buscador devolvía una calle de
+// Guanajuato entre dos españolas, y una lista que empieza por el otro lado del mundo se lee como si
+// estuviera rota. Ordenar es honesto; esconder resultados, no.
+export async function sugerir(texto, pais) {
+  const q = String(texto || '').trim().replace(/\s+/g, ' ');
+  if (q.length < SUG_MIN) return [];
+  const casa = String(pais || '').trim().toUpperCase();
+  const clave = casa + '|' + q.toLowerCase();
+  const guardada = CACHE_SUG.get(clave);
+  if (guardada && Date.now() - guardada.ts < SUG_TTL) return guardada.lista;
+
+  const u = new URL(PHOTON);
+  u.searchParams.set('q', q);
+  u.searchParams.set('limit', '6');
+  const corta = new AbortController();
+  const reloj = setTimeout(() => corta.abort(), ESPERA_MS);
+  let lista = [];
+  try {
+    const r = await fetch(u, { headers: { 'User-Agent': AGENTE }, signal: corta.signal });
+    if (r.ok) {
+      const j = await r.json();
+      const vistas = new Set();
+      for (const f of (j && j.features) || []) {
+        const s = deFoton(f);
+        if (!s || vistas.has(s.etiqueta)) continue;
+        vistas.add(s.etiqueta);
+        lista.push(s);
+      }
+    }
+  } catch { lista = []; } finally { clearTimeout(reloj); }
+
+  // Los del país del negocio primero, conservando el orden del buscador dentro de cada grupo.
+  if (casa) lista = lista.filter(x => x.codigoPais === casa).concat(lista.filter(x => x.codigoPais !== casa));
+
+  // Caché en memoria: la política de OSM la exige para Nominatim y aquí vale igual —escribir una
+  // dirección repite muchísimo los mismos prefijos. Tope duro para que no crezca sin freno.
+  if (CACHE_SUG.size >= SUG_TOPE) CACHE_SUG.clear();
+  CACHE_SUG.set(clave, { ts: Date.now(), lista });
+  return lista;
+}
+
+// EL PUNTO ELEGIDO A MANO. Cuando alguien PICA una sugerencia, el sitio ya está decidido: se guarda
+// ese punto y NO se le vuelve a preguntar a nadie. Es lo que convierte «sugiere la exacta» en una
+// promesa cumplida — el mapa enseña justo lo que se eligió, no lo que un segundo buscador entienda.
+// Síncrono a propósito: es una escritura en nuestra base, dentro del mismo guardado.
+export function fijarPunto(db, clientId, lat, lon, etiqueta) {
+  const cli = db.prepare('SELECT id,address,city,postal_code,province,country FROM clients WHERE id=?').get(clientId);
+  if (!cli) return null;
+  const d = direccionDeCliente(cli);
+  if (!d) return null;
+  const la = Number(lat), lo = Number(lon);
+  if (!Number.isFinite(la) || !Number.isFinite(lo) || Math.abs(la) > 90 || Math.abs(lo) > 180) return null;
+  db.prepare(GUARDAR).run(clientId, d.huella, la, lo, String(etiqueta || '').slice(0, 300) || null, 1);
+  return geoDeCliente(db, clientId);
 }
 
 // ── LAS TESELAS, POR NUESTRO SERVIDOR ───────────────────────────────────────────────────────────

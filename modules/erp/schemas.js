@@ -97,6 +97,14 @@ export const clientSchema = z.object({
   // que es un estado legítimo y NO un error: los clientes existentes nacen así y el dueño reparte
   // cuando quiera. Se asigna a mano; ni reparto automático ni DISA (decisión del dueño).
   responsable_user_id: optId,
+  // F — EL PUNTO QUE SE ELIGIÓ EN LA LISTA DE SUGERENCIAS. De paso, no de guardado: NO se escribe en
+  // `clients` (no es un dato del cliente, y el encargo dice que esos no se tocan) sino en la caché
+  // `client_geo`. Opcionales: si no vienen —porque se escribió la dirección a mano sin elegir— la
+  // dirección se resuelve al guardar como siempre. `''` se acepta porque es lo que manda un campo
+  // vacío del formulario.
+  geo_lat: z.union([z.null(), z.literal(''), z.coerce.number().min(-90).max(90)]).optional(),
+  geo_lon: z.union([z.null(), z.literal(''), z.coerce.number().min(-180).max(180)]).optional(),
+  geo_etiqueta: strOpt(300),
 });
 
 // ── Peldaño 7 · PIEZA 1 — PROYECTO (entidad de servicios profesionales) ──────────────────────────

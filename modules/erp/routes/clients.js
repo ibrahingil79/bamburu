@@ -27,7 +27,7 @@ import { contactosDe, apuntarContacto, TIPOS as TIPOS_CONTACTO, DIRECCIONES } fr
 import { clientTimeline, clientCrmSummary } from '../crm.js';
 // F — EL MAPA DE LA FICHA. La dirección se resuelve AL GUARDAR (una vez), no al abrir la ficha: lo
 // que se ejecuta al mirar un cliente es `mapaDeCliente`, que solo lee de nuestra base.
-import { programarGeo, mapaDeCliente } from '../mapa-cliente.js';
+import { programarGeo, mapaDeCliente, fijarPunto } from '../mapa-cliente.js';
 import { detectar } from '../vigia.js';
 
 // Comprobación reutilizable de NIF duplicado (regla de integridad — sin duplicados).
@@ -72,6 +72,21 @@ function parseClient(input) {
   return res.data;
 }
 
+// F — QUÉ SE HACE CON EL PUNTO AL GUARDAR. Una sola función para el alta y para la edición: si
+// fueran dos, el día que una cambie la otra se queda vieja en silencio.
+//   · Si el usuario ELIGIÓ una sugerencia, el sitio ya está decidido: se guarda ESE punto y no se le
+//     pregunta a nadie. Es lo que hace que el mapa enseñe exactamente lo que se eligió.
+//   · Si escribió la dirección a mano, se resuelve al guardar como siempre (en segundo plano).
+// `fijarPunto` valida el rango y comprueba que el cliente tenga calle: unas coordenadas que lleguen
+// sueltas, sin dirección detrás, no pintan nada.
+function guardarPunto(db, id, d) {
+  const lat = Number(d.geo_lat), lon = Number(d.geo_lon);
+  if (d.address && Number.isFinite(lat) && Number.isFinite(lon) && (lat !== 0 || lon !== 0)) {
+    if (fijarPunto(db, id, lat, lon, d.geo_etiqueta)) return;
+  }
+  programarGeo(db, id);
+}
+
 export function createClientSvc(db, input) {
   const d = parseClient(input);
   if (fiscalIdConflict(db, d.fiscal_id)) { const e = new Error('Ya existe un cliente con ese NIF'); e.status = 409; throw e; }
@@ -79,10 +94,9 @@ export function createClientSvc(db, input) {
   const r = db.prepare('INSERT INTO clients (name,fiscal_id,email,phone,address,city,country,postal_code,province,group_id,notes,accepts_newsletter,client_type,payment_term_days,payment_method,collections_profile,client_code,responsable_user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
     .run(d.name, d.fiscal_id || '', d.email || '', d.phone || '', d.address || '', d.city || '', d.country || '', d.postal_code || '', d.province || '', d.group_id || null, d.notes || '', d.accepts_newsletter ? 1 : 0, d.client_type || 'particular', d.payment_term_days || 0, d.payment_method || '', d.collections_profile || 'estandar', code, d.responsable_user_id || null);
   syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
-  // F — se resuelve la dirección AQUÍ, en el servicio compartido, y no en la ruta: así el mapa sale
-  // igual si el cliente lo da de alta una persona o lo dicta DISA. Va sin `await` y no puede fallar:
-  // que un buscador de fuera no conteste NO puede tumbar el alta de un cliente (ver mapa-cliente.js).
-  programarGeo(db, r.lastInsertRowid);
+  // F — el mapa se decide AQUÍ, en el servicio compartido, y no en la ruta: así sale igual si el
+  // cliente lo da de alta una persona o lo dicta DISA. Nunca puede tumbar el alta (ver mapa-cliente.js).
+  guardarPunto(db, r.lastInsertRowid, d);
   return { id: r.lastInsertRowid, name: d.name, client_code: code };
 }
 
@@ -94,7 +108,7 @@ export function updateClientSvc(db, id, input) {
   db.prepare('UPDATE clients SET name=?,fiscal_id=?,email=?,phone=?,address=?,city=?,country=?,postal_code=?,province=?,group_id=?,notes=?,accepts_newsletter=?,client_type=?,payment_term_days=?,payment_method=?,collections_profile=?,responsable_user_id=? WHERE id=?')
     .run(d.name, d.fiscal_id || '', d.email || '', d.phone || '', d.address || '', d.city || '', d.country || '', d.postal_code || '', d.province || '', d.group_id || null, d.notes || '', d.accepts_newsletter ? 1 : 0, d.client_type || 'particular', d.payment_term_days || 0, d.payment_method || '', d.collections_profile || 'estandar', d.responsable_user_id || null, id);
   syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
-  programarGeo(db, id);   // F — misma regla que en el alta: si la dirección cambió, se vuelve a resolver
+  guardarPunto(db, id, d);   // F — misma regla que en el alta, y por la misma puerta
   return { id: Number(id), name: d.name };
 }
 
@@ -618,7 +632,16 @@ export function createClientRoutes(db, cfg = {}) {
               <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="cEmail" type="email"></div>
               <div class="form-group"><label class="form-label">Teléfono</label><input class="form-control" id="cPhone"></div>
             </div>
-            <div class="form-group"><label class="form-label">Dirección</label><input class="form-control" id="cAddress"></div>
+            <!-- F · SUGERENCIAS DE DIRECCIÓN. autocomplete=off para que el desplegable del navegador
+                 no se ponga encima del nuestro; role/aria para que se pueda usar con el teclado. -->
+            <div class="form-group" style="position:relative">
+              <label class="form-label">Dirección</label>
+              <input class="form-control" id="cAddress" autocomplete="off" role="combobox"
+                     aria-autocomplete="list" aria-expanded="false" aria-controls="cAddressSug"
+                     placeholder="Escribe la calle y elige la dirección de la lista">
+              <div id="cAddressSug" class="dir-sug" role="listbox" style="display:none"></div>
+              <div id="cAddressPista" class="dir-pista"></div>
+            </div>
             <div class="form-row">
               <div class="form-group"><label class="form-label">Ciudad</label><input class="form-control" id="cCity"></div>
               <div class="form-group"><label class="form-label">País</label><input class="form-control" id="cCountry"></div>
@@ -692,7 +715,22 @@ export function createClientRoutes(db, cfg = {}) {
            cobro compartida. -->
       ${cobroModalHtml()}
       ${mapaAssetsHTML()}
-      <style>${fichaClienteCSS()}${fichaCompletaCSS()}</style>
+      <style>${fichaClienteCSS()}${fichaCompletaCSS()}
+        /* F · La lista de sugerencias de dirección. Flota sobre el formulario (por eso el padre
+           lleva position:relative) y se limita en alto: el modal ya tiene su propio scroll y una
+           lista larga lo empujaría entero. */
+        .dir-sug{position:absolute;left:0;right:0;top:100%;z-index:5;margin-top:.25rem;
+          background:var(--bg2);border:1px solid var(--border2);border-radius:12px;
+          box-shadow:0 12px 28px rgba(0,0,0,.28);max-height:230px;overflow-y:auto}
+        .dir-sug button{display:block;width:100%;text-align:left;background:none;border:none;
+          font-family:inherit;font-size:.84rem;color:var(--text);padding:.55rem .75rem;cursor:pointer;
+          border-bottom:1px solid var(--border)}
+        .dir-sug button:last-child{border-bottom:none}
+        .dir-sug button:hover,.dir-sug button[aria-selected="true"]{background:var(--bg3)}
+        .dir-sug .no{padding:.55rem .75rem;font-size:.8rem;color:var(--text3)}
+        .dir-pista{font-size:11px;color:var(--text2);margin-top:.3rem;min-height:1em}
+        .dir-pista.ok{color:var(--ok)}
+      </style>
       <script>
       ${JS_LISTADO_ENVIAR}
       ${fichaClienteJS({ sym })}
@@ -711,6 +749,118 @@ export function createClientRoutes(db, cfg = {}) {
           .catch(function(){ window.BFWin.abrir(currentDetailClientId); });
       };
       let currentClient=null;   // cliente en edición (conserva accepts_newsletter sin tocar la API)
+      // ── F · SUGERENCIAS DE DIRECCIÓN ──────────────────────────────────────────────────────────
+      // POR QUÉ EXISTE ESTO (23 ago 2026): se guardó «Cuesta de San Francisco 8, Getafe» y no salió
+      // mapa. La calle existe, pero en LAS ROZAS, no en Getafe — y escribiendo a ciegas no hay forma
+      // de enterarse. Ahora se escribe, se elige de la lista, y el punto que se guarda es EL ELEGIDO:
+      // no se vuelve a buscar nada, así que el mapa no puede acabar en otro sitio.
+      //
+      // Tres cosas que no son adorno:
+      //  · El retardo (350 ms) y el mínimo de 4 letras. Sin ellos se dispara una consulta por tecla
+      //    contra un servicio ajeno y gratuito, que es justo como te ganas que te bloqueen.
+      //  · La petición lleva un número de orden: una respuesta lenta de hace tres letras NO puede
+      //    pisar la lista de lo que se está escribiendo ahora.
+      //  · Si el servicio no contesta, no pasa NADA: el campo se comporta como el de siempre y se
+      //    puede escribir a mano. Una dirección no puede depender de que un tercero esté vivo.
+      let dirElegida = null;      // el punto que se picó en la lista (null = escrito a mano)
+      let dirReloj = null, dirTurno = 0, dirLista = [], dirFoco = -1;
+
+      function dirPista(txt, ok){
+        const e = document.getElementById('cAddressPista');
+        e.textContent = txt || ''; e.className = 'dir-pista' + (ok ? ' ok' : '');
+      }
+      function dirCerrar(){
+        const c = document.getElementById('cAddressSug');
+        c.style.display='none'; c.innerHTML=''; dirLista=[]; dirFoco=-1;
+        document.getElementById('cAddress').setAttribute('aria-expanded','false');
+      }
+      // Se llama al abrir el modal y al empezar a teclear: el punto de una dirección anterior no
+      // puede sobrevivir a que alguien cambie la dirección.
+      function dirReset(){ dirElegida=null; dirPista(''); dirCerrar(); }
+
+      function dirPintar(){
+        const c = document.getElementById('cAddressSug');
+        if (!dirLista.length){ dirCerrar(); return; }
+        c.innerHTML = dirLista.map(function(s,i){
+          return '<button type="button" role="option" data-sug="'+i+'" aria-selected="false">'
+               + escHtml(s.etiqueta) + '</button>';
+        }).join('');
+        c.style.display='block';
+        document.getElementById('cAddress').setAttribute('aria-expanded','true');
+      }
+      function dirMarcar(n){
+        const bs = document.getElementById('cAddressSug').querySelectorAll('button[data-sug]');
+        if (!bs.length) return;
+        dirFoco = (n + bs.length) % bs.length;
+        bs.forEach(function(b,i){ b.setAttribute('aria-selected', i===dirFoco ? 'true' : 'false'); });
+        bs[dirFoco].scrollIntoView({block:'nearest'});
+      }
+      function dirElegir(i){
+        const s = dirLista[i]; if (!s) return;
+        document.getElementById('cAddress').value = s.calle;
+        if (s.ciudad) document.getElementById('cCity').value = s.ciudad;
+        if (s.pais)   document.getElementById('cCountry').value = s.pais;
+        // El CP vive en el bloque fiscal, que nace plegado: si se rellena y no se abre, aparece un
+        // dato donde nadie lo ve. La PROVINCIA no se toca — el buscador devuelve la comunidad
+        // autónoma («Comunidad de Madrid»), no la provincia («Madrid»), y rellenarla mal rompe Facturae.
+        if (s.cp){
+          document.getElementById('cPostal').value = s.cp;
+          if (document.getElementById('fiscalBlock').style.display==='none') setFiscal(true);
+        }
+        dirElegida = s;
+        dirCerrar();
+        dirPista('Dirección confirmada en el mapa: ' + s.etiqueta, true);
+      }
+
+      function dirBuscar(){
+        const q = document.getElementById('cAddress').value.trim();
+        if (q.length < 4){ dirCerrar(); return; }
+        const mio = ++dirTurno;
+        fetch('/api/erp/mapa/sugerencias?q=' + encodeURIComponent(q))
+          .then(function(r){ return r.json(); })
+          .then(function(j){
+            if (mio !== dirTurno) return;         // llegó tarde: ya se está escribiendo otra cosa
+            dirLista = (j && j.sugerencias) || [];
+            if (!dirLista.length){
+              const c = document.getElementById('cAddressSug');
+              c.innerHTML = '<div class="no">Ninguna dirección coincide. Puedes escribirla a mano: se guardará igual, pero sin mapa.</div>';
+              c.style.display='block';
+              return;
+            }
+            dirPintar();
+          })
+          .catch(function(){ dirCerrar(); });     // el buscador no contesta: ni ruido ni estorbo
+      }
+
+      // SEGUIR ESCRIBIENDO DETRÁS DE LO ELEGIDO NO TIRA EL PUNTO. Hace falta porque el mapa NO tiene
+      // todos los portales de España: cuando el número no está, el buscador ofrece LA CALLE, y quien
+      // la elige tiene que poder añadirle el número sin perder el sitio. Añadir «, 2ºB» o « 3» a la
+      // calle elegida no mueve la chincheta de sitio, así que el punto sigue valiendo.
+      // La comprobación del dígito NO sobra: sin ella, cambiar «Guadalupe 3» por «Guadalupe 300»
+      // seguiría empezando igual y se quedaría con el punto del número 3, que es otro portal.
+      function dirSigueValiendo(valor){
+        if (!dirElegida) return false;
+        if (valor.indexOf(dirElegida.calle) !== 0) return false;
+        var resto = valor.slice(dirElegida.calle.length);
+        return resto === '' || !/^[0-9]/.test(resto);
+      }
+      document.getElementById('cAddress').addEventListener('input', function(){
+        if (!dirSigueValiendo(this.value)) { dirElegida = null; dirPista(''); }
+        clearTimeout(dirReloj); dirReloj = setTimeout(dirBuscar, 350);
+      });
+      document.getElementById('cAddress').addEventListener('keydown', function(ev){
+        if (ev.key === 'ArrowDown'){ ev.preventDefault(); dirMarcar(dirFoco + 1); }
+        else if (ev.key === 'ArrowUp'){ ev.preventDefault(); dirMarcar(dirFoco - 1); }
+        else if (ev.key === 'Enter' && dirFoco >= 0){ ev.preventDefault(); dirElegir(dirFoco); }
+        else if (ev.key === 'Escape'){ dirCerrar(); }
+      });
+      document.getElementById('cAddressSug').addEventListener('mousedown', function(ev){
+        // mousedown y no click: el blur del campo cierra la lista antes de que llegue el click.
+        const b = ev.target.closest('button[data-sug]'); if (!b) return;
+        ev.preventDefault(); dirElegir(parseInt(b.getAttribute('data-sug'), 10));
+      });
+      document.getElementById('cAddress').addEventListener('blur', function(){ setTimeout(dirCerrar, 120); });
+
       // Bloque de dirección fiscal (Facturae): plegado por defecto; se despliega solo si el cliente
       // ya tiene alguno de esos datos, para que al editar no queden escondidos.
       function setFiscal(abierto){
@@ -726,6 +876,7 @@ export function createClientRoutes(db, cfg = {}) {
         document.getElementById('clientId').value='';
         ['cName','cFiscal','cEmail','cPhone','cAddress','cCity','cCountry','cNotes','cPostal','cProvince'].forEach(id=>document.getElementById(id).value='');
         setFiscal(false);
+        dirReset();   // F — ni sugerencias abiertas ni el punto del cliente anterior
         document.getElementById('cGroup').value='';
         document.getElementById('cResp').value='';
         document.getElementById('cType').value='particular';
@@ -744,6 +895,7 @@ export function createClientRoutes(db, cfg = {}) {
         document.getElementById('cEmail').value=c.email||'';
         document.getElementById('cPhone').value=c.phone||'';
         document.getElementById('cAddress').value=c.address||'';
+        dirReset();   // F — se edita partiendo de lo guardado, sin punto elegido en esta sesión
         document.getElementById('cCity').value=c.city||'';
         document.getElementById('cCountry').value=c.country||'';
         document.getElementById('cPostal').value=c.postal_code||'';
@@ -760,7 +912,12 @@ export function createClientRoutes(db, cfg = {}) {
       }
       async function saveClient(){
         const id=document.getElementById('clientId').value;
-        const body={name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,address:document.getElementById('cAddress').value,city:document.getElementById('cCity').value,country:document.getElementById('cCountry').value,postal_code:document.getElementById('cPostal').value,province:document.getElementById('cProvince').value,group_id:document.getElementById('cGroup').value||null,notes:document.getElementById('cNotes').value,accepts_newsletter: id ? !!(currentClient&&currentClient.accepts_newsletter) : false,client_type:document.getElementById('cType').value,payment_term_days:parseInt(document.getElementById('cTermDays').value)||0,payment_method:document.getElementById('cPayMethod').value,collections_profile:document.getElementById('cProfile').value,responsable_user_id:document.getElementById('cResp').value||null};
+        const body={name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,address:document.getElementById('cAddress').value,city:document.getElementById('cCity').value,country:document.getElementById('cCountry').value,postal_code:document.getElementById('cPostal').value,province:document.getElementById('cProvince').value,group_id:document.getElementById('cGroup').value||null,notes:document.getElementById('cNotes').value,accepts_newsletter: id ? !!(currentClient&&currentClient.accepts_newsletter) : false,client_type:document.getElementById('cType').value,payment_term_days:parseInt(document.getElementById('cTermDays').value)||0,payment_method:document.getElementById('cPayMethod').value,collections_profile:document.getElementById('cProfile').value,responsable_user_id:document.getElementById('cResp').value||null,
+          // F — si se eligió una dirección de la lista, viaja SU punto: el servidor lo guarda tal cual
+          // y no vuelve a buscar nada. Si se escribió a mano, no van y se resuelve al guardar.
+          geo_lat: dirElegida ? dirElegida.lat : null,
+          geo_lon: dirElegida ? dirElegida.lon : null,
+          geo_etiqueta: dirElegida ? dirElegida.etiqueta : ''};
         try{if(id)await api('PUT','/api/erp/clients/'+id,body);else await api('POST','/api/erp/clients',body);closeModal('clientModal');toast(id?'Actualizado':'Creado');location.reload();}catch(e){toast(e.message,'err')}
       }
       async function delClient(id){if(!confirm('¿Archivar este cliente? Dejará de aparecer en la lista, pero no se borra.'))return;try{await api('DELETE','/api/erp/clients/'+id);toast('Archivado');location.reload();}catch(e){toast(e.message,'err')}}
