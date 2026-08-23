@@ -117,10 +117,14 @@
 `A 8 · B 3 · C 11 · D 5 · E 4 · F 4 · G 5 · H 3 · I 3 · J 0 · K 0` = **46**.
 (J y K son ítems bloqueados sin subpuntos: su texto es una sola afirmación.)
 
-**RECUENTO VIGENTE — 23 ago 2026 (cierre): 65 subpuntos vivos · 49 hechos · 16 pendientes.**
+**RECUENTO VIGENTE — 23 ago 2026 (cierre de la ficha D): 65 subpuntos vivos · 54 hechos · 11 pendientes.**
+*(**la ficha D entra entera, 5 de 5** — D1 y D4 eran la misma pieza y se cerraron con el área de
+agenda; D2, D3 y D5 completos. 49 + 5 = 54 hechos · 16 − 5 = 11 pendientes.
+Pendientes: **E 4 · G 4 · I 3** = 11. Vivos siguen siendo 65.)*
 *(**la ficha F entra entera, 4 de 4** — el mapa lo escribió otra sesión y quedó sin commitear;
 se revisó, se ejecutó su gate por primera vez y se cerró. 45 + 4 = 49 hechos · 20 − 4 = 16
-pendientes. Pendientes: **D 5 · E 4 · G 4 · I 3** = 16. Vivos siguen siendo 65.)*
+pendientes. ~~Pendientes: **D 5 · E 4 · G 4 · I 3** = 16.~~ — **caducada el mismo 23 ago al cerrarse
+la ficha D: 11, sin D.** Vivos siguen siendo 65.)*
 *(**H1 se cierra por decisión del dueño esa noche**: las facturas NO entran por CSV y se quedan en la
 migración asistida. Con eso **H queda entera, 3 de 3**, y sale de la lista de pendientes.
 44 + 1 = 45 hechos · 21 − 1 = 20 pendientes. ~~Pendientes: **D 5 · E 4 · F 4 · G 4 · I 3** = 20.~~
@@ -1317,7 +1321,7 @@ fichero ya despertaba: `documentos.js` y `attachments.js` · `quotes|pedidos|inv
 `albaranes` · `purchase-orders` · `settings`. Comprobado **ejecutándolas** contra las siete rutas
 reales y verificando que **ningún grupo anterior se pierde**.
 
-#### D. ANALÍTICAS — INFORMES A MEDIDA · **PENDIENTE**
+#### D. ANALÍTICAS — INFORMES A MEDIDA · ✅ **HECHO (23 ago 2026)** · commits `e16bd01` + `fb5db14` + `bcd826c` · **5 de 5**
 
 > **D. ANALITICAS — INFORMES A MEDIDA.**
 > Palabras del dueño: "en analiticas lo principal es que el cliente pueda elaborar informes segun su requerimiento y no mostrar una serie de datos donde el mismo se pierde".
@@ -1327,16 +1331,27 @@ reales y verificando que **ningún grupo anterior se pierde**.
 > **D4** Pendiente conocido de antes: el constructor de analiticas no sabe expresar datos de agenda (los avisos de agenda no tienen grafico que los acompañe). Entra aqui.
 > **D5** Enlaza con C: un informe compuesto debe poder imprimirse y descargarse.
 
-**⚙️ CORREGIDO: D1 y D3 ya están construidos.** El **constructor de analíticas**
-(`modules/erp/constructor-analitica.js`, escalera pasos 4a/4a-bis/4b) ya deja **elegir medida,
+**⚙️ ESTO ERA EL ESTADO ANTES DE LA ENTREGA DEL 23 AGO. Se conserva porque es el registro de lo que
+se creía, y se corrige EN EL SITIO lo que no era exacto.** El **constructor de analíticas**
+(`modules/erp/constructor-analitica.js`, escalera pasos 4a/4a-bis/4b) ya dejaba **elegir medida,
 dimensión y periodo** sobre **cinco áreas** (Ventas · Compras · Clientes · Inventario ·
 Contabilidad), con cálculos propios y paneles **guardados y compartibles** (`listarPaneles`).
-- **D1 → lo que falta es el ÁREA DE AGENDA**, que es exactamente **D4** (y ya estaba apuntado en
-  §TAREA 3 de este TABLERO). **D1 y D4 son la misma pieza**, no dos.
+- **D1 → lo que falta es el ÁREA DE AGENDA**, que es exactamente **D4**. **D1 y D4 son la misma
+  pieza**, no dos. → **Era CIERTO, y el 23 ago se comprobó contra el código**: `dibujo.js` declaraba
+  los cuatro avisos de agenda «sin gráfico» con el motivo escrito. **Hecho: el área existe.**
 - **D2 sigue entero:** `/admin/analytics` abre con **4 KPIs + gráficos fijos** por defecto
-  (`modules/erp/routes/analytics.js:334-364`) — el muro que el dueño describe.
-- **D5 sigue entero:** hoy un informe compuesto solo sale en **CSV** (`informes.csv`); **no hay PDF
-  ni impresión**. Depende de C.
+  (~~`modules/erp/routes/analytics.js:334-364`~~ — **referencia derivada, corregida el 23 ago: los
+  KPIs estaban en `:347-352` y los gráficos en `:354-364`; hoy ninguna de las dos existe, la fila de
+  KPIs se retiró**) — el muro que el dueño describe. **Hecho.**
+- ~~**D5 sigue entero:** hoy un informe compuesto solo sale en **CSV** (`informes.csv`); **no hay PDF
+  ni impresión**.~~ **⚠️ ESTA FRASE ERA FALSA y se tacha con su motivo (23 ago 2026).** `informes.csv`
+  **no tiene nada que ver con un informe compuesto**: exporta los DIEZ informes fijos de la pestaña
+  «Informes por área» (`routes/analytics.js`, `/export/informes`). Un informe compuesto **no salía de
+  la pantalla de ninguna forma** — la tarjeta «Construye tu gráfico» no tenía ni un botón de
+  exportar. El alcance real de D5 era mayor que lo que decía esta línea. **Hecho: los tres verbos.**
+- **D3 estaba a medias y aquí no se decía:** se podía guardar y **no se podía deshacer** — ni borrar
+  (el endpoint existía y no lo llamaba nadie), ni renombrar, ni descompartir, y cada «Guardar» dejaba
+  un duplicado. **Hecho.**
 
 ---
 
@@ -1360,6 +1375,16 @@ bloques, quitar bloque, «Personalizar», «Volver al de fábrica», guardado **
   debajo** y de fábrica trae **un solo bloque** («Avisos pendientes»).
 - **La tarea E, por tanto, es EXTENDER lo que ya existe al cuadro de mando** — no construirlo de
   cero. Y la tabla ya está: `dashboard_layouts`. **Cero tablas nuevas.**
+- **⚙️ LO QUE LE DEJA LA FICHA D (23 ago 2026), para que E no se lo encuentre de sorpresa.** La ficha
+  D **no ha tocado el Inicio** ni `inicio-layout.js`, y se comprobó en el gate que `/admin` sigue
+  respondiendo. Pero le cambia el terreno en dos cosas, las dos a favor:
+  **(1)** la rejilla del Inicio ya sabía pintar un informe del constructor como widget (`tipo:'panel'`,
+  `inicio-layout.js:148`), y ahora **hay un área más** (Agenda): un informe de agenda se puede anclar
+  al Inicio sin escribir una línea, porque `permDeBloque` resuelve el permiso por el área de la receta.
+  **(2)** los informes guardados **ya se pueden borrar y renombrar**, así que E tiene que contar con
+  que un widget puede quedarse apuntando a un informe que ya no existe — eso ya estaba previsto
+  (`permDeBloque` devuelve `__inexistente__` y el bloque **cae cerrado**), pero antes no podía pasar
+  nunca y ahora sí. **Merece una comprobación propia cuando se aborde E.**
 
 ---
 
@@ -1803,10 +1828,21 @@ verdad y no como se suponía — que es justo el problema que esta tarea viene a
 
 ### ⬜ TAREA 3 — Funciones nuevas  (apuntadas, sin encargo)
 
-- **Área de agenda en el constructor de analítica.** Sin ella, los cuatro avisos de agenda de DISA
-  **no pueden llevar gráfico**.
+- ~~**Área de agenda en el constructor de analítica.** Sin ella, los cuatro avisos de agenda de DISA
+  **no pueden llevar gráfico**.~~ **✅ HECHA el 23 ago 2026 en la ficha D (D1+D4, `e16bd01`)**: el área
+  existe con seis dimensiones y nueve medidas, y los cuatro avisos ya llevan su gráfico.
 - **Control horario (fichaje).**
 - **Agenda del CRM.**
+- **⬜ DISA Y LOS INFORMES — que se puedan crear y abrir por chat.** *(Apuntada por Ibrahin el 23 ago
+  2026 al encargar la ficha D, **y excluida expresamente de ella**: «DISA no entra aquí».)*
+  **Responde al principio de LAS DOS PUERTAS de CANON §3-bis:** toda información de negocio se alcanza
+  por DISA **y** por la vía visual, y ninguna sustituye a la otra. Hoy la puerta visual está entera
+  (crear, guardar, reabrir, compartir, renombrar, borrar, imprimir, PDF y correo) y **la de DISA no
+  existe**: `analytics_panels` no está en su mapa de lectura —un empleado que los pida por chat recibe
+  «no consultable con tu permiso»— ni en `WRITABLE_TABLES`, y no hay ninguna acción dedicada. Un
+  dueño/admin puede leer la tabla en crudo por `query_database`, que es SQL, no una puerta.
+  **Cuando se aborde, las dos mitades tienen que respetar los MISMOS permisos** (CANON §3-bis), y el
+  área de una receta es la que manda: exactamente el candado que ya usa el papel.
 - **⬜ DESCUENTOS Y PROMOCIONES — rehacer la función ENTERA y BIEN** (bonos, promociones, descuento por
   cliente), **operable por DISA**. *(Apuntada por Ibrahin el 23 ago 2026 al cerrar el encargo INTEGRIDAD.
   **No se ha construido nada hoy**: queda registrada, sin encargo.)*
@@ -3090,6 +3126,104 @@ mano: `node scripts/verify-verifactu-anulaciones.mjs`. **Queda propuesto meterlo
 **Lo que NO se ha tocado:** la cadena de altas (comprobado campo a campo, idéntica), las huellas ya calculadas,
 el QR, las rectificativas, los permisos y ninguna factura existente. **Cero borrados.** `avisos.js` sigue
 filtrando por `record_type='alta'` **a propósito**: abrirlo generaría avisos visibles, y eso es encender algo.
+
+### FICHA D — Analíticas: informes a medida  ✅ HECHO (2026-08-23) — `e16bd01` + `fb5db14` + `bcd826c` · **5 de 5**
+Las cinco en una entrega. Palabras del dueño en el encargo original: *«en analíticas lo principal es
+que el cliente pueda elaborar informes según su requerimiento y no mostrar una serie de datos donde
+él mismo se pierde»*.
+
+**EL PASO 0 CAMBIÓ EL ALCANCE Y SE PARÓ A PREGUNTAR, antes de construir.** Dos cosas:
+1. **Las siete medidas de agenda no caben en un solo grano.** «Horas libres» y «% de ocupación» son
+   del **día y la persona**: una hora libre no tiene cliente, ni servicio, ni sala. Y **un día entero
+   sin citas está 100 % libre y no produce ninguna fila**, así que contándolas sobre las citas
+   saldrían siempre de menos. **Decisión de Ibrahin: «ofrecerlas solo donde son ciertas».**
+2. **«Horas ocupadas» tenía dos valores verdaderos.** Medido en la agenda real: el lunes 27-jul hay
+   una cita de 30 min a las 16:00 y el negocio cierra a las 14:00 → **0,5 h reservadas · 0 h ocupadas
+   del horario**. El recorte al horario no es un fallo (sin él, una cita fuera de hora haría pasar la
+   ocupación del 100 %). **Decisión de Ibrahin: las dos, con nombres distintos.**
+
+**D1 + D4 · EL ÁREA DE AGENDA (la sexta).** Colgada del **motor de citas** (`tramosPersona` +
+`ocupacionPersona`), no de una consulta propia: así no puede contradecir a la agenda ni al Inicio.
+- **Seis dimensiones:** fecha · cliente · **servicio principal** · quién la atiende · puesto o sala ·
+  estado. Se llama «servicio **principal**» porque una cita con tres servicios no puede contarse tres
+  veces.
+- **Cinco medidas de grano CITA** (valen con las seis dimensiones): nº de citas, horas reservadas,
+  ingresos facturados sin IVA, citas anuladas y ausencias.
+- **Cuatro medidas de grano DÍA×PERSONA** (solo por fecha o por persona): horas abiertas, horas
+  ocupadas del horario, horas libres y % de ocupación. Fuera de esas dos dimensiones **no se enseñan**
+  en el desplegable, y si alguien las fuerza por la API `cruzar` responde **400 diciendo por qué y con
+  qué dimensión sí se puede**. El desplegable es cortesía; el candado está en el servidor.
+- **Las horas abiertas salen del horario REAL** con sus excepciones, no de un 24×7.
+- **Detalles que se ven en el código:** una factura se cuenta **una vez por grupo** aunque la paguen
+  dos citas; las anuladas **no** suman horas reservadas (mismo criterio que `ocupacionPersona`) pero
+  una **ausencia sí**, porque el hueco estuvo bloqueado; y **la ventana recorrida se DECLARA** en la
+  respuesta y en la cabecera del papel — unas horas libres sin decir de qué periodo son es una cifra
+  sin base.
+- **LOS CUATRO AVISOS DEL VIGÍA YA LLEVAN GRÁFICO** y se retira el cartel «el constructor todavía no
+  tiene un área de agenda». `hueco_perdido` es **exacto** (su cifra y la medida salen de las mismas
+  primitivas); los otros tres pintan el ritmo de citas del cliente, con su `gap` avisando de que el
+  filtro añade el permiso de Clientes.
+
+**D2 · SE ACABÓ EL MURO.** `/admin/analytics` **no dibuja ni un gráfico al abrir**. Arriba el botón
+«Crear un informe», debajo «Mis informes guardados», debajo «Informes disponibles» como lista de
+nombres con una línea cada uno, y cada uno se dibuja **solo al pulsarlo**. **De doce peticiones al
+abrir se pasa a DOS.** Fuera la fila de cuatro indicadores.
+**NO SE PERDIÓ NI UN INFORME, contados antes y después: 9 tarjetas antes** (8 informes + el
+constructor) **= 8 entradas del índice + el constructor detrás de su botón**. «Informes por área»
+conserva sus tres pestañas y sus diez informes. El índice se filtra por el permiso del **área** de
+cada informe (owner y admin lo ven todo). *Lo que esto NO es: los endpoints siguen exigiendo
+`analytics.read` y filtrando su contenido por área, como estaban — aquí se cierra la puerta de la
+lista, no se reescriben los permisos del producto.*
+
+**D3 · SE ACABÓ EL GUARDAR SIN DESHACER.** Borrar (**el endpoint existía desde el paso 4b y no lo
+llamaba nadie**), renombrar, dejar de compartir y volver a compartir, y **«Guardar cambios» distinto
+de «Guardar como nuevo»** — hasta hoy el front nunca mandaba el `id`, así que cada guardado dejaba un
+duplicado. Solo quien lo creó, **y el dueño**; a propósito **el admin no**: ver las cifras de todos no
+es poder borrarle el trabajo a nadie. La confirmación dice **con esas palabras** que se borra la
+receta y **no un dato del negocio**.
+
+**D5 · IMPRIMIR, PDF Y CORREO, POR EL MOTOR ÚNICO DE LA FICHA C.** El informe compuesto es **una
+entrada más de `LISTADOS`** y sale por las **mismas tres rutas** de los quince listados, con membrete,
+«Página X de Y» y una cabecera que declara la base: área, por qué se agrupa, qué se mide, los filtros
+y la ventana medida. **El papel lleva las dos cosas: el dibujo arriba y la tabla completa debajo.**
+- **El dibujo se genera en SVG DENTRO del motor** (`impresion.js`), no con el Chart.js de la pantalla,
+  y por dos motivos medidos: el PDF se hace con `page.setContent`, que **no tiene dirección base**
+  (habría que incrustar la librería entera en cada papel), y además habría que esperar a que
+  terminara de animar. En SVG no hay librería ni espera. **No es un segundo origen de cifras:** recibe
+  los mismos pares (etiqueta, valor) que la tabla.
+- **Fontanería:** `titulo`, `columnas` y `perm` de un listado ya pueden ser **función de (q, db)**,
+  como `totales`/`notas`/`secciones` ya podían. **Los quince listados existentes no cambian ni un
+  carácter de su papel** (comprobado).
+- **El `panel_id` es lo único que viaja por la URL:** la receta se lee de la base, nunca de la
+  dirección, y el permiso se comprueba sobre el **área de esa receta** (un informe de Agenda exige
+  `citas.read`; uno de Ventas, `invoices.read`).
+
+**VERIFICADO — `scripts/gate-informes-a-medida.mjs`, 97 ✓ · 0 ✗, EJECUTADO.**
+- **Se trae sus propias citas**, porque con las cuatro reales no se podía medir la mitad: ninguna
+  facturada, ninguna con ausencia, ninguna con puesto. Crea cinco (facturada · ausencia · anulada ·
+  normal · **una fuera de horario**), mide y las borra. La de fuera de horario es la que separa las
+  dos medidas de horas: **0,50 h exactas**, y sin ella coincidirían por casualidad.
+- **Cada medida contada a mano** por otro camino. Capacidad contrastada contra `ocupacionDia` sumado
+  día a día: **88 h abiertas / 3 h ocupadas**, iguales por los dos caminos.
+- **La pantalla en un navegador de verdad**, porque lo que cambia D2 es *qué se dibuja al abrir* y eso
+  **no se ve en el HTML** (las tarjetas están, ocultas): se mide que **ningún canvas tiene un píxel
+  pintado** y que **no ha salido ni una petición de cruce**, con su control positivo de que al pulsar
+  sí se dibujan.
+- **Los botones se pulsan**, no se buscan: borrar de verdad, contando la base antes y después.
+- **El papel comparado con la pantalla valor a valor: 5/5 idénticas.**
+- **Cuatro reversiones, las cuatro tumban:** quitar el área (9 rojos) · volver a dibujarlo todo al
+  abrir (3) · quitar el dibujo del papel (3) · **desenganchar el botón de Borrar (1 rojo, y es el más
+  parecido al fallo real: el botón sigue ahí y no hace nada)**. Restaurado: 97 ✓ · 0 ✗.
+- El gate no deja residuo: la base vuelve a 833 facturas, 4 citas y 0 paneles.
+
+**Fuera del barrido.** No se ha metido en `GRUPOS`; se corre a mano. **NINGÚN BARRIDO CORRIDO.**
+
+**UN FALLO PROPIO QUE MERECE QUEDAR ESCRITO:** dentro de una plantilla del servidor, un `\n` escrito
+en una cadena de JavaScript **se lo come la plantilla** y llega al navegador como un salto de línea de
+verdad → cadena sin cerrar → la página **entera** muerta. Había **seis**, en los `confirm()` de borrar,
+del papel largo y del correo. **`node --check` daba OK** (el fichero del servidor es válido) y **el
+lint tampoco lo caza**. Lo único que lo vio fue abrir la página en un navegador. Es hermano del
+backtick en un comentario, que también apareció dos veces en esta entrega.
 
 ### ENCARGO INTEGRIDAD — Recomponer la cadena propietaria de `invoices`  ✅ HECHO (2026-08-23) — `351f5f4`
 Sale del pendiente que dejó el encargo CUPONES. Palabras de Ibrahin: **«una alarma siempre encendida es
