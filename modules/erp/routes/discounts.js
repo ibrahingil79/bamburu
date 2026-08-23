@@ -180,8 +180,8 @@ export function createDiscountRoutes(db, cfg = {}) {
         const body={name:document.getElementById('adName').value,type:document.getElementById('adType').value,value:parseFloat(document.getElementById('adValue').value)||0,condition_type:document.getElementById('adCondType').value,condition_value:document.getElementById('adCondVal').value};
         try{await api('POST','/api/erp/discounts/auto',body);closeModal('autoModal');toast('Creado');loadAuto();}catch(e){toast(e.message,'err')}
       }
-      async function delCode(id){if(!confirm('¿Eliminar?'))return;await api('DELETE','/api/erp/discounts/'+id);toast('Eliminado');loadCodes();}
-      async function delAuto(id){if(!confirm('¿Eliminar?'))return;await api('DELETE','/api/erp/discounts/auto/'+id);toast('Eliminado');loadAuto();}
+      async function delCode(id){if(!await window.confirmarEnPagina({titulo:'Eliminar el código de descuento',aceptar:'Sí, eliminarlo'}))return;await api('DELETE','/api/erp/discounts/'+id);toast('Eliminado');loadCodes();}
+      async function delAuto(id){if(!await window.confirmarEnPagina({titulo:'Eliminar el descuento automático',aceptar:'Sí, eliminarlo'}))return;await api('DELETE','/api/erp/discounts/auto/'+id);toast('Eliminado');loadAuto();}
       loadCodes();loadAuto();
       </script>`;
     return c.html(adminLayout('Descuentos', content, 'discounts', c.get('session')?.csrfToken || '', c));

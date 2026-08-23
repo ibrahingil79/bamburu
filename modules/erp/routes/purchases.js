@@ -431,7 +431,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
         catch(e){ toast(e.message||'Error','err'); }
       }
       async function cancelPurchase(){
-        if(!confirm('¿Cancelar esta compra? Si estaba recibida, se revertirá el stock (no se borra).'))return;
+        if(!await window.confirmarEnPagina({titulo:'Cancelar la compra',texto:'Si estaba recibida, se revierte el stock que entró. La compra no se borra: queda cancelada.',aceptar:'Sí, cancelarla'}))return;
         try{ var r=await api('POST','/api/erp/purchases/${purchase.id}/cancel',{}); toast(r.reverted?'Compra cancelada y stock revertido':'Compra cancelada'); location.reload(); }
         catch(e){ toast(e.message||'Error','err'); }
       }

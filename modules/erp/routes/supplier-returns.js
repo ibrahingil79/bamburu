@@ -453,7 +453,9 @@ export function createSupplierReturnRoutes(db) {
         const items = collect();
         if (!items.length){ toast('Indica al menos una línea con cantidad a devolver','err'); return; }
         const units = items.reduce(function(s,i){ return s + i.quantity; }, 0);
-        if (!confirm('Vas a CONFIRMAR la devolución de ' + items.length + ' línea(s) (' + units + ' unidades) a ' + CURRENT.supplier.name + '. Sacará ese stock del almacén y será inmutable (corregir = anular y crear otra).\\n\\n¿Confirmar?')) return;
+        if (!await window.confirmarEnPagina({titulo:'Confirmar la devolución',
+          texto:'Son ' + items.length + ' línea(s), ' + units + ' unidades, a ' + CURRENT.supplier.name + '. Sacará ese stock del almacén y será inmutable: corregirla es anularla y crear otra.',
+          aceptar:'Sí, confirmarla'})) return;
         const btn = document.getElementById('btn-confirm');
         btn.disabled = true;
         try {
@@ -532,7 +534,10 @@ export function createSupplierReturnRoutes(db) {
       </div></div>
       <script>
       async function anularDevolucion(){
-        const motivo = prompt('Motivo de anulación de la devolución ${esc(r.return_number || '')} (reintegrará su stock):');
+        const _v = await window.pedirDatos({titulo:'Anular la devolución ${esc(r.return_number || '')}',aceptar:'Anular',
+      texto:'Se reintegrará al almacén el stock que salió con ella.',
+      campos:[{id:'motivo',etiqueta:'Motivo de la anulación'}]});
+    const motivo = _v ? _v.motivo : null;
         if (motivo === null) return;
         if (motivo.trim().length < 3){ toast('El motivo es obligatorio (mínimo 3 caracteres)','err'); return; }
         try {

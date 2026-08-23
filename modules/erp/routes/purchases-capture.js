@@ -890,7 +890,7 @@ function capturePage({ sym, bands, today, preload = null }) {
       });
       if(!payload.lines.length){ toast('Indica al menos una línea con cantidad','err'); return; }
       if(excess.length){
-        if(!confirm('Vas a recibir MÁS de lo pedido:\\n· '+excess.join('\\n· ')+'\\n\\n¿Confirmar el exceso?')) return;
+        if(!await window.confirmarEnPagina({titulo:'Vas a recibir MÁS de lo pedido',texto:excess.join(' · '),aceptar:'Confirmar el exceso'})) return;
         payload.confirm_excess = true;
       }
     } else {

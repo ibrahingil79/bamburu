@@ -409,7 +409,7 @@ export function createUserRoutes(db) {
       }
 
       async function delUser(id){
-        if(!confirm('¿Eliminar usuario?'))return;
+        if(!await window.confirmarEnPagina({titulo:'Eliminar el usuario',texto:'Perderá el acceso ahora mismo, aunque tenga la sesión abierta.',aceptar:'Sí, eliminarlo'}))return;
         try{await api('DELETE','/api/erp/users/'+id);toast('Eliminado');loadUsers();}catch(e){toast(e.message,'err');}
       }
 

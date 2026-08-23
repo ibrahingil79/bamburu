@@ -51,7 +51,7 @@ export function createNewsletterRoutes(db) {
           '<td><button class="btn btn-danger btn-sm" onclick="del('+s.id+')">Eliminar</button></td>'+
           '</tr>').join(''):'<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--muted)">Sin suscriptores</td></tr>';
       });
-      async function del(id){if(!confirm('¿Eliminar suscriptor?'))return;await api('DELETE','/api/erp/newsletter/'+id);toast('Eliminado');location.reload();}
+      async function del(id){if(!await window.confirmarEnPagina({titulo:'Eliminar el suscriptor',texto:'Dejará de recibir el boletín.',aceptar:'Sí, eliminarlo'}))return;await api('DELETE','/api/erp/newsletter/'+id);toast('Eliminado');location.reload();}
       </script>`;
     return c.html(adminLayout('Newsletter', content, 'newsletter', c.get('session')?.csrfToken || '', c));
   });

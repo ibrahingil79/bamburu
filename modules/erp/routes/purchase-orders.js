@@ -874,11 +874,12 @@ export function createPurchaseOrderRoutes(db) {
         if (!date){ toast('La fecha es obligatoria','err'); return; }
         const units = col.items.reduce(function(s,i){ return s + i.quantity; }, 0);
         // Confirm-first: si hay exceso, la confirmación lo REPITE antes de guardar.
-        let msg = 'Vas a CONFIRMAR la recepción de ' + col.items.length + ' línea(s) (' + units + ' unidades). Moverá el stock con el coste indicado y será inmutable (corregir = anular y crear otra).';
+        let msg = 'Vas a CONFIRMAR la recepción de ' + col.items.length + ' línea(s) (' + units + ' unidades). Moverá el stock con el coste indicado y será inmutable: corregir es anularla y crear otra.';
         if (col.excess.length){
-          msg += '\\n\\nATENCIÓN — vas a recibir MÁS de lo pedido:\\n· ' + col.excess.join('\\n· ');
+          msg += '  ATENCIÓN, vas a recibir MÁS de lo pedido: ' + col.excess.join(' · ');
         }
-        if (!confirm(msg + '\\n\\n¿Confirmar?')) return;
+        if (!await window.confirmarEnPagina({ titulo:'Confirmar la recepción', texto:msg,
+              aceptar:'Sí, confirmar' })) return;
         const btn = document.getElementById('btn-confirm');
         btn.disabled = true;
         try {
@@ -1057,34 +1058,44 @@ ${receptionBlock}`;
     return d;
   }
   async function enviarOrden(){
-    if (!confirm('¿Enviar esta orden? Recibirá su número OC y quedará bloqueada (no editable).')) return;
+    if (!await window.confirmarEnPagina({ titulo:'Enviar la orden',
+          texto:'Recibirá su número OC y quedará bloqueada: ya no se podrá editar.',
+          aceptar:'Sí, enviarla' })) return;
     try { const d = await post('/api/erp/purchase-orders/${id}/enviar'); toast('Orden ' + d.order_number + ' enviada'); location.reload(); }
     catch(e){ toast(e.message,'err'); }
   }
   async function emailOrden(){
-    if (!confirm('¿Enviar la orden por email a ${esc(supplier.email || 'el proveedor')}?')) return;
+    if (!await window.confirmarEnPagina({ titulo:'Enviar la orden por email',
+          texto:'Se manda a ${esc(supplier.email || 'el proveedor')}.', aceptar:'Sí, enviar' })) return;
     try { const d = await post('/api/erp/purchase-orders/${id}/email'); toast('Enviada por email a ' + d.to); }
     catch(e){ toast(e.message,'err'); }
   }
+  // EL MOTIVO SE PIDE EN UN PANEL, no en una ventanita. Y la validación va DENTRO del panel: antes,
+  // un motivo corto cerraba la ventana y soltaba un aviso; ahora el panel no se cierra y dice dónde.
   async function anularOrden(){
-    const motivo = prompt('Motivo de anulación de la orden ${esc(o.order_number || '')}:');
-    if (motivo === null) return;
-    if (motivo.trim().length < 3){ toast('El motivo es obligatorio (mínimo 3 caracteres)','err'); return; }
-    try { await post('/api/erp/purchase-orders/${id}/anular', { motivo: motivo.trim() }); location.reload(); }
+    const v = await window.pedirDatos({ titulo:'Anular la orden ${esc(o.order_number || '')}', aceptar:'Anular',
+      campos:[{ id:'motivo', etiqueta:'Motivo de la anulación', ayuda:'Mínimo 3 caracteres. Queda guardado con la orden.' }],
+      validar:v2 => String(v2.motivo||'').trim().length < 3 ? { campo:'motivo', mensaje:'El motivo es obligatorio (mínimo 3 caracteres).' } : null });
+    if (!v) return;
+    try { await post('/api/erp/purchase-orders/${id}/anular', { motivo: String(v.motivo).trim() }); location.reload(); }
     catch(e){ toast(e.message,'err'); }
   }
   async function anularYRehacer(){
-    const motivo = prompt('Motivo de anulación (se abrirá un borrador nuevo precargado):');
-    if (motivo === null) return;
-    if (motivo.trim().length < 3){ toast('El motivo es obligatorio (mínimo 3 caracteres)','err'); return; }
-    try { const d = await post('/api/erp/purchase-orders/${id}/anular-y-rehacer', { motivo: motivo.trim() }); window.location.href = '/admin/purchase-orders/' + d.id + '/edit'; }
+    const v = await window.pedirDatos({ titulo:'Anular y rehacer', aceptar:'Anular y abrir el borrador',
+      texto:'Se anula esta orden y se abre un borrador nuevo ya precargado.',
+      campos:[{ id:'motivo', etiqueta:'Motivo de la anulación', ayuda:'Mínimo 3 caracteres.' }],
+      validar:v2 => String(v2.motivo||'').trim().length < 3 ? { campo:'motivo', mensaje:'El motivo es obligatorio (mínimo 3 caracteres).' } : null });
+    if (!v) return;
+    try { const d = await post('/api/erp/purchase-orders/${id}/anular-y-rehacer', { motivo: String(v.motivo).trim() }); window.location.href = '/admin/purchase-orders/' + d.id + '/edit'; }
     catch(e){ toast(e.message,'err'); }
   }
   async function cerrarOrden(){
-    const motivo = prompt('Motivo del cierre (el pendiente NO va a llegar; la orden no admitirá más recepciones ni se reabre):');
-    if (motivo === null) return;
-    if (motivo.trim().length < 3){ toast('El motivo es obligatorio (mínimo 3 caracteres)','err'); return; }
-    try { await post('/api/erp/purchase-orders/${id}/close', { motivo: motivo.trim() }); location.reload(); }
+    const v = await window.pedirDatos({ titulo:'Cerrar la orden', aceptar:'Cerrarla',
+      texto:'Lo pendiente NO va a llegar. La orden no admitirá más recepciones y no se reabre.',
+      campos:[{ id:'motivo', etiqueta:'Motivo del cierre', ayuda:'Mínimo 3 caracteres.' }],
+      validar:v2 => String(v2.motivo||'').trim().length < 3 ? { campo:'motivo', mensaje:'El motivo es obligatorio (mínimo 3 caracteres).' } : null });
+    if (!v) return;
+    try { await post('/api/erp/purchase-orders/${id}/close', { motivo: String(v.motivo).trim() }); location.reload(); }
     catch(e){ toast(e.message,'err'); }
   }
 </script>`;

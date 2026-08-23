@@ -329,7 +329,7 @@ export function createWarehouseRoutes(db) {
         catch(e){ toast(e.message||'Error','err'); }
       }
       async function archiveWh(id){
-        if(!confirm('¿Archivar este almacén? No se borra; deja de estar activo.')) return;
+        if(!await window.confirmarEnPagina({titulo:'Archivar el almacén',texto:'Deja de estar activo y de salir en los selectores. No se borra, y su stock sigue registrado.',aceptar:'Sí, archivarlo'})) return;
         try { await api('DELETE','/api/erp/warehouses/'+id); toast('Archivado'); loadWh(); }
         catch(e){ toast(e.message||'Error','err'); }
       }

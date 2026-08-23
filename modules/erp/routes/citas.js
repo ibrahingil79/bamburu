@@ -1116,7 +1116,7 @@ function paginaCita(db, cita, token) {
           if(estado) document.getElementById('estado').textContent=estado;
         }
         async function accion(a){
-          if(a==='avisar' && !confirm('¿Seguro que no puedes venir? Se liberará tu hueco.')) return;
+          if(a==='avisar' && !await window.confirmarEnPagina({titulo:'Avisar de que no puedes venir',texto:'Se liberará tu hueco para otra persona.',aceptar:'Sí, avisar'})) return;
           try{
             var res = await fetch('/cita/'+TOKEN+'/'+a,{method:'POST'});
             var d = await res.json();
@@ -1157,7 +1157,7 @@ function paginaCita(db, cita, token) {
           }catch(e){ alert(e.message); }
         }
         async function anular(){
-          if(!confirm('¿Seguro que quieres anular tu cita?')) return;
+          if(!await window.confirmarEnPagina({titulo:'Anular tu cita',texto:'El hueco vuelve a quedar libre. Si te arrepientes, tendrás que pedir cita otra vez.',aceptar:'Sí, anularla'})) return;
           try{
             var r = await fetch('/cita/'+TOKEN+'/anular',{method:'POST'});
             var d = await r.json();
@@ -1961,7 +1961,7 @@ async function pbAprobar(id){
   try{ var r=await api('POST','/api/erp/reserva-publica/solicitudes/'+id+'/aprobar'); toast(r.message); pbSolicitudes(); }catch(e){ toast(e.message,'err'); }
 }
 async function pbRechazar(id){
-  if(!confirm('¿Rechazar la solicitud? Se libera el hueco y la cita queda anulada.')) return;
+  if(!await window.confirmarEnPagina({titulo:'Rechazar la solicitud',texto:'Se libera el hueco y la cita queda anulada. Constará que la anulaste tú.',aceptar:'Sí, rechazarla'})) return;
   try{ var r=await api('POST','/api/erp/reserva-publica/solicitudes/'+id+'/rechazar'); toast(r.message); pbSolicitudes(); }catch(e){ toast(e.message,'err'); }
 }
 pbCargar();
@@ -3185,7 +3185,16 @@ async function anular(id){
   catch(x){ toast(x.message,'err'); }
 }
 async function atender(id){
-  var cobrar=confirm('¿Cobrar ahora? (Aceptar = cobrar con un ticket en efectivo; Cancelar = marcar atendida sin cobrar)');
+  // ERA UNA VENTANITA CON TRES SIGNIFICADOS Y SOLO DOS BOTONES: Aceptar cobraba, Cancelar marcaba
+  // atendida SIN cobrar… y no había forma de ARREPENTIRSE. Pulsar Escape por error dejaba la cita
+  // atendida. Ahora son tres respuestas de verdad: la casilla decide si se cobra, y cerrar el panel
+  // no hace nada. No se pierde ninguna de las dos acciones de antes; se gana la de salir.
+  var v = await window.pedirDatos({ titulo:'Atender la cita', aceptar:'Marcar como atendida',
+    texto:'La cita queda atendida. Si además la cobras, se emite un ticket en efectivo.',
+    campos:[{ id:'cobrar', tipo:'casilla', etiqueta:'Cobrar ahora', valor:true,
+              ayuda:'Ticket en efectivo. Si lo dejas sin marcar, se atiende sin cobrar.' }] });
+  if (!v) return;                                    // cerró el panel: no se atiende ni se cobra
+  var cobrar = !!v.cobrar;
   var body={cobrar:cobrar, via:'ticket', payment_method:'efectivo', registrar_tiempo:false};
   try{ var r=await api('POST','/api/erp/citas/'+id+'/atender',body); closeModal('mDet'); toast(r.invoice_id?'Atendida y cobrada':'Atendida'); agCargar(); }catch(x){ toast(x.message,'err'); }
 }
@@ -3461,7 +3470,7 @@ function openRecurso(){ document.getElementById('recId').value=''; document.getE
 function edit(id){ var r=LIST.find(x=>x.id===id); document.getElementById('recId').value=id; document.getElementById('mRecTitle').textContent='Editar '+(window.PUESTO_SING||'Puesto').toLowerCase(); document.getElementById('recNombre').value=r.nombre; document.getElementById('recTipo').value=r.tipo; document.getElementById('recNotas').value=r.notas||''; openModal('mRec'); }
 async function recGuardar(){ var id=document.getElementById('recId').value; var body={nombre:document.getElementById('recNombre').value,tipo:document.getElementById('recTipo').value,notas:document.getElementById('recNotas').value};
   try{ if(id) await api('PUT','/api/erp/citas/recursos/'+id,body); else await api('POST','/api/erp/citas/recursos',body); closeModal('mRec'); toast('Guardado'); cargar(); }catch(e){ toast(e.message,'err'); } }
-async function del(id){ if(!confirm('¿Archivar?'))return; try{ await api('DELETE','/api/erp/citas/recursos/'+id); toast('Archivado'); cargar(); }catch(e){ toast(e.message,'err'); } }
+async function del(id){ if(!await window.confirmarEnPagina({titulo:'Archivar el puesto',texto:'Deja de estar disponible para citas nuevas. Las citas que ya lo tenían no cambian.',aceptar:'Sí, archivarlo'}))return; try{ await api('DELETE','/api/erp/citas/recursos/'+id); toast('Archivado'); cargar(); }catch(e){ toast(e.message,'err'); } }
 cargar();
 `;
 

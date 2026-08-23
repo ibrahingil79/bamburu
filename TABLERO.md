@@ -1972,7 +1972,11 @@ verdad y no como se suponía — que es justo el problema que esta tarea viene a
   existe con seis dimensiones y nueve medidas, y los cuatro avisos ya llevan su gráfico.
 - **Control horario (fichaje).**
 - **Agenda del CRM.**
-- **⬜ LAS VENTANITAS DEL NAVEGADOR DEL RESTO DEL PRODUCTO — 81, y son LA MISMA TRAMPA.**
+- ~~**⬜ LAS VENTANITAS DEL NAVEGADOR DEL RESTO DEL PRODUCTO — 81, y son LA MISMA TRAMPA.**~~
+  **✅ HECHO el 23 ago 2026 (noche · punto 7) · gate `scripts/gate-sin-ventanitas.mjs` · 36 ✓ · 0 ✗.**
+  **El censo da CERO**: `node scripts/censo-ventanitas.mjs`. Ver la ficha completa al final de este
+  documento. Lo que sigue es el registro de cómo estaba antes, que se conserva.
+  **⬜ LO DE ANTES (para el registro):**
   *(Censadas el 23 ago 2026 en la ficha D-bis, que arregló las 12 de Analíticas. **No se tocan hasta
   que haya encargo.**)* En el producto hay **93** (29 `prompt` + 64 `confirm`, 42 ficheros; **86 en
   pantallas vivas**). La avería que costó esta ficha es que **Chrome silencia los diálogos** en cuanto
@@ -3360,8 +3364,9 @@ el guardado **llamando a la API con un cuerpo JSON escrito por mí**: medía el 
 entero el tramo donde estaba el fallo. De ahí sale la norma nueva de CLAUDE.md.
 
 **PASO 0 — el censo:** **93 ventanitas** en el producto (29 `prompt` + 64 `confirm`, 42 ficheros),
-**86 en pantallas vivas**. Se arreglan **las 12 de Analíticas**; **las 81 restantes quedan apuntadas**
-(ver «⬜ Las ventanitas del navegador» en TAREA 3). Y se **reutiliza** el modal que ya existía
+**86 en pantallas vivas**. Se arreglan **las 12 de Analíticas**; ~~**las 81 restantes quedan
+apuntadas**~~ → **hechas el 23 ago 2026 (noche, punto 7): quedan CERO en todo el producto.** Y se
+**reutiliza** el modal que ya existía
 (`.modal-overlay` + `openModal`, `layout.js:1245`): no se inventa uno.
 
 **PARTE 1 — se acaban las ventanitas.** Guardar es un panel dentro de la página: nombre **ya
@@ -6810,3 +6815,57 @@ sueltas que se enganchan a lo que ya existe, y por eso no ocupan peldaño.
 
 > El detalle completo de cada módulo del roadmap, de las decisiones registradas (D1–D6) y de todas las
 > piezas ya cerradas se conserva en `docs/contexto/` y en el historial de `git` (TABLERO anterior).
+
+---
+
+### PUNTO 7 · LAS 80 VENTANITAS DEL NAVEGADOR, FUERA  ✅ **HECHO (23 ago 2026, noche)** · gate `scripts/gate-sin-ventanitas.mjs` · **36 ✓ · 0 ✗**
+
+**EL CENSO DABA 81 Y ERAN 80 VIVAS**, y la diferencia importa: `scripts/censo-ventanitas.mjs` **no
+cuenta lo que está en un comentario**. Media docena de las apariciones eran las notas que explican
+esta misma avería; contarlas habría dado un número que nunca podía llegar a cero. **Hoy da 0.**
+
+**LA AVERÍA, otra vez, para que no se olvide.** Chrome ofrece la casilla «Impedir que esta página
+cree cuadros de diálogo adicionales» en el **segundo** diálogo seguido. Marcada, `prompt()` devuelve
+null y `confirm()` false **sin enseñar nada**: el botón queda muerto —ni ventana, ni petición, ni
+aviso— y el usuario cree que el programa está roto. Las pantallas que **encadenaban dos** rompían del
+todo; las de una sola «solo» se silenciaban.
+
+**LO MIGRADO: 80 sitios en 40 ficheros** (21 `prompt` + 59 `confirm`), todos al panel compartido
+`window.pedirDatos()` / `window.confirmarEnPagina()` de `layout.js`. **No se ha inventado ningún
+componente nuevo**: es la pieza que nació con la ficha D-bis para esto exactamente.
+- **Los pares que MATABAN, primero, como pedía el encargo:** Presupuestos (anular y rehacer, y el
+  aviso de exceso de stock encadenado con la conversión), Pedidos (tres seguidos), Órdenes de compra
+  (dos), Mostrador (**la línea libre pedía concepto e importe en DOS ventanitas seguidas**: ahora es
+  UN panel con los dos campos, más rápido de rellenar y que valida sin cerrarse) y la **ficha de
+  cliente** (editar y quitar una nota, que era el quinto par y no estaba en la lista de cinco).
+- **Se gana una salida que antes no existía.** «Atender la cita» era una ventanita con **tres
+  significados y dos botones**: Aceptar cobraba, Cancelar marcaba atendida **sin** cobrar… y **no
+  había forma de arrepentirse** — pulsar Escape por error dejaba la cita atendida. Ahora la casilla
+  decide si se cobra y cerrar el panel **no hace nada**. No se pierde ninguna de las dos acciones.
+- **La validación se muda DENTRO del panel.** Antes, un motivo corto cerraba la ventana y soltaba un
+  aviso suelto; ahora el panel **no se cierra** y dice **en qué campo** está el fallo.
+- **El superadmin también**, y sin duplicar código: tiene su propio `window.saConfirmar()` construido
+  **sobre el modal que ese panel ya tenía** (`saOpenModal`), así que no hay un segundo CSS ni un
+  segundo estilo. Escape y clic fuera cuentan como «no».
+- **`perfil.js` tenía un `onsubmit="return confirm(…)"`**, que es el peor caso de todos: apagada la
+  ventanita, el formulario **se enviaba sin preguntar**, y ese formulario apaga la verificación en
+  dos pasos. Ahora el envío se intercepta y solo sale con el panel aceptado.
+
+**CÓMO SE COMPRUEBA, y por qué así**
+- **Las ventanitas se NEUTRALIZAN antes de que cargue la página** y, además, **se apuntan**: el gate
+  no se conforma con que «no pase nada», quiere saber si alguien lo **intentó**. Un solo intento lo
+  tumba.
+- **Se pulsan los botones de verdad**, y se prueban los tres caminos que estaban muertos: **cancelar**
+  (el panel cierra, **cero peticiones**, el documento sigue como estaba), **campo vacío** (el panel
+  **no** se cierra y dice dónde), y **Escape** (cierra, no deja a nadie atrapado).
+- **Y el censo del código tiene que dar CERO**, porque pulsar seis pantallas no dice nada de las otras
+  cincuenta. `censo-ventanitas.mjs` **sale con código 1** si aparece una: es la red que impide que
+  vuelvan.
+
+**DOS ROJOS DEL GATE QUE ERAN DEL GATE, no del producto**, y se dicen porque son la lección:
+- Cogía la **última orden enviada** para probar «Anular», y esa tenía una **recepción confirmada**:
+  el producto **no pinta el botón** en ese caso, y hacía bien. Rojo sobre una pantalla correcta.
+- Contaba las notas del cliente con `SELECT COUNT(*)` a secas. **Quitar una nota la ARCHIVA**
+  (`active=0`), que es la regla permanente del proyecto. El gate exigía que la fila desapareciera.
+
+**Sin residuo:** 0 clientes, 0 notas y 0 sesiones del gate en `desarrollo-bamburu` al terminar.

@@ -158,13 +158,29 @@ export function createMostradorRoutes(db) {
         if(ex){ ex.qty++; } else { cart.push({ product_id:id, description:p.name, qty:1, unit_price:Number(p.price)||0, tax_rate:Number(p.tax_rate)||0, free:false, physical:(p.type||'physical')==='physical' }); }
         renderCart();
       }
-      function addFreeLine(){
-        const desc=prompt('Concepto de la línea libre:'); if(desc===null) return;
-        if(!desc.trim()){ toast('Indica un concepto','err'); return; }
-        const imp=prompt('Importe (sin IVA) por unidad:'); if(imp===null) return;
-        const price=parseFloat(imp); if(!(price>=0)){ toast('Importe no válido','err'); return; }
-        cart.push({ product_id:null, description:desc.trim(), qty:1, unit_price:price, tax_rate:21, free:true });
+      // ESTE ERA UNO DE LOS CINCO QUE MATABAN: pedía el concepto con prompt() y el importe con OTRO
+      // prompt() justo detrás. Con la casilla de Chrome marcada en el segundo, el importe volvía
+      // null y la línea no se añadía nunca — sin ventana, sin aviso y sin nada que mirar. Ahora los
+      // dos datos van en UN panel, que además es más rápido de rellenar (un Tab en vez de dos
+      // ventanas) y valida sin cerrarse.
+      async function addFreeLine(){
+        const v = await window.pedirDatos({ titulo:'Línea libre', aceptar:'Añadir al ticket',
+          texto:'Para lo que no está en el catálogo. Se añade con IVA general (21 %).',
+          campos:[
+            { id:'desc', etiqueta:'Concepto', marcador:'Mano de obra, desplazamiento…' },
+            { id:'imp', etiqueta:'Importe por unidad (sin IVA)', tipo:'numero', valor:'' },
+          ],
+          validar:v2 => {
+            if(!String(v2.desc||'').trim()) return { campo:'desc', mensaje:'Indica un concepto.' };
+            const p2=parseFloat(String(v2.imp).replace(',','.'));
+            if(!(p2>=0)) return { campo:'imp', mensaje:'El importe tiene que ser un número de cero para arriba.' };
+            return null;
+          } });
+        if(!v) return;
+        cart.push({ product_id:null, description:String(v.desc).trim(), qty:1,
+                    unit_price:parseFloat(String(v.imp).replace(',','.')), tax_rate:21, free:true });
         renderCart();
+        toast('Línea añadida');
       }
       function setQty(i,v){ cart[i].qty=Math.max(1,parseInt(v)||1); renderCart(); }
       function removeLine(i){ cart.splice(i,1); renderCart(); }

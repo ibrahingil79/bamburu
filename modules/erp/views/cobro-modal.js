@@ -74,7 +74,7 @@ export function cobroModalScript(sym) {
     };
     // Deshacer un cobro concreto (corrige un apunte mal metido; NO anula la factura).
     window.deshacerCobro = async function(invoiceId, paymentId){
-      if(!confirm('¿Deshacer este cobro? Se elimina solo este apunte de caja; la factura sigue igual.')) return;
+      if(!await window.confirmarEnPagina({titulo:'Deshacer el cobro',texto:'Se elimina solo este apunte de caja. La factura sigue igual, y volverá a contar como pendiente.',aceptar:'Sí, deshacerlo'})) return;
       try {
         await api('DELETE','/api/erp/invoices/'+invoiceId+'/payments/'+paymentId);
         toast('Cobro deshecho');

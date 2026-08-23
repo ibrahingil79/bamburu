@@ -370,7 +370,7 @@ export function register(app) {
           try{ await saApi('POST','/superadmin/negocios/'+id+'/suspend',{mode:mode,note:document.getElementById('susNote').value}); location.reload(); }catch(e){ alert(e.message); }
         }
         async function saReactivar(id){
-          if(!confirm('¿Reactivar este negocio (vuelve al estado normal)?')) return;
+          if(!await window.saConfirmar({titulo:'Reactivar el negocio',texto:'Vuelve al estado normal: sus usuarios podrán entrar otra vez.',aceptar:'Sí, reactivarlo'})) return;
           try{ await saApi('POST','/superadmin/negocios/'+id+'/reactivate'); location.reload(); }catch(e){ alert(e.message); }
         }
       </script>`;
@@ -592,7 +592,7 @@ function dosFactoresActivoPage(sess, quedan, nonce = '') {
         }catch(e){ msg.textContent=e.message; }
       }
       async function desactivar(){
-        if(!confirm('¿Desactivar el doble factor? La cuenta más poderosa de la plataforma se quedará solo con contraseña.')) return;
+        if(!await window.saConfirmar({titulo:'Desactivar el doble factor',texto:'La cuenta más poderosa de la plataforma se quedará SOLO con contraseña.',aceptar:'Sí, desactivarlo'})) return;
         var msg=document.getElementById('msg'); msg.style.color='#fca5a5'; msg.textContent='';
         try{ await llama('/superadmin/2fa/desactivar'); location.href='/superadmin/2fa'; }
         catch(e){ msg.textContent=e.message; }

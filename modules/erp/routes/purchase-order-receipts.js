@@ -280,7 +280,10 @@ export function createPurchaseOrderReceiptRoutes(db) {
       </div></div>
       <script>
       async function anularRecepcion(){
-        const motivo = prompt('Motivo de anulación de la recepción ${esc(r.receipt_number || '')} (revertirá su stock):');
+        const _v = await window.pedirDatos({titulo:'Anular la recepción ${esc(r.receipt_number || '')}',aceptar:'Anular',
+      texto:'Se revertirá el stock que entró con ella.',
+      campos:[{id:'motivo',etiqueta:'Motivo de la anulación'}]});
+    const motivo = _v ? _v.motivo : null;
         if (motivo === null) return;
         if (motivo.trim().length < 3){ toast('El motivo es obligatorio (mínimo 3 caracteres)','err'); return; }
         try {

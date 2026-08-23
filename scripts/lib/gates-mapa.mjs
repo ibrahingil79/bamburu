@@ -148,6 +148,8 @@ export const GRUPOS = {
     // comprueba. Va en `clientes` con los otros de agenda, que es donde vive su cobertura.
     'gate-agenda-cabos',             // punto 6: quién anuló, repartible en el constructor; los cinco
                                      // cabos del 20 ago siguen vivos; y un informe que falla lo dice
+    'gate-sin-ventanitas',           // punto 7: cero prompt/confirm en el producto, comprobado
+                                     // PULSANDO y con las ventanitas del navegador neutralizadas
   ],
   // Sala de máquinas: superadmin, conexiones a la BD, el fichero -wal, el saneo de errores al cliente,
   // el escapado del texto del usuario (que no se vuelva HTML ni JS) y la CSP estricta de las

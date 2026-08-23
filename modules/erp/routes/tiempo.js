@@ -343,7 +343,7 @@ export function createTiempoRoutes(db) {
         const body={proyecto_id:document.getElementById('tmProyecto').value,descripcion:document.getElementById('tmDesc').value,fecha:document.getElementById('tmFecha').value,horas:parseInt(document.getElementById('tmHoras').value)||0,minutos:parseInt(document.getElementById('tmMin').value)||0,facturable:document.getElementById('tmFact').checked};
         try{ if(id) await api('PUT','/api/erp/tiempo/'+id,body); else await api('POST','/api/erp/tiempo',body); closeModal('tModal'); toast(id?'Actualizada':'Registrada'); tCargar(); }catch(e){ toast(e.message,'err'); }
       }
-      async function tDel(id){ if(!confirm('¿Eliminar esta entrada? Se ocultará (el dato se conserva).'))return; try{ await api('DELETE','/api/erp/tiempo/'+id); toast('Eliminada'); tCargar(); }catch(e){ toast(e.message,'err'); } }
+      async function tDel(id){ if(!await window.confirmarEnPagina({titulo:'Eliminar la entrada de tiempo',texto:'Se oculta de la lista. El dato se conserva.',aceptar:'Sí, eliminarla'}))return; try{ await api('DELETE','/api/erp/tiempo/'+id); toast('Eliminada'); tCargar(); }catch(e){ toast(e.message,'err'); } }
       tCargar();
       </script>`;
     return c.html(adminLayout('Registro de tiempo', content, 'tiempo', c.get('session')?.csrfToken || '', c));

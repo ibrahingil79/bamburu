@@ -468,7 +468,7 @@ export function createImportadorRoutes(db) {
       });
 
       function deshacer(id, btn){
-        if (!confirm('Se archivarán las fichas que entraron en esa importación. No se borra nada. ¿Sigo?')) return;
+        if (!await window.confirmarEnPagina({titulo:'Deshacer la importación',texto:'Se ARCHIVAN las fichas que entraron en ella. No se borra nada, y lo archivado se puede volver a activar una a una.',aceptar:'Sí, deshacerla'})) return;
         btn.disabled = true;
         fetch('/api/erp/importar/' + encodeURIComponent(id) + '/deshacer', {
           method: 'POST', headers: { 'x-csrf-token': window.CSRF_TOKEN }

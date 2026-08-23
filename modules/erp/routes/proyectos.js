@@ -329,7 +329,7 @@ export function createProyectoRoutes(db) {
           closeModal('proyModal'); toast(id?'Actualizado':'Creado'); location.reload();
         }catch(e){ toast(e.message,'err'); }
       }
-      async function delProyecto(id){ if(!confirm('¿Archivar este proyecto? Dejará de aparecer en la lista, pero no se borra.'))return;
+      async function delProyecto(id){ if(!await window.confirmarEnPagina({titulo:'Archivar el proyecto',texto:'Dejará de aparecer en la lista. No se borra: sus horas, sus gastos y sus facturas siguen enteros.',aceptar:'Sí, archivarlo'}))return;
         try{ await api('DELETE','/api/erp/proyectos/'+id); toast('Archivado'); location.reload(); }catch(e){ toast(e.message,'err'); } }
       async function restoreProyecto(id){ try{ await api('POST','/api/erp/proyectos/'+id+'/restore'); toast('Restaurado'); location.reload(); }catch(e){ toast(e.message,'err'); } }
       async function viewDetail(id){

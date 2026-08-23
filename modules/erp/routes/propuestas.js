@@ -614,7 +614,7 @@ export function createPropuestasRoutes(db) {
       // Emitir = un clic. Llama a la propuesta, que por dentro usa la MISMA vía que /admin/recurrentes.
       // Si la emisión falla, la propuesta sigue pendiente y se ve el motivo.
       window.emitir = async function(id){
-        if (!confirm('¿Emitir esta factura recurrente? Nacerá con su número y su huella Verifactu.')) return;
+        if (!await window.confirmarEnPagina({titulo:'Emitir la factura recurrente',texto:'Nacerá con su número y su huella VERI*FACTU. A partir de ahí ya no se puede editar: se corrige con una rectificativa.',aceptar:'Sí, emitirla'})) return;
         try { const r=await api('POST','/api/erp/propuestas/'+id+'/emitir',{});
               toast(r.message||'Factura emitida'); loadProps(); }
         catch(e){ toast(e.message||'Error','err'); }
@@ -629,7 +629,7 @@ export function createPropuestasRoutes(db) {
       window.enviarDormido = async function(id){
         const subject=document.getElementById('subj'+id).value;
         const body=document.getElementById('body'+id).value;
-        if (!confirm('¿Enviar este email a tu cliente?')) return;
+        if (!await window.confirmarEnPagina({titulo:'Enviar el email al cliente',texto:'Sale ahora mismo, a la dirección de su ficha.',aceptar:'Sí, enviarlo'})) return;
         try { const r=await api('POST','/api/erp/propuestas/'+id+'/enviar',{subject,body});
               toast(r.message||'Enviado'); loadProps(); }
         catch(e){ toast(e.message||'Error','err'); }
@@ -645,7 +645,7 @@ export function createPropuestasRoutes(db) {
       window.preparar = async function(id){
         try { const r=await api('POST','/api/erp/propuestas/'+id+'/preparar',{});
               toast(r.message||'Preparado');
-              if (r.ver_modelos && confirm('¿Ir a revisar el borrador en Contabilidad › Impuestos?')) {
+              if (r.ver_modelos && await window.confirmarEnPagina({titulo:'Borrador preparado',texto:'Está en Contabilidad › Impuestos. ¿Vamos a revisarlo?',aceptar:'Sí, ir a revisarlo',cancelar:'Ahora no'})) {
                 location.href=r.ver_modelos; return;
               }
               loadProps(); }
@@ -656,7 +656,7 @@ export function createPropuestasRoutes(db) {
       window.preparaCompra = async function(id){
         try { const r=await api('POST','/api/erp/propuestas/'+id+'/preparar-compra',{});
               toast(r.message||'Borrador creado');
-              if (r.ver_orden && confirm('¿Ir a revisar el borrador de compra?')) { location.href=r.ver_orden; return; }
+              if (r.ver_orden && await window.confirmarEnPagina({titulo:'Borrador de compra preparado',texto:'¿Vamos a revisarlo?',aceptar:'Sí, ir a revisarlo',cancelar:'Ahora no'})) { location.href=r.ver_orden; return; }
               loadProps(); }
         catch(e){ toast(e.message||'Error','err'); }
       };

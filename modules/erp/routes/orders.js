@@ -397,7 +397,7 @@ export function createOrderRoutes(db, cfg = {}) {
 
       async function changeStatus(newStatus){
         const label=STATUS_LABEL[newStatus];
-        if(!confirm('¿Cambiar estado a "'+label+'"?'))return;
+        if(!await window.confirmarEnPagina({titulo:'Cambiar el estado',texto:'Pasará a «'+label+'».',aceptar:'Sí, cambiarlo'}))return;
         const comment=document.getElementById('status-comment')?.value||'';
         try{
           await api('POST','/api/erp/orders/'+orderId+'/status',{status:newStatus,comment});
@@ -419,7 +419,9 @@ export function createOrderRoutes(db, cfg = {}) {
         }catch(e){toast(e.message||'Error al generar factura','err');}
       }
       async function editNotes(){
-        const n=prompt('Nota interna:',order?.admin_notes||'');
+        const _v=await window.pedirDatos({titulo:'Nota interna',texto:'Solo la ves tú y tu equipo. El cliente no la ve.',aceptar:'Guardar la nota',
+    campos:[{id:'n',etiqueta:'Nota',valor:(order&&order.admin_notes)||''}]});
+  const n=_v ? _v.n : null;
         if(n===null)return;
         await api('POST','/api/erp/orders/'+orderId+'/notes',{admin_notes:n});
         toast('Nota guardada');loadOrder();

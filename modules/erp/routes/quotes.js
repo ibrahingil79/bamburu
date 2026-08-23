@@ -729,23 +729,56 @@ export function createQuoteRoutes(db) {
 <script>
   const CSRF=${JSON.stringify(csrfToken)}, QID=${id}, LIVE_EMAIL=${JSON.stringify(liveEmail)};
   async function call(path, body){ let r; try{ r=await fetch('/api/erp/quotes/'+QID+path,{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:JSON.stringify(body||{})}); }catch(_e){ throw new Error(window.ERR.NET); } let d; try{ d=await r.json(); }catch(_e){ d=null; } if(!r.ok||!d||d.error) throw new Error(window.cleanErrMsg((d&&d.error)||'')); return d; }
-  async function emitir(){ if(!confirm('Vas a EMITIR el presupuesto: ganará número PRE-NNNN y quedará bloqueado (corregir = anular y rehacer). ¿Continuar?')) return; try{ const d=await call('/emitir'); location.reload(); }catch(e){ toast(e.message,'err'); } }
+  async function emitir(){
+    if(!await window.confirmarEnPagina({ titulo:'Emitir el presupuesto',
+      texto:'Ganará número PRE-NNNN y quedará bloqueado. A partir de ahí, corregirlo es anularlo y rehacerlo.',
+      aceptar:'Sí, emitirlo' })) return;
+    try{ await call('/emitir'); location.reload(); }catch(e){ toast(e.message,'err'); } }
   async function emailQuote(){
     // "Para" pre-rellenado con el email de la ficha (si hay), pero EDITABLE: un único destinatario.
-    const to = prompt('Enviar el presupuesto por email.\\nCorreo de destino (puedes cambiarlo):', LIVE_EMAIL || '');
-    if (to === null) return;                       // cancelado
-    if (!String(to).trim()){ toast('Indica un correo de destino','err'); return; }
-    try{ const d=await call('/email', { to: String(to).trim() }); toast(d.message); }catch(e){ toast(e.message,'err'); }
+    const v = await window.pedirDatos({ titulo:'Enviar el presupuesto por email',
+      texto:'Va a un solo destinatario. Viene puesto el de la ficha del cliente; puedes cambiarlo.',
+      aceptar:'Enviar',
+      campos:[{ id:'to', etiqueta:'Correo de destino', valor: LIVE_EMAIL || '', marcador:'cliente@ejemplo.com' }],
+      validar:v2 => !String(v2.to||'').trim() ? { campo:'to', mensaje:'Indica un correo de destino.' } : null });
+    if (!v) return;                                // cancelado: ni petición ni aviso, es lo pedido
+    try{ const d=await call('/email', { to: String(v.to).trim() }); toast(d.message); }catch(e){ toast(e.message,'err'); }
   }
-  async function crearPedido(){ if(!confirm('Crear un PEDIDO a partir de este presupuesto? Se creará un pedido en borrador con sus líneas; lo revisas (almacén, entrega) y lo confirmas para reservar el stock.')) return;
+  async function crearPedido(){
+    if(!await window.confirmarEnPagina({ titulo:'Crear un pedido desde este presupuesto',
+      texto:'Se creará un pedido en BORRADOR con sus líneas. Lo revisas (almacén, entrega) y lo confirmas tú para reservar el stock.',
+      aceptar:'Sí, crear el pedido' })) return;
     try{ const d=await call('/convert',{dest:'order'}); location.href='/admin/pedidos/'+d.order_id; }
     catch(e){ toast(e.message,'err'); } }
-  async function convertir(dest){ if(!confirm('Convertir este presupuesto a factura? Se creará una factura real con sus líneas.')) return;
+  async function convertir(dest){
+    if(!await window.confirmarEnPagina({ titulo:'Convertir a factura',
+      texto:'Se creará una FACTURA REAL con las líneas de este presupuesto.', aceptar:'Sí, facturar' })) return;
     try{ const d=await call('/convert',{dest}); location.href='/admin/invoices/'+d.invoice_id; }
-    catch(e){ if(/exceso|excede|supera el stock/i.test(e.message) && confirm(e.message+'\\n\\n¿Confirmar el exceso y convertir igualmente?')){ try{ const d=await call('/convert',{dest,confirm_excess:true}); location.href='/admin/invoices/'+d.invoice_id; }catch(e2){ toast(e2.message,'err'); } } else { toast(e.message,'err'); } } }
+    catch(e){
+      // ESTE ERA EL PAR QUE MATABA: dos diálogos seguidos. Con la casilla de Chrome marcada, el
+      // segundo devolvía false sin enseñar nada y el botón se quedaba mudo. Ahora es un panel.
+      if(/exceso|excede|supera el stock/i.test(e.message)){
+        if(await window.confirmarEnPagina({ titulo:'No hay stock suficiente', texto:e.message,
+              aceptar:'Facturar igualmente', cancelar:'No, dejarlo' })){
+          try{ const d=await call('/convert',{dest,confirm_excess:true}); location.href='/admin/invoices/'+d.invoice_id; }
+          catch(e2){ toast(e2.message,'err'); }
+        } else toast('No se ha facturado','warn');
+      } else toast(e.message,'err');
+    } }
   async function seguimiento(s){ try{ await call('/follow',{follow_status:s}); location.reload(); }catch(e){ toast(e.message,'err'); } }
-  async function anular(){ const m=prompt('Motivo de la anulación:'); if(m===null) return; if(!m.trim()){ toast('El motivo es obligatorio','err'); return; } try{ await call('/anular',{motivo:m.trim()}); location.reload(); }catch(e){ toast(e.message,'err'); } }
-  async function anularYRehacer(){ const m=prompt('Motivo de la anulación (se creará un borrador nuevo con las mismas líneas):'); if(m===null) return; if(!m.trim()){ toast('El motivo es obligatorio','err'); return; } try{ const d=await call('/anular-y-rehacer',{motivo:m.trim()}); location.href='/admin/quotes/'+d.id+'/edit'; }catch(e){ toast(e.message,'err'); } }
+  async function anular(){
+    const v = await window.pedirDatos({ titulo:'Anular el presupuesto', aceptar:'Anular',
+      campos:[{ id:'m', etiqueta:'Motivo de la anulación', ayuda:'Queda guardado con el presupuesto.' }],
+      validar:v2 => !String(v2.m||'').trim() ? { campo:'m', mensaje:'El motivo es obligatorio.' } : null });
+    if(!v) return;
+    try{ await call('/anular',{motivo:String(v.m).trim()}); location.reload(); }catch(e){ toast(e.message,'err'); } }
+  async function anularYRehacer(){
+    const v = await window.pedirDatos({ titulo:'Anular y rehacer', aceptar:'Anular y abrir el borrador',
+      texto:'Se anula este presupuesto y se abre un borrador nuevo con las mismas líneas.',
+      campos:[{ id:'m', etiqueta:'Motivo de la anulación', ayuda:'Queda guardado con el presupuesto anulado.' }],
+      validar:v2 => !String(v2.m||'').trim() ? { campo:'m', mensaje:'El motivo es obligatorio.' } : null });
+    if(!v) return;
+    try{ const d=await call('/anular-y-rehacer',{motivo:String(v.m).trim()}); location.href='/admin/quotes/'+d.id+'/edit'; }catch(e){ toast(e.message,'err'); } }
 </script>`;
     return c.html(adminLayout('Presupuesto ' + (q.quote_number || ('#' + id)), docShell(paper, panel), 'quotes', csrfToken, c));
   });

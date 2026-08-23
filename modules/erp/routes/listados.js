@@ -230,7 +230,7 @@ async function descargarListado(clave, qs){
     var r = await fetch(base, { headers: { 'Accept': 'application/pdf' } });
     if (r.status === 409) {
       var d = await r.json();
-      if (!confirm(d.mensaje + '\\n\\n¿Lo descargo igualmente?')) return;
+      if (!await window.confirmarEnPagina({titulo:'Es un listado muy largo',texto:d.mensaje,aceptar:'Descargarlo igualmente'})) return;
       base = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'entero=1';
       r = await fetch(base);
     }
@@ -245,10 +245,11 @@ async function descargarListado(clave, qs){
 }
 
 async function enviarListado(clave, qs){
-  var to = prompt('¿A qué correo lo mandamos?');
-  if (to === null) return;
-  to = String(to).trim();
-  if (!to) { toast('Escribe a quién se lo mandas.','warn'); return; }
+  var _v = await window.pedirDatos({titulo:'Mandar el listado por correo',aceptar:'Enviar',
+    campos:[{id:'to',etiqueta:'¿A qué correo lo mandamos?',marcador:'alguien@ejemplo.com'}],
+    validar:function(v2){ return !String(v2.to||'').trim() ? {campo:'to',mensaje:'Escribe a quién se lo mandas.'} : null; }});
+  if (!_v) return;
+  var to = String(_v.to).trim();
   try {
     var d = await api('POST','/api/erp/listados/'+clave+'/enviar'+(qs?('?'+qs):''), { to: to });
     toast('Enviado a '+d.to+' ('+d.lineas+(d.lineas===1?' línea':' líneas')+') ✓');

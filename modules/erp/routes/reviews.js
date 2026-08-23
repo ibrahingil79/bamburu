@@ -71,7 +71,7 @@ export function createReviewRoutes(db) {
       }
       async function approve(id){await api('PUT','/api/erp/reviews/'+id,{status:'approved'});toast('Aprobada');loadReviews();}
       async function reject(id){await api('PUT','/api/erp/reviews/'+id,{status:'rejected'});toast('Rechazada');loadReviews();}
-      async function del(id){if(!confirm('¿Eliminar?'))return;await api('DELETE','/api/erp/reviews/'+id);toast('Eliminada');loadReviews();}
+      async function del(id){if(!await window.confirmarEnPagina({titulo:'Eliminar la reseña',aceptar:'Sí, eliminarla'}))return;await api('DELETE','/api/erp/reviews/'+id);toast('Eliminada');loadReviews();}
       loadReviews();
       </script>`;
     return c.html(adminLayout('Reseñas', content, 'reviews', c.get('session')?.csrfToken || '', c));

@@ -893,10 +893,19 @@ export function createSettingsRoutes(db, cfg = {}) {
 
       // ── Editor visual: sin ver una sola etiqueta ──
       function fmt(ev, cmd){ ev.preventDefault(); document.execCommand(cmd,false,null); return false; }
-      function ponerEnlace(ev){
+      async function ponerEnlace(ev){
         ev.preventDefault();
-        const url = prompt('¿A qué dirección enlaza?', 'https://');
-        if (url) document.execCommand('createLink', false, url);
+        // OJO AL FOCO: el panel se lleva el cursor del editor, así que la selección se guarda ANTES
+        // de abrirlo y se restaura después. Sin esto, createLink no tendría sobre qué actuar.
+        const sel = window.getSelection();
+        const rango = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+        const v = await window.pedirDatos({ titulo:'Poner un enlace', aceptar:'Enlazar',
+          campos:[{ id:'url', etiqueta:'¿A qué dirección enlaza?', valor:'https://' }],
+          validar:v2 => !/^https?:\/\/.+/.test(String(v2.url||'').trim())
+            ? { campo:'url', mensaje:'Escribe una dirección completa, empezando por https://' } : null });
+        if (!v) return false;
+        if (rango) { const s2 = window.getSelection(); s2.removeAllRanges(); s2.addRange(rango); }
+        document.execCommand('createLink', false, String(v.url).trim());
         return false;
       }
       // Los huecos se INSERTAN en el cursor. Nunca se teclean: un {{factrua}} mal escrito saldría vacío.
@@ -945,7 +954,7 @@ export function createSettingsRoutes(db, cfg = {}) {
       }
 
       async function volverAlOriginal(){
-        if (!confirm('¿Volver a la plantilla original de Bamburu? Se pierde tu texto.')) return;
+        if (!await window.confirmarEnPagina({titulo:'Volver a la plantilla original',texto:'Se pierde el texto que hayas escrito tú. No hay deshacer.',aceptar:'Sí, volver a la original'})) return;
         try {
           const r = await api('DELETE','/api/erp/settings/email-templates/'+TPL.tipo+'/'+TPL.tono);
           document.getElementById('tplSubject').value = r.subject;

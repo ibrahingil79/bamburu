@@ -72,7 +72,7 @@ export function pagoModalScript(sym) {
     };
     // Deshacer un pago concreto (corrige un apunte mal metido; NO anula la factura).
     window.deshacerPago = async function(invoiceId, paymentId){
-      if(!confirm('¿Deshacer este pago? Se elimina solo este apunte de caja; la factura sigue igual.')) return;
+      if(!await window.confirmarEnPagina({titulo:'Deshacer el pago',texto:'Se elimina solo este apunte de caja. La factura del proveedor sigue igual, y volverá a contar como pendiente.',aceptar:'Sí, deshacerlo'})) return;
       try {
         await api('DELETE','/api/erp/supplier-invoices/'+invoiceId+'/payments/'+paymentId);
         toast('Pago deshecho');

@@ -429,7 +429,9 @@ export function createStockTransferRoutes(db) {
         const fromName = document.getElementById('fFrom').selectedOptions[0].text;
         const toName = document.getElementById('fTo').selectedOptions[0].text;
         const units = items.reduce(function(s,i){ return s + i.quantity; }, 0);
-        if (!confirm('Vas a CONFIRMAR el traslado de ' + items.length + ' línea(s) (' + units + ' unidades) de ' + fromName + ' a ' + toName + '. Moverá ese stock entre almacenes y será inmutable (corregir = anular y crear otro).\\n\\n¿Confirmar?')) return;
+        if (!await window.confirmarEnPagina({titulo:'Confirmar el traslado',
+      texto:'Son ' + items.length + ' línea(s), ' + units + ' unidades, de ' + fromName + ' a ' + toName + '. Moverá ese stock entre almacenes y será inmutable: corregirlo es anularlo y crear otro.',
+      aceptar:'Sí, confirmarlo'})) return;
         const btn = document.getElementById('btn-confirm');
         btn.disabled = true;
         const send = function(confirmBelow){
@@ -445,7 +447,7 @@ export function createStockTransferRoutes(db) {
           catch(e){
             // PIEZA 2a — guarda de reserva: dejar el origen por debajo de lo reservado avisa
             // (aviso-confirmado). El usuario confirma y se reintenta.
-            if (/reservad/i.test(e.message||'') && confirm((e.message||'')+'\\n\\n¿Trasladar igualmente?')) d = await send(true);
+            if (/reservad/i.test(e.message||'') && await window.confirmarEnPagina({titulo:'Hay stock reservado',texto:(e.message||''),aceptar:'Trasladar igualmente'})) d = await send(true);
             else throw e;
           }
           toast(d.message || 'Traslado confirmado');
@@ -510,7 +512,10 @@ export function createStockTransferRoutes(db) {
       </div>
       <script>
       async function anularTraslado(){
-        const motivo = prompt('Motivo de anulación del traslado ${esc(t.transfer_number || '')} (devolverá el stock al origen):');
+        const _v = await window.pedirDatos({titulo:'Anular el traslado ${esc(t.transfer_number || '')}',aceptar:'Anular',
+      texto:'El stock volverá al almacén de origen.',
+      campos:[{id:'motivo',etiqueta:'Motivo de la anulación'}]});
+    const motivo = _v ? _v.motivo : null;
         if (motivo === null) return;
         if (motivo.trim().length < 3){ toast('El motivo es obligatorio (mínimo 3 caracteres)','err'); return; }
         try {

@@ -757,7 +757,7 @@ export function createProductRoutes(db, cfg = {}) {
       }
 
       async function delProd(id){
-        if(!confirm('¿Eliminar producto?'))return;
+        if(!await window.confirmarEnPagina({titulo:'Eliminar el producto',texto:'Si tiene movimientos o líneas de documento, se archivará en vez de borrarse.',aceptar:'Sí, eliminarlo'}))return;
         try{await api('DELETE',A+'/products/'+id);toast('Eliminado');location.reload();}catch(e){toast(e.message,'err')}
       }
 
@@ -865,7 +865,7 @@ export function createProductRoutes(db, cfg = {}) {
         const n=document.getElementById('tagName').value.trim();if(!n)return;
         try{await api('POST','/api/erp/products/tags/create',{name:n});document.getElementById('tagName').value='';toast('Etiqueta creada');loadTags();}catch(e){toast(e.message,'err')}
       }
-      async function delTag(id){if(!confirm('¿Eliminar?'))return;await api('DELETE','/api/erp/products/tags/'+id);toast('Eliminada');loadTags();}
+      async function delTag(id){if(!await window.confirmarEnPagina({titulo:'Eliminar la etiqueta',texto:'Se quita de los productos que la lleven. No se borra ningún producto.',aceptar:'Sí, eliminarla'}))return;await api('DELETE','/api/erp/products/tags/'+id);toast('Eliminada');loadTags();}
       loadTags();
       </script>`;
     return c.html(adminLayout('Etiquetas', content, 'tags', c.get('session')?.csrfToken || '', c));

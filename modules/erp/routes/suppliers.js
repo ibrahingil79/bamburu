@@ -285,7 +285,7 @@ export function createSupplierRoutes(db) {
         }catch(e){toast(e.message,'err');}
       }
       async function delSup(id){
-        if(!confirm('¿Archivar este proveedor? Dejará de aparecer en la lista y en los selectores, pero no se borra.'))return;
+        if(!await window.confirmarEnPagina({titulo:'Archivar el proveedor',texto:'Dejará de aparecer en la lista y en los selectores. No se borra: sus facturas y sus compras siguen enteras.',aceptar:'Sí, archivarlo'}))return;
         try{await api('DELETE','/api/erp/suppliers/'+id);toast('Archivado');loadSups();}
         catch(e){toast(e.message,'err');}
       }

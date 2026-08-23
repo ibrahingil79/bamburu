@@ -334,11 +334,24 @@ export function createPerfilRoutes(db) {
               <p style="font-size:.75rem;color:var(--text2);margin-top:.5rem">Los de ahora dejarán de valer.</p>
             </form>
           </div>
-          <form method="POST" action="/admin/perfil/disable-2fa"
-                onsubmit="return confirm('¿Seguro que quieres desactivar la verificación en dos pasos? Tu cuenta quedará menos protegida y tus códigos de rescate se borrarán.')">
+          <!-- La confirmación va en un PANEL de la página, no en una ventanita: un confirm() en
+               onsubmit se apaga con la casilla de Chrome y el formulario se enviaría SIN preguntar,
+               que en esta pantalla es justo lo peor que puede pasar. -->
+          <form method="POST" action="/admin/perfil/disable-2fa" id="form2faOff">
             <input type="hidden" name="_csrf" value="${csrfToken}">
             <button type="submit" class="btn btn-danger">Desactivar</button>
           </form>
+          <script nonce="${c.get('cspNonce') || ''}">
+            document.getElementById('form2faOff').addEventListener('submit', async function(ev){
+              if (this.dataset.ok === '1') return;              // ya confirmado: que salga
+              ev.preventDefault();
+              const si = await window.confirmarEnPagina({ titulo:'Desactivar la verificación en dos pasos',
+                texto:'Tu cuenta quedará menos protegida y tus códigos de rescate se borrarán.',
+                aceptar:'Sí, desactivarla' });
+              if (!si) return;
+              this.dataset.ok = '1'; this.submit();
+            });
+          </script>
         ` : `
           <div class="pf-info">
             <h4>Cómo activarla</h4>

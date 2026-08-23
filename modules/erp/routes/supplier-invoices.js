@@ -928,7 +928,9 @@ export function createSupplierInvoiceRoutes(db) {
       async function anular(){
         var aviso = 'Motivo de la anulación (mín. 3 caracteres):';
         if(INV_HAS_PAYMENTS>0) aviso = 'OJO: esta factura tiene ' + INV_HAS_PAYMENTS + ' pago(s) registrado(s). Anular la FACTURA no es lo mismo que deshacer un pago (para eso usa "Deshacer" en cada pago).\\n\\n' + aviso;
-        const motivo = prompt(aviso);
+        const _v = await window.pedirDatos({titulo:'Anular la factura recibida',texto:aviso,aceptar:'Anular',
+      campos:[{id:'motivo',etiqueta:'Motivo de la anulación'}]});
+    const motivo = _v ? _v.motivo : null;
         if(motivo==null) return;
         try { await api('POST','/api/erp/supplier-invoices/${inv.id}/anular',{ motivo:motivo }); toast('Factura anulada'); location.reload(); }
         catch(e){ toast(e.message||'Error','err'); }

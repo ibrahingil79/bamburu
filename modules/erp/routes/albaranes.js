@@ -446,7 +446,7 @@ export function createAlbaranRoutes(db) {
             let r; try{ r=await fetch('/api/erp/albaranes',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:JSON.stringify(body)}); }catch(_e){ throw new Error(window.ERR.NET); }
             let d; try{ d=await r.json(); }catch(_e){ d=null; } if(!r.ok||!d||d.error){
               const em=window.cleanErrMsg((d&&d.error)||'');
-              if(/disponible|supera/i.test(em) && !over && confirm(em+'\\n\\n¿Entregar igualmente?')){ btn.disabled=false; return saveAlbaran(true); }
+              if(/disponible|supera/i.test(em) && !over && await window.confirmarEnPagina({titulo:'No hay stock suficiente',texto:em,aceptar:'Entregar igualmente'})){ btn.disabled=false; return saveAlbaran(true); }
               throw new Error(em); }
             window.location.href='/admin/albaranes/'+d.id;
           } catch(e){ toast(e.message||'Error','err'); btn.disabled=false; }
@@ -522,7 +522,7 @@ export function createAlbaranRoutes(db) {
           let r; try{ r=await fetch('/api/erp/albaranes',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:JSON.stringify(body)}); }catch(_e){ throw new Error(window.ERR.NET); }
           let d; try{ d=await r.json(); }catch(_e){ d=null; } if(!r.ok||!d||d.error){
             const em=window.cleanErrMsg((d&&d.error)||'');
-            if(/disponible|supera/i.test(em) && !over && confirm(em+'\\n\\n¿Entregar igualmente?')){ btn.disabled=false; return saveAlbaran(true); }
+            if(/disponible|supera/i.test(em) && !over && await window.confirmarEnPagina({titulo:'No hay stock suficiente',texto:em,aceptar:'Entregar igualmente'})){ btn.disabled=false; return saveAlbaran(true); }
             throw new Error(em); }
           window.location.href='/admin/albaranes/'+d.id;
         } catch(e){ toast(e.message||'Error','err'); btn.disabled=false; }
@@ -570,8 +570,16 @@ export function createAlbaranRoutes(db) {
 <script>
   const CSRF=${JSON.stringify(csrfToken)}, AID=${id};
   async function call(path, body){ let r; try{ r=await fetch('/api/erp/albaranes/'+AID+path,{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:JSON.stringify(body||{})}); }catch(_e){ throw new Error(window.ERR.NET); } let d; try{ d=await r.json(); }catch(_e){ d=null; } if(!r.ok||!d||d.error) throw new Error(window.cleanErrMsg((d&&d.error)||'')); return d; }
-  async function facturar(){ if(!confirm('Facturar este albarán? Se creará una factura real con las líneas entregadas (el stock ya salió con el albarán).')) return; try{ const d=await call('/factura'); location.href='/admin/invoices/'+d.invoice_id; }catch(e){ toast(e.message,'err'); } }
-  async function anular(){ const m=prompt('Motivo de la anulación (revertirá el stock entregado):'); if(m===null) return; if(!m.trim()){ toast('El motivo es obligatorio','err'); return; } try{ await call('/anular',{motivo:m.trim()}); location.reload(); }catch(e){ toast(e.message,'err'); } }
+  async function facturar(){
+    if(!await window.confirmarEnPagina({titulo:'Facturar el albarán',
+      texto:'Se creará una factura real con las líneas entregadas. El stock ya salió con el albarán, así que esto no lo mueve.',
+      aceptar:'Sí, facturar'})) return; try{ const d=await call('/factura'); location.href='/admin/invoices/'+d.invoice_id; }catch(e){ toast(e.message,'err'); } }
+  async function anular(){
+    const v = await window.pedirDatos({titulo:'Anular el albarán',aceptar:'Anular',
+      texto:'Se revertirá el stock que salió con él.',
+      campos:[{id:'m',etiqueta:'Motivo de la anulación',ayuda:'Queda guardado con el albarán.'}],
+      validar:v2 => !String(v2.m||'').trim() ? {campo:'m',mensaje:'El motivo es obligatorio.'} : null});
+    if(!v) return; const m=String(v.m); try{ await call('/anular',{motivo:m.trim()}); location.reload(); }catch(e){ toast(e.message,'err'); } }
 </script>`;
     return c.html(adminLayout('Albarán ' + (a.delivery_number || ('#' + id)), docShell(paper, panel), 'albaranes', csrfToken, c));
   });

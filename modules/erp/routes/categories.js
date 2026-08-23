@@ -76,7 +76,7 @@ export function createCategoryRoutes(db) {
         const body={name:document.getElementById('catName').value,description:document.getElementById('catDesc').value};
         try{if(id)await api('PUT','/api/erp/categories/'+id,body);else await api('POST','/api/erp/categories',body);closeModal('catModal');document.getElementById('catId').value='';document.getElementById('catModalTitle').textContent='Nueva Categoría';toast(id?'Actualizada':'Creada');loadCats();}catch(e){toast(e.message,'err')}
       }
-      async function delCat(id){if(!confirm('¿Eliminar? Los productos quedarán sin categoría.'))return;await api('DELETE','/api/erp/categories/'+id);toast('Eliminada');loadCats();}
+      async function delCat(id){if(!await window.confirmarEnPagina({titulo:'Eliminar la categoría',texto:'Los productos que la tengan quedarán sin categoría. No se borra ningún producto.',aceptar:'Sí, eliminarla'}))return;await api('DELETE','/api/erp/categories/'+id);toast('Eliminada');loadCats();}
       loadCats();
       </script>`;
     return c.html(adminLayout('Categorías', content, 'categories', c.get('session')?.csrfToken || '', c));

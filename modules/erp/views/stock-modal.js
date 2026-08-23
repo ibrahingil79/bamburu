@@ -174,7 +174,7 @@ export function stockModalScript(sym, warehouses = []) {
         catch(e){
           // PIEZA 2a — guarda de reserva: dejar el almacén por debajo de lo reservado avisa
           // (aviso-confirmado, nunca en silencio). El usuario confirma y se reintenta.
-          if (/reservad/i.test(e.message||'') && confirm((e.message||'')+'\\n\\n¿Ajustar igualmente?')) r = await send(true);
+          if (/reservad/i.test(e.message||'') && await window.confirmarEnPagina({titulo:'Hay stock reservado',texto:(e.message||''),aceptar:'Ajustar igualmente'})) r = await send(true);
           else throw e;
         }
         toast(r.message || ('Stock: '+r.stock));
@@ -185,7 +185,7 @@ export function stockModalScript(sym, warehouses = []) {
       } catch(e){ toast(e.message||'Error ajustando','err'); }
     };
     window.revertirMov = async function(movId){
-      if(!confirm('¿Revertir este movimiento? Se creará el movimiento opuesto (no se borra el original).')) return;
+      if(!await window.confirmarEnPagina({titulo:'Revertir el movimiento',texto:'Se crea el movimiento OPUESTO. El original no se borra: el histórico de stock no se toca nunca.',aceptar:'Sí, revertirlo'})) return;
       try {
         await api('POST','/api/erp/stock/movements/'+movId+'/reverse',{});
         toast('Movimiento revertido');

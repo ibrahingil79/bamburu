@@ -301,7 +301,7 @@ export function createFacturarHorasRoutes(db) {
       async function fhEmitir(){
         const sel=fhSel();
         if(!sel.length){ toast('Selecciona al menos una entrada','err'); return; }
-        if(!confirm('Se creará una factura REAL con estas horas ('+sel.length+' entrada(s)). Las entradas quedarán bloqueadas. ¿Continuar?')) return;
+        if(!await window.confirmarEnPagina({titulo:'Facturar estas horas',texto:'Se creará una factura REAL con '+sel.length+' entrada(s). Esas entradas quedarán bloqueadas.',aceptar:'Sí, facturar'})) return;
         const btn=document.getElementById('fhBtn'); if(btn) btn.disabled=true;
         const body={
           proyecto_id:parseInt(document.getElementById('fhProyecto').value),

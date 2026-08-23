@@ -1080,8 +1080,10 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
         .then(pintarRail)
         .catch(function(e){ toast((e&&e.message)||window.ERR.GEN_SHORT,'err'); });
     }
-    window.menuRestablecer = function(){
-      if (!confirm('¿Dejar el menú como venía de fábrica? Se quitan tus anclados y tu orden.')) return;
+    window.menuRestablecer = async function(){
+      if (!await window.confirmarEnPagina({ titulo:'Dejar el menú como venía de fábrica',
+        texto:'Se quitan tus anclados y tu orden. Nada más: las pantallas siguen todas donde están.',
+        aceptar:'Sí, restablecerlo' })) return;
       api('DELETE','/api/erp/menu/orden',{activa:window.MENU_ACTIVE||''})
         .then(function(r){ pintarRail(r); toast('Menú restablecido'); })
         .catch(function(e){ toast((e&&e.message)||window.ERR.GEN_SHORT,'err'); });

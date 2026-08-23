@@ -184,8 +184,13 @@ Las cuatro reglas, en concreto:
    caminos muertos y silenciosos en la misma pantalla, y ninguno estaba probado.
 3. **Con las ventanitas silenciadas.** Si algo depende de `prompt`/`confirm`, se neutralizan
    (`window.prompt = () => null`) y se exige que el producto **siga funcionando**, no que se disculpe.
-   *(Quedan 81 ventanitas en otras pantallas del producto, con la misma trampa. Están apuntadas en el
-   TABLERO; cinco pantallas encadenan dos, que es el caso exacto que rompe.)*
+   ~~*(Quedan 81 ventanitas en otras pantallas del producto…)*~~ **Ya no queda ninguna: el 23 ago 2026
+   (noche) se migraron las 80 vivas al panel compartido, y el censo da CERO.** La regla se queda
+   igual de vigente, porque lo que impide que vuelvan es la comprobación, no la buena intención:
+   **`node scripts/censo-ventanitas.mjs` sale con código 1 si aparece una**, y `gate-sin-ventanitas`
+   lo mide además PULSANDO. **Un `prompt()` o un `confirm()` nuevo en este producto es un rojo.**
+   Lo que se usa en su lugar ya existe y es compartido: `window.pedirDatos()` y
+   `window.confirmarEnPagina()` en `layout.js` (y `window.saConfirmar()` en el superadmin).
 4. **Se mira la captura.** Se hace una de la pantalla terminada y se mira. El aviso tapado por la
    burbuja de DISA (se leía «Informe guar») y el índice con el nombre pegado a la derecha llevaban
    horas ahí, y **ninguna de 97 aserciones los vio, porque ninguna miraba**. Donde se pueda, se afirma

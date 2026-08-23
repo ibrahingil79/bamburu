@@ -920,7 +920,7 @@ export function createClientRoutes(db, cfg = {}) {
           geo_etiqueta: dirElegida ? dirElegida.etiqueta : ''};
         try{if(id)await api('PUT','/api/erp/clients/'+id,body);else await api('POST','/api/erp/clients',body);closeModal('clientModal');toast(id?'Actualizado':'Creado');location.reload();}catch(e){toast(e.message,'err')}
       }
-      async function delClient(id){if(!confirm('¿Archivar este cliente? Dejará de aparecer en la lista, pero no se borra.'))return;try{await api('DELETE','/api/erp/clients/'+id);toast('Archivado');location.reload();}catch(e){toast(e.message,'err')}}
+      async function delClient(id){if(!await window.confirmarEnPagina({titulo:'Archivar el cliente',texto:'Dejará de aparecer en la lista y en los selectores. No se borra: sus facturas y su historial siguen enteros.',aceptar:'Sí, archivarlo'}))return;try{await api('DELETE','/api/erp/clients/'+id);toast('Archivado');location.reload();}catch(e){toast(e.message,'err')}}
       async function restoreClient(id){try{await api('POST','/api/erp/clients/'+id+'/restore');toast('Restaurado');location.reload();}catch(e){toast(e.message,'err')}}
       // ── A1 · ABRIR UN CLIENTE ABRE LA VENTANA FLOTANTE ──────────────────────────────────────
       // Mismo nombre de función que antes a propósito: la llaman la fila de la lista y el modal de
@@ -1082,7 +1082,7 @@ export function createClientRoutes(db, cfg = {}) {
         const body={name:document.getElementById('gName').value,description:document.getElementById('gDesc').value,discount_pct: id ? ((groups.find(x=>x.id===+id)||{}).discount_pct||0) : 0};
         try{if(id)await api('PUT','/api/erp/clients/groups/'+id,body);else await api('POST','/api/erp/clients/groups/create',body);closeModal('groupModal');document.getElementById('groupId').value='';toast('Guardado');load();}catch(e){toast(e.message,'err')}
       }
-      async function delGroup(id){if(!confirm('¿Eliminar?'))return;await api('DELETE','/api/erp/clients/groups/'+id);toast('Eliminado');load();}
+      async function delGroup(id){if(!await window.confirmarEnPagina({titulo:'Eliminar el grupo',texto:'Los clientes que estén en él se quedan sin grupo. No se borra ningún cliente.',aceptar:'Sí, eliminarlo'}))return;await api('DELETE','/api/erp/clients/groups/'+id);toast('Eliminado');load();}
       load();
       </script>`;
     return c.html(adminLayout('Grupos de Clientes', content, 'client-groups', c.get('session')?.csrfToken || '', c));

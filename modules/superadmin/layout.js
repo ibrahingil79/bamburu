@@ -83,6 +83,33 @@ input,select{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,
   }
   function saOpenModal(html){ document.getElementById('modalBox').innerHTML=html; document.getElementById('modalBg').style.display='flex'; }
   function saCloseModal(){ document.getElementById('modalBg').style.display='none'; }
+  // ── CONFIRMAR SIN VENTANITA DEL NAVEGADOR (23 ago 2026) ──────────────────────────────────────
+  // El panel tiene la misma razón de ser que window.confirmarEnPagina del ERP: Chrome ofrece la
+  // casilla «Impedir que esta página cree cuadros de diálogo adicionales» y, marcada, confirm()
+  // devuelve false SIN ENSEÑAR NADA — el botón se queda muerto. Aquí NO se copia aquel código: se
+  // reutiliza el modal que este panel ya tiene, así que no hay CSS duplicado ni un segundo estilo.
+  // Devuelve una promesa: true / false. Cerrar por fuera o con Escape es «no».
+  window.saConfirmar = function(o){
+    o = o || {};
+    return new Promise(function(resolve){
+      var vivo = true;
+      function fin(v){ if(!vivo) return; vivo=false; document.removeEventListener('keydown', tecla);
+        bg.removeEventListener('click', fuera); saCloseModal(); resolve(v); }
+      var bg = document.getElementById('modalBg');
+      saOpenModal('<h3>'+saEsc(o.titulo||'¿Seguro?')+'</h3>'
+        + (o.texto ? '<p style="font-size:13px;color:#94a3b8;line-height:1.5;margin-bottom:16px">'+saEsc(o.texto)+'</p>' : '')
+        + '<div style="display:flex;gap:8px;justify-content:flex-end">'
+        + '<button class="btn" id="saCfNo">'+saEsc(o.cancelar||'No, dejarlo')+'</button>'
+        + '<button class="btn btn-amber" id="saCfSi">'+saEsc(o.aceptar||'Sí, adelante')+'</button></div>');
+      document.getElementById('saCfNo').addEventListener('click', function(){ fin(false); });
+      document.getElementById('saCfSi').addEventListener('click', function(){ fin(true); });
+      function tecla(e){ if(e.key==='Escape') fin(false); }
+      function fuera(e){ if(e.target.id==='modalBg') fin(false); }
+      document.addEventListener('keydown', tecla);
+      bg.addEventListener('click', fuera);
+      setTimeout(function(){ var b=document.getElementById('saCfSi'); if(b) b.focus(); }, 30);
+    });
+  };
   // C4b-1: enganchado aquí, no desde el HTML. La CSP estricta bloquea los handlers de atributo,
   // y el nonce solo cubre el bloque de script, no los atributos.
   document.getElementById('saLogoutLink').addEventListener('click', e => { e.preventDefault(); saLogout(); });

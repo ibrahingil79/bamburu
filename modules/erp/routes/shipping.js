@@ -97,7 +97,7 @@ export function createShippingRoutes(db, cfg = {}) {
         const body={name:document.getElementById('sName').value,description:document.getElementById('sDesc').value,price:parseFloat(document.getElementById('sPrice').value)||0,free_from:parseFloat(document.getElementById('sFree').value)||null,estimated_days:document.getElementById('sDays').value,active:document.getElementById('sActive').checked};
         try{if(id)await api('PUT','/api/erp/shipping/'+id,body);else await api('POST','/api/erp/shipping',body);closeModal('shipModal');document.getElementById('shipId').value='';document.getElementById('shipModalTitle').textContent='Nuevo Método de Envío';toast('Guardado');load();}catch(e){toast(e.message,'err')}
       }
-      async function delShip(id){if(!confirm('¿Eliminar?'))return;await api('DELETE','/api/erp/shipping/'+id);toast('Eliminado');load();}
+      async function delShip(id){if(!await window.confirmarEnPagina({titulo:'Eliminar el método de envío',aceptar:'Sí, eliminarlo'}))return;await api('DELETE','/api/erp/shipping/'+id);toast('Eliminado');load();}
       load();
       </script>`;
     return c.html(adminLayout('Métodos de Envío', content, 'shipping', c.get('session')?.csrfToken || '', c));

@@ -1273,7 +1273,10 @@ export function createInvoiceRoutes(db) {
         </tr>\`}).join(''):(q?window.emptyRow(9,'No se encontraron facturas con ese filtro.',{icon:'ti-search'}):window.emptyRow(9,'Aún no has emitido ninguna factura. ¿Empezamos por la primera?',window.canDo('invoices.create')?{cta:'Nueva factura',href:'/admin/invoices/new'}:{}));
       }
       async function anular(id, num){
-        const motivo = prompt('Motivo de anulación de la factura '+num+':');
+        const _v = await window.pedirDatos({titulo:'Anular la factura '+num,aceptar:'Anular',
+      texto:'La factura no se borra: queda anulada, y su anulación se registra en la cadena.',
+      campos:[{id:'motivo',etiqueta:'Motivo de la anulación'}]});
+    const motivo = _v ? _v.motivo : null;
         if (motivo === null) return;                 // cancelado
         if (!motivo.trim()){ toast('El motivo es obligatorio','err'); return; }
         try {
@@ -1560,7 +1563,9 @@ export function createInvoiceRoutes(db) {
         let confirm_excess = false;
         if (excess.length) {
           if (!CAN_OVER) { toast('No tienes permiso para facturar con exceso de stock. Baja la cantidad a lo disponible.','err'); return; }
-          if (!confirm('Vas a facturar MÁS de lo que hay en stock:\\n' + excess.join('\\n') + '\\n\\nEl stock NO se moverá (la factura no es una venta de almacén). ¿Confirmar el exceso?')) return;
+          if (!await window.confirmarEnPagina({titulo:'Vas a facturar MÁS de lo que hay en stock',
+      texto: excess.join(' · ') + '.  El stock NO se moverá: una factura no es una salida de almacén.',
+      aceptar:'Confirmar el exceso'})) return;
           confirm_excess = true;
         }
         const btn = document.getElementById('btn-emit');
@@ -1956,7 +1961,10 @@ ${esTicketSustituible ? `
     catch(e){ toast(e.message,'err'); }
   }` : ''}
   async function anularFactura(){
-    const motivo = prompt('Motivo de anulación de la factura ${inv.invoice_number}:');
+    const _v = await window.pedirDatos({titulo:'Anular la factura ${inv.invoice_number}',aceptar:'Anular',
+      texto:'La factura no se borra: queda anulada, y su anulación se registra en la cadena.',
+      campos:[{id:'motivo',etiqueta:'Motivo de la anulación'}]});
+    const motivo = _v ? _v.motivo : null;
     if (motivo === null) return;
     if (!motivo.trim()){ toast('El motivo es obligatorio','err'); return; }
     try {

@@ -258,7 +258,7 @@ export function createAvisosRoutes(db) {
       // siempre; la primera, además, apaga la puerta. Se recarga la lista para que el aviso desaparezca
       // en el acto: quien contesta tiene que VER que su respuesta ha servido de algo.
       async function apagarReservas(){
-        if(!confirm('Tu página de reservas dejará de estar disponible. ¿La apago?')) return;
+        if(!await window.confirmarEnPagina({titulo:'Apagar tu página de reservas',texto:'La dirección pública dejará de responder: quien entre verá «no encontrado». Las citas que ya tengas no cambian.',aceptar:'Sí, apagarla'})) return;
         try{ await api('POST','/api/erp/reserva-publica/aviso-encendido/apagar',{}); toast('Página de reservas apagada'); loadAvisos(); }
         catch(e){ toast(e.message,'err'); }
       }

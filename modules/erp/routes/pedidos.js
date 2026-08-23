@@ -646,10 +646,30 @@ export function createPedidoRoutes(db) {
 <script>
   const CSRF=${JSON.stringify(csrfToken)}, OID=${id};
   async function call(path, body){ let r; try{ r=await fetch('/api/erp/pedidos/'+OID+path,{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:JSON.stringify(body||{})}); }catch(_e){ throw new Error(window.ERR.NET); } let d; try{ d=await r.json(); }catch(_e){ d=null; } if(!r.ok||!d||d.error) throw new Error(window.cleanErrMsg((d&&d.error)||'')); return d; }
-  async function confirmar(){ if(!confirm('Vas a CONFIRMAR el pedido: ganará número PED-NNNN, quedará bloqueado (corregir = anular y rehacer) y APARTARÁ (reservará) el stock físico para este cliente. ¿Continuar?')) return; try{ await call('/confirmar'); location.reload(); }catch(e){ toast(e.message,'err'); } }
-  async function facturar(){ if(!confirm('Facturar este pedido directamente? Se creará una factura real con sus líneas (no mueve stock; la entrega va por albarán). La cadena es suelta: también puedes facturar desde un albarán.')) return; try{ const d=await call('/factura'); location.href='/admin/invoices/'+d.invoice_id; }catch(e){ toast(e.message,'err'); } }
-  async function anular(){ const m=prompt('Motivo de la anulación (se liberará la reserva):'); if(m===null) return; if(!m.trim()){ toast('El motivo es obligatorio','err'); return; } try{ await call('/anular',{motivo:m.trim()}); location.reload(); }catch(e){ toast(e.message,'err'); } }
-  async function anularYRehacer(){ const m=prompt('Motivo de la anulación (se creará un borrador nuevo con las mismas líneas):'); if(m===null) return; if(!m.trim()){ toast('El motivo es obligatorio','err'); return; } try{ const d=await call('/anular-y-rehacer',{motivo:m.trim()}); location.href='/admin/pedidos/'+d.id+'/edit'; }catch(e){ toast(e.message,'err'); } }
+  async function confirmar(){
+    if(!await window.confirmarEnPagina({ titulo:'Confirmar el pedido',
+      texto:'Ganará número PED-NNNN, quedará bloqueado (corregirlo será anularlo y rehacerlo) y APARTARÁ el stock físico para este cliente.',
+      aceptar:'Sí, confirmarlo' })) return;
+    try{ await call('/confirmar'); location.reload(); }catch(e){ toast(e.message,'err'); } }
+  async function facturar(){
+    if(!await window.confirmarEnPagina({ titulo:'Facturar el pedido',
+      texto:'Se creará una factura real con sus líneas. No mueve stock: la entrega va por albarán. La cadena es suelta, así que también puedes facturar desde un albarán.',
+      aceptar:'Sí, facturar' })) return;
+    try{ const d=await call('/factura'); location.href='/admin/invoices/'+d.invoice_id; }catch(e){ toast(e.message,'err'); } }
+  async function anular(){
+    const v = await window.pedirDatos({ titulo:'Anular el pedido', aceptar:'Anular',
+      texto:'Se liberará la reserva de stock.',
+      campos:[{ id:'m', etiqueta:'Motivo de la anulación', ayuda:'Queda guardado con el pedido.' }],
+      validar:v2 => !String(v2.m||'').trim() ? { campo:'m', mensaje:'El motivo es obligatorio.' } : null });
+    if(!v) return;
+    try{ await call('/anular',{motivo:String(v.m).trim()}); location.reload(); }catch(e){ toast(e.message,'err'); } }
+  async function anularYRehacer(){
+    const v = await window.pedirDatos({ titulo:'Anular y rehacer', aceptar:'Anular y abrir el borrador',
+      texto:'Se anula este pedido (liberando la reserva) y se abre un borrador nuevo con las mismas líneas.',
+      campos:[{ id:'m', etiqueta:'Motivo de la anulación', ayuda:'Queda guardado con el pedido anulado.' }],
+      validar:v2 => !String(v2.m||'').trim() ? { campo:'m', mensaje:'El motivo es obligatorio.' } : null });
+    if(!v) return;
+    try{ const d=await call('/anular-y-rehacer',{motivo:String(v.m).trim()}); location.href='/admin/pedidos/'+d.id+'/edit'; }catch(e){ toast(e.message,'err'); } }
 </script>`;
     return c.html(adminLayout('Pedido ' + (o.order_number || ('#' + id)), docShell(paper, panel), 'pedidos', csrfToken, c));
   });

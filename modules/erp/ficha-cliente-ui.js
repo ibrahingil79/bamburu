@@ -1187,17 +1187,26 @@ export function fichaCompletaJS() {
           $('nueva').value=''; if(window.toast) toast('Nota guardada'); cargarNotas(); DESDE=0; cargarTl();
         }).catch(function(e){ if(window.toast) toast(e.message,'err'); });
       });
-      $('notas').addEventListener('click', function(ev){
+      // LAS DOS VENTANITAS DE AQUÍ ERAN UN PAR ENCADENADO: editar pedía con prompt() y borrar
+      // confirmaba con confirm(), y bastaba entrar en las dos seguidas para que Chrome ofreciera la
+      // casilla que las apaga. Desde ese momento, editar una nota no hacía nada y borrarla tampoco:
+      // ni ventana, ni petición, ni aviso. Ahora las dos son el panel compartido de layout.js.
+      $('notas').addEventListener('click', async function(ev){
         var e = ev.target.closest('a[data-nedit]'), d = ev.target.closest('a[data-ndel]');
         if (e) { ev.preventDefault();
           var actual = e.closest('.bf-nota').firstChild.textContent;
-          var t = prompt('Editar la nota:', actual); if (t==null) return;
-          api('PUT','/api/erp/clients/'+id+'/notas/'+e.getAttribute('data-nedit'),{texto:t})
-            .then(function(){ cargarNotas(); DESDE=0; cargarTl(); }).catch(function(x){ if(window.toast) toast(x.message,'err'); });
+          var v = await window.pedirDatos({ titulo:'Editar la nota', aceptar:'Guardar',
+            campos:[{ id:'t', etiqueta:'Nota', valor: actual }],
+            validar:function(v2){ return !String(v2.t||'').trim() ? { campo:'t', mensaje:'La nota no puede quedarse vacía.' } : null; } });
+          if (v == null) return;
+          api('PUT','/api/erp/clients/'+id+'/notas/'+e.getAttribute('data-nedit'),{texto:String(v.t)})
+            .then(function(){ if(window.toast) toast('Nota guardada'); cargarNotas(); DESDE=0; cargarTl(); })
+            .catch(function(x){ if(window.toast) toast(x.message,'err'); });
         } else if (d) { ev.preventDefault();
-          if (!confirm('¿Quitar esta nota?')) return;
+          if (!await window.confirmarEnPagina({ titulo:'Quitar la nota', aceptar:'Sí, quitarla' })) return;
           api('DELETE','/api/erp/clients/'+id+'/notas/'+d.getAttribute('data-ndel'))
-            .then(function(){ cargarNotas(); DESDE=0; cargarTl(); }).catch(function(x){ if(window.toast) toast(x.message,'err'); });
+            .then(function(){ if(window.toast) toast('Nota quitada'); cargarNotas(); DESDE=0; cargarTl(); })
+            .catch(function(x){ if(window.toast) toast(x.message,'err'); });
         }
       });
 

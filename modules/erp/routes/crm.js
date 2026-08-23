@@ -406,11 +406,11 @@ export function createCrmRoutes(db) {
     }
 
     async function reopenOpp(id){
-      if(!confirm('¿Reabrir esta oportunidad? Volverá al embudo en la etapa en la que estaba.')) return;
+      if(!await window.confirmarEnPagina({titulo:'Reabrir la oportunidad',texto:'Vuelve al embudo, en la etapa en la que estaba.',aceptar:'Sí, reabrirla'})) return;
       try{ await api('POST','/api/erp/crm/'+id+'/reopen'); toast('Reabierta'); reload(); }catch(e){ toast(e.message,'err'); }
     }
     async function archiveOpp(id){
-      if(!confirm('¿Archivar esta oportunidad? Sale del embudo, pero no se borra.')) return;
+      if(!await window.confirmarEnPagina({titulo:'Archivar la oportunidad',texto:'Sale del embudo. No se borra: se puede reabrir.',aceptar:'Sí, archivarla'})) return;
       try{ await api('DELETE','/api/erp/crm/'+id); toast('Archivada'); reload(); }catch(e){ toast(e.message,'err'); }
     }
 
