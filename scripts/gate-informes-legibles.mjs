@@ -1,0 +1,247 @@
+// GATE de la FICHA D-ter — los informes dejan de ser una chapuza.
+//   node scripts/gate-informes-legibles.mjs
+//
+// LA QUINTA REGLA, la que nace de esta entrega: **no basta con que responda; tiene que servir para
+// algo.** El gate anterior dio 59 ✓ · 0 ✗ y el dueño abrió la pantalla y se encontró ejes con noventa
+// nombres —la mitad, restos de mis propios gates—, Contabilidad con cuarenta barras a cero porque no
+// había forma de decir «este año», y un grupo con fecha del año 2000. Ninguna aserción falló, porque
+// ninguna preguntaba si aquello se podía leer.
+//
+// Por eso aquí se mide **el resultado**, no solo el mecanismo: cuántos grupos entran en un eje, si el
+// periodo recorta de verdad, si el número sale solo cuando toca, y si queda un solo nombre de gate
+// en la pantalla. Y se limpia lo propio en el `finally`, por marca, que es la otra norma nueva.
+import puppeteer from 'puppeteer';
+import Database from 'better-sqlite3';
+import { randomBytes } from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import { tenantDb, APP_DIR, launchOpts } from './lib/gate-env.mjs';
+import { cruzar, camposPara, AREAS, RANGOS, RANGO_POR_DEFECTO, rangoDeFechas,
+         listarMedidasPropias, guardarMedidaPropia, borrarMedidaPropia } from '../modules/erp/constructor-analitica.js';
+
+const SLUG = 'desarrollo-bamburu';
+const DB_PATH = tenantDb(SLUG);
+const HOST = `${SLUG}.bamburu.com`, BASE = 'https://' + HOST;
+const RID = randomBytes(3).toString('hex');
+const MARCA = 'GD3-' + RID;                 // por aquí se limpia todo lo de esta pasada
+const TOKEN_PREFIJO = 'gate-dter-';
+const SHOTS = path.join(process.env.HOME || '/home/ubuntu', 'informes-shots');
+const dormir = ms => new Promise(r => setTimeout(r, ms));
+
+let pass = 0, fail = 0;
+const ok = (c, m, det) => { if (c) { pass++; console.log('  ✓ ' + m + (det ? ' · ' + det : '')); } else { fail++; console.error('  ✗ ' + m + (det ? ' · ' + det : '')); } };
+
+const db = new Database(DB_PATH);
+db.pragma('busy_timeout = 10000');
+const todo = () => true;
+let browser = null;
+const owner = db.prepare("SELECT id FROM admin_users WHERE role='owner' AND active=1 ORDER BY id LIMIT 1").get();
+if (!owner) { console.error('✗ GATE ABORTADO: no hay owner activo'); process.exit(2); }
+const token = TOKEN_PREFIJO + randomBytes(20).toString('hex');
+const ahora = Math.floor(Date.now() / 1000);
+db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)')
+  .run(token, owner.id, ahora, ahora + 3600, randomBytes(20).toString('hex'));
+
+async function abrirConstructor() {
+  const ctx = await browser.createBrowserContext();
+  const page = await ctx.newPage();
+  await page.setViewport({ width: 1440, height: 1000 });
+  await page.setCookie({ name: 'asess', value: token, domain: HOST, path: '/', secure: true });
+  const errores = [];
+  page.on('pageerror', e => errores.push(String(e && e.message || e)));
+  page.on('dialog', async d => { errores.push('VENTANITA: ' + d.type()); await d.dismiss(); });
+  await page.goto(BASE + '/admin/analytics', { waitUntil: 'networkidle0' });
+  await dormir(1600);
+  await page.click('#btnCrear'); await dormir(2400);
+  return { page, errores };
+}
+const componer = (page, r) => page.evaluate(async (x) => {
+  const set = (id, v) => { const e = document.getElementById(id); if (e && v != null) { e.value = v; e.dispatchEvent(new Event('change')); } };
+  set('cArea', x.area); await new Promise(r2 => setTimeout(r2, 1100));
+  set('cDim', x.dim);   await new Promise(r2 => setTimeout(r2, 500));
+  set('cMed', x.med);   await new Promise(r2 => setTimeout(r2, 400));
+  set('cRango', x.rango); set('cTipo', x.tipo);
+  await new Promise(r2 => setTimeout(r2, 1800));
+  const cv = document.getElementById('cChart');
+  let barras = -1; try { barras = Chart.getChart(cv).data.labels.length; } catch {}
+  const vis = id => { const e = document.getElementById(id); return !!e && e.offsetParent !== null; };
+  return { barras, numero: vis('cNumeroWrap'), tabla: vis('cTablaWrap'), grafico: vis('cChartWrap'),
+           cifra: (document.getElementById('cNumero') || {}).textContent,
+           pie: (document.getElementById('cNumeroPie') || {}).textContent,
+           nota: (document.getElementById('cNota') || {}).innerText || '',
+           medidas: [...document.querySelectorAll('#cMed option')].map(o => o.textContent) };
+}, r);
+
+try {
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n[1] PARTE 6 — NO QUEDA BASURA DE MIS PRUEBAS EN EL NEGOCIO');
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  const M = "(name LIKE 'GATE%' OR name LIKE '%(gate %' OR name LIKE 'ZZ %' OR name LIKE 'GD2-%')";
+  const cliVis = db.prepare(`SELECT COUNT(*) c FROM clients WHERE active=1 AND ${M}`).get().c;
+  const proVis = db.prepare(`SELECT COUNT(*) c FROM products WHERE COALESCE(status,'')<>'archived' AND ${M}`).get().c;
+  ok(cliVis === 0, 'ni un cliente de gate VISIBLE en el negocio', cliVis + '');
+  ok(proVis === 0, 'ni un producto de gate visible', proVis + '');
+  const total = db.prepare('SELECT COUNT(*) c FROM clients WHERE active=1').get().c;
+  // Medido tras la limpieza: 24 activos, TODOS reales (Taxis Ríos SL, Autoescuela El Volante SL…).
+  // Los 15 inactivos sin marca de gate ya lo estaban antes: la limpieza no tocó ni uno de verdad.
+  ok(total >= 20, '  y quedan los clientes de verdad (no se ha barrido todo)', total + ' activos');
+  ok(db.prepare(`SELECT COUNT(*) c FROM clients WHERE active=1 AND ${M}`).get().c === 0,
+     '  y ni uno de los activos lleva marca de gate');
+  // Lo que NO se pudo borrar está archivado, no destruido, y su factura sigue en la cadena.
+  const arch = db.prepare(`SELECT COUNT(*) c FROM clients WHERE active=0 AND ${M}`).get().c;
+  ok(arch > 0, '  los que tenían factura están ARCHIVADOS, no borrados', arch + ' archivados');
+  const enCadena = db.prepare(`SELECT COUNT(*) c FROM verifactu_registros`).get().c;
+  ok(enCadena === 1050, '  y la cadena de Verifactu sigue con sus 1050 registros', enCadena + '');
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n[2] PARTE 1 — LAS CUENTAS SON MEDIDAS CON NOMBRE, no una caja de fórmulas');
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  const nMed = Object.values(AREAS).reduce((n, a) => n + Object.keys(a.medidas).length, 0);
+  const nDim = Object.values(AREAS).reduce((n, a) => n + Object.keys(a.dimensiones).length, 0);
+  ok(nDim === 33 && nMed === 39, 'nada se pierde: 33 dimensiones (las mismas) y 31 medidas → 39', `${nDim} · ${nMed}`);
+  for (const [a, k, etq] of [['ventas', 'ticket_medio', 'Ticket medio'], ['compras', 'pct_pendiente', '% pendiente de pago'],
+       ['clientes', 'facturacion_media', 'Facturación media por cliente'], ['agenda', 'pct_ausencias', '% de ausencias'],
+       ['agenda', 'duracion_media', 'Duración media de la cita (h)'], ['contabilidad', 'margen_pct', 'Margen sobre ingresos (%)']])
+    ok(AREAS[a].medidas[k] && AREAS[a].medidas[k].etiqueta === etq, `nueva medida con nombre: «${etq}» en ${a}`);
+  // Y la propia, construida ELIGIENDO (no escribiendo).
+  const mp = guardarMedidaPropia(db, owner.id, { area: 'ventas', nombre: MARCA + ' mi margen',
+    medida_a: 'beneficio', op: '/', medida_b: 'base', por_cien: true });
+  const propias = listarMedidasPropias(db, owner.id);
+  const cp = camposPara(todo, 'ventas', undefined, propias);
+  const clave = 'propia_' + mp.id;
+  ok(!!cp.medidas[clave], 'una medida propia aparece en «quiero saber» como una más', cp.medidas[clave]?.etiqueta);
+  ok(/Beneficio en euros dividido entre Facturado/.test(cp.medidas[clave].ayuda || ''),
+     '  y su cuenta se explica EN PALABRAS debajo', cp.medidas[clave].ayuda);
+  const rp = cruzar(db, { area: 'ventas', dimension: 'fecha', medidas: [clave], rango: 'anio', propias, hasPerm: todo, limit: 99 });
+  ok(rp.filas.length > 0 && rp.filas.every(f => f[clave] != null), '  y se calcula de verdad', JSON.stringify(rp.filas[0]));
+  let err = null;
+  try { guardarMedidaPropia(db, owner.id, { area: 'agenda', nombre: 'x', medida_a: 'horas_libres', op: '/', medida_b: 'citas' }); }
+  catch (e) { err = e; }
+  ok(err && err.status === 400, '  y no deja mezclar una medida del horario (daría un número inventado)');
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n[3] PARTE 2 — EL PERIODO: por defecto 12 meses, NUNCA el histórico');
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  ok(RANGO_POR_DEFECTO === '12m', 'el rango por defecto son los últimos 12 meses', RANGO_POR_DEFECTO);
+  ok(Object.keys(RANGOS).length >= 6, 'están los seis periodos pedidos', Object.keys(RANGOS).join(', '));
+  const conta = k => cruzar(db, { area: 'contabilidad', dimension: 'fecha', medidas: ['resultado'], rango: k, hasPerm: todo, limit: 9999 }).filas.length;
+  const todoH = conta('todo'), doce = conta('12m'), esteAnio = conta('anio');
+  ok(doce <= 12 && doce < todoH, 'Contabilidad pasa de todo el histórico a 12 grupos', `todo=${todoH} · 12m=${doce} · año=${esteAnio}`);
+  ok(rangoDeFechas('anio').from.endsWith('-01-01'), '«este año» arranca el 1 de enero', rangoDeFechas('anio').from);
+  // El año 2000 (stock de apertura) deja de estorbar SIN borrar el dato.
+  const inv12 = cruzar(db, { area: 'inventario', dimension: 'fecha', medidas: ['movimientos'], rango: '12m', hasPerm: todo, limit: 999 });
+  ok(!inv12.filas.some(f => String(f.clave).startsWith('2000')), 'el grupo del año 2000 ya no sale en Inventario');
+  ok(db.prepare("SELECT COUNT(*) c FROM stock_movements WHERE created_at < '2020-01-01'").get().c === 7,
+     '  y sin haber borrado sus 7 movimientos: son el stock de apertura de productos reales');
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n[4] PARTE 4 — nada ilegible y nada sin sentido');
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  let degen = null;
+  try { cruzar(db, { area: 'clientes', dimension: 'cliente', medidas: ['clientes'], hasPerm: todo }); } catch (e) { degen = e; }
+  ok(degen && degen.status === 400 && /no dice nada/.test(degen.message),
+     'contar clientes repartidos por cliente se rechaza y se explica', degen ? degen.message.slice(0, 55) + '…' : 'la permitió');
+  ok((camposPara(todo, 'clientes').medidas.clientes.nuncaCon || []).includes('cliente'),
+     '  y el desplegable la esconde en esa dimensión, en vez de dejar elegirla');
+  // Grupos vacíos.
+  const conVacios = cruzar(db, { area: 'ventas', dimension: 'fecha', medidas: ['base'], rango: 'todo', hasPerm: todo, limit: 9999 });
+  ok(conVacios.filas.every(f => Number(f.base) !== 0), 'ningún grupo a cero se cuela en el resultado',
+     conVacios.gruposVacios + ' quitados');
+
+  browser = await puppeteer.launch(launchOpts());
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n[5] PARTE 3 y 4 EN PANTALLA — la forma la decide el resultado (y se MIRA)');
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  const { page, errores } = await abrirConstructor();
+  fs.mkdirSync(SHOTS, { recursive: true });
+
+  // (a) UN NÚMERO: un solo grupo.
+  const rNum = await componer(page, { area: 'ventas', dim: 'fecha', med: 'base', rango: 'mes', tipo: 'auto' });
+  ok(rNum.numero && !rNum.grafico, 'con un solo grupo sale EL NÚMERO, no un gráfico de una barra', 'cifra ' + rNum.cifra);
+  ok(/\d/.test(rNum.cifra || '') && /mes/i.test(rNum.pie || ''), '  con su cifra y su periodo debajo', (rNum.cifra || '') + ' · ' + (rNum.pie || ''));
+  await page.evaluate(() => document.getElementById('cardConstructor').scrollIntoView({ block: 'center' })); await dormir(600);
+  await page.screenshot({ path: path.join(SHOTS, 'dter-numero.png') });
+
+  // (b) MUCHOS GRUPOS: tabla por defecto, y el gráfico recorta a 12 + Otros.
+  const rMuchos = await componer(page, { area: 'ventas', dim: 'cliente', med: 'base', rango: 'todo', tipo: 'auto' });
+  ok(rMuchos.tabla && !rMuchos.grafico, 'con más de 12 grupos sale la TABLA, no sesenta barras');
+  await page.screenshot({ path: path.join(SHOTS, 'dter-tabla.png') });
+  const rBarras = await componer(page, { area: 'ventas', dim: 'cliente', med: 'base', rango: 'todo', tipo: 'barras' });
+  ok(rBarras.barras > 0 && rBarras.barras <= 13, 'si el usuario pide barras, se pintan 12 + «Otros», no más',
+     rBarras.barras + ' barras');
+  ok(/Otros/.test(rBarras.nota) || rBarras.barras <= 12, '  y la nota lo dice', rBarras.nota.slice(0, 90));
+  ok(/tabla/i.test(rBarras.nota), '  con su enlace para verlo todo en tabla');
+  const etiquetas = await page.evaluate(() => { try { return Chart.getChart(document.getElementById('cChart')).data.labels; } catch { return []; } });
+  ok(!etiquetas.some(l => /GATE|ZZ |GD2-/.test(String(l))), 'NI UN NOMBRE DE GATE en el eje (era la mitad del eje)',
+     etiquetas.slice(0, 4).join(' · '));
+  await page.evaluate(() => document.getElementById('cardConstructor').scrollIntoView({ block: 'center' })); await dormir(600);
+  await page.screenshot({ path: path.join(SHOTS, 'dter-muchos-grupos.png') });
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n[6] PARTE 5 — LA AYUDA SE RECALCULA AL CAMBIAR DE ÁREA');
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  const ayudaDe = (area, dim, med) => page.evaluate(async (a, d, m) => {
+    const set = (id, v) => { const e = document.getElementById(id); e.value = v; e.dispatchEvent(new Event('change')); };
+    set('cArea', a); await new Promise(r => setTimeout(r, 1100));
+    if (d) { set('cDim', d); await new Promise(r => setTimeout(r, 400)); }
+    if (m) { set('cMed', m); await new Promise(r => setTimeout(r, 400)); }
+    return { med: document.getElementById('cMedAyuda').textContent, dim: document.getElementById('cDimAyuda').textContent };
+  }, area, dim, med);
+  const aV = await ayudaDe('ventas', 'cliente', 'base');
+  const aC = await ayudaDe('compras', 'proveedor', 'base');
+  ok(aV.dim !== aC.dim, 'la ayuda del reparto CAMBIA al cambiar de área', `«${aV.dim}» → «${aC.dim}»`);
+  ok(/cliente/i.test(aV.dim) && /proveedor/i.test(aC.dim), '  y nombra el campo de cada una');
+  const aM = await ayudaDe('ventas', 'cliente', 'margenPct');
+  ok(/sobre lo que/i.test(aM.med), 'la ayuda de la medida declara su base', aM.med);
+  // Ni un nombre interno en toda la pantalla.
+  const texto = await page.evaluate(() => document.getElementById('cardConstructor').innerText);
+  for (const t of ['margenPct', 'ticket_medio', 'pct_pendiente', 'horas_reservadas', 'propia_'])
+    ok(!texto.includes(t), `  ni un nombre interno en pantalla: «${t}»`);
+  ok(!(await page.evaluate(() => !!document.getElementById('cFormula'))), 'la caja de fórmulas ya no está en la pantalla');
+  ok(await page.evaluate(() => !!document.getElementById('cMisMedidas')), '  y en su sitio está «Mis medidas»');
+  ok(errores.length === 0, 'toda la sesión sin errores de JavaScript ni ventanitas', errores.join(' | ') || 'ninguno');
+
+  console.log('\n[7] Las once preguntas siguen funcionando, ahora con periodo');
+  const preg = await page.evaluate(async () => {
+    const bs = [...document.querySelectorAll('[data-preg]')];
+    const out = [];
+    for (let i = 0; i < bs.length; i++) {
+      window.scrollTo(0, 0); bs[i].click();
+      await new Promise(r => setTimeout(r, 1400));
+      const vis = id => { const e = document.getElementById(id); return !!e && e.offsetParent !== null; };
+      out.push({ t: bs[i].innerText.replace(/\s+/g, ' ').slice(0, 34), rango: document.getElementById('cRango').value,
+                 algo: vis('cNumeroWrap') || vis('cTablaWrap') || vis('cChartWrap') });
+    }
+    return out;
+  });
+  ok(preg.length === 11, 'siguen siendo once', preg.length + '');
+  ok(preg.every(p => p.algo), '  y las once contestan', preg.filter(p => !p.algo).map(p => p.t).join(' | ') || 'todas');
+  ok(preg.every(p => p.rango && p.rango !== 'todo'), '  con un periodo puesto, nunca el histórico entero',
+     [...new Set(preg.map(p => p.rango))].join(', '));
+  await page.close();
+
+  console.log('\n[8] Lo que no se ha roto');
+  for (const ruta of ['/admin', '/admin/vigia', '/admin/citas', '/admin/listados/clientes/imprimir']) {
+    const r = await fetch(BASE + ruta, { headers: { cookie: 'asess=' + token }, redirect: 'manual' });
+    ok(r.status === 200, `${ruta} responde`, 'got ' + r.status);
+  }
+  ok(fs.existsSync(path.join(SHOTS, 'dter-numero.png')) && fs.existsSync(path.join(SHOTS, 'dter-tabla.png'))
+     && fs.existsSync(path.join(SHOTS, 'dter-muchos-grupos.png')), 'las tres capturas están hechas', SHOTS);
+
+  try { borrarMedidaPropia(db, owner.id, mp.id); } catch {}
+} catch (e) {
+  fail++; console.error('\n✗ EXCEPCIÓN: ' + e.message + '\n' + e.stack);
+} finally {
+  // LO QUE UNA PRUEBA CREA, LA PRUEBA LO BORRA — por MARCA, no por las variables de esta pasada.
+  try { if (browser) await browser.close(); } catch {}
+  try {
+    db.prepare("DELETE FROM analytics_medidas WHERE nombre LIKE 'GD3-%'").run();
+    db.prepare("DELETE FROM analytics_panels  WHERE nombre LIKE 'GD3-%'").run();
+    db.prepare("DELETE FROM admin_sessions WHERE token LIKE '" + TOKEN_PREFIJO + "%'").run();
+  } catch (e) { console.error('  (limpieza incompleta: ' + e.message + ')'); }
+  try { db.close(); } catch {}
+}
+
+console.log(`\n${'─'.repeat(70)}\nRESULTADO: ${pass} ✓  ·  ${fail} ✗`);
+process.exit(fail === 0 ? 0 : 1);

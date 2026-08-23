@@ -191,8 +191,44 @@ Las cuatro reglas, en concreto:
    horas ahí, y **ninguna de 97 aserciones los vio, porque ninguna miraba**. Donde se pueda, se afirma
    sobre píxeles o sobre posiciones (`getBoundingClientRect`), no de oídas.
 
+5. **La pantalla se juzga MIRÁNDOLA CON DATOS REALES.** Antes de dar algo por terminado se abre con
+   los datos del negocio y se mira el resultado, no solo que no falle. **Un gráfico con sesenta
+   etiquetas encimadas no da error, y está mal.** La pregunta no es «¿responde?» sino **«¿esto sirve
+   para algo?»**.
+   De dónde sale (23 ago 2026, el mismo día): entregué la pantalla de informes con 59 ✓ · 0 ✗ y el
+   dueño la abrió y se encontró **ejes con 90 nombres**, la mitad de ellos *«GATE Tardío 1787050812»*
+   y *«ZZ Dormido (gate b3708e)»*; un informe de Contabilidad que salía con **cuarenta barras a cero**
+   porque no había forma de decir «este año»; y un grupo con fecha del **año 2000**. Ninguna aserción
+   falló, porque ninguna preguntaba si aquello se podía leer.
+
 Y la regla que las une: **una comprobación mide lo que mide.** Cuando dé verde, la pregunta no es
-«¿ha pasado?» sino **«¿ha pasado por donde pasa el dueño?»**.
+«¿ha pasado?» sino **«¿ha pasado por donde pasa el dueño?»** — y después, **«¿y lo que ve le sirve?»**.
+
+## Lo que una prueba crea, la prueba lo borra
+
+> **Una comprobación limpia SIEMPRE lo que ha creado: pase, falle o reviente. Lo que siembre va con
+> una marca reconocible y se borra en el `finally`, por esa marca y no por las variables de la pasada.
+> Un negocio no puede quedarse con basura de una prueba.**
+
+De dónde sale (23 ago 2026): el dueño abrió sus informes y los ejes estaban llenos de *«GATE Tardío
+1787050812»*, *«GATE FH Cliente»* y *«ZZ Dormido (gate b3708e)»*. Al medirlo: **200 de sus 239
+clientes eran restos de mis gates — el 84 %**. También 13 productos, 4 almacenes y un recurso.
+
+Y la parte cara, que es la lección de verdad: **no todo se pudo borrar.** 130 de esos 200 clientes
+tenían facturas, y **154 de esas facturas ya estaban en la cadena de VERI\*FACTU**. Borrarlos habría
+exigido borrar facturas de la cadena legal, que es exactamente lo que no se puede hacer. Hubo que
+**archivarlos** (`active=0`) y dejar dicho que sus nombres siguen apareciendo en el área de Ventas,
+porque la factura guarda el nombre del cliente por dentro. **La basura que una prueba deja hoy puede
+volverse imborrable mañana**: en cuanto se enreda con un documento legal, ya no hay marcha atrás.
+
+En concreto:
+- Todo lo que un gate cree lleva **prefijo reconocible** (`GATE …`, `ZZ …`, `… (gate <rid>)`) **y un
+  sufijo aleatorio por pasada**, para que no se enganche a lo que dejó la anterior.
+- La limpieza va en el **`finally`**, y **por la marca**, no por los ids de esa pasada: si el gate
+  muere a mitad, lo suyo se va igual.
+- Un gate que **no pueda** borrar lo que creó (porque quedó atado a una factura, a la contabilidad o a
+  la cadena) **no debe crearlo en ese negocio**: que se traiga su propio negocio (`EMPIEZAN_DE_CERO`).
+- Para el residuo que ya existe: `node scripts/limpiar-restos-de-gates.mjs` (simulacro por defecto).
 
 ## Un titular de recuento se corrige con el cuerpo que lo desarrolla
 

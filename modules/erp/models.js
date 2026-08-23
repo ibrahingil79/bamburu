@@ -1218,6 +1218,23 @@ export function runMigrations(db) {
     updated_at TEXT
   )`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_analytics_panels_user ON analytics_panels(user_id)`);
+  // ── FICHA D-ter · «MIS MEDIDAS» (aditiva, idempotente) ────────────────────────────────────────
+  // Sustituye a la caja de fórmulas que había en la pantalla del constructor. Un dueño no escribe
+  // expresiones: ELIGE de dos listas y una operación, y le pone nombre. Por eso aquí no se guarda
+  // texto libre sino las TRES piezas (medida A, operación, medida B) más si se multiplica por cien.
+  // Nada que compilar, nada que validar contra inyección: no hay expresión que interpretar.
+  db.exec(`CREATE TABLE IF NOT EXISTS analytics_medidas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    area TEXT NOT NULL,
+    nombre TEXT NOT NULL,
+    medida_a TEXT NOT NULL,
+    op TEXT NOT NULL DEFAULT '/',
+    medida_b TEXT NOT NULL,
+    por_cien INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_analytics_medidas_user ON analytics_medidas(user_id, area)`);
   // Paso 4b — COMPARTIR. Un panel compartido lo ven todos, pero guarda la RECETA, no los datos: al
   // abrirlo se vuelve a cruzar y se revalidan los permisos de HOY. Compartir la receta NO filtra — un
   // panel de Compras compartido no se abre para quien no tiene `purchases.read` (falla cerrado). Solo

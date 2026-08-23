@@ -47,7 +47,7 @@ export function filasVenta(db, { from = null, to = null } = {}) {
   if (!facturas.length) return [];
   const ph = facturas.map(() => '?').join(',');
   return db.prepare(
-    `SELECT ii.id, ii.quantity, ii.total_price AS base, ii.unit_cost, ii.product_id,
+    `SELECT ii.id, ii.invoice_id, ii.quantity, ii.total_price AS base, ii.unit_cost, ii.product_id,
             ii.description AS linea,
             i.issue_date, i.series, i.client_id, i.client_name, i.client_province,
             c.client_type, c.payment_method,
@@ -86,12 +86,18 @@ const AREA_VENTAS = {
     // la misma cosa dos veces y eran dos medidas distintas: una en euros y otra en porcentaje.
     beneficio: { etiqueta: 'Beneficio en euros',  dinero: true },
     margenPct: { etiqueta: 'Margen %',            dinero: false, pct: true },
+    // FICHA D-ter — MEDIDAS CON NOMBRE en vez de una caja de fórmulas. Un dueño no escribe cuentas:
+    // pide «el ticket medio». La cuenta la hace el programa, y así además sale bien ponderada (el
+    // total del grupo entre sus facturas, no la media de medias, que pondera mal).
+    facturas:     { etiqueta: 'Nº de facturas',    dinero: false },
+    ticket_medio: { etiqueta: 'Ticket medio',      dinero: true },
   },
   usaPeriodo: true,
-  nuevoAcc: clave => ({ clave, base: 0, unidades: 0, lineas: 0, coste: 0, _conCoste: 0, sinCoste: 0 }),
+  nuevoAcc: clave => ({ clave, base: 0, unidades: 0, lineas: 0, coste: 0, _conCoste: 0, sinCoste: 0, _fact: new Set() }),
   sumar: (a, f) => {
     const base = Number(f.base) || 0;
     a.base += base; a.unidades += Number(f.quantity) || 0; a.lineas++;
+    if (f.invoice_id != null) a._fact.add(f.invoice_id);
     // MISMA regla que `margenResumen`: sin coste conocido NO es margen del 100 %, se aparta.
     if (f.unit_cost == null) a.sinCoste += base;
     else { a._conCoste += base; a.coste += (Number(f.unit_cost) || 0) * (Number(f.quantity) || 0); }
@@ -110,6 +116,9 @@ const AREA_VENTAS = {
       else if (m === 'beneficio') o.beneficio = mg.euros;
       // El titular obedece al ajuste de empresa; las dos cifras viajan igualmente en `o.margen`.
       else if (m === 'margenPct') o.margenPct = modoMargen === 'coste' ? mg.pctCoste : mg.pctVenta;
+      else if (m === 'facturas') o.facturas = a._fact.size;
+      // El ticket medio del GRUPO = lo facturado del grupo / sus facturas. No la media de medias.
+      else if (m === 'ticket_medio') o.ticket_medio = a._fact.size ? r2(a.base / a._fact.size) : null;
     }
     o.sinCoste = r2(a.sinCoste);
     o.margen = mg;
@@ -150,6 +159,7 @@ const AREA_COMPRAS = {
     base:      { etiqueta: 'Comprado (sin IVA)', dinero: true },
     facturas:  { etiqueta: 'Nº de facturas',     dinero: false },
     pendiente: { etiqueta: 'Pendiente de pago',  dinero: true },
+    pct_pendiente: { etiqueta: '% pendiente de pago', dinero: false, pct: true },
   },
   usaPeriodo: true,
   nuevoAcc: clave => ({ clave, base: 0, facturas: 0, pendiente: 0 }),
@@ -160,6 +170,7 @@ const AREA_COMPRAS = {
       if (m === 'base') o.base = r2(a.base);
       else if (m === 'facturas') o.facturas = a.facturas;
       else if (m === 'pendiente') o.pendiente = r2(a.pendiente);
+      else if (m === 'pct_pendiente') o.pct_pendiente = a.base ? r2(a.pendiente / a.base * 100) : null;
     }
     return o;
   },
@@ -201,8 +212,16 @@ const AREA_CLIENTES = {
     deuda:        { etiqueta: 'Deuda pendiente',      dinero: true },
     compras:      { etiqueta: 'Nº de compras',        dinero: false },
     ticket_medio: { etiqueta: 'Ticket medio',         dinero: true },
+    facturacion_media: { etiqueta: 'Facturación media por cliente', dinero: true },
+    deuda_media:       { etiqueta: 'Deuda media por cliente',       dinero: true },
   },
   usaPeriodo: false,
+  // FICHA D-ter — «Nº de clientes» repartido por «Cliente» da un 1 en cada grupo: no dice nada, y
+  // con 90 clientes son 90 barras de altura 1. Se QUITA de la lista en vez de dejar que se elija y
+  // dar un error después. Se declara aquí, junto al área, porque es una propiedad suya: la medida
+  // cuenta el grano y la dimensión ES el grano. Es la única del catálogo con esa forma — se buscó
+  // en las seis áreas ejecutando cada par (33 dimensiones × sus medidas) y comprobando el resultado.
+  sinSentido: [['cliente', 'clientes']],
   nuevoAcc: clave => ({ clave, clientes: 0, facturado: 0, deuda: 0, compras: 0 }),
   sumar: (a, f) => { a.clientes++; a.facturado += Number(f.facturado) || 0; a.deuda += Number(f.deuda) || 0; a.compras += Number(f.compras) || 0; },
   salida: (a, meds) => {
@@ -215,6 +234,8 @@ const AREA_CLIENTES = {
       // El ticket medio del GRUPO = facturación del grupo / nº de compras del grupo. NO la media de
       // medias (que pondera mal): un cliente con una compra grande no debe pesar igual que 20 chicas.
       else if (m === 'ticket_medio') o.ticket_medio = a.compras ? r2(a.facturado / a.compras) : null;
+      else if (m === 'facturacion_media') o.facturacion_media = a.clientes ? r2(a.facturado / a.clientes) : null;
+      else if (m === 'deuda_media') o.deuda_media = a.clientes ? r2(a.deuda / a.clientes) : null;
     }
     return o;
   },
@@ -323,6 +344,7 @@ const AREA_CONTABILIDAD = {
     resultado: { etiqueta: 'Resultado (beneficio)', dinero: true },
     ingresos:  { etiqueta: 'Ingresos',              dinero: true },
     gastos:    { etiqueta: 'Gastos',                dinero: true },
+    margen_pct:{ etiqueta: 'Margen sobre ingresos (%)', dinero: false, pct: true },
   },
   usaPeriodo: true,
   nuevoAcc: clave => ({ clave, resultado: 0, ingresos: 0, gastos: 0 }),
@@ -337,6 +359,7 @@ const AREA_CONTABILIDAD = {
       if (m === 'resultado') o.resultado = r2(a.resultado);
       else if (m === 'ingresos') o.ingresos = r2(a.ingresos);
       else if (m === 'gastos') o.gastos = r2(a.gastos);
+      else if (m === 'margen_pct') o.margen_pct = a.ingresos ? r2(a.resultado / a.ingresos * 100) : null;
     }
     return o;
   },
@@ -440,6 +463,8 @@ const AREA_AGENDA = {
     horas_ocupadas:   { etiqueta: 'Horas ocupadas del horario',  dinero: false, capacidad: true },
     horas_libres:     { etiqueta: 'Horas libres',                dinero: false, capacidad: true },
     ocupacion_pct:    { etiqueta: '% de ocupación',              dinero: false, pct: true, capacidad: true },
+    pct_ausencias:    { etiqueta: '% de ausencias',              dinero: false, pct: true },
+    duracion_media:   { etiqueta: 'Duración media de la cita (h)', dinero: false },
   },
   // Las cuatro de capacidad SOLO con estas dos dimensiones. Ver la nota de arriba.
   dimsCapacidad: ['fecha', 'persona'],
@@ -465,6 +490,8 @@ const AREA_AGENDA = {
       else if (m === 'ingresos') o.ingresos = r2(a.ingresos);
       else if (m === 'anuladas') o.anuladas = a.anuladas;
       else if (m === 'ausencias') o.ausencias = a.ausencias;
+      else if (m === 'pct_ausencias') o.pct_ausencias = a.citas ? r2(a.ausencias / a.citas * 100) : null;
+      else if (m === 'duracion_media') o.duracion_media = a.citas ? h(a.min_reservados / a.citas) : null;
       // Las de capacidad vienen del segundo grano. Sin capacidad para ese grupo → null, que la
       // pantalla pinta como hueco. NUNCA cero: cero significa «cerrado», y no saberlo no es cerrar.
       else if (m === 'horas_abiertas') o.horas_abiertas = cap ? h(cap.abierto) : null;
@@ -523,6 +550,42 @@ export const MEDIDAS = AREA_VENTAS.medidas;
 // Qué áreas puede el usuario, y dentro de cada una qué campos. `hasPerm` gatea: un área sin su permiso
 // base NO se ofrece, y dentro, un campo con `perm` propio se esconde si no lo tiene. Es cortesía: el
 // servidor lo revalida en `cruzar` — el desplegable filtrado nunca es el candado.
+// ── FICHA D-ter · PARTE 2 — EL PERIODO, que no existía ────────────────────────────────────────
+// Hasta hoy no había forma de decir «este año»: los informes salían con TODO el histórico, y eso es
+// lo que convertía Contabilidad en cuarenta barras a cero y sacaba a pasear un grupo con fecha del
+// año 2000 (el stock de apertura). Los rangos se calculan AQUÍ, en el servidor, para que la fecha
+// del navegador del usuario no pueda dar un informe distinto del que sale en el papel.
+//
+// POR DEFECTO: `12m`, los últimos doce meses. NUNCA el histórico entero.
+export const RANGOS = {
+  '12m':       'Últimos 12 meses',
+  mes:         'Este mes',
+  trimestre:   'Este trimestre',
+  anio:        'Este año',
+  anio_pasado: 'El año pasado',
+  todo:        'Todo el histórico',
+  entre:       'Entre dos fechas',
+};
+export const RANGO_POR_DEFECTO = '12m';
+const iso = d => d.toISOString().slice(0, 10);
+export function rangoDeFechas(clave, { desde = null, hasta = null, hoy = new Date() } = {}) {
+  const y = hoy.getUTCFullYear(), m = hoy.getUTCMonth();
+  switch (clave) {
+    case 'mes':         return { from: iso(new Date(Date.UTC(y, m, 1))), to: iso(hoy) };
+    case 'trimestre':   return { from: iso(new Date(Date.UTC(y, Math.floor(m / 3) * 3, 1))), to: iso(hoy) };
+    case 'anio':        return { from: iso(new Date(Date.UTC(y, 0, 1))), to: iso(hoy) };
+    case 'anio_pasado': return { from: iso(new Date(Date.UTC(y - 1, 0, 1))), to: iso(new Date(Date.UTC(y - 1, 11, 31))) };
+    case 'todo':        return { from: null, to: null };
+    case 'entre':       return { from: desde || null, to: hasta || null };
+    // 12m y cualquier cosa rara: los últimos doce meses. Nunca el histórico por accidente.
+    default:            return { from: iso(new Date(Date.UTC(y, m - 11, 1))), to: iso(hoy) };
+  }
+}
+export function etiquetaRango(clave, { desde = null, hasta = null } = {}) {
+  if (clave === 'entre') return 'Entre ' + (desde || '…') + ' y ' + (hasta || '…');
+  return RANGOS[clave] || RANGOS[RANGO_POR_DEFECTO];
+}
+
 export function areasPara(hasPerm) {
   const out = {};
   for (const [k, a] of Object.entries(AREAS)) if (!a.perm || hasPerm(a.perm)) out[k] = { etiqueta: a.etiqueta };
@@ -531,7 +594,44 @@ export function areasPara(hasPerm) {
 // `modo` es el ajuste de margen de la empresa (G2). Se usa SOLO para nombrar la medida "Margen %"
 // con su base: un porcentaje llamado "Margen %" a secas es exactamente el fallo que esta tarea viene
 // a cerrar. La cuenta no cambia por esto; el nombre, sí.
-export function camposPara(hasPerm, areaKey = 'ventas', modo = MODO_POR_DEFECTO) {
+// FICHA D-ter — LAS MEDIDAS PROPIAS. Tres piezas elegidas de listas, nunca una expresión escrita.
+// `op` se valida contra esta tabla cerrada: lo que no esté aquí no se calcula.
+export const OPERACIONES = {
+  '/': { etiqueta: 'dividido entre', calc: (a, b) => (b ? a / b : null) },
+  '-': { etiqueta: 'menos',          calc: (a, b) => a - b },
+  '+': { etiqueta: 'más',            calc: (a, b) => a + b },
+  '*': { etiqueta: 'por',            calc: (a, b) => a * b },
+};
+export function listarMedidasPropias(db, userId, area = null) {
+  const w = area ? ' AND area=?' : '';
+  const args = area ? [userId, area] : [userId];
+  return db.prepare('SELECT id,area,nombre,medida_a,op,medida_b,por_cien FROM analytics_medidas WHERE user_id=?' + w + ' ORDER BY id').all(...args)
+    .map(m => ({ ...m, clave: 'propia_' + m.id, por_cien: !!m.por_cien }));
+}
+export function guardarMedidaPropia(db, userId, { area, nombre, medida_a, op, medida_b, por_cien }) {
+  const A = AREAS[area];
+  if (!A) { const e = new Error('Esa área no existe'); e.status = 400; throw e; }
+  const n = String(nombre || '').trim();
+  if (!n) { const e = new Error('Ponle un nombre a tu medida'); e.status = 400; throw e; }
+  if (!A.medidas[medida_a] || !A.medidas[medida_b]) { const e = new Error('Elige dos medidas del área'); e.status = 400; throw e; }
+  if (!OPERACIONES[op]) { const e = new Error('Esa operación no existe'); e.status = 400; throw e; }
+  // Una medida de CAPACIDAD solo vale en dos dimensiones: mezclarla en una propia la haría aparecer
+  // en todas, y eso es justo el número inventado que el área de Agenda evita.
+  if (A.medidas[medida_a].capacidad || A.medidas[medida_b].capacidad) {
+    const e = new Error('Las medidas del horario (horas abiertas, libres, ocupadas y % de ocupación) no se pueden combinar: solo valen repartidas por fecha o por persona.');
+    e.status = 400; throw e;
+  }
+  const r = db.prepare('INSERT INTO analytics_medidas (user_id,area,nombre,medida_a,op,medida_b,por_cien) VALUES (?,?,?,?,?,?,?)')
+    .run(userId, area, n, medida_a, op, medida_b, por_cien ? 1 : 0);
+  return { id: r.lastInsertRowid };
+}
+export function borrarMedidaPropia(db, userId, id) {
+  const r = db.prepare('DELETE FROM analytics_medidas WHERE id=? AND user_id=?').run(id, userId);
+  if (!r.changes) { const e = new Error('Esa medida no existe'); e.status = 404; throw e; }
+  return { ok: true };
+}
+
+export function camposPara(hasPerm, areaKey = 'ventas', modo = MODO_POR_DEFECTO, propias = []) {
   const a = AREAS[areaKey]; if (!a) return { dimensiones: {}, medidas: {}, graficos: TIPOS_GRAFICO };
   const usa = MODOS[modo] ? modo : MODO_POR_DEFECTO;
   const dims = {}, meds = {};
@@ -547,6 +647,18 @@ export function camposPara(hasPerm, areaKey = 'ventas', modo = MODO_POR_DEFECTO)
     // Se declara aquí para que el desplegable la esconda donde no vale. Es cortesía: el candado de
     // verdad está en `cruzar`, que responde 400 si alguien fuerza la combinación por la API.
     if (m.capacidad) meds[k].soloCon = a.dimsCapacidad || [];
+    // FICHA D-ter — y las que no dicen nada se declaran para que el desplegable las esconda en
+    // esa dimensión concreta, en vez de dejar elegirlas y contestar con un error.
+    const nunca = (a.sinSentido || []).filter(([, mk]) => mk === k).map(([dk]) => dk);
+    if (nunca.length) meds[k].nuncaCon = nunca;
+  }
+  // Las propias del usuario entran como una medida más de «quiero saber», ya calculada.
+  for (const p of (propias || [])) {
+    if (p.area !== areaKey) continue;
+    if (!a.medidas[p.medida_a] || !a.medidas[p.medida_b]) continue;   // el área cambió: se ignora
+    meds[p.clave] = { etiqueta: p.nombre, dinero: false, pct: !!p.por_cien, propia: true,
+      ayuda: (a.medidas[p.medida_a].etiqueta) + ' ' + (OPERACIONES[p.op] || {}).etiqueta + ' '
+             + (a.medidas[p.medida_b].etiqueta) + (p.por_cien ? ' por cien' : '') };
   }
   return { dimensiones: dims, medidas: meds, graficos: TIPOS_GRAFICO, usaPeriodo: !!a.usaPeriodo, modoMargen: usa };
 }
@@ -555,7 +667,10 @@ export function camposPara(hasPerm, areaKey = 'ventas', modo = MODO_POR_DEFECTO)
 // Genérico: agrupa las filas del área por la dimensión y acumula las medidas con los ganchos del área.
 // `area` por defecto 'ventas' → los llamadores del paso 4a (sin `area`) siguen funcionando igual.
 export function cruzar(db, { area = 'ventas', dimension = 'fecha', medidas = ['base'], periodo = 'mes',
-                            filtros = {}, from = null, to = null, limit = 100, formula = null, hasPerm } = {}) {
+                            filtros = {}, from = null, to = null, limit = 100, formula = null, hasPerm,
+                            // FICHA D-ter — el RANGO con nombre. Si viene, manda sobre from/to.
+                            rango = null, desde = null, hasta = null, propias = [] } = {}) {
+  if (rango) { const r = rangoDeFechas(rango, { desde, hasta }); from = r.from; to = r.to; }
   // G2 — qué porcentaje manda como TITULAR en esta empresa. No cambia ninguna cuenta: `margen` sigue
   // llevando las dos cifras en cada fila; esto solo decide cuál se copia a `margenPct`.
   const modoMargen = modoDeEmpresa(db);
@@ -564,8 +679,23 @@ export function cruzar(db, { area = 'ventas', dimension = 'fecha', medidas = ['b
   if (A.perm && hasPerm && !hasPerm(A.perm)) { const e = new Error('No tienes permiso para el área ' + A.etiqueta.toLowerCase()); e.status = 403; throw e; }
   const dim = A.dimensiones[dimension];
   if (!dim) { const e = new Error('No sé cruzar "' + area + '" por "' + dimension + '"'); e.status = 400; throw e; }
+  // Lo que no dice nada no se contesta: se explica. (El desplegable ya no lo ofrece; esto es el cierre.)
+  for (const [dk, mk] of (A.sinSentido || [])) {
+    if (dimension === dk && (Array.isArray(medidas) ? medidas : [medidas]).includes(mk)) {
+      const e = new Error('«' + A.medidas[mk].etiqueta + '» repartido por «' + A.dimensiones[dk].etiqueta
+        + '» daría un 1 en cada grupo: no dice nada. Elige otra cosa que medir, o reparte por otro campo.');
+      e.status = 400; throw e;
+    }
+  }
   if (dim.perm && hasPerm && !hasPerm(dim.perm)) { const e = new Error('No tienes permiso para cruzar por ' + dim.etiqueta.toLowerCase()); e.status = 403; throw e; }
-  const meds = (Array.isArray(medidas) ? medidas : [medidas]).filter(m => A.medidas[m]);
+  // FICHA D-ter — las MEDIDAS PROPIAS del usuario. No son del catálogo del área, así que se resuelven
+  // aparte: se piden sus dos ingredientes al motor y la cuenta se hace al final, con la operación de
+  // la tabla cerrada `OPERACIONES`. No se interpreta ninguna expresión.
+  const pedidas = (Array.isArray(medidas) ? medidas : [medidas]);
+  const propiasPedidas = (propias || []).filter(p => p.area === area && pedidas.includes(p.clave)
+    && A.medidas[p.medida_a] && A.medidas[p.medida_b] && OPERACIONES[p.op]);
+  const ingredientes = [...new Set(propiasPedidas.flatMap(p => [p.medida_a, p.medida_b]))];
+  const meds = [...new Set(pedidas.filter(m => A.medidas[m]).concat(ingredientes))];
   if (!meds.length) { const e = new Error('Elige al menos una medida'); e.status = 400; throw e; }
   // FICHA D — EL CANDADO DE LAS MEDIDAS DE CAPACIDAD. Una hora libre no tiene cliente ni servicio:
   // pedirla agrupada por ahí no es un error del usuario, es una pregunta sin respuesta. Se contesta
@@ -620,16 +750,39 @@ export function cruzar(db, { area = 'ventas', dimension = 'fecha', medidas = ['b
   const filas = [...map.values()].map(acc => {
     const fila = A.salida(acc, medsSalida, modoMargen, cap ? cap.mapa.get(acc.clave) : null);
     if (rpn) fila.calculo = evalRPN(rpn, fila);   // el cálculo propio, sobre las medidas del grupo
+    for (const p of propiasPedidas) {
+      const a1 = Number(fila[p.medida_a]), b1 = Number(fila[p.medida_b]);
+      const v1 = (Number.isFinite(a1) && Number.isFinite(b1)) ? OPERACIONES[p.op].calc(a1, b1) : null;
+      fila[p.clave] = v1 == null ? null : r2(v1 * (p.por_cien ? 100 : 1));
+    }
     return fila;
   });
+  // FICHA D-ter — UN GRUPO VACÍO NO SE PINTA. Un mes sin nada no ocupa sitio en el eje. Se mide
+  // sobre las medidas PEDIDAS: si todas son nulas o cero, el grupo no aporta. (Un null es «no se
+  // sabe» y un 0 es «nada»: en los dos casos la barra no existe y solo estorba.) La única excepción
+  // es que TODOS los grupos estén vacíos — entonces se dejan, porque «todo a cero» sí es una
+  // respuesta y borrarla dejaría un lienzo mudo sin explicar.
+  const mirar = pedidas.filter(m => A.medidas[m] || propiasPedidas.some(p => p.clave === m));
+  const conAlgo = filas.filter(f => (mirar.length ? mirar : meds).some(m => f[m] != null && Number(f[m]) !== 0));
+  const filasFinales = conAlgo.length ? conAlgo : filas;
+  const vacios = filas.length - filasFinales.length;
+  filas.length = 0; filas.push(...filasFinales);
   const ord = rpn ? 'calculo' : A.ordenar;
   // Por fecha, orden cronológico (una serie temporal desordenada no es una serie). Por lo demás, de
   // mayor a menor según la medida de referencia del área (ranking).
   filas.sort((a, b) => dimension === 'fecha' ? (a.clave < b.clave ? -1 : 1) : ((b[ord] ?? 0) - (a[ord] ?? 0)));
 
   return {
-    area, dimension, dimensionEtiqueta: dim.etiqueta, medidas: meds, periodo, usaPeriodo: !!A.usaPeriodo,
+    area, dimension, dimensionEtiqueta: dim.etiqueta,
+    // Se devuelven las que el usuario PIDIÓ, no los ingredientes que hubo que calcular por dentro.
+    medidas: pedidas.filter(m => A.medidas[m] || propiasPedidas.some(p => p.clave === m)),
+    periodo, usaPeriodo: !!A.usaPeriodo,
     calculo: !!rpn,
+    // Lo que se recortó y con qué ventana, para que la pantalla y el papel lo puedan declarar.
+    gruposVacios: vacios,
+    rango: rango || null,
+    rangoEtiqueta: rango ? etiquetaRango(rango, { desde, hasta }) : null,
+    ventana: (from || to) ? { desde: from, hasta: to } : null,
     filas: filas.slice(0, limit), truncado: filas.length > limit,
     aviso: A.aviso ? A.aviso(map, meds) : null,
     // La ventana que se recorrió para la capacidad. Unas «horas libres» sin decir de qué periodo son

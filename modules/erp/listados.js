@@ -30,7 +30,7 @@
 import { dinero, graficoSvg } from './impresion.js';
 // FICHA D · PARTE 4 — el informe compuesto sale del MISMO motor del constructor que lo pinta en
 // pantalla (`cruzar`), no de una consulta hecha aquí: por eso el papel no puede dar otra cifra.
-import { cruzar, panelVisible, areaPerm, AREAS } from './constructor-analitica.js';
+import { cruzar, panelVisible, areaPerm, AREAS, listarMedidasPropias, etiquetaRango } from './constructor-analitica.js';
 import { kardex } from './stock.js';
 import { backfillLedger, libroVentas, libroCompras, libroDiario, libroMayor } from './contabilidad.js';
 import { ventasAsientos, comprasAsientos } from './contabilidad-export.js';
@@ -246,9 +246,13 @@ function cruceDePanel(db, q) {
   const p = panelDe(q, db);
   const cfg = p.config || {};
   const medida = (cfg.medidas && cfg.medidas[0]) || 'citas';
+  let propias = [];
+  try { propias = listarMedidasPropias(db, q._userId); } catch { propias = []; }
   const r = cruzar(db, {
-    area: cfg.area, dimension: cfg.dimension, medidas: [medida], periodo: cfg.periodo || 'mes',
+    area: cfg.area, dimension: cfg.dimension, medidas: cfg.medidas || [medida], periodo: cfg.periodo || 'mes',
     filtros: cfg.filtros || {}, formula: cfg.formula || null, limit: 100000, hasPerm: q._hasPerm,
+    // FICHA D-ter — el PERIODO viaja en la receta y se declara en la cabecera del papel.
+    rango: cfg.rango || null, desde: cfg.desde || null, hasta: cfg.hasta || null, propias,
   });
   const clave = r.calculo ? 'calculo' : medida;
   const meta = r.calculo
@@ -278,6 +282,10 @@ const LISTADO_PANEL = {
     }
     // La ventana que se recorrió para la capacidad — sin ella, unas «horas libres» no declaran su base.
     if (cruce.capacidad) f.push({ etiqueta: 'Ventana medida', valor: cruce.capacidad.desde + ' a ' + cruce.capacidad.hasta });
+    // EL PERIODO SE ESCRIBE EN LA CABECERA. Un informe que no dice de qué periodo es, miente.
+    f.push({ etiqueta: 'Periodo', valor: cruce.rangoEtiqueta || etiquetaRango(cfg.rango || null, cfg)
+      + (cruce.ventana ? ' (' + cruce.ventana.desde + ' a ' + cruce.ventana.hasta + ')' : '') });
+    if (cruce.gruposVacios) f.push({ etiqueta: 'Sin datos', valor: cruce.gruposVacios + ' grupos vacíos no se listan' });
     return f;
   },
   columnas: (q, db) => {

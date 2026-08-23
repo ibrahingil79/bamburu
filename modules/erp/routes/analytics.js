@@ -12,6 +12,7 @@ import { hoyLocal } from '../avisos.js';    // fecha local Europe/Madrid (en UTC
 import { planFinanciero, fijarObjetivo } from '../plan-financiero.js';   // PASO 3 · bloque 2: objetivos vs. real
 import { logActivity } from '../../../core/auth.js';
 import { ENTITY } from '../../../core/activity-entities.js';
+import { listarMedidasPropias, guardarMedidaPropia, borrarMedidaPropia, OPERACIONES, RANGOS, RANGO_POR_DEFECTO } from '../constructor-analitica.js';
 import { camposPara, cruzar, guardarPanel, listarPaneles, borrarPanel, areasPara, areaPerm,
          areasComparables, compararEnTiempo } from '../constructor-analitica.js';   // PASO 4a/4a-bis/4b: la puerta visual
 import { modoDeEmpresa } from '../margen.js';   // G2: qué porcentaje manda como titular
@@ -177,11 +178,31 @@ export function createAnalyticsRoutes(db, cfg = {}) {
     catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
   });
 
+  // FICHA D-ter — las medidas PROPIAS del usuario, que entran en «quiero saber» como una más.
+  const propiasDe = c => { try { return listarMedidasPropias(db, c.get('session')?.userId); } catch { return []; } };
+  api.get('/constructor/medidas', requirePerm('analytics.read'), c => {
+    try { return c.json({ medidas: propiasDe(c), operaciones: Object.entries(OPERACIONES).map(([v, o]) => ({ v, t: o.etiqueta })) }); }
+    catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
+  });
+  api.post('/constructor/medidas', requirePerm('analytics.read'), async c => {
+    try {
+      const d = await c.req.json();
+      exigeArea(c, d.area);
+      guardarMedidaPropia(db, c.get('session')?.userId, d);
+      return c.json({ ok: true, medidas: propiasDe(c) });
+    } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
+  });
+  api.delete('/constructor/medidas/:id', requirePerm('analytics.read'), c => {
+    try { borrarMedidaPropia(db, c.get('session')?.userId, c.req.param('id'));
+      return c.json({ ok: true, medidas: propiasDe(c) }); }
+    catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
+  });
+
   api.get('/constructor/campos', requirePerm('analytics.read'), c => {
     try {
       const area = c.req.query('area') || 'ventas';
       exigeArea(c, area);
-      return c.json(camposPara(permDe(c), area, modoDeEmpresa(db)));
+      return c.json(camposPara(permDe(c), area, modoDeEmpresa(db), propiasDe(c)));
     } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
   });
 
@@ -189,7 +210,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
     try {
       const d = await c.req.json();
       exigeArea(c, d.area);   // el área base; los campos los revalida cruzar()
-      return c.json(cruzar(db, { ...d, hasPerm: permDe(c) }));
+      return c.json(cruzar(db, { ...d, propias: propiasDe(c), hasPerm: permDe(c) }));
     } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
   });
 
@@ -560,36 +581,50 @@ export function createAnalyticsRoutes(db, cfg = {}) {
               <span class="fr-a">el área del negocio</span></span>
             <span class="fr-t">quiero saber</span>
             <span class="fr-c"><select class="form-control" id="cMed"></select>
-              <span class="fr-a">el número que quieres ver</span></span>
+              <span class="fr-a" id="cMedAyuda">el número que quieres ver</span></span>
             <span class="fr-t">, repartido por</span>
             <span class="fr-c"><select class="form-control" id="cDim"></select>
-              <span class="fr-a">en qué grupos quieres separar los datos</span></span>
+              <span class="fr-a" id="cDimAyuda">en qué grupos quieres separar los datos</span></span>
+            <span class="fr-t">,</span>
+            <!-- FICHA D-ter · PARTE 2 — EL PERIODO, que no existía. Sin él los informes salían con
+                 TODO el histórico: cuarenta barras a cero en Contabilidad y un grupo del año 2000
+                 (el stock de apertura). Por defecto, los últimos 12 meses. Nunca el histórico. -->
+            <span class="fr-c"><select class="form-control" id="cRango"></select>
+              <span class="fr-a">de qué periodo</span></span>
+            <span class="fr-c" id="cEntreWrap" style="display:none;flex-direction:row;gap:.35rem;align-items:flex-start">
+              <input type="date" class="form-control" id="cDesde" style="width:auto">
+              <input type="date" class="form-control" id="cHasta" style="width:auto"></span>
             <span class="fr-t" id="cPeriodoComa">,</span>
             <span class="fr-c" id="cPeriodoWrap"><select class="form-control" id="cPeriodo">
                 <option value="mes">mes a mes</option><option value="trimestre">por trimestres</option><option value="anio">año por año</option>
               </select><span class="fr-a">el paso del tiempo</span></span>
             <span class="fr-t">, y verlo en</span>
             <span class="fr-c"><select class="form-control" id="cTipo">
-                <option value="barras">barras</option><option value="lineas">una línea</option>
-                <option value="tarta">un quesito</option><option value="tabla">una tabla</option>
+                <option value="auto">lo que mejor se lea</option>
+                <option value="numero">un número</option>
+                <option value="tabla">una tabla</option>
+                <option value="barras">barras</option>
+                <option value="lineas">una línea</option>
+                <option value="tarta">un quesito</option>
               </select><span class="fr-a">la forma del dibujo</span></span>
             <span class="fr-t">.</span>
           </div>
 
-          <details id="cAvanzado" style="margin-top:.9rem">
-            <summary style="cursor:pointer;font-size:.8rem;color:var(--text2);font-weight:600">Opciones avanzadas</summary>
-            <div style="padding:.7rem 0 0">
-              <label class="form-label" style="display:flex;align-items:center;gap:.5rem">
-                <input type="checkbox" id="cCalcOn" style="width:15px;height:15px"> Calcular algo con esos números</label>
-              <div style="font-size:.74rem;color:var(--muted);margin-top:.2rem">
-                Una cuenta con las cifras de arriba. Por ejemplo, dividir una entre otra para sacar un porcentaje.</div>
-              <input class="form-control" id="cFormula" style="display:none;margin-top:.45rem;font-family:ui-monospace,monospace">
-              <div id="cFormulaAyuda" style="display:none;font-size:.74rem;color:var(--muted);margin-top:.25rem"></div>
-            </div>
-          </details>
+          <!-- FICHA D-ter · PARTE 1 — LA CAJA DE FÓRMULAS SE VA DE AQUÍ. Un dueño de negocio no
+               escribe expresiones. Las cuentas que se piden a diario son ahora MEDIDAS CON NOMBRE
+               dentro de «quiero saber» (ticket medio, margen en %, % de ocupación, % de ausencias,
+               facturación media por cliente, % pendiente de pago, duración media de la cita…), ya
+               calculadas. Y quien quiera la suya la construye ELIGIENDO de listas, ahí abajo, en
+               «Mis medidas». Nunca se teclea una fórmula, y no queda un solo nombre interno. -->
+          <div id="cMisMedidas" style="margin-top:.9rem;font-size:.78rem;color:var(--muted)"></div>
 
           <div id="cAviso" style="display:none;margin:.6rem 0"></div>
+          <div id="cNota" style="display:none;font-size:.74rem;color:var(--muted);margin:.5rem 0"></div>
           <div id="cVacio" style="display:none;font-size:.82rem;color:var(--muted);margin:.6rem 0"></div>
+          <div id="cNumeroWrap" style="display:none;text-align:center;padding:2.2rem 0">
+            <div id="cNumero" style="font-size:3.2rem;font-weight:700;line-height:1.1;color:var(--text)">—</div>
+            <div id="cNumeroPie" style="font-size:.85rem;color:var(--muted);margin-top:.5rem"></div>
+          </div>
           <div id="cChartWrap" style="height:280px;margin-top:.75rem"><canvas id="cChart"></canvas></div>
           <div id="cTablaWrap" style="display:none;margin-top:.75rem"></div>
         </div>
@@ -683,7 +718,10 @@ export function createAnalyticsRoutes(db, cfg = {}) {
       // Medidas EXTRA de la receta actual: solo se llena cuando una pregunta pide más de una
       // («trabajadas frente a abiertas»). Al tocar cualquier desplegable se vacía, porque a partir
       // de ahí manda lo que el usuario ha elegido a mano.
-      let medidasExtra=null, cAreasCache=null;
+      let medidasExtra=null, cAreasCache=null, cPropias=[];
+      const RANGOS=${JSON.stringify(RANGOS)};
+      const RANGO_DEF=${JSON.stringify(RANGO_POR_DEFECTO)};
+      const TOPE_GRUPOS=12;   // más de doce barras con sus nombres encimados no se leen
       const TEXTO_VACIO='Todavía no hay datos para responder a esto. En cuanto los haya, el gráfico se llena solo.';
 
       // PASO 2 — RENTABILIDAD. La regla de esta vista: lo que no se sabe se dice, no se rellena.
@@ -948,10 +986,18 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         if(!cCampos||!cCampos.medidas) return;
         const dim=document.getElementById('cDim').value;
         const sel=document.getElementById('cMed'), antes=sel.value;
-        const validas=Object.entries(cCampos.medidas).filter(([,v])=>!v.soloCon||v.soloCon.includes(dim));
+        // Fuera las de capacidad donde no valen, y fuera las que no dicen nada en esta dimension.
+        const validas=Object.entries(cCampos.medidas).filter(([,v])=>
+          (!v.soloCon||v.soloCon.includes(dim)) && !(v.nuncaCon&&v.nuncaCon.includes(dim)));
         sel.innerHTML=validas.map(([k,v])=>'<option value="'+k+'">'+escHtml(v.etiqueta)+'</option>').join('');
         // Si la que estaba elegida ya no vale, se cae a la primera y se dice por qué.
         if(validas.some(([k])=>k===antes)) sel.value=antes;
+        refrescarAyudas();
+        if(validas.some(([k])=>k===antes)) { /* seguía valiendo */ }
+        else if(antes&&cCampos.medidas[antes]&&cCampos.medidas[antes].nuncaCon&&cCampos.medidas[antes].nuncaCon.includes(dim)){
+          const et=(cCampos.dimensiones[dim]||{}).etiqueta||dim;
+          toast('«'+cCampos.medidas[antes].etiqueta+'» repartido por '+String(et).toLowerCase()+' daría un 1 en cada grupo: no dice nada.');
+        }
         else if(antes&&cCampos.medidas[antes]&&cCampos.medidas[antes].soloCon){
           const et=(cCampos.dimensiones[dim]||{}).etiqueta||dim;
           toast('«'+cCampos.medidas[antes].etiqueta+'» se mide sobre el horario, no sobre cada cita: no se puede repartir por '+String(et).toLowerCase()+'.');
@@ -959,69 +1005,121 @@ export function createAnalyticsRoutes(db, cfg = {}) {
       }
       function engancharConstructor(){
         // Listeners UNA sola vez (los <select> conservan su listener aunque cambien sus <option>).
-        for(const id of ['cPeriodo','cMed','cTipo']) document.getElementById(id).addEventListener('change',dibujar);
+        for(const id of ['cPeriodo','cTipo']) document.getElementById(id).addEventListener('change',dibujar);
+        document.getElementById('cMed').addEventListener('change',()=>{ refrescarAyudas(); dibujar(); });
         // La dimensión primero recalcula qué medidas valen (ver rellenarMedidas) y luego dibuja.
         document.getElementById('cDim').addEventListener('change',()=>{ rellenarMedidas(); dibujar(); });
         document.getElementById('cArea').addEventListener('change',async e=>{
           cArea=e.target.value;
           cCampos=await api('GET','/api/erp/analytics/constructor/campos?area='+cArea).catch(()=>null);
-          rellenarCampos(); dibujar();
+          rellenarCampos(); pintarMisMedidas(); dibujar();
         });
         document.getElementById('cGuardar').onclick=()=>guardarPanelUI(true);
         document.getElementById('cGuardarNuevo').onclick=()=>guardarPanelUI(false);
         // PASO 4b — cálculo propio: al marcarlo aparece el campo de fórmula y la lista de medidas
         // disponibles. Se redibuja al escribir (con una pausa para no llamar en cada tecla).
-        document.getElementById('cCalcOn').addEventListener('change',()=>{ toggleFormula(); dibujar(); });
-        let tF; document.getElementById('cFormula').addEventListener('input',()=>{ clearTimeout(tF); tF=setTimeout(dibujar,500); });
+        // FICHA D-ter — la caja de formulas se fue de la pantalla; en su sitio, «Mis medidas».
+        document.getElementById('cRango').addEventListener('change',()=>{
+          document.getElementById('cEntreWrap').style.display = document.getElementById('cRango').value==='entre' ? 'inline-flex' : 'none';
+          dibujar(); });
+        for(const id of ['cDesde','cHasta']) document.getElementById(id).addEventListener('change',dibujar);
         // FICHA D · PARTE 2 — AQUÍ NO SE DIBUJA. Antes esto acababa en dibujar(), que lanzaba un
         // cruce nada más cargar la pantalla. El primer trazo lo hace abrirConstructor(), cuando
         // alguien pulsa «Crear un informe» o abre uno guardado.
-        rellenarCampos(); toggleFormula();
+        rellenarCampos(); llenarRangos(); pintarMisMedidas();
       }
-      function toggleFormula(){
-        const on=document.getElementById('cCalcOn').checked;
-        document.getElementById('cFormula').style.display=on?'':'none';
-        const ayuda=document.getElementById('cFormulaAyuda');
-        ayuda.style.display=on?'':'none';
-        // FICHA D-bis — LA AYUDA ENSEÑABA NOMBRES INTERNOS (base, margenPct) que el usuario no ha
-        // visto en su vida. Ahora enseña EXACTAMENTE las palabras de la lista de «quiero saber», y la
-        // traducción a los nombres del motor la hace la pantalla al mandar la fórmula.
-        if(on&&cCampos&&cCampos.medidas){
-          const nombres=Object.values(cCampos.medidas).map(m=>m.etiqueta);
-          ayuda.textContent='Puedes usar: '+nombres.join(' · ')+'. Por ejemplo: '+
-            (nombres[0]||'')+' / '+(nombres[1]||nombres[0]||'')+' * 100';
-          document.getElementById('cFormula').placeholder=(nombres[0]||'')+' / '+(nombres[1]||nombres[0]||'')+' * 100';
-        }
-        // El selector "Medir" queda en segundo plano cuando hay fórmula (lo que se pinta es el cálculo).
-        document.getElementById('cMed').disabled=on;
+      // ── FICHA D-ter · PARTE 1 — «MIS MEDIDAS» ────────────────────────────────────────────────
+      // La capacidad de la caja de formulas no se pierde: cambia de forma. Aqui no se escribe una
+      // expresion, se ELIGE de dos listas y una operacion, y se le pone nombre. A partir de ahi la
+      // medida aparece como una mas en «quiero saber», ya calculada, y con su cuenta escrita en la
+      // ayuda de debajo. El usuario no ve un nombre interno en ningun momento.
+      let cOperaciones=[{v:'/',t:'dividido entre'},{v:'-',t:'menos'},{v:'+',t:'más'},{v:'*',t:'por'}];
+      function pintarMisMedidas(){
+        const cont=document.getElementById('cMisMedidas'); if(!cont) return;
+        const mias=cPropias.filter(m=>m.area===cArea);
+        const etq=k=>((cCampos&&cCampos.medidas)||{})[k]?cCampos.medidas[k].etiqueta:k;
+        const op=v=>(cOperaciones.find(o=>o.v===v)||{}).t||v;
+        cont.innerHTML='<div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">'
+          +'<strong style="color:var(--text2)">Mis medidas</strong>'
+          +'<button type="button" class="btn btn-secondary btn-sm" id="cNuevaMedida">Crear una medida mía</button>'
+          +'<span style="font-size:.72rem">una cuenta con dos de las cifras de arriba, con el nombre que le pongas</span></div>'
+          +(mias.length?'<div style="margin-top:.5rem;display:flex;flex-direction:column;gap:.25rem">'+mias.map(m=>
+             '<div style="display:flex;align-items:center;gap:.5rem"><span style="color:var(--text);font-weight:600">'+escHtml(m.nombre)+'</span>'
+             +'<span>= '+escHtml(etq(m.medida_a))+' '+escHtml(op(m.op))+' '+escHtml(etq(m.medida_b))+(m.por_cien?' por cien':'')+'</span>'
+             +'<button type="button" class="btn btn-danger btn-sm" data-medq="'+m.id+'">Quitar</button></div>').join('')+'</div>':'');
+        document.getElementById('cNuevaMedida').onclick=nuevaMedidaPropia;
+        cont.querySelectorAll('[data-medq]').forEach(b=>b.onclick=()=>quitarMedidaPropia(b.dataset.medq));
       }
+      async function nuevaMedidaPropia(){
+        if(!cCampos||!cCampos.medidas) return;
+        // Solo se ofrecen las medidas del area que NO son de capacidad ni propias: combinar una
+        // propia con otra propia encadenaria cuentas y el nombre dejaria de decir de donde sale.
+        const opciones=Object.entries(cCampos.medidas).filter(([,m])=>!m.soloCon&&!m.propia)
+          .map(([k,m])=>({v:k,t:m.etiqueta}));
+        if(opciones.length<2){ toast('Esta área no tiene dos cifras que combinar','err'); return; }
+        let hecho=false;
+        await window.pedirDatos({
+          titulo:'Crear una medida mía',
+          texto:'Elige dos cifras y qué se hace con ellas. La cuenta la hago yo; tú le pones el nombre.',
+          campos:[
+            {id:'a',tipo:'lista',etiqueta:'Coge',valor:opciones[0].v,opciones},
+            {id:'op',tipo:'lista',etiqueta:'y hazle',valor:'/',opciones:cOperaciones},
+            {id:'b',tipo:'lista',etiqueta:'esto otro',valor:(opciones[1]||opciones[0]).v,opciones},
+            {id:'por_cien',tipo:'casilla',etiqueta:'Enseñarlo como porcentaje',ayuda:'Multiplica el resultado por cien y le pone el signo %.'},
+            {id:'nombre',tipo:'texto',etiqueta:'¿Cómo la llamas?',valor:'',marcador:'Margen sobre lo que cobro'},
+          ],
+          aceptar:'Crear la medida',
+          validar:(d)=>String(d.nombre||'').trim()?null:{campo:'nombre',mensaje:'Ponle un nombre: es como la vas a encontrar en la lista.'},
+          alAceptar:async(d)=>{
+            const r=await api('POST','/api/erp/analytics/constructor/medidas',
+              {area:cArea,nombre:String(d.nombre).trim(),medida_a:d.a,op:d.op,medida_b:d.b,por_cien:!!d.por_cien});
+            cPropias=r.medidas; hecho=true;
+          },
+        });
+        if(hecho){ cCampos=await api('GET','/api/erp/analytics/constructor/campos?area='+cArea).catch(()=>cCampos);
+          rellenarCampos(); pintarMisMedidas(); toast('Medida creada: ya está en «quiero saber»'); }
+      }
+      async function quitarMedidaPropia(id){
+        const m=cPropias.find(x=>String(x.id)===String(id)); if(!m) return;
+        const si=await window.confirmarEnPagina({titulo:'¿Quitar «'+m.nombre+'»?',
+          texto:'Deja de aparecer en «quiero saber». No se borra ningún dato del negocio.',
+          aceptar:'Sí, quitarla', cancelar:'No, dejarla',
+          alAceptar:async()=>{ const r=await api('DELETE','/api/erp/analytics/constructor/medidas/'+id); cPropias=r.medidas; }});
+        if(si){ cCampos=await api('GET','/api/erp/analytics/constructor/campos?area='+cArea).catch(()=>cCampos);
+          rellenarCampos(); pintarMisMedidas(); toast('Medida quitada'); }
+      }
+
+      function llenarRangos(){
+        const sel=document.getElementById('cRango');
+        if(sel.options.length) return;
+        sel.innerHTML=Object.entries(RANGOS).map(([k,t])=>'<option value="'+k+'"'+(k===RANGO_DEF?' selected':'')+'>'+escHtml(t)+'</option>').join('');
+      }
+      // FICHA D-ter · PARTE 5 — LA AYUDA QUE MENTIA. Los textos de debajo de cada hueco se quedaban
+      // congelados en la primera area: si mirabas Ventas y luego Compras, seguian describiendo Ventas.
+      // Ahora se recalculan cada vez que cambia el area, la medida o el reparto.
+      function refrescarAyudas(){
+        if(!cCampos) return;
+        const m=(cCampos.medidas||{})[document.getElementById('cMed').value]||{};
+        const d=(cCampos.dimensiones||{})[document.getElementById('cDim').value]||{};
+        document.getElementById('cMedAyuda').textContent = m.ayuda || 'el numero que quieres ver';
+        document.getElementById('cDimAyuda').textContent = d.ayuda ||
+          ('un grupo por cada '+String(d.etiqueta||'').toLowerCase()+', y su cifra al lado');
+      }
+
       function recetaActual(){
-        const calcOn=document.getElementById('cCalcOn').checked;
-        const f=document.getElementById('cFormula').value.trim();
+        const rango=document.getElementById('cRango').value||RANGO_DEF;
         // FICHA D-bis — la receta puede llevar VARIAS medidas. El motor ya las devolvía todas; lo que
         // faltaba era que la pantalla las pintara. Lo necesita «¿cuántas horas trabajo frente a las
         // que tengo abiertas?», que lleva un «frente a» dentro y son dos líneas del mismo gráfico.
         const r={ area:cArea, dimension:document.getElementById('cDim').value, periodo:document.getElementById('cPeriodo').value,
                   medidas:(medidasExtra&&medidasExtra.length)?medidasExtra.slice():[document.getElementById('cMed').value],
                   grafico:document.getElementById('cTipo').value };
-        if(calcOn&&f) r.formula=traducirFormula(f);
+        r.rango=rango;
+        if(rango==='entre'){ r.desde=document.getElementById('cDesde').value||null; r.hasta=document.getElementById('cHasta').value||null; }
         return r;
       }
       // De las palabras que ve el usuario a los nombres del motor. Se sustituye la etiqueta MÁS LARGA
       // primero, para que «Beneficio en euros» no se rompa por dentro al sustituir otra más corta.
-      function traducirFormula(txt){
-        if(!cCampos||!cCampos.medidas) return txt;
-        // Sin expresiones regulares a propósito: dentro de una plantilla del servidor un patrón con
-        // llaves se lo come la interpolación. Con split/join no hay nada que escapar.
-        const sinTildes=x=>String(x).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-        const pares=Object.entries(cCampos.medidas).map(([k,m])=>[m.etiqueta,k]).sort((a,b)=>b[0].length-a[0].length);
-        let out=String(txt);
-        for(const [etq,clave] of pares) out=out.split(etq).join(clave);          // tal cual se ve
-        let plano=sinTildes(out);
-        for(const [etq,clave] of pares) plano=plano.split(sinTildes(etq)).join(clave);  // como se teclea
-        return plano;
-      }
-
       async function dibujar(){
         const r=recetaActual();
         // El "agrupado por" solo tiene sentido en la dimensión fecha Y en áreas que agrupan por tiempo
@@ -1046,7 +1144,34 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         // En español: 30,0 % — no "30.0%". La etiqueta de la medida ya dice la base (viene de
         // camposPara con el modo de la empresa), así que el porcentaje no queda desnudo.
         const fmt=v=>v==null?'—':(meta.dinero?eur(v):(meta.pct?pctEs(v):Number(v)));
-        if(r.grafico==='tabla'){
+
+        // FICHA D-ter · PARTE 3 — LA FORMA, DECIDIDA POR EL RESULTADO. El usuario puede elegirla
+        // siempre; «lo que mejor se lea» es solo el arranque, y elige por el numero de grupos:
+        // un solo valor -> el numero grande y solo · hasta 12 -> barras · mas de 12 -> tabla.
+        let forma=r.grafico;
+        if(forma==='auto') forma = d.filas.length<=1 ? 'numero' : (d.filas.length<=TOPE_GRUPOS ? 'barras' : 'tabla');
+        const nota=document.getElementById('cNota');
+        const trozos=[];
+        if(d.rangoEtiqueta) trozos.push(d.rangoEtiqueta.toLowerCase());
+        if(d.gruposVacios) trozos.push(d.gruposVacios+(d.gruposVacios===1?' grupo vacío no se pinta':' grupos vacíos no se pintan'));
+
+        const wrapN=document.getElementById('cNumeroWrap');
+        wrapN.style.display='none';
+        if(forma==='numero'){
+          // UN NÚMERO TAMBIÉN ES UN INFORME: la cifra grande y sola, con su periodo debajo.
+          document.getElementById('cChartWrap').style.display='none';
+          document.getElementById('cTablaWrap').style.display='none';
+          wrapN.style.display='';
+          const total=d.filas.reduce((n2,f)=>n2+(Number(f[med])||0),0);
+          const uno=d.filas.length===1?d.filas[0][med]:total;
+          document.getElementById('cNumero').textContent=d.filas.length?fmt(uno):'—';
+          document.getElementById('cNumeroPie').textContent=
+            (meta.etiqueta||'')+(d.rangoEtiqueta?' · '+d.rangoEtiqueta.toLowerCase():'')+(d.filas.length?'':' · '+TEXTO_VACIO);
+          nota.style.display=trozos.length?'':'none'; nota.textContent=trozos.join(' · ');
+          return;
+        }
+        nota.style.display=trozos.length?'':'none'; nota.textContent=trozos.join(' · ');
+        if(forma==='tabla'){
           document.getElementById('cChartWrap').style.display='none';
           const w=document.getElementById('cTablaWrap'); w.style.display='';
           const cab=series.map(k=>'<th>'+escHtml(((cCampos.medidas||{})[k]||{}).etiqueta||(k==='calculo'?meta.etiqueta:k))+'</th>').join('');
@@ -1060,19 +1185,39 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         document.getElementById('cTablaWrap').style.display='none';
         document.getElementById('cChartWrap').style.display='';
         if(cChartInst) cChartInst.destroy();
-        const tipo=r.grafico==='lineas'?'line':r.grafico==='tarta'?'pie':'bar';
+        const tipo=forma==='lineas'?'line':forma==='tarta'?'pie':'bar';
         // Los null (sin coste conocido) NO se pintan como 0: en un gráfico, un 0 es una afirmación
         // ("no ganó nada") y null es un hueco, que es la verdad.
         // UN DATASET POR MEDIDA. Con una serie sale exactamente igual que antes; con dos, dos líneas
         // en el mismo eje. La tarta no admite varias series: si la receta trae más de una, se pinta la
         // primera (y la tabla de debajo, en el modo tabla, sí las lleva todas).
+        // FICHA D-ter · PARTE 4 — NADA ILEGIBLE. Sesenta barras con los nombres encimados no se leen.
+        // Se pintan los DOCE MAYORES y el resto se suma en «Otros», con una linea que lo dice y un
+        // enlace para verlo entero en tabla. La TABLA siempre las lleva todas: aqui no se pierde nada,
+        // se deja de amontonar.
+        let pintar=d.filas, recortados=0;
+        if(d.filas.length>TOPE_GRUPOS && tipo!=='line'){
+          const orden=[...d.filas].sort((a2,b2)=>(Number(b2[med])||0)-(Number(a2[med])||0));
+          const cabeza=orden.slice(0,TOPE_GRUPOS), cola=orden.slice(TOPE_GRUPOS);
+          recortados=cola.length;
+          const otros={clave:'Otros ('+cola.length+')'};
+          for(const k of series) otros[k]=cola.reduce((n2,f)=>n2+(Number(f[k])||0),0);
+          pintar=cabeza.concat([otros]);
+        }
+        if(recortados){
+          nota.style.display='';
+          nota.innerHTML=escHtml(trozos.concat(['se pintan los '+TOPE_GRUPOS+' mayores y los otros '+recortados+' van sumados en «Otros»']).join(' · '))
+            +' — <a href="#" id="cVerTabla" style="color:var(--accent)">verlo todo en tabla</a>';
+          setTimeout(()=>{ const a2=document.getElementById('cVerTabla'); if(a2) a2.onclick=(e2)=>{ e2.preventDefault();
+            document.getElementById('cTipo').value='tabla'; dibujar(); }; },0);
+        }
         const usa = tipo==='pie' ? series.slice(0,1) : series;
         const COL=['#0ea5e9','#f59e0b','#10b981','#8b5cf6','#ef4444','#14b8a6'];
         const etqDe=k=>((cCampos.medidas||{})[k]||{}).etiqueta||(k==='calculo'?meta.etiqueta:k);
         cChartInst=new Chart(document.getElementById('cChart').getContext('2d'),{
           type:tipo,
-          data:{labels:d.filas.map(f=>String(f.clave).substring(0,22)),
-                datasets:usa.map((k,i)=>({label:etqDe(k),data:d.filas.map(f=>f[k]),
+          data:{labels:pintar.map(f=>String(f.clave).substring(0,22)),
+                datasets:usa.map((k,i)=>({label:etqDe(k),data:pintar.map(f=>f[k]),
                   backgroundColor:tipo==='pie'?PALETA:(COL[i%COL.length]+'99'),
                   borderColor:tipo==='pie'?'#0b1220':COL[i%COL.length],borderWidth:1,borderRadius:tipo==='bar'?4:0,
                   tension:tipo==='line'?.25:0,spanGaps:false}))},
@@ -1183,9 +1328,10 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         rellenarCampos();
         document.getElementById('cDim').value=p.config.dimension;
         document.getElementById('cPeriodo').value=p.config.periodo||'mes';
-        document.getElementById('cCalcOn').checked=!!p.config.formula;
-        document.getElementById('cFormula').value=p.config.formula||'';
-        toggleFormula();
+        document.getElementById('cRango').value=p.config.rango||RANGO_DEF;
+        document.getElementById('cEntreWrap').style.display=p.config.rango==='entre'?'inline-flex':'none';
+        if(p.config.desde) document.getElementById('cDesde').value=p.config.desde;
+        if(p.config.hasta) document.getElementById('cHasta').value=p.config.hasta;
         // La medida puede ser de capacidad: hay que rellenar el desplegable ANTES de elegirla.
         rellenarMedidas();
         document.getElementById('cMed').value=(p.config.medidas||[Object.keys(cCampos.medidas)[0]])[0];
@@ -1448,7 +1594,8 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         document.getElementById('cMed').value=p.r.medidas[0];
         document.getElementById('cPeriodo').value=p.r.periodo||'mes';
         document.getElementById('cTipo').value=p.r.grafico||'barras';
-        document.getElementById('cCalcOn').checked=false; toggleFormula();
+        document.getElementById('cRango').value=p.r.rango||RANGO_DEF;
+        document.getElementById('cEntreWrap').style.display='none';
         // Si la pregunta compara dos números, se llevan los dos al gráfico.
         medidasExtra = p.r.medidas.length>1 ? p.r.medidas.slice() : null;
         refrescarBotonesGuardar();
@@ -1484,6 +1631,8 @@ export function createAnalyticsRoutes(db, cfg = {}) {
           api('GET','/api/erp/analytics/constructor/areas').catch(()=>({}))
         ]);
         cCampos=campos; cPaneles=Array.isArray(paneles)?paneles:[];
+        try{ const mm=await api('GET','/api/erp/analytics/constructor/medidas');
+          cPropias=mm.medidas||[]; if(Array.isArray(mm.operaciones)&&mm.operaciones.length) cOperaciones=mm.operaciones; }catch(e){}
         llenarPaneles(); llenarAreas(areas); engancharConstructor();
         pintarMisInformes(); engancharIndice(); refrescarBotonesGuardar();
       }
