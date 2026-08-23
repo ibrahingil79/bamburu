@@ -145,6 +145,16 @@
   (siguen siendo los mismos subpuntos), solo cambia lo que piden.
 - **L nace con 9 subpuntos y se queda con 8 vivos** (L1 retirado). **M nace con 9, los 9 hechos.**
 
+**⚙️ SANEAMIENTO DE ESTA CABECERA — 23 ago 2026 · commit `9a6fc0f`. Cero código de producto.**
+Salió de una lectura del tablero pedida por Ibrahin, no de un fallo del producto. **El titular
+—«65 vivos · 39 hechos · 26 pendientes»— estaba bien; lo que estaba mal era el cuerpo que lo
+desarrolla**: cuatro bullets se quedaron sin actualizar cuando C se cerró el 22 ago, y llevaban un día
+contradiciendo a su propio titular tres renglones más arriba. Los cuatro quedan **tachados con su
+motivo y su fecha, nunca borrados** (el método de la ficha C). Se ajustó además «los once puntos
+(A–K)» a las **catorce fichas** que hay hoy. Y de aquí sale una **regla permanente en `CLAUDE.md`**
+(«Un titular de recuento se corrige con el cuerpo que lo desarrolla»): al cambiar una cifra que
+resume, en la misma entrega se revisa el detalle que la explica.
+
 ---
 
 ### PASO 0 — AUDITORÍA DE SOLO LECTURA (21 ago 2026). Cero código tocado.
