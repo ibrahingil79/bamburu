@@ -3070,6 +3070,40 @@ Sé preciso con los números y siempre redondea correctamente.`,
   db.exec(`CREATE INDEX IF NOT EXISTS idx_customer_orders_client ON customer_orders(client_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_delivery_notes_client  ON delivery_notes(client_id)`);
 
+  // ── IMPORTADOR DE CSV · EL REGISTRO DE CADA IMPORTACIÓN (ficha H · aditivo, sin DROP) ─────────
+  //
+  // Existe por H2: «posibilidad de deshacer». Sin saber QUÉ fichas entraron en cada importación,
+  // deshacer sería adivinar — y adivinar aquí significa archivar un cliente que el dueño creó a
+  // mano el martes. Por eso se apunta ficha a ficha, y no «los últimos N clientes».
+  //
+  // DESHACER ARCHIVA, NO BORRA (regla permanente del proyecto): clientes a `active=0`, productos a
+  // `status='archived'`, exactamente lo que hace el botón de archivar de cada pantalla. Por eso
+  // aquí no hay ningún DELETE, ni en la tabla ni en el motor.
+  //
+  // FUERA de WRITABLE_TABLES a propósito: esto lo escribe una persona subiendo su fichero. DISA no
+  // importa ficheros.
+  db.exec(`CREATE TABLE IF NOT EXISTS importaciones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo           TEXT    NOT NULL,                 -- clientes | productos  (facturas NO: ver importador.js)
+    fichero        TEXT    NOT NULL DEFAULT '',      -- nombre del CSV que subió, para reconocerlo en la lista
+    filas_total    INTEGER NOT NULL DEFAULT 0,
+    filas_creadas  INTEGER NOT NULL DEFAULT 0,
+    filas_omitidas INTEGER NOT NULL DEFAULT 0,       -- las que fallaban y NO entraron (se vieron antes)
+    user_id        INTEGER,
+    user_name      TEXT    NOT NULL DEFAULT '',
+    created_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+    deshecha_at    TEXT                              -- NULL = viva; con fecha = ya se deshizo (idempotente)
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS importacion_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    importacion_id INTEGER NOT NULL,
+    entidad        TEXT    NOT NULL,                 -- client | product
+    entidad_id     INTEGER NOT NULL,
+    FOREIGN KEY (importacion_id) REFERENCES importaciones(id)
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_importacion_items_lote ON importacion_items(importacion_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_importaciones_fecha    ON importaciones(created_at DESC)`);
+
   console.log('✅ ERP: Migraciones completadas');
   // ── C-0 · EL LOGO EN LA FOTO CONGELADA DEL DOCUMENTO ─────────────────────────────────────────
   // VA AL FINAL, Y NO ES UN DETALLE: la primera versión lo puso arriba, junto al resto de columnas

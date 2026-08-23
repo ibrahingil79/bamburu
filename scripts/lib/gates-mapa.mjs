@@ -44,6 +44,14 @@ export const GRUPOS = {
     // pida; no se engancha a ningún disparador automático.
     'gate-citas-mes',                // la vista Mes: base de la cifra, un solo selector, los tres grises,
                                      // el reparto del alto, el servicio en la casilla y crear desde el mes
+    // ── EL IMPORTADOR DE CSV (ficha H · 23 ago 2026) ─────────────────────────────────────────
+    // Se declara AQUÍ el mismo día que nace. Va en `clientes` porque es donde vive la cobertura de
+    // la migración asistida (`gate-inicio-arranque`), de la que este importador cuelga — y porque
+    // lo que da de alta son clientes. DECLARAR NO ES EJECUTAR: entra en el mapa para que el barrido
+    // lo alcance CUANDO Ibrahin lo pida; no se engancha a ningún disparador.
+    'gate-importador-csv',           // la vista previa no escribe, el «todo o nada» se comprueba
+                                     // provocando un fallo a mitad, la asistida sigue primera y el
+                                     // tipo «facturas» se rechaza
     'gate-cola-envios',              // «Recordatorios a clientes»: que siga siendo una pantalla del panel
                                      // (menú, buscador, permiso), con su contenedor, el orden hoy→mañana,
                                      // el número en la cabecera y la advertencia de «marcado ≠ entregado»
@@ -160,6 +168,9 @@ export const EMPIEZAN_DE_CERO = new Set([
   'gate-migracion-puerta',         // negocio nuevo: es la condición del encargo («creas uno de cero»)
   'gate-agenda-visual',            // negocio nuevo: el lienzo de la agenda
   'gate-inicio-arranque',          // negocio RECIÉN CREADO: es justo lo que prueba
+  'gate-importador-csv',           // negocio nuevo: DA DE ALTA clientes y productos. En el de
+                                   // desarrollo dejaría basura y le movería los totales a los
+                                   // gates que exigen neto-cero.
   'gate-inicio-cuadro-mando',      // negocio nuevo + uno vacío + un empleado sin permisos
   'gate-vigia-agenda',             // negocio nuevo: los cuatro detectores de agenda
   'gate-agenda-calendario',        // negocio nuevo: el calendario, sin datos ajenos

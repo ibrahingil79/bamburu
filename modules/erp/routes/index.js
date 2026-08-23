@@ -21,6 +21,7 @@ import { createAnalyticsRoutes } from './analytics.js';
 import { createVigiaRoutes } from './vigia.js';   // Escalera · paso 5 — DISA predictiva · PIEZA 1: el vigía
 import { createInicioRoutes } from './inicio.js';   // Escalera · paso 6 — Inicio personalizable
 import { createMigracionRoutes } from './migracion.js';   // Trae tus datos: la migración la hace el equipo
+import { createImportadorRoutes } from './importador.js';   // ficha H — importador de CSV (clientes y productos), DENTRO de la migración asistida
 import { createListadosRoutes } from './listados.js';   // C · los tres verbos, una sola vez para los ocho listados
 import { createMenuRoutes } from './menu-routes.js';   // Navegación — anclas del menú (por usuario)
 import { createSettingsRoutes } from './settings.js';
@@ -92,6 +93,7 @@ export function mountRoutes(app, db) {
   const { api: inicioApi } = createInicioRoutes(db, { rutaExiste });   // Escalera · paso 6 — Inicio personalizable
   const { api: menuApi } = createMenuRoutes(db);       // Navegación — anclas del menú (por usuario)
   const { api: migracionApi, views: migracionViews } = createMigracionRoutes(db);
+  const { api: importadorApi, views: importadorViews } = createImportadorRoutes(db);
   const { api: settApi, views: settViews, storeViews: storeSettViews } = createSettingsRoutes(db);
   const { api: userApi, views: userViews, activityViews } = createUserRoutes(db);
   const { api: nlApi, views: nlViews } = createNewsletterRoutes(db);
@@ -146,6 +148,7 @@ export function mountRoutes(app, db) {
   admin.route('/analytics', analytViews);
   admin.route('/vigia', vigiaViews);     // ← DISA predictiva · el vigía (motor de detección)
   admin.route('/settings', settViews);   // ← /admin/settings (config de EMPRESA) SE QUEDA (núcleo vivo)
+  admin.route('/migracion/importar', importadorViews);   // ← ficha H · el importador de CSV. VA ANTES que /migracion: montar el padre primero le daría la subruta a la asistida.
   admin.route('/migracion', migracionViews);   // ← /admin/migracion (trae tus datos · candado company.read)
   // D2 — store-builder DESMONTADO (UI): /admin/store-settings → 404. store_settings NO se archiva (se conserva el diseño, tienda Capa 2).
   // admin.route('/store-settings', storeSettViews);
@@ -213,6 +216,7 @@ export function mountRoutes(app, db) {
   apiApp.route('/vigia', vigiaApi);     // ← DISA predictiva · hallazgos del vigía (solo lectura)
   apiApp.route('/inicio', inicioApi);   // ← Inicio personalizable (layout por usuario/empresa/fábrica)
   apiApp.route('/migracion', migracionApi);   // ← Trae tus datos: la migración la hace el equipo, a mano
+  apiApp.route('/importar', importadorApi);   // ← ficha H · analizar (no escribe) / importar (una transacción) / deshacer
   apiApp.route('/listados', listApi);        // ← POST /api/erp/listados/<clave>/enviar
   apiApp.route('/menu', menuApi);       // ← anclas del menú de CADA usuario (solo colocación, sin datos)
   apiApp.route('/perfil', perfilApi);   // ← datos personales del usuario logueado (+ su foto)

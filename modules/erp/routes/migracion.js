@@ -191,12 +191,26 @@ export function createMigracionRoutes(db) {
     <div class="mg-wrap">
       <div class="mg-caja">
         <h3>La migración la hacemos nosotros, y es gratis</h3>
-        <p>No hay que teclear nada ni pelearse con ningún importador. Dinos de dónde vienes y qué
-           quieres traer; <strong>lo pasa una persona del equipo de Bamburu</strong> y te escribimos
-           en 1-2 días laborables. Mientras tanto sigues usando Bamburu con normalidad: nada de lo
-           que hagas ahora se pierde al migrar.</p>
+        <p>No hay que teclear nada. Dinos de dónde vienes y qué quieres traer;
+           <strong>lo pasa una persona del equipo de Bamburu</strong> y te escribimos en 1-2 días
+           laborables. Mientras tanto sigues usando Bamburu con normalidad: nada de lo que hagas
+           ahora se pierde al migrar. <strong>Las facturas solo se traen por aquí.</strong></p>
         <div class="mg-nota">Si todavía no tienes el fichero, pídelo igual: te decimos cómo sacarlo
           de tu programa y nos lo mandas después.</div>
+      </div>
+
+      <!-- ── EL IMPORTADOR DE CSV, AL LADO DE LA ASISTIDA Y NO ENCIMA (ficha H · H3) ──────────
+           La asistida NO se retira ni se degrada: sigue siendo la de arriba, la que se ofrece
+           primero y la ÚNICA para facturas. Esto es la segunda vía, para quien prefiere hacerlo él
+           y solo trae clientes o productos. Las dos puertas conviven en la misma pantalla porque
+           esconder una detrás de la otra sería elegir por el dueño. -->
+      <div class="mg-caja" style="border-color:var(--accent)">
+        <h3>¿Prefieres hacerlo tú ahora mismo?</h3>
+        <p>Si lo que traes son <strong>clientes</strong> o <strong>productos</strong> y ya tienes el
+           CSV, puedes importarlos tú en un minuto: te enseño qué columna va a qué campo y qué filas
+           fallan <strong>antes</strong> de guardar nada. <strong>Las facturas no</strong> — esas las
+           pasamos nosotros, por lo de arriba.</p>
+        <a class="btn btn-secondary" href="/admin/migracion/importar"><i class="ti ti-table-import"></i> Importar un CSV yo mismo</a>
       </div>
 
       <div class="mg-caja">

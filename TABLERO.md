@@ -117,13 +117,19 @@
 `A 8 · B 3 · C 11 · D 5 · E 4 · F 4 · G 5 · H 3 · I 3 · J 0 · K 0` = **46**.
 (J y K son ítems bloqueados sin subpuntos: su texto es una sola afirmación.)
 
-**RECUENTO VIGENTE — 23 ago 2026: 65 subpuntos vivos · 44 hechos · 21 pendientes.**
+**RECUENTO VIGENTE — 23 ago 2026 (noche): 65 subpuntos vivos · 45 hechos · 20 pendientes.**
+*(**H1 se cierra por decisión del dueño esa noche**: las facturas NO entran por CSV y se quedan en la
+migración asistida. Con eso **H queda entera, 3 de 3**, y sale de la lista de pendientes.
+44 + 1 = 45 hechos · 21 − 1 = 20 pendientes. Pendientes: **D 5 · E 4 · F 4 · G 4 · I 3** = 20.)*
 *(**rehecho entre las dos entregas del 23 ago**, como pedía el aviso de más abajo: la sesión del
 importador de CSV lo dejó en 41/24 sumando H2 y H3, y **la ficha B entera —B1, B2 y B3— suma 3 más**.
-41 + 3 = 44 hechos · 24 − 3 = 21 pendientes. Pendientes: **D 5 · E 4 · F 4 · G 4 · H 1 · I 3** = 21.)*
+41 + 3 = 44 hechos · 24 − 3 = 21 pendientes. ~~Pendientes: **D 5 · E 4 · F 4 · G 4 · H 1 · I 3** =
+21.~~ — **caducada esa misma noche al cerrarse H1: 20, sin H.**)*
 *(el 22 ago iba por 39 hechos · 26 pendientes; **H2 y H3** entran hoy con el importador de CSV.
-**H1 NO se cuenta como hecho**: clientes y productos están, las facturas quedaron paradas a la
-espera de la decisión del dueño, y media entrega no es una entrega.)*
+~~**H1 NO se cuenta como hecho**: clientes y productos están, las facturas quedaron paradas a la
+espera de la decisión del dueño, y media entrega no es una entrega.~~ — **la decisión llegó esa misma
+noche y H1 se cierra**: las facturas se quedan en la asistida. La línea se tacha, no se borra: era
+cierta mientras la decisión no existía, y es el registro de que se paró antes de construir.)*
 *(el 21 ago iba por 31 hechos · 34 pendientes; **C entera** suma sus 8 restantes)*
 `A 6 · C 12 · C-0 4 · B 3 · D 5 · E 4 · F 4 · G 4 · H 3 · I 3 · J 0 · K 0 · L 8 · M 9` = **65**.
 - **C pasa de 11 a 12** con **C10-f**, que Ibrahin añadió el 21 ago tras cerrar C-0. ~~Los pendientes
@@ -139,7 +145,8 @@ espera de la decisión del dueño, y media entrega no es una entrega.)*
   23 ago 2026:** se quedó sin **los 12 de C**, cerrada el 22 ago. ~~**Son 39 HECHOS:** los 6 de **A** ·
   los **12 de C** (22 ago) · los **4 de C-0** · los 8 vivos de **L** · los 9 de **M**~~ — **corregida
   otra vez el 23 ago por la tarde: son 41 HECHOS**, los mismos de antes **+ H2 y H3** (importador de
-  CSV). Los cuatro grupos del final, del 21 ago 2026.
+  CSV)~~ — **y otra vez esa noche: son 45**, sumando **los 3 de B** (otra sesión) **y H1**, cerrado
+  por decisión del dueño. Los cuatro grupos del final, del 21 ago 2026.
 - **C-0 no estaba en el encargo original** y nace del Paso 0 de **C**: sanear los documentos antes de
   construir el motor de listados encima. ~~**C sigue entero y pendiente**~~ — **línea caducada,
   corregida el 23 ago 2026: C quedó CERRADA el 22 ago, 12 de 12** (commits `575e333`, `c3302f5`,
@@ -149,7 +156,8 @@ espera de la decisión del dueño, y media entrega no es una entrega.)*
   G 4 · H 3 · I 3)~~ y **2 bloqueados** (J y K), que no dependen de Ibrahin. **Corregida otra vez el
   23 ago 2026 por la tarde, al entregar el importador de CSV: quedan 24 pendientes**, y siguen siendo
   «los de B a I» — **B 3 · D 5 · E 4 · F 4 · G 4 · H 1 · I 3**. H baja de 3 a 1: se cierran H2 y H3,
-  y el único que queda vivo es **H1, solo en su parte de facturas**. Los bloqueados siguen siendo 2.
+  y el único que queda vivo es **H1, solo en su parte de facturas**~~ — **y esa noche también se
+  cierra: quedan 20, D 5 · E 4 · F 4 · G 4 · I 3. H sale de la lista.** Los bloqueados siguen siendo 2.
   ~~⚠️ **Si otra sesión cierra B el mismo día, este recuento hay que rehacerlo entre las dos
   entregas.**~~ — **pasó, y está rehecho (23 ago, tarde): B se cerró entera esa misma tarde en otra
   sesión, así que quedan 21 pendientes — D 5 · E 4 · F 4 · G 4 · H 1 · I 3.** B sale de la lista.
@@ -1389,10 +1397,10 @@ Acceso por **enlace mágico con token temporal**, solo lectura.
 
 ---
 
-#### H. IMPORTADOR DE CSV GENÉRICO · **H2 ✅ · H3 ✅ · H1 A MEDIAS A PROPÓSITO** (23 ago 2026, sin commitear)
+#### H. IMPORTADOR DE CSV GENÉRICO · ✅ **HECHO (23 ago 2026)** · **3 de 3**
 
 > **H. IMPORTADOR DE CSV GENERICO.**
-> **H1** ~~Clientes, productos y facturas desde CSV.~~ **Clientes ✅ · Productos ✅ · Facturas ⏸ PARADAS: exigen un camino de emisión nuevo y eso lo decide el dueño (abajo).**
+> **H1** ~~Clientes, productos y facturas desde CSV.~~ ✅ **Clientes y productos por CSV. LAS FACTURAS NO, POR DECISIÓN DEL DUEÑO (23 ago 2026): se quedan en la migración asistida.**
 > **H2** ✅ Previsualizacion antes de importar y posibilidad de deshacer.
 > **H3** ✅ Complementa la migracion asistida, NO la sustituye ni la retira.
 
@@ -1432,7 +1440,20 @@ al lado. Tres pasos: subir → revisar → confirmar.
   de texto en la asistida: decía «ni pelearse con ningún importador», que dejaba de ser verdad con
   uno nuestro tres centímetros más abajo.
 
-**⛔ H1 · LAS FACTURAS: PARADO ANTES DE CONSTRUIR, COMO PEDÍA EL ENCARGO.** Meterlas exige un
+**⛔→✅ H1 · LAS FACTURAS: SE PARÓ ANTES DE CONSTRUIR, SE PREGUNTÓ, Y EL DUEÑO DECIDIÓ.**
+
+> **DECISIÓN DE IBRAHIN, 23 ago 2026:** *las facturas no entran por CSV; se quedan en la migración
+> asistida, que es lo que ya hacía.* Con eso **H1 queda cerrado con su alcance acotado**: el
+> importador trae clientes y productos, y las facturas las sigue pasando una persona del equipo.
+> **No es una función pendiente: es una función que no se hace, y por este motivo.**
+
+Se le presentaron tres caminos y eligió el primero. Los otros dos quedan escritos **por si algún día
+se reabre**, no como deuda: (b) un **archivo histórico de solo lectura** —entidad nueva, fuera de
+`invoices`, fuera de la cadena y fuera de la AEAT, conservando número y fecha originales, con la
+pregunta abierta de si cuenta en Analítica y en el Libro de ventas—; y (c) **emitirlas de verdad**,
+que es lo que haría `createInvoice` hoy y **duplicaría la declaración**. La (c) no se recomendó.
+
+**EL PORQUÉ, QUE ES LO QUE NO CADUCA.** Meterlas exigía un
 **camino de emisión nuevo**, y eso no se abre sin decisión del dueño. El único camino vivo es
 `createInvoice` (`routes/invoices.js`; `generateInvoice` está retirado con un 410) y hace **siempre**
 tres cosas que una factura importada no tolera:
@@ -1444,9 +1465,11 @@ tres cosas que una factura importada no tolera:
 | 3 | La encola para remitirla a la AEAT (`encolarSiProcede`) | Declararía **por segunda vez** facturas que el programa anterior ya declaró. |
 
 Saltarse cualquiera de los tres es abrir una segunda puerta de emisión al lado de la única que hay.
-**Hasta que el dueño decida, el tipo «facturas» no existe en el importador y se rechaza con un 400**
-(el gate lo comprueba). Las facturas siguen yendo por la migración asistida, donde las mira una
-persona. *Las tres salidas posibles están planteadas en el parte de la entrega, sin construir ninguna.*
+**El tipo «facturas» no existe en el importador y se rechaza con un 400**, y el gate lo comprueba —
+así que el día que alguien lo añada, esto se pone rojo y le obliga a leer este bloque antes de seguir.
+**Ojo con K:** los importadores de Holded y Quipu siguen BLOQUEADOS y, cuando lleguen sus ficheros
+reales, se toparán con esta misma pared en cuanto traigan facturas. La decisión de hoy es la respuesta
+por adelantado.
 
 **COMPROBACIÓN PROPIA:** `scripts/gate-importador-csv.mjs` — 11 bloques, negocio propio
 (`EMPIEZAN_DE_CERO`), declarado en `GRUPOS.clientes`. **ESCRITO Y NO EJECUTADO**: la norma de
