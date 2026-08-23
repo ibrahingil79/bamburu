@@ -1397,7 +1397,7 @@ Acceso por **enlace mágico con token temporal**, solo lectura.
 
 ---
 
-#### H. IMPORTADOR DE CSV GENÉRICO · ✅ **HECHO (23 ago 2026)** · **3 de 3**
+#### H. IMPORTADOR DE CSV GENÉRICO · ✅ **HECHO (23 ago 2026)** · commit `d55dd8b` · **3 de 3**
 
 > **H. IMPORTADOR DE CSV GENERICO.**
 > **H1** ~~Clientes, productos y facturas desde CSV.~~ ✅ **Clientes y productos por CSV. LAS FACTURAS NO, POR DECISIÓN DEL DUEÑO (23 ago 2026): se quedan en la migración asistida.**
