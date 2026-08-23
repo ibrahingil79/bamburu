@@ -1988,7 +1988,10 @@ verdad y no como se suponía — que es justo el problema que esta tarea viene a
   Pedidos 4 · Propuestas 4 · Facturas 3 · Traslados 3 · Ficha de cliente 2 · Mostrador 2.
   **Cuando se aborde no hay que inventar nada:** `window.pedirDatos()` y `window.confirmarEnPagina()`
   ya están en `layout.js`, son compartidos y se usan en Analíticas. Es cambiar la llamada.
-- **⬜ QUE «QUÉ PRODUCTOS ESTÁN PARADOS» SE PUEDA CONTESTAR.** *(Apuntada el 23 ago 2026: es la
+- ~~**⬜ QUE «QUÉ PRODUCTOS ESTÁN PARADOS» SE PUEDA CONTESTAR.**~~ **✅ HECHO el 23 ago 2026 (noche ·
+  punto 9) · gate `scripts/gate-productos-parados.mjs` · 23 ✓ · 0 ✗.** Área nueva **Catálogo**, cuya
+  fila es el PRODUCTO. Ficha completa al final del documento. Registro de cómo estaba:
+  **⬜ LO DE ANTES:** *(Apuntada el 23 ago 2026: es la
   duodécima pregunta frecuente, que quedó fuera de la ficha D-bis.)* El área de Inventario mide
   **movimientos**, así que un producto sin ninguno no produce fila y **no puede salir en un gráfico**.
   Medido: 121 productos físicos, 76 con movimiento, **45 invisibles**. Hace falta que el área pueda
@@ -6958,3 +6961,54 @@ control de seguridad de mentira es peor que no tenerlo.**
 borraron**. Es la misma regla del punto 7 —lo que una prueba crea, la prueba lo borra— pero **un
 piso más arriba**: no son filas dentro de un negocio, son negocios enteros. No se tocan esta noche
 porque borrar negocios es exactamente la clase de cosa que no se hace sin decirlo antes.
+
+---
+
+### PUNTO 9 · «¿QUÉ PRODUCTOS LLEVO TIEMPO SIN VENDER?» — LA PREGUNTA DOCE  ✅ **HECHO (23 ago 2026, noche)** · gate `scripts/gate-productos-parados.mjs` · **23 ✓ · 0 ✗**
+
+**EL PROBLEMA ERA EL GRANO, no los datos.** El área de Inventario tiene como fila un MOVIMIENTO de
+almacén: un producto que nunca se ha movido **no produce fila**, así que no puede salir en ningún
+gráfico — y justo esos eran la respuesta. Es el mismo cambio de grano que hizo falta en la agenda
+para poder hablar de horas libres.
+
+**ÁREA NUEVA: «CATÁLOGO», cuya fila es el PRODUCTO** y las ventas se le cuelgan. Un producto que no
+vendió nada sale con **cero, que es un dato, no un hueco**. Cinco formas de repartir (cuánto lleva
+sin venderse · producto · categoría · bien o servicio · estado en el catálogo) y seis medidas.
+- **«Parado» se mide por VENTAS, no por movimientos de almacén**, y es a propósito: una entrada de
+  mercancía o un traslado mueven el stock y **no significan que el producto se venda**; y un
+  **SERVICIO no mueve stock jamás**, así que por movimientos todos los servicios saldrían parados
+  siempre. La fuente es `invoice_items` sobre las facturas que **cuentan como venta** — la misma
+  regla que el área de Ventas, para que las dos digan lo mismo.
+- **«Nunca se ha vendido» es un grupo APARTE de «más de un año».** Son cosas distintas, y juntarlas
+  escondería justo la peor.
+- **Cuidado con la ventana, y está resuelto:** las unidades y el importe son del periodo elegido,
+  pero **«cuánto lleva sin venderse» mira toda la historia**. Si se recortara al periodo, un producto
+  vendido hace dos años parecería igual de parado que uno vendido ayer en cuanto el periodo fuera
+  corto: una respuesta falsa a la pregunta que se está haciendo.
+- **Lo que no se sabe no se inventa:** los que nunca se han vendido **no entran en la media de días**
+  —no tienen días que promediar, y meter un cero sería mentir—, así que su media sale «—». Pidiendo
+  solo esa medida, el grupo se retira **y se cuenta** como grupo vacío, que es la norma de la D-ter.
+
+**LO QUE CONTESTA, con los datos reales de `desarrollo-bamburu`:** de **126 productos**, **89 no se
+han vendido nunca** (en una factura que cuente como venta) y tienen **4.430,23 € de stock parado**.
+Antes de esta noche esa cifra no se podía sacar de ninguna pantalla.
+- *Matiz medido y dicho:* 121 productos aparecen en alguna línea de factura, pero solo **43 en
+  facturas que CUENTAN** — el resto son facturas anuladas o de prueba. Y de esos 43, **6 apuntan a
+  productos que ya no existen** en el catálogo, así que no salen: el área parte del catálogo de HOY,
+  que es de lo que el dueño puede hacer algo.
+
+**DOS PREGUNTAS NUEVAS EN LA PORTADA**, en un grupo «Catálogo»: *«¿Qué productos llevo tiempo sin
+vender?»* y la que sigue de forma natural, *«¿Cuánto dinero tengo parado en productos que no se
+venden?»*. Se prueban **pulsándolas**, y dejan el constructor puesto en su receta.
+
+**🔒 Y UN CANDADO QUE PARECÍA UN CANDADO Y NO LO ERA.** Al declarar las medidas del área nuevas con
+`perm` salió que **`camposPara` filtraba las DIMENSIONES por permiso y las MEDIDAS no**: una medida
+con `perm` lo declaraba y no lo comprobaba nadie. Ahora se aplica **en el desplegable y en `cruzar`**,
+y falla cerrado (403 con su motivo, no un cero que se leería como «no hay nada»). Estreno: se ve el
+catálogo con `products.read`, pero **lo facturado exige además `invoices.read`**. Ninguna otra área
+pierde medidas por el cambio, comprobado área por área.
+
+**DOS ROJOS DEL GATE QUE ERAN DEL GATE:** buscaba el botón de la pregunta por su texto y pulsaba un
+contenedor sin manejador; y buscaba la leyenda del quesito en el HTML, cuando **Chart.js la dibuja
+DENTRO del lienzo**. Ahora pulsa el `[data-preg]` de verdad y afirma sobre **píxeles pintados**
+(50.822 de 361.760) más la tabla.

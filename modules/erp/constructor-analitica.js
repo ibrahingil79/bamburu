@@ -553,7 +553,136 @@ const AREA_AGENDA = {
   ordenar: 'citas',
 };
 
-export const AREAS = { ventas: AREA_VENTAS, compras: AREA_COMPRAS, clientes: AREA_CLIENTES, inventario: AREA_INVENTARIO, contabilidad: AREA_CONTABILIDAD, agenda: AREA_AGENDA };
+// ── ÁREA: CATÁLOGO — la que parte del PRODUCTO y no del movimiento ───────────
+// POR QUÉ EXISTE (23 ago 2026, punto 9). La pregunta doce del catálogo —«¿qué productos llevo tiempo
+// sin vender?»— NO SE PODÍA CONTESTAR, y no por falta de datos: el área de Inventario tiene como
+// fila un MOVIMIENTO, así que un producto que no se ha movido nunca **no produce fila** y no puede
+// salir en ningún gráfico. Medido el 23 ago en `desarrollo-bamburu`: 113 productos físicos, 76 con
+// movimiento, **37 invisibles**. Y justo los invisibles son la respuesta a la pregunta.
+//
+// EL CAMBIO DE GRANO, que es todo el asunto: aquí la fila es el PRODUCTO, y las ventas se le cuelgan.
+// Un producto que no vendió nada sale con CERO, que es un dato, no un hueco. Es el mismo cambio que
+// hizo falta en la agenda para poder hablar de horas libres.
+//
+// «PARADO» SE MIDE POR VENTAS, NO POR MOVIMIENTOS DE ALMACÉN, y es a propósito: una entrada de
+// mercancía o un traslado mueven el stock y no significan que el producto se venda; y un SERVICIO no
+// mueve stock jamás, así que por movimientos todos los servicios saldrían parados siempre. La fuente
+// es `invoice_items` sobre las facturas que CUENTAN como venta — la misma regla que el área de
+// Ventas, para que las dos digan lo mismo.
+//
+// OJO A LA VENTANA: las unidades y el importe son DEL PERIODO elegido, pero «cuánto lleva sin
+// venderse» se mira sobre TODA la historia. Si se recortara al periodo, un producto vendido hace dos
+// años parecería igual de parado que uno vendido ayer en cuanto el periodo fuera corto — y eso sería
+// una respuesta falsa a la pregunta que se está haciendo.
+const TRAMOS_PARADO = [
+  { max: 0,    etiqueta: 'Vendido en el periodo' },
+  { max: 30,   etiqueta: 'Sin vender: menos de 1 mes' },
+  { max: 90,   etiqueta: 'Sin vender: 1 a 3 meses' },
+  { max: 180,  etiqueta: 'Sin vender: 3 a 6 meses' },
+  { max: 365,  etiqueta: 'Sin vender: 6 meses a 1 año' },
+  { max: 1e9,  etiqueta: 'Sin vender: más de 1 año' },
+];
+const AREA_CATALOGO = {
+  etiqueta: 'Catálogo',
+  // Mismo candado que la pantalla de productos. Las medidas de dinero de venta piden además
+  // `invoices.read`, declarado en cada una: quien no ve facturas no ve lo facturado.
+  perm: 'products.read',
+  filas: (db, { from = null, to = null } = {}) => {
+    const prods = db.prepare(
+      `SELECT p.id, p.name AS producto, p.type, p.status, p.stock, p.average_cost,
+              c.name AS categoria
+         FROM products p LEFT JOIN categories c ON c.id = p.category_id`
+    ).all();
+    // Las ventas, UNA sola vez, y con la misma regla de «qué cuenta» que el área de Ventas.
+    const cuentan = countingSalesInvoices(db, {});
+    const idsCuentan = new Set(cuentan.map(i => i.id));
+    const fechaDe = new Map(cuentan.map(i => [i.id, String(i.issue_date).slice(0, 10)]));
+    const porProd = new Map();     // product_id → { uds, importe, ultima }
+    let lineas = [];
+    try {
+      lineas = db.prepare('SELECT invoice_id, product_id, quantity, total_price FROM invoice_items WHERE product_id IS NOT NULL').all();
+    } catch { lineas = []; }
+    for (const l of lineas) {
+      if (!idsCuentan.has(l.invoice_id)) continue;
+      const f = fechaDe.get(l.invoice_id);
+      const e = porProd.get(l.product_id) || { uds: 0, importe: 0, ultima: null, udsPeriodo: 0, importePeriodo: 0 };
+      if (!e.ultima || f > e.ultima) e.ultima = f;                       // TODA la historia
+      e.uds += Number(l.quantity) || 0;
+      e.importe += Number(l.total_price) || 0;
+      const dentro = (!from || f >= from) && (!to || f <= to);           // solo el periodo
+      if (dentro) { e.udsPeriodo += Number(l.quantity) || 0; e.importePeriodo += Number(l.total_price) || 0; }
+      porProd.set(l.product_id, e);
+    }
+    const hoy = new Date().toISOString().slice(0, 10);
+    const DIA = 86400000;
+    return prods.map(p => {
+      const v = porProd.get(p.id) || { uds: 0, importe: 0, ultima: null, udsPeriodo: 0, importePeriodo: 0 };
+      const dias = v.ultima
+        ? Math.max(0, Math.round((Date.parse(hoy + 'T00:00:00Z') - Date.parse(v.ultima + 'T00:00:00Z')) / DIA))
+        : null;                                                          // null = no se ha vendido NUNCA
+      return {
+        ...p,
+        uds_periodo: v.udsPeriodo, importe_periodo: r2(v.importePeriodo),
+        ultima_venta: v.ultima, dias_sin_vender: dias,
+        vendido_en_periodo: v.udsPeriodo > 0,
+        valor_stock: r2((Number(p.stock) || 0) * (Number(p.average_cost) || 0)),
+      };
+    });
+  },
+  dimensiones: {
+    // LA DIMENSIÓN DE LA PREGUNTA 12. «Nunca se ha vendido» es un grupo aparte y no se mezcla con
+    // «más de un año»: son cosas distintas, y juntarlas escondería justo la peor.
+    parado: {
+      etiqueta: 'Cuánto lleva sin venderse',
+      valor: f => {
+        if (f.vendido_en_periodo) return TRAMOS_PARADO[0].etiqueta;
+        if (f.dias_sin_vender == null) return 'No se ha vendido nunca';
+        return (TRAMOS_PARADO.find(t => f.dias_sin_vender <= t.max) || TRAMOS_PARADO[TRAMOS_PARADO.length - 1]).etiqueta;
+      },
+    },
+    producto:  { etiqueta: 'Producto',  valor: f => (f.producto || '').trim() || VACIO },
+    categoria: { etiqueta: 'Categoría', valor: f => (f.categoria || '').trim() || '(sin categoría)' },
+    tipo:      { etiqueta: 'Bien o servicio', valor: f => f.type === 'service' ? 'Servicio' : (f.type === 'digital' ? 'Digital' : 'Bien físico') },
+    estado:    { etiqueta: 'Estado en el catálogo', valor: f => f.status === 'archived' ? 'Archivado' : 'Activo' },
+  },
+  medidas: {
+    productos:      { etiqueta: 'Nº de productos',              dinero: false },
+    uds_vendidas:   { etiqueta: 'Unidades vendidas',            dinero: false, perm: 'invoices.read' },
+    importe:        { etiqueta: 'Facturado (sin IVA)',          dinero: true,  perm: 'invoices.read' },
+    stock_actual:   { etiqueta: 'Stock actual (uds)',           dinero: false, perm: 'inventory.read' },
+    valor_stock:    { etiqueta: 'Valor del stock a coste',      dinero: true,  perm: 'inventory.read' },
+    dias_medios:    { etiqueta: 'Días sin venderse (media)',    dinero: false },
+  },
+  // Repartir «nº de productos» por «Producto» daría un 1 en cada grupo, como en Clientes.
+  sinSentido: [['producto', 'productos', 'daría un 1 en cada grupo']],
+  usaPeriodo: false,
+  nuevoAcc: clave => ({ clave, productos: 0, uds: 0, importe: 0, stock: 0, valor: 0, diasSuma: 0, diasN: 0 }),
+  sumar: (a, f) => {
+    a.productos++;
+    a.uds += Number(f.uds_periodo) || 0;
+    a.importe += Number(f.importe_periodo) || 0;
+    a.stock += Number(f.stock) || 0;
+    a.valor += Number(f.valor_stock) || 0;
+    // Los que no se han vendido NUNCA no entran en la media: no tienen un «cuántos días» que
+    // promediar, y meterlos con un número inventado (¿la edad del producto? ¿cero?) sería mentir.
+    if (f.dias_sin_vender != null) { a.diasSuma += f.dias_sin_vender; a.diasN++; }
+  },
+  salida: (a, meds) => {
+    const o = { clave: a.clave };
+    for (const m of meds) {
+      if (m === 'productos') o.productos = a.productos;
+      else if (m === 'uds_vendidas') o.uds_vendidas = r2(a.uds);
+      else if (m === 'importe') o.importe = r2(a.importe);
+      else if (m === 'stock_actual') o.stock_actual = r2(a.stock);
+      else if (m === 'valor_stock') o.valor_stock = r2(a.valor);
+      else if (m === 'dias_medios') o.dias_medios = a.diasN ? Math.round(a.diasSuma / a.diasN) : null;
+    }
+    return o;
+  },
+  ordenar: 'productos',
+};
+
+export const AREAS = { ventas: AREA_VENTAS, compras: AREA_COMPRAS, clientes: AREA_CLIENTES, inventario: AREA_INVENTARIO, contabilidad: AREA_CONTABILIDAD, agenda: AREA_AGENDA, catalogo: AREA_CATALOGO };
 
 // El permiso BASE de un área (para que las rutas no tengan que conocer el registro). null si no existe.
 export function areaPerm(area) { return AREAS[area]?.perm || null; }
@@ -653,6 +782,12 @@ export function camposPara(hasPerm, areaKey = 'ventas', modo = MODO_POR_DEFECTO,
   const dims = {}, meds = {};
   for (const [k, d] of Object.entries(a.dimensiones)) if (!d.perm || hasPerm(d.perm)) dims[k] = { etiqueta: d.etiqueta };
   for (const [k, m] of Object.entries(a.medidas)) {
+    // EL CANDADO POR MEDIDA (23 ago 2026, punto 9). Hasta hoy solo las DIMENSIONES podían pedir un
+    // permiso; una medida con `perm` lo declaraba y no lo comprobaba nadie — un candado que parece
+    // un candado y no lo es, que es peor que no tenerlo. Lo estrena el área de Catálogo: se ve
+    // el catálogo con `products.read`, pero lo FACTURADO exige además `invoices.read`.
+    // Esto es la cortesía del desplegable; el candado de verdad está en `cruzar`, abajo.
+    if (m.perm && !hasPerm(m.perm)) continue;
     // FICHA D-bis — el titular de la medida es «Margen en %» (que es lo que es) y su BASE va en la
     // ayuda, no pegada al nombre: «Margen sobre lo que te costó» se leía como otra medida distinta
     // de «Beneficio (margen)». La base no se pierde — sigue enseñándose, debajo.
@@ -708,6 +843,14 @@ export function cruzar(db, { area = 'ventas', dimension = 'fecha', medidas = ['b
     }
   }
   if (dim.perm && hasPerm && !hasPerm(dim.perm)) { const e = new Error('No tienes permiso para cruzar por ' + dim.etiqueta.toLowerCase()); e.status = 403; throw e; }
+  // Y el mismo candado para las MEDIDAS que lo pidan. Falla CERRADO: si se pide una medida sin su
+  // permiso, no se calcula y se dice — no se devuelve un cero, que se leería como «no hay nada».
+  for (const mk of (Array.isArray(medidas) ? medidas : [medidas])) {
+    const md = A.medidas[mk];
+    if (md && md.perm && hasPerm && !hasPerm(md.perm)) {
+      const e = new Error('No tienes permiso para ver «' + md.etiqueta + '»'); e.status = 403; throw e;
+    }
+  }
   // FICHA D-ter — las MEDIDAS PROPIAS del usuario. No son del catálogo del área, así que se resuelven
   // aparte: se piden sus dos ingredientes al motor y la cuenta se hace al final, con la operación de
   // la tabla cerrada `OPERACIONES`. No se interpreta ninguna expresión.

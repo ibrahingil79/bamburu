@@ -437,6 +437,15 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         r:{area:'agenda',dimension:'fecha',periodo:'mes',medidas:['horas_ocupadas','horas_abiertas'],grafico:'lineas'} },
       { g:'Agenda', t:'¿Cuántas citas se me caen?', perm:'citas.read',
         r:{area:'agenda',dimension:'estado',periodo:'mes',medidas:['citas'],grafico:'tarta'} },
+      // LA PREGUNTA DOCE (punto 9 · 23 ago 2026). Quedó fuera de la D-bis porque NO SE PODÍA
+      // contestar: el área de Inventario tiene como fila un MOVIMIENTO, y un producto que no se ha
+      // movido nunca no produce fila. El área de Catálogo parte del PRODUCTO, así que los parados
+      // salen con cero, que es la respuesta.
+      { g:'Catálogo', t:'¿Qué productos llevo tiempo sin vender?', perm:'products.read',
+        r:{area:'catalogo',dimension:'parado',periodo:'mes',medidas:['productos'],grafico:'tarta'} },
+      // Y la que la sigue de forma natural: si están parados, ¿cuánto dinero tengo ahí quieto?
+      { g:'Catálogo', t:'¿Cuánto dinero tengo parado en productos que no se venden?', perm:'inventory.read',
+        r:{area:'catalogo',dimension:'parado',periodo:'mes',medidas:['valor_stock'],grafico:'barras'} },
     ].filter(p => can(c, p.perm));
 
     const preguntasHtml = PREGUNTAS.map((p, i) =>
