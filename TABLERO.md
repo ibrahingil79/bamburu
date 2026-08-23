@@ -2010,7 +2010,9 @@ verdad y no como se suponía — que es justo el problema que esta tarea viene a
   dueño/admin puede leer la tabla en crudo por `query_database`, que es SQL, no una puerta.
   **Cuando se aborde, las dos mitades tienen que respetar los MISMOS permisos** (CANON §3-bis), y el
   área de una receta es la que manda: exactamente el candado que ya usa el papel.
-- **⬜ DESCUENTOS Y PROMOCIONES — rehacer la función ENTERA y BIEN** (bonos, promociones, descuento por
+- ~~**⬜ DESCUENTOS Y PROMOCIONES — rehacer la función ENTERA y BIEN**~~ **✅ HECHO el 23 ago 2026
+  (noche · punto 11) · gate `scripts/gate-descuentos.mjs` · 60 ✓ · 0 ✗.** Ficha al final. Registro:
+  **⬜ LO DE ANTES:** (bonos, promociones, descuento por
   cliente), **operable por DISA**. *(Apuntada por Ibrahin el 23 ago 2026 al cerrar el encargo INTEGRIDAD.
   **No se ha construido nada hoy**: queda registrada, sin encargo.)*
   **Ojo con leer mal la retirada del 23 de agosto:** la pantalla vieja `/admin/discounts` se desmontó ese
@@ -7055,3 +7057,64 @@ verdad** en el gate, porque un enlace que no lleva a ninguna parte es peor que n
 fallar cerrado es lo correcto—, así que las funciones del módulo unas veces devolvían un objeto y
 otras reventaban, según por dónde se llamaran. Ahora **todas devuelven lo mismo**: un resultado o
 `{ error, status }`. Una función exportada que a veces explota es una trampa para el siguiente.
+
+---
+
+### PUNTO 11 · DESCUENTOS, PROMOCIONES Y BONOS, REHECHOS ENTEROS  ✅ **HECHO (23 ago 2026, noche)** · gate `scripts/gate-descuentos.mjs` · **60 ✓ · 0 ✗**
+
+**LA DECISIÓN DE DISEÑO QUE LO GOBIERNA TODO, y por la que esto no toca el motor fiscal:**
+
+> **UN DESCUENTO ES UNA LÍNEA DEL DOCUMENTO**, con importe negativo y el mismo tipo de IVA que lo que
+> rebaja. No una columna de la cabecera.
+
+`computeTotals` ya suma líneas negativas —la base baja, el IVA baja en proporción y el desglose por
+tipo cuadra—, así que **ni el sello ni VERI\*FACTU cambian**. Y en el papel **se lee**: el cliente ve
+qué le has descontado y por qué, en vez de un total más bajo sin explicación.
+
+**Y LA SEGUNDA: EL MOTOR PROPONE, EL USUARIO CONFIRMA.** Ningún descuento entra solo en un documento.
+Al facturar se pulsa **«Descuentos…»**, sale un panel con lo que toca —cada uno con su motivo y lo
+que resta—, **las casillas nacen sin marcar**, y si se cancela **no se añade nada**. Comprobado
+pulsando las dos cosas.
+
+**LAS TRES PIEZAS**
+- **Descuento fijo por cliente** (`clients.descuento_pct`, aditiva). Se pone en su ficha y se
+  **propone** al facturarle. Validado en el esquema, no solo en la pantalla: un 150 % por la API se
+  rechaza.
+- **Promociones** (tabla nueva): porcentaje o importe fijo, con **ventana de fechas**, **mínimo de
+  documento**, **alcance** (todo / una categoría / un producto), **tope de usos** y **código
+  opcional**. Una promoción con código **no se aplica sola** — si lo hiciera no sería un código,
+  sería una rebaja. Un importe fijo enorme **se recorta a la base**: nunca deja el total en negativo.
+- **Bonos** (tabla nueva + su registro de consumos): un talonario prepagado. **Se vende con una
+  factura normal** —ahí está el ingreso— y **consumirlo NO emite factura**: baja el contador y queda
+  apuntado quién, cuándo y cuántas. Comprobado que el número de facturas **no cambia** al consumir.
+  Caducidad, agotado y **deshacer un consumo** (que le devuelve al cliente lo que pagó) también.
+
+**LOS TRES CUPONES ARCHIVADOS VUELVEN, y encajan.** `BIENVENIDA10` (10 %), `VERANO2026` (15 %) y
+`FIJO5` (5 €) pasan a ser promociones con su código, migrados desde `discount_codes_archived`.
+**Nacen APAGADOS: recuperar no es encender.** Lo que **no** se recupera es su mecánica de carrito de
+tienda —esa pantalla estaba muerta y la tienda está congelada—: ahora se aplican al documento que se
+esté haciendo.
+
+**DISA LEE Y PROPONE, PERO NO APLICA.** Dos herramientas (`ver_descuentos`, `calcular_descuento`) y
+las tres tablas en su mapa de LECTURA con `invoices.read`. **No están en `WRITABLE_TABLES`**: aplicar
+un descuento cambia lo que se factura y consumir un bono le quita al cliente algo que pagó — las dos
+son acciones con valor, y el canon dice que DISA propone. Y avisa del malentendido fácil: **un bono
+no rebaja la factura, la evita.**
+
+**🔴 LO QUE DESTAPÓ LA CAPTURA, Y NINGUNA ASERCIÓN VIO.** El gate daba 47 ✓ con la línea de descuento
+puesta… y en la captura, **la base seguía diciendo 100,00 € con un −10,00 € dos centímetros más
+abajo**. Dos fallos encadenados:
+1. **El esquema rechazaba el precio negativo** (`unit_price: nonnegative()`), así que la factura se
+   habría rechazado **al emitir**. Se cambia por `min(-1.000.000)`, y **la guarda que sustituye a esa
+   se pone donde tiene sentido**: en `computeTotals`, sobre el TOTAL — *una línea negativa es un
+   descuento y es legítima; una factura de −40 € no lo es, para eso está la rectificativa*.
+2. **El preview de totales fallaba EN SILENCIO** (un `catch` vacío «para no spamear toasts»). La
+   intención era buena y el efecto, malo: la pantalla enseñaba un total que **no cuadraba con sus
+   propias líneas**, que es peor que un error. Ahora lo dice **donde está el total**, sin toast.
+*Es la tercera vez esta noche que un `catch` mudo esconde una avería. Van tres.*
+
+**LA PRUEBA QUE MÁS VALE, y dónde se hace.** El gate **emite una factura de verdad con descuento** y
+comprueba la base (90 €), el total (108,90 €), que la línea queda guardada y que **la cadena de
+huellas cuadra con ella dentro**. Y lo hace **en un negocio propio que borra entero al salir**:
+una factura emitida entra en VERI\*FACTU y **ya no se puede borrar** — emitirla en el negocio
+compartido sería dejar basura imborrable, que es la lección que costó 130 clientes archivados.

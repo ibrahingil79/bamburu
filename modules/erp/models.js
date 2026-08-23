@@ -2772,6 +2772,99 @@ Sé preciso con los números y siempre redondea correctamente.`,
     txB();
   }
 
+  // ── DESCUENTOS, PROMOCIONES Y BONOS (23 ago 2026, noche · punto 11) ─────────────────────────
+  // TODO ADITIVO E IDEMPOTENTE. Y la decisión que lo gobierna todo, escrita aquí porque es la que
+  // hace que esto NO toque el motor fiscal:
+  //
+  //   **UN DESCUENTO ES UNA LÍNEA DEL DOCUMENTO, no una columna de la cabecera.**
+  //
+  // Una línea con importe negativo y el MISMO tipo de IVA que lo que rebaja. `computeTotals` ya la
+  // suma bien —el subtotal baja, el IVA baja en proporción y el desglose por tipo cuadra—, así que
+  // no cambia ni una línea del cálculo, ni el sello, ni VERI*FACTU. Y en el papel se LEE: el cliente
+  // ve qué le has descontado y por qué, en vez de un total más bajo sin explicación.
+  //
+  // La otra decisión: EL MOTOR PROPONE, EL USUARIO CONFIRMA (CANON). Ningún descuento se mete solo
+  // en una factura. Se calcula, se enseña, y quien emite decide.
+  addCol(db, 'clients', 'descuento_pct', 'REAL NOT NULL DEFAULT 0');   // el que lleva SIEMPRE ese cliente
+  db.exec(`
+    -- PROMOCIONES: una regla con fecha. Lo que antes eran «cupones» de la tienda (con código, para
+    -- un carrito) pasa a ser esto, que es lo que un autónomo usa de verdad: «en agosto, 15 % en
+    -- revisiones». El CÓDIGO se conserva como campo opcional, para las que sí se dan a mano.
+    CREATE TABLE IF NOT EXISTS promociones (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nombre TEXT NOT NULL,
+      codigo TEXT DEFAULT '',                 -- opcional: si se rellena, hay que teclearlo
+      tipo TEXT NOT NULL DEFAULT 'porcentaje' CHECK(tipo IN ('porcentaje','importe')),
+      valor REAL NOT NULL DEFAULT 0,
+      desde DATE, hasta DATE,                 -- NULL = sin límite por ese lado
+      minimo REAL NOT NULL DEFAULT 0,         -- base mínima del documento para que aplique
+      alcance TEXT NOT NULL DEFAULT 'todo' CHECK(alcance IN ('todo','categoria','producto')),
+      categoria_id INTEGER, product_id INTEGER,
+      usos_max INTEGER, usos INTEGER NOT NULL DEFAULT 0,
+      activa INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (categoria_id) REFERENCES categories(id),
+      FOREIGN KEY (product_id) REFERENCES products(id)
+    );
+    -- BONOS: un talonario prepagado de un cliente. Se VENDE como una línea normal de factura (el
+    -- ingreso se declara al venderlo, que es el tratamiento simple y el que usa un autónomo que
+    -- vende «un bono de 10 sesiones»), y CONSUMIRLO no emite factura: descuenta del talonario.
+    CREATE TABLE IF NOT EXISTS bonos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id INTEGER NOT NULL,
+      nombre TEXT NOT NULL,
+      product_id INTEGER,                     -- a qué servicio da derecho (opcional)
+      sesiones INTEGER NOT NULL DEFAULT 0,    -- cuántas trae
+      usadas INTEGER NOT NULL DEFAULT 0,
+      importe REAL NOT NULL DEFAULT 0,        -- lo que pagó por él
+      invoice_id INTEGER,                     -- la factura con la que se vendió
+      caduca DATE,
+      activo INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (client_id) REFERENCES clients(id),
+      FOREIGN KEY (product_id) REFERENCES products(id)
+    );
+    -- Cada consumo, apuntado. Sin esto no se puede contestar «¿cuándo gastó las cinco?», y un
+    -- talonario cuyo contador baja sin dejar rastro es exactamente lo que nadie se cree.
+    CREATE TABLE IF NOT EXISTS bono_consumos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bono_id INTEGER NOT NULL,
+      fecha DATE NOT NULL,
+      sesiones INTEGER NOT NULL DEFAULT 1,
+      cita_id INTEGER, nota TEXT DEFAULT '',
+      user_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (bono_id) REFERENCES bonos(id)
+    );
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_promociones_activa ON promociones(activa, desde, hasta)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_bonos_cliente ON bonos(client_id, activo)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_bono_consumos ON bono_consumos(bono_id, fecha)`);
+
+  // LOS TRES CUPONES ARCHIVADOS VUELVEN, convertidos en promociones (punto 11). Estaban legibles en
+  // `discount_codes_archived` desde el encargo de cupones, y encajan: los tres son «un porcentaje o
+  // un importe fijo, con su código». Lo que NO se recupera es su mecánica de carrito de tienda —esa
+  // pantalla estaba muerta y la tienda está congelada—: entran con su código, y se aplican al
+  // documento que se esté haciendo. Nacen INACTIVAS: recuperar no es encender.
+  const promKey = 'migration_promos_desde_cupones_2026_v1';
+  if (!db.prepare('SELECT value FROM settings WHERE key=?').get(promKey)) {
+    const txP = db.transaction(() => {
+      const hay = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='discount_codes_archived'").get();
+      if (hay) {
+        for (const c of db.prepare('SELECT * FROM discount_codes_archived').all()) {
+          db.prepare(
+            `INSERT INTO promociones (nombre, codigo, tipo, valor, minimo, usos_max, usos, activa, hasta)
+             VALUES (?,?,?,?,?,?,?,0,?)`
+          ).run(c.code, c.code, c.type === 'fixed' ? 'importe' : 'porcentaje', Number(c.value) || 0,
+                Number(c.min_order) || 0, c.max_uses ?? null, Number(c.uses_count) || 0,
+                c.expires_at ? String(c.expires_at).slice(0, 10) : null);
+        }
+      }
+      db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(promKey, 'done');
+    });
+    txP();
+  }
+
   // ── B12 · LAS TRES TABLAS DE ROLES, ARCHIVADAS (23 ago 2026, noche · punto 8) ────────────────
   // `roles`, `role_permissions` y `user_roles` se sembraban desde siempre y NO CONCEDÍAN NADA: la
   // aplicación de permisos lee solo `user_permissions`. El informe del Eje C las declaró código

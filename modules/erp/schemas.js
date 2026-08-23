@@ -93,6 +93,9 @@ export const clientSchema = z.object({
   payment_method: z.enum(['', 'transferencia', 'efectivo', 'tarjeta', 'domiciliacion']).optional().default(''),
   // T4 Paso 2 — perfil de cobro: gobierna la cadencia de la próxima acción (motor en cobros.js).
   collections_profile: z.enum(['suave', 'estandar', 'firme', 'manual']).optional().default('estandar'),
+  // PUNTO 11 — el descuento fijo del cliente. Se valida AQUÍ, no en la pantalla: un 150 % metido
+  // por la API sería un regalo con vueltas, y la pantalla no es el candado.
+  descuento_pct: z.coerce.number().min(0).max(100).optional().default(0),
   // CRM — RESPONSABLE (dueño comercial de la ficha). `optId` acepta vacío/0 → null = "sin asignar",
   // que es un estado legítimo y NO un error: los clientes existentes nacen así y el dueño reparte
   // cuando quiera. Se asigna a mano; ni reparto automático ni DISA (decisión del dueño).
@@ -389,10 +392,22 @@ export const refundSchema = z.object({
 });
 
 // ── Invoices ───────────────────────────────────────────────────
+// EL PRECIO PUEDE SER NEGATIVO — y el motivo es de peso (punto 11, 23 ago 2026).
+// Un DESCUENTO en este producto es una LÍNEA con importe negativo: así el cliente lo lee en el
+// papel y el IVA baja en proporción sin tocar el motor fiscal. Con `nonnegative()` la factura se
+// rechazaba al emitir… y el preview de totales fallaba EN SILENCIO (su `catch` no dice nada), así
+// que la pantalla enseñaba la base sin rebajar mientras la línea negativa estaba a la vista. Lo
+// cazó la CAPTURA, no una aserción: el descuento en su fila y el total sin cambiar, dos centímetros
+// más abajo.
+//
+// LO QUE SUSTITUYE A ESA GUARDA, porque hacía falta una: el tope de que **un documento no puede
+// salir en negativo** se comprueba donde tiene sentido —sobre el TOTAL, en `computeTotals`— y no
+// línea a línea. Una línea negativa suelta no es un error; una factura de −40 € sí (para eso está
+// la rectificativa). La cantidad sigue teniendo que ser positiva.
 const invoiceLineSchema = z.object({
   description: str(500),
   quantity:    z.coerce.number().positive().max(1_000_000),
-  unit_price:  z.coerce.number().nonnegative().max(1_000_000),
+  unit_price:  z.coerce.number().min(-1_000_000).max(1_000_000),
   tax_rate:    z.coerce.number().min(0).max(50).optional().default(0),  // A2: IVA por línea
   product_id:  optId,   // si la línea procede del catálogo: enlaza al producto para el aviso de exceso de stock (físicos)
 });

@@ -145,3 +145,82 @@ export function herramientasDeInformes(db, { userId = null, hasPerm = () => true
   };
   return { TOOLS: TOOLS_INFORMES, ejecutar, ...api };
 }
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// DISA · DESCUENTOS, PROMOCIONES Y BONOS (punto 11) — LEER Y PROPONER, nunca aplicar
+//
+// POR QUÉ AQUÍ: es la misma clase de puerta que la de los informes —DISA contesta con el MISMO
+// motor que la pantalla— y comparte su regla: **no escribe**. Aplicar un descuento cambia lo que se
+// factura, y consumir un bono le quita al cliente algo que pagó: las dos son acciones con valor, y
+// el canon dice que DISA propone y el usuario confirma. Así que devuelve el cálculo y **el enlace**
+// a donde se hace, igual que con los informes.
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+import { listarPromociones, promocionVigente, bonosDe, proponer as proponerDto } from '../erp/descuentos.js';
+
+export const TOOLS_DESCUENTOS = [
+  {
+    name: 'ver_descuentos',
+    description: 'Dice que descuentos hay disponibles: las promociones vigentes hoy, el descuento fijo de un cliente y sus bonos con sesiones sin usar. Si le pasas el id del cliente, lo cuenta todo de el.',
+    input_schema: { type: 'object', properties: { client_id: { type: 'integer', description: 'opcional: el cliente del que preguntan' } } },
+  },
+  {
+    name: 'calcular_descuento',
+    description: 'Calcula cuanto se llevaria de descuento un importe para un cliente, con lo que hay vigente hoy. Devuelve el detalle y el enlace para hacerlo en la pantalla. NO aplica nada.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'integer', description: 'el cliente' },
+        importe: { type: 'number', description: 'la base del documento, sin IVA' },
+        iva: { type: 'number', description: 'el tipo de IVA de esa base (21, 10, 4 o 0). Por defecto 21.' },
+        codigo: { type: 'string', description: 'un codigo de promocion, si lo tiene' },
+      },
+      required: ['importe'],
+    },
+  },
+];
+export const NOMBRES_DESCUENTOS = new Set(TOOLS_DESCUENTOS.map(t => t.name));
+
+export function herramientasDeDescuentos(db, { hasPerm = () => true } = {}) {
+  const puede = () => hasPerm('invoices.read');
+  const ver = (inp = {}) => {
+    if (!puede()) return { error: 'No tienes permiso para ver los descuentos (hace falta el de facturas).' };
+    const hoy = new Date().toISOString().slice(0, 10);
+    const proms = listarPromociones(db, { soloActivas: true })
+      .filter(p => promocionVigente(p, hoy))
+      .map(p => ({ nombre: p.nombre, descuento: p.tipo === 'porcentaje' ? p.valor + ' %' : p.valor + ' €',
+                   codigo: p.codigo || null, hasta: p.hasta || null, sobre: p.alcance }));
+    const out = { promociones_vigentes: proms, enlace: '/admin/descuentos' };
+    if (inp.client_id) {
+      const cli = db.prepare('SELECT id, name, descuento_pct FROM clients WHERE id=?').get(inp.client_id);
+      if (!cli) return { error: 'Ese cliente no existe.' };
+      out.cliente = { id: cli.id, nombre: cli.name, descuento_fijo_pct: Number(cli.descuento_pct) || 0 };
+      out.bonos = bonosDe(db, cli.id, { soloVivos: true })
+        .map(b => ({ id: b.id, nombre: b.nombre, quedan: b.quedan, de: b.sesiones, caduca: b.caduca || null }));
+      out.nota_bonos = 'Un bono no se descuenta de la factura: se consume desde /admin/descuentos y no genera factura, porque el ingreso se declaro al venderlo.';
+    }
+    return out;
+  };
+  const calcular = (inp = {}) => {
+    if (!puede()) return { error: 'No tienes permiso para calcular descuentos (hace falta el de facturas).' };
+    const importe = Number(inp.importe) || 0;
+    if (importe <= 0) return { error: 'Dime un importe mayor que cero.' };
+    const iva = inp.iva == null ? 21 : Number(inp.iva);
+    const r = proponerDto(db, { clientId: inp.client_id || null, codigo: inp.codigo || '',
+      lineas: [{ description: 'Base', quantity: 1, unit_price: importe, tax_rate: iva }] });
+    const total = Math.round(r.lineas.reduce((s, l) => s + Math.abs(l.unit_price), 0) * 100) / 100;
+    return {
+      base: importe, descuento_total: total, quedaria_en: Math.round((importe - total) * 100) / 100,
+      detalle: r.propuestas.map(p => ({ nombre: p.nombre, motivo: p.motivo, resta: p.importe || 0 })),
+      enlace: '/admin/invoices/new',
+      nota: 'Esto es un calculo, no se ha aplicado nada. Para aplicarlo, en la PANTALLA de la factura pulsa «Descuentos…» y eliges cual entra.',
+    };
+  };
+  const ejecutar = (nombre, input = {}) => {
+    try {
+      if (nombre === 'ver_descuentos') return ver(input);
+      if (nombre === 'calcular_descuento') return calcular(input);
+      return { error: 'Herramienta de descuentos desconocida: ' + nombre };
+    } catch (e) { return { error: e && e.message ? e.message : 'No he podido calcularlo.', status: e && e.status }; }
+  };
+  return { TOOLS: TOOLS_DESCUENTOS, ejecutar, ver, calcular };
+}

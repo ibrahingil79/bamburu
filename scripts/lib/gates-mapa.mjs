@@ -156,6 +156,8 @@ export const GRUPOS = {
                                      // parado sale con cero en vez de no salir
     'gate-disa-informes',            // punto 10: las dos puertas dan el mismo número y los mismos
                                      // permisos; y el enlace que da DISA se abre de verdad
+    'gate-descuentos',               // punto 11: descuentos, promociones y bonos — el IVA baja en
+                                     // proporción, y emite una factura de verdad en un negocio propio
   ],
   // Sala de máquinas: superadmin, conexiones a la BD, el fichero -wal, el saneo de errores al cliente,
   // el escapado del texto del usuario (que no se vuelva HTML ni JS) y la CSP estricta de las
@@ -223,6 +225,10 @@ export const EMPIEZAN_DE_CERO = new Set([
 // fichero nombra `provisionTenant`, así que sin esta lista canta un desajuste que no existe — y una
 // alarma falsa repetida en cada pasada enseña a no mirar las alarmas. Se declara con su motivo.
 export const TENANT_EXTRA = new Map([
+  ['gate-descuentos',
+   'vive en el negocio de desarrollo (promociones, bonos y la pantalla de la factura), pero para EMITIR '
+   + 'una factura con descuento levanta uno propio y lo borra entero al salir: una factura emitida entra '
+   + 'en la cadena de VERI*FACTU y ya no se puede borrar, así que no se emite en un negocio compartido.'],
   ['gate-oficio-pantalla',
    'vive en el negocio de desarrollo (le cambia el OFICIO en company_config y lo devuelve), pero para '
    + 'el caso «un negocio de una sola persona» levanta uno propio en vez de APAGAR a las demás, que es '

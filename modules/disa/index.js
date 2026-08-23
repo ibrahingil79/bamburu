@@ -23,7 +23,8 @@ import { resumirAvisos, hoyLocal } from '../erp/avisos.js';                     
 import { fuentesPermitidas } from '../erp/layout.js';                                       // cada fuente exige el permiso de su pantalla
 // PUNTO 10 · LA SEGUNDA PUERTA A LOS INFORMES (CANON §3-bis). Vive en su propio módulo para que el
 // gate pueda probar LAS MISMAS funciones que corre DISA, y no una copia escrita para la prueba.
-import { herramientasDeInformes, NOMBRES_INFORMES } from './informes.js';
+import { herramientasDeInformes, NOMBRES_INFORMES,
+         herramientasDeDescuentos, NOMBRES_DESCUENTOS } from './informes.js';
 import { sendEmail } from '../../core/mailer.js';
 import { runCapture, captureFromExtraction } from '../erp/routes/purchases-capture.js';   // pipeline de captura C2 reutilizado (foto/PDF y voz)
 import { createProductSvc } from '../erp/routes/products.js';   // alta validada (banda de IVA obligatoria, sin defecto silencioso)
@@ -81,6 +82,11 @@ export const QUERY_TABLE_READ_PERMS = {
   // no crea ni mueve citas; citas NO está en WRITABLE_TABLES, así que escribir ya es imposible).
   citas: 'citas.read', cita_servicios: 'citas.read', recursos: 'citas.read', agenda_bloqueos: 'citas.read',
   horario_tramos: 'citas.read', horario_excepciones: 'citas.read', service_config: 'citas.read', cita_avisos: 'citas.read',
+  // PUNTO 11 (23 ago 2026) — descuentos, promociones y bonos. Cuelgan de FACTURAS porque es lo que
+  // cambian: un descuento no es un dato suelto, es menos dinero en un documento. DISA los LEE y los
+  // PROPONE; no están en WRITABLE_TABLES, así que aplicar o consumir sigue siendo cosa de la
+  // pantalla — que es donde el usuario confirma.
+  promociones: 'invoices.read', bonos: 'invoices.read', bono_consumos: 'invoices.read',
 };
 
 // Una tabla se considera REFERIDA si su nombre aparece como palabra completa (\b). '_' es carácter de
@@ -2272,6 +2278,10 @@ export function register(app, db) {
       '  Cuando compongas o abras uno, DA EL ENLACE que te devuelve la herramienta, para que lo vea con',
       '  su grafico. GUARDAR no se hace por chat: se hace en esa pantalla, y se lo dices asi.',
       '  Estas herramientas ya respetan los permisos del usuario; si algo no aparece, es que no lo ve.',
+      '- DESCUENTOS, PROMOCIONES Y BONOS: contar que hay (ver_descuentos) y calcular cuanto se llevaria',
+      '  un importe (calcular_descuento). NO los aplicas ni consumes un bono: eso cambia lo que se',
+      '  factura, asi que se hace en la pantalla y lo confirma el usuario. Da el enlace que te devuelve',
+      '  la herramienta. Y ojo: un BONO no se descuenta de la factura, se consume y no genera factura.',
       '- Si el usuario es admin/owner: ejecutar cambios (crear, editar, eliminar registros,',
       '  ajustar stock, generar facturas) SIEMPRE pidiendo confirmacion previa.',
       '',
@@ -2564,12 +2574,12 @@ export function register(app, db) {
       // ── PUNTO 10 · LOS INFORMES, POR CHAT ────────────────────────────────────────────────────
       // Mismo motor y mismos permisos que la pantalla; el detalle y el porqué, en `informes.js`.
       // `hasPerm` recibe la clave entera y la parte: es el MISMO `checkPermission` de `requirePerm`.
-      const INFORMES_TOOL = herramientasDeInformes(db, {
-        userId: session?.userId || null,
-        hasPerm: clave => { const [m, a] = String(clave).split('.'); return checkPermission(db, session, m, a); },
-      });
+      const permClave = clave => { const [m, a] = String(clave).split('.'); return checkPermission(db, session, m, a); };
+      const INFORMES_TOOL = herramientasDeInformes(db, { userId: session?.userId || null, hasPerm: permClave });
+      // PUNTO 11 · descuentos, promociones y bonos: LEER y PROPONER. Aplicar sigue en la pantalla.
+      const DTO_TOOL = herramientasDeDescuentos(db, { hasPerm: permClave });
 
-      const tools = [...INFORMES_TOOL.TOOLS, {
+      const tools = [...INFORMES_TOOL.TOOLS, ...DTO_TOOL.TOOLS, {
         name: 'query_database',
         description: 'Ejecuta una consulta SQL SELECT para obtener datos especificos del negocio. Usala cuando necesites datos que no estan en el contexto inicial: clientes por gasto, productos por ventas, pedidos por periodo, etc. Solo lectura. Usa LIMIT 20 como maximo.',
         input_schema: {
@@ -2605,8 +2615,8 @@ export function register(app, db) {
           const toolUse = data.content.find(b => b.type === 'tool_use');
           if (!toolUse) break;
           const inp = toolUse.input || {};
-          const result = NOMBRES_INFORMES.has(toolUse.name)
-            ? INFORMES_TOOL.ejecutar(toolUse.name, inp)
+          const result = NOMBRES_INFORMES.has(toolUse.name) ? INFORMES_TOOL.ejecutar(toolUse.name, inp)
+            : NOMBRES_DESCUENTOS.has(toolUse.name) ? DTO_TOOL.ejecutar(toolUse.name, inp)
             : runQueryTool(inp.sql || '');
           // C6/B8 — el SQL va al log SIN sus valores. La consulta la escribe el modelo, así que los
           // literales son lo que el dueño preguntó: "la factura de Juan Pérez" acaba como

@@ -40,6 +40,9 @@ export const NAV_PERMS = {
   'supplier-returns': 'purchases.read',
   'stock-transfers': 'inventory.read',
   discounts:        'discounts.read',
+  // La pantalla nueva cuelga de FACTURAS, no de un permiso propio: un descuento cambia lo que se
+  // factura, así que quien no puede ver facturas tampoco tiene por qué ver las promociones.
+  descuentos:       'invoices.read',
   quotes:           'quotes.read',
   pedidos:          'pedidos.read',
   albaranes:        'albaranes.read',
@@ -132,6 +135,10 @@ export const MENU = [
     { href: '/admin/albaranes', label: 'Albaranes', key: 'albaranes', icon: 'ti-truck-delivery' },
     { href: '/admin/cobros', label: 'Cobros', key: 'cobros', icon: 'ti-cash' },
     { href: '/admin/mostrador', label: 'TPV', key: 'mostrador', icon: 'ti-cash-register' },
+    // PUNTO 11 (23 ago 2026) — la función de descuentos VUELVE, y esta vez con puerta. La vieja
+    // (`/admin/discounts`) se desmontó por estar MUERTA: era de la tienda, con códigos para un
+    // carrito, y no tocaba ni una factura. Esta sirve a la facturación, así que vive en Ventas.
+    { href: '/admin/descuentos', label: 'Descuentos y bonos', key: 'descuentos', icon: 'ti-discount' },
     // «Portal de cliente» YA NO ESTÁ AQUÍ: se fue a Clientes el 18 ago 2026, por decisión de Ibrahin.
   ]},
   // «A quién le vendes» — ÁREA PROPIA en el rail (sacada de Ventas a petición de Ibrahim, 21 jul 2026):

@@ -73,6 +73,15 @@ export function computeTotals(lines, irpfRate = 0) {
     taxByRate[key].amount += tax;
   }
 
+  // UN DOCUMENTO NO PUEDE SALIR EN NEGATIVO. Esta es la guarda que sustituye al `nonnegative()` de
+  // la línea (punto 11): una línea negativa suelta es un DESCUENTO y es legítima; una factura cuyo
+  // total se va por debajo de cero no lo es — para eso está la rectificativa, que tiene su propio
+  // camino y su propio esquema. Se comprueba aquí, en el único sitio por el que pasan todas.
+  if (subtotal < -0.0049) {
+    throw new Error('Los descuentos suman más que las líneas: el documento saldría en negativo. '
+      + 'Si lo que quieres es devolver dinero, se hace con una rectificativa.');
+  }
+
   // Redondeos finales por grupo para evitar arrastre.
   for (const k of Object.keys(taxByRate)) {
     taxByRate[k].base   = r2(taxByRate[k].base);
@@ -1331,7 +1340,12 @@ export function createInvoiceRoutes(db) {
           <hr style="margin:1.25rem 0;border:none;border-top:1px solid var(--border)">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
             <h3 style="font-size:.9rem;font-weight:600;margin:0">Líneas</h3>
-            <button class="btn btn-secondary btn-sm" onclick="addLine()">+ Añadir línea</button>
+            <div style="display:flex;gap:.5rem">
+              <!-- PUNTO 11 · EL MOTOR PROPONE, EL USUARIO CONFIRMA. No se mete ningún descuento
+                   solo: se calcula, se enseña en un panel con su motivo, y quien emite decide. -->
+              <button class="btn btn-secondary btn-sm" id="btnDto" onclick="mirarDescuentos()">Descuentos…</button>
+              <button class="btn btn-secondary btn-sm" onclick="addLine()">+ Añadir línea</button>
+            </div>
           </div>
 
           <div class="table-wrap">
@@ -1408,7 +1422,11 @@ export function createInvoiceRoutes(db) {
         return (cl && cl.client_type === 'empresa') ? IRPF_DEFAULT : 0;
       }
 
-      function addLine(){
+      // El parámetro seed (punto 11): permite crear una línea YA RELLENA. Lo usa la línea de descuento, que es
+      // la única que nace con importe negativo — por eso, y solo entonces, se le quita el min=0
+      // del precio: ese tope existe para que nadie teclee un precio negativo a mano en una factura
+      // normal, no para impedir un descuento que el propio programa acaba de calcular.
+      function addLine(seed){
         const tbody = document.getElementById('lines-body');
         const row = document.createElement('tr');
         // Línea única: un solo campo de descripción que ES el buscador de catálogo
@@ -1424,6 +1442,15 @@ export function createInvoiceRoutes(db) {
           '<td><button class="btn btn-danger btn-sm" onclick="this.closest(\\'tr\\').remove();scheduleRecalc()">✕</button></td>';
         row.cells[0].insertAdjacentHTML('beforeend', '<input type="hidden" class="line-tax" value="21">');
         tbody.appendChild(row);
+        if (seed) {
+          const precio = Number(seed.unit_price || 0);
+          if (precio < 0) row.querySelector('.line-price').removeAttribute('min');
+          row.querySelector('.line-desc').value  = seed.description || '';
+          row.querySelector('.line-qty').value   = seed.quantity || 1;
+          row.querySelector('.line-price').value = precio.toFixed(2);
+          row.querySelector('.line-tax').value   = String(Number(seed.tax_rate) || 0);
+          if (seed._descuento) row.dataset.descuento = seed._descuento.origen + ':' + seed._descuento.id;
+        }
         row.querySelectorAll('.line-qty, .line-price').forEach(inp => inp.addEventListener('input', scheduleRecalc));
         // El aviso de exceso se refresca al cambiar la cantidad o al editar la descripción
         // (editarla a mano desliga el producto → la línea deja de chequearse).
@@ -1485,6 +1512,55 @@ export function createInvoiceRoutes(db) {
         recalcTimer = setTimeout(doRecalc, 300);
       }
 
+      // ── PUNTO 11 · DESCUENTOS, PROMOCIONES Y BONOS ─────────────────────────────────────────────
+      // Pide al servidor qué descuentos tocan con las líneas que hay AHORA y el cliente elegido, y
+      // los enseña en un panel. Nada se añade sin marcarlo: un descuento que se cuela solo en una
+      // factura es un error que se descubre cuando el cliente ya la tiene.
+      async function mirarDescuentos(){
+        const cid = Number(document.getElementById('f-client').value || 0);
+        const lineas = collectLines();
+        if (!lineas.length){ toast('Añade alguna línea antes de buscar descuentos','warn'); return; }
+        let d;
+        try { d = await api('POST','/api/erp/descuentos/proponer',{ client_id: cid || null, lineas }); }
+        catch(e){ toast(e.message || 'No he podido calcular los descuentos','err'); return; }
+        const props = d.propuestas || [];
+        const bonos = d.bonos || [];
+        if (!props.length && !bonos.length){
+          await window.confirmarEnPagina({ titulo:'No hay descuentos que aplicar',
+            texto: (cid ? 'Este cliente no tiene descuento fijo' : 'Elige un cliente para ver su descuento fijo')
+                 + ' y no hay ninguna promoción vigente que encaje con estas líneas.',
+            aceptar:'Entendido', cancelar:'Cerrar' });
+          return;
+        }
+        const campos = props.map((p,i)=>({ id:'d'+i, tipo:'casilla', valor:false,
+          etiqueta: p.nombre + ' — ' + (p.tipo==='porcentaje' ? p.valor+' %' : SYM+Number(p.valor).toFixed(2)),
+          ayuda: p.motivo + ' · resta ' + SYM + Number(p.importe||0).toFixed(2) }));
+        if (d.codigos_disponibles) campos.push({ id:'codigo', etiqueta:'¿Tienes un código?',
+          marcador:'BIENVENIDA10', ayuda:'Las promociones con código solo se aplican si lo escribes.' });
+        const v = await window.pedirDatos({ titulo:'Descuentos que puedo aplicar', aceptar:'Añadir los marcados',
+          texto: bonos.length ? ('Ojo: este cliente tiene ' + bonos.length + ' bono(s) con sesiones sin usar. '
+                 + 'Un bono NO se descuenta aquí: se consume desde su ficha, y no genera factura.') : '',
+          campos });
+        if (!v) return;
+        // Si ha escrito un código, se vuelve a preguntar: puede desbloquear una promoción más.
+        if (v.codigo && String(v.codigo).trim()){
+          try {
+            const d2 = await api('POST','/api/erp/descuentos/proponer',{ client_id: cid||null, lineas, codigo: String(v.codigo).trim() });
+            const nuevas = (d2.propuestas||[]).filter(p => !props.some(q => q.origen===p.origen && q.id===p.id));
+            if (!nuevas.length) toast('Ese código no aplica a estas líneas','warn');
+            else { for (const l of (d2.lineas||[]).filter(l => nuevas.some(n => n.id===l._descuento.id && n.origen===l._descuento.origen))) addLine(l);
+                   toast('Aplicado: ' + nuevas.map(n=>n.nombre).join(', ')); scheduleRecalc(); return; }
+          } catch(e){ toast(e.message,'err'); }
+        }
+        const elegidas = props.filter((p,i)=>v['d'+i]);
+        if (!elegidas.length){ toast('No has marcado ninguno','warn'); return; }
+        for (const l of (d.lineas||[])){
+          if (elegidas.some(p => p.origen===l._descuento.origen && p.id===l._descuento.id)) addLine(l);
+        }
+        scheduleRecalc();
+        toast('Añadido: ' + elegidas.map(p=>p.nombre).join(', '));
+      }
+
       function collectLines(){
         const lines = [];
         for (const r of document.querySelectorAll('#lines-body tr')) {
@@ -1506,8 +1582,21 @@ export function createInvoiceRoutes(db) {
         try {
           const t = await api('POST','/api/erp/invoices/compute-totals', { lines, irpf_rate });
           renderTotals(t, irpf_rate);
+          const av = document.getElementById('totales-aviso'); if (av) av.remove();
         } catch(e) {
-          // Silencioso: si la línea está incompleta (precio 0, etc.) no spameamos toasts.
+          // ANTES ESTO ERA UN CATCH VACÍO, «para no spamear toasts si la línea está incompleta». La
+          // intención era buena y el efecto, malo: el 23 ago 2026 el esquema rechazaba las líneas de
+          // descuento y la pantalla se quedaba enseñando la BASE SIN REBAJAR, con la línea negativa
+          // a la vista dos centímetros más abajo. Un total que no cuadra con sus líneas es peor que
+          // un error. Ahora se dice, y se dice DONDE está el total —no en un aviso que se va solo—,
+          // sin toast: así no molesta mientras se teclea, pero no se puede no verlo.
+          const cuerpo = document.getElementById('lines-body');
+          if (!cuerpo) return;
+          let av = document.getElementById('totales-aviso');
+          if (!av) { av = document.createElement('tr'); av.id = 'totales-aviso'; cuerpo.parentElement.appendChild(av); }
+          av.innerHTML = '<td colspan="5" style="padding:.5rem 1rem;color:var(--danger);font-size:.8rem">'
+            + 'No he podido calcular el total: ' + escHtmlCli((e && e.message) || 'revisa las líneas')
+            + '. Lo de arriba es el cálculo ANTERIOR.</td>';
         }
       }
 
