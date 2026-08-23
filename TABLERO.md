@@ -117,10 +117,14 @@
 `A 8 · B 3 · C 11 · D 5 · E 4 · F 4 · G 5 · H 3 · I 3 · J 0 · K 0` = **46**.
 (J y K son ítems bloqueados sin subpuntos: su texto es una sola afirmación.)
 
-**RECUENTO VIGENTE — 23 ago 2026 (noche): 65 subpuntos vivos · 45 hechos · 20 pendientes.**
+**RECUENTO VIGENTE — 23 ago 2026 (cierre): 65 subpuntos vivos · 49 hechos · 16 pendientes.**
+*(**la ficha F entra entera, 4 de 4** — el mapa lo escribió otra sesión y quedó sin commitear;
+se revisó, se ejecutó su gate por primera vez y se cerró. 45 + 4 = 49 hechos · 20 − 4 = 16
+pendientes. Pendientes: **D 5 · E 4 · G 4 · I 3** = 16. Vivos siguen siendo 65.)*
 *(**H1 se cierra por decisión del dueño esa noche**: las facturas NO entran por CSV y se quedan en la
 migración asistida. Con eso **H queda entera, 3 de 3**, y sale de la lista de pendientes.
-44 + 1 = 45 hechos · 21 − 1 = 20 pendientes. Pendientes: **D 5 · E 4 · F 4 · G 4 · I 3** = 20.)*
+44 + 1 = 45 hechos · 21 − 1 = 20 pendientes. ~~Pendientes: **D 5 · E 4 · F 4 · G 4 · I 3** = 20.~~
+— **caducada ese mismo cierre al entrar F: 16, sin F.**)*
 *(**rehecho entre las dos entregas del 23 ago**, como pedía el aviso de más abajo: la sesión del
 importador de CSV lo dejó en 41/24 sumando H2 y H3, y **la ficha B entera —B1, B2 y B3— suma 3 más**.
 41 + 3 = 44 hechos · 24 − 3 = 21 pendientes. ~~Pendientes: **D 5 · E 4 · F 4 · G 4 · H 1 · I 3** =
@@ -162,6 +166,9 @@ cierta mientras la decisión no existía, y es el registro de que se paró antes
   entregas.**~~ — **pasó, y está rehecho (23 ago, tarde): B se cerró entera esa misma tarde en otra
   sesión, así que quedan 21 pendientes — D 5 · E 4 · F 4 · G 4 · H 1 · I 3.** B sale de la lista.
   El aviso cumplió su función y por eso se tacha en vez de borrarse.
+  **Y una tercera vez esa misma noche, que es el día que más manos ha tenido este tablero: cerrada
+  H1 y cerrada F, quedan 16 — D 5 · E 4 · G 4 · I 3.** Tres sesiones distintas movieron el recuento
+  el 23 de agosto; cada una lo rehízo sobre lo que encontró, en vez de sobre lo que recordaba.
 - **A1, A4 y A7 fueron REESCRITOS** por el dueño antes de construirse; el recuento no cambia por eso
   (siguen siendo los mismos subpuntos), solo cambia lo que piden.
 - **L nace con 9 subpuntos y se queda con 8 vivos** (L1 retirado). **M nace con 9, los 9 hechos.**
@@ -1353,7 +1360,36 @@ bloques, quitar bloque, «Personalizar», «Volver al de fábrica», guardado **
 
 ---
 
-#### F. MAPA EN LA FICHA DE CLIENTE · **PENDIENTE**
+#### F. MAPA EN LA FICHA DE CLIENTE · ✅ **HECHO (23 ago 2026)** · commit `27b0de4` · **4 de 4**
+
+> **HECHOS (23 ago 2026): F1 · F2 · F3 · F4.**
+> **⚠️ AUTORÍA, y conviene que conste: el código lo escribió OTRA SESIÓN** que trabajaba en paralelo
+> en este mismo árbol y lo dejó **terminado pero sin commitear y sin ejecutar su gate ni una vez**.
+> La sesión que cerró B lo revisó, corrió su gate por primera vez y lo entregó **sin cambiar ni una
+> línea de su código**.
+> - **F1 · OpenStreetMap, no Google.** Leaflet 1.9.4 vendorizado (BSD-2-Clause, con su LICENSE) en
+>   `public/vendor/leaflet`.
+> - **F2 · El mapa, con el punto del cliente.** El punto vive en **`client_geo`, tabla propia: NO se
+>   toca `clients`**. Lleva la **huella** de la dirección que se resolvió, así que un cliente que se
+>   muda **deja de enseñar la chincheta de su casa anterior** en vez de enseñarla con aplomo.
+> - **F3 · «Cómo llegar»** con el punto del cliente.
+> - **F4 · Sin dirección no se pinta nada:** la caja queda oculta y **a cero de alto**, no un mapa
+>   del océano. Igual para el que se mudó y para el que no se pudo resolver.
+> - **Cuándo se resuelve:** AL GUARDAR, una vez, y desde `createClientSvc` — así sale igual si el
+>   alta la hace una persona o la dicta DISA. **Sin `await`:** que un buscador de fuera no conteste
+>   no puede tumbar el alta de un cliente.
+>
+> **VERIFICADO: `gate-mapa-cliente`, ejecutado por primera vez, 38 OK · 0 fallos.** Comprueba lo que
+> importa: **el navegador NO habla con ningún dominio ajeno** y las teselas se le piden a Bamburu
+> (12 por `/api/erp/mapa/tesela/`); el nombre con carga **XSS** no se ejecuta; y la ruta de teselas
+> rechaza zoom inexistente, coordenada negativa, coordenada decimal y el intento de **salir de la
+> carpeta**. **Las reversiones de esta ficha NO las hizo quien la entregó:** su gate es el que hay.
+>
+> **⬜ PENDIENTE DE IBRAHIN — y lo pedía esta misma ficha.** El aviso de abajo decía que
+> *«sin dependencias externas»* **había que confirmarlo contigo al abrir F**. La solución elegida
+> deja al **navegador sin ninguna llamada de fuera**, pero **el servidor sí consulta OpenStreetMap la
+> primera vez** (geocodificar la dirección y traer la tesela) y luego la **cachea en disco**. Queda
+> **dicho, no decidido**: si no lo quieres ni en el servidor, se dice y se cambia.
 
 > **F. MAPA EN LA FICHA DE CLIENTE.**
 > Palabras del dueño: "se puede mejorar la ficha de cliente incluyendo google maps o open maps".
@@ -1398,6 +1434,23 @@ Acceso por **enlace mágico con token temporal**, solo lectura.
 ---
 
 #### H. IMPORTADOR DE CSV GENÉRICO · ✅ **HECHO (23 ago 2026)** · commit `d55dd8b` · **3 de 3**
+> **⚠️ AÑADIDO DESPUÉS (23 ago, cierre) · commit `cb4a347`. SU GATE SE HABÍA ENTREGADO SIN CORRER, y
+> al correrlo NO PASABA.** `session.json` lo dejó apuntado como pendiente y bien: el gate moría en el
+> bloque [4] esperando la vista previa.
+> - **La causa no era el producto: era el nombre del fichero de prueba del propio gate.** Se llamaba
+>   `.gate-imp-XXXX.csv`, **con punto delante**. El confinamiento del snap de Chromium concede
+>   `$HOME/[^.]**` — todo **menos lo oculto** —, así que el navegador **ve** el fichero y da bien su
+>   `size`, pero al leerlo devuelve `NotReadableError`. Ya estaba fuera de `/tmp` por la lección
+>   anterior; **la regla real es más amplia que `/tmp`**. Quitado el punto, pasa.
+> - **Y al diagnosticarlo salió un defecto de verdad, este sí del producto:** cuando el `FileReader`
+>   falla, el manejador dejaba el botón **deshabilitado en «Leyendo…» PARA SIEMPRE**. Se veía el
+>   aviso y detrás quedaba **un mando muerto**, sin más salida que recargar. Arreglado: `leeFichero`
+>   acepta un tercer argumento para el fallo y el botón vuelve a su sitio.
+> - **El rojo queda convertido en cobertura:** dos aserciones nuevas suben un fichero
+>   **deliberadamente ilegible** —oculto, el mismo truco— y exigen que el botón se recupere y que no
+>   se abra una vista previa vacía. **Provocado de verdad, no simulado.**
+> - **`gate-importador-csv`: 53 aserciones, todas en verde.** Reversión hecha: al quitar la
+>   recuperación del botón, cae con «Leyendo… · DESHABILITADO».
 
 > **H. IMPORTADOR DE CSV GENERICO.**
 > **H1** ~~Clientes, productos y facturas desde CSV.~~ ✅ **Clientes y productos por CSV. LAS FACTURAS NO, POR DECISIÓN DEL DUEÑO (23 ago 2026): se quedan en la migración asistida.**
