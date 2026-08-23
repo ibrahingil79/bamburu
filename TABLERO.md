@@ -2617,7 +2617,8 @@ propia revisión antes de activarse, precisamente porque mete registros fiscales
 ### Verifactu · Cola de envío automático por negocio  ✅ HECHO (2026-07-09) — `7b394c6`
 Encargo expreso del dueño, a raíz del **hallazgo de los 240 s** de la Tarea 2 Fase A: el envío dejó de
 ser manual. Al emitir una factura, su registro sale hacia la AEAT **en segundos**. Aditivo y reversible.
-No toca huella/QR/encadenado (Tarea 1), no envía anulaciones, no subsana el 2004. Detalle completo en
+No toca huella/QR/encadenado (Tarea 1) ni subsana el 2004. ~~no envía anulaciones~~ → **las anulaciones YA se
+remiten** (23-ago-2026, `1fb0221`), siempre **detrás de su alta**. Detalle completo en
 `docs/verifactu/tarea2-cola-envio-automatico.md`.
 
 > **⚠️ ESTO ES UNA PRUEBA DE CONCEPTO, NO EL PRODUCTO FINAL.** Lo construido y lo remitido el 9-jul va con
@@ -2683,7 +2684,7 @@ No toca huella/QR/encadenado (Tarea 1), no envía anulaciones, no subsana el 200
 - **Fuera de alcance, para encargos propios:**
   - **Envío real a preproducción CON la cola**: falta el `.p12` del dueño y su contraseña en el entorno del
     servicio. Hasta entonces la cola está inactiva (comportamiento idéntico al actual).
-  - Envío de **anulaciones** · **subsanación** del 2004 · **Fase B legal**.
+  - ~~Envío de **anulaciones**~~ **HECHO** (23-ago-2026, `1fb0221`) · **subsanación** del 2004 · ~~**Fase B legal**~~ (resuelta el 2026-07-10).
   - Bug latente de `verifactu-envio.js` (`prevRegistro` por `id` sin filtrar por emisor) — sigue vivo, es encadenado.
   - **`company_config.fiscal_id` vacío** en `duniya`, `rachibra` e `inversiones-disan`: la Cabecera saldría con
     `ObligadoEmision` vacío. Hoy teórico (sin certificado, su cola no arranca). El gate de T2 no lo detectaba
@@ -2746,10 +2747,118 @@ simulador (17/17); faltaba conectar el certificado FNMT real y remitir a **prepr
     sobre los 61 registros reales (0 desajustes, 0 cruces). Solo mordería si un negocio cambiase de NIF
     teniendo ya registros.
   - **Subsanación del 2004** con un alta `Subsanacion=S` sobre `S2026-0001`.
-  - Envío de **anulaciones** (hoy Fase A solo remite altas).
+  - ~~Envío de **anulaciones** (hoy Fase A solo remite altas)~~ **HECHO** (23-ago-2026, `1fb0221`): se encolan
+    detrás de su alta y nunca salen antes que ella. Ver la ficha «Verifactu · REMISIÓN DE ANULACIONES».
 
 - **Evidencia que se conserva:** `helados-ibrahin` guarda su registro 1 en `incorrecto` con el error
   1239 (NIF de destinatario ficticio, no identificado en el censo real de preproducción). No se toca.
+
+### Verifactu · REMISIÓN DE ANULACIONES a la AEAT  ✅ HECHO (2026-08-23) — `1fb0221`
+Encargo expreso del dueño. La anulación ya se **registraba y encadenaba** en local desde la Tarea 1
+(y por NIF: `lastHuella(db, idEmisor)` filtra por `id_emisor`, con `assertUnSoloEmisor` de cinturón).
+Lo que faltaba era su **remisión**: el motor la bloqueaba a propósito («Fase A solo remite altas») y
+la cola no la miraba. **Queda dormida, igual que la cola: se construye entera, no se enciende.**
+
+- **`buildRegistroAnulacion`** (`modules/erp/verifactu-envio.js`) — pieza nueva, no sale de la del alta:
+  `RegistroFacturacionAnulacionType` es **otra secuencia** (sin `Desglose`, sin `CuotaTotal`/`ImporteTotal`,
+  sin `TipoFactura`, sin `Destinatarios`, sin `NombreRazonEmisor`) y su `IDFactura` usa **nombres propios**
+  (`IDEmisorFacturaAnulada` / `NumSerieFacturaAnulada` / `FechaExpedicionFacturaAnulada`).
+  Los **cuatro datos identificativos** se exigen **sin excepción** —NIF del emisor, serie+número anulados,
+  su fecha de emisión, y la fecha en que se anula (`FechaHoraHusoGenRegistro`)—: si falta uno, el envío
+  se para en `bloqueado_datos` con su aviso. Nunca se inventa un dato.
+- **PRECEDENCIA — una anulación NUNCA sale antes que su alta** (`verifactu-cola.js`). Se comprueba **dentro
+  del SQL del reclamo**, no con un paso de liberación posterior: un paso así hay que acordarse de llamarlo
+  desde todos los sitios donde un alta pasa a aceptada, y el día que aparezca uno nuevo la anulación se
+  queda dormida para siempre. Así la fila está en la cola desde el primer día y simplemente **nadie se la
+  lleva** hasta que su alta consta aceptada; en cuanto lo está, la ven solos el `programar` de cada aterrizaje
+  y el barrido de systemd.
+- **Los cuatro casos** (`encolarAnulacionSiProcede`, `CASO_ANULACION`): alta **aceptada** → se encola normal ·
+  alta **sin enviar** → se encola **detrás** · alta **rechazada** → se **anota** (`bloqueado_datos`, `next_retry_at`
+  nulo) y **no se encola** · **ya anulada** → ya lo cortaba `anularInvoice` exigiendo `status='emitida'`; no se
+  construyó nada, se **demuestra**. Quinto caso encontrado al medir: factura **sin registro de alta** (anterior a
+  la implantación de la Tarea 1) → se anota igual que la rechazada.
+- **La pantalla** `/admin/verifactu/envios` lista ya **altas y anulaciones**, con columna «Operación».
+
+**EL CASO NORMAL NO ERA EL QUE PARECÍA.** Censo del 23-ago-2026 sobre las **28 BD** de tenants:
+**299 facturas anuladas, 0 con su alta remitida y aceptada.** En todo el sistema hay **5** filas en
+`verifactu_envios` (2 `bloqueado_datos`, 1 `incorrecto`, 1 `correcto`, 1 `aceptado_con_errores`) y ninguna
+de esas facturas está anulada. Así que «alta nunca enviada» **no es la esquina rara: es la carretera**, y ahí
+es donde está puesto el cuidado. *(De las 299: 218 con registro de anulación; **62** con alta pero sin
+anulación y sin fila en `invoice_anulaciones` — son del `UPDATE` masivo de `scripts/seed-taller.mjs:107`, no
+pasaron por el producto; 19 sin registro ninguno, anteriores a la Tarea 1. **Un gate no puede coger «una
+anulada cualquiera» de ese tenant**: 81 de las 299 no sirven para medir.)*
+
+**DOS COSAS QUE NO ESTABAN EN EL ENCARGO Y SALIERON AL LEER EL ESQUEMA OFICIAL:**
+
+1. **El emparejamiento de respuestas cruzaba altas con anulaciones.** `enviarLote` casaba cada
+   `RespuestaLinea` con su registro por `NumSerieFactura` **a secas**, y una anulación lleva **el mismo número
+   de serie que su alta**: con las dos en un sobre, el `Map` colisionaba y cada fila se quedaba con el estado
+   de la otra. El desempate es `Operacion/TipoOperacion` (`Alta`|`Anulacion`), que `RespuestaSuministro.xsd`
+   trae justo para esto. Si la respuesta no lo informa, solo se empareja cuando **no hay ambigüedad**.
+2. **EL AVISO DEL FORMATO DE FECHA ERA FALSO, Y DEL REVÉS — y aplicarlo habría roto todas las anulaciones.**
+   Ver el bloque de abajo.
+
+#### El aviso del formato de fecha: por qué era falso (para que no se repita)
+Llegó como aviso de fabricantes: *«en el alta Hacienda admite dos formatos de fecha, pero en la anulación
+solo el internacional (año-mes-día), y si no se cumple la rechaza»*. **El dueño pidió expresamente que no se
+diera por cierto y se midiera contra el esquema oficial.** Se descargó en vivo (`SuministroInformacion.xsd`,
+HTTP 200, 49.540 bytes) y dice, literal:
+
+```xml
+<simpleType name="fecha">
+  <restriction base="string">
+    <length value="10"/>
+    <pattern value="\d{2,2}-\d{2,2}-\d{4,4}"/>
+  </restriction>
+</simpleType>
+```
+
+Ese tipo `sf:fecha` lo usan **por igual** `FechaExpedicionFactura` (alta, línea 71) y
+`FechaExpedicionFacturaAnulada` (anulación, línea 93). **Las dos mitades del aviso son falsas:** el alta
+**no** admite dos formatos (admite uno, `DD-MM-YYYY`) y la anulación **no** exige el ISO (exige el mismo
+`DD-MM-YYYY`). Y lo que importa: **haber normalizado a ISO habría provocado el rechazo que el aviso decía
+evitar** — `2026-08-23` pasa el `<length 10>` pero **falla el `<pattern>`**, y la AEAT devuelve el **4102**
+(«El XML no cumple el esquema») en **cada** anulación.
+
+De dónde viene probablemente el runrún: **`FechaHoraHusoGenRegistro` sí es formato internacional**
+(`type="dateTime"`, ISO-8601 con huso) — pero lo es **en el alta y en la anulación por igual**, y ya lo
+producía bien `genTimestampMadrid()` desde la Tarea 1.
+
+Por eso lo que entra es una **GUARDA, no una conversión**: se comprueba `\d{2}-\d{2}-\d{4}` antes de enviar
+y, si algún día no cuadra, **se para el envío** (`bloqueado_datos` + aviso que nombra el formato y el 4102) en
+vez de mandar un XML que ya sabemos rechazado. Comprobado también contra los datos: **1.067 registros** en
+todos los tenants, **0** fuera del patrón.
+
+**La lección, que es la que vale para la próxima:** un aviso de formato de un tercero **se mide contra el
+esquema, no se aplica**. Este venía con la forma exacta de un consejo útil —concreto, plausible, con síntoma
+y remedio— y el remedio era el fallo. **Si se hubiera hecho caso, habría roto en producción justo la pieza
+que decía proteger, y el gate lo habría cazado** (reversión R5, abajo).
+
+**Decisión del dueño (23-ago-2026): `SinRegistroPrevio` NO se usa.** El XSD ofrece ese campo (`S`/`N`) para
+anular una factura cuyo alta no se va a remitir nunca. En Bamburu el alta **siempre acaba remitiéndose**, así
+que la anulación espera detrás de la suya y las dos se comunican en orden. **No se introduce ni se deja
+preparado**; el gate comprueba que el XML **no** lo lleva.
+
+**Comprobación propia: `scripts/verify-verifactu-anulaciones.mjs` — 66 aserciones, 66 en verde**, contra un
+simulador SOAP local (sin red a la AEAT, sin certificado, BD temporal). Cubre: la cola dormida fuera del
+simulador · el caso normal con su puerta de precedencia (y que se abre sola al aceptarse el alta) · los cuatro
+datos identificativos · la huella **recalculada** y su encadenado por NIF · **la cadena de altas idéntica antes
+y después** · los cuatro casos · el orden exacto de la secuencia del XSD y los campos que **no** debe llevar ·
+la guarda de fecha por las dos caras · y el choque de alta+anulación en un mismo sobre.
+
+**Verificada por REVERSIÓN** (que es lo que separa medir el mecanismo de medir el resultado). Cinco reversiones,
+las cinco en rojo: **R1** quitar la precedencia → 2 rojos · **R2** volver a emparejar por serie sola → 1 rojo ·
+**R3** quitar la guarda de fecha → 2 rojos · **R4** quitar el encolado tras el commit → 2 rojos ·
+**R5 aplicar el aviso falso (normalizar a ISO) → 2 rojos**. Restaurado: 66/66.
+
+**Fuera del barrido, como toda la familia Verifactu.** Este gate **no** se ha metido en `GRUPOS`
+(`scripts/lib/gates-mapa.mjs`): los otros cinco de Verifactu tampoco están, y `docs/comprobaciones-fuera-del-barrido.md`
+dice expresamente que meter las 97 invisibles **es material para que decida Ibrahin, no una tarea**. Se corre a
+mano: `node scripts/verify-verifactu-anulaciones.mjs`. **Queda propuesto meterlo — decisión pendiente del dueño.**
+
+**Lo que NO se ha tocado:** la cadena de altas (comprobado campo a campo, idéntica), las huellas ya calculadas,
+el QR, las rectificativas, los permisos y ninguna factura existente. **Cero borrados.** `avisos.js` sigue
+filtrando por `record_type='alta'` **a propósito**: abrirlo generaría avisos visibles, y eso es encender algo.
 
 ### Rendimiento · Opción A — coste de bcrypt y frenos de peticiones  ✅ HECHO (2026-07-09)
 Encargo expreso del dueño a partir de `docs/rendimiento/diagnostico-carga.md` (que se guarda aquí con
@@ -4368,7 +4477,8 @@ fiscales a medio camino. Decisión que la fija: `docs/contexto/decisiones.md` (2
   la cola sigue sin instalar; **ya no hace falta activar nada con el certificado personal** — la activación
   real llega con el de Bamburu. Hoy vive solo el envío manual: `/admin/verifactu/envios` o
   `scripts/verifactu-enviar-preproduccion.mjs`. Estado verificado en `docs/verifactu/estado-certificado.md`.
-- **Verifactu — ampliaciones técnicas pendientes:** envío de **anulaciones** (hoy solo altas), **subsanación**
+- **Verifactu — ampliaciones técnicas pendientes:** ~~envío de **anulaciones** (hoy solo altas)~~ **HECHO**
+  (23-ago-2026, `1fb0221`), **subsanación**
   del aviso 2004, validación XSD formal. *(La ~~Fase B legal~~ queda resuelta por la decisión del 2026-07-10:
   el modelo de certificado ya está elegido — colaborador social, un único certificado de Bamburu. Queda solo
   el trámite, dentro de la tarea única de arriba. La ~~cola + timer por tenant~~ ya está hecha.)*

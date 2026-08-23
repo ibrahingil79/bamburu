@@ -127,7 +127,8 @@ y pasa con el bueno. Cierra el "sin confirmar" de `tarea2-remision-aeat-investig
 - Queda **el trámite**: alta como envío autorizado (Convenio tipo 17) y declaración responsable (art. 13 RD
   1007/2023). Es legal y externo, **solo lo puede iniciar el dueño**. Contexto en
   `tarea2-remision-aeat-investigacion.md` §Certificados y multi-tenant.
-- Ampliaciones técnicas anotadas: envío de **anulaciones** (hoy solo altas) · **cola + timer por
+- Ampliaciones técnicas anotadas: ~~envío de **anulaciones** (hoy solo altas)~~ **HECHO** (23-ago-2026,
+  `1fb0221`) · **cola + timer por
   tenant** (ya no opcional: sin ella, todo envío llega fuera de los 240 s → `AceptadoConErrores`) ·
   **subsanación** del 2004 con un alta `Subsanacion=S` · y el bug de `verifactu-envio.js:347`, que
   elige el registro anterior de la cadena por id **sin filtrar por emisor** (latente: `company_config`

@@ -2,7 +2,9 @@
 
 > Encargo del dueño, a raíz del **hallazgo de los 240 s** de la Tarea 2 Fase A
 > (`tarea2-fase-a-envio.md`). Aditivo y reversible. No toca la huella, el QR ni el encadenado
-> (Tarea 1 sigue siendo inmutable). No envía anulaciones. No subsana el 2004.
+> (Tarea 1 sigue siendo inmutable). No subsana el 2004. ~~No envía anulaciones.~~ → **las anulaciones YA se
+> remiten** (23-ago-2026, `1fb0221`), y **nunca antes que su alta**: la precedencia se comprueba dentro del
+> SQL del reclamo. Ver la ficha «Verifactu · REMISIÓN DE ANULACIONES» en `TABLERO.md`.
 >
 > **⚠️ PRUEBA DE CONCEPTO — no es el producto final.** Todo lo que sigue está construido y probado con el
 > **certificado personal del dueño** (FNMT de persona física), un certificado por negocio. Sirvió para
@@ -145,7 +147,7 @@ ni reintenta el `incorrecto` de `helados-ibrahin`.
 - **Envío real a preproducción con la cola**: necesita el `.p12` del dueño y su contraseña en el
   entorno del servicio. Mientras no estén, la cola está inactiva para todos los negocios y el
   comportamiento es exactamente el de hoy (botón manual).
-- Envío de **anulaciones** (Fase A remite solo altas).
+- ~~Envío de **anulaciones** (Fase A remite solo altas)~~ — **HECHO** (23-ago-2026, `1fb0221`).
 - **Subsanación** del 2004 con un alta `Subsanacion=S`.
 - **Fase B legal**: colaboración social (Convenio tipo 17), declaración responsable, elección de
   certificado (propio-por-todos vs. Anexo II por cliente).
