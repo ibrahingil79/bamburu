@@ -1463,7 +1463,7 @@ decisión a confirmar con Ibrahin al abrir F**, no aquí.
 
 ---
 
-#### G. PORTAL DEL CLIENTE — AMPLIACIÓN · **PENDIENTE** (G3 retirado)
+#### G. PORTAL DEL CLIENTE — AMPLIACIÓN · ✅ **HECHO lo construible (23 ago 2026)** · **G1 y G2 cerrados · G3 ya estaba · G4 bloqueado fuera · G5 abierto a propósito**
 
 > **G. PORTAL DEL CLIENTE — AMPLIACION.**
 > Palabras del dueño: "el portal del cliente hoy solamente dice las facturas pendientes, este portal es una ventaja que ofrecemos, tambien debe ofrecer funciones como analiticas, manejo de comunicaciones, pago de facturas etc".
@@ -1482,10 +1482,57 @@ Acceso por **enlace mágico con token temporal**, solo lectura.
   todas las facturas** (no solo las pendientes) y **baja el PDF de cada una**. *Queda anotado, sin
   ser subpunto de G:* presupuestos, pedidos y albaranes no bajan del portal — eso entra con **C**,
   que es donde vive el motor de documentos.
-- **G1 y G2 no existen** en absoluto.
+- ~~**G1 y G2 no existen** en absoluto.~~ **Desmentido el 23 ago 2026 (noche): construidos los dos.**
 - **Ojo al puntero caducado:** el Backlog de este TABLERO (§Ventas, portal y recurrentes) dice que el
   pago con tarjeta es *«el único paso que falta del portal»*. **Con G eso deja de ser cierto** y esa
-  línea queda desmentida por este registro.
+  línea queda desmentida por este registro. **Y con G1 y G2 ya hechos, vuelve a ser casi cierto: hoy
+  el pago con tarjeta SÍ es lo único que le falta al portal, y está fuera por falta de pasarela.**
+
+**LO ENTREGADO (23 ago 2026, noche) · gate `scripts/gate-portal-ampliado.mjs` · 35 ✓ · 0 ✗**
+
+- **G1 · «Tu histórico con ‹empresa›».** Cinco cifras —compras, total sin IVA, media por compra,
+  **cada cuánto compra** y cuánto hace de la última—, **qué compra** (sus ocho líneas más caras, con
+  barra) y **por año**. Todo del propio cliente y de nadie más.
+  - **Se calcula con el MISMO criterio que su lista de facturas** (`countsAsReceivable`): una factura
+    anulada no le infla el histórico. Si las dos cifras no cuadraran a dos centímetros de distancia
+    en la misma pantalla, el portal estaría mintiendo; el gate lo comprueba metiendo una anulada.
+  - **«Cada cuánto» es la MEDIANA de los días entre compras, no la media.** Una compra grande y rara
+    dispara el promedio y le diría a un cliente mensual que compra cada tres meses.
+- **G2 · «Hablar con ‹empresa›».** Un hilo por cliente, en las dos direcciones, tabla
+  `portal_mensajes` (aditiva). El cliente escribe desde su portal —**formulario normal: el portal no
+  lleva JavaScript y no se le mete uno para esto**— y el negocio desde `/admin/portal/mensajes/:id`,
+  con contador de **sin leer** por cliente y aviso en la portada del portal. **No hay borrado:** una
+  conversación con un cliente es registro.
+  - Del lado del negocio se guarda y se enseña **quién contestó** («lo contestó Marta»). **Al cliente
+    no se le enseña**: para él el interlocutor es la empresa. El gate mide las dos cosas.
+  - Un mensaje en blanco o de solo espacios **se rechaza y se dice por qué**; no hay silencio.
+- **Lo primero que mide el gate no es que funcione, sino que no se abre lo ajeno:** el portal es la
+  única pantalla del producto sin sesión. Token inventado, token de OTRO cliente, caducado y
+  revocado: los cuatro comprobados.
+- **Las facturas que siembra el gate entran en la cadena propietaria con su hash bien calculado.**
+  Meterlas en blanco dejaría la pantalla de Integridad en ALARMA mientras corre —y para siempre si el
+  gate muriera antes de limpiar—, que es justo la avería que se recompuso esa misma tarde. El gate
+  verifica la cadena al final: **836 facturas, cuadra**.
+- **Corrido dos veces, y se dice por qué:** la primera pasada (32 ✓ · 1 ✗) destapó que `mensajesDe`
+  no leía la columna `admin_user_id` que sí se estaba guardando —el dato existía y no lo veía nadie—.
+  Arreglado eso y enseñado en la pantalla del negocio, la segunda pasada dio 35 ✓ · 0 ✗.
+- **Sin residuo:** 0 clientes, 0 facturas, 0 mensajes y 0 sesiones del gate en `desarrollo-bamburu`
+  al terminar, medido.
+
+**LO QUE NO ENTRA, Y POR QUÉ**
+- **G4 · pago de facturas con tarjeta: BLOQUEADO FUERA DEL CÓDIGO.** Necesita una **pasarela
+  contratada** (Stripe/Redsys: alta, credenciales, comisiones) y eso es una decisión de negocio de
+  Ibrahin, no una tarea de construcción. Sigue en el **GRUPO 4**, donde ya tiene ficha propia: es
+  exactamente la **ficha J**. Lo que sí está listo para cuando llegue: la factura, su estado derivado
+  y el IBAN ya viven en el portal. **Y sigue vigente la norma del 28 jul 2026 que prohíbe dejar
+  ganchos preparados para la pasarela**: no se ha dejado ninguno.
+- **G5 · el «etc» del dueño no se da por cerrado**, por decisión suya. No es un subpunto construible:
+  queda abierto a propósito para lo que él quiera añadir.
+
+**CABO MENOR APUNTADO (no tocado):** el portal escribe el dinero a la inglesa —`€6023.00`, sin
+separador de miles y con punto decimal—. **No es de G1: la tabla de facturas ya lo hacía antes**, y
+cambiar solo el bloque nuevo dejaría dos formatos en la misma pantalla. Se arregla el portal entero
+de una vez, cuando toque.
 
 ---
 

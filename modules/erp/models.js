@@ -1235,6 +1235,23 @@ export function runMigrations(db) {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_analytics_medidas_user ON analytics_medidas(user_id, area)`);
+  // ── FICHA G2 · EL CANAL DE COMUNICACIONES DEL PORTAL (aditiva, idempotente) ────────────────────
+  // Un hilo por cliente, sin asunto: es una conversación, no un buzón de tickets. `autor` dice de
+  // qué lado viene ('negocio' | 'cliente') y es lo único que decide quién lo escribió — el cliente
+  // entra por token, no tiene usuario, así que `admin_user_id` solo se llena del lado del negocio.
+  // `visto_*` permite el contador de sin leer de cada lado sin borrar nada.
+  db.exec(`CREATE TABLE IF NOT EXISTS portal_mensajes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL,
+    autor TEXT NOT NULL CHECK(autor IN ('negocio','cliente')),
+    texto TEXT NOT NULL,
+    admin_user_id INTEGER,
+    visto_negocio INTEGER DEFAULT 0,
+    visto_cliente INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id) REFERENCES clients(id)
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_portal_mensajes_cli ON portal_mensajes(client_id, id)`);
   // Paso 4b — COMPARTIR. Un panel compartido lo ven todos, pero guarda la RECETA, no los datos: al
   // abrirlo se vuelve a cruzar y se revalidan los permisos de HOY. Compartir la receta NO filtra — un
   // panel de Compras compartido no se abre para quien no tiene `purchases.read` (falla cerrado). Solo

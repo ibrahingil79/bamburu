@@ -46,6 +46,101 @@ export function revokeTokensDeCliente(db, clientId) {
   db.prepare('UPDATE portal_tokens SET revoked=1 WHERE client_id=? AND revoked=0').run(clientId);
 }
 
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// FICHA G1 — LAS ANALÍTICAS DEL PROPIO CLIENTE: qué compra, cuánto y cada cuánto
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// SOLO SUS DATOS, y calculadas con los MISMOS criterios que las del negocio: cuenta lo que cuenta
+// como venta (`countsAsReceivable`), así que una factura anulada no le infla su historial ni le
+// contradice lo que ve en su lista de facturas dos centímetros más arriba.
+//
+// «Cada cuánto» se calcula con la MEDIANA de los días entre compras, no con la media: una compra
+// grande y rara dispara el promedio y le diría a un cliente mensual que compra cada tres meses. Es
+// el mismo criterio que usa `umbralDormido` para el ritmo de un cliente en el vigía.
+export function analiticaCliente(db, clientId, hoy = new Date().toISOString().slice(0, 10)) {
+  const invs = db.prepare('SELECT * FROM invoices WHERE client_id=? ORDER BY issue_date, id').all(clientId)
+    .filter(i => countsAsReceivable(db, i));
+  const sym = invs[0]?.currency_symbol || '€';
+  if (!invs.length) return { hay: false, sym };
+
+  const total = invs.reduce((n, i) => n + (Number(i.subtotal) || 0), 0);
+  const fechas = invs.map(i => String(i.issue_date).slice(0, 10)).filter(Boolean);
+  const dias = [];
+  for (let k = 1; k < fechas.length; k++) {
+    const d = Math.round((Date.parse(fechas[k] + 'T00:00:00Z') - Date.parse(fechas[k - 1] + 'T00:00:00Z')) / 86400000);
+    if (Number.isFinite(d) && d >= 0) dias.push(d);
+  }
+  const mediana = xs => { if (!xs.length) return null; const s2 = [...xs].sort((a, b) => a - b);
+    const m = Math.floor(s2.length / 2); return s2.length % 2 ? s2[m] : Math.round((s2[m - 1] + s2[m]) / 2); };
+  const ultima = fechas[fechas.length - 1] || null;
+  const desdeUltima = ultima ? Math.round((Date.parse(hoy + 'T00:00:00Z') - Date.parse(ultima + 'T00:00:00Z')) / 86400000) : null;
+
+  // QUÉ COMPRA: sus líneas, agrupadas por descripción (invoice_items no guarda product_id siempre).
+  const ph = invs.map(() => '?').join(',');
+  const lineas = db.prepare(
+    `SELECT description d, SUM(quantity) uds, ROUND(SUM(total_price),2) importe
+       FROM invoice_items WHERE invoice_id IN (${ph}) GROUP BY description ORDER BY importe DESC LIMIT 8`
+  ).all(...invs.map(i => i.id));
+
+  // POR AÑO, que es el grano que un cliente entiende sin explicación.
+  const porAnio = {};
+  for (const i of invs) {
+    const a = String(i.issue_date).slice(0, 4);
+    porAnio[a] = (porAnio[a] || 0) + (Number(i.subtotal) || 0);
+  }
+  return {
+    hay: true, sym,
+    compras: invs.length,
+    total: Math.round(total * 100) / 100,
+    media: Math.round((total / invs.length) * 100) / 100,
+    primera: fechas[0] || null,
+    ultima, desdeUltima,
+    cadaDias: mediana(dias),
+    lineas,
+    porAnio: Object.entries(porAnio).sort((a, b) => a[0] < b[0] ? -1 : 1)
+      .map(([anio, imp]) => ({ anio, importe: Math.round(imp * 100) / 100 })),
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// FICHA G2 — EL CANAL DE COMUNICACIONES
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// Un hilo por cliente. El cliente escribe desde su portal (entra por token, no tiene usuario) y el
+// negocio desde /admin/portal. No hay borrado: una conversación con el cliente es registro.
+const MAX_MENSAJE = 2000;
+// Trae también QUIÉN contestó del lado del negocio: en un equipo de tres, «lo contestó Marta» es la
+// mitad de la información. El cliente no lo ve —para él el interlocutor es la empresa—, pero dentro
+// del negocio sí, y por eso la columna se guarda desde el primer día.
+export function mensajesDe(db, clientId) {
+  try {
+    return db.prepare(
+      `SELECT m.id, m.autor, m.texto, m.created_at, m.visto_negocio, m.visto_cliente, m.admin_user_id,
+              u.name AS autor_nombre
+         FROM portal_mensajes m LEFT JOIN admin_users u ON u.id = m.admin_user_id
+        WHERE m.client_id=? ORDER BY m.id`).all(clientId);
+  } catch { return []; }
+}
+export function escribirMensaje(db, clientId, autor, texto, adminUserId = null) {
+  const t = String(texto == null ? '' : texto).trim();
+  if (!t) { const e = new Error('Escribe un mensaje antes de enviarlo.'); e.status = 400; throw e; }
+  if (t.length > MAX_MENSAJE) { const e = new Error('El mensaje es demasiado largo (máximo ' + MAX_MENSAJE + ' caracteres).'); e.status = 400; throw e; }
+  if (autor !== 'negocio' && autor !== 'cliente') { const e = new Error('Autor no válido'); e.status = 400; throw e; }
+  if (!db.prepare('SELECT 1 FROM clients WHERE id=?').get(clientId)) { const e = new Error('Cliente no encontrado'); e.status = 404; throw e; }
+  const r = db.prepare(
+    `INSERT INTO portal_mensajes (client_id, autor, texto, admin_user_id, visto_negocio, visto_cliente)
+     VALUES (?,?,?,?,?,?)`
+  ).run(clientId, autor, t, adminUserId, autor === 'negocio' ? 1 : 0, autor === 'cliente' ? 1 : 0);
+  return { id: r.lastInsertRowid };
+}
+export function marcarVisto(db, clientId, lado) {
+  const col = lado === 'negocio' ? 'visto_negocio' : 'visto_cliente';
+  try { db.prepare(`UPDATE portal_mensajes SET ${col}=1 WHERE client_id=? AND ${col}=0`).run(clientId); } catch {}
+}
+export function sinLeer(db, lado) {
+  const col = lado === 'negocio' ? 'visto_negocio' : 'visto_cliente';
+  try { return db.prepare(`SELECT client_id, COUNT(*) n FROM portal_mensajes WHERE ${col}=0 GROUP BY client_id`).all(); }
+  catch { return []; }
+}
+
 // Facturas del cliente con su estado de pago DERIVADO. Excluye las que no cuentan (anuladas, etc.).
 export function clientInvoices(db, clientId, today = new Date().toISOString().slice(0, 10)) {
   const invs = db.prepare('SELECT * FROM invoices WHERE client_id=? ORDER BY issue_date DESC, id DESC').all(clientId);
