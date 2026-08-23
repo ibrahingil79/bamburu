@@ -2865,6 +2865,49 @@ Sé preciso con los números y siempre redondea correctamente.`,
     txP();
   }
 
+  // ── CONTROL HORARIO · EL REGISTRO DE JORNADA (23 ago 2026, noche · punto 12) ────────────────
+  // OBLIGATORIO POR LEY en España desde el RD-ley 8/2019 (art. 34.9 ET) para quien tiene personas
+  // contratadas: registro DIARIO de la jornada de cada trabajador, con su hora de INICIO y de FIN;
+  // conservable **cuatro años**; y a disposición del trabajador, sus representantes y la Inspección.
+  //
+  // POR QUÉ ES UNA TABLA APARTE Y NO `time_entries`, que ya existe. Son dos cosas distintas y
+  // mezclarlas estropearía las dos:
+  //   · `time_entries` es tiempo DE PROYECTO, y sirve para FACTURAR horas. Lleva proyecto, si es
+  //     facturable y su coste/hora congelado.
+  //   · Una JORNADA no tiene proyecto ni se factura, e incluye la pausa de la comida. Si la metiera
+  //     en `time_entries`, las horas facturables de un cliente incluirían el bocadillo, y el registro
+  //     legal quedaría a merced de que alguien borrase una entrada de proyecto.
+  // Lo que SÍ se comparte es el sitio: la pantalla vive junto al Registro de tiempo, en su área.
+  //
+  // ES UN LIBRO DE EVENTOS, no un estado. Se apuntan FICHAJES (entrada, pausa, vuelta, salida) y la
+  // jornada se DERIVA de ellos. Un registro legal tiene que poder auditarse: si guardara solo «hoy
+  // trabajó 7,5 h», nadie podría comprobar de dónde sale.
+  //
+  // Y NO SE BORRA NUNCA. Corregir un fichaje deja el original marcado (`corregido_de`), con quién y
+  // por qué. Un registro de jornada que se puede reescribir en silencio no vale para lo que existe.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS fichajes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      fecha DATE NOT NULL,                    -- el día al que pertenece (el de la ENTRADA)
+      hora TEXT NOT NULL,                     -- HH:MM, hora local del negocio
+      tipo TEXT NOT NULL CHECK(tipo IN ('entrada','pausa','vuelta','salida')),
+      origen TEXT NOT NULL DEFAULT 'pantalla',
+      nota TEXT DEFAULT '',
+      -- Corrección: NUNCA se edita el original. Se apunta uno nuevo que dice a cuál sustituye, y el
+      -- viejo queda anulado con su motivo. Los dos siguen ahí.
+      corregido_de INTEGER,
+      anulado INTEGER NOT NULL DEFAULT 0,
+      motivo TEXT DEFAULT '',
+      hecho_por INTEGER,                      -- quién lo apuntó (puede no ser el trabajador)
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES admin_users(id),
+      FOREIGN KEY (corregido_de) REFERENCES fichajes(id)
+    );
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_fichajes_dia ON fichajes(user_id, fecha, anulado)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_fichajes_fecha ON fichajes(fecha)`);
+
   // ── B12 · LAS TRES TABLAS DE ROLES, ARCHIVADAS (23 ago 2026, noche · punto 8) ────────────────
   // `roles`, `role_permissions` y `user_roles` se sembraban desde siempre y NO CONCEDÍAN NADA: la
   // aplicación de permisos lee solo `user_permissions`. El informe del Eje C las declaró código

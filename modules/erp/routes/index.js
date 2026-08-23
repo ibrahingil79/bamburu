@@ -44,6 +44,7 @@ import { createWarehouseRoutes } from './warehouses.js';
 import { createFeedbackRoutes } from './feedback.js';
 import { createInvoiceRoutes } from './invoices.js';
 import { createDescuentosRoutes } from './descuentos.js';   // punto 11 · promociones, bonos y descuentos
+import { createFichajeRoutes } from './fichaje.js';         // punto 12 · control horario (registro de jornada)
 import { createCobrosRoutes } from './cobros.js';
 import { createCrmRoutes } from './crm.js';
 import { createSupplierInvoiceRoutes } from './supplier-invoices.js';
@@ -115,6 +116,7 @@ export function mountRoutes(app, db) {
   const { api: feedbackApi, views: feedbackViews } = createFeedbackRoutes(db);
   const { api: invoiceApi, views: invoiceViews } = createInvoiceRoutes(db);
   const { api: dtoApi, views: dtoViews } = createDescuentosRoutes(db);
+  const { api: fichajeApi, views: fichajeViews } = createFichajeRoutes(db);
   const { api: cobrosApi, views: cobrosViews } = createCobrosRoutes(db);
   const { api: crmApi, views: crmViews } = createCrmRoutes(db);
   const { api: supplierInvoiceApi, views: supplierInvoiceViews } = createSupplierInvoiceRoutes(db);
@@ -194,6 +196,7 @@ export function mountRoutes(app, db) {
   admin.route('/mostrador', mostradorViews);
   admin.route('/invoices', invoiceViews);
   admin.route('/descuentos', dtoViews);
+  admin.route('/fichaje', fichajeViews);
   admin.route('/cobros', cobrosViews);
   admin.route('/crm', crmViews);                // CRM comercial: embudo (/) + cola (/cola)
   admin.route('/supplier-invoices', supplierInvoiceViews);
@@ -262,6 +265,7 @@ export function mountRoutes(app, db) {
   apiApp.route('/mostrador', mostradorApi);
   apiApp.route('/invoices', invoiceApi);
   apiApp.route('/descuentos', dtoApi);
+  apiApp.route('/fichaje', fichajeApi);
   apiApp.route('/cobros', cobrosApi);
   apiApp.route('/crm', crmApi);
   apiApp.route('/supplier-invoices', supplierInvoiceApi);

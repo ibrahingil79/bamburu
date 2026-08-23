@@ -1970,7 +1970,8 @@ verdad y no como se suponía — que es justo el problema que esta tarea viene a
 - ~~**Área de agenda en el constructor de analítica.** Sin ella, los cuatro avisos de agenda de DISA
   **no pueden llevar gráfico**.~~ **✅ HECHA el 23 ago 2026 en la ficha D (D1+D4, `e16bd01`)**: el área
   existe con seis dimensiones y nueve medidas, y los cuatro avisos ya llevan su gráfico.
-- **Control horario (fichaje).**
+- ~~**Control horario (fichaje).**~~ **✅ HECHO el 23 ago 2026 (noche · punto 12) · gate
+  `scripts/gate-control-horario.mjs` · 41 ✓ · 0 ✗.** Ficha al final del documento.
 - **Agenda del CRM.**
 - ~~**⬜ LAS VENTANITAS DEL NAVEGADOR DEL RESTO DEL PRODUCTO — 81, y son LA MISMA TRAMPA.**~~
   **✅ HECHO el 23 ago 2026 (noche · punto 7) · gate `scripts/gate-sin-ventanitas.mjs` · 36 ✓ · 0 ✗.**
@@ -7118,3 +7119,50 @@ comprueba la base (90 €), el total (108,90 €), que la línea queda guardada 
 huellas cuadra con ella dentro**. Y lo hace **en un negocio propio que borra entero al salir**:
 una factura emitida entra en VERI\*FACTU y **ya no se puede borrar** — emitirla en el negocio
 compartido sería dejar basura imborrable, que es la lección que costó 130 clientes archivados.
+
+---
+
+### PUNTO 12 · CONTROL HORARIO — EL REGISTRO DE JORNADA  ✅ **HECHO (23 ago 2026, noche)** · gate `scripts/gate-control-horario.mjs` · **41 ✓ · 0 ✗**
+
+**QUÉ EXIGE LA LEY, que es lo que esto tiene que cumplir** (RD-ley 8/2019, art. 34.9 ET): registro
+**diario** por trabajador con hora de inicio y de fin, conservable **cuatro años**, y **a disposición
+del trabajador**, sus representantes y la Inspección.
+
+**POR QUÉ ES UNA TABLA APARTE Y NO `time_entries`.** El encargo decía «cuelga del registro de tiempo
+que ya existe, no montes un segundo motor», y **cuelga: comparte área y pantalla vecina**. Pero la
+tabla no puede ser la misma, y el motivo es concreto: `time_entries` es tiempo **de proyecto** y
+sirve para **facturar horas**; una jornada no tiene proyecto, no se factura e **incluye la pausa de
+la comida**. Metiéndola ahí, las horas facturables de un cliente incluirían el bocadillo, y el
+registro legal quedaría a merced de que alguien borrase una entrada de proyecto.
+
+**ES UN LIBRO DE EVENTOS, NO UN ESTADO.** Se apuntan fichajes (entrada · pausa · vuelta · salida) y
+**la jornada se DERIVA**. Un total guardado no se puede auditar; unos fichajes, sí.
+- **Nada se borra.** Corregir **añade** un fichaje que dice a cuál sustituye; el original queda
+  anulado **con su motivo y quién**, y los dos siguen en la tabla. Sin motivo no se corrige.
+- **La secuencia imposible se rechaza con su motivo**, no «se arregla sola»: no se sale sin entrar,
+  no se entra dos veces, no se vuelve de una pausa que no existe y **no se ficha hacia atrás**.
+- **Una jornada sin cerrar se marca ABIERTA** — es un dato, no un fallo — y **la de un día pasado no
+  se estira hasta ahora**: eso sería inventar horas.
+
+**EL DERECHO DEL TRABAJADOR NO ES UN PERMISO.** «Mi semana» y «fichar» **no llevan candado**:
+cualquiera que pueda entrar ve y ficha lo suyo, porque eso es lo que da la ley. Lo que sí lo lleva
+(`tiempo.read`) es el bloque del **equipo** — son datos de otras personas. Comprobado con un
+empleado sin permisos: ve el suyo (200) y **no** el ajeno, ni quién está dentro, ni el historial de
+otro, ni puede fichar por otro, ni corregir (403 en los cinco).
+
+**Y LO QUE NO HACE, escrito en la propia pantalla:** nóminas, horas extra, convenios y descansos
+mínimos **no**. Registra y suma. Decirlo en la pantalla es lo que impide que alguien dé por hecho un
+cumplimiento que no está.
+
+**🔴 DOS FALLOS DE RELOJ, LOS DOS ENCONTRADOS PORQUE ESTO SE ESCRIBIÓ A LAS DOS DE LA MAÑANA:**
+1. **`jornadaDe` mezclaba dos relojes**: `fichar` usaba el del negocio (`ahoraLocal`, Europe/Madrid)
+   y el cálculo del día en curso usaba **UTC**. A las 23:50 son dos días distintos, así que el
+   trabajador veía «todavía no has fichado» **un minuto después de fichar**. Un registro de jornada
+   que se descuadra a medianoche no vale para lo que existe.
+2. **El reloj grande de la pantalla era el del NAVEGADOR.** La captura lo enseñó sin lugar a dudas:
+   **«23:39» en grande y «en pausa desde las 01:39» justo debajo**. Ahora arranca del minuto que
+   dice el servidor. En un registro legal, dos relojes en la misma tarjeta parecen un fichaje
+   apuntado a otra hora.
+*Y un tercero, del gate y no del producto: sembraba la entrada de hoy «a las 08:00», que a la 01:38
+está en el futuro — el producto rechazaba fichar después, con razón. Dos rojos que a las diez de la
+mañana no habrían salido. Es la lección de los «gates escritos de día» otra vez.*

@@ -158,6 +158,8 @@ export const GRUPOS = {
                                      // permisos; y el enlace que da DISA se abre de verdad
     'gate-descuentos',               // punto 11: descuentos, promociones y bonos — el IVA baja en
                                      // proporción, y emite una factura de verdad en un negocio propio
+    'gate-control-horario',          // punto 12: el registro de jornada — nada se borra, corregir
+                                     // deja el original a la vista, y cada trabajador ve lo suyo
   ],
   // Sala de máquinas: superadmin, conexiones a la BD, el fichero -wal, el saneo de errores al cliente,
   // el escapado del texto del usuario (que no se vuelva HTML ni JS) y la CSP estricta de las

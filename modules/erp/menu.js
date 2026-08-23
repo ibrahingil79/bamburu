@@ -65,6 +65,10 @@ export const NAV_PERMS = {
   crm:              'crm.read',
   proyectos:        'proyectos.read',   // peldaño 7 · servicios profesionales
   tiempo:           'tiempo.read',      // peldaño 7 · PIEZA 2 · registro de tiempo
+  // El control horario NO lleva candado en el menú A PROPÓSITO: la ley da a CADA trabajador derecho
+  // a consultar su propio registro, así que la entrada la ve todo el mundo. Lo que sí lleva permiso
+  // (`tiempo.read`) es el bloque del EQUIPO dentro de la pantalla — eso son datos de otras personas.
+  fichaje:          null,
   'facturar-horas': 'invoices.create',  // peldaño 7 · PIEZA 3 · facturar horas (mismo permiso que emitir factura)
   rentabilidad:     ['proyectos.read', 'invoices.read'],   // peldaño 7 · PIEZA 4 · exige AMBOS (proyectos + P&G)
   citas:            'citas.read',        // peldaño 7 · PIEZA 5 · agenda de citas
@@ -165,6 +169,11 @@ export const MENU = [
   { id: 'proyectos', label: 'Proyectos', icon: 'ti-briefcase', items: [
     { href: '/admin/proyectos', label: 'Proyectos', key: 'proyectos', icon: 'ti-folders' },
     { href: '/admin/tiempo', label: 'Registro de tiempo', key: 'tiempo', icon: 'ti-clock-play' },
+    // PUNTO 12 (23 ago 2026) — el registro de jornada, que es OTRA cosa que el registro de tiempo:
+    // uno factura horas de proyecto y el otro cumple el RD-ley 8/2019. Van juntos porque los dos
+    // hablan de horas, pero no comparten tabla: mezclarlos metería la pausa de la comida en las
+    // horas facturables de un cliente.
+    { href: '/admin/fichaje', label: 'Control horario', key: 'fichaje', icon: 'ti-clock-check' },
     { href: '/admin/facturar-horas', label: 'Facturar horas', key: 'facturar-horas', icon: 'ti-clock-dollar' },
     { href: '/admin/rentabilidad', label: 'Rentabilidad', key: 'rentabilidad', icon: 'ti-chart-pie' },
   ]},
