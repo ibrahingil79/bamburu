@@ -1360,7 +1360,29 @@ bloques, quitar bloque, «Personalizar», «Volver al de fábrica», guardado **
 
 ---
 
-#### F. MAPA EN LA FICHA DE CLIENTE · ✅ **HECHO (23 ago 2026)** · commit `27b0de4` · **4 de 4**
+#### F. MAPA EN LA FICHA DE CLIENTE · ✅ **HECHO (23 ago 2026)** · commits `27b0de4` + `d467b66` · **4 de 4**
+> **SEGUNDA ENTREGA (23 ago, `d467b66`) — DOS CORRECCIONES DEL DUEÑO SOBRE LA F YA ENTREGADA.**
+> Registrada aquí el mismo día por la sesión que hizo el cierre: **el commit se hizo y no se empujó,
+> y su gate ampliado se había quedado sin ejecutar.** Se ejecutó — **54 OK · 0 fallos** — y se empujó.
+> - **La dirección se escribía a ciegas.** Ibrahin guardó «Cuesta de San Francisco 8, Getafe» y no
+>   salió mapa: **esa calle no existe en Getafe** (está en Las Rozas) y el buscador devolvía vacío.
+>   Ahora **se escribe, se elige de una lista, y el punto que se guarda es EL ELEGIDO** — no se
+>   vuelve a buscar, así que el mapa no puede acabar en otro sitio.
+> - **El buscador del tecleo es PHOTON, no Nominatim, y no es preferencia:** la política de la OSM
+>   Foundation lo prohíbe con todas las letras (*«Auto-complete search: … you must not implement such
+>   a service»*). Montarlo contra Nominatim arriesga que **bloqueen la IP del servidor, y con ella el
+>   mapa entero**. Pasa por nuestro servidor con caché, como las teselas.
+> - **Dos defectos que las aserciones en verde no vieron y la captura sí:** las farmacias españolas
+>   se registran en OSM con el nombre de su titular, y salía **la persona delante de la dirección**;
+>   y cuando el resultado ES la calle, el nombre y la calle **salían dos veces**. La etiqueta se
+>   compone ahora solo con la dirección.
+> - **La PROVINCIA no se rellena a propósito:** Photon devuelve la comunidad autónoma («Comunidad de
+>   Madrid»), no la provincia («Madrid»), y ponerla mal **rompería el Facturae de ese cliente**.
+> - **El mapa, también en el resumen de la ventana del cliente** (150 px; 130 en móvil), entre los
+>   contadores y «Qué te compra». **No se ha copiado:** el pintor sale al componente compartido
+>   (`BF.pintaMapa`) y lo llaman las **tres** superficies.
+> - **Y una aserción suya llevaba un `|| true`** — habría dado verde con la puerta abierta. La
+>   sustituyó por una que puede fallar de verdad: sin sesión, `/api/erp/mapa/sugerencias` da **401**.
 
 > **HECHOS (23 ago 2026): F1 · F2 · F3 · F4.**
 > **⚠️ AUTORÍA, y conviene que conste: el código lo escribió OTRA SESIÓN** que trabajaba en paralelo
