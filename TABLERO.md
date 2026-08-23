@@ -1407,11 +1407,17 @@ bloques, quitar bloque, «Personalizar», «Volver al de fábrica», guardado **
 > rechaza zoom inexistente, coordenada negativa, coordenada decimal y el intento de **salir de la
 > carpeta**. **Las reversiones de esta ficha NO las hizo quien la entregó:** su gate es el que hay.
 >
-> **⬜ PENDIENTE DE IBRAHIN — y lo pedía esta misma ficha.** El aviso de abajo decía que
-> *«sin dependencias externas»* **había que confirmarlo contigo al abrir F**. La solución elegida
-> deja al **navegador sin ninguna llamada de fuera**, pero **el servidor sí consulta OpenStreetMap la
-> primera vez** (geocodificar la dirección y traer la tesela) y luego la **cachea en disco**. Queda
-> **dicho, no decidido**: si no lo quieres ni en el servidor, se dice y se cambia.
+> **✅ YA DECIDIDO POR IBRAHIN, y no queda nada que preguntar aquí.** El aviso de abajo pedía
+> confirmar con él lo de *«sin dependencias externas»* **al abrir F**, y se hizo: se le plantearon las
+> opciones para las teselas y **eligió «por nuestro servidor, con caché»** — Bamburu se las pide a OSM
+> **una vez** y las guarda en disco; a partir de ahí salen de nuestro disco. Su frase del encargo,
+> *«para no depender de un servicio ajeno cada vez que se abre un cliente»*, dice lo mismo: **lo que
+> descartó es la dependencia POR VISITA**, no que el servidor consulte una vez.
+> **⚠️ ESTA LÍNEA ESTUVO MAL UNAS HORAS Y SE CORRIGE AQUÍ (23 ago, cierre).** Al cerrar F desde otra
+> sesión se escribió como «pendiente de decidir», porque quien cerraba **no tenía delante esa
+> conversación**. Lo avisó la sesión que construyó F. Se deja escrito en vez de borrarlo porque el
+> daño de un pendiente falso es concreto: **manda al siguiente chat a preguntar otra vez algo ya
+> resuelto**, que es justo lo que este bloque existe para evitar.
 
 > **F. MAPA EN LA FICHA DE CLIENTE.**
 > Palabras del dueño: "se puede mejorar la ficha de cliente incluyendo google maps o open maps".
