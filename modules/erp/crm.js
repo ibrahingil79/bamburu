@@ -614,7 +614,8 @@ const TIPO_ACT_ICON = { contacto: 'ti-phone', nota: 'ti-note', compromiso: 'ti-c
 // Las fuentes del timeline, cada una con su permiso propio aguas arriba. Las cuatro últimas las
 // añade la FICHA 360: agenda, proyectos, horas y notas.
 export const TIMELINE_ALL = { oportunidades: true, actividad: true, quotes: true, orders: true, albaranes: true, invoices: true, cobros: true,
-                              citas: true, proyectos: true, tiempo: true, notas: true };
+                              citas: true, proyectos: true, tiempo: true, notas: true,
+                              tareas: true };   // punto 13 · la agenda del CRM, en la línea de tiempo
 
 export function clientTimeline(db, clientId, hoy, opts = {}) {
   const inc = { ...TIMELINE_ALL, ...(opts.include || {}) };
@@ -813,6 +814,33 @@ export function clientTimeline(db, clientId, hoy, opts = {}) {
   // Más reciente arriba. `created_at` de las tablas viejas es 'YYYY-MM-DD HH:MM:SS' y el de las
   // nuevas es ISO con 'T': se normaliza para que el orden sea el real y no alfabético por accidente.
   const norm = s => String(s || '').replace(' ', 'T');
+  // ── PUNTO 13 · LAS TAREAS DEL CRM, en la línea de tiempo del cliente ──────────────────────────
+  // Una tarea PENDIENTE se pone con SU fecha (la de para cuándo), así que aparece en el futuro de la
+  // línea, que es donde le toca: la ficha cuenta lo que pasó Y lo que queda por hacer. Una hecha se
+  // pone con la fecha en que se hizo. Y una vencida se marca, porque es lo que hay que mirar.
+  if (inc.tareas) {
+    let tareas = [];
+    try { tareas = db.prepare(
+      `SELECT t.*, u.name AS responsable FROM crm_tareas t LEFT JOIN admin_users u ON u.id=t.user_id
+        WHERE t.client_id=? ORDER BY t.fecha`).all(clientId); } catch { tareas = []; }
+    const hoyT = hoy || new Date().toISOString().slice(0, 10);
+    for (const t of tareas) {
+      const vencida = t.estado === 'pendiente' && t.fecha < hoyT;
+      push({
+        ts: (t.estado === 'hecha' && t.hecha_at) ? t.hecha_at : (t.fecha + ' 09:00:00'),
+        kind: 'tarea', icon: t.estado === 'hecha' ? 'ti-checkbox' : (t.estado === 'anulada' ? 'ti-square-off' : 'ti-clock-exclamation'),
+        title: (t.estado === 'pendiente' ? (vencida ? 'Tarea VENCIDA: ' : 'Tarea pendiente: ')
+               : (t.estado === 'hecha' ? 'Tarea hecha: ' : 'Tarea anulada: ')) + t.titulo,
+        detail: [t.responsable ? 'de ' + t.responsable : '',
+                 t.estado === 'pendiente' ? 'para el ' + t.fecha : '',
+                 t.estado === 'hecha' && t.resultado ? t.resultado : '',
+                 t.estado === 'anulada' && t.motivo ? t.motivo : ''].filter(Boolean).join(' · '),
+        badge: vencida ? 'b-red' : (t.estado === 'hecha' ? 'b-green' : (t.estado === 'anulada' ? 'b-gray' : 'b-amber')),
+        opportunity_id: t.opportunity_id || null, tarea_id: t.id,
+      });
+    }
+  }
+
   return ev.sort((a, b) => norm(b.ts).localeCompare(norm(a.ts)));
 }
 

@@ -2908,6 +2908,39 @@ Sé preciso con los números y siempre redondea correctamente.`,
   db.exec(`CREATE INDEX IF NOT EXISTS idx_fichajes_dia ON fichajes(user_id, fecha, anulado)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_fichajes_fecha ON fichajes(fecha)`);
 
+  // ── AGENDA DEL CRM · TAREAS Y SEGUIMIENTOS (23 ago 2026, noche · punto 13) ──────────────────
+  // QUÉ FALTABA, medido antes de escribir: `client_activities` ya guarda lo que PASÓ (contactos,
+  // notas, compromisos) y hasta tiene `commitment_date` —«me llama el día X»—. Lo que no había es
+  // una TAREA: algo pendiente, con **dueño** y **estado**, que avise cuando llega su día.
+  //
+  // POR QUÉ NO SE METE EN `client_activities`. Esa tabla es un REGISTRO de lo ocurrido, y la línea
+  // de tiempo del cliente la pinta como historia. Meter ahí una tarea pendiente haría que el
+  // historial enseñara como hecho algo que no ha pasado todavía. Son dos cosas y se quedan en dos
+  // tablas — pero la línea de tiempo las junta al pintarlas, que es donde el dueño las quiere ver.
+  //
+  // ARCHIVAR, NUNCA BORRAR (regla del proyecto): una tarea se marca hecha o se anula con su motivo.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS crm_tareas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id INTEGER,                       -- puede ser de un cliente…
+      opportunity_id INTEGER,                  -- …y además, de una oportunidad concreta
+      titulo TEXT NOT NULL,
+      detalle TEXT DEFAULT '',
+      fecha DATE NOT NULL,                     -- para cuándo
+      user_id INTEGER,                         -- DE QUIÉN es (el dueño de la tarea)
+      estado TEXT NOT NULL DEFAULT 'pendiente' CHECK(estado IN ('pendiente','hecha','anulada')),
+      hecha_at TEXT, hecha_por INTEGER, resultado TEXT DEFAULT '',
+      motivo TEXT DEFAULT '',                  -- por qué se anuló
+      created_by INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (client_id) REFERENCES clients(id),
+      FOREIGN KEY (opportunity_id) REFERENCES opportunities(id),
+      FOREIGN KEY (user_id) REFERENCES admin_users(id)
+    );
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_crm_tareas_pend ON crm_tareas(estado, fecha)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_crm_tareas_cli ON crm_tareas(client_id, estado)`);
+
   // ── B12 · LAS TRES TABLAS DE ROLES, ARCHIVADAS (23 ago 2026, noche · punto 8) ────────────────
   // `roles`, `role_permissions` y `user_roles` se sembraban desde siempre y NO CONCEDÍAN NADA: la
   // aplicación de permisos lee solo `user_permissions`. El informe del Eje C las declaró código

@@ -160,6 +160,8 @@ export const GRUPOS = {
                                      // proporción, y emite una factura de verdad en un negocio propio
     'gate-control-horario',          // punto 12: el registro de jornada — nada se borra, corregir
                                      // deja el original a la vista, y cada trabajador ve lo suyo
+    'gate-crm-tareas',               // punto 13: la agenda del CRM — fecha, dueño, aviso por el
+                                     // motor que ya hay, y en la línea de tiempo del cliente
   ],
   // Sala de máquinas: superadmin, conexiones a la BD, el fichero -wal, el saneo de errores al cliente,
   // el escapado del texto del usuario (que no se vuelva HTML ni JS) y la CSP estricta de las

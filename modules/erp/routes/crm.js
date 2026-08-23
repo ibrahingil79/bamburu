@@ -8,6 +8,9 @@ import { sendEmail } from '../../../core/mailer.js';
 import { opportunitySchema, opportunityStageSchema, closeOpportunitySchema, clientActivitySchema } from '../schemas.js';
 import { ENTITY } from '../../../core/activity-entities.js';
 import { exigirCorreoActivo } from '../avisos-preferencias.js';   // interruptor de Ajustes → Avisos y correos
+import { hoyLocal } from '../avisos.js';   // el reloj del negocio, uno solo para todo
+// PUNTO 13 · la agenda del CRM. El motor vive aparte; aquí solo la puerta.
+import { crearTarea, getTarea, listarTareas, marcarHecha, anularTarea, reprogramar } from '../crm-tareas.js';
 import {
   ETAPAS, ETAPA_LABEL, ORIGENES, ORIGEN_LABEL, MOTIVOS_PERDIDA, MOTIVO_PERDIDA_LABEL,
   CANALES, CANAL_LABEL, URGENCIA_LABEL,
@@ -30,7 +33,12 @@ import {
 export function createCrmRoutes(db) {
   const api = new Hono();
   const views = new Hono();
-  const hoy = () => new Date().toISOString().slice(0, 10);
+  // EL RELOJ DEL NEGOCIO, NO EL DE UTC (23 ago 2026, punto 13). Esto era
+  // `new Date().toISOString()`, y a partir de las 22:00 de Madrid en verano devuelve el día
+  // ANTERIOR: la pantalla de tareas enseñaba «para hoy» una tarea del día pasado, y la cola de
+  // trabajo medía los retrasos contra un día que no era. hoyLocal() es el mismo reloj que usan
+  // la agenda, los avisos y el fichaje — que es de lo que se trata: uno solo.
+  const hoy = () => hoyLocal();
   const userName = c => c.get('session')?.userName || '';
 
   // ── API: LECTURA ────────────────────────────────────────────────
@@ -68,6 +76,46 @@ export function createCrmRoutes(db) {
   api.get('/clients/:cid/summary', requirePerm('crm.read'), c => {
     try { return c.json(clientCrmSummary(db, parseInt(c.req.param('cid')), hoy())); }
     catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+
+  // ── PUNTO 13 · TAREAS. Van ANTES de '/:id': Hono casa por orden de registro, y '/tareas' se lo
+  // comería la ruta del id. Es el mismo tropiezo que ya costó el '/cuadro/orden' de la ficha E.
+  api.get('/tareas', requirePerm('crm.read'), c => {
+    const estado = c.req.query('estado');
+    return c.json(listarTareas(db, {
+      estado: estado === 'todas' ? null : (estado || 'pendiente'),
+      userId: c.req.query('mias') === '1' ? (c.get('session')?.userId || null) : null,
+      clientId: c.req.query('cliente') ? Number(c.req.query('cliente')) : null,
+      hoy: hoy(),
+    }));
+  });
+  api.post('/tareas', requirePerm('crm.manage'), async c => {
+    try {
+      const b = await c.req.json();
+      const r = crearTarea(db, { ...b, created_by: c.get('session')?.userId || null });
+      logActivity(db, c.get('session'), 'Creó una tarea comercial', 'crm_tarea', r.id, r.titulo);
+      return c.json(r);
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+  });
+  api.post('/tareas/:id/hecha', requirePerm('crm.manage'), async c => {
+    try {
+      const b = await c.req.json().catch(() => ({}));
+      const r = marcarHecha(db, Number(c.req.param('id')), { resultado: b.resultado || '', por: c.get('session')?.userId || null });
+      logActivity(db, c.get('session'), 'Cerró una tarea comercial', 'crm_tarea', r.id, String(b.resultado || ''));
+      return c.json(r);
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+  });
+  api.post('/tareas/:id/reprogramar', requirePerm('crm.manage'), async c => {
+    try { const b = await c.req.json();
+      return c.json(reprogramar(db, Number(c.req.param('id')), b.fecha)); }
+    catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+  });
+  api.delete('/tareas/:id', requirePerm('crm.manage'), async c => {
+    try { const b = await c.req.json().catch(() => ({}));
+      const r = anularTarea(db, Number(c.req.param('id')), b.motivo);
+      logActivity(db, c.get('session'), 'Anuló una tarea comercial', 'crm_tarea', r.id, String(b.motivo || ''));
+      return c.json(r); }
+    catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
   api.get('/:id', requirePerm('crm.read'), c => {
@@ -189,6 +237,7 @@ export function createCrmRoutes(db) {
   const tabs = (active) => `<div class="tabs">
       <a href="/admin/crm" class="tab${active === 'embudo' ? ' active' : ''}">Embudo</a>
       <a href="/admin/crm/cola" class="tab${active === 'cola' ? ' active' : ''}">Cola de trabajo</a>
+      <a href="/admin/crm/tareas" class="tab${active === 'tareas' ? ' active' : ''}">Tareas</a>
     </div>`;
 
   // CSS del tablero. Vive aquí (no en layout.js) porque solo esta pantalla lo usa: el resto de
@@ -798,6 +847,119 @@ export function createCrmRoutes(db) {
       reload();
       </script>`;
     return c.html(adminLayout('Oportunidades', content, 'crm', c.get('session')?.csrfToken || '', c));
+  });
+
+  // ── PUNTO 13 · LA AGENDA DEL CRM ─────────────────────────────────────────────────────────────
+  // Tres cosas y en este orden, que es el de quien la abre por la mañana: lo VENCIDO, lo de HOY, y
+  // lo que viene. Y un botón para apuntar la siguiente, que es lo que se hace al colgar el teléfono.
+  views.get('/tareas', requirePerm('crm.read'), c => {
+    const csrf = c.get('session')?.csrfToken || '';
+    const puedeGestionar = can(c, 'crm.manage');
+    const t = hoy();
+    const todas = listarTareas(db, { estado: 'pendiente', hoy: t });
+    const vencidas = todas.filter(x => x.vencida);
+    const deHoy = todas.filter(x => x.hoy);
+    const futuras = todas.filter(x => !x.vencida && !x.hoy);
+    const hechas = listarTareas(db, { estado: 'hecha', hoy: t }).slice(-15).reverse();
+    const equipo = db.prepare('SELECT id, name FROM admin_users WHERE active=1 ORDER BY name').all();
+
+    const fila = x => `<tr>
+      <td><strong>${escHtml(x.titulo)}</strong>${x.detalle ? `<div style="font-size:.75rem;color:var(--text3)">${escHtml(x.detalle)}</div>` : ''}</td>
+      <td><a href="/admin/clients/${x.client_id}">${escHtml(x.cliente || '—')}</a>
+        ${x.oportunidad ? `<div style="font-size:.72rem;color:var(--text3)">${escHtml(x.oportunidad)}</div>` : ''}</td>
+      <td>${escHtml(x.responsable || 'sin dueño')}</td>
+      <td>${escHtml(x.fecha)}${x.vencida ? `<div style="font-size:.72rem;color:var(--danger)">hace ${x.retraso} día(s)</div>` : ''}</td>
+      <td class="r">${puedeGestionar ? `
+        <button class="btn btn-sm" data-hecha="${x.id}">Hecha</button>
+        <button class="btn btn-secondary btn-sm" data-mover="${x.id}">Mover</button>
+        <button class="btn btn-secondary btn-sm" data-anular="${x.id}">Anular</button>` : ''}</td></tr>`;
+    const bloque = (titulo, lista, vacio, color) => `
+      <div class="card bf-caja" style="margin-bottom:1rem">
+        <h3 style="margin-top:0${color ? ';color:' + color : ''}">${escHtml(titulo)} ${lista.length ? '<span style="color:var(--text3);font-weight:400">· ' + lista.length + '</span>' : ''}</h3>
+        ${lista.length ? `<div class="table-wrap"><table><thead><tr><th>Qué hay que hacer</th><th>Cliente</th>
+          <th>De quién</th><th>Para cuándo</th><th></th></tr></thead><tbody>${lista.map(fila).join('')}</tbody></table></div>`
+          : `<div style="color:var(--text3);font-size:.86rem">${escHtml(vacio)}</div>`}
+      </div>`;
+
+    const content = `
+      <div class="ph"><h2>Oportunidades</h2>
+        ${puedeGestionar ? '<button class="btn btn-primary" id="btnNuevaTarea">Nueva tarea</button>' : ''}</div>
+      ${tabs('tareas')}
+      <div class="alert" style="margin-bottom:1rem">Lo que hay que hacer con cada cliente, <strong>con
+        fecha y con dueño</strong>. Lo vencido y lo de hoy salen además <strong>en la campana de avisos</strong>,
+        con el resto: no hay una bandeja nueva que vigilar. Y cada tarea aparece en la
+        <strong>línea de tiempo del cliente</strong>, junto a sus facturas y sus citas.</div>
+      ${bloque('Se te ha pasado', vencidas, 'Nada vencido. Bien.', 'var(--danger)')}
+      ${bloque('Para hoy', deHoy, 'Hoy no tienes nada apuntado.')}
+      ${bloque('Lo que viene', futuras, 'No hay nada apuntado más adelante.')}
+      ${hechas.length ? `<div class="card bf-caja"><h3 style="margin-top:0">Últimas hechas</h3>
+        <div class="table-wrap"><table><tbody>${hechas.map(x => `<tr>
+          <td style="color:var(--text3)">${escHtml(String(x.hecha_at || '').slice(0, 10))}</td>
+          <td>${escHtml(x.titulo)}</td><td>${escHtml(x.cliente || '')}</td>
+          <td style="color:var(--text3)">${escHtml(x.resultado || '')}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
+      <script>
+      const CSRF=${JSON.stringify(csrf)};
+      const EQUIPO=${JSON.stringify(equipo)}, HOY=${JSON.stringify(t)};
+      async function api(m,u,b){ const r=await fetch(u,{method:m,headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:b?JSON.stringify(b):undefined});
+        let d=null; try{ d=await r.json(); }catch(e){} if(!r.ok||(d&&d.error)) throw new Error(window.cleanErrMsg((d&&d.error)||'')); return d; }
+      async function nuevaTarea(){
+        const v = await window.pedirDatos({ titulo:'Nueva tarea', aceptar:'Apuntarla',
+          texto:'Qué hay que hacer, con quién y para cuándo. Sin fecha y sin dueño una tarea no la hace nadie.',
+          campos:[
+            { id:'cliente', etiqueta:'Cliente (nombre exacto o parte)', marcador:'Taxis Ríos' },
+            { id:'titulo', etiqueta:'Qué hay que hacer', marcador:'Llamar para el presupuesto de la furgoneta' },
+            { id:'fecha', etiqueta:'Para cuándo', valor:HOY, ayuda:'AAAA-MM-DD' },
+            { id:'user_id', tipo:'lista', etiqueta:'De quién es',
+              opciones:[{v:'',t:'— sin dueño —'}].concat(EQUIPO.map(u=>({v:u.id,t:u.name}))) },
+            { id:'detalle', etiqueta:'Detalle (opcional)' },
+          ],
+          validar: v2 => {
+            if(!String(v2.cliente||'').trim()) return { campo:'cliente', mensaje:'Dime de qué cliente es.' };
+            if(!String(v2.titulo||'').trim()) return { campo:'titulo', mensaje:'Escribe qué hay que hacer.' };
+            if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(v2.fecha||''))) return { campo:'fecha', mensaje:'Pon una fecha AAAA-MM-DD.' };
+            return null;
+          },
+          alAceptar: async v2 => {
+            const cl = await api('GET','/api/erp/clients?q='+encodeURIComponent(String(v2.cliente).trim()));
+            const lista = Array.isArray(cl)?cl:(cl.clients||cl.rows||[]);
+            if(!lista.length) throw new Error('No encuentro ningún cliente que se llame así.');
+            const exacto = lista.find(x=>String(x.name).toLowerCase()===String(v2.cliente).trim().toLowerCase());
+            if(lista.length>1 && !exacto) throw new Error('Hay '+lista.length+' clientes que encajan. Escribe el nombre completo.');
+            await api('POST','/api/erp/crm/tareas',{ client_id:(exacto||lista[0]).id, titulo:String(v2.titulo).trim(),
+              fecha:v2.fecha, user_id:v2.user_id||null, detalle:String(v2.detalle||'') });
+          } });
+        if (v) location.reload();
+      }
+      window.addEventListener('DOMContentLoaded',()=>{
+        const b=document.getElementById('btnNuevaTarea'); if(b) b.onclick=nuevaTarea;
+        document.querySelectorAll('[data-hecha]').forEach(x=>x.onclick=async()=>{
+          const v = await window.pedirDatos({ titulo:'Dar la tarea por hecha', aceptar:'Hecha',
+            texto:'Apunta cómo ha ido: sin resultado, el siguiente seguimiento empieza a ciegas.',
+            campos:[{ id:'resultado', etiqueta:'¿Cómo ha ido?', marcador:'Quedamos en llamar en septiembre' }] });
+          if(!v) return;
+          try{ await api('POST','/api/erp/crm/tareas/'+x.dataset.hecha+'/hecha',{resultado:v.resultado||''});
+            toast('Hecha'); setTimeout(()=>location.reload(),600); }catch(e){ toast(e.message,'err'); }
+        });
+        document.querySelectorAll('[data-mover]').forEach(x=>x.onclick=async()=>{
+          const v = await window.pedirDatos({ titulo:'Mover la tarea de día', aceptar:'Mover',
+            campos:[{ id:'fecha', etiqueta:'Nueva fecha', valor:HOY, ayuda:'AAAA-MM-DD' }],
+            validar: v2 => /^\\d{4}-\\d{2}-\\d{2}$/.test(String(v2.fecha||'')) ? null : { campo:'fecha', mensaje:'AAAA-MM-DD.' } });
+          if(!v) return;
+          try{ await api('POST','/api/erp/crm/tareas/'+x.dataset.mover+'/reprogramar',{fecha:v.fecha});
+            toast('Movida'); setTimeout(()=>location.reload(),600); }catch(e){ toast(e.message,'err'); }
+        });
+        document.querySelectorAll('[data-anular]').forEach(x=>x.onclick=async()=>{
+          const v = await window.pedirDatos({ titulo:'Anular la tarea', aceptar:'Anular',
+            texto:'No se borra: queda anulada con su motivo. Saber qué se decidió NO hacer también vale.',
+            campos:[{ id:'motivo', etiqueta:'¿Por qué?' }],
+            validar: v2 => String(v2.motivo||'').trim().length>=3 ? null : { campo:'motivo', mensaje:'Dilo en tres letras al menos.' } });
+          if(!v) return;
+          try{ await api('DELETE','/api/erp/crm/tareas/'+x.dataset.anular,{motivo:v.motivo});
+            toast('Anulada'); setTimeout(()=>location.reload(),600); }catch(e){ toast(e.message,'err'); }
+        });
+      });
+      </script>`;
+    return c.html(adminLayout('Tareas comerciales', content, 'crm', csrf, c));
   });
 
   return { api, views };

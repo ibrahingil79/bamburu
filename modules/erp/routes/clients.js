@@ -244,6 +244,7 @@ export function createClientRoutes(db, cfg = {}) {
         invoices: can(c, 'invoices.read'), cobros: can(c, 'cobros.read'),
         citas: can(c, 'citas.read'), proyectos: can(c, 'proyectos.read'), tiempo: can(c, 'tiempo.read'),
         notas: true,                                    // las notas son del cliente: van con clients.read
+        tareas: can(c, 'crm.read'),                     // punto 13 · mismo permiso que su pantalla
       };
       const todos = clientTimeline(db, cli.id, new Date().toISOString().slice(0, 10), { include });
       const tipo = String(c.req.query('tipo') || '').trim();

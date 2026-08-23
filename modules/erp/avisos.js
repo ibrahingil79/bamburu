@@ -20,6 +20,8 @@ import { productosBajoMinimo } from './reposicion.js';
 // depende de routes/citas.js → layout.js → este mismo fichero, y el círculo dejaría PERM_POR_FUENTE en
 // zona muerta al arrancar. La hoja solo depende de citas-engine.js.
 import { reservasPublicasPendientes, reservaPublicaEncendida } from './reserva-publica-config.js';
+// PUNTO 13 — la fuente de avisos de la agenda del CRM vive en su módulo, junto a su motor.
+import { tareasCrmVencidas } from './crm-tareas.js';
 
 const r2 = n => Math.round(n * 100) / 100;
 
@@ -256,6 +258,9 @@ export const PERM_POR_FUENTE = {
   // y no por copiar: su pantalla de origen (/admin/citas/publica) exige `citas.edit`, y el aviso trae
   // el interruptor para apagarla. Enseñárselo a quien no puede apagarla sería un botón muerto.
   reserva_publica_encendida: 'citas.edit',
+  // Su pantalla de origen es /admin/crm, así que lleva su mismo permiso. Un aviso no puede ser una
+  // puerta trasera a datos que su pantalla te niega.
+  tarea_crm:             'crm.read',
 };
 
 // ── EL MISMO PERMISO, TAMBIÉN FUERA DE UNA PETICIÓN ─────────────────────────────────────────────
@@ -313,6 +318,10 @@ const SOURCES = [
   // "los canales que ya hay": cero mensajería nueva.
   { tipo: 'reserva_publica',       fn: reservasPublicasPendientes },
   { tipo: 'reserva_publica_encendida', fn: reservaPublicaEncendida },
+  // PUNTO 13 (23 ago 2026) — la agenda del CRM. Registrar la fuente aquí es TODO lo que hace falta
+  // para que una tarea comercial vencida salga en la campana, en /admin/avisos, en el Inicio y en el
+  // correo diario. Cero mensajería nueva: es lo que pedía el encargo con «y aviso».
+  { tipo: 'tarea_crm',             fn: tareasCrmVencidas },
 ];
 
 // Todos los avisos del día, ordenados por urgencia (más urgente arriba). Robusto: si una fuente
@@ -347,6 +356,7 @@ export function avisosEmail(ctx) {
     vencimiento_proveedor: 'Facturas de proveedor (vencidas o que vencen en ≤7 días)',
     cobro_vencido: 'Facturas de cliente vencidas (te deben)',
     cliente_en_riesgo: 'Clientes en riesgo (seguimiento comercial vencido)',
+    tarea_crm: 'Tareas comerciales para hoy o ya vencidas',
     factura_recurrente: 'Facturas recurrentes en borrador',
     reserva_publica: 'Solicitudes de cita por Internet (pendientes de aprobar)',
     reserva_publica_encendida: 'Tu página de reservas se ha abierto sola',

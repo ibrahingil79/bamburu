@@ -1972,7 +1972,8 @@ verdad y no como se suponía — que es justo el problema que esta tarea viene a
   existe con seis dimensiones y nueve medidas, y los cuatro avisos ya llevan su gráfico.
 - ~~**Control horario (fichaje).**~~ **✅ HECHO el 23 ago 2026 (noche · punto 12) · gate
   `scripts/gate-control-horario.mjs` · 41 ✓ · 0 ✗.** Ficha al final del documento.
-- **Agenda del CRM.**
+- ~~**Agenda del CRM.**~~ **✅ HECHO el 23 ago 2026 (noche · punto 13) · gate
+  `scripts/gate-crm-tareas.mjs` · 38 ✓ · 0 ✗.** Ficha al final del documento.
 - ~~**⬜ LAS VENTANITAS DEL NAVEGADOR DEL RESTO DEL PRODUCTO — 81, y son LA MISMA TRAMPA.**~~
   **✅ HECHO el 23 ago 2026 (noche · punto 7) · gate `scripts/gate-sin-ventanitas.mjs` · 36 ✓ · 0 ✗.**
   **El censo da CERO**: `node scripts/censo-ventanitas.mjs`. Ver la ficha completa al final de este
@@ -7166,3 +7167,37 @@ cumplimiento que no está.
 *Y un tercero, del gate y no del producto: sembraba la entrada de hoy «a las 08:00», que a la 01:38
 está en el futuro — el producto rechazaba fichar después, con razón. Dos rojos que a las diez de la
 mañana no habrían salido. Es la lección de los «gates escritos de día» otra vez.*
+
+---
+
+### PUNTO 13 · LA AGENDA DEL CRM — TAREAS Y SEGUIMIENTOS  ✅ **HECHO (23 ago 2026, noche)** · gate `scripts/gate-crm-tareas.mjs` · **38 ✓ · 0 ✗**
+
+**LAS CUATRO PIEZAS QUE PEDÍA EL ENCARGO —«con fecha, dueño y aviso, enganchados a la línea de tiempo
+del cliente»— y cómo se cumple cada una:**
+| Pieza | Cómo | Cómo se comprueba |
+|---|---|---|
+| **Fecha** | obligatoria | una tarea sin fecha **se rechaza**, y sin título y sin cliente también |
+| **Dueño** | `user_id`, y se enseña | *«sin dueño, una tarea es de todos y no la hace nadie»* — se guarda igual si no lo tiene, y **se ve que no lo tiene** |
+| **Aviso** | una fuente nueva en el motor de avisos **que ya existía** | sale en la campana, en `/admin/avisos`, en el Inicio y en el correo diario **sin tocar nada más** |
+| **Línea de tiempo** | `clientTimeline` las pinta con las facturas y las citas | las tres aparecen, y la vencida **marcada** |
+
+**POR QUÉ UNA TABLA NUEVA Y NO `client_activities`.** Esa tabla es un **registro de lo que pasó**, y
+la ficha la pinta como historia. Una tarea pendiente metida ahí haría que el historial enseñara como
+hecho algo que **no ha pasado todavía**. Son dos cosas y se quedan en dos tablas — pero **la línea de
+tiempo las junta al pintarlas**, que es donde el dueño las quiere ver.
+
+**NADA SE BORRA.** Hecha (con su **resultado** apuntado: sin él, el siguiente seguimiento empieza a
+ciegas), movida de día (**reprogramar no es anular**) o anulada **con su motivo** — las tres siguen
+en la tabla. Comprobado contando filas antes y después.
+
+**EL AVISO NO ES UNA BANDEJA NUEVA**, y eso es deliberado: se registra en `SOURCES` de `avisos.js` y
+hereda todos los canales. Lleva **`crm.read`**, el mismo permiso que su pantalla — *un aviso no puede
+ser una puerta trasera a datos que su pantalla te niega* — y **no tapa lo importante**: su urgencia es
+301, la de una factura sin cobrar era 1773 en la medición.
+
+**🔴 Y EL MISMO FALLO DE RELOJ DEL PUNTO 12, otra vez, en otro sitio.** El CRM entero usaba
+`new Date().toISOString()` para saber qué día es. A partir de las 22:00 de Madrid en verano eso
+devuelve **el día anterior**: la pantalla de tareas enseñaba «para hoy» una tarea del día pasado, y
+**la cola de trabajo medía los retrasos contra un día que no era**. Ahora usa `hoyLocal()`, el mismo
+reloj que la agenda, los avisos y el fichaje. *Van dos relojes descuadrados encontrados esta noche, y
+los dos por trabajar de madrugada.*
