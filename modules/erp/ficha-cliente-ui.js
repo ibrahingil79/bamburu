@@ -31,6 +31,17 @@
 //
 // En móvil es hoja inferior arrastrable (A4): mismo HTML, otra caja.
 
+// ── F · LOS FICHEROS DEL MAPA ───────────────────────────────────────────────────────────────────
+// Leaflet 1.9.4, CONGELADO en `public/vendor/leaflet/` y servido desde 'self'. Nunca desde un CDN:
+// esa puerta se cerró en C4b-2 (las cuatro librerías que venían de jsdelivr se cargaban sin
+// `integrity`, así que la CSP confiaba a ciegas en un dominio ajeno). Se declara aquí, en el mismo
+// fichero que la ficha, porque las DOS pantallas que la pintan —la lista de clientes y la ficha
+// completa— tienen que cargar exactamente lo mismo: dos listas parecidas acaban divergiendo.
+export function mapaAssetsHTML() {
+  return '<link rel="stylesheet" href="/public/vendor/leaflet/leaflet.css">'
+       + '<script src="/public/vendor/leaflet/leaflet.js"><' + '/script>';
+}
+
 // ── LOS ESTILOS ─────────────────────────────────────────────────────────────────────────────────
 export function fichaClienteCSS() {
   return `
@@ -1029,10 +1040,84 @@ export function fichaCompletaJS() {
       return fetch(u, o).then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.error||r.status); return j; }); });
     }
 
+    // ── F · DÓNDE ESTÁ — el mapa de la ficha y el enlace de ruta ─────────────────────────────
+    // LAS TRES REGLAS DEL ENCARGO SE DECIDEN AQUÍ:
+    //  · Sin punto del que fiarse no se pinta NADA: ni hueco, ni mapa vacío, ni "sin datos".
+    //  · El punto llega YA RESUELTO del servidor —se resolvió el día que se guardó el cliente—, así
+    //    que abrir una ficha no le pregunta nada a nadie de fuera: las teselas también son nuestras.
+    //  · Si Leaflet no cargó, tampoco se pinta. Mejor la ficha de siempre que una caja rota.
+    var MAPAS = {};
+    var ICONO = null;
+
+    // EL ENLACE ABRE LA APLICACIÓN DE MAPAS DEL TELÉFONO, que no es lo mismo que abrir un mapa:
+    //  · Android      -> esquema geo:, el estándar del sistema; el móvil ofrece las apps que tenga.
+    //  · iPhone/iPad  -> el enlace universal de Apple, que iOS abre DIRECTAMENTE en su app de Mapas
+    //                    (el esquema maps:// lo bloquean algunos navegadores; este no).
+    //  · Escritorio   -> OpenStreetMap, que es de donde sale el mapa.
+    // Esto NO reabre la decisión del proveedor: el mapa lo dibuja OpenStreetMap y punto. Aquí solo
+    // se le pasa el punto al teléfono para que lo abra con lo que su dueño tenga instalado.
+    function enlaceRuta(lat, lon, nombre){
+      var d = lat + ',' + lon;
+      var ua = navigator.userAgent || '';
+      if (/iPad|iPhone|iPod/i.test(ua)) return 'https://maps.apple.com/?daddr=' + d + '&dirflg=d';
+      if (/Android/i.test(ua)) return 'geo:' + d + '?q=' + d + '(' + encodeURIComponent(nombre || '') + ')';
+      return 'https://www.openstreetmap.org/directions?route=;' + d;
+    }
+
+    function pintaMapa(pfx, D){
+      var box = document.getElementById(pfx + 'mapaBox');
+      if (!box) return;
+      // Repintar la ficha (tras un cobro, por ejemplo) rehace el HTML de la caja. El mapa anterior
+      // hay que CERRARLO: si no, se queda escuchando el redimensionado de la ventana para siempre.
+      if (MAPAS[pfx]) { try { MAPAS[pfx].remove(); } catch(e){} delete MAPAS[pfx]; }
+      var m = D && D.mapa;
+      var hay = !!m && isFinite(m.lat) && isFinite(m.lon) && typeof L !== 'undefined';
+      if (!hay) { box.innerHTML = ''; box.style.display = 'none'; return; }
+      var nombre = (D.cliente && D.cliente.name) || '';
+      // TODO lo que viene del cliente pasa por BF.esc — el nombre y la dirección los escribe una
+      // persona, y en esta casa hay clientes con carga XSS en el nombre desde el primer día.
+      box.innerHTML = '<h4>Dónde está</h4>'
+        + '<div class="bf-mapa" id="' + pfx + 'mapaLienzo"></div>'
+        + '<div class="bf-mapa-pie">'
+        +   '<span class="dir" title="' + BF.esc(m.direccion || '') + '">' + BF.esc(m.direccion || '') + '</span>'
+        +   '<a class="btn btn-secondary btn-sm" target="_blank" rel="noopener" href="'
+        +     BF.esc(enlaceRuta(m.lat, m.lon, nombre)) + '">Cómo llegar</a>'
+        + '</div>';
+      box.style.display = '';
+      // Icono con las rutas ESCRITAS. Leaflet, si no se le dan, las adivina mirando de dónde vino su
+      // propio CSS — y esa adivinanza falla en cuanto los ficheros no están donde él espera.
+      if (!ICONO) ICONO = L.icon({
+        iconUrl: '/public/vendor/leaflet/images/marker-icon.png',
+        iconRetinaUrl: '/public/vendor/leaflet/images/marker-icon-2x.png',
+        shadowUrl: '/public/vendor/leaflet/images/marker-shadow.png',
+        iconSize: [25, 41], iconAnchor: [12, 41], shadowSize: [41, 41], shadowAnchor: [12, 41]
+      });
+      try {
+        // scrollWheelZoom apagado: bajar por la ficha con la rueda no puede acabar haciendo zoom en
+        // un mapa por el que pasabas. Los botones + y - siguen ahí para quien quiera acercarse.
+        var mapa = L.map(pfx + 'mapaLienzo', { scrollWheelZoom: false, attributionControl: true });
+        mapa.attributionControl.setPrefix(false);
+        // Las teselas salen de NUESTRA ruta, no de openstreetmap.org (ver routes/mapa.js). La
+        // atribución es obligatoria por la licencia de los datos (ODbL) y por eso se queda.
+        L.tileLayer('/api/erp/mapa/tesela/{z}/{x}/{y}', { minZoom: 3, maxZoom: 19,
+          attribution: '&copy; colaboradores de <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' }).addTo(mapa);
+        mapa.setView([m.lat, m.lon], 17);
+        L.marker([m.lat, m.lon], { icon: ICONO, title: nombre, keyboard: false }).addTo(mapa);
+        MAPAS[pfx] = mapa;
+        // La ventana flotante entra ANIMADA: en el instante de crear el mapa su caja todavía puede
+        // medir otra cosa, y Leaflet se queda con la medida de ese momento. Esto la vuelve a tomar.
+        setTimeout(function(){ try { mapa.invalidateSize(); } catch(e){} }, 80);
+      } catch(e) { box.innerHTML = ''; box.style.display = 'none'; }
+    }
+
     // El armazón. Los ids llevan el prefijo de la caja para que la capa y la página puedan convivir
     // en el mismo documento sin pisarse los identificadores.
     function armazon(pfx){
       return '<div class="' + 'bf-full">'
+        // F — DÓNDE ESTÁ. Nace VACÍO y oculto, y solo lo llena pintaMapa si hay un punto del que
+        // fiarse. Vacío y con display:none no deja hueco: .bf-full es un flex y un hijo oculto no
+        // cuenta para el gap. Es la diferencia entre "no se pinta" y "se pinta un sitio en blanco".
+        + '<div class="card bf-caja" id="'+pfx+'mapaBox" style="display:none"></div>'
         + '<div class="card bf-caja" id="'+pfx+'hist"><h4>Su historia</h4>'
         +   '<div class="bf-per" id="'+pfx+'tabs"></div><div id="'+pfx+'tl">Cargando…</div>'
         +   '<div style="text-align:center;padding:.6rem"><button type="button" class="btn btn-secondary btn-sm" id="'+pfx+'mas" style="display:none">Ver más</button></div>'
@@ -1123,6 +1208,7 @@ export function fichaCompletaJS() {
 
       // ── Qué te compra y la nota fija ─────────────────────────────────────────────────────────
       function pintaDe(D){
+        pintaMapa(pfx, D);   // F — dónde está el cliente (y nada, si no se sabe)
         $('notaFija').innerHTML = D.cliente && D.cliente.notes
           ? '<div class="alert alert-ok" style="margin-bottom:.6rem">'+BF.esc(D.cliente.notes)+'</div>' : '';
         $('compra').innerHTML = D.compra == null ? '<div class="bf-vacio">—</div>'
@@ -1169,6 +1255,22 @@ export function fichaCompletaCSS() {
     .bf-full-2{display:grid;grid-template-columns:1fr 1fr;gap:1rem;align-items:start}
     .bf-full-2>.card{min-width:0}
     @media(max-width:900px){ .bf-full-2{grid-template-columns:1fr} }
+    /* ── F · DÓNDE ESTÁ ──────────────────────────────────────────────────────────────────────────
+       El position:relative con z-index:0 NO es adorno: crea un contexto de apilado propio y encierra
+       dentro los z-index de Leaflet (sus controles van a 1000), que si no se le suben por encima
+       a la cabecera del panel. El alto es fijo a propósito — un mapa sin alto se pinta de 0 px. */
+    .bf-mapa{height:220px;border-radius:12px;overflow:hidden;position:relative;z-index:0;
+      border:1px solid var(--border2);background:var(--bg2)}
+    .bf-mapa .leaflet-container{font:inherit;background:var(--bg2)}
+    .bf-mapa-pie{display:flex;align-items:center;justify-content:space-between;gap:.75rem;
+      margin-top:.6rem;min-width:0}
+    /* La dirección se recorta con puntos suspensivos, como las tres líneas de la tarjeta (D1): un
+       texto largo no puede estirar la caja ni empujar al botón fuera del borde. */
+    .bf-mapa-pie .dir{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+      font-size:.82rem;color:var(--text2)}
+    .bf-mapa-pie .btn{flex:none}
+    @media(max-width:520px){ .bf-mapa{height:180px} }
+
     /* Dentro de la ventana la ficha completa no lleva marcos dobles: la ventana ya es el marco. */
     .bf-win-body .bf-full .card{border:none;background:transparent;padding:0}
     .bf-win-body .bf-full{gap:1.5rem}

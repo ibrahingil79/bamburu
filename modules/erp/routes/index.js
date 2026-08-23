@@ -56,6 +56,7 @@ import { createVerifactuEnvioRoutes } from './verifactu-envio-routes.js';
 import { createConciliacionRoutes } from './conciliacion-routes.js';
 import { createRecurrentesRoutes } from './recurrentes-routes.js';
 import { createPortalAdminRoutes } from '../../portal/admin.js';
+import { createMapaRoutes } from './mapa.js';   // F — las teselas del mapa, servidas y cacheadas por nosotros
 
 export function mountRoutes(app, db) {
   const auth = adminAuth(db);
@@ -69,6 +70,7 @@ export function mountRoutes(app, db) {
   const dashboard = createDashboardRoutes(db);
   const { api: prodApi, views: prodViews, tagsViews } = createProductRoutes(db);
   const { api: catApi, views: catViews } = createCategoryRoutes(db);
+  const { api: mapaApi } = createMapaRoutes();
   const { api: clientApi, views: clientViews } = createClientRoutes(db);
   const { api: proyApi, views: proyViews } = createProyectoRoutes(db);   // paso 7 · proyectos
   const { api: tiempoApi, views: tiempoViews } = createTiempoRoutes(db); // paso 7 · registro de tiempo
@@ -200,6 +202,7 @@ export function mountRoutes(app, db) {
   apiApp.route('/products', prodApi);
   apiApp.route('/categories', catApi);
   apiApp.route('/clients', clientApi);
+  apiApp.route('/mapa', mapaApi);       // ← /api/erp/mapa/tesela/:z/:x/:y (candado clients.read)
   apiApp.route('/proyectos', proyApi);   // ← /api/erp/proyectos (CRUD con proyectos.read/edit)
   apiApp.route('/tiempo', tiempoApi);    // ← /api/erp/tiempo (cronómetro + entradas, tiempo.read/edit)
   apiApp.route('/facturar-horas', fhApi); // ← /api/erp/facturar-horas (preview + emitir, invoices.create)

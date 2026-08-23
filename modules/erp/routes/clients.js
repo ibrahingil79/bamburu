@@ -20,11 +20,14 @@ import { cabecera360, contadoresDe, queCompra, avisosDisaDe, recomendacionesDisa
   detalleTarjeta, CLAVES_TARJETA, periodoDeUsuario, guardarPeriodoDeUsuario, PERIODOS_FICHA,
   chipsForzados, encenderChip } from '../cliente-360.js';
 import { fichaClienteCSS, fichaClienteJS, fichaVentanaJS,
-  fichaCompletaJS, fichaCompletaCSS } from '../ficha-cliente-ui.js';
+  fichaCompletaJS, fichaCompletaCSS, mapaAssetsHTML } from '../ficha-cliente-ui.js';
 // REGISTRO DE CONTACTOS (bloque D). Tabla propia, FUERA de WRITABLE_TABLES: la escribe una persona o
 // la deriva un documento real. DISA no apunta conversaciones que no ha visto.
 import { contactosDe, apuntarContacto, TIPOS as TIPOS_CONTACTO, DIRECCIONES } from '../contactos.js';
 import { clientTimeline, clientCrmSummary } from '../crm.js';
+// F — EL MAPA DE LA FICHA. La dirección se resuelve AL GUARDAR (una vez), no al abrir la ficha: lo
+// que se ejecuta al mirar un cliente es `mapaDeCliente`, que solo lee de nuestra base.
+import { programarGeo, mapaDeCliente } from '../mapa-cliente.js';
 import { detectar } from '../vigia.js';
 
 // Comprobación reutilizable de NIF duplicado (regla de integridad — sin duplicados).
@@ -76,6 +79,10 @@ export function createClientSvc(db, input) {
   const r = db.prepare('INSERT INTO clients (name,fiscal_id,email,phone,address,city,country,postal_code,province,group_id,notes,accepts_newsletter,client_type,payment_term_days,payment_method,collections_profile,client_code,responsable_user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
     .run(d.name, d.fiscal_id || '', d.email || '', d.phone || '', d.address || '', d.city || '', d.country || '', d.postal_code || '', d.province || '', d.group_id || null, d.notes || '', d.accepts_newsletter ? 1 : 0, d.client_type || 'particular', d.payment_term_days || 0, d.payment_method || '', d.collections_profile || 'estandar', code, d.responsable_user_id || null);
   syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
+  // F — se resuelve la dirección AQUÍ, en el servicio compartido, y no en la ruta: así el mapa sale
+  // igual si el cliente lo da de alta una persona o lo dicta DISA. Va sin `await` y no puede fallar:
+  // que un buscador de fuera no conteste NO puede tumbar el alta de un cliente (ver mapa-cliente.js).
+  programarGeo(db, r.lastInsertRowid);
   return { id: r.lastInsertRowid, name: d.name, client_code: code };
 }
 
@@ -87,6 +94,7 @@ export function updateClientSvc(db, id, input) {
   db.prepare('UPDATE clients SET name=?,fiscal_id=?,email=?,phone=?,address=?,city=?,country=?,postal_code=?,province=?,group_id=?,notes=?,accepts_newsletter=?,client_type=?,payment_term_days=?,payment_method=?,collections_profile=?,responsable_user_id=? WHERE id=?')
     .run(d.name, d.fiscal_id || '', d.email || '', d.phone || '', d.address || '', d.city || '', d.country || '', d.postal_code || '', d.province || '', d.group_id || null, d.notes || '', d.accepts_newsletter ? 1 : 0, d.client_type || 'particular', d.payment_term_days || 0, d.payment_method || '', d.collections_profile || 'estandar', d.responsable_user_id || null, id);
   syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
+  programarGeo(db, id);   // F — misma regla que en el alta: si la dirección cambió, se vuelve a resolver
   return { id: Number(id), name: d.name };
 }
 
@@ -172,6 +180,10 @@ export function createClientRoutes(db, cfg = {}) {
         // B1.1 — la cabecera compacta de la ventana: quién es, en una línea.
         fijos: { fiscal_id: cli.fiscal_id || '', phone: cli.phone || '', email: cli.email || '',
                  city: cli.city || '', client_type: cli.client_type || '' },
+        // F — DÓNDE ESTÁ. `null` cuando no hay dirección, cuando no se pudo resolver o cuando el
+        // punto guardado es de una dirección anterior: la pantalla entonces NO pinta el bloque.
+        // Esto NO sale a la red — lee el punto que se guardó el día que se guardó el cliente.
+        mapa: mapaDeCliente(db, cli),
         cabecera: cab,
         contadores: contadoresDe(db, cli.id, puede, cab.deuda),
         compra: queCompra(db, cli.id, puede),
@@ -679,6 +691,7 @@ export function createClientRoutes(db, cfg = {}) {
            armazon y no puedan divergir. Aqui solo queda el hueco que necesita la maquinaria de
            cobro compartida. -->
       ${cobroModalHtml()}
+      ${mapaAssetsHTML()}
       <style>${fichaClienteCSS()}${fichaCompletaCSS()}</style>
       <script>
       ${JS_LISTADO_ENVIAR}
@@ -793,6 +806,7 @@ export function createClientRoutes(db, cfg = {}) {
     const cli = db.prepare('SELECT c.*, g.name AS group_name FROM clients c LEFT JOIN client_groups g ON c.group_id=g.id WHERE c.id=?').get(c.req.param('id'));
     if (!cli) return c.html(adminLayout('Cliente', '<div class="card"><p>Ese cliente no existe o se archivó. <a href="/admin/clients">Volver a Clientes</a></p></div>', 'clients', c.get('session')?.csrfToken || '', c), 404);
     const content = `
+    ${mapaAssetsHTML()}
     <style>
       ${fichaClienteCSS()}
       ${fichaCompletaCSS()}

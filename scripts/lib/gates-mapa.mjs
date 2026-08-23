@@ -44,6 +44,13 @@ export const GRUPOS = {
     // pida; no se engancha a ningún disparador automático.
     'gate-citas-mes',                // la vista Mes: base de la cifra, un solo selector, los tres grises,
                                      // el reparto del alto, el servicio en la casilla y crear desde el mes
+    // ── F · EL MAPA DE LA FICHA DE CLIENTE (23 ago 2026) ─────────────────────────────────────
+    // Se declara EL MISMO DÍA que nace, como la vista Mes: un gate fuera de esta lista no lo
+    // ejecuta nadie. DECLARAR NO ES EJECUTAR — entra para que el barrido lo alcance CUANDO
+    // Ibrahin lo pida; no se engancha a ningún disparador.
+    'gate-mapa-cliente',             // el mapa: que se pinte con dirección, que NO se pinte sin ella,
+                                     // que las teselas salgan de Bamburu y no de un servidor ajeno,
+                                     // y que un punto de una dirección vieja no llegue a la pantalla
     // ── EL IMPORTADOR DE CSV (ficha H · 23 ago 2026) ─────────────────────────────────────────
     // Se declara AQUÍ el mismo día que nace. Va en `clientes` porque es donde vive la cobertura de
     // la migración asistida (`gate-inicio-arranque`), de la que este importador cuelga — y porque
@@ -180,6 +187,7 @@ export const EMPIEZAN_DE_CERO = new Set([
                                    // sirve para probar que un negocio no ve el logo del otro)
   // `gate-pantallas-documento` NO va aquí: necesita el negocio de desarrollo, que es el único con
   // documentos de los diez tipos que abre. Se trae lo suyo (el presupuesto en borrador) y lo limpia.
+  'gate-mapa-cliente',             // negocio nuevo: cuatro clientes, uno por cada caso del mapa
   'gate-impresion',                // DOS negocios nuevos: uno siembra 200 facturas para ver paginar
                                    // de verdad, y el vecino existe para probar que su PDF no trae
                                    // ni un dato del primero
@@ -321,6 +329,11 @@ export const AFECTA = [
   // `margen` y `clientes`. Y una de sus tres pantallas, `routes/products.js`, hoy cae en el `.*`
   // final y corre todo: cubrir menos que su propio consumidor sería quedarse corto por escrito.
   { re: /^modules\/erp\/listados\.js$/, grupos: null },
+  // F · EL MAPA DE LA FICHA (23 ago 2026). El motor y la ruta de teselas hoy solo los usa la ficha
+  // de cliente: van con `clientes` —donde vive su gate— y con `pantallas`, que es lo que comprueba
+  // que ninguna pantalla del panel reviente al abrirse. Sin esta regla los dos caerían en el `.*`
+  // final y correrían los 85: prudente, pero a ciegas.
+  { re: /^modules\/erp\/(mapa-cliente\.js|routes\/mapa\.js)$/, grupos: ['clientes', 'pantallas'] },
   // La pantalla de clientes ahora ADEMÁS imprime. Va delante de la regla grande de abajo y se lleva
   // los grupos que ya tenía **más** `impresion` — si llevara solo `impresion`, tocar esta pantalla
   // dejaría de despertar al grupo `clientes`, que es donde vive casi todo lo suyo.

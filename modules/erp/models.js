@@ -3104,6 +3104,27 @@ Sé preciso con los números y siempre redondea correctamente.`,
   db.exec(`CREATE INDEX IF NOT EXISTS idx_importacion_items_lote ON importacion_items(importacion_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_importaciones_fecha    ON importaciones(created_at DESC)`);
 
+  // ── F · EL MAPA DE LA FICHA DE CLIENTE (23 ago 2026) ────────────────────────────────────────
+  // El punto en el mapa NO va en `clients`, y no es un capricho de orden: el encargo dice «lo que
+  // no se toca son los datos del cliente». Esto NO es un dato del cliente — es una CACHÉ de lo que
+  // contestó el buscador de OpenStreetMap cuando se guardó su dirección. Se puede tirar entera y
+  // reconstruirse guardando otra vez, y ningún documento ni ninguna factura depende de ella.
+  //
+  // `huella` es la dirección exacta que se resolvió. Sin ella, un cliente que se muda seguiría
+  // enseñando la chincheta de su casa anterior con toda la confianza del mundo: la ficha exige que
+  // la huella guardada coincida con la dirección de HOY antes de pintar nada.
+  // `resuelto=0` es una respuesta legítima y se guarda a propósito ("se preguntó y no se pudo"),
+  // para no volver a molestar al servicio de fuera con lo mismo. Motor: `erp/mapa-cliente.js`.
+  db.exec(`CREATE TABLE IF NOT EXISTS client_geo (
+    client_id  INTEGER PRIMARY KEY REFERENCES clients(id),
+    huella     TEXT    NOT NULL DEFAULT '',
+    lat        REAL,
+    lon        REAL,
+    etiqueta   TEXT,
+    resuelto   INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT    NOT NULL DEFAULT (datetime('now'))
+  )`);
+
   console.log('✅ ERP: Migraciones completadas');
   // ── C-0 · EL LOGO EN LA FOTO CONGELADA DEL DOCUMENTO ─────────────────────────────────────────
   // VA AL FINAL, Y NO ES UN DETALLE: la primera versión lo puso arriba, junto al resto de columnas
