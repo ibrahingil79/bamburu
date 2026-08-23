@@ -1355,7 +1355,7 @@ Contabilidad), con cálculos propios y paneles **guardados y compartibles** (`li
 
 ---
 
-#### E. PANTALLA DE INICIO — FICHAS COMO WIDGETS · **PENDIENTE**
+#### E. PANTALLA DE INICIO — FICHAS COMO WIDGETS · ✅ **HECHO (23 ago 2026)** · commit `c3b2d6a` · **4 de 4**
 
 > **E. PANTALLA DE INICIO — FICHAS COMO WIDGETS.**
 > Palabras del dueño: "la pantalla de inicio deberia permitir organizar cada ficha como widgets, bien sea de posicion".
@@ -1385,6 +1385,37 @@ bloques, quitar bloque, «Personalizar», «Volver al de fábrica», guardado **
   que un widget puede quedarse apuntando a un informe que ya no existe — eso ya estaba previsto
   (`permDeBloque` devuelve `__inexistente__` y el bloque **cae cerrado**), pero antes no podía pasar
   nunca y ahora sí. **Merece una comprobación propia cuando se aborde E.**
+
+**LO ENTREGADO (23 ago 2026, noche · punto 2 del encargo nocturno) · gate
+`scripts/gate-inicio-widgets.mjs` · 30 ✓ · 0 ✗**
+
+- **LA UNIDAD ES LA TARJETA QUE SE VE, no la sección del motor.** `cuadro-mando.js` tiene **diez**
+  secciones y la pantalla las agrupa en **SIETE tarjetas** (ventas + cobro + margen + clientes son
+  «Tus números»; productos + mejores son «Tu negocio en cifras»). **Mover media tarjeta no significa
+  nada**, así que la rejilla trabaja sobre las siete: `hoy · numeros · grafico · cifras · oport ·
+  decide · arranque`.
+- **E1 · cada ficha se mueve.** Arrastrando —**el MISMO Sortable de la rejilla de abajo**, no una
+  segunda librería— y con botones **subir/bajar**, porque arrastrar no funciona con el teclado y en un
+  móvil pequeño es incómodo. **Las dos vías escriben lo mismo.**
+- **E2 · se guarda por usuario.** Misma tabla `dashboard_layouts` y la misma cascada del peldaño 6:
+  **CERO TABLAS NUEVAS**, como decía este registro. Medido **RECARGANDO**, que es la única forma de
+  saber que se guardó de verdad y no solo en la pantalla de esa sesión; y comprobado que **otro
+  usuario NO hereda** la colocación ajena.
+- **E3 · esconder y volver a mostrar.** Lo escondido **se LISTA** en una barra («Escondidas: El
+  gráfico del mes · volver a mostrar»): **esconder no puede ser perder**, o el dueño se queda sin
+  media pantalla y sin saber por qué.
+- **E4 · volver a fábrica en un clic**, y el servidor **borra** la colocación propia en vez de
+  sobreescribirla con una copia de la de fábrica: así, si mañana se añade una tarjeta nueva, la ve.
+- **El modo colocar arranca APAGADO** y no se queda pegado entre visitas: quien no quiera tocar nada
+  ve la pantalla **exactamente igual que antes**, sin un solo mando a la vista. Comprobado.
+- **`sanearCuadro` tira los ids inventados y los duplicados, y añade al final las tarjetas nuevas**
+  que no estuvieran en la colocación guardada. Una colocación vieja nunca puede esconder una tarjeta
+  que aún no existía cuando se guardó.
+- **EL AÑADIDO, que es el aviso que dejó la ficha D tres párrafos más arriba:** se creó un informe, se
+  ancló a la rejilla como widget y **se borró el informe**. El bloque **desaparece** y el resto de la
+  rejilla sigue vivo — no queda un hueco mudo. La primera pasada del gate lo daba por bueno **por el
+  motivo equivocado** (`1 bloque` de partida, no 2): el fixture estaba mal escrito —un bloque nativo
+  lleva su clave en `tipo`, no en un campo `ref`—, **no el producto**.
 
 ---
 
@@ -3587,13 +3618,34 @@ endpoint, ni permiso. Una factura emitida no se borra: se anula.**
 > **arreglando la causa, no callándola**. La cadena propietaria se recompuso entera (857 sellos) y el
 > chequeo da VERDE **sin tocarle una línea a `integridad.js`**. Ver su ficha abajo.
 
-> **⬜ TAMBIÉN PENDIENTE — LA FACTURA Nº 20, `F2026-0012` (id 12).** Es del mismo lote y también está sin
-> registro Verifactu, pero **no se ha borrado** y hay que saber por qué: está `rectificada`, no `anulada`,
-> y **sí cuenta como venta real (53,01 €)** — borrarla habría movido los totales del negocio, que no es lo
-> que se pidió. El «19» del censo salió de mirar solo las 299 anuladas; el lote real son 20 (ids 1-20).
-> Consecuencia asumida: `F2026-0012` queda marcada `rectificada` **sin rectificativa detrás**, porque
-> `R2026-0001` sí estaba en las 19. (Su rectificativa ya estaba anulada antes de esto, así que la cifra
-> de ventas no cambia por ello.)
+> ~~**⬜ TAMBIÉN PENDIENTE — LA FACTURA Nº 20, `F2026-0012` (id 12).**~~ **✅ RESUELTA el 23 ago 2026
+> (noche, punto 1 del encargo nocturno) · commit `757667d`.** Se deja el motivo original, que sigue
+> siendo cierto y explica por qué no se fue con las otras 19: es del mismo lote y también estaba sin
+> registro Verifactu, pero está `rectificada`, no `anulada`, y **sí contaba como venta real (53,01 €)**
+> — borrarla movía los totales del negocio, y eso no se hace sin decirlo. El «19» del censo salió de
+> mirar solo las 299 anuladas; el lote real eran 20 (ids 1-20).
+>
+> **LO QUE SE HIZO, con la decisión de Ibrahin encima de la mesa:**
+> - **Qué colgaba de ella:** 3 líneas, 1 propuesta de DISA, 2 apuntes de actividad y 1 asiento con sus
+>   7 líneas. **Cero cobros, cero anulaciones, cero registros Verifactu**, y nadie la rectificaba ni la
+>   sustituía.
+> - **Qué cifras se mueven — y se dicen porque se mueven A PROPÓSITO:** ventas **553 → 552 documentos**
+>   y **414.016,40 → 413.963,39 €** (−53,01); libro **917.336,23 → 917.283,22 €**, cuadrado; facturas
+>   **833 → 832**.
+> - **La cadena propietaria, recompuesta** como en `351f5f4`: **856 sellos** (710 facturas de la serie F
+>   y 146 registros de anulación). El chequeo de Integridad pasa de **ALARMA en `F2026-0020`** a
+>   **CUADRA**, y se refresca de verdad **por su endpoint real**: 27 filas guardadas, 0 en rojo.
+> - **VERI\*FACTU idéntica:** mismo SHA-256 de los 1050 registros antes y después. Cero huérfanos.
+>   `foreign_key_check` limpio.
+> - **Dos fallos de mis propios scripts, encontrados al usarlos por segunda vez:** `VACUUM INTO` **se
+>   niega a escribir sobre un fichero que ya existe**, así que la segunda pasada de `limpiar-facturas`
+>   y de `recomponer-cadena` moría con *«output file already exists»* — y moría **después de anunciar
+>   lo que iba a hacer**, que es la peor forma de fallar. Ahora borran la copia anterior primero.
+> - **La bandera `--incluir-rectificadas` es nueva** y existe para que borrar una factura **que cuenta**
+>   no pueda pasar por descuido: hay que pedirlo expresamente.
+> - Línea base del gate rehecha (833/553 caducaron al borrarla) **conservando lo que esa línea base
+>   existe para vigilar**: el SHA de la cadena de Verifactu. Gate `gate-cadena-integridad.mjs`:
+>   **34 ✓ · 0 ✗**, ejecutado.
 
 **Huecos de numeración:** serie F 2026 pierde las secuencias **1-11 y 13-19** (18 números), y queda
 `F2026-0012` sola antes de `F2026-0020`. Serie R 2026 queda **vacía**. **No hay reutilización de
