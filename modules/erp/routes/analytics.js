@@ -378,6 +378,50 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         linea: 'Qué tienes, cuánto vale y qué está por debajo del mínimo.' },
     ].filter(i => can(c, i.perm));
 
+    // ── FICHA D-bis · PARTE 4 — SE EMPIEZA POR UNA PREGUNTA, NO POR UN LIENZO ────────────────
+    // Cada tarjeta abre el constructor con la frase YA COMPLETADA y el gráfico dibujado; desde ahí se
+    // retoca y se guarda como propio. Crear de cero sigue existiendo, pero deja de ser la puerta única.
+    //
+    // CADA PREGUNTA ES UNA RECETA QUE EL CONSTRUCTOR YA SABE RESOLVER. Ninguna se maquilla: se probaron
+    // las doce del encargo contra el motor y TRES no se podían montar. Dos se arreglaron de raíz
+    // (la dimensión «Cliente» que faltaba en el área de Clientes, y que el gráfico pinte varias
+    // medidas); la duodécima —«¿qué productos se mueven y cuáles están PARADOS?»— se queda FUERA a
+    // propósito y anotada en el TABLERO: el área de Inventario mide movimientos, así que un producto
+    // parado no produce ninguna fila y no puede aparecer. Medido: 121 productos físicos, 76 con algún
+    // movimiento → 45 invisibles. Enseñar solo los que se mueven y llamarlo «y cuáles están parados»
+    // sería mentir en el título de la tarjeta.
+    //
+    // El candado es el del ÁREA: un negocio sin agenda no ve las de agenda, y un empleado sin compras
+    // no ve las de gastos. Mismo `can()` que el resto del índice.
+    const PREGUNTAS = [
+      { g:'Ventas', t:'¿Cuánto he facturado este año, mes a mes?', perm:'invoices.read',
+        r:{area:'ventas',dimension:'fecha',periodo:'mes',medidas:['base'],grafico:'lineas'} },
+      { g:'Ventas', t:'¿Qué clientes me dan más dinero?', perm:'invoices.read',
+        r:{area:'ventas',dimension:'cliente',periodo:'mes',medidas:['base'],grafico:'barras'} },
+      { g:'Ventas', t:'¿Qué clientes me dan más margen?', perm:'invoices.read',
+        r:{area:'ventas',dimension:'cliente',periodo:'mes',medidas:['beneficio'],grafico:'barras'} },
+      { g:'Ventas', t:'¿Qué vendo más y qué vendo menos?', perm:'invoices.read',
+        r:{area:'ventas',dimension:'producto',periodo:'mes',medidas:['unidades'],grafico:'barras'} },
+      { g:'Cobros y clientes', t:'¿Quién me debe dinero?', perm:'clients.read',
+        r:{area:'clientes',dimension:'cliente',periodo:'mes',medidas:['deuda'],grafico:'barras'} },
+      { g:'Cobros y clientes', t:'¿De dónde vienen mis clientes?', perm:'clients.read',
+        r:{area:'clientes',dimension:'provincia',periodo:'mes',medidas:['clientes'],grafico:'tarta'} },
+      { g:'Gastos', t:'¿En qué me gasto el dinero?', perm:'purchases.read',
+        r:{area:'compras',dimension:'categoria',periodo:'mes',medidas:['base'],grafico:'tarta'} },
+      { g:'Gastos', t:'¿A qué proveedores les compro más?', perm:'purchases.read',
+        r:{area:'compras',dimension:'proveedor',periodo:'mes',medidas:['base'],grafico:'barras'} },
+      { g:'Agenda', t:'¿Qué servicios me llenan más la agenda?', perm:'citas.read',
+        r:{area:'agenda',dimension:'servicio',periodo:'mes',medidas:['horas_reservadas'],grafico:'barras'} },
+      { g:'Agenda', t:'¿Cuántas horas trabajo de verdad frente a las que tengo abiertas?', perm:'citas.read',
+        r:{area:'agenda',dimension:'fecha',periodo:'mes',medidas:['horas_ocupadas','horas_abiertas'],grafico:'lineas'} },
+      { g:'Agenda', t:'¿Cuántas citas se me caen?', perm:'citas.read',
+        r:{area:'agenda',dimension:'estado',periodo:'mes',medidas:['citas'],grafico:'tarta'} },
+    ].filter(p => can(c, p.perm));
+
+    const preguntasHtml = PREGUNTAS.map((p, i) =>
+      '<button type="button" data-preg="' + i + '">'
+      + '<span class="pg-a">' + escHtml(p.g) + '</span>' + escHtml(p.t) + '</button>').join('');
+
     const indiceHtml = INFORMES.map(i =>
       '<button type="button" class="inf-fila" data-inf="' + i.clave + '">'
       + '<span class="inf-n">' + escHtml(i.nombre) + '</span>'
@@ -388,14 +432,31 @@ export function createAnalyticsRoutes(db, cfg = {}) {
       <div class="ph"><h2>Analítica</h2></div>
 
       <style>
-        .inf-fila{display:grid;grid-template-columns:1fr auto;gap:.1rem .8rem;width:100%;text-align:left;
+        /* FICHA D-bis — ESTABA AL REVES EN PANTALLA: el nombre pegado a la derecha y la flechita
+           arriba a la izquierda. El motivo: .inf-v llevaba grid-row pero NO grid-column, asi que la
+           colocacion automatica lo metia el primero, en la columna 1, y empujaba el nombre a la 2.
+           Se arregla diciendole SU columna a cada pieza, que es lo que faltaba. Solo se via mirando
+           la captura: ninguna asercion del gate lo habria notado nunca. */
+        .inf-fila{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;
+          gap:.1rem .8rem;width:100%;text-align:left;
           background:none;border:0;border-bottom:1px solid var(--border);padding:.7rem .2rem;cursor:pointer}
         .inf-fila:last-child{border-bottom:0}
         .inf-fila:hover{background:var(--accent-soft)}
-        .inf-fila .inf-n{font-weight:600;color:var(--text)}
-        .inf-fila .inf-l{grid-column:1;font-size:.75rem;color:var(--muted)}
-        .inf-fila .inf-v{grid-row:1 / span 2;align-self:center;color:var(--muted);font-size:1.1rem}
+        .inf-fila .inf-n{grid-column:1;grid-row:1;font-weight:600;color:var(--text);text-align:left}
+        .inf-fila .inf-l{grid-column:1;grid-row:2;font-size:.75rem;color:var(--muted);text-align:left}
+        .inf-fila .inf-v{grid-column:2;grid-row:1 / span 2;align-self:center;color:var(--muted);font-size:1.1rem;transition:transform .15s}
         .inf-fila[aria-expanded="true"] .inf-v{transform:rotate(90deg)}
+        .frase{display:flex;flex-wrap:wrap;align-items:flex-start;gap:.45rem .55rem;font-size:1rem;line-height:2.3}
+        .frase .fr-t{color:var(--text2);padding-top:.45rem}
+        .frase .fr-c{display:inline-flex;flex-direction:column;gap:.1rem}
+        .frase .fr-c select{width:auto;min-width:9rem;font-weight:600}
+        .frase .fr-a{font-size:.68rem;color:var(--muted);line-height:1.2;font-weight:400;padding-left:.15rem}
+        @media(max-width:760px){ .frase{line-height:1.9} .frase .fr-c select{min-width:100%} }
+        .preg{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:.6rem}
+        .preg button{text-align:left;background:var(--bg2);border:1px solid var(--border2);border-radius:12px;
+          padding:.75rem .85rem;cursor:pointer;font-size:.85rem;color:var(--text);line-height:1.35;transition:border-color .15s,background .15s}
+        .preg button:hover{border-color:var(--accent);background:var(--accent-soft)}
+        .preg .pg-a{display:block;font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:.25rem}
         .crear-caja{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
         .mis-inf{display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap;
           border-bottom:1px solid var(--border);padding:.55rem .2rem}
@@ -403,12 +464,22 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         .mis-inf .mi-acc{display:flex;gap:.35rem;flex-wrap:wrap}
       </style>
 
+      ${PREGUNTAS.length ? `
+      <div class="card" style="margin-bottom:1.5rem">
+        <div class="card-head"><h3>Preguntas frecuentes</h3></div>
+        <div class="card-body">
+          <p style="font-size:.78rem;color:var(--muted);margin-bottom:.7rem">
+            Pulsa una y te la contesto con tus datos. Luego puedes retocarla y guardarla como tuya.</p>
+          <div class="preg">${preguntasHtml}</div>
+        </div>
+      </div>` : ''}
+
       <div class="card" style="margin-bottom:1.5rem">
         <div class="card-body crear-caja">
           <div>
-            <div style="font-weight:700;font-size:1.02rem">Crea el informe que necesitas</div>
+            <div style="font-weight:700;font-size:1.02rem">¿No está la pregunta que buscas?</div>
             <div style="font-size:.78rem;color:var(--muted);margin-top:.15rem">
-              Eliges qué mides, por qué lo agrupas y en qué periodo. Puedes guardarlo, imprimirlo y mandarlo por correo.</div>
+              Móntala tú: eliges de qué área, qué número quieres ver y cómo repartirlo. Se puede guardar, imprimir y mandar por correo.</div>
           </div>
           <button type="button" class="btn btn-primary" id="btnCrear" style="font-size:.95rem;padding:.6rem 1.1rem">Crear un informe</button>
         </div>
@@ -469,37 +540,56 @@ export function createAnalyticsRoutes(db, cfg = {}) {
       </div>
 
       <div class="card" id="cardConstructor" style="margin-bottom:1.5rem;display:none">
-        <div class="card-head"><h3>Construye tu gráfico</h3>
-          <div style="display:flex;gap:.5rem;align-items:center">
+        <div class="card-head"><h3>Tu informe</h3>
+          <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
             <span id="cEditando" style="display:none;font-size:.75rem;color:var(--muted)"></span>
             <button type="button" class="btn btn-primary btn-sm" id="cGuardar" style="display:none">Guardar cambios</button>
             <button type="button" class="btn btn-secondary btn-sm" id="cGuardarNuevo">Guardar como nuevo</button>
           </div>
         </div>
         <div class="card-body">
-          <div class="form-row" style="align-items:flex-end;gap:.6rem;flex-wrap:wrap">
-            <div class="form-group" style="min-width:130px"><label class="form-label">Área</label>
-              <select class="form-control" id="cArea"></select></div>
-            <div class="form-group" style="min-width:150px"><label class="form-label">Mirar por</label>
-              <select class="form-control" id="cDim"></select></div>
-            <div class="form-group" id="cPeriodoWrap" style="min-width:120px"><label class="form-label">Agrupado</label>
-              <select class="form-control" id="cPeriodo"><option value="mes">Por mes</option><option value="trimestre">Por trimestre</option><option value="anio">Por año</option></select></div>
-            <div class="form-group" style="min-width:170px"><label class="form-label">Medir</label>
-              <select class="form-control" id="cMed"></select></div>
-            <div class="form-group" style="min-width:130px"><label class="form-label">Gráfico</label>
-              <select class="form-control" id="cTipo">
-                <option value="barras">Barras</option><option value="lineas">Líneas</option>
-                <option value="tarta">Tarta</option><option value="tabla">Tabla</option>
-              </select></div>
+          <!-- FICHA D-bis · PARTE 3 — LA FRASE. Antes eran cinco desplegables abiertos a la vez con 27
+               opciones y ni una palabra que dijera para qué servía cada uno; «Mirar por» y «Medir» son
+               lo mismo en la cabeza de un dueño. Ahora la pantalla se lee de corrido:
+                 De [Ventas] quiero saber [cuánto he facturado], repartido por [cliente], [este año],
+                 y verlo en [barras].
+               Mismas opciones, mismo motor: cambia el orden, el envoltorio y las palabras. -->
+          <div class="frase">
+            <span class="fr-t">De</span>
+            <span class="fr-c"><select class="form-control" id="cArea"></select>
+              <span class="fr-a">el área del negocio</span></span>
+            <span class="fr-t">quiero saber</span>
+            <span class="fr-c"><select class="form-control" id="cMed"></select>
+              <span class="fr-a">el número que quieres ver</span></span>
+            <span class="fr-t">, repartido por</span>
+            <span class="fr-c"><select class="form-control" id="cDim"></select>
+              <span class="fr-a">en qué grupos quieres separar los datos</span></span>
+            <span class="fr-t" id="cPeriodoComa">,</span>
+            <span class="fr-c" id="cPeriodoWrap"><select class="form-control" id="cPeriodo">
+                <option value="mes">mes a mes</option><option value="trimestre">por trimestres</option><option value="anio">año por año</option>
+              </select><span class="fr-a">el paso del tiempo</span></span>
+            <span class="fr-t">, y verlo en</span>
+            <span class="fr-c"><select class="form-control" id="cTipo">
+                <option value="barras">barras</option><option value="lineas">una línea</option>
+                <option value="tarta">un quesito</option><option value="tabla">una tabla</option>
+              </select><span class="fr-a">la forma del dibujo</span></span>
+            <span class="fr-t">.</span>
           </div>
-          <div class="form-group" style="margin-top:.5rem">
-            <label class="form-label" style="display:flex;align-items:center;gap:.5rem">
-              <input type="checkbox" id="cCalcOn" style="width:15px;height:15px"> Cálculo propio
-              <span style="font-size:.7rem;color:var(--muted)">— una fórmula con tus medidas, p. ej. <code>beneficio / base * 100</code></span></label>
-            <input class="form-control" id="cFormula" placeholder="beneficio / base * 100" style="display:none;margin-top:.35rem;font-family:ui-monospace,monospace">
-            <div id="cFormulaAyuda" style="display:none;font-size:.7rem;color:var(--muted);margin-top:.25rem"></div>
-          </div>
+
+          <details id="cAvanzado" style="margin-top:.9rem">
+            <summary style="cursor:pointer;font-size:.8rem;color:var(--text2);font-weight:600">Opciones avanzadas</summary>
+            <div style="padding:.7rem 0 0">
+              <label class="form-label" style="display:flex;align-items:center;gap:.5rem">
+                <input type="checkbox" id="cCalcOn" style="width:15px;height:15px"> Calcular algo con esos números</label>
+              <div style="font-size:.74rem;color:var(--muted);margin-top:.2rem">
+                Una cuenta con las cifras de arriba. Por ejemplo, dividir una entre otra para sacar un porcentaje.</div>
+              <input class="form-control" id="cFormula" style="display:none;margin-top:.45rem;font-family:ui-monospace,monospace">
+              <div id="cFormulaAyuda" style="display:none;font-size:.74rem;color:var(--muted);margin-top:.25rem"></div>
+            </div>
+          </details>
+
           <div id="cAviso" style="display:none;margin:.6rem 0"></div>
+          <div id="cVacio" style="display:none;font-size:.82rem;color:var(--muted);margin:.6rem 0"></div>
           <div id="cChartWrap" style="height:280px;margin-top:.75rem"><canvas id="cChart"></canvas></div>
           <div id="cTablaWrap" style="display:none;margin-top:.75rem"></div>
         </div>
@@ -588,6 +678,13 @@ export function createAnalyticsRoutes(db, cfg = {}) {
       // A propósito el admin NO: ver las cifras de todos no es poder borrarle el trabajo a nadie.
       // Esto solo pinta o esconde botones; quien decide de verdad es el servidor (esDuenyo).
       const PUEDE_TODO=${JSON.stringify(c.get('session')?.role === 'owner')};
+      // Las recetas de las preguntas frecuentes, ya filtradas por permiso en el servidor.
+      const PREGUNTAS=${JSON.stringify(PREGUNTAS.map(p => ({ t: p.t, r: p.r })))};
+      // Medidas EXTRA de la receta actual: solo se llena cuando una pregunta pide más de una
+      // («trabajadas frente a abiertas»). Al tocar cualquier desplegable se vacía, porque a partir
+      // de ahí manda lo que el usuario ha elegido a mano.
+      let medidasExtra=null, cAreasCache=null;
+      const TEXTO_VACIO='Todavía no hay datos para responder a esto. En cuanto los haya, el gráfico se llena solo.';
 
       // PASO 2 — RENTABILIDAD. La regla de esta vista: lo que no se sabe se dice, no se rellena.
       // Un margen null se pinta "—" (no 0, que diría "no ganas nada", ni 100, que diría "todo
@@ -776,17 +873,47 @@ export function createAnalyticsRoutes(db, cfg = {}) {
           '</tr>';
         }).join('');
       }
+      // FICHA D-bis — ERAN CINCO VENTANITAS SEGUIDAS pidiendo palabras clave escritas a mano
+      // («facturacion o beneficio», «mes, trimestre o anio», el numero de usuario del responsable).
+      // Cinco dialogos encadenados es la peor version de la averia que arregla esta entrega: basta
+      // que el navegador silencie el segundo para que los tres siguientes no salgan y el objetivo se
+      // pierda sin decir nada. Ahora es UN formulario, con listas en vez de palabras que adivinar.
       async function nuevaMeta(){
-        const tipo=prompt('¿Qué objetivo? Escribe: facturacion  o  beneficio'); if(!tipo) return;
-        const periodo=prompt('¿Periodo? Escribe: mes, trimestre o anio'); if(!periodo) return;
-        const ej=periodo==='mes'?'2026-07':periodo==='trimestre'?'2026-T3':'2026';
-        const clave=prompt('¿Cuál en concreto? Ejemplo para '+periodo+': '+ej); if(!clave) return;
-        const quien=prompt('¿De quién? Deja vacío para TODO EL NEGOCIO, o pon el nº de usuario del responsable')||'';
-        const valor=prompt('¿Cuánto (sin IVA)? Pon 0 para quitar la meta'); if(valor===null) return;
-        const body={tipo:tipo.trim(),periodo:periodo.trim(),clave:clave.trim(),
-          alcance:quien.trim()?'responsable':'global',user_id:quien.trim()?Number(quien.trim()):null,valor:Number(valor)};
-        try{ const r=await api('POST','/api/erp/analytics/plan',body); planCache={...planCache,filas:r.filas}; pintarPlan(); toast('Objetivo guardado'); }
-        catch(e){ /* api() ya enseña el error del servidor en un toast */ }
+        const hoy=new Date();
+        const ejemplos={mes:hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0'),
+                        trimestre:hoy.getFullYear()+'-T'+(Math.floor(hoy.getMonth()/3)+1),
+                        anio:String(hoy.getFullYear())};
+        const personas=(respCache&&Array.isArray(respCache.ventas))?respCache.ventas:[];
+        const v=await window.pedirDatos({
+          titulo:'Ponerte un objetivo',
+          texto:'Escribe la meta y la pantalla te dira, cada vez que la abras, cuanto llevas frente a ella.',
+          campos:[
+            {id:'tipo',tipo:'lista',etiqueta:'¿Objetivo de qué?',valor:'facturacion',
+             opciones:[{v:'facturacion',t:'Lo facturado (sin IVA)'},{v:'beneficio',t:'El beneficio'}]},
+            {id:'periodo',tipo:'lista',etiqueta:'¿Cada cuánto?',valor:'mes',
+             opciones:[{v:'mes',t:'Por mes'},{v:'trimestre',t:'Por trimestre'},{v:'anio',t:'Por año'}]},
+            {id:'clave',tipo:'texto',etiqueta:'¿Cuál en concreto?',valor:ejemplos.mes,
+             ayuda:'Por mes se escribe 2026-07 · por trimestre 2026-T3 · por año 2026'},
+            {id:'valor',tipo:'numero',etiqueta:'¿Cuánto, sin IVA?',valor:'',
+             ayuda:'Pon 0 para quitar un objetivo que ya tengas.'},
+            {id:'quien',tipo:'lista',etiqueta:'¿De quién?',valor:'',
+             opciones:[{v:'',t:'De todo el negocio'}].concat(personas.filter(x=>x.user_id).map(x=>({v:String(x.user_id),t:x.responsable})))},
+          ],
+          aceptar:'Guardar el objetivo',
+          validar:(d)=>{
+            if(!String(d.clave||'').trim()) return {campo:'clave',mensaje:'Escribe a qué periodo se refiere. Por ejemplo '+ejemplos[d.periodo]+'.'};
+            if(String(d.valor||'').trim()==='') return {campo:'valor',mensaje:'Escribe cuánto. Pon 0 si quieres quitar el objetivo.'};
+            if(isNaN(Number(d.valor))) return {campo:'valor',mensaje:'Eso no es una cantidad. Escribe solo números.'};
+            return null;
+          },
+          alAceptar:async(d)=>{
+            const body={tipo:d.tipo,periodo:d.periodo,clave:String(d.clave).trim(),
+              alcance:d.quien?'responsable':'global',user_id:d.quien?Number(d.quien):null,valor:Number(d.valor)};
+            const r=await api('POST','/api/erp/analytics/plan',body);
+            planCache={...planCache,filas:r.filas}; pintarPlan();
+          },
+        });
+        if(v) toast('Objetivo guardado');
       }
 
       // ── PASO 4a — EL CONSTRUCTOR. La puerta visual: el usuario cruza lo que quiere y elige cómo
@@ -801,6 +928,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
       // servidor por permiso, el usuario solo ve las áreas y campos que puede.
       let cArea='ventas';
       function llenarAreas(areas){
+        cAreasCache=areas||{};
         const sel=document.getElementById('cArea');
         const ks=Object.keys(areas||{});
         sel.innerHTML=ks.map(k=>'<option value="'+k+'">'+escHtml(areas[k].etiqueta)+'</option>').join('');
@@ -855,27 +983,59 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         document.getElementById('cFormula').style.display=on?'':'none';
         const ayuda=document.getElementById('cFormulaAyuda');
         ayuda.style.display=on?'':'none';
-        if(on&&cCampos&&cCampos.medidas) ayuda.textContent='Medidas que puedes usar: '+Object.keys(cCampos.medidas).join(', ');
+        // FICHA D-bis — LA AYUDA ENSEÑABA NOMBRES INTERNOS (base, margenPct) que el usuario no ha
+        // visto en su vida. Ahora enseña EXACTAMENTE las palabras de la lista de «quiero saber», y la
+        // traducción a los nombres del motor la hace la pantalla al mandar la fórmula.
+        if(on&&cCampos&&cCampos.medidas){
+          const nombres=Object.values(cCampos.medidas).map(m=>m.etiqueta);
+          ayuda.textContent='Puedes usar: '+nombres.join(' · ')+'. Por ejemplo: '+
+            (nombres[0]||'')+' / '+(nombres[1]||nombres[0]||'')+' * 100';
+          document.getElementById('cFormula').placeholder=(nombres[0]||'')+' / '+(nombres[1]||nombres[0]||'')+' * 100';
+        }
         // El selector "Medir" queda en segundo plano cuando hay fórmula (lo que se pinta es el cálculo).
         document.getElementById('cMed').disabled=on;
       }
       function recetaActual(){
         const calcOn=document.getElementById('cCalcOn').checked;
         const f=document.getElementById('cFormula').value.trim();
+        // FICHA D-bis — la receta puede llevar VARIAS medidas. El motor ya las devolvía todas; lo que
+        // faltaba era que la pantalla las pintara. Lo necesita «¿cuántas horas trabajo frente a las
+        // que tengo abiertas?», que lleva un «frente a» dentro y son dos líneas del mismo gráfico.
         const r={ area:cArea, dimension:document.getElementById('cDim').value, periodo:document.getElementById('cPeriodo').value,
-                  medidas:[document.getElementById('cMed').value], grafico:document.getElementById('cTipo').value };
-        if(calcOn&&f) r.formula=f;
+                  medidas:(medidasExtra&&medidasExtra.length)?medidasExtra.slice():[document.getElementById('cMed').value],
+                  grafico:document.getElementById('cTipo').value };
+        if(calcOn&&f) r.formula=traducirFormula(f);
         return r;
       }
+      // De las palabras que ve el usuario a los nombres del motor. Se sustituye la etiqueta MÁS LARGA
+      // primero, para que «Beneficio en euros» no se rompa por dentro al sustituir otra más corta.
+      function traducirFormula(txt){
+        if(!cCampos||!cCampos.medidas) return txt;
+        // Sin expresiones regulares a propósito: dentro de una plantilla del servidor un patrón con
+        // llaves se lo come la interpolación. Con split/join no hay nada que escapar.
+        const sinTildes=x=>String(x).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+        const pares=Object.entries(cCampos.medidas).map(([k,m])=>[m.etiqueta,k]).sort((a,b)=>b[0].length-a[0].length);
+        let out=String(txt);
+        for(const [etq,clave] of pares) out=out.split(etq).join(clave);          // tal cual se ve
+        let plano=sinTildes(out);
+        for(const [etq,clave] of pares) plano=plano.split(sinTildes(etq)).join(clave);  // como se teclea
+        return plano;
+      }
+
       async function dibujar(){
         const r=recetaActual();
         // El "agrupado por" solo tiene sentido en la dimensión fecha Y en áreas que agrupan por tiempo
         // (ventas/compras/inventario; clientes no). Enseñarlo donde no hace nada sugeriría que hace algo.
-        document.getElementById('cPeriodoWrap').style.display = (r.dimension==='fecha' && cCampos && cCampos.usaPeriodo) ? '' : 'none';
+        const conPeriodo = (r.dimension==='fecha' && cCampos && cCampos.usaPeriodo);
+        document.getElementById('cPeriodoWrap').style.display = conPeriodo ? '' : 'none';
+        document.getElementById('cPeriodoComa').style.display = conPeriodo ? '' : 'none';
         let d; try{ d=await api('POST','/api/erp/analytics/constructor/cruzar',r); }catch(e){ return; }
         // Si hay fórmula, lo que se pinta es el CÁLCULO (una medida derivada, número plano).
         const med=d.calculo?'calculo':r.medidas[0];
         const meta=d.calculo?{etiqueta:'Cálculo: '+(r.formula||''),dinero:false}:((cCampos.medidas||{})[med]||{});
+        // Las medidas que hay que pintar. Con fórmula, una (el cálculo). Sin ella, TODAS las que pida
+        // la receta — normalmente una, dos cuando la pregunta compara («trabajadas frente a abiertas»).
+        const series=d.calculo?['calculo']:(r.medidas||[med]);
         const av=document.getElementById('cAviso');
         // El aviso de "sin coste" solo existe en Ventas (el margen). En las demás áreas viene a null.
         if(d.aviso&&d.aviso.sinCoste){ av.style.display='';
@@ -889,9 +1049,12 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         if(r.grafico==='tabla'){
           document.getElementById('cChartWrap').style.display='none';
           const w=document.getElementById('cTablaWrap'); w.style.display='';
-          w.innerHTML='<div class="table-wrap"><table><thead><tr><th>'+escHtml(d.dimensionEtiqueta)+'</th><th>'+escHtml(meta.etiqueta||med)+'</th></tr></thead><tbody>'+
-            (d.filas.length?d.filas.map(f=>'<tr><td>'+escHtml(f.clave)+'</td><td>'+fmt(f[med])+'</td></tr>').join('')
-             :'<tr><td colspan="2" style="color:var(--muted)">Sin datos.</td></tr>')+'</tbody></table></div>';
+          const cab=series.map(k=>'<th>'+escHtml(((cCampos.medidas||{})[k]||{}).etiqueta||(k==='calculo'?meta.etiqueta:k))+'</th>').join('');
+          const fmtDe=k=>{const mm=k==='calculo'?meta:((cCampos.medidas||{})[k]||{});
+            return v=>v==null?'—':(mm.dinero?eur(v):(mm.pct?pctEs(v):Number(v)));};
+          w.innerHTML='<div class="table-wrap"><table><thead><tr><th>'+escHtml(d.dimensionEtiqueta)+'</th>'+cab+'</tr></thead><tbody>'+
+            (d.filas.length?d.filas.map(f=>'<tr><td>'+escHtml(f.clave)+'</td>'+series.map(k=>'<td>'+fmtDe(k)(f[k])+'</td>').join('')+'</tr>').join('')
+             :'<tr><td colspan="'+(series.length+1)+'" style="color:var(--muted)">'+escHtml(TEXTO_VACIO)+'</td></tr>')+'</tbody></table></div>';
           return;
         }
         document.getElementById('cTablaWrap').style.display='none';
@@ -900,18 +1063,26 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         const tipo=r.grafico==='lineas'?'line':r.grafico==='tarta'?'pie':'bar';
         // Los null (sin coste conocido) NO se pintan como 0: en un gráfico, un 0 es una afirmación
         // ("no ganó nada") y null es un hueco, que es la verdad.
-        const datos=d.filas.map(f=>f[med]);
+        // UN DATASET POR MEDIDA. Con una serie sale exactamente igual que antes; con dos, dos líneas
+        // en el mismo eje. La tarta no admite varias series: si la receta trae más de una, se pinta la
+        // primera (y la tabla de debajo, en el modo tabla, sí las lleva todas).
+        const usa = tipo==='pie' ? series.slice(0,1) : series;
+        const COL=['#0ea5e9','#f59e0b','#10b981','#8b5cf6','#ef4444','#14b8a6'];
+        const etqDe=k=>((cCampos.medidas||{})[k]||{}).etiqueta||(k==='calculo'?meta.etiqueta:k);
         cChartInst=new Chart(document.getElementById('cChart').getContext('2d'),{
           type:tipo,
           data:{labels:d.filas.map(f=>String(f.clave).substring(0,22)),
-                datasets:[{label:meta.etiqueta||med,data:datos,
-                  backgroundColor:tipo==='pie'?PALETA:'rgba(14,165,233,.6)',
-                  borderColor:tipo==='pie'?'#0b1220':'#0ea5e9',borderWidth:1,borderRadius:tipo==='bar'?4:0,
-                  tension:tipo==='line'?.25:0,spanGaps:false}]},
+                datasets:usa.map((k,i)=>({label:etqDe(k),data:d.filas.map(f=>f[k]),
+                  backgroundColor:tipo==='pie'?PALETA:(COL[i%COL.length]+'99'),
+                  borderColor:tipo==='pie'?'#0b1220':COL[i%COL.length],borderWidth:1,borderRadius:tipo==='bar'?4:0,
+                  tension:tipo==='line'?.25:0,spanGaps:false}))},
           options:{responsive:true,maintainAspectRatio:false,
-            plugins:{legend:{display:tipo==='pie'},tooltip:{callbacks:{label:x=>' '+fmt(x.parsed.y ?? x.parsed)}}},
+            plugins:{legend:{display:tipo==='pie'||usa.length>1},tooltip:{callbacks:{label:x=>' '+(x.dataset.label?x.dataset.label+': ':'')+fmt(x.parsed.y ?? x.parsed)}}},
             scales:tipo==='pie'?{}:{y:{beginAtZero:true,ticks:{callback:v=>meta.dinero?'${sym}'+v:(meta.pct?v+'%':v)}}}}
         });
+        // Sin datos no se deja un lienzo mudo: se dice por qué está vacío.
+        const avVacio=document.getElementById('cVacio');
+        if(avVacio){ avVacio.style.display=d.filas.length?'none':''; avVacio.textContent=TEXTO_VACIO; }
       }
       // FICHA D · PARTE 3 — GUARDAR CAMBIOS vs GUARDAR COMO NUEVO. Antes solo existía lo segundo, y
       // encima disfrazado de lo primero: el botón decía «Guardar» y cada pulsación dejaba un
@@ -919,20 +1090,72 @@ export function createAnalyticsRoutes(db, cfg = {}) {
       async function guardarPanelUI(sobreEscribir){
         const abierto = sobreEscribir ? panelPorId(panelAbierto) : null;
         if (sobreEscribir && !abierto) { toast('No hay ningún informe abierto que actualizar','err'); return; }
-        let nombre = abierto ? abierto.nombre : (prompt('¿Cómo lo llamas?')||'').trim();
-        if (!nombre) return;
-        const cuerpo = { nombre, config: recetaActual() };
-        if (abierto) { cuerpo.id = abierto.id; }
-        else {
-          // Compartir se pregunta SOLO al crear. Cambiar de opinión después es el botón de la lista.
-          cuerpo.compartido = confirm('¿Compartirlo con el equipo? Verán el gráfico, pero cada uno con sus propios permisos: si no pueden ver un área, ese informe no se les abre.');
+
+        // GUARDAR CAMBIOS sobre uno abierto no pregunta nada: ya tiene nombre y ya sabe si se comparte.
+        if (abierto) {
+          try{
+            const r=await api('POST','/api/erp/analytics/constructor/paneles',{id:abierto.id,nombre:abierto.nombre,config:recetaActual()});
+            cPaneles=r.paneles; pintarMisInformes(); refrescarBotonesGuardar();
+            lucirInforme(abierto.id,'Cambios guardados');
+          }catch(e){ toast('No hemos podido guardar los cambios. Vuelve a intentarlo.','err'); }
+          return;
         }
-        try{
-          const r=await api('POST','/api/erp/analytics/constructor/paneles',cuerpo);
-          cPaneles=r.paneles; if(!abierto) panelAbierto=r.id;
-          pintarMisInformes(); llenarPaneles(); refrescarBotonesGuardar();
-          toast(abierto?'Cambios guardados':'Informe guardado');
-        }catch(e){}
+
+        // FICHA D-bis — AQUÍ ESTABA LA AVERÍA. Eran prompt() + confirm() encadenados, y en cuanto el
+        // navegador silenciaba los diálogos (la casilla que Chrome ofrece en el SEGUNDO seguido) el
+        // botón quedaba muerto: sin ventana, sin petición y sin una palabra. Ahora es UN panel dentro
+        // de la página, con el nombre ya propuesto y la casilla de compartir a la vista.
+        await window.pedirDatos({
+          titulo:'Guardar este informe',
+          campos:[
+            {id:'nombre',tipo:'texto',etiqueta:'¿Cómo lo llamas?',valor:nombrePropuesto(),
+             ayuda:'Es el nombre con el que lo verás en «Mis informes guardados».'},
+            {id:'compartido',tipo:'casilla',etiqueta:'Compartirlo con el equipo',
+             ayuda:'Verán el gráfico, pero cada uno con sus propios permisos: si no pueden ver un área, ese informe no se les abre.'},
+          ],
+          aceptar:'Guardar',
+          validar:(d)=>{
+            // NUNCA se cierra en silencio: si el nombre está vacío o son espacios, se dice AHÍ.
+            if(!String(d.nombre||'').trim()) return {campo:'nombre',mensaje:'Ponle un nombre para poder encontrarlo después.'};
+            return null;
+          },
+          alAceptar:async(d)=>{
+            const r=await api('POST','/api/erp/analytics/constructor/paneles',
+              {nombre:String(d.nombre).trim(), config:recetaActual(), compartido:!!d.compartido});
+            cPaneles=r.paneles; panelAbierto=r.id;
+            pintarMisInformes(); refrescarBotonesGuardar();
+            ultimoGuardado=r.id;
+          },
+        });
+        if(ultimoGuardado){ lucirInforme(ultimoGuardado,'Informe guardado'); ultimoGuardado=null; }
+      }
+      let ultimoGuardado=null;
+
+      // Un nombre propuesto que se entiende: «Ventas por cliente · 2026». Sale de la propia receta,
+      // así que el usuario lo acepta con Enter en el 90 % de los casos.
+      function nombrePropuesto(){
+        const a=(cAreasCache&&cAreasCache[cArea])?cAreasCache[cArea].etiqueta:cArea;
+        const d=((cCampos&&cCampos.dimensiones)||{})[document.getElementById('cDim').value];
+        const dim=d?String(d.etiqueta).toLowerCase():'';
+        return a+(dim?' por '+dim:'')+' · '+new Date().getFullYear();
+      }
+
+      // FICHA D-bis · PARTE 2 — LA PRUEBA DE QUE HA GUARDADO ES EL INFORME EN LA LISTA, no un
+      // mensajito de tres segundos en una esquina. Se sube hasta «Mis informes guardados» y se
+      // resalta el recién guardado un par de segundos.
+      function lucirInforme(id,aviso){
+        const cont=document.getElementById('misInformes');
+        if(cont){
+          const card=cont.closest('.card')||cont;
+          card.scrollIntoView({behavior:'smooth',block:'center'});
+          const fila=cont.querySelector('[data-fila="'+id+'"]');
+          if(fila){
+            fila.style.transition='background-color .4s';
+            fila.style.backgroundColor='var(--accent-soft)';
+            setTimeout(()=>{ fila.style.backgroundColor=''; },2200);
+          }
+        }
+        if(aviso) toast(aviso);
       }
 
       // Compatibilidad: el desplegable de paneles desapareció (los informes guardados viven ahora en
@@ -1095,7 +1318,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
           if(mio||PUEDE_TODO) acc.push('<button type="button" class="btn btn-secondary btn-sm" data-ren="'+p.id+'">Renombrar</button>');
           if(mio||PUEDE_TODO) acc.push('<button type="button" class="btn btn-secondary btn-sm" data-comp="'+p.id+'">'+(p.compartido?'Dejar de compartir':'Compartir')+'</button>');
           if(mio||PUEDE_TODO) acc.push('<button type="button" class="btn btn-danger btn-sm" data-del="'+p.id+'">Borrar</button>');
-          return '<div class="mis-inf"><div><div style="font-weight:600">'+escHtml(p.nombre)+'</div>'
+          return '<div class="mis-inf" data-fila="'+p.id+'"><div><div style="font-weight:600">'+escHtml(p.nombre)+'</div>'
             +'<div style="font-size:.72rem;color:var(--muted)">'
             +(mio?(p.compartido?'Tuyo · compartido con el equipo':'Tuyo'):'Compartido por '+escHtml(p.autor||'alguien'))
             +'</div></div><div class="mi-acc">'+acc.join('')+'</div></div>';
@@ -1114,31 +1337,49 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         const p=panelPorId(id); if(!p) return;
         // La confirmación dice EXACTAMENTE qué se borra. Un dueño que lee «borrar informe» puede
         // entender que se lleva las facturas por delante; hay que quitarle esa duda con palabras.
-        if(!confirm('¿Borrar el informe «'+p.nombre+'»?\\n\\nSe borra solo la receta (qué mides y cómo lo agrupas). '
-          +'No se borra ningún dato del negocio: ni una factura, ni una cita, ni un cliente.')) return;
-        try{ const r=await api('DELETE','/api/erp/analytics/constructor/paneles/'+id);
-          cPaneles=r.paneles; pintarMisInformes(); llenarPaneles();
-          if(String(panelAbierto)===String(id)) panelAbierto=null; refrescarBotonesGuardar();
-          toast('Informe borrado'); }catch(e){}
+        const si=await window.confirmarEnPagina({
+          titulo:'¿Borrar «'+p.nombre+'»?',
+          texto:'Se borra solo la receta: qué mides y cómo lo agrupas. No se borra ningún dato del negocio — ni una factura, ni una cita, ni un cliente.',
+          aceptar:'Sí, borrar el informe', cancelar:'No, dejarlo',
+          alAceptar:async()=>{
+            const r=await api('DELETE','/api/erp/analytics/constructor/paneles/'+id);
+            cPaneles=r.paneles; pintarMisInformes();
+            if(String(panelAbierto)===String(id)) panelAbierto=null; refrescarBotonesGuardar();
+          },
+        });
+        if(si) toast('Informe borrado');
       }
 
       async function renombrarInforme(id){
         const p=panelPorId(id); if(!p) return;
-        const nombre=prompt('¿Cómo quieres que se llame?', p.nombre);
-        if(!nombre||nombre.trim()===p.nombre) return;
-        try{ const r=await api('POST','/api/erp/analytics/constructor/paneles',{id:p.id,nombre:nombre.trim(),config:p.config});
-          cPaneles=r.paneles; pintarMisInformes(); llenarPaneles(); toast('Renombrado'); }catch(e){}
+        await window.pedirDatos({
+          titulo:'Cambiar el nombre',
+          campos:[{id:'nombre',tipo:'texto',etiqueta:'¿Cómo quieres que se llame?',valor:p.nombre}],
+          aceptar:'Cambiar el nombre',
+          validar:(d)=>String(d.nombre||'').trim()?null:{campo:'nombre',mensaje:'No puede quedarse sin nombre.'},
+          alAceptar:async(d)=>{
+            const r=await api('POST','/api/erp/analytics/constructor/paneles',{id:p.id,nombre:String(d.nombre).trim(),config:p.config});
+            cPaneles=r.paneles; pintarMisInformes();
+          },
+        });
+        lucirInforme(p.id,'Nombre cambiado');
       }
 
       async function alternarCompartir(id){
         const p=panelPorId(id); if(!p) return;
-        const aviso=p.compartido
-          ? '¿Dejar de compartir «'+p.nombre+'»? Quien no lo creó dejará de verlo.'
-          : '¿Compartir «'+p.nombre+'» con el equipo? Verán el gráfico, pero cada uno con SUS permisos: '
-            +'si no pueden ver un área, ese informe no se les abre.';
-        if(!confirm(aviso)) return;
-        try{ const r=await api('POST','/api/erp/analytics/constructor/paneles',{id:p.id,nombre:p.nombre,config:p.config,compartido:!p.compartido});
-          cPaneles=r.paneles; pintarMisInformes(); llenarPaneles(); toast(p.compartido?'Ya no se comparte':'Compartido'); }catch(e){}
+        const si=await window.confirmarEnPagina({
+          titulo: p.compartido ? '¿Dejar de compartir «'+p.nombre+'»?' : '¿Compartir «'+p.nombre+'» con el equipo?',
+          texto: p.compartido
+            ? 'Quien no lo creó dejará de verlo en su lista. Tú lo conservas.'
+            : 'Verán el gráfico, pero cada uno con SUS permisos: si no pueden ver un área, ese informe no se les abre.',
+          aceptar: p.compartido ? 'Sí, dejar de compartir' : 'Sí, compartir', cancelar:'No, dejarlo',
+          alAceptar:async()=>{
+            const r=await api('POST','/api/erp/analytics/constructor/paneles',
+              {id:p.id,nombre:p.nombre,config:p.config,compartido:!p.compartido});
+            cPaneles=r.paneles; pintarMisInformes();
+          },
+        });
+        if(si) lucirInforme(p.id, p.compartido?'Ya no se comparte':'Compartido con el equipo');
       }
 
       // ── FICHA D · PARTE 4 — LOS TRES VERBOS, por el motor único de la ficha C ────────────────
@@ -1151,7 +1392,9 @@ export function createAnalyticsRoutes(db, cfg = {}) {
           // El motor avisa (409) cuando el papel va a salir muy largo. Se pregunta y se sigue, igual
           // que en los otros listados: nunca se recorta una fila en silencio.
           if(r.status===409){ const a=await r.json();
-            if(!confirm(a.mensaje+'\\n\\n¿Lo bajamos igualmente?')) return;
+            const si=await window.confirmarEnPagina({ titulo:'Este papel va a salir largo',
+              texto:a.mensaje, aceptar:'Sí, bajarlo entero', cancelar:'No, dejarlo' });
+            if(!si) return;
             window.open(a.seguir,'_blank','noopener'); return; }
           if(!r.ok){ const e=await r.json().catch(()=>({})); toast(e.error||'No hemos podido preparar el PDF','err'); return; }
           const b=await r.blob(), a=document.createElement('a');
@@ -1162,10 +1405,24 @@ export function createAnalyticsRoutes(db, cfg = {}) {
 
       async function enviarInforme(id){
         const p=panelPorId(id); if(!p) return;
-        const to=prompt('¿A qué correo lo mandamos?\\n\\nVa como PDF adjunto, con el gráfico y la tabla.');
-        if(!to) return;
-        try{ const r=await api('POST','/api/erp/listados/panel/enviar?panel_id='+id,{to:to.trim()});
-          toast('Enviado a '+r.to); }catch(e){}
+        let enviado=null;
+        await window.pedirDatos({
+          titulo:'Enviar «'+p.nombre+'» por correo',
+          texto:'Va como PDF adjunto, con el gráfico y la tabla de datos.',
+          campos:[{id:'to',tipo:'texto',etiqueta:'¿A qué correo?',valor:'',marcador:'nombre@ejemplo.com'}],
+          aceptar:'Enviar',
+          validar:(d)=>{
+            const t=String(d.to||'').trim();
+            if(!t) return {campo:'to',mensaje:'Escribe a quién se lo mandas.'};
+            if(!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(t)) return {campo:'to',mensaje:'Ese correo no tiene buena pinta. Revísalo.'};
+            return null;
+          },
+          alAceptar:async(d)=>{
+            const r=await api('POST','/api/erp/listados/panel/enviar?panel_id='+id,{to:String(d.to).trim()});
+            enviado=r.to;
+          },
+        });
+        if(enviado) toast('Enviado a '+enviado);
       }
 
       // ── EL ÍNDICE ────────────────────────────────────────────────────────────────────────────
@@ -1177,8 +1434,36 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         card.scrollIntoView({behavior:'smooth',block:'start'});
       }
 
+      // FICHA D-bis · PARTE 4 — abrir una pregunta = rellenar la frase y dibujar. No hay un segundo
+      // camino de cálculo: se compone la MISMA receta que compondría el usuario a mano.
+      async function abrirPregunta(i){
+        const p=PREGUNTAS[i]; if(!p) return;
+        panelAbierto=null;
+        cArea=p.r.area;
+        document.getElementById('cArea').value=cArea;
+        cCampos=await api('GET','/api/erp/analytics/constructor/campos?area='+cArea).catch(()=>cCampos);
+        rellenarCampos();
+        document.getElementById('cDim').value=p.r.dimension;
+        rellenarMedidas();
+        document.getElementById('cMed').value=p.r.medidas[0];
+        document.getElementById('cPeriodo').value=p.r.periodo||'mes';
+        document.getElementById('cTipo').value=p.r.grafico||'barras';
+        document.getElementById('cCalcOn').checked=false; toggleFormula();
+        // Si la pregunta compara dos números, se llevan los dos al gráfico.
+        medidasExtra = p.r.medidas.length>1 ? p.r.medidas.slice() : null;
+        refrescarBotonesGuardar();
+        const card=document.getElementById('cardConstructor');
+        card.style.display=''; constructorDibujado=true;
+        dibujar();
+        card.scrollIntoView({behavior:'smooth',block:'start'});
+      }
+
       function engancharIndice(){
         document.getElementById('btnCrear').onclick=abrirConstructor;
+        document.querySelectorAll('[data-preg]').forEach(b=>b.onclick=()=>abrirPregunta(Number(b.dataset.preg)));
+        // En cuanto el usuario toca la frase a mano, deja de mandar la pregunta.
+        for(const id of ['cArea','cDim','cMed','cTipo','cPeriodo'])
+          document.getElementById(id).addEventListener('change',()=>{ medidasExtra=null; });
         document.querySelectorAll('.inf-fila').forEach(b=>{
           b.setAttribute('aria-expanded','false');
           b.onclick=async()=>{

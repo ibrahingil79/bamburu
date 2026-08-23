@@ -154,6 +154,46 @@ Dos avisos que van con la norma:
 - **Antes de meter una pantalla en un gate, comprobar que su ruta existe** (montaje + handler). Una
   ruta inventada da verde sobre nada.
 
+## Lo que solo ve un navegador
+
+> **Nada se da por bueno llamando al motor por dentro. Si el usuario pulsa un botón, la comprobación
+> pulsa ESE botón. Se prueba también cuando el usuario dice que no —cancelar, dejar un campo vacío,
+> escribir solo espacios—. Si algo depende de una ventanita del navegador, se prueba además con las
+> ventanitas silenciadas. Y se MIRA la captura de la pantalla terminada, no solo el código.**
+
+De dónde sale (23 ago 2026): **dos fallos el mismo día que ninguna aserción vio**.
+
+1. **Un `\n` dentro de una plantilla del servidor.** Escrito en una cadena de JavaScript, la plantilla
+   se come el escape y llega al navegador como un salto de línea de verdad → cadena sin cerrar → **la
+   página entera muerta**. Había seis. `node --check` daba OK (el fichero del servidor es válido) y
+   `lint-plantillas.mjs` tampoco lo caza.
+2. **Guardar un informe no funcionaba, y el gate daba 97 ✓ · 0 ✗.** El guardado pedía el nombre con
+   `prompt()` y confirmaba con `confirm()`, encadenados. Chrome ofrece la casilla «Impedir que esta
+   página cree cuadros de diálogo adicionales» en el **segundo** diálogo seguido; en cuanto se marca,
+   `prompt` devuelve null y `confirm` false **sin enseñar nada**. El botón quedaba muerto: ni ventana,
+   ni petición, ni aviso. El gate no lo vio porque **comprobaba el guardado llamando a la API con un
+   cuerpo JSON escrito por mí**: probaba que el servidor guarda, y se saltaba entero el tramo donde
+   estaba la avería. En el mismo gate sí se pulsaba el botón de Borrar, y esa reversión fue la que más
+   dijo. Los verdes eran ciertos sobre lo que medían y no cubrían lo que el dueño hace.
+
+Las cuatro reglas, en concreto:
+
+1. **Nada por dentro.** Si hay un botón, se pulsa el botón. Llamar al endpoint mide el motor, no el
+   mando — y el mando es donde se rompen las cosas.
+2. **También cuando el usuario dice que no.** Cancelar, campo vacío, solo espacios. Los tres eran
+   caminos muertos y silenciosos en la misma pantalla, y ninguno estaba probado.
+3. **Con las ventanitas silenciadas.** Si algo depende de `prompt`/`confirm`, se neutralizan
+   (`window.prompt = () => null`) y se exige que el producto **siga funcionando**, no que se disculpe.
+   *(Quedan 81 ventanitas en otras pantallas del producto, con la misma trampa. Están apuntadas en el
+   TABLERO; cinco pantallas encadenan dos, que es el caso exacto que rompe.)*
+4. **Se mira la captura.** Se hace una de la pantalla terminada y se mira. El aviso tapado por la
+   burbuja de DISA (se leía «Informe guar») y el índice con el nombre pegado a la derecha llevaban
+   horas ahí, y **ninguna de 97 aserciones los vio, porque ninguna miraba**. Donde se pueda, se afirma
+   sobre píxeles o sobre posiciones (`getBoundingClientRect`), no de oídas.
+
+Y la regla que las une: **una comprobación mide lo que mide.** Cuando dé verde, la pregunta no es
+«¿ha pasado?» sino **«¿ha pasado por donde pasa el dueño?»**.
+
 ## Un titular de recuento se corrige con el cuerpo que lo desarrolla
 
 > **Cuando se actualiza una cifra que resume algo —un recuento, un total, un «X de Y hechos»—, en la

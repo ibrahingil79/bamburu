@@ -82,7 +82,9 @@ const AREA_VENTAS = {
     unidades:  { etiqueta: 'Unidades vendidas',   dinero: false },
     lineas:    { etiqueta: 'Nº de líneas',        dinero: false },
     coste:     { etiqueta: 'Coste',               dinero: true },
-    beneficio: { etiqueta: 'Beneficio (margen)',  dinero: true },
+    // FICHA D-bis — renombrada. «Beneficio (margen)» y «Margen sobre lo que te costó» se leían como
+    // la misma cosa dos veces y eran dos medidas distintas: una en euros y otra en porcentaje.
+    beneficio: { etiqueta: 'Beneficio en euros',  dinero: true },
     margenPct: { etiqueta: 'Margen %',            dinero: false, pct: true },
   },
   usaPeriodo: true,
@@ -183,6 +185,10 @@ const AREA_CLIENTES = {
       });
   },
   dimensiones: {
+    // FICHA D-bis — la dimensión que faltaba y que hacía imposible «¿quién me debe dinero?»: el área
+    // tenía la medida «deuda» y ninguna forma de repartirla POR CLIENTE, solo por provincia o tipo.
+    // Las filas ya traían el nombre; era el único hueco entre la medida y la pregunta.
+    cliente:      { etiqueta: 'Cliente',         valor: f => (f.name || '').trim() || VACIO },
     tipo_cliente: { etiqueta: 'Tipo de cliente', valor: f => f.tipo || VACIO },
     provincia:    { etiqueta: 'Provincia',       valor: f => (f.provincia || '').trim() || '(sin provincia)' },
     forma_pago:   { etiqueta: 'Forma de pago',   valor: f => (f.forma_pago || '').trim() || VACIO },
@@ -531,8 +537,12 @@ export function camposPara(hasPerm, areaKey = 'ventas', modo = MODO_POR_DEFECTO)
   const dims = {}, meds = {};
   for (const [k, d] of Object.entries(a.dimensiones)) if (!d.perm || hasPerm(d.perm)) dims[k] = { etiqueta: d.etiqueta };
   for (const [k, m] of Object.entries(a.medidas)) {
-    const etiqueta = k === 'margenPct' ? 'Margen ' + MODOS[usa].sufijo : m.etiqueta;
+    // FICHA D-bis — el titular de la medida es «Margen en %» (que es lo que es) y su BASE va en la
+    // ayuda, no pegada al nombre: «Margen sobre lo que te costó» se leía como otra medida distinta
+    // de «Beneficio (margen)». La base no se pierde — sigue enseñándose, debajo.
+    const etiqueta = k === 'margenPct' ? 'Margen en %' : m.etiqueta;
     meds[k] = { etiqueta, dinero: !!m.dinero, pct: !!m.pct };
+    if (k === 'margenPct') meds[k].ayuda = 'calculado ' + MODOS[usa].sufijo;
     // FICHA D — una medida de CAPACIDAD solo es cierta en algunas dimensiones (ver AREA_AGENDA).
     // Se declara aquí para que el desplegable la esconda donde no vale. Es cortesía: el candado de
     // verdad está en `cruzar`, que responde 400 si alguien fuerza la combinación por la API.

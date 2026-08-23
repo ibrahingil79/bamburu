@@ -536,10 +536,133 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   <script>
     function openModal(id){document.getElementById(id).classList.add('open')}
     function closeModal(id){document.getElementById(id).classList.remove('open')}
+    // FICHA D-bis — CERRAR CON ESCAPE Y PULSANDO FUERA. Ningun modal del producto lo hacia, y es lo
+    // que espera cualquiera. Va en el componente compartido, no en una pantalla: hacerlo solo en una
+    // dejaria dos comportamientos distintos para el mismo cacharro.
+    document.addEventListener('keydown',function(e){
+      if(e.key!=='Escape') return;
+      var abierto=document.querySelector('.modal-overlay.open');
+      if(abierto){ abierto.classList.remove('open'); if(abierto.__alCerrar) abierto.__alCerrar(); }
+    });
+    document.addEventListener('mousedown',function(e){
+      var ov=e.target;
+      if(ov&&ov.classList&&ov.classList.contains('modal-overlay')&&ov.classList.contains('open')){
+        ov.classList.remove('open'); if(ov.__alCerrar) ov.__alCerrar();
+      }
+    });
+
+    // ── PEDIR UN DATO SIN VENTANITA DEL NAVEGADOR (ficha D-bis) ───────────────────────────────
+    // NACE DE UNA AVERIA REAL, y su unico trabajo es que no se repita. Guardar un informe pedia el
+    // nombre con prompt() y acto seguido confirmaba con confirm(). Chrome, ante el SEGUNDO dialogo
+    // seguido, ofrece la casilla «Impedir que esta pagina cree cuadros de dialogo adicionales»; en
+    // cuanto alguien la marca, prompt() devuelve null y confirm() devuelve false SIN ENSEÑAR NADA.
+    // El boton quedaba muerto: ni dialogo, ni peticion, ni aviso. Medido el 23 ago 2026.
+    //
+    // Estas dos funciones sustituyen a prompt() y confirm() por un panel DENTRO de la pagina. Quedan
+    // aqui, en el componente compartido, porque las otras 81 ventanitas del producto tienen la misma
+    // trampa y su migracion esta apuntada en el TABLERO: cuando toque, es cambiar la llamada.
+    //
+    // El parametro campos: [{id, etiqueta, valor, ayuda, tipo:'texto'|'casilla'|'lista', opciones:[{v,t}]}]
+    // Devuelve una promesa con el objeto de valores, o null si se cancela.
+    window.pedirDatos=function(opciones){
+      var o=opciones||{};
+      return new Promise(function(resolve){
+        var ov=document.createElement('div');
+        ov.className='modal-overlay open';
+        var campos=(o.campos||[]);
+        var cuerpo=campos.map(function(c){
+          if(c.tipo==='casilla') return '<div class="form-group"><label class="form-label" style="display:flex;gap:.5rem;align-items:flex-start;cursor:pointer">'
+            +'<input type="checkbox" id="pd-'+c.id+'" style="width:16px;height:16px;margin-top:2px"'+(c.valor?' checked':'')+'>'
+            +'<span><span style="font-weight:600">'+escHtmlCli(c.etiqueta)+'</span>'
+            +(c.ayuda?'<span style="display:block;font-weight:400;font-size:.74rem;color:var(--muted);margin-top:.15rem">'+escHtmlCli(c.ayuda)+'</span>':'')
+            +'</span></label></div>';
+          if(c.tipo==='lista') return '<div class="form-group"><label class="form-label" for="pd-'+c.id+'">'+escHtmlCli(c.etiqueta)+'</label>'
+            +'<select class="form-control" id="pd-'+c.id+'">'+(c.opciones||[]).map(function(x){
+               return '<option value="'+escHtmlCli(x.v)+'"'+(String(x.v)===String(c.valor)?' selected':'')+'>'+escHtmlCli(x.t)+'</option>';}).join('')+'</select>'
+            +(c.ayuda?'<div style="font-size:.74rem;color:var(--muted);margin-top:.2rem">'+escHtmlCli(c.ayuda)+'</div>':'')
+            +'<div class="pd-err" data-para="'+c.id+'" style="display:none;color:var(--danger);font-size:.74rem;margin-top:.25rem"></div></div>';
+          return '<div class="form-group"><label class="form-label" for="pd-'+c.id+'">'+escHtmlCli(c.etiqueta)+'</label>'
+            +'<input class="form-control" id="pd-'+c.id+'" type="'+(c.tipo==='numero'?'number':'text')+'" value="'+escHtmlCli(c.valor==null?'':c.valor)+'"'
+            +(c.marcador?' placeholder="'+escHtmlCli(c.marcador)+'"':'')+'>'
+            +(c.ayuda?'<div style="font-size:.74rem;color:var(--muted);margin-top:.2rem">'+escHtmlCli(c.ayuda)+'</div>':'')
+            +'<div class="pd-err" data-para="'+c.id+'" style="display:none;color:var(--danger);font-size:.74rem;margin-top:.25rem"></div></div>';
+        }).join('');
+        ov.innerHTML='<div class="modal" role="dialog" aria-modal="true"><div class="modal-head">'
+          +'<h3>'+escHtmlCli(o.titulo||'')+'</h3><button type="button" class="modal-close" data-pd="x">✕</button></div>'
+          +'<div class="modal-body">'+(o.texto?'<p style="font-size:.82rem;color:var(--text2);margin-bottom:.9rem">'+escHtmlCli(o.texto)+'</p>':'')+cuerpo
+          +'<div id="pd-general" style="display:none;background:#FBE3E3;border:1px solid #F0CFCC;color:#C0392B;border-radius:8px;padding:.55rem .7rem;font-size:.78rem;margin-top:.4rem"></div></div>'
+          +'<div class="modal-foot"><button type="button" class="btn btn-secondary" data-pd="x">'+escHtmlCli(o.cancelar||'Cancelar')+'</button>'
+          +'<button type="button" class="btn btn-primary" data-pd="ok">'+escHtmlCli(o.aceptar||'Guardar')+'</button></div></div>';
+        document.body.appendChild(ov);
+        var vivo=true;
+        function cerrar(val){ if(!vivo) return; vivo=false; ov.remove(); resolve(val); }
+        ov.__alCerrar=function(){ cerrar(null); };
+        ov.querySelectorAll('[data-pd="x"]').forEach(function(b){ b.onclick=function(){ cerrar(null); }; });
+        var leer=function(){ var o2={}; campos.forEach(function(c){ var el=document.getElementById('pd-'+c.id);
+          o2[c.id]= c.tipo==='casilla' ? !!el.checked : el.value; }); return o2; };
+        var pintarError=function(id,msg){
+          var g=document.getElementById('pd-general');
+          if(!id){ g.style.display=''; g.textContent=msg; return; }
+          var e=ov.querySelector('.pd-err[data-para="'+id+'"]');
+          if(e){ e.style.display=''; e.textContent=msg; }
+          var el=document.getElementById('pd-'+id); if(el){ el.style.borderColor='var(--danger)'; el.focus(); }
+        };
+        var limpiar=function(){ ov.querySelectorAll('.pd-err').forEach(function(e){e.style.display='none';});
+          document.getElementById('pd-general').style.display='none';
+          campos.forEach(function(c){ var el=document.getElementById('pd-'+c.id); if(el) el.style.borderColor=''; }); };
+        var aceptar=async function(){
+          limpiar();
+          var val=leer();
+          if(typeof o.validar==='function'){
+            var fallo=o.validar(val);
+            // EL PANEL NO SE CIERRA EN SILENCIO NUNCA: o pasa la validacion, o se dice que no y donde.
+            if(fallo){ pintarError(fallo.campo||null, fallo.mensaje||'Revisa este dato.'); return; }
+          }
+          if(typeof o.alAceptar==='function'){
+            var b=ov.querySelector('[data-pd="ok"]'); var txt=b.textContent;
+            b.disabled=true; b.textContent='Guardando…';
+            try{ await o.alAceptar(val); }
+            catch(err){
+              // Y SI FALLA, SE DICE. Rehabilitar el boton va aqui y tambien en el camino feliz:
+              // deshabilitarlo antes de algo asincrono y soltarlo solo si sale bien deja el mando
+              // muerto cuando falla (fallo de clase ya pagado en este repo).
+              b.disabled=false; b.textContent=txt;
+              pintarError(null, (err&&err.message)||'No hemos podido guardarlo. Vuelve a intentarlo.');
+              return;
+            }
+            b.disabled=false; b.textContent=txt;
+          }
+          cerrar(val);
+        };
+        ov.querySelector('[data-pd="ok"]').onclick=aceptar;
+        ov.addEventListener('keydown',function(e){ if(e.key==='Enter'&&e.target.tagName==='INPUT'&&e.target.type!=='checkbox'){ e.preventDefault(); aceptar(); } });
+        // FOCO Y TEXTO SELECCIONADO en el primer campo: el nombre propuesto se acepta con Enter o se
+        // reescribe sin tener que borrarlo antes.
+        setTimeout(function(){ var pri=campos.find(function(c){return c.tipo!=='casilla';});
+          if(pri){ var el=document.getElementById('pd-'+pri.id); if(el){ el.focus(); if(el.select) el.select(); } } },30);
+      });
+    };
+
+    // Confirmar SIN ventanita. Misma promesa: true / false.
+    window.confirmarEnPagina=function(opciones){
+      var o=opciones||{};
+      return window.pedirDatos({ titulo:o.titulo, texto:o.texto, campos:[],
+        aceptar:o.aceptar||'Sí, adelante', cancelar:o.cancelar||'No, dejarlo',
+        alAceptar:o.alAceptar }).then(function(v){ return v!==null; });
+    };
+    // Escape de HTML del lado del cliente (el del servidor no vive aqui).
+    function escHtmlCli(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+    window.escHtmlCli=escHtmlCli;
     function toast(msg,type='ok'){
       const t=document.createElement('div');
       const styles={ok:'background:#E4F6EA;border:1px solid #CDE8D8;color:#157F3B',err:'background:#FBE3E3;border:1px solid #F0CFCC;color:#C0392B',warn:'background:#FBEED0;border:1px solid #EBDDB7;color:#8A5B00'};
-      t.style.cssText='position:fixed;bottom:1.5rem;right:1.5rem;padding:.75rem 1.1rem;border-radius:12px;font-size:.85rem;font-weight:500;z-index:9999;box-shadow:0 12px 36px rgba(16,24,40,.16);max-width:300px';
+      // FICHA D-bis — EL AVISO SALIA DEBAJO DEL BOTON FLOTANTE DE DISA y se leia a medias. Medido:
+      // el aviso estaba en bottom/right 24px con z-index 9999, y #disaFab en bottom/right 24px con
+      // z-index 99999 — el MISMO rincon y el aviso por debajo. En la captura se leia «Informe guar».
+      // Se arregla por los dos lados: se sube por encima de la burbuja (88px, que es su alto mas su
+      // margen) Y se le da mas z-index, porque la burbuja se puede ARRASTRAR y el hueco no basta.
+      t.style.cssText='position:fixed;bottom:88px;right:1.5rem;padding:.75rem 1.1rem;border-radius:12px;font-size:.85rem;font-weight:500;z-index:100000;box-shadow:0 12px 36px rgba(16,24,40,.16);max-width:320px';
       Object.assign(t.style, {});
       t.setAttribute('style', t.style.cssText + ';' + (styles[type]||styles.ok));
       t.textContent=msg;
