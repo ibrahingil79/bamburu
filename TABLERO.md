@@ -3145,6 +3145,68 @@ mano: `node scripts/verify-verifactu-anulaciones.mjs`. **Queda propuesto meterlo
 el QR, las rectificativas, los permisos y ninguna factura existente. **Cero borrados.** `avisos.js` sigue
 filtrando por `record_type='alta'` **a propósito**: abrirlo generaría avisos visibles, y eso es encender algo.
 
+### FICHA D-ter — Los informes dejan de ser una chapuza  ✅ HECHO (2026-08-23) — `0107a63`
+Sale de que el dueño abrió sus informes con **sus datos** y se encontró una chapuza. Siete partes, una
+entrega. **La causa de fondo era mía y es la lección de la ficha:** de sus 239 clientes, **200 eran
+restos de mis propios gates** — el 84 % del eje.
+
+**PARTE 6 · LAS PRUEBAS DEJAN DE ENSUCIAR EL NEGOCIO.** Borrados **64 clientes, 11 productos, 3
+almacenes y 1 recurso**. Archivados **130 clientes y 2 productos**.
+> **NO SE PUDO BORRAR TODO, y esto es lo que hay que recordar:** 130 de esos clientes tenían factura y
+> **154 de esas facturas ya están en la cadena de VERI\*FACTU**. Borrarlos habría exigido romper la
+> cadena que se recompuso esa misma tarde. Se **archivan** (`active=0`), y sus nombres siguen
+> apareciendo en el área de Ventas porque la factura guarda el nombre del cliente por dentro. **La
+> basura que una prueba deja hoy se vuelve imborrable en cuanto se enreda con un documento legal.**
+> Y los **7 movimientos con fecha 2000-01-01 NO se tocan**: son el stock de **apertura** de productos
+> reales (Vela Lavanda, Aceite Bergamota…) y borrarlos cambiaría el stock. El grupo «2000» desaparece
+> de los informes **por el filtro de periodo**, no destruyendo el dato.
+Quedan **24 clientes activos, todos de verdad, y 0 con marca de gate**. Script:
+`scripts/limpiar-restos-de-gates.mjs` (simulacro por defecto, copia previa).
+
+**PARTE 1 · FUERA LA CAJA DE FÓRMULAS.** Un dueño no escribe cuentas. Las que se piden a diario pasan a
+ser **medidas con nombre, ya calculadas**: ticket medio y nº de facturas (Ventas) · % pendiente de pago
+(Compras) · facturación media y deuda media por cliente (Clientes) · % de ausencias y duración media de
+la cita (Agenda) · margen sobre ingresos (Contabilidad). Y para la suya, **«Mis medidas»**: se
+construye **eligiendo** de dos listas y una operación, se le pone nombre, y aparece en «quiero saber»
+con su cuenta escrita **en palabras** debajo. No se guarda texto libre sino las **tres piezas**, así que
+no hay expresión que interpretar. **Ni un nombre interno en pantalla**, comprobado uno a uno.
+
+**PARTE 2 · EL PERIODO, QUE NO EXISTÍA.** Sexto hueco en la frase, seis rangos, y **por defecto los
+últimos 12 meses — nunca el histórico**. Es lo que convertía Contabilidad en cuarenta barras a cero:
+**medido, pasa de 26 grupos a 12**. Los rangos se calculan **en el servidor**, para que el reloj del
+navegador no pueda dar un informe distinto del papel. Y **el periodo se escribe en la cabecera del
+papel** al imprimir.
+
+**PARTE 3 · UN NÚMERO TAMBIÉN ES UN INFORME.** «Y verlo en» ofrece número · tabla · barras · línea ·
+quesito, más **«lo que mejor se lea»**, que es el arranque y decide por el resultado: **un solo valor →
+el número grande y solo** con su periodo debajo · **hasta 12 → barras** · **más de 12 → tabla**. El
+usuario lo cambia siempre.
+
+**PARTE 4 · NADA ILEGIBLE Y NADA SIN SENTIDO.** Más de 12 grupos en un dibujo: **los 12 mayores y el
+resto sumado en «Otros»**, con su línea y un **enlace para verlo entero en tabla** — la tabla las lleva
+todas. «Contar clientes repartidos por cliente» **sale de la lista** (se buscaron las 33 dimensiones ×
+sus medidas **ejecutando cada par**: es la única con esa forma) y si alguien la fuerza por la API se
+explica por qué no dice nada. Y **un grupo vacío no se pinta**, salvo que lo estén todos — «todo a
+cero» sí es una respuesta.
+
+**PARTE 5 · LA AYUDA QUE MENTÍA.** Los textos de debajo de cada hueco se quedaban **congelados en la
+primera área**. Ahora se recalculan al cambiar de área, de medida o de reparto: comprobado **mirando**,
+«un grupo por cada cliente» pasa a «un grupo por cada proveedor».
+
+**PARTE 7 · QUINTA REGLA** en CLAUDE.md («Lo que solo ve un navegador»): **la pantalla se juzga
+mirándola con datos reales.** Un gráfico con sesenta etiquetas encimadas no da error, y está mal. Más
+una norma nueva aparte: **«Lo que una prueba crea, la prueba lo borra»**.
+
+**NADA SE PIERDE, contado:** **33 dimensiones** (las mismas) y **31 medidas → 39**. Las **once
+preguntas** siguen funcionando, ahora con periodo y con la forma que les toca.
+
+**VERIFICADO — `scripts/gate-informes-legibles.mjs`, 52 ✓ · 0 ✗, EJECUTADO** contra la dirección
+pública. **Mide el RESULTADO, no solo el mecanismo**, que es la quinta regla: cuántos grupos entran en
+el eje (13 con «Otros», no 33), si el periodo recorta de verdad, si el número sale cuando toca, y si
+queda **un solo nombre de gate** en pantalla. Tres capturas en `~/informes-shots/dter-*.png`.
+
+**No mueve el recuento**: no es un subpunto A–M.
+
 ### FICHA D-bis — La pantalla de informes se hace entender  ✅ HECHO (2026-08-23) — `541b303`
 Sale de un fallo que el dueño encontró usando la pantalla: **guardar un informe no funcionaba**. El
 diagnóstico está en su encargo de solo lectura del mismo día; esta ficha es el arreglo, en cinco
