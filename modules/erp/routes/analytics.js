@@ -1660,6 +1660,44 @@ export function createAnalyticsRoutes(db, cfg = {}) {
           cPropias=mm.medidas||[]; if(Array.isArray(mm.operaciones)&&mm.operaciones.length) cOperaciones=mm.operaciones; }catch(e){}
         llenarPaneles(); llenarAreas(areas); engancharConstructor();
         pintarMisInformes(); engancharIndice(); refrescarBotonesGuardar();
+        await abrirDesdeLaUrl();
+      }
+
+      // ── PUNTO 10 · LA PUERTA POR LA QUE ENTRA DISA ────────────────────────────────────────────
+      // DISA compone un informe en el chat y le da al dueño un enlace para verlo aquí, en la
+      // pantalla, con su gráfico y su botón de guardar. Dos formas:
+      //   ?panel=<id>                → abre un informe GUARDADO
+      //   ?area=..&dim=..&med=..     → deja la frase puesta con esa receta y la dibuja
+      // NO ES UNA PUERTA NUEVA A LOS DATOS: lo que se pinta lo calcula el mismo endpoint de
+      // siempre, con los permisos de siempre. Un enlace con un área que no puedes ver no te la
+      // enseña — el 403 lo pone cruzar(), no esta función.
+      async function abrirDesdeLaUrl(){
+        const q = new URLSearchParams(location.search);
+        const panelId = Number(q.get('panel')||0);
+        if (panelId) { if (panelPorId(panelId)) { await cargarPanelEn(panelId); } else {
+            toast('Ese informe ya no existe o no es tuyo','warn'); } return; }
+        const area = q.get('area'); if (!area) return;
+        const dim = q.get('dim'), med = q.get('med');
+        if (!dim || !med) return;
+        panelAbierto = null;
+        cArea = area;
+        const sel = document.getElementById('cArea');
+        if (![...sel.options].some(o=>o.value===area)) { toast('No tienes acceso a esa área','warn'); return; }
+        sel.value = area;
+        cCampos = await api('GET','/api/erp/analytics/constructor/campos?area='+encodeURIComponent(area)).catch(()=>cCampos);
+        rellenarCampos();
+        if ([...document.getElementById('cDim').options].some(o=>o.value===dim)) document.getElementById('cDim').value=dim;
+        rellenarMedidas();
+        if ([...document.getElementById('cMed').options].some(o=>o.value===med)) document.getElementById('cMed').value=med;
+        if (q.get('rango')) document.getElementById('cRango').value=q.get('rango');
+        if (q.get('periodo')) document.getElementById('cPeriodo').value=q.get('periodo');
+        if (q.get('grafico')) document.getElementById('cTipo').value=q.get('grafico');
+        medidasExtra = null;
+        refrescarBotonesGuardar();
+        const card=document.getElementById('cardConstructor');
+        card.style.display=''; constructorDibujado=true;
+        dibujar();
+        card.scrollIntoView({behavior:'smooth',block:'start'});
       }
       window.addEventListener('DOMContentLoaded',arranque);
       </script>`;

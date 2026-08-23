@@ -154,6 +154,8 @@ export const GRUPOS = {
                                      // que faltaban (cada uno contra su control), B10 y B12
     'gate-productos-parados',        // punto 9: el área de Catálogo parte del PRODUCTO, así que un
                                      // parado sale con cero en vez de no salir
+    'gate-disa-informes',            // punto 10: las dos puertas dan el mismo número y los mismos
+                                     // permisos; y el enlace que da DISA se abre de verdad
   ],
   // Sala de máquinas: superadmin, conexiones a la BD, el fichero -wal, el saneo de errores al cliente,
   // el escapado del texto del usuario (que no se vuelva HTML ni JS) y la CSP estricta de las

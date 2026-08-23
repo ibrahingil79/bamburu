@@ -1997,7 +1997,10 @@ verdad y no como se suponía — que es justo el problema que esta tarea viene a
   Medido: 121 productos físicos, 76 con movimiento, **45 invisibles**. Hace falta que el área pueda
   **partir de los productos** y colgarles sus movimientos, para que un parado aparezca con cero. Es el
   mismo cambio de grano que hizo falta en la agenda para las horas libres.
-- **⬜ DISA Y LOS INFORMES — que se puedan crear y abrir por chat.** *(Apuntada por Ibrahin el 23 ago
+- ~~**⬜ DISA Y LOS INFORMES — que se puedan crear y abrir por chat.**~~ **✅ HECHO el 23 ago 2026
+  (noche · punto 10) · gate `scripts/gate-disa-informes.mjs` · 28 ✓ · 0 ✗.** Ficha al final del
+  documento. Registro de cómo estaba:
+  **⬜ LO DE ANTES:** *(Apuntada por Ibrahin el 23 ago
   2026 al encargar la ficha D, **y excluida expresamente de ella**: «DISA no entra aquí».)*
   **Responde al principio de LAS DOS PUERTAS de CANON §3-bis:** toda información de negocio se alcanza
   por DISA **y** por la vía visual, y ninguna sustituye a la otra. Hoy la puerta visual está entera
@@ -7012,3 +7015,43 @@ pierde medidas por el cambio, comprobado área por área.
 contenedor sin manejador; y buscaba la leyenda del quesito en el HTML, cuando **Chart.js la dibuja
 DENTRO del lienzo**. Ahora pulsa el `[data-preg]` de verdad y afirma sobre **píxeles pintados**
 (50.822 de 361.760) más la tabla.
+
+---
+
+### PUNTO 10 · DISA Y LOS INFORMES — LA SEGUNDA PUERTA  ✅ **HECHO (23 ago 2026, noche)** · gate `scripts/gate-disa-informes.mjs` · **28 ✓ · 0 ✗**
+
+**CUATRO HERRAMIENTAS NUEVAS**, en su propio módulo (`modules/disa/informes.js`):
+`listar_informes` · `abrir_informe` · `catalogo_informes` · `componer_informe`. Y **el prompt le dice
+que existen**, porque una herramienta que el modelo no sabe que tiene no la usa nunca.
+
+**LAS TRES REGLAS QUE MANDAN, y cómo se comprueban:**
+1. **MISMO MOTOR, NO UNA COPIA.** Todo sale de `constructor-analitica.js`. **El gate exige que
+   componer por chat devuelva EXACTAMENTE las mismas filas que el cruce de la pantalla** — mismo
+   JSON, mismo periodo. Si fueran dos motores no serían dos puertas: serían dos verdades.
+2. **MISMOS PERMISOS QUE LA PANTALLA, y falla cerrado.** Un informe **compartido** de un área que no
+   puedes ver **no se lista**; abrirlo a la fuerza da error; componer uno de esa área da **403, no un
+   cero** (un cero se leería como «no hay nada»). El candado llega **hasta la medida**: sin
+   `invoices.read` no se le ofrece «Facturado». Y **se dice cuántos informes se esconden**: no es lo
+   mismo que no existan.
+3. **NO ESCRIBE NADA.** Ni guardar, ni renombrar, ni borrar. Comprobado contando los informes antes y
+   después de listar, abrir y componer, y leyendo el módulo: **cero `INSERT`/`UPDATE`/`DELETE`**.
+   `analytics_panels` sigue **fuera de `WRITABLE_TABLES`**.
+
+**DECISIÓN DE ALCANCE, dicha en voz alta: GUARDAR SE QUEDA EN LA PANTALLA.** El encargo pedía
+«componer uno nuevo desde el chat», y eso es lo que hace: devuelve el resultado **y un enlace** que
+abre el constructor con la receta puesta, donde el dueño le da a Guardar si le sirve. Es
+**«DISA propone y el usuario confirma»** aplicado a esto, y evita abrir un camino de escritura nuevo
+por una comodidad. **Si Ibrahin prefiere que guarde por chat, es cambiar una función** — pero es su
+decisión, no la mía.
+
+**LA PUERTA POR LA QUE ENTRA EL ENLACE.** La pantalla de Analítica aprende a abrirse con la receta
+puesta: `?panel=<id>` para un informe guardado y `?area=..&dim=..&med=..` para una receta suelta.
+**No es una puerta nueva a los datos**: la pantalla vuelve a pedir el cruce por el endpoint de
+siempre, con los permisos de siempre — un enlace a un área que no puedes ver no te la enseña, y uno
+a un informe que no existe no revienta la pantalla. **Los tres casos se abren en un navegador de
+verdad** en el gate, porque un enlace que no lleva a ninguna parte es peor que no darlo.
+
+**UNA TRAMPA QUE SE QUITÓ AL ENCONTRARLA.** `cruzar` **lanza** cuando falta un permiso —y hace bien,
+fallar cerrado es lo correcto—, así que las funciones del módulo unas veces devolvían un objeto y
+otras reventaban, según por dónde se llamaran. Ahora **todas devuelven lo mismo**: un resultado o
+`{ error, status }`. Una función exportada que a veces explota es una trampa para el siguiente.

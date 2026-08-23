@@ -21,6 +21,9 @@ import { supplierAccountsSummary } from '../erp/pagos.js';                      
 import { registerSupplierAccountPayment } from '../erp/routes/supplier-invoices.js';       // Paso (d): pago a proveedor por voz (reparto a cuenta)
 import { resumirAvisos, hoyLocal } from '../erp/avisos.js';                                 // Paso (d): resumen-primero del badge (motor de avisos)
 import { fuentesPermitidas } from '../erp/layout.js';                                       // cada fuente exige el permiso de su pantalla
+// PUNTO 10 · LA SEGUNDA PUERTA A LOS INFORMES (CANON §3-bis). Vive en su propio módulo para que el
+// gate pueda probar LAS MISMAS funciones que corre DISA, y no una copia escrita para la prueba.
+import { herramientasDeInformes, NOMBRES_INFORMES } from './informes.js';
 import { sendEmail } from '../../core/mailer.js';
 import { runCapture, captureFromExtraction } from '../erp/routes/purchases-capture.js';   // pipeline de captura C2 reutilizado (foto/PDF y voz)
 import { createProductSvc } from '../erp/routes/products.js';   // alta validada (banda de IVA obligatoria, sin defecto silencioso)
@@ -2262,6 +2265,13 @@ export function register(app, db) {
       '- Registrar una compra de proveedor DICTANDOLA (dictar_compra): la preparas y llevas al usuario a la',
       '  pantalla de revision para que confirme ahi (no se confirma de palabra).',
       '- Mostrar respuestas visuales con artifacts (KPIs, listas, numeros).',
+      '- INFORMES DE ANALITICA, por chat (la segunda puerta del canon): listar los informes GUARDADOS',
+      '  que el usuario puede ver (listar_informes), ABRIR uno y contar lo que dice (abrir_informe), y',
+      '  COMPONER uno nuevo (componer_informe). Antes de componer, mira SIEMPRE catalogo_informes para',
+      '  usar nombres de area, medida y forma de repartir que existan de verdad: no te los inventes.',
+      '  Cuando compongas o abras uno, DA EL ENLACE que te devuelve la herramienta, para que lo vea con',
+      '  su grafico. GUARDAR no se hace por chat: se hace en esa pantalla, y se lo dices asi.',
+      '  Estas herramientas ya respetan los permisos del usuario; si algo no aparece, es que no lo ve.',
       '- Si el usuario es admin/owner: ejecutar cambios (crear, editar, eliminar registros,',
       '  ajustar stock, generar facturas) SIEMPRE pidiendo confirmacion previa.',
       '',
@@ -2551,7 +2561,15 @@ export function register(app, db) {
         }
       }
 
-      const tools = [{
+      // ── PUNTO 10 · LOS INFORMES, POR CHAT ────────────────────────────────────────────────────
+      // Mismo motor y mismos permisos que la pantalla; el detalle y el porqué, en `informes.js`.
+      // `hasPerm` recibe la clave entera y la parte: es el MISMO `checkPermission` de `requirePerm`.
+      const INFORMES_TOOL = herramientasDeInformes(db, {
+        userId: session?.userId || null,
+        hasPerm: clave => { const [m, a] = String(clave).split('.'); return checkPermission(db, session, m, a); },
+      });
+
+      const tools = [...INFORMES_TOOL.TOOLS, {
         name: 'query_database',
         description: 'Ejecuta una consulta SQL SELECT para obtener datos especificos del negocio. Usala cuando necesites datos que no estan en el contexto inicial: clientes por gasto, productos por ventas, pedidos por periodo, etc. Solo lectura. Usa LIMIT 20 como maximo.',
         input_schema: {
@@ -2586,14 +2604,19 @@ export function register(app, db) {
         if (data.stop_reason === 'tool_use') {
           const toolUse = data.content.find(b => b.type === 'tool_use');
           if (!toolUse) break;
-          const result = runQueryTool(toolUse.input?.sql || '');
+          const inp = toolUse.input || {};
+          const result = NOMBRES_INFORMES.has(toolUse.name)
+            ? INFORMES_TOOL.ejecutar(toolUse.name, inp)
+            : runQueryTool(inp.sql || '');
           // C6/B8 — el SQL va al log SIN sus valores. La consulta la escribe el modelo, así que los
           // literales son lo que el dueño preguntó: "la factura de Juan Pérez" acaba como
           // WHERE name='Juan Pérez' en el journal — PII de SUS clientes, en un sitio que nadie
           // limpia. Misma lección que C3/M7 (el email fuera del log de login) y que el forgot-password
           // de C5. La FORMA se conserva entera, que es lo único que sirve para depurar: se ve la
           // tabla, el join y la cláusula; lo que se pierde es a quién buscaba.
-          console.log('[DISA] query_database:', redactarSql(toolUse.input?.sql), '→', result.count ?? result.error);
+          console.log('[DISA] ' + toolUse.name + ':',
+            toolUse.name === 'query_database' ? redactarSql(inp.sql) : JSON.stringify(inp),
+            '→', result.count ?? result.total_filas ?? (result.informes ? result.informes.length : (result.areas ? 'catálogo' : result.error)));
           apiMessages.push({ role: 'assistant', content: data.content });
           apiMessages.push({
             role: 'user',
