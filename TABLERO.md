@@ -1833,6 +1833,24 @@ verdad y no como se suponía — que es justo el problema que esta tarea viene a
   existe con seis dimensiones y nueve medidas, y los cuatro avisos ya llevan su gráfico.
 - **Control horario (fichaje).**
 - **Agenda del CRM.**
+- **⬜ LAS VENTANITAS DEL NAVEGADOR DEL RESTO DEL PRODUCTO — 81, y son LA MISMA TRAMPA.**
+  *(Censadas el 23 ago 2026 en la ficha D-bis, que arregló las 12 de Analíticas. **No se tocan hasta
+  que haya encargo.**)* En el producto hay **93** (29 `prompt` + 64 `confirm`, 42 ficheros; **86 en
+  pantallas vivas**). La avería que costó esta ficha es que **Chrome silencia los diálogos** en cuanto
+  el usuario marca la casilla que aparece en el SEGUNDO seguido, y el botón queda muerto sin decir
+  nada. **Cinco pantallas encadenan dos y son las que rompen exactamente igual**: Presupuestos
+  (`anularYRehacer`), Pedidos (ídem), Órdenes de compra (tres sitios) y Mostrador (pide concepto y
+  luego importe). El resto son de una sola y fallan «solo» silenciándose.
+  Las diez peores por número: Presupuestos 7 · Órdenes de compra 6 · Agenda 5 · Albaranes 4 ·
+  Pedidos 4 · Propuestas 4 · Facturas 3 · Traslados 3 · Ficha de cliente 2 · Mostrador 2.
+  **Cuando se aborde no hay que inventar nada:** `window.pedirDatos()` y `window.confirmarEnPagina()`
+  ya están en `layout.js`, son compartidos y se usan en Analíticas. Es cambiar la llamada.
+- **⬜ QUE «QUÉ PRODUCTOS ESTÁN PARADOS» SE PUEDA CONTESTAR.** *(Apuntada el 23 ago 2026: es la
+  duodécima pregunta frecuente, que quedó fuera de la ficha D-bis.)* El área de Inventario mide
+  **movimientos**, así que un producto sin ninguno no produce fila y **no puede salir en un gráfico**.
+  Medido: 121 productos físicos, 76 con movimiento, **45 invisibles**. Hace falta que el área pueda
+  **partir de los productos** y colgarles sus movimientos, para que un parado aparezca con cero. Es el
+  mismo cambio de grano que hizo falta en la agenda para las horas libres.
 - **⬜ DISA Y LOS INFORMES — que se puedan crear y abrir por chat.** *(Apuntada por Ibrahin el 23 ago
   2026 al encargar la ficha D, **y excluida expresamente de ella**: «DISA no entra aquí».)*
   **Responde al principio de LAS DOS PUERTAS de CANON §3-bis:** toda información de negocio se alcanza
@@ -3126,6 +3144,87 @@ mano: `node scripts/verify-verifactu-anulaciones.mjs`. **Queda propuesto meterlo
 **Lo que NO se ha tocado:** la cadena de altas (comprobado campo a campo, idéntica), las huellas ya calculadas,
 el QR, las rectificativas, los permisos y ninguna factura existente. **Cero borrados.** `avisos.js` sigue
 filtrando por `record_type='alta'` **a propósito**: abrirlo generaría avisos visibles, y eso es encender algo.
+
+### FICHA D-bis — La pantalla de informes se hace entender  ✅ HECHO (2026-08-23) — `541b303`
+Sale de un fallo que el dueño encontró usando la pantalla: **guardar un informe no funcionaba**. El
+diagnóstico está en su encargo de solo lectura del mismo día; esta ficha es el arreglo, en cinco
+partes y una entrega.
+
+**LA AVERÍA, Y POR QUÉ MI GATE ANTERIOR NO LA VIO.** Guardar pedía el nombre con `prompt()` y
+confirmaba con `confirm()`, **encadenados**. Chrome ofrece la casilla «Impedir que esta página cree
+cuadros de diálogo adicionales» en el **segundo** diálogo seguido; en cuanto se marca, `prompt`
+devuelve null y `confirm` false **sin enseñar nada**, y el botón queda muerto hasta recargar: ni
+ventana, ni petición, ni aviso. **El gate de la ficha D dio 97 ✓ · 0 ✗ sobre esto** porque comprobaba
+el guardado **llamando a la API con un cuerpo JSON escrito por mí**: medía el motor y se saltaba
+entero el tramo donde estaba el fallo. De ahí sale la norma nueva de CLAUDE.md.
+
+**PASO 0 — el censo:** **93 ventanitas** en el producto (29 `prompt` + 64 `confirm`, 42 ficheros),
+**86 en pantallas vivas**. Se arreglan **las 12 de Analíticas**; **las 81 restantes quedan apuntadas**
+(ver «⬜ Las ventanitas del navegador» en TAREA 3). Y se **reutiliza** el modal que ya existía
+(`.modal-overlay` + `openModal`, `layout.js:1245`): no se inventa uno.
+
+**PARTE 1 — se acaban las ventanitas.** Guardar es un panel dentro de la página: nombre **ya
+propuesto** («Agenda por fecha · 2026»), con el foco puesto y el texto seleccionado; casilla de
+compartir con su explicación; Guardar y Cancelar. **Nombre vacío o solo espacios → lo dice ahí, en
+rojo, y no se cierra.** Si el guardado falla, sale el motivo y el botón vuelve a estar vivo
+(rehabilitarlo va en los dos caminos, no solo en el feliz — fallo de clase ya pagado en este repo).
+**Caen las doce, no solo la de guardar:** el Plan financiero eran **cinco ventanitas seguidas**
+pidiendo palabras clave a mano («facturacion o beneficio», «mes, trimestre o anio», el número de
+usuario del responsable) y ahora es un formulario con listas. **Escape y clic fuera** se añaden al
+componente **compartido**: ningún modal del producto los tenía.
+
+**PARTE 2 — que se vea que ha guardado.** La página **sube** hasta «Mis informes guardados» y resalta
+el recién guardado dos segundos: la prueba es el informe en la lista, no un mensajito. El aviso deja
+de salir debajo de la burbuja de DISA — **medido**: los dos en `bottom/right: 24px` y el aviso con
+**menos** z-index (9999 contra 99999), por eso se leía «Informe guar». Se arregla por los dos lados
+(88 px de alto **y** z-index 100000), porque la burbuja **se puede arrastrar** y el hueco solo no
+basta. Y el índice se maqueta bien: `.inf-v` llevaba `grid-row` pero **no** `grid-column`, así que la
+colocación automática metía la flechita en la columna 1 y empujaba el nombre a la derecha.
+
+**PARTE 3 — se lee como una frase.** *«De [Ventas] quiero saber [cuánto he facturado], repartido por
+[cliente], [mes a mes], y verlo en [barras].»* Los cinco desplegables de siempre, **cada uno con su
+línea de ayuda debajo**. Renombrados: «Mirar por» → **«Repartido por»** · «Medir» → **«Quiero saber»**
+· «Beneficio (margen)» → **«Beneficio en euros»** · «Margen sobre lo que te costó» → **«Margen en %»**
+(su base no se pierde: baja a la ayuda) · «Área» → **«De»**. La fórmula se va a **«Opciones
+avanzadas»**, plegada, y **su ayuda enseña las palabras del usuario**: la traducción a los nombres del
+motor la hace la pantalla, sustituyendo primero la etiqueta más larga para que una corta no rompa otra
+por dentro.
+
+**PARTE 4 — se empieza por una pregunta.** **ONCE** tarjetas con nombre de negocio, agrupadas y
+**filtradas por el permiso de su área** (un negocio sin agenda no ve las tres de agenda). Abren el
+constructor con la frase **ya completada** y el gráfico dibujado; sin datos, el gráfico vacío con una
+línea que lo explica, no un error.
+
+> **DE LAS DOCE DEL ENCARGO, TRES NO SE PODÍAN MONTAR. Se probaron una a una contra el motor antes de
+> construir nada, y se paró a preguntar.** Dos se arreglaron **de raíz**, no maquillándolas:
+> - **«¿Quién me debe dinero?»** — el área de Clientes tenía la medida «deuda» y **ninguna forma de
+>   repartirla por cliente**: solo por provincia, tipo, forma de pago, perfil y responsable. Se añade
+>   la **dimensión «Cliente»** (las filas ya traían el nombre).
+> - **«¿Cuántas horas trabajo frente a las que tengo abiertas?»** — lleva un «frente a» dentro: son dos
+>   series. **El motor ya devolvía varias medidas; `dibujar()` se quedaba con la primera.** Ahora pinta
+>   todas, lo que además sirve para cualquier comparación futura dentro de un área.
+> - **⬜ «¿Qué productos se mueven y cuáles están PARADOS?» QUEDA FUERA, y es lo honesto.** El área de
+>   Inventario mide **movimientos**, así que un producto parado **no produce ninguna fila y no puede
+>   aparecer**. Medido: **121 productos físicos · 76 con algún movimiento · 45 invisibles**. Enseñar
+>   solo los que se mueven y titularlo «y cuáles están parados» sería mentir en la tarjeta. **Para que
+>   entre hace falta que Inventario pueda partir de los productos y no de los movimientos** — el mismo
+>   cambio de grano que la agenda. **PENDIENTE DE IBRAHIN.**
+
+**NADA SE PIERDE, contado antes y después:** **32 dimensiones → 33** (la nueva) y **31 medidas → 31**.
+Los 8 informes de fábrica y los 10 subinformes de «Informes por área», intactos.
+
+**PARTE 5 — norma nueva en CLAUDE.md**, «Lo que solo ve un navegador», con las cuatro reglas y los dos
+fallos del mismo día de los que nacen.
+
+**VERIFICADO — `scripts/gate-informes-se-entienden.mjs`, 59 ✓ · 0 ✗, EJECUTADO** contra la dirección
+**pública**. Aplica las cuatro reglas nuevas: **pulsa los botones** (ni una aserción de guardado llama
+a la API), prueba **cancelar / vacío / solo espacios / Escape / clic fuera**, prueba **con las
+ventanitas silenciadas** —que es la avería exacta— y **mira la captura sobre píxeles**: que el aviso
+no toque la burbuja y que el nombre del índice esté a la izquierda del chevron (**x=108 contra
+x=1387**). Las once preguntas **se pulsan una a una** y las once contestan. Captura en
+`~/informes-shots/ficha-d-bis*.png`.
+
+**No mueve el recuento**: no es un subpunto A–M.
 
 ### FICHA D — Analíticas: informes a medida  ✅ HECHO (2026-08-23) — `e16bd01` + `fb5db14` + `bcd826c` · **5 de 5**
 Las cinco en una entrega. Palabras del dueño en el encargo original: *«en analíticas lo principal es
