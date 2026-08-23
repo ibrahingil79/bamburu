@@ -565,7 +565,7 @@ devuelve sus horas, que copiar no abre días cerrados y que un tramo imposible n
   ayudante **`clic(page, sel)`**, que devuelve `false` en vez de tumbar la pasada, y se usa en todos
   los clics del gate.
 
-#### B. MIGRACIÓN ASISTIDA SIN ACCESO VISIBLE · ✅ **HECHO (23 ago 2026)** · commit `PENDIENTE_HASH` · **3 de 3**
+#### B. MIGRACIÓN ASISTIDA SIN ACCESO VISIBLE · ✅ **HECHO (23 ago 2026)** · commit `b7b6706` · **3 de 3**
 
 > **HECHOS (23 ago 2026): B1 · B2 · B3.** Solo la puerta: la migración **por dentro no se ha tocado**
 > (`modules/erp/routes/migracion.js`, sin un solo cambio).
