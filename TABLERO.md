@@ -96,6 +96,11 @@
 > los **once puntos (A–K)** del dueño, **enteros, literales y en un solo sitio**, ANTES de construir
 > nada. **Esta tarea no construyó ni una línea de producto.**
 >
+> **AJUSTE (23 ago 2026): hoy el bloque tiene CATORCE fichas, no once.** A los once del dueño se
+> sumaron tres nacidas después y con el mismo rango: **C-0** (Paso 0 de C, 21 ago), **L** (cola de
+> envíos, 21 ago) y **M** (lo que se dictó de viva voz, 21 ago). El recuento vigente cuenta las
+> catorce; la frase «los once puntos (A–K)» describe **el origen del bloque**, no su contenido de hoy.
+>
 > **CÓMO SE USA.** Cada ítem lleva su estado — **PENDIENTE / EN CURSO / HECHO + hash**. Cuando una
 > tarea se cierre **se marca AQUÍ**; la línea **no se borra**. Ningún trozo de A–K se da por
 > entregado si no está marcado en este bloque.
@@ -115,17 +120,27 @@
 **RECUENTO VIGENTE — 22 ago 2026: 65 subpuntos vivos · 39 hechos · 26 pendientes.**
 *(el 21 ago iba por 31 hechos · 34 pendientes; **C entera** suma sus 8 restantes)*
 `A 6 · C 12 · C-0 4 · B 3 · D 5 · E 4 · F 4 · G 4 · H 3 · I 3 · J 0 · K 0 · L 8 · M 9` = **65**.
-- **C pasa de 11 a 12** con **C10-f**, que Ibrahin añadió el 21 ago tras cerrar C-0. Los pendientes
-  suben de 37 a 38: el subpunto es nuevo, no estaba antes sin marcar.
+- **C pasa de 11 a 12** con **C10-f**, que Ibrahin añadió el 21 ago tras cerrar C-0. ~~Los pendientes
+  suben de 37 a 38~~ — **línea caducada, corregida el 23 ago 2026:** los pendientes de hoy son **26**,
+  y esta cifra ya se contradecía con la de dos líneas más abajo («quedan 37 pendientes») el mismo día
+  en que se escribió. Lo que sigue siendo cierto y por eso no se borra: **el subpunto es nuevo, no
+  estaba antes sin marcar.**
 - **4 RETIRADOS**, con su motivo escrito en su sitio y **sin borrar la línea**: **A3** y **A6**
   (premisas falsas, las tumbó la auditoría del encargo 0), **G3** (ya estaba hecho) y **L1** (la
   pantalla ya traía el armazón del panel: lo tumbó el Paso 0 de la tarea L).
-- **27 HECHOS:** los 6 de **A** · los 9 de **M** (las dos entregas que se dictaron de viva voz) · los
-  8 vivos de **L** · y los **4 de C-0**. Todos del 21 ago 2026.
+- ~~**27 HECHOS:** los 6 de **A** · los 9 de **M** (las dos entregas que se dictaron de viva voz) · los
+  8 vivos de **L** · y los **4 de C-0**. Todos del 21 ago 2026.~~ — **línea caducada, corregida el
+  23 ago 2026:** se quedó sin **los 12 de C**, cerrada el 22 ago. **Son 39 HECHOS:** los 6 de **A** ·
+  los **12 de C** (22 ago) · los **4 de C-0** · los 8 vivos de **L** · los 9 de **M**. Los cuatro
+  últimos grupos, del 21 ago 2026.
 - **C-0 no estaba en el encargo original** y nace del Paso 0 de **C**: sanear los documentos antes de
-  construir el motor de listados encima. **C sigue entero y pendiente** — C-0 le quita el andamio
-  podrido de debajo, no le hace el trabajo.
-- Quedan **37 pendientes** —los de B a I— y **2 bloqueados** (J y K), que no dependen de Ibrahin.
+  construir el motor de listados encima. ~~**C sigue entero y pendiente**~~ — **línea caducada,
+  corregida el 23 ago 2026: C quedó CERRADA el 22 ago, 12 de 12** (commits `575e333`, `c3302f5`,
+  `5e05738`). Lo que sigue siendo cierto: C-0 le quitó el andamio podrido de debajo, no le hizo el
+  trabajo.
+- ~~Quedan **37 pendientes** —los de B a I—~~ y **2 bloqueados** (J y K), que no dependen de Ibrahin.
+  **Línea caducada, corregida el 23 ago 2026: quedan 26 pendientes**, y siguen siendo «los de B a I»
+  (B 3 · D 5 · E 4 · F 4 · G 4 · H 3 · I 3). Los bloqueados siguen siendo 2.
 - **A1, A4 y A7 fueron REESCRITOS** por el dueño antes de construirse; el recuento no cambia por eso
   (siguen siendo los mismos subpuntos), solo cambia lo que piden.
 - **L nace con 9 subpuntos y se queda con 8 vivos** (L1 retirado). **M nace con 9, los 9 hechos.**

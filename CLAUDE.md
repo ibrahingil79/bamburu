@@ -154,6 +154,27 @@ Dos avisos que van con la norma:
 - **Antes de meter una pantalla en un gate, comprobar que su ruta existe** (montaje + handler). Una
   ruta inventada da verde sobre nada.
 
+## Un titular de recuento se corrige con el cuerpo que lo desarrolla
+
+> **Cuando se actualiza una cifra que resume algo —un recuento, un total, un «X de Y hechos»—, en la
+> MISMA entrega se revisa el cuerpo que la desarrolla: los desgloses, las listas de «cuáles son» y
+> las frases que nombran el estado de una pieza concreta. Cambiar el titular y dejar el detalle es
+> dejar escrita una contradicción, y el detalle es justo lo que se lee cuando alguien quiere el
+> porqué de la cifra.**
+
+De dónde sale (23 ago 2026): al listar el bloque «CORRECCIONES DEL DUEÑO» aparecieron **cuatro líneas
+que llevaban un día contradiciendo a su propio titular**, tres renglones más abajo. El titular decía
+«39 hechos · 26 pendientes» y el cuerpo seguía diciendo «27 HECHOS», «C sigue entero y pendiente» y
+«quedan 37 pendientes» — y una cuarta, «los pendientes suben de 37 a 38», ya se contradecía con esa
+tercera **el día en que se escribió**. Nadie mintió: se cerró C, se subió el titular y no se bajó a
+tocar los bullets.
+
+Cómo se aplica, en concreto:
+- Al cerrar una tarea, `grep` la cifra vieja en el fichero antes de dar la entrega por terminada.
+- Las cifras que se contradicen **se tachan con su motivo y su fecha, no se borran** (el método que ya
+  usaba la ficha C): el registro existe para poder reconstruir qué se creía y cuándo.
+- **Si dos cifras del mismo documento no cuadran, se dice; no se elige la que conviene.**
+
 ## Seguridad (importante)
 
 - NUNCA subir secretos, claves o bases de datos a Git/GitHub.
