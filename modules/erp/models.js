@@ -23,6 +23,10 @@ export function runMigrations(db) {
   // shipping_methods)? Si sí, NO recrearlos (CREATE guardados con `if (!d2Archived)`). NO incluye
   // tags/product_tags (función viva del catálogo) ni store_settings (se conserva, tienda Capa 2).
   const d2Archived = !!db.prepare('SELECT value FROM settings WHERE key=?').get('migration_d2_archive_ecommerce_2026_v1');
+  // B (23 ago 2026) — ¿ya se archivaron los CUPONES (discount_codes, auto_discounts)? Si sí, NO
+  // recrearlos (sus CREATE van guardados con `if (!bArchived)`), para que el rename → _archived sea
+  // idempotente y no reaparezcan vacíos en el arranque siguiente. Mismo patrón que D1 y D2.
+  const bArchived = !!db.prepare('SELECT value FROM settings WHERE key=?').get('migration_b_archive_discounts_2026_v1');
 
   // Admin users
   db.exec(`CREATE TABLE IF NOT EXISTS admin_users (
@@ -317,7 +321,8 @@ export function runMigrations(db) {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
-  // Discount codes
+  // Discount codes — B: guardados por `bArchived` (ver el archivado al final del fichero).
+  if (!bArchived) {
   db.exec(`CREATE TABLE IF NOT EXISTS discount_codes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     code TEXT UNIQUE NOT NULL,
@@ -342,6 +347,7 @@ export function runMigrations(db) {
     active INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
+  }  // fin if(!bArchived) — cupones
 
   // Sales orders (extended)
   // D1 — clúster viejo de ventas (sales_orders / sales_items / order_status_history): NO recrear si ya
@@ -2756,6 +2762,29 @@ Sé preciso con los números y siempre redondea correctamente.`,
       db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(d2Key, 'done');
     });
     tx2();
+  }
+
+  // ── B — ARCHIVAR LOS CUPONES (rename → _archived, idempotente, sin DROP) ──────────────────────
+  // Solo tras desmontar su UI y su API (`/admin/discounts`, `/api/erp/discounts`, routes/index.js) y
+  // cortar la superficie de DISA (acciones dedicadas, vía genérica, allowlist de lectura, URLs).
+  // "Eliminar" = archivar, NUNCA DROP: los tres cupones que existen en `desarrollo-bamburu` siguen
+  // ahí, legibles en `discount_codes_archived`. Mismo helper y mismo patrón que D1 y D2.
+  //
+  // Los PERMISOS `discounts.*` NO se tocan a propósito: el encargo dice que no se tocan permisos, y
+  // borrarlos de `permissions` arrastraría filas de `user_permissions` de usuarios reales. Se quedan
+  // asignables y sin pantalla que abrir, igual que quedaron los de las áreas que apagaron D1 y D2.
+  const bKey = 'migration_b_archive_discounts_2026_v1';
+  if (!db.prepare('SELECT value FROM settings WHERE key=?').get(bKey)) {
+    const archiveTable = (name) => {
+      const src = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
+      const dst = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name + '_archived');
+      if (src && !dst) db.exec(`ALTER TABLE ${name} RENAME TO ${name}_archived`);
+    };
+    const txB = db.transaction(() => {
+      ['discount_codes', 'auto_discounts'].forEach(archiveTable);
+      db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(bKey, 'done');
+    });
+    txB();
   }
 
   // ── Contabilidad (Pieza 1): cuaderno de doble cara + libros registro ──────────

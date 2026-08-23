@@ -214,11 +214,11 @@ export const MENU = [
   // ⚙️ ACTUALIZADO EL 23 AGO 2026 (B2). Este comentario decía que `/admin/discounts` y `/admin/tags`
   // seguían sin enlace «a propósito». No era exacto: lo que el dueño dijo en U7 fue **«se abordarán
   // luego»** (TABLERO:1724), y ese luego es B2. **`/admin/tags` ya está enganchada** aquí arriba, en
-  // Catálogo. **`/admin/discounts` sigue fuera, y ahora sí a propósito y por decisión de hoy:** sus
-  // tablas (`discount_codes`, `auto_discounts`) solo las leen la tienda —Capa 2, CONGELADA— y el POS
-  // viejo, que está desmontado; ni facturas, ni presupuestos, ni mostrador aplican un cupón. Darle
-  // entrada de menú sería prometer algo que hoy no ocurre. Queda apuntada en el TABLERO como
-  // candidata a desmontar, con su motivo, para decidirlo en su propio encargo. NO se retira aquí.
+  // Catálogo.
+  // ⚙️ CORREGIDO EL MISMO 23 AGO 2026 (ficha B). Donde este comentario decía que `/admin/discounts`
+  // «queda apuntada como candidata a desmontar, NO se retira aquí», ya NO es cierto: **se desmontó**.
+  // La pantalla y su API están retiradas (`routes/index.js`) y sus tablas archivadas a
+  // `discount_codes_archived` / `auto_discounts_archived`. No hay nada que enlazar: da 404.
   // El clúster de e-commerce (`/admin/orders`, `/admin/shipping`) está desmontado y da 404 —
   // resucitarlo por el menú sería revivir lo que D1/D2 apagaron.
   { id: 'analitica', label: 'Analítica', icon: 'ti-chart-histogram', items: [

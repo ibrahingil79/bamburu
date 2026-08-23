@@ -1,0 +1,27 @@
+{
+  "tomada": "2026-08-23",
+  "slug": "desarrollo-bamburu",
+  "verifactu": {
+    "registros": 1050,
+    "envios": 2,
+    "sha": "4583329bdec49c1125b03d42800e436380b4780458e0a3857fd3549ab0a59d1b"
+  },
+  "ventas": {
+    "count": 553,
+    "base": 342165.51,
+    "iva": 71850.89,
+    "total": 414016.4
+  },
+  "cobros_total": {
+    "c": 578,
+    "imp": 1212841.07
+  },
+  "libro": {
+    "debe": 917567.63,
+    "haber": 917567.63
+  },
+  "facturas": 852,
+  "cupones": 3,
+  "actividad_huerfana_previa": 11,
+  "nota_huerfanos_previos": "activity_logs con entity=invoice apuntando a facturas que ya no existen: 11 filas del 15-jul-2026 (ids 145-155). SON PREVIAS a la ficha B y ajenas a ella. El gate exige que no CREZCAN, no que sean cero: arreglarlas no es de esta tarea."
+}

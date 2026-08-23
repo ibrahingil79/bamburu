@@ -162,11 +162,12 @@ try {
   ok(vTags.url === '/admin/tags' && /etiquetas/i.test(vTags.h2),
      'y la pantalla RESPONDE y es la suya (no una redirección con 200)', vTags.url + ' · ' + vTags.h2.trim());
 
-  // DESCUENTOS NO SE ENLAZA, y eso es una decisión, no un olvido: sus tablas solo las leen la tienda
-  // (Capa 2, congelada) y el POS viejo, desmontado. Si alguien la mete en el menú sin quitar antes
-  // ese motivo, este gate lo dice.
+  // DESCUENTOS NO SE ENLAZA. Cuando se escribió esto era «sin enlace a propósito»; desde la ficha B
+  // (23 ago 2026) la pantalla está DESMONTADA y sus tablas archivadas, así que enlazarla llevaría a
+  // un 404. El gate propio de la ficha B (`gate-cupones-desmontados.mjs`) prueba el desmontaje
+  // entero; esta línea se queda como cinturón del menú.
   ok(!dest.some(d => d.h === '/admin/discounts'),
-     'Descuentos sigue FUERA del menú a propósito (Capa 2 congelada + POS desmontado; apuntada para desmontar)');
+     'Descuentos sigue FUERA del menú (desmontada en la ficha B: la ruta ya no existe)');
 
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   console.log('\n[4] LA PUERTA NUEVA NO ABRE NADA: EL CANDADO ES EL DE LA PANTALLA');

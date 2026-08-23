@@ -144,7 +144,20 @@ export function mountRoutes(app, db) {
   // el POS, los borradores y los reembolsos viejos. Archivado de tablas y corte de escritura de DISA = D1.
   // admin.route('/orders', orderViews);
   admin.route('/inventory', invViews);
-  admin.route('/discounts', discViews);
+  // B (23 ago 2026) — CUPONES RETIRADOS. Desmontado, no borrado: discounts.js sigue en el repo, igual
+  // que orders.js y shipping.js. Sus tablas (discount_codes, auto_discounts) quedan archivadas a
+  // *_archived por la migración `migration_b_archive_discounts_2026_v1` de models.js. Motivo: ningún
+  // documento vivo aplica un cupón —ni factura, ni presupuesto, ni pedido, ni mostrador—; sus únicos
+  // lectores eran la tienda y el POS viejo, los dos ya apagados.
+  //
+  // OJO CON CÓMO SE COMPRUEBA QUE LA TIENDA ESTÁ APAGADA, porque el grep engaña de dos maneras: (1)
+  // `core/loader.js` importa los módulos con una ruta CONSTRUIDA (`join(modulesDir, mod, 'index.js')`),
+  // así que buscar "modules/store" no encuentra nada y parece código muerto; y (2) el arranque imprime
+  // "✅ Store: Tienda pública en /store" aunque no monte nada, porque ese console.log está antes de las
+  // dos líneas comentadas. Lo que de verdad la apaga son los `app.route` comentados por D1 al final de
+  // `modules/store/routes.js`: /store y /api/store/* devuelven 404 (medido).
+  // Con esto cae también la superficie de descuentos de DISA (modules/disa/index.js).
+  // admin.route('/discounts', discViews);
   // D2 — resto e-commerce DESMONTADO (envíos): comentado, no borrado; shipping.js permanece. /admin/shipping → 404.
   // admin.route('/shipping', shipViews);
   admin.route('/analytics', analytViews);
@@ -212,7 +225,8 @@ export function mountRoutes(app, db) {
   // PIEZA C — API del POS viejo RETIRADA (ver nota arriba). Desmontado, no borrado.
   // apiApp.route('/orders', orderApi);
   apiApp.route('/inventory', invApi);
-  apiApp.route('/discounts', discApi);
+  // B — API de cupones RETIRADA (ver nota arriba). Desmontada, no borrada. /api/erp/discounts/* → 404.
+  // apiApp.route('/discounts', discApi);
   // D2 — API de envíos DESMONTADA: comentada, no borrada. /api/erp/shipping/* → 404.
   // apiApp.route('/shipping', shipApi);
   apiApp.route('/analytics', analytApi);
