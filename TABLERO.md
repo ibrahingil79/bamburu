@@ -4217,6 +4217,57 @@ se aplica en el SERVIDOR** —lo que no es de ese cliente no viaja al navegador�
 nombre y **tiene su aspa** para quitarlo. Es un chip aparte: **no toca ni se parece a los filtros de
 eje** del constructor.
 
+**⚙️ REPASADA EL 23 AGO 2026 (noche · punto 6) — LOS CINCO SEGUÍAN BIEN, FALTABA LA SEGUNDA MITAD
+DEL CABO 4, Y APARECIÓ UN 502 QUE NO ERA DE LA AGENDA NI DE NADIE.**
+*(Gate propio: `scripts/gate-agenda-cabos.mjs` · **27 ✓ · 0 ✗**.)*
+
+- **Los cinco cabos, medidos otra vez y vivos.** Dos citas a la misma hora se pintan **lado a lado y
+  con el mismo ancho** (153 px y 153 px, medido con sus rectángulos, no de oídas); las citas llevan
+  su **asa**; la agenda se abre **filtrada por el cliente** y con su chip; y `anulada_por` y
+  `anulada_at` **siguen las dos** en la base, sin renombrar ni fusionar. El **gesto horizontal de
+  móvil no se vuelve a medir aquí a propósito**: lo cubre `gate-agenda-calendario`, y meter un verde
+  por «lo comprueba otro» sería contar dos veces la misma prueba.
+- **LO QUE FALTABA DEL CABO 4** — y es lo que pedía el encargo con estas palabras: *«Guárdalo, y que
+  la medida de agenda del constructor pueda repartir por ello»*. La columna se guardaba desde el 20
+  de agosto y **no se podía repartir por ella**: el dato existía y no lo veía nadie. Ahora el área de
+  Agenda tiene la dimensión **«Quién anuló la cita»**, con cinco grupos: El cliente · El negocio ·
+  Caducó sola, sin respuesta · **Sin registrar** (las anteriores al cambio, a las que **no se les
+  inventa autor**) · **(no anulada)**.
+  - **Las etiquetas se mudaron a `citas-engine.js`**, que no importa nada y puede leerlo todo el
+    mundo. Estaban escritas a mano en el JavaScript de la agenda y el constructor iba a escribirlas
+    **otra vez**: dos copias de una lista son dos listas, y el día que una cambie la otra se queda
+    vieja en silencio. Ahora la pantalla las recibe del servidor.
+  - **Y lo que no dice nada, no se ofrece:** un **plantón NO es una anulación**, así que «Ausencias»
+    repartido por «quién anuló» caería entero en «(no anulada)» — un solo grupo con todo dentro. Se
+    esconde del desplegable. **Cada pareja imposible pasa a llevar SU motivo**: antes todas soltaban
+    *«daría un 1 en cada grupo»*, que aquí habría sido **una ayuda que miente**, justo lo que arregló
+    la ficha D-ter.
+
+**🔴 EL HALLAZGO GORDO DE LA NOCHE, y no era de la agenda: UN 502 INTERMITENTE EN TODO EL PRODUCTO.**
+Persiguiendo por qué el gate no veía el informe en pantalla salió esto:
+- **Síntoma:** cambiar un desplegable en Informes dejaba la pantalla con el resultado **ANTERIOR** y
+  **sin decir nada**. Medido: `POST /api/erp/analytics/constructor/cruzar` devolvía **502 con el
+  cuerpo vacío**, de forma intermitente y **solo desde un navegador** — el mismo cuerpo con `curl`
+  daba 200 diez veces seguidas.
+- **Causa, en el registro de Caddy:** `read tcp 127.0.0.1:…->127.0.0.1:3000: read: connection reset
+  by peer`. **La carrera de la conexión reutilizada.** Node cierra las conexiones ociosas a los **5 s**
+  (`keepAliveTimeout` por defecto) y Caddy las guarda **2 min** para reutilizarlas. Cuando Caddy manda
+  una petición por una conexión que Node acaba de cerrar en ese instante, el proxy **no puede saber si
+  llegó a ejecutarse**, así que no reintenta y devuelve 502. Con `curl` no pasa porque abre conexión
+  nueva cada vez. **Le pasaba a cualquier usuario, en cualquier pantalla, al azar.**
+- **Cura (`index.js`):** que el de dentro aguante más que el de fuera — `keepAliveTimeout = 180 s` y
+  `headersTimeout = 190 s`, por encima de los 120 s de Caddy, para que **el que cierre sea siempre
+  Caddy**, que sí sabe que la conexión está libre. Comprobado: **tres pasadas seguidas, cero 502**,
+  donde antes fallaba una de cada dos.
+- **Y la mitad de la pantalla, que era igual de grave:** el dibujo del informe hacía
+  `catch(e){ return; }`. **Un fallo dejaba el resultado viejo puesto y en silencio** — el usuario
+  cambia la pregunta, ve la misma cifra y cree que le está contestando. **Es peor que un error: es
+  una respuesta equivocada con cara de buena.** Ahora sale un aviso que dice que no se pudo calcular
+  **y que lo de debajo es la respuesta anterior**. El gate lo prueba **tumbando la petición a
+  propósito** y exigiendo que la pantalla hable.
+
+---
+
 **CÓMO SE COMPROBÓ (y cómo se demostró que las comprobaciones sirven).** Los cinco cabos tienen
 **prueba de reversión**: se deshizo cada uno, se reinició y se volvió a pasar la comprobación, que se
 puso **roja**; después se restauró.

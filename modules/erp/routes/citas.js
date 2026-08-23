@@ -21,8 +21,8 @@ import {
 import {
   geometriaCadena, comprobarSolape, huecos, ahoraLocal, hhmm, dowDeFecha, diasEntre,
   ESTADO_LABEL, puedeTransicionar, tramosPersona, tramosAmbito, ocupacionRecurso, overlaps,
-  ocupacionPersona, resta, hayHorarioNegocio, DEFAULT_OPEN,
-} from '../citas-engine.js';
+  ocupacionPersona, resta, hayHorarioNegocio, DEFAULT_OPEN, ANULADA_POR as ANULADA_POR_ENGINE,
+         ANULADA_POR_LABEL } from '../citas-engine.js';
 import {
   contactoDeCita, serviciosDeCita, textoAviso, waLink, smsLink, citaBaseUrl, citaEnlace,
   enviarEmailCita, registrarAviso, avisoHecho, colaEnvios, normalizeMovil,
@@ -301,11 +301,12 @@ export function moverCitaSvc(db, id, input) {
 }
 
 // ── QUIÉN ANULA ─────────────────────────────────────────────────────────────────────────────────
-// Tres valores y ni uno más. Cada camino de anulación dice el suyo; el que no puede saberlo (una
-// caducidad automática) dice 'automatico', que es la verdad y no un hueco. Lo que NUNCA se hace es
-// dejar que el dato se rellene solo con un valor por defecto: una anulación sin autor conocido se
-// queda en NULL y la pantalla dice «sin registrar».
-export const ANULADA_POR = ['cliente', 'negocio', 'automatico'];
+// La lista y sus etiquetas viven en `citas-engine.js` desde el 23 ago 2026: las necesitan esta
+// pantalla Y el constructor de informes, y dos copias de una lista son dos listas. Se re-exporta
+// para no romper a quien la importe de aquí.
+// OJO: `export { X } from '...'` re-exporta pero NO crea la variable local, y este fichero la usa
+// tres veces más abajo. Se importa y se re-exporta a mano.
+export const ANULADA_POR = ANULADA_POR_ENGINE;
 const quienValido = q => (ANULADA_POR.includes(q) ? q : null);
 
 export function cambiarEstadoSvc(db, id, estado, quien = null) {
@@ -1555,7 +1556,7 @@ function vistaAgenda(c, db) {
         <p style="color:var(--text2);font-size:.8rem;margin:.9rem 0 0">Las citas <b>anuladas</b> no se pintan en la agenda.</p>
       </div>
     </div></div>
-    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};window.CITA_ESTADOS=${jsonForScript(ESTADOS_COLOR)};window.AG_GRID=${Number(aj.grid) || 30};${jsVoz(aj)}${JS_AGENDA}</script>`;
+    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};window.CITA_ESTADOS=${jsonForScript(ESTADOS_COLOR)};window.AG_GRID=${Number(aj.grid) || 30};window.QUIEN_ANULA=${jsonForScript(ANULADA_POR_LABEL)};${jsVoz(aj)}${JS_AGENDA}</script>`;
   return adminLayout('Agenda', content, 'citas', c.get('session')?.csrfToken || '', c);
 }
 // ── COLOR DE ESTADO — FUENTE ÚNICA ───────────────────────────────────────────────────────────────
@@ -3153,7 +3154,9 @@ async function verCita(id){
 }
 var ESTLBL={pedida:'Pedida',confirmada:'Confirmada',atendida:'Atendida',no_show:'No se presentó',anulada:'Anulada'};
 // Los tres valores del cabo 4, en cristiano. Lo que no esté aquí (incluido null) se lee «Sin registrar».
-var QUIEN_ANULA={cliente:'El cliente',negocio:'El negocio',automatico:'Caducó sola, sin respuesta'};
+// Las etiquetas las manda el servidor (window.QUIEN_ANULA, desde citas-engine.js). Estaban escritas
+// aquí a mano y el constructor de informes iba a escribirlas otra vez: una sola lista.
+var QUIEN_ANULA=window.QUIEN_ANULA||{};
 async function estado(id,e){
   var extra={};
   if(e==='anulada'){ var q=await quienAnula(); if(!q) return; extra.anulada_por=q; }

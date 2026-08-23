@@ -1495,11 +1495,31 @@ app.notFound((c) => {
   return c.html(errorShell('Página no encontrada', ERR.PAGE, { action: 'Ir al inicio', href: '/admin' }), 404);
 });
 
-serve({ fetch: app.fetch, port: 3000, hostname: '127.0.0.1' }, (info) => {
+const servidor = serve({ fetch: app.fetch, port: 3000, hostname: '127.0.0.1' }, (info) => {
   console.log('🚀 Bamburu listo en http://localhost:' + info.port);
   console.log('👉 Admin:   http://localhost:3000/admin');
   console.log('👉 Tienda:  http://localhost:3000/store');
 });
+
+// ── EL 502 QUE NO ERA DE NADIE (23 ago 2026) ────────────────────────────────────────────────────
+// SÍNTOMA: en la pantalla de Informes, cambiar un desplegable dejaba la pantalla con el resultado
+// ANTERIOR y sin decir nada. Medido: `POST /api/erp/analytics/constructor/cruzar` devolvía **502**
+// con el cuerpo vacío, de forma intermitente y siempre desde un navegador — el mismo cuerpo con
+// `curl` daba 200 una y otra vez. En el registro de Caddy estaba la frase que lo explica todo:
+//   read tcp 127.0.0.1:xxxxx->127.0.0.1:3000: read: connection reset by peer
+//
+// LA CAUSA no es de la pantalla ni de la consulta: es la CARRERA DE LA CONEXIÓN REUTILIZADA. Node
+// cierra las conexiones ociosas a los **5 s** (`keepAliveTimeout` por defecto) y Caddy las guarda
+// **2 min** en su bolsa para reutilizarlas. Cuando Caddy manda una petición por una conexión que
+// Node acaba de cerrar en ese mismo instante, no hay a quién preguntar: el proxy no puede saber si
+// la petición llegó a ejecutarse, así que no la reintenta y devuelve 502. No pasa en `curl` porque
+// abre una conexión nueva cada vez. Le pasa a CUALQUIER usuario, en cualquier pantalla, al azar.
+//
+// LA CURA es la de siempre: que el de dentro aguante MÁS que el de fuera. 180 s > 120 s de Caddy,
+// así que el que cierra es siempre Caddy, que sí sabe que la conexión está libre. `headersTimeout`
+// tiene que ir por encima de `keepAliveTimeout` o Node corta a media cabecera.
+servidor.keepAliveTimeout = 180_000;
+servidor.headersTimeout   = 190_000;
 
 // Limpieza de sesiones en control.db
 async function cleanupControlSessions() {

@@ -144,6 +144,10 @@ export const GRUPOS = {
     'gate-inicio-widgets',           // ficha E: el cuadro de mando se coloca, se esconde y vuelve
     'gate-portal-ampliado',          // ficha G: analíticas del cliente y el canal de mensajes
     'gate-tarjeta-unica',            // ficha I: una sola tarjeta de cifra en las 56 pantallas
+    // Este SÍ se declara el mismo día que nace, que es la costumbre — y ahora, además, el censo la
+    // comprueba. Va en `clientes` con los otros de agenda, que es donde vive su cobertura.
+    'gate-agenda-cabos',             // punto 6: quién anuló, repartible en el constructor; los cinco
+                                     // cabos del 20 ago siguen vivos; y un informe que falla lo dice
   ],
   // Sala de máquinas: superadmin, conexiones a la BD, el fichero -wal, el saneo de errores al cliente,
   // el escapado del texto del usuario (que no se vuelva HTML ni JS) y la CSP estricta de las

@@ -288,6 +288,22 @@ export function geometriaCadena(configs) {
 // ── Estados y sus saltos ─────────────────────────────────────────────────────────────────────────
 export const ESTADOS = ['pedida', 'confirmada', 'atendida', 'no_show', 'anulada'];
 export const ESTADO_LABEL = { pedida: 'Pedida', confirmada: 'Confirmada', atendida: 'Atendida', no_show: 'No se presentó', anulada: 'Anulada' };
+
+// ── QUIÉN ANULÓ (cabo 4 de la TAREA 2) — la lista vive AQUÍ, no en una ruta ────────────────────
+// Tres valores y ni uno más. Cada camino de anulación dice el suyo; el que no puede saberlo (una
+// caducidad automática) dice 'automatico', que es la verdad y no un hueco. Lo que NUNCA se hace es
+// rellenarlo solo con un valor por defecto: una anulación sin autor conocido se queda en NULL y se
+// enseña como «Sin registrar» — a las anteriores al cambio no se les inventa autor.
+//
+// POR QUÉ SE MUDÓ AQUÍ el 23 ago 2026: las etiquetas estaban escritas DOS veces —una en el
+// JavaScript de la pantalla de la agenda y otra a punto de escribirse en el constructor de
+// informes—, y dos copias de una lista son dos listas: el día que una cambie, la otra se queda
+// vieja en silencio. `citas-engine.js` no importa nada, así que puede leerlo todo el mundo.
+export const ANULADA_POR = ['cliente', 'negocio', 'automatico'];
+export const ANULADA_POR_LABEL = {
+  cliente: 'El cliente', negocio: 'El negocio', automatico: 'Caducó sola, sin respuesta',
+};
+export const ANULADA_POR_SIN = 'Sin registrar';
 const TRANSICIONES = {
   pedida:     ['confirmada', 'atendida', 'no_show', 'anulada'],
   confirmada: ['atendida', 'no_show', 'anulada'],

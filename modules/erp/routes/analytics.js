@@ -1127,7 +1127,20 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         const conPeriodo = (r.dimension==='fecha' && cCampos && cCampos.usaPeriodo);
         document.getElementById('cPeriodoWrap').style.display = conPeriodo ? '' : 'none';
         document.getElementById('cPeriodoComa').style.display = conPeriodo ? '' : 'none';
-        let d; try{ d=await api('POST','/api/erp/analytics/constructor/cruzar',r); }catch(e){ return; }
+        // SI LA CONSULTA FALLA, SE DICE. Antes esto era un return a secas y la pantalla se quedaba
+        // con el resultado ANTERIOR: el usuario cambiaba el desplegable, no pasaba nada visible, y
+        // se creía que la cifra de arriba contestaba a la pregunta nueva. Es peor que un error —es
+        // una respuesta equivocada con cara de buena—. Se destapó el 23 ago 2026 con un 502
+        // intermitente del proxy (la carrera de la conexión reutilizada, arreglada en index.js).
+        let d;
+        try{ d=await api('POST','/api/erp/analytics/constructor/cruzar',r); }
+        catch(e){
+          const av2=document.getElementById('cAviso'); av2.style.display='';
+          av2.innerHTML='<div style="background:var(--danger-s);border:1px solid var(--danger);border-radius:8px;padding:.55rem .7rem;font-size:.78rem;color:var(--danger)">'+
+            '<strong>No he podido calcular esto.</strong> '+escHtmlCli(e&&e.message||'La consulta no llegó al servidor.')+
+            ' Lo que se ve debajo es la respuesta ANTERIOR, no esta pregunta. Vuelve a intentarlo.</div>';
+          return;
+        }
         // Si hay fórmula, lo que se pinta es el CÁLCULO (una medida derivada, número plano).
         const med=d.calculo?'calculo':r.medidas[0];
         const meta=d.calculo?{etiqueta:'Cálculo: '+(r.formula||''),dinero:false}:((cCampos.medidas||{})[med]||{});
@@ -1369,7 +1382,10 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         const rows=[...document.querySelectorAll('.cmp-serie')];
         const series=rows.map(r=>({area:r.querySelector('.cmp-area').value,medida:r.querySelector('.cmp-med').value}));
         if(series.length<2) return;
-        let d; try{ d=await api('POST','/api/erp/analytics/constructor/comparar',{series,periodo:document.getElementById('cmpPeriodo').value}); }catch(e){ return; }
+        // Mismo motivo que arriba: una comparación que falla en silencio deja las líneas viejas.
+        let d;
+        try{ d=await api('POST','/api/erp/analytics/constructor/comparar',{series,periodo:document.getElementById('cmpPeriodo').value}); }
+        catch(e){ toast((e&&e.message)||'No he podido calcular la comparación','err'); return; }
         if(cmpChartInst) cmpChartInst.destroy();
         cmpChartInst=new Chart(document.getElementById('cmpChart').getContext('2d'),{
           type:'line',

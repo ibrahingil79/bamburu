@@ -31,7 +31,8 @@ import { margen as margenDe, MODOS, modoDeEmpresa, MODO_POR_DEFECTO } from './ma
 // `ocupacionPersona` lo que tiene pillado (con márgenes y tiempos muertos). Son las MISMAS dos
 // funciones de las que come `ocupacionDia` del vigía, así que la capacidad que se mide aquí no
 // puede contradecir a la que enseña la agenda ni a la del Inicio.
-import { tramosPersona, ocupacionPersona, interseca, resta, ESTADO_LABEL } from './citas-engine.js';
+import { tramosPersona, ocupacionPersona, interseca, resta, ESTADO_LABEL,
+         ANULADA_POR_LABEL, ANULADA_POR_SIN } from './citas-engine.js';
 
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
 const VACIO = '(sin dato)';
@@ -221,7 +222,7 @@ const AREA_CLIENTES = {
   // dar un error después. Se declara aquí, junto al área, porque es una propiedad suya: la medida
   // cuenta el grano y la dimensión ES el grano. Es la única del catálogo con esa forma — se buscó
   // en las seis áreas ejecutando cada par (33 dimensiones × sus medidas) y comprobando el resultado.
-  sinSentido: [['cliente', 'clientes']],
+  sinSentido: [['cliente', 'clientes', 'daría un 1 en cada grupo']],
   nuevoAcc: clave => ({ clave, clientes: 0, facturado: 0, deuda: 0, compras: 0 }),
   sumar: (a, f) => { a.clientes++; a.facturado += Number(f.facturado) || 0; a.deuda += Number(f.deuda) || 0; a.compras += Number(f.compras) || 0; },
   salida: (a, meds) => {
@@ -425,7 +426,7 @@ const AREA_AGENDA = {
     // citas» contara la misma cita tres veces. Se cuenta entera en su servicio principal.
     const filas = db.prepare(
       `SELECT c.id, c.fecha, c.dur_min, c.estado, c.user_id, c.recurso_id, c.cliente_id,
-              c.cliente_suelto_nombre, c.invoice_id,
+              c.cliente_suelto_nombre, c.invoice_id, c.anulada_por,
               u.name AS persona, r.nombre AS puesto, cl.name AS cliente,
               (SELECT pr.name FROM cita_servicios cs LEFT JOIN products pr ON pr.id = cs.product_id
                 WHERE cs.cita_id = c.id ORDER BY cs.orden, cs.id LIMIT 1) AS servicio
@@ -452,6 +453,14 @@ const AREA_AGENDA = {
     persona:  { etiqueta: 'Quién la atiende',   valor: f => (f.persona || '').trim() || SIN_ASIGNAR },
     puesto:   { etiqueta: 'Puesto o sala',      valor: f => (f.puesto || '').trim() || '(sin puesto)' },
     estado:   { etiqueta: 'Estado de la cita',  valor: f => ESTADO_LABEL[f.estado] || f.estado || VACIO },
+    // CABO 4 de la TAREA 2, cerrado del todo el 23 ago 2026. La columna `anulada_por` se guardaba
+    // desde el 20 de agosto y NO se podía repartir por ella: el dato existía y no lo veía nadie.
+    // Sin esto no se puede contestar «¿me anulan más los clientes o cancelo más yo?», que es justo
+    // para lo que se guardó — y que es distinto del plantón (`no_show`), que no es una anulación.
+    // Las etiquetas vienen de citas-engine.js, la misma lista que usa la pantalla de la agenda.
+    anulada_por: { etiqueta: 'Quién anuló la cita',
+      valor: f => f.estado !== 'anulada' ? '(no anulada)'
+        : (ANULADA_POR_LABEL[f.anulada_por] || ANULADA_POR_SIN) },
   },
   medidas: {
     citas:            { etiqueta: 'Nº de citas',                 dinero: false },
@@ -468,6 +477,13 @@ const AREA_AGENDA = {
   },
   // Las cuatro de capacidad SOLO con estas dos dimensiones. Ver la nota de arriba.
   dimsCapacidad: ['fecha', 'persona'],
+  // Y lo que no dice nada, no se ofrece: un PLANTÓN NO ES UNA ANULACIÓN, así que las dos medidas de
+  // ausencias repartidas por «quién anuló» caerían enteras en «(no anulada)» — un solo grupo con
+  // todo dentro. Se esconde en el desplegable y `cruzar` lo explica si alguien lo fuerza por la API.
+  sinSentido: [
+    ['anulada_por', 'ausencias', 'las metería TODAS en «(no anulada)», porque un plantón no es una anulación'],
+    ['anulada_por', 'pct_ausencias', 'saldría 0 % en todos los grupos menos en «(no anulada)»'],
+  ],
   usaPeriodo: true,
   nuevoAcc: clave => ({ clave, citas: 0, min_reservados: 0, ingresos: 0, anuladas: 0, ausencias: 0, facturas: new Set() }),
   sumar: (a, f) => {
@@ -680,10 +696,14 @@ export function cruzar(db, { area = 'ventas', dimension = 'fecha', medidas = ['b
   const dim = A.dimensiones[dimension];
   if (!dim) { const e = new Error('No sé cruzar "' + area + '" por "' + dimension + '"'); e.status = 400; throw e; }
   // Lo que no dice nada no se contesta: se explica. (El desplegable ya no lo ofrece; esto es el cierre.)
-  for (const [dk, mk] of (A.sinSentido || [])) {
+  // Cada pareja puede traer SU motivo: no todas fallan igual. «Nº de clientes» por «Cliente» da un 1
+  // en cada grupo; «Ausencias» por «Quién anuló» las mete TODAS en un mismo grupo. Decir lo primero
+  // cuando pasa lo segundo es una ayuda que miente, que es justo lo que arregló la ficha D-ter.
+  for (const [dk, mk, porQue] of (A.sinSentido || [])) {
     if (dimension === dk && (Array.isArray(medidas) ? medidas : [medidas]).includes(mk)) {
       const e = new Error('«' + A.medidas[mk].etiqueta + '» repartido por «' + A.dimensiones[dk].etiqueta
-        + '» daría un 1 en cada grupo: no dice nada. Elige otra cosa que medir, o reparte por otro campo.');
+        + '» ' + (porQue || 'daría un 1 en cada grupo')
+        + ': no dice nada. Elige otra cosa que medir, o reparte por otro campo.');
       e.status = 400; throw e;
     }
   }
