@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { safeError } from '../../../core/errors.js';
 import { adminLayout, skeletonRows, can } from '../layout.js';
+import { escHtml } from '../../../core/escape.js';   // ficha D: el índice se arma en el SERVIDOR
 import { requirePerm } from '../../../core/auth.js';
 import { ventasResumen, topProductos, ventasPorDia, ventasCsvRows, margenResumen, margenPorProducto,
          ventasPorResponsable, clientesPorResponsable, ventasPorPeriodo, ventasPorCliente,
@@ -136,6 +137,9 @@ export function createAnalyticsRoutes(db, cfg = {}) {
   // permiso nuevo (CANON: el candado más estricto que ya existe), y un empleado no se pone sus
   // propias metas ni las de otro. Decisión del dueño.
   const mandaAqui = c => c.get('isAdmin') || ['owner', 'admin'].includes(c.get('session')?.role);
+  // FICHA D · PARTE 3 — quién puede tocar el informe de OTRO. Solo el dueño, y a propósito NO el
+  // admin: `mandaAqui` (de arriba) es para ver cifras de todos, no para borrarle el trabajo a nadie.
+  const esDuenyo = c => c.get('session')?.role === 'owner';
 
   api.get('/plan', requirePerm('analytics.read'), c => {
     try {
@@ -211,19 +215,26 @@ export function createAnalyticsRoutes(db, cfg = {}) {
     catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
   });
 
+  // FICHA D · PARTE 3 — el mismo POST sirve para CREAR y para GUARDAR CAMBIOS: si el cuerpo trae `id`,
+  // se actualiza ese informe en vez de nacer otro. Hasta hoy el front nunca mandaba `id`, así que cada
+  // «Guardar» dejaba un duplicado y no había forma de corregir un nombre. El renombrar y el
+  // compartir/descompartir pasan por aquí también: son el mismo campo del mismo registro.
   api.post('/constructor/paneles', requirePerm('analytics.read'), async c => {
     try {
       const d = await c.req.json();
       // Comparar no tiene un área única; solo se exige el área cuando el panel es de dimensión.
       if (d.config?.modo !== 'comparar') exigeArea(c, d.config?.area);
-      const r = guardarPanel(db, c.get('session')?.userId, d);
+      const r = guardarPanel(db, c.get('session')?.userId, d, esDuenyo(c));
       return c.json({ ...r, paneles: listarPaneles(db, c.get('session')?.userId) });
     } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
   });
 
+  // Este endpoint existía desde el paso 4b y NO LO LLAMABA NADIE: se podía guardar un informe y no
+  // había forma de borrarlo desde la pantalla. La ficha D lo engancha. Borra la RECETA, nunca un dato
+  // del negocio — la confirmación de la pantalla lo dice con esas palabras.
   api.delete('/constructor/paneles/:id', requirePerm('analytics.read'), c => {
     try {
-      borrarPanel(db, c.get('session')?.userId, c.req.param('id'));
+      borrarPanel(db, c.get('session')?.userId, c.req.param('id'), esDuenyo(c));
       return c.json({ ok: true, paneles: listarPaneles(db, c.get('session')?.userId) });
     } catch(e) { return c.json({error:safeError(e)}, e.status || 500); }
   });
@@ -333,36 +344,107 @@ export function createAnalyticsRoutes(db, cfg = {}) {
 
   views.get('/', requirePerm('analytics.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
+    // ── FICHA D · PARTE 2 — ESTA PANTALLA ES UN ÍNDICE, NO UN MURO ─────────────────────────────
+    // Palabras del dueño: «que el cliente pueda elaborar informes según su requerimiento y no
+    // mostrar una serie de datos donde él mismo se pierde». Antes se abría con 4 indicadores y NUEVE
+    // tarjetas dibujándose de golpe, y el constructor —lo que él pidió— era la cuarta, enterrada.
+    // Ahora al abrir NO SE DIBUJA NI UN GRÁFICO: primero crear, luego los tuyos, luego la lista.
+    //
+    // NO SE HA PERDIDO NI UN INFORME: las ocho tarjetas que no eran el constructor son las ocho
+    // entradas de `INFORMES`, con el MISMO cuerpo y la MISMA consulta. Cambian de sitio, no de
+    // contenido. Y la de «Informes por área» sigue llevando dentro sus tres pestañas con sus diez
+    // informes, que tampoco se tocan.
+    //
+    // EL CANDADO DEL ÍNDICE es el permiso del ÁREA de cada informe: quien no puede ver compras no lee
+    // «Compras» en la lista. Owner y admin lo ven todo (`can`). Ojo con lo que esto NO es: los
+    // endpoints siguen exigiendo `analytics.read` como antes — filtran su CONTENIDO por área, que es
+    // como estaban. Aquí se cierra la puerta de la lista, no se reescriben los permisos del producto.
+    const INFORMES = [
+      { clave: 'ventas-periodo', nombre: 'Ventas por período',   perm: 'invoices.read',
+        linea: 'Cuánto has facturado día a día en la ventana que elijas.' },
+      { clave: 'top-productos',  nombre: 'Productos más vendidos', perm: 'invoices.read',
+        linea: 'Qué se vende más, por ingresos.' },
+      { clave: 'rentabilidad',   nombre: 'Rentabilidad',          perm: 'invoices.read',
+        linea: 'Qué queda después del coste, y sobre qué parte de la facturación se sabe.' },
+      { clave: 'comparar',       nombre: 'Comparar áreas en el tiempo', perm: 'analytics.read',
+        linea: 'Dos o más áreas sobre el mismo eje de tiempo: facturación contra gasto, por ejemplo.' },
+      { clave: 'plan',           nombre: 'Plan financiero — objetivos vs. real', perm: 'invoices.read',
+        linea: 'Lo que te propusiste contra lo que va saliendo.' },
+      { clave: 'por-area',       nombre: 'Informes por área',     perm: 'analytics.read',
+        linea: 'Los diez informes de siempre, en tres pestañas: ventas, compras y clientes.' },
+      { clave: 'responsable',    nombre: 'Por responsable',       perm: 'invoices.read',
+        linea: 'Qué ha facturado cada persona y cuántos clientes lleva.' },
+      { clave: 'stock',          nombre: 'Informe de stock',      perm: 'inventory.read',
+        linea: 'Qué tienes, cuánto vale y qué está por debajo del mínimo.' },
+    ].filter(i => can(c, i.perm));
+
+    const indiceHtml = INFORMES.map(i =>
+      '<button type="button" class="inf-fila" data-inf="' + i.clave + '">'
+      + '<span class="inf-n">' + escHtml(i.nombre) + '</span>'
+      + '<span class="inf-l">' + escHtml(i.linea) + '</span>'
+      + '<span class="inf-v" aria-hidden="true">›</span></button>').join('');
+
     const content = `
-      <div class="ph"><h2>Analítica</h2>
-        <div style="display:flex;gap:.5rem">
-          <select class="form-control" id="periodSel" style="width:auto" onchange="loadCharts()">
-            <option value="7">Últimos 7 días</option>
-            <option value="30" selected>Últimos 30 días</option>
-            <option value="90">Últimos 90 días</option>
-          </select>
-        </div>
-      </div>
+      <div class="ph"><h2>Analítica</h2></div>
 
-      <div class="grid ga" style="margin-bottom:1.5rem" id="kpiRow">
-        <div class="kpi"><div class="kpi-label">Ingresos</div><div class="kpi-val" id="kRev" style="color:var(--ok)">-</div></div>
-        <div class="kpi"><div class="kpi-label">Pedidos</div><div class="kpi-val" id="kOrd">-</div></div>
-        <div class="kpi"><div class="kpi-label">Ticket medio</div><div class="kpi-val" id="kAvg">-</div></div>
-        <div class="kpi"><div class="kpi-label">Clientes</div><div class="kpi-val" id="kCli">-</div></div>
-      </div>
+      <style>
+        .inf-fila{display:grid;grid-template-columns:1fr auto;gap:.1rem .8rem;width:100%;text-align:left;
+          background:none;border:0;border-bottom:1px solid var(--border);padding:.7rem .2rem;cursor:pointer}
+        .inf-fila:last-child{border-bottom:0}
+        .inf-fila:hover{background:var(--accent-soft)}
+        .inf-fila .inf-n{font-weight:600;color:var(--text)}
+        .inf-fila .inf-l{grid-column:1;font-size:.75rem;color:var(--muted)}
+        .inf-fila .inf-v{grid-row:1 / span 2;align-self:center;color:var(--muted);font-size:1.1rem}
+        .inf-fila[aria-expanded="true"] .inf-v{transform:rotate(90deg)}
+        .crear-caja{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+        .mis-inf{display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap;
+          border-bottom:1px solid var(--border);padding:.55rem .2rem}
+        .mis-inf:last-child{border-bottom:0}
+        .mis-inf .mi-acc{display:flex;gap:.35rem;flex-wrap:wrap}
+      </style>
 
-      <div class="grid g2" style="margin-bottom:1.5rem">
-        <div class="card">
-          <div class="card-head"><h3>Ventas por período</h3></div>
-          <div class="card-body" style="height:240px"><canvas id="salesChart"></canvas></div>
-        </div>
-        <div class="card">
-          <div class="card-head"><h3>Productos más vendidos</h3></div>
-          <div class="card-body" style="height:240px"><canvas id="topChart"></canvas></div>
+      <div class="card" style="margin-bottom:1.5rem">
+        <div class="card-body crear-caja">
+          <div>
+            <div style="font-weight:700;font-size:1.02rem">Crea el informe que necesitas</div>
+            <div style="font-size:.78rem;color:var(--muted);margin-top:.15rem">
+              Eliges qué mides, por qué lo agrupas y en qué periodo. Puedes guardarlo, imprimirlo y mandarlo por correo.</div>
+          </div>
+          <button type="button" class="btn btn-primary" id="btnCrear" style="font-size:.95rem;padding:.6rem 1.1rem">Crear un informe</button>
         </div>
       </div>
 
       <div class="card" style="margin-bottom:1.5rem">
+        <div class="card-head"><h3>Mis informes guardados</h3></div>
+        <div class="card-body" id="misInformes">${skeletonRows(1)}</div>
+      </div>
+
+      <div class="card" style="margin-bottom:1.5rem">
+        <div class="card-head"><h3>Informes disponibles</h3></div>
+        <div class="card-body" style="padding-top:.2rem">
+          ${indiceHtml || '<div style="color:var(--muted);font-size:.8rem">No tienes permiso para ninguno de los informes de fábrica. Puedes crear los tuyos con el botón de arriba.</div>'}
+        </div>
+      </div>
+
+      <div class="card" id="inf-ventas-periodo" style="margin-bottom:1.5rem;display:none">
+        <div class="card-head"><h3>Ventas por período</h3>
+          <div style="display:flex;gap:.5rem">
+            <select class="form-control" id="periodSel" style="width:auto;font-size:.8rem">
+              <option value="7">Últimos 7 días</option>
+              <option value="30" selected>Últimos 30 días</option>
+              <option value="90">Últimos 90 días</option>
+            </select>
+          </div>
+        </div>
+        <div class="card-body" style="height:240px"><canvas id="salesChart"></canvas></div>
+      </div>
+
+      <div class="card" id="inf-top-productos" style="margin-bottom:1.5rem;display:none">
+        <div class="card-head"><h3>Productos más vendidos</h3></div>
+        <div class="card-body" style="height:240px"><canvas id="topChart"></canvas></div>
+      </div>
+
+      <div class="card" id="inf-rentabilidad" style="margin-bottom:1.5rem;display:none">
         <div class="card-head"><h3>Rentabilidad</h3>
           <div style="display:flex;gap:.5rem">
             <a href="/api/erp/analytics/export/margen" class="btn btn-secondary btn-sm">CSV Rentabilidad</a>
@@ -386,11 +468,12 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         </table></div>
       </div>
 
-      <div class="card" style="margin-bottom:1.5rem">
+      <div class="card" id="cardConstructor" style="margin-bottom:1.5rem;display:none">
         <div class="card-head"><h3>Construye tu gráfico</h3>
           <div style="display:flex;gap:.5rem;align-items:center">
-            <select class="form-control" id="cPanel" style="width:auto;font-size:.8rem"><option value="">Mis paneles…</option></select>
-            <button type="button" class="btn btn-secondary btn-sm" id="cGuardar">Guardar</button>
+            <span id="cEditando" style="display:none;font-size:.75rem;color:var(--muted)"></span>
+            <button type="button" class="btn btn-primary btn-sm" id="cGuardar" style="display:none">Guardar cambios</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="cGuardarNuevo">Guardar como nuevo</button>
           </div>
         </div>
         <div class="card-body">
@@ -422,7 +505,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         </div>
       </div>
 
-      <div class="card" style="margin-bottom:1.5rem">
+      <div class="card" id="inf-comparar" style="margin-bottom:1.5rem;display:none">
         <div class="card-head"><h3>Comparar áreas en el tiempo</h3>
           <div style="display:flex;gap:.5rem;align-items:center">
             <select class="form-control" id="cmpPeriodo" style="width:auto;font-size:.8rem"><option value="mes">Por mes</option><option value="trimestre">Por trimestre</option><option value="anio">Por año</option></select>
@@ -436,7 +519,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         </div>
       </div>
 
-      <div class="card" style="margin-bottom:1.5rem">
+      <div class="card" id="inf-plan" style="margin-bottom:1.5rem;display:none">
         <div class="card-head"><h3>Plan financiero — objetivos vs. real</h3>
           <div style="display:flex;gap:.5rem" id="planNuevoWrap"></div>
         </div>
@@ -453,7 +536,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         </div>
       </div>
 
-      <div class="card" style="margin-bottom:1.5rem">
+      <div class="card" id="inf-por-area" style="margin-bottom:1.5rem;display:none">
         <div class="card-head"><h3>Informes por área</h3>
           <div style="display:flex;gap:.5rem;align-items:center">
             <select class="form-control" id="infPeriodo" style="width:auto;font-size:.8rem">
@@ -472,7 +555,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         </div>
       </div>
 
-      <div class="card" style="margin-bottom:1.5rem">
+      <div class="card" id="inf-responsable" style="margin-bottom:1.5rem;display:none">
         <div class="card-head"><h3>Por responsable</h3>
           <div style="display:flex;gap:.5rem;align-items:center">
             <select class="form-control" id="respSel" style="width:auto;font-size:.8rem"><option value="">Todos</option></select>
@@ -484,7 +567,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         </table></div>
       </div>
 
-      <div class="card" style="margin-bottom:1.5rem">
+      <div class="card" id="inf-stock" style="margin-bottom:1.5rem;display:none">
         <div class="card-head"><h3>Informe de stock</h3>
           <div style="display:flex;gap:.5rem">
             <a href="/api/erp/analytics/export/products" class="btn btn-secondary btn-sm">CSV Productos</a>
@@ -501,6 +584,10 @@ export function createAnalyticsRoutes(db, cfg = {}) {
       <script src="/public/vendor/chartjs/chart.umd.min.js"></script>
       <script>
       let salesChartInst=null,topChartInst=null;
+      // FICHA D · PARTE 3 — el DUEÑO puede renombrar, compartir y borrar el informe de cualquiera.
+      // A propósito el admin NO: ver las cifras de todos no es poder borrarle el trabajo a nadie.
+      // Esto solo pinta o esconde botones; quien decide de verdad es el servidor (esDuenyo).
+      const PUEDE_TODO=${JSON.stringify(c.get('session')?.role === 'owner')};
 
       // PASO 2 — RENTABILIDAD. La regla de esta vista: lo que no se sabe se dice, no se rellena.
       // Un margen null se pinta "—" (no 0, que diría "no ganas nada", ni 100, que diría "todo
@@ -722,23 +809,46 @@ export function createAnalyticsRoutes(db, cfg = {}) {
       function rellenarCampos(){
         if(!cCampos||cCampos.error){ return; }
         document.getElementById('cDim').innerHTML=Object.entries(cCampos.dimensiones).map(([k,v])=>'<option value="'+k+'">'+escHtml(v.etiqueta)+'</option>').join('');
-        document.getElementById('cMed').innerHTML=Object.entries(cCampos.medidas).map(([k,v])=>'<option value="'+k+'">'+escHtml(v.etiqueta)+'</option>').join('');
+        rellenarMedidas();
+      }
+      // FICHA D · PARTE 1 — LAS MEDIDAS DEPENDEN DE POR DÓNDE SE AGRUPE. Una medida marcada soloCon
+      // (las de capacidad del área de Agenda: horas abiertas, ocupadas del horario, libres y % de
+      // ocupación) solo es cierta agrupando por fecha o por persona: una hora libre no tiene cliente
+      // ni servicio. Fuera de ahí se quita del desplegable en vez de ofrecer un número que no existe.
+      // Esto es cortesía; el candado está en el servidor, que responde 400 y explica por qué.
+      function rellenarMedidas(){
+        if(!cCampos||!cCampos.medidas) return;
+        const dim=document.getElementById('cDim').value;
+        const sel=document.getElementById('cMed'), antes=sel.value;
+        const validas=Object.entries(cCampos.medidas).filter(([,v])=>!v.soloCon||v.soloCon.includes(dim));
+        sel.innerHTML=validas.map(([k,v])=>'<option value="'+k+'">'+escHtml(v.etiqueta)+'</option>').join('');
+        // Si la que estaba elegida ya no vale, se cae a la primera y se dice por qué.
+        if(validas.some(([k])=>k===antes)) sel.value=antes;
+        else if(antes&&cCampos.medidas[antes]&&cCampos.medidas[antes].soloCon){
+          const et=(cCampos.dimensiones[dim]||{}).etiqueta||dim;
+          toast('«'+cCampos.medidas[antes].etiqueta+'» se mide sobre el horario, no sobre cada cita: no se puede repartir por '+String(et).toLowerCase()+'.');
+        }
       }
       function engancharConstructor(){
         // Listeners UNA sola vez (los <select> conservan su listener aunque cambien sus <option>).
-        for(const id of ['cDim','cPeriodo','cMed','cTipo']) document.getElementById(id).addEventListener('change',dibujar);
+        for(const id of ['cPeriodo','cMed','cTipo']) document.getElementById(id).addEventListener('change',dibujar);
+        // La dimensión primero recalcula qué medidas valen (ver rellenarMedidas) y luego dibuja.
+        document.getElementById('cDim').addEventListener('change',()=>{ rellenarMedidas(); dibujar(); });
         document.getElementById('cArea').addEventListener('change',async e=>{
           cArea=e.target.value;
           cCampos=await api('GET','/api/erp/analytics/constructor/campos?area='+cArea).catch(()=>null);
           rellenarCampos(); dibujar();
         });
-        document.getElementById('cGuardar').onclick=guardarPanelUI;
-        document.getElementById('cPanel').onchange=abrirPanel;
+        document.getElementById('cGuardar').onclick=()=>guardarPanelUI(true);
+        document.getElementById('cGuardarNuevo').onclick=()=>guardarPanelUI(false);
         // PASO 4b — cálculo propio: al marcarlo aparece el campo de fórmula y la lista de medidas
         // disponibles. Se redibuja al escribir (con una pausa para no llamar en cada tecla).
         document.getElementById('cCalcOn').addEventListener('change',()=>{ toggleFormula(); dibujar(); });
         let tF; document.getElementById('cFormula').addEventListener('input',()=>{ clearTimeout(tF); tF=setTimeout(dibujar,500); });
-        rellenarCampos(); toggleFormula(); dibujar();
+        // FICHA D · PARTE 2 — AQUÍ NO SE DIBUJA. Antes esto acababa en dibujar(), que lanzaba un
+        // cruce nada más cargar la pantalla. El primer trazo lo hace abrirConstructor(), cuando
+        // alguien pulsa «Crear un informe» o abre uno guardado.
+        rellenarCampos(); toggleFormula();
       }
       function toggleFormula(){
         const on=document.getElementById('cCalcOn').checked;
@@ -803,39 +913,61 @@ export function createAnalyticsRoutes(db, cfg = {}) {
             scales:tipo==='pie'?{}:{y:{beginAtZero:true,ticks:{callback:v=>meta.dinero?'${sym}'+v:(meta.pct?v+'%':v)}}}}
         });
       }
-      async function guardarPanelUI(){
-        const nombre=prompt('¿Cómo lo llamas?'); if(!nombre) return;
-        // PASO 4b — compartir: se pregunta al guardar. Compartir enseña la RECETA a todo el negocio;
-        // al abrirla, cada uno la ve con SUS permisos (un panel de Compras no se abre sin compras).
-        const compartido=confirm('¿Compartirlo con el equipo? Verán el gráfico, pero cada uno con sus propios permisos: si no pueden ver un área, ese panel no se les abre.');
-        try{ const r=await api('POST','/api/erp/analytics/constructor/paneles',{nombre,config:recetaActual(),compartido});
-          cPaneles=r.paneles; llenarPaneles(); toast('Panel guardado'); }catch(e){}
+      // FICHA D · PARTE 3 — GUARDAR CAMBIOS vs GUARDAR COMO NUEVO. Antes solo existía lo segundo, y
+      // encima disfrazado de lo primero: el botón decía «Guardar» y cada pulsación dejaba un
+      // duplicado. Ahora «Guardar cambios» solo aparece cuando hay un informe abierto, y manda su id.
+      async function guardarPanelUI(sobreEscribir){
+        const abierto = sobreEscribir ? panelPorId(panelAbierto) : null;
+        if (sobreEscribir && !abierto) { toast('No hay ningún informe abierto que actualizar','err'); return; }
+        let nombre = abierto ? abierto.nombre : (prompt('¿Cómo lo llamas?')||'').trim();
+        if (!nombre) return;
+        const cuerpo = { nombre, config: recetaActual() };
+        if (abierto) { cuerpo.id = abierto.id; }
+        else {
+          // Compartir se pregunta SOLO al crear. Cambiar de opinión después es el botón de la lista.
+          cuerpo.compartido = confirm('¿Compartirlo con el equipo? Verán el gráfico, pero cada uno con sus propios permisos: si no pueden ver un área, ese informe no se les abre.');
+        }
+        try{
+          const r=await api('POST','/api/erp/analytics/constructor/paneles',cuerpo);
+          cPaneles=r.paneles; if(!abierto) panelAbierto=r.id;
+          pintarMisInformes(); llenarPaneles(); refrescarBotonesGuardar();
+          toast(abierto?'Cambios guardados':'Informe guardado');
+        }catch(e){}
       }
-      function llenarPaneles(){
-        // Los propios y, aparte, los que alguien compartió. Un panel compartido dice de quién es.
-        const mios=cPaneles.filter(p=>p.propio), otros=cPaneles.filter(p=>!p.propio);
-        let h='<option value="">Mis paneles…</option>';
-        h+=mios.map(p=>'<option value="'+p.id+'">'+escHtml(p.nombre)+(p.compartido?' (compartido)':'')+'</option>').join('');
-        if(otros.length) h+='<optgroup label="Compartidos contigo">'+otros.map(p=>'<option value="'+p.id+'">'+escHtml(p.nombre)+' · '+escHtml(p.autor||'')+'</option>').join('')+'</optgroup>';
-        document.getElementById('cPanel').innerHTML=h;
+
+      // Compatibilidad: el desplegable de paneles desapareció (los informes guardados viven ahora en
+      // su propia tarjeta), pero varias funciones lo llamaban. Se deja como no-op con su motivo.
+      function llenarPaneles(){ /* ficha D: la lista la pinta pintarMisInformes */ }
+
+      function refrescarBotonesGuardar(){
+        const p = panelPorId(panelAbierto);
+        const bg = document.getElementById('cGuardar'), et = document.getElementById('cEditando');
+        if (!bg || !et) return;
+        bg.style.display = p ? '' : 'none';
+        et.style.display = p ? '' : 'none';
+        et.textContent = p ? 'Editando: ' + p.nombre : '';
       }
-      async function abrirPanel(e){
-        const p=cPaneles.find(x=>String(x.id)===e.target.value); if(!p||!p.config) return;
-        // Se re-CRUZA, no se pinta lo guardado: un panel guarda la receta, no los datos, así que los
-        // permisos se revalidan al abrirlo. Si guardara resultados, sería una fuga con fecha. Como el
-        // panel puede ser de OTRA área, primero se cambia de área y se cargan SUS campos.
+
+      // Carga un informe guardado EN el constructor. Se re-CRUZA, no se pinta lo guardado: un informe
+      // guarda la receta, no los datos, así que los permisos se revalidan al abrirlo. Si guardara
+      // resultados sería una fuga con fecha.
+      async function cargarPanelEn(id){
+        const p=panelPorId(id); if(!p||!p.config) return;
+        panelAbierto=p.id;
         cArea=p.config.area||'ventas';
         document.getElementById('cArea').value=cArea;
         cCampos=await api('GET','/api/erp/analytics/constructor/campos?area='+cArea).catch(()=>cCampos);
         rellenarCampos();
         document.getElementById('cDim').value=p.config.dimension;
         document.getElementById('cPeriodo').value=p.config.periodo||'mes';
-        // Restaurar el cálculo propio si el panel lo tenía.
         document.getElementById('cCalcOn').checked=!!p.config.formula;
         document.getElementById('cFormula').value=p.config.formula||'';
         toggleFormula();
+        // La medida puede ser de capacidad: hay que rellenar el desplegable ANTES de elegirla.
+        rellenarMedidas();
         document.getElementById('cMed').value=(p.config.medidas||[Object.keys(cCampos.medidas)[0]])[0];
         document.getElementById('cTipo').value=p.config.grafico||'barras';
+        refrescarBotonesGuardar();
         dibujar();
       }
 
@@ -891,39 +1023,42 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         dibujarCmp();
       }
 
-      async function loadCharts(){
-        const days=document.getElementById('periodSel').value;
-        const [ov,period,top,stock,mg,resp,inf,plan,campos,paneles,areas,comparables]=await Promise.all([
-          api('GET','/api/erp/analytics/overview').catch(()=>({})),
-          api('GET','/api/erp/analytics/sales-by-period?days='+days).catch(()=>[]),
-          api('GET','/api/erp/analytics/best-sellers?limit=8').catch(()=>[]),
-          api('GET','/api/erp/analytics/stock-report').catch(()=>[]),
-          api('GET','/api/erp/analytics/margen').catch(()=>null),
-          api('GET','/api/erp/analytics/responsable').catch(()=>null),
-          api('GET','/api/erp/analytics/informes').catch(()=>null),
-          api('GET','/api/erp/analytics/plan').catch(()=>null),
-          api('GET','/api/erp/analytics/constructor/campos').catch(()=>null),
-          api('GET','/api/erp/analytics/constructor/paneles').catch(()=>[]),
-          api('GET','/api/erp/analytics/constructor/areas').catch(()=>({})),
-          api('GET','/api/erp/analytics/constructor/comparables').catch(()=>[])
-        ]);
-        document.getElementById('kRev').textContent='${sym}'+Number(ov.totalRevenue||0).toFixed(2);
-        document.getElementById('kOrd').textContent=ov.totalOrders||0;
-        document.getElementById('kAvg').textContent='${sym}'+Number(ov.avgOrder||0).toFixed(2);
-        document.getElementById('kCli').textContent=ov.totalClients||0;
+      // ── FICHA D · PARTE 2 — CARGA PEREZOSA ──────────────────────────────────────────────────
+      // Antes esto era un Promise.all de DOCE peticiones al abrir la pantalla, y pintaba los nueve
+      // paneles quisiera uno verlos o no. Ahora al abrir se piden DOS cosas: la lista de informes
+      // guardados y el catálogo del constructor (que es lo que hace falta para el botón «Crear»).
+      // Cada informe de fábrica se carga la PRIMERA vez que se pulsa su fila, y no se vuelve a pedir.
+      const YA = {};
+      const dias = () => (document.getElementById('periodSel') || {}).value || '30';
 
-        pintarMargen(mg);
-        respCache=resp; llenarSelResponsable(); pintarResponsable();
-        infCache=inf; pintarInformes();
-        planCache=plan; pintarPlan();
-        if(!cCampos){ cCampos=campos; cPaneles=Array.isArray(paneles)?paneles:[]; llenarPaneles(); llenarAreas(areas); engancharConstructor(); cmpComparables=Array.isArray(comparables)?comparables:[]; engancharComparar(); }
+      async function cargarInforme(clave){
+        if (YA[clave]) return; YA[clave] = true;
+        try{
+          if(clave==='ventas-periodo'){
+            const period=await api('GET','/api/erp/analytics/sales-by-period?days='+dias()).catch(()=>[]);
+            if(salesChartInst)salesChartInst.destroy();
+            salesChartInst=new Chart(document.getElementById('salesChart').getContext('2d'),{type:'bar',data:{labels:period.map(d=>d.date),datasets:[{label:'${sym}',data:period.map(d=>d.total),backgroundColor:'rgba(16,185,129,.6)',borderColor:'#10b981',borderWidth:1,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'${sym}'+v}}}}});
+            document.getElementById('periodSel').onchange=async()=>{ YA['ventas-periodo']=false; await cargarInforme('ventas-periodo'); };
+          }
+          else if(clave==='top-productos'){
+            const top=await api('GET','/api/erp/analytics/best-sellers?limit=8').catch(()=>[]);
+            if(topChartInst)topChartInst.destroy();
+            topChartInst=new Chart(document.getElementById('topChart').getContext('2d'),{type:'bar',data:{labels:top.map(p=>p.product_name.substring(0,15)),datasets:[{label:'Ingresos',data:top.map(p=>p.total_val),backgroundColor:'rgba(14,165,233,.6)',borderColor:'#0ea5e9',borderWidth:1,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{callback:v=>'${sym}'+v}}}}});
+          }
+          else if(clave==='rentabilidad'){ pintarMargen(await api('GET','/api/erp/analytics/margen').catch(()=>null)); }
+          else if(clave==='responsable'){ respCache=await api('GET','/api/erp/analytics/responsable').catch(()=>null); llenarSelResponsable(); pintarResponsable(); }
+          else if(clave==='por-area'){ infCache=await api('GET','/api/erp/analytics/informes').catch(()=>null); pintarInformes(); }
+          else if(clave==='plan'){ planCache=await api('GET','/api/erp/analytics/plan').catch(()=>null); pintarPlan(); }
+          else if(clave==='comparar'){
+            cmpComparables=await api('GET','/api/erp/analytics/constructor/comparables').catch(()=>[]);
+            if(!Array.isArray(cmpComparables)) cmpComparables=[];
+            engancharComparar();
+          }
+          else if(clave==='stock'){ pintarStock(await api('GET','/api/erp/analytics/stock-report').catch(()=>[])); }
+        }catch(e){ YA[clave]=false; }
+      }
 
-        if(salesChartInst)salesChartInst.destroy();
-        salesChartInst=new Chart(document.getElementById('salesChart').getContext('2d'),{type:'bar',data:{labels:period.map(d=>d.date),datasets:[{label:'${sym}',data:period.map(d=>d.total),backgroundColor:'rgba(16,185,129,.6)',borderColor:'#10b981',borderWidth:1,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'${sym}'+v}}}}});
-
-        if(topChartInst)topChartInst.destroy();
-        topChartInst=new Chart(document.getElementById('topChart').getContext('2d'),{type:'bar',data:{labels:top.map(p=>p.product_name.substring(0,15)),datasets:[{label:'Ingresos',data:top.map(p=>p.total_val),backgroundColor:'rgba(14,165,233,.6)',borderColor:'#0ea5e9',borderWidth:1,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{callback:v=>'${sym}'+v}}}}});
-
+      function pintarStock(stock){
         document.getElementById('stockBody').innerHTML=stock.length?stock.map(p=>'<tr>'+
           '<td><strong>'+escHtml(p.name)+'</strong></td>'+
           '<td style="color:var(--muted)">'+escHtml(p.sku||'-')+'</td>'+
@@ -931,10 +1066,143 @@ export function createAnalyticsRoutes(db, cfg = {}) {
           '<td><strong style="color:'+(p.stock<5?'var(--danger)':'inherit')+'">'+p.stock+'</strong></td>'+
           '<td>${sym}'+Number(p.price).toFixed(2)+'</td>'+
           '<td style="color:var(--ok);font-weight:600">${sym}'+Number(p.inventory_value||0).toFixed(2)+'</td>'+
-          '</tr>').join(''):window.emptyRow(6,'Sin datos de stock todavía: aparecerán cuando tengas productos con movimiento.');
+          '</tr>').join(''):window.emptyRow(6,'No hay productos con stock que mostrar.');
       }
-      engancharTabs();
-      loadCharts();
+
+      // ── FICHA D · PARTE 3 — MIS INFORMES GUARDADOS, con todo lo que faltaba ──────────────────
+      // Hasta hoy se podía guardar y NO se podía deshacer: ni borrar, ni renombrar, ni dejar de
+      // compartir, y cada «Guardar» creaba un duplicado porque el front nunca mandaba el id.
+      let panelAbierto = null;    // el informe que está cargado en el constructor (para «Guardar»)
+
+      function pintarMisInformes(){
+        const cont=document.getElementById('misInformes');
+        if(!cPaneles.length){
+          cont.innerHTML='<div style="color:var(--muted);font-size:.82rem">Aquí se guardan los informes que te montas: la receta, no los datos, '
+            +'así que al abrirlos vuelven a calcularse con las cifras de hoy. Todavía no tienes ninguno.'
+            +'</div><button type="button" class="btn btn-primary btn-sm" id="btnCrear2" style="margin-top:.7rem">Crear un informe</button>';
+          document.getElementById('btnCrear2').onclick=abrirConstructor;
+          return;
+        }
+        cont.innerHTML=cPaneles.map(p=>{
+          const mio=p.propio;
+          const acc=[
+            '<button type="button" class="btn btn-secondary btn-sm" data-ab="'+p.id+'">Abrir</button>',
+            '<a class="btn btn-secondary btn-sm" href="/admin/listados/panel/imprimir?panel_id='+p.id+'" target="_blank" rel="noopener">Imprimir</a>',
+            '<button type="button" class="btn btn-secondary btn-sm" data-pdf="'+p.id+'">PDF</button>',
+            '<button type="button" class="btn btn-secondary btn-sm" data-mail="'+p.id+'">Enviar</button>',
+          ];
+          // Renombrar, compartir y borrar solo el que lo creó (y el dueño, que lo resuelve el servidor).
+          if(mio||PUEDE_TODO) acc.push('<button type="button" class="btn btn-secondary btn-sm" data-ren="'+p.id+'">Renombrar</button>');
+          if(mio||PUEDE_TODO) acc.push('<button type="button" class="btn btn-secondary btn-sm" data-comp="'+p.id+'">'+(p.compartido?'Dejar de compartir':'Compartir')+'</button>');
+          if(mio||PUEDE_TODO) acc.push('<button type="button" class="btn btn-danger btn-sm" data-del="'+p.id+'">Borrar</button>');
+          return '<div class="mis-inf"><div><div style="font-weight:600">'+escHtml(p.nombre)+'</div>'
+            +'<div style="font-size:.72rem;color:var(--muted)">'
+            +(mio?(p.compartido?'Tuyo · compartido con el equipo':'Tuyo'):'Compartido por '+escHtml(p.autor||'alguien'))
+            +'</div></div><div class="mi-acc">'+acc.join('')+'</div></div>';
+        }).join('');
+        cont.querySelectorAll('[data-ab]').forEach(b=>b.onclick=()=>{ abrirConstructor(); cargarPanelEn(b.dataset.ab); });
+        cont.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>borrarInforme(b.dataset.del));
+        cont.querySelectorAll('[data-ren]').forEach(b=>b.onclick=()=>renombrarInforme(b.dataset.ren));
+        cont.querySelectorAll('[data-comp]').forEach(b=>b.onclick=()=>alternarCompartir(b.dataset.comp));
+        cont.querySelectorAll('[data-pdf]').forEach(b=>b.onclick=()=>bajarPdf(b.dataset.pdf));
+        cont.querySelectorAll('[data-mail]').forEach(b=>b.onclick=()=>enviarInforme(b.dataset.mail));
+      }
+
+      const panelPorId=id=>cPaneles.find(x=>String(x.id)===String(id));
+
+      async function borrarInforme(id){
+        const p=panelPorId(id); if(!p) return;
+        // La confirmación dice EXACTAMENTE qué se borra. Un dueño que lee «borrar informe» puede
+        // entender que se lleva las facturas por delante; hay que quitarle esa duda con palabras.
+        if(!confirm('¿Borrar el informe «'+p.nombre+'»?\n\nSe borra solo la receta (qué mides y cómo lo agrupas). '
+          +'No se borra ningún dato del negocio: ni una factura, ni una cita, ni un cliente.')) return;
+        try{ const r=await api('DELETE','/api/erp/analytics/constructor/paneles/'+id);
+          cPaneles=r.paneles; pintarMisInformes(); llenarPaneles();
+          if(String(panelAbierto)===String(id)) panelAbierto=null; refrescarBotonesGuardar();
+          toast('Informe borrado'); }catch(e){}
+      }
+
+      async function renombrarInforme(id){
+        const p=panelPorId(id); if(!p) return;
+        const nombre=prompt('¿Cómo quieres que se llame?', p.nombre);
+        if(!nombre||nombre.trim()===p.nombre) return;
+        try{ const r=await api('POST','/api/erp/analytics/constructor/paneles',{id:p.id,nombre:nombre.trim(),config:p.config});
+          cPaneles=r.paneles; pintarMisInformes(); llenarPaneles(); toast('Renombrado'); }catch(e){}
+      }
+
+      async function alternarCompartir(id){
+        const p=panelPorId(id); if(!p) return;
+        const aviso=p.compartido
+          ? '¿Dejar de compartir «'+p.nombre+'»? Quien no lo creó dejará de verlo.'
+          : '¿Compartir «'+p.nombre+'» con el equipo? Verán el gráfico, pero cada uno con SUS permisos: '
+            +'si no pueden ver un área, ese informe no se les abre.';
+        if(!confirm(aviso)) return;
+        try{ const r=await api('POST','/api/erp/analytics/constructor/paneles',{id:p.id,nombre:p.nombre,config:p.config,compartido:!p.compartido});
+          cPaneles=r.paneles; pintarMisInformes(); llenarPaneles(); toast(p.compartido?'Ya no se comparte':'Compartido'); }catch(e){}
+      }
+
+      // ── FICHA D · PARTE 4 — LOS TRES VERBOS, por el motor único de la ficha C ────────────────
+      // Ni una línea de HTML de informe aquí: se llama a /admin/listados/panel/{imprimir,pdf} y a
+      // /api/erp/listados/panel/enviar, que son las MISMAS tres rutas de los quince listados.
+      async function bajarPdf(id){
+        const url='/admin/listados/panel/pdf?panel_id='+id;
+        try{
+          const r=await fetch(url,{credentials:'same-origin'});
+          // El motor avisa (409) cuando el papel va a salir muy largo. Se pregunta y se sigue, igual
+          // que en los otros listados: nunca se recorta una fila en silencio.
+          if(r.status===409){ const a=await r.json();
+            if(!confirm(a.mensaje+'\n\n¿Lo bajamos igualmente?')) return;
+            window.open(a.seguir,'_blank','noopener'); return; }
+          if(!r.ok){ const e=await r.json().catch(()=>({})); toast(e.error||'No hemos podido preparar el PDF','err'); return; }
+          const b=await r.blob(), a=document.createElement('a');
+          a.href=URL.createObjectURL(b); a.download='informe.pdf'; document.body.appendChild(a); a.click();
+          setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1500);
+        }catch(e){ toast('No hemos podido preparar el PDF','err'); }
+      }
+
+      async function enviarInforme(id){
+        const p=panelPorId(id); if(!p) return;
+        const to=prompt('¿A qué correo lo mandamos?\n\nVa como PDF adjunto, con el gráfico y la tabla.');
+        if(!to) return;
+        try{ const r=await api('POST','/api/erp/listados/panel/enviar?panel_id='+id,{to:to.trim()});
+          toast('Enviado a '+r.to); }catch(e){}
+      }
+
+      // ── EL ÍNDICE ────────────────────────────────────────────────────────────────────────────
+      let constructorDibujado=false;
+      function abrirConstructor(){
+        const card=document.getElementById('cardConstructor');
+        card.style.display='';
+        if(!constructorDibujado){ constructorDibujado=true; dibujar(); }
+        card.scrollIntoView({behavior:'smooth',block:'start'});
+      }
+
+      function engancharIndice(){
+        document.getElementById('btnCrear').onclick=abrirConstructor;
+        document.querySelectorAll('.inf-fila').forEach(b=>{
+          b.setAttribute('aria-expanded','false');
+          b.onclick=async()=>{
+            const card=document.getElementById('inf-'+b.dataset.inf); if(!card) return;
+            const abierto=card.style.display!=='none';
+            card.style.display=abierto?'none':'';
+            b.setAttribute('aria-expanded',abierto?'false':'true');
+            if(!abierto){ await cargarInforme(b.dataset.inf); card.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+          };
+        });
+      }
+
+      async function arranque(){
+        // SOLO DOS PETICIONES AL ABRIR. Ni un gráfico se dibuja hasta que se pulsa algo.
+        const [campos,paneles,areas]=await Promise.all([
+          api('GET','/api/erp/analytics/constructor/campos').catch(()=>null),
+          api('GET','/api/erp/analytics/constructor/paneles').catch(()=>[]),
+          api('GET','/api/erp/analytics/constructor/areas').catch(()=>({}))
+        ]);
+        cCampos=campos; cPaneles=Array.isArray(paneles)?paneles:[];
+        llenarPaneles(); llenarAreas(areas); engancharConstructor();
+        pintarMisInformes(); engancharIndice(); refrescarBotonesGuardar();
+      }
+      window.addEventListener('DOMContentLoaded',arranque);
       </script>`;
     return c.html(adminLayout('Analítica', content, 'analytics', c.get('session')?.csrfToken || '', c));
   });

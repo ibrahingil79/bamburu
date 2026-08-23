@@ -119,6 +119,14 @@ export const LISTADO_CSS = `
              background:var(--warn-s,#FFFAEB);font-size:10px;color:var(--text2);line-height:1.6}
   .lst-notas b{color:var(--text);font-weight:600}
   .lst-notas ul{margin:4px 0 0;padding-left:16px}
+  /* ficha D — el dibujo. Lleva break-inside avoid para que no lo parta un salto de pagina. */
+  .lst-graf{margin:10px 0 14px;break-inside:avoid;page-break-inside:avoid}
+  .lst-graf svg{display:block;max-width:100%}
+  .g-tit{font-size:11px;font-weight:700;fill:#111827}
+  .g-eje{font-size:9px;fill:#6b7280}
+  .g-lab{font-size:10px;fill:#374151}
+  .g-rej{stroke:#e5e7eb;stroke-width:1}
+  .g-ax{stroke:#9ca3af;stroke-width:1}
 `;
 
 // ── LA CABECERA QUE DECLARA LA BASE (C10-c + C10-d) ─────────────────────────────────────────────
@@ -186,6 +194,110 @@ function notasHtml(notas, titulo) {
     + '<ul>' + lista.map(n => '<li>' + escHtml(n) + '</li>').join('') + '</ul></div>';
 }
 
+// ── EL DIBUJO EN PAPEL (ficha D · parte 4) ──────────────────────────────────────────────────────
+// POR QUÉ SE DIBUJA AQUÍ, EN SVG, Y NO CON EL CHART.JS DE LA PANTALLA. El PDF se genera con
+// `page.setContent` (core/pdf.js), que NO tiene dirección base: un `<script src="/public/js/…">` no
+// resolvería, así que habría que incrustar la librería entera en cada papel Y esperar a que termine
+// de animar antes de imprimir. Dos motivos de fragilidad para algo que en un papel es estático.
+// En SVG no hay librería, no hay espera y sale idéntico por los tres verbos —imprimir, PDF y correo—
+// porque los tres pasan por el mismo `listadoHtml`.
+//
+// LO QUE ESTO NO ES: un segundo origen de cifras. Recibe LOS MISMOS pares (etiqueta, valor) que se
+// pintan en la tabla de debajo, sacados del mismo `cruzar`. El dibujo y la tabla no pueden discrepar
+// porque son el mismo array leído dos veces. El gate lo comprueba leyendo los números DE DENTRO del
+// SVG y comparándolos con los de la tabla, uno a uno.
+const SVG_W = 720, SVG_H = 260, SVG_PAD = { i: 58, d: 12, a: 14, b: 46 };
+const PALETA = ['#0ea5e9', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#14b8a6', '#6366f1', '#ec4899'];
+
+// Rótulo corto para un eje: un nombre de cliente de 40 letras convierte el eje en una mancha.
+const corta = (t, n) => { const x = String(t == null ? '' : t); return x.length > n ? x.slice(0, n - 1) + '…' : x; };
+// El valor, formateado como en la tabla: si la medida es dinero lleva su símbolo; si es %, su signo.
+const valorFmt = (v, meta, sym) => meta && meta.dinero ? dinero(v, sym) : (meta && meta.pct ? numero(v, 1) + ' %' : numero(v, 2));
+
+// Escala "bonita" para el eje: 1, 2, 2.5 o 5 por potencia de diez. Un eje que acaba en 4.317 se lee
+// peor que uno que acaba en 5.000, y en un papel no hay tooltip que lo rescate.
+function techo(max) {
+  if (!(max > 0)) return 1;
+  const p = Math.pow(10, Math.floor(Math.log10(max)));
+  for (const m of [1, 2, 2.5, 5, 10]) if (max <= m * p) return m * p;
+  return 10 * p;
+}
+
+export function graficoSvg({ tipo = 'barras', etiquetas = [], valores = [], meta = null, sym = '€', titulo = '' } = {}) {
+  const n = Math.min(etiquetas.length, valores.length);
+  if (tipo === 'tabla' || !n) return '';          // una tabla no lleva dibujo: la tabla ya está debajo
+  const et = etiquetas.slice(0, n).map(x => String(x == null ? '' : x));
+  const va = valores.slice(0, n).map(x => Number(x) || 0);
+  const cab = titulo ? '<text x="0" y="10" class="g-tit">' + escHtml(titulo) + '</text>' : '';
+  const desplaza = titulo ? 18 : 0;
+
+  if (tipo === 'tarta') {
+    const total = va.reduce((a, b) => a + Math.abs(b), 0);
+    if (!(total > 0)) return '';
+    const cx = 130, cy = 118 + desplaza, r = 96;
+    let ang = -Math.PI / 2, trozos = '', leyenda = '';
+    va.forEach((v, i) => {
+      const frac = Math.abs(v) / total, fin = ang + frac * 2 * Math.PI;
+      const x1 = cx + r * Math.cos(ang), y1 = cy + r * Math.sin(ang);
+      const x2 = cx + r * Math.cos(fin), y2 = cy + r * Math.sin(fin);
+      const grande = frac > 0.5 ? 1 : 0;
+      // Un único trozo del 100 % no se puede dibujar con un arco (empieza y acaba en el mismo punto):
+      // se pinta el círculo entero, que es lo que es.
+      trozos += frac >= 0.999
+        ? '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="' + PALETA[i % PALETA.length] + '"/>'
+        : '<path d="M' + cx + ',' + cy + ' L' + x1.toFixed(1) + ',' + y1.toFixed(1)
+          + ' A' + r + ',' + r + ' 0 ' + grande + ',1 ' + x2.toFixed(1) + ',' + y2.toFixed(1) + ' Z" fill="'
+          + PALETA[i % PALETA.length] + '" stroke="#fff" stroke-width="1"/>';
+      const ly = 26 + desplaza + i * 18;
+      if (ly < SVG_H - 6) leyenda += '<rect x="266" y="' + (ly - 9) + '" width="10" height="10" rx="2" fill="' + PALETA[i % PALETA.length] + '"/>'
+        + '<text x="283" y="' + ly + '" class="g-lab">' + escHtml(corta(et[i], 34)) + ' — ' + escHtml(valorFmt(v, meta, sym))
+        + ' (' + numero(frac * 100, 1) + ' %)</text>';
+      ang = fin;
+    });
+    return '<div class="lst-graf"><svg viewBox="0 0 ' + SVG_W + ' ' + SVG_H + '" width="100%" height="' + SVG_H + '" role="img">'
+      + cab + trozos + leyenda + '</svg></div>';
+  }
+
+  // Barras y líneas comparten ejes.
+  const x0 = SVG_PAD.i, y0 = SVG_PAD.a + desplaza, x1 = SVG_W - SVG_PAD.d, y1 = SVG_H - SVG_PAD.b;
+  const ancho = x1 - x0, alto = y1 - y0;
+  const maxV = techo(Math.max(0, ...va));
+  const yDe = v => y1 - (Math.max(0, v) / maxV) * alto;
+  let rejilla = '';
+  for (let i = 0; i <= 4; i++) {
+    const y = y1 - (alto * i) / 4, v = (maxV * i) / 4;
+    rejilla += '<line x1="' + x0 + '" y1="' + y.toFixed(1) + '" x2="' + x1 + '" y2="' + y.toFixed(1) + '" class="g-rej"/>'
+      + '<text x="' + (x0 - 6) + '" y="' + (y + 3.5).toFixed(1) + '" class="g-eje" text-anchor="end">' + escHtml(numero(v, maxV < 10 ? 1 : 0)) + '</text>';
+  }
+  // Con muchas categorías no caben todos los rótulos: se pinta uno de cada k y se dice en el pie.
+  const paso = Math.ceil(n / 14);
+  let ejeX = '';
+  for (let i = 0; i < n; i += paso) {
+    const cx = x0 + (ancho * (i + 0.5)) / n;
+    ejeX += '<text x="' + cx.toFixed(1) + '" y="' + (y1 + 14) + '" class="g-eje" text-anchor="middle">' + escHtml(corta(et[i], 12)) + '</text>';
+  }
+
+  let cuerpo = '';
+  if (tipo === 'lineas') {
+    const pts = va.map((v, i) => (x0 + (ancho * (i + 0.5)) / n).toFixed(1) + ',' + yDe(v).toFixed(1)).join(' ');
+    cuerpo = '<polyline points="' + pts + '" fill="none" stroke="' + PALETA[0] + '" stroke-width="2.2" stroke-linejoin="round"/>'
+      + va.map((v, i) => '<circle cx="' + (x0 + (ancho * (i + 0.5)) / n).toFixed(1) + '" cy="' + yDe(v).toFixed(1) + '" r="2.8" fill="' + PALETA[0] + '"/>').join('');
+  } else {
+    const bw = Math.max(3, (ancho / n) * 0.62);
+    cuerpo = va.map((v, i) => {
+      const cx = x0 + (ancho * (i + 0.5)) / n, y = yDe(v);
+      return '<rect x="' + (cx - bw / 2).toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1)
+        + '" height="' + Math.max(0, y1 - y).toFixed(1) + '" rx="2" fill="' + PALETA[0] + '"/>';
+    }).join('');
+  }
+  const nota = paso > 1 ? '<text x="' + x0 + '" y="' + (SVG_H - 6) + '" class="g-eje">Se rotula 1 de cada '
+    + paso + ' · la tabla de abajo las lleva todas</text>' : '';
+  return '<div class="lst-graf"><svg viewBox="0 0 ' + SVG_W + ' ' + SVG_H + '" width="100%" height="' + SVG_H + '" role="img">'
+    + cab + rejilla + cuerpo
+    + '<line x1="' + x0 + '" y1="' + y1 + '" x2="' + x1 + '" y2="' + y1 + '" class="g-ax"/>'
+    + ejeX + nota + '</svg></div>';
+}
+
 // ── EL MOTOR ────────────────────────────────────────────────────────────────────────────────────
 // Recibe DATOS y una declaración; devuelve el papel entero. Añadir un listado nuevo es escribir su
 // declaración: ni una línea de este fichero cambia (C11).
@@ -203,6 +315,10 @@ export function listadoHtml(db, {
   titulo, columnas, filas = [], filtros = [], periodo = null, totales = [],
   agrupar = null, generadoPor = '', vacio = 'No hay datos que mostrar con estos filtros.',
   sym = '€', cuando = null, esSubtotal = null, secciones = null, notas = null, tituloNotas = null,
+  // ficha D · parte 4 — un papel puede llevar un DIBUJO encima de su tabla. Es SVG ya montado
+  // (`graficoSvg`, arriba). Los quince listados que ya existen no lo pasan y salen exactamente igual
+  // que antes: sin `grafico`, esto no añade ni un carácter al papel.
+  grafico = '',
 }) {
   const { emisor } = partesDe(db, null);          // configuración EN VIVO: un listado es de hoy
   const ahora = cuando || new Date().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
@@ -241,6 +357,7 @@ export function listadoHtml(db, {
                      filas: secciones && secciones.length
                        ? secciones.reduce((n, s2) => n + ((s2.filas || []).length), 0)
                        : filas.length })
+    + (grafico || '')
     + cuerpo + tot + notasHtml(notas, tituloNotas);
 }
 

@@ -21,9 +21,17 @@ import { ENTITY } from '../../../core/activity-entities.js';
 
 // El papel, montado. Es el ÚNICO sitio del proyecto que compone un listado imprimible: las tres
 // rutas comen de aquí, así que imprimir, descargar y enviar no pueden dar tres papeles distintos.
+// FICHA D · PARTE 4 — `titulo`, `columnas` y `perm` pueden ser FUNCIÓN de (q, db), igual que
+// `totales`, `notas` y `secciones` ya podían. Lo pide el informe compuesto, cuyo título es el nombre
+// que le puso el dueño y cuyas columnas dependen de la medida elegida. Los quince listados que traen
+// un valor fijo no notan nada: `campo()` devuelve tal cual lo que no sea función.
+const campo = (v, q, db) => (typeof v === 'function' ? v(q, db) : v);
+
 function papelDe(db, clave, q, quien) {
   const L = LISTADOS[clave];
   const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
+  const titulo = campo(L.titulo, q, db);
+  const columnas = campo(L.columnas, q, db);
   // `extra` es lo que la consulta sepa y las columnas no puedan deducir: los totales que ya trae
   // calculados un libro contable, los avisos de un modelo… Nace con los informes: sus cifras las
   // calcula contabilidad y AQUÍ NO SE RECALCULA NADA, solo se pinta lo que ella devuelve.
@@ -34,10 +42,12 @@ function papelDe(db, clave, q, quien) {
   return {
     filas,
     secciones,
-    titulo: L.titulo,
+    titulo,
     html: listadoHtml(db, {
-      titulo: L.titulo,
-      columnas: L.columnas,
+      titulo,
+      columnas,
+      // El dibujo, si el listado trae uno. Los quince de la ficha C no lo traen y salen igual que antes.
+      grafico: L.grafico ? L.grafico(q, db, sym) : '',
       filas,
       filtros: L.filtros ? L.filtros(q, db) : [],
       periodo: L.periodo ? L.periodo(q) : null,
@@ -93,11 +103,21 @@ export function createListadosRoutes(db) {
   const views = new Hono();
 
   // El candado, resuelto en caliente: la ruta es genérica pero el permiso es el de SU pantalla.
+  // FICHA D · PARTE 4 — el informe compuesto necesita saber QUIÉN pide el papel (para resolver su
+  // receta con la misma visibilidad de la pantalla) y con QUÉ permisos. Se mete en `q`, que es lo que
+  // ya viaja hasta la consulta; así no hay que pasar la sesión por seis sitios.
+  const conSesion = (c, q) => ({ ...q, _userId: c.get('session')?.userId, _hasPerm: (p) => can(c, p) });
+
   const guarda = (c, clave) => {
     const L = LISTADOS[clave];
     if (!L) return { error: 'Listado no encontrado', status: 404 };
     if (!c.get('session')) return { error: 'No autorizado', status: 401 };
-    if (!can(c, L.perm)) return { error: 'No tienes permiso para ver este listado', status: 403 };
+    // El permiso puede depender del propio listado pedido (el informe compuesto: manda el área de su
+    // receta). Si resolverlo falla —informe inexistente, o de otro— se contesta ESO, no un 403 genérico.
+    let perm;
+    try { perm = campo(L.perm, conSesion(c, filtrosDeUrl(c)), db); }
+    catch (e) { return { error: e.message || 'No se pudo resolver el listado', status: e.status || 400 }; }
+    if (!can(c, perm)) return { error: 'No tienes permiso para ver este listado', status: 403 };
     return { L };
   };
   const quienDe = c => c.get('session')?.name || c.get('session')?.email || '';
@@ -110,7 +130,7 @@ export function createListadosRoutes(db) {
     const g = guarda(c, clave);
     if (g.error) return c.html(errorShell('No podemos abrir este listado', g.error, { action: 'Volver', href: '/admin' }), g.status);
     try {
-      const { html, titulo } = papelDe(db, clave, filtrosDeUrl(c), quienDe(c));
+      const { html, titulo } = papelDe(db, clave, conSesion(c, filtrosDeUrl(c)), quienDe(c));
       return c.html(printableShell(html + '<script>window.addEventListener("load",function(){setTimeout(window.print,250)})<\/script>', { title: titulo }));
     } catch (e) { return c.html(errorShell('No hemos podido preparar la impresión', ERR.GEN, { action: 'Volver', href: g.L.volver }), e.status || 500); }
   });
@@ -121,7 +141,7 @@ export function createListadosRoutes(db) {
     const g = guarda(c, clave);
     if (g.error) return c.json({ error: g.error }, g.status);
     try {
-      const { html, titulo, filas, secciones } = papelDe(db, clave, filtrosDeUrl(c), quienDe(c));
+      const { html, titulo, filas, secciones } = papelDe(db, clave, conSesion(c, filtrosDeUrl(c)), quienDe(c));
       // EL AVISO DE LOS PAPELES LARGOS. Con `?entero=1` sale sin preguntar; sin él, se dice cuántas
       // hojas van a salir y se deja decidir. No se recorta ni una fila en ninguno de los dos casos.
       const hojas = paginasEstimadas(filas, secciones);
@@ -157,7 +177,7 @@ export function createListadosRoutes(db) {
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return c.json({ error: 'Ese correo no tiene buena pinta. Revísalo.' }, 400);
 
       const empresa = db.prepare('SELECT company_name FROM company_config WHERE id=1').get()?.company_name || 'Bamburu';
-      const { html, titulo, filas } = papelDe(db, clave, filtrosDeUrl(c), quienDe(c));
+      const { html, titulo, filas } = papelDe(db, clave, conSesion(c, filtrosDeUrl(c)), quienDe(c));
       const pdf = await renderPdfFromHtml(printableShell(html, { title: titulo }), { pie: pieDePagina(titulo) });
 
       const r = await sendEmail({

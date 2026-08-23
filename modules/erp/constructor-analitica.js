@@ -731,7 +731,11 @@ export function compararEnTiempo(db, { series = [], periodo = 'mes', from = null
 // De QUIEN LOS CREA (decisión del dueño). Compartir es el paso 4b.
 // Guardan la RECETA (qué área, qué cruzar), NO los datos: al abrirlos se vuelve a pasar por `cruzar`,
 // que revalida los permisos de HOY. Si guardara resultados, un panel sería una fuga con fecha.
-export function guardarPanel(db, userId, { id = null, nombre, config, compartido = null }) {
+// FICHA D · PARTE 3 — `esDueno` abre la puerta que faltaba: hasta hoy el `WHERE user_id=?` hacía que
+// un informe compartido por alguien que se fue del negocio no lo pudiera tocar NADIE, ni el dueño.
+// Regla de Ibrahin: «cada uno solo lo puede hacer quien lo creó, SALVO EL DUEÑO». El dueño no se cuela
+// por el mismo sitio: se le quita la condición del WHERE, no se le regala el `user_id` de otro.
+export function guardarPanel(db, userId, { id = null, nombre, config, compartido = null }, esDueno = false) {
   const n = String(nombre || '').trim();
   if (!n) { const e = new Error('El panel necesita un nombre'); e.status = 400; throw e; }
   const area = (config && config.area) || 'ventas';   // por defecto ventas (compat. paso 4a)
@@ -750,8 +754,10 @@ export function guardarPanel(db, userId, { id = null, nombre, config, compartido
     // El WHERE lleva el user_id: sin él, cambiar el id en la petición editaría el panel de otro.
     const set = compartido == null ? 'nombre=?, config=?, updated_at=CURRENT_TIMESTAMP'
                                    : 'nombre=?, config=?, compartido=?, updated_at=CURRENT_TIMESTAMP';
-    const args = compartido == null ? [n, json, id, userId] : [n, json, compartido ? 1 : 0, id, userId];
-    const r = db.prepare('UPDATE analytics_panels SET ' + set + ' WHERE id=? AND user_id=?').run(...args);
+    const where = esDueno ? 'WHERE id=?' : 'WHERE id=? AND user_id=?';
+    const cola = esDueno ? [id] : [id, userId];
+    const args = compartido == null ? [n, json, ...cola] : [n, json, compartido ? 1 : 0, ...cola];
+    const r = db.prepare('UPDATE analytics_panels SET ' + set + ' ' + where).run(...args);
     if (!r.changes) { const e = new Error('Panel no encontrado'); e.status = 404; throw e; }
     return { id: Number(id) };
   }
@@ -775,8 +781,22 @@ export function listarPaneles(db, userId) {
   });
 }
 
-export function borrarPanel(db, userId, id) {
-  const r = db.prepare('DELETE FROM analytics_panels WHERE id=? AND user_id=?').run(id, userId);
+export function borrarPanel(db, userId, id, esDueno = false) {
+  const r = esDueno
+    ? db.prepare('DELETE FROM analytics_panels WHERE id=?').run(id)
+    : db.prepare('DELETE FROM analytics_panels WHERE id=? AND user_id=?').run(id, userId);
   if (!r.changes) { const e = new Error('Panel no encontrado'); e.status = 404; throw e; }
   return { ok: true };
+}
+
+// Un panel por id, con la MISMA regla de visibilidad que `listarPaneles` (el mío, o uno compartido).
+// Lo necesita el papel imprimible: la ruta recibe un id y tiene que resolver la receta sin fiarse de
+// lo que venga por la URL. Devuelve null si no existe o no es visible para ese usuario.
+export function panelVisible(db, userId, id) {
+  const p = db.prepare('SELECT id, nombre, config, user_id, compartido FROM analytics_panels WHERE id=?').get(id);
+  if (!p) return null;
+  if (p.user_id !== userId && !p.compartido) return null;
+  let config = null; try { config = JSON.parse(p.config); } catch {}
+  if (!config) return null;
+  return { id: p.id, nombre: p.nombre, config, propio: p.user_id === userId, compartido: !!p.compartido };
 }

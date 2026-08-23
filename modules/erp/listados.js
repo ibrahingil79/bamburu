@@ -27,7 +27,10 @@
 //
 // PARA AÑADIR EL SIGUIENTE: copia el bloque de `clientes`, cambia la consulta y las columnas, y
 // exporta la consulta para que su pantalla la use. No hay nada más que hacer.
-import { dinero } from './impresion.js';
+import { dinero, graficoSvg } from './impresion.js';
+// FICHA D · PARTE 4 — el informe compuesto sale del MISMO motor del constructor que lo pinta en
+// pantalla (`cruzar`), no de una consulta hecha aquí: por eso el papel no puede dar otra cifra.
+import { cruzar, panelVisible, areaPerm, AREAS } from './constructor-analitica.js';
 import { kardex } from './stock.js';
 import { backfillLedger, libroVentas, libroCompras, libroDiario, libroMayor } from './contabilidad.js';
 import { ventasAsientos, comprasAsientos } from './contabilidad-export.js';
@@ -213,7 +216,97 @@ export function consultaKardex(db, { producto_id = null } = {}) {
 const RANGO = q => ({ from: q.desde || '', to: q.hasta || '' });
 const tasa = r => r === null || r === undefined ? 'sin desglosar' : (Number(r) === 0 ? '0% (exento)' : r + '%');
 
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// FICHA D · PARTE 4 — EL INFORME COMPUESTO, DENTRO DEL MISMO MOTOR
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// Un informe que el dueño se ha montado en «Construye tu gráfico» sale por los TRES verbos igual que
+// los quince listados de la ficha C: imprimir, PDF y correo, con membrete, cabecera que declara la
+// base y «Página X de Y». Sin un generador aparte — si hubiera que escribir HTML de informe aquí,
+// esto iría mal.
+//
+// LA DIFERENCIA CON LOS OTROS QUINCE, y por qué obligó a tocar la fontanería: los quince tienen
+// `titulo`, `columnas` y `perm` FIJOS. Un informe compuesto no puede: su título es el nombre que le
+// puso el dueño, sus columnas dependen de la medida y su permiso es el del ÁREA de la receta. Así que
+// los tres pueden ser función de `(q, db)`, igual que `totales`, `notas` y `secciones` ya podían.
+// Ningún listado existente cambia: los que traen un valor fijo lo siguen trayendo.
+//
+// EL PAPEL LLEVA LAS DOS COSAS: el dibujo arriba (`grafico`) y la tabla con TODAS las filas debajo.
+// Salen del MISMO `cruzar`, leído dos veces — por eso no pueden discrepar.
+const panelDe = (q, db) => {
+  if (!q.panel_id) { const e = new Error('Falta el informe'); e.status = 400; throw e; }
+  const p = panelVisible(db, q._userId, q.panel_id);
+  if (!p) { const e = new Error('Ese informe no existe o no es tuyo'); e.status = 404; throw e; }
+  return p;
+};
+
+// El cruce del panel, cacheado por petición: `perm`, `titulo`, `columnas`, `consulta` y `grafico` se
+// llaman por separado y no puede cruzarse cinco veces el mismo informe.
+function cruceDePanel(db, q) {
+  if (q._cache) return q._cache;
+  const p = panelDe(q, db);
+  const cfg = p.config || {};
+  const medida = (cfg.medidas && cfg.medidas[0]) || 'citas';
+  const r = cruzar(db, {
+    area: cfg.area, dimension: cfg.dimension, medidas: [medida], periodo: cfg.periodo || 'mes',
+    filtros: cfg.filtros || {}, formula: cfg.formula || null, limit: 100000, hasPerm: q._hasPerm,
+  });
+  const clave = r.calculo ? 'calculo' : medida;
+  const meta = r.calculo
+    ? { etiqueta: 'Cálculo: ' + (cfg.formula || ''), dinero: false, pct: false }
+    : (AREAS[cfg.area]?.medidas?.[medida] || { etiqueta: medida, dinero: false, pct: false });
+  q._cache = { panel: p, cfg, cruce: r, clave, meta, medida };
+  return q._cache;
+}
+
+const LISTADO_PANEL = {
+  titulo: (q, db) => cruceDePanel(db, q).panel.nombre,
+  // EL CANDADO ES EL DEL ÁREA DE LA RECETA, no uno nuevo: quien no puede ver Compras tampoco puede
+  // imprimir un informe de Compras que alguien le compartió. `cruzar` lo revalida por dentro además.
+  perm: (q, db) => areaPerm(cruceDePanel(db, q).cfg.area) || 'analytics.read',
+  filtros: (q, db) => {
+    const { cfg, cruce } = cruceDePanel(db, q);
+    const A = AREAS[cfg.area];
+    const f = [
+      { etiqueta: 'Área', valor: A?.etiqueta || cfg.area },
+      { etiqueta: 'Mirado por', valor: A?.dimensiones?.[cfg.dimension]?.etiqueta || cfg.dimension },
+      { etiqueta: 'Midiendo', valor: cruceDePanel(db, q).meta.etiqueta },
+    ];
+    if (cruce.usaPeriodo && cfg.dimension === 'fecha') f.push({ etiqueta: 'Agrupado', valor: cfg.periodo || 'mes' });
+    if (cfg.formula) f.push({ etiqueta: 'Cálculo propio', valor: cfg.formula });
+    for (const [k, vals] of Object.entries(cfg.filtros || {})) {
+      if (Array.isArray(vals) && vals.length) f.push({ etiqueta: A?.dimensiones?.[k]?.etiqueta || k, valor: vals.join(', ') });
+    }
+    // La ventana que se recorrió para la capacidad — sin ella, unas «horas libres» no declaran su base.
+    if (cruce.capacidad) f.push({ etiqueta: 'Ventana medida', valor: cruce.capacidad.desde + ' a ' + cruce.capacidad.hasta });
+    return f;
+  },
+  columnas: (q, db) => {
+    const { clave, meta } = cruceDePanel(db, q);
+    return [
+      { clave: 'clave', rotulo: 'Grupo' },
+      { clave, rotulo: meta.etiqueta, formato: meta.dinero ? 'dinero' : (meta.pct ? 'pct' : 'decimal'), align: 'right' },
+    ];
+  },
+  consulta: (db, q) => ({ filas: cruceDePanel(db, q).cruce.filas }),
+  // EL DIBUJO. Los mismos pares (etiqueta, valor) que la tabla de debajo.
+  grafico: (q, db, sym) => {
+    const { cruce, clave, cfg, meta } = cruceDePanel(db, q);
+    return graficoSvg({
+      tipo: cfg.grafico || 'barras', sym, meta,
+      etiquetas: cruce.filas.map(f => f.clave),
+      valores: cruce.filas.map(f => f[clave]),
+      titulo: meta.etiqueta,
+    });
+  },
+  totales: (filas, _extra) => [],
+  vacio: 'Este informe no devuelve ninguna fila con la receta guardada.',
+  volver: '/admin/analytics',
+};
+
 export const LISTADOS = {
+  // FICHA D · PARTE 4 — el informe compuesto. Va el primero para que se vea que existe.
+  panel: LISTADO_PANEL,
+
   // ══ C4 ══════════════════════════════════════════════════════════════════════════════════════
   clientes: {
     titulo: 'Listado de clientes',
@@ -688,5 +781,10 @@ export function filtrosDeUrl(c) {
     anio: g('anio') || g('year'),
     trimestre: g('trimestre') || g('q'),
     proveedor_id: parseInt(g('proveedor_id'), 10) || null,
+    // FICHA D · PARTE 4 — el informe compuesto. `panel_id` es lo ÚNICO que viaja por la URL: la
+    // receta (área, dimensión, medida, periodo, fórmula) se lee de la base a partir del id, NO de la
+    // dirección. Si viniera por la URL, cualquiera podría pedir un papel de un área que no puede ver
+    // cambiando un parámetro — y el permiso se comprueba sobre el área de la receta guardada.
+    panel_id: parseInt(g('panel_id'), 10) || null,
   };
 }
