@@ -1312,11 +1312,58 @@ ${ROOT_TOKENS}
     .card-head{padding:.875rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
     .card-head h3{font-size:.88rem;font-weight:500;color:var(--text)}
     .card-body{padding:1.25rem}
-    .kpi{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:1.25rem;transition:border-color .2s}
-    .kpi:hover{border-color:var(--border2)}
-    .kpi-label{font-size:.72rem;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.06em}
-    .kpi-val{font-size:1.7rem;font-weight:500;margin:.3rem 0 .15rem;color:var(--text)}
-    .kpi-sub{font-size:.75rem;color:var(--text3)}
+
+    /* ══ LA TARJETA DE CIFRA — EL COMPONENTE ÚNICO (ficha I1) ═══════════════════════════════════
+       Hasta el 23 ago 2026 el producto tenía TRES tarjetas de cifra distintas, medidas pantalla a
+       pantalla con scripts/inventario-tarjetas.mjs: .bf-card (8, solo en la ficha de cliente),
+       .kpi (10, en Stock, Informes, Boletín y Devoluciones) y .cm-num (4, en el Inicio). Eran
+       casi iguales y ninguna sabía lo que sabía la otra. Ahora hay UNA, y vive aquí, en el estilo
+       global, para que la siguiente pantalla que necesite una cifra no invente la cuarta.
+
+       ANATOMÍA:  .bf-cards  la rejilla    ·  .bf-card  la caja
+                  .bf-k  el rótulo         ·  .bf-v  la cifra   ·  .bf-s  la explicación
+                  .bf-go la flecha (solo si se puede pulsar)
+       MODIFICADORES:  .bf-card.grande  para las cifras de titular del Inicio
+                       .bf-v.debe / .gana / .pierde / .na   el color, y solo donde dice algo
+
+       EL COLOR DICE ALGO, no adorna (CANON: jerarquía por peso y espacio). Se reserva para lo que
+       exige una decisión —una deuda viva en rojo, un margen en verde—; lo demás se queda en negro.
+       Si se colorea todo, no destaca nada. */
+    .bf-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.6rem;margin-bottom:1rem}
+    .bf-card{display:flex;flex-direction:column;gap:.15rem;text-align:left;width:100%;min-width:0;
+      background:var(--bg2);border:1px solid var(--border2);border-radius:14px;padding:.85rem 1rem;
+      font-family:inherit;cursor:pointer;position:relative;box-sizing:border-box;transition:border-color .15s,box-shadow .15s}
+    .bf-card:hover,.bf-card:focus-visible{border-color:var(--accent);box-shadow:0 2px 10px rgba(47,107,255,.12);outline:none}
+    .bf-card[disabled],.bf-card.inerte{cursor:default}
+    .bf-card[disabled]:hover,.bf-card.inerte:hover{border-color:var(--border2);box-shadow:none}
+    /* El recorte con puntos suspensivos es de la tarjeta pequeña: en la grande la cifra puede ser
+       larga (117.087,43 €) y cortarla sería peor que dejarla saltar de línea. */
+    .bf-card>span{display:block;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .bf-k{font-size:.68rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text3);padding-right:1.2rem}
+    .bf-k>i.ti{font-size:.85rem;vertical-align:-.08em;margin-right:.25rem}
+    .bf-v{font-size:1.12rem;font-weight:700;letter-spacing:-.01em;color:var(--text)}
+    .bf-v.na{font-size:1rem;color:var(--text3);font-weight:600}
+    .bf-v.debe,.bf-v.pierde{color:var(--danger)}
+    .bf-v.gana{color:var(--ok)}
+    .bf-s{font-size:.73rem;color:var(--text2)}
+    .bf-s strong,.bf-s b{color:var(--text)}
+    .bf-go{position:absolute;top:.8rem;right:.8rem;color:var(--text3);font-size:.8rem}
+    .bf-card:hover .bf-go{color:var(--accent)}
+    /* GRANDE — la cifra de titular del Inicio. Misma caja, misma familia; solo cambia la escala, y
+       aquí el texto NO se recorta: estas tarjetas llevan una explicación de dos líneas debajo. */
+    .bf-card.grande{padding:13px 15px;gap:3px}
+    .bf-card.grande .bf-k{font-size:11.5px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text2)}
+    .bf-card.grande .bf-v{font-size:23px;letter-spacing:-.6px;line-height:1.15}
+    .bf-card.grande .bf-s{font-size:11.5px;color:var(--text3);line-height:1.45}
+    .bf-card.grande>span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+    @media(max-width:820px){ .bf-cards{grid-template-columns:repeat(2,minmax(0,1fr))} .bf-card.grande .bf-v{font-size:21px} }
+    @media(max-width:400px){ .bf-cards{grid-template-columns:1fr} }
+    /* Relleno para las cajas que meten su contenido DIRECTO dentro de .card, sin .card-body. La
+       .card global no lleva relleno a propósito (una tabla debe ir a borde, sus celdas ya traen el
+       suyo), así que la prosa y los campos que van sueltos necesitan pedirlo. */
+    .bf-caja{padding:1.1rem 1.2rem}
+    .bf-caja>h3:first-child,.bf-caja>h4:first-child{margin-top:0}
+    @media(max-width:520px){ .bf-caja{padding:.9rem} }
 
     /* ── Grid ── */
     .grid{display:grid;gap:1rem}

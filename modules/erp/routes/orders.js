@@ -747,7 +747,8 @@ export function createOrderRoutes(db, cfg = {}) {
     const total = refunds.reduce((a, b) => a + b.amount, 0);
     const content = `
       <div class="ph"><h2>Devoluciones</h2></div>
-      <div class="kpi" style="margin-bottom:1rem;max-width:250px"><div class="kpi-label">Total reembolsado</div><div class="kpi-val" style="color:var(--danger)">${sym}${total.toFixed(2)}</div></div>
+      <div class="bf-cards" style="grid-template-columns:minmax(0,250px)"><div class="bf-card inerte">
+        <span class="bf-k">Total reembolsado</span><span class="bf-v pierde">${sym}${total.toFixed(2)}</span></div></div>
       <div class="card">
         <div class="card-head"><h3>Listado de devoluciones</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="filterRefunds()"></div>
         <div class="table-wrap"><table>

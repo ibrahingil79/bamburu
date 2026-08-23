@@ -85,14 +85,10 @@ export function disaHomeHtml({ userName, simbolo = '€' }) {
       .cm-ev .m { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
       /* ── TUS NÚMEROS: cuatro tarjetas grandes ───────────────────────────────────────────────── */
-      .cm-nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 14px; }
-      .cm-num { background: var(--bg2); border: 1px solid var(--border2); border-radius: 14px;
-        padding: 13px 15px; min-width: 0; display: flex; flex-direction: column; gap: 3px; box-sizing: border-box; }
-      .cm-num-l { font-size: 11.5px; color: var(--text2); display: flex; align-items: center; gap: 5px; margin: 0; }
-      .cm-num-l i { font-size: 14px; }
-      .cm-num-v { font-size: 23px; font-weight: 700; color: var(--text); margin: 1px 0 0;
-        letter-spacing: -.6px; line-height: 1.15; overflow-wrap: anywhere; }
-      .cm-num-b { font-size: 11.5px; color: var(--text3); margin: 0; line-height: 1.45; overflow-wrap: anywhere; }
+      /* I1 (23 ago 2026) · La tarjeta ya NO se define aquí: es .bf-card.grande, el componente único
+         de layout.js. Esto era .cm-num, la tercera implementación de la misma caja en el producto.
+         Solo queda la separación de la rejilla, que es de esta pantalla y no del componente. */
+      .bf-cards { margin-bottom: 14px; }
       .cm-cmp { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600;
         border-radius: 20px; padding: 1px 9px; align-self: flex-start; white-space: nowrap; }
       .cm-cmp.bien { background: var(--ok-s); color: var(--ok); }
@@ -143,7 +139,6 @@ export function disaHomeHtml({ userName, simbolo = '€' }) {
       @media (max-width: 560px) {
         .cm-graf { height: 200px; }
         .cm-dec .btn { width: 100%; text-align: center; }
-        .cm-num-v { font-size: 21px; }
         /* La barra de la rejilla se parte en dos líneas: en 390 px el rótulo y los dos botones no
            caben en una, y apretados el rótulo se leía en columna de dos letras. */
         .ig-bar { flex-wrap: wrap; }
@@ -223,10 +218,12 @@ export function disaHomeHtml({ userName, simbolo = '€' }) {
       .ig-block-body { flex: 1; min-height: 0; overflow: auto; }
       .ig-note, .ig-empty { color: var(--muted); font-size: 12px; padding: 6px 2px; }
       .ig-empty { text-align: center; padding: 28px 10px; }
-      /* KPIs dentro de un bloque */
+      /* Cifras dentro de un bloque de la rejilla. La CAJA la pone el bloque; aquí solo hace falta
+         la rejilla que las reparte. El rótulo y la cifra usan .bf-k y .bf-v, el componente único
+         (layout.js): antes eran .ig-kpi-label/.ig-kpi-value, una cuarta tipografía para lo mismo. */
       .ig-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
-      .ig-kpi-label { font-size: 11px; color: var(--text2); display: flex; align-items: center; gap: 5px; margin: 0 0 5px; }
-      .ig-kpi-value { font-size: 20px; font-weight: 600; margin: 0; color: var(--text); letter-spacing: -.5px; }
+      .ig-kpis .bf-k { margin: 0 0 5px; }
+      .ig-kpis .bf-v { font-size: 20px; }
       /* Modo edición */
       .ig-grid.editing .ig-block { border-style: dashed; border-color: var(--accent); cursor: grab; }
       .ig-block-tools { display: none; gap: 4px; margin-left: auto; }
@@ -420,11 +417,15 @@ export function disaHomeHtml({ userName, simbolo = '€' }) {
             + '</svg></div>';
         }
 
+        // I1 · EL COMPONENTE ÚNICO DE TARJETA (.bf-card de layout.js), en su tamaño grande. Antes
+        // esto era .cm-num, una tercera tarjeta casi idéntica a las otras dos del producto. No se
+        // pierde nada de lo que sabía hacer: el icono va en el rótulo, y el chip de comparación y
+        // la chispa siguen colgando debajo, que es lo que esta tarjeta tiene y las demás no.
         function tarjeta(o){
-          return '<div class="cm-num">'
-            + '<p class="cm-num-l"><i class="ti ' + o.icon + '" style="color:' + o.color + '"></i>' + esc(o.label) + '</p>'
-            + '<p class="cm-num-v">' + o.valor + '</p>'
-            + (o.base ? '<p class="cm-num-b">' + o.base + '</p>' : '')
+          return '<div class="bf-card grande inerte">'
+            + '<span class="bf-k"><i class="ti ' + o.icon + '" style="color:' + o.color + '"></i>' + esc(o.label) + '</span>'
+            + '<span class="bf-v">' + o.valor + '</span>'
+            + (o.base ? '<span class="bf-s">' + o.base + '</span>' : '')
             + o.chip
             + (o.chispa || '')
             + '</div>';
@@ -519,7 +520,7 @@ export function disaHomeHtml({ userName, simbolo = '€' }) {
               base: ent(s.cobro.facturas) + ' facturas vivas'
                 + (s.cobro.vencidas ? ' · <b style="color:var(--danger)">' + ent(s.cobro.vencidas) + ' vencidas por ' + eur(s.cobro.vencido) + '</b>' : ' · ninguna vencida'),
               chip: chip(s.cobro.comparacion, 'eur'),
-              chispa: '<p class="cm-num-b">' + esc(s.cobro.porQueNoHayComparacion) + '</p>',
+              chispa: '<span class="bf-s">' + esc(s.cobro.porQueNoHayComparacion) + '</span>',
             }));
           }
           if (s.margen) {
@@ -547,7 +548,7 @@ export function disaHomeHtml({ userName, simbolo = '€' }) {
               chispa: chispa(s.clientes.chispa, 'var(--accent-purple)'),
             }));
           }
-          box.innerHTML = cards.length ? '<div class="cm-nums">' + cards.join('') + '</div>' : '';
+          box.innerHTML = cards.length ? '<div class="bf-cards">' + cards.join('') + '</div>' : '';
         }
 
         // ── EL GRÁFICO PRINCIPAL ────────────────────────────────────────────────────────────────
@@ -909,7 +910,10 @@ export function disaHomeHtml({ userName, simbolo = '€' }) {
         }
         function pintarKpis(body){
           var k = (IG.datos && IG.datos.kpis) || {}, av = (IG.datos && IG.datos.avisos) || {};
-          function fig(icon, color, label, val){ return '<div><p class="ig-kpi-label"><i class="ti ' + icon + '" style="color:' + color + '"></i>' + label + '</p><p class="ig-kpi-value">' + val + '</p></div>'; }
+          // I1 · MISMA TIPOGRAFÍA QUE LA TARJETA ÚNICA, SIN SU CAJA: estas cifras van DENTRO de un
+          // bloque que ya es una caja, y meter una tarjeta dentro de otra sería un marco de más.
+          // Lo que se unifica es cómo se leen el rótulo y la cifra, que es lo que se notaba.
+          function fig(icon, color, label, val){ return '<div><p class="bf-k"><i class="ti ' + icon + '" style="color:' + color + '"></i>' + label + '</p><p class="bf-v">' + val + '</p></div>'; }
           body.innerHTML = '<div class="ig-kpis">'
             + fig('ti-arrow-down-left', 'var(--accent)', 'Ventas del mes (sin IVA)', k.verVentas ? eurEs(k.ventas || 0) : '—')
             + fig('ti-receipt', 'var(--warn)', 'Pedidos', k.verPedidos ? (k.pedidos || 0) : '—')

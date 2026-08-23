@@ -543,11 +543,11 @@ export function createAnalyticsRoutes(db, cfg = {}) {
           </div>
         </div>
         <div class="card-body">
-          <div class="grid ga" id="mgRow">
-            <div class="kpi"><div class="kpi-label">Beneficio</div><div class="kpi-val" id="mBen" style="color:var(--ok)">-</div></div>
-            <div class="kpi"><div class="kpi-label" id="mPctLbl">Margen</div><div class="kpi-val" id="mPct">-</div></div>
-            <div class="kpi"><div class="kpi-label">Base del margen</div><div class="kpi-val" id="mIng">-</div></div>
-            <div class="kpi"><div class="kpi-label">Coste</div><div class="kpi-val" id="mCos">-</div></div>
+          <div class="bf-cards" id="mgRow" style="margin-bottom:0">
+            <div class="bf-card inerte"><span class="bf-k">Beneficio</span><span class="bf-v gana" id="mBen">—</span></div>
+            <div class="bf-card inerte"><span class="bf-k" id="mPctLbl">Margen</span><span class="bf-v" id="mPct">—</span></div>
+            <div class="bf-card inerte"><span class="bf-k">Base del margen</span><span class="bf-v" id="mIng">—</span></div>
+            <div class="bf-card inerte"><span class="bf-k">Coste</span><span class="bf-v" id="mCos">—</span></div>
           </div>
           <!-- G3 — las DOS cifras, siempre, debajo del titular. Ni una pantalla enseña un % de
                margen sin decir sobre qué se divide. -->

@@ -1669,7 +1669,7 @@ verdad): 60 aserciones en verde, ninguna de ellas un gate registrado ni un barri
 
 ## GRUPO 3 — BARRIDO
 
-#### I. MEJORA VISUAL GENERAL DE BAMBURU · **PENDIENTE** · *va al final, a propósito*
+#### I. MEJORA VISUAL GENERAL DE BAMBURU · ✅ **HECHO (23 ago 2026)** · **3 de 3** · *llegó al final, como debía*
 
 > **I. MEJORA VISUAL GENERAL DE BAMBURU.**
 > Palabras del dueño: "mejora visual de bamburu en general".
@@ -1685,6 +1685,67 @@ aplazado»** — se buscó y no aparece. Si el acuerdo se tomó de viva voz, **q
 por primera vez y con esa advertencia**, no como si constara de antes.
 *(La lección del 19 ago sigue aplicando a I3: aquel gate medía solo `.bf-card` y no la pantalla que
 lo rodea, y se comieron 17 sitios con el texto pegado al borde.)*
+
+**LO ENTREGADO (23 ago 2026, noche · punto 4 del encargo nocturno) · gate
+`scripts/gate-tarjeta-unica.mjs` · 24 ✓ · 0 ✗**
+
+**I2 · SE CUMPLIÓ EL «AL FINAL».** I no se abrió hasta que C, D, E, F y G estuvieron cerradas —las
+cinco lo están— así que no hay nada que repetir. Era la única condición del subpunto, y era una
+condición de orden, no una tarea.
+
+**I3 · LAS 56 PANTALLAS, MEDIDAS UNA A UNA — y una premisa que se cayó.** Se escribió
+`scripts/inventario-tarjetas.mjs`, que **no lee el código: abre cada pantalla en un navegador con
+sesión de dueño y mide sobre píxeles**. Recorre las 47 entradas del menú **más las 9 pantallas de
+detalle**, que no cuelgan de él y son justo donde vivía el componente. Lo que salió:
+- **El producto tenía CUATRO tarjetas de cifra distintas, no una y «el resto»:** `.bf-card` (8, solo
+  en la ficha de cliente), `.kpi` (10, en Stock · Informes · Boletín · Devoluciones), `.cm-num` (4,
+  en el Inicio) y `.ig-kpi-*` (4, dentro de un bloque de la rejilla del Inicio). Casi idénticas y
+  ninguna sabía de la otra.
+- **52 de las 56 pantallas NO tienen ninguna tarjeta de cifras, y no les falta.** Son listas de
+  documentos y formularios. **«Aplicar el componente al resto» no podía significar inventarle un
+  resumen a 52 pantallas**: significa que las que ya lo tenían usen la misma. Queda dicho para que
+  nadie lea el ✅ como «hay tarjetas en todas partes».
+- **Productos, proyectos y proveedores NO tienen pantalla de detalle** (se editan en ventana desde su
+  lista). Pedirlas daba 404 y contarlo como «pantalla rota» habría sido un rojo inventado.
+
+**I1 · AHORA HAY UNA, Y VIVE EN EL ESTILO GLOBAL.** El componente subió de
+`ficha-cliente-ui.js` a `layout.js`, que es donde debe estar lo que usan seis pantallas.
+- Convertidas: **Stock (4), Informes (4), Boletín (1), Devoluciones (1)** desde `.kpi`; **el Inicio
+  (4)** desde `.cm-num`, con un modificador `.bf-card.grande` que le conserva su escala de titular;
+  y **las cifras dentro de un bloque de la rejilla**, que pasan a la tipografía del componente **sin
+  su caja** —van dentro de un bloque que ya es una caja, y una tarjeta dentro de otra es un marco de
+  más—. **Quedan cero `.kpi`, cero `.cm-num` y cero `.ig-kpi-*` en todo el código**, medido.
+- **A la ficha de cliente se le quitó su copia**, incluidos dos cortes de pantalla estrecha (640 y
+  400 px) que pisaban a los globales **solo en esa pantalla**: un componente con dos juegos de
+  cortes se ve distinto según dónde. La ficha quedó **idéntica al píxel**, comprobado con captura
+  antes y después.
+- **El color solo donde dice algo.** En Stock, «Stock bajo» iba siempre en ámbar y «Sin stock»
+  siempre en rojo, **incluso valiendo 0**. Un cero en rojo asusta por nada y, si todo va pintado, deja
+  de destacar lo que importa. Ahora se encienden cuando hay algo que mirar.
+
+**EL TEXTO PEGADO AL BORDE — la lección del 19 ago, esta vez medida.** El barrido encontró **8 cajas
+en 2 pantallas** con la prosa y los campos contra el marco: **«Mi página de reservas» (7)** —donde se
+veía a simple vista: los títulos de sección tocando el borde izquierdo y los desplegables llegando al
+derecho— y **«Cómo se piden las citas» (1)**. Arregladas con `.bf-caja` y separadas entre sí, que
+además se tocaban. **Quedan 0.**
+- **Dos falsos positivos que NO se arreglaron porque no estaban rotos**, y el instrumento aprendió a
+  distinguirlos: (1) una `.card` que solo envuelve una **tabla** debe ir a borde —las celdas traen su
+  relleno—; (2) la rejilla de la **agenda** declara `padding:0` a propósito. El script los cuenta
+  aparte y **lo dice en voz alta**, para que nadie confunda «no aparece» con «no existe».
+
+**LA REVERSIÓN DEL GATE.** Se apaga el componente en el navegador y se exige que la medida **caiga**:
+un gate que comprobara la clase y no el estilo daría verde con el CSS borrado. Y las tarjetas de
+Informes, que nacen escondidas tras un desplegable, **se prueban PULSANDO**; contarlas en el DOM y
+darlas por buenas habría sido el verde por el motivo equivocado.
+
+**⬜ LO QUE I DESTAPÓ Y NO ARREGLA — EL DINERO ESTÁ ESCRITO EN INGLÉS EN MEDIO PRODUCTO.** Conviven
+`117.087,43 €` (Inicio, ficha de cliente, Informes) y **`€117087.43`** (Cobros, Stock, Rentabilidad,
+y las columnas de casi todas las tablas): símbolo delante, punto decimal y sin separador de miles.
+También `€-1461.93`, con el signo detrás del símbolo. **Medido: 269 `toFixed(2)` en `modules/erp`**, y
+ya existe un formateador central sin usar (`fmtEur`, `margen.js:154`) y la norma escrita en el código
+(*«Español de verdad: 1.234,50 €. Un €1234.5 no es una cifra de esta casa»*). **No entra en I**: I1
+pedía unificar la TARJETA, y esto es un barrido de 269 sitios con riesgo real de romper cifras que se
+vuelven a leer. **Merece encargo propio, y es probablemente el defecto visual más visible que queda.**
 
 ---
 

@@ -30,11 +30,14 @@ export function createInventoryRoutes(db, cfg = {}) {
           </select>
         </div>
       </div>
-      <div class="grid ga" style="margin-bottom:1.5rem">
-        <div class="kpi"><div class="kpi-label">Productos físicos</div><div class="kpi-val" id="kTotal">-</div></div>
-        <div class="kpi"><div class="kpi-label">Stock bajo (&lt;5)</div><div class="kpi-val" id="kLow" style="color:var(--warn)">-</div></div>
-        <div class="kpi"><div class="kpi-label">Sin stock</div><div class="kpi-val" id="kOut" style="color:var(--danger)">-</div></div>
-        <div class="kpi"><div class="kpi-label" id="kValLabel">Valor del almacén</div><div class="kpi-val" id="kVal" style="color:var(--ok)">-</div></div>
+      <!-- I1 · el componente único de tarjeta de cifra (.bf-card, layout.js). Antes eran .kpi, que
+           era otra tarjeta distinta para lo mismo. «Sin stock» pierde el rojo fijo: se lo pone el
+           JS SOLO si hay alguno, porque un 0 en rojo asusta por nada. -->
+      <div class="bf-cards">
+        <div class="bf-card inerte"><span class="bf-k">Productos físicos</span><span class="bf-v" id="kTotal">—</span></div>
+        <div class="bf-card inerte"><span class="bf-k">Stock bajo (&lt;5)</span><span class="bf-v" id="kLow">—</span></div>
+        <div class="bf-card inerte"><span class="bf-k">Sin stock</span><span class="bf-v" id="kOut">—</span></div>
+        <div class="bf-card inerte"><span class="bf-k" id="kValLabel">Valor del almacén</span><span class="bf-v gana" id="kVal">—</span></div>
       </div>
       <div class="card">
         <div class="card-head"><h3>Existencias (productos físicos)</h3><input class="search" id="searchBox" placeholder="Buscar nombre o SKU..." oninput="filterTable()"></div>
@@ -80,10 +83,17 @@ export function createInventoryRoutes(db, cfg = {}) {
         render();
       }
       function render(){
-        // KPIs sobre TODOS los físicos, con la cantidad del almacén activo (o global).
+        // Cifras sobre TODOS los físicos, con la cantidad del almacén activo (o global).
+        // I1 · EL COLOR SOLO SI DICE ALGO: antes «Stock bajo» iba siempre en ámbar y «Sin stock»
+        // siempre en rojo, incluso valiendo 0 — un cero en rojo asusta por nada y, si todo va
+        // pintado, deja de destacar lo que importa. Ahora se enciende cuando hay algo que mirar.
         document.getElementById('kTotal').textContent=prods.length;
-        document.getElementById('kLow').textContent=prods.filter(function(x){ const s=stockOf(x); return s>0&&s<5; }).length;
-        document.getElementById('kOut').textContent=prods.filter(function(x){ return stockOf(x)===0; }).length;
+        var nLow = prods.filter(function(x){ const s=stockOf(x); return s>0&&s<5; }).length;
+        var nOut = prods.filter(function(x){ return stockOf(x)===0; }).length;
+        var elLow = document.getElementById('kLow'), elOut = document.getElementById('kOut');
+        elLow.textContent = nLow; elOut.textContent = nOut;
+        elLow.style.color = nLow ? 'var(--warn)' : '';
+        elOut.classList.toggle('debe', nOut > 0);
         // Valor = Σ (cantidad × coste medio GLOBAL). Valoración a COSTE, no a precio de venta.
         document.getElementById('kVal').textContent='${sym}'+prods.reduce(function(a,b){ return a+((b.average_cost||0)*stockOf(b)); },0).toFixed(2);
         filterTable();

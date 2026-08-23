@@ -50,35 +50,12 @@ export function fichaClienteCSS() {
        directamente dentro de .card, así que TODO su texto tocaba el borde — 17 sitios medidos con
        padding 0. Esto se lo devuelve a las cajas de la ficha sin tocar .card global (que la usan
        cuarenta pantallas más y no es asunto de esta tarea). Se marca con .bf-caja. */
-    .bf-caja{padding:1.1rem 1.2rem}
-    .bf-caja>h4:first-child,.bf-caja>h3:first-child{margin-top:0}
-    @media(max-width:520px){ .bf-caja{padding:.9rem} }
+    /* .bf-caja también vive ahora en layout.js, por lo mismo. */
 
-    /* Tarjetas — el componente único. Alto automático, alturas iguales, texto que jamás se sale. */
-    .bf-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.6rem;margin-bottom:1rem}
-    .bf-card{display:flex;flex-direction:column;gap:.15rem;text-align:left;width:100%;min-width:0;
-      background:var(--bg2);border:1px solid var(--border2);border-radius:14px;padding:.85rem 1rem;
-      font-family:inherit;cursor:pointer;position:relative;transition:border-color .15s,box-shadow .15s}
-    .bf-card:hover,.bf-card:focus-visible{border-color:var(--accent);box-shadow:0 2px 10px rgba(47,107,255,.12);outline:none}
-    .bf-card[disabled]{cursor:default}
-    .bf-card[disabled]:hover{border-color:var(--border2);box-shadow:none}
-    .bf-card>span{display:block;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .bf-k{font-size:.68rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text3);padding-right:1.2rem}
-    /* EL COLOR DICE ALGO, no adorna. El estilo de la casa es jerarquía por peso y espacio (CANON),
-       así que el color se reserva para lo que exige una decisión: una deuda viva en rojo y un margen
-       en verde se leen de un vistazo sin tener que buscar la cifra. Lo demás se queda en negro: si
-       se colorea todo, no destaca nada. */
-    .bf-v{font-size:1.12rem;font-weight:700;letter-spacing:-.01em;color:var(--text)}
-    .bf-v.na{font-size:1rem;color:var(--text3);font-weight:600}
-    .bf-v.debe{color:var(--danger)}
-    .bf-v.gana{color:var(--ok)}
-    .bf-v.pierde{color:var(--danger)}
-    /* El subtítulo con el porcentaje sube de contraste: es el dato que acompaña al titular, no una
-       nota al pie. Antes se leía en gris claro contra blanco y se perdía. */
-    .bf-s{font-size:.73rem;color:var(--text2)}
-    .bf-s strong,.bf-s b{color:var(--text)}
-    .bf-go{position:absolute;top:.8rem;right:.8rem;color:var(--text3);font-size:.8rem}
-    .bf-card:hover .bf-go{color:var(--accent)}
+    /* LAS TARJETAS DE CIFRA YA NO SE DEFINEN AQUÍ. Nacieron en esta pantalla el 19 ago 2026 y el
+       23 ago (ficha I1) subieron al estilo global de layout.js, que es donde debe vivir un
+       componente que usan seis pantallas. Aquí NO queda ni una regla suya: dos copias de un
+       componente son dos componentes, y a la segunda semana ya no se parecen. */
 
     /* C2 · Los datos del cliente. Jerarquía por PESO y ESPACIO, no por marcos (CANON, estilo iOS):
        no llevan caja propia, se apoyan en el aire de la que los contiene. */
@@ -196,9 +173,10 @@ export function fichaClienteCSS() {
       .bf-win.arrastrando{transition:none}
       .bf-grab{display:block;width:40px;height:4px;border-radius:99px;background:var(--border2);
         margin:.5rem auto .1rem;flex:none}
-      .bf-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
     }
-    @media(max-width:400px){ .bf-cards{grid-template-columns:1fr} }
+    /* Los cortes de .bf-cards para pantalla estrecha también son del componente y viven en
+       layout.js. Aquí había OTROS (640 y 400 px) que pisaban a los globales solo en esta pantalla:
+       un componente con dos juegos de cortes es un componente que se ve distinto según dónde. */
   `;
 }
 

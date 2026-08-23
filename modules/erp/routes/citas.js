@@ -1767,7 +1767,7 @@ function vistaAjustes(c, db) {
   if (!found) puestoOpts = `<option value="${escHtml(cur)}" selected>${escHtml(aj.puesto_plural)}</option>` + puestoOpts;
   const content = `
     <div class="ph"><h2>Cómo se piden las citas</h2><div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/settings#cfg-agenda">← Configuración</a><a class="btn btn-secondary" href="/admin/citas/publica">Mi página de reservas</a></div></div>
-    <div class="card" style="max-width:640px">
+    <div class="card bf-caja" style="max-width:640px">
       <div class="form-row">
         <div class="form-group"><label class="form-label">Rejilla (minutos)</label><select class="form-control" id="ajGrid"><option value="15"${sel(aj.grid,15)}>15</option><option value="30"${sel(aj.grid,30)}>30</option><option value="60"${sel(aj.grid,60)}>60</option></select></div>
         <div class="form-group"><label class="form-label">Antelación mínima (min)</label><input class="form-control" type="number" min="0" id="ajAntel" value="${aj.antelacion_min}"></div>
@@ -1804,7 +1804,7 @@ function vistaPublica(c, db) {
     </div>
     <div class="alert" style="margin-bottom:1rem">Tu página de reservas: el cliente elige servicio, con quién, día y hora, y la cita entra <strong>en tu agenda</strong> con las mismas reglas de dentro (mismos huecos, mismos solapes). <strong>Está apagada hasta que la enciendas</strong>, y solo se ve lo que marques: los servicios en <a href="/admin/citas/servicios">Cuánto dura cada servicio</a> («Se pide por Internet») y las personas aquí abajo. Reservar <strong>no cobra ni emite factura</strong>: eso sigue siendo tu «Atender».</div>
 
-    <div class="card">
+    <div class="card bf-caja" style="margin-bottom:1rem">
       <label style="display:flex;gap:.6rem;align-items:flex-start;font-weight:600">
         <input type="checkbox" id="pbActiva" style="margin-top:.25rem">
         <span>Mi página de reservas está abierta<div style="font-weight:400;font-size:.8rem;color:var(--muted)">Mientras esté apagada, la dirección responde «no encontrado» a cualquiera.</div></span>
@@ -1823,7 +1823,7 @@ function vistaPublica(c, db) {
       </div>
     </div>
 
-    <div class="card">
+    <div class="card bf-caja" style="margin-bottom:1rem">
       <h3 style="margin-top:0">Con cuánto tiempo se puede pedir</h3>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Antelación mínima (horas)</label><input class="form-control" type="number" min="0" step="1" id="pbAntel">
@@ -1833,7 +1833,7 @@ function vistaPublica(c, db) {
       </div>
     </div>
 
-    <div class="card">
+    <div class="card bf-caja" style="margin-bottom:1rem">
       <h3 style="margin-top:0">¿Se confirma sola o la apruebas tú?</h3>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Modo</label>
@@ -1846,14 +1846,14 @@ function vistaPublica(c, db) {
       </div>
     </div>
 
-    <div class="card">
+    <div class="card bf-caja" style="margin-bottom:1rem">
       <h3 style="margin-top:0">¿Puede el cliente cambiar o anular?</h3>
       <label style="display:flex;gap:.6rem;align-items:center;font-size:.9rem"><input type="checkbox" id="pbCancAct" onchange="pbCancToggle()"> Sí, desde su enlace</label>
       <div class="form-group" id="pbCancWrap" style="margin-top:.75rem"><label class="form-label">Hasta cuántas horas antes</label><input class="form-control" type="number" min="0" id="pbCancH" style="max-width:160px">
         <div style="font-size:.7rem;color:var(--muted)">Pasado ese plazo, su enlace le dice que te llame. <strong>Las citas que creas tú en la agenda no cambian</strong>: su enlace sigue igual que siempre.</div></div>
     </div>
 
-    <div class="card">
+    <div class="card bf-caja" style="margin-bottom:1rem">
       <h3 style="margin-top:0">Tu política de cancelación</h3>
       <div style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem">Se le <strong>muestra antes de confirmar</strong> y se repite en el correo. Si lo dejas vacío, no se muestra nada.</div>
       <textarea class="form-control" id="pbPolitica" rows="4" maxlength="2000" placeholder="Si no puedes venir, avísanos con 24 h de antelación…"></textarea>
@@ -1861,7 +1861,7 @@ function vistaPublica(c, db) {
       <div class="alert" style="font-size:.8rem;margin-top:.75rem">Casilla que el cliente <strong>tiene que marcar</strong> (se guarda con fecha y hora el texto exacto que aceptó):<br><em id="pbConsent"></em></div>
     </div>
 
-    <div class="card">
+    <div class="card bf-caja" style="margin-bottom:1rem">
       <h3 style="margin-top:0">Quién aparece en la página</h3>
       <div style="font-size:.8rem;color:var(--muted);margin-bottom:.75rem">Por defecto <strong>no aparece nadie</strong>. El nombre que pongas aquí es el que ve el cliente — nunca el usuario del sistema.</div>
       <div id="pbPersonas"></div>
@@ -1869,7 +1869,7 @@ function vistaPublica(c, db) {
 
     <button class="btn btn-primary" onclick="pbGuardar()">Guardar</button>
 
-    <div class="card" id="pbSolWrap" style="display:none;margin-top:1.5rem">
+    <div class="card bf-caja" id="pbSolWrap" style="display:none;margin-top:1.5rem">
       <h3 style="margin-top:0">Solicitudes pendientes de aprobar</h3>
       <div id="pbSolicitudes">Cargando…</div>
     </div>
