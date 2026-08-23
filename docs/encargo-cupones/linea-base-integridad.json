@@ -1,0 +1,42 @@
+{
+  "tomada": "2026-08-23 (encargo INTEGRIDAD, tras el encargo CUPONES)",
+  "slug": "desarrollo-bamburu",
+  "integridad_antes": {
+    "total": 833,
+    "ok": false,
+    "alarm": {
+      "invoice_number": "F2026-0012",
+      "reason": "el enlace con la factura anterior está roto (¿borrada/insertada?)"
+    }
+  },
+  "verifactu": {
+    "registros": 1050,
+    "envios": 2,
+    "sha": "4583329bdec49c1125b03d42800e436380b4780458e0a3857fd3549ab0a59d1b"
+  },
+  "ventas": {
+    "count": 553,
+    "base": 342165.51,
+    "iva": 71850.89,
+    "total": 414016.4
+  },
+  "cobros": {
+    "c": 575,
+    "imp": 1212609.67
+  },
+  "libro": {
+    "n": 4625,
+    "debe": 917336.23,
+    "haber": 917336.23
+  },
+  "asientos": 1709,
+  "facturas": 833,
+  "anulaciones": 218,
+  "anulaciones_que_enlazan_bien": 218,
+  "sello_serie_S": "5bd689a9ba9702d9cd165aa6431832a95b7e53532b7079dc9c51b9eb6673b8d4",
+  "serie_S_n": 122,
+  "integridad_js_sha": "43caa83e34c5bde2d4f9007a5e2fb059c4cdda1fd752d82e2fd914a1b836c5d9",
+  "nota_integridad_js": "SHA del fichero del verificador ANTES de esta tarea. El encargo prohibe anadirle excepciones: el gate exige que este SHA no cambie.",
+  "datos_factura_sha": "7b71c040786a345d0a4572d03ba194be62ac014a57b80e40cec58b7815d04c37",
+  "nota_datos_factura": "SHA de TODOS los campos de las facturas MENOS verifactu_hash y prev_hash. Cambiar un total tambien hace cuadrar un hash: esto detecta que se arregle la cadena falsificando el negocio."
+}
