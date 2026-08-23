@@ -26,6 +26,12 @@ import { countsAsPayable, supplierInvoicePago } from './pagos.js';
 import { cuentaPyG } from './contabilidad-pyg.js';   // PASO 4a-bis: Contabilidad se cuelga del P&G, no de ledger_lines
 import { clientDebt } from './cobros.js';
 import { margen as margenDe, MODOS, modoDeEmpresa, MODO_POR_DEFECTO } from './margen.js';
+// FICHA D · PARTE 1 — el área de AGENDA se cuelga del MOTOR DE CITAS, no de una consulta propia.
+// `tramosPersona` da el horario REAL de una persona un día (con las excepciones ya aplicadas) y
+// `ocupacionPersona` lo que tiene pillado (con márgenes y tiempos muertos). Son las MISMAS dos
+// funciones de las que come `ocupacionDia` del vigía, así que la capacidad que se mide aquí no
+// puede contradecir a la que enseña la agenda ni a la del Inicio.
+import { tramosPersona, ocupacionPersona, interseca, resta, ESTADO_LABEL } from './citas-engine.js';
 
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
 const VACIO = '(sin dato)';
@@ -331,7 +337,174 @@ const AREA_CONTABILIDAD = {
   ordenar: 'resultado',
 };
 
-export const AREAS = { ventas: AREA_VENTAS, compras: AREA_COMPRAS, clientes: AREA_CLIENTES, inventario: AREA_INVENTARIO, contabilidad: AREA_CONTABILIDAD };
+// ── ÁREA: AGENDA (ficha D · D1+D4) ───────────────────────────────────────────
+// LA DECISIÓN QUE MANDA AQUÍ, y hay que leerla antes de tocar nada: **esta área tiene DOS GRANOS**,
+// y por eso no todas sus medidas valen para todas las dimensiones.
+//
+//   · Grano CITA  → nº de citas, horas reservadas, ingresos facturados, anuladas, ausencias.
+//     Se pueden repartir por cualquiera de las seis dimensiones: una cita tiene cliente, servicio,
+//     persona, puesto, estado y fecha.
+//   · Grano DÍA×PERSONA → horas abiertas, horas ocupadas del horario, horas libres y % de ocupación.
+//     **Una hora libre no tiene cliente, ni servicio, ni sala.** Y un día ENTERO sin citas está 100 %
+//     libre y no produce ninguna fila de cita, así que contándolo sobre las citas las horas libres
+//     saldrían siempre de menos. Por eso estas cuatro se ofrecen SOLO al agrupar por fecha o por
+//     persona (`dimsCapacidad`), que son los dos ejes donde el horario está definido. Fuera de ahí no
+//     se enseñan, y si alguien las fuerza por la API, `cruzar` responde 400. Decisión de Ibrahin
+//     (23 ago 2026): «ofrecerlas solo donde son ciertas».
+//
+// Y POR QUÉ HAY DOS MEDIDAS DE HORAS Y NO UNA. Porque hay dos cifras verdaderas y distintas, y
+// elegir una en silencio metería una contradicción dentro de la propia pantalla:
+//   · «Horas reservadas» = lo que suman las citas, caigan donde caigan.
+//   · «Horas ocupadas del horario» = lo que esas citas consumen DENTRO del horario de trabajo.
+// Medido en la agenda real el 23 ago 2026: el lunes 27-jul hay una cita de 30 min a las 16:00 y el
+// negocio cierra a las 14:00 → reservadas 0,5 h · ocupadas del horario 0 h. Las dos son ciertas. El
+// recorte al horario NO es un bug: sin él una cita fuera de hora haría que la ocupación pasara del
+// 100 % (está escrito en `ocupacionDia`). El % de ocupación se calcula SIEMPRE con la segunda, que es
+// la que cuadra con las horas abiertas.
+const AGENDA_MAX_DIAS = 1100;   // ~3 años. Cota de trabajo: 365 días cuestan 167 ms medidos.
+
+// Capacidad de UN día, desglosada POR PERSONA. `ocupacionDia` (vigia-agenda.js) hace este mismo
+// recorrido pero solo devuelve el total y, de cada persona, los tramos LIBRES —y omite a quien está
+// lleno—, que es justo lo que necesita el vigía y no lo que necesita agrupar por persona. Así que se
+// recorre aquí con las MISMAS primitivas (`tramosPersona` + `ocupacionPersona`), no con una segunda
+// lectura del horario: el horario sigue teniendo una sola implementación.
+function capacidadDiaPorPersona(db, fecha) {
+  const out = [];
+  const personas = db.prepare('SELECT id, name FROM admin_users WHERE active=1 ORDER BY id').all();
+  for (const p of personas) {
+    const base = tramosPersona(db, p.id, fecha);
+    if (!base.length) continue;                       // esa persona no trabaja ese día
+    const dentro = interseca(ocupacionPersona(db, p.id, fecha), base);
+    const abierto = base.reduce((n, [a, b]) => n + (b - a), 0);
+    const ocupado = dentro.reduce((n, [a, b]) => n + (b - a), 0);
+    out.push({ user_id: p.id, nombre: p.name || SIN_ASIGNAR, abierto, ocupado, libre: Math.max(0, abierto - ocupado) });
+  }
+  return out;
+}
+
+const AREA_AGENDA = {
+  etiqueta: 'Agenda',
+  // MISMO candado que la pantalla de la agenda (`routes/citas.js`): quien no puede ver la agenda no
+  // ve el área, ni en el desplegable ni forzando la API. No se inventa ningún permiso nuevo.
+  perm: 'citas.read',
+  filas: (db, { from = null, to = null } = {}) => {
+    const w = ['c.archived = 0'], p = [];
+    if (from) { w.push('c.fecha >= ?'); p.push(from); }
+    if (to)   { w.push('c.fecha <= ?'); p.push(to); }
+    // El SERVICIO PRINCIPAL es el primero de la cadena (`orden`), y la dimensión se llama así a
+    // propósito: una cita puede llevar varios servicios, y repartirla entre todos haría que «nº de
+    // citas» contara la misma cita tres veces. Se cuenta entera en su servicio principal.
+    const filas = db.prepare(
+      `SELECT c.id, c.fecha, c.dur_min, c.estado, c.user_id, c.recurso_id, c.cliente_id,
+              c.cliente_suelto_nombre, c.invoice_id,
+              u.name AS persona, r.nombre AS puesto, cl.name AS cliente,
+              (SELECT pr.name FROM cita_servicios cs LEFT JOIN products pr ON pr.id = cs.product_id
+                WHERE cs.cita_id = c.id ORDER BY cs.orden, cs.id LIMIT 1) AS servicio
+         FROM citas c
+         LEFT JOIN admin_users u ON u.id = c.user_id
+         LEFT JOIN recursos r    ON r.id = c.recurso_id
+         LEFT JOIN clients cl    ON cl.id = c.cliente_id
+        WHERE ` + w.join(' AND ')).all(...p);
+    // INGRESOS: solo de facturas que CUENTAN como venta (misma regla que el área de Ventas — una
+    // anulada o un ticket sustituido no son ingreso). Se toma la BASE sin IVA, como en Ventas, para
+    // que las dos áreas hablen el mismo idioma.
+    const cuentan = new Map(countingSalesInvoices(db, {}).map(i => [i.id, Number(i.subtotal) || 0]));
+    for (const f of filas) {
+      f.base_factura = (f.invoice_id && cuentan.has(f.invoice_id)) ? cuentan.get(f.invoice_id) : 0;
+      f.factura_id = (f.invoice_id && cuentan.has(f.invoice_id)) ? f.invoice_id : null;
+    }
+    return filas;
+  },
+  dimensiones: {
+    fecha:    { etiqueta: 'Fecha',              valor: (f, o) => clavePeriodo(f.fecha, o.periodo || 'mes') },
+    cliente:  { etiqueta: 'Cliente',            perm: 'clients.read',
+                valor: f => (f.cliente || f.cliente_suelto_nombre || '').trim() || '(sin cliente)' },
+    servicio: { etiqueta: 'Servicio principal', valor: f => (f.servicio || '').trim() || '(sin servicio)' },
+    persona:  { etiqueta: 'Quién la atiende',   valor: f => (f.persona || '').trim() || SIN_ASIGNAR },
+    puesto:   { etiqueta: 'Puesto o sala',      valor: f => (f.puesto || '').trim() || '(sin puesto)' },
+    estado:   { etiqueta: 'Estado de la cita',  valor: f => ESTADO_LABEL[f.estado] || f.estado || VACIO },
+  },
+  medidas: {
+    citas:            { etiqueta: 'Nº de citas',                 dinero: false },
+    horas_reservadas: { etiqueta: 'Horas reservadas',            dinero: false },
+    ingresos:         { etiqueta: 'Ingresos facturados (sin IVA)', dinero: true },
+    anuladas:         { etiqueta: 'Citas anuladas',              dinero: false },
+    ausencias:        { etiqueta: 'Ausencias (no se presentó)',  dinero: false },
+    horas_abiertas:   { etiqueta: 'Horas abiertas',              dinero: false, capacidad: true },
+    horas_ocupadas:   { etiqueta: 'Horas ocupadas del horario',  dinero: false, capacidad: true },
+    horas_libres:     { etiqueta: 'Horas libres',                dinero: false, capacidad: true },
+    ocupacion_pct:    { etiqueta: '% de ocupación',              dinero: false, pct: true, capacidad: true },
+  },
+  // Las cuatro de capacidad SOLO con estas dos dimensiones. Ver la nota de arriba.
+  dimsCapacidad: ['fecha', 'persona'],
+  usaPeriodo: true,
+  nuevoAcc: clave => ({ clave, citas: 0, min_reservados: 0, ingresos: 0, anuladas: 0, ausencias: 0, facturas: new Set() }),
+  sumar: (a, f) => {
+    a.citas++;
+    // Las anuladas NO reservan tiempo: es el mismo criterio que `ocupacionPersona`, que las excluye.
+    // Una ausencia SÍ lo reservó (el hueco estuvo bloqueado y nadie lo pudo usar), así que cuenta.
+    if (f.estado !== 'anulada') a.min_reservados += Number(f.dur_min) || 0;
+    if (f.estado === 'anulada') a.anuladas++;
+    if (f.estado === 'no_show') a.ausencias++;
+    // Una FACTURA se cuenta UNA vez por grupo aunque la paguen dos citas: sumarla dos veces sería
+    // inventar ingresos. Por eso el acumulador lleva el conjunto de facturas ya contadas.
+    if (f.factura_id && !a.facturas.has(f.factura_id)) { a.facturas.add(f.factura_id); a.ingresos += f.base_factura; }
+  },
+  salida: (a, meds, _modo, cap) => {
+    const o = { clave: a.clave };
+    const h = min => r2(min / 60);
+    for (const m of meds) {
+      if (m === 'citas') o.citas = a.citas;
+      else if (m === 'horas_reservadas') o.horas_reservadas = h(a.min_reservados);
+      else if (m === 'ingresos') o.ingresos = r2(a.ingresos);
+      else if (m === 'anuladas') o.anuladas = a.anuladas;
+      else if (m === 'ausencias') o.ausencias = a.ausencias;
+      // Las de capacidad vienen del segundo grano. Sin capacidad para ese grupo → null, que la
+      // pantalla pinta como hueco. NUNCA cero: cero significa «cerrado», y no saberlo no es cerrar.
+      else if (m === 'horas_abiertas') o.horas_abiertas = cap ? h(cap.abierto) : null;
+      else if (m === 'horas_ocupadas') o.horas_ocupadas = cap ? h(cap.ocupado) : null;
+      else if (m === 'horas_libres')   o.horas_libres   = cap ? h(cap.libre)   : null;
+      else if (m === 'ocupacion_pct')  o.ocupacion_pct  = (cap && cap.abierto > 0) ? r2(cap.ocupado / cap.abierto * 100) : null;
+    }
+    return o;
+  },
+  // LA CAPACIDAD, por grupo. Recorre DÍA A DÍA el rango que cubre el informe —incluidos los días sin
+  // ninguna cita, que son justo los que más horas libres tienen— y reparte por fecha o por persona.
+  // Devuelve también el rango recorrido para que el aviso lo declare: unas «horas libres» sin decir
+  // de qué ventana son es una cifra sin base, y eso el CANON no lo permite.
+  capacidad: (db, { from = null, to = null, periodo = 'mes', dimension = 'fecha' } = {}) => {
+    const mapa = new Map();
+    let desde = from, hasta = to;
+    if (!desde || !hasta) {
+      // Sin rango explícito, la ventana es la que abarcan las propias citas del negocio. Si no hay
+      // ninguna cita, no hay ventana que recorrer y no se inventa una.
+      const r = db.prepare('SELECT MIN(fecha) a, MAX(fecha) b FROM citas WHERE archived=0').get() || {};
+      desde = desde || r.a; hasta = hasta || r.b;
+    }
+    if (!desde || !hasta) return { mapa, rango: null, recortado: false };
+    const DIA = 86400000;
+    let t0 = Date.parse(desde + 'T00:00:00Z'), t1 = Date.parse(hasta + 'T00:00:00Z');
+    if (!Number.isFinite(t0) || !Number.isFinite(t1) || t1 < t0) return { mapa, rango: null, recortado: false };
+    let dias = Math.round((t1 - t0) / DIA) + 1;
+    const recortado = dias > AGENDA_MAX_DIAS;
+    if (recortado) { dias = AGENDA_MAX_DIAS; t1 = t0 + (dias - 1) * DIA; }
+    const suma = (clave, c) => {
+      const e = mapa.get(clave) || { abierto: 0, ocupado: 0, libre: 0 };
+      e.abierto += c.abierto; e.ocupado += c.ocupado; e.libre += c.libre;
+      mapa.set(clave, e);
+    };
+    for (let i = 0; i < dias; i++) {
+      const fecha = new Date(t0 + i * DIA).toISOString().slice(0, 10);
+      for (const c of capacidadDiaPorPersona(db, fecha)) {
+        suma(dimension === 'persona' ? c.nombre : clavePeriodo(fecha, periodo), c);
+      }
+    }
+    return { mapa, rango: { desde, hasta: new Date(t1).toISOString().slice(0, 10) }, recortado };
+  },
+  ordenar: 'citas',
+};
+
+export const AREAS = { ventas: AREA_VENTAS, compras: AREA_COMPRAS, clientes: AREA_CLIENTES, inventario: AREA_INVENTARIO, contabilidad: AREA_CONTABILIDAD, agenda: AREA_AGENDA };
 
 // El permiso BASE de un área (para que las rutas no tengan que conocer el registro). null si no existe.
 export function areaPerm(area) { return AREAS[area]?.perm || null; }
@@ -360,6 +533,10 @@ export function camposPara(hasPerm, areaKey = 'ventas', modo = MODO_POR_DEFECTO)
   for (const [k, m] of Object.entries(a.medidas)) {
     const etiqueta = k === 'margenPct' ? 'Margen ' + MODOS[usa].sufijo : m.etiqueta;
     meds[k] = { etiqueta, dinero: !!m.dinero, pct: !!m.pct };
+    // FICHA D — una medida de CAPACIDAD solo es cierta en algunas dimensiones (ver AREA_AGENDA).
+    // Se declara aquí para que el desplegable la esconda donde no vale. Es cortesía: el candado de
+    // verdad está en `cruzar`, que responde 400 si alguien fuerza la combinación por la API.
+    if (m.capacidad) meds[k].soloCon = a.dimsCapacidad || [];
   }
   return { dimensiones: dims, medidas: meds, graficos: TIPOS_GRAFICO, usaPeriodo: !!a.usaPeriodo, modoMargen: usa };
 }
@@ -380,6 +557,19 @@ export function cruzar(db, { area = 'ventas', dimension = 'fecha', medidas = ['b
   if (dim.perm && hasPerm && !hasPerm(dim.perm)) { const e = new Error('No tienes permiso para cruzar por ' + dim.etiqueta.toLowerCase()); e.status = 403; throw e; }
   const meds = (Array.isArray(medidas) ? medidas : [medidas]).filter(m => A.medidas[m]);
   if (!meds.length) { const e = new Error('Elige al menos una medida'); e.status = 400; throw e; }
+  // FICHA D — EL CANDADO DE LAS MEDIDAS DE CAPACIDAD. Una hora libre no tiene cliente ni servicio:
+  // pedirla agrupada por ahí no es un error del usuario, es una pregunta sin respuesta. Se contesta
+  // diciendo POR QUÉ y con qué sí se puede, en vez de devolver un número inventado o un cero.
+  const dimsCap = A.dimsCapacidad || [];
+  const capPedida = meds.filter(m => A.medidas[m].capacidad);
+  if (capPedida.length && !dimsCap.includes(dimension)) {
+    const nombres = capPedida.map(m => '«' + A.medidas[m].etiqueta + '»').join(', ');
+    const validas = dimsCap.map(d => '«' + (A.dimensiones[d]?.etiqueta || d).toLowerCase() + '»').join(' o ');
+    const e = new Error(nombres + ' se mide sobre el horario del negocio, no sobre cada cita: una hora '
+      + 'libre no tiene ' + (A.dimensiones[dimension]?.etiqueta || dimension).toLowerCase()
+      + '. Agrúpalo por ' + validas + '.');
+    e.status = 400; throw e;
+  }
   // PASO 4b — cálculo propio: se compila UNA vez (valida contra las medidas del área o lanza 400) y se
   // evalúa por grupo. Para evaluarlo hacen falta TODAS las medidas del grupo, aunque el usuario solo
   // pinte el cálculo — por eso se calculan todas cuando hay fórmula.
@@ -407,8 +597,18 @@ export function cruzar(db, { area = 'ventas', dimension = 'fecha', medidas = ['b
     map.set(clave, acc);
   }
 
+  // FICHA D — EL SEGUNDO GRANO. Si el área tiene capacidad y la dimensión la admite, se calcula
+  // aparte y se une: un día ABIERTO Y SIN NINGUNA CITA no produce fila arriba y es justo el que más
+  // horas libres tiene, así que su grupo se crea aquí o no existiría. Las áreas sin `capacidad` no
+  // pasan por nada de esto.
+  let cap = null;
+  if (A.capacidad && dimsCap.includes(dimension) && (capPedida.length || rpn)) {
+    cap = A.capacidad(db, { from, to, periodo, dimension });
+    for (const clave of cap.mapa.keys()) if (!map.has(clave)) map.set(clave, A.nuevoAcc(clave));
+  }
+
   const filas = [...map.values()].map(acc => {
-    const fila = A.salida(acc, medsSalida, modoMargen);
+    const fila = A.salida(acc, medsSalida, modoMargen, cap ? cap.mapa.get(acc.clave) : null);
     if (rpn) fila.calculo = evalRPN(rpn, fila);   // el cálculo propio, sobre las medidas del grupo
     return fila;
   });
@@ -422,6 +622,9 @@ export function cruzar(db, { area = 'ventas', dimension = 'fecha', medidas = ['b
     calculo: !!rpn,
     filas: filas.slice(0, limit), truncado: filas.length > limit,
     aviso: A.aviso ? A.aviso(map, meds) : null,
+    // La ventana que se recorrió para la capacidad. Unas «horas libres» sin decir de qué periodo son
+    // es una cifra sin base, y el CANON exige que toda cifra declare la suya.
+    capacidad: cap && cap.rango ? { desde: cap.rango.desde, hasta: cap.rango.hasta, recortado: !!cap.recortado } : null,
   };
 }
 

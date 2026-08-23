@@ -7,13 +7,18 @@
 // constructor hace el resto — el MISMO que pinta "Construye tu gráfico" y los informes. Así es
 // IMPOSIBLE que el gráfico dé una cifra distinta de la del constructor hecho a mano.
 //
-// EXPRESABILIDAD (ver PASO 0). Solo caída de facturación y de margen son EXACTAS (su receta es la
-// misma `cruzar` que produjo la cifra del vigía). Las otras cuatro son el gráfico expresable MÁS
-// CERCANO, con su hueco anotado en `gap` — NO se inventa un render:
+// EXPRESABILIDAD (ver PASO 0). ⚙️ ACTUALIZADO EL 23 AGO 2026 (ficha D): antes esto decía «solo caída
+// de facturación y de margen son EXACTAS» y hablaba de «las otras cuatro». Ya no: los detectores son
+// DIEZ y las EXACTAS son TRES — caída de facturación, caída de margen y **hueco que se va a perder**,
+// que entra en esta lista porque su cifra y la medida `horas_libres` del constructor salen de las
+// mismas dos primitivas del motor de citas. Las demás son el gráfico expresable MÁS CERCANO, con su
+// hueco anotado en `gap` — NO se inventa un render:
 //   · deuda vencida  → facturación mensual del deudor (el constructor no tiene área de cobros/antigüedad)
 //   · cliente dormido→ facturación mensual del cliente (se ve el desplome)
 //   · desvío del plan→ la serie REAL por periodo (el constructor no tiene medida "objetivo")
 //   · pago próximo   → pendiente por proveedor (el constructor no tiene dimensión "vencimiento")
+//   · los tres de agenda por cliente (fuera de ritmo · sin próxima cita · ausencias) → su ritmo de
+//     citas filtrado por él; el hueco es que el filtro añade el permiso de Clientes al de Agenda
 //
 // PERMISOS heredados: la receta se la come `cruzar`, que revalida el permiso del área (403 si falta).
 // El dibujo NO reabre nada. Para el filtro por cliente se resuelve `client_id → nombre` (un rótulo, NO
@@ -47,21 +52,54 @@ function receta(area, dimension, medida, grafico, { periodo = 'mes', filtros = n
 // no se puede componer una receta honesta (p. ej. no se pudo resolver el nombre para el filtro).
 const sinGrafico = gap => ({ receta: null, medida: null, meta: null, grafico: null, explica: null, gap });
 
-// PELDAÑO 8 · PIEZA 3 — LOS AVISOS DE AGENDA VAN SIN GRÁFICO, Y SE DICE POR QUÉ. El constructor de
-// analíticas tiene cinco áreas —ventas, compras, clientes, inventario y contabilidad— y NINGUNA sabe
-// expresar citas: no hay dimensión de agenda ni medida de ocupación. Sin área no hay receta honesta, y
-// dibujar la ocupación por libre sería exactamente lo que el vigía tiene prohibido: una cifra que no
-// viene del motor que la posee. Se declaran igualmente, en vez de dejar que caigan en el mensaje
-// genérico de `graficoDe`, para que el hueco quede EXPLICADO y no parezca un olvido. Crear el área de
-// agenda en el constructor es otro encargo (queda anotado en el TABLERO).
-const SIN_AREA_CITAS = 'El constructor de analíticas todavía no tiene un área de agenda, así que este '
-  + 'aviso no lleva gráfico de apoyo. Las cifras salen del motor de citas, que sí es el dueño del dato.';
-
+// ⚙️ PELDAÑO 8 · PIEZA 3 decía aquí que los cuatro avisos de agenda iban SIN GRÁFICO, con el cartel
+// «el constructor todavía no tiene un área de agenda». **Eso dejó de ser cierto el 23 ago 2026**
+// (ficha D · parte 1): el área de Agenda existe, y con ella los cuatro tienen su gráfico por la MISMA
+// vía que los otros seis — una receta para `cruzar`, sin motor nuevo y sin una sola cifra calculada
+// aquí. El cartel se retira porque ya no describe nada.
+//
+// EL DE HUECO PERDIDO ES EXACTO, no aproximado: su cifra sale de `ocupacionDia` y la medida
+// `horas_libres` del constructor se calcula con las MISMAS dos primitivas del motor de citas
+// (`tramosPersona` + `ocupacionPersona`), así que el gráfico no puede decir otra cosa que el aviso.
+// Los otros tres pintan el RITMO DE CITAS del cliente, filtrado por él: es lo que hace visible «lleva
+// 40 días sin venir» o «faltó dos veces». Su `gap` avisa de que el filtro por cliente añade el
+// permiso de Clientes al de Agenda, igual que ya hacen los avisos de cliente dormido y deuda vencida.
 export const RECETAS = {
-  hueco_perdido:     () => sinGrafico(SIN_AREA_CITAS),
-  fuera_de_ritmo:    () => sinGrafico(SIN_AREA_CITAS),
-  sin_proxima_cita:  () => sinGrafico(SIN_AREA_CITAS),
-  ausencias:         () => sinGrafico(SIN_AREA_CITAS),
+  hueco_perdido: () =>
+    receta('agenda', 'fecha', 'horas_libres', 'lineas', {
+      periodo: 'mes',
+      explica: 'Tus horas libres por meses: se ve si el hueco de este día es un caso suelto o la tónica.',
+    }),
+
+  fuera_de_ritmo: (h, { nombreCliente } = {}) => {
+    if (!nombreCliente) return sinGrafico('No se pudo identificar al cliente para el gráfico.');
+    return receta('agenda', 'fecha', 'citas', 'lineas', {
+      periodo: 'mes',
+      filtros: { cliente: [nombreCliente] },
+      explica: 'Las citas de este cliente por meses: se ve cuándo se le fue el ritmo.',
+      gap: 'El filtro por cliente hace que el gráfico necesite permiso de Clientes además del de Agenda.',
+    });
+  },
+
+  sin_proxima_cita: (h, { nombreCliente } = {}) => {
+    if (!nombreCliente) return sinGrafico('No se pudo identificar al cliente para el gráfico.');
+    return receta('agenda', 'fecha', 'citas', 'lineas', {
+      periodo: 'mes',
+      filtros: { cliente: [nombreCliente] },
+      explica: 'Las citas de este cliente por meses: la última visita es donde se corta la línea.',
+      gap: 'El filtro por cliente hace que el gráfico necesite permiso de Clientes además del de Agenda.',
+    });
+  },
+
+  ausencias: (h, { nombreCliente } = {}) => {
+    if (!nombreCliente) return sinGrafico('No se pudo identificar al cliente para el gráfico.');
+    return receta('agenda', 'fecha', 'ausencias', 'barras', {
+      periodo: 'mes',
+      filtros: { cliente: [nombreCliente] },
+      explica: 'Las veces que este cliente no se presentó, por meses.',
+      gap: 'El filtro por cliente hace que el gráfico necesite permiso de Clientes además del de Agenda.',
+    });
+  },
 
   caida_facturacion: (h) =>
     receta('ventas', 'fecha', 'base', 'lineas', {
