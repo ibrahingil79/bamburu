@@ -1114,7 +1114,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         const p=panelPorId(id); if(!p) return;
         // La confirmación dice EXACTAMENTE qué se borra. Un dueño que lee «borrar informe» puede
         // entender que se lleva las facturas por delante; hay que quitarle esa duda con palabras.
-        if(!confirm('¿Borrar el informe «'+p.nombre+'»?\n\nSe borra solo la receta (qué mides y cómo lo agrupas). '
+        if(!confirm('¿Borrar el informe «'+p.nombre+'»?\\n\\nSe borra solo la receta (qué mides y cómo lo agrupas). '
           +'No se borra ningún dato del negocio: ni una factura, ni una cita, ni un cliente.')) return;
         try{ const r=await api('DELETE','/api/erp/analytics/constructor/paneles/'+id);
           cPaneles=r.paneles; pintarMisInformes(); llenarPaneles();
@@ -1151,7 +1151,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
           // El motor avisa (409) cuando el papel va a salir muy largo. Se pregunta y se sigue, igual
           // que en los otros listados: nunca se recorta una fila en silencio.
           if(r.status===409){ const a=await r.json();
-            if(!confirm(a.mensaje+'\n\n¿Lo bajamos igualmente?')) return;
+            if(!confirm(a.mensaje+'\\n\\n¿Lo bajamos igualmente?')) return;
             window.open(a.seguir,'_blank','noopener'); return; }
           if(!r.ok){ const e=await r.json().catch(()=>({})); toast(e.error||'No hemos podido preparar el PDF','err'); return; }
           const b=await r.blob(), a=document.createElement('a');
@@ -1162,7 +1162,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
 
       async function enviarInforme(id){
         const p=panelPorId(id); if(!p) return;
-        const to=prompt('¿A qué correo lo mandamos?\n\nVa como PDF adjunto, con el gráfico y la tabla.');
+        const to=prompt('¿A qué correo lo mandamos?\\n\\nVa como PDF adjunto, con el gráfico y la tabla.');
         if(!to) return;
         try{ const r=await api('POST','/api/erp/listados/panel/enviar?panel_id='+id,{to:to.trim()});
           toast('Enviado a '+r.to); }catch(e){}
