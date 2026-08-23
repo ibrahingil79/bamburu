@@ -83,6 +83,9 @@ export const NAV_PERMS = {
   security:         'admin.settings',
   'change-password': null,
   'purchases-capture': 'purchases.create',
+  // B1 — la migración asistida. MISMO candado que exige `/admin/migracion` (`company.read`, ver
+  // `routes/migracion.js`): darle entrada de menú no abre ni cierra ninguna puerta, solo la enseña.
+  migracion:        'company.read',
 };
 
 export const ROLE_FILTERS = {
@@ -197,14 +200,27 @@ export const MENU = [
   { id: 'catalogo', label: 'Catálogo', icon: 'ti-box', items: [
     { href: '/admin/products', label: 'Productos', key: 'products', icon: 'ti-box' },
     { href: '/admin/categories', label: 'Categorías', key: 'categories', icon: 'ti-category', ajustes: true },
+    // B2 (23 ago 2026) — ETIQUETAS, reenganchada. Llevaba viva y sin enlace desde U7 (8 jul): pantalla
+    // propia (`tagsViews`, products.js:842), responde 200 y no había forma de llegar salvo tecleando la
+    // dirección. Es un maestro del catálogo, como Categorías, así que va marcada `ajustes` y a su lado.
+    // `NAV_PERMS.tags` YA estaba declarado sin ningún item que lo usara — el mismo caso que analytics.
+    { href: '/admin/tags', label: 'Etiquetas', key: 'tags', icon: 'ti-tag', ajustes: true,
+      alias: ['Tags', 'Etiquetas de producto'] },
   ]},
   // ── ANALÍTICA — reenganchada al menú (17 jul 2026, escalera paso 2) ────────────────────────
   // La pantalla llevaba VIVA y sin enlace desde que U7 la encontró (8-jul): existía, respondía 200
   // y no había forma de llegar salvo tecleando la URL. `NAV_PERMS.analytics` ya estaba declarado
   // sin ningún item que lo usara — U7 lo anotó como hallazgo. Ahora lo usa este.
-  // NO se reengancha nada más: `/admin/discounts` y `/admin/tags` siguen sin enlace a propósito
-  // (decisión del dueño en U7), y el clúster de e-commerce (`/admin/orders`, `/admin/shipping`)
-  // está desmontado y da 404 — resucitarlo por el menú sería revivir lo que D1/D2 apagaron.
+  // ⚙️ ACTUALIZADO EL 23 AGO 2026 (B2). Este comentario decía que `/admin/discounts` y `/admin/tags`
+  // seguían sin enlace «a propósito». No era exacto: lo que el dueño dijo en U7 fue **«se abordarán
+  // luego»** (TABLERO:1724), y ese luego es B2. **`/admin/tags` ya está enganchada** aquí arriba, en
+  // Catálogo. **`/admin/discounts` sigue fuera, y ahora sí a propósito y por decisión de hoy:** sus
+  // tablas (`discount_codes`, `auto_discounts`) solo las leen la tienda —Capa 2, CONGELADA— y el POS
+  // viejo, que está desmontado; ni facturas, ni presupuestos, ni mostrador aplican un cupón. Darle
+  // entrada de menú sería prometer algo que hoy no ocurre. Queda apuntada en el TABLERO como
+  // candidata a desmontar, con su motivo, para decidirlo en su propio encargo. NO se retira aquí.
+  // El clúster de e-commerce (`/admin/orders`, `/admin/shipping`) está desmontado y da 404 —
+  // resucitarlo por el menú sería revivir lo que D1/D2 apagaron.
   { id: 'analitica', label: 'Analítica', icon: 'ti-chart-histogram', items: [
     { href: '/admin/analytics', label: 'Informes', key: 'analytics', icon: 'ti-report-analytics' },
     // Escalera · paso 5 — DISA predictiva. El vigía analiza sobre los motores del constructor; por
@@ -308,12 +324,26 @@ export function condicionesConfig(db) {
 // encuentre y se puedan anclar: son entradas del menú como cualquier otra. `adminLayout` las sigue
 // pintando en su sitio de siempre, leyéndolas de aquí.
 //
-// ⚠️ NO PASAN POR EL FILTRO DE PERMISOS, igual que antes: las dos son de todos (el Inicio y la ayuda).
-// Esto hereda el aviso que llevaba la rama `g.home` del menú viejo —que no usaba nadie y que aquí se
-// retira—: si algún día se añade a esta lista una pantalla con candado, HAY QUE FILTRARLA, o el menú
-// enseñará una puerta que solo se cierra al pulsarla (403).
+// ⚠️ ESE DÍA LLEGÓ (23 ago 2026, B1). El aviso de aquí decía: «si algún día se añade a esta lista una
+// pantalla con candado, HAY QUE FILTRARLA, o el menú enseñará una puerta que solo se cierra al
+// pulsarla (403)». «Trae tus datos» tiene candado (`company.read`), así que **las FIJAS ya pasan por
+// el filtro de permisos** — ver `menuDeUsuario`. Inicio y la ayuda no cambian de comportamiento: sus
+// claves no exigen nada en `NAV_PERMS` (`dashboard: null`, `ayuda` ni siquiera está), así que siguen
+// siendo de todos. Lo que se ha quitado es el riesgo, no una puerta.
+//
+// POR QUÉ LA MIGRACIÓN VA AQUÍ Y NO EN UN ÁREA: no es del día a día de ningún área —no es una venta,
+// ni una compra, ni un cliente—, es lo PRIMERO que hace quien viene de otro programa. Al pie del rail
+// está siempre visible, no depende de que el negocio esté vacío y queda junto a la ayuda, que es donde
+// mira quien acaba de entrar. Sus otras dos puertas siguen donde estaban y ninguna depende de esta:
+// el paso del panel «Pon en marcha tu negocio» (`arranque.js`), que se pliega, y la tarjeta fija de
+// «Datos del negocio» (`routes/settings.js`).
 export const FIJAS = [
   { href: '/admin', label: 'Inicio', key: 'dashboard', icon: 'ti-home', sitio: 'pin' },
+  // B1 — LA ENTRADA PERMANENTE A LA MIGRACIÓN ASISTIDA. Los `alias` son las palabras con las que un
+  // dueño la busca de verdad: nadie teclea «migración asistida», teclea «Holded» o «importar».
+  { href: '/admin/migracion', label: 'Trae tus datos', key: 'migracion', icon: 'ti-file-import', sitio: 'pie',
+    alias: ['Migración', 'Migrar', 'Importar datos', 'Traer mis datos', 'Holded', 'Quipu', 'Excel',
+            'Cambiar de programa', 'Programa anterior'] },
   { href: '/docs', label: 'Ayuda y soporte', key: 'ayuda', icon: 'ti-lifebuoy', sitio: 'pie', target: '_blank' },
 ];
 
@@ -426,7 +456,9 @@ export function menuDeUsuario(db, { role = '', perms = [], userId = null } = {})
   const cuenta = CUENTA
     .filter(it => pasa(it) || (it.key === 'settings' && config.length > 0))
     .map(it => ({ ...it, area: 'Cuenta', areaId: 'cuenta' }));
-  const fijas  = FIJAS.map(it => ({ ...it, area: '', areaId: 'fijas' }));
+  // Las FIJAS pasan por el MISMO filtro que el resto desde que una de ellas tiene candado
+  // («Trae tus datos», `company.read`). Inicio y la ayuda no lo notan: no exigen ningún permiso.
+  const fijas  = FIJAS.filter(pasa).map(it => ({ ...it, area: '', areaId: 'fijas' }));
   // El ORDEN de este usuario se aplica al final, sobre el menú ya filtrado. Nunca quita nada: lo que
   // no esté en su lista se coloca detrás, en el orden de fábrica (ver `aplicarOrden`).
   let pref = { areas: [], entradas: {} };
@@ -507,7 +539,9 @@ export function destinosBuscador(menu) {
   // resultado diga de dónde sale («Cuándo abro · Cómo funciona mi agenda») y no parezca que están en
   // el rail. Ya vienen filtradas por permiso y por condición desde `menuDeUsuario`.
   for (const sec of (menu.config || [])) for (const i of sec.items) out.push(dest(i, sec.label));
-  for (const i of menu.fijas)  out.push({ tipo: 'entrada', key: i.key, label: i.label, area: '', href: i.href, icon: i.icon, alias: [] });
+  // Los `alias` de las fijas SÍ viajan al buscador: sin esto, «Trae tus datos» solo se encontraría
+  // tecleando su nombre exacto, y quien viene de otro programa teclea «Holded», no «trae tus datos».
+  for (const i of menu.fijas)  out.push({ tipo: 'entrada', key: i.key, label: i.label, area: '', href: i.href, icon: i.icon, alias: i.alias || [] });
   for (const i of menu.cuenta) out.push({ tipo: 'entrada', key: i.key, label: i.label, area: i.area, href: i.href, icon: i.icon, alias: [] });
   return out;
 }

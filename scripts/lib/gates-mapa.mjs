@@ -20,6 +20,7 @@ export const GRUPOS = {
     'gate-cliente-ficha-completa',   // ventana, tarjetas, registro de contactos y los dos márgenes
     'gate-cliente-360',              // la ficha cuadra al céntimo con la pantalla de la que sale
     'gate-menu-navegacion',          // ni una función del menú se pierde por el camino
+    'gate-migracion-puerta',         // ficha B: la migración tiene puerta, y solo la ve quien puede
     'gate-agenda-visual',            // el lienzo de la agenda, y que se sirve desde la dirección real
     'gate-inicio-arranque',          // el Inicio de un negocio que arranca: panel, «Hoy» y migración
     'gate-inicio-cuadro-mando',      // el Inicio es el cuadro de mando del día (contra la dirección pública)
@@ -155,7 +156,8 @@ export const GRUPOS = {
 export const EMPIEZAN_DE_CERO = new Set([
   'gate-cliente-ficha-completa',   // negocio nuevo: la ficha entera, desde el alta
   'gate-cliente-360',              // negocio nuevo: la ficha cuadra con su pantalla de origen
-  'gate-menu-navegacion',          // negocio nuevo: 50 puertas del menú, una a una
+  'gate-menu-navegacion',          // negocio nuevo: 52 puertas del menú, una a una
+  'gate-migracion-puerta',         // negocio nuevo: es la condición del encargo («creas uno de cero»)
   'gate-agenda-visual',            // negocio nuevo: el lienzo de la agenda
   'gate-inicio-arranque',          // negocio RECIÉN CREADO: es justo lo que prueba
   'gate-inicio-cuadro-mando',      // negocio nuevo + uno vacío + un empleado sin permisos

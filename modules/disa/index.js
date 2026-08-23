@@ -2356,6 +2356,7 @@ export function register(app, db) {
       '/admin/invoices /admin/clients /admin/clients/groups /admin/analytics',
       '/admin/settings /admin/users /admin/activity',
       '/admin/citas /admin/citas/cola',
+      '/admin/migracion',   // B3 (23 ago 2026) — trae tus datos del programa anterior
       '/admin/security /admin/disa',
       // D2 — desmontados: quitados /admin/store-settings, /admin/newsletter, /admin/reviews, /admin/feedback.
       '',
@@ -2524,6 +2525,11 @@ export function register(app, db) {
       // poder llevarte. Son destinos de solo lectura y con el mismo candado que su pantalla
       // (`citas.read`): esto no abre ninguna puerta nueva, quita un callejón sin salida.
       '/admin/citas','/admin/citas/cola',
+      // 23 ago 2026 · B3 — la migración asistida. DISA ya sabía contarla pero no podía LLEVARTE:
+      // decía «pídela en Ajustes» sin enlace, que es el mismo callejón sin salida que tenía la agenda.
+      // Destino de solo lectura y con el MISMO candado que su pantalla (`company.read`): no abre
+      // ninguna puerta nueva. Quien no puede ver la pantalla tampoco puede entrar por este enlace.
+      '/admin/migracion',
       // D2 — desmontados: quitados /admin/store-settings, /admin/newsletter, /admin/reviews, /admin/feedback.
     ]);
     const DISA_DETAIL_PATTERNS = [

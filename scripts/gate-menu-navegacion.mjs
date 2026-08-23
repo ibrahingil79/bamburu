@@ -70,6 +70,10 @@ const BASE_RAIL = [
   ['Inventario', 'Almacenes', '/admin/warehouses'],
   ['Catálogo', 'Productos', '/admin/products'],
   ['Catálogo', 'Categorías', '/admin/categories'],
+  // B2 (23 ago 2026) — Etiquetas se reenganchó al menú: llevaba viva y sin enlace desde U7.
+  // El inventario SUBE a propósito. Es lo contrario de una amputación, y por eso se apunta aquí:
+  // si mañana desaparece, esta línea la echa de menos.
+  ['Catálogo', 'Etiquetas', '/admin/tags'],
   ['Analítica', 'Informes', '/admin/analytics'],
   ['Analítica', 'Vigía (DISA)', '/admin/vigia'],
 ];
@@ -89,12 +93,18 @@ const BASE_CONFIG = [
 const CONFIG_PUESTOS = ['(puesto_plural)', 'Recursos', '/admin/citas/recursos', 'citas.read'];
 const SECCION_CONFIG = 'Cómo funciona mi agenda';
 
-const BASE_FIJAS  = [['Inicio', '/admin'], ['Ayuda y soporte', '/docs']];
+// B1 (23 ago 2026) — «Trae tus datos» es la TERCERA fija: la puerta permanente a la migración
+// asistida, al pie del rail, encima de la ayuda. Y desde hoy las fijas pasan por el filtro de
+// permisos (lleva candado `company.read`), cosa que antes no ocurría con ninguna.
+const BASE_FIJAS  = [['Inicio', '/admin'], ['Trae tus datos', '/admin/migracion'], ['Ayuda y soporte', '/docs']];
 const BASE_CUENTA = [['Perfil', '/admin/perfil'], ['Datos del negocio', '/admin/settings'],
                      ['Usuarios', '/admin/users'], ['Actividad', '/admin/activity'],
                      ['Documentación', '/docs'], ['Cerrar sesión', '/admin/logout']];
 // EL NÚMERO QUE NO PUEDE BAJAR. Antes de la mudanza: 42 del rail + 2 fijas + 6 de cuenta = 50.
 // Después: 36 del rail + 6 en la configuración del negocio + 2 + 6 = las MISMAS 50.
+// Y DESDE EL 23 AGO 2026 SON 52, porque la ficha B abrió dos puertas que estaban construidas y sin
+// enlace: «Etiquetas» al rail (37) y «Trae tus datos» a las fijas (3). Que el número SUBA aquí es el
+// resultado esperado del encargo; lo que este gate impide es que baje sin que nadie se entere.
 //
 // Con un matiz que se dice en voz alta en vez de esconderlo en el recuento: una de las seis —los
 // puestos— es CONDICIONAL y nace oculta, así que un negocio recién creado enseña 49 y no 50. Por eso
@@ -119,7 +129,9 @@ const N_SIN_PUESTOS = N_TOTAL - 1;                                              
 // desplegable de Agenda «va de una pieza» porque el umbral que ya existía lo decide solo.
 const AJUSTES_ESPERADOS = {};
 // Áreas con un solo ajuste: NO se parten, y su entrada de ajuste tiene que seguir estando, la última.
-const SIN_PARTIR = { 'Clientes': 'Grupos', 'Compras y gastos': 'Proveedores', 'Inventario': 'Almacenes', 'Catálogo': 'Categorías' };
+// Catálogo pasa a DOS entradas de ajuste (Categorías y Etiquetas) y sigue sin partirse: el umbral
+// `MIN_AJUSTES` son 3. La última de su lista ya no es Categorías, es Etiquetas.
+const SIN_PARTIR = { 'Clientes': 'Grupos', 'Compras y gastos': 'Proveedores', 'Inventario': 'Almacenes', 'Catálogo': 'Etiquetas' };
 
 let pass = 0, fail = 0;
 const ok = (c, m, extra = '') => {
@@ -161,7 +173,10 @@ const leerMenu = page => page.evaluate(() => {
   return {
     areas,
     pin: { label: txt(sb.querySelector('.disa-pin .nav-label')), href: sb.querySelector('.disa-pin').getAttribute('href') },
-    pie: { label: txt(nav.querySelector('a[href="/docs"] .nav-label')), href: '/docs' },
+    // EL PIE SON VARIAS desde el 23 ago 2026. Antes esto estaba cableado a `/docs`, así que una
+    // entrada nueva al pie no la habría visto nadie — ni para bien ni para mal. Ahora se leen todas.
+    pies: [...nav.querySelectorAll(':scope > a.nav-item')].map(a => ({
+      label: txt(a.querySelector('.nav-label')), href: a.getAttribute('href') })),
     cuenta: [...document.querySelectorAll('.acct-menu .acct-item')].map(a => ({ label: txt(a.querySelector('span')), href: a.getAttribute('href') })),
     // Hijas DIRECTAS del bloque: un área anclada trae su desplegable dentro, y sus entradas no son anclas.
     anclas: [...document.querySelectorAll('#railAnc > .anc')].map(a => ({
@@ -287,12 +302,16 @@ try {
   await page.goto(BASE + '/admin', { waitUntil: 'networkidle0' });
 
   ok(menu.pin.label === 'Inicio' && menu.pin.href === '/admin', 'sigue el pin de Inicio arriba del rail');
-  ok(menu.pie.label === 'Ayuda y soporte', 'sigue Ayuda y soporte al pie del rail');
+  const piesEsp = BASE_FIJAS.filter(([, h]) => h !== '/admin').map(([l, h]) => l + ' » ' + h);
+  const piesVis = menu.pies.map(i => i.label + ' » ' + i.href);
+  ok(JSON.stringify(piesVis) === JSON.stringify(piesEsp),
+     'el pie del rail tiene sus ' + piesEsp.length + ' entradas, en orden y sin pisarse', piesVis.join(' · '));
+  ok(menu.pies.some(i => i.href === '/docs'), 'y Ayuda y soporte sigue ahí');
   const cuentaVista = menu.cuenta.map(i => i.label + ' » ' + i.href);
   const cuentaEsp = BASE_CUENTA.map(([l, h]) => l + ' » ' + h);
   ok(cuentaEsp.every(x => cuentaVista.includes(x)) && cuentaVista.length === cuentaEsp.length,
      'el menú de cuenta conserva sus ' + cuentaEsp.length + ' entradas', cuentaVista.join(' · '));
-  const N_VISTO = vistoRail.length + vistoConfig.length + 2 + menu.cuenta.length;
+  const N_VISTO = vistoRail.length + vistoConfig.length + (1 + menu.pies.length) + menu.cuenta.length;   // 1 = el pin de Inicio
   ok(N_VISTO === N_SIN_PUESTOS, 'N ANTES = N DESPUÉS (menos la condicional, que aparece en [6])',
      N_TOTAL + ' puertas antes · ' + N_VISTO + ' ahora + 1 condicional');
 

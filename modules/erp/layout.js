@@ -330,7 +330,12 @@ export function anclasBloqueHTML(anclas, ctx) {
 // EL RAIL ENTERO — lo que va dentro de `<nav class="sb-nav">`. Lo pinta el servidor y punto: cuando el
 // usuario ancla o reordena, el endpoint devuelve ESTO ya hecho y el navegador solo lo sustituye. Un
 // segundo renderizador en el JavaScript acabaría diciendo algo distinto del primero.
-export function railHTML(menu, anclas, ctx, fijaPie, hayPref) {
+// `fijasPie` es una LISTA, no una entrada. Dejó de ser una sola el 23 ago 2026, cuando «Trae tus
+// datos» se sumó a «Ayuda y soporte» al pie del rail. Con un `find` la segunda entrada no se habría
+// pintado nunca — y sin error: simplemente no estaría. Se acepta también una entrada suelta por si
+// algún llamador viejo la pasa así.
+export function railHTML(menu, anclas, ctx, fijasPie, hayPref) {
+  const pie = Array.isArray(fijasPie) ? fijasPie : (fijasPie ? [fijasPie] : []);
   return `<div class="rail-anc" id="railAnc">${anclasBloqueHTML(anclas, ctx)}</div>`
     + menu.areas.map(a => areaNavgHTML(a, ctx)).join('')
     + `<span class="rail-spacer"></span>`
@@ -339,7 +344,7 @@ export function railHTML(menu, anclas, ctx, fijaPie, hayPref) {
     + (hayPref
         ? `<button type="button" class="nav-item rail-reset" id="railReset" title="Restablecer mi menú" aria-label="Restablecer mi menú" onclick="menuRestablecer()"><i class="ti ti-rotate"></i><span class="nav-label">Restablecer mi menú</span></button>`
         : '')
-    + `<a href="${fijaPie.href}"${fijaPie.target ? ` target="${fijaPie.target}"` : ''} class="nav-item" title="${escHtml(fijaPie.label)}"><i class="ti ${fijaPie.icon}"></i><span class="nav-label">${escHtml(fijaPie.label)}</span></a>`;
+    + pie.map(f => `<a href="${f.href}"${f.target ? ` target="${f.target}"` : ''} class="nav-item${f.key && ctx.active === f.key ? ' active' : ''}" title="${escHtml(f.label)}"><i class="ti ${f.icon}"></i><span class="nav-label">${escHtml(f.label)}</span></a>`).join('');
 }
 
 // ══ PINTAR LA CONFIGURACIÓN DEL NEGOCIO ═══════════════════════════════════════════════════════════
@@ -479,8 +484,9 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   // Las dos entradas FIJAS del rail (Inicio arriba del todo, Ayuda al pie) también salen de `menu.js`,
   // que es lo que permite encontrarlas en el buscador y anclarlas como cualquier otra.
   const fijaPin = menu.fijas.find(f => f.sitio === 'pin') || { href: '/admin', label: 'Inicio', icon: 'ti-home', key: 'dashboard' };
-  const fijaPie = menu.fijas.find(f => f.sitio === 'pie') || { href: '/docs', label: 'Ayuda y soporte', icon: 'ti-lifebuoy' };
-  const railInner = railHTML(menu, anclas, ctxRail, fijaPie, hayPref);
+  const fijasPie = menu.fijas.filter(f => f.sitio === 'pie');
+  if (!fijasPie.length) fijasPie.push({ href: '/docs', label: 'Ayuda y soporte', key: 'ayuda', icon: 'ti-lifebuoy' });
+  const railInner = railHTML(menu, anclas, ctxRail, fijasPie, hayPref);
 
   // ── Avatar + barra de Cuenta (mockup): cabecera + items gateados + Documentación + salir ──
   const acctVisible = menu.cuenta;

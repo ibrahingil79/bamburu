@@ -42,8 +42,10 @@ export function createMenuRoutes(db) {
       ? `<span class="rail-count" id="propCount"${pend ? '' : ' style="display:none"'}>${pend || ''}</span>`
       : '';
     const ctx = { active: typeof activa === 'string' ? activa : '', anclado: new Set(anclas.map(a => a.key)), disaBadge };
-    const fijaPie = menu.fijas.find(f => f.sitio === 'pie') || { href: '/docs', label: 'Ayuda y soporte', icon: 'ti-lifebuoy' };
-    return { rail: railHTML(menu, anclas, ctx, fijaPie, tienePref(db, userId)) };
+    // TODAS las del pie, no la primera: desde el 23 ago 2026 son dos («Trae tus datos» y la ayuda).
+    const fijasPie = menu.fijas.filter(f => f.sitio === 'pie');
+    if (!fijasPie.length) fijasPie.push({ href: '/docs', label: 'Ayuda y soporte', key: 'ayuda', icon: 'ti-lifebuoy' });
+    return { rail: railHTML(menu, anclas, ctx, fijasPie, tienePref(db, userId)) };
   }
 
   const usuario = c => {

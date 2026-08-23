@@ -117,12 +117,18 @@
 `A 8 · B 3 · C 11 · D 5 · E 4 · F 4 · G 5 · H 3 · I 3 · J 0 · K 0` = **46**.
 (J y K son ítems bloqueados sin subpuntos: su texto es una sola afirmación.)
 
-**RECUENTO VIGENTE — 22 ago 2026: 65 subpuntos vivos · 39 hechos · 26 pendientes.**
+**RECUENTO VIGENTE — 23 ago 2026: 65 subpuntos vivos · 44 hechos · 21 pendientes.**
+*(**rehecho entre las dos entregas del 23 ago**, como pedía el aviso de más abajo: la sesión del
+importador de CSV lo dejó en 41/24 sumando H2 y H3, y **la ficha B entera —B1, B2 y B3— suma 3 más**.
+41 + 3 = 44 hechos · 24 − 3 = 21 pendientes. Pendientes: **D 5 · E 4 · F 4 · G 4 · H 1 · I 3** = 21.)*
+*(el 22 ago iba por 39 hechos · 26 pendientes; **H2 y H3** entran hoy con el importador de CSV.
+**H1 NO se cuenta como hecho**: clientes y productos están, las facturas quedaron paradas a la
+espera de la decisión del dueño, y media entrega no es una entrega.)*
 *(el 21 ago iba por 31 hechos · 34 pendientes; **C entera** suma sus 8 restantes)*
 `A 6 · C 12 · C-0 4 · B 3 · D 5 · E 4 · F 4 · G 4 · H 3 · I 3 · J 0 · K 0 · L 8 · M 9` = **65**.
 - **C pasa de 11 a 12** con **C10-f**, que Ibrahin añadió el 21 ago tras cerrar C-0. ~~Los pendientes
-  suben de 37 a 38~~ — **línea caducada, corregida el 23 ago 2026:** los pendientes de hoy son **26**,
-  y esta cifra ya se contradecía con la de dos líneas más abajo («quedan 37 pendientes») el mismo día
+  suben de 37 a 38~~ — **línea caducada, corregida el 23 ago 2026:** ~~los pendientes de hoy son
+  **26**~~ **→ 24 tras el importador de CSV, esa misma tarde**; y esta cifra ya se contradecía con la de dos líneas más abajo («quedan 37 pendientes») el mismo día
   en que se escribió. Lo que sigue siendo cierto y por eso no se borra: **el subpunto es nuevo, no
   estaba antes sin marcar.**
 - **4 RETIRADOS**, con su motivo escrito en su sitio y **sin borrar la línea**: **A3** y **A6**
@@ -130,17 +136,24 @@
   pantalla ya traía el armazón del panel: lo tumbó el Paso 0 de la tarea L).
 - ~~**27 HECHOS:** los 6 de **A** · los 9 de **M** (las dos entregas que se dictaron de viva voz) · los
   8 vivos de **L** · y los **4 de C-0**. Todos del 21 ago 2026.~~ — **línea caducada, corregida el
-  23 ago 2026:** se quedó sin **los 12 de C**, cerrada el 22 ago. **Son 39 HECHOS:** los 6 de **A** ·
-  los **12 de C** (22 ago) · los **4 de C-0** · los 8 vivos de **L** · los 9 de **M**. Los cuatro
-  últimos grupos, del 21 ago 2026.
+  23 ago 2026:** se quedó sin **los 12 de C**, cerrada el 22 ago. ~~**Son 39 HECHOS:** los 6 de **A** ·
+  los **12 de C** (22 ago) · los **4 de C-0** · los 8 vivos de **L** · los 9 de **M**~~ — **corregida
+  otra vez el 23 ago por la tarde: son 41 HECHOS**, los mismos de antes **+ H2 y H3** (importador de
+  CSV). Los cuatro grupos del final, del 21 ago 2026.
 - **C-0 no estaba en el encargo original** y nace del Paso 0 de **C**: sanear los documentos antes de
   construir el motor de listados encima. ~~**C sigue entero y pendiente**~~ — **línea caducada,
   corregida el 23 ago 2026: C quedó CERRADA el 22 ago, 12 de 12** (commits `575e333`, `c3302f5`,
   `5e05738`). Lo que sigue siendo cierto: C-0 le quitó el andamio podrido de debajo, no le hizo el
   trabajo.
-- ~~Quedan **37 pendientes** —los de B a I—~~ y **2 bloqueados** (J y K), que no dependen de Ibrahin.
-  **Línea caducada, corregida el 23 ago 2026: quedan 26 pendientes**, y siguen siendo «los de B a I»
-  (B 3 · D 5 · E 4 · F 4 · G 4 · H 3 · I 3). Los bloqueados siguen siendo 2.
+- ~~Quedan **37 pendientes** —los de B a I—~~ ~~**quedan 26 pendientes** (B 3 · D 5 · E 4 · F 4 ·
+  G 4 · H 3 · I 3)~~ y **2 bloqueados** (J y K), que no dependen de Ibrahin. **Corregida otra vez el
+  23 ago 2026 por la tarde, al entregar el importador de CSV: quedan 24 pendientes**, y siguen siendo
+  «los de B a I» — **B 3 · D 5 · E 4 · F 4 · G 4 · H 1 · I 3**. H baja de 3 a 1: se cierran H2 y H3,
+  y el único que queda vivo es **H1, solo en su parte de facturas**. Los bloqueados siguen siendo 2.
+  ~~⚠️ **Si otra sesión cierra B el mismo día, este recuento hay que rehacerlo entre las dos
+  entregas.**~~ — **pasó, y está rehecho (23 ago, tarde): B se cerró entera esa misma tarde en otra
+  sesión, así que quedan 21 pendientes — D 5 · E 4 · F 4 · G 4 · H 1 · I 3.** B sale de la lista.
+  El aviso cumplió su función y por eso se tacha en vez de borrarse.
 - **A1, A4 y A7 fueron REESCRITOS** por el dueño antes de construirse; el recuento no cambia por eso
   (siguen siendo los mismos subpuntos), solo cambia lo que piden.
 - **L nace con 9 subpuntos y se queda con 8 vivos** (L1 retirado). **M nace con 9, los 9 hechos.**
@@ -552,7 +565,48 @@ devuelve sus horas, que copiar no abre días cerrados y que un tramo imposible n
   ayudante **`clic(page, sel)`**, que devuelve `false` en vez de tumbar la pasada, y se usa en todos
   los clics del gate.
 
-#### B. MIGRACIÓN ASISTIDA SIN ACCESO VISIBLE · **PENDIENTE**
+#### B. MIGRACIÓN ASISTIDA SIN ACCESO VISIBLE · ✅ **HECHO (23 ago 2026)** · commit `PENDIENTE_HASH` · **3 de 3**
+
+> **HECHOS (23 ago 2026): B1 · B2 · B3.** Solo la puerta: la migración **por dentro no se ha tocado**
+> (`modules/erp/routes/migracion.js`, sin un solo cambio).
+> - **B1 — ENTRADA PERMANENTE.** «Trae tus datos» es ahora una entrada **fija del rail**, al pie,
+>   encima de «Ayuda y soporte» (`menu.js` → `FIJAS`). No es de un área porque no es del día a día de
+>   ninguna: es lo PRIMERO que hace quien viene de otro programa. Sus dos puertas anteriores **siguen
+>   donde estaban y ninguna depende de esta**: el paso del panel «Pon en marcha tu negocio» (que se
+>   pliega con la primera factura) y la tarjeta de «Datos del negocio». Son **tres**, no una que
+>   sustituye a dos.
+> - **B1-bis — EL BUSCADOR, GRATIS Y NO TANTO.** El buscador rápido se alimenta de la MISMA lista que
+>   el menú, así que la entrada aparece sola. Lo que **no** era gratis: `destinosBuscador` mandaba las
+>   entradas fijas con `alias: []` **cableado**, de modo que solo se habrían encontrado tecleando su
+>   nombre exacto. Ahora los alias viajan, y se busca por **Holded, Quipu, Excel, importar, migrar**…
+>   que es como lo teclea un dueño.
+> - **B2 — ETIQUETAS, REENGANCHADA.** `/admin/tags` llevaba viva y sin enlace desde U7 (8 jul).
+>   Entra en **Catálogo**, junto a Categorías, marcada como ajuste. `NAV_PERMS.tags` ya estaba
+>   declarado sin ningún item que lo usara — el mismo caso exacto que tuvo `analytics`.
+>   **`/admin/discounts` NO se ha enlazado**, y es decisión de Ibrahin de hoy: ver el punto de abajo.
+> - **B3 — DISA YA PUEDE LLEVARTE.** Hacían falta **las dos mitades** y solo con una no funciona:
+>   `DISA_ALLOWED_URLS` (el sanitizador, que si no le borra el enlace) **y** la lista de URLs del
+>   **prompt** (que es lo que le dice a DISA que la pantalla existe). Mismo candado que la pantalla.
+>
+> **⚠️ DOS COSAS QUE ESTABAN MAL Y NO SE VEÍAN, destapadas al construir esto:**
+> - **El rail se habría comido la entrada nueva sin decir nada.** `railHTML` cogía la entrada del pie
+>   con un `find`: con dos, la segunda **no se pinta jamás**, y sin error ninguno. Ahora pinta todas.
+> - **Las entradas fijas NO pasaban por el filtro de permisos.** El propio código lo avisaba —«si
+>   algún día se añade a esta lista una pantalla con candado, HAY QUE FILTRARLA»— y ese día era hoy:
+>   la migración exige `company.read`. **Ya se filtran.** Medido con un empleado real: sin ese permiso
+>   no la ve en el rail, no la encuentra en el buscador y recibe 403 si fuerza la dirección. Inicio y
+>   la ayuda no cambian: sus claves no exigen nada.
+>
+> **⬜ APUNTADO, NO DECIDIDO — `/admin/discounts` (cupones y descuentos automáticos).** Es la tercera
+> pantalla huérfana y **se queda fuera del menú a propósito**. Motivo medido: sus tablas
+> (`discount_codes`, `auto_discounts`) **solo las leen la tienda —Capa 2, CONGELADA— y el POS viejo,
+> que está desmontado**; ni facturas, ni presupuestos, ni mostrador aplican un cupón. Enlazarla sería
+> prometer algo que hoy no ocurre. **Candidata a DESMONTAR, en su propio encargo y con decisión de
+> Ibrahin: aquí no se retira nada.** Va junto a la deuda ya declarada de `routes/orders.js`.
+>
+> **VERIFICADO:** `gate-migracion-puerta` (nuevo, **25 comprobaciones**, negocio creado de cero, en
+> `GRUPOS.clientes` y en `EMPIEZAN_DE_CERO`) y `gate-menu-navegacion`, cuyo inventario **sube de 50 a
+> 52 puertas** a propósito: **155 OK · 0 fallos**. **Seis reversiones, y las seis tumban.**
 
 > **B. MIGRACION ASISTIDA SIN ACCESO VISIBLE.**
 > Palabras del dueño: "la migracion de datos de otras plataformas no se ha construido o esta a medias". Dato real: la migracion ASISTIDA esta construida; el importador AUTOMATICO no existe. El defecto es que no hay acceso visual a la asistida.
@@ -1335,17 +1389,71 @@ Acceso por **enlace mágico con token temporal**, solo lectura.
 
 ---
 
-#### H. IMPORTADOR DE CSV GENÉRICO · **PENDIENTE**
+#### H. IMPORTADOR DE CSV GENÉRICO · **H2 ✅ · H3 ✅ · H1 A MEDIAS A PROPÓSITO** (23 ago 2026, sin commitear)
 
 > **H. IMPORTADOR DE CSV GENERICO.**
-> **H1** Clientes, productos y facturas desde CSV.
-> **H2** Previsualizacion antes de importar y posibilidad de deshacer.
-> **H3** Complementa la migracion asistida, NO la sustituye ni la retira.
+> **H1** ~~Clientes, productos y facturas desde CSV.~~ **Clientes ✅ · Productos ✅ · Facturas ⏸ PARADAS: exigen un camino de emisión nuevo y eso lo decide el dueño (abajo).**
+> **H2** ✅ Previsualizacion antes de importar y posibilidad de deshacer.
+> **H3** ✅ Complementa la migracion asistida, NO la sustituye ni la retira.
 
-**⚙️ CONFIRMADO: no existe.** Lo único que importa ficheros hoy es la **conciliación bancaria
-(Norma 43)** (`modules/erp/routes/conciliacion-routes.js`), que no es un importador de datos de
-negocio. Sí hay **exportación** CSV en Analítica y Conciliación, que puede servir de referencia de
-formato al construir H.
+**⚙️ CONFIRMADO AL EMPEZAR: no existía.** Lo único que importaba ficheros era la **conciliación
+bancaria (Norma 43)** (`modules/erp/routes/conciliacion-routes.js`), que no es un importador de datos
+de negocio.
+
+**QUÉ HAY AHORA.** `modules/erp/importador.js` (el motor) + `modules/erp/routes/importador.js` (la
+pantalla y la API), colgando de **`/admin/migracion/importar`** — dentro de la migración asistida, no
+al lado. Tres pasos: subir → revisar → confirmar.
+
+- **H1 · CLIENTES Y PRODUCTOS.** 13 campos de cliente y 9 de producto, con automapeo por el nombre de
+  la columna (dos pasadas: exacta primero, para que «Precio» no se lo lleve «Precio anterior») y
+  corrección a mano de cualquier columna. Lector de CSV propio: comillas, comas y saltos de línea
+  DENTRO del campo, BOM de Excel, separador adivinado (`;` `,` tab `|`) y **juego de caracteres
+  detectado** (UTF-8 y, si aparece el carácter de reemplazo, Windows-1252 — que es lo que escribe
+  Excel en español). Números a la española: `1.234,56 €` → `1234.56`.
+- **NO HAY UN SEGUNDO CAMINO DE ALTA.** Escribe por `createClientSvc` / `createProductSvc`, los
+  servicios compartidos del patrón T5. Aquí no hay ni un `INSERT INTO clients`.
+- **LA VISTA PREVIA VALIDA CON EL VALIDADOR DE VERDAD** (`clientSchema` / `productSchema`,
+  `fiscalIdConflict`, las bandas de `core/vat-bands.js`), no con una segunda copia de las reglas. Los
+  mensajes de Zod se traducen al castellano para que digan **qué columna** y **qué pasa**.
+- **EL IVA NO CAE A UN DEFECTO SILENCIOSO.** `tax_band` es obligatoria en el formulario y aquí
+  también. Si el fichero no trae columna de IVA, el dueño **elige** la banda para todo el fichero en
+  la propia pantalla: eso es una decisión visible antes de confirmar, no un 21% puesto a su espalda.
+- **H2 · LA VISTA PREVIA NO ESCRIBE NADA.** Medido contando filas en la base antes y después de tres
+  análisis (uno remapeado): la tabla no se mueve. Cancelar no deja rastro porque no hay rastro.
+- **H2 · DESHACER ARCHIVA, NO BORRA.** Tablas `importaciones` + `importacion_items` (aditivas, sin
+  DROP, fuera de WRITABLE_TABLES). Deshacer pone `active=0` / `status='archived'`, que es lo que hace
+  el botón de archivar de cada pantalla. Se dice en pantalla con esas palabras, y se dice también qué
+  NO deshace: una factura hecha a un cliente importado se queda, y su movimiento de stock también.
+- **O ENTRA TODO O NO ENTRA NADA**, y no de palabra: una transacción de SQLite. Comprobado
+  **provocando** un fallo en la tercera fila con un disparador — no quedan ni las dos anteriores, ni
+  el lote a medias, ni el contador de códigos internos gastado.
+- **H3 · LA ASISTIDA NO SE TOCA.** Sigue entera, sigue ofreciéndose **primero** en su pantalla y
+  sigue siendo la **única** vía para facturas. El importador es una tarjeta debajo. Un solo retoque
+  de texto en la asistida: decía «ni pelearse con ningún importador», que dejaba de ser verdad con
+  uno nuestro tres centímetros más abajo.
+
+**⛔ H1 · LAS FACTURAS: PARADO ANTES DE CONSTRUIR, COMO PEDÍA EL ENCARGO.** Meterlas exige un
+**camino de emisión nuevo**, y eso no se abre sin decisión del dueño. El único camino vivo es
+`createInvoice` (`routes/invoices.js`; `generateInvoice` está retirado con un 410) y hace **siempre**
+tres cosas que una factura importada no tolera:
+
+| | Qué hace `createInvoice` | Por qué rompe una factura importada |
+|---|---|---|
+| 1 | Correlativo NUEVO del año EN CURSO (`getNextSeq`) | La `FAC-2024-0012` de Holded se convierte en `F2026-00NN`. El número es lo que la identifica ante Hacienda y ante el cliente que ya la recibió. |
+| 2 | Registra el ALTA en la cadena legal (`recordVerifactuAlta`) con la marca de tiempo de AHORA (`genTimestampMadrid`) | `verifactu.js:12` ya lo dejó escrito: las facturas anteriores **no** se registran retroactivamente, porque no tenemos su `FechaHoraHusoGenRegistro` real y backdatearla **falsearía la huella**. |
+| 3 | La encola para remitirla a la AEAT (`encolarSiProcede`) | Declararía **por segunda vez** facturas que el programa anterior ya declaró. |
+
+Saltarse cualquiera de los tres es abrir una segunda puerta de emisión al lado de la única que hay.
+**Hasta que el dueño decida, el tipo «facturas» no existe en el importador y se rechaza con un 400**
+(el gate lo comprueba). Las facturas siguen yendo por la migración asistida, donde las mira una
+persona. *Las tres salidas posibles están planteadas en el parte de la entrega, sin construir ninguna.*
+
+**COMPROBACIÓN PROPIA:** `scripts/gate-importador-csv.mjs` — 11 bloques, negocio propio
+(`EMPIEZAN_DE_CERO`), declarado en `GRUPOS.clientes`. **ESCRITO Y NO EJECUTADO**: la norma de
+`RITUAL.md` §LA REGRESIÓN dice que ni el gate de la propia tarea se corre sin que Ibrahin lo pida, y
+este encargo no lo pedía arriba. Lo que SÍ se ha hecho es ejercitar el código escrito (motor contra
+una BD nueva, API y pantalla contra el servidor vivo, y el recorrido del encargo en un navegador de
+verdad): 60 aserciones en verde, ninguna de ellas un gate registrado ni un barrido.
 
 ---
 
