@@ -23,14 +23,20 @@ import { runMigrations } from '../modules/erp/models.js';
 import { createInvoice } from '../modules/erp/routes/invoices.js';
 import { fijarObjetivo } from '../modules/erp/plan-financiero.js';
 import { detectar } from '../modules/erp/vigia.js';
-import { narrar, vestir, PLANTILLAS } from '../modules/erp/voz.js';
+import { narrar, vestir, PLANTILLAS, dinero as dineroVoz, fechaEs } from '../modules/erp/voz.js';
 import * as VOZ from '../modules/erp/voz.js';
+import { sinDigitosInventados as sinDigitosLib } from './lib/voz-digitos.mjs';
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ FALLO: ' + m); } };
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
 const SYM = '€';
-const dinero = n => SYM + Number(n || 0).toFixed(2);
+// EL FORMATO SE IMPORTA DEL PRODUCTO, NO SE COPIA (23 ago 2026). Esta comprobación existe para
+// cazar CIFRAS INVENTADAS: quita del texto los campos limpios del hallazgo y exige que no quede
+// ni un dígito. Para quitarlos tiene que escribirlos EXACTAMENTE como los escribe la voz, así
+// que si tuviera su propia copia del formateador, el día que uno cambie el otro daría un falso
+// rojo — o peor, un falso verde. Que el formato en sí sea el español se afirma aparte, abajo.
+const dinero = n => dineroVoz(n, SYM);
 const HOY = '2026-07-15';
 const dbs = [];
 
@@ -57,18 +63,9 @@ function facturaProveedor(db, supId, { code, invDate, dueDate, base, tax }) {
   return db.prepare('SELECT id FROM supplier_invoices WHERE internal_code=?').get(code).id;
 }
 
-// El corazón del criterio 1: quita del texto SOLO los campos limpios del hallazgo (importe con y sin
-// símbolo, fecha, códigos de ref). Si tras quitarlos queda algún dígito, es un número INVENTADO.
-function sinDigitosInventados(texto, a) {
-  let t = ' ' + texto + ' ';
-  // Se quitan los campos limpios permitidos MÁS LARGOS PRIMERO: si no, la cifra "20" borraría el "20"
-  // de la fecha "2026-…" y dejaría un falso dígito huérfano (la cifra y la fecha son ambas del hallazgo).
-  const quitar = [dinero(a.cifra), String(a.cifra ?? ''), a.fecha, a.ref && a.ref.invoice_number, a.ref && a.ref.internal_code]
-    .filter(x => x != null && x !== '').map(String).sort((x, y) => y.length - x.length);
-  for (const q of quitar) t = t.split(q).join(' ');
-  const resto = t.match(/\d/g);
-  return { limpio: !resto, resto: resto || [] };
-}
+// La comprobación vive en scripts/lib/voz-digitos.mjs: estaba escrita DOS veces y las dos copias
+// se habían quedado cortas igual. Se le pasan los formateadores DEL PRODUCTO, no una copia.
+const sinDigitosInventados = (texto, a) => sinDigitosLib(texto, a, { dinero: dineroVoz, fechaEs });
 
 try {
   // ── SIEMBRA (idéntica al escenario "con problemas" de test-vigia: dispara los seis) ──
@@ -125,9 +122,20 @@ try {
   for (const a of avisos) {
     ok(!prohibido.test(a.quePasa) && !prohibido.test(a.decision), a.detector + ': el texto no trae ningún control de acción');
   }
+  // LO QUE ESTA GUARDA PROTEGE es que la voz siga sin poder ESCRIBIR nada: solo narra. La lista se
+  // amplía el 23 ago 2026 con los dos FORMATEADORES (`dinero`, `fechaEs`), que se exportan para que
+  // esta misma comprobación pueda escribir el importe y la fecha EXACTAMENTE como los escribe la voz
+  // —si tuviera su copia, un cambio de formato daría un falso rojo, o peor, un falso verde—.
+  // Ampliar una lista blanca es una decisión, no un trámite, así que además se comprueba que los dos
+  // nuevos son funciones PURAS: se les pasa un dato y devuelven texto, sin base de datos por medio.
+  const PERMITIDOS = ['vestir', 'narrar', 'PLANTILLAS', 'dinero', 'fechaEs'];
   const exportsVoz = Object.keys(VOZ);
-  ok(exportsVoz.every(n => ['vestir', 'narrar', 'PLANTILLAS'].includes(n)),
-     'voz.js solo exporta vestir/narrar/PLANTILLAS (ninguna función de escritura): ' + exportsVoz.join(', '));
+  ok(exportsVoz.every(n => PERMITIDOS.includes(n)),
+     'voz.js no exporta nada fuera de lo permitido (ninguna función de escritura): ' + exportsVoz.join(', '));
+  ok(VOZ.dinero(1234.5, '€') === '1.234,50 €', 'y el dinero se escribe en español: ' + VOZ.dinero(1234.5, '€'));
+  ok(VOZ.fechaEs('2026-08-23') === '23/08/2026', 'y la fecha también: ' + VOZ.fechaEs('2026-08-23'));
+  ok(VOZ.dinero.length <= 2 && VOZ.fechaEs.length === 1 && !/\bdb\b/.test(String(VOZ.dinero) + String(VOZ.fechaEs)),
+     '  y los dos formateadores son puros: entra un dato, sale texto, sin base de datos por medio');
 
   console.log('\n=== 5. PERMISOS (la voz hereda el filtrado del vigía) ===\n');
   const sinCobros = narrar(detectar(db, { hasPerm: p => p !== 'cobros.read', hoy: HOY }), SYM);

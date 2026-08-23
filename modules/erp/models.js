@@ -2457,37 +2457,20 @@ export function runMigrations(db) {
 
   db.exec(`INSERT OR IGNORE INTO disa_profile (id) VALUES (1)`);
 
-  // Roles y permisos (ACL)
+  // ── PERMISOS (ACL) ──────────────────────────────────────────────────────────────────────────
+  // B12 · 23 ago 2026 — AQUÍ SE CREABAN TAMBIÉN `roles`, `role_permissions` y `user_roles`, y se
+  // sembraban cuatro roles (Admin/Seller/Accountant/Viewer). Estaban MUERTAS desde siempre: la
+  // aplicación de permisos lee SOLO `user_permissions`, así que ni concedían ni podían filtrar
+  // nada. Se dejan de crear, y la migración de más abajo renombra las que ya existan a
+  // `*_archived` — no se destruye ninguna, que es la regla permanente del proyecto.
+  // `permissions` y `user_permissions` SE QUEDAN: son las que mandan de verdad.
   db.exec(`
-    CREATE TABLE IF NOT EXISTS roles (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE NOT NULL,
-      description TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
     CREATE TABLE IF NOT EXISTS permissions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       module TEXT NOT NULL,
       action TEXT NOT NULL,
       description TEXT,
       UNIQUE(module, action)
-    );
-
-    CREATE TABLE IF NOT EXISTS role_permissions (
-      role_id INTEGER NOT NULL,
-      permission_id INTEGER NOT NULL,
-      PRIMARY KEY (role_id, permission_id),
-      FOREIGN KEY (role_id) REFERENCES roles(id),
-      FOREIGN KEY (permission_id) REFERENCES permissions(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS user_roles (
-      admin_user_id INTEGER NOT NULL,
-      role_id INTEGER NOT NULL,
-      PRIMARY KEY (admin_user_id, role_id),
-      FOREIGN KEY (admin_user_id) REFERENCES admin_users(id),
-      FOREIGN KEY (role_id) REFERENCES roles(id)
     );
 
     CREATE TABLE IF NOT EXISTS user_permissions (
@@ -2499,16 +2482,7 @@ export function runMigrations(db) {
     );
   `);
 
-  // Seed roles predefinidos
-  const rolesData = [
-    { name: 'Admin',       description: 'Acceso total' },
-    { name: 'Seller',      description: 'Gestión de pedidos y clientes' },
-    { name: 'Accountant',  description: 'Facturación y reportes' },
-    { name: 'Viewer',      description: 'Solo lectura' },
-  ];
-  for (const role of rolesData) {
-    db.prepare('INSERT OR IGNORE INTO roles (name, description) VALUES (?, ?)').run(role.name, role.description);
-  }
+  // (B12) La siembra de los cuatro roles predefinidos vivía aquí y se ha retirado con ellos.
 
   // Seed permisos predefinidos
   const permissionsData = [
@@ -2601,37 +2575,10 @@ export function runMigrations(db) {
   }
 
   // Seed role_permissions
-  const rolePermissions = {
-    Admin:      ['products.read','products.create','products.edit','products.delete',
-                 'orders.read','orders.create','orders.edit','orders.update_status',
-                 'clients.read','clients.create','clients.edit',
-                 'invoices.read','invoices.create','sales.emit_over_stock',
-                 'quotes.read','quotes.create','quotes.edit',
-                 'pedidos.read','pedidos.create','pedidos.edit',
-                 'albaranes.read','albaranes.create','albaranes.edit',
-                 'crm.read','crm.manage',
-                 'admin.manage_users','admin.manage_roles','admin.settings'],
-    Seller:     ['products.read',
-                 'orders.read','orders.create','orders.edit','orders.update_status',
-                 'clients.read','clients.create','clients.edit',
-                 'invoices.read',
-                 'crm.read','crm.manage'],   // el comercial es justo quien gobierna el embudo
-    Accountant: ['orders.read','clients.read','invoices.read','invoices.create','admin.settings',
-                 'cobros.read','cobros.manage','conciliacion.read','conciliacion.manage',
-                 'recurrentes.read','recurrentes.manage'],
-    Viewer:     ['products.read','orders.read','clients.read','invoices.read'],
-  };
-  for (const [roleName, perms] of Object.entries(rolePermissions)) {
-    const role = db.prepare('SELECT id FROM roles WHERE name=?').get(roleName);
-    if (!role) continue;
-    for (const perm of perms) {
-      const [mod, act] = perm.split('.');
-      const permission = db.prepare('SELECT id FROM permissions WHERE module=? AND action=?').get(mod, act);
-      if (permission) {
-        db.prepare('INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)').run(role.id, permission.id);
-      }
-    }
-  }
+  // (B12 · 23 ago 2026) AQUÍ SE SEMBRABA `role_permissions`: qué permisos llevaba cada uno de los
+  // cuatro roles. Se retira con ellos. **Lo sembrado sigue legible** en `role_permissions_archived`,
+  // y el reparto que describía queda además escrito en el TABLERO, por si algún día se decide
+  // construir permisos por rol de verdad: sería el punto de partida, no un dato perdido.
 
   // DISA — Multi-agentes
   db.exec(`
@@ -2823,6 +2770,33 @@ Sé preciso con los números y siempre redondea correctamente.`,
       db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(bKey, 'done');
     });
     txB();
+  }
+
+  // ── B12 · LAS TRES TABLAS DE ROLES, ARCHIVADAS (23 ago 2026, noche · punto 8) ────────────────
+  // `roles`, `role_permissions` y `user_roles` se sembraban desde siempre y NO CONCEDÍAN NADA: la
+  // aplicación de permisos lee solo `user_permissions`. El informe del Eje C las declaró código
+  // muerto en julio y las dejó como «riesgo asumido» porque retirarlas o cablearlas era una
+  // decisión de diseño. La decisión, tomada esta noche por encargo del dueño, es RETIRARLAS:
+  // cablearlas sería rediseñar el modelo de permisos entero, y dejarlas es peor que quitarlas
+  // —un esquema con `roles` PARECE un sistema de permisos, y quien le dé el rol «Admin» a alguien
+  // creerá que le ha concedido algo—.
+  //
+  // ARCHIVAR, NUNCA DESTRUIR: se renombran a `*_archived`. Lo que había dentro (los cuatro roles
+  // sembrados y las filas que `ensureAdminRole` escribía en cada login) sigue legible. `permissions`
+  // y `user_permissions` NO se tocan.
+  const b12Key = 'migration_b12_archive_roles_2026_v1';
+  if (!db.prepare('SELECT value FROM settings WHERE key=?').get(b12Key)) {
+    const archivar = (name) => {
+      const src = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
+      const dst = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name + '_archived');
+      if (src && !dst) db.exec(`ALTER TABLE ${name} RENAME TO ${name}_archived`);
+    };
+    const tx12 = db.transaction(() => {
+      // Las hijas primero: `user_roles` y `role_permissions` apuntan a `roles`.
+      ['user_roles', 'role_permissions', 'roles'].forEach(archivar);
+      db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(b12Key, 'done');
+    });
+    tx12();
   }
 
   // ── Contabilidad (Pieza 1): cuaderno de doble cara + libros registro ──────────

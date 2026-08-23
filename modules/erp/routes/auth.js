@@ -118,16 +118,21 @@ function totpVerifyPage(pending, error = false) {
 </html>`;
 }
 
-function ensureAdminRole(db, userId) {
-  try {
-    const existing = db.prepare('SELECT 1 FROM user_roles WHERE admin_user_id=?').get(userId);
-    if (existing) return;
-    const adminRole = db.prepare('SELECT id FROM roles WHERE name=?').get('Admin');
-    if (adminRole) {
-      db.prepare('INSERT OR IGNORE INTO user_roles (admin_user_id, role_id) VALUES (?, ?)').run(userId, adminRole.id);
-    }
-  } catch (_) {}
-}
+// ── B12 · RETIRADO el 23 ago 2026 (noche, punto 8) ─────────────────────────────────────────────
+// AQUÍ VIVÍA `ensureAdminRole()`, que en CADA login escribía una fila en `user_roles`… que no lee
+// nadie. Los permisos de este producto se aplican SOLO con `user_permissions`; `roles`,
+// `role_permissions` y `user_roles` estaban sembradas y muertas desde siempre.
+//
+// SE RETIRA, no se cablea, y el motivo es de fondo: cablearlas sería REDISEÑAR el modelo de
+// permisos —pasar de permisos por persona a permisos por rol—, que es una decisión de producto del
+// dueño y una tarea entera, no la limpieza de una noche. Y dejarlas es peor que quitarlas: un
+// esquema con `roles` y `role_permissions` **parece** un sistema de permisos, así que el día que
+// alguien le dé el rol «Admin» a un empleado creerá que le ha concedido algo. No le concede nada.
+// Un control de seguridad de mentira es peor que no tenerlo.
+//
+// LAS TABLAS NO SE DESTRUYEN: la migración las renombra a `*_archived` (regla permanente del
+// proyecto). Lo que se va es la ESCRITURA en el camino vivo — que además ocurría en cada login.
+// `permissions` y `user_permissions` NO se tocan: son las que mandan de verdad.
 
 // Registra el vínculo cookie→negocio (control.db tenant_sessions) para que el resto de la
 // navegación sepa en qué negocio está aunque el host no lo identifique (desarrollo). Mismo
@@ -321,7 +326,6 @@ export function createAuthRoutes(db) {
       return c.html(totpVerifyPage(pending));
     }
 
-    ensureAdminRole(db, user.id);
     const token = createAdminSession(db, user.id);
     bindTenantSession(c, db, token, user.id);
     const headers = new Headers({ Location: '/admin' });
@@ -376,7 +380,6 @@ export function createAuthRoutes(db) {
     }
 
     pending2FAStore.delete(pending);
-    ensureAdminRole(db, entry.userId);
     const sessionToken = createAdminSession(db, entry.userId);
     bindTenantSession(c, db, sessionToken, entry.userId);
     const headers = new Headers({ Location: '/admin' });

@@ -7,12 +7,13 @@
 // código de ref: CERO CIFRAS INVENTADAS sobre datos reales.
 import Database from 'better-sqlite3';
 import { detectar } from '../modules/erp/vigia.js';
-import { narrar } from '../modules/erp/voz.js';
+import { narrar, dinero as dineroVoz, fechaEs } from '../modules/erp/voz.js';
 import { openDebts } from '../modules/erp/cobros.js';
 import { openPayables } from '../modules/erp/pagos.js';
 import { clientesDormidos } from '../modules/erp/ventas-metrics.js';
 import { cruzar } from '../modules/erp/constructor-analitica.js';
 import { planFinanciero } from '../modules/erp/plan-financiero.js';
+import { sinDigitosInventados as sinDigitosLib } from './lib/voz-digitos.mjs';
 
 const path = process.argv[2];
 if (!path) { console.error('Uso: node scripts/verify-voz.mjs <ruta.db> [YYYY-MM-DD]'); process.exit(2); }
@@ -21,18 +22,18 @@ const db = new Database(path, { readonly: true, fileMustExist: true });
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
 const eq = (a, b) => Math.round(r2(a) * 100) === Math.round(r2(b) * 100);
 const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
-const dinero = n => sym + Number(n || 0).toFixed(2);
+// EL FORMATO SE IMPORTA DEL PRODUCTO, NO SE COPIA (23 ago 2026). Esta comprobación existe para
+// cazar CIFRAS INVENTADAS: quita del texto los campos limpios del hallazgo y exige que no quede
+// ni un dígito. Para quitarlos tiene que escribirlos EXACTAMENTE como los escribe la voz, así
+// que si tuviera su propia copia del formateador, el día que uno cambie el otro daría un falso
+// rojo — o peor, un falso verde. Que el formato en sí sea el español se afirma aparte, abajo.
+const dinero = n => dineroVoz(n, sym);
 let okN = 0, bad = 0;
 const chk = (c, m) => { if (c) { okN++; console.log('  ✓ ' + m); } else { bad++; console.log('  ✗ ' + m); } };
 
-function sinDigitosInventados(texto, a) {
-  let t = ' ' + texto + ' ';
-  // Campos limpios permitidos, los MÁS LARGOS PRIMERO (que la cifra "20" no borre el "20" de "2026-…").
-  const quitar = [dinero(a.cifra), String(a.cifra ?? ''), a.fecha, a.ref && a.ref.invoice_number, a.ref && a.ref.internal_code]
-    .filter(x => x != null && x !== '').map(String).sort((x, y) => y.length - x.length);
-  for (const q of quitar) t = t.split(q).join(' ');
-  return !/\d/.test(t);
-}
+// La comprobación vive en scripts/lib/voz-digitos.mjs: estaba escrita DOS veces y las dos copias
+// se habían quedado cortas igual. Se le pasan los formateadores DEL PRODUCTO, no una copia.
+const sinDigitosInventados = (texto, a) => sinDigitosLib(texto, a, { dinero: dineroVoz, fechaEs });
 
 // El valor del motor de área que le corresponde a un hallazgo (para cruzar la cifra del aviso).
 function valorMotor(h) {

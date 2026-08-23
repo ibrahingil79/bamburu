@@ -474,7 +474,10 @@ function bloqueCodigos() {
         <p style="color:#94a3b8;font-size:12px;line-height:1.5">No se volverán a mostrar. Cada uno sirve UNA vez y sustituye al código de la app si pierdes el móvil. Imprímelos o guárdalos donde guardas lo importante — no en este ordenador.</p>
       </div>
       <pre id="codigos" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:12px;color:#e2e8f0;font-size:13px;line-height:1.9;text-align:center;font-family:ui-monospace,monospace;white-space:pre-wrap"></pre>
-      <button class="btn" id="btnCopiar" style="background:rgba(255,255,255,.08);color:#e2e8f0">Copiar al portapapeles</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="btnCopiar" style="background:rgba(255,255,255,.08);color:#e2e8f0">Copiar al portapapeles</button>
+        <button class="btn" id="btnBajar" style="background:rgba(255,255,255,.08);color:#e2e8f0">Descargar</button>
+      </div>
       <label style="display:flex;align-items:flex-start;gap:9px;margin:14px 0;font-size:13px;color:#e2e8f0;cursor:pointer">
         <input type="checkbox" id="rcOk" style="margin-top:2px;width:16px;height:16px;flex-shrink:0">
         <span>He guardado mis códigos de rescate en un sitio seguro.</span>
@@ -490,7 +493,23 @@ function bloqueCodigos() {
 // Devuelve el CUERPO de la función, no una etiqueta <script>: así el nonce lo pone quien lo inserta
 // y esto no puede olvidárselo.
 const cerrojoCodigosJs = `
+      // DESCARGAR LOS CÓDIGOS (23 ago 2026). El dueño podía bajárselos desde el 17 de julio y el
+      // superadmin no: se quedó con «Copiar» y ya. Copiar al portapapeles es justo lo que NO hay que
+      // hacer con unos códigos de rescate —el portapapeles se pisa con lo siguiente que copies—, así
+      // que la cuenta más poderosa de la plataforma era la única sin la forma buena de guardarlos.
+      // Va en el mismo sitio que el cerrojo para que lo tengan LAS DOS pantallas que usan el bloque.
+      function bajarCodigos(){
+        var txt = document.getElementById('codigos').textContent;
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain' }));
+        a.download = 'bamburu-superadmin-codigos-de-rescate.txt';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+        document.getElementById('btnBajar').textContent = 'Descargados ✓';
+      }
       function engancharCerrojo(){
+        var bajar = document.getElementById('btnBajar');
+        if (bajar) bajar.onclick = bajarCodigos;
         var ok = document.getElementById('rcOk');
         var fin = document.getElementById('rcFin');
         if (!ok || !fin) return;

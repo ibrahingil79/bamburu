@@ -27,8 +27,9 @@
 // CALCULA, así que no puede viajar. Y forzar la ruta de una sección sin sus permisos da 403.
 import { hoyLocal } from './avisos.js';
 import { ventasResumen, ventasPorDia, margenResumen, margenPorProducto,
-         ventasPorCliente, clientesNuevosPorMes } from './ventas-metrics.js';
-import { openDebts } from './cobros.js';
+         ventasPorCliente, clientesNuevosPorMes, clientesNuevosPorTramo } from './ventas-metrics.js';
+import { openDebts, deudaAFecha } from './cobros.js';
+import { fechaEs } from './voz.js';   // 23/08/2026, no 2026-08-23: una fecha en una frase se dice, no se guarda
 import { modoDeEmpresa, titularDe, MODOS } from './margen.js';
 import { pipelineByStage } from './crm.js';
 import { detectar } from './vigia.js';
@@ -149,20 +150,31 @@ export const SECCIONES = {
   },
 
   // ── PENDIENTE DE COBRO ────────────────────────────────────────────────────────────────────────
-  // `openDebts` mide la deuda VIVA a día de hoy. NO existe motor que reconstruya la deuda de una
-  // fecha pasada (los cobros no se fechan hacia atrás en ninguna consulta del sistema), así que la
-  // comparación contra el mes anterior NO se inventa: sale «—» y se dice por qué.
+  // YA HAY COMPARACIÓN (23 ago 2026, punto 8). Aquí ponía «no existe motor que reconstruya la deuda
+  // de una fecha pasada», y era verdad hasta que se construyó: `deudaAFecha` (cobros.js) suma lo
+  // emitido hasta esa fecha menos lo COBRADO hasta esa fecha, con el mismo filtro de qué cuenta que
+  // el resto del sistema. Control: al día de hoy da exactamente lo mismo que `openDebts`.
+  // MENOS deuda es MEJOR, así que la comparación va con el tono invertido (`baja_bien`).
+  // Y lo que el motor NO puede saber se DICE, no se disimula: el estado de una factura se lee como
+  // está HOY, así que una anulada la semana pasada tampoco cuenta para el mes anterior. Cuando hay
+  // alguna de esas, la cifra de comparación se marca como aproximada con su motivo.
   cobro: {
     perms: ['cobros.read'],
     datos: (db, { per }) => {
       const d = openDebts(db, per.hoy);
       const vencidas = (d.rows || []).filter(r => r.estado === 'vencida');
+      const ant = deudaAFecha(db, per.finAnt);
+      const cmp = comparar(d.total, ant.total, 'baja_bien');
       return {
         total: d.total, facturas: (d.rows || []).length,
         vencidas: vencidas.length,
         vencido: r2(vencidas.reduce((s, r) => s + (Number(r.pendiente) || 0), 0)),
-        comparacion: { hay: false, pct: null, delta: null, tono: vencidas.length ? 'mal' : 'neutro' },
-        porQueNoHayComparacion: 'La deuda se mide a día de hoy; no hay motor que la reconstruya a una fecha pasada.',
+        deudaAnterior: ant.total, fechaAnterior: ant.fecha,
+        comparacion: { ...cmp, tono: cmp.hay ? cmp.tono : (vencidas.length ? 'mal' : 'neutro') },
+        aproximada: !ant.exacta,
+        porQueNoHayComparacion: ant.exacta ? null
+          : 'La comparación es aproximada: ' + ant.avisadas + ' factura(s) anuladas o rectificadas se leen '
+            + 'como están hoy, no como estaban el ' + fechaEs(ant.fecha) + '.',
         chispa: null,
       };
     },
@@ -196,20 +208,28 @@ export const SECCIONES = {
   },
 
   // ── CLIENTES NUEVOS ───────────────────────────────────────────────────────────────────────────
-  // `clientesNuevosPorMes` cuenta por MESES COMPLETOS (agrupa por `substr(created_at,1,7)`). No hay
-  // motor que cuente los altas del día 1 al 20, así que el mes en curso sale tal cual y la
-  // comparación contra «el mismo tramo del mes anterior» NO se inventa: «—», y se dice por qué.
-  // La tendencia sí se puede enseñar: son los meses completos que el motor ya da.
+  // YA HAY COMPARACIÓN (23 ago 2026, punto 8). Aquí ponía «el motor cuenta las altas por meses
+  // completos: no hay forma honesta de comparar medio mes con medio mes». La forma honesta existe y
+  // es la obvia: comparar el MISMO TRAMO — del 1 al 23 de agosto contra del 1 al 23 de julio.
+  // `clientesNuevosPorTramo` lo hace recortando los dos lados por igual, y avisa (`completo`) cuando
+  // el mes anterior era más corto que el día pedido, que es el único caso en que no son iguales.
+  // La tendencia sigue saliendo de los meses COMPLETOS: una chispa de medio mes engañaría.
   clientes: {
     perms: ['clients.read'],
     datos: (db, { per }) => {
       const filas = clientesNuevosPorMes(db, { meses: 12 });
       const porMes = new Map(filas.map(f => [f.periodo, f.clientes]));
+      const dia = Number(String(per.hoy).slice(8, 10));
+      const ahora = clientesNuevosPorTramo(db, { mes: per.mes, hastaDia: dia });
+      const antes = clientesNuevosPorTramo(db, { mes: per.mesAnt, hastaDia: dia });
       return {
-        nuevos: porMes.get(per.mes) || 0,
+        nuevos: ahora.clientes,
         mesAnteriorCompleto: porMes.has(per.mesAnt) ? porMes.get(per.mesAnt) : null,
-        comparacion: { hay: false, pct: null, delta: null, tono: 'neutro' },
-        porQueNoHayComparacion: 'El motor cuenta las altas por meses completos: no hay forma honesta de comparar medio mes con medio mes.',
+        tramoDia: dia, tramoAnterior: antes.clientes, tramoAnteriorDia: antes.hastaDia,
+        comparacion: comparar(ahora.clientes, antes.clientes, 'sube_bien'),
+        // El único matiz que puede haber: febrero contra un día 30 no tiene día 30 que comparar.
+        porQueNoHayComparacion: antes.hastaDia === dia ? null
+          : 'El mes anterior solo tenía ' + antes.diasDelMes + ' días, así que se compara con el mes entero.',
         chispa: filas.slice(-6).map(f => f.clientes),
         chispaMeses: filas.slice(-6).map(f => f.periodo),
       };
@@ -375,17 +395,23 @@ function serieDelMes(db, ctx) {
   const per = ctx.per;
   const DIA = 86400000;
   const dias = Math.round((Date.parse(per.hoy + 'T00:00:00Z') - Date.parse(per.iniAnt + 'T00:00:00Z')) / DIA) + 1;
-  const porFecha = new Map(ventasPorDia(db, Math.max(1, dias)).map(d => [d.date, d.total]));
+  // AHORA CADA DÍA TRAE SUS DOS CIFRAS (23 ago 2026, punto 8). `ventasPorDia` devolvía solo el total
+  // CON IVA, así que el gráfico iba con IVA y el titular de arriba sin él, y la pantalla tenía que
+  // explicar el desajuste en una nota al pie. Ahora el motor da también la BASE —el mismo `subtotal`
+  // que suma el titular—, así que el gráfico habla el mismo idioma que la cifra que tiene encima.
+  const porFecha = new Map(ventasPorDia(db, Math.max(1, dias)).map(d => [d.date, d]));
   const serie = (ini, fin) => {
     const out = [];
     for (let t = Date.parse(ini + 'T00:00:00Z'); t <= Date.parse(fin + 'T00:00:00Z'); t += DIA) {
       const f = new Date(t).toISOString().slice(0, 10);
-      out.push({ fecha: f, dia: Number(f.slice(8, 10)), total: porFecha.get(f) || 0 });
+      const d = porFecha.get(f);
+      out.push({ fecha: f, dia: Number(f.slice(8, 10)), total: d ? d.total : 0, base: d ? d.base : 0 });
     }
     return out;
   };
   ctx._serie = {
-    conIva: true,                                  // lo que da el motor; la pantalla lo dice
+    conIva: false,                                 // se pinta la BASE, igual que el titular
+    tieneAmbas: true,                              // y el total con IVA sigue viajando, por si hace falta
     actual: serie(per.ini, per.fin), mes: per.mes,
     anterior: serie(per.iniAnt, per.ultAnt), mesAnt: per.mesAnt,
   };

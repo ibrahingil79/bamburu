@@ -1,3 +1,5 @@
+import { fmtEur } from './margen.js';
+
 // ════════════════════════════════════════════════════════════════════════════
 // LA VOZ — narración + decisión propuesta. Escalera · paso 5 (DISA predictiva) · PIEZA 2.
 //
@@ -28,8 +30,22 @@
 // tabla `disa_*` FUERA de WRITABLE_TABLES — nunca aquí.
 
 // El símbolo de moneda lo pasa quien pinta (el motor no lo conoce), igual que `detalleAviso` en
-// avisos.js. Formato idéntico al del resto de la app y al de la vista del vigía: `€232.75`.
-const dinero = (n, sym) => (sym || '') + Number(n || 0).toFixed(2);
+// avisos.js.
+//
+// EN ESPAÑOL, DESDE EL 23 AGO 2026 (noche, punto 8). Antes esto escribía `€232.75`: símbolo delante,
+// punto decimal y sin separador de miles. En una frase que le lee un dueño español —«Tienes una
+// factura sin cobrar por €232.75»— eso no se lee, se descifra. Ahora es `232,75 €`, que es como se
+// escribe el dinero aquí y como ya lo escriben la ficha de cliente, el Inicio y los Informes.
+// Se usa `fmtEur` de margen.js: es el formateador que ya existía, y no hacía falta un segundo.
+export const dinero = (n, sym) => fmtEur(Number(n || 0), sym || '€');
+
+// Y LAS FECHAS TAMBIÉN. `2026-08-23` es como se guarda, no como se dice. En una frase va `23/08/2026`.
+// Lo que NO cambia es el dato: se formatea lo que llega, no se recalcula ni se reinterpreta — la
+// regla de oro de este fichero es que el número que sale es EXACTAMENTE el que entró.
+export function fechaEs(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+  return m ? m[3] + '/' + m[2] + '/' + m[1] : (iso || '—');
+}
 
 // La cifra ya formateada: con moneda si el hallazgo la marca; si no hay dato, "—" (no inventa).
 function cifraTexto(h, sym) {
@@ -165,7 +181,7 @@ export const PLANTILLAS = {
 // Si no hay plantilla para el detector (no debería), se degrada con honestidad usando titulo/motivo.
 export function vestir(h, sym = '€', hoy = null) {
   const importe = cifraTexto(h, sym);
-  const fecha = h.fecha || '—';
+  const fecha = h.fecha ? fechaEs(h.fecha) : '—';
   const ctx = { importe, fecha, hoy, sym };
   const plantilla = PLANTILLAS[h.detector];
 

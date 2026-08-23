@@ -150,6 +150,8 @@ export const GRUPOS = {
                                      // cabos del 20 ago siguen vivos; y un informe que falla lo dice
     'gate-sin-ventanitas',           // punto 7: cero prompt/confirm en el producto, comprobado
                                      // PULSANDO y con las ventanitas del navegador neutralizadas
+    'gate-cabos-apuntados',          // punto 8: los seis cabos — la voz en español, los tres motores
+                                     // que faltaban (cada uno contra su control), B10 y B12
   ],
   // Sala de máquinas: superadmin, conexiones a la BD, el fichero -wal, el saneo de errores al cliente,
   // el escapado del texto del usuario (que no se vuelva HTML ni JS) y la CSP estricta de las

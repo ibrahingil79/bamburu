@@ -562,15 +562,19 @@ export function disaHomeHtml({ userName, simbolo = '€' }) {
             + '<p class="cm-h"><i class="ti ti-chart-bar"></i>Ventas por día<span class="x">'
             + esc(mesLargo(g.mes)) + ' · en gris, ' + esc(mesLargo(g.mesAnt)) + '</span></p>'
             + '<div class="cm-graf"><canvas id="cmGrafCanvas"></canvas></div>'
-            + '<p class="cm-pie">Facturado con IVA, día a día. El titular de arriba va sin IVA porque es lo que cuadra con el informe de ventas.</p>'
+            + '<p class="cm-pie">Facturado SIN IVA, día a día: la misma base que la cifra de arriba y que el informe de ventas.</p>'
             + '</div>';
           if (typeof Chart === 'undefined') return;
           var dias = Math.max(g.actual.length, g.anterior.length);
           var etiquetas = [], serieA = [], serieB = [];
           for (var i = 0; i < dias; i++) {
             etiquetas.push(String(i + 1));
-            serieA.push(i < g.actual.length ? g.actual[i].total : null);
-            serieB.push(i < g.anterior.length ? g.anterior[i].total : null);
+            // LA BASE, no el total con IVA (23 ago 2026). El motor ya da las dos; se pinta la que
+            // cuadra con el titular de encima. g.conIva dice cuál es, por si algún día vuelve a
+            // haber solo una: la pantalla no adivina, pregunta.
+            var campo = g.conIva ? 'total' : 'base';
+            serieA.push(i < g.actual.length ? g.actual[i][campo] : null);
+            serieB.push(i < g.anterior.length ? g.anterior[i][campo] : null);
           }
           new Chart(document.getElementById('cmGrafCanvas'), {
             type: 'bar',

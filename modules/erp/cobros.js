@@ -199,6 +199,42 @@ function daysPastDue(due, today) {
 }
 
 // Acciones activas de una factura (log que lee el motor de próxima acción).
+// ── LA DEUDA A UNA FECHA PASADA (23 ago 2026, punto 8) ──────────────────────────────────────────
+// EL HUECO QUE TAPA. El cuadro de mando enseñaba «Pendiente de cobro» con un «— sin comparación» y
+// el motivo escrito al lado: *«La deuda se mide a día de hoy; no hay motor que la reconstruya a una
+// fecha pasada»*. Era cierto —`openDebts` mira lo cobrado HASTA HOY, sin mirar cuándo se cobró— y
+// era una limitación del motor, no de los datos: `invoice_payments.paid_date` guarda el día.
+//
+// QUÉ ES LA DEUDA AL DÍA D, y por qué se calcula así:
+//   · Entran las facturas EMITIDAS hasta D (`issue_date <= D`). Una factura de después no existía.
+//   · Se descuenta solo lo COBRADO hasta D (`paid_date <= D`). Un cobro posterior no había ocurrido.
+//   · Se aplica el MISMO filtro de qué cuenta (`countsAsReceivable`) que el resto del sistema, así
+//     que una anulada o una sustituida no inflan la cifra de ninguna fecha.
+//
+// LO QUE ESTE MOTOR NO PUEDE SABER, Y SE DICE. El estado de una factura (anulada, rectificada,
+// sustituida) se lee TAL Y COMO ESTÁ HOY: la base no guarda cuándo se anuló, así que una factura
+// anulada la semana pasada no cuenta tampoco para el mes anterior. La deuda de una fecha pasada sale
+// por tanto **igual o algo MENOR** que la que se vio ese día. Se devuelve `exacta:false` cuando hay
+// alguna de esas y `avisadas` con cuántas son, para que quien pinte pueda decirlo en vez de dar una
+// cifra como si fuera un fotograma perfecto. Preferimos una cifra con su matiz que un hueco.
+export function deudaAFecha(db, fecha) {
+  const hasta = String(fecha).slice(0, 10);
+  const invs = db.prepare('SELECT * FROM invoices WHERE substr(issue_date,1,10) <= ? ORDER BY issue_date, id').all(hasta);
+  const cobradoHasta = db.prepare(
+    'SELECT COALESCE(SUM(amount),0) s FROM invoice_payments WHERE invoice_id=? AND substr(paid_date,1,10) <= ?'
+  );
+  let total = 0, facturas = 0, dudosas = 0;
+  for (const inv of invs) {
+    if (!countsAsReceivable(db, inv)) { if (inv.status === 'anulada' || inv.status === 'rectificada') dudosas++; continue; }
+    let cobrado = cobradoHasta.get(inv.id, hasta).s;
+    // Espejo de invoiceCobro: la sustitutiva hereda los cobros del ticket al que sustituye.
+    if (inv.substitutes_invoice_id) cobrado += cobradoHasta.get(inv.substitutes_invoice_id, hasta).s;
+    const pendiente = r2((Number(inv.total) || 0) - r2(cobrado));
+    if (pendiente > 0.0049) { total = r2(total + pendiente); facturas++; }
+  }
+  return { fecha: hasta, total: r2(total), facturas, exacta: dudosas === 0, avisadas: dudosas };
+}
+
 export function activeActions(db, invoiceId) {
   return db.prepare(
     'SELECT * FROM collection_actions WHERE invoice_id=? AND active=1 ORDER BY created_at, id'

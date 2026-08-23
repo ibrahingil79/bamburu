@@ -6869,3 +6869,92 @@ componente nuevo**: es la pieza que nació con la ficha D-bis para esto exactame
   (`active=0`), que es la regla permanente del proyecto. El gate exigía que la fila desapareciera.
 
 **Sin residuo:** 0 clientes, 0 notas y 0 sesiones del gate en `desarrollo-bamburu` al terminar.
+
+---
+
+### PUNTO 8 · LOS SEIS CABOS APUNTADOS Y NUNCA CONSTRUIDOS  ✅ **HECHO (23 ago 2026, noche)** · gate `scripts/gate-cabos-apuntados.mjs` · **46 ✓ · 0 ✗**
+
+**1 · LA VOZ HABLA EN ESPAÑOL.** `voz.js` escribía `€232.75` y las fechas en ISO. En una frase que le
+lee un dueño español —«Tienes una factura sin cobrar por €232.75, venció el 2026-07-15»— eso no se
+lee, se descifra. Ahora es **`1.232,50 €`** y **`15/07/2026`**, usando `fmtEur`, **el formateador que
+ya existía y nadie usaba**. La misma corrección en **la pantalla del vigía**, que no pasa por la voz
+y pintaba el hallazgo en crudo. **La cifra que viaja no cambia: solo cambia cómo se escribe**, y el
+gate lo comprueba.
+- **Las cuatro comprobaciones que dependían, arregladas — y una de ellas llevaba tiempo en rojo.**
+  `test-voz` y `verify-voz` tenían **cada una su copia** del formateador para poder quitar del texto
+  los importes y comprobar que no queda ningún dígito inventado. Ahora **importan el del producto**:
+  si tuvieran copia, un cambio de formato daría un falso rojo o, peor, un falso verde.
+- **🔴 Y AL HACERLO SALIÓ UN ROJO VIEJO:** `verify-voz` daba **287/290 desde que existen los
+  detectores de agenda**, y no era del producto — las dos copias de la comprobación quitaban
+  `cifra`, `fecha` y dos códigos, y **nada más de `ref`**, así que el porcentaje de ocupación y los
+  tramos libres (campos limpios, permitidos por la regla) contaban como cifras inventadas.
+  **Comprobado contra el código de antes: el rojo era idéntico.** La comprobación se muda a
+  `scripts/lib/voz-digitos.mjs`, en un solo sitio, y aplica la regla **tal y como está escrita**:
+  todos los escalares de `ref`. **Ahora 290/290.** *(Que llevara meses en rojo sin que nadie se
+  enterara es, otra vez, el problema del punto 5: `verify-voz` está fuera del barrido.)*
+
+**2 · `gate-nav-inicio-disa` SE TRAE SU PROPIA PROPUESTA.** Afirmaba que el badge de DISA enseña el
+número de propuestas pendientes… y exigía que el negocio tuviera alguna sin crearla él. Se resolvieron
+a mano las 39 que quedaban, el generador es idempotente por documento y el gate se quedó en rojo por
+una precondición que no era suya. Ahora la crea, con marca y sufijo de pasada, y la borra en el
+`finally` **por la marca**. **34 OK**, sin residuo.
+
+**3 · EL ALTA DEL SUPERADMIN — ⚙️ LA PREMISA ERA FALSA, y se midió antes de construir.** El paso «He
+guardado mis códigos de rescate» **ya existía desde el 17 jul 2026** (C5-ter · T1). Comprobado
+**pidiendo la pantalla de verdad** con sesión de superadmin: la casilla está, el botón «Terminar»
+nace con `pointer-events:none` y `engancharCerrojo` se engancha. *El puntero del panel estaba rancio.*
+- **Lo único que SÍ le faltaba, y se ha puesto:** el dueño podía **descargarse** los códigos y el
+  superadmin solo copiarlos. **Copiar al portapapeles es justo lo que no hay que hacer con unos
+  códigos de rescate** —se pisa con lo siguiente que copies—, así que la cuenta más poderosa de la
+  plataforma era la única sin la forma buena de guardarlos. Botón «Descargar» añadido **en el bloque
+  compartido**, para que lo tengan las dos pantallas que lo usan.
+
+**4 · LOS TRES MOTORES QUE FALTABAN, y los dos «sin comparación» tapados.** Cada uno con su CONTROL,
+porque un motor que calcula solo no se puede contrastar con nada:
+| Motor nuevo | Qué tapa | Su control |
+|---|---|---|
+| `deudaAFecha` (cobros.js) | «Pendiente de cobro» decía *«no hay motor que la reconstruya a una fecha pasada»* | **Al día de hoy da EXACTAMENTE lo mismo que `openDebts`**, el motor que ya existía |
+| `base` en `ventasPorDia` | el gráfico iba con IVA y el titular sin él, con una nota al pie explicando el desajuste | **La suma de las bases del mes cuadra al céntimo con `ventasResumen`**, que es otro motor |
+| `clientesNuevosPorTramo` | «Clientes nuevos» decía *«no hay forma honesta de comparar medio mes con medio mes»* | **Pidiendo el día 31 devuelve el mes entero**, y avisa cuando el mes es más corto |
+- **Y lo que un motor NO puede saber, se dice.** La deuda de una fecha pasada lee el estado de cada
+  factura **como está HOY** (la base no guarda cuándo se anuló), así que sale igual o algo menor que
+  la que se vio ese día. La tarjeta lo enseña: *«La comparación es aproximada: 87 factura(s) anuladas
+  o rectificadas se leen como están hoy, no como estaban el 23/07/2026»*. **Preferimos una cifra con
+  su matiz que un hueco.**
+
+**5 · B10 · EL SERVICIO, MÁS CERRADO Y VIVO.** Aplazado desde el 9 de julio por ser «el único que
+puede tirar el servicio», hecho esta noche porque no hay nadie usándolo. **Medido:
+`systemd-analyze security` pasa de `8.7 EXPOSED` a `7.3 MEDIUM`**, con copia previa de la unidad y
+**el PDF comprobado antes y después (59.652 bytes las dos veces)**, que es exactamente lo que se
+rompe.
+- **Lo que NO se pone, y por qué — escrito en la propia unidad:** `ProtectHome` (las BD viven en
+  `/home/ubuntu`), `NoNewPrivileges` y `RestrictSUIDSGID` (el PDF lo genera el Chromium de **snap**, y
+  `snap-confine` es **setuid** y necesita `cap_dac_override`) y `RestrictNamespaces`/`PrivateMounts`/
+  `ProtectProc` (snap monta su espacio de nombres y Chromium gestiona procesos hijos). **Poner
+  cualquiera de ellas apaga los PDF en silencio.** `NoNewPrivileges=false` queda escrito **a
+  propósito**, no por olvido, y el gate exige que siga así.
+
+**6 · B12 · LAS TRES TABLAS DE ROLES: RETIRADAS.** `roles`, `role_permissions` y `user_roles` estaban
+sembradas desde siempre y **no concedían nada**: los permisos se aplican solo con `user_permissions`.
+**Se RETIRAN, no se cablean, y el motivo es de fondo:** cablearlas sería **rediseñar el modelo de
+permisos** —de permisos por persona a permisos por rol—, que es una decisión de producto del dueño y
+una tarea entera. Y **dejarlas es peor que quitarlas**: un esquema con `roles` **parece** un sistema
+de permisos, así que quien le dé el rol «Admin» a un empleado creerá que le ha concedido algo. **Un
+control de seguridad de mentira es peor que no tenerlo.**
+- **Archivadas, no destruidas** (`*_archived`), con migración aditiva e idempotente y **cero DROP**.
+  Lo sembrado sigue legible, y el reparto de permisos por rol que describía queda en el histórico de
+  git por si algún día se construye de verdad.
+- **Se deja de escribir en el camino vivo:** `ensureAdminRole()` metía una fila en `user_roles` **en
+  cada login**, y no la leía nadie.
+- **🔴 Y el arreglo estuvo a punto de romper el alta de negocios.** Quitadas la creación y la siembra,
+  quedaba **una tercera referencia 130 líneas más abajo** (el reparto de permisos por rol) que
+  reventaba `runMigrations` con `no such table: roles`. **Lo cazó la prueba, no el razonamiento:**
+  dar de alta un negocio nuevo de verdad y entrar con su contraseña. Un negocio nuevo nace ahora con
+  `permissions` y `user_permissions` **y nada más**, con sus 66 permisos, y el login devuelve 302 con
+  su cookie y `/admin` responde 200.
+
+**🔎 HALLAZGO ANOTADO, NO TOCADO.** En `data/tenants/` hay **16 negocios de prueba de gates**
+(`gate-*`, `__gate_*`, `peluqueria-arranque-*`, `muestra-logo-*`) que sus gates crearon y **no
+borraron**. Es la misma regla del punto 7 —lo que una prueba crea, la prueba lo borra— pero **un
+piso más arriba**: no son filas dentro de un negocio, son negocios enteros. No se tocan esta noche
+porque borrar negocios es exactamente la clase de cosa que no se hace sin decirlo antes.

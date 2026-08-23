@@ -112,12 +112,18 @@ export function createVigiaRoutes(db) {
       <script src="/public/js/grafico-constructor.js"></script>
       <script>
       const SYM = ${JSON.stringify(sym)};
-      const eur = v => SYM + Number(v||0).toFixed(2);
+      // EN ESPAÑOL (23 ago 2026, punto 8). Antes: €232.75 y fechas 2026-08-23. Es la misma
+      // corrección que en voz.js, y va aquí porque esta pantalla NO usa la voz: pinta el hallazgo
+      // en crudo. Formatear es todo lo que se hace — la cifra que sale sigue siendo la del motor.
+      const eur = v => Number(v||0).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2,useGrouping:'always'}) + ' ' + SYM;
+      // OJO: esta regex vive DENTRO de una plantilla del servidor, así que las barras van DOBLADAS
+      // para llegar enteras al navegador. Es la trampa que ya se ha pagado varias veces en este repo.
+      const fechaEs = iso => { const m=/^(\\d{4})-(\\d{2})-(\\d{2})/.exec(String(iso||'')); return m? m[3]+'/'+m[2]+'/'+m[1] : (iso||'—'); };
       const fmtCifra = h => h.moneda ? eur(h.cifra) : String(h.cifra);
       function pintarVigia(data){
         const body = document.getElementById('vigBody'), meta = document.getElementById('vigMeta'), av = document.getElementById('vigAviso');
         if(!data){ body.innerHTML = '<div class="card"><div class="card-body" style="color:var(--muted)">No he podido cargar los hallazgos. Vuelve a cargar la página.</div></div>'; return; }
-        meta.textContent = 'Al día ' + data.hoy + ' · ' + data.total + ' hallazgo' + (data.total===1?'':'s') + '. Umbrales fijos: vencida ≥'+data.umbrales.VENCIDA_DIAS_MIN+'d · caída facturación ≥'+data.umbrales.CAIDA_FACTURACION_PCT+'% · caída margen ≥'+data.umbrales.CAIDA_MARGEN_PCT+'% · desvío plan ≥'+data.umbrales.DESVIO_PLAN_PCT+'% · pago vence ≤'+data.umbrales.PAGO_VENCE_DIAS+'d.';
+        meta.textContent = 'Al día ' + fechaEs(data.hoy) + ' · ' + data.total + ' hallazgo' + (data.total===1?'':'s') + '. Umbrales fijos: vencida ≥'+data.umbrales.VENCIDA_DIAS_MIN+'d · caída facturación ≥'+data.umbrales.CAIDA_FACTURACION_PCT+'% · caída margen ≥'+data.umbrales.CAIDA_MARGEN_PCT+'% · desvío plan ≥'+data.umbrales.DESVIO_PLAN_PCT+'% · pago vence ≤'+data.umbrales.PAGO_VENCE_DIAS+'d.';
         // Se dice QUÉ no ves y por qué (no un hueco mudo): la regla del resto de la Analítica.
         if((data.sinPermiso||[]).length){
           av.style.display='';
@@ -143,7 +149,7 @@ export function createVigiaRoutes(db) {
             + g.filas.map(h => '<tr>'
                 + '<td><strong>'+escHtml(h.titulo)+'</strong></td>'
                 + '<td style="white-space:nowrap">'+escHtml(fmtCifra(h))+'</td>'
-                + '<td style="white-space:nowrap;color:var(--muted)">'+escHtml(h.fecha||'—')+'</td>'
+                + '<td style="white-space:nowrap;color:var(--muted)">'+escHtml(h.fecha?fechaEs(h.fecha):'—')+'</td>'
                 + '<td style="color:var(--text2);font-size:.82rem">'+escHtml(h.motivo||'')+'</td>'
               + '</tr>').join('')
             + '</tbody></table></div></div>';

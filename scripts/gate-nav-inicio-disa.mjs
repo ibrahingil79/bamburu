@@ -42,6 +42,20 @@ const noPermId = db.prepare(
 const tokOwner = mkSession(OWNER);
 const tokNoPerm = mkSession(noPermId);
 
+// ── EL GATE SE TRAE SU PROPIA PROPUESTA (23 ago 2026) ───────────────────────────────────────────
+// POR QUÉ. Este gate afirma que el badge de DISA enseña el número de propuestas PENDIENTES, y para
+// afirmarlo exigía que el negocio tuviera alguna… sin crearla él. El 20 de agosto se resolvieron a
+// mano las 39 que quedaban, el generador diario es idempotente por documento (una factura cuya
+// propuesta ya se descartó no vuelve a generar otra) y el gate se quedó EN ROJO por una precondición
+// que no era suya. Estuvo declarado en ROJOS_CONOCIDOS hasta que volvió a pasar de casualidad.
+// Ahora se trae la suya, con marca y sufijo de pasada, y la borra en el finally. El BADGE sigue
+// comparándose con el TOTAL del negocio: el gate no cambia lo que mide, solo deja de depender de
+// que otro le haya dejado el escenario puesto.
+const MARCA_PROP = 'ZZ nav-disa ' + randomBytes(3).toString('hex');
+db.prepare(
+  "INSERT INTO disa_proposals (type, status, subject, body, created_at) VALUES ('recordatorio_impago','pendiente',?,?,datetime('now'))"
+).run(MARCA_PROP, MARCA_PROP + ' — propuesta de prueba del gate, se borra al terminar');
+
 // El Chrome de puppeteer está roto en este arm64: se usa el Chromium del sistema (snap).
 const browser = await puppeteer.launch({
   headless: 'new',
@@ -132,7 +146,7 @@ try {
 
   // Badge = mismo número que el motor de D5, SOBRE el icono de DISA.
   const esperado = contarPropuestasPendientes(db);
-  ok(esperado > 0, 'el tenant tiene propuestas pendientes para probar el badge (' + esperado + ')');
+  ok(esperado > 0, 'hay propuestas pendientes para probar el badge, y una es del gate (' + esperado + ')');
   ok(fly.badgeVisible && fly.badgeText === String(esperado), 'el badge sobre DISA muestra el nº pendiente ' + esperado + ' (got "' + fly.badgeText + '")');
 
   // El badge YA NO está en el topbar, pero campana y cuenta siguen.
@@ -196,6 +210,8 @@ try {
   try {
     db.prepare('DELETE FROM admin_sessions WHERE token IN (?,?)').run(tokOwner, tokNoPerm);
     db.prepare('DELETE FROM admin_users WHERE id=?').run(noPermId);
+    // Por la MARCA, no por el id de esta pasada: si el gate muere a mitad, lo suyo se va igual.
+    db.prepare("DELETE FROM disa_proposals WHERE subject LIKE 'ZZ nav-disa %'").run();
   } catch (e) { console.error('  (limpieza) ' + e.message); }
   await browser.close();
   db.close();

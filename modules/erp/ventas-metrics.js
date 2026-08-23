@@ -130,6 +130,28 @@ export function clientesNuevosPorMes(db, { meses = 12 } = {}) {
   return filas;
 }
 
+// ── ALTAS DE CLIENTE POR TRAMO DE MES (23 ago 2026, punto 8) ─────────────────
+// EL HUECO QUE TAPA. El cuadro de mando enseñaba «Clientes nuevos: 4» y debajo «— sin comparación»,
+// con el motivo escrito: *«El motor cuenta las altas por meses completos: no hay forma honesta de
+// comparar medio mes con medio mes»*. Era verdad, y era una limitación del motor, no de los datos:
+// `created_at` tiene el DÍA. Comparar «del 1 al 23 de agosto» con «del 1 al 23 de julio» sí es
+// honesto — es el mismo trozo de mes — y es justo lo que le hacía falta a la tarjeta.
+//
+// `hastaDia` recorta los dos lados por igual. Un mes más corto que `hastaDia` (febrero contra un 30)
+// se cuenta entero, que es todo lo que tiene: se DICE con `completo`, para que quien pinte pueda
+// avisar en vez de comparar 28 días contra 30 en silencio.
+export function clientesNuevosPorTramo(db, { mes, hastaDia }) {
+  const dia = Math.max(1, Math.min(31, Number(hastaDia) || 31));
+  const finDeMes = new Date(Date.UTC(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0)).getUTCDate();
+  const tope = Math.min(dia, finDeMes);
+  const hasta = mes + '-' + String(tope).padStart(2, '0');
+  const n = db.prepare(
+    `SELECT COUNT(*) AS n FROM clients
+      WHERE active=1 AND substr(created_at,1,7)=? AND substr(created_at,1,10) <= ?`
+  ).get(mes, hasta).n;
+  return { mes, hastaDia: tope, pedidoDia: dia, completo: tope >= finDeMes, diasDelMes: finDeMes, clientes: n };
+}
+
 // ── CRM · RESPONSABLE DE LA VENTA — la cascada de tres ───────────────────────
 // FUENTE ÚNICA de "¿de quién es esta venta?". Vive aquí, junto al resto de métricas de venta, para
 // que la analítica, los filtros y cualquier informe futuro respondan lo MISMO. La regla la fijó el
@@ -309,15 +331,26 @@ export function margenPorProducto(db, { from = null, to = null, limit = 100 } = 
 }
 
 // Ventas por DÍA (últimos N días) — total con IVA. Para el gráfico de analítica.
+// Cada día trae AHORA sus dos cifras: `total` (con IVA, como siempre) y `base` (sin IVA).
+// POR QUÉ SE AÑADE `base` (23 ago 2026, punto 8). El titular de «Ventas del mes» va SIN IVA porque
+// es lo que cuadra con el informe de ventas, y el gráfico de debajo iba CON IVA porque era lo único
+// que este motor sabía dar. La pantalla lo decía en voz alta —«Facturado con IVA, día a día. El
+// titular de arriba va sin IVA»— que es honesto, pero es una nota al pie explicando un desajuste
+// que no tenía por qué existir. `subtotal` es el mismo campo que suma `ventasResumen` para el
+// titular, así que las dos cifras salen de la MISMA fuente y no pueden discrepar.
+// Aditivo: quien pedía `total` lo sigue teniendo, con el mismo valor.
 export function ventasPorDia(db, days = 30) {
   const map = new Map();
   for (const i of countingSalesInvoices(db, { from: daysAgoISO(days - 1) })) {
     const d = String(i.issue_date).slice(0, 10);
-    const e = map.get(d) || { date: d, total: 0, orders: 0 };
-    e.total += Number(i.total) || 0; e.orders++;
+    const e = map.get(d) || { date: d, total: 0, base: 0, orders: 0 };
+    e.total += Number(i.total) || 0;
+    e.base += Number(i.subtotal) || 0;
+    e.orders++;
     map.set(d, e);
   }
-  return [...map.values()].map(e => ({ ...e, total: r2(e.total) })).sort((a, b) => a.date < b.date ? -1 : 1);
+  return [...map.values()].map(e => ({ ...e, total: r2(e.total), base: r2(e.base) }))
+    .sort((a, b) => a.date < b.date ? -1 : 1);
 }
 
 // Ventas por MES (últimos N meses) — para el contexto de DISA en la página de analítica.
