@@ -45,12 +45,23 @@ const ok = (c, m, x = '') => { if (c) { pass++; console.log('  ✓ ' + m + (x ? 
 
 // El fichero de prueba va bajo $HOME: el Chromium de snap no lee /tmp y el <input type=file> se
 // queda sin nada, con un rojo que no tiene que ver con lo que se está probando.
+//
+// ⚠️ Y NO PUEDE EMPEZAR POR PUNTO — medido el 23 ago 2026, costó un rojo entero. El confinamiento
+// del snap concede `$HOME/[^.]**`, o sea TODO menos lo oculto. Con un nombre oculto Chromium ve el
+// fichero y hasta da bien su `size`, pero al leerlo devuelve `NotReadableError`: el `FileReader` de
+// la pantalla falla, el botón se queda en «Leyendo…» y el gate muere esperando la vista previa.
+// Parece un producto roto y es el nombre del fichero de prueba. Un Blob del mismo contenido se lee
+// perfectamente, y esa es la forma rápida de distinguir una cosa de la otra.
 const CSV_DIR = process.env.HOME || APP;
-const CSV_BUENO = path.join(CSV_DIR, '.gate-imp-' + randomBytes(3).toString('hex') + '.csv');
+const CSV_BUENO = path.join(CSV_DIR, 'gate-imp-' + randomBytes(3).toString('hex') + '.csv');
+// Y uno DELIBERADAMENTE ilegible, con el mismo truco que costó el rojo: oculto, así que el navegador
+// lo ve pero no lo lee. Es la única forma barata de provocar un `NotReadableError` de verdad.
+const CSV_ILEGIBLE = path.join(CSV_DIR, '.gate-imp-ilegible-' + randomBytes(3).toString('hex') + '.csv');
 
 const tenants = [];
 function limpiar() {
   try { unlinkSync(CSV_BUENO); } catch {}
+  try { unlinkSync(CSV_ILEGIBLE); } catch {}
   for (const { slug, db } of tenants) {
     try { if (db) db.close(); } catch {}
     const t = getTenantBySlug(slug);
@@ -191,6 +202,27 @@ try {
      'AL CANCELAR NO HA ENTRADO NADA', antesCancelar + ' → ' + cuenta(N.db, 'SELECT COUNT(*) n FROM clients'));
   ok(cuenta(N.db, 'SELECT COUNT(*) n FROM importaciones') === 0, 'ni queda apuntada la importación');
   ok(await page.evaluate(() => document.getElementById('impPaso1').style.display === ''), 'y la pantalla vuelve al principio');
+
+  // ── UN FICHERO QUE NO SE PUEDE LEER NO DEJA EL BOTÓN MUERTO ────────────────────────────────
+  // Salió de un rojo de este mismo gate (23 ago 2026): el botón se ponía en «Leyendo…», el
+  // `FileReader` fallaba y NADIE lo devolvía a su sitio. Se veía el aviso y detrás quedaba un mando
+  // deshabilitado para siempre, sin más salida que recargar. Se provoca de verdad —fichero oculto,
+  // que el confinamiento del snap deja ver pero no leer— porque un fallo simulado no habría
+  // recorrido el mismo camino.
+  writeFileSync(CSV_ILEGIBLE, CSV, 'utf8');
+  await (await page.$('#impFichero')).uploadFile(CSV_ILEGIBLE);
+  await dormir(300);
+  await page.click('#impVer');
+  await dormir(1500);
+  const trasFallo = await page.evaluate(() => ({
+    texto: (document.getElementById('impVer') || {}).textContent || '',
+    inerte: !!(document.getElementById('impVer') || {}).disabled,
+    paso2: (document.getElementById('impPaso2') || {}).style.display,
+  }));
+  ok(!trasFallo.inerte && /vista previa/i.test(trasFallo.texto),
+     'un fichero ILEGIBLE avisa y DEVUELVE el botón a su sitio: no se queda muerto en «Leyendo…»',
+     trasFallo.texto.trim() + (trasFallo.inerte ? ' · DESHABILITADO' : ' · se puede volver a pulsar'));
+  ok(trasFallo.paso2 === 'none', 'y no se abre una vista previa vacía');
   ok(errsPagina.length === 0, 'sin errores de página en todo el recorrido', errsPagina.join(' | ') || 'ninguno');
 
   // ══════════════════════════════════════════════════════════════════════════════════════════════

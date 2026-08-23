@@ -260,9 +260,18 @@ export function createImportadorRoutes(db) {
       // acento se convierte en el carácter de reemplazo y el cliente entra como "Mart?nez" para
       // siempre. Se lee en UTF-8, y si aparece ese carácter se relee en Windows-1252 y se DICE
       // cuál se usó, para que se pueda comprobar en la vista previa.
-      function leeFichero(file, cb){
+      // El tercer argumento, el de fallo, NO es opcional por gusto: sin él, quien elige un fichero
+      // que el navegador no puede leer se queda con el botón deshabilitado en «Leyendo…» PARA
+      // SIEMPRE, y la única salida es recargar. Se veía el aviso y el mando quedaba muerto
+      // detrás. (23 ago 2026. Y ojo: aquí dentro no se escriben acentos graves ni escapes, que
+      // esto vive en una plantilla del servidor y un solo acento grave la parte entera.)
+      function leeFichero(file, cb, alFallar){
         var fr = new FileReader();
-        fr.onerror = function(){ toast('No he podido leer el fichero','err'); };
+        var falla = function(){
+          toast('No he podido leer el fichero. Vuelve a elegirlo o pruébalo guardado como CSV UTF-8.','err');
+          if (alFallar) alFallar();
+        };
+        fr.onerror = falla;
         fr.onload = function(){
           var t = String(fr.result || '');
           if (t.indexOf('\\uFFFD') === -1) { cb(t, 'UTF-8'); return; }
@@ -304,10 +313,11 @@ export function createImportadorRoutes(db) {
         if (!f) { toast('Elige tu fichero CSV','err'); return; }
         if (f.size > MAXB) { toast('El fichero supera el máximo','err'); return; }
         var btn = this; btn.disabled = true; btn.textContent = 'Leyendo…';
+        var suelta = function(){ btn.disabled = false; btn.textContent = 'Ver la vista previa'; };
         leeFichero(f, function(texto, juego){
           estado.nombre = f.name; estado.texto = texto; estado.juego = juego;
-          analiza(null, '').finally(function(){ btn.disabled = false; btn.textContent = 'Ver la vista previa'; });
-        });
+          analiza(null, '').finally(suelta);
+        }, suelta);
       });
 
       function analiza(mapeo, banda){
