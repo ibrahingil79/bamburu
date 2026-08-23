@@ -131,7 +131,20 @@ export const GRUPOS = {
   // LAS PANTALLAS QUE CUELGAN DE UN DOCUMENTO. Van con `clientes` —el grupo de las pantallas del
   // panel— y no en uno propio: lo que vigilan es transversal (que ninguna reviente al abrirse), así
   // que tiene que despertarse con casi cualquier cambio de pantalla, no solo con el suyo.
-  pantallas: ['gate-pantallas-documento'],
+  pantallas: ['gate-pantallas-documento',
+    // ── LOS SEIS DE LAS FICHAS D, E, G e I (23 ago 2026) ─────────────────────────────────────
+    // Se declaran al SANEAR (punto 5 de la noche), no el día que nacieron, y eso es exactamente el
+    // fallo que el censo de abajo viene a impedir: entre el 22 y el 23 de agosto escribí ocho gates
+    // y no metí ninguno. La costumbre de «declarar el mismo día» se me olvidó dos días seguidos.
+    // DECLARAR NO ES EJECUTAR: entran para que el barrido los alcance cuando Ibrahin lo pida.
+    // Los seis se han corrido a mano al entregarse, y los seis pasaron.
+    'gate-informes-a-medida',        // ficha D: el constructor y las cinco piezas de la ficha
+    'gate-informes-se-entienden',    // ficha D-bis: guardar se ve, y sin una sola ventanita
+    'gate-informes-legibles',        // ficha D-ter: nada ilegible, el periodo, y la ayuda no miente
+    'gate-inicio-widgets',           // ficha E: el cuadro de mando se coloca, se esconde y vuelve
+    'gate-portal-ampliado',          // ficha G: analíticas del cliente y el canal de mensajes
+    'gate-tarjeta-unica',            // ficha I: una sola tarjeta de cifra en las 56 pantallas
+  ],
   // Sala de máquinas: superadmin, conexiones a la BD, el fichero -wal, el saneo de errores al cliente,
   // el escapado del texto del usuario (que no se vuelva HTML ni JS) y la CSP estricta de las
   // superficies endurecidas (que sigan sin 'unsafe-inline' Y con los botones vivos).
@@ -191,6 +204,17 @@ export const EMPIEZAN_DE_CERO = new Set([
   'gate-impresion',                // DOS negocios nuevos: uno siembra 200 facturas para ver paginar
                                    // de verdad, y el vecino existe para probar que su PDF no trae
                                    // ni un dato del primero
+]);
+
+// NI DE CERO NI COMPARTIDO DEL TODO: los que levantan un negocio EXTRA para UN caso concreto y el
+// resto del tiempo viven en el de desarrollo. La comprobación automática del runner solo mira si el
+// fichero nombra `provisionTenant`, así que sin esta lista canta un desajuste que no existe — y una
+// alarma falsa repetida en cada pasada enseña a no mirar las alarmas. Se declara con su motivo.
+export const TENANT_EXTRA = new Map([
+  ['gate-oficio-pantalla',
+   'vive en el negocio de desarrollo (le cambia el OFICIO en company_config y lo devuelve), pero para '
+   + 'el caso «un negocio de una sola persona» levanta uno propio en vez de APAGAR a las demás, que es '
+   + 'lo que hacía antes del 22 ago 2026 y lo que le costó estar declarado SOLOS por dos causas.'],
 ]);
 
 // Los que necesitan el negocio de desarrollo en silencio. Cada uno con su MOTIVO: un gate marcado
@@ -256,6 +280,51 @@ export const SOLOS = new Map([
 ]);
 
 export const claseDe = g => EMPIEZAN_DE_CERO.has(g) ? 'propio' : (SOLOS.has(g) ? 'solo' : 'compartido');
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// EL CENSO — que un gate no pueda volver a ser invisible (23 ago 2026)
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// HAY DOS FORMAS DE QUE UN GATE NO CUENTE, y las dos han pasado ya en este repo:
+//   (1) NO ESTÁ EN `GRUPOS` → no lo ejecuta nadie. Le pasó a catorce gates durante tres semanas, y
+//       otra vez a los cuatro de agenda del 18 al 20 de agosto: `gate-oficio-pantalla` llevaba en
+//       ROJO dos días y nadie se enteró.
+//   (2) SÍ ESTÁ, pero su resumen final no lo sabe leer el runner y cuenta un verde inventado.
+// Contra (1) no bastaba con la buena costumbre de «declarar el mismo día», porque la costumbre se
+// olvida: al medirlo el 23 de agosto había **25 ficheros `gate-*` en disco fuera del mapa**, ocho de
+// ellos escritos esa misma semana. Así que la costumbre pasa a ser una COMPROBACIÓN.
+//
+// LA REGLA: todo `scripts/gate-*.mjs` está en `GRUPOS` **o** en `FUERA_A_PROPOSITO` con su motivo
+// escrito. Lo que no esté en ninguno de los dos, el barrido lo CANTA en cada pasada. Estar fuera es
+// una decisión legítima; estarlo sin que nadie lo sepa, no.
+
+// Fuera del barrido A PROPÓSITO, cada uno con su motivo. Declarar no es esconder: esto SALE en el
+// parte, y por eso una excusa floja aquí se lee y se discute.
+export const FUERA_A_PROPOSITO = new Map([
+  ['gate-cupones-desmontados',
+   'familia VERI*FACTU: comprueba que 19 facturas de prueba se fueron y que la cadena legal no se '
+   + 'movió (SHA de los 1050 registros). Se corre a mano al tocar facturación, nunca en un barrido '
+   + 'que puede ir en paralelo con gates que emiten y anulan facturas.'],
+  ['gate-cadena-integridad',
+   'familia VERI*FACTU: recorre y compara las DOS cadenas de huellas del negocio entero y lleva una '
+   + 'línea base congelada en docs/. Cualquier gate que emita una factura mientras corre le cambia '
+   + 'el suelo. Se corre a mano, y solo.'],
+]);
+
+// El censo. Recibe la lista de ficheros de `scripts/` (quien llama tiene el fs) y NO lee disco por
+// su cuenta: este módulo es de datos y no puede tener efectos, o volvería a no poder importarse.
+export function censoDeGates(ficheros) {
+  const base = [...new Set(ficheros
+    .filter(f => /^gate-.*\.(mjs|js)$/.test(f))
+    .map(f => f.replace(/\.(mjs|js)$/, '')))].sort();
+  const enMapa = new Set(Object.values(GRUPOS).flat());
+  return {
+    enDisco: base,
+    dentro: base.filter(g => enMapa.has(g)),
+    declaradosFuera: base.filter(g => !enMapa.has(g) && FUERA_A_PROPOSITO.has(g)),
+    invisibles: base.filter(g => !enMapa.has(g) && !FUERA_A_PROPOSITO.has(g)),
+    sinFichero: [...enMapa].filter(g => !ficheros.some(f => f.replace(/\.(mjs|js)$/, '') === g)),
+  };
+}
 
 // ── QUÉ TOCA QUÉ — el modo corto, cuando se pide ────────────────────────────────────────────────
 // Traduce «qué ficheros has cambiado» a «qué grupos hay que correr». La tabla es a mano A PROPÓSITO:

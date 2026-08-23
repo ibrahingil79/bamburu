@@ -21,10 +21,10 @@
 //   node scripts/barrido-estado.mjs --registrar-hecho "59/71" --segundos 360
 //   node scripts/barrido-estado.mjs --registrar-pendiente    # Ibrahin ha dicho que no
 import { execSync } from 'child_process';
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, readdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { GRUPOS, AFECTA } from './lib/gates-mapa.mjs';
+import { GRUPOS, AFECTA, FUERA_A_PROPOSITO, censoDeGates } from './lib/gates-mapa.mjs';
 
 const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TABLERO = join(APP_DIR, 'TABLERO.md');
@@ -112,6 +112,22 @@ export function parte() {
         + new Set(Object.values(GRUPOS).flat()).size + ')');
     }
   }
+  // ── EL CENSO (23 ago 2026) · el parte tiene que decir lo que el barrido NO cubre ───────────────
+  // Sin esto, «los N gates» se lee como «todo», y no lo es. Un gate en scripts/ que no está en el
+  // mapa no lo ejecuta nadie: es la avería que ya costó catorce gates muertos tres semanas y dos
+  // días de `gate-oficio-pantalla` en rojo sin que nadie lo viera.
+  try {
+    const censo = censoDeGates(readdirSync(join(APP_DIR, 'scripts')));
+    if (censo.declaradosFuera.length) {
+      lineas.push('  · fuera del barrido A PROPÓSITO (' + censo.declaradosFuera.length + '): '
+        + censo.declaradosFuera.join(', '));
+    }
+    if (censo.invisibles.length) {
+      lineas.push('  · 🚨 INVISIBLES — en scripts/ y en ningún grupo, o sea que no los corre nadie ('
+        + censo.invisibles.length + ' de ' + censo.enDisco.length + ' ficheros gate-*):');
+      lineas.push('      ' + censo.invisibles.join(', '));
+    }
+  } catch { /* el parte no se cae por el censo */ }
   return { lineas, e, c };
 }
 

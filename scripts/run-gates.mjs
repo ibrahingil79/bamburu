@@ -27,13 +27,13 @@
 //   --lista                                 # dice qué correría y se va, sin correr nada
 //   --serie                                 # uno detrás de otro, como antes: para comparar barridos
 import { spawn, execSync } from 'child_process';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, readdirSync } from 'fs';
 import { cpus } from 'os';
 import { dirname, join, resolve, relative } from 'path';
 import { fileURLToPath } from 'url';
 // El mapa de los gates (grupos, clases y qué toca qué) vive en su propio módulo: lo leen este
 // runner y `barrido-estado.mjs`. Una sola lista, no dos.
-import { GRUPOS, EMPIEZAN_DE_CERO, SOLOS, claseDe, AFECTA } from './lib/gates-mapa.mjs';
+import { GRUPOS, EMPIEZAN_DE_CERO, SOLOS, claseDe, AFECTA, FUERA_A_PROPOSITO, TENANT_EXTRA, censoDeGates } from './lib/gates-mapa.mjs';
 
 const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TIMEOUT_MS = 300000;
@@ -303,7 +303,10 @@ for (const g of objetivo) {
   let src = ''; try { src = readFileSync(f, 'utf8'); } catch {}
   const seTraeSuNegocio = src.includes('provisionTenant');
   if (src.includes('puppeteer.launch')) CON_NAVEGADOR.add(g);
-  if (seTraeSuNegocio && !EMPIEZAN_DE_CERO.has(g)) desajustes.push(g + ': se trae su propio negocio y NO está declarado en EMPIEZAN_DE_CERO');
+  // TENANT_EXTRA son los que levantan un negocio de más para UN caso y por lo demás viven en el
+  // compartido: nombran `provisionTenant` sin ser «de cero». Sin declararlos, esta comprobación
+  // cantaba un desajuste falso en cada pasada, que es la mejor forma de que se deje de mirar.
+  if (seTraeSuNegocio && !EMPIEZAN_DE_CERO.has(g) && !TENANT_EXTRA.has(g)) desajustes.push(g + ': se trae su propio negocio y NO está declarado en EMPIEZAN_DE_CERO');
   if (!seTraeSuNegocio && EMPIEZAN_DE_CERO.has(g)) desajustes.push(g + ': está declarado en EMPIEZAN_DE_CERO pero NO llama a provisionTenant');
 }
 
@@ -405,6 +408,32 @@ if (desajustes.length) {
   console.log('');
 }
 
+// ── EL CENSO DE GATES · que ninguno vuelva a ser invisible (23 ago 2026) ────────────────────────
+// Un gate que no está en el mapa no lo ejecuta nadie, y una comprobación que nadie ejecuta acaba
+// mintiendo. Ha pasado dos veces: catorce gates muertos tres semanas, y los cuatro de agenda dos
+// días con `gate-oficio-pantalla` EN ROJO sin que nadie lo viera. NO tumba el barrido —es
+// contabilidad, no producto— pero se canta en CADA pasada, y también con `--lista`, que es donde se
+// mira la cobertura antes de decidir. Se cantará hasta que cada gate esté en un grupo o declarado
+// fuera con su motivo escrito.
+function cantarCenso() {
+  try {
+    const censo = censoDeGates(readdirSync(join(APP_DIR, 'scripts')));
+    if (censo.declaradosFuera.length) {
+      console.log('\n📋 FUERA DEL BARRIDO A PROPÓSITO (' + censo.declaradosFuera.length + '), con su motivo:');
+      for (const g of censo.declaradosFuera) console.log('  · ' + g + '\n      ' + FUERA_A_PROPOSITO.get(g));
+    }
+    if (censo.invisibles.length) {
+      console.log('\n🚨 GATES INVISIBLES — están en scripts/ y NO los ejecuta nadie (' +
+        censo.invisibles.length + ' de ' + censo.enDisco.length + '):');
+      for (const g of censo.invisibles) console.log('  · ' + g);
+      console.log('  Cada uno tiene que ir a un grupo de GRUPOS o a FUERA_A_PROPOSITO con su motivo.');
+    }
+    if (censo.sinFichero.length) {
+      console.log('\n🚨 DECLARADOS Y SIN FICHERO (' + censo.sinFichero.length + '): ' + censo.sinFichero.join(', '));
+    }
+  } catch (e) { console.log('\n(no se pudo pasar el censo de gates: ' + e.message + ')'); }
+}
+
 // `--lista` enseña QUÉ correría y se va. Antes de un commit vale para mirar la selección sin
 // esperar al barrido — y para discutir la tabla AFECTA con algo delante.
 if (args.includes('--lista')) {
@@ -412,6 +441,7 @@ if (args.includes('--lista')) {
   for (const g of pendientes) {
     console.log('  · ' + g.padEnd(36) + claseDe(g).padEnd(11) + (CON_NAVEGADOR.has(g) ? 'navegador' : '—'));
   }
+  cantarCenso();
   process.exit(0);
 }
 
@@ -457,6 +487,8 @@ for (const [g, d] of Object.entries(ROJOS_CONOCIDOS)) {
   console.log('\n⚠️  ROJO CONOCIDO, con dueño y motivo (el gate SÍ se ejecuta):');
   console.log('  · ' + g + '  (declarado el ' + d.desde + ')\n      ' + d.motivo);
 }
+
+cantarCenso();
 
 // ── PIEZA D · DECLARACIONES CADUCADAS ───────────────────────────────────────────────────────────
 // NACE DE UN CASO REAL. `gate-vigia-agenda` se declaró rojo el 19-ago; el rediseño del Inicio lo

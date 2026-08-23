@@ -4330,6 +4330,70 @@ peticiones frenadas.
 vigia-agenda 41 → 41 · agenda-sencilla 14 → 14 · oficio-pantalla 28 → 28 · agenda-calendario 38 → 38 ·
 citas-pantalla 25 → 25. Los 13 rojos del barrido son **los mismos 13 por nombre** que antes.
 
+---
+
+**⚙️ REPASADA EL 23 AGO 2026 (noche · punto 5 del encargo nocturno) — LAS TRES PIEZAS SEGUÍAN BIEN, Y
+APARECIÓ UNA CUARTA AVERÍA MAYOR QUE LAS TRES.**
+
+Ibrahin pidió (a), (b) y (c) otra vez porque en el panel seguían abiertas. **Se midieron las tres
+antes de tocar nada, y las tres estaban hechas desde el 20 de agosto:**
+- **(a)** `gate-vigia-agenda` **no está** en `ROJOS_CONOCIDOS` — y de hecho **no queda ni una entrada
+  activa** en esa lista.
+- **(b)** los dos gates **se traen lo suyo**: `gate-agenda-sencilla` mete su propia excepción de
+  horario para hoy (`horario_excepciones`, 00:00–24:00, borrada al salir) y `gate-oficio-pantalla`
+  levanta su propio negocio de una persona.
+- **(c)** las cuatro **están en `GRUPOS`** (grupo `clientes`). *La primera medición dio 0 porque busqué
+  en `run-gates.mjs` y la lista vive en `scripts/lib/gates-mapa.mjs`; se corrigió antes de escribir
+  nada.*
+
+**Y ejecutado `gate-importador-csv`, que el encargo pedía por su nombre: 53 aserciones, todas en
+verde.** (El TABLERO ya lo daba por corrido en la ficha H; se ha vuelto a correr porque lo pedía el
+encargo, y pasa.)
+
+**LO QUE SÍ ESTABA ROTO: 25 GATES QUE NO EJECUTA NADIE, Y OCHO ERAN MÍOS DE ESTA SEMANA.** La
+costumbre de «declarar el mismo día» está escrita tres veces en `gates-mapa.mjs`… y se me olvidó dos
+días seguidos. Medido: **73 ficheros `gate-*` en `scripts/`, 54 en el mapa, 25 fuera**. Es la misma
+avería que costó catorce gates muertos tres semanas y dos días de `gate-oficio-pantalla` en rojo sin
+que nadie lo viera. **Una costumbre que se olvida no es una salvaguarda.**
+
+- **La costumbre pasa a ser una COMPROBACIÓN.** `censoDeGates()` recorre `scripts/` y exige que todo
+  `gate-*` esté **en un grupo** o **en `FUERA_A_PROPOSITO` con su motivo escrito**. Lo canta
+  `run-gates.mjs` en cada pasada **y también con `--lista`**, que es donde se mira la cobertura antes
+  de decidir, y `barrido-estado.mjs` lo mete en el parte. **No tumba el barrido**: es contabilidad,
+  no producto. **Estar fuera es legítimo; estarlo sin que nadie lo sepa, no.**
+- **Declarados los SEIS gates de las fichas D, D-bis, D-ter, E, G e I** → el barrido pasa de **87 a
+  93**. Los seis se corrieron a mano al entregarse y los seis pasaron.
+- **Declarados FUERA A PROPÓSITO los dos de la familia VERI\*FACTU** (`gate-cupones-desmontados`,
+  `gate-cadena-integridad`), con el motivo por escrito: comparan cadenas de huellas del negocio
+  entero contra una línea base congelada, y cualquier gate que emita una factura en paralelo les
+  cambia el suelo. **Ya estaban fuera; lo nuevo es que ahora se sabe.**
+- **Y una alarma falsa retirada atacando su causa.** La comprobación del runner cantaba
+  *«`gate-oficio-pantalla` se trae su propio negocio y NO está declarado en EMPIEZAN_DE_CERO»*. No es
+  cierto: **vive en el de desarrollo y levanta uno extra para UN caso**. Nace `TENANT_EXTRA`, con su
+  motivo, para poder decir eso. **Una alarma falsa repetida en cada pasada enseña a no mirar las
+  alarmas** — que es exactamente cómo empezó todo esto.
+
+**⬜ QUEDAN 17 GATES INVISIBLES, y NO se han declarado a ciegas.** Ninguno es mío ni de esta semana:
+`gate-avisos-contador-vivo`, `gate-avisos-correos`, `gate-avisos-pantalla`, `gate-c2-captura`,
+`gate-c5-2fa-superadmin`, `gate-c5bis-rescate-duenyo`, `gate-c5ter-cerrojo-superadmin`,
+`gate-c6-find-tenant`, `gate-coste-horas-pantalla`, `gate-dibujo-pantalla`, `gate-disa-captura-chat`,
+`gate-espera-pantalla`, `gate-inicio-pantalla`, `gate-pago-voz-avisos`, `gate-registro-alta`,
+`gate-registro-tailscale` y `gate-voz-pantalla`.
+**Por qué no entran esta noche:** meter 17 gates sin auditar en el mapo justo antes del único barrido
+completo de la noche haría el parte ilegible, y correrlos para saber su estado puede **sembrar basura
+en `desarrollo-bamburu`** —no los escribí yo, no sé qué limpian— la misma noche en la que el encargo
+dice *«ni un rastro de gate dentro de ningún negocio al amanecer»*. **El censo ya los canta en cada
+pasada, así que dejan de ser invisibles**; entrar o no es la misma decisión que Ibrahin tomó el 20 de
+agosto con los cuatro de agenda, y es suya.
+
+**⬜ Y HAY MÁS DEBAJO, medido y sin tocar:** contando también los `test-*` y `verify-*`, en `scripts/`
+hay **201 comprobaciones y 93 en el mapa** — o sea **108 fuera**, casi todas scripts de verificación
+puntual de una entrega antigua. **No se han censado como gates a propósito**: el censo mira solo
+`gate-*`, que es la convención de este repo para una comprobación mantenida. Triar esos 108 es una
+tarea con su propio criterio, no un descuido que se arregle de paso.
+
+---
+
 **🔎 HALLAZGO ANOTADO, NO ARREGLADO (no es de esta tarea).** `huecos()` solo propone huecos del
 **MISMO día**: a las 22:00 devuelve 0 en lugar de ofrecer el día siguiente. Medido con el día por
 defecto (8-21): **12:00 → 18 huecos · 18:00 → 6 · 20:00 → 2 · 21:00 → 0**. Puede ser un límite
