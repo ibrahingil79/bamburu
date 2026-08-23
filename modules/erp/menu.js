@@ -215,7 +215,7 @@ export const MENU = [
   // seguían sin enlace «a propósito». No era exacto: lo que el dueño dijo en U7 fue **«se abordarán
   // luego»** (TABLERO:1724), y ese luego es B2. **`/admin/tags` ya está enganchada** aquí arriba, en
   // Catálogo.
-  // ⚙️ CORREGIDO EL MISMO 23 AGO 2026 (ficha B). Donde este comentario decía que `/admin/discounts`
+  // ⚙️ CORREGIDO EL MISMO 23 AGO 2026 (encargo CUPONES, que NO es la ficha B de la migración). Donde este comentario decía que `/admin/discounts`
   // «queda apuntada como candidata a desmontar, NO se retira aquí», ya NO es cierto: **se desmontó**.
   // La pantalla y su API están retiradas (`routes/index.js`) y sus tablas archivadas a
   // `discount_codes_archived` / `auto_discounts_archived`. No hay nada que enlazar: da 404.

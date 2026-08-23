@@ -230,9 +230,12 @@ Son las de **U7 (8 jul 2026)**: **`/admin/analytics`**, **`/admin/discounts`** y
 
 - ⚙️ **CORREGIDO: hoy ya no son tres, son DOS.** **`/admin/analytics` se reenganchó al menú el
   17 jul 2026** (área «Analítica» → «Informes», `menu.js:209`; consta en el propio TABLERO).
-  **Siguen sin enlace `/admin/discounts` y `/admin/tags`** (montadas en `routes/index.js:129` y `:142`,
+  ~~**Siguen sin enlace `/admin/discounts` y `/admin/tags`** (montadas en `routes/index.js:129` y `:142`,
   ausentes de `MENU`). Las dos solo aparecen en la lista blanca de URLs de DISA, que no es un enlace
-  de la interfaz.
+  de la interfaz.~~ **⚠️ ESTO ERA CIERTO EL 21-AGO Y DEJÓ DE SERLO EL 23-AGO. Hoy no queda ninguna:**
+  `/admin/tags` se enganchó al menú (B2) y `/admin/discounts` se **DESMONTÓ** (encargo CUPONES, `9e77f2b`) —
+  ya no está montada en `routes/index.js`, y **se retiró también de la lista blanca de URLs de DISA**,
+  junto con su lectura, su escritura y sus tres acciones.
 - **La migración es una CUARTA, no una de esas tres.** No estaba en la lista de U7 porque **no
   existía** entonces: se construyó el **19 ago 2026**.
 - **Y hay más pantallas fuera del menú, pero por diseño y con camino propio** — no son huérfanas:
@@ -612,12 +615,12 @@ devuelve sus horas, que copiar no abre días cerrados y que un tramo imposible n
 >   no la ve en el rail, no la encuentra en el buscador y recibe 403 si fuerza la dirección. Inicio y
 >   la ayuda no cambian: sus claves no exigen nada.
 >
-> **⬜ APUNTADO, NO DECIDIDO — `/admin/discounts` (cupones y descuentos automáticos).** Es la tercera
-> pantalla huérfana y **se queda fuera del menú a propósito**. Motivo medido: sus tablas
-> (`discount_codes`, `auto_discounts`) **solo las leen la tienda —Capa 2, CONGELADA— y el POS viejo,
-> que está desmontado**; ni facturas, ni presupuestos, ni mostrador aplican un cupón. Enlazarla sería
-> prometer algo que hoy no ocurre. **Candidata a DESMONTAR, en su propio encargo y con decisión de
-> Ibrahin: aquí no se retira nada.** Va junto a la deuda ya declarada de `routes/orders.js`.
+> **~~⬜ APUNTADO, NO DECIDIDO~~ → ✅ RESUELTO EL 23 AGO 2026 (encargo CUPONES, `9e77f2b`) — `/admin/discounts`
+> (cupones y descuentos automáticos).** Se escribió aquí como «tercera pantalla huérfana que se queda
+> fuera del menú a propósito, candidata a DESMONTAR en su propio encargo». **Ese encargo llegó y está
+> hecho: la pantalla y su API están DESMONTADAS y sus tablas archivadas.** Y el motivo que se dio aquí
+> —«solo las leen la tienda y el POS viejo»— **estaba incompleto: faltaba DISA, que además escribía**.
+> Ver la ficha «ENCARGO CUPONES» en «Función por encargo del dueño».
 >
 > **VERIFICADO:** `gate-migracion-puerta` (nuevo, **25 comprobaciones**, negocio creado de cero, en
 > `GRUPOS.clientes` y en `EMPIEZAN_DE_CERO`) y `gate-menu-navegacion`, cuyo inventario **sube de 50 a
@@ -1635,8 +1638,10 @@ de exportación reales** para construir y probar contra algo cierto.
   **«Recordatorios a clientes»**, su icono, **alias «Cola de envíos»** para el buscador y **contador
   de pendientes** al lado. Ctrl+K la encuentra **por los dos nombres**. **Lo único cierto de L2 era
   lo de DISA**, y eso sí se ha construido.
-- **NO es una pantalla huérfana** ni la quinta: tiene menú, permiso, alias y contador. Las huérfanas
-  siguen siendo dos (`/admin/discounts` y `/admin/tags`) más la migración.
+- **NO es una pantalla huérfana** ni la quinta: tiene menú, permiso, alias y contador. ~~Las huérfanas
+  siguen siendo dos (`/admin/discounts` y `/admin/tags`) más la migración.~~ **⚠️ CADUCADO: ya no queda
+  ninguna de esas dos.** `/admin/tags` se enganchó al menú en B2 y `/admin/discounts` se DESMONTÓ en el
+  encargo CUPONES (23 ago 2026, `9e77f2b`). La migración sí tiene entrada desde B1.
 - **El orden Mañana→Hoy NO era deliberado:** ni un comentario ni una nota lo justificaban. Era el
   orden en que se escribieron los dos bloques. **L6 es correcto.**
 
@@ -2025,7 +2030,10 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
 - **Códigos de recuperación de 2FA.** Ninguna de las implementaciones los tuvo nunca: si el usuario pierde el
   móvil, no hay salida por producto (hoy solo por intervención en BD). Necesario antes de empujar el 2FA a los
   clientes.
-- **Tres pantallas vivas sin enlace** (U7): `/admin/analytics`, `/admin/discounts`, `/admin/tags`.
+- ~~**Tres pantallas vivas sin enlace** (U7): `/admin/analytics`, `/admin/discounts`, `/admin/tags`.~~
+  **⚠️ CADUCADO, las tres resueltas:** `/admin/analytics` se enganchó al menú el 17-jul (escalera paso 2),
+  `/admin/tags` en B2 (23 ago) y `/admin/discounts` **no se enlazó: se DESMONTÓ** en el encargo CUPONES
+  (23 ago 2026, `9e77f2b`), con sus tablas archivadas. Ya no hay ninguna pantalla viva sin enlace de U7.
 
 ## Eje B: DISA  ✅ COMPLETO (D0–D5f)
 - **Diagnóstico de avisos/notificaciones (solo lectura, 9 jul 2026):** `docs/disa/diagnostico-avisos.md`.
@@ -2997,7 +3005,7 @@ la cola no la miraba. **Queda dormida, igual que la cola: se construye entera, n
 de esas facturas está anulada. Así que «alta nunca enviada» **no es la esquina rara: es la carretera**, y ahí
 es donde está puesto el cuidado. *(De las 299: 218 con registro de anulación; **62** con alta pero sin
 anulación y sin fila en `invoice_anulaciones` — son del `UPDATE` masivo de `scripts/seed-taller.mjs:107`, no
-pasaron por el producto; 19 sin registro ninguno, anteriores a la Tarea 1. **Un gate no puede coger «una
+pasaron por el producto; 19 sin registro ninguno, anteriores a la Tarea 1 — **⚠️ esas 19 YA NO EXISTEN: las borró el encargo CUPONES el 23-ago-2026 (`9e77f2b`); este censo queda como estaba EL DÍA QUE SE MIDIÓ**. **Un gate no puede coger «una
 anulada cualquiera» de ese tenant**: 81 de las 299 no sirven para medir.)*
 
 **DOS COSAS QUE NO ESTABAN EN EL ENCARGO Y SALIERON AL LEER EL ESQUEMA OFICIAL:**
@@ -3071,6 +3079,111 @@ mano: `node scripts/verify-verifactu-anulaciones.mjs`. **Queda propuesto meterlo
 **Lo que NO se ha tocado:** la cadena de altas (comprobado campo a campo, idéntica), las huellas ya calculadas,
 el QR, las rectificativas, los permisos y ninguna factura existente. **Cero borrados.** `avisos.js` sigue
 filtrando por `record_type='alta'` **a propósito**: abrirlo generaría avisos visibles, y eso es encender algo.
+
+### ENCARGO CUPONES — Retirar los cupones y limpiar las 19 facturas de prueba  ✅ HECHO (2026-08-23) — `9e77f2b`
+> **⚠️ NO CONFUNDIR CON «LA FICHA B»**, que es otra cosa y se cerró el MISMO día: la puerta de la
+> migración asistida (B1/B2/B3, `b7b6706`). Este encargo NACE de su punto **B2-bis**, donde
+> `/admin/discounts` quedó «apuntada como candidata a desmontar, en su propio encargo». Este es ese
+> encargo. *(La bandera de migración se llama `migration_b_archive_discounts_2026_v1` y **se queda
+> así**: ya está puesta en las BD y renombrarla recrearía `discount_codes` vacía.)*
+Encargo del dueño, entrega única, las dos mitades juntas. **El PASO 0 encontró dos cosas que el encargo
+no preveía y que cambiaron el trabajo**; las dos están abajo, porque son lo que hay que recordar.
+
+**MITAD 1 — CUPONES DESMONTADOS.** `/admin/discounts` y `/api/erp/discounts` dejan de montarse
+(comentados, **no borrados**: `discounts.js` sigue en el repo, igual que `orders.js` y `shipping.js`).
+Sus tablas se archivan a `discount_codes_archived` / `auto_discounts_archived` con el patrón
+idempotente de D1/D2 (bandera en `settings` + los `CREATE` guardados con `if (!bArchived)`, para que
+no reaparezcan vacías en el arranque siguiente). **NUNCA DROP:** los 3 cupones que había siguen
+legibles. Los **permisos `discounts.*` NO se tocan** (el encargo lo prohíbe): quedan asignables y sin
+pantalla que abrir, igual que los de las áreas que apagaron D1 y D2.
+
+> **🔴 EL CONSUMIDOR VIVO QUE NO ESTABA PREVISTO: DISA.** El encargo daba por hecho que los únicos
+> lectores eran «la tienda congelada y el TPV viejo». **No era cierto, y no era solo lectura: DISA
+> ESCRIBÍA.** Un dueño podía decirle por chat «créame un cupón del 10 %» y se creaba. Cinco
+> superficies, todas retiradas: las **3 acciones dedicadas** (`create/edit/delete_discount`), las dos
+> tablas en **`WRITABLE_TABLES`** (vía genérica `insert/update/delete_record`), las dos en el **mapa de
+> lectura** `QUERY_TABLE_READ_PERMS`, el **contexto de página**, y `/admin/discounts` en la **lista
+> blanca de URLs** (las DOS mitades: el sanitizador y el prompt — con una sola no basta, lección de B3).
+> Sin este corte, archivar la tabla dejaba a DISA apuntando a una tabla inexistente: **es exactamente
+> el fallo que D2 dejó vivo y que sigue vivo hoy con `shipping_methods`**, que se archivó y se quedó
+> en `WRITABLE_TABLES`.
+
+**Y un agujero de al lado, que había que tapar para que el archivado sirviese de algo:** `getDbSchema`
+enumeraba `sqlite_master` con una lista de exclusión **por nombre exacto**, así que las tablas recién
+archivadas **volvían al prompt del modelo por la puerta de atrás** con su nombre `_archived`. Ahora
+filtra `_(archived|legacy)$`. De paso deja de enseñarle `sales_orders_archived`, `feedback_archived`
+e `inventory_movements_legacy`, que llevaban meses colándose.
+
+**Cómo se comprueba que la tienda está apagada, porque el grep engaña DOS veces** (me equivoqué en el
+PASO 0 y lo corregí midiendo): (1) `core/loader.js` importa los módulos con una ruta **construida**
+(`join(modulesDir, mod, 'index.js')`), así que `grep "modules/store"` no encuentra **nada** y parece
+código muerto — pero el módulo **sí se carga**; y (2) el arranque imprime `✅ Store: Tienda pública en
+/store` **aunque no monte nada**, porque ese `console.log` está antes de las dos líneas comentadas.
+Lo que de verdad la apaga son los `app.route` comentados por D1 al final de `modules/store/routes.js`.
+**Medido: `/store` y `/api/store/*` → 404.**
+
+**MITAD 2 — LAS 19 FACTURAS, BORRADAS DE VERDAD.** Todas en **`desarrollo-bamburu`** (negocio de
+pruebas: datos de `seed-taller.mjs`, clientes con payload XSS, usuarios `@bamburu.test`). Series F
+(18) y R (1), del 28-may al 20-jun-2026, **4.234,02 € base · 4.751,24 € total**, las 19 `anulada` y
+sin **ninguna** fila en `verifactu_registros`. Se fueron enteras, con **28 líneas, 3 cobros, 1 registro
+de anulación, 9 propuestas de DISA, 63 apuntes de actividad y 3 asientos con sus 6 líneas**. Cero
+huérfanos, `foreign_key_check` limpio. Por **script puntual** (`scripts/limpiar-facturas-prueba-sin-verifactu.mjs`,
+simulacro por defecto, copia de seguridad antes de tocar): **no se añade pantalla, ni botón, ni
+endpoint, ni permiso. Una factura emitida no se borra: se anula.**
+
+**El negocio cuadra después, y se demuestra con cifras, no con adjetivos:**
+- **Ventas: IDÉNTICAS** — 553 documentos, 414.016,40 €, antes y después. Las 19 estaban anuladas y
+  nunca contaron. Si esta cifra se hubiera movido, se habría borrado algo que sí contaba.
+- **Contabilidad:** el libro baja **exactamente 231,40 €** (los 3 asientos de cobro de esas facturas)
+  y sigue cuadrado: debe 917.336,23 € = haber 917.336,23 €.
+- **Cobros:** 575, tres menos que los 578 de partida. Ni uno más.
+- **Cadena de VERIFACTU: IDÉNTICA.** SHA-256 de los **1050 registros + sus envíos**, `4583329b…`
+  antes y después. **Comparado, no afirmado** — y con el SHA, no con el recuento: 1050 filas alteradas
+  siguen siendo 1050 filas. La línea base está congelada en `docs/encargo-cupones/linea-base.json`.
+
+> **🔴 LO SEGUNDO QUE EL ENCARGO NO PREVEÍA, Y HAY QUE SABERLO: HAY DOS CADENAS DE HUELLAS, NO UNA.**
+> Además de la de Verifactu (`verifactu_registros.prev_huella`, intacta), `invoices` tiene la suya
+> **propietaria** (`verifactu_hash`/`prev_hash`), la que recorre `superadmin/integridad.js` y vigila
+> `verify-verifactu-t1.mjs`. **Las 19 SÍ estaban en esa, y encadenadas.** Antes: `{total:852, ok:true}`.
+> Después: **ALARMA en `F2026-0012`**, «el enlace con la factura anterior está roto (¿borrada/insertada?)».
+> **No hay forma de borrar la cabecera de una serie sin eso:** `verifyTenantInvoices` arranca cada grupo
+> (serie, año) con `prevStored=''` y exige que la primera factura tenga `prev_hash` vacío. Borrar las
+> 20 tampoco lo arregla (la alarma se muda a `F2026-0020`, que sí tiene registro Verifactu). Recomponerla
+> exigiría **reescribir hashes de 700+ facturas**, que es justo lo que «la cadena no se toca» prohíbe.
+> **No se ha tocado ni la cadena ni `integridad.js`.** El chequeo del superadmin quedará en **ALARMA para
+> `desarrollo-bamburu`** hasta que Ibrahin decida qué hacer. **⬜ PENDIENTE DE IBRAHIN.**
+
+> **⬜ TAMBIÉN PENDIENTE — LA FACTURA Nº 20, `F2026-0012` (id 12).** Es del mismo lote y también está sin
+> registro Verifactu, pero **no se ha borrado** y hay que saber por qué: está `rectificada`, no `anulada`,
+> y **sí cuenta como venta real (53,01 €)** — borrarla habría movido los totales del negocio, que no es lo
+> que se pidió. El «19» del censo salió de mirar solo las 299 anuladas; el lote real son 20 (ids 1-20).
+> Consecuencia asumida: `F2026-0012` queda marcada `rectificada` **sin rectificativa detrás**, porque
+> `R2026-0001` sí estaba en las 19. (Su rectificativa ya estaba anulada antes de esto, así que la cifra
+> de ventas no cambia por ello.)
+
+**Huecos de numeración:** serie F 2026 pierde las secuencias **1-11 y 13-19** (18 números), y queda
+`F2026-0012` sola antes de `F2026-0020`. Serie R 2026 queda **vacía**. **No hay reutilización de
+números**: el siguiente sale de `invoice_sequences` (contador propio: F=1041, R=1), no de `MAX(sequence)`.
+
+**Un huérfano que NO es mío y que el gate destapó:** 11 filas de `activity_logs` con `entity='invoice'`
+apuntando a facturas inexistentes (ids 145-155, del **15-jul-2026**). Son muy anteriores a este encargo.
+El gate exige que **no crezcan**, no que sean cero: limpiarlas no es de esta tarea. Anotado, sin tocar.
+
+**VERIFICADO — `scripts/gate-cupones-desmontados.mjs`, 48 ✓ · 0 ✗, EJECUTADO** (no solo escrito).
+Pide las rutas **con sesión válida de DUEÑO**: sin sesión `/admin/*` da 302 y `/api/erp/*` da 401, y
+los daría igual si la pantalla siguiera montada — medir eso habría sido un verde por el motivo
+equivocado. Lleva control positivo (`/admin/inventory` → 200) para que un 404 por servidor caído no se
+disfrace de aprobado. **Tres reversiones, las tres tumban:** **A** volver a montar la pantalla → `got 200`
+(1 rojo) · **B** resucitar `F2026-0001` desde la copia → 3 rojos · **C** tocar **una** huella en una copia
+de la BD → el SHA cambia (`4583329b…` → `394f0781…`) con las mismas 1050 filas. Restaurado: 48 ✓ · 0 ✗.
+
+**Fuera del barrido**, como toda la familia Verifactu: no se ha metido en `GRUPOS`. Se corre a mano.
+
+**NINGÚN BARRIDO CORRIDO** — el encargo lo prohibía expresamente.
+
+**NO MUEVE EL RECUENTO** de «CORRECCIONES DEL DUEÑO» (65 vivos · 49 hechos · 16 pendientes): esto no
+es uno de los subpuntos A–M. Nace del **B2-bis** de la ficha B, que era una nota dentro de una ficha
+ya contada como hecha, no un subpunto propio. Pendientes siguen siendo **D 5 · E 4 · G 4 · I 3**.
 
 ### Rendimiento · Opción A — coste de bcrypt y frenos de peticiones  ✅ HECHO (2026-07-09)
 Encargo expreso del dueño a partir de `docs/rendimiento/diagnostico-carga.md` (que se guarda aquí con
@@ -4904,7 +5017,9 @@ Bamburu ya calcula solo desde las compras.
   ahora saldado). **Es un área y no un enlace directo por una razón de seguridad:** la rama `g.home`
   del riel **no pasa por `navFilter`**, así que la entrada se vería sin permiso y solo fallaría al
   pulsar; queda avisado en el código para quien la use algún día. **No se reenganchó nada más**:
-  `/admin/discounts` y `/admin/tags` siguen fuera por decisión del dueño (U7), y `/admin/orders` y
+  ~~`/admin/discounts` y `/admin/tags` siguen fuera por decisión del dueño (U7)~~ **⚠️ eso valía el
+  17-jul; el 23-ago-2026 dejó de valer: `/admin/tags` se enganchó (B2) y `/admin/discounts` se
+  DESMONTÓ (encargo CUPONES, `9e77f2b`)** — y `/admin/orders` y
   `/admin/shipping` siguen desmontados (404, D1/D2) — el gate lo afirma. **Verificado antes de
   enganchar:** la Analítica no lee **ni una tabla** del clúster viejo.
   Solo navegación: sin tocar el cálculo. Gate ampliado a **26/0**.

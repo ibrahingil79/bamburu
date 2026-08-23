@@ -61,7 +61,7 @@ export const QUERY_TABLE_READ_PERMS = {
   delivery_notes: 'albaranes.read', delivery_note_items: 'albaranes.read',
   suppliers: 'suppliers.read',
   supplier_invoices: 'purchases.read', supplier_payments: 'purchases.read', purchases: 'purchases.read', purchase_items: 'purchases.read', purchase_orders: 'purchases.read', purchase_order_items: 'purchases.read', supplier_returns: 'purchases.read', supplier_return_items: 'purchases.read',
-  // B (23 ago 2026) — `discount_codes` / `auto_discounts` RETIRADAS: sus tablas están archivadas
+  // ENCARGO CUPONES (23 ago 2026) — `discount_codes` / `auto_discounts` RETIRADAS: sus tablas están archivadas
   // (*_archived) y su pantalla desmontada. Fuera de esta allowlist se DENIEGA por defecto, que es
   // justo lo que queremos: nadie consulta por chat una tabla que ya no existe.
   // ── Añadidas por D1: tablas de negocio que antes pasaban sin ningún permiso ──
@@ -228,7 +228,7 @@ export function register(app, db) {
     // inventory_movements_legacy en Pilar 3 (stock unificado); el stock se mueve por el
     // libro stock_movements vía servicios validados (adjust_stock/transfer_stock), nunca por
     // el genérico. Se comenta (no se borra) para no permitir escrituras a una tabla inexistente.
-    // B (23 ago 2026) — 'discount_codes', 'auto_discounts' RETIRADAS del genérico: archivadas a
+    // ENCARGO CUPONES (23 ago 2026) — 'discount_codes', 'auto_discounts' RETIRADAS del genérico: archivadas a
     // *_archived. Se comenta (no se borra) por el mismo motivo que 'inventory_movements' de arriba:
     // no dejar que la vía genérica escriba en una tabla inexistente.
     'shipping_methods',
@@ -265,7 +265,7 @@ export function register(app, db) {
     create_product: 'products.create', edit_product: 'products.edit', deactivate_product: 'products.edit', activate_product: 'products.edit', delete_product: 'products.delete',
     create_variant: 'products.edit', edit_variant: 'products.edit', delete_variant: 'products.edit',
     create_category: 'categories.create', edit_category: 'categories.edit', delete_category: 'categories.delete',
-    // B — create/edit/delete_discount RETIRADAS con la pantalla de cupones (tablas archivadas).
+    // ENCARGO CUPONES — create/edit/delete_discount RETIRADAS con la pantalla de cupones (tablas archivadas).
     create_supplier: 'suppliers.create', edit_supplier: 'suppliers.edit', delete_supplier: 'suppliers.delete',
     create_client: 'clients.create', edit_client: 'clients.edit', deactivate_client: 'clients.edit', activate_client: 'clients.edit',
     adjust_stock: 'inventory.edit', transfer_stock: 'inventory.edit',
@@ -311,7 +311,7 @@ export function register(app, db) {
       'feedback', 'wishlist', 'product_reviews', 'newsletter_subscribers',
     ]);
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all();
-    // B (23 ago 2026) — lo ARCHIVADO no se le enseña al modelo. Este filtro hacía falta para que
+    // ENCARGO CUPONES (23 ago 2026) — lo ARCHIVADO no se le enseña al modelo. Este filtro hacía falta para que
     // `discount_codes_archived` / `auto_discounts_archived` no reaparecieran en el prompt por la
     // puerta de atrás justo después de archivarlas. De paso tapa la misma fuga, que ya existía, de
     // lo que archivaron D1 y D2 (`sales_orders_archived`, `feedback_archived`…) y de los `_legacy`
@@ -431,7 +431,7 @@ export function register(app, db) {
           return { ok: true, message: 'Registro ' + id + ' eliminado de ' + table + '.' };
         }
 
-        // ── Descuentos ── RETIRADOS (B, 23 ago 2026) ─────────────────
+        // ── Descuentos ── RETIRADOS (ENCARGO CUPONES, 23 ago 2026) ────
         // Las tres acciones dedicadas (create_discount / delete_discount / edit_discount) se
         // retiran con la pantalla: `discount_codes` está archivada a `discount_codes_archived`.
         // Sin este corte DISA seguiría ofreciendo crear cupones y fallaría contra una tabla que
@@ -1421,7 +1421,7 @@ export function register(app, db) {
         ).join(' | ') || 'sin datos'));
       } else if (currentPage === 'dashboard' || currentPage === 'admin') {
         lines.push('', 'PAGINA ACTUAL: Dashboard principal');
-      // B (23 ago 2026) — el contexto de la PÁGINA de descuentos se retira con la pantalla: leía
+      // ENCARGO CUPONES (23 ago 2026) — el contexto de la PÁGINA de descuentos se retira con la pantalla: leía
       // `discount_codes`, hoy archivada. La página ya no existe, así que esta rama era además
       // inalcanzable; se quita para que nadie la resucite copiándola.
       } else if (currentPage === 'invoices' && canRead('invoices.read')) {
@@ -2482,7 +2482,7 @@ export function register(app, db) {
     const DISA_ALLOWED_URLS = new Set([
       '/admin/products','/admin/categories','/admin/tags',
       // PIEZA C — POS viejo retirado: quitados '/admin/orders', '/admin/orders/pos', '/refunds', '/draft/new'.
-      // B (23 ago 2026) — quitado '/admin/discounts': pantalla desmontada. Dejarlo aquí haría que
+      // ENCARGO CUPONES (23 ago 2026) — quitado '/admin/discounts': pantalla desmontada. Dejarlo aquí haría que
       // DISA enlazara una ruta que hoy da 404, que es el callejón sin salida que D2 ya limpió.
       '/admin/inventory','/admin/suppliers','/admin/purchases',
       '/admin/purchases/new','/admin/invoices','/admin/clients','/admin/clients/groups',

@@ -23,7 +23,7 @@ export function runMigrations(db) {
   // shipping_methods)? Si sí, NO recrearlos (CREATE guardados con `if (!d2Archived)`). NO incluye
   // tags/product_tags (función viva del catálogo) ni store_settings (se conserva, tienda Capa 2).
   const d2Archived = !!db.prepare('SELECT value FROM settings WHERE key=?').get('migration_d2_archive_ecommerce_2026_v1');
-  // B (23 ago 2026) — ¿ya se archivaron los CUPONES (discount_codes, auto_discounts)? Si sí, NO
+  // ENCARGO CUPONES (23 ago 2026) — ¿ya se archivaron los CUPONES (discount_codes, auto_discounts)? Si sí, NO
   // recrearlos (sus CREATE van guardados con `if (!bArchived)`), para que el rename → _archived sea
   // idempotente y no reaparezcan vacíos en el arranque siguiente. Mismo patrón que D1 y D2.
   const bArchived = !!db.prepare('SELECT value FROM settings WHERE key=?').get('migration_b_archive_discounts_2026_v1');
@@ -321,7 +321,7 @@ export function runMigrations(db) {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
-  // Discount codes — B: guardados por `bArchived` (ver el archivado al final del fichero).
+  // Discount codes — ENCARGO CUPONES: guardados por `bArchived` (ver el archivado al final del fichero).
   if (!bArchived) {
   db.exec(`CREATE TABLE IF NOT EXISTS discount_codes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2764,7 +2764,11 @@ Sé preciso con los números y siempre redondea correctamente.`,
     tx2();
   }
 
-  // ── B — ARCHIVAR LOS CUPONES (rename → _archived, idempotente, sin DROP) ──────────────────────
+  // ── ENCARGO CUPONES — ARCHIVAR (rename → _archived, idempotente, sin DROP) ───────────────────
+  // ⚠️ LA CLAVE DE LA BANDERA DICE `_b_` Y SE QUEDA ASÍ. Se escribió cuando este encargo se llamaba
+  // «ficha B», nombre que ya tenía la ficha de la migración asistida del mismo día. El nombre humano
+  // se corrigió; la clave NO se puede tocar: ya está puesta en las BD, y cambiarla haría `bArchived`
+  // falso, recrearía `discount_codes` VACÍA y dejaría la tabla viva y la archivada a la vez.
   // Solo tras desmontar su UI y su API (`/admin/discounts`, `/api/erp/discounts`, routes/index.js) y
   // cortar la superficie de DISA (acciones dedicadas, vía genérica, allowlist de lectura, URLs).
   // "Eliminar" = archivar, NUNCA DROP: los tres cupones que existen en `desarrollo-bamburu` siguen

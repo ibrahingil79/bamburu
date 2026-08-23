@@ -144,7 +144,7 @@ export function mountRoutes(app, db) {
   // el POS, los borradores y los reembolsos viejos. Archivado de tablas y corte de escritura de DISA = D1.
   // admin.route('/orders', orderViews);
   admin.route('/inventory', invViews);
-  // B (23 ago 2026) — CUPONES RETIRADOS. Desmontado, no borrado: discounts.js sigue en el repo, igual
+  // ENCARGO CUPONES (23 ago 2026) — CUPONES RETIRADOS. Desmontado, no borrado: discounts.js sigue en el repo, igual
   // que orders.js y shipping.js. Sus tablas (discount_codes, auto_discounts) quedan archivadas a
   // *_archived por la migración `migration_b_archive_discounts_2026_v1` de models.js. Motivo: ningún
   // documento vivo aplica un cupón —ni factura, ni presupuesto, ni pedido, ni mostrador—; sus únicos
@@ -225,7 +225,7 @@ export function mountRoutes(app, db) {
   // PIEZA C — API del POS viejo RETIRADA (ver nota arriba). Desmontado, no borrado.
   // apiApp.route('/orders', orderApi);
   apiApp.route('/inventory', invApi);
-  // B — API de cupones RETIRADA (ver nota arriba). Desmontada, no borrada. /api/erp/discounts/* → 404.
+  // ENCARGO CUPONES — API de cupones RETIRADA (ver nota arriba). Desmontada, no borrada. /api/erp/discounts/* → 404.
   // apiApp.route('/discounts', discApi);
   // D2 — API de envíos DESMONTADA: comentada, no borrada. /api/erp/shipping/* → 404.
   // apiApp.route('/shipping', shipApi);

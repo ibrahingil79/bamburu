@@ -1,4 +1,4 @@
-// GATE de la ficha B — CUPONES RETIRADOS + LAS 19 FACTURAS DE PRUEBA BORRADAS.
+// GATE del encargo CUPONES — CUPONES RETIRADOS + LAS 19 FACTURAS DE PRUEBA BORRADAS.
 //   node scripts/gate-cupones-desmontados.mjs
 //
 // Prueba las DOS mitades del encargo contra el servidor REAL (:3000, el mismo proceso que Caddy
@@ -12,7 +12,7 @@
 //     la ruta no existe. (Y se comprueba a la vez que una pantalla VIVA sí da 200, para que un 404
 //     por "el servidor está caído" no se disfrace de aprobado.)
 //
-//  2. LA CADENA DE VERIFACTU SE COMPARA, NO SE AFIRMA. `docs/ficha-b/linea-base.json` guarda el
+//  2. LA CADENA DE VERIFACTU SE COMPARA, NO SE AFIRMA. `docs/encargo-cupones/linea-base.json` guarda el
 //     SHA-256 de los 1050 registros y sus envíos TOMADO ANTES DE BORRAR NADA. Aquí se recalcula con
 //     la misma receta y se exige que coincida byte a byte. Contar filas no bastaría: 1050 filas
 //     alteradas siguen siendo 1050 filas.
@@ -62,7 +62,7 @@ db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf
   .run(token, owner.id, ahora, ahora + 900, randomBytes(24).toString('hex'));
 const H = { cookie: 'asess=' + token };
 
-const BASE_JSON = path.join(APP_DIR, 'docs', 'ficha-b', 'linea-base.json');
+const BASE_JSON = path.join(APP_DIR, 'docs', 'encargo-cupones', 'linea-base.json');
 
 try {
   // ═══ [1] LA PANTALLA Y SU API ESTÁN DESMONTADAS ══════════════════════════════════════════════
@@ -171,13 +171,13 @@ try {
   }
   // ACTIVIDAD — aquí NO se exige cero, y hay que explicar por qué para que nadie lo "arregle" mal.
   // Este negocio ya arrastraba 11 apuntes con entity='invoice' apuntando a facturas inexistentes
-  // (ids 145-155, del 15-jul-2026), muy anteriores a esta ficha. No son míos y limpiarlos no es de
+  // (ids 145-155, del 15-jul-2026), muy anteriores a este encargo. No son míos y limpiarlos no es de
   // esta tarea. Lo que sí es mío es no AÑADIR ni uno: por eso se compara contra la línea base.
   {
     const lineaTmp = JSON.parse(fs.readFileSync(BASE_JSON, 'utf8'));
     const c = db.prepare("SELECT COUNT(*) c FROM activity_logs WHERE entity='invoice' AND entity_id NOT IN (SELECT id FROM invoices)").get().c;
     ok(c <= lineaTmp.actividad_huerfana_previa,
-       'la actividad huérfana NO creció (había 11 previos, ajenos a esta ficha)',
+       'la actividad huérfana NO creció (había 11 previos, ajenos a este encargo)',
        `${c} ahora vs ${lineaTmp.actividad_huerfana_previa} antes`);
   }
   const fk = db.pragma('foreign_key_check');

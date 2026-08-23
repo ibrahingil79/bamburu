@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
-// LIMPIEZA PUNTUAL — las facturas de PRUEBA anteriores a la Tarea 1 de Verifactu (ficha B).
+// LIMPIEZA PUNTUAL — las facturas de PRUEBA anteriores a la Tarea 1 de Verifactu (encargo CUPONES).
 //
 // ESTO NO ES UNA FUNCIÓN DEL PRODUCTO. Es un script de un solo uso, y a propósito no tiene pantalla,
 // ni botón, ni endpoint, ni permiso: **una factura emitida no se borra, se anula**. Lo único que

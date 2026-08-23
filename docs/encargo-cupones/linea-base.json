@@ -23,5 +23,5 @@
   "facturas": 852,
   "cupones": 3,
   "actividad_huerfana_previa": 11,
-  "nota_huerfanos_previos": "activity_logs con entity=invoice apuntando a facturas que ya no existen: 11 filas del 15-jul-2026 (ids 145-155). SON PREVIAS a la ficha B y ajenas a ella. El gate exige que no CREZCAN, no que sean cero: arreglarlas no es de esta tarea."
+  "nota_huerfanos_previos": "activity_logs con entity=invoice apuntando a facturas que ya no existen: 11 filas del 15-jul-2026 (ids 145-155). SON PREVIAS al encargo CUPONES y ajenas a él. El gate exige que no CREZCAN, no que sean cero: arreglarlas no es de esta tarea."
 }
