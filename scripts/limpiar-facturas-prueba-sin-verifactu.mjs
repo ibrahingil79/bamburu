@@ -12,12 +12,11 @@
 //   Son las anteriores a la implantación del registro de facturación: la AEAT no las conoce, no
 //   están en la cadena de huellas de Verifactu y nada posterior se apoya en ellas.
 //
-// QUÉ NO BORRA, Y HAY QUE SABERLO:
-//   `F2026-0012` (id 12) también es de ese lote y también está sin registro Verifactu, pero está
-//   `rectificada`, no `anulada`, y **sí cuenta como venta real** (53,01 €). Borrarla movería los
-//   totales del negocio, que no es lo que se pidió. Se queda, y con ella se queda que su
-//   rectificativa (`R2026-0001`, que sí está en el lote) desaparece: F2026-0012 quedará marcada
-//   `rectificada` sin rectificativa detrás. Está anotado en el TABLERO para decidirlo aparte.
+// LA VEINTEAVA, `F2026-0012`: se quedó fuera la primera vez a propósito —está `rectificada`, no
+// `anulada`, y SÍ cuenta como venta real (53,01 €), así que borrarla mueve los totales— y quedó
+// anotada para que decidiera Ibrahin. **Decidió que fuera (24 ago 2026).** Con `--incluir-rectificadas`
+// entran también las que están en ese caso: sin ningún registro Verifactu pero no anuladas. La
+// bandera existe para que borrar una factura que CUENTA nunca pase por descuido: hay que pedirlo.
 //
 // LO QUE ESTE SCRIPT SE NIEGA A HACER:
 //   · tocar `verifactu_registros` o `verifactu_envios` — ni una fila, y lo comprueba;
@@ -40,6 +39,7 @@ import fs from 'fs';
 import path from 'path';
 
 const HAZLO = process.argv.includes('--hazlo');
+const CON_RECT = process.argv.includes('--incluir-rectificadas');
 const SOLO = (process.argv.find(a => a.startsWith('--tenant=')) || '').split('=')[1] || null;
 const RAIZ = path.resolve(new URL('..', import.meta.url).pathname);
 const DIR = path.join(RAIZ, 'data', 'tenants');
@@ -59,16 +59,17 @@ function huellaVerifactu(db) {
   };
 }
 
-// Estas son LAS 19: anuladas y sin ningún registro de facturación.
+// Las candidatas: sin ningún registro de facturación. Por defecto SOLO las anuladas; con
+// `--incluir-rectificadas`, también las que no lo están (y que por tanto sí cuentan en las cifras).
 const SQL_CANDIDATAS = `
   SELECT id, invoice_number, series, sequence, issue_date, status, subtotal, total
     FROM invoices i
-   WHERE i.status = 'anulada'
+   WHERE ` + (CON_RECT ? '1=1' : "i.status = 'anulada'") + `
      AND NOT EXISTS (SELECT 1 FROM verifactu_registros r WHERE r.invoice_id = i.id)
    ORDER BY i.id`;
 
-// La 20ª: mismo lote, sin registro, pero NO anulada. Solo se informa.
-const SQL_VECINAS = `
+// Las que quedan fuera de esta pasada. Solo se informa.
+const SQL_VECINAS = CON_RECT ? 'SELECT id, invoice_number, status, total FROM invoices WHERE 1=0' : `
   SELECT id, invoice_number, status, total
     FROM invoices i
    WHERE i.status <> 'anulada'
@@ -148,6 +149,11 @@ function procesar(slug, ruta) {
     const dirCopias = path.join(RAIZ, 'data', 'copias-limpieza');
     fs.mkdirSync(dirCopias, { recursive: true });
     const copia = path.join(dirCopias, `${slug}-antes-limpieza-facturas.db`);
+    // `VACUUM INTO` se niega a escribir sobre un fichero que ya existe, así que una SEGUNDA pasada
+    // del script moría con «output file already exists» — y moría DESPUÉS de haber dicho lo que iba
+    // a borrar, que es la peor forma de fallar. Se borra la copia anterior antes: la que importa es
+    // la del estado de AHORA, no la de la vez pasada.
+    fs.rmSync(copia, { force: true });
     db.exec(`VACUUM INTO '${copia.replace(/'/g, "''")}'`);
     console.log(`\n  ✓ copia de seguridad: ${copia}`);
 

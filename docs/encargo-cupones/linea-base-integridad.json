@@ -1,11 +1,11 @@
 {
-  "tomada": "2026-08-23 (encargo INTEGRIDAD, tras el encargo CUPONES)",
+  "tomada": "2026-08-24 (rehecha tras borrar F2026-0012 · encargo nocturno, punto 1)",
   "slug": "desarrollo-bamburu",
   "integridad_antes": {
     "total": 833,
     "ok": false,
     "alarm": {
-      "invoice_number": "F2026-0012",
+      "invoice_number": "F2026-0020",
       "reason": "el enlace con la factura anterior está roto (¿borrada/insertada?)"
     }
   },
@@ -15,28 +15,30 @@
     "sha": "4583329bdec49c1125b03d42800e436380b4780458e0a3857fd3549ab0a59d1b"
   },
   "ventas": {
-    "count": 553,
-    "base": 342165.51,
-    "iva": 71850.89,
-    "total": 414016.4
+    "count": 552,
+    "base": 342118.5,
+    "iva": 71844.89,
+    "total": 413963.39
   },
   "cobros": {
     "c": 575,
     "imp": 1212609.67
   },
   "libro": {
-    "n": 4625,
-    "debe": 917336.23,
-    "haber": 917336.23
+    "n": 4618,
+    "debe": 917283.22,
+    "haber": 917283.22
   },
-  "asientos": 1709,
-  "facturas": 833,
+  "asientos": 1708,
+  "facturas": 832,
   "anulaciones": 218,
   "anulaciones_que_enlazan_bien": 218,
   "sello_serie_S": "5bd689a9ba9702d9cd165aa6431832a95b7e53532b7079dc9c51b9eb6673b8d4",
   "serie_S_n": 122,
   "integridad_js_sha": "43caa83e34c5bde2d4f9007a5e2fb059c4cdda1fd752d82e2fd914a1b836c5d9",
   "nota_integridad_js": "SHA del fichero del verificador ANTES de esta tarea. El encargo prohibe anadirle excepciones: el gate exige que este SHA no cambie.",
-  "datos_factura_sha": "7b71c040786a345d0a4572d03ba194be62ac014a57b80e40cec58b7815d04c37",
-  "nota_datos_factura": "SHA de TODOS los campos de las facturas MENOS verifactu_hash y prev_hash. Cambiar un total tambien hace cuadrar un hash: esto detecta que se arregle la cadena falsificando el negocio."
+  "datos_factura_sha": "2f96e6c45137ebf509e0bb06bb7a5cf1fd6fb59e5aec162757a1fa46916ba6d9",
+  "nota_datos_factura": "SHA de TODOS los campos de las facturas MENOS verifactu_hash y prev_hash. Cambiar un total tambien hace cuadrar un hash: esto detecta que se arregle la cadena falsificando el negocio.",
+  "nota_rehecha": "Las cifras de 833 facturas y 553 documentos CADUCARON al borrar F2026-0012, que Ibrahin decidió quitar el 24 ago. Se rehacen con el estado de después: 832 y 552. Lo que NO cambia y esta línea base existe para vigilar —el SHA de la cadena de Verifactu— se conserva tal cual.",
+  "actividad_huerfana_previa": 11
 }

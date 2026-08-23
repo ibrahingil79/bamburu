@@ -181,6 +181,10 @@ for (const fichero of fs.readdirSync(DIR).filter(f => f.endsWith('.db'))) {
     const dirCopias = path.join(RAIZ, 'data', 'copias-limpieza');
     fs.mkdirSync(dirCopias, { recursive: true });
     const copia = path.join(dirCopias, `${slug}-antes-recomponer-cadena.db`);
+    // `VACUUM INTO` no sobreescribe: sin esto, la SEGUNDA pasada muere con «output file already
+    // exists» — y muere después de haber dicho lo que iba a hacer. La copia que importa es la de
+    // AHORA, no la de la vez anterior.
+    fs.rmSync(copia, { force: true });
     db.exec(`VACUUM INTO '${copia.replace(/'/g, "''")}'`);
     console.log(`\n  ✓ copia de seguridad: ${copia}`);
 
