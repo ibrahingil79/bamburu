@@ -1807,6 +1807,17 @@ verdad y no como se suponía — que es justo el problema que esta tarea viene a
   **no pueden llevar gráfico**.
 - **Control horario (fichaje).**
 - **Agenda del CRM.**
+- **⬜ DESCUENTOS Y PROMOCIONES — rehacer la función ENTERA y BIEN** (bonos, promociones, descuento por
+  cliente), **operable por DISA**. *(Apuntada por Ibrahin el 23 ago 2026 al cerrar el encargo INTEGRIDAD.
+  **No se ha construido nada hoy**: queda registrada, sin encargo.)*
+  **Ojo con leer mal la retirada del 23 de agosto:** la pantalla vieja `/admin/discounts` se desmontó ese
+  día **por estar MUERTA** —ningún documento vivo aplicaba un cupón: ni factura, ni presupuesto, ni pedido,
+  ni mostrador; solo la leían la tienda congelada y el TPV viejo—, **no porque la función sobre**. **La
+  función sí hace falta**, y se quiere más ancha que aquella: aquella eran cupones y descuentos
+  automáticos de e-commerce, y esto son **bonos, promociones y descuento por cliente**, con DISA pudiendo
+  operarlos. Cuando se aborde: las tablas viejas siguen ahí, archivadas y legibles
+  (`discount_codes_archived`, `auto_discounts_archived`), y los permisos `discounts.*` **nunca se
+  borraron** — están asignables y sin pantalla que abrir, listos para reengancharse.
 
 
 
@@ -3080,6 +3091,84 @@ mano: `node scripts/verify-verifactu-anulaciones.mjs`. **Queda propuesto meterlo
 el QR, las rectificativas, los permisos y ninguna factura existente. **Cero borrados.** `avisos.js` sigue
 filtrando por `record_type='alta'` **a propósito**: abrirlo generaría avisos visibles, y eso es encender algo.
 
+### ENCARGO INTEGRIDAD — Recomponer la cadena propietaria de `invoices`  ✅ HECHO (2026-08-23) — `351f5f4`
+Sale del pendiente que dejó el encargo CUPONES. Palabras de Ibrahin: **«una alarma siempre encendida es
+una alarma muerta: hay que apagarla arreglando la causa, no silenciándola»**.
+
+**QUÉ ESTABA ROTO — y eran DOS puntos, no uno.** Solo `desarrollo-bamburu`; los otros 7 negocios con
+facturas cuadraban. En la serie **F|2026** había **dos** eslabones rotos: `F2026-0012` (seq 12) y
+`F2026-0020` (seq 20), que son exactamente las dos que iban **detrás de una factura borrada** el mismo
+día (la 11 y la 19). `integridad.js` solo enseñaba la primera **porque corta al primer fallo**, así que
+el parte de la entrega anterior se quedó corto sin mentir.
+
+**Y lo que NO estaba roto, que importa igual:** los **833 sellos cuadraban con sus propios datos** (0
+fallos de `calcHash`). Nadie había alterado una factura. Lo único roto eran los **enlaces**.
+
+**QUÉ SE HA RECOMPUESTO: 857 sellos.**
+- **711 facturas** de la serie F — el efecto cascada desde seq 12 hasta seq 1037.
+- **146 registros de `invoice_anulaciones`**, y no es alcance de más: esa tabla guarda `prev_hash` = el
+  sello de SU factura, y su hash sale de `calcAnulacionHash`, que el propio código describe como
+  **«familia del `calcHash` de facturas»**. Es la MISMA cadena propietaria — `models.js:1466` dice
+  expresamente que la oficial de Verifactu va «SEPARADA de la cadena propietaria». Los 218 registros
+  enlazaban bien antes; recomponer solo las facturas habría dejado **146 apuntando a sellos que ya no
+  existen**, que es la referencia colgando que el encargo anterior prohibía.
+- **Serie S|2026: 0 cambios.** Nunca estuvo rota, y recalculada de principio a fin devuelve sus **122
+  sellos idénticos**. Es el **control positivo** de toda la tarea: demuestra que el cálculo *reproduce*
+  el original en vez de inventar uno nuevo. Si la S se moviera, el verde de la F no valdría nada.
+- Serie R|2026: vacía desde el borrado de las 19.
+
+**LA CADENA DE VERIFACTU NO SE HA TOCADO, y se demuestra comparando.** SHA-256 de los 1050 registros y
+sus 2 envíos: **`4583329b…` antes y después**. Y no participa en el cálculo: `calcHash` usa seis campos
+—`invoice_number | issue_date | company_fiscal_id | client_fiscal_id | total | prev_hash`— y **ninguno es
+de Verifactu**; a la inversa, la huella oficial (`verifactu.js:40-60`) usa `idEmisor, numSerie, fecha,
+tipo, cuota, importe, prevHuella, huso` y **nunca lee `invoices.verifactu_hash`**. El script solo abre
+`verifactu_registros` en **lectura**, y para una única cosa: sacar ese SHA de prueba.
+
+**EL NEGOCIO NO SE MOVIÓ NI UN CÉNTIMO** (medido antes y después, no afirmado):
+- Ventas **553 documentos · 414.016,40 €** · base 342.165,51 € · IVA 71.850,89 €.
+- Cobros **575 · 1.212.609,67 €**. Contabilidad **4625 líneas · 1709 asientos · debe = haber = 917.336,23 €**.
+- Y un cinturón más fino, porque hacía falta: un **SHA de TODOS los campos de las facturas MENOS los dos
+  del sello**. Cambiar un `total` también hace cuadrar un hash, y eso sería «arreglar» la cadena
+  **falsificando el negocio**. Ese SHA es idéntico: ni un campo de ninguna factura ha cambiado.
+
+**`integridad.js` NO SE HA TOCADO, y no es una promesa: su SHA-256 está congelado en la línea base y el
+gate lo compara.** Cero excepciones, cero listas blancas, cero «ignorar este negocio».
+
+**⚠️ HALLAZGO DEL PASO 0 — el panel no estaba en rojo: estaba en VERDE RANCIO.** La pantalla de
+Integridad **no ejecuta el chequeo**: pinta la última fila guardada en `integrity_checks` (control.db).
+Y la última era del **20 de junio**: `desarrollo-bamburu · ok=1 · 20 facturas · «cadena íntegra»`, con
+**833 facturas** en la base. Llevaba dos meses diciendo que todo iba bien sobre una foto de otro mundo,
+y la ALARMA solo aparecía si alguien pulsaba «Lanzar chequeo ahora». Por eso el gate **lanza el chequeo
+por su endpoint REAL** (sesión de superadmin + CSRF) y exige que la fila guardada sea **de hace un
+momento** y con el número de facturas de hoy. *(La pantalla pinta lo guardado a propósito —el chequeo
+recorre todas las BD—, así que esto no es un fallo a arreglar aquí; es algo que hay que saber para no
+volver a leer un verde caducado como si fuera de hoy.)*
+
+**NO SE HA CREADO NINGUNA FUNCIÓN DE RECALCULAR SELLOS.** `scripts/recomponer-cadena-propietaria.mjs` es
+puntual: simulacro por defecto, copia de seguridad antes de escribir, y una **lista explícita**
+(`NEGOCIOS_DE_PRUEBAS`) — si el negocio no está en ella, **se niega y sale con error**. Ni pantalla, ni
+botón, ni endpoint, ni permiso, ni tarea programada. En un negocio real, recalcular sellos es justo lo
+que un sistema honesto **no debe permitir**: la cadena existe para delatar que alguien tocó una factura,
+y una función que la recalcula convierte la delación en un botón. Queda escrito en la cabecera del script.
+
+**VERIFICADO — `scripts/gate-cadena-integridad.mjs`, 34 ✓ · 0 ✗, EJECUTADO.** Comprueba los 8 negocios
+con facturas (no solo el arreglado), el SHA de `integridad.js`, el SHA de Verifactu, la foto del negocio,
+el enlace de las 218 anulaciones, el control de la serie S, y **el panel de punta a punta**.
+**Tres reversiones, las tres tumban:**
+- **A — añadirle a `integridad.js` justo lo que el encargo prohíbe** (`if (absPath.includes('desarrollo-bamburu')) continue`):
+  3 rojos. Y esto es lo que hay que mirar: **el verificador saboteado devolvía `{ok:true}`** — un verde
+  perfecto y completamente falso. Lo único que lo cazó fue el SHA del fichero.
+- **B — romper un eslabón en los datos** (`prev_hash` de `F2026-0500` a ceros): 7 rojos.
+- **C — falsificar el negocio para hacer cuadrar la cadena** (subir 100 € el total de `S2026-0001` y
+  recalcularle el sello para que cuadre): **10 rojos**, cazado por cuatro vías independientes — el SHA de
+  los datos de factura, el control de la serie S, el enlace de las anulaciones y la propia cadena.
+Restaurado tras cada una: **34 ✓ · 0 ✗**.
+
+**Fuera del barrido.** No se ha metido en `GRUPOS`; se corre a mano. **NINGÚN BARRIDO CORRIDO.**
+
+**No mueve el recuento** de «CORRECCIONES DEL DUEÑO» (65 vivos · 49 hechos · 16 pendientes): no es uno de
+los subpuntos A–M.
+
 ### ENCARGO CUPONES — Retirar los cupones y limpiar las 19 facturas de prueba  ✅ HECHO (2026-08-23) — `9e77f2b`
 > **⚠️ NO CONFUNDIR CON «LA FICHA B»**, que es otra cosa y se cerró el MISMO día: la puerta de la
 > migración asistida (B1/B2/B3, `b7b6706`). Este encargo NACE de su punto **B2-bis**, donde
@@ -3150,8 +3239,11 @@ endpoint, ni permiso. Una factura emitida no se borra: se anula.**
 > (serie, año) con `prevStored=''` y exige que la primera factura tenga `prev_hash` vacío. Borrar las
 > 20 tampoco lo arregla (la alarma se muda a `F2026-0020`, que sí tiene registro Verifactu). Recomponerla
 > exigiría **reescribir hashes de 700+ facturas**, que es justo lo que «la cadena no se toca» prohíbe.
-> **No se ha tocado ni la cadena ni `integridad.js`.** El chequeo del superadmin quedará en **ALARMA para
-> `desarrollo-bamburu`** hasta que Ibrahin decida qué hacer. **⬜ PENDIENTE DE IBRAHIN.**
+> **No se ha tocado ni la cadena ni `integridad.js`.** ~~El chequeo del superadmin quedará en **ALARMA para
+> `desarrollo-bamburu`** hasta que Ibrahin decida qué hacer.~~ **⬜ PENDIENTE DE IBRAHIN.**
+> **→ ✅ RESUELTO EL MISMO 23 AGO 2026 (encargo INTEGRIDAD, `351f5f4`):** Ibrahin encargó apagar la alarma
+> **arreglando la causa, no callándola**. La cadena propietaria se recompuso entera (857 sellos) y el
+> chequeo da VERDE **sin tocarle una línea a `integridad.js`**. Ver su ficha abajo.
 
 > **⬜ TAMBIÉN PENDIENTE — LA FACTURA Nº 20, `F2026-0012` (id 12).** Es del mismo lote y también está sin
 > registro Verifactu, pero **no se ha borrado** y hay que saber por qué: está `rectificada`, no `anulada`,
@@ -3180,6 +3272,12 @@ de la BD → el SHA cambia (`4583329b…` → `394f0781…`) con las mismas 1050
 **Fuera del barrido**, como toda la familia Verifactu: no se ha metido en `GRUPOS`. Se corre a mano.
 
 **NINGÚN BARRIDO CORRIDO** — el encargo lo prohibía expresamente.
+
+**⚠️ LA FUNCIÓN VUELVE, Y NO ES UNA CONTRADICCIÓN.** El 23 ago 2026, al cerrar el encargo INTEGRIDAD,
+Ibrahin apuntó **«Descuentos y promociones — rehacer la función entera y bien (bonos, promociones,
+descuento por cliente), operable por DISA»** (ver «⬜ TAREA 3 — Funciones nuevas»). Lo que se retiró
+aquí fue **una pantalla muerta**, no la necesidad: nada la aplicaba. Quien lea esta ficha dentro de
+seis meses tiene que ver las dos cosas juntas, o creerá que los descuentos están descartados.
 
 **NO MUEVE EL RECUENTO** de «CORRECCIONES DEL DUEÑO» (65 vivos · 49 hechos · 16 pendientes): esto no
 es uno de los subpuntos A–M. Nace del **B2-bis** de la ficha B, que era una nota dentro de una ficha
