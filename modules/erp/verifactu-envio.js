@@ -286,6 +286,107 @@ export function buildRegistroAlta({ registro, invoice, items, prevRegistro, comp
   return { xml, avisos, bloqueado: avisos.length > 0 };
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// PASO 2-bis — Constructor del XML de ANULACIÓN (RegistroAnulacion).
+//
+// No sale de buildRegistroAlta porque `RegistroFacturacionAnulacionType` es OTRA secuencia: no lleva
+// Desglose, ni CuotaTotal/ImporteTotal, ni TipoFactura, ni Destinatarios, ni NombreRazonEmisor, y su
+// IDFactura usa nombres de elemento distintos (IDEmisorFacturaAnulada / NumSerieFacturaAnulada /
+// FechaExpedicionFacturaAnulada). Igual que el alta, todo sale del registro CONGELADO por la Tarea 1:
+// aquí no se re-deriva ni se toca la huella, ni el encadenado, ni la fecha.
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── EL FORMATO DE FECHA DE LA AEAT: SE GUARDA, NO SE CONVIERTE ────────────────────────────────
+// Comprobado contra el esquema oficial descargado en vivo el 23-ago-2026 (SuministroInformacion.xsd):
+//
+//   <simpleType name="fecha">
+//     <restriction base="string">
+//       <length value="10"/>
+//       <pattern value="\d{2,2}-\d{2,2}-\d{4,4}"/>
+//     </restriction>
+//   </simpleType>
+//
+// Ese tipo `sf:fecha` lo usan POR IGUAL `FechaExpedicionFactura` (alta) y `FechaExpedicionFacturaAnulada`
+// (anulación): UN solo formato, DD-MM-YYYY, y el mismo en los dos. Circula el aviso de que "el alta
+// admite dos formatos y la anulación solo el internacional año-mes-día": es FALSO en sus dos mitades,
+// y actuar sobre él rompe justo lo que dice arreglar — '2026-08-23' pasa el <length 10> pero FALLA el
+// <pattern>, y la AEAT devuelve el 4102 ("El XML no cumple el esquema") en cada anulación.
+// Por eso aquí NO se normaliza a ISO: se GUARDA el formato y, si algún día no cuadra, se para el envío
+// (bloqueado_datos + aviso) en vez de mandar un XML que ya sabemos que se va a rechazar.
+// El único campo en formato internacional es `FechaHoraHusoGenRegistro` (type="dateTime"), y lo es en
+// el alta Y en la anulación por igual; ya lo genera genTimestampMadrid() (Tarea 1, inmutable).
+export const RE_FECHA_AEAT = /^\d{2}-\d{2}-\d{4}$/;
+export const esFechaAeat = v => RE_FECHA_AEAT.test(String(v == null ? '' : v));
+
+// Construye el <RegistroAnulacion> de UN registro congelado. Devuelve { xml, avisos, bloqueado }.
+// `bloqueado=true` (con avisos) cuando falta uno de los datos obligatorios: NO se envía y se marca
+// 'bloqueado_datos'. Mismo contrato que buildRegistroAlta.
+//
+// SinRegistroPrevio NO se usa (decisión del dueño, 23-ago-2026): en Bamburu el alta siempre acaba
+// remitiéndose, así que la anulación espera detrás de su alta y las dos se comunican en orden. El
+// campo existe en el XSD y se deja deliberadamente fuera; no está "preparado" ni comentado a medias.
+export function buildRegistroAnulacion({ registro, prevRegistro, sistemaInfo }) {
+  const avisos = [];
+
+  // ── LOS CUATRO DATOS IDENTIFICATIVOS, SIN EXCEPCIÓN ──
+  // Sin cualquiera de ellos la AEAT rechaza el registro, así que ninguno se inventa ni se deriva:
+  // o está en el registro congelado, o el envío se para con un aviso que dice cuál falta.
+  //   1. NIF del emisor            → IDEmisorFacturaAnulada
+  //   2. serie y número anulados   → NumSerieFacturaAnulada
+  //   3. su fecha de emisión       → FechaExpedicionFacturaAnulada (DD-MM-YYYY)
+  //   4. la fecha en que se anula  → FechaHoraHusoGenRegistro (ISO-8601 con huso, congelada al anular)
+  if (!registro.id_emisor) avisos.push('Falta el NIF del emisor de la factura anulada (IDEmisorFacturaAnulada).');
+  if (!registro.num_serie) avisos.push('Falta la serie y número de la factura anulada (NumSerieFacturaAnulada).');
+  if (!registro.fecha_expedicion) avisos.push('Falta la fecha de emisión de la factura anulada (FechaExpedicionFacturaAnulada).');
+  else if (!esFechaAeat(registro.fecha_expedicion)) avisos.push('La fecha de emisión de la factura anulada ("' + registro.fecha_expedicion + '") no cumple el formato DD-MM-YYYY que exige el tipo sf:fecha del esquema oficial; no se remite (la AEAT la rechazaría con el error 4102).');
+  if (!registro.fecha_hora_huso) avisos.push('Falta la fecha y hora de la anulación (FechaHoraHusoGenRegistro).');
+  if (!registro.huella) avisos.push('Falta la huella del registro de anulación.');
+
+  // SistemaInformatico (productor): NIF/NombreRazon se rellenan con el certificado.
+  if (!sistemaInfo.NombreRazon || !sistemaInfo.NIF) avisos.push('SistemaInformatico incompleto: falta NIF/NombreRazón del productor del software (se configura junto al certificado).');
+
+  // Encadenamiento: primer registro o huella del anterior (de la cadena única del MISMO NIF, congelada).
+  let encad;
+  if (registro.primer_registro === 'S') {
+    encad = el('sf:PrimerRegistro', 'S');
+  } else if (prevRegistro) {
+    // La fecha del registro anterior también es sf:fecha: misma guarda, mismo motivo.
+    if (!esFechaAeat(prevRegistro.fecha_expedicion)) avisos.push('La fecha del registro anterior del encadenamiento ("' + prevRegistro.fecha_expedicion + '") no cumple el formato DD-MM-YYYY que exige sf:fecha.');
+    encad = '<sf:RegistroAnterior>' + el('sf:IDEmisorFactura', prevRegistro.id_emisor) + el('sf:NumSerieFactura', prevRegistro.num_serie) + el('sf:FechaExpedicionFactura', prevRegistro.fecha_expedicion) + el('sf:Huella', registro.prev_huella) + '</sf:RegistroAnterior>';
+  } else {
+    avisos.push('No se encuentra el registro anterior de la cadena (Encadenamiento).');
+    encad = '';
+  }
+
+  // Orden EXACTO del XSD (RegistroFacturacionAnulacionType). Los opcionales —RefExterna,
+  // SinRegistroPrevio, RechazoPrevio, GeneradoPor, Generador— se omiten a propósito.
+  const xml = '<sf:RegistroAnulacion>' +
+    el('sf:IDVersion', '1.0') +
+    '<sf:IDFactura>' +
+      el('sf:IDEmisorFacturaAnulada', registro.id_emisor) +
+      el('sf:NumSerieFacturaAnulada', registro.num_serie) +
+      el('sf:FechaExpedicionFacturaAnulada', registro.fecha_expedicion) +
+    '</sf:IDFactura>' +
+    '<sf:Encadenamiento>' + encad + '</sf:Encadenamiento>' +
+    '<sf:SistemaInformatico>' +
+      el('sf:NombreRazon', sistemaInfo.NombreRazon) +
+      el('sf:NIF', sistemaInfo.NIF) +
+      el('sf:NombreSistemaInformatico', sistemaInfo.NombreSistemaInformatico) +
+      el('sf:IdSistemaInformatico', sistemaInfo.IdSistemaInformatico) +
+      el('sf:Version', sistemaInfo.Version) +
+      el('sf:NumeroInstalacion', sistemaInfo.NumeroInstalacion) +
+      el('sf:TipoUsoPosibleSoloVerifactu', sistemaInfo.TipoUsoPosibleSoloVerifactu) +
+      el('sf:TipoUsoPosibleMultiOT', sistemaInfo.TipoUsoPosibleMultiOT) +
+      el('sf:IndicadorMultiplesOT', sistemaInfo.IndicadorMultiplesOT) +
+    '</sf:SistemaInformatico>' +
+    el('sf:FechaHoraHusoGenRegistro', registro.fecha_hora_huso) +
+    el('sf:TipoHuella', '01') +
+    el('sf:Huella', registro.huella) +
+  '</sf:RegistroAnulacion>';
+
+  return { xml, avisos, bloqueado: avisos.length > 0 };
+}
+
 // Envuelve N <RegistroAlta> en la Cabecera (ObligadoEmision) + envelope SOAP 1.1.
 //
 // OJO con los namespaces (verificado contra el XSD oficial, no de memoria): en SuministroLR.xsd,
@@ -359,6 +460,10 @@ export function parseRespuesta(body) {
     const seg = m[1];
     lineas.push({
       numSerie: pick(seg, 'NumSerieFactura'),
+      // `Operacion/TipoOperacion` (Alta|Anulacion, SuministroInformacion.xsd) es lo ÚNICO que
+      // distingue la respuesta de un alta de la de su anulación: las dos llevan el MISMO
+      // NumSerieFactura. Sin esto, emparejar por serie las cruza (ver enviarLote).
+      tipoOperacion: pick(seg, 'TipoOperacion'),
       estadoRegistro: pick(seg, 'EstadoRegistro'),
       codigoError: pick(seg, 'CodigoErrorRegistro'),
       descripcionError: pick(seg, 'DescripcionErrorRegistro'),
@@ -385,7 +490,7 @@ export function estadoRegistroToEstado(estadoRegistro) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// PASO 4 — Orquestación IDEMPOTENTE del envío de un LOTE de registros de alta.
+// PASO 4 — Orquestación IDEMPOTENTE del envío de un LOTE de registros (alta y anulación).
 //
 // Va por lotes porque la ley obliga: el control de flujo (art. 16.2 Orden HAC/1177/2024) impone
 // esperar el `TiempoEsperaEnvio` devuelto (t inicial = 60 s) entre envíos, mientras que la huella
@@ -411,25 +516,23 @@ export async function enviarLote(db, registroIds, opts = {}) {
     const registro = db.prepare('SELECT * FROM verifactu_registros WHERE id=?').get(registroId);
     if (!registro) throw new Error(`Registro de facturación ${registroId} no existe`);
 
-    // Fase A: solo altas. La remisión de anulaciones es ampliación posterior (no romper).
-    if (registro.record_type !== 'alta') {
-      resultados.set(registroId, upsertEnvio(db, registroId, { estado: ESTADO.BLOQUEADO, aviso: 'Fase A solo remite registros de ALTA; la anulación se enviará en una ampliación posterior.' }));
-      continue;
-    }
-
     // Idempotencia: no reenviar lo ya aceptado por la AEAT.
     const existing = getEnvio(db, registroId);
     if (yaAceptado(existing) && !opts.forzar) { resultados.set(registroId, existing); continue; }
 
     const invoice = db.prepare('SELECT * FROM invoices WHERE id=?').get(registro.invoice_id) || {};
-    const items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id=?').all(registro.invoice_id);
     // A1 (Eje C): el registro previo del ENCADENAMIENTO se busca dentro de la cadena DEL MISMO NIF emisor
     // (`id_emisor`), nunca el último global — o el XML enviado a la AEAT cruzaría dos cadenas legales.
     const prevRegistro = registro.primer_registro === 'S' ? null
       : db.prepare('SELECT * FROM verifactu_registros WHERE id < ? AND id_emisor = ? ORDER BY id DESC LIMIT 1').get(registroId, registro.id_emisor);
     if (companyName === null) companyName = db.prepare('SELECT company_name FROM company_config WHERE id=1').get()?.company_name || invoice.company_name || '';
 
-    const built = buildRegistroAlta({ registro, invoice, items, prevRegistro, companyName, sistemaInfo });
+    // Alta y anulación son DOS tipos distintos del XSD (RegistroFacturacionAltaType /
+    // RegistroFacturacionAnulacionType): cada uno con su constructor. El resto del camino —sobre,
+    // mTLS, respuesta, persistencia, reintentos— es el mismo para los dos.
+    const built = registro.record_type === 'anulacion'
+      ? buildRegistroAnulacion({ registro, prevRegistro, sistemaInfo })
+      : buildRegistroAlta({ registro, invoice, items: db.prepare('SELECT * FROM invoice_items WHERE invoice_id=?').all(registro.invoice_id), prevRegistro, companyName, sistemaInfo });
     if (built.bloqueado) {
       resultados.set(registroId, upsertEnvio(db, registroId, { estado: ESTADO.BLOQUEADO, aviso: built.avisos.join(' | ') }));
       continue;
@@ -470,12 +573,23 @@ export async function enviarLote(db, registroIds, opts = {}) {
   // La <RespuestaLinea> de UNA serie. Se ancla en el TAG completo (<NumSerieFactura>X</NumSerieFactura>),
   // no en la serie suelta: 'F2026-1000' es subcadena de 'F2026-10000' y cazaría la línea del vecino.
   // El token templado impide además saltar de una RespuestaLinea a la siguiente.
-  const lineaXml = (body, serie) => {
-    const esc = serie.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const re = new RegExp('<(?:[\\w.-]+:)?RespuestaLinea>(?:(?!</(?:[\\w.-]+:)?RespuestaLinea>)[\\s\\S])*?'
-      + '<(?:[\\w.-]+:)?NumSerieFactura>' + esc + '</(?:[\\w.-]+:)?NumSerieFactura>'
-      + '[\\s\\S]*?</(?:[\\w.-]+:)?RespuestaLinea>');
-    const m = String(body || '').match(re);
+  // Con `tipoOper` exige ADEMÁS su <TipoOperacion> dentro del mismo bloque: un alta y su anulación
+  // comparten NumSerieFactura, así que la serie sola guardaría en las dos filas el mismo trozo.
+  const escRe = v => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const BLOQUE = '<(?:[\\w.-]+:)?RespuestaLinea>(?:(?!</(?:[\\w.-]+:)?RespuestaLinea>)[\\s\\S])*?';
+  const NO_CIERRE = '(?:(?!</(?:[\\w.-]+:)?RespuestaLinea>)[\\s\\S])*?';
+  const FIN = '[\\s\\S]*?</(?:[\\w.-]+:)?RespuestaLinea>';
+  const lineaXml = (body, serie, tipoOper) => {
+    const b = String(body || '');
+    const serieTag = '<(?:[\\w.-]+:)?NumSerieFactura>' + escRe(serie) + '</(?:[\\w.-]+:)?NumSerieFactura>';
+    if (tipoOper) {
+      // En RespuestaExpedidaType, Operacion va DESPUÉS de IDFactura: serie primero, tipo después.
+      const conTipo = new RegExp(BLOQUE + serieTag + NO_CIERRE
+        + '<(?:[\\w.-]+:)?TipoOperacion>' + escRe(tipoOper) + '</(?:[\\w.-]+:)?TipoOperacion>' + FIN);
+      const m = b.match(conTipo);
+      if (m) return m[0];
+    }
+    const m = b.match(new RegExp(BLOQUE + serieTag + FIN));
     return m ? m[0] : null;
   };
 
@@ -496,12 +610,29 @@ export async function enviarLote(db, registroIds, opts = {}) {
     return salida();
   }
 
-  // Cada RespuestaLinea con SU registro por NumSerieFactura: la AEAT no garantiza el orden, y dentro
-  // de un lote de altas el correlativo de serie es único. El índice queda solo de red de seguridad.
-  const porSerie = new Map(parsed.lineas.filter(l => l.numSerie).map(l => [l.numSerie, l]));
+  // Cada RespuestaLinea con SU registro. La AEAT no garantiza el orden, así que se empareja por
+  // contenido — pero NO por NumSerieFactura a secas: una ANULACIÓN lleva el MISMO número de serie que
+  // su alta, y con una clave por serie sola las dos filas se quedan con el estado de una de ellas
+  // (la última gana). El desempate es `Operacion/TipoOperacion` (Alta|Anulacion), que el XSD de la
+  // respuesta trae justo para esto. Si la respuesta no lo informa, solo se acepta el emparejamiento
+  // cuando NO hay ambigüedad (una única línea con esa serie); si la hay, se cae al índice posicional.
+  const OPERACION = { alta: 'Alta', anulacion: 'Anulacion' };
+  const porSerie = new Map();
+  for (const l of parsed.lineas) {
+    if (!l.numSerie) continue;
+    if (!porSerie.has(l.numSerie)) porSerie.set(l.numSerie, []);
+    porSerie.get(l.numSerie).push(l);
+  }
+  const lineaDe = registro => {
+    const mismas = porSerie.get(registro.num_serie) || [];
+    if (!mismas.length) return null;
+    const exacta = mismas.find(l => l.tipoOperacion === OPERACION[registro.record_type]);
+    if (exacta) return exacta;
+    return (mismas.length === 1 && !mismas[0].tipoOperacion) ? mismas[0] : null;
+  };
   lote.forEach((x, i) => {
     const { registro } = x;
-    const linea = porSerie.get(registro.num_serie) || parsed.lineas[i] || {};
+    const linea = lineaDe(registro) || parsed.lineas[i] || {};
     resultados.set(registro.id, upsertEnvio(db, registro.id, {
       estado: estadoRegistroToEstado(linea.estadoRegistro),
       entorno, endpoint, http_status: resp.httpStatus,
@@ -509,7 +640,7 @@ export async function enviarLote(db, registroIds, opts = {}) {
       codigo_error: linea.codigoError, descripcion_error: linea.descripcionError,
       csv: parsed.csv, tiempo_espera_envio: parsed.tiempoEspera,
       request_xml: peticionDe(x),
-      response_xml: solo ? resp.body : (lineaXml(resp.body, registro.num_serie) || resp.body),
+      response_xml: solo ? resp.body : (lineaXml(resp.body, registro.num_serie, OPERACION[registro.record_type]) || resp.body),
       enviado_at: ahora, bumpIntentos: true,
     }));
   });

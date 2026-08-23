@@ -18,7 +18,8 @@ import { safeError } from '../../core/errors.js';
 //
 // ── Qué NO hace ──
 //   · No toca la huella, el QR ni el encadenado (Tarea 1 es inmutable).
-//   · No envía anulaciones (Fase A remite solo altas).
+//   · Nunca remite una anulación antes que su alta (ver PRECEDENCIA, más abajo): a la AEAT no se le
+//     manda la baja de una factura que no conoce.
 //   · No reenvía lo ya aceptado: reutiliza la idempotencia del motor (`yaAceptado`).
 //   · No drena el pasado. Solo toca filas con `next_retry_at` no nulo, y solo la cola lo pone. Los
 //     registros históricos (sin fila de envío) y los envíos manuales quedan intactos.
@@ -41,7 +42,7 @@ import { safeError } from '../../core/errors.js';
 // dentro de una transacción IMMEDIATE. El que no reclama, no envía.
 
 import {
-  enviarLote, getEnvio, yaAceptado, ESTADO,
+  enviarLote, getEnvio, yaAceptado, upsertEnvio, ESTADO,
   certStatusForTenant, certPassForTenant, sistemaInformaticoFaltantes,
 } from './verifactu-envio.js';
 
@@ -104,12 +105,36 @@ export function proximoEnvioPermitido(db, ahoraMs = Date.now()) {
   return desde + t * 1000;
 }
 
+// ── PRECEDENCIA: una anulación NUNCA sale antes que su alta ──────────────────────────────────
+// Regla legal antes que técnica: no se comunica la baja de una factura que la AEAT no conoce. Un
+// registro de ALTA es elegible por sí mismo; uno de ANULACIÓN solo cuando el alta DE SU MISMA FACTURA
+// consta ACEPTADA — 'correcto' o 'aceptado_con_errores', que son las dos formas de quedar registrado
+// allí (el 2004 por huella caducada entra por la segunda, y el registro existe igual).
+//
+// Se comprueba DENTRO del SQL del reclamo, no con un paso posterior que suelte las que esperan. Esa
+// era la alternativa y es peor: un paso de liberación hay que acordarse de llamarlo desde todos los
+// sitios donde un alta pasa a aceptada, y el día que aparezca un sitio nuevo la anulación se queda
+// dormida para siempre sin que nadie se entere. Aquí la fila está en la cola desde el primer día y
+// simplemente NADIE se la lleva hasta que su alta esté aceptada; en cuanto lo está, el `programar`
+// que corre al aterrizar cada sobre —y el barrido de systemd— la ven solas. No hay estado que soltar.
+//
+// El caso normal HOY es justo este: de las facturas anuladas que existen, NINGUNA tenía su alta
+// remitida (medido el 23-ago-2026: 299 anuladas, 0 con alta aceptada). Así que este camino no es la
+// esquina rara, es la carretera.
+const ALTA_ACEPTADA_DE_LA_MISMA_FACTURA = `EXISTS (
+        SELECT 1 FROM verifactu_registros ra
+          JOIN verifactu_envios ea ON ea.registro_id = ra.id
+         WHERE ra.invoice_id = r.invoice_id AND ra.record_type = 'alta'
+           AND ea.estado IN ('${ESTADO.CORRECTO}', '${ESTADO.CON_ERRORES}'))`;
+const ELEGIBLE_POR_TIPO = `(r.record_type = 'alta'
+      OR (r.record_type = 'anulacion' AND ${ALTA_ACEPTADA_DE_LA_MISMA_FACTURA}))`;
+
 // Momento (ms) del próximo registro que toca enviar, o null si no hay trabajo. Incluye los que están
 // esperando su backoff: por eso la cola sabe despertarse sola sin depender del barrido.
 export function proximoTrabajo(db) {
   const r = db.prepare(`SELECT MIN(e.next_retry_at) AS t FROM verifactu_envios e
       JOIN verifactu_registros r ON r.id = e.registro_id
-     WHERE r.record_type='alta' AND e.next_retry_at IS NOT NULL
+     WHERE ${ELEGIBLE_POR_TIPO} AND e.next_retry_at IS NOT NULL
        AND e.estado IN (?, ?) AND e.intentos < ?`).get(...RETRIABLES, MAX_INTENTOS);
   if (!r || !r.t) return null;
   const ms = Date.parse(r.t);
@@ -126,7 +151,7 @@ export function reclamar(db, ahoraMs = Date.now(), limite = LOTE_MAX) {
   const tx = db.transaction(() => {
     const filas = db.prepare(`SELECT e.registro_id FROM verifactu_envios e
         JOIN verifactu_registros r ON r.id = e.registro_id
-       WHERE r.record_type='alta' AND e.next_retry_at IS NOT NULL AND e.next_retry_at <= ?
+       WHERE ${ELEGIBLE_POR_TIPO} AND e.next_retry_at IS NOT NULL AND e.next_retry_at <= ?
          AND e.estado IN (?, ?) AND e.intentos < ?
        ORDER BY e.registro_id LIMIT ?`).all(ahora, ...RETRIABLES, MAX_INTENTOS, limite);
     const ids = filas.map(f => f.registro_id);
@@ -259,6 +284,74 @@ export function encolarSiProcede(db, registroId) {
     return true;
   } catch {
     return false;   // la emisión de la factura manda: la remisión nunca la tumba
+  }
+}
+
+// ── Enganche desde la ANULACIÓN (post-commit) ────────────────────────────────────────────────
+// Se llama con la anulación YA confirmada: el registro de anulación existe, está encadenado y su
+// huella está congelada (Tarea 1). Esto decide únicamente QUÉ SE HACE CON SU REMISIÓN, y son cuatro
+// situaciones distintas con cuatro comportamientos distintos. Nunca lanza: la factura ya está
+// anulada en local pase lo que pase aquí — igual que la emisión, la remisión no la puede tumbar.
+//
+// El cuarto caso del encargo —"ya anulada"— no se decide aquí: lo corta `anularInvoice` antes de
+// llegar, exigiendo que la factura esté 'emitida'. Una factura no se anula dos veces, así que un
+// segundo registro de anulación no llega a existir.
+export const CASO_ANULACION = {
+  ALTA_ACEPTADA:  'alta_aceptada',    // 1 — la AEAT conoce la factura → se encola normalmente
+  ALTA_PENDIENTE: 'alta_pendiente',   // 2 — el alta aún no ha salido → se encola DETRÁS de ella (el caso normal hoy)
+  ALTA_RECHAZADA: 'alta_rechazada',   // 3 — la AEAT rechazó el alta → no hay nada que anular allí; se anota y no se encola
+  SIN_ALTA:       'sin_alta',         // factura sin registro de alta (anterior a la implantación de la Tarea 1)
+};
+
+export const AVISO_ANULACION = {
+  [CASO_ANULACION.ALTA_PENDIENTE]: 'La anulación espera en la cola a que la AEAT acepte el alta de esta factura: no se remite la baja de una factura que Hacienda todavía no conoce. Sale sola en cuanto el alta esté aceptada.',
+  [CASO_ANULACION.ALTA_RECHAZADA]: 'La AEAT rechazó el alta de esta factura, así que allí no hay nada que anular. La anulación queda registrada y encadenada en local, pero NO se remite.',
+  [CASO_ANULACION.SIN_ALTA]: 'Esta factura no tiene registro de facturación de alta (es anterior a la implantación del registro Verifactu), así que la AEAT no la conoce y su anulación no se puede remitir. Queda registrada y encadenada en local.',
+};
+
+export function encolarAnulacionSiProcede(db, registroId) {
+  try {
+    if (!registroId) return { caso: null, encolado: false, aviso: null };
+    const reg = db.prepare("SELECT * FROM verifactu_registros WHERE id=? AND record_type='anulacion'").get(registroId);
+    if (!reg) return { caso: null, encolado: false, aviso: null };
+
+    // El alta DE SU MISMA FACTURA y cómo le fue. `getEnvio` devuelve null si nunca se intentó.
+    const alta = db.prepare("SELECT id FROM verifactu_registros WHERE invoice_id=? AND record_type='alta' ORDER BY id LIMIT 1").get(reg.invoice_id);
+    const envAlta = alta ? getEnvio(db, alta.id) : null;
+
+    const caso = !alta ? CASO_ANULACION.SIN_ALTA
+      : envAlta && envAlta.estado === ESTADO.INCORRECTO ? CASO_ANULACION.ALTA_RECHAZADA
+      : yaAceptado(envAlta) ? CASO_ANULACION.ALTA_ACEPTADA
+      : CASO_ANULACION.ALTA_PENDIENTE;
+    const aviso = AVISO_ANULACION[caso] || null;
+
+    // Casos 3 y "sin alta": SE ANOTA Y NO SE ENCOLA. La anotación se hace siempre, esté la cola
+    // activa o no, porque no es una acción de envío: es dejar escrito por qué esto no va a salir
+    // nunca. `next_retry_at` se queda NULL, que es lo que en esta cola significa "no es mía".
+    if (caso === CASO_ANULACION.ALTA_RECHAZADA || caso === CASO_ANULACION.SIN_ALTA) {
+      upsertEnvio(db, registroId, { estado: ESTADO.BLOQUEADO, aviso });
+      return { caso, encolado: false, aviso };
+    }
+
+    // Casos 1 y 2: la anulación entra en la cola. La fila se crea SIEMPRE (así la anulación es
+    // consultable en la pantalla de envíos desde el primer momento, y el botón manual la alcanza);
+    // lo que decide si la cola automática es su dueña es `next_retry_at`, y ese solo se pone si la
+    // cola puede enviar por este negocio. Sin cola activa se comporta exactamente como un alta hoy:
+    // la fila espera al envío manual.
+    const slug = db.bamburuSlug ?? null;
+    const activa = motivoColaInactiva(slug) === null;
+    upsertEnvio(db, registroId, { estado: ESTADO.PENDIENTE, aviso });
+    if (!activa) return { caso, encolado: false, aviso };
+
+    // Elegible YA. Que salga o no lo decide la PRECEDENCIA en el reclamo: en el caso 2 la fila está
+    // en la cola pero nadie se la lleva hasta que su alta conste aceptada. No hay que soltarla luego.
+    db.prepare('UPDATE verifactu_envios SET next_retry_at=?, updated_at=CURRENT_TIMESTAMP WHERE registro_id=?')
+      .run(iso(Date.now()), registroId);
+
+    programar(db, slug);
+    return { caso, encolado: true, aviso };
+  } catch {
+    return { caso: null, encolado: false, aviso: null };   // la anulación manda: la remisión nunca la tumba
   }
 }
 

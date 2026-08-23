@@ -25,18 +25,19 @@ function estadoBadge(estado) {
 export function createVerifactuEnvioRoutes(db) {
   const views = new Hono();
 
-  // Lista de registros de ALTA con su estado de envío (consultable por documento).
+  // Lista de registros de facturación (altas y anulaciones) con su estado de envío, por documento.
   views.get('/envios', requirePerm('invoices.read'), c => {
     const cs = certStatus();
     const slug = c.get('tenant')?.slug || null;
     const motivoCola = motivoColaInactiva(slug);   // null = la cola remite sola
+    // Altas Y anulaciones: los dos son registros de facturación y los dos se remiten. Filtrar por
+    // 'alta' dejaba la anulación invisible en la única pantalla que cuenta qué ha llegado a la AEAT.
     const registros = db.prepare(`
-      SELECT r.id, r.num_serie, r.fecha_expedicion, r.tipo_factura, r.importe_total,
+      SELECT r.id, r.record_type, r.num_serie, r.fecha_expedicion, r.tipo_factura, r.importe_total,
              e.estado, e.csv, e.codigo_error, e.descripcion_error, e.aviso, e.enviado_at, e.intentos,
              e.next_retry_at
         FROM verifactu_registros r
         LEFT JOIN verifactu_envios e ON e.registro_id = r.id
-       WHERE r.record_type='alta'
        ORDER BY r.id DESC`).all();
     const csrf = c.get('session')?.csrfToken || '';
     // Estado de la COLA: es lo que decide si una factura recién emitida llega dentro de los 240 s de
@@ -58,20 +59,24 @@ export function createVerifactuEnvioRoutes(db) {
       const cola = r.next_retry_at
         ? `<span style="color:var(--text2)">Reintento automático · intento ${r.intentos || 0}</span>`
         : (r.intentos ? `<span style="color:var(--text2)">${r.intentos} intento${r.intentos === 1 ? '' : 's'}</span>` : '');
+      const operacion = r.record_type === 'anulacion'
+        ? `<span style="color:var(--danger);font-weight:600">Anulación</span>`
+        : `<span style="color:var(--text2)">Alta</span>`;
       return `<tr>
-        <td>${escHtml(r.num_serie)}</td><td>${escHtml(r.fecha_expedicion)}</td><td>${escHtml(r.tipo_factura || '')}</td>
+        <td>${escHtml(r.num_serie)}</td><td>${operacion}</td>
+        <td>${escHtml(r.fecha_expedicion)}</td><td>${escHtml(r.tipo_factura || '')}</td>
         <td style="text-align:right">${escHtml(r.importe_total || '')}</td>
         <td>${estadoBadge(r.estado)}</td>
         <td style="font-size:12px;color:var(--text2)">${detalle}</td>
         <td style="font-size:12px">${cola}</td>
         <td>${btn}</td></tr>`;
-    }).join('') || emptyRow(8, 'Aún no hay registros que enviar. Se generan solos al emitir tus facturas.');
+    }).join('') || emptyRow(9, 'Aún no hay registros que enviar. Se generan solos al emitir y al anular tus facturas.');
     const content = `<div class="ph"><h2>Envío Verifactu a la AEAT</h2></div>
-      <div style="color:var(--text2);font-size:12px;margin-bottom:.5rem">Remisión de los registros de facturación (huella congelada por la Tarea 1) al entorno de <b>pruebas (preproducción)</b> de la AEAT. Estado por documento; reenviar no duplica (idempotente).</div>
+      <div style="color:var(--text2);font-size:12px;margin-bottom:.5rem">Remisión de los registros de facturación —<b>altas y anulaciones</b>, con la huella congelada por la Tarea 1— al entorno de <b>pruebas (preproducción)</b> de la AEAT. Estado por documento; reenviar no duplica (idempotente). Una anulación nunca se remite antes que su alta.</div>
       ${colaAviso}
       ${certAviso}
       <div class="card"><table>
-        <thead><tr><th>Nº factura</th><th>Fecha</th><th>Tipo</th><th style="text-align:right">Importe</th><th>Estado AEAT</th><th>Detalle / CSV / aviso</th><th>Cola</th><th>Acción</th></tr></thead>
+        <thead><tr><th>Nº factura</th><th>Operación</th><th>Fecha</th><th>Tipo</th><th style="text-align:right">Importe</th><th>Estado AEAT</th><th>Detalle / CSV / aviso</th><th>Cola</th><th>Acción</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`;
     return c.html(adminLayout('Envío Verifactu', content, 'verifactu-envio', csrf, c));
   });

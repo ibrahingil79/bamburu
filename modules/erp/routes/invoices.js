@@ -10,7 +10,7 @@ import { checkPermission } from '../../../core/permission-check.js';   // cheque
 import { isPhysical, productStock, productStockInWarehouse, reservedOfProduct, recordMovement, resolveWarehouseId } from '../stock.js';   // aviso de exceso al facturar (RAMA B) + mostrador (ticket): salida de stock por el libro
 import { esTrazable, asignarFEFO, salirConTraza } from '../trazabilidad.js';   // Pilar 3: consumo de lote/serie (FEFO) al vender por mostrador
 import { recordVerifactuAlta, recordVerifactuAnulacion, cotejoUrl } from '../verifactu.js';   // VERI*FACTU T1: registro oficial + QR de cotejo
-import { encolarSiProcede } from '../verifactu-cola.js';   // VERI*FACTU T2: remisión automática a la AEAT tras commit (ventana de 240 s)
+import { encolarSiProcede, encolarAnulacionSiProcede } from '../verifactu-cola.js';   // VERI*FACTU T2: remisión automática a la AEAT tras commit (ventana de 240 s)
 import { postInvoice, postInvoicePayment } from '../contabilidad.js';   // Contabilidad: posteo del asiento tras commit (aditivo; no rompe el documento)
 import { validate } from '../../../core/validate.js';
 import { invoiceCreateSchema, invoiceComputeSchema, invoiceAnularSchema, invoiceRectificativaSchema, invoicePaymentSchema, collectionActionSchema, sustitutivaSchema } from '../schemas.js';
@@ -354,11 +354,16 @@ export function anularInvoice(db, invoiceId, motivo) {
 
     db.prepare("UPDATE invoices SET status='anulada' WHERE id=?").run(original.id);
     // VERI*FACTU T1: registro de ANULACIÓN oficial (huella encadenada) en la MISMA transacción.
-    recordVerifactuAnulacion(db, original);
-    return { id: res.lastInsertRowid, invoice_id: original.id, invoice_number: original.invoice_number };
+    const regAnulacion = recordVerifactuAnulacion(db, original);
+    return { id: res.lastInsertRowid, invoice_id: original.id, invoice_number: original.invoice_number, registro_id: regAnulacion.id };
   });
   const out = run();
   try { postInvoice(db, out.invoice_id); } catch {}   // reconcilia: la venta anulada se reversa (no rompe la anulación)
+  // VERI*FACTU T2: la anulación, a la cola de remisión. DESPUÉS del commit y sin lanzar, igual que el
+  // alta en createInvoice: la factura ya está anulada y eso no depende de que la AEAT se entere hoy.
+  // Qué hace exactamente depende de si el alta llegó a Hacienda y cómo — los cuatro casos viven en
+  // `encolarAnulacionSiProcede`, no aquí.
+  encolarAnulacionSiProcede(db, out.registro_id);
   return out;
 }
 
