@@ -255,7 +255,7 @@ export const GRUPOS = {
   // superficies endurecidas (que sigan sin 'unsafe-inline' Y con los botones vivos).
 
   // GRUPO NUEVO (24 ago 2026): nace al colocar las comprobaciones que nadie ejecutaba.
-  agenda: ['test-avisos-cita', 'test-citas', 'test-coincidencia-huecos', 'test-enlace-cita', 'test-neto-cero-cita', 'test-prioridad', 'test-textos-citas'],
+  agenda: ['gate-historial-clinico','test-avisos-cita', 'test-citas', 'test-coincidencia-huecos', 'test-enlace-cita', 'test-neto-cero-cita', 'test-prioridad', 'test-textos-citas'],
   // GRUPO NUEVO (24 ago 2026): nace al colocar las comprobaciones que nadie ejecutaba.
   compras: ['verify-albaranes-browser', 'verify-pedidos-browser', 'verify-quotes-browser', 'verify-mostrador-browser',
             'verify-sustitutiva-browser','verify-albaranes', 'verify-mostrador', 'verify-pdf', 'verify-pdf-http', 'verify-pedidos', 'verify-portal', 'verify-quotes', 'verify-recurrentes'],
@@ -326,7 +326,7 @@ export const EMPIEZAN_DE_CERO = new Set([
   // desarrollo no valía: varias EMITEN una factura, y una factura emitida no se borra jamás. Con su
   // propio negocio, lo que emiten nace y muere ahí dentro y se tira el negocio entero.
   'verify-albaranes-browser', 'verify-pedidos-browser', 'verify-quotes-browser', 'verify-mostrador-browser',
-  'verify-sustitutiva-browser', 'gate-espera-pantalla',
+  'verify-sustitutiva-browser', 'gate-espera-pantalla', 'gate-historial-clinico',
   // ── LAS CINCO QUE SE TRAÍAN SU PROPIO NEGOCIO Y NO LO DECÍAN (24 ago 2026) ────────────────────
   // Lo cantaba el propio corredor en cada arranque —«la declaración y el código no dicen lo mismo»—
   // y llevaba semanas sin que nadie lo mirara, porque las cinco eran de las 99 que no ejecutaba

@@ -20,6 +20,7 @@ import { createInicioRoutes } from './inicio.js';   // Escalera · paso 6 — In
 import { createMigracionRoutes } from './migracion.js';   // Trae tus datos: la migración la hace el equipo
 import { createImportadorRoutes } from './importador.js';   // ficha H — importador de CSV (clientes y productos), DENTRO de la migración asistida
 import { createListadosRoutes } from './listados.js';   // C · los tres verbos, una sola vez para los ocho listados
+import { createHistorialRoutes } from './historial.js';
 import { createMenuRoutes } from './menu-routes.js';   // Navegación — anclas del menú (por usuario)
 import { createSettingsRoutes } from './settings.js';
 import { createUserRoutes } from './users.js';
@@ -199,6 +200,9 @@ export function mountRoutes(app, db) {
   // C · IMPRIMIR / DESCARGAR / ENVIAR. TRES rutas para los OCHO listados, no tres por listado:
   // añadir uno es declararlo en `listados.js`, no tocar nada de aquí.
   const { api: listApi, views: listViews } = createListadosRoutes(db);
+  // PELDAÑO 8 · HISTORIAL CLÍNICO. Las rutas existen siempre, pero dan 404 fuera del oficio de salud
+  // (primera puerta, dentro del propio módulo) y 403 sin el permiso, que NO perdona el rol admin.
+  admin.route('/historial', createHistorialRoutes(db).views);
   admin.route('/listados', listViews);          // ← /admin/listados/<clave>/{imprimir,pdf}
   app.route('/admin', admin);
 

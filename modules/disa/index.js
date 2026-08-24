@@ -49,6 +49,13 @@ export const QUERY_PROTECTED_TABLES = new Set([
   // podría pedirle a DISA por chat que se los leyera. Son hashes, sí, pero son material de acceso y
   // no se consultan hablando. (Escribir ya era imposible: WRITABLE_TABLES es allowlist.)
   'admin_recovery_codes',
+  // ── PELDAÑO 8 · HISTORIAL CLÍNICO (24 ago 2026) ────────────────────────────────────────────────
+  // Van en la lista PROTEGIDA, no en la de permisos, y el motivo es el mismo que el de los códigos de
+  // rescate pero más fuerte: esta lista se comprueba ANTES del bypass de dueño/administrador, así que
+  // **nadie las consulta hablando, ni aunque se lo pidan**. Son datos de salud, categoría especial del
+  // RGPD (art. 9), y DISA no los lee, ni los resume, ni los menciona.
+  // (Escribir ya era imposible: WRITABLE_TABLES es allowlist y no están en ella.)
+  'hc_consentimientos', 'hc_antecedentes', 'hc_notas', 'hc_accesos',
 ]);
 // TABLE_READ_PERMS: allowlist. Una tabla de negocio SOLO se consulta si está aquí y el usuario tiene
 // su permiso. Lo NO mapeado se DENIEGA (mismo criterio que el motor de avisos). Cada permiso es el

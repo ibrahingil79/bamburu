@@ -285,3 +285,53 @@ export async function changeOwnPassword(db, session, { current = '', nuevo = '',
 
   return { ok: true, forced };
 }
+
+// ── EL HISTORIAL CLÍNICO: EL ÚNICO PERMISO QUE NO PERDONA EL ROL ─────────────────────────────────
+//
+// POR QUÉ EXISTE ESTA EXCEPCIÓN, y por qué es la única del producto. Todo lo demás en Bamburu
+// funciona así: quien es `owner` o `admin` pasa sin mirar sus permisos (ver `requirePerm`, arriba).
+// Es lo correcto para facturas, stock o clientes: quien administra el negocio administra sus datos.
+//
+// **El historial clínico no son datos del negocio: son datos de SALUD de una persona**, categoría
+// especial del RGPD (art. 9). El acceso se limita a quien ATIENDE al paciente, y quien administra un
+// centro no atiende a nadie. Recepción y administración no tienen por qué leer el diagnóstico de un
+// paciente para hacer su trabajo, y la ley no se lo permite por el hecho de administrar.
+//
+// Decisión del dueño, 24 ago 2026: *«Entra el dueño (role owner) y quien lo tenga concedido
+// explícitamente. Un usuario con role admin SIN el permiso concedido no entra.»*
+//
+// El DUEÑO sí entra por su rol: es el responsable del tratamiento de los datos ante la ley, y no
+// puede quedarse fuera del historial de su propio centro.
+export function requireHistorial() {
+  return async (c, next) => {
+    const s = c.get('session');
+    if (!s) return c.redirect('/admin/login');
+    if (s.role === 'owner') return next();            // el responsable ante la ley, sí
+    // `admin` NO pasa por su rol: tiene que tenerlo concedido, como cualquier otro.
+    const db = c.get('db');
+    const row = db.prepare(`
+      SELECT 1 FROM user_permissions up
+      JOIN permissions p ON up.permission_id = p.id
+      WHERE up.admin_user_id = ? AND p.module = 'historial' AND p.action = 'read'
+    `).get(s.userId);
+    if (row) return next();
+    const esApi = c.req.path.startsWith('/api/');
+    if (esApi) return c.json({ error: 'No tienes acceso al historial clínico.' }, 403);
+    return c.html('<!doctype html><meta charset="utf-8"><title>Sin acceso</title>'
+      + '<div style="font:16px/1.5 system-ui;max-width:36rem;margin:4rem auto;padding:0 1rem">'
+      + '<h1 style="font-size:1.3rem">No tienes acceso al historial clínico</h1>'
+      + '<p>Son datos de salud, y solo los ve el profesional que atiende al paciente. '
+      + 'Si necesitas acceso, pídeselo a la persona dueña del negocio.</p>'
+      + '<p><a href="/admin">Volver</a></p></div>', 403);
+  };
+}
+
+// La misma decisión, para PINTAR o no pintar (la pestaña, un botón). Sin sesión, no.
+export function puedeHistorial(db, session) {
+  if (!session?.userId) return false;
+  if (session.role === 'owner') return true;
+  try {
+    return !!db.prepare(`SELECT 1 FROM user_permissions up JOIN permissions p ON up.permission_id = p.id
+      WHERE up.admin_user_id = ? AND p.module = 'historial' AND p.action = 'read'`).get(session.userId);
+  } catch { return false; }
+}

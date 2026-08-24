@@ -109,6 +109,10 @@ export const NAV_PERMS = {
   'migracion-importar': 'company.read',
   'settings-plantillas': 'company.read',
   'settings-fiscal':   'company.read',
+  // PELDAÑO 8 · el registro de accesos al historial. Su candado NO es `requirePerm` corriente: el
+  // permiso `historial.read` no perdona el rol de administrador (ver core/auth.js). Aquí se declara
+  // para que el rail lo respete igual, y `condicionesConfig` lo esconde fuera del oficio de salud.
+  'historial-accesos': 'historial.read',
   'settings-avisos':   null,   // la pantalla no exige permiso: filtra por dentro lo que enseña
   avisos:              null,   // la pantalla de avisos tampoco; ya se alcanzaba desde la campana
   security:         'admin.settings',
@@ -183,6 +187,11 @@ export const MENU = [
     // Las dos pantallas que colgaban del embudo y no se veían desde fuera.
     { href: '/admin/crm/cola', label: 'Cola comercial', key: 'crm-cola', icon: 'ti-list-check' },
     { href: '/admin/crm/tareas', label: 'Tareas del CRM', key: 'crm-tareas', icon: 'ti-checkbox' },
+    // SOLO EN EL OFICIO DE SALUD. `siHay: 'historial'` la esconde en peluquerías, talleres y demás:
+    // en esos negocios no existe ni la entrada, ni la pestaña, ni la ruta (que da 404).
+    { href: '/admin/historial/accesos', label: 'Quién ha abierto un historial', key: 'historial-accesos',
+      icon: 'ti-lock-access', siHay: 'historial', ajustes: true,
+      alias: ['Historial clínico', 'Accesos', 'Auditoría del historial'] },
     // MOVIDO DESDE VENTAS (18 ago 2026, decisión de Ibrahin). Es la puerta por la que un CLIENTE entra
     // a ver sus facturas, y desde aquí se le manda su enlace: pertenece a «a quién le vendes», no a los
     // documentos de venta. ⚠️ SU CANDADO NO CAMBIA: sigue exigiendo `invoices.read`, el de su pantalla
@@ -387,6 +396,8 @@ export function condicionesConfig(db) {
   const hay = sql => { try { return db.prepare(sql).get() != null; } catch { return false; } };
   if (!db) return { puestos: false };
   return {
+    // PELDAÑO 8 · el historial clínico solo existe en el oficio de salud.
+    historial: (() => { try { return db.prepare("SELECT 1 FROM company_config WHERE id=1 AND oficio='salud'").get() != null; } catch { return false; } })(),
     puestos: hay('SELECT 1 FROM recursos WHERE active=1 LIMIT 1')
           || hay('SELECT 1 FROM service_resources LIMIT 1'),
   };
@@ -504,9 +515,15 @@ export function menuDeUsuario(db, { role = '', perms = [], userId = null } = {})
   };
 
   const pasa = filtroDeUsuario({ role, perms });
+  // ⚙️ 24 ago 2026 · `siHay` YA NO ES SOLO DE LA CONFIGURACIÓN. Lo usaba únicamente `CONFIG_NEGOCIO`
+  // (para los puestos), y el rail lo ignoraba. El historial clínico lo necesita en el rail: es una
+  // entrada que **solo existe en el oficio de salud**, y una entrada condicional que el rail no filtra
+  // es una puerta enseñada a quien no puede abrirla.
+  const cond0 = condicionesConfig(db);
+  const hayCond = it => !it.siHay || cond0[it.siHay] === true;
   const areas = [];
   for (const g of MENU) {
-    const todos = g.items.filter(pasa).map(it => ({ ...it, label: etiqueta(it), area: g.label, areaId: g.id }));
+    const todos = g.items.filter(pasa).filter(hayCond).map(it => ({ ...it, label: etiqueta(it), area: g.label, areaId: g.id }));
     if (!todos.length) continue;
     areas.push({
       id: g.id, label: g.label, icon: g.icon,
@@ -521,7 +538,7 @@ export function menuDeUsuario(db, { role = '', perms = [], userId = null } = {})
   // (2) por su condición `siHay`, que hoy solo usan los puestos.
   // Una sección sin entradas visibles NO se devuelve: quien no tiene ninguna de las seis no ve ni el
   // título. Así la pantalla de ajustes no tiene que decidir nada — pinta lo que le llega.
-  const cond = condicionesConfig(db);
+  const cond = cond0;
   const config = [];
   for (const sec of CONFIG_NEGOCIO) {
     const items = sec.items
@@ -542,7 +559,7 @@ export function menuDeUsuario(db, { role = '', perms = [], userId = null } = {})
     .map(it => ({ ...it, area: 'Cuenta', areaId: 'cuenta' }));
   // Las FIJAS pasan por el MISMO filtro que el resto desde que una de ellas tiene candado
   // («Trae tus datos», `company.read`). Inicio y la ayuda no lo notan: no exigen ningún permiso.
-  const fijas  = FIJAS.filter(pasa).map(it => ({ ...it, area: '', areaId: 'fijas' }));
+  const fijas  = FIJAS.filter(pasa).filter(hayCond).map(it => ({ ...it, area: '', areaId: 'fijas' }));
   // El ORDEN de este usuario se aplica al final, sobre el menú ya filtrado. Nunca quita nada: lo que
   // no esté en su lista se coloca detrás, en el orden de fábrica (ver `aplicarOrden`).
   let pref = { areas: [], entradas: {} };

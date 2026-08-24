@@ -2568,6 +2568,11 @@ export function runMigrations(db) {
     // libres se calculan solo sobre las suyas: enseñar la capacidad de gente cuya agenda no puedes
     // ver sería la misma fuga por otra puerta. El dueño y los administradores lo tienen por bypass
     // de rol (`can()`), así que a ellos no les cambia nada.
+    // ── PELDAÑO 8 · EL HISTORIAL CLÍNICO (24 ago 2026) ─────────────────────────────────────────
+    // Permiso NUEVO E INDEPENDIENTE, y con una excepción que no tiene ningún otro del producto: **NO
+    // honra el bypass de rol `admin`**. Ver `requireHistorial` en core/auth.js, donde está escrito el
+    // porqué. Aquí basta con saber que existe y que se concede a mano, uno por uno.
+    { module: 'historial', action: 'read', description: 'Ver y escribir el historial clínico de los pacientes (solo oficio salud)' },
     { module: 'citas',     action: 'ver_todas', description: 'Ver la agenda de TODO el equipo (sin este permiso, cada persona ve solo sus citas)' },
   ];
   for (const p of permissionsData) {
@@ -2792,6 +2797,102 @@ Sé preciso con los números y siempre redondea correctamente.`,
   // de todos: guardar un dato que un oficio necesita no puede depender de una columna por oficio.
   // NO es un dato de salud: una fecha de nacimiento no dice nada de la dolencia de nadie.
   addCol(db, 'clients', 'fecha_nacimiento', "TEXT DEFAULT ''");
+
+  // ═══════════════════════════════════════════════════════════════════════════════════════════════
+  // PELDAÑO 8 · HISTORIAL CLÍNICO (24 ago 2026) — decisión del dueño tras el aviso de que son datos
+  // de salud, categoría especial del RGPD (art. 9).
+  //
+  // TODO LO DE AQUÍ SOLO SE USA EN NEGOCIOS DE OFICIO «salud». Las tablas existen en todos —una
+  // migración aditiva no puede depender del oficio, y el oficio se puede cambiar— pero ni una
+  // pantalla, ni un menú, ni un campo asoma fuera de él.
+  //
+  // NINGUNA DE ESTAS TABLAS SE BORRA SOLA. No hay caducidad, ni cron, ni limpieza automática: la ley
+  // estatal obliga a conservar cinco años desde la última atención y varias comunidades llegan a
+  // veinte en ciertos documentos. Un borrado automático adelantaría el plazo de la comunidad del
+  // cliente y le costaría una multa. Borrar es siempre un acto manual del dueño.
+  //
+  // Y LAS CUATRO ESTÁN EN `QUERY_PROTECTED_TABLES` DE DISA — que se comprueba ANTES del bypass de
+  // dueño/administrador—, así que no se consultan hablando ni aunque se lo pidan. Fuera de
+  // WRITABLE_TABLES, así que tampoco se escriben.
+  // ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+  // (1) EL CONSENTIMIENTO. Sin él no se puede escribir historial: lo impide el motor, no la pantalla.
+  // Se guarda EL TEXTO EXACTO de la versión que el paciente aceptó, no un enlace: dentro de cinco
+  // años el enlace apunta a otra cosa y lo que hay que poder demostrar es qué firmó, no dónde estaba.
+  // Revocar NO borra el historial (la ley obliga a conservarlo): lo marca, con su fecha.
+  db.exec(`CREATE TABLE IF NOT EXISTS hc_consentimientos (
+    id INTEGER PRIMARY KEY,
+    client_id INTEGER NOT NULL,
+    otorgado_at TEXT NOT NULL,
+    otorgado_por_user_id INTEGER,
+    otorgado_por_nombre TEXT DEFAULT '',
+    version TEXT NOT NULL DEFAULT '',
+    texto TEXT NOT NULL,                       -- el texto ÍNTEGRO que aceptó
+    revocado_at TEXT,
+    revocado_por_user_id INTEGER,
+    revocado_por_nombre TEXT DEFAULT '',
+    revocado_motivo TEXT DEFAULT ''
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_hc_cons_client ON hc_consentimientos(client_id)');
+
+  // (2) LOS ANTECEDENTES. Una ficha por paciente, pero VERSIONADA: editar no pisa lo anterior, añade
+  // una versión con su fecha y su autor. La vigente es la de `version` más alta.
+  db.exec(`CREATE TABLE IF NOT EXISTS hc_antecedentes (
+    id INTEGER PRIMARY KEY,
+    client_id INTEGER NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    motivo_consulta TEXT DEFAULT '',
+    antecedentes TEXT DEFAULT '',
+    alergias TEXT DEFAULT '',
+    medicacion TEXT DEFAULT '',
+    observaciones TEXT DEFAULT '',
+    autor_user_id INTEGER,
+    autor_nombre TEXT DEFAULT '',
+    created_at TEXT NOT NULL
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_hc_ant_client ON hc_antecedentes(client_id, version DESC)');
+
+  // (3) LA EVOLUCIÓN POR SESIÓN. Una nota por cita atendida. Una nota firmada NO se borra ni se pisa:
+  // se corrige añadiendo otra que apunta a ella (`corrige_nota_id`), y la anterior sigue visible.
+  // Igual que un contable con un asiento.
+  //
+  // `privado` es la anotación subjetiva del profesional. La ley española la excluye del derecho de
+  // acceso del paciente, así que NUNCA sale en la copia que se le entrega. Va en su propia columna
+  // para que sea imposible que se cuele por descuido al componer el PDF.
+  db.exec(`CREATE TABLE IF NOT EXISTS hc_notas (
+    id INTEGER PRIMARY KEY,
+    client_id INTEGER NOT NULL,
+    cita_id INTEGER,
+    fecha TEXT NOT NULL,
+    profesional_user_id INTEGER,
+    profesional_nombre TEXT DEFAULT '',
+    valoracion TEXT DEFAULT '',
+    tratamiento TEXT DEFAULT '',
+    siguiente_paso TEXT DEFAULT '',
+    privado TEXT DEFAULT '',                   -- anotación subjetiva: NUNCA en la copia del paciente
+    corrige_nota_id INTEGER,                   -- si corrige a otra, su id; la anterior queda visible
+    created_at TEXT NOT NULL
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_hc_notas_client ON hc_notas(client_id, fecha DESC)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_hc_notas_cita ON hc_notas(cita_id)');
+
+  // (4) EL REGISTRO DE ACCESOS. Tabla PROPIA y no `activity_logs`, por decisión del dueño: el registro
+  // general mezclaría «María abrió el historial de Juan» con «se creó la factura 1093», y su campo de
+  // detalle es texto libre donde alguien acabaría escribiendo contenido clínico.
+  // SOLO SE AÑADE: no hay en toda la aplicación un UPDATE ni un DELETE contra esta tabla, y hay una
+  // comprobación que se pone roja si aparece uno.
+  db.exec(`CREATE TABLE IF NOT EXISTS hc_accesos (
+    id INTEGER PRIMARY KEY,
+    client_id INTEGER NOT NULL,
+    user_id INTEGER,
+    user_nombre TEXT DEFAULT '',
+    accion TEXT NOT NULL,                      -- abrir | escribir | corregir | imprimir | exportar | borrar
+    detalle TEXT DEFAULT '',                   -- QUÉ se hizo, NUNCA el contenido clínico
+    created_at TEXT NOT NULL
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_hc_acc_client ON hc_accesos(client_id, id DESC)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_hc_acc_user ON hc_accesos(user_id, id DESC)');
+
   db.exec(`
     -- PROMOCIONES: una regla con fecha. Lo que antes eran «cupones» de la tienda (con código, para
     -- un carrito) pasa a ser esto, que es lo que un autónomo usa de verdad: «en agosto, 15 % en

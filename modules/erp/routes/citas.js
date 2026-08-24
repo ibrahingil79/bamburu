@@ -38,6 +38,8 @@ import { reservaDeCita, ventanaCliente, personasPublicas, autoEncenderReservas }
 // PASO 8 — PERFIL DE OFICIO. Otro módulo HOJA (solo `db`), por la misma razón que el de arriba: layout.js
 // también lo importa para el menú, y si el diccionario viviera aquí se cerraría el círculo.
 import { vocabulario, oficioDe } from '../oficios.js';
+import { tieneHistorial } from '../historial.js';
+import { puedeHistorial } from '../../../core/auth.js';
 import { fechaEs } from '../voz.js';   // la fecha, en cristiano
 import { contactoDeCita as apuntarContactoDeCita } from '../contactos.js';   // D2: rastro en el registro
 // (alias a propósito: `contactoDeCita` ya existe aquí y significa el teléfono/correo del cliente)
@@ -460,6 +462,11 @@ export function agendaData(db, { desde, hasta, cliente_id = null, soloUsuario = 
       id: c.id, codigo: c.codigo, fecha: c.fecha, inicio_min: c.inicio_min, dur_min: c.dur_min, margen_min: c.margen_min,
       estado: c.estado, user_id: c.user_id, recurso_id: c.recurso_id, persona: c.persona || '—',
       recurso: c.recurso || null, cliente: c.cliente_nombre || c.cliente_suelto_nombre || 'Cliente',
+      // PELDAÑO 8 · para el botón de la nota clínica: hace falta saber si la cita tiene FICHA de
+      // paciente. Una cita de paso lleva solo un nombre suelto, y de un nombre suelto no puede colgar
+      // una nota clínica: no hay a quién enlazarla. La pantalla lo explica y ofrece crear la ficha.
+      cliente_id: c.cliente_id || null,
+      cliente_suelto: !c.cliente_id ? (c.cliente_suelto_nombre || '') : '',
       servicios: serviciosDeCita(db, c.id).join(' + '), espera,
     };
   });
@@ -1646,7 +1653,7 @@ function vistaAgenda(c, db) {
         <p style="color:var(--text2);font-size:.8rem;margin:.9rem 0 0">Las citas <b>anuladas</b> no se pintan en la agenda.</p>
       </div>
     </div></div>
-    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};window.CITA_ESTADOS=${jsonForScript(ESTADOS_COLOR)};window.AG_GRID=${Number(aj.grid) || 30};window.QUIEN_ANULA=${jsonForScript(ANULADA_POR_LABEL)};${jsVoz(aj)}${JS_AGENDA}</script>`;
+    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};window.HC_PUEDE=${(tieneHistorial(db) && puedeHistorial(db, c.get('session'))) ? 'true' : 'false'};window.CITA_ESTADOS=${jsonForScript(ESTADOS_COLOR)};window.AG_GRID=${Number(aj.grid) || 30};window.QUIEN_ANULA=${jsonForScript(ANULADA_POR_LABEL)};${jsVoz(aj)}${JS_AGENDA}</script>`;
   return adminLayout('Agenda', content, 'citas', c.get('session')?.csrfToken || '', c);
 }
 // ── COLOR DE ESTADO — FUENTE ÚNICA ───────────────────────────────────────────────────────────────
@@ -3210,6 +3217,20 @@ function cErrorChoque(d){
   document.getElementById('cMas').open=true;
 }
 function cElegirHora(min){ QUICK_MIN=min; var sel=document.getElementById('cHueco'); var opt=[...sel.options].find(o=>o.value==String(min)); if(!opt){ opt=document.createElement('option'); opt.value=String(min); opt.textContent=fhhmm(min); sel.appendChild(opt); } sel.value=String(min); document.getElementById('cContexto').textContent=document.getElementById('cContexto').textContent.replace(/·[^·]*$/, '· '+fhhmm(min)); cSugerir(); }
+// PELDAÑO 8 · las dos puertas del historial desde la agenda.
+function notaClinica(citaId, clienteId){ location.href='/admin/historial/'+clienteId+'?cita='+citaId; }
+async function fichaDesdeCita(citaId){
+  var c=await api('GET','/api/erp/citas/'+citaId);
+  var nombre=(c.cliente_suelto_nombre||'').trim();
+  if(!await window.confirmarEnPagina({titulo:'Crear la ficha del paciente',
+      texto:'Se creará la ficha de «'+(nombre||'este paciente')+'» y esta cita quedará enlazada a ella. A partir de ahí ya podrás escribir su historial.',
+      aceptar:'Crear la ficha'})) return;
+  try{
+    var nuevo=await api('POST','/api/erp/clients',{name:nombre||'Paciente sin nombre',phone:(c.contacto&&c.contacto.movil_e164)||''});
+    await api('PUT','/api/erp/citas/'+citaId,{cliente_id:nuevo.id});
+    location.href='/admin/historial/'+nuevo.id+'?cita='+citaId;
+  }catch(e){ toast(e.message,'err'); }
+}
 async function verCita(id){
   var c=await api('GET','/api/erp/citas/'+id);
   document.getElementById('mDetTitle').textContent=c.codigo+' · '+(ESTLBL[c.estado]||c.estado);
@@ -3220,6 +3241,17 @@ async function verCita(id){
     if(c.estado==='pedida'||c.estado==='confirmada'){ acc+='<button class="btn btn-primary btn-sm" onclick="atender('+id+')">Atender / cobrar</button> '; acc+='<button class="btn btn-secondary btn-sm" onclick="estado('+id+',\'no_show\')">No se presentó</button> '; }
     if(c.estado!=='anulada'&&c.estado!=='atendida') acc+='<button class="btn btn-secondary btn-sm" onclick="editCita('+id+')">Editar</button> ';
     acc+='<button class="btn btn-secondary btn-sm" onclick="abrirAvisos('+id+')">Avisar</button> ';
+    // PELDAÑO 8 · LA NOTA CLÍNICA, EN UN CLIC. Solo en el oficio de salud y solo con el permiso.
+    // Si la cita es DE PASO —solo un nombre suelto, sin ficha— no puede colgar de ella una nota
+    // clínica: no hay paciente al que enlazarla. En vez de esconder el botón sin más, se dice por qué
+    // y se ofrece crear la ficha ahí mismo; al crearla, la cita queda enlazada y la nota ya se puede.
+    if(window.HC_PUEDE){
+      if(c.cliente_id){
+        acc+='<button class="btn btn-secondary btn-sm" onclick="notaClinica('+id+','+c.cliente_id+')">Nota clínica</button> ';
+      } else {
+        acc+='<button class="btn btn-secondary btn-sm" onclick="fichaDesdeCita('+id+')" title="Esta cita no tiene ficha de paciente">Crear ficha del paciente</button> ';
+      }
+    }
     if(c.estado!=='anulada') acc+='<button class="btn btn-danger btn-sm" onclick="anular('+id+')">Anular</button>';
   }
   document.getElementById('mDetBody').innerHTML=
@@ -3235,6 +3267,7 @@ async function verCita(id){
     // CABO 4 · quién la anuló. «Sin registrar» para las anuladas ANTES de que se guardara el dato:
     // no se les adivina un autor, se dice que no consta. Inventarlo sería peor que el hueco.
     +(c.estado==='anulada'?'<div><div class="form-label">Anulada por</div>'+e(QUIEN_ANULA[c.anulada_por]||'Sin registrar')+'</div>':'')
+    +((window.HC_PUEDE&&!c.cliente_id)?'<div style="grid-column:1/-1;color:var(--text2);font-size:12px">Esta cita es de paso y no tiene ficha de paciente, así que no se le puede colgar una nota clínica. Crea su ficha y la cita queda enlazada.</div>':'')
     +'</div>'
     +'<div class="form-label">Servicios</div><div style="margin-bottom:1rem">'+e((c.servicios||[]).map(s=>s.nombre).join(' + '))+'</div>'
     +(c.nota?'<div class="alert" style="margin-bottom:1rem">'+e(c.nota)+'</div>':'')

@@ -19,6 +19,8 @@ import { exigirCorreoActivo } from '../avisos-preferencias.js';   // interruptor
 import { cabecera360, contadoresDe, queCompra, avisosDisaDe, recomendacionesDisa,
   detalleTarjeta, CLAVES_TARJETA, periodoDeUsuario, guardarPeriodoDeUsuario, PERIODOS_FICHA,
   chipsForzados, encenderChip } from '../cliente-360.js';
+import { tieneHistorial } from '../historial.js';
+import { puedeHistorial } from '../../../core/auth.js';
 import { fichaClienteCSS, fichaClienteJS, fichaVentanaJS,
   fichaCompletaJS, fichaCompletaCSS, mapaAssetsHTML } from '../ficha-cliente-ui.js';
 // REGISTRO DE CONTACTOS (bloque D). Tabla propia, FUERA de WRITABLE_TABLES: la escribe una persona o
@@ -986,6 +988,10 @@ export function createClientRoutes(db, cfg = {}) {
   // mismos clics— y gana UNA sola cosa: el enlace para venir aquí. Todo lo del 360 vive SOLO aquí:
   // dos sitios pintando lo mismo acaban discrepando.
   views.get('/:id{[0-9]+}', requirePerm('clients.read'), c => {
+    // PELDAÑO 8 · LA PESTAÑA DEL HISTORIAL. Dos condiciones, y las dos tienen que cumplirse:
+    // el negocio es de oficio SALUD, y esta persona tiene el permiso —que no perdona el rol admin—.
+    // Quien no cumpla las dos NO VE EL BOTÓN: nada de enseñar la puerta y dar error al empujarla.
+    const verHistorial = tieneHistorial(db) && puedeHistorial(db, c.get('session'));
     const cli = db.prepare('SELECT c.*, g.name AS group_name FROM clients c LEFT JOIN client_groups g ON c.group_id=g.id WHERE c.id=?').get(c.req.param('id'));
     if (!cli) return c.html(adminLayout('Cliente', '<div class="card"><p>Ese cliente no existe o se archivó. <a href="/admin/clients">Volver a Clientes</a></p></div>', 'clients', c.get('session')?.csrfToken || '', c), 404);
     const content = `
@@ -1000,6 +1006,7 @@ export function createClientRoutes(db, cfg = {}) {
         <h2 style="margin:0">${escHtml(cli.name)}</h2>
       </div>
       <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        ${verHistorial ? `<a class="btn btn-sm" href="/admin/historial/${cli.id}"><i class="ti ti-stethoscope"></i> Historial clínico</a>` : ''}
         <a class="btn btn-secondary btn-sm" href="/admin/clients">← Volver</a>
       </div>
     </div>
