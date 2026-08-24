@@ -123,6 +123,16 @@ estado `errored` y no es la instancia productiva — ignorarla.
   - Lo que NO cambia: **ningún gate suelto se ejecuta solo**, y al cerrar una entrega se propone el
     barrido y se espera un sí (`node scripts/barrido-estado.mjs`). La norma entera sigue en
     `RITUAL.md` §«LA REGRESIÓN».
+- 🛑 **CUÁNDO SE PARA Y SE PREGUNTA — y cuándo NO.** Palabras de Ibrahin (24 ago 2026):
+  > «La máquina para y pregunta SOLO cuando la duda cambia lo que el producto le promete al cliente.
+  > Si la duda es de cómo construirlo —qué tabla, qué formato, dónde colgar un botón, qué reutilizar—
+  > decide, construye, y lo deja escrito en la entrega con su motivo. Traer al dueño una duda de
+  > construcción cuesta un día y no mejora el producto.»
+
+  Se para: cuando la respuesta cambia lo que el cliente puede hacer, lo que ve, lo que se le promete,
+  lo que se le cobra o lo que la ley le exige. **No se para** por una decisión de construcción: se
+  toma, se construye y se explica en la entrega.
+
 - 🚩 **SI UNA NORMA DE IBRAHIN ADMITE DOS LECTURAS, NO ELIJAS UNA: PREGUNTA.** Van dos veces que
   parto una norma suya en dos y me quedo con la mitad conveniente — su «barridos a demanda» acabó
   siendo «corto automático + completo a demanda», y al corregirlo, «gate propio automático +
