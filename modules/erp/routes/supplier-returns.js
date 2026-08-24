@@ -365,7 +365,7 @@ export function createSupplierReturnRoutes(db) {
     }
 
     const opts = origins.map((o, i) =>
-      '<option value="' + i + '">' + esc(o.supplier_name + ' · ' + o.label + ' · ' + o.date) + '</option>'
+      '<option value="' + i + '">' + esc(o.supplier_name + ' · ' + o.label + ' · ' + fechaEs(o.date)) + '</option>'
     ).join('');
 
     const content = `
@@ -387,7 +387,7 @@ export function createSupplierReturnRoutes(db) {
         <div class="table-wrap"><table>
           <thead><tr><th>Producto</th><th style="text-align:right">Recibido</th><th style="text-align:right">Ya devuelto</th><th style="text-align:right">Devolvible</th><th>Devolver ahora</th><th style="text-align:right">Valor</th></tr></thead>
           <tbody id="rLines"><tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--text3)">Elige un documento de origen para ver sus líneas.</td></tr></tbody>
-          <tfoot><tr><td colspan="5" style="text-align:right;font-weight:700;padding:.7rem 1rem">Valor devuelto</td><td style="text-align:right;font-weight:700" id="rTotal">0.00 ${sym}</td></tr></tfoot>
+          <tfoot><tr><td colspan="5" style="text-align:right;font-weight:700;padding:.7rem 1rem">Valor devuelto</td><td style="text-align:right;font-weight:700" id="rTotal">0,00 ${sym}</td></tr></tfoot>
         </table></div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:.5rem">

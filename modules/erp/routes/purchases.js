@@ -240,7 +240,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
           <thead><tr><th>Producto</th><th>Cantidad</th><th>Coste unitario</th><th>Subtotal</th><th></th></tr></thead>
           <tbody id="linesBody"></tbody>
         </table></div>
-        <div class="card-body" style="text-align:right"><strong>Total: <span id="totalDisplay">0.00 ${sym}</span></strong></div>
+        <div class="card-body" style="text-align:right"><strong>Total: <span id="totalDisplay">0,00 ${sym}</span></strong></div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:.5rem">
         <a href="/admin/purchases" class="btn btn-secondary">Cancelar</a>
@@ -267,7 +267,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
           +'</td>'
           +'<td><input class="form-control" type="number" id="qty-'+id+'" min="1" value="1" style="width:80px" oninput="calcTotal()"></td>'
           +'<td><input class="form-control" type="number" id="cost-'+id+'" min="0" step="0.01" value="0.00" style="width:110px" oninput="calcTotal()"></td>'
-          +'<td id="sub-'+id+'" style="font-weight:600">0.00 ${sym}</td>'
+          +'<td id="sub-'+id+'" style="font-weight:600">0,00 ${sym}</td>'
           +'<td><button class="btn btn-danger btn-sm" onclick="removeLine('+id+')">Eliminar</button></td>'
           +'</tr>';
         document.getElementById('linesBody').insertAdjacentHTML('beforeend',html);

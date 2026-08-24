@@ -87,6 +87,30 @@ export const NAV_PERMS = {
   perfil:           null,   // todo usuario gestiona su propio perfil
   users:            'admin.manage_users',
   settings:         'admin.settings',
+  // ── LAS CATORCE QUE NO ESTABAN EN EL MENÚ (24 ago 2026) ──────────────────────────────────────
+  // Eran secciones de verdad a las que solo se llegaba desde dentro de otra pantalla o escribiendo
+  // la dirección. Cada una entra con EL CANDADO DE SU PROPIA PANTALLA, no con uno inventado: si el
+  // menú pidiera menos, sería una puerta abierta de tapadillo; si pidiera más, escondería algo que
+  // el usuario sí puede abrir.
+  //
+  // ⚠️ Y DE PASO SE CIERRA EL HALLAZGO QUE LLEVABA AQUÍ ANOTADO SIN ARREGLAR: `contabilidad` era la
+  // única clave del rail SIN candado, mientras `/admin/contabilidad` exige `invoices.read`. Un
+  // empleado sin ese permiso VEÍA «Libros y modelos» y se comía un 403 al pulsar. Ahora no la ve.
+  contabilidad:        'invoices.read',
+  'contab-ventas':     'invoices.read',
+  'contab-compras':    'invoices.read',
+  'contab-diario':     'invoices.read',
+  'contab-mayor':      'invoices.read',
+  'contab-bienes':     'invoices.read',
+  'contab-pyg':        'invoices.read',
+  'contab-modelos':    'invoices.read',
+  'crm-cola':          'crm.read',
+  'crm-tareas':        'crm.read',
+  'migracion-importar': 'company.read',
+  'settings-plantillas': 'company.read',
+  'settings-fiscal':   'company.read',
+  'settings-avisos':   null,   // la pantalla no exige permiso: filtra por dentro lo que enseña
+  avisos:              null,   // la pantalla de avisos tampoco; ya se alcanzaba desde la campana
   security:         'admin.settings',
   'change-password': null,
   'purchases-capture': 'purchases.create',
@@ -156,6 +180,9 @@ export const MENU = [
     // llama. La ruta sigue siendo /admin/crm (es el módulo), pero el usuario lee "Oportunidades",
     // que es la palabra de Holded ("embudos de venta" y "oportunidades"), no "negocios"/"deals".
     { href: '/admin/crm', label: 'Oportunidades', key: 'crm', icon: 'ti-target-arrow' },
+    // Las dos pantallas que colgaban del embudo y no se veían desde fuera.
+    { href: '/admin/crm/cola', label: 'Cola comercial', key: 'crm-cola', icon: 'ti-list-check' },
+    { href: '/admin/crm/tareas', label: 'Tareas del CRM', key: 'crm-tareas', icon: 'ti-checkbox' },
     // MOVIDO DESDE VENTAS (18 ago 2026, decisión de Ibrahin). Es la puerta por la que un CLIENTE entra
     // a ver sus facturas, y desde aquí se le manda su enlace: pertenece a «a quién le vendes», no a los
     // documentos de venta. ⚠️ SU CANDADO NO CAMBIA: sigue exigiendo `invoices.read`, el de su pantalla
@@ -205,6 +232,16 @@ export const MENU = [
   ]},
   { id: 'contabilidad', label: 'Contabilidad', icon: 'ti-book', items: [
     { href: '/admin/contabilidad', label: 'Libros y modelos', key: 'contabilidad', icon: 'ti-book' },
+    // Los SIETE libros, cada uno con su entrada. Estaban vivos y solo se alcanzaban por las pestañas
+    // de dentro: quien no supiera que existen no llegaba. Van marcados como `ajustes:false` (día a
+    // día) porque son consulta diaria de una gestoría, no configuración.
+    { href: '/admin/contabilidad/ventas', label: 'Libro de ventas', key: 'contab-ventas', icon: 'ti-file-dollar' },
+    { href: '/admin/contabilidad/compras', label: 'Libro de compras', key: 'contab-compras', icon: 'ti-file-invoice' },
+    { href: '/admin/contabilidad/diario', label: 'Diario', key: 'contab-diario', icon: 'ti-notebook' },
+    { href: '/admin/contabilidad/mayor', label: 'Mayor', key: 'contab-mayor', icon: 'ti-books' },
+    { href: '/admin/contabilidad/pyg', label: 'Pérdidas y ganancias', key: 'contab-pyg', icon: 'ti-chart-line' },
+    { href: '/admin/contabilidad/bienes', label: 'Bienes de inversión', key: 'contab-bienes', icon: 'ti-building-factory' },
+    { href: '/admin/contabilidad/modelos', label: 'Modelos de Hacienda', key: 'contab-modelos', icon: 'ti-file-certificate' },
     { href: '/admin/conciliacion', label: 'Conciliación bancaria', key: 'conciliacion', icon: 'ti-arrows-exchange' },
     { href: '/admin/verifactu/envios', label: 'Envío Verifactu (AEAT)', key: 'verifactu-envio', icon: 'ti-cloud-upload' },
   ]},
@@ -316,6 +353,27 @@ export const CONFIG_NEGOCIO = [
         desc: 'Las sillas, cabinas, salas o aparatos que una cita ocupa además de la persona.' },
     ],
   },
+  // ── LAS TRES PANTALLAS DE AJUSTES QUE NO ESTABAN EN NINGÚN MENÚ (24 ago 2026) ──────────────────
+  // Vivían dentro de «Datos del negocio» y solo se llegaba a ellas pulsando un botón de esa pantalla.
+  // Son configuración del negocio, así que van donde vive la configuración del negocio, con el mismo
+  // candado que cada una exige por su cuenta.
+  {
+    id: 'cfg-empresa',
+    label: 'Cómo habla mi negocio y qué presenta',
+    icon: 'ti-building',
+    descripcion: 'La voz de tus correos, cuándo avisa Bamburu y qué modelos te tocan con Hacienda.',
+    items: [
+      { href: '/admin/settings/plantillas', label: 'Plantillas de correo', key: 'settings-plantillas', icon: 'ti-mail-cog',
+        alias: ['Emails', 'Correos', 'Plantillas de email'],
+        desc: 'El texto de cada correo que sale de Bamburu, escrito con tus palabras.' },
+      { href: '/admin/settings/avisos', label: 'Avisos y correos', key: 'settings-avisos', icon: 'ti-bell-cog',
+        alias: ['Notificaciones', 'Recordatorios'],
+        desc: 'Qué te avisa Bamburu, cuándo, y a qué dirección llega el resumen del día.' },
+      { href: '/admin/settings/situacion-fiscal', label: 'Mi situación fiscal', key: 'settings-fiscal', icon: 'ti-file-certificate',
+        alias: ['Modelos', 'Hacienda', 'IVA', 'IRPF', '303', '130'],
+        desc: 'Qué declaras. De aquí salen los modelos que DISA te recuerda, y sus fechas.' },
+    ],
+  },
 ];
 
 // ¿Qué condiciones `siHay` se cumplen en ESTE negocio? Una sola consulta por condición, y tolerante a
@@ -360,6 +418,16 @@ export const FIJAS = [
   { href: '/admin/migracion', label: 'Trae tus datos', key: 'migracion', icon: 'ti-file-import', sitio: 'pie',
     alias: ['Migración', 'Migrar', 'Importar datos', 'Traer mis datos', 'Holded', 'Quipu', 'Excel',
             'Cambiar de programa', 'Programa anterior'] },
+  // EL IMPORTADOR DE FICHEROS, junto a la migración asistida: son las dos formas de traerse los datos
+  // —una la hace el equipo por ti, la otra la haces tú— y hasta hoy solo se llegaba a la segunda
+  // escribiendo la dirección. Mismo candado que su pantalla (`company.read`).
+  { href: '/admin/migracion/importar', label: 'Importar un fichero', key: 'migracion-importar', icon: 'ti-table-import',
+    sitio: 'pie', alias: ['CSV', 'Importar CSV', 'Subir fichero', 'Excel'] },
+  // LA PANTALLA DE AVISOS. Ya se alcanzaba desde la campana («Ver y resolver todos»), así que no
+  // estaba huérfana como las otras trece — pero un destino que solo existe dentro de un desplegable
+  // no se puede buscar ni anclar, y eso sí faltaba.
+  { href: '/admin/avisos', label: 'Avisos', key: 'avisos', icon: 'ti-bell', sitio: 'pie',
+    alias: ['Notificaciones', 'Pendientes', 'Alertas'] },
   { href: '/docs', label: 'Ayuda y soporte', key: 'ayuda', icon: 'ti-lifebuoy', sitio: 'pie', target: '_blank' },
 ];
 

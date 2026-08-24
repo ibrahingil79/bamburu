@@ -18,6 +18,7 @@
 // nunca editar/borrar (mismo patrón que stock_movements y facturas).
 // ════════════════════════════════════════════════════════════════════════════
 import { countsAsReceivable } from './cobros.js';
+import { fechaEs } from './voz.js';   // la fecha del memo, en cristiano
 import { countsAsPayable } from './pagos.js';
 
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
@@ -193,8 +194,10 @@ export function reversarHuerfanos(db, { hoy, simulacro = false } = {}) {
       writeEntry(db, {
         entry_type: 'reversion', origin_type: e.origin_type, origin_id: e.origin_id,
         entry_date: fecha, reverses_entry_id: e.id,
+        // La fecha del memo va en cristiano: este texto SE LEE en el diario, y una fecha ISO en
+        // pantalla es exactamente lo que el resto del producto ya no hace.
         memo: 'Anula asiento huérfano de documento borrado (asiento #' + e.id
-              + ', ' + e.origin_type + ' #' + e.origin_id + ', fechado ' + e.entry_date + ')',
+              + ', ' + e.origin_type + ' #' + e.origin_id + ', fechado ' + fechaEs(e.entry_date) + ')',
         lines,
       });
       n++;

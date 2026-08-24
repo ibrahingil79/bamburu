@@ -90,7 +90,31 @@ for (const [tabla, ruta] of [['invoices', 'invoices'], ['quotes', 'quotes'], ['p
   if (r) meter(`/admin/${ruta}/${r.id}/imprimir`);
 }
 
-const lista = SOLO.length ? SOLO : rutas;
+// ── Y AHORA SE SIGUEN LOS ENLACES, en vez de fiarse de la lista de arriba ───────────────────────
+// 24 ago 2026. Hasta hoy esta comprobación recorría «el menú más unas cuantas fichas escritas a
+// mano», y por eso se le escapó una pantalla entera durante semanas. **Una lista que alguien
+// mantiene a mano siempre se queda corta** — es la misma lección que ya costó el lint de JavaScript
+// servido, que pasó de 66 pantallas a 324 el día que aprendió a seguir enlaces.
+// Un solo nivel: se visita lo de arriba, se recogen los `/admin/...` que aparecen en su HTML y se
+// añaden. Se tiran los href que son cadenas de JavaScript a medio construir (`'/admin/x/'+id`), que
+// no son direcciones sino código, y lo que descarga un fichero.
+const NO_RASTREAR = /\/(pdf|descargar|export|logout|salir)(\/|$)/i;
+async function conRastreo(base, cookie, semilla) {
+  const vistas = new Set(semilla);
+  for (const ruta of semilla) {
+    let html = '';
+    try { const r = await fetch(base + ruta, { headers: { cookie } }); if (r.status !== 200) continue; html = await r.text(); }
+    catch { continue; }
+    for (const m of html.matchAll(/href="(\/admin[^"#?]*)"/g)) {
+      const h = m[1].replace(/\/$/, '');
+      if (/['"+${}\\]|\s/.test(h)) continue;
+      if (!h || vistas.has(h) || NO_RASTREAR.test(h)) continue;
+      vistas.add(h);
+    }
+  }
+  return [...vistas];
+}
+const lista = SOLO.length ? SOLO : await conRastreo(BASE, 'asess=' + tok, rutas);
 
 // El texto que ve una persona: sin <script>, sin <style> y sin atributos.
 function textoVisible(html) {

@@ -5598,6 +5598,12 @@ fiscales a medio camino. Decisión que la fija: `docs/contexto/decisiones.md` (2
 - **Conciliación bancaria:** **CSV genérico** de extracto (añadido barato); **PSD2 / Enable Banking** como fuente automática futura (la costura ingesta↔cruce ya lo prevé).
 
 ### Ventas, portal y recurrentes
+- ⬜ **FACTURA PROFORMA — construida bien y desde cero.** *(Apuntada por Ibrahin el 24 ago 2026, al
+  retirar el POS viejo.)* Es un documento normal en cualquier negocio: una previsión de importe que se
+  manda antes de emitir la factura de verdad. **NO se resucita la del POS viejo**, que apuntaba a una
+  tabla archivada y se titulaba «FACTURA» a secas — esa se retiró entera ese mismo día. Cuando se
+  aborde: título con la palabra **PROFORMA** visible, la línea «Este documento no tiene validez
+  fiscal», y **serie propia**, nunca la de las facturas legales. Es cuestión de orden, no de si toca.
 - **Portal de cliente — pago online (tarjeta):** pasarela (Stripe u otro); necesita decisión de proveedor y coste del dueño. **Único paso que falta del portal.**
 - **Portal de cliente — acceso admin al enlace:** mostrar/copiar el enlace del portal desde el admin (hoy solo se envía por email).
 - **Portal de cliente completo (roadmap):** que el cliente vea y **acepte presupuestos** y haga **pedidos B2B con carrito**.

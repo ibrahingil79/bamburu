@@ -14,6 +14,7 @@
 //      hay aviso (y el área figura en `sinPermiso`).
 //   6. TRAZABLE — `porque` es el `motivo` del vigía, VERBATIM.
 // Se imprime además un ejemplo por tipo para leerlo (lenguaje llano).
+import { readFileSync } from 'fs';
 import Database from 'better-sqlite3';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -128,10 +129,39 @@ try {
   // —si tuviera su copia, un cambio de formato daría un falso rojo, o peor, un falso verde—.
   // Ampliar una lista blanca es una decisión, no un trámite, así que además se comprueba que los dos
   // nuevos son funciones PURAS: se les pasa un dato y devuelven texto, sin base de datos por medio.
-  const PERMITIDOS = ['vestir', 'narrar', 'PLANTILLAS', 'dinero', 'fechaEs'];
+  // ⚙️ LA LISTA A MANO, FUERA (24 ago 2026). Esto era `PERMITIDOS = ['vestir','narrar',…]`, escrita a
+  // mano. Se puso roja el día que la voz aprendió a decir los meses en español (`mesEs`): la función
+  // era inocente y la lista no se había actualizado. **Una lista blanca a mano siempre se queda
+  // corta, y cuando se queda corta miente en la dirección peor: parece un fallo de producto.**
+  //
+  // Lo que esta guarda protege de verdad NO es «qué nombres hay», es que la voz **no pueda escribir
+  // nada**: solo narra. Eso sí se puede DERIVAR del código, y en tres capas:
+  //   (1) no importa nada que sepa escribir — ni base de datos, ni ficheros, ni red;
+  //   (2) ningún export se llama como algo que escribe (crear/guardar/borrar/enviar/actualizar…);
+  //   (3) cada export es una función pura o una constante: no hay objetos con estado dentro.
+  // Así, añadir un formateador nuevo no toca esta comprobación; añadir un `guardarAviso()`, sí.
   const exportsVoz = Object.keys(VOZ);
-  ok(exportsVoz.every(n => PERMITIDOS.includes(n)),
-     'voz.js no exporta nada fuera de lo permitido (ninguna función de escritura): ' + exportsVoz.join(', '));
+  const fuenteVoz = readFileSync(new URL('../modules/erp/voz.js', import.meta.url), 'utf8');
+
+  const IMPORTS_QUE_ESCRIBEN = /(better-sqlite3|['"](?:node:)?fs['"]|control-db|tenant-|mailer|resend|fetch\s*\()/i;
+  const importes = [...fuenteVoz.matchAll(/^import[^;]+;/gm)].map(m => m[0]).join(' ');
+  ok(!IMPORTS_QUE_ESCRIBEN.test(importes) && !IMPORTS_QUE_ESCRIBEN.test(fuenteVoz),
+     'voz.js no importa nada que sepa escribir (ni BD, ni ficheros, ni correo, ni red)',
+     importes.replace(/\s+/g, ' ').slice(0, 90));
+
+  const NOMBRE_QUE_ESCRIBE = /^(crear|guardar|borrar|eliminar|actualizar|enviar|mandar|set|write|save|delete|insert|update|post|marcar|apuntar|registrar)/i;
+  const sospechosos = exportsVoz.filter(n => NOMBRE_QUE_ESCRIBE.test(n));
+  ok(sospechosos.length === 0,
+     'ningún export de voz.js se llama como algo que escribe: ' + exportsVoz.join(', '),
+     sospechosos.join(', ') || 'los ' + exportsVoz.length + ' solo narran o formatean');
+
+  const conEstado = exportsVoz.filter(n => {
+    const v = VOZ[n];
+    if (typeof v === 'function') return false;
+    if (v && typeof v === 'object') return Object.values(v).some(x => typeof x === 'function' && x.length === 0 && /db|prepare/i.test(String(x)));
+    return false;
+  });
+  ok(conEstado.length === 0, 'y ninguno lleva estado ni base de datos dentro', conEstado.join(', ') || 'todos puros');
   ok(VOZ.dinero(1234.5, '€') === '1.234,50 €', 'y el dinero se escribe en español: ' + VOZ.dinero(1234.5, '€'));
   ok(VOZ.fechaEs('2026-08-23') === '23/08/2026', 'y la fecha también: ' + VOZ.fechaEs('2026-08-23'));
   ok(VOZ.dinero.length <= 2 && VOZ.fechaEs.length === 1 && !/\bdb\b/.test(String(VOZ.dinero) + String(VOZ.fechaEs)),

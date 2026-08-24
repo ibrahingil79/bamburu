@@ -130,7 +130,7 @@ function comprasTable(libro, sym) {
   const head = `<tr><th>Nº recepción</th><th>Nº fra. proveedor</th><th>F. exped.</th><th>F. oper.</th><th>NIF</th><th>Proveedor</th>
     <th style="text-align:right">Base</th><th style="text-align:right">Tipo IVA</th><th style="text-align:right">Cuota soportada</th><th style="text-align:right">Total línea</th></tr>`;
   const body = comprasAsientos(libro).map(a => `<tr><td>${escHtml(a.internal_code || '')}</td><td>${escHtml(a.supplier_number || '')}</td>
-      <td>${escHtml(a.invoice_date || '')}</td><td>${escHtml(a.operation_date || '—')}</td><td>${escHtml(a.nif || '')}</td><td>${escHtml(a.nombre || '')}</td>
+      <td>${a.invoice_date ? fechaEs(a.invoice_date) : ''}</td><td>${a.operation_date ? fechaEs(a.operation_date) : '—'}</td><td>${escHtml(a.nif || '')}</td><td>${escHtml(a.nombre || '')}</td>
       <td style="text-align:right">${money(sym, a.base)}</td><td style="text-align:right">${rateLabel(a.rate)}</td><td style="text-align:right">${money(sym, a.cuota)}</td>
       <td style="text-align:right">${money(sym, a.total_linea)}</td></tr>`).join('') || emptyRow(10, 'No hay operaciones en este periodo. Cambia las fechas o emite tu primera factura.');
   const foot = `<tr style="font-weight:700"><td colspan="6" style="text-align:right">TOTALES</td>
@@ -147,7 +147,7 @@ function diarioTable(diario, sym) {
   const bloques = diario.rows.map(a => {
     const ls = a.lines.map(l => `<tr><td></td><td>${escHtml(l.account_code)} · ${escHtml(l.account_name || '')}</td>
       <td style="text-align:right">${l.debit ? money(sym, l.debit) : ''}</td><td style="text-align:right">${l.credit ? money(sym, l.credit) : ''}</td></tr>`).join('');
-    return `<tr style="background:var(--bg2)"><td>${escHtml(a.entry_date)}</td>
+    return `<tr style="background:var(--bg2)"><td>${fechaEs(a.entry_date)}</td>
       <td colspan="3"><b>Asiento ${a.id}</b> · ${escHtml(a.entry_type)} — ${escHtml(a.memo || '')}${a.cuadra ? '' : ' <span style="color:var(--danger)">(descuadra)</span>'}</td></tr>${ls}`;
   }).join('') || emptyRow(4, 'No hay asientos en este periodo. Cambia las fechas o emite tu primera factura.');
   const foot = `<tr style="font-weight:700"><td colspan="2" style="text-align:right">TOTALES</td>
@@ -172,7 +172,7 @@ function mayorTable(mayor, sym, from, to) {
 }
 // Detalle de UNA cuenta (drill-down): movimientos con saldo acumulado línea a línea.
 function mayorDetalle(det, sym) {
-  const body = det.rows.map(m => `<tr><td>${escHtml(m.entry_date)}</td><td>${m.entry_id}</td><td>${escHtml(m.entry_type)}</td>
+  const body = det.rows.map(m => `<tr><td>${fechaEs(m.entry_date)}</td><td>${m.entry_id}</td><td>${escHtml(m.entry_type)}</td>
       <td>${escHtml(m.memo || '')}</td><td style="text-align:right">${m.debit ? money(sym, m.debit) : ''}</td>
       <td style="text-align:right">${m.credit ? money(sym, m.credit) : ''}</td><td style="text-align:right">${money(sym, m.saldo)}</td></tr>`).join('')
     || emptyRow(7, 'No hay movimientos en este periodo.');
@@ -461,7 +461,7 @@ export function createContabilidadRoutes(db) {
     const res130 = m130.c19 < 0 ? 'sin ingreso (negativo o cero)' : (m130.c19 > 0 ? 'a ingresar' : 'sin ingreso');
     const content = `<div class="ph"><h2>Contabilidad — Libros registro</h2></div>
       ${tabsBar('modelos', from, to)}${modelosPeriodForm(year, q)}
-      <div style="color:var(--text2);font-size:12px;margin-bottom:1rem">Periodo ${escHtml(from)} → ${escHtml(to)}. <b>Borradores</b> calculados desde tus libros: Bamburu los deja listos para que tú o tu gestoría los revisen y presenten. Bamburu no presenta ante la AEAT.</div>
+      <div style="color:var(--text2);font-size:12px;margin-bottom:1rem">Periodo ${fechaEs(from)} → ${fechaEs(to)}. <b>Borradores</b> calculados desde tus libros: Bamburu los deja listos para que tú o tu gestoría los revisen y presenten. Bamburu no presenta ante la AEAT.</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;align-items:start">
         <div class="card"><div class="card-body"><h3>Modelo 303 · IVA — ${escHtml(String(q))}T ${escHtml(String(year))}</h3>
           <span style="color:var(--text2);font-size:12px">IVA repercutido − IVA soportado deducible. Resultado de la liquidación (casilla 71): <b>${money(sym, m303.casilla71)} ${escHtml(res303)}</b>.</span>
