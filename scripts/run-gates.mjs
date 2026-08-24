@@ -33,7 +33,7 @@ import { dirname, join, resolve, relative } from 'path';
 import { fileURLToPath } from 'url';
 // El mapa de los gates (grupos, clases y qué toca qué) vive en su propio módulo: lo leen este
 // runner y `barrido-estado.mjs`. Una sola lista, no dos.
-import { GRUPOS, EMPIEZAN_DE_CERO, SOLOS, claseDe, AFECTA, FUERA_A_PROPOSITO, TENANT_EXTRA, censoDeGates } from './lib/gates-mapa.mjs';
+import { GRUPOS, EMPIEZAN_DE_CERO, SOLOS, claseDe, AFECTA, FUERA_A_PROPOSITO, TENANT_EXTRA, censoDeGates, RAPIDO, velocidadDe } from './lib/gates-mapa.mjs';
 
 const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TIMEOUT_MS = 300000;
@@ -155,7 +155,9 @@ const EN_SERIE = args.includes('--serie');   // para comparar contra el barrido 
 if (!args.length) {
   console.log('Uso: node scripts/run-gates.mjs <grupo|gate>...  |  --all  |  --tocado');
   console.log('Grupos: ' + Object.keys(GRUPOS).join(', '));
-  console.log('Modos:  --tocado   corre solo los gates de lo que has cambiado (ANTES de cada commit)');
+  console.log('Modos:  --rapido   unos minutos: pantallas vivas, dinero y fechas, ventanitas, menú, cadena');
+  console.log('        --all      TODO. Corre solo cada madrugada y manda el parte por correo');
+  console.log('        --tocado   corre solo los gates de lo que has cambiado (ANTES de cada commit)');
   console.log('        --all      el barrido completo (AL CERRAR la tarea)');
   console.log('Topes:  --jobs=N --jobs-navegador=N --jobs-compartido=N --serie');
   console.log('Ver:    --lista     dice qué correría y se va, sin correr nada');
@@ -232,7 +234,12 @@ function resolverTocado(todos) {
 // Resolver qué se corre.
 const TODOS = [...new Set(Object.values(GRUPOS).flat())];
 let objetivo = [], informeTocado = null;
-if (args.includes('--all')) {
+if (args.includes('--rapido')) {
+  // EL BARRIDO RÁPIDO: unos minutos, lo que se rompe a menudo y tumba el producto. Se lanza A MANO.
+  // Incluye `gate-cadena-integridad`, que está fuera del completo porque cualquier gate que emita una
+  // factura mientras corre le mueve el suelo — y aquí corre solo, que es lo que necesita.
+  objetivo = [...RAPIDO.keys()];
+} else if (args.includes('--all')) {
   objetivo = TODOS;
 } else if (args.includes('--tocado')) {
   const r = resolverTocado(TODOS);

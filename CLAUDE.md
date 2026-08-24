@@ -106,12 +106,23 @@ estado `errored` y no es la instancia productiva — ignorarla.
 
 ## Reglas de trabajo (de RITUAL.md)
 
-- 📍 **LOS BARRIDOS Y LOS GATES SON A DEMANDA — la norma está escrita ENTERA en `RITUAL.md`,
-  sección «LA REGRESIÓN», y aquí NO se reescribe.** Lo justo para saber que existe:
-  **ningún barrido y ningún gate se ejecuta solo. Ni el de la tarea. Se ejecutan cuando Ibrahin lo
-  pide.** Si un encargo los necesita, lo dice arriba del todo y **con eso queda pedido**.
-  Al cerrar una entrega **se propone** (`node scripts/barrido-estado.mjs` prepara el parte) y se
-  espera un sí; si dice que no, `--registrar-pendiente` y se vuelve a proponer al abrir.
+- 📍 **EL BARRIDO VA EN DOS VELOCIDADES (norma cambiada por Ibrahin el 24 ago 2026).** Sus palabras:
+  *«RÁPIDO — pocos minutos. […] Se lanza a mano cuando se pida. COMPLETO — todo […] Se programa para
+  que corra solo cada madrugada. Nadie lo lanza a mano en horario de trabajo.»*
+  - **`node scripts/run-gates.mjs --rapido`** — unos minutos: que ninguna pantalla se caiga, que el
+    dinero y las fechas salgan como en España, que no haya cuadros de diálogo del navegador, que no
+    falte ninguna sección, que la cadena de VERI\*FACTU esté entera y que ninguna base de datos sea
+    legible por otro usuario. **A mano, cuando Ibrahin lo pida.**
+  - **`--all`** — todo. **Lo lanza el temporizador `bamburu-barrido-nocturno.timer` a las 03:15**, y
+    manda el parte por correo a Ibrahin: cuántas han corrido, cuántas han fallado y qué se ha roto.
+    Si no falla nada, una línea. **Si no llega a terminar, también avisa** — un barrido que no corre
+    y no lo dice es peor que no tenerlo. **Nadie lo lanza a mano en horario de trabajo.**
+  - **La marca de velocidad NO se mantiene a mano:** en `gates-mapa.mjs` se declara solo el conjunto
+    RÁPIDO —que es corto y es una decisión— y todo lo demás es del completo por definición, así que
+    ninguna comprobación puede quedarse sin marcar.
+  - Lo que NO cambia: **ningún gate suelto se ejecuta solo**, y al cerrar una entrega se propone el
+    barrido y se espera un sí (`node scripts/barrido-estado.mjs`). La norma entera sigue en
+    `RITUAL.md` §«LA REGRESIÓN».
 - 🚩 **SI UNA NORMA DE IBRAHIN ADMITE DOS LECTURAS, NO ELIJAS UNA: PREGUNTA.** Van dos veces que
   parto una norma suya en dos y me quedo con la mitad conveniente — su «barridos a demanda» acabó
   siendo «corto automático + completo a demanda», y al corregirlo, «gate propio automático +

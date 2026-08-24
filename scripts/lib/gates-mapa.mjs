@@ -30,6 +30,45 @@ export const EN_DOS_AREAS = new Map([
   ['verify-constructor',             'servicios + margen — el constructor cruza horas de proyecto y margen'],
 ]);
 
+// ── EL BARRIDO, EN DOS VELOCIDADES ───────────────────────────────────────────────────────────────
+// 24 ago 2026. Meter las comprobaciones que faltaban en un solo bloque lo volvería tan largo que
+// dejaría de lanzarse — y un barrido que no se lanza no protege nada. Se parte en dos:
+//
+//   RÁPIDO   · unos minutos. Lo que se rompe a menudo y tumba el producto. Se lanza A MANO cuando se
+//              pida: `node scripts/run-gates.mjs --rapido`.
+//   COMPLETO · todo. Corre SOLO cada madrugada y manda el parte por correo. Nadie lo lanza a mano en
+//              horario de trabajo.
+//
+// LA MARCA NO SE MANTIENE A MANO, y es a propósito: hoy van 113 comprobaciones y una lista paralela
+// de 113 nombres se queda desincronizada el primer día (es la lección que ya costó dos veces hoy: la
+// lista blanca de voz.js y la lista de pantallas del dinero). Aquí se declara SOLO el rápido —que es
+// corto y es una decisión— y todo lo demás es completo por definición. Así **ninguna queda sin
+// marcar**: `velocidadDe()` devuelve siempre una de las dos, y no hay tercer estado posible.
+//
+// QUÉ ENTRA EN EL RÁPIDO, y por qué cada una:
+export const RAPIDO = new Map([
+  // Que ninguna pantalla se caiga. Son las tres que cazan una pantalla muerta, y las tres son baratas.
+  ['lint-plantillas',        'una plantilla rota mata la pantalla entera y no avisa'],
+  ['lint-js-servido',        'un error de sintaxis en el JS servido mata el bloque entero, en silencio'],
+  ['gate-pantallas-documento', 'las pantallas de documento, pedidas como salen del servidor'],
+  // Que el dinero y las fechas salgan como en España. Recorre 343 pantallas siguiendo enlaces.
+  ['verify-dinero-espanol',  'el dinero y las fechas, en pantalla y en papel'],
+  // Que no haya cuadros de diálogo del navegador.
+  ['censo-ventanitas',       'un prompt() o un confirm() nuevo deja un botón muerto sin avisar'],
+  // Que no falte ninguna sección ni ninguna puerta.
+  ['verify-menu-completo',   'una sección sin enlace es una función que nadie encuentra'],
+  // Que la cadena de VERI*FACTU esté entera. Va aquí y no en el completo por su propio motivo: exige
+  // que NADIE emita una factura mientras corre, y el rápido se lanza solo y a demanda.
+  ['gate-cadena-integridad', 'las dos cadenas de huellas del negocio, comparadas enteras'],
+  // Seguridad del mismo día: una base de datos legible por otro usuario no puede esperar a la noche.
+  ['test-c6-secretos',       'ningún secreto ni PII por un log, y ninguna BD legible por otros'],
+  // Y que ningún papel se llame «Factura» sin serlo: es riesgo legal, y cuesta cero.
+  ['verify-nombre-documentos', 'un papel titulado Factura que no lo es puede acabar en manos de un cliente'],
+]);
+
+// La velocidad de UNA comprobación. No hay tercer estado: o está declarada arriba o es del completo.
+export function velocidadDe(nombre) { return RAPIDO.has(nombre) ? 'rapido' : 'completo'; }
+
 export const GRUPOS = {
   // ── PANTALLAS DEL CLIENTE Y DE LA NAVEGACIÓN ─────────────────────────────────────────────────
   // NACE DE UN DESCUIDO MÍO: estos cuatro gates existían, se corrían A MANO al entregarlos, y NO
@@ -198,7 +237,7 @@ export const GRUPOS = {
   // Sala de máquinas: superadmin, conexiones a la BD, el fichero -wal, el saneo de errores al cliente,
   // el escapado del texto del usuario (que no se vuelva HTML ni JS) y la CSP estricta de las
   // superficies endurecidas (que sigan sin 'unsafe-inline' Y con los botones vivos).
-  infra: ['verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
+  infra: ['test-c6-secretos', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
           // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
           // archivar si lo dejó, y decirlo ANTES de pulsar. Antes daba un 500 seco.
@@ -402,7 +441,8 @@ export const FUERA_A_PROPOSITO = new Map([
   ['gate-cadena-integridad',
    'familia VERI*FACTU: recorre y compara las DOS cadenas de huellas del negocio entero y lleva una '
    + 'línea base congelada en docs/. Cualquier gate que emita una factura mientras corre le cambia '
-   + 'el suelo. Se corre a mano, y solo.'],
+   + 'el suelo, así que NO va en el barrido COMPLETO. ⚙️ 24 ago 2026: SÍ va en el RÁPIDO, que se '
+   + 'lanza a mano y a solas — que es justo la condición que necesita.'],
 ]);
 
 // El censo. Recibe la lista de ficheros de `scripts/` (quien llama tiene el fs) y NO lee disco por
