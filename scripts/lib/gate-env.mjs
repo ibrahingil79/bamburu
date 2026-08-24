@@ -227,7 +227,14 @@ export async function autoAceptarPaneles(page) {
     // Y EL REGISTRO DE LO ACEPTADO, que es el equivalente de `dialogs.push(d.message())`: varios
     // gates afirman el TEXTO de la advertencia («repite el exceso de 2 unidades»), y ese texto ahora
     // vive en el panel, no en una ventanita. Se guarda antes de pulsar, porque después desaparece.
-    window.__pdVistos = [];
+    //
+    // VA EN `sessionStorage`, NO EN UNA VARIABLE. Aceptar un panel suele NAVEGAR (confirmar una
+    // recepción se va a su ficha), y con la navegación el contexto se rehace y una variable vuelve a
+    // nacer vacía: el gate leía cero y cantaba un fallo que no existía. `sessionStorage` sobrevive a
+    // la navegación en la misma pestaña. Envuelto en try/catch porque puede no estar disponible.
+    const LEE = () => { try { return JSON.parse(sessionStorage.getItem('__pdVistos') || '[]'); } catch { return []; } };
+    const GUARDA = a => { try { sessionStorage.setItem('__pdVistos', JSON.stringify(a)); } catch {} };
+    window.__pdVistos = LEE();
     const rellena = (ov, v) => {
       const campos = [...ov.querySelectorAll('input, select, textarea')];
       if (!campos.length) return true;
@@ -252,7 +259,10 @@ export async function autoAceptarPaneles(page) {
         const conCampos = !!ov.querySelector('input, select, textarea');
         const v = conCampos ? window.__pdCola.shift() : undefined;
         if (!rellena(ov, v)) { if (conCampos && v !== undefined) window.__pdCola.unshift(v); continue; }
-        window.__pdVistos.push((ov.innerText || '').replace(/\s+/g, ' ').trim());
+        const vistos = LEE();
+        vistos.push((ov.innerText || '').replace(/\s+/g, ' ').trim());
+        GUARDA(vistos);
+        window.__pdVistos = vistos;
         ok.click();
         return;
       }
