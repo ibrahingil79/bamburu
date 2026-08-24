@@ -267,7 +267,10 @@ if (inexistentes.length) {
 // nada. (El formato "N comprobaciones" se añadió el 20 ago 2026 al meter las tres de la puerta
 // pública: `test-reserva-publica` y `test-neto-cero-reserva` salían SOSPECHOSOS pasando 133/133 y
 // 21/21. El listón no baja: sigue exigiendo que el gate DIGA cuántas aserciones corrió.)
-const RESUMEN = /\d+\s+OK\b|\bOK[,:]\s*\d+|\bPASS:\s*\d+|\d+\s+comprobaciones\b/i;
+// (24 ago 2026: se añade "RESULTADO: N \u2713" — es el formato de los doce gates de la noche del
+// 23 y el runner no sabía leerlo: los doce habrían salido SOSPECHOSOS pasando todo. Sigue
+// exigiendo lo mismo: que el gate DIGA cuántas aserciones corrió.)
+const RESUMEN = /\d+\s+OK\b|\bOK[,:]\s*\d+|\bPASS:\s*\d+|\d+\s+comprobaciones\b|\d+\s*\u2713/i;
 
 function correr(gate) {
   return new Promise(resolve => {

@@ -89,8 +89,16 @@ try {
     }
   }
   ok(literales.length === 0, `ninguna llamada viva teclea el literal${literales.length ? ':\n      ' + literales.join('\n      ') : ''}`);
-  ok([...dinamicos].every(d => /^ENTITY\.|entityForTable\(|TRANSFER_ENTITY|entity_type/.test(d)),
+  // `TIPOS[...].entidad` (el importador de CSV) es una indirección: la llamada no teclea el literal,
+  // pero el MAPA sí podía. Se admite la indirección Y se comprueba aparte que el mapa lee del
+  // catálogo — si no, la indirección sería un agujero con buena cara. (Rojo desde la ficha H, 23 ago
+  // 2026: el mapa tenía 'client'/'product'/'supplier' escritos a mano.)
+  ok([...dinamicos].every(d => /^ENTITY\.|entityForTable\(|TRANSFER_ENTITY|entity_type|^TIPOS\[[^\]]+\]\.entidad$/.test(d)),
     `las expresiones usadas son del catálogo: ${[...dinamicos].join(' · ')}`);
+  const impSrc = readFileSync('modules/erp/importador.js', 'utf8');
+  const entidadesTipos = [...impSrc.matchAll(/entidad:\s*([^,}\n]+)/g)].map(m => m[1].trim());
+  ok(entidadesTipos.length > 0 && entidadesTipos.every(e => e.startsWith('ENTITY.')),
+    `y el mapa TIPOS del importador también: ${entidadesTipos.join(' · ') || '(no encontrado)'}`);
   const disaSrc = readFileSync('modules/disa/index.js', 'utf8');
   ok(/from '\.\.\/\.\.\/core\/activity-entities\.js'/.test(disaSrc), 'DISA importa el catálogo');
   ok(/from '\.\/activity-entities\.js'/.test(readFileSync('core/auth.js', 'utf8')), 'core/auth.js importa el catálogo');

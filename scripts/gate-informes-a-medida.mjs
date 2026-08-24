@@ -106,12 +106,20 @@ try {
   console.log('\n[1] D1+D4 · EL ÁREA DE AGENDA — cada medida contrastada contando a mano');
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   const areas = Object.keys(AREAS);
-  ok(areas.length === 6 && areas.includes('agenda'), 'el constructor tiene SEIS áreas y una es Agenda', areas.join(' · '));
+  // Eran seis; desde la noche del 23-24 ago 2026 son SIETE (entró «Catálogo», punto 9: los
+  // productos parados, que el área de Inventario no puede contestar porque su fila es un
+  // movimiento y un producto que nunca se movió no produce fila). Lo que este gate guarda es que
+  // Agenda siga estando y que el número no BAJE.
+  ok(areas.length >= 7 && areas.includes('agenda') && areas.includes('catalogo'),
+     'el constructor tiene sus áreas, con Agenda y Catálogo entre ellas', areas.join(' · '));
   const campos = camposPara(todo, 'agenda');
   const dims = Object.keys(campos.dimensiones);
-  ok(dims.length === 6, 'seis dimensiones', dims.join(', '));
-  for (const d of ['fecha', 'cliente', 'servicio', 'persona', 'puesto', 'estado'])
+  // Eran seis; la séptima («Quién anuló la cita») entró la noche del 23-24 ago con los cabos de
+  // agenda. Se comprueban por NOMBRE, que es lo que detecta una pérdida: un recuento a secas se
+  // queda verde si desaparece una y aparece otra.
+  for (const d of ['fecha', 'cliente', 'servicio', 'persona', 'puesto', 'estado', 'anulada_por'])
     ok(dims.includes(d), '  dimensión «' + d + '»');
+  ok(dims.length >= 7, 'siete dimensiones o más en Agenda', dims.join(', '));
 
   // A MANO, por otro camino que el del constructor.
   const aMano = {

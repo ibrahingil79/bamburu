@@ -90,13 +90,24 @@ try {
   ok(cv.medidas.beneficio.etiqueta === 'Beneficio en euros', 'renombrada: «Beneficio en euros»', cv.medidas.beneficio.etiqueta);
   ok(cv.medidas.margenPct.etiqueta === 'Margen en %', 'renombrada: «Margen en %»', cv.medidas.margenPct.etiqueta);
   ok(!!cv.medidas.margenPct.ayuda, '  y su base no se pierde: va en la ayuda', cv.medidas.margenPct.ayuda);
-  // NADA SE PIERDE: mismas medidas y dimensiones que antes, más la de Clientes.
+  // NADA SE PIERDE, y se comprueba ÁREA POR ÁREA en vez de con dos totales. Un total suelto tiene dos
+  // defectos: envejece a cada entrega (esta línea ya iba rota de antes: pedía 31 medidas cuando eran
+  // 39) y, peor, se queda verde si un área pierde un campo y otra gana otro. El mínimo por área dice
+  // dónde está la pérdida. Los números son los medidos el 24 ago 2026; SUBIR es correcto, BAJAR no.
+  const MINIMO_POR_AREA = { ventas: [9, 8], compras: [4, 4], clientes: [6, 7], inventario: [5, 5],
+                            contabilidad: [3, 4], agenda: [7, 11], catalogo: [5, 6] };
+  const perdidas = [];
+  for (const [ak, [nd, nm]] of Object.entries(MINIMO_POR_AREA)) {
+    const a = AREAS[ak];
+    if (!a) { perdidas.push(ak + ': el área ENTERA ha desaparecido'); continue; }
+    const hd = Object.keys(a.dimensiones).length, hm = Object.keys(a.medidas).length;
+    if (hd < nd) perdidas.push(ak + ': ' + hd + ' dimensiones, eran ' + nd);
+    if (hm < nm) perdidas.push(ak + ': ' + hm + ' medidas, eran ' + nm);
+  }
   const totalDims = Object.values(AREAS).reduce((n, a) => n + Object.keys(a.dimensiones).length, 0);
   const totalMeds = Object.values(AREAS).reduce((n, a) => n + Object.keys(a.medidas).length, 0);
-  // NADA SE PIERDE, contado antes y después: antes 32 dimensiones y 31 medidas; ahora 33 y 31.
-  // La única diferencia es la dimensión «Cliente» que faltaba. Ni una medida menos.
-  ok(totalDims === 33 && totalMeds === 31, 'el catálogo entero sigue ahí: 32 dimensiones + la nueva = 33 · 31 medidas, las mismas',
-     totalDims + ' dims · ' + totalMeds + ' medidas');
+  ok(perdidas.length === 0, 'el catálogo entero sigue ahí, área por área',
+     perdidas.join(' · ') || totalDims + ' dimensiones · ' + totalMeds + ' medidas en ' + Object.keys(AREAS).length + ' áreas');
 
   browser = await puppeteer.launch(launchOpts());
 

@@ -18,6 +18,7 @@ import { adminLayout } from '../layout.js';
 import { escHtml } from '../../../core/escape.js';
 import { safeError } from '../../../core/errors.js';
 import { logActivity } from '../../../core/auth.js';
+import { ENTITY } from '../../../core/activity-entities.js';
 import { fichar, corregir, estadoDe, jornadaDe, resumen, quienEstaDentro, historialDe,
          horasTexto, TIPO_LABEL } from '../fichaje.js';
 import { ahoraLocal } from '../citas-engine.js';
@@ -44,7 +45,7 @@ export function createFichajeRoutes(db) {
       const r = fichar(db, { userId: de, tipo: b.tipo, hora: b.hora || null, fecha: b.fecha || null,
                              hechoPor: yo, nota: b.nota || '', origen: de === yo ? 'pantalla' : 'por otro' });
       logActivity(db, c.get('session'), 'Fichó ' + (TIPO_LABEL[b.tipo] || b.tipo).toLowerCase(),
-                  'fichaje', r.id, de === yo ? '' : 'por el usuario ' + de);
+                  ENTITY.FICHAJE, r.id, de === yo ? '' : 'por el usuario ' + de);
       return c.json(r);
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
@@ -54,7 +55,7 @@ export function createFichajeRoutes(db) {
       const b = await c.req.json();
       const r = corregir(db, { fichajeId: Number(b.id), hora: b.hora, motivo: b.motivo,
                                hechoPor: c.get('session')?.userId || null });
-      logActivity(db, c.get('session'), 'Corrigió un fichaje', 'fichaje', r.id, String(b.motivo || ''));
+      logActivity(db, c.get('session'), 'Corrigió un fichaje', ENTITY.FICHAJE, r.id, String(b.motivo || ''));
       return c.json(r);
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });

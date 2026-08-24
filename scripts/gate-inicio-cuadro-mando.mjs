@@ -214,14 +214,19 @@ try {
   // Se leen de la PANTALLA (el texto pintado) y se contrastan con lo que devuelve la pantalla de
   // origen POR OTRO CAMINO: el informe de ventas, la torre de Cobros, el informe de margen y el
   // informe de clientes. Si alguien cambia un motor y no el otro, esto cae.
+  // Las clases son las de la TARJETA ÚNICA (`.bf-card` / `.bf-k` / `.bf-v` / `.bf-s`). Antes eran
+  // `.cm-num*`, propias de esta pantalla; el punto 7 del encargo del 23-24 ago 2026 unificó los seis
+  // dialectos de tarjeta en uno solo y estas cuatro cifras pasaron a la tarjeta común. El contenido
+  // es el mismo, la sub-línea con la BASE incluida: lo que cambió es el nombre de la clase.
   const pintado = await page.evaluate(() => {
-    const cards = [...document.querySelectorAll('#cmNumeros .cm-num')];
+    const cards = [...document.querySelectorAll('#cmNumeros .bf-card')];
     const out = {};
     for (const c of cards) {
-      const l = c.querySelector('.cm-num-l').textContent.trim();
-      out[l] = { valor: c.querySelector('.cm-num-v').textContent.trim(),
-                 base: (c.querySelector('.cm-num-b') || {}).textContent || '',
-                 todo: c.textContent };
+      const k = c.querySelector('.bf-k');
+      if (!k) continue;
+      out[k.textContent.trim()] = { valor: (c.querySelector('.bf-v') || {}).textContent?.trim() || '',
+                                    base: (c.querySelector('.bf-s') || {}).textContent || '',
+                                    todo: c.textContent };
     }
     return out;
   });
@@ -422,10 +427,16 @@ try {
   // Puerta 1: la configuración del negocio. Se NAVEGA de verdad y se pulsa el enlace.
   await page.goto(P.base + '/admin/settings', { waitUntil: 'networkidle0' });
   await dormir(800);
+  // Se busca el enlace QUE ESTÁ EN UNA TARJETA de esta pantalla, no el primero del documento: desde
+  // la ficha B (23 ago 2026) el menú fijo tiene su propia entrada «Trae tus datos» a la misma ruta, y
+  // esa sale antes en el HTML. Cogiendo `a[0]` se leía el del menú, que no cuelga de ninguna
+  // `.card-body`, y la comprobación del texto fallaba por mirar donde no era.
   const enAjustes = await page.evaluate(() => {
-    const a = [...document.querySelectorAll('a[href="/admin/migracion"]')];
-    return { hay: a.length, texto: a.length ? a[0].textContent.trim() : '',
-             titulo: a.length ? (a[0].closest('.card-body') || {}).textContent || '' : '' };
+    const todos = [...document.querySelectorAll('a[href="/admin/migracion"]')];
+    const enTarjeta = todos.filter(x => x.closest('.card-body'));
+    const a = enTarjeta[0] || null;
+    return { hay: enTarjeta.length, texto: a ? a.textContent.trim() : '',
+             titulo: a ? a.closest('.card-body').textContent : '' };
   });
   ok(enAjustes.hay > 0, 'PUERTA 1: la configuración del negocio tiene su entrada a la migración', enAjustes.texto);
   ok(/equipo de Bamburu/.test(enAjustes.titulo),

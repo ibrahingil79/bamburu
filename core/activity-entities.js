@@ -65,6 +65,13 @@ export const ENTITY = {
   TIME_ENTRY:       'registro_tiempo',
   CITA:             'cita',
   RECURSO:          'recurso',
+
+  // Añadidas la noche del 23-24 ago 2026 con los puntos 11, 12 y 13. Se teclearon como literal
+  // en las rutas y `verify-actividad-etiquetas` lo cazó: es exactamente para lo que está.
+  PROMOCION:        'promocion',
+  BONO:             'bono',
+  FICHAJE:          'fichaje',
+  CRM_TAREA:        'crm_tarea',
 };
 
 // Tabla → entidad, para la vía GENÉRICA de DISA (`insert_record`/`update_record`/`delete_record`

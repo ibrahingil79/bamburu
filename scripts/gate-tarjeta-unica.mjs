@@ -47,7 +47,16 @@ for (const [tabla, ruta, label] of [
   ['delivery_notes', 'albaranes', 'ficha de albarán'], ['purchase_orders', 'purchase-orders', 'ficha de orden'],
   ['purchases', 'purchases', 'ficha de compra'], ['supplier_invoices', 'supplier-invoices', 'ficha de recibida'],
   ['supplier_returns', 'supplier-returns', 'ficha de devolución'],
-]) { const r = uno(`SELECT id FROM ${tabla} ORDER BY id DESC LIMIT 1`); if (r) meter(`/admin/${ruta}/${r.id}`, label); }
+]) {
+  // EL MÁS ANTIGUO, NO EL MÁS NUEVO. Con `ORDER BY id DESC` se cogía el último registro creado, que
+  // en un barrido es casi siempre de OTRO gate corriendo a la vez: para cuando esta pestaña navega,
+  // el otro ya lo ha limpiado y la ficha responde 404. Pasó el 24 ago 2026 con /admin/clients/704 y
+  // /admin/invoices/1302, y arrastró otras dos comprobaciones (sin ficha no hay tarjetas que contar).
+  // El registro más antiguo es del negocio de verdad y nadie lo borra por debajo.
+  const filtro = tabla === 'clients' ? ' WHERE active=1' : '';
+  const r = uno(`SELECT id FROM ${tabla}${filtro} ORDER BY id ASC LIMIT 1`);
+  if (r) meter(`/admin/${ruta}/${r.id}`, label);
+}
 
 // Lo que se mide dentro de cada pantalla.
 const MEDIR = () => {

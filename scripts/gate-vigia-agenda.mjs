@@ -240,11 +240,19 @@ try {
   ok(idxDeuda === -1 || idxHueco === -1 || idxDeuda < idxHueco,
      'dentro de ALTA, primero lo que tiene importe y después la agenda');
 
-  // El gráfico: no hay área de citas en el constructor y se DICE, no se calla.
+  // EL GRÁFICO. Hasta el 23 ago 2026 esta comprobación exigía lo contrario: que el aviso fuese SIN
+  // gráfico y con el cartel «el constructor no tiene un área de agenda». Ese día el área de Agenda
+  // entró en el constructor (ficha D · parte 1) y el cartel se retiró del producto, pero nadie tocó
+  // esta línea: el gate se quedó pidiendo un cartel que ya no existe y llevaba rojo desde entonces.
+  // Ahora comprueba lo que toca: que el hueco perdido lleva un gráfico DE VERDAD, del área de
+  // agenda, y sin ningún hueco que excusar.
   const conGap = lista.find(a => a.detector === 'hueco_perdido');
-  ok(conGap && conGap.grafico && conGap.grafico.gap && /área de agenda/i.test(conGap.grafico.gap),
-     'el aviso va sin gráfico y explica por qué (el constructor no tiene área de agenda)',
-     conGap && conGap.grafico && (conGap.grafico.gap || '').slice(0, 60));
+  const g = conGap && conGap.grafico;
+  ok(!!(g && g.receta && g.receta.area === 'agenda'),
+     'el hueco perdido lleva gráfico del área de agenda (ya no hay cartel que poner)',
+     g && g.receta ? g.receta.area + ' · ' + (g.receta.medidas || []).join(',') : '(sin receta)');
+  ok(!!(g && !g.gap),
+     'y no arrastra ningún «gap»: no queda nada que excusar', g ? (g.gap || 'sin gap') : '(sin gráfico)');
 
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   console.log('\n[6] PERMISOS — quien no ve la agenda, no ve estos avisos');

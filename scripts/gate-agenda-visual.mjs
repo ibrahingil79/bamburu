@@ -170,14 +170,22 @@ try {
              tercio: r ? Math.round(((r.top - rw.top) / rw.height) * 100) : null };
   });
   ok(sc.alto > sc.visible, 'con el día entero abierto, no cabe de una vez (hay que desplazar)', sc.alto + ' > ' + sc.visible);
-  ok(sc.top > 0, 'y al abrir NO se queda en 0', 'scrollTop=' + sc.top);
+  // EL MISMO RAZONAMIENTO QUE EL DEL TERCIO, POR EL OTRO EXTREMO. A primera hora del día del negocio
+  // no hay nada por encima que desplazar: el lienzo se topa con el principio y scrollTop es 0 porque
+  // es el único valor posible, no porque nadie haya desplazado. Con el listón fijo este gate era
+  // verde de día y rojo de madrugada (medido a las 01:39 del 24 ago 2026, con la línea al 11 %).
+  // Se exige desplazamiento cuando hay sitio arriba; cuando no, que la línea esté A LA VISTA.
+  const topeArriba = sc.tercio !== null && sc.tercio <= 34;
+  ok(sc.top > 0 || (topeArriba && sc.ahoraVisible),
+     'y al abrir NO se queda en 0 (salvo a primera hora, que no hay nada que subir)',
+     'scrollTop=' + sc.top + (sc.top === 0 ? ' · la línea de ahora va al ' + sc.tercio + '% y se ve' : ''));
   // EL TERCIO SOLO SE PUEDE CUMPLIR SI QUEDA DÍA POR DEBAJO. A última hora no hay nada más que
   // desplazar: el lienzo se topa con el final y la línea de ahora queda necesariamente más abajo del
   // tercio — el producto está haciendo lo único que puede hacer. Con el listón fijo, este gate era
   // verde de día y rojo de noche: medido al 52 % pasada la medianoche del negocio. Se exige el
   // tercio cuando hay sitio, y que la línea siga A LA VISTA cuando ya no lo hay.
   const topeAbajo = sc.top + sc.visible >= sc.alto - 4;
-  ok(sc.ahoraVisible && (topeAbajo || (sc.tercio >= 20 && sc.tercio <= 45)),
+  ok(sc.ahoraVisible && (topeAbajo || sc.top === 0 || (sc.tercio >= 20 && sc.tercio <= 45)),
      'la hora actual queda a un tercio de lo que se ve, no pegada al borde'
        + (topeAbajo ? ' (o a la vista, si ya no queda día que desplazar)' : ''),
      'al ' + sc.tercio + '% del alto visible' + (topeAbajo ? ' · el lienzo ya está al tope' : ''));

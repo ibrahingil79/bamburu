@@ -716,7 +716,7 @@ export function createCitasRoutes(db) {
     try {
       const b = await c.req.json();
       const r = crearSerieSvc(db, b, { created_by: c.get('session')?.userId || null });
-      logActivity(db, c.get('session'), 'Creó una serie de citas', 'cita', r.creadas[0]?.id || null,
+      logActivity(db, c.get('session'), 'Creó una serie de citas', ENTITY.CITA, r.creadas[0]?.id || null,
         r.creadas.length + ' de ' + r.pedidas + ' sesiones');
       return c.json(r);
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
@@ -1134,6 +1134,14 @@ function paginaCita(db, cita, token) {
       .pol b{display:block;margin-bottom:.3rem;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:#64748b}
       select,input[type=date]{width:100%;box-sizing:border-box;padding:.75rem;border-radius:10px;border:1px solid #cbd5e1;font-size:1rem;background:#fff;color:#0f172a;margin-top:.5rem}
       @media (prefers-color-scheme:dark){select,input[type=date]{background:#0f172a;color:#e2e8f0;border-color:#334155}}
+      /* Panel de confirmación DENTRO de la página. Esta página no carga el layout del panel, así
+         que no tiene window.confirmarEnPagina: si se la llama, el botón muere en silencio. Pasó.
+         Ver gate-reserva-publica-pantalla. */
+      #cnf{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;padding:1rem;z-index:50}
+      #cnf.on{display:flex}
+      #cnfCaja{background:#fff;color:#0f172a;border-radius:16px;padding:1.25rem;max-width:380px;width:100%;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+      @media (prefers-color-scheme:dark){#cnfCaja{background:#1e293b;color:#e2e8f0}}
+      #cnfCaja h2{font-size:1.05rem;margin:0 0 .4rem}
     </style></head>
     <body><div class="wrap">
       <h1>Tu cita en ${E(aj.company_name)}</h1>
@@ -1163,15 +1171,38 @@ function paginaCita(db, cita, token) {
         <button class="btn ok" onclick="guardarCambio()">Guardar el cambio</button>
       </div>` : ''}
       <div id="msg"></div>
+      <div id="cnf" role="dialog" aria-modal="true" aria-labelledby="cnfT"><div id="cnfCaja">
+        <h2 id="cnfT"></h2><div class="muted" id="cnfX"></div>
+        <button class="btn no" id="cnfSi"></button>
+        <button class="btn sec" id="cnfNo">No, dejarlo</button>
+      </div></div>
       <script>
         var TOKEN = ${JSON.stringify(token)};
+        // Confirmar sin ventanita del navegador y SIN depender del layout del panel, que aquí no
+        // existe. Devuelve una promesa con true/false, igual que window.confirmarEnPagina.
+        function confirmarAqui(o){
+          return new Promise(function(resolve){
+            var ov=document.getElementById('cnf');
+            document.getElementById('cnfT').textContent=o.titulo||'¿Seguro?';
+            document.getElementById('cnfX').textContent=o.texto||'';
+            var si=document.getElementById('cnfSi'), no=document.getElementById('cnfNo');
+            si.textContent=o.aceptar||'Sí, adelante';
+            ov.classList.add('on'); si.focus();
+            function fin(v){ ov.classList.remove('on'); si.onclick=null; no.onclick=null;
+              ov.onclick=null; document.onkeydown=null; resolve(v); }
+            si.onclick=function(){ fin(true); };
+            no.onclick=function(){ fin(false); };
+            ov.onclick=function(e){ if(e.target===ov) fin(false); };
+            document.onkeydown=function(e){ if(e.key==='Escape') fin(false); };
+          });
+        }
         function pinta(color, fondo, texto, estado){
           var msg = document.getElementById('msg');
           msg.style.background=fondo; msg.style.color=color; msg.textContent=texto; msg.style.display='block';
           if(estado) document.getElementById('estado').textContent=estado;
         }
         async function accion(a){
-          if(a==='avisar' && !await window.confirmarEnPagina({titulo:'Avisar de que no puedes venir',texto:'Se liberará tu hueco para otra persona.',aceptar:'Sí, avisar'})) return;
+          if(a==='avisar' && !await confirmarAqui({titulo:'Avisar de que no puedes venir',texto:'Se liberará tu hueco para otra persona.',aceptar:'Sí, avisar'})) return;
           try{
             var res = await fetch('/cita/'+TOKEN+'/'+a,{method:'POST'});
             var d = await res.json();
@@ -1212,7 +1243,7 @@ function paginaCita(db, cita, token) {
           }catch(e){ alert(e.message); }
         }
         async function anular(){
-          if(!await window.confirmarEnPagina({titulo:'Anular tu cita',texto:'El hueco vuelve a quedar libre. Si te arrepientes, tendrás que pedir cita otra vez.',aceptar:'Sí, anularla'})) return;
+          if(!await confirmarAqui({titulo:'Anular tu cita',texto:'El hueco vuelve a quedar libre. Si te arrepientes, tendrás que pedir cita otra vez.',aceptar:'Sí, anularla'})) return;
           try{
             var r = await fetch('/cita/'+TOKEN+'/anular',{method:'POST'});
             var d = await r.json();

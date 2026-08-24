@@ -16,6 +16,7 @@ import { adminLayout } from '../layout.js';
 import { escHtml } from '../../../core/escape.js';
 import { safeError } from '../../../core/errors.js';
 import { logActivity } from '../../../core/auth.js';
+import { ENTITY } from '../../../core/activity-entities.js';
 import {
   listarPromociones, getPromocion, guardarPromocion, archivarPromocion, promocionVigente,
   bonosDe, crearBono, consumirBono, deshacerConsumo, consumosDe, proponer,
@@ -49,14 +50,14 @@ export function createDescuentosRoutes(db) {
     try {
       const b = await c.req.json();
       const r = guardarPromocion(db, b);
-      logActivity(db, c.get('session'), b.id ? 'Editó promoción' : 'Creó promoción', 'promocion', r.id, String(b.nombre || ''));
+      logActivity(db, c.get('session'), b.id ? 'Editó promoción' : 'Creó promoción', ENTITY.PROMOCION, r.id, String(b.nombre || ''));
       return c.json(r);
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
   api.delete('/promociones/:id', requirePerm('invoices.edit'), c => {
     try {
       const r = archivarPromocion(db, Number(c.req.param('id')));
-      logActivity(db, c.get('session'), 'Apagó promoción', 'promocion', r.id, '');
+      logActivity(db, c.get('session'), 'Apagó promoción', ENTITY.PROMOCION, r.id, '');
       return c.json(r);
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
@@ -67,7 +68,7 @@ export function createDescuentosRoutes(db) {
     try {
       const b = await c.req.json();
       const r = crearBono(db, b);
-      logActivity(db, c.get('session'), 'Creó bono', 'bono', r.id, String(b.nombre || ''));
+      logActivity(db, c.get('session'), 'Creó bono', ENTITY.BONO, r.id, String(b.nombre || ''));
       return c.json(r);
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
@@ -75,7 +76,7 @@ export function createDescuentosRoutes(db) {
     try {
       const b = await c.req.json().catch(() => ({}));
       const r = consumirBono(db, Number(c.req.param('id')), { ...b, user_id: c.get('session')?.userId || null });
-      logActivity(db, c.get('session'), 'Usó un bono', 'bono', r.id, 'consumo de ' + (b.sesiones || 1) + ' sesión(es)');
+      logActivity(db, c.get('session'), 'Usó un bono', ENTITY.BONO, r.id, 'consumo de ' + (b.sesiones || 1) + ' sesión(es)');
       return c.json(r);
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });

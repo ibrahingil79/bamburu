@@ -73,11 +73,20 @@ export function computeTotals(lines, irpfRate = 0) {
     taxByRate[key].amount += tax;
   }
 
-  // UN DOCUMENTO NO PUEDE SALIR EN NEGATIVO. Esta es la guarda que sustituye al `nonnegative()` de
-  // la línea (punto 11): una línea negativa suelta es un DESCUENTO y es legítima; una factura cuyo
-  // total se va por debajo de cero no lo es — para eso está la rectificativa, que tiene su propio
-  // camino y su propio esquema. Se comprueba aquí, en el único sitio por el que pasan todas.
-  if (subtotal < -0.0049) {
+  // UN DOCUMENTO CON LÍNEAS POSITIVAS NO PUEDE SALIR EN NEGATIVO. Esta es la guarda que sustituye al
+  // `nonnegative()` de la línea (punto 11): una línea negativa suelta es un DESCUENTO y es legítima;
+  // una VENTA cuyos descuentos se comen la base y la pasan de cero no lo es — para eso está la
+  // rectificativa, que tiene su propio camino y su propio esquema.
+  //
+  // PERO SOLO CUANDO HAY ALGO QUE DESCONTAR. Un documento cuyas líneas son TODAS negativas es un
+  // ABONO —una devolución— y en este producto se escribe exactamente así: una factura con las
+  // cantidades en negativo (ver `verify-margen`, paso [7], y el neteo de coste e ingreso del informe
+  // de margen). La primera versión de esta guarda miraba solo el signo del subtotal y dejó los
+  // abonos sin poder emitirse: una función que existía desde antes y que se perdió sin que nadie la
+  // pidiera. La condición correcta es la MEZCLA: hay base positiva y aun así el total se va por
+  // debajo de cero. Se comprueba aquí, en el único sitio por el que pasan todas.
+  const hayPositivas = lines.some(l => r2((Number(l.quantity) || 0) * (Number(l.unit_price) || 0)) > 0);
+  if (hayPositivas && subtotal < -0.0049) {
     throw new Error('Los descuentos suman más que las líneas: el documento saldría en negativo. '
       + 'Si lo que quieres es devolver dinero, se hace con una rectificativa.');
   }

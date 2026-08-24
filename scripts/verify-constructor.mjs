@@ -297,7 +297,20 @@ try {
   const antes = listarPaneles(db, otro).length;
   runMigrations(db); runMigrations(db);
   check('re-ejecutar runMigrations no toca los paneles', listarPaneles(db, otro).length === antes);
-  check('el catálogo tiene las 9 dimensiones y las 6 medidas', Object.keys(DIMENSIONES).length === 9 && Object.keys(MEDIDAS).length === 6);
+  // Antes esto era «9 dimensiones y 6 medidas»: dos números sueltos que envejecieron mal — las
+  // medidas ya eran 8 y el gate llevaba rojo sin decir cuál sobraba. Ahora compara la LISTA: si
+  // aparece o desaparece un campo, el fallo dice su nombre.
+  const DIMS_ESPERADAS = ['fecha', 'cliente', 'tipo_cliente', 'provincia', 'forma_pago', 'producto',
+                          'categoria', 'responsable', 'serie'];
+  const MEDS_ESPERADAS = ['base', 'unidades', 'lineas', 'coste', 'beneficio', 'margenPct', 'facturas',
+                          'ticket_medio'];
+  const faltan = (esp, hay) => esp.filter(k => !hay.includes(k)).map(k => '−' + k)
+                       .concat(hay.filter(k => !esp.includes(k)).map(k => '+' + k));
+  const difD = faltan(DIMS_ESPERADAS, Object.keys(DIMENSIONES));
+  const difM = faltan(MEDS_ESPERADAS, Object.keys(MEDIDAS));
+  check('el catálogo de Ventas tiene sus 9 dimensiones y sus 8 medidas, una a una',
+        difD.length === 0 && difM.length === 0,
+        difD.concat(difM).join(' ') || Object.keys(DIMENSIONES).length + ' dims · ' + Object.keys(MEDIDAS).length + ' medidas');
   check('ventasResumen sigue intacto', near(ventasResumen(db).base, 850));
 
 } catch (e) {

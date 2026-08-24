@@ -1441,7 +1441,11 @@ export function createAnalyticsRoutes(db, cfg = {}) {
           }
           else if(clave==='rentabilidad'){ pintarMargen(await api('GET','/api/erp/analytics/margen').catch(()=>null)); }
           else if(clave==='responsable'){ respCache=await api('GET','/api/erp/analytics/responsable').catch(()=>null); llenarSelResponsable(); pintarResponsable(); }
-          else if(clave==='por-area'){ infCache=await api('GET','/api/erp/analytics/informes').catch(()=>null); pintarInformes(); }
+          // engancharTabs() estaba DEFINIDA Y SIN LLAMAR: las pestañas «Compras» y «Clientes» y el
+          // selector de periodo no tenían ningún manejador, así que pulsarlas no hacía nada — ni
+          // siquiera se marcaban como activas. Se enganchan aquí, cuando la sección se carga (una
+          // sola vez: cargarInforme no repite). Encontrado el 24 ago 2026 con gate-margen-pantalla.
+          else if(clave==='por-area'){ infCache=await api('GET','/api/erp/analytics/informes').catch(()=>null); engancharTabs(); pintarInformes(); }
           else if(clave==='plan'){ planCache=await api('GET','/api/erp/analytics/plan').catch(()=>null); pintarPlan(); }
           else if(clave==='comparar'){
             cmpComparables=await api('GET','/api/erp/analytics/constructor/comparables').catch(()=>[]);

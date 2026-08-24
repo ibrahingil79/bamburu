@@ -21,6 +21,15 @@ import bcrypt from 'bcrypt';
 // setExtraHTTPHeaders: Chromium lo rechaza con ERR_INVALID_ARGUMENT.)
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
 const HOST = 'desarrollo-bamburu.localhost';
+// Desde la ficha D-ter los informes de Analítica se cargan al DESPLEGAR su fila del índice, no al
+// entrar en la pantalla. Abrir la sección y esperar a que tenga contenido es parte de mirarla.
+async function abrirSeccion(page, clave, selectorConDatos) {
+  await page.waitForSelector('[data-inf="' + clave + '"]', { timeout: 10000 });
+  await page.click('[data-inf="' + clave + '"]');
+  await page.waitForSelector(selectorConDatos, { timeout: 15000 }).catch(() => {});
+  await new Promise(r => setTimeout(r, 600));
+}
+
 let pass = 0, fail = 0;
 const ok = (c, m, extra = '') => { if (c) { pass++; console.log('  ✓ ' + m + (extra ? ' — ' + extra : '')); } else { fail++; console.error('  ✗ FALLO: ' + m + (extra ? ' — ' + extra : '')); } };
 
@@ -63,11 +72,23 @@ try {
   console.log('\n[1] LA PANTALLA PINTA LA RENTABILIDAD');
   const r = await page.goto(BASE + '/admin/analytics', { waitUntil: 'networkidle2' });
   ok(r.status() === 200, 'Analítica responde 200', String(r.status()));
-  await page.waitForSelector('#mgBody tr', { timeout: 10000 }).catch(() => {});
+  // HAY QUE ABRIR LA SECCIÓN. Desde la ficha D-ter (23 ago 2026) los informes de esta pantalla se
+  // cargan al desplegarlos, no al entrar: `cargarInforme('rentabilidad')` solo corre cuando alguien
+  // pulsa su fila del índice. Este gate seguía midiendo la pantalla recién cargada, así que leía el
+  // esqueleto — y encima daba VERDE en las dos primeras líneas, porque comparaba contra el guion
+  // corto '-' y la pantalla pinta la raya larga '—'. Dos maneras de mentir a la vez: no cargar lo
+  // que se mide, y aceptar el hueco como si fuera una cifra.
+  await page.waitForSelector('[data-inf="rentabilidad"]', { timeout: 10000 });
+  await page.click('[data-inf="rentabilidad"]');
+  await page.waitForFunction(() => {
+    const e = document.getElementById('mBen');
+    return e && e.textContent.trim() !== '—' && e.textContent.trim() !== '-' && e.textContent.trim() !== '';
+  }, { timeout: 15000 }).catch(() => {});
+  const vacio = v => !v || v === '-' || v === '—' || v === '';
   const ben = await page.$eval('#mBen', e => e.textContent.trim()).catch(() => null);
   const pct = await page.$eval('#mPct', e => e.textContent.trim()).catch(() => null);
-  ok(ben && ben !== '-', 'el beneficio se pinta', ben);
-  ok(pct && pct !== '-', 'el margen % se pinta', pct);
+  ok(!vacio(ben), 'el beneficio se pinta', ben);
+  ok(!vacio(pct), 'el margen % se pinta', pct);
   ok(errores.length === 0, '0 errores JS', errores.join(' | '));
 
   console.log('\n[2] EL AVISO DE "SIN COSTE REGISTRADO" — lo que impide leer mal la cifra');
@@ -152,7 +173,7 @@ try {
 
   console.log('\n[6] CRM — POR RESPONSABLE: la tarjeta pinta y el candado cruza áreas');
   await page.goto(BASE + '/admin/analytics', { waitUntil: 'networkidle2' });
-  await page.waitForSelector('#respBody tr', { timeout: 10000 }).catch(() => {});
+  await abrirSeccion(page, 'responsable', '#respBody tr td');
   const resp = await page.$$eval('#respBody tr', trs => trs.map(t => [...t.querySelectorAll('td')].map(d => d.textContent.trim())));
   ok(resp.length > 0, 'la tarjeta "Por responsable" pinta filas', resp.length + ' filas');
   ok(resp.some(f => /Sin asignar/i.test(f[0] || '')), '"Sin asignar" aparece como una fila más (no se esconde)');
@@ -175,24 +196,28 @@ try {
 
   console.log('\n[8] PASO 3 — INFORMES POR ÁREA: las tres pestañas pintan');
   await page.goto(BASE + '/admin/analytics', { waitUntil: 'networkidle2' });
-  await page.waitForSelector('#infBody table', { timeout: 10000 }).catch(() => {});
+  await abrirSeccion(page, 'por-area', '#infBody table');
   const tabs = await page.$$eval('#infTabs .tab', ts => ts.map(t => t.textContent.trim()));
   ok(tabs.join(',') === 'Ventas,Compras,Clientes', 'las tres pestañas existen', tabs.join(' · '));
   const ventasTablas = await page.$$eval('#infBody table', ts => ts.length);
   ok(ventasTablas >= 4, 'Ventas trae sus 4 informes', ventasTablas + ' tablas');
   // Se PULSA: que una pestaña exista no demuestra que pinte.
+  // 300 ms no bastan: la pestaña pide sus datos al pulsarla. Se espera a que el texto CAMBIE.
   await page.click('#infTabs .tab[data-area="compras"]');
-  await new Promise(r => setTimeout(r, 300));
+  await page.waitForFunction(() => /Gasto por categoría/i.test(document.getElementById('infBody').textContent),
+                             { timeout: 12000 }).catch(() => {});
   const comprasTxt = await page.$eval('#infBody', e => e.textContent);
   ok(/Gasto por categoría/i.test(comprasTxt), 'al pulsar Compras, pinta sus informes');
   ok(/Abono a tu favor|Vencida|Aún no vencida/i.test(comprasTxt), 'y los tramos llevan su etiqueta en cristiano');
   await page.click('#infTabs .tab[data-area="clientes"]');
-  await new Promise(r => setTimeout(r, 300));
+  await page.waitForFunction(() => /dormidos/i.test(document.getElementById('infBody').textContent),
+                             { timeout: 12000 }).catch(() => {});
   const cliTxt = await page.$eval('#infBody', e => e.textContent);
   ok(/dormidos/i.test(cliTxt) && /Ranking/i.test(cliTxt), 'al pulsar Clientes, pinta los suyos');
   ok(errores.length === 0, '0 errores JS tras pulsar las tres', errores.join(' | '));
 
   console.log('\n[9] PASO 3 — PLAN FINANCIERO: la pantalla y su candado');
+  await abrirSeccion(page, 'plan', '#planBody');
   const plan = await page.evaluate(() => ({
     tabla: !!document.getElementById('planBody'),
     botonFijar: !!document.getElementById('btnMeta'),
@@ -219,8 +244,15 @@ try {
     lienzo: !!document.getElementById('cChart'),
   }));
   ok(cons.dims.length === 9, 'ofrece las 9 dimensiones en cristiano', cons.dims.join(' · '));
-  ok(cons.meds.length === 6, 'y las 6 medidas', cons.meds.join(' · '));
-  ok(cons.tipos.join(',') === 'barras,lineas,tarta,tabla', 'los 4 tipos de gráfico', cons.tipos.join(','));
+  // Eran 6 y hoy son 8 (Nº de facturas y Ticket medio entraron después). Se exige que estén LAS QUE
+  // importan, por nombre: un recuento congelado envejece a cada entrega y no dice qué falta.
+  for (const m of ['Facturado (sin IVA)', 'Coste', 'Beneficio en euros', 'Margen en %'])
+    ok(cons.meds.includes(m), '  la medida «' + m + '» está', cons.meds.join(' · '));
+  // Los cuatro DIBUJOS más las dos formas de la frase («lo que mejor se lea» y «un número»), que se
+  // añadieron a la lista válida el 24 ago 2026 — sin ellas no se podía guardar un informe recién
+  // creado. Se comprueba que estén los cuatro de siempre; que haya más no es una pérdida.
+  for (const t of ['barras', 'lineas', 'tarta', 'tabla'])
+    ok(cons.tipos.includes(t), '  el tipo de gráfico «' + t + '» sigue ahí', cons.tipos.join(','));
   ok(cons.lienzo, 'y el gráfico se dibuja');
   // Se CAMBIA el cruce de verdad: que el desplegable exista no demuestra que redibuje.
   await page.select('#cDim', 'producto');
@@ -230,8 +262,39 @@ try {
   ok(avisoCons, 'al pedir margen, sale el aviso de "sin coste"');
   await page.select('#cTipo', 'tabla');
   await new Promise(r => setTimeout(r, 700));
-  const tabla = await page.$eval('#cTablaWrap', e => e.style.display !== 'none' && e.textContent).catch(() => '');
-  ok(!!tabla && /—/.test(tabla), 'en tabla, lo que no tiene coste se pinta "—", no 0 ni 100%');
+  // LO QUE SE PUEDE PROBAR AQUÍ, Y LO QUE NO. Esto exigía ver una raya «—» en la tabla, es decir un
+  // grupo SIN NINGUNA línea con coste. En este negocio no existe: todos los grupos tienen al menos
+  // una línea costeada (medido el 24 ago 2026, con las ocho dimensiones y el histórico entero: cero
+  // huecos), y el gate no puede fabricar uno porque emitir una factura aquí la mete en la cadena de
+  // VERI*FACTU y no se puede quitar. Era una precondición que el gate no posee — la clase de rojo
+  // que no dice nada del producto.
+  //
+  // Se prueba lo mismo por el lado que SÍ se sostiene siempre: que lo PINTADO diga exactamente lo
+  // que dice el motor. Cada fila con número se pinta con número; cada hueco del motor se pinta «—»
+  // y nunca 0 ni 100 %. Si algún día hay un hueco, esta comprobación lo cubre sin tocarla. El
+  // comportamiento del motor con huecos lo prueba `verify-margen` (paso [6]), y la tabla de arriba
+  // de esta misma pantalla ya enseña sus filas «sin coste» en el paso [3].
+  const cuadre = await page.evaluate(async () => {
+    const r = await fetch('/api/erp/analytics/constructor/cruzar', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': window.CSRF_TOKEN },
+      body: JSON.stringify({ area: 'ventas', dimension: 'producto', medidas: ['beneficio'], limit: 999 }) });
+    const j = await r.json();
+    const pintadas = [...document.querySelectorAll('#cTablaWrap tbody tr')]
+      .map(t => [...t.querySelectorAll('td')].map(d => d.textContent.trim()));
+    const huecosMotor = (j.filas || []).filter(f => f.beneficio == null).length;
+    const rayasPintadas = pintadas.filter(f => f[1] === '—').length;
+    const cerosFalsos = pintadas.filter((f, i) => (j.filas || [])[i] &&
+      (j.filas || [])[i].beneficio == null && /^0,00|^100,0/.test(f[1] || '')).length;
+    return { filasMotor: (j.filas || []).length, filasPintadas: pintadas.length,
+             huecosMotor, rayasPintadas, cerosFalsos };
+  });
+  ok(cuadre.filasPintadas > 0 && cuadre.filasPintadas === cuadre.filasMotor,
+     'la tabla pinta EXACTAMENTE las filas que da el motor',
+     cuadre.filasPintadas + ' pintadas · ' + cuadre.filasMotor + ' del motor');
+  ok(cuadre.rayasPintadas === cuadre.huecosMotor && cuadre.cerosFalsos === 0,
+     'y cada hueco del motor se pinta "—", nunca 0 ni 100 %',
+     cuadre.huecosMotor + ' huecos · ' + cuadre.rayasPintadas + ' rayas · ' + cuadre.cerosFalsos + ' ceros falsos'
+     + (cuadre.huecosMotor === 0 ? ' (hoy este negocio no tiene ningún grupo sin coste)' : ''));
   // El selector de agrupación solo tiene sentido en fecha.
   const perOculto = await page.$eval('#cPeriodoWrap', e => e.style.display === 'none');
   ok(perOculto, 'el "agrupado por" se oculta cuando no cruzas por fecha', 'enseñarlo sugeriría que hace algo');
@@ -279,7 +342,10 @@ try {
   await page.goto(BASE + '/admin/analytics', { waitUntil: 'networkidle2' });
   await page.waitForSelector('#cArea option', { timeout: 10000 }).catch(() => {});
   const areas = await page.$$eval('#cArea option', os => os.map(o => o.value));
-  ok(areas.join(',') === 'ventas,compras,clientes,inventario,contabilidad', 'el owner ve las 5 áreas', areas.join(' · '));
+  // Eran cinco; hoy son siete (Agenda el 23 ago, Catálogo el 24). Se exige que NO FALTE ninguna de
+  // las cinco de siempre; que aparezcan más es lo esperado de cada entrega.
+  const faltan = ['ventas', 'compras', 'clientes', 'inventario', 'contabilidad'].filter(a => !areas.includes(a));
+  ok(faltan.length === 0, 'el owner no ha perdido ninguna área', faltan.join(', ') || areas.join(' · '));
   // Cambiar a Compras debe recargar SUS dimensiones (proveedor no está en ventas).
   await page.select('#cArea', 'compras');
   await new Promise(r => setTimeout(r, 800));
@@ -317,18 +383,22 @@ try {
 
   console.log('\n[15] 4b · CÁLCULO PROPIO en la pantalla');
   await page.goto(BASE + '/admin/analytics', { waitUntil: 'networkidle2' });
-  await page.waitForSelector('#cCalcOn', { timeout: 10000 }).catch(() => {});
+  // LA CAJA DE FÓRMULAS YA NO EXISTE EN LA PANTALLA. La ficha D-ter (23 ago 2026) la retiró a
+  // propósito —«nunca se teclea una fórmula»— y puso en su sitio «Mis medidas»: se elige una
+  // operación y dos cifras de las de arriba. Este paso seguía buscando `#cCalcOn` y reventaba el
+  // gate entero con una excepción, dejando sin correr todo lo que venía detrás. Se comprueba lo que
+  // HAY (el bloque de Mis medidas) y se mantienen las dos comprobaciones del SERVIDOR, que es donde
+  // sigue viviendo el cálculo y donde importa que la inyección se corte.
+  await page.waitForSelector('#cMisMedidas', { timeout: 10000 }).catch(() => {});
   await page.select('#cArea', 'ventas');
-  await new Promise(r => setTimeout(r, 500));
-  await page.click('#cCalcOn');
-  await new Promise(r => setTimeout(r, 300));
-  const formVisible = await page.$eval('#cFormula', e => e.style.display !== 'none');
-  ok(formVisible, 'al marcar "Cálculo propio" aparece el campo de fórmula');
-  const ayuda = await page.$eval('#cFormulaAyuda', e => e.textContent);
-  ok(/base|beneficio/.test(ayuda), 'y una ayuda con las medidas disponibles', ayuda.slice(0, 50));
-  await page.type('#cFormula', 'beneficio / base * 100');
-  await new Promise(r => setTimeout(r, 900));
-  ok(errores.length === 0, '0 errores JS al escribir la fórmula', errores.join(' | '));
+  await new Promise(r => setTimeout(r, 700));
+  const mis = await page.evaluate(() => {
+    const c = document.getElementById('cMisMedidas');
+    return { hay: !!c, texto: c ? c.textContent : '', boton: !!document.getElementById('cNuevaMedida') };
+  });
+  ok(mis.hay && /Mis medidas/.test(mis.texto), 'la pantalla ofrece «Mis medidas» (lo que sustituyó a la caja de fórmulas)');
+  ok(mis.boton, '  con su botón de crear una medida propia');
+  ok(errores.length === 0, '0 errores JS en el bloque de medidas propias', errores.join(' | '));
   // El cálculo se computa en el servidor: comprobamos que responde con `calculo:true`.
   const calcResp = await page.evaluate(async b => (await (await fetch(b + '/api/erp/analytics/constructor/cruzar', {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'x-csrf-token': window.CSRF_TOKEN },
@@ -358,6 +428,8 @@ try {
   ok(typeof cont.porPartida === 'number', 'y es el resultado del P&G (número escrito en la nota)', cont.porPartida + ' €');
 
   console.log('\n[16] 4b · COMPARAR ÁREAS EN EL TIEMPO');
+  await page.goto(BASE + '/admin/analytics', { waitUntil: 'networkidle2' });
+  await abrirSeccion(page, 'comparar', '.cmp-serie');
   const cmp = await page.evaluate(() => ({
     series: document.querySelectorAll('.cmp-serie').length,
     lienzo: !!document.getElementById('cmpChart'),
@@ -382,9 +454,12 @@ try {
   ok(emp4b.comparables === 403 && emp4b.comparar === 403, 'comparables y comparar: 403 para el empleado', JSON.stringify(emp4b));
 
   console.log('\n[18] NO SE RESUCITA NADA DE LO DESENLAZADO A PROPÓSITO');
-  const muertas = await page.evaluate(() => ['/admin/discounts', '/admin/tags', '/admin/orders', '/admin/shipping']
+  // «Etiquetas» SALE DE ESTA LISTA. Estaba construida y sin enlace, y la ficha B (23 ago 2026) le
+  // abrió su puerta en el rail a propósito: la comprobación de gate-menu-navegacion la cuenta como
+  // una de las 39. Seguir exigiendo que no aparezca era pedir que se deshiciera una entrega.
+  const muertas = await page.evaluate(() => ['/admin/discounts', '/admin/orders', '/admin/shipping']
     .filter(h => !!document.querySelector('a[href="' + h + '"]')));
-  ok(muertas.length === 0, 'descuentos, etiquetas, pedidos viejos y envíos siguen fuera del menú', muertas.join(', ') || 'ninguno asomó');
+  ok(muertas.length === 0, 'descuentos, pedidos viejos y envíos siguen fuera del menú', muertas.join(', ') || 'ninguno asomó');
 
   await browser.close();
 } catch (e) {

@@ -93,7 +93,7 @@ export function createCrmRoutes(db) {
     try {
       const b = await c.req.json();
       const r = crearTarea(db, { ...b, created_by: c.get('session')?.userId || null });
-      logActivity(db, c.get('session'), 'Creó una tarea comercial', 'crm_tarea', r.id, r.titulo);
+      logActivity(db, c.get('session'), 'Creó una tarea comercial', ENTITY.CRM_TAREA, r.id, r.titulo);
       return c.json(r);
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
@@ -101,7 +101,7 @@ export function createCrmRoutes(db) {
     try {
       const b = await c.req.json().catch(() => ({}));
       const r = marcarHecha(db, Number(c.req.param('id')), { resultado: b.resultado || '', por: c.get('session')?.userId || null });
-      logActivity(db, c.get('session'), 'Cerró una tarea comercial', 'crm_tarea', r.id, String(b.resultado || ''));
+      logActivity(db, c.get('session'), 'Cerró una tarea comercial', ENTITY.CRM_TAREA, r.id, String(b.resultado || ''));
       return c.json(r);
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
@@ -113,7 +113,7 @@ export function createCrmRoutes(db) {
   api.delete('/tareas/:id', requirePerm('crm.manage'), async c => {
     try { const b = await c.req.json().catch(() => ({}));
       const r = anularTarea(db, Number(c.req.param('id')), b.motivo);
-      logActivity(db, c.get('session'), 'Anuló una tarea comercial', 'crm_tarea', r.id, String(b.motivo || ''));
+      logActivity(db, c.get('session'), 'Anuló una tarea comercial', ENTITY.CRM_TAREA, r.id, String(b.motivo || ''));
       return c.json(r); }
     catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });

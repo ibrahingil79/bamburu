@@ -38,7 +38,14 @@ const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
 const VACIO = '(sin dato)';
 const nombreUsuario = (db, id) => id ? (db.prepare('SELECT name FROM admin_users WHERE id=? AND active=1').get(id)?.name || SIN_ASIGNAR) : SIN_ASIGNAR;
 
-export const TIPOS_GRAFICO = ['barras', 'lineas', 'tarta', 'tabla'];
+// Los cuatro dibujos, MÁS las dos formas que ofrece la frase de la pantalla: «lo que mejor se lea»
+// (`auto`, que es la opción POR DEFECTO) y «un número» (`numero`, que es lo que se pinta cuando el
+// informe da una sola fila). Faltaban las dos, y como esta lista es también la que valida el POST de
+// guardar, GUARDAR UN INFORME RECIÉN CREADO devolvía 400 «Ese tipo de gráfico no existe»: el panel se
+// quedaba abierto con el error dentro y el informe no se guardaba nunca. Roto desde la ficha D-ter
+// (23 ago 2026), encontrado el 24 con tres gates de informes en rojo. `auto` lo resuelve la pantalla
+// al dibujar (analytics.js): aquí solo se ALMACENA, para que el informe reabra como se guardó.
+export const TIPOS_GRAFICO = ['barras', 'lineas', 'tarta', 'tabla', 'auto', 'numero'];
 
 // ── ÁREA: VENTAS ─────────────────────────────────────────────────────────────
 // El conjunto enriquecido: una fila por LÍNEA de venta de las facturas que cuentan. Se exporta

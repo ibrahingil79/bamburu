@@ -38,6 +38,9 @@ const BASE_RAIL = [
   ['Ventas', 'Albaranes', '/admin/albaranes'],
   ['Ventas', 'Cobros', '/admin/cobros'],
   ['Ventas', 'TPV', '/admin/mostrador'],
+  // AÑADIDA la noche del 23-24 ago 2026 (punto 11 del encargo nocturno): la pantalla de descuentos,
+  // promociones y bonos. Que el número SUBA es lo esperado; lo que este gate impide es que BAJE.
+  ['Ventas', 'Descuentos y bonos', '/admin/descuentos'],
   ['Clientes', 'Clientes', '/admin/clients'],
   ['Clientes', 'Oportunidades', '/admin/crm'],
   // MOVIDA DESDE VENTAS el 18 ago 2026 (decisión de Ibrahin). El inventario NO cambia de tamaño: son
@@ -49,6 +52,8 @@ const BASE_RAIL = [
   ['Proyectos', 'Registro de tiempo', '/admin/tiempo'],
   ['Proyectos', 'Facturar horas', '/admin/facturar-horas'],
   ['Proyectos', 'Rentabilidad', '/admin/rentabilidad'],
+  // AÑADIDA la noche del 23-24 ago 2026 (punto 12): el control horario de la plantilla.
+  ['Proyectos', 'Control horario', '/admin/fichaje'],
   // ── AGENDA, DESPUÉS DE LA MUDANZA (18 ago 2026) ───────────────────────────────────────────────
   // EN AGENDA SOLO VIVE LO QUE SE USA ATENDIENDO CLIENTES. Las otras SEIS no se han borrado: están
   // en BASE_CONFIG, dentro de la configuración del negocio. El inventario NO encoge — lo comprueba
@@ -105,6 +110,8 @@ const BASE_CUENTA = [['Perfil', '/admin/perfil'], ['Datos del negocio', '/admin/
 // Y DESDE EL 23 AGO 2026 SON 52, porque la ficha B abrió dos puertas que estaban construidas y sin
 // enlace: «Etiquetas» al rail (37) y «Trae tus datos» a las fijas (3). Que el número SUBA aquí es el
 // resultado esperado del encargo; lo que este gate impide es que baje sin que nadie se entere.
+// Y DESDE LA NOCHE DEL 23-24 AGO 2026 SON 54: «Descuentos y bonos» (Ventas) y «Control horario»
+// (Proyectos), las dos pantallas nuevas de los puntos 11 y 12. Rail: 39.
 //
 // Con un matiz que se dice en voz alta en vez de esconderlo en el recuento: una de las seis —los
 // puestos— es CONDICIONAL y nace oculta, así que un negocio recién creado enseña 49 y no 50. Por eso
@@ -112,7 +119,7 @@ const BASE_CUENTA = [['Perfil', '/admin/perfil'], ['Datos del negocio', '/admin/
 // de alta y verifica que aparece la 50ª. En ningún momento se comprueba «que salgan 50 cosas»: se
 // comprueban UNA A UNA por identidad (área » nombre » ruta), que es lo que detecta una amputación
 // disfrazada de entrada nueva.
-const N_TOTAL       = BASE_RAIL.length + BASE_CONFIG.length + 1 + BASE_FIJAS.length + BASE_CUENTA.length;   // 36+5+1+2+6 = 50
+const N_TOTAL       = BASE_RAIL.length + BASE_CONFIG.length + 1 + BASE_FIJAS.length + BASE_CUENTA.length;   // 39+5+1+3+6 = 54
 const N_SIN_PUESTOS = N_TOTAL - 1;                                                                          // 49
 
 // Qué áreas se parten en DOS bloques, y qué entradas quedan bajo el rótulo «Ajustes de <Área>». No

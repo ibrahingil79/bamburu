@@ -572,6 +572,11 @@ try {
       const BASES = /sobre lo que (cobras|te cost|cobro|me cost)|sobre la venta|sobre el coste/i;
       for (const el of document.querySelectorAll('*')) {
         if (el.children.length) continue;
+        // UN <option> NO ES UNA CIFRA: es el NOMBRE de una medida. «Margen en %» se llama así a
+        // propósito (ficha D-bis) y su base va en la ayuda de debajo, no pegada al nombre. Marcarlo
+        // aquí era un falso positivo — y encima tapaba la comprobación que sí vale, que es que al
+        // ELEGIR esa medida la ayuda diga sobre qué se divide. Esa se hace justo después.
+        if (el.tagName === 'OPTION') continue;
         const txt = (el.textContent || '').trim();
         if (!/%/.test(txt)) continue;
         // ¿Este porcentaje habla de margen? Se mira su propio texto y el de su contenedor cercano.
@@ -586,6 +591,24 @@ try {
   }
   ok(desnudos.length === 0, 'ninguna pantalla enseña un % de margen sin decir su base',
      desnudos.length ? desnudos.join('  ·  ') : PANTALLAS.map(p => p[1]).join(' y ') + ' barridos');
+
+  // Y LA OTRA MITAD DE LA MISMA REGLA, la que el <option> no puede contestar: al elegir «Margen en %»
+  // en el constructor, la ayuda de debajo tiene que decir SOBRE QUÉ se divide. Se elige de verdad,
+  // disparando el `change`, que es lo que repinta la ayuda.
+  await page.goto(BASE + '/admin/analytics', { waitUntil: 'networkidle0' });
+  await dormir(1200);
+  const ayudaMargen = await page.evaluate(() => {
+    const sel = document.getElementById('cMed');
+    if (!sel) return '(no hay desplegable de medidas)';
+    const op = [...sel.options].find(o => /Margen en %/.test(o.textContent));
+    if (!op) return '(no está la medida de margen)';
+    sel.value = op.value;
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    return (document.getElementById('cMedAyuda') || {}).textContent || '';
+  });
+  await dormir(400);
+  ok(/sobre lo que (cobras|te cost)/i.test(ayudaMargen),
+     'y al ELEGIR «Margen en %» la ayuda dice sobre qué se divide', ayudaMargen.trim().slice(0, 90));
 
   // Y el detalle enseña SIEMPRE los dos, con euros y con lo que queda fuera (G3).
   await irLista(QS); await abrirVentana(CLI);

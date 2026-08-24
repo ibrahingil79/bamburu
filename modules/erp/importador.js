@@ -37,6 +37,7 @@ import { createProductSvc } from './routes/products.js';
 // comprobación de duplicados NO es la misma que la del cliente.
 import { createSupplierSvc, supplierFiscalIdConflict } from './routes/suppliers.js';
 import { getVatBands } from '../../core/vat-bands.js';
+import { ENTITY } from '../../core/activity-entities.js';
 
 // Topes. El fichero entero viaja en memoria y las filas se validan una a una contra la BD, así que
 // el tope no es decorativo. Un CSV de 2000 clientes son ~200 KB: quien traiga más, lo parte en dos.
@@ -49,12 +50,12 @@ export const MAX_FILAS = 2000;
 export const MAX_FILAS_VISTA = 300;
 
 export const TIPOS = {
-  clientes:  { label: 'Clientes',              perm: 'clients.create',   entidad: 'client'   },
-  productos: { label: 'Productos y servicios', perm: 'products.create',  entidad: 'product'  },
+  clientes:  { label: 'Clientes',              perm: 'clients.create',   entidad: ENTITY.CLIENT   },
+  productos: { label: 'Productos y servicios', perm: 'products.create',  entidad: ENTITY.PRODUCT  },
   // PUNTO 14 (23 ago 2026) — PROVEEDORES. Era el hueco real de la ficha K, y no dependía de nada
   // externo: se podían traer clientes y productos de otro programa, y los proveedores había que
   // teclearlos a mano uno a uno. Mismo motor, mismo «todo o nada», mismo deshacer.
-  proveedores: { label: 'Proveedores',         perm: 'suppliers.create', entidad: 'supplier' },
+  proveedores: { label: 'Proveedores',         perm: 'suppliers.create', entidad: ENTITY.SUPPLIER },
 };
 
 // ── NORMALIZACIÓN DE TEXTO PARA COMPARAR ────────────────────────────────────────────────────────

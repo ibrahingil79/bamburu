@@ -90,15 +90,41 @@ try {
   // Lo que NO se pudo borrar está archivado, no destruido, y su factura sigue en la cadena.
   const arch = db.prepare(`SELECT COUNT(*) c FROM clients WHERE active=0 AND ${M}`).get().c;
   ok(arch > 0, '  los que tenían factura están ARCHIVADOS, no borrados', arch + ' archivados');
+  // LA CADENA. Esto pedía «exactamente 1050 registros», y eso es una cifra que sube sola: cualquier
+  // gate que emita una factura la mueve, y este gate se ponía rojo por algo que no es una pérdida
+  // (medido el 24 ago 2026: 1054, cuatro de más por los gates de la noche). Lo que hay que garantizar
+  // es que la limpieza NO DESTRUYE registros legales y que la cadena sigue ENGANCHADA — por huella,
+  // no por recuento.
   const enCadena = db.prepare(`SELECT COUNT(*) c FROM verifactu_registros`).get().c;
-  ok(enCadena === 1050, '  y la cadena de Verifactu sigue con sus 1050 registros', enCadena + '');
+  ok(enCadena >= 1050, '  la cadena de Verifactu no ha perdido registros (nunca baja de 1050)', enCadena + '');
+  const cadena = db.prepare('SELECT id, prev_huella, huella FROM verifactu_registros ORDER BY id').all();
+  let rotos = 0;
+  for (let i = 1; i < cadena.length; i++)
+    if ((cadena[i].prev_huella || '') !== (cadena[i - 1].huella || '')) rotos++;
+  ok(rotos === 0, '  y sigue enganchada: cada registro lleva la huella del anterior',
+     rotos ? rotos + ' eslabones rotos' : cadena.length + ' eslabones, ni uno suelto');
 
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   console.log('\n[2] PARTE 1 — LAS CUENTAS SON MEDIDAS CON NOMBRE, no una caja de fórmulas');
   // ══════════════════════════════════════════════════════════════════════════════════════════════
-  const nMed = Object.values(AREAS).reduce((n, a) => n + Object.keys(a.medidas).length, 0);
-  const nDim = Object.values(AREAS).reduce((n, a) => n + Object.keys(a.dimensiones).length, 0);
-  ok(nDim === 33 && nMed === 39, 'nada se pierde: 33 dimensiones (las mismas) y 31 medidas → 39', `${nDim} · ${nMed}`);
+  // NADA SE PIERDE, y se comprueba ÁREA POR ÁREA en vez de con dos totales. Un total suelto tiene dos
+  // defectos: envejece a cada entrega (esta línea ya iba rota de antes: pedía 31 medidas cuando eran
+  // 39) y, peor, se queda verde si un área pierde un campo y otra gana otro. El mínimo por área dice
+  // dónde está la pérdida. Los números son los medidos el 24 ago 2026; SUBIR es correcto, BAJAR no.
+  const MINIMO_POR_AREA = { ventas: [9, 8], compras: [4, 4], clientes: [6, 7], inventario: [5, 5],
+                            contabilidad: [3, 4], agenda: [7, 11], catalogo: [5, 6] };
+  const perdidas = [];
+  for (const [ak, [nd, nm]] of Object.entries(MINIMO_POR_AREA)) {
+    const a = AREAS[ak];
+    if (!a) { perdidas.push(ak + ': el área ENTERA ha desaparecido'); continue; }
+    const hd = Object.keys(a.dimensiones).length, hm = Object.keys(a.medidas).length;
+    if (hd < nd) perdidas.push(ak + ': ' + hd + ' dimensiones, eran ' + nd);
+    if (hm < nm) perdidas.push(ak + ': ' + hm + ' medidas, eran ' + nm);
+  }
+  const totalDims = Object.values(AREAS).reduce((n, a) => n + Object.keys(a.dimensiones).length, 0);
+  const totalMeds = Object.values(AREAS).reduce((n, a) => n + Object.keys(a.medidas).length, 0);
+  ok(perdidas.length === 0, 'el catálogo entero sigue ahí, área por área',
+     perdidas.join(' · ') || totalDims + ' dimensiones · ' + totalMeds + ' medidas en ' + Object.keys(AREAS).length + ' áreas');
   for (const [a, k, etq] of [['ventas', 'ticket_medio', 'Ticket medio'], ['compras', 'pct_pendiente', '% pendiente de pago'],
        ['clientes', 'facturacion_media', 'Facturación media por cliente'], ['agenda', 'pct_ausencias', '% de ausencias'],
        ['agenda', 'duracion_media', 'Duración media de la cita (h)'], ['contabilidad', 'margen_pct', 'Margen sobre ingresos (%)']])
