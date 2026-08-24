@@ -27,8 +27,88 @@ const JSON_OUT = process.argv.includes('--json');
 // (`window.confirm` sí cuenta; `confirmarEnPagina` no) y que no esté dentro de un comentario.
 const RE = /(?<![\w.$])(prompt|confirm)\s*\(/g;
 
-function sinComentarios(linea) {
-  // Corta en el primer `//` que no vaya dentro de una URL (`://`) ni de una cadena obvia.
+// ── POR QUÉ ESTO SE LEE CARÁCTER A CARÁCTER Y NO A GOLPE DE `indexOf` ──────────────────────────
+// 24 ago 2026. La versión anterior decidía «esta línea va dentro de un comentario» comparando
+// `lastIndexOf('/*')` con `lastIndexOf('*/')`. Y en `modules/erp/routes/conciliacion-routes.js`
+// hay esta línea, que es HTML dentro de una plantilla:
+//
+//     <input type="file" name="file" accept=".q43,.n43,.txt,.043,*/*" required>
+//
+// El `*/*` del filtro de ficheros contiene un `/*` DESPUÉS de un `*/`, así que el censo se creyó
+// dentro de un comentario **desde ahí hasta el final del fichero** — y se comió una ventanita VIVA:
+// el botón «Deshacer» de Conciliación bancaria, que abre un `confirm()` de verdad. El censo decía
+// CERO y había una. **Un censo que dice cero y no es cierto es peor que no tenerlo**, porque cierra
+// la pregunta.
+//
+// La cura no es otro parche sobre el mismo truco: es leer el fichero como lo lee JavaScript. Este
+// recorrido conoce las cinco cosas donde un `/*` NO abre un comentario —comilla simple, comilla
+// doble, plantilla (con sus `${}` anidados), expresión regular y el propio comentario— y devuelve el
+// código con los comentarios ya fuera, conservando los saltos de línea para no descolocar los
+// números. Los comentarios de HTML (`<!-- -->`) se quitan después, sobre lo que quede.
+function soloCodigo(src) {
+  let out = '', i = 0;
+  const n = src.length;
+  const hueco = t => t.replace(/[^\n]/g, ' ');   // se sustituye por espacios: la línea no se mueve
+  // ¿un `/` aquí abre una expresión regular o es una división? Se mira el último carácter con
+  // significado: tras `(`, `,`, `=`, `:`, `[`, `!`, `&`, `|`, `?`, `{`, `}`, `;` o principio, es regex.
+  const abreRegex = () => {
+    for (let k = out.length - 1; k >= 0; k--) {
+      const c = out[k];
+      if (/\s/.test(c)) continue;
+      return '(,=:[!&|?{};+-*%^~<>'.includes(c);
+    }
+    return true;
+  };
+  while (i < n) {
+    const c = src[i], d = src[i + 1];
+    // El `//` NO se toca aquí. Se quita después, línea a línea, porque la mitad de los comentarios
+    // de este producto viven DENTRO de una plantilla (son el JavaScript que se sirve al navegador),
+    // y para este recorrido una plantilla es una cadena: si los quitara aquí, no los vería.
+    if (c === '/' && d === '*') { const j = src.indexOf('*/', i + 2); const fin = j === -1 ? n : j + 2; out += hueco(src.slice(i, fin)); i = fin; continue; }
+    if (c === "'" || c === '"') {
+      let j = i + 1;
+      while (j < n && src[j] !== c) { if (src[j] === '\\') j++; j++; }
+      out += src.slice(i, Math.min(j + 1, n)); i = j + 1; continue;
+    }
+    if (c === '`') {
+      let j = i + 1, prof = 0;
+      while (j < n) {
+        if (src[j] === '\\') { j += 2; continue; }
+        if (src[j] === '$' && src[j + 1] === '{') { prof++; j += 2; continue; }
+        if (prof > 0 && src[j] === '}') { prof--; j++; continue; }
+        if (prof === 0 && src[j] === '`') break;
+        j++;
+      }
+      out += src.slice(i, Math.min(j + 1, n)); i = j + 1; continue;
+    }
+    if (c === '/' && abreRegex()) {
+      let j = i + 1, clase = false, ok = false;
+      while (j < n && src[j] !== '\n') {
+        if (src[j] === '\\') { j += 2; continue; }
+        if (src[j] === '[') clase = true;
+        else if (src[j] === ']') clase = false;
+        else if (src[j] === '/' && !clase) { ok = true; break; }
+        j++;
+      }
+      if (ok) { out += src.slice(i, j + 1); i = j + 1; continue; }
+    }
+    out += c; i++;
+  }
+  return out;
+}
+
+// Y los comentarios de HTML dentro de las plantillas, que también son comentarios: la nota que
+// explica por qué una pantalla ya NO usa confirm() no puede contar como un confirm() vivo.
+function sinComentariosHtml(src) {
+  return src.replace(/<!--[\s\S]*?-->/g, t => t.replace(/[^\n]/g, ' '));
+}
+
+// El comentario de una sola línea, en los DOS niveles: el del servidor y el del JavaScript que va
+// dentro de la plantilla. Se corta en el primer `//` que no sea el de una dirección (`https://`).
+// Es una regla de brocha gorda a propósito: lo único que puede perderse por ella es un `confirm(`
+// escrito DETRÁS de un comentario en la misma línea, que no existe en este producto — y a cambio
+// caza las notas que explican esta misma avería, que son la mayoría de las apariciones.
+function sinComentariosDeLinea(linea) {
   const i = linea.search(/(^|[^:'"`\\])\/\//);
   return i === -1 ? linea : linea.slice(0, i + 1);
 }
@@ -40,34 +120,19 @@ const barrer = d => {
     const p = path.join(d, f.name);
     if (f.isDirectory()) { barrer(p); continue; }
     if (!f.name.endsWith('.js')) continue;
-    const lineas = fs.readFileSync(p, 'utf8').split('\n');
-    let enBloque = false, enHtml = false;
-    lineas.forEach((l, i) => {
-      // Comentario de bloque de JS: se lleva la línea entera mientras esté abierto.
-      const abre = l.lastIndexOf('/*'), cierra = l.lastIndexOf('*/');
-      const dentro = enBloque;
-      if (abre > cierra) enBloque = true; else if (cierra > abre) enBloque = false;
-      if (dentro) return;
-      // Y los comentarios de HTML dentro de las plantillas, que también son comentarios: la nota que
-      // explica por qué una pantalla ya NO usa confirm() no puede contar como un confirm() vivo.
-      const abreH = l.lastIndexOf('<!--'), cierraH = l.lastIndexOf('-->');
-      const dentroH = enHtml;
-      if (abreH > cierraH) enHtml = true; else if (cierraH > abreH) enHtml = false;
-      if (dentroH || (abreH !== -1 && cierraH === -1) || (abreH !== -1 && cierraH > abreH)) {
-        // línea que abre, contiene o cierra un comentario HTML: se mira solo lo que queda fuera
-        const fuera = (cierraH > abreH && abreH !== -1) ? l.slice(0, abreH) + l.slice(cierraH + 3)
-                    : (abreH !== -1 ? l.slice(0, abreH) : (cierraH !== -1 ? l.slice(cierraH + 3) : ''));
-        for (const m of sinComentarios(fuera).matchAll(RE))
-          hallazgos.push({ fichero: path.relative(RAIZ, p), linea: i + 1, tipo: m[1], texto: l.trim().slice(0, 100) });
-        return;
-      }
-      const util = sinComentarios(l);
-      for (const m of util.matchAll(RE)) {
-        hallazgos.push({ fichero: path.relative(RAIZ, p), linea: i + 1, tipo: m[1], texto: l.trim().slice(0, 100) });
+    const bruto = fs.readFileSync(p, 'utf8');
+    const limpio = sinComentariosHtml(soloCodigo(bruto));
+    const originales = bruto.split('\n');
+    limpio.split('\n').forEach((linea, i) => {
+      const l = sinComentariosDeLinea(linea);
+      for (const m of l.matchAll(RE)) {
+        hallazgos.push({ fichero: path.relative(RAIZ, p), linea: i + 1, tipo: m[1],
+                         texto: (originales[i] || '').trim().slice(0, 100) });
       }
     });
   }
 };
+
 barrer(path.join(RAIZ, 'modules'));
 
 if (JSON_OUT) { console.log(JSON.stringify(hallazgos, null, 1)); process.exit(0); }

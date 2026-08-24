@@ -69,6 +69,20 @@ const DEUDA = {};
 // es anterior y de otro tema: se declara aquí para que salga por su nombre en cada barrido en vez de
 // perderse entre los demás. Un rojo con dueño y motivo es información; un rojo anónimo es ruido.
 const ROJOS_CONOCIDOS = {
+  // 24 ago 2026 · EL CENSO EMPIEZA A DECIR LA VERDAD, Y POR ESO SE PONE ROJO. Decía CERO ventanitas
+  // del navegador y había UNA viva: el botón «Deshacer» de la conciliación bancaria abre un
+  // confirm(). No la veía porque decidía si una línea iba dentro de un comentario comparando dónde
+  // estaba el último `/*` con el último `*/`, y en esa pantalla hay un filtro de ficheros
+  // `accept="…,*/*"`: el `/*` del comodín le hizo creer que se abría un comentario que no se cerraba
+  // nunca, y se quedó CIEGO desde ahí hasta el final de tres ficheros.
+  // Hoy el censo lee el fichero como lo lee JavaScript (cadenas, plantillas y expresiones regulares
+  // incluidas) y encuentra la que faltaba. **El rojo es correcto: la ventanita existe.**
+  // NO SE ARREGLA AQUÍ porque tocar esa pantalla es código de producto y el encargo del inventario
+  // lo prohíbe expresamente. Se declara para que salga POR SU NOMBRE en cada pasada en vez de
+  // perderse, y queda apuntado en el inventario de Notion (§C, deuda técnica, punto 3).
+  'censo-ventanitas':
+    'UNA ventanita viva en conciliación bancaria (el botón «Deshacer»). Medida el 24 ago 2026, cuando '
+    + 'se arregló la ceguera del propio censo. Arreglarla es tocar esa pantalla: tarea aparte, con encargo.',
   // 20 ago 2026 · NO ES DEL PARALELISMO, y se comprobó: falla igual EN SERIE y falla igual suelto.
   // El gate exige que el negocio de desarrollo tenga propuestas pendientes (`esperado > 0`) para
   // poder afirmar que el badge del riel enseña ese número — pero NO las crea él. Ese día se

@@ -117,10 +117,33 @@
 `A 8 · B 3 · C 11 · D 5 · E 4 · F 4 · G 5 · H 3 · I 3 · J 0 · K 0` = **46**.
 (J y K son ítems bloqueados sin subpuntos: su texto es una sola afirmación.)
 
-**RECUENTO VIGENTE — 23 ago 2026 (cierre de la ficha D): 65 subpuntos vivos · 54 hechos · 11 pendientes.**
+**RECUENTO VIGENTE — 24 ago 2026: 65 subpuntos vivos · 65 resueltos · 0 PENDIENTES CONSTRUIBLES.**
+**De A a M no queda nada que programar.** Lo que sigue vivo son tres cosas que NO son tareas:
+**G5** (el «etc» del dueño, abierto a propósito por decisión suya) y **J y K**, bloqueados fuera del
+código. Los 4 retirados siguen retirados, con su motivo en su sitio.
+
+> ~~**RECUENTO VIGENTE — 23 ago 2026 (cierre de la ficha D): 65 subpuntos vivos · 54 hechos ·
+> 11 pendientes.** Pendientes: **E 4 · G 4 · I 3** = 11.~~
+> **⚙️ CADUCADO Y CORREGIDO EL 24 AGO 2026.** No se borra: es el registro de qué se creía y cuándo.
+> **El motivo, medido:** esta cabecera se escribió el 23 ago a las **15:59** (commit `2bee917`), y
+> esa misma noche se cerraron los tres que declaraba pendientes — **G a las 20:56** (`1ccc49c`),
+> **E a las 20:58** (`28ac712`) y **I a las 21:28** (`9e43ce0`)—. Nadie volvió a subir a la cabecera.
+> Es EXACTAMENTE la avería contra la que se escribió la regla de `CLAUDE.md` («Un titular de recuento
+> se corrige con el cuerpo que lo desarrolla»), esta vez **al revés**: el cuerpo se actualizó y el
+> titular se quedó atrás. Una cifra vieja en la primera línea de un registro hace creer que quedan
+> once tareas donde no queda ninguna, y manda al siguiente chat a trabajar sobre humo.
+>
+> **La prueba de cada cierre, para que no haya que fiarse de esta línea:**
+> · **E — 4 de 4.** Commit `c3b2d6a`, comprobación `gate-inicio-widgets` (30 ✓), dentro del barrido.
+> · **G — G1 y G2 hechos.** `gate-portal-ampliado` (35 ✓), dentro del barrido. G3 estaba retirado
+>   desde el 21 ago por estar ya hecho; **G4 no es de G: es la ficha J**, bloqueada por falta de
+>   pasarela; **G5 queda abierto a propósito**, no es construible.
+> · **I — 3 de 3.** `gate-tarjeta-unica` (24 ✓), dentro del barrido.
+
 *(**la ficha D entra entera, 5 de 5** — D1 y D4 eran la misma pieza y se cerraron con el área de
 agenda; D2, D3 y D5 completos. 49 + 5 = 54 hechos · 16 − 5 = 11 pendientes.
-Pendientes: **E 4 · G 4 · I 3** = 11. Vivos siguen siendo 65.)*
+~~Pendientes: **E 4 · G 4 · I 3** = 11.~~ — **caducada esa misma noche: 0, ver arriba.**
+Vivos siguen siendo 65.)*
 *(**la ficha F entra entera, 4 de 4** — el mapa lo escribió otra sesión y quedó sin commitear;
 se revisó, se ejecutó su gate por primera vez y se cerró. 45 + 4 = 49 hechos · 20 − 4 = 16
 pendientes. ~~Pendientes: **D 5 · E 4 · G 4 · I 3** = 16.~~ — **caducada el mismo 23 ago al cerrarse
@@ -170,9 +193,14 @@ cierta mientras la decisión no existía, y es el registro de que se paró antes
   entregas.**~~ — **pasó, y está rehecho (23 ago, tarde): B se cerró entera esa misma tarde en otra
   sesión, así que quedan 21 pendientes — D 5 · E 4 · F 4 · G 4 · H 1 · I 3.** B sale de la lista.
   El aviso cumplió su función y por eso se tacha en vez de borrarse.
-  **Y una tercera vez esa misma noche, que es el día que más manos ha tenido este tablero: cerrada
-  H1 y cerrada F, quedan 16 — D 5 · E 4 · G 4 · I 3.** Tres sesiones distintas movieron el recuento
+  ~~**Y una tercera vez esa misma noche, que es el día que más manos ha tenido este tablero: cerrada
+  H1 y cerrada F, quedan 16 — D 5 · E 4 · G 4 · I 3.**~~ Tres sesiones distintas movieron el recuento
   el 23 de agosto; cada una lo rehízo sobre lo que encontró, en vez de sobre lo que recordaba.
+  **⚙️ Y UNA CUARTA, EL 24 AGO 2026: quedan CERO.** La cifra de 16 —y la de 11 que la sustituyó tres
+  horas después— caducaron esa misma noche, cuando **una cuarta sesión cerró D, E, G e I** y no subió
+  a rehacer la cabecera. **Hoy A–M no tiene ni un pendiente construible:** queda **G5**, abierto a
+  propósito por el dueño, y **J y K**, bloqueados fuera del código. Los tres cierres, con su prueba,
+  están en el recuadro del principio de este bloque.
 - **A1, A4 y A7 fueron REESCRITOS** por el dueño antes de construirse; el recuento no cambia por eso
   (siguen siendo los mismos subpuntos), solo cambia lo que piden.
 - **L nace con 9 subpuntos y se queda con 8 vivos** (L1 retirado). **M nace con 9, los 9 hechos.**
@@ -1933,7 +1961,8 @@ miraba `admin_users`**.
 > las tres son transversales o previas, y el peldaño sigue ABIERTO esperando su encargo.
 
 **EL ORDEN:** (1) sanear las comprobaciones automáticas ✅ · (2) cerrar los cabos sueltos de la Agenda,
-como **UNA sola tarea entera** ✅ · (3) funciones nuevas ← **AQUÍ** · (4) volver al **Peldaño 8 — Salud/bienestar**.
+como **UNA sola tarea entera** ✅ · (3) funciones nuevas ✅ **(las siete, 23 ago 2026)** · (4) volver al **Peldaño 8 — Salud/bienestar** ← **AQUÍ**.
+> ⚙️ *El puntero «← AQUÍ» estaba en la (3) y se corrige el 24 ago 2026: la (3) se cerró entera esa noche. El siguiente paso del orden acordado es el Peldaño 8.*
 
 ### ✅ TAREA 1 — Sanear las comprobaciones automáticas  ✅ HECHA (2026-08-20) — ver su ficha abajo
 
@@ -1970,7 +1999,17 @@ verdad y no como se suponía — que es justo el problema que esta tarea viene a
   distintas y una de ellas es un dato de negocio.
 - Desde la **ficha del cliente**, sus citas se abren **sin filtrar por él**.
 
-### ⬜ TAREA 3 — Funciones nuevas  (apuntadas, sin encargo)
+### ✅ TAREA 3 — Funciones nuevas  (apuntadas, sin encargo) · **LAS SIETE, HECHAS (23 ago 2026)**
+
+> ~~⬜~~ **⚙️ EL TÍTULO ESTABA CADUCADO, CORREGIDO EL 24 AGO 2026.** Seguía diciendo «pendiente» con
+> **las siete líneas de debajo tachadas y marcadas ✅**. Un apartado que se anuncia pendiente y por
+> dentro está entero manda a leerlo al que venga detrás, y peor: hace creer que quedan tareas donde
+> no queda ninguna. Las siete y su prueba: área de agenda en el constructor (`e16bd01`) · control
+> horario (41 ✓) · agenda del CRM (38 ✓) · las ventanitas del navegador (36 ✓ — **ojo: el 24 ago,
+> al arreglar la ceguera del censo, apareció UNA que se le había escapado; ver Deuda técnica**) · productos
+> parados (23 ✓) · DISA y los informes por chat (28 ✓) · descuentos, promociones y bonos (60 ✓).
+> **El cuerpo no se toca:** cada línea conserva su tachado y su registro de cómo estaba antes.
+
 
 - ~~**Área de agenda en el constructor de analítica.** Sin ella, los cuatro avisos de agenda de DISA
   **no pueden llevar gráfico**.~~ **✅ HECHA el 23 ago 2026 en la ficha D (D1+D4, `e16bd01`)**: el área
@@ -3750,7 +3789,7 @@ de la BD → el SHA cambia (`4583329b…` → `394f0781…`) con las mismas 1050
 
 **⚠️ LA FUNCIÓN VUELVE, Y NO ES UNA CONTRADICCIÓN.** El 23 ago 2026, al cerrar el encargo INTEGRIDAD,
 Ibrahin apuntó **«Descuentos y promociones — rehacer la función entera y bien (bonos, promociones,
-descuento por cliente), operable por DISA»** (ver «⬜ TAREA 3 — Funciones nuevas»). Lo que se retiró
+descuento por cliente), operable por DISA»** (ver «TAREA 3 — Funciones nuevas», **hecha el 23 ago 2026**). Lo que se retiró
 aquí fue **una pantalla muerta**, no la necesidad: nada la aplicaba. Quien lea esta ficha dentro de
 seis meses tiene que ver las dos cosas juntas, o creerá que los descuentos están descartados.
 
@@ -5622,6 +5661,28 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
   sigue en el árbol, con 6 `logActivity` que nunca se ejecutan. Retirarlo o revivirlo, no dejarlo a medias.
   *(Sus hermanos ya cayeron: `generateInvoice` de `invoices.js` sigue neutralizada desde D1 —lanza 410— y su
   ruta `/from-order/:orderId` tampoco se usa. Van juntos en el mismo encargo.)*
+- ⬜ **QUEDA UNA VENTANITA DEL NAVEGADOR VIVA, y el censo decía CERO (24 ago 2026).** El botón
+  **«Deshacer»** de `/admin/conciliacion` abre un `confirm()` de verdad
+  (`routes/conciliacion-routes.js:120`), y es la trampa conocida: el navegador los silencia y el
+  botón queda muerto sin decir nada.
+  - **Por qué no se veía.** `censo-ventanitas.mjs` decidía si una línea iba dentro de un comentario
+    comparando `lastIndexOf('/*')` con `lastIndexOf('*/')`. En esa pantalla hay un filtro de ficheros
+    `accept=".q43,.n43,.txt,.043,*/*"`, y el `/*` del comodín le hizo creer que se abría un comentario
+    que no se cerraba nunca: **se quedó ciego desde la línea 84 hasta el final**, y lo mismo en
+    `routes/index.js` y en `store/routes.js`. **Un censo que dice cero y no es cierto es peor que no
+    tenerlo**, porque cierra la pregunta.
+  - **ARREGLADO el 24 ago 2026.** El censo lee ahora el fichero como lo lee JavaScript —conoce las
+    cadenas, las plantillas con sus `${}`, las expresiones regulares y los dos tipos de comentario— y
+    sigue quitando los `//` línea a línea, porque la mitad de los comentarios de este producto viven
+    DENTRO de una plantilla (son el JS que se sirve al navegador) y para el recorrido eso es una
+    cadena. **Probado con un caso a mano: el censo de antes daba CERO sobre él y el de ahora lo caza.**
+  - **La ventanita NO se ha tocado**: arreglarla es código de producto y el encargo del inventario lo
+    prohíbe. Queda declarada en `ROJOS_CONOCIDOS` con su motivo, para que el barrido la nombre en vez
+    de que su rojo parezca ruido. **Es tarea aparte, con encargo.**
+- ⬜ **SEIS FICHEROS DE PANTALLA DESMONTADOS SIGUEN EN EL ÁRBOL (24 ago 2026): 1.584 líneas.** Este
+  registro solo nombraba `orders.js`, y son seis: `orders.js` (1061), `discounts.js` (191),
+  `shipping.js` (107), `feedback.js` (84), `reviews.js` (81) y `newsletter.js` (60). Ninguno está
+  montado. Mismo criterio para los seis: retirar o revivir, no dejarlos a medias.
 - **DISA `create_order` multi-línea:** limitación heredada de la base e-commerce; los pedidos multi-línea entran con el flujo pedido→albarán→factura.
 - ~~Arreglar `scripts/gate-avisos-badge.mjs`~~ — **ya no reproduce**: ejecutado el 2026-07-10 pasa **25 OK**.
   Si vuelve a fallar por la ruta de BD fija, reabrir con la salida del fallo.
@@ -5851,7 +5912,14 @@ Módulo de **informes predefinidos por área** (ventas, compras, clientes…) + 
 *Origen: auditoría Bamburu vs Holded (9 jul 2026), repaso con el manual funcional completo de Holded
 (más detallado que la del 4 jul). Era "Analítica" en esa lista.*
 
-### 🟡 4a — Constructor de analíticas · **VENTAS HECHO (17 jul 2026)** · faltan las otras 4 áreas
+### ✅ 4a — Constructor de analíticas · **LAS SIETE ÁREAS, HECHAS**
+
+> ~~🟡 **VENTAS HECHO (17 jul 2026) · faltan las otras 4 áreas.**~~ **⚙️ CADUCADO, CORREGIDO EL
+> 24 AGO 2026.** No se borra: era cierto el 17 de julio. **Hoy el constructor tiene SIETE áreas**, no
+> una: ventas, compras, clientes, inventario, contabilidad, **agenda** (ficha D, 23 ago) y
+> **catálogo** (productos parados, 23 ago). Medido en `constructor-analitica.js`, donde se declaran.
+> Las dos últimas nacieron después de escribirse esta línea y nadie volvió a ella.
+
 
 **La puerta visual ya existe**: el dueño cruza lo que quiere y elige cómo verlo, sobre sus datos.
 Vive en `/admin/analytics` (el área "Analítica" que se creó al reengancharla — la duda del "dónde"
