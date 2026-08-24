@@ -496,7 +496,12 @@ vive el dato y de ahí lo leen la agenda y sus comprobaciones.
   vista Día. La casilla dice las dos cosas: «**1 cita · Cerrado**». Y **un día cerrado con citas se
   puede abrir** (antes era una casilla muerta: se veían las citas y no había forma de llegar a
   ellas). Lo que sigue sin ofrecerse ahí es **crear**.
-- ⬜ **Los dos gates ajenos siguen SIN REEJECUTAR** — necesitan barrido, y el barrido lo pides tú.
+- ✅ **Los dos gates ajenos, REEJECUTADOS** (24 ago 2026). `gate-agenda-calendario` y
+  `gate-agenda-visual` entraron en el barrido completo de esa noche. El primero pasó a la primera;
+  el segundo estaba rojo **por el reloj, no por el código**: exigía que la agenda apareciera
+  desplazada al abrir, y a primera hora del día del negocio no hay nada que subir (medido a las
+  01:39, con la línea de «ahora» al 11 % del alto). Ya contemplaba el tope de abajo; ahora también
+  el de arriba, y pasa. Su estado ya no es «sin verificar».
 - ✅ **EL PERMISO DE «AGENDA AJENA», CONSTRUIDO** — preguntado y decidido por Ibrahin el 21 ago 2026:
   *«sí, cada uno ve solo la suya»*. Nace **`citas.ver_todas`**. Sin él, el servidor devuelve
   **únicamente las citas propias**, y **también las horas libres se calculan solo sobre las suyas**:
