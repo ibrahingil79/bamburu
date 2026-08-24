@@ -1,32 +1,42 @@
-// Parte C (navegador, servidor real, tenant desarrollo): flujo del PEDIDO + RESERVA.
+// Parte C (navegador, servidor real): flujo del PEDIDO + RESERVA.
 //   node scripts/verify-pedidos-browser.mjs
 // crear borrador → confirmar (PED-NNNN + reserva) → comprobar reservado/disponible en la API
 // e inventario → anular (reserva liberada) → "Crear pedido" desde un presupuesto.
+//
+// ⚙️ SE TRAE SU PROPIO NEGOCIO (24 ago 2026). Antes daba por sentado el producto «Aceite Lavanda
+// 30ml» (id 6) del negocio de desarrollo. Ese producto cambió y la comprobación se quedó en 1
+// aserción. Y sembrarlo allí no valía: este flujo acaba emitiendo, y una factura emitida entra en la
+// cadena de VERI*FACTU y no se borra. Con su propio negocio, todo nace y muere aquí dentro.
 import Database from 'better-sqlite3';
-import { randomBytes } from 'crypto';
 import puppeteer from 'puppeteer';
+import { negocioDesechable, sembrarFlujoDocumentos } from './lib/negocio-desechable.mjs';
+import { autoAceptarPaneles } from './lib/gate-env.mjs';
 
-const DB = 'data/tenants/desarrollo-bamburu.db';
-const ORIGIN = 'http://127.0.0.1:3000';
-const PROD_NAME = 'Aceite Lavanda 30ml', PROD_ID = 6;
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-const db = new Database(DB);
-const token = randomBytes(24).toString('base64url');
-const now = Math.floor(Date.now() / 1000);
-db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)').run(token, 2, now, now + 3600, randomBytes(8).toString('hex'));
-db.close();
+const neg = await negocioDesechable('Gate Pedidos');
+const ORIGIN = neg.base;
+let PROD_ID, PROD_NAME, token;
+try {
+  const semilla = sembrarFlujoDocumentos(neg.db, { stock: 20, precio: 30 });
+  PROD_ID = semilla.productoId;
+  PROD_NAME = neg.db.prepare('SELECT name FROM products WHERE id=?').get(PROD_ID).name;
+  token = neg.sesion();
+} catch (e) {
+  console.error('✗ No se pudo sembrar: ' + e.message); neg.tirar(); process.exit(1);
+}
 
 // reservado de un producto (lectura directa, para contrastar con la UI/API)
-const reservedNow = (pid) => { const d = new Database(DB, { readonly: true }); const r = d.prepare("SELECT COALESCE(SUM(oi.quantity),0) r FROM customer_order_items oi JOIN customer_orders o ON o.id=oi.order_id WHERE oi.product_id=? AND o.status='confirmado'").get(pid).r; d.close(); return r; };
+const reservedNow = (pid) => { const d = new Database(neg.abs, { readonly: true }); const r = d.prepare("SELECT COALESCE(SUM(oi.quantity),0) r FROM customer_order_items oi JOIN customer_orders o ON o.id=oi.order_id WHERE oi.product_id=? AND o.status='confirmado'").get(pid).r; d.close(); return r; };
 
-const browser = await puppeteer.launch({ headless: 'new', executablePath: '/snap/bin/chromium', userDataDir: '/home/ubuntu/.cache/pptr-verify', args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] });
+const browser = await puppeteer.launch({ headless: 'new', executablePath: '/snap/bin/chromium', userDataDir: '/home/ubuntu/.cache/pptr-verif', args: ['--no-sandbox'] });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 1000 });
-await page.setCookie({ name: 'asess', value: token, domain: '127.0.0.1', path: '/' }, { name: 'btenant', value: 'desarrollo-bamburu', domain: '127.0.0.1', path: '/' });
-page.on('dialog', async d => { await d.accept(d.type() === 'prompt' ? 'Anulación de prueba (verificación)' : undefined); });
+await page.setCookie({ name: 'asess', value: token, domain: new URL(ORIGIN).hostname, path: '/' });
+// El producto ya no usa ventanitas del navegador: los paneles se aceptan desde la página.
+await autoAceptarPaneles(page);
 
 let pedidoId = null;
 try {
@@ -41,9 +51,11 @@ try {
   await page.waitForSelector('#f-client');
   await sleep(800);                              // carga de clientes + catálogo
   ok(await page.$('#f-warehouse') !== null, 'el formulario de pedido tiene selector de almacén (de dónde sale la reserva)');
-  await page.select('#f-client', '1');           // María García López
+  // El cliente y el producto son los que sembró ESTA comprobación, no los que hubiera en el negocio
+  // de otro: se leen de la semilla en vez de escribirlos a mano.
+  await page.select('#f-client', String(neg.db.prepare('SELECT id FROM clients ORDER BY id LIMIT 1').get().id));
   await page.click('.line-desc');
-  await page.type('.line-desc', 'Aceite Lav', { delay: 25 });
+  await page.type('.line-desc', PROD_NAME.slice(0, 10), { delay: 25 });
   await page.waitForFunction(() => { const b = document.querySelector('.line-suggest'); return b && b.style.display !== 'none' && b.querySelector('.suggest-item'); }, { timeout: 8000 });
   await page.evaluate(() => document.querySelector('.line-suggest .suggest-item').dispatchEvent(new MouseEvent('mousedown', { bubbles: true })));
   await sleep(300);
@@ -81,6 +93,8 @@ try {
 
   // 5) Anular el pedido → reserva liberada
   await page.goto(ORIGIN + '/admin/pedidos/' + pedidoId, { waitUntil: 'networkidle0' });
+  // El motivo va a la cola DESPUÉS de estar en la página: la cola vive en ella y al navegar se rehace.
+  await page.evaluate(v => window.__pdCola.push(v), 'Anulación de prueba (verificación)');
   await page.evaluate(() => { const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === 'Anular'); b.click(); });
   await sleep(1500);
   body = await page.evaluate(() => document.body.innerText);
@@ -90,8 +104,8 @@ try {
   // 6) "Crear pedido" desde un presupuesto (motor de conversión)
   await page.goto(ORIGIN + '/admin/quotes/new', { waitUntil: 'networkidle0' });
   await page.waitForSelector('#f-client'); await sleep(800);
-  await page.select('#f-client', '1');
-  await page.click('.line-desc'); await page.type('.line-desc', 'Aceite Lav', { delay: 25 });
+  await page.select('#f-client', String(neg.db.prepare('SELECT id FROM clients ORDER BY id LIMIT 1').get().id));
+  await page.click('.line-desc'); await page.type('.line-desc', PROD_NAME.slice(0, 10), { delay: 25 });
   await page.waitForFunction(() => { const b = document.querySelector('.line-suggest'); return b && b.style.display !== 'none' && b.querySelector('.suggest-item'); }, { timeout: 8000 });
   await page.evaluate(() => document.querySelector('.line-suggest .suggest-item').dispatchEvent(new MouseEvent('mousedown', { bubbles: true })));
   await sleep(300);
@@ -106,8 +120,9 @@ try {
   ok(/\/admin\/pedidos\/\d+/.test(page.url()) && /Procede del presupuesto/.test(body), 'crear pedido desde presupuesto → navega al pedido (borrador) "Procede del presupuesto"');
   // limpiar: este pedido es borrador, no reserva nada
 } catch (e) { console.error('ERROR', e.message); fail++; } finally {
-  await browser.close();
-  const d = new Database(DB); d.prepare('DELETE FROM admin_sessions WHERE token=?').run(token); d.close();
+  try { await browser.close(); } catch (_) {}
+  neg.tirar();
+  console.log('  [limpieza] negocio de prueba «' + neg.slug + '» tirado entero');
 }
 console.log('\n=== RESULTADO PARTE C: ' + pass + ' OK / ' + fail + ' FALLOS ===');
 process.exit(fail ? 1 : 0);

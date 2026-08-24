@@ -94,7 +94,6 @@ const DEUDA = {
   'verify-permisos-disa':      'misma familia y misma causa que la anterior (empleado de prueba inactivo).',
   'verify-invoice-over-stock-http': 'mismos 403 sobre el mismo empleado inactivo.',
   'verify-mostrador-overstock':     'ídem: el permiso se prueba contra un empleado que ya no está activo.',
-  'verify-pedidos-browser':    'misma familia: datos sembrados que ya no están.',
   'verify-pedidos-disa':       'espera un cliente y un número de pedido concretos del negocio de desarrollo.',
   'verify-quotes-browser':     'espera un presupuesto ya convertido a factura; hoy no hay ninguno así.',
   'verify-sustitutiva-browser':'espera un ticket sustituido concreto; el suyo ya no está.',
