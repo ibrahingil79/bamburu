@@ -24,10 +24,18 @@ const HOST = 'desarrollo-bamburu.localhost';
 // Desde la ficha D-ter los informes de Analítica se cargan al DESPLEGAR su fila del índice, no al
 // entrar en la pantalla. Abrir la sección y esperar a que tenga contenido es parte de mirarla.
 async function abrirSeccion(page, clave, selectorConDatos) {
-  await page.waitForSelector('[data-inf="' + clave + '"]', { timeout: 10000 });
-  await page.click('[data-inf="' + clave + '"]');
-  await page.waitForSelector(selectorConDatos, { timeout: 15000 }).catch(() => {});
+  // NI SE REVIENTA NI SE FINGE. Con el barrido a cuatro gates a la vez, 10 s no bastan para que la
+  // pantalla pinte su índice: un `waitForSelector` sin red mata el gate entero con una excepción y
+  // deja sin correr todo lo de detrás (pasó el 24 ago 2026: 54 s y cero aserciones). Se espera más,
+  // y si la fila no aparece se DEVUELVE false para que quien llama lo cuente como fallo con su
+  // motivo, en vez de tirar el gate.
+  const fila = '[data-inf="' + clave + '"]';
+  try { await page.waitForSelector(fila, { timeout: 30000 }); }
+  catch { ok(false, 'la sección «' + clave + '» tiene su fila en el índice de informes', 'no apareció en 30 s'); return false; }
+  await page.click(fila);
+  await page.waitForSelector(selectorConDatos, { timeout: 25000 }).catch(() => {});
   await new Promise(r => setTimeout(r, 600));
+  return true;
 }
 
 let pass = 0, fail = 0;
@@ -78,12 +86,11 @@ try {
   // esqueleto — y encima daba VERDE en las dos primeras líneas, porque comparaba contra el guion
   // corto '-' y la pantalla pinta la raya larga '—'. Dos maneras de mentir a la vez: no cargar lo
   // que se mide, y aceptar el hueco como si fuera una cifra.
-  await page.waitForSelector('[data-inf="rentabilidad"]', { timeout: 10000 });
-  await page.click('[data-inf="rentabilidad"]');
+  await abrirSeccion(page, 'rentabilidad', '#mgBody tr td');
   await page.waitForFunction(() => {
     const e = document.getElementById('mBen');
     return e && e.textContent.trim() !== '—' && e.textContent.trim() !== '-' && e.textContent.trim() !== '';
-  }, { timeout: 15000 }).catch(() => {});
+  }, { timeout: 25000 }).catch(() => {});
   const vacio = v => !v || v === '-' || v === '—' || v === '';
   const ben = await page.$eval('#mBen', e => e.textContent.trim()).catch(() => null);
   const pct = await page.$eval('#mPct', e => e.textContent.trim()).catch(() => null);
@@ -474,7 +481,17 @@ try {
     db.prepare('DELETE FROM user_permissions WHERE admin_user_id=?').run(empId);
     db.prepare('DELETE FROM admin_users WHERE id=?').run(empId);
   }
-  db.prepare("DELETE FROM admin_users WHERE email LIKE 'gate-margen-%@test.local'").run();   // por si una pasada anterior murió antes
+  // LA BARRIDA DE PASADAS ANTERIORES TAMBIÉN TIENE QUE SOLTAR LO QUE CUELGA. Esta línea borraba el
+  // usuario y no sus permisos, y `user_permissions.admin_user_id` no es ON DELETE CASCADE: en cuanto
+  // una pasada moría antes de limpiar (y esa noche murieron varias), la SIGUIENTE reventaba aquí con
+  // «FOREIGN KEY constraint failed» — después de pasar sus 86 aserciones, así que el gate salía rojo
+  // por su propia limpieza. Se sueltan los dependientes primero, y por el mismo camino que arriba.
+  const viejos = db.prepare("SELECT id FROM admin_users WHERE email LIKE 'gate-margen-%@test.local'").all();
+  for (const u of viejos) {
+    db.prepare('DELETE FROM user_permissions WHERE admin_user_id=?').run(u.id);
+    db.prepare('DELETE FROM admin_sessions WHERE user_id=?').run(u.id);
+    db.prepare('DELETE FROM admin_users WHERE id=?').run(u.id);
+  }
   db.close();
 }
 

@@ -21,6 +21,13 @@ import { anularSupplierInvoiceSvc } from '../modules/erp/routes/supplier-invoice
 import { postSupplierInvoice } from '../modules/erp/contabilidad.js';
 import { cuentaPyG } from '../modules/erp/contabilidad-pyg.js';
 import { cruzar } from '../modules/erp/constructor-analitica.js';
+import { randomBytes as __rb } from 'crypto';
+// Identificador de ESTA pasada: los códigos de los proyectos de prueba lo llevan, porque
+// `proyectos.codigo` es UNIQUE y un código fijo deja el gate muerto en cuanto una pasada cae
+// a medias sin limpiar (pasó el 24 ago 2026).
+const RID = __rb(3).toString('hex');
+// Los códigos de los dos proyectos de prueba, en el ámbito del módulo: se usan al sembrar y al leer.
+let COD_PG = '', COD_PP = '';
 
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
 const HOST = 'desarrollo-bamburu.localhost';
@@ -72,8 +79,14 @@ try {
 
   cliId = db.prepare("INSERT INTO clients (name,fiscal_id,country,active) VALUES (?,?, 'ES',1)").run('GATE Rent Cliente', 'X7654321X').lastInsertRowid;
   provId = db.prepare("INSERT INTO suppliers (name,active) VALUES (?,1)").run('GATE Rent Proveedor').lastInsertRowid;
-  PG = db.prepare("INSERT INTO proyectos (codigo,nombre,cliente_id,modo_cobro,active) VALUES ('GATE-PG',?,?,'horas',1)").run('GATE Rent GANA ' + Date.now(), cliId).lastInsertRowid;
-  PP = db.prepare("INSERT INTO proyectos (codigo,nombre,cliente_id,modo_cobro,active) VALUES ('GATE-PP',?,?,'horas',1)").run('GATE Rent PIERDE ' + Date.now(), cliId).lastInsertRowid;
+  // EL CÓDIGO DEL PROYECTO, ÚNICO POR PASADA. Era fijo ('GATE-PG'/'GATE-PP') y `proyectos.codigo`
+  // tiene UNIQUE: en cuanto una pasada moría a medias sin limpiar, la siguiente NO PODÍA NI ARRANCAR
+  // —«UNIQUE constraint failed»— y salía 0 OK · 1 fallo en un segundo. Pasó el 24 ago 2026 con este
+  // gate y con gate-tiempo-pantalla. Un identificador fijo convierte cualquier caída en una avería
+  // permanente.
+  COD_PG = 'GATE-PG-' + RID; COD_PP = 'GATE-PP-' + RID;
+  PG = db.prepare("INSERT INTO proyectos (codigo,nombre,cliente_id,modo_cobro,active) VALUES (?,?,?,'horas',1)").run(COD_PG, 'GATE Rent GANA ' + Date.now(), cliId).lastInsertRowid;
+  PP = db.prepare("INSERT INTO proyectos (codigo,nombre,cliente_id,modo_cobro,active) VALUES (?,?,?,'horas',1)").run(COD_PP, 'GATE Rent PIERDE ' + Date.now(), cliId).lastInsertRowid;
   // Venta real 1000 (sin proyecto aún) y gasto real 500 (mercadería → 600, sin proyecto aún).
   fPG = createInvoice(db, { client_id: cliId, lines: [{ description: 'Servicio gate', quantity: 1, unit_price: 1000, tax_rate: 21 }], issue_date: HOY }).id;
   gPP = db.prepare("INSERT INTO supplier_invoices (supplier_id,invoice_date,base,tax,total,status) VALUES (?,?,?,?,?, 'vigente')").run(provId, HOY, 500, 105, 605).lastInsertRowid;
@@ -112,16 +125,19 @@ try {
 
   // (d) COMPARATIVA: PP en rojo (pierde), PG no.
   await po.goto(BASE + '/admin/rentabilidad', { waitUntil: 'networkidle2' });
-  const cmp = await po.evaluate((pg, pp) => {
+  // Los códigos VIAJAN como parámetros: dentro de `evaluate` se ejecuta en el navegador, y allí no
+  // existe ninguna variable de este fichero. (Antes iban como literales `'GATE-PP'`, que sí funcionaba
+  // pero era un identificador FIJO y bloqueaba la pasada siguiente si esta moría a medias.)
+  const cmp = await po.evaluate((codPG, codPP) => {
     const rows = [...document.querySelectorAll('table tbody tr')];
     const find = code => rows.find(r => r.textContent.includes(code));
-    const rPP = find('GATE-PP'), rPG = find('GATE-PG');
+    const rPP = find(codPP), rPG = find(codPG);
     return {
       ppPierde: !!(rPP && /pierde/i.test(rPP.textContent)),
       pgPierde: !!(rPG && /pierde/i.test(rPG.textContent)),
       hayTotal: rows.some(r => /TOTAL/.test(r.textContent)),
     };
-  }, PG, PP);
+  }, COD_PG, COD_PP);
   ok(cmp.ppPierde, 'la comparativa marca PP como que PIERDE (gastos > ingresos)');
   ok(!cmp.pgPierde, 'PG no aparece marcado como que pierde');
   ok(cmp.hayTotal, 'la comparativa muestra la fila TOTAL (= P&G de la empresa)');

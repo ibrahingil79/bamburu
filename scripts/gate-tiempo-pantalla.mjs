@@ -15,6 +15,11 @@ import Database from 'better-sqlite3';
 import { join } from 'path';
 import { mkdirSync } from 'fs';
 import bcrypt from 'bcrypt';
+import { randomBytes as __rb } from 'crypto';
+// Identificador de ESTA pasada: los códigos de los proyectos de prueba lo llevan, porque
+// `proyectos.codigo` es UNIQUE y un código fijo deja el gate muerto en cuanto una pasada cae
+// a medias sin limpiar (pasó el 24 ago 2026).
+const RID = __rb(3).toString('hex');
 
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
 const HOST = 'desarrollo-bamburu.localhost';
@@ -64,7 +69,7 @@ try {
   const owner = db.prepare("SELECT id, tarifa_hora FROM admin_users WHERE role='owner' AND active=1 ORDER BY id LIMIT 1").get();
   ownerTarifaPrev = owner.tarifa_hora;
   db.prepare('UPDATE admin_users SET tarifa_hora=60 WHERE id=?').run(owner.id);   // tarifa del dueño para el importe
-  proyId = db.prepare("INSERT INTO proyectos (codigo,nombre,modo_cobro,active) VALUES (?,?,?,1)").run('GATE-PRY', NOMBRE, 'horas').lastInsertRowid;
+  proyId = db.prepare("INSERT INTO proyectos (codigo,nombre,modo_cobro,active) VALUES (?,?,?,1)").run('GATE-PRY-' + RID, NOMBRE, 'horas').lastInsertRowid;
 
   browser = await puppeteer.launch(launchOpts());
 

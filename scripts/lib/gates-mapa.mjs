@@ -286,6 +286,24 @@ export const SOLOS = new Map([
   // A `gate-oficio-pantalla` se le quitó ese mismo día la causa de los usuarios —ahora levanta su
   // propio negocio de una sola persona—, pero SIGUE declarado más abajo: mueve `company_config` del
   // negocio compartido, que es una causa distinta y anterior, y esa no se ha tocado.
+  // ── LOS TRES QUE DESTAPÓ EL BARRIDO DEL 24 AGO 2026 ──────────────────────────────────────────
+  // Los tres pasan SOLOS y caen en paralelo, comprobado en la misma sesión: no se les ha tocado una
+  // aserción ni bajado el listón, se han declarado con su causa.
+  ['gate-portal-ampliado',
+   'verifica la CADENA PROPIETARIA ENTERA del negocio (`verifyTenantInvoices`) con sus facturas '
+   + 'dentro. Cualquier gate que cree o BORRE una factura a la vez le deja un eslabón suelto y el '
+   + 'chequeo canta «el enlace con la factura anterior está roto». En paralelo: 34 ✓ · 1 ✗; solo: '
+   + '35 ✓ · 0 ✗. La aserción es buena y se conserva tal cual.'],
+  ['gate-informes-a-medida',
+   'cuenta A MANO las citas, las horas reservadas y las ocupadas del negocio entero y las contrasta '
+   + 'con el constructor. Otro gate creando una cita le mueve las dos cifras a la vez (en paralelo: '
+   + '«3 en la sala vs 6 a mano» y 4 h de diferencia entre reservadas y ocupadas; solo: 99 ✓ · 0 ✗).'],
+  ['gate-descuentos',
+   'la propuesta de descuentos mira las PROMOCIONES ACTIVAS del negocio compartido, no solo las '
+   + 'suyas: si otro gate deja una activa, salen propuestas de más y el reparto por tipo de IVA deja '
+   + 'de ser el que afirma (en paralelo salieron cuatro bandas donde espera dos). EL ARREGLO BUENO '
+   + 'es que el gate filtre por SU promoción, como ya hacen los de compras con `productoDePrueba`; '
+   + 'mientras eso no esté, corre solo — y queda dicho para que no se olvide.'],
   ['gate-nav-inicio-disa',
    'cuenta las PROPUESTAS PENDIENTES del negocio (`contarPropuestasPendientes`) y exige que el badge '
    + 'del riel enseñe ese mismo número. Los seis gates de propuestas crean y consumen propuestas en '
