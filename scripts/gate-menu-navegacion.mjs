@@ -43,6 +43,11 @@ const BASE_RAIL = [
   ['Ventas', 'Descuentos y bonos', '/admin/descuentos'],
   ['Clientes', 'Clientes', '/admin/clients'],
   ['Clientes', 'Oportunidades', '/admin/crm'],
+  // ⚙️ 24 ago 2026 · LAS CATORCE QUE ESTABAN ESCONDIDAS. No fallaba el gate: **el menú creció**, que
+  // es lo que este encargo perseguía. Que el número SUBA es el resultado esperado; lo que este gate
+  // impide es que BAJE sin que nadie se entere, y eso sigue igual de vigilado.
+  ['Clientes', 'Cola comercial', '/admin/crm/cola'],
+  ['Clientes', 'Tareas del CRM', '/admin/crm/tareas'],
   // MOVIDA DESDE VENTAS el 18 ago 2026 (decisión de Ibrahin). El inventario NO cambia de tamaño: son
   // las mismas 42 entradas del rail, una de ellas en otra área. Si algún día desaparece, este gate
   // se pone rojo igual.
@@ -68,6 +73,13 @@ const BASE_RAIL = [
   ['Compras y gastos', 'Captura de factura', '/admin/purchases/capture'],
   ['Compras y gastos', 'Proveedores', '/admin/suppliers'],
   ['Contabilidad', 'Libros y modelos', '/admin/contabilidad'],
+  ['Contabilidad', 'Libro de ventas', '/admin/contabilidad/ventas'],
+  ['Contabilidad', 'Libro de compras', '/admin/contabilidad/compras'],
+  ['Contabilidad', 'Diario', '/admin/contabilidad/diario'],
+  ['Contabilidad', 'Mayor', '/admin/contabilidad/mayor'],
+  ['Contabilidad', 'Pérdidas y ganancias', '/admin/contabilidad/pyg'],
+  ['Contabilidad', 'Bienes de inversión', '/admin/contabilidad/bienes'],
+  ['Contabilidad', 'Modelos de Hacienda', '/admin/contabilidad/modelos'],
   ['Contabilidad', 'Conciliación bancaria', '/admin/conciliacion'],
   ['Contabilidad', 'Envío Verifactu (AEAT)', '/admin/verifactu/envios'],
   ['Inventario', 'Stock', '/admin/inventory'],
@@ -101,7 +113,14 @@ const SECCION_CONFIG = 'Cómo funciona mi agenda';
 // B1 (23 ago 2026) — «Trae tus datos» es la TERCERA fija: la puerta permanente a la migración
 // asistida, al pie del rail, encima de la ayuda. Y desde hoy las fijas pasan por el filtro de
 // permisos (lleva candado `company.read`), cosa que antes no ocurría con ninguna.
-const BASE_FIJAS  = [['Inicio', '/admin'], ['Trae tus datos', '/admin/migracion'], ['Ayuda y soporte', '/docs']];
+const BASE_FIJAS  = [
+  ['Inicio', '/admin'],
+  ['Trae tus datos', '/admin/migracion'],
+  // ⚙️ 24 ago 2026 · dos de las catorce que estaban escondidas.
+  ['Importar un fichero', '/admin/migracion/importar'],
+  ['Avisos', '/admin/avisos'],
+  ['Ayuda y soporte', '/docs'],
+];
 const BASE_CUENTA = [['Perfil', '/admin/perfil'], ['Datos del negocio', '/admin/settings'],
                      ['Usuarios', '/admin/users'], ['Actividad', '/admin/activity'],
                      ['Documentación', '/docs'], ['Cerrar sesión', '/admin/logout']];
@@ -290,9 +309,16 @@ try {
   // ── LA OTRA MITAD DEL INVENTARIO: la sección dentro de la configuración del negocio ────────────
   await page.goto(BASE + '/admin/settings', { waitUntil: 'networkidle0' });
   const cfg = await leerConfig(page);
-  ok(cfg.secs.length === 1 && cfg.secs[0].label === SECCION_CONFIG,
-     'la configuración del negocio tiene UNA sección propia para las mudadas', cfg.secs.map(x => x.label).join(' · '));
-  const vistoConfig = (cfg.secs[0] ? cfg.secs[0].items : []).map(i => [SECCION_CONFIG, i.label, i.href]);
+  // ⚙️ 24 ago 2026 · AHORA SON DOS SECCIONES. La segunda —«Cómo habla mi negocio y qué presenta»—
+  // recoge las tres pantallas de ajustes que no estaban en ningún menú (plantillas de correo, avisos
+  // y situación fiscal). Se exige que la de la agenda SIGA estando, que es lo que protege de una
+  // amputación; que haya una más es el resultado del encargo, no un fallo.
+  ok(cfg.secs.some(x => x.label === SECCION_CONFIG),
+     'la configuración del negocio conserva su sección de la agenda', cfg.secs.map(x => x.label).join(' · '));
+  ok(cfg.secs.some(x => /qué presenta/i.test(x.label)),
+     '  y tiene la de los ajustes que estaban escondidos', cfg.secs.map(x => x.label).join(' · '));
+  const secAgenda = cfg.secs.find(x => x.label === SECCION_CONFIG);
+  const vistoConfig = (secAgenda ? secAgenda.items : []).map(i => [SECCION_CONFIG, i.label, i.href]);
   // El negocio acaba de nacer y no tiene puestos, así que aquí se esperan CINCO (ver N_SIN_PUESTOS).
   const espConfig = BASE_CONFIG.map(([nuevo, , h]) => [SECCION_CONFIG, nuevo, h]);
   ok(JSON.stringify(vistoConfig.map(x => x[1])) === JSON.stringify(espConfig.map(x => x[1])),
@@ -808,8 +834,16 @@ try {
   const enMenu = new Set();
   for (const a of mEmp.areas) for (const i of a.diario.concat(a.ajustes)) if (i.href) enMenu.add(i.href);
   for (const sec of cfgEmp.secs) for (const i of sec.items) enMenu.add(i.href);
-  enMenu.add(mEmp.pin.href); enMenu.add('/docs');
+  enMenu.add(mEmp.pin.href);
   for (const i of mEmp.cuenta) enMenu.add(i.href);
+  // 24 ago 2026 · EL PIE DEL RAIL ES MENÚ COMO LOS DEMÁS. `leerMenu` ya lo leía desde ayer, pero
+  // esta lista se armaba sin él y con `/docs` a mano — así que cualquier entrada nueva al pie
+  // salía «colada»: en el buscador sí, en el menú no. Lo destapó `/admin/avisos`. Se leen las
+  // tres superficies (rail, configuración, pie) y se comprueba que el pie NO viene vacío: si un
+  // día deja de pintarse, esta línea no puede tapar el agujero dándolo todo por bueno.
+  ok(mEmp.pies.length >= 2, 'la empleada ve el pie de su rail',
+     mEmp.pies.length + ' entradas: ' + mEmp.pies.map(i => i.label).join(', '));
+  for (const i of mEmp.pies) enMenu.add(i.href);
   const enBuscador = mEmp.destinos.filter(d => d.href).map(d => d.href);
   const colados = enBuscador.filter(h => !enMenu.has(h));
   ok(colados.length === 0, 'el buscador NO enseña ni una puerta que no esté en su menú',

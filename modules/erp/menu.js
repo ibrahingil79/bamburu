@@ -113,7 +113,12 @@ export const NAV_PERMS = {
   // permiso `historial.read` no perdona el rol de administrador (ver core/auth.js). Aquí se declara
   // para que el rail lo respete igual, y `condicionesConfig` lo esconde fuera del oficio de salud.
   'historial-accesos': 'historial.read',
-  'settings-avisos':   null,   // la pantalla no exige permiso: filtra por dentro lo que enseña
+  // ⚙️ 24 ago 2026 · CORREGIDO EL MISMO DÍA QUE SE PUSO. Se declaró `null` porque la pantalla filtra
+  // por dentro lo que enseña — y es verdad—, pero eso hacía que **cualquier empleado viera en su
+  // menú una entrada de la configuración del negocio**. Lo cazó `gate-menu-navegacion`: «y NO ve
+  // ninguna otra parte de la configuración del negocio — avisos=true». Filtrar dentro no basta si
+  // la puerta se enseña fuera. Pide lo mismo que las otras dos de su sección.
+  'settings-avisos':   'company.read',
   avisos:              null,   // la pantalla de avisos tampoco; ya se alcanzaba desde la campana
   security:         'admin.settings',
   'change-password': null,

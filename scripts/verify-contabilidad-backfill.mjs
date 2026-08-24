@@ -48,17 +48,31 @@ try {
   const r2run = backfillLedger(db);
   ok(r1.entries === r2run.entries && r2run.errors.length === 0, 'Backfill idempotente: re-ejecutar NO duplica (' + r1.entries + ' = ' + r2run.entries + ')');
 
-  // 5) Cuadre del LIBRO DE VENTAS vs documentos vivos (todo el histórico).
+  // 5 y 6) Cuadre de los LIBROS vs documentos vivos (todo el histórico).
+  //
+  // LAS CUATRO LECTURAS VAN EN UNA SOLA FOTO. 24 ago 2026: esto salió ROJO en el barrido de anoche
+  // —«libro 119976.28 = vivo 119649.28», 327,00 € de más EN EL LIBRO— y a la mañana siguiente estaba
+  // verde sin que nadie tocara nada. No era el producto: era esta comprobación. Leía el libro, y
+  // DESPUÉS recorría los documentos. Entre las dos lecturas, otra de las 204 comprobaciones que
+  // corren a la vez sobre el mismo negocio anulaba facturas de proveedor: el libro ya las había
+  // contado y el segundo recuento ya no. Por eso el desfase siempre salía del mismo signo, libro >
+  // vivo, nunca al revés. Reproducido en una copia: anular 93,06 € entre las dos lecturas da un
+  // desfase de exactamente 93,06 €; con la foto puesta, da 0 aunque la otra conexión anule en medio.
+  //
+  // La foto NO ablanda nada: se sigue exigiendo cuadre exacto al céntimo. Solo obliga a que los dos
+  // lados se midan en el mismo instante, que es lo único que la comprobación quería decir.
   const R = ['1900-01-01', '2999-12-31'];
-  const lv = libroVentas(db, ...R);
-  let liveV = 0;
-  for (const inv of db.prepare('SELECT * FROM invoices').all()) if (countsAsReceivable(db, inv)) liveV = r2(liveV + r2(inv.subtotal) + r2(inv.tax_amount));
+  const foto = db.transaction(() => {
+    const lv = libroVentas(db, ...R);
+    let liveV = 0;
+    for (const inv of db.prepare('SELECT * FROM invoices').all()) if (countsAsReceivable(db, inv)) liveV = r2(liveV + r2(inv.subtotal) + r2(inv.tax_amount));
+    const lc = libroCompras(db, ...R);
+    let liveC = 0;
+    for (const si of db.prepare('SELECT * FROM supplier_invoices').all()) if (countsAsPayable(si)) liveC = r2(liveC + r2(si.base) + r2(si.tax));
+    return { lv, liveV, lc, liveC };
+  });
+  const { lv, liveV, lc, liveC } = foto();
   ok(r2(lv.totals.total) === liveV, 'Libro de VENTAS cuadra con documentos vivos (libro ' + r2(lv.totals.total) + ' = vivo ' + liveV + ')');
-
-  // 6) Cuadre del LIBRO DE COMPRAS vs documentos vivos.
-  const lc = libroCompras(db, ...R);
-  let liveC = 0;
-  for (const si of db.prepare('SELECT * FROM supplier_invoices').all()) if (countsAsPayable(si)) liveC = r2(liveC + r2(si.base) + r2(si.tax));
   ok(r2(lc.totals.total) === liveC, 'Libro de COMPRAS cuadra con documentos vivos (libro ' + r2(lc.totals.total) + ' = vivo ' + liveC + ')');
 
   // 7) Anti-doble-conteo explícito: ninguna factura sustituida (ticket→F3) ni anulada aparece en el libro.

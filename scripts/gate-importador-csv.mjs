@@ -140,8 +140,14 @@ try {
   const h2 = await (await pedir('/admin/migracion')).text();
   ok(/La migración la hacemos nosotros, y es gratis/.test(h2), 'la asistida conserva su oferta');
   ok(/Pedir la migración/.test(h2), 'y su botón de siempre');
-  const posAsistida = h2.indexOf('La migración la hacemos nosotros');
-  const posImport   = h2.indexOf('/admin/migracion/importar');
+  // ⚙️ 24 ago 2026 · SE MIDE EL CUERPO DE LA PANTALLA, NO EL DOCUMENTO ENTERO. Esto comparaba
+  // posiciones en todo el HTML, y el menú lateral se pinta ANTES que el contenido: desde que el
+  // importador tiene su entrada en el rail —una de las catorce pantallas que estaban escondidas—,
+  // su enlace aparecía el primero y la aserción cantaba que la asistida ya no iba delante.
+  // Lo que se quiere afirmar es del CONTENIDO: que en esta pantalla se ofrece antes la asistida.
+  const cuerpo = h2.slice(Math.max(0, h2.indexOf('<div class="ph"')));
+  const posAsistida = cuerpo.indexOf('La migración la hacemos nosotros');
+  const posImport   = cuerpo.indexOf('/admin/migracion/importar');
   ok(posImport > 0, 'la pantalla ofrece TAMBIÉN el importador');
   ok(posAsistida > 0 && posAsistida < posImport, 'y la asistida va PRIMERO: se suma, no la sustituye');
   ok(/[Ll]as facturas/.test(h2), 'y se dice en pantalla qué pasa con las facturas');

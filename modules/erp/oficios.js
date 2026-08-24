@@ -123,7 +123,7 @@ export const OFICIOS = [
       // (La estética tiene su propio oficio, `estetica`, y allí nace entera al general.)
       { nombre: 'Masaje de bienestar (no terapéutico)', duracion_min: 60, banda: 'general' },
       { nombre: 'Sesión de entrenamiento personal',     duracion_min: 60, banda: 'general' },
-      { nombre: 'Clase de pilates (grupo)',             duracion_min: 55, banda: 'general' },
+      { nombre: 'Clase de pilates en grupo (no terapéutico)', duracion_min: 55, banda: 'general' },
       { nombre: 'Plan de adelgazamiento (no terapéutico)', duracion_min: 45, banda: 'general' },
     ],
   },

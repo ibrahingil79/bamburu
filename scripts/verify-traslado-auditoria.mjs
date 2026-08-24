@@ -92,7 +92,10 @@ try {
   let bloqueado = '';
   try {
     createStockTransferSvc(db, { from_warehouse_id: origen.id, to_warehouse_id: destino.id, date: '2026-07-10', notes: 'x',
-      items: [{ product_id: prod.id, quantity: 12 }] });   // basta con pasarse del stock; miles distorsionan informes
+      // PASARSE DEL STOCK, con una cifra de la vida real: lo que hay en origen MÁS UNO. Antes ponía
+      // 999.999, que distorsiona cualquier informe si un día se escapa. Se calcula sobre el stock de
+      // verdad para que siga pasándose aunque el almacén cambie: una cifra fija se queda corta o larga.
+      items: [{ product_id: prod.id, quantity: productStockInWarehouse(db, prod.id, origen.id) + 1 }] });
   } catch (e) { bloqueado = e.message; }
   ok(/disponible en/.test(bloqueado), `sacar más de lo que hay se impide: "${bloqueado.slice(0, 70)}…"`);
 

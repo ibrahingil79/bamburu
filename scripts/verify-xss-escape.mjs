@@ -62,7 +62,10 @@ const SINKS_B = [
   ['modules/erp/routes/quotes.js',          'PRELOAD',     'líneas del presupuesto: description'],
   ['modules/erp/routes/pedidos.js',         'PRELOAD',     'líneas del pedido: description'],
   ['modules/erp/routes/invoices.js',        'SEED_LINES',  'líneas de la factura: description'],
-  ['modules/erp/routes/orders.js',          'PRODUCTS',    'catálogo (ruta hoy desmontada, red por si vuelve)'],
+  // ⚙️ 24 ago 2026 · AQUÍ ESTABA `routes/orders.js`, del POS viejo, como «red por si vuelve». Ya no
+  // vuelve: el fichero se RETIRÓ del árbol ese mismo día, con las otras cinco pantallas muertas, y
+  // con él cayó el documento de PEDIDO que se titulaba «FACTURA». Una red tendida sobre un fichero
+  // que no existe no protege nada: revienta al abrirlo, que es justo lo que hacía este gate.
   ['modules/erp/routes/purchases.js',       'productsJson','catálogo: name + sku (C4a)'],
   ['modules/erp/routes/inventory.js',       'WAREHOUSES',  'almacenes: name (C4a)'],
   ['modules/erp/views/stock-modal.js',      'WAREHOUSES',  'almacenes: name (C4a)'],

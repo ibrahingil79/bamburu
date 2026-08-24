@@ -15,7 +15,7 @@ import { randomBytes } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { tenantDb, launchOpts } from './lib/gate-env.mjs';
-import { MENU, CONFIG_NEGOCIO, FIJAS, CUENTA } from '../modules/erp/menu.js';
+import { MENU, CONFIG_NEGOCIO, FIJAS, CUENTA, condicionesConfig } from '../modules/erp/menu.js';
 
 const SLUG = 'desarrollo-bamburu';
 const HOST = SLUG + '.bamburu.com', BASE = 'https://' + HOST;
@@ -36,9 +36,16 @@ db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf
 
 // ── Las pantallas: el menú entero + las de detalle que existen de verdad ─────────────────────────
 const pantallas = [];
+const CONDS = condicionesConfig(db);
 const meter = (href, label) => { if (href && href.startsWith('/admin') && !pantallas.some(p => p.href === href)) pantallas.push({ href, label }); };
 const recorrer = l => { for (const it of (l || [])) { if (Array.isArray(it)) { recorrer(it); continue; }
-  if (!it || typeof it !== 'object') continue; meter(it.href, it.label); if (it.items) recorrer(it.items); } };
+  if (!it || typeof it !== 'object') continue;
+  // ⚙️ 24 ago 2026 · las entradas CONDICIONALES (`siHay`) solo existen en el negocio que cumple su
+  // condición. La del historial clínico da 404 a propósito fuera del oficio de salud, y pedirla
+  // aquí la contaba como pantalla muerta. Lo que NO se afloja: una pantalla sin condición que dé
+  // 404 sigue siendo un rojo.
+  if (it.siHay && CONDS[it.siHay] !== true) continue;
+  meter(it.href, it.label); if (it.items) recorrer(it.items); } };
 recorrer(MENU); recorrer(CONFIG_NEGOCIO); recorrer(FIJAS); recorrer(CUENTA);
 const uno = s => { try { return db.prepare(s).get(); } catch { return null; } };
 for (const [tabla, ruta, label] of [

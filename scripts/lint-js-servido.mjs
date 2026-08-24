@@ -25,7 +25,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { tenantDb } from './lib/gate-env.mjs';
-import { MENU, CONFIG_NEGOCIO, FIJAS, CUENTA } from '../modules/erp/menu.js';
+import { MENU, CONFIG_NEGOCIO, FIJAS, CUENTA, condicionesConfig } from '../modules/erp/menu.js';
 
 const SLUG = 'desarrollo-bamburu';
 const BASE = 'https://' + SLUG + '.bamburu.com';
@@ -42,8 +42,18 @@ db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf
 // justo por donde se coló la que rompió. Enumerarlas a mano es feo; no enumerarlas es peor.
 const rutas = [];
 const meter = h => { if (h && h.startsWith('/admin') && !rutas.includes(h)) rutas.push(h); };
+// ⚙️ 24 ago 2026 · LAS ENTRADAS CONDICIONALES. Esto leía la lista CRUDA de entradas del menú, sin
+// pasar por `menuDeUsuario`, que es quien decide cuáles existen en ESTE negocio. Con el historial
+// clínico apareció el primer caso en que eso importa: su entrada solo existe en el oficio de salud y
+// su ruta **da 404 a propósito** en cualquier otro — así que el lint la pedía y la contaba como
+// pantalla muerta. No lo estaba: estaba haciendo exactamente lo que se le pidió.
+// Se salta las entradas cuya condición no se cumple aquí. Lo que NO se afloja: si una pantalla sin
+// condición da 404, sigue siendo un rojo.
+const CONDS = condicionesConfig(db);
 const rec = l => { for (const it of (l || [])) { if (Array.isArray(it)) { rec(it); continue; }
-  if (!it || typeof it !== 'object') continue; meter(it.href); if (it.items) rec(it.items); } };
+  if (!it || typeof it !== 'object') continue;
+  if (it.siHay && CONDS[it.siHay] !== true) continue;
+  meter(it.href); if (it.items) rec(it.items); } };
 rec(MENU); rec(CONFIG_NEGOCIO); rec(FIJAS); rec(CUENTA);
 for (const extra of [
   '/admin/migracion/importar',      // ← la que se coló

@@ -20,7 +20,12 @@ APP="/home/ubuntu/bamburu"
 NODE="/usr/bin/node"
 MAILTO="${BAMBURU_BARRIDO_EMAIL:-ibrahingil@gmail.com}"
 MAILFROM="Bamburu <noreply@bamburu.com>"
-TOPE_SEG="${BAMBURU_BARRIDO_TOPE:-3600}"        # 1 h: el completo tarda ~17 min; si pasa de una hora, algo va mal
+# ⚙️ 24 ago 2026 · SUBIDO DE 1 H A 4 H, y el motivo importa: cuando se escribió esto el barrido
+# completo eran 111 comprobaciones y 17 minutos. Hoy son 204 —las 99 que no ejecutaba nadie ya
+# están dentro— y varias se traen su propio negocio, que cuesta unos segundos cada una. Medido:
+# va camino de dos horas y media. Con el tope viejo, el parte de cada noche habría dicho «no
+# llegó a terminar» **siempre**, y un aviso que salta todas las noches se deja de leer en tres días.
+TOPE_SEG="${BAMBURU_BARRIDO_TOPE:-14400}"      # 4 h. Si un día se pasa de ahí, algo va mal de verdad.
 LOG="$(mktemp /tmp/barrido-nocturno-XXXXXX.log)"
 cd "$APP" || exit 1
 
