@@ -42,9 +42,10 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { runMigrations } from '../modules/erp/models.js';
 import { avisosEmail, hoyLocal, fuentesDe, puedeDe, permisosDeUsuario } from '../modules/erp/avisos.js';
-import { parteDelDia, parteHtml, parteTexto } from '../modules/erp/parte-diario.js';
+import { parteDelDia, parteHtml, parteTexto, permDeLinea } from '../modules/erp/parte-diario.js';
 import { getPref, leToca, horaLocal, yaRegistrado, registrar } from '../modules/erp/avisos-preferencias.js';
 import { sendEmail } from '../core/mailer.js';
+import { enviarAlEquipo, destinatarioDe } from '../core/correo-equipo.js';
 
 const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TENANTS_DIR = join(APP_DIR, 'data', 'tenants');
@@ -140,24 +141,36 @@ async function processTenant(path) {
         continue;
       }
 
-      const payload = {
+      // POR LA PUERTA ÚNICA (`core/correo-equipo.js`). El parte ya viene filtrado por permisos, pero
+      // pasar por aquí no es redundancia: es lo que hace que la regla sea ESTRUCTURA y no costumbre.
+      // Cada frase viaja con el permiso que exige la pantalla donde ese dato se ve, la puerta lo
+      // vuelve a comprobar contra los permisos LEÍDOS DE LA BASE, y si no sobrevive nada no manda.
+      // Así, el día que alguien escriba otro correo al equipo, hereda la regla sin acordarse.
+      const bloques = parte.frases.map(f => ({ id: f.id, perm: permDeLinea(f.id), texto: f.texto }));
+      const res = await enviarAlEquipo(db, {
+        userId: u.id,
+        bloques,
         from: 'Bamburu <noreply@bamburu.com>',
-        to: destino,
-        subject: tpl.subject,
-        html: tpl.html,
-        text: tpl.text || (parteTexto(parte.frases) + '\n\nCambiar o dejar de recibir estos avisos: ' + ajustesUrl),
-        ...(company.email ? { replyTo: company.email } : {}),
-      };
-      const { data, error } = await sendEmail(payload);
-      if (error) {
-        r.errores++;
-        log(slug + '/' + destino + ': ERROR al enviar: ' + (error.message || JSON.stringify(error)));
-        registrar(db, { fecha: TODAY, userId: u.id, enviado: 0, motivo: 'error', lineas: parte.n });
+        replyTo: company.email || undefined,
+        componer: (quedan) => ({
+          subject: tpl.subject,
+          html: tpl.html,
+          text: tpl.text || (parteTexto(quedan.map(b => ({ texto: b.texto }))) + '\n\nCambiar o dejar de recibir estos avisos: ' + ajustesUrl),
+        }),
+      }, sendEmail);
+
+      if (!res.enviado) {
+        r.errores += res.motivo === 'error' ? 1 : 0;
+        log(slug + '/' + (res.destino || u.email || u.id) + ': NO enviado (' + res.motivo + ')'
+          + (res.error ? ': ' + (res.error.message || JSON.stringify(res.error)) : '')
+          + (res.fuera && res.fuera.length ? ' · fuera por permiso: ' + res.fuera.map(x => x.id).join(', ') : ''));
+        registrar(db, { fecha: TODAY, userId: u.id, enviado: 0, motivo: res.motivo, lineas: parte.n });
         continue;
       }
-      registrar(db, { fecha: TODAY, userId: u.id, enviado: 1, motivo: 'enviado', lineas: parte.n });
+      registrar(db, { fecha: TODAY, userId: u.id, enviado: 1, motivo: 'enviado', lineas: res.bloques });
       r.enviados++;
-      log(slug + ': enviado a ' + destino + ' · ' + parte.n + ' línea(s) · id ' + (data && data.id));
+      log(slug + ': enviado a ' + res.destino + ' · ' + res.bloques + ' línea(s) · id ' + res.id
+        + (res.fuera && res.fuera.length ? ' · fuera por permiso: ' + res.fuera.map(x => x.id).join(', ') : ''));
     }
 
     // La marca DEL NEGOCIO se conserva tal cual estaba: `daily_alert_log` sigue siendo la fila por

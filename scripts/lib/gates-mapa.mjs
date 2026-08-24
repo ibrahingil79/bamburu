@@ -105,7 +105,10 @@ export const GRUPOS = {
   // `verify-avisos-crm-riesgo` ENTRA AL BARRIDO el 22 ago 2026. Estaba excluido con la nota «EN ROJO
   // desde antes (datos de riesgo ya en la BD viva)» y hoy pasa limpio: la exclusión estaba caducada
   // y lo que hacía era esconder una comprobación buena. Se mide, no se supone.
-  avisos: ['verify-avisos-permisos', 'gate-avisos-badge', 'verify-avisos-crm-riesgo'],
+  avisos: ['verify-avisos-permisos', 'gate-avisos-badge', 'verify-avisos-crm-riesgo',
+           // PUNTO 1 (24 ago 2026) — la regla de los correos al equipo: un correo nunca lleva un
+           // dato que su destinatario no podría ver en pantalla. Estructural + de comportamiento.
+           'verify-correos-permisos'],
   // Escalera · paso 7 — SERVICIOS PROFESIONALES (proyectos, tiempo, facturar horas). verify-constructor
   // va incluido a propósito: facturar horas EMITE facturas reales, así que la regresión tiene que probar
   // que Ventas (la "única verdad") no se mueve por ello.

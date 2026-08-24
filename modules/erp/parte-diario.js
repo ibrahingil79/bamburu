@@ -69,6 +69,15 @@ export function lineas() {
   return CATALOGO_LINEAS.map(l => ({ ...l, perm: l.extra ? l.perm : (PERM_POR_FUENTE[l.id] || '__sin_permiso_declarado__') }));
 }
 
+// El permiso que exige UNA línea, por su id. Lo necesita la puerta única de correos al equipo
+// (`core/correo-equipo.js`): cada frase del parte viaja con el permiso de la pantalla donde ese dato
+// se ve, y la puerta lo vuelve a comprobar. Una línea desconocida devuelve el permiso imposible, así
+// que falla CERRADO — igual que el catálogo de arriba.
+export function permDeLinea(id) {
+  const l = lineas().find(x => x.id === id);
+  return (l && l.perm) || '__sin_permiso_declarado__';
+}
+
 // Las líneas que este usuario PUEDE ver (permiso) Y ha dejado marcadas (preferencia). Intersección,
 // nunca unión: una casilla marcada de algo que ya no puede ver NO se la devuelve. `elegidas` vacío o
 // nulo = "todas las que pueda"; es el defecto de quien no ha tocado la pantalla.
