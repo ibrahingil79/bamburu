@@ -38,7 +38,16 @@ for (const n of negocios) {
     db.prepare('SELECT 1 FROM ledger_entries LIMIT 1').get();   // sin libro, nada que mirar
     const h = huerfanosVivos(db);
     mirados++;
-    if (h.length) sucios.push(n.replace('.db', '') + ': ' + h.length);
+    // NO BASTA CON DECIR CUÁNTOS. 24 ago 2026: este fallo salió «desarrollo-bamburu: 9» y averiguar
+    // quién los dejaba costó media tarde. El memo del asiento trae el número del documento, que es
+    // justo lo que señala a la comprobación culpable («Pago a proveedor (factura FRP-0427)»).
+    if (h.length) {
+      const porTipo = {};
+      for (const e of h) porTipo[e.origin_type] = (porTipo[e.origin_type] || 0) + 1;
+      const tipos = Object.entries(porTipo).map(([t, c]) => t + '×' + c).join(', ');
+      const muestra = h.slice(0, 3).map(e => e.memo || ('#' + e.id)).join(' | ');
+      sucios.push(n.replace('.db', '') + ': ' + h.length + ' (' + tipos + ') — p.ej. ' + muestra);
+    }
   } catch { /* ese negocio no tiene contabilidad montada */ }
   db.close();
 }

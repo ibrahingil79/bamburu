@@ -9,7 +9,7 @@ import { tenantDb, launchOpts } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 import { recomputeStock } from '../modules/erp/stock.js';
-import { borrarAsientosDe, contarHuerfanos } from './lib/limpiar-asientos.mjs';
+import { borrarFacturaProveedor, contarHuerfanos } from './lib/limpiar-asientos.mjs';
 
 const DB_PATH = tenantDb('desarrollo-bamburu');
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
@@ -133,8 +133,8 @@ try {
   // compra de prueba con sus movimientos recomponiendo el stock. (No usa /cancel porque el
   // tenant de desarrollo puede tener traslados activos que lo bloqueen; aquí borramos el
   // dato de prueba como si nunca hubiera existido.)
-  if (invoiceId) db2.prepare('DELETE FROM supplier_invoices WHERE id=?').run(invoiceId);
-  borrarAsientosDe(db2, 'supplier_invoice', [invoiceId]);   // el asiento NO cae en cascada: no hay clave ajena
+  // Borra la factura Y sus asientos, los suyos y los de sus pagos, en ese orden. Ver lib/limpiar-asientos.mjs.
+  if (invoiceId) borrarFacturaProveedor(db2, [invoiceId]);
   if (purchaseId) {
     const affected = db2.prepare("SELECT DISTINCT product_id pid FROM stock_movements WHERE origin_type='purchase' AND origin_id=?").all(purchaseId).map(r => r.pid);
     db2.transaction(() => {

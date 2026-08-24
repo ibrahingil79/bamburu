@@ -8,6 +8,7 @@ import puppeteer from 'puppeteer';
 import { tenantDb, launchOpts } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
+import { borrarFacturaProveedor, contarHuerfanos } from './lib/limpiar-asientos.mjs';
 
 const DB_PATH = tenantDb('desarrollo-bamburu');
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
@@ -16,6 +17,8 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
 
 const db = new Database(DB_PATH);
+// 24 ago 2026 · Se cuenta la basura del libro ANTES y DESPUÉS. Ver scripts/lib/limpiar-asientos.mjs.
+const huerfanosAntes = contarHuerfanos(db);
 const token = randomBytes(32).toString('base64url'), csrf = randomBytes(32).toString('base64url');
 const now = Math.floor(Date.now() / 1000);
 db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)').run(token, 2, now, now + 1800, csrf);
@@ -93,10 +96,17 @@ try {
 } finally {
   try {
     const ids = [a, b, cc, abono].filter(Boolean);
-    if (ids.length) { db.prepare('DELETE FROM supplier_payments WHERE supplier_invoice_id IN (' + ids.map(() => '?').join(',') + ')').run(...ids); db.prepare('DELETE FROM supplier_invoices WHERE id IN (' + ids.map(() => '?').join(',') + ')').run(...ids); }
+    // Borra las facturas de prueba Y sus asientos —los suyos y los de sus pagos—, apuntando los ids de
+    // los pagos ANTES de que el CASCADE se los lleve. Ver scripts/lib/limpiar-asientos.mjs.
+    if (ids.length) borrarFacturaProveedor(db, ids);
     if (supId) db.prepare('DELETE FROM suppliers WHERE id=?').run(supId);
     db.prepare('DELETE FROM admin_sessions WHERE token=?').run(token);
   } catch (e) { console.error('  (limpieza) ' + e.message); }
+  // Y se comprueba que se ha ido de verdad. Si mañana esta comprobación crea un documento nuevo y se
+  // olvida de su asiento, falla AQUÍ y no tres semanas después en el libro de compras.
+  const huerfanosDespues = contarHuerfanos(db);
+  ok(huerfanosDespues === huerfanosAntes,
+     'limpieza: no deja asientos huérfanos en el libro (antes ' + huerfanosAntes + ', ahora ' + huerfanosDespues + ')');
   await browser.close();
   db.close();
   console.log('\n' + (fail ? '✗ ' + fail + ' fallos, ' : '') + pass + ' OK');

@@ -23,7 +23,11 @@ try {
   token = neg.sesion();
 } catch (e) { console.error('✗ No se pudo sembrar: ' + e.message); neg.tirar(); process.exit(1); }
 
-const browser = await puppeteer.launch({ headless: 'new', executablePath: '/snap/bin/chromium', userDataDir: '/home/ubuntu/.cache/pptr-verif', args: ['--no-sandbox'] });
+// 24 ago 2026 · SIN perfil fijo, A PROPOSITO. Uno fijo hace que dos comprobaciones a la vez se maten con
+// «The browser is already running» — mensaje enganoso: puppeteer lo lanza en cuanto Chromium dice «Failed
+// to create a ProcessSingleton», y el snap no puede poner su cerrojo ahi. Sin la opcion, puppeteer levanta
+// un perfil temporal unico por arranque, que ademas evita que dos pestanas compartan cookies.
+const browser = await puppeteer.launch({ headless: 'new', executablePath: '/snap/bin/chromium', args: ['--no-sandbox'] });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 1000 });
 await page.setCookie({ name: 'asess', value: token, domain: new URL(ORIGIN).hostname, path: '/' });

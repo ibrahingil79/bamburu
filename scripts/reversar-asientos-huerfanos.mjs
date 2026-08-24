@@ -23,7 +23,13 @@ const ruta = join(RAIZ, 'data', 'tenants', slug + '.db');
 const db = new Database(ruta);
 restringirBd(ruta);
 
-const antesV = libroVentas(db, null, null), antesC = libroCompras(db, null, null);
+// 24 ago 2026 · CON RANGO Y CON LA RUTA BUENA. Esto llevaba imprimiendo «null → null» desde que se
+// escribió, o sea que la herramienta no enseñaba su propio efecto: (1) libroVentas/libroCompras con
+// fechas nulas no devuelven nada, hay que darles un rango; (2) devuelven { rows, totals:{...} }, y
+// `tot` buscaba `total` a pelo. Un instrumento que no mide es peor que no tenerlo: da por hecho que
+// el trabajo salió bien porque no dice lo contrario.
+const TODO = ['1900-01-01', '2999-12-31'];
+const antesV = libroVentas(db, ...TODO), antesC = libroCompras(db, ...TODO);
 const sim = reversarHuerfanos(db, { simulacro: true });
 
 console.log('\n=== Asientos huérfanos en «' + slug + '» ===\n');
@@ -39,8 +45,12 @@ if (!HAZLO) {
 }
 
 const r = reversarHuerfanos(db, {});
-const despuesV = libroVentas(db, null, null), despuesC = libroCompras(db, null, null);
-const tot = l => (l && (l.total ?? l.resumen?.total)) ?? null;
+const despuesV = libroVentas(db, ...TODO), despuesC = libroCompras(db, ...TODO);
+const tot = l => {
+  const n = l?.totals?.total;
+  if (typeof n !== 'number') throw new Error('reversar: no sé leer el total del libro — ' + JSON.stringify(Object.keys(l || {})));
+  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+};
 console.log('\n  ANULADOS con asiento inverso: ' + r.anulados);
 console.log('  libro de VENTAS:  ' + tot(antesV) + '  →  ' + tot(despuesV));
 console.log('  libro de COMPRAS: ' + tot(antesC) + '  →  ' + tot(despuesC));

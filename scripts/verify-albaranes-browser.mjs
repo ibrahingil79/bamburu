@@ -47,7 +47,11 @@ try {
 const stockWh = (pid, wid) => { const d = new Database(neg.abs, { readonly: true }); const s = d.prepare('SELECT COALESCE(SUM(quantity),0) q FROM stock_movements WHERE product_id=? AND warehouse_id=?').get(pid, wid).q; d.close(); return s; };
 const reserved = (pid) => { const d = new Database(neg.abs, { readonly: true }); const r = d.prepare(`SELECT COALESCE(SUM(MAX(oi.quantity-COALESCE(x.e,0),0)),0) r FROM customer_order_items oi JOIN customer_orders o ON o.id=oi.order_id LEFT JOIN (SELECT di.order_item_id, SUM(di.quantity) e FROM delivery_note_items di JOIN delivery_notes dn ON dn.id=di.delivery_note_id WHERE dn.status='confirmado' GROUP BY di.order_item_id) x ON x.order_item_id=oi.id WHERE oi.product_id=? AND o.status='confirmado'`).get(pid).r; d.close(); return r; };
 
-const browser = await puppeteer.launch({ headless: 'new', executablePath: '/snap/bin/chromium', userDataDir: '/home/ubuntu/.cache/puppeteer-gate', args: ['--no-sandbox'] });
+// 24 ago 2026 · SIN perfil fijo, A PROPOSITO. Uno fijo hace que dos comprobaciones a la vez se maten con
+// «The browser is already running» — mensaje enganoso: puppeteer lo lanza en cuanto Chromium dice «Failed
+// to create a ProcessSingleton», y el snap no puede poner su cerrojo ahi. Sin la opcion, puppeteer levanta
+// un perfil temporal unico por arranque, que ademas evita que dos pestanas compartan cookies.
+const browser = await puppeteer.launch({ headless: 'new', executablePath: '/snap/bin/chromium', args: ['--no-sandbox'] });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 1000 });
 await page.setCookie({ name: 'asess', value: token, domain: new URL(ORIGIN).hostname, path: '/' });

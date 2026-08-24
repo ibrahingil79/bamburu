@@ -24,7 +24,11 @@ db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf
 db.close();
 
 const jsErrors = [];
-const browser = await puppeteer.launch({ headless: 'new', executablePath: '/snap/bin/chromium', userDataDir: '/home/ubuntu/.cache/pptr-u3', args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] });
+// 24 ago 2026 · SIN `userDataDir` FIJO, A PROPOSITO. Un perfil fijo hace que dos comprobaciones a la vez
+// se maten con «The browser is already running» — mensaje enganoso: puppeteer lo lanza en cuanto Chromium
+// dice «Failed to create a ProcessSingleton», y el snap no puede poner su cerrojo ahi. Sin la opcion,
+// puppeteer levanta un perfil temporal unico por arranque. Ver scripts/lib/copia-consistente.mjs (misma familia).
+const browser = await puppeteer.launch({ headless: 'new', executablePath: '/snap/bin/chromium', args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 900 });
 await page.setCookie({ name: 'asess', value: token, domain: '127.0.0.1', path: '/' }, { name: 'btenant', value: 'desarrollo-bamburu', domain: '127.0.0.1', path: '/' });

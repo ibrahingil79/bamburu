@@ -16,6 +16,7 @@
 import puppeteer from 'puppeteer';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
+import { borrarFacturaProveedor, contarHuerfanos } from './lib/limpiar-asientos.mjs';
 
 const DB_PATH = '/home/ubuntu/bamburu/data/tenants/desarrollo-bamburu.db';
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
@@ -26,6 +27,8 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
 
 const db = new Database(DB_PATH);
+// 24 ago 2026 · Se cuenta la basura del libro ANTES y DESPUÉS. Ver scripts/lib/limpiar-asientos.mjs.
+const huerfanosAntes = contarHuerfanos(db);
 const PERM = Object.fromEntries(db.prepare("SELECT module||'.'||action AS code, id FROM permissions").all().map(r => [r.code, r.id]));
 
 // ── Fixtures. Todo lo que creo lo borro al final; no toco un solo dato real. ──────────────
@@ -248,8 +251,9 @@ try {
   try {
     if (creados.invoice) {
       db.prepare('DELETE FROM disa_proposals WHERE supplier_invoice_id=?').run(creados.invoice);
-      db.prepare('DELETE FROM supplier_payments WHERE supplier_invoice_id=?').run(creados.invoice);
-      db.prepare('DELETE FROM supplier_invoices WHERE id=?').run(creados.invoice);
+      // La factura, sus pagos y los ASIENTOS de ambos, en ese orden: los asientos no cuelgan de ninguna
+      // clave ajena, así que el CASCADE no se los lleva. Ver scripts/lib/limpiar-asientos.mjs.
+      borrarFacturaProveedor(db, [creados.invoice]);
     }
     if (creados.supplier) db.prepare('DELETE FROM suppliers WHERE id=?').run(creados.supplier);
     for (const t of creados.sessions) db.prepare('DELETE FROM admin_sessions WHERE token=?').run(t);
@@ -261,6 +265,9 @@ try {
     const resto = db.prepare('SELECT COUNT(*) n FROM supplier_invoices WHERE internal_code=?').get('D5B-' + SUFIJO).n;
     console.log('\n· Limpieza: fixtures borrados (quedan ' + resto + ' facturas de prueba).');
   } catch (e) { console.error('· AVISO: limpieza incompleta: ' + e.message); }
+  const huerfanosDespues = contarHuerfanos(db);
+  ok(huerfanosDespues === huerfanosAntes,
+     'limpieza: no deja asientos huérfanos en el libro (antes ' + huerfanosAntes + ', ahora ' + huerfanosDespues + ')');
   db.close();
   console.log('\n' + (fail ? '✗ ' + fail + ' fallos, ' : '') + pass + ' OK');
   process.exit(fail ? 1 : 0);

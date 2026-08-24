@@ -9,7 +9,7 @@ import { tenantDb, launchOpts } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 import { recomputeStock } from '../modules/erp/stock.js';
-import { borrarAsientosDe, contarHuerfanos } from './lib/limpiar-asientos.mjs';
+import { borrarFacturaProveedor, contarHuerfanos } from './lib/limpiar-asientos.mjs';
 
 const DB_PATH = tenantDb('desarrollo-bamburu');
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
@@ -98,9 +98,8 @@ try {
   await browser.close();
   const db2 = new Database(DB_PATH); db2.pragma('journal_mode = WAL');
   // Limpieza sin rastro.
-  if (abonoId) db2.prepare('DELETE FROM supplier_invoices WHERE id=?').run(abonoId);   // CASCADE líneas/pagos
-  if (debtId) db2.prepare('DELETE FROM supplier_invoices WHERE id=?').run(debtId);
-  borrarAsientosDe(db2, 'supplier_invoice', [abonoId, debtId]);   // el asiento NO cae en cascada: no hay clave ajena
+  // Borra las facturas Y sus asientos, los suyos y los de sus pagos, en ese orden. Ver lib/limpiar-asientos.mjs.
+  borrarFacturaProveedor(db2, [abonoId, debtId]);
   if (returnId) { db2.prepare('DELETE FROM supplier_return_items WHERE return_id=?').run(returnId); db2.prepare('DELETE FROM supplier_returns WHERE id=?').run(returnId); }
   if (pid) {
     db2.transaction(() => {

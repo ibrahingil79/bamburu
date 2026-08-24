@@ -35,9 +35,42 @@ export function borrarAsientosDe(db, origenTipo, ids) {
 
 // Cuántos asientos apuntan a un documento que ya no existe. Se mide ANTES y DESPUÉS: si la
 // comprobación deja uno más del que se encontró, es que se le ha escapado algo.
+//
+// CUENTA LOS TRES ORÍGENES, y esto no es celo: la primera versión miraba solo facturas y facturas
+// recibidas. Con ella, gate-pagos-proveedor decía «antes 68, ahora 68» tan tranquilo mientras dejaba
+// asientos de PAGO colgando — porque al borrar la factura, el CASCADE se lleva sus pagos y los
+// asientos de esos pagos se quedan igual de huérfanos. Un contador que no cuenta todo da un verde
+// que no vale nada.
+const ORIGENES = [
+  ['supplier_invoice', 'supplier_invoices'],
+  ['invoice',          'invoices'],
+  ['supplier_payment', 'supplier_payments'],
+];
+
 export function contarHuerfanos(db) {
-  return db.prepare(`SELECT COUNT(*) n FROM ledger_entries e
-    WHERE e.origin_type IN ('supplier_invoice','invoice')
-      AND NOT EXISTS (SELECT 1 FROM supplier_invoices si WHERE e.origin_type='supplier_invoice' AND si.id=e.origin_id)
-      AND NOT EXISTS (SELECT 1 FROM invoices i          WHERE e.origin_type='invoice'          AND i.id=e.origin_id)`).get().n;
+  let n = 0;
+  for (const [tipo, tabla] of ORIGENES) {
+    n += db.prepare('SELECT COUNT(*) n FROM ledger_entries e WHERE e.origin_type=?'
+      + ' AND NOT EXISTS (SELECT 1 FROM ' + tabla + ' t WHERE t.id=e.origin_id)').get(tipo).n;
+  }
+  return n;
+}
+
+// Borra una factura de proveedor de prueba SIN dejar rastro en el libro, y en el orden correcto.
+//
+// El orden importa y es la parte que se me escapó la primera vez: al borrar la factura, el CASCADE
+// se lleva sus pagos, y entonces ya no hay forma de saber qué ids tenían para limpiar SUS asientos.
+// Hay que apuntarlos ANTES.
+export function borrarFacturaProveedor(db, ids) {
+  const lista = (Array.isArray(ids) ? ids : [ids]).filter(Boolean);
+  if (!lista.length) return { asientos: 0, pagos: 0 };
+  const hueco = lista.map(() => '?').join(',');
+  return db.transaction(() => {
+    const pagos = db.prepare('SELECT id FROM supplier_payments WHERE supplier_invoice_id IN (' + hueco + ')')
+      .all(...lista).map(r => r.id);
+    const a = borrarAsientosDe(db, 'supplier_payment', pagos);
+    const b = borrarAsientosDe(db, 'supplier_invoice', lista);
+    db.prepare('DELETE FROM supplier_invoices WHERE id IN (' + hueco + ')').run(...lista);
+    return { asientos: a + b, pagos: pagos.length };
+  })();
 }

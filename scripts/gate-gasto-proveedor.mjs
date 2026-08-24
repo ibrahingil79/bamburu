@@ -7,7 +7,7 @@ import puppeteer from 'puppeteer';
 import { tenantDb, launchOpts } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
-import { borrarAsientosDe, contarHuerfanos } from './lib/limpiar-asientos.mjs';
+import { borrarFacturaProveedor, contarHuerfanos } from './lib/limpiar-asientos.mjs';
 
 const DB_PATH = tenantDb('desarrollo-bamburu');
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
@@ -116,8 +116,8 @@ try {
 } finally {
   await browser.close();
   const db2 = new Database(DB_PATH);
-  if (invoiceId) db2.prepare('DELETE FROM supplier_invoices WHERE id=?').run(invoiceId);   // CASCADE borra líneas + pagos
-  borrarAsientosDe(db2, 'supplier_invoice', [invoiceId]);   // el asiento NO cae en cascada: no hay clave ajena
+  // Borra la factura Y sus asientos, los suyos y los de sus pagos, en ese orden. Ver lib/limpiar-asientos.mjs.
+  if (invoiceId) borrarFacturaProveedor(db2, [invoiceId]);
   ok(!invoiceId || !db2.prepare('SELECT 1 FROM supplier_invoices WHERE id=?').get(invoiceId), 'limpieza: factura de gasto eliminada (líneas/pagos en cascada)');
   ok(!invoiceId || db2.prepare('SELECT COUNT(*) n FROM supplier_invoice_items WHERE supplier_invoice_id=?').get(invoiceId).n === 0, 'limpieza: líneas eliminadas');
   db2.prepare('DELETE FROM admin_sessions WHERE token=?').run(token);
