@@ -237,7 +237,7 @@ export const GRUPOS = {
   // Sala de máquinas: superadmin, conexiones a la BD, el fichero -wal, el saneo de errores al cliente,
   // el escapado del texto del usuario (que no se vuelva HTML ni JS) y la CSP estricta de las
   // superficies endurecidas (que sigan sin 'unsafe-inline' Y con los botones vivos).
-  infra: ['test-c6-secretos', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
+  infra: ['test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
           // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
           // archivar si lo dejó, y decirlo ANTES de pulsar. Antes daba un 500 seco.
@@ -255,7 +255,7 @@ export const GRUPOS = {
   //   · censo-ventanitas   — que no vuelva a colarse un prompt() o un confirm() (<1 s)
   //   · lint-js-servido    — pide cada pantalla y compila su JavaScript en línea (~324 pantallas)
   lint: ['lint-plantillas', 'censo-ventanitas', 'lint-js-servido', 'verify-nombre-documentos', 'verify-menu-completo',
-         'verify-factura-exenta', 'test-oficio',
+         'verify-factura-exenta', 'test-oficio', 'verify-libro-sin-huerfanos', 'verify-contabilidad-backfill',
          // PUNTO 5 (24 ago 2026) — el dinero y las fechas, como en España. Se mide sobre lo
          // SERVIDO: el código tiene toFixed(2) legítimos (el valor de un campo, un cuerpo de
          // petición) que romperlos sí sería un fallo. Lo que se prohíbe es lo que lee una persona.
