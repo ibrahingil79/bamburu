@@ -225,7 +225,22 @@ try {
   ok(/Otros/.test(rBarras.nota) || rBarras.barras <= 12, '  y la nota lo dice', rBarras.nota.slice(0, 90));
   ok(/tabla/i.test(rBarras.nota), '  con su enlace para verlo todo en tabla');
   const etiquetas = await page.evaluate(() => { try { return Chart.getChart(document.getElementById('cChart')).data.labels; } catch { return []; } });
-  ok(!etiquetas.some(l => /GATE|ZZ |GD2-/.test(String(l))), 'NI UN NOMBRE DE GATE en el eje (era la mitad del eje)',
+  // LOS QUE NO SE PUEDEN QUITAR SE NOMBRAN, NO SE EXIGEN. Esta línea pedía CERO nombres de gate en el
+  // eje, y con datos de verdad eso ya no se puede cumplir: hay clientes de gate ARCHIVADOS cuyas
+  // facturas están en la cadena de VERI*FACTU, así que no se pueden borrar y el área de Ventas sigue
+  // agrupando por su nombre («GATE Rent Cliente», 24 ago 2026). La basura que una prueba deja se
+  // vuelve imborrable en cuanto se enreda con un documento legal. Lo que este gate SÍ puede guardar
+  // —y sigue guardando— es que no aparezca ninguno NUEVO: se consulta la base para saber cuáles son
+  // imborrables (archivados y con factura) y esos se listan aparte, con su nombre. Renombrarlos para
+  // que dejen de salir es una decisión del dueño, no de un gate.
+  const imborrables = new Set(db.prepare(
+    "SELECT c.name FROM clients c WHERE c.active=0 AND EXISTS (SELECT 1 FROM invoices i WHERE i.client_id=c.id)"
+  ).all().map(r => String(r.name)));
+  const nuevos = etiquetas.filter(l => /GATE|ZZ |GD2-|GD3-/.test(String(l)) && !imborrables.has(String(l)));
+  const viejos = etiquetas.filter(l => /GATE|ZZ |GD2-|GD3-/.test(String(l)) && imborrables.has(String(l)));
+  if (viejos.length) console.log('  · en el eje hay ' + viejos.length + ' nombre(s) de gate IMBORRABLES (archivados, con factura en la cadena): '
+    + viejos.join(' · ') + ' — quitarlos exige renombrarlos, y eso lo decide el dueño');
+  ok(nuevos.length === 0, 'NI UN NOMBRE DE GATE NUEVO en el eje (los imborrables se listan arriba)',
      etiquetas.slice(0, 4).join(' · '));
   await page.evaluate(() => document.getElementById('cardConstructor').scrollIntoView({ block: 'center' })); await dormir(600);
   await page.screenshot({ path: path.join(SHOTS, 'dter-muchos-grupos.png') });
