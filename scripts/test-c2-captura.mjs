@@ -236,5 +236,9 @@ console.log('9. DISA — compras fuera de WRITABLE_TABLES');
   ok(!/['"]purchases['"]/.test(setBlock) && !/['"]purchase_items['"]/.test(setBlock), "DISA ya no puede escribir 'purchases'/'purchase_items' por el genérico");
 }
 
-console.log('\n' + (fail ? '✗ ' : '✓ ') + pass + ' pasaron, ' + fail + ' fallaron');
+// ⚙️ 24 ago 2026 · EL RESUMEN, EN EL FORMATO QUE EL CORREDOR SABE LEER. Esto imprimía «N pasaron, M
+// fallaron» y el barrido lo leía como «salió 0 pero no imprimió resumen — no demuestra nada»: una
+// comprobación que pasa y que el corredor no puede dar por buena es una que no cuenta.
+console.log('\n' + '─'.repeat(60));
+console.log('RESULTADO: ' + pass + ' ✓  ·  ' + fail + ' ✗');
 process.exit(fail ? 1 : 0);

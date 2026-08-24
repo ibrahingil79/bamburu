@@ -66,7 +66,11 @@ try {
   await sleep(400);
   await hookToasts(page);
   sawAlert = false;
-  await page.evaluate(() => emitir());   // confirm() se auto-acepta → el servidor rechaza (400)
+  // ⚙️ 24 ago 2026 · `emitir()` ya no abre un confirm() del navegador: abre el panel de la casa y
+  // AWAITA su respuesta. `page.evaluate` esperaba esa promesa y se quedaba colgado — 186 s hasta que
+  // el corredor lo mataba. Se dispara sin esperar, y el panel lo acepta `autoAceptarPaneles`.
+  page.evaluate(() => { emitir(); }).catch(() => {});
+  await page.waitForFunction(() => !document.querySelector('.modal-overlay.open'), { timeout: 8000 }).catch(() => {});
   const t5 = await toastHas(page, /Solo se puede emitir un borrador/);
   const t5all = await page.evaluate(() => window.__toasts || []);
   ok(t5 && !sawAlert, '[alert→toast] Emitir un presupuesto anulado → TOAST "Solo se puede emitir un borrador" y NINGÚN alert() nativo · toasts=' + JSON.stringify(t5all));

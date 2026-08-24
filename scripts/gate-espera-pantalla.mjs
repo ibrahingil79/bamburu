@@ -17,13 +17,22 @@ import Database from 'better-sqlite3';
 import { join } from 'path';
 import { mkdirSync } from 'fs';
 import bcrypt from 'bcrypt';
+import { negocioDesechable, sembrarFlujoDocumentos } from './lib/negocio-desechable.mjs';
+import { createInvoice } from '../modules/erp/routes/invoices.js';
 
-const BASE = 'http://desarrollo-bamburu.localhost:3000';
-const HOST = 'desarrollo-bamburu.localhost';
+let BASE, HOST;   // se fijan al crear el negocio, más abajo
 let pass = 0, fail = 0;
 const ok = (c, m, extra = '') => { if (c) { pass++; console.log('  ✓ ' + m + (extra ? ' — ' + extra : '')); } else { fail++; console.error('  ✗ FALLO: ' + m + (extra ? ' — ' + extra : '')); } };
 
-const db = new Database(join(APP_DIR, 'data/tenants/desarrollo-bamburu.db'));
+// ⚙️ SE TRAE SU PROPIO NEGOCIO (24 ago 2026). El bloque «Vigía de DISA» solo asoma si hay hallazgos,
+// y esta comprobación no los creaba: los esperaba del negocio de desarrollo. El día que ese negocio
+// se quedó sin deuda vencida, la comprobación se puso roja y ahí llevaba meses.
+// Ahora siembra la condición que produce el hallazgo —una factura VENCIDA y sin cobrar— en su propio
+// negocio, y se lo lleva entero. La factura que emite no puede borrarse; el negocio, sí.
+const neg = await negocioDesechable('Gate Espera');
+const db = neg.db;
+BASE = neg.base;
+HOST = new URL(neg.base).hostname;
 const SHOTS = join(process.env.HOME || '/home/ubuntu', 'espera-shots');
 try { mkdirSync(SHOTS, { recursive: true }); } catch {}
 const tokens = [];
@@ -40,6 +49,24 @@ const avisosApi = page => page.evaluate(async () => {
   const r = await fetch('/api/erp/vigia/avisos', { headers: { 'x-csrf-token': window.CSRF_TOKEN || '' } });
   return { status: r.status, body: await r.json().catch(() => null) };
 });
+
+// ── LA CONDICIÓN QUE PRODUCE EL HALLAZGO DEL VIGÍA ──────────────────────────────────────────────
+// El bloque «Vigía de DISA» solo asoma si hay algo que avisar. Lo más simple y más real: una factura
+// VENCIDA y sin cobrar. Se siembra aquí en vez de esperarla del negocio de otro.
+// Cifras de la vida real (120 €), no miles: si un día algo se escapa, no distorsiona nada.
+try {
+  const semilla = sembrarFlujoDocumentos(db, { stock: 20, precio: 120 });
+  const haceDosMeses = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10);
+  createInvoice(db, {
+    client_id: semilla.clienteId,
+    issue_date: haceDosMeses, due_date: haceDosMeses,
+    lines: [{ description: 'Servicio de prueba', quantity: 1, unit_price: 120, tax_rate: 21 }],
+  });
+} catch (e) {
+  console.error('✗ No se pudo sembrar la factura vencida: ' + e.message);
+  neg.tirar();
+  process.exit(1);
+}
 
 try {
   const browser = await puppeteer.launch(launchOpts());
@@ -150,9 +177,12 @@ try {
 } catch (e) {
   console.error('ERROR', e.stack || e.message); fail++;
 } finally {
-  for (const t of tokens) { try { db.prepare('DELETE FROM admin_sessions WHERE token=?').run(t); } catch {} }
+  // Ya no hace falta borrar sesiones ni usuarios uno a uno: se tira el negocio entero, y con él todo
+  // lo que se sembró — incluida la factura vencida, que de otro modo no se podría borrar.
+  neg.tirar();
+  console.log('  [limpieza] negocio de prueba «' + neg.slug + '» tirado entero');
+  if (false) for (const t of tokens) { try { db.prepare('DELETE FROM admin_sessions WHERE token=?').run(t); } catch {} }
   if (empId) { try { db.prepare('DELETE FROM user_permissions WHERE admin_user_id=?').run(empId); } catch {} try { db.prepare('DELETE FROM admin_users WHERE id=?').run(empId); } catch {} }
-  db.close();
 }
 console.log('\n=== RESULTADO: ' + pass + ' OK / ' + fail + ' FALLOS ===  (capturas en ' + SHOTS + ')');
 process.exit(fail ? 1 : 0);

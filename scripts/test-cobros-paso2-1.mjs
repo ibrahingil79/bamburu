@@ -103,7 +103,14 @@ console.log('4. registerAccountAction · recordatorio');
   const m = mockMailer();
   const r = await registerAccountAction(db, cid, { type: 'recordatorio_cuenta' }, { sendEmail: m, today: TODAY, now: TODAY + 'T10:00:00Z', batchId: 'B1' });
   eq(m.count(), 1, 'recordatorio de cuenta envía UN solo email');
-  ok(/200\.00|300\.00/.test(m.last.text), 'el email incluye importes del desglose');
+  // ⚙️ 24 ago 2026 · Esto buscaba «200.00» — el dinero a la inglesa — y el correo lo escribe como en
+  // España desde el encargo del dinero: «200,00 €». Medía la ORTOGRAFÍA de la cifra, no la cifra.
+  // Se acepta cualquiera de las dos formas y además se exige que NO salga a la inglesa, así la
+  // aserción sirve para las dos cosas y el formato viejo no puede volver a colarse.
+  const plano = String(m.last.text).replace(/(\d)\.(?=\d{3}(\D|$))/g, '$1');
+  ok(/200[.,]00|300[.,]00/.test(plano), 'el email incluye importes del desglose');
+  ok(!/[€$£] ?-?\d/.test(m.last.text) && !/-?\d+\.\d{2}\s*[€$£]/.test(m.last.text),
+     '  y los escribe como en España (ni símbolo delante ni punto decimal)');
   eq(r.facturas, 2, 'reporta 2 facturas incluidas');
   eq(activeActions(db, iA).length, 1, 'acción registrada en factura A');
   eq(activeActions(db, iB).length, 1, 'acción registrada en factura B');

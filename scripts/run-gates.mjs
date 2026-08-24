@@ -94,20 +94,26 @@ const DEUDA = {
   'verify-permisos-disa':      'misma familia y misma causa que la anterior (empleado de prueba inactivo).',
   'verify-invoice-over-stock-http': 'mismos 403 sobre el mismo empleado inactivo.',
   'verify-mostrador-overstock':     'ídem: el permiso se prueba contra un empleado que ya no está activo.',
-  'verify-pedidos-disa':       'espera un cliente y un número de pedido concretos del negocio de desarrollo.',
   'verify-sustitutiva-browser':'espera un ticket sustituido concreto; el suyo ya no está.',
   'verify-inventory-fix-browser':
     'YA se trae su propio negocio (24 ago 2026) y pasó de 5 a 6 aserciones, pero le quedan DOS en rojo: '
     + 'el aviso de «hay unidades reservadas» al ajustar stock no llega a salir en el negocio recién '
     + 'sembrado, aunque hay un pedido confirmado que reserva 5. Sin resolver: puede ser del producto.',
-  'gate-espera-pantalla':      'exige que el bloque del vigía traiga avisos, y no los crea ella.',
-  'gate-inicio-pantalla':      'exige la rejilla de fábrica con más de un bloque; hoy trae uno.',
+  'gate-espera-pantalla':
+    'YA se trae su propio negocio y siembra la factura vencida (24 ago 2026): el vigía la detecta, '
+    + 'comprobado. Le quedan TRES en rojo por otra cosa — la rejilla del Inicio de un negocio recién '
+    + 'creado trae UN bloque de fábrica y el del vigía no está entre ellos. Falta sembrar la rejilla.',
+  'gate-inicio-pantalla':
+    'misma causa que gate-espera-pantalla: exige una rejilla de Inicio con varios bloques y un negocio '
+    + 'nuevo trae uno. Sin convertir todavía.',
   'gate-avisos-correos':       'depende de la hora del día (la pasada de las 15:00) — un gate con reloj es una moneda al aire.',
-  'test-cobros-paso2-1':       'espera un desglose de importes en el correo que ya no se compone así.',
-  'verify-u3-errores':         'smoke de errores del navegador anterior a los paneles de la casa.',
+  'verify-u3-errores':
+    'de 4 a 11 aserciones (24 ago 2026): se arregló que esperaba un confirm() del navegador donde ahora '
+    + 'hay un panel — se colgaba 186 s. Le quedan DOS en rojo y una es DE PRODUCTO: al crear una '
+    + 'categoría con nombre repetido, el aviso dice «Ha ocurrido un error» en vez de «Ya existe una '
+    + 'categoría con ese nombre». La causa, medida: safeError() tapa el error de UNIQUE porque no trae '
+    + 'status 4xx, así que el mensaje amable del navegador nunca puede dispararse. Reportado, sin tocar.',
   // SALEN 0 PERO NO DEMUESTRAN NADA: no imprimen resumen, así que el corredor no puede leerlas.
-  'test-c2-captura':           'sale 0 sin imprimir resumen: no demuestra nada. Necesita su línea de RESULTADO.',
-  'verify-disa-alcance':       'ídem: termina bien y no dice qué ha verificado.',
   // NO ARRANCAN: abortan antes de comprobar nada.
 };
 
@@ -148,6 +154,18 @@ const EXCLUIDOS = {
   // familia que las de arriba — ni determinista ni gratis, y en un barrido de madrugada que corre
   // todas las noches el coste se multiplica por 365.
   'verify-llm-disa-stock': 'llama al MODELO REAL (stock por chat). A mano, cuando se toque DISA.',
+  // 24 ago 2026 · NO ES UNA COMPROBACIÓN, y por eso no puede «entrar»: manda dos baterías de
+  // preguntas al MODELO REAL y escribe la transcripción LITERAL para que una persona la lea. No
+  // tiene ni una aserción, así que el corredor la leía como «salió 0 pero no demuestra nada» — y
+  // tenía razón. Es una herramienta de diagnóstico, y como tal se declara.
+  // 24 ago 2026 · MISMA FAMILIA: pregunta por el chat de DISA (`/api/disa/message`), o sea al MODELO
+  // REAL. Además esperaba «Carlos / PED-0005» del negocio de desarrollo, datos que ya no están.
+  // Ni determinista ni gratis, y en un barrido nocturno el coste se multiplica por 365.
+  'verify-pedidos-disa':
+    'pregunta al MODELO REAL por el chat de DISA. A mano, cuando se toquen los pedidos de DISA.',
+  'verify-disa-alcance':
+    'llama al MODELO REAL y escribe una transcripción para leerla; no afirma nada. Es diagnóstico, '
+    + 'no comprobación. A mano, cuando se toque el límite de tema de DISA.',
   'verify-disa-pedidos-modelo-real': 'llama al MODELO REAL: ni determinista ni gratis. A mano.',
   'gate-pago-voz-avisos': 'llama al MODELO REAL (misma familia). A mano y a conciencia.',
   'gate-c2-captura':

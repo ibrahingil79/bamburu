@@ -159,6 +159,7 @@ export const GRUPOS = {
     'gate-orden-compra-c1a', 'gate-recepciones-c1b', 'gate-devoluciones-proveedor', 'gate-c2-revision',
   ],
   disa: [
+    'test-c2-captura',
     // ↓ tres que ABORTABAN por pedir la ruta de la BD por parámetro (24 ago 2026): ya arrancan
     'verify-voz', 'verify-vigia', 'verify-dibujo',
     // ↓ de las 99 invisibles (24 ago 2026), medidas y en verde:
@@ -178,7 +179,7 @@ export const GRUPOS = {
   // `verify-avisos-crm-riesgo` ENTRA AL BARRIDO el 22 ago 2026. Estaba excluido con la nota «EN ROJO
   // desde antes (datos de riesgo ya en la BD viva)» y hoy pasa limpio: la exclusión estaba caducada
   // y lo que hacía era esconder una comprobación buena. Se mide, no se supone.
-  avisos: [
+  avisos: ['test-cobros-paso2-1',
     // ↓ de las 99 invisibles (24 ago 2026), medidas y en verde:
     'gate-avisos-contador-vivo', 'test-cobros-paso2', 'verify-crm', 'verify-suggest-legible','verify-avisos-permisos', 'gate-avisos-badge', 'verify-avisos-crm-riesgo',
            // PUNTO 3 (24 ago 2026) — la petición de migración llega al equipo, y si el correo
@@ -325,7 +326,7 @@ export const EMPIEZAN_DE_CERO = new Set([
   // desarrollo no valía: varias EMITEN una factura, y una factura emitida no se borra jamás. Con su
   // propio negocio, lo que emiten nace y muere ahí dentro y se tira el negocio entero.
   'verify-albaranes-browser', 'verify-pedidos-browser', 'verify-quotes-browser', 'verify-mostrador-browser',
-  'verify-sustitutiva-browser',
+  'verify-sustitutiva-browser', 'gate-espera-pantalla',
   // ── LAS CINCO QUE SE TRAÍAN SU PROPIO NEGOCIO Y NO LO DECÍAN (24 ago 2026) ────────────────────
   // Lo cantaba el propio corredor en cada arranque —«la declaración y el código no dicen lo mismo»—
   // y llevaba semanas sin que nadie lo mirara, porque las cinco eran de las 99 que no ejecutaba
