@@ -156,6 +156,8 @@ export const GRUPOS = {
     'gate-orden-compra-c1a', 'gate-recepciones-c1b', 'gate-devoluciones-proveedor', 'gate-c2-revision',
   ],
   disa: [
+    // ↓ tres que ABORTABAN por pedir la ruta de la BD por parámetro (24 ago 2026): ya arrancan
+    'verify-voz', 'verify-vigia', 'verify-dibujo',
     // ↓ de las 99 invisibles (24 ago 2026), medidas y en verde:
     'gate-dibujo-pantalla', 'gate-voz-pantalla', 'test-dibujo', 'test-disa-captura-chat', 'test-disa-clientes-t5', 'test-disa-dictar-compra', 'test-disa-stock', 'test-llm-texto-respuesta', 'test-pago-voz-avisos', 'test-vigia', 'test-voz', 'verify-albaranes-disa', 'verify-d5-create-product', 'verify-llm-migracion',
     'verify-propuestas-d5',

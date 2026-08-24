@@ -4,6 +4,7 @@
 // permisos) y como el EMPLEADO real (sus permisos de user_permissions), imprime los hallazgos y
 // CRUZA cada cifra contra el motor de su área para demostrar el cuadre con números reales.
 import Database from 'better-sqlite3';
+import { existsSync } from 'fs';
 import { detectar, DETECTORES } from '../modules/erp/vigia.js';
 import { openDebts } from '../modules/erp/cobros.js';
 import { openPayables } from '../modules/erp/pagos.js';
@@ -11,8 +12,13 @@ import { clientesDormidos } from '../modules/erp/ventas-metrics.js';
 import { cruzar } from '../modules/erp/constructor-analitica.js';
 import { planFinanciero } from '../modules/erp/plan-financiero.js';
 
-const path = process.argv[2];
-if (!path) { console.error('Uso: node scripts/verify-vigia.mjs <ruta.db> [YYYY-MM-DD]'); process.exit(2); }
+// LA RUTA, CON VALOR POR DEFECTO (24 ago 2026). Esto exigía la ruta de la BD por parámetro y
+// ABORTABA sin ella (código 2), así que el barrido no podía ejecutarla: era una de las 99 que
+// no corría nadie, y ni siquiera por estar rota — por no poder arrancar. Se le da por defecto el
+// negocio de desarrollo, que es contra el que corren todas las demás. Sigue aceptando una ruta
+// distinta como primer argumento, que es para lo que se escribió.
+const path = process.argv[2] || 'data/tenants/desarrollo-bamburu.db';
+if (!existsSync(path)) { console.error('No existe la base «' + path + '».\nUso: node scripts/verify-vigia.mjs [ruta.db] [YYYY-MM-DD]'); process.exit(2); }
 const hoy = /^\d{4}-\d{2}-\d{2}$/.test(process.argv[3] || '') ? process.argv[3] : null;
 const db = new Database(path, { readonly: true, fileMustExist: true });
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;

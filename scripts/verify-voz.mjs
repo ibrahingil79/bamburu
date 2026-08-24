@@ -6,6 +6,7 @@
 // comprueba, aviso a aviso, que en (a)/(b) no hay ni un dígito que no sea la cifra, la fecha o un
 // código de ref: CERO CIFRAS INVENTADAS sobre datos reales.
 import Database from 'better-sqlite3';
+import { existsSync } from 'fs';
 import { detectar } from '../modules/erp/vigia.js';
 import { narrar, dinero as dineroVoz, fechaEs } from '../modules/erp/voz.js';
 import { openDebts } from '../modules/erp/cobros.js';
@@ -15,8 +16,13 @@ import { cruzar } from '../modules/erp/constructor-analitica.js';
 import { planFinanciero } from '../modules/erp/plan-financiero.js';
 import { sinDigitosInventados as sinDigitosLib } from './lib/voz-digitos.mjs';
 
-const path = process.argv[2];
-if (!path) { console.error('Uso: node scripts/verify-voz.mjs <ruta.db> [YYYY-MM-DD]'); process.exit(2); }
+// LA RUTA, CON VALOR POR DEFECTO (24 ago 2026). Esto exigía la ruta de la BD por parámetro y
+// ABORTABA sin ella (código 2), así que el barrido no podía ejecutarla: era una de las 99 que
+// no corría nadie, y ni siquiera por estar rota — por no poder arrancar. Se le da por defecto el
+// negocio de desarrollo, que es contra el que corren todas las demás. Sigue aceptando una ruta
+// distinta como primer argumento, que es para lo que se escribió.
+const path = process.argv[2] || 'data/tenants/desarrollo-bamburu.db';
+if (!existsSync(path)) { console.error('No existe la base «' + path + '».\nUso: node scripts/verify-voz.mjs [ruta.db] [YYYY-MM-DD]'); process.exit(2); }
 const hoy = /^\d{4}-\d{2}-\d{2}$/.test(process.argv[3] || '') ? process.argv[3] : null;
 const db = new Database(path, { readonly: true, fileMustExist: true });
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;

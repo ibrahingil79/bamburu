@@ -5,14 +5,20 @@
 // cifra del aviso/del motor de su área. En el tenant "desarrollo" disparan deuda y pago; los otros
 // cuatro tipos los cubre `test-dibujo` (sembrado).
 import Database from 'better-sqlite3';
+import { existsSync } from 'fs';
 import { detectar } from '../modules/erp/vigia.js';
 import { narrar } from '../modules/erp/voz.js';
 import { graficoDe } from '../modules/erp/dibujo.js';
 import { cruzar } from '../modules/erp/constructor-analitica.js';
 import { openPayables } from '../modules/erp/pagos.js';
 
-const path = process.argv[2];
-if (!path) { console.error('Uso: node scripts/verify-dibujo.mjs <ruta.db> [YYYY-MM-DD]'); process.exit(2); }
+// LA RUTA, CON VALOR POR DEFECTO (24 ago 2026). Esto exigía la ruta de la BD por parámetro y
+// ABORTABA sin ella (código 2), así que el barrido no podía ejecutarla: era una de las 99 que
+// no corría nadie, y ni siquiera por estar rota — por no poder arrancar. Se le da por defecto el
+// negocio de desarrollo, que es contra el que corren todas las demás. Sigue aceptando una ruta
+// distinta como primer argumento, que es para lo que se escribió.
+const path = process.argv[2] || 'data/tenants/desarrollo-bamburu.db';
+if (!existsSync(path)) { console.error('No existe la base «' + path + '».\nUso: node scripts/verify-dibujo.mjs [ruta.db] [YYYY-MM-DD]'); process.exit(2); }
 const hoy = /^\d{4}-\d{2}-\d{2}$/.test(process.argv[3] || '') ? process.argv[3] : null;
 const db = new Database(path, { readonly: true, fileMustExist: true });
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
