@@ -70,10 +70,22 @@ try {
   ok(decisiones === tarjetas && tarjetas > 0, 'cada tarjeta muestra su "Decisión propuesta"', decisiones + '/' + tarjetas);
 
   // La MISMA cifra sin copiarla: el importe del primer aviso de dinero aparece pintado.
+  //
+  // ⚙️ CORREGIDO EL 24 AGO 2026. Esta aserción construía lo esperado como `'€' + toFixed(2)` — o sea
+  // «€60493.95», el dinero a la inglesa— y desde que el producto lo escribe como en España
+  // («60.493,95 €») no lo encontraba. **El fallo era de la comprobación, no de la pantalla**: medía
+  // la ORTOGRAFÍA de la cifra en vez de la cifra. Ahora se compara el NÚMERO, quitando el punto de
+  // los miles, y se exige además que NO aparezca escrito a la inglesa — así la aserción sirve para
+  // las dos cosas y no se puede volver a colar el formato viejo.
   const primerDinero = (apiOwner.body.avisos || []).find(a => a.moneda);
-  const importe = primerDinero ? ('€' + Number(primerDinero.cifra || 0).toFixed(2)) : null;
   const vozText = await page.$eval('#vozBody', e => e.innerText).catch(() => '');
-  ok(importe && vozText.includes(importe), 'el importe del aviso se ve tal cual en pantalla', importe || '(sin aviso de dinero)');
+  const plano = t => String(t || '').replace(/(\d)\.(?=\d{3}(\D|$))/g, '$1');
+  const esperado = primerDinero ? Number(primerDinero.cifra || 0).toFixed(2).replace('.', ',') : null;
+  ok(esperado && plano(vozText).includes(esperado), 'el importe del aviso se ve en pantalla, escrito como en España',
+     esperado ? esperado + ' €' : '(sin aviso de dinero)');
+  ok(!/[€$£] ?-?\d/.test(vozText) && !/-?\d+\.\d{2}\s*[€$£]/.test(vozText),
+     '  y NINGÚN importe de esa pantalla sale a la inglesa (símbolo delante o punto decimal)',
+     (vozText.match(/[€$£] ?-?\d[\d.,]*/g) || []).slice(0, 3).join(' · ') || 'ninguno');
 
   // NO EJECUTA: en la voz no hay ni un botón, ni un formulario, ni un enlace de acción.
   const controles = await page.$$eval('#vozBody button, #vozBody form, #vozBody a, #vozBody input, #vozBody [onclick]', els => els.length).catch(() => 0);

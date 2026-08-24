@@ -117,9 +117,15 @@ export function createConciliacionRoutes(db) {
         acciones += `<form method="post" action="/admin/conciliacion/${m.id}/ignorar" style="margin-top:.2rem"><input type="hidden" name="_csrf" value="${escHtml(csrf)}"><button class="btn btn-ghost" type="submit">Ignorar</button></form>`;
       } else if (m.estado !== 'pendiente' && puedeGestionar) {
         const cobroPago = m.target_type === 'supplier_payment' ? 'pago' : 'cobro';
-        const necesitaAviso = m.created_payment_id ? ` onclick="return confirm('Este movimiento creó un ${cobroPago} al conciliar. ¿Deshacer y ELIMINAR también ese ${cobroPago}?')"` : '';
+        // ── LA ÚLTIMA VENTANITA DEL NAVEGADOR DEL PRODUCTO (retirada el 24 ago 2026) ──────────────
+        // Aquí vivía un `onclick="return confirm(...)"`. El censo daba CERO y no era cierto: se
+        // quedaba ciego en este fichero desde el `accept="…,*/*"` de más arriba, que confundía con
+        // el principio de un comentario. La trampa es la de siempre: el navegador ofrece apagar los
+        // diálogos y, apagados, `confirm()` devuelve false SIN ENSEÑAR NADA — el botón se queda
+        // muerto y el usuario no sabe por qué. Ahora pregunta DENTRO de la página, como el resto.
         const delFlag = m.created_payment_id ? '<input type="hidden" name="delete_payment" value="1">' : '';
-        acciones = `<form method="post" action="/admin/conciliacion/${m.id}/deshacer"><input type="hidden" name="_csrf" value="${escHtml(csrf)}">${delFlag}<button class="btn btn-ghost" type="submit"${necesitaAviso}>Deshacer</button></form>`;
+        const avisoId = 'desh' + m.id;
+        acciones = `<form method="post" action="/admin/conciliacion/${m.id}/deshacer" id="${avisoId}"><input type="hidden" name="_csrf" value="${escHtml(csrf)}">${delFlag}<button class="btn btn-ghost" type="submit"${m.created_payment_id ? ` data-aviso="${avisoId}" data-que="${escHtml(cobroPago)}"` : ''}>Deshacer</button></form>`;
       }
       const VINC = {
         invoice_payment: `cobro #${m.target_id}${m.created_payment_id ? ' (creado aquí)' : ''}`,
@@ -144,7 +150,27 @@ export function createConciliacionRoutes(db) {
       ${subir}${filtro}
       <div class="card"><table>
         <thead><tr><th>Fecha</th><th>Concepto</th><th style="text-align:right">Importe</th><th style="text-align:right">Saldo</th><th>Estado</th><th>Acción / sugerencia</th></tr></thead>
-        <tbody>${filas}</tbody></table></div>`;
+        <tbody>${filas}</tbody></table></div>
+      <script>
+        // Deshacer una conciliación que CREÓ un cobro o un pago borra también ese apunte, así que se
+        // pregunta antes. La pregunta va en un panel de la propia página (window.confirmarEnPagina,
+        // en layout.js): un confirm() del navegador se puede apagar y deja el botón muerto sin decir
+        // nada. Se engancha por delegación para que valga también con la tabla recién repintada.
+        document.addEventListener('click', async function (ev) {
+          const b = ev.target.closest('button[data-aviso]');
+          if (!b) return;
+          ev.preventDefault();
+          const que = b.getAttribute('data-que') || 'cobro';
+          const seguir = await window.confirmarEnPagina({
+            titulo: 'Deshacer y eliminar el ' + que,
+            texto: 'Este movimiento creó un ' + que + ' al conciliar. Si lo deshaces, ese ' + que + ' se ELIMINA también.',
+            aceptar: 'Deshacer y eliminar',
+          });
+          if (!seguir) return;
+          const f = document.getElementById(b.getAttribute('data-aviso'));
+          if (f) f.submit();
+        });
+      </script>`;
     return c.html(adminLayout('Conciliación', content, 'conciliacion', csrf, c));
   });
 

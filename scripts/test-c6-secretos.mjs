@@ -79,11 +79,24 @@ console.log('\n[B8] DISA no manda al log los valores del WHERE (son PII de tus c
   check('conserva la columna del WHERE (se ve por qué buscaba, no a quién)', red.includes('c.email'));
   check('aguanta null/undefined sin reventar', redactarSql(null) === '' && redactarSql(undefined) === '');
 
-  // El sitio real: la línea que loguea debe llamar a redactarSql, no al sql crudo.
+  // El sitio real: lo que loguea la herramienta debe pasar por redactarSql, nunca el sql crudo.
+  //
+  // ⚙️ REESCRITO EL 24 AGO 2026. Antes esto buscaba el TEXTO LITERAL `console.log('[DISA] query_database:`
+  // en UNA línea. El producto sigue haciendo lo correcto, pero la traza se generalizó para cubrir
+  // todas las herramientas —`'[DISA] ' + toolUse.name + ':'`— y se partió en tres líneas, así que la
+  // comprobación no encontraba su cadena y cantaba un fallo de producto que no existía.
+  // **Medía cómo estaba ESCRITA la línea, no lo que hace.** Ahora se busca la SENTENCIA entera
+  // (desde `console.log('[DISA] ` hasta su `);`) y se afirma sobre el mecanismo.
   const disa = leer('modules/disa/index.js');
-  const lineaLog = disa.split('\n').find(l => l.includes("console.log('[DISA] query_database:"));
-  check('la línea que loguea usa redactarSql', !!lineaLog && lineaLog.includes('redactarSql'), (lineaLog || '').trim().slice(0, 70));
-  check('y NO manda el sql crudo', !!lineaLog && !/toolUse\.input\?\.sql\s*,/.test(lineaLog));
+  // Se busca la traza DE LA HERRAMIENTA, no cualquier `[DISA]`: hay varias, y la primera del fichero
+  // es la del arranque («Usando BD»). La que importa es la que imprime `toolUse.name`.
+  const i = disa.indexOf("console.log('[DISA] ' + toolUse.name");
+  const sentencia = i === -1 ? '' : disa.slice(i, disa.indexOf(');', i) + 2);
+  check('la traza de la herramienta pasa el SQL por redactarSql',
+    /query_database'\s*\?\s*redactarSql\(/.test(sentencia.replace(/\s+/g, ' ')),
+    sentencia.replace(/\s+/g, ' ').slice(0, 80));
+  check('y NO manda el sql crudo al log',
+    sentencia !== '' && !/(?<!redactarSql\()\binp\.sql\b(?![^)]*\))/.test(sentencia) && !/toolUse\.input\?\.sql\s*,/.test(sentencia));
 }
 
 console.log('\n[B9] Ninguna BD de negocio es legible por otros usuarios de la máquina');

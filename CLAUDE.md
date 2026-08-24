@@ -182,6 +182,24 @@ Las cuatro reglas, en concreto:
    mando — y el mando es donde se rompen las cosas.
 2. **También cuando el usuario dice que no.** Cancelar, campo vacío, solo espacios. Los tres eran
    caminos muertos y silenciosos en la misma pantalla, y ninguno estaba probado.
+> ## CERO CUADROS DE DIÁLOGO DEL NAVEGADOR EN TODO EL PRODUCTO
+>
+> **Ni `prompt()`, ni `confirm()`, ni `alert()`. En ninguna pantalla, por ningún motivo.** Se pregunta
+> DENTRO de la página con `window.pedirDatos()` y `window.confirmarEnPagina()` (`layout.js`), o con
+> `window.saConfirmar()` en el superadmin.
+>
+> **El motivo, medido:** ante el SEGUNDO diálogo seguido, Chrome ofrece la casilla «Impedir que esta
+> página cree cuadros de diálogo adicionales». En cuanto alguien la marca, `prompt()` devuelve `null`
+> y `confirm()` devuelve `false` **sin enseñar nada**: el botón se queda muerto —ni ventana, ni
+> petición, ni aviso— y el usuario no tiene forma de saber por qué. No es una preferencia de estilo:
+> es un botón que deja de funcionar en silencio.
+>
+> **Lo vigila `node scripts/censo-ventanitas.mjs`**, que sale con código 1 si aparece una y va en el
+> barrido. El 24 ago 2026 ese censo decía CERO y había una viva: confundía el `accept="…,*/*"` de una
+> pantalla con el principio de un comentario y **se quedaba ciego hasta el final de tres ficheros**.
+> Ahora lee el fichero como lo lee JavaScript. De ahí sale la segunda mitad de la regla: **un censo
+> que dice cero y no es cierto es peor que no tenerlo, porque cierra la pregunta.**
+
 3. **Con las ventanitas silenciadas.** Si algo depende de `prompt`/`confirm`, se neutralizan
    (`window.prompt = () => null`) y se exige que el producto **siga funcionando**, no que se disculpe.
    ~~*(Quedan 81 ventanitas en otras pantallas del producto…)*~~ ~~**Ya no queda ninguna: el 23 ago

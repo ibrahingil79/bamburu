@@ -10,6 +10,26 @@
 // módulo de datos, sin efectos, es la única forma de compartirlo.
 
 // Grupos. Un gate puede estar en varios (la regresión de Pagos incluye los de compras/proveedor).
+// ── CINCO COMPROBACIONES ESTÁN APUNTADAS EN DOS ÁREAS, A PROPÓSITO ───────────────────────────────
+// 24 ago 2026. GRUPOS tiene 116 APUNTES para 111 comprobaciones distintas. El corredor las
+// desduplica, así que el barrido corre 111 y la cifra que da es correcta — pero quien LEA esta lista
+// para saber qué se comprueba contaba 116, y contaba mal.
+//
+// No se quitan, y el motivo importa: cada una de las cinco pertenece de verdad a las dos áreas, y
+// `--tocado` usa estos grupos para decidir qué correr cuando cambias un fichero. Borrar el segundo
+// apunte no arreglaría un recuento: dejaría de correrse la comprobación al tocar esa otra área, que
+// es exactamente el agujero que este fichero existe para cerrar.
+//
+// Lo que se arregla es la CUENTA: queda declarado cuáles son, y `censoDeGates` devuelve el número de
+// comprobaciones DISTINTAS junto al de apuntes, para que las dos cifras se puedan leer sin sorpresa.
+export const EN_DOS_AREAS = new Map([
+  ['verify-propuestas-pagos',        'pagos + disa — es una propuesta DE DISA sobre un pago a proveedor'],
+  ['gate-propuestas-pagos-permisos', 'pagos + disa — el permiso de esa misma propuesta'],
+  ['verify-propuestas-reposicion',   'disa + inventario — propuesta DE DISA que nace del stock mínimo'],
+  ['gate-propuestas-reposicion',     'disa + inventario — la pantalla de esa misma propuesta'],
+  ['verify-constructor',             'servicios + margen — el constructor cruza horas de proyecto y margen'],
+]);
+
 export const GRUPOS = {
   // ── PANTALLAS DEL CLIENTE Y DE LA NAVEGACIÓN ─────────────────────────────────────────────────
   // NACE DE UN DESCUIDO MÍO: estos cuatro gates existían, se corrían A MANO al entregarlos, y NO
@@ -195,7 +215,7 @@ export const GRUPOS = {
   //   · lint-plantillas    — backticks sueltos y escapes que la plantilla se come (169 ficheros, <1 s)
   //   · censo-ventanitas   — que no vuelva a colarse un prompt() o un confirm() (<1 s)
   //   · lint-js-servido    — pide cada pantalla y compila su JavaScript en línea (~324 pantallas)
-  lint: ['lint-plantillas', 'censo-ventanitas', 'lint-js-servido',
+  lint: ['lint-plantillas', 'censo-ventanitas', 'lint-js-servido', 'verify-nombre-documentos',
          // PUNTO 5 (24 ago 2026) — el dinero y las fechas, como en España. Se mide sobre lo
          // SERVIDO: el código tiene toFixed(2) legítimos (el valor de un campo, un cuerpo de
          // petición) que romperlos sí sería un fallo. Lo que se prohíbe es lo que lee una persona.
@@ -391,8 +411,12 @@ export function censoDeGates(ficheros) {
   const base = [...new Set(ficheros
     .filter(f => /^gate-.*\.(mjs|js)$/.test(f))
     .map(f => f.replace(/\.(mjs|js)$/, '')))].sort();
-  const enMapa = new Set(Object.values(GRUPOS).flat());
+  const apuntes = Object.values(GRUPOS).flat();
+  const enMapa = new Set(apuntes);
   return {
+    apuntes: apuntes.length,          // cuántas veces aparece una comprobación en GRUPOS
+    distintas: enMapa.size,           // cuántas comprobaciones DISTINTAS son (lo que corre el barrido)
+    dosAreas: [...EN_DOS_AREAS.keys()].filter(g => enMapa.has(g)),
     enDisco: base,
     dentro: base.filter(g => enMapa.has(g)),
     declaradosFuera: base.filter(g => !enMapa.has(g) && FUERA_A_PROPOSITO.has(g)),

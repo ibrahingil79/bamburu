@@ -12,11 +12,8 @@ import { createFacturarHorasRoutes } from './facturar-horas.js'; // Escalera · 
 import { createRentabilidadRoutes } from './rentabilidad.js';    // Escalera · paso 7 — PIEZA 4: rentabilidad por proyecto
 import { createCitasRoutes, createCitasPublicRoutes } from './citas.js';   // Escalera · paso 7 — PIEZA 5: sistema de citas
 import { createReservaPublicaRoutes, createReservaEnlaceRoutes, createReservaAdminRoutes } from './reserva-publica.js';   // paso 7 — PIEZA 6: puerta pública de reserva
-import { createOrderRoutes } from './orders.js';
 import { createInventoryRoutes } from './inventory.js';
 import { createStockRoutes } from './stock.js';
-import { createDiscountRoutes } from './discounts.js';
-import { createShippingRoutes } from './shipping.js';
 import { createAnalyticsRoutes } from './analytics.js';
 import { createVigiaRoutes } from './vigia.js';   // Escalera · paso 5 — DISA predictiva · PIEZA 1: el vigía
 import { createInicioRoutes } from './inicio.js';   // Escalera · paso 6 — Inicio personalizable
@@ -26,8 +23,6 @@ import { createListadosRoutes } from './listados.js';   // C · los tres verbos,
 import { createMenuRoutes } from './menu-routes.js';   // Navegación — anclas del menú (por usuario)
 import { createSettingsRoutes } from './settings.js';
 import { createUserRoutes } from './users.js';
-import { createNewsletterRoutes } from './newsletter.js';
-import { createReviewRoutes } from './reviews.js';
 import { createChangePasswordRoutes } from './change-password.js';
 import { createSupplierRoutes } from './suppliers.js';
 import { createPurchaseRoutes } from './purchases.js';
@@ -41,7 +36,6 @@ import { createPurchaseOrderReceiptRoutes } from './purchase-order-receipts.js';
 import { createSupplierReturnRoutes } from './supplier-returns.js';
 import { createStockTransferRoutes } from './stock-transfers.js';
 import { createWarehouseRoutes } from './warehouses.js';
-import { createFeedbackRoutes } from './feedback.js';
 import { createInvoiceRoutes } from './invoices.js';
 import { createDescuentosRoutes } from './descuentos.js';   // punto 11 · promociones, bonos y descuentos
 import { createFichajeRoutes } from './fichaje.js';         // punto 12 · control horario (registro de jornada)
@@ -80,11 +74,8 @@ export function mountRoutes(app, db) {
   const { api: rentApi, views: rentViews } = createRentabilidadRoutes(db); // paso 7 · rentabilidad por proyecto
   const { api: citasApi, views: citasViews } = createCitasRoutes(db);      // paso 7 · PIEZA 5 · sistema de citas
   const reservaPubApi = createReservaAdminRoutes(db);                      // paso 7 · PIEZA 6 · mandos del dueño
-  const { api: orderApi, views: orderViews } = createOrderRoutes(db);
   const { api: invApi, views: invViews } = createInventoryRoutes(db);
   const { api: stockApi } = createStockRoutes(db);
-  const { api: discApi, views: discViews } = createDiscountRoutes(db);
-  const { api: shipApi, views: shipViews } = createShippingRoutes(db);
   const { api: analytApi, views: analytViews } = createAnalyticsRoutes(db);
   const { api: vigiaApi, views: vigiaViews } = createVigiaRoutes(db);
   // El panel de arranque solo ofrece pasos cuyo destino EXISTE. En vez de mantener una lista a mano
@@ -100,8 +91,6 @@ export function mountRoutes(app, db) {
   const { api: importadorApi, views: importadorViews } = createImportadorRoutes(db);
   const { api: settApi, views: settViews, storeViews: storeSettViews } = createSettingsRoutes(db);
   const { api: userApi, views: userViews, activityViews } = createUserRoutes(db);
-  const { api: nlApi, views: nlViews } = createNewsletterRoutes(db);
-  const { api: revApi, views: revViews } = createReviewRoutes(db);
   const changePasswordRoutes = createChangePasswordRoutes(db);
   const securityRoutes = createSecurityRoutes(db);
   const { api: perfilApi, views: perfilViews } = createPerfilRoutes(db);
@@ -113,7 +102,6 @@ export function mountRoutes(app, db) {
   const { api: supplierReturnApi, views: supplierReturnViews } = createSupplierReturnRoutes(db);
   const { api: stockTransferApi, views: stockTransferViews } = createStockTransferRoutes(db);
   const { api: warehouseApi, views: warehouseViews } = createWarehouseRoutes(db);
-  const { api: feedbackApi, views: feedbackViews } = createFeedbackRoutes(db);
   const { api: invoiceApi, views: invoiceViews } = createInvoiceRoutes(db);
   const { api: dtoApi, views: dtoViews } = createDescuentosRoutes(db);
   const { api: fichajeApi, views: fichajeViews } = createFichajeRoutes(db);
@@ -229,7 +217,7 @@ export function mountRoutes(app, db) {
   apiApp.route('/citas', citasApi);       // ← /api/erp/citas (agenda, huecos, citas, avisos, cola, config · citas.read/edit)
   apiApp.route('/reserva-publica', reservaPubApi);   // ← PIEZA 6 · mandos de la puerta pública (citas.read/edit)
   // PIEZA C — API del POS viejo RETIRADA (ver nota arriba). Desmontado, no borrado.
-  // apiApp.route('/orders', orderApi);
+  // apiApp.route('/orders', orderApi);   // ⚠️ 24 ago 2026: orders.js RETIRADO del árbol (ver nota abajo)
   apiApp.route('/inventory', invApi);
   // ENCARGO CUPONES — API de cupones RETIRADA (ver nota arriba). Desmontada, no borrada. /api/erp/discounts/* → 404.
   // apiApp.route('/discounts', discApi);

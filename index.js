@@ -15,6 +15,10 @@ import { register as registerRegistro } from './modules/registro/index.js';
 import { register as registerSuperadmin } from './modules/superadmin/index.js';
 import { docsHtml } from './docs.html.js';
 import { errorShell, ERR } from './modules/erp/layout.js';
+import { restringirArbol } from './core/db-file-perms.js';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+const APP_DIR_RAIZ = dirname(fileURLToPath(import.meta.url));
 
 initControlDb();
 
@@ -1511,6 +1515,17 @@ app.notFound((c) => {
   if (c.req.path.startsWith('/api/')) return c.json({ error: 'No encontrado' }, 404);
   return c.html(errorShell('Página no encontrada', ERR.PAGE, { action: 'Ir al inicio', href: '/admin' }), 404);
 });
+
+// ── LAS BASES DE DATOS, PRIVADAS SIEMPRE ────────────────────────────────────────────────────────
+// Al arrancar se repasa TODO el árbol de `data/` y se cierra lo que tenga permisos de grupo o de
+// otros. No se limita a los negocios registrados: `data/tenants/desarrollo.db` llevaba meses en 0644
+// precisamente porque NO tiene fila en control.db y nadie la abría nunca, y las copias de seguridad
+// nacen del umask de quien haga el `cp`. Una copia es tan tuya como el original.
+// Es idempotente y no dice nada cuando no hay nada que arreglar.
+{
+  const tocados = restringirArbol(join(APP_DIR_RAIZ, 'data'));
+  if (tocados) console.log('🔒 Permisos cerrados en ' + tocados + ' fichero(s) de datos');
+}
 
 const servidor = serve({ fetch: app.fetch, port: 3000, hostname: '127.0.0.1' }, (info) => {
   console.log('🚀 Bamburu listo en http://localhost:' + info.port);

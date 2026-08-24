@@ -155,6 +155,62 @@ function reverseExisting(db, original, entry_type, memo) {
   });
 }
 
+// ── ASIENTOS HUÉRFANOS: EL DOCUMENTO SE BORRÓ Y EL APUNTE SE QUEDÓ ───────────────────────────────
+// DE DÓNDE SALE (24 ago 2026). `verify-contabilidad-backfill` llevaba meses sin ejecutarlo nadie —era
+// una de las 99 invisibles— y decía la verdad: el LIBRO sumaba más que los DOCUMENTOS VIVOS. Medido
+// en el negocio de desarrollo: ventas 419.843,99 € de libro contra 418.803,39 € de documentos, y
+// compras 121.883,06 contra 119.618,26. La causa, buscada a mano: **33 asientos cuyo documento ya no
+// existe** — limpiezas de comprobaciones que borraron facturas sin deshacer su apunte.
+//
+// CÓMO SE CORRIGE, y por qué así. Un libro contable NO SE BORRA: se corrige con un asiento que anula
+// al anterior y deja rastro de que existió. Es lo que hace un contable y lo que espera cualquier
+// gestoría que mire estos libros. Por eso aquí no hay ningún DELETE.
+//
+// Y AQUÍ LA FECHA ES LA DE HOY, no la del original — al revés que `reverseExisting`. El motivo es
+// distinto en cada caso: una factura ANULADA se reversa en SU periodo para que netee a cero donde
+// estaba; un huérfano NO es una anulación de negocio, es una CORRECCIÓN de los libros, y una
+// corrección se fecha el día que se hace. Fecharla hacia atrás sería reescribir un periodo cerrado.
+export function reversarHuerfanos(db, { hoy, simulacro = false } = {}) {
+  const fecha = hoy || new Date().toISOString().slice(0, 10);
+  const huerfanos = db.prepare(`
+    SELECT e.* FROM ledger_entries e
+     WHERE e.reverses_entry_id IS NULL
+       AND (
+         (e.origin_type='invoice'          AND NOT EXISTS (SELECT 1 FROM invoices i          WHERE i.id=e.origin_id))
+      OR (e.origin_type='supplier_invoice' AND NOT EXISTS (SELECT 1 FROM supplier_invoices s WHERE s.id=e.origin_id))
+      OR (e.origin_type='invoice_payment'  AND NOT EXISTS (SELECT 1 FROM invoice_payments p  WHERE p.id=e.origin_id))
+      OR (e.origin_type='supplier_payment' AND NOT EXISTS (SELECT 1 FROM supplier_payments p WHERE p.id=e.origin_id))
+       )
+       AND NOT EXISTS (SELECT 1 FROM ledger_entries r WHERE r.reverses_entry_id = e.id)
+     ORDER BY e.id`).all();
+  if (simulacro) return { encontrados: huerfanos.length, anulados: 0, detalle: huerfanos };
+  const hacer = () => {
+    let n = 0;
+    for (const e of huerfanos) {
+      const lines = db.prepare('SELECT account_code, debit, credit, tax_rate, line_kind FROM ledger_lines WHERE entry_id=?').all(e.id)
+        .map(l => ({ account_code: l.account_code, debit: l.credit, credit: l.debit, tax_rate: l.tax_rate, line_kind: l.line_kind }));
+      if (!lines.length) continue;
+      writeEntry(db, {
+        entry_type: 'reversion', origin_type: e.origin_type, origin_id: e.origin_id,
+        entry_date: fecha, reverses_entry_id: e.id,
+        memo: 'Anula asiento huérfano de documento borrado (asiento #' + e.id
+              + ', ' + e.origin_type + ' #' + e.origin_id + ', fechado ' + e.entry_date + ')',
+        lines,
+      });
+      n++;
+    }
+    return n;
+  };
+  const anulados = db.inTransaction ? hacer() : db.transaction(hacer)();
+  return { encontrados: huerfanos.length, anulados, detalle: huerfanos };
+}
+
+// Cuántos asientos quedan sin documento y SIN anular. Es lo que mide la comprobación que impide que
+// el agujero se vuelva a abrir: si alguien borra un documento sin deshacer su apunte, esto sube.
+export function huerfanosVivos(db) {
+  return reversarHuerfanos(db, { simulacro: true }).detalle;
+}
+
 function saleEntryOf(db, invoiceId) {
   return db.prepare("SELECT * FROM ledger_entries WHERE origin_type='invoice' AND origin_id=? AND entry_type IN ('venta','rectificativa')").get(invoiceId);
 }
