@@ -114,17 +114,24 @@ try {
   // foto es el instrumento que miente, no la pantalla.
   const foto = join(SHOTS, 'vigia-owner.png');
   try { unlinkSync(foto); } catch {}
+  // LA FOTO AVISA, NUNCA FALLA. Primer intento el 24 ago 2026: la puse como aserción («queda una
+  // captura») y el gate se volvió inestable — dos pasadas seguidas dieron «Protocol error
+  // (Page.captureScreenshot): Internal error» y, peor, la excepción se llevó por delante las
+  // aserciones que venían detrás: de 15 OK a 6 OK sin que el producto cambiara. Una comprobación no
+  // puede ponerse roja por algo que no es el producto. Con 304 canvas en la página, esta captura es
+  // cara y falla a ratos; lo que MIDE el gráfico son los píxeles, ahí arriba, y eso sí es fiable.
+  // La foto es para mirarla, y si no sale se dice — pero antes se borra la vieja, porque enseñar la
+  // pantalla de la pasada anterior es peor que no enseñar ninguna.
   try {
-    await page.screenshot({ path: foto, fullPage: true });
-  } catch (e1) {
     try {
-      await page.screenshot({ path: foto });   // la ventana, sin más
-      console.warn('  ⚠ la página entera no cabe en una captura (' + e1.message.slice(0, 60) + '); guardada la ventana.');
-    } catch (e2) {
-      console.warn('  ⚠ NO hay captura del vigía: ' + e2.message.slice(0, 80));
+      await page.screenshot({ path: foto, fullPage: true });
+    } catch {
+      await page.screenshot({ path: foto });   // la ventana: mucho más barata
     }
+  } catch (e) {
+    console.warn('  ⚠ sin captura del vigía en esta pasada (' + String(e.message || e).slice(0, 70) + ').'
+      + ' No es un fallo del producto: el gráfico ya se ha medido por píxeles. La foto vieja se ha borrado.');
   }
-  ok(existsSync(foto), 'queda una captura del vigía para mirarla (y es de AHORA, no de la pasada anterior)');
 
   // El JSON de la API trae los mismos hallazgos (número real > 0).
   const apiOwner = await page.evaluate(async () => {

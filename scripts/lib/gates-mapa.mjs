@@ -265,7 +265,10 @@ export const GRUPOS = {
   seguridad: ['gate-c5-2fa-superadmin', 'gate-c5bis-rescate-duenyo', 'gate-c5ter-cerrojo-superadmin', 'gate-c6-find-tenant', 'test-c5-2fa-superadmin', 'test-c5-forgot', 'test-c5-sesiones', 'test-c5bis-rescate-duenyo', 'test-c5ter-sin-email', 'test-c6-acceso'],
   // GRUPO NUEVO (24 ago 2026): nace al colocar las comprobaciones que nadie ejecutaba.
   verifactu: ['verify-pieza-c', 'verify-sustitutiva', 'verify-verifactu-anulaciones', 'verify-verifactu-cadena-nif', 'verify-verifactu-cola', 'verify-verifactu-t1', 'verify-verifactu-t2'],
-  infra: ['test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
+  // 'verify-disco-perfiles' entra el 24 ago 2026, el día que el disco se llenó al 100 % POR SEGUNDA VEZ
+  // y tiró el navegador, las capturas y hasta el /tmp del sistema. El arreglo está en
+  // scripts/lib/perfil-chromium.mjs; esto es el aviso, para enterarse por un rojo y no por un servidor caído.
+  infra: ['verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
           // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
           // archivar si lo dejó, y decirlo ANTES de pulsar. Antes daba un 500 seco.

@@ -16,6 +16,7 @@ import { tmpdir } from 'os';
 import { execSync } from 'child_process';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { perfilDesechable } from './perfil-chromium.mjs';
 
 export const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -176,12 +177,12 @@ export function exigeCodigoServido() {
 // El perfil se le da EXPLÍCITAMENTE (`userDataDir`) para saber cuál es el nuestro, y se borra cuando
 // el proceso termina — salga bien, salga mal o lo maten. Puppeteer solo limpia el suyo si el
 // navegador se cierra ordenadamente, y un gate que revienta a medias no lo cierra.
-const perfiles = new Set();
-let engancheLimpieza = false;
-function limpiaPerfiles() {
-  for (const d of perfiles) { try { rmSync(d, { recursive: true, force: true }); } catch {} }
-  perfiles.clear();
-}
+// 24 ago 2026 · ESTO YA NO VIVE AQUÍ, Y NO ES UNA MUDANZA COSMÉTICA. La versión que había borraba
+// `/tmp/gate-chrome-XXXX` y creía haber liberado el disco. No lo liberaba: el snap de Chromium remapea
+// /tmp y los ~130 MB de cada perfil viven en `/tmp/snap-private-tmp/snap.chromium/tmp/...`, que nadie
+// tocaba. Por eso el disco volvió a llenarse al 100 % el 24 ago —1.485 carpetas, 29 GB— pese al
+// arreglo del 22. Ahora hay UNA sola pieza que borra las dos rutas, y la usan los gates y las
+// comprobaciones por igual: scripts/lib/perfil-chromium.mjs.
 
 export function launchOpts() {
   if (!existsSync(CHROMIUM)) {
@@ -189,15 +190,7 @@ export function launchOpts() {
             'Instálalo (snap install chromium) o apunta PUPPETEER_EXECUTABLE_PATH a uno que funcione.');
   }
   exigeCodigoServido();
-  const dir = mkdtempSync(join(tmpdir(), 'gate-chrome-'));
-  perfiles.add(dir);
-  if (!engancheLimpieza) {
-    engancheLimpieza = true;
-    process.on('exit', limpiaPerfiles);
-    for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
-      process.on(s, () => { limpiaPerfiles(); process.exit(130); });
-    }
-  }
+  const dir = perfilDesechable('gate-chrome');
   return { headless: 'new', executablePath: CHROMIUM, args: ['--no-sandbox'], userDataDir: dir };
 }
 
