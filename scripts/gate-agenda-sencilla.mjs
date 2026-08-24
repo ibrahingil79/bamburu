@@ -15,11 +15,17 @@ import puppeteer from 'puppeteer';
 import { launchOpts, APP_DIR, autoAceptarPaneles } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { join } from 'path';
+import { fotoHorario, restaurarHorario } from './lib/horario-intacto.mjs';
 
 const BASE = 'http://desarrollo-bamburu.localhost:3000', HOST = 'desarrollo-bamburu.localhost';
 let pass = 0, fail = 0;
 const ok = (c, m, e = '') => { (c ? pass++ : fail++); console.log((c ? '  ✓ ' : '  ✗ FALLO: ') + m + (e ? ' — ' + e : '')); };
 const db = new Database(join(APP_DIR, 'data/tenants/desarrollo-bamburu.db'));
+// 24 ago 2026 · FOTO DEL HORARIO ANTES DE TOCARLO. Este gate cambia el horario de apertura POR LA
+// PANTALLA y no lo devolvía. Dejó dos tramos solapados y con eso la agenda dejó de ofrecer huecos:
+// quien se puso rojo fue gate-oficio-pantalla («sin huecos»), a tres pantallas del culpable.
+// Ver scripts/lib/horario-intacto.mjs.
+const horarioAntes = fotoHorario(db);
 const TS = Date.now();
 const owner = db.prepare("SELECT id FROM admin_users WHERE role='owner' AND active=1 LIMIT 1").get();
 const HOY = new Date().toISOString().slice(0, 10);
@@ -221,6 +227,12 @@ finally {
   for (const sid of [S, Sesp]) { try { db.prepare('DELETE FROM service_config WHERE product_id=?').run(sid); } catch {} try { db.prepare('DELETE FROM products WHERE id=?').run(sid); } catch {} }
   try { if (CLI) db.prepare('DELETE FROM clients WHERE id=?').run(CLI); } catch {}
   for (const uid of emps) { try { db.prepare('DELETE FROM admin_users WHERE id=?').run(uid); } catch {} }
+  // El horario, como estaba. Y se comprueba: restaurar sin mirar es confiar en que valió.
+  try {
+    const r = restaurarHorario(db, horarioAntes);
+    ok(r.iguales, 'limpieza: el horario del negocio queda EXACTAMENTE como estaba'
+      + (r.cambios ? ' (deshechos ' + r.cambios + ' cambios)' : ' (no hizo falta tocar nada)'));
+  } catch (e) { fail++; console.error('  ✗ FALLO: no se pudo restaurar el horario — ' + e.message); }
   db.close();
 }
 console.log('\n=== RESULTADO: ' + pass + ' OK / ' + fail + ' FALLOS ===');
