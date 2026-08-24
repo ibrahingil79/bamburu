@@ -35,8 +35,10 @@ const MAX_BYTES = 12 * 1024 * 1024;                 // 12 MB, el mismo tope que 
 // `email_ok` decía 1) y el estado final es `bounced`. O sea: la petición salía, nadie la recibía
 // y el registro decía que había ido bien.
 // Se pone la dirección que SÍ recibe —la misma que ya usan los avisos de copia de seguridad— y
-// se deja configurable por `settings.migracion_buzon` o por la variable de entorno. **Ibrahin
-// tiene que confirmar cuál es la buena**: queda dicho en el parte.
+// se deja configurable por `settings.migracion_buzon` o por la variable de entorno.
+// CONFIRMADA POR IBRAHIN el 24 ago 2026: `ibrahingil@gmail.com` es la buena. Comprobado que
+// además LLEGA, no solo que Resend la acepte: el envío de las 10:32 figura como `delivered`
+// (`hola@bamburu.com` figuraba como `bounced`, que es de donde salió todo esto).
 const BUZON_POR_DEFECTO = process.env.BAMBURU_MIGRACIONES_EMAIL || 'ibrahingil@gmail.com';
 function buzonDe(db) {
   try {

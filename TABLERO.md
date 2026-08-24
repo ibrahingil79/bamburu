@@ -7522,8 +7522,10 @@ archivada. Al dueño y a una misma no se les ofrece, y forzar la ruta da 403. `g
 `email_ok` decía 1—, pero iba a `hola@bamburu.com`, **que REBOTA**: el dominio está verificado para
 ENVIAR con la recepción DESACTIVADA. Sonda al mismo buzón: estado **`bounced`**.
 **Ahora se manda a `ibrahingil@gmail.com`** (la misma que ya usan los avisos de copia), configurable por
-`settings.migracion_buzon` o `BAMBURU_MIGRACIONES_EMAIL`. **⬜ Ibrahin tiene que confirmar cuál es la
-buena.** No hay más avisos al equipo en la misma situación: los otros dos van a esa dirección y llegan.
+`settings.migracion_buzon` o `BAMBURU_MIGRACIONES_EMAIL`. **✅ CONFIRMADA por Ibrahin el 24 ago 2026:
+`ibrahingil@gmail.com` es la buena.** Y no solo está puesta: el envío de las 10:32 figura en Resend
+como **`delivered`**, no como «aceptado» —que fue lo que engañó al registro con la dirección vieja—.
+Nada la pisa: ni la variable de entorno ni `settings.migracion_buzon` están puestas en ningún negocio. No hay más avisos al equipo en la misma situación: los otros dos van a esa dirección y llegan.
 
 Y se arregla la causa, no el síntoma: **el fichero se guarda** (antes solo su nombre; el binario viajaba
 únicamente dentro del correo) y hay **pantalla nueva en el panel de control, «Migraciones»**, con todas
