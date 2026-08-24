@@ -62,7 +62,7 @@ try {
     renderGLines();
   });
   const totalsTxt = await page.$eval('#gTotals', el => el.textContent);
-  ok(/206\.00/.test(totalsTxt), 'total a pagar = 206.00 (base 180 + IVA 26)');
+  ok(/206[.,]00/.test(totalsTxt), 'total a pagar = 206.00 (base 180 + IVA 26)');
   ok(/IVA 21%/.test(totalsTxt) && /IVA 10%/.test(totalsTxt), 'desglose de IVA por tipo (21% y 10%) visible');
   await page.screenshot({ path: '/tmp/gasto-1-form.png' });
 
@@ -75,7 +75,8 @@ try {
   ok(/FRP-\d{4}/.test(body), 'ficha: código FRP');
   ok(body.includes('Gasto') && body.includes('Servicios profesionales'), 'ficha: tipo Gasto + categoría');
   ok(body.includes('Líneas del gasto') && body.includes('Asesoría') && body.includes('Suplido exento'), 'ficha: tabla de líneas del gasto');
-  ok(body.includes('206.00'), 'ficha: total 206.00');
+  // El importe, en las DOS formas: el producto lo escribe ya como en España («206,00 €»).
+  ok(/206[.,]00/.test(body), 'ficha: total 206,00');
   ok(body.includes('—') , 'ficha: sin documento de origen ("—")');
   await page.screenshot({ path: '/tmp/gasto-2-ficha.png' });
 
@@ -90,7 +91,7 @@ try {
   await page.waitForSelector('#spay-amount', { timeout: 8000 });
   await page.evaluate(() => { document.getElementById('spay-amount').value = '100'; });
   await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => {}), clickByText('#pagoBody', 'Registrar pago')]);
-  await page.waitForFunction(() => document.body.textContent.includes('106.00'), { timeout: 8000 });
+  await page.waitForFunction(() => document.body.textContent.match(/106[.,]00/), { timeout: 8000 });
   ok(true, 'pago parcial de 100 → pendiente 106.00');
 
   // ── 3. La factura de gasto aparece en la torre de control de pagos ──

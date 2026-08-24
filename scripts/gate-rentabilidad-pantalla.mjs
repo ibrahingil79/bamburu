@@ -133,7 +133,11 @@ try {
   await po.evaluate((id) => viewDetail(id), PG);
   await po.waitForFunction(() => { const b = document.getElementById('proyRent'); return b && /Resultado/.test(b.textContent); }, { timeout: 8000 }).catch(() => {});
   const panelTxt = await po.evaluate(() => document.getElementById('proyRent')?.textContent || '');
-  ok(/Rentabilidad/.test(panelTxt) && /1000\.00/.test(panelTxt), 'la ficha de PG muestra el panel de rentabilidad con 1000,00', panelTxt.replace(/\s+/g, ' ').slice(0, 90));
+  // La cifra se busca EN LAS DOS FORMAS. El 24 ago 2026 el producto pasó a escribir el dinero como
+  // en España («1.000,00 €», no «€1000.00») y esta aserción, clavada al texto inglés, se puso roja
+  // por el cambio que se pedía. Lo que importa es que la cifra ESTÉ, no cómo se separan sus miles.
+  ok(/Rentabilidad/.test(panelTxt) && /1[.,]?000[.,]00/.test(panelTxt),
+     'la ficha de PG muestra el panel de rentabilidad con 1.000,00', panelTxt.replace(/\s+/g, ' ').slice(0, 90));
   await po.screenshot({ path: join(SHOTS, 'rent-panel.png') }).catch(() => {});
 
   // (d) COMPARATIVA: PP en rojo (pierde), PG no.

@@ -74,8 +74,14 @@ try {
   invoiceId = parseInt(url.match(/\/(\d+)$/)[1]);
   let body = await page.content();
   ok(/FRP-\d{4}/.test(body), 'ficha: código interno FRP-NNNN');
-  ok(body.includes('121.00'), 'ficha: total CON IVA = 121.00');
-  ok(body.includes(addDays(INV_DATE, term)), 'ficha: vencimiento = fecha + plazo del proveedor (' + addDays(INV_DATE, term) + ')');
+  // El importe, en las DOS formas: el producto lo escribe ya como en España («206,00 €»).
+  ok(/121[.,]00/.test(body), 'ficha: total CON IVA = 121,00');
+  // La fecha, en las DOS formas: el producto la escribe ya en cristiano («10/07/2026»), pero se
+  // sigue guardando en ISO. Se acepta cualquiera de las dos, que lo que importa es que sea ESE día.
+  const venc = addDays(INV_DATE, term);
+  const vencEs = venc.slice(8, 10) + '/' + venc.slice(5, 7) + '/' + venc.slice(0, 4);
+  ok(body.includes(venc) || body.includes(vencEs),
+     'ficha: vencimiento = fecha + plazo del proveedor (' + venc + ' / ' + vencEs + ')');
 
   // ── 3. SITIO 1 — registrar pago PARCIAL desde la ficha (modal compartido) ──
   await page.evaluate((id) => openPagos(id), invoiceId);
@@ -86,7 +92,7 @@ try {
     page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => {}),
     clickByText('#pagoBody', 'Registrar pago'),
   ]);
-  await page.waitForFunction(() => document.body.textContent.includes('71.00'), { timeout: 8000 });
+  await page.waitForFunction(() => document.body.textContent.match(/71[.,]00/), { timeout: 8000 });
   ok(true, 'sitio 1 (ficha): pago parcial de 50 → pendiente 71.00');
   await page.screenshot({ path: '/tmp/pagos-1-ficha.png' });
 
@@ -101,7 +107,7 @@ try {
   await page.waitForSelector('#spay-amount', { timeout: 8000 });
   await page.evaluate(() => { document.getElementById('spay-amount').value = '71'; });
   await clickByText('#pagoBody', 'Registrar pago');
-  await page.waitForFunction(() => document.getElementById('pagoBody').textContent.includes('Factura pagada por completo') || document.getElementById('pagoBody').textContent.includes('Pendiente €0.00'), { timeout: 8000 });
+  await page.waitForFunction(() => document.getElementById('pagoBody').textContent.includes('Factura pagada por completo') || /Pendiente\s*(€\s*0\.00|0,00\s*€)/.test(document.getElementById('pagoBody').textContent), { timeout: 8000 });
   ok(true, 'sitio 2 (sección Pagos): pago restante de 71 → factura pagada');
   await page.screenshot({ path: '/tmp/pagos-2-seccion.png' });
 

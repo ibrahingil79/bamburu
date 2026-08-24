@@ -38,6 +38,23 @@ app.use('/public/*', serveStatic({ root: './' }));
 // lo sensible tiene freno propio y más estricto: login (5/15 min), DISA, tienda, alta de
 // negocio y /find-tenant. Separar el cupo por PERSONA dentro de un negocio queda pendiente.
 app.use('*', rateLimit({ windowMs: 60000, max: 600, keyPrefix: 'global' }));
+// ── EL FAVICON ──────────────────────────────────────────────────────────────────────────────────
+// No había ninguno, así que TODAS las pantallas pedían /favicon.ico y recibían un 404. Eso ensucia
+// la consola del navegador de cualquiera que mire, y además hacía caer a un gate que exige CERO
+// errores en consola (gate-vigia-agenda, 24 ago 2026): un fallo que no era del producto pero que
+// tapaba los que sí lo son. Se sirve la «B» de Bamburu en un SVG mínimo, sin fichero en disco ni
+// dependencia nueva, y con caché larga porque no cambia.
+const FAVICON = Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
+  + '<rect width="64" height="64" rx="14" fill="#0ea5e9"/>'
+  + '<text x="32" y="45" font-family="system-ui,sans-serif" font-size="38" font-weight="700"'
+  + ' fill="#fff" text-anchor="middle">B</text></svg>', 'utf8');
+const sirveFavicon = c => new Response(FAVICON, {
+  headers: { 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=604800' },
+});
+app.get('/favicon.ico', sirveFavicon);
+app.get('/favicon.svg', sirveFavicon);
+
 app.get('/', c => c.html(`<!DOCTYPE html>
 <html lang="es">
 <head>

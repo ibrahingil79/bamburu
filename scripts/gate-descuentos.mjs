@@ -236,14 +236,24 @@ try {
   // se movía. El esquema rechazaba el precio negativo y el preview fallaba EN SILENCIO. Un total que
   // no cuadra con sus propias líneas es peor que un error.
   await dormir(1400);
+  // LAS CIFRAS SE LEEN Y SE COMPARAN COMO NÚMEROS, no como texto. Desde el 24 ago 2026 la pantalla
+  // escribe el dinero como en España («90,00 €», no «€90.00»), y estas dos aserciones comparaban
+  // contra la cadena literal: se pusieron rojas por un cambio que era justo el que se pedía. Lo que
+  // importa es el NÚMERO, así que se normaliza (quitar los puntos de millar, la coma decimal a punto)
+  // y se compara con tolerancia de céntimo. Así vale escriba el producto como escriba.
   const tot = await page.evaluate(() => {
     const t = document.body.innerText.replace(/\s+/g, ' ');
-    const base = (t.match(/Base imponible\s*€?([\d.,]+)/) || [])[1];
-    const total = (t.match(/Total\s*€?([\d.,]+)/) || [])[1];
+    const num = s => {
+      if (!s) return null;
+      const n = Number(String(s).replace(/\./g, '').replace(',', '.'));
+      return Number.isFinite(n) ? n : null;
+    };
+    const base = num((t.match(/Base imponible\s*€?\s*([\d.,]+)/) || [])[1]);
+    const total = num((t.match(/Total\s*€?\s*([\d.,]+)/) || [])[1]);
     return { base, total, aviso: !!document.getElementById('totales-aviso') };
   });
-  ok(tot.base === '90.00', 'y el TOTAL se entera: la base baja de 100 a 90', 'base ' + tot.base);
-  ok(tot.total === '108.90', '  y el total con IVA, de 121,00 a 108,90 (el IVA baja en proporción)', 'total ' + tot.total);
+  ok(tot.base !== null && Math.abs(tot.base - 90) < 0.005, 'y el TOTAL se entera: la base baja de 100 a 90', 'base ' + tot.base);
+  ok(tot.total !== null && Math.abs(tot.total - 108.90) < 0.005, '  y el total con IVA, de 121,00 a 108,90 (el IVA baja en proporción)', 'total ' + tot.total);
   ok(!tot.aviso, '  y sin ningún aviso de que no se pudo calcular');
   ok(errores.length === 0, 'sin errores de JavaScript ni ventanitas', errores.join(' | ') || 'ninguno');
   await page.screenshot({ path: path.join(process.env.HOME || '/home/ubuntu', 'informes-shots', 'punto11-descuentos.png') });

@@ -90,7 +90,7 @@ try {
   await page.type('#fMotivo', 'mercancia defectuosa en transporte');
   await page.evaluate(() => { const r = document.querySelector('#rLines tr[data-oid]'); r.querySelector('.r-qty').value = '4'; r.querySelector('.r-qty').dispatchEvent(new Event('input')); });
   const subTxt = await page.$eval('#rLines tr[data-oid] .r-sub', el => el.textContent);
-  ok(/10\.00/.test(subTxt), 'valor de la línea = 4 × 2.50 = 10.00 (' + subTxt.trim() + ')');
+  ok(/10[.,]00/.test(subTxt), 'valor de la línea = 4 × 2.50 = 10.00 (' + subTxt.trim() + ')');
   await page.screenshot({ path: '/tmp/devol-1-form.png' });
 
   dialogQueue.push(undefined);   // confirm-first

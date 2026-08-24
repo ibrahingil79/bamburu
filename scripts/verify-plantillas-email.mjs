@@ -144,7 +144,7 @@ try {
   console.log('\n[3] Los huecos se rellenan con datos reales');
   ok(/María García/.test(tpl.html), 'el hueco {{cliente}} → "María García"');
   ok(/F2026-0042/.test(tpl.html), 'el hueco {{factura}} → "F2026-0042"');
-  ok(/363\.00/.test(tpl.html) || /363,00/.test(tpl.html), 'el hueco {{importe}} → el pendiente real (363,00 €)');
+  ok(/363[.,]00/.test(tpl.html) || /363,00/.test(tpl.html), 'el hueco {{importe}} → el pendiente real (363,00 €)');
   ok(!/\{\{/.test(tpl.html + tpl.subject), 'no queda NI UN hueco sin rellenar en la cara del cliente');
   ok(tpl.text && !/</.test(tpl.text.replace(/&lt;|&gt;/g, '')), 'y sale también la versión en texto plano, para el que no pinte HTML');
 

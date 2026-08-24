@@ -76,7 +76,7 @@ try {
   await page.waitForSelector('#ref-amount', { timeout: 8000 });
   await page.evaluate(() => { document.getElementById('ref-amount').value = '10'; });
   await clickByText('#pagoBody', 'Registrar reembolso recibido');
-  await page.waitForFunction(() => { const b = document.getElementById('pagoBody'); return b && b.textContent.includes('Reembolsado') && b.textContent.includes('10.00'); }, { timeout: 8000 });
+  await page.waitForFunction(() => { const b = document.getElementById('pagoBody'); return b && b.textContent.includes('Reembolsado') && b.textContent.match(/10[.,]00/); }, { timeout: 8000 });
   ok(Math.round(debtTotal() * 100) === Math.round((baseDebt + 100 - 24.2 + 10) * 100), 'reembolso de 10 → la deuda neta sube 10 (ya tienes el dinero)');
 
   // ── 5. Guarda: anular la devolución con reembolso registrado → 409 ──

@@ -113,9 +113,14 @@ try {
   ok(total >= 20, '  y quedan los clientes de verdad (no se ha barrido todo)', total + ' activos');
   ok(db.prepare(`SELECT COUNT(*) c FROM clients WHERE active=1 AND ${mio}`).get().c === 0,
      '  y ninguno de los activos lleva MI marca');
-  // Lo que NO se pudo borrar está archivado, no destruido, y su factura sigue en la cadena.
-  const arch = db.prepare(`SELECT COUNT(*) c FROM clients WHERE active=0 AND ${M}`).get().c;
-  ok(arch > 0, '  los que tenían factura están ARCHIVADOS, no borrados', arch + ' archivados');
+  // LO QUE NO SE PUDO BORRAR ESTÁ ARCHIVADO, NO DESTRUIDO. Se cuenta por lo que IMPORTA —clientes
+  // archivados que tienen factura— y no por su nombre: el 24 ago 2026 los 148 clientes de gate se
+  // renombraron a «Cliente de pruebas» para que no salieran en los informes del dueño, y esta
+  // aserción, que los buscaba por la marca «GATE», pasó a contar CERO y se puso roja. La marca era un
+  // atajo; lo que garantiza esto es que archivar no destruye.
+  const arch = db.prepare(
+    'SELECT COUNT(*) c FROM clients c WHERE c.active=0 AND EXISTS (SELECT 1 FROM invoices i WHERE i.client_id=c.id)').get().c;
+  ok(arch > 0, '  los que tenían factura están ARCHIVADOS, no borrados', arch + ' archivados con factura');
   // LA CADENA. Esto pedía «exactamente 1050 registros», y eso es una cifra que sube sola: cualquier
   // gate que emita una factura la mueve, y este gate se ponía rojo por algo que no es una pérdida
   // (medido el 24 ago 2026: 1054, cuatro de más por los gates de la noche). Lo que hay que garantizar
@@ -222,8 +227,15 @@ try {
   const rBarras = await componer(page, { area: 'ventas', dim: 'cliente', med: 'base', rango: 'todo', tipo: 'barras' });
   ok(rBarras.barras > 0 && rBarras.barras <= 13, 'si el usuario pide barras, se pintan 12 + «Otros», no más',
      rBarras.barras + ' barras');
-  ok(/Otros/.test(rBarras.nota) || rBarras.barras <= 12, '  y la nota lo dice', rBarras.nota.slice(0, 90));
-  ok(/tabla/i.test(rBarras.nota), '  con su enlace para verlo todo en tabla');
+  // EL RECORTE SOLO SE PUEDE COMPROBAR SI HAY ALGO QUE RECORTAR. Con 13 o más grupos el gráfico
+  // pinta 12 + «Otros» y lo dice con su enlace a la tabla; con menos, no hay nada que decir y exigir
+  // la nota es exigir que mienta. El 24 ago 2026 los 148 clientes de gate se renombraron a uno solo
+  // y el eje bajó de 13 grupos: estas dos aserciones se pusieron rojas por un cambio que era el
+  // pedido. Ahora se exige la nota SOLO cuando hay recorte, y se dice en voz alta cuando no lo hay.
+  const hayRecorte = rBarras.barras > 12;
+  if (!hayRecorte) console.log('  · hoy el eje tiene ' + rBarras.barras + ' grupos: no hay recorte que anunciar');
+  ok(!hayRecorte || /Otros/.test(rBarras.nota), '  y la nota lo dice (si hay recorte)', rBarras.nota.slice(0, 90));
+  ok(!hayRecorte || /tabla/i.test(rBarras.nota), '  con su enlace para verlo todo en tabla');
   const etiquetas = await page.evaluate(() => { try { return Chart.getChart(document.getElementById('cChart')).data.labels; } catch { return []; } });
   // LOS QUE NO SE PUEDEN QUITAR SE NOMBRAN, NO SE EXIGEN. Esta línea pedía CERO nombres de gate en el
   // eje, y con datos de verdad eso ya no se puede cumplir: hay clientes de gate ARCHIVADOS cuyas

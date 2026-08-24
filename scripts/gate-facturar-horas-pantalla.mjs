@@ -110,7 +110,9 @@ try {
   const prevTxt = await po.evaluate(() => document.getElementById('fhPreview').textContent);
   const nLineasPrev = await po.evaluate(() => document.querySelectorAll('#fhPreview tbody tr').length);
   ok(nLineasPrev === 2, 'la vista previa agrupa en 2 líneas (Diseño + Reunión)', String(nLineasPrev));
-  ok(/300\.00/.test(prevTxt) && /363\.00/.test(prevTxt), 'la previa cuadra: base 300 y total 363 (IVA 21%)', prevTxt.replace(/\s+/g, ' ').slice(0, 120));
+  // Las cifras, en las DOS formas: desde el 24 ago 2026 el producto escribe el dinero como en
+  // España («300,00 €»). Lo que importa es que la cifra esté, no cómo se escribe el decimal.
+  ok(/300[.,]00/.test(prevTxt) && /363[.,]00/.test(prevTxt), 'la previa cuadra: base 300 y total 363 (IVA 21%)', prevTxt.replace(/\s+/g, ' ').slice(0, 120));
   await po.screenshot({ path: join(SHOTS, 'fh-preview.png') }).catch(() => {});
 
   // Generar la factura REAL → navega a /admin/invoices/<id>.

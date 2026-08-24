@@ -124,7 +124,8 @@ try {
   ok(foot.includes('Base imponible') && foot.includes('IVA 21%') && foot.includes('Total'), 'pie en vivo: Base + IVA por tasa + Total');
   // 3×2.50 + 2×1.80 = 11.10 base; IVA por línea redondeado y sumado (1.58 + 0.76)
   // = 2.34; total 13.44 — misma matemática que computeTotals en el servidor.
-  ok(foot.includes('11.10') && foot.includes('2.34') && foot.includes('13.44'), 'pie cuadra (11.10 / 2.34 / 13.44)');
+  // El importe, en las DOS formas: el producto lo escribe ya como en España («206,00 €»).
+  ok(/11[.,]10/.test(foot) && /2[.,]34/.test(foot) && /13[.,]44/.test(foot), 'pie cuadra (11,10 / 2,34 / 13,44)');
 
   await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle0' }), page.click('#btn-save')]);
   const docUrl = page.url();
