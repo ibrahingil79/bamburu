@@ -1,30 +1,40 @@
-// Verificación — PIEZA A · Mostrador, navegador headless (Puppeteer), tenant desarrollo, server real.
+// Verificación — PIEZA A · Mostrador, navegador headless (Puppeteer), servidor real.
 //   node scripts/verify-mostrador-browser.mjs
-// Venta completa: rejilla → cobro efectivo con cambio → ticket con QR → aparece en Facturas y en
-// Cobros como cobrada → stock bajó por el libro.
+//
+// ⚙️ SE TRAE SU PROPIO NEGOCIO (24 ago 2026). Esperaba el producto id 6 del negocio de desarrollo, y
+// el ticket que emite es una FACTURA SIMPLIFICADA: entra en la cadena de VERI*FACTU y no se borra.
+// Esta comprobación era una de las que dejaban tickets sueltos en los datos del dueño. Ahora el
+// ticket nace y muere con el negocio, que se tira entero.
 import Database from 'better-sqlite3';
-import { randomBytes } from 'crypto';
 import puppeteer from 'puppeteer';
+import { negocioDesechable, sembrarFlujoDocumentos } from './lib/negocio-desechable.mjs';
+import { autoAceptarPaneles } from './lib/gate-env.mjs';
 
-const DB = 'data/tenants/desarrollo-bamburu.db';
-const ORIGIN = 'http://127.0.0.1:3000';
-const PROD_ID = 6;  // Aceite Lavanda 30ml · 12 € · IVA 10% → total 13.20
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-const db = new Database(DB);
-const token = randomBytes(24).toString('base64url');
-const now = Math.floor(Date.now() / 1000);
-db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)').run(token, 2, now, now + 1800, randomBytes(8).toString('hex'));
-const wid = db.prepare('SELECT id FROM warehouses WHERE is_default=1').get().id;
-db.close();
-const stockNow = () => { const d = new Database(DB, { readonly: true }); const s = d.prepare('SELECT COALESCE(SUM(quantity),0) s FROM stock_movements WHERE product_id=? AND warehouse_id=?').get(PROD_ID, wid).s; d.close(); return s; };
+const neg = await negocioDesechable('Gate Mostrador');
+const ORIGIN = neg.base;
+let PROD_ID, PROD_NAME, PRECIO, wid, token;
+try {
+  // Cifras de la vida real: 12 € con IVA 10 % → 13,20 €, que es lo que este flujo comprueba.
+  const semilla = sembrarFlujoDocumentos(neg.db, { stock: 20, precio: 12 });
+  PROD_ID = semilla.productoId;
+  neg.db.prepare("UPDATE products SET tax_rate=10, tax_band='reducido' WHERE id=?").run(PROD_ID);
+  PROD_NAME = neg.db.prepare('SELECT name FROM products WHERE id=?').get(PROD_ID).name;
+  PRECIO = semilla.precio;
+  wid = semilla.almacenId;
+  token = neg.sesion();
+} catch (e) { console.error('✗ No se pudo sembrar: ' + e.message); neg.tirar(); process.exit(1); }
 
-const browser = await puppeteer.launch({ headless: 'new', executablePath: '/snap/bin/chromium', userDataDir: '/home/ubuntu/.cache/pptr-verify', args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] });
+const stockNow = () => { const d = new Database(neg.abs, { readonly: true }); const s = d.prepare('SELECT COALESCE(SUM(quantity),0) s FROM stock_movements WHERE product_id=? AND warehouse_id=?').get(PROD_ID, wid).s; d.close(); return s; };
+
+const browser = await puppeteer.launch({ headless: 'new', executablePath: '/snap/bin/chromium', userDataDir: '/home/ubuntu/.cache/pptr-verify', args: ['--no-sandbox'] });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 1000 });
-await page.setCookie({ name: 'asess', value: token, domain: '127.0.0.1', path: '/' }, { name: 'btenant', value: 'desarrollo-bamburu', domain: '127.0.0.1', path: '/' });
+await page.setCookie({ name: 'asess', value: token, domain: new URL(ORIGIN).hostname, path: '/' });
+await autoAceptarPaneles(page);
 
 let invNum = null;
 try {
@@ -66,7 +76,7 @@ try {
   ok(stockNow() === stock0 - 1, 'stock bajó por el libro: ' + stock0 + ' → ' + stockNow());
 
   // 6) El ticket PDF se descarga y es válido (QR incluido)
-  const dbq = new Database(DB, { readonly: true });
+  const dbq = new Database(neg.abs, { readonly: true });
   const invId = dbq.prepare('SELECT id FROM invoices WHERE invoice_number=?').get(invNum)?.id;
   dbq.close();
   const r = await page.evaluate(async (id) => { const resp = await fetch('/admin/mostrador/' + id + '/pdf'); return { status: resp.status, ct: resp.headers.get('content-type'), head: (await resp.text()).slice(0, 5) }; }, invId);
@@ -78,7 +88,7 @@ try {
   ok(new RegExp(invNum).test(invBody), 'el ticket aparece en el listado de Facturas (' + invNum + ')');
 
   // 8) Comprobación fiscal directa: serie S, tipo F2, cobrada (no en worklist de cobros)
-  const dbv = new Database(DB, { readonly: true });
+  const dbv = new Database(neg.abs, { readonly: true });
   const inv = dbv.prepare('SELECT * FROM invoices WHERE invoice_number=?').get(invNum);
   const reg = dbv.prepare("SELECT tipo_factura FROM verifactu_registros WHERE invoice_id=? AND record_type='alta'").get(inv.id);
   const paid = dbv.prepare('SELECT COALESCE(SUM(amount),0) s, MAX(payment_method) pm FROM invoice_payments WHERE invoice_id=?').get(inv.id);
@@ -86,8 +96,9 @@ try {
   ok(inv.series === 'S' && reg.tipo_factura === 'F2' && inv.client_id === null, 'fiscal: serie S, tipo F2, sin cliente');
   ok(Math.round(paid.s * 100) === 1320 && paid.pm === 'efectivo', 'cobrada por completo (13,20 € efectivo) → no pendiente');
 } catch (e) { console.error('ERROR', e.message); fail++; } finally {
-  await browser.close();
-  const d = new Database(DB); d.prepare('DELETE FROM admin_sessions WHERE token=?').run(token); d.close();
+  try { await browser.close(); } catch (_) {}
+  neg.tirar();
+  console.log('  [limpieza] negocio de prueba «' + neg.slug + '» tirado entero');
 }
 console.log('\n=== RESULTADO NAVEGADOR: ' + pass + ' OK / ' + fail + ' FALLOS ===');
 process.exit(fail ? 1 : 0);
