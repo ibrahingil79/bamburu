@@ -15,7 +15,7 @@ import path from 'path';
 import { unlinkSync } from 'fs';
 import { randomBytes } from 'crypto';
 import Database from 'better-sqlite3';
-import { launchOpts } from './lib/gate-env.mjs';
+import { launchOpts, autoAceptarPaneles } from './lib/gate-env.mjs';
 import { controlDb, getTenantBySlug } from '../core/control-db.js';
 import { provisionTenant } from '../core/tenant-provisioning.js';
 import { fijarOficio, vocabulario } from '../modules/erp/oficios.js';
@@ -120,7 +120,7 @@ const BASE_CUENTA = [['Perfil', '/admin/perfil'], ['Datos del negocio', '/admin/
 // comprueban UNA A UNA por identidad (área » nombre » ruta), que es lo que detecta una amputación
 // disfrazada de entrada nueva.
 const N_TOTAL       = BASE_RAIL.length + BASE_CONFIG.length + 1 + BASE_FIJAS.length + BASE_CUENTA.length;   // 39+5+1+3+6 = 54
-const N_SIN_PUESTOS = N_TOTAL - 1;                                                                          // 49
+const N_SIN_PUESTOS = N_TOTAL - 1;                                                                          // 53
 
 // Qué áreas se parten en DOS bloques, y qué entradas quedan bajo el rótulo «Ajustes de <Área>». No
 // cambia el inventario: solo dónde se pinta cada una dentro del MISMO desplegable.
@@ -256,6 +256,9 @@ try {
   browser = await puppeteer.launch(launchOpts());
   const errsGlobal = [];
   const page = await browser.newPage();
+  // El interruptor de la página de reservas confirmaba con confirm(); desde el 24 ago 2026 abre el
+  // panel de `pedirDatos`. Sin aceptarlo, el clic se queda a medias y el interruptor «no apaga».
+  await autoAceptarPaneles(page);
   page.on('pageerror', e => errsGlobal.push(String(e && e.message || e)));
   await page.setViewport({ width: 1400, height: 950 });
 
@@ -1143,7 +1146,9 @@ try {
 
   // Se PULSA el botón de verdad (con el confirm respondido que sí), no se llama al endpoint por
   // debajo: lo que hay que demostrar es que el interruptor funciona desde donde está el dueño.
-  await page.evaluate(() => { window.confirm = () => true; });
+  // Ya no se falsea `window.confirm`: esa ventanita no existe. El panel que la sustituyó lo acepta
+  // `autoAceptarPaneles`, arriba, así que aquí se PULSA el botón y nada más — que es de lo que iba
+  // esta comprobación.
   await page.evaluate(() => document.querySelector('button[onclick*="apagarReservas"]').click());
   await dormir(800);
   ok(pub().a === 0, 'pulsarlo la APAGA, en un clic', JSON.stringify(pub()));

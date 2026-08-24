@@ -212,7 +212,11 @@ try {
   {
     const { page, estado } = await abrir();
     const tarjetas = await page.evaluate(() => [...document.querySelectorAll('[data-preg]')].map(b => b.innerText.replace(/\s+/g, ' ').trim()));
-    ok(tarjetas.length === 11, 'hay ONCE preguntas (la 12ª queda fuera y anotada, ver TABLERO)', tarjetas.length + '');
+    // Eran once, con la duodécima («¿qué productos llevo tiempo sin vender?») anotada como imposible
+    // de contestar. La noche del 23-24 ago 2026 (punto 9) se hizo posible con el área de Catálogo, y
+    // entraron DOS: esa y «¿cuánto dinero tengo parado en productos que no se venden?». Se exige que
+    // no BAJEN de once, que es lo que protege de una pérdida.
+    ok(tarjetas.length >= 11, 'las preguntas frecuentes siguen ahí (once o más; hoy trece)', tarjetas.length + '');
     ok(tarjetas.some(t => /Quién me debe dinero/.test(t)), '  entre ellas «¿Quién me debe dinero?» (la que no se podía)');
     ok(tarjetas.some(t => /horas trabajo de verdad/.test(t)), '  y «¿Cuántas horas trabajo de verdad…?» (la de dos series)');
     ok(!tarjetas.some(t => /parados/.test(t)), '  y NO está la de productos parados, que no se puede contestar');

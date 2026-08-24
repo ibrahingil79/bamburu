@@ -91,7 +91,15 @@ function revisa(ruta) {
           i += barras + 1; continue;
         }
         if (esComilla) { i += barras + 1; continue; }
-        if (!marco().raw && '*.+?()[]{}|^sdwbSDWB'.includes(d)) {
+        // LA BARRA DE UN REGEX (`\/`) TAMBIÉN SE LA COME, y esta lista la dejaba pasar entera
+        // porque `<\/script>` es un idioma legítimo. Se distingue por lo que va DELANTE: si la
+        // barra invertida viene tras un `<`, es el cierre de una etiqueta y está bien; en cualquier
+        // otro sitio es el delimitador de un regex y la plantilla lo destruye. El 24 ago 2026 esto
+        // dejó MUERTA la pantalla de plantillas de correo: un `/^https?:\/\/.+/` llegó al navegador
+        // como `/^https?://.+/` y el script entero de la pantalla no arrancó — ni una plantilla
+        // pintada, y este lint decía «limpias».
+        const barraDeRegex = d === '/' && s[i - 1] !== '<';
+        if (!marco().raw && (barraDeRegex || '*.+?()[]{}|^sdwbSDWB'.includes(d))) {
           const l0 = s.lastIndexOf('\n', i) + 1;
           const l1 = s.indexOf('\n', i);
           avisaEscape(s.slice(l0, l1 === -1 ? s.length : l1));

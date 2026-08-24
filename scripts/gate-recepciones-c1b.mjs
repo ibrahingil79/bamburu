@@ -59,12 +59,12 @@ page.on('pageerror', e => erroresJS.push(String(e && e.message || e)));
 page.on('console', m => { if (m.type() === 'error') erroresJS.push('console: ' + m.text()); });
 
 page.on('dialog', async d => {
-// Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
-await autoAceptarPaneles(page);
   const next = dialogQueue.shift();
   if (next === undefined) await d.accept();
   else await d.accept(typeof next === 'string' ? next : undefined);
 });
+// Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+await autoAceptarPaneles(page);
 
 const HJ = { 'Cookie': 'asess=' + token, 'Content-Type': 'application/json', 'x-csrf-token': csrf };
 const post = async (u, body) => (await fetch(BASE + u, { method: 'POST', headers: HJ, body: JSON.stringify(body || {}) })).json();
@@ -140,7 +140,9 @@ try {
   // ── 7. Anular la 2ª recepción → orden reabierta (parcial) y stock revertido ──
   //     Camino feliz: el producto del gate NO tiene traslados, así que el motor deja anular.
   await page.goto(receiptUrl2, { waitUntil: 'networkidle0' });
-  dialogQueue.push('bultos dañados en el transporte');   // prompt del motivo
+  // El motivo ya no lo pide un prompt(): va en un panel con campo. Se empuja a la cola del panel,
+  // el equivalente exacto de la de diálogos (ver autoAceptarPaneles en lib/gate-env.mjs).
+  await page.evaluate(v => window.__pdCola.push(v), 'bultos dañados en el transporte');
   await page.evaluate(() => anularRecepcion());
   // 30 s Y NO 10, Y NO ES ABLANDAR EL GATE: lo que se exige es exactamente lo mismo —que la ficha
   // diga «Recepción anulada»—; lo que cambia es cuánto se espera. Anular mueve stock y recalcula el
@@ -184,7 +186,7 @@ try {
   ok(stockTrasRecibir === trasladadoBefore.stock + 5, 'recepción del producto trasladado confirmada (stock ' + trasladadoBefore.stock + ' → ' + stockTrasRecibir + ')');
 
   // Intentar anularla POR LA UI: el usuario debe ver el bloqueo, no un fallo mudo.
-  dialogQueue.push('me arrepiento');
+  await page.evaluate(v => window.__pdCola.push(v), 'me arrepiento');
   await page.evaluate(() => anularRecepcion());
   const avisoBloqueo = await esperarToast(page, /traslados activos/i);
   ok(!!avisoBloqueo, 'la UI avisa del bloqueo con un toast: ' + JSON.stringify(avisoBloqueo && avisoBloqueo.msg));

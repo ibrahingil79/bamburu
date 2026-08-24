@@ -16,7 +16,7 @@
 // a como estaban (incluido dejar la puerta APAGADA si lo estaba).
 //   node scripts/gate-reserva-publica-pantalla.mjs
 import puppeteer from 'puppeteer';
-import { launchOpts, APP_DIR } from './lib/gate-env.mjs';
+import { launchOpts, APP_DIR, autoAceptarPaneles } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { mkdirSync } from 'fs';
@@ -90,6 +90,11 @@ async function paginaAnonima(viewport) {
   const page = await ctx.newPage();
   await page.setViewport(viewport);
   page.on('dialog', d => d.accept().catch(() => {}));
+  // El enlace del cliente dejó de usar confirm() el 24 ago 2026: ahora abre un panel DENTRO de la
+  // página (esa página no carga el layout del panel, así que lleva el suyo). `anular()` y
+  // `accion('avisar')` DEVUELVEN una promesa que no resuelve hasta que alguien contesta, y este gate
+  // las espera: sin esto se queda colgado hasta el tope de tiempo del barrido.
+  await autoAceptarPaneles(page);
   return page;
 }
 

@@ -55,10 +55,34 @@ for (const [tabla, ruta] of [['clients', 'clients'], ['invoices', 'invoices'], [
   ['customer_orders', 'pedidos'], ['delivery_notes', 'albaranes'], ['purchase_orders', 'purchase-orders'],
   ['purchases', 'purchases'], ['supplier_invoices', 'supplier-invoices'], ['supplier_returns', 'supplier-returns'],
   ['stock_transfers', 'stock-transfers'], ['purchase_order_receipts', 'purchase-order-receipts']]) {
-  const r = uno(`SELECT id FROM ${tabla} ORDER BY id DESC LIMIT 1`);
+  const r = uno(`SELECT id FROM ${tabla} ORDER BY id ASC LIMIT 1`);   // el más ANTIGUO: no lo borra otro gate a la vez
   if (r) meter(`/admin/${ruta}/${r.id}`);
 }
-const lista = SOLO.length ? SOLO : rutas;
+// Y UN NIVEL DE RASTREO. La lista de extras de arriba es una lista a mano, y una lista a mano se
+// queda corta: el 24 ago 2026 se colaba `/admin/settings/plantillas` —una subruta de Ajustes— con el
+// script MUERTO por una barra que la plantilla se comió, y esta herramienta decía «todas válidas».
+// Ahora, además de las de la lista, se siguen los enlaces `/admin/...` que aparecen EN EL HTML de las
+// pantallas visitadas. No es un rastreo completo (un nivel, y sin parámetros), pero cubre justo el
+// hueco: una pantalla enlazada desde otra ya no puede esconderse.
+const NO_RASTREAR = /\/(logout|export|imprimir|pdf|descargar|csv|nuevo-tenant)(\/|$|\?)/i;
+async function conRastreo(base, cookie, semilla) {
+  const vistas = new Set(semilla), cola = [...semilla];
+  for (const ruta of cola) {
+    let html = '';
+    try { const r = await fetch(base + ruta, { headers: { cookie } }); if (r.status !== 200) continue; html = await r.text(); }
+    catch { continue; }
+    for (const m of html.matchAll(/href="(\/admin[^"#?]*)"/g)) {
+      const h = m[1].replace(/\/$/, '');
+      // Un href puede ser una CADENA A MEDIO CONSTRUIR dentro de un <script>
+      // (`href="/admin/invoices/'+r.id+'"`). No es una ruta: es código. Se descarta por sus signos.
+      if (/['"+${}\\]|\s/.test(h)) continue;
+      if (!h || vistas.has(h) || NO_RASTREAR.test(h)) continue;
+      vistas.add(h);            // se añade a la lista, pero NO a la cola: un solo nivel
+    }
+  }
+  return [...vistas];
+}
+const lista = SOLO.length ? SOLO : await conRastreo(BASE, 'asess=' + tok, rutas);
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lintjs-'));
 let bloques = 0, rotos = 0, pantallas = 0;

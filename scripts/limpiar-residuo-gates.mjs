@@ -141,6 +141,19 @@ const borrar = db.transaction(() => {
   db.exec(`DELETE FROM purchases                    WHERE id IN (${ids(compras)})`);
   // Almacenes de prueba (solo los que no tienen nada colgando).
   db.exec(`DELETE FROM warehouses WHERE id IN (${ids(almacenesOk)})`);
+  // Y SI SE LLEVÓ POR DELANTE EL PRINCIPAL, SE DEVUELVE. El producto no deja archivar el almacén
+  // principal (warehouses.js: 409 «marca antes otro como principal»), pero esta limpieza escribe SQL
+  // directo y se salta esa regla. El 24 ago 2026 el negocio de desarrollo apareció con los tres
+  // almacenes a is_default=0: ninguno principal. No se inventa uno nuevo — se le devuelve la marca al
+  // más antiguo que siga activo, que es el del negocio de verdad.
+  const hayPrincipal = db.prepare('SELECT COUNT(*) n FROM warehouses WHERE active=1 AND is_default=1').get().n;
+  if (!hayPrincipal) {
+    const w = db.prepare('SELECT id, name FROM warehouses WHERE active=1 ORDER BY id LIMIT 1').get();
+    if (w) {
+      db.prepare('UPDATE warehouses SET is_default=1 WHERE id=?').run(w.id);
+      console.log(`  ⚠️ no quedaba almacén principal: se le devuelve la marca a «${w.name}» (id ${w.id})`);
+    }
+  }
 
   // ÚLTIMO: los asientos huérfanos. Va al final A PROPÓSITO — borrar las facturas y los pagos de
   // arriba CONVIERTE en huérfanos a sus asientos, así que la consulta se re-evalúa aquí, ya con la

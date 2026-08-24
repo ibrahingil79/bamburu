@@ -30,6 +30,16 @@ const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g,
 // Pie del documento: reusa la matemática fiscal de la factura (computeTotals →
 // base + desglose IVA por tasa + total), sin IRPF (no aplica a la orden).
 export function purchaseOrderTotals(items) {
+  // UNA ORDEN SIN LÍNEAS SE PUEDE VER, aunque no se pueda emitir. `computeTotals` exige al menos una
+  // línea —correcto para CREAR un documento—, pero esta función también la usa la pantalla de VER, y
+  // ahí la validación de crear no vale: reventaba con un 500 y la ficha no se abría. En el negocio de
+  // desarrollo hay tres así (OC-0011, OC-0012 y OC-0013, del 14 jun 2026, en estado «enviada»), y
+  // llevaban desde entonces sin poder abrirse. Encontrado el 24 ago 2026 por `lint-js-servido` al
+  // seguir los enlaces de la lista. Sin líneas, los totales son cero: eso no es inventar un dato, es
+  // decir lo que hay.
+  if (!Array.isArray(items) || items.length === 0) {
+    return { subtotal: 0, taxByRate: {}, taxAmount: 0, irpfBase: 0, irpfAmount: 0, total: 0 };
+  }
   return computeTotals(
     items.map(i => ({ quantity: i.quantity, unit_price: i.unit_cost, tax_rate: i.tax_rate })),
     0

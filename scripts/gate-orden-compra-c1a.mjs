@@ -60,8 +60,6 @@ let correoAntes = null;   // cómo estaba el interruptor de «orden de compra» 
 const dialogQueue = [];
 const dialogosInesperados = [];
 page.on('dialog', async d => {
-// Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
-await autoAceptarPaneles(page);
   if (!dialogQueue.length) {
     dialogosInesperados.push(d.type() + ': ' + d.message());
     await d.dismiss();
@@ -72,6 +70,8 @@ await autoAceptarPaneles(page);
   else if (next === false) await d.dismiss();
   else await d.accept(typeof next === 'string' ? next : undefined);
 });
+// Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+await autoAceptarPaneles(page);
 
 try {
   // ── 1. Lista ──
@@ -197,7 +197,9 @@ try {
      'email enviado por Resend a ' + SINK_EMAIL + ' (toast exacto)');
 
   // ── 6. Anular (pide motivo) ──
-  dialogQueue.push('precio pactado incorrecto');   // prompt
+  // El motivo ya no se pide con prompt(): va en un panel con campo. Se empuja a la cola del panel,
+  // que es el equivalente exacto de la de diálogos (ver autoAceptarPaneles en lib/gate-env.mjs).
+  await page.evaluate(v => window.__pdCola.push(v), 'precio pactado incorrecto');
   await page.evaluate(() => anularOrden());
   await page.waitForNavigation({ waitUntil: 'networkidle0' });
   body = await page.content();
@@ -220,7 +222,7 @@ try {
   await page.waitForNavigation({ waitUntil: 'networkidle0' });
   const oc2 = (await page.content()).match(/OC-\d{4,}/)[0];
 
-  dialogQueue.push('cantidad equivocada');         // prompt de anular-y-rehacer
+  await page.evaluate(v => window.__pdCola.push(v), 'cantidad equivocada');   // panel de anular-y-rehacer
   await page.evaluate(() => anularYRehacer());
   await page.waitForNavigation({ waitUntil: 'networkidle0' });
   ok(page.url().endsWith('/edit'), 'anular-y-rehacer aterriza en el borrador nuevo (editable)');

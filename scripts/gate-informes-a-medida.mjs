@@ -28,7 +28,7 @@ import puppeteer from 'puppeteer';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 import path from 'path';
-import { tenantDb, APP_DIR, launchOpts } from './lib/gate-env.mjs';
+import { tenantDb, APP_DIR, launchOpts, autoAceptarPaneles } from './lib/gate-env.mjs';
 import { cruzar, camposPara, AREAS } from '../modules/erp/constructor-analitica.js';
 import { RECETAS } from '../modules/erp/dibujo.js';
 import { LISTADOS } from '../modules/erp/listados.js';
@@ -218,6 +218,10 @@ try {
   const page = await ctx.newPage();
   await page.setViewport({ width: 1440, height: 1200 });
   await page.setCookie({ name: 'asess', value: token, domain: SLUG + '.localhost', path: '/' });
+  // Borrar un informe pedía confirmación con confirm(); desde el 24 ago 2026 abre el panel de
+  // `pedirDatos`. El `page.on('dialog')` de más abajo ya no lo alcanza: si nadie acepta el panel, el
+  // botón se queda a medias y el informe no se borra (así salió este gate en el barrido del 24).
+  await autoAceptarPaneles(page);
   const errores = [];
   page.on('pageerror', e => errores.push(String(e && e.message || e)));
   const cruces = [];

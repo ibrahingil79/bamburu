@@ -901,7 +901,10 @@ export function createSettingsRoutes(db, cfg = {}) {
         const rango = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
         const v = await window.pedirDatos({ titulo:'Poner un enlace', aceptar:'Enlazar',
           campos:[{ id:'url', etiqueta:'¿A qué dirección enlaza?', valor:'https://' }],
-          validar:v2 => !/^https?:\/\/.+/.test(String(v2.url||'').trim())
+          // OJO A LAS BARRAS: esto vive DENTRO de una plantilla, así que la barra invertida se la
+          // come la plantilla y al navegador llegaba /^https?://.+/ — error de sintaxis que mataba
+          // EL SCRIPT ENTERO de esta pantalla: no pintaba ni una plantilla de correo. Van dobladas.
+          validar:v2 => !/^https?:\\/\\/.+/.test(String(v2.url||'').trim())
             ? { campo:'url', mensaje:'Escribe una dirección completa, empezando por https://' } : null });
         if (!v) return false;
         if (rango) { const s2 = window.getSelection(); s2.removeAllRanges(); s2.addRange(rango); }

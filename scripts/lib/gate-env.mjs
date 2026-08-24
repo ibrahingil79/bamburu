@@ -214,11 +214,42 @@ export function launchOpts() {
 // más. Si un gate quiere probar el camino del «no», que no llame a esto.
 export async function autoAceptarPaneles(page) {
   await page.evaluateOnNewDocument(() => {
+    // LA COLA DE LOS PANELES CON CAMPO. Un `confirm()` migrado no pide nada y se acepta solo; un
+    // `prompt()` migrado se convierte en un panel CON CAMPO, y ahí no se puede adivinar el valor:
+    // el producto suele validarlo (el motivo de anular una orden exige 3 caracteres) y el gate suele
+    // AFIRMAR el texto que escribió. Así que funciona igual que la cola de diálogos que ya usaban
+    // estos gates: antes de pulsar el botón se empuja el valor.
+    //   await page.evaluate(v => window.__pdCola.push(v), 'precio pactado incorrecto');
+    // Un string va al primer campo de texto; un objeto {id: valor} rellena por id. Si la cola está
+    // vacía, el panel con campos se DEJA EN PAZ — mejor un gate colgado y visible que uno que se
+    // inventa un dato y da verde.
+    window.__pdCola = [];
+    const rellena = (ov, v) => {
+      const campos = [...ov.querySelectorAll('input, select, textarea')];
+      if (!campos.length) return true;
+      if (v === undefined) return false;
+      if (typeof v === 'object' && v !== null) {
+        for (const [id, val] of Object.entries(v)) {
+          const el = ov.querySelector('#pd-' + id);
+          if (!el) continue;
+          if (el.type === 'checkbox') el.checked = !!val; else el.value = String(val);
+        }
+        return true;
+      }
+      const primero = campos.find(c => c.type !== 'checkbox');
+      if (!primero) return false;
+      primero.value = String(v);
+      return true;
+    };
     const pulsa = () => {
       for (const ov of document.querySelectorAll('.modal-overlay.open')) {
-        if (ov.querySelector('input, select, textarea')) continue;   // lleva campos: no es un confirmar
         const ok = ov.querySelector('[data-pd="ok"]');
-        if (ok && !ok.disabled) { ok.click(); return; }
+        if (!ok || ok.disabled) continue;
+        const conCampos = !!ov.querySelector('input, select, textarea');
+        const v = conCampos ? window.__pdCola.shift() : undefined;
+        if (!rellena(ov, v)) { if (conCampos && v !== undefined) window.__pdCola.unshift(v); continue; }
+        ok.click();
+        return;
       }
     };
     const arranca = () => new MutationObserver(pulsa)

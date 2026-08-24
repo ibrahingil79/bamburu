@@ -31,13 +31,13 @@ await page.setCookie({ name: 'asess', value: token, domain: 'desarrollo-bamburu.
 const dialogQueue = [];
 const dialogs = [];
 page.on('dialog', async d => {
-// Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
-await autoAceptarPaneles(page);
   dialogs.push(d.message());
   const next = dialogQueue.shift();
   if (next === undefined) await d.accept();
   else await d.accept(typeof next === 'string' ? next : undefined);
 });
+// Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+await autoAceptarPaneles(page);
 
 const HJ = { 'Cookie': 'asess=' + token, 'Content-Type': 'application/json', 'x-csrf-token': csrf };
 const post = async (u, body) => { const r = await fetch(BASE + u, { method: 'POST', headers: HJ, body: JSON.stringify(body || {}) }); return { status: r.status, body: await r.json() }; };
@@ -100,7 +100,9 @@ try {
   await page.goto(BASE + `/admin/purchase-orders/${b.id}`, { waitUntil: 'networkidle0' });
   body = await page.content();
   ok(body.includes('Parcialmente recibida') && body.includes('Cerrar orden'), 'orden B parcial con botón "Cerrar orden"');
-  dialogQueue.push('el proveedor ya no sirve este artículo');   // prompt motivo
+  // El motivo ya no lo pide un prompt(): va en un panel con campo. Se empuja a la cola del panel,
+  // el equivalente exacto de la de diálogos (ver autoAceptarPaneles en lib/gate-env.mjs).
+  await page.evaluate(v => window.__pdCola.push(v), 'el proveedor ya no sirve este artículo');
   await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle0' }), page.evaluate(() => cerrarOrden())]);
   body = await page.content();
   ok(body.includes('Cerrada (incompleta)'), 'estado "Cerrada (incompleta)" visible');

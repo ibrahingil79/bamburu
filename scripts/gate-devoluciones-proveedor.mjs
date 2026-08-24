@@ -115,7 +115,9 @@ try {
 
   // ── 5. Anular la devolución desde la ficha → stock vuelve, WAC correcto ──
   await page.goto(returnUrl, { waitUntil: 'networkidle0' });
-  dialogQueue.push('error administrativo, se reintegra');   // prompt del motivo
+  // El motivo ya no lo pide un prompt(): va en un panel con campo. Se empuja a la cola del panel,
+  // el equivalente exacto de la de diálogos (ver autoAceptarPaneles en lib/gate-env.mjs).
+  await page.evaluate(v => window.__pdCola.push(v), 'error administrativo, se reintegra');
   await page.evaluate(() => anularDevolucion());
   await page.waitForFunction(() => document.body.innerHTML.includes('Devolución anulada'), { timeout: 10000 });
   body = await page.content();

@@ -67,7 +67,7 @@ export function createRentabilidadRoutes(db) {
     const avisoHoras = cmp.hay_horas_sin_coste
       ? `<div class="alert" style="margin-bottom:1rem;background:var(--warn-s,rgba(200,140,20,.10))">
           ⚠️ Hay <strong>${Number(cmp.horas_sin_coste).toFixed(2)} h</strong> sin coste-hora registrado: quedan <strong>FUERA</strong> del coste de las horas (no se cuentan como coste 0).
-          Pon el <em>coste por hora</em> de esas personas en <a href="/admin/usuarios">Usuarios</a> para que entren.
+          Pon el <em>coste por hora</em> de esas personas en <a href="/admin/users">Usuarios</a> para que entren.
         </div>` : '';
 
     const content = `

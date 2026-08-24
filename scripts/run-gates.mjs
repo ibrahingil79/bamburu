@@ -268,9 +268,11 @@ if (inexistentes.length) {
 // pública: `test-reserva-publica` y `test-neto-cero-reserva` salían SOSPECHOSOS pasando 133/133 y
 // 21/21. El listón no baja: sigue exigiendo que el gate DIGA cuántas aserciones corrió.)
 // (24 ago 2026: se añade "RESULTADO: N \u2713" — es el formato de los doce gates de la noche del
-// 23 y el runner no sabía leerlo: los doce habrían salido SOSPECHOSOS pasando todo. Sigue
-// exigiendo lo mismo: que el gate DIGA cuántas aserciones corrió.)
-const RESUMEN = /\d+\s+OK\b|\bOK[,:]\s*\d+|\bPASS:\s*\d+|\d+\s+comprobaciones\b|\d+\s*\u2713/i;
+// 23 y el runner no sabía leerlo: los doce habrían salido SOSPECHOSOS pasando todo. Va ANCLADO a la
+// palabra RESULTADO a propósito: con solo \d+\s*\u2713 se colaba cualquier número seguido de un tic
+// —una línea de detalle cualquiera— y eso convertía un gate sin resumen en un falso PASA. Sigue
+// exigiendo lo mismo que el resto: que el gate DIGA cuántas aserciones corrió.)
+const RESUMEN = /\d+\s+OK\b|\bOK[,:]\s*\d+|\bPASS:\s*\d+|\d+\s+comprobaciones\b|RESULTADO:\s*\d+\s*\u2713/i;
 
 function correr(gate) {
   return new Promise(resolve => {

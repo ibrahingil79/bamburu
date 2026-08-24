@@ -61,7 +61,21 @@ const componer = (page, r) => page.evaluate(async (x) => {
   set('cDim', x.dim);   await new Promise(r2 => setTimeout(r2, 500));
   set('cMed', x.med);   await new Promise(r2 => setTimeout(r2, 400));
   set('cRango', x.rango); set('cTipo', x.tipo);
-  await new Promise(r2 => setTimeout(r2, 1800));
+  // NO UNA ESPERA FIJA. `dibujar()` pide su cruce al servidor y pinta en dos tiempos: primero la nota
+  // con el periodo y luego, si recorta grupos, la reescribe con «Otros» y su enlace a la tabla. Con
+  // 1800 ms clavados, bajo la carga de un barrido se leía la nota A MEDIAS —«todo el histórico»— con
+  // el gráfico ya en 13 barras, y el gate cantaba un fallo que no existía (comprobado el 24 ago 2026:
+  // la pantalla dice «se pintan los 12 mayores y los otros 21 van sumados en Otros»). Se espera a que
+  // la nota se QUEDE QUIETA: dos lecturas iguales seguidas, con tope de 12 s.
+  const notaDe = () => (document.getElementById('cNota') || {}).innerText || '';
+  let previa = null, quietas = 0, t0 = 0;
+  while (t0 < 12000) {
+    await new Promise(r2 => setTimeout(r2, 400)); t0 += 400;
+    const ahora = notaDe();
+    quietas = (ahora === previa) ? quietas + 1 : 0;
+    previa = ahora;
+    if (quietas >= 2 && t0 >= 1600) break;
+  }
   const cv = document.getElementById('cChart');
   let barras = -1; try { barras = Chart.getChart(cv).data.labels.length; } catch {}
   const vis = id => { const e = document.getElementById(id); return !!e && e.offsetParent !== null; };
@@ -241,7 +255,11 @@ try {
     }
     return out;
   });
-  ok(preg.length === 11, 'siguen siendo once', preg.length + '');
+  // Eran once, con la duodécima («¿qué productos llevo tiempo sin vender?») anotada como imposible
+  // de contestar. La noche del 23-24 ago 2026 (punto 9) se hizo posible con el área de Catálogo, y
+  // entraron DOS: esa y «¿cuánto dinero tengo parado en productos que no se venden?». Se exige que
+  // no BAJEN de once, que es lo que protege de una pérdida.
+  ok(preg.length >= 11, 'las preguntas frecuentes no han bajado de once (hoy trece)', preg.length + '');
   ok(preg.every(p => p.algo), '  y las once contestan', preg.filter(p => !p.algo).map(p => p.t).join(' | ') || 'todas');
   ok(preg.every(p => p.rango && p.rango !== 'todo'), '  con un periodo puesto, nunca el histórico entero',
      [...new Set(preg.map(p => p.rango))].join(', '));
