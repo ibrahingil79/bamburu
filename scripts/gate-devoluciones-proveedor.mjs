@@ -13,7 +13,7 @@
 //
 // El bloqueo, que es comportamiento REAL y bueno del producto, se afirma aparte (bloque 6).
 import puppeteer from 'puppeteer';
-import { tenantDb, launchOpts, engancharToasts, esperarToast } from './lib/gate-env.mjs';
+import { tenantDb, launchOpts, engancharToasts, esperarToast, autoAceptarPaneles } from './lib/gate-env.mjs';
 import { productoDePrueba, purgarArtefactos, cuadraLibro } from './lib/gate-fixtures.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
@@ -59,6 +59,8 @@ await page.setCookie({ name: 'asess', value: token, domain: 'desarrollo-bamburu.
 
 const dialogQueue = [];
 page.on('dialog', async d => { const next = dialogQueue.shift(); if (next === undefined) await d.accept(); else await d.accept(typeof next === 'string' ? next : undefined); });
+// Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+await autoAceptarPaneles(page);
 
 let purchaseId = null, returnUrl = null;
 try {

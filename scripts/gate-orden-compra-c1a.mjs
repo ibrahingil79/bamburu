@@ -17,7 +17,7 @@
 //      (delivered@resend.dev), no contra la bandeja de nadie. El email del proveedor se restaura al
 //      terminar.
 import puppeteer from 'puppeteer';
-import { tenantDb, launchOpts, engancharToasts, esperarToast } from './lib/gate-env.mjs';
+import { tenantDb, launchOpts, engancharToasts, esperarToast, autoAceptarPaneles } from './lib/gate-env.mjs';
 import { purgarArtefactos, productoDePrueba } from './lib/gate-fixtures.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
@@ -60,6 +60,8 @@ let correoAntes = null;   // cómo estaba el interruptor de «orden de compra» 
 const dialogQueue = [];
 const dialogosInesperados = [];
 page.on('dialog', async d => {
+// Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+await autoAceptarPaneles(page);
   if (!dialogQueue.length) {
     dialogosInesperados.push(d.type() + ': ' + d.message());
     await d.dismiss();

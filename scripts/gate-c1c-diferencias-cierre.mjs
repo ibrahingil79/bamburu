@@ -5,7 +5,7 @@
 //      línea de ayuda → intento de nueva recepción bloqueado (400 y sin botón).
 // OJO: crea dos órdenes de prueba en el tenant de desarrollo.
 import puppeteer from 'puppeteer';
-import { tenantDb, launchOpts } from './lib/gate-env.mjs';
+import { tenantDb, launchOpts, autoAceptarPaneles } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 
@@ -31,6 +31,8 @@ await page.setCookie({ name: 'asess', value: token, domain: 'desarrollo-bamburu.
 const dialogQueue = [];
 const dialogs = [];
 page.on('dialog', async d => {
+// Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+await autoAceptarPaneles(page);
   dialogs.push(d.message());
   const next = dialogQueue.shift();
   if (next === undefined) await d.accept();

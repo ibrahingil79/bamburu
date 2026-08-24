@@ -8,7 +8,7 @@
 // EL EMAIL SE ENVÍA DE VERDAD, al BUZÓN SUMIDERO de Resend (delivered@resend.dev): cero correos a
 // personas. Y se limpia todo por id: el negocio queda como estaba.
 import puppeteer from 'puppeteer';
-import { tenantDb, launchOpts, engancharToasts, esperarToast } from './lib/gate-env.mjs';
+import { tenantDb, launchOpts, engancharToasts, esperarToast, autoAceptarPaneles } from './lib/gate-env.mjs';
 import { RID } from './lib/gate-fixtures.mjs';
 import { plantillaDeFabrica, htmlAtexto } from '../modules/erp/email-templates.js';
 import Database from 'better-sqlite3';
@@ -48,6 +48,8 @@ await engancharToasts(page);
 await page.setCookie({ name: 'asess', value: token, domain: DOMAIN, path: '/' });
 const dialogos = [];
 page.on('dialog', async d => { dialogos.push(d.message()); await d.accept(); });
+// Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+await autoAceptarPaneles(page);
 
 const HJ = { 'Cookie': 'asess=' + token, 'Content-Type': 'application/json', 'x-csrf-token': csrf };
 

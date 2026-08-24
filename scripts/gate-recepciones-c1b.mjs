@@ -13,7 +13,7 @@
 // Y el bloqueo, que es comportamiento REAL del producto, se afirma aparte y a propósito (bloque 8),
 // sobre un producto que sí tiene traslados. Se prueban los DOS caminos, no uno en vez del otro.
 import puppeteer from 'puppeteer';
-import { tenantDb, launchOpts, engancharToasts, esperarToast } from './lib/gate-env.mjs';
+import { tenantDb, launchOpts, engancharToasts, esperarToast, autoAceptarPaneles } from './lib/gate-env.mjs';
 import { productoDePrueba, purgarArtefactos, cuadraLibro } from './lib/gate-fixtures.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
@@ -59,6 +59,8 @@ page.on('pageerror', e => erroresJS.push(String(e && e.message || e)));
 page.on('console', m => { if (m.type() === 'error') erroresJS.push('console: ' + m.text()); });
 
 page.on('dialog', async d => {
+// Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+await autoAceptarPaneles(page);
   const next = dialogQueue.shift();
   if (next === undefined) await d.accept();
   else await d.accept(typeof next === 'string' ? next : undefined);

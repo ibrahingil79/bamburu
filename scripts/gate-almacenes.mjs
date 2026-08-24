@@ -18,7 +18,7 @@
 //      limpiar-residuo-gates.mjs: si algo real colgara de él, se deja estar. Mejor una fila de basura
 //      que romper un dato bueno.
 import puppeteer from 'puppeteer';
-import { tenantDb, launchOpts } from './lib/gate-env.mjs';
+import { tenantDb, launchOpts, autoAceptarPaneles } from './lib/gate-env.mjs';
 import { purgarArtefactos, cuadraLibro, RID, productoDePrueba } from './lib/gate-fixtures.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
@@ -63,6 +63,8 @@ const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 950 });
 await page.setCookie({ name: 'asess', value: token, domain: 'desarrollo-bamburu.localhost', path: '/' });
 page.on('dialog', async d => { await d.accept(); });   // solo confirm() en este flujo → aceptar siempre
+// Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+await autoAceptarPaneles(page);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let norteId = null;

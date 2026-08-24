@@ -22,7 +22,7 @@
 // mismo cuadre contra el catálogo, el mismo endpoint de confirmación, el mismo motor de stock.
 // No se simula NADA del producto: solo se le ahorra la foto.
 import puppeteer from 'puppeteer';
-import { tenantDb, launchOpts, APP_DIR } from './lib/gate-env.mjs';
+import { tenantDb, launchOpts, APP_DIR, autoAceptarPaneles } from './lib/gate-env.mjs';
 import { purgarArtefactos, cuadraLibro, RID } from './lib/gate-fixtures.mjs';
 import { saveAttachment } from '../modules/erp/attachments.js';
 import Database from 'better-sqlite3';
@@ -109,6 +109,8 @@ async function newAdminPage() {
   await page.setViewport({ width: 1280, height: 1000 });
   await page.setCookie({ name: 'asess', value: token, domain: DOMAIN, path: '/' });
   page.on('dialog', async d => { await d.accept(); });   // acepta el confirm() del exceso
+  // Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+  await autoAceptarPaneles(page);
   return page;
 }
 

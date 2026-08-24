@@ -9,7 +9,7 @@
 // NO ESCRIBE datos de negocio ajenos: crea 2 empleados de prueba + sus proyectos y los BORRA al salir.
 //   node scripts/gate-proyectos-pantalla.mjs
 import puppeteer from 'puppeteer';
-import { launchOpts, APP_DIR } from './lib/gate-env.mjs';
+import { launchOpts, APP_DIR, autoAceptarPaneles } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { mkdirSync } from 'fs';
@@ -56,6 +56,8 @@ async function paginaDe(userId) {
   // Acepta cualquier diálogo (el confirm() de archivar y el alert() de la página 403 de requirePerm),
   // que si no bloquearían la navegación.
   page.on('dialog', d => d.accept().catch(() => {}));
+  // Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+  await autoAceptarPaneles(page);
   await page.setCookie({ name: 'asess', value: sesion(userId), domain: HOST, path: '/' });
   return page;
 }

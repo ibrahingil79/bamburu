@@ -200,3 +200,30 @@ export function launchOpts() {
   }
   return { headless: 'new', executablePath: CHROMIUM, args: ['--no-sandbox'], userDataDir: dir };
 }
+
+// ── EL PANEL QUE SUSTITUYÓ A LAS VENTANITAS ───────────────────────────────────────────────────────
+// La noche del 23-24 ago 2026 se retiraron las 81 `confirm()`/`prompt()` del producto y en su sitio
+// quedó `window.pedirDatos()`, un panel DENTRO de la página. Eso dejó cojos a los gates que no
+// probaban el diálogo, sino que se lo quitaban de en medio con `page.on('dialog', d => d.accept())`:
+// ahora nadie acepta el panel, el botón se queda a medias y el gate se cuelga esperando una
+// navegación que no llega. Salieron once así en el barrido del 24, varios disfrazados de «timeout».
+//
+// Esto es el equivalente exacto de aquel `d.accept()`: en cuanto aparece un panel de confirmación
+// (sin campos que rellenar), se pulsa su botón de aceptar. NO sirve para paneles con campos —esos
+// hay que rellenarlos a mano, que es lo que hacen los gates que SÍ prueban el panel— y no toca nada
+// más. Si un gate quiere probar el camino del «no», que no llame a esto.
+export async function autoAceptarPaneles(page) {
+  await page.evaluateOnNewDocument(() => {
+    const pulsa = () => {
+      for (const ov of document.querySelectorAll('.modal-overlay.open')) {
+        if (ov.querySelector('input, select, textarea')) continue;   // lleva campos: no es un confirmar
+        const ok = ov.querySelector('[data-pd="ok"]');
+        if (ok && !ok.disabled) { ok.click(); return; }
+      }
+    };
+    const arranca = () => new MutationObserver(pulsa)
+      .observe(document.body, { childList: true, subtree: true });
+    if (document.body) arranca();
+    else document.addEventListener('DOMContentLoaded', arranca);
+  });
+}

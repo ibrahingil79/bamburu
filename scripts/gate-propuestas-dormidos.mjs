@@ -14,7 +14,7 @@
 // estaba. OJO: las facturas sembradas son de un cliente de prueba y se borran con él; aquí NO se emite
 // ninguna factura por el flujo (esto no emite nada), así que la cadena de Verifactu no se toca.
 import puppeteer from 'puppeteer';
-import { tenantDb, launchOpts, engancharToasts, esperarToast } from './lib/gate-env.mjs';
+import { tenantDb, launchOpts, engancharToasts, esperarToast, autoAceptarPaneles } from './lib/gate-env.mjs';
 import { RID } from './lib/gate-fixtures.mjs';
 import { generarPropuestasDormidos, TIPO_DORMIDO } from '../modules/erp/propuestas.js';
 import { clientesDormidos } from '../modules/erp/ventas-metrics.js';
@@ -50,6 +50,8 @@ await page.setViewport({ width: 1280, height: 1000 });
 await engancharToasts(page);
 await page.setCookie({ name: 'asess', value: token, domain: DOMAIN, path: '/' });
 page.on('dialog', async d => { await d.accept(); });
+// Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+await autoAceptarPaneles(page);
 
 try {
   // ── 1. Siembra: un cliente que compraba cada 7 días y lleva 40 sin aparecer ──

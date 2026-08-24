@@ -12,7 +12,7 @@
 //   [6] 0 errores JS.
 // No deja residuo: borra sus citas/servicios/cliente/empleados/horarios al salir.
 import puppeteer from 'puppeteer';
-import { launchOpts, APP_DIR } from './lib/gate-env.mjs';
+import { launchOpts, APP_DIR, autoAceptarPaneles } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { join } from 'path';
 
@@ -64,6 +64,8 @@ try {
   b = await puppeteer.launch(launchOpts());
   const p = await b.newPage(); await p.setViewport({ width: 1500, height: 1000 });
   const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('dialog', d => d.accept().catch(() => {}));
+  // Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+  await autoAceptarPaneles(p);
   await p.setCookie({ name: 'asess', value: tok, domain: HOST, path: '/' });
   await p.evaluateOnNewDocument(() => { try { localStorage.removeItem('agPrefs'); } catch (e) {} });   // vista de entrada limpia
 
