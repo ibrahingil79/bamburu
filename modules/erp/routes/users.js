@@ -8,6 +8,7 @@ import { readFileSync } from 'fs';
 import path from 'path';
 import { validate } from '../../../core/validate.js';
 import { userCreateSchema, userUpdateSchema } from '../schemas.js';
+import { decidirBaja, ejecutarBaja } from '../usuarios-baja.js';
 
 // Permisos que NO se conceden: retirados o sin ruta viva. orders.* (POS retirado, ya no gatea nada
 // tras recablear facturas/cobros), services.* (servicios unificados en productos), activity.read (la
@@ -96,22 +97,65 @@ export function createUserRoutes(db) {
     } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
+  // Los mismos candados para las dos puertas: la que PREGUNTA qué va a pasar y la que lo HACE. Si
+  // solo los tuviera la segunda, la pantalla enseñaría un aviso para una acción que luego se deniega.
+  const candados = (c, targetId) => {
+    const s = c.get('session');
+    const target = db.prepare('SELECT id,role FROM admin_users WHERE id=?').get(targetId);
+    if (!target) return { error: 'Usuario no encontrado', status: 404 };
+    if (target.role === 'owner') return { error: 'Al dueño del negocio no se le puede dar de baja.', status: 403 };
+    if (s.role !== 'owner' && PROTECTED_ROLES.includes(target.role)) {
+      return { error: 'No tienes permiso para dar de baja a esa persona', status: 403 };
+    }
+    if (targetId === s.userId) return { error: 'No puedes darte de baja a ti misma.', status: 400 };
+    const count = db.prepare('SELECT COUNT(*) as c FROM admin_users WHERE active=1').get().c;
+    if (count <= 1) return { error: 'No puedes dar de baja al último usuario activo', status: 400 };
+    return { target };
+  };
+
+  // QUÉ VA A PASAR, ANTES DE PULSAR. La pantalla pregunta y enseña la respuesta con sus palabras: si
+  // se borra o se archiva, y POR QUÉ. Nada de un error seco después de haber pulsado.
+  api.get('/:id/baja', requirePerm('admin.manage_users'), c => {
+    try {
+      const targetId = parseInt(c.req.param('id'));
+      const g = candados(c, targetId);
+      if (g.error) return c.json({ error: g.error }, g.status);
+      const d = decidirBaja(db, targetId);
+      if (!d.existe) return c.json({ error: 'Usuario no encontrado' }, 404);
+      return c.json(d);
+    } catch(e) { return c.json({error:safeError(e)},500); }
+  });
+
+  // RECUPERAR: la vuelta de archivar. No devuelve permisos nuevos ni toca nada más — los suyos
+  // siguieron ahí todo el tiempo, que es justo la diferencia entre archivar y borrar.
+  api.post('/:id/recuperar', requirePerm('admin.manage_users'), c => {
+    try {
+      const targetId = parseInt(c.req.param('id'));
+      const u = db.prepare('SELECT id, name, role, active FROM admin_users WHERE id=?').get(targetId);
+      if (!u) return c.json({ error: 'Usuario no encontrado' }, 404);
+      if (u.active) return c.json({ error: 'Esa persona ya está activa.' }, 400);
+      const s = c.get('session');
+      if (s.role !== 'owner' && PROTECTED_ROLES.includes(u.role)) {
+        return c.json({ error: 'No tienes permiso para recuperar a esa persona' }, 403);
+      }
+      db.prepare('UPDATE admin_users SET active=1 WHERE id=?').run(targetId);
+      logActivity(db, s, 'Recuperó a una persona del equipo', ENTITY.ADMIN_USER, targetId, u.name || '');
+      return c.json({ message: 'Recuperada' });
+    } catch(e) { return c.json({error:safeError(e)},500); }
+  });
+
   api.delete('/:id', requirePerm('admin.manage_users'), c => {
     try {
-      const s = c.get('session');
       const targetId = parseInt(c.req.param('id'));
-      const target = db.prepare('SELECT id,role FROM admin_users WHERE id=?').get(targetId);
-      if (!target) return c.json({error:'Usuario no encontrado'},404);
-      // Nunca borrar al owner
-      if (target.role === 'owner') return c.json({error:'No puedes eliminar al owner'},403);
-      // Admin no puede borrar usuarios admin ni owner
-      if (s.role !== 'owner' && PROTECTED_ROLES.includes(target.role)) {
-        return c.json({error:'No tienes permiso para eliminar ese usuario'},403);
-      }
-      const count = db.prepare('SELECT COUNT(*) as c FROM admin_users WHERE active=1').get().c;
-      if (count <= 1) return c.json({error:'No puedes eliminar el último usuario activo'},400);
-      db.prepare('DELETE FROM admin_users WHERE id=?').run(targetId);
-      return c.json({message:'Eliminado'});
+      const g = candados(c, targetId);
+      if (g.error) return c.json({ error: g.error }, g.status);
+      // La decisión NO se toma aquí: se pregunta a `usuarios-baja.js`, que es el mismo sitio al que
+      // preguntó la pantalla. Así lo avisado y lo hecho no pueden discrepar.
+      const r = ejecutarBaja(db, targetId, { revocarSesiones: revokeUserSessions });
+      if (!r.ok) return c.json({ error: r.error }, r.status || 500);
+      logActivity(db, c.get('session'), r.accion === 'borrar' ? 'Borró a una persona del equipo' : 'Archivó a una persona del equipo',
+                  ENTITY.ADMIN_USER, targetId, (g.target && g.target.role) || '');
+      return c.json({ message: r.mensaje, accion: r.accion });
     } catch(e) { return c.json({error:safeError(e)},500); }
   });
 
@@ -290,6 +334,8 @@ export function createUserRoutes(db) {
       const SYSTEM_ROLES={owner:'Propietario',admin:'Administrador',employee:'Empleado',readonly:'Solo lectura'};
       const MODULE_LABELS={activity:'Actividad',admin:'Administración',analytics:'Analítica',categories:'Categorías',clients:'Clientes',cobros:'Cobros',discounts:'Descuentos',inventory:'Inventario',invoices:'Facturas',orders:'Pedidos',products:'Productos',purchases:'Compras',quotes:'Presupuestos',pedidos:'Pedidos de venta',albaranes:'Albaranes',sales:'Ventas',feedback:'Feedback',suppliers:'Proveedores',tags:'Etiquetas',proyectos:'Proyectos',tiempo:'Registro de tiempo',citas:'Citas y agenda',crm:'Oportunidades (CRM)',conciliacion:'Conciliación',recurrentes:'Recurrentes'};
       const ALL_PERMS=${permsJson};
+      // Quién soy: para no ofrecerme a mí misma el botón de darme de baja (el servidor lo deniega).
+      const YO=${Number(c.get('session')?.userId) || 0};
       let users=[], selectedPermIds=new Set();
 
       function groupByModule(perms){
@@ -349,9 +395,27 @@ export function createUserRoutes(db) {
             '<td>'+permBadge+'</td>'+
             '<td>'+(u.active?'<span class="badge b-green">Activo</span>':'<span class="badge b-red">Inactivo</span>')+'</td>'+
             '<td style="color:var(--muted);font-size:.8rem">'+(u.created_at?.split(' ')[0]||'-')+'</td>'+
-            '<td style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="editUser('+u.id+')">Editar</button> <button class="btn btn-danger btn-sm" onclick="delUser('+u.id+')">Eliminar</button></td>'+
+            // AL DUEÑO NO SE LE DA DE BAJA, Y A UNA MISMA TAMPOCO: el servidor lo deniega, así que
+            // enseñar el botón sería ofrecer algo que no se puede hacer. Y quien está archivada lleva
+            // su botón de RECUPERAR al lado, que es como se deshace una baja.
+            '<td style="white-space:nowrap">'+
+              '<button class="btn btn-secondary btn-sm" onclick="editUser('+u.id+')">Editar</button> '+
+              (u.active
+                ? (u.role==='owner'||u.id===YO ? '' : '<button class="btn btn-danger btn-sm" onclick="delUser('+u.id+')">Dar de baja</button>')
+                : '<button class="btn btn-secondary btn-sm" onclick="recuperarUser('+u.id+')">Recuperar</button>')+
+            '</td>'+
             '</tr>';
         }).join(''):window.emptyRow(7,'Por ahora solo estás tú. Invita a tu equipo cuando quieras.',window.canDo('admin.manage_users')?{cta:'Nuevo usuario',onclick:'newUser()'}:{});
+      }
+
+      // RECUPERAR: vuelve a darle acceso. Es la vuelta exacta de archivar, y por eso está aquí al
+      // lado y no escondida en el formulario de edición.
+      async function recuperarUser(id){
+        if(!await window.confirmarEnPagina({titulo:'Recuperar a esta persona',
+             texto:'Vuelve a tener acceso con los permisos que tenía y reaparece en las listas y los desplegables.',
+             aceptar:'Sí, recuperarla'}))return;
+        try{ await api('POST','/api/erp/users/'+id+'/recuperar'); toast('Recuperada'); loadUsers(); }
+        catch(e){ toast(e.message,'err'); }
       }
 
       function newUser(){
@@ -409,8 +473,18 @@ export function createUserRoutes(db) {
       }
 
       async function delUser(id){
-        if(!await window.confirmarEnPagina({titulo:'Eliminar el usuario',texto:'Perderá el acceso ahora mismo, aunque tenga la sesión abierta.',aceptar:'Sí, eliminarlo'}))return;
-        try{await api('DELETE','/api/erp/users/'+id);toast('Eliminado');loadUsers();}catch(e){toast(e.message,'err');}
+        // SE PREGUNTA PRIMERO QUÉ VA A PASAR. El servidor decide (borrar o archivar) y devuelve las
+        // palabras; la pantalla las enseña tal cual. Antes esto avisaba siempre de lo mismo y luego
+        // soltaba un 500 seco: con un solo permiso, el borrado chocaba con la clave ajena.
+        let plan;
+        try { plan = await api('GET','/api/erp/users/'+id+'/baja'); }
+        catch(e){ toast(e.message,'err'); return; }
+        if(!await window.confirmarEnPagina({titulo:plan.titulo,texto:plan.texto,aceptar:plan.aceptar}))return;
+        try{
+          const r = await api('DELETE','/api/erp/users/'+id);
+          toast(r.accion==='borrar'?'Borrada del todo':'Archivada: pierde el acceso y su rastro se queda');
+          loadUsers();
+        }catch(e){toast(e.message,'err');}
       }
 
       loadUsers();

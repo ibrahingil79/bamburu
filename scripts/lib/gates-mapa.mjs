@@ -173,7 +173,10 @@ export const GRUPOS = {
   // el escapado del texto del usuario (que no se vuelva HTML ni JS) y la CSP estricta de las
   // superficies endurecidas (que sigan sin 'unsafe-inline' Y con los botones vivos).
   infra: ['verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
-          'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta'],
+          'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
+          // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
+          // archivar si lo dejó, y decirlo ANTES de pulsar. Antes daba un 500 seco.
+          'gate-baja-empleado'],
 
   // ── LOS TRES LINT, DENTRO DEL BARRIDO (24 ago 2026) ──────────────────────────────────────────
   // Estaban en `scripts/` y solo corrían si alguien se acordaba, y esa noche eso salió caro DOS veces:
