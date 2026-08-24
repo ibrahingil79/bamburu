@@ -16,6 +16,7 @@ import { registerClientActivitySvc } from '../crm.js';
 import { registerCollectionAction } from '../cobros.js';
 import { pagoModalHtml, pagoModalScript } from '../views/pago-modal.js';
 import { sendEmail } from '../../../core/mailer.js';
+import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
 
 // D5 (Eje B) — PANEL "PROPUESTAS DE DISA". Lista el trabajo que DISA ha preparado y que espera una
 // decisión del dueño. NUNCA se ejecuta nada sin aprobación. Tres tipos hoy:
@@ -443,7 +444,7 @@ export function createPropuestasRoutes(db) {
       function recurrenteHtml(p){
         const imp = (p.importe!=null ? p.importe.toFixed(2) : '—');
         const desglose = (p.base!=null)
-          ? 'base '+SYM+p.base.toFixed(2)+' + IVA '+SYM+p.iva.toFixed(2)+(p.irpf>0?' − IRPF '+SYM+p.irpf.toFixed(2):'')
+          ? 'base '+dineroEs(p.base, SYM)+' + IVA '+dineroEs(p.iva, SYM)+(p.irpf>0?' − IRPF '+dineroEs(p.irpf, SYM):'')
           : '';
         const noViva = p.viva ? ''
           : '<p class="prop-warn">⚠ Este borrador ya no está pendiente'+(p.occ_status?' ('+escHtml(p.occ_status)+')':'')+'. Se emitió u omitió desde Recurrentes. Descártala.</p>';
@@ -514,7 +515,7 @@ export function createPropuestasRoutes(db) {
           : 'el plazo terminó hace ' + (-d) + ' día' + (d===-1?'':'s');
         const importe = p.tiene_importe
           ? (p.importe != null
-              ? '<div class="prop-meta">Importe estimado: <strong>'+SYM+Number(p.importe).toFixed(2)+'</strong> · <span style="color:var(--muted)">estimación, revísala antes de presentar</span></div>'
+              ? '<div class="prop-meta">Importe estimado: <strong>'+dineroEs(p.importe, SYM)+'</strong> · <span style="color:var(--muted)">estimación, revísala antes de presentar</span></div>'
               : '<div class="prop-meta">Importe estimado: <strong>—</strong> <span style="color:var(--muted)">(sin datos de contabilidad aún)</span></div>')
           : '<div class="prop-meta">Aún no calculamos el importe de este modelo; te avisamos de la fecha.</div>';
         const verLink = (p.q && (p.fiscal_model==='303'||p.fiscal_model==='130'))
@@ -544,7 +545,7 @@ export function createPropuestasRoutes(db) {
       //    "Preparar borrador de compra" crea la orden en BORRADOR y te lleva a revisarla — NO la envía. ──
       function reposicionHtml(p){
         const lineasHtml = (p.lineas||[]).map(function(l){
-          const cost = l.unit_cost ? SYM+Number(l.unit_cost).toFixed(2) : '<span style="color:var(--muted)">—</span>';
+          const cost = l.unit_cost ? dineroEs(l.unit_cost, SYM) : '<span style="color:var(--muted)">—</span>';
           return '<tr><td style="padding:.2rem .5rem">'+escHtml(l.product_name)+'</td>'
             +'<td style="padding:.2rem .5rem;text-align:right"><strong>'+l.quantity+'</strong></td>'
             +'<td style="padding:.2rem .5rem;text-align:right">'+cost+'</td></tr>';
@@ -556,7 +557,7 @@ export function createPropuestasRoutes(db) {
             +'<th style="padding:.2rem .5rem;text-align:right;font-weight:600">Coste ud.</th></tr></thead>'
             +'<tbody>'+lineasHtml+'</tbody></table>'
           : '';
-        const total = '<div class="prop-meta">Total estimado: <strong>'+SYM+Number(p.total_estimado||0).toFixed(2)+'</strong>'
+        const total = '<div class="prop-meta">Total estimado: <strong>'+dineroEs(p.total_estimado||0, SYM)+'</strong>'
           + (p.algun_coste_desconocido ? ' · <span style="color:var(--muted)">algún coste aún sin conocer (0): ajústalo en la orden</span>' : '')+'</div>';
         const noViva = p.viva ? ''
           : '<p class="prop-warn">⚠ Este proveedor ya no tiene productos bajo mínimo (repuesto). Descártala.</p>';

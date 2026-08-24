@@ -17,6 +17,7 @@ import {
   ALLOWED_MIME, MAX_UPLOAD_BYTES, saveAttachment, getAttachment,
   readAttachmentBuffer, linkAttachment,
 } from '../attachments.js';
+import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
 
 // ════════════════════════════════════════════════════════════════════════════
 // C2 — Captura de factura de proveedor por foto/PDF.
@@ -746,7 +747,7 @@ function capturePage({ sym, bands, today, preload = null }) {
       +'<td><input class="form-control" type="number" min="1" step="1" value="'+l.quantity+'" style="width:80px" oninput="lineSet('+l.uid+',\\'quantity\\',this.value)"></td>'
       +'<td><input class="form-control" type="number" min="0" step="0.01" value="'+Number(l.unit_cost).toFixed(2)+'" style="width:110px" oninput="lineSet('+l.uid+',\\'unit_cost\\',this.value)"></td>'
       +'<td>'+iva+'</td>'
-      +'<td class="sub" style="font-weight:600">'+sub.toFixed(2)+' '+SYM+'</td>'
+      +'<td class="sub" style="font-weight:600">'+dineroEs(sub, SYM)+'</td>'
       +'<td><button class="btn btn-danger btn-sm" onclick="lineRemove('+l.uid+')">×</button></td>'
       +'</tr>';
   }
@@ -792,7 +793,7 @@ function capturePage({ sym, bands, today, preload = null }) {
   function updateRowSub(uid){
     var l = lineFind(uid); if(!l) return;
     var tr = document.querySelector('#linesBody tr[data-uid="'+uid+'"]');
-    if(tr){ var s=tr.querySelector('.sub'); if(s) s.textContent=((l.quantity*l.unit_cost)||0).toFixed(2)+' '+SYM; }
+    if(tr){ var s=tr.querySelector('.sub'); if(s) s.textContent=dineroEs((l.quantity*l.unit_cost)||0, SYM); }
   }
   function linePickProduct(uid, pid, label){ var l=lineFind(uid); if(!l)return; l.product_mode='existing'; l.product_id=pid; l.product_label=label; renderLines(); renderTotals(); }
   function lineChangeProduct(uid){ var l=lineFind(uid); if(!l)return; l.product_mode='unset'; l.product_id=null; renderLines(); }
@@ -815,7 +816,7 @@ function capturePage({ sym, bands, today, preload = null }) {
         +'<td style="text-align:right;font-weight:600">'+l.pendiente+'</td>'
         +'<td><input class="form-control" type="number" min="0" step="1" value="'+l.quantity+'" style="width:90px" oninput="orderSet('+l.uid+',\\'quantity\\',this.value)">'+warn+'</td>'
         +'<td><input class="form-control" type="number" min="0" step="0.01" value="'+Number(l.unit_cost).toFixed(2)+'" style="width:110px" oninput="orderSet('+l.uid+',\\'unit_cost\\',this.value)"></td>'
-        +'<td class="sub" style="font-weight:600">'+sub.toFixed(2)+' '+SYM+'</td>'
+        +'<td class="sub" style="font-weight:600">'+dineroEs(sub, SYM)+'</td>'
         +'</tr>';
     }).join('');
   }
@@ -835,7 +836,7 @@ function capturePage({ sym, bands, today, preload = null }) {
     Object.keys(byRate).forEach(function(rate){
       if(rate==='?'){ rateHtml += '<div style="display:flex;justify-content:space-between"><span>IVA (sin tasa indicada)</span><span>—</span></div>'; return; }
       var iva = byRate[rate]*Number(rate)/100; ivaTotal+=iva;
-      rateHtml += '<div style="display:flex;justify-content:space-between"><span>IVA '+rate+'% sobre '+byRate[rate].toFixed(2)+'</span><span>'+iva.toFixed(2)+' '+SYM+'</span></div>';
+      rateHtml += '<div style="display:flex;justify-content:space-between"><span>IVA '+rate+'% sobre '+byRate[rate].toFixed(2)+'</span><span>'+dineroEs(iva, SYM)+'</span></div>';
     });
     var total = base + ivaTotal;
     // Importes que generarán AUTO la factura recibida (la deuda) al confirmar. El total es
@@ -850,13 +851,13 @@ function capturePage({ sym, bands, today, preload = null }) {
     if(ex.total!=null){
       var diff = Math.abs(total - ex.total);
       cmp = (diff>0.02)
-        ? '<div class="alert alert-warn" style="margin-top:.6rem">Los totales calculados ('+total.toFixed(2)+' '+SYM+') no cuadran con los del documento ('+Number(ex.total).toFixed(2)+' '+SYM+'). Revisa, pero puedes confirmar lo que veas correcto.</div>'
-        : '<div style="color:var(--text3);font-size:.78rem;margin-top:.5rem">Cuadra con el total del documento ('+Number(ex.total).toFixed(2)+' '+SYM+').</div>';
+        ? '<div class="alert alert-warn" style="margin-top:.6rem">Los totales calculados ('+dineroEs(total, SYM)+') no cuadran con los del documento ('+dineroEs(ex.total, SYM)+'). Revisa, pero puedes confirmar lo que veas correcto.</div>'
+        : '<div style="color:var(--text3);font-size:.78rem;margin-top:.5rem">Cuadra con el total del documento ('+dineroEs(ex.total, SYM)+').</div>';
     }
     document.getElementById('totalsBox').innerHTML =
-      '<div style="display:flex;justify-content:space-between;margin-bottom:.3rem"><span>Base</span><strong>'+base.toFixed(2)+' '+SYM+'</strong></div>'
+      '<div style="display:flex;justify-content:space-between;margin-bottom:.3rem"><span>Base</span><strong>'+dineroEs(base, SYM)+'</strong></div>'
       +rateHtml
-      +'<div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:.4rem;padding-top:.4rem"><span style="font-weight:700">Total</span><strong style="font-size:1.1rem">'+total.toFixed(2)+' '+SYM+'</strong></div>'
+      +'<div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:.4rem;padding-top:.4rem"><span style="font-weight:700">Total</span><strong style="font-size:1.1rem">'+dineroEs(total, SYM)+'</strong></div>'
       +(ex.base!=null||ex.total!=null ? '<div style="color:var(--text3);font-size:.78rem;margin-top:.4rem">Documento: base '+(ex.base!=null?Number(ex.base).toFixed(2):'—')+' · IVA '+(ex.tax!=null?Number(ex.tax).toFixed(2):'—')+' · total '+(ex.total!=null?Number(ex.total).toFixed(2):'—')+' '+SYM+'</div>' : '')
       +cmp;
   }

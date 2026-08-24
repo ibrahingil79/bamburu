@@ -38,6 +38,7 @@ import { reservaDeCita, ventanaCliente, personasPublicas, autoEncenderReservas }
 // PASO 8 — PERFIL DE OFICIO. Otro módulo HOJA (solo `db`), por la misma razón que el de arriba: layout.js
 // también lo importa para el menú, y si el diccionario viviera aquí se cerraría el círculo.
 import { vocabulario } from '../oficios.js';
+import { fechaEs } from '../voz.js';   // la fecha, en cristiano
 import { contactoDeCita as apuntarContactoDeCita } from '../contactos.js';   // D2: rastro en el registro
 // (alias a propósito: `contactoDeCita` ya existe aquí y significa el teléfono/correo del cliente)
 
@@ -2039,7 +2040,7 @@ async function pbSolicitudes(){
     if(!list.length){ box.innerHTML='<span style="color:var(--muted)">Nada pendiente.</span>'; return; }
     box.innerHTML='<div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Cuándo</th><th>Servicio</th><th>Caduca en</th><th></th></tr></thead><tbody>'
       +list.map(function(r){ return '<tr><td>'+esc(r.cliente)+'<div style="font-size:.75rem;color:var(--muted)">'+esc(r.email||r.cliente_suelto_movil||'')+'</div></td>'
-        +'<td>'+esc(r.fecha)+' '+esc(r.hora)+'</td><td>'+esc(r.servicios)+'</td>'
+        +'<td>'+fechaEs(r.fecha)+' '+esc(r.hora)+'</td><td>'+esc(r.servicios)+'</td>'
         +'<td>'+(r.horas_restantes==null?'—':(r.horas_restantes+' h'))+'</td>'
         +'<td style="white-space:nowrap"><button class="btn btn-primary btn-sm" onclick="pbAprobar('+r.id+')">Aprobar</button> '
         +'<button class="btn btn-secondary btn-sm" onclick="pbRechazar('+r.id+')">Rechazar</button></td></tr>'; }).join('')
@@ -3845,7 +3846,7 @@ function renderExc(exc){
   var box=document.getElementById('excList');
   if(!exc||!exc.length){ box.innerHTML='<div style="color:var(--text3);font-size:.85rem">No tienes ningún día suelto apuntado.</div>'; return; }
   box.innerHTML='<div class="table-wrap"><table><thead><tr><th>Día</th><th>Qué pasa</th><th>Horario</th><th>Motivo</th><th></th></tr></thead><tbody>'
-    +exc.map(e=>'<tr><td>'+esc(e.fecha)+'</td><td>'+(e.tipo==='cerrado'?'Cerrado todo el día':'Abre a otras horas')+'</td><td>'+(e.tipo==='horario'?hcorta(e.inicio_min)+'–'+hcorta(e.fin_min):'—')+'</td><td>'+esc(e.motivo||'')+'</td><td>'+(window.CITAS_EDIT?'<button class="hor-quitar" onclick="eDel('+e.id+')" title="Quitar" aria-label="Quitar">✕</button>':'')+'</td></tr>').join('')+'</tbody></table></div>';
+    +exc.map(e=>'<tr><td>'+fechaEs(e.fecha)+'</td><td>'+(e.tipo==='cerrado'?'Cerrado todo el día':'Abre a otras horas')+'</td><td>'+(e.tipo==='horario'?hcorta(e.inicio_min)+'–'+hcorta(e.fin_min):'—')+'</td><td>'+esc(e.motivo||'')+'</td><td>'+(window.CITAS_EDIT?'<button class="hor-quitar" onclick="eDel('+e.id+')" title="Quitar" aria-label="Quitar">✕</button>':'')+'</td></tr>').join('')+'</tbody></table></div>';
 }
 async function eDel(id){ try{ await api('DELETE','/api/erp/citas/excepcion/'+id); toast('Quitado'); hCargar(); }catch(e){ toast(e.message,'err'); } }
 ['hpA1','hpB1','hpA2','hpB2'].forEach(function(id){ var el=document.getElementById(id); if(el) el.addEventListener('change', pintaPrevia); });

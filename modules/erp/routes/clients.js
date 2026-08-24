@@ -573,7 +573,7 @@ export function createClientRoutes(db, cfg = {}) {
       '<td style="color:var(--muted)">'+escHtml(cl.email||'-')+'</td>'+
       '<td style="color:var(--muted)">'+escHtml(cl.phone||'-')+'</td>'+
       '<td>'+(cl.group_name?'<span class="badge b-purple">'+escHtml(cl.group_name)+'</span>':'-')+'</td>'+
-      '<td style="color:var(--muted);font-size:.8rem">'+((cl.created_at||'').split(' ')[0]||'-')+'</td>'+
+      '<td style="color:var(--muted);font-size:.8rem">'+(window.fechaEs((cl.created_at||'').split(' ')[0])||'-')+'</td>'+
       '<td style="white-space:nowrap">'+
         // Patrón §6: UNA acción clara ("Ver") + el resto en un menú "···".
         '<button class="btn btn-secondary btn-sm" onclick="viewDetail('+cl.id+')">Ver</button> '+

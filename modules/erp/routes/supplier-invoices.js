@@ -12,6 +12,8 @@ import { pagoModalHtml, pagoCuentaModalHtml, pagoModalScript } from '../views/pa
 import { getVatBands } from '../../../core/vat-bands.js';
 import { postSupplierInvoice, postSupplierPayment } from '../contabilidad.js';   // Contabilidad: posteo tras commit (writeEntry es seguro dentro o fuera de transacción)
 import { ENTITY } from '../../../core/activity-entities.js';
+import { fechaEs } from '../voz.js';   // la fecha, en cristiano (24/08/2026)
+import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
 
 // ════════════════════════════════════════════════════════════════════════════
 // FACTURA RECIBIDA (Capa de dinero con proveedores · Paso a) — documento INMUTABLE
@@ -537,7 +539,7 @@ export function createSupplierInvoiceRoutes(db) {
         const v=rows.filter(function(r){return r.status!=='anulada' && Number(r.pendiente||0)>0.0049 && Number(r.dias_vencida||0)>0;});
         if(!v.length){ el.innerHTML=''; return; }
         const eur=v.reduce(function(a,r){return a+Number(r.pendiente||0);},0);
-        const txt='Tienes <strong>'+v.length+'</strong> factura'+(v.length===1?'':'s')+' de proveedor vencida'+(v.length===1?'':'s')+' ('+SYM+eur.toFixed(2)+' pendiente de pago).';
+        const txt='Tienes <strong>'+v.length+'</strong> factura'+(v.length===1?'':'s')+' de proveedor vencida'+(v.length===1?'':'s')+' ('+dineroEs(eur, SYM)+' pendiente de pago).';
         el.innerHTML=window.disaBand(txt,'/admin/pagos','Revisar');
       }
       async function loadList(){
@@ -545,7 +547,7 @@ export function createSupplierInvoiceRoutes(db) {
         updateDisaBand();
         document.getElementById('siBody').innerHTML = rows.length ? rows.map(function(r){
           const badge = r.status==='anulada' ? '<span class="badge b-gray">Anulada</span>' : '<span class="badge '+(ESTADO_BADGE[r.estado]||'')+'">'+(ESTADO_LABEL[r.estado]||r.estado)+(r.dias_vencida>0?' · '+r.dias_vencida+'d':'')+'</span>';
-          const pend = r.status==='anulada' ? '—' : SYM+Number(r.pendiente||0).toFixed(2);
+          const pend = r.status==='anulada' ? '—' : dineroEs(r.pendiente||0, SYM);
           const payBtn = (r.pagable && r.pendiente>0.0049) ? '<button class="btn btn-secondary btn-sm" onclick="openPagos('+r.id+')">Pago</button> '
             : (r.entity_type==='supplier_return' && r.status==='vigente' && r.pendiente<-0.0049) ? '<button class="btn btn-secondary btn-sm" onclick="openPagos('+r.id+')">Reembolso</button> '
             : '';
@@ -564,7 +566,7 @@ export function createSupplierInvoiceRoutes(db) {
             +'<td>'+escHtml(r.supplier_invoice_number||'-')+'</td>'
             +'<td>'+escHtml(r.invoice_date||'')+'</td>'
             +'<td>'+escHtml(r.due_date||'-')+'</td>'
-            +'<td><strong>'+SYM+Number(r.total||0).toFixed(2)+'</strong></td>'
+            +'<td><strong>'+dineroEs(r.total||0, SYM)+'</strong></td>'
             +'<td>'+badge+'</td>'
             +'<td>'+pend+'</td>'
             +'<td style="text-align:right;white-space:nowrap">'+payBtn+'<a href="/admin/supplier-invoices/'+r.id+'" class="btn btn-secondary btn-sm">Ver</a></td>'
@@ -580,9 +582,9 @@ export function createSupplierInvoiceRoutes(db) {
           const o=d.oldest;
           const neto=Number(d.total||0);
           box.innerHTML = (neto < -0.0049
-              ? 'Saldo a tu favor <strong style="font-size:1.3rem;color:var(--ok)">'+SYM+Math.abs(neto).toFixed(2)+'</strong>'
-              : 'Le debes <strong style="font-size:1.3rem">'+SYM+neto.toFixed(2)+'</strong>')
-            + (o ? ' · Deuda más antigua: <a href="/admin/supplier-invoices/'+o.supplier_invoice_id+'">'+escHtml(o.internal_code||'')+'</a> ('+SYM+Number(o.pendiente||0).toFixed(2)+', vence '+escHtml(o.due_date||'-')+(o.dias_vencida>0?' · '+o.dias_vencida+' días vencida':'')+')' : ' · sin deuda pendiente')
+              ? 'Saldo a tu favor <strong style="font-size:1.3rem;color:var(--ok)">'+dineroEs(Math.abs(neto), SYM)+'</strong>'
+              : 'Le debes <strong style="font-size:1.3rem">'+dineroEs(neto, SYM)+'</strong>')
+            + (o ? ' · Deuda más antigua: <a href="/admin/supplier-invoices/'+o.supplier_invoice_id+'">'+escHtml(o.internal_code||'')+'</a> ('+dineroEs(o.pendiente||0, SYM)+', vence '+(o.due_date?fechaEs(o.due_date):'-')+(o.dias_vencida>0?' · '+o.dias_vencida+' días vencida':'')+')' : ' · sin deuda pendiente')
             + (neto > 0.0049 ? ' <button class="btn btn-primary btn-sm" style="margin-left:.75rem" onclick="openPagoCuenta('+SUPPLIER_ID+')">Pagar a cuenta</button>' : '');
           card.style.display='';
         } catch(e){}
@@ -781,26 +783,26 @@ export function createSupplierInvoiceRoutes(db) {
             +'<td><input class="form-control" value="'+escAttr(l.concepto)+'" placeholder="Concepto (p. ej. Asesoría junio)" oninput="gSet('+l.uid+',\\'concepto\\',this.value)"></td>'
             +'<td><input class="form-control" type="number" min="0" step="0.01" value="'+Number(l.base).toFixed(2)+'" oninput="gSet('+l.uid+',\\'base\\',this.value)"></td>'
             +'<td><select class="form-control" onchange="gSet('+l.uid+',\\'tax_rate\\',this.value)">'+bandOpts(l.tax_rate)+'</select></td>'
-            +'<td class="gcuota" style="font-weight:600">'+cuota.toFixed(2)+' '+SYM+'</td>'
+            +'<td class="gcuota" style="font-weight:600">'+dineroEs(cuota, SYM)+'</td>'
             +'<td><button class="btn btn-danger btn-sm" onclick="gRemove('+l.uid+')">×</button></td>'
             +'</tr>';
         }).join('');
         renderGTotals();
       }
-      function updateGRow(uid){ var l=glines.find(function(x){return x.uid===uid;}); if(!l)return; var tr=document.querySelector('#gLinesBody tr[data-uid="'+uid+'"]'); if(tr){ var c=tr.querySelector('.gcuota'); if(c) c.textContent=(Math.round(l.base*l.tax_rate)/100).toFixed(2)+' '+SYM; } }
+      function updateGRow(uid){ var l=glines.find(function(x){return x.uid===uid;}); if(!l)return; var tr=document.querySelector('#gLinesBody tr[data-uid="'+uid+'"]'); if(tr){ var c=tr.querySelector('.gcuota'); if(c) c.textContent=dineroEs(Math.round(l.base*l.tax_rate)/100, SYM); } }
       window.renderGTotals=function(){
         var base=0, byRate={};
         glines.forEach(function(l){ base+=l.base; var k=String(l.tax_rate); byRate[k]=(byRate[k]||0)+l.base; });
         var iva=0, rateHtml='';
         Object.keys(byRate).sort(function(a,b){return Number(b)-Number(a);}).forEach(function(rate){
           var cuota=byRate[rate]*Number(rate)/100; iva+=cuota;
-          rateHtml+='<div style="display:flex;justify-content:space-between"><span>IVA '+rate+'% sobre '+byRate[rate].toFixed(2)+'</span><span>'+cuota.toFixed(2)+' '+SYM+'</span></div>';
+          rateHtml+='<div style="display:flex;justify-content:space-between"><span>IVA '+rate+'% sobre '+byRate[rate].toFixed(2)+'</span><span>'+dineroEs(cuota, SYM)+'</span></div>';
         });
         var total=base+iva;
         document.getElementById('gTotals').innerHTML=
-          '<div style="display:flex;justify-content:space-between;margin-bottom:.3rem"><span>Base</span><strong>'+base.toFixed(2)+' '+SYM+'</strong></div>'
+          '<div style="display:flex;justify-content:space-between;margin-bottom:.3rem"><span>Base</span><strong>'+dineroEs(base, SYM)+'</strong></div>'
           +rateHtml
-          +'<div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:.4rem;padding-top:.4rem"><span style="font-weight:700">Total a pagar</span><strong style="font-size:1.1rem">'+total.toFixed(2)+' '+SYM+'</strong></div>';
+          +'<div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:.4rem;padding-top:.4rem"><span style="font-weight:700">Total a pagar</span><strong style="font-size:1.1rem">'+dineroEs(total, SYM)+'</strong></div>';
       };
       async function saveGasto(){
         if(!gsupplier){ toast('Elige el proveedor','err'); return; }
@@ -858,12 +860,12 @@ export function createSupplierInvoiceRoutes(db) {
       ? `<h2 style="font-size:14px;font-weight:500;margin:0 0 8px">${linesTitle}</h2>
           <table>
             <thead><tr><th>Concepto</th><th style="text-align:right">Base</th><th>IVA</th><th style="text-align:right">Cuota</th></tr></thead>
-            <tbody>${inv.items.map(it => `<tr><td>${esc(it.concepto || '—')}</td><td style="text-align:right">${s}${Number(it.base).toFixed(2)}</td><td>${Number(it.tax_rate)}%</td><td style="text-align:right">${s}${Number(it.cuota).toFixed(2)}</td></tr>`).join('')}
-            <tr><td style="font-weight:700;border-top:1px solid var(--border)">Totales</td><td style="text-align:right;font-weight:700;border-top:1px solid var(--border)">${s}${Number(inv.base).toFixed(2)}</td><td style="border-top:1px solid var(--border)"></td><td style="text-align:right;font-weight:700;border-top:1px solid var(--border)">${s}${Number(inv.tax).toFixed(2)}</td></tr></tbody>
+            <tbody>${inv.items.map(it => `<tr><td>${esc(it.concepto || '—')}</td><td style="text-align:right">${dineroEs(it.base, s)}</td><td>${Number(it.tax_rate)}%</td><td style="text-align:right">${dineroEs(it.cuota, s)}</td></tr>`).join('')}
+            <tr><td style="font-weight:700;border-top:1px solid var(--border)">Totales</td><td style="text-align:right;font-weight:700;border-top:1px solid var(--border)">${dineroEs(inv.base, s)}</td><td style="border-top:1px solid var(--border)"></td><td style="text-align:right;font-weight:700;border-top:1px solid var(--border)">${dineroEs(inv.tax, s)}</td></tr></tbody>
           </table>` : '';
     const paper = `
       <h1>Factura recibida ${esc(inv.internal_code || ('#' + inv.id))}${tipoBadge}</h1>
-      <div class="doc-sub">${esc(inv.invoice_date)} · vence ${esc(inv.due_date || '-')}</div>
+      <div class="doc-sub">${fechaEs(inv.invoice_date)} · vence ${inv.due_date ? fechaEs(inv.due_date) : '-'}</div>
       ${anuladaBlock}
       <div class="doc-cols">
         <div>
@@ -877,20 +879,20 @@ export function createSupplierInvoiceRoutes(db) {
         </div>
         <div>
           <div class="doc-label">Fecha / Vencimiento</div>
-          <div>${esc(inv.invoice_date)} · vence <strong>${esc(inv.due_date || '-')}</strong></div>
-          <div style="margin-top:.5rem"><div class="doc-label">${isCredit ? 'Estado del abono' : 'Estado de pago'}</div>${statusBadge} ${inv.status === 'anulada' ? '' : isCredit ? `Crédito ${s}${Math.abs(Number(inv.total)).toFixed(2)} · Reembolsado ${s}${Math.abs(Number(pg.pagado)).toFixed(2)} · Pendiente <strong>${s}${Math.abs(Number(pg.pendiente)).toFixed(2)}</strong>` : `Pagado ${s}${Number(pg.pagado).toFixed(2)} · Pendiente <strong>${s}${Number(pg.pendiente).toFixed(2)}</strong>`}</div>
+          <div>${fechaEs(inv.invoice_date)} · vence <strong>${inv.due_date ? fechaEs(inv.due_date) : '-'}</strong></div>
+          <div style="margin-top:.5rem"><div class="doc-label">${isCredit ? 'Estado del abono' : 'Estado de pago'}</div>${statusBadge} ${inv.status === 'anulada' ? '' : isCredit ? `Crédito ${dineroEs(Math.abs(Number(inv.total)), s)} · Reembolsado ${dineroEs(Math.abs(Number(pg.pagado)), s)} · Pendiente <strong>${dineroEs(Math.abs(Number(pg.pendiente)), s)}</strong>` : `Pagado ${dineroEs(pg.pagado, s)} · Pendiente <strong>${dineroEs(pg.pendiente, s)}</strong>`}</div>
         </div>
       </div>
       ${linesBlock}
       <table class="doc-totals">
-        <tr><td>Base</td><td>${s}${Number(inv.base).toFixed(2)}</td></tr>
-        <tr><td>IVA</td><td>${s}${Number(inv.tax).toFixed(2)}</td></tr>
-        <tr class="grand"><td>Total</td><td>${s}${Number(inv.total).toFixed(2)}</td></tr>
+        <tr><td>Base</td><td>${dineroEs(inv.base, s)}</td></tr>
+        <tr><td>IVA</td><td>${dineroEs(inv.tax, s)}</td></tr>
+        <tr class="grand"><td>Total</td><td>${dineroEs(inv.total, s)}</td></tr>
       </table>
       <h2 style="font-size:14px;font-weight:500;margin:22px 0 8px">Pagos registrados</h2>
       <table>
         <thead><tr><th>Fecha</th><th style="text-align:right">Importe</th><th>Forma</th><th>Nota</th><th></th></tr></thead>
-        <tbody>${inv.payments.length ? inv.payments.map(p => `<tr><td>${esc(p.paid_date)}</td><td style="text-align:right">${s}${Number(p.amount).toFixed(2)}</td><td>${esc(p.payment_method || '—')}</td><td>${esc(p.note || '')}</td><td style="text-align:right">${canCreate ? `<button class="btn btn-secondary btn-sm" onclick="deshacerPago(${inv.id},${p.id})">Deshacer</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin pagos registrados</td></tr>'}</tbody>
+        <tbody>${inv.payments.length ? inv.payments.map(p => `<tr><td>${fechaEs(p.paid_date)}</td><td style="text-align:right">${dineroEs(p.amount, s)}</td><td>${esc(p.payment_method || '—')}</td><td>${esc(p.note || '')}</td><td style="text-align:right">${canCreate ? `<button class="btn btn-secondary btn-sm" onclick="deshacerPago(${inv.id},${p.id})">Deshacer</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin pagos registrados</td></tr>'}</tbody>
       </table>`;
 
     // PIEZA 4 — etiqueta de proyecto (rentabilidad). La pone quien puede editar el documento (purchases.create).
@@ -906,9 +908,9 @@ export function createSupplierInvoiceRoutes(db) {
         <div style="margin-bottom:12px">${statusBadge}</div>
         <div class="dp-row"><span class="k">Código</span><span class="v">${esc(inv.internal_code || ('#' + inv.id))}</span></div>
         <div class="dp-row"><span class="k">Proveedor</span><span class="v">${esc(inv.supplier_name || '')}</span></div>
-        <div class="dp-row"><span class="k">Fecha</span><span class="v">${esc(inv.invoice_date)}</span></div>
-        <div class="dp-row"><span class="k">Vencimiento</span><span class="v">${esc(inv.due_date || '-')}</span></div>
-        <div class="dp-row"><span class="k">Total</span><span class="v">${s}${Number(inv.total).toFixed(2)}</span></div>
+        <div class="dp-row"><span class="k">Fecha</span><span class="v">${fechaEs(inv.invoice_date)}</span></div>
+        <div class="dp-row"><span class="k">Vencimiento</span><span class="v">${inv.due_date ? fechaEs(inv.due_date) : '-'}</span></div>
+        <div class="dp-row"><span class="k">Total</span><span class="v">${dineroEs(inv.total, s)}</span></div>
         ${proyRowHtml}
         <div class="dp-actions" style="margin-top:14px">
           ${actionBtns}

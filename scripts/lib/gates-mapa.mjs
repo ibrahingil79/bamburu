@@ -195,7 +195,11 @@ export const GRUPOS = {
   //   · lint-plantillas    — backticks sueltos y escapes que la plantilla se come (169 ficheros, <1 s)
   //   · censo-ventanitas   — que no vuelva a colarse un prompt() o un confirm() (<1 s)
   //   · lint-js-servido    — pide cada pantalla y compila su JavaScript en línea (~324 pantallas)
-  lint: ['lint-plantillas', 'censo-ventanitas', 'lint-js-servido'],
+  lint: ['lint-plantillas', 'censo-ventanitas', 'lint-js-servido',
+         // PUNTO 5 (24 ago 2026) — el dinero y las fechas, como en España. Se mide sobre lo
+         // SERVIDO: el código tiene toFixed(2) legítimos (el valor de un campo, un cuerpo de
+         // petición) que romperlos sí sería un fallo. Lo que se prohíbe es lo que lee una persona.
+         'verify-dinero-espanol'],
 };
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════

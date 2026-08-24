@@ -12,6 +12,7 @@ import { safeError } from '../../../core/errors.js';
 import { adminLayout, can } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
 import { detectar, catalogoDetectores } from '../vigia.js';
+import { fechaEs } from '../voz.js';   // la fecha, en cristiano (24/08/2026)
 import { narrar } from '../voz.js';   // Escalera · paso 5 — DISA predictiva · PIEZA 2: la voz
 import { graficoDe } from '../dibujo.js';   // Escalera · paso 5 — DISA predictiva · PIEZA 3: el dibujo
 import { priorizar } from '../prioridad.js';   // Escalera · paso 5 — DISA predictiva · PIEZA 5: dónde te espera

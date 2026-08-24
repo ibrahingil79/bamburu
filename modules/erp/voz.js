@@ -65,54 +65,54 @@ const diasEntre = (a, b) => Math.floor((Date.parse(a + 'T00:00:00Z') - Date.pars
 export const PLANTILLAS = {
   deuda_vencida: {
     quePasa: (h, { importe, fecha }) =>
-      `Tienes una factura de cliente sin cobrar por ${importe}. Venció el ${fecha} y sigue pendiente.`,
+      `Tienes una factura de cliente sin cobrar por ${importe}. Venció el ${fechaEs(fecha)} y sigue pendiente.`,
     decision: (h, { importe, fecha }) => {
       const fac = h.ref && h.ref.invoice_number ? `la factura ${h.ref.invoice_number}` : 'esta factura';
-      return `Conviene reclamar el cobro de ${importe} de ${fac}, vencida desde el ${fecha}.`;
+      return `Conviene reclamar el cobro de ${importe} de ${fac}, vencida desde el ${fechaEs(fecha)}.`;
     },
   },
 
   cliente_dormido: {
     quePasa: (h, { importe, fecha }) =>
-      `Un cliente que te compraba con regularidad lleva ${importe} días sin hacerlo. Su última compra fue el ${fecha}.`,
+      `Un cliente que te compraba con regularidad lleva ${importe} días sin hacerlo. Su última compra fue el ${fechaEs(fecha)}.`,
     decision: (h, { importe, fecha }) =>
-      `Conviene retomar el contacto con este cliente: lleva ${importe} días en silencio desde su última compra, del ${fecha}.`,
+      `Conviene retomar el contacto con este cliente: lleva ${importe} días en silencio desde su última compra, del ${fechaEs(fecha)}.`,
   },
 
   caida_facturacion: {
     quePasa: (h, { importe, fecha }) =>
-      `En ${fecha} tu facturación fue de ${importe}. Ha bajado respecto al mes anterior.`,
+      `En ${fechaEs(fecha)} tu facturación fue de ${importe}. Ha bajado respecto al mes anterior.`,
     decision: (h, { importe, fecha }) =>
-      `La facturación ha caído respecto al mes anterior; en ${fecha} quedó en ${importe}. Conviene revisar a qué se debe.`,
+      `La facturación ha caído respecto al mes anterior; en ${fechaEs(fecha)} quedó en ${importe}. Conviene revisar a qué se debe.`,
   },
 
   caida_margen: {
     quePasa: (h, { importe, fecha }) =>
-      `En ${fecha} tu margen (lo que ganas, no lo que facturas) fue de ${importe}. Ha bajado respecto al mes anterior.`,
+      `En ${fechaEs(fecha)} tu margen (lo que ganas, no lo que facturas) fue de ${importe}. Ha bajado respecto al mes anterior.`,
     decision: (h, { importe, fecha }) =>
-      `El margen ha caído respecto al mes anterior; en ${fecha} quedó en ${importe}. Conviene revisar precios o costes.`,
+      `El margen ha caído respecto al mes anterior; en ${fechaEs(fecha)} quedó en ${importe}. Conviene revisar precios o costes.`,
   },
 
   desvio_plan: {
     quePasa: (h, { importe, fecha }) =>
-      `Vas por debajo del objetivo que te fijaste para ${fecha}. Lo real va por ${importe}.`,
+      `Vas por debajo del objetivo que te fijaste para ${fechaEs(fecha)}. Lo real va por ${importe}.`,
     decision: (h, { importe, fecha }) =>
-      `Vas por debajo del objetivo de ${fecha}: lo real suma ${importe}. Conviene ajustar el ritmo o revisar la previsión.`,
+      `Vas por debajo del objetivo de ${fechaEs(fecha)}: lo real suma ${importe}. Conviene ajustar el ritmo o revisar la previsión.`,
   },
 
   pago_vence_pronto: {
     quePasa: (h, { importe, fecha, hoy }) => {
       const vencido = h.fecha && hoy && diasEntre(h.fecha, hoy) < 0;
       return vencido
-        ? `Tienes un pago a proveedor de ${importe} que venció el ${fecha} y sigue pendiente.`
-        : `Tienes un pago a proveedor de ${importe} con vencimiento el ${fecha}.`;
+        ? `Tienes un pago a proveedor de ${importe} que venció el ${fechaEs(fecha)} y sigue pendiente.`
+        : `Tienes un pago a proveedor de ${importe} con vencimiento el ${fechaEs(fecha)}.`;
     },
     decision: (h, { importe, fecha, hoy }) => {
       const fac = h.ref && h.ref.internal_code ? `la factura ${h.ref.internal_code}` : 'esta factura';
       const vencido = h.fecha && hoy && diasEntre(h.fecha, hoy) < 0;
       return vencido
-        ? `Conviene pagar cuanto antes ${importe} de ${fac}: venció el ${fecha}.`
-        : `Conviene tener saldo o programar el pago de ${importe} de ${fac}, que vence el ${fecha}.`;
+        ? `Conviene pagar cuanto antes ${importe} de ${fac}: venció el ${fechaEs(fecha)}.`
+        : `Conviene tener saldo o programar el pago de ${importe} de ${fac}, que vence el ${fechaEs(fecha)}.`;
     },
   },
 
@@ -143,12 +143,12 @@ export const PLANTILLAS = {
     quePasa: (h, { importe, fecha }) => {
       const pct = h.ref && h.ref.pct != null ? h.ref.pct : null;
       return pct == null
-        ? `El ${fecha} te quedan ${importe} horas libres en la agenda.`
-        : `El ${fecha} tu agenda está al ${pct}% y te quedan ${importe} horas libres.`;
+        ? `El ${fechaEs(fecha)} te quedan ${importe} horas libres en la agenda.`
+        : `El ${fechaEs(fecha)} tu agenda está al ${pct}% y te quedan ${importe} horas libres.`;
     },
     decision: (h, { importe, fecha }) => {
       const tramos = h.ref && h.ref.tramos ? ` Libre: ${h.ref.tramos}.` : '';
-      return `Conviene llenar el ${fecha}: hay ${importe} horas sin reservar y ese día no se repite.${tramos}`;
+      return `Conviene llenar el ${fechaEs(fecha)}: hay ${importe} horas sin reservar y ese día no se repite.${tramos}`;
     },
   },
 
@@ -159,32 +159,32 @@ export const PLANTILLAS = {
         ? `Este cliente suele venir cada ${r} días y lleva ${importe} sin aparecer.`
         : `Este cliente lleva ${importe} días sin aparecer, más de lo que acostumbra.`;
       const serv = h.ref && h.ref.ultimo_servicio ? ` La última vez vino a ${h.ref.ultimo_servicio}.` : '';
-      return base + ` Su última visita fue el ${fecha}.` + serv;
+      return base + ` Su última visita fue el ${fechaEs(fecha)}.` + serv;
     },
     decision: (h, { importe, fecha }) => {
       const r = (h.ref && h.ref.ritmo_dias) || null;
       return r
-        ? `Conviene llamarle: viene cada ${r} días y ya lleva ${importe} desde el ${fecha}.`
-        : `Conviene llamarle: lleva ${importe} días desde su última visita, del ${fecha}.`;
+        ? `Conviene llamarle: viene cada ${r} días y ya lleva ${importe} desde el ${fechaEs(fecha)}.`
+        : `Conviene llamarle: lleva ${importe} días desde su última visita, del ${fechaEs(fecha)}.`;
     },
   },
 
   sin_proxima_cita: {
     quePasa: (h, { fecha }) => {
       const serv = h.ref && h.ref.ultimo_servicio ? ` Vino a ${h.ref.ultimo_servicio}.` : '';
-      return `Este cliente estuvo aquí el ${fecha} y se fue sin dejar la siguiente cita.` + serv;
+      return `Este cliente estuvo aquí el ${fechaEs(fecha)} y se fue sin dejar la siguiente cita.` + serv;
     },
     decision: (h, { fecha }) =>
-      `Conviene proponerle día para la próxima: estuvo el ${fecha} y no tiene ninguna cita puesta.`,
+      `Conviene proponerle día para la próxima: estuvo el ${fechaEs(fecha)} y no tiene ninguna cita puesta.`,
   },
 
   ausencias: {
     quePasa: (h, { importe, fecha }) => {
       const n = (h.ref && h.ref.faltas) || 0;
-      return `Este cliente no se presentó ${importe} ${n === 1 ? 'vez' : 'veces'} en el último mes; la última, el ${fecha}.`;
+      return `Este cliente no se presentó ${importe} ${n === 1 ? 'vez' : 'veces'} en el último mes; la última, el ${fechaEs(fecha)}.`;
     },
     decision: (h, { fecha }) =>
-      `Conviene confirmarle la cita antes de reservarle otra vez: la última falta fue el ${fecha}.`,
+      `Conviene confirmarle la cita antes de reservarle otra vez: la última falta fue el ${fechaEs(fecha)}.`,
   },
 };
 

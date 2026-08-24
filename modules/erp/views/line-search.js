@@ -42,7 +42,7 @@ export function lineSearchScript() {
           'onmousedown="event.preventDefault();pickProduct(this,'+p.id+')">' +
             '<strong>'+escHtml(p.name)+'</strong>' +
             (p.sku ? ' <span style="color:var(--muted);font-size:.8rem">['+escHtml(p.sku)+']</span>' : '') +
-            ' <span style="float:right;color:var(--muted)">'+SYM+Number(p.price||0).toFixed(2)+'</span>' +
+            ' <span style="float:right;color:var(--muted)">'+dineroEs(p.price||0, SYM)+'</span>' +
           '</div>'
         ).join('');
         box.style.display='';

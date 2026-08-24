@@ -10,6 +10,7 @@ import { menuDeUsuario, anclasDeUsuario, destinosBuscador, tienePref, MIN_AJUSTE
 // PELDAÑO 8 · qué campos pide el oficio. `oficios.js` es HOJA (solo recibe `db`), así que el
 // layout puede importarlo sin cerrar ningún círculo — es la razón por la que se escribió así.
 import { oficioDe as oficioDeTenant, oficioPorId } from './oficios.js';
+import { fmtEur as dineroEs } from './margen.js';   // el dinero, como en España
 
 export const ROOT_TOKENS = `
     :root{
@@ -676,6 +677,40 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     function escHtmlCli(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){
       return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
     window.escHtmlCli=escHtmlCli;
+
+    // ── EL DINERO Y LAS FECHAS, ESCRITOS COMO EN ESPAÑA ──────────────────────────────────────────
+    // UNA sola forma para todo el producto, aquí, en el componente compartido: el mismo sitio donde
+    // vive el escape de HTML y por el mismo motivo. Antes había QUINCE ayudantes distintos repartidos por
+    // las pantallas —la mitad escribían €117087.43, con el símbolo delante y punto decimal— y por
+    // eso convivían dos formas de escribir la misma cifra. Se escribe 117.087,43 €: miles con
+    // punto, decimales con coma, símbolo DETRÁS y separado.
+    //
+    // LO QUE ESTO NO ES: no vale para el valor de un campo ni para lo que se manda al servidor. Ahi
+    // el numero va crudo, porque alguien lo vuelve a leer y 1.234,56 no es un numero. Esto es solo
+    // para lo que LEE UNA PERSONA.
+    window.eur=function(n,sym){
+      if(n==null||n==='') return '—';
+      var v=Number(n); if(!isFinite(v)) return '—';
+      return v.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2,useGrouping:'always'})
+        + ' ' + (sym||window.MONEDA_SIMBOLO||'€');
+    };
+    // MISMO NOMBRE EN LOS DOS LADOS. En el servidor se importa fmtEur con este alias; aquí es
+    // global. Así la misma expresión —dineroEs(x, sym)— vale escriba donde escriba quien la usa,
+    // y no hay que acordarse de en qué mitad del fichero se está.
+    window.dineroEs=window.eur;
+
+    // Un porcentaje, con su coma: 46,6 %
+    window.pct=function(n,dec){
+      if(n==null||n==='') return '—';
+      var v=Number(n); if(!isFinite(v)) return '—';
+      var d=(dec==null?1:dec);
+      return v.toLocaleString('es-ES',{minimumFractionDigits:d,maximumFractionDigits:d}) + ' %';
+    };
+    // Y LA FECHA. 2026-08-24 es como se guarda, no como se dice: en pantalla va 24/08/2026.
+    window.fechaEs=function(iso){
+      var m=/^(\\d{4})-(\\d{2})-(\\d{2})/.exec(String(iso==null?'':iso));
+      return m ? (m[3]+'/'+m[2]+'/'+m[1]) : String(iso==null?'':iso);
+    };
     function toast(msg,type='ok'){
       const t=document.createElement('div');
       const styles={ok:'background:#E4F6EA;border:1px solid #CDE8D8;color:#157F3B',err:'background:#FBE3E3;border:1px solid #F0CFCC;color:#C0392B',warn:'background:#FBEED0;border:1px solid #EBDDB7;color:#8A5B00'};

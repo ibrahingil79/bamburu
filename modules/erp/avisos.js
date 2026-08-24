@@ -22,6 +22,8 @@ import { productosBajoMinimo } from './reposicion.js';
 import { reservasPublicasPendientes, reservaPublicaEncendida } from './reserva-publica-config.js';
 // PUNTO 13 — la fuente de avisos de la agenda del CRM vive en su módulo, junto a su motor.
 import { tareasCrmVencidas } from './crm-tareas.js';
+import { fechaEs } from './voz.js';   // la fecha, en cristiano (24/08/2026)
+import { fmtEur } from './margen.js';   // el dinero, escrito como en España
 
 const r2 = n => Math.round(n * 100) / 100;
 
@@ -144,7 +146,7 @@ export function borradoresRecurrentes(db, today) {
     tipo: 'factura_recurrente',
     urgencia: 200,     // por encima de stock bajo, por debajo de lo vencido
     titulo: `${o.document_name} recurrente · ${o.client_name}`,
-    detalle: `Borrador listo para revisar y emitir (fecha ${o.due_date})`,
+    detalle: `Borrador listo para revisar y emitir (fecha ${fechaEs(o.due_date)})`,
     ref: { source: 'factura_recurrente', occurrence_id: o.id },
   }));
 }
@@ -426,7 +428,8 @@ function escapeHtml(s) {
 // redacta un vencimiento ahora se hace en un sitio, y la pantalla, el correo y el panel no discrepan.
 export function detalleAviso(a, sym = '', { compacto = false } = {}) {
   const r = (a && a.ref) || {};
-  const dinero = n => sym + Number(n || 0).toFixed(2);
+  // El dinero, escrito como en España (117.087,43 €), no como en inglés (€117087.43).
+  const dinero = n => fmtEur(Number(n || 0), sym);
   const dias = n => n + ' día' + (n === 1 ? '' : 's');
 
   if (a.tipo === 'cobro_vencido') {

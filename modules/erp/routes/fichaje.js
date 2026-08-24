@@ -22,6 +22,7 @@ import { ENTITY } from '../../../core/activity-entities.js';
 import { fichar, corregir, estadoDe, jornadaDe, resumen, quienEstaDentro, historialDe,
          horasTexto, TIPO_LABEL } from '../fichaje.js';
 import { ahoraLocal } from '../citas-engine.js';
+import { fechaEs } from '../voz.js';   // la fecha, en cristiano
 
 const lunesDe = f => { const d = new Date(f + 'T00:00:00Z'); const dow = (d.getUTCDay() + 6) % 7;
   d.setUTCDate(d.getUTCDate() - dow); return d.toISOString().slice(0, 10); };
@@ -128,7 +129,7 @@ export function createFichajeRoutes(db) {
 
       <div class="card bf-caja" style="margin-bottom:1rem">
         <h3 style="margin-top:0">Mi semana</h3>
-        <div style="font-size:.8rem;color:var(--text2);margin-bottom:.5rem">Del ${escHtml(lunes)} al ${escHtml(masDias(lunes, 6))} ·
+        <div style="font-size:.8rem;color:var(--text2);margin-bottom:.5rem">Del ${fechaEs(lunes)} al ${fechaEs(masDias(lunes, 6))} ·
           total <strong>${escHtml(horasTexto(mia.total_min))}</strong>${mia.pausa_min ? ' · pausas ' + escHtml(horasTexto(mia.pausa_min)) : ''}</div>
         <div class="table-wrap"><table><thead><tr><th>Día</th><th>Entrada</th><th>Salida</th><th>Trabajado</th>
           <th>Pausas</th><th></th><th></th></tr></thead><tbody>

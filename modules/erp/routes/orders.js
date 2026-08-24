@@ -12,6 +12,7 @@ import { generateInvoice } from './invoices.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { recordMovement, resolveWarehouseId, productStockInWarehouse, availableOfProduct, originMovementWarehouse } from '../stock.js';
 import { activeWarehouses } from './warehouses.js';
+import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
 
 const ORDER_STATUSES = [
   'borrador', 'en_preparacion', 'enviado',
@@ -489,11 +490,11 @@ export function createOrderRoutes(db, cfg = {}) {
     <tbody>${items.map(i=>'<tr><td>'+escHtml(i.product_name)+'</td><td>'+i.quantity+'</td><td>${sym}'+Number(i.unit_price).toFixed(2)+'</td><td>${sym}'+Number(i.total).toFixed(2)+'</td></tr>').join('')}</tbody>
   </table>
   <div class="totals">
-    <div class="total-row"><span>Subtotal</span><span>${sym}${Number(order.subtotal||0).toFixed(2)}</span></div>
+    <div class="total-row"><span>Subtotal</span><span>${dineroEs(order.subtotal||0, sym)}</span></div>
     ${order.discount_amount>0?'<div class="total-row" style="color:var(--ok)"><span>Descuento</span><span>-${sym}'+Number(order.discount_amount).toFixed(2)+'</span></div>':''}
     ${order.shipping_cost>0?'<div class="total-row"><span>Envío</span><span>${sym}'+Number(order.shipping_cost).toFixed(2)+'</span></div>':''}
-    <div class="total-row"><span>IVA</span><span>${sym}${Number(order.tax_amount||0).toFixed(2)}</span></div>
-    <div class="total-row total-final"><span>TOTAL</span><span>${sym}${Number(order.total||0).toFixed(2)}</span></div>
+    <div class="total-row"><span>IVA</span><span>${dineroEs(order.tax_amount||0, sym)}</span></div>
+    <div class="total-row total-final"><span>TOTAL</span><span>${dineroEs(order.total||0, sym)}</span></div>
   </div>
   <br><button onclick="window.print()" style="background:var(--accent);color:var(--bg2);border:none;padding:.6rem 1.5rem;border-radius:6px;cursor:pointer;font-weight:500">Imprimir / PDF</button>
 </body></html>`);
@@ -554,9 +555,9 @@ export function createOrderRoutes(db, cfg = {}) {
                 <select class="form-control" id="shippingMethod"><option value="">Sin envío</option></select>
               </div>
               <div style="background:var(--bg3);padding:1rem;border-radius:8px;margin-bottom:1rem">
-                <div style="display:flex;justify-content:space-between;margin-bottom:.3rem;font-size:.85rem"><span>Subtotal</span><span id="posSubtotal">${sym}0.00</span></div>
-                <div style="display:flex;justify-content:space-between;margin-bottom:.3rem;font-size:.85rem;color:var(--ok)" id="discountRow" style="display:none"><span>Descuento</span><span id="posDiscount">-${sym}0.00</span></div>
-                <div style="display:flex;justify-content:space-between;font-size:1rem;font-weight:500"><span>Total estimado</span><span id="posTotal">${sym}0.00</span></div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:.3rem;font-size:.85rem"><span>Subtotal</span><span id="posSubtotal">${dineroEs(0, sym)}</span></div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:.3rem;font-size:.85rem;color:var(--ok)" id="discountRow" style="display:none"><span>Descuento</span><span id="posDiscount">-${dineroEs(0, sym)}</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:1rem;font-weight:500"><span>Total estimado</span><span id="posTotal">${dineroEs(0, sym)}</span></div>
               </div>
               <button class="btn btn-primary" style="width:100%" onclick="checkout()">Cobrar</button>
             </div>
@@ -715,7 +716,7 @@ export function createOrderRoutes(db, cfg = {}) {
           const parts=[v.option1_name&&v.option1_value?v.option1_name+': '+v.option1_value:'',v.option2_name&&v.option2_value?v.option2_name+': '+v.option2_value:'',v.name].filter(Boolean);
           const label=parts.join(' · ');
           const price=v.price!==null?v.price:p.price;
-          return '<button onclick="selectVariant('+i+')" style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);cursor:pointer;text-align:left;width:100%"><strong>'+label+'</strong><span style="float:right;color:var(--accent)">'+sym+price.toFixed(2)+'</span><br><small style="color:var(--text2)">Stock: '+v.stock+'</small></button>';
+          return '<button onclick="selectVariant('+i+')" style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);cursor:pointer;text-align:left;width:100%"><strong>'+label+'</strong><span style="float:right;color:var(--accent)">'+dineroEs(price, sym)+'</span><br><small style="color:var(--text2)">Stock: '+v.stock+'</small></button>';
         }).join('');
         document.getElementById('variantModal').style.display='flex';
       }
@@ -742,7 +743,7 @@ export function createOrderRoutes(db, cfg = {}) {
     const rows = refunds.map(r => `<tr class="frow">
       <td><a href="/admin/orders/${r.order_id}" style="color:var(--p);font-weight:500">${escHtml(r.order_number)}</a></td>
       <td>${escHtml(r.client_name||'Anónimo')}</td>
-      <td><strong>${sym}${Number(r.amount).toFixed(2)}</strong></td>
+      <td><strong>${dineroEs(r.amount, sym)}</strong></td>
       <td style="color:var(--muted)">${escHtml(r.reason||'-')}</td>
       <td style="color:var(--muted);font-size:.8rem">${r.created_at?.split(' ')[0]||'-'}</td>
     </tr>`).join('');
@@ -750,7 +751,7 @@ export function createOrderRoutes(db, cfg = {}) {
     const content = `
       <div class="ph"><h2>Devoluciones</h2></div>
       <div class="bf-cards" style="grid-template-columns:minmax(0,250px)"><div class="bf-card inerte">
-        <span class="bf-k">Total reembolsado</span><span class="bf-v pierde">${sym}${total.toFixed(2)}</span></div></div>
+        <span class="bf-k">Total reembolsado</span><span class="bf-v pierde">${dineroEs(total, sym)}</span></div></div>
       <div class="card">
         <div class="card-head"><h3>Listado de devoluciones</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="filterRefunds()"></div>
         <div class="table-wrap"><table>
@@ -906,7 +907,7 @@ export function createOrderRoutes(db, cfg = {}) {
                 <tr>
                   <td colspan="3" style="text-align:right;font-weight:500;padding:.7rem 1rem">Total</td>
                   <td style="text-align:right;font-weight:500;font-size:1rem;padding:.7rem 1rem">
-                    <span id="total-display">${sym}0.00</span>
+                    <span id="total-display">${dineroEs(0, sym)}</span>
                   </td>
                   <td></td>
                 </tr>
@@ -961,7 +962,7 @@ export function createOrderRoutes(db, cfg = {}) {
           const opts = p.variants.map(function(v){
             const lbl = [v.option1_value, v.option2_value, v.name].filter(Boolean).join(' · ');
             const pr  = v.price !== null ? v.price : p.price;
-            return '<option value="'+v.id+'" data-price="'+pr+'">'+escHtml(lbl)+' ('+SYM+pr.toFixed(2)+')</option>';
+            return '<option value="'+v.id+'" data-price="'+pr+'">'+escHtml(lbl)+' ('+dineroEs(pr, SYM)+')</option>';
           }).join('');
           return '<select class="form-control" style="margin-top:6px" onchange="onVariantChange(this)"><option value="">Sin variante</option>'+opts+'</select>';
         }
@@ -1004,7 +1005,7 @@ export function createOrderRoutes(db, cfg = {}) {
             r.querySelector('.line-subtotal').textContent = SYM + (qty * price).toFixed(2);
             total += qty * price;
           });
-          document.getElementById('total-display').textContent = SYM + total.toFixed(2);
+          document.getElementById('total-display').textContent = dineroEs(total, SYM);
         }
 
         // Recoge las líneas en el MISMO formato que esperaba el guardado (id, variant_id,

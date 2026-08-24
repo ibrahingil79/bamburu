@@ -19,6 +19,9 @@ import { ventasAsientos, comprasAsientos, ventasMatrix, comprasMatrix, toCSV, bu
 import { libroBienes, createInvestmentGood, updateInvestmentGood, bajaInvestmentGood, reactivarInvestmentGood } from '../contabilidad-bienes.js';
 import { modelo303, modelo130, filas303, filas130, quarterRange } from '../contabilidad-modelos.js';
 import { cuentaPyG, filasPyG } from '../contabilidad-pyg.js';
+import { fechaEs } from '../voz.js';   // la fecha, en cristiano
+import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
+import { fmtEur } from '../margen.js';   // el dinero, escrito como en España
 
 function defaultRange(db) {
   const y = (db.prepare('SELECT MAX(issue_date) m FROM invoices').get()?.m || '').slice(0, 4) || String(new Date().getFullYear());
@@ -26,7 +29,8 @@ function defaultRange(db) {
 }
 const symbolOf = db => db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
-const money = (sym, n) => sym + Number(n || 0).toFixed(2);
+// El dinero, escrito como en España (117.087,43 €). Una sola forma en todo el producto: fmtEur.
+const money = (sym, n) => fmtEur(Number(n || 0), sym);
 const rateLabel = r => (r === null || r === undefined) ? 'sin desglosar' : (Number(r) === 0 ? '0% (exento)' : `${r}%`);
 const rangeOf = (c, db) => { const d = defaultRange(db); return { from: c.req.query('from') || d.from, to: c.req.query('to') || d.to }; };
 
@@ -112,7 +116,7 @@ function ventasTable(libro, sym) {
     <th style="text-align:right">Retención IRPF</th><th style="text-align:right">Total línea</th></tr>`;
   const body = ventasAsientos(libro).map(a => {
     const badge = a.es_rectificativa ? ` <span title="Rectificativa" style="background:var(--warn-s);color:var(--warn);border-radius:4px;padding:0 4px;font-size:10px">R${a.rect_mode ? '·' + a.rect_mode : ''}</span>` : '';
-    return `<tr><td>${escHtml(a.invoice_number || '')}${badge}</td><td>${escHtml(a.issue_date || '')}</td><td>${escHtml(a.operation_date || '—')}</td>
+    return `<tr><td>${escHtml(a.invoice_number || '')}${badge}</td><td>${a.issue_date ? fechaEs(a.issue_date) : ''}</td><td>${a.operation_date ? fechaEs(a.operation_date) : '—'}</td>
       <td>${escHtml(a.tipo_factura || '')}</td><td>${escHtml(a.nif || '')}</td><td>${escHtml(a.nombre || '')}</td>
       <td style="text-align:right">${money(sym, a.base)}</td><td style="text-align:right">${rateLabel(a.rate)}</td><td style="text-align:right">${money(sym, a.cuota)}</td>
       <td style="text-align:right">${a.irpf != null && a.irpf !== 0 ? money(sym, a.irpf) : ''}</td><td style="text-align:right">${money(sym, a.total_linea)}</td></tr>`;
@@ -182,7 +186,7 @@ function mayorDetalle(det, sym) {
 // CUENTA DE PÉRDIDAS Y GANANCIAS — estructura formal PGC PYMES; subtotales resaltados; los
 // gastos entran en negativo (mostrados entre paréntesis, convención contable).
 function pygTable(pyg, sym) {
-  const m = n => { const v = Number(n || 0); return v < 0 ? `(${sym}${Math.abs(v).toFixed(2)})` : `${sym}${v.toFixed(2)}`; };
+  const m = n => { const v = Number(n || 0); return v < 0 ? `(${dineroEs(Math.abs(v), sym)})` : `${dineroEs(v, sym)}`; };
   const body = filasPyG(pyg).map(([etiqueta, nombre, importe, tipo]) => tipo === 'subtotal'
     ? `<tr style="font-weight:700;background:var(--bg2)"><td>${escHtml(etiqueta)}</td><td>${escHtml(nombre)}</td><td style="text-align:right;white-space:nowrap">${m(importe)}</td></tr>`
     : `<tr><td style="color:var(--text2)">${escHtml(etiqueta)}</td><td>${escHtml(nombre)}</td><td style="text-align:right;white-space:nowrap">${m(importe)}</td></tr>`).join('');

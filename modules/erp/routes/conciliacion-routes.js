@@ -9,9 +9,10 @@ import { escHtml } from '../../../core/escape.js';
 import { buildXlsx, toCSV } from '../contabilidad-export.js';
 import { importNorma43, sugerenciasIngreso, conciliarConCobro, conciliarConFactura, ignorarMovimiento, deshacer,
          sugerenciasGasto, conciliarConGasto, conciliarConPagoProveedor } from '../conciliacion.js';
+import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
 
 const symbolOf = db => db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
-const money = (sym, n) => { const v = Number(n || 0); return (v < 0 ? '-' : '') + sym + Math.abs(v).toFixed(2); };
+const money = (sym, n) => { const v = Number(n || 0); return (v < 0 ? '-' : '') + dineroEs(Math.abs(v), sym); };
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const fileResp = (buf, type, name) => new Response(buf, { headers: { 'Content-Type': type, 'Content-Disposition': `attachment; filename="${name}"` } });
 // owner/admin saltan; el resto necesita el permiso concreto (para el gate de registrar cobro).

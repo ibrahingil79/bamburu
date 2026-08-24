@@ -480,7 +480,7 @@ export function disaHomeHtml({ userName, simbolo = '€' }) {
           }
           var prox = '';
           if (h.proxima) {
-            prox = '<a class="cm-prox" href="/admin/citas?fecha=' + esc(h.fecha) + '">'
+            prox = '<a class="cm-prox" href="/admin/citas?fecha=' + fechaEs(h.fecha) + '">'
               + '<span class="hh">' + esc(h.proxima.hora) + '</span>'
               + '<span class="tx"><b>' + esc(h.proxima.cliente) + '</b>'
               + '<span>' + esc((h.proxima.servicios || 'Cita') + ' · ' + h.proxima.persona) + '</span></span>'
@@ -824,7 +824,7 @@ export function disaHomeHtml({ userName, simbolo = '€' }) {
         if (!grid) return;
         var IG_SYM = '${sym}';
         var esc = window.escHtml || function(s){ return s == null ? '' : String(s); };
-        var eur = function(v){ return IG_SYM + Number(v || 0).toFixed(2); };
+        var eur = function(v){ return dineroEs(v || 0, IG_SYM); };
         var IG = { blocks: [], datos: null, esDuenyo: false, origen: 'fabrica', tieneCapaPropia: false,
                    editing: false, scope: 'usuario', vigia: undefined, paleta: null, sortable: null, uidSeq: 0 };
         window.__IG = IG;
@@ -950,7 +950,7 @@ export function disaHomeHtml({ userName, simbolo = '€' }) {
           var LBL = { pedida:'Pedida', confirmada:'Confirmada', atendida:'Atendida', no_show:'No vino', anulada:'Anulada' };
           body.innerHTML = '<div class="ig-hoy">' + cab
             + h.citas.map(function(c){
-                return '<a class="ig-hoy-fila" href="/admin/citas?fecha=' + esc(h.fecha) + '" style="text-decoration:none;color:inherit">'
+                return '<a class="ig-hoy-fila" href="/admin/citas?fecha=' + fechaEs(h.fecha) + '" style="text-decoration:none;color:inherit">'
                   + '<span class="h">' + esc(c.hora) + '</span>'
                   + '<span class="c" title="' + esc(c.cliente + ' · ' + c.servicios) + '">' + esc(c.cliente)
                   + (c.servicios ? ' <span class="q">' + esc(c.servicios) + '</span>' : '') + '</span>'

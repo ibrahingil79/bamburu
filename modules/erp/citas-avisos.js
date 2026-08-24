@@ -11,6 +11,7 @@ import { renderEmail, TONO_UNICO } from './email-templates.js';
 import { PREFIJOS_VALIDOS } from './paises-telefono.js';
 import { hhmm, ahoraLocal } from './citas-engine.js';
 import { escHtml as escapeHtmlEmail } from '../../core/escape.js';
+import { fechaEs } from './voz.js';   // la fecha, en cristiano (24/08/2026)
 
 // ── 1.13 Móvil en formato internacional (+34…): validar al escribir y sanear los existentes ────────
 // Devuelve { e164, valido }. Acepta '+CC...' / '00CC...' / un número nacional español de 9 cifras (se
@@ -66,7 +67,7 @@ export function textoAviso(tipo, { empresa, servicio, fecha, hora, direccion, en
     : `Tu cita en ${empresa} está confirmada:`;
   const lineas = [
     cabecera,
-    `${servicio} · ${fecha} a las ${hora}`,
+    `${servicio} · ${fechaEs(fecha)} a las ${hora}`,
   ];
   if (direccion) lineas.push(`Dónde: ${direccion}`);
   lineas.push(`Confirma o avísanos si no puedes venir: ${enlace}`);

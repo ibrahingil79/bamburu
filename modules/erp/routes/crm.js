@@ -19,6 +19,8 @@ import {
   createOpportunitySvc, updateOpportunitySvc, moveOpportunityStageSvc, closeOpportunitySvc,
   reopenOpportunitySvc, archiveOpportunitySvc, restoreOpportunitySvc, registerClientActivitySvc,
 } from '../crm.js';
+import { fechaEs } from '../voz.js';   // la fecha, en cristiano (24/08/2026)
+import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
 
 // ════════════════════════════════════════════════════════════════════════════
 // CRM COMERCIAL — pantalla del embudo (/admin/crm) y su API.
@@ -300,7 +302,7 @@ export function createCrmRoutes(db) {
     const URGENCIA_LABEL = ${JSON.stringify(URGENCIA_LABEL)};
     const MOTIVO_LABEL = ${JSON.stringify(MOTIVO_PERDIDA_LABEL)};
     const URGENCIA_BADGE = {en_riesgo:'b-red',negociacion:'b-blue',propuesta:'b-blue',cualificado:'b-yellow',nuevo:'b-gray',compromiso:'b-green'};
-    const money = n => SYM + Number(n||0).toFixed(2);
+    const money = n => dineroEs(n||0, SYM);
 
     function proxBadge(p){
       if(!p) return '';
@@ -600,16 +602,16 @@ export function createCrmRoutes(db) {
 
       <div class="card" style="margin-bottom:1rem"><div class="card-body">
         <div class="kb-kpi">
-          <div><span>En el embudo</span><strong id="kpiAbierto">${s}0.00</strong></div>
-          <div><span>Previsión ponderada</span><strong id="kpiPonderado" style="color:var(--accent)">${s}0.00</strong></div>
+          <div><span>En el embudo</span><strong id="kpiAbierto">${dineroEs(0, s)}</strong></div>
+          <div><span>Previsión ponderada</span><strong id="kpiPonderado" style="color:var(--accent)">${dineroEs(0, s)}</strong></div>
           <div><span>Piden acción hoy</span><strong id="kpiPend">0</strong></div>
-          <div><span>Ganadas</span><strong id="kpiGan" style="color:var(--ok)">${s}0.00</strong></div>
-          <div><span>Perdidas</span><strong id="kpiPer" style="color:var(--text3)">${s}0.00</strong></div>
+          <div><span>Ganadas</span><strong id="kpiGan" style="color:var(--ok)">${dineroEs(0, s)}</strong></div>
+          <div><span>Perdidas</span><strong id="kpiPer" style="color:var(--text3)">${dineroEs(0, s)}</strong></div>
         </div>
       </div></div>
 
       <div id="kbWrap"><div class="kb" id="kb">
-        ${ETAPAS.map(e => `<div class="kb-col"><div class="kb-head"><div class="kb-title"><strong>${escHtml(e.label)}</strong><span class="kb-n">0</span></div><div class="kb-sum">${s}0.00</div><div class="kb-prob">${e.prob}% por defecto</div></div><div class="kb-body"><div class="kb-skel"><span class="skel"></span><span class="skel" style="width:60%"></span></div><div class="kb-skel"><span class="skel"></span><span class="skel" style="width:45%"></span></div></div></div>`).join('')}
+        ${ETAPAS.map(e => `<div class="kb-col"><div class="kb-head"><div class="kb-title"><strong>${escHtml(e.label)}</strong><span class="kb-n">0</span></div><div class="kb-sum">${dineroEs(0, s)}</div><div class="kb-prob">${e.prob}% por defecto</div></div><div class="kb-body"><div class="kb-skel"><span class="skel"></span><span class="skel" style="width:60%"></span></div><div class="kb-skel"><span class="skel"></span><span class="skel" style="width:45%"></span></div></div></div>`).join('')}
       </div></div>
 
       ${puedeGestionar ? `<div class="kb-term">
@@ -868,7 +870,7 @@ export function createCrmRoutes(db) {
       <td><a href="/admin/clients/${x.client_id}">${escHtml(x.cliente || '—')}</a>
         ${x.oportunidad ? `<div style="font-size:.72rem;color:var(--text3)">${escHtml(x.oportunidad)}</div>` : ''}</td>
       <td>${escHtml(x.responsable || 'sin dueño')}</td>
-      <td>${escHtml(x.fecha)}${x.vencida ? `<div style="font-size:.72rem;color:var(--danger)">hace ${x.retraso} día(s)</div>` : ''}</td>
+      <td>${fechaEs(x.fecha)}${x.vencida ? `<div style="font-size:.72rem;color:var(--danger)">hace ${x.retraso} día(s)</div>` : ''}</td>
       <td class="r">${puedeGestionar ? `
         <button class="btn btn-sm" data-hecha="${x.id}">Hecha</button>
         <button class="btn btn-secondary btn-sm" data-mover="${x.id}">Mover</button>

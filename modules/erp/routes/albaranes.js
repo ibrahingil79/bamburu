@@ -14,6 +14,7 @@ import { activeWarehouses } from './warehouses.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { ENTITY } from '../../../core/activity-entities.js';
 import { jsonForScript } from '../../../core/escape.js';
+import { fechaEs } from '../voz.js';   // la fecha, en cristiano (24/08/2026)
 
 // ════════════════════════════════════════════════════════════════════════════
 // PILAR 4 · VENTAS · PIEZA 2b — ALBARÁN (entrega). ESPEJO de la RECEPCIÓN de compra
@@ -289,7 +290,7 @@ function albaranDocumentBodyHtml(a, items, emisor, cliente, sym) {
     <div style="color:var(--text2);font-size:12px">${a.delivery_number ? esc(a.delivery_number) : 'Sin número'}</div>
   </div>
   <div style="text-align:right;color:var(--text2);font-size:12px">
-    <div>Fecha: <strong style="color:var(--accent-d)">${esc(a.date)}</strong></div>
+    <div>Fecha: <strong style="color:var(--accent-d)">${fechaEs(a.date)}</strong></div>
     ${a.order_number ? `<div>Pedido: <strong style="color:var(--accent-d)">${esc(a.order_number)}</strong></div>` : ''}
   </div>
 </div>
@@ -369,7 +370,7 @@ export function createAlbaranRoutes(db) {
       return '<tr>'
         + '<td><strong style="font-family:monospace">' + esc(a.delivery_number || ('#' + a.id)) + '</strong></td>'
         + '<td><strong>' + esc(name) + '</strong></td>'
-        + '<td>' + esc(a.date) + '</td>'
+        + '<td>' + fechaEs(a.date) + '</td>'
         + '<td><span class="badge ' + badge + '">' + esc(lbl) + '</span></td>'
         + '<td style="text-align:right"><a href="/admin/albaranes/' + a.id + '" class="btn btn-secondary btn-sm">Ver</a></td>'
         + '</tr>';

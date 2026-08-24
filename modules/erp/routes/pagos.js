@@ -4,6 +4,7 @@ import { requirePerm } from '../../../core/auth.js';
 import { adminLayout, skeletonRows } from '../layout.js';
 import { openPayables } from '../pagos.js';
 import { pagoModalHtml, pagoCuentaModalHtml, pagoModalScript } from '../views/pago-modal.js';
+import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
 
 // Sección "Pagos a proveedores": torre de control de lo que DEBES. Espejo de la sección
 // Cobros. Lee SIEMPRE del motor (openPayables → supplierDebt), no duplica cálculo. Cada
@@ -28,7 +29,7 @@ export function createPagosRoutes(db) {
       <div class="card" style="margin-bottom:1rem">
         <div class="card-body" style="display:flex;align-items:baseline;gap:.75rem">
           <span style="color:var(--muted)">Debes</span>
-          <span id="pagosTotal" style="font-size:1.8rem;font-weight:700">${sym}0.00</span>
+          <span id="pagosTotal" style="font-size:1.8rem;font-weight:700">${dineroEs(0, sym)}</span>
           <span id="pagosCount" style="color:var(--muted);font-size:.85rem"></span>
         </div>
       </div>
@@ -56,15 +57,15 @@ export function createPagosRoutes(db) {
         const neto = Number(data.total||0);
         const totEl = document.getElementById('pagosTotal');
         const lblEl = document.querySelector('#pagosTotal').previousElementSibling;
-        if (neto < -0.0049) { lblEl.textContent='Saldo a tu favor'; totEl.textContent=SYM+Math.abs(neto).toFixed(2); totEl.style.color='var(--ok)'; }
-        else { lblEl.textContent='Debes'; totEl.textContent=SYM+neto.toFixed(2); totEl.style.color=''; }
+        if (neto < -0.0049) { lblEl.textContent='Saldo a tu favor'; totEl.textContent=dineroEs(Math.abs(neto), SYM); totEl.style.color='var(--ok)'; }
+        else { lblEl.textContent='Debes'; totEl.textContent=dineroEs(neto, SYM); totEl.style.color=''; }
         document.getElementById('pagosCount').textContent = '· ' + pagosRows.length + ' documento' + (pagosRows.length===1?'':'s');
         document.getElementById('pagosBody').innerHTML = pagosRows.length ? pagosRows.map(function(r){
           const tramo = r.dias_vencida>0 ? ' · '+r.dias_vencida+'d' : '';
           const esAbono = r.estado==='abono' || Number(r.pendiente)<-0.0049;
           const pend = esAbono
-            ? '<strong style="color:var(--ok)">'+SYM+Number(r.pendiente||0).toFixed(2)+'</strong> <span style="color:var(--muted);font-size:.78rem">(a tu favor)</span>'
-            : '<strong>'+SYM+Number(r.pendiente||0).toFixed(2)+'</strong>';
+            ? '<strong style="color:var(--ok)">'+dineroEs(r.pendiente||0, SYM)+'</strong> <span style="color:var(--muted);font-size:.78rem">(a tu favor)</span>'
+            : '<strong>'+dineroEs(r.pendiente||0, SYM)+'</strong>';
           const btn = esAbono
             ? '<button class="btn btn-secondary btn-sm" onclick="openPagos('+r.supplier_invoice_id+')">Reembolso</button>'
             : '<button class="btn btn-secondary btn-sm" onclick="openPagos('+r.supplier_invoice_id+')">Pagar</button>'

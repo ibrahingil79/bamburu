@@ -27,6 +27,8 @@ import { paymentsSum, invoiceCobro, cobroState, isCobrable, ESTADO_LABEL,
   invoiceProximaAccion, invoiceActionHistory, registerCollectionAction, collectionEmail } from '../cobros.js';
 import { sendEmail } from '../../../core/mailer.js';
 import { ENTITY } from '../../../core/activity-entities.js';
+import { fechaEs } from '../voz.js';   // la fecha, en cristiano (24/08/2026)
+import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
 import { exigirCorreoActivo } from '../avisos-preferencias.js';   // interruptor de Ajustes → Avisos y correos
 import { contactoDeFactura } from '../contactos.js';   // D2: facturar deja constancia de que vino
 
@@ -563,14 +565,14 @@ export async function buildInvoicePaper(db, inv) {
         <tr>
           <td>${escHtml(it.description)}</td>
           <td style="text-align:right">${it.quantity}</td>
-          <td style="text-align:right">${sym}${it.unit_price.toFixed(2)}</td>
-          <td style="text-align:right">${sym}${it.total_price.toFixed(2)}</td>
+          <td style="text-align:right">${dineroEs(it.unit_price, sym)}</td>
+          <td style="text-align:right">${dineroEs(it.total_price, sym)}</td>
         </tr>`).join('');
 
   const lifecycle = (() => {
     if (inv.status === 'anulada' && anulacion) {
       return `<div class="alert alert-err" style="margin-bottom:24px">
-      <strong>Factura anulada</strong> el ${esc(anulacion.issue_date)}.
+      <strong>Factura anulada</strong> el ${fechaEs(anulacion.issue_date)}.
       Motivo: ${esc(anulacion.motivo)}.
       <div style="font-size:11px;margin-top:4px;font-family:ui-monospace,monospace;word-break:break-all">Asiento de anulación · hash ${esc(anulacion.verifactu_hash)}</div>
     </div>`;
@@ -615,25 +617,25 @@ export async function buildInvoicePaper(db, inv) {
       }
       taxBlock = Object.keys(groups).sort((a, b) => b - a).map(r => {
         const base = groups[r].base.toFixed(2);
-        if (Number(r) === 0) return `<tr><td>Exento de IVA (sobre ${sym}${base})</td><td>${sym}0.00</td></tr>`;
-        return `<tr><td>${escHtml(inv.tax_name)} ${r}% (sobre ${sym}${base})</td><td>${sym}${groups[r].amount.toFixed(2)}</td></tr>`;
+        if (Number(r) === 0) return `<tr><td>Exento de IVA (sobre ${dineroEs(base, sym)})</td><td>${dineroEs(0, sym)}</td></tr>`;
+        return `<tr><td>${escHtml(inv.tax_name)} ${r}% (sobre ${dineroEs(base, sym)})</td><td>${dineroEs(groups[r].amount, sym)}</td></tr>`;
       }).join('');
     } else if (inv.tax_rate > 0) {
-      taxBlock = `<tr><td>${escHtml(inv.tax_name)} (${inv.tax_rate}%)</td><td>${sym}${inv.tax_amount.toFixed(2)}</td></tr>`;
+      taxBlock = `<tr><td>${escHtml(inv.tax_name)} (${inv.tax_rate}%)</td><td>${dineroEs(inv.tax_amount, sym)}</td></tr>`;
     } else if (items.length > 0) {
       const totalBase = items.reduce((s, it) => s + (Number(it.total_price) || 0), 0);
-      taxBlock = `<tr><td>Exento de IVA (sobre ${sym}${totalBase.toFixed(2)})</td><td>${sym}0.00</td></tr>`;
+      taxBlock = `<tr><td>Exento de IVA (sobre ${dineroEs(totalBase, sym)})</td><td>${dineroEs(0, sym)}</td></tr>`;
     } else {
-      taxBlock = `<tr><td>${escHtml(inv.tax_name)}</td><td>${sym}${inv.tax_amount.toFixed(2)}</td></tr>`;
+      taxBlock = `<tr><td>${escHtml(inv.tax_name)}</td><td>${dineroEs(inv.tax_amount, sym)}</td></tr>`;
     }
     const irpfBlock = (Number(inv.irpf_amount) > 0)
-      ? `<tr><td style="color:var(--accent-purple)">IRPF (${inv.irpf_rate}%)</td><td style="color:var(--accent-purple)">−${sym}${inv.irpf_amount.toFixed(2)}</td></tr>`
+      ? `<tr><td style="color:var(--accent-purple)">IRPF (${inv.irpf_rate}%)</td><td style="color:var(--accent-purple)">−${dineroEs(inv.irpf_amount, sym)}</td></tr>`
       : '';
     return `<table class="doc-totals">
-  <tr><td>Base imponible</td><td>${sym}${inv.subtotal.toFixed(2)}</td></tr>
+  <tr><td>Base imponible</td><td>${dineroEs(inv.subtotal, sym)}</td></tr>
   ${taxBlock}
   ${irpfBlock}
-  <tr class="grand"><td>TOTAL</td><td>${sym}${inv.total.toFixed(2)}</td></tr>
+  <tr class="grand"><td>TOTAL</td><td>${dineroEs(inv.total, sym)}</td></tr>
 </table>`;
   })();
 
@@ -656,7 +658,7 @@ export async function buildInvoicePaper(db, inv) {
   return `${vfHead}
 ${lifecycle}
 <h1>${escHtml(inv.document_name)}</h1>
-<div class="doc-sub">${escHtml(inv.invoice_number)} · ${inv.status === 'emitida' ? 'Emitida' : inv.status === 'rectificada' ? 'Rectificada' : 'Anulada'} el ${inv.issue_date}</div>
+<div class="doc-sub">${escHtml(inv.invoice_number)} · ${inv.status === 'emitida' ? 'Emitida' : inv.status === 'rectificada' ? 'Rectificada' : 'Anulada'} el ${fechaEs(inv.issue_date)}</div>
 
 ${membreteHtml({ emisor: partesDe(db, inv).emisor,
                  otra: { ...partesDe(db, inv).cliente, name: inv.client_name || 'Cliente general' },
@@ -809,8 +811,8 @@ export async function buildTicketPaper(db, inv) {
   const pay = db.prepare('SELECT payment_method FROM invoice_payments WHERE invoice_id=? ORDER BY id').get(inv.id) || {};
   const groups = {};
   for (const it of items) { const r = Number(it.tax_rate) || 0; if (!groups[r]) groups[r] = { base: 0, amount: 0 }; groups[r].base += Number(it.total_price) || 0; groups[r].amount += Number(it.tax_amount) || 0; }
-  const taxRows = Object.keys(groups).sort((a, b) => b - a).map(r => `<tr><td>${Number(r) > 0 ? 'IVA ' + r + '%' : 'Exento de IVA'} (sobre ${sym}${groups[r].base.toFixed(2)})</td><td>${sym}${groups[r].amount.toFixed(2)}</td></tr>`).join('');
-  const rows = items.map(it => `<tr><td>${escHtml(it.description)}</td><td style="text-align:right">${it.quantity}</td><td style="text-align:right">${sym}${Number(it.unit_price).toFixed(2)}</td><td style="text-align:right">${sym}${Number(it.total_price).toFixed(2)}</td></tr>`).join('');
+  const taxRows = Object.keys(groups).sort((a, b) => b - a).map(r => `<tr><td>${Number(r) > 0 ? 'IVA ' + r + '%' : 'Exento de IVA'} (sobre ${dineroEs(groups[r].base, sym)})</td><td>${dineroEs(groups[r].amount, sym)}</td></tr>`).join('');
+  const rows = items.map(it => `<tr><td>${escHtml(it.description)}</td><td style="text-align:right">${it.quantity}</td><td style="text-align:right">${dineroEs(it.unit_price, sym)}</td><td style="text-align:right">${dineroEs(it.total_price, sym)}</td></tr>`).join('');
 
   const vfReg = db.prepare("SELECT * FROM verifactu_registros WHERE invoice_id=? AND record_type='alta' ORDER BY id ASC LIMIT 1").get(inv.id) || null;
   let vfHead = '';
@@ -821,12 +823,12 @@ export async function buildTicketPaper(db, inv) {
   const metodo = pay.payment_method === 'efectivo' ? 'Efectivo' : pay.payment_method === 'tarjeta' ? 'Tarjeta' : '—';
   return `${vfHead}
 <h1>Factura simplificada</h1>
-<div class="doc-sub">${escHtml(inv.invoice_number)} · ${escHtml(inv.issue_date)}</div>
+<div class="doc-sub">${escHtml(inv.invoice_number)} · ${fechaEs(inv.issue_date)}</div>
 ${membreteHtml({ emisor: partesDe(db, inv).emisor, otra: null,
                  camposEmisor: ['fiscal_id', 'address'] })}
 <table><thead><tr><th>Concepto</th><th style="text-align:right">Cant.</th><th style="text-align:right">P. unit.</th><th style="text-align:right">Total</th></tr></thead><tbody>${rows}</tbody></table>
-<table class="doc-totals"><tr><td>Base imponible</td><td>${sym}${Number(inv.subtotal).toFixed(2)}</td></tr>${taxRows}<tr class="grand"><td>TOTAL</td><td>${sym}${Number(inv.total).toFixed(2)}</td></tr></table>
-<div style="margin-top:14px"><span class="doc-label">Forma de pago</span><div><strong>${metodo}</strong> · ${sym}${Number(inv.total).toFixed(2)} (pagado)</div></div>
+<table class="doc-totals"><tr><td>Base imponible</td><td>${dineroEs(inv.subtotal, sym)}</td></tr>${taxRows}<tr class="grand"><td>TOTAL</td><td>${dineroEs(inv.total, sym)}</td></tr></table>
+<div style="margin-top:14px"><span class="doc-label">Forma de pago</span><div><strong>${metodo}</strong> · ${dineroEs(inv.total, sym)} (pagado)</div></div>
 <div style="margin-top:10px;color:var(--text2);font-size:11px">Factura simplificada (art. 7.1 RD 1619/2012) — sin identificación del destinatario.</div>`;
 }
 
@@ -1542,8 +1544,8 @@ export function createInvoiceRoutes(db) {
           return;
         }
         const campos = props.map((p,i)=>({ id:'d'+i, tipo:'casilla', valor:false,
-          etiqueta: p.nombre + ' — ' + (p.tipo==='porcentaje' ? p.valor+' %' : SYM+Number(p.valor).toFixed(2)),
-          ayuda: p.motivo + ' · resta ' + SYM + Number(p.importe||0).toFixed(2) }));
+          etiqueta: p.nombre + ' — ' + (p.tipo==='porcentaje' ? p.valor+' %' : dineroEs(p.valor, SYM)),
+          ayuda: p.motivo + ' · resta ' + dineroEs(p.importe||0, SYM) }));
         if (d.codigos_disponibles) campos.push({ id:'codigo', etiqueta:'¿Tienes un código?',
           marcador:'BIENVENIDA10', ayuda:'Las promociones con código solo se aplican si lo escribes.' });
         const v = await window.pedirDatos({ titulo:'Descuentos que puedo aplicar', aceptar:'Añadir los marcados',
@@ -1615,21 +1617,21 @@ export function createInvoiceRoutes(db) {
         const labelTd = (txt, color) => '<td colspan="3" style="text-align:right;padding:.45rem 1rem'+(color?';color:'+color:'')+'">'+txt+'</td>';
         const valTd   = (txt, color) => '<td style="text-align:right;padding:.45rem 1rem'+(color?';color:'+color:'')+'">'+txt+'</td><td></td>';
         let html = '<tr><td colspan="3" style="text-align:right;font-weight:600;padding:.7rem 1rem">Base imponible</td>' +
-                   '<td style="text-align:right;padding:.7rem 1rem">'+SYM+t.subtotal.toFixed(2)+'</td><td></td></tr>';
+                   '<td style="text-align:right;padding:.7rem 1rem">'+dineroEs(t.subtotal, SYM)+'</td><td></td></tr>';
         const rates = Object.values(t.taxByRate || {});
         if (rates.length === 0) {
           html += '<tr>'+labelTd('IVA','var(--muted)')+valTd(SYM+'0.00','var(--muted)')+'</tr>';
         } else {
           for (const x of rates) {
-            const lbl = (Number(x.rate) > 0 ? 'IVA '+x.rate+'%' : 'Exento (0%)') + ' (sobre '+SYM+Number(x.base).toFixed(2)+')';
-            html += '<tr>'+labelTd(lbl,'var(--muted)')+valTd(SYM+Number(x.amount).toFixed(2),'var(--muted)')+'</tr>';
+            const lbl = (Number(x.rate) > 0 ? 'IVA '+x.rate+'%' : 'Exento (0%)') + ' (sobre '+dineroEs(x.base, SYM)+')';
+            html += '<tr>'+labelTd(lbl,'var(--muted)')+valTd(dineroEs(x.amount, SYM),'var(--muted)')+'</tr>';
           }
         }
         if (SHOW_IRPF && t.irpfAmount > 0) {
-          html += '<tr>'+labelTd('IRPF '+irpfRate+'%','var(--accent-purple)')+valTd('−'+SYM+t.irpfAmount.toFixed(2),'var(--accent-purple)')+'</tr>';
+          html += '<tr>'+labelTd('IRPF '+irpfRate+'%','var(--accent-purple)')+valTd('−'+dineroEs(t.irpfAmount, SYM),'var(--accent-purple)')+'</tr>';
         }
         html += '<tr><td colspan="3" style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">Total</td>' +
-                '<td style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">'+SYM+t.total.toFixed(2)+'</td><td></td></tr>';
+                '<td style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">'+dineroEs(t.total, SYM)+'</td><td></td></tr>';
         document.getElementById('totals-foot').innerHTML = html;
       }
 
@@ -1898,16 +1900,16 @@ export function createInvoiceRoutes(db) {
         const labelTd = (txt,color) => '<td colspan="3" style="text-align:right;padding:.45rem 1rem'+(color?';color:'+color:'')+'">'+txt+'</td>';
         const valTd   = (txt,color) => '<td style="text-align:right;padding:.45rem 1rem'+(color?';color:'+color:'')+'">'+txt+'</td><td></td>';
         let html = '<tr><td colspan="3" style="text-align:right;font-weight:600;padding:.7rem 1rem">Base imponible</td>' +
-                   '<td style="text-align:right;padding:.7rem 1rem">'+SYM+t.subtotal.toFixed(2)+'</td><td></td></tr>';
+                   '<td style="text-align:right;padding:.7rem 1rem">'+dineroEs(t.subtotal, SYM)+'</td><td></td></tr>';
         const rs = Object.values(t.taxByRate || {});
         if (!rs.length) html += '<tr>'+labelTd('IVA','var(--muted)')+valTd(SYM+'0.00','var(--muted)')+'</tr>';
         else for (const x of rs) {
-          const lbl = (Number(x.rate) > 0 ? 'IVA '+x.rate+'%' : 'Exento (0%)') + ' (sobre '+SYM+Number(x.base).toFixed(2)+')';
-          html += '<tr>'+labelTd(lbl,'var(--muted)')+valTd(SYM+Number(x.amount).toFixed(2),'var(--muted)')+'</tr>';
+          const lbl = (Number(x.rate) > 0 ? 'IVA '+x.rate+'%' : 'Exento (0%)') + ' (sobre '+dineroEs(x.base, SYM)+')';
+          html += '<tr>'+labelTd(lbl,'var(--muted)')+valTd(dineroEs(x.amount, SYM),'var(--muted)')+'</tr>';
         }
-        if (Math.abs(t.irpfAmount) > 0) html += '<tr>'+labelTd('IRPF '+IRPF_RATE+'%','var(--accent-purple)')+valTd('−'+SYM+t.irpfAmount.toFixed(2),'var(--accent-purple)')+'</tr>';
+        if (Math.abs(t.irpfAmount) > 0) html += '<tr>'+labelTd('IRPF '+IRPF_RATE+'%','var(--accent-purple)')+valTd('−'+dineroEs(t.irpfAmount, SYM),'var(--accent-purple)')+'</tr>';
         html += '<tr><td colspan="3" style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">Total</td>' +
-                '<td style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">'+SYM+t.total.toFixed(2)+'</td><td></td></tr>';
+                '<td style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">'+dineroEs(t.total, SYM)+'</td><td></td></tr>';
         document.getElementById('totals-foot').innerHTML = html;
       }
 
@@ -1982,7 +1984,7 @@ export function createInvoiceRoutes(db) {
              <strong>Esta factura es anterior al Facturae de Bamburu.</strong> No tiene congelados los
              datos fiscales, así que el XML se genera con los datos <em>actuales</em>
              ${feStatus.usedLiveData.buyer ? 'del cliente' : ''}${feStatus.usedLiveData.buyer && feStatus.usedLiveData.seller ? ' y ' : ''}${feStatus.usedLiveData.seller ? 'de tu empresa' : ''}.
-             Si la dirección cambió desde ${escHtml(inv.issue_date)}, no será la del día de emisión.
+             Si la dirección cambió desde ${fechaEs(inv.issue_date)}, no será la del día de emisión.
            </div>` : '')
         : `<div class="fe-nota fe-block">
              <strong>Facturae no disponible.</strong> ${escHtml(feStatus.reason)}
@@ -2012,9 +2014,9 @@ export function createInvoiceRoutes(db) {
 <div class="card"><div class="card-body">
   <div style="margin-bottom:12px">${statusBadge}</div>
   <div class="dp-row"><span class="k">Nº</span><span class="v">${inv.invoice_number}</span></div>
-  <div class="dp-row"><span class="k">Fecha</span><span class="v">${inv.issue_date}</span></div>
+  <div class="dp-row"><span class="k">Fecha</span><span class="v">${fechaEs(inv.issue_date)}</span></div>
   <div class="dp-row"><span class="k">Cliente</span><span class="v">${escHtml(inv.client_name || 'Cliente general')}</span></div>
-  <div class="dp-row"><span class="k">Total</span><span class="v">${sym}${inv.total.toFixed(2)}</span></div>
+  <div class="dp-row"><span class="k">Total</span><span class="v">${dineroEs(inv.total, sym)}</span></div>
   ${proyRowHtml}
   <div class="dp-actions" style="margin-top:14px">
     <button onclick="window.print()" class="btn btn-primary">Imprimir</button>

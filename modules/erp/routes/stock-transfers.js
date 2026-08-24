@@ -11,6 +11,8 @@ import { activeWarehouses } from './warehouses.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { ENTITY } from '../../../core/activity-entities.js';
 import { jsonForScript } from '../../../core/escape.js';
+import { fechaEs } from '../voz.js';   // la fecha, en cristiano (24/08/2026)
+import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
 
 // ════════════════════════════════════════════════════════════════════════════
 // TRASLADO ENTRE ALMACENES — Multi-almacén · Capa 3. Mueve mercancía de un almacén
@@ -253,7 +255,7 @@ export function createStockTransferRoutes(db) {
       '<tr>'
       + '<td><strong style="font-family:monospace">' + esc(r.transfer_number || ('#' + r.id)) + '</strong></td>'
       + '<td><strong>' + esc(r.from_warehouse_name) + '</strong> <span style="color:var(--text3)">→</span> <strong>' + esc(r.to_warehouse_name) + '</strong></td>'
-      + '<td>' + esc(r.date) + '</td>'
+      + '<td>' + fechaEs(r.date) + '</td>'
       + '<td>' + badge(r.status) + '</td>'
       + '<td style="text-align:right">' + Number(r.uds) + '</td>'
       + '<td style="text-align:right"><a href="/admin/stock-transfers/' + r.id + '" class="btn btn-secondary btn-sm">Ver</a></td>'
@@ -473,8 +475,8 @@ export function createStockTransferRoutes(db) {
     const totalVal = t.items.reduce((s, i) => s + Math.round(i.quantity * i.unit_cost * 100) / 100, 0);
     const rows = t.items.map(i =>
       `<tr><td>${i.sku ? `<span style="color:var(--text3);font-size:.8rem">[${esc(i.sku)}]</span> ` : ''}${esc(i.product_name)}</td>` +
-      `<td style="text-align:right">${i.quantity}</td><td style="text-align:right">${Number(i.unit_cost).toFixed(2)} ${sym}</td>` +
-      `<td style="text-align:right"><strong>${(Math.round(i.quantity * i.unit_cost * 100) / 100).toFixed(2)} ${sym}</strong></td></tr>`
+      `<td style="text-align:right">${i.quantity}</td><td style="text-align:right">${dineroEs(Number(i.unit_cost))}{sym}</td>` +
+      `<td style="text-align:right"><strong>${dineroEs((Math.round(i.quantity * i.unit_cost * 100) / 100))}{sym}</strong></td></tr>`
     ).join('');
 
     const badge = t.status === 'confirmada' ? '<span class="badge b-green">Confirmado</span>' : '<span class="badge b-red">Anulado</span>';
@@ -496,7 +498,7 @@ export function createStockTransferRoutes(db) {
           <div><span style="color:var(--text3);font-size:.8rem;text-transform:uppercase">Destino</span><br><strong>${esc(t.to_warehouse_name)}</strong></div>
         </div>
         <div class="card card-body">
-          <div style="margin-bottom:.5rem"><span style="color:var(--text3);font-size:.8rem;text-transform:uppercase">Fecha</span><br>${esc(t.date)}</div>
+          <div style="margin-bottom:.5rem"><span style="color:var(--text3);font-size:.8rem;text-transform:uppercase">Fecha</span><br>${fechaEs(t.date)}</div>
           <div style="margin-bottom:.5rem"><span style="color:var(--text3);font-size:.8rem;text-transform:uppercase">Estado</span><br>${badge}</div>
           ${notesBlock}
         </div>
@@ -506,7 +508,7 @@ export function createStockTransferRoutes(db) {
         <div class="table-wrap"><table>
           <thead><tr><th>Producto</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Coste unit. (WAC)</th><th style="text-align:right">Valor movido</th></tr></thead>
           <tbody>${rows}</tbody>
-          <tfoot><tr><td style="text-align:right;font-weight:700;padding:.7rem 1rem">${totalUds} uds</td><td></td><td style="text-align:right;font-weight:700">Valor</td><td style="text-align:right;font-weight:700">${totalVal.toFixed(2)} ${sym}</td></tr></tfoot>
+          <tfoot><tr><td style="text-align:right;font-weight:700;padding:.7rem 1rem">${totalUds} uds</td><td></td><td style="text-align:right;font-weight:700">Valor</td><td style="text-align:right;font-weight:700">${dineroEs(totalVal)}{sym}</td></tr></tfoot>
         </table></div>
         <div class="card-body" style="color:var(--text3);font-size:.78rem">El coste es el medio ponderado (WAC) global del producto congelado al confirmar. Un traslado no cambia el stock total ni el WAC global: solo redistribuye cantidad y valor entre almacenes.</div>
       </div>

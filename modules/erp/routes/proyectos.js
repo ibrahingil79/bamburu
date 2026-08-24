@@ -14,6 +14,8 @@ import { escHtml } from '../../../core/escape.js';
 import { proyectoSchema } from '../schemas.js';
 import { nextCode } from '../codes.js';
 import { ENTITY } from '../../../core/activity-entities.js';
+import { fechaEs } from '../voz.js';   // la fecha, en cristiano
+import { fmtEur } from '../margen.js';   // el dinero, escrito como en España
 
 const MODO_LABEL = { horas: 'Por horas', precio_cerrado: 'Precio cerrado' };
 const ESTADO_LABEL = { abierto: 'Abierto', cerrado: 'Cerrado' };
@@ -171,7 +173,8 @@ export function createProyectoRoutes(db) {
       u.set('page', String(p));
       return u.toString();
     };
-    const dinero = n => (n == null ? '—' : sym + Number(n).toFixed(2));
+    // El dinero, escrito como en España. Una sola forma en todo el producto.
+    const dinero = n => (n == null ? '—' : fmtEur(Number(n), sym));
     const cobroCol = p => p.modo_cobro === 'horas'
       ? 'Por horas · ' + (p.tarifa_hora == null ? '<span style="color:var(--muted)">sin tarifa</span>' : dinero(p.tarifa_hora) + '/h')
       : 'Precio cerrado · ' + dinero(p.precio_cerrado);
@@ -335,7 +338,8 @@ export function createProyectoRoutes(db) {
       async function viewDetail(id){
         const p = await api('GET','/api/erp/proyectos/'+id);
         document.getElementById('proyDetailName').textContent=p.nombre;
-        const dinero = n => (n==null?'—':PROY_SYM+Number(n).toFixed(2));
+        // El dinero, escrito como en España. window.eur vive en el componente compartido (layout.js).
+        const dinero = n => (n==null?'—':window.eur(n, PROY_SYM));
         const cobro = p.modo_cobro==='horas' ? ('Por horas'+(p.tarifa_hora!=null?' · '+dinero(p.tarifa_hora)+'/h':' · sin tarifa')) : ('Precio cerrado · '+dinero(p.precio_cerrado));
         document.getElementById('proyDetailBody').innerHTML =
           '<div class="grid g2" style="margin-bottom:1rem">'
@@ -361,7 +365,8 @@ export function createProyectoRoutes(db) {
       async function loadRentProy(id){
         const box=document.getElementById('proyRent'); if(!box) return;
         let d; try{ d=await api('GET','/api/erp/rentabilidad/proyecto/'+id); }catch(e){ box.innerHTML=''; return; }
-        const dinero=n=>PROY_SYM+Number(n||0).toFixed(2);
+        // El dinero, escrito como en España. window.eur vive en el componente compartido (layout.js).
+        const dinero=n=>window.eur(n||0, PROY_SYM);
         const col=n=>(n<0?'var(--danger,#b23)':(n>0?'var(--ok,#1a7f37)':'var(--muted)'));
         const pct=n=>(n==null?'—':Number(n).toFixed(1)+'%');
         const ch=d.costeHoras||{};
@@ -386,14 +391,15 @@ export function createProyectoRoutes(db) {
       async function loadTiempoProy(id){
         const box=document.getElementById('proyTiempo'); if(!box) return;
         let d; try{ d=await api('GET','/api/erp/tiempo/proyecto/'+id); }catch(e){ box.innerHTML=''; return; }
-        const dinero=n=>(n==null?'—':PROY_SYM+Number(n).toFixed(2));
+        // El dinero, escrito como en España. window.eur vive en el componente compartido (layout.js).
+        const dinero=n=>(n==null?'—':window.eur(n, PROY_SYM));
         const fmtDur=s=>{ s=Math.max(0,Math.round(s||0)); const m=Math.floor((s%3600)/60); return Math.floor(s/3600)+'h '+(m<10?'0':'')+m+'m'; };
         const rows=(d.entradas||[]).filter(e=>!e.corriendo);
         box.style.color='';
         box.innerHTML='<h4 style="margin:0 0 .5rem">Registro de tiempo</h4>'
           +'<div class="alert '+(d.total_seg>0?'alert-ok':'')+'" style="margin-bottom:.75rem">Total: <strong>'+fmtDur(d.total_seg)+'</strong> · Facturable: <strong>'+dinero(d.total_importe_facturable)+'</strong></div>'
           +(rows.length?'<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Persona</th><th>Descripción</th><th>Duración</th><th>Fact.</th><th>Importe</th></tr></thead><tbody>'
-            +rows.map(e=>'<tr><td style="color:var(--muted);font-size:.8rem">'+escHtml(e.fecha)+'</td><td>'+escHtml(e.user_nombre||'')+'</td><td>'+escHtml(e.descripcion||'—')+'</td><td style="white-space:nowrap">'+fmtDur(e.duracion_seg)+'</td><td>'+(e.facturada?'<span class="badge b-blue" title="Facturada en '+escHtml(e.invoice_number||'')+'">🔒</span>':(e.facturable?'Sí':'No'))+'</td><td style="white-space:nowrap">'+(e.sin_tarifa?'<span style="color:var(--muted)">—</span>':dinero(e.importe))+'</td></tr>').join('')
+            +rows.map(e=>'<tr><td style="color:var(--muted);font-size:.8rem">'+fechaEs(e.fecha)+'</td><td>'+escHtml(e.user_nombre||'')+'</td><td>'+escHtml(e.descripcion||'—')+'</td><td style="white-space:nowrap">'+fmtDur(e.duracion_seg)+'</td><td>'+(e.facturada?'<span class="badge b-blue" title="Facturada en '+escHtml(e.invoice_number||'')+'">🔒</span>':(e.facturable?'Sí':'No'))+'</td><td style="white-space:nowrap">'+(e.sin_tarifa?'<span style="color:var(--muted)">—</span>':dinero(e.importe))+'</td></tr>').join('')
             +'</tbody></table></div>'
             :'<div style="color:var(--muted);font-size:.85rem">Aún no hay tiempo registrado en este proyecto.</div>');
       }

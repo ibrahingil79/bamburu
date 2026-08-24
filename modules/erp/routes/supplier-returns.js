@@ -10,6 +10,8 @@ import { bloquearSiTrazable } from '../trazabilidad.js';   // Pilar 3: la devolu
 import { createReturnCredit, anularReturnCredit } from './supplier-invoices.js';
 import { ENTITY } from '../../../core/activity-entities.js';
 import { jsonForScript } from '../../../core/escape.js';
+import { fechaEs } from '../voz.js';   // la fecha, en cristiano (24/08/2026)
+import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
 
 // ════════════════════════════════════════════════════════════════════════════
 // DEVOLUCIÓN A PROVEEDOR — solo la CAPA FÍSICA (sale el stock + documento). La
@@ -309,9 +311,9 @@ export function createSupplierReturnRoutes(db) {
       '<tr>'
       + '<td><strong style="font-family:monospace">' + esc(r.return_number || ('#' + r.id)) + '</strong></td>'
       + '<td><strong>' + esc(r.supplier_name || r.supplier_current_name) + '</strong></td>'
-      + '<td>' + esc(r.date) + '</td>'
+      + '<td>' + fechaEs(r.date) + '</td>'
       + '<td>' + badge(r.status) + '</td>'
-      + '<td><strong>' + Number(r.valor).toFixed(2) + ' ' + sym + '</strong></td>'
+      + '<td><strong>' + dineroEs(r.valor, sym) + '</strong></td>'
       + '<td style="text-align:right"><a href="/admin/supplier-returns/' + r.id + '" class="btn btn-secondary btn-sm">Ver</a></td>'
       + '</tr>'
     ).join('');
@@ -429,10 +431,10 @@ export function createSupplierReturnRoutes(db) {
           if (qty < 0) qty = 0;
           if (qty > dev){ qty = dev; r.querySelector('.r-qty').value = dev; }
           const sub = qty * parseFloat(r.dataset.cost);
-          r.querySelector('.r-sub').textContent = sub.toFixed(2) + ' ' + SYM;
+          r.querySelector('.r-sub').textContent = dineroEs(sub, SYM);
           total += sub;
         });
-        document.getElementById('rTotal').textContent = total.toFixed(2) + ' ' + SYM;
+        document.getElementById('rTotal').textContent = dineroEs(total, SYM);
       }
 
       function collect(){
@@ -483,8 +485,8 @@ export function createSupplierReturnRoutes(db) {
     const total = r.items.reduce((s, i) => s + Math.round(i.quantity * i.unit_cost * 100) / 100, 0);
     const rows = r.items.map(i =>
       `<tr><td>${i.sku ? `<span style="color:var(--text3);font-size:.8rem">[${esc(i.sku)}]</span> ` : ''}${esc(i.product_name)}</td>` +
-      `<td style="text-align:right">${i.quantity}</td><td style="text-align:right">${Number(i.unit_cost).toFixed(2)} ${sym}</td>` +
-      `<td style="text-align:right"><strong>${(Math.round(i.quantity * i.unit_cost * 100) / 100).toFixed(2)} ${sym}</strong></td></tr>`
+      `<td style="text-align:right">${i.quantity}</td><td style="text-align:right">${dineroEs(Number(i.unit_cost))}{sym}</td>` +
+      `<td style="text-align:right"><strong>${dineroEs((Math.round(i.quantity * i.unit_cost * 100) / 100))}{sym}</strong></td></tr>`
     ).join('');
 
     const badge = r.status === 'confirmada' ? '<span class="badge b-green">Confirmada</span>' : '<span class="badge b-red">Anulada</span>';
@@ -497,7 +499,7 @@ export function createSupplierReturnRoutes(db) {
 
     const paper = `
       <h1>Devolución ${esc(r.return_number || ('#' + r.id))}</h1>
-      <div class="doc-sub">${esc(r.date)}</div>
+      <div class="doc-sub">${fechaEs(r.date)}</div>
       ${motivoBlock}
       <div class="doc-cols">
         <div>
@@ -516,7 +518,7 @@ export function createSupplierReturnRoutes(db) {
         <tbody>${rows}</tbody>
       </table>
       <table class="doc-totals">
-        <tr class="grand"><td>Valor devuelto</td><td>${total.toFixed(2)} ${sym}</td></tr>
+        <tr class="grand"><td>Valor devuelto</td><td>${dineroEs(total)}{sym}</td></tr>
       </table>
       <div style="margin-top:8px;color:var(--text3);font-size:.78rem">Líneas devueltas inmutables — corregir = anular y crear otra. El valor es informativo (lo que el proveedor debería abonar). El cobro/abono al proveedor no se gestiona aquí.</div>`;
 
@@ -524,9 +526,9 @@ export function createSupplierReturnRoutes(db) {
       <div class="card"><div class="card-body">
         <div style="margin-bottom:12px">${badge}</div>
         <div class="dp-row"><span class="k">Devolución</span><span class="v">${esc(r.return_number || ('#' + r.id))}</span></div>
-        <div class="dp-row"><span class="k">Fecha</span><span class="v">${esc(r.date)}</span></div>
+        <div class="dp-row"><span class="k">Fecha</span><span class="v">${fechaEs(r.date)}</span></div>
         <div class="dp-row"><span class="k">Proveedor</span><span class="v">${esc(r.supplier_name || r.supplier_current_name)}</span></div>
-        <div class="dp-row"><span class="k">Valor</span><span class="v">${total.toFixed(2)} ${sym}</span></div>
+        <div class="dp-row"><span class="k">Valor</span><span class="v">${dineroEs(total)}{sym}</span></div>
         <div class="dp-actions" style="margin-top:14px">
           ${r.status === 'confirmada' && canEdit ? '<button class="btn btn-danger" onclick="anularDevolucion()">Anular</button>' : ''}
           <a href="/admin/supplier-returns" class="btn btn-secondary">Volver</a>

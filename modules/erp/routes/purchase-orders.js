@@ -15,6 +15,8 @@ import { activeWarehouses } from './warehouses.js';
 import { sendEmail } from '../../../core/mailer.js';
 import { ENTITY } from '../../../core/activity-entities.js';
 import { jsonForScript } from '../../../core/escape.js';
+import { fechaEs } from '../voz.js';   // la fecha, en cristiano (24/08/2026)
+import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
 import { exigirCorreoActivo } from '../avisos-preferencias.js';   // interruptor de Ajustes → Avisos y correos
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -242,8 +244,8 @@ export async function emailPurchaseOrderSvc(db, id, opts = {}) {
   const html = tpl.html;
   const text = 'Orden de compra ' + o.order_number + ' de ' + empresa + '\n'
     + 'Fecha: ' + o.date + (o.expected_date ? ' · Entrega prevista: ' + o.expected_date : '') + '\n\n'
-    + items.map(i => '- ' + i.product_name + (i.sku ? ' [' + i.sku + ']' : '') + ' × ' + i.quantity + ' a ' + Number(i.unit_cost).toFixed(2) + ' ' + sym + ' (neto)').join('\n')
-    + '\n\nTotal (IVA incluido): ' + t.total.toFixed(2) + ' ' + sym
+    + items.map(i => '- ' + i.product_name + (i.sku ? ' [' + i.sku + ']' : '') + ' × ' + i.quantity + ' a ' + dineroEs(i.unit_cost, sym) + ' (neto)').join('\n')
+    + '\n\nTotal (IVA incluido): ' + dineroEs(t.total, sym)
     + (o.notes ? '\n\nNotas: ' + o.notes : '');
 
   const payload = {
@@ -276,13 +278,13 @@ function documentBodyHtml(o, items, emisor, proveedor, sym) {
     <tr>
       <td style="padding:8px 12px;border-bottom:1px solid var(--bg3)">${esc(i.product_name)}${i.sku ? ` <span style="color:var(--text2);font-size:11px">[${esc(i.sku)}]</span>` : ''}</td>
       <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${i.quantity}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${sym}${Number(i.unit_cost).toFixed(2)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${dineroEs(i.unit_cost, sym)}</td>
       <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${Number(i.tax_rate) > 0 ? Number(i.tax_rate) + '%' : 'Exento'}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${sym}${(Math.round(i.quantity * i.unit_cost * 100) / 100).toFixed(2)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${dineroEs((Math.round(i.quantity * i.unit_cost * 100) / 100), sym)}</td>
     </tr>`).join('');
 
   const taxRows = Object.values(t.taxByRate).sort((a, b) => b.rate - a.rate).map(x =>
-    `<tr><td style="padding:4px 12px;color:var(--text2)">${Number(x.rate) > 0 ? 'IVA ' + x.rate + '%' : 'Exento de IVA'} (sobre ${sym}${x.base.toFixed(2)})</td><td style="padding:4px 12px;text-align:right;font-weight:600">${sym}${x.amount.toFixed(2)}</td></tr>`
+    `<tr><td style="padding:4px 12px;color:var(--text2)">${Number(x.rate) > 0 ? 'IVA ' + x.rate + '%' : 'Exento de IVA'} (sobre ${dineroEs(x.base, sym)})</td><td style="padding:4px 12px;text-align:right;font-weight:600">${dineroEs(x.amount, sym)}</td></tr>`
   ).join('');
 
   return `
@@ -292,8 +294,8 @@ function documentBodyHtml(o, items, emisor, proveedor, sym) {
     <div style="color:var(--text2);font-size:12px">${o.order_number ? esc(o.order_number) : 'Borrador (sin número)'}</div>
   </div>
   <div style="text-align:right;color:var(--text2);font-size:12px">
-    <div>Fecha: <strong style="color:var(--accent-d)">${esc(o.date)}</strong></div>
-    ${o.expected_date ? `<div>Entrega prevista: <strong style="color:var(--accent-d)">${esc(o.expected_date)}</strong></div>` : ''}
+    <div>Fecha: <strong style="color:var(--accent-d)">${fechaEs(o.date)}</strong></div>
+    ${o.expected_date ? `<div>Entrega prevista: <strong style="color:var(--accent-d)">${fechaEs(o.expected_date)}</strong></div>` : ''}
   </div>
 </div>
 ${membreteHtml({ emisor, otra: proveedor, rotuloOtra: 'Proveedor',
@@ -310,9 +312,9 @@ ${membreteHtml({ emisor, otra: proveedor, rotuloOtra: 'Proveedor',
   <tbody>${rows}</tbody>
 </table>
 <table style="margin-left:auto;width:300px;border-collapse:collapse">
-  <tr><td style="padding:4px 12px;color:var(--text2)">Base imponible</td><td style="padding:4px 12px;text-align:right;font-weight:600">${sym}${t.subtotal.toFixed(2)}</td></tr>
+  <tr><td style="padding:4px 12px;color:var(--text2)">Base imponible</td><td style="padding:4px 12px;text-align:right;font-weight:600">${dineroEs(t.subtotal, sym)}</td></tr>
   ${taxRows}
-  <tr><td style="padding:10px 12px;font-size:15px;border-top:2px solid var(--accent-d);font-weight:700">TOTAL</td><td style="padding:10px 12px;text-align:right;font-size:15px;border-top:2px solid var(--accent-d);font-weight:700">${sym}${t.total.toFixed(2)}</td></tr>
+  <tr><td style="padding:10px 12px;font-size:15px;border-top:2px solid var(--accent-d);font-weight:700">TOTAL</td><td style="padding:10px 12px;text-align:right;font-size:15px;border-top:2px solid var(--accent-d);font-weight:700">${dineroEs(t.total, sym)}</td></tr>
 </table>
 ${o.notes ? `<div style="margin-top:16px;color:var(--text2)">${esc(o.notes)}</div>` : ''}`;
 }
@@ -483,9 +485,9 @@ export function createPurchaseOrderRoutes(db) {
       return '<tr>'
         + '<td>' + (o.order_number ? '<strong style="font-family:monospace">' + esc(o.order_number) + '</strong>' : '<span style="color:var(--text3)">Borrador</span>') + '</td>'
         + '<td><strong>' + esc(o.supplier_name) + '</strong></td>'
-        + '<td>' + esc(o.date) + '</td>'
+        + '<td>' + fechaEs(o.date) + '</td>'
         + '<td><span class="badge ' + badge + '">' + esc(lbl) + '</span></td>'
-        + '<td><strong>' + totalOf(o.id).toFixed(2) + ' ' + sym + '</strong></td>'
+        + '<td><strong>' + dineroEs(totalOf(o.id), sym) + '</strong></td>'
         + '<td style="text-align:right"><a href="/admin/purchase-orders/' + o.id + '" class="btn btn-secondary btn-sm">Ver</a></td>'
         + '</tr>';
     }).join('');
@@ -668,7 +670,7 @@ export function createPurchaseOrderRoutes(db) {
           const cost = parseFloat(r.querySelector('.line-cost').value) || 0;
           const rate = parseFloat(r.querySelector('.line-tax').value)  || 0;
           const base = r2(qty * cost);
-          r.querySelector('.line-subtotal').textContent = SYM + base.toFixed(2);
+          r.querySelector('.line-subtotal').textContent = dineroEs(base, SYM);
           subtotal += base;
           const k = String(rate);
           if (!byRate[k]) byRate[k] = { rate: rate, base: 0, amount: 0 };
@@ -678,15 +680,15 @@ export function createPurchaseOrderRoutes(db) {
         subtotal = r2(subtotal);
         let taxTotal = 0;
         let html = '<tr><td colspan="4" style="text-align:right;font-weight:600;padding:.7rem 1rem">Base imponible</td>' +
-                   '<td style="text-align:right;padding:.7rem 1rem">' + SYM + subtotal.toFixed(2) + '</td><td></td></tr>';
+                   '<td style="text-align:right;padding:.7rem 1rem">' + dineroEs(subtotal, SYM) + '</td><td></td></tr>';
         Object.values(byRate).sort((a,b) => b.rate - a.rate).forEach(function(x){
           const amount = r2(x.amount); taxTotal += amount;
-          const lbl = (x.rate > 0 ? 'IVA ' + x.rate + '%' : 'Exento (0%)') + ' (sobre ' + SYM + r2(x.base).toFixed(2) + ')';
+          const lbl = (x.rate > 0 ? 'IVA ' + x.rate + '%' : 'Exento (0%)') + ' (sobre ' + dineroEs(r2(x.base), SYM) + ')';
           html += '<tr><td colspan="4" style="text-align:right;padding:.45rem 1rem;color:var(--text3)">' + lbl + '</td>' +
-                  '<td style="text-align:right;padding:.45rem 1rem;color:var(--text3)">' + SYM + amount.toFixed(2) + '</td><td></td></tr>';
+                  '<td style="text-align:right;padding:.45rem 1rem;color:var(--text3)">' + dineroEs(amount, SYM) + '</td><td></td></tr>';
         });
         html += '<tr><td colspan="4" style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">Total</td>' +
-                '<td style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">' + SYM + r2(subtotal + taxTotal).toFixed(2) + '</td><td></td></tr>';
+                '<td style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">' + dineroEs(r2(subtotal + taxTotal), SYM) + '</td><td></td></tr>';
         document.getElementById('totals-foot').innerHTML = html;
       }
 
@@ -823,7 +825,7 @@ export function createPurchaseOrderRoutes(db) {
           const qty = parseInt(r.querySelector('.r-qty').value) || 0;
           const cost = parseFloat(r.querySelector('.r-cost').value) || 0;
           const sub = Math.round(qty * cost * 100) / 100;
-          r.querySelector('.r-sub').textContent = sub.toFixed(2) + ' ' + SYM;
+          r.querySelector('.r-sub').textContent = dineroEs(sub, SYM);
           total += sub;
           const pend = parseInt(r.dataset.pend), pedido = parseInt(r.dataset.pedido), rec = parseInt(r.dataset.rec);
           const warn = r.querySelector('.r-warn');
@@ -837,7 +839,7 @@ export function createPurchaseOrderRoutes(db) {
             r.style.background = '';
           }
         });
-        document.getElementById('rTotal').textContent = total.toFixed(2) + ' ' + SYM;
+        document.getElementById('rTotal').textContent = dineroEs(total, SYM);
       }
       function collectR(){
         const items = [], excess = [];
@@ -1031,7 +1033,7 @@ export function createPurchaseOrderRoutes(db) {
     <tbody>${receipts.map(r => `
       <tr>
         <td style="font-family:ui-monospace,monospace;font-weight:600">${esc(r.receipt_number || ('#' + r.id))}</td>
-        <td>${esc(r.date)}</td>
+        <td>${fechaEs(r.date)}</td>
         <td>${receiptStatusBadge(r.status)}</td>
         <td style="text-align:right">${r.line_count}</td>
         <td style="text-align:right">${r.units}</td>
@@ -1049,8 +1051,8 @@ ${receptionBlock}`;
 <div class="card"><div class="card-body">
   <div style="margin-bottom:12px">${statusBadge}</div>
   <div class="dp-row"><span class="k">Nº</span><span class="v">${o.order_number ? esc(o.order_number) : 'Borrador'}</span></div>
-  <div class="dp-row"><span class="k">Fecha</span><span class="v">${esc(o.date)}</span></div>
-  ${o.expected_date ? `<div class="dp-row"><span class="k">Entrega prevista</span><span class="v">${esc(o.expected_date)}</span></div>` : ''}
+  <div class="dp-row"><span class="k">Fecha</span><span class="v">${fechaEs(o.date)}</span></div>
+  ${o.expected_date ? `<div class="dp-row"><span class="k">Entrega prevista</span><span class="v">${fechaEs(o.expected_date)}</span></div>` : ''}
   <div class="dp-row"><span class="k">Proveedor</span><span class="v">${esc(proveedor.name || '')}</span></div>
   <div class="dp-actions" style="margin-top:14px">
     <button onclick="window.print()" class="btn btn-primary">Imprimir</button>

@@ -7,6 +7,7 @@ import { printableShell, ROOT_TOKENS } from '../erp/layout.js';
 import { buildInvoicePaper } from '../erp/routes/invoices.js';
 import { validateToken, clientInvoices, transferData, invoiceBelongsToClient,
          analiticaCliente, mensajesDe, escribirMensaje, marcarVisto } from './portal.js';
+import { fechaEs } from '../erp/voz.js';   // la fecha, en cristiano (24/08/2026)
 
 function shell(title, body) {
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -49,7 +50,7 @@ export function register(app, db) {
     const t = transferData(db);
     const token = c.req.param('token');
     const filas = rows.map(r => `<tr>
-      <td>${escHtml(r.invoice_number)}</td><td>${escHtml(r.issue_date)}</td>
+      <td>${escHtml(r.invoice_number)}</td><td>${fechaEs(r.issue_date)}</td>
       <td class="r">${escHtml(r.currency_symbol)}${Number(r.total).toFixed(2)}</td>
       <td>${r.pagada ? '<span class="pill pagada">Pagada</span>' : `<span class="pill pend">Pendiente${r.pendiente < r.total ? ' · ' + r.currency_symbol + r.pendiente.toFixed(2) : ''}</span>`}</td>
       <td class="r"><a class="btn" href="/portal/${escHtml(token)}/factura/${r.id}/pdf">PDF</a></td></tr>`).join('')

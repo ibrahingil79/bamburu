@@ -34,6 +34,7 @@ import { callClaude, hasAnthropicKey, textFromResponse } from '../../core/llm.js
 import { rateLimit } from '../../core/rate-limit.js';   // freno por IP del endpoint caro de DISA
 import { ENTITY, entityForTable } from '../../core/activity-entities.js';
 import { escHtml } from '../../core/escape.js';
+import { fmtEur as dineroEs } from '../erp/margen.js';   // el dinero, como en España
 
 // ── query_database · control de acceso de lectura (ALLOWLIST, cierre D1) ──────────────────────────
 // A nivel de módulo y EXPORTADO para que el gate lo pruebe con los mapas REALES (no una copia).
@@ -1174,9 +1175,9 @@ export function register(app, db) {
         '',
         ...(canRead('invoices.read') ? [
           'VENTAS ESTE MES (' + (sales.orders || 0) + ' facturas que cuentan: mostrador, facturas y ventas manuales):',
-          '- Venta neta (sin IVA): ' + sym + Number(sales.revenue || 0).toFixed(2),
-          '- IVA recaudado: ' + sym + Number(sales.iva || 0).toFixed(2),
-          '- Total cobrado (con IVA): ' + sym + Number(sales.gross_revenue || 0).toFixed(2),
+          '- Venta neta (sin IVA): ' + dineroEs(sales.revenue || 0, sym),
+          '- IVA recaudado: ' + dineroEs(sales.iva || 0, sym),
+          '- Total cobrado (con IVA): ' + dineroEs(sales.gross_revenue || 0, sym),
           '',
         ] : []),
         // PIEZA 2a — PEDIDOS de venta (documento "Pedido", customer_orders). Numero y clientes
@@ -1184,9 +1185,9 @@ export function register(app, db) {
         ...(canRead('pedidos.read') ? [
         'PEDIDOS DE VENTA (documento "Pedido" del Pilar 4 · tabla customer_orders; NO es el TPV/sales_orders viejo):',
         '- Pendientes de entrega = CONFIRMADOS (definicion UNICA; anulados y borradores NO cuentan): ' + (pending.count || 0),
-        ...(pedidosConfirmados.length ? ['  ' + pedidosConfirmados.map(p => (p.order_number || '?') + ' · ' + p.cliente + ' · ' + sym + Number(p.total || 0).toFixed(2)).join(' | ')] : []),
+        ...(pedidosConfirmados.length ? ['  ' + pedidosConfirmados.map(p => (p.order_number || '?') + ' · ' + p.cliente + ' · ' + dineroEs(p.total || 0, sym)).join(' | ')] : []),
         '- Borradores (sin confirmar; NO reservan, sin numero): ' + pedidosBorradores.length,
-        ...(pedidosBorradores.length ? ['  ' + pedidosBorradores.map(p => '#' + p.id + ' · ' + p.cliente + ' · ' + sym + Number(p.total || 0).toFixed(2)).join(' | ')] : []),
+        ...(pedidosBorradores.length ? ['  ' + pedidosBorradores.map(p => '#' + p.id + ' · ' + p.cliente + ' · ' + dineroEs(p.total || 0, sym)).join(' | ')] : []),
         'Usa SIEMPRE estos numeros y estos clientes (no recalcules "pendientes" con otra definicion ni inventes/cambies el cliente de un borrador).',
         'GESTION DE PEDIDOS POR CHAT: NO disponible en esta version. NO crees, confirmes, anules ni elimines pedidos por chat (ni con insert/update/delete_record sobre customer_orders/customer_order_items). Ante esa peticion, DECLINA con un mensaje claro y redirige a la pantalla de Pedidos (/admin/pedidos), SIN pedir confirmacion. LEER pedidos SI esta permitido.',
         ] : []),
@@ -1219,13 +1220,13 @@ export function register(app, db) {
                 : p.etapa === 'manual' ? 'gestion manual'
                 : p.etapa === 'por_vencer' ? 'aun no vence' : 'sin accion';
               return (i + 1) + '. ' + (r.client_name || '-') + ' · factura ' + r.invoice_number
-                + ' · ' + sym + Number(r.pendiente || 0).toFixed(2)
+                + ' · ' + dineroEs(r.pendiente || 0, sym)
                 + (r.dias_vencida > 0 ? ' · vencida ' + r.dias_vencida + 'd' : '')
                 + ' · perfil ' + (r.collections_profile || 'estandar')
                 + ' · PROXIMA: ' + accion + ' (invoice_id=' + r.invoice_id + ')';
             });
             return [
-              'COBROS POR FACTURA — TE DEBEN ' + sym + Number(wl.total || 0).toFixed(2) + ' (' + wl.rows.length + ' factura(s)):',
+              'COBROS POR FACTURA — TE DEBEN ' + dineroEs(wl.total || 0, sym) + ' (' + wl.rows.length + ' factura(s)):',
               wl.rows.length ? top.join('\n') : 'sin deudas vivas',
               '',
             ];
@@ -1244,7 +1245,7 @@ export function register(app, db) {
                 : p.etapa === 'promesa' ? 'promesa en curso'
                 : p.etapa === 'manual' ? 'gestion manual' : 'sin accion ahora';
               return (i + 1) + '. ' + (r.client_name || '-') + ' (client_id=' + r.client_id + ') · '
-                + sym + Number(r.deudaTotal).toFixed(2) + ' en ' + r.facturas + ' factura(s)'
+                + dineroEs(r.deudaTotal, sym) + ' en ' + r.facturas + ' factura(s)'
                 + ' · perfil ' + (r.perfilCuenta || 'estandar') + ' · CUENTA: ' + accion;
             });
             return ['COBROS POR CUENTA (cliente entero):', lines.join('\n'), ''];
@@ -1262,15 +1263,15 @@ export function register(app, db) {
             if (!pa.rows.length) return [];
             const lines = pa.rows.slice(0, 8).map((r, i) => {
               const facts = r.vivas.slice(0, 5).map(f => (f.internal_code || ('#' + f.supplier_invoice_id))
-                + ' ' + sym + Number(f.pendiente).toFixed(2)
+                + ' ' + dineroEs(f.pendiente, sym)
                 + ' vence ' + (f.due_date || '-')
                 + (f.dias_vencida > 0 ? ' (vencida ' + f.dias_vencida + 'd)' : '')).join('; ');
               return (i + 1) + '. ' + (r.supplier_name || '-') + ' (supplier_id=' + r.supplier_id + ') · '
-                + 'DEBES ' + sym + Number(r.deudaTotal).toFixed(2) + ' en ' + r.facturas + ' factura(s)'
+                + 'DEBES ' + dineroEs(r.deudaTotal, sym) + ' en ' + r.facturas + ' factura(s)'
                 + (r.maxVencida > 0 ? ' · más vencida ' + r.maxVencida + 'd' : '') + ' · ' + facts;
             });
             return [
-              'COMPRAS POR PAGAR (lo que DEBES a proveedores) — DEBES ' + sym + Number(pa.total || 0).toFixed(2) + ' en total:',
+              'COMPRAS POR PAGAR (lo que DEBES a proveedores) — DEBES ' + dineroEs(pa.total || 0, sym) + ' en total:',
               lines.join('\n'),
               'Para un pago por voz, resuelve el proveedor a supplier_id aqui. Vence en <=7 dias o vencida = avisalo.',
               '',
@@ -1311,7 +1312,7 @@ export function register(app, db) {
               const available = (p.stock || 0) - reserved;
               return '#' + p.id + ' ' + p.name + (p.sku ? ' [' + p.sku + ']' : '')
                 + ' · stock ' + p.stock + (reserved > 0 ? ' · reservado ' + reserved : '') + ' · disponible ' + available
-                + ' · coste medio ' + sym + Number(p.average_cost || 0).toFixed(2);
+                + ' · coste medio ' + dineroEs(p.average_cost || 0, sym);
             }).join('\n');
             return [
               'PRODUCTOS FISICOS ACTIVOS (' + total + (total > prods.length ? '; muestro los ' + prods.length + ' primeros por nombre' : '') + ') — id, nombre, [SKU], stock GLOBAL, reservado, disponible (= stock − reservado), coste medio (WAC):',
@@ -1358,10 +1359,10 @@ export function register(app, db) {
             const v = inventoryValuation(db);
             const out = [
               'INVENTARIO — valoracion a coste (WAC global) [dato curado, usalo tal cual]:',
-              'Valor total: ' + sym + v.total_value.toFixed(2) + ' (' + v.total_units + ' uds)',
+              'Valor total: ' + dineroEs(v.total_value, sym) + ' (' + v.total_units + ' uds)',
             ];
             if (v.warehouses.length > 1) {
-              out.push('Por almacen: ' + v.warehouses.map(w => w.name + ' ' + sym + w.value.toFixed(2) + ' (' + w.units + ' uds)').join(' · '));
+              out.push('Por almacen: ' + v.warehouses.map(w => w.name + ' ' + dineroEs(w.value, sym) + ' (' + w.units + ' uds)').join(' · '));
             }
             out.push('El stock minimo / punto de pedido NO se gestiona aun: si preguntan que hay "bajo minimos", dilo claramente; no uses un umbral inventado.');
             out.push('');
@@ -1426,7 +1427,7 @@ export function register(app, db) {
         const last3months = ventasPorMes(db, 3);
         lines.push('', 'PAGINA ACTUAL: Analitica');
         lines.push('Ventas ultimos 3 meses: ' + (last3months.map(
-          m => m.month + ': ' + sym + Number(m.revenue).toFixed(2) + ' (' + m.orders + ' fact.)'
+          m => m.month + ': ' + dineroEs(m.revenue, sym) + ' (' + m.orders + ' fact.)'
         ).join(' | ') || 'sin datos'));
       } else if (currentPage === 'dashboard' || currentPage === 'admin') {
         lines.push('', 'PAGINA ACTUAL: Dashboard principal');

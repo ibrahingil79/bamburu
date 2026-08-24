@@ -4,6 +4,7 @@ import { requirePerm } from '../../../core/auth.js';
 import { adminLayout, skeletonRows } from '../layout.js';
 import { collectionsWorklist } from '../cobros.js';
 import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
+import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
 
 // T4 Paso 1 — Sección "Cobros": torre de control de lo que te deben. Lee SIEMPRE del
 // motor (openDebts → clientDebt), no duplica cálculo. Cada fila permite registrar un
@@ -30,7 +31,7 @@ export function createCobrosRoutes(db) {
       <div class="card" style="margin-bottom:1rem">
         <div class="card-body" style="display:flex;align-items:baseline;gap:.75rem">
           <span style="color:var(--muted)">Te deben</span>
-          <span id="cobrosTotal" style="font-size:1.8rem;font-weight:700">${sym}0.00</span>
+          <span id="cobrosTotal" style="font-size:1.8rem;font-weight:700">${dineroEs(0, sym)}</span>
           <span id="cobrosCount" style="color:var(--muted);font-size:.85rem"></span>
         </div>
       </div>
@@ -59,7 +60,7 @@ export function createCobrosRoutes(db) {
         let data;
         try { data = await api('GET','/api/erp/cobros'); } catch(e){ toast(e.message||'Error','err'); return; }
         cobrosRows = data.rows || [];
-        document.getElementById('cobrosTotal').textContent = SYM + Number(data.total||0).toFixed(2);
+        document.getElementById('cobrosTotal').textContent = dineroEs(data.total||0, SYM);
         document.getElementById('cobrosCount').textContent = '· ' + cobrosRows.length + ' factura' + (cobrosRows.length===1?'':'s') + ' pendiente' + (cobrosRows.length===1?'':'s');
         document.getElementById('cobrosBody').innerHTML = cobrosRows.length ? cobrosRows.map(function(r){
           const p = r.proximaAccion||null;
@@ -67,7 +68,7 @@ export function createCobrosRoutes(db) {
           return '<tr class="frow">'
             +'<td>'+escHtml(r.client_name||'')+'</td>'
             +'<td><a href="/admin/invoices/'+r.invoice_id+'" target="_blank"><strong>'+escHtml(r.invoice_number||'')+'</strong></a></td>'
-            +'<td><strong>'+SYM+Number(r.pendiente||0).toFixed(2)+'</strong></td>'
+            +'<td><strong>'+dineroEs(r.pendiente||0, SYM)+'</strong></td>'
             +'<td>'+(window.proximaBadgeHtml?window.proximaBadgeHtml(p):'')+'</td>'
             +'<td>'+escHtml(accionTxt(p))+fecha+'<div style="color:var(--muted);font-size:.8rem">'+escHtml(r.motivo||'')+'</div></td>'
             // U4: la acción frecuente (registrar el cobro que ha entrado) es directa —abre el

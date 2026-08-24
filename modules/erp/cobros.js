@@ -4,6 +4,7 @@
 //
 // Fuera de alcance (Paso 2): perfiles de cobro, próxima acción, DISA. Aquí solo el motor.
 import { renderEmail, renderEmailFabrica } from './email-templates.js';
+import { fmtEur as dineroEs } from './margen.js';   // el dinero, como en España
 import { contactoDeCorreo } from './contactos.js';   // D2: el correo enviado deja rastro
 
 const r2 = n => Math.round(n * 100) / 100;
@@ -578,14 +579,14 @@ export function accountEmail(tono, ctx) {
   // La lista de facturas es un BLOQUE que genera el sistema (el dueño no la teclea): se le ofrece como
   // hueco {{facturas}} para que la coloque donde quiera, pero el HTML de dentro lo pone Bamburu.
   const filasHtml = facturasVivas.map(f =>
-    '<tr><td style="padding:4px 8px">' + escapeHtml(f.invoice_number) + '</td><td style="padding:4px 8px;color:#6b7280">vence ' + escapeHtml(f.due_date || '-') + '</td><td style="padding:4px 8px;text-align:right">' + sym + Number(f.pendiente).toFixed(2) + '</td></tr>').join('');
+    '<tr><td style="padding:4px 8px">' + escapeHtml(f.invoice_number) + '</td><td style="padding:4px 8px;color:#6b7280">vence ' + escapeHtml(f.due_date || '-') + '</td><td style="padding:4px 8px;text-align:right">' + dineroEs(f.pendiente, sym) + '</td></tr>').join('');
   const tabla = '<table style="border-collapse:collapse;width:100%;margin:12px 0;background:#f9fafb;border-radius:8px">' + filasHtml
     + '<tr><td colspan="2" style="padding:8px;font-weight:700;border-top:1px solid #e5e7eb">TOTAL ADEUDADO</td><td style="padding:8px;text-align:right;font-weight:700;border-top:1px solid #e5e7eb">'
-    + sym + Number(total).toFixed(2) + '</td></tr></table>';
+    + dineroEs(total, sym) + '</td></tr></table>';
   const vars = {
     cliente: (client && client.name) || 'cliente',
     n_facturas: String(facturasVivas.length),
-    total: sym + Number(total).toFixed(2),
+    total: dineroEs(total, sym),
     facturas: { esHtml: true, valor: tabla },
     empresa: (company && company.company_name) || 'Nosotros',
   };

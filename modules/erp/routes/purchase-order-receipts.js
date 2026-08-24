@@ -10,6 +10,8 @@ import { esTrazable, entrarConTraza, revertirTrazaDeOrigen } from '../trazabilid
 import { hasActiveTransfersFromOrigin } from './stock-transfers.js';
 import { originDocBlock } from '../attachments.js';
 import { ENTITY } from '../../../core/activity-entities.js';
+import { fechaEs } from '../voz.js';   // la fecha, en cristiano (24/08/2026)
+import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
 
 // ════════════════════════════════════════════════════════════════════════════
 // C1.b — RECEPCIONES contra la orden de compra. Una orden ENVIADA se recibe en
@@ -231,8 +233,8 @@ export function createPurchaseOrderReceiptRoutes(db) {
     const total = r.items.reduce((s, i) => s + Math.round(i.quantity * i.unit_cost * 100) / 100, 0);
     const rows = r.items.map(i =>
       `<tr><td>${i.sku ? `<span style="color:var(--text3);font-size:.8rem">[${esc(i.sku)}]</span> ` : ''}${esc(i.product_name)}</td>` +
-      `<td>${i.quantity}</td><td>${Number(i.unit_cost).toFixed(2)} ${sym}</td>` +
-      `<td><strong>${(Math.round(i.quantity * i.unit_cost * 100) / 100).toFixed(2)} ${sym}</strong></td></tr>`
+      `<td>${i.quantity}</td><td>${dineroEs(Number(i.unit_cost))}{sym}</td>` +
+      `<td><strong>${dineroEs((Math.round(i.quantity * i.unit_cost * 100) / 100))}{sym}</strong></td></tr>`
     ).join('');
 
     const badge = r.status === 'confirmada' ? '<span class="badge b-green">Confirmada</span>' : '<span class="badge b-red">Anulada</span>';
@@ -242,7 +244,7 @@ export function createPurchaseOrderReceiptRoutes(db) {
 
     const paper = `
       <h1>Recepción ${esc(r.receipt_number || ('#' + r.id))}</h1>
-      <div class="doc-sub">${esc(r.date)}</div>
+      <div class="doc-sub">${fechaEs(r.date)}</div>
       ${motivoBlock}
       <div class="doc-cols">
         <div>
@@ -259,7 +261,7 @@ export function createPurchaseOrderReceiptRoutes(db) {
         <tbody>${rows}</tbody>
       </table>
       <table class="doc-totals">
-        <tr class="grand"><td>Total recepción</td><td>${total.toFixed(2)} ${sym}</td></tr>
+        <tr class="grand"><td>Total recepción</td><td>${dineroEs(total)}{sym}</td></tr>
       </table>
       <div style="margin-top:8px;color:var(--text3);font-size:.78rem">Líneas recibidas inmutables — corregir = anular y crear otra recepción.</div>
       ${notesBlock}
@@ -269,10 +271,10 @@ export function createPurchaseOrderReceiptRoutes(db) {
       <div class="card"><div class="card-body">
         <div style="margin-bottom:12px">${badge}</div>
         <div class="dp-row"><span class="k">Recepción</span><span class="v">${esc(r.receipt_number || ('#' + r.id))}</span></div>
-        <div class="dp-row"><span class="k">Fecha</span><span class="v">${esc(r.date)}</span></div>
+        <div class="dp-row"><span class="k">Fecha</span><span class="v">${fechaEs(r.date)}</span></div>
         <div class="dp-row"><span class="k">Orden</span><span class="v">${esc(r.order_number || ('#' + r.order_id))}</span></div>
         <div class="dp-row"><span class="k">Proveedor</span><span class="v">${esc(r.supplier_name)}</span></div>
-        <div class="dp-row"><span class="k">Total</span><span class="v">${total.toFixed(2)} ${sym}</span></div>
+        <div class="dp-row"><span class="k">Total</span><span class="v">${dineroEs(total)}{sym}</span></div>
         <div class="dp-actions" style="margin-top:14px">
           ${r.status === 'confirmada' && canEdit ? '<button class="btn btn-danger" onclick="anularRecepcion()">Anular</button>' : ''}
           <a href="/admin/purchase-orders/${r.order_id}" class="btn btn-secondary">Ver orden</a>

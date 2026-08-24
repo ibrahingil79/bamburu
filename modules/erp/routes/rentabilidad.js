@@ -9,6 +9,7 @@ import { adminLayout } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
 import { escHtml } from '../../../core/escape.js';
 import { rentabilidadProyecto, comparativaProyectos } from '../rentabilidad.js';
+import { fmtEur } from '../margen.js';   // el dinero, escrito como en España
 
 export function createRentabilidadRoutes(db) {
   const api = new Hono();
@@ -29,7 +30,8 @@ export function createRentabilidadRoutes(db) {
   views.get('/', ...gate, c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const cmp = comparativaProyectos(db);
-    const dinero = n => sym + Number(n || 0).toFixed(2);
+    // El dinero, escrito como en España. Una sola forma en todo el producto.
+    const dinero = n => fmtEur(Number(n || 0), sym);
     const signo = n => (n < 0 ? 'color:var(--danger,#b23);font-weight:600' : (n > 0 ? 'color:var(--ok,#1a7f37)' : 'color:var(--muted)'));
     const pct = n => (n == null ? '—' : Number(n).toFixed(1) + '%');
 

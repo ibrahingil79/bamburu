@@ -9,6 +9,7 @@ import { emitTicketSvc, buildTicketPaper, ticketStockExcess, excessLineText } fr
 import { renderPdfFromHtml } from '../../../core/pdf.js';
 import { activeWarehouses } from './warehouses.js';
 import { ENTITY } from '../../../core/activity-entities.js';
+import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
 
 // ════════════════════════════════════════════════════════════════════════════
 // PILAR 4 · MOSTRADOR (PIEZA A) — pantalla del mostrador NUEVO, separada del POS viejo.
@@ -149,7 +150,7 @@ export function createMostradorRoutes(db) {
           const stxt = s===null ? '' : '<div style="font-size:.7rem;color:'+(s<=0?'var(--danger)':'var(--muted)')+'">disp. '+s+'</div>';
           return '<div onclick="addProduct('+p.id+')" style="border:1px solid var(--border2);border-radius:8px;padding:.55rem;cursor:pointer;background:var(--bg2)">'
             +'<div style="font-size:.8rem;font-weight:500;line-height:1.2">'+escHtml(p.name)+'</div>'
-            +'<div style="font-size:.82rem;color:var(--accent);font-weight:600;margin-top:.2rem">'+SYM+Number(p.price||0).toFixed(2)+'</div>'+stxt+'</div>';
+            +'<div style="font-size:.82rem;color:var(--accent);font-weight:600;margin-top:.2rem">'+dineroEs(p.price||0, SYM)+'</div>'+stxt+'</div>';
         }).join('') : (q?'<div style="grid-column:1/-1">'+window.emptyState('No hay productos que coincidan con la búsqueda.',{icon:'ti-search'})+'</div>':'<div style="grid-column:1/-1">'+window.emptyState('No hay productos con stock en este almacén. Repón stock o añade productos al catálogo para vender aquí.',{cta:'Ir al catálogo',href:'/admin/products',soft:true})+'</div>');
       }
       function addProduct(id){
@@ -195,7 +196,7 @@ export function createMostradorRoutes(db) {
           const a=lineAvail(l); const over=(a!=null && l.qty>a);
           const overTxt = over ? '<br><span style="color:var(--danger);font-size:.72rem">⚠ hay '+a+', vendes '+l.qty+' — exceso de '+(l.qty-a)+'</span>' : '';
           return '<div style="display:flex;align-items:center;gap:.4rem;padding:.35rem 0;border-bottom:1px solid var(--border)">'
-            +'<div style="flex:1;font-size:.85rem">'+escHtml(l.description)+(l.free?' <span style="color:var(--muted);font-size:.72rem">(libre 21%)</span>':'')+'<br><span style="color:var(--muted);font-size:.75rem">'+SYM+l.unit_price.toFixed(2)+' · IVA '+l.tax_rate+'%</span>'+overTxt+'</div>'
+            +'<div style="flex:1;font-size:.85rem">'+escHtml(l.description)+(l.free?' <span style="color:var(--muted);font-size:.72rem">(libre 21%)</span>':'')+'<br><span style="color:var(--muted);font-size:.75rem">'+dineroEs(l.unit_price, SYM)+' · IVA '+l.tax_rate+'%</span>'+overTxt+'</div>'
             +'<input type="number" min="1" value="'+l.qty+'" onchange="setQty('+i+',this.value)" style="width:52px;padding:.2rem .3rem;border:1px solid '+(over?'var(--danger)':'var(--border2)')+';border-radius:4px;font-size:.82rem">'
             +'<span style="min-width:64px;text-align:right;font-size:.85rem">'+SYM+(l.qty*l.unit_price).toFixed(2)+'</span>'
             +'<button class="btn btn-danger btn-sm" onclick="removeLine('+i+')">✕</button></div>';
@@ -204,21 +205,21 @@ export function createMostradorRoutes(db) {
         if(exc.length){ sw.style.display='block'; sw.innerHTML='⚠ Venta por encima del stock disponible: '+exc.map(function(x){return escHtml(x.name)+' (hay '+x.available+', vendes '+x.requested+')';}).join('; ')+'. Puedes continuar; al cobrar se pedirá confirmación.'; }
         else { sw.style.display='none'; }
         const t=totals();
-        const ivaRows=Object.keys(t.byRate).sort((a,b)=>b-a).map(r=>'<tr><td style="color:var(--muted);padding:.15rem 0">IVA '+r+'%</td><td style="text-align:right">'+SYM+t.byRate[r].toFixed(2)+'</td></tr>').join('');
+        const ivaRows=Object.keys(t.byRate).sort((a,b)=>b-a).map(r=>'<tr><td style="color:var(--muted);padding:.15rem 0">IVA '+r+'%</td><td style="text-align:right">'+dineroEs(t.byRate[r], SYM)+'</td></tr>').join('');
         document.getElementById('totals').innerHTML = cart.length
-          ? '<tr><td style="color:var(--muted);padding:.15rem 0">Base</td><td style="text-align:right">'+SYM+t.base.toFixed(2)+'</td></tr>'+ivaRows
-            +'<tr><td style="font-weight:700;font-size:1.05rem;padding-top:.4rem">TOTAL</td><td style="text-align:right;font-weight:700;font-size:1.05rem;padding-top:.4rem">'+SYM+t.total.toFixed(2)+'</td></tr>'
+          ? '<tr><td style="color:var(--muted);padding:.15rem 0">Base</td><td style="text-align:right">'+dineroEs(t.base, SYM)+'</td></tr>'+ivaRows
+            +'<tr><td style="font-weight:700;font-size:1.05rem;padding-top:.4rem">TOTAL</td><td style="text-align:right;font-weight:700;font-size:1.05rem;padding-top:.4rem">'+dineroEs(t.total, SYM)+'</td></tr>'
           : '';
         document.getElementById('btn-cobrar').disabled = !cart.length;
         const warn=document.getElementById('limitWarn');
-        if(cart.length && t.total>LIMIT){ warn.style.display='block'; warn.textContent='Aviso: '+SYM+t.total.toFixed(2)+' supera 400 €. Por encima de ese importe normalmente corresponde una factura completa (hay excepciones por sector). Puedes continuar.'; }
+        if(cart.length && t.total>LIMIT){ warn.style.display='block'; warn.textContent='Aviso: '+dineroEs(t.total, SYM)+' supera 400 €. Por encima de ese importe normalmente corresponde una factura completa (hay excepciones por sector). Puedes continuar.'; }
         else { warn.style.display='none'; }
       }
       function openCobro(){
         if(!cart.length) return;
         method=null;
         const t=totals();
-        document.getElementById('cobroTotal').textContent=SYM+t.total.toFixed(2);
+        document.getElementById('cobroTotal').textContent=dineroEs(t.total, SYM);
         document.getElementById('pm-efectivo').className='btn btn-secondary'; document.getElementById('pm-tarjeta').className='btn btn-secondary';
         document.getElementById('efectivoWrap').style.display='none';
         document.getElementById('entregado').value=''; document.getElementById('cambio').textContent='';
@@ -241,7 +242,7 @@ export function createMostradorRoutes(db) {
       function calcCambio(){
         const t=totals(); const ent=parseFloat(document.getElementById('entregado').value);
         const el=document.getElementById('cambio');
-        if(isFinite(ent)){ const c=Math.round((ent-t.total)*100)/100; el.textContent = c>=0 ? 'Cambio: '+SYM+c.toFixed(2) : 'Falta '+SYM+(-c).toFixed(2); el.style.color=c>=0?'var(--ok)':'var(--danger)'; }
+        if(isFinite(ent)){ const c=Math.round((ent-t.total)*100)/100; el.textContent = c>=0 ? 'Cambio: '+dineroEs(c, SYM) : 'Falta '+SYM+(-c).toFixed(2); el.style.color=c>=0?'var(--ok)':'var(--danger)'; }
         else { el.textContent=''; }
         updateConfirm();
       }
@@ -260,7 +261,7 @@ export function createMostradorRoutes(db) {
           let extra='';
           if(method==='efectivo'){ const ent=parseFloat(document.getElementById('entregado').value); if(isFinite(ent)) extra='<div style="margin-top:.4rem">Cambio: <strong>'+SYM+(Math.round((ent-d.total)*100)/100).toFixed(2)+'</strong></div>'; }
           closeModal('cobroModal');
-          document.getElementById('ticketBody').innerHTML='<div><strong>'+escHtml(d.invoice_number)+'</strong> · '+SYM+Number(d.total).toFixed(2)+' ('+method+')</div>'+extra
+          document.getElementById('ticketBody').innerHTML='<div><strong>'+escHtml(d.invoice_number)+'</strong> · '+dineroEs(d.total, SYM)+' ('+method+')</div>'+extra
             +'<div style="margin-top:.8rem;display:flex;gap:.5rem;flex-wrap:wrap"><a class="btn btn-primary btn-sm" href="/admin/mostrador/'+d.id+'/pdf" target="_blank">Imprimir ticket (PDF)</a><a class="btn btn-secondary btn-sm" href="/admin/invoices/'+d.id+'" target="_blank">Ver en Facturas</a></div>';
           openModal('ticketModal');
           cart=[]; renderCart(); await loadStock(); renderGrid();

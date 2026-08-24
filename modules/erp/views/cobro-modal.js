@@ -49,7 +49,7 @@ export function cobroModalScript(sym) {
       const payRows = (inv.payments && inv.payments.length) ? inv.payments.map(function(p){
         running = Math.round((running+Number(p.amount))*100)/100;
         const saldo = Math.round((Number(inv.total)-running)*100)/100;
-        return '<tr><td>'+p.paid_date+'</td><td style="text-align:right">'+SYM+Number(p.amount).toFixed(2)+'</td><td>'+escHtml(p.payment_method||'—')+'</td><td>'+escHtml(p.note||'')+'</td><td style="text-align:right;color:var(--muted)">'+SYM+saldo.toFixed(2)+'</td>'
+        return '<tr><td>'+p.paid_date+'</td><td style="text-align:right">'+dineroEs(p.amount, SYM)+'</td><td>'+escHtml(p.payment_method||'—')+'</td><td>'+escHtml(p.note||'')+'</td><td style="text-align:right;color:var(--muted)">'+dineroEs(saldo, SYM)+'</td>'
           +'<td style="text-align:right"><button class="btn btn-secondary btn-sm" title="Deshacer este cobro" onclick="deshacerCobro('+inv.id+','+p.id+')">Deshacer</button></td></tr>';
       }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:1rem">Sin cobros registrados</td></tr>';
       // El formulario solo si la factura admite cobro (flag del motor: inv.cobrable) y queda pendiente.
@@ -67,7 +67,7 @@ export function cobroModalScript(sym) {
           +'</div>'
         : '<p style="color:var(--muted);margin:0">'+(co.estado==='cobrada'?'Factura cobrada por completo.':'Esta factura no admite registrar más cobros.')+'</p>';
       document.getElementById('cobroBody').innerHTML =
-        '<div style="margin-bottom:1rem">Cobrado <strong>'+SYM+Number(co.cobrado||0).toFixed(2)+'</strong> · Pendiente <strong>'+SYM+Number(co.pendiente||0).toFixed(2)+'</strong> <span style="color:var(--muted)">(de '+SYM+Number(inv.total||0).toFixed(2)+')</span></div>'
+        '<div style="margin-bottom:1rem">Cobrado <strong>'+dineroEs(co.cobrado||0, SYM)+'</strong> · Pendiente <strong>'+dineroEs(co.pendiente||0, SYM)+'</strong> <span style="color:var(--muted)">(de '+dineroEs(inv.total||0, SYM)+')</span></div>'
         +'<div class="table-wrap" style="margin-bottom:1rem"><table><thead><tr><th>Fecha</th><th style="text-align:right">Importe</th><th>Forma</th><th>Nota</th><th style="text-align:right">Saldo</th><th></th></tr></thead><tbody>'+payRows+'</tbody></table></div>'
         +form;
       openModal('cobroModal');
@@ -137,7 +137,7 @@ export function cobroModalScript(sym) {
         +(canCobro?'<button class="btn btn-secondary btn-sm" onclick="formPromesa('+id+')">Registrar promesa de pago</button>':'')
         +'</div>';
       document.getElementById('gestionBody').innerHTML =
-        '<div style="margin-bottom:.75rem">Pendiente <strong>'+SYM+Number(co.pendiente||0).toFixed(2)+'</strong> de '+SYM+Number(inv.total||0).toFixed(2)+'</div>'
+        '<div style="margin-bottom:.75rem">Pendiente <strong>'+dineroEs(co.pendiente||0, SYM)+'</strong> de '+dineroEs(inv.total||0, SYM)+'</div>'
         +proxLine+buttons+'<div id="gestionForm"></div>'+hist;
       openModal('gestionModal');
     };
@@ -221,15 +221,15 @@ export function cobroModalScript(sym) {
         +window.proximaBadgeHtml(p)+' '+escHtml(p&&p.accion==='recordatorio_email'?'Mandar recordatorio':(p?(STAGE_LABEL[p.etapa]||p.etapa):'Sin acción'))
         +'<div style="color:var(--muted);font-size:.85rem;margin-top:.25rem">Perfil '+escHtml(acct.perfilCuenta||'estandar')+(p&&p.motivo?(' · '+escHtml(p.motivo)):'')+'</div></div>';
       const listado = '<div class="table-wrap" style="margin-bottom:1rem"><table><thead><tr><th>Factura</th><th>Vence</th><th style="text-align:right">Pendiente</th></tr></thead><tbody>'
-        +vivas.map(function(f){return '<tr><td>'+escHtml(f.invoice_number)+'</td><td style="color:var(--muted);font-size:.8rem">'+escHtml(f.due_date||'-')+'</td><td style="text-align:right">'+SYM+Number(f.pendiente).toFixed(2)+'</td></tr>';}).join('')
-        +'<tr><td colspan="2" style="font-weight:700;border-top:1px solid var(--border)">Total adeudado</td><td style="text-align:right;font-weight:700;border-top:1px solid var(--border)">'+SYM+Number(acct.deudaTotal).toFixed(2)+'</td></tr></tbody></table></div>';
+        +vivas.map(function(f){return '<tr><td>'+escHtml(f.invoice_number)+'</td><td style="color:var(--muted);font-size:.8rem">'+escHtml(f.due_date||'-')+'</td><td style="text-align:right">'+dineroEs(f.pendiente, SYM)+'</td></tr>';}).join('')
+        +'<tr><td colspan="2" style="font-weight:700;border-top:1px solid var(--border)">Total adeudado</td><td style="text-align:right;font-weight:700;border-top:1px solid var(--border)">'+dineroEs(acct.deudaTotal, SYM)+'</td></tr></tbody></table></div>';
       const buttons = '<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">'
         +'<button class="btn btn-primary btn-sm" onclick="formRecordatorioCuenta()">Mandar recordatorio</button>'
         +'<button class="btn btn-secondary btn-sm" onclick="formPromesaCuenta()">Registrar promesa</button>'
         +'<button class="btn btn-secondary btn-sm" onclick="formCobroCuenta()">Registrar cobro a cuenta</button>'
         +'</div>';
       document.getElementById('gestionBody').innerHTML =
-        '<div style="margin-bottom:.75rem">Te debe <strong>'+SYM+Number(acct.deudaTotal).toFixed(2)+'</strong> en '+vivas.length+' factura'+(vivas.length===1?'':'s')+'</div>'
+        '<div style="margin-bottom:.75rem">Te debe <strong>'+dineroEs(acct.deudaTotal, SYM)+'</strong> en '+vivas.length+' factura'+(vivas.length===1?'':'s')+'</div>'
         +proxLine+listado+buttons+'<div id="acctForm"></div>';
       openModal('gestionModal');
     };
@@ -294,12 +294,12 @@ export function cobroModalScript(sym) {
       if(modo==='auto'){
         const r=repartoAutoJS(importe, vivas);
         cont.innerHTML='<table style="width:100%;font-size:.85rem;margin-top:.5rem"><thead><tr><th style="text-align:left">Factura</th><th style="text-align:right">Se aplica</th></tr></thead><tbody>'
-          +vivas.map(function(f){return '<tr><td>'+escHtml(f.invoice_number)+' <span style="color:var(--muted)">('+SYM+Number(f.pendiente).toFixed(2)+')</span></td><td style="text-align:right">'+SYM+Number(r.asg[f.invoice_id]||0).toFixed(2)+'</td></tr>';}).join('')+'</tbody></table>'
-          +(r.sinAsignar>0.0049?'<p style="color:var(--warn);font-size:.8rem;margin:.4rem 0">Sobran '+SYM+r.sinAsignar.toFixed(2)+' tras saldar toda la deuda (no se aplican).</p>':'');
+          +vivas.map(function(f){return '<tr><td>'+escHtml(f.invoice_number)+' <span style="color:var(--muted)">('+dineroEs(f.pendiente, SYM)+')</span></td><td style="text-align:right">'+dineroEs(r.asg[f.invoice_id]||0, SYM)+'</td></tr>';}).join('')+'</tbody></table>'
+          +(r.sinAsignar>0.0049?'<p style="color:var(--warn);font-size:.8rem;margin:.4rem 0">Sobran '+dineroEs(r.sinAsignar, SYM)+' tras saldar toda la deuda (no se aplican).</p>':'');
         if(btn) btn.disabled=!(importe>0);
       } else {
         cont.innerHTML='<table style="width:100%;font-size:.85rem;margin-top:.5rem"><thead><tr><th style="text-align:left">Factura</th><th style="text-align:right">Pendiente</th><th style="text-align:right">Importe</th></tr></thead><tbody>'
-          +vivas.map(function(f){return '<tr><td>'+escHtml(f.invoice_number)+'</td><td style="text-align:right;color:var(--muted)">'+SYM+Number(f.pendiente).toFixed(2)+'</td><td style="text-align:right"><input type="number" step="0.01" min="0" max="'+Number(f.pendiente).toFixed(2)+'" class="form-control acct-mf" data-id="'+f.invoice_id+'" data-pend="'+Number(f.pendiente).toFixed(2)+'" value="0" style="width:110px;text-align:right;display:inline-block" oninput="sumManual()"></td></tr>';}).join('')+'</tbody></table>'
+          +vivas.map(function(f){return '<tr><td>'+escHtml(f.invoice_number)+'</td><td style="text-align:right;color:var(--muted)">'+dineroEs(f.pendiente, SYM)+'</td><td style="text-align:right"><input type="number" step="0.01" min="0" max="'+Number(f.pendiente).toFixed(2)+'" class="form-control acct-mf" data-id="'+f.invoice_id+'" data-pend="'+Number(f.pendiente).toFixed(2)+'" value="0" style="width:110px;text-align:right;display:inline-block" oninput="sumManual()"></td></tr>';}).join('')+'</tbody></table>'
           +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:.4rem"><button class="btn btn-secondary btn-sm" type="button" onclick="autoFillManual()">Auto por antigüedad</button><span id="acct-counter" style="font-size:.85rem"></span></div>';
         sumManual();
       }
@@ -317,7 +317,7 @@ export function cobroModalScript(sym) {
       const totalC=Math.round(importe*100);
       const cuadra=(suma===totalC)&&!over&&importe>0;
       const cnt=document.getElementById('acct-counter');
-      if(cnt) cnt.innerHTML='Asignado <strong>'+SYM+(suma/100).toFixed(2)+'</strong> / '+SYM+importe.toFixed(2)+(over?' <span style="color:var(--danger)">· alguna se pasa</span>':(cuadra?' <span style="color:var(--ok)">· cuadra ✓</span>':' <span style="color:var(--muted)">· falta cuadrar</span>'));
+      if(cnt) cnt.innerHTML='Asignado <strong>'+SYM+(suma/100).toFixed(2)+'</strong> / '+dineroEs(importe, SYM)+(over?' <span style="color:var(--danger)">· alguna se pasa</span>':(cuadra?' <span style="color:var(--ok)">· cuadra ✓</span>':' <span style="color:var(--muted)">· falta cuadrar</span>'));
       const btn=document.getElementById('acct-cobro-btn'); if(btn) btn.disabled=!cuadra;
     };
     window.guardarCobroCuenta = async function(){
@@ -330,7 +330,7 @@ export function cobroModalScript(sym) {
       }
       try {
         const r=await api('POST','/api/erp/clients/'+acct.client_id+'/account-actions',body);
-        toast('Cobro a cuenta registrado en '+(r.pagos?r.pagos.length:0)+' factura(s)'+(r.sinAsignar>0.0049?' (sobran '+SYM+Number(r.sinAsignar).toFixed(2)+')':''));
+        toast('Cobro a cuenta registrado en '+(r.pagos?r.pagos.length:0)+' factura(s)'+(r.sinAsignar>0.0049?' (sobran '+dineroEs(r.sinAsignar, SYM)+')':''));
         if(typeof window.cobroOnSaved==='function') window.cobroOnSaved(acct.client_id);
         await openGestionCuenta(acct.client_id);
       } catch(e){ toast(e.message||'Error registrando el cobro','err'); }

@@ -17,6 +17,7 @@ import { lotesDeProducto, trazaDeLote, trackingDe } from '../trazabilidad.js';
 import { stockModalHtml, stockModalScript } from '../views/stock-modal.js';
 import { nextCode } from '../codes.js';
 import { ENTITY } from '../../../core/activity-entities.js';
+import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
 
 function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now();
@@ -366,7 +367,7 @@ export function createProductRoutes(db, cfg = {}) {
       '<td>'+(p.image_url?'<img class="thumb" src="'+escHtml(p.image_url)+'" alt="">':'<span style="font-size:1.2rem"></span>')+'</td>'+
       '<td><strong>'+escHtml(p.name)+'</strong>'+(p.featured?'  <span class="badge b-purple">Destacado</span>':'')+'<br><span style="color:var(--muted);font-size:.75rem"><span style="font-family:monospace">'+escHtml(p.product_code||'-')+'</span> · SKU: '+escHtml(p.sku||'-')+'</span></td>'+
       '<td>'+escHtml(p.category_name||'-')+'</td>'+
-      '<td><strong>'+sym+p.price.toFixed(2)+'</strong>'+(p.compare_price?'<br><span style="text-decoration:line-through;color:var(--muted);font-size:.75rem">'+sym+p.compare_price.toFixed(2)+'</span>':'')+'<br><span style="color:var(--muted);font-size:.72rem">'+(Number(p.tax_rate)>0?('IVA '+p.tax_rate+'%'):'Exento')+'</span></td>'+
+      '<td><strong>'+dineroEs(p.price, sym)+'</strong>'+(p.compare_price?'<br><span style="text-decoration:line-through;color:var(--muted);font-size:.75rem">'+dineroEs(p.compare_price, sym)+'</span>':'')+'<br><span style="color:var(--muted);font-size:.72rem">'+(Number(p.tax_rate)>0?('IVA '+p.tax_rate+'%'):'Exento')+'</span></td>'+
       '<td>'+(p.type==='service'?'<span style="color:var(--muted)">—</span>':(p.stock<5?'<span style="color:var(--danger);font-weight:500">'+p.stock+'</span>':p.stock))+'</td>'+
       '<td>'+(statusB[p.status]||escHtml(p.status))+'</td>'+
       '<td><span class="badge b-gray">'+(p.type==='digital'?'Digital':p.type==='service'?'Servicio':'Físico')+'</span></td>'+

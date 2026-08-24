@@ -15,6 +15,8 @@ import { sendEmail } from '../../../core/mailer.js';
 import { createPedidoSvc } from './pedidos.js';   // PIEZA 2a: presupuesto → pedido (motor de conversión)
 import { ENTITY } from '../../../core/activity-entities.js';
 import { jsonForScript } from '../../../core/escape.js';
+import { fechaEs } from '../voz.js';   // la fecha, en cristiano (24/08/2026)
+import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
 import { exigirCorreoActivo } from '../avisos-preferencias.js';   // interruptor de Ajustes → Avisos y correos
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -303,15 +305,15 @@ function quoteDocumentBodyHtml(q, items, emisor, cliente, sym) {
     <tr>
       <td style="padding:8px 12px;border-bottom:1px solid var(--bg3)">${esc(i.description)}${i.sku ? ` <span style="color:var(--text2);font-size:11px">[${esc(i.sku)}]</span>` : ''}</td>
       <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${i.quantity}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${sym}${Number(i.unit_price).toFixed(2)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${dineroEs(i.unit_price, sym)}</td>
       <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${Number(i.tax_rate) > 0 ? Number(i.tax_rate) + '%' : 'Exento'}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${sym}${Number(i.total_price).toFixed(2)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${dineroEs(i.total_price, sym)}</td>
     </tr>`).join('');
   const taxRows = Object.values(taxByRate).sort((a, b) => b.rate - a.rate).map(x =>
-    `<tr><td style="padding:4px 12px;color:var(--text2)">${x.rate > 0 ? 'IVA ' + x.rate + '%' : 'Exento de IVA'} (sobre ${sym}${x.base.toFixed(2)})</td><td style="padding:4px 12px;text-align:right;font-weight:600">${sym}${x.amount.toFixed(2)}</td></tr>`
+    `<tr><td style="padding:4px 12px;color:var(--text2)">${x.rate > 0 ? 'IVA ' + x.rate + '%' : 'Exento de IVA'} (sobre ${dineroEs(x.base, sym)})</td><td style="padding:4px 12px;text-align:right;font-weight:600">${dineroEs(x.amount, sym)}</td></tr>`
   ).join('');
   const irpfRow = (Number(q.irpf_amount) > 0)
-    ? `<tr><td style="padding:4px 12px;color:var(--accent-purple)">IRPF (${q.irpf_rate}%)</td><td style="padding:4px 12px;text-align:right;color:var(--accent-purple)">−${sym}${Number(q.irpf_amount).toFixed(2)}</td></tr>` : '';
+    ? `<tr><td style="padding:4px 12px;color:var(--accent-purple)">IRPF (${q.irpf_rate}%)</td><td style="padding:4px 12px;text-align:right;color:var(--accent-purple)">−${dineroEs(q.irpf_amount, sym)}</td></tr>` : '';
   return `
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px">
   <div>
@@ -319,8 +321,8 @@ function quoteDocumentBodyHtml(q, items, emisor, cliente, sym) {
     <div style="color:var(--text2);font-size:12px">${q.quote_number ? esc(q.quote_number) : 'Borrador (sin número)'}</div>
   </div>
   <div style="text-align:right;color:var(--text2);font-size:12px">
-    <div>Fecha: <strong style="color:var(--accent-d)">${esc(q.date)}</strong></div>
-    ${q.valid_until ? `<div>Válido hasta: <strong style="color:var(--accent-d)">${esc(q.valid_until)}</strong></div>` : ''}
+    <div>Fecha: <strong style="color:var(--accent-d)">${fechaEs(q.date)}</strong></div>
+    ${q.valid_until ? `<div>Válido hasta: <strong style="color:var(--accent-d)">${fechaEs(q.valid_until)}</strong></div>` : ''}
   </div>
 </div>
 ${membreteHtml({ emisor, otra: cliente, rotuloOtra: 'Cliente',
@@ -337,10 +339,10 @@ ${membreteHtml({ emisor, otra: cliente, rotuloOtra: 'Cliente',
   <tbody>${rows}</tbody>
 </table>
 <table style="margin-left:auto;width:320px;border-collapse:collapse">
-  <tr><td style="padding:4px 12px;color:var(--text2)">Base imponible</td><td style="padding:4px 12px;text-align:right;font-weight:600">${sym}${Number(q.subtotal).toFixed(2)}</td></tr>
+  <tr><td style="padding:4px 12px;color:var(--text2)">Base imponible</td><td style="padding:4px 12px;text-align:right;font-weight:600">${dineroEs(q.subtotal, sym)}</td></tr>
   ${taxRows}
   ${irpfRow}
-  <tr><td style="padding:10px 12px;font-size:15px;border-top:2px solid var(--accent-d);font-weight:700">TOTAL</td><td style="padding:10px 12px;text-align:right;font-size:15px;border-top:2px solid var(--accent-d);font-weight:700">${sym}${Number(q.total).toFixed(2)}</td></tr>
+  <tr><td style="padding:10px 12px;font-size:15px;border-top:2px solid var(--accent-d);font-weight:700">TOTAL</td><td style="padding:10px 12px;text-align:right;font-size:15px;border-top:2px solid var(--accent-d);font-weight:700">${dineroEs(q.total, sym)}</td></tr>
 </table>
 ${q.notes ? `<div style="margin-top:16px;color:var(--text2)">${esc(q.notes)}</div>` : ''}`;
 }
@@ -503,9 +505,9 @@ export function createQuoteRoutes(db) {
       return '<tr>'
         + '<td>' + (q.quote_number ? '<strong style="font-family:monospace">' + esc(q.quote_number) + '</strong>' : '<span style="color:var(--text3)">Borrador</span>') + '</td>'
         + '<td><strong>' + esc(name) + '</strong></td>'
-        + '<td>' + esc(q.date) + '</td>'
+        + '<td>' + fechaEs(q.date) + '</td>'
         + '<td><span class="badge ' + badge + '">' + esc(lbl) + '</span></td>'
-        + '<td><strong>' + Number(q.total).toFixed(2) + ' ' + sym + '</strong></td>'
+        + '<td><strong>' + dineroEs(q.total, sym) + '</strong></td>'
         + '<td style="text-align:right"><a href="/admin/quotes/' + q.id + '" class="btn btn-secondary btn-sm">Ver</a></td>'
         + '</tr>';
     }).join('');
@@ -636,12 +638,12 @@ export function createQuoteRoutes(db) {
       function renderTotals(t){
         const lab=(x,col)=>'<td colspan="3" style="text-align:right;padding:.45rem 1rem'+(col?';color:'+col:'')+'">'+x+'</td>';
         const val=(x,col)=>'<td style="text-align:right;padding:.45rem 1rem'+(col?';color:'+col:'')+'">'+x+'</td><td></td>';
-        let html='<tr><td colspan="3" style="text-align:right;font-weight:600;padding:.7rem 1rem">Base imponible</td><td style="text-align:right;padding:.7rem 1rem">'+SYM+t.subtotal.toFixed(2)+'</td><td></td></tr>';
+        let html='<tr><td colspan="3" style="text-align:right;font-weight:600;padding:.7rem 1rem">Base imponible</td><td style="text-align:right;padding:.7rem 1rem">'+dineroEs(t.subtotal, SYM)+'</td><td></td></tr>';
         const rates=Object.values(t.taxByRate||{});
         if(!rates.length){ html+='<tr>'+lab('IVA','var(--muted)')+val(SYM+'0.00','var(--muted)')+'</tr>'; }
-        else { for(const x of rates){ const l=(Number(x.rate)>0?'IVA '+x.rate+'%':'Exento (0%)')+' (sobre '+SYM+Number(x.base).toFixed(2)+')'; html+='<tr>'+lab(l,'var(--muted)')+val(SYM+Number(x.amount).toFixed(2),'var(--muted)')+'</tr>'; } }
-        if(SHOW_IRPF && t.irpfAmount>0){ html+='<tr>'+lab('IRPF '+t.irpfRate+'%','var(--accent-purple)')+val('−'+SYM+t.irpfAmount.toFixed(2),'var(--accent-purple)')+'</tr>'; }
-        html+='<tr><td colspan="3" style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">Total</td><td style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">'+SYM+t.total.toFixed(2)+'</td><td></td></tr>';
+        else { for(const x of rates){ const l=(Number(x.rate)>0?'IVA '+x.rate+'%':'Exento (0%)')+' (sobre '+dineroEs(x.base, SYM)+')'; html+='<tr>'+lab(l,'var(--muted)')+val(dineroEs(x.amount, SYM),'var(--muted)')+'</tr>'; } }
+        if(SHOW_IRPF && t.irpfAmount>0){ html+='<tr>'+lab('IRPF '+t.irpfRate+'%','var(--accent-purple)')+val('−'+dineroEs(t.irpfAmount, SYM),'var(--accent-purple)')+'</tr>'; }
+        html+='<tr><td colspan="3" style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">Total</td><td style="text-align:right;font-weight:700;font-size:1.05rem;padding:.7rem 1rem">'+dineroEs(t.total, SYM)+'</td><td></td></tr>';
         document.getElementById('totals-foot').innerHTML=html;
       }
       async function saveQuote(){
@@ -705,8 +707,8 @@ export function createQuoteRoutes(db) {
   <div style="margin-bottom:12px"><span class="badge ${badge}">${esc(lbl)}</span></div>
   <div class="dp-row"><span class="k">Nº</span><span class="v">${q.quote_number ? esc(q.quote_number) : 'Borrador'}</span></div>
   <div class="dp-row"><span class="k">Cliente</span><span class="v">${esc(emisor && q.company_name != null ? (q.client_name || '') : (cliente.name || ''))}</span></div>
-  <div class="dp-row"><span class="k">Total</span><span class="v">${sym}${Number(q.total).toFixed(2)}</span></div>
-  ${q.valid_until ? `<div class="dp-row"><span class="k">Válido hasta</span><span class="v">${esc(q.valid_until)}</span></div>` : ''}
+  <div class="dp-row"><span class="k">Total</span><span class="v">${dineroEs(q.total, sym)}</span></div>
+  ${q.valid_until ? `<div class="dp-row"><span class="k">Válido hasta</span><span class="v">${fechaEs(q.valid_until)}</span></div>` : ''}
   <div class="dp-actions" style="margin-top:14px;display:flex;flex-direction:column;gap:.5rem">
     <button onclick="window.print()" class="btn btn-secondary">Imprimir</button>
     <a href="/admin/quotes/${id}/pdf" class="btn btn-secondary">Descargar PDF</a>

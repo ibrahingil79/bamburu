@@ -15,6 +15,7 @@ import { escHtml } from '../../../core/escape.js';
 import { tiempoStartSchema, tiempoManualSchema } from '../schemas.js';
 import { hoyLocal } from '../avisos.js';
 import { ENTITY } from '../../../core/activity-entities.js';
+import { fechaEs } from '../voz.js';   // la fecha, en cristiano
 
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
 // PIEZA 4 (parte 2) — coste/hora de la persona a CONGELAR en la entrada al crearla (mismo criterio que el WAC:
@@ -220,7 +221,7 @@ export function createTiempoRoutes(db) {
       <div class="ph"><h2>Registro de tiempo</h2>
         <div style="display:flex;gap:.5rem;align-items:center">
           <a class="btn btn-secondary btn-sm" href="?desde=${prev}">← Semana anterior</a>
-          <span style="color:var(--muted);font-size:.85rem" id="tSemLabel">Semana del ${lunes}</span>
+          <span style="color:var(--muted);font-size:.85rem" id="tSemLabel">Semana del ${fechaEs(lunes)}</span>
           <a class="btn btn-secondary btn-sm" href="?desde=${next}">Siguiente →</a>
           <a class="btn btn-secondary btn-sm" href="/admin/tiempo">Hoy</a>
         </div>
@@ -265,7 +266,8 @@ export function createTiempoRoutes(db) {
       <script>
       const T_SYM=${JSON.stringify(sym)}, T_LUNES=${JSON.stringify(lunes)}, T_HOY=${JSON.stringify(hoy)}, T_EDIT=${puedeEditar ? 'true' : 'false'};
       const T_DIAS=${JSON.stringify(dias)};
-      const eur=v=>T_SYM+Number(v||0).toFixed(2);
+      // El dinero, escrito como en España. window.eur vive en layout.js.
+      const eur=v=>window.eur(v||0, T_SYM);
       const fmtDur=s=>{ s=Math.max(0,Math.round(s||0)); const h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return h+'h '+(m<10?'0':'')+m+'m'; };
       const clock=s=>{ s=Math.max(0,Math.round(s||0)); const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),x=s%60; return h+':'+(m<10?'0':'')+m+':'+(x<10?'0':'')+x; };
       let T_ENTRIES=[], T_RUN=null, T_TICK=null;

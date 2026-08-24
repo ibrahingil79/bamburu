@@ -8,10 +8,13 @@ import { adminLayout, emptyRow, errorShell, cleanErrMsg } from '../layout.js';
 import { escHtml } from '../../../core/escape.js';
 import { generateDueOccurrences, borradoresPendientes, proximasFechas, importeEstimado,
          emitirOcurrencia, omitirOcurrencia, createTemplate, setTemplateStatus } from '../recurrentes.js';
+import { fechaEs } from '../voz.js';   // la fecha, en cristiano (24/08/2026)
+import { fmtEur } from '../margen.js';   // el dinero, escrito como en España
 
 const today = () => new Date().toISOString().slice(0, 10);
 const symbolOf = db => db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
-const money = (sym, n) => sym + Number(n || 0).toFixed(2);
+// El dinero, escrito como en España (117.087,43 €). Una sola forma en todo el producto: fmtEur.
+const money = (sym, n) => fmtEur(Number(n || 0), sym);
 const CAD = { 1: 'Mensual', 3: 'Trimestral', 12: 'Anual' };
 const cadLabel = n => CAD[n] || `Cada ${n} meses`;
 const canEmit = (c, db) => { const s = c.get('session'); return s?.role === 'owner' || s?.role === 'admin' || checkPermission(db, s, 'invoices', 'create'); };
@@ -34,7 +37,7 @@ export function createRecurrentesRoutes(db) {
         ? `<form method="post" action="/admin/recurrentes/borrador/${o.id}/emitir" style="display:inline"><input type="hidden" name="_csrf" value="${escHtml(csrf)}"><button class="btn" type="submit">Emitir factura</button></form>`
         : `<span style="color:var(--warn);font-size:12px">Necesita permiso de emisión</span>`;
       const omitir = puedeGestionar ? `<form method="post" action="/admin/recurrentes/borrador/${o.id}/omitir" style="display:inline;margin-left:.3rem"><input type="hidden" name="_csrf" value="${escHtml(csrf)}"><button class="btn btn-ghost" type="submit">Omitir</button></form>` : '';
-      return `<tr><td>${escHtml(o.due_date)}</td><td>${escHtml(o.document_name)} · ${escHtml(o.client_name)}</td>
+      return `<tr><td>${fechaEs(o.due_date)}</td><td>${escHtml(o.document_name)} · ${escHtml(o.client_name)}</td>
         <td style="text-align:right">${money(sym, est.total)}</td><td>${emitir}${omitir}</td></tr>`;
     }).join('') || emptyRow(4, 'No hay borradores esperando. Cuando toque una recurrente, la verás aquí para revisarla y emitirla.');
 

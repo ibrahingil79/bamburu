@@ -11,6 +11,8 @@ import { bloquearSiTrazable } from '../trazabilidad.js';   // Pilar 3: los traza
 import { activeWarehouses } from './warehouses.js';
 import { hasActiveTransfersFromOrigin } from './stock-transfers.js';
 import { originDocBlock } from '../attachments.js';
+import { fechaEs } from '../voz.js';   // la fecha, en cristiano
+import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
 
 // ── Motor de Compras: servicios de transición (testables; los usan las rutas) ──
 // Recibir una compra PENDIENTE: el stock sube en el libro (entrada +, origen compra X).
@@ -168,7 +170,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
             ||(STATUS_MAP[r.status]||r.status||'').toLowerCase().indexOf(q)>=0;
         }):PURCHASES;
         document.getElementById('purchBody').innerHTML=rows.length?rows.map(function(r){
-          return '<tr><td style="color:var(--muted)">#'+r.id+'</td><td><strong>'+escHtml(r.supplier_name)+'</strong></td><td>'+escHtml(r.reference||'-')+'</td><td>'+escHtml(r.date)+'</td><td><span class="badge '+(BADGE_MAP[r.status]||'b-gray')+'">'+escHtml(STATUS_MAP[r.status]||r.status)+'</span></td><td><strong>'+parseFloat(r.total).toFixed(2)+' ${sym}</strong></td><td style="text-align:right"><a href="/admin/purchases/'+r.id+'" class="btn btn-secondary btn-sm">Ver</a></td></tr>';
+          return '<tr><td style="color:var(--muted)">#'+r.id+'</td><td><strong>'+escHtml(r.supplier_name)+'</strong></td><td>'+escHtml(r.reference||'-')+'</td><td>'+fechaEs(r.date)+'</td><td><span class="badge '+(BADGE_MAP[r.status]||'b-gray')+'">'+escHtml(STATUS_MAP[r.status]||r.status)+'</span></td><td><strong>'+parseFloat(r.total).toFixed(2)+' ${sym}</strong></td><td style="text-align:right"><a href="/admin/purchases/'+r.id+'" class="btn btn-secondary btn-sm">Ver</a></td></tr>';
         }).join(''):(q?window.emptyRow(7,'No se encontraron compras con ese filtro.',{icon:'ti-search'}):window.emptyRow(7,'Todavía no hay compras registradas. ¿Anotamos la primera?',window.canDo('purchases.create')?{cta:'Nueva compra',href:'/admin/purchases/new'}:{}));
       }
       loadPurchases();
@@ -326,10 +328,10 @@ export function createPurchaseRoutes(db, cfg = {}) {
           var qty=parseFloat(qtyEl.value)||0;
           var cost=parseFloat(costEl.value)||0;
           var sub=qty*cost;
-          if(subEl)subEl.textContent=sub.toFixed(2)+' ${sym}';
+          if(subEl)subEl.textContent=dineroEs(sub, '${sym}');
           total+=sub;
         });
-        document.getElementById('totalDisplay').textContent=total.toFixed(2)+' ${sym}';
+        document.getElementById('totalDisplay').textContent=dineroEs(total, '${sym}');
       }
       async function submitPurchase(){
         var ids=lineIds();
@@ -377,7 +379,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
 
     const itemRows = items.map(i => {
       const skuTag = i.sku ? `<span style="color:var(--muted);font-size:.8rem">[${escHtml(i.sku)}]</span> ` : '';
-      return `<tr><td>${skuTag}${escHtml(i.product_name)}</td><td>${i.quantity}</td><td>${parseFloat(i.unit_cost).toFixed(2)} ${sym}</td><td><strong>${(i.quantity*i.unit_cost).toFixed(2)} ${sym}</strong></td></tr>`;
+      return `<tr><td>${skuTag}${escHtml(i.product_name)}</td><td>${i.quantity}</td><td>${dineroEs(parseFloat(i.unit_cost))}{sym}</td><td><strong>${dineroEs((i.quantity*i.unit_cost))}{sym}</strong></td></tr>`;
     }).join('') || '<tr><td colspan="4" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin líneas</td></tr>';
 
     const refBlock = purchase.reference ? `<div style="margin-bottom:.5rem"><span style="color:var(--muted);font-size:.8rem;text-transform:uppercase">Referencia</span><br>${escHtml(purchase.reference)}</div>` : '';
@@ -391,7 +393,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
 
     const paper = `
       <h1>Compra #${purchase.id}</h1>
-      <div class="doc-sub">${purchase.date}</div>
+      <div class="doc-sub">${fechaEs(purchase.date)}</div>
       <div class="doc-cols">
         <div>
           <div class="doc-label">Proveedor</div>
@@ -400,7 +402,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
         </div>
         <div>
           <div class="doc-label">Fecha</div>
-          <div>${purchase.date}</div>
+          <div>${fechaEs(purchase.date)}</div>
           ${notesBlock}
         </div>
       </div>
@@ -409,7 +411,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
         <tbody>${itemRows}</tbody>
       </table>
       <table class="doc-totals">
-        <tr class="grand"><td>Total</td><td>${parseFloat(purchase.total).toFixed(2)} ${sym}</td></tr>
+        <tr class="grand"><td>Total</td><td>${dineroEs(parseFloat(purchase.total))}{sym}</td></tr>
       </table>
       ${originDocBlock(db, 'purchase', purchase.id)}`;
 
@@ -418,8 +420,8 @@ export function createPurchaseRoutes(db, cfg = {}) {
         <div style="margin-bottom:12px"><span class="badge ${badge}">${statusLabel}</span></div>
         <div class="dp-row"><span class="k">Compra</span><span class="v">#${purchase.id}</span></div>
         <div class="dp-row"><span class="k">Proveedor</span><span class="v">${escHtml(purchase.supplier_name)}</span></div>
-        <div class="dp-row"><span class="k">Fecha</span><span class="v">${purchase.date}</span></div>
-        <div class="dp-row"><span class="k">Total</span><span class="v">${parseFloat(purchase.total).toFixed(2)} ${sym}</span></div>
+        <div class="dp-row"><span class="k">Fecha</span><span class="v">${fechaEs(purchase.date)}</span></div>
+        <div class="dp-row"><span class="k">Total</span><span class="v">${dineroEs(parseFloat(purchase.total))}{sym}</span></div>
         <div class="dp-actions" style="margin-top:14px">
           ${actionBtns}
           <a href="/admin/purchases" class="btn btn-secondary">Volver</a>

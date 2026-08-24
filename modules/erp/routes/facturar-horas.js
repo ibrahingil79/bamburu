@@ -20,6 +20,7 @@ import { escHtml } from '../../../core/escape.js';
 import { facturarHorasSchema } from '../schemas.js';
 import { createInvoice } from './invoices.js';
 import { ENTITY } from '../../../core/activity-entities.js';
+import { fechaEs } from '../voz.js';   // la fecha, en cristiano
 
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
 const horasDe = seg => Math.round((Number(seg) || 0) / 3600 * 100) / 100;   // horas con 2 decimales (lo que va en la línea)
@@ -222,7 +223,8 @@ export function createFacturarHorasRoutes(db) {
 
       <script>
       const FH_SYM=${JSON.stringify(sym)}, FH_IVA=${JSON.stringify(iva)};
-      const eur=v=>FH_SYM+Number(v||0).toFixed(2);
+      // El dinero, escrito como en España. window.eur vive en layout.js.
+      const eur=v=>window.eur(v||0, FH_SYM);
       const fmtDur=s=>{ s=Math.max(0,Math.round(s||0)); const m=Math.floor((s%3600)/60); return Math.floor(s/3600)+'h '+(m<10?'0':'')+m+'m'; };
       let FH_DATA=null;
 
@@ -248,7 +250,7 @@ export function createFacturarHorasRoutes(db) {
         const filas=ent.map(e=>{
           const dis=e.sin_tarifa;
           return '<tr'+(dis?' style="opacity:.55"':'')+'><td>'+(dis?'<span title="Sin tarifa: pon la tarifa/hora de la persona en Usuarios">—</span>':'<input type="checkbox" class="fhChk" value="'+e.id+'" checked onchange="fhRecalc()">')+'</td>'
-            +'<td style="color:var(--muted);font-size:.8rem">'+escHtml(e.fecha)+'</td><td>'+escHtml(e.user_nombre||'')+'</td>'
+            +'<td style="color:var(--muted);font-size:.8rem">'+fechaEs(e.fecha)+'</td><td>'+escHtml(e.user_nombre||'')+'</td>'
             +'<td>'+escHtml(e.descripcion||'—')+'</td><td style="white-space:nowrap">'+fmtDur(e.duracion_seg)+'</td>'
             +'<td style="white-space:nowrap">'+(dis?'<span style="color:var(--danger,#b23)">sin tarifa</span>':eur(e.tarifa_efectiva)+'/h')+'</td>'
             +'<td style="white-space:nowrap">'+(dis?'—':eur(e.importe))+'</td></tr>';
