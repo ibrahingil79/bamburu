@@ -7360,7 +7360,24 @@ duraciones y su fuente, como los otros oficios.
   que se pregunta en una primera visita. La columna es de todos los negocios; **el campo solo se
   pinta en el oficio que lo pide** (`window.OFICIO_CAMPOS`), para no llenar de huecos la ficha de un
   taller.
-- **⬜ NO PUESTO, Y ESTO NECESITA UNA DECISIÓN TUYA: el historial clínico.** Son **datos de salud,
+- **✅ HECHO (24 ago 2026) — EL HISTORIAL CLÍNICO. Decisión tomada: la opción 2.** Se guarda dentro
+  de Bamburu, con acceso restringido, consentimiento del paciente y registro de quién lo abre.
+  **Bamburu nunca borra un historial por su cuenta.** `gate-historial-clinico`, 40 ✓.
+  - **Un permiso que no perdona el rol**, y es el único del producto: entra el dueño —que responde
+    ante la ley— y quien lo tenga concedido. Un `admin` sin él recibe 403. Recepción, tampoco.
+  - **Solo en el oficio de salud:** en un taller da 404 aunque escribas la dirección.
+  - **Sin consentimiento no escribe el MOTOR**, no la pantalla. Revocar no borra: la ley obliga.
+  - **Nada se pisa:** los antecedentes se versionan y una nota se corrige añadiendo otra.
+  - **La anotación privada no se filtra: no se lee.** La consulta de la copia del paciente ni
+    siquiera nombra esa columna.
+  - **DISA no lo ve ni pidiéndoselo el dueño** (`QUERY_PROTECTED_TABLES` se mira antes del bypass).
+  - **Ningún borrado automático.** Borrar es del dueño, escribiendo el nombre del paciente.
+  - ⬜ **APUNTADO, NO OCULTO — sin visor DICOM.** Los adjuntos aceptan cualquier fichero, `.dcm`
+    incluido: se guarda y se descarga. No se construye visor. *Motivo (decisión del dueño, 24 ago
+    2026): en fisioterapia la imagen la genera el centro de radiología y a la consulta llega el
+    informe en PDF.* Si algún día hace falta, es una pieza aparte.
+
+  ~~**⬜ NO PUESTO, Y ESTO NECESITA UNA DECISIÓN TUYA: el historial clínico.** Son **datos de salud,
   categoría especial del RGPD (art. 9)**, y guardarlos exige decisiones que no están escritas en
   ningún sitio de este proyecto. **Meter un campo «notas clínicas» sin resolverlas sería lo peor de
   los dos mundos: el dato dentro y la protección fuera.** Las tres opciones, para que elijas:
@@ -7371,7 +7388,7 @@ duraciones y su fuente, como los otros oficios.
      decidir cuántos años se conservan y quién puede exportarlos.
   3. **Solo una nota libre, avisando de que no es un historial clínico** y que no se metan
      diagnósticos. Barato, y se incumple el primer día.
-  *Mi recomendación es la 2, pero no es una decisión de programación y no la tomo yo.*
+  *Mi recomendación es la 2, pero no es una decisión de programación y no la tomo yo.*~~ — **elegida la 2 el 24 ago 2026; queda tachado, no borrado: es el registro de lo que se preguntó.**
 
 **LA AGENDA AJUSTADA A SU FORMA DE TRABAJAR: LAS SERIES.** Un fisio no cierra «una cita»: prescribe
 **diez sesiones, los martes a las 17:00**. Eso eran diez altas a mano y diez ocasiones de
