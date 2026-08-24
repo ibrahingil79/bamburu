@@ -73,7 +73,14 @@ async function paginaDe(userId) {
 
 try {
   const owner = db.prepare("SELECT id FROM admin_users WHERE role='owner' AND active=1 ORDER BY id LIMIT 1").get();
-  cliId = db.prepare("INSERT INTO clients (name,fiscal_id,country,active) VALUES (?,?, 'ES',1)").run('GATE FH Cliente', 'X1234567X').lastInsertRowid;
+  // SE REUTILIZA, NO SE CREA UNO NUEVO CADA PASADA. Este cliente NO se puede borrar al salir —sus
+  // facturas están en la cadena de VERI*FACTU— y crear uno nuevo en cada ejecución convertía una
+  // decisión razonable en basura creciendo sola: el 24 ago 2026 había 67 «GATE FH Cliente» y 70
+  // «GATE Rent Cliente» en el negocio de desarrollo, y le salían al dueño en sus informes.
+  const yaFH = db.prepare("SELECT id FROM clients WHERE fiscal_id='X1234567X' LIMIT 1").get();
+  cliId = yaFH ? yaFH.id
+    : db.prepare("INSERT INTO clients (name,fiscal_id,country,active) VALUES (?,?, 'ES',1)").run('Cliente de pruebas', 'X1234567X').lastInsertRowid;
+  db.prepare('UPDATE clients SET active=1 WHERE id=?').run(cliId);
   proyId = db.prepare("INSERT INTO proyectos (codigo,nombre,cliente_id,modo_cobro,active) VALUES (?,?,?,?,1)").run('GATE-FH', NOMBRE, cliId, 'horas').lastInsertRowid;
   workerId = nuevoEmpleado('Gate FH Worker', [['tiempo', 'read']], 50);   // tarifa 50/h → importes deterministas
   const e1 = nuevaEntrada('Diseño'), e2 = nuevaEntrada('Diseño'), e3 = nuevaEntrada('Reunión');   // 2 se agrupan + 1

@@ -16,7 +16,7 @@
 // gasto agotado) y estuvo semanas sin cubrir NADA. Lo que se puede probar gratis y siempre, se
 // prueba aquí, en cada barrido.
 import puppeteer from 'puppeteer';
-import { tenantDb, launchOpts, APP_DIR } from './lib/gate-env.mjs';
+import { tenantDb, launchOpts, APP_DIR, autoAceptarPaneles } from './lib/gate-env.mjs';
 import { saveAttachment } from '../modules/erp/attachments.js';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
@@ -58,6 +58,8 @@ const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 1000 });
 await page.setCookie({ name: 'asess', value: token, domain: DOMAIN, path: '/' });
 page.on('dialog', async d => { await d.accept(); });
+// Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+await autoAceptarPaneles(page);
 
 let attId = null;
 try {

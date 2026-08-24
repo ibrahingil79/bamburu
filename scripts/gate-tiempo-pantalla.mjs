@@ -10,7 +10,7 @@
 // NO ESCRIBE datos de negocio ajenos: siembra proyecto + empleados + entradas de prueba y los BORRA.
 //   node scripts/gate-tiempo-pantalla.mjs
 import puppeteer from 'puppeteer';
-import { launchOpts, APP_DIR } from './lib/gate-env.mjs';
+import { launchOpts, APP_DIR, autoAceptarPaneles } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { mkdirSync } from 'fs';
@@ -62,6 +62,8 @@ async function paginaDe(userId) {
   await page.setViewport({ width: 1400, height: 1000 });
   page.on('dialog', d => d.accept().catch(() => {}));   // confirm() de eliminar / alert() del 403
   await page.setCookie({ name: 'asess', value: sesion(userId), domain: HOST, path: '/' });
+  // Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+  await autoAceptarPaneles(page);
   return page;
 }
 

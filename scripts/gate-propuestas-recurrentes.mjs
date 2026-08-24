@@ -15,7 +15,7 @@
 // (La cola de la AEAT, además, está inactiva en desarrollo por falta de certificado: emitir aquí no
 // mandaría nada a Hacienda. Pero la factura quedaría igual, y de eso va esto.)
 import puppeteer from 'puppeteer';
-import { tenantDb, launchOpts } from './lib/gate-env.mjs';
+import { tenantDb, launchOpts, autoAceptarPaneles } from './lib/gate-env.mjs';
 import { RID } from './lib/gate-fixtures.mjs';
 import { createTemplate, generateDueOccurrences } from '../modules/erp/recurrentes.js';
 import { generarPropuestasRecurrentes, TIPO_RECURRENTE } from '../modules/erp/propuestas.js';
@@ -49,6 +49,8 @@ const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 1000 });
 await page.setCookie({ name: 'asess', value: token, domain: DOMAIN, path: '/' });
 page.on('dialog', async d => { await d.accept(); });
+// Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+await autoAceptarPaneles(page);
 
 try {
   // ── 1. Siembra: una iguala que toca ──────────────────────────────────────────

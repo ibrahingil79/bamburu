@@ -25,7 +25,7 @@
 // Genera dos órdenes/compra de prueba en el tenant de desarrollo y deja productos nuevos.
 //   node scripts/gate-c2-captura.mjs
 import puppeteer from 'puppeteer';
-import { tenantDb, launchOpts, requireLlmQuota } from './lib/gate-env.mjs';
+import { tenantDb, launchOpts, requireLlmQuota, autoAceptarPaneles } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 
@@ -107,6 +107,8 @@ async function newAdminPage() {
   await page.setCookie({ name: 'asess', value: token, domain: DOMAIN, path: '/' });
   page.on('dialog', async d => { await d.accept(); });   // acepta los confirm() de exceso
   return page;
+  // Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+  await autoAceptarPaneles(page);
 }
 
 try {

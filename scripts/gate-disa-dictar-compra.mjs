@@ -17,7 +17,7 @@
 //
 //   node scripts/gate-disa-dictar-compra.mjs
 import puppeteer from 'puppeteer';
-import { tenantDb, launchOpts } from './lib/gate-env.mjs';
+import { tenantDb, launchOpts, autoAceptarPaneles } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 import { captureFromExtraction } from '../modules/erp/routes/purchases-capture.js';
@@ -53,6 +53,8 @@ async function newAdminPage() {
   await page.setViewport({ width: 1280, height: 1000 });
   await page.setCookie({ name: 'asess', value: token, domain: DOMAIN, path: '/' });
   page.on('dialog', async d => { await d.accept(); });
+  // Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+  await autoAceptarPaneles(page);
   return page;
 }
 // Mockea la respuesta de /api/disa/message para devolver un capture_url (simula que DISA

@@ -57,7 +57,14 @@ export function filasVenta(db, { from = null, to = null } = {}) {
   return db.prepare(
     `SELECT ii.id, ii.invoice_id, ii.quantity, ii.total_price AS base, ii.unit_cost, ii.product_id,
             ii.description AS linea,
-            i.issue_date, i.series, i.client_id, i.client_name, i.client_province,
+            i.issue_date, i.series, i.client_id, i.client_province,
+            -- EL NOMBRE DE HOY, NO EL CONGELADO. La factura guarda el nombre que tenía el cliente el
+            -- día que se emitió, y eso está bien para el DOCUMENTO: no se reescribe jamás. Pero un
+            -- informe habla del negocio de HOY, y si un cliente cambia de nombre el informe tiene que
+            -- seguirle. ventas-metrics.js ya lo hacía así en su ranking (línea 374); aquí no, y por
+            -- eso renombrar un cliente no cambiaba nada en los informes. Si el cliente ya no existe,
+            -- se cae al nombre congelado, que es lo único que queda.
+            COALESCE(c.name, i.client_name) AS client_name,
             c.client_type, c.payment_method,
             p.name AS producto, cat.name AS categoria,
             ${SQL_RESPONSABLE}

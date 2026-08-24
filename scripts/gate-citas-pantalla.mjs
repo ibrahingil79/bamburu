@@ -15,7 +15,7 @@
 //  cadena Verifactu a mano.)
 //   node scripts/gate-citas-pantalla.mjs
 import puppeteer from 'puppeteer';
-import { launchOpts, APP_DIR } from './lib/gate-env.mjs';
+import { launchOpts, APP_DIR, autoAceptarPaneles } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { mkdirSync } from 'fs';
@@ -62,6 +62,8 @@ async function paginaDe(userId) {
   const page = await ctx.newPage();
   await page.setViewport({ width: 1500, height: 1000 });
   page.on('dialog', d => d.accept().catch(() => {}));
+  // Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+  await autoAceptarPaneles(page);
   await page.setCookie({ name: 'asess', value: sesion(userId), domain: HOST, path: '/' });
   return page;
 }

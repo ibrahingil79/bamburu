@@ -7,7 +7,7 @@
 // Limpia POR ID todo lo que siembra (producto, niveles, propuesta, orden, proveedor, usuarios, sesiones):
 // el negocio queda como estaba. NO envía nada al proveedor (el flujo solo crea un borrador).
 import puppeteer from 'puppeteer';
-import { tenantDb, launchOpts, engancharToasts } from './lib/gate-env.mjs';
+import { tenantDb, launchOpts, engancharToasts, autoAceptarPaneles } from './lib/gate-env.mjs';
 import { RID, productoDePrueba, purgarArtefactos } from './lib/gate-fixtures.mjs';
 import { generarPropuestasReposicion, setNivelesProducto } from '../modules/erp/reposicion.js';
 import { TIPO_REPOSICION } from '../modules/erp/propuestas.js';
@@ -75,6 +75,8 @@ try {
   await engancharToasts(page);
   await page.setCookie({ name: 'asess', value: tok, domain: DOMAIN, path: '/' });
   page.on('dialog', async d => { await d.accept(); });
+  // Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+  await autoAceptarPaneles(page);
 
   await page.goto(BASE + '/admin/propuestas', { waitUntil: 'networkidle2' });
   const avisos = await page.evaluate(async () => (await (await fetch('/api/erp/avisos')).json()).avisos || []);

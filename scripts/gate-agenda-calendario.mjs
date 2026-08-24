@@ -11,7 +11,7 @@
 // «Proyecto», asesoría sí · [6] 0 errores JS en móvil y escritorio.
 // Crea tenants de prueba en la control.db REAL y los borra al terminar.
 import puppeteer from 'puppeteer';
-import { launchOpts, APP_DIR } from './lib/gate-env.mjs';
+import { launchOpts, APP_DIR, autoAceptarPaneles } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { unlinkSync } from 'fs';
@@ -57,6 +57,8 @@ try {
   const errs = []; p.on('pageerror', e => errs.push(e.message));
   p.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/i.test(m.text())) errs.push('console: ' + m.text()); });
   p.on('dialog', d => d.accept().catch(() => {}));
+  // Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+  await autoAceptarPaneles(p);
 
   // ── EL RECORRIDO REAL: negocio nuevo → cita puesta ──────────────────────────
   console.log('\n[0] LA PRUEBA QUE MANDA — negocio de cero hasta tener una cita');

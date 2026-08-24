@@ -13,7 +13,7 @@
 // de PRUEBA que se borran: ningún usuario real se toca. Ventas y P&G total quedan EXACTAMENTE igual.
 //   node scripts/gate-coste-horas-pantalla.mjs
 import puppeteer from 'puppeteer';
-import { launchOpts, APP_DIR } from './lib/gate-env.mjs';
+import { launchOpts, APP_DIR, autoAceptarPaneles } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { mkdirSync } from 'fs';
@@ -66,6 +66,8 @@ async function paginaDe(userId) {
   const page = await ctx.newPage();
   await page.setViewport({ width: 1400, height: 1000 });
   page.on('dialog', d => d.accept().catch(() => {}));
+  // Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+  await autoAceptarPaneles(page);
   await page.setCookie({ name: 'asess', value: sesion(userId), domain: HOST, path: '/' });
   return page;
 }
@@ -74,7 +76,14 @@ try {
   const owner = db.prepare("SELECT id FROM admin_users WHERE role='owner' AND active=1 ORDER BY id LIMIT 1").get();
   const ventasAntes = ventasBase(), pygAntes = pygTotal();
 
-  cliId = db.prepare("INSERT INTO clients (name,fiscal_id,country,active) VALUES (?,?, 'ES',1)").run('GATE Coste Cliente', 'X1122334X').lastInsertRowid;
+  // SE REUTILIZA, NO SE CREA UNO NUEVO CADA PASADA. Este cliente NO se puede borrar al salir —sus
+  // facturas están en la cadena de VERI*FACTU— y crear uno nuevo en cada ejecución convertía una
+  // decisión razonable en basura creciendo sola: el 24 ago 2026 había 67 «GATE FH Cliente» y 70
+  // «GATE Rent Cliente» en el negocio de desarrollo, y le salían al dueño en sus informes.
+  const yaCoste = db.prepare("SELECT id FROM clients WHERE fiscal_id='X1122334X' LIMIT 1").get();
+  cliId = yaCoste ? yaCoste.id
+    : db.prepare("INSERT INTO clients (name,fiscal_id,country,active) VALUES (?,?, 'ES',1)").run('Cliente de pruebas', 'X1122334X').lastInsertRowid;
+  db.prepare('UPDATE clients SET active=1 WHERE id=?').run(cliId);
   PC = db.prepare("INSERT INTO proyectos (codigo,nombre,cliente_id,modo_cobro,tarifa_hora,active) VALUES ('GATE-CH',?,?,'horas',60,1)").run('GATE Coste Horas ' + Date.now(), cliId).lastInsertRowid;
   // Venta real 1000 etiquetada al proyecto → resultado CONTABLE = 1000 (sin gastos).
   fVenta = createInvoice(db, { client_id: cliId, lines: [{ description: 'Servicio gate coste', quantity: 1, unit_price: 1000, tax_rate: 21 }], issue_date: HOY }).id;

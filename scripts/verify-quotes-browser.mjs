@@ -4,6 +4,7 @@
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 import puppeteer from 'puppeteer';
+import { autoAceptarPaneles } from './lib/gate-env.mjs';
 
 const DB = 'data/tenants/desarrollo-bamburu.db';
 const ORIGIN = 'http://127.0.0.1:3000';
@@ -22,6 +23,8 @@ const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 1000 });
 await page.setCookie({ name: 'asess', value: token, domain: '127.0.0.1', path: '/' }, { name: 'btenant', value: 'desarrollo-bamburu', domain: '127.0.0.1', path: '/' });
 page.on('dialog', async d => { await d.accept(); });
+// Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+await autoAceptarPaneles(page);
 
 try {
   console.log('\n=== Presupuesto — Parte B (navegador) ===\n');

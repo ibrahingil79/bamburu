@@ -10,7 +10,7 @@
 //   [6] 0 errores JS, en móvil (390×844) y escritorio (1400×900).
 // No deja residuo: restaura el oficio, las palabras de los puestos y los usuarios que desactiva.
 import puppeteer from 'puppeteer';
-import { launchOpts, APP_DIR } from './lib/gate-env.mjs';
+import { launchOpts, APP_DIR, autoAceptarPaneles } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { unlinkSync } from 'fs';
@@ -94,6 +94,8 @@ try {
     errs.push('console: ' + t);
   });
   p.on('dialog', d => d.accept().catch(() => {}));
+  // Y el panel que sustituyó a esas ventanitas: se acepta igual que se aceptaba el confirm().
+  await autoAceptarPaneles(p);
   await p.setCookie({ name: 'asess', value: tok, domain: HOST, path: '/' });
   await p.evaluateOnNewDocument(() => { try { localStorage.removeItem('agPrefs'); } catch (e) {} });
 
