@@ -47,6 +47,22 @@ const DE_UN_CLIENTE = [
 // Proveedor»** en el negocio de desarrollo —uno por cada vez que corrió gate-rentabilidad-pantalla—,
 // y 46 de ellos sin nada colgando: borrables desde el primer día y nadie los miraba, porque este
 // limpiador no tenía proveedores en la lista.
+// De un USUARIO de prueba: si tiene cualquiera de estos, NO se borra — se archiva. El registro de
+// actividad es lo que de verdad lo ata: un apunte de auditoría no se reescribe hacia atrás (misma
+// regla que `core/activity-entities.js`). Las horas fichadas y los documentos también atan, porque
+// borrarlos movería cifras del negocio. Lo que sí se suelta al borrar son las cosas de configuración
+// del propio usuario: permisos, sesiones, resúmenes por correo y excepciones de horario.
+// El 24 ago 2026 quedaban 17 usuarios de gate a la vista en la pantalla de Usuarios y este limpiador
+// no los miraba.
+const DE_UN_USUARIO = [
+  ['activity_logs', 'user_id'], ['time_entries', 'user_id'], ['citas', 'user_id'],
+  ['invoices', 'responsable_id'], ['fichajes', 'user_id'], ['crm_tareas', 'user_id'],
+];
+const SUELTA_DE_UN_USUARIO = [
+  ['user_permissions', 'admin_user_id'], ['admin_sessions', 'user_id'],
+  ['resumen_envios', 'admin_user_id'], ['horario_excepciones', 'user_id'],
+];
+
 const DE_UN_PROVEEDOR = [
   ['supplier_invoices', 'supplier_id'], ['purchases', 'supplier_id'], ['purchase_orders', 'supplier_id'],
   ['supplier_returns', 'supplier_id'], ['products', 'supplier_id'], ['supplier_payments', 'supplier_id'],
@@ -82,6 +98,12 @@ function procesar(slug, ruta) {
     const proBorrar = pro.filter(p => libre(db, p.id, DE_UN_PRODUCTO));
     const proArchivar = pro.filter(p => !libre(db, p.id, DE_UN_PRODUCTO) && p.status !== 'archived');
 
+    // ── USUARIOS DE PRUEBA ──────────────────────────────────────────────────────────────────────
+    const MARCA_USU = "(name LIKE 'GATE%' OR name LIKE 'Gate %' OR name LIKE 'ZZ %' OR email LIKE '%gate%' OR email LIKE 'zz-%' OR email LIKE 'gas-%')";
+    const usu = db.prepare(`SELECT id, name, email, role, active FROM admin_users WHERE role<>'owner' AND ${MARCA_USU}`).all();
+    const usuBorrar = usu.filter(u => libre(db, u.id, DE_UN_USUARIO));
+    const usuArchivar = usu.filter(u => !libre(db, u.id, DE_UN_USUARIO) && u.active);
+
     // ── PROVEEDORES ─────────────────────────────────────────────────────────────────────────────
     const prv = hay('suppliers') ? db.prepare(`SELECT id, name, active FROM suppliers WHERE ${MARCA_SQL('name')}`).all() : [];
     const prvBorrar = prv.filter(x => libre(db, x.id, DE_UN_PROVEEDOR));
@@ -112,6 +134,7 @@ function procesar(slug, ruta) {
     console.log(`    · se ARCHIVAN (tienen facturas u otros): ${cliArchivar.length}`);
     console.log(`  productos con marca: ${pro.length} → borrar ${proBorrar.length} · archivar ${proArchivar.length}`);
     console.log(`  proveedores con marca: ${prv.length} → borrar ${prvBorrar.length} · archivar ${prvArchivar.length}`);
+    console.log(`  usuarios de prueba: ${usu.length} → borrar ${usuBorrar.length} · archivar ${usuArchivar.length}`);
     console.log(`  almacenes vacíos con marca: ${almBorrar.length} de ${alm.length}`);
     console.log(`  recursos con marca sin citas: ${recBorrar.length} de ${rec.length}`);
     console.log(`  citas con código de gate: ${citas.length}`);
@@ -141,9 +164,19 @@ function procesar(slug, ruta) {
       R.borrado.almacenes = almBorrar.length ? db.prepare(`DELETE FROM warehouses WHERE id IN ${enLista(almBorrar)}`).run().changes : 0;
       R.borrado.recursos = recBorrar.length ? db.prepare(`DELETE FROM recursos WHERE id IN ${enLista(recBorrar)}`).run().changes : 0;
       R.borrado.proveedores = prvBorrar.length ? db.prepare(`DELETE FROM suppliers WHERE id IN ${enLista(prvBorrar)}`).run().changes : 0;
+      // Los usuarios: primero se sueltan sus cosas de configuración, después el usuario.
+      let usuBorrados = 0;
+      for (const u of usuBorrar) {
+        for (const [t, c] of SUELTA_DE_UN_USUARIO) {
+          try { db.prepare(`DELETE FROM ${t} WHERE ${c}=?`).run(u.id); } catch {}
+        }
+        try { usuBorrados += db.prepare('DELETE FROM admin_users WHERE id=?').run(u.id).changes; } catch {}
+      }
+      R.borrado.usuarios = usuBorrados;
       R.archivado.clientes = cliArchivar.length ? db.prepare(`UPDATE clients SET active=0 WHERE id IN ${enLista(cliArchivar)}`).run().changes : 0;
       R.archivado.productos = proArchivar.length ? db.prepare(`UPDATE products SET status='archived' WHERE id IN ${enLista(proArchivar)}`).run().changes : 0;
       R.archivado.proveedores = prvArchivar.length ? db.prepare(`UPDATE suppliers SET active=0 WHERE id IN ${enLista(prvArchivar)}`).run().changes : 0;
+      R.archivado.usuarios = usuArchivar.length ? db.prepare(`UPDATE admin_users SET active=0 WHERE id IN ${enLista(usuArchivar)}`).run().changes : 0;
     })();
 
     console.log('\n  BORRADO :', JSON.stringify(R.borrado));
