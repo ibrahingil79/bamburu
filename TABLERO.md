@@ -7475,3 +7475,93 @@ alguien se acordaba**, que es exactamente cómo una herramienta deja de cazar co
 ellas dieron verde con una pantalla muerta. Grupo nuevo `lint`. Los tres cierran ya con el pie que el
 runner sabe leer, y `lint-js-servido` se declara **consumidor de cupo** del freno de 600 pet./min:
 pide más de 300 pantallas en un minuto, más que cualquier gate de navegador.
+
+---
+
+## 🔧 ENCARGO DEL 24 AGO 2026 — cuatro errores vistos por el dueño y los cabos de la noche
+
+Ocho puntos. Los cuatro primeros son fallos que Ibrahin vio EN PANTALLA; los cuatro siguientes,
+deuda que quedó apuntada la noche anterior.
+
+### 1 · LOS CORREOS AL EQUIPO — y una respuesta que no esperaba
+**PASO 0, la lista completa.** Correos automáticos que el producto manda a alguien del EQUIPO: **dos**
+—el RESUMEN DIARIO (parte del día: deuda, cobros vencidos, pagos a proveedor, stock bajo, envíos a la
+AEAT, reservas sin aprobar, recurrentes, clientes en riesgo, citas de hoy) y RECUPERAR CONTRASEÑA, que
+no lleva ni un dato del negocio—. Todo lo demás va a CLIENTES o PROVEEDORES, donde no hay permisos que
+consultar. Aparte, el heartbeat de las copias, que va a la dirección de Ibrahin.
+
+**Y LO QUE SE MIDIÓ: el resumen diario YA filtraba por permisos, y lo hace bien.** Un empleado con solo
+`citas.read` no recibe nada. Los correos con cifras que Ibrahin vio llegar iban a `empleado prueba
+<gilibrahin@gmail.com>`, una cuenta de rol «empleado» **con 49 permisos**, entre ellos `invoices.read`,
+`cobros.read`, `analytics.read` y `admin.manage_users`: cada cifra de esos correos es algo que esa
+cuenta ve al entrar. **No se encontró ninguna fuga.**
+
+**LO QUE SÍ FALTABA.** La regla se cumplía POR CONVENIO, escrita dentro del cron. `core/correo-equipo.js`
+es ahora la ÚNICA puerta: quien mande algo a un compañero declara el permiso de CADA bloque, la puerta
+lee los permisos DE LA BASE (nunca de quien llama), quita lo que ese destinatario no vería en pantalla
+y, si no queda nada, NO MANDA. Falla cerrado en tres sitios: bloque sin permiso declarado → revienta al
+escribirlo; destinatario inactivo → no recibe; usuario inexistente → tampoco.
+`verify-correos-permisos` (13 ✓) enseña el correo entero de tres personas y hace de LLAMADOR
+DESCUIDADO: pasa al empleado los bloques del dueño y la puerta los para.
+
+### 2 · NO SE PODÍAN BORRAR EMPLEADOS
+**PASO 0, en un navegador con sesión de dueño:** el botón estaba y funcionaba… solo con un empleado SIN
+ningún permiso. **Con UN permiso: HTTP 500 «Ha ocurrido un error, inténtalo de nuevo» y el usuario
+seguía ahí** — `DELETE FROM admin_users` chocaba con la clave ajena de `user_permissions`. Como
+cualquier empleado útil tiene permisos, no se podía dar de baja a ninguno.
+
+`modules/erp/usuarios-baja.js` decide en UN sitio: **sin rastro → se borra** (soltando lo suyo:
+permisos, sesiones, preferencias, horarios); **con rastro → se archiva** (pierde el acceso al momento,
+su sesión cae en el siguiente clic, desaparece de listas y desplegables, y su rastro queda intacto). El
+rastro son **16 sitios del esquema**, cada uno con su nombre en cristiano. La pantalla PREGUNTA antes
+(`GET /users/:id/baja`) y enseña qué va a pasar y por qué. Botón «Recuperar» en la fila de quien está
+archivada. Al dueño y a una misma no se les ofrece, y forzar la ruta da 403. `gate-baja-empleado` 27 ✓.
+
+### 3 · LA MIGRACIÓN NO LE LLEGABA AL EQUIPO
+**DÓNDE SE CAÍA, MEDIDO:** la petición se registraba y el correo se mandaba —Resend lo aceptaba, por eso
+`email_ok` decía 1—, pero iba a `hola@bamburu.com`, **que REBOTA**: el dominio está verificado para
+ENVIAR con la recepción DESACTIVADA. Sonda al mismo buzón: estado **`bounced`**.
+**Ahora se manda a `ibrahingil@gmail.com`** (la misma que ya usan los avisos de copia), configurable por
+`settings.migracion_buzon` o `BAMBURU_MIGRACIONES_EMAIL`. **⬜ Ibrahin tiene que confirmar cuál es la
+buena.** No hay más avisos al equipo en la misma situación: los otros dos van a esa dirección y llegan.
+
+Y se arregla la causa, no el síntoma: **el fichero se guarda** (antes solo su nombre; el binario viajaba
+únicamente dentro del correo) y hay **pantalla nueva en el panel de control, «Migraciones»**, con todas
+las peticiones de todos los negocios, su fichero descargable y si el correo salió. Un buzón caído ya no
+puede hacer desaparecer a un cliente que quiere entrar. `gate-migracion-al-equipo` 22 ✓.
+
+### 4 · EL PANEL DE ARRANQUE Y EL LOGO
+**PASO 0, los once uno a uno en un negocio nuevo:** diez se marcaban; **solo fallaba el del logo**. El
+panel miraba `company_config.logo_url` —la columna vieja— y subir el fichero escribe
+`company_config.company_logo_id`. Ahora mira las dos. Y el panel **se marca en el momento**: se pone al
+día cuando la pestaña vuelve a estar a la vista, al volver del historial y al recuperar el foco.
+`gate-arranque-once-pasos` 32 ✓, con la captura del panel abierto y el paso marcado.
+
+### 5 · EL DINERO Y LAS FECHAS, COMO EN ESPAÑA
+No eran 269 sitios sueltos: eran **QUINCE ayudantes distintos**, la mitad escribiendo `€117087.43`. Una
+sola forma: `window.eur`/`window.dineroEs`/`window.fechaEs` en el componente compartido y `fmtEur` en el
+servidor, con el MISMO nombre en los dos lados. **Lo que NO se tocó, y es la mitad del trabajo:** los
+`toFixed(2)` que alimentan el `value` de un campo o el cuerpo de una petición, donde el número va crudo
+porque alguien lo vuelve a leer. Por eso `verify-dinero-espanol` mide **sobre lo servido** y no sobre el
+código: **59 pantallas —incluidas las de imprimir— sin un importe con el símbolo delante ni con punto
+decimal, y sin una fecha en formato inglés.**
+
+### 6 · UN SOLO MOTOR DE DEUDA
+Discrepaban en 242,00 € porque uno recorría CLIENTES y el otro FACTURAS. Decisión del dueño aplicada:
+**se cuenta sobre las FACTURAS**. Un solo recorrido (`deudaViva`) con dos caras. **Cifra que se mueve en
+pantalla: «Te deben» baja 2,00 €** (121.927,43 → 121.925,43), y la causa, buscada factura a factura, es
+un ticket de mostrador sin cliente **pagado de más en 2 €** que el recorrido viejo no veía.
+
+### 7 · LIMPIEZA
+**29 negocios de prueba borrados** (33,2 MB), con sus filas de control.db y sus adjuntos. Se salvan ocho:
+los dos que usan las comprobaciones, `desarrollo`, `peluqueria-gil` (lo nombra `desplegar.mjs`) y los
+**cuatro negocios reales**. **148 clientes de gate renombrados** a «Cliente de pruebas» —eran 70 «GATE
+Rent Cliente», 67 «GATE FH», 5 «GATE Coste» y 6 «ZZ Dormido»— y ahora agrupan en UNA fila. Para que eso
+se viera hubo que arreglar algo más: el informe leía el nombre CONGELADO en la factura; la factura lo
+conserva (un documento emitido no se reescribe), pero el informe usa ya el nombre de hoy. Y tres gates
+reutilizan su cliente en vez de crear uno nuevo por pasada. **Las 13 comprobaciones con la ventanita
+vieja, migradas**: no queda ninguna que solo sepa aceptar el diálogo del navegador.
+
+### CONSTANTES
+**Rutas 430 → 434, ninguna perdida**, comparadas una a una. Cero `DROP`. Las tablas de DISA siguen fuera
+de `WRITABLE_TABLES`. La cadena de VERI*FACTU, sin tocar.

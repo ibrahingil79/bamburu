@@ -29,6 +29,7 @@ import { clientTimeline, clientCrmSummary } from '../crm.js';
 // que se ejecuta al mirar un cliente es `mapaDeCliente`, que solo lee de nuestra base.
 import { programarGeo, mapaDeCliente, fijarPunto } from '../mapa-cliente.js';
 import { detectar } from '../vigia.js';
+import { fechaEs } from '../voz.js';   // la fecha, en cristiano (24/08/2026)
 
 // Comprobación reutilizable de NIF duplicado (regla de integridad — sin duplicados).
 // Devuelve el cliente ACTIVO en conflicto (otro id con el mismo fiscal_id normalizado)
@@ -573,7 +574,11 @@ export function createClientRoutes(db, cfg = {}) {
       '<td style="color:var(--muted)">'+escHtml(cl.email||'-')+'</td>'+
       '<td style="color:var(--muted)">'+escHtml(cl.phone||'-')+'</td>'+
       '<td>'+(cl.group_name?'<span class="badge b-purple">'+escHtml(cl.group_name)+'</span>':'-')+'</td>'+
-      '<td style="color:var(--muted);font-size:.8rem">'+(window.fechaEs((cl.created_at||'').split(' ')[0])||'-')+'</td>'+
+      // ESTO SE EJECUTA EN EL SERVIDOR, así que `window` no existe: `fechaEs` va importado, no por
+      // el objeto global. Metí `window.fechaEs` aquí y dejé /admin/clients dando 500 («window is
+      // not defined»). La regla: dentro de una plantilla es código del navegador y vale `window`;
+      // fuera de ella es código del servidor y hay que importar.
+      '<td style="color:var(--muted);font-size:.8rem">'+(fechaEs((cl.created_at||'').split(' ')[0])||'-')+'</td>'+
       '<td style="white-space:nowrap">'+
         // Patrón §6: UNA acción clara ("Ver") + el resto en un menú "···".
         '<button class="btn btn-secondary btn-sm" onclick="viewDetail('+cl.id+')">Ver</button> '+
