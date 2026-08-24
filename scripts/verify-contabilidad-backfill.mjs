@@ -9,7 +9,7 @@ import { copyFileSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { randomBytes } from 'crypto';
-import { backfillLedger, libroVentas, libroCompras } from '../modules/erp/contabilidad.js';
+import { backfillLedger, libroVentas, libroCompras, correccionesDeOtroPeriodo } from '../modules/erp/contabilidad.js';
 import { countsAsReceivable } from '../modules/erp/cobros.js';
 import { countsAsPayable } from '../modules/erp/pagos.js';
 
@@ -76,9 +76,24 @@ try {
   if (topMonth) {
     const mFrom = topMonth.ym + '-01', mTo = topMonth.ym + '-31';
     const mlv = libroVentas(db, mFrom, mTo);
+    // ── LAS CORRECCIONES DE OTRO PERIODO, DESCONTADAS ────────────────────────────────────────────
+    // Un asiento que anula a otro se fecha el día que se hace: no se reabre un periodo cerrado. Así
+    // que la corrección de un apunte de junio aterriza en el mes en curso con signo negativo, y este
+    // periodo se compara contra las facturas EMITIDAS en él — que no incluyen esa de junio.
+    // Medido el 24 ago 2026: 992,20 € en cinco asientos, todos reversiones de enero a marzo.
+    // No se afloja la aserción: se hace que compare lo mismo en los dos lados. Una corrección de otro
+    // periodo no es una venta de este, y contarla como si lo fuera deja un rojo PERMANENTE — y un rojo
+    // permanente se acaba ignorando, que es como se llega a 99 comprobaciones que no mira nadie.
+    const corr = correccionesDeOtroPeriodo(db, 'invoice', mFrom, mTo);
     let mLive = 0;
     for (const inv of db.prepare("SELECT * FROM invoices WHERE substr(issue_date,1,7)=?").all(topMonth.ym)) if (countsAsReceivable(db, inv)) mLive = r2(mLive + r2(inv.subtotal) + r2(inv.tax_amount));
-    ok(r2(mlv.totals.total) === mLive, 'Periodo real ' + topMonth.ym + ' (' + topMonth.n + ' facturas): libro de ventas (' + r2(mlv.totals.total) + ') = vivo (' + mLive + ')');
+    const mLibro = r2(r2(mlv.totals.total) - corr.total);
+    ok(mLibro === mLive, 'Periodo real ' + topMonth.ym + ' (' + topMonth.n + ' facturas): libro de ventas ('
+      + mLibro + ') = vivo (' + mLive + ')'
+      + (corr.detalle.length
+         ? '  ·  descontadas ' + corr.detalle.length + ' correcciones de otro periodo por ' + r2(-corr.total) + ' €'
+           + ' (el libro en bruto suma ' + r2(mlv.totals.total) + ')'
+         : ''));
   }
 
   // 9) Coherencia del DESGLOSE por tipo en TODAS las filas (ventas y compras): Σ por tipo = total fila.

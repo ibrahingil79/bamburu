@@ -208,6 +208,37 @@ export function reversarHuerfanos(db, { hoy, simulacro = false } = {}) {
   return { encontrados: huerfanos.length, anulados, detalle: huerfanos };
 }
 
+// ── LO QUE UNA CORRECCIÓN DE OTRO PERIODO METE EN ESTE ───────────────────────────────────────────
+// 24 ago 2026. Un asiento que ANULA a otro se fecha el día que se hace —no se reabre un periodo
+// cerrado—, así que la corrección de un apunte de junio aterriza en AGOSTO con signo negativo. El
+// libro histórico sigue cuadrando; el de AGOSTO, no: trae un descuento cuya factura no es de agosto.
+//
+// Medido el día que pasó: el desglose de agosto se movió 992,20 €, que eran exactamente las
+// reversiones de asientos de junio y julio fechadas hoy.
+//
+// **Esto no afloja nada: hace que la comparación compare lo mismo en los dos lados.** Una corrección
+// de otro periodo no es una venta de este, y contarla como si lo fuera deja un rojo permanente —y un
+// rojo permanente se acaba ignorando, que es como se llega a 99 comprobaciones que nadie mira.
+//
+// Devuelve lo que esas correcciones aportan al periodo, con su detalle, para que la cifra se pueda
+// enseñar en vez de aplicarse a ciegas.
+export function correccionesDeOtroPeriodo(db, tipoOrigen, from, to) {
+  if (!from || !to) return { total: 0, detalle: [] };
+  const filas = db.prepare(`
+    SELECT e.id, e.entry_date, e.origin_id, o.entry_date AS fecha_original,
+           ROUND(SUM(CASE WHEN l.account_code IN ('700','705','477') THEN l.credit - l.debit ELSE 0 END), 2) AS aporta
+      FROM ledger_entries e
+      JOIN ledger_entries o ON o.id = e.reverses_entry_id
+      JOIN ledger_lines  l ON l.entry_id = e.id
+     WHERE e.entry_type = 'reversion'
+       AND e.origin_type = ?
+       AND e.entry_date BETWEEN ? AND ?
+       AND (o.entry_date < ? OR o.entry_date > ?)
+     GROUP BY e.id`).all(tipoOrigen, from, to, from, to);
+  const total = Math.round(filas.reduce((s, f) => s + (f.aporta || 0), 0) * 100) / 100;
+  return { total, detalle: filas };
+}
+
 // Cuántos asientos quedan sin documento y SIN anular. Es lo que mide la comprobación que impide que
 // el agujero se vuelva a abrir: si alguien borra un documento sin deshacer su apunte, esto sube.
 export function huerfanosVivos(db) {

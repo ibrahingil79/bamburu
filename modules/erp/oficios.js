@@ -114,9 +114,17 @@ export const OFICIOS = [
       { nombre: 'Quiropodia',                    duracion_min: 45, banda: 'exento' },
       // Logopedia — sesión estándar de 45 min.
       { nombre: 'Sesión de logopedia',           duracion_min: 45, banda: 'exento' },
-      // BIENESTAR, no sanitario: al tipo GENERAL, y el nombre lo dice.
+      // ── BIENESTAR: NO ES ASISTENCIA SANITARIA, AUNQUE LO DÉ UN SANITARIO ──────────────────────
+      // La exención del art. 20.Uno.3.º LIVA pide DOS cosas A LA VEZ: profesional sanitario titulado
+      // Y finalidad terapéutica. El MISMO fisioterapeuta factura sin IVA una rehabilitación y al 21 %
+      // un masaje relajante o unas clases de pilates. Estos cuatro vienen marcados al general **a
+      // propósito y desde el primer día**: un fisio que emitiera todo exento tendría un problema con
+      // Hacienda, y se lo habríamos dado nosotros al precargarle el catálogo.
+      // (La estética tiene su propio oficio, `estetica`, y allí nace entera al general.)
       { nombre: 'Masaje de bienestar (no terapéutico)', duracion_min: 60, banda: 'general' },
       { nombre: 'Sesión de entrenamiento personal',     duracion_min: 60, banda: 'general' },
+      { nombre: 'Clase de pilates (grupo)',             duracion_min: 55, banda: 'general' },
+      { nombre: 'Plan de adelgazamiento (no terapéutico)', duracion_min: 45, banda: 'general' },
     ],
   },
   {

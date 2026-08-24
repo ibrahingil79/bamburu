@@ -1,6 +1,7 @@
 // Parte B (servidor real, tenant desarrollo): códigos de estado y PERMISO con sesiones reales.
 //   node scripts/verify-invoice-over-stock-http.mjs
 import Database from 'better-sqlite3';
+import { prepararEmpleado } from './lib/empleado-de-prueba.mjs';
 import { randomBytes } from 'crypto';
 
 const DB = 'data/tenants/desarrollo-bamburu.db';
@@ -9,6 +10,8 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
 
 const db = new Database(DB);
+// El empleado de prueba, activo mientras dura esto y devuelto como estaba.
+const emp = prepararEmpleado(db, 3);
 const PHYS = 1, SERV = 8;            // Vela Lavanda (físico, stock 62) · Servicio de Montaje
 const permId = (mod, act) => db.prepare('SELECT id FROM permissions WHERE module=? AND action=?').get(mod, act).id;
 const PID_CREATE = permId('invoices', 'create'), PID_OVER = permId('sales', 'emit_over_stock');
@@ -58,6 +61,7 @@ try {
   r = await emit(emp, { description: 'Vela Lavanda 200g', quantity: 1000, unit_price: 10, tax_rate: 21, product_id: PHYS }, true);
   ok(r.status === 201 && r.body.invoice_number, 'empleado CON sales.emit_over_stock + confirm_excess → 201 ' + (r.body.invoice_number || ''));
 } finally {
+  emp.restaurar(db);
   for (const t of cleanup) db.prepare('DELETE FROM admin_sessions WHERE token=?').run(t);
   revoke(3, PID_CREATE); revoke(3, PID_OVER);   // dejar al empleado como estaba
   db.close();

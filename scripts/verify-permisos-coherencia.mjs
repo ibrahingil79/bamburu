@@ -4,6 +4,7 @@
 // URL directa); dueño pasa todo por el bypass; la pantalla de asignación ya no ofrece los decorativos.
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
+import { prepararEmpleado } from './lib/empleado-de-prueba.mjs';
 
 const DB = 'data/tenants/desarrollo-bamburu.db';
 const ORIGIN = 'http://127.0.0.1:3000';
@@ -20,6 +21,11 @@ db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf
 const pid = (m, a) => db.prepare('SELECT id FROM permissions WHERE module=? AND action=?').get(m, a)?.id;
 const PERMS = { 'invoices.read': pid('invoices', 'read'), 'invoices.create': pid('invoices', 'create'), 'cobros.read': pid('cobros', 'read'), 'cobros.manage': pid('cobros', 'manage') };
 const anyInvoice = db.prepare('SELECT id FROM invoices ORDER BY id DESC LIMIT 1').get()?.id || 1;
+// EL EMPLEADO DE PRUEBA, ACTIVO MIENTRAS DURA ESTO. Estaba INACTIVO, y a un usuario inactivo se le
+// rechaza ANTES de mirar sus permisos —con 302/401, no con 403—, así que las seis aserciones de
+// «SIN permiso → 403» caían y parecían un agujero de seguridad que no existía. Se prepara la
+// precondición, NO se relaja lo que se exige: un 403 sigue siendo lo correcto.
+const emp = prepararEmpleado(db, 3);
 // estado inicial de permisos del empleado (para restaurar)
 const initialPerms = db.prepare('SELECT permission_id FROM user_permissions WHERE admin_user_id=3').all().map(r => r.permission_id);
 db.close();
@@ -35,6 +41,8 @@ const restore = () => {
   d.prepare('DELETE FROM user_permissions WHERE admin_user_id=3').run();
   for (const p of initialPerms) d.prepare('INSERT OR IGNORE INTO user_permissions (admin_user_id, permission_id) VALUES (3,?)').run(p);
   d.prepare('DELETE FROM admin_sessions WHERE token IN (?,?)').run(ownerTok, empTok);
+  emp.restaurar(d);   // y el empleado, como estaba: si estaba inactivo, vuelve a estarlo
+                      // (se le pasa ESTA conexión: la de arriba se cerró hace veinte líneas)
   d.close();
 };
 const ck = (tok) => 'asess=' + tok + '; btenant=desarrollo-bamburu';

@@ -10,24 +10,20 @@
 // módulo de datos, sin efectos, es la única forma de compartirlo.
 
 // Grupos. Un gate puede estar en varios (la regresión de Pagos incluye los de compras/proveedor).
-// ── CINCO COMPROBACIONES ESTÁN APUNTADAS EN DOS ÁREAS, A PROPÓSITO ───────────────────────────────
-// 24 ago 2026. GRUPOS tiene 116 APUNTES para 111 comprobaciones distintas. El corredor las
-// desduplica, así que el barrido corre 111 y la cifra que da es correcta — pero quien LEA esta lista
-// para saber qué se comprueba contaba 116, y contaba mal.
+// ── CINCO PERTENECÍAN A DOS ÁREAS, Y EL MAPA CONTABA MAL ─────────────────────────────────────────
+// GRUPOS tenía 116 APUNTES para 111 comprobaciones distintas: cinco estaban escritas en dos áreas.
+// El corredor las desduplicaba, así que el barrido corría bien — pero quien LEYERA esta lista para
+// saber qué se comprueba contaba 116, y contaba mal.
 //
-// No se quitan, y el motivo importa: cada una de las cinco pertenece de verdad a las dos áreas, y
-// `--tocado` usa estos grupos para decidir qué correr cuando cambias un fichero. Borrar el segundo
-// apunte no arreglaría un recuento: dejaría de correrse la comprobación al tocar esa otra área, que
-// es exactamente el agujero que este fichero existe para cerrar.
-//
-// Lo que se arregla es la CUENTA: queda declarado cuáles son, y `censoDeGates` devuelve el número de
-// comprobaciones DISTINTAS junto al de apuntes, para que las dos cifras se puedan leer sin sorpresa.
-export const EN_DOS_AREAS = new Map([
-  ['verify-propuestas-pagos',        'pagos + disa — es una propuesta DE DISA sobre un pago a proveedor'],
-  ['gate-propuestas-pagos-permisos', 'pagos + disa — el permiso de esa misma propuesta'],
-  ['verify-propuestas-reposicion',   'disa + inventario — propuesta DE DISA que nace del stock mínimo'],
-  ['gate-propuestas-reposicion',     'disa + inventario — la pantalla de esa misma propuesta'],
-  ['verify-constructor',             'servicios + margen — el constructor cruza horas de proyecto y margen'],
+// ⚙️ ARREGLADO EL 24 AGO 2026, y no borrando cobertura. Cada una vive AHORA en un solo grupo, así que
+// `GRUPOS` se puede contar sumando; y la segunda pertenencia —que era real: una propuesta de DISA
+// sobre un pago pertenece a pagos Y a DISA— se declara aquí abajo, que es donde `--tocado` la lee.
+// Tocar `pagos` sigue corriendo sus dos propuestas; lo que ya no pasa es que el mapa mienta al contarse.
+// La clave es el área DE LA QUE SE QUITÓ el apunte repetido; el valor, lo que hay que correr igual.
+export const TAMBIEN_LAS_TOCA = new Map([
+  ['disa',       ['verify-propuestas-pagos', 'gate-propuestas-pagos-permisos']],  // viven en «pagos»
+  ['inventario', ['verify-propuestas-reposicion', 'gate-propuestas-reposicion']], // viven en «disa»
+  ['margen',     ['verify-constructor']],                                          // vive en «servicios»
 ]);
 
 // ── EL BARRIDO, EN DOS VELOCIDADES ───────────────────────────────────────────────────────────────
@@ -162,7 +158,7 @@ export const GRUPOS = {
   disa: [
     // ↓ de las 99 invisibles (24 ago 2026), medidas y en verde:
     'gate-dibujo-pantalla', 'gate-voz-pantalla', 'test-dibujo', 'test-disa-captura-chat', 'test-disa-clientes-t5', 'test-disa-dictar-compra', 'test-disa-stock', 'test-llm-texto-respuesta', 'test-pago-voz-avisos', 'test-vigia', 'test-voz', 'verify-albaranes-disa', 'verify-d5-create-product', 'verify-llm-migracion',
-    'verify-propuestas-d5', 'verify-propuestas-pagos', 'gate-propuestas-pagos-permisos',
+    'verify-propuestas-d5',
     'verify-propuestas-recurrentes', 'gate-propuestas-recurrentes',
     'verify-propuestas-dormidos', 'gate-propuestas-dormidos',
     'verify-propuestas-fiscales',
@@ -172,7 +168,7 @@ export const GRUPOS = {
   ],
   inventario: [
     // ↓ de las 99 invisibles (24 ago 2026), medidas y en verde:
-    'test-almacenes', 'test-almacenes-capa2', 'test-stock-pilar3', 'test-transfer-upstream', 'verify-invoice-over-stock', 'verify-mostrador-overstock-browser', 'verify-over-stock-ui','test-transfers', 'verify-traslado-auditoria', 'gate-almacenes', 'verify-propuestas-reposicion', 'gate-propuestas-reposicion',
+    'test-almacenes', 'test-almacenes-capa2', 'test-stock-pilar3', 'test-transfer-upstream', 'verify-invoice-over-stock', 'verify-mostrador-overstock-browser', 'verify-over-stock-ui','test-transfers', 'verify-traslado-auditoria', 'gate-almacenes',
                'verify-trazabilidad', 'verify-trazabilidad-flujos', 'gate-trazabilidad'],
   // `verify-avisos-crm-riesgo` ENTRA AL BARRIDO el 22 ago 2026. Estaba excluido con la nota «EN ROJO
   // desde antes (datos de riesgo ya en la BD viva)» y hoy pasa limpio: la exclusión estaba caducada
@@ -200,7 +196,7 @@ export const GRUPOS = {
   // Escalera · pasos 2-4a: margen, informes, plan financiero y el constructor. Vigilan lo mismo: que
   // ninguna cifra de la Analítica pueda contradecir a Ventas, ni regalar margen donde no hay coste.
   margen: ['verify-margen', 'gate-margen-pantalla', 'verify-responsable', 'verify-informes',
-           'verify-plan-financiero', 'verify-constructor'],
+           'verify-plan-financiero'],
   // Plantillas de email editables: tocan TODOS los correos que el negocio manda.
   plantillas: ['verify-plantillas-email', 'gate-plantillas-email'],
   // LOS LISTADOS IMPRESOS. Grupo propio y no dentro de `documentos` porque son dos familias
@@ -490,9 +486,9 @@ export function censoDeGates(ficheros) {
   const apuntes = Object.values(GRUPOS).flat();
   const enMapa = new Set(apuntes);
   return {
-    apuntes: apuntes.length,          // cuántas veces aparece una comprobación en GRUPOS
-    distintas: enMapa.size,           // cuántas comprobaciones DISTINTAS son (lo que corre el barrido)
-    dosAreas: [...EN_DOS_AREAS.keys()].filter(g => enMapa.has(g)),
+    apuntes: apuntes.length,          // desde el 24 ago 2026 es igual a `distintas`: ninguna se repite
+    distintas: enMapa.size,
+    repetidas: apuntes.filter((g, i) => apuntes.indexOf(g) !== i),   // si esto deja de estar vacío, el mapa vuelve a contarse mal
     enDisco: base,
     dentro: base.filter(g => enMapa.has(g)),
     declaradosFuera: base.filter(g => !enMapa.has(g) && FUERA_A_PROPOSITO.has(g)),

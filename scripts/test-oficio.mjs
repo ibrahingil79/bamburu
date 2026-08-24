@@ -195,7 +195,7 @@ try {
       'salud: TODOS los servicios nacen con su banda de IVA declarada (ninguno sin marcar)',
       svc.filter(s => !['exento', 'general'].includes(s.tax_band)).map(s => s.name).join(', ') || svc.length + ' servicios');
     const SANITARIOS = /fisioterapia|psicolog|nutrici|osteopat|quiropodia|logopedia|suelo pélvico|consulta y valoración|terapia de pareja/i;
-    const BIENESTAR  = /bienestar|no terapéutico|entrenamiento personal|estétic|pilates|relajante/i;
+    const BIENESTAR  = /bienestar|no terapéutico|entrenamiento personal|estétic|pilates|adelgaza|relajante/i;
     const malSanitarios = svc.filter(s => SANITARIOS.test(s.name) && s.tax_band !== 'exento');
     ok(malSanitarios.length === 0,
       '  lo sanitario y terapéutico nace EXENTO (art. 20.Uno.3º LIVA)',

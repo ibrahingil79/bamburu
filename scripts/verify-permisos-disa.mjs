@@ -5,6 +5,7 @@
 // sembrando un pending_action en el hilo y confirmando con "sí" (el resultado del gate es determinista).
 // Empleado de prueba = user 3 (role employee); owner = user 2 (bypass). Limpia permisos y sesiones al final.
 import Database from 'better-sqlite3';
+import { prepararEmpleado } from './lib/empleado-de-prueba.mjs';
 import { randomBytes } from 'crypto';
 
 const DB = 'data/tenants/desarrollo-bamburu.db';
@@ -13,6 +14,8 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
 
 const db = new Database(DB);
+// El empleado de prueba, activo mientras dura esto y devuelto como estaba (ver lib/empleado-de-prueba.mjs).
+const emp = prepararEmpleado(db, 3);
 const now = Math.floor(Date.now() / 1000);
 const ownerTok = randomBytes(24).toString('base64url'), ownerCsrf = randomBytes(8).toString('hex');
 const empTok = randomBytes(24).toString('base64url'), empCsrf = randomBytes(8).toString('hex');
@@ -23,7 +26,7 @@ const initial = db.prepare('SELECT permission_id FROM user_permissions WHERE adm
 db.close();
 
 const setEmp = (names) => { const d = new Database(DB); d.prepare('DELETE FROM user_permissions WHERE admin_user_id=3').run(); for (const n of names) { const id = PERMID[n]; if (id) d.prepare('INSERT OR IGNORE INTO user_permissions (admin_user_id,permission_id) VALUES (3,?)').run(id); } d.close(); };
-const restore = () => { const d = new Database(DB); d.prepare('DELETE FROM user_permissions WHERE admin_user_id=3').run(); for (const p of initial) d.prepare('INSERT OR IGNORE INTO user_permissions (admin_user_id,permission_id) VALUES (3,?)').run(p); d.prepare('DELETE FROM admin_sessions WHERE token IN (?,?)').run(ownerTok, empTok); d.close(); };
+const restore = () => { const d = new Database(DB); emp.restaurar(d); d.prepare('DELETE FROM user_permissions WHERE admin_user_id=3').run(); for (const p of initial) d.prepare('INSERT OR IGNORE INTO user_permissions (admin_user_id,permission_id) VALUES (3,?)').run(p); d.prepare('DELETE FROM admin_sessions WHERE token IN (?,?)').run(ownerTok, empTok); d.close(); };
 const ck = t => 'asess=' + t + '; btenant=desarrollo-bamburu';
 
 // Siembra un pending_action en el hilo activo del usuario y confirma con "sí". Devuelve reply.

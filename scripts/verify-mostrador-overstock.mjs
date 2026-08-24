@@ -4,6 +4,7 @@
 // emite F2 + mueve stock. Servicio/digital/línea libre NUNCA se chequean. Atomicidad: un rechazo no emite
 // ni mueve stock ni toca la cadena de huellas. Trabaja sobre productos DESECHABLES y los limpia al final.
 import Database from 'better-sqlite3';
+import { prepararEmpleado } from './lib/empleado-de-prueba.mjs';
 import { randomBytes } from 'crypto';
 import { recordMovement } from '../modules/erp/stock.js';
 
@@ -13,6 +14,8 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
 
 const db = new Database(DB);
+// El empleado de prueba, activo mientras dura esto y devuelto como estaba.
+const emp = prepararEmpleado(db, 3);
 db.pragma('busy_timeout = 5000');
 const now = Math.floor(Date.now() / 1000);
 const sym = randomBytes(3).toString('hex');
@@ -86,6 +89,7 @@ try {
   c.prepare('DELETE FROM admin_sessions WHERE token IN (?,?)').run(ownerTok, empTok);
   c.close();
 } catch (e) { console.error('ERROR', e.message); fail++; } finally {
+  { const d = new Database(DB); emp.restaurar(d); d.close(); }   // el empleado, como estaba
   const c = new Database(DB); c.prepare('DELETE FROM admin_sessions WHERE token IN (?,?)').run(ownerTok, empTok); c.close();
 }
 console.log('\n=== RESULTADO: ' + pass + ' OK / ' + fail + ' FALLOS ===');

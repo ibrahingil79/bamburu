@@ -33,7 +33,7 @@ import { dirname, join, resolve, relative } from 'path';
 import { fileURLToPath } from 'url';
 // El mapa de los gates (grupos, clases y qué toca qué) vive en su propio módulo: lo leen este
 // runner y `barrido-estado.mjs`. Una sola lista, no dos.
-import { GRUPOS, EMPIEZAN_DE_CERO, SOLOS, claseDe, AFECTA, FUERA_A_PROPOSITO, TENANT_EXTRA, censoDeGates, RAPIDO, velocidadDe } from './lib/gates-mapa.mjs';
+import { GRUPOS, EMPIEZAN_DE_CERO, SOLOS, claseDe, AFECTA, FUERA_A_PROPOSITO, TENANT_EXTRA, censoDeGates, RAPIDO, velocidadDe, TAMBIEN_LAS_TOCA } from './lib/gates-mapa.mjs';
 
 const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TIMEOUT_MS = 300000;
@@ -270,6 +270,14 @@ function resolverTocado(todos) {
   }
   const lista = new Set();
   for (const g of grupos) for (const x of (GRUPOS[g] || [])) lista.add(x);
+  // LA SEGUNDA PERTENENCIA. Cinco comprobaciones pertenecen de verdad a dos áreas —una propuesta de
+  // DISA sobre un pago a proveedor es de pagos Y de DISA—. Antes estaban escritas dos veces en
+  // GRUPOS, y eso hacía que el mapa se contara mal a sí mismo (116 apuntes para 111). Ahora viven en
+  // un solo grupo y su otra área se declara en TAMBIEN_LAS_TOCA: **la cobertura no cambia**, lo que
+  // cambia es que la lista se puede contar sumando.
+  for (const g of grupos) for (const x of (TAMBIEN_LAS_TOCA.get(g) || [])) {
+    if (!lista.has(x)) { lista.add(x); informe.push('área ' + g + ' → ' + x + ' (pertenece también a otra área)'); }
+  }
   // Los gates que has cambiado tú, corren.
   for (const f of cambiados) {
     const m = f.match(/^scripts\/([a-z0-9-]+)\.(mjs|js)$/);
