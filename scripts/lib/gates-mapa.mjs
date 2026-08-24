@@ -106,6 +106,9 @@ export const GRUPOS = {
   // desde antes (datos de riesgo ya en la BD viva)» y hoy pasa limpio: la exclusión estaba caducada
   // y lo que hacía era esconder una comprobación buena. Se mide, no se supone.
   avisos: ['verify-avisos-permisos', 'gate-avisos-badge', 'verify-avisos-crm-riesgo',
+           // PUNTO 3 (24 ago 2026) — la petición de migración llega al equipo, y si el correo
+           // falla NO se pierde: se ve en el panel de control, con su fichero.
+           'gate-migracion-al-equipo',
            // PUNTO 1 (24 ago 2026) — la regla de los correos al equipo: un correo nunca lleva un
            // dato que su destinatario no podría ver en pantalla. Estructural + de comportamiento.
            'verify-correos-permisos'],

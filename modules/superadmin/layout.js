@@ -10,6 +10,9 @@ const ZONES = [
   { key: 'integridad', href: '/superadmin/integridad', label: 'Integridad', icon: '🔗', ready: true  },
   { key: 'errores',    href: '/superadmin/errores',    label: 'Errores',    icon: '⚠️', ready: true  },
   { key: 'backups',    href: '/superadmin/backups',    label: 'Copias',     icon: '💾', ready: true  },
+  // PUNTO 3 (24 ago 2026) — las migraciones pedidas, para que una petición no dependa de que
+  // llegue un correo. El buzón del equipo estuvo rebotando y nadie se enteró.
+  { key: 'migraciones', href: '/superadmin/migraciones', label: 'Migraciones', icon: '📦', ready: true },
   { key: 'avance',     href: '/superadmin/avance',     label: 'Avance',     icon: '📊', ready: true  },
 ];
 

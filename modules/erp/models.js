@@ -3264,6 +3264,11 @@ Sé preciso con los números y siempre redondea correctamente.`,
     active      INTEGER NOT NULL DEFAULT 1
   )`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_migracion_peticiones_fecha ON migracion_peticiones(created_at DESC)`);
+  // PUNTO 3 (24 ago 2026) — EL FICHERO SE GUARDA, no solo su nombre. Antes se anotaban `fichero` y
+  // `fichero_bytes` y el binario viajaba SOLO dentro del correo al equipo: si ese correo se perdía
+  // —y se estaba perdiendo, el buzón rebotaba— el fichero del cliente desaparecía con él. Ahora se
+  // guarda como adjunto normal y aquí queda su id. Aditiva: ninguna fila existente cambia.
+  addCol(db, 'migracion_peticiones', 'attachment_id', 'INTEGER');
 
   // Y LA LIMPIEZA, AUTOMÁTICA. Un contacto sin cliente no significa nada: si alguna vez se borra un
   // cliente de verdad, sus contactos se van con él. **El producto NUNCA borra un cliente** —archiva

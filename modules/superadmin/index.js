@@ -18,6 +18,7 @@ import { mountBackups } from './backups.js';
 import { mountSeguridad } from './seguridad.js';
 import { mountErrores } from './errores.js';
 import { mountIntegridad } from './integridad.js';
+import { mountMigraciones } from './migraciones.js';
 import { mountAvance } from './avance.js';
 import {
   getTenantBySlug, getTenantById, listTenants, setTenantStatus,
@@ -409,6 +410,7 @@ export function register(app) {
   mountSeguridad(sa);  // zona 2 · Seguridad
   mountErrores(sa);    // zona 4 · Errores
   mountIntegridad(sa); // zona 3 · Integridad de facturas
+  mountMigraciones(sa); // punto 3 · Migraciones pedidas (no dependen del correo)
   mountAvance(sa);     // zona 7 · Avance (Notion, solo lectura)
 
   app.route('/superadmin', sa);

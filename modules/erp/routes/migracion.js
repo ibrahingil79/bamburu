@@ -20,6 +20,7 @@ import { safeError } from '../../../core/errors.js';
 import { adminLayout, can } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
 import { escHtml } from '../../../core/escape.js';
+import { saveAttachment } from '../attachments.js';
 import { sendEmail } from '../../../core/mailer.js';
 import { exigirCorreoActivo } from '../avisos-preferencias.js';
 
@@ -28,7 +29,15 @@ const MAX_BYTES = 12 * 1024 * 1024;                 // 12 MB, el mismo tope que 
 // de la instalación, y si no, el buzón de Bamburu. El primer escalón existe para que un gate pueda
 // apuntar al buzón sumidero de Resend y probar el envío DE VERDAD sin mandarle correo a una persona
 // — probar el envío contra un buzón real sería spam, y no probarlo sería no verificar nada.
-const BUZON_POR_DEFECTO = process.env.BAMBURU_MIGRACIONES_EMAIL || 'hola@bamburu.com';
+// EL BUZÓN DEL EQUIPO. Estaba puesto en `hola@bamburu.com` y **esa dirección REBOTA**: el dominio
+// bamburu.com está verificado en Resend para ENVIAR, con la recepción DESACTIVADA, así que no hay
+// buzón detrás. Medido el 24 ago 2026 mandando una sonda: Resend acepta el correo (por eso
+// `email_ok` decía 1) y el estado final es `bounced`. O sea: la petición salía, nadie la recibía
+// y el registro decía que había ido bien.
+// Se pone la dirección que SÍ recibe —la misma que ya usan los avisos de copia de seguridad— y
+// se deja configurable por `settings.migracion_buzon` o por la variable de entorno. **Ibrahin
+// tiene que confirmar cuál es la buena**: queda dicho en el parte.
+const BUZON_POR_DEFECTO = process.env.BAMBURU_MIGRACIONES_EMAIL || 'ibrahingil@gmail.com';
 function buzonDe(db) {
   try {
     const v = db.prepare("SELECT value FROM settings WHERE key='migracion_buzon'").get()?.value;
@@ -81,13 +90,32 @@ export function createMigracionRoutes(db) {
 
         const s = c.get('session') || {};
         const emp = empresa();
+        // EL FICHERO SE GUARDA ANTES DE MANDAR NADA. Antes solo se anotaba su nombre y el binario
+        // viajaba únicamente dentro del correo: con el buzón del equipo rebotando, el fichero del
+        // cliente se perdía. Ahora queda en el almacén de adjuntos del negocio, y el correo pasa a
+        // ser una comodidad, no el único sitio donde existe.
+        let adjuntoId = null;
+        if (adjunto) {
+          try {
+            const guardado = saveAttachment(db, c.get('tenant'), {
+              buffer: adjunto.buffer, originalName: adjunto.nombre,
+              mime: adjunto.mime || 'application/octet-stream', kind: 'migracion',
+              ext: (adjunto.nombre.split('.').pop() || 'bin').toLowerCase().slice(0, 8),
+            });
+            adjuntoId = guardado.id;
+          } catch (e) { /* si no se puede guardar, la petición sigue: el correo aún puede llevarlo */ }
+        }
+
         const info = db.prepare(
-          `INSERT INTO migracion_peticiones (origen,origen_otro,quiere,comentario,fichero,fichero_bytes,user_id,user_name)
-           VALUES (?,?,?,?,?,?,?,?)`
+          `INSERT INTO migracion_peticiones (origen,origen_otro,quiere,comentario,fichero,fichero_bytes,user_id,user_name,attachment_id)
+           VALUES (?,?,?,?,?,?,?,?,?)`
         ).run(origen, origenOtro, quiere.join(','), comentario,
               adjunto ? adjunto.nombre : null, adjunto ? adjunto.buffer.length : null,
-              s.userId || null, s.userName || '');
+              s.userId || null, s.userName || '', adjuntoId);
         const id = info.lastInsertRowid;
+        if (adjuntoId) {
+          try { db.prepare("UPDATE attachments SET entity_type='migracion_peticion', entity_id=? WHERE id=?").run(id, adjuntoId); } catch {}
+        }
 
         // ── El correo al equipo, con el fichero si lo hay ─────────────────────────────────────────
         const deDonde = origen === 'otro' ? origenOtro : ORIGENES[origen];
