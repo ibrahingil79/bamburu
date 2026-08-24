@@ -843,7 +843,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
             d.porResponsable.map(r=>'<tr><td>'+escHtml(r.responsable)+'</td><td>'+r.facturas+'</td><td>'+eur(r.base)+'</td></tr>'));
           const c=d.cobrado;
           h+=h3('Cobrado vs pendiente (con IVA — es lo que entra en caja)')+tabla(['Facturado','Cobrado','Pendiente','% cobrado'],
-            ['<tr><td>'+eur(c.facturado)+'</td><td style="color:var(--ok)">'+eur(c.cobrado)+'</td><td style="color:var(--warn)">'+eur(c.pendiente)+'</td><td><strong>'+Number(c.cobradoPct).toFixed(1)+'%</strong></td></tr>']);
+            ['<tr><td>'+eur(c.facturado)+'</td><td style="color:var(--ok)">'+eur(c.cobrado)+'</td><td style="color:var(--warn)">'+eur(c.pendiente)+'</td><td><strong>'+window.pct(c.cobradoPct,1)+'</strong></td></tr>']);
         } else if(infArea==='compras'){
           h+=h3('Compras por proveedor (sin IVA)')+tabla(['Proveedor','Facturas','Base'],
             d.porProveedor.map(r=>'<tr><td>'+escHtml(r.proveedor)+'</td><td>'+r.facturas+'</td><td>'+eur(r.base)+'</td></tr>'));
@@ -916,7 +916,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
             '<td>'+eur(x.objetivo)+'</td>'+
             '<td>'+eur(x.real)+'</td>'+
             '<td style="color:'+col+'"><strong>'+signo+eur(x.desviacion)+'</strong>'+
-              (x.desviacionPct==null?'':' <span style="font-size:.72rem">('+signo+Number(x.desviacionPct).toFixed(1)+'%)</span>')+'</td>'+
+              (x.desviacionPct==null?'':' <span style="font-size:.72rem">('+signo+window.pct(x.desviacionPct,1)+')</span>')+'</td>'+
           '</tr>';
         }).join('');
       }

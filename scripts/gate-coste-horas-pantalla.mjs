@@ -27,6 +27,9 @@ const BASE = 'http://desarrollo-bamburu.localhost:3000';
 const HOST = 'desarrollo-bamburu.localhost';
 let pass = 0, fail = 0;
 const ok = (c, m, extra = '') => { if (c) { pass++; console.log('  ✓ ' + m + (extra ? ' — ' + extra : '')); } else { fail++; console.error('  ✗ FALLO: ' + m + (extra ? ' — ' + extra : '')); } };
+// El dinero se escribe como en España (1.000,00 €). Para comparar cifras, quito el punto de los
+// miles y dejo la coma decimal: así la aserción mira el NÚMERO, no la forma de escribirlo.
+const plano = t => String(t || '').replace(/(\d)\.(?=\d{3}(\D|$))/g, '$1');
 
 const db = new Database(join(APP_DIR, 'data/tenants/desarrollo-bamburu.db'));
 const SHOTS = join(process.env.HOME || '/home/ubuntu', 'coste-shots');
@@ -103,11 +106,11 @@ try {
   await po.goto(BASE + '/admin/proyectos', { waitUntil: 'networkidle2' });
   await po.evaluate((id) => viewDetail(id), PC);
   await po.waitForFunction(() => { const b = document.getElementById('proyRent'); return b && /Resultado de gesti/i.test(b.textContent); }, { timeout: 8000 }).catch(() => {});
-  const panel = await po.evaluate(() => (document.getElementById('proyRent')?.textContent || '').replace(/\s+/g, ' '));
-  ok(/Resultado contable/i.test(panel) && /1000\.00/.test(panel), 'la ficha muestra Resultado CONTABLE = 1000,00');
-  ok(/Coste de las horas/i.test(panel) && /300\.00/.test(panel), 'la ficha muestra Coste de las horas = 300,00 (10 h × 30)');
-  ok(/Resultado de gesti/i.test(panel) && /700\.00/.test(panel), 'la ficha muestra Resultado de GESTIÓN = 700,00 (1000 − 300)');
-  ok(/sin coste-hora registrado/i.test(panel) && /4\.00 h/.test(panel), 'la ficha AVISA de 4,00 h sin coste-hora (fuera del coste, no es 0)');
+  const panel = plano(await po.evaluate(() => (document.getElementById('proyRent')?.textContent || '').replace(/\s+/g, ' ')));
+  ok(/Resultado contable/i.test(panel) && /(?<!\d)1000,00/.test(panel), 'la ficha muestra Resultado CONTABLE = 1000,00', panel.slice(0, 160));
+  ok(/Coste de las horas/i.test(panel) && /(?<!\d)300,00/.test(panel), 'la ficha muestra Coste de las horas = 300,00 (10 h × 30)');
+  ok(/Resultado de gesti/i.test(panel) && /(?<!\d)700,00/.test(panel), 'la ficha muestra Resultado de GESTIÓN = 700,00 (1000 − 300)', panel.slice(240, 620));
+  ok(/sin coste-hora registrado/i.test(panel) && /(?<!\d)4,00 h/.test(panel), 'la ficha AVISA de 4,00 h sin coste-hora (fuera del coste, no es 0)', panel.slice(0, 240));
   ok(/no es el resultado contable/i.test(panel) && /P&G no cambia/i.test(panel), 'la ficha lleva el aviso honesto (gestión ≠ contable; el P&G no cambia)');
   await po.screenshot({ path: join(SHOTS, 'coste-panel.png') }).catch(() => {});
 
@@ -127,7 +130,8 @@ try {
   });
   ok(cmp.heads.some(h => /Coste horas/i.test(h)), 'la comparativa tiene la columna "Coste horas"', cmp.heads.join(' | '));
   ok(cmp.heads.some(h => /Resultado gesti/i.test(h)), 'la comparativa tiene la columna "Resultado gestión"');
-  ok(/300\.00/.test(cmp.pcTxt) && /700\.00/.test(cmp.pcTxt), 'la fila del proyecto muestra coste 300,00 y gestión 700,00', cmp.pcTxt.slice(0, 120));
+  const pcTxt = plano(cmp.pcTxt);
+  ok(/(?<!\d)300,00/.test(pcTxt) && /(?<!\d)700,00/.test(pcTxt), 'la fila del proyecto muestra coste 300,00 y gestión 700,00', pcTxt.slice(0, 160));
   ok(cmp.avisoHoras, 'la comparativa avisa (agregado) de horas sin coste-hora');
   ok(cmp.gestionExplicada, 'la comparativa explica que el coste de horas NO entra en el P&G (capa de gestión)');
   await po.screenshot({ path: join(SHOTS, 'coste-comparativa.png') }).catch(() => {});

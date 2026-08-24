@@ -151,6 +151,13 @@ export function fmtPct(pct) {
   return NUM(pct, 1) + ' %';
 }
 
+// Un numero a secas, tambien en espanol: 10,00 h · 1.234,5. Para lo que NO es dinero ni %
+// (horas, unidades). Gemelo de window.numEs en layout.js: el mismo nombre en los dos lados.
+export function fmtNum(n, d = 2) {
+  if (n == null) return '—';
+  return NUM(n, d);
+}
+
 export function fmtEur(n, sym = '€') {
   if (n == null) return '—';
   return NUM(n, 2) + ' ' + sym;

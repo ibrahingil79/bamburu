@@ -51,6 +51,11 @@ const PUNTO_DECIMAL   = /-?\d+\.\d{2}\s*[€$£]/g;
 // Una fecha en formato inglés a la vista (2026-08-24). Se permite dentro de atributos (value, data-*)
 // porque ahí es un DATO que alguien vuelve a leer, no texto para una persona.
 const FECHA_ISO_VISIBLE = /(^|[^\w-])(\d{4}-\d{2}-\d{2})([^\w-]|$)/;
+// 3. Un PORCENTAJE con punto decimal: «100.0%», «12.5 %». Se escribe 100,0 % — con coma y con su
+// espacio. Salió el 24 ago 2026: la ficha de un proyecto decía «1.000,00 €» y tres palabras después
+// «(100.0% sobre lo que cobras)». El dinero estaba bien y el porcentaje de al lado, en inglés.
+// Se exige el dígito pegado al punto para no marcar un «Ley 37/1992, art. 20.1 %» ni una versión.
+const PCT_PUNTO = /-?\d+\.\d+\s*%/g;
 
 const db = new Database(tenantDb(SLUG));
 const owner = db.prepare("SELECT id FROM admin_users WHERE role='owner' AND active=1 ORDER BY id LIMIT 1").get();
@@ -113,15 +118,17 @@ try {
     if (fechas.length) conFechaIso.push({ ruta, fechas: fechas.slice(0, 4) });
     const delante = [...txt.matchAll(SIMBOLO_DELANTE)].map(m => m[0].trim());
     const punto = [...txt.matchAll(PUNTO_DECIMAL)].map(m => m[0].trim());
-    if (delante.length || punto.length) {
-      malas.push({ ruta, delante: [...new Set(delante)].slice(0, 4), punto: [...new Set(punto)].slice(0, 4) });
+    const pcts = [...txt.matchAll(PCT_PUNTO)].map(m => m[0].trim());
+    if (delante.length || punto.length || pcts.length) {
+      malas.push({ ruta, delante: [...new Set(delante)].slice(0, 4), punto: [...new Set(punto)].slice(0, 4),
+                   pcts: [...new Set(pcts)].slice(0, 4) });
     }
-    process.stdout.write(delante.length || punto.length ? '✗' : '.');
+    process.stdout.write(delante.length || punto.length || pcts.length ? '✗' : '.');
   }
   console.log('');
 
-  ok(malas.length === 0, 'ninguna pantalla escribe el dinero en inglés',
-     malas.length ? malas.map(m => m.ruta + ': ' + [...(m.delante || []), ...(m.punto || [])].join(' ')).join('  ·  ')
+  ok(malas.length === 0, 'ninguna pantalla escribe el dinero ni el porcentaje en inglés',
+     malas.length ? malas.map(m => m.ruta + ': ' + [...(m.delante || []), ...(m.punto || []), ...(m.pcts || [])].join(' ')).join('  ·  ')
                   : miradas + ' pantallas miradas');
 
   // ── Y LAS FECHAS ──────────────────────────────────────────────────────────────────────────────
@@ -162,6 +169,45 @@ try {
   ok(sueltos.length === 0, 'ningún ayudante suelto vuelve a poner el símbolo delante',
      sueltos.slice(0, 4).join(' · ') || 'ninguno');
 
+  // ── EL PORCENTAJE Y LAS HORAS EN EL JS QUE DIBUJA EL NAVEGADOR ────────────────────────────────
+  // Media pantalla del producto la pinta JavaScript DESPUÉS de cargar (el panel de rentabilidad de
+  // un proyecto, las tablas de analítica, la portada de DISA). Ese texto no está en el HTML que baja
+  // del servidor, así que el barrido de arriba NO lo ve: hay que mirarlo en el código fuente.
+  // Lo que se prohíbe es escribir el número a mano —`toFixed(1) + '%'` da «100.0%»— habiendo un
+  // formateador compartido (window.pct / fmtPct / window.numEs / fmtNum).
+  // Se deja fuera lo que va a CSS (`left:12.34%;`): ahí el punto es obligatorio y no lo lee nadie.
+  const aMano = [];
+  const mirarNum = ruta => {
+    let st; try { st = statSync(ruta); } catch { return; }
+    if (st.isDirectory()) { for (const f of readdirSync(ruta)) mirarNum(join(ruta, f)); return; }
+    if (!/\.js$/.test(ruta)) return;
+    if (ruta.includes('/modules/store/')) return;             // Capa 2 congelada
+    const src = readFileSync(ruta, 'utf8');
+    // Solo con DECIMALES: `toFixed(0)` da «85 %», que en español está bien escrito. Lo que delata el
+    // inglés es el PUNTO, y solo hay punto si hay decimales.
+    // Y línea a línea, para poder descartar la que además es CSS: `left:12.34%;width:…` es una
+    // declaración de estilo, ahí el punto es obligatorio y no lo lee nadie.
+    const ESTILO = /(left|top|right|bottom|width|height|flex-basis|translate)\s*:/;
+    src.split('\n').forEach((linea, i) => {
+      if (ESTILO.test(linea)) return;
+      const golpes = [...linea.matchAll(/toFixed\([12]\)\s*\+\s*'(?:%|\s?h)'/g),
+                      ...linea.matchAll(/toFixed\([12]\)\}\s*(?:%|h\b)/g)];
+      for (const m of golpes) aMano.push(ruta.replace(APP_DIR + '/', '') + ':' + (i + 1) + ': ' + m[0]);
+    });
+  };
+  mirarNum(join(APP_DIR, 'modules'));
+  ok(aMano.length === 0, 'ningún porcentaje ni hora se escribe a mano en inglés (100.0% · 10.00 h)',
+     aMano.slice(0, 6).join(' · ') || 'ninguno');
+
+  // Y las piezas compartidas, donde tienen que estar.
+  const { fmtPct, fmtNum } = await import('../modules/erp/margen.js');
+  ok(fmtPct(100) === '100,0 %', 'el porcentaje del servidor va con coma y con su espacio', fmtPct(100));
+  ok(fmtNum(10) === '10,00', '  y un número suelto (horas) también', fmtNum(10));
+  const { mesEs } = await import('../modules/erp/voz.js');
+  ok(mesEs('2026-07') === 'julio de 2026', '  y un mes se dice, no se codifica', mesEs('2026-07'));
+  ok(/window\.pct\s*=/.test(layout) && /window\.numEs\s*=/.test(layout),
+     '  los mismos, disponibles en el navegador (window.pct / window.numEs)');
+
 } finally {
   try { db.prepare('DELETE FROM admin_sessions WHERE token=?').run(tok); } catch {}
   db.close();
@@ -173,6 +219,7 @@ if (malas.length) {
     console.error('  ✗ ' + m.ruta + (m.err ? '  ' + m.err : ''));
     if (m.delante && m.delante.length) console.error('      símbolo delante: ' + m.delante.join(' · '));
     if (m.punto && m.punto.length) console.error('      punto decimal:   ' + m.punto.join(' · '));
+    if (m.pcts && m.pcts.length) console.error('      % con punto:     ' + m.pcts.join(' · '));
   }
 }
 console.log('\n' + '─'.repeat(70));

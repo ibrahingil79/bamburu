@@ -47,6 +47,17 @@ export function fechaEs(iso) {
   return m ? m[3] + '/' + m[2] + '/' + m[1] : (iso || '—');
 }
 
+// Y UN MES SUELTO. `2026-07` es una clave de agrupación, no algo que se diga: en una frase va
+// «julio de 2026». Si lo que llega no tiene esa forma, se devuelve tal cual (no se inventa).
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+               'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+export function mesEs(clave) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(clave || ''));
+  if (!m) return clave || '—';
+  const nombre = MESES[Number(m[2]) - 1];
+  return nombre ? nombre + ' de ' + m[1] : clave;
+}
+
 // La cifra ya formateada: con moneda si el hallazgo la marca; si no hay dato, "—" (no inventa).
 function cifraTexto(h, sym) {
   if (h == null || h.cifra == null) return '—';

@@ -9,7 +9,7 @@ import { adminLayout } from '../layout.js';
 import { requirePerm } from '../../../core/auth.js';
 import { escHtml } from '../../../core/escape.js';
 import { rentabilidadProyecto, comparativaProyectos } from '../rentabilidad.js';
-import { fmtEur } from '../margen.js';   // el dinero, escrito como en España
+import { fmtEur, fmtPct, fmtNum } from '../margen.js';   // el dinero, el % y las horas, como en España
 
 export function createRentabilidadRoutes(db) {
   const api = new Hono();
@@ -33,7 +33,7 @@ export function createRentabilidadRoutes(db) {
     // El dinero, escrito como en España. Una sola forma en todo el producto.
     const dinero = n => fmtEur(Number(n || 0), sym);
     const signo = n => (n < 0 ? 'color:var(--danger,#b23);font-weight:600' : (n > 0 ? 'color:var(--ok,#1a7f37)' : 'color:var(--muted)'));
-    const pct = n => (n == null ? '—' : Number(n).toFixed(1) + '%');
+    const pct = n => fmtPct(n);   // 100,0 % — con coma y con su espacio, como en España
 
     const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
     const totalGestion = r2(cmp.total.resultado - cmp.coste_horas_total);   // gestión total = contable − Σ coste horas
@@ -68,7 +68,7 @@ export function createRentabilidadRoutes(db) {
 
     const avisoHoras = cmp.hay_horas_sin_coste
       ? `<div class="alert" style="margin-bottom:1rem;background:var(--warn-s,rgba(200,140,20,.10))">
-          ⚠️ Hay <strong>${Number(cmp.horas_sin_coste).toFixed(2)} h</strong> sin coste-hora registrado: quedan <strong>FUERA</strong> del coste de las horas (no se cuentan como coste 0).
+          ⚠️ Hay <strong>${fmtNum(cmp.horas_sin_coste, 2)} h</strong> sin coste-hora registrado: quedan <strong>FUERA</strong> del coste de las horas (no se cuentan como coste 0).
           Pon el <em>coste por hora</em> de esas personas en <a href="/admin/users">Usuarios</a> para que entren.
         </div>` : '';
 

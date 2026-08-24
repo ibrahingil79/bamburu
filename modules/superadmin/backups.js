@@ -26,7 +26,7 @@ export function mountBackups(sa) {
     const s = backupStatus();
     const big = s.sem === 'green' ? '#10b981' : s.sem === 'amber' ? '#f59e0b' : '#ef4444';
     const cuando = s.lastEpoch ? new Date(s.lastEpoch * 1000).toLocaleString('es-ES') : 'NUNCA';
-    const hace = s.ageH == null ? '—' : s.ageH < 1 ? Math.round(s.ageH * 60) + ' min' : s.ageH.toFixed(1) + ' h';
+    const hace = s.ageH == null ? '—' : s.ageH < 1 ? Math.round(s.ageH * 60) + ' min' : s.ageH.toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' h';
     const resultBadge = s.lastResult === 'success' ? '<span class="badge b-green">OK</span>'
       : s.lastResult ? `<span class="badge b-red">${escHtml(s.lastResult)}</span>` : '<span class="badge b-gray">—</span>';
     const content = `

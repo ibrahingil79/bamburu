@@ -368,19 +368,22 @@ export function createProyectoRoutes(db) {
         // El dinero, escrito como en España. window.eur vive en el componente compartido (layout.js).
         const dinero=n=>window.eur(n||0, PROY_SYM);
         const col=n=>(n<0?'var(--danger,#b23)':(n>0?'var(--ok,#1a7f37)':'var(--muted)'));
-        const pct=n=>(n==null?'—':Number(n).toFixed(1)+'%');
+        // El porcentaje y las horas, tambien como en Espana: 100,0 % y 10,00 h. Vienen del
+        // componente compartido (layout.js), igual que window.eur.
+        const pct=n=>window.pct(n,1);
+        const horas=n=>window.numEs(n,2);
         const ch=d.costeHoras||{};
         box.style.color='';
         const fila=(lbl,val,style)=>'<div style="display:flex;justify-content:space-between;gap:1rem;'+(style||'')+'"><span>'+lbl+'</span><span style="white-space:nowrap;font-variant-numeric:tabular-nums">'+val+'</span></div>';
         const avisoHoras = ch.hay_horas_sin_coste
-          ? '<div style="color:var(--muted);font-size:.78rem;margin:.15rem 0 .3rem">⚠️ '+Number(ch.horas_sin_coste).toFixed(2)+' h sin coste-hora registrado quedan FUERA del coste (no es coste 0). Pon el coste/hora de esas personas en Usuarios.</div>'
+          ? '<div style="color:var(--muted);font-size:.78rem;margin:.15rem 0 .3rem">⚠️ '+horas(ch.horas_sin_coste)+' h sin coste-hora registrado quedan FUERA del coste (no es coste 0). Pon el coste/hora de esas personas en Usuarios.</div>'
           : '';
         box.innerHTML='<h4 style="margin:0 0 .5rem">Rentabilidad</h4>'
           +'<div style="display:flex;flex-direction:column;gap:.3rem">'
           +fila('Ingresos (facturado, sin IVA)','<strong>'+dinero(d.ingresos)+'</strong>')
           +fila('− Gastos directos (facturas de proveedor)',dinero(d.gastos))
           +fila('= Resultado contable','<strong style="color:'+col(d.resultado)+'">'+dinero(d.resultado)+'</strong> <span style="color:var(--muted);font-size:.8rem">('+pct(d.margenPct)+' sobre lo que cobras)</span>','border-top:1px solid var(--border);padding-top:.3rem')
-          +fila('− Coste de las horas'+(ch.horas_con_coste?' <span style="color:var(--muted);font-size:.8rem">('+Number(ch.horas_con_coste).toFixed(2)+' h)</span>':''),dinero(ch.coste))
+          +fila('− Coste de las horas'+(ch.horas_con_coste?' <span style="color:var(--muted);font-size:.8rem">('+horas(ch.horas_con_coste)+' h)</span>':''),dinero(ch.coste))
           +avisoHoras
           +fila('= Resultado de gestión','<strong style="color:'+col(d.resultadoGestion)+'">'+dinero(d.resultadoGestion)+'</strong> <span style="color:var(--muted);font-size:.8rem">('+pct(d.margenGestionPct)+' sobre lo que cobras)</span>','border-top:2px solid var(--border);padding-top:.3rem;font-weight:600')
           +'</div>'

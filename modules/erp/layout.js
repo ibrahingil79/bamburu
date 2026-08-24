@@ -706,6 +706,15 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       var d=(dec==null?1:dec);
       return v.toLocaleString('es-ES',{minimumFractionDigits:d,maximumFractionDigits:d}) + ' %';
     };
+    // Un numero a secas, tambien en espanol: 10,00 h · 1.234,5. Para lo que NO es dinero ni
+    // porcentaje (horas, unidades). Mismo motivo: en la misma pantalla no pueden convivir
+    // «1.000,00 EUR» y «10.00 h».
+    window.numEs=function(n,dec){
+      if(n==null||n==='') return '—';
+      var v=Number(n); if(!isFinite(v)) return '—';
+      var d=(dec==null?2:dec);
+      return v.toLocaleString('es-ES',{minimumFractionDigits:d,maximumFractionDigits:d,useGrouping:'always'});
+    };
     // Y LA FECHA. 2026-08-24 es como se guarda, no como se dice: en pantalla va 24/08/2026.
     window.fechaEs=function(iso){
       var m=/^(\\d{4})-(\\d{2})-(\\d{2})/.exec(String(iso==null?'':iso));

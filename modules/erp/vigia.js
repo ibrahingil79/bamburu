@@ -35,6 +35,11 @@ import {
   clientesConRitmoDeCitas, OCUPACION_FLOJA_PCT, RITMO_FACTOR, RITMO_MIN_CITAS,
   SIN_PROXIMA_DIAS, AUSENCIA_DIAS, DIAS_VISTA,
 } from './vigia-agenda.js';
+// Un aviso de DISA se LEE, igual que una pantalla: el dinero va 1.234,56, el porcentaje 12,5 %
+// y la fecha 24/08/2026. Aquí se escribe el TEXTO del aviso, así que aquí se usan las mismas
+// piezas que en el resto del producto — no se vuelve a inventar el formato.
+import { fmtNum, fmtPct } from './margen.js';
+import { fechaEs, mesEs } from './voz.js';
 
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
 const DIA = 86400000;
@@ -113,7 +118,7 @@ export const DETECTORES = [
         titulo: (d.client_name || 'Cliente #' + d.client_id) + ' lleva ' + d.dias_sin_comprar + ' días sin comprar',
         cifra: d.dias_sin_comprar, moneda: false,
         fecha: d.ultima_compra,
-        motivo: 'Última compra el ' + d.ultima_compra + '. ' + d.motivo
+        motivo: 'Última compra el ' + fechaEs(d.ultima_compra) + '. ' + d.motivo
           + '; se ha pasado ' + d.exceso + ' día' + (d.exceso === 1 ? '' : 's') + ' de su ritmo.',
         ref: { client_id: d.client_id },
       }));
@@ -160,8 +165,8 @@ export const DETECTORES = [
           titulo: (TIPO[f.tipo] || f.tipo) + ' ' + f.clave + ' · ' + f.responsable + ': por debajo del objetivo',
           cifra: r2(f.real), moneda: true,
           fecha: f.clave,
-          motivo: 'Objetivo ' + r2(f.objetivo) + ', real ' + r2(f.real) + ' ('
-            + f.desviacionPct.toFixed(1) + '% por debajo, ' + r2(f.desviacion) + ' de desviación).',
+          motivo: 'Objetivo ' + fmtNum(f.objetivo, 2) + ', real ' + fmtNum(f.real, 2) + ' ('
+            + fmtPct(f.desviacionPct) + ' por debajo, ' + fmtNum(f.desviacion, 2) + ' de desviación).',
           ref: { objetivo_id: f.id, tipo: f.tipo, periodo: f.periodo, clave: f.clave, user_id: f.user_id },
         }))
         .sort((a, b) => a.cifra - b.cifra);   // los más cortos de objetivo (menor real) arriba
@@ -186,8 +191,8 @@ export const DETECTORES = [
             cifra: r2(r.pendiente), moneda: true,
             fecha: r.due_date,
             motivo: dias >= 0
-              ? 'Vence en ' + dias + ' día' + (dias === 1 ? '' : 's') + ' (' + r.due_date + '); pendiente de pago.'
-              : 'Vencida hace ' + (-dias) + ' día' + (dias === -1 ? '' : 's') + ' (' + r.due_date + '); pendiente de pago.',
+              ? 'Vence en ' + dias + ' día' + (dias === 1 ? '' : 's') + ' (' + fechaEs(r.due_date) + '); pendiente de pago.'
+              : 'Vencida hace ' + (-dias) + ' día' + (dias === -1 ? '' : 's') + ' (' + fechaEs(r.due_date) + '); pendiente de pago.',
             ref: { supplier_id: r.supplier_id, supplier_invoice_id: r.supplier_invoice_id, internal_code: r.internal_code },
           };
         })
@@ -212,11 +217,11 @@ export const DETECTORES = [
       return huecosQueSePierden(db, hoy).map(h => ({
         area: 'agenda', areaEtiqueta: 'Agenda',
         detector: 'hueco_perdido', detectorEtiqueta: 'Hueco que se va a perder',
-        titulo: 'El ' + h.fecha + ' tienes ' + h.horas_libres + ' h libres (ocupación ' + h.pct + '%)',
+        titulo: 'El ' + fechaEs(h.fecha) + ' tienes ' + fmtNum(h.horas_libres, 1) + ' h libres (ocupación ' + fmtPct(h.pct) + ')',
         cifra: h.horas_libres, moneda: false,
         fecha: h.fecha,
-        motivo: 'Ese día abres ' + Math.round(h.abierto_min / 60 * 10) / 10 + ' h en total y solo hay '
-          + h.pct + '% ocupado (umbral ' + OCUPACION_FLOJA_PCT + '%). Libre: ' + h.detalle + '.',
+        motivo: 'Ese día abres ' + fmtNum(Math.round(h.abierto_min / 60 * 10) / 10, 1) + ' h en total y solo hay '
+          + fmtPct(h.pct) + ' ocupado (umbral ' + fmtPct(OCUPACION_FLOJA_PCT) + '). Libre: ' + h.detalle + '.',
         ref: { fecha: h.fecha, horas_libres: h.horas_libres, pct: h.pct, dias_para: h.dias_para,
                tramos: h.detalle, personas: h.personas.length },
       }));
@@ -275,7 +280,7 @@ export const DETECTORES = [
         cifra: d.faltas, moneda: false,
         fecha: d.ultima_falta,
         motivo: 'Marcada' + (d.faltas === 1 ? '' : 's') + ' como "No se presentó" en la agenda; la última, el '
-          + d.ultima_falta + ' (hace ' + d.dias_desde + ' día' + (d.dias_desde === 1 ? '' : 's') + ').',
+          + fechaEs(d.ultima_falta) + ' (hace ' + d.dias_desde + ' día' + (d.dias_desde === 1 ? '' : 's') + ').',
         ref: { client_id: d.client_id, faltas: d.faltas, ultima_falta: d.ultima_falta, dias_desde: d.dias_desde },
       }));
     },
@@ -325,7 +330,7 @@ export const DETECTORES = [
           cifra: quedan, moneda: false,
           fecha: b.ultima || null,
           motivo: 'Bono «' + b.nombre + '»: ' + b.usadas + ' de ' + b.sesiones + ' usadas'
-            + (b.ultima ? ', la última el ' + b.ultima : ', ninguna todavía')
+            + (b.ultima ? ', la última el ' + fechaEs(b.ultima) : ', ninguna todavía')
             + '. No tiene ninguna cita futura'
             + (diasCaduca != null ? ' y el bono caduca en ' + diasCaduca + ' día' + (diasCaduca === 1 ? '' : 's') : '') + '.',
           ref: { client_id: b.client_id, bono_id: b.id, bono: b.nombre, quedan,
@@ -358,11 +363,11 @@ function caidaMensual(db, { hoy, hasPerm, medida, umbralPct, area, areaEtiqueta,
   if (caidaPct > -umbralPct) return [];   // no cae lo bastante (o sube) → no es hallazgo
   return [{
     area, areaEtiqueta, detector, detectorEtiqueta,
-    titulo: concepto + ' cayó ' + Math.abs(caidaPct).toFixed(1) + '% en ' + ultimo,
+    titulo: concepto + ' cayó ' + fmtPct(Math.abs(caidaPct)) + ' en ' + mesEs(ultimo),
     cifra: r2(vUlt), moneda: true,
     fecha: ultimo,
-    motivo: concepto + ' pasó de ' + r2(vAnt) + ' en ' + anterior + ' a ' + r2(vUlt) + ' en ' + ultimo
-      + ' (' + caidaPct.toFixed(1) + '%). Comparados meses completos, sin el mes en curso.',
+    motivo: concepto + ' pasó de ' + fmtNum(vAnt, 2) + ' en ' + mesEs(anterior) + ' a ' + fmtNum(vUlt, 2) + ' en ' + mesEs(ultimo)
+      + ' (' + fmtPct(caidaPct) + '). Comparados meses completos, sin el mes en curso.',
     ref: { mes: ultimo, mes_anterior: anterior, medida },
   }];
 }

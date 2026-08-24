@@ -988,7 +988,7 @@ export function disaHomeHtml({ userName, simbolo = '€' }) {
             if (!d.filas || !d.filas.length){ body.innerHTML = '<div class="ig-note">Sin datos.</div>'; return; }
             if (cfg.grafico === 'tabla'){
               body.innerHTML = '<div style="overflow:auto"><table style="width:100%;font-size:11px;border-collapse:collapse">'
-                + d.filas.map(function(f){ var v = f[med]; return '<tr><td style="padding:2px 6px;color:var(--text2)">' + esc(f.clave) + '</td><td style="padding:2px 6px;text-align:right">' + (v == null ? '—' : (meta.dinero ? eur(v) : (meta.pct ? Number(v).toFixed(1) + '%' : v))) + '</td></tr>'; }).join('')
+                + d.filas.map(function(f){ var v = f[med]; return '<tr><td style="padding:2px 6px;color:var(--text2)">' + esc(f.clave) + '</td><td style="padding:2px 6px;text-align:right">' + (v == null ? '—' : (meta.dinero ? eur(v) : (meta.pct ? window.pct(v, 1) : v))) + '</td></tr>'; }).join('')
                 + '</table></div>';
               return;
             }
