@@ -37,7 +37,7 @@ import { rateLimit } from '../../../core/rate-limit.js';
 import { reservaDeCita, ventanaCliente, personasPublicas, autoEncenderReservas } from '../reserva-publica-config.js';
 // PASO 8 — PERFIL DE OFICIO. Otro módulo HOJA (solo `db`), por la misma razón que el de arriba: layout.js
 // también lo importa para el menú, y si el diccionario viviera aquí se cerraría el círculo.
-import { vocabulario } from '../oficios.js';
+import { vocabulario, oficioDe } from '../oficios.js';
 import { fechaEs } from '../voz.js';   // la fecha, en cristiano
 import { contactoDeCita as apuntarContactoDeCita } from '../contactos.js';   // D2: rastro en el registro
 // (alias a propósito: `contactoDeCita` ya existe aquí y significa el teléfono/correo del cliente)
@@ -1733,7 +1733,7 @@ function vistaServicios(c, db) {
     <div class="alert" style="margin-bottom:1rem">Son los productos de tipo <strong>servicio</strong> de tu catálogo. Aquí defines lo que la cita necesita: el <strong>tiempo contigo</strong>, el <strong>tiempo de espera</strong> (los minutos en que el ${escHtml(aj.cliente_sing.toLowerCase())} espera y tú quedas libre, como el tinte) y el <strong>margen después</strong>. <strong>El precio y el IVA siguen viniendo del catálogo.</strong> Un servicio no se puede pedir hasta que tenga tiempo (pulsa «Configurar»). ¿No está en el catálogo? Créalo aquí con «Nuevo servicio». <strong>«Se pide por Internet»</strong> es otra cosa: es lo que ven tus ${escHtml(aj.cliente_plural.toLowerCase())} en tu <a href="/admin/citas/publica">página de reservas</a>, y viene <strong>apagado</strong> hasta que tú lo enciendas servicio a servicio.</div>
     <div class="card"><div class="table-wrap"><table><thead><tr><th>Servicio</th><th>Se pide cita</th><th>Se pide por Internet</th><th>Tiempo contigo</th><th>Tiempo de espera</th><th>Margen</th><th></th></tr></thead><tbody id="svcBody"><tr><td colspan="7">Cargando…</td></tr></tbody></table></div></div>
     ${modalServicio(aj.puesto_sing)}
-    ${modalNuevoServicio()}
+    ${modalNuevoServicio(oficioDe(db)?.id === 'salud')}
     <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};${jsVoz(aj)}${JS_SERVICIOS}</script>`;
   return adminLayout('Cuánto dura cada servicio', content, 'citas-servicios', c.get('session')?.csrfToken || '', c);
 }
@@ -2191,7 +2191,7 @@ const modalServicio = (puestoSing = 'Puesto') => `
     <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('mSvc')">Cancelar</button><button class="btn btn-primary" onclick="svcGuardar()">Guardar</button></div>
   </div></div>`;
 
-const modalNuevoServicio = () => `
+const modalNuevoServicio = (esSalud = false) => `
   <div class="modal-overlay" id="mNuevoSvc"><div class="modal" style="max-width:560px">
     <div class="modal-head"><h3>Nuevo servicio</h3><button class="modal-close" onclick="closeModal('mNuevoSvc')">✕</button></div>
     <div class="modal-body">
@@ -2199,7 +2199,7 @@ const modalNuevoServicio = () => `
       <div class="form-group"><label class="form-label">Nombre *</label><input class="form-control" id="nsNombre" placeholder="Corte de pelo, Manicura…"></div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Precio *</label><input class="form-control" type="number" min="0" step="0.01" id="nsPrecio" value="0"></div>
-        <div class="form-group"><label class="form-label">IVA</label><select class="form-control" id="nsIva"><option value="general">General (21%)</option><option value="reducido">Reducido (10%)</option><option value="superreducido">Superreducido (4%)</option><option value="exento">Exento (0%)</option></select></div>
+        <div class="form-group"><label class="form-label">IVA</label><select class="form-control" id="nsIva"><option value="general">General (21%)</option><option value="reducido">Reducido (10%)</option><option value="superreducido">Superreducido (4%)</option><option value="exento">Exento (0%)</option></select>${esSalud ? '<div style="margin-top:.35rem;color:var(--text2);font-size:12px">Va <strong>exento</strong> lo que es tratamiento: lo hace un profesional sanitario titulado y busca curar, aliviar o prevenir. Va al <strong>21 %</strong> lo demás aunque lo des tú: un masaje relajante, la estética, el pilates o un informe para una aseguradora.</div>' : ''}</div>
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Tiempo contigo (min) *</label><input class="form-control" type="number" min="1" id="nsContigo" value="30"><div style="font-size:.72rem;color:var(--muted)">Los minutos que estás con el cliente.</div></div>

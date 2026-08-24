@@ -24,6 +24,7 @@ import { saveAttachment } from '../attachments.js';
 import { lineSearchCellHtml, lineSearchScript } from '../views/line-search.js';
 import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
 import { paymentsSum, invoiceCobro, cobroState, isCobrable, ESTADO_LABEL,
+
   invoiceProximaAccion, invoiceActionHistory, registerCollectionAction, collectionEmail } from '../cobros.js';
 import { sendEmail } from '../../../core/mailer.js';
 import { ENTITY } from '../../../core/activity-entities.js';
@@ -31,6 +32,27 @@ import { fechaEs } from '../voz.js';   // la fecha, en cristiano (24/08/2026)
 import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
 import { exigirCorreoActivo } from '../avisos-preferencias.js';   // interruptor de Ajustes → Avisos y correos
 import { contactoDeFactura } from '../contactos.js';   // D2: facturar deja constancia de que vino
+
+// ── LA FACTURA EXENTA TIENE QUE DECIR POR QUÉ LO ES ──────────────────────────────────────────────
+// Una factura sin IVA no vale con no ponerlo: el RD 1619/2012 (art. 6.1.j) obliga a **mencionar la
+// disposición que declara la exención**. Sin esa línea, la factura está incompleta y el cliente —o
+// su gestoría— no sabe si es una exención legal o un IVA que se olvidó.
+//
+// DE DÓNDE SALE (24 ago 2026, corrección de Ibrahin). La exención sanitaria del art. 20.Uno.3º LIVA
+// pide DOS cosas a la vez: profesional sanitario titulado Y finalidad terapéutica. El MISMO
+// fisioterapeuta factura sin IVA una rehabilitación y al 21 % un masaje relajante. Por eso la marca
+// vive en CADA SERVICIO y no en el oficio, y por eso esta leyenda se pinta **solo si esta factura
+// lleva de verdad alguna línea exenta**, no por el hecho de ser una clínica.
+//
+// Es una MENCIÓN, no un cálculo: no toca ni un importe ni la huella.
+export function leyendaExencion(items, inv) {
+  const hayExento = (items || []).some(it => Number(it.tax_rate) === 0)
+    || ((!items || !items.length) && Number(inv.tax_rate) === 0);
+  if (!hayExento) return '';
+  return '<div style="margin-top:12px;color:var(--text2);font-size:11px">'
+       + 'Operación exenta de IVA según el art. 20.Uno.3.º de la Ley 37/1992 del IVA '
+       + '(asistencia sanitaria a personas físicas por profesional titulado).</div>';
+}
 
 // T4 Paso 1 — fecha de vencimiento de una factura = fecha de emisión + plazo de pago
 // del cliente (días). Se guarda en la factura al emitir; cada factura conserva el suyo.
@@ -673,6 +695,7 @@ ${membreteHtml({ emisor: partesDe(db, inv).emisor,
 
 ${totalsBlock}
 
+${leyendaExencion(items, inv)}
 ${inv.notes ? `<div style="margin-top:16px;color:var(--text2)">${escHtml(inv.notes)}</div>` : ''}
 
 <div class="doc-hash">

@@ -181,9 +181,29 @@ try {
       of.label + ': tiempo de espera y margen nacen a 0 (no se inventa el reparto interno)');
   }
   {
+    // ⚙️ CORREGIDO EL 24 AGO 2026, por Ibrahin, y la corrección importa. Esto exigía que TODOS los
+    // servicios de salud nacieran exentos, y eso es falso: la exención del art. 20.Uno.3º LIVA pide
+    // DOS cosas a la vez —profesional sanitario titulado Y finalidad terapéutica—. El MISMO
+    // fisioterapeuta factura sin IVA una rehabilitación y al 21 % un masaje relajante, un tratamiento
+    // estético, pilates o un informe para una aseguradora.
+    // **Un fisio que emitiera todo exento tendría un problema con Hacienda, y se lo habríamos dado
+    // nosotros.** Así que lo que se exige no es «todo exento», es que CADA SERVICIO lleve su marca y
+    // que el catálogo precargado traiga marcado lo obvio.
     const db = negocioNuevo('salud');
-    ok(servicios(db).every(s => s.tax_band === 'exento'),
-      'salud nace EXENTA de IVA (asistencia sanitaria, art. 20.Uno.3º LIVA), no al 21%');
+    const svc = servicios(db);
+    ok(svc.every(s => s.tax_band === 'exento' || s.tax_band === 'general'),
+      'salud: TODOS los servicios nacen con su banda de IVA declarada (ninguno sin marcar)',
+      svc.filter(s => !['exento', 'general'].includes(s.tax_band)).map(s => s.name).join(', ') || svc.length + ' servicios');
+    const SANITARIOS = /fisioterapia|psicolog|nutrici|osteopat|quiropodia|logopedia|suelo pélvico|consulta y valoración|terapia de pareja/i;
+    const BIENESTAR  = /bienestar|no terapéutico|entrenamiento personal|estétic|pilates|relajante/i;
+    const malSanitarios = svc.filter(s => SANITARIOS.test(s.name) && s.tax_band !== 'exento');
+    ok(malSanitarios.length === 0,
+      '  lo sanitario y terapéutico nace EXENTO (art. 20.Uno.3º LIVA)',
+      malSanitarios.map(s => s.name).join(', ') || svc.filter(s => s.tax_band === 'exento').length + ' exentos');
+    const malBienestar = svc.filter(s => BIENESTAR.test(s.name) && s.tax_band !== 'general');
+    ok(malBienestar.length === 0,
+      '  y lo de BIENESTAR nace al tipo GENERAL: no es asistencia sanitaria aunque lo dé un sanitario',
+      malBienestar.map(s => s.name).join(', ') || svc.filter(s => s.tax_band === 'general').map(s => s.name).join(' · '));
     ok(servicios(negocioNuevo('taller')).every(s => s.tax_band === 'general'),
       'taller nace al tipo general');
   }
