@@ -78,6 +78,12 @@ export async function negocioDesechable(nombre, { oficio = null } = {}) {
 // LAS CIFRAS SON DE LA VIDA REAL a propósito (12 unidades, 30 €), no 9999: si un día algo se escapa
 // de aquí, no distorsiona ningún informe. Es la norma que costó 523.002,90 € de ventas falsas.
 export function sembrarFlujoDocumentos(db, { stock = 20, precio = 30 } = {}) {
+  // LOS DATOS FISCALES DEL NEGOCIO. Un negocio recién dado de alta nace SIN NIF —igual que uno de
+  // verdad— y sin NIF no se puede emitir una factura: el flujo se queda parado en el botón y la
+  // comprobación se cae por tiempo sin decir por qué. Se rellena lo mínimo legal, que es justo lo
+  // que el panel «Pon en marcha tu negocio» le pide al dueño en su primer paso.
+  db.prepare("UPDATE company_config SET company_name=?, fiscal_id=?, address=? WHERE id=1")
+    .run('Negocio de prueba', 'B00000001', 'Calle de Prueba 1, Madrid');
   const almacen = db.prepare("SELECT id FROM warehouses WHERE active=1 ORDER BY id LIMIT 1").get()
     || { id: db.prepare("INSERT INTO warehouses (name, active) VALUES ('Almacén', 1)").run().lastInsertRowid };
   const cliente = db.prepare(

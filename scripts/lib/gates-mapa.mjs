@@ -256,7 +256,7 @@ export const GRUPOS = {
   // GRUPO NUEVO (24 ago 2026): nace al colocar las comprobaciones que nadie ejecutaba.
   agenda: ['test-avisos-cita', 'test-citas', 'test-coincidencia-huecos', 'test-enlace-cita', 'test-neto-cero-cita', 'test-prioridad', 'test-textos-citas'],
   // GRUPO NUEVO (24 ago 2026): nace al colocar las comprobaciones que nadie ejecutaba.
-  compras: ['verify-albaranes', 'verify-mostrador', 'verify-pdf', 'verify-pdf-http', 'verify-pedidos', 'verify-portal', 'verify-quotes', 'verify-recurrentes'],
+  compras: ['verify-albaranes-browser','verify-albaranes', 'verify-mostrador', 'verify-pdf', 'verify-pdf-http', 'verify-pedidos', 'verify-portal', 'verify-quotes', 'verify-recurrentes'],
   // GRUPO NUEVO (24 ago 2026): nace al colocar las comprobaciones que nadie ejecutaba.
   contabilidad: ['test-codigos-internos', 'test-contabilidad', 'test-contabilidad-bienes', 'test-contabilidad-modelos', 'test-contabilidad-pyg', 'test-coste-wac', 'verify-conciliacion', 'verify-conciliacion-gastos', 'verify-contabilidad-diario-mayor', 'verify-contabilidad-export'],
   // GRUPO NUEVO (24 ago 2026): nace al colocar las comprobaciones que nadie ejecutaba.
@@ -319,6 +319,11 @@ export const GRUPOS = {
 // el fichero: si un gate llama a `provisionTenant` y no está en esta lista —o al revés—, el runner
 // lo dice en cada pasada. Una declaración que nadie verifica se pudre en dos semanas.
 export const EMPIEZAN_DE_CERO = new Set([
+  // ── LAS TRECE QUE SE TRAEN SU PROPIO NEGOCIO (24 ago 2026) ────────────────────────────────────
+  // Fallaban por esperar datos sembrados a mano que ya no estaban, y sembrarlos en el negocio de
+  // desarrollo no valía: varias EMITEN una factura, y una factura emitida no se borra jamás. Con su
+  // propio negocio, lo que emiten nace y muere ahí dentro y se tira el negocio entero.
+  'verify-albaranes-browser',
   // ── LAS CINCO QUE SE TRAÍAN SU PROPIO NEGOCIO Y NO LO DECÍAN (24 ago 2026) ────────────────────
   // Lo cantaba el propio corredor en cada arranque —«la declaración y el código no dicen lo mismo»—
   // y llevaba semanas sin que nadie lo mirara, porque las cinco eran de las 99 que no ejecutaba
