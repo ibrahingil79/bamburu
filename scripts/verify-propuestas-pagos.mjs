@@ -20,19 +20,26 @@ import {
 } from '../modules/erp/propuestas.js';
 import { registerSupplierPaymentSvc } from '../modules/erp/routes/supplier-invoices.js';
 import { supplierInvoicePago } from '../modules/erp/pagos.js';
+// 24 ago 2026 · La copia va por `copiarBase` (sqlite .backup), no por copyFileSync: los negocios
+// corren en WAL y un `cp` deja fuera el -wal, o sea mide una foto vieja. Ver scripts/lib/copia-consistente.mjs.
+import { copiarBase } from './lib/copia-consistente.mjs';
 
 const TODAY = '2026-07-10';
 const dias = n => new Date(Date.parse(TODAY + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
+// UN NOMBRE DE TEMPORAL POR LLAMADA, no por negocio. 24 ago 2026: en verify-trazabilidad-flujos esta
+// misma forma hizo que la segunda copia pisara la base que la primera tenía abierta, y la comprobación
+// perdió un lote a media prueba. Aquí no había explotado todavía; el contador la desactiva.
+let nCopias = 0;
 const copias = [];
 
 // Copia de una BD viva + esquema, con las propuestas a cero (la BD viva puede traer propuestas de una
 // apertura previa del panel; este gate cuenta desde cero a propósito).
 function copia(slug) {
-  const p = join(tmpdir(), 'd5b-' + slug + '-' + process.pid + '-' + copias.length + '.db');
-  copyFileSync(`data/tenants/${slug}.db`, p);
+  const p = join(tmpdir(), 'd5b-' + slug + '-' + process.pid + '-' + copias.length + '-' + (++nCopias) + '.db');
+  copiarBase(`data/tenants/${slug}.db`, p);
   copias.push(p);
   const db = new Database(p);
   runMigrations(db);

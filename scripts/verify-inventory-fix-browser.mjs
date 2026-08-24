@@ -32,7 +32,14 @@ try {
 
 const consoleErrors = [];
 const pageErrors = [];
-const browser = await puppeteer.launch({ headless: 'new', executablePath: '/snap/bin/chromium', userDataDir: '/home/ubuntu/.cache/pptr-verify', args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] });
+// 24 ago 2026 · SIN `userDataDir` FIJO, A PROPOSITO. Estas seis compartian /home/ubuntu/.cache/pptr-verify
+// y en el barrido la segunda que arrancaba moria con «The browser is already running». Puppeteer miente en
+// ese mensaje: lo lanza en cuanto el log de Chromium dice «Failed to create a ProcessSingleton for your
+// profile directory». El navegador ajeno no existia — el snap de Chromium no podia crear su cerrojo ahi
+// (esos directorios de .cache no llegaron a existir nunca). Darle a cada una el suyo tampoco valia: seguian
+// muriendo, cada una en el suyo. Sin la opcion, puppeteer levanta un perfil temporal unico por arranque,
+// que ademas mata la otra trampa vieja: dos pestanas con las mismas cookies pisandose la sesion.
+const browser = await puppeteer.launch({ headless: 'new', executablePath: '/snap/bin/chromium', args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] });
 const page = await browser.newPage();
 page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });
 page.on('pageerror', e => pageErrors.push(e.message));

@@ -7,6 +7,7 @@
 import Database from 'better-sqlite3';
 import { copyFileSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
+import { execFileSync } from 'child_process';
 import { join } from 'path';
 import { randomBytes } from 'crypto';
 import { backfillLedger, libroVentas, libroCompras, correccionesDeOtroPeriodo } from '../modules/erp/contabilidad.js';
@@ -15,7 +16,14 @@ import { countsAsPayable } from '../modules/erp/pagos.js';
 
 const SRC = 'data/tenants/desarrollo-bamburu.db';
 const DBF = join(tmpdir(), 'conta-backfill-' + randomBytes(4).toString('hex') + '.db');
-copyFileSync(SRC, DBF);
+// LA COPIA SE HACE CON .backup, NO CON copyFileSync. 24 ago 2026: esta comprobación llevaba días
+// dando tumbos —roja en el barrido con «libro 119976.28 = vivo 119649.28», verde media hora después
+// sin que nadie tocara nada, y siempre el mismo desfase de 327,00 €—. No era el producto ni una
+// carrera: el negocio está en modo WAL, y `copyFileSync` se lleva el fichero .db pero deja fuera el
+// -wal, que es donde viven los últimos cambios confirmados. La comprobación medía una foto vieja.
+// Medido: el original leído con su WAL daba desfase 0 y un `cp` del mismo fichero daba 654,00 €.
+// `.backup` de sqlite copia la base ENTERA, WAL incluido, y de forma consistente.
+execFileSync('sqlite3', [SRC, ".backup '" + DBF + "'"]);
 const db = new Database(DBF);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };

@@ -20,15 +20,23 @@ import { createSupplierReturnSvc } from '../modules/erp/routes/supplier-returns.
 import { createDirectPurchaseSvc } from '../modules/erp/routes/purchases.js';
 import { adjustStock, productStock, defaultWarehouseId } from '../modules/erp/stock.js';
 import { lotesDeProducto, saldoLote, trazaDeLote } from '../modules/erp/trazabilidad.js';
+// 24 ago 2026 · La copia va por `copiarBase` (sqlite .backup), no por copyFileSync: los negocios
+// corren en WAL y un `cp` deja fuera el -wal, o sea mide una foto vieja. Ver scripts/lib/copia-consistente.mjs.
+import { copiarBase } from './lib/copia-consistente.mjs';
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
 const throws = (fn, m) => { let s = false; try { fn(); } catch (e) { s = e.status === 400; } ok(s, m); };
 
 const copias = [];
+let nCopias = 0;
 function copia(slug) {
-  const p = join(tmpdir(), 'traz-' + slug + '-' + process.pid + '.db');
-  copyFileSync(`data/tenants/${slug}.db`, p); copias.push(p);
+  // UN NOMBRE POR LLAMADA, no por negocio. 24 ago 2026: `copia('desarrollo-bamburu')` se llama DOS
+  // veces (secciones 1 y 5) y las dos caían en el mismo fichero temporal, así que la segunda pisaba
+  // la base que la primera todavía tenía abierta. Con `cp` colaba de milagro; al copiar bien, la
+  // sección 6 dejó de encontrar el lote L-A. El fallo llevaba ahí desde siempre, tapado.
+  const p = join(tmpdir(), 'traz-' + slug + '-' + process.pid + '-' + (++nCopias) + '.db');
+  copiarBase(`data/tenants/${slug}.db`, p); copias.push(p);
   const db = new Database(p); runMigrations(db);
   return db;
 }

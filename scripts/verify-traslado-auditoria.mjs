@@ -15,6 +15,9 @@ import { createStockTransferSvc, TRANSFER_ENTITY, transferLogDetails } from '../
 import { productStockInWarehouse } from '../modules/erp/stock.js';
 import { activeWarehouses } from '../modules/erp/routes/warehouses.js';
 import { logActivity } from '../core/auth.js';
+// 24 ago 2026 · La copia va por `copiarBase` (sqlite .backup), no por copyFileSync: los negocios
+// corren en WAL y un `cp` deja fuera el -wal, o sea mide una foto vieja. Ver scripts/lib/copia-consistente.mjs.
+import { copiarBase } from './lib/copia-consistente.mjs';
 
 const ORIGEN = 'data/tenants/desarrollo-bamburu.db';
 const COPIA = join(tmpdir(), 'bamburu-verify-traslado-' + process.pid + '.db');
@@ -22,7 +25,7 @@ const COPIA = join(tmpdir(), 'bamburu-verify-traslado-' + process.pid + '.db');
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
 
-copyFileSync(ORIGEN, COPIA);
+copiarBase(ORIGEN, COPIA);
 const db = new Database(COPIA);
 
 try {

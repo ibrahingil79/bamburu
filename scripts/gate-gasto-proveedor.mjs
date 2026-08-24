@@ -7,6 +7,7 @@ import puppeteer from 'puppeteer';
 import { tenantDb, launchOpts } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
+import { borrarAsientosDe, contarHuerfanos } from './lib/limpiar-asientos.mjs';
 
 const DB_PATH = tenantDb('desarrollo-bamburu');
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
@@ -16,6 +17,8 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
 
 const db = new Database(DB_PATH);
+// 24 ago 2026 · Se cuenta la basura del libro ANTES y DESPUÉS. Ver scripts/lib/limpiar-asientos.mjs.
+const huerfanosAntes = contarHuerfanos(db);
 const token = randomBytes(32).toString('base64url'), csrf = randomBytes(32).toString('base64url');
 const now = Math.floor(Date.now() / 1000);
 db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)').run(token, 2, now, now + 900, csrf);
@@ -114,9 +117,15 @@ try {
   await browser.close();
   const db2 = new Database(DB_PATH);
   if (invoiceId) db2.prepare('DELETE FROM supplier_invoices WHERE id=?').run(invoiceId);   // CASCADE borra líneas + pagos
+  borrarAsientosDe(db2, 'supplier_invoice', [invoiceId]);   // el asiento NO cae en cascada: no hay clave ajena
   ok(!invoiceId || !db2.prepare('SELECT 1 FROM supplier_invoices WHERE id=?').get(invoiceId), 'limpieza: factura de gasto eliminada (líneas/pagos en cascada)');
   ok(!invoiceId || db2.prepare('SELECT COUNT(*) n FROM supplier_invoice_items WHERE supplier_invoice_id=?').get(invoiceId).n === 0, 'limpieza: líneas eliminadas');
   db2.prepare('DELETE FROM admin_sessions WHERE token=?').run(token);
+  // Y se comprueba que se ha ido de verdad. Si mañana esta comprobación crea un documento nuevo
+  // y se olvida de su asiento, falla AQUÍ y no tres semanas después en el libro de compras.
+  const huerfanosDespues = contarHuerfanos(db2);
+  ok(huerfanosDespues === huerfanosAntes,
+     'limpieza: no deja asientos huérfanos en el libro (antes ' + huerfanosAntes + ', ahora ' + huerfanosDespues + ')');
   db2.close();
 }
 

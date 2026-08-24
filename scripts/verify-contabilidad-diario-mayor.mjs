@@ -11,9 +11,12 @@ import { join } from 'path';
 import { randomBytes } from 'crypto';
 import { backfillLedger, libroVentas, libroCompras, libroDiario, libroMayor, mayorCuenta } from '../modules/erp/contabilidad.js';
 import { diarioMatrix, mayorMatrix, buildXlsx } from '../modules/erp/contabilidad-export.js';
+// 24 ago 2026 · La copia va por `copiarBase` (sqlite .backup), no por copyFileSync: los negocios
+// corren en WAL y un `cp` deja fuera el -wal, o sea mide una foto vieja. Ver scripts/lib/copia-consistente.mjs.
+import { copiarBase } from './lib/copia-consistente.mjs';
 
 const DBF = join(tmpdir(), 'conta-dm-' + randomBytes(4).toString('hex') + '.db');
-copyFileSync('data/tenants/desarrollo-bamburu.db', DBF);
+copiarBase('data/tenants/desarrollo-bamburu.db', DBF);
 const db = new Database(DBF);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };

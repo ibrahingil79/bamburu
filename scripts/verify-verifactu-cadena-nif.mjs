@@ -14,15 +14,22 @@ import { join } from 'path';
 import { runMigrations } from '../modules/erp/models.js';
 import { recordVerifactuAlta, lastHuella } from '../modules/erp/verifactu.js';
 import { createSettingsRoutes } from '../modules/erp/routes/settings.js';
+// 24 ago 2026 · La copia va por `copiarBase` (sqlite .backup), no por copyFileSync: los negocios
+// corren en WAL y un `cp` deja fuera el -wal, o sea mide una foto vieja. Ver scripts/lib/copia-consistente.mjs.
+import { copiarBase } from './lib/copia-consistente.mjs';
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
 const throws = (fn, m, code = 409) => { let s = false; try { fn(); } catch (e) { s = e.status === code; } ok(s, m); };
 
+// UN NOMBRE DE TEMPORAL POR LLAMADA, no por negocio. 24 ago 2026: en verify-trazabilidad-flujos esta
+// misma forma hizo que la segunda copia pisara la base que la primera tenía abierta, y la comprobación
+// perdió un lote a media prueba. Aquí no había explotado todavía; el contador la desactiva.
+let nCopias = 0;
 const copias = [];
 function copia(slug, migrar = true) {
-  const p = join(tmpdir(), 'vfnif-' + slug + '-' + copias.length + '-' + process.pid + '.db');
-  copyFileSync(`data/tenants/${slug}.db`, p); copias.push(p);
+  const p = join(tmpdir(), 'vfnif-' + slug + '-' + copias.length + '-' + process.pid + '-' + (++nCopias) + '.db');
+  copiarBase(`data/tenants/${slug}.db`, p); copias.push(p);
   const db = new Database(p); if (migrar) runMigrations(db);
   return db;
 }

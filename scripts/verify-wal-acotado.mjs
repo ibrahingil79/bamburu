@@ -34,6 +34,9 @@ const copias = [];
 // creer que el arreglo no sirve (me pasó). Por eso aquí: checkpoint → una escritura → medir.
 function ensayo(etiqueta, limite) {
   const p = join(tmpdir(), 'wal-' + etiqueta + '-' + process.pid + '.db');
+  // `cp` A PROPÓSITO, no es el descuido del 24 ago 2026. Aquí control.db solo hace de semilla: lo que
+  // se mide es el WAL que ESTE ensayo escribe después. Llevárselo con .backup haría checkpoint y
+  // borraría justo lo que se quiere medir. Las demás comprobaciones sí usan lib/copia-consistente.mjs.
   copyFileSync('data/control.db', p);
   copias.push(p);
   const db = new Database(p);

@@ -9,6 +9,7 @@ import { tenantDb, launchOpts } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 import { recomputeStock } from '../modules/erp/stock.js';
+import { borrarAsientosDe, contarHuerfanos } from './lib/limpiar-asientos.mjs';
 
 const DB_PATH = tenantDb('desarrollo-bamburu');
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
@@ -19,6 +20,8 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
 
 const db = new Database(DB_PATH);
+// 24 ago 2026 · Se cuenta la basura del libro ANTES y DESPUÉS. Ver scripts/lib/limpiar-asientos.mjs.
+const huerfanosAntes = contarHuerfanos(db);
 const token = randomBytes(32).toString('base64url');
 const csrf = randomBytes(32).toString('base64url');
 const now = Math.floor(Date.now() / 1000);
@@ -131,6 +134,7 @@ try {
   // tenant de desarrollo puede tener traslados activos que lo bloqueen; aquí borramos el
   // dato de prueba como si nunca hubiera existido.)
   if (invoiceId) db2.prepare('DELETE FROM supplier_invoices WHERE id=?').run(invoiceId);
+  borrarAsientosDe(db2, 'supplier_invoice', [invoiceId]);   // el asiento NO cae en cascada: no hay clave ajena
   if (purchaseId) {
     const affected = db2.prepare("SELECT DISTINCT product_id pid FROM stock_movements WHERE origin_type='purchase' AND origin_id=?").all(purchaseId).map(r => r.pid);
     db2.transaction(() => {
@@ -143,6 +147,11 @@ try {
   ok(!invoiceId || !db2.prepare('SELECT 1 FROM supplier_invoices WHERE id=?').get(invoiceId), 'limpieza: factura de prueba eliminada');
   ok(!purchaseId || !db2.prepare('SELECT 1 FROM purchases WHERE id=?').get(purchaseId), 'limpieza: compra de prueba eliminada (stock recompuesto)');
   db2.prepare('DELETE FROM admin_sessions WHERE token=?').run(token);
+  // Y se comprueba que se ha ido de verdad. Si mañana esta comprobación crea un documento nuevo
+  // y se olvida de su asiento, falla AQUÍ y no tres semanas después en el libro de compras.
+  const huerfanosDespues = contarHuerfanos(db2);
+  ok(huerfanosDespues === huerfanosAntes,
+     'limpieza: no deja asientos huérfanos en el libro (antes ' + huerfanosAntes + ', ahora ' + huerfanosDespues + ')');
   db2.close();
 }
 

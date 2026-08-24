@@ -15,6 +15,9 @@ import { copyFileSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import { getTenantDb, getTenantConnection } from '../core/tenant-middleware.js';
 import { WAL_SIZE_LIMIT } from '../core/control-db.js';
+// 24 ago 2026 · La copia va por `copiarBase` (sqlite .backup), no por copyFileSync: los negocios
+// corren en WAL y un `cp` deja fuera el -wal, o sea mide una foto vieja. Ver scripts/lib/copia-consistente.mjs.
+import { copiarBase } from './lib/copia-consistente.mjs';
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
@@ -48,7 +51,7 @@ ok(/getTenantDb/.test(sa.slice(0, sa.indexOf('const TENANT_CAP_DEFAULT'))), 'imp
 // ── 3. La caché es de verdad una caché (misma conexión, no una nueva por llamada) ───────────
 console.log('\n[3] getTenantDb devuelve SIEMPRE la misma conexión');
 const tmp = join(tmpdir(), 'sa-cap-' + process.pid + '.db');
-copyFileSync('data/tenants/desarrollo-bamburu.db', tmp);
+copiarBase('data/tenants/desarrollo-bamburu.db', tmp);
 const tenantFake = { slug: 'zz-gate-' + process.pid, db_filename: tmp };
 const c1 = getTenantDb(tenantFake);
 const c2 = getTenantDb(tenantFake);

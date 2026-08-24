@@ -14,6 +14,9 @@ import { runMigrations } from '../modules/erp/models.js';
 import { generarPropuestasImpago, propuestasPendientes, contarPropuestasPendientes, umbralImpago } from '../modules/erp/propuestas.js';
 import { registerCollectionAction } from '../modules/erp/cobros.js';
 import { openDebts } from '../modules/erp/cobros.js';
+// 24 ago 2026 · La copia va por `copiarBase` (sqlite .backup), no por copyFileSync: los negocios
+// corren en WAL y un `cp` deja fuera el -wal, o sea mide una foto vieja. Ver scripts/lib/copia-consistente.mjs.
+import { copiarBase } from './lib/copia-consistente.mjs';
 
 const TENANTS = ['desarrollo-bamburu', 'ibrahin-repuestos'];
 const TODAY = '2026-07-10';
@@ -23,7 +26,11 @@ const copias = [];
 // Copia de la BD viva + esquema. Limpia disa_proposals: la BD viva puede traer propuestas de una
 // apertura previa del panel (generación perezosa), y las aserciones de conteo de ESTE gate parten de
 // cero a propósito. No es un dato inventado: es aislar el gate del estado incidental del demo.
-const copia = slug => { const p = join(tmpdir(), 'd5-' + slug + '-' + process.pid + '.db'); copyFileSync(`data/tenants/${slug}.db`, p); copias.push(p); const db = new Database(p); runMigrations(db); db.prepare('DELETE FROM disa_proposals').run(); return db; };
+// UN NOMBRE DE TEMPORAL POR LLAMADA, no por negocio. 24 ago 2026: en verify-trazabilidad-flujos esta
+// misma forma hizo que la segunda copia pisara la base que la primera tenía abierta, y la comprobación
+// perdió un lote a media prueba. Aquí no había explotado todavía; el contador la desactiva.
+let nCopias = 0;
+const copia = slug => { const p = join(tmpdir(), 'd5-' + slug + '-' + process.pid + '-' + (++nCopias) + '.db'); copiarBase(`data/tenants/${slug}.db`, p); copias.push(p); const db = new Database(p); runMigrations(db); db.prepare('DELETE FROM disa_proposals').run(); return db; };
 
 try {
   // ── 1. Esquema (aditivo, idempotente) ────────────────────────────────────────
