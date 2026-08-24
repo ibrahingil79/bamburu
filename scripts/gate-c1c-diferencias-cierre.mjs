@@ -78,7 +78,12 @@ try {
 
   dialogQueue.push(undefined);   // confirm (acepta)
   await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle0' }), page.evaluate(() => confirmReceipt())]);
-  ok(dialogs.some(m => m.includes('MÁS de lo pedido') && m.includes('exceso de 2')), 'la confirmación final REPITE el exceso');
+  // LA ADVERTENCIA YA NO ES UNA VENTANITA: es el panel de `pedirDatos`. Su texto queda registrado en
+  // `window.__pdVistos` por `autoAceptarPaneles` — el equivalente de `dialogs.push(d.message())`.
+  const panelesVistos = await page.evaluate(() => window.__pdVistos || []);
+  const avisos = dialogs.concat(panelesVistos);
+  ok(avisos.some(m => m.includes('MÁS de lo pedido') && m.includes('exceso de 2')),
+     'la confirmación final REPITE el exceso', avisos.join(' | ').slice(0, 160) || '(nada)');
   ok(page.url().includes('/purchase-order-receipts/'), 'recepción con exceso confirmada');
 
   await page.goto(BASE + `/admin/purchase-orders/${a.id}`, { waitUntil: 'networkidle0' });

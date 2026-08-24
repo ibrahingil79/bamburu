@@ -259,29 +259,48 @@ try {
     return { texto: f ? f.innerText.replace(/\s+/g, ' ').trim() : null,
              ayudas: [...document.querySelectorAll('.frase .fr-a')].map(a => a.textContent.trim()),
              selects: [...document.querySelectorAll('.frase select')].length,
-             avanzadoAbierto: document.getElementById('cAvanzado').open,
-             formulaVisible: document.getElementById('cFormula').offsetParent !== null };
+             // `cAvanzado` y `cFormula` ya no existen: la ficha D-ter (23 ago 2026) retiró la caja
+             // de fórmulas de la pantalla —«nunca se teclea una fórmula»— y puso en su sitio «Mis
+             // medidas», que se construye ELIGIENDO. Este paso seguía preguntando por el desplegable
+             // viejo y reventaba el gate con una excepción, dejando sin correr lo de detrás.
+             misMedidas: !!document.getElementById('cMisMedidas'),
+             botonMedida: !!document.getElementById('cNuevaMedida') };
   });
   ok(/^De .* quiero saber .* repartido por/.test(frase.texto), 'la pantalla se lee como una frase', (frase.texto || '').slice(0, 70) + '…');
-  ok(frase.selects === 5, '  con los cinco desplegables de siempre (no se pierde ninguno)', frase.selects + '');
-  ok(frase.ayudas.length === 5 && frase.ayudas.every(a => a.length > 5),
-     '  y CADA UNO lleva su línea de ayuda debajo', frase.ayudas.join(' / '));
-  ok(!frase.avanzadoAbierto && !frase.formulaVisible, 'la fórmula está en «Opciones avanzadas», plegada');
-  // La ayuda de la fórmula, en las palabras del usuario.
-  await page.evaluate(() => { document.getElementById('cAvanzado').open = true;
-    const c = document.getElementById('cCalcOn'); c.checked = true; c.dispatchEvent(new Event('change')); });
+  // Eran cinco y hoy son seis (el «y verlo en …» también es parte de la frase, con su ayuda). Lo que
+  // hay que garantizar no es un número: es que NO BAJE de cinco y que CADA desplegable tenga su línea
+  // de ayuda. Un recuento clavado se pone rojo por una entrega buena.
+  ok(frase.selects >= 5, '  no se pierde ningún desplegable de la frase', frase.selects + ' desplegables');
+  ok(frase.ayudas.length === frase.selects && frase.ayudas.every(a => a.length > 5),
+     '  y CADA UNO lleva su línea de ayuda debajo',
+     frase.ayudas.length + ' ayudas para ' + frase.selects + ' desplegables · ' + frase.ayudas.join(' / '));
+  ok(frase.misMedidas, 'y debajo está «Mis medidas», lo que sustituyó a la caja de fórmulas');
+  ok(frase.botonMedida, '  con su botón de crear una medida propia');
+  // Y LO QUE IMPORTA DE VERDAD: que una medida propia se construya ELIGIENDO, y dé un número. Se
+  // abre el panel, se eligen las dos cifras y la operación, y se comprueba que el gráfico pinta.
+  await page.evaluate(() => document.getElementById('cNuevaMedida').click());
   await dormir(900);
-  const ayudaF = await page.evaluate(() => document.getElementById('cFormulaAyuda').textContent);
-  ok(/Facturado \(sin IVA\)/.test(ayudaF), 'la ayuda de la fórmula usa las palabras del usuario', ayudaF.slice(0, 70) + '…');
+  const panelMedida = await textoModal(page);
+  ok(!!panelMedida, 'crear una medida propia abre un panel DENTRO de la página', (panelMedida || '').slice(0, 60));
+  ok(estado.dialogos.length === 0, '  y sin una sola ventanita del navegador', estado.dialogos.join(' | ') || 'ninguna');
+  const conPalabras = await page.evaluate(() => {
+    const ov = document.querySelector('.modal-overlay.open');
+    if (!ov) return null;
+    const sels = [...ov.querySelectorAll('select')];
+    // Las opciones tienen que estar EN LAS PALABRAS DEL USUARIO, no con el nombre interno.
+    const textos = sels.flatMap(sl => [...sl.options].map(o => o.textContent.trim()));
+    return { selects: sels.length, textos };
+  });
+  ok(conPalabras && conPalabras.selects >= 2, '  se elige de listas, no se teclea una fórmula',
+     conPalabras ? conPalabras.selects + ' desplegables' : '(sin panel)');
+  ok(conPalabras && conPalabras.textos.some(t => /Facturado \(sin IVA\)/.test(t)),
+     '  y las cifras salen con las palabras del usuario', (conPalabras ? conPalabras.textos.slice(0, 4).join(' · ') : ''));
   for (const tecnico of ['base', 'margenPct', 'unidades'])
-    ok(!new RegExp('(^|[^a-zA-Z])' + tecnico + '([^a-zA-Z]|$)').test(ayudaF), `  y no enseña el nombre interno «${tecnico}»`);
-  // Y una fórmula escrita EN PALABRAS tiene que dar un número.
-  await page.evaluate(() => { const f = document.getElementById('cFormula');
-    f.value = 'Beneficio en euros / Facturado (sin IVA) * 100'; f.dispatchEvent(new Event('input')); });
-  await dormir(1800);
-  const calc = await page.evaluate(() => { try { const ch = Chart.getChart(document.getElementById('cChart'));
-    return ch.data.datasets[0].data.filter(x => x != null).length; } catch { return -1; } });
-  ok(calc > 0, 'una fórmula escrita EN PALABRAS se calcula igual', calc + ' puntos con valor');
+    ok(!(conPalabras || { textos: [] }).textos.some(t => new RegExp('(^|[^a-zA-Z])' + tecnico + '([^a-zA-Z]|$)').test(t)),
+       `  y no enseña el nombre interno «${tecnico}»`);
+  await page.evaluate(() => { const ov = document.querySelector('.modal-overlay.open');
+    const x = ov && ov.querySelector('[data-pd="x"]'); if (x) x.click(); });
+  await dormir(400);
 
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   console.log('\n[8] REGLA 4 — SE MIRA LA CAPTURA (sobre píxeles, no de oídas)');

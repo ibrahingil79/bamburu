@@ -128,8 +128,14 @@ try {
   await page.goto(BASE + `/admin/purchase-orders/${oid}`, { waitUntil: 'networkidle0' });
   body = await page.content();
   ok(body.includes('>Recibida<') || body.includes('status-recibida'), 'orden: estado RECIBIDA (cerrada sola)');
-  ok(!body.includes('Registrar recepción'), 'sin pendiente → sin botón de registrar');
-  ok(!body.includes('Anular y rehacer'), 'con recepciones confirmadas no se ofrece anular la orden');
+  // SE MIRA EL BOTÓN, NO EL HTML CRUDO. Desde que los prompt() son paneles, el TÍTULO del panel
+  // («Anular y rehacer») viaja dentro del <script> de la pantalla aunque el botón no se pinte: buscar
+  // la frase en `body` daba rojo con el producto haciendo lo correcto. Lo que hay que comprobar es que
+  // no haya BOTÓN, y eso se pregunta al DOM.
+  const botones = await page.evaluate(() => [...document.querySelectorAll('button, a.btn')]
+    .filter(b => b.offsetParent !== null).map(b => b.textContent.replace(/\s+/g, ' ').trim()));
+  ok(!botones.some(t => /Registrar recepción/i.test(t)), 'sin pendiente → sin botón de registrar', botones.join(' | '));
+  ok(!botones.some(t => /Anular y rehacer/i.test(t)), 'con recepciones confirmadas no se ofrece anular la orden', botones.join(' | '));
   await page.screenshot({ path: '/tmp/c1b-4-recibida.png' });
 
   // ── 6. Lista: estado combinado ──

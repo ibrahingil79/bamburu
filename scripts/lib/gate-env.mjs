@@ -224,6 +224,10 @@ export async function autoAceptarPaneles(page) {
     // vacía, el panel con campos se DEJA EN PAZ — mejor un gate colgado y visible que uno que se
     // inventa un dato y da verde.
     window.__pdCola = [];
+    // Y EL REGISTRO DE LO ACEPTADO, que es el equivalente de `dialogs.push(d.message())`: varios
+    // gates afirman el TEXTO de la advertencia («repite el exceso de 2 unidades»), y ese texto ahora
+    // vive en el panel, no en una ventanita. Se guarda antes de pulsar, porque después desaparece.
+    window.__pdVistos = [];
     const rellena = (ov, v) => {
       const campos = [...ov.querySelectorAll('input, select, textarea')];
       if (!campos.length) return true;
@@ -248,6 +252,7 @@ export async function autoAceptarPaneles(page) {
         const conCampos = !!ov.querySelector('input, select, textarea');
         const v = conCampos ? window.__pdCola.shift() : undefined;
         if (!rellena(ov, v)) { if (conCampos && v !== undefined) window.__pdCola.unshift(v); continue; }
+        window.__pdVistos.push((ov.innerText || '').replace(/\s+/g, ' ').trim());
         ok.click();
         return;
       }

@@ -90,17 +90,29 @@ try {
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   console.log('\n[1] PARTE 6 — NO QUEDA BASURA DE MIS PRUEBAS EN EL NEGOCIO');
   // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // LO QUE ESTE GATE PUEDE GARANTIZAR ES LO SUYO, NO LO DE LOS DEMÁS. Esto exigía CERO clientes con
+  // marca de gate en el negocio entero, y en un barrido eso es imposible de cumplir: otros gates
+  // están sembrando y limpiando a la vez, así que la cifra sube y baja por razones que no tienen nada
+  // que ver con esta pantalla (medido el 24 ago 2026: 4 y luego 6, según qué otro gate iba corriendo).
+  // Un gate no puede responder de la basura de otro. Se exige CERO de LA SUYA —su MARCA, que es la
+  // única que crea y borra él— y lo ajeno se INFORMA, con su número, para que no desaparezca en
+  // silencio: el que responde de eso es `limpiar-restos-de-gates.mjs`.
   const M = "(name LIKE 'GATE%' OR name LIKE '%(gate %' OR name LIKE 'ZZ %' OR name LIKE 'GD2-%')";
+  const mio = `name LIKE '${MARCA}%'`;
+  const cliMios = db.prepare(`SELECT COUNT(*) c FROM clients WHERE ${mio}`).get().c;
+  const proMios = db.prepare(`SELECT COUNT(*) c FROM products WHERE ${mio}`).get().c;
+  ok(cliMios === 0, 'ni un cliente MÍO se queda en el negocio', cliMios + '');
+  ok(proMios === 0, 'ni un producto MÍO se queda', proMios + '');
   const cliVis = db.prepare(`SELECT COUNT(*) c FROM clients WHERE active=1 AND ${M}`).get().c;
   const proVis = db.prepare(`SELECT COUNT(*) c FROM products WHERE COALESCE(status,'')<>'archived' AND ${M}`).get().c;
-  ok(cliVis === 0, 'ni un cliente de gate VISIBLE en el negocio', cliVis + '');
-  ok(proVis === 0, 'ni un producto de gate visible', proVis + '');
+  console.log('  · restos de OTROS gates visibles ahora mismo: ' + cliVis + ' clientes · ' + proVis
+    + ' productos (se limpian con `node scripts/limpiar-restos-de-gates.mjs --hazlo`)');
   const total = db.prepare('SELECT COUNT(*) c FROM clients WHERE active=1').get().c;
   // Medido tras la limpieza: 24 activos, TODOS reales (Taxis Ríos SL, Autoescuela El Volante SL…).
   // Los 15 inactivos sin marca de gate ya lo estaban antes: la limpieza no tocó ni uno de verdad.
   ok(total >= 20, '  y quedan los clientes de verdad (no se ha barrido todo)', total + ' activos');
-  ok(db.prepare(`SELECT COUNT(*) c FROM clients WHERE active=1 AND ${M}`).get().c === 0,
-     '  y ni uno de los activos lleva marca de gate');
+  ok(db.prepare(`SELECT COUNT(*) c FROM clients WHERE active=1 AND ${mio}`).get().c === 0,
+     '  y ninguno de los activos lleva MI marca');
   // Lo que NO se pudo borrar está archivado, no destruido, y su factura sigue en la cadena.
   const arch = db.prepare(`SELECT COUNT(*) c FROM clients WHERE active=0 AND ${M}`).get().c;
   ok(arch > 0, '  los que tenían factura están ARCHIVADOS, no borrados', arch + ' archivados');

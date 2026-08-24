@@ -1138,7 +1138,7 @@ function paginaCita(db, cita, token) {
          que no tiene window.confirmarEnPagina: si se la llama, el botón muere en silencio. Pasó.
          Ver gate-reserva-publica-pantalla. */
       #cnf{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;padding:1rem;z-index:50}
-      #cnf.on{display:flex}
+      #cnf.open{display:flex}
       #cnfCaja{background:#fff;color:#0f172a;border-radius:16px;padding:1.25rem;max-width:380px;width:100%;box-shadow:0 10px 30px rgba(0,0,0,.25)}
       @media (prefers-color-scheme:dark){#cnfCaja{background:#1e293b;color:#e2e8f0}}
       #cnfCaja h2{font-size:1.05rem;margin:0 0 .4rem}
@@ -1171,10 +1171,13 @@ function paginaCita(db, cita, token) {
         <button class="btn ok" onclick="guardarCambio()">Guardar el cambio</button>
       </div>` : ''}
       <div id="msg"></div>
-      <div id="cnf" role="dialog" aria-modal="true" aria-labelledby="cnfT"><div id="cnfCaja">
+      <!-- MISMAS CLASES Y MISMOS data-pd QUE EL PANEL COMPARTIDO del layout, aunque el estilo sea
+           propio de esta página: así cualquier herramienta que sepa aceptar un panel (los gates,
+           por ejemplo) sabe aceptar TAMBIÉN este. Un segundo idioma para lo mismo se paga. -->
+      <div id="cnf" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="cnfT"><div id="cnfCaja">
         <h2 id="cnfT"></h2><div class="muted" id="cnfX"></div>
-        <button class="btn no" id="cnfSi"></button>
-        <button class="btn sec" id="cnfNo">No, dejarlo</button>
+        <button class="btn no" id="cnfSi" data-pd="ok"></button>
+        <button class="btn sec" id="cnfNo" data-pd="x">No, dejarlo</button>
       </div></div>
       <script>
         var TOKEN = ${JSON.stringify(token)};
@@ -1187,8 +1190,8 @@ function paginaCita(db, cita, token) {
             document.getElementById('cnfX').textContent=o.texto||'';
             var si=document.getElementById('cnfSi'), no=document.getElementById('cnfNo');
             si.textContent=o.aceptar||'Sí, adelante';
-            ov.classList.add('on'); si.focus();
-            function fin(v){ ov.classList.remove('on'); si.onclick=null; no.onclick=null;
+            ov.classList.add('open'); si.focus();
+            function fin(v){ ov.classList.remove('open'); si.onclick=null; no.onclick=null;
               ov.onclick=null; document.onkeydown=null; resolve(v); }
             si.onclick=function(){ fin(true); };
             no.onclick=function(){ fin(false); };
