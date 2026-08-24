@@ -69,12 +69,16 @@ try {
   ok(snap().stock === 3 - 100, 'movió stock por el libro (3 → -97, venta bajo pedido)');
 
   // 4) Servicio NUNCA se chequea (qty enorme) → 201 sin gate
-  r = await sale(ownerTok, ownerCsrf, L(pSrv, 9999));
+  r = await sale(ownerTok, ownerCsrf, L(pSrv, 12));   // cifra de la vida real: ver la nota de más abajo
   ok(r.status === 201, 'SERVICIO con qty enorme → 201 (no se chequea stock)');
 
   // 5) Línea LIBRE (sin product_id) nunca se chequea → 201
-  r = await sale(ownerTok, ownerCsrf, { warehouse_id: wh, payment_method: 'efectivo', lines: [{ product_id: null, description: 'Mano de obra', quantity: 9999, unit_price: 5, tax_rate: 21 }] });
-  ok(r.status === 201, 'LÍNEA LIBRE con qty enorme → 201 (no se chequea stock)');
+  // ⚙️ 24 ago 2026 · CIFRAS DE LA VIDA REAL. Aquí ponía 9999 unidades y salía un ticket de mostrador
+  // de 120.987,90 €. Lo que se prueba es que una línea SIN producto no mira el stock — y eso se
+  // prueba igual con 12 que con 9999. La diferencia es que si una se escapa sin anular, con 12 no se
+  // lleva por delante ningún informe: las 19 que se escaparon hoy sumaban el 55 % de las ventas.
+  r = await sale(ownerTok, ownerCsrf, { warehouse_id: wh, payment_method: 'efectivo', lines: [{ product_id: null, description: 'Mano de obra', quantity: 12, unit_price: 5, tax_rate: 21 }] });
+  ok(r.status === 201, 'LÍNEA LIBRE sin producto → 201 (no se chequea stock, sea cual sea la cantidad)');
 
   // 6) Venta NORMAL dentro de stock (otro físico, qty ≤ disponible) → 201 sin necesidad de confirm
   const d2 = new Database(DB); const pOk = d2.prepare("INSERT INTO products (name,slug,sku,price,stock,status,type,tax_rate,tax_band) VALUES (?,?,?,?,?,?,?,?,?)").run('ZZZ Ok ' + sym, 'zzz-ok-' + sym, 'ZO-' + sym, 10, 0, 'active', 'physical', 21, 'general').lastInsertRowid; d2.close();

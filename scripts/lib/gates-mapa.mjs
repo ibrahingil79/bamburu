@@ -60,6 +60,9 @@ export const RAPIDO = new Map([
   ['test-c6-secretos',       'ningún secreto ni PII por un log, y ninguna BD legible por otros'],
   // Y que ningún papel se llame «Factura» sin serlo: es riesgo legal, y cuesta cero.
   ['verify-nombre-documentos', 'un papel titulado Factura que no lo es puede acabar en manos de un cliente'],
+  // Y que el propio barrido no le infle las ventas al dueño. Va en el RÁPIDO porque el daño se hace
+  // el mismo día: una factura emitida cuenta como venta en cuanto existe.
+  ['verify-barrido-no-infla-ventas', 'ninguna comprobación deja una factura emitida en el negocio del dueño'],
 ]);
 
 // La velocidad de UNA comprobación. No hay tercer estado: o está declarada arriba o es del completo.
@@ -278,6 +281,7 @@ export const GRUPOS = {
   //   · censo-ventanitas   — que no vuelva a colarse un prompt() o un confirm() (<1 s)
   //   · lint-js-servido    — pide cada pantalla y compila su JavaScript en línea (~324 pantallas)
   lint: ['lint-plantillas', 'censo-ventanitas', 'lint-js-servido', 'verify-nombre-documentos', 'verify-menu-completo',
+         'verify-barrido-no-infla-ventas',
          'verify-factura-exenta', 'test-oficio', 'verify-libro-sin-huerfanos', 'verify-contabilidad-backfill',
          // PUNTO 5 (24 ago 2026) — el dinero y las fechas, como en España. Se mide sobre lo
          // SERVIDO: el código tiene toFixed(2) legítimos (el valor de un campo, un cuerpo de

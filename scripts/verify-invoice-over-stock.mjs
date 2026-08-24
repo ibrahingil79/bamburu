@@ -41,11 +41,11 @@ try {
   ok(invoiceStockExcess(db, [{ product_id: pFis, quantity: 3 }]).length === 0, 'físico 3 con 5 → sin exceso');
 
   // 3) SERVICIO y DIGITAL → nunca se chequean (no tienen inventario)
-  ok(invoiceStockExcess(db, [{ product_id: pSrv, quantity: 9999 }]).length === 0, 'servicio 9999 → NUNCA se gatea');
-  ok(invoiceStockExcess(db, [{ product_id: pDig, quantity: 9999 }]).length === 0, 'digital 9999 → NUNCA se gatea');
+  ok(invoiceStockExcess(db, [{ product_id: pSrv, quantity: 12 }]).length === 0, 'un SERVICIO no mira el stock, pida lo que pida → NUNCA se gatea');
+  ok(invoiceStockExcess(db, [{ product_id: pDig, quantity: 12 }]).length === 0, 'un DIGITAL tampoco → NUNCA se gatea');
 
   // 4) LÍNEA LIBRE (sin product_id) → nunca se chequea
-  ok(invoiceStockExcess(db, [{ description: 'Mano de obra', quantity: 9999 }]).length === 0, 'línea libre (sin product_id) → NUNCA se gatea');
+  ok(invoiceStockExcess(db, [{ description: 'Mano de obra', quantity: 12 }]).length === 0, 'línea libre (sin product_id) → NUNCA se gatea');
 
   // 5) RAMA B — emitir CON exceso NO mueve el libro de stock
   const before = db.prepare('SELECT COUNT(*) n FROM stock_movements').get().n;

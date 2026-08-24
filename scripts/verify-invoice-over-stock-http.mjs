@@ -46,8 +46,8 @@ try {
   r = await emit(owner, { description: 'Vela Lavanda 200g', quantity: 1000, unit_price: 10, tax_rate: 21, product_id: PHYS }, true);
   ok(r.status === 201 && r.body.invoice_number, 'físico 1000 CON confirm_excess (dueño) → 201 ' + (r.body.invoice_number || ''));
 
-  r = await emit(owner, { description: 'Servicio de Montaje', quantity: 9999, unit_price: 5, tax_rate: 21, product_id: SERV }, false);
-  ok(r.status === 201, 'servicio 9999 → 201 (NUNCA se gatea) ' + (r.body.invoice_number || ''));
+  r = await emit(owner, { description: 'Servicio de Montaje', quantity: 12, unit_price: 5, tax_rate: 21, product_id: SERV }, false);
+  ok(r.status === 201, 'un SERVICIO no mira el stock, pida lo que pida → 201 ' + (r.body.invoice_number || ''));
 
   console.log('\nEMPLEADO (sin permiso de exceso):');
   const emp = session(3); cleanup.push(emp.token);

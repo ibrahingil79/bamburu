@@ -92,7 +92,7 @@ try {
   let bloqueado = '';
   try {
     createStockTransferSvc(db, { from_warehouse_id: origen.id, to_warehouse_id: destino.id, date: '2026-07-10', notes: 'x',
-      items: [{ product_id: prod.id, quantity: 999999 }] });
+      items: [{ product_id: prod.id, quantity: 12 }] });   // basta con pasarse del stock; miles distorsionan informes
   } catch (e) { bloqueado = e.message; }
   ok(/disponible en/.test(bloqueado), `sacar más de lo que hay se impide: "${bloqueado.slice(0, 70)}…"`);
 
