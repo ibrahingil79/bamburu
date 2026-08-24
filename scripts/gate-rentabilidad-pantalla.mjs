@@ -77,8 +77,19 @@ try {
   const owner = db.prepare("SELECT id FROM admin_users WHERE role='owner' AND active=1 ORDER BY id LIMIT 1").get();
   const ventasAntes = ventasBase(), pygAntes = pygTotal();
 
-  cliId = db.prepare("INSERT INTO clients (name,fiscal_id,country,active) VALUES (?,?, 'ES',1)").run('GATE Rent Cliente', 'X7654321X').lastInsertRowid;
-  provId = db.prepare("INSERT INTO suppliers (name,active) VALUES (?,1)").run('GATE Rent Proveedor').lastInsertRowid;
+  // SE REUTILIZAN, NO SE CREAN CADA VEZ. El cliente y el proveedor de prueba NO se pueden borrar al
+  // salir —sus facturas están en la cadena y eso está decidido, ver el `finally`—, pero crear uno
+  // NUEVO en cada pasada convierte una decisión razonable en basura que crece sola: el 24 ago 2026
+  // había **79 «GATE Rent Proveedor»** en el negocio de desarrollo, uno por cada vez que este gate se
+  // ha ejecutado. Se busca primero y solo se crea si no está.
+  const dameCliente = () => db.prepare("SELECT id FROM clients WHERE name=? LIMIT 1").get('GATE Rent Cliente');
+  const dameProv = () => db.prepare("SELECT id FROM suppliers WHERE name=? LIMIT 1").get('GATE Rent Proveedor');
+  cliId = (dameCliente() || {}).id
+    || db.prepare("INSERT INTO clients (name,fiscal_id,country,active) VALUES (?,?, 'ES',1)").run('GATE Rent Cliente', 'X7654321X').lastInsertRowid;
+  db.prepare('UPDATE clients SET active=1 WHERE id=?').run(cliId);
+  provId = (dameProv() || {}).id
+    || db.prepare("INSERT INTO suppliers (name,active) VALUES (?,1)").run('GATE Rent Proveedor').lastInsertRowid;
+  db.prepare('UPDATE suppliers SET active=1 WHERE id=?').run(provId);
   // EL CÓDIGO DEL PROYECTO, ÚNICO POR PASADA. Era fijo ('GATE-PG'/'GATE-PP') y `proyectos.codigo`
   // tiene UNIQUE: en cuanto una pasada moría a medias sin limpiar, la siguiente NO PODÍA NI ARRANCAR
   // —«UNIQUE constraint failed»— y salía 0 OK · 1 fallo en un segundo. Pasó el 24 ago 2026 con este
@@ -178,7 +189,9 @@ try {
   for (const t of tokens) { try { db.prepare('DELETE FROM admin_sessions WHERE token=?').run(t); } catch {} }
   for (const id of emps) { try { db.prepare('DELETE FROM user_permissions WHERE admin_user_id=?').run(id); } catch {} try { db.prepare('DELETE FROM admin_users WHERE id=?').run(id); } catch {} }
   // Los proyectos de prueba se borran; las facturas anuladas (venta + gasto) y el cliente/proveedor
-  // PERMANECEN a propósito (cadena inmutable, neto-cero en Ventas y P&G) — residuo esperado.
+  // PERMANECEN a propósito (cadena inmutable, neto-cero en Ventas y P&G) — residuo esperado. Y desde
+  // el 24 ago 2026 son UNO Y SIEMPRE EL MISMO, no uno por pasada: la decisión de no borrarlos es
+  // razonable, pero multiplicada por cada ejecución era basura creciendo sola (79 proveedores).
   try { if (PG) db.prepare('DELETE FROM proyectos WHERE id=?').run(PG); } catch {}
   try { if (PP) db.prepare('DELETE FROM proyectos WHERE id=?').run(PP); } catch {}
   db.close();

@@ -7421,3 +7421,37 @@ El fallo 3 es el que más enseña, porque **las dos defensas que existen para ca
 El negocio de desarrollo se había quedado **sin almacén principal**: un script de limpieza archivó por
 SQL el que lo era, saltándose la regla del producto (que devuelve 409 al intentar archivar el
 principal). Se le devuelve la marca al más antiguo activo y **el limpiador ya lo repone solo**.
+
+### LA SEGUNDA PASADA: 95/103, Y LOS OCHO QUE FALTABAN
+Con los seis fallos de producto arreglados y las comprobaciones al día, el barrido pasó de **65/103 a
+95/103**. Los ocho restantes NO eran producto: eran comprobaciones que se estorbaban a sí mismas.
+
+- **`gate-margen-pantalla` pasaba sus 86 aserciones y moría AL LIMPIAR**: borraba su usuario de prueba
+  sin soltar `user_permissions`, que no es `ON DELETE CASCADE`. En cuanto una pasada moría antes de
+  limpiar —y esa noche murieron varias—, la siguiente reventaba con «FOREIGN KEY constraint failed»
+  **después** de haberlo probado todo. Un gate que se envenena a sí mismo.
+- **`gate-tiempo-pantalla` y `gate-rentabilidad-pantalla` no podían NI ARRANCAR.** Usaban códigos de
+  proyecto FIJOS (`GATE-PRY`, `GATE-PG`, `GATE-PP`) y `proyectos.codigo` es UNIQUE: una caída sin
+  limpieza dejaba el gate muerto para siempre (0 OK · 1 fallo en un segundo). **Un identificador fijo
+  convierte cualquier caída en una avería permanente.** Código único por pasada.
+- **`gate-importador-csv`** cerraba con «N aserciones, todas en verde»: SOSPECHOSO pasándolo todo.
+
+### Y TRES CARRERAS, DECLARADAS EN VEZ DE MAQUILLADAS
+Pasan **solos** y caen **en paralelo**, comprobado en la misma sesión. No se les ha tocado una
+aserción ni bajado el listón: se han declarado en `SOLOS` con su causa escrita.
+
+- **`gate-portal-ampliado`** verifica la **cadena propietaria entera** (`verifyTenantInvoices`): otro
+  gate que cree o BORRE una factura a la vez le deja un eslabón suelto. Paralelo 34 ✓ · 1 ✗ · solo
+  35 ✓ · 0 ✗.
+- **`gate-informes-a-medida`** cuenta **a mano** las citas y las horas del negocio entero y las
+  contrasta con el constructor. Otro gate creando una cita le mueve las dos cifras.
+- **`gate-descuentos`** mira las **promociones activas del negocio compartido**, no solo las suyas.
+  **El arreglo bueno, escrito para que no se olvide:** que filtre por SU promoción, como ya hacen los
+  de compras con `productoDePrueba`. Mientras no esté, corre solo.
+
+### LOS TRES LINT ENTRAN AL BARRIDO — 103 → 106
+`lint-plantillas`, `censo-ventanitas` y `lint-js-servido` estaban en `scripts/` y **solo corrían si
+alguien se acordaba**, que es exactamente cómo una herramienta deja de cazar cosas: esta noche dos de
+ellas dieron verde con una pantalla muerta. Grupo nuevo `lint`. Los tres cierran ya con el pie que el
+runner sabe leer, y `lint-js-servido` se declara **consumidor de cupo** del freno de 600 pet./min:
+pide más de 300 pantallas en un minuto, más que cualquier gate de navegador.

@@ -43,6 +43,15 @@ const DE_UN_CLIENTE = [
   ['collection_actions', 'client_id'], ['disa_proposals', 'client_id'],
   ['delivery_notes', 'client_id'], ['client_activities', 'client_id'],
 ];
+// De un PROVEEDOR: si tiene cualquiera de estos, no se borra. El 24 ago 2026 había **74 «GATE Rent
+// Proveedor»** en el negocio de desarrollo —uno por cada vez que corrió gate-rentabilidad-pantalla—,
+// y 46 de ellos sin nada colgando: borrables desde el primer día y nadie los miraba, porque este
+// limpiador no tenía proveedores en la lista.
+const DE_UN_PROVEEDOR = [
+  ['supplier_invoices', 'supplier_id'], ['purchases', 'supplier_id'], ['purchase_orders', 'supplier_id'],
+  ['supplier_returns', 'supplier_id'], ['products', 'supplier_id'], ['supplier_payments', 'supplier_id'],
+];
+
 const DE_UN_PRODUCTO = [
   ['invoice_items', 'product_id'], ['stock_movements', 'product_id'], ['cita_servicios', 'product_id'],
   ['quote_items', 'product_id'], ['purchase_items', 'product_id'], ['customer_order_items', 'product_id'],
@@ -73,6 +82,11 @@ function procesar(slug, ruta) {
     const proBorrar = pro.filter(p => libre(db, p.id, DE_UN_PRODUCTO));
     const proArchivar = pro.filter(p => !libre(db, p.id, DE_UN_PRODUCTO) && p.status !== 'archived');
 
+    // ── PROVEEDORES ─────────────────────────────────────────────────────────────────────────────
+    const prv = hay('suppliers') ? db.prepare(`SELECT id, name, active FROM suppliers WHERE ${MARCA_SQL('name')}`).all() : [];
+    const prvBorrar = prv.filter(x => libre(db, x.id, DE_UN_PROVEEDOR));
+    const prvArchivar = prv.filter(x => !libre(db, x.id, DE_UN_PROVEEDOR) && x.active !== 0);
+
     // ── ALMACENES, RECURSOS Y CITAS ─────────────────────────────────────────────────────────────
     const alm = hay('warehouses') ? db.prepare(`SELECT id, name FROM warehouses WHERE ${MARCA_SQL('name')} AND is_default=0`).all() : [];
     const almBorrar = alm.filter(w => cuenta(db, 'stock_movements', 'warehouse_id', w.id) === 0);
@@ -97,6 +111,7 @@ function procesar(slug, ruta) {
     console.log(`    · se BORRAN (no cuelga nada de ellos): ${cliBorrar.length}`);
     console.log(`    · se ARCHIVAN (tienen facturas u otros): ${cliArchivar.length}`);
     console.log(`  productos con marca: ${pro.length} → borrar ${proBorrar.length} · archivar ${proArchivar.length}`);
+    console.log(`  proveedores con marca: ${prv.length} → borrar ${prvBorrar.length} · archivar ${prvArchivar.length}`);
     console.log(`  almacenes vacíos con marca: ${almBorrar.length} de ${alm.length}`);
     console.log(`  recursos con marca sin citas: ${recBorrar.length} de ${rec.length}`);
     console.log(`  citas con código de gate: ${citas.length}`);
@@ -125,8 +140,10 @@ function procesar(slug, ruta) {
       R.borrado.productos = proBorrar.length ? db.prepare(`DELETE FROM products WHERE id IN ${enLista(proBorrar)}`).run().changes : 0;
       R.borrado.almacenes = almBorrar.length ? db.prepare(`DELETE FROM warehouses WHERE id IN ${enLista(almBorrar)}`).run().changes : 0;
       R.borrado.recursos = recBorrar.length ? db.prepare(`DELETE FROM recursos WHERE id IN ${enLista(recBorrar)}`).run().changes : 0;
+      R.borrado.proveedores = prvBorrar.length ? db.prepare(`DELETE FROM suppliers WHERE id IN ${enLista(prvBorrar)}`).run().changes : 0;
       R.archivado.clientes = cliArchivar.length ? db.prepare(`UPDATE clients SET active=0 WHERE id IN ${enLista(cliArchivar)}`).run().changes : 0;
       R.archivado.productos = proArchivar.length ? db.prepare(`UPDATE products SET status='archived' WHERE id IN ${enLista(proArchivar)}`).run().changes : 0;
+      R.archivado.proveedores = prvArchivar.length ? db.prepare(`UPDATE suppliers SET active=0 WHERE id IN ${enLista(prvArchivar)}`).run().changes : 0;
     })();
 
     console.log('\n  BORRADO :', JSON.stringify(R.borrado));
