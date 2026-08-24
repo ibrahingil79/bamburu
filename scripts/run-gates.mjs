@@ -63,7 +63,45 @@ const TIMEOUT_MS = 300000;
 //
 // La moraleja, para el que venga: un gate que se apoya en datos vivos ajenos, o en el saldo de una
 // cuenta, no se pudre por culpa del producto. Se pudre porque no era suyo lo que pisaba.
-const DEUDA = {};
+// ── LAS QUE NO PASAN, DECLARADAS (24 ago 2026) ──────────────────────────────────────────────────
+// De las 99 que nadie ejecutaba, 21 no pasan hoy. **No se retiran ni se ablandan**: se declaran aquí
+// con lo que se midió de cada una y su fecha, para que salgan POR SU NOMBRE en cada pasada. Un rojo
+// con dueño y motivo es información; un rojo anónimo es ruido, y un fichero que nadie ejecuta no es
+// ni una cosa ni la otra.
+//
+// LO QUE SE COMPROBÓ ANTES DE DECLARARLAS: ninguna de estas 21 es un fallo de producto sin arreglar.
+// Las dos que SÍ lo eran —la base de datos legible por cualquiera y los libros descuadrados— se
+// arreglaron el mismo día, y sus comprobaciones están en el barrido, en verde.
+const DEUDA = {
+  // PRECONDICIÓN AJENA: exigen datos que no crean ellas y que hoy no están. Es la avería que ya
+  // documenta la cabecera de este fichero: «un gate que se apoya en datos vivos ajenos se pudre
+  // porque no era suyo lo que pisaba». El arreglo bueno es que se traigan lo suyo.
+  'verify-permisos-coherencia':
+    'exige un 403 literal y el empleado de prueba (usuario 3) está INACTIVO, así que el rechazo llega '
+    + 'como 302/401 — más duro, no más flojo. COMPROBADO A MANO el 24 ago 2026: NO hay agujero de permisos.',
+  'verify-permisos-disa':      'misma familia y misma causa que la anterior (empleado de prueba inactivo).',
+  'verify-invoice-over-stock-http': 'mismos 403 sobre el mismo empleado inactivo.',
+  'verify-mostrador-overstock':     'ídem: el permiso se prueba contra un empleado que ya no está activo.',
+  'verify-albaranes-browser':  'necesita un pedido confirmado de prueba que no crea ella y hoy no existe.',
+  'verify-pedidos-browser':    'misma familia: datos sembrados que ya no están.',
+  'verify-pedidos-disa':       'espera un cliente y un número de pedido concretos del negocio de desarrollo.',
+  'verify-quotes-browser':     'espera un presupuesto ya convertido a factura; hoy no hay ninguno así.',
+  'verify-sustitutiva-browser':'espera un ticket sustituido concreto; el suyo ya no está.',
+  'verify-mostrador-browser':  'el ticket de prueba que espera ya no existe en el negocio.',
+  'verify-inventory-fix-browser': 'cuenta 80 productos físicos y hoy hay 119: cifra congelada de junio.',
+  'gate-espera-pantalla':      'exige que el bloque del vigía traiga avisos, y no los crea ella.',
+  'gate-inicio-pantalla':      'exige la rejilla de fábrica con más de un bloque; hoy trae uno.',
+  'gate-avisos-correos':       'depende de la hora del día (la pasada de las 15:00) — un gate con reloj es una moneda al aire.',
+  'test-cobros-paso2-1':       'espera un desglose de importes en el correo que ya no se compone así.',
+  'verify-u3-errores':         'smoke de errores del navegador anterior a los paneles de la casa.',
+  // SALEN 0 PERO NO DEMUESTRAN NADA: no imprimen resumen, así que el corredor no puede leerlas.
+  'test-c2-captura':           'sale 0 sin imprimir resumen: no demuestra nada. Necesita su línea de RESULTADO.',
+  'verify-disa-alcance':       'ídem: termina bien y no dice qué ha verificado.',
+  // NO ARRANCAN: abortan antes de comprobar nada.
+  'verify-dibujo':             'aborta al arrancar (código 2): no llega a verificar nada.',
+  'verify-vigia':              'aborta al arrancar (código 2).',
+  'verify-voz':                'aborta al arrancar (código 2).',
+};
 
 // ROJOS CONOCIDOS de gates que SÍ se ejecutan. No son deuda (el gate corre y verifica), pero su rojo
 // es anterior y de otro tema: se declara aquí para que salga por su nombre en cada barrido en vez de
@@ -98,6 +136,10 @@ const ROJOS_CONOCIDOS = {
 
 // Excluidos por naturaleza, no por estar rotos: no son deuda, simplemente no van en un barrido.
 const EXCLUIDOS = {
+  // 24 ago 2026 · la última de las 99: llama al MODELO REAL para preguntar por el stock. Misma
+  // familia que las de arriba — ni determinista ni gratis, y en un barrido de madrugada que corre
+  // todas las noches el coste se multiplica por 365.
+  'verify-llm-disa-stock': 'llama al MODELO REAL (stock por chat). A mano, cuando se toque DISA.',
   'verify-disa-pedidos-modelo-real': 'llama al MODELO REAL: ni determinista ni gratis. A mano.',
   'gate-pago-voz-avisos': 'llama al MODELO REAL (misma familia). A mano y a conciencia.',
   'gate-c2-captura':
@@ -436,7 +478,15 @@ if (desajustes.length) {
 // fuera con su motivo escrito.
 function cantarCenso() {
   try {
-    const censo = censoDeGates(readdirSync(join(APP_DIR, 'scripts')));
+    // ⚙️ 24 ago 2026 — EL CENSO NO CONOCÍA LAS DECLARACIONES DE ESTE MISMO FICHERO. Miraba solo
+    // GRUPOS y FUERA_A_PROPOSITO (que viven en el mapa) e ignoraba EXCLUIDOS, ENTORNO, DEUDA y
+    // ROJOS_CONOCIDOS, que viven aquí — así que cantaba como «invisibles» ocho gates que estaban
+    // declarados con su motivo tres pantallas más arriba. **Un censo que grita en falso se acaba
+    // ignorando, y entonces deja de avisar cuando el grito es de verdad.**
+    const declaradosAqui = new Set([...Object.keys(EXCLUIDOS), ...Object.keys(ENTORNO),
+                                    ...Object.keys(DEUDA), ...Object.keys(ROJOS_CONOCIDOS)]);
+    const censoBruto = censoDeGates(readdirSync(join(APP_DIR, 'scripts')));
+    const censo = { ...censoBruto, invisibles: censoBruto.invisibles.filter(g => !declaradosAqui.has(g)) };
     if (censo.declaradosFuera.length) {
       console.log('\n📋 FUERA DEL BARRIDO A PROPÓSITO (' + censo.declaradosFuera.length + '), con su motivo:');
       for (const g of censo.declaradosFuera) console.log('  · ' + g + '\n      ' + FUERA_A_PROPOSITO.get(g));
@@ -445,7 +495,7 @@ function cantarCenso() {
       console.log('\n🚨 GATES INVISIBLES — están en scripts/ y NO los ejecuta nadie (' +
         censo.invisibles.length + ' de ' + censo.enDisco.length + '):');
       for (const g of censo.invisibles) console.log('  · ' + g);
-      console.log('  Cada uno tiene que ir a un grupo de GRUPOS o a FUERA_A_PROPOSITO con su motivo.');
+      console.log('  Cada uno tiene que ir a un grupo de GRUPOS, a FUERA_A_PROPOSITO, o declararse aquí\n  (EXCLUIDOS / ENTORNO / DEUDA) con su motivo y su fecha. Ninguno puede quedarse sin destino.');
     }
     if (censo.sinFichero.length) {
       console.log('\n🚨 DECLARADOS Y SIN FICHERO (' + censo.sinFichero.length + '): ' + censo.sinFichero.join(', '));

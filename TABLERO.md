@@ -7552,6 +7552,66 @@ pide más de 300 pantallas en un minuto, más que cualquier gate de navegador.
 
 ---
 
+## 🧹 ENCARGO DEL 24 AGO 2026 — SANEAR LO INVISIBLE
+
+**El argumento del encargo, y lo que lo demostró.** De 216 ficheros de comprobación, **99 no los
+ejecutaba nadie**: ni corrían ni constaba que no corrieran. Al ejecutarlos uno a uno —73 pasaban, 26
+no— aparecieron **dos fallos de producto que llevaban meses ahí**, y los dos los cazó una
+comprobación que existía y nadie lanzaba:
+
+- **La base de datos de un negocio, legible por cualquier usuario de la máquina.**
+  `data/tenants/desarrollo.db` en 0644 y tres COPIAS DE SEGURIDAD del negocio de desarrollo en un
+  directorio 0775. La pieza que cierra permisos existía desde C6 y no llegaba: cura la BD **cuando se
+  abre**, y esa no se abre nunca porque **no tiene fila en `control.db`**. Ahora el arranque repasa
+  todo el árbol de `data/` —registradas o no, copias incluidas— y solo aprieta directorios que
+  GUARDAN bases de datos: la primera versión tocaba 157 (el caché de mapas incluido) para arreglar 4
+  ficheros, y una pieza de seguridad que hace de más se acaba desactivando entera.
+- **Los libros no cuadraban con los documentos.** Ventas 419.843,99 € de libro contra 418.803,39 € de
+  documentos vivos; compras 121.883,06 contra 119.618,26. Causa: **65 asientos cuyo documento ya no
+  existía**, de limpiezas que borraron facturas sin deshacer su apunte. Corregido como corrige un
+  contable —asiento inverso, fechado hoy, con el motivo y la referencia; **cero DELETE**— y con
+  `verify-libro-sin-huerfanos` para que no se vuelva a abrir.
+
+**Y dos que parecían de producto y NO lo eran** (dicho porque el registro sirve para eso): el dinero
+en inglés de la pantalla de avisos era la ASERCIÓN, que construía lo esperado como `'€' + toFixed(2)`;
+y «salud nace exenta de IVA» era una premisa falsa que **corrigió Ibrahin**: la exención pide
+profesional sanitario titulado Y finalidad terapéutica, así que el mismo fisio factura sin IVA una
+rehabilitación y al 21 % un masaje relajante.
+
+### CÓMO QUEDA EL CENSO
+| | antes | después |
+|---|---|---|
+| ficheros de comprobación | 216 | 221 |
+| en el barrido | 111 | 190 |
+| declarados fuera, con motivo y fecha | 9 | 30 |
+| **sin clasificar** | **99** | **0** |
+
+Las 21 que no pasan quedan en `DEUDA` con lo medido de cada una: la mayoría exige datos que no crea
+ella (el caso de libro es `verify-permisos-coherencia`, que pide un 403 literal y el empleado de
+prueba está INACTIVO, así que el rechazo llega como 302/401 — más duro, no más flojo; **comprobado a
+mano: no hay agujero de permisos**). Ninguna se ablanda ni se retira.
+
+### LO DEMÁS DEL ENCARGO
+- **Las 14 pantallas escondidas, al menú**, cada una con el candado de su propia pantalla. De paso se
+  cierra un agujero que llevaba anotado sin arreglar: `contabilidad` era la única clave del rail SIN
+  candado, así que un empleado sin `invoices.read` VEÍA «Libros y modelos» y se comía un 403.
+- **Cero cuadros de diálogo del navegador.** El «Deshacer» de conciliación era el último; pregunta ya
+  dentro de la página, y se prueba PULSÁNDOLO con `prompt`/`confirm` neutralizados y también cuando
+  el usuario dice que no.
+- **Las seis pantallas retiradas, retiradas de verdad** (1.584 líneas) y sus 12 líneas de importación.
+  Rutas registradas 642 → 603: **39 muertas fuera, ninguna viva perdida**.
+- **Ningún papel se llama «Factura» sin serlo.** Con `orders.js` cae el documento de PEDIDO titulado
+  «FACTURA», apuntado como riesgo legal desde julio. Nunca compartió la numeración legal (serie
+  `DEV-2026-NNN`) y llevaba meses sin poder abrirse (404 medido).
+- **El barrido, en dos velocidades:** `--rapido` a mano (9 comprobaciones, unos minutos) y el completo
+  **por temporizador cada madrugada a las 03:15**, con parte por correo que dice qué se ha roto — y
+  que avisa también **si no llega a terminar**.
+- **Y tres listas a mano, fuera:** la de pantallas del dinero (ahora sigue enlaces: de 60 a 343
+  pantallas, y destapó cinco sitios con el dinero o la fecha en inglés), la lista blanca de `voz.js`
+  (ahora se deriva del código) y el recuento del mapa del barrido.
+
+---
+
 ## 🔧 ENCARGO DEL 24 AGO 2026 — cuatro errores vistos por el dueño y los cabos de la noche
 
 Ocho puntos. Los cuatro primeros son fallos que Ibrahin vio EN PANTALLA; los cuatro siguientes,

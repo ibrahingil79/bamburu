@@ -70,6 +70,12 @@ export const RAPIDO = new Map([
 export function velocidadDe(nombre) { return RAPIDO.has(nombre) ? 'rapido' : 'completo'; }
 
 export const GRUPOS = {
+  // ── LAS QUE NADIE EJECUTABA (24 ago 2026) ─────────────────────────────────────────────────────
+  // De las 99 comprobaciones que estaban en `scripts/` y no corría nadie, estas PASAN hoy —medido,
+  // una a una— y entran. Un fichero de comprobación que existe y no se ejecuta no protege nada: solo
+  // da la sensación de estar cubierto, que es peor. Las que no pasan quedan declaradas en `DEUDA`
+  // con su motivo y su fecha; ninguna se queda sin destino.
+
   // ── PANTALLAS DEL CLIENTE Y DE LA NAVEGACIÓN ─────────────────────────────────────────────────
   // NACE DE UN DESCUIDO MÍO: estos cuatro gates existían, se corrían A MANO al entregarlos, y NO
   // estaban en el barrido. Un gate fuera del barrido es un gate que nadie ejecuta, y esa es la
@@ -154,6 +160,8 @@ export const GRUPOS = {
     'gate-orden-compra-c1a', 'gate-recepciones-c1b', 'gate-devoluciones-proveedor', 'gate-c2-revision',
   ],
   disa: [
+    // ↓ de las 99 invisibles (24 ago 2026), medidas y en verde:
+    'gate-dibujo-pantalla', 'gate-voz-pantalla', 'test-dibujo', 'test-disa-captura-chat', 'test-disa-clientes-t5', 'test-disa-dictar-compra', 'test-disa-stock', 'test-llm-texto-respuesta', 'test-pago-voz-avisos', 'test-vigia', 'test-voz', 'verify-albaranes-disa', 'verify-d5-create-product', 'verify-llm-migracion',
     'verify-propuestas-d5', 'verify-propuestas-pagos', 'gate-propuestas-pagos-permisos',
     'verify-propuestas-recurrentes', 'gate-propuestas-recurrentes',
     'verify-propuestas-dormidos', 'gate-propuestas-dormidos',
@@ -162,12 +170,16 @@ export const GRUPOS = {
     'verify-disa-query-permisos', 'verify-disa-sin-pedidos', 'verify-actividad-etiquetas',
     'gate-nav-inicio-disa', 'gate-disa-dictar-compra', 'gate-disa-adjuntar',
   ],
-  inventario: ['test-transfers', 'verify-traslado-auditoria', 'gate-almacenes', 'verify-propuestas-reposicion', 'gate-propuestas-reposicion',
+  inventario: [
+    // ↓ de las 99 invisibles (24 ago 2026), medidas y en verde:
+    'test-almacenes', 'test-almacenes-capa2', 'test-stock-pilar3', 'test-transfer-upstream', 'verify-invoice-over-stock', 'verify-mostrador-overstock-browser', 'verify-over-stock-ui','test-transfers', 'verify-traslado-auditoria', 'gate-almacenes', 'verify-propuestas-reposicion', 'gate-propuestas-reposicion',
                'verify-trazabilidad', 'verify-trazabilidad-flujos', 'gate-trazabilidad'],
   // `verify-avisos-crm-riesgo` ENTRA AL BARRIDO el 22 ago 2026. Estaba excluido con la nota «EN ROJO
   // desde antes (datos de riesgo ya en la BD viva)» y hoy pasa limpio: la exclusión estaba caducada
   // y lo que hacía era esconder una comprobación buena. Se mide, no se supone.
-  avisos: ['verify-avisos-permisos', 'gate-avisos-badge', 'verify-avisos-crm-riesgo',
+  avisos: [
+    // ↓ de las 99 invisibles (24 ago 2026), medidas y en verde:
+    'gate-avisos-contador-vivo', 'test-cobros-paso2', 'verify-crm', 'verify-suggest-legible','verify-avisos-permisos', 'gate-avisos-badge', 'verify-avisos-crm-riesgo',
            // PUNTO 3 (24 ago 2026) — la petición de migración llega al equipo, y si el correo
            // falla NO se pierde: se ve en el panel de control, con su fichero.
            'gate-migracion-al-equipo',
@@ -177,7 +189,9 @@ export const GRUPOS = {
   // Escalera · paso 7 — SERVICIOS PROFESIONALES (proyectos, tiempo, facturar horas). verify-constructor
   // va incluido a propósito: facturar horas EMITE facturas reales, así que la regresión tiene que probar
   // que Ventas (la "única verdad") no se mueve por ello.
-  servicios: ['test-proyectos', 'gate-proyectos-pantalla', 'test-tiempo', 'gate-tiempo-pantalla',
+  servicios: [
+    // ↓ de las 99 invisibles (24 ago 2026), medidas y en verde:
+    'gate-coste-horas-pantalla', 'gate-registro-alta', 'test-coste-horas-proyecto', 'test-inicio', 'test-oficio-alta', 'test-registro-alta','test-proyectos', 'gate-proyectos-pantalla', 'test-tiempo', 'gate-tiempo-pantalla',
               'test-facturar-horas', 'gate-facturar-horas-pantalla',
               'test-rentabilidad-proyecto', 'gate-rentabilidad-pantalla', 'verify-constructor'],
   // Escalera · paso 2 — MARGEN. Vigila que la cifra de "cuánto gano" no mienta: IVA fuera, coste
@@ -237,6 +251,17 @@ export const GRUPOS = {
   // Sala de máquinas: superadmin, conexiones a la BD, el fichero -wal, el saneo de errores al cliente,
   // el escapado del texto del usuario (que no se vuelva HTML ni JS) y la CSP estricta de las
   // superficies endurecidas (que sigan sin 'unsafe-inline' Y con los botones vivos).
+
+  // GRUPO NUEVO (24 ago 2026): nace al colocar las comprobaciones que nadie ejecutaba.
+  agenda: ['test-avisos-cita', 'test-citas', 'test-coincidencia-huecos', 'test-enlace-cita', 'test-neto-cero-cita', 'test-prioridad', 'test-textos-citas'],
+  // GRUPO NUEVO (24 ago 2026): nace al colocar las comprobaciones que nadie ejecutaba.
+  compras: ['verify-albaranes', 'verify-mostrador', 'verify-pdf', 'verify-pdf-http', 'verify-pedidos', 'verify-portal', 'verify-quotes', 'verify-recurrentes'],
+  // GRUPO NUEVO (24 ago 2026): nace al colocar las comprobaciones que nadie ejecutaba.
+  contabilidad: ['test-codigos-internos', 'test-contabilidad', 'test-contabilidad-bienes', 'test-contabilidad-modelos', 'test-contabilidad-pyg', 'test-coste-wac', 'verify-conciliacion', 'verify-conciliacion-gastos', 'verify-contabilidad-diario-mayor', 'verify-contabilidad-export'],
+  // GRUPO NUEVO (24 ago 2026): nace al colocar las comprobaciones que nadie ejecutaba.
+  seguridad: ['gate-c5-2fa-superadmin', 'gate-c5bis-rescate-duenyo', 'gate-c5ter-cerrojo-superadmin', 'gate-c6-find-tenant', 'test-c5-2fa-superadmin', 'test-c5-forgot', 'test-c5-sesiones', 'test-c5bis-rescate-duenyo', 'test-c5ter-sin-email', 'test-c6-acceso'],
+  // GRUPO NUEVO (24 ago 2026): nace al colocar las comprobaciones que nadie ejecutaba.
+  verifactu: ['verify-pieza-c', 'verify-sustitutiva', 'verify-verifactu-anulaciones', 'verify-verifactu-cadena-nif', 'verify-verifactu-cola', 'verify-verifactu-t1', 'verify-verifactu-t1-http', 'verify-verifactu-t2'],
   infra: ['test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
           // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
@@ -292,6 +317,16 @@ export const GRUPOS = {
 // el fichero: si un gate llama a `provisionTenant` y no está en esta lista —o al revés—, el runner
 // lo dice en cada pasada. Una declaración que nadie verifica se pudre en dos semanas.
 export const EMPIEZAN_DE_CERO = new Set([
+  // ── LAS CINCO QUE SE TRAÍAN SU PROPIO NEGOCIO Y NO LO DECÍAN (24 ago 2026) ────────────────────
+  // Lo cantaba el propio corredor en cada arranque —«la declaración y el código no dicen lo mismo»—
+  // y llevaba semanas sin que nadie lo mirara, porque las cinco eran de las 99 que no ejecutaba
+  // nadie. Ibrahin: «Una comprobación que crea cosas por detrás sin decirlo es la misma trampa que
+  // las 99 invisibles, en pequeño.» Declaradas.
+  'gate-avisos-correos',           // negocio nuevo: el resumen diario, sin tocar los datos de nadie
+  'gate-c5bis-rescate-duenyo',     // negocio nuevo: los códigos de rescate del dueño se prueban desde el alta
+  'test-oficio',                   // negocio nuevo POR OFICIO: es justo lo que compara, seis veces
+  'test-oficio-alta',              // negocio nuevo: elegir oficio en el alta
+  'test-registro-alta',            // negocio nuevo: el alta ES lo que prueba
   'gate-cliente-ficha-completa',   // negocio nuevo: la ficha entera, desde el alta
   'gate-cliente-360',              // negocio nuevo: la ficha cuadra con su pantalla de origen
   'gate-menu-navegacion',          // negocio nuevo: 52 puertas del menú, una a una
