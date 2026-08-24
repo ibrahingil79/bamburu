@@ -171,6 +171,19 @@ export const GRUPOS = {
   // superficies endurecidas (que sigan sin 'unsafe-inline' Y con los botones vivos).
   infra: ['verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta'],
+
+  // ── LOS TRES LINT, DENTRO DEL BARRIDO (24 ago 2026) ──────────────────────────────────────────
+  // Estaban en `scripts/` y solo corrían si alguien se acordaba, y esa noche eso salió caro DOS veces:
+  //   · la pantalla de plantillas de correo llevaba MUERTA (un regex cuyas barras se comió la
+  //     plantilla) y `lint-plantillas` decía «limpias», porque dejaba pasar `\/` a propósito;
+  //   · y `lint-js-servido` no la visitaba, porque recorría una lista de rutas escrita a mano.
+  // Una herramienta que nadie ejecuta deja de cazar cosas: es la misma lección de los gates que
+  // llevaban semanas fuera del barrido. Los tres son rápidos, no escriben NADA en ningún negocio y
+  // salen != 0 cuando encuentran algo, que es todo lo que el runner necesita.
+  //   · lint-plantillas    — backticks sueltos y escapes que la plantilla se come (169 ficheros, <1 s)
+  //   · censo-ventanitas   — que no vuelva a colarse un prompt() o un confirm() (<1 s)
+  //   · lint-js-servido    — pide cada pantalla y compila su JavaScript en línea (~324 pantallas)
+  lint: ['lint-plantillas', 'censo-ventanitas', 'lint-js-servido'],
 };
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════

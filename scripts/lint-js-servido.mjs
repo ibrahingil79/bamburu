@@ -123,3 +123,5 @@ if (malas.length) {
   process.exit(1);
 }
 console.log('✓ ' + pantallas + ' pantallas · ' + bloques + ' bloques de JavaScript en línea: todos válidos.');
+// El pie que el barrido sabe leer (ver scripts/run-gates.mjs · RESUMEN).
+console.log('RESULTADO: ' + bloques + ' ✓  ·  0 ✗');

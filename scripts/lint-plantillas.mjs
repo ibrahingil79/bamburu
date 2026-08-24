@@ -197,4 +197,7 @@ console.log(malos
     + '  · backtick: cierra la plantilla ahí mismo → escápalo (\\`) o quítalo.\n'
     + '  · escape comido: la plantilla tira la barra → dóblala (\\\\*) o quita el regex.'
   : '✓ ' + mirados + ' ficheros: plantillas limpias (ni backticks sueltos ni escapes comidos).');
+// El pie que el barrido sabe leer (ver scripts/run-gates.mjs · RESUMEN). Sin él, esto entra al barrido
+// y sale SOSPECHOSO: «salió 0 pero no imprimió resumen».
+console.log('RESULTADO: ' + (mirados - malos) + ' ✓  ·  ' + malos + ' ✗');
 process.exit(malos ? 1 : 0);

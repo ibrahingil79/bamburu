@@ -93,4 +93,6 @@ for (const [f, hs] of Object.entries(porFichero)) {
 }
 console.log(`\nENCADENADAS (dos a menos de 6 líneas — el caso que mata): ${encadenadas.length}`);
 for (const e of encadenadas) console.log('  · ' + e);
+// El pie que el barrido sabe leer (ver scripts/run-gates.mjs · RESUMEN).
+console.log('RESULTADO: ' + (hallazgos.length ? 0 : 1) + ' ✓  ·  ' + hallazgos.length + ' ✗');
 process.exit(hallazgos.length ? 1 : 0);

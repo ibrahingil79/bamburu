@@ -355,6 +355,10 @@ try {
 }
 
 console.log('\n' + '─'.repeat(70));
+// EL PIE, EN EL FORMATO QUE EL BARRIDO SABE LEER. Decía «N aserciones, todas en verde», que es
+// bonito y el runner no lo entiende: salía SOSPECHOSO —«no demuestra nada»— pasándolo todo. Ver
+// scripts/run-gates.mjs · RESUMEN.
+console.log('RESULTADO: ' + pass + ' ✓  ·  ' + fail + ' ✗');
 console.log(fail ? '✗ GATE IMPORTADOR CSV: ' + pass + ' pasadas · ' + fail + ' FALLOS'
                  : '✓ GATE IMPORTADOR CSV: ' + pass + ' aserciones, todas en verde');
 process.exit(fail ? 1 : 0);

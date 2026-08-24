@@ -308,6 +308,13 @@ for (const g of objetivo) {
   let src = ''; try { src = readFileSync(f, 'utf8'); } catch {}
   const seTraeSuNegocio = src.includes('provisionTenant');
   if (src.includes('puppeteer.launch')) CON_NAVEGADOR.add(g);
+  // Y LOS QUE GASTAN CUPO SIN NAVEGADOR. El freno de 600 pet./min no distingue quién pide: cuenta
+  // peticiones. `lint-js-servido` pide MÁS DE 300 pantallas con `fetch` en un minuto —más que
+  // cualquier gate de navegador— y sin esto entraría como si no gastara nada, tirando el cupo de los
+  // que corren a su lado. Se reconoce por lo que hace: recorrer pantallas con fetch en un bucle.
+  if (!CON_NAVEGADOR.has(g) && /for\s*\(const\s+ruta\s+of|conRastreo\(/.test(src) && src.includes('fetch(')) {
+    CON_NAVEGADOR.add(g);
+  }
   // TENANT_EXTRA son los que levantan un negocio de más para UN caso y por lo demás viven en el
   // compartido: nombran `provisionTenant` sin ser «de cero». Sin declararlos, esta comprobación
   // cantaba un desajuste falso en cada pasada, que es la mejor forma de que se deje de mirar.
