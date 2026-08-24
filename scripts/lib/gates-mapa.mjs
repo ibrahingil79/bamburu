@@ -22,7 +22,10 @@ export const GRUPOS = {
     'gate-menu-navegacion',          // ni una función del menú se pierde por el camino
     'gate-migracion-puerta',         // ficha B: la migración tiene puerta, y solo la ve quien puede
     'gate-agenda-visual',            // el lienzo de la agenda, y que se sirve desde la dirección real
-    'gate-inicio-arranque',          // el Inicio de un negocio que arranca: panel, «Hoy» y migración
+    'gate-inicio-arranque',
+           // PUNTO 4 (24 ago 2026) — los ONCE pasos del panel, hechos uno a uno. Solo fallaba el
+           // del logo: el panel miraba `logo_url` y subir el fichero guarda `company_logo_id`.
+           'gate-arranque-once-pasos',          // el Inicio de un negocio que arranca: panel, «Hoy» y migración
     'gate-inicio-cuadro-mando',      // el Inicio es el cuadro de mando del día (contra la dirección pública)
     'gate-vigia-pantalla',           // el vigía en su pantalla
     'gate-vigia-agenda',             // los detectores de agenda

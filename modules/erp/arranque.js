@@ -53,7 +53,14 @@ export function estadoArranque(db) {
   // El aspecto: basta con que haya logo O que haya cambiado el nombre del documento. Es un paso de
   // presentación, no de legalidad: no se exige más de lo que hace falta para que la factura no
   // salga anónima.
-  s.aspecto = !!((cfg.logo_url && String(cfg.logo_url).trim())
+  // EL LOGO SE MIRA DONDE SE GUARDA. Aquí solo se miraba `logo_url`, que es la columna VIEJA (una
+  // dirección de imagen escrita a mano); desde que se puede SUBIR el fichero, el logo vive en
+  // `company_config.company_logo_id`, que apunta al adjunto. Resultado: subías el logo, se guardaba
+  // bien, y el panel de arranque seguía diciendo que faltaba. Es el fallo que avisó el dueño el 24
+  // ago 2026, y era el ÚNICO de los once pasos que no se marcaba (los otros diez, comprobados uno a
+  // uno haciéndolos de verdad). Se miran las DOS: la nueva y la de siempre.
+  s.aspecto = !!(cfg.company_logo_id
+                 || (cfg.logo_url && String(cfg.logo_url).trim())
                  || (cfg.document_name && String(cfg.document_name).trim() && cfg.document_name !== 'Factura'));
   // Para empezar a trabajar
   s.migracion = cuenta(db, 'SELECT COUNT(*) n FROM migracion_peticiones WHERE active=1') > 0;

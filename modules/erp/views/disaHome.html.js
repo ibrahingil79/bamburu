@@ -1173,6 +1173,15 @@ export function disaHomeHtml({ userName, simbolo = '€' }) {
         }
         window.onbRecargar = cargar;
 
+        // QUE SE MARQUE EN EL MOMENTO, NO AL RECARGAR. Los pasos se completan en OTRA pantalla (o en
+        // otra pestaña): al volver aquí, el panel tiene que estar al día. Con el navegador devolviendo
+        // la página de su caché de historial, pedirlo solo al cargar no basta: no se vuelve a ejecutar.
+        // Se recarga cuando la pestaña vuelve a estar a la vista y cuando la página vuelve del
+        // historial. Un panel que va con retraso hace dudar de si se ha guardado.
+        document.addEventListener('visibilitychange', function(){ if (!document.hidden) cargar(); });
+        window.addEventListener('pageshow', function(e){ if (e.persisted) cargar(); });
+        window.addEventListener('focus', function(){ cargar(); });
+
         document.addEventListener('click', function(e){
           var t = e.target.closest('[data-onb-toggle],[data-onb-extra]');
           if (!t || !caja.contains(t)) return;
