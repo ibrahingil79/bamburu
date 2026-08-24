@@ -96,7 +96,10 @@ const DEUDA = {
   'verify-mostrador-overstock':     'ídem: el permiso se prueba contra un empleado que ya no está activo.',
   'verify-pedidos-disa':       'espera un cliente y un número de pedido concretos del negocio de desarrollo.',
   'verify-sustitutiva-browser':'espera un ticket sustituido concreto; el suyo ya no está.',
-  'verify-inventory-fix-browser': 'cuenta 80 productos físicos y hoy hay 119: cifra congelada de junio.',
+  'verify-inventory-fix-browser':
+    'YA se trae su propio negocio (24 ago 2026) y pasó de 5 a 6 aserciones, pero le quedan DOS en rojo: '
+    + 'el aviso de «hay unidades reservadas» al ajustar stock no llega a salir en el negocio recién '
+    + 'sembrado, aunque hay un pedido confirmado que reserva 5. Sin resolver: puede ser del producto.',
   'gate-espera-pantalla':      'exige que el bloque del vigía traiga avisos, y no los crea ella.',
   'gate-inicio-pantalla':      'exige la rejilla de fábrica con más de un bloque; hoy trae uno.',
   'gate-avisos-correos':       'depende de la hora del día (la pasada de las 15:00) — un gate con reloj es una moneda al aire.',

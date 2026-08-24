@@ -1,31 +1,42 @@
-// Verificación — PIEZA B · Sustitutiva en navegador headless (Puppeteer), tenant desarrollo, real.
-//   node scripts/verify-sustitutiva-browser.mjs
+// Verificación — PIEZA B · Sustitutiva en navegador headless (Puppeteer), servidor real.
 // Desde un ticket real → "Emitir factura completa" → elegir cliente → factura completa con QR →
 // enlace bidireccional → ticket marcado sustituido → no aparece cobro nuevo en Cobros.
+//
+// ⚙️ SE TRAE SU PROPIO NEGOCIO (24 ago 2026). Buscaba «el ticket sustituible más reciente» del negocio
+// de desarrollo — un dato vivo que no creaba ella y que dejó de existir. Y sembrarlo allí no valía:
+// este flujo emite DOS documentos con huella (el ticket y la factura que lo sustituye), y ninguno se
+// puede borrar. Aquí los dos nacen y mueren con el negocio.
 import Database from 'better-sqlite3';
-import { randomBytes } from 'crypto';
 import puppeteer from 'puppeteer';
+import { negocioDesechable, sembrarFlujoDocumentos } from './lib/negocio-desechable.mjs';
+import { autoAceptarPaneles } from './lib/gate-env.mjs';
+import { emitTicketSvc } from '../modules/erp/routes/invoices.js';
 
-const DB = 'data/tenants/desarrollo-bamburu.db';
-const ORIGIN = 'http://127.0.0.1:3000';
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-const db = new Database(DB);
-const token = randomBytes(24).toString('base64url');
-const now = Math.floor(Date.now() / 1000);
-db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)').run(token, 2, now, now + 1800, randomBytes(8).toString('hex'));
-// Ticket sustituible más reciente (serie S, emitida, no sustituido) + un cliente.
-const ticket = db.prepare("SELECT i.id, i.invoice_number FROM invoices i WHERE i.series='S' AND i.status='emitida' AND NOT EXISTS (SELECT 1 FROM invoices x WHERE x.substitutes_invoice_id=i.id) ORDER BY i.id DESC LIMIT 1").get();
-const clientId = db.prepare('SELECT id FROM clients ORDER BY id LIMIT 1').get().id;
-const paysBefore = db.prepare('SELECT COUNT(*) n FROM invoice_payments').get().n;
-db.close();
+const neg = await negocioDesechable('Gate Sustitutiva');
+const ORIGIN = neg.base;
+let ticket, clientId, paysBefore, token;
+try {
+  const semilla = sembrarFlujoDocumentos(neg.db, { stock: 20, precio: 12 });
+  clientId = semilla.clienteId;
+  // EL TICKET, emitido aquí: es lo que esta comprobación necesita y no creaba.
+  const t = emitTicketSvc(neg.db, {
+    lines: [{ product_id: semilla.productoId, quantity: 1 }],
+    warehouse_id: semilla.almacenId, payment_method: 'efectivo',
+  });
+  ticket = neg.db.prepare('SELECT id, invoice_number FROM invoices WHERE id=?').get(t.invoice_id || t.id);
+  paysBefore = neg.db.prepare('SELECT COUNT(*) n FROM invoice_payments').get().n;
+  token = neg.sesion();
+} catch (e) { console.error('✗ No se pudo sembrar el ticket: ' + e.message); neg.tirar(); process.exit(1); }
 
-const browser = await puppeteer.launch({ headless: 'new', executablePath: '/snap/bin/chromium', userDataDir: '/home/ubuntu/.cache/pptr-verify', args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] });
+const browser = await puppeteer.launch({ headless: 'new', executablePath: '/snap/bin/chromium', userDataDir: '/home/ubuntu/.cache/pptr-verify', args: ['--no-sandbox'] });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 1000 });
-await page.setCookie({ name: 'asess', value: token, domain: '127.0.0.1', path: '/' }, { name: 'btenant', value: 'desarrollo-bamburu', domain: '127.0.0.1', path: '/' });
+await page.setCookie({ name: 'asess', value: token, domain: new URL(ORIGIN).hostname, path: '/' });
+await autoAceptarPaneles(page);
 
 try {
   console.log('\n=== Sustitutiva — navegador ===\n');
@@ -61,7 +72,7 @@ try {
   ok(!/Emitir factura completa/.test(body), 'el ticket ya NO ofrece "Emitir factura completa" (no se sustituye dos veces)');
 
   // 4) Comprobación fiscal + cobros (directo en BD)
-  const dbv = new Database(DB, { readonly: true });
+  const dbv = new Database(neg.abs, { readonly: true });
   const fac = dbv.prepare('SELECT * FROM invoices WHERE id=?').get(parseInt(facId));
   const reg = dbv.prepare("SELECT tipo_factura FROM verifactu_registros WHERE invoice_id=? AND record_type='alta'").get(fac.id);
   const paysAfter = dbv.prepare('SELECT COUNT(*) n FROM invoice_payments').get().n;
@@ -76,8 +87,9 @@ try {
   body = await page.evaluate(() => document.body.innerText);
   ok(!new RegExp(fac.invoice_number).test(body), 'la factura sustitutiva NO aparece en Cobros pendientes');
 } catch (e) { console.error('ERROR', e.message); fail++; } finally {
-  await browser.close();
-  const d = new Database(DB); d.prepare('DELETE FROM admin_sessions WHERE token=?').run(token); d.close();
+  try { await browser.close(); } catch (_) {}
+  neg.tirar();
+  console.log('  [limpieza] negocio de prueba «' + neg.slug + '» tirado entero');
 }
 console.log('\n=== RESULTADO NAVEGADOR: ' + pass + ' OK / ' + fail + ' FALLOS ===');
 process.exit(fail ? 1 : 0);
