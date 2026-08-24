@@ -7582,9 +7582,17 @@ rehabilitación y al 21 % un masaje relajante.
 | | antes | después |
 |---|---|---|
 | ficheros de comprobación | 216 | 221 |
-| en el barrido | 111 | 190 |
-| declarados fuera, con motivo y fecha | 9 | 30 |
+| en el barrido | 111 | **188** |
+| declarados fuera, con motivo y fecha | 9 | **33** |
 | **sin clasificar** | **99** | **0** |
+
+**Y las 72 que entraron se ejecutaron enteras para medir si dejan basura: 75/75 en verde, y el
+negocio ganó DOS facturas.** Las dos culpables salen del barrido y quedan declaradas:
+`verify-verifactu-t1-http` emite 121,00 € y no los limpia —no puede: entran en la cadena— y
+`gate-coste-horas-pantalla` emite 1.210,00 € y los ANULA, que es lo máximo que se puede hacer con una
+factura, pero la fila se queda para siempre. Es la norma de `CLAUDE.md` escrita justo para esto: *un
+gate que no pueda borrar lo que creó no debe crearlo en ese negocio; que se traiga el suyo.* Entran el
+día que lo hagan. **Ninguna entra sucia.**
 
 Las 21 que no pasan quedan en `DEUDA` con lo medido de cada una: la mayoría exige datos que no crea
 ella (el caso de libro es `verify-permisos-coherencia`, que pide un 403 literal y el empleado de

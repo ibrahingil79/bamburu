@@ -73,6 +73,18 @@ const TIMEOUT_MS = 300000;
 // Las dos que SÍ lo eran —la base de datos legible por cualquiera y los libros descuadrados— se
 // arreglaron el mismo día, y sus comprobaciones están en el barrido, en verde.
 const DEUDA = {
+  // ── LAS DOS QUE DEJAN UNA FACTURA IMBORRABLE (medido el 24 ago 2026) ─────────────────────────
+  // Pasan las dos, y aun así NO entran. Al ejecutar las 74 recién colocadas y contar antes y después,
+  // el negocio de desarrollo ganó DOS facturas — y una factura emitida entra en la cadena de
+  // VERI*FACTU y **ya no se puede borrar**: lo más que se puede hacer es anularla, y la fila se queda.
+  // Es la norma de CLAUDE.md, y está escrita justo para esto: «un gate que no pueda borrar lo que creó
+  // no debe crearlo en ese negocio: que se traiga su propio negocio». Entran el día que lo hagan.
+  'verify-verifactu-t1-http':
+    'emite una factura de 121,00 € en el negocio de desarrollo y NO la limpia — no puede: entra en la '
+    + 'cadena. Medido el 24 ago 2026 contando antes y después. Tiene que traerse su propio negocio.',
+  'gate-coste-horas-pantalla':
+    'emite una factura de 1.210,00 € y la ANULA, que es lo máximo que se puede hacer con una factura — '
+    + 'pero la fila se queda para siempre. Misma cura: su propio negocio.',
   // PRECONDICIÓN AJENA: exigen datos que no crean ellas y que hoy no están. Es la avería que ya
   // documenta la cabecera de este fichero: «un gate que se apoya en datos vivos ajenos se pudre
   // porque no era suyo lo que pisaba». El arreglo bueno es que se traigan lo suyo.

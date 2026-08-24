@@ -191,7 +191,7 @@ export const GRUPOS = {
   // que Ventas (la "única verdad") no se mueve por ello.
   servicios: [
     // ↓ de las 99 invisibles (24 ago 2026), medidas y en verde:
-    'gate-coste-horas-pantalla', 'gate-registro-alta', 'test-coste-horas-proyecto', 'test-inicio', 'test-oficio-alta', 'test-registro-alta','test-proyectos', 'gate-proyectos-pantalla', 'test-tiempo', 'gate-tiempo-pantalla',
+    'gate-registro-alta', 'test-coste-horas-proyecto', 'test-inicio', 'test-oficio-alta', 'test-registro-alta','test-proyectos', 'gate-proyectos-pantalla', 'test-tiempo', 'gate-tiempo-pantalla',
               'test-facturar-horas', 'gate-facturar-horas-pantalla',
               'test-rentabilidad-proyecto', 'gate-rentabilidad-pantalla', 'verify-constructor'],
   // Escalera · paso 2 — MARGEN. Vigila que la cifra de "cuánto gano" no mienta: IVA fuera, coste
@@ -261,7 +261,7 @@ export const GRUPOS = {
   // GRUPO NUEVO (24 ago 2026): nace al colocar las comprobaciones que nadie ejecutaba.
   seguridad: ['gate-c5-2fa-superadmin', 'gate-c5bis-rescate-duenyo', 'gate-c5ter-cerrojo-superadmin', 'gate-c6-find-tenant', 'test-c5-2fa-superadmin', 'test-c5-forgot', 'test-c5-sesiones', 'test-c5bis-rescate-duenyo', 'test-c5ter-sin-email', 'test-c6-acceso'],
   // GRUPO NUEVO (24 ago 2026): nace al colocar las comprobaciones que nadie ejecutaba.
-  verifactu: ['verify-pieza-c', 'verify-sustitutiva', 'verify-verifactu-anulaciones', 'verify-verifactu-cadena-nif', 'verify-verifactu-cola', 'verify-verifactu-t1', 'verify-verifactu-t1-http', 'verify-verifactu-t2'],
+  verifactu: ['verify-pieza-c', 'verify-sustitutiva', 'verify-verifactu-anulaciones', 'verify-verifactu-cadena-nif', 'verify-verifactu-cola', 'verify-verifactu-t1', 'verify-verifactu-t2'],
   infra: ['test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
           // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
