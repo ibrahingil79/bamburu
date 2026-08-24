@@ -208,6 +208,13 @@ Las cuatro reglas, en concreto:
    plantillas, ni el barrido de pantallas — porque ese barrido recorría **las 47 entradas del menú**
    y el importador cuelga de `/admin/migracion/importar`, que es una subruta. **Recorrer «todas las
    pantallas» y recorrer «todo el menú» no es lo mismo**, y esa diferencia es por donde se coló.
+   **Y volvió a colarse el 24 ago 2026** por el mismo sitio, con la lista de subrutas ya escrita a
+   mano: `/admin/settings/plantillas` estaba MUERTA (un regex cuyas barras se comió la plantilla) y la
+   herramienta decía «todas válidas». Ahora, además de la lista, **sigue los enlaces `/admin/...` del
+   HTML de las pantallas que visita** — un nivel, tirando los href que son cadenas de JS a medio
+   construir. Pasó de 66 pantallas a 324 y de 318 bloques a 1426, y en la primera pasada destapó una
+   ficha de orden de compra que daba 500 desde junio y un enlace muerto. **Una lista a mano de rutas
+   siempre se queda corta: si añades una pantalla, comprueba que el rastreo llega a ella.**
 
 5. **La pantalla se juzga MIRÁNDOLA CON DATOS REALES.** Antes de dar algo por terminado se abre con
    los datos del negocio y se mira el resultado, no solo que no falle. **Un gráfico con sesenta

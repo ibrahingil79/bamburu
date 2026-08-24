@@ -7324,3 +7324,95 @@ un tratamiento sin acabar, y **el dinero ya está cobrado**, así que lo que se 
 **EL GATE SE TRAE SU PROPIO NEGOCIO DE SALUD** y lo borra entero al salir: fijar un oficio cambia el
 vocabulario y el catálogo del negocio completo, y hacerlo en el compartido dejaría a los demás gates
 hablando de «Pacientes» y «Salas».
+
+---
+
+## 🔍 EL BARRIDO COMPLETO DEL 24 AGO 2026 — y lo que salió de mirarlo entero
+
+**Se corrió UNA vez al terminar los quince puntos del encargo nocturno: 65/103 en 23,6 min.** Lo que
+sigue es el trabajo de mirar los **38 que no pasaron**, uno a uno. Ninguno se dio por ruido, y esa
+decisión es la que dio de sí: **seis fallos de producto de verdad**, dos míos de esa noche y cuatro
+anteriores que llevaban semanas o meses sin que nadie los viera.
+
+### LOS SEIS FALLOS DE PRODUCTO
+
+1. **El enlace público del cliente tenía DOS BOTONES MUERTOS.** «No puedo ir» y «Anular mi cita»
+   llamaban a `window.confirmarEnPagina()`, que vive en el layout del panel — y `/cita/<token>` no lo
+   carga. Se pulsaba y no pasaba nada, sin un solo error. **Mío, del punto 7.** Esa página lleva ahora
+   su propio panel de confirmación, con su CSS, su Escape y su clic fuera.
+2. **Los ABONOS no se podían emitir.** Mi guarda del punto 11 («los descuentos no pueden dejar el
+   documento en negativo») miraba solo el signo del total, y en este producto **una devolución es una
+   factura con las cantidades en negativo** (`verify-margen`, paso 7). **Mío**, y es exactamente lo
+   que prohíbe la constante «no se pierde ninguna función existente». La condición correcta es la
+   MEZCLA: hay líneas positivas y aun así el total baja de cero.
+3. **La pantalla de PLANTILLAS DE CORREO estaba muerta**: no pintaba ni una. Un
+   `/^https?:\/\/.+/` escrito dentro de una plantilla llegaba al navegador como `/^https?://.+/`, y
+   el bloque entero de JavaScript no arrancaba. **Mío, del punto 7.**
+4. **No se podía GUARDAR un informe recién creado.** La pantalla ofrece «lo que mejor se lea» y «un
+   número», y la lista que valida el guardado solo tenía los cuatro dibujos: 400 «Ese tipo de gráfico
+   no existe», con el panel abierto y el error dentro. **De la ficha D-ter (23 ago).**
+5. **Las pestañas «Compras» y «Clientes» de Analítica no hacían nada**, ni se marcaban como activas:
+   `engancharTabs()` estaba **definida y nunca llamada**. Con ellas, el selector de periodo. **De
+   antes.**
+6. **La ficha de una ORDEN DE COMPRA SIN LÍNEAS daba 500** — OC-0011, OC-0012 y OC-0013, del 14 jun
+   2026, en estado «enviada», llevaban desde junio sin poder abrirse. `purchaseOrderTotals` usaba la
+   validación de CREAR («se requiere al menos una línea») en la pantalla de VER. **De junio.**
+
+Y un enlace muerto en Rentabilidad (`/admin/usuarios`, cuando la ruta es `/admin/users`).
+
+### LAS DOS HERRAMIENTAS QUE DECÍAN QUE TODO ESTABA BIEN
+
+El fallo 3 es el que más enseña, porque **las dos defensas que existen para cazarlo dieron verde**:
+
+- **`lint-plantillas.mjs`** dejaba pasar `\/` **a propósito**, porque `<\/script>` es un idioma
+  legítimo. Ahora se distinguen por lo que va delante: tras un `<` está bien; en cualquier otro sitio
+  es el delimitador de un regex y la plantilla lo destruye. Probado con un fichero que lleva las dos.
+- **`lint-js-servido.mjs`** recorría las 47 entradas del menú **más una lista de subrutas escrita a
+  mano** — y una lista a mano se queda corta: por ahí se colaron el importador (23 ago) y las
+  plantillas de correo (24 ago). Ahora **sigue los enlaces `/admin/...` del HTML de las pantallas que
+  visita** (un nivel, tirando los href que son cadenas de JS a medio construir). **De 66 pantallas y
+  318 bloques a 324 y 1426**, y en la primera pasada destapó el 500 de junio y el enlace muerto.
+
+### EL RESTO DE LOS 38: COMPROBACIONES, NO PRODUCTO
+
+- **Doce gates míos salían «SOSPECHOSOS» pasando todo.** Cierran con `RESULTADO: N ✓ · N ✗` y la
+  expresión del runner no lo reconocía. Los había corrido **a mano**, que es justo lo que no
+  demuestra que el barrido los sepa leer. Corregido en `run-gates.mjs`, **anclado a la palabra
+  RESULTADO**: sin el ancla, cualquier número seguido de un tic valía como resumen y eso convierte un
+  gate sin resumen en un falso verde.
+- **Once gates se quedaron esperando un `confirm()` que ya no existe.** Al migrar las 81 ventanitas,
+  los gates que no probaban el diálogo —sino que se lo quitaban de en medio con
+  `page.on('dialog', d => d.accept())`— se quedaron sin nadie que aceptara el panel. Varios salían
+  como «timeout» o «ProtocolError», que es lo que despista. Se añade `autoAceptarPaneles(page)` a
+  `lib/gate-env.mjs`, con una **cola** (`window.__pdCola`) para los paneles con campo: el motivo de
+  anular lo valida el producto y lo afirma el gate, así que no se puede adivinar. Si la cola está
+  vacía, el panel con campos **se deja en paz**: mejor un gate colgado y visible que uno que se
+  inventa un dato.
+- **Recuentos congelados que envejecieron**: áreas (5→7), dimensiones (32→39), medidas (31→45),
+  preguntas frecuentes (11→13), tipos de gráfico (4→6), puertas del menú (52→54). Donde se ha podido,
+  el número se ha cambiado por la **lista**: un total suelto se queda verde si un área pierde un campo
+  y otra gana otro.
+- **Tres gates medían secciones de Analítica sin abrirlas.** Desde la D-ter los informes se cargan al
+  desplegar su fila del índice; medir la pantalla recién cargada es medir el esqueleto. Uno de ellos
+  daba además **verde falso** en dos líneas, por comparar contra el guion corto `-` cuando la pantalla
+  pinta la raya larga `—`.
+- **Dos gates solo pasaban de día.** `gate-agenda-visual` exigía que la agenda estuviera desplazada al
+  abrir; a primera hora del día del negocio **no hay nada que subir** y el gate era rojo de madrugada
+  (medido a las 01:39, con la línea de «ahora» al 11 %). Ya contemplaba el tope de abajo; ahora
+  también el de arriba.
+- **Un gate cogía el registro MÁS NUEVO de cada tabla** para abrir fichas — que en un barrido es casi
+  siempre de otro gate corriendo a la vez, y para cuando navega ya lo han borrado: 404. Ahora coge el
+  más antiguo, que es del negocio de verdad.
+- **Una precondición que ningún gate posee.** `gate-margen-pantalla` exigía ver un «—» en la tabla del
+  constructor, o sea un grupo **sin ninguna** línea con coste. En este negocio no existe (medido con
+  las ocho dimensiones y el histórico entero: cero huecos) y el gate no puede fabricarlo, porque
+  emitir una factura aquí la mete en la cadena de VERI*FACTU y no se puede quitar. Se cambió por el
+  cuadre **motor ↔ pantalla**: cada hueco del motor se pinta «—» y nunca 0 ni 100 %. Si algún día hay
+  un hueco, queda cubierto sin tocar nada.
+- **Una carrera:** `gate-informes-legibles` esperaba 1800 ms fijos y leía la nota **a medias**; bajo la
+  carga de un barrido cantaba un fallo que no existía. Ahora espera a que la nota **se quede quieta**.
+
+### UN DATO REPARADO
+El negocio de desarrollo se había quedado **sin almacén principal**: un script de limpieza archivó por
+SQL el que lo era, saltándose la regla del producto (que devuelve 409 al intentar archivar el
+principal). Se le devuelve la marca al más antiguo activo y **el limpiador ya lo repone solo**.
