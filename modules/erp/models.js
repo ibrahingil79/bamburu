@@ -2786,6 +2786,12 @@ Sé preciso con los números y siempre redondea correctamente.`,
   // La otra decisión: EL MOTOR PROPONE, EL USUARIO CONFIRMA (CANON). Ningún descuento se mete solo
   // en una factura. Se calcula, se enseña, y quien emite decide.
   addCol(db, 'clients', 'descuento_pct', 'REAL NOT NULL DEFAULT 0');   // el que lleva SIEMPRE ese cliente
+  // PELDAÑO 8 (24 ago 2026) — la fecha de nacimiento del paciente. La pide el oficio de SALUD (la
+  // edad cambia la pauta de un tratamiento y es lo primero que se pregunta en una primera visita) y
+  // la ficha solo la PINTA en ese oficio, para no llenar de campos la de un taller. La columna es
+  // de todos: guardar un dato que un oficio necesita no puede depender de una columna por oficio.
+  // NO es un dato de salud: una fecha de nacimiento no dice nada de la dolencia de nadie.
+  addCol(db, 'clients', 'fecha_nacimiento', "TEXT DEFAULT ''");
   db.exec(`
     -- PROMOCIONES: una regla con fecha. Lo que antes eran «cupones» de la tienda (con código, para
     -- un carrito) pasa a ser esto, que es lo que un autónomo usa de verdad: «en agosto, 15 % en

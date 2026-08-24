@@ -91,8 +91,8 @@ export function createClientSvc(db, input) {
   const d = parseClient(input);
   if (fiscalIdConflict(db, d.fiscal_id)) { const e = new Error('Ya existe un cliente con ese NIF'); e.status = 409; throw e; }
   const code = nextCode(db, 'client');   // código interno CLI-NNNN, tras la guarda de NIF (no editable)
-  const r = db.prepare('INSERT INTO clients (name,fiscal_id,email,phone,address,city,country,postal_code,province,group_id,notes,accepts_newsletter,client_type,payment_term_days,payment_method,collections_profile,client_code,responsable_user_id,descuento_pct) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-    .run(d.name, d.fiscal_id || '', d.email || '', d.phone || '', d.address || '', d.city || '', d.country || '', d.postal_code || '', d.province || '', d.group_id || null, d.notes || '', d.accepts_newsletter ? 1 : 0, d.client_type || 'particular', d.payment_term_days || 0, d.payment_method || '', d.collections_profile || 'estandar', code, d.responsable_user_id || null, Number(d.descuento_pct) || 0);
+  const r = db.prepare('INSERT INTO clients (name,fiscal_id,email,phone,address,city,country,postal_code,province,group_id,notes,accepts_newsletter,client_type,payment_term_days,payment_method,collections_profile,client_code,responsable_user_id,descuento_pct,fecha_nacimiento) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(d.name, d.fiscal_id || '', d.email || '', d.phone || '', d.address || '', d.city || '', d.country || '', d.postal_code || '', d.province || '', d.group_id || null, d.notes || '', d.accepts_newsletter ? 1 : 0, d.client_type || 'particular', d.payment_term_days || 0, d.payment_method || '', d.collections_profile || 'estandar', code, d.responsable_user_id || null, Number(d.descuento_pct) || 0, d.fecha_nacimiento || '');
   syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
   // F — el mapa se decide AQUÍ, en el servicio compartido, y no en la ruta: así sale igual si el
   // cliente lo da de alta una persona o lo dicta DISA. Nunca puede tumbar el alta (ver mapa-cliente.js).
@@ -105,8 +105,8 @@ export function updateClientSvc(db, id, input) {
   if (!exists) { const e = new Error('Cliente no encontrado'); e.status = 404; throw e; }
   const d = parseClient(input);
   if (fiscalIdConflict(db, d.fiscal_id, id)) { const e = new Error('Ya existe un cliente con ese NIF'); e.status = 409; throw e; }
-  db.prepare('UPDATE clients SET name=?,fiscal_id=?,email=?,phone=?,address=?,city=?,country=?,postal_code=?,province=?,group_id=?,notes=?,accepts_newsletter=?,client_type=?,payment_term_days=?,payment_method=?,collections_profile=?,responsable_user_id=?,descuento_pct=? WHERE id=?')
-    .run(d.name, d.fiscal_id || '', d.email || '', d.phone || '', d.address || '', d.city || '', d.country || '', d.postal_code || '', d.province || '', d.group_id || null, d.notes || '', d.accepts_newsletter ? 1 : 0, d.client_type || 'particular', d.payment_term_days || 0, d.payment_method || '', d.collections_profile || 'estandar', d.responsable_user_id || null, Number(d.descuento_pct) || 0, id);
+  db.prepare('UPDATE clients SET name=?,fiscal_id=?,email=?,phone=?,address=?,city=?,country=?,postal_code=?,province=?,group_id=?,notes=?,accepts_newsletter=?,client_type=?,payment_term_days=?,payment_method=?,collections_profile=?,responsable_user_id=?,descuento_pct=?,fecha_nacimiento=? WHERE id=?')
+    .run(d.name, d.fiscal_id || '', d.email || '', d.phone || '', d.address || '', d.city || '', d.country || '', d.postal_code || '', d.province || '', d.group_id || null, d.notes || '', d.accepts_newsletter ? 1 : 0, d.client_type || 'particular', d.payment_term_days || 0, d.payment_method || '', d.collections_profile || 'estandar', d.responsable_user_id || null, Number(d.descuento_pct) || 0, d.fecha_nacimiento || '', id);
   syncNewsletter(db, d.email, d.name, d.accepts_newsletter);
   guardarPunto(db, id, d);   // F — misma regla que en el alta, y por la misma puerta
   return { id: Number(id), name: d.name };
@@ -706,6 +706,11 @@ export function createClientRoutes(db, cfg = {}) {
             </div>
             <!-- PUNTO 11 · el descuento que este cliente lleva SIEMPRE. No se aplica solo: al hacer
                  una factura sale propuesto en «Descuentos…» y se confirma ahí. -->
+            <!-- PELDAÑO 8 · solo se pinta en el oficio de SALUD, que es quien la necesita. La columna
+                 la tienen todos; el campo, no: la ficha de un taller no se llena de huecos ajenos. -->
+            <div class="form-group" id="cNacWrap" style="display:none"><label class="form-label">Fecha de nacimiento</label>
+              <input type="date" class="form-control" id="cNac" style="max-width:200px">
+              <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">La edad cambia la pauta de un tratamiento.</div></div>
             <div class="form-group"><label class="form-label">Descuento fijo (%)</label>
               <input type="number" class="form-control" id="cDto" min="0" max="100" step="0.5" value="0" style="max-width:140px">
               <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">El que lleva siempre. Se te propone al facturarle; nunca se aplica solo.</div></div>
@@ -882,6 +887,9 @@ export function createClientRoutes(db, cfg = {}) {
         document.getElementById('clientId').value='';
         ['cName','cFiscal','cEmail','cPhone','cAddress','cCity','cCountry','cNotes','cPostal','cProvince'].forEach(id=>document.getElementById(id).value='');
         document.getElementById('cDto').value='0';
+        document.getElementById('cNac').value='';
+        document.getElementById('cNacWrap').style.display =
+          (window.OFICIO_CAMPOS && window.OFICIO_CAMPOS.indexOf('fecha_nacimiento')>=0) ? '' : 'none';
         setFiscal(false);
         dirReset();   // F — ni sugerencias abiertas ni el punto del cliente anterior
         document.getElementById('cGroup').value='';
@@ -912,6 +920,11 @@ export function createClientRoutes(db, cfg = {}) {
         document.getElementById('cResp').value=c.responsable_user_id||'';
         document.getElementById('cNotes').value=c.notes||'';
         document.getElementById('cDto').value=Number(c.descuento_pct||0);
+        document.getElementById('cNac').value=c.fecha_nacimiento||'';
+        // El campo solo existe para el oficio que lo pide (peldaño 8). Se decide con lo que el
+        // servidor ya manda en window.OFICIO: no se adivina desde el navegador.
+        if (window.OFICIO_CAMPOS && window.OFICIO_CAMPOS.indexOf('fecha_nacimiento')>=0)
+          document.getElementById('cNacWrap').style.display='';
         document.getElementById('cType').value=c.client_type||'particular';
         document.getElementById('cTermDays').value=Number(c.payment_term_days||0);
         document.getElementById('cPayMethod').value=c.payment_method||'';
@@ -920,7 +933,7 @@ export function createClientRoutes(db, cfg = {}) {
       }
       async function saveClient(){
         const id=document.getElementById('clientId').value;
-        const body={name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,address:document.getElementById('cAddress').value,city:document.getElementById('cCity').value,country:document.getElementById('cCountry').value,postal_code:document.getElementById('cPostal').value,province:document.getElementById('cProvince').value,group_id:document.getElementById('cGroup').value||null,notes:document.getElementById('cNotes').value,descuento_pct:Number(document.getElementById('cDto').value)||0,accepts_newsletter: id ? !!(currentClient&&currentClient.accepts_newsletter) : false,client_type:document.getElementById('cType').value,payment_term_days:parseInt(document.getElementById('cTermDays').value)||0,payment_method:document.getElementById('cPayMethod').value,collections_profile:document.getElementById('cProfile').value,responsable_user_id:document.getElementById('cResp').value||null,
+        const body={name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,address:document.getElementById('cAddress').value,city:document.getElementById('cCity').value,country:document.getElementById('cCountry').value,postal_code:document.getElementById('cPostal').value,province:document.getElementById('cProvince').value,group_id:document.getElementById('cGroup').value||null,notes:document.getElementById('cNotes').value,descuento_pct:Number(document.getElementById('cDto').value)||0,fecha_nacimiento:document.getElementById('cNac').value||'',accepts_newsletter: id ? !!(currentClient&&currentClient.accepts_newsletter) : false,client_type:document.getElementById('cType').value,payment_term_days:parseInt(document.getElementById('cTermDays').value)||0,payment_method:document.getElementById('cPayMethod').value,collections_profile:document.getElementById('cProfile').value,responsable_user_id:document.getElementById('cResp').value||null,
           // F — si se eligió una dirección de la lista, viaja SU punto: el servidor lo guarda tal cual
           // y no vuelve a buscar nada. Si se escribió a mano, no van y se resuelve al guardar.
           geo_lat: dirElegida ? dirElegida.lat : null,

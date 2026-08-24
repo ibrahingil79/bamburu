@@ -122,6 +122,23 @@ export const PLANTILLAS = {
   // aquí, se ECHAN de lo que ya trajo el vigía—; las que no caben en `importe` viajan en `ref`, que es
   // exactamente lo que la regla permite. Ninguna frase propone enviar nada a nadie: DISA propone y el
   // dueño decide, y aquí ni siquiera hay a quién escribir.
+  // PELDAÑO 8 · el detector del oficio de salud. Sin plantilla, la voz se degrada con honestidad
+  // (usa el título y el motivo del vigía), pero la DECISIÓN quedaría genérica — «conviene revisar
+  // este punto» — y aquí la decisión concreta es obvia: llamarle y cerrar la siguiente sesión.
+  tratamiento_a_medias: {
+    quePasa: (h, { importe, fecha }) => {
+      const r = h.ref || {};
+      return 'Le quedan ' + importe + (Number(h.cifra) === 1 ? ' sesión pagada' : ' sesiones pagadas')
+        + ' del bono «' + (r.bono || 'suyo') + '» y no tiene ninguna cita puesta'
+        + (r.caduca ? ', y el bono caduca el ' + fechaEs(r.caduca) : '') + '.';
+    },
+    decision: (h) => {
+      const r = h.ref || {};
+      return 'Conviene llamarle y cerrar la siguiente sesión: ya está pagada'
+        + (r.caduca ? ', y si el bono caduca la pierde' : '') + '.';
+    },
+  },
+
   hueco_perdido: {
     quePasa: (h, { importe, fecha }) => {
       const pct = h.ref && h.ref.pct != null ? h.ref.pct : null;

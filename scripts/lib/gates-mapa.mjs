@@ -164,6 +164,7 @@ export const GRUPOS = {
                                      // motor que ya hay, y en la línea de tiempo del cliente
     'gate-importador-proveedores',   // punto 14: lo construible de J y K — proveedores por CSV, y
                                      // que la ficha J siga SIN un solo gancho de pasarela
+    'gate-oficio-salud',             // punto 15 · peldaño 8: el oficio de salud y bienestar entero
   ],
   // Sala de máquinas: superadmin, conexiones a la BD, el fichero -wal, el saneo de errores al cliente,
   // el escapado del texto del usuario (que no se vuelva HTML ni JS) y la CSP estricta de las
@@ -221,6 +222,9 @@ export const EMPIEZAN_DE_CERO = new Set([
   // `gate-pantallas-documento` NO va aquí: necesita el negocio de desarrollo, que es el único con
   // documentos de los diez tipos que abre. Se trae lo suyo (el presupuesto en borrador) y lo limpia.
   'gate-mapa-cliente',             // negocio nuevo: cuatro clientes, uno por cada caso del mapa
+  // PUNTO 15 · fijar un oficio cambia el vocabulario y el catálogo del negocio ENTERO, y hacerlo en
+  // el compartido dejaría a los demás gates hablando de «Pacientes» y «Salas».
+  'gate-oficio-salud',             // negocio nuevo DE SALUD, con su catálogo sembrado
   'gate-impresion',                // DOS negocios nuevos: uno siembra 200 facturas para ver paginar
                                    // de verdad, y el vecino existe para probar que su PDF no trae
                                    // ni un dato del primero

@@ -178,6 +178,49 @@ function huecosCercanos(db, input, cuantos = 4) {
 }
 
 // ── SERVICIOS VALIDADOS COMPARTIDOS (única fuente de verdad de escritura) ──────────────────────────
+// ── PELDAÑO 8 · CITAS EN SERIE ───────────────────────────────────────────────────────────────────
+// LA FORMA DE TRABAJAR DE UNA CONSULTA DE SALUD, que es lo que pedía el peldaño. Un fisio no cierra
+// «una cita»: prescribe **diez sesiones, los martes a las 17:00**. Hoy eso eran diez altas a mano, y
+// diez ocasiones de equivocarse.
+//
+// NO ES UN MOTOR NUEVO — y esto es la mitad del asunto. Llama a `createCitaSvc` una vez por sesión,
+// así que hereda TODO lo que ya sabe: los huecos, los solapes, el puesto libre, la geometría de la
+// cadena de servicios y el código de cada cita. Si algún día cambia una regla de la agenda, esto la
+// hereda sin enterarse.
+//
+// Y LO QUE MÁS IMPORTA: **NO ES «TODO O NADA»**. Si la tercera sesión choca con otra cita, las demás
+// SÍ se crean y la tercera se devuelve en `fallidas` con su motivo. Deshacer nueve altas buenas por
+// una colisión sería peor: el paciente ya se ha ido y las nueve fechas estaban bien. Quien las pidió
+// ve la lista de las que no cupieron y les busca hueco.
+export function crearSerieSvc(db, { sesiones, cada_dias = 7, ...base }, ctx = {}) {
+  const n = Number(sesiones) || 0;
+  if (n < 2) throw err('Una serie son al menos dos sesiones. Para una sola, crea la cita normal.', 400);
+  if (n > 52) throw err('Una serie no puede pasar de 52 sesiones.', 400);
+  const paso = Number(cada_dias) || 7;
+  if (paso < 1 || paso > 90) throw err('El hueco entre sesiones va de 1 a 90 días.', 400);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(base.fecha || ''))) throw err('La fecha de la primera sesión no vale.', 400);
+
+  const creadas = [], fallidas = [];
+  const t0 = Date.parse(base.fecha + 'T00:00:00Z');
+  for (let i = 0; i < n; i++) {
+    const fecha = new Date(t0 + i * paso * 86400000).toISOString().slice(0, 10);
+    try {
+      const r = createCitaSvc(db, { ...base, fecha }, ctx);
+      creadas.push({ ...r, fecha, sesion: i + 1 });
+    } catch (e) {
+      // El motivo VERBATIM del motor de citas: «se solapa con…», «no hay sala libre…». Reescribirlo
+      // aquí sería inventar una segunda explicación de lo mismo.
+      fallidas.push({ sesion: i + 1, fecha, motivo: (e && e.message) || 'no se pudo crear' });
+    }
+  }
+  if (!creadas.length) {
+    const e = new Error('No se ha podido crear ninguna sesión de la serie. La primera falló porque: '
+      + (fallidas[0] ? fallidas[0].motivo : 'motivo desconocido'));
+    e.status = 409; throw e;
+  }
+  return { creadas, fallidas, pedidas: n, cada_dias: paso };
+}
+
 export function createCitaSvc(db, input, ctx = {}) {
   const r = citaSchema.safeParse(input);
   if (!r.success) throw err(r.error.issues.map(i => i.path.join('.') + ': ' + i.message).join('; '), 400);
@@ -667,6 +710,18 @@ export function createCitasRoutes(db) {
   });
 
   // ── Escrituras de citas ───────────────────────────────────────────────────
+  // PELDAÑO 8 · la serie. VA ANTES de '/:id' y comparte permiso con crear una cita: crear diez no
+  // es un poder distinto de crear una, es el mismo hecho diez veces.
+  api.post('/serie', requirePerm('citas.edit'), async c => {
+    try {
+      const b = await c.req.json();
+      const r = crearSerieSvc(db, b, { created_by: c.get('session')?.userId || null });
+      logActivity(db, c.get('session'), 'Creó una serie de citas', 'cita', r.creadas[0]?.id || null,
+        r.creadas.length + ' de ' + r.pedidas + ' sesiones');
+      return c.json(r);
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+  });
+
   api.post('/', requirePerm('citas.edit'), validate(citaSchema), c => {
     const input = c.get('validated');
     try {

@@ -7255,3 +7255,72 @@ función. **Nada lo cazó:**
 **NACE `scripts/lint-js-servido.mjs`**, que pide cada pantalla, le saca los `<script>` y le pasa
 `node --check` a cada uno — el único sitio donde ese JS es JS de verdad. **66 pantallas, 318 bloques,
 todos válidos.** Y es **la sexta regla** de «Lo que solo ve un navegador» en `CLAUDE.md`.
+
+---
+
+### PUNTO 15 · PELDAÑO 8 — EL OFICIO DE SALUD Y BIENESTAR  ✅ **HECHO (24 ago 2026, noche)** · gate `scripts/gate-oficio-salud.mjs` · **42 ✓ · 0 ✗**
+
+**PASO 0 — LO QUE YA ESTABA, medido antes de tocar nada.** El **mecanismo** de oficio se entregó el
+15 ago (pieza 1): seis oficios, vocabulario de pantalla y catálogo precargado con duraciones reales y
+fuente anotada. Y el 17 ago, la pieza 3: cuatro detectores de agenda en el vigía. Lo que faltaba era
+**el oficio en sí**, que estaba a medio hacer: se llamaba «Fisioterapia y salud» y traía **cuatro
+servicios, los cuatro de fisio**. Un psicólogo o un nutricionista lo elegía y se encontraba un
+catálogo que no era el suyo.
+
+**CATÁLOGO DEL SECTOR — de 4 a 14 servicios**, y ahora cubre las siete áreas que se atienden con
+agenda: fisioterapia, psicología, nutrición, osteopatía, podología, logopedia y bienestar. Con sus
+duraciones y su fuente, como los otros oficios.
+- **EL IVA ES LO QUE MÁS SE HABRÍA EQUIVOCADO SOLO.** La asistencia sanitaria de profesional titulado
+  está **exenta** (art. 20.Uno.3º LIVA), así que **12 de los 14 nacen exentos**. Pero **el masaje de
+  bienestar sin finalidad terapéutica y el entrenamiento personal NO lo están**, y nacen al tipo
+  general **con el nombre diciéndolo** — «Masaje de bienestar (no terapéutico)» — para que el negocio
+  decida a sabiendas en vez de descubrirlo en una inspección.
+
+**LA FICHA DEL PACIENTE — lo que se ha puesto, y sobre todo lo que NO.**
+- **Puesto:** la **fecha de nacimiento**. La edad cambia la pauta de un tratamiento y es lo primero
+  que se pregunta en una primera visita. La columna es de todos los negocios; **el campo solo se
+  pinta en el oficio que lo pide** (`window.OFICIO_CAMPOS`), para no llenar de huecos la ficha de un
+  taller.
+- **⬜ NO PUESTO, Y ESTO NECESITA UNA DECISIÓN TUYA: el historial clínico.** Son **datos de salud,
+  categoría especial del RGPD (art. 9)**, y guardarlos exige decisiones que no están escritas en
+  ningún sitio de este proyecto. **Meter un campo «notas clínicas» sin resolverlas sería lo peor de
+  los dos mundos: el dato dentro y la protección fuera.** Las tres opciones, para que elijas:
+  1. **No guardarlos nunca.** El historial vive fuera de Bamburu. Cero riesgo, y el oficio queda
+     cojo para quien lo esperaba.
+  2. **Guardarlos con acceso restringido al profesional que atiende**, con registro de quién los
+     abre y un aviso de consentimiento al dar de alta al paciente. Es lo que hace el sector, y exige
+     decidir cuántos años se conservan y quién puede exportarlos.
+  3. **Solo una nota libre, avisando de que no es un historial clínico** y que no se metan
+     diagnósticos. Barato, y se incumple el primer día.
+  *Mi recomendación es la 2, pero no es una decisión de programación y no la tomo yo.*
+
+**LA AGENDA AJUSTADA A SU FORMA DE TRABAJAR: LAS SERIES.** Un fisio no cierra «una cita»: prescribe
+**diez sesiones, los martes a las 17:00**. Eso eran diez altas a mano y diez ocasiones de
+equivocarse. Ahora es una.
+- **NO ES UN MOTOR NUEVO** — y esa es la mitad del asunto: llama a `createCitaSvc` una vez por
+  sesión, así que hereda los huecos, los solapes, la asignación de sala y la geometría de la cadena
+  de servicios. Si mañana cambia una regla de la agenda, la serie la hereda sin enterarse.
+- **Y NO ES «TODO O NADA», a propósito:** si la tercera choca, **las otras se crean igual** y la que
+  no cupo se devuelve con **el motivo del motor de citas** y su fecha. Deshacer nueve altas buenas
+  por una colisión sería peor: el paciente ya se ha ido. Si **ninguna** cabe, se para y lo dice.
+
+**EL AVISO QUE LE CORRESPONDE: «TRATAMIENTO SIN TERMINAR».** Alguien pagó un bono de diez sesiones,
+lleva cuatro y **no tiene ninguna cita futura**. En una consulta eso no es «un cliente dormido»: es
+un tratamiento sin acabar, y **el dinero ya está cobrado**, así que lo que se pierde es el resultado.
+- **No se pisa con `sin_proxima_cita`**, que ya existía: aquel mira a quien vino y no dejó otra cita;
+  este mira a quien **tiene sesiones pagadas sin usar**. Se puede tener cita y estar a punto de dejar
+  cinco sesiones sin gastar.
+- **Cruza dos áreas, así que pide los dos permisos** (`citas.read` **y** `invoices.read`).
+- Y la voz propone algo **concreto** —«conviene llamarle y cerrar la siguiente sesión: ya está
+  pagada, y si el bono caduca la pierde»— en vez del genérico «conviene revisar este punto».
+
+**DOS FALLOS QUE CAZÓ EL GATE, y no el razonamiento:**
+1. **`window.OFICIO_CAMPOS` llegaba SIEMPRE vacío.** `oficioDe(db)` devuelve el **id** (una cadena),
+   no el objeto, así que el código pedía `'salud'.campos_ficha`. El campo no se habría pintado en
+   ningún sitio, y en el negocio de desarrollo —que es «otro»— nunca se habría notado.
+2. **«6 sesiónes».** El plural de *sesión* pierde la tilde. Pegar sufijos a mano lo escribe mal; se
+   escriben las dos formas enteras.
+
+**EL GATE SE TRAE SU PROPIO NEGOCIO DE SALUD** y lo borra entero al salir: fijar un oficio cambia el
+vocabulario y el catálogo del negocio completo, y hacerlo en el compartido dejaría a los demás gates
+hablando de «Pacientes» y «Salas».

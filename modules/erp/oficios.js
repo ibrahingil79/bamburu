@@ -72,18 +72,51 @@ export const OFICIOS = [
   {
     id: 'salud',
     usa_proyectos: false,
-    label: 'Fisioterapia y salud',
+    // PELDAÑO 8 (24 ago 2026) — el oficio pasa de «fisioterapia» a SALUD Y BIENESTAR, que es lo que
+    // pedía el peldaño. Antes tenía cuatro servicios y los cuatro eran de fisio: un psicólogo o un
+    // nutricionista elegía este oficio y se encontraba un catálogo que no era el suyo.
+    label: 'Salud y bienestar',
     cliente_sing: 'Paciente', cliente_plural: 'Pacientes',
     puesto_sing: 'Sala', puesto_plural: 'Salas',
-    // Fuente: tarifas publicadas de clínica de fisioterapia en España (fisioem.com, ago 2026).
+    // LA FICHA DEL PACIENTE. `campos_ficha` dice qué le hace falta a ESTE oficio en la ficha de su
+    // cliente. Hoy solo la fecha de nacimiento — y NO es un capricho: la edad cambia la pauta de un
+    // tratamiento y es lo primero que se pregunta en una primera visita.
+    // LO QUE NO ENTRA AQUÍ, Y ES A PROPÓSITO: el historial clínico. Son datos de salud, categoría
+    // ESPECIAL del RGPD (art. 9), y guardarlos exige decisiones que no están escritas en ningún
+    // sitio de este proyecto (quién los ve, cuánto se conservan, cómo se piden). Va apuntado en el
+    // TABLERO con sus opciones. Meter un campo «notas clínicas» sin resolver eso sería lo peor de
+    // los dos mundos: el dato dentro y la protección fuera.
+    campos_ficha: ['fecha_nacimiento'],
     // IVA: los servicios de asistencia sanitaria prestados por profesional titulado están EXENTOS
     // (art. 20.Uno.3º LIVA). Nace 'exento' para no arrancar cobrando un 21% que no toca; si el negocio
     // no está en ese supuesto, lo cambia en Productos como cualquier otra banda.
+    // OJO A LA EXCEPCIÓN, y por eso no todos nacen exentos: el masaje de bienestar SIN finalidad
+    // terapéutica NO está exento (consultas vinculantes de la DGT), y lo mismo el asesoramiento
+    // nutricional que no presta un sanitario titulado. Los que están en esa frontera nacen al tipo
+    // general y con el nombre que lo dice, para que el negocio decida a sabiendas.
     servicios: [
+      // Fisioterapia — fuente: tarifas publicadas de clínica de fisioterapia en España (fisioem.com, ago 2026).
       { nombre: 'Primera consulta y valoración', duracion_min: 60, banda: 'exento' },  // fisioem: "1ª consulta – valoración 60 min"
       { nombre: 'Sesión de fisioterapia',        duracion_min: 45, banda: 'exento' },  // fisioem: "Sesión fisioterapia 45min"
       { nombre: 'Sesión de fisioterapia (60 min)', duracion_min: 60, banda: 'exento' },// tarifas de sesión de 60 min en clínicas ES
       { nombre: 'Sesión de suelo pélvico',       duracion_min: 45, banda: 'exento' },  // fisioem: "Sesión de tratamiento 45 min" (suelo pélvico)
+      // Psicología — fuente: tarifas publicadas de gabinetes de psicología en España (ago 2026): la
+      // sesión estándar es de 50–60 min y la primera, algo más larga.
+      { nombre: 'Primera sesión de psicología',  duracion_min: 60, banda: 'exento' },
+      { nombre: 'Sesión de psicología',          duracion_min: 50, banda: 'exento' },
+      { nombre: 'Terapia de pareja',             duracion_min: 75, banda: 'exento' },
+      // Nutrición — fuente: consultas de dietética-nutrición en España: primera visita 60 min,
+      // revisiones 30 min. EXENTO solo si lo presta un sanitario titulado; si no, va al general.
+      { nombre: 'Primera consulta de nutrición', duracion_min: 60, banda: 'exento' },
+      { nombre: 'Revisión de nutrición',         duracion_min: 30, banda: 'exento' },
+      // Osteopatía y podología — sesiones de 45–60 min en clínicas ES.
+      { nombre: 'Sesión de osteopatía',          duracion_min: 50, banda: 'exento' },
+      { nombre: 'Quiropodia',                    duracion_min: 45, banda: 'exento' },
+      // Logopedia — sesión estándar de 45 min.
+      { nombre: 'Sesión de logopedia',           duracion_min: 45, banda: 'exento' },
+      // BIENESTAR, no sanitario: al tipo GENERAL, y el nombre lo dice.
+      { nombre: 'Masaje de bienestar (no terapéutico)', duracion_min: 60, banda: 'general' },
+      { nombre: 'Sesión de entrenamiento personal',     duracion_min: 60, banda: 'general' },
     ],
   },
   {

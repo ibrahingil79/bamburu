@@ -280,6 +280,60 @@ export const DETECTORES = [
       }));
     },
   },
+  {
+    // ── PELDAÑO 8 · EL AVISO DEL OFICIO DE SALUD ───────────────────────────────────────────────
+    // TRATAMIENTO A MEDIAS: alguien pagó un bono de diez sesiones, lleva cuatro, y no tiene ninguna
+    // cita futura. En una consulta de salud eso no es «un cliente dormido»: es un tratamiento sin
+    // terminar, que es peor para el paciente y para el negocio — el dinero ya está cobrado, así que
+    // el que se pierde es el resultado.
+    //
+    // POR QUÉ ES DISTINTO DE `sin_proxima_cita`, que ya existe: aquel mira a quien vino y no dejó
+    // otra cita. Este mira a quien **tiene sesiones pagadas sin usar**. Un paciente puede tener una
+    // cita futura y aun así estar a punto de dejarse cinco sesiones sin gastar si el bono caduca.
+    // Y al revés: quien no volvió pero no tenía bono ya lo cuenta el otro. No se pisan.
+    //
+    // CRUZA DOS ÁREAS, así que pide LOS DOS permisos (`citas.read` y `invoices.read`): un aviso no
+    // puede ser la rendija por la que se ve algo que su pantalla te niega.
+    key: 'tratamiento_a_medias', porCliente: true, etiqueta: 'Tratamiento sin terminar',
+    area: 'agenda', areaEtiqueta: 'Agenda', perm: 'citas.read', permExtra: 'invoices.read',
+    correr(db, { hoy, hasPerm }) {
+      if (hasPerm && !hasPerm('invoices.read')) return [];
+      let filas = [];
+      try {
+        filas = db.prepare(
+          `SELECT b.id, b.client_id, b.nombre, b.sesiones, b.usadas, b.caduca, c.name AS client_name,
+                  (SELECT MAX(fecha) FROM bono_consumos bc WHERE bc.bono_id = b.id) AS ultima
+             FROM bonos b JOIN clients c ON c.id = b.client_id
+            WHERE b.activo = 1 AND b.usadas < b.sesiones
+              AND (b.caduca IS NULL OR b.caduca >= ?)
+              AND NOT EXISTS (SELECT 1 FROM citas ci WHERE ci.cliente_id = b.client_id
+                              AND ci.archived = 0 AND ci.estado IN ('pedida','confirmada') AND ci.fecha >= ?)`
+        ).all(hoy, hoy);
+      } catch { return []; }                        // tenant sin bonos todavía
+      const DIA = 86400000;
+      return filas.map(b => {
+        const quedan = Number(b.sesiones) - Number(b.usadas);
+        const diasCaduca = b.caduca
+          ? Math.round((Date.parse(b.caduca + 'T00:00:00Z') - Date.parse(hoy + 'T00:00:00Z')) / DIA) : null;
+        return {
+          area: 'agenda', areaEtiqueta: 'Agenda',
+          detector: 'tratamiento_a_medias', detectorEtiqueta: 'Tratamiento sin terminar',
+          // «sesión» + «es» da «sesiónes», que no existe. El plural pierde la tilde. Se escribe
+          // entero cada forma en vez de pegar sufijos: es más largo y es lo que se lee bien.
+          titulo: (b.client_name || 'Paciente #' + b.client_id) + ' tiene ' + quedan
+            + (quedan === 1 ? ' sesión pagada' : ' sesiones pagadas') + ' sin usar y ninguna cita',
+          cifra: quedan, moneda: false,
+          fecha: b.ultima || null,
+          motivo: 'Bono «' + b.nombre + '»: ' + b.usadas + ' de ' + b.sesiones + ' usadas'
+            + (b.ultima ? ', la última el ' + b.ultima : ', ninguna todavía')
+            + '. No tiene ninguna cita futura'
+            + (diasCaduca != null ? ' y el bono caduca en ' + diasCaduca + ' día' + (diasCaduca === 1 ? '' : 's') : '') + '.',
+          ref: { client_id: b.client_id, bono_id: b.id, bono: b.nombre, quedan,
+                 usadas: b.usadas, sesiones: b.sesiones, caduca: b.caduca || null, ultima: b.ultima || null },
+        };
+      });
+    },
+  },
 ];
 
 // Caída mes-a-mes de una medida del área Ventas, vía el motor del constructor. Devuelve 0 o 1

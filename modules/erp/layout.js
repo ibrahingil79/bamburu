@@ -7,6 +7,9 @@ import { contarPropuestasPendientes, tiposVisiblesPara } from './propuestas.js';
 // oficio) y `contarAvisosPendientes()` (el contador de la Cola) se consultan allí, no aquí: eran las
 // dos lecturas que este fichero hacía por su cuenta.
 import { menuDeUsuario, anclasDeUsuario, destinosBuscador, tienePref, MIN_AJUSTES, MAX_ANCLAS } from './menu.js';
+// PELDAÑO 8 · qué campos pide el oficio. `oficios.js` es HOJA (solo recibe `db`), así que el
+// layout puede importarlo sin cerrar ningún círculo — es la razón por la que se escribió así.
+import { oficioDe as oficioDeTenant, oficioPorId } from './oficios.js';
 
 export const ROOT_TOKENS = `
     :root{
@@ -386,6 +389,19 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   const isAdmin = role === 'admin' || isOwner;
   const perms = c?.get?.('userPerms') || [];
 
+  // PELDAÑO 8 · los campos que pide el oficio de este negocio. Falla en blando a propósito: si el
+  // tenant todavía no tiene `company_config` (un negocio a medio crear), la lista sale vacía y las
+  // pantallas se pintan igual. Un campo de más que no aparece es una molestia; una pantalla caída
+  // por preguntar por el oficio, no.
+  let oficioCampos = [];
+  try {
+    const dbc = c?.get?.('db');
+    // OJO: `oficioDe` devuelve el ID (una cadena), no el objeto. Escrito como estaba, esto pedía
+    // `'salud'.campos_ficha` y salía undefined — la lista llegaba vacía SIEMPRE y el campo no se
+    // pintaba en ningún sitio. Lo cazó el gate abriendo un negocio de salud de verdad.
+    if (dbc) { const o = oficioPorId(oficioDeTenant(dbc)); oficioCampos = (o && o.campos_ficha) || []; }
+  } catch { oficioCampos = []; }
+
   // Estado de avisos de ESTE usuario para la ÚNICA señal del chrome: la campana.
   // Se recalcula en cada render (nunca es un número guardado). Manda el ESTADO, no el conteo:
   //   'rojo'    → hay algo que este usuario no ha visto  → punto rojo
@@ -524,6 +540,12 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     window.USER_PERMS=${JSON.stringify(perms)};
     window.USER_IS_OWNER=${isOwner};
     window.USER_IS_ADMIN=${isAdmin};
+    // PELDAÑO 8 (24 ago 2026) — QUÉ CAMPOS PIDE EL OFICIO DE ESTE NEGOCIO. Va en el layout, con el
+    // resto de lo que toda pantalla necesita saber, y NO en cada pantalla por su cuenta: el
+    // vocabulario del oficio ya se partió una vez en dos sitios y la lección está escrita en el
+    // oficios.js. Aquí solo viaja la LISTA de campos, no una decisión: cada pantalla mira si el
+    // suyo está y lo pinta o no.
+    window.OFICIO_CAMPOS=${JSON.stringify(oficioCampos)};
     window.canDo=function(p){if(window.USER_IS_OWNER||window.USER_IS_ADMIN)return true;return window.USER_PERMS.includes(p);};
     // NAVEGACIÓN — el menú de ESTE usuario, YA filtrado por permisos en el servidor. El buscador y las
     // anclas leen de aquí y de ningún otro sitio: por eso no pueden enseñar una puerta que el rail

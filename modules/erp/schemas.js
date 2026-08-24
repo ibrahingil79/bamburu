@@ -96,6 +96,8 @@ export const clientSchema = z.object({
   // PUNTO 11 — el descuento fijo del cliente. Se valida AQUÍ, no en la pantalla: un 150 % metido
   // por la API sería un regalo con vueltas, y la pantalla no es el candado.
   descuento_pct: z.coerce.number().min(0).max(100).optional().default(0),
+  // Peldaño 8 · la pide el oficio de salud. Vacía o AAAA-MM-DD; nada de fechas inventadas.
+  fecha_nacimiento: z.string().trim().regex(/^$|^\d{4}-\d{2}-\d{2}$/, 'La fecha de nacimiento va en formato AAAA-MM-DD').optional().default(''),
   // CRM — RESPONSABLE (dueño comercial de la ficha). `optId` acepta vacío/0 → null = "sin asignar",
   // que es un estado legítimo y NO un error: los clientes existentes nacen así y el dueño reparte
   // cuando quiera. Se asigna a mano; ni reparto automático ni DISA (decisión del dueño).
