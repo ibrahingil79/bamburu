@@ -7449,6 +7449,26 @@ aserción ni bajado el listón: se han declarado en `SOLOS` con su causa escrita
   **El arreglo bueno, escrito para que no se olvide:** que filtre por SU promoción, como ya hacen los
   de compras con `productoDePrueba`. Mientras no esté, corre solo.
 
+### EL CIERRE, MEDIDO
+**Cuarta pasada del barrido completo: 105/106** (65/103 → 95/103 → 105/106, y el 106º es uno de los
+tres lint que se acaban de meter). El único rojo que quedaba era real y no se puede arreglar
+programando: en el eje del informe de Ventas sale **«GATE Rent Cliente»**, un cliente ARCHIVADO cuyas
+facturas están en la cadena de VERI*FACTU. La aserción pedía cero nombres de gate y eso ya no se puede
+cumplir; ahora exige cero **nuevos** y **lista por nombre** los imborrables. **Renombrarlos para que
+dejen de salir en los informes es una decisión del dueño.**
+
+**Y la limpieza, con sus cifras:**
+- **Cero clientes, productos y proveedores de gate VISIBLES** en el negocio de desarrollo.
+- Borrados: 7 clientes · 4 productos · 1 recurso · 50 proveedores · **22 usuarios de prueba**.
+- Archivados (tienen documentos): 12 clientes · 28 proveedores.
+- **Quedan DOS usuarios de prueba**, los dos archivados y los dos por un motivo escrito: «Gate FH
+  Worker» tiene 3 horas fichadas y «ZZ traza» un apunte de auditoría — y un apunte de auditoría no se
+  reescribe hacia atrás.
+- **148 clientes archivados imborrables**: sus facturas están en la cadena legal.
+- **La cadena de VERI*FACTU: 1.078 registros, CERO eslabones sueltos** (recorrida entera por huella).
+- **El limpiador ya mira proveedores y usuarios**, que antes no miraba, con la misma regla: se borra
+  el que está libre, se archiva el que tiene documentos.
+
 ### LOS TRES LINT ENTRAN AL BARRIDO — 103 → 106
 `lint-plantillas`, `censo-ventanitas` y `lint-js-servido` estaban en `scripts/` y **solo corrían si
 alguien se acordaba**, que es exactamente cómo una herramienta deja de cazar cosas: esta noche dos de
