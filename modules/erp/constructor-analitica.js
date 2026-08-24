@@ -158,7 +158,22 @@ const AREA_COMPRAS = {
     const where = [], params = [];
     if (from) { where.push('invoice_date >= ?'); params.push(from); }
     if (to)   { where.push('invoice_date <= ?'); params.push(to); }
-    const sql = 'SELECT * FROM supplier_invoices' + (where.length ? ' WHERE ' + where.join(' AND ') : '');
+    // EL NOMBRE DE HOY, NO EL CONGELADO. La factura recibida guarda el nombre del proveedor tal y
+    // como estaba el día que se registró (`supplier_name`), y eso está bien: un documento no se
+    // reescribe. Pero un INFORME habla del negocio de HOY, y agrupar por el nombre congelado parte a
+    // un mismo proveedor en tantas barras como veces se llamó distinto.
+    //
+    // MEDIDO EL 24 AGO 2026, y es lo que destapó `verify-dibujo` al poder arrancar por primera vez:
+    // «Neumáticos RuedaFácil SL» tenía sus 25 facturas repartidas en CINCO nombres congelados
+    // distintos, así que el gráfico decía 10.355,86 € de pendiente y la pantalla de Pagos 10.750,15 €
+    // — 394,29 € de diferencia sobre el mismo proveedor.
+    //
+    // Es EXACTAMENTE el mismo fallo que se corrigió el 23 ago en el área de VENTAS con el nombre del
+    // cliente, y que no se llevó a compras. Misma cura: manda el nombre de hoy, y solo se cae al
+    // congelado si el proveedor ya no existe.
+    const sql = 'SELECT si.*, COALESCE(s.name, si.supplier_name) AS supplier_name '
+              + 'FROM supplier_invoices si LEFT JOIN suppliers s ON s.id = si.supplier_id'
+              + (where.length ? ' WHERE ' + where.map(w => 'si.' + w).join(' AND ') : '');
     return db.prepare(sql).all(...params).filter(countsAsPayable).map(inv => ({
       ...inv, pendiente: supplierInvoicePago(db, inv, hoy).pendiente,
     }));

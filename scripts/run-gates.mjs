@@ -116,21 +116,6 @@ const DEUDA = {
 // es anterior y de otro tema: se declara aquí para que salga por su nombre en cada barrido en vez de
 // perderse entre los demás. Un rojo con dueño y motivo es información; un rojo anónimo es ruido.
 const ROJOS_CONOCIDOS = {
-  // ⚠️ 24 ago 2026 · UN DESCUADRE DE PRODUCTO, REPORTADO AL DUEÑO Y SIN TOCAR.
-  // `verify-dibujo` pedía la ruta de la BD por parámetro y ABORTABA sin ella: era una de las 99 y no
-  // corría nadie. Al darle valor por defecto y ejecutarla POR PRIMERA VEZ, destapó esto:
-  //
-  //   proveedor «Neumáticos RuedaFácil SL» · openPayables dice 10.750,15 € · el gráfico dice
-  //   10.355,86 € · diferencia 394,29 €.
-  //
-  // Los dos dicen medir «pendiente» y no dan lo mismo. Es la MISMA familia que la deuda de clientes
-  // que se unificó el 24 ago («los dos motores de deuda, uno solo»), pero del lado de PROVEEDORES.
-  // No se toca ninguno de los dos: cuál manda es una decisión del dueño, igual que lo fue aquella.
-  // El rojo se declara para que salga por su nombre en cada pasada en vez de perderse.
-  'verify-dibujo':
-    'DESCUADRE DE PRODUCTO (no del gate): openPayables y el gráfico de compras dan cifras distintas '
-    + 'para el mismo proveedor (10.750,15 vs 10.355,86 · 394,29 € de diferencia). Medido el 24 ago 2026. '
-    + 'Dos motores de deuda de proveedor, como los de cliente antes de unificarlos. Espera decisión.',
   // 20 ago 2026 · NO ES DEL PARALELISMO, y se comprobó: falla igual EN SERIE y falla igual suelto.
   // El gate exige que el negocio de desarrollo tenga propuestas pendientes (`esperado > 0`) para
   // poder afirmar que el badge del riel enseña ese número — pero NO las crea él. Ese día se

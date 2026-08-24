@@ -281,7 +281,7 @@ export const GRUPOS = {
   //   · censo-ventanitas   — que no vuelva a colarse un prompt() o un confirm() (<1 s)
   //   · lint-js-servido    — pide cada pantalla y compila su JavaScript en línea (~324 pantallas)
   lint: ['lint-plantillas', 'censo-ventanitas', 'lint-js-servido', 'verify-nombre-documentos', 'verify-menu-completo',
-         'verify-barrido-no-infla-ventas',
+         'verify-barrido-no-infla-ventas', 'verify-deuda-una-sola-cuenta',
          'verify-factura-exenta', 'test-oficio', 'verify-libro-sin-huerfanos', 'verify-contabilidad-backfill',
          // PUNTO 5 (24 ago 2026) — el dinero y las fechas, como en España. Se mide sobre lo
          // SERVIDO: el código tiene toFixed(2) legítimos (el valor de un campo, un cuerpo de

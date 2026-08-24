@@ -139,7 +139,14 @@ export function deudaViva(db, hasta) {
     }
     const st = invoiceCobro(db, inv, t);
     total = r2(total + st.pendiente);
-    if (st.pendiente > 0.0049) {
+    // ── LA SUMA DE LAS FILAS TIENE QUE SER EL TOTAL DE CABECERA ─────────────────────────────────
+    // 24 ago 2026. El total sumaba TODO —incluidos los pendientes NEGATIVOS, que son cobros de más—
+    // y las filas solo enseñaban los positivos: el negocio veía «Te deben 117.085,43 €» y, al sumar
+    // lo que tenía delante, le salían 117.087,43. Dos euros de un ticket de mostrador pagado de más.
+    // Es el mismo caso que `openPayables` ya resolvió del lado de proveedores, con estas palabras:
+    // «incluye deudas Y abonos vivos… así Σ(filas) cuadra con el total de cabecera».
+    // Se muestra igual, con su signo: un cobro de más es información, no un error que esconder.
+    if (Math.abs(st.pendiente) > 0.0049) {
       const cl = inv.client_id ? nombreDe.get(inv.client_id) : null;
       rows.push({
         client_id: inv.client_id || null,
