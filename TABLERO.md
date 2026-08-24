@@ -7201,3 +7201,57 @@ devuelve **el día anterior**: la pantalla de tareas enseñaba «para hoy» una 
 **la cola de trabajo medía los retrasos contra un día que no era**. Ahora usa `hoyLocal()`, el mismo
 reloj que la agenda, los avisos y el fichaje. *Van dos relojes descuadrados encontrados esta noche, y
 los dos por trabajar de madrugada.*
+
+---
+
+### PUNTO 14 · FICHAS J Y K — LO EXTERNO, MEDIDO; Y LO CONSTRUIBLE, CONSTRUIDO  ✅ **HECHO (24 ago 2026, noche)** · gate `scripts/gate-importador-proveedores.mjs` · **25 ✓ · 0 ✗**
+
+**(a) QUÉ FALTA DE FUERA, MEDIDO**
+
+**FICHA J · pago con tarjeta en el portal.** Falta **una pasarela contratada**, y eso es una decisión
+de negocio con coste, no una tarea de construcción: alta en Stripe o Redsys, credenciales y
+comisiones. Medido: **cero integraciones** en el código (ni `stripe`, ni `api.stripe.com`, ni
+`sis.redsys`, ni una clave `STRIPE_*`/`REDSYS_*`), y en `/etc/bamburu.env` hay **siete** variables,
+ninguna de pago (`ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `NOTION_TOKEN`, `PUBLIC_BASE_DOMAIN`,
+`HEALTHCHECKS_URL` y las dos de VERI\*FACTU).
+- **(b) LO CONSTRUIBLE DE J ES CERO, Y POR DECISIÓN TUYA.** La norma del **28 jul 2026** prohíbe
+  dejar **ganchos preparados** para la pasarela. Un gancho a medias es peor que nada: parece que el
+  pago existe y no existe. **Así que aquí no se construye nada, y el gate comprueba que sigue sin
+  haber ninguno** — y que el portal **no promete un botón que no está**, pero sí dice cómo se paga
+  hoy (transferencia, con el IBAN). *Si prefieres levantar esa norma y que se deje el enchufe puesto,
+  dilo y se hace: es tu regla, no mía.*
+- Lo que **ya está listo** para el día que llegue: la factura, su **estado de pago derivado** y el
+  IBAN viven en el portal desde antes.
+
+**FICHA K · importadores de Holded y Quipu.** Falta **un fichero de exportación real** de esos
+programas con el que comprobar sus nombres de columna. **Y la máquina ya estaba**: el importador de
+la ficha H lee CSV con cuatro separadores, **automapea**, enseña vista previa, valida con el mismo
+esquema que el formulario, entra **todo o nada** y **se puede deshacer**. Medido hoy: **3 tipos, 32
+campos y 206 alias** de cabecera.
+- **(b) LO CONSTRUIBLE, CONSTRUIDO: LOS PROVEEDORES.** Era el hueco de verdad y no dependía de nadie:
+  se podían traer clientes y productos de otro programa, y **los proveedores había que teclearlos uno
+  a uno**. Mismo motor, mismo permiso que el formulario (`suppliers.create`), mismo «todo o nada»,
+  mismo deshacer — que **archiva, no borra**, y que hubo que enseñarle a archivar proveedores: sin esa
+  línea habría dicho «hecho» sin archivar nada, *y un deshacer que miente es peor que no tenerlo*.
+- **Su guarda de NIF es la SUYA, no la del cliente:** un proveedor y un cliente **pueden compartir
+  NIF** (la gestoría que me factura y a la que yo facturo). Usar la del cliente habría rechazado
+  filas correctas.
+- **Los alias que se han añadido son una ayuda, no una promesa.** Ayudan al automapeo con cabeceras
+  españolas —comprobado: acierta **10 de 10** con «Razón social», «CIF», «Persona de contacto»,
+  «Población»…—, pero **esto no es «un importador de Holded verificado»**. Sin un fichero suyo
+  delante, un alias es una apuesta razonable; si falla, se corrige la columna a mano.
+
+**🔴 Y EL GATE DESTAPÓ UNA AVERÍA VIVA QUE NO ERA DE ESTE PUNTO: LA PANTALLA DEL IMPORTADOR ESTABA
+MUERTA.** Al quitar las ventanitas (punto 7) convertí un `confirm()` en
+`await window.confirmarEnPagina(...)` dentro de una función que **no era `async`**. Eso es un error
+de sintaxis, y un error de sintaxis **mata el bloque entero** de JavaScript de la pantalla — no la
+función. **Nada lo cazó:**
+- `node --check` valida el fichero del **servidor**, donde ese JS es texto dentro de una plantilla;
+- `lint-plantillas.mjs` busca backticks sueltos y escapes comidos, no sintaxis;
+- y el barrido de pantallas del punto 7 recorrió **las 47 entradas del MENÚ**… y el importador cuelga
+  de `/admin/migracion/importar`, que es una **subruta**. **Recorrer «todas las pantallas» y recorrer
+  «todo el menú» no es lo mismo**, y por esa diferencia se coló.
+
+**NACE `scripts/lint-js-servido.mjs`**, que pide cada pantalla, le saca los `<script>` y le pasa
+`node --check` a cada uno — el único sitio donde ese JS es JS de verdad. **66 pantallas, 318 bloques,
+todos válidos.** Y es **la sexta regla** de «Lo que solo ve un navegador» en `CLAUDE.md`.

@@ -29,9 +29,13 @@
 // ESCRITURA: pasa por `createClientSvc` / `createProductSvc`, que son los servicios compartidos
 // (patrón T5). Aquí NO hay un INSERT propio de cliente ni de producto. Un importador que escribe
 // por su cuenta es un segundo camino de alta que se salta las guardas del primero.
-import { clientSchema, productSchema } from './schemas.js';
+import { clientSchema, productSchema, supplierSchema } from './schemas.js';
 import { createClientSvc, fiscalIdConflict } from './routes/clients.js';
 import { createProductSvc } from './routes/products.js';
+// PUNTO 14 · proveedores. MISMO servicio que el formulario, con su guarda de NIF propia: un
+// proveedor y un cliente pueden compartir NIF (mi gestoría me factura y yo le facturo), así que la
+// comprobación de duplicados NO es la misma que la del cliente.
+import { createSupplierSvc, supplierFiscalIdConflict } from './routes/suppliers.js';
 import { getVatBands } from '../../core/vat-bands.js';
 
 // Topes. El fichero entero viaja en memoria y las filas se validan una a una contra la BD, así que
@@ -45,8 +49,12 @@ export const MAX_FILAS = 2000;
 export const MAX_FILAS_VISTA = 300;
 
 export const TIPOS = {
-  clientes:  { label: 'Clientes',              perm: 'clients.create',  entidad: 'client'  },
-  productos: { label: 'Productos y servicios', perm: 'products.create', entidad: 'product' },
+  clientes:  { label: 'Clientes',              perm: 'clients.create',   entidad: 'client'   },
+  productos: { label: 'Productos y servicios', perm: 'products.create',  entidad: 'product'  },
+  // PUNTO 14 (23 ago 2026) — PROVEEDORES. Era el hueco real de la ficha K, y no dependía de nada
+  // externo: se podían traer clientes y productos de otro programa, y los proveedores había que
+  // teclearlos a mano uno a uno. Mismo motor, mismo «todo o nada», mismo deshacer.
+  proveedores: { label: 'Proveedores',         perm: 'suppliers.create', entidad: 'supplier' },
 };
 
 // ── NORMALIZACIÓN DE TEXTO PARA COMPARAR ────────────────────────────────────────────────────────
@@ -148,6 +156,32 @@ export const CAMPOS = {
     { key: 'client_type', label: 'Tipo', ayuda: 'particular o empresa (si no viene, particular)',
       alias: ['tipo', 'tipo de cliente', 'tipo cliente', 'client type', 'customer type'] },
     { key: 'payment_term_days', label: 'Días de pago', ayuda: 'Número de días de vencimiento',
+      alias: ['dias de pago', 'vencimiento', 'plazo', 'plazo de pago', 'dias vencimiento', 'payment terms', 'terms'] },
+    { key: 'payment_method', label: 'Forma de pago', ayuda: 'transferencia, efectivo, tarjeta o domiciliación',
+      alias: ['forma de pago', 'metodo de pago', 'payment method'] },
+    { key: 'notes', label: 'Notas',
+      alias: ['notas', 'observaciones', 'comentarios', 'notes', 'nota', 'comment'] },
+  ],
+  // Los alias llevan los nombres que usan Holded y Quipu en sus exportaciones de proveedores además
+  // de los españoles corrientes. OJO A LO QUE ESTO ES Y NO ES: ayuda al automapeo, **no** convierte
+  // esto en «un importador de Holded verificado». Sin un fichero real de esos programas delante, un
+  // alias es una apuesta razonable; si falla, el dueño corrige la columna a mano en la vista previa.
+  proveedores: [
+    { key: 'name', label: 'Nombre', obligatorio: true, ayuda: 'Nombre o razón social del proveedor',
+      alias: ['nombre', 'proveedor', 'razon social', 'nombre fiscal', 'nombre comercial', 'denominacion', 'name', 'supplier', 'vendor', 'contacto'] },
+    { key: 'fiscal_id', label: 'NIF / CIF', ayuda: 'Sin duplicados: si ya existe un proveedor con ese NIF, la fila falla',
+      alias: ['nif', 'cif', 'dni', 'nif cif', 'documento', 'identificacion fiscal', 'tax id', 'vat', 'vat number'] },
+    { key: 'contact', label: 'Persona de contacto',
+      alias: ['contacto', 'persona de contacto', 'persona contacto', 'contact', 'contact name', 'atencion'] },
+    { key: 'email', label: 'Email',
+      alias: ['email', 'correo', 'e mail', 'mail', 'correo electronico', 'email 1'] },
+    { key: 'phone', label: 'Teléfono',
+      alias: ['telefono', 'tel', 'tlf', 'movil', 'phone', 'mobile', 'telefono 1'] },
+    { key: 'address', label: 'Dirección',
+      alias: ['direccion', 'domicilio', 'calle', 'address', 'address 1', 'via'] },
+    { key: 'city', label: 'Ciudad',
+      alias: ['ciudad', 'localidad', 'poblacion', 'municipio', 'city', 'town'] },
+    { key: 'payment_term_days', label: 'Días de pago', ayuda: 'Número de días de vencimiento de sus facturas',
       alias: ['dias de pago', 'vencimiento', 'plazo', 'plazo de pago', 'dias vencimiento', 'payment terms', 'terms'] },
     { key: 'payment_method', label: 'Forma de pago', ayuda: 'transferencia, efectivo, tarjeta o domiciliación',
       alias: ['forma de pago', 'metodo de pago', 'payment method'] },
@@ -314,6 +348,33 @@ function mensajeZod(issue, campos) {
 // bueno gane al genérico de Zod cuando los dos hablan de lo mismo.
 function celda(fila, idx) { return idx == null ? '' : limpio(fila[idx]); }
 
+// PROVEEDORES. Comparte con el cliente todo lo que comparte de verdad —forma de pago y días— y no
+// lo que no: un proveedor no tiene «tipo particular/empresa» ni provincia en su ficha.
+function leerProveedor(cruda, mapeo) {
+  const errores = [], mal = new Set();
+  const g = k => celda(cruda, mapeo[k]);
+  const datos = {
+    name: g('name'), fiscal_id: g('fiscal_id').toUpperCase(), contact: g('contact'),
+    email: g('email').toLowerCase(), phone: g('phone'), address: g('address'), city: g('city'),
+    notes: g('notes'), payment_term_days: 0, payment_method: '',
+  };
+  const fp = g('payment_method');
+  if (fp) {
+    const v = FORMA_PAGO.get(norm(fp));
+    if (v) datos.payment_method = v;
+    else { errores.push('Forma de pago: no se entiende «' + fp + '» (transferencia, efectivo, tarjeta o domiciliación)'); mal.add('payment_method'); }
+  }
+  const dp = g('payment_term_days');
+  if (dp) {
+    const n = aNumero(dp);
+    if (n == null || Number.isNaN(n) || n < 0 || !Number.isInteger(n)) {
+      errores.push('Días de pago: «' + dp + '» no es un número entero de días'); mal.add('payment_term_days');
+    } else datos.payment_term_days = n;
+  }
+  if (!datos.name) { errores.push('Nombre: hace falta'); mal.add('name'); }
+  return { datos, errores, avisos: [], mal };
+}
+
 function leerCliente(cruda, mapeo) {
   const errores = [], avisos = [], mal = new Set();
   const g = k => celda(cruda, mapeo[k]);
@@ -449,8 +510,9 @@ function pasada(db, { tipo, texto, mapeo: mapeoPedido = null, bandaDefecto = '' 
   const bandaOk = bandas.find(b => b.code === bandaDefecto) ? bandaDefecto : '';
   const ctx = { bandas, bandaDefecto: bandaOk };
 
-  const esquema = tipo === 'clientes' ? clientSchema : productSchema;
-  const leer    = tipo === 'clientes' ? leerCliente : leerProducto;
+  const ESQUEMAS = { clientes: clientSchema, productos: productSchema, proveedores: supplierSchema };
+  const LECTORES = { clientes: leerCliente, productos: leerProducto, proveedores: leerProveedor };
+  const esquema = ESQUEMAS[tipo], leer = LECTORES[tipo];
 
   // Duplicados DENTRO del propio fichero. El choque contra la BD lo canta `fiscalIdConflict`, pero
   // dos filas con el mismo NIF en el mismo CSV no chocan con nada hasta que la primera ya ha
@@ -473,13 +535,16 @@ function pasada(db, { tipo, texto, mapeo: mapeoPedido = null, bandaDefecto = '' 
       }
     }
 
-    if (tipo === 'clientes' && datos.fiscal_id) {
+    if ((tipo === 'clientes' || tipo === 'proveedores') && datos.fiscal_id) {
       const clave = datos.fiscal_id.toUpperCase();
       const antes = nifsVistos.get(clave);
       if (antes) errores.push('NIF ' + clave + ': repetido en este fichero (ya sale en la fila ' + antes + ')');
       else {
         nifsVistos.set(clave, n);
-        const choque = fiscalIdConflict(db, clave);
+        // Cada uno con SU guarda: un proveedor y un cliente pueden tener el mismo NIF (la gestoría
+        // que me factura y a la que yo facturo). Usar la del cliente para los proveedores habría
+        // rechazado filas correctas, que es peor que dejar pasar un duplicado.
+        const choque = tipo === 'proveedores' ? supplierFiscalIdConflict(db, clave) : fiscalIdConflict(db, clave);
         if (choque) errores.push('NIF ' + clave + ': ya lo tiene «' + choque.name + '», que ya está en Bamburu');
       }
     }
@@ -546,7 +611,8 @@ export function importar(db, { tipo, texto, mapeo = null, bandaDefecto = '', nom
     e.status = 400; throw e;
   }
 
-  const crea = tipo === 'clientes' ? createClientSvc : createProductSvc;
+  const CREADORES = { clientes: createClientSvc, productos: createProductSvc, proveedores: createSupplierSvc };
+  const crea = CREADORES[tipo];
   const entidad = TIPOS[tipo].entidad;
 
   const trabajo = db.transaction(() => {
@@ -610,6 +676,9 @@ export function deshacer(db, loteId) {
     for (const it of items) {
       if (it.entidad === 'client')  n += db.prepare('UPDATE clients  SET active=0          WHERE id=? AND active=1').run(it.entidad_id).changes;
       if (it.entidad === 'product') n += db.prepare("UPDATE products SET status='archived' WHERE id=? AND status<>'archived'").run(it.entidad_id).changes;
+      // PUNTO 14 · proveedores. Sin esta línea, deshacer una importación de proveedores habría
+      // dicho «hecho» y no habría archivado nada: un deshacer que miente es peor que no tenerlo.
+      if (it.entidad === 'supplier') n += db.prepare('UPDATE suppliers SET active=0 WHERE id=? AND active=1').run(it.entidad_id).changes;
     }
     db.prepare("UPDATE importaciones SET deshecha_at=datetime('now') WHERE id=?").run(loteId);
     return n;

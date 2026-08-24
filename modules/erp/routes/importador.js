@@ -178,7 +178,7 @@ export function createImportadorRoutes(db) {
       </div>
 
       ${alguno ? '' : `<div class="imp-caja"><h3>No tienes permiso para importar</h3>
-        <p>Importar da de alta clientes o productos, así que hace falta el mismo permiso que para
+        <p>Importar da de alta clientes, productos o proveedores, así que hace falta el mismo permiso que para
            crearlos a mano. Pídeselo a quien administre tu Bamburu.</p></div>`}
 
       <div id="impPaso1" style="${alguno ? '' : 'display:none'}">
@@ -451,7 +451,7 @@ export function createImportadorRoutes(db) {
               + (j.omitidas ? ' y se han quedado fuera <strong>' + j.omitidas + '</strong> filas con error, las que viste marcadas.' : '.')
               + '</p>'
               + '<div class="imp-barra">'
-              + '<a class="btn btn-secondary" href="' + (estado.tipo === 'clientes' ? '/admin/clients' : '/admin/products') + '">Ver lo importado</a>'
+              + '<a class="btn btn-secondary" href="' + ({clientes:'/admin/clients',productos:'/admin/products',proveedores:'/admin/suppliers'}[estado.tipo] || '/admin') + '">Ver lo importado</a>'
               + '<button type="button" class="btn btn-ghost" data-deshacer="' + j.lote_id + '">Deshacer esta importación</button>'
               + '<button type="button" class="btn btn-ghost" id="impOtra">Importar otro fichero</button>'
               + '</div></div>';
@@ -467,7 +467,12 @@ export function createImportadorRoutes(db) {
           .finally(function(){ btn.disabled = false; btn.textContent = txt; });
       });
 
-      function deshacer(id, btn){
+      // ASYNC, y esto se me olvidó el 23 ago al quitar las ventanitas (punto 7): un await
+      // abajo en una función normal es un ERROR DE SINTAXIS, y un error de sintaxis mata el bloque
+      // ENTERO de JavaScript de la pantalla, no solo esta función. La pantalla del importador
+      // estuvo muerta hasta que el gate del punto 14 la abrió en un navegador. Ni node --check
+      // ni el lint de plantillas lo cazan: solo un navegador. Por eso nace lint-js-servido.mjs.
+      async function deshacer(id, btn){
         if (!await window.confirmarEnPagina({titulo:'Deshacer la importación',texto:'Se ARCHIVAN las fichas que entraron en ella. No se borra nada, y lo archivado se puede volver a activar una a una.',aceptar:'Sí, deshacerla'})) return;
         btn.disabled = true;
         fetch('/api/erp/importar/' + encodeURIComponent(id) + '/deshacer', {
@@ -482,7 +487,7 @@ export function createImportadorRoutes(db) {
           if (!Array.isArray(xs) || !xs.length) { muestra('impHistCaja', false); return; }
           muestra('impHistCaja', true);
           $('impHist').innerHTML = xs.map(function(x){
-            var etq = x.tipo === 'clientes' ? 'Clientes' : 'Productos';
+            var etq = ({clientes:'Clientes',productos:'Productos',proveedores:'Proveedores'})[x.tipo] || x.tipo;
             return '<div style="display:flex;gap:.6rem;padding:.5rem 0;border-bottom:1px solid var(--border);align-items:center;flex-wrap:wrap">'
               + '<span style="flex:1;min-width:180px;font-size:.86rem">' + escHtml(etq)
               + (x.fichero ? ' · ' + escHtml(x.fichero) : '')

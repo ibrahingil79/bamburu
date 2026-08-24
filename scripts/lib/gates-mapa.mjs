@@ -162,6 +162,8 @@ export const GRUPOS = {
                                      // deja el original a la vista, y cada trabajador ve lo suyo
     'gate-crm-tareas',               // punto 13: la agenda del CRM — fecha, dueño, aviso por el
                                      // motor que ya hay, y en la línea de tiempo del cliente
+    'gate-importador-proveedores',   // punto 14: lo construible de J y K — proveedores por CSV, y
+                                     // que la ficha J siga SIN un solo gancho de pasarela
   ],
   // Sala de máquinas: superadmin, conexiones a la BD, el fichero -wal, el saneo de errores al cliente,
   // el escapado del texto del usuario (que no se vuelva HTML ni JS) y la CSP estricta de las

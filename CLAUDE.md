@@ -196,6 +196,19 @@ Las cuatro reglas, en concreto:
    horas ahí, y **ninguna de 97 aserciones los vio, porque ninguna miraba**. Donde se pueda, se afirma
    sobre píxeles o sobre posiciones (`getBoundingClientRect`), no de oídas.
 
+6. **El JavaScript de una pantalla se comprueba COMO LLEGA AL NAVEGADOR.** `node --check` valida el
+   fichero del SERVIDOR, donde ese JS es solo texto dentro de una plantilla: para él no hay ningún
+   `await`, hay una cadena. Y un error de sintaxis **mata el bloque entero**, no la función: la
+   pantalla se queda muerta y no dice nada.
+   **`node scripts/lint-js-servido.mjs`** pide cada pantalla, saca sus `<script>` y los valida uno a
+   uno. Es el único sitio donde ese JS es JS.
+   De dónde sale (24 ago 2026): al quitar las ventanitas convertí un `confirm()` en
+   `await window.confirmarEnPagina(...)` dentro de una función que **no era `async`**, y **la
+   pantalla del importador estuvo muerta varias horas**. No lo cazó `node --check`, ni el lint de
+   plantillas, ni el barrido de pantallas — porque ese barrido recorría **las 47 entradas del menú**
+   y el importador cuelga de `/admin/migracion/importar`, que es una subruta. **Recorrer «todas las
+   pantallas» y recorrer «todo el menú» no es lo mismo**, y esa diferencia es por donde se coló.
+
 5. **La pantalla se juzga MIRÁNDOLA CON DATOS REALES.** Antes de dar algo por terminado se abre con
    los datos del negocio y se mira el resultado, no solo que no falle. **Un gráfico con sesenta
    etiquetas encimadas no da error, y está mal.** La pregunta no es «¿responde?» sino **«¿esto sirve
