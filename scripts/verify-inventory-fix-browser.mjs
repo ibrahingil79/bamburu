@@ -9,6 +9,10 @@ import Database from 'better-sqlite3';
 import puppeteer from 'puppeteer';
 import { negocioDesechable, sembrarFlujoDocumentos } from './lib/negocio-desechable.mjs';
 import { createPedidoSvc, confirmPedidoSvc } from '../modules/erp/routes/pedidos.js';
+// 24 ago 2026 · Perfil ÚNICO por arranque y borrado al salir, aunque esto reviente. Ni perfil fijo
+// (dos a la vez se matan) ni sin perfil (el temporal de puppeteer no se limpia si hay crash, y eso
+// llenó el disco y tiró el servidor el 22 ago). Ver scripts/lib/perfil-chromium.mjs.
+import { perfilDesechable } from './lib/perfil-chromium.mjs';
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
@@ -32,14 +36,7 @@ try {
 
 const consoleErrors = [];
 const pageErrors = [];
-// 24 ago 2026 · SIN `userDataDir` FIJO, A PROPOSITO. Estas seis compartian /home/ubuntu/.cache/pptr-verify
-// y en el barrido la segunda que arrancaba moria con «The browser is already running». Puppeteer miente en
-// ese mensaje: lo lanza en cuanto el log de Chromium dice «Failed to create a ProcessSingleton for your
-// profile directory». El navegador ajeno no existia — el snap de Chromium no podia crear su cerrojo ahi
-// (esos directorios de .cache no llegaron a existir nunca). Darle a cada una el suyo tampoco valia: seguian
-// muriendo, cada una en el suyo. Sin la opcion, puppeteer levanta un perfil temporal unico por arranque,
-// que ademas mata la otra trampa vieja: dos pestanas con las mismas cookies pisandose la sesion.
-const browser = await puppeteer.launch({ headless: 'new', executablePath: '/snap/bin/chromium', args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] });
+const browser = await puppeteer.launch({ userDataDir: perfilDesechable('verify-inventory-fix-browser'),  headless: 'new', executablePath: '/snap/bin/chromium', args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] });
 const page = await browser.newPage();
 page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });
 page.on('pageerror', e => pageErrors.push(e.message));

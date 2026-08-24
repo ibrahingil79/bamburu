@@ -35,6 +35,12 @@ const ok = (c, m, e = '') => { (c ? pass++ : fail++); console.log((c ? '  ✓ ' 
 const TS = Date.now();
 const RID = String(TS).slice(-6);
 const creados = [];
+// LAS CONEXIONES, NO SOLO LOS NOMBRES. 24 ago 2026: este gate borraba el fichero del negocio con la
+// conexión todavía abierta. En WAL, SQLite hace checkpoint al cerrarse y VUELVE A ESCRIBIR el fichero
+// — completo, 1,2 MB, y con el umask del proceso, o sea 0644. Así que la limpieza dejaba dos bases de
+// datos de negocio sueltas y legibles por cualquier usuario de la máquina. Lo cazó test-c6-secretos.
+// Cerrar primero y borrar después.
+const conexiones = [];
 let b;
 
 const dormir = ms => new Promise(r => setTimeout(r, ms));
@@ -62,6 +68,7 @@ async function negocio(etiqueta, { personas = 1 } = {}) {
   });
   creados.push(r.slug);
   const db = new Database(join(APP_DIR, r.db_filename));
+  conexiones.push(db);
   const owner = db.prepare('SELECT id,name FROM admin_users WHERE active=1').get();
   // El resto del EQUIPO. Sin horario propio heredan el del negocio (citas-engine · tramosPersona),
   // que es justo lo que hace que la capacidad del día sea N × las horas de apertura.
@@ -825,6 +832,7 @@ try {
   console.error('\n✗ EXCEPCIÓN: ' + (e && e.stack || e));
 } finally {
   try { if (b) await b.close(); } catch {}
+  for (const c of conexiones) { try { c.close(); } catch {} }   // ANTES de borrar: ver arriba
   for (const s of creados) { try { borrarTenant(s); } catch {} }
   console.log('\n──────────────────────────────────────────────');
   console.log((fail === 0 ? '✓ GATE VERDE' : '✗ GATE ROJO') + ' — ' + pass + ' pasan · ' + fail + ' fallan');

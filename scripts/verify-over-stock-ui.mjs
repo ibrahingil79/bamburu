@@ -4,6 +4,10 @@
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 import puppeteer from 'puppeteer';
+// 24 ago 2026 · Perfil ÚNICO por arranque y borrado al salir, aunque esto reviente. Ni perfil fijo
+// (dos a la vez se matan) ni sin perfil (el temporal de puppeteer no se limpia si hay crash, y eso
+// llenó el disco y tiró el servidor el 22 ago). Ver scripts/lib/perfil-chromium.mjs.
+import { perfilDesechable } from './lib/perfil-chromium.mjs';
 
 const DB = 'data/tenants/desarrollo-bamburu.db';
 const ORIGIN = 'http://127.0.0.1:3000';
@@ -16,14 +20,7 @@ const now = Math.floor(Date.now() / 1000);
 db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)').run(token, 2, now, now + 3600, randomBytes(8).toString('hex'));
 db.close();
 
-// 24 ago 2026 · SIN `userDataDir` FIJO, A PROPOSITO. Estas seis compartian /home/ubuntu/.cache/pptr-verify
-// y en el barrido la segunda que arrancaba moria con «The browser is already running». Puppeteer miente en
-// ese mensaje: lo lanza en cuanto el log de Chromium dice «Failed to create a ProcessSingleton for your
-// profile directory». El navegador ajeno no existia — el snap de Chromium no podia crear su cerrojo ahi
-// (esos directorios de .cache no llegaron a existir nunca). Darle a cada una el suyo tampoco valia: seguian
-// muriendo, cada una en el suyo. Sin la opcion, puppeteer levanta un perfil temporal unico por arranque,
-// que ademas mata la otra trampa vieja: dos pestanas con las mismas cookies pisandose la sesion.
-const browser = await puppeteer.launch({ headless: 'new', executablePath: '/snap/bin/chromium', args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] });
+const browser = await puppeteer.launch({ userDataDir: perfilDesechable('verify-over-stock-ui'),  headless: 'new', executablePath: '/snap/bin/chromium', args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] });
 const page = await browser.newPage();
 await page.setCookie({ name: 'asess', value: token, domain: '127.0.0.1', path: '/' }, { name: 'btenant', value: 'desarrollo-bamburu', domain: '127.0.0.1', path: '/' });
 const sleep = ms => new Promise(r => setTimeout(r, ms));

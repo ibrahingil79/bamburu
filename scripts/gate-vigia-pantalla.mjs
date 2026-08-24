@@ -13,7 +13,7 @@ import puppeteer from 'puppeteer';
 import { launchOpts, APP_DIR } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { join } from 'path';
-import { mkdirSync } from 'fs';
+import { mkdirSync, unlinkSync, existsSync } from 'fs';
 import bcrypt from 'bcrypt';
 
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
@@ -59,11 +59,72 @@ try {
   ok(meta && /hallazgo/.test(meta), 'la meta anuncia los hallazgos', meta || '(vacío)');
   const filas = await page.$$eval('#vigBody table tbody tr', rs => rs.length).catch(() => 0);
   ok(filas > 0, 'se pintan filas de hallazgos (desarrollo tiene deuda y pagos)', filas + ' filas');
-  await page.screenshot({ path: join(SHOTS, 'vigia-owner.png'), fullPage: true }).catch(() => {});
 
   // El menú (riel) tiene la entrada "Vigía (DISA)" apuntando a /admin/vigia.
   const navLink = await page.$eval('a[href="/admin/vigia"]', a => a.textContent.trim()).catch(() => null);
   ok(navLink && /Vig[ií]a/i.test(navLink), 'el menú tiene la entrada "Vigía (DISA)"', navLink || '(no está)');
+
+  // LA CAPTURA, LA ÚLTIMA. 24 ago 2026: estaba ANTES de leer el menú, y en el barrido este gate se caía
+  // con «el menú no está» y «Attempted to use detached Frame» — pero a solas daba 13/13. La pantalla del
+  // vigía trae 304 filas: una captura `fullPage` de eso es enorme, y bajo la carga del barrido tarda lo
+  // bastante como para dejar el marco colgado. Lo que se rompía no era el producto, era todo lo que
+  // venía detrás de la foto. La foto sigue haciéndose —hay que MIRARLA—, pero ya no puede tumbar una
+  // aserción: va cuando no queda nada que medir en esta página.
+  // Y SI LA FOTO FALLA, QUE SE SEPA. El `.catch(() => {})` de antes se tragaba el error en silencio:
+  // el gate decía verde y dejaba en disco la captura de la pasada ANTERIOR, que es peor que no dejar
+  // ninguna — se mira una pantalla vieja creyendo que es la de ahora. No tumba el gate (la foto es
+  // para mirarla, no una aserción), pero lo dice y borra la caducada.
+  // Y CHROMIUM NO PUEDE CON LA PÁGINA ENTERA. Con 304 hallazgos, `fullPage: true` devuelve «Unable to
+  // capture screenshot»: la imagen es demasiado alta. O sea que este gate llevaba tiempo dejando en disco
+  // la captura de una pasada ANTERIOR y nadie lo sabía, porque el `.catch(() => {})` se lo tragaba. Peor
+  // que no tener foto: se mira una pantalla vieja creyendo que es la de ahora. Se intenta entera y, si no
+  // cabe, se guarda lo que se ve en la ventana — que es justo lo que un cliente tiene delante.
+  // ── EL GRÁFICO DE APOYO SE DIBUJA DE VERDAD ─────────────────────────────────────────────────────
+  // La pantalla promete, con estas palabras, que «cada aviso trae un gráfico de apoyo dibujado por tu
+  // propio constructor». Hasta hoy no lo comprobaba nadie: 13 aserciones en verde y la captura enseñaba
+  // un hueco blanco donde va el dibujo. No estaba roto —los gráficos son PEREZOSOS, se dibujan al
+  // hacerse visibles— pero la foto se tomaba antes de que les diera tiempo, así que la única prueba que
+  // un humano iba a mirar enseñaba una pantalla a medio hacer.
+  //
+  // Se mide por PÍXELES, no por que el <canvas> exista: un canvas vacío también está en el DOM y también
+  // tiene tamaño. Y se exige que los VISIBLES estén pintados, no todos: los 300 de abajo no deben
+  // dibujarse hasta que se llegue a ellos, que es justo lo que hace que la pantalla no se arrastre.
+  const dibujados = await page.waitForFunction(() => {
+    const cs = [...document.querySelectorAll('.voz-graf canvas')];
+    const conPixeles = cs.filter(c => {
+      try {
+        const d = c.getContext('2d').getImageData(0, 0, c.width || 1, c.height || 1).data;
+        for (let i = 3; i < d.length; i += 4) if (d[i] !== 0) return true;
+      } catch (e) { /* canvas sin contexto: cuenta como no dibujado */ }
+      return false;
+    });
+    return conPixeles.length >= 1 ? { total: cs.length, pintados: conPixeles.length } : false;
+  }, { timeout: 20000 }).then(h => h.jsonValue()).catch(() => null);
+  ok(dibujados && dibujados.pintados >= 1,
+     'el gráfico de apoyo se DIBUJA (píxeles, no solo el <canvas>)',
+     dibujados ? dibujados.pintados + ' pintados de ' + dibujados.total + ' (los de abajo esperan a verse: es lo correcto)' : '(ninguno pintó en 20 s)');
+
+  // ⚠ LA CAPTURA NO ENSEÑA LOS GRÁFICOS, Y EL PRODUCTO ESTÁ BIEN. Léelo antes de asustarte:
+  // en la foto, donde va cada gráfico se ve un hueco blanco con un iconito de imagen partida. Yo mismo
+  // di por hecho que estaban rotos el 24 ago 2026. NO LO ESTÁN. Medido en la página de verdad: el
+  // elemento que hay en ese punto ES el <canvas>, mide 1252x180, tiene 30 colores distintos y su
+  // toDataURL devuelve un PNG de 21 KB. Este Chromium headless no compone el canvas dentro de la
+  // captura — la misma limitación por la que `fullPage` responde «Unable to capture screenshot».
+  // Por eso el gráfico se comprueba por PÍXELES (la aserción de arriba) y no mirando la foto: aquí la
+  // foto es el instrumento que miente, no la pantalla.
+  const foto = join(SHOTS, 'vigia-owner.png');
+  try { unlinkSync(foto); } catch {}
+  try {
+    await page.screenshot({ path: foto, fullPage: true });
+  } catch (e1) {
+    try {
+      await page.screenshot({ path: foto });   // la ventana, sin más
+      console.warn('  ⚠ la página entera no cabe en una captura (' + e1.message.slice(0, 60) + '); guardada la ventana.');
+    } catch (e2) {
+      console.warn('  ⚠ NO hay captura del vigía: ' + e2.message.slice(0, 80));
+    }
+  }
+  ok(existsSync(foto), 'queda una captura del vigía para mirarla (y es de AHORA, no de la pasada anterior)');
 
   // El JSON de la API trae los mismos hallazgos (número real > 0).
   const apiOwner = await page.evaluate(async () => {

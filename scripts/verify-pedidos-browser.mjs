@@ -11,6 +11,10 @@ import Database from 'better-sqlite3';
 import puppeteer from 'puppeteer';
 import { negocioDesechable, sembrarFlujoDocumentos } from './lib/negocio-desechable.mjs';
 import { autoAceptarPaneles } from './lib/gate-env.mjs';
+// 24 ago 2026 · Perfil ÚNICO por arranque y borrado al salir, aunque esto reviente. Ni perfil fijo
+// (dos a la vez se matan) ni sin perfil (el temporal de puppeteer no se limpia si hay crash, y eso
+// llenó el disco y tiró el servidor el 22 ago). Ver scripts/lib/perfil-chromium.mjs.
+import { perfilDesechable } from './lib/perfil-chromium.mjs';
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
@@ -31,11 +35,7 @@ try {
 // reservado de un producto (lectura directa, para contrastar con la UI/API)
 const reservedNow = (pid) => { const d = new Database(neg.abs, { readonly: true }); const r = d.prepare("SELECT COALESCE(SUM(oi.quantity),0) r FROM customer_order_items oi JOIN customer_orders o ON o.id=oi.order_id WHERE oi.product_id=? AND o.status='confirmado'").get(pid).r; d.close(); return r; };
 
-// 24 ago 2026 · SIN perfil fijo, A PROPOSITO. Uno fijo hace que dos comprobaciones a la vez se maten con
-// «The browser is already running» — mensaje enganoso: puppeteer lo lanza en cuanto Chromium dice «Failed
-// to create a ProcessSingleton», y el snap no puede poner su cerrojo ahi. Sin la opcion, puppeteer levanta
-// un perfil temporal unico por arranque, que ademas evita que dos pestanas compartan cookies.
-const browser = await puppeteer.launch({ headless: 'new', executablePath: '/snap/bin/chromium', args: ['--no-sandbox'] });
+const browser = await puppeteer.launch({ userDataDir: perfilDesechable('verify-pedidos-browser'),  headless: 'new', executablePath: '/snap/bin/chromium', args: ['--no-sandbox'] });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 1000 });
 await page.setCookie({ name: 'asess', value: token, domain: new URL(ORIGIN).hostname, path: '/' });
