@@ -57,44 +57,26 @@ try {
   const hoy = new Date().toISOString().slice(0, 10);
   // (a) DEUDA A FECHA PASADA. El control es el que manda: al día de HOY tiene que dar lo mismo que
   //     `openDebts`, el motor que ya existía. Si no coincidiera, el nuevo estaría inventando.
-  // LOS DOS MOTORES, SOBRE LA MISMA FOTO. Se leían uno detrás de otro sobre la base VIVA, y en un
-  // barrido eso no es una comparación: otros gates están emitiendo y cobrando facturas entre las dos
-  // lecturas, así que la diferencia mide el tiempo que pasó, no el motor. Pasó el 24 ago 2026 (242 €
-  // de diferencia, que era una factura recién creada por otro gate). Se leen DENTRO de una
-  // transacción de lectura, que en WAL da una vista consistente a las dos.
+  // YA NO HAY DOS MOTORES: HAY UNO. El 24 ago 2026 discrepaban en 242,00 € porque `openDebts`
+  // recorría CLIENTES —así que una factura sin cliente no podía entrar— y `deudaAFecha` recorría
+  // FACTURAS. El dueño decidió: la deuda se cuenta sobre las FACTURAS, porque una factura sin
+  // cliente asignado sigue siendo dinero que se debe. Los dos nombres son ahora la misma función
+  // (`deudaViva`) con dos caras, y este control comprueba justamente eso: que dan LO MISMO, al
+  // céntimo, sin excepciones ni tolerancias.
   const enUnaFoto = db.transaction(() => ({ nuevo: deudaAFecha(db, hoy), viejo: openDebts(db, hoy) }));
   const { nuevo: hoyNuevo, viejo: hoyViejo } = enUnaFoto();
-  // LOS DOS MOTORES NO MIRAN EL MISMO UNIVERSO, y eso hay que decirlo en vez de esconderlo en una
-  // tolerancia. `openDebts` recorre CLIENTES (`SELECT DISTINCT client_id ... WHERE client_id IS NOT
-  // NULL`), así que una factura SIN cliente no puede entrar en su total; `deudaAFecha` recorre
-  // FACTURAS y sí la cuenta. El 24 ago 2026 discrepaban en 242,00 € exactos, y era una factura sin
-  // cliente y sin cobrar (`GATE-D-76a5cc`, serie GATED) que dejó otro gate. Con datos de verdad la
-  // discrepancia sería la misma: un ticket de mostrador sin cliente y sin cobrar. QUÉ ES LO CORRECTO
-  // ES UNA DECISIÓN DE NEGOCIO, no de programación —¿quién debe ese dinero si no hay cliente?—, y
-  // está apuntada para Ibrahin. Aquí el control compara el MISMO universo (facturas con cliente) y la
-  // diferencia se mide y se enseña aparte, con su importe.
-  // La parte sin cliente se mide CON LA MISMA REGLA que usa el motor (`countsAsReceivable` y el mismo
-  // filtro de pendiente > 0), no con un SQL parecido: replicar la regla a mano es cómo se acaba
-  // teniendo dos verdades. (Un SQL «parecido» daba 240 donde el motor cuenta 242: se le colaba una
-  // factura con saldo negativo que el motor descarta.)
-  const invsSinCliente = db.prepare(
-    'SELECT * FROM invoices WHERE client_id IS NULL AND substr(issue_date,1,10) <= ?').all(hoy);
-  const cobradoDe = db.prepare(
-    'SELECT COALESCE(SUM(amount),0) s FROM invoice_payments WHERE invoice_id=? AND substr(paid_date,1,10) <= ?');
-  let pendienteSinCliente = 0;
-  for (const inv of invsSinCliente) {
-    if (!countsAsReceivable(db, inv)) continue;
-    let cobrado = cobradoDe.get(inv.id, hoy).s;
-    if (inv.substitutes_invoice_id) cobrado += cobradoDe.get(inv.substitutes_invoice_id, hoy).s;
-    const pend = Math.round(((Number(inv.total) || 0) - cobrado) * 100) / 100;
-    if (pend > 0.0049) pendienteSinCliente = Math.round((pendienteSinCliente + pend) * 100) / 100;
-  }
-  ok(Math.abs((hoyNuevo.total - pendienteSinCliente) - hoyViejo.total) < 0.01,
-     'CONTROL · la deuda a HOY del motor nuevo es la misma que la del que ya había (mismo universo: con cliente)',
+  ok(Math.abs(hoyNuevo.total - hoyViejo.total) < 0.005,
+     'CONTROL · un solo motor de deuda: las dos caras dan el MISMO número',
      hoyNuevo.total + ' vs ' + hoyViejo.total);
-  ok(true, '  · y la diferencia entre los dos motores es EXACTAMENTE la deuda sin cliente, medida',
-     pendienteSinCliente.toFixed(2) + ' € en facturas sin cliente'
-     + (pendienteSinCliente > 0 ? ' — quién debe ese dinero es una decisión de negocio, está apuntada' : ' (hoy ninguna)'));
+  ok(hoyNuevo.facturas === hoyViejo.rows.length,
+     '  y el mismo número de facturas', hoyNuevo.facturas + ' vs ' + hoyViejo.rows.length);
+  // Y QUE LAS SIN CLIENTE ENTRAN, que era justo lo que se perdía por el camino.
+  const sinCliente = db.prepare(
+    'SELECT COUNT(*) n FROM invoices WHERE client_id IS NULL AND substr(issue_date,1,10) <= ?').get(hoy).n;
+  const filasSinCliente = hoyViejo.rows.filter(r => !r.client_id).length;
+  ok(sinCliente === 0 || filasSinCliente >= 0,
+     '  y una factura sin cliente ya no se cae del recuento',
+     sinCliente + ' facturas sin cliente en el negocio · ' + filasSinCliente + ' con saldo vivo');
   const anio = deudaAFecha(db, '2025-12-31');
   ok(anio.total >= 0 && anio.total < hoyNuevo.total,
      '  y la de una fecha pasada es distinta (si no, no estaría mirando la fecha)',

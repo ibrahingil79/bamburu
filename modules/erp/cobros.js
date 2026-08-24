@@ -109,31 +109,55 @@ export function clientDebt(db, clientId, today) {
   return { total: r2(total), oldest, invoices: rows };
 }
 
-// Torre de control de cobros: TODAS las deudas vivas de TODOS los clientes.
-// Reutiliza clientDebt (no duplica lógica): total global = Σ de lo que debe cada
-// cliente uno a uno; filas = facturas que cuentan como deuda y con pendiente>0
-// (las anuladas/sustituidas/abono ya quedan fuera por countsAsReceivable). Orden:
-// la más vencida arriba.
-export function openDebts(db, today) {
-  const clientIds = db.prepare('SELECT DISTINCT client_id FROM invoices WHERE client_id IS NOT NULL').all().map(r => r.client_id);
-  let total = 0;
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// EL MOTOR DE LA DEUDA. **UNO SOLO, Y CUENTA SOBRE FACTURAS.**
+//
+// Hasta el 24 ago 2026 había DOS y discrepaban en 242,00 €. `openDebts` recorría CLIENTES
+// (`SELECT DISTINCT client_id ... WHERE client_id IS NOT NULL`), así que una factura SIN cliente no
+// podía entrar en su total; `deudaAFecha` recorría FACTURAS y sí la contaba. Con datos de verdad la
+// diferencia es un ticket de mostrador emitido sin cliente y sin pagar.
+//
+// DECISIÓN DEL DUEÑO (24 ago 2026): **la deuda se cuenta sobre las FACTURAS.** Una factura sin
+// cliente asignado sigue siendo dinero que se debe. Así que este es el único recorrido, y los dos
+// nombres de antes son ahora la misma función con dos caras: `openDebts(db, hoy)` para quien quiere
+// las filas, `deudaAFecha(db, fecha)` para quien quiere el total a una fecha.
+//
+// LAS FILAS NO CAMBIAN DE FORMA: mismos campos que antes, para que ninguna pantalla se entere. Una
+// factura sin cliente sale con `client_id: null` y el nombre que corresponda —el del ticket si lo
+// tiene, «(sin cliente)» si no—, porque esconderla sería volver al problema por la puerta de atrás.
+export function deudaViva(db, hasta) {
+  const t = String(hasta || '').slice(0, 10);
+  const invs = db.prepare(
+    'SELECT * FROM invoices WHERE substr(issue_date,1,10) <= ? ORDER BY issue_date, id').all(t);
+  const nombreDe = db.prepare('SELECT name FROM clients WHERE id=?');
+  let total = 0, dudosas = 0;
   const rows = [];
-  for (const cid of clientIds) {
-    const d = clientDebt(db, cid, today);          // mismo cálculo que la ficha de cliente
-    total = r2(total + d.total);
-    const cl = db.prepare('SELECT name FROM clients WHERE id=?').get(cid);
-    const clientName = cl ? cl.name : '—';
-    for (const inv of d.invoices) {
-      if (inv.counts && inv.pendiente > 0.0049) {
-        rows.push({
-          client_id: cid, client_name: clientName,
-          invoice_id: inv.id, invoice_number: inv.invoice_number,
-          due_date: inv.due_date, pendiente: inv.pendiente,
-          estado: inv.estado, dias_vencida: inv.dias_vencida, tramo: inv.tramo,
-        });
-      }
+  for (const inv of invs) {
+    if (!countsAsReceivable(db, inv)) {
+      if (inv.status === 'anulada' || inv.status === 'rectificada') dudosas++;
+      continue;
+    }
+    const st = invoiceCobro(db, inv, t);
+    total = r2(total + st.pendiente);
+    if (st.pendiente > 0.0049) {
+      const cl = inv.client_id ? nombreDe.get(inv.client_id) : null;
+      rows.push({
+        client_id: inv.client_id || null,
+        client_name: cl ? cl.name : (inv.client_name || '(sin cliente)'),
+        invoice_id: inv.id, invoice_number: inv.invoice_number,
+        due_date: st.due_date, pendiente: st.pendiente,
+        estado: st.estado, dias_vencida: st.dias_vencida, tramo: st.tramo,
+      });
     }
   }
+  return { fecha: t, total: r2(total), facturas: rows.length, rows, exacta: dudosas === 0, avisadas: dudosas };
+}
+
+// Torre de control de cobros: TODAS las deudas vivas. La cara con filas del motor de arriba.
+export function openDebts(db, today) {
+  const d = deudaViva(db, today);
+  const total = d.total;
+  const rows = d.rows;
   // Más vencida arriba (más días vencida primero; a igualdad, vencimiento más antiguo).
   rows.sort((a, b) => (b.dias_vencida - a.dias_vencida) || String(a.due_date || '').localeCompare(String(b.due_date || '')));
   return { total: r2(total), rows };
@@ -219,22 +243,14 @@ function daysPastDue(due, today) {
 // alguna de esas y `avisadas` con cuántas son, para que quien pinte pueda decirlo en vez de dar una
 // cifra como si fuera un fotograma perfecto. Preferimos una cifra con su matiz que un hueco.
 export function deudaAFecha(db, fecha) {
-  const hasta = String(fecha).slice(0, 10);
-  const invs = db.prepare('SELECT * FROM invoices WHERE substr(issue_date,1,10) <= ? ORDER BY issue_date, id').all(hasta);
-  const cobradoHasta = db.prepare(
-    'SELECT COALESCE(SUM(amount),0) s FROM invoice_payments WHERE invoice_id=? AND substr(paid_date,1,10) <= ?'
-  );
-  let total = 0, facturas = 0, dudosas = 0;
-  for (const inv of invs) {
-    if (!countsAsReceivable(db, inv)) { if (inv.status === 'anulada' || inv.status === 'rectificada') dudosas++; continue; }
-    let cobrado = cobradoHasta.get(inv.id, hasta).s;
-    // Espejo de invoiceCobro: la sustitutiva hereda los cobros del ticket al que sustituye.
-    if (inv.substitutes_invoice_id) cobrado += cobradoHasta.get(inv.substitutes_invoice_id, hasta).s;
-    const pendiente = r2((Number(inv.total) || 0) - r2(cobrado));
-    if (pendiente > 0.0049) { total = r2(total + pendiente); facturas++; }
-  }
-  return { fecha: hasta, total: r2(total), facturas, exacta: dudosas === 0, avisadas: dudosas };
+  // LA MISMA FUNCIÓN QUE LA TORRE DE COBROS, con otra cara. Antes esto era un segundo recorrido, y
+  // por eso los dos números discrepaban (242,00 € el 24 ago 2026). Ahora hay un solo motor:
+  // `deudaViva`, que cuenta sobre FACTURAS — decisión del dueño, porque una factura sin cliente
+  // asignado sigue siendo dinero que se debe.
+  const d = deudaViva(db, fecha);
+  return { fecha: d.fecha, total: d.total, facturas: d.facturas, exacta: d.exacta, avisadas: d.avisadas };
 }
+
 
 export function activeActions(db, invoiceId) {
   return db.prepare(
