@@ -85,7 +85,7 @@
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-08-24 · `4e4201d` · **105/106** · 1030 s
+- **Último barrido completo:** 2026-08-24 · `098affc` · **111/111** · 1009 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -7542,9 +7542,10 @@ No eran 269 sitios sueltos: eran **QUINCE ayudantes distintos**, la mitad escrib
 sola forma: `window.eur`/`window.dineroEs`/`window.fechaEs` en el componente compartido y `fmtEur` en el
 servidor, con el MISMO nombre en los dos lados. **Lo que NO se tocó, y es la mitad del trabajo:** los
 `toFixed(2)` que alimentan el `value` de un campo o el cuerpo de una petición, donde el número va crudo
-porque alguien lo vuelve a leer. Por eso `verify-dinero-espanol` mide **sobre lo servido** y no sobre el
-código: **59 pantallas —incluidas las de imprimir— sin un importe con el símbolo delante ni con punto
-decimal, y sin una fecha en formato inglés.**
+porque alguien lo vuelve a leer. Por eso `verify-dinero-espanol` mide **sobre lo servido**: **60
+pantallas —incluidas las de imprimir— sin un importe con el símbolo delante ni con punto decimal, y
+sin una fecha en formato inglés.** *(En el punto 8 se le añade además una regla que mira el CÓDIGO,
+porque media pantalla la dibuja el navegador después de cargar y ahí lo servido no llega.)*
 
 ### 6 · UN SOLO MOTOR DE DEUDA
 Discrepaban en 242,00 € porque uno recorría CLIENTES y el otro FACTURAS. Decisión del dueño aplicada:
@@ -7562,6 +7563,46 @@ conserva (un documento emitido no se reescribe), pero el informe usa ya el nombr
 reutilizan su cliente en vez de crear uno nuevo por pasada. **Las 13 comprobaciones con la ventanita
 vieja, migradas**: no queda ninguna que solo sepa aceptar el diálogo del navegador.
 
+### 8 · LA REVISIÓN COMPLETA — al final, una vez
+**Primera pasada: 102/111.** Los nueve rojos, mirados uno a uno sin dar ninguno por ruido:
+
+**Ocho eran de la comprobación, no del producto.** Al escribir el dinero como en España (punto 5),
+ocho gates seguían exigiendo el texto viejo: buscaban `1234.56` y la pantalla ya decía `1.234,56 €`.
+El producto estaba bien y la comprobación medía **la ortografía de la cifra en vez de la cifra**.
+Corregidos para mirar el NÚMERO: `gate-descuentos`, `gate-rentabilidad-pantalla`,
+`gate-facturar-horas-pantalla`, `gate-gasto-proveedor`, `gate-pagos-proveedor` (importe y fecha),
+`gate-abono-proveedor`, `gate-orden-compra-c1a`, `gate-coste-horas-pantalla`,
+`gate-devoluciones-proveedor` y `verify-plantillas-email`. Un detalle que costó una pasada: en
+`gestión700,00 €` **no hay frontera de palabra** entre la «n» y el «7», así que `\b700,00` NO casa;
+va con `(?<!\d)`. Y `gate-informes-legibles` llevaba dos aserciones atadas a datos que ya no existen
+—contaba los archivados por su NOMBRE en vez de por si tienen facturas— (53 ✓).
+
+**Uno era del producto: no había favicon.** Todas las pantallas pedían `/favicon.ico` y recibían un
+**404**. Cosmético para el ojo, pero tumbaba un gate que exige CERO errores en consola: **un fallo
+que no era del producto tapando los que sí lo son.** Ahora se sirve la «B» de Bamburu en un SVG
+mínimo, sin fichero en disco ni dependencia nueva.
+
+**Y la revisión me cazó a mí en el punto 5.** Al arreglar `gate-coste-horas-pantalla` vi la pantalla
+de verdad, y decía: `Resultado contable 1.000,00 € (100.0% sobre lo que cobras)` · `Coste de las
+horas (10.00 h)` · `⚠️ 4.00 h sin coste-hora`. **El dinero estaba bien y el número de al lado, en
+inglés.** Cada pantalla se hacía su propio `toFixed(1) + '%'` teniendo la pieza compartida al lado.
+Arreglado en la ficha de proyecto, la comparativa de rentabilidad, la portada de DISA, las dos tablas
+de analítica y el panel de salud del superadmin. **Y en los AVISOS DE DISA**, que el encargo nombra a
+propósito: llevaban además la fecha cruda («Última compra el 2026-08-01») y el mes como clave de base
+de datos («cayó 12.5% en 2026-07» → «cayó 12,5 % en julio de 2026»).
+Piezas nuevas, con el mismo nombre en los dos lados: `fmtNum` y `mesEs` en el servidor,
+`window.numEs` en el navegador.
+**Dos reglas nuevas en `verify-dinero-espanol`** para que no vuelva: (a) en pantalla, prohibido un
+porcentaje con punto decimal; (b) **en el código**, prohibido `toFixed(1|2) + '%'` o `+ ' h'` —porque
+media pantalla la dibuja el navegador DESPUÉS de cargar y el barrido de HTML no la ve—, dejando fuera
+lo que va a CSS y `toFixed(0)`, que en español ya está bien escrito. **Probadas las dos volviendo a
+meter el fallo a mano**: la de pantalla cazó cuatro porcentajes en `/admin/rentabilidad` y la de
+código señaló fichero y línea.
+
+**Segunda pasada, sobre el código final: `111/111` en 1009 s (16,8 min).**
+
 ### CONSTANTES
-**Rutas 430 → 434, ninguna perdida**, comparadas una a una. Cero `DROP`. Las tablas de DISA siguen fuera
-de `WRITABLE_TABLES`. La cadena de VERI*FACTU, sin tocar.
+**Rutas 430 → 436, ninguna perdida**, comparadas una a una: las seis nuevas son `/users/:id/baja`,
+`/users/:id/recuperar`, `/superadmin/migraciones`, `/superadmin/migraciones/:slug/:id/fichero`,
+`/favicon.ico` y `/favicon.svg`. Cero `DROP`. Las tablas de DISA siguen fuera de `WRITABLE_TABLES`.
+La cadena de VERI*FACTU, sin tocar.
