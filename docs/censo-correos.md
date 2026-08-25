@@ -168,3 +168,38 @@ De las 205 del barrido:
    reputación del dominio sigue bajando y volverá a haber supresiones.
 3. **La cuenta compartida con Rebobina:** conviene saberlo antes de mirar cupos o reputación, porque
    lo que haga un producto le pasa factura al otro.
+
+---
+
+## 5 · Verificación (25 ago 2026, después de aplicar la norma)
+
+Dos barridos completos seguidos, de 207 comprobaciones cada uno, con el registro de Resend marcado
+antes y leído después:
+
+| | 24 ago (antes) | 25 ago (después) |
+|---|---:|---:|
+| Envíos por pasada del barrido | ~90 | **12** |
+| A la bandeja del dueño | 4 por pasada | **0** |
+| Rebotes | 36 en el día | **0** |
+| Veredicto del barrido | 8 rojos | **6 rojos** (4 son el saldo de IA) |
+
+Los 12 envíos que quedan van todos a direcciones de simulación, y cada uno lleva su etiqueta para
+saber quién lo mandó: `delivered+c6-find-tenant-…`, `delivered+migracion-acuse@…`,
+`delivered+migracion-equipo@…`. Se comprueban exactamente las mismas cosas que antes; lo único que
+cambia es que no acaban en la bandeja de nadie.
+
+**El freno**, medido en el mismo barrido: 30 envíos apuntados, **0 frenados** — muy por debajo del
+tope de 120 por hora, que es lo que se esperaba.
+
+### Y de paso: seis negocios fantasma que recibían correo
+
+Al medir salieron **seis negocios creados por comprobaciones que se cayeron a medias** y que se
+quedaron dados de alta y **activos**: `gos-9fd944-clinica`, tres `gate-sustitutiva-*`,
+`gate-presupuestos-c96f9a` y `gate-xss-941065`. No eran solo basura en una tabla: el temporizador de
+avisos los trataba como negocios de verdad y **les mandaba su resumen diario** —cada uno tenía ya dos
+envíos apuntados— a direcciones que no existen. Borrados (con copia previa de `control.db`), quedan
+los 7 negocios reales.
+
+Uno de ellos, `gate-xss-941065`, tenía el fichero declarado como
+`data/tenants/__gate_941065_no_existe.db`: borrarlo por el nombre del negocio no lo habría quitado.
+Se borran por `db_filename`, que es lo único que dice dónde está de verdad.
