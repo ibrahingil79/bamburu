@@ -13,6 +13,10 @@ import { join } from 'path';
 import { runMigrations } from '../modules/erp/models.js';
 import { generateInvoice, createInvoice, anularInvoice, createRectificativa, calcHash } from '../modules/erp/routes/invoices.js';
 import { altaHuella, anulacionHuella, altaHuellaString, anulacionHuellaString, cotejoUrl, genTimestampMadrid, COTEJO_BASE_URL } from '../modules/erp/verifactu.js';
+// 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
+// puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
+// del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.
+// La puerta del correo los desvía a simulación. Ver docs/censo-correos.md.
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
@@ -64,7 +68,7 @@ try {
   runMigrations(db);
   db.prepare("INSERT OR IGNORE INTO company_config (id, company_name, fiscal_id, tax_rate) VALUES (1, 'Acme Test SL', '89890001K', 21)").run();
   db.prepare("UPDATE company_config SET fiscal_id='89890001K', country='ES' WHERE id=1").run();
-  const cli = db.prepare("INSERT INTO clients (name, fiscal_id, address, email) VALUES ('Cliente Uno','12345678Z','Calle 1','c1@x.com')").run();
+  const cli = db.prepare("INSERT INTO clients (name, fiscal_id, address, email) VALUES ('Cliente Uno','12345678Z','Calle 1','c1@x.test')").run();
   const clientId = cli.lastInsertRowid;
 
   const regs = () => db.prepare('SELECT * FROM verifactu_registros ORDER BY id').all();

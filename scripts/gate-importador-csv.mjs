@@ -37,6 +37,10 @@ import Database from 'better-sqlite3';
 import { launchOpts } from './lib/gate-env.mjs';
 import { controlDb, getTenantBySlug } from '../core/control-db.js';
 import { provisionTenant } from '../core/tenant-provisioning.js';
+// 25 ago 2026 · Direcciones de dominio IMPOSIBLE (`.test`), no de dominios que existen de verdad.
+// `ej.com`, `minegocio.com` y `barpepe.com` son dominios reales de otra gente: un correo de
+// recuperación de contraseña dirigido ahí acaba en casa de un desconocido. `.test` está reservado
+// justo para esto (RFC 2606) y la puerta del correo lo desvía a simulación. Ver docs/censo-correos.md.
 
 const APP = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const dormir = ms => new Promise(r => setTimeout(r, ms));
@@ -105,7 +109,7 @@ const cuenta = (db, sql) => db.prepare(sql).get().n;
 const CSV = [
   'Nombre;NIF;Email;Ciudad',
   'Ana Ruiz Delgado;12345678Z;ana@ejemplo.com;Sevilla',
-  'Bar Pepe SL;B12345674;admin@barpepe.com;Cádiz',
+  'Bar Pepe SL;B12345674;admin@barpepe.test;Cádiz',
   ';99999999R;sinnombre@ejemplo.com;Huelva',
   'Carmen Gil Soto;X1234567L;carmen@ejemplo.com;Málaga',
 ].join('\n');

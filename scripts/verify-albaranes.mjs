@@ -11,6 +11,10 @@ import { runMigrations } from '../modules/erp/models.js';
 import { createPedidoSvc, confirmPedidoSvc, cancelPedidoSvc, orderToInvoiceSvc } from '../modules/erp/routes/pedidos.js';
 import { createAlbaranSvc, cancelAlbaranSvc, albaranToInvoiceSvc, orderDeliveryState } from '../modules/erp/routes/albaranes.js';
 import { recordMovement, reservedOfProduct, availableOfProduct, productStock, productStockInWarehouse } from '../modules/erp/stock.js';
+// 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
+// puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
+// del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.
+// La puerta del correo los desvía a simulación. Ver docs/censo-correos.md.
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
@@ -22,7 +26,7 @@ const db = new Database(dbPath);
 try {
   runMigrations(db);
   db.prepare("INSERT OR IGNORE INTO company_config (id, company_name, fiscal_id, tax_rate) VALUES (1,'Acme SL','B11111111',21)").run();
-  db.prepare("UPDATE company_config SET country='ES', irpf_default=15, company_name='Acme SL', address='C/ Mayor 1', phone='600', email='a@x.com' WHERE id=1").run();
+  db.prepare("UPDATE company_config SET country='ES', irpf_default=15, company_name='Acme SL', address='C/ Mayor 1', phone='600', email='a@x.test' WHERE id=1").run();
   const cli = db.prepare("INSERT INTO clients (name, fiscal_id, client_type) VALUES ('Cliente Empresa SL','B22222222','empresa')").run().lastInsertRowid;
   const whMain = db.prepare("SELECT id FROM warehouses WHERE is_default=1").get().id;
   const wh2 = db.prepare("INSERT INTO warehouses (name, active, is_default) VALUES ('Tienda',1,0)").run().lastInsertRowid;

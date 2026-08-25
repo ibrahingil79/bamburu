@@ -14,6 +14,10 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import Database from 'better-sqlite3';
 import { Hono } from 'hono';
+// 25 ago 2026 · Direcciones de dominio IMPOSIBLE (`.test`), no de dominios que existen de verdad.
+// `ej.com`, `minegocio.com` y `barpepe.com` son dominios reales de otra gente: un correo de
+// recuperación de contraseña dirigido ahí acaba en casa de un desconocido. `.test` está reservado
+// justo para esto (RFC 2606) y la puerta del correo lo desvía a simulación. Ver docs/censo-correos.md.
 
 // Clave FALSA a propósito, y antes de importar la ruta: el SDK de Resend revienta al construirse sin
 // clave, y auth.js lo construye al cargar el módulo. Con esta clave el envío falla al intentar salir
@@ -74,7 +78,7 @@ try {
       created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, csrf_token TEXT
     );
   `);
-  const EXISTE = 'existe@ej.com';
+  const EXISTE = 'existe@ej.test';
   const userId = db.prepare(
     "INSERT INTO admin_users (name,email,password_hash,role) VALUES ('Ana',?,'x','owner')"
   ).run(EXISTE).lastInsertRowid;
@@ -82,7 +86,7 @@ try {
   console.log('\n[1] EL CRITERIO — la respuesta NO revela si el email existe');
   {
     const rExiste = await pedirEnlace(EXISTE, '10.1.0.1');
-    const rNoExiste = await pedirEnlace('fantasma@ej.com', '10.1.0.2');
+    const rNoExiste = await pedirEnlace('fantasma@ej.test', '10.1.0.2');
     const bodyExiste = await rExiste.text();
     const bodyNoExiste = await rNoExiste.text();
 
@@ -126,7 +130,7 @@ try {
   {
     const IP = '10.3.0.1';
     const codigos = [];
-    for (let i = 0; i < 7; i++) codigos.push((await pedirEnlace(`quien${i}@ej.com`, IP)).status);
+    for (let i = 0; i < 7; i++) codigos.push((await pedirEnlace(`quien${i}@ej.test`, IP)).status);
     check('ROJO antes de C5 · los 5 primeros pasan', codigos.slice(0, 5).every(s => s === 200), codigos.slice(0, 5).join(','));
     check('del 6º en adelante → 429', codigos.slice(5).every(s => s === 429), codigos.slice(5).join(','));
   }
@@ -135,7 +139,7 @@ try {
   {
     // Cuenta propia para este caso: el cupo por email es de 3 por ventana y los casos [1] y [2] ya
     // habían gastado dos de los de EXISTE. Cada caso trae la suya y no se pisan.
-    const DIANA = 'diana@ej.com';
+    const DIANA = 'diana@ej.test';
     db.prepare("INSERT INTO admin_users (name,email,password_hash,role) VALUES ('Diana',?,'x','owner')").run(DIANA);
     // Barrer una sola cuenta desde IPs distintas: el freno por IP no ve nada raro (una petición por
     // IP); el freno por email sí. Es el caso que el límite por IP, solo, no cubre.
@@ -147,7 +151,7 @@ try {
 
   console.log('\n[5] El freno por email distingue cuentas (no es un freno global)');
   {
-    const r = await pedirEnlace('otra-distinta@ej.com', '10.5.0.1');
+    const r = await pedirEnlace('otra-distinta@ej.test', '10.5.0.1');
     check('otra cuenta con su propio cupo sigue pasando', r.status === 200);
   }
 

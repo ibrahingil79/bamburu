@@ -15,6 +15,10 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import Database from 'better-sqlite3';
 import { Hono } from 'hono';
+// 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
+// puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
+// del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.
+// La puerta del correo los desvía a simulación. Ver docs/censo-correos.md.
 
 let ok = 0, fail = 0;
 const check = (label, cond, extra = '') => {
@@ -50,7 +54,7 @@ try {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
   `);
 
-  const EMAIL = 'duenyo-real@minegocio.com';
+  const EMAIL = 'duenyo-real@minegocio.test';
   const PW = 'contrasenya-larga-real';
   const userId = db.prepare("INSERT INTO admin_users (name,email,password_hash,role) VALUES ('Ana',?,?,'owner')")
     .run(EMAIL, await hashPassword(PW)).lastInsertRowid;

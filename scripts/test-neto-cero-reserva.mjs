@@ -24,6 +24,10 @@ import {
 import { dowDeFecha } from '../modules/erp/citas-engine.js';
 import { ventasResumen } from '../modules/erp/ventas-metrics.js';
 import { cuentaPyG } from '../modules/erp/contabilidad-pyg.js';
+// 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
+// puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
+// del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.
+// La puerta del correo los desvía a simulación. Ver docs/censo-correos.md.
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ FALLO: ' + m); } };
@@ -84,7 +88,7 @@ try {
 
   const r1 = crearReservaPublica(db, {
     service_ids: [S], user_id: U, fecha: F, inicio_min: 10 * 60,
-    nombre: 'María', movil: '600111222', email: 'maria@ej.com', consent: true,
+    nombre: 'María', movil: '600111222', email: 'maria@ej.test', consent: true,
   }, { ahora: AHORA });
   const trasReserva = snap();
   ok(igual(base, trasReserva), 'tras RESERVAR desde la calle, todo igual — ' + dif(base, trasReserva));

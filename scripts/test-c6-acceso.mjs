@@ -11,6 +11,10 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import Database from 'better-sqlite3';
 import { Hono } from 'hono';
+// 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
+// puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
+// del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.
+// La puerta del correo los desvía a simulación. Ver docs/censo-correos.md.
 
 let ok = 0, fail = 0;
 const check = (label, cond, extra = '') => {
@@ -49,7 +53,7 @@ try {
   `);
 
   const PW = 'contrasenya-larga-1';
-  const EMAIL = 'duenyo@ej.com';
+  const EMAIL = 'duenyo@ej.test';
   const userId = db.prepare("INSERT INTO admin_users (name,email,password_hash,role) VALUES ('Ana',?,?,'owner')")
     .run(EMAIL, await hashPassword(PW)).lastInsertRowid;
 
@@ -138,7 +142,7 @@ try {
   console.log('\n[B4] EL CRITERIO — el login se frena por CUENTA, y RALENTIZA (no bloquea)');
   {
     const { registrarFallo, limpiarFallos } = await import('../core/rate-limit.js');
-    const VICTIMA = 'victima@ej.com';
+    const VICTIMA = 'victima@ej.test';
     db.prepare("INSERT INTO admin_users (name,email,password_hash,role) VALUES ('V',?,?,'employee')")
       .run(VICTIMA, await hashPassword('otra-contrasenya-larga'));
 
@@ -164,9 +168,9 @@ try {
     check('tras acertar, el siguiente login ya no espera', Date.now() - t2 < 500, `${Date.now() - t2} ms`);
 
     // No es un oráculo: un email que NO existe se frena igual.
-    for (let i = 0; i < 6; i++) await login('fantasma@ej.com', 'x', `10.61.0.${i}`);
+    for (let i = 0; i < 6; i++) await login('fantasma@ej.test', 'x', `10.61.0.${i}`);
     const t3 = Date.now();
-    await login('fantasma@ej.com', 'x', '10.61.0.50');
+    await login('fantasma@ej.test', 'x', '10.61.0.50');
     check('un email INEXISTENTE también se frena (el reloj no chiva)', Date.now() - t3 >= 1500, `${Date.now() - t3} ms`);
     limpiarFallos('admin-login-cuenta', VICTIMA, 'global');
   }
@@ -178,7 +182,7 @@ try {
     // importarse, así que aquí se prueba lo que sí es importable — la pieza que decide.
     const cdb = await import('../core/control-db.js');
     cdb.initControlDb();
-    const EM = 'quien@ej.com';
+    const EM = 'quien@ej.test';
 
     const t = cdb.createAccessLink(EM);
     check('el token es largo e impredecible (32 bytes hex)', /^[0-9a-f]{64}$/.test(t));
@@ -187,7 +191,7 @@ try {
     check('EL CRITERIO · gastarlo DOS veces → no', cdb.consumeAccessLink(t) === null);
     check('y ya ni se puede mirar', cdb.peekAccessLink(t) === null);
 
-    const caducado = cdb.createAccessLink('otro@ej.com');
+    const caducado = cdb.createAccessLink('otro@ej.test');
     cdb.controlDb.prepare('UPDATE tenant_access_links SET expires_at=? WHERE token=?')
       .run(Math.floor(Date.now() / 1000) - 1, caducado);
     check('EL CRITERIO · un enlace caducado no vale', cdb.consumeAccessLink(caducado) === null);

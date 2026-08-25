@@ -11,6 +11,10 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import Database from 'better-sqlite3';
 import {
+// 25 ago 2026 · Direcciones de dominio IMPOSIBLE (`.test`), no de dominios que existen de verdad.
+// `ej.com`, `minegocio.com` y `barpepe.com` son dominios reales de otra gente: un correo de
+// recuperación de contraseña dirigido ahí acaba en casa de un desconocido. `.test` está reservado
+// justo para esto (RFC 2606) y la puerta del correo lo desvía a simulación. Ver docs/censo-correos.md.
   createAdminSession, getAdminSession, destroyAllAdminSessionsForUser,
 } from '../core/auth.js';
 
@@ -44,7 +48,7 @@ try {
 
   console.log('\n[1] Un usuario ACTIVO conserva su sesión');
   {
-    const id = nuevoUsuario('activo@ej.com');
+    const id = nuevoUsuario('activo@ej.test');
     const token = createAdminSession(db, id);
     const sess = getAdminSession(db, reqConCookie(token));
     check('sesión válida antes de tocar nada', sess !== null && sess.userId === id);
@@ -52,7 +56,7 @@ try {
 
   console.log('\n[2] EL CRITERIO — desactivar expulsa en la siguiente petición');
   {
-    const id = nuevoUsuario('victima@ej.com');
+    const id = nuevoUsuario('victima@ej.test');
     const token = createAdminSession(db, id);
     check('entra: la sesión vale', getAdminSession(db, reqConCookie(token)) !== null);
 
@@ -66,7 +70,7 @@ try {
 
   console.log('\n[3] La fila muerta no sobrevive: se limpia al detectarla');
   {
-    const id = nuevoUsuario('limpieza@ej.com');
+    const id = nuevoUsuario('limpieza@ej.test');
     const token = createAdminSession(db, id);
     db.prepare('UPDATE admin_users SET active=0 WHERE id=?').run(id);
     getAdminSession(db, reqConCookie(token));
@@ -76,7 +80,7 @@ try {
 
   console.log('\n[4] Reactivar NO resucita la sesión vieja (hay que volver a entrar)');
   {
-    const id = nuevoUsuario('vuelve@ej.com');
+    const id = nuevoUsuario('vuelve@ej.test');
     const token = createAdminSession(db, id);
     db.prepare('UPDATE admin_users SET active=0 WHERE id=?').run(id);
     getAdminSession(db, reqConCookie(token));
@@ -88,8 +92,8 @@ try {
 
   console.log('\n[5] Desactivar a UNO no toca a los demás');
   {
-    const malo = nuevoUsuario('malo@ej.com');
-    const bueno = nuevoUsuario('bueno@ej.com');
+    const malo = nuevoUsuario('malo@ej.test');
+    const bueno = nuevoUsuario('bueno@ej.test');
     const tMalo = createAdminSession(db, malo);
     const tBueno = createAdminSession(db, bueno);
     db.prepare('UPDATE admin_users SET active=0 WHERE id=?').run(malo);
@@ -99,7 +103,7 @@ try {
 
   console.log('\n[6] destroyAllAdminSessionsForUser corta TODOS sus dispositivos');
   {
-    const id = nuevoUsuario('multi@ej.com');
+    const id = nuevoUsuario('multi@ej.test');
     const movil = createAdminSession(db, id);
     const portatil = createAdminSession(db, id);
     destroyAllAdminSessionsForUser(db, id);

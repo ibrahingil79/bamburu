@@ -5,6 +5,10 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { runMigrations } from '../modules/erp/models.js';
 import { createQuoteSvc, updateQuoteSvc, emitQuoteSvc, anularQuoteSvc, anularYRehacerQuoteSvc, setFollowStatusSvc, convertQuoteSvc, emailQuoteSvc, quoteTotals } from '../modules/erp/routes/quotes.js';
+// 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
+// puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
+// del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.
+// La puerta del correo los desvía a simulación. Ver docs/censo-correos.md.
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
@@ -16,8 +20,8 @@ const db = new Database(dbPath);
 try {
   runMigrations(db);
   db.prepare("INSERT OR IGNORE INTO company_config (id, company_name, fiscal_id, tax_rate) VALUES (1,'Acme SL','B11111111',21)").run();
-  db.prepare("UPDATE company_config SET fiscal_id='B11111111', country='ES', irpf_default=15, company_name='Acme SL', address='Calle Mayor 1', phone='600', email='acme@x.com' WHERE id=1").run();
-  const cli = db.prepare("INSERT INTO clients (name, fiscal_id, address, email, client_type) VALUES ('Cliente Empresa SL','B22222222','Av. Test 2','cli@x.com','empresa')").run().lastInsertRowid;
+  db.prepare("UPDATE company_config SET fiscal_id='B11111111', country='ES', irpf_default=15, company_name='Acme SL', address='Calle Mayor 1', phone='600', email='acme@x.test' WHERE id=1").run();
+  const cli = db.prepare("INSERT INTO clients (name, fiscal_id, address, email, client_type) VALUES ('Cliente Empresa SL','B22222222','Av. Test 2','cli@x.test','empresa')").run().lastInsertRowid;
   const ins = db.prepare("INSERT INTO products (name,slug,sku,price,stock,status,type,tax_rate,tax_band) VALUES (?,?,?,?,?,?,?,?,?)");
   const prod = ins.run('Mesa roble','mesa','MESA1',10,50,'active','physical',21,'general').lastInsertRowid;
 
@@ -95,19 +99,19 @@ try {
   // 10b) email a destinatario EDITABLE (mock — no envía de verdad).
   let mailedTo = null;
   const mock = async (p) => { mailedTo = p.to; return { data: { id: 'mock' }, error: null }; };
-  // El cliente del presupuesto qid tiene email cli@x.com en su ficha (pre-relleno del campo "Para").
-  ok(db.prepare('SELECT email FROM clients WHERE id=?').get(cli).email === 'cli@x.com', 'cliente con email en ficha → ese correo es el pre-relleno del campo "Para"');
+  // El cliente del presupuesto qid tiene email cli@x.test en su ficha (pre-relleno del campo "Para").
+  ok(db.prepare('SELECT email FROM clients WHERE id=?').get(cli).email === 'cli@x.test', 'cliente con email en ficha → ese correo es el pre-relleno del campo "Para"');
   // Cambiar el destino a OTRO correo válido → envía a ese; la ficha NO cambia.
   const mockPdf = async () => Buffer.from('%PDF-1.4\n mock');   // PDF adjunto: renderer inyectado (sin Chromium en el test de lógica)
-  const mailRes1 = await emailQuoteSvc(db, qid, { to: 'otro@dominio.com', sendEmail: mock, renderPdf: mockPdf });
-  ok(mailRes1.sent && mailedTo === 'otro@dominio.com', 'enviar a un correo distinto del de la ficha → llega a ese (otro@dominio.com)');
-  ok(db.prepare('SELECT email FROM clients WHERE id=?').get(cli).email === 'cli@x.com', 'editar el destino NO modifica la ficha del cliente');
+  const mailRes1 = await emailQuoteSvc(db, qid, { to: 'otro@dominio.test', sendEmail: mock, renderPdf: mockPdf });
+  ok(mailRes1.sent && mailedTo === 'otro@dominio.test', 'enviar a un correo distinto del de la ficha → llega a ese (otro@dominio.test)');
+  ok(db.prepare('SELECT email FROM clients WHERE id=?').get(cli).email === 'cli@x.test', 'editar el destino NO modifica la ficha del cliente');
   // Cliente SIN email en ficha → escribo uno válido → envía igualmente.
   const cliNoMail = db.prepare("INSERT INTO clients (name, fiscal_id, client_type) VALUES ('Sin Email','C33333333','particular')").run().lastInsertRowid;
   const qNoMail = createQuoteSvc(db, { client_id: cliNoMail, lines: [{ description: 'X', quantity: 1, unit_price: 5, tax_rate: 21 }] });
   emitQuoteSvc(db, qNoMail);
-  const mailRes2 = await emailQuoteSvc(db, qNoMail, { to: 'nuevo@x.com', sendEmail: mock, renderPdf: mockPdf });
-  ok(mailRes2.sent && mailedTo === 'nuevo@x.com', 'cliente SIN email en ficha → escribir un correo válido → se envía a nuevo@x.com');
+  const mailRes2 = await emailQuoteSvc(db, qNoMail, { to: 'nuevo@x.test', sendEmail: mock, renderPdf: mockPdf });
+  ok(mailRes2.sent && mailedTo === 'nuevo@x.test', 'cliente SIN email en ficha → escribir un correo válido → se envía a nuevo@x.test');
   // Campo vacío → 400 (ya NO "ficha sin email"). Formato inválido → 400.
   let emptyErr = false; try { await emailQuoteSvc(db, qNoMail, { to: '', sendEmail: mock }); } catch (e) { emptyErr = e.status === 400 && /correo de destino/i.test(e.message); }
   ok(emptyErr, 'campo de destino vacío → 400 ("indica un correo de destino")');

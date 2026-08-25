@@ -8,6 +8,10 @@
 import Database from 'better-sqlite3';
 import { runMigrations } from '../modules/erp/models.js';
 import {
+// 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
+// puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
+// del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.
+// La puerta del correo los desvía a simulación. Ver docs/censo-correos.md.
   resumenCuentaCliente, repartoAutomatico, validarRepartoManual,
   registerAccountAction, accountsSummary, accountEmail,
   invoiceProximaAccion, registerCollectionAction, activeActions, paymentsSum, invoiceCobro,
@@ -21,11 +25,11 @@ const TODAY = '2026-06-08';
 function freshDb() {
   const db = new Database(':memory:');
   runMigrations(db);
-  db.prepare("UPDATE company_config SET company_name=?, email=?, currency_symbol=? WHERE id=1").run('Autónomo SL', 'yo@autonomo.es', '€');
+  db.prepare("UPDATE company_config SET company_name=?, email=?, currency_symbol=? WHERE id=1").run('Autónomo SL', 'yo@autonomo.test', '€');
   return db;
 }
 let seq = 0;
-function addClient(db, profile, email = 'c@x.es', name = 'Cliente') {
+function addClient(db, profile, email = 'c@x.test', name = 'Cliente') {
   return db.prepare("INSERT INTO clients (name,email,active,collections_profile) VALUES (?,?,1,?)").run(name, email, profile).lastInsertRowid;
 }
 function addInvoice(db, { clientId, due, total = 100, status = 'emitida', number }) {
@@ -97,7 +101,7 @@ console.log('3. Validación de reparto manual');
 console.log('4. registerAccountAction · recordatorio');
 {
   const db = freshDb();
-  const cid = addClient(db, 'estandar', 'cli@x.es');
+  const cid = addClient(db, 'estandar', 'cli@x.test');
   const iA = addInvoice(db, { clientId: cid, due: '2026-05-01', total: 200 });
   const iB = addInvoice(db, { clientId: cid, due: '2026-05-20', total: 100 });
   const m = mockMailer();
@@ -189,8 +193,8 @@ console.log('7. registerAccountAction · cobro manual + guardas');
 console.log('8. DISA · resumen de cuenta');
 {
   const db = freshDb();
-  const cA = addClient(db, 'firme', 'a@x.es', 'Ana');
-  const cB = addClient(db, 'estandar', 'b@x.es', 'Bea');
+  const cA = addClient(db, 'firme', 'a@x.test', 'Ana');
+  const cB = addClient(db, 'estandar', 'b@x.test', 'Bea');
   addInvoice(db, { clientId: cA, due: '2026-03-01', total: 300 });
   addInvoice(db, { clientId: cA, due: '2026-04-01', total: 150 });
   addInvoice(db, { clientId: cB, due: '2026-06-04', total: 80 });
@@ -208,7 +212,7 @@ console.log('8. DISA · resumen de cuenta');
 console.log('9. Regresión Paso 2 (factura a factura)');
 {
   const db = freshDb();
-  const cid = addClient(db, 'estandar', 'reg@x.es');
+  const cid = addClient(db, 'estandar', 'reg@x.test');
   const id = addInvoice(db, { clientId: cid, due: '2026-05-20', total: 100 });
   const m = mockMailer();
   const r = await registerCollectionAction(db, id, { type: 'recordatorio_email' }, { sendEmail: m, today: TODAY, now: TODAY + 'T10:00:00Z' });

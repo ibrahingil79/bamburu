@@ -14,6 +14,10 @@ import { join } from 'path';
 import Database from 'better-sqlite3';
 import { Hono } from 'hono';
 import { TOTP, NobleCryptoPlugin, ScureBase32Plugin } from 'otplib';
+// 25 ago 2026 · Direcciones de dominio IMPOSIBLE (`.test`), no de dominios que existen de verdad.
+// `ej.com`, `minegocio.com` y `barpepe.com` son dominios reales de otra gente: un correo de
+// recuperación de contraseña dirigido ahí acaba en casa de un desconocido. `.test` está reservado
+// justo para esto (RFC 2606) y la puerta del correo lo desvía a simulación. Ver docs/censo-correos.md.
 
 let ok = 0, fail = 0;
 const check = (label, cond, extra = '') => {
@@ -49,7 +53,7 @@ try {
   };
 
   const PW = 'contrasenya-del-duenyo';
-  const EMAIL = 'duenyo@minegocio.com';
+  const EMAIL = 'duenyo@minegocio.test';
   const userId = db.prepare("INSERT INTO admin_users (name,email,password_hash,role) VALUES ('Ana',?,?,'owner')")
     .run(EMAIL, await hashPassword(PW)).lastInsertRowid;
 

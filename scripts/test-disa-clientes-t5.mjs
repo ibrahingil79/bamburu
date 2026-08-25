@@ -17,6 +17,10 @@ import {
   searchClients, fiscalIdConflict,
 } from '../modules/erp/routes/clients.js';
 import { clientFieldOptions } from '../modules/erp/schemas.js';
+// 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
+// puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
+// del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.
+// La puerta del correo los desvía a simulación. Ver docs/censo-correos.md.
 
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) pass++; else { fail++; console.error('  ✗ ' + m); } }
@@ -101,7 +105,7 @@ console.log('4. searchClients');
 console.log('5. Paridad DISA (edición parcial fusionada)');
 {
   const db = freshDb();
-  const id = createClientSvc(db, { name: 'Cliente', fiscal_id: 'NIF', email: 'c@x.es', city: 'Madrid', phone: '600', client_type: 'empresa', payment_term_days: 30 }).id;
+  const id = createClientSvc(db, { name: 'Cliente', fiscal_id: 'NIF', email: 'c@x.test', city: 'Madrid', phone: '600', client_type: 'empresa', payment_term_days: 30 }).id;
   // Simula exactamente lo que hace el case edit_client de DISA: fusiona {city} sobre lo actual.
   const cur = db.prepare('SELECT * FROM clients WHERE id=?').get(id);
   const keep = (v, c) => (v !== undefined ? v : c);
@@ -119,7 +123,7 @@ console.log('5. Paridad DISA (edición parcial fusionada)');
   });
   const after = db.prepare('SELECT * FROM clients WHERE id=?').get(id);
   eq(after.city, 'Sevilla', 'cambia el campo enviado');
-  eq([after.email, after.phone, after.client_type, after.payment_term_days], ['c@x.es', '600', 'empresa', 30], 'preserva los campos NO enviados (edición parcial)');
+  eq([after.email, after.phone, after.client_type, after.payment_term_days], ['c@x.test', '600', 'empresa', 30], 'preserva los campos NO enviados (edición parcial)');
   db.close();
 }
 

@@ -14,6 +14,7 @@
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { APP_DIR } from './lib/gate-env.mjs';
+import { negocioDesechable } from './lib/negocio-desechable.mjs';
 
 const BASE = 'http://localhost:3000';
 let pass = 0, fail = 0;
@@ -22,13 +23,18 @@ const ok = (c, m, extra = '') => { if (c) { pass++; console.log('  ✓ ' + m + (
 const cdb = new Database(join(APP_DIR, 'data', 'control.db'));
 const HJ = { 'Content-Type': 'application/json' };
 
-// Un email REAL de un negocio activo, y uno inventado. La gracia está en que no se distingan.
-const real = cdb.prepare("SELECT * FROM tenants WHERE status='active' LIMIT 1").get();
-if (!real) { console.error('\n✗ GATE ABORTADO — no hay tenants activos. No ha verificado NADA.'); process.exit(2); }
-const tdb = new Database(join(APP_DIR, real.db_filename), { readonly: true });
-const EMAIL_REAL = tdb.prepare('SELECT email FROM admin_users WHERE active=1 LIMIT 1').get()?.email;
-tdb.close();
-if (!EMAIL_REAL) { console.error('\n✗ GATE ABORTADO — el tenant no tiene admins. No ha verificado NADA.'); process.exit(2); }
+// Un email que EXISTE de verdad en un negocio, y uno inventado. La gracia está en que no se distingan.
+//
+// 25 ago 2026 · SE TRAE SU PROPIO NEGOCIO. Antes cogía el primer negocio activo que encontraba y el
+// primer admin de dentro — que en esta máquina es `ibrahingil@gmail.com`, la bandeja del dueño. Y este
+// gate pide el enlace DOS veces, así que le metía **dos correos reales en cada pasada del barrido**:
+// los 16 que llegaron el 24 de agosto salieron de aquí. Ver docs/censo-correos.md.
+//
+// Lo que mide no cambia ni un ápice: sigue haciendo falta una dirección que exista de verdad en un
+// negocio de verdad, para poder demostrar que la respuesta NO la distingue de una inventada. Lo único
+// distinto es que ese negocio nace y muere dentro de este gate, y su correo es de simulación.
+const negocio = await negocioDesechable('C6 find-tenant');
+const EMAIL_REAL = negocio.correoDueño;
 
 const pedir = (email, ip) => fetch(BASE + '/find-tenant', {
   method: 'POST', headers: { ...HJ, 'X-Real-IP': ip }, body: JSON.stringify({ email }),
@@ -43,7 +49,7 @@ try {
   ok(rReal.status === rFake.status, 'mismo código de estado', `${rReal.status} vs ${rFake.status}`);
   ok(rReal.status === 200, 'estado 200 (ROJO antes: 404 con el email inventado)');
   ok(bReal === bFake, 'cuerpo byte a byte IDÉNTICO', bReal.slice(0, 40));
-  ok(!bReal.includes(real.slug), 'ROJO antes de C6 · el slug del negocio NO viaja en la respuesta');
+  ok(!bReal.includes(negocio.slug), 'ROJO antes de C6 · el slug del negocio NO viaja en la respuesta');
   ok(!/"tenants"|"choose"|"redirect"|"password"/.test(bReal), 'ni la lista, ni el modo, ni la URL del panel');
   ok(!(rReal.headers.get('set-cookie') || '').includes('btenant'), 'ROJO antes de C6 · ya no fija la cookie btenant');
 
@@ -75,10 +81,10 @@ try {
   const ck = r1.headers.get('set-cookie') || '';
   // En dev (sin PUBLIC_BASE_DOMAIN) el negocio se dice por cookie; en producción, por subdominio.
   if (!destino.startsWith('http')) {
-    ok(new RegExp('btenant=' + real.slug).test(ck), 'fija btenant con su slug (dev)', ck.split(';')[0]);
+    ok(new RegExp('btenant=' + negocio.slug).test(ck), 'fija btenant con su slug (dev)', ck.split(';')[0]);
     ok(/Secure/.test(ck), 'C6/B11 · la cookie btenant va con Secure', ck.split(';').slice(1).join(';').trim());
   } else {
-    ok(destino.includes(real.slug + '.'), 'al subdominio de su negocio (producción)', destino);
+    ok(destino.includes(negocio.slug + '.'), 'al subdominio de su negocio (producción)', destino);
     ok(true, 'en producción no hace falta btenant: lo dice el subdominio');
   }
   ok(cdb.prepare('SELECT used_at FROM tenant_access_links WHERE token=?').get(fila.token).used_at !== null,
@@ -100,10 +106,11 @@ try {
 
   console.log(`\n${pass} OK, ${fail} fallos\n`);
 } finally {
-  // Los enlaces que este gate haya creado, fuera: no dejamos puertas abiertas a una cuenta real.
+  // Los enlaces que este gate haya creado, fuera: no dejamos puertas abiertas a ninguna cuenta.
   cdb.prepare('DELETE FROM tenant_access_links WHERE email = ?').run(EMAIL_REAL);
   cdb.close();
-  console.log('🧹 enlaces de acceso del gate eliminados');
+  try { negocio.tirar(); } catch (e) { console.error('  (limpieza) no pude tirar el negocio: ' + e.message); }
+  console.log('🧹 enlaces de acceso y negocio de prueba eliminados');
 }
 
 process.exit(fail === 0 ? 0 : 1);

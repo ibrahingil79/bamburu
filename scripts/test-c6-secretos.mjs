@@ -6,6 +6,10 @@
 import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+// 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
+// puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
+// del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.
+// La puerta del correo los desvía a simulación. Ver docs/censo-correos.md.
 
 const APP = join(dirname(fileURLToPath(import.meta.url)), '..');
 const leer = (p) => readFileSync(join(APP, p), 'utf8');
@@ -73,7 +77,7 @@ console.log('\n[B8] DISA no manda al log los valores del WHERE (son PII de tus c
   }
 
   // La FORMA se conserva: sin esto el log no serviría para nada y alguien lo volvería a abrir.
-  const red = redactarSql("SELECT c.name, SUM(i.total) FROM clients c JOIN invoices i ON i.client_id=c.id WHERE c.email='x@y.com' GROUP BY c.id");
+  const red = redactarSql("SELECT c.name, SUM(i.total) FROM clients c JOIN invoices i ON i.client_id=c.id WHERE c.email='x@y.test' GROUP BY c.id");
   check('conserva las tablas', red.includes('clients') && red.includes('invoices'));
   check('conserva el JOIN y el GROUP BY', red.includes('JOIN') && red.includes('GROUP BY'));
   check('conserva la columna del WHERE (se ve por qué buscaba, no a quién)', red.includes('c.email'));

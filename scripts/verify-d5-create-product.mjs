@@ -6,6 +6,10 @@
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 import { createProductSvc } from '../modules/erp/routes/products.js';
+// 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
+// puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
+// del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.
+// La puerta del correo los desvía a simulación. Ver docs/censo-correos.md.
 
 const DB_PATH = 'data/tenants/desarrollo-bamburu.db';
 const HOST = 'desarrollo-bamburu.localhost';
@@ -17,7 +21,7 @@ const now = Math.floor(Date.now() / 1000);
 const token = randomBytes(32).toString('base64url');
 const csrf = randomBytes(32).toString('base64url');
 db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)')
-  .run(token, 2, now, now + 3600, csrf);   // user 2 = owner (ibrahingil@gmail.com)
+  .run(token, 2, now, now + 3600, csrf);   // user 2 = owner (el dueño del negocio de desarrollo)
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let pass = 0, fail = 0;

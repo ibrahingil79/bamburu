@@ -12,6 +12,10 @@ import { renderPdfFromHtml } from '../core/pdf.js';
 import { printableShell } from '../modules/erp/layout.js';
 import { buildInvoicePaper } from '../modules/erp/routes/invoices.js';
 import { createQuoteSvc, emitQuoteSvc, emailQuoteSvc } from '../modules/erp/routes/quotes.js';
+// 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
+// puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
+// del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.
+// La puerta del correo los desvía a simulación. Ver docs/censo-correos.md.
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
@@ -54,8 +58,8 @@ const db = new Database(dbPath);
 try {
   runMigrations(db);
   db.prepare("INSERT OR IGNORE INTO company_config (id, company_name, fiscal_id, tax_rate) VALUES (1,'Acme SL','B11111111',21)").run();
-  db.prepare("UPDATE company_config SET country='ES', company_name='Acme SL', email='acme@x.com' WHERE id=1").run();
-  const cli = db.prepare("INSERT INTO clients (name, fiscal_id, email, client_type) VALUES ('Cliente SL','B22222222','cli@x.com','empresa')").run().lastInsertRowid;
+  db.prepare("UPDATE company_config SET country='ES', company_name='Acme SL', email='acme@x.test' WHERE id=1").run();
+  const cli = db.prepare("INSERT INTO clients (name, fiscal_id, email, client_type) VALUES ('Cliente SL','B22222222','cli@x.test','empresa')").run().lastInsertRowid;
   const qid = createQuoteSvc(db, { client_id: cli, lines: [{ description: 'Servicio', quantity: 1, unit_price: 100, tax_rate: 21 }] });
   emitQuoteSvc(db, qid);
 
@@ -63,7 +67,7 @@ try {
   let captured = null;
   const sendOk = async (p) => { captured = p; return { data: { id: 'mock' }, error: null }; };
   const pdfOk = async () => Buffer.from('%PDF-1.4\n cuerpo del pdf de prueba '.padEnd(1200, 'x'));
-  const r = await emailQuoteSvc(db, qid, { to: 'dest@x.com', sendEmail: sendOk, renderPdf: pdfOk });
+  const r = await emailQuoteSvc(db, qid, { to: 'dest@x.test', sendEmail: sendOk, renderPdf: pdfOk });
   ok(r.sent === true, 'el envío del presupuesto se completa');
   ok(captured && Array.isArray(captured.attachments) && captured.attachments.length === 1, 'el email lleva exactamente 1 adjunto');
   ok(captured.attachments[0].filename === 'Presupuesto-PRE-0001.pdf', 'el adjunto se llama Presupuesto-PRE-0001.pdf (got ' + (captured.attachments[0] || {}).filename + ')');
@@ -75,7 +79,7 @@ try {
   const sendSpy = async (p) => { sendCalled = true; return { data: { id: 'x' }, error: null }; };
   const pdfFail = async () => { throw new Error('Chromium no disponible (simulado)'); };
   let errored = false;
-  try { await emailQuoteSvc(db, qid, { to: 'dest@x.com', sendEmail: sendSpy, renderPdf: pdfFail }); }
+  try { await emailQuoteSvc(db, qid, { to: 'dest@x.test', sendEmail: sendSpy, renderPdf: pdfFail }); }
   catch (e) { errored = /No se pudo generar el PDF/i.test(e.message); }
   ok(errored, 'fallo de PDF → error claro ("No se pudo generar el PDF…")');
   ok(sendCalled === false, 'con el PDF fallido NO se envía el email (sendEmail no se llama)');

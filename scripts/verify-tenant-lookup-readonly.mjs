@@ -14,6 +14,10 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import Database from 'better-sqlite3';
 import { getTenantByEmail, getTenantsByEmail } from '../core/control-db.js';
+// 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
+// puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
+// del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.
+// La puerta del correo los desvía a simulación. Ver docs/censo-correos.md.
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
@@ -57,7 +61,14 @@ real.close();
 
 // ── 3. Funcional: buscar por email sigue encontrando el negocio ─────────────────────────────
 console.log('\n[3] la búsqueda por email sigue funcionando');
-const email = 'ibrahingil@gmail.com';
+// EL CORREO SE LEE DE LA BASE, no se escribe aquí. Esta comprobación busca un negocio POR correo, así
+// que necesita uno que exista de verdad — y hasta el 25 ago 2026 estaba puesta a mano la bandeja del
+// dueño. No manda nada (es una consulta), pero una dirección real escrita en una comprobación es cómo
+// empiezan estas cosas. Leyéndola de la base sigue existiendo y no está escrita en ninguna parte.
+const dev = new Database('data/tenants/desarrollo-bamburu.db', { readonly: true, fileMustExist: true });
+const email = dev.prepare("SELECT email FROM admin_users WHERE active=1 AND email LIKE '%@%' ORDER BY id LIMIT 1").get()?.email;
+dev.close();
+if (!email) { console.error('\n✗ ABORTADO — el negocio de desarrollo no tiene ningún admin con correo. No ha verificado NADA.'); process.exit(2); }
 const uno = getTenantByEmail(email);
 ok(!!uno && !!uno.slug, `getTenantByEmail("${email}") → "${uno?.slug}"`);
 const todos = getTenantsByEmail(email);

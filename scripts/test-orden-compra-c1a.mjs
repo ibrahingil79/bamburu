@@ -12,6 +12,10 @@
 import Database from 'better-sqlite3';
 import { runMigrations } from '../modules/erp/models.js';
 import {
+// 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
+// puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
+// del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.
+// La puerta del correo los desvía a simulación. Ver docs/censo-correos.md.
   createPurchaseOrderSvc, updatePurchaseOrderSvc, sendPurchaseOrderSvc,
   anularPurchaseOrderSvc, anularYRehacerSvc, emailPurchaseOrderSvc, purchaseOrderTotals,
   lastKnownCost,
@@ -284,7 +288,7 @@ console.log('10. Foto congelada al enviar');
 {
   const db = freshDb();
   db.prepare("UPDATE company_config SET company_name='Velas Ibra', fiscal_id='12345678Z', address='Calle Vieja 1', phone='600111222' WHERE id=1").run();
-  const sup = db.prepare("INSERT INTO suppliers (name, fiscal_id, address, city, email) VALUES ('Prov Foto','B11111111','Av. Norte 5','Sevilla','p@x.com')").run().lastInsertRowid;
+  const sup = db.prepare("INSERT INTO suppliers (name, fiscal_id, address, city, email) VALUES ('Prov Foto','B11111111','Av. Norte 5','Sevilla','p@x.test')").run().lastInsertRowid;
   const p = addProduct(db);
   const mk = () => createPurchaseOrderSvc(db, { supplier_id: sup, date: '2026-06-10', items: [{ product_id: p, quantity: 1, unit_cost: 2 }] });
 

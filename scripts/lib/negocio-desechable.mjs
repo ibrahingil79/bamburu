@@ -22,13 +22,19 @@ import path from 'path';
 import { provisionTenant } from '../../core/tenant-provisioning.js';
 import { controlDb, getTenantBySlug } from '../../core/control-db.js';
 import { APP_DIR } from './gate-env.mjs';
+import { correoDePrueba, ENTREGADO } from './correo-de-prueba.mjs';
 
 export async function negocioDesechable(nombre, { oficio = null } = {}) {
   const rid = randomBytes(3).toString('hex');
+  const correoDueño = correoDePrueba(nombre + '-' + rid);
   const alta = await provisionTenant({
     businessName: nombre + ' ' + rid,
     ownerName: 'Dueña de prueba',
-    email: nombre.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + rid + '@bamburu.test',
+    // 25 ago 2026 · DIRECCIÓN DE SIMULACIÓN, NO INVENTADA. Antes era `@bamburu.test`, que no existe:
+    // cada correo que el producto mandaba a este negocio de prueba **rebotaba** contra bamburu.com.
+    // En agosto rebotaron 122 de 675 envíos (el 18 %), y los rebotes son lo que llevó a Resend a
+    // suprimir una dirección REAL, que lleva ocho días sin recibir nada. Ver docs/censo-correos.md.
+    email: correoDueño,
     password: 'Gate.' + rid + '.Desechable!',
     phone: '+34 600 000 000',
   });
@@ -42,8 +48,11 @@ export async function negocioDesechable(nombre, { oficio = null } = {}) {
   }
   const dueño = db.prepare("SELECT id FROM admin_users WHERE role='owner' ORDER BY id LIMIT 1").get();
 
+  // El correo del dueño se devuelve: hay comprobaciones que necesitan «una dirección que EXISTE de
+  // verdad en un negocio» y hasta ahora la sacaban del primer negocio real que pillaban — con lo
+  // que acababan mandando correo a una bandeja de verdad.
   return {
-    rid, slug, db, abs,
+    rid, slug, db, abs, correoDueño,
     // La dirección por la que se le habla, igual que a cualquier negocio.
     base: 'https://' + slug + '.bamburu.com',
     dueñoId: dueño ? dueño.id : null,
@@ -87,7 +96,7 @@ export function sembrarFlujoDocumentos(db, { stock = 20, precio = 30 } = {}) {
   const almacen = db.prepare("SELECT id FROM warehouses WHERE active=1 ORDER BY id LIMIT 1").get()
     || { id: db.prepare("INSERT INTO warehouses (name, active) VALUES ('Almacén', 1)").run().lastInsertRowid };
   const cliente = db.prepare(
-    "INSERT INTO clients (name, email, fiscal_id, active) VALUES ('Cliente de prueba', 'cliente@bamburu.test', 'B00000000', 1)"
+    "INSERT INTO clients (name, email, fiscal_id, active) VALUES ('Cliente de prueba', '" + ENTREGADO + "', 'B00000000', 1)"
   ).run().lastInsertRowid;
   const producto = db.prepare(
     "INSERT INTO products (name, sku, price, tax_rate, tax_band, type, status, stock) "

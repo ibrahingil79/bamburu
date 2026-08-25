@@ -11,6 +11,10 @@ import { emitTicketSvc, emitSustitutivaSvc, createInvoice, anularInvoice } from 
 import { recordMovement, productStock } from '../modules/erp/stock.js';
 import { invoiceCobro, paymentsSum, countsAsReceivable, collectionsWorklist } from '../modules/erp/cobros.js';
 import { altaHuella } from '../modules/erp/verifactu.js';
+// 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
+// puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
+// del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.
+// La puerta del correo los desvía a simulación. Ver docs/censo-correos.md.
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
@@ -24,7 +28,7 @@ try {
   runMigrations(db);
   db.prepare("INSERT OR IGNORE INTO company_config (id, company_name, fiscal_id, tax_rate) VALUES (1,'Acme SL','B11111111',21)").run();
   db.prepare("UPDATE company_config SET country='ES', irpf_default=15, company_name='Acme SL', fiscal_id='B11111111', address='C/ Mayor 1' WHERE id=1").run();
-  const cli = db.prepare("INSERT INTO clients (name, fiscal_id, address, email, client_type) VALUES ('Cliente Empresa SL','B22222222','Av. Test 2','c@x.com','empresa')").run().lastInsertRowid;
+  const cli = db.prepare("INSERT INTO clients (name, fiscal_id, address, email, client_type) VALUES ('Cliente Empresa SL','B22222222','Av. Test 2','c@x.test','empresa')").run().lastInsertRowid;
   const whMain = db.prepare("SELECT id FROM warehouses WHERE is_default=1").get().id;
   const pRed = db.prepare("INSERT INTO products (name,slug,sku,price,stock,status,type,tax_rate,tax_band) VALUES ('Libro','libro','LIB1',10,0,'active','physical',10,'reducido')").run().lastInsertRowid;
   recordMovement(db, { product_id: pRed, type: 'apertura', quantity: 30, origin_type: 'opening', warehouse_id: whMain });

@@ -268,7 +268,10 @@ export const GRUPOS = {
   // 'verify-disco-perfiles' entra el 24 ago 2026, el día que el disco se llenó al 100 % POR SEGUNDA VEZ
   // y tiró el navegador, las capturas y hasta el /tmp del sistema. El arreglo está en
   // scripts/lib/perfil-chromium.mjs; esto es el aviso, para enterarse por un rojo y no por un servidor caído.
-  infra: ['verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
+  // 25 ago 2026 · Las dos del correo. `verify-correo-freno` prueba que el freno para de verdad al
+  // llegar al tope; `verify-comprobaciones-sin-correo-real` vigila la norma del dueño: ninguna
+  // comprobación vuelve a escribir a una bandeja real. Ver docs/censo-correos.md.
+  infra: ['verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
           // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
           // archivar si lo dejó, y decirlo ANTES de pulsar. Antes daba un 500 seco.

@@ -85,7 +85,7 @@
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-08-24 · `874e321` · **198/205** · 1199 s
+- **Último barrido completo:** 2026-08-25 · `8b605f8` · **197/205** · 1172 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->

@@ -5,6 +5,10 @@ import { tmpdir } from 'os'; import { join } from 'path'; import { randomBytes }
 import { runMigrations } from '../modules/erp/models.js';
 import { createInvoice } from '../modules/erp/routes/invoices.js';
 import { createToken, validateToken, revokeTokensDeCliente, clientInvoices, invoiceBelongsToClient,
+// 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
+// puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
+// del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.
+// La puerta del correo los desvía a simulación. Ver docs/censo-correos.md.
          transferData, setPortalSetting, sendPortalLink } from '../modules/portal/portal.js';
 
 const DBF = join(tmpdir(), 'portal-' + randomBytes(4).toString('hex') + '.db');
@@ -15,8 +19,8 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail
 try {
   runMigrations(db);
   db.prepare("INSERT OR IGNORE INTO company_config (id, company_name, fiscal_id, invoice_series) VALUES (1,'Mi Empresa SL','89890001K','F')").run();
-  db.prepare("INSERT INTO clients (name, fiscal_id, client_type, payment_term_days, email) VALUES ('Cliente A','A1','empresa',0,'a@cli.com')").run();
-  db.prepare("INSERT INTO clients (name, fiscal_id, client_type, payment_term_days, email) VALUES ('Cliente B','B2','empresa',0,'b@cli.com')").run();
+  db.prepare("INSERT INTO clients (name, fiscal_id, client_type, payment_term_days, email) VALUES ('Cliente A','A1','empresa',0,'a@cli.test')").run();
+  db.prepare("INSERT INTO clients (name, fiscal_id, client_type, payment_term_days, email) VALUES ('Cliente B','B2','empresa',0,'b@cli.test')").run();
   const A = db.prepare("SELECT id FROM clients WHERE name='Cliente A'").get().id;
   const B = db.prepare("SELECT id FROM clients WHERE name='Cliente B'").get().id;
   const fA1 = createInvoice(db, { client_id: A, issue_date: '2026-03-01', lines: [{ description: 'S', quantity: 1, unit_price: 100, tax_rate: 21 }] }); // 121
@@ -60,7 +64,7 @@ try {
   let capt = null;
   const mock = async (opts) => { capt = opts; return { data: { id: 'x' }, error: null }; };
   const res = await sendPortalLink(db, A, 'https://desarrollo-bamburu.bamburu.com', mock);
-  ok(res.sent && capt.to === 'a@cli.com', 'envía el email al email del cliente');
+  ok(res.sent && capt.to === 'a@cli.test', 'envía el email al email del cliente');
   ok(/\/portal\//.test(capt.html) && capt.subject.includes('facturas'), 'el email contiene el enlace /portal/<token>');
   // cliente sin email → error claro, sin crear enlace a ciegas
   db.prepare("UPDATE clients SET email='' WHERE id=?").run(B);

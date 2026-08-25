@@ -8,6 +8,10 @@ import { parseSignup } from '../core/signup-schema.js';
 import { emailTaken, validateSignupDraft, createTenantSvc } from '../core/tenant-signup.js';
 import { provisionTenant } from '../core/tenant-provisioning.js';
 import { controlDb, getTenantBySlug } from '../core/control-db.js';
+// 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
+// puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
+// del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.
+// La puerta del correo los desvía a simulación. Ver docs/censo-correos.md.
 
 let ok = 0, fail = 0;
 const check = (label, cond, extra = '') => {
@@ -27,7 +31,16 @@ function deleteTenant(slug) {
   if (t) dropTenantFiles(t.db_filename);
 }
 
-const DEV_EMAIL = 'ibrahingil@gmail.com';   // owner del tenant dev (email ya existente)
+// EL CORREO DEL DUEÑO SE LEE DE LA BASE. Tiene que ser uno que YA exista —de eso va la prueba: que el
+// alta rechace un correo ocupado— y estaba escrito a mano. 25 ago 2026: una dirección real escrita en
+// una comprobación es cómo empieza una avalancha; se lee y no se escribe. Ver docs/censo-correos.md.
+const DEV_EMAIL = (() => {
+  const d = new Database('data/tenants/desarrollo-bamburu.db', { readonly: true, fileMustExist: true });
+  const e = d.prepare("SELECT email FROM admin_users WHERE active=1 AND email LIKE '%@%' ORDER BY id LIMIT 1").get()?.email;
+  d.close();
+  if (!e) { console.error('\\n✗ ABORTADO — el negocio de desarrollo no tiene ningún admin con correo. No ha verificado NADA.'); process.exit(2); }
+  return e;
+})();
 const created = [];                          // tenants a limpiar al final
 
 try {
@@ -35,17 +48,17 @@ try {
   {
     const e1 = await threw(() => parseSignup({ businessName: 'X', ownerName: 'A', email: 'no-es-email', password: 'abcdefgh' }));
     check('email inválido → 400 field=email', e1?.status === 400 && e1?.field === 'email');
-    const e2 = await threw(() => parseSignup({ businessName: 'X', ownerName: 'A', email: 'a@b.com', password: 'corta' }));
+    const e2 = await threw(() => parseSignup({ businessName: 'X', ownerName: 'A', email: 'a@b.test', password: 'corta' }));
     check('contraseña < 8 → 400 field=password', e2?.status === 400 && e2?.field === 'password');
-    const e3 = await threw(() => parseSignup({ ownerName: 'A', email: 'a@b.com', password: 'abcdefgh' }));
+    const e3 = await threw(() => parseSignup({ ownerName: 'A', email: 'a@b.test', password: 'abcdefgh' }));
     check('falta businessName → 400 field=businessName', e3?.status === 400 && e3?.field === 'businessName');
-    const e4 = await threw(() => parseSignup({ businessName: 'X', email: 'a@b.com', password: 'abcdefgh' }));
+    const e4 = await threw(() => parseSignup({ businessName: 'X', email: 'a@b.test', password: 'abcdefgh' }));
     check('falta ownerName → 400 field=ownerName', e4?.status === 400 && e4?.field === 'ownerName');
-    const d = parseSignup({ businessName: 'Mi Tienda', sector: 'Comercio', ownerName: 'Ana', email: 'ANA@Ej.COM', country: 'XX', password: 'abcdefgh' });
-    check('válido: email en minúsculas', d.email === 'ana@ej.com');
+    const d = parseSignup({ businessName: 'Mi Tienda', sector: 'Comercio', ownerName: 'Ana', email: 'ANA@Ej.test', country: 'XX', password: 'abcdefgh' });
+    check('válido: email en minúsculas', d.email === 'ana@ej.test');
     check('válido: país desconocido → ES', d.country === 'ES');
     check('válido: sector conservado', d.sector === 'Comercio');
-    const draft = parseSignup({ businessName: 'X', ownerName: 'A', email: 'a@b.com' }, { draft: true });
+    const draft = parseSignup({ businessName: 'X', ownerName: 'A', email: 'a@b.test' }, { draft: true });
     check('borrador sin contraseña valida (sector opcional = "")', draft.sector === '' && !('password' in draft));
   }
 
@@ -65,7 +78,7 @@ try {
     const before = tenantsCount();
     const e1 = await threw(() => createTenantSvc({ businessName: 'X', ownerName: 'A', email: 'malo', password: 'abcdefgh' }));
     check('email malo → throw 400', e1?.status === 400 && e1?.field === 'email');
-    const e2 = await threw(() => createTenantSvc({ businessName: 'X', ownerName: 'A', email: 'b@b.com', password: '123' }));
+    const e2 = await threw(() => createTenantSvc({ businessName: 'X', ownerName: 'A', email: 'b@b.test', password: '123' }));
     check('contraseña corta → throw 400', e2?.status === 400 && e2?.field === 'password');
     const e3 = await threw(() => createTenantSvc({ businessName: 'X', ownerName: 'A', email: DEV_EMAIL, password: 'abcdefgh' }));
     check('email duplicado → throw 409', e3?.status === 409 && e3?.field === 'email');

@@ -85,6 +85,28 @@ function runMigrations(db) {
     )
   `);
 
+  // ── FRENO DE CORREO: cuántos se han enviado en la última hora ────────────────────────────────
+  // Misma idea que `llm_spend_global`, pero para el correo: un acumulador que permite PARAR antes de
+  // vaciar el cupo del plan sin que nadie se entere.
+  //
+  // POR QUÉ ESTÁ EN control.db Y NO EN MEMORIA. Las comprobaciones corren en procesos separados —una
+  // pasada del barrido son 205 procesos— y cada uno tendría su propio contador: entre todos podrían
+  // mandar cientos de correos sin que ninguno pasara de dos. El único sitio donde se ve el conjunto
+  // es una tabla compartida.
+  //
+  // Se apunta ANTES de enviar, no después: si se apuntara después, un montón de procesos a la vez
+  // pasarían todos el control antes de que ninguno hubiera dejado rastro.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS correo_envios (
+      id      INTEGER PRIMARY KEY,
+      ts      TEXT    NOT NULL,
+      destino TEXT    NOT NULL DEFAULT '',
+      asunto  TEXT    NOT NULL DEFAULT '',
+      frenado INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS ix_correo_envios_ts ON correo_envios(ts)');
+
   // Configuración de países disponibles en la plataforma
   db.exec(`
     CREATE TABLE IF NOT EXISTS country_configs (

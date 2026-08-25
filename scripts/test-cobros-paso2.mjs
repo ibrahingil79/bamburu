@@ -6,6 +6,10 @@
 import Database from 'better-sqlite3';
 import { runMigrations } from '../modules/erp/models.js';
 import {
+// 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
+// puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
+// del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.
+// La puerta del correo los desvía a simulación. Ver docs/censo-correos.md.
   calcularProximaAccion, priorizarCobros, collectionsWorklist,
   invoiceProximaAccion, registerCollectionAction, collectionEmail,
   invoiceActionHistory, activeActions, CADENCIAS,
@@ -20,11 +24,11 @@ const TODAY = '2026-06-08';
 function freshDb() {
   const db = new Database(':memory:');
   runMigrations(db);
-  db.prepare("UPDATE company_config SET company_name=?, email=?, currency_symbol=? WHERE id=1").run('Autónomo SL', 'yo@autonomo.es', '€');
+  db.prepare("UPDATE company_config SET company_name=?, email=?, currency_symbol=? WHERE id=1").run('Autónomo SL', 'yo@autonomo.test', '€');
   return db;
 }
 let seq = 0;
-function addClient(db, profile, email = 'cliente@x.es', name = 'Cliente') {
+function addClient(db, profile, email = 'cliente@x.test', name = 'Cliente') {
   return db.prepare("INSERT INTO clients (name,email,active,collections_profile) VALUES (?,?,1,?)").run(name, email, profile).lastInsertRowid;
 }
 function addInvoice(db, { clientId, due, total = 100, status = 'emitida', number }) {
@@ -129,7 +133,7 @@ console.log('5. Servicio registerCollectionAction');
   let sent = null;
   const mock = async (payload) => { sent = payload; return { data: { id: 'em_test' }, error: null }; };
   const r1 = await registerCollectionAction(db, id, { type: 'recordatorio_email' }, { sendEmail: mock, today: TODAY, now: TODAY + 'T10:00:00Z' });
-  ok(sent && sent.to === 'cliente@x.es', 'recordatorio_email envió email al cliente');
+  ok(sent && sent.to === 'cliente@x.test', 'recordatorio_email envió email al cliente');
   ok(sent.subject && sent.text, 'email con asunto y cuerpo');
   eq(r1.email.sent, true, 'servicio reporta email enviado');
   eq(activeActions(db, id).length, 1, 'recordatorio quedó en el log');
@@ -187,8 +191,8 @@ console.log('6. Tres superficies coherentes');
 console.log('7. DISA cobros');
 {
   const db = freshDb();
-  const cA = addClient(db, 'firme', 'a@x.es', 'Ana');
-  const cB = addClient(db, 'estandar', 'b@x.es', 'Bea');
+  const cA = addClient(db, 'firme', 'a@x.test', 'Ana');
+  const cB = addClient(db, 'estandar', 'b@x.test', 'Bea');
   const iA = addInvoice(db, { clientId: cA, due: '2026-03-01', total: 500 }); // muy vencida
   const iB = addInvoice(db, { clientId: cB, due: '2026-06-04', total: 100 }); // poco vencida
 
@@ -202,7 +206,7 @@ console.log('7. DISA cobros');
   let sent = null;
   const mock = async (p) => { sent = p; return { data: { id: 'x' }, error: null }; };
   await registerCollectionAction(db, iB, { type: 'recordatorio_email' }, { sendEmail: mock, today: TODAY, now: TODAY + 'T09:00:00Z' });
-  ok(sent && sent.to === 'b@x.es', 'DISA (vía servicio) envió el recordatorio');
+  ok(sent && sent.to === 'b@x.test', 'DISA (vía servicio) envió el recordatorio');
   eq(invoiceActionHistory(db, iB).length, 1, 'quedó registrado por el servicio');
 
   // Plantillas por tono diferenciadas.

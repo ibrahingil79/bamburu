@@ -44,7 +44,17 @@ try {
     JSON.stringify((init.body.reply || '').slice(0, 60)));
 
   console.log('\n[2] Conversación con DISA (modelo real): datos + EMAIL DUPLICADO antes del resumen');
-  const DUP_EMAIL = 'ibrahingil@gmail.com';   // ya pertenece al tenant dev → debe rechazarse
+  // LA DIRECCIÓN DUPLICADA SE LEE DE LA BASE, NO SE ESCRIBE AQUÍ. 25 ago 2026: estaba puesta a mano
+  // (`ibrahingil@gmail.com`) porque tenía que ser una que YA existiera. No manda ningún correo —el
+  // alta la rechaza precisamente por duplicada—, pero tener la bandeja del dueño escrita en una
+  // comprobación es cómo empiezan estas cosas: basta que alguien mueva la línea de sitio. Leyéndola
+  // de la base se sigue cumpliendo lo único que importa —que exista— sin escribirla en ninguna parte.
+  const tDev = getTenantBySlug('desarrollo-bamburu');
+  const dbDev = new Database(path.isAbsolute(tDev.db_filename) ? tDev.db_filename
+    : path.join(path.dirname(new URL(import.meta.url).pathname), '..', tDev.db_filename), { readonly: true });
+  const DUP_EMAIL = dbDev.prepare("SELECT email FROM admin_users WHERE active=1 AND email LIKE '%@%' ORDER BY id LIMIT 1").get()?.email;
+  if (!DUP_EMAIL) { console.error('\n✗ GATE ABORTADO — el negocio de desarrollo no tiene ningún admin con correo. No ha verificado NADA.'); process.exit(2); }
+  dbDev.close();
   const email = `gate.alta.${RID}.${Date.now()}@ejemplo.com`;
   const bizName = `Peluquería Gate ${RID}`;
 

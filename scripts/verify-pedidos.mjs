@@ -15,6 +15,10 @@ import { invoiceStockExcess } from '../modules/erp/routes/invoices.js';
 import { warehouseBreakdown } from '../modules/erp/routes/warehouses.js';
 import { createStockTransferSvc } from '../modules/erp/routes/stock-transfers.js';
 import { recordMovement, reservedOfProduct, availableOfProduct, productStock, productStockInWarehouse, adjustStock } from '../modules/erp/stock.js';
+// 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
+// puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
+// del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.
+// La puerta del correo los desvía a simulación. Ver docs/censo-correos.md.
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
@@ -26,8 +30,8 @@ const db = new Database(dbPath);
 try {
   runMigrations(db);
   db.prepare("INSERT OR IGNORE INTO company_config (id, company_name, fiscal_id, tax_rate) VALUES (1,'Acme SL','B11111111',21)").run();
-  db.prepare("UPDATE company_config SET fiscal_id='B11111111', country='ES', irpf_default=15, company_name='Acme SL', address='Calle Mayor 1', phone='600', email='acme@x.com' WHERE id=1").run();
-  const cli = db.prepare("INSERT INTO clients (name, fiscal_id, address, email, client_type) VALUES ('Cliente Empresa SL','B22222222','Av. Test 2','cli@x.com','empresa')").run().lastInsertRowid;
+  db.prepare("UPDATE company_config SET fiscal_id='B11111111', country='ES', irpf_default=15, company_name='Acme SL', address='Calle Mayor 1', phone='600', email='acme@x.test' WHERE id=1").run();
+  const cli = db.prepare("INSERT INTO clients (name, fiscal_id, address, email, client_type) VALUES ('Cliente Empresa SL','B22222222','Av. Test 2','cli@x.test','empresa')").run().lastInsertRowid;
 
   // Almacenes: el principal lo crea la migración; añadimos un segundo.
   const whMain = db.prepare("SELECT id FROM warehouses WHERE is_default=1").get().id;

@@ -25,6 +25,7 @@ import { pasosDe, estadoArranque, trabajaConCitas } from '../modules/erp/arranqu
 import { datosHoy, fabricaDe, bloqueAplica, bloquesDisponibles, NATIVOS } from '../modules/erp/inicio-layout.js';
 import { ocupacionDia, huecosQueSePierden } from '../modules/erp/vigia-agenda.js';
 import { agendaData } from '../modules/erp/routes/citas.js';
+import { correoDePrueba } from './lib/correo-de-prueba.mjs';
 
 const RID = randomBytes(3).toString('hex');
 const APP = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -50,11 +51,21 @@ let browser = null;
 async function nuevoNegocio(nombre, oficio) {
   const r = randomBytes(3).toString('hex');
   const alta = await provisionTenant({ businessName: nombre + ' ' + r, ownerName: 'Dueña ' + r,
-    email: 'ga-' + r + '@bamburu.test', password: 'Gate.Ar.' + r + '!', phone: '+34 600 000 000' });
+    // 25 ago 2026 · Simulación, no `@bamburu.test`. Este gate pide una MIGRACIÓN de verdad, y el
+    // producto manda dos correos por ello: el acuse a esta dirección y el aviso al buzón del equipo.
+    // Con la dirección inventada, el acuse rebotaba contra bamburu.com en cada pasada del barrido.
+    email: correoDePrueba('inicio-arranque-' + r), password: 'Gate.Ar.' + r + '!', phone: '+34 600 000 000' });
   const t = getTenantBySlug(alta.slug);
   const db = new Database(path.isAbsolute(t.db_filename) ? t.db_filename : path.join(APP, t.db_filename));
   tenants.push({ slug: alta.slug, db });
   if (oficio) fijarOficio(db, oficio);
+  // Y EL BUZÓN DEL EQUIPO, TAMBIÉN DE SIMULACIÓN. El aviso de «Migración pedida» no va al que la
+  // pide: va a `settings.migracion_buzon`, y si el negocio no lo tiene puesto, el producto usa su
+  // valor por defecto, que es la bandeja REAL del dueño. Ese es el segundo de los dos correos que
+  // este gate le metía en cada pasada del barrido. Se fija aquí, dentro de SU negocio desechable:
+  // el valor por defecto del producto no se toca, que ese sí tiene que seguir yendo donde va.
+  db.prepare("INSERT INTO settings (key, value) VALUES ('migracion_buzon', ?)"
+    + " ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(correoDePrueba('buzon-equipo'));
   const owner = db.prepare("SELECT id FROM admin_users WHERE role='owner'").get();
   const now = Math.floor(Date.now() / 1000), tok = randomBytes(32).toString('base64url');
   const csrf = randomBytes(32).toString('base64url');

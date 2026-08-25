@@ -15,6 +15,10 @@ import { mkdtempSync, mkdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { TOTP, NobleCryptoPlugin, ScureBase32Plugin } from 'otplib';
+// 25 ago 2026 · Direcciones de dominio IMPOSIBLE (`.test`), no de dominios que existen de verdad.
+// `ej.com`, `minegocio.com` y `barpepe.com` son dominios reales de otra gente: un correo de
+// recuperación de contraseña dirigido ahí acaba en casa de un desconocido. `.test` está reservado
+// justo para esto (RFC 2606) y la puerta del correo lo desvía a simulación. Ver docs/censo-correos.md.
 
 let ok = 0, fail = 0;
 const check = (label, cond, extra = '') => {
@@ -77,7 +81,7 @@ try {
   }
 
   const PW = 'contrasenya-larga-superadmin';
-  const EMAIL = 'jefe@bamburu.com';
+  const EMAIL = 'jefe@bamburu.test';
   cdb.createSuperadmin({ email: EMAIL, password_hash: await hashPassword(PW), must_change_password: 0 });
   const admin = cdb.getSuperadminByEmail(EMAIL);
 

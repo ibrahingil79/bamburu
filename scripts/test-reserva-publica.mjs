@@ -21,6 +21,10 @@ import {
   resolverClientePublico, politicaHuecos,
 } from '../modules/erp/reserva-publica.js';
 import {
+// 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
+// puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
+// del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.
+// La puerta del correo los desvía a simulación. Ver docs/censo-correos.md.
   ajustesPublicos, handleEfectivo, slugHandle, exigirPuerta, personasPublicas,
   ventanaCliente, reservaDeCita, textoConsentimiento, reservasPublicasPendientes, PUERTA_CERRADA,
 } from '../modules/erp/reserva-publica-config.js';
@@ -176,7 +180,7 @@ try {
 
     const r = crearReservaPublica(db, {
       service_ids: [corte], user_id: ana, fecha, inicio_min: 10 * 60,
-      nombre: 'María García', movil: '600111222', email: 'maria@ej.com',
+      nombre: 'María García', movil: '600111222', email: 'maria@ej.test',
       consent: true, trampa: '',
     }, { ahora });
     ok(r.id > 0 && /^CITA-\d{4}$/.test(r.codigo), 'la cita se crea con el código de la pieza 5: ' + r.codigo);
@@ -194,7 +198,7 @@ try {
 
     const res = reservaDeCita(db, r.id);
     ok(res != null, 'queda la marca de origen: existe fila en cita_reserva_publica');
-    ok(res.email === 'maria@ej.com', 'se guarda el email (el cliente suelto de la pieza 5 no tenía dónde)');
+    ok(res.email === 'maria@ej.test', 'se guarda el email (el cliente suelto de la pieza 5 no tenía dónde)');
     ok(res.consent_texto === textoConsentimiento('Peluquería Lola'), 'se archiva el TEXTO EXACTO del consentimiento aceptado');
     ok(/^\d{4}-\d{2}-\d{2}/.test(res.consent_at), 'con su fecha y hora: ' + res.consent_at);
     ok(res.politica_texto === 'Avísanos con 24 h.', 'se archiva la política TAL COMO SE MOSTRÓ, no la de hoy');
@@ -296,15 +300,15 @@ try {
     const ahora = AHORA(proximoLunes(0), 8 * 60);
 
     const cliTel = db.prepare("INSERT INTO clients (name,email,movil_e164,active,client_code) VALUES (?,?,?,1,'CLI-0001')")
-      .run('María García', 'maria@ej.com', '+34600111222').lastInsertRowid;
+      .run('María García', 'maria@ej.test', '+34600111222').lastInsertRowid;
     const cliMail = db.prepare("INSERT INTO clients (name,email,movil_e164,active,client_code) VALUES (?,?,?,1,'CLI-0002')")
-      .run('Pedro Ruiz', 'Pedro@Ej.com', '').lastInsertRowid;
+      .run('Pedro Ruiz', 'Pedro@Ej.test', '').lastInsertRowid;
     const antes = db.prepare('SELECT COUNT(*) n FROM clients').get().n;
 
     // Por MÓVIL, escrito en nacional (se normaliza a +34… antes de buscar).
     ok(resolverClientePublico(db, { movil: '600 111 222' }).cliente_id === cliTel, 'resolverClientePublico enlaza por móvil NORMALIZADO');
-    ok(resolverClientePublico(db, { email: 'PEDRO@ej.COM' }).cliente_id === cliMail, 'y por email, sin distinguir mayúsculas');
-    ok(resolverClientePublico(db, { movil: '699000000', email: 'nadie@ej.com' }).cliente_id === null, 'y devuelve null si no hay nadie');
+    ok(resolverClientePublico(db, { email: 'PEDRO@ej.test' }).cliente_id === cliMail, 'y por email, sin distinguir mayúsculas');
+    ok(resolverClientePublico(db, { movil: '699000000', email: 'nadie@ej.test' }).cliente_id === null, 'y devuelve null si no hay nadie');
 
     const r = crearReservaPublica(db, {
       service_ids: [corte], user_id: ana, fecha, inicio_min: 10 * 60,
@@ -316,7 +320,7 @@ try {
 
     const r2 = crearReservaPublica(db, {
       service_ids: [corte], user_id: ana, fecha, inicio_min: 11 * 60,
-      nombre: 'P. Ruiz', email: 'pedro@ej.com', consent: true,
+      nombre: 'P. Ruiz', email: 'pedro@ej.test', consent: true,
     }, { ahora });
     ok(db.prepare('SELECT cliente_id FROM citas WHERE id=?').get(r2.id).cliente_id === cliMail, 'y enlaza igual por email');
     ok(db.prepare('SELECT COUNT(*) n FROM clients').get().n === antes,
@@ -499,7 +503,7 @@ try {
     const db = nuevaBD(); abrirPuerta(db); horarioLV(db);
     const ana = usuario(db, 'Ana Sistema'); verVisible(db, ana, 'Ana');
     const corte = servicio(db, { nombre: 'Corte', precio: 20, dur: 30 });
-    db.prepare("INSERT INTO clients (name,email,movil_e164,active,client_code) VALUES ('Cliente Secreto','secreto@ej.com','+34600555444',1,'CLI-0001')").run();
+    db.prepare("INSERT INTO clients (name,email,movil_e164,active,client_code) VALUES ('Cliente Secreto','secreto@ej.test','+34600555444',1,'CLI-0001')").run();
     const fecha = proximoLunes();
     const ahora = AHORA(proximoLunes(0), 8 * 60);
     crearReservaPublica(db, {
@@ -513,7 +517,7 @@ try {
       huecos: huecosPublicos(db, { fecha, service_ids: [corte], ahora }).map(h => ({ min: h.min, hora: h.hora })),
     });
     ok(!superficie.includes('Cliente Secreto'), 'lo que sale a la calle no lleva nombres de clientes');
-    ok(!superficie.includes('secreto@ej.com') && !superficie.includes('600555444'), 'ni emails ni teléfonos de terceros');
+    ok(!superficie.includes('secreto@ej.test') && !superficie.includes('600555444'), 'ni emails ni teléfonos de terceros');
     ok(!superficie.includes('Sistema'), 'ni nombres de usuarios del sistema');
     ok(!superficie.includes('Otro'), 'ni el nombre de quien acaba de reservar');
     ok(!/cita_id|token|CITA-/.test(superficie), 'ni identificadores ni llaves de citas ajenas');
