@@ -1,6 +1,6 @@
 # RITUAL DE TRABAJO — Bamburu
 
-> Cómo se trabaja en cada sesión. Para alguien solo, con Claude Code, sin horario fijo.
+> Cómo trabajan en cada sesión el chat/orquestador y Codex como programador/ejecutor, sin horario fijo.
 > La consistencia no viene del reloj — viene de repetir el mismo ritual cada vez.
 
 ---
@@ -35,7 +35,7 @@ node scripts/run-gates.mjs --lista        # enseña QUÉ correría, sin correr n
 ```
 
 Los dos funcionan igual que siempre y se invocan **a mano, cuando Ibrahin lo pide**. Lo que
-desaparece es el disparo por iniciativa de Code: **no hay barrido «no negociable»**, ni antes del
+desaparece es el disparo por iniciativa de Codex: **no hay barrido «no negociable»**, ni antes del
 commit ni en ningún otro sitio.
 
 El **corto** sale de `git diff` y de tres fuentes que se SUMAN, nunca se restan: la tabla `AFECTA`
@@ -51,7 +51,7 @@ que no se ha corrido — nunca se presenta el corto como si lo fuera.
 
 ### 2. AL CERRAR UNA ENTREGA SE PROPONE. NUNCA SE LANZA SOLO.
 
-Code **propone** el barrido diciendo tres cosas:
+Codex **propone** el barrido diciendo tres cosas:
 
 1. **qué se ha tocado** (ficheros y áreas),
 2. **qué modo recomienda** (`--tocado` o `--all`) y por qué,
@@ -167,13 +167,13 @@ Dos redes de seguridad más, para que esto no dependa de acordarse:
 1. Anotar la hora de inicio en `session.json` (campo "sesion_inicio").
 2. Leer `CANON.md` (qué es Bamburu y qué NO) y `TABLERO.md` (qué toca).
 3. Leer `session.json` para saber dónde se quedó la sesión anterior.
-4. Coger la primera tarea de "POR HACER" en el TABLERO y moverla a "HACIENDO".
+4. Identificar la tarea pendiente (`⬜`) que corresponda al encargo vigente. El TABLERO no tiene columnas y no se mueve ninguna tarea a "HACIENDO". Si no hay encargo del dueño, no se inicia ninguna tarea.
 5. Releer su criterio de "HECHO CUANDO" y confirmarlo antes de tocar código.
 6. **Mirar si el barrido está pendiente** y, si lo está, PROPONERLO diciendo desde cuándo no se
    corre: `node scripts/barrido-estado.mjs`. Se propone; **no se lanza sin un sí de Ibrahin**.
 
 ## DURANTE la sesión
-6. Trabajar SOLO esa tarea. Nunca dos en "HACIENDO" a la vez.
+6. Trabajar SOLO esa tarea. Nunca dos tareas activas a la vez.
 7. Si aparece una idea nueva, pasarla por "la línea" (CANON sección 4):
    ¿ayuda al autónomo de servicios a gestionar su negocio? Si no → no se toca ahora.
    Si es buena pero no es de ahora → anotarla, no construirla.
@@ -219,7 +219,7 @@ como `NOTION_TOKEN`).
   1. **`🚦 DÓNDE LO DEJÉ / DÓNDE SIGO`** (arriba del todo, NO confundir con `📍 Dónde estoy`,
      que es un histórico más abajo y no se toca). Es una lista de citas, la más nueva primera:
      AÑADIR arriba una `> ✅ HECHO (D mes AAAA) — <código> — <resumen>. Commit <hash>.`, y que
-     termine en `· SIGUIENTE TAREA: <la primera de POR HACER en el TABLERO>`.
+     termine en `· SIGUIENTE TAREA: <la siguiente tarea pendiente según el orden vigente del TABLERO, o A LA ESPERA DE ENCARGO si no hay una tarea construible asignada>`.
   2. **KPIs** (sección `📊 KPIs`) — solo si la sesión mueve alguno. Los que existen:
      - **`Fase del producto`** → qué pilar está cerrado y cuál en curso. Se mueve al cerrar
        un pilar (Catálogo · Cliente · Inventario · Ventas). Espejo de él: la sección
@@ -270,7 +270,7 @@ como `NOTION_TOKEN`).
 ---
 
 ## Reglas que protegen el proyecto
-- UNA tarea en HACIENDO a la vez. Terminar antes de empezar.
+- UNA tarea activa a la vez. Terminar antes de empezar otra.
 - MOTORES antes que la CARA de DISA: el núcleo debe ser fiable antes de que DISA lo accione.
 - Nada de Capa 2 o 3 hasta cerrar Capa 1. Si tienta, releer CANON sección 5.
 - Se puede parar a mitad de una tarea: el ritual guarda el hilo para retomarlo.

@@ -1969,15 +1969,19 @@ miraba `admin_users`**.
 - **No se corrió** ningún barrido ni ningún gate: el encargo lo dijo arriba del todo.
 
 
-## 🧭 ORDEN DE TRABAJO ACORDADO (20 ago 2026) — nada de esto está iniciado
+## 🧭 ORDEN DE TRABAJO ACORDADO (20 ago 2026) — estado actualizado al 25 ago 2026
 
 > **Sesión de decisión: cero código, cero commits de producto.** Aquí queda el orden que se acordó y
-> el detalle de cada tarea. Ninguna se inicia sin encargo. **El puntero del Peldaño 8 NO se mueve:**
-> las tres son transversales o previas, y el peldaño sigue ABIERTO esperando su encargo.
+> el detalle de cada tarea. Ninguna se inicia sin encargo. **En la sesión del 20 ago el puntero del
+> Peldaño 8 no se movía**, porque las tres tareas eran transversales o previas. Su estado posterior se
+> refleja en el orden actualizado de abajo.
 
 **EL ORDEN:** (1) sanear las comprobaciones automáticas ✅ · (2) cerrar los cabos sueltos de la Agenda,
-como **UNA sola tarea entera** ✅ · (3) funciones nuevas ✅ **(las siete, 23 ago 2026)** · (4) volver al **Peldaño 8 — Salud/bienestar** ← **AQUÍ**.
-> ⚙️ *El puntero «← AQUÍ» estaba en la (3) y se corrige el 24 ago 2026: la (3) se cerró entera esa noche. El siguiente paso del orden acordado es el Peldaño 8.*
+como **UNA sola tarea entera** ✅ · (3) funciones nuevas ✅ **(las siete, 23 ago 2026)** ·
+(4) **Peldaño 8 — Salud/bienestar ✅ HECHO (24 ago 2026)** ·
+(5) **Peldaño 9 — Belleza/estética** ← **SIGUIENTE EN LA ESCALERA, A LA ESPERA DE ENCARGO**.
+> ⚙️ *El puntero «← AQUÍ» estaba en la (3) y se corrigió el 24 ago 2026 al cerrarse la (3): el siguiente paso era entonces el Peldaño 8.*
+> ⚙️ *Actualización 25 ago 2026: el Peldaño 8 quedó cerrado la noche del 24 ago. Según CANON §4, el siguiente en el orden es el Peldaño 9. No se inicia sin encargo del dueño.*
 
 ### ✅ TAREA 1 — Sanear las comprobaciones automáticas  ✅ HECHA (2026-08-20) — ver su ficha abajo
 
@@ -6638,10 +6642,11 @@ Aquí aterrizan, de las listas viejas:
   cliente que dejó de reservar. Hoy DISA solo LEE la agenda (pieza 1.14); esto sería el paso proactivo
   (avisar/proponer), apoyado en el vigía (peldaño 5).
 
-### 🟡 8 — Salud / bienestar · **2º oficio**  ⬅️ **AQUÍ ES DONDE VAMOS** · **EN CURSO (pieza 1 entregada, 15 ago 2026)**
+### ✅ 8 — Salud / bienestar · **2º oficio** · **HECHO (24 ago 2026)**
 Agenda presencial. **Se apoya en el peldaño 7, que quedó cerrado el 28 jul 2026**: el motor de citas, la
 agenda interna y la puerta pública de reserva ya existen y son de USO GENERAL, no de un oficio. Lo que
-este peldaño añade es la cara propia del sector, no otro motor.
+este peldaño añade es la cara propia del sector, no otro motor. **Cerrado por el PUNTO 15 de esta misma
+ficha. El siguiente en el orden de CANON §4 es el Peldaño 9, pero no está iniciado y espera encargo.**
 
 - **PIEZA 1 — PERFIL DE OFICIO EN LA AGENDA · ✅ ENTREGADA y verificada (15 ago 2026).** Al crear el
   negocio se ELIGE a qué se dedica, y la agenda habla su idioma desde el primer minuto sin configurar
@@ -6874,7 +6879,7 @@ este peldaño añade es la cara propia del sector, no otro motor.
     si fue el cliente o el negocio — hoy no hace falta para nada, pero el día que se quiera distinguir
     «me lo canceló el cliente» de «lo cancelé yo», ese dato **no existe**.
 
-### ⬜ 9 — Belleza / estética · **3er oficio**
+### ⬜ 9 — Belleza / estética · **3er oficio**  ⬅️ **SIGUIENTE EN LA ESCALERA · A LA ESPERA DE ENCARGO · NO INICIADO**
 Agenda + caja del día.
 
 ### ⬜ 10 — Proyectos · partes de horas · servicio de campo

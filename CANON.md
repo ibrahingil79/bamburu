@@ -1,6 +1,6 @@
 # CANON — Bamburu (v2: fase de LA ESCALERA)
 
-> Estrategia e identidad del proyecto. La mantiene Claude Code en el servidor y GitHub. El chat decide y redacta; Code ejecuta y commitea.
+> Estrategia e identidad del proyecto. El chat/orquestador decide y redacta los encargos; Codex actúa como programador/ejecutor técnico, mantiene el repo y commitea.
 
 ## 1. Qué es Bamburu (identidad — no se toca)
 Software de gestión de primer nivel a un precio que el autónomo sí puede pagar. Bamburu no es "software para pequeños": es software de clase mundial al alcance del autónomo. Los negocios pequeños no son negocios simples; si un autónomo no usa hoy ciertas funciones es porque no podía pagar el software que las tenía — Bamburu rompe eso.
@@ -135,7 +135,7 @@ dibuja, y por eso DISA predictiva (5) puede analizar sin construirse su propio d
 el usuario tiene gráficos guardados (4) tiene sentido dejarle componer su Inicio (6). Los oficios (7-9)
 van después porque un oficio sin números no es una cara, es un formulario.
 
-Decisión de mercado: cuándo sale Bamburu al mercado lo decide el dueño. El asistente y Code no recomiendan el momento de lanzar ni lo usan como argumento; solo ejecutan lo que el dueño prioriza.
+Decisión de mercado: cuándo sale Bamburu al mercado lo decide el dueño. El asistente y Codex no recomiendan el momento de lanzar ni lo usan como argumento; solo ejecutan lo que el dueño prioriza.
 
 ### 4-bis. Fase anterior: OPTIMIZACIÓN — ✅ CERRADA (A, B y C completos)
 
@@ -160,14 +160,14 @@ Optimizado cuando: el aislamiento multi-tenant está auditado sin fugas; no hay 
 ## 5. Reglas de trabajo
 - Simplicidad primero: el código mínimo que resuelve el problema; sin abstracciones ni configurabilidad no pedida. **Es del CÓDIGO, no del producto**: nunca se usa para recortar una función, un campo ni una opción — eso lo prohíbe §3-bis.
 - Cambios quirúrgicos: tocar solo lo pedido; aditivo, sin DROP; no tocar huella/Verifactu ni la lógica de documentos salvo autorización.
-- Verificación siempre: cada tarea con test/gate propio y cierre con regresión 0.
+- Verificación definida siempre: cada tarea especifica su test/gate propio. Ejecutar esa comprobación o cualquier regresión requiere la autorización expresa que fija `RITUAL.md`; el criterio de HECHO no la autoriza por sí solo.
 - Fuente única de tareas: TABLERO.md. Notion es solo panel.
 - Legal/regulatorio: verificado contra fuente oficial, nunca de memoria.
 - Un tema por chat.
 
 ## 6. Quién decide qué
 - El dueño decide: negocio, producto, prioridades, precios, experiencia de usuario, y cuándo salir al mercado.
-- El técnico (chat + Code) decide: base de datos, arquitectura, nombres, orden técnico de programar. Si una duda técnica tiene recomendación clara, se aplica sin preguntar y se explica en una frase simple.
+- El técnico (chat/orquestador + Codex) decide: base de datos, arquitectura, nombres, orden técnico de programar. Si una duda técnica tiene recomendación clara, se aplica sin preguntar y se explica en una frase simple.
 
 ## 7. Mapa de capas (nombra lo construido y el umbral — el orden lo manda §4)
 - **Núcleo Operativo**: Pilares 1–4 (Catálogo, Cliente, Inventario, Ventas). **Construido.**

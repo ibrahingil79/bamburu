@@ -1,7 +1,9 @@
-# CLAUDE.md — Instrucciones para Claude Code en Bamburu
+# CLAUDE.md — Contexto técnico acumulado de Bamburu
 
-> Este archivo lo lees automáticamente al empezar cada sesión. Son las reglas del proyecto.
-> Si algo aquí contradice a otro documento, manda CANON.md (estrategia) y este archivo (cómo trabajar).
+> Codex lee este archivo al empezar cada sesión como contexto técnico acumulado. `AGENTS.md` define su
+> papel; `CANON.md` manda en estrategia, `TABLERO.md` en estado y tareas, y `RITUAL.md` en la rutina
+> vigente. Si una regla histórica de este fichero contradice a cualquiera de esas autoridades, no
+> concede permiso: se aplica la autoridad superior y se conserva aquí solo como historia útil.
 
 ---
 
@@ -23,7 +25,7 @@
 ## Lo PRIMERO en cada sesión
 
 1. Lee `CANON.md` — qué es Bamburu, qué entra y qué NO (la estrategia).
-2. Lee `TABLERO.md` — qué tarea toca ahora (la de más arriba en "POR HACER").
+2. Lee `TABLERO.md` — identifica la tarea que corresponda al encargo vigente; si no hay encargo del dueño, no inicies ninguna.
 3. Lee `RITUAL.md` — el flujo de trabajo de la sesión, y síguelo.
 4. Lee `session.json` — dónde se quedó la sesión anterior.
 
@@ -106,23 +108,12 @@ estado `errored` y no es la instancia productiva — ignorarla.
 
 ## Reglas de trabajo (de RITUAL.md)
 
-- 📍 **EL BARRIDO VA EN DOS VELOCIDADES (norma cambiada por Ibrahin el 24 ago 2026).** Sus palabras:
-  *«RÁPIDO — pocos minutos. […] Se lanza a mano cuando se pida. COMPLETO — todo […] Se programa para
-  que corra solo cada madrugada. Nadie lo lanza a mano en horario de trabajo.»*
-  - **`node scripts/run-gates.mjs --rapido`** — unos minutos: que ninguna pantalla se caiga, que el
-    dinero y las fechas salgan como en España, que no haya cuadros de diálogo del navegador, que no
-    falte ninguna sección, que la cadena de VERI\*FACTU esté entera y que ninguna base de datos sea
-    legible por otro usuario. **A mano, cuando Ibrahin lo pida.**
-  - **`--all`** — todo. **Lo lanza el temporizador `bamburu-barrido-nocturno.timer` a las 03:15**, y
-    manda el parte por correo a Ibrahin: cuántas han corrido, cuántas han fallado y qué se ha roto.
-    Si no falla nada, una línea. **Si no llega a terminar, también avisa** — un barrido que no corre
-    y no lo dice es peor que no tenerlo. **Nadie lo lanza a mano en horario de trabajo.**
-  - **La marca de velocidad NO se mantiene a mano:** en `gates-mapa.mjs` se declara solo el conjunto
-    RÁPIDO —que es corto y es una decisión— y todo lo demás es del completo por definición, así que
-    ninguna comprobación puede quedarse sin marcar.
-  - Lo que NO cambia: **ningún gate suelto se ejecuta solo**, y al cerrar una entrega se propone el
-    barrido y se espera un sí (`node scripts/barrido-estado.mjs`). La norma entera sigue en
-    `RITUAL.md` §«LA REGRESIÓN».
+- 📍 **BARRIDOS, GATES, TESTS Y COMPROBACIONES: MANDA `RITUAL.md`.** Ninguno se ejecuta por iniciativa
+  propia —ni el propio de la tarea, ni el corto, ni el completo, ni antes de commit— y un criterio de
+  HECHO no concede permiso. Solo se ejecutan si Ibrahin lo pide expresamente o si el encargo lo
+  autoriza arriba del todo de forma visible; una autorización vale para una sola ejecución.
+  La antigua regla del 24 ago sobre un completo automático nocturno queda como historia en
+  `TABLERO.md`, pero **no es una instrucción activa y no autoriza a Codex a lanzarlo ni programarlo**.
 - 🛑 **CUÁNDO SE PARA Y SE PREGUNTA — y cuándo NO.** Palabras de Ibrahin (24 ago 2026):
   > «La máquina para y pregunta SOLO cuando la duda cambia lo que el producto le promete al cliente.
   > Si la duda es de cómo construirlo —qué tabla, qué formato, dónde colgar un botón, qué reutilizar—
