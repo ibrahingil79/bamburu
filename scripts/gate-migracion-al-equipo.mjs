@@ -22,6 +22,7 @@ import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import puppeteer from 'puppeteer-core';
 import { tenantDb, launchOpts, APP_DIR, autoAceptarPaneles } from './lib/gate-env.mjs';
+import { correoDePrueba } from './lib/correo-de-prueba.mjs';
 
 const SLUG = 'desarrollo-bamburu';
 const HOST = SLUG + '.bamburu.com';
@@ -40,6 +41,22 @@ const ahora = Math.floor(Date.now() / 1000);
 const token = 'zz-migra-' + randomBytes(20).toString('hex');
 db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)')
   .run(token, owner.id, ahora, ahora + 3600, randomBytes(20).toString('hex'));
+
+// ── LAS DOS DIRECCIONES, DE SIMULACIÓN MIENTRAS DURA LA PRUEBA ─────────────────────────────────
+// Este gate pide una migración DE VERDAD en el negocio de desarrollo, y el producto manda dos correos
+// por ello: el acuse al correo de empresa del negocio y el aviso al buzón del equipo. Las dos
+// direcciones del negocio de desarrollo son la bandeja del dueño, así que este gate le metía DOS
+// correos reales en cada pasada del barrido — los últimos que quedaban. Ver docs/censo-correos.md.
+//
+// No se puede saltar el envío: lo que este gate comprueba es precisamente que el correo SALE y que
+// queda marcado `email_ok`. Así que se cambian las dos direcciones por simulación, se hace la prueba
+// entera igual, y se devuelven al final. La norma del dueño dice justo esto: la comprobación sigue
+// comprobando lo mismo, pero no acaba en la bandeja de nadie.
+const correoEmpresaAntes = db.prepare('SELECT email FROM company_config LIMIT 1').get()?.email ?? null;
+const buzonAntes = db.prepare("SELECT value FROM settings WHERE key='migracion_buzon'").get()?.value ?? null;
+db.prepare('UPDATE company_config SET email=?').run(correoDePrueba('migracion-acuse'));
+db.prepare("INSERT INTO settings (key,value) VALUES ('migracion_buzon',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+  .run(correoDePrueba('migracion-equipo'));
 
 const antes = db.prepare('SELECT COUNT(*) n FROM migracion_peticiones').get().n;
 let creada = null, adjuntoRuta = null, browser;
@@ -205,6 +222,18 @@ try {
 
 } finally {
   // LO QUE LA PRUEBA CREA, LA PRUEBA LO BORRA.
+  // Y lo primero, las dos direcciones del negocio: si se quedaran en simulación, el dueño dejaría de
+  // recibir los avisos de migración de verdad. Se devuelven Y se comprueba que se devolvieron.
+  try {
+    if (correoEmpresaAntes !== null) db.prepare('UPDATE company_config SET email=?').run(correoEmpresaAntes);
+    if (buzonAntes !== null) db.prepare("UPDATE settings SET value=? WHERE key='migracion_buzon'").run(buzonAntes);
+    else db.prepare("DELETE FROM settings WHERE key='migracion_buzon'").run();
+    const correoAhora = db.prepare('SELECT email FROM company_config LIMIT 1').get()?.email ?? null;
+    const buzonAhora = db.prepare("SELECT value FROM settings WHERE key='migracion_buzon'").get()?.value ?? null;
+    ok(correoAhora === correoEmpresaAntes && buzonAhora === buzonAntes,
+       'limpieza: el correo de empresa y el buzón del equipo quedan como estaban',
+       'empresa ' + correoAhora + ' · buzón ' + buzonAhora);
+  } catch (e) { console.error('  ✗ FALLO: no pude devolver las direcciones — ' + e.message); }
   try {
     if (creada) {
       if (creada.attachment_id) {
