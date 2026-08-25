@@ -33,8 +33,31 @@ const TS = Date.now();
 const tokens = [], emps = [], citaIds = [], tramoIds = [];
 let R = 0, S = 0, CLI = 0;
 const ymd = (d) => new Date(d).toISOString().slice(0, 10);
-const F = ymd(Date.now() + 2 * 86400000);
-const MANANA = ymd(Date.now() + 86400000);
+// LOS DOS DÍAS SE ELIGEN VACÍOS, NO SE CUENTAN CON LOS DEDOS ────────────────────────────────────
+// Antes eran «hoy + 2» y «hoy + 1» a secas, y este gate cablea las 9, 10, 11, 12 y 13 de ese día. El
+// 25 ago 2026 se puso rojo de golpe sin que nadie tocara nada: llevaba cuatro barridos en verde con
+// 42 ✓ y de repente daba 409 al crear la primera cita. No era una regresión — «hoy + 2» había pasado
+// de caer en el 26 (libre) a caer en el 27, donde había DOS citas de los datos de ejemplo del negocio
+// puestas el 20 de agosto. Una bomba de relojería: el residuo estaba quieto y fue el gate el que se
+// acercó a él.
+//
+// Esas dos citas NO se borran: son de clientes del propio negocio y pueden ser una demostración de
+// verdad. Un gate no tiene por qué quitar de en medio los datos de otros; lo que tiene que hacer es no
+// dar por hecho que su hueco está libre. Se buscan dos días SIN NINGUNA cita, y así las cinco horas
+// que usa quedan libres por construcción.
+function diaVacio(desdeDias, ocupados) {
+  for (let i = desdeDias; i < desdeDias + 60; i++) {
+    const f = ymd(Date.now() + i * 86400000);
+    if (ocupados.has(f)) continue;
+    ocupados.add(f);   // el segundo día no puede ser el mismo que el primero
+    return f;
+  }
+  console.error('\n✗ GATE ABORTADO — no encuentro ni un día sin citas en los próximos dos meses. No ha verificado NADA.');
+  process.exit(2);
+}
+const ocupados = new Set(db.prepare("SELECT DISTINCT fecha FROM citas WHERE fecha >= date('now')").all().map(r => r.fecha));
+const MANANA = diaVacio(1, ocupados);
+const F = diaVacio(2, ocupados);
 
 function sesion(userId) {
   const tok = 'gate-citas-' + userId + '-' + Date.now() + '-' + Math.floor(performance.now());
