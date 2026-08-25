@@ -1,5 +1,20 @@
 # TABLERO — Fase de optimización
 
+> **ENCARGO SUELTO ✅ HECHO (25 ago 2026): CENSO Y SANEAMIENTO DE LOS ENVÍOS DE CORREO.** Sí, la
+> avalancha del 24 (174 correos contra una línea base de **2 al día**) vino del trabajo de ese día:
+> **39 de los 45** que llegaron a la bandeja del dueño los mandaron dos comprobaciones, sin querer —
+> una cogía «el primer admin del primer negocio activo» y la otra pedía una migración de verdad, cuyo
+> aviso va al buzón del equipo. Censo completo y medido en `docs/censo-correos.md`. **Ahora: 12 envíos
+> por pasada del barrido, CERO a bandejas reales, CERO rebotes** (dos barridos seguidos, con el
+> registro de Resend marcado antes y leído después). Los envíos reales del producto no se han tocado.
+> Hay freno: si en una hora se pasa de 120 envíos, para y avisa una vez — el número está medido, la
+> hora más cargada de todo agosto tuvo 38. Y **dos hallazgos que el encargo no preveía**: (1) el
+> negocio **helados-ibrahin** lleva ocho días sin recibir nada porque tiene apuntado
+> `igilm@gmail.com`, una cuenta que **no existe** (Gmail: «550-5.1.1 does not exist»); Resend lo
+> suprimió el 17 ago y desde entonces lo tira todo en silencio — **el producto lo da por enviado**;
+> corregir la dirección es decisión del dueño y queda fuera del encargo; (2) seis negocios fantasma
+> de comprobaciones caídas seguían **activos y recibiendo su resumen diario** a direcciones
+> inexistentes: borrados.
 > **DÓNDE ESTAMOS HOY (2026-07-16).** Eje A (UX) **completo**. Multi-almacén **cerrado** (las tres capas;
 > los traslados se verificaron el 10-jul: el valor del inventario no cambia al mover stock). Módulo de
 > **Avisos al 100 %** (contador en vivo + fuente "cliente en riesgo"; el bucle de la campana, arreglado).
