@@ -110,7 +110,7 @@ export function documentBlock(base64, mediaType = 'application/pdf') {
 // - Lanza Error con .status si no hay key (500) o si la API responde error (502).
 // - fetchImpl: inyectable para tests (por defecto, fetch global).
 export async function callClaude(opts = {}) {
-  const { model, system, messages, max_tokens = 1500, tools } = opts;
+  const { model, system, messages, max_tokens = 1500, tools, timeoutMs = 30000 } = opts;
   if (!model) { const e = new Error('Falta el modelo'); e.status = 500; throw e; }
   if (!Array.isArray(messages) || !messages.length) { const e = new Error('Faltan mensajes'); e.status = 500; throw e; }
 
@@ -143,17 +143,37 @@ export async function callClaude(opts = {}) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': ANTHROPIC_VERSION },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(Math.max(1000, Math.min(Number(timeoutMs) || 30000, 120000))),
     });
   } catch (err) {
-    const e = new Error('No se pudo contactar con la IA: ' + (err.message || err)); e.status = 502; throw e;
+    const timedOut = err?.name === 'TimeoutError' || err?.name === 'AbortError';
+    const e = new Error(timedOut ? 'La IA tardó demasiado en responder.' : 'No se pudo contactar con la IA.');
+    e.status = timedOut ? 504 : 502;
+    e.code = timedOut ? 'llm_timeout' : 'llm_transport';
+    throw e;
   }
 
   if (!resp.ok) {
     let detail = '';
     try { const j = await resp.json(); detail = j?.error?.message || JSON.stringify(j); } catch { detail = 'HTTP ' + resp.status; }
-    const e = new Error('La IA devolvió un error: ' + detail); e.status = 502; throw e;
+    const noBalance = /credit balance|billing|payment/i.test(detail);
+    const e = new Error(noBalance
+      ? 'El proveedor de IA no tiene saldo disponible.'
+      : 'El proveedor de IA rechazó temporalmente la solicitud.');
+    e.status = noBalance ? 503 : 502;
+    e.code = noBalance ? 'llm_provider_balance' : 'llm_provider_error';
+    throw e;
   }
-  const data = await resp.json();
+  let data;
+  try { data = await resp.json(); }
+  catch {
+    const e = new Error('El proveedor de IA devolvió una respuesta inválida.');
+    e.status = 502; e.code = 'llm_invalid_response'; throw e;
+  }
+  if (!data || !Array.isArray(data.content) || typeof data.stop_reason !== 'string') {
+    const e = new Error('El proveedor de IA devolvió una respuesta incompleta.');
+    e.status = 502; e.code = 'llm_incomplete_response'; throw e;
+  }
 
   // ── Registro de gasto (después de gastar). Nunca rompe la respuesta. ──
   try {

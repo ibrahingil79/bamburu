@@ -78,7 +78,7 @@ export function getDisaWidget() {
         msgs.innerHTML = '';
         t.messages.forEach(function(m) { dpAppend(m.role, m.content); });
       }
-    } catch(e) { console.error('[Widget] Error cargando historial:', e); }
+    } catch(e) { console.error('[DISA Widget] No se pudo cargar el historial.'); }
   }
 
   window.disaOpen = function(){

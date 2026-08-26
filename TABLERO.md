@@ -5,9 +5,23 @@
 > añaden funciones nuevas hasta cerrarla.** La finalidad es elevar seguridad, robustez, calidad de
 > código, coherencia operativa, recuperación, escalabilidad y mantenibilidad hasta el nivel de un
 > producto profesional comparable con los líderes del mercado. Se mantiene una sola tarea activa cada
-> vez. **Saneamiento 1 está cerrado. Fase de saneamiento general: ACTIVA. SIGUIENTE TAREA OFICIAL:
-> Saneamiento 2 — Blindaje de DISA**, todavía no iniciado. **Peldaño 9 — Belleza/estética queda
+> vez. **Saneamientos 1 y 2 están cerrados. Fase de saneamiento general: ACTIVA. No se ha iniciado
+> ninguna tarea posterior; el siguiente saneamiento queda pendiente de encargo oficial.** **Peldaño 9 — Belleza/estética queda
 > pendiente y aplazado; no es la siguiente tarea.**
+
+> **SANEAMIENTO 2 ✅ HECHO (26 ago 2026): BLINDAJE DE DISA.** Se retiró la vía genérica
+> `insert_record`/`update_record`/`delete_record`, que escribía tablas directamente y podía eludir
+> servicios e invariantes del producto. El servidor acepta ahora solo una lista cerrada de acciones
+> dedicadas, valida la envolvente y sus límites, vuelve a comprobar los permisos reales y conserva la
+> confirmación humana. Cada propuesta con consecuencias recibe un identificador de un solo uso: evita
+> duplicados por reintento y deja una traza mínima de propuesta, confirmación y resultado sin guardar
+> parámetros, prompts ni datos sensibles. El contexto de negocio queda marcado como dato no confiable;
+> la traza interna no es consultable por DISA. El proveedor de IA tiene timeout y errores controlados
+> para falta de saldo, transporte y respuestas inválidas/incompletas. Se retiraron logs de depuración
+> con valores o errores completos. La lectura ya era fail-closed por tabla/permiso y el estado de
+> producto `archived` ya estaba corregido antes de este saneamiento. Revisión exclusivamente estática:
+> por orden expresa de Ibrahin no se ejecutó ningún gate, barrido, test, regresión ni comprobación
+> funcional. Cierre de código: commit pendiente de consignar tras el cierre documental.
 
 > **SANEAMIENTO 1 ✅ HECHO (26 ago 2026): RETIRADO EL BARRIDO NOCTURNO AUTOMÁTICO.** El timer
 > `bamburu-barrido-nocturno.timer` estaba activo y ejecutó por última vez el barrido completo el
@@ -2002,8 +2016,8 @@ como **UNA sola tarea entera** ✅ · (3) funciones nuevas ✅ **(las siete, 23 
 > ⚙️ *El puntero «← AQUÍ» estaba en la (3) y se corrigió el 24 ago 2026 al cerrarse la (3): el siguiente paso era entonces el Peldaño 8.*
 > ⚙️ *Actualización 25 ago 2026, ya histórica: al cerrar el Peldaño 8, el siguiente era el Peldaño 9.*
 > **Actualización vigente 26 ago 2026:** Ibrahin aplaza el roadmap funcional hasta cerrar la fase de
-> saneamiento derivada de la auditoría integral. **Siguiente tarea oficial: Saneamiento 2 — Blindaje
-> de DISA**, todavía no iniciado.
+> saneamiento derivada de la auditoría integral. **Saneamiento 2 — Blindaje de DISA quedó cerrado el
+> 26 ago 2026. No se inicia ninguna tarea posterior en este encargo.**
 
 ### ✅ TAREA 1 — Sanear las comprobaciones automáticas  ✅ HECHA (2026-08-20) — ver su ficha abajo
 

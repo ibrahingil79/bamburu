@@ -4,6 +4,12 @@
 > Este documento es el mapa de partida del Eje B (DISA). Las referencias son `fichero:línea` sobre
 > el árbol en el commit de esta auditoría.
 
+> **Estado vigente (26 ago 2026): documento histórico.** La fuga de lectura se cerró en D1 y el
+> estado de producto fuera de enum se corrigió en D3. Saneamiento 2 retiró por completo la vía
+> genérica `insert_record`/`update_record`/`delete_record`, cerró las capacidades ejecutables en una
+> allowlist de acciones dedicadas y añadió confirmación de un solo uso y trazabilidad mínima. Las
+> tablas, líneas y estados descritos abajo retratan el código del 10-jul y no son instrucciones activas.
+
 ## TL;DR
 
 - **1 hallazgo de SEGURIDAD, prioridad alta:** la herramienta de consulta de DISA (`query_database`)

@@ -27,7 +27,7 @@
 
 ---
 
-## BUG #2: DISA no podía gestionar todas las entidades — RESUELTO
+## BUG #2: DISA no podía gestionar todas las entidades — SOLUCIÓN HISTÓRICA RETIRADA
 
 **Síntoma original:**
 - "crear categoría" → "no puedo hacer eso"
@@ -50,6 +50,11 @@
 
 **Archivos modificados:**
 - modules/disa/index.js — WRITABLE_TABLES, insert_record, update_record, delete_record
+
+**Estado vigente (Saneamiento 2, 2026-08-26):** esa solución genérica se retiró porque permitía
+escribir tablas directamente y saltarse servicios e invariantes de negocio. DISA conserva solo
+acciones dedicadas, con permisos y confirmación del servidor. Este bloque se mantiene como historia,
+no como contrato activo.
 
 ---
 
@@ -98,9 +103,10 @@
 
 ---
 
-## PENDIENTE: Console.logs de debug en widget
+## Console.logs de debug en widget — RESUELTO (Saneamiento 2, 2026-08-26)
 
-**Estado:** Abierto (baja prioridad)
+**Estado:** Cerrado. Se retiraron los valores y objetos de error completos de los logs de DISA; los
+mensajes operativos restantes no incluyen prompts, parámetros, SQL, PII ni secretos.
 
 Los logs añadidos durante el debugging siguen en widget.js:
 - [DISA Widget] Script cargado
@@ -115,4 +121,4 @@ Y en index.js buildBusinessContext:
 - [DISA] Productos encontrados:
 - [DISA] Pedidos completados:
 
-Limpiar cuando se confirme estabilidad en producción.
+La lista anterior se conserva como diagnóstico histórico.

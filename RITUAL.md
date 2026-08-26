@@ -140,8 +140,8 @@ Dos redes de seguridad más, para que esto no dependa de acordarse:
 > referencia del ritual de cierre.
 
 - Estamos en la **fase de saneamiento técnico** (CANON §4), derivada de la auditoría integral. No se
-  añaden funciones nuevas hasta cerrarla y se trabaja una tarea cada vez. **Siguiente tarea oficial:
-  Saneamiento 2 — Blindaje de DISA**, aún no iniciado. La escalera conserva el orden funcional, pero
+  añaden funciones nuevas hasta cerrarla y se trabaja una tarea cada vez. **Saneamientos 1 y 2 están
+  cerrados; no hay una tarea posterior iniciada y el siguiente saneamiento requiere encargo oficial.** La escalera conserva el orden funcional, pero
   queda aplazada; Peldaño 9 — Belleza/estética no es la siguiente tarea.
 - La **fase de optimización** (ejes UX · DISA · Seguridad) quedó **✅ CERRADA**, los tres completos. Sus
   reglas rectoras siguen vigentes (CANON §4-bis); lo que caducó es "las funciones nuevas ceden al

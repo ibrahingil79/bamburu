@@ -102,8 +102,8 @@ La auditoría integral de agosto de 2026 abre una fase de saneamiento antes de c
 funcional. **No se añaden más funciones nuevas hasta cerrarla.** Su finalidad es elevar seguridad,
 robustez, calidad de código, coherencia operativa, recuperación, escalabilidad y mantenibilidad al
 nivel de un producto profesional comparable con los líderes del mercado. Se trabaja **una tarea cada
-vez**. Saneamiento 1 está cerrado; la siguiente tarea oficial es **Saneamiento 2 — Blindaje de DISA**,
-que no se inicia sin encargo. El Peldaño 9 — Belleza/estética sigue pendiente, pero queda aplazado y
+vez**. Saneamientos 1 y 2 están cerrados; no hay una tarea posterior iniciada y el siguiente
+saneamiento requiere encargo oficial. El Peldaño 9 — Belleza/estética sigue pendiente, pero queda aplazado y
 no es la siguiente tarea mientras esta fase permanezca activa.
 
 ### La escalera — roadmap funcional aplazado
