@@ -5,9 +5,57 @@
 > añaden funciones nuevas hasta cerrarla.** La finalidad es elevar seguridad, robustez, calidad de
 > código, coherencia operativa, recuperación, escalabilidad y mantenibilidad hasta el nivel de un
 > producto profesional comparable con los líderes del mercado. Se mantiene una sola tarea activa cada
-> vez. **Saneamientos 1 y 2 están cerrados. Fase de saneamiento general: ACTIVA. No se ha iniciado
-> ninguna tarea posterior; el siguiente saneamiento queda pendiente de encargo oficial.** **Peldaño 9 — Belleza/estética queda
+> vez. **Saneamientos 1 y 2 están cerrados. Fase de saneamiento general: ACTIVA. SIGUIENTE TAREA
+> OFICIAL: Saneamiento 3 — Blindaje antiavalancha del rate limiting**, delimitada y todavía no
+> iniciada. **Peldaño 9 — Belleza/estética queda
 > pendiente y aplazado; no es la siguiente tarea.**
+
+> **SANEAMIENTO 3 ⏳ SIGUIENTE · NO INICIADO (26 ago 2026): BLINDAJE ANTIAVALANCHA DEL RATE
+> LIMITING.**
+>
+> **Problema demostrado.** El diagnóstico de carga registró **50.738 respuestas 429 en 20 segundos** y
+> señaló que cada una escribía un evento en la base central. El código vigente conserva exactamente
+> esa forma: `core/rate-limit.js` llama de manera síncrona a `recordSecurityEvent(...)` por **cada**
+> petición rechazada; `recordSecurityEvent` escribe en `control.db`, compartida por toda la plataforma.
+> Un tráfico que el sistema ya ha decidido frenar puede, por tanto, amplificarse en una tormenta de
+> escrituras centrales y degradar a negocios ajenos. La defensa cuesta más cuanto más se la ataca.
+>
+> **Por qué va ahora.** Es un riesgo vigente de seguridad y disponibilidad, transversal a todas las
+> superficies que reutilizan `rateLimit`, y puede hacer que Bamburu aparente estar protegido mientras
+> el propio freno castiga su punto compartido. No requiere decidir funciones, precios ni experiencia.
+> Se descartan como siguiente: permisos Paso 1 y el hueco CSRF antiguo de 2FA (ya cerrados); el
+> hardening de systemd (ya aplicado con exclusiones documentadas); la segunda copia de backup (mejora
+> de resiliencia pendiente de destino/coste, mientras el backup actual tiene verificación, restore y
+> heartbeat); las opciones SQLite B/C (condicionadas al crecimiento); y todo el roadmap funcional.
+>
+> **Objetivo.** Hacer que rechazar tráfico sea barato, acotado y observable: ninguna avalancha de 429
+> debe provocar una escritura por petición ni crecimiento sin límite, conservando una señal de
+> seguridad útil y sin rebajar las protecciones actuales.
+>
+> **Incluye, cuando se encargue:**
+> - sustituir el registro por-429 por agregación o deduplicación acotada por limitador, sujeto/tenant y
+>   ventana, persistiendo resúmenes limitados y nunca PII ni secretos;
+> - acotar también la cardinalidad y vida de los buckets/contadores en memoria ante claves únicas;
+> - revisar estáticamente todos los usos vivos de `rateLimit` para que el arreglo compartido cubra las
+>   superficies globales, login, alta, DISA y rutas públicas sin lógica paralela;
+> - conservar los umbrales vigentes, `Retry-After`, los cuerpos 429 JSON/HTML, el throttle por cuenta
+>   que ralentiza sin bloquear y la utilidad del panel de seguridad;
+> - dejar definida una comprobación aislada que mida que una ráfaga genera respuestas 429 pero un
+>   número acotado de escrituras/eventos; ejecutarla solo si Ibrahin la autoriza expresamente.
+>
+> **Fuera:** cambiar cupos o políticas comerciales; rediseñar login/autenticación; permisos; DISA;
+> CSP; backups; portal/tienda; migrar SQLite/Postgres; multiproceso/afinidad; limpiar eventos o datos
+> históricos; Peldaño 9; cualquier función nueva.
+>
+> **Resultado esperado.** Bajo abuso, Bamburu sigue respondiendo 429 con el contrato actual, la memoria
+> permanece acotada y `control.db` recibe como máximo una señal resumida y limitada por ventana, no una
+> escritura por rechazo. El panel conserva información suficiente para investigar sin almacenar datos
+> sensibles innecesarios.
+>
+> **Criterio documental de cierre.** Solo se marcará ✅ cuando la implementación esté desplegada, el
+> diff se limite a este alcance y TABLERO/session/Notion consignen los commits, el estado real de la
+> comprobación autorizable (ejecutada o expresamente pendiente/no autorizada) y cualquier riesgo
+> residual. Definir esa comprobación no concede permiso para ejecutarla.
 
 > **SANEAMIENTO 2 ✅ HECHO (26 ago 2026): BLINDAJE DE DISA.** Se retiró la vía genérica
 > `insert_record`/`update_record`/`delete_record`, que escribía tablas directamente y podía eludir
