@@ -21,7 +21,8 @@
 > con valores o errores completos. La lectura ya era fail-closed por tabla/permiso y el estado de
 > producto `archived` ya estaba corregido antes de este saneamiento. Revisión exclusivamente estática:
 > por orden expresa de Ibrahin no se ejecutó ningún gate, barrido, test, regresión ni comprobación
-> funcional. Cierre de código: commit pendiente de consignar tras el cierre documental.
+> funcional. Desplegado y visible con el procedimiento vigente. Implementación en commits `71b135a`
+> y `c48c83c`.
 
 > **SANEAMIENTO 1 ✅ HECHO (26 ago 2026): RETIRADO EL BARRIDO NOCTURNO AUTOMÁTICO.** El timer
 > `bamburu-barrido-nocturno.timer` estaba activo y ejecutó por última vez el barrido completo el
