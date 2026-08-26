@@ -1,4 +1,13 @@
-# TABLERO — Fase de optimización
+# TABLERO — Fase activa de saneamiento técnico
+
+> **ORDEN VIGENTE — DECISIÓN DE IBRAHIN (26 ago 2026).** La auditoría integral está realizada y,
+> antes de continuar el roadmap funcional, Bamburu entra en una fase de saneamiento técnico. **No se
+> añaden funciones nuevas hasta cerrarla.** La finalidad es elevar seguridad, robustez, calidad de
+> código, coherencia operativa, recuperación, escalabilidad y mantenibilidad hasta el nivel de un
+> producto profesional comparable con los líderes del mercado. Se mantiene una sola tarea activa cada
+> vez. **Saneamiento 1 está cerrado. Fase de saneamiento general: ACTIVA. SIGUIENTE TAREA OFICIAL:
+> Saneamiento 2 — Blindaje de DISA**, todavía no iniciado. **Peldaño 9 — Belleza/estética queda
+> pendiente y aplazado; no es la siguiente tarea.**
 
 > **SANEAMIENTO 1 ✅ HECHO (26 ago 2026): RETIRADO EL BARRIDO NOCTURNO AUTOMÁTICO.** El timer
 > `bamburu-barrido-nocturno.timer` estaba activo y ejecutó por última vez el barrido completo el
@@ -1979,7 +1988,7 @@ miraba `admin_users`**.
 - **No se corrió** ningún barrido ni ningún gate: el encargo lo dijo arriba del todo.
 
 
-## 🧭 ORDEN DE TRABAJO ACORDADO (20 ago 2026) — estado actualizado al 25 ago 2026
+## 🧭 ORDEN DE TRABAJO ACORDADO (20 ago 2026) — subordinado al saneamiento activo desde el 26 ago
 
 > **Sesión de decisión: cero código, cero commits de producto.** Aquí queda el orden que se acordó y
 > el detalle de cada tarea. Ninguna se inicia sin encargo. **En la sesión del 20 ago el puntero del
@@ -1989,9 +1998,12 @@ miraba `admin_users`**.
 **EL ORDEN:** (1) sanear las comprobaciones automáticas ✅ · (2) cerrar los cabos sueltos de la Agenda,
 como **UNA sola tarea entera** ✅ · (3) funciones nuevas ✅ **(las siete, 23 ago 2026)** ·
 (4) **Peldaño 8 — Salud/bienestar ✅ HECHO (24 ago 2026)** ·
-(5) **Peldaño 9 — Belleza/estética** ← **SIGUIENTE EN LA ESCALERA, A LA ESPERA DE ENCARGO**.
+(5) **Peldaño 9 — Belleza/estética** — pendiente en la escalera, **APLAZADO hasta cerrar la fase de saneamiento**.
 > ⚙️ *El puntero «← AQUÍ» estaba en la (3) y se corrigió el 24 ago 2026 al cerrarse la (3): el siguiente paso era entonces el Peldaño 8.*
-> ⚙️ *Actualización 25 ago 2026: el Peldaño 8 quedó cerrado la noche del 24 ago. Según CANON §4, el siguiente en el orden es el Peldaño 9. No se inicia sin encargo del dueño.*
+> ⚙️ *Actualización 25 ago 2026, ya histórica: al cerrar el Peldaño 8, el siguiente era el Peldaño 9.*
+> **Actualización vigente 26 ago 2026:** Ibrahin aplaza el roadmap funcional hasta cerrar la fase de
+> saneamiento derivada de la auditoría integral. **Siguiente tarea oficial: Saneamiento 2 — Blindaje
+> de DISA**, todavía no iniciado.
 
 ### ✅ TAREA 1 — Sanear las comprobaciones automáticas  ✅ HECHA (2026-08-20) — ver su ficha abajo
 
@@ -6656,7 +6668,8 @@ Aquí aterrizan, de las listas viejas:
 Agenda presencial. **Se apoya en el peldaño 7, que quedó cerrado el 28 jul 2026**: el motor de citas, la
 agenda interna y la puerta pública de reserva ya existen y son de USO GENERAL, no de un oficio. Lo que
 este peldaño añade es la cara propia del sector, no otro motor. **Cerrado por el PUNTO 15 de esta misma
-ficha. El siguiente en el orden de CANON §4 es el Peldaño 9, pero no está iniciado y espera encargo.**
+ficha. El Peldaño 9 permanece pendiente, pero está aplazado por la fase de saneamiento activa y no es
+la siguiente tarea.**
 
 - **PIEZA 1 — PERFIL DE OFICIO EN LA AGENDA · ✅ ENTREGADA y verificada (15 ago 2026).** Al crear el
   negocio se ELIGE a qué se dedica, y la agenda habla su idioma desde el primer minuto sin configurar

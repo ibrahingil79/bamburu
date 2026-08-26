@@ -7,9 +7,15 @@
 
 ---
 
-## Fase actual: LA ESCALERA (CANON §4)
+## Fase actual: SANEAMIENTO TÉCNICO (CANON §4)
 
-- El orden vigente es **una escalera numerada** (CANON §4) donde cada peldaño se apoya en el anterior:
+- La auditoría integral está realizada y la fase de saneamiento general está **ACTIVA**. No se añaden
+  funciones nuevas hasta cerrarla; una tarea cada vez. Saneamiento 1 está cerrado y la siguiente
+  tarea oficial es **Saneamiento 2 — Blindaje de DISA**, todavía no iniciado.
+- El Peldaño 9 — Belleza/estética sigue pendiente en el roadmap funcional, pero está aplazado y no es
+  la siguiente tarea.
+
+- La escalera sigue siendo el **roadmap funcional aplazado** (CANON §4), donde cada peldaño se apoya en el anterior:
   sincerar → margen → informes → **constructor de analíticas (la puerta visual)** → DISA predictiva →
   dashboards → oficios → el resto. **No hay lista de "espera" ni capa aparte**; el detalle y la
   colocación de cada módulo están en `TABLERO.md` (§LA ESCALERA). **No se inicia un paso sin encargo.**

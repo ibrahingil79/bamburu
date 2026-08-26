@@ -96,7 +96,17 @@ mira a la competencia directa.)
   mirar sus números por su cuenta también es el dueño. "El software trabaja, no el humano" no significa
   "el humano no mira".*
 
-## 4. Fase actual: LA ESCALERA (el orden vigente)
+## 4. Fase actual: SANEAMIENTO TÉCNICO (la escalera queda aplazada)
+
+La auditoría integral de agosto de 2026 abre una fase de saneamiento antes de continuar el roadmap
+funcional. **No se añaden más funciones nuevas hasta cerrarla.** Su finalidad es elevar seguridad,
+robustez, calidad de código, coherencia operativa, recuperación, escalabilidad y mantenibilidad al
+nivel de un producto profesional comparable con los líderes del mercado. Se trabaja **una tarea cada
+vez**. Saneamiento 1 está cerrado; la siguiente tarea oficial es **Saneamiento 2 — Blindaje de DISA**,
+que no se inicia sin encargo. El Peldaño 9 — Belleza/estética sigue pendiente, pero queda aplazado y
+no es la siguiente tarea mientras esta fase permanezca activa.
+
+### La escalera — roadmap funcional aplazado
 
 El orden ya no se decide módulo a módulo, ni por capas: es **UNA escalera numerada** donde cada peldaño
 se apoya en el anterior. **No hay lista de "espera" ni capa aparte**: lo que no está hecho está en un
@@ -134,6 +144,9 @@ informes fijan qué campos existen, que son el catálogo del constructor (4); el
 dibuja, y por eso DISA predictiva (5) puede analizar sin construirse su propio dibujante; y solo cuando
 el usuario tiene gráficos guardados (4) tiene sentido dejarle componer su Inicio (6). Los oficios (7-9)
 van después porque un oficio sin números no es una cara, es un formulario.
+
+La escalera conserva el orden funcional para cuando termine el saneamiento; no autoriza a iniciar
+ningún peldaño durante la fase activa.
 
 Decisión de mercado: cuándo sale Bamburu al mercado lo decide el dueño. El asistente y Codex no recomiendan el momento de lanzar ni lo usan como argumento; solo ejecutan lo que el dueño prioriza.
 

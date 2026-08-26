@@ -139,9 +139,10 @@ Dos redes de seguridad más, para que esto no dependa de acordarse:
 > Este bloque manda sobre lo que siga abajo cuando haya contradicción; el resto se conserva como
 > referencia del ritual de cierre.
 
-- Estamos en **la escalera** (CANON §4): un orden numerado donde cada peldaño se apoya en el anterior,
-  con el detalle en `TABLERO.md` (§LA ESCALERA). **No hay lista de "espera" ni capa aparte.** No se
-  inicia un paso sin encargo del dueño.
+- Estamos en la **fase de saneamiento técnico** (CANON §4), derivada de la auditoría integral. No se
+  añaden funciones nuevas hasta cerrarla y se trabaja una tarea cada vez. **Siguiente tarea oficial:
+  Saneamiento 2 — Blindaje de DISA**, aún no iniciado. La escalera conserva el orden funcional, pero
+  queda aplazada; Peldaño 9 — Belleza/estética no es la siguiente tarea.
 - La **fase de optimización** (ejes UX · DISA · Seguridad) quedó **✅ CERRADA**, los tres completos. Sus
   reglas rectoras siguen vigentes (CANON §4-bis); lo que caducó es "las funciones nuevas ceden al
   pulido", porque el pulido terminó.
