@@ -8,6 +8,7 @@
 > demás timers/cron: no apareció otro automatismo de gates, tests, regresiones o comprobaciones
 > funcionales; los demás timers Bamburu son operación normal (avisos, recordatorios, propuestas,
 > caducidad de reservas, Verifactu y backups). Cero gates/tests/barridos ejecutados en este saneamiento.
+> Cambio y cierre documentados en commit `bff11d0`.
 >
 > **ENCARGO SUELTO ✅ HECHO (25 ago 2026): CENSO Y SANEAMIENTO DE LOS ENVÍOS DE CORREO.** Sí, la
 > avalancha del 24 (174 correos contra una línea base de **2 al día**) vino del trabajo de ese día:
