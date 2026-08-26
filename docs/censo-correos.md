@@ -86,7 +86,7 @@ de construcción.
 | Tu enlace para entrar en Bamburu | 16 | `verify-tenant-lookup-readonly` + `gate-registro-alta` | **no** — comprobación |
 | Hemos recibido tus datos para la migración | 12 | `gate-inicio-arranque` | **no** — comprobación |
 | Migración pedida · Talleres RecambiAuto SL | 11 | `gate-inicio-arranque` | **no** — comprobación |
-| Parte del barrido nocturno (3 variantes) | 3 | `barrido-nocturno.sh` | sí |
+| Parte del barrido nocturno (3 variantes) | 3 | `barrido-nocturno.sh` | sí, histórico; automatismo retirado el 26 ago |
 | ✅ Backup Bamburu OK | 1 | `bamburu-backup.sh` | sí |
 | [PRUEBA] Orden de compra OC-0031 | 1 | `gate-orden-compra-c1a` | **no** — comprobación |
 | Confirma tu correo · Rebobina | 1 | otro producto | sí (ajeno) |
@@ -130,7 +130,7 @@ La única puerta a Resend es `core/mailer.js` → `sendEmail()`. Todo lo demás 
 | Migración: aviso al equipo | lo mismo | buzón del equipo |
 | Gasto de IA al 80 % | el propio consumo (`core/llm.js`) | `ibrahingil@gmail.com` |
 
-### B · Temporizadores del sistema (7, de los que 4 envían)
+### B · Temporizadores del sistema (6 activos, de los que 4 envían; 1 retirado)
 
 | Unidad | Cuándo | Envía | A quién |
 |---|---|---|---|
@@ -138,7 +138,7 @@ La única puerta a Resend es `core/mailer.js` → `sendEmail()`. Todo lo demás 
 | `bamburu-recordatorios-cita` | 09:00 | recordatorios de cita | clientes |
 | `bamburu-backup` | 03:30 | parte del backup | `ibrahingil@gmail.com` |
 | `bamburu-backup-heartbeat` | 09:00 | aviso si no hay backup en 48 h | `ibrahingil@gmail.com` |
-| `bamburu-barrido-nocturno` | 03:15 | parte del barrido | `ibrahingil@gmail.com` |
+| `bamburu-barrido-nocturno` | **RETIRADO 26 ago 2026** | ya no se ejecuta ni envía automáticamente | — |
 | `bamburu-caducar-reservas` | cada hora | — | — |
 | `bamburu-propuestas` | 07:45 | — (genera propuestas) | — |
 

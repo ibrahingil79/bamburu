@@ -2,6 +2,11 @@
 
 > Cómo se hace un cambio, cuándo está "terminado" y cómo se cierra. Fuente: RITUAL.md + práctica del repo.
 
+> **Vigencia:** este documento conserva prácticas históricas. Ante cualquier contradicción manda
+> `RITUAL.md`: ningún gate, barrido, test, regresión o comprobación funcional se ejecuta
+> automáticamente ni por iniciativa de Codex. Solo se ejecuta cuando Ibrahin lo solicita o autoriza
+> expresamente; los checklist y criterios históricos de abajo no conceden esa autorización.
+
 ## ⛔ Reglas de oro antes de tocar nada
 
 1. **Antes de cualquier cambio, lee `docs/contexto/piezas-cerradas.md` y `docs/contexto/errores-conocidos.md`.**

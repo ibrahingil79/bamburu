@@ -1,5 +1,14 @@
 # TABLERO — Fase de optimización
 
+> **SANEAMIENTO 1 ✅ HECHO (26 ago 2026): RETIRADO EL BARRIDO NOCTURNO AUTOMÁTICO.** El timer
+> `bamburu-barrido-nocturno.timer` estaba activo y ejecutó por última vez el barrido completo el
+> 26 ago a las 03:15. Se detuvo, deshabilitó y retiró junto con su unidad `.service`; systemd ya no
+> puede arrancarlo por reloj. `scripts/barrido-nocturno.sh` se conserva como herramienta manual,
+> únicamente para cuando Ibrahin lo pida o autorice expresamente. Revisión de solo lectura de los
+> demás timers/cron: no apareció otro automatismo de gates, tests, regresiones o comprobaciones
+> funcionales; los demás timers Bamburu son operación normal (avisos, recordatorios, propuestas,
+> caducidad de reservas, Verifactu y backups). Cero gates/tests/barridos ejecutados en este saneamiento.
+>
 > **ENCARGO SUELTO ✅ HECHO (25 ago 2026): CENSO Y SANEAMIENTO DE LOS ENVÍOS DE CORREO.** Sí, la
 > avalancha del 24 (174 correos contra una línea base de **2 al día**) vino del trabajo de ese día:
 > **39 de los 45** que llegaron a la bandeja del dueño los mandaron dos comprobaciones, sin querer —
@@ -100,7 +109,7 @@
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-08-25 · `6afaf0c` · **201/207** · 1225 s
+- **Último barrido completo:** 2026-08-26 · `18bcd4a` · **153/207** · 1273 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -7648,9 +7657,11 @@ mano: no hay agujero de permisos**). Ninguna se ablanda ni se retira.
 - **Ningún papel se llama «Factura» sin serlo.** Con `orders.js` cae el documento de PEDIDO titulado
   «FACTURA», apuntado como riesgo legal desde julio. Nunca compartió la numeración legal (serie
   `DEV-2026-NNN`) y llevaba meses sin poder abrirse (404 medido).
-- **El barrido, en dos velocidades:** `--rapido` a mano (9 comprobaciones, unos minutos) y el completo
-  **por temporizador cada madrugada a las 03:15**, con parte por correo que dice qué se ha roto — y
-  que avisa también **si no llega a terminar**.
+- **Registro histórico, subordinado a RITUAL:** aquí se implantó el barrido en dos velocidades:
+  `--rapido` a mano y el completo por temporizador cada madrugada a las 03:15. **Ese automatismo quedó
+  retirado el 26 ago 2026 por contradecir la norma vigente.** Ambos modos solo pueden ejecutarse a mano
+  cuando Ibrahin los solicita o autoriza expresamente; ninguna parte de este bloque histórico concede
+  permiso para programarlos ni lanzarlos automáticamente.
 - **Y tres listas a mano, fuera:** la de pantallas del dinero (ahora sigue enlaces: de 60 a 343
   pantallas, y destapó cinco sitios con el dinero o la fecha en inglés), la lista blanca de `voz.js`
   (ahora se deriva del código) y el recuento del mapa del barrido.

@@ -1,5 +1,12 @@
 # Units de systemd de Bamburu
 
+> **Comprobaciones automáticas: ninguna.** El 26 ago 2026 se detuvo, deshabilitó y eliminó de
+> `/etc/systemd/system/` el timer y el servicio `bamburu-barrido-nocturno`. No deben reinstalarse:
+> gates, barridos, tests y regresiones solo se ejecutan cuando Ibrahin los solicita o autoriza
+> expresamente, conforme a `RITUAL.md`. El script `scripts/barrido-nocturno.sh` se conserva únicamente
+> como herramienta manual. El resto de unidades de esta página son procesos normales del producto o
+> de respaldo, no comprobaciones funcionales.
+
 | Unit | Qué hace | Detalle |
 |------|----------|---------|
 | `bamburu-backup` + `bamburu-backup-heartbeat` | Copia diaria a Google Drive, blindada | abajo |
