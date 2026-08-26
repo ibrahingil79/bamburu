@@ -145,17 +145,6 @@ export function register(app, db) {
 
   // ── Schema migrations ─────────────────────────────────────
   try { db.prepare('ALTER TABLE disa_conversation_threads ADD COLUMN pinned INTEGER DEFAULT 0').run(); } catch {}
-  db.prepare(`CREATE TABLE IF NOT EXISTS disa_action_audit (
-    action_id TEXT PRIMARY KEY,
-    action_type TEXT NOT NULL,
-    user_id INTEGER,
-    user_name TEXT,
-    status TEXT NOT NULL CHECK(status IN ('proposed','confirmed','executed','failed')),
-    proposed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    confirmed_at TEXT,
-    executed_at TEXT,
-    outcome TEXT
-  )`).run();
 
   // ── Helpers ──────────────────────────────────────────────
 
@@ -225,7 +214,22 @@ export function register(app, db) {
 
   // Registro mínimo de decisiones de DISA: no guarda parámetros, prompts ni datos del negocio.
   // El action_id sirve también como cerrojo de un solo uso frente a dobles envíos/reintentos.
+  function ensureActionAudit(db) {
+    db.prepare(`CREATE TABLE IF NOT EXISTS disa_action_audit (
+      action_id TEXT PRIMARY KEY,
+      action_type TEXT NOT NULL,
+      user_id INTEGER,
+      user_name TEXT,
+      status TEXT NOT NULL CHECK(status IN ('proposed','confirmed','executed','failed')),
+      proposed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      confirmed_at TEXT,
+      executed_at TEXT,
+      outcome TEXT
+    )`).run();
+  }
+
   function auditProposal(db, action, session) {
+    ensureActionAudit(db);
     db.prepare(`INSERT INTO disa_action_audit
       (action_id, action_type, user_id, user_name, status)
       VALUES (?, ?, ?, ?, 'proposed')`)
@@ -234,6 +238,7 @@ export function register(app, db) {
 
   function claimConfirmation(db, action, session) {
     if (!action?._actionId) return false;
+    ensureActionAudit(db);
     const r = db.prepare(`UPDATE disa_action_audit
       SET status='confirmed', confirmed_at=CURRENT_TIMESTAMP
       WHERE action_id=? AND action_type=? AND user_id=? AND status='proposed'`)
