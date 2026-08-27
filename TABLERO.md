@@ -5,57 +5,36 @@
 > añaden funciones nuevas hasta cerrarla.** La finalidad es elevar seguridad, robustez, calidad de
 > código, coherencia operativa, recuperación, escalabilidad y mantenibilidad hasta el nivel de un
 > producto profesional comparable con los líderes del mercado. Se mantiene una sola tarea activa cada
-> vez. **Saneamientos 1 y 2 están cerrados. Fase de saneamiento general: ACTIVA. SIGUIENTE TAREA
-> OFICIAL: Saneamiento 3 — Blindaje antiavalancha del rate limiting**, delimitada y todavía no
-> iniciada. **Peldaño 9 — Belleza/estética queda
+> vez. **Saneamientos 1, 2 y 3 están cerrados. Fase de saneamiento general: ACTIVA. No hay otra tarea
+> oficial definida: A LA ESPERA DE ENCARGO para delimitar el siguiente saneamiento.** **Peldaño 9 — Belleza/estética queda
 > pendiente y aplazado; no es la siguiente tarea.**
 
-> **SANEAMIENTO 3 ⏳ SIGUIENTE · NO INICIADO (26 ago 2026): BLINDAJE ANTIAVALANCHA DEL RATE
-> LIMITING.**
+> **SANEAMIENTO 3 ✅ HECHO (27 ago 2026 · `2d258c8`): BLINDAJE ANTIAVALANCHA DEL RATE
+> LIMITING.** La causa exacta eran los **50.738 rechazos 429 en 20 segundos**, cada uno con un `INSERT`
+> síncrono individual en `security_events` de la base central compartida `control.db`.
 >
-> **Problema demostrado.** El diagnóstico de carga registró **50.738 respuestas 429 en 20 segundos** y
-> señaló que cada una escribía un evento en la base central. El código vigente conserva exactamente
-> esa forma: `core/rate-limit.js` llama de manera síncrona a `recordSecurityEvent(...)` por **cada**
-> petición rechazada; `recordSecurityEvent` escribe en `control.db`, compartida por toda la plataforma.
-> Un tráfico que el sistema ya ha decidido frenar puede, por tanto, amplificarse en una tormenta de
-> escrituras centrales y degradar a negocios ajenos. La defensa cuesta más cuanto más se la ataca.
+> Todos los usos vivos del `rateLimit` compartido —global, login, alta, `/find-tenant`, DISA, avisos y
+> rutas públicas— conservan umbrales, claves funcionales, cuerpos JSON/HTML, `Retry-After` y contrato
+> 429. Los rechazos se acumulan ahora en la tabla aditiva `rate_limit_summaries`; el panel suma esos
+> contadores y muestra periodo, limitador, negocio, magnitud y origen técnico anonimizado. Los eventos
+> históricos permanecen intactos.
 >
-> **Por qué va ahora.** Es un riesgo vigente de seguridad y disponibilidad, transversal a todas las
-> superficies que reutilizan `rateLimit`, y puede hacer que Bamburu aparente estar protegido mientras
-> el propio freno castiga su punto compartido. No requiere decidir funciones, precios ni experiencia.
-> Se descartan como siguiente: permisos Paso 1 y el hueco CSRF antiguo de 2FA (ya cerrados); el
-> hardening de systemd (ya aplicado con exclusiones documentadas); la segunda copia de backup (mejora
-> de resiliencia pendiente de destino/coste, mientras el backup actual tiene verificación, restore y
-> heartbeat); las opciones SQLite B/C (condicionadas al crecimiento); y todo el roadmap funcional.
+> **Límites:** 10.000 claves de cupo en memoria, con fallo cerrado para claves nuevas si se agota el
+> techo; 289 claves de resumen; ventanas de cinco minutos; máximo una escritura cada cinco segundos
+> por resumen y cuatro operaciones por segundo por proceso; memoria hasta veinte minutos mediante el
+> barrido ya existente; persistencia rodada 30 días, solo sobre la tabla nueva. No se guarda IP completa,
+> sujeto de `keyFn`, contenido, credenciales, tokens ni cookies. El origen usa HMAC-SHA-256 con sal
+> efímera. El `UPSERT` suma lotes concurrentes sin pisarlos.
 >
-> **Objetivo.** Hacer que rechazar tráfico sea barato, acotado y observable: ninguna avalancha de 429
-> debe provocar una escritura por petición ni crecimiento sin límite, conservando una señal de
-> seguridad útil y sin rebajar las protecciones actuales.
+> Si `control.db` falla, el lote permanece dentro del límite de memoria, stderr avisa como máximo una
+> vez cada cinco minutos y el 429 sigue respondiéndose: no hay bypass ni recursión. No se añadió ningún
+> temporizador ni proceso. La comprobación aislada `scripts/test-rate-limit-aggregation.mjs` quedó
+> definida pero **no ejecutada**: por orden expresa de Ibrahin no se ejecutó ningún gate, barrido, test,
+> regresión, prueba de carga ni comprobación funcional.
 >
-> **Incluye, cuando se encargue:**
-> - sustituir el registro por-429 por agregación o deduplicación acotada por limitador, sujeto/tenant y
->   ventana, persistiendo resúmenes limitados y nunca PII ni secretos;
-> - acotar también la cardinalidad y vida de los buckets/contadores en memoria ante claves únicas;
-> - revisar estáticamente todos los usos vivos de `rateLimit` para que el arreglo compartido cubra las
->   superficies globales, login, alta, DISA y rutas públicas sin lógica paralela;
-> - conservar los umbrales vigentes, `Retry-After`, los cuerpos 429 JSON/HTML, el throttle por cuenta
->   que ralentiza sin bloquear y la utilidad del panel de seguridad;
-> - dejar definida una comprobación aislada que mida que una ráfaga genera respuestas 429 pero un
->   número acotado de escrituras/eventos; ejecutarla solo si Ibrahin la autoriza expresamente.
->
-> **Fuera:** cambiar cupos o políticas comerciales; rediseñar login/autenticación; permisos; DISA;
-> CSP; backups; portal/tienda; migrar SQLite/Postgres; multiproceso/afinidad; limpiar eventos o datos
-> históricos; Peldaño 9; cualquier función nueva.
->
-> **Resultado esperado.** Bajo abuso, Bamburu sigue respondiendo 429 con el contrato actual, la memoria
-> permanece acotada y `control.db` recibe como máximo una señal resumida y limitada por ventana, no una
-> escritura por rechazo. El panel conserva información suficiente para investigar sin almacenar datos
-> sensibles innecesarios.
->
-> **Criterio documental de cierre.** Solo se marcará ✅ cuando la implementación esté desplegada, el
-> diff se limite a este alcance y TABLERO/session/Notion consignen los commits, el estado real de la
-> comprobación autorizable (ejecutada o expresamente pendiente/no autorizada) y cualquier riesgo
-> residual. Definir esa comprobación no concede permiso para ejecutarla.
+> Servicio reiniciado y activo. No se lanzó `scripts/desplegar.mjs` porque incluye una comprobación
+> HTTPS funcional no autorizada. Fase de saneamiento general aún ACTIVA. **SIGUIENTE TAREA OFICIAL: A
+> LA ESPERA DE ENCARGO para delimitar el siguiente saneamiento.** Peldaño 9 permanece aplazado.
 
 > **SANEAMIENTO 2 ✅ HECHO (26 ago 2026): BLINDAJE DE DISA.** Se retiró la vía genérica
 > `insert_record`/`update_record`/`delete_record`, que escribía tablas directamente y podía eludir

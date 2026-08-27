@@ -10,9 +10,8 @@
 ## Fase actual: SANEAMIENTO TÉCNICO (CANON §4)
 
 - La auditoría integral está realizada y la fase de saneamiento general está **ACTIVA**. No se añaden
-  funciones nuevas hasta cerrarla; una tarea cada vez. Saneamientos 1 y 2 están cerrados. La
-  siguiente tarea oficial es **Saneamiento 3 — Blindaje antiavalancha del rate limiting**, delimitada
-  y todavía no iniciada.
+  funciones nuevas hasta cerrarla; una tarea cada vez. Saneamientos 1, 2 y 3 están cerrados. No hay
+  otra tarea oficial definida: queda **a la espera de encargo** para delimitar el siguiente saneamiento.
 - El Peldaño 9 — Belleza/estética sigue pendiente en el roadmap funcional, pero está aplazado y no es
   la siguiente tarea.
 
