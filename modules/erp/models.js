@@ -249,6 +249,18 @@ export function runMigrations(db) {
   // guarda la banda (general/reducido/superreducido/exento) y el % se resuelve desde
   // core/vat-bands.js. Backfill (una vez) mapea los productos existentes por su tipo.
   addCol(db, 'products', 'tax_band', "TEXT NOT NULL DEFAULT 'general'");
+  // Saneamiento 4: naturaleza fiscal explícita. Cero histórico queda pendiente: nunca se
+  // convierte retrospectivamente en exención; los tipos positivos conservan su conducta S1.
+  addCol(db, 'products', 'fiscal_treatment', "TEXT NOT NULL DEFAULT 'pending'");
+  addCol(db, 'products', 'fiscal_exemption_code', 'TEXT');
+  addCol(db, 'products', 'fiscal_non_subject_code', 'TEXT');
+  addCol(db, 'products', 'fiscal_reverse_charge', 'INTEGER NOT NULL DEFAULT 0');
+  addCol(db, 'products', 'fiscal_legal_text', 'TEXT');
+  const fiscalProdKey = 'migration_products_fiscal_classification_2026_v1';
+  if (!db.prepare('SELECT value FROM settings WHERE key=?').get(fiscalProdKey)) {
+    db.prepare("UPDATE products SET fiscal_treatment='taxable' WHERE tax_rate>0 AND fiscal_treatment='pending'").run();
+    db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(fiscalProdKey, 'done');
+  }
   const prodBandMigKey = 'migration_products_tax_band_2026_v1';
   if (!db.prepare('SELECT value FROM settings WHERE key=?').get(prodBandMigKey)) {
     const upd = db.prepare('UPDATE products SET tax_band=? WHERE tax_rate=?');
@@ -1202,6 +1214,13 @@ export function runMigrations(db) {
   // global intacto, así que la vista imprimible sigue cuadrando.
   addCol(db, 'invoice_items', 'tax_rate',   'REAL NOT NULL DEFAULT 0');
   addCol(db, 'invoice_items', 'tax_amount', 'REAL NOT NULL DEFAULT 0');
+  for (const table of ['invoice_items']) {
+    addCol(db, table, 'fiscal_treatment', "TEXT NOT NULL DEFAULT 'pending'");
+    addCol(db, table, 'fiscal_exemption_code', 'TEXT');
+    addCol(db, table, 'fiscal_non_subject_code', 'TEXT');
+    addCol(db, table, 'fiscal_reverse_charge', 'INTEGER NOT NULL DEFAULT 0');
+    addCol(db, table, 'fiscal_legal_text', 'TEXT');
+  }
 
   // ── ESCALERA · PASO 4a — CONSTRUCTOR DE ANALÍTICAS: los paneles guardados (aditivo) ───────────
   // De QUIEN LOS CREA (decisión del dueño, 17 jul 2026); compartir es el paso 4b.
@@ -1801,6 +1820,16 @@ export function runMigrations(db) {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_customer_order_items_product ON customer_order_items(product_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_customer_orders_status ON customer_orders(status, warehouse_id)`);
 
+  // Snapshots fiscales aditivos en todos los documentos previos y plantillas. Las filas
+  // históricas quedan `pending`; no se deduce una causa legal de un mero 0 %.
+  for (const table of ['quote_items','customer_order_items','recurring_template_items']) {
+    addCol(db, table, 'fiscal_treatment', "TEXT NOT NULL DEFAULT 'pending'");
+    addCol(db, table, 'fiscal_exemption_code', 'TEXT');
+    addCol(db, table, 'fiscal_non_subject_code', 'TEXT');
+    addCol(db, table, 'fiscal_reverse_charge', 'INTEGER NOT NULL DEFAULT 0');
+    addCol(db, table, 'fiscal_legal_text', 'TEXT');
+  }
+
   // ── PILAR 4 · VENTAS · PIEZA 2b — ALBARÁN / entrega (delivery_notes) ───────
   // Documento de ENTREGA, ESPEJO de la RECEPCIÓN de compra (purchase_order_receipts): es el
   // ÚNICO punto de la cadena de ventas donde el stock SALE de verdad del libro. DEL-NNNN al
@@ -1857,6 +1886,11 @@ export function runMigrations(db) {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_delivery_notes_order ON delivery_notes(order_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_delivery_note_items_dn ON delivery_note_items(delivery_note_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_delivery_note_items_orderitem ON delivery_note_items(order_item_id)`);
+  for (const col of [
+    ['fiscal_treatment', "TEXT NOT NULL DEFAULT 'pending'"], ['fiscal_exemption_code', 'TEXT'],
+    ['fiscal_non_subject_code', 'TEXT'], ['fiscal_reverse_charge', 'INTEGER NOT NULL DEFAULT 0'],
+    ['fiscal_legal_text', 'TEXT'],
+  ]) addCol(db, 'delivery_note_items', col[0], col[1]);
   // Estado de entrega del pedido (espejo de purchase_orders.received_status). ADITIVO: no toca
   // el CHECK de customer_orders.status; el pedido sigue 'confirmado' aunque esté entregado.
   addCol(db, 'customer_orders', 'delivered_status', 'TEXT');   // NULL | 'parcial' | 'entregado'

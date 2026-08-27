@@ -96,24 +96,24 @@ export const OFICIOS = [
     // general y con el nombre que lo dice, para que el negocio decida a sabiendas.
     servicios: [
       // Fisioterapia — fuente: tarifas publicadas de clínica de fisioterapia en España (fisioem.com, ago 2026).
-      { nombre: 'Primera consulta y valoración', duracion_min: 60, banda: 'exento' },  // fisioem: "1ª consulta – valoración 60 min"
-      { nombre: 'Sesión de fisioterapia',        duracion_min: 45, banda: 'exento' },  // fisioem: "Sesión fisioterapia 45min"
-      { nombre: 'Sesión de fisioterapia (60 min)', duracion_min: 60, banda: 'exento' },// tarifas de sesión de 60 min en clínicas ES
-      { nombre: 'Sesión de suelo pélvico',       duracion_min: 45, banda: 'exento' },  // fisioem: "Sesión de tratamiento 45 min" (suelo pélvico)
+      { nombre: 'Primera consulta y valoración', duracion_min: 60, banda: 'general' },
+      { nombre: 'Sesión de fisioterapia',        duracion_min: 45, banda: 'general' },
+      { nombre: 'Sesión de fisioterapia (60 min)', duracion_min: 60, banda: 'general' },
+      { nombre: 'Sesión de suelo pélvico',       duracion_min: 45, banda: 'general' },
       // Psicología — fuente: tarifas publicadas de gabinetes de psicología en España (ago 2026): la
       // sesión estándar es de 50–60 min y la primera, algo más larga.
-      { nombre: 'Primera sesión de psicología',  duracion_min: 60, banda: 'exento' },
-      { nombre: 'Sesión de psicología',          duracion_min: 50, banda: 'exento' },
-      { nombre: 'Terapia de pareja',             duracion_min: 75, banda: 'exento' },
+      { nombre: 'Primera sesión de psicología',  duracion_min: 60, banda: 'general' },
+      { nombre: 'Sesión de psicología',          duracion_min: 50, banda: 'general' },
+      { nombre: 'Terapia de pareja',             duracion_min: 75, banda: 'general' },
       // Nutrición — fuente: consultas de dietética-nutrición en España: primera visita 60 min,
       // revisiones 30 min. EXENTO solo si lo presta un sanitario titulado; si no, va al general.
-      { nombre: 'Primera consulta de nutrición', duracion_min: 60, banda: 'exento' },
-      { nombre: 'Revisión de nutrición',         duracion_min: 30, banda: 'exento' },
+      { nombre: 'Primera consulta de nutrición', duracion_min: 60, banda: 'general' },
+      { nombre: 'Revisión de nutrición',         duracion_min: 30, banda: 'general' },
       // Osteopatía y podología — sesiones de 45–60 min en clínicas ES.
-      { nombre: 'Sesión de osteopatía',          duracion_min: 50, banda: 'exento' },
-      { nombre: 'Quiropodia',                    duracion_min: 45, banda: 'exento' },
+      { nombre: 'Sesión de osteopatía',          duracion_min: 50, banda: 'general' },
+      { nombre: 'Quiropodia',                    duracion_min: 45, banda: 'general' },
       // Logopedia — sesión estándar de 45 min.
-      { nombre: 'Sesión de logopedia',           duracion_min: 45, banda: 'exento' },
+      { nombre: 'Sesión de logopedia',           duracion_min: 45, banda: 'general' },
       // ── BIENESTAR: NO ES ASISTENCIA SANITARIA, AUNQUE LO DÉ UN SANITARIO ──────────────────────
       // La exención del art. 20.Uno.3.º LIVA pide DOS cosas A LA VEZ: profesional sanitario titulado
       // Y finalidad terapéutica. El MISMO fisioterapeuta factura sin IVA una rehabilitación y al 21 %
@@ -274,7 +274,7 @@ export function sembrarCatalogo(db, oficioId, crearProducto) {
     // (fuente única). Precio 0 — las fuentes publican duraciones, no precios, y el precio es del negocio.
     const sku = (norm(s.nombre).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)) || 'servicio';
     const prod = crearProducto(db, {
-      name: s.nombre, sku, price: 0, tax_band: s.banda,
+      name: s.nombre, sku, price: 0, tax_band: s.banda, fiscal_treatment: 'taxable',
       type: 'service', status: 'active', stock: 0, tags: [],
     });
     insCfg.run(prod.id, s.duracion_min);

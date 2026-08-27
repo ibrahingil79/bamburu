@@ -28,6 +28,11 @@ export const productSchema = z.object({
   tracking: z.enum(['none', 'lot', 'serial']).default('none'),           // Pilar 3: traza por lote / nº de serie
 
   tax_band: str(40),                                                     // OBLIGATORIO (dato fiscal): banda de IVA; el % lo resuelve el servidor desde banda+país
+  fiscal_treatment: z.enum(['taxable', 'exempt', 'non_subject', 'pending']).optional().default('pending'),
+  fiscal_exemption_code: z.enum(['', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6']).optional().default(''),
+  fiscal_non_subject_code: z.enum(['', 'N1', 'N2']).optional().default(''),
+  fiscal_reverse_charge: z.coerce.boolean().optional().default(false),
+  fiscal_human_confirmed: z.coerce.boolean().optional().default(false),
   featured: z.coerce.boolean().default(false),
   tags: z.array(intPos).optional().default([]),
   stock: z.coerce.number().int().min(0).default(0),
@@ -406,7 +411,15 @@ export const refundSchema = z.object({
 // salir en negativo** se comprueba donde tiene sentido —sobre el TOTAL, en `computeTotals`— y no
 // línea a línea. Una línea negativa suelta no es un error; una factura de −40 € sí (para eso está
 // la rectificativa). La cantidad sigue teniendo que ser positiva.
+const fiscalLineFields = {
+  fiscal_treatment: z.enum(['taxable','exempt','non_subject','pending']).optional(),
+  fiscal_exemption_code: z.enum(['','E1','E2','E3','E4','E5','E6']).optional(),
+  fiscal_non_subject_code: z.enum(['','N1','N2']).optional(),
+  fiscal_reverse_charge: z.coerce.boolean().optional(),
+  fiscal_legal_text: strOpt(500),
+};
 const invoiceLineSchema = z.object({
+  ...fiscalLineFields,
   description: str(500),
   quantity:    z.coerce.number().positive().max(1_000_000),
   unit_price:  z.coerce.number().min(-1_000_000).max(1_000_000),
@@ -440,6 +453,7 @@ export const invoiceAnularSchema = z.object({
 // ── Presupuestos (quotes) — Pilar 4 · Pieza 1 ──────────────────
 // Línea ESPEJO de la factura: catálogo (product_id) o línea libre; unit_price NETO.
 const quoteLineSchema = z.object({
+  ...fiscalLineFields,
   description: str(500),
   quantity:    z.coerce.number().positive().max(1_000_000),
   unit_price:  z.coerce.number().nonnegative().max(1_000_000),
@@ -478,6 +492,7 @@ export const quoteFollowSchema = z.object({
 // ── Pedidos (customer_orders) — Pilar 4 · Pieza 2a ─────────────
 // Línea ESPEJO del presupuesto/factura: catálogo (product_id) o línea libre; unit_price NETO.
 const pedidoLineSchema = z.object({
+  ...fiscalLineFields,
   description: str(500),
   quantity:    z.coerce.number().positive().max(1_000_000),
   unit_price:  z.coerce.number().nonnegative().max(1_000_000),
@@ -504,6 +519,7 @@ export const pedidoAnularSchema = z.object({
 // Línea de albarán: desde pedido (order_item_id) o suelta (product_id de catálogo / línea libre).
 // quantity positiva (entrega parcial = a la baja sobre el pendiente). unit_price NETO.
 const albaranLineSchema = z.object({
+  ...fiscalLineFields,
   order_item_id: optId,   // línea del pedido que entrega (NULL en albarán suelto)
   product_id:    optId,   // línea de catálogo → re-resuelve IVA por banda; NULL = línea libre (no mueve stock)
   description:   str(500),
@@ -528,6 +544,7 @@ export const albaranAnularSchema = z.object({
 // Línea: producto de catálogo (product_id → el servidor re-resuelve precio + IVA por banda) o
 // línea libre (concepto + importe, IVA 21% fijo). SIN cliente, SIN IRPF (venta a consumidor).
 const mostradorLineSchema = z.object({
+  ...fiscalLineFields,
   product_id:  optId,
   description: strOpt(500),
   quantity:    z.coerce.number().positive().max(1_000_000),
@@ -551,6 +568,8 @@ export const sustitutivaSchema = z.object({
 // original. ADMITE IMPORTES NEGATIVOS (abono): a diferencia de la factura ordinaria,
 // quantity y unit_price pueden ser negativos para devoluciones/anulación de operación.
 const rectificativeLineSchema = z.object({
+  ...fiscalLineFields,
+  product_id: optId,
   description: str(500),
   quantity:    z.coerce.number().gte(-1_000_000).lte(1_000_000).refine(n => n !== 0, 'La cantidad no puede ser 0'),
   unit_price:  z.coerce.number().gte(-1_000_000).lte(1_000_000),

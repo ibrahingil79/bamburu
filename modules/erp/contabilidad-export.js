@@ -34,6 +34,8 @@ export function ventasAsientos(libro) {
         issue_date: r.issue_date, operation_date: r.operation_date, tipo_factura: r.tipo_factura,
         es_rectificativa: r.es_rectificativa, rect_mode: r.rect_mode, nif: r.nif, nombre: r.nombre,
         rate: g.rate, base: r2(g.base), cuota: r2(g.cuota), total_linea: r2(g.base + g.cuota),
+        fiscal_treatment: g.fiscal_treatment, fiscal_exemption_code: g.fiscal_exemption_code,
+        fiscal_non_subject_code: g.fiscal_non_subject_code, fiscal_reverse_charge: g.fiscal_reverse_charge,
         irpf: i === 0 ? r2(r.irpf) : null,   // retención sólo en la primera línea de la factura
       });
     });
@@ -77,7 +79,7 @@ const COLS_RECIBIDAS = ['Ejercicio', 'Periodo', 'Actividad-Código', 'Actividad-
 
 // Columnas oficiales SIN dato en Bamburu (vacías, NUNCA inventadas) — para reportar/decidir.
 export const PENDING_COLUMNS = {
-  EXPEDIDAS_INGRESOS: ['Actividad (Código/Tipo/IAE)', 'Concepto de Ingreso', 'Ingreso Computable (IRPF)', 'NIF Destinatario-Tipo', 'Código País', 'Clave de Operación', 'Calificación de la Operación', 'Operación Exenta (E1–E6/N1–N2)', 'Tipo de Recargo Eq. y Cuota', 'Cobro (criterio de caja)', 'Tipo Retención del IRPF (%) — se exporta el importe, no el %', 'Registro Acuerdo Facturación', 'Inmueble / Referencia Catastral', 'Referencia Externa'],
+  EXPEDIDAS_INGRESOS: ['Actividad (Código/Tipo/IAE)', 'Concepto de Ingreso', 'Ingreso Computable (IRPF)', 'NIF Destinatario-Tipo', 'Código País', 'Clave de Operación', 'Tipo de Recargo Eq. y Cuota', 'Cobro (criterio de caja)', 'Tipo Retención del IRPF (%) — se exporta el importe, no el %', 'Registro Acuerdo Facturación', 'Inmueble / Referencia Catastral', 'Referencia Externa'],
   RECIBIDAS_GASTOS: ['Actividad (Código/Tipo/IAE)', 'Tipo de Factura', 'Concepto de Gasto', 'Gasto Deducible (IRPF)', 'NIF Expedidor-Tipo', 'Código País', 'Clave de Operación', 'Bien de Inversión', 'Inversión del Sujeto Pasivo', 'Deducible en Periodo Posterior / Periodo Deducción', 'Cuota Deducible', 'Tipo y Cuota de Recargo Eq.', 'Pago (criterio de caja)', 'Retención del IRPF', 'Registro Acuerdo Facturación', 'Inmueble / Referencia Catastral', 'Referencia Externa'],
 };
 
@@ -89,6 +91,9 @@ function rowExpedidas(a) {
   c[8] = fechaES(a.issue_date); c[9] = a.operation_date ? fechaES(a.operation_date) : '';
   c[10] = a.series || ''; c[11] = a.numero || '';
   c[15] = a.nif || ''; c[16] = a.nombre || '';
+  if (a.fiscal_treatment === 'taxable') c[18] = a.fiscal_reverse_charge ? 'S2' : 'S1';
+  else if (a.fiscal_treatment === 'exempt') c[19] = a.fiscal_exemption_code || '';
+  else if (a.fiscal_treatment === 'non_subject') c[18] = a.fiscal_non_subject_code || '';
   c[20] = a.total_linea; c[21] = a.base; c[22] = a.rate === null ? '' : a.rate; c[23] = a.cuota;
   if (a.irpf != null && a.irpf !== 0) c[31] = a.irpf;   // Importe Retenido sólo en la 1ª línea
   return c;

@@ -18,6 +18,7 @@ import { stockModalHtml, stockModalScript } from '../views/stock-modal.js';
 import { nextCode } from '../codes.js';
 import { ENTITY } from '../../../core/activity-entities.js';
 import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
+import { validateFiscalClassification } from '../../../core/fiscal-classification.js';
 
 function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now();
@@ -42,7 +43,7 @@ export function searchProducts(db, { q = '', limit = 20 } = {}) {
   }
   const lim = Math.min(Math.max(Number(limit) || 20, 1), 100);
   return db.prepare(
-    'SELECT id, name, sku, product_code, price, tax_band, tax_rate, type FROM products WHERE '
+    'SELECT id, name, sku, product_code, price, tax_band, tax_rate, type, fiscal_treatment, fiscal_exemption_code, fiscal_non_subject_code, fiscal_reverse_charge, fiscal_legal_text FROM products WHERE '
     + where.join(' AND ') + ' ORDER BY name LIMIT ?'
   ).all(...params, lim);
 }
@@ -65,6 +66,8 @@ export function createProductSvc(db, input) {
   const chosen = getVatBands(country, fallbackRate).find(b => b.code === d.tax_band);
   if (!chosen) { const e = new Error('La banda de IVA es obligatoria y debe ser válida'); e.status = 400; throw e; }
   const band = chosen.code, rate = chosen.rate;
+  if (d.fiscal_treatment === 'exempt' && !d.fiscal_human_confirmed) { const e = new Error('Una persona responsable debe confirmar la causa y las condiciones de la exención'); e.status = 400; throw e; }
+  const fiscal = validateFiscalClassification({ ...d, tax_rate: rate }, { allowPending: true });
   const ptype = d.type || 'physical';
   const tracking = ptype === 'physical' ? (d.tracking || 'none') : 'none';   // solo físicos llevan traza
   // Un producto TRAZADO no nace con stock de apertura: sus unidades entran por recepción/ajuste, que es
@@ -72,8 +75,8 @@ export function createProductSvc(db, input) {
   const initialStock = (ptype === 'service' || ptype === 'digital' || tracking !== 'none') ? 0 : (parseInt(d.stock) || 0);
   const code = nextCode(db, 'product');
   const slug = slugify(d.name);
-  const r = db.prepare(`INSERT INTO products (name,slug,sku,description,price,compare_price,image_url,category_id,status,type,digital_file_url,featured,stock,supplier_id,tax_rate,tax_band,product_code,tracking) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(d.name, slug, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', ptype, d.digital_file_url||'', d.featured?1:0, 0, d.supplier_id||null, rate, band, code, tracking);
+  const r = db.prepare(`INSERT INTO products (name,slug,sku,description,price,compare_price,image_url,category_id,status,type,digital_file_url,featured,stock,supplier_id,tax_rate,tax_band,product_code,tracking,fiscal_treatment,fiscal_exemption_code,fiscal_non_subject_code,fiscal_reverse_charge,fiscal_legal_text) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(d.name, slug, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', ptype, d.digital_file_url||'', d.featured?1:0, 0, d.supplier_id||null, rate, band, code, tracking, fiscal.fiscal_treatment, fiscal.fiscal_exemption_code, fiscal.fiscal_non_subject_code, fiscal.fiscal_reverse_charge, fiscal.fiscal_legal_text);
   const id = r.lastInsertRowid;
   if (ptype === 'physical' && initialStock > 0) {
     // Capa 2: el stock inicial entra al almacén elegido (principal por defecto).
@@ -181,6 +184,8 @@ export function createProductRoutes(db, cfg = {}) {
       const chosen = getVatBands(country, fallbackRate).find(b => b.code === d.tax_band);
       if (!chosen) return c.json({ error: 'La banda de IVA es obligatoria y debe ser válida' }, 400);
       const band = chosen.code, rate = chosen.rate;
+      if (d.fiscal_treatment === 'exempt' && !d.fiscal_human_confirmed) return c.json({ error: 'Una persona responsable debe confirmar la causa y las condiciones de la exención' }, 400);
+      const fiscal = validateFiscalClassification({ ...d, tax_rate: rate }, { allowPending: true });
       // Trazabilidad (Pilar 3): solo físicos; y NO se puede cambiar si el producto ya tiene movimientos
       // de stock (su stock existente no tendría lote → el libro quedaría descuadrado). Deja el stock a 0.
       const cur = db.prepare('SELECT tracking FROM products WHERE id=?').get(id) || {};
@@ -188,8 +193,8 @@ export function createProductRoutes(db, cfg = {}) {
       if (nuevoTracking !== (cur.tracking || 'none') && db.prepare('SELECT 1 FROM stock_movements WHERE product_id=? LIMIT 1').get(id)) {
         return c.json({ error: 'No puedes cambiar la trazabilidad de un producto que ya tiene movimientos de stock. Deja su stock a 0 primero, o crea un producto nuevo.' }, 400);
       }
-      db.prepare(`UPDATE products SET name=?,sku=?,description=?,price=?,compare_price=?,image_url=?,category_id=?,status=?,type=?,digital_file_url=?,featured=?,supplier_id=?,tax_rate=?,tax_band=?,tracking=? WHERE id=?`)
-        .run(d.name, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', d.type||'physical', d.digital_file_url||'', d.featured?1:0, d.supplier_id||null, rate, band, nuevoTracking, id);
+      db.prepare(`UPDATE products SET name=?,sku=?,description=?,price=?,compare_price=?,image_url=?,category_id=?,status=?,type=?,digital_file_url=?,featured=?,supplier_id=?,tax_rate=?,tax_band=?,tracking=?,fiscal_treatment=?,fiscal_exemption_code=?,fiscal_non_subject_code=?,fiscal_reverse_charge=?,fiscal_legal_text=? WHERE id=?`)
+        .run(d.name, d.sku||'', d.description||'', d.price, d.compare_price||null, d.image_url||'', d.category_id||null, d.status||'active', d.type||'physical', d.digital_file_url||'', d.featured?1:0, d.supplier_id||null, rate, band, nuevoTracking, fiscal.fiscal_treatment, fiscal.fiscal_exemption_code, fiscal.fiscal_non_subject_code, fiscal.fiscal_reverse_charge, fiscal.fiscal_legal_text, id);
       if (d.tags !== undefined) {
         db.prepare('DELETE FROM product_tags WHERE product_id=?').run(id);
         for (const tid of (d.tags||[])) {
@@ -367,7 +372,7 @@ export function createProductRoutes(db, cfg = {}) {
       '<td>'+(p.image_url?'<img class="thumb" src="'+escHtml(p.image_url)+'" alt="">':'<span style="font-size:1.2rem"></span>')+'</td>'+
       '<td><strong>'+escHtml(p.name)+'</strong>'+(p.featured?'  <span class="badge b-purple">Destacado</span>':'')+'<br><span style="color:var(--muted);font-size:.75rem"><span style="font-family:monospace">'+escHtml(p.product_code||'-')+'</span> · SKU: '+escHtml(p.sku||'-')+'</span></td>'+
       '<td>'+escHtml(p.category_name||'-')+'</td>'+
-      '<td><strong>'+dineroEs(p.price, sym)+'</strong>'+(p.compare_price?'<br><span style="text-decoration:line-through;color:var(--muted);font-size:.75rem">'+dineroEs(p.compare_price, sym)+'</span>':'')+'<br><span style="color:var(--muted);font-size:.72rem">'+(Number(p.tax_rate)>0?('IVA '+p.tax_rate+'%'):'Exento')+'</span></td>'+
+      '<td><strong>'+dineroEs(p.price, sym)+'</strong>'+(p.compare_price?'<br><span style="text-decoration:line-through;color:var(--muted);font-size:.75rem">'+dineroEs(p.compare_price, sym)+'</span>':'')+'<br><span style="color:var(--muted);font-size:.72rem">'+(p.fiscal_treatment==='exempt'?'Exenta '+(p.fiscal_exemption_code||''):p.fiscal_treatment==='non_subject'?'No sujeta '+(p.fiscal_non_subject_code||''):p.fiscal_treatment==='pending'?'Fiscalidad pendiente':('IVA '+p.tax_rate+'%'))+'</span></td>'+
       '<td>'+(p.type==='service'?'<span style="color:var(--muted)">—</span>':(p.stock<5?'<span style="color:var(--danger);font-weight:500">'+p.stock+'</span>':p.stock))+'</td>'+
       '<td>'+(statusB[p.status]||escHtml(p.status))+'</td>'+
       '<td><span class="badge b-gray">'+(p.type==='digital'?'Digital':p.type==='service'?'Servicio':'Físico')+'</span></td>'+
@@ -447,7 +452,11 @@ export function createProductRoutes(db, cfg = {}) {
               <div class="form-group" style="display:none"><!-- OCULTO: pensada para la tienda online --><label class="form-label">Descripción</label><textarea class="form-control" id="pDesc" rows="3"></textarea></div>
               <div class="form-row">
                 <div class="form-group"><label class="form-label">Precio *</label><input class="form-control" type="number" id="pPrice" step="0.01"></div>
-                <div class="form-group"><label class="form-label">Tipo de IVA *</label><select class="form-control" id="pTaxBand"></select></div>
+                <div class="form-group"><label class="form-label">Tratamiento fiscal *</label><select class="form-control" id="pFiscal" onchange="fiscalUI()"><option value="taxable">Sujeta y no exenta</option><option value="exempt">Exenta</option><option value="non_subject">No sujeta</option><option value="pending">Pendiente de confirmar</option></select></div>
+                <div class="form-group"><label class="form-label">Tipo de IVA *</label><select class="form-control" id="pTaxBand"></select><small>El 0 % sigue siendo una operación sujeta: no equivale a exenta.</small></div>
+                <div class="form-group" id="pExemptWrap" style="display:none"><label class="form-label">Causa de exención *</label><select class="form-control" id="pExempt"><option value="">— Selecciona —</option>${['E1 · art. 20','E2 · art. 21','E3 · art. 22','E4 · arts. 23 y 24','E5 · art. 25','E6 · otras causas'].map((x,i)=>`<option value="E${i+1}">${x}</option>`).join('')}</select><label style="display:block;margin-top:.5rem"><input type="checkbox" id="pFiscalConfirm"> Confirmo como responsable la causa y que se cumplen sus condiciones.</label><small>En servicios sanitarios confirma titulación habilitante y finalidad real de diagnóstico, prevención o tratamiento. El oficio o el nombre no bastan; Bamburu no sustituye el criterio fiscal del responsable.</small></div>
+                <div class="form-group" id="pNonSubjectWrap" style="display:none"><label class="form-label">Causa de no sujeción *</label><select class="form-control" id="pNonSubject"><option value="">— Selecciona —</option><option value="N1">N1 · arts. 7/14 u otras causas</option><option value="N2">N2 · reglas de localización</option></select></div>
+                <div class="form-group" id="pReverseWrap"><label class="form-label"><input type="checkbox" id="pReverse"> Inversión del sujeto pasivo</label></div>
                 <div class="form-group" style="display:none"><label class="form-label">Precio antes (tachado)</label><input class="form-control" type="number" id="pCompare" step="0.01"></div><!-- OCULTO: promoción de tienda online -->
                 <div class="form-group" id="pStockWrap"><label class="form-label">Stock inicial</label><input class="form-control" type="number" id="pStock" value="0"></div>
                 <div class="form-group" id="pWarehouseWrap"><label class="form-label">Almacén del stock inicial</label><select class="form-control" id="pWarehouse">${whInitOptions}</select></div>
@@ -557,6 +566,7 @@ export function createProductRoutes(db, cfg = {}) {
         }).join('');
       })();
       function bandRate(code){const b=VAT_BANDS.find(x=>x.code===code);return b?b.rate:null;}
+      function fiscalUI(){const v=document.getElementById('pFiscal').value;document.getElementById('pExemptWrap').style.display=v==='exempt'?'':'none';document.getElementById('pNonSubjectWrap').style.display=v==='non_subject'?'':'none';document.getElementById('pReverseWrap').style.display=v==='taxable'?'':'none';}
 
       // P4: la lista la renderiza el servidor (búsqueda/filtro/paginación por URL).
       // Aquí solo se cargan las categorías/proveedores/etiquetas que necesita el modal.
@@ -638,6 +648,7 @@ export function createProductRoutes(db, cfg = {}) {
         document.getElementById('pStock').value=p.stock;
         document.getElementById('pAvgCost').textContent='${sym}'+Number(p.average_cost||0).toFixed(2);
         document.getElementById('pTaxBand').value=p.tax_band||'general';
+        document.getElementById('pFiscal').value=p.fiscal_treatment||'pending'; document.getElementById('pExempt').value=p.fiscal_exemption_code||''; document.getElementById('pNonSubject').value=p.fiscal_non_subject_code||''; document.getElementById('pReverse').checked=!!p.fiscal_reverse_charge; fiscalUI();
         document.getElementById('pImage').value=p.image_url||'';
         document.getElementById('pDigital').value=p.digital_file_url||'';
         document.getElementById('pStatus').value=p.status||'active';
@@ -743,6 +754,11 @@ export function createProductRoutes(db, cfg = {}) {
           type:document.getElementById('pType').value,
           tracking:document.getElementById('pTracking').value,
           tax_band:document.getElementById('pTaxBand').value,
+          fiscal_treatment:document.getElementById('pFiscal').value,
+          fiscal_exemption_code:document.getElementById('pExempt').value,
+          fiscal_non_subject_code:document.getElementById('pNonSubject').value,
+          fiscal_reverse_charge:document.getElementById('pReverse').checked,
+          fiscal_human_confirmed:document.getElementById('pFiscalConfirm').checked,
           featured:document.getElementById('pFeatured').checked,
           tags:selTags,
           stock:(document.getElementById('pType').value==='service'||document.getElementById('pType').value==='digital')?0:(parseInt(document.getElementById('pStock').value)||0),

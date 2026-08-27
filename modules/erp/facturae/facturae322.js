@@ -175,13 +175,21 @@ export function serializeFacturae322(model) {
           <GrossAmount>${n2(l.grossAmount)}</GrossAmount>
           <TaxesOutputs>
 ${taxXml(l, '            ')}
-          </TaxesOutputs>
+          </TaxesOutputs>${l.fiscalTreatment === 'exempt' || l.fiscalTreatment === 'non_subject' ? `
+          <SpecialTaxableEvent>
+            <SpecialTaxableEventCode>${l.fiscalTreatment === 'exempt' ? '01' : '02'}</SpecialTaxableEventCode>
+            <SpecialTaxableEventReason>${esc('01 ' + (l.fiscalLegalText || l.fiscalCode || ''))}</SpecialTaxableEventReason>
+          </SpecialTaxableEvent>` : ''}
         </InvoiceLine>`).join('\n');
 
   const withheldXml = taxesWithheld ? `
       <TaxesWithheld>
 ${taxXml(taxesWithheld, '        ')}
       </TaxesWithheld>` : '';
+  const legal = [...new Set(lines.filter(l => l.fiscalTreatment !== 'taxable' || l.fiscalReverseCharge)
+    .map(l => l.fiscalLegalText || (l.fiscalReverseCharge ? 'Inversión del sujeto pasivo' : l.fiscalCode)).filter(Boolean))];
+  const legalXml = legal.length ? `
+      <LegalLiterals>${legal.map(x => `<LegalReference>${esc(x).slice(0,250)}</LegalReference>`).join('')}</LegalLiterals>` : '';
 
   // `UnitOfMeasure` es [0..1] en el XSD: se omite a propósito. `PaymentDetails` también es opcional
   // y hoy `payment_method` es texto libre sin equivalencia fiable con `PaymentMeans` → se omite
@@ -233,7 +241,7 @@ ${taxesOutputs.map(t => taxXml(t, '        ')).join('\n')}
       </InvoiceTotals>
       <Items>
 ${lineasXml}
-      </Items>
+      </Items>${legalXml}
     </Invoice>
   </Invoices>
 </fe:Facturae>

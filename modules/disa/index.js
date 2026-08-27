@@ -473,10 +473,13 @@ export function register(app, db) {
           try {
             const r = createProductSvc(db, {
               name: p.name, sku: pSku, price: Number(p.price) || 0,
-              stock: Number(p.stock) || 0, type: 'physical', tax_band: band,
+              stock: Number(p.stock) || 0, type: p.type || 'physical', tax_band: band,
+              // DISA prepara el producto, pero no confirma consecuencias fiscales: el responsable
+              // elige S1/S2, E1–E6 o N1/N2 en Productos antes de poder facturarlo.
+              fiscal_treatment: 'pending',
             });
             logActivity(db, 'create', ENTITY.PRODUCT, r.id, 'Producto "' + r.name + '" creado por DISA', session);
-            return { ok: true, message: 'Producto "' + (r.name || 'nuevo') + '" creado (banda ' + band + ').' };
+            return { ok: true, message: 'Producto "' + (r.name || 'nuevo') + '" preparado (banda ' + band + '). Falta que una persona confirme su clasificación fiscal en Productos antes de facturarlo.' };
           } catch (e) {
             return { ok: false, message: 'No se pudo crear el producto: ' + (e.message || 'datos inválidos') + '.' };
           }
@@ -2349,7 +2352,9 @@ export function register(app, db) {
       '  codigos de la lista cerrada, nunca inventes otro ni un numero libre:',
       '    tax_band: ' + vatVals,
       '  Mapea lo que diga el usuario a su banda SOLO si es inequivoco (1:1): "21" o "IVA general" -> general,',
-      '  "10" -> reducido, "4" -> superreducido, "0"/"exento"/"sin IVA" -> exento. Si el usuario NO dice el IVA,',
+      '  "10" -> reducido y "4" -> superreducido. NO equipares "0 %", "exento" y "sin IVA": no son la misma clasificación.',
+      '  DISA deja siempre pendiente la clasificación jurídica; una persona debe confirmar S1/S2, E1–E6 o N1/N2 en Productos.',
+      '  Si el usuario NO dice el IVA,',
       '  o lo que dice es ambiguo/no encaja claro con una banda, NO lo adivines: PREGUNTA cual es la banda antes',
       '  de crear. Sin banda no se crea el producto (el servidor lo rechaza). El SKU se genera solo si no lo das.',
       '',

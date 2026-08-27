@@ -133,14 +133,18 @@ export function buildInvoiceModel(db, invoiceId) {
       grossAmount: base,
       taxRate: rate,
       taxAmount: tax,
+      fiscalTreatment: it.fiscal_treatment || 'pending',
+      fiscalCode: it.fiscal_exemption_code || it.fiscal_non_subject_code || null,
+      fiscalLegalText: it.fiscal_legal_text || null,
+      fiscalReverseCharge: !!it.fiscal_reverse_charge,
     };
   });
 
   // Desglose de IVA por tipo (una factura puede mezclar 21/10/4).
   const porTipo = new Map();
   for (const l of lines) {
-    const k = l.taxRate;
-    const a = porTipo.get(k) || { rate: k, base: 0, amount: 0 };
+    const k = [l.fiscalTreatment, l.fiscalCode || '', l.taxRate].join('|');
+    const a = porTipo.get(k) || { rate: l.taxRate, base: 0, amount: 0, fiscalTreatment: l.fiscalTreatment, fiscalCode: l.fiscalCode };
     a.base = r2(a.base + l.grossAmount);
     a.amount = r2(a.amount + l.taxAmount);
     porTipo.set(k, a);
@@ -223,6 +227,9 @@ export function facturaeStatus(model) {
   }
   if (!model.lines.length) {
     return { ready: false, blocked: true, missing: [], reason: 'La factura no tiene líneas.', usedLiveData: model.usedLiveData };
+  }
+  if (model.lines.some(l => l.fiscalTreatment === 'pending')) {
+    return { ready: false, blocked: true, missing: ['Clasificación fiscal de las líneas'], reason: 'La factura no tiene una clasificación fiscal explícita y no puede exportarse atribuyéndole una causa.', usedLiveData: model.usedLiveData };
   }
 
   missing.push(...faltantesDeParte(model.seller, 'Tu empresa'));

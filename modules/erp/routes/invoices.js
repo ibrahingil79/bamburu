@@ -32,6 +32,7 @@ import { fechaEs } from '../voz.js';   // la fecha, en cristiano (24/08/2026)
 import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
 import { exigirCorreoActivo } from '../avisos-preferencias.js';   // interruptor de Ajustes → Avisos y correos
 import { contactoDeFactura } from '../contactos.js';   // D2: facturar deja constancia de que vino
+import { validateFiscalClassification, FISCAL_LABELS } from '../../../core/fiscal-classification.js';
 
 // ── LA FACTURA EXENTA TIENE QUE DECIR POR QUÉ LO ES ──────────────────────────────────────────────
 // Una factura sin IVA no vale con no ponerlo: el RD 1619/2012 (art. 6.1.j) obliga a **mencionar la
@@ -46,12 +47,11 @@ import { contactoDeFactura } from '../contactos.js';   // D2: facturar deja cons
 //
 // Es una MENCIÓN, no un cálculo: no toca ni un importe ni la huella.
 export function leyendaExencion(items, inv) {
-  const hayExento = (items || []).some(it => Number(it.tax_rate) === 0)
-    || ((!items || !items.length) && Number(inv.tax_rate) === 0);
-  if (!hayExento) return '';
-  return '<div style="margin-top:12px;color:var(--text2);font-size:11px">'
-       + 'Operación exenta de IVA según el art. 20.Uno.3.º de la Ley 37/1992 del IVA '
-       + '(asistencia sanitaria a personas físicas por profesional titulado).</div>';
+  const textos = [...new Set((items || []).filter(it => ['exempt','non_subject'].includes(it.fiscal_treatment))
+    .map(it => it.fiscal_legal_text || FISCAL_LABELS[it.fiscal_exemption_code] || FISCAL_LABELS[it.fiscal_non_subject_code]).filter(Boolean))];
+  if (!textos.length) return '';
+  return '<div style="margin-top:12px;color:var(--text2);font-size:11px"><strong>Menciones fiscales:</strong> '
+       + textos.map(escHtml).join(' · ') + '</div>';
 }
 
 // T4 Paso 1 — fecha de vencimiento de una factura = fecha de emisión + plazo de pago
@@ -87,7 +87,7 @@ export function computeTotals(lines, irpfRate = 0) {
     const price = Number(line.unit_price) || 0;
     const rate  = Number(line.tax_rate) || 0;
     const base  = r2(qty * price);
-    const tax   = r2(base * rate / 100);
+    const tax   = (line.fiscal_treatment && (line.fiscal_treatment !== 'taxable' || line.fiscal_reverse_charge)) ? 0 : r2(base * rate / 100);
 
     subtotal += base;
 
@@ -265,8 +265,24 @@ function snapshotCoste(db, productId) {
   return c > 0 ? c : null;
 }
 
+// Resuelve y valida ANTES de abrir la transacción de emisión. Catálogo → copia completa;
+// línea libre positiva → S1 inequívoco; línea libre al 0 % exige clasificación explícita.
+function classifyInvoiceLines(db, lines) {
+  const get = db.prepare('SELECT tax_rate,fiscal_treatment,fiscal_exemption_code,fiscal_non_subject_code,fiscal_reverse_charge,fiscal_legal_text FROM products WHERE id=?');
+  return lines.map((line, i) => {
+    const source = line.product_id ? get.get(line.product_id) : line;
+    if (!source) throw new Error(`No existe el producto de la línea ${i + 1}`);
+    const rate = Number(line.tax_rate ?? source.tax_rate);
+    const candidate = { ...source, ...line, tax_rate: rate };
+    if (!candidate.fiscal_treatment && rate > 0) candidate.fiscal_treatment = 'taxable';
+    try { return { ...line, ...validateFiscalClassification(candidate) }; }
+    catch (e) { const err = new Error(`Línea ${i + 1}: ${e.message}. Corrígela antes de emitir.`); err.status = 400; throw err; }
+  });
+}
+
 export function createInvoice(db, invoiceData) {
   const { client_id, lines, issue_date, notes = '', irpf_rate = 0, tipo_factura = 'F1' } = invoiceData;
+  const classifiedLines = classifyInvoiceLines(db, lines);
 
   const client = db.prepare('SELECT * FROM clients WHERE id=?').get(client_id);
   if (!client) throw new Error('Cliente no existe');
@@ -276,7 +292,7 @@ export function createInvoice(db, invoiceData) {
   // IRPF solo aplica a tenants ES por ahora. Otros países lo ignoran silenciosamente.
   const appliedIrpfRate = country === 'ES' ? (Number(irpf_rate) || 0) : 0;
 
-  const totals = computeTotals(lines, appliedIrpfRate);
+  const totals = computeTotals(classifiedLines, appliedIrpfRate);
   const headerTaxRate = mainTaxRate(totals.taxByRate);  // 0 si hay mezcla, tasa única si todas iguales
 
   const series    = cfg.invoice_series || 'F';
@@ -326,16 +342,16 @@ export function createInvoice(db, invoiceData) {
     const invoiceId = result.lastInsertRowid;
 
     // PASO 2 — la línea guarda ADEMÁS qué producto es y cuánto costaba HOY (snapshot del WAC).
-    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price, tax_rate, tax_amount, product_id, unit_cost, cost_source) VALUES (?,?,?,?,?,?,?,?,?,?)');
-    for (const line of lines) {
+    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price, tax_rate, tax_amount, product_id, unit_cost, cost_source, fiscal_treatment, fiscal_exemption_code, fiscal_non_subject_code, fiscal_reverse_charge, fiscal_legal_text) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    for (const line of classifiedLines) {
       const qty   = Number(line.quantity);
       const price = Number(line.unit_price);
       const rate  = Number(line.tax_rate) || 0;
       const base  = Math.round(qty * price * 100) / 100;
-      const tax   = Math.round(base * rate / 100 * 100) / 100;
+    const tax   = (line.fiscal_treatment && (line.fiscal_treatment !== 'taxable' || line.fiscal_reverse_charge)) ? 0 : Math.round(base * rate / 100 * 100) / 100;
       const pid   = line.product_id || null;
       const coste = snapshotCoste(db, pid);
-      insItem.run(invoiceId, line.description, qty, price, base, rate, tax, pid, coste, coste == null ? null : 'snapshot');
+      insItem.run(invoiceId, line.description, qty, price, base, rate, tax, pid, coste, coste == null ? null : 'snapshot', line.fiscal_treatment, line.fiscal_exemption_code, line.fiscal_non_subject_code, line.fiscal_reverse_charge, line.fiscal_legal_text);
     }
     // VERI*FACTU T1: registro de ALTA oficial (huella encadenada) en la MISMA transacción.
     const reg = recordVerifactuAlta(db, {
@@ -424,13 +440,14 @@ export function createRectificativa(db, data) {
   const original = db.prepare('SELECT * FROM invoices WHERE id=?').get(original_id);
   if (!original) throw new Error('Factura original no encontrada');
   if (original.status !== 'emitida') throw new Error('Solo se puede rectificar una factura emitida');
+  const classifiedLines = classifyInvoiceLines(db, lines);
 
   const cfg = db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
   const country = (cfg.country || 'ES').toUpperCase();
   const appliedIrpfRate = country === 'ES' ? (Number(irpf_rate) || 0) : 0;
 
   // computeTotals es sign-agnostic → soporta líneas negativas (abono).
-  const totals = computeTotals(lines, appliedIrpfRate);
+  const totals = computeTotals(classifiedLines, appliedIrpfRate);
   const headerTaxRate = mainTaxRate(totals.taxByRate);
 
   const series    = cfg.rectificative_series || 'R';
@@ -481,16 +498,16 @@ export function createRectificativa(db, data) {
     // coste también resta: el margen NETEA solo, sin caso especial. (Se congela el WAC de HOY, que
     // es la regla del paso; si el coste se movió entre la venta y el abono, el neteo lo arrastra —
     // anotado a conciencia, no descubierto tarde.)
-    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price, tax_rate, tax_amount, product_id, unit_cost, cost_source) VALUES (?,?,?,?,?,?,?,?,?,?)');
-    for (const line of lines) {
+    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price, tax_rate, tax_amount, product_id, unit_cost, cost_source, fiscal_treatment, fiscal_exemption_code, fiscal_non_subject_code, fiscal_reverse_charge, fiscal_legal_text) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    for (const line of classifiedLines) {
       const qty   = Number(line.quantity);
       const price = Number(line.unit_price);
       const rate  = Number(line.tax_rate) || 0;
       const base  = Math.round(qty * price * 100) / 100;
-      const tax   = Math.round(base * rate / 100 * 100) / 100;
+      const tax   = (line.fiscal_treatment !== 'taxable' || line.fiscal_reverse_charge) ? 0 : Math.round(base * rate / 100 * 100) / 100;
       const pid   = line.product_id || null;
       const coste = snapshotCoste(db, pid);
-      insItem.run(invoiceId, line.description, qty, price, base, rate, tax, pid, coste, coste == null ? null : 'snapshot');
+      insItem.run(invoiceId, line.description, qty, price, base, rate, tax, pid, coste, coste == null ? null : 'snapshot', line.fiscal_treatment, line.fiscal_exemption_code, line.fiscal_non_subject_code, line.fiscal_reverse_charge, line.fiscal_legal_text);
     }
 
     db.prepare("UPDATE invoices SET status='rectificada' WHERE id=?").run(original.id);
@@ -718,11 +735,11 @@ const SIMPLIFIED_SERIES = 'S';
 // (lo fija el SERVIDOR, nunca un 21% en silencio) + nombre; línea libre → concepto + importe del
 // formulario, IVA 21% fijo (como la factura). Marca qué líneas mueven stock (producto físico).
 function resolveTicketLines(db, lines) {
-  const get = db.prepare('SELECT id, name, price, tax_rate, type FROM products WHERE id=?');
+  const get = db.prepare('SELECT id, name, price, tax_rate, type, fiscal_treatment, fiscal_exemption_code, fiscal_non_subject_code, fiscal_reverse_charge, fiscal_legal_text FROM products WHERE id=?');
   return lines.map(l => {
     if (l.product_id) {
       const p = get.get(l.product_id);
-      if (p) return { product_id: p.id, description: (String(l.description || '').trim() || p.name), quantity: Number(l.quantity), unit_price: Number(p.price) || 0, tax_rate: Number(p.tax_rate) || 0, is_physical: (p.type || 'physical') === 'physical' };
+      if (p) return { ...p, product_id: p.id, description: (String(l.description || '').trim() || p.name), quantity: Number(l.quantity), unit_price: Number(p.price) || 0, tax_rate: Number(p.tax_rate) || 0, is_physical: (p.type || 'physical') === 'physical' };
     }
     const desc = String(l.description || '').trim();
     if (!desc) { const e = new Error('Una línea libre necesita un concepto'); e.status = 400; throw e; }
@@ -741,7 +758,7 @@ function resolveTicketLines(db, lines) {
 // reatribuyera su histórico, que es justo lo que un CRM tiene que hacer.
 export function emitTicketSvc(db, { lines, warehouse_id, payment_method, paid_date, emitted_by = null } = {}) {
   if (!['efectivo', 'tarjeta'].includes(payment_method)) { const e = new Error('Método de pago no válido (efectivo o tarjeta)'); e.status = 400; throw e; }
-  const resolved = resolveTicketLines(db, lines || []);
+  const resolved = classifyInvoiceLines(db, resolveTicketLines(db, lines || []));
   if (!resolved.length) { const e = new Error('El ticket no tiene líneas'); e.status = 400; throw e; }
   for (const l of resolved) if (!(l.quantity > 0)) { const e = new Error('La cantidad debe ser mayor que 0'); e.status = 400; throw e; }
 
@@ -786,12 +803,12 @@ export function emitTicketSvc(db, { lines, warehouse_id, payment_method, paid_da
 
     // PASO 2 — el mostrador es donde MÁS importa el snapshot: vende físicos y mueve stock, así que
     // el WAC cambia por debajo constantemente. `resolveTicketLines` ya trae el product_id resuelto.
-    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price, tax_rate, tax_amount, product_id, unit_cost, cost_source) VALUES (?,?,?,?,?,?,?,?,?,?)');
+    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price, tax_rate, tax_amount, product_id, unit_cost, cost_source, fiscal_treatment, fiscal_exemption_code, fiscal_non_subject_code, fiscal_reverse_charge, fiscal_legal_text) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
     for (const l of resolved) {
       const base = Math.round(l.quantity * l.unit_price * 100) / 100;
-      const tax = Math.round(base * l.tax_rate / 100 * 100) / 100;
+      const tax = (l.fiscal_treatment !== 'taxable' || l.fiscal_reverse_charge) ? 0 : Math.round(base * l.tax_rate / 100 * 100) / 100;
       const coste = snapshotCoste(db, l.product_id || null);
-      insItem.run(invoiceId, l.description, l.quantity, l.unit_price, base, l.tax_rate, tax, l.product_id || null, coste, coste == null ? null : 'snapshot');
+      insItem.run(invoiceId, l.description, l.quantity, l.unit_price, base, l.tax_rate, tax, l.product_id || null, coste, coste == null ? null : 'snapshot', l.fiscal_treatment, l.fiscal_exemption_code, l.fiscal_non_subject_code, l.fiscal_reverse_charge, l.fiscal_legal_text);
     }
 
     // Alta Verifactu con TIPO F2 (simplificada), misma cadena de huella del emisor.
@@ -885,7 +902,7 @@ export function emitSustitutivaSvc(db, ticketId, client_id) {
   // el WAC de hoy, a propósito: la venta ocurrió al emitir el ticket y esto es el MISMO hecho económico
   // con otro papel. Re-fotografiar movería el margen de una venta pasada solo porque el cliente pidió
   // la factura completa una semana después. Es la misma razón por la que el importe tampoco se recalcula.
-  const lines = items.map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price, tax_rate: i.tax_rate, product_id: i.product_id || null, unit_cost: i.unit_cost ?? null, cost_source: i.cost_source || null }));
+  const lines = items.map(i => ({ ...i, product_id: i.product_id || null, unit_cost: i.unit_cost ?? null, cost_source: i.cost_source || null }));
   const totals = computeTotals(lines, 0);
   const headerTaxRate = mainTaxRate(totals.taxByRate);
   const series = cfg.invoice_series || 'F';   // serie ordinaria de facturas completas
@@ -923,11 +940,11 @@ export function emitSustitutivaSvc(db, ticketId, client_id) {
     );
     const invoiceId = result.lastInsertRowid;
 
-    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price, tax_rate, tax_amount, product_id, unit_cost, cost_source) VALUES (?,?,?,?,?,?,?,?,?,?)');
+    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total_price, tax_rate, tax_amount, product_id, unit_cost, cost_source, fiscal_treatment, fiscal_exemption_code, fiscal_non_subject_code, fiscal_reverse_charge, fiscal_legal_text) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
     for (const line of lines) {
       const base = Math.round(line.quantity * line.unit_price * 100) / 100;
-      const tax = Math.round(base * line.tax_rate / 100 * 100) / 100;
-      insItem.run(invoiceId, line.description, line.quantity, line.unit_price, base, line.tax_rate, tax, line.product_id || null, line.unit_cost ?? null, line.cost_source || null);
+      const tax = (line.fiscal_treatment !== 'taxable' || line.fiscal_reverse_charge) ? 0 : Math.round(base * line.tax_rate / 100 * 100) / 100;
+      insItem.run(invoiceId, line.description, line.quantity, line.unit_price, base, line.tax_rate, tax, line.product_id || null, line.unit_cost ?? null, line.cost_source || null, line.fiscal_treatment, line.fiscal_exemption_code, line.fiscal_non_subject_code, line.fiscal_reverse_charge, line.fiscal_legal_text);
     }
     // Alta Verifactu TIPO F3 (sustitución de simplificadas), misma cadena de huella del emisor.
     const reg = recordVerifactuAlta(db, { id: invoiceId, company_fiscal_id: cfg.fiscal_id || '', invoice_number, issue_date: issueDate, record_type: 'alta', tipo_factura: 'F3', subtotal: totals.subtotal, tax_amount: totals.taxAmount });
@@ -1735,6 +1752,10 @@ export function createInvoiceRoutes(db) {
       quantity: Number(it.quantity),
       unit_price: Number(it.unit_price),
       tax_rate: Number(it.tax_rate) || 0,
+      product_id: it.product_id || null,
+      fiscal_treatment: it.fiscal_treatment, fiscal_exemption_code: it.fiscal_exemption_code,
+      fiscal_non_subject_code: it.fiscal_non_subject_code, fiscal_reverse_charge: it.fiscal_reverse_charge,
+      fiscal_legal_text: it.fiscal_legal_text,
     }));
 
     const content = `
@@ -1846,11 +1867,13 @@ export function createInvoiceRoutes(db) {
           '<td><button class="btn btn-danger btn-sm" onclick="this.closest(\\'tr\\').remove();scheduleRecalc()">✕</button></td>';
         row.cells[0].insertAdjacentHTML('beforeend', '<input type="hidden" class="line-tax" value="21">');
         tbody.appendChild(row);
+        row._fiscal={fiscal_treatment:'taxable',fiscal_exemption_code:'',fiscal_non_subject_code:'',fiscal_reverse_charge:false,fiscal_legal_text:'',product_id:null};
         if (seed) {
           row.querySelector('.line-desc').value  = seed.description || '';
           row.querySelector('.line-qty').value   = seed.quantity;
           row.querySelector('.line-price').value = Number(seed.unit_price || 0).toFixed(2);
           row.querySelector('.line-tax').value   = String(Number(seed.tax_rate) || 0);
+          row._fiscal={fiscal_treatment:seed.fiscal_treatment,fiscal_exemption_code:seed.fiscal_exemption_code||'',fiscal_non_subject_code:seed.fiscal_non_subject_code||'',fiscal_reverse_charge:!!seed.fiscal_reverse_charge,fiscal_legal_text:seed.fiscal_legal_text||'',product_id:seed.product_id||null};
         }
         row.querySelectorAll('.line-qty, .line-price').forEach(inp => inp.addEventListener('input', scheduleRecalc));
         scheduleRecalc();
@@ -1863,6 +1886,7 @@ export function createInvoiceRoutes(db) {
         row.querySelector('.line-desc').value  = p.name;
         row.querySelector('.line-price').value = Number(p.price || 0).toFixed(2);
         row.querySelector('.line-tax').value   = String(Number(p.tax_rate) || 0);
+        row._fiscal={fiscal_treatment:p.fiscal_treatment,fiscal_exemption_code:p.fiscal_exemption_code||'',fiscal_non_subject_code:p.fiscal_non_subject_code||'',fiscal_reverse_charge:!!p.fiscal_reverse_charge,fiscal_legal_text:p.fiscal_legal_text||'',product_id:p.id||null};
         scheduleRecalc();
       }
 
@@ -1908,7 +1932,7 @@ export function createInvoiceRoutes(db) {
           const qty   = parseFloat(r.querySelector('.line-qty').value)   || 0;
           const price = parseFloat(r.querySelector('.line-price').value) || 0;
           const rate  = parseFloat(r.querySelector('.line-tax').value)   || 0;
-          lines.push({ description: desc, quantity: qty, unit_price: price, tax_rate: rate });
+          lines.push({ description: desc, quantity: qty, unit_price: price, tax_rate: rate, ...(r._fiscal||{}) });
           r.querySelector('.line-subtotal').textContent = SYM + (qty * price).toFixed(2);
         }
         return lines;
@@ -1950,7 +1974,7 @@ export function createInvoiceRoutes(db) {
           if (!desc) { toast('Falta descripción en una línea','err'); return; }
           if (!Number.isFinite(qty) || qty === 0) { toast('Cantidad no puede ser 0','err'); return; }
           if (!Number.isFinite(price)) { toast('Precio inválido','err'); return; }
-          lines.push({ description: desc, quantity: qty, unit_price: price, tax_rate: rate });
+          lines.push({ description: desc, quantity: qty, unit_price: price, tax_rate: rate, ...(r._fiscal||{}) });
         }
         if (!lines.length) { toast('Añade al menos una línea','err'); return; }
         const btn = document.getElementById('btn-emit');

@@ -26,7 +26,7 @@
 
 ## Fiscal
 - **Verifactu** — sistema antifraude AEAT: **huella SHA-256 en mayúsculas, encadenada** por documento + **QR de cotejo** + leyenda. (`modules/erp/verifactu.js`.)
-- **Banda de IVA** — clasificación legal del producto (ES: general 21 / reducido 10 / superreducido 4 / exento); el % se resuelve desde `core/vat-bands.js`, no se teclea.
+- **Banda de IVA** — selección del tipo porcentual (ES: 21 / 10 / 4 / 0); no determina por sí sola si la operación está exenta. La naturaleza jurídica se guarda aparte con la clasificación fiscal por línea.
 - **IRPF / retención** — depende de quién factura (régimen) y a quién (cliente); se decide en settings + factura, no en el producto.
 - **Facturae / SII / TicketBAI** — obligaciones B2B/territoriales aún no construidas.
 

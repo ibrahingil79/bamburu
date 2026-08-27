@@ -489,13 +489,24 @@ export function libroVentas(db, from, to) {
     if (Math.round(inv.base * 100) === 0 && Math.round(inv.cuota * 100) === 0) continue;   // anuladas netas → fuera
     const doc = db.prepare('SELECT invoice_number, series, issue_date, client_name, client_fiscal_id, record_type, rectification_type, rectification_mode FROM invoices WHERE id=?').get(inv.invoice_id);
     const vf = db.prepare("SELECT tipo_factura FROM verifactu_registros WHERE invoice_id=? AND record_type='alta' ORDER BY id LIMIT 1").get(inv.invoice_id);
+    const fiscalItems = db.prepare('SELECT total_price,tax_rate,tax_amount,fiscal_treatment,fiscal_exemption_code,fiscal_non_subject_code,fiscal_reverse_charge FROM invoice_items WHERE invoice_id=? ORDER BY id').all(inv.invoice_id);
+    let desglose = desgloseArray(inv.rates);
+    if (fiscalItems.length && fiscalItems.every(i => i.fiscal_treatment && i.fiscal_treatment !== 'pending')) {
+      const sign = inv.base < 0 ? -1 : 1, groups = new Map();
+      for (const i of fiscalItems) {
+        const key = [i.fiscal_treatment,i.fiscal_exemption_code||'',i.fiscal_non_subject_code||'',i.fiscal_reverse_charge||0,i.tax_rate].join('|');
+        const g = groups.get(key) || { rate:Number(i.tax_rate)||0,base:0,cuota:0,fiscal_treatment:i.fiscal_treatment,fiscal_exemption_code:i.fiscal_exemption_code,fiscal_non_subject_code:i.fiscal_non_subject_code,fiscal_reverse_charge:i.fiscal_reverse_charge };
+        g.base=r2(g.base+Math.abs(Number(i.total_price)||0)*sign); g.cuota=r2(g.cuota+Math.abs(Number(i.tax_amount)||0)*sign); groups.set(key,g);
+      }
+      desglose=[...groups.values()];
+    }
     out.push({
       invoice_number: doc?.invoice_number, series: doc?.series,
       issue_date: doc?.issue_date, operation_date: null,   // el modelo no guarda fecha de operación distinta de la de expedición
       tipo_factura: vf?.tipo_factura || (doc?.series === 'R' ? (doc?.rectification_type || 'R') : doc?.series === 'S' ? 'F2' : 'F1'),
       es_rectificativa: doc?.record_type === 'rectificativa', rect_mode: doc?.rectification_mode || '',
       nif: doc?.client_fiscal_id || '', nombre: doc?.client_name || 'VENTAS A CONSUMIDOR FINAL',
-      desglose: desgloseArray(inv.rates), base: r2(inv.base), cuota: r2(inv.cuota), irpf: r2(inv.irpf), total: r2(inv.base + inv.cuota),
+      desglose, base: r2(inv.base), cuota: r2(inv.cuota), irpf: r2(inv.irpf), total: r2(inv.base + inv.cuota),
     });
     totBase = r2(totBase + inv.base); totCuota = r2(totCuota + inv.cuota); totIrpf = r2(totIrpf + inv.irpf);
   }

@@ -91,11 +91,11 @@ function albaranesOfOrder(db, orderId) {
 }
 
 function insertItems(db, dnId, lines) {
-  const ins = db.prepare('INSERT INTO delivery_note_items (delivery_note_id, order_item_id, product_id, description, quantity, unit_price, total_price, tax_rate, tax_amount) VALUES (?,?,?,?,?,?,?,?,?)');
+  const ins = db.prepare('INSERT INTO delivery_note_items (delivery_note_id, order_item_id, product_id, description, quantity, unit_price, total_price, tax_rate, tax_amount, fiscal_treatment, fiscal_exemption_code, fiscal_non_subject_code, fiscal_reverse_charge, fiscal_legal_text) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
   for (const l of lines) {
     const base = Math.round(l.quantity * l.unit_price * 100) / 100;
-    const tax = Math.round(base * l.tax_rate / 100 * 100) / 100;
-    ins.run(dnId, l.order_item_id || null, l.product_id || null, l.description, l.quantity, l.unit_price, base, l.tax_rate, tax);
+    const tax = (l.fiscal_treatment !== 'taxable' || l.fiscal_reverse_charge) ? 0 : Math.round(base * l.tax_rate / 100 * 100) / 100;
+    ins.run(dnId, l.order_item_id || null, l.product_id || null, l.description, l.quantity, l.unit_price, base, l.tax_rate, tax, l.fiscal_treatment || 'pending', l.fiscal_exemption_code || null, l.fiscal_non_subject_code || null, l.fiscal_reverse_charge || 0, l.fiscal_legal_text || null);
   }
 }
 
@@ -132,7 +132,8 @@ export function createAlbaranSvc(db, d) {
       }
       // descripción/precio/IVA SIEMPRE del pedido (no se confía en el cliente).
       resolved.push({ order_item_id: line.order_item_id, product_id: line.product_id, description: line.description,
-        quantity: it.quantity, unit_price: line.unit_price, tax_rate: line.tax_rate, product_type: line.product_type });
+        quantity: it.quantity, unit_price: line.unit_price, tax_rate: line.tax_rate, product_type: line.product_type,
+        fiscal_treatment:line.fiscal_treatment,fiscal_exemption_code:line.fiscal_exemption_code,fiscal_non_subject_code:line.fiscal_non_subject_code,fiscal_reverse_charge:line.fiscal_reverse_charge,fiscal_legal_text:line.fiscal_legal_text });
     }
     if (!resolved.length) { const e = new Error('Indica al menos una línea con cantidad a entregar'); e.status = 400; throw e; }
   } else {
@@ -141,14 +142,14 @@ export function createAlbaranSvc(db, d) {
     checkClient(db, d.client_id);
     client_id = d.client_id;
     wid = resolveWarehouseId(db, d.warehouse_id);
-    const get = db.prepare('SELECT id, name, tax_rate, type FROM products WHERE id=?');
+    const get = db.prepare('SELECT id, name, tax_rate, type, fiscal_treatment, fiscal_exemption_code, fiscal_non_subject_code, fiscal_reverse_charge, fiscal_legal_text FROM products WHERE id=?');
     for (const it of d.lines) {
       let product_id = null, tax_rate = Number(it.tax_rate) || 0, description = String(it.description || '').trim(), product_type = null;
       if (it.product_id) {
         const p = get.get(it.product_id);
-        if (p) { product_id = p.id; tax_rate = Number(p.tax_rate) || 0; product_type = p.type; if (!description) description = p.name; }
+        if (p) { product_id = p.id; tax_rate = Number(p.tax_rate) || 0; product_type = p.type; Object.assign(it, p); if (!description) description = p.name; }
       }
-      resolved.push({ order_item_id: null, product_id, description: description || '_', quantity: Number(it.quantity), unit_price: Number(it.unit_price), tax_rate, product_type });
+      resolved.push({ order_item_id: null, product_id, description: description || '_', quantity: Number(it.quantity), unit_price: Number(it.unit_price), tax_rate, product_type, fiscal_treatment:it.fiscal_treatment || (tax_rate>0?'taxable':'pending'), fiscal_exemption_code:it.fiscal_exemption_code, fiscal_non_subject_code:it.fiscal_non_subject_code, fiscal_reverse_charge:it.fiscal_reverse_charge, fiscal_legal_text:it.fiscal_legal_text });
     }
   }
 
@@ -171,7 +172,7 @@ export function createAlbaranSvc(db, d) {
   }
 
   const irpf_rate = order ? order.irpf_rate : albaranIrpfRate(db, client_id);
-  const tot = computeTotals(resolved.map(l => ({ quantity: l.quantity, unit_price: l.unit_price, tax_rate: l.tax_rate })), irpf_rate);
+  const tot = computeTotals(resolved, irpf_rate);
   const cl = db.prepare('SELECT * FROM clients WHERE id=?').get(client_id) || {};
 
   const run = db.transaction(() => {
@@ -261,7 +262,7 @@ export function albaranToInvoiceSvc(db, id) {
     const e = new Error('Este albarán ya se facturó en ' + (inv ? inv.invoice_number : '#' + already.dest_id) + '.'); e.status = 400; throw e;
   }
   const items = db.prepare('SELECT * FROM delivery_note_items WHERE delivery_note_id=? ORDER BY id').all(id);
-  const lines = items.map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price, tax_rate: i.tax_rate, product_id: i.product_id || undefined }));
+  const lines = items.map(i => ({ ...i, product_id: i.product_id || undefined }));
   const run = db.transaction(() => {
     const inv = createInvoice(db, { client_id: a.client_id, lines, irpf_rate: a.irpf_rate, notes: 'Procede del albarán ' + (a.delivery_number || ('#' + id)) });
     db.prepare("INSERT INTO document_links (source_type, source_id, dest_type, dest_id) VALUES ('delivery_note', ?, 'invoice', ?)").run(id, inv.id);

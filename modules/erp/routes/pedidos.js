@@ -16,6 +16,7 @@ import { ENTITY } from '../../../core/activity-entities.js';
 import { jsonForScript } from '../../../core/escape.js';
 import { fechaEs } from '../voz.js';   // la fecha, en cristiano (24/08/2026)
 import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
+import { validateFiscalClassification } from '../../../core/fiscal-classification.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // PILAR 4 · VENTAS · PIEZA 2a — PEDIDO + RESERVA DE STOCK.
@@ -41,14 +42,15 @@ function checkClient(db, clientId) {
 // (product_id) → el IVA lo fija el SERVIDOR desde la banda del producto; línea libre → el IVA
 // que venga (el formulario manda 21% fijo). unit_price es NETO.
 function resolveOrderLines(db, lines) {
-  const get = db.prepare('SELECT id, name, tax_rate FROM products WHERE id=?');
+  const get = db.prepare('SELECT id, name, tax_rate, fiscal_treatment, fiscal_exemption_code, fiscal_non_subject_code, fiscal_reverse_charge, fiscal_legal_text FROM products WHERE id=?');
   return lines.map(l => {
     let product_id = null, tax_rate = Number(l.tax_rate) || 0, description = String(l.description || '').trim();
     if (l.product_id) {
       const p = get.get(l.product_id);
       if (p) { product_id = p.id; tax_rate = Number(p.tax_rate) || 0; if (!description) description = p.name; }
     }
-    return { product_id, description, quantity: Number(l.quantity), unit_price: Number(l.unit_price), tax_rate };
+    const source = l.fiscal_treatment ? l : product_id ? get.get(product_id) : { ...l, fiscal_treatment: tax_rate > 0 ? 'taxable' : 'pending' };
+    return { product_id, description, quantity: Number(l.quantity), unit_price: Number(l.unit_price), ...validateFiscalClassification({ ...source, tax_rate }, { allowPending: true }) };
   });
 }
 
@@ -64,16 +66,16 @@ function orderIrpfRate(db, clientId) {
 // Totales con la MISMA matemática de la factura (computeTotals): base + IVA por tasa − IRPF.
 export function orderTotals(db, clientId, resolvedLines) {
   const irpf_rate = orderIrpfRate(db, clientId);
-  const t = computeTotals(resolvedLines.map(l => ({ quantity: l.quantity, unit_price: l.unit_price, tax_rate: l.tax_rate })), irpf_rate);
+  const t = computeTotals(resolvedLines, irpf_rate);
   return { subtotal: t.subtotal, tax_amount: t.taxAmount, irpf_rate, irpf_amount: t.irpfAmount, total: t.total, taxByRate: t.taxByRate };
 }
 
 function insertItems(db, orderId, lines) {
-  const ins = db.prepare('INSERT INTO customer_order_items (order_id, product_id, description, quantity, unit_price, total_price, tax_rate, tax_amount) VALUES (?,?,?,?,?,?,?,?)');
+  const ins = db.prepare('INSERT INTO customer_order_items (order_id, product_id, description, quantity, unit_price, total_price, tax_rate, tax_amount, fiscal_treatment, fiscal_exemption_code, fiscal_non_subject_code, fiscal_reverse_charge, fiscal_legal_text) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
   for (const l of lines) {
     const base = Math.round(l.quantity * l.unit_price * 100) / 100;
-    const tax = Math.round(base * l.tax_rate / 100 * 100) / 100;
-    ins.run(orderId, l.product_id || null, l.description, l.quantity, l.unit_price, base, l.tax_rate, tax);
+    const tax = (l.fiscal_treatment !== 'taxable' || l.fiscal_reverse_charge) ? 0 : Math.round(base * l.tax_rate / 100 * 100) / 100;
+    ins.run(orderId, l.product_id || null, l.description, l.quantity, l.unit_price, base, l.tax_rate, tax, l.fiscal_treatment, l.fiscal_exemption_code, l.fiscal_non_subject_code, l.fiscal_reverse_charge, l.fiscal_legal_text);
   }
 }
 
@@ -183,9 +185,9 @@ export function cancelRedoPedidoSvc(db, id, motivo, opts = {}) {
       o.client_id, o.warehouse_id, today, o.expected_delivery_date || null, o.notes || '', id,
       o.subtotal, o.tax_amount, o.irpf_rate, o.irpf_amount, o.total, o.currency || 'EUR', o.currency_symbol || '€');
     const newId = r.lastInsertRowid;
-    const ins = db.prepare('INSERT INTO customer_order_items (order_id, product_id, description, quantity, unit_price, total_price, tax_rate, tax_amount) VALUES (?,?,?,?,?,?,?,?)');
+    const ins = db.prepare('INSERT INTO customer_order_items (order_id, product_id, description, quantity, unit_price, total_price, tax_rate, tax_amount, fiscal_treatment, fiscal_exemption_code, fiscal_non_subject_code, fiscal_reverse_charge, fiscal_legal_text) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
     for (const it of db.prepare('SELECT * FROM customer_order_items WHERE order_id=? ORDER BY id').all(id)) {
-      ins.run(newId, it.product_id, it.description, it.quantity, it.unit_price, it.total_price, it.tax_rate, it.tax_amount);
+      ins.run(newId, it.product_id, it.description, it.quantity, it.unit_price, it.total_price, it.tax_rate, it.tax_amount, it.fiscal_treatment, it.fiscal_exemption_code, it.fiscal_non_subject_code, it.fiscal_reverse_charge, it.fiscal_legal_text);
     }
     return { id: newId, anulada_id: id, anulada_number: anulada.order_number };
   });
@@ -207,7 +209,7 @@ export function orderToInvoiceSvc(db, id) {
     const e = new Error('Este pedido ya se facturó en ' + (inv ? inv.invoice_number : '#' + already.dest_id) + '.'); e.status = 400; throw e;
   }
   const items = db.prepare('SELECT * FROM customer_order_items WHERE order_id=? ORDER BY id').all(id);
-  const lines = items.map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price, tax_rate: i.tax_rate, product_id: i.product_id || undefined }));
+  const lines = items.map(i => ({ ...i, product_id: i.product_id || undefined }));
   const run = db.transaction(() => {
     const inv = createInvoice(db, { client_id: o.client_id, lines, irpf_rate: o.irpf_rate, notes: 'Procede del pedido ' + (o.order_number || ('#' + id)) });
     db.prepare("INSERT INTO document_links (source_type, source_id, dest_type, dest_id) VALUES ('order', ?, 'invoice', ?)").run(id, inv.id);
@@ -477,7 +479,7 @@ export function createPedidoRoutes(db) {
       const SYM='${sym}', SHOW_IRPF=${showIrpf}, IRPF_DEFAULT=${irpfDefault};
       const LINE_CELL=${JSON.stringify(lineSearchCellHtml('<input type="hidden" class="line-pid"><input type="hidden" class="line-pname">'))};
       const IS_EDIT=${isEdit}, EDIT_ID=${isEdit ? existing.id : 'null'};
-      const PRELOAD=${jsonForScript(items.map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price, tax_rate: i.tax_rate, product_id: i.product_id || null })))};
+      const PRELOAD=${jsonForScript(items.map(i => ({ ...i, product_id: i.product_id || null })))};
       let clients=[], catalog=[], recalcTimer=null;
       async function loadAll(){
         try {

@@ -79,10 +79,10 @@ export function borradoresPendientes(db) {
 
 // Importe estimado de una plantilla (base + IVA − IRPF) desde sus líneas, para mostrar en el borrador.
 export function importeEstimado(db, templateId) {
-  const items = db.prepare('SELECT quantity, unit_price, tax_rate FROM recurring_template_items WHERE template_id=?').all(templateId);
+  const items = db.prepare('SELECT quantity, unit_price, tax_rate, fiscal_treatment, fiscal_reverse_charge FROM recurring_template_items WHERE template_id=?').all(templateId);
   const tpl = db.prepare('SELECT irpf_rate FROM recurring_templates WHERE id=?').get(templateId) || {};
   let base = 0, iva = 0;
-  for (const it of items) { const b = r2(it.quantity * it.unit_price); base = r2(base + b); iva = r2(iva + b * (Number(it.tax_rate) || 0) / 100); }
+  for (const it of items) { const b = r2(it.quantity * it.unit_price); base = r2(base + b); if (it.fiscal_treatment === 'taxable' && !it.fiscal_reverse_charge) iva = r2(iva + b * (Number(it.tax_rate) || 0) / 100); }
   const irpf = r2(base * (Number(tpl.irpf_rate) || 0) / 100);
   return { base, iva, irpf, total: r2(base + iva - irpf) };
 }
@@ -95,7 +95,7 @@ export function emitirOcurrencia(db, occurrenceId) {
   if (occ.status !== 'borrador') { const e = new Error('Este borrador ya se emitió o se omitió'); e.status = 409; throw e; }
   const tpl = db.prepare('SELECT * FROM recurring_templates WHERE id=?').get(occ.template_id);
   if (!tpl) { const e = new Error('Plantilla no encontrada'); e.status = 404; throw e; }
-  const items = db.prepare('SELECT description, quantity, unit_price, tax_rate FROM recurring_template_items WHERE template_id=?').all(tpl.id);
+  const items = db.prepare('SELECT description, quantity, unit_price, tax_rate, fiscal_treatment, fiscal_exemption_code, fiscal_non_subject_code, fiscal_reverse_charge, fiscal_legal_text FROM recurring_template_items WHERE template_id=?').all(tpl.id);
   if (!items.length) { const e = new Error('La plantilla no tiene líneas'); e.status = 400; throw e; }
 
   let created;
@@ -103,7 +103,7 @@ export function emitirOcurrencia(db, occurrenceId) {
     created = createInvoice(db, {
       client_id: tpl.client_id, issue_date: occ.due_date, irpf_rate: tpl.irpf_rate || 0,
       document_name: tpl.document_name || 'Factura',
-      lines: items.map(it => ({ description: it.description, quantity: it.quantity, unit_price: it.unit_price, tax_rate: it.tax_rate })),
+      lines: items.map(it => ({ ...it })),
     });
     db.prepare("UPDATE recurring_occurrences SET status='emitida', invoice_id=?, emitted_at=CURRENT_TIMESTAMP WHERE id=?")
       .run(created.id, occ.id);
@@ -136,8 +136,11 @@ export function createTemplate(db, d) {
       VALUES (?,?,?,?,?,?,?, 'activa', ?)`)
       .run(client_id, String(d.document_name || 'Factura'), interval_months, start_date, end_date, max_occurrences, r2(d.irpf_rate || 0), String(d.notes || ''));
     id = r.lastInsertRowid;
-    const insL = db.prepare('INSERT INTO recurring_template_items (template_id, description, quantity, unit_price, tax_rate) VALUES (?,?,?,?,?)');
-    for (const l of lines) insL.run(id, String(l.description).trim(), Number(l.quantity) || 1, r2(l.unit_price), Number(l.tax_rate) || 0);
+    const insL = db.prepare('INSERT INTO recurring_template_items (template_id, description, quantity, unit_price, tax_rate, fiscal_treatment, fiscal_exemption_code, fiscal_non_subject_code, fiscal_reverse_charge, fiscal_legal_text) VALUES (?,?,?,?,?,?,?,?,?,?)');
+    for (const l of lines) {
+      const rate=Number(l.tax_rate)||0, treatment=l.fiscal_treatment || (rate>0?'taxable':'pending');
+      insL.run(id, String(l.description).trim(), Number(l.quantity) || 1, r2(l.unit_price), rate, treatment, l.fiscal_exemption_code||null, l.fiscal_non_subject_code||null, l.fiscal_reverse_charge?1:0, l.fiscal_legal_text||null);
+    }
   })();
   return { id };
 }

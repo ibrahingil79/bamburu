@@ -15,6 +15,7 @@ import http from 'http';
 import https from 'https';
 import { join } from 'path';
 import { fmtImporte } from './verifactu.js';   // Tarea 1 (inmutable): formato oficial de importes
+import { fiscalGroupKey, verifactuClassification, validateFiscalClassification } from '../../core/fiscal-classification.js';
 
 // Namespaces canónicos (targetNamespace de los XSD; apuntan a www2 aunque el XSD se sirva de prewww2).
 export const NS_LR = 'https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroLR.xsd';
@@ -196,19 +197,22 @@ export function yaAceptado(envio) {
 // Desglose por tipo de IVA reconstruido desde las líneas; con fallback de cabecera para facturas
 // legacy sin desglose en línea (mismo criterio que contabilidad.js/postInvoice).
 export function desgloseFromItems(invoice, items) {
-  const byRate = {};
+  const groups = new Map();
   for (const it of items || []) {
-    const rate = Number(it.tax_rate) || 0;
-    (byRate[rate] ||= { rate, base: 0, cuota: 0 });
-    byRate[rate].base = r2(byRate[rate].base + (Number(it.total_price) || 0));
-    byRate[rate].cuota = r2(byRate[rate].cuota + (Number(it.tax_amount) || 0));
+    const fiscal = validateFiscalClassification(it);
+    const key = fiscalGroupKey(fiscal);
+    const g = groups.get(key) || { ...fiscal, rate: fiscal.tax_rate, base: 0, cuota: 0 };
+    g.base = r2(g.base + (Number(it.total_price) || 0));
+    g.cuota = r2(g.cuota + (Number(it.tax_amount) || 0));
+    groups.set(key, g);
   }
-  let arr = Object.values(byRate);
+  let arr = [...groups.values()];
   const sumCuota = r2(arr.reduce((s, g) => s + g.cuota, 0));
   if (Math.round(sumCuota * 100) === 0 && Math.round(r2(invoice.tax_amount) * 100) !== 0) {
     let rate = Number(invoice.tax_rate) || 0;
     if (!rate && r2(invoice.subtotal)) { const eff = Math.round(r2(invoice.tax_amount) / r2(invoice.subtotal) * 100); if ([0, 4, 10, 21].includes(eff)) rate = eff; }
-    arr = [{ rate, base: r2(invoice.subtotal), cuota: r2(invoice.tax_amount) }];
+    // Una factura histórica sin snapshot no se reclasifica: el caller la bloqueará.
+    arr = [{ fiscal_treatment: 'pending', rate, base: r2(invoice.subtotal), cuota: r2(invoice.tax_amount) }];
   }
   return arr.filter(g => Math.round(g.base * 100) !== 0 || Math.round(g.cuota * 100) !== 0).sort((a, b) => b.rate - a.rate);
 }
@@ -216,7 +220,7 @@ export function desgloseFromItems(invoice, items) {
 // Construye el <RegistroAlta> de UN registro congelado. Devuelve { xml, avisos, bloqueado }.
 // `bloqueado=true` (con avisos) cuando falta un dato obligatorio o los importes no cuadran: NO se
 // envía y se marca 'bloqueado_datos'. Defaults documentados: CalificacionOperacion S1, ClaveRegimen 01.
-export function buildRegistroAlta({ registro, invoice, items, prevRegistro, companyName, sistemaInfo, calificacion = 'S1', claveRegimen = '01' }) {
+export function buildRegistroAlta({ registro, invoice, items, prevRegistro, companyName, sistemaInfo, claveRegimen = '01' }) {
   const avisos = [];
   const tipo = registro.tipo_factura || 'F1';
   const esSimplificada = tipo === 'F2';
@@ -227,7 +231,9 @@ export function buildRegistroAlta({ registro, invoice, items, prevRegistro, comp
   if (!esSimplificada && !nifDest) avisos.push(`Falta el NIF del destinatario (obligatorio en factura ${tipo}); corrige la factura antes de remitir.`);
 
   // Desglose por tipo de IVA.
-  const desglose = desgloseFromItems(invoice, items);
+  let desglose = [];
+  try { desglose = desgloseFromItems(invoice, items); }
+  catch (e) { avisos.push(`Clasificación fiscal incompleta: ${e.message}`); }
   if (!desglose.length) avisos.push('No hay desglose de IVA reconstruible (ni líneas ni IVA en cabecera).');
   const sumBase = r2(desglose.reduce((s, g) => s + g.base, 0));
   const sumCuota = r2(desglose.reduce((s, g) => s + g.cuota, 0));
@@ -249,9 +255,14 @@ export function buildRegistroAlta({ registro, invoice, items, prevRegistro, comp
   }
 
   const descripcion = (items && items[0] && items[0].description) || invoice.document_name || 'Operación';
-  const detalles = desglose.map(g =>
-    `<sf:DetalleDesglose>${el('sf:Impuesto', '01')}${el('sf:ClaveRegimen', claveRegimen)}${el('sf:CalificacionOperacion', calificacion)}${el('sf:TipoImpositivo', fmtImporte(g.rate))}${el('sf:BaseImponibleOimporteNoSujeto', fmtImporte(g.base))}${el('sf:CuotaRepercutida', fmtImporte(g.cuota))}</sf:DetalleDesglose>`
-  ).join('');
+  const detalles = desglose.map(g => {
+    const c = verifactuClassification(g);
+    const clasificacion = c.operacionExenta ? el('sf:OperacionExenta', c.operacionExenta) : el('sf:CalificacionOperacion', c.calificacionOperacion);
+    const importes = g.fiscal_treatment === 'taxable' && !g.fiscal_reverse_charge
+      ? el('sf:TipoImpositivo', fmtImporte(g.rate)) + el('sf:BaseImponibleOimporteNoSujeto', fmtImporte(g.base)) + el('sf:CuotaRepercutida', fmtImporte(g.cuota))
+      : el('sf:BaseImponibleOimporteNoSujeto', fmtImporte(g.base));
+    return `<sf:DetalleDesglose>${el('sf:Impuesto', '01')}${el('sf:ClaveRegimen', claveRegimen)}${clasificacion}${importes}</sf:DetalleDesglose>`;
+  }).join('');
   const destinatariosXml = (!esSimplificada && nifDest)
     ? `<sf:Destinatarios><sf:IDDestinatario>${el('sf:NombreRazon', nombreDest)}${el('sf:NIF', nifDest)}</sf:IDDestinatario></sf:Destinatarios>` : '';
 

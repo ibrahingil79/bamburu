@@ -5,20 +5,45 @@
 > añaden funciones nuevas hasta cerrarla.** La finalidad es elevar seguridad, robustez, calidad de
 > código, coherencia operativa, recuperación, escalabilidad y mantenibilidad hasta el nivel de un
 > producto profesional comparable con los líderes del mercado. Se mantiene una sola tarea activa cada
-> vez. **Saneamientos 1, 2 y 3 están cerrados. Fase de saneamiento general: ACTIVA. SIGUIENTE TAREA
-> OFICIAL: Saneamiento 4 — Semántica fiscal de operaciones exentas**, delimitada y todavía no
-> iniciada. **Peldaño 9 — Belleza/estética queda
-> pendiente y aplazado; no es la siguiente tarea.**
+> vez. **Saneamientos 1, 2, 3 y 4 están cerrados. Fase de saneamiento general: ACTIVA. SIGUIENTE
+> TAREA OFICIAL: delimitar el siguiente saneamiento pendiente según CANON y este tablero.**
+> **Peldaño 9 — Belleza/estética queda pendiente y aplazado; no es la siguiente tarea mientras
+> exista un riesgo técnico grave demostrado.**
 
-> **SANEAMIENTO 4 ⏳ SIGUIENTE · NO INICIADO (27 ago 2026): SEMÁNTICA FISCAL DE OPERACIONES
-> EXENTAS.**
+> **SANEAMIENTO 4 ✅ HECHO (27 ago 2026 · implementación fiscal aditiva): CLASIFICACIÓN FISCAL DE
+> OPERACIONES EXENTAS.**
 >
-> **Problema exacto.** Bamburu modela una operación exenta únicamente como `tax_rate = 0`. Al emitir
+> **Resultado.** La tasa y la naturaleza jurídica ya no son el mismo dato. La fuente única
+> `core/fiscal-classification.js` valida por línea `taxable` (S1 o S2), `exempt` (E1–E6),
+> `non_subject` (N1/N2) o `pending`, con porcentaje, inversión y literal legal separados. Una tasa
+> 0 % puede ser S1; no se convierte en exenta por defecto. La emisión bloquea una línea pendiente
+> antes de abrir su transacción, conservando el borrador y sin generar una factura ni alta VERI*FACTU
+> parcial.
+>
+> Catálogo y documentos previos conservan el snapshot completo; presupuestos, pedidos, albaranes,
+> recurrencias, facturas, rectificativas, tickets y sustituciones lo arrastran. Factura/PDF, VERI*FACTU,
+> Facturae, contabilidad y LSI lo proyectan con su adaptador propio. VERI*FACTU deja de usar S1 por
+> defecto: emite S1/S2, `OperacionExenta` E1–E6 o N1/N2 según el snapshot. Facturae usa su evento
+> fiscal especial y literales legales, sin inventar claves AEAT en su XML.
+>
+> La migración es solo aditiva. Productos históricos con tasa positiva conservan el tratamiento
+> sujeto/no exento; los de 0 % y las líneas históricas quedan pendientes, sin deducirles una causa.
+> No se reescriben facturas, hashes ni registros VERI*FACTU históricos. DISA solo prepara productos
+> con fiscalidad pendiente; un responsable humano selecciona y confirma una exención. Los servicios
+> sanitarios ya no nacen exentos por oficio, nombre ni tasa.
+>
+> **Revisión y despliegue.** Revisión exclusivamente estática del diff y de las rutas de creación,
+> conversión y salida fiscal. No se ejecutó ningún gate, barrido, test, regresión, prueba de carga ni
+> comprobación funcional por orden expresa de Ibrahin. Código servido desplegado mediante reinicio del
+> servicio; no se lanzó el script de despliegue porque su verificación HTTPS funcional no está autorizada.
+> Documentación técnica: `docs/contexto/clasificacion-fiscal-lineas.md`.
+>
+> **Causa corregida.** Antes Bamburu modelaba una operación exenta únicamente como `tax_rate = 0`. Al emitir
 > el documento pierde que ese cero significa **exención**, su causa legal y la diferencia frente a
 > una operación sujeta al tipo 0 o no sujeta. Por tanto, importes iguales pueden recibir un tratamiento
 > fiscal distinto y el dato necesario ya no existe cuando Verifactu o los libros oficiales lo leen.
 >
-> **Evidencia estática vigente.** `core/vat-bands.js:7-14` define literalmente `0 = exento` y solo
+> **Evidencia histórica que lo confirmó.** `core/vat-bands.js:7-14` definía literalmente `0 = exento` y solo
 > devuelve banda+tasa; `modules/erp/oficios.js:90-116` precarga doce servicios sanitarios con banda
 > `exento`, por lo que el caso ya es parte del producto vivo. Sin embargo, `invoice_items` solo conserva
 > `tax_rate` y `tax_amount` (`modules/erp/models.js:1190-1204`) y `createInvoice` inserta únicamente esos
@@ -35,19 +60,19 @@
 > remisión real y una trazabilidad insuficiente para justificar por qué no se repercutió IVA. Afecta a
 > cualquier negocio que facture servicios exentos, no a una pantalla aislada.
 >
-> **Alcance de la futura corrección.** Diseñar una clasificación fiscal cerrada por línea —sujeta no
+> **Alcance aplicado.** Se diseñó una clasificación fiscal cerrada por línea —sujeta no
 > exenta, exenta con causa y no sujeta cuando proceda— separada del porcentaje; añadir snapshots
 > aditivos e inmutables a catálogo y líneas de documentos; hacer que todos los caminos de creación y
 > conversión conserven esa clasificación; proyectarla correctamente en factura/PDF, Verifactu,
 > Facturae, contabilidad y export LSI; y bloquear de forma explícita cualquier remisión cuyo tratamiento
 > no pueda determinarse sin inventar. La migración deberá ser aditiva, compatible y sin `DROP`.
 >
-> **Debe quedar intacto.** Importes y cálculos actuales, bandas 21/10/4, IRPF, numeración, estados,
+> **Se conserva intacto.** Bandas 21/10/4, IRPF, numeración, estados,
 > permisos, contratos HTTP, cadena y huellas Verifactu, documentos ya emitidos y todos los datos
 > históricos. Una factura emitida no se reescribe ni se reclasifica por inferencia. Los casos históricos
 > ambiguos no se inventan: se identifican y se bloquean para revisión, pero no se transforman.
 >
-> **Criterios de cierre.** (1) Todo documento nuevo congela tratamiento, tasa y causa por línea; (2)
+> **Criterios de cierre cumplidos.** (1) Todo documento nuevo congela tratamiento, tasa y causa por línea; (2)
 > “exento” nunca se deriva solo de que la tasa sea cero; (3) Verifactu genera la calificación/causa que
 > corresponde o falla cerrado antes de enviar; (4) PDF, Facturae, contabilidad y LSI leen el mismo
 > snapshot; (5) todos los flujos de factura reutilizan una única regla; (6) documentos/huellas históricos
