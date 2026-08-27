@@ -102,7 +102,7 @@ export function mountSeguridad(sa) {
       </div>
       <div class="card" style="padding:0;overflow:hidden">
         <div style="padding:14px 16px;font-weight:700;border-bottom:1px solid rgba(255,255,255,.06)">Eventos recientes</div>
-        <table><thead><tr><th>Cuándo</th><th>Tipo</th><th>IP</th><th>Negocio</th><th>Detalle</th></tr></thead>
+        <table><thead><tr><th>Cuándo</th><th>Tipo</th><th>Origen técnico</th><th>Negocio</th><th>Detalle</th></tr></thead>
         <tbody>${evRows || '<tr><td colspan="5" style="text-align:center;padding:24px;color:#64748b">Sin eventos registrados todavía</td></tr>'}</tbody></table>
       </div>`;
     return c.html(saLayout('Seguridad', content, 'seguridad', sess, sess.csrfToken, c.get('cspNonce')));

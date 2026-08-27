@@ -1,6 +1,70 @@
-import { recordSecurityEvent } from './control-db.js';
+import { createHmac, randomBytes } from 'crypto';
+import { pruneRateLimitSummaries, recordRateLimitSummary, recordSecurityEvent } from './control-db.js';
 
 const buckets = new Map();
+const bucketWindows = new Map();
+const rejectionSummaries = new Map();
+const ORIGIN_PEPPER = randomBytes(32);
+
+const MAX_BUCKET_KEYS = 10_000;
+const MAX_SUMMARY_KEYS = 256;
+const MAX_SUMMARY_KEYS_WITH_OVERFLOW = 289; // 256 orígenes + hasta 32 categorías + desbordamiento global
+const SUMMARY_PERIOD_MS = 5 * 60_000;
+const SUMMARY_WRITE_MS = 5_000;
+const GLOBAL_WRITE_MS = 250;
+const SUMMARY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+let lastAggregatorWarning = 0;
+let lastSummaryWriteAttempt = 0;
+
+const anonymizeOrigin = value => createHmac('sha256', ORIGIN_PEPPER)
+  .update(String(value || 'unknown')).digest('hex').slice(0, 20);
+
+function warnAggregatorOnce(now) {
+  if (now - lastAggregatorWarning < 5 * 60_000) return;
+  lastAggregatorWarning = now;
+  console.warn('[rate-limit] no se pudo persistir el resumen; el 429 sigue protegido');
+}
+
+function flushSummary(summary, now = Date.now()) {
+  const pending = summary.count - summary.persisted;
+  if (pending <= 0) return;
+  if (now - lastSummaryWriteAttempt < GLOBAL_WRITE_MS) return;
+  lastSummaryWriteAttempt = now;
+  summary.lastAttempt = now;
+  if (recordRateLimitSummary({
+    periodStart: Math.floor(summary.periodStart / 1000),
+    periodEnd: Math.floor(summary.lastSeen / 1000),
+    type: summary.type,
+    originHash: summary.originHash,
+    tenantSlug: summary.tenantSlug,
+    count: pending,
+  })) summary.persisted = summary.count;
+  else warnAggregatorOnce(now);
+}
+
+function aggregateRejection({ keyPrefix, ip, slug, now }) {
+  const periodStart = Math.floor(now / SUMMARY_PERIOD_MS) * SUMMARY_PERIOD_MS;
+  const originHash = anonymizeOrigin(ip);
+  let key = `${periodStart}:${keyPrefix}:${slug}:${originHash}`;
+  if (!rejectionSummaries.has(key) && rejectionSummaries.size >= MAX_SUMMARY_KEYS) {
+    key = `${periodStart}:${keyPrefix}:overflow`;
+    if (!rejectionSummaries.has(key) && rejectionSummaries.size >= MAX_SUMMARY_KEYS_WITH_OVERFLOW - 1) {
+      key = `${periodStart}:global:overflow`;
+    }
+  }
+  let summary = rejectionSummaries.get(key);
+  if (!summary) {
+    summary = { periodStart, lastSeen: now,
+      type: key.includes(':global:overflow') ? 'ratelimit:overflow' : 'ratelimit:' + keyPrefix,
+      originHash: key.endsWith(':overflow') ? 'overflow' : originHash,
+      tenantSlug: key.endsWith(':overflow') ? 'varios' : slug,
+      count: 0, persisted: 0, lastAttempt: 0 };
+    rejectionSummaries.set(key, summary);
+  }
+  summary.count += 1;
+  summary.lastSeen = now;
+  if (now - summary.lastAttempt >= SUMMARY_WRITE_MS) flushSummary(summary, now);
+}
 
 export function getClientIp(c) {
   // La IP real del cliente la PISA Caddy en X-Real-IP ({remote_host}); lo que mande el
@@ -38,12 +102,14 @@ export function rateLimit({ windowMs, max, keyPrefix, message = 'Demasiados inte
     let arr = buckets.get(key) || [];
     arr = arr.filter(ts => ts > windowStart);
 
-    if (arr.length >= max) {
+    // Al alcanzar el techo de cardinalidad se falla cerrado para una clave nueva: nunca se abre
+    // un bypass por agotar memoria. Las claves ya vigiladas conservan exactamente su umbral.
+    const capacityRejected = !buckets.has(key) && buckets.size >= MAX_BUCKET_KEYS;
+    if (arr.length >= max || capacityRejected) {
       const oldest = arr[0];
-      const retryAfter = Math.ceil((oldest + windowMs - now) / 1000);
+      const retryAfter = capacityRejected ? Math.ceil(windowMs / 1000) : Math.ceil((oldest + windowMs - now) / 1000);
       c.header('Retry-After', String(retryAfter));
-      // Vigilancia: la petición frenada queda registrada para el panel de superadmin.
-      recordSecurityEvent('ratelimit:' + keyPrefix, ip, slug, c.req.method + ' ' + c.req.path);
+      aggregateRejection({ keyPrefix, ip, slug, now });
       // Responde en el idioma del cliente. Antes solo miraba el prefijo /api/, así que un
       // endpoint JSON fuera de /api/ (POST /find-tenant) recibía una PÁGINA HTML: el `await
       // r.json()` del navegador reventaba y el usuario leía "Error de conexión" en vez del
@@ -59,6 +125,7 @@ export function rateLimit({ windowMs, max, keyPrefix, message = 'Demasiados inte
 
     arr.push(now);
     buckets.set(key, arr);
+    bucketWindows.set(key, windowMs);
 
     return next();
   };
@@ -137,13 +204,18 @@ export function cleanupFallos() {
 
 export function cleanupRateLimitBuckets() {
   const now = Date.now();
-  const maxAge = 60 * 60 * 1000;
   for (const [key, arr] of buckets.entries()) {
-    const filtered = arr.filter(ts => ts > now - maxAge);
+    const filtered = arr.filter(ts => ts > now - (bucketWindows.get(key) || 60 * 60 * 1000));
     if (filtered.length === 0) {
       buckets.delete(key);
+      bucketWindows.delete(key);
     } else if (filtered.length !== arr.length) {
       buckets.set(key, filtered);
     }
   }
+  for (const [key, summary] of rejectionSummaries.entries()) {
+    flushSummary(summary, now);
+    if (summary.periodStart < now - 2 * SUMMARY_PERIOD_MS) rejectionSummaries.delete(key);
+  }
+  pruneRateLimitSummaries(Math.floor((now - SUMMARY_RETENTION_MS) / 1000));
 }

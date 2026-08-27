@@ -193,6 +193,21 @@ function runMigrations(db) {
       detail      TEXT
     )
   `);
+  // Saneamiento 3 — resúmenes de rate limiting. Aditiva: los eventos históricos permanecen
+  // intactos y los nuevos rechazos masivos ya no necesitan una fila por petición.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rate_limit_summaries (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      period_start  INTEGER NOT NULL,
+      period_end    INTEGER NOT NULL,
+      type          TEXT NOT NULL,
+      origin_hash   TEXT NOT NULL,
+      tenant_slug   TEXT,
+      rejected_count INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(period_start, type, origin_hash, tenant_slug)
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_rate_limit_summaries_period ON rate_limit_summaries (period_end)');
   db.exec(`
     CREATE TABLE IF NOT EXISTS error_log (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -552,14 +567,42 @@ export function recordSecurityEvent(type, ip, tenantSlug, detail) {
     if (Number(r.lastInsertRowid) % 200 === 0) controlDb.prepare('DELETE FROM security_events WHERE id <= ? - 1000').run(r.lastInsertRowid);
   } catch { /* la vigilancia nunca rompe la petición */ }
 }
+
+// Suma un lote ya anonimizado. Devuelve false si control.db no está disponible; nunca lanza.
+export function recordRateLimitSummary({ periodStart, periodEnd, type, originHash, tenantSlug, count }) {
+  try {
+    controlDb.prepare(`INSERT INTO rate_limit_summaries
+      (period_start,period_end,type,origin_hash,tenant_slug,rejected_count) VALUES (?,?,?,?,?,?)
+      ON CONFLICT(period_start,type,origin_hash,tenant_slug) DO UPDATE SET
+        period_end=MAX(period_end,excluded.period_end),
+        rejected_count=rejected_count+excluded.rejected_count`)
+      .run(periodStart, periodEnd, _trunc(type, 40), _trunc(originHash, 24),
+        tenantSlug ? _trunc(tenantSlug, 60) : null, Math.max(1, count | 0));
+    return true;
+  } catch { return false; }
+}
+
+export function pruneRateLimitSummaries(beforeTs) {
+  try {
+    controlDb.prepare('DELETE FROM rate_limit_summaries WHERE period_end < ?').run(beforeTs);
+    return true;
+  } catch { return false; }
+}
 export function listSecurityEvents(limit = 100) {
-  return controlDb.prepare('SELECT id, ts, type, ip, tenant_slug, detail FROM security_events ORDER BY id DESC LIMIT ?').all(limit);
+  return controlDb.prepare(`SELECT id, ts, type, ip, tenant_slug, detail FROM (
+    SELECT id, ts, type, ip, tenant_slug, detail FROM security_events
+    UNION ALL
+    SELECT -id, period_end, type, 'anon:' || origin_hash, tenant_slug,
+      rejected_count || ' rechazos · periodo ' || period_start || '–' || period_end
+      FROM rate_limit_summaries
+  ) ORDER BY ts DESC LIMIT ?`).all(limit);
 }
 // Conteo por tipo en las últimas `hours` horas → { type: count }.
 export function securityCounts(hours = 24) {
   const since = Math.floor(Date.now() / 1000) - hours * 3600;
   const map = {};
   for (const r of controlDb.prepare('SELECT type, COUNT(*) c FROM security_events WHERE ts >= ? GROUP BY type').all(since)) map[r.type] = r.c;
+  for (const r of controlDb.prepare('SELECT type, SUM(rejected_count) c FROM rate_limit_summaries WHERE period_end >= ? GROUP BY type').all(since)) map[r.type] = (map[r.type] || 0) + r.c;
   return map;
 }
 

@@ -1,5 +1,5 @@
 {
-  "sesion_inicio": "2026-08-26",
+  "sesion_inicio": "2026-08-27",
   "ultima_tarea": "CONTINUIDAD DE SANEAMIENTO (26 ago 2026): revisión estática de riesgos abiertos y delimitación de una única siguiente tarea. Solo documentación; Saneamiento 3 no se ha implementado ni iniciado.",
   "estado": "Auditoría integral realizada. Saneamientos 1 y 2 cerrados. Fase de saneamiento general ACTIVA: no se añaden funciones nuevas hasta terminarla. Peldaño 9 — Belleza/estética sigue pendiente y aplazado. Saneamiento 3 está delimitado como siguiente, pero NO iniciado.",
   "donde_sigo": "SIGUIENTE TAREA OFICIAL: Saneamiento 3 — Blindaje antiavalancha del rate limiting. Problema demostrado: cada 429 sigue escribiendo sincrónicamente en control.db y el diagnóstico midió 50.738 rechazos/escrituras en 20 s. Objetivo: agregación acotada, memoria acotada y mismo contrato 429/umbrales, sin tocar auth, permisos, DISA, backups, SQLite ni roadmap. A LA ESPERA DE ENCARGO; no iniciarlo por iniciativa propia. TABLERO.md contiene la ficha ejecutable. RITUAL.md manda sobre comprobaciones: no ejecutar ninguna sin autorización expresa y visible.",
