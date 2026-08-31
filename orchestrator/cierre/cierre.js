@@ -123,6 +123,57 @@ export function marcarEnTablero({ config, tarea, commits, registro, logger, apar
 }
 
 /**
+ * Deshace la marca de APARTADA: el bloque vuelve a «## TAREA — …» con `estado: pendiente`,
+ * y se le quita la nota de apartada. Es lo que pide «desapartar» desde Telegram.
+ *
+ * Se deja escrito CUÁNDO y POR QUÉ volvió, en vez de borrar el rastro: la tarea se apartó
+ * por algo, y quien la lea dentro de un mes tiene que poder reconstruir qué pasó.
+ *
+ * @returns { ok, motivo? }
+ */
+export function desmarcarEnTablero({ config, id, logger }) {
+  const texto = fs.readFileSync(config.tableroAbs, 'utf8');
+  const lineas = texto.split('\n');
+
+  // El bloque: su encabezado dice «⛔ APARTADA» y su `id:` es el que se pide.
+  let ini = -1;
+  let fin = lineas.length;
+  let nivel = 0;
+  for (let i = 0; i < lineas.length && ini === -1; i++) {
+    const m = /^(#{1,6})\s+⛔\s*APARTADA\b.*$/.exec(lineas[i]);
+    if (!m) continue;
+    for (let j = i + 1; j < lineas.length; j++) {
+      const n = /^(#{1,6})\s+/.exec(lineas[j]);
+      if (n && n[1].length <= m[1].length) break;
+      const d = /^\s*(?:[-*+]\s*)?[*_]*\s*id\s*[*_]*\s*:\s*[*_]*\s*([^\s*_`]+)/i.exec(lineas[j]);
+      if (d && d[1] === id) { ini = i; nivel = m[1].length; break; }
+    }
+  }
+  if (ini === -1) return { ok: false, motivo: `no encuentro ninguna tarea apartada con el id «${id}» en el tablero` };
+
+  for (let j = ini + 1; j < lineas.length; j++) {
+    const n = /^(#{1,6})\s+/.exec(lineas[j]);
+    if (n && n[1].length <= nivel) { fin = j; break; }
+  }
+
+  const titulo = lineas[ini].replace(/^#{1,6}\s+⛔\s*APARTADA\s*\([^)]*\)\s*[—–\-:·|]?\s*/, '').trim();
+  const nuevas = lineas.slice(ini, fin)
+    .map((l, k) => (k === 0 ? `${'#'.repeat(nivel)} TAREA — ${titulo}` : l))
+    .map((l) => l.replace(/^(\s*(?:[-*+]\s*)?[*_]*\s*estado\s*[*_]*\s*:\s*[*_]*\s*)(.+?)([*_]*\s*)$/i, '$1pendiente$3'))
+    // La nota de apartada se va, pero no en silencio: se sustituye por el rastro de la vuelta.
+    .filter((l) => !/^>\s*\*\*Apartada por el orquestador/.test(l)
+                && !/^>\s*Motivo:/.test(l)
+                && !/^>\s*Registro:/.test(l));
+
+  const rastro = ['', `> **Desapartada el ${hoy()} a petición de Ibrahin desde Telegram.** Vuelve a estar pendiente.`, ''];
+  const bloque = nuevas.join('\n').replace(/\s*$/, '') + '\n' + rastro.join('\n');
+
+  escribirAtomico(config.tableroAbs, [...lineas.slice(0, ini), bloque, ...lineas.slice(fin)].join('\n'));
+  logger?.exito(`${config.repo.tablero} actualizado: «${titulo}» vuelve a estar pendiente.`);
+  return { ok: true, titulo };
+}
+
+/**
  * El commit del cierre. Un solo commit con todo lo del cierre: registro + tablero.
  * El código del programador ya está confirmado por él; esto cierra el expediente.
  */

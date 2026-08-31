@@ -134,6 +134,10 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
       if (r.apartada) {
         await entregar({ texto: redactarApartada(r.apartada), config: cfg, entorno, logger: log });
       }
+      // Lo que contestan las órdenes que llegaron por Telegram mientras trabajaba.
+      for (const aviso of r.avisos || []) {
+        await entregar({ texto: aviso, config: cfg, entorno, logger: log });
+      }
       averiaViva = r.averiaViva ?? averiaViva;
       if (r.averia) {
         averiaViva = r.averia;

@@ -123,6 +123,14 @@ function decidirSinMirarCuota({ estado, tareaDisponible, pendientesEnTablero = [
 
   // ── 2 · Sin tarea en curso: coger una, o descansar ──────────────────────────
   if (!estado.tarea) {
+    // Pausa pedida desde Telegram. Va ANTES de mirar el tablero y DESPUÉS de terminar la
+    // tarea en curso (por eso está aquí y no arriba del todo): «para» promete que acaba lo
+    // que tiene entre manos y no coge la siguiente, no que lo suelte todo.
+    // Y pausado NO es avería: no hay nada roto, se lo ha pedido él.
+    if (estado.pausado) {
+      return { tipo: ACCIONES.OCIOSO, pausado: true,
+               porque: 'en pausa porque Ibrahin la pidió: no cojo tareas hasta que diga «arranca»' };
+    }
     if (!tareaDisponible) return ocioso(pendientesEnTablero);
     return { tipo: ACCIONES.TOMAR_TAREA, tarea: tareaDisponible, porque: 'hay tarea y hay cuota' };
   }

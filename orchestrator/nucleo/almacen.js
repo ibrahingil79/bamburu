@@ -79,6 +79,13 @@ export function estadoInicial() {
     esperandoCuota: false,
     esperaDesde: null,
     apartadas: [],        // [{ id, titulo, motivo, cuando, historial }]
+    // Pausa pedida desde Telegram. NO corta la tarea en curso: solo impide coger otra.
+    // Ésa es exactamente la promesa de «para»: termina lo que hace y no coge la siguiente.
+    pausado: false,
+    pausadoDesde: null,
+    // Cuántas órdenes de la bandeja se han aplicado ya. La bandeja es un fichero al que solo
+    // se añade, así que el número de línea vale de marcador y sobrevive a un corte.
+    ordenesLeidas: 0,
     subidaPendiente: false,
     ultimoFalloSubida: null,
     arrancadoEn: null,
@@ -124,6 +131,29 @@ export class Almacen {
       return { estado, reconstruido: false, eventosAplicados: pendientes.length };
     }
     return { estado, reconstruido: false, eventosAplicados: 0 };
+  }
+
+  /**
+   * Lee el estado SIN escribir nada. Es lo que usa el vigía, que corre en otro proceso.
+   *
+   * `recuperar()` no vale para eso: cuando encuentra el journal por delante de la
+   * instantánea, la reescribe — y dos procesos reescribiendo el mismo fichero acabarían
+   * pisándose. Aquí se hace la misma reconciliación en memoria y se devuelve, y punto.
+   * El dueño del estado en disco es UNO: el daemon.
+   */
+  leerEstado() {
+    let estado = estadoInicial();
+    let desdeInstantanea = false;
+    if (fs.existsSync(this.rutaEstado)) {
+      try {
+        const leido = JSON.parse(fs.readFileSync(this.rutaEstado, 'utf8'));
+        if (leido && leido.version === VERSION_ESTADO) { estado = leido; desdeInstantanea = true; }
+      } catch { /* a medio escribir: se reconstruye desde el journal */ }
+    }
+    const eventos = leerLineas(this.rutaJournal);
+    if (!desdeInstantanea) return eventos.length ? eventos.reduce((a, e) => aplicar(a, e), estadoInicial()) : estado;
+    const seq = estado.seq || 0;
+    return eventos.filter((e) => (e.seq || 0) > seq).reduce((a, e) => aplicar(a, e), estado);
   }
 
   /**
@@ -192,6 +222,15 @@ export function aplicar(estado, e) {
       return { ...s, tarea: null, paso: 'OCIOSO', pasoDesde: e.cuando, intento: 0, replanteos: 0,
                base: null, historial: [], fallosTecnicos: {},
                subidaPendiente: e.subidaPendiente ?? s.subidaPendiente };
+    // ── Órdenes desde Telegram ──────────────────────────────────────────────
+    case 'PAUSADO':
+      return { ...s, pausado: true, pausadoDesde: e.cuando };
+    case 'REANUDADO':
+      return { ...s, pausado: false, pausadoDesde: null };
+    case 'ORDENES_LEIDAS':
+      return { ...s, ordenesLeidas: e.hasta };
+    case 'DESAPARTADA':
+      return { ...s, apartadas: s.apartadas.filter((a) => a.id !== e.id) };
     case 'SUBIDA_PENDIENTE':
       return { ...s, subidaPendiente: true, ultimoFalloSubida: { motivo: e.motivo, cuando: e.cuando } };
     case 'SUBIDA_HECHA':

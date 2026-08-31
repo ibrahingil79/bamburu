@@ -16,8 +16,9 @@ import { componer } from './ejecucion/papeles.js';
 import { validarAnalisis, validarRevision, validarCodigo, detectarAnalisisImposible } from './validacion/validador.js';
 import { leerTablero, buscarSiguienteTarea, tareasPendientes, commitsDesde } from './reader.js';
 import { cabeza } from './cierre/git.js';
-import { escribirRegistroTarea, marcarEnTablero, confirmarCierre, subirTrabajo } from './cierre/cierre.js';
-import { escribirAtomico } from './nucleo/almacen.js';
+import { escribirRegistroTarea, marcarEnTablero, desmarcarEnTablero, confirmarCierre, subirTrabajo } from './cierre/cierre.js';
+import { escribirAtomico, leerLineas } from './nucleo/almacen.js';
+import { ORDENES } from './vigia/ordenes.js';
 import { sanear } from './tablero/saneador.js';
 import { confirmar, anadir } from './cierre/git.js';
 
@@ -131,6 +132,11 @@ export class Ciclo {
    * No lanza: cualquier desastre se convierte en un fallo técnico registrado.
    */
   async unPaso(estado) {
+    // Lo primero de la vuelta: las órdenes que Ibrahin haya dejado desde el móvil. Van antes
+    // de decidir nada, porque una pausa o un salto cambian lo que toca hacer AHORA.
+    const ord = await this.aplicarOrdenes(estado);
+    estado = ord.estado;
+
     let tareaDisponible = null;
     let pendientesEnTablero = [];
     try {
@@ -159,7 +165,90 @@ export class Ciclo {
       estado = this.almacen.transicion(estado, { tipo: 'CUOTA_VUELTA' });
     }
     this.log.info(`Decisión: ${accion.tipo} — ${accion.porque}`);
-    return this.ejecutar({ estado, accion, cuota, tareaDisponible });
+    const r = await this.ejecutar({ estado, accion, cuota, tareaDisponible });
+    return ord.avisos.length ? { ...r, avisos: [...ord.avisos, ...(r.avisos || [])] } : r;
+  }
+
+  /**
+   * Vacía la bandeja de órdenes que deja el vigía y las aplica.
+   *
+   * La bandeja es un fichero al que SOLO se añade, y el marcador es el número de líneas ya
+   * leídas: así una orden no se aplica dos veces aunque se vaya la luz entre aplicarla y
+   * guardar el estado, y el vigía no necesita hablar con este proceso por ningún socket.
+   *
+   * Lo que llega aquí YA está autorizado y validado por vigia/ordenes.js: aquí no se
+   * interpreta texto de nadie, solo se ejecutan entradas de una lista cerrada.
+   *
+   * @returns { estado, avisos } — los avisos los manda el daemon por Telegram.
+   */
+  async aplicarOrdenes(estado) {
+    const avisos = [];
+    let lineas;
+    try { lineas = leerLineas(this.config.rutasAbs.ordenes); }
+    catch (e) { this.log.aviso(`No pude leer la bandeja de órdenes: ${e.message}`); return { estado, avisos }; }
+
+    const leidas = estado.ordenesLeidas || 0;
+    if (lineas.length <= leidas) return { estado, avisos };
+
+    for (const o of lineas.slice(leidas)) {
+      try {
+        const r = await this.aplicarUnaOrden(estado, o);
+        estado = r.estado;
+        if (r.aviso) avisos.push(r.aviso);
+      } catch (e) {
+        // Una orden que revienta no puede llevarse el ciclo ni bloquear la bandeja.
+        this.log.error(`La orden «${o?.orden}» reventó: ${e.message}`);
+        avisos.push(`⚠️ No pude aplicar «${o?.orden}»: ${e.message}`);
+      }
+    }
+    estado = this.almacen.transicion(estado, { tipo: 'ORDENES_LEIDAS', hasta: lineas.length });
+    return { estado, avisos };
+  }
+
+  async aplicarUnaOrden(estado, o) {
+    switch (o?.orden) {
+      case ORDENES.PARAR: {
+        if (estado.pausado) return { estado, aviso: 'Ya estaba parado: no cojo tareas nuevas.' };
+        this.log.aviso('Orden desde Telegram: PARAR. Termino lo que tengo y no cojo más.');
+        estado = this.almacen.transicion(estado, { tipo: 'PAUSADO', de: o.de || 'telegram' });
+        return { estado, aviso: estado.tarea
+          ? `⏸ Vale. Termino «${estado.tarea.titulo}» y no cojo ninguna más hasta que me digas «arranca».`
+          : '⏸ Vale. No cojo ninguna tarea hasta que me digas «arranca».' };
+      }
+      case ORDENES.ARRANCAR: {
+        if (!estado.pausado) return { estado, aviso: '▶️ Ya estaba en marcha.' };
+        this.log.exito('Orden desde Telegram: ARRANCAR. Vuelvo a coger tareas.');
+        estado = this.almacen.transicion(estado, { tipo: 'REANUDADO', de: o.de || 'telegram' });
+        return { estado, aviso: '▶️ En marcha. Vuelvo a coger tareas del tablero.' };
+      }
+      case ORDENES.SALTAR: {
+        if (!estado.tarea) return { estado, aviso: 'No tengo ninguna tarea entre manos: no hay nada que saltar.' };
+        const { titulo, id } = estado.tarea;
+        this.log.aviso(`Orden desde Telegram: SALTAR «${titulo}».`);
+        // Se aparta, no se borra: si no quedara marcada en el tablero, la volvería a coger
+        // en la vuelta siguiente y estaríamos en un bucle. Y así se puede desapartar luego.
+        const r = await this.apartar({
+          estado,
+          accion: { motivo: 'la saltaste tú desde Telegram', detalle: [], decisionDeProducto: true },
+        });
+        return { estado: r.estado, aviso: `⏭ Saltada «${titulo}». Queda apartada por si la quieres recuperar («desapartar ${id}»). Sigo con la siguiente.` };
+      }
+      case ORDENES.DESAPARTAR: {
+        const ap = (estado.apartadas || []).find((a) => a.id === o.id);
+        if (!ap) return { estado, aviso: `No tengo ninguna tarea apartada que se llame «${o.id}».` };
+        const r = desmarcarEnTablero({ config: this.config, id: o.id, logger: this.log });
+        if (!r.ok) return { estado, aviso: `No pude devolverla al montón: ${r.motivo}` };
+        confirmarCierre({
+          config: this.config, tarea: { id: o.id, titulo: ap.titulo || o.id },
+          ficheros: [this.config.tableroAbs], logger: this.log,
+        });
+        estado = this.almacen.transicion(estado, { tipo: 'DESAPARTADA', id: o.id, de: o.de || 'telegram' });
+        this.log.exito(`Orden desde Telegram: DESAPARTAR «${o.id}». Vuelve a estar pendiente.`);
+        return { estado, aviso: `↩️ «${ap.titulo || o.id}» vuelve a estar pendiente. La cogeré cuando le toque.` };
+      }
+      default:
+        return { estado, aviso: null };
+    }
   }
 
   async ejecutar({ estado, accion, cuota, tareaDisponible }) {

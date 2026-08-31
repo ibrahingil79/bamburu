@@ -11,6 +11,8 @@
     "journal": ".orquestador/journal.ndjson",
     "historial": ".orquestador/historial.ndjson",
     "partesPendientes": ".orquestador/partes-pendientes.ndjson",
+    "ordenes": ".orquestador/ordenes.ndjson",
+    "registroOrdenes": ".orquestador/ordenes-registro.ndjson",
     "logs": "logs",
     "artefactos": "docs/architecture",
     "registrosTarea": "docs/orquestador/tareas"
@@ -80,6 +82,12 @@
       "chatIdEnv": "ORQUESTADOR_TELEGRAM_CHAT_ID",
       "timeoutMs": 20000,
       "maxPendientes": 50
+    },
+    "escucha": {
+      "activa": true,
+      "esperaLargaS": 50,
+      "esperaTrasFalloMs": 15000,
+      "confirmacionMs": 120000
     }
   }
 }

@@ -22,6 +22,7 @@ Comandos:
   parar-ya            parada de EMERGENCIA: corta lo que esté haciendo (puede dejar algo a medias)
   historial           tareas hechas, rechazadas, replanteadas y apartadas, con su consumo
   parte               fuerza el envío del parte ahora (y vacía la cola de pendientes)
+  escuchar            atiende las órdenes que Ibrahin manda por Telegram (daemon aparte)
   conectar-telegram   te pregunta los dos datos de Telegram y los guarda
   probar-telegram     comprueba el aviso de Telegram y manda un mensaje de prueba
   ayuda               esto
@@ -148,6 +149,27 @@ function parar(cfg, señal) {
     ? `\n  Parada buena pedida al pid ${pid}. Termina el paso en curso y para.\n  Míralo con: node orchestrator/orq.js estado\n\n`
     : `\n  ⚠️  Parada de EMERGENCIA enviada al pid ${pid}.\n  Puede haber dejado una llamada a medias. Al arrancar retomará desde el último paso guardado.\n\n`);
   return 0;
+}
+
+/**
+ * El vigía que recibe órdenes desde Telegram. Corre en su propio proceso, aparte del ciclo:
+ * así contesta «¿qué estás haciendo?» aunque el orquestador lleve media hora en una llamada,
+ * o aunque se haya caído.
+ */
+async function escuchar(cfg) {
+  const { Escucha } = await import('./vigia/escucha.js');
+  const { Vigilante } = await import('./cuota/vigilante.js');
+  const { crearRegistro } = await import('./nucleo/registro.js');
+  const log = crearRegistro({ dirLogs: cfg.rutasAbs.logs, nombre: 'vigia.log' });
+  log.titulo('VIGÍA DEL ORQUESTADOR  ·  escuchando órdenes');
+
+  const escucha = new Escucha({
+    config: cfg, almacen: almacenDe(cfg), vigilante: new Vigilante({ config: cfg }), logger: log,
+  });
+  const parar = () => { log.aviso('Parando el vigía.'); escucha.parar(); };
+  process.on('SIGTERM', parar);
+  process.on('SIGINT', parar);
+  return escucha.correr();
 }
 
 async function forzarParte(cfg) {
@@ -333,6 +355,7 @@ async function principal() {
     case 'parar':       return parar(cfg, 'SIGTERM');
     case 'parar-ya':    return parar(cfg, 'SIGINT');
     case 'parte':       cargarSecretos(); return forzarParte(cfg);
+    case 'escuchar':    cargarSecretos(); return escuchar(cfg);
     case 'probar-telegram': return probarTelegram(cfg);
     case 'conectar-telegram': return conectarTelegram(cfg);
     default:
