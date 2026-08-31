@@ -1,7 +1,8 @@
 // Prueba REAL (no simulada) de las 3 llamadas LLM migradas a core/llm.js.
 // Ejercita el camino migrado (callClaude → modelo de verdad) con la config EXACTA
 // (modelo, max_tokens, system, tools) de cada sitio: store builder, registro y DISA.
-import { callClaude, textFromResponse } from '../core/llm.js';
+import { callClaude, textFromResponse, toolUseBlocks } from '../core/llm.js';
+import { resultadosDeHerramientas } from '../modules/disa/index.js';   // el MISMO emparejador que corre /message, no una copia
 
 let ok = 0, fail = 0;
 const check = (label, cond, extra = '') => {
@@ -64,14 +65,20 @@ console.log('\n[3] DISA asistente — sonnet, max_tokens 1024, tool query_databa
     model: 'claude-sonnet-5', max_tokens: 1024, system, messages: apiMessages, tools,
   });
   console.log('  modelo devuelto:', first.model, '| stop_reason:', first.stop_reason);
-  const toolUse = (first.content || []).find(b => b.type === 'tool_use');
-  check('primera vuelta usa la tool (tool_use)', first.stop_reason === 'tool_use' && !!toolUse,
-    toolUse ? 'sql=' + JSON.stringify(toolUse.input?.sql) : 'sin tool_use');
+  const bloques = toolUseBlocks(first);   // TODAS las del turno, en orden (nunca solo la primera)
+  check('primera vuelta usa la tool (tool_use)', first.stop_reason === 'tool_use' && bloques.length > 0,
+    bloques.length ? bloques.length + ' llamada(s), sql=' + JSON.stringify(bloques[0].input?.sql) : 'sin tool_use');
 
-  // Segunda vuelta: devolvemos un tool_result (simulamos el dato de la BD) y cerramos
-  if (toolUse) {
+  // Segunda vuelta: devolvemos UN tool_result POR CADA tool_use del turno —el contrato de la API,
+  // y lo que este fichero documenta— y cerramos. Simulamos el dato de la BD.
+  if (bloques.length) {
+    const r = resultadosDeHerramientas(bloques, () => ({ rows: [{ total: 7 }], count: 1 }));
+    check('se contesta a TODAS las herramientas del turno, emparejadas por id',
+      r.mensaje.content.length === bloques.length
+      && r.mensaje.content.every((b, i) => b.tool_use_id === bloques[i].id),
+      bloques.length + ' tool_use → ' + r.mensaje.content.length + ' tool_result');
     apiMessages.push({ role: 'assistant', content: first.content });
-    apiMessages.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify({ rows: [{ total: 7 }], count: 1 }) }] });
+    apiMessages.push(r.mensaje);
     const second = await callClaude({
       model: 'claude-sonnet-5', max_tokens: 1024, system, messages: apiMessages, tools,
     });

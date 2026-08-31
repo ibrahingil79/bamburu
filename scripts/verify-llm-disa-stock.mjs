@@ -9,7 +9,8 @@ import Database from 'better-sqlite3';
 import { runMigrations } from '../modules/erp/models.js';
 import { recordMovement, ADJUST_REASONS } from '../modules/erp/stock.js';
 import { activeWarehouses, inventoryValuation } from '../modules/erp/routes/warehouses.js';
-import { callClaude, hasAnthropicKey } from '../core/llm.js';
+import { callClaude, hasAnthropicKey, toolUseBlocks } from '../core/llm.js';
+import { resultadosDeHerramientas } from '../modules/disa/index.js';   // el MISMO emparejador que corre /message, no una copia
 
 let ok = 0, fail = 0;
 const check = (label, cond, extra = '') => {
@@ -81,17 +82,23 @@ const tools = [{
 }];
 
 // Bucle real de tool-use (como el módulo): hasta 4 vueltas, ejecutando el SELECT de verdad.
+// TODAS las herramientas del turno, emparejadas por id: se usan `toolUseBlocks` y
+// `resultadosDeHerramientas` del módulo, no una copia. Coger «la primera» con `.find(...)` y
+// contestar una sola era el 400 del 31 ago 2026, y este fichero lo tenía copiado.
 async function ask(userMsg) {
   let msgs = [{ role: 'user', content: userMsg }];
   let turns = 0, usedTool = false, lastSql = '';
   while (turns <= 4) {
     const data = await callClaude({ model: 'claude-sonnet-5', max_tokens: 1024, system: systemPrompt, messages: msgs, tools });
-    if (data.stop_reason === 'tool_use') {
-      const tu = data.content.find(b => b.type === 'tool_use');
-      usedTool = true; lastSql = tu.input?.sql || '';
-      let result; try { const rows = db.prepare(lastSql).all(); result = { rows, count: rows.length }; } catch (e) { result = { error: e.message }; }
+    const bloques = toolUseBlocks(data);
+    if (data.stop_reason === 'tool_use' && bloques.length) {
+      usedTool = true; lastSql = bloques[bloques.length - 1].input?.sql || '';
+      const r = resultadosDeHerramientas(bloques, (_nombre, input) => {
+        const sql = input.sql || '';
+        try { const rows = db.prepare(sql).all(); return { rows, count: rows.length }; } catch (e) { return { error: e.message }; }
+      });
       msgs.push({ role: 'assistant', content: data.content });
-      msgs.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: tu.id, content: JSON.stringify(result) }] });
+      msgs.push(r.mensaje);
       turns++; continue;
     }
     const text = data.content?.find(b => b.type === 'text')?.text || '';

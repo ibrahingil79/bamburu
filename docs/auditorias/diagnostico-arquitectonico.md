@@ -258,7 +258,20 @@ de llamada.
 
 ### 4.2 · DISA se rompe cuando el modelo llama a dos herramientas a la vez — síntoma de la capa LLM
 
-`modules/disa/index.js:2570`:
+> ⚙️ RESUELTO el 31 ago 2026 por la tarea `disa-herramientas-en-paralelo`: se contestan TODAS las
+> llamadas del turno —un `tool_result` por cada `tool_use`, en el mismo orden y con su `tool_use_id`—
+> con `toolUseBlocks` (`core/llm.js`) y `resultadosDeHerramientas` (`modules/disa/index.js`, exportada
+> y pura). Lo vigila `scripts/verify-disa-herramientas-paralelo.mjs`, que además barre `modules/`,
+> `core/` y `scripts/` para que nadie vuelva a coger «la primera» con `.find(...)`. El hallazgo se
+> conserva entero para poder reconstruir qué se creía y cuándo.
+>
+> **Lo de abajo NO se cierra:** los cinco puntos de `core/llm.js` (sin reintentos, sin streaming, sin
+> mirar `max_tokens`, sin caché de prompt, y el contador de gasto que falla abierto) **siguen
+> abiertos**, cada uno con su decisión pendiente.
+
+~~`modules/disa/index.js:2570`~~ — ⚙️ **CORREGIDO EL 31 ago 2026:** la línea rota era la **2583**; la
+2570 es el cierre de la llamada a `callClaude`. El código se movió 13 líneas desde que se escribió este
+diagnóstico. Se tacha en vez de borrarse porque quien construya va a buscar por número de línea:
 
 ```js
 const toolUse = data.content.find(b => b.type === 'tool_use');   // ← la PRIMERA, solo

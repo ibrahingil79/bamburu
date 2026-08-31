@@ -31,7 +31,7 @@ import { runCapture, captureFromExtraction } from '../erp/routes/purchases-captu
 import { createProductSvc } from '../erp/routes/products.js';   // alta validada (banda de IVA obligatoria, sin defecto silencioso)
 import { getVatBands } from '../../core/vat-bands.js';   // [D5] lista cerrada de bandas legales (misma fuente que el formulario/API)
 import { ALLOWED_MIME, MAX_UPLOAD_BYTES } from '../erp/attachments.js';
-import { callClaude, hasAnthropicKey, textFromResponse } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
+import { callClaude, hasAnthropicKey, textFromResponse, toolUseBlocks } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
 import { rateLimit } from '../../core/rate-limit.js';   // freno por IP del endpoint caro de DISA
 import { ENTITY } from '../../core/activity-entities.js';
 import { escHtml } from '../../core/escape.js';
@@ -149,6 +149,76 @@ export function redactarSql(sql) {
 // veía sus informes (diagnóstico arquitectónico §4.1).
 export function permisoDeSesion(db, session) {
   return clave => { const [m, a] = String(clave).split('.'); return checkPermission(db, session, m, a); };
+}
+
+// ── HERRAMIENTAS EN PARALELO · el contrato del turno (31 ago 2026) ────────────────────────────────
+// El modelo puede pedir VARIAS herramientas en un mismo turno (el paralelismo está activo por
+// defecto en la Messages API), y la API exige que el mensaje `user` siguiente traiga UN `tool_result`
+// POR CADA `tool_use`, emparejado por su id. Hasta hoy el bucle ejecutaba la PRIMERA, reenviaba
+// TODAS y contestaba UNA: la petición siguiente era inválida, la API respondía 400 y el usuario leía
+// «No se pudo contactar con DISA» — un fallo de contrato disfrazado de fallo de red.
+//
+// El presupuesto es explícito porque un bucle sin tope sobre la BD no se deja abierto. Y pasado el
+// presupuesto el bloque SIGUE RECIBIENDO su tool_result: descartar uno sin contestarlo es volver al
+// 400 por otro camino. Se rechaza CONTESTANDO, nunca callando.
+export const MAX_VUELTAS = 5;                    // llamadas a la API por mensaje (lo mismo que antes)
+export const MAX_HERRAMIENTAS_POR_MENSAJE = 8;   // ejecuciones de herramienta en todo el mensaje
+export const MSG_PRESUPUESTO_HERRAMIENTAS =
+  'Has consultado demasiadas cosas en un solo mensaje. Contesta con lo que ya tienes.';
+
+// Construye el mensaje `user` de respuesta a un turno de herramientas.
+//
+// VIVE AQUÍ, A NIVEL DE MÓDULO Y EXPORTADA, por lo mismo que `evaluateQueryAccess` y
+// `permisoDeSesion`: para que la comprobación mida EL CABLEADO REAL y no una copia escrita para la
+// prueba. Es pura —ni BD, ni red, ni sesión—, así que se prueba entera en milisegundos.
+//
+//   bloques     : los `tool_use` del turno (los que devuelve toolUseBlocks)
+//   ejecutar    : (nombre, input) => resultado — puede devolver { error } y puede lanzar
+//   presupuesto : cuántas se pueden EJECUTAR de verdad; el resto se rechazan CONTESTANDO
+//   → { mensaje, ejecutadas, rechazadas, traza }
+//
+// NO LANZA NUNCA (patrón `seguro()` de informes.js:138): una excepción a mitad del lote dejaría el
+// mensaje malformado, que es el fallo original con otro disfraz. Un error es un resultado.
+export function resultadosDeHerramientas(bloques, ejecutar, { presupuesto = Infinity } = {}) {
+  const content = [];
+  const traza = [];
+  const vistos = new Set();
+  let ejecutadas = 0;
+  let rechazadas = 0;   // bloques cuyo tool_result va con is_error (por error propio o sin presupuesto)
+
+  for (const b of (Array.isArray(bloques) ? bloques : [])) {
+    // Sin id no se puede emparejar, y dos tool_result con el mismo id son otro 400. Defensivo.
+    if (!b || !b.id || vistos.has(b.id)) continue;
+    vistos.add(b.id);
+
+    let resultado, texto, estado;
+    if (ejecutadas >= presupuesto) {
+      resultado = { error: MSG_PRESUPUESTO_HERRAMIENTAS };
+      texto = JSON.stringify(resultado);
+      estado = 'sin presupuesto';
+    } else {
+      try {
+        resultado = ejecutar(b.name, b.input || {});
+        if (!resultado || typeof resultado !== 'object') resultado = { resultado };
+        texto = JSON.stringify(resultado);
+        if (typeof texto !== 'string') throw new Error('resultado no serializable');
+      } catch (e) {
+        resultado = { error: safeError(e) };
+        texto = JSON.stringify(resultado);
+      }
+      ejecutadas++;
+      estado = resultado.error ? 'rechazada' : 'completada';
+    }
+
+    const bloque = { type: 'tool_result', tool_use_id: b.id, content: texto };
+    // `is_error` es el canal que la propia API tiene para esto: hace el fallo legible para el modelo
+    // sin tocar el `content` ni el emparejamiento, que es lo que arregla la avería.
+    if (resultado.error) { bloque.is_error = true; rechazadas++; }
+    content.push(bloque);
+    traza.push({ nombre: b.name, estado });
+  }
+
+  return { mensaje: { role: 'user', content }, ejecutadas, rechazadas, traza };
 }
 
 export function register(app, db) {
@@ -2555,14 +2625,30 @@ export function register(app, db) {
         }
       }];
 
+      // Despacho POR NOMBRE contra el registro, nunca «la que quede». Antes era una cadena de
+      // ternarios que acababa en `runQueryTool(inp.sql || '')`, así que CUALQUIER nombre que el
+      // modelo se inventara se ejecutaba como una consulta SQL vacía: fallaba cerrado por
+      // casualidad (`evaluateQueryAccess` rechaza la cadena vacía), no por diseño.
+      const ejecutarHerramienta = (nombre, input = {}) => {
+        if (NOMBRES_INFORMES.has(nombre))   return INFORMES_TOOL.ejecutar(nombre, input);
+        if (NOMBRES_DESCUENTOS.has(nombre)) return DTO_TOOL.ejecutar(nombre, input);
+        if (nombre === 'query_database')    return runQueryTool(input.sql || '');
+        return { error: 'No conozco la herramienta "' + nombre + '".' };
+      };
+
       let apiMessages = [...recentHistory, { role: 'user', content: message }];
       let reply = '';
-      let toolCalls = 0;
+      let vueltas = 0;    // llamadas a la API en este mensaje
+      let gastadas = 0;   // herramientas EJECUTADAS en todo el mensaje, sumando vueltas
 
-      while (toolCalls <= 4) {
+      while (vueltas < MAX_VUELTAS) {
+        vueltas++;
         // Vía core/llm.js (callClaude): clave + transporte centralizados. Mismo modelo,
-        // max_tokens, prompt, mensajes y tools; el bucle de tool-use queda intacto. Si
-        // falla la red/API, callClaude lanza y esta ruta responde sin exponer detalles internos.
+        // max_tokens, prompt, mensajes y tools. El bucle de tool-use cumple desde el 31 ago 2026
+        // el contrato de la API: se contestan TODAS las herramientas del turno, una por una y
+        // emparejadas por su `tool_use_id` (antes se ejecutaba la primera y se contestaba una sola,
+        // con las demás reenviadas sin respuesta → 400). Si falla la red/API, callClaude lanza y
+        // esta ruta responde sin exponer detalles internos.
         let data;
         try {
           data = await callClaude({
@@ -2579,29 +2665,33 @@ export function register(app, db) {
           return c.json({ error: 'No se pudo contactar con DISA. No se ha ejecutado ninguna acción; inténtalo de nuevo.' }, 502);
         }
 
-        if (data.stop_reason === 'tool_use') {
-          const toolUse = data.content.find(b => b.type === 'tool_use');
-          if (!toolUse) break;
-          const inp = toolUse.input || {};
-          const result = NOMBRES_INFORMES.has(toolUse.name) ? INFORMES_TOOL.ejecutar(toolUse.name, inp)
-            : NOMBRES_DESCUENTOS.has(toolUse.name) ? DTO_TOOL.ejecutar(toolUse.name, inp)
-            : runQueryTool(inp.sql || '');
-          // La traza operativa conserva solo herramienta + resultado. Nunca SQL, argumentos ni PII.
-          console.log('[DISA] herramienta:', toolUse.name,
-            result.error ? 'rechazada' : 'completada');
-          apiMessages.push({ role: 'assistant', content: data.content });
-          apiMessages.push({
-            role: 'user',
-            content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(result) }]
-          });
-          toolCalls++;
-        } else {
-          // Ya filtraba por tipo (bien), pero se unifica en el helper: un solo sitio decide cómo se
-          // saca el texto de una respuesta, para que no vuelva a haber tres formas distintas.
+        // La lista COMPLETA de bloques del turno, en su orden (toolUseBlocks). Cubre de una vez
+        // el caso «no pidió herramientas» y el viejo `if (!toolUse) break`, y en los dos SACA EL
+        // TEXTO en vez de dejar `reply` vacío. El texto se saca con el helper: un solo sitio decide
+        // cómo se lee una respuesta, para que no vuelva a haber tres formas distintas.
+        const bloques = toolUseBlocks(data);
+        if (data.stop_reason !== 'tool_use' || bloques.length === 0) {
           reply = textFromResponse(data);
           break;
         }
+
+        const r = resultadosDeHerramientas(bloques, ejecutarHerramienta, {
+          presupuesto: Math.max(0, MAX_HERRAMIENTAS_POR_MENSAJE - gastadas),
+        });
+        gastadas += r.ejecutadas;
+        // La traza operativa conserva solo herramienta + resultado. Nunca SQL, argumentos ni PII.
+        for (const t of r.traza) console.info('[DISA] herramienta:', t.nombre, t.estado);
+
+        apiMessages.push({ role: 'assistant', content: data.content });
+        apiMessages.push(r.mensaje);
       }
+
+      // NUNCA una burbuja vacía con HTTP 200: si el presupuesto de vueltas se agota a mitad de una
+      // cadena de herramientas, o el turno viene sin texto y sin bloques utilizables, se DICE. Es la
+      // avería del 15 ago 2026 (respuesta vacía con 200, sin error y sin nada en pantalla), que
+      // seguía viva por este otro camino.
+      if (!reply) reply = 'He consultado varias cosas y no he conseguido cerrar la respuesta. '
+                        + 'Vuelve a preguntármelo, si puedes más concreto.';
 
       const lastAssistantMsg = history.slice().reverse().find(m => m.role === 'assistant');
       const pendingAction = lastAssistantMsg?.pending_action || null;

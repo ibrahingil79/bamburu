@@ -203,3 +203,14 @@ export function textFromResponse(apijson) {
   if (!apijson || !Array.isArray(apijson.content)) return '';
   return apijson.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
 }
+
+// Atajo hermano de textFromResponse: la lista COMPLETA de bloques `tool_use` de la respuesta, en su
+// orden. Existe por lo mismo que aquél: un solo sitio decide cómo se lee la forma de una respuesta.
+// La lista entera, no el primero: el uso de herramientas en paralelo está activo por defecto en la API y
+// cada `tool_use` exige su `tool_result`; quedarse con `.find(...)` es el 400 del 31 ago 2026.
+export function toolUseBlocks(apijson) {
+  if (!apijson || !Array.isArray(apijson.content)) return [];
+  // El filtro por `b.id` es deliberado: un bloque sin id no se puede contestar, así que tampoco
+  // se ejecuta. Misma tolerancia que textFromResponse: nunca lanza, siempre devuelve un array.
+  return apijson.content.filter(b => b && b.type === 'tool_use' && b.id);
+}
