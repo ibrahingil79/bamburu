@@ -9,6 +9,9 @@
 > SIGUIENTE TAREA OFICIAL: aislamiento de bloqueos SQLite — a delimitar antes de iniciarlo.**
 > **Peldaño 9 — Belleza/estética queda pendiente y aplazado; no es la siguiente tarea mientras
 > exista un riesgo técnico grave demostrado.**
+>
+> 🗃️ **Backlog de mejoras del 31 ago 2026 (54 ítems, SIN ORDEN DECIDIDO): al final de este
+> documento.** Sale de cinco auditorías cuyos informes íntegros viven en `docs/` — no aquí.
 
 > **SANEAMIENTO 6 ✅ HECHO (31 ago 2026): SEGUNDA COPIA DE SEGURIDAD EN GOOGLE DRIVE (cuenta
 > `gilibrahin@gmail.com`).**
@@ -8005,3 +8008,100 @@ código señaló fichero y línea.
 `/users/:id/recuperar`, `/superadmin/migraciones`, `/superadmin/migraciones/:slug/:id/fichero`,
 `/favicon.ico` y `/favicon.svg`. Cero `DROP`. Las tablas de DISA siguen fuera de `WRITABLE_TABLES`.
 La cadena de VERI*FACTU, sin tocar.
+
+---
+
+# 🗃️ BACKLOG DE MEJORAS — sesión del 31 ago 2026 (SIN ORDEN DECIDIDO)
+
+> **Esto NO es una cola de trabajo.** Es el volcado de todo lo que salió de las cinco auditorías del
+> 31 ago. **El orden lo decide Ibrahin** (CANON §6); nada de aquí se inicia sin encargo. Los informes
+> íntegros están en el repo, no aquí:
+>
+> - `docs/rendimiento/diagnostico-bloqueos-sqlite.md`
+> - `docs/rendimiento/analisis-migracion-postgres.md`
+> - `docs/auditorias/arquitectura-y-estandares.md`
+> - `docs/auditorias/comparativa-referentes.md`
+> - `docs/seguridad/vectores-de-ataque.md`
+
+## Seguridad y datos
+
+- [ ] **Cifrar las copias de seguridad.** Hoy en claro en dos Drive personales, con 203 clientes y 922 facturas dentro. Cierra a la vez los vectores 4 y 7 de la auditoría de seguridad. Es configuración (`rclone crypt`), no programación.
+- [ ] **Manifiesto de huellas del histórico de backups.** Hoy solo se verifica la copia del día: una copia de hace cinco días se puede editar y nadie vuelve a mirarla. SHA-256 por copia, guardado aparte, comprobado contra las 14 en cada pasada.
+- [ ] **La retención del backup borra aunque la subida haya fallado** (`scripts/bamburu-backup.sh:164`). Condicionar el borrado al éxito.
+- [ ] **Cifrado en reposo de las bases de negocio.**
+- [ ] **Permisos Paso 1:** 600 de 1.025 rutas sin comprobación de permiso visible en la línea. Recorrerlas y dejar escrito qué exige cada una. Desbloquea el Paso 2 (DISA administrando permisos).
+- [ ] **Roles heredados.** Hoy son permisos casilla por casilla y persona por persona: 55 filas para 9 usuarios. Las tablas `roles`/`role_permissions`/`user_roles` no existen.
+- [ ] **RGPD como función:** exportar, borrar y anonimizar los datos de un cliente. Requiere decidir antes cómo convive con la regla de no destruir datos y con la inmutabilidad fiscal.
+- [ ] **2FA obligatoria para `owner`/`admin`.** Hoy es opcional, con mínimo de 8 caracteres.
+- [ ] **Sesión de 24 h fijas sin renovación por actividad** (`core/auth.js:74`). Revisar.
+- [ ] **CSP con `unsafe-inline`** (8 usos, `core/security-headers.js`) — hallazgo M8, esfuerzo alto.
+- [ ] **2 vulnerabilidades moderadas** en dependencias (`npm audit`).
+- [ ] **Ensayo de recuperación completo cronometrado**, con RTO/RPO escrito. Hoy se sabe que los ficheros abren; no cuánto se tarda en volver.
+- [ ] **Anclar la cadena VERI\*FACTU fuera del servidor.** Quien tenga acceso al `.db` puede reescribir importes y recalcular la cadena. El envío real a la AEAT lo resuelve solo.
+
+## Arquitectura
+
+- [ ] **Los cuatro temporizadores que abren en escritura cada hora** (`caducar-reservas`, `avisos`, `propuestas`, `recordatorios-cita`), que abran en solo lectura donde solo leen.
+- [ ] **Bajar la espera de bloqueo** de 5 s a una fracción: convierte «producto congelado 5 segundos» en «una operación falla rápido».
+- [ ] **Un solo escritor:** que los temporizadores pidan el trabajo al servidor en vez de abrir la base.
+- [ ] **Varios procesos con reparto de negocios** (opción B del diagnóstico de julio). Bloqueada hasta cerrar lo anterior.
+- [ ] **Medir `worker_threads`** como alternativa a Postgres: mantiene SQLite y el aislamiento por fichero. Sin medir todavía.
+- [ ] **PostgreSQL con el patrón de Odoo** (una base por negocio), cuando el número lo justifique. 571–987 h medidas. **No va primero.**
+
+## Observabilidad
+
+- [ ] **Integración continua** que ejecute las comprobaciones en cada subida. Hoy hay 267 gates y ningún automatismo.
+- [ ] **Registro estructurado.** Hoy 22 `console.log` sueltos y el journal.
+- [ ] **Métricas básicas:** cuántas peticiones, cuánto tardan, cuál va lenta.
+
+## API
+
+- [ ] **Versionado** (`/api/v1` no existe hoy).
+- [ ] **Contrato documentado** (sin OpenAPI/Swagger).
+- [ ] **Validación en todas las entradas** (`zod` en 16 sitios de 611 rutas).
+- [ ] **Autenticación por token con ámbitos y cuotas.**
+
+## Producto — de la comparativa con los grandes
+
+- [ ] Datos de ejemplo borrables al crear un negocio.
+- [ ] Que el oficio traiga también serie de facturas, IVA y recordatorios, no solo el catálogo.
+- [ ] Papelera con recuperación por el propio dueño.
+- [ ] Historial de cambios visible para el cliente.
+- [ ] Exportación completa de todos sus datos.
+- [ ] Modo de pruebas por negocio.
+- [ ] Entrada como cliente para soporte, con motivo obligatorio y registro.
+- [ ] Página de estado pública.
+- [ ] Límites visibles antes de chocar contra ellos.
+- [ ] Importación asistida con mapeo de columnas.
+- [ ] Ciclo completo de suscripción: alta, cobro, tarjeta caducada, cancelación, recuperación.
+
+## Producto — operativo
+
+- [ ] Corregir errores de semanas atrás en documentos no fiscales.
+- [ ] Deshacer una importación entera.
+- [ ] Fusionar clientes duplicados.
+- [ ] Búsqueda global.
+- [ ] Aviso cuando dos personas editan lo mismo.
+- [ ] Que el dueño vea la actividad de sus empleados.
+- [ ] Acceso de gestoría sin consumir usuario.
+- [ ] Canal de aviso desde dentro del programa.
+- [ ] Modo mantenimiento.
+- [ ] Acciones en bloque.
+- [ ] Exportar cualquier lista a Excel.
+- [ ] Adjuntar documentos a clientes, pedidos y facturas.
+- [ ] Buscar dentro de los documentos adjuntos.
+
+## Limpieza
+
+- [ ] Retirar las 6 pantallas muertas (1.584 líneas ya sin montar).
+- [ ] Enlazar las 14 secciones sin acceso desde el menú.
+- [ ] Reducir los 65 elementos de menú.
+- [ ] Las 99 comprobaciones que nadie ejecuta: o entran al barrido o se retiran con motivo escrito.
+
+## Decisiones tomadas el 31 ago 2026
+
+- **Segunda copia en Google Drive** (`gilibrahin@gmail.com`), **no Backblaze**. B2 quedó medido (10 GB gratis, sin tarjeta, el backup ocupa el 3 %) y descartado por preferencia de Ibrahin por una cuenta propia.
+- **Avisos de backup:** una copia caída = aviso · las dos = crítico.
+- **Todo lo que hay hoy en Bamburu es de PRUEBA** hasta que Ibrahin diga lo contrario.
+- **Postgres no se descarta, pero no va primero.**
+- **No perseguir amplitud** (multi-moneda, nóminas, fabricación): es donde se pierde contra SAP.
