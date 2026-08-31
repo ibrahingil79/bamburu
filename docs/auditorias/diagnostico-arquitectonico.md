@@ -229,6 +229,9 @@ verificados leyendo el código y **ninguno está reproducido** (RITUAL).
 
 ### 4.1 · El dueño no puede ver sus propios informes por DISA — síntoma de N2
 
+> ⚙️ RESUELTO el 31 ago 2026 por la tarea `disa-informes-permiso-dueno`: el bypass owner/admin pasó a
+> `core/permission-check.js`. El hallazgo se conserva entero para poder reconstruir qué se creía y cuándo.
+
 `modules/disa/index.js:2528` construye el comprobador de permisos de las herramientas de informes y de
 descuentos así:
 

@@ -14,11 +14,17 @@
 //     puertas darían números distintos el día que una cambiara — y el canon dice que ninguna
 //     sustituye a la otra, no que se parezcan.
 //
-//  2. MISMOS PERMISOS QUE LA PANTALLA. El `hasPerm` que se le pasa es el mismo `checkPermission`
-//     que usa `requirePerm`. Un panel COMPARTIDO de un área que el usuario no puede ver **no se
-//     lista**: `listarPaneles` filtra por «mío o compartido», y encima de eso se filtra por el
-//     permiso del área, que es lo que hace la pantalla al abrirlo. Y se dice CUÁNTOS se han
-//     escondido, para que el usuario sepa que hay algo que no ve en vez de creer que no existe.
+//  2. MISMOS PERMISOS QUE LA PANTALLA. El `hasPerm` que se le pasa lo construye `permisoDeSesion`
+//     (`modules/disa/index.js`), y decide como `requirePerm`: primero el ROL —owner y admin pasan,
+//     igual que en la pantalla— y después la fila de `user_permissions`. Ese bypass por rol vive
+//     DENTRO de `checkPermission` (`core/permission-check.js`) desde el 31 ago 2026. Hasta ese día
+//     no estaba en ninguno de los dos sitios, y esta regla prometía algo que no cumplía: al DUEÑO,
+//     que NO tiene filas en `user_permissions` —nadie se las siembra—, esta puerta le escondía sus
+//     propios informes mientras la visual se los enseñaba (diagnóstico arquitectónico §4.1).
+//     Un panel COMPARTIDO de un área que el usuario no puede ver **no se lista**: `listarPaneles`
+//     filtra por «mío o compartido», y encima de eso se filtra por el permiso del área, que es lo
+//     que hace la pantalla al abrirlo. Y se dice CUÁNTOS se han escondido, para que el usuario sepa
+//     que hay algo que no ve en vez de creer que no existe.
 //
 //  3. NO SE ESCRIBE. Ni guardar, ni renombrar, ni borrar. Componer devuelve el resultado y un
 //     ENLACE que abre el constructor con la receta puesta; guardar se hace allí, con un botón.

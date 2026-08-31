@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { safeError } from '../../core/errors.js';
 import { bodyLimit } from 'hono/body-limit';
 import { adminAuth, getCsrfToken, requirePerm } from '../../core/auth.js';
-import { checkPermission } from '../../core/permission-check.js';   // Permisos · Paso 2 — MISMO motor que requirePerm (sin lógica paralela)
+import { checkPermission } from '../../core/permission-check.js';   // Permisos · Paso 2 — MISMO motor que requirePerm (sin lógica paralela), incluido el bypass owner/admin, desde el 31 ago 2026
 import { adminLayout } from '../erp/layout.js';
 // `generateInvoice` ya no se importa: era el puente pedido-viejo→factura (create_invoice_from_order),
 // retirado el 2026-07-10. La función sigue en invoices.js, neutralizada desde D1 (lanza 410).
@@ -138,6 +138,17 @@ export function redactarSql(sql) {
     .replace(/\b\d+(?:\.\d+)?\b/g, '?')
     // Fechas/valores entre comillas dobles, si el modelo las usa como literal.
     .replace(/"(?:[^"]|"")*"/g, '"?"');
+}
+
+// El comprobador de permisos que usan las herramientas de INFORMES y de DESCUENTOS. Toma la clave
+// entera ('invoices.read'), que es la forma que espera `hasPerm` en constructor-analitica.js.
+//
+// VIVE AQUÍ, A NIVEL DE MÓDULO Y EXPORTADO, por el mismo motivo que `evaluateQueryAccess` (arriba):
+// para que la comprobación pueda llamar AL CABLEADO REAL. Cuando era una lambda dentro del handler,
+// el gate no podía alcanzarla, le pasaba `() => true` a las herramientas, daba verde — y el dueño no
+// veía sus informes (diagnóstico arquitectónico §4.1).
+export function permisoDeSesion(db, session) {
+  return clave => { const [m, a] = String(clave).split('.'); return checkPermission(db, session, m, a); };
 }
 
 export function register(app, db) {
@@ -2524,8 +2535,10 @@ export function register(app, db) {
 
       // ── PUNTO 10 · LOS INFORMES, POR CHAT ────────────────────────────────────────────────────
       // Mismo motor y mismos permisos que la pantalla; el detalle y el porqué, en `informes.js`.
-      // `hasPerm` recibe la clave entera y la parte: es el MISMO `checkPermission` de `requirePerm`.
-      const permClave = clave => { const [m, a] = String(clave).split('.'); return checkPermission(db, session, m, a); };
+      // `permisoDeSesion` toma la clave entera y decide como `requirePerm`: primero el rol (owner/admin
+      // pasan) y después la fila de `user_permissions`. El bypass está DENTRO de `checkPermission`
+      // (core/permission-check.js), no aquí — si volviera a escribirse a mano, volvería a olvidarse.
+      const permClave = permisoDeSesion(db, session);
       const INFORMES_TOOL = herramientasDeInformes(db, { userId: session?.userId || null, hasPerm: permClave });
       // PUNTO 11 · descuentos, promociones y bonos: LEER y PROPONER. Aplicar sigue en la pantalla.
       const DTO_TOOL = herramientasDeDescuentos(db, { hasPerm: permClave });

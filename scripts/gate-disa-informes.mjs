@@ -16,6 +16,7 @@ import fs from 'fs';
 import path from 'path';
 import { tenantDb, launchOpts } from './lib/gate-env.mjs';
 import { herramientasDeInformes, TOOLS_INFORMES, NOMBRES_INFORMES } from '../modules/disa/informes.js';
+import { permisoDeSesion } from '../modules/disa/index.js';
 import { cruzar, guardarPanel, borrarPanel } from '../modules/erp/constructor-analitica.js';
 
 const SLUG = 'desarrollo-bamburu';
@@ -47,7 +48,14 @@ try {
     config: { area: 'compras', dimension: 'proveedor', periodo: 'mes', medidas: ['base'], rango: '12m', grafico: 'barras' } }, true);
 
   const TODO = () => true;
-  const dueno = herramientasDeInformes(db, { userId: owner.id, hasPerm: TODO });
+  // EL DUEÑO SE MIDE CON EL CABLEADO REAL, no con `() => true`. Hasta el 31 ago 2026 estas dos líneas
+  // le pasaban a las herramientas un `hasPerm` escrito para la prueba: los bloques [2], [3] y [5]
+  // daban verde sobre el motor y se saltaban entero el tramo donde estaba la avería — el dueño no
+  // veía sus propios informes por chat (diagnóstico arquitectónico §4.1). Es el mismo patrón del
+  // fallo del 23 ago con las ventanitas: «probaba que el servidor guarda, y se saltaba el mando».
+  const sesionDueno = { userId: owner.id, role: 'owner' };
+  const permDueno = permisoDeSesion(db, sesionDueno);
+  const dueno = herramientasDeInformes(db, { userId: owner.id, hasPerm: permDueno });
 
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   console.log('\n[1] LA PUERTA EXISTE — y está declarada para el modelo');
