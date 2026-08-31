@@ -8044,10 +8044,10 @@ La cadena de VERI*FACTU, sin tocar.
 > **Manda esta lista.** El rótulo de la línea 9 se retiró; aquella tarea sigue pendiente, no
 > descartada. Se deja escrito lo que se creía y cuándo, en vez de borrarlo.
 
-## SIGUIENTE TAREA — El dueño no puede ver sus propios informes por DISA
+## ✅ HECHA (2026-08-31) — El dueño no puede ver sus propios informes por DISA · `e5111df`
 
 - **id:** disa-informes-permiso-dueno
-- **estado:** pendiente
+- **estado:** hecha
 - **origen:** `docs/auditorias/diagnostico-arquitectonico.md` §4.1
 
 `modules/disa/index.js:2528` construye el comprobador de permisos de las herramientas de informes
@@ -8066,6 +8066,10 @@ tiene todo. El comentario de la línea 2527 afirma que es «el MISMO `checkPermi
 `requirePerm`», y es cierto: la primitiva es la misma; lo que falta es la mitad que `requirePerm`
 tiene en la línea de al lado. Es el síntoma N2 del diagnóstico: **la regla de autorización no está
 en la primitiva, así que se olvida en un punto de llamada.**
+
+> **Cerrada por el orquestador el 2026-08-31.**
+> Commits: `e5111df`
+> Registro: `docs/orquestador/tareas/disa-informes-permiso-dueno.md`
 
 ## TAREA — DISA se rompe cuando el modelo llama a dos herramientas a la vez
 
