@@ -1827,6 +1827,9 @@ Acceso por **enlace mágico con token temporal**, solo lectura.
 separador de miles y con punto decimal—. **No es de G1: la tabla de facturas ya lo hacía antes**, y
 cambiar solo el bloque nuevo dejaría dos formatos en la misma pantalla. Se arregla el portal entero
 de una vez, cuando toque.
+>
+> ↪️ **Convertida a formato de orquestador el 31 ago 2026** — id `portal-formato-dinero`,
+> en §«TAREAS EN FORMATO DEL ORQUESTADOR». Esta prosa se conserva tal cual.
 
 ---
 
@@ -5926,6 +5929,7 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
   registro solo nombraba `orders.js`, y son seis: `orders.js` (1061), `discounts.js` (191),
   `shipping.js` (107), `feedback.js` (84), `reviews.js` (81) y `newsletter.js` (60). Ninguno está
   montado. Mismo criterio para los seis: retirar o revivir, no dejarlos a medias.
+  ↪️ **Convertida a formato de orquestador el 31 ago 2026** — id `retirar-pantallas-muertas`.
 - **DISA `create_order` multi-línea:** limitación heredada de la base e-commerce; los pedidos multi-línea entran con el flujo pedido→albarán→factura.
 - ~~Arreglar `scripts/gate-avisos-badge.mjs`~~ — **ya no reproduce**: ejecutado el 2026-07-10 pasa **25 OK**.
   Si vuelve a fallar por la ruta de BD fija, reabrir con la salida del fallo.
@@ -8011,6 +8015,129 @@ La cadena de VERI*FACTU, sin tocar.
 
 ---
 
+---
+
+# 📌 TAREAS EN FORMATO DEL ORQUESTADOR — convertidas el 31 ago 2026
+
+> **Qué es esto.** Cinco de las mejoras del 31 ago, escritas en el formato que el orquestador
+> sabe **leer y cerrar solo** (`docs/orquestador/paso-0-diagnostico.md` §2). El resto del
+> backlog sigue en prosa a propósito: **solo se han convertido estas cinco**.
+>
+> **La prosa original NO se ha borrado.** Cada una está marcada allí donde estaba, con la fecha
+> de conversión y un enlace a su bloque de aquí.
+>
+> **El orden de estas cinco es el que se pidió** y no lo decide el orquestador. Solo la primera
+> lleva el rótulo «SIGUIENTE TAREA»: es la única que el orquestador cogerá si se le suelta.
+>
+> ⚠️ **Los criterios de aceptación los escribe el arquitecto** cuando le toque cada tarea, no
+> están aquí. El orquestador rechaza un análisis que no los traiga.
+>
+> 🚩 **CONTRADICCIÓN ABIERTA, PARA QUE LA DECIDA IBRAHIN — no la resuelve el orquestador.**
+> La línea 9 de este mismo documento dice: *«SIGUIENTE TAREA OFICIAL: aislamiento de bloqueos
+> SQLite»*. El rótulo «SIGUIENTE TAREA» de aquí abajo dice otra cosa. **Las dos no pueden ser
+> ciertas a la vez**, y cuál manda es una decisión del dueño (CANON §6), no de quien convirtió el
+> formato. Se deja escrita en vez de elegir la que conviene.
+>
+> **Mientras no se decida:** si se suelta el daemon, cogerá la de aquí abajo, porque un encabezado
+> gana a una línea de prosa. Si la buena es la de SQLite, quita el rótulo «SIGUIENTE TAREA» de la
+> primera tarea de esta sección (déjala como «TAREA —», igual que las otras cuatro) y el
+> orquestador dejará de cogerla.
+
+## SIGUIENTE TAREA — El dueño no puede ver sus propios informes por DISA
+
+- **id:** disa-informes-permiso-dueno
+- **estado:** pendiente
+- **origen:** `docs/auditorias/diagnostico-arquitectonico.md` §4.1
+
+`modules/disa/index.js:2528` construye el comprobador de permisos de las herramientas de informes
+y de descuentos con `checkPermission` a secas, y **`checkPermission` no lleva el bypass de
+owner/admin** (`core/permission-check.js:1`). El resto de `modules/disa/index.js` sí se lo añade a
+mano donde hace falta (`:319`, `:1409`); aquí no. Y a un `owner` **nadie le siembra filas en
+`user_permissions`** —solo se escriben cuando alguien edita permisos a mano
+(`modules/erp/routes/users.js:201`)—, así que su acceso vive entero en el bypass por rol. Resultado:
+`permClave('invoices.read')` es **false para el dueño**, `modules/disa/informes.js:81` le filtra la
+lista y le devuelve `ocultos_por_permiso: N`.
+
+**El dueño pide sus informes por chat y DISA le dice que no los tiene; la pantalla se los enseña.**
+Rompe «las dos puertas respetan los mismos permisos» (CANON §3-bis) **justo al revés de como se
+temía**: la puerta conversacional es *más estricta* que la visual, y con la única persona que lo
+tiene todo. El comentario de la línea 2527 afirma que es «el MISMO `checkPermission` de
+`requirePerm`», y es cierto: la primitiva es la misma; lo que falta es la mitad que `requirePerm`
+tiene en la línea de al lado. Es el síntoma N2 del diagnóstico: **la regla de autorización no está
+en la primitiva, así que se olvida en un punto de llamada.**
+
+## TAREA — DISA se rompe cuando el modelo llama a dos herramientas a la vez
+
+- **id:** disa-herramientas-en-paralelo
+- **estado:** pendiente
+- **origen:** `docs/auditorias/diagnostico-arquitectonico.md` §4.2
+
+`modules/disa/index.js:2570` coge con `find` **la primera** llamada a herramienta de la respuesta
+(`data.content.find(b => b.type === 'tool_use')`), pero después empuja al historial **todas**
+(`apiMessages.push({ role: 'assistant', content: data.content })`) y devuelve **un solo**
+`tool_result`.
+
+El uso de herramientas en paralelo está **activo por defecto** en la API: una respuesta puede traer
+varios bloques `tool_use`, y cada uno exige su `tool_result`. La petición siguiente es inválida, la
+API responde **400**, `callClaude` lo convierte en `llm_provider_error`, y el usuario lee: *«No se
+pudo contactar con DISA. No se ha ejecutado ninguna acción; inténtalo de nuevo.»*
+
+**Es un fallo de contrato disfrazado de fallo de red**: no determinista e imposible de perseguir
+desde el mensaje que ve el usuario. Y con las 20 acciones más las herramientas de informes y
+descuentos declaradas juntas, que el modelo pida dos en un turno **no es un caso raro**.
+
+## TAREA — La pantalla de «no tienes permiso» abre una ventanita sobre una página en blanco
+
+- **id:** pantalla-403-ventanita
+- **estado:** pendiente
+- **origen:** `docs/auditorias/diagnostico-arquitectonico.md` §4.3
+
+La respuesta 403 de **todas** las rutas con `requirePerm` (`core/auth.js:28`) devuelve un HTML
+suelto con un único script que llama a `showAccessDenied()` si existe y, si no,
+`alert('Acceso no permitido')`. Pero `showAccessDenied` se define en `modules/erp/layout.js:793`, y
+**ese documento no carga `layout.js`**: la condición **siempre** cae al `else`. Cada denegación de
+permiso del producto es un `alert()` del navegador sobre una página en blanco. Hay una copia igual
+en `modules/erp/routes/settings.js:489`.
+
+Y si el usuario ya marcó «impedir que esta página cree cuadros de diálogo» —el segundo diálogo
+seguido, que es exactamente el motivo por el que existe la norma de CERO ventanitas—, **se queda
+una página en blanco y nada más**: ni ventana, ni aviso, ni explicación.
+
+**El censo de ventanitas no lo ve**, por las dos razones del síntoma N5: `core/` está fuera de su
+alcance y `alert` no está en su patrón. Se vuelve a cumplir la frase que ya está escrita en
+`CLAUDE.md`: *un censo que dice cero y no es cierto es peor que no tenerlo, porque cierra la
+pregunta*.
+
+## TAREA — El portal del cliente escribe el dinero a la inglesa
+
+- **id:** portal-formato-dinero
+- **estado:** pendiente
+- **origen:** TABLERO.md §G (cabo menor apuntado el 23 ago 2026)
+
+El portal escribe los importes a la inglesa —`€6023.00`, **sin separador de miles y con punto
+decimal**— en lugar del formato español.
+
+**El matiz que no se puede perder:** esto **no es del bloque G1**. La tabla de facturas ya lo hacía
+antes de G1, así que **arreglar solo el bloque nuevo dejaría dos formatos distintos en la misma
+pantalla**, que es peor que el defecto actual. Se arregla **el portal entero de una vez**, no por
+trozos.
+
+## TAREA — Retirar las seis pantallas muertas que siguen en el árbol
+
+- **id:** retirar-pantallas-muertas
+- **estado:** pendiente
+- **origen:** TABLERO.md §Deuda técnica (24 ago 2026) y §Backlog 31 ago (Limpieza)
+
+Seis ficheros de pantalla **desmontados siguen en el árbol**: **1.584 líneas** en total, más sus 12
+líneas de importación. Son `orders.js` (1061), `discounts.js` (191), `shipping.js` (107),
+`feedback.js` (84), `reviews.js` (81) y `newsletter.js` (60). **Ninguno está montado.**
+
+**El matiz que no se puede perder:** el registro anterior solo nombraba `orders.js`, y son seis. Y
+el criterio es el mismo para los seis: **retirar o revivir, no dejarlos a medias.**
+
+Recordatorio de la regla permanente de `CLAUDE.md`: *eliminar es sacarlo del sistema vivo, no
+destruir datos*. Aquí son ficheros de código sin montar, no datos de ningún negocio.
+
 # 🗃️ BACKLOG DE MEJORAS — sesión del 31 ago 2026 (SIN ORDEN DECIDIDO)
 
 > **Esto NO es una cola de trabajo.** Es el volcado de todo lo que salió de las cinco auditorías del
@@ -8022,6 +8149,10 @@ La cadena de VERI*FACTU, sin tocar.
 > - `docs/auditorias/arquitectura-y-estandares.md`
 > - `docs/auditorias/comparativa-referentes.md`
 > - `docs/seguridad/vectores-de-ataque.md`
+>
+> **Orden propuesto (31 ago 2026):** `docs/auditorias/diagnostico-arquitectonico.md` reagrupa estos
+> 54 puntos en 12 capacidades y las ordena **por impacto arquitectónico**. Es una PROPUESTA del
+> architect: el orden lo sigue decidiendo Ibrahin (CANON §6) y no mueve nada de esta lista.
 
 ## Seguridad y datos
 
@@ -8093,7 +8224,7 @@ La cadena de VERI*FACTU, sin tocar.
 
 ## Limpieza
 
-- [ ] Retirar las 6 pantallas muertas (1.584 líneas ya sin montar).
+- [ ] Retirar las 6 pantallas muertas (1.584 líneas ya sin montar). ↪️ **Convertida el 31 ago 2026** (id `retirar-pantallas-muertas`).
 - [ ] Enlazar las 14 secciones sin acceso desde el menú.
 - [ ] Reducir los 65 elementos de menú.
 - [ ] Las 99 comprobaciones que nadie ejecuta: o entran al barrido o se retiran con motivo escrito.
