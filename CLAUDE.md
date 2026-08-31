@@ -14,8 +14,11 @@
   S1 barrido nocturno retirado · S2 blindaje de DISA · S3 antiavalancha del rate limiting ·
   S4 clasificación fiscal por línea (`feb90b3`) · S5 los servicios sanitarios nacen `pending` y no
   `taxable` (`f13594e`) · S6 segunda copia de seguridad a la cuenta `gilibrahin` de Drive.
-  **La siguiente tarea oficial es el aislamiento de bloqueos SQLite, y está SIN DELIMITAR: hay que
-  acotarla antes de iniciarla, y no se inicia sin encargo.**
+  ~~**La siguiente tarea oficial es el aislamiento de bloqueos SQLite**~~ — **⚙️ CORREGIDO EL
+  31 ago 2026 POR DECISIÓN DE IBRAHIN.** El aislamiento de bloqueos SQLite **sigue pendiente y sin
+  delimitar**, pero **ya no es la siguiente**: manda la lista de cinco tareas de `TABLERO.md`
+  §«TAREAS EN FORMATO DEL ORQUESTADOR», y la siguiente es la primera de esa lista. Se tacha en vez
+  de borrarse para poder reconstruir qué se creía y cuándo.
 - **Backups: hay DOS copias diarias, en dos cuentas distintas** (principal 03:33 → `ibrahingil`,
   secundaria 03:35 → `gilibrahin`). Las dos verifican MD5 y hacen prueba de restore real. Una sola
   pieza las sirve: `scripts/bamburu-backup.sh` sin entorno es la principal; la unit de la secundaria

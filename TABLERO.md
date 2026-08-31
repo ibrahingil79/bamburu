@@ -6,7 +6,14 @@
 > código, coherencia operativa, recuperación, escalabilidad y mantenibilidad hasta el nivel de un
 > producto profesional comparable con los líderes del mercado. Se mantiene una sola tarea activa cada
 > vez. **Saneamientos 1, 2, 3, 4, 5 y 6 están cerrados. Fase de saneamiento general: ACTIVA.
-> SIGUIENTE TAREA OFICIAL: aislamiento de bloqueos SQLite — a delimitar antes de iniciarlo.**
+> El aislamiento de bloqueos SQLite sigue PENDIENTE y SIN DELIMITAR: hay que acotarlo antes de
+> iniciarlo.**
+>
+> ⚙️ **DECISIÓN DE IBRAHIN (31 ago 2026): esta tarea DEJA DE SER LA SIGUIENTE.** Manda la lista de cinco
+> de §«TAREAS EN FORMATO DEL ORQUESTADOR». El motivo: era un candidato que este mismo tablero ya
+> había descalificado —está sin delimitar y no se puede iniciar—. **No se descarta: se queda
+> pendiente, como las demás.** El rótulo se retira aquí para que solo haya una siguiente tarea en
+> todo el documento.
 > **Peldaño 9 — Belleza/estética queda pendiente y aplazado; no es la siguiente tarea mientras
 > exista un riesgo técnico grave demostrado.**
 >
@@ -8032,16 +8039,10 @@ La cadena de VERI*FACTU, sin tocar.
 > ⚠️ **Los criterios de aceptación los escribe el arquitecto** cuando le toque cada tarea, no
 > están aquí. El orquestador rechaza un análisis que no los traiga.
 >
-> 🚩 **CONTRADICCIÓN ABIERTA, PARA QUE LA DECIDA IBRAHIN — no la resuelve el orquestador.**
-> La línea 9 de este mismo documento dice: *«SIGUIENTE TAREA OFICIAL: aislamiento de bloqueos
-> SQLite»*. El rótulo «SIGUIENTE TAREA» de aquí abajo dice otra cosa. **Las dos no pueden ser
-> ciertas a la vez**, y cuál manda es una decisión del dueño (CANON §6), no de quien convirtió el
-> formato. Se deja escrita en vez de elegir la que conviene.
->
-> **Mientras no se decida:** si se suelta el daemon, cogerá la de aquí abajo, porque un encabezado
-> gana a una línea de prosa. Si la buena es la de SQLite, quita el rótulo «SIGUIENTE TAREA» de la
-> primera tarea de esta sección (déjala como «TAREA —», igual que las otras cuatro) y el
-> orquestador dejará de cogerla.
+> ✅ **CONTRADICCIÓN RESUELTA (31 ago 2026) — decisión de Ibrahin.** Hubo un momento en que el rótulo de
+> «siguiente tarea» estaba en dos sitios: aquí y en la línea 9 (aislamiento de bloqueos SQLite).
+> **Manda esta lista.** El rótulo de la línea 9 se retiró; aquella tarea sigue pendiente, no
+> descartada. Se deja escrito lo que se creía y cuándo, en vez de borrarlo.
 
 ## SIGUIENTE TAREA — El dueño no puede ver sus propios informes por DISA
 

@@ -184,8 +184,17 @@ export function buscarSiguienteTarea(texto) {
   for (let i = 0; i < lineas.length; i++) {
     const m = /siguiente\s+tarea(?:\s+oficial)?\s*:\s*(.+)$/i.exec(normalizar(lineas[i]) === '' ? '' : lineas[i]);
     if (!m) continue;
-    const crudo = m[1].replace(/\*+\s*$/, '').replace(/\s*<!--.*$/, '').trim();
+    let crudo = m[1].replace(/\*+\s*$/, '').replace(/\s*<!--.*$/, '').trim();
+    // La prosa se parte al ancho del documento: si lo capturado es muy corto, se cose con la
+    // línea siguiente antes de juzgarlo.
+    if (crudo.length < 60 && lineas[i + 1] !== undefined && nivelEncabezado(lineas[i + 1]) === 0) {
+      const cont = lineas[i + 1].replace(/^\s*>?\s*/, '').replace(/\*+\s*$/, '').trim();
+      if (cont) crudo = `${crudo} ${cont}`.trim();
+    }
     if (!crudo) continue;
+    // «A LA ESPERA DE ENCARGO» no es una tarea: es la ausencia de una. Cogerla haría trabajar
+    // al sistema sobre una frase. (Regla R6 de tablero/saneador.js.)
+    if (/^(a la espera|sin decidir|pendiente de (encargo|decidir)|ninguna|por decidir)\b/i.test(normalizar(crudo))) continue;
     const titulo = crudo.split(/\s+[—–-]\s+/)[0].trim() || crudo;
     return {
       id: slug(titulo),

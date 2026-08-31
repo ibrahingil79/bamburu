@@ -103,6 +103,27 @@ El bot **solo escribe**: no escucha, no tiene comandos y no puede recibir órden
 | Telegram caído | El ciclo sigue. El parte se guarda y se manda luego |
 | Corte de luz | Al arrancar retoma desde el último paso guardado |
 
+## El formato del tablero lo arregla el sistema, no Ibrahin
+
+Si el tablero tiene un problema de **cómo está escrito**, el orquestador lo arregla solo con una
+regla escrita, lo confirma en git y lo cuenta en el parte. **Nunca se lo pregunta a Ibrahin.**
+
+| Regla | Qué encuentra | Qué hace |
+|---|---|---|
+| **R1** | Dos o más tareas con el rótulo «SIGUIENTE TAREA» | Gana la **primera del documento**; a las demás les quita el rótulo |
+| **R2** | Un rótulo de «siguiente» suelto en prosa, habiendo un encabezado | Deja la prosa y lo anota. **El encabezado manda** |
+| **R3** | Una tarea sin identificador | Le pone uno sacado de su título |
+| **R4** | Dos tareas con el mismo identificador | La primera lo conserva; las siguientes pasan a `-2`, `-3`… |
+| **R5** | Un rótulo «SIGUIENTE TAREA» sin título detrás | Lo completa con la primera línea de su propio bloque |
+| **R6** | Un rótulo que señala a algo que no es una tarea («A LA ESPERA DE ENCARGO») | No lo coge. Se queda ocioso y lo anota |
+
+El motivo de cada regla está escrito en `tablero/saneador.js`. Es el único sitio que hay que leer
+para saber qué se arregla solo y con qué criterio.
+
+**La línea que no se cruza:** el FORMATO lo arregla el sistema; el CONTENIDO —qué se construye y
+para qué sirve— sube a Ibrahin, y sube por una sola vía: el arquitecto diciendo `🛑 TAREA MAL
+PLANTEADA`, o una tarea apartada tras replantearla.
+
 ## Lo que NO hace
 
 - No elige tareas: eso lo decide el tablero.
@@ -110,3 +131,4 @@ El bot **solo escribe**: no escucha, no tiene comandos y no puede recibir órden
 - No fuerza nada sobre GitHub.
 - No recibe órdenes por Telegram.
 - No reescribe `TABLERO.md` si la tarea está en prosa (ver `docs/orquestador/paso-0-diagnostico.md` §2).
+- No le pregunta a Ibrahin cómo tiene que estar escrito el tablero: eso lo arregla él solo.

@@ -47,7 +47,7 @@ export function redactar({ estado, cuota, historialReciente, tareaEnTablero, des
   t('');
 
   // 2 · Lo que se arregló solo
-  const arreglos = historialReciente.filter((h) => (h.intentos > 1) || h.replanteos > 0);
+  const arreglos = historialReciente.filter((h) => h.resultado !== 'tablero-saneado' && ((h.intentos > 1) || h.replanteos > 0));
   if (arreglos.length) {
     t('<b>🔧 Resuelto sin molestarte</b>');
     for (const h of arreglos) {
@@ -56,6 +56,18 @@ export function redactar({ estado, cuota, historialReciente, tareaEnTablero, des
       if (h.replanteos > 0) partes.push(`${h.replanteos} replanteamiento(s)`);
       t(`• ${esc(h.titulo)}: ${partes.join(' y ')}`);
     }
+    t('');
+  }
+
+  // 2-bis · Lo que el sistema se arregló del tablero. Va en el parte y NO como pregunta:
+  // el formato del documento no es decisión de Ibrahin.
+  const saneos = historialReciente.filter((h) => h.resultado === 'tablero-saneado');
+  if (saneos.length) {
+    const todos = saneos.flatMap((h) => h.arreglos || []);
+    t('<b>🧹 Del tablero, arreglado solo</b>');
+    for (const a of todos.slice(0, 6)) t(`• ${esc(a.que)} → ${esc(a.comoQueda)}`);
+    if (todos.length > 6) t(`• …y ${todos.length - 6} más`);
+    t('<i>Son cosas de cómo estaba escrito el documento, no de qué hay que construir.</i>');
     t('');
   }
 

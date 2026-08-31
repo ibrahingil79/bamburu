@@ -18,6 +18,8 @@ import { leerTablero, buscarSiguienteTarea, commitsDesde } from './reader.js';
 import { cabeza } from './cierre/git.js';
 import { escribirRegistroTarea, marcarEnTablero, confirmarCierre, subirTrabajo } from './cierre/cierre.js';
 import { escribirAtomico } from './nucleo/almacen.js';
+import { sanear } from './tablero/saneador.js';
+import { confirmar, anadir } from './cierre/git.js';
 
 export class Ciclo {
   constructor({ config, almacen, vigilante, logger, invocador = invocar }) {
@@ -27,6 +29,57 @@ export class Ciclo {
     this.log = logger;
     this.invocador = invocador;
     this.cancelables = new Set();
+  }
+
+  /**
+   * Arregla el formato del tablero y devuelve el texto ya bueno.
+   *
+   * Nada de lo que se arregla aquí sube a Ibrahin: son problemas de cómo está ESCRITO el
+   * documento, no de qué se construye. Queda anotado en el registro y en el parte.
+   * Las reglas, con su motivo, están en tablero/saneador.js.
+   */
+  sanearTablero() {
+    const texto = leerTablero(this.config.tableroAbs);
+    const r = sanear(texto);
+
+    if (!r.cambiado) {
+      // Lo anotado (prosa con rótulo) no cambia el fichero, pero se dice UNA vez por arranque
+      // para que no llene el registro en cada vuelta.
+      if (r.anotados.length && !this._anotadoDicho) {
+        this._anotadoDicho = true;
+        for (const a of r.anotados) this.log.info(`Tablero · ${a.que} → ${a.comoQueda}`);
+      }
+      return texto;
+    }
+
+    this.log.aviso(`El tablero tenía ${r.arreglos.length} problema(s) de formato. Los arreglo yo.`);
+    for (const a of r.arreglos) this.log.info(`  · ${a.que} → ${a.comoQueda} (línea ${a.linea})`);
+
+    escribirAtomico(this.config.tableroAbs, r.texto);
+    this.almacen.registrarHistorial({
+      resultado: 'tablero-saneado',
+      arreglos: r.arreglos.map((a) => ({ regla: a.regla, que: a.que, comoQueda: a.comoQueda, linea: a.linea })),
+    });
+    this.confirmarSaneo(r.arreglos);
+    return r.texto;
+  }
+
+  /** El arreglo del formato se confirma solo: si no, se quedaría suelto en el árbol. */
+  confirmarSaneo(arreglos) {
+    const rel = path.relative(this.config.repo.raiz, this.config.tableroAbs);
+    const cuerpo = arreglos.map((a) => `- ${a.que} → ${a.comoQueda} (línea ${a.linea}, regla ${a.regla})`).join('\n');
+    try {
+      anadir({ cwd: this.config.repo.raiz, ficheros: [rel] });
+      const sha = confirmar({
+        cwd: this.config.repo.raiz,
+        mensaje: `Tablero — arreglo de formato automático (${arreglos.length})\n\n${cuerpo}\n\nLo arregla el orquestador con las reglas de orchestrator/tablero/saneador.js.\nNo es una decisión de producto: no sube a Ibrahin.`,
+        ficheros: [rel],
+      });
+      this.log.exito(`Arreglo del tablero confirmado: ${sha}`);
+    } catch (e) {
+      // El fichero YA está arreglado en disco. Que git falle no puede parar el ciclo.
+      this.log.aviso(`No pude confirmar el arreglo del tablero: ${e.message}. El fichero ya está bien.`);
+    }
   }
 
   rutasDe(tarea) {
@@ -80,7 +133,8 @@ export class Ciclo {
   async unPaso(estado) {
     let tareaDisponible = null;
     try {
-      const texto = leerTablero(this.config.tableroAbs);
+      // El formato del tablero lo arregla el sistema, no Ibrahin. Antes de leer nada, se sanea.
+      const texto = this.sanearTablero();
       tareaDisponible = buscarSiguienteTarea(texto);
     } catch (e) {
       this.log.error(`No pude leer el tablero: ${e.message}`);
