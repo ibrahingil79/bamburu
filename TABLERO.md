@@ -8033,8 +8033,14 @@ La cadena de VERI*FACTU, sin tocar.
 > **La prosa original NO se ha borrado.** Cada una está marcada allí donde estaba, con la fecha
 > de conversión y un enlace a su bloque de aquí.
 >
-> **El orden de estas cinco es el que se pidió** y no lo decide el orquestador. Solo la primera
-> lleva el rótulo «SIGUIENTE TAREA»: es la única que el orquestador cogerá si se le suelta.
+> **El orden de estas cinco es el que se pidió** y no lo decide el orquestador. ~~Solo la primera
+> lleva el rótulo «SIGUIENTE TAREA»: es la única que el orquestador cogerá si se le suelta.~~
+> **⚙️ CORREGIDO EL 31 ago 2026 (noche).** Eso era cierto y era la avería: el orquestador cerró la
+> primera, se quedó **ocioso con estas cuatro escritas** y nadie le ponía el rótulo a la siguiente.
+> **Ahora manda el campo `estado:`, no la etiqueta**: coge la primera `pendiente` en orden de
+> documento y encadena solo. El rótulo sigue funcionando y ahora sirve para lo que quería servir:
+> **saltarse el orden** cuando Ibrahin quiera otra antes. Diagnóstico y arreglo en
+> `docs/orquestador/paso-0-por-que-no-encadena.md`.
 >
 > ⚠️ **Los criterios de aceptación los escribe el arquitecto** cuando le toque cada tarea, no
 > están aquí. El orquestador rechaza un análisis que no los traiga.

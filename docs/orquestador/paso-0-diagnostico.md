@@ -76,7 +76,7 @@ Requisitos, y solo estos:
 | Campo **`id`** explícito | El id derivado del título cambia si alguien retoca el título, y entonces se pierde el rastro de los commits |
 | Campo **`estado`** | `pendiente` / `en-curso` / `hecha` / `apartada`. Sin esto no hay forma de saber qué queda |
 | Bloque **`Criterios de aceptación`** con casillas | Es lo que el revisor juzga uno a uno |
-| **Un solo** encabezado `SIGUIENTE TAREA` en todo el fichero | Si hay dos, el orquestador se planta y avisa en vez de elegir |
+| ~~**Un solo** encabezado `SIGUIENTE TAREA` en todo el fichero~~ · **⚙️ corregido el 31 ago 2026 (noche)** | El rótulo **ya no hace falta**: el orquestador coge la primera tarea con `estado: pendiente` en orden de documento. Sigue admitiéndose para **saltarse ese orden**, y si hay dos gana el primero (regla R1 del saneador). Ver `paso-0-por-que-no-encadena.md` |
 
 **Mientras el tablero siga como está**, el orquestador lo lee y trabaja, pero **al cerrar no lo reescribe**: deja el texto en un fichero aparte para pegarlo a mano, y lo dice en el parte. Es el comportamiento actual de `updater.js` y se conserva a propósito.
 
