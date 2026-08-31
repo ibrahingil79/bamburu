@@ -3,6 +3,10 @@
 El orquestador te manda un parte cada 3 horas contando qué ha hecho. Para eso necesita dos
 datos que solo puedes sacar tú, desde Telegram. Se tarda unos cinco minutos.
 
+> **Y desde el 31 ago 2026 también te escucha:** con estos mismos dos datos puedes pedirle el
+> parte cuando quieras, preguntarle qué está haciendo, o mandarle parar. Cómo se le habla está
+> en [mandarle-por-telegram.md](mandarle-por-telegram.md).
+
 **Mientras no lo hagas no pasa nada:** el orquestador trabaja igual y guarda los partes para
 mandártelos todos en cuanto lo conectes.
 

@@ -59,7 +59,9 @@ function pidVivo(cfg) {
 }
 
 function mostrarEstado(cfg) {
-  const { estado } = almacenDe(cfg).recuperar();
+  // Se LEE, no se recupera: `recuperar()` reescribe la instantánea, y el dueño de
+  // ese fichero es el daemon, que puede estar corriendo mientras se teclea esto.
+  const estado = almacenDe(cfg).leerEstado();
   const pid = pidVivo(cfg);
   const L = [];
   L.push('', '═'.repeat(66), '  ESTADO DEL ORQUESTADOR', '═'.repeat(66), '');
@@ -178,7 +180,9 @@ async function forzarParte(cfg) {
   const { leerTablero, buscarSiguienteTarea, tareasPendientes } = await import('./reader.js');
   const { crearRegistro } = await import('./nucleo/registro.js');
   const log = crearRegistro({ dirLogs: cfg.rutasAbs.logs, nombre: 'orquestador.log' });
-  const { estado } = almacenDe(cfg).recuperar();
+  // Se LEE, no se recupera: `recuperar()` reescribe la instantánea, y el dueño de
+  // ese fichero es el daemon, que puede estar corriendo mientras se teclea esto.
+  const estado = almacenDe(cfg).leerEstado();
   const cuota = await new Vigilante({ config: cfg }).consultar();
   let enTablero = null;
   let pendientesEnTablero = [];
