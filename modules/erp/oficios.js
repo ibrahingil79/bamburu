@@ -87,40 +87,43 @@ export const OFICIOS = [
     // TABLERO con sus opciones. Meter un campo «notas clínicas» sin resolver eso sería lo peor de
     // los dos mundos: el dato dentro y la protección fuera.
     campos_ficha: ['fecha_nacimiento'],
-    // IVA: los servicios de asistencia sanitaria prestados por profesional titulado están EXENTOS
-    // (art. 20.Uno.3º LIVA). Nace 'exento' para no arrancar cobrando un 21% que no toca; si el negocio
-    // no está en ese supuesto, lo cambia en Productos como cualquier otra banda.
-    // OJO A LA EXCEPCIÓN, y por eso no todos nacen exentos: el masaje de bienestar SIN finalidad
-    // terapéutica NO está exento (consultas vinculantes de la DGT), y lo mismo el asesoramiento
-    // nutricional que no presta un sanitario titulado. Los que están en esa frontera nacen al tipo
-    // general y con el nombre que lo dice, para que el negocio decida a sabiendas.
+    // IVA — LOS DOCE SANITARIOS NACEN 'pending', NO 'taxable' (S5, 31 ago 2026).
+    // La exención del art. 20.Uno.3.º LIVA pide DOS cosas A LA VEZ: profesional sanitario TITULADO
+    // Y finalidad TERAPÉUTICA. Bamburu no puede saber ninguna de las dos, así que no las presume:
+    // los doce servicios de asistencia sanitaria nacen con `fiscal: 'pending'` y una persona
+    // responsable confirma la causa (E1–E6) y sus condiciones línea a línea.
+    // 'pending' BLOQUEA la emisión hasta esa confirmación (core/fiscal-classification.js:25), y eso
+    // es lo que se busca: mejor no poder facturar que facturar mal y firmarlo en VERI*FACTU.
+    // Historia: S4 (feb90b3) los pasó de 'exento' a 'general' + 'taxable'. La decisión de NO nacer
+    // exentos era correcta; el aterrizaje no, porque dejaba al fisio arrancando con un 21 % que la
+    // ley no le permite repercutir, sin aviso y sin bloqueo. 'pending' cumple la misma decisión sin
+    // cobrar nada y sin presumir nada.
     servicios: [
       // Fisioterapia — fuente: tarifas publicadas de clínica de fisioterapia en España (fisioem.com, ago 2026).
-      { nombre: 'Primera consulta y valoración', duracion_min: 60, banda: 'general' },
-      { nombre: 'Sesión de fisioterapia',        duracion_min: 45, banda: 'general' },
-      { nombre: 'Sesión de fisioterapia (60 min)', duracion_min: 60, banda: 'general' },
-      { nombre: 'Sesión de suelo pélvico',       duracion_min: 45, banda: 'general' },
+      { nombre: 'Primera consulta y valoración', duracion_min: 60, banda: 'general', fiscal: 'pending' },
+      { nombre: 'Sesión de fisioterapia',        duracion_min: 45, banda: 'general', fiscal: 'pending' },
+      { nombre: 'Sesión de fisioterapia (60 min)', duracion_min: 60, banda: 'general', fiscal: 'pending' },
+      { nombre: 'Sesión de suelo pélvico',       duracion_min: 45, banda: 'general', fiscal: 'pending' },
       // Psicología — fuente: tarifas publicadas de gabinetes de psicología en España (ago 2026): la
       // sesión estándar es de 50–60 min y la primera, algo más larga.
-      { nombre: 'Primera sesión de psicología',  duracion_min: 60, banda: 'general' },
-      { nombre: 'Sesión de psicología',          duracion_min: 50, banda: 'general' },
-      { nombre: 'Terapia de pareja',             duracion_min: 75, banda: 'general' },
+      { nombre: 'Primera sesión de psicología',  duracion_min: 60, banda: 'general', fiscal: 'pending' },
+      { nombre: 'Sesión de psicología',          duracion_min: 50, banda: 'general', fiscal: 'pending' },
+      { nombre: 'Terapia de pareja',             duracion_min: 75, banda: 'general', fiscal: 'pending' },
       // Nutrición — fuente: consultas de dietética-nutrición en España: primera visita 60 min,
       // revisiones 30 min. EXENTO solo si lo presta un sanitario titulado; si no, va al general.
-      { nombre: 'Primera consulta de nutrición', duracion_min: 60, banda: 'general' },
-      { nombre: 'Revisión de nutrición',         duracion_min: 30, banda: 'general' },
+      { nombre: 'Primera consulta de nutrición', duracion_min: 60, banda: 'general', fiscal: 'pending' },
+      { nombre: 'Revisión de nutrición',         duracion_min: 30, banda: 'general', fiscal: 'pending' },
       // Osteopatía y podología — sesiones de 45–60 min en clínicas ES.
-      { nombre: 'Sesión de osteopatía',          duracion_min: 50, banda: 'general' },
-      { nombre: 'Quiropodia',                    duracion_min: 45, banda: 'general' },
+      { nombre: 'Sesión de osteopatía',          duracion_min: 50, banda: 'general', fiscal: 'pending' },
+      { nombre: 'Quiropodia',                    duracion_min: 45, banda: 'general', fiscal: 'pending' },
       // Logopedia — sesión estándar de 45 min.
-      { nombre: 'Sesión de logopedia',           duracion_min: 45, banda: 'general' },
+      { nombre: 'Sesión de logopedia',           duracion_min: 45, banda: 'general', fiscal: 'pending' },
       // ── BIENESTAR: NO ES ASISTENCIA SANITARIA, AUNQUE LO DÉ UN SANITARIO ──────────────────────
-      // La exención del art. 20.Uno.3.º LIVA pide DOS cosas A LA VEZ: profesional sanitario titulado
-      // Y finalidad terapéutica. El MISMO fisioterapeuta factura sin IVA una rehabilitación y al 21 %
-      // un masaje relajante o unas clases de pilates. Estos cuatro vienen marcados al general **a
-      // propósito y desde el primer día**: un fisio que emitiera todo exento tendría un problema con
-      // Hacienda, y se lo habríamos dado nosotros al precargarle el catálogo.
-      // (La estética tiene su propio oficio, `estetica`, y allí nace entera al general.)
+      // Estos cuatro son los ÚNICOS del oficio que nacen 'taxable' al 21 %, y es correcto: el MISMO
+      // fisioterapeuta factura sin IVA una rehabilitación y al 21 % un masaje relajante o unas clases
+      // de pilates. Aquí no hay nada que confirmar, así que no se bloquea la emisión.
+      // NO los pases a 'pending': parar una factura que ya se sabe correcta es un fallo, no una
+      // precaución. (La estética tiene su propio oficio, `estetica`, y allí nace entera al general.)
       { nombre: 'Masaje de bienestar (no terapéutico)', duracion_min: 60, banda: 'general' },
       { nombre: 'Sesión de entrenamiento personal',     duracion_min: 60, banda: 'general' },
       { nombre: 'Clase de pilates en grupo (no terapéutico)', duracion_min: 55, banda: 'general' },
@@ -274,7 +277,7 @@ export function sembrarCatalogo(db, oficioId, crearProducto) {
     // (fuente única). Precio 0 — las fuentes publican duraciones, no precios, y el precio es del negocio.
     const sku = (norm(s.nombre).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)) || 'servicio';
     const prod = crearProducto(db, {
-      name: s.nombre, sku, price: 0, tax_band: s.banda, fiscal_treatment: 'taxable',
+      name: s.nombre, sku, price: 0, tax_band: s.banda, fiscal_treatment: s.fiscal || 'taxable',
       type: 'service', status: 'active', stock: 0, tags: [],
     });
     insCfg.run(prod.id, s.duracion_min);

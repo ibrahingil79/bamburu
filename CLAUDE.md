@@ -10,9 +10,11 @@
 ## Fase actual: SANEAMIENTO TÉCNICO (CANON §4)
 
 - La auditoría integral está realizada y la fase de saneamiento general está **ACTIVA**. No se añaden
-  funciones nuevas hasta cerrarla; una tarea cada vez. Saneamientos 1, 2 y 3 están cerrados. La
-  siguiente tarea oficial es **Saneamiento 4 — Semántica fiscal de operaciones exentas**, delimitada,
-  no iniciada y pendiente de encargo de implementación.
+  funciones nuevas hasta cerrarla; una tarea cada vez. **Saneamientos 1, 2, 3 y 4 están cerrados**
+  (S4 = `feb90b3`, clasificación fiscal por línea). La siguiente tarea oficial es **Saneamiento 5 —
+  Defecto fiscal de servicios sanitarios**: los doce servicios de asistencia sanitaria de la precarga
+  de oficios nacen `pending` y no `taxable`, para que ningún negocio de salud arranque cobrando un
+  21 % que el art. 20.Uno.3.º LIVA no permite repercutir.
 - El Peldaño 9 — Belleza/estética sigue pendiente en el roadmap funcional, pero está aplazado y no es
   la siguiente tarea.
 
