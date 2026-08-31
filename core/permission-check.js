@@ -1,3 +1,6 @@
+// La denegación se PINTA en un solo sitio del producto, y ese sitio es `denegarPermiso`.
+import { denegarPermiso } from './auth.js';
+
 // El bypass owner/admin vive AQUÍ, no en cada punto de llamada. Es la mitad que `requirePerm`
 // (core/auth.js:17) tiene y esta función no tenía: la primitiva contestaba «¿tiene la fila?» mientras
 // que quien la llama pregunta «¿puede esta sesión?». Donde alguien se olvidaba de añadir el rol, el
@@ -24,11 +27,16 @@ export function checkPermission(db, session, module, action) {
   }
 }
 
+// La denegación la pinta `denegarPermiso` (core/auth.js), como la de `requirePerm` y la del
+// historial. Aquí había una CUARTA página de error a mano: un `<p>` rojo sin `<!DOCTYPE>`, sin
+// charset —los acentos salían mojibake— y sin ninguna salida. Hoy no la llama nadie (31 ago 2026:
+// la única aparición de `permissionMiddleware` en todo el repo es esta definición), pero está
+// exportada y a un `import` de resucitar, así que se arregla igual en vez de dejarla esperando.
 export function permissionMiddleware(db, module, action) {
   return async (c, next) => {
     const session = c.get('session');
     if (!checkPermission(db, session, module, action)) {
-      return c.html('<p style="color:red;padding:2rem">No tienes permiso para realizar esta acción.</p>', 403);
+      return denegarPermiso(c);
     }
     return next();
   };

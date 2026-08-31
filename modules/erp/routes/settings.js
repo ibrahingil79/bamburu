@@ -5,7 +5,7 @@ import { adminLayout, can, configNegocioHTML } from '../layout.js';
 // misma de la que comen el buscador y las anclas. Escribirla a mano aquí sería la segunda lista
 // que la cabecera de menu.js lleva meses prohibiendo: el día que cambie una, la otra miente.
 import { menuDeUsuario } from '../menu.js';
-import { requirePerm } from '../../../core/auth.js';
+import { requirePerm, denegarPermiso } from '../../../core/auth.js';
 import { validate } from '../../../core/validate.js';
 import { companySchema, storeSettingsSchema } from '../schemas.js';
 import { getCountryConfig } from '../../../core/control-db.js';
@@ -486,7 +486,10 @@ export function createSettingsRoutes(db, cfg = {}) {
   const puedeVerAjustes = async (c, next) => {
     if (!c.get('session')) return c.redirect('/admin/login');
     if (can(c, 'company.read') || seccionesDe(c).length) return next();
-    return c.html('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body><script>window.addEventListener("DOMContentLoaded",function(){if(typeof showAccessDenied==="function")showAccessDenied();else alert("Acceso no permitido");});<\/script></body></html>', 403);
+    // La MISMA denegación que `requirePerm`, y por el mismo sitio: aquí había una copia literal de
+    // aquel documento roto, con las comillas cambiadas. Una segunda copia de una página de error es
+    // una segunda página que se queda vieja sola.
+    return denegarPermiso(c);
   };
 
   views.get('/', puedeVerAjustes, c => {

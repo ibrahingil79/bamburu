@@ -1,6 +1,11 @@
 import { createHash, randomBytes } from 'crypto';
 import bcrypt from 'bcrypt';
 import { ENTITY } from './activity-entities.js';
+// La página de error maquetada y el texto de permiso. Se importa de `pagina-error.js` y NO de
+// `layout.js` a propósito: `layout.js` cierra un ciclo con este fichero por nueve rutas
+// (`avisos.js → reposicion.js → routes/purchase-orders.js → core/auth.js`, entre otras), mientras
+// que el cierre transitivo de `pagina-error.js` son dos ficheros hoja y no puede cerrar ninguno.
+import { ERR, errorShell } from '../modules/erp/pagina-error.js';
 
 // ── Role permissions ───────────────────────────────────────────
 export const PERMS = {
@@ -9,6 +14,34 @@ export const PERMS = {
   employee: [],
   readonly: [],
 };
+
+// ── LA DENEGACIÓN DE PERMISO, EN UN SOLO SITIO ──────────────────────────────────────────────────
+//
+// QUÉ ARREGLA. La respuesta 403 de `requirePerm` era un documento HTML suelto con un único
+// `<script>` que llamaba a `showAccessDenied()` «si existe» y, si no, a `alert('Acceso no
+// permitido')`. `showAccessDenied` se define en `modules/erp/layout.js`, y ese documento NO carga
+// `layout.js`: la condición caía SIEMPRE al `else`. Cada denegación de permiso del producto era una
+// ventanita del navegador sobre una página en blanco — y con la casilla «Impedir que esta página
+// cree cuadros de diálogo adicionales» marcada, que es el motivo entero de la norma de CERO
+// ventanitas de `CLAUDE.md`, `alert()` no enseña nada: quedaba la página en blanco y punto.
+//
+// POR QUÉ REPARTE POR CANAL. Porque una denegación tiene dos públicos distintos: un `fetch` quiere
+// el motivo en JSON y una navegación quiere una página con texto y con salida. No es un patrón
+// nuevo: `requireHistorial` (más abajo, en este mismo fichero) ya lo hacía, y con él
+// `adminAuth` (:215 y :238), `core/csrf.js`, `core/tenant-middleware.js`, `core/validate.js` y
+// `core/rate-limit.js`. `requirePerm` era la única excepción.
+//
+// El criterio del canal es el prefijo `/api/`: los routers de API cuelgan de `/api/erp` y de
+// `/api/disa`, y no hay un solo `fetch` a una ruta `/admin/…` en todo el producto.
+//
+// Esto solo DIBUJA. Quién entra y quién no lo siguen decidiendo `requirePerm` y `requireHistorial`,
+// cada uno con su regla.
+export function denegarPermiso(c, { titulo, mensaje, accion, href } = {}) {
+  const msg = mensaje || ERR.PERM;
+  if (c.req.path.startsWith('/api/')) return c.json({ error: msg }, 403);
+  return c.html(errorShell(titulo || 'No tienes permiso para ver esta página', msg,
+                           { action: accion || 'Volver al panel', href: href || '/admin' }), 403);
+}
 
 export function requirePerm(perm) {
   return async (c, next) => {
@@ -25,7 +58,7 @@ export function requirePerm(perm) {
     `).get(s.userId, module, action);
     if (row) return next();
 
-    return c.html(`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body><script>window.addEventListener('DOMContentLoaded',function(){if(typeof showAccessDenied==='function')showAccessDenied();else alert('Acceso no permitido');});<\/script></body></html>`, 403);
+    return denegarPermiso(c);
   };
 }
 
@@ -315,14 +348,16 @@ export function requireHistorial() {
       WHERE up.admin_user_id = ? AND p.module = 'historial' AND p.action = 'read'
     `).get(s.userId);
     if (row) return next();
-    const esApi = c.req.path.startsWith('/api/');
-    if (esApi) return c.json({ error: 'No tienes acceso al historial clínico.' }, 403);
-    return c.html('<!doctype html><meta charset="utf-8"><title>Sin acceso</title>'
-      + '<div style="font:16px/1.5 system-ui;max-width:36rem;margin:4rem auto;padding:0 1rem">'
-      + '<h1 style="font-size:1.3rem">No tienes acceso al historial clínico</h1>'
-      + '<p>Son datos de salud, y solo los ve el profesional que atiende al paciente. '
-      + 'Si necesitas acceso, pídeselo a la persona dueña del negocio.</p>'
-      + '<p><a href="/admin">Volver</a></p></div>', 403);
+    // El reparto por canal y el maquetado los pone `denegarPermiso`; el TEXTO no se generaliza. Este
+    // es el único permiso que no perdona el rol (el bloque de arriba explica por qué), y su mensaje
+    // tiene que seguir diciendo que son datos de salud: quien lo lea tiene que entender que no es un
+    // permiso que se conceda por administrar el negocio.
+    return denegarPermiso(c, {
+      titulo: 'No tienes acceso al historial clínico',
+      mensaje: 'Son datos de salud, y solo los ve el profesional que atiende al paciente. '
+             + 'Si necesitas acceso, pídeselo a la persona dueña del negocio.',
+      accion: 'Volver al panel', href: '/admin',
+    });
   };
 }
 

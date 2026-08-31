@@ -2267,7 +2267,11 @@ verdad y no como se suponía — que es justo el problema que esta tarea viene a
   `scripts/gate-crm-tareas.mjs` · 38 ✓ · 0 ✗.** Ficha al final del documento.
 - ~~**⬜ LAS VENTANITAS DEL NAVEGADOR DEL RESTO DEL PRODUCTO — 81, y son LA MISMA TRAMPA.**~~
   **✅ HECHO el 23 ago 2026 (noche · punto 7) · gate `scripts/gate-sin-ventanitas.mjs` · 36 ✓ · 0 ✗.**
-  **El censo da CERO**: `node scripts/censo-ventanitas.mjs`. Ver la ficha completa al final de este
+  ~~**El censo da CERO**: `node scripts/censo-ventanitas.mjs`.~~ **⚙️ CORREGIDO EL 31 ago 2026:** el
+  censo da **0 `prompt` · 0 `confirm` · 12 `alert`**. La cifra no cambió porque apareciera nada nuevo,
+  sino porque el instrumento **no miraba `alert` ni miraba `core/`** y aquel CERO era suyo, no del
+  producto. Los 12 son deuda declarada (§Deuda técnica · `alert-pendientes`) y el censo sale en verde
+  con `SIN DECLARAR: 0`. Ver la ficha completa al final de este
   documento. Lo que sigue es el registro de cómo estaba antes, que se conserva.
   **⬜ LO DE ANTES (para el registro):**
   *(Censadas el 23 ago 2026 en la ficha D-bis, que arregló las 12 de Analíticas. **No se tocan hasta
@@ -5914,10 +5918,15 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
   sigue en el árbol, con 6 `logActivity` que nunca se ejecutan. Retirarlo o revivirlo, no dejarlo a medias.
   *(Sus hermanos ya cayeron: `generateInvoice` de `invoices.js` sigue neutralizada desde D1 —lanza 410— y su
   ruta `/from-order/:orderId` tampoco se usa. Van juntos en el mismo encargo.)*
-- ⬜ **QUEDA UNA VENTANITA DEL NAVEGADOR VIVA, y el censo decía CERO (24 ago 2026).** El botón
-  **«Deshacer»** de `/admin/conciliacion` abre un `confirm()` de verdad
-  (`routes/conciliacion-routes.js:120`), y es la trampa conocida: el navegador los silencia y el
-  botón queda muerto sin decir nada.
+- ✅ ~~**QUEDA UNA VENTANITA DEL NAVEGADOR VIVA, y el censo decía CERO (24 ago 2026).**~~ **CERRADA.
+  ⚙️ CORREGIDO EL 31 ago 2026 al medir para `pantalla-403-ventanita`: ese `confirm()` YA NO EXISTE.**
+  El botón «Deshacer» pregunta hoy con `window.confirmarEnPagina` dentro de la propia página
+  (`routes/conciliacion-routes.js:164`), y el censo —que sí lo ve, desde el arreglo de esa misma
+  fecha— da **0 `prompt` y 0 `confirm`** en todo el producto. Se tacha en vez de borrarse, y se deja
+  el porqué escrito debajo, porque el diagnóstico de la ceguera del censo sigue siendo la lección.
+  El texto original decía: el botón **«Deshacer»** de `/admin/conciliacion` abre un `confirm()` de
+  verdad (`routes/conciliacion-routes.js:120`), y es la trampa conocida: el navegador los silencia y
+  el botón queda muerto sin decir nada.
   - **Por qué no se veía.** `censo-ventanitas.mjs` decidía si una línea iba dentro de un comentario
     comparando `lastIndexOf('/*')` con `lastIndexOf('*/')`. En esa pantalla hay un filtro de ficheros
     `accept=".q43,.n43,.txt,.043,*/*"`, y el `/*` del comodín le hizo creer que se abría un comentario
@@ -5929,14 +5938,50 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
     sigue quitando los `//` línea a línea, porque la mitad de los comentarios de este producto viven
     DENTRO de una plantilla (son el JS que se sirve al navegador) y para el recorrido eso es una
     cadena. **Probado con un caso a mano: el censo de antes daba CERO sobre él y el de ahora lo caza.**
-  - **La ventanita NO se ha tocado**: arreglarla es código de producto y el encargo del inventario lo
-    prohíbe. Queda declarada en `ROJOS_CONOCIDOS` con su motivo, para que el barrido la nombre en vez
-    de que su rojo parezca ruido. **Es tarea aparte, con encargo.**
+  - ~~**La ventanita NO se ha tocado**: arreglarla es código de producto y el encargo del inventario
+    lo prohíbe. Queda declarada en `ROJOS_CONOCIDOS` con su motivo, para que el barrido la nombre en
+    vez de que su rojo parezca ruido. **Es tarea aparte, con encargo.**~~
+    **⚙️ CORREGIDO EL 31 ago 2026.** Las dos mitades caducaron: la ventanita **sí se tocó** (se migró
+    al panel en página, `conciliacion-routes.js:164`, con su gate `gate-conciliacion-deshacer`), y en
+    `ROJOS_CONOCIDOS` de `run-gates.mjs` **no queda ninguna declaración de `censo-ventanitas`**.
+    Medido el 31 ago 2026 con el censo ya capaz de verla.
 - ⬜ **SEIS FICHEROS DE PANTALLA DESMONTADOS SIGUEN EN EL ÁRBOL (24 ago 2026): 1.584 líneas.** Este
   registro solo nombraba `orders.js`, y son seis: `orders.js` (1061), `discounts.js` (191),
   `shipping.js` (107), `feedback.js` (84), `reviews.js` (81) y `newsletter.js` (60). Ninguno está
   montado. Mismo criterio para los seis: retirar o revivir, no dejarlos a medias.
   ↪️ **Convertida a formato de orquestador el 31 ago 2026** — id `retirar-pantallas-muertas`.
+- ⬜ **`alert-pendientes` — QUEDAN 12 `alert()` VIVOS, DECLARADOS UNO A UNO (31 ago 2026).** Salieron
+  al arreglar `pantalla-403-ventanita`: hasta ese día el censo **no miraba `alert`** (su patrón solo
+  tenía `prompt|confirm`) **ni miraba `core/`**, así que decía CERO habiendo catorce. Dos eran la
+  denegación de permiso de todo el producto y se arreglaron en esa tarea; **los otros doce quedan**,
+  y están declarados con fecha y motivo en `scripts/censo-ventanitas.mjs` (`DEUDA_ALERT`):
+  - `modules/erp/routes/citas.js` — **4** · errores del calendario; tarea aparte.
+  - `modules/superadmin/index.js` — **4** · superadmin; **dos de ellas ENCADENADAS** (`:352+353`,
+    `:371+375`), que es el caso que mata: ante el segundo diálogo seguido Chrome ofrece la casilla de
+    silenciarlos y el botón se queda muerto sin decir nada.
+  - `modules/superadmin/integridad.js` — **1** · superadmin; tarea aparte.
+  - `modules/store/routes.js` — **3** · **Capa 2, CONGELADA** (`CLAUDE.md`): **no se tocan** hasta
+    descongelar, aunque se sepa cómo.
+
+  **La declaración es por RECUENTO EXACTO, no por «al menos»**: si un fichero declarado sube de 4 a 5
+  el censo sale en rojo (es una ventanita nueva), y si baja de 4 a 3 sale en rojo por **declaración
+  rancia** — la misma regla que `run-gates.mjs` aplica a los rojos conocidos, y por el mismo motivo:
+  un puntero caducado manda al siguiente al sitio equivocado con toda la confianza del mundo.
+  El censo sale en verde con `SIN DECLARAR: 0`, que es lo único que un cambio nuevo puede empeorar.
+- 💡 **CANDIDATA, SIN CONSTRUIR — el registro de denegaciones (estilo `SU53` de SAP).** En SAP GUI, un
+  fallo de autorización **queda registrado** y el administrador lo recupera con la transacción `SU53`
+  para ver qué objeto faltó y concederlo. Bamburu tiene dónde colgarlo (`logActivity` y la pantalla
+  `/admin/activity`), y es la mejor de las tres ideas de la comparativa. **No se construyó con
+  `pantalla-403-ventanita` a propósito**: un `logActivity` en `requirePerm` escribe una fila **por
+  petición denegada**, sin control de volumen —un rastreador o un bucle de `fetch` llena
+  `activity_logs` del negocio—, así que hacerlo bien exige agregar por (usuario, permiso, día) y
+  decidir qué se le enseña al dueño. Eso es **función nueva**, y la fase de saneamiento no las admite
+  (CANON §4). Queda apuntada, no empezada.
+- 💡 **CANDIDATA, SIN CONSTRUIR — las otras dos páginas de 403 maquetadas a mano.** `core/csrf.js:38` y
+  `core/tenant-middleware.js:124` siguen escribiendo su propio HTML de error. No son de permisos y
+  quedaron fuera de `pantalla-403-ventanita` a propósito; pero desde esa tarea `errorShell` **es
+  importable desde `core/` sin cerrar ningún ciclo** (`modules/erp/pagina-error.js`), así que
+  unificarlas es una tarea de una línea cada una.
 - **DISA `create_order` multi-línea:** limitación heredada de la base e-commerce; los pedidos multi-línea entran con el flujo pedido→albarán→factura.
 - ~~Arreglar `scripts/gate-avisos-badge.mjs`~~ — **ya no reproduce**: ejecutado el 2026-07-10 pasa **25 OK**.
   Si vuelve a fallar por la ruta de BD fija, reabrir con la salida del fallo.

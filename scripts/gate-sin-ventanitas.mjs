@@ -13,8 +13,10 @@
 //   · Se PULSAN los botones de verdad, no se llama a la API: el mando es donde se rompen las cosas.
 //   · Se prueba TAMBIÉN cuando el usuario dice que no (cancelar) y cuando deja el campo vacío, que
 //     eran los tres caminos muertos y silenciosos del caso original.
-//   · Y el censo del código tiene que dar CERO: pulsar seis pantallas no demuestra nada de las otras
-//     cincuenta.
+//   · Y el censo del código tiene que dar CERO SIN DECLARAR: pulsar seis pantallas no demuestra nada
+//     de las otras cincuenta. (Desde el 31 ago 2026 el censo cuenta también los `alert()` y mira
+//     `core/`; las 12 que quedan son deuda declarada, y lo que este gate exige es que no aparezca
+//     ninguna nueva. Ver el bloque [0].)
 import puppeteer from 'puppeteer';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
@@ -61,9 +63,22 @@ try {
   let censo = '', censoOk = false;
   try { censo = execFileSync('node', [path.join(RAIZ, 'scripts', 'censo-ventanitas.mjs')], { encoding: 'utf8' }); censoOk = true; }
   catch (e) { censo = String(e.stdout || e.message); }
-  const nVivas = Number((censo.match(/VENTANITAS VIVAS: (\d+)/) || [0, -1])[1]);
-  ok(censoOk && nVivas === 0, 'no queda ni un prompt() ni un confirm() vivo en modules/', nVivas + ' vivas');
-  ok(/ENCADENADAS[^\n]*: 0/.test(censo), 'y ninguna pantalla encadena dos, que era el caso que mataba');
+  // 31 ago 2026 · AQUÍ SE LEÍA `VENTANITAS VIVAS` Y SE EXIGÍA 0, y ese número cambió de significado:
+  // el censo cuenta ahora también los `alert()` y mira además `core/`, así que las vivas son 12 —doce
+  // `alert()` preexistentes, declarados uno a uno con su fecha y su motivo en el propio censo—. Dejar
+  // la aserción como estaba habría puesto este gate en rojo por deuda ajena, y un rojo que se ignora
+  // deja de avisar cuando el grito es de verdad (`run-gates.mjs`). Lo que se exige es lo único que un
+  // cambio nuevo puede empeorar: que no haya NINGUNA sin declarar, en `modules/` ni en `core/`.
+  const nSinDeclarar = Number((censo.match(/SIN DECLARAR: (\d+)/) || [0, -1])[1]);
+  ok(censoOk && nSinDeclarar === 0,
+     'ni un prompt(), confirm() o alert() NUEVO en modules/ ni en core/', nSinDeclarar + ' sin declarar');
+  // Y las encadenadas —dos diálogos seguidos, el caso que mata— pasan a exigirse que NO CREZCAN: hoy
+  // son 2, las dos en `modules/superadmin/index.js` (:352+353 y :371+375), preexistentes y declaradas
+  // en el censo el 31 ago 2026. Se compara contra 2, no contra 0, y el día que se arreglen esa cifra
+  // baja aquí: una declaración rancia manda al siguiente al sitio equivocado con toda la confianza.
+  const nEncadenadas = Number((censo.match(/ENCADENADAS[^\n]*: (\d+)/) || [0, -1])[1]);
+  ok(nEncadenadas === 2, 'y las que encadenan dos no crecen (2 declaradas, superadmin/index.js)',
+     nEncadenadas + ' encadenadas');
 
   browser = await puppeteer.launch(launchOpts());
   const ctx = await browser.createBrowserContext();
@@ -243,7 +258,12 @@ try {
     ok(/window\.saConfirmar\s*=/.test(src), 'el superadmin tiene su propio confirmar-en-la-página');
     // Se mide con el MISMO censo que el resto, que sabe saltarse los comentarios. Mirar el fichero
     // con una expresión a pelo contaba la nota que explica la avería como si fuera la avería.
-    ok(!/superadmin/.test(censo), '  y su layout no llama a confirm() ni una vez (según el censo)');
+    // 31 ago 2026 · ESTA ASERCIÓN BUSCABA LA PALABRA «superadmin» EN EL CENSO ENTERO, y desde que el
+    // censo cuenta `alert()` esa palabra aparece siempre: `modules/superadmin/index.js` tiene cuatro,
+    // declarados como deuda. Buscar el fichero del que habla la frase —su LAYOUT— dice lo mismo que
+    // quería decir y deja de dar rojo por un fichero que no es el suyo.
+    ok(!/modules\/superadmin\/layout\.js/.test(censo),
+       '  y su layout no llama a confirm() ni una vez (según el censo)');
     ok(errores.length === 0, 'y su login sigue vivo', errores.join(' | ') || 'ninguno');
     console.log('  · no se prueba pulsando: haría falta una sesión de superadmin, y este gate no la abre.');
     await page.close();

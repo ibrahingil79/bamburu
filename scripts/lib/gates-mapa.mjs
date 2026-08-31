@@ -234,6 +234,8 @@ export const GRUPOS = {
                                      // cabos del 20 ago siguen vivos; y un informe que falla lo dice
     'gate-sin-ventanitas',           // punto 7: cero prompt/confirm en el producto, comprobado
                                      // PULSANDO y con las ventanitas del navegador neutralizadas
+    'gate-403-permiso',              // la pantalla de «no tienes permiso»: página con texto y salida
+                                     // por navegación, JSON por la API, y cero ventanitas
     'gate-cabos-apuntados',          // punto 8: los seis cabos — la voz en español, los tres motores
                                      // que faltaban (cada uno contra su control), B10 y B12
     'gate-productos-parados',        // punto 9: el área de Catálogo parte del PRODUCTO, así que un
