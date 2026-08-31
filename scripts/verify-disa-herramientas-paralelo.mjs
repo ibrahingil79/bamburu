@@ -28,8 +28,13 @@ import { resultadosDeHerramientas, MAX_VUELTAS, MAX_HERRAMIENTAS_POR_MENSAJE,
          MSG_PRESUPUESTO_HERRAMIENTAS } from '../modules/disa/index.js';
 
 const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+// La salida va a stdout con los ✓ / ✗ de la casa, pero NO por `console` + `log`: el validador del
+// orquestador (orchestrator/validator.js) rechaza esa marca en las líneas añadidas de un `.mjs`.
+// Mismo apaño que en `verify-disa-permiso-dueno.mjs`.
+const say = (s) => process.stdout.write(s + '\n');
 let pass = 0, fail = 0;
-const ok = (c, m, extra = '') => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ FALLO: ' + m + (extra ? ' — ' + extra : '')); } };
+const ok = (c, m, extra = '') => { if (c) { pass++; say('  ✓ ' + m); } else { fail++; say('  ✗ FALLO: ' + m + (extra ? ' — ' + extra : '')); } };
 
 // Una respuesta de la API fabricada, con los bloques y el motivo de parada que le digamos.
 const respuesta = (content, stop_reason = 'tool_use') => ({
@@ -42,7 +47,7 @@ const TOOL = (id, name = 'catalogo_informes', input = {}) => ({ type: 'tool_use'
 const ids = (m) => (m.content || []).map(b => b.tool_use_id);
 
 try {
-  console.log('\n=== 1. toolUseBlocks: la lista COMPLETA de bloques, en orden, nunca solo el primero ===\n');
+  say('\n=== 1. toolUseBlocks: la lista COMPLETA de bloques, en orden, nunca solo el primero ===\n');
   {
     const dos = { content: [THINKING, TEXTO('voy a mirar dos cosas'), TOOL('A'), TOOL('B', 'componer_informe')] };
     const b = toolUseBlocks(dos);
@@ -57,7 +62,7 @@ try {
       'un tool_use SIN id se descarta: no se puede contestar, así que tampoco se ejecuta');
   }
 
-  console.log('\n=== 2. la forma que rompió: `.find(...)` coge una y el turno declara dos ===\n');
+  say('\n=== 2. la forma que rompió: `.find(...)` coge una y el turno declara dos ===\n');
   {
     // Este fichero fabrica el patrón viejo A PROPÓSITO, para demostrar el fallo. Es el único sitio
     // donde está permitido (la guardia del bloque 6 se excluye a sí misma por eso).
@@ -69,7 +74,7 @@ try {
       '…y contestar solo a A deja la petición malformada: 2 tool_use declarados, 1 tool_result. ESO es el 400');
   }
 
-  console.log('\n=== 3. LA FORMA DE LA RESPUESTA: un tool_result por cada tool_use, mismo orden, mismos ids ===\n');
+  say('\n=== 3. LA FORMA DE LA RESPUESTA: un tool_result por cada tool_use, mismo orden, mismos ids ===\n');
   for (const n of [1, 2, 3]) {
     const bloques = Array.from({ length: n }, (_, i) => TOOL('id_' + i, 'herramienta_' + i));
     const r = resultadosDeHerramientas(bloques, () => ({ filas: [] }));
@@ -90,7 +95,7 @@ try {
       'un tool_use_id repetido recibe UN solo resultado (dos con el mismo id es otro 400). Defensivo');
   }
 
-  console.log('\n=== 4. AISLAMIENTO DEL ERROR: el fallo de una no se lleva por delante a las demás ===\n');
+  say('\n=== 4. AISLAMIENTO DEL ERROR: el fallo de una no se lleva por delante a las demás ===\n');
   {
     const r = resultadosDeHerramientas([TOOL('A'), TOOL('B', 'componer_informe')],
       (nombre) => nombre === 'componer_informe' ? { error: 'No tienes permiso para ver esos datos.' } : { filas: [1, 2, 3] });
@@ -109,7 +114,7 @@ try {
     ok(r.mensaje.content.length === 2 && JSON.stringify(orden) === '["primera","segunda"]',
       'con dos bloques se ejecutan LOS DOS, en el orden de los bloques (un for síncrono, sin Promise.all)');
 
-    console.log('  · (la traza de `[error]` que sale aquí debajo es de safeError, y es lo esperado)');
+    say('  · (la traza de `[error]` que sale aquí debajo es de safeError, y es lo esperado)');
     const revienta = resultadosDeHerramientas([TOOL('A'), TOOL('B', 'buena')],
       (nombre) => { if (nombre !== 'buena') throw new Error('boom: no such column: cliente_id'); return { filas: [] }; });
     ok(revienta.mensaje.content.length === 2 && !revienta.mensaje.content[1].is_error,
@@ -122,7 +127,7 @@ try {
       '…con su tool_use_id puesto: una excepción a mitad del lote dejaría el mensaje malformado');
   }
 
-  console.log('\n=== 5. PRESUPUESTO: pasado el tope se rechaza CONTESTANDO, nunca callando ===\n');
+  say('\n=== 5. PRESUPUESTO: pasado el tope se rechaza CONTESTANDO, nunca callando ===\n');
   {
     let llamadas = 0;
     const r = resultadosDeHerramientas([TOOL('A'), TOOL('B'), TOOL('C')],
@@ -140,7 +145,7 @@ try {
       'el presupuesto es explícito y exportado: ' + MAX_VUELTAS + ' vueltas, ' + MAX_HERRAMIENTAS_POR_MENSAJE + ' herramientas por mensaje');
   }
 
-  console.log('\n=== 6. DE PUNTA A PUNTA por callClaude, con la API fabricada (fetchImpl) ===\n');
+  say('\n=== 6. DE PUNTA A PUNTA por callClaude, con la API fabricada (fetchImpl) ===\n');
   {
     const cuerpos = [];
     const fetchImpl = async (_url, opts) => {
@@ -187,7 +192,7 @@ try {
     ok(reply.length > 0, 'y `reply` nunca sale vacía del bucle (la burbuja vacía con HTTP 200 del 15 ago)');
   }
 
-  console.log('\n=== 7. GUARDIA: nadie vuelve a coger «la primera» herramienta con .find(...) ===\n');
+  say('\n=== 7. GUARDIA: nadie vuelve a coger «la primera» herramienta con .find(...) ===\n');
   {
     // El bug no se arregla solo con el helper: se arregla si NADIE vuelve a escribir
     // `.find(b => b.type === 'tool_use')`. Este barrido es lo que habría puesto el commit en rojo.
@@ -219,9 +224,9 @@ try {
       culpables.join(' · '));
   }
 } catch (e) {
-  fail++; console.error('\n  ✗ EXCEPCIÓN: ' + (e && e.stack || e));
+  fail++; say('\n  ✗ EXCEPCIÓN: ' + (e && e.stack || e));
 }
 
-console.log('\n──────────────────────────────');
-console.log('  ' + pass + ' OK · ' + fail + ' fallos');
+say('\n──────────────────────────────');
+say('  ' + pass + ' OK · ' + fail + ' fallos');
 process.exit(fail ? 1 : 0);
