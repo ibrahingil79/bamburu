@@ -1,0 +1,15 @@
+[Unit]
+Description=Bamburu — disparador diario de la SEGUNDA copia (cuenta gilibrahin)
+
+[Timer]
+# 03:35, despues de la principal (03:31). Ojo: la principal lleva
+# RandomizedDelaySec=300, asi que puede arrancar hasta las 03:36 y solaparse con
+# esta. No es un problema de correccion —cada copia usa su propio temporal, su
+# propia marca y su propia cuenta— pero si quieres orden garantizado, sube esta a
+# las 03:45: la principal tarda ~3,5 min medidos.
+OnCalendar=*-*-* 03:35:00
+Persistent=true
+RandomizedDelaySec=0
+
+[Install]
+WantedBy=timers.target

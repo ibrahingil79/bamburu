@@ -5,10 +5,80 @@
 > añaden funciones nuevas hasta cerrarla.** La finalidad es elevar seguridad, robustez, calidad de
 > código, coherencia operativa, recuperación, escalabilidad y mantenibilidad hasta el nivel de un
 > producto profesional comparable con los líderes del mercado. Se mantiene una sola tarea activa cada
-> vez. **Saneamientos 1, 2, 3 y 4 están cerrados. Fase de saneamiento general: ACTIVA. SIGUIENTE
-> TAREA OFICIAL: delimitar el siguiente saneamiento pendiente según CANON y este tablero.**
+> vez. **Saneamientos 1, 2, 3, 4, 5 y 6 están cerrados. Fase de saneamiento general: ACTIVA.
+> SIGUIENTE TAREA OFICIAL: aislamiento de bloqueos SQLite — a delimitar antes de iniciarlo.**
 > **Peldaño 9 — Belleza/estética queda pendiente y aplazado; no es la siguiente tarea mientras
 > exista un riesgo técnico grave demostrado.**
+
+> **SANEAMIENTO 6 ✅ HECHO (31 ago 2026): SEGUNDA COPIA DE SEGURIDAD EN GOOGLE DRIVE (cuenta
+> `gilibrahin@gmail.com`).**
+>
+> **Resultado.** Ya hay **dos copias diarias verificadas en dos cuentas distintas**. La principal sale
+> a las 03:33 a `ibrahingil@gmail.com`; la secundaria a las 03:35 a `gilibrahin@gmail.com`. Las dos
+> copian los mismos 11 artefactos —`control.db`, las 9 bases de tenant y `data/uploads` en `tar.gz`—,
+> las dos verifican tamaño y MD5 contra el fichero ya subido, las dos hacen prueba de restore real y
+> las dos conservan 14 días.
+>
+> **Una sola pieza, no dos scripts.** `scripts/bamburu-backup.sh` sirve a las dos copias: sin
+> variables de entorno se comporta exactamente como antes, y la unit de la secundaria sobreescribe
+> `BACKUP_REMOTE`, `BACKUP_LABEL`, `BACKUP_SUFFIX` y `BACKUP_HC_URL`. Se parametrizó en vez de
+> duplicar porque dos copias de las mismas reglas se separan en cuanto alguien arregla una sola.
+> Comprobado que sin entorno los valores efectivos son idénticos a los de antes del cambio.
+>
+> **El dead-man's-switch NO se comparte.** `BACKUP_HC_URL` va vacío a propósito en la secundaria: si
+> pingease el mismo check de healthchecks.io que la principal, una principal caída seguiría viéndose
+> verde en el monitor externo.
+>
+> **Avisos: una caída avisa, dos son críticas.** El heartbeat vigila cada copia por separado, con
+> marcas distintas (`last-success` y `last-success-secondary`). Una copia sin éxito en +48 h manda
+> AVISO (queda respaldo, se perdió la redundancia); las dos, CRÍTICO. Vigilar solo «que fallen las
+> dos» habría reintroducido el fallo silencioso que costó el cambio desde Backblaze: una secundaria
+> rota durante un mes, con la principal en verde, no avisaría a nadie. La secundaria solo se vigila si
+> su timer está instalado, para no dar falsas alarmas antes de existir. Probado en 7 escenarios.
+>
+> **Verificado en producción.** Credencial comprobada ANTES de instalar: `gdrive_gili` responde y es
+> otra cuenta (10,38 GiB usados frente a 5,38; papelera 0 frente a 516 MiB). Ciclo suelto probado
+> —subir, MD5, descargar, borrar— antes de tocar systemd. Primera copia real ejecutada a mano el
+> 31 ago, 14:16→14:20 UTC: **11 archivos, exit 0**, cada uno con su restore-test, email
+> `[secundaria] OK` enviado. Contrastado por fuera contra la cuenta principal: **11 de 11 idénticos
+> en tamaño, 0 discrepancias**. Heartbeat en `OK 2/2`.
+>
+> **Límite conocido, y no es un descuido.** Las dos copias viven en el MISMO proveedor. Protege contra
+> borrado accidental y contra que una cuenta se llene; **no protege** contra que la identidad de
+> Google se suspenda o se comprometa, que probablemente se llevaría las dos. Backblaze B2 quedó
+> medido como alternativa (10 GB gratis, sin tarjeta, el backup ocupa 320 MB = 3 % del cupo) y
+> **descartado por decisión de Ibrahin**, que prefirió una segunda cuenta propia.
+>
+> **Fuera.** Cifrado de las copias; tercer destino; ensayo de restauración completa de un negocio; y
+> cualquier cambio en la copia principal más allá de la parametrización.
+
+> **SANEAMIENTO 5 ✅ HECHO (31 ago 2026 · `f13594e`): DEFECTO FISCAL DE SERVICIOS SANITARIOS — NACEN
+> `pending`, NO `taxable`.**
+>
+> **Causa.** S4 (`feb90b3`) pasó los 12 servicios de asistencia sanitaria de la precarga de oficios de
+> banda `exento` (0 %) a `general` (21 %) con `fiscal_treatment: 'taxable'`. La decisión de no nacer
+> exentos era correcta —la exención del art. 20.Uno.3.º LIVA exige profesional titulado Y finalidad
+> terapéutica, y el software no puede saber ninguna de las dos—, pero el aterrizaje dejaba al próximo
+> negocio de salud arrancando con un catálogo que **cobra un 21 % que la ley no permite repercutir**,
+> sin aviso, sin bloqueo y firmado en VERI*FACTU.
+>
+> **Alcance medido.** Cero negocios afectados: ningún tenant de salud tenía catálogo sembrado. Riesgo
+> **latente**, que se disparaba en la próxima alta de un negocio sanitario.
+>
+> **Arreglo.** Los 12 nacen `pending`, estado que **bloquea la emisión**
+> (`core/fiscal-classification.js:25`) hasta que una persona responsable confirme causa y condiciones
+> línea a línea. `fiscal_treatment` pasa a ser **por servicio** (`s.fiscal || 'taxable'`) en vez de una
+> constante para los seis oficios: ponerlo global habría dejado sin facturar a peluquerías, estéticas,
+> talleres y asesorías, cuyos 25 servicios no tienen ninguna duda fiscal. Los 4 de bienestar (masaje no
+> terapéutico, entrenamiento personal, pilates, plan de adelgazamiento) siguen `taxable` al 21 %.
+>
+> **Sincerados los comentarios**, que describían el comportamiento anterior a S4 («Nace 'exento' para
+> no arrancar cobrando un 21%»), y `CLAUDE.md`, que daba S4 por «no iniciada» con S4 ya en HEAD.
+>
+> **Verificación.** Estática, sin gates ni barridos (no autorizados en el encargo): `node --check` OK
+> y evaluación del módulo → **12 `pending` · 4 `taxable`**, y los otros cinco oficios con 0 `pending`.
+> Desplegado el 31 ago a las 13:19 UTC reiniciando el servicio; comprobado que el proceso arrancó
+> DESPUÉS del cambio y que sirve el código de S5.
 
 > **SANEAMIENTO 4 ✅ HECHO (27 ago 2026 · implementación fiscal aditiva): CLASIFICACIÓN FISCAL DE
 > OPERACIONES EXENTAS.**

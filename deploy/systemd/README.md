@@ -10,6 +10,7 @@
 | Unit | Qué hace | Detalle |
 |------|----------|---------|
 | `bamburu-backup` + `bamburu-backup-heartbeat` | Copia diaria a Google Drive, blindada | abajo |
+| `bamburu-backup-secondary` | **SEGUNDA copia** diaria a la otra cuenta de Drive (S6) | abajo |
 | `bamburu-avisos` | Resumen diario de avisos por email (08:00 Europe/Madrid) | `scripts/bamburu-avisos.mjs` |
 | `bamburu-recordatorios-cita` | Recordatorio de citas por email, el día antes (09:00 Europe/Madrid) | `scripts/bamburu-recordatorios-cita.mjs` |
 | `bamburu-caducar-reservas` | Caduca las solicitudes de cita por Internet sin responder y **libera el hueco** (cada hora) | abajo |
@@ -157,3 +158,93 @@ rclone copy gdrive:Bamburu-backup/daily/desarrollo-bamburu-AAAA-MM-DD.db /tmp/re
 # data/tenants/ con el nombre que espera la app (p. ej. desarrollo-bamburu.db).
 # Las uploads:  tar -xzf uploads-AAAA-MM-DD.tar.gz -C data/   (recrea data/uploads)
 ```
+
+
+---
+
+# Segunda copia (S6) — cuenta `gilibrahin@gmail.com`
+
+> **ESTADO: PREPARADA, NO INSTALADA.** Falta un único paso, y es manual: autorizar rclone
+> con la segunda cuenta. Hasta que exista el remote `gdrive_gili`, nada de esto está activo
+> y el sistema se comporta exactamente como antes.
+
+## Por qué una sola pieza y no dos scripts
+
+`scripts/bamburu-backup.sh` sirve a **las dos copias**. Sin variables de entorno se comporta
+igual que siempre (copia principal); la unit de la secundaria sobreescribe cuatro variables:
+
+| Variable | Principal (por defecto) | Secundaria |
+|---|---|---|
+| `BACKUP_REMOTE` | `gdrive:Bamburu-backup/daily` | `gdrive_gili:Bamburu-backup-gili/daily` |
+| `BACKUP_LABEL` | `principal` | `secundaria` |
+| `BACKUP_SUFFIX` | *(vacío)* → `last-success` | `-secondary` → `last-success-secondary` |
+| `BACKUP_HC_URL` | hereda `HEALTHCHECKS_URL` | **vacío a propósito** |
+
+Se parametriza en vez de duplicar porque dos copias de las mismas reglas se separan en cuanto
+alguien arregla una sola.
+
+**`BACKUP_HC_URL` vacío no es un olvido:** si la secundaria pingease el mismo check de
+healthchecks.io que la principal, una principal caída seguiría viéndose verde en el monitor
+externo. El dead-man's-switch se queda en la principal; la secundaria la vigila el heartbeat.
+
+## Avisos: una caída avisa, dos son críticas
+
+`bamburu-backup-heartbeat` mira **cada copia por separado**:
+
+- **una caída (+48 h)** → email de AVISO: sigue habiendo respaldo, pero se perdió la redundancia.
+- **las dos** → email CRÍTICO: ahora mismo no hay respaldo.
+
+Vigilar solo «que fallen las dos» reintroduciría el fallo silencioso que costó el cambio desde
+Backblaze: una secundaria rota un mes, con la principal en verde, no avisaría a nadie.
+
+La secundaria **solo se vigila si su timer está instalado** (`/etc/systemd/system/bamburu-backup-secondary.timer`).
+Antes de terminar S6 no existe, así que no genera falsas alarmas.
+
+## Paso que falta (lo tiene que hacer Ibrahin)
+
+rclone habla con Google Drive por **OAuth2**. Las contraseñas de aplicación de Google **no
+sirven** aquí: son para IMAP/SMTP. Y el servidor no tiene navegador, así que va el flujo *headless*:
+
+```bash
+# 1) EN EL SERVIDOR
+rclone config
+#    n) New remote  →  name: gdrive_gili  →  storage: drive
+#    client_id / client_secret: EN BLANCO   →  scope: 1 (drive)
+#    "Use web browser to automatically authenticate?"  →  N
+#    imprime un comando:  rclone authorize "drive" "…"
+
+# 2) EN EL MAC/PC, con sesión abierta en gilibrahin@gmail.com
+rclone authorize "drive" "…"      # el comando que imprimió el servidor
+#    autorizar en el navegador y copiar el token
+
+# 3) VOLVER AL SERVIDOR y pegar el token
+```
+
+El token queda en `~/.config/rclone/rclone.conf` (modo 600). Comprobar después:
+
+```bash
+rclone about gdrive_gili:                  # debe responder con la cuota de esa cuenta
+rclone mkdir gdrive_gili:Bamburu-backup-gili/daily
+```
+
+## Instalación (después de tener el remote)
+
+```bash
+cd /home/ubuntu/bamburu
+sudo cp deploy/systemd/bamburu-backup-secondary.service /etc/systemd/system/
+sudo cp deploy/systemd/bamburu-backup-secondary.timer   /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now bamburu-backup-secondary.timer
+
+# Primera ejecución a mano, para no esperar a las 03:35:
+sudo systemctl start bamburu-backup-secondary.service
+journalctl -u bamburu-backup-secondary -n 60 --no-pager
+rclone ls gdrive_gili:Bamburu-backup-gili/daily/
+```
+
+## Horario
+
+Principal 03:31 · secundaria 03:35 · heartbeat 09:03. La principal lleva
+`RandomizedDelaySec=300`, así que puede arrancar hasta las 03:36 y solaparse con la secundaria.
+No rompe nada —cada copia usa su propio temporal, su propia marca y su propia cuenta— pero si se
+quiere orden garantizado, subir la secundaria a las **03:45** (la principal tarda ~3,5 min medidos).

@@ -23,15 +23,30 @@ set -uo pipefail
 # --- Config -----------------------------------------------------------------
 APP_DIR="/home/ubuntu/bamburu"
 DATA_DIR="$APP_DIR/data"
-REMOTE="gdrive:Bamburu-backup/daily"
-RETENTION_DAYS=14
+
+# --- Una sola pieza sirve a las DOS copias (S6, 31 ago 2026) -----------------
+# Sin argumentos se comporta EXACTAMENTE como antes: copia principal a la cuenta
+# personal. La unit de la copia secundaria sobreescribe estas variables por entorno.
+# Se parametriza en vez de duplicar el script: dos copias de las mismas reglas se
+# separan en cuanto alguien arregla una sola.
+REMOTE="${BACKUP_REMOTE:-gdrive:Bamburu-backup/daily}"
+LABEL="${BACKUP_LABEL:-principal}"          # solo etiqueta emails y resumen
+SUFFIX="${BACKUP_SUFFIX:-}"                 # separa la marca de exito por copia
+RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-14}"
+
 RCLONE="/usr/bin/rclone"
 NODE="/usr/bin/node"
 SNAPSHOT="$APP_DIR/scripts/db-snapshot.mjs"
 STATE_DIR="$HOME/.local/state/bamburu-backup"
-LAST_OK="$STATE_DIR/last-success"
+LAST_OK="$STATE_DIR/last-success$SUFFIX"
 MAILTO="ibrahingil@gmail.com"
 MAILFROM="Bamburu <noreply@bamburu.com>"
+
+# Dead-man's-switch: la copia SECUNDARIA no debe pingear el mismo check que la
+# principal — si lo hiciera, una principal caida seguiria viendose verde y el
+# monitor externo mentiria. Se usa `-` y NO `:-` a proposito: un
+# BACKUP_HC_URL="" explicito significa "sin ping", no "hereda el de la principal".
+HC_URL="${BACKUP_HC_URL-${HEALTHCHECKS_URL:-}}"
 
 DATE="$(date +%F)"
 HOST="$(hostname)"
@@ -55,14 +70,14 @@ send_email(){
 
 # --- Ping a healthchecks.io (dead-man's-switch externo; no aborta) ----------
 hc_ping(){  # $1 = "" éxito | "/fail" fallo | "/start" inicio
-  [ -n "${HEALTHCHECKS_URL:-}" ] || return 0
-  curl -fsS -m 20 --retry 3 "${HEALTHCHECKS_URL}${1:-}" -o /dev/null 2>/dev/null || log "WARN: ping healthchecks falló (${1:-ok})"
+  [ -n "${HC_URL:-}" ] || return 0
+  curl -fsS -m 20 --retry 3 "${HC_URL}${1:-}" -o /dev/null 2>/dev/null || log "WARN: ping healthchecks falló (${1:-ok})"
 }
 
 fail_exit(){
   local msg="$1"
   log "FALLO: $msg"
-  send_email "❌ Backup Bamburu FALLÓ ($DATE)" "El backup ha FALLADO en: $msg
+  send_email "❌ Backup Bamburu [$LABEL] FALLÓ ($DATE)" "El backup ha FALLADO en: $msg
 
 Host: $HOST
 Destino: $REMOTE
@@ -150,7 +165,7 @@ log "retención: borrando en Drive lo más viejo que ${RETENTION_DAYS} días"
 
 # --- Éxito ------------------------------------------------------------------
 date +%s > "$LAST_OK"
-send_email "✅ Backup Bamburu OK ($DATE)" "Backup completado y VERIFICADO en $HOST ($DATE).
+send_email "✅ Backup Bamburu [$LABEL] OK ($DATE)" "Backup completado y VERIFICADO en $HOST ($DATE).
 
 $SUMMARY
 Retención: ${RETENTION_DAYS} días. Destino: $REMOTE

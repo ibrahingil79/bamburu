@@ -1,0 +1,22 @@
+[Unit]
+Description=Bamburu — SEGUNDA copia diaria a Google Drive (cuenta gilibrahin), verificada
+Documentation=file:///home/ubuntu/bamburu/deploy/systemd/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/bamburu
+EnvironmentFile=/etc/bamburu.env
+# Misma pieza que la copia principal, apuntada a la otra cuenta. Ver el bloque de
+# config de scripts/bamburu-backup.sh: sin estas variables se comporta como la principal.
+Environment=BACKUP_REMOTE=gdrive_gili:Bamburu-backup-gili/daily
+Environment=BACKUP_LABEL=secundaria
+Environment=BACKUP_SUFFIX=-secondary
+# VACIO A PROPOSITO: la secundaria NO pingea el healthchecks de la principal. Si lo
+# hiciera, una principal caida seguiria viendose verde en el monitor externo.
+Environment=BACKUP_HC_URL=
+ExecStart=/home/ubuntu/bamburu/scripts/bamburu-backup.sh
+SyslogIdentifier=bamburu-backup-secondary

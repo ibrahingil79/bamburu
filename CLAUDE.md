@@ -10,11 +10,17 @@
 ## Fase actual: SANEAMIENTO TÉCNICO (CANON §4)
 
 - La auditoría integral está realizada y la fase de saneamiento general está **ACTIVA**. No se añaden
-  funciones nuevas hasta cerrarla; una tarea cada vez. **Saneamientos 1, 2, 3 y 4 están cerrados**
-  (S4 = `feb90b3`, clasificación fiscal por línea). La siguiente tarea oficial es **Saneamiento 5 —
-  Defecto fiscal de servicios sanitarios**: los doce servicios de asistencia sanitaria de la precarga
-  de oficios nacen `pending` y no `taxable`, para que ningún negocio de salud arranque cobrando un
-  21 % que el art. 20.Uno.3.º LIVA no permite repercutir.
+  funciones nuevas hasta cerrarla; una tarea cada vez. **Saneamientos 1 a 6 están cerrados:**
+  S1 barrido nocturno retirado · S2 blindaje de DISA · S3 antiavalancha del rate limiting ·
+  S4 clasificación fiscal por línea (`feb90b3`) · S5 los servicios sanitarios nacen `pending` y no
+  `taxable` (`f13594e`) · S6 segunda copia de seguridad a la cuenta `gilibrahin` de Drive.
+  **La siguiente tarea oficial es el aislamiento de bloqueos SQLite, y está SIN DELIMITAR: hay que
+  acotarla antes de iniciarla, y no se inicia sin encargo.**
+- **Backups: hay DOS copias diarias, en dos cuentas distintas** (principal 03:33 → `ibrahingil`,
+  secundaria 03:35 → `gilibrahin`). Las dos verifican MD5 y hacen prueba de restore real. Una sola
+  pieza las sirve: `scripts/bamburu-backup.sh` sin entorno es la principal; la unit de la secundaria
+  sobreescribe `BACKUP_REMOTE`/`LABEL`/`SUFFIX`/`HC_URL`. **No la dupliques.** El heartbeat avisa si
+  cae UNA (aviso) y es crítico si caen las DOS. Detalle en `deploy/systemd/README.md`.
 - El Peldaño 9 — Belleza/estética sigue pendiente en el roadmap funcional, pero está aplazado y no es
   la siguiente tarea.
 
