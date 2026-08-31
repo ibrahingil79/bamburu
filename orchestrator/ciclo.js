@@ -14,7 +14,7 @@ import { ErrorOrquestador, CLASES } from './nucleo/errores.js';
 import { invocar } from './ejecucion/cli.js';
 import { componer } from './ejecucion/papeles.js';
 import { validarAnalisis, validarRevision, validarCodigo, detectarAnalisisImposible } from './validacion/validador.js';
-import { leerTablero, buscarSiguienteTarea, commitsDesde } from './reader.js';
+import { leerTablero, buscarSiguienteTarea, tareasPendientes, commitsDesde } from './reader.js';
 import { cabeza } from './cierre/git.js';
 import { escribirRegistroTarea, marcarEnTablero, confirmarCierre, subirTrabajo } from './cierre/cierre.js';
 import { escribirAtomico } from './nucleo/almacen.js';
@@ -132,10 +132,15 @@ export class Ciclo {
    */
   async unPaso(estado) {
     let tareaDisponible = null;
+    let pendientesEnTablero = [];
     try {
       // El formato del tablero lo arregla el sistema, no Ibrahin. Antes de leer nada, se sanea.
       const texto = this.sanearTablero();
-      tareaDisponible = buscarSiguienteTarea(texto);
+      // Una tarea apartada NO se vuelve a coger: está esperando decisión de Ibrahin. En el
+      // tablero queda marcada (ver `apartar`), y esto es el cinturón por si esa marca falló.
+      const vetadas = (estado.apartadas || []).map((a) => a.id).filter(Boolean);
+      pendientesEnTablero = tareasPendientes(texto);
+      tareaDisponible = buscarSiguienteTarea(texto, { excluir: vetadas });
     } catch (e) {
       this.log.error(`No pude leer el tablero: ${e.message}`);
       return { estado, espera: this.config.ciclo.intervaloVueltaMs };
@@ -146,7 +151,7 @@ export class Ciclo {
     // estaríamos mirando siempre una respuesta vieja.
     const cuota = necesitaCuota ? await this.vigilante.consultar({ forzar: estado.esperandoCuota }) : null;
     const obs = this.observar(estado);
-    const accion = decidir({ estado, cuota, tareaDisponible, obs, config: this.config });
+    const accion = decidir({ estado, cuota, tareaDisponible, pendientesEnTablero, obs, config: this.config });
 
     if (estado.esperandoCuota && accion.tipo !== ACCIONES.ESPERAR_CUOTA) {
       const rato = estado.esperaDesde ? Math.round((Date.now() - new Date(estado.esperaDesde).getTime()) / 60000) : 0;
@@ -161,8 +166,25 @@ export class Ciclo {
     const cfg = this.config.ciclo;
 
     switch (accion.tipo) {
-      case ACCIONES.OCIOSO:
-        return { estado, espera: cfg.intervaloVueltaMs };
+      case ACCIONES.OCIOSO: {
+        // Ocioso con el tablero lleno NO es ocioso: es una avería.
+        //   · `averia`     → manda el aviso suelto. Sale UNA vez por avería distinta; si no,
+        //                    serían 60 mensajes de Telegram por hora.
+        //   · `averiaViva` → va en cada vuelta, y en el parte de las 3 h mientras siga rota.
+        //                    Vale `null` cuando se arregla, y así el parte deja de decirlo.
+        if (!accion.averia) {
+          this._averiaAvisada = null;
+          return { estado, espera: cfg.intervaloVueltaMs, averiaViva: null };
+        }
+        const a = accion.averia;
+        this.log.error(`🚨 AVERÍA: ${a.motivo}`);
+        for (const n of a.nombres) this.log.error(`   · sin coger: ${n}`);
+
+        const firma = `${a.clase}:${a.pendientes}:${a.nombres.join('|')}`;
+        const yaAvisada = this._averiaAvisada === firma;
+        this._averiaAvisada = firma;
+        return { estado, espera: cfg.intervaloVueltaMs, averiaViva: a, averia: yaAvisada ? null : a };
+      }
 
       case ACCIONES.SALTAR: {
         this.log.info(`Salto al paso ${accion.paso}: ${accion.porque}`);
@@ -351,6 +373,15 @@ export class Ciclo {
       criterios: this.criteriosDelAnalisis(rutas.analisis), consumo: cuota, apartada: accion.motivo,
     });
     this.log.info(`Registro de la tarea apartada: ${path.relative(this.config.repo.raiz, registro)}`);
+
+    // El tablero tiene que enterarse. Si no, la tarea sigue diciendo «pendiente» y el lector
+    // —que desde el 31 ago 2026 coge por `estado:`— la volvería a coger en la vuelta siguiente,
+    // y en la siguiente, sin fin. La marca es lo que rompe ese bucle.
+    const tab = marcarEnTablero({
+      config: this.config, tarea, commits: [], registro, logger: this.log, apartada: accion.motivo,
+    });
+    const ficheros = [registro].concat(tab.escrito ? [this.config.tableroAbs] : []).concat(tab.destino ? [tab.destino] : []);
+    confirmarCierre({ config: this.config, tarea, ficheros: ficheros.filter((f) => fs.existsSync(f)), logger: this.log });
 
     this.almacen.registrarHistorial({
       id: tarea.id, titulo: tarea.titulo, resultado: 'apartada', motivo: accion.motivo,

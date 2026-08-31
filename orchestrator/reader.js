@@ -157,6 +157,12 @@ function tareaDesdeBloque(lineas, i, origen) {
     titulo,
     descripcion,
     criterios: extraerCriterios(cuerpo),
+    // El campo `estado:` tal cual está escrito. Es lo que decide si la tarea se coge:
+    // ver ESTADOS_CERRADOS y tareasPendientes.
+    estado: campos.estado || '',
+    // ¿Lleva el rótulo «SIGUIENTE TAREA»? Ya no es obligatorio para trabajar: es la forma
+    // de saltarse el orden natural del documento.
+    rotulada: /siguiente\s+tarea/.test(normalizar(encabezado)),
     bruto: lineas.slice(ini, fin).join('\n'),
     linea: ini + 1,          // 1-indexada, para mensajes al humano
     inicio: ini,
@@ -166,20 +172,60 @@ function tareaDesdeBloque(lineas, i, origen) {
 }
 
 /**
- * Busca la tarea siguiente. Dos formatos, en este orden:
- *   1. Un encabezado markdown "## SIGUIENTE TAREA" (el formato que el orquestador quiere).
- *   2. Repliegue: una línea de prosa "SIGUIENTE TAREA OFICIAL: ..." (el formato que hoy tiene
- *      TABLERO.md). Se lee, pero no se puede reescribir sin riesgo: ver updater.marcarHecha.
+ * Un `estado:` que significa «ésta ya no se coge». Todo lo demás (incluido no escribirlo)
+ * cuenta como pendiente: es preferible que el orquestador ofrezca una tarea de más —se ve y
+ * se corrige— a que se calle una de menos, que es la avería del 31 ago 2026.
  */
-export function buscarSiguienteTarea(texto) {
-  const lineas = texto.split('\n');
+const ESTADOS_CERRADOS = /^(hecha|hecho|cerrada|cerrado|apartada|apartado|descartada|descartado|anulada|en[- ]curso)\b/;
 
+/** ¿Este encabezado rotula una tarea en el formato del orquestador? */
+function esEncabezadoDeTarea(titulo) {
+  const n = normalizar(titulo);
+  // «TAREA — X» con separador: se exige para no cazar «TAREAS EN FORMATO DEL ORQUESTADOR»,
+  // que es el capítulo que las contiene, ni «✅ HECHA (…) — X», que es una ya cerrada.
+  return /siguiente\s+tarea/.test(n) || /^\s*tareas?\s*[—–\-:·|]/.test(n);
+}
+
+/**
+ * TODAS las tareas del tablero que siguen pendientes, en orden de documento.
+ *
+ * Es la pieza que faltaba. Antes solo se sabía responder «¿cuál lleva el rótulo?», y con eso
+ * un tablero lleno de trabajo pendiente era indistinguible de un tablero vacío.
+ */
+export function tareasPendientes(texto) {
+  const lineas = String(texto).split('\n');
+  const fuera = [];
   for (let i = 0; i < lineas.length; i++) {
     if (nivelEncabezado(lineas[i]) === 0) continue;
-    if (/siguiente\s+tarea/.test(normalizar(tituloEncabezado(lineas[i])))) {
-      return tareaDesdeBloque(lineas, i, 'bloque');
-    }
+    if (!esEncabezadoDeTarea(tituloEncabezado(lineas[i]))) continue;
+    const tarea = tareaDesdeBloque(lineas, i, 'bloque');
+    if (ESTADOS_CERRADOS.test(normalizar(tarea.estado))) continue;
+    fuera.push(tarea);
   }
+  return fuera;
+}
+
+/**
+ * Busca la tarea siguiente. Tres formatos, en este orden:
+ *   1. Un bloque pendiente CON el rótulo «SIGUIENTE TAREA»: es como se salta el orden natural.
+ *   2. El PRIMER bloque pendiente en orden de documento, lleve rótulo o no.
+ *   3. Repliegue: una línea de prosa "SIGUIENTE TAREA OFICIAL: ..." (el formato viejo de
+ *      TABLERO.md). Se lee, pero no se puede reescribir sin riesgo: ver marcarEnTablero.
+ *
+ * El 2 es el arreglo del 31 ago 2026. Antes NO existía: al cerrar una tarea se le quitaba el
+ * rótulo y no se le ponía a nadie, así que el sistema se paraba con el tablero lleno esperando
+ * que una persona moviera la etiqueta a mano. Ahora manda el campo `estado:`, no la etiqueta.
+ *
+ * @param opciones.excluir ids que no se pueden coger (las apartadas de esta sesión).
+ */
+export function buscarSiguienteTarea(texto, { excluir = [] } = {}) {
+  const lineas = texto.split('\n');
+  const vetadas = new Set(excluir.filter(Boolean).map((x) => slug(x)));
+  const pendientes = tareasPendientes(texto).filter((t) => !vetadas.has(t.id));
+
+  const rotulada = pendientes.find((t) => t.rotulada);
+  if (rotulada) return rotulada;
+  if (pendientes.length) return pendientes[0];
 
   for (let i = 0; i < lineas.length; i++) {
     const m = /siguiente\s+tarea(?:\s+oficial)?\s*:\s*(.+)$/i.exec(normalizar(lineas[i]) === '' ? '' : lineas[i]);
@@ -196,6 +242,7 @@ export function buscarSiguienteTarea(texto) {
     // al sistema sobre una frase. (Regla R6 de tablero/saneador.js.)
     if (/^(a la espera|sin decidir|pendiente de (encargo|decidir)|ninguna|por decidir)\b/i.test(normalizar(crudo))) continue;
     const titulo = crudo.split(/\s+[—–-]\s+/)[0].trim() || crudo;
+    if (vetadas.has(slug(titulo))) continue;
     return {
       id: slug(titulo),
       titulo,

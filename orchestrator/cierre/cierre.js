@@ -64,21 +64,33 @@ ${commits?.length ? commits.map((c) => `- \`${c.corto}\` ${c.asunto}`).join('\n'
  * Marca la tarea en el tablero. Solo reescribe si la tarea venía de un bloque con principio
  * y fin. Con el tablero en prosa (que es el caso hoy) deja el texto aparte y lo dice: NO se
  * reescribe a ciegas un fichero de 681 KB.
+ *
+ * Dos desenlaces, y los dos se escriben: ✅ HECHA y ⛔ APARTADA. La apartada NO es cosmética:
+ * desde que el lector coge tareas por `estado:` (31 ago 2026), una apartada que siguiera
+ * diciendo «pendiente» se volvería a coger en cada vuelta, para siempre.
  */
-export function marcarEnTablero({ config, tarea, commits, registro, logger }) {
+export function marcarEnTablero({ config, tarea, commits, registro, logger, apartada = null }) {
   const shas = commits?.map((c) => `\`${c.corto}\``).join(', ') || '(ninguno)';
-  const nota = [
-    '',
-    `> **Cerrada por el orquestador el ${hoy()}.**`,
-    `> Commits: ${shas}`,
-    `> Registro: \`${path.relative(config.repo.raiz, registro)}\``,
-    '',
-  ].join('\n');
+  const nota = apartada
+    ? [
+      '',
+      `> **Apartada por el orquestador el ${hoy()}.** Esperando decisión de Ibrahin.`,
+      `> Motivo: ${apartada}`,
+      `> Registro: \`${path.relative(config.repo.raiz, registro)}\``,
+      '',
+    ].join('\n')
+    : [
+      '',
+      `> **Cerrada por el orquestador el ${hoy()}.**`,
+      `> Commits: ${shas}`,
+      `> Registro: \`${path.relative(config.repo.raiz, registro)}\``,
+      '',
+    ].join('\n');
 
   if (tarea.origen !== 'bloque') {
     const destino = path.join(config.rutasAbs.registrosTarea, `${tarea.id}-PEGAR-EN-TABLERO.md`);
     fs.mkdirSync(path.dirname(destino), { recursive: true });
-    escribirAtomico(destino, `# ${tarea.titulo} — HECHA (${hoy()})\n\nPega esto en ${config.repo.tablero}, línea ${tarea.linea}:\n${nota}\n`);
+    escribirAtomico(destino, `# ${tarea.titulo} — ${apartada ? 'APARTADA' : 'HECHA'} (${hoy()})\n\nPega esto en ${config.repo.tablero}, línea ${tarea.linea}:\n${nota}\n`);
     logger?.aviso(`El tablero está en prosa: no lo reescribo. Texto para pegar en ${path.relative(config.repo.raiz, destino)}`);
     return { escrito: false, motivo: 'tablero-en-prosa', destino };
   }
@@ -91,19 +103,22 @@ export function marcarEnTablero({ config, tarea, commits, registro, logger }) {
   }
 
   const lineas = tarea.bruto.split('\n');
-  lineas[0] = lineas[0].replace(/^(#{1,6})\s+.*$/, (_, h) => `${h} ✅ HECHA (${hoy()}) — ${tarea.titulo} · ${shas}`);
+  lineas[0] = lineas[0].replace(/^(#{1,6})\s+.*$/, (_, h) => (apartada
+    ? `${h} ⛔ APARTADA (${hoy()}) — ${tarea.titulo}`
+    : `${h} ✅ HECHA (${hoy()}) — ${tarea.titulo} · ${shas}`));
   const bloque = lineas
-    .map((l) => l.replace(/^(\s*[-*+]\s*)\[ \]/, '$1[x]'))
+    // Una apartada no ha cumplido nada: sus casillas se quedan como estaban.
+    .map((l) => (apartada ? l : l.replace(/^(\s*[-*+]\s*)\[ \]/, '$1[x]')))
     // El campo `estado` se actualiza con el titular. Dejarlo en «pendiente» bajo un
     // encabezado que dice HECHA es dejar escrita una contradicción, y el detalle es justo
     // lo que se lee cuando alguien quiere el porqué de la cifra (CLAUDE.md).
     // Cubre las tres formas que aparecen en los tableros: «estado: x»,
     // «**estado**: x» y «- **estado:** x» (los dos puntos DENTRO de los asteriscos).
-    .map((l) => l.replace(/^(\s*(?:[-*+]\s*)?[*_]*\s*estado\s*[*_]*\s*:\s*[*_]*\s*)(.+?)([*_]*\s*)$/i, '$1hecha$3'))
+    .map((l) => l.replace(/^(\s*(?:[-*+]\s*)?[*_]*\s*estado\s*[*_]*\s*:\s*[*_]*\s*)(.+?)([*_]*\s*)$/i, `$1${apartada ? 'apartada' : 'hecha'}$3`))
     .join('\n').replace(/\s*$/, '') + '\n' + nota;
 
   escribirAtomico(config.tableroAbs, texto.slice(0, pos) + bloque + texto.slice(pos + tarea.bruto.length));
-  logger?.exito(`${config.repo.tablero} actualizado: «${tarea.titulo}» queda HECHA.`);
+  logger?.exito(`${config.repo.tablero} actualizado: «${tarea.titulo}» queda ${apartada ? 'APARTADA' : 'HECHA'}.`);
   return { escrito: true };
 }
 

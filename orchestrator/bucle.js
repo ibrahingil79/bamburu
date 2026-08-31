@@ -14,9 +14,9 @@ import { Almacen } from './nucleo/almacen.js';
 import { crearRegistro } from './nucleo/registro.js';
 import { Vigilante } from './cuota/vigilante.js';
 import { Ciclo } from './ciclo.js';
-import { redactar, redactarApartada, entregar } from './vigia/parte.js';
+import { redactar, redactarApartada, redactarAveria, entregar } from './vigia/parte.js';
 import { configurado, queFalta } from './vigia/telegram.js';
-import { leerTablero, buscarSiguienteTarea, esRepo, rama } from './reader.js';
+import { leerTablero, buscarSiguienteTarea, tareasPendientes, esRepo, rama } from './reader.js';
 
 export async function arrancar({ config = null, unaVuelta = false, entorno = process.env } = {}) {
   const cfg = config || cargarConfig({ entorno });
@@ -86,20 +86,28 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
   // ── Vigía ─────────────────────────────────────────────────────────────────
   let ultimoParte = Date.now();
   let cuotaAlUltimoParte = null;
+  // La última avería vista. Va al parte además del aviso suelto: el aviso se manda una vez,
+  // pero mientras el sistema siga roto tiene que salir en TODOS los partes.
+  let averiaViva = null;
 
   const mandarParte = async () => {
     let cuota = null;
     try { cuota = await vigilante.consultar(); } catch { /* el parte sale igual, diciendo que no la pudo leer */ }
     let enTablero = null;
-    try { enTablero = buscarSiguienteTarea(leerTablero(cfg.tableroAbs)); } catch { /* idem */ }
+    let pendientesEnTablero = [];
+    try {
+      const texto = leerTablero(cfg.tableroAbs);
+      enTablero = buscarSiguienteTarea(texto, { excluir: (estado.apartadas || []).map((a) => a.id) });
+      pendientesEnTablero = tareasPendientes(texto);
+    } catch { /* idem */ }
     // El «qué se ha terminado» sale del historial EN DISCO, filtrado por fecha, no de un
     // array en memoria: si systemd reinicia el daemon, el parte tiene que seguir sabiendo
     // qué se cerró. (Lo cazó la autorrevisión: era el motivo del único criterio en NO.)
     const desdeIso = new Date(ultimoParte).toISOString();
     const historialReciente = almacen.leerHistorial().filter((h) => h.cuando >= desdeIso);
     const texto = redactar({
-      estado, cuota, historialReciente, tareaEnTablero: enTablero,
-      desde: cuotaAlUltimoParte, config: cfg,
+      estado, cuota, historialReciente, tareaEnTablero: enTablero, pendientesEnTablero,
+      averia: averiaViva, desde: cuotaAlUltimoParte, config: cfg,
     });
     const r = await entregar({ texto, config: cfg, entorno, logger: log });
     log.info(`Parte ${r.ok ? 'entregado' : `guardado (${r.pendientes} pendiente/s)`}.`);
@@ -121,9 +129,15 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
       estado = r.estado;
       espera = r.espera;
 
-      // Una tarea apartada es lo ÚNICO que se avisa fuera del parte de las 3 horas.
+      // Dos cosas se avisan fuera del parte de las 3 horas, y solo dos: una tarea apartada
+      // (necesita decisión) y una AVERÍA (el sistema está parado y nadie lo sabe).
       if (r.apartada) {
         await entregar({ texto: redactarApartada(r.apartada), config: cfg, entorno, logger: log });
+      }
+      averiaViva = r.averiaViva ?? averiaViva;
+      if (r.averia) {
+        averiaViva = r.averia;
+        await entregar({ texto: redactarAveria(r.averia), config: cfg, entorno, logger: log });
       }
     } catch (e) {
       // La red de seguridad. Que una vuelta reviente no puede llevarse el daemon.

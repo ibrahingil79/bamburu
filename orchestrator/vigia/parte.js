@@ -27,13 +27,23 @@ const NOMBRE_PASO = {
 /**
  * Redacta el parte. Función pura: se le pasa todo y devuelve texto. Se prueba sin red.
  */
-export function redactar({ estado, cuota, historialReciente, tareaEnTablero, desde, ahora = Date.now(), config }) {
+export function redactar({ estado, cuota, historialReciente, tareaEnTablero, pendientesEnTablero = [], averia = null, desde, ahora = Date.now(), config }) {
   const L = [];
   const t = (s) => L.push(s);
 
   t('<b>🤖 Parte del orquestador</b>');
   t(`<i>Últimas ${Math.round(config.vigia.intervaloParteMs / 3600000)} horas</i>`);
   t('');
+
+  // 0 · La avería va ARRIBA DEL TODO, antes que lo terminado. Un sistema parado teniendo
+  // trabajo no es una nota al pie: es la única noticia del parte.
+  if (averia) {
+    t('<b>🚨 AVERÍA — NO estoy ocioso, estoy parado</b>');
+    t(esc(averia.motivo));
+    for (const n of averia.nombres || []) t(`• sin coger: ${esc(n)}`);
+    t('<i>El tablero tiene trabajo y no consigo cogerlo. Esto no se arregla solo.</i>');
+    t('');
+  }
 
   // 1 · Terminado
   const hechas = historialReciente.filter((h) => h.resultado === 'cerrada');
@@ -88,7 +98,17 @@ export function redactar({ estado, cuota, historialReciente, tareaEnTablero, des
 
   // 4 · Pendiente
   t('<b>📋 Pendiente</b>');
-  t(tareaEnTablero ? `• Siguiente en el tablero: ${esc(tareaEnTablero.titulo)}` : '• El tablero no ofrece ninguna tarea más.');
+  // Se dice CUÁNTAS quedan, no solo cuál es la siguiente: «el tablero no ofrece ninguna tarea
+  // más» era la frase que el 31 ago 2026 habría tapado la avería, dicha con toda tranquilidad.
+  const nPend = pendientesEnTablero.length;
+  if (tareaEnTablero) {
+    t(`• Siguiente en el tablero: ${esc(tareaEnTablero.titulo)}`);
+    if (nPend > 1) t(`• Quedan ${nPend} pendientes en total.`);
+  } else if (nPend) {
+    t(`• ⚠️ El tablero tiene ${nPend} pendiente(s) y no puedo coger ninguna.`);
+  } else {
+    t('• El tablero no ofrece ninguna tarea más.');
+  }
   t('');
 
   // 5 · Apartadas — lo único que pide decisión
@@ -136,6 +156,26 @@ export function redactarApartada({ tarea, motivo, historial }) {
     }
   }
   L.push('', '<i>No es un error técnico: es una decisión de producto. El sistema sigue con la siguiente tarea.</i>');
+  return L.join('\n');
+}
+
+/**
+ * Aviso suelto de AVERÍA. Sale al momento, sin esperar al parte de las 3 horas, porque el
+ * sistema está parado teniendo trabajo y cada hora de silencio es una hora perdida.
+ *
+ * Sale UNA vez por avería distinta (lo controla ciclo.js): si no, serían 60 mensajes por hora.
+ */
+export function redactarAveria({ motivo, nombres = [], pendientes = 0 }) {
+  const L = ['<b>🚨 El orquestador está parado, no ocioso</b>', ''];
+  L.push(esc(motivo), '');
+  if (nombres.length) {
+    L.push('<b>Lo que hay en el tablero y no cojo:</b>');
+    for (const n of nombres) L.push(`• ${esc(n)}`);
+    if (pendientes > nombres.length) L.push(`• …y ${pendientes - nombres.length} más`);
+    L.push('');
+  }
+  L.push('<i>Antes esto se veía igual que estar ocioso y no se avisaba: el sistema daba vueltas');
+  L.push('cada minuto en silencio. Ahora se dice.</i>');
   return L.join('\n');
 }
 

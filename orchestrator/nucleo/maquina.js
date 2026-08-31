@@ -77,6 +77,9 @@ export function alcanzaParaCiclo(cuota, config) {
  * @param situacion.estado          estado persistido (ver almacen.estadoInicial)
  * @param situacion.cuota           { sesionPct, semanaPct, fiable, reinicioSesion } o null
  * @param situacion.tareaDisponible tarea del tablero, o null
+ * @param situacion.pendientesEnTablero  todas las tareas que el tablero da por pendientes.
+ *                                  Sirve para una sola cosa, y es importante: distinguir
+ *                                  «no hay trabajo» de «hay trabajo y no lo veo» (avería).
  * @param situacion.obs             observaciones ya calculadas por el ejecutor:
  *                                  { analisis:{existe,valido,motivos,paroArquitecto},
  *                                    codigo:{valido,motivos,hayCommits},
@@ -84,7 +87,7 @@ export function alcanzaParaCiclo(cuota, config) {
  * @param situacion.config
  * @returns { tipo, ...datos, porque }
  */
-export function decidir({ estado, cuota, tareaDisponible, obs = {}, config }) {
+export function decidir({ estado, cuota, tareaDisponible, pendientesEnTablero = [], obs = {}, config }) {
   // ── 0 · La subida pendiente se reintenta ANTES de coger trabajo nuevo ───────
   // Va aquí y no al final a propósito: si GitHub volvió, lo primero es dejar de
   // deber trabajo aprobado. Y no depende de la cuota: git no gasta modelo.
@@ -92,7 +95,7 @@ export function decidir({ estado, cuota, tareaDisponible, obs = {}, config }) {
     return { tipo: ACCIONES.REINTENTAR_SUBIDA, porque: 'hay trabajo aprobado sin subir de una tarea anterior' };
   }
 
-  const decision = decidirSinMirarCuota({ estado, tareaDisponible, obs, config });
+  const decision = decidirSinMirarCuota({ estado, tareaDisponible, pendientesEnTablero, obs, config });
 
   // ── La puerta de cuota ──────────────────────────────────────────────────────
   // Se aplica a la DECISIÓN, no al paso en el que estamos. Un paso de validación no
@@ -115,12 +118,12 @@ export function decidir({ estado, cuota, tareaDisponible, obs = {}, config }) {
 }
 
 /** La decisión sin mirar el combustible. Separada para que la puerta de cuota sea una sola. */
-function decidirSinMirarCuota({ estado, tareaDisponible, obs, config }) {
+function decidirSinMirarCuota({ estado, tareaDisponible, pendientesEnTablero = [], obs, config }) {
   const cfg = config.ciclo;
 
   // ── 2 · Sin tarea en curso: coger una, o descansar ──────────────────────────
   if (!estado.tarea) {
-    if (!tareaDisponible) return { tipo: ACCIONES.OCIOSO, porque: 'el tablero no ofrece ninguna tarea' };
+    if (!tareaDisponible) return ocioso(pendientesEnTablero);
     return { tipo: ACCIONES.TOMAR_TAREA, tarea: tareaDisponible, porque: 'hay tarea y hay cuota' };
   }
 
@@ -223,6 +226,34 @@ function decidirSinMirarCuota({ estado, tareaDisponible, obs, config }) {
     default:
       return { tipo: ACCIONES.OCIOSO, porque: `paso desconocido «${estado.paso}»` };
   }
+}
+
+/**
+ * Descansar… o dar la alarma.
+ *
+ * LA REGLA (31 ago 2026): estar ocioso TENIENDO tareas pendientes en el tablero NO es estar
+ * ocioso, es una AVERÍA. El 31 de agosto el sistema cerró una tarea y se quedó diciendo «el
+ * tablero no ofrece ninguna tarea» durante horas, con cuatro pendientes escritas y en su
+ * formato. Se calló porque ocioso y averiado eran, para él, exactamente lo mismo.
+ *
+ * Ahora se distinguen: si el tablero ofrece trabajo y aquí no llega, se dice.
+ */
+function ocioso(pendientesEnTablero = []) {
+  const n = pendientesEnTablero.length;
+  if (!n) return { tipo: ACCIONES.OCIOSO, porque: 'el tablero no ofrece ninguna tarea' };
+
+  const nombres = pendientesEnTablero.slice(0, 5).map((t) => t.titulo || t.id);
+  return {
+    tipo: ACCIONES.OCIOSO,
+    averia: {
+      clase: 'ocioso-con-tablero-lleno',
+      pendientes: n,
+      nombres,
+      // Se explica en castellano llano porque esto acaba en Telegram, no en un log.
+      motivo: `el tablero tiene ${n} tarea(s) pendiente(s) y no consigo coger ninguna`,
+    },
+    porque: `AVERÍA: ${n} tarea(s) pendiente(s) en el tablero y ninguna que pueda coger`,
+  };
 }
 
 /**
