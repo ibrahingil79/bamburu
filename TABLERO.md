@@ -8077,10 +8077,10 @@ en la primitiva, así que se olvida en un punto de llamada.**
 > Commits: `e5111df`
 > Registro: `docs/orquestador/tareas/disa-informes-permiso-dueno.md`
 
-## TAREA — DISA se rompe cuando el modelo llama a dos herramientas a la vez
+## ✅ HECHA (2026-08-31) — DISA se rompe cuando el modelo llama a dos herramientas a la vez · `d9d5ed7`, `13ef3d8`
 
 - **id:** disa-herramientas-en-paralelo
-- **estado:** pendiente
+- **estado:** hecha
 - **origen:** `docs/auditorias/diagnostico-arquitectonico.md` §4.2
 
 `modules/disa/index.js:2570` coge con `find` **la primera** llamada a herramienta de la respuesta
@@ -8096,6 +8096,10 @@ pudo contactar con DISA. No se ha ejecutado ninguna acción; inténtalo de nuevo
 **Es un fallo de contrato disfrazado de fallo de red**: no determinista e imposible de perseguir
 desde el mensaje que ve el usuario. Y con las 20 acciones más las herramientas de informes y
 descuentos declaradas juntas, que el modelo pida dos en un turno **no es un caso raro**.
+
+> **Cerrada por el orquestador el 2026-08-31.**
+> Commits: `d9d5ed7`, `13ef3d8`
+> Registro: `docs/orquestador/tareas/disa-herramientas-en-paralelo.md`
 
 ## TAREA — La pantalla de «no tienes permiso» abre una ventanita sobre una página en blanco
 
