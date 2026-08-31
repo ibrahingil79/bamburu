@@ -1,0 +1,54 @@
+[Unit]
+Description=Bamburu — orquestador: construye la SIGUIENTE TAREA del TABLERO sin vigilancia
+Documentation=file:///home/ubuntu/bamburu/deploy/systemd/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/bamburu
+
+# HOME explícito: la CLI de Claude Code lee las credenciales de ~/.claude, y PATH
+# explícito porque systemd no hereda el del login y `claude` vive en ~/.local/bin.
+Environment=HOME=/home/ubuntu
+Environment=PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+Environment=ORCHESTRATOR_LOOP_INTERVAL=60000
+Environment=ORCHESTRATOR_PAUSE_CHECK_INTERVAL=300000
+Environment=ORCHESTRATOR_MAX_INTENTOS=3
+
+# Secretos (ANTHROPIC_API_KEY, si se quiere la sonda de saldo contra la API).
+# El guion inicial: si el fichero no existe, el servicio arranca igual.
+EnvironmentFile=-/etc/bamburu.env
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LA PUERTA PELIGROSA — descomentar solo a sabiendas.
+#
+# Sin esto, Claude Code pedirá permiso para escribir ficheros y usar git, y aquí
+# no hay nadie que conteste: cada despacho se quedará colgado hasta agotar su
+# plazo y la tarea fallará. Con esto, un agente escribe y CONFIRMA en el repo sin
+# que nadie lo mire. Nunca hace push, y TABLERO.md se copia antes de tocarlo,
+# pero el resto queda a su criterio. Es una decisión de Ibrahin, no un defecto.
+#
+# Environment=ORCHESTRATOR_CLAUDE_ARGS=--dangerously-skip-permissions
+# ─────────────────────────────────────────────────────────────────────────────
+
+ExecStart=/usr/bin/node /home/ubuntu/bamburu/orchestrator/index.js --daemon
+
+# El daemon se pausa solo cuando no hay saldo, así que un reinicio aquí significa
+# que ha reventado de verdad. 30 s de calma antes de volver a levantarlo.
+Restart=on-failure
+RestartSec=30
+
+# Parada limpia: termina la vuelta y se lleva consigo la tarea que estuviera corriendo.
+KillSignal=SIGTERM
+TimeoutStopSec=120
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bamburu-orchestrator
+
+[Install]
+WantedBy=multi-user.target

@@ -16,6 +16,7 @@
 | `bamburu-caducar-reservas` | Caduca las solicitudes de cita por Internet sin responder y **libera el hueco** (cada hora) | abajo |
 | `bamburu-propuestas` | Genera las **Propuestas de DISA** del día (07:45 Europe/Madrid) | abajo |
 | `bamburu-verifactu-cola` | **Red de seguridad** de la cola de envío a la AEAT (cada 2 min) | `docs/verifactu/tarea2-cola-envio-automatico.md` |
+| `orquestador` | **NO INSTALADA.** Construye sola la SIGUIENTE TAREA del TABLERO (arquitecto → programador → revisor) | `orquestador.service` y `orchestrator/LEEME.md` |
 
 ## Caducar reservas por Internet (peldaño 7 · pieza 6) — INSTALADO
 
@@ -248,3 +249,29 @@ Principal 03:31 · secundaria 03:35 · heartbeat 09:03. La principal lleva
 `RandomizedDelaySec=300`, así que puede arrancar hasta las 03:36 y solaparse con la secundaria.
 No rompe nada —cada copia usa su propio temporal, su propia marca y su propia cuenta— pero si se
 quiere orden garantizado, subir la secundaria a las **03:45** (la principal tarda ~3,5 min medidos).
+
+## Orquestador de tareas (`bamburu-orchestrator`) — ESCRITA, NO INSTALADA
+
+No es un proceso del producto: es un proceso del **desarrollo**. Da vueltas cada minuto,
+mira si hay saldo, y si lo hay coge la `## SIGUIENTE TAREA` del TABLERO y la construye
+entera —arquitecto, programador, revisión— lanzando `claude -p` en cada paso. Si aprueba,
+marca la tarea HECHA y lo confirma. Sin saldo se pausa y mira cada 5 min hasta que vuelve.
+
+**Autorización.** El aviso del principio de esta página dice que nada automático se instala
+sin permiso expreso de Ibrahin. Esta unit existe porque él la encargó el 31 ago 2026. Queda
+escrita y **sin instalar** hasta que él lo diga.
+
+**Lo que hay que entender antes de instalarla.** Comentada dentro del fichero hay una línea
+con `--dangerously-skip-permissions`. Sin ella el daemon arranca pero cada despacho se cuelga
+pidiendo permisos que nadie contesta. Con ella, un agente escribe y **confirma en `master`**
+sin que nadie lo mire. Nunca hace push, TABLERO.md se copia antes de tocarlo y una tarea que
+falla 3 veces se aparca sola, pero el resto queda a criterio del agente.
+
+    sudo cp deploy/systemd/bamburu-orchestrator.service /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now bamburu-orchestrator.service
+    journalctl -u bamburu-orchestrator -f          # verlo trabajar
+    sudo systemctl stop bamburu-orchestrator       # parada limpia (SIGTERM)
+
+    npm run orchestrate:daemon                     # lo mismo, a mano
+    npm run orchestrate:once                       # una sola tarea, con pausas manuales

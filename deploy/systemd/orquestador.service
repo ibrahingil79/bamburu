@@ -1,0 +1,67 @@
+# Orquestador de Bamburu — Architect → Programmer → Review, desatendido.
+#
+# INSTALAR:
+#   sudo cp deploy/systemd/orquestador.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now orquestador
+#
+# VER:   systemctl status orquestador --no-pager
+#        sudo journalctl -u orquestador -f
+#        node orchestrator/orq.js estado
+#
+# PARAR BIEN (termina el paso en curso y no coge otra tarea):
+#        sudo systemctl stop orquestador        ← manda SIGTERM
+# PARAR DE GOLPE (puede dejar algo a medias):
+#        node orchestrator/orq.js parar-ya      ← manda SIGINT
+
+[Unit]
+Description=Orquestador de Bamburu (Architect - Programmer - Review)
+Documentation=file:///home/ubuntu/bamburu/docs/orquestador/paso-0-diagnostico.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/bamburu
+ExecStart=/usr/bin/node /home/ubuntu/bamburu/orchestrator/orq.js arrancar
+
+# HOME es lo ÚNICO imprescindible para que el CLI encuentre ~/.claude/.credentials.json.
+# Está medido: con `env -i HOME=... PATH=...` la invocación funciona.
+Environment=HOME=/home/ubuntu
+Environment=PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+# ── LA CLAVE DE TELEGRAM LA PONE IBRAHIN, NO EL ORQUESTADOR ──────────────────
+# Crea /etc/orquestador.env con permisos 600 y estas dos líneas:
+#     ORQUESTADOR_TELEGRAM_TOKEN=123456:AA...
+#     ORQUESTADOR_TELEGRAM_CHAT_ID=987654321
+# Sin ese fichero el ciclo funciona igual: los partes se guardan y se mandan al configurarlo.
+EnvironmentFile=-/etc/orquestador.env
+
+# Parada buena: SIGTERM y tiempo de sobra para que termine el paso en curso.
+# 35 min > los 30 del timeout por llamada, para que nunca lo corte a mitad.
+KillSignal=SIGTERM
+TimeoutStopSec=2100
+KillMode=mixed
+
+# Que no se muera: si se cae, vuelve.
+Restart=always
+RestartSec=30
+
+# Superficie mínima. El orquestador solo necesita escribir en su repo.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/bamburu /home/ubuntu/.claude
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=orquestador
+
+[Install]
+WantedBy=multi-user.target

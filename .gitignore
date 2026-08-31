@@ -35,3 +35,9 @@ Thumbs.db
 *.key
 *.jks
 *.crt
+
+# Registros y prompts del orquestador (ruido local, no van al repo)
+logs/
+
+# Estado en vivo del orquestador (no se versiona)
+.orquestador/

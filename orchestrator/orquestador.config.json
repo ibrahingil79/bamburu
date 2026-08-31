@@ -1,0 +1,85 @@
+{
+  "$comentario": "Configuración del orquestador. Nada de umbrales ni rutas en el código.",
+  "repo": {
+    "raiz": null,
+    "tablero": "TABLERO.md",
+    "ramaPrincipal": "master",
+    "remoto": "origin"
+  },
+  "rutas": {
+    "estado": ".orquestador/estado.json",
+    "journal": ".orquestador/journal.ndjson",
+    "historial": ".orquestador/historial.ndjson",
+    "partesPendientes": ".orquestador/partes-pendientes.ndjson",
+    "logs": "logs",
+    "artefactos": "docs/architecture",
+    "registrosTarea": "docs/orquestador/tareas"
+  },
+  "roles": {
+    "arquitecto": "orchestrator/roles/arquitecto.md",
+    "programador": "orchestrator/roles/programador.md",
+    "revisor": "orchestrator/roles/revisor.md"
+  },
+  "cli": {
+    "binario": "claude",
+    "modelo": "claude-opus-5",
+    "timeoutMs": 1800000,
+    "herramientasPorPapel": {
+      "arquitecto": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Write",
+        "Edit",
+        "Bash"
+      ],
+      "programador": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Write",
+        "Edit",
+        "Bash"
+      ],
+      "revisor": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Write",
+        "Edit",
+        "Bash"
+      ]
+    },
+    "maxSalidaBytes": 4194304
+  },
+  "cuota": {
+    "minimoParaCicloPct": 25,
+    "margenReservadoPct": 20,
+    "minimoSemanalPct": 10,
+    "cacheMs": 300000,
+    "timeoutConsultaMs": 180000,
+    "esperaSinCuotaMs": 900000
+  },
+  "ciclo": {
+    "maxIntentosRevision": 3,
+    "maxReplanteos": 1,
+    "maxFallosTecnicosPorPaso": 3,
+    "intervaloVueltaMs": 60000,
+    "esperaTrasFalloTecnicoMs": 30000
+  },
+  "subida": {
+    "activa": true,
+    "maxIntentos": 3,
+    "esperaBaseMs": 60000
+  },
+  "vigia": {
+    "activo": true,
+    "intervaloParteMs": 10800000,
+    "telegram": {
+      "tokenEnv": "ORQUESTADOR_TELEGRAM_TOKEN",
+      "chatIdEnv": "ORQUESTADOR_TELEGRAM_CHAT_ID",
+      "timeoutMs": 20000,
+      "maxPendientes": 50
+    }
+  }
+}
