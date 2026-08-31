@@ -6,6 +6,8 @@ import { cargarConfig } from './nucleo/config.js';
 import { Almacen } from './nucleo/almacen.js';
 import { arrancar } from './bucle.js';
 import { cargarSecretos, FICHERO_SECRETOS } from './nucleo/entorno.js';
+import { tareasPendientes, buscarSiguienteTarea } from './reader.js';
+import { averiaOciosoConTablero } from './nucleo/maquina.js';
 
 const AYUDA = `
 Orquestador de Bamburu
@@ -85,8 +87,41 @@ function mostrarEstado(cfg) {
     L.push('', `  ⛔ Apartadas esperando decisión (${estado.apartadas.length}):`);
     for (const a of estado.apartadas.slice(-5)) L.push(`    · ${a.titulo} — ${a.motivo}`);
   }
+
+  // La cola. Antes no salía por ningún lado: el 31 ago 2026 el daemon decía «ocioso» y no
+  // había forma de ver desde fuera que quedaban cuatro tareas escritas esperando.
+  L.push('', ...colaDelTablero(cfg, estado));
+
   L.push('', `  Registro:    ${path.join(cfg.rutasAbs.logs, 'orquestador.log')}`, '');
   process.stdout.write(L.join('\n') + '\n');
+}
+
+/** Lo que el tablero ofrece, y si hay contradicción entre «ofrece» y «puedo coger». */
+function colaDelTablero(cfg, estado) {
+  let pendientes = [];
+  let siguiente = null;
+  try {
+    const texto = fs.readFileSync(cfg.tableroAbs, 'utf8');
+    pendientes = tareasPendientes(texto);
+    siguiente = buscarSiguienteTarea(texto, { excluir: (estado.apartadas || []).map((a) => a.id) });
+  } catch (e) {
+    return [`  Tablero:     no lo pude leer (${e.message})`];
+  }
+
+  if (!pendientes.length) return ['  Tablero:     sin tareas pendientes'];
+
+  const L = [`  Tablero:     ${pendientes.length} pendiente(s)`];
+  for (const t of pendientes.slice(0, 8)) {
+    const marca = t.id === siguiente?.id ? '→' : ' ';
+    L.push(`    ${marca} ${t.id}${t.rotulada ? '  (rotulada SIGUIENTE)' : ''}`);
+  }
+  if (pendientes.length > 8) L.push(`      …y ${pendientes.length - 8} más`);
+
+  // Ocioso con el tablero lleno NO es ocioso. Si pasa, aquí se ve, con la MISMA regla
+  // que usa el daemon para avisar por Telegram.
+  const averia = (!estado.tarea && !siguiente) ? averiaOciosoConTablero(pendientes) : null;
+  if (averia) L.push('', `  🚨 AVERÍA: ${averia.motivo}`);
+  return L;
 }
 
 function mostrarHistorial(cfg) {
@@ -118,14 +153,23 @@ function parar(cfg, señal) {
 async function forzarParte(cfg) {
   const { redactar, entregar } = await import('./vigia/parte.js');
   const { Vigilante } = await import('./cuota/vigilante.js');
-  const { leerTablero, buscarSiguienteTarea } = await import('./reader.js');
+  const { leerTablero, buscarSiguienteTarea, tareasPendientes } = await import('./reader.js');
   const { crearRegistro } = await import('./nucleo/registro.js');
   const log = crearRegistro({ dirLogs: cfg.rutasAbs.logs, nombre: 'orquestador.log' });
   const { estado } = almacenDe(cfg).recuperar();
   const cuota = await new Vigilante({ config: cfg }).consultar();
   let enTablero = null;
-  try { enTablero = buscarSiguienteTarea(leerTablero(cfg.tableroAbs)); } catch { /* el parte lo dice */ }
-  const texto = redactar({ estado, cuota, historialReciente: [], tareaEnTablero: enTablero, desde: null, config: cfg });
+  let pendientesEnTablero = [];
+  try {
+    const texto = leerTablero(cfg.tableroAbs);
+    enTablero = buscarSiguienteTarea(texto, { excluir: (estado.apartadas || []).map((a) => a.id) });
+    pendientesEnTablero = tareasPendientes(texto);
+  } catch { /* el parte lo dice */ }
+  // Sin esto, un parte pedido a mano seguiría diciendo «el tablero no ofrece ninguna tarea
+  // más» con el tablero lleno: la misma frase falsa del 31 ago, en otro sitio.
+  const averia = (!estado.tarea && !enTablero) ? averiaOciosoConTablero(pendientesEnTablero) : null;
+  const texto = redactar({ estado, cuota, historialReciente: [], tareaEnTablero: enTablero,
+                           pendientesEnTablero, averia, desde: null, config: cfg });
   const r = await entregar({ texto, config: cfg, logger: log });
   process.stdout.write(`\n${texto.replace(/<[^>]+>/g, '')}\n\n  → ${r.ok ? 'Entregado por Telegram.' : `Guardado (${r.pendientes} pendiente/s): ${r.motivo || 'no se pudo entregar'}`}\n\n`);
   return 0;

@@ -239,20 +239,27 @@ function decidirSinMirarCuota({ estado, tareaDisponible, pendientesEnTablero = [
  * Ahora se distinguen: si el tablero ofrece trabajo y aquí no llega, se dice.
  */
 function ocioso(pendientesEnTablero = []) {
-  const n = pendientesEnTablero.length;
-  if (!n) return { tipo: ACCIONES.OCIOSO, porque: 'el tablero no ofrece ninguna tarea' };
+  const averia = averiaOciosoConTablero(pendientesEnTablero);
+  if (!averia) return { tipo: ACCIONES.OCIOSO, porque: 'el tablero no ofrece ninguna tarea' };
+  return { tipo: ACCIONES.OCIOSO, averia, porque: `AVERÍA: ${averia.motivo}` };
+}
 
-  const nombres = pendientesEnTablero.slice(0, 5).map((t) => t.titulo || t.id);
+/**
+ * La avería, en un solo sitio. La usan el ciclo (que la avisa por Telegram) y `orq parte`
+ * y `orq estado` (que la enseñan a mano): si cada uno se la escribiera por su cuenta, el
+ * día que cambie la regla cambiaría en uno y no en los otros.
+ *
+ * @returns la avería, o null si no la hay.
+ */
+export function averiaOciosoConTablero(pendientesEnTablero = []) {
+  const n = pendientesEnTablero.length;
+  if (!n) return null;
   return {
-    tipo: ACCIONES.OCIOSO,
-    averia: {
-      clase: 'ocioso-con-tablero-lleno',
-      pendientes: n,
-      nombres,
-      // Se explica en castellano llano porque esto acaba en Telegram, no en un log.
-      motivo: `el tablero tiene ${n} tarea(s) pendiente(s) y no consigo coger ninguna`,
-    },
-    porque: `AVERÍA: ${n} tarea(s) pendiente(s) en el tablero y ninguna que pueda coger`,
+    clase: 'ocioso-con-tablero-lleno',
+    pendientes: n,
+    nombres: pendientesEnTablero.slice(0, 5).map((t) => t.titulo || t.id),
+    // Se explica en castellano llano porque esto acaba en Telegram, no en un log.
+    motivo: `el tablero tiene ${n} tarea(s) pendiente(s) y no consigo coger ninguna`,
   };
 }
 
