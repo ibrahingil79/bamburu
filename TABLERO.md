@@ -322,7 +322,7 @@
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-08-26 · `18bcd4a` · **153/207** · 1273 s
+- **Último barrido completo:** 2026-09-01 · `e1ae10c` · **95/208** · 463 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -9318,6 +9318,83 @@ que aún no se pueden adjuntar no sirve de nada.
   secas lista **0 gates**), y **las tres averías se repusieron una a una para ver las pruebas
   ponerse rojas**. La de la cuota reprodujo el número del registro al minuto: *«arranca 10 min después
   del reinicio»*.
+
+  ---
+
+  **LA VERIFICACIÓN, QUE ERA EL ENCARGO: cada arreglo provocando la situación de verdad.**
+
+  **Parada — antes y después sobre la MISMA tarea**, con el daemon trabajando (`anclar-verifactu-fuera`
+  en ANALISIS). El «antes» salió gratis porque el daemon en marcha llevaba el código viejo en memoria:
+
+  ```
+  ANTES    09:18:36  Stopping…
+           09:20:36  State 'stop-sigterm' timed out. Killing.
+           09:20:36  Killing process 2466793 (node) with signal SIGKILL
+           09:20:36  Killing process 2501057 (claude) with signal SIGKILL
+           09:20:36  Failed with result 'timeout'                        → 120 s
+  DESPUÉS  09:20:54  SIGTERM: no empiezo ningún paso más. Al de ahora le doy 20 s
+           09:21:14  ⛔ Se pasó el plazo de 20 s: corto lo que tengo en vuelo
+           09:21:14  Stopped   (sin timeout, sin Killing, sin Failed)    → 20,3 s
+  ```
+
+  Y la tarea sobrevivió: *«Retomo «Anclar la cadena de VERI\*FACTU fuera del servidor» en el paso
+  ANALISIS»*. Tres reinicios más: **21 s**, **33 ms** (dormido esperando cuota). Con la unit original
+  habrían sido 2100 s cada uno.
+
+  **Cuota — contrastada en el mismo minuto**, `orq estado` contra `/usage`: **54 % usado de sesión y
+  28 % semanal en los dos sitios**, y las dos horas de reinicio idénticas. Se puede preguntar sin
+  matar el daemon, y con la antigüedad de la lectura delante.
+
+  **Barrido — con el orquestador PARADO POR CUOTA de verdad.** Se puso el umbral fuera de alcance
+  (`ORQUESTADOR_MIN_CICLO_PCT=90`) para reproducir las 07:39 con la tarea intacta en ANALISIS. Corrió
+  `scripts/run-gates.mjs --all` y terminó: **208 ejecutadas · 113 en rojo · 463 s**.
+
+  **DOS AVERÍAS MÁS QUE DESTAPÓ LA VERIFICACIÓN EN VIVO, las dos de la misma familia:**
+  · La llamada cortada volvía como *«la salida no es JSON (código 143)»* —143 es 128+SIGTERM, nuestra
+    propia señal— y el ciclo la apuntaba como **«Fallo técnico 1 de 3» del arquitecto**. Tres reinicios
+    seguidos habrían apartado una tarea que no falló nunca, y reiniciar el daemon es justo lo que uno
+    hace mientras lo arregla. Clase propia `LLAMADA_CORTADA`, que no gasta intento.
+  · El registro decía *«Sep 1, 1pm (UTC), que **ya pasó**»* a las 09:23. No había pasado: estaba más
+    lejos que el sondeo. Colapsar «lejos» y «caducado» en la misma frase es la misma afirmación falsa
+    que este encargo vino a quitar, y la escribí yo arreglándolo. Ahora son tres casos, no dos.
+
+  ---
+
+  **⚠️ LO QUE ESTE ENCARGO DEJA ABIERTO, con su motivo. No se toca aquí: son tareas aparte.**
+
+  **1 · EL BARRIDO CAE DE 153/207 A 95/208.** Es lo que escribió el propio `barrido-estado.mjs`:
+
+  ```
+  - Último barrido completo: 2026-08-26 · 18bcd4a · 153/207 · 1273 s
+  + Último barrido completo: 2026-09-01 · e1ae10c ·  95/208 ·  463 s
+  ```
+
+  **58 pasadas menos y menos de la mitad de tiempo.** No se sabe cuáles: la lista de rojos vivía solo
+  en la memoria del daemon hasta el parte de las 3 h, que además sale por un Telegram sin configurar, y
+  el reinicio se la llevó. **No se ha vuelto a pasar el barrido para averiguarlo** — manda la norma de
+  `CLAUDE.md`: una comprobación pedida una vez se ejecuta UNA vez. Queda para el siguiente encargo, y
+  el siguiente barrido **sí** los nombrará: la salida entera se guarda ahora en
+  `logs/barrido-<fecha>.log` y los rojos salen por su nombre en el registro. Ése era el agujero de la
+  regla 3 del bloque 4 — *«113 rojos sin nombre no son un resultado legible, son un número»*.
+  **Aviso al que lo coja:** el barrido del daemon corre **dentro del sandbox de systemd** del
+  orquestador (`ProtectHome=read-only`, `PrivateTmp`, `PATH` mínimo) y el que se lanza a mano NO. Antes
+  de culpar al producto, hay que descartar el entorno. Un gate rápido (`verify-disco-perfiles`) se
+  probó bajo ese sandbox y corrió bien, así que **no basta con el sandbox para explicarlo**; hace falta
+  la lista.
+
+  **2 · `validarCodigo` le atribuye al programador líneas que no escribió.** Escanea
+  `lineasAnadidas(base, HEAD)` — **todo el diff desde la base**, no solo los commits del papel. Un
+  commit ajeno en esa ventana le suspende el trabajo por `console.log` o `TODO` que no son suyos. Se
+  midió el 1 sep: un commit de este mismo encargo metía 7 líneas así, y tres de ellas eran el «todo»
+  español de *«corta TODO lo que esté en vuelo»* cazado por `/\bTO[D]O\b/`. Se quitaron para no
+  romperle la tarea al daemon, pero **el fallo sigue en pie**.
+
+  **3 · Un desliz de git de este encargo, anotado en vez de reescrito.** Un `git commit --amend` cayó
+  justo cuando el programador confirmaba lo suyo, y **6 líneas del mensaje de `orq parar` quedaron
+  dentro de `5834d79`** («Las copias salen cifradas…»), que no las escribió. El árbol es correcto; lo
+  que está mal es la atribución. **No se reescribe la historia**: el hook de cierre ya registra hashes
+  y rehacerla dejaría el TABLERO citando commits inexistentes. Se deja dicho, que es lo que manda este
+  documento para las cifras que no cuadran.
 
 - **EL PANEL DE NOTION, PUESTO AL DÍA Y VUELTO A BAJAR DEL TOPE (bloque 5).** Entrada nueva del
   1 sep 2026 arriba del todo de «DÓNDE LO DEJÉ / DÓNDE SIGO», en español llano, con los ocho puntos

@@ -110,6 +110,34 @@ test('AVERÍA 1 · los argumentos llegan al guion: el doble ya no puede tragárs
   } finally { limpiar(raiz); }
 });
 
+test('AVERÍA 1 · la salida entera queda EN DISCO, con sus rojos por nombre', async () => {
+  // Del primer barrido que funcionó de verdad (1 sep 2026): devolvió «208 ejecutadas · 113 en
+  // rojo» y no había forma de saber CUÁLES. La lista solo vivía en la memoria del daemon hasta
+  // el parte de las 3 h —que además sale por un Telegram sin configurar—, y un reinicio se la
+  // llevaba. 113 rojos sin nombre no son un resultado legible: son un número.
+  const raiz = mkdtempSync(path.join(tmpdir(), 'barrido-disco-'));
+  try {
+    mkdirSync(path.join(raiz, 'scripts'), { recursive: true });
+    mkdirSync(path.join(raiz, 'logs'), { recursive: true });
+    writeFileSync(path.join(raiz, 'scripts', 'run-gates.mjs'), `
+      process.stdout.write('──── RESULTADO POR NOMBRE ────\\n');
+      process.stdout.write('✅ gate-bueno   PASA\\n');
+      process.stdout.write('❌ gate-malo    FALLA\\n');
+      process.stdout.write('el detalle de por qué falló gate-malo va aquí\\n');
+    `);
+    const cfg = { repo: { raiz }, cuota: {}, barrido: { argumentos: ['--all'] },
+                  rutasAbs: { logs: path.join(raiz, 'logs') } };
+    const r = await correrBarrido({ cfg, log: null });
+
+    assert.equal(r.estado, 'completo');
+    assert.ok(r.registro, 'tiene que decir DÓNDE dejó la salida');
+    const guardado = fs.readFileSync(r.registro, 'utf8');
+    assert.match(guardado, /gate-malo\s+FALLA/, 'el rojo, por su nombre');
+    assert.match(guardado, /el detalle de por qué falló/, 'y el detalle, que es lo que no cabe en el parte');
+    assert.match(guardado, /run-gates\.mjs --all/, 'y con qué se invocó, que es la avería de esta misma mañana');
+  } finally { limpiar(raiz); }
+});
+
 // ════════════════════════════════════════════════════════════════════════════════════════════
 //  AVERÍA 2 · LA CUOTA — con el reloj en la mano
 // ════════════════════════════════════════════════════════════════════════════════════════════

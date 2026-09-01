@@ -273,6 +273,12 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
         if (r.estado === 'completo') log.exito(`Barrido terminado: ${resumen}.`);
         else if (r.estado === 'cortado') log.info(`Barrido cortado: ${resumen}. ${r.motivo}.`);
         else log.aviso(`El barrido no se pudo pasar: ${r.motivo}`);
+        // DÓNDE MIRAR, y los rojos POR SU NOMBRE en el propio registro. El 1 sep 2026 el primer
+        // barrido que funcionó dijo «113 en rojo» y no había forma de saber cuáles: la lista se
+        // iba con el daemon en el siguiente reinicio.
+        if (r.registro) log.info(`   salida entera en ${r.registro}`);
+        for (const x of r.rojos.slice(0, 40)) log.aviso(`   ✗ ${x.gate} — ${x.estado}`);
+        if (r.rojos.length > 40) log.aviso(`   …y ${r.rojos.length - 40} más, en ${r.registro || 'la salida'}`);
       } catch (e) {
         // Aquí NO se llega salvo desastre: correrBarrido no lanza. La red está por si acaso,
         // porque la regla del fichero es que esto no se muere.

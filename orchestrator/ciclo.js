@@ -360,11 +360,20 @@ export class Ciclo {
     if (!accion.reinicio) {
       return `Manda ${cual}. No sé a qué hora se reinicia, así que vuelvo a mirar en ${min} min.`;
     }
-    const aTiempo = Number.isFinite(accion.reinicioMs) && accion.reinicioMs > this.ahora()
-      && accion.esperaMs < this.config.cuota.esperaSinCuotaMs;
-    return aTiempo
-      ? `Manda ${cual} y se reinicia ${accion.reinicio}: me despierto entonces, en ${min} min.`
-      : `Manda ${cual} y dice reiniciarse ${accion.reinicio}, que ya pasó o no me cuadra: vuelvo a mirar en ${min} min.`;
+    // TRES CASOS, no dos, y el tercero se añadió a los diez minutos de escribir los dos primeros
+    // (1 sep 2026, verificando esto en vivo): con el reinicio a tres horas y media, el registro
+    // decía «Sep 1, 1pm (UTC), que YA PASÓ» a las 09:23. No había pasado — solo estaba más lejos
+    // que el sondeo. Colapsar «lejos» y «caducado» en la misma frase es exactamente la clase de
+    // afirmación falsa que este encargo vino a quitar, y la escribí yo arreglándolo.
+    const falta = Number.isFinite(accion.reinicioMs) ? accion.reinicioMs - this.ahora() : null;
+    if (falta === null || falta <= 0) {
+      return `Manda ${cual} y dice reiniciarse ${accion.reinicio}, que ya pasó o no sé leer: vuelvo a mirar en ${min} min.`;
+    }
+    if (accion.esperaMs < this.config.cuota.esperaSinCuotaMs) {
+      return `Manda ${cual} y se reinicia ${accion.reinicio}: me despierto entonces, en ${min} min.`;
+    }
+    const h = (falta / 3600000).toFixed(1);
+    return `Manda ${cual} y se reinicia ${accion.reinicio}, dentro de ${h} h. Es más de lo que duermo de una vez: vuelvo a mirar en ${min} min.`;
   }
 
   /** Lanza un papel y avanza al paso de validación correspondiente. */

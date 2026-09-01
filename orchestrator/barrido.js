@@ -18,7 +18,14 @@
 //   2. MANDA EL TRABAJO. Si vuelve la cuota a mitad del barrido, se CORTA y se retoma la tarea.
 //      Construir tiene prioridad sobre comprobar, siempre. Por eso se sondea la cuota mientras
 //      corre en vez de esperar a que termine.
-//   3. EL RESULTADO VA AL PARTE. Qué se ejecutó y qué salió rojo.
+//   3. EL RESULTADO VA AL PARTE **Y AL DISCO**. Qué se ejecutó y qué salió rojo.
+//
+//      ⚙️ LO DE «Y AL DISCO» ES DEL 1 SEP 2026, y salió del primer barrido que funcionó. Devolvió
+//      «208 ejecutadas · 113 en rojo» y NO HABÍA FORMA DE SABER CUÁLES: la lista vivía solo en la
+//      memoria del daemon hasta el parte de las 3 horas, que además sale por un Telegram sin
+//      configurar. Un reinicio se la llevaba. 113 rojos sin nombre no son un resultado legible —
+//      son un número—, y «un rojo anónimo es ruido» lo dice el propio run-gates. Ahora la salida
+//      ENTERA se guarda en `logs/barrido-<fecha>.log` antes de devolver nada.
 //   4. NO PUEDE TUMBAR AL DAEMON. Este módulo NO LANZA NUNCA. Cualquier desastre —que no exista
 //      el script, que el proceso muera, que la salida sea basura— sale por `estado: 'reventado'`
 //      con su motivo, y el orquestador sigue su vuelta como si nada.
@@ -32,7 +39,7 @@
 //     Decir «no se pudo leer ningún resultado» ante un 64 es señalar al barrido cuando el
 //     que se ha equivocado es quien lo llama.
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { cargarSecretos } from './nucleo/entorno.js';
 
@@ -144,15 +151,17 @@ export async function correrBarrido({ cfg, log, hayCuotaYa = async () => false, 
 
   clearInterval(reloj);
 
+  const registro = guardarSalida({ cfg, salida, inv });
+
   const { ejecutados, rojos } = leerResultado(salida);
   if (cortado) {
-    return { estado: 'cortado', ejecutados, rojos, segs: segs(), motivo: motivoCorte || 'lo cortaron' };
+    return { estado: 'cortado', ejecutados, rojos, segs: segs(), registro, motivo: motivoCorte || 'lo cortaron' };
   }
   // EL 64 SE DICE POR SU NOMBRE. Es EX_USAGE: el barrido está bien y quien lo ha llamado mal
   // somos nosotros. El 1 sep 2026 esto se reportó como «no se pudo leer ningún resultado», que
   // manda a mirar al sitio equivocado y costó el primer uso real entero.
   if (code === EX_USAGE) {
-    return { estado: 'reventado', ejecutados, rojos, segs: segs(),
+    return { estado: 'reventado', ejecutados, rojos, segs: segs(), registro,
              motivo: `LO HE INVOCADO MAL (código 64 = EX_USAGE): «${inv.guion} ${inv.argumentos.join(' ')}». `
                    + `Contestó con su ayuda, así que no acepta esos argumentos. Se arreglan en `
                    + `orquestador.config.json → barrido.argumentos, no aquí.` };
@@ -161,9 +170,27 @@ export async function correrBarrido({ cfg, log, hayCuotaYa = async () => false, 
   // su veredicto. Reventado es no haber podido leer ni un resultado.
   if (!ejecutados.length) {
     const cola = salida.split('\n').filter(Boolean).slice(-3).join(' · ').slice(0, 300);
-    return { estado: 'reventado', ejecutados, rojos, segs: segs(), motivo: `no se pudo leer ningún resultado (código ${code}): ${cola}` };
+    return { estado: 'reventado', ejecutados, rojos, segs: segs(), registro, motivo: `no se pudo leer ningún resultado (código ${code}): ${cola}` };
   }
-  return { estado: 'completo', ejecutados, rojos, segs: segs(), motivo: null };
+  return { estado: 'completo', ejecutados, rojos, segs: segs(), registro, motivo: null };
+}
+
+/**
+ * Guarda la salida entera del barrido y devuelve dónde quedó, o `null` si no se pudo.
+ *
+ * Va con `try` porque la regla 4 manda sobre todo lo demás: que no se pueda escribir el fichero
+ * no puede tumbar al daemon ni perder el recuento que sí tenemos.
+ */
+function guardarSalida({ cfg, salida, inv }) {
+  try {
+    const dir = cfg.rutasAbs?.logs;
+    if (!dir || !salida) return null;
+    mkdirSync(dir, { recursive: true });
+    const sello = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const ruta = path.join(dir, `barrido-${sello}.log`);
+    writeFileSync(ruta, `# ${inv.guion} ${inv.argumentos.join(' ')}\n# ${new Date().toISOString()}\n\n${salida}`, 'utf8');
+    return ruta;
+  } catch { return null; }
 }
 
 /**
