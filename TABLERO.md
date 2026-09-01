@@ -8485,6 +8485,48 @@ Los cuatro pasos, con sus comandos y sus condiciones de paso, están en `deploy/
 > Motivo: el arquitecto declaró la tarea mal planteada
 > Registro: `docs/orquestador/tareas/cifrado-copias-seguridad.md`
 
+## TAREA — Que cada comprobación se traiga su propio negocio
+
+- **id:** gates-con-negocio-propio
+- **estado:** pendiente
+- **origen:** decisión de Ibrahin del 1 sep 2026 (bloque 0 del encargo de cierre)
+
+**Siete de los ocho negocios de esta máquina están `suspended_admin`** —`desarrollo-bamburu` desde
+el **25 ago 2026, 12:07:03**— y `readOnlyGuard` (`core/tenant-middleware.js`, montado en
+`index.js` con `app.use('*')` **antes de la autenticación**) devuelve **403 a todo lo que no sea
+GET/HEAD/OPTIONS**. Medido en el barrido del 1 sep: `✗ cita creada (API) — 403`, `✗ mover a un hueco
+libre → 200 — 403`, `✗ POST /api/erp/avisos/visto responde 200 (got 403)`.
+
+**Cualquier comprobación que ESCRIBA en el negocio de desarrollo falla por esto, no por el
+producto.** Es ruido que tapa los rojos de verdad.
+
+**LA DECISIÓN DE IBRAHIN, Y SU MOTIVO, EN SUS PALABRAS (1 sep 2026):** *«cada comprobación con su
+propio negocio. A la cola, sin prisa. No levantes el castigo al negocio de desarrollo: ese estado
+puede estar puesto a propósito para probar esa función.»*
+
+**NO SE TOCA `status` DE NINGÚN NEGOCIO VIVO.** Lo prohíbe además el propio `run-gates.mjs`: «no se
+cambia el estado de un negocio vivo para poner un gate en verde». El arreglo es que la comprobación
+se traiga lo suyo.
+
+**El camino ya está abierto y probado:** **23 gates** están en `EMPIEZAN_DE_CERO`
+(`scripts/lib/gates-mapa.mjs`) y se traen su negocio con `provisionTenant()`; `gate-403-permiso` y
+`gate-historial-clinico` se pasaron a `negocioDesechable()` por esta misma causa. Se trata de
+extender eso, no de inventarlo.
+
+**Criterios de aceptación**
+
+- [ ] Está la lista de qué comprobaciones escriben en `desarrollo-bamburu`, sacada de medir, no de suponer.
+- [ ] Cada una de esas se trae su propio negocio y **borra lo que creó en el `finally`, por su marca**
+      (la regla de `CLAUDE.md`: lo que una prueba crea, la prueba lo borra).
+- [ ] Ninguna comprobación cambia el `status` de un negocio existente.
+- [ ] Se declara en `EMPIEZAN_DE_CERO` cada gate convertido, para que el mapa y el código digan lo mismo
+      (hoy `--lista` avisa de dos que no cuadran).
+- [ ] **Verificación**: barrido completo antes y después, y la diferencia de rojos se explica gate a gate.
+      Vale apoyarse en la línea base con nombres de `docs/barridos/2026-09-01-los-113-rojos.md`.
+
+**Cuidado con lo que NO se puede romper:** las comprobaciones que prueban **el castigo mismo** —que un
+negocio suspendido NO deja escribir— necesitan un negocio suspendido y tienen que seguir teniéndolo.
+
 ## TAREA — Anclar la cadena de VERI*FACTU fuera del servidor
 
 - **id:** anclar-verifactu-fuera
@@ -9217,6 +9259,51 @@ que aún no se pueden adjuntar no sirve de nada.
 - **No perseguir amplitud** (multi-moneda, nóminas, fabricación): es donde se pierde contra SAP.
 
 ## Decisiones tomadas el 1 sep 2026
+
+- **LAS DOS DECISIONES DEL BLOQUE 0, TOMADAS POR IBRAHIN (1 sep 2026).**
+
+  **DECISIÓN 1 — el barrido del daemon deja de mentir. HECHO.** *«Conéctalo ahora, antes del bloque 2.
+  Un repaso que miente enseña a desconfiar también de los rojos buenos.»*
+
+  El barrido de los ratos muertos daba **28 rojos falsos por pasada**, todos gates de navegador,
+  muertos en ~1 s. `/snap/bin/chromium` **no es el navegador: es el envoltorio** (un enlace a
+  `/usr/bin/snap`), y `snap-confine` necesita **setuid** para montar su confinamiento;
+  `NoNewPrivileges=true` —que lleva `orquestador.service`, y hace bien— se lo prohíbe. A mano no se
+  nota, porque una terminal no lleva ese cerrojo. **Dos entornos, dos verdades.**
+
+  **Y la primera cura que propuse era mala:** usar el Chrome que trae puppeteer. **No sirve: es
+  `x86-64` en una máquina `aarch64`.** Lo dice el propio `gate-env.mjs`, escrito esa misma mañana, y
+  se vio al ir a comprobarlo antes de recomendarlo.
+
+  **La cura buena YA ESTABA MEDIDA Y ESCRITA en `gate-env.mjs`… y sin conectar**: el ELF de DENTRO
+  del snap (`/snap/chromium/current/usr/lib/chromium-browser/chrome`) arranca **directo, sin pasar
+  por `snap-confine`**. El valor por defecto seguía apuntando al envoltorio, así que la receta era un
+  comentario. Ahora se aplica en `launchOpts()`, que es el único sitio por donde pasan los **99**
+  gates de navegador, y el entorno del snap va **solo al proceso del navegador** —cambiarle el `HOME`
+  al gate le rompería lo que lea su configuración de verdad— con el `HOME` de mentira **en el tmp**,
+  porque el daemon tiene el `$HOME` en solo lectura.
+
+  **No se afloja ni un cerrojo: `NoNewPrivileges=true` se queda.** Comprobado con cuatro gates, a
+  mano y **dentro del aislamiento del daemon**, dando lo mismo:
+
+  | | A mano | Dentro del aislamiento |
+  |---|---|---|
+  | `gate-xss-escape` | 29 OK, 0 fallos | 29 OK, 0 fallos |
+  | `gate-cola-envios` | 38 OK, 0 fallos | 38 OK, 0 fallos |
+  | `gate-voz-pantalla` | 17 OK / 0 FALLOS | 17 OK / 0 FALLOS |
+  | `test-textos-citas` | 27 ok, 0 fallos | 27 ok, 0 fallos |
+
+  Y para que no se desconecte otra vez —que es lo que pasó— entra al barrido
+  `verify-navegador-en-el-daemon` (209 gates ahora): vigila que el navegador no vuelva a ser el
+  envoltorio. **Verificada en rojo** reponiendo el valor por defecto viejo. Es barata: no abre
+  navegador.
+
+  **DECISIÓN 2 — los negocios suspendidos: a la cola, y NO se toca el castigo.** *«Cada comprobación
+  con su propio negocio. A la cola, sin prisa. No levantes el castigo al negocio de desarrollo: ese
+  estado puede estar puesto a propósito para probar esa función.»* Tarea nueva
+  **`gates-con-negocio-propio`** en §TAREAS EN FORMATO DEL ORQUESTADOR, con sus criterios y el aviso
+  de que las comprobaciones que prueban **el castigo mismo** necesitan seguir teniendo un negocio
+  suspendido. La cola pasa de 42 a **43**.
 
 - **BLOQUE 0 — LOS 113 ROJOS, NOMBRADOS. Y 28 DE ELLOS NO EXISTÍAN.**
   Informe completo: `docs/barridos/2026-09-01-los-113-rojos.md` · salida entera:

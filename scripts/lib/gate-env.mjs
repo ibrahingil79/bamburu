@@ -11,7 +11,7 @@
 //   2. Si falta algo imprescindible (la BD, el Chromium), el gate ABORTA con un mensaje explícito y
 //      código != 0. Un gate que no puede arrancar no ha verificado NADA: tiene que decirlo a gritos,
 //      no morir con una traza que un barrido de regresión pueda confundir con ruido.
-import { existsSync, statSync, readdirSync, mkdtempSync, rmSync } from 'fs';
+import { existsSync, statSync, readdirSync, mkdtempSync, rmSync, mkdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { execSync } from 'child_process';
 import { dirname, join } from 'path';
@@ -109,8 +109,69 @@ export function requireLlmQuota(db) {
 // CIERTAS —el envoltorio no arranca, los Chrome de puppeteer son de otra arquitectura— y la
 // conclusión era falsa. Una medida cierta sobre el envoltorio no dice nada del navegador.
 //
-// Se puede forzar cualquier otro con PUPPETEER_EXECUTABLE_PATH.
-export const CHROMIUM = process.env.PUPPETEER_EXECUTABLE_PATH || '/snap/bin/chromium';
+// ⚙️ 1 SEP 2026 · LA RECETA DE ARRIBA YA NO ES SOLO UN COMENTARIO: SE APLICA.
+// Estaba escrita, medida y sin conectar, así que el valor por defecto seguía siendo el ENVOLTORIO
+// —el que no arranca—. Coste medido: el barrido que el orquestador pasa en sus ratos muertos daba
+// **28 rojos falsos por pasada**, todos gates de navegador, muertos en ~1 s con
+// «snap-confine is packaged without necessary permissions». A mano pasaban, porque una sesión de
+// terminal no lleva `NoNewPrivileges` y el envoltorio sí arranca ahí. Dos entornos, dos verdades.
+//
+// Ahora se prefiere el ELF de DENTRO del snap, que se ejecuta directo y no pasa por `snap-confine`:
+// funciona en los dos sitios y **no hace falta aflojar ni un cerrojo del daemon**. Comprobado
+// dentro del aislamiento con `NoNewPrivileges=true` puesto: `gate-xss-escape` → 29 OK, 0 fallos.
+//
+// El orden importa y es el prudente: lo que diga PUPPETEER_EXECUTABLE_PATH manda siempre (para
+// poder forzar otro); si no, el binario de dentro del snap SI EXISTE; y si tampoco, el envoltorio
+// de siempre, que es como estaba. En una máquina sin este snap, nada cambia.
+const SNAP_CHROMIUM = '/snap/chromium/current';
+const CHROME_DENTRO_DEL_SNAP = SNAP_CHROMIUM + '/usr/lib/chromium-browser/chrome';
+
+export const CHROMIUM = process.env.PUPPETEER_EXECUTABLE_PATH
+  || (existsSync(CHROME_DENTRO_DEL_SNAP) ? CHROME_DENTRO_DEL_SNAP : '/snap/bin/chromium');
+
+/**
+ * El entorno que necesita el ELF de dentro del snap para arrancar SIN `snap-confine`.
+ *
+ * Devuelve `undefined` cuando no estamos usando ese binario: entonces no hay nada que preparar y el
+ * navegador hereda el entorno de siempre. Así esto no puede estropear una máquina distinta.
+ *
+ * EL `HOME` CON FORMA DE SNAP NO ES ADORNO (está medido, ver la receta de arriba): sin él y sin
+ * SNAP_USER_COMMON/SNAP_USER_DATA, Chromium lanza `chrome_crashpad_handler` sin `--database` y
+ * ABORTA con core dump antes de pintar nada. Se parece a «el navegador no arranca en esta máquina»,
+ * y no lo es. Va en el tmp, no en el HOME de verdad: el daemon tiene `$HOME` en solo lectura.
+ */
+export function entornoDelNavegador() {
+  if (CHROMIUM !== CHROME_DENTRO_DEL_SNAP) return undefined;
+  const hogar = join(tmpdir(), 'gate-chromium-home');
+  const comun = join(hogar, 'snap', 'chromium', 'common');
+  const datos = join(hogar, 'snap', 'chromium', 'current');
+  try { mkdirSync(comun, { recursive: true }); mkdirSync(datos, { recursive: true }); }
+  catch (e) {
+    abortar('No puedo preparar el HOME del navegador en ' + hogar + ': ' + e.message,
+            'Sin él Chromium aborta con core dump antes de pintar nada, y parece «no hay navegador».');
+  }
+  // El nombre de la carpeta de librerías depende de la arquitectura. Las que no existan se caen
+  // solas: mejor una lista corta que una ruta inventada.
+  const arco = { arm64: 'aarch64-linux-gnu', x64: 'x86_64-linux-gnu' }[process.arch] || '';
+  const libs = [
+    SNAP_CHROMIUM + '/usr/lib/' + arco,
+    SNAP_CHROMIUM + '/usr/lib/chromium-browser',
+    '/snap/gnome-46-2404/current/usr/lib/' + arco,
+    '/snap/mesa-2404/current/usr/lib/' + arco,
+    '/snap/core24/current/usr/lib/' + arco,
+  ].filter((d) => arco && existsSync(d));
+  return {
+    ...process.env,
+    HOME: hogar,
+    LD_LIBRARY_PATH: libs.join(':'),
+    SNAP: SNAP_CHROMIUM,
+    SNAP_NAME: 'chromium',
+    SNAP_INSTANCE_NAME: 'chromium',
+    SNAP_REAL_HOME: process.env.HOME || '/home/ubuntu',
+    SNAP_USER_COMMON: comun,
+    SNAP_USER_DATA: datos,
+  };
+}
 
 // Algunos gates prueban un flujo que solo existe SOBRE UNA RED CONCRETA (el alta por la dirección de
 // Tailscale, p. ej.). Si esa red no está montada en la máquina donde se corre, el gate no puede
@@ -238,7 +299,12 @@ export function launchOpts() {
   }
   exigeCodigoServido();
   const dir = perfilDesechable('gate-chrome');
-  return { headless: 'new', executablePath: CHROMIUM, args: ['--no-sandbox'], userDataDir: dir };
+  const opciones = { headless: 'new', executablePath: CHROMIUM, args: ['--no-sandbox'], userDataDir: dir };
+  // El entorno va SOLO al proceso del navegador, no al del gate: cambiarle el HOME al gate le
+  // rompería cualquier cosa que lea su configuración de verdad.
+  const env = entornoDelNavegador();
+  if (env) opciones.env = env;
+  return opciones;
 }
 
 // ── EL PANEL QUE SUSTITUYÓ A LAS VENTANITAS ───────────────────────────────────────────────────────

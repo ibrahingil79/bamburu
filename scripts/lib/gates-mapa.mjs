@@ -277,7 +277,11 @@ export const GRUPOS = {
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
           // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
           // archivar si lo dejó, y decirlo ANTES de pulsar. Antes daba un 500 seco.
-          'gate-baja-empleado'],
+          'gate-baja-empleado',
+          // 1 SEP 2026 — que el barrido del DAEMON mida lo mismo que el de mano. Vigila que el
+          // navegador siga siendo el ELF de dentro del snap y no el envoltorio, que muere bajo
+          // `NoNewPrivileges` y daba 28 rojos falsos por pasada. Barata: no abre navegador.
+          'verify-navegador-en-el-daemon'],
 
   // ── LOS TRES LINT, DENTRO DEL BARRIDO (24 ago 2026) ──────────────────────────────────────────
   // Estaban en `scripts/` y solo corrían si alguien se acordaba, y esa noche eso salió caro DOS veces:
