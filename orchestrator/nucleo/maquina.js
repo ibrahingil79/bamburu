@@ -48,6 +48,66 @@ const PAPEL_DE = {
 };
 
 /**
+ * QUÉ SE HACE CUANDO NO SE HA PODIDO LEER LA CUOTA.
+ *
+ * ⚙️ POR QUÉ ESTO YA NO ES «PLANTARSE Y YA» (1 sep 2026, avería de la cuota ilegible). Aquí
+ * ponía una sola línea —«no sé cuánta cuota queda: no arranco a ciegas»— y con eso el
+ * orquestador se quedaba quieto SIN PLAZO, esperando a que una lectura saliera bien. Ese día
+ * salió mal UNA lectura, a las 13:54:52, y la fábrica estuvo parada con un 32 % disponible
+ * mientras el vigía leía `/usage` sin problema por Telegram. **Se paró por no saber, no por
+ * falta de presupuesto**, y ésa es una avería peor que la que quería evitar: prudencia que
+ * cuesta lo mismo que el riesgo.
+ *
+ * La regla vieja no era tonta y su mitad buena se conserva: **no se arranca a ciegas**. Lo que
+ * cambia es qué cuenta como ciego. Si hace tres minutos se leyó un 68 % gastado, no estamos a
+ * ciegas: estamos con un dato de hace tres minutos. Se arranca CON ESE DATO y con margen de
+ * sobra, o no se arranca:
+ *
+ *   · La última lectura buena tiene que ser RECIENTE (`cuota.ultimoValorValidoMs`). Una de
+ *     hace una hora no dice nada de ahora.
+ *   · Y tiene que sobrar de largo: además del margen que se le reserva al chat de Ibrahin, se
+ *     exige `cuota.margenCiegoPct` de más. Un dato viejo se paga con holgura, no con fe.
+ *   · Si no se cumple, se espera — pero se espera POCO y se vuelve a leer, porque preguntar
+ *     `/usage` no cuesta ni un token (medido: 21 lecturas, 0 tokens, 0 $). Eso lo pone
+ *     `decidir()` más abajo.
+ *
+ * Y el riesgo de equivocarse está acotado por abajo, que es lo que permite tomar la decisión:
+ * si con ese dato viejo se arranca y resulta que ya no queda cuota, **la llamada muere por
+ * cuota y el ciclo lo trata como lo que es** (`marcarSinCuota`). Se pierde una llamada, no la
+ * ventana de Ibrahin.
+ */
+function sinLectura(cuota, config) {
+  const c = config.cuota;
+  const u = cuota?.ultimaFiable;
+  const nada = { alcanza: false, ventana: null, desconocida: true };
+  const tope = c.ultimoValorValidoMs ?? 0;
+
+  if (!u || !Number.isFinite(u.sesionPct) || !Number.isFinite(u.edadMs) || u.edadMs > tope) {
+    const cuando = u && Number.isFinite(u.edadMs) ? ` (la última es de hace ${minutos(u.edadMs)})` : '';
+    return { ...nada, motivo: `no sé cuánta cuota queda y no tengo lectura reciente${cuando}: no arranco a ciegas` };
+  }
+
+  const libreSesion = 100 - u.sesionPct;
+  const libreSemana = 100 - (Number.isFinite(u.semanaPct) ? u.semanaPct : 0);
+  const utilizable = libreSesion - c.margenReservadoPct - (c.margenCiegoPct ?? 0);
+
+  if (libreSemana < c.minimoSemanalPct) {
+    return { ...nada, ventana: 'semanal',
+             motivo: `no he podido leer la cuota, y hace ${minutos(u.edadMs)} quedaba ${libreSemana.toFixed(0)}% de la semanal (mínimo ${c.minimoSemanalPct}%)` };
+  }
+  if (utilizable < c.minimoParaCicloPct) {
+    return { ...nada, ventana: 'sesion',
+             motivo: `no he podido leer la cuota, y hace ${minutos(u.edadMs)} quedaba ${libreSesion.toFixed(0)}% de sesión: descontando el ${c.margenReservadoPct}% del chat y el ${c.margenCiegoPct ?? 0}% extra por ir con un dato viejo, quedan ${utilizable.toFixed(0)}% y hacen falta ${c.minimoParaCicloPct}%` };
+  }
+  return {
+    alcanza: true, ventana: null, aCiegas: true,
+    motivo: `no he podido leer la cuota, pero hace ${minutos(u.edadMs)} quedaba ${libreSesion.toFixed(0)}% de sesión y sobra de largo (${utilizable.toFixed(0)}% tras el margen del chat y el extra por dato viejo): tiro con esa lectura`,
+  };
+}
+
+const minutos = (ms) => (ms < 60000 ? `${Math.max(1, Math.round(ms / 1000))} s` : `${Math.round(ms / 60000)} min`);
+
+/**
  * ¿Alcanza la cuota para meterse en un ciclo entero?
  *
  * Dos condiciones, y las dos tienen que cumplirse:
@@ -59,9 +119,7 @@ const PAPEL_DE = {
  */
 export function alcanzaParaCiclo(cuota, config) {
   const c = config.cuota;
-  if (!cuota || !cuota.fiable) {
-    return { alcanza: false, motivo: 'no sé cuánta cuota queda: no arranco a ciegas', desconocida: true };
-  }
+  if (!cuota || !cuota.fiable) return sinLectura(cuota, config);
   const libreSesion = 100 - cuota.sesionPct;
   const libreSemana = 100 - cuota.semanaPct;
   const utilizable = libreSesion - c.margenReservadoPct;
@@ -144,6 +202,10 @@ export function decidir({ estado, cuota, tareaDisponible, pendientesEnTablero = 
   const gastaModelo = decision.tipo === ACCIONES.EJECUTAR || decision.tipo === ACCIONES.TOMAR_TAREA;
   if (gastaModelo) {
     const v = alcanzaParaCiclo(cuota, config);
+    // Arrancar con la última lectura buena SE DICE. Es una decisión con riesgo asumido —pequeño
+    // y acotado, pero riesgo—, y las decisiones con riesgo no viajan en silencio: si luego algo
+    // sale mal, quien mire el registro tiene que ver que ahí se tiró con un dato de hace un rato.
+    if (v.alcanza && v.aCiegas) return { ...decision, cuotaACiegas: true, avisoCuota: v.motivo };
     if (!v.alcanza) {
       // La hora que se anuncia y la que se duerme son la de LA VENTANA QUE CORTA, no siempre
       // la de sesión. Si corta la semanal, la de sesión se reiniciará esta noche sin cambiar
@@ -153,7 +215,14 @@ export function decidir({ estado, cuota, tareaDisponible, pendientesEnTablero = 
       const reinicioMs = (semanal ? cuota?.reinicioSemanaMs : cuota?.reinicioSesionMs) ?? null;
       return {
         tipo: ACCIONES.ESPERAR_CUOTA,
-        esperaMs: esperaHastaLaCuota({ reinicioMs, ahora, config }),
+        // ⚙️ NO SABER Y NO QUEDAR SON DOS ESPERAS DISTINTAS (1 sep 2026). Cuando NO QUEDA cuota
+        // se duerme hasta que se reinicie la ventana: preguntar antes no cambia nada. Cuando NO
+        // SE SABE, dormir eso mismo es absurdo — lo que falta es una lectura, y una lectura son
+        // dos segundos y cero tokens. Antes las dos caían en el mismo sondeo de 15 minutos: por
+        // eso una lectura ilegible costaba un cuarto de hora de fábrica parada.
+        esperaMs: v.desconocida
+          ? (config.cuota.esperaSinLecturaMs ?? config.ciclo.intervaloVueltaMs)
+          : esperaHastaLaCuota({ reinicioMs, ahora, config }),
         ventana: v.ventana ?? null,
         reinicio,
         reinicioMs,

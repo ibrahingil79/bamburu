@@ -198,6 +198,9 @@ export class Ciclo {
       this.log.exito(`▶ Vuelve a haber cuota tras ${rato} min. Retomo en el paso ${estado.paso}.`);
       estado = this.almacen.transicion(estado, { tipo: 'CUOTA_VUELTA' });
     }
+    // Tirar con la última lectura buena se anuncia SIEMPRE y antes de la decisión, porque es
+    // lo que explica por qué se gastó cuota sin haberla comprobado en ese momento.
+    if (accion.cuotaACiegas) this.log.aviso(`⚠️ Cuota sin leer: ${accion.avisoCuota}`);
     this.log.info(`Decisión: ${accion.tipo} — ${accion.porque}`);
     const r = await this.ejecutar({ estado, accion, cuota, tareaDisponible });
     return ord.avisos.length ? { ...r, avisos: [...ord.avisos, ...(r.avisos || [])] } : r;
@@ -418,7 +421,9 @@ export class Ciclo {
       }
 
       case ACCIONES.EJECUTAR:
-        return this.ejecutarPapel({ estado, accion });
+        // La cuota ya leída en esta vuelta entra como marca de salida del contador del papel:
+        // así medir un paso no cuesta una consulta de más al empezarlo.
+        return this.ejecutarPapel({ estado, accion, cuota });
 
       case ACCIONES.REINTENTAR: {
         this.log.aviso(`Rechazado. Vuelvo al programador (intento ${accion.intentoSiguiente}).`);
@@ -472,7 +477,16 @@ export class Ciclo {
    */
   comoEspera(accion) {
     const min = Math.max(1, Math.round(accion.esperaMs / 60000));
+    const seg = Math.max(1, Math.round(accion.esperaMs / 1000));
     const cual = accion.ventana === 'semanal' ? 'la ventana SEMANAL' : 'la ventana de sesión';
+    // ⚙️ NO SABERLA NO ES NO TENERLA (1 sep 2026). Esta espera decía siempre «manda la ventana
+    // de sesión», también cuando lo que pasaba era que la LECTURA había fallado. Es una frase
+    // falsa en el peor momento: quien mira el registro entiende «se acabó la cuota» y se va
+    // tranquilo, cuando lo que hay es un instrumento roto y un 32 % sin usar.
+    if (accion.desconocida) {
+      const espera = accion.esperaMs < 60000 ? `${seg} s` : `${min} min`;
+      return `No es que no quede: es que no la he podido LEER. Vuelvo a intentarlo en ${espera}.`;
+    }
     if (!accion.reinicio) {
       return `Manda ${cual}. No sé a qué hora se reinicia, así que vuelvo a mirar en ${min} min.`;
     }
@@ -492,8 +506,43 @@ export class Ciclo {
     return `Manda ${cual} y se reinicia ${accion.reinicio}, dentro de ${h} h. Es más de lo que duermo de una vez: vuelvo a mirar en ${min} min.`;
   }
 
+  /**
+   * QUÉ SE HA GASTADO ESTE PAPEL. Se apunta al terminar cada llamada.
+   *
+   * ⚙️ POR QUÉ HACEN FALTA DOS NÚMEROS Y NO UNO (1 sep 2026). Se guardan los dos porque miden
+   * cosas distintas y ninguno vale solo:
+   *
+   *   · **Puntos de ventana** es la moneda en la que duele —es lo que deja al daemon parado y
+   *     lo que se le come a Ibrahin el chat—, pero la ventana es DESLIZANTE: mientras un papel
+   *     trabaja, gasto viejo va caducando, así que la resta puede salir corta e incluso
+   *     negativa. Sirve para el orden de magnitud, no para sumar con precisión.
+   *   · **`total_cost_usd`** lo da el CLI por llamada, es aditivo y no se mueve solo. Es el que
+   *     permite comparar de verdad el antes y el después de cambiar el modelo de un papel.
+   *
+   * Preguntar la cuota al terminar cuesta CERO tokens (medido el 1 sep 2026: 21 lecturas de
+   * `/usage`, 0 turnos, 0 tokens, 0 $). Si costara, esta medición no se podría permitir.
+   */
+  async medirPapel({ estado, papel, modelo, r, cuotaAntes }) {
+    let puntos = null;
+    try {
+      const antes = cuotaAntes?.fiable ? cuotaAntes.sesionPct : null;
+      const despues = this.vigilante ? (await this.vigilante.consultar({ forzar: true })) : null;
+      if (Number.isFinite(antes) && despues?.fiable) puntos = despues.sesionPct - antes;
+    } catch { /* medir no puede tumbar un paso: el desglose se queda sin ese dato y ya está */ }
+
+    const g = this.almacen.transicion(estado, {
+      tipo: 'PAPEL_MEDIDO', papel, modelo, ms: r.ms || 0,
+      costeUsd: Number.isFinite(r.coste) ? r.coste : 0, puntos,
+    });
+    const t = g.gastoPorPapel[papel];
+    this.log.info(`Gasto de ${papel} (${modelo}): ${puntos == null ? 'puntos ?' : `${puntos.toFixed(0)} pts`}`
+      + ` · ${(r.coste ?? 0).toFixed(4)} $ · ${Math.round((r.ms || 0) / 1000)} s`
+      + `  ‹acumulado de la tarea: ${t.puntos.toFixed(0)} pts · ${t.costeUsd.toFixed(4)} $ en ${t.llamadas} llamada(s)›`);
+    return g;
+  }
+
   /** Lanza un papel y avanza al paso de validación correspondiente. */
-  async ejecutarPapel({ estado, accion }) {
+  async ejecutarPapel({ estado, accion, cuota = null }) {
     const cfg = this.config.ciclo;
     const tarea = estado.tarea;
     const rutas = this.rutasDe(tarea);
@@ -517,7 +566,12 @@ export class Ciclo {
     });
     escribirAtomico(path.join(this.config.rutasAbs.logs, `prompt-${tarea.id}-${accion.papel}.txt`), prompt);
 
-    this.log.paso(accion.paso, `${accion.papel.toUpperCase()} — ${accion.porque}`);
+    // ⚙️ EL MODELO DE CADA PAPEL SALE EN EL REGISTRO (1 sep 2026). No es adorno: desde que cada
+    // papel lleva el suyo, «qué modelo atendió este paso» es un dato que hace falta para juzgar
+    // un rechazo. Si el revisor empieza a rechazar más de la cuenta, lo primero que hay que poder
+    // mirar es con qué construyó el programador, y eso tiene que estar en la línea del paso.
+    const modelo = this.config.cli.modeloPorPapel[accion.papel];
+    this.log.paso(accion.paso, `${accion.papel.toUpperCase()} (${modelo}) — ${accion.porque}`);
     // El cancelador se APUNTA al empezar y se BORRA al terminar. Antes solo se apuntaba, así que
     // el conjunto crecía una entrada por llamada y `cancelarTodo()` acababa mandando SIGTERM al
     // grupo de procesos de llamadas muertas hace horas — y un pid se reutiliza.
@@ -527,8 +581,17 @@ export class Ciclo {
       herramientas: this.config.cli.herramientasPorPapel[accion.papel] || [],
       cwd: this.config.repo.raiz,
       config: this.config,
+      modelo,
       alSalir: (cancelar) => { miCancelador = cancelar; this.cancelables.add(cancelar); },
     }).finally(() => { if (miCancelador) this.cancelables.delete(miCancelador); });
+
+    // Se mide SIEMPRE, haya salido bien o mal: una llamada que falla a los 20 minutos también
+    // se ha gastado la cuota, y dejarla fuera del recuento haría que el desglose por papel
+    // mintiera justo en los días malos.
+    estado = await this.medirPapel({ estado, papel: accion.papel, modelo, r, cuotaAntes: cuota });
+    if (r.ok && r.modeloServido?.length && !r.modeloServido.some((m) => m.includes(modelo.replace(/^claude-/, '')))) {
+      this.log.aviso(`⚠️ Pedí «${modelo}» y atendió «${r.modeloServido.join(', ')}». Míralo antes de fiarte de la comparación de gasto.`);
+    }
 
     if (r.ok) {
       this.log.exito(`${accion.papel} terminó en ${Math.round(r.ms / 1000)} s.`);
@@ -633,6 +696,7 @@ export class Ciclo {
       id: tarea.id, titulo: tarea.titulo, resultado: 'esperando-firma', rama,
       intentos: estado.historial.length, replanteos: estado.replanteos,
       commits: commits.length, cuotaFin: cuota?.sesionPct ?? null, cuotaIni: estado.cuotaInicio,
+      gastoPorPapel: estado.gastoPorPapel || {},
     });
     estado = this.almacen.transicion(estado, {
       tipo: 'FIRMA_PEDIDA', id: tarea.id, titulo: tarea.titulo, rama, promesa,
@@ -691,6 +755,7 @@ export class Ciclo {
       id: tarea.id, titulo: tarea.titulo, resultado: 'cerrada',
       intentos: estado.historial.length, replanteos: estado.replanteos,
       commits: commits.length, subida: sub.ok, cuotaFin: cuota?.sesionPct ?? null, cuotaIni: estado.cuotaInicio,
+      gastoPorPapel: estado.gastoPorPapel || {},
     });
 
     if (!sub.ok && !sub.omitida) {
@@ -728,6 +793,10 @@ export class Ciclo {
     this.almacen.registrarHistorial({
       id: tarea.id, titulo: tarea.titulo, resultado: 'apartada', motivo: accion.motivo,
       intentos: estado.historial.length, replanteos: estado.replanteos, decisionDeProducto: !!accion.decisionDeProducto,
+      // Una tarea APARTADA es la que más caro sale: tres intentos pagados y nada entregado.
+      // Dejarla fuera del desglose haría que el coste medio por papel pareciera más barato de
+      // lo que es, y justo en el caso que hay que vigilar al bajar de modelo.
+      gastoPorPapel: estado.gastoPorPapel || {},
     });
 
     const apartada = { tarea, motivo: accion.motivo, historial: estado.historial,
@@ -774,7 +843,7 @@ export class Ciclo {
     this.almacen.registrarHistorial({
       id: tarea.id, titulo: tarea.titulo, resultado: 'cerrada-premisa-falsa', motivo: accion.motivo,
       prueba: accion.prueba, intentos: estado.historial.length, replanteos: estado.replanteos,
-      decisionDeProducto: false,
+      decisionDeProducto: false, gastoPorPapel: estado.gastoPorPapel || {},
     });
     // Se APARTA en el estado (es la transición que suelta la tarea sin darla por construida), pero
     // NO se devuelve `apartada`: eso es lo que dispara el aviso al móvil, y aquí no hay que avisar.

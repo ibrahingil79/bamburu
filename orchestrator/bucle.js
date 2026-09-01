@@ -53,6 +53,10 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
   log.info(`Cuota:    empieza si quedan ${cfg.cuota.minimoParaCicloPct}% tras reservar ${cfg.cuota.margenReservadoPct}% para el chat`);
   log.info(`Ciclo:    ${cfg.ciclo.maxIntentosRevision} rechazos → replanteo · ${cfg.ciclo.maxReplanteos} replanteo(s) → apartar`);
   log.info(`Subida:   ${cfg.subida.activa ? `${cfg.repo.remoto}/${cfg.repo.ramaPrincipal}` : 'desactivada'}`);
+  // Los TRES, cada arranque. El encargo pide que no haya un modelo global escondido: la forma
+  // de que no lo haya es que estén escritos en el registro cada vez que el daemon abre los ojos,
+  // y que un cambio en el fichero se vea en la línea siguiente sin ir a buscarlo.
+  log.info(`Modelos:  ${Object.entries(cfg.cli.modeloPorPapel).map(([p, m]) => `${p} → ${m}`).join(' · ')}`);
 
   if (!esRepo(cfg.repo.raiz)) { log.error(`${cfg.repo.raiz} no es un repositorio git. No arranco.`); return 1; }
   log.info(`Rama:     ${rama(cfg.repo.raiz)}`);
@@ -76,7 +80,7 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
     log.info(`Retomo «${estado.tarea.titulo}» en el paso ${estado.paso} (intento ${estado.intento}).`);
   }
 
-  const vigilante = new Vigilante({ config: cfg, ruta: cfg.rutasAbs.cuota, reloj });
+  const vigilante = new Vigilante({ config: cfg, ruta: cfg.rutasAbs.cuota, rutaLogs: cfg.rutasAbs.logs, reloj });
   const ciclo = new Ciclo({ config: cfg, almacen, vigilante, logger: log, reloj });
 
   // ── Parada ────────────────────────────────────────────────────────────────

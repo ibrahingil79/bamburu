@@ -327,6 +327,40 @@
 
 <!-- BARRIDO:FIN -->
 
+## 👁️ EN VIGILANCIA — UN MODELO POR PAPEL (desde el 1 sep 2026)
+
+> **Decisión de Ibrahin, 1 sep 2026.** Hasta hoy los tres papeles iban en **Opus** y una tarea
+> costaba **entre 14 y 40 puntos** de ventana (**5 a 7 por paso**), con el orquestador pasándose
+> el día esperando cuota. Desde hoy:
+>
+> | Papel | Modelo | Por qué |
+> |---|---|---|
+> | Arquitecto | `claude-opus-5` | Decide **qué** se construye y compara contra los líderes del mercado. Un error suyo se propaga a todo lo demás. |
+> | Revisor | `claude-opus-5` | Es la **red de seguridad**. El 1 sep rechazó el cifrado tres veces con criterio, incluida la comprobación de que las copias seguían **en claro en producción**. Ahí no se recorta. |
+> | Programador | `claude-sonnet-5` | Construye lo que el análisis **ya decidió**. Trabajo acotado, no invención. |
+
+**LO QUE HAY QUE VIGILAR, y es el motivo de que el revisor se quede en el modelo bueno:**
+
+> **Si el revisor empieza a rechazar más de lo normal, es señal de que el programador no da la
+> talla en Sonnet y hay que devolverlo a Opus.** El revisor es quien avisa. La referencia con la
+> que comparar: hasta el 1 sep 2026, lo normal era **0 o 1 rechazo** por tarea, y el disparador es
+> **llegar al replanteo (3 rechazos) en tareas que antes salían a la primera o a la segunda**.
+
+**Dónde se mira.** `orq historial` enseña ahora el **desglose por papel** de cada tarea —puntos de
+ventana, dólares, llamadas y minutos, con el modelo que atendió—, y `orq estado` y la cabecera del
+registro imprimen los tres modelos en cada arranque. Los `intentos:` de cada fila son los rechazos.
+
+**Dónde se cambia.** En **un solo sitio**: `orchestrator/orquestador.config.json` →
+`cli.modeloPorPapel`. No hay modelo global escondido: si a un papel le falta el suyo, o la clave
+está mal escrita, **el daemon no arranca** (`config.js`, con su prueba en `pruebas/modelos.test.js`).
+
+**Aviso sobre los números.** Los **puntos de ventana** son la moneda en la que duele, pero la
+ventana es **deslizante**: mientras un papel trabaja, gasto viejo va caducando, así que la resta
+puede salir corta o negativa. Para comparar de verdad el antes y el después manda el **coste en
+dólares**, que el CLI da por llamada y es aditivo. Se guardan los dos, y los negativos **no se
+recortan a cero**: recortarlos inflaría el total y convertiría la medición en propaganda.
+
+
 ## CORRECCIONES DEL DUEÑO — 21 AGO 2026 (registro completo, no trocear sin marcar aquí)
 
 > **POR QUÉ EXISTE ESTE BLOQUE.** Al trocear tareas se pierden requisitos por el camino. Aquí quedan

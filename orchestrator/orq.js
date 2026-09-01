@@ -67,6 +67,7 @@ function mostrarEstado(cfg) {
   const L = [];
   L.push('', '═'.repeat(66), '  ESTADO DEL ORQUESTADOR', '═'.repeat(66), '');
   L.push(pid ? `  Daemon:      corriendo (pid ${pid})` : '  Daemon:      PARADO');
+  L.push(`  Modelos:     ${Object.entries(cfg.cli.modeloPorPapel).map(([p, m]) => `${p} → ${m}`).join('  ·  ')}`);
   L.push(estado.esperandoCuota
     ? `  Situación:   PARADO esperando cuota ${desdeHace(estado.esperaDesde)} (la tarea sigue en: ${NOMBRE_PASO[estado.paso] || estado.paso})`
     : `  Situación:   ${NOMBRE_PASO[estado.paso] || estado.paso} ${desdeHace(estado.pasoDesde)}`);
@@ -127,7 +128,21 @@ function loQueCreeDeLaCuota(cfg) {
   try { c = JSON.parse(fs.readFileSync(cfg.rutasAbs.cuota, 'utf8')); }
   catch { return ['  Cuota:       (todavía no ha anotado ninguna lectura)']; }
 
-  if (!c.fiable) return [`  Cuota:       NO LA SABE ${desdeHace(c.leidoEn)} — ${c.motivo || 'sin detalle'}`];
+  if (!c.fiable) {
+    const L = [`  Cuota:       NO LA SABE ${desdeHace(c.leidoEn)} — ${c.motivo || 'sin detalle'}`];
+    // CON QUÉ ESTÁ DECIDIENDO MIENTRAS TANTO. «No la sabe» a secas no dice si está parado o
+    // trabajando, y son dos averías distintas: la primera es la fábrica quieta, la segunda es
+    // cuota gastándose sin comprobar. Desde el 1 sep 2026 se enseñan las dos.
+    const u = c.ultimaFiable;
+    if (u && Number.isFinite(u.sesionPct)) {
+      L.push(`               tira de la última lectura buena: QUEDABA ${(100 - u.sesionPct).toFixed(0)}% de sesión`
+           + `, de hace ${Math.max(1, Math.round((u.edadMs || 0) / 60000))} min`);
+    } else {
+      L.push('               y no tiene ninguna lectura buena reciente de la que tirar: está parado');
+    }
+    L.push('               si esto dura, mira logs/usage-ilegible-*.txt: ahí está la salida cruda');
+    return L;
+  }
 
   const L = [`  Cuota:       cree que QUEDA ${(100 - c.sesionPct).toFixed(0)}% de sesión (${c.sesionPct.toFixed(0)}% gastado)`
            + `${c.semanaPct != null ? ` y ${(100 - c.semanaPct).toFixed(0)}% de la semanal (${c.semanaPct.toFixed(0)}% gastado)` : ''}`
@@ -204,6 +219,16 @@ function mostrarHistorial(cfg) {
     const gasto = (f.cuotaFin != null && f.cuotaIni != null) ? `${(f.cuotaFin - f.cuotaIni).toFixed(0)} pts` : '—';
     L.push(`  ${icono} ${String(f.cuando).slice(0, 16).replace('T', ' ')}  ${f.titulo}`);
     L.push(`      intentos: ${f.intentos ?? '?'} · replanteos: ${f.replanteos ?? 0} · cuota: ${gasto}${f.subida === false ? ' · SIN SUBIR' : ''}`);
+    // EL DESGLOSE, que es para lo que se guarda: un total no deja comparar el cambio de modelo
+    // de UN papel — se compara total contra total y la diferencia se le atribuye a lo que a uno
+    // le parezca. Con esto se ve qué papel se llevó los puntos, con qué modelo y en cuántas
+    // llamadas. Las tareas de antes del 1 sep 2026 no lo tienen y salen sin esta línea.
+    const g = f.gastoPorPapel || {};
+    for (const [papel, d] of Object.entries(g)) {
+      L.push(`        · ${papel.padEnd(12)} ${String(d.modelos?.join('/') || '?').padEnd(18)}`
+           + ` ${Number(d.puntos ?? 0).toFixed(0).padStart(3)} pts · ${Number(d.costeUsd ?? 0).toFixed(4)} $`
+           + ` · ${d.llamadas} llamada(s) · ${Math.round((d.ms || 0) / 60000)} min`);
+    }
     if (f.motivo) L.push(`      motivo: ${f.motivo}`);
   }
   const cerradas = filas.filter((f) => f.resultado === 'cerrada').length;
@@ -239,7 +264,7 @@ async function escuchar(cfg) {
   log.titulo('VIGÍA DEL ORQUESTADOR  ·  escuchando órdenes');
 
   const escucha = new Escucha({
-    config: cfg, almacen: almacenDe(cfg), vigilante: new Vigilante({ config: cfg }), logger: log,
+    config: cfg, almacen: almacenDe(cfg), vigilante: new Vigilante({ config: cfg, rutaLogs: cfg.rutasAbs.logs }), logger: log,
   });
   const parar = () => { log.aviso('Parando el vigía.'); escucha.parar(); };
   process.on('SIGTERM', parar);
@@ -256,7 +281,7 @@ async function forzarParte(cfg) {
   // Se LEE, no se recupera: `recuperar()` reescribe la instantánea, y el dueño de
   // ese fichero es el daemon, que puede estar corriendo mientras se teclea esto.
   const estado = almacenDe(cfg).leerEstado();
-  const cuota = await new Vigilante({ config: cfg }).consultar();
+  const cuota = await new Vigilante({ config: cfg, rutaLogs: cfg.rutasAbs.logs }).consultar();
   let enTablero = null;
   let pendientesEnTablero = [];
   try {

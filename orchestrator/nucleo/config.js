@@ -79,7 +79,17 @@ function booleano(v) {
   return ['1', 'true', 'si', 'sí', 'yes', 'on'].includes(String(v).toLowerCase());
 }
 
-/** Se valida al cargar, no al usar: un umbral absurdo tiene que reventar en el arranque. */
+/**
+ * Se valida al cargar, no al usar: un umbral absurdo tiene que reventar en el arranque.
+ *
+ * Se EXPORTA para poder probar las reglas con una configuración a mano. No se puede llegar a
+ * ellas por `cargarConfig`: `fusionar` es una mezcla PROFUNDA, así que una sobreescritura puede
+ * añadir y cambiar claves pero no quitarlas — y «falta el modelo de un papel» es justo el caso
+ * de quitar. Sin esta puerta, la regla que impide que un papel herede el modelo de al lado sería
+ * indemostrable, que es la misma razón por la que el reloj de `maquina.js` entra por parámetro.
+ */
+export function validarConfig(cfg) { return validar(cfg); }
+
 function validar(cfg) {
   const fallos = [];
   const c = cfg.cuota;
@@ -99,6 +109,26 @@ function validar(cfg) {
   if (cfg.ciclo.maxIntentosRevision < 1) fallos.push('ciclo.maxIntentosRevision tiene que ser 1 o más');
   if (cfg.ciclo.maxReplanteos < 0) fallos.push('ciclo.maxReplanteos no puede ser negativo');
   if (cfg.cli.timeoutMs < 1000) fallos.push('cli.timeoutMs es absurdamente corto');
+
+  // ⚙️ CADA PAPEL DECLARA SU MODELO, Y SE COMPRUEBA AL ARRANCAR (1 sep 2026). El encargo dice
+  // «que no haya un modelo global escondido»: la forma de cumplirlo no es quitar el modelo
+  // suelto —`/usage` lo necesita—, es que NINGÚN PAPEL pueda caer en él por descuido. Un
+  // `modeloPorPapel` al que le falte «revisor», o con la clave mal escrita, arrancaría tan
+  // ricamente con el modelo de al lado y no se notaría hasta mirar la factura. Aquí revienta.
+  const porPapel = cfg.cli.modeloPorPapel;
+  if (!porPapel || typeof porPapel !== 'object') {
+    fallos.push('falta cli.modeloPorPapel: cada papel tiene que declarar con qué modelo trabaja');
+  } else {
+    for (const papel of Object.keys(cfg.roles)) {
+      const m = porPapel[papel];
+      if (typeof m !== 'string' || !m.trim()) {
+        fallos.push(`cli.modeloPorPapel.${papel} no dice ningún modelo: los papeles no heredan cli.modelo`);
+      }
+    }
+    for (const papel of Object.keys(porPapel)) {
+      if (!(papel in cfg.roles)) fallos.push(`cli.modeloPorPapel.${papel} no es ningún papel: ¿está mal escrito?`);
+    }
+  }
   for (const [papel, ruta] of Object.entries(cfg.rolesAbs)) {
     if (!fs.existsSync(ruta)) fallos.push(`falta el fichero del papel «${papel}»: ${ruta}`);
   }

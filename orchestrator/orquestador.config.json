@@ -25,6 +25,13 @@
   },
   "cli": {
     "binario": "claude",
+    "$porqueModeloPorPapel": "1 sep 2026, decision de Ibrahin. Los tres papeles iban en Opus y una tarea costaba entre 14 y 40 puntos de ventana. ARQUITECTO en Opus: decide QUE se construye y compara contra el mercado; un error suyo se propaga a todo lo demas. REVISOR en Opus: es la red de seguridad, y hoy rechazo el cifrado tres veces con criterio (incluida la comprobacion de que las copias seguian en claro en produccion); ahi no se recorta. PROGRAMADOR en Sonnet: construye lo que el analisis ya decidio, trabajo acotado y no invencion. Se cambia AQUI y en ningun otro sitio: config.js revienta al arrancar si falta un papel, y la cabecera del daemon y `orq estado` los imprimen los tres.",
+    "modeloPorPapel": {
+      "arquitecto": "claude-opus-5",
+      "programador": "claude-sonnet-5",
+      "revisor": "claude-opus-5"
+    },
+    "$porqueModeloSuelto": "SOLO para las llamadas que no son de un papel: hoy, la consulta de /usage (que ademas no llama al modelo). Ningun papel cae aqui por descuido: config.js exige entrada propia para los tres.",
     "modelo": "claude-opus-5",
     "timeoutMs": 1800000,
     "herramientasPorPapel": {
@@ -62,7 +69,13 @@
     "cacheMs": 300000,
     "timeoutConsultaMs": 180000,
     "esperaSinCuotaMs": 900000,
-    "margenTrasReinicioMs": 60000
+    "margenTrasReinicioMs": 60000,
+    "$porqueNoSaber": "1 sep 2026. Medido: /usage NO gasta cuota (21 lecturas seguidas, 0 turnos, 0 tokens, 0 $). La caché se puso creyendo lo contrario y guardaba tambien los fallos: una lectura ilegible a las 13:54:52 tuvo la fabrica parada hasta las 14:00:04 con un 32% disponible. Estos cuatro mandos separan NO QUEDA de NO LO SE.",
+    "reintentosLectura": 3,
+    "esperaEntreLecturasMs": 3000,
+    "esperaSinLecturaMs": 60000,
+    "ultimoValorValidoMs": 1200000,
+    "margenCiegoPct": 15
   },
   "ciclo": {
     "maxIntentosRevision": 3,

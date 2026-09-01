@@ -76,6 +76,13 @@ export function estadoInicial() {
     historial: [],        // [{ intento, veredicto, motivos[], resumen, cuando }]
     fallosTecnicos: {},   // { [paso]: n }
     cuotaInicio: null,
+    // ⚙️ EL GASTO, PAPEL POR PAPEL (1 sep 2026, con el cambio a un modelo por papel). Hasta hoy
+    // solo se medía por TAREA —`cuotaInicio` contra la cuota del cierre—, y con eso se puede
+    // decir «esta tarea costó 30 puntos» pero no «el programador costó 18 de esos 30». Sin ese
+    // desglose, cambiar el modelo de UN papel es una decisión que no se puede evaluar: se compara
+    // un total contra otro total y se atribuye la diferencia a lo que a uno le parezca.
+    // { [papel]: { llamadas, ms, costeUsd, puntos, modelos[] } }
+    gastoPorPapel: {},
     esperandoCuota: false,
     esperaDesde: null,
     apartadas: [],        // [{ id, titulo, motivo, cuando, historial }]
@@ -199,13 +206,28 @@ export function aplicar(estado, e) {
     case 'TAREA_TOMADA':
       return { ...s, esperandoCuota: false, esperaDesde: null, tarea: e.tarea, paso: 'ANALISIS', pasoDesde: e.cuando,
                intento: 1, replanteos: 0, base: null, historial: [], fallosTecnicos: {},
-               cuotaInicio: e.cuota ?? null };
+               cuotaInicio: e.cuota ?? null, gastoPorPapel: {} };
     case 'PASO_INICIADO':
       return { ...s, paso: e.paso, pasoDesde: e.cuando };
     case 'BASE_FIJADA':
       return { ...s, base: e.base };
     case 'FALLO_TECNICO':
       return { ...s, fallosTecnicos: { ...s.fallosTecnicos, [e.paso]: (s.fallosTecnicos[e.paso] || 0) + 1 } };
+    // Una llamada de un papel, ya terminada y medida. Se acumula; no pisa.
+    case 'PAPEL_MEDIDO': {
+      const g = s.gastoPorPapel || {};
+      const a = g[e.papel] || { llamadas: 0, ms: 0, costeUsd: 0, puntos: 0, modelos: [] };
+      return { ...s, gastoPorPapel: { ...g, [e.papel]: {
+        llamadas: a.llamadas + 1,
+        ms: a.ms + (e.ms || 0),
+        costeUsd: Number((a.costeUsd + (e.costeUsd || 0)).toFixed(6)),
+        // Los puntos de ventana pueden salir negativos: la ventana es DESLIZANTE y al gasto viejo
+        // le llega su hora de caducar mientras el papel trabaja. Se suman tal cual, sin recortar a
+        // cero: recortarlos inflaría el total y convertiría la medición en propaganda.
+        puntos: Number((a.puntos + (e.puntos ?? 0)).toFixed(1)),
+        modelos: a.modelos.includes(e.modelo) ? a.modelos : [...a.modelos, e.modelo].filter(Boolean),
+      } } };
+    }
     case 'FALLOS_TECNICOS_LIMPIADOS':
       return { ...s, fallosTecnicos: { ...s.fallosTecnicos, [e.paso]: 0 } };
     case 'VEREDICTO':
@@ -223,11 +245,11 @@ export function aplicar(estado, e) {
       return { ...s, apartadas: [...s.apartadas,
                { id: s.tarea?.id, titulo: s.tarea?.titulo, motivo: e.motivo, cuando: e.cuando, historial: s.historial }],
                tarea: null, paso: 'OCIOSO', pasoDesde: e.cuando, intento: 0, replanteos: 0, base: null,
-               historial: [], fallosTecnicos: {} };
+               historial: [], fallosTecnicos: {}, gastoPorPapel: {} };
     // ── LA FIRMA DE IBRAHIN ───────────────────────────────────────────────────
     case 'FIRMA_PEDIDA':
       return { ...s, tarea: null, paso: 'OCIOSO', pasoDesde: e.cuando, intento: 0, replanteos: 0,
-               base: null, historial: [], fallosTecnicos: {}, cuotaInicio: null,
+               base: null, historial: [], fallosTecnicos: {}, cuotaInicio: null, gastoPorPapel: {},
                firmasPendientes: [...s.firmasPendientes.filter((f) => f.id !== e.id),
                  { id: e.id, titulo: e.titulo, rama: e.rama, promesa: e.promesa,
                    cuando: e.cuando, estado: 'esperando' }] };
@@ -241,7 +263,7 @@ export function aplicar(estado, e) {
 
     case 'TAREA_CERRADA':
       return { ...s, tarea: null, paso: 'OCIOSO', pasoDesde: e.cuando, intento: 0, replanteos: 0,
-               base: null, historial: [], fallosTecnicos: {},
+               base: null, historial: [], fallosTecnicos: {}, gastoPorPapel: {},
                subidaPendiente: e.subidaPendiente ?? s.subidaPendiente };
     // ── Órdenes desde Telegram ──────────────────────────────────────────────
     case 'PAUSADO':
