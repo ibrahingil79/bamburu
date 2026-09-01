@@ -8541,11 +8541,21 @@ desde dos sitios.
 **Verificado el 1 sep 2026:** no existe ningún anclaje externo en el árbol (ni sellado de tiempo, ni
 TSA, ni publicación de huellas fuera).
 
-**⚠️ AVISO QUE MANDA SOBRE EL PLANO:** el encargo del 1 sep dice **no tocar Verifactu ni la cadena de
-facturas** — está en la cola y se hace cuando toque. Esta tarea queda **convertida y en su sitio del
-orden**, pero **no se empieza sin encargo expreso de Ibrahin**. Y cuando se haga: `toFixed(2)` de
+**✅ DESCONGELADA EL 1 SEP 2026. EL ENCARGO EXPRESO ESTÁ DADO.** *Ibrahin:* «Descongelo el anclaje
+de VERI\*FACTU. Que lo construya.» ~~No se empieza sin encargo expreso de Ibrahin.~~ Se tacha en vez
+de borrarse: durante unas horas de ese día la máquina la tuvo entre manos **mientras la propia tarea
+decía que no se empezara**, y conviene que se vea por qué ya no lo dice.
+
+**Y POR QUÉ PASÓ ESO, que es la lección y no el trámite:** la máquina cogió esta tarea al apartarse
+el cifrado, siguiendo el orden que este mismo tablero le fija («1º el cifrado, 2º el anclaje»). El
+aviso de «no empezar» **estaba en la prosa**, y de un bloque de tarea la máquina solo lee
+`estado:`. **Un freno escrito en prosa no frena.** Si algo no debe cogerse, va en el estado — que es
+para lo que existe `esperando` desde hoy.
+
+**⚠️ LO QUE SÍ MANDA SOBRE EL PLANO, y esto no se toca:** `toFixed(2)` de
 `modules/erp/routes/invoices.js:156` es **entrada del hash de la cadena**; tocar ese fichero a la
-ligera rompe las 922 facturas emitidas.
+ligera **rompe las 922 facturas emitidas**. Y la regla de `docs/contexto/decisiones.md` sigue
+entera: **la factura emitida es inmutable** — solo anular y rectificar.
 
 ## TAREA — Manifiesto de huellas del histórico de copias
 
@@ -8619,55 +8629,6 @@ que no da ni 600 ni 1.025 por ningún camino.
 método de conteo, y ese método es parte de la entrega**: sin él, no hay forma de saber cuándo está
 terminado. Es exactamente la lección de `CLAUDE.md` §«un inventario con "~" y "..." NO es una lista
 cerrada»: solo vale un inventario `fichero:línea` verificado contra el código de HOY.
-
-## TAREA — Roles heredados, en vez de casilla por casilla
-
-- **id:** roles-heredados
-- **estado:** pendiente
-- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
-
-Hoy los permisos son **casilla por casilla y persona por persona: 55 filas para 9 usuarios**. Cada
-alta de empleado se hace a mano y cada olvido es un agujero o un bloqueo.
-
-**Verificado el 1 sep 2026:** las tablas `roles`, `role_permissions` y `user_roles` **no existen** en
-el árbol. No hay nada empezado.
-
-**Ojo a la regla permanente de `CLAUDE.md`:** cualquier migración que toque datos de un negocio
-**archiva, no borra**. Los 55 permisos actuales no se destruyen al pasar a roles: se conservan.
-
-## TAREA — 2FA obligatoria para dueño y administradores
-
-- **id:** 2fa-obligatoria-owner-admin
-- **estado:** pendiente
-- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
-
-Hoy la verificación en dos pasos es **opcional**, con un mínimo de 8 caracteres en la contraseña.
-Las cuentas `owner` y `admin` son las que pueden facturar, cobrar y ver todo, y son justo las que
-pueden entrar con solo una contraseña.
-
-**Verificado el 1 sep 2026:** no hay ninguna obligatoriedad en el árbol (ni `totp_required`, ni
-equivalente).
-
-**El TOTP ya está construido** (`core/`, con bcrypt + 2FA TOTP): esto no es construir 2FA, es
-**exigirla** a dos roles. Lo que hace falta pensar es la puerta de entrada: cómo se le exige a un
-dueño que ya está dentro sin dejarlo fuera de su propio negocio.
-
-## TAREA — La sesión dura 24 h fijas y no se renueva por actividad
-
-- **id:** sesion-24h-sin-renovacion
-- **estado:** pendiente
-- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
-
-La sesión caduca a las 24 h **cuentes lo que cuentes**: ni se renueva porque estés trabajando, ni se
-acorta porque te hayas ido. Quien deja el ordenador abierto sigue dentro; quien está usándolo se
-cae a media tarea.
-
-**⚙️ LÍNEA CORREGIDA EL 1 SEP 2026:** la entrada citaba `core/auth.js:74`, y ahí está `BCRYPT_COST`.
-**El plazo real está en `core/auth.js:107`:** `const expires = now + 24 * 60 * 60`.
-
-La entrada original decía solo «Revisar». **Revisar no es un criterio de HECHO**, así que la tarea
-tiene que empezar decidiendo qué comportamiento se quiere —renovación por actividad, plazo distinto,
-o las dos— y eso queda escrito en la entrega.
 
 ## TAREA — La CSP todavía permite `unsafe-inline`
 
@@ -8839,32 +8800,6 @@ la cadena de VERI\*FACTU: hubo que archivarlos. **La basura que se deja hoy pued
 mañana**, así que este borrado tiene que existir ANTES de que los datos de ejemplo se enreden con un
 documento legal.
 
-## TAREA — Que el oficio traiga serie de facturas, IVA y recordatorios
-
-- **id:** oficio-serie-iva-recordatorios
-- **estado:** pendiente
-- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
-
-Hoy elegir oficio trae **solo el catálogo**. Debería traer también **la serie de facturas, el IVA y
-los recordatorios** que ese oficio necesita: es lo que convierte «elegir oficio» en «el programa ya
-está configurado para lo mío».
-
-Verificado el 1 sep 2026: no existe. **Cuidado con lo fiscal:** la serie y el IVA no son
-preferencias, son datos con consecuencias legales, y el Saneamiento 4 ya dejó la clasificación
-fiscal explícita e inmutable por línea. Esto tiene que apoyarse en ese trabajo, no rodearlo.
-
-## TAREA — Papelera con recuperación por el propio dueño
-
-- **id:** papelera-con-recuperacion
-- **estado:** pendiente
-- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
-
-Hoy, cuando algo se quita, el dueño **no puede recuperarlo él**. Verificado el 1 sep 2026: no hay
-papelera en el árbol.
-
-**Encaja con la regla permanente de `CLAUDE.md`** —archivar, no destruir—: buena parte de lo que se
-«borra» ya se archiva por dentro. **Lo que falta no es guardar: es enseñarlo y dejar deshacer.**
-
 ## TAREA — Historial de cambios visible para el cliente
 
 - **id:** historial-cambios-visible-cliente
@@ -8903,19 +8838,6 @@ existe (lo único que aparece buscando es el `--no-sandbox` de Chromium, que no 
 **Se apoya en los negocios desechables que los gates ya usan** (`negocioDesechable`,
 `EMPIEZAN_DE_CERO`): la pieza de crear y tirar un negocio entero ya está construida y probada.
 
-## TAREA — Entrada como cliente para soporte, con motivo y registro
-
-- **id:** entrada-como-cliente-soporte
-- **estado:** pendiente
-- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
-
-Para ayudar a un cliente hoy hay que pedirle la contraseña o mirar por encima de su hombro.
-Verificado el 1 sep 2026: no existe.
-
-**Las dos condiciones no son adorno, son la tarea:** **motivo obligatorio** y **registro**. Una
-entrada de soporte sin rastro es una puerta trasera con buena intención, y este producto guarda datos
-de salud en algunos oficios.
-
 ## TAREA — Página de estado pública
 
 - **id:** pagina-estado-publica
@@ -8942,19 +8864,6 @@ almacenamiento. Verificado el 1 sep 2026: no hay nada que los enseñe antes.
 esperando una pantalla que no se pintaba nunca. **El diagnóstico que quedó escrito era falso** y se
 tardó en descubrir. Un tope que no se ve no solo molesta: **hace que se diagnostique mal**.
 
-## TAREA — Ciclo completo de suscripción
-
-- **id:** ciclo-suscripcion-completo
-- **estado:** pendiente
-- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
-
-Alta, cobro, **tarjeta caducada**, cancelación y recuperación. Verificado el 1 sep 2026: no existe
-(lo único que aparece es un mensaje de límite de envíos en la tienda, que es **Capa 2 y está
-CONGELADA**).
-
-**El caso que de verdad importa es la tarjeta caducada**, porque es el único del ciclo que ocurre sin
-que nadie lo pida y el que decide si un cliente se pierde solo.
-
 ## TAREA — Corregir errores de semanas atrás en documentos no fiscales
 
 - **id:** corregir-errores-documentos-no-fiscales
@@ -8980,20 +8889,6 @@ existe.
 escribe nada**, así que los fallos se ven antes. Lo que falta es la vuelta atrás **de lo que ya
 entró**, y esa es la que no existe.
 
-## TAREA — Fusionar clientes duplicados
-
-- **id:** fusionar-clientes-duplicados
-- **estado:** pendiente
-- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
-
-Los duplicados se acumulan y hoy **no hay forma de unirlos**. Verificado el 1 sep 2026: no existe.
-
-**Y aquí hay una trampa medida:** una factura **guarda el nombre del cliente por dentro**. Se
-descubrió el 23 ago al limpiar los restos de gates: se archivaron 130 clientes y **sus nombres
-siguen apareciendo en el área de Ventas**, porque la factura no mira al cliente, lleva su nombre
-copiado. Fusionar dos clientes **no puede reescribir facturas emitidas**, así que el plano tiene que
-decir qué se une y qué se queda como estaba.
-
 ## TAREA — Búsqueda global
 
 - **id:** busqueda-global
@@ -9018,18 +8913,6 @@ Verificado el 1 sep 2026: no hay control de versión ni bloqueo optimista en el 
 **El diagnóstico arquitectónico ya lo situó:** es una columna `version` en el servicio — **trivial
 una vez esté «un solo escritor»**, e **imposible de aplicar de forma uniforme sin él**. Por eso no
 va antes que aquélla.
-
-## TAREA — Que el dueño vea la actividad de sus empleados
-
-- **id:** actividad-de-empleados
-- **estado:** pendiente
-- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
-
-El dueño **no puede ver qué han hecho sus empleados** en el programa. Verificado el 1 sep 2026: no
-existe registro de actividad por usuario.
-
-**Comparte cimiento con el historial de cambios del cliente y con el aviso de edición simultánea:**
-las tres necesitan que quede rastro de quién cambió qué. Se decide una vez y sirve a las tres.
 
 ## TAREA — Acceso de gestoría sin consumir un usuario
 
@@ -9290,7 +9173,8 @@ negocio suspendido NO deja escribir— necesitan un negocio suspendido y tienen 
 
 - [x] ~~Retirar las 6 pantallas muertas (1.584 líneas ya sin montar).~~ **CERRADA — ya estaban retiradas desde el 24 ago 2026 (`fe6bef0`); esta línea llevaba ocho días afirmando en falso. Verificado el 1 sep 2026: no existen en el árbol. Detalle y lección en §Deuda técnica.**
 - [x] ~~Enlazar las 14 secciones sin acceso desde el menú.~~ **CADUCADA — resuelta el 24 ago 2026 en `9d114d2` («Las 14 pantallas escondidas, al menú»), siete días antes de volcarse. Contrastado contra el árbol el 1 sep 2026: ese commit añadió EXACTAMENTE 14 entradas a `modules/erp/menu.js` y las 14 siguen ahí (comprobadas una a una, cero ausencias); el fichero no se ha tocado desde entonces. Ojo al rastro: el bloque de entrega la atribuye a `fe6bef0`, que NO tocó el menú.**
-- [ ] ⛔ **NO CONVERTIBLE — le falta un criterio que solo puede dar Ibrahin.** ~~Reducir los 65 elementos de menú.~~ **Son 67**, contados el 1 sep 2026 (49 del menú principal + 9 de configuración del negocio + 5 fijas + 4 de cuenta). Y `menu.js` no se ha tocado desde el 24 ago, así que la auditoría y este recuento miran el MISMO árbol: la diferencia entre 65 y 67 es método de conteo, no crecimiento. **Por qué no se convierte:** «reducir» no es un defecto, es un juicio de producto, y nadie ha escrito **a cuánto** hay que bajar ni **con qué criterio**. Un constructor no sabría cuándo ha terminado. *(Nota: cuántas ve un usuario concreto depende de su rol y permisos —`menuDeUsuario` filtra—, y eso no se sabe sin levantar una sesión.)*
+- [ ] ⛔ **NO CONVERTIBLE — le falta un criterio que solo puede dar Ibrahin.** ~~Reducir los 65 elementos de menú.~~ **Son 67**, contados el 1 sep 2026 (49 del menú principal + 9 de configuración del negocio + 5 fijas + 4 de cuenta). Y `menu.js` no se ha tocado desde el 24 ago, así que la auditoría y este recuento miran el MISMO árbol: la diferencia entre 65 y 67 es método de conteo, no crecimiento. **Por qué no se convierte:** «reducir» no es un defecto, es un juicio de producto, y nadie ha escrito **a cuánto** hay que bajar ni **con qué criterio**. Un constructor no sabría cuándo ha terminado.
+  **⚙️ AÑADIDO EL 1 SEP 2026 (bloque 3), Y CAMBIA LA PREGUNTA EN VEZ DE SOLO CONTESTARLA: ESTO YA SE PROBÓ Y SE DESCARTÓ.** `DISEÑO.md` §3 registra que el **«lean estricto»** —el menú corto— **se sustituyó porque «escondía demasiado»**, y el modelo vigente desde entonces es **rail de 6 iconos por área con desplegable, estilo Holded**: en reposo se ven **seis iconos, no 67 entradas**. O sea que **el problema que la entrada describe ya está resuelto por diseño**, y «reducir el menú» repetiría una decisión **ya tomada y ya revertida** por Ibrahin. Esta advertencia faltaba en la entrada: sin ella, quien la cogiera desharía el rail. **Si aun así se quiere bajar el número de entradas, hace falta que Ibrahin diga a cuánto y con qué criterio** — y sabiendo que cuántas ve una persona concreta depende de su rol, porque `menuDeUsuario` filtra. *(Nota: cuántas ve un usuario concreto depende de su rol y permisos —`menuDeUsuario` filtra—, y eso no se sabe sin levantar una sesión.)*
 - [x] ~~Las 99 comprobaciones que nadie ejecuta: o entran al barrido o se retiran con motivo escrito.~~ **CADUCADA EN SU NÚMERO — resuelta el 24 ago 2026 en `edb5a9c` («de 99 sin clasificar a CERO»). Contrastado el 1 sep 2026 con el propio instrumento del código: 89 gates en disco = 78 en el barrido + 2 declarados fuera + 9 declarados con motivo; **0 sin clasificar**. Y el invariante ha aguantado el crecimiento (87 → 89 gates). ⚠️ LA PREOCUPACIÓN NO MURIÓ, y por eso no se borra: bajo la lectura de la auditoría —«nadie las ejecuta AUTOMÁTICAMENTE»— seguía viva, porque el nocturno se retiró a propósito el 26 ago (`bff11d0`). Eso lo cierra el bloque 4 del encargo del 1 sep: el barrido se lanza en las esperas de cuota.**
 
 ## Decisiones tomadas el 31 ago 2026
@@ -9302,6 +9186,58 @@ negocio suspendido NO deja escribir— necesitan un negocio suspendido y tienen 
 - **No perseguir amplitud** (multi-moneda, nóminas, fabricación): es donde se pierde contra SAP.
 
 ## Decisiones tomadas el 1 sep 2026
+
+- **BLOQUE 3 — LAS 44 DE LA COLA, UNA A UNA. 35 SE QUEDAN, 9 ESPERAN, 0 SE RECORTAN.**
+
+  **La suma cuadra y está comprobada leyendo el tablero con el propio lector del orquestador:
+  35 en la cola + 9 esperando = 44.** Ninguna perdida, y las nueve **idénticas letra por letra** a
+  como estaban salvo su línea de estado.
+
+  **LO QUE SEPARA UN GRUPO DEL OTRO no es el tamaño ni la dificultad**, y conviene decirlo porque la
+  norma lo prohíbe expresamente: una tarea sale de la cola **solo** si su respuesta **cambia lo que
+  Bamburu le promete al cliente**. Las dudas de construcción —qué tabla, qué formato, dónde va un
+  botón— se deciden y se explican en la entrega (norma del 24 ago 2026). **Ninguna ha salido por ser
+  grande, complicada o cara, y ninguna se ha resumido.**
+
+  **LAS 9 QUE ESPERAN, con su pregunta en una frase que Ibrahin puede contestar sin ser técnico**
+  (sección §«⏸ ESPERANDO UNA DECISIÓN DE IBRAHIN»):
+  `roles-heredados` (qué perfiles existen y qué puede cada uno) · `2fa-obligatoria-owner-admin` (a un
+  dueño que ya está dentro, ¿se le obliga o se le deja seguir?) · `sesion-24h-sin-renovacion` (cuánto
+  sigue dentro quien se levanta) · `papelera-con-recuperacion` (cuánto se guarda lo borrado) ·
+  `entrada-como-cliente-soporte` (¿se puede entrar en su negocio, y se le avisa?) ·
+  `actividad-de-empleados` (qué ve el dueño de sus empleados, y si se les dice) ·
+  `ciclo-suscripcion-completo` (qué pasa cuando caduca la tarjeta) · `oficio-serie-iva-recordatorios`
+  (qué serie, IVA y recordatorios trae cada oficio) · `fusionar-clientes-duplicados` (con qué datos
+  se queda la ficha buena).
+
+  **POR QUÉ SALEN DE LA COLA Y NO SE QUEDAN «PENDIENTES», que es la parte que importa:** si la
+  máquina coge una de éstas, el arquitecto se encuentra **sin criterio**, la declara mal planteada y
+  acaba **subiendo al móvil de Ibrahin como si fuera una avería**. **Eso pasó dos veces ese mismo
+  día** —las seis pantallas y el cifrado—. Su `estado:` es `esperando decisión de Ibrahin`, y
+  `orchestrator/reader.js` las deja fuera de la cola por eso, con prueba propia **verificada en
+  rojo**. Contestar una es cambiarle el encabezado y el estado: vuelve entera.
+
+  **UN FRENO ESCRITO EN PROSA NO FRENA, y costó verlo en vivo.** `anclar-verifactu-fuera` llevaba
+  dentro *«no se empieza sin encargo expreso de Ibrahin»*… **y la máquina la tenía entre manos**,
+  en ANALISIS, desde las 09:17. No fue un fallo suyo: cogió la 2ª del orden que este tablero le fija
+  al caerse la 1ª, y **de un bloque de tarea solo lee `estado:`**. El aviso vivía en la prosa. Para
+  eso existe ahora el estado `esperando`. **Ibrahin la ha DESCONGELADO** —*«que lo construya»*— así
+  que la nota se tacha y la tarea se queda en la cola con el encargo dado.
+
+  **UNA DECISIÓN YA TOMADA QUE NO HABÍA LLEGADO A SU TAREA.** El backlog pide *«reducir los 67
+  elementos de menú»* y lo declara no convertible *«porque nadie ha escrito a cuánto bajar»*. Pero
+  **`DISEÑO.md` §3 registra que el «lean estricto» ya se probó y Ibrahin lo descartó porque «escondía
+  demasiado»**, y por eso hoy hay **rail de 6 iconos con desplegable**: en reposo se ven seis iconos,
+  no 67 entradas. **El problema que la entrada describe ya está resuelto por diseño**, y quien la
+  cogiera **desharía el rail repitiendo una decisión ya revertida**. Anotado en la entrada.
+  *(Lo de Backblaze que Ibrahin puso de ejemplo SÍ había llegado: está en `CLAUDE.md` y en la tarea
+  del cifrado.)*
+
+  **Y GRUPO C — tareas con un paso que solo funciona hablando con una persona: CERO.** Era una sola,
+  el cifrado, y se arregló en el bloque 2.1. Tres **terminan** necesitando algo de Ibrahin (ejecutar
+  el guion del cifrado, una clave de repositorio para la integración continua, una cuenta de cobros
+  para las suscripciones), y **eso no es una parada a mitad: es el final**. La máquina llega sola
+  hasta ahí.
 
 - **BLOQUE 2 — LAS DOS APARTADAS SALEN. NINGUNA DE LAS DOS ERA UNA DECISIÓN DE IBRAHIN.**
   La lista de apartadas queda **VACÍA**.
@@ -9775,3 +9711,195 @@ negocio suspendido NO deja escribir— necesitan un negocio suspendido y tienen 
   manda sobre todo lo demás, así que esa vuelta no ejercita la puerta. Ejercitada aparte contra la
   función real: la frontera cae **exacta en 25 % libre** (25 arranca · 24 espera), y con los tres
   atascos medidos de esa madrugada —41 %, 39 % y 36 % libres— **arranca en los tres**.
+
+
+# ⏸ ESPERANDO UNA DECISIÓN DE IBRAHIN — 9 tareas (1 sep 2026, bloque 3)
+
+> **NO ESTÁN DESCARTADAS NI RECORTADAS: ESPERAN.** Son las 9 de las 44 cuya respuesta **cambia lo
+> que Bamburu le promete al cliente** —qué perfiles existen, cuánto dura una sesión, qué pasa
+> cuando caduca una tarjeta—. Eso lo decide Ibrahin, no quien construye. Las dudas de construcción
+> (qué tabla, qué formato, dónde va un botón) **no están aquí**: ésas se deciden y se explican en la
+> entrega, que es la norma del 24 ago 2026.
+>
+> **Ninguna sale de aquí por ser grande, complicada o cara.** Ninguna se ha resumido: cada una
+> conserva su cuerpo entero, con su motivo y su detalle.
+>
+> **Por qué salen de la cola y no se quedan «pendientes».** Si la máquina coge una de éstas, el
+> arquitecto se encuentra sin criterio, la declara mal planteada y acaba subiendo al móvil de
+> Ibrahin como si fuera una avería. **Eso pasó dos veces el 1 sep 2026** —las seis pantallas y el
+> cifrado— y es lo que el bloque 4 de este encargo viene a separar. Su `estado:` es
+> `esperando decisión de Ibrahin`, y `orchestrator/reader.js` las deja fuera de la cola por eso.
+>
+> **Para contestarlas no hace falta saber de programación.** Cada una lleva su pregunta arriba.
+
+## ⏸ ESPERANDO DECISIÓN DE IBRAHIN — Roles heredados, en vez de casilla por casilla
+
+> ### ❓ ¿Qué perfiles de persona quieres que existan (dueño, administrador, empleado, gestoría…) y qué puede hacer cada uno?
+>
+> Contéstala y esta tarea vuelve a la cola tal cual está: cambia el encabezado a
+> `## TAREA — Roles heredados, en vez de casilla por casilla` y el estado a `pendiente`. **No falta nada de ella.**
+
+- **id:** roles-heredados
+- **estado:** esperando decisión de Ibrahin
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
+
+Hoy los permisos son **casilla por casilla y persona por persona: 55 filas para 9 usuarios**. Cada
+alta de empleado se hace a mano y cada olvido es un agujero o un bloqueo.
+
+**Verificado el 1 sep 2026:** las tablas `roles`, `role_permissions` y `user_roles` **no existen** en
+el árbol. No hay nada empezado.
+
+**Ojo a la regla permanente de `CLAUDE.md`:** cualquier migración que toque datos de un negocio
+**archiva, no borra**. Los 55 permisos actuales no se destruyen al pasar a roles: se conservan.
+
+## ⏸ ESPERANDO DECISIÓN DE IBRAHIN — 2FA obligatoria para dueño y administradores
+
+> ### ❓ A un dueño que YA está dentro y no tiene la verificación en dos pasos, ¿se le deja seguir trabajando, o se le obliga a ponerla antes de nada?
+>
+> Contéstala y esta tarea vuelve a la cola tal cual está: cambia el encabezado a
+> `## TAREA — 2FA obligatoria para dueño y administradores` y el estado a `pendiente`. **No falta nada de ella.**
+
+- **id:** 2fa-obligatoria-owner-admin
+- **estado:** esperando decisión de Ibrahin
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
+
+Hoy la verificación en dos pasos es **opcional**, con un mínimo de 8 caracteres en la contraseña.
+Las cuentas `owner` y `admin` son las que pueden facturar, cobrar y ver todo, y son justo las que
+pueden entrar con solo una contraseña.
+
+**Verificado el 1 sep 2026:** no hay ninguna obligatoriedad en el árbol (ni `totp_required`, ni
+equivalente).
+
+**El TOTP ya está construido** (`core/`, con bcrypt + 2FA TOTP): esto no es construir 2FA, es
+**exigirla** a dos roles. Lo que hace falta pensar es la puerta de entrada: cómo se le exige a un
+dueño que ya está dentro sin dejarlo fuera de su propio negocio.
+
+## ⏸ ESPERANDO DECISIÓN DE IBRAHIN — La sesión dura 24 h fijas y no se renueva por actividad
+
+> ### ❓ ¿Cuánto tiempo debe seguir dentro alguien que se levanta del ordenador, y quieres que la sesión se alargue sola mientras está trabajando?
+>
+> Contéstala y esta tarea vuelve a la cola tal cual está: cambia el encabezado a
+> `## TAREA — La sesión dura 24 h fijas y no se renueva por actividad` y el estado a `pendiente`. **No falta nada de ella.**
+
+- **id:** sesion-24h-sin-renovacion
+- **estado:** esperando decisión de Ibrahin
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
+
+La sesión caduca a las 24 h **cuentes lo que cuentes**: ni se renueva porque estés trabajando, ni se
+acorta porque te hayas ido. Quien deja el ordenador abierto sigue dentro; quien está usándolo se
+cae a media tarea.
+
+**⚙️ LÍNEA CORREGIDA EL 1 SEP 2026:** la entrada citaba `core/auth.js:74`, y ahí está `BCRYPT_COST`.
+**El plazo real está en `core/auth.js:107`:** `const expires = now + 24 * 60 * 60`.
+
+La entrada original decía solo «Revisar». **Revisar no es un criterio de HECHO**, así que la tarea
+tiene que empezar decidiendo qué comportamiento se quiere —renovación por actividad, plazo distinto,
+o las dos— y eso queda escrito en la entrega.
+
+## ⏸ ESPERANDO DECISIÓN DE IBRAHIN — Que el oficio traiga serie de facturas, IVA y recordatorios
+
+> ### ❓ Para cada oficio, ¿qué serie de facturas, qué IVA y qué recordatorios trae puestos de fábrica?
+>
+> Contéstala y esta tarea vuelve a la cola tal cual está: cambia el encabezado a
+> `## TAREA — Que el oficio traiga serie de facturas, IVA y recordatorios` y el estado a `pendiente`. **No falta nada de ella.**
+
+- **id:** oficio-serie-iva-recordatorios
+- **estado:** esperando decisión de Ibrahin
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
+
+Hoy elegir oficio trae **solo el catálogo**. Debería traer también **la serie de facturas, el IVA y
+los recordatorios** que ese oficio necesita: es lo que convierte «elegir oficio» en «el programa ya
+está configurado para lo mío».
+
+Verificado el 1 sep 2026: no existe. **Cuidado con lo fiscal:** la serie y el IVA no son
+preferencias, son datos con consecuencias legales, y el Saneamiento 4 ya dejó la clasificación
+fiscal explícita e inmutable por línea. Esto tiene que apoyarse en ese trabajo, no rodearlo.
+
+## ⏸ ESPERANDO DECISIÓN DE IBRAHIN — Papelera con recuperación por el propio dueño
+
+> ### ❓ ¿Cuánto tiempo se guarda lo borrado antes de desaparecer del todo, y quién puede vaciar la papelera?
+>
+> Contéstala y esta tarea vuelve a la cola tal cual está: cambia el encabezado a
+> `## TAREA — Papelera con recuperación por el propio dueño` y el estado a `pendiente`. **No falta nada de ella.**
+
+- **id:** papelera-con-recuperacion
+- **estado:** esperando decisión de Ibrahin
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
+
+Hoy, cuando algo se quita, el dueño **no puede recuperarlo él**. Verificado el 1 sep 2026: no hay
+papelera en el árbol.
+
+**Encaja con la regla permanente de `CLAUDE.md`** —archivar, no destruir—: buena parte de lo que se
+«borra» ya se archiva por dentro. **Lo que falta no es guardar: es enseñarlo y dejar deshacer.**
+
+## ⏸ ESPERANDO DECISIÓN DE IBRAHIN — Entrada como cliente para soporte, con motivo y registro
+
+> ### ❓ ¿Puedes entrar tú en el negocio de un cliente para ayudarle, y se le avisa al cliente cuando pasa?
+>
+> Contéstala y esta tarea vuelve a la cola tal cual está: cambia el encabezado a
+> `## TAREA — Entrada como cliente para soporte, con motivo y registro` y el estado a `pendiente`. **No falta nada de ella.**
+
+- **id:** entrada-como-cliente-soporte
+- **estado:** esperando decisión de Ibrahin
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
+
+Para ayudar a un cliente hoy hay que pedirle la contraseña o mirar por encima de su hombro.
+Verificado el 1 sep 2026: no existe.
+
+**Las dos condiciones no son adorno, son la tarea:** **motivo obligatorio** y **registro**. Una
+entrada de soporte sin rastro es una puerta trasera con buena intención, y este producto guarda datos
+de salud en algunos oficios.
+
+## ⏸ ESPERANDO DECISIÓN DE IBRAHIN — Ciclo completo de suscripción
+
+> ### ❓ Cuando a un cliente le caduca la tarjeta, ¿cuántos días le sigue funcionando el programa y qué deja de poder hacer?
+>
+> Contéstala y esta tarea vuelve a la cola tal cual está: cambia el encabezado a
+> `## TAREA — Ciclo completo de suscripción` y el estado a `pendiente`. **No falta nada de ella.**
+
+- **id:** ciclo-suscripcion-completo
+- **estado:** esperando decisión de Ibrahin
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
+
+Alta, cobro, **tarjeta caducada**, cancelación y recuperación. Verificado el 1 sep 2026: no existe
+(lo único que aparece es un mensaje de límite de envíos en la tienda, que es **Capa 2 y está
+CONGELADA**).
+
+**El caso que de verdad importa es la tarjeta caducada**, porque es el único del ciclo que ocurre sin
+que nadie lo pida y el que decide si un cliente se pierde solo.
+
+## ⏸ ESPERANDO DECISIÓN DE IBRAHIN — Fusionar clientes duplicados
+
+> ### ❓ Al unir dos fichas del mismo cliente, ¿con qué datos se queda la ficha buena cuando las dos tienen teléfono o dirección distintos?
+>
+> Contéstala y esta tarea vuelve a la cola tal cual está: cambia el encabezado a
+> `## TAREA — Fusionar clientes duplicados` y el estado a `pendiente`. **No falta nada de ella.**
+
+- **id:** fusionar-clientes-duplicados
+- **estado:** esperando decisión de Ibrahin
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
+
+Los duplicados se acumulan y hoy **no hay forma de unirlos**. Verificado el 1 sep 2026: no existe.
+
+**Y aquí hay una trampa medida:** una factura **guarda el nombre del cliente por dentro**. Se
+descubrió el 23 ago al limpiar los restos de gates: se archivaron 130 clientes y **sus nombres
+siguen apareciendo en el área de Ventas**, porque la factura no mira al cliente, lleva su nombre
+copiado. Fusionar dos clientes **no puede reescribir facturas emitidas**, así que el plano tiene que
+decir qué se une y qué se queda como estaba.
+
+## ⏸ ESPERANDO DECISIÓN DE IBRAHIN — Que el dueño vea la actividad de sus empleados
+
+> ### ❓ ¿Qué puede ver el dueño de lo que hacen sus empleados, y se les dice que queda registrado?
+>
+> Contéstala y esta tarea vuelve a la cola tal cual está: cambia el encabezado a
+> `## TAREA — Que el dueño vea la actividad de sus empleados` y el estado a `pendiente`. **No falta nada de ella.**
+
+- **id:** actividad-de-empleados
+- **estado:** esperando decisión de Ibrahin
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
+
+El dueño **no puede ver qué han hecho sus empleados** en el programa. Verificado el 1 sep 2026: no
+existe registro de actividad por usuario.
+
+**Comparte cimiento con el historial de cambios del cliente y con el aviso de edición simultánea:**
+las tres necesitan que quede rastro de quién cambió qué. Se decide una vez y sirve a las tres.

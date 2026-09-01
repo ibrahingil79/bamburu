@@ -176,7 +176,15 @@ function tareaDesdeBloque(lineas, i, origen) {
  * cuenta como pendiente: es preferible que el orquestador ofrezca una tarea de más —se ve y
  * se corrige— a que se calle una de menos, que es la avería del 31 ago 2026.
  */
-const ESTADOS_CERRADOS = /^(hecha|hecho|cerrada|cerrado|apartada|apartado|descartada|descartado|anulada|en[- ]curso)\b/;
+// Los estados que SACAN una tarea de la cola. No todos significan «terminada»:
+//
+// ⚙️ `esperando` se añadió el 1 sep 2026 (bloque 3 del encargo de cierre). Nueve tareas de las 44
+// necesitan una decisión de Ibrahin que cambia lo que el producto le promete al cliente —qué
+// perfiles existen, cuánto dura una sesión, qué pasa cuando caduca una tarjeta—. **No se
+// descartan ni se recortan: esperan.** Y mientras esperan, el orquestador NO puede cogerlas: si
+// las coge, el arquitecto se encuentra sin criterio, las declara mal planteadas y acaban subiendo
+// al móvil de Ibrahin como una avería. Eso ya pasó dos veces ese mismo día.
+const ESTADOS_CERRADOS = /^(hecha|hecho|cerrada|cerrado|apartada|apartado|descartada|descartado|anulada|en[- ]curso|esperando)\b/;
 
 /** ¿Este encabezado rotula una tarea en el formato del orquestador? */
 function esEncabezadoDeTarea(titulo) {

@@ -438,6 +438,36 @@ test('un umbral de cuota que no puede alcanzarse NUNCA revienta al cargar la con
   assert.equal(bueno.cuota.minimoParaCicloPct + bueno.cuota.margenReservadoPct, 25);
 });
 
+// ════════════════════════════════════════════════════════════════════════════════════════════
+//  UNA TAREA QUE ESPERA UNA DECISIÓN NO ES UNA TAREA PENDIENTE
+// ════════════════════════════════════════════════════════════════════════════════════════════
+
+test('una tarea «esperando» sale de la cola, pero NO se pierde del tablero', async () => {
+  // DE DÓNDE SALE (1 sep 2026, bloque 3). De las 44 de la cola, 9 necesitan una decisión de
+  // Ibrahin que cambia lo que el producto promete al cliente. No se descartan ni se recortan:
+  // ESPERAN. Y mientras esperan el orquestador no puede cogerlas — si las coge, el arquitecto se
+  // encuentra sin criterio, las declara mal planteadas y suben al móvil como si fueran una
+  // avería. Pasó dos veces ese mismo día (las seis pantallas y el cifrado).
+  const { tareasPendientes, buscarSiguienteTarea } = await import('../reader.js');
+  const tablero = [
+    '## TAREA — Una que espera a Ibrahin', '',
+    '- **id:** espera-decision', '- **estado:** esperando decisión de Ibrahin', '',
+    'Su cuerpo entero sigue aquí, sin recortar.', '',
+    '## TAREA — Una que se puede construir', '',
+    '- **id:** lista-para-construir', '- **estado:** pendiente', '',
+    'Cuerpo.', '',
+  ].join('\n');
+
+  const p = tareasPendientes(tablero);
+  assert.deepEqual(p.map((t) => t.id), ['lista-para-construir'],
+    'la que espera no puede aparecer como pendiente');
+  assert.equal(buscarSiguienteTarea(tablero, { excluir: [] })?.id, 'lista-para-construir',
+    'y desde luego no puede ser la siguiente que se coge');
+
+  // Y NO SE PIERDE: sigue escrita, entera, para el día que Ibrahin conteste.
+  assert.match(tablero, /Su cuerpo entero sigue aquí, sin recortar/);
+});
+
 // ── utilidades ───────────────────────────────────────────────────────────────────────────────
 
 function correr(cmd, args, cwd) {
