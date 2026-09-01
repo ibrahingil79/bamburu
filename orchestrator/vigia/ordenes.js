@@ -32,6 +32,14 @@ export const ORDENES = Object.freeze({
   APROBAR: 'APROBAR',      // entra en producción
   RECHAZAR: 'RECHAZAR',    // vuelve a la cola con su motivo
   HABLAR: 'HABLAR',        // abre conversación y la deja esperando
+  // ── LO QUE ESPERA POR IBRAHIN (1 sep 2026) ──────────────────────────────────
+  // Nueve decisiones paradas y nueve firmas por venir viven hoy en el tablero, y **el tablero no
+  // lo lee nadie salvo que se pregunte por él**. Si no se acuerda de que algo espera por él, se
+  // queda colgado indefinidamente. Esto es la forma de preguntarlo desde el móvil.
+  PREGUNTAS: 'PREGUNTAS',
+  // Y contestar una, ahí mismo: «1: que se le obligue». El número sale del listado de arriba —
+  // NUNCA un identificador técnico, que es lo que nadie va a teclear de pie en la calle.
+  RESPONDER: 'RESPONDER',
   AYUDA: 'AYUDA',
   SI: 'SI',
   NO: 'NO',
@@ -66,6 +74,27 @@ const VOCABULARIO = [
   // aviso de firma escribe como habla («adelante», «no me convence», «hablemos de eso»), y esas
   // palabras no deben caer en AYUDA. RECHAZAR va antes que APROBAR: «no lo apruebes» lleva las
   // dos palabras y significa una sola cosa.
+  // ── LO QUE ESPERA POR IBRAHIN ───────────────────────────────────────────────
+  // Va ANTES que TAREAS: «qué tengo pendiente» es esto, no la cola de trabajo de la máquina.
+  // ⚙️ SE EXIGE LA PRIMERA PERSONA (1 sep 2026), y no es un capricho.
+  //
+  // La primera versión cazaba «qué falta» y «qué queda» a secas, y **ésas ya eran la cola de
+  // trabajo** («📋 Lo que queda»). Lo cazaron dos pruebas que ya existían. Y tienen razón: «qué
+  // queda» pregunta por lo que le falta a la MÁQUINA; «qué me falta» pregunta por lo que espera
+  // por ÉL. Son dos preguntas distintas y la diferencia está en el «me».
+  //
+  // Todos los ejemplos del encargo llevaban esa marca —«qué ME falta», «qué espera por MÍ», «qué
+  // TENGO pendiente»—, así que se exige: `me`, `mi` o `tengo`. Y «preguntas» a secas, que no es
+  // ambiguo con nada.
+  { orden: ORDENES.PREGUNTAS, es: /\bpreguntas?\b|\bque\s+me\s+(falta|queda)\b|\bque\s+espera\s+por\s+mi\b|\bque\s+tengo\s+pendiente\b|\bque\s+esperas?\s+de\s+mi\b|\bque\s+necesitas\s+de\s+mi\b|\bque\s+hay\s+para\s+mi\b|\bque\s+espera\s+por\s+mi\b/ },
+  // Contestar una del listado: **empieza por el número** y sigue algo.
+  //
+  // ⚙️ Se compara contra el texto YA LIMPIO, y `interpretar` le quita la puntuación antes: «7.» y
+  // «2:» llegan aquí como «7 » y «2 ». Por eso no se puede exigir el punto ni los dos puntos — la
+  // primera versión lo hacía y «7. treinta días» acababa en la ayuda. Basta con el número al
+  // principio: **ningún otro comando de la lista empieza por un dígito**, y el `\s+` de después
+  // impide cazar cosas como «2fa obligatoria».
+  { orden: ORDENES.RESPONDER, es: /^(la\s+)?(numero\s+)?[1-9][0-9]?\s+\S/ },
   { orden: ORDENES.RECHAZAR, es: /\bno\s+(lo\s+)?(apruebo|apruebes|me\s+vale|me\s+convence|lo\s+quiero)\b|\brechaza[rl]?o?\b|\brechazo\b|\bque\s+no\b|\bmarcha\s+atras\b/ },
   { orden: ORDENES.APROBAR, es: /\bapruebo\b|\baprueba[rl]?o?\b|\baprobad[oa]\b|\badelante\b|\bfirmo\b|\bfirmad[oa]\b|\btira\s+p?a?\s*lante\b|\bque\s+entre\b|\bdale\b/ },
   { orden: ORDENES.HABLAR, es: /\bhablemos\b|\bhablamos\b|\bdiscut\w*\b|\bexplicame\b|\bcuentame\b|\btengo\s+dudas?\b|\bno\s+lo\s+tengo\s+claro\b|\bespera\b/ },
@@ -77,7 +106,19 @@ const VOCABULARIO = [
   { orden: ORDENES.TAREAS, es: /\btareas?\b|\bcola\b|\bpendientes?\b|\bque\s+queda\b|\bque\s+falta\b/ },
   { orden: ORDENES.ESTADO, es: /\bestado\b|\bque\s+(estas\s+)?haciendo\b|\bque\s+haces\b|\ben\s+que\s+vas\b|\bcomo\s+vas\b/ },
   { orden: ORDENES.ARRANCAR, es: /\barrancar?\b|\barranca\b|\bsigue\b|\bseguir\b|\bcontinua\b|\bcontinuar\b|\breanudar?\b|\bvuelve\s+a\s+empezar\b/ },
-  { orden: ORDENES.PARAR, es: /\bparar?\b|\bpara\b|\bparate\b|\bparalo\b|\bpausa\b|\bpausar\b|\bdetente\b|\bdetente?\b|\bdescansa\b|\bno\s+cojas\s+mas\b/ },
+  // ⚙️ «para» Y «parar» VAN ANCLADOS AL PRINCIPIO (1 sep 2026), y el resto no hace falta.
+  //
+  // Antes era `\bpara\b` suelto, y **«para» es la preposición más común del castellano**: «esto es
+  // para el cliente», «una papelera para recuperar», «2FA obligatoria para el dueño» — las tres se
+  // leían como «deja de coger tareas» y **paraban el orquestador**. Se destapó al montar las
+  // respuestas por Telegram, y ahí deja de ser una curiosidad: desde hoy Ibrahin contesta preguntas
+  // EN PROSA desde el móvil, y una respuesta como «que se le obligue para poder facturar» habría
+  // parado la fábrica sin que él se enterara.
+  //
+  // Un imperativo va al principio del mensaje; una preposición, casi nunca. Y «para qué…» se
+  // excluye a mano porque es pregunta, no orden. Las palabras que NO son ambiguas —«párate»,
+  // «pausa», «detente»— se quedan libres, que para eso no se parecen a nada.
+  { orden: ORDENES.PARAR, es: /^para(?!\s+qu[eé]\b)r?\b|\bparate\b|\bparalo\b|\bpausa\b|\bpausar\b|\bdetente\b|\bdescansa\b|\bno\s+cojas\s+mas\b/ },
   { orden: ORDENES.SI, es: /^(si|s|vale|ok|adelante|confirmo|hazlo|dale|correcto|afirmativo)$/ },
   { orden: ORDENES.NO, es: /^(no|n|cancela|cancelar|deja|dejalo|mejor\s+no|anula)$/ },
 ];
@@ -112,6 +153,14 @@ export function interpretar(texto) {
     if (v.orden === ORDENES.APROBAR || v.orden === ORDENES.RECHAZAR || v.orden === ORDENES.HABLAR) {
       return { orden: v.orden, id: idEnElMensaje(limpio), texto: String(texto ?? '').trim().slice(0, 500) };
     }
+    if (v.orden === ORDENES.RESPONDER) {
+      // El número y la respuesta, separados. La respuesta se guarda TAL CUAL la escribió él:
+      // es lo que va a leer el arquitecto para replantear la tarea, y resumirla la estropea.
+      const bruto = String(texto ?? '').trim();
+      const m = /^\s*(?:la\s+)?(?:n[uú]mero\s+)?([1-9][0-9]?)\s*(?:[:.\-)]|\s)\s*([\s\S]+)$/i.exec(bruto);
+      return { orden: v.orden, numero: m ? Number(m[1]) : null,
+               respuesta: m ? m[2].trim().slice(0, 1000) : null };
+    }
     return { orden: v.orden };
   }
   return { orden: ORDENES.AYUDA };
@@ -126,6 +175,12 @@ export function ayuda() {
     '<b>🤖 Esto es lo que puedes pedirme</b>',
     '',
     'Escríbeme como hablas. No hace falta ningún formato.',
+    '',
+    '<b>⭐ Lo que espera por ti</b>',
+    '• <b>preguntas</b> — todo lo que está parado esperando que decidas tú',
+    '   <i>(también vale «qué me falta» o «qué tengo pendiente»)</i>',
+    '• <b>3: treinta días</b> — contestar una, con su número y tu respuesta',
+    '• <b>adelante</b> / <b>no me convence</b> / <b>hablemos</b> — para lo que espera tu visto bueno',
     '',
     '<b>Para saber cómo va</b>',
     '• <b>parte</b> — el resumen entero, ahora, sin esperar a las 3 horas',
@@ -142,7 +197,9 @@ export function ayuda() {
     '• <b>salta esta tarea</b> — la deja y pasa a la siguiente',
     '• <b>desapartar</b> — devuelve al montón una que se quedó apartada',
     '',
+    '',
     '<i>Sigo mandándote el parte cada 3 horas aunque no me pidas nada.</i>',
+    '<i>De producto no discuto: te enseño lo que espera y apunto lo que decidas. Lo demás, en un chat.</i>',
   ].join('\n');
 }
 

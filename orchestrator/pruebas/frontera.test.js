@@ -876,6 +876,121 @@ test('FIRMA · una tarea YA EN CURSO cuando se marca la firma tampoco se cierra 
   } finally { limpiar(raiz); }
 });
 
+// ════════════════════════════════════════════════════════════════════════════════════════════
+//  QUE IBRAHIN SEPA QUÉ ESPERA POR ÉL
+// ════════════════════════════════════════════════════════════════════════════════════════════
+
+const TABLERO_ESPERANDO = `# Tablero
+
+## ⏸ ESPERANDO DECISIÓN DE IBRAHIN — Papelera con recuperación
+
+> ### ❓ ¿Cuánto tiempo se guarda lo borrado antes de desaparecer del todo?
+>
+> Contéstala y esta tarea vuelve a la cola tal cual está: cambia el encabezado a
+> \`## TAREA — Papelera con recuperación\` y el estado a \`pendiente\`.
+
+- **id:** papelera-con-recuperacion
+- **estado:** esperando decisión de Ibrahin
+
+Su cuerpo entero, sin recortar.
+
+## TAREA — Una normal
+
+- **id:** una-normal
+- **estado:** pendiente
+
+Cuerpo.
+`;
+
+test('PREGUNTAS · sin nada esperando, lo dice claro', async () => {
+  const { contestarPreguntas } = await import('../vigia/escucha.js');
+  const t = contestarPreguntas({ decisiones: [], firmas: [] });
+  assert.match(t, /Nada espera por ti/);
+});
+
+test('PREGUNTAS · los tres grupos, numerados y sin jerga', async () => {
+  const { contestarPreguntas } = await import('../vigia/escucha.js');
+  const t = contestarPreguntas({
+    decisiones: [{ id: 'papelera-con-recuperacion', titulo: 'Papelera', pregunta: '¿Cuánto se guarda lo borrado?' }],
+    firmas: [
+      { id: 'anclar', titulo: 'Anclar las facturas', promesa: 'Cada factura queda sellada.', estado: 'esperando' },
+      { id: 'pruebas', titulo: 'Modo de pruebas', estado: 'en-discusion', desde: new Date(Date.now() - 3600000).toISOString() },
+    ],
+  });
+  assert.match(t, /Decisiones que tienen una tarea parada \(1\)/);
+  assert.match(t, /esperando tu visto bueno \(1\)/);
+  assert.match(t, /Conversaciones que dejaste abiertas \(1\)/);
+  assert.match(t, /<b>1\.<\/b> Papelera/, 'numeradas: es la única forma de contestar desde un móvil');
+
+  // NADA DE JERGA: lo lee de pie y sin saber programar.
+  assert.doesNotMatch(t, /papelera-con-recuperacion|\.js|\.md|commit|rama tarea\//,
+    'ni identificadores técnicos, ni ficheros, ni ramas');
+});
+
+test('PREGUNTAS · una conversación abierta SIGUE saliendo hasta que se resuelva', async () => {
+  const { contestarPreguntas } = await import('../vigia/escucha.js');
+  const enDiscusion = [{ id: 'x', titulo: 'Modo de pruebas', estado: 'en-discusion', desde: new Date().toISOString() }];
+  for (const vuelta of [1, 2, 3]) {
+    const t = contestarPreguntas({ decisiones: [], firmas: enDiscusion });
+    assert.match(t, /Conversaciones que dejaste abiertas/, `vuelta ${vuelta}: tiene que seguir ahí`);
+    assert.doesNotMatch(t, /Nada espera por ti/);
+  }
+  // Y desaparece cuando deja de estar pendiente, no antes.
+  assert.match(contestarPreguntas({ decisiones: [], firmas: [] }), /Nada espera por ti/);
+});
+
+test('RESPONDER · la respuesta se guarda LITERAL y la tarea vuelve a la cola', async () => {
+  const { guardarRespuesta } = await import('../tablero/respuestas.js');
+  const { decisionesEsperando, tareasPendientes } = await import('../reader.js');
+  const raiz = mkdtempSync(path.join(tmpdir(), 'resp-'));
+  try {
+    const f = path.join(raiz, 'TABLERO.md');
+    writeFileSync(f, TABLERO_ESPERANDO);
+    assert.equal(decisionesEsperando(TABLERO_ESPERANDO).length, 1);
+    assert.equal(tareasPendientes(TABLERO_ESPERANDO).length, 1, 'de partida solo la normal está en la cola');
+
+    const r = guardarRespuesta({ rutaTablero: f, titulo: 'Papelera con recuperación',
+      respuesta: 'treinta días, y vaciarla solo el dueño', cuando: '2026-09-01' });
+    assert.equal(r.ok, true, r.motivo);
+
+    const t = fs.readFileSync(f, 'utf8');
+    assert.equal(decisionesEsperando(t).length, 0, 'deja de esperar');
+    assert.equal(tareasPendientes(t).length, 2, 'y VUELVE A LA COLA — hacen falta los dos cambios');
+    assert.match(t, /RESPUESTA DE IBRAHIN \(2026-09-01\)/, 'con su fecha');
+    assert.match(t, /treinta días, y vaciarla solo el dueño/, 'literal, sin resumir');
+    assert.match(t, /Su cuerpo entero, sin recortar/, 'y sin perder nada de la tarea');
+
+    // La instrucción vieja ya no vale: decía «contéstala y volverá a la cola», y ya ha vuelto.
+    assert.doesNotMatch(t, /Contéstala y esta tarea vuelve a la cola/,
+      'un renglón que manda hacer algo ya hecho es un renglón que miente');
+  } finally { limpiar(raiz); }
+});
+
+test('RESPONDER · lo que no cabe en una línea se queda esperando, y el bot NO discute', async () => {
+  const { interpretar } = await import('../vigia/ordenes.js');
+  // Se reconoce como respuesta, con su número…
+  const o = interpretar('1 lo tengo que pensar');
+  assert.equal(o.orden, 'RESPONDER');
+  assert.equal(o.numero, 1);
+  // …y el vigía la deja estar. La conversación de producto no es cosa suya.
+});
+
+test('«para» dejó de parar la fábrica: es la preposición más común del castellano', async () => {
+  // Salió al montar las respuestas por Telegram, y ahí deja de ser una curiosidad: desde hoy
+  // Ibrahin contesta EN PROSA desde el móvil, y «que se le obligue para poder facturar» habría
+  // parado el orquestador sin que él se enterara.
+  const { interpretar } = await import('../vigia/ordenes.js');
+  for (const f of ['esto es para el cliente', '2fa obligatoria para el dueño',
+                   'una papelera para recuperar', 'que se le obligue para poder facturar']) {
+    assert.notEqual(interpretar(f).orden, 'PARAR', `«${f}» NO puede parar la fábrica`);
+  }
+  // Y las órdenes de verdad siguen funcionando.
+  for (const f of ['para', 'parar', 'párate', 'pausa', 'detente', 'no cojas más tareas']) {
+    assert.equal(interpretar(f).orden, 'PARAR', `«${f}» sí tiene que parar`);
+  }
+  assert.equal(interpretar('para ya').orden, 'PARAR_YA');
+});
+
 // ── utilidades ───────────────────────────────────────────────────────────────────────────────
 
 function correr(cmd, args, cwd) {

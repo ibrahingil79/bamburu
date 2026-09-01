@@ -229,6 +229,45 @@ export function tareasPendientes(texto) {
 }
 
 /**
+ * LAS DECISIONES QUE ESPERAN A IBRAHIN, sacadas del tablero.
+ *
+ * ⚙️ POR QUÉ EXISTE (1 sep 2026). Nueve tareas están paradas esperando que él conteste una
+ * pregunta de negocio, y esas preguntas **viven en el tablero, que no lee nadie salvo que se
+ * pregunte por él**. Si Ibrahin no se acuerda de que algo espera por él, se queda colgado
+ * indefinidamente. Esto es lo que permite que lo pregunte desde el móvil.
+ *
+ * Cada bloque tiene esta forma, escrita el 1 sep al sacarlas de la cola:
+ *
+ *     ## ⏸ ESPERANDO DECISIÓN DE IBRAHIN — <título>
+ *     > ### ❓ <la pregunta, en una frase de negocio>
+ *
+ * Se lee la pregunta y NADA MÁS: ni el id, ni el cuerpo, ni los criterios. Lo que va al móvil
+ * tiene que poder leerse de pie y sin saber programar.
+ *
+ * @returns [{ id, titulo, pregunta }] en el orden del documento.
+ */
+export function decisionesEsperando(texto) {
+  const lineas = String(texto).split('\n');
+  const fuera = [];
+  for (let i = 0; i < lineas.length; i++) {
+    const m = /^#{1,6}\s*⏸\s*ESPERANDO DECISI[ÓO]N DE IBRAHIN\s*[—–-]\s*(.+?)\s*$/i.exec(lineas[i]);
+    if (!m) continue;
+    const [ini, fin] = limitesBloque(lineas, i);
+    const cuerpo = lineas.slice(ini + 1, fin);
+    // La pregunta va marcada con ❓ dentro de la cita. Si alguien la borra, se dice — no se
+    // inventa una: una pregunta inventada le haría decidir sobre algo que nadie preguntó.
+    const q = cuerpo.find((l) => /❓/.test(l));
+    const campos = extraerCampos(preambulo(cuerpo));
+    fuera.push({
+      id: slug(campos.id || slug(m[1])),
+      titulo: m[1].trim(),
+      pregunta: q ? q.replace(/^[>#\s]*❓\s*/, '').trim() : null,
+    });
+  }
+  return fuera;
+}
+
+/**
  * Busca la tarea siguiente. Tres formatos, en este orden:
  *   1. Un bloque pendiente CON el rótulo «SIGUIENTE TAREA»: es como se salta el orden natural.
  *   2. El PRIMER bloque pendiente en orden de documento, lleve rótulo o no.

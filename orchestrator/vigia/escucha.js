@@ -21,13 +21,14 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { anadirLinea, leerLineas } from '../nucleo/almacen.js';
 import { tapar } from '../nucleo/secretos.js';
+import { guardarRespuesta } from '../tablero/respuestas.js';
 import { recibir, responderA, configurado, queFalta } from './telegram.js';
 import { redactar } from './parte.js';
 import {
   ORDENES, PIDEN_CONFIRMACION, VAN_AL_ORQUESTADOR,
   interpretar, ayuda, pedirConfirmacion, NO_ERES_QUIEN,
 } from './ordenes.js';
-import { leerTablero, buscarSiguienteTarea, tareasPendientes } from '../reader.js';
+import { leerTablero, buscarSiguienteTarea, tareasPendientes, decisionesEsperando, normalizar } from '../reader.js';
 import { averiaOciosoConTablero } from '../nucleo/maquina.js';
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -154,6 +155,88 @@ export function contestarTareas({ pendientes, siguiente, estado }) {
   return L.join('\n');
 }
 
+/**
+ * LO QUE ESPERA POR IBRAHIN. Tres grupos, y ninguno lleva jerga.
+ *
+ * ⚙️ POR QUÉ EXISTE (1 sep 2026). Nueve tareas están paradas esperando una decisión suya y otras
+ * nueve se la pedirán al terminar. Esas preguntas **viven en el tablero, y el tablero no lo lee
+ * nadie salvo que se pregunte por él**. Si no se acuerda de que algo espera por él, se queda
+ * colgado indefinidamente. Esto es lo que lo pone en su móvil.
+ *
+ * **LA REGLA QUE MANDA AQUÍ: EL BOT NO DISCUTE.** No propone, no razona sobre el producto, no
+ * intenta convencer. **Enseña lo que espera y recoge lo que él conteste.** La conversación de
+ * producto pasa en un chat aparte, con él delante — y esta función está escrita para no poder
+ * hacer otra cosa: solo lee y numera.
+ *
+ * Los números son la única forma de contestar. **Nada de identificadores técnicos**: nadie teclea
+ * `2fa-obligatoria-owner-admin` de pie en la calle.
+ */
+export function contestarPreguntas({ decisiones = [], firmas = [], ahora = Date.now() }) {
+  const enEspera = firmas.filter((f) => f.estado !== 'en-discusion');
+  const hablando = firmas.filter((f) => f.estado === 'en-discusion');
+
+  if (!decisiones.length && !enEspera.length && !hablando.length) {
+    return '<b>✅ Nada espera por ti.</b>\n\nTodo lo que tengo puedo hacerlo yo solo.';
+  }
+
+  const L = ['<b>🙋 Lo que espera por ti</b>', ''];
+  let n = 0;
+
+  if (decisiones.length) {
+    L.push(`<b>1 · Decisiones que tienen una tarea parada (${decisiones.length})</b>`);
+    L.push('<i>Contéstame con el número y tu respuesta. Ej.: «3: media hora».</i>', '');
+    for (const d of decisiones) {
+      n++;
+      L.push(`<b>${n}.</b> ${esc(d.titulo)}`);
+      L.push(d.pregunta ? `    ❓ ${esc(d.pregunta)}` : '    ⚠️ <i>Esta se quedó sin pregunta escrita. Hay que mirarla en un chat.</i>');
+    }
+    L.push('');
+  }
+
+  if (enEspera.length) {
+    L.push(`<b>2 · Terminadas, esperando tu visto bueno (${enEspera.length})</b>`);
+    L.push('<i>Están hechas y probadas, y NO tocan a nadie hasta que digas que sí.</i>', '');
+    for (const f of enEspera) {
+      L.push(`<b>${esc(f.titulo)}</b>`);
+      if (f.promesa) L.push(`    ${esc(String(f.promesa).split('\n')[0]).slice(0, 220)}`);
+      L.push(`    <i>«adelante» para que entre · «no me convence» + por qué · «hablemos»</i>`);
+    }
+    L.push('');
+  }
+
+  if (hablando.length) {
+    L.push(`<b>3 · Conversaciones que dejaste abiertas (${hablando.length})</b>`);
+    L.push('<i>Me dijiste «hablemos» y ahí siguen. Esto no lo hablo yo: es para un chat con calma.</i>', '');
+    for (const f of hablando) {
+      L.push(`<b>${esc(f.titulo)}</b>${f.desde ? ` — ${desdeHace(f.desde, ahora)}` : ''}`);
+    }
+    L.push('');
+  }
+
+  L.push('<i>No corre prisa ninguna: sigo trabajando en lo que sí puedo hacer solo.</i>');
+  return L.join('\n');
+}
+
+/**
+ * Lo que se le contesta a Ibrahin cuando responde a una decisión desde el móvil.
+ *
+ * Dos caminos, y el segundo es tan importante como el primero: **hay preguntas que no se
+ * contestan en una línea**, y forzarlas sería peor que dejarlas esperando. Cuando su respuesta es
+ * «tengo que pensarlo» o similar, se le dice sin más y la decisión **se queda en la lista**.
+ */
+export function acusarRespuesta({ decision, respuesta, guardada, motivo = null }) {
+  if (!guardada) {
+    return `No he podido guardar tu respuesta a «${esc(decision.titulo)}»: ${esc(motivo || 'sin detalle')}.\n\n`
+      + 'Sigue esperando por ti. Vuelve a intentarlo o dímelo en un chat.';
+  }
+  return `✅ Anotado en <b>${esc(decision.titulo)}</b>:\n\n<i>${esc(respuesta)}</i>\n\n`
+    + 'Queda escrito en la tarea con la fecha de hoy, y vuelve a la cola. La cogeré cuando le toque.';
+}
+
+// Respuestas que NO son una respuesta: hay preguntas que no caben en una línea, y forzarlas
+// dejaría una decisión de producto escrita a medias en el tablero. Se reconocen y se dejan estar.
+const PARA_PENSAR = /\b(lo\s+)?tengo\s+que\s+pensar\w*\b|\bd[ée]jame\s+pensar\w*\b|\bno\s+lo\s+tengo\s+claro\b|\bhablemos\b|\blo\s+hablamos\b|\bes\s+largo\b|\bno\s+s[ée]\b|\bmas\s+adelante\b|\bluego\s+lo\s+veo\b/;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // El vigía
 // ─────────────────────────────────────────────────────────────────────────────
@@ -246,14 +329,17 @@ export class Escucha {
     }
 
     // 2 · ¿Qué? El texto se traduce a una entrada de la lista cerrada. Nunca se ejecuta.
-    const { orden, id } = interpretar(m.texto);
-    const respuesta = await this.resolver(orden, id, m);
+    // La orden ENTERA viaja hasta el final. `RESPONDER` necesita el número y el texto que escribió
+    // Ibrahin, y quedarse solo con `orden` e `id` los perdía por el camino (1 sep 2026).
+    const o = interpretar(m.texto);
+    const { orden, id } = o;
+    const respuesta = await this.resolver(orden, id, m, o);
 
     this.registrar({ chatId: m.chatId, de: m.de, texto: m.texto, autorizado: true, orden, id, respuesta });
     await responderA({ chatId: m.chatId, texto: respuesta, config: this.config, entorno: this.entorno });
   }
 
-  async resolver(orden, id, m) {
+  async resolver(orden, id, m, o = {}) {
     const estado = this.estadoActual();
 
     // ── La confirmación pendiente se resuelve antes que nada ──
@@ -287,7 +373,7 @@ export class Escucha {
     }
 
     // ── Las que no rompen nada: se hacen ──
-    return this.ejecutar(orden, id, estado);
+    return this.ejecutar(orden, id, estado, o);
   }
 
   confirmacionViva() {
@@ -314,7 +400,7 @@ export class Escucha {
       : '↩️ Anotado. Lo hace en cuanto termine el paso que tiene entre manos y te lo digo.';
   }
 
-  async ejecutar(orden, id, estado) {
+  async ejecutar(orden, id, estado, o = {}) {
     switch (orden) {
       case ORDENES.PARTE: return this.parte(estado);
       case ORDENES.ESTADO: {
@@ -326,6 +412,36 @@ export class Escucha {
         const t = this.tablero(estado);
         return contestarTareas({ ...t, estado });
       }
+      // ── LO QUE ESPERA POR IBRAHIN ─────────────────────────────────────────
+      case ORDENES.PREGUNTAS:
+        return contestarPreguntas({ decisiones: this.decisiones(), firmas: estado.firmasPendientes || [] });
+
+      case ORDENES.RESPONDER: {
+        const decisiones = this.decisiones();
+        if (!decisiones.length) return 'Ahora mismo no hay ninguna decisión esperándote. Dime <b>preguntas</b> para verlo.';
+        const d = decisiones[(o?.numero ?? 0) - 1];
+        if (!d) {
+          return `No tengo una número ${esc(String(o?.numero))}. Hay ${decisiones.length}: dime <b>preguntas</b> y te las enseño otra vez.`;
+        }
+        if (!o.respuesta) return `Dime también qué contestas. Por ejemplo: «${o.numero}: treinta días».`;
+
+        // ── LAS QUE NO SE CONTESTAN EN UNA LÍNEA ────────────────────────────
+        // Forzarlas sería peor que dejarlas esperando: acabaría con una decisión de producto
+        // escrita a medias en el tablero, y de ahí sale una tarea mal planteada. **El bot no
+        // discute** — si él dice que lo tiene que pensar, se queda como está y se le dice dónde
+        // se habla de eso.
+        if (PARA_PENSAR.test(normalizar(o.respuesta))) {
+          return `Vale, «${esc(d.titulo)}» se queda esperando.\n\n`
+            + '<b>Ésta la hablas en un chat cuando tengas rato.</b> Yo no discuto de producto: '
+            + 'te enseño lo que espera y apunto lo que decidas.';
+        }
+
+        const g = guardarRespuesta({ rutaTablero: this.config.tableroAbs, titulo: d.titulo, respuesta: o.respuesta });
+        if (g.ok) this.log.exito(`Ibrahin contestó «${d.titulo}» desde el móvil. Vuelve a la cola.`);
+        else this.log.error(`No pude guardar la respuesta a «${d.titulo}»: ${g.motivo}`);
+        return acusarRespuesta({ decision: d, respuesta: o.respuesta, guardada: g.ok, motivo: g.motivo });
+      }
+
       case ORDENES.PARAR:
       case ORDENES.ARRANCAR: {
         if (orden === ORDENES.PARAR && estado.pausado) return '⏸ Ya estaba parado: no cojo tareas nuevas. Dime <b>arranca</b> cuando quieras que siga.';
@@ -348,6 +464,12 @@ export class Escucha {
   async cuota() {
     try { return await this.vigilante.consultar(); }
     catch (e) { return { fiable: false, motivo: tapar(e.message, this.entorno) }; }
+  }
+
+  /** Las decisiones que esperan, leídas del tablero. Si no se puede leer, se dice: no se inventa. */
+  decisiones() {
+    try { return decisionesEsperando(fs.readFileSync(this.config.tableroAbs, 'utf8')); }
+    catch (e) { this.log.aviso(`No pude leer el tablero para las preguntas: ${e.message}`); return []; }
   }
 
   tablero(estado) {

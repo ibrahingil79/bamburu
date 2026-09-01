@@ -9291,6 +9291,55 @@ negocio suspendido NO deja escribir— necesitan un negocio suspendido y tienen 
 
 ## Decisiones tomadas el 1 sep 2026
 
+- **IBRAHIN YA PUEDE PREGUNTARLE AL BOT QUÉ ESPERA POR ÉL.**
+
+  **El problema, dicho como es:** 9 tareas paradas esperando una decisión suya y 9 más que se la
+  pedirán al terminar, y **todas esas preguntas viven en el tablero — que no lee nadie salvo que
+  pregunte por él**. Si no se acuerda de que algo espera por él, se queda colgado indefinidamente.
+
+  **QUÉ PUEDE PEDIRLE AHORA, escrito para él:**
+  · **`preguntas`** —también vale *«qué me falta»*, *«qué tengo pendiente»*, *«qué espera por mí»*—
+    y le contesta con **tres grupos**: las **decisiones que tienen una tarea parada** (numeradas, con
+    su pregunta en una frase de negocio) · las **terminadas esperando su visto bueno** (con la
+    promesa, no con el código) · y las **conversaciones que dejó abiertas** al decir «hablemos».
+    Si no hay nada: **«Nada espera por ti.»**
+  · **`3: treinta días`** — contestar una **desde el móvil, con su número**. La respuesta se guarda
+    **literal, con su fecha**, y la tarea **vuelve a la cola**.
+  · **`adelante` / `no me convence` / `hablemos`** — para lo que espera su firma.
+
+  **NÚMEROS, NUNCA IDENTIFICADORES.** Nadie teclea `2fa-obligatoria-owner-admin` de pie en la calle.
+  El listado no lleva ni ficheros, ni ramas, ni ids — y hay una prueba que lo exige.
+
+  **LA REGLA QUE MANDA: EL BOT NO DISCUTE.** No propone, no razona sobre el producto, no intenta
+  convencer. Enseña lo que espera y **recoge lo que él conteste, sin resumirlo ni interpretarlo** —
+  porque lo que se guarda es lo que el arquitecto va a leer para hacer el plano, y un resumen por el
+  camino es una decisión de producto tomada por quien no debe. **Lo que no cabe en una línea se
+  queda esperando** y se le dice: *«ésta la hablas en un chat cuando tengas rato»*.
+
+  **VERIFICADO SOBRE EL TABLERO DE VERDAD, por el camino de Telegram entero** (interpretar → vigía →
+  escritura): salieron **las nueve** con su pregunta legible, más la firma pendiente y la
+  conversación abierta; se contestó una y **pasó de 9 esperando y 36 en cola a 8 y 37**, con la
+  respuesta escrita literal y fechada; y una aplazada se quedó donde estaba. **Las respuestas de
+  prueba se deshicieron**: eran inventadas por la máquina, y dejarlas habría sido poner palabras en
+  boca de Ibrahin.
+
+  **DOS COSAS QUE SALIERON POR EL CAMINO, y una es gorda:**
+
+  **1 · «PARA» PARABA LA FÁBRICA.** El vocabulario cazaba `\bpara\b` suelto, y **«para» es la
+  preposición más común del castellano**: *«esto es para el cliente»*, *«una papelera para
+  recuperar»*, *«2FA obligatoria para el dueño»* — las tres se leían como **«deja de coger tareas»**
+  y paraban el orquestador. Estaba así desde que se escribió el vigía. **Y se vuelve peligroso justo
+  ahora**, porque desde hoy Ibrahin contesta EN PROSA desde el móvil: *«que se le obligue para poder
+  facturar»* habría parado la fábrica sin que él se enterara. Ahora «para» y «parar» van **anclados
+  al principio del mensaje** —un imperativo empieza la frase, una preposición casi nunca— y «para
+  qué…» se excluye a mano por ser pregunta. Con prueba de las dos direcciones y verificada en rojo.
+
+  **2 · «QUÉ FALTA» Y «QUÉ ME FALTA» NO SON LA MISMA PREGUNTA.** La primera versión se llevó por
+  delante `qué falta` y `qué queda`, que **ya eran la cola de trabajo**. Lo cazaron dos pruebas que
+  ya existían, y tenían razón: *«qué queda»* pregunta por lo que le falta a la **máquina**; *«qué me
+  falta»*, por lo que espera por **él**. La diferencia está en el «me», y ahora se exige la primera
+  persona.
+
 - **LAS TAREAS QUE COMPROMETEN A BAMBURU LAS FIRMA IBRAHIN.** Regla nueva, y no se cierra sola
   ninguna que la cumpla.
 
