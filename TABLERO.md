@@ -8382,7 +8382,7 @@ destruir datos*. Aquí son ficheros de código sin montar, no datos de ningún n
 > (cerradas con su commit), 4 no convertibles (les falta un criterio que solo da Ibrahin) y 3 no
 > verificables sin ejecutar.
 
-## TAREA — Cifrar las copias de seguridad · CÓDIGO HECHO, OPERACIÓN PENDIENTE DE IBRAHIN
+## ⛔ APARTADA (2026-09-01) — Cifrar las copias de seguridad · CÓDIGO HECHO, OPERACIÓN PENDIENTE DE IBRAHIN
 
 - **id:** cifrado-copias-seguridad
 - **estado:** ⚠️ **código HECHO el 1 sep 2026** (`5834d79`) · **operación PENDIENTE** (cuatro pasos de terminal)
@@ -8480,6 +8480,10 @@ Los cuatro pasos, con sus comandos y sus condiciones de paso, están en `deploy/
 > Es el guardián haciendo su trabajo, y el email dice qué hacer. Se deja así a propósito: la
 > alternativa era un `BACKUP_REMOTE` en claro que sigue subiendo 203 clientes sin cifrar mientras la
 > documentación dice lo contrario, y eso es justo el fallo silencioso que esta tarea venía a matar.
+
+> **Apartada por el orquestador el 2026-09-01.** Esperando decisión de Ibrahin.
+> Motivo: el arquitecto declaró la tarea mal planteada
+> Registro: `docs/orquestador/tareas/cifrado-copias-seguridad.md`
 
 ## TAREA — Anclar la cadena de VERI*FACTU fuera del servidor
 
