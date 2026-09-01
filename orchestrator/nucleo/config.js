@@ -87,8 +87,14 @@ function validar(cfg) {
   pct('minimoParaCicloPct', c.minimoParaCicloPct);
   pct('margenReservadoPct', c.margenReservadoPct);
   pct('minimoSemanalPct', c.minimoSemanalPct);
-  if (c.minimoParaCicloPct + c.margenReservadoPct > 100) {
-    fallos.push(`cuota.minimoParaCicloPct (${c.minimoParaCicloPct}) + margenReservadoPct (${c.margenReservadoPct}) pasa de 100: nunca arrancaría`);
+  // ⚙️ `>=`, NO `>` (1 sep 2026). Con `>` el peor caso pasaba en silencio: 90 + 10 = 100 exactos
+  // significa «hace falta que la ventana esté ENTERA libre», o sea que no arranca nunca — y la
+  // función existe justo para que «un umbral absurdo reviente en el arranque». Se descubrió porque
+  // yo mismo colé un 90 por entorno para provocar un rato muerto, y el daemon lo aceptó sin
+  // pestañear y se quedó parado con 43 tareas delante. Un umbral que garantiza el bloqueo es el
+  // umbral más absurdo de todos, y era el único que no se comprobaba.
+  if (c.minimoParaCicloPct + c.margenReservadoPct >= 100) {
+    fallos.push(`cuota.minimoParaCicloPct (${c.minimoParaCicloPct}) + margenReservadoPct (${c.margenReservadoPct}) suma ${c.minimoParaCicloPct + c.margenReservadoPct}: haría falta la ventana entera libre y NO ARRANCARÍA NUNCA`);
   }
   if (cfg.ciclo.maxIntentosRevision < 1) fallos.push('ciclo.maxIntentosRevision tiene que ser 1 o más');
   if (cfg.ciclo.maxReplanteos < 0) fallos.push('ciclo.maxReplanteos no puede ser negativo');

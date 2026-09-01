@@ -322,7 +322,7 @@
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-09-01 · `e1ae10c` · **95/208** · 463 s
+- **Último barrido completo:** 2026-09-01 · `50f821c` · **123/208** · 1389 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -9217,6 +9217,84 @@ que aún no se pueden adjuntar no sirve de nada.
 - **No perseguir amplitud** (multi-moneda, nóminas, fabricación): es donde se pierde contra SAP.
 
 ## Decisiones tomadas el 1 sep 2026
+
+- **BLOQUE 0 — LOS 113 ROJOS, NOMBRADOS. Y 28 DE ELLOS NO EXISTÍAN.**
+  Informe completo: `docs/barridos/2026-09-01-los-113-rojos.md` · salida entera:
+  `docs/barridos/2026-09-01-salida-completa.log`.
+
+  Barrido autorizado expresamente por Ibrahin y pasado **dos veces a propósito**, porque separar
+  producto de entorno exige dos entornos:
+
+  | | Pasan | En rojo | Tiempo |
+  |---|---|---|---|
+  | A mano, fuera del aislamiento | 123 | **85** | 23,1 min |
+  | Bajo el daemon, dentro del aislamiento de systemd | 95 | **113** | 7,7 min |
+  | 26 ago 2026 (referencia, **sin un solo nombre**) | 153 | 54 | 21,2 min |
+
+  **LOS 28 DE DIFERENCIA SON DEL ENTORNO, Y LA CAUSA ESTÁ MEDIDA, NO SUPUESTA:**
+
+  ```
+  node scripts/gate-xss-escape.mjs                    →  ✅ 29 OK, 0 fallos
+  mismo aislamiento, NoNewPrivileges=true             →  snap-confine is packaged without
+                                                         necessary permissions and cannot continue
+  mismo aislamiento, NoNewPrivileges=false            →  ✅ 29 OK, 0 fallos
+  ```
+
+  Chromium en esta máquina es un **snap** y `snap-confine` necesita **setuid** para arrancar.
+  `NoNewPrivileges=true` —que lleva `orquestador.service`— lo prohíbe, así que **todo gate de
+  navegador muere en ~1 s** en el barrido de los ratos muertos. 19 identificados uno a uno (verdes a
+  mano, muertos en ~0 s bajo el daemon); los otros 9 **no se pueden nombrar porque aquella pasada
+  perdió su lista**, que es el agujero ya tapado esta misma mañana.
+
+  **UN CONTRIBUYENTE SISTÉMICO QUE TAMPOCO ES DEL PRODUCTO.** `desarrollo-bamburu` está
+  `suspended_admin` **desde el 25 ago 2026, 12:07:03** (7 de los 8 negocios lo están), y
+  `readOnlyGuard` devuelve **403 a todo lo que no sea GET/HEAD/OPTIONS**. Medido en la salida de hoy:
+  `✗ cita creada (API) — 403`, `✗ mover a un hueco libre → 200 — 403`, `✗ POST /api/erp/avisos/visto
+  responde 200 (got 403)`. **Cualquier comprobación que ESCRIBA falla por esto.**
+  **PERO NO EXPLICA LA SUBIDA DE 54 A 85:** la suspensión es del 25 y aquel barrido fue el 26. Ya
+  estaba puesta.
+
+  **LO QUE NO SE PUEDE CONTESTAR, Y HAY QUE DECIRLO.** «¿Desde cuándo falla cada uno?» **no tiene
+  respuesta** para nada anterior a hoy: el barrido del 26 ago dejó en este mismo documento el
+  marcador «153/207» y **ni un solo nombre**. No hay lista en el repo, ni en `docs/`, ni en git. Los
+  31 de diferencia no se pueden fechar. **Lo de hoy queda como línea base** y a partir de aquí los
+  deltas sí son contestables.
+
+  **NO HAY 58 COSAS ROTAS DE VERDAD**, que era la pregunta que decidía el orden del encargo: 28 son
+  entorno con causa probada, 2 estaban declarados, y una parte grande de los 85 son 403 del negocio
+  suspendido. Muchos de los que quedan pasan 40 o 90 aserciones y fallan una (`exit 1 · RESULTADO:
+  39 ✓`, `exit 1 · 128 OK`). **El orden del encargo no cambia.**
+
+  **TRES DECISIONES DE IBRAHIN, ninguna de construcción, en el informe con sus opciones:** qué hacer
+  con el barrido del daemon (lo bueno: que puppeteer deje de usar el Chromium del snap; lo que **no**
+  se recomienda: quitar `NoNewPrivileges`, que baja la defensa del daemon entero para que corran unos
+  gates); qué hacer con los negocios suspendidos (**no se toca el estado de un negocio vivo para
+  poner un gate en verde** — lo prohíbe el propio `run-gates.mjs`); y las copias, ya resuelta abajo.
+
+- **BLOQUE 1 — EL LISTÓN DE 90 ERA MÍO, Y EL VALIDADOR LO DEJÓ PASAR.**
+
+  **1.1 · De dónde salía el 90.** No está en el código ni en la config. Lo metí yo en
+  `/etc/orquestador.env` (`ORQUESTADOR_MIN_CICLO_PCT=90`) a las 09:23 para provocar un rato muerto y
+  poder verificar el barrido, y lo quité a las 09:35. El rastro del registro no deja duda:
+  `09:20:36 → 15%` · `09:23:42 → 90%` · `09:35:24 → 15%`.
+
+  **PERO ELEGÍ 90 PORQUE EL VALIDADOR ME DEJÓ.** `validar()` comprobaba
+  `minimoParaCicloPct + margenReservadoPct > 100`, y 90 + 10 son **100 exactos**: «hace falta que la
+  ventana esté ENTERA libre», o sea que no arranca nunca. **El único valor que garantiza el bloqueo
+  era el único que no se comprobaba**, en la función que existe justo para que «un umbral absurdo
+  reviente en el arranque». Corregido a `>=`, con prueba propia **verificada en rojo** reponiendo el
+  `>`.
+
+  **1.2 · El mismo número descrito de dos formas opuestas: era solo el texto.** `cuotaInicio` se usa
+  como «% GASTADO» en los cuatro sitios que lo tocan (`orq.js`, el historial del ciclo, la ficha de
+  cierre) — **no hay inversión en ninguna parte**. Lo que hubo fue una coincidencia cruel: **46 %
+  gastado** al coger la tarea (09:17) y **46 % libre** seis minutos después. Ahora las dos líneas
+  enseñan **las dos mitades siempre** (`46% GASTADO (quedaba 54%)`), que es lo que impide tener que
+  recordar cuál de las dos cosas mide cada número.
+
+  **Verificación:** con la cuota real del momento la decisión fue **TOMAR_TAREA**, y `orq estado`
+  contra `/usage` en el mismo minuto dio **54 % usado de sesión y 28 % semanal en los dos sitios**,
+  con las dos horas de reinicio idénticas.
 
 - **LAS TRES AVERÍAS DEL PRIMER USO REAL, Y POR QUÉ NINGUNA SE VIO VENIR (encargo del 1 sep 2026).**
   `orchestrator/barrido.js` · `orchestrator/cuota/*` · `orchestrator/nucleo/maquina.js` ·

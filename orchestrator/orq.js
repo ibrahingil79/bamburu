@@ -76,7 +76,14 @@ function mostrarEstado(cfg) {
     L.push(`  Id:          ${estado.tarea.id}`);
     L.push(`  Intento:     ${estado.intento} de ${cfg.ciclo.maxIntentosRevision}`);
     if (estado.replanteos) L.push(`  Replanteos:  ${estado.replanteos}`);
-    if (estado.cuotaInicio != null) L.push(`  Cuota al empezar: ${estado.cuotaInicio}% de sesión usado`);
+    // Las dos mitades SIEMPRE, aquí y en la línea de la cuota de arriba. El 1 sep 2026 esta
+    // línea decía «Cuota al empezar: 46% de sesión usado» tres renglones debajo de «cree que
+    // queda 46% de sesión»: los dos números eran ciertos —46 gastado al coger la tarea, 46 libre
+    // seis minutos después— y juntos parecían una contradicción. Un número solo, sin su mitad,
+    // obliga a quien lo lee a recordar cuál de las dos cosas mide.
+    if (estado.cuotaInicio != null) {
+      L.push(`  Cuota al coger la tarea: ${estado.cuotaInicio}% GASTADO (quedaba ${100 - estado.cuotaInicio}%)`);
+    }
     if (estado.historial.length) {
       L.push('', '  Intentos hasta ahora:');
       for (const h of estado.historial) L.push(`    ${h.intento}. ${h.veredicto}${h.motivos?.length ? ` — ${h.motivos[0].slice(0, 70)}` : ''}`);
@@ -120,8 +127,8 @@ function loQueCreeDeLaCuota(cfg) {
 
   if (!c.fiable) return [`  Cuota:       NO LA SABE ${desdeHace(c.leidoEn)} — ${c.motivo || 'sin detalle'}`];
 
-  const L = [`  Cuota:       cree que queda ${(100 - c.sesionPct).toFixed(0)}% de sesión`
-           + `${c.semanaPct != null ? ` y ${(100 - c.semanaPct).toFixed(0)}% de la semanal` : ''}`
+  const L = [`  Cuota:       cree que QUEDA ${(100 - c.sesionPct).toFixed(0)}% de sesión (${c.sesionPct.toFixed(0)}% gastado)`
+           + `${c.semanaPct != null ? ` y ${(100 - c.semanaPct).toFixed(0)}% de la semanal (${c.semanaPct.toFixed(0)}% gastado)` : ''}`
            + `  ·  leído ${desdeHace(c.leidoEn)}`];
   if (c.reinicioSesion) L.push(`               la sesión se reinicia ${c.reinicioSesion}${vencido(c.reinicioSesionMs) ? '  ⚠️ esa hora YA PASÓ' : ''}`);
   if (c.reinicioSemana) L.push(`               la semanal se reinicia ${c.reinicioSemana}`);

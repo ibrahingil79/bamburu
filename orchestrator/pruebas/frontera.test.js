@@ -416,6 +416,28 @@ test('AVERÍA 3 · un SEGUNDO SIGTERM corta sin esperar al plazo', { timeout: 60
   } finally { limpiar(raiz); }
 });
 
+// ════════════════════════════════════════════════════════════════════════════════════════════
+//  EL UMBRAL QUE GARANTIZA EL BLOQUEO — la misma familia, encontrada desde el otro lado
+// ════════════════════════════════════════════════════════════════════════════════════════════
+
+test('un umbral de cuota que no puede alcanzarse NUNCA revienta al cargar la config', () => {
+  // DE DÓNDE SALE (1 sep 2026). Para verificar el barrido hice falta un rato muerto, así que colé
+  // `ORQUESTADOR_MIN_CICLO_PCT=90` por entorno. El daemon lo aceptó sin pestañear y se quedó
+  // parado con 43 tareas delante — 90 + 10 de reserva = 100 exactos, o sea «hace falta que la
+  // ventana esté ENTERA libre».
+  //
+  // `validar()` existe precisamente para que «un umbral absurdo reviente en el arranque», y
+  // comprobaba `> 100`: dejaba pasar el ÚNICO valor que garantiza el bloqueo. Es el mismo error
+  // que las tres del día — el guardián estaba de acuerdo con la suposición.
+  const bloquea = () => cargarConfig({ entorno: { ORQUESTADOR_MIN_CICLO_PCT: '90' } });
+  assert.throws(bloquea, /NO ARRANCARÍA NUNCA/,
+    '90 + 10 = 100 deja al daemon parado para siempre y tiene que reventar al cargar');
+
+  // Y el valor de trabajo sigue siendo válido: la comprobación no puede pasarse de dura.
+  const bueno = cargarConfig({ entorno: { ORQUESTADOR_MIN_CICLO_PCT: '15' } });
+  assert.equal(bueno.cuota.minimoParaCicloPct + bueno.cuota.margenReservadoPct, 25);
+});
+
 // ── utilidades ───────────────────────────────────────────────────────────────────────────────
 
 function correr(cmd, args, cwd) {

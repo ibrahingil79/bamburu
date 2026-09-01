@@ -1,0 +1,956 @@
+· 208 gates · hasta 4 a la vez · 2 con navegador (freno de 600 pet./min) · 2 sobre el negocio de desarrollo
+
+⚠️  LA DECLARACIÓN Y EL CÓDIGO NO DICEN LO MISMO (arréglalo, no lo ignores):
+   · gate-arranque-once-pasos: se trae su propio negocio y NO está declarado en EMPIEZAN_DE_CERO
+   · gate-historial-clinico: está declarado en EMPIEZAN_DE_CERO pero NO llama a provisionTenant
+   · verify-albaranes-browser: está declarado en EMPIEZAN_DE_CERO pero NO llama a provisionTenant
+   · verify-pedidos-browser: está declarado en EMPIEZAN_DE_CERO pero NO llama a provisionTenant
+   · verify-quotes-browser: está declarado en EMPIEZAN_DE_CERO pero NO llama a provisionTenant
+   · verify-mostrador-browser: está declarado en EMPIEZAN_DE_CERO pero NO llama a provisionTenant
+   · verify-sustitutiva-browser: está declarado en EMPIEZAN_DE_CERO pero NO llama a provisionTenant
+   · verify-barrido-no-infla-ventas: se trae su propio negocio y NO está declarado en EMPIEZAN_DE_CERO
+
+[ 1/208] ✅ test-oficio-alta                     52 OK  (8s)
+[ 2/208] ✅ test-registro-alta                   26 OK  (2s)
+[ 3/208] ✅ gate-cliente-360                     48 OK  (28s)
+[ 4/208] ✅ gate-inicio-arranque                 66 OK  (33s)
+[ 5/208] ✅ gate-vigia-agenda                    42 OK  (7s)
+[ 6/208] ✅ test-reserva-publica                 133 comprobaciones  (83s)
+[ 7/208] ✅ gate-mapa-cliente                    54 OK  (32s)
+[ 8/208] ✅ gate-menu-navegacion                 157 OK  (105s)
+[ 9/208] ❌ gate-oficio-salud                    exit 1 · RESULTADO: 39 ✓  (9s)
+[10/208] ❌ gate-historial-clinico               exit 1 · RESULTADO: 39 ✓  (18s)
+[11/208] ✅ gate-c5bis-rescate-duenyo            19 OK  (17s)
+[12/208] ✅ test-coincidencia-huecos             40 comprobaciones  (58s)
+[13/208] ❌ gate-cliente-ficha-completa          exit 1 · 16 OK  (36s)
+[14/208] ❌ gate-citas-mes                       exit 1 · 128 OK  (39s)
+[15/208] ❌ test-oficio                          exit 1 · 95 OK  (178s)
+[16/208] ✅ verify-pedidos-browser               13 OK  (19s)
+[17/208] ✅ verify-dibujo                        12 OK  (34s)
+[18/208] ✅ test-citas                           39 ok  (16s)
+[19/208] ✅ gate-migracion-puerta                25 OK  (22s)
+[20/208] ✅ verify-voz                           7 OK  (33s)
+[21/208] ✅ verify-pdf-http                      7 OK  (11s)
+[22/208] ✅ test-c6-acceso                       32 OK  (10s)
+[23/208] ✅ verify-verifactu-cola                62 OK  (13s)
+[24/208] ✅ test-pagos-proveedor                 105 OK  (7s)
+[25/208] ✅ test-coste-horas-proyecto            28 OK  (10s)
+[26/208] ✅ test-facturar-horas                  31 OK  (6s)
+[27/208] ✅ test-vigia                           38 OK  (10s)
+[28/208] ✅ test-rentabilidad-proyecto           22 OK  (6s)
+[29/208] ❌ test-neto-cero-reserva               exit 1  (5s)
+[30/208] ❌ verify-invoice-over-stock            exit 1  (5s)
+[31/208] ✅ verify-crm                           44 OK  (5s)
+[32/208] ✅ gate-agenda-visual                   88 OK  (46s)
+[33/208] ❌ gate-inicio-cuadro-mando             exit 1 · 0 OK  (1s)
+[34/208] ✅ test-proyectos                       20 OK  (6s)
+[35/208] ✅ test-tiempo                          23 OK  (7s)
+[36/208] ❌ verify-constructor                   exit 1 · 0 OK  (6s)
+[37/208] ❌ verify-margen                        exit 1 · 0 OK  (6s)
+[38/208] ❌ verify-responsable                   exit 1 · 1 OK  (6s)
+[39/208] ❌ verify-informes                      exit 1 · 0 OK  (6s)
+[40/208] ❌ verify-plan-financiero               exit 1 · 0 OK  (5s)
+[41/208] ✅ gate-agenda-calendario               43 OK  (20s)
+[42/208] ✅ test-enlace-cita                     14 ok  (6s)
+[43/208] ❌ test-neto-cero-cita                  exit 1  (6s)
+[44/208] ✅ test-prioridad                       13 OK  (6s)
+[45/208] ✅ gate-importador-csv                  RESULTADO: 53 ✓  (8s)
+[46/208] ❌ verify-albaranes                     exit 1  (6s)
+[47/208] ❌ verify-mostrador                     exit 1  (6s)
+[48/208] ❌ verify-pedidos                       exit 1 · 37 OK  (6s)
+[49/208] ✅ verify-portal                        17 OK  (5s)
+[50/208] ❌ verify-quotes                        exit 1  (5s)
+[51/208] ✅ test-contabilidad                    38 OK  (5s)
+[52/208] ✅ test-contabilidad-bienes             33 OK  (5s)
+[53/208] ✅ gate-cola-envios                     38 OK  (20s)
+[54/208] ✅ test-contabilidad-modelos            28 OK  (6s)
+[55/208] ✅ test-contabilidad-pyg                36 OK  (6s)
+[56/208] ✅ gate-impresion                       75 OK  (148s)
+[57/208] ❌ verify-pieza-c                       exit 1 · 1 OK  (5s)
+[58/208] ❌ verify-sustitutiva                   exit 1  (6s)
+[59/208] ❌ gate-documentos                      exit 1 · 24 OK  (12s)
+[60/208] ✅ verify-verifactu-anulaciones         66 OK  (8s)
+[61/208] ✅ verify-verifactu-t2                  17 OK  (7s)
+[62/208] ✅ test-dibujo                          32 OK  (5s)
+[63/208] ✅ test-pago-voz-avisos                 50 OK  (5s)
+[64/208] ✅ test-voz                             92 OK  (4s)
+[65/208] ✅ test-inicio                          22 OK  (4s)
+[66/208] ❌ verify-quotes-browser                exit 1 · 5 OK  (16s)
+[67/208] ❌ gate-cabos-apuntados                 exit 1 · RESULTADO: 47 ✓  (4s)
+[68/208] ❌ verify-albaranes-browser             exit 1 · 13 OK  (24s)
+[69/208] ❌ verify-sustitutiva-browser           exit 1  (1s)
+[70/208] ✅ test-avisos-cita                     20 ok  (5s)
+[71/208] ✅ verify-recurrentes                   15 OK  (5s)
+[72/208] ✅ verify-conciliacion                  12 OK  (4s)
+[73/208] ❌ verify-mostrador-browser             exit 1 · 4 OK  (13s)
+[74/208] ✅ verify-conciliacion-gastos           12 OK  (3s)
+[75/208] ❌ verify-dinero-espanol                exit 1 · RESULTADO: 19 ✓  (88s)
+[76/208] ✅ verify-pdf                           14 OK  (12s)
+[77/208] ✅ test-c5bis-rescate-duenyo            52 OK  (4s)
+[78/208] ✅ verify-verifactu-t1                  18 OK  (4s)
+[79/208] ✅ test-devoluciones-proveedor          48 OK  (3s)
+[80/208] ✅ test-orden-compra-c1a                78 OK  (3s)
+[81/208] ✅ test-recepciones-c1b                 48 OK  (3s)
+[82/208] ✅ test-c2-captura                      RESULTADO: 55 ✓  (3s)
+[83/208] ✅ verify-propuestas-dormidos           93 OK  (3s)
+[84/208] ❌ lint-js-servido                      exit 1  (133s)
+[85/208] ✅ verify-propuestas-fiscales           200 ok  (3s)
+[86/208] ✅ test-almacenes-capa2                 41 OK  (3s)
+[87/208] ❌ gate-informes-a-medida               exit 1 · RESULTADO: 69 ✓  (13s)
+[88/208] ✅ test-c5-2fa-superadmin               44 OK  (4s)
+[89/208] ✅ test-compras-motor                   29 OK  (2s)
+[90/208] ✅ test-suppliers-saneamiento           18 OK  (2s)
+[91/208] ✅ test-c1c-diferencias-cierre          35 OK  (2s)
+[92/208] ✅ verify-vigia                         5 OK  (2s)
+[93/208] ✅ gate-arranque-once-pasos             RESULTADO: 32 ✓  (12s)
+[94/208] ✅ test-disa-captura-chat               25 OK  (2s)
+[95/208] ✅ test-disa-clientes-t5                30 OK  (2s)
+[96/208] ✅ test-disa-dictar-compra              33 OK  (2s)
+[97/208] ✅ test-disa-stock                      22 OK  (2s)
+[98/208] ✅ verify-propuestas-d5                 22 OK  (2s)
+[99/208] ❌ gate-propuestas-dormidos             exit 1 · 15 OK  (18s)
+[100/208] ❌ gate-propuestas-recurrentes          exit 1 · 23 OK  (21s)
+[101/208] ❌ gate-propuestas-reposicion           exit 1 · 200 ok  (3s)
+[102/208] ✅ gate-nav-inicio-disa                 34 OK  (5s)
+[103/208] ✅ test-almacenes                       43 OK  (3s)
+[104/208] ✅ test-stock-pilar3                    34 OK  (2s)
+[105/208] ✅ verify-trazabilidad                  30 OK  (2s)
+[106/208] ❌ gate-trazabilidad                    exit 1 · 2 OK  (3s)
+[107/208] ✅ test-cobros-paso2-1                  47 OK  (2s)
+[108/208] ❌ gate-disa-dictar-compra              exit 1 · 12 OK  (31s)
+[109/208] ❌ gate-avisos-badge                    exit 1 · 18 OK  (9s)
+[110/208] ❌ gate-facturar-horas-pantalla         exit 1 · 11 OK  (27s)
+[111/208] ❌ gate-rentabilidad-pantalla           exit 1 · 12 OK  (15s)
+[112/208] ❌ gate-informes-se-entienden           exit 1 · RESULTADO: 10 ✓  (8s)
+[113/208] ❌ gate-informes-legibles               exit 1 · RESULTADO: 49 ✓  (44s)
+[114/208] ❌ gate-portal-ampliado                 exit 1 · RESULTADO: 19 ✓  (12s)
+[115/208] ✅ gate-403-permiso                     RESULTADO: 22 ✓  (9s)
+[116/208] ❌ gate-productos-parados               exit 1 · RESULTADO: 21 ✓  (9s)
+[117/208] ❌ gate-tarjeta-unica                   exit 1 · RESULTADO: 23 ✓  (146s)
+[118/208] ❌ gate-descuentos                      exit 1 · RESULTADO: 50 ✓  (16s)
+[119/208] ❌ gate-crm-tareas                      exit 1 · RESULTADO: 37 ✓  (9s)
+[120/208] ✅ test-coste-wac                       19 OK  (2s)
+[121/208] ✅ gate-c6-find-tenant                  22 OK  (3s)
+[122/208] ❌ gate-vigia-pantalla                  exit 1 · 13 OK  (33s)
+[123/208] ❌ gate-importador-proveedores          exit 1 · RESULTADO: 22 ✓  (116s)
+[124/208] ❌ gate-agenda-sencilla                 exit 1 · 8 OK  (33s)
+[125/208] ❌ gate-citas-pantalla                  exit 1 · 2 OK  (26s)
+[126/208] ❌ gate-oficio-pantalla                 exit 1 · 22 OK  (19s)
+[127/208] ❌ gate-reserva-publica-pantalla        exit 1 · 5 OK  (12s)
+[128/208] ❌ gate-pago-cuenta                     exit 1 · 7 OK  (6s)
+[129/208] ❌ gate-abono-proveedor                 exit 1  (1s)
+[130/208] ❌ gate-pagos-proveedor                 exit 1  (33s)
+[131/208] ❌ gate-c1c-diferencias-cierre          exit 1  (1s)
+[132/208] ✅ verify-propuestas-pagos              48 OK  (1s)
+[133/208] ❌ gate-gasto-proveedor                 exit 1  (33s)
+[134/208] ❌ gate-propuestas-pagos-permisos       exit 1 · 2 OK  (17s)
+[135/208] ❌ gate-recepciones-c1b                 exit 1  (2s)
+[136/208] ❌ gate-orden-compra-c1a                exit 1  (35s)
+[137/208] ❌ gate-devoluciones-proveedor          exit 1  (10s)
+[138/208] ❌ gate-dibujo-pantalla                 exit 1 · 11 OK  (16s)
+[139/208] ❌ gate-c2-revision                     exit 1  (25s)
+[140/208] ❌ verify-d5-create-product             exit 1  (1s)
+[141/208] ❌ verify-llm-migracion                 exit 1  (1s)
+[142/208] ✅ verify-propuestas-recurrentes        55 OK  (4s)
+[143/208] ✅ gate-voz-pantalla                    17 OK  (18s)
+[144/208] ✅ verify-disa-query-permisos           43 OK  (1s)
+[145/208] ✅ verify-disa-sin-pedidos              32 OK  (1s)
+[146/208] ✅ verify-propuestas-reposicion         46 OK  (6s)
+[147/208] ✅ verify-actividad-etiquetas           33 OK  (1s)
+[148/208] ✅ test-transfer-upstream               PASS: 8  (1s)
+[149/208] ✅ gate-disa-adjuntar                   18 OK  (7s)
+[150/208] ✅ verify-over-stock-ui                 2 OK  (4s)
+[151/208] ✅ test-transfers                       PASS: 30  (1s)
+[152/208] ✅ verify-traslado-auditoria            13 OK  (1s)
+[153/208] ✅ verify-mostrador-overstock-browser   3 OK  (11s)
+[154/208] ❌ verify-trazabilidad-flujos           exit 1  (1s)
+[155/208] ❌ gate-almacenes                       exit 1  (10s)
+[156/208] ✅ test-cobros-paso2                    47 OK  (1s)
+[157/208] ✅ verify-suggest-legible               6 OK  (5s)
+[158/208] ❌ verify-avisos-crm-riesgo             exit 1 · 32 OK  (1s)
+[159/208] ✅ verify-correos-permisos              RESULTADO: 13 ✓  (1s)
+[160/208] ❌ gate-registro-alta                   exit 1 · 4 OK  (1s)
+[161/208] ❌ gate-proyectos-pantalla              exit 1 · 2 OK  (34s)
+[162/208] ❌ gate-tiempo-pantalla                 exit 1 · 12 OK  (29s)
+[163/208] ❌ gate-avisos-contador-vivo            exit 1 · 14 OK  (98s)
+[164/208] ✅ verify-plantillas-email              49 OK  (1s)
+[165/208] ❌ gate-inicio-widgets                  exit 1 · RESULTADO: 27 ✓  (25s)
+[166/208] ❌ gate-margen-pantalla                 exit 1 · 56 OK  (44s)
+[167/208] ❌ gate-agenda-cabos                    exit 1 · RESULTADO: 26 ✓  (15s)
+[168/208] ❌ gate-sin-ventanitas                  exit 1 · RESULTADO: 24 ✓  (21s)
+[169/208] ❌ gate-disa-informes                   exit 1 · RESULTADO: 27 ✓  (13s)
+[170/208] ❌ gate-control-horario                 exit 1 · RESULTADO: 39 ✓  (9s)
+[171/208] ✅ test-codigos-internos                25 OK  (1s)
+[172/208] ✅ verify-contabilidad-diario-mayor     14 OK  (1s)
+[173/208] ✅ verify-contabilidad-export           21 OK  (1s)
+[174/208] ✅ test-textos-citas                    27 ok  (12s)
+[175/208] ✅ gate-c5-2fa-superadmin               18 OK  (7s)
+[176/208] ✅ test-c5-forgot                       25 OK  (1s)
+[177/208] ❌ test-c5ter-sin-email                 exit 1 · 15 OK  (1s)
+[178/208] ✅ verify-verifactu-cadena-nif          18 OK  (1s)
+[179/208] ❌ test-c6-secretos                     exit 1 · 26 OK  (1s)
+[180/208] ✅ gate-conciliacion-deshacer           RESULTADO: 10 ✓  (3s)
+[181/208] ✅ verify-tenant-lookup-readonly        17 OK  (1s)
+[182/208] ✅ gate-c5ter-cerrojo-superadmin        15 OK  (14s)
+[183/208] ✅ gate-xss-escape                      29 OK  (10s)
+[184/208] ✅ gate-csp-estricta                    19 OK  (6s)
+[185/208] ✅ censo-ventanitas                     RESULTADO: 1 ✓  (1s)
+[186/208] ✅ verify-menu-completo                 RESULTADO: 8 ✓  (1s)
+[187/208] ❌ verify-factura-exenta                exit 1 · RESULTADO: 5 ✓  (1s)
+[188/208] ✅ verify-contabilidad-backfill         11 OK  (1s)
+[189/208] ✅ test-llm-texto-respuesta             13 OK  (0s)
+[190/208] ❌ verify-albaranes-disa                exit 1 · 0 OK  (0s)
+[191/208] ❌ gate-baja-empleado                   exit 1  (15s)
+[192/208] ✅ verify-avisos-permisos               16 OK  (0s)
+[193/208] ❌ gate-plantillas-email                exit 1 · 13 OK  (3s)
+[194/208] ❌ gate-migracion-al-equipo             exit 1 · 140
+  ok  (6s)
+[195/208] ✅ test-c5-sesiones                     10 OK  (0s)
+[196/208] ✅ verify-correo-freno                  16 OK  (0s)
+[197/208] ✅ verify-comprobaciones-sin-correo-real 208 comprobaciones  (0s)
+[198/208] ❌ verify-disco-perfiles                exit 1 · 3 OK  (0s)
+[199/208] ✅ verify-superadmin-escrituras         10 OK  (0s)
+[200/208] ✅ verify-wal-acotado                   9 OK  (0s)
+[201/208] ✅ verify-safe-error                    15 OK  (0s)
+[202/208] ✅ verify-xss-escape                    46 OK  (0s)
+[203/208] ✅ lint-plantillas                      RESULTADO: 171 ✓  (0s)
+[204/208] ✅ verify-nombre-documentos             RESULTADO: 4 ✓  (0s)
+[205/208] ❌ verify-barrido-no-infla-ventas       exit 1 · RESULTADO: 4 ✓  (0s)
+[206/208] ✅ verify-deuda-una-sola-cuenta         RESULTADO: 6 ✓  (0s)
+[207/208] ✅ verify-libro-sin-huerfanos           RESULTADO: 3 ✓  (0s)
+[208/208] ✅ gate-pantallas-documento             16 OK  (21s)
+
+──── RESULTADO POR NOMBRE (orden fijo, para comparar dos barridos) ────
+❌ gate-cliente-ficha-completa          FALLA
+✅ gate-cliente-360                     PASA
+✅ gate-menu-navegacion                 PASA
+✅ gate-migracion-puerta                PASA
+✅ gate-agenda-visual                   PASA
+✅ gate-inicio-arranque                 PASA
+✅ gate-arranque-once-pasos             PASA
+❌ gate-inicio-cuadro-mando             FALLA
+❌ gate-vigia-pantalla                  FALLA
+✅ gate-vigia-agenda                    PASA
+❌ gate-agenda-sencilla                 FALLA
+✅ gate-agenda-calendario               PASA
+❌ gate-citas-pantalla                  FALLA
+❌ gate-oficio-pantalla                 FALLA
+❌ gate-citas-mes                       FALLA
+✅ gate-mapa-cliente                    PASA
+✅ gate-importador-csv                  PASA
+✅ gate-cola-envios                     PASA
+❌ gate-documentos                      FALLA
+✅ test-reserva-publica                 PASA
+❌ test-neto-cero-reserva               FALLA
+❌ gate-reserva-publica-pantalla        FALLA
+✅ test-pagos-proveedor                 PASA
+❌ gate-pagos-proveedor                 FALLA
+❌ gate-pago-cuenta                     FALLA
+❌ gate-abono-proveedor                 FALLA
+❌ gate-gasto-proveedor                 FALLA
+✅ test-devoluciones-proveedor          PASA
+✅ test-compras-motor                   PASA
+✅ test-suppliers-saneamiento           PASA
+✅ test-orden-compra-c1a                PASA
+✅ test-recepciones-c1b                 PASA
+❌ gate-c1c-diferencias-cierre          FALLA
+✅ test-c1c-diferencias-cierre          PASA
+✅ verify-propuestas-pagos              PASA
+❌ gate-propuestas-pagos-permisos       FALLA
+❌ gate-orden-compra-c1a                FALLA
+❌ gate-recepciones-c1b                 FALLA
+❌ gate-devoluciones-proveedor          FALLA
+❌ gate-c2-revision                     FALLA
+✅ test-c2-captura                      PASA
+✅ verify-voz                           PASA
+✅ verify-vigia                         PASA
+✅ verify-dibujo                        PASA
+❌ gate-dibujo-pantalla                 FALLA
+✅ gate-voz-pantalla                    PASA
+✅ test-dibujo                          PASA
+✅ test-disa-captura-chat               PASA
+✅ test-disa-clientes-t5                PASA
+✅ test-disa-dictar-compra              PASA
+✅ test-disa-stock                      PASA
+✅ test-llm-texto-respuesta             PASA
+✅ test-pago-voz-avisos                 PASA
+✅ test-vigia                           PASA
+✅ test-voz                             PASA
+❌ verify-albaranes-disa                FALLA
+❌ verify-d5-create-product             FALLA
+❌ verify-llm-migracion                 FALLA
+✅ verify-propuestas-d5                 PASA
+✅ verify-propuestas-recurrentes        PASA
+❌ gate-propuestas-recurrentes          FALLA
+✅ verify-propuestas-dormidos           PASA
+❌ gate-propuestas-dormidos             FALLA
+✅ verify-propuestas-fiscales           PASA
+✅ verify-propuestas-reposicion         PASA
+❌ gate-propuestas-reposicion           FALLA
+✅ verify-disa-query-permisos           PASA
+✅ verify-disa-sin-pedidos              PASA
+✅ verify-actividad-etiquetas           PASA
+✅ gate-nav-inicio-disa                 PASA
+❌ gate-disa-dictar-compra              FALLA
+✅ gate-disa-adjuntar                   PASA
+✅ test-almacenes                       PASA
+✅ test-almacenes-capa2                 PASA
+✅ test-stock-pilar3                    PASA
+✅ test-transfer-upstream               PASA
+❌ verify-invoice-over-stock            FALLA
+✅ verify-mostrador-overstock-browser   PASA
+✅ verify-over-stock-ui                 PASA
+✅ test-transfers                       PASA
+✅ verify-traslado-auditoria            PASA
+❌ gate-almacenes                       FALLA
+✅ verify-trazabilidad                  PASA
+❌ verify-trazabilidad-flujos           FALLA
+❌ gate-trazabilidad                    FALLA
+✅ test-cobros-paso2-1                  PASA
+❌ gate-avisos-contador-vivo            FALLA
+✅ test-cobros-paso2                    PASA
+✅ verify-crm                           PASA
+✅ verify-suggest-legible               PASA
+✅ verify-avisos-permisos               PASA
+❌ gate-avisos-badge                    FALLA
+❌ verify-avisos-crm-riesgo             FALLA
+❌ gate-migracion-al-equipo             FALLA
+✅ verify-correos-permisos              PASA
+❌ gate-registro-alta                   FALLA
+✅ test-coste-horas-proyecto            PASA
+✅ test-inicio                          PASA
+✅ test-oficio-alta                     PASA
+✅ test-registro-alta                   PASA
+✅ test-proyectos                       PASA
+❌ gate-proyectos-pantalla              FALLA
+✅ test-tiempo                          PASA
+❌ gate-tiempo-pantalla                 FALLA
+✅ test-facturar-horas                  PASA
+❌ gate-facturar-horas-pantalla         FALLA
+✅ test-rentabilidad-proyecto           PASA
+❌ gate-rentabilidad-pantalla           FALLA
+❌ verify-constructor                   FALLA
+❌ verify-margen                        FALLA
+❌ gate-margen-pantalla                 FALLA
+❌ verify-responsable                   FALLA
+❌ verify-informes                      FALLA
+❌ verify-plan-financiero               FALLA
+✅ verify-plantillas-email              PASA
+❌ gate-plantillas-email                FALLA
+✅ gate-impresion                       PASA
+✅ gate-pantallas-documento             PASA
+❌ gate-informes-a-medida               FALLA
+❌ gate-informes-se-entienden           FALLA
+❌ gate-informes-legibles               FALLA
+❌ gate-inicio-widgets                  FALLA
+❌ gate-portal-ampliado                 FALLA
+❌ gate-tarjeta-unica                   FALLA
+❌ gate-agenda-cabos                    FALLA
+❌ gate-sin-ventanitas                  FALLA
+✅ gate-403-permiso                     PASA
+❌ gate-cabos-apuntados                 FALLA
+❌ gate-productos-parados               FALLA
+❌ gate-disa-informes                   FALLA
+❌ gate-descuentos                      FALLA
+❌ gate-control-horario                 FALLA
+❌ gate-crm-tareas                      FALLA
+❌ gate-importador-proveedores          FALLA
+❌ gate-oficio-salud                    FALLA
+❌ gate-historial-clinico               FALLA
+✅ test-avisos-cita                     PASA
+✅ test-citas                           PASA
+✅ test-coincidencia-huecos             PASA
+✅ test-enlace-cita                     PASA
+❌ test-neto-cero-cita                  FALLA
+✅ test-prioridad                       PASA
+✅ test-textos-citas                    PASA
+❌ verify-albaranes-browser             FALLA
+✅ verify-pedidos-browser               PASA
+❌ verify-quotes-browser                FALLA
+❌ verify-mostrador-browser             FALLA
+❌ verify-sustitutiva-browser           FALLA
+❌ verify-albaranes                     FALLA
+❌ verify-mostrador                     FALLA
+✅ verify-pdf                           PASA
+✅ verify-pdf-http                      PASA
+❌ verify-pedidos                       FALLA
+✅ verify-portal                        PASA
+❌ verify-quotes                        FALLA
+✅ verify-recurrentes                   PASA
+✅ test-codigos-internos                PASA
+✅ test-contabilidad                    PASA
+✅ test-contabilidad-bienes             PASA
+✅ test-contabilidad-modelos            PASA
+✅ test-contabilidad-pyg                PASA
+✅ test-coste-wac                       PASA
+✅ verify-conciliacion                  PASA
+✅ verify-conciliacion-gastos           PASA
+✅ verify-contabilidad-diario-mayor     PASA
+✅ verify-contabilidad-export           PASA
+✅ gate-c5-2fa-superadmin               PASA
+✅ gate-c5bis-rescate-duenyo            PASA
+✅ gate-c5ter-cerrojo-superadmin        PASA
+✅ gate-c6-find-tenant                  PASA
+✅ test-c5-2fa-superadmin               PASA
+✅ test-c5-forgot                       PASA
+✅ test-c5-sesiones                     PASA
+✅ test-c5bis-rescate-duenyo            PASA
+❌ test-c5ter-sin-email                 FALLA
+✅ test-c6-acceso                       PASA
+❌ verify-pieza-c                       FALLA
+❌ verify-sustitutiva                   FALLA
+✅ verify-verifactu-anulaciones         PASA
+✅ verify-verifactu-cadena-nif          PASA
+✅ verify-verifactu-cola                PASA
+✅ verify-verifactu-t1                  PASA
+✅ verify-verifactu-t2                  PASA
+✅ verify-correo-freno                  PASA
+✅ verify-comprobaciones-sin-correo-real PASA
+❌ verify-disco-perfiles                FALLA
+❌ test-c6-secretos                     FALLA
+✅ gate-conciliacion-deshacer           PASA
+✅ verify-superadmin-escrituras         PASA
+✅ verify-tenant-lookup-readonly        PASA
+✅ verify-wal-acotado                   PASA
+✅ verify-safe-error                    PASA
+✅ verify-xss-escape                    PASA
+✅ gate-xss-escape                      PASA
+✅ gate-csp-estricta                    PASA
+❌ gate-baja-empleado                   FALLA
+✅ lint-plantillas                      PASA
+✅ censo-ventanitas                     PASA
+❌ lint-js-servido                      FALLA
+✅ verify-nombre-documentos             PASA
+✅ verify-menu-completo                 PASA
+❌ verify-barrido-no-infla-ventas       FALLA
+✅ verify-deuda-una-sola-cuenta         PASA
+❌ verify-factura-exenta                FALLA
+❌ test-oficio                          FALLA
+✅ verify-libro-sin-huerfanos           PASA
+✅ verify-contabilidad-backfill         PASA
+❌ verify-dinero-espanol                FALLA
+
+──── gate-cliente-ficha-completa (FALLA, exit 1) ────
+  ✗ FALLO: ocho facturas: seis con coste conocido y dos sin él — 0
+  ✗ FALLO: la historia queda: 1.200 € con coste (840 € de coste) y 400 € sin coste — 0 / 0 / 0
+  ✗ FALLO: y trae TODO: su historia, sus notas y la tabla larga de facturas (criterio 22) — 0 filas de factura
+  ✗ FALLO: la capa de «Te debe» trae «Registrar cobro» por factura y «Gestionar cuenta» — 0 cobros · 0 cuenta
+✗ EL GATE HA REVENTADO: TypeError: Cannot read properties of undefined (reading 'id')
+
+──── gate-inicio-cuadro-mando (FALLA, exit 1) ────
+✗ EXCEPCIÓN: Error: Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir.
+
+──── gate-vigia-pantalla (FALLA, exit 1) ────
+  ✗ FALLO: el gráfico de apoyo se DIBUJA (píxeles, no solo el <canvas>) — (ninguno pintó en 20 s)
+  ✓ la pantalla no lanza errores de JS/CSP — limpio
+  ✓ la pantalla del empleado tampoco lanza errores — limpio
+
+──── gate-agenda-sencilla (FALLA, exit 1) ────
+  ✗ FALLO: cita creada desde el hueco — (no)
+  ✗ FALLO: la persona y la hora son las del hueco pulsado (no se re-preguntaron)
+  ✗ FALLO: cita con cliente nuevo creada sin salir del panel — (no)
+  ✗ FALLO: la cita se crea con el nombre CORREGIDO, sin volver a pulsar nada — (no se creó: el alta vuelve a estar rota)
+  ✗ FALLO: y el panel se cierra: no se queda colgado con un error
+  ✗ FALLO: el bloque del tinte lleva su tramo de espera con "Aquí estás libre" — (ninguno)
+
+──── gate-citas-pantalla (FALLA, exit 1) ────
+  ✗ FALLO: cita creada (API) — 403
+  ✗ FALLO: cita con código CITA-NNNN
+  ✗ FALLO: eje PERSONA: la cita se pinta en la agenda — 0 bloque(s)
+  ✗ FALLO: eje RECURSO: la misma cita se pinta por recurso — 0 bloque(s)
+  ✗ FALLO: segunda cita creada por la API (para el conflicto) — 403
+  ✗ FALLO: mover a un hueco libre → 200 — 403
+
+──── gate-oficio-pantalla (FALLA, exit 1) ────
+  ✗ EXCEPCIÓN: TimeoutError: Waiting failed: 8000ms exceeded
+
+──── gate-citas-mes (FALLA, exit 1) ────
+  ✗ FALLO: y el mes que se está mirando viene marcado — Sep
+  ✓ cero errores de consola en la pantalla de horarios
+  ✓ y en su respuesta NO viaja ni un nombre de cliente — {"error":"No tienes permiso para esta acción. Si lo necesita
+[18] móvil · 360, 390 y 414 px: sin scroll horizontal ni errores
+  ✗ FALLO: a 360 px no hay scroll horizontal
+  ✓ cero errores de consola en el negocio con equipo
+
+──── gate-documentos (FALLA, exit 1) ────
+  ✗ FALLO: se emite una factura antes de subir el logo — factura undefined
+  ✗ FALLO: y el ticket de mostrador también — ticket undefined · 
+  ✗ FALLO: el logo sale en pantalla en los CINCO papeles que tienen pantalla — 4/5 · sin logo: factura(404)
+  ✗ FALLO: y en el TICKET de mostrador, que es el sexto papel con membrete
+  ✗ FALLO: que además lo CONGELA al emitirse, como el resto del membrete — company_logo_id=undefined
+  ✗ FALLO: la factura con logo genera un PDF de verdad — 6 KB
+
+──── test-neto-cero-reserva (FALLA, exit 1) ────
+    catch (e) { const err = new Error(`Línea ${i + 1}: ${e.message}. Corrígela antes de emitir.`); err.status = 400; throw err; }
+Error: Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir.
+
+──── gate-reserva-publica-pantalla (FALLA, exit 1) ────
+  ✗ FALLO: se encienden los ajustes desde la pantalla del dueño — 403
+  ✗ FALLO: se publica UN servicio (el otro se queda privado) — 403
+  ✗ FALLO: publicar un servicio SIN tiempo configurado se rechaza (400) — 403
+  ✓ la pantalla de mandos no lanza errores de JS/CSP — limpio
+ERROR TimeoutError: Waiting for selector `#listaServicios .opt` failed
+
+──── gate-pagos-proveedor (FALLA, exit 1) ────
+  ✗ compra recibida de prueba creada (#undefined)
+  ✗ la compra de prueba aparece como origen elegible y se selecciona
+            this.#timeoutError = new TimeoutError(opts.message);
+TimeoutError: Navigation timeout of 30000 ms exceeded
+
+──── gate-pago-cuenta (FALLA, exit 1) ────
+  ✗ reparto AUTO por antigüedad: 100 a la 1ª, 100 a la 2ª, 0 a la 3ª (got 0/0/0)
+  ✗ la deuda pagable baja 300→100 tras el pago a cuenta
+  ✗ manual sobrepasando el pendiente de una factura → 400
+  ✗ manual cuya suma != importe → 400
+  ✗ manual válido salda la 3ª factura → deuda 0
+  ✗ sin deuda viva → 400
+
+──── gate-abono-proveedor (FALLA, exit 1) ────
+TypeError: Cannot read properties of undefined (reading 'id')
+
+──── gate-gasto-proveedor (FALLA, exit 1) ────
+            this.#timeoutError = new TimeoutError(opts.message);
+TimeoutError: Navigation timeout of 30000 ms exceeded
+
+──── gate-c1c-diferencias-cierre (FALLA, exit 1) ────
+  ✗ orden A undefined enviada
+  ✗ delta de stock = +15 (12 con exceso + 3 parciales; antes 678 → 678)
+TypeError: Cannot read properties of undefined (reading 'lines')
+
+──── gate-propuestas-pagos-permisos (FALLA, exit 1) ────
+  ✗ al abrir el panel, DISA genera la propuesta de pago (como el cron)
+  ✗ EXCEPCIÓN: Cannot read properties of undefined (reading 'id')
+✗ 2 fallos, 2 OK
+
+──── gate-orden-compra-c1a (FALLA, exit 1) ────
+            this.#timeoutError = new TimeoutError(opts.message);
+TimeoutError: Navigation timeout of 30000 ms exceeded
+
+──── gate-recepciones-c1b (FALLA, exit 1) ────
+  ✗ orden undefined enviada
+  ✗ ficha: bloque de recepción con Pedido/Recibido/Pendiente
+  ✗ ficha: botón "Registrar recepción" (hay pendiente)
+  ✗ ficha: aún sin recepciones
+        throw new Error(message);
+Error: No element found for selector: a[href="/admin/purchase-orders/undefined/receipts/new"]
+
+──── gate-devoluciones-proveedor (FALLA, exit 1) ────
+  ✗ compra de prueba creada (#undefined, +6 @ 2.50)
+  ✗ stock sube a 6 tras la compra (nace a 0 → 0)
+  ✗ la compra de prueba aparece como origen elegible y se selecciona
+                const waitForSelectorError = new (error instanceof TimeoutError ? TimeoutError : Error)(`Waiting for selector \`${selector}\` failed`);
+TimeoutError: Waiting for selector `#rLines tr[data-oid] .r-qty` failed
+  cause: TimeoutError: Waiting failed: 8000ms exceeded
+
+──── gate-c2-revision (FALLA, exit 1) ────
+  ✗ confirmar → redirige a la ficha de la compra (capture?attachment=709)
+  ✗ stock de Vainilla subió +3 por el libro (678→678)
+  ✗ producto nuevo creado con stock 2 y WAC 5
+  ✗ producto nuevo con la banda elegida explícitamente (21%)
+  ✗ el adjunto queda enlazado a la compra (entity_type=purchase)
+  ✗ "Documento origen" visible en la ficha de la compra
+
+──── gate-dibujo-pantalla (FALLA, exit 1) ────
+  ✗ FALLO: el primer aviso tiene un gráfico dibujado por Chart.js (mismo motor) — tipo=undefined
+  ✗ FALLO: lo pintado == lo que devuelve el constructor para la misma receta (MISMA cifra)
+  ✓ la pantalla no lanza errores de JS/CSP — limpio
+  ✓ la pantalla del empleado tampoco lanza errores — limpio
+
+──── verify-albaranes-disa (FALLA, exit 1) ────
+ERROR Cannot read properties of undefined (reading 'replace')
+
+──── verify-d5-create-product (FALLA, exit 1) ────
+TypeError: Cannot read properties of undefined (reading 'replace')
+
+──── verify-llm-migracion (FALLA, exit 1) ────
+    const e = new Error(noBalance
+Error: El proveedor de IA no tiene saldo disponible.
+
+──── gate-propuestas-recurrentes (FALLA, exit 1) ────
+ERROR en el gate: TimeoutError: Waiting failed: 15000ms exceeded
+
+──── gate-propuestas-dormidos (FALLA, exit 1) ────
+ERROR en el gate: TimeoutError: Waiting failed: 15000ms exceeded
+
+──── gate-propuestas-reposicion (FALLA, exit 1) ────
+   POST /preparar-compra → 403 {"error":"Tu cuenta está en modo SOLO LECTURA por regularizar. No puedes crear ni modificar nada hasta reactivarla. Tus datos están intactos."}
+  ✗ el endpoint del botón responde 200 ok
+  ✗ devuelve el enlace al borrador para revisarlo
+  ✗ el mensaje deja claro que Bamburu NO envía nada al proveedor
+  ✗ la propuesta queda aprobada, apuntando a su borrador
+  ✗ la orden es del proveedor y queda en BORRADOR (no enviada)
+
+──── gate-disa-dictar-compra (FALLA, exit 1) ────
+  ✗ confirmar → ficha de la compra (capture?attachment=706)
+✗ 12 OK, 1 fallos
+
+──── verify-invoice-over-stock (FALLA, exit 1) ────
+    catch (e) { const err = new Error(`Línea ${i + 1}: ${e.message}. Corrígela antes de emitir.`); err.status = 400; throw err; }
+Error: Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir.
+
+──── gate-almacenes (FALLA, exit 1) ────
+            this.#timeoutError = new TimeoutError(`Waiting failed: ${options.timeout}ms exceeded`);
+TimeoutError: Waiting failed: 8000ms exceeded
+
+──── verify-trazabilidad-flujos (FALLA, exit 1) ────
+    catch (e) { const err = new Error(`Línea ${i + 1}: ${e.message}. Corrígela antes de emitir.`); err.status = 400; throw err; }
+Error: Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir.
+
+──── gate-trazabilidad (FALLA, exit 1) ────
+   POST receipts → 403 {"error":"Tu cuenta está en modo SOLO LECTURA por regularizar. No puedes crear n
+  ✗ la recepción se confirma (201 Created)
+  ✗ el stock del producto = 12 (entró la recepción)
+  ✗ nace el lote L-GATE con saldo 12 y caducidad 2026-12-31
+  ✗ el endpoint del informe devuelve el lote con su saldo (lo que pinta la ficha)
+
+──── gate-avisos-contador-vivo (FALLA, exit 1) ────
+  ✗ el contador SUBE solo, sin recargar: 27 → 27 (90.1s, sondeo de 60s)
+  ✗ la oportunidad se cierra desde la página, por el endpoint real (No tienes permiso para esta acción. Si lo necesitas, pídeselo al dueño o a un administrador del negocio.)
+  ✓ el panel muestra sus avisos, no un error («Cargando……»)
+  ✓ 0 errores de JS
+  ✗ 0 peticiones fallidas propias: 401 /api/erp/avisos/contador, 403 /api/erp/crm/84/close
+✗ 3 fallos, 14 OK
+
+──── gate-avisos-badge (FALLA, exit 1) ────
+  ✗ el resumen-primero sale del motor ("…")
+  ✗ el resumen lista los conteos por fuente y cuadran con el badge (reserva_publica_encendida=1, envio_verifactu=2, vencimiento_proveedor=161, cobro_vencido=137)
+  ✗ el resumen NO ofrece acciones: solo conteos y "¿cuál quieres ver?"
+  ✗ tras "marcar todos como vistos", la campana pasa a GRIS y sigue gris en otra pantalla
+  ✗ POST /api/erp/avisos/visto responde 200 (got 403)
+  ✗ que una factura ya vista EMPEORE no reactiva el rojo (sigue VISTO)
+
+──── verify-avisos-crm-riesgo (FALLA, exit 1) ────
+  ✗ antes de crear nada NO hay avisos de cliente_en_riesgo
+  ✗ el dueño ve 1 aviso de cliente_en_riesgo (vio 2)
+  ✗ su contador en vivo dice 1 (dijo 2)
+  ✗ al cerrar la oportunidad, el aviso desaparece
+✗ 4 fallos, 32 OK
+
+──── gate-migracion-al-equipo (FALLA, exit 1) ────
+  ✗ el cliente ve su acuse en pantalla
+  ✗ la petición se registra en la base · 1 → 1
+TypeError: Cannot read properties of undefined (reading 'comentario')
+
+──── gate-registro-alta (FALLA, exit 1) ────
+  ✗ FALLO: responde 200 — He tenido un problema para responderte. Inténtalo 
+  ✗ FALLO: responde 200 — He tenido un problema para responderte. Inténtalo 
+  ✗ FALLO: email duplicado NO marca ready (no aparece el botón)
+  ✗ FALLO: DISA avisa de que el email está en uso y pide otro (antes del resumen)
+  ✗ FALLO: responde 200 — He tenido un problema para responderte. Inténtalo 
+  ✗ FALLO: responde 200 — He tenido un problema para responderte. Inténtalo 
+
+──── gate-proyectos-pantalla (FALLA, exit 1) ────
+  ✗ FALLO: creado desde pantalla: código PRY-NNNN, modo horas, tarifa 55
+  ✗ FALLO: el proyecto creado aparece en la lista de la pantalla
+ERROR TypeError: Cannot read properties of undefined (reading 'id')
+
+──── gate-tiempo-pantalla (FALLA, exit 1) ────
+  ✗ FALLO: entrada manual 2h: importe = 120 € (2h × tarifa 60 de la persona)
+  ✗ FALLO: la entrada aparece en la vista semanal con su duración
+  ✗ FALLO: PULSANDO "Empezar" arranca el cronómetro (caja "en marcha" visible)
+  ✗ FALLO: la API confirma un cronómetro activo
+  ✓ la pantalla no lanza errores de JS/CSP — limpio
+  ✗ FALLO: A registra una entrada (200)
+
+──── gate-facturar-horas-pantalla (FALLA, exit 1) ────
+  ✗ FALLO: tras generar, lleva a la pantalla de la factura — http://desarrollo-bamburu.localhost:3000/admin/facturar-horas
+  ✗ FALLO: se creó una factura con id — NaN
+  ✗ FALLO: la factura nace EMITIDA
+  ✗ FALLO: la factura cuadra al céntimo: 300 + 63 IVA = 363
+  ✗ FALLO: la factura tiene 2 líneas — 0
+  ✗ FALLO: las 3 entradas quedan enlazadas a la factura
+
+──── gate-rentabilidad-pantalla (FALLA, exit 1) ────
+  ✗ FALLO: asignar la venta a PG desde pantalla la etiqueta en BD
+  ✗ FALLO: asignar el gasto a PP desde pantalla lo etiqueta en BD
+  ✗ FALLO: la ficha de PG muestra el panel de rentabilidad con 1.000,00 — RentabilidadIngresos (facturado, sin IVA)0,00 €− Gastos directos (facturas de proveedor)0,
+  ✓ las pantallas no lanzan errores de JS/CSP — limpio
+
+──── verify-constructor (FALLA, exit 1) ────
+✗ EXCEPCIÓN: Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir. 
+ Error: Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir.
+
+──── verify-margen (FALLA, exit 1) ────
+✗ EXCEPCIÓN: Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir. 
+ Error: Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir.
+
+──── gate-margen-pantalla (FALLA, exit 1) ────
+  ✓ 0 errores JS
+  ✓ 0 errores JS tras pulsar las tres
+  ✓ y la nota explica que un descuadre entre niveles NO es un error
+  ✗ FALLO: al pedir margen, sale el aviso de "sin coste"
+  ✗ FALLO: la tabla pinta EXACTAMENTE las filas que da el motor — 0 pintadas · 0 del motor
+  ✓ 0 errores JS en todo el constructor
+
+──── verify-responsable (FALLA, exit 1) ────
+[1] LOS CLIENTES NACEN SIN ASIGNAR — y eso no es un error
+✗ EXCEPCIÓN: Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir. 
+ Error: Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir.
+
+──── verify-informes (FALLA, exit 1) ────
+✗ EXCEPCIÓN: Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir. 
+ Error: Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir.
+
+──── verify-plan-financiero (FALLA, exit 1) ────
+✗ EXCEPCIÓN: Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir. 
+ Error: Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir.
+
+──── gate-plantillas-email (FALLA, exit 1) ────
+ERROR en el gate: Error: No tienes permiso para esta acción. Si lo necesitas, pídeselo al dueño o a un administrador del negocio.
+
+──── gate-informes-a-medida (FALLA, exit 1) ────
+  ✓ la pantalla carga sin un solo error de JavaScript · ninguno
+  ✗ guardar como nuevo crea UNO · 0 → 0
+  ✗ guardar CAMBIOS actualiza el mismo, no duplica · 0 paneles · id undefined
+✗ EXCEPCIÓN: Cannot read properties of undefined (reading 'config')
+TypeError: Cannot read properties of undefined (reading 'config')
+RESULTADO: 69 ✓  ·  3 ✗
+
+──── gate-informes-se-entienden (FALLA, exit 1) ────
+  ✗ al pulsar Guardar se abre un panel DENTRO de la página
+  ✗   el panel dice qué es
+✗ EXCEPCIÓN: Cannot read properties of null (reading 'value')
+TypeError: Cannot read properties of null (reading 'value')
+RESULTADO: 10 ✓  ·  3 ✗
+
+──── gate-informes-legibles (FALLA, exit 1) ────
+  ✗ con un solo grupo sale EL NÚMERO, no un gráfico de una barra · cifra —
+  ✗   con su cifra y su periodo debajo · — · 
+  ✗ con más de 12 grupos sale la TABLA, no sesenta barras
+  ✗ si el usuario pide barras, se pintan 12 + «Otros», no más · -1 barras
+  ✓ toda la sesión sin errores de JavaScript ni ventanitas · ninguno
+RESULTADO: 49 ✓  ·  4 ✗
+
+──── gate-inicio-widgets (FALLA, exit 1) ────
+  ✗ el servidor guarda lo mismo que se ve · hoy,numeros,grafico,cifras,oport,decide,arranque
+  ✗ y al RECARGAR sigue puesto · hoy,numeros,grafico,cifras,oport,decide,arranque
+  ✗   y queda escondido en el servidor
+  ✓ toda la sesión sin errores de JavaScript ni ventanitas · ninguno
+RESULTADO: 27 ✓  ·  3 ✗
+
+──── gate-portal-ampliado (FALLA, exit 1) ────
+  ✗ el cliente escribe y se guarda · ""
+  ✗   y el portal le DICE que salió (nada de un silencio)
+  ✗   y su mensaje aparece en el hilo
+  ✗ un mensaje en blanco se rechaza y se dice por qué
+  ✗   y no se guarda
+  ✗ al negocio le consta 1 mensaje sin leer · []
+
+──── gate-tarjeta-unica (FALLA, exit 1) ────
+  ✗ sin un solo error de JavaScript en todo el recorrido · Invalid or unexpected token | Invalid or unexpected token | Invalid or unexpected token
+RESULTADO: 23 ✓  ·  1 ✗
+
+──── gate-agenda-cabos (FALLA, exit 1) ────
+  ✗ y al elegirla, el informe sale con sus grupos · anulada_por/anuladas/tabla [none] → 
+  ✓ sin errores de JavaScript ni ventanitas · ninguno
+  ✓ la agenda sigue sin errores de JavaScript · ninguno
+RESULTADO: 26 ✓  ·  1 ✗
+
+──── gate-sin-ventanitas (FALLA, exit 1) ────
+  ✓ sin errores de JavaScript ni ventanitas nativas · ninguno
+  ✓ sin errores de JavaScript · ninguno
+  ✓ sin errores de JavaScript · ninguno
+  ✗ la nota se crea desde la pantalla
+  ✗ editar abre un panel, no una ventanita
+✗ EXCEPCIÓN: Cannot read properties of undefined (reading 'texto')
+
+──── gate-cabos-apuntados (FALLA, exit 1) ────
+  ✗ cero prompt() y cero confirm() en el producto
+RESULTADO: 47 ✓  ·  1 ✗
+
+──── gate-productos-parados (FALLA, exit 1) ────
+  ✗   y el quesito se pinta de verdad (píxeles, no la etiqueta) · 0 píxeles de 45000
+  ✗   y en tabla salen los grupos, con los parados dentro
+  ✓ sin errores de JavaScript ni ventanitas · ninguno
+RESULTADO: 21 ✓  ·  2 ✗
+
+──── gate-disa-informes (FALLA, exit 1) ────
+  ✗   y el bucle sabe despacharlas
+  ✓ sin errores de JavaScript ni ventanitas · ninguno
+RESULTADO: 27 ✓  ·  1 ✗
+
+──── gate-descuentos (FALLA, exit 1) ────
+  ✗ al pulsar «Descuentos…» sale un panel con lo que toca
+  ✗   con una casilla por descuento, SIN marcar (nada entra solo)
+  ✗   y el descuento del cliente entre ellos
+  ✗ marcándolo, la línea de descuento entra · 1 líneas
+  ✗   con importe NEGATIVO y por su valor
+  ✗   y con su nombre, para que el cliente lo lea en el papel
+
+──── gate-control-horario (FALLA, exit 1) ────
+  ✗ al pulsar «Pausa» y confirmar, queda en pausa DE VERDAD · trabajando
+  ✗   y la pantalla ya ofrece volver o salir · pausa,salida
+  ✓ sin errores de JavaScript ni ventanitas del navegador · ninguno
+RESULTADO: 39 ✓  ·  2 ✗
+
+──── gate-crm-tareas (FALLA, exit 1) ────
+  ✗ y con los datos buenos, la tarea se apunta de verdad
+  ✓ sin errores de JavaScript ni ventanitas · ninguno
+RESULTADO: 37 ✓  ·  1 ✗
+
+──── gate-importador-proveedores (FALLA, exit 1) ────
+  ✗ deshacer archiva los dos · {"error":"Tu cuenta está en modo SOLO LECTURA por regularizar. No puedes crear ni modificar nada hasta reactivarla. Tus datos están intactos."}
+  ✗   pero fuera de la lista
+  ✓ sin errores de JavaScript ni ventanitas · ninguno
+  ✗ /admin/descuentos  (bloque 3)
+      /tmp/lintjs-CAh7Xr/b2.js:3 | const CATS=[{"id":39,"name":"Batería y sistema eléctrico"},{"id":112,"name":"Cat <img src=x onerror=\"window.__xss=1\"> (gate 67cb1b)"},{"id":164,"name":"Cat <img src=x on
+  ✗ /admin/clients/1016
+
+──── gate-oficio-salud (FALLA, exit 1) ────
+  ✗ la asistencia sanitaria nace EXENTA (art. 20.Uno.3º LIVA) · 0 exentos
+  ✗   y el nombre lo dice, para que el negocio decida a sabiendas
+  ✗   con el IVA exento ya puesto, no un 21 % que habría que corregir · 0
+  ✓ sin errores de JavaScript · ninguno
+RESULTADO: 39 ✓  ·  3 ✗
+
+──── gate-historial-clinico (FALLA, exit 1) ────
+  ✗ FALLO: y ningún temporizador del sistema lo toca — bamburu-backup-secondary.service
+RESULTADO: 39 ✓  ·  1 ✗
+
+──── test-neto-cero-cita (FALLA, exit 1) ────
+💥 EXCEPCIÓN: Error: Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir.
+
+──── verify-albaranes-browser (FALLA, exit 1) ────
+  ✗ factura desde albarán → navega a la factura https://gate-albaranes-13acd3.bamburu.com/admin/albaranes/1
+  ✗ la factura indica "Procede del albarán"
+
+──── verify-quotes-browser (FALLA, exit 1) ────
+ERROR Waiting failed: 9000ms exceeded
+
+──── verify-mostrador-browser (FALLA, exit 1) ────
+ERROR Waiting failed: 9000ms exceeded
+
+──── verify-sustitutiva-browser (FALLA, exit 1) ────
+✗ No se pudo sembrar el ticket: Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir.
+
+──── verify-albaranes (FALLA, exit 1) ────
+    catch (e) { const err = new Error(`Línea ${i + 1}: ${e.message}. Corrígela antes de emitir.`); err.status = 400; throw err; }
+Error: Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir.
+
+──── verify-mostrador (FALLA, exit 1) ────
+    catch (e) { const err = new Error(`Línea ${i + 1}: ${e.message}. Corrígela antes de emitir.`); err.status = 400; throw err; }
+Error: Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir.
+
+──── verify-pedidos (FALLA, exit 1) ────
+  ✗ totales borrador como la factura: base 200 · IVA 42 · IRPF 30 · total 212  (got 200 / 0 / 30 / 170)
+
+──── verify-quotes (FALLA, exit 1) ────
+  ✗ totales borrador: base 120 · IVA 25.20 · IRPF 18.00 · total 127.20  (got 120 / 21 / 18 / 123)
+    catch (e) { const err = new Error(`Línea ${i + 1}: ${e.message}. Corrígela antes de emitir.`); err.status = 400; throw err; }
+Error: Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir.
+
+──── test-c5ter-sin-email (FALLA, exit 1) ────
+  ✗ FALLO: los frenos también registran — 0 eventos
+
+──── verify-pieza-c (FALLA, exit 1) ────
+ERROR Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir.     at file:///home/ubuntu/bamburu/modules/erp/routes/invoices.js:279:29
+
+──── verify-sustitutiva (FALLA, exit 1) ────
+    catch (e) { const err = new Error(`Línea ${i + 1}: ${e.message}. Corrígela antes de emitir.`); err.status = 400; throw err; }
+Error: Línea 1: Falta confirmar la clasificación fiscal de una línea antes de emitir. Corrígela antes de emitir.
+
+──── verify-disco-perfiles (FALLA, exit 1) ────
+  ✗ FALLO: se puede MIRAR el tmp privado del snap (si no, esta comprobación no vale nada) — no se pudo listar /tmp/snap-private-tmp/snap.chromium/tmp — necesita sudo sin contraseña
+
+──── test-c6-secretos (FALLA, exit 1) ────
+  ✗ FALLO: la traza de la herramienta pasa el SQL por redactarSql
+  ✗ FALLO: y NO manda el sql crudo al log
+
+──── gate-baja-empleado (FALLA, exit 1) ────
+  ✗ PULSANDO EL BOTÓN, la persona sin rastro se BORRA — con permisos y todo · sigue ahí
+  ✗   y sus permisos se sueltan (era justo lo que daba el 500)
+  ✗ PULSANDO EL BOTÓN, la persona con rastro se ARCHIVA (no se borra) · activo=1
+  ✗ y en su SIGUIENTE clic ya no entra · HTTP 200 · /admin/citas
+  ✗ la archivada se ve como Inactiva en la lista · ZZ Baja 76c043 limpiozz-baja-limpio-76c043@bamburu.testEmpleado1 permi
+  ✗   y su fila ofrece «Recuperar» · Editar | Dar de baja
+
+──── lint-js-servido (FALLA, exit 1) ────
+........✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗
+  ✗ /admin/descuentos  (bloque 3)
+      /tmp/lintjs-pRDuIc/b2.js:3 | const CATS=[{"id":39,"name":"Batería y sistema eléctrico"},{"id":112,"name":"Cat <img src=x onerror=\"window.__xss=1\"> (gate 67cb1b)"},{"id":164,"name":"Cat <img src=x on
+
+──── verify-barrido-no-infla-ventas (FALLA, exit 1) ────
+  ✗ FALLO: no hay ninguna factura EMITIDA creada hoy en el negocio compartido · 1 facturas por 1210.00 € · la mayor: F2026-1172 (1210.00)
+RESULTADO: 4 ✓  ·  1 ✗
+
+──── verify-factura-exenta (FALLA, exit 1) ────
+  ✗ FALLO: una factura con línea exenta imprime el artículo que la exime
+  ✗ FALLO: una factura MIXTA (una línea exenta y otra con IVA) también la imprime
+  ✗ FALLO: sin líneas y con tipo 0 en la cabecera, la imprime
+  ✗ FALLO:   y explica los DOS lados de la raya: qué va exento y qué va al 21 %
+  ✗ FALLO:   con los casos que de verdad se confunden (masaje, estética, pilates, informe)
+RESULTADO: 5 ✓  ·  5 ✗
+
+──── test-oficio (FALLA, exit 1) ────
+  ✗ FALLO:   lo sanitario y terapéutico nace EXENTO (art. 20.Uno.3º LIVA)
+
+──── verify-dinero-espanol (FALLA, exit 1) ────
+  ✗ ninguna pantalla enseña una fecha en formato inglés · /admin/descuentos: 2026-08-23 2026-09-01 2026-09-30 2027-08-23
+RESULTADO: 19 ✓  ·  1 ✗   (356 pantallas)
+
+NO ejecutados, por su naturaleza (no son deuda):
+  · verify-llm-disa-stock           llama al MODELO REAL (stock por chat). A mano, cuando se toque DISA.
+  · verify-pedidos-disa             pregunta al MODELO REAL por el chat de DISA. A mano, cuando se toquen los pedidos de DISA.
+  · verify-disa-alcance             llama al MODELO REAL y escribe una transcripción para leerla; no afirma nada. Es diagnóstico, no comprobación. A mano, cuando se toque el límite de tema de DISA.
+  · verify-disa-pedidos-modelo-real llama al MODELO REAL: ni determinista ni gratis. A mano.
+  · gate-pago-voz-avisos            llama al MODELO REAL (misma familia). A mano y a conciencia.
+  · gate-c2-captura                 llama al MODELO REAL (visión) para LEER la factura: cuesta dinero y depende de la cuota de IA del mes. Sin cuota ABORTA (código 2), no finge. La PANTALLA de revisión —que es lo que se rompe— sí va en el barrido: gate-c2-revision.
+  · gate-disa-captura-chat          llama al MODELO REAL por el chat de DISA (misma familia). Sin cuota ABORTA. Lo que no necesita modelo (superficies de adjuntar, aterrizaje precargado, archivo protegido) va en el barrido: gate-disa-adjuntar.
+  · gate-avisos-pantalla            EN ROJO desde antes (3 aserciones, medidas el 22 ago 2026). Otro tema.
+  · verify-pieza-c-http             gate FRÁGIL preexistente (redondeo de céntimos). Otro tema.
+
+🌍 REQUIEREN UN ENTORNO que esta máquina no tiene (abortan con código 2, no fingen):
+  · gate-registro-tailscale
+      el alta POR LA DIRECCIÓN DE TAILSCALE necesita esa red montada, y aquí el host no resuelve. Apuntarlo a localhost lo dejaría sin probar lo que existe para probar. Correrlo donde haya Tailscale (`tailscale up`).
+
+⚠️  ROJO CONOCIDO, con dueño y motivo (el gate SÍ se ejecuta):
+  · verify-dinero-espanol  (declarado el 1 sep 2026)
+      ROJO ANTERIOR A LA ENTREGA QUE LO DESTAPÓ, y comprobado: la aserción ya estaba en el commit base (`git show b1f8770:scripts/verify-dinero-espanol.mjs`, línea 162) y el rojo también. Sale 19 ✓ · 1 ✗ sobre 356 pantallas; el único ✗ es «ninguna pantalla enseña una fecha en formato inglés» y señala /admin/descuentos con 2026-08-23 2026-09-01 2026-09-30 2027-08-23. NO son fechas de datos: son los marcadores de sus formularios (descuentos.js:179, :180, :216), que viven dentro de un <script>. Llegan al texto visible porque el bloque se cierra antes de tiempo: descuentos.js:163 mete el catálogo con JSON.stringify SIN escapar `</`, y el producto 2097 de desarrollo-bamburu lleva un `</script>` en el nombre desde el 25 ago 2026 (residuo de gate: «(gate 941065)»). UN defecto, dos instrumentos cantándolo — el otro es lint-js-servido. LO CIERRA la tarea de `/admin/descuentos` ya abierta en TABLERO.md §Deuda técnica (escapar `</` en descuentos.js:163), no esta declaración. Las 5 aserciones que portal-formato-dinero añadió a este script están las 5 en verde.
+
+⚠️  ROJO CONOCIDO, con dueño y motivo (el gate SÍ se ejecuta):
+  · gate-portal-ampliado  (declarado el 1 sep 2026)
+      NO ES DEL PRODUCTO NI DEL GATE: es el estado administrativo de los negocios de esta máquina. Sale 19 ✓ · 9 ✗. Los bloques [0] (tokens ajenos/caducados/revocados) y [1] (analíticas del cliente, con la aserción del dinero español `600,00 €`) pasan ENTEROS por navegador de verdad. Los 9 ✗ son todos del bloque [2], que escribe por formulario: 7 de los 8 negocios de data/control.db están en status=suspended_admin (desarrollo-bamburu desde el 25 ago 2026, los demás desde el 16 jul) y readOnlyGuard (core/tenant-middleware.js) devuelve 403 a todo lo que no sea GET/HEAD/OPTIONS, montado en index.js con app.use('*') ANTES de la autenticación. La excepción de :159 («admin_user_id» de undefined) es aguas abajo del mismo 403: no hay fila que leer porque no se guardó ninguna. NO se cambia el estado de un negocio vivo para poner un gate en verde. LO CIERRA que el gate se traiga su propio negocio con negocioDesechable() —como ya hacen gate-403-permiso y gate-historial-clinico por esta misma causa—: tarea aparte, abierta en TABLERO.md §Deuda técnica.
+
+📋 FUERA DEL BARRIDO A PROPÓSITO (2), con su motivo:
+  · gate-cadena-integridad
+      familia VERI*FACTU: recorre y compara las DOS cadenas de huellas del negocio entero y lleva una línea base congelada en docs/. Cualquier gate que emita una factura mientras corre le cambia el suelo, así que NO va en el barrido COMPLETO. ⚙️ 24 ago 2026: SÍ va en el RÁPIDO, que se lanza a mano y a solas — que es justo la condición que necesita.
+  · gate-cupones-desmontados
+      familia VERI*FACTU: comprueba que 19 facturas de prueba se fueron y que la cadena legal no se movió (SHA de los 1050 registros). Se corre a mano al tocar facturación, nunca en un barrido que puede ir en paralelo con gates que emiten y anulan facturas.
+
+🚧 DEUDA — 12 gates de navegador ROTOS o CADUCADOS, NO se están ejecutando:
+  · verify-verifactu-t1-http
+      emite una factura de 121,00 € en el negocio de desarrollo y NO la limpia — no puede: entra en la cadena. Medido el 24 ago 2026 contando antes y después. Tiene que traerse su propio negocio.
+  · gate-coste-horas-pantalla
+      emite una factura de 1.210,00 € y la ANULA, que es lo máximo que se puede hacer con una factura — pero la fila se queda para siempre. Misma cura: su propio negocio.
+  · verify-permisos-coherencia
+      exige un 403 literal y el empleado de prueba (usuario 3) está INACTIVO, así que el rechazo llega como 302/401 — más duro, no más flojo. COMPROBADO A MANO el 24 ago 2026: NO hay agujero de permisos.
+  · verify-permisos-disa
+      misma familia y misma causa que la anterior (empleado de prueba inactivo).
+  · verify-invoice-over-stock-http
+      mismos 403 sobre el mismo empleado inactivo.
+  · verify-mostrador-overstock
+      ídem: el permiso se prueba contra un empleado que ya no está activo.
+  · verify-sustitutiva-browser
+      espera un ticket sustituido concreto; el suyo ya no está.
+  · verify-inventory-fix-browser
+      YA se trae su propio negocio (24 ago 2026) y pasó de 5 a 6 aserciones, pero le quedan DOS en rojo: el aviso de «hay unidades reservadas» al ajustar stock no llega a salir en el negocio recién sembrado, aunque hay un pedido confirmado que reserva 5. Sin resolver: puede ser del producto.
+  · gate-espera-pantalla
+      YA se trae su propio negocio y siembra la factura vencida (24 ago 2026): el vigía la detecta, comprobado. Le quedan TRES en rojo por otra cosa — la rejilla del Inicio de un negocio recién creado trae UN bloque de fábrica y el del vigía no está entre ellos. Falta sembrar la rejilla.
+  · gate-inicio-pantalla
+      misma causa que gate-espera-pantalla: exige una rejilla de Inicio con varios bloques y un negocio nuevo trae uno. Sin convertir todavía.
+  · gate-avisos-correos
+      depende de la hora del día (la pasada de las 15:00) — un gate con reloj es una moneda al aire.
+  · verify-u3-errores
+      de 4 a 11 aserciones (24 ago 2026): se arregló que esperaba un confirm() del navegador donde ahora hay un panel — se colgaba 186 s. Le quedan DOS en rojo y una es DE PRODUCTO: al crear una categoría con nombre repetido, el aviso dice «Ha ocurrido un error» en vez de «Ya existe una categoría con ese nombre». La causa, medida: safeError() tapa el error de UNIQUE porque no trae status 4xx, así que el mensaje amable del navegador nunca puede dispararse. Reportado, sin tocar.
+  → Mientras sigan aquí, ESTAS PANTALLAS NO ESTÁN CUBIERTAS EN NAVEGADOR. Arreglarlos es tarea aparte.
+
+🧹 Este barrido deja documentos de prueba en el tenant (los gates que aún NO se limpian solos):
+     node scripts/limpiar-residuo-gates.mjs           (en seco: dice qué borraría)
+     node scripts/limpiar-residuo-gates.mjs --hazlo   (borra y recalcula el stock)
+
+══════════════════════════════════════════════════════════════════════
+123/208 pasan  ·  1389 s (23.1 min)  ·  85 NO: gate-cliente-ficha-completa, gate-inicio-cuadro-mando, gate-vigia-pantalla, gate-agenda-sencilla, gate-citas-pantalla, gate-oficio-pantalla, gate-citas-mes, gate-documentos, test-neto-cero-reserva, gate-reserva-publica-pantalla, gate-pagos-proveedor, gate-pago-cuenta, gate-abono-proveedor, gate-gasto-proveedor, gate-c1c-diferencias-cierre, gate-propuestas-pagos-permisos, gate-orden-compra-c1a, gate-recepciones-c1b, gate-devoluciones-proveedor, gate-c2-revision, gate-dibujo-pantalla, verify-albaranes-disa, verify-d5-create-product, verify-llm-migracion, gate-propuestas-recurrentes, gate-propuestas-dormidos, gate-propuestas-reposicion, gate-disa-dictar-compra, verify-invoice-over-stock, gate-almacenes, verify-trazabilidad-flujos, gate-trazabilidad, gate-avisos-contador-vivo, gate-avisos-badge, verify-avisos-crm-riesgo, gate-migracion-al-equipo, gate-registro-alta, gate-proyectos-pantalla, gate-tiempo-pantalla, gate-facturar-horas-pantalla, gate-rentabilidad-pantalla, verify-constructor, verify-margen, gate-margen-pantalla, verify-responsable, verify-informes, verify-plan-financiero, gate-plantillas-email, gate-informes-a-medida, gate-informes-se-entienden, gate-informes-legibles, gate-inicio-widgets, gate-portal-ampliado, gate-tarjeta-unica, gate-agenda-cabos, gate-sin-ventanitas, gate-cabos-apuntados, gate-productos-parados, gate-disa-informes, gate-descuentos, gate-control-horario, gate-crm-tareas, gate-importador-proveedores, gate-oficio-salud, gate-historial-clinico, test-neto-cero-cita, verify-albaranes-browser, verify-quotes-browser, verify-mostrador-browser, verify-sustitutiva-browser, verify-albaranes, verify-mostrador, verify-pedidos, verify-quotes, test-c5ter-sin-email, verify-pieza-c, verify-sustitutiva, verify-disco-perfiles, test-c6-secretos, gate-baja-empleado, lint-js-servido, verify-barrido-no-infla-ventas, verify-factura-exenta, test-oficio, verify-dinero-espanol
+(y 12 gates en DEUDA, sin ejecutar — arriba)
+
+🔁 Anotado en TABLERO.md: barrido completo 2026-09-01 · 50f821c · 123/208
+EXIT=1
