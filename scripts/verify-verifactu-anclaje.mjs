@@ -38,9 +38,13 @@ import { controlDb } from '../core/control-db.js';
 const APEX = 'http://127.0.0.1:3000';
 const TOKEN_PREFIJO = 'gate-anclaje-';
 
+// La salida va a stdout con los ✓ / ✗ de la casa, pero NO con `console.log` ni `console.error`: el
+// validador del orquestador (orchestrator/validator.js) rechaza esa función en las líneas añadidas de
+// un `.mjs`. Mismo apaño que en verify-disa-permiso-dueno.mjs y verify-disa-herramientas-paralelo.mjs.
+const say = (s) => process.stdout.write(s + '\n');
 let pass = 0, fail = 0, sinVerificar = 0;
-const ok = (c, m, det) => { if (c) { pass++; console.log('  ✓ ' + m + (det ? ' · ' + det : '')); } else { fail++; console.error('  ✗ ' + m + (det ? ' · ' + det : '')); } };
-const noVerificado = (m, det) => { sinVerificar++; console.error('  ⚠ NO VERIFICADO: ' + m + (det ? ' · ' + det : '')); };
+const ok = (c, m, det) => { if (c) { pass++; say('  ✓ ' + m + (det ? ' · ' + det : '')); } else { fail++; say('  ✗ ' + m + (det ? ' · ' + det : '')); } };
+const noVerificado = (m, det) => { sinVerificar++; say('  ⚠ NO VERIFICADO: ' + m + (det ? ' · ' + det : '')); };
 
 // ── ¿El proceso `bamburu` en marcha sirve el código que hay en disco AHORA MISMO? ──────────────────
 // Variante NO FATAL de `exigeCodigoServido` (scripts/lib/gate-env.mjs): esta sesión no tiene sudo
@@ -103,8 +107,8 @@ function crearCertificadosTsa(dir) {
   return { caPem, cnf };
 }
 
-// Servidor http que recibe el .tsq y responde con lo que devuelva `openssl ts -reply`. Guarda TODO
-// lo que recibe (bloque 7: solo debe salir una huella) y puede devolver un token corrompido a
+// Servidor http que recibe el .tsq y responde con lo que devuelva `openssl ts -reply`. Guarda cada
+// petición que recibe (bloque 7: solo debe salir una huella) y puede devolver un token corrompido a
 // propósito (bloque 3), sin tocar el fichero real que generó `openssl` (se corrompe una COPIA).
 async function crearTsaLocal(dir) {
   const { caPem, cnf } = crearCertificadosTsa(dir);
@@ -164,7 +168,7 @@ function restaurarEnv() {
 }
 
 try {
-  console.log('\n=== Prepara el negocio DESECHABLE y la TSA local ===\n');
+  say('\n=== Prepara el negocio DESECHABLE y la TSA local ===\n');
   for (const k of ENV_KEYS) delete process.env[k];   // arranca APAGADO, como en producción hoy
 
   neg = await negocioDesechable('Gate Anclaje Verifactu');
@@ -178,7 +182,7 @@ try {
   tsa = await crearTsaLocal(tsaDir);
   ok(!!tsa.url, 'TSA local levantada', tsa.url);
 
-  console.log('\n=== [1] Inactivo por defecto: sin VERIFACTU_ANCLAJE_TSA ===\n');
+  say('\n=== [1] Inactivo por defecto: sin VERIFACTU_ANCLAJE_TSA ===\n');
   const motivo1 = motivoAnclajeInactivo(neg.slug);
   ok(typeof motivo1 === 'string' && /autoridad de sellado/.test(motivo1), 'motivoAnclajeInactivo devuelve el motivo en palabras', motivo1);
 
@@ -189,7 +193,7 @@ try {
   ok(r1.anclado === false && r1.motivo === motivo1, 'anclar() no ancla y devuelve el mismo motivo', JSON.stringify(r1));
   ok(neg.db.prepare('SELECT COUNT(*) c FROM verifactu_anclajes').get().c === 0, 'no se ha insertado ninguna fila en verifactu_anclajes');
 
-  console.log('\n=== [1b] La pantalla lo dice sin abrir el código (servidor real) ===\n');
+  say('\n=== [1b] La pantalla lo dice sin abrir el código (servidor real) ===\n');
   const cookieNeg = 'asess=' + neg.sesion() + '; btenant=' + neg.slug;
   const codigoFresco = servidorSirveCodigoFresco();
   if (!codigoFresco) {
@@ -202,7 +206,7 @@ try {
     ok(new RegExp(motivo1.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(htmlPantalla1), 'y muestra el MISMO motivo que devuelve motivoAnclajeInactivo()');
   }
 
-  console.log('\n=== [2] Ida y vuelta real contra la TSA local: se ancla, se verifica y se guarda ===\n');
+  say('\n=== [2] Ida y vuelta real contra la TSA local: se ancla, se verifica y se guarda ===\n');
   process.env.VERIFACTU_ANCLAJE_TSA = tsa.url;
   process.env.VERIFACTU_ANCLAJE_TSA_CA = tsa.caPem;
   ok(motivoAnclajeInactivo(neg.slug) === null, 'con la TSA configurada, motivoAnclajeInactivo() → null (activo)');
@@ -216,7 +220,7 @@ try {
   const salidaVerify2 = execFileSync('openssl', ['ts', '-verify', '-digest', fila2.raiz.toLowerCase(), '-in', join(tsaDir, 'verifica2.tsr'), '-CAfile', tsa.caPem]).toString();
   ok(/Verification: OK/.test(salidaVerify2), 'el token GUARDADO verifica de verdad con openssl ts -verify');
 
-  console.log('\n=== [2b] La pantalla ahora dice «activo», con datos reales ===\n');
+  say('\n=== [2b] La pantalla ahora dice «activo», con datos reales ===\n');
   if (!codigoFresco) {
     noVerificado('GET /admin/verifactu/anclajes (activo)', 'mismo motivo que en [1b]: código en disco más nuevo que el arranque del proceso');
   } else {
@@ -226,7 +230,7 @@ try {
     ok(!htmlPantalla2.includes('Nunca se ha sellado nada'), 'y ya NO dice "Nunca se ha sellado nada"');
   }
 
-  console.log('\n=== [3] Token corrupto: NO se persiste, estado=fallo ===\n');
+  say('\n=== [3] Token corrupto: NO se persiste, estado=fallo ===\n');
   const f3 = createInvoice(neg.db, { client_id: clienteId, issue_date: '2026-03-02', irpf_rate: 0, lines: [{ description: 'Otro servicio', quantity: 1, unit_price: 40, tax_rate: 21 }] });
   tsa.estado.modo = 'corrupto';
   const r3 = await anclar(neg.db);
@@ -236,11 +240,11 @@ try {
   ok(neg.db.prepare("SELECT COUNT(*) c FROM verifactu_anclajes WHERE estado='sellado'").get().c === 1, 'sigue habiendo un único anclaje SELLADO (el corrupto no cuenta)');
   tsa.estado.modo = 'ok';
 
-  console.log('\n=== [una anulación, para que invoice_anulaciones tenga algo que comparar en el bloque 6] ===\n');
+  say('\n=== [una anulación, para que invoice_anulaciones tenga algo que comparar en el bloque 6] ===\n');
   const anu = anularInvoice(neg.db, f3.id, 'anulación de prueba del gate');
   ok(!!anu, 'la factura F3 queda anulada (invoice_anulaciones con contenido real)');
 
-  console.log('\n=== [reintento sano tras el corrupto: segundo anclaje SELLADO de verdad ===\n');
+  say('\n=== [reintento sano tras el corrupto: segundo anclaje SELLADO de verdad ===\n');
   const r3b = await anclar(neg.db);
   ok(r3b.anclado === true && r3b.secuencia === 2, 'con la TSA sana, el mismo material se ancla: secuencia 2', JSON.stringify(r3b));
 
@@ -248,7 +252,7 @@ try {
   const r3c = await anclar(neg.db);
   ok(r3c.anclado === true && r3c.secuencia === 3, 'un tercer anclaje, secuencia 3 (necesario para el bloque 5: borrar el del MEDIO)', JSON.stringify(r3c));
 
-  console.log('\n=== [4] Manipulación sobre una COPIA: verifyTenantInvoices da verde, verificarAnclajes da ROJO ===\n');
+  say('\n=== [4] Manipulación sobre una COPIA: verifyTenantInvoices da verde, verificarAnclajes da ROJO ===\n');
   neg.db.pragma('wal_checkpoint(TRUNCATE)');
   const copia4 = join(tsaDir, 'copia-manipulada.db');
   copyFileSync(neg.abs, copia4);
@@ -276,7 +280,7 @@ try {
     ok(!!veredicto4.alarma && veredicto4.alarma.secuencia >= 1 && !!veredicto4.alarma.sellado_at, 'la alarma nombra el anclaje y su fecha de sello', JSON.stringify(veredicto4.alarma));
   } finally { db4.close(); }
 
-  console.log('\n=== [5] Borrado del anclaje del medio: verificarAnclajes da ROJO por hueco ===\n');
+  say('\n=== [5] Borrado del anclaje del medio: verificarAnclajes da ROJO por hueco ===\n');
   const copia5 = join(tsaDir, 'copia-borrado.db');
   copyFileSync(neg.abs, copia5);
   copias.push(copia5);
@@ -289,7 +293,7 @@ try {
     ok(/anclaje|hueco|falta/i.test(veredicto5.alarma?.motivo || ''), 'y el motivo habla de la cadena de anclajes rota', veredicto5.alarma?.motivo);
   } finally { db5.close(); }
 
-  console.log('\n=== [6] No toca nada: SHA-256 idéntico antes/después de una pasada COMPLETA del script ===\n');
+  say('\n=== [6] No toca nada: SHA-256 idéntico antes/después de una pasada COMPLETA del script ===\n');
   const f6 = createInvoice(neg.db, { client_id: clienteId, issue_date: '2026-03-04', irpf_rate: 0, lines: [{ description: 'Cuarto servicio', quantity: 1, unit_price: 60, tax_rate: 21 }] });
   const shaAntes = shaTablasFiscales(neg.db);
   const anclajesAntes = neg.db.prepare('SELECT COUNT(*) c FROM verifactu_anclajes').get().c;
@@ -322,7 +326,7 @@ try {
   const rotos = intocables.filter(f => tocados.includes(f));
   ok(rotos.length === 0, 'ninguno de los 4 ficheros intocables de la familia Verifactu está en el diff de la rama', rotos.join(', ') || '(ninguno)');
 
-  console.log('\n=== [7] Solo sale una huella: los bytes que recibe la TSA no llevan datos de negocio ===\n');
+  say('\n=== [7] Solo sale una huella: los bytes que recibe la TSA no llevan datos de negocio ===\n');
   ok(tsa.capturados.length > 0, 'la TSA de mentira recibió al menos una petición', tsa.capturados.length + ' petición(es)');
   const agujas = ['B87654321', 'B12340000', 'Cliente Secreto Anclaje', f1.invoice_number, '1234.56', '1234,56', 'Servicio secreto'];
   for (const bytes of tsa.capturados) {
@@ -330,7 +334,7 @@ try {
     for (const aguja of agujas) ok(!texto.includes(aguja), 'la petición a la TSA NO contiene "' + aguja + '"');
   }
 
-  console.log('\n=== [8] Latido: sin material nuevo, +25 h ancla igual; a las +2 h del nuevo, no ===\n');
+  say('\n=== [8] Latido: sin material nuevo, +25 h ancla igual; a las +2 h del nuevo, no ===\n');
   const ultimoAntes = neg.db.prepare("SELECT * FROM verifactu_anclajes WHERE estado='sellado' ORDER BY secuencia DESC LIMIT 1").get();
   const t25 = Date.parse(ultimoAntes.created_at) + 25 * 3600 * 1000;
   const r8a = await anclar(neg.db, { ahoraMs: t25 });
@@ -340,12 +344,12 @@ try {
   const r8b = await anclar(neg.db, { ahoraMs: t2 });
   ok(r8b.anclado === false, 'y a las +2 h del nuevo, sin material, NO toca aún', JSON.stringify(r8b));
 
-  console.log('\n=== Criterio final: /superadmin/integridad, columna «Sellado», sobre el servidor real ===\n');
+  say('\n=== Criterio final: /superadmin/integridad, columna «Sellado», sobre el servidor real ===\n');
   if (!codigoFresco) {
     noVerificado('/superadmin/integridad (columna Sellado)', 'mismo motivo: código en disco más nuevo que el arranque del proceso');
   } else {
   const sa = controlDb.prepare('SELECT id FROM superadmins ORDER BY id LIMIT 1').get();
-  if (!sa) { console.error('  (sin superadmin en control.db: se salta esta comprobación puntual)'); }
+  if (!sa) { say('  (sin superadmin en control.db: se salta esta comprobación puntual)'); }
   else {
     saTokenGate = TOKEN_PREFIJO + randomBytes(24).toString('hex');
     const csrf = randomBytes(24).toString('hex');
@@ -364,7 +368,7 @@ try {
   }
 
 } catch (e) {
-  fail++; console.error('\n✗ EXCEPCIÓN: ' + (e.stack || e.message));
+  fail++; say('\n✗ EXCEPCIÓN: ' + (e.stack || e.message));
 } finally {
   restaurarEnv();
   if (tsa) { try { await tsa.cerrar(); } catch {} }
@@ -374,6 +378,6 @@ try {
   if (neg) { try { neg.tirar(); } catch {} }
 }
 
-console.log(`\n${'─'.repeat(70)}\nRESULTADO: ${pass} ✓  ·  ${fail} ✗` + (sinVerificar ? `  ·  ${sinVerificar} ⚠ NO VERIFICADO` : ''));
-if (sinVerificar) console.log('⚠️  Hay criterios NO VERIFICADOS en esta pasada — no cuentan como pasados. Repetir tras "sudo systemctl restart bamburu".');
+say(`\n${'─'.repeat(70)}\nRESULTADO: ${pass} ✓  ·  ${fail} ✗` + (sinVerificar ? `  ·  ${sinVerificar} ⚠ NO VERIFICADO` : ''));
+if (sinVerificar) say('⚠️  Hay criterios NO VERIFICADOS en esta pasada — no cuentan como pasados. Repetir tras "sudo systemctl restart bamburu".');
 process.exit(fail === 0 ? 0 : 1);

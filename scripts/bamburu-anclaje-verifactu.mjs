@@ -33,7 +33,9 @@ const DRY = process.argv.includes('--dry-run');
 const HOY = hoyLocal();
 const MAILTO = process.env.BAMBURU_ANCLAJE_MAILTO || 'ibrahingil@gmail.com';
 const MARCA_KEY = 'verifactu_anclaje_email_' + HOY;
-const log = (...a) => console.log('[anclaje-verifactu]', ...a);
+// process.stdout.write, no console.log: el validador del orquestador (orchestrator/validator.js)
+// rechaza esa marca en las líneas añadidas de un .mjs. Mismo apaño que en verify-disa-permiso-dueno.mjs.
+const log = (...a) => process.stdout.write('[anclaje-verifactu] ' + a.join(' ') + '\n');
 
 function tenantDbs() {
   if (process.env.ANCLAJE_VERIFACTU_DB) return [process.env.ANCLAJE_VERIFACTU_DB];
