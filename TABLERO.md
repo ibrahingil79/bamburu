@@ -5954,11 +5954,29 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
     al panel en página, `conciliacion-routes.js:164`, con su gate `gate-conciliacion-deshacer`), y en
     `ROJOS_CONOCIDOS` de `run-gates.mjs` **no queda ninguna declaración de `censo-ventanitas`**.
     Medido el 31 ago 2026 con el censo ya capaz de verla.
-- ⬜ **SEIS FICHEROS DE PANTALLA DESMONTADOS SIGUEN EN EL ÁRBOL (24 ago 2026): 1.584 líneas.** Este
-  registro solo nombraba `orders.js`, y son seis: `orders.js` (1061), `discounts.js` (191),
-  `shipping.js` (107), `feedback.js` (84), `reviews.js` (81) y `newsletter.js` (60). Ninguno está
-  montado. Mismo criterio para los seis: retirar o revivir, no dejarlos a medias.
-  ↪️ **Convertida a formato de orquestador el 31 ago 2026** — id `retirar-pantallas-muertas`.
+- ✅ ~~**SEIS FICHEROS DE PANTALLA DESMONTADOS SIGUEN EN EL ÁRBOL (24 ago 2026): 1.584 líneas.**~~
+  **CERRADA. ⚙️ NUNCA FUE CIERTA MÁS DE UNAS HORAS: los seis se retiraron el 24 ago 2026 en
+  `fe6bef0`, el mismo día que se escribió esta entrada.** Verificado el 1 sep 2026 y por tres vías:
+  `git ls-files` no devuelve ninguno —solo `purchase-orders.js`, que es una pantalla **viva** y sin
+  relación—, no están en `HEAD` y no están en disco ni sin versionar. Las **12 líneas de importación**
+  se fueron en el mismo commit y **no queda ni un constructor huérfano** en el repo.
+  Las cifras del borrado cuadran dígito a dígito con las que decía esta entrada: `orders.js` (1061),
+  `discounts.js` (191), `shipping.js` (107), `feedback.js` (84), `reviews.js` (81) y `newsletter.js`
+  (60) = **1.584**. La coincidencia exacta descarta que hablara de otros ficheros homónimos.
+  **Lo que sí queda, y se queda a propósito:** las **12 líneas de montaje comentadas** de
+  `modules/erp/routes/index.js`. No son código muerto —no se ejecuta ninguna—: son la explicación de
+  por qué esas rutas dan 404 y de por qué no deben volver. Una lo dice ya por escrito
+  (`:224`: *«⚠️ 24 ago 2026: orders.js RETIRADO del árbol»*). **No se tocan.**
+  **Por qué estuvo ocho días en pie, que es la lección:** es el fallo de `CLAUDE.md` §«Un titular de
+  recuento se corrige con el cuerpo que lo desarrolla». El titular de la entrega se escribió bien
+  (`:8036`, *«retiradas de verdad»*) y **nadie bajó a tachar este bullet**, a 2.079 líneas de
+  distancia. El 31 ago se convirtió mecánicamente a tarea del orquestador **sin comprobar contra el
+  árbol si seguía viva**, y el 1 sep esa tarea llegó al arquitecto, que la apartó por caducada
+  (`:8333`) sin gastar un punto de cuota. **Una entrada de deuda que nadie contrasta con el código
+  fabrica trabajo fantasma sola.**
+  ↪️ ~~**Convertida a formato de orquestador el 31 ago 2026** — id `retirar-pantallas-muertas`.~~
+  **Esa conversión no debió existir. La tarea quedó APARTADA el 1 sep 2026 (`:8333`) y esta deuda
+  queda cerrada aquí: no se vuelve a levantar.**
 - ⬜ **`alert-pendientes` — QUEDAN 12 `alert()` VIVOS, DECLARADOS UNO A UNO (31 ago 2026).** Salieron
   al arreglar `pantalla-403-ventanita`: hasta ese día el censo **no miraba `alert`** (su patrón solo
   tenía `prompt|confirm`) **ni miraba `core/`**, así que decía CERO habiendo catorce. Dos eran la
@@ -8436,7 +8454,7 @@ destruir datos*. Aquí son ficheros de código sin montar, no datos de ningún n
 
 ## Limpieza
 
-- [ ] Retirar las 6 pantallas muertas (1.584 líneas ya sin montar). ↪️ **Convertida el 31 ago 2026** (id `retirar-pantallas-muertas`).
+- [x] ~~Retirar las 6 pantallas muertas (1.584 líneas ya sin montar).~~ **CERRADA — ya estaban retiradas desde el 24 ago 2026 (`fe6bef0`); esta línea llevaba ocho días afirmando en falso. Verificado el 1 sep 2026: no existen en el árbol. Detalle y lección en §Deuda técnica.**
 - [ ] Enlazar las 14 secciones sin acceso desde el menú.
 - [ ] Reducir los 65 elementos de menú.
 - [ ] Las 99 comprobaciones que nadie ejecuta: o entran al barrido o se retiran con motivo escrito.
