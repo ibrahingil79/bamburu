@@ -6044,6 +6044,45 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
   **No lo toca `portal-formato-dinero`** y no puede: arreglarlo es `descuentos.js` (fichero que su
   plano no nombra) o borrar filas de un negocio vivo (`CLAUDE.md`: se para y se pregunta). Se cierra
   con esa tarea, no con esta.
+  **Desde el 1 sep 2026 el rojo queda además declarado en `ROJOS_CONOCIDOS`** (`scripts/run-gates.mjs`),
+  con su fecha, su causa y la tarea que lo cierra: así sale **por su nombre** en cada barrido en vez de
+  perderse entre los demás, y la Pieza D avisará sola el día que pase a verde y haya que retirar la
+  declaración. Esto **no lo arregla** —el arreglo sigue siendo `descuentos.js:163`—: solo deja de ser
+  un rojo anónimo.
+- ⬜ **`gate-portal-ampliado` SALE 19 ✓ · 9 ✗ POR `readOnlyGuard`, Y EL ARREGLO ES QUE SE TRAIGA SU
+  PROPIO NEGOCIO (1 sep 2026).** Ejecutado al construir `portal-formato-dinero`, con navegador de
+  verdad (salida completa en `docs/architecture/task-portal-formato-dinero-informe.md` §3). Los
+  bloques `[0]` (tokens ajenos, caducados y revocados) y `[1]` (analíticas del cliente, con la
+  aserción del dinero español `600,00 €`) pasan **enteros**. Los 9 ✗ son todos del bloque `[2]`, que
+  es el único que **escribe por formulario**.
+  **El motivo, medido:** 7 de los 8 negocios de `data/control.db` están en `status='suspended_admin'`
+  (`desarrollo-bamburu` desde el 25 ago 2026, los demás desde el 16 jul) y `readOnlyGuard`
+  (`core/tenant-middleware.js`) devuelve **403** a todo lo que no sea GET/HEAD/OPTIONS, montado en
+  `index.js` con `app.use('*')` **antes de la autenticación**. La excepción de
+  `gate-portal-ampliado.mjs:159` (`admin_user_id` de `undefined`) es **aguas abajo del mismo 403**: no
+  hay fila que leer porque no se guardó ninguna.
+  **Es la MISMA avería y el MISMO arreglo que el cabo de `gate-sin-ventanitas`** tres puntos más
+  arriba, y conviene decirlo en vez de apuntarlos como dos cosas: son **dos gates de una lista que va
+  a crecer** mientras los negocios sigan suspendidos. El arreglo bueno es que el gate se traiga su
+  propio negocio (`negocioDesechable`, como ya hacen `gate-403-permiso` y `gate-historial-clinico` por
+  esta misma causa), y eso **rehace su bootstrap entero** —clientes, facturas con hash de cadena,
+  sesión de admin—: **tarea aparte, con encargo**.
+  **No se cambia el estado administrativo de un negocio vivo para poner un gate en verde**
+  (`CLAUDE.md`: eso se para y se pregunta). Declarado en `ROJOS_CONOCIDOS` desde el 1 sep 2026.
+- ⬜ **LA RECETA PARA ABRIR UN NAVEGADOR EN ESTE SERVIDOR ESTÁ ESCRITA EN `gate-env.mjs`, PERO NINGÚN
+  GATE LA APLICA SOLO (1 sep 2026).** `launchOpts()` sigue apuntando por defecto a `/snap/bin/chromium`,
+  que aquí **no arranca**: es un enlace a `/usr/bin/snap` —el envoltorio— y con `NoNewPrivs: 1` el
+  `snap-confine` se queda sin el `cap_dac_override` que necesita. Consecuencia: **cualquier gate de
+  navegador lanzado sin las variables de entorno de la receta muere**, y eso es cobertura que se está
+  perdiendo en silencio en cada barrido.
+  Lo que sí arranca —medido el 1 sep 2026— es el binario de dentro del snap,
+  `/snap/chromium/current/usr/lib/chromium-browser/chrome` (ELF ARM `aarch64`, directo, sin
+  `snap-confine`), con un `LD_LIBRARY_PATH` de los snaps y un `HOME` con forma de snap. La receta
+  entera quedó escrita el 1 sep 2026 en `scripts/lib/gate-env.mjs`, junto al `export const CHROMIUM`.
+  💡 **Propuesta, NO construida — es candidata:** que `gate-env.mjs` detecte solo el binario ARM
+  interno y monte el `HOME` con forma de snap por su cuenta. Alcanza a los **40+ gates de navegador
+  del repo**, así que cambia el comportamiento de todos a la vez: **necesita su propio encargo y su
+  propia verificación**, y por eso `portal-formato-dinero` escribió la receta y no la automatizó.
 - 💡 **CANDIDATA, SIN CONSTRUIR — el registro de denegaciones (estilo `SU53` de SAP).** En SAP GUI, un
   fallo de autorización **queda registrado** y el administrador lo recupera con la transacción `SU53`
   para ver qué objeto faltó y concederlo. Bamburu tiene dónde colgarlo (`logActivity` y la pantalla
@@ -8272,6 +8311,20 @@ trozos.
 > **Se arregló también una TERCERA fecha inglesa que el análisis no contaba:** `A.ultima` en
 > `modules/portal/index.js` («desde la última (2026-03-12)») se pintaba cruda. Sin ella, el criterio
 > que prohíbe cualquier fecha ISO en esa pantalla no se podía cumplir.
+
+> **Registro cerrado el 2026-09-01, en una segunda vuelta que NO toca `modules/`.** Para que dentro de
+> seis meses no se relea mal: **el arreglo del producto es `bfea8a8` y aquí no se ha cambiado ni una
+> línea de él** (`git diff --name-only d93125e..HEAD -- modules/` está vacío, a propósito). Esta vuelta
+> solo cierra el registro, y son tres cosas: (a) los **dos rojos** —`verify-dinero-espanol` y
+> `gate-portal-ampliado`— declarados en `ROJOS_CONOCIDOS` de `scripts/run-gates.mjs`, cada uno con su
+> fecha, su causa medida y **la tarea que lo cierra**; (b) la **receta para abrir un navegador en este
+> servidor**, escrita en `scripts/lib/gate-env.mjs`, donde hasta hoy había una frase falsa que costó
+> dos rechazos; (c) los **cinco documentos** de la tarea versionados, que es lo que hace ciertos los
+> dos punteros de aquí arriba.
+> Su commit es el que trae estas líneas, con `Tarea: portal-formato-dinero` en el mensaje: un commit no
+> puede citar su propio hash —por eso `d93125e` existe aparte— y no se abre un segundo solo para eso.
+> **Los dos rojos siguen rojos, y se declaran precisamente para que se vea:** el barrido los cantará
+> por su nombre hasta que se cierren sus dos cabos de §Deuda técnica.
 
 ## TAREA — Retirar las seis pantallas muertas que siguen en el árbol
 

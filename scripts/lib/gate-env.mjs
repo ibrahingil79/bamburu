@@ -61,8 +61,55 @@ export function requireLlmQuota(db) {
   }
 }
 
-// El Chromium que trae puppeteer NO arranca en este servidor (ARM): "Syntax error: newline
-// unexpected". Hay que usar el de snap. Se puede forzar otro con PUPPETEER_EXECUTABLE_PATH.
+// EL NAVEGADOR EN ESTE SERVIDOR — la receta, medida el 1 sep 2026.
+//
+// EL VALOR POR DEFECTO DE ABAJO NO ARRANCA AQUÍ, y conviene saberlo antes de perder una tarde:
+// `/snap/bin/chromium` es un enlace a `/usr/bin/snap`, o sea el ENVOLTORIO, no el navegador. Esta
+// máquina corre con `NoNewPrivs: 1` (`grep NoNewPrivs /proc/self/status`), que le quita a
+// `snap-confine` el `cap_dac_override` que necesita para montar su confinamiento: el envoltorio
+// muere ahí, sin llegar nunca a ejecutar un navegador.
+//
+// Y LOS CHROME DE `~/.cache/puppeteer` TAMPOCO, pero por otra causa: son `x86-64` en una máquina
+// `aarch64` (`uname -m`), y de ahí sale el "Syntax error: newline unexpected" que decía este
+// comentario. Cierto, y no es toda la verdad — que es justo donde estaba el error.
+//
+// SÍ HAY UN TERCERO, Y ESE ARRANCA: `/snap/chromium/current/usr/lib/chromium-browser/chrome`, el
+// binario de dentro del snap, ELF ARM `aarch64`, que se ejecuta DIRECTO sin pasar por
+// `snap-confine`. No hay que creérselo, se comprueba:
+//     file /snap/chromium/current/usr/lib/chromium-browser/chrome
+// Y si un día el snap mueve las rutas, la regla para rehacerlo en un minuto es esa misma: buscar el
+// ELF `aarch64` DENTRO del snap, nunca el envoltorio de `/snap/bin`.
+//
+// LA RECETA ENTERA (probada el 1 sep 2026 con `gate-portal-ampliado`: 19 ✓ · 9 ✗ por navegador de
+// verdad; salida completa en `docs/architecture/task-portal-formato-dinero-informe.md` §3):
+//
+//     mkdir -p /tmp/fakehome/snap/chromium/common /tmp/fakehome/snap/chromium/current
+//     export LD_LIBRARY_PATH=/snap/chromium/current/usr/lib/aarch64-linux-gnu:\
+//     /snap/chromium/current/usr/lib/chromium-browser:\
+//     /snap/gnome-46-2404/current/usr/lib/aarch64-linux-gnu:\
+//     /snap/mesa-2404/current/usr/lib/aarch64-linux-gnu:\
+//     /snap/core24/current/usr/lib/aarch64-linux-gnu
+//     export HOME=/tmp/fakehome SNAP=/snap/chromium/current SNAP_NAME=chromium \
+//            SNAP_INSTANCE_NAME=chromium SNAP_REAL_HOME=/home/ubuntu \
+//            SNAP_USER_COMMON=/tmp/fakehome/snap/chromium/common \
+//            SNAP_USER_DATA=/tmp/fakehome/snap/chromium/current
+//     export PUPPETEER_EXECUTABLE_PATH=/snap/chromium/current/usr/lib/chromium-browser/chrome
+//
+// EL `HOME` CON FORMA DE SNAP NO ES ADORNO: sin él —y sin `SNAP_USER_COMMON`/`SNAP_USER_DATA`—
+// Chromium lanza `chrome_crashpad_handler` sin `--database` y ABORTA con core dump antes de pintar
+// nada. Se parece a "el navegador no arranca en esta máquina", y no lo es.
+//
+// EL AVISO DEL DISCO, QUE POR ESTA VÍA CAMBIA DE FORMA: el sumidero de `/tmp/snap-private-tmp/…`
+// que llenó el disco el 22 y el 24 ago solo existe cuando se pasa por `snap-confine`, y aquí no se
+// pasa: `/tmp` no se remapea, así que ese agujero no aparece. `perfilDesechable` sigue siendo
+// OBLIGATORIO igual, y se mira el disco al terminar.
+//
+// LA LECCIÓN, porque costó dos rechazos (`pantalla-403-ventanita` intento 1 y `portal-formato-dinero`
+// intento 1): las dos medidas que sostenían la frase «esta máquina no puede abrir un navegador» eran
+// CIERTAS —el envoltorio no arranca, los Chrome de puppeteer son de otra arquitectura— y la
+// conclusión era falsa. Una medida cierta sobre el envoltorio no dice nada del navegador.
+//
+// Se puede forzar cualquier otro con PUPPETEER_EXECUTABLE_PATH.
 export const CHROMIUM = process.env.PUPPETEER_EXECUTABLE_PATH || '/snap/bin/chromium';
 
 // Algunos gates prueban un flujo que solo existe SOBRE UNA RED CONCRETA (el alta por la dirección de

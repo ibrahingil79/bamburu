@@ -146,6 +146,38 @@ const ROJOS_CONOCIDOS = {
   // declaración se quedó anunciando un rojo que ya no existía. Un puntero rancio manda al siguiente
   // chat al sitio equivocado con toda la confianza del mundo. La Pieza D de esta tarea existe para
   // que la próxima vez lo cante el propio barrido en vez de descubrirse dos semanas después.
+  'verify-dinero-espanol': {
+    desde: '1 sep 2026',
+    motivo:
+      'ROJO ANTERIOR A LA ENTREGA QUE LO DESTAPÓ, y comprobado: la aserción ya estaba en el commit '
+      + 'base (`git show b1f8770:scripts/verify-dinero-espanol.mjs`, línea 162) y el rojo también. '
+      + 'Sale 19 ✓ · 1 ✗ sobre 356 pantallas; el único ✗ es «ninguna pantalla enseña una fecha en '
+      + 'formato inglés» y señala /admin/descuentos con 2026-08-23 2026-09-01 2026-09-30 2027-08-23. '
+      + 'NO son fechas de datos: son los marcadores de sus formularios (descuentos.js:179, :180, '
+      + ':216), que viven dentro de un <script>. Llegan al texto visible porque el bloque se cierra '
+      + 'antes de tiempo: descuentos.js:163 mete el catálogo con JSON.stringify SIN escapar `</`, y '
+      + 'el producto 2097 de desarrollo-bamburu lleva un `</script>` en el nombre desde el 25 ago '
+      + '2026 (residuo de gate: «(gate 941065)»). UN defecto, dos instrumentos cantándolo — el otro '
+      + 'es lint-js-servido. LO CIERRA la tarea de `/admin/descuentos` ya abierta en TABLERO.md '
+      + '§Deuda técnica (escapar `</` en descuentos.js:163), no esta declaración. Las 5 aserciones '
+      + 'que portal-formato-dinero añadió a este script están las 5 en verde.',
+  },
+  'gate-portal-ampliado': {
+    desde: '1 sep 2026',
+    motivo:
+      'NO ES DEL PRODUCTO NI DEL GATE: es el estado administrativo de los negocios de esta máquina. '
+      + 'Sale 19 ✓ · 9 ✗. Los bloques [0] (tokens ajenos/caducados/revocados) y [1] (analíticas del '
+      + 'cliente, con la aserción del dinero español `600,00 €`) pasan ENTEROS por navegador de '
+      + 'verdad. Los 9 ✗ son todos del bloque [2], que escribe por formulario: 7 de los 8 negocios '
+      + 'de data/control.db están en status=suspended_admin (desarrollo-bamburu desde el 25 ago '
+      + '2026, los demás desde el 16 jul) y readOnlyGuard (core/tenant-middleware.js) devuelve 403 a '
+      + 'todo lo que no sea GET/HEAD/OPTIONS, montado en index.js con app.use(\'*\') ANTES de la '
+      + 'autenticación. La excepción de :159 («admin_user_id» de undefined) es aguas abajo del mismo '
+      + '403: no hay fila que leer porque no se guardó ninguna. NO se cambia el estado de un negocio '
+      + 'vivo para poner un gate en verde. LO CIERRA que el gate se traiga su propio negocio con '
+      + 'negocioDesechable() —como ya hacen gate-403-permiso y gate-historial-clinico por esta misma '
+      + 'causa—: tarea aparte, abierta en TABLERO.md §Deuda técnica.',
+  },
 };
 
 // Excluidos por naturaleza, no por estar rotos: no son deuda, simplemente no van en un barrido.
