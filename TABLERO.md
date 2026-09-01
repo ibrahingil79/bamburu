@@ -8384,20 +8384,47 @@ destruir datos*. Aquí son ficheros de código sin montar, no datos de ningún n
 > 54 puntos en 12 capacidades y las ordena **por impacto arquitectónico**. Es una PROPUESTA del
 > architect: el orden lo sigue decidiendo Ibrahin (CANON §6) y no mueve nada de esta lista.
 
+> ## ⚖️ CONTRASTE CONTRA EL CÓDIGO — 1 SEP 2026 (bloque 2 del encargo)
+>
+> **Las 54 entradas de este volcado se han contrastado UNA A UNA contra el árbol real, no contra lo
+> que dice el tablero.** Resultado:
+>
+> | Veredicto | Cuántas |
+> |---|---:|
+> | **Vive** — el problema sigue ahí | **43** |
+> | **Caducada** — ya resuelta, con su commit | **4** |
+> | **No convertible** — le falta un criterio que solo da Ibrahin | **4** |
+> | **No verificable sin ejecutar** | **3** |
+>
+> **Por qué hizo falta:** el volcado del 31 ago **heredó las cifras del tablero en vez de medirlas**.
+> De las cuatro entradas de §Limpieza, **tres estaban podridas**: dos caducadas el 24 ago (`9d114d2`,
+> `edb5a9c`) y una con la cifra mal contada. Y las seis pantallas muertas llevaban **ocho días
+> borradas** (`fe6bef0`) cuando se convirtieron en tarea: le costaron al orquestador una tarea entera
+> y una interrupción a Ibrahin por una decisión que no existía.
+>
+> **Además de los cuatro veredictos, cinco cifras de entradas VIVAS estaban mal** y quedan corregidas
+> en su sitio, tachadas y con el motivo: los «267 gates» (son 89 ficheros `gate-*` y 208
+> comprobaciones en el barrido), los «22 `console.log`» (son 14), la línea `core/auth.js:74` (el
+> plazo está en la `:107`), la retención del backup (el guardián existe desde junio; el hueco real es
+> el fallo PARCIAL) y las «600 de 1.025 rutas» (no reproducible con ningún conteo).
+>
+> **La regla que queda, y es la lección:** una entrada de deuda que nadie contrasta con el código
+> fabrica trabajo fantasma sola. **Antes de convertir, se mide.**
+
 ## Seguridad y datos
 
 - [ ] **Cifrar las copias de seguridad.** Hoy en claro en dos Drive personales, con 203 clientes y 922 facturas dentro. Cierra a la vez los vectores 4 y 7 de la auditoría de seguridad. Es configuración (`rclone crypt`), no programación.
 - [ ] **Manifiesto de huellas del histórico de backups.** Hoy solo se verifica la copia del día: una copia de hace cinco días se puede editar y nadie vuelve a mirarla. SHA-256 por copia, guardado aparte, comprobado contra las 14 en cada pasada.
-- [ ] **La retención del backup borra aunque la subida haya fallado** (`scripts/bamburu-backup.sh:164`). Condicionar el borrado al éxito.
+- [ ] **La retención del backup borra aunque la subida haya fallado PARCIALMENTE** (`scripts/bamburu-backup.sh:164`). **⚙️ MATIZ MEDIDO EL 1 SEP 2026, porque la entrada estaba mal escrita:** cuatro líneas ANTES de la retención ya hay un guardián —`[ "$uploaded" -gt 0 ] || fail_exit`— que existe **desde el 19 jun 2026** (`3076f68`). O sea: si NO se subió nada, el script sale y no borra. **El hueco real, que sí es real, es el fallo PARCIAL:** si se subió un fichero y falló otro, `uploaded` es mayor que cero y la retención se ejecuta igual. Condicionar el borrado al éxito **de todos**, no de al menos uno.
 - [ ] **Cifrado en reposo de las bases de negocio.**
-- [ ] **Permisos Paso 1:** 600 de 1.025 rutas sin comprobación de permiso visible en la línea. Recorrerlas y dejar escrito qué exige cada una. Desbloquea el Paso 2 (DISA administrando permisos).
+- [ ] **Permisos Paso 1:** recorrer las rutas y dejar escrito qué permiso exige cada una. Desbloquea el Paso 2 (DISA administrando permisos). **⚙️ CIFRA NO REPRODUCIBLE, 1 sep 2026:** ~~600 de 1.025 rutas~~ — no se ha podido reproducir con ningún conteo sobre el árbol (salen 1.995 declaraciones de ruta y 464 guardas visibles). **La proporción del problema se sostiene —la mayoría de rutas no enseña su permiso en la línea— pero la cifra concreta no vale como criterio de HECHO.** Quien la construya tiene que empezar por fijar el método de conteo, y ese método es parte de la entrega.
 - [ ] **Roles heredados.** Hoy son permisos casilla por casilla y persona por persona: 55 filas para 9 usuarios. Las tablas `roles`/`role_permissions`/`user_roles` no existen.
-- [ ] **RGPD como función:** exportar, borrar y anonimizar los datos de un cliente. Requiere decidir antes cómo convive con la regla de no destruir datos y con la inmutabilidad fiscal.
+- [ ] ⛔ **NO CONVERTIBLE — lo dice la propia entrada.** **RGPD como función:** exportar, borrar y anonimizar los datos de un cliente. Verificado el 1 sep 2026: no existe nada de esto en el árbol. **Pero requiere decidir antes cómo convive con la regla de no destruir datos y con la inmutabilidad fiscal**, y esa decisión es de Ibrahin: cambia lo que Bamburu le promete al cliente.
 - [ ] **2FA obligatoria para `owner`/`admin`.** Hoy es opcional, con mínimo de 8 caracteres.
-- [ ] **Sesión de 24 h fijas sin renovación por actividad** (`core/auth.js:74`). Revisar.
+- [ ] **Sesión de 24 h fijas sin renovación por actividad.** ~~(`core/auth.js:74`)~~ **⚙️ LÍNEA CORREGIDA EL 1 SEP 2026: en la 74 está `BCRYPT_COST`. El plazo real vive en `core/auth.js:107` (`const expires = now + 24 * 60 * 60`).** El defecto es cierto: 24 h fijas, sin renovación por actividad. Revisar.
 - [ ] **CSP con `unsafe-inline`** (8 usos, `core/security-headers.js`) — hallazgo M8, esfuerzo alto.
-- [ ] **2 vulnerabilidades moderadas** en dependencias (`npm audit`).
-- [ ] **Ensayo de recuperación completo cronometrado**, con RTO/RPO escrito. Hoy se sabe que los ficheros abren; no cuánto se tarda en volver.
+- [ ] ⚠️ **NO VERIFICABLE SIN EJECUTAR** — hay que correr `npm audit`, y `RITUAL.md` reserva las ejecuciones a petición expresa de Ibrahin. La cifra (2 moderadas) es del 31 ago y puede haber cambiado sola: las bases de datos de avisos se actualizan sin que nadie toque el repo. **2 vulnerabilidades moderadas** en dependencias.
+- [ ] ⚠️ **NO VERIFICABLE SIN EJECUTAR — y no por pereza: la tarea ES ejecutar.** Un ensayo cronometrado solo existe si se hace. Verificado el 1 sep 2026 que no está hecho: `RTO`/`RPO` solo aparecen en documentos de auditoría, como pendiente, nunca como medida. **Ensayo de recuperación completo cronometrado**, con RTO/RPO escrito. Hoy se sabe que los ficheros abren; no cuánto se tarda en volver.
 - [ ] **Anclar la cadena VERI\*FACTU fuera del servidor.** Quien tenga acceso al `.db` puede reescribir importes y recalcular la cadena. El envío real a la AEAT lo resuelve solo.
 
 ## Arquitectura
@@ -8405,14 +8432,14 @@ destruir datos*. Aquí son ficheros de código sin montar, no datos de ningún n
 - [ ] **Los cuatro temporizadores que abren en escritura cada hora** (`caducar-reservas`, `avisos`, `propuestas`, `recordatorios-cita`), que abran en solo lectura donde solo leen.
 - [ ] **Bajar la espera de bloqueo** de 5 s a una fracción: convierte «producto congelado 5 segundos» en «una operación falla rápido».
 - [ ] **Un solo escritor:** que los temporizadores pidan el trabajo al servidor en vez de abrir la base.
-- [ ] **Varios procesos con reparto de negocios** (opción B del diagnóstico de julio). Bloqueada hasta cerrar lo anterior.
-- [ ] **Medir `worker_threads`** como alternativa a Postgres: mantiene SQLite y el aislamiento por fichero. Sin medir todavía.
-- [ ] **PostgreSQL con el patrón de Odoo** (una base por negocio), cuando el número lo justifique. 571–987 h medidas. **No va primero.**
+- [ ] ⛔ **NO CONVERTIBLE — bloqueada por dependencia, lo dice la propia entrada.** **Varios procesos con reparto de negocios** (opción B del diagnóstico de julio). **Bloqueada hasta cerrar lo anterior** (un solo escritor y la espera de bloqueo). Se convierte el día que esas dos estén cerradas.
+- [ ] ⚠️ **NO VERIFICABLE SIN EJECUTAR — la tarea ES medir.** **Medir `worker_threads`** como alternativa a Postgres: mantiene SQLite y el aislamiento por fichero. **Sin medir todavía**, confirmado el 1 sep 2026.
+- [ ] ⛔ **NO CONVERTIBLE — es una decisión de momento, no de construcción.** **PostgreSQL con el patrón de Odoo** (una base por negocio), cuando el número lo justifique. 571–987 h medidas. **No va primero**, y «cuándo el número lo justifique» solo lo dice Ibrahin.
 
 ## Observabilidad
 
-- [ ] **Integración continua** que ejecute las comprobaciones en cada subida. Hoy hay 267 gates y ningún automatismo.
-- [ ] **Registro estructurado.** Hoy 22 `console.log` sueltos y el journal.
+- [ ] **Integración continua** que ejecute las comprobaciones en cada subida. ~~Hoy hay 267 gates~~ **⚙️ CIFRA CORREGIDA EL 1 SEP 2026: los 267 no salen de ningún conteo del árbol. Son 89 ficheros `gate-*` en disco, 178 ficheros de comprobación en total y **208 comprobaciones dentro del barrido**.** Lo que SÍ es cierto y se confirma: **ningún automatismo las dispara** — el nocturno se retiró el 26 ago (`bff11d0`) y no hay temporizador instalado. *(El bloque 4 del encargo del 1 sep cubre las esperas de cuota, NO la integración continua en cada subida: esta entrada sigue viva.)*
+- [ ] **Registro estructurado.** ~~Hoy 22 `console.log` sueltos~~ **⚙️ CIFRA CORREGIDA EL 1 SEP 2026: son 14** en `core/` y `modules/`, no 22. El defecto sigue vivo; la cifra estaba inflada.
 - [ ] **Métricas básicas:** cuántas peticiones, cuánto tardan, cuál va lenta.
 
 ## API
@@ -8433,7 +8460,7 @@ destruir datos*. Aquí son ficheros de código sin montar, no datos de ningún n
 - [ ] Entrada como cliente para soporte, con motivo obligatorio y registro.
 - [ ] Página de estado pública.
 - [ ] Límites visibles antes de chocar contra ellos.
-- [ ] Importación asistida con mapeo de columnas.
+- [x] ~~Importación asistida con mapeo de columnas.~~ **CADUCADA — resuelta el 23 ago 2026 en `d55dd8b` (Ficha H, `modules/erp/importador.js`): tiene automapeo por alias y **el dueño puede corregir cualquier columna a mano en la vista previa**, y analizar no escribe nada. ⚠️ ALCANCE, para no leerlo de más: cubre **clientes y productos**. Las FACTURAS siguen yendo por la migración asistida a propósito, y eso está escrito en la cabecera del fichero. Si Ibrahin quiere el mapeo también para facturas, es tarea nueva y con encargo.**
 - [ ] Ciclo completo de suscripción: alta, cobro, tarjeta caducada, cancelación, recuperación.
 
 ## Producto — operativo
@@ -8455,9 +8482,9 @@ destruir datos*. Aquí son ficheros de código sin montar, no datos de ningún n
 ## Limpieza
 
 - [x] ~~Retirar las 6 pantallas muertas (1.584 líneas ya sin montar).~~ **CERRADA — ya estaban retiradas desde el 24 ago 2026 (`fe6bef0`); esta línea llevaba ocho días afirmando en falso. Verificado el 1 sep 2026: no existen en el árbol. Detalle y lección en §Deuda técnica.**
-- [ ] Enlazar las 14 secciones sin acceso desde el menú.
-- [ ] Reducir los 65 elementos de menú.
-- [ ] Las 99 comprobaciones que nadie ejecuta: o entran al barrido o se retiran con motivo escrito.
+- [x] ~~Enlazar las 14 secciones sin acceso desde el menú.~~ **CADUCADA — resuelta el 24 ago 2026 en `9d114d2` («Las 14 pantallas escondidas, al menú»), siete días antes de volcarse. Contrastado contra el árbol el 1 sep 2026: ese commit añadió EXACTAMENTE 14 entradas a `modules/erp/menu.js` y las 14 siguen ahí (comprobadas una a una, cero ausencias); el fichero no se ha tocado desde entonces. Ojo al rastro: el bloque de entrega la atribuye a `fe6bef0`, que NO tocó el menú.**
+- [ ] ⛔ **NO CONVERTIBLE — le falta un criterio que solo puede dar Ibrahin.** ~~Reducir los 65 elementos de menú.~~ **Son 67**, contados el 1 sep 2026 (49 del menú principal + 9 de configuración del negocio + 5 fijas + 4 de cuenta). Y `menu.js` no se ha tocado desde el 24 ago, así que la auditoría y este recuento miran el MISMO árbol: la diferencia entre 65 y 67 es método de conteo, no crecimiento. **Por qué no se convierte:** «reducir» no es un defecto, es un juicio de producto, y nadie ha escrito **a cuánto** hay que bajar ni **con qué criterio**. Un constructor no sabría cuándo ha terminado. *(Nota: cuántas ve un usuario concreto depende de su rol y permisos —`menuDeUsuario` filtra—, y eso no se sabe sin levantar una sesión.)*
+- [x] ~~Las 99 comprobaciones que nadie ejecuta: o entran al barrido o se retiran con motivo escrito.~~ **CADUCADA EN SU NÚMERO — resuelta el 24 ago 2026 en `edb5a9c` («de 99 sin clasificar a CERO»). Contrastado el 1 sep 2026 con el propio instrumento del código: 89 gates en disco = 78 en el barrido + 2 declarados fuera + 9 declarados con motivo; **0 sin clasificar**. Y el invariante ha aguantado el crecimiento (87 → 89 gates). ⚠️ LA PREOCUPACIÓN NO MURIÓ, y por eso no se borra: bajo la lectura de la auditoría —«nadie las ejecuta AUTOMÁTICAMENTE»— seguía viva, porque el nocturno se retiró a propósito el 26 ago (`bff11d0`). Eso lo cierra el bloque 4 del encargo del 1 sep: el barrido se lanza en las esperas de cuota.**
 
 ## Decisiones tomadas el 31 ago 2026
 
