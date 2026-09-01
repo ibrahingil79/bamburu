@@ -419,16 +419,18 @@ export function verificarAnclajes(db, opts = {}) {
 
   let verificados = 0;
   let sinComprobar = 0;
-  // SIN límite (recorrido completo), la cadena tiene que arrancar de verdad: secuencia 1 y
-  // raiz_anterior vacía. Si el anclaje 1 se ha BORRADO entero, el recorrido completo no puede aceptar
-  // lo que trae el que ahora es el primero como si fuera el principio — eso sería el mismo agujero
-  // que [D] del análisis, solo que sin `limite`.
-  // CON límite, no hay anclaje cargado ANTES del primero del lote contra el que contrastar su
-  // raiz_anterior: se acepta la que trae y solo se exige continuidad DENTRO del lote. Como esa primera
-  // fila ya está fuera de lo que `fueraDeVentana` cubre, el veredicto no puede salir en verde de todos
-  // modos mientras haya algo fuera de la ventana.
-  let raizAnteriorEsperada = limite && ventana.length ? (ventana[0].raiz_anterior || '') : '';
-  let secuenciaEsperada = limite && ventana.length ? ventana[0].secuencia : 1;
+  // La cadena tiene que arrancar de verdad: secuencia 1 y raiz_anterior vacía. Si el anclaje 1 se ha
+  // BORRADO entero, el recorrido no puede aceptar lo que trae el que ahora es el primero como si fuera
+  // el principio — eso es el agujero [D] del análisis.
+  // La condición es `fueraDeVentana > 0`, NO `limite`: con `limite >= sellados` la ventana ya cubre
+  // TODOS los sellados y no hay nada fuera de ella, así que relajar el arranque ahí dejaba borrar el
+  // anclaje más viejo y seguir saliendo en verde — es el punto 1 del rechazo del intento 4. Solo cuando
+  // de verdad hay algo fuera de la ventana (`fueraDeVentana > 0`) no hay anclaje cargado ANTES del
+  // primero del lote contra el que contrastar su raiz_anterior: se acepta la que trae y solo se exige
+  // continuidad DENTRO del lote — y esa primera fila ya está fuera de lo que `fueraDeVentana` cubre, así
+  // que el veredicto no puede salir en verde de todos modos.
+  let raizAnteriorEsperada = fueraDeVentana > 0 ? (ventana[0].raiz_anterior || '') : '';
+  let secuenciaEsperada = fueraDeVentana > 0 ? ventana[0].secuencia : 1;
 
   for (let i = 0; i < ventana.length; i++) {
     const f = ventana[i];

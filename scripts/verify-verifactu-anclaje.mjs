@@ -400,7 +400,11 @@ try {
     const rFresca = await fetch(APEX + '/admin/verifactu/anclajes', { headers: { cookie: cookieNeg } });
     const htmlFresca = await rFresca.text();
     ok(rFresca.status === 200 && htmlFresca.includes('Última auditoría completa'), 'con la auditoría reciente, la pantalla muestra el bloque de la auditoría completa');
-    ok(!htmlFresca.includes('ya no vale'), 'y, fresca, NO dice que el resultado ya no vale');
+    // Anclada al bloque de la auditoría, no a la pantalla entera: layout.js trae un comentario «lo
+    // cacheado ya no vale» en el JS que se inyecta en TODAS las pantallas del admin, y medir sobre
+    // htmlFresca entero daba esta aserción siempre en rojo aunque el bloque estuviera bien.
+    const bloqueAudFresca = htmlFresca.match(/<b>Última auditoría completa[\s\S]*?<\/div>/)?.[0] || '';
+    ok(!!bloqueAudFresca && !bloqueAudFresca.includes('ya no vale'), 'y, fresca, el bloque de la auditoría NO dice que el resultado ya no vale');
 
     // Se envejece la fila A MANO (no se espera un día de verdad) para comprobar la caducidad.
     const horasViejas = ANCLAJE_LATIDO_H * 2 + 1;
@@ -505,6 +509,14 @@ try {
     db10a.prepare('DELETE FROM verifactu_anclajes WHERE secuencia=1').run();
     const v10a = verificarAnclajes(db10a, { caPath: tsa.caPem });
     ok(v10a.veredicto !== 'cuadra', 'borrar el anclaje MÁS VIEJO, en un recorrido SIN límite, se detecta (no hay "primero de la ventana" gratis)', JSON.stringify(v10a.alarma));
+
+    // Misma mutación, pero con el límite que usa EL BOTÓN. Con menos anclajes sellados que
+    // ANCLAJE_COMPROBAR_LIMITE, la ventana completa cabe entera y fueraDeVentana=0: es justo el hueco
+    // que dejó salir 'cuadra' tras borrar el más viejo (punto 1 del rechazo del intento 4).
+    const selladosDb10a = db10a.prepare("SELECT COUNT(*) c FROM verifactu_anclajes WHERE estado='sellado'").get().c;
+    ok(selladosDb10a < ANCLAJE_COMPROBAR_LIMITE, 'y hay menos anclajes sellados que ANCLAJE_COMPROBAR_LIMITE, para que la ventana del botón los cubra todos', String(selladosDb10a));
+    const v10aLimite = verificarAnclajes(db10a, { caPath: tsa.caPem, limite: ANCLAJE_COMPROBAR_LIMITE });
+    ok(v10aLimite.veredicto !== 'cuadra', 'borrar el anclaje MÁS VIEJO, con el límite que usa el botón (limite >= sellados), TAMBIÉN se detecta', JSON.stringify(v10aLimite));
   } finally { db10a.close(); }
 
   const { db: db10b } = abrirCopia(neg.abs, tsaDir, copias, 'borrado-ultimo');
@@ -565,7 +577,14 @@ try {
     const rTrasBoton = await fetch(APEX + destino, { headers: { cookie: cookieNeg } });
     const htmlTrasBoton = await rTrasBoton.text();
     ok(rTrasBoton.status === 200, 'la pantalla tras el botón responde 200 con su URL final');
-    ok(!htmlTrasBoton.includes('cuadra'), `la palabra «cuadra» NO aparece en la respuesta`);
+    // Anclada al aviso del botón, no a la pantalla entera: layout.js usa la palabra «cuadra» en textos
+    // ajenos (p.ej. «…un formato que no cuadra.») presentes en TODAS las pantallas del admin, y medir
+    // sobre htmlTrasBoton entero daba esta aserción siempre en rojo aunque el aviso estuviera bien. El
+    // color es tan parte del mensaje como la palabra: el aviso no puede pintarse en verde sobre un
+    // veredicto parcial.
+    const flashBoton = htmlTrasBoton.match(/Comprobado ahora:[\s\S]*?<\/div>/)?.[0] || '';
+    ok(!!flashBoton, 'la pantalla trae el aviso del botón');
+    ok(!flashBoton.includes('cuadra') && !/var\(--ok\)/.test(flashBoton), 'el aviso del botón no dice «cuadra» ni se pinta en verde');
     ok(/de los otros \d+ no se dice nada/.test(htmlTrasBoton), 'y el mensaje dice cuántos de cuántos ha comprobado, con lo que queda fuera');
   }
 
