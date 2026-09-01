@@ -333,3 +333,99 @@ test('con el tablero lleno y el lector ciego, el ciclo AVISA en vez de callarse'
     assert.ok(r2.averiaViva, 'pero sigue constando como rota, para que salga en el parte');
   } finally { limpiar(raiz); }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5 · El cierre deja rastro aunque otro haya reescrito el bloque
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('si el programador reescribió el bloque, NO se le pisa pero sí se le deja la nota', async () => {
+  // De dónde sale (1 sep 2026): al cerrar `portal-formato-dinero`, el programador había
+  // reescrito ese bloque durante su trabajo. El cierre hizo bien en no pisarlo, pero se
+  // rindió del todo y el bloque se quedó sin sus commits y sin enlace a su registro.
+  const raiz = repoTemporal({ tablero: TABLERO_TRES });
+  try {
+    const cfg = configDe(raiz);
+    const ids = ['primera-del-encadenado', 'segunda-del-encadenado', 'tercera-del-encadenado'];
+    const guion = ids.flatMap((id, i) => guionDe(raiz, cfg, id, i + 1));
+    const almacen = new Almacen({ rutaEstado: cfg.rutasAbs.estado, rutaJournal: cfg.rutasAbs.journal, rutaHistorial: cfg.rutasAbs.historial });
+    const ciclo = new Ciclo({ config: cfg, almacen, vigilante: vigilanteFalso(), logger: registroMudo(), invocador: invocadorFalso(guion) });
+
+    let estado = almacen.recuperar().estado;
+    let tocado = false;
+    const cerradas = [];
+    for (let i = 0; i < 30 && cerradas.length < 1; i++) {
+      const r = await ciclo.unPaso(estado);
+      estado = r.estado;
+      // A mitad del trabajo, otro reescribe el bloque de la tarea en curso.
+      // (El paso CONSTRUCCION no se ve nunca entre vueltas: se entra y se sale dentro de la
+      // misma, así que se engancha en cuanto la tarea está cogida.)
+      if (!tocado && estado.tarea?.id === 'primera-del-encadenado') {
+        tocado = true;
+        const t = fs.readFileSync(cfg.tableroAbs, 'utf8')
+          .replace('Hace falta una funcion que sume dos numeros y valide sus entradas.',
+                   'Lo reescribió el programador mientras trabajaba, y tenía sus motivos.');
+        fs.writeFileSync(cfg.tableroAbs, t);
+      }
+      if (r.cerrada) cerradas.push(r.cerrada.id);
+    }
+
+    assert.deepEqual(cerradas, ['primera-del-encadenado']);
+    const tab = fs.readFileSync(cfg.tableroAbs, 'utf8');
+
+    // Lo que escribió el otro se respeta…
+    assert.match(tab, /Lo reescribió el programador mientras trabajaba/, 'le pisó el texto');
+    // …y aun así queda el rastro del cierre.
+    assert.match(tab, /✅ HECHA/);
+    assert.match(tab, /docs\/orquestador\/tareas\/primera-del-encadenado\.md/, 'se quedó sin enlace a su registro');
+    assert.match(tab, /Cerrada por el orquestador/);
+    assert.ok(!/\*\*estado:\*\* pendiente/.test(tab.slice(0, tab.indexOf('## TAREA — Segunda'))), 'quedó diciendo pendiente');
+
+    // Y encadena igual: la siguiente se coge sola.
+    const r = await ciclo.unPaso(estado);
+    assert.equal(r.estado.tarea?.id, 'segunda-del-encadenado');
+  } finally { limpiar(raiz); }
+});
+
+test('un cierre repetido no duplica la nota', async () => {
+  const raiz = repoTemporal({ tablero: TABLERO_TRES });
+  try {
+    const cfg = configDe(raiz);
+    const { escribirRegistroTarea, marcarEnTablero } = await import('../cierre/cierre.js');
+    const tarea = { id: 'primera-del-encadenado', titulo: 'Primera del encadenado', origen: 'bloque', bruto: 'ya no existe este texto', linea: 3 };
+    const estado = { historial: [], replanteos: 0, cuotaInicio: 0 };
+    const registro = escribirRegistroTarea({ config: cfg, tarea, estado, rutas: { analisis: 'a.md', review: 'r.md' }, commits: [], criterios: [], consumo: null });
+
+    const r1 = marcarEnTablero({ config: cfg, tarea, commits: [], registro });
+    assert.equal(r1.escrito, true);
+    const r2 = marcarEnTablero({ config: cfg, tarea, commits: [], registro });
+    assert.equal(r2.escrito, false);
+    assert.equal(r2.motivo, 'ya-anotado');
+
+    const tab = fs.readFileSync(cfg.tableroAbs, 'utf8');
+    assert.equal((tab.match(/Cerrada por el orquestador/g) || []).length, 1, 'duplicó la nota');
+  } finally { limpiar(raiz); }
+});
+
+test('la nota de cierre toca SOLO su bloque, nunca el documento entero', async () => {
+  // El primer intento de este arreglo cogía el encabezado más externo —«# Tablero», que
+  // contiene el id como contiene todo— y trataba el fichero completo como el bloque: pasó
+  // TODOS los `estado: pendiente` del documento a «hecha» de un plumazo.
+  const raiz = repoTemporal({ tablero: TABLERO_TRES });
+  try {
+    const cfg = configDe(raiz);
+    const { escribirRegistroTarea, marcarEnTablero } = await import('../cierre/cierre.js');
+    const tarea = { id: 'primera-del-encadenado', titulo: 'Primera', origen: 'bloque', bruto: 'texto que ya no existe', linea: 3 };
+    const registro = escribirRegistroTarea({
+      config: cfg, tarea, estado: { historial: [], replanteos: 0, cuotaInicio: 0 },
+      rutas: { analisis: 'a.md', review: 'r.md' }, commits: [], criterios: [], consumo: null,
+    });
+
+    marcarEnTablero({ config: cfg, tarea, commits: [], registro });
+
+    const tab = fs.readFileSync(cfg.tableroAbs, 'utf8');
+    assert.match(tab, /^# Tablero de pruebas$/m, 'le tocó el titular del documento');
+    assert.equal((tab.match(/\*\*estado:\*\* hecha/g) || []).length, 1, 'marcó más de una tarea');
+    assert.equal((tab.match(/\*\*estado:\*\* pendiente/g) || []).length, 2, 'las otras dos siguen pendientes');
+    assert.deepEqual(tareasPendientes(tab).map((t) => t.id), ['segunda-del-encadenado', 'tercera-del-encadenado']);
+  } finally { limpiar(raiz); }
+});

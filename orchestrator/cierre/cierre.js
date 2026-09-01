@@ -98,8 +98,10 @@ export function marcarEnTablero({ config, tarea, commits, registro, logger, apar
   const texto = fs.readFileSync(config.tableroAbs, 'utf8');
   const pos = texto.indexOf(tarea.bruto);
   if (pos === -1) {
-    logger?.error('El bloque de la tarea cambió en el tablero mientras trabajábamos. No lo piso.');
-    return { escrito: false, motivo: 'bloque-cambiado' };
+    // Cambió mientras trabajábamos. El cuerpo NO se toca —puede haberlo reescrito el
+    // programador con razón— pero la nota de cierre sí se deja: sin ella, el bloque se queda
+    // sin sus commits y sin enlace a su registro, y eso es justo lo que se lee después.
+    return anotarCierreEnBloqueCambiado({ config, tarea, nota, apartada, logger });
   }
 
   const lineas = tarea.bruto.split('\n');
@@ -120,6 +122,82 @@ export function marcarEnTablero({ config, tarea, commits, registro, logger, apar
   escribirAtomico(config.tableroAbs, texto.slice(0, pos) + bloque + texto.slice(pos + tarea.bruto.length));
   logger?.exito(`${config.repo.tablero} actualizado: «${tarea.titulo}» queda ${apartada ? 'APARTADA' : 'HECHA'}.`);
   return { escrito: true };
+}
+
+/**
+ * Localiza el bloque de una tarea por su `id`, que es lo ÚNICO estable: el título se retoca,
+ * el cuerpo se reescribe, pero el identificador no cambia (por eso el formato lo exige).
+ * @returns { ini, fin, nivel, titulo } o null
+ */
+function bloquePorId(lineas, id) {
+  const candidatos = [];
+  for (let i = 0; i < lineas.length; i++) {
+    const m = /^(#{1,6})\s+/.exec(lineas[i]);
+    if (!m) continue;
+    const nivel = m[1].length;
+    let fin = lineas.length;
+    let encontrado = false;
+    for (let j = i + 1; j < lineas.length; j++) {
+      const n = /^(#{1,6})\s+/.exec(lineas[j]);
+      if (n && n[1].length <= nivel) { fin = j; break; }
+      const d = /^\s*(?:[-*+]\s*)?[*_]*\s*id\s*[*_]*\s*:\s*[*_]*\s*([^\s*_`]+)/i.exec(lineas[j]);
+      if (d && d[1] === id) encontrado = true;
+    }
+    if (encontrado) candidatos.push({ ini: i, fin, nivel });
+  }
+  if (!candidatos.length) return null;
+
+  // GANA EL MÁS PEQUEÑO. Es la sección de la tarea, no el capítulo que la contiene ni el
+  // documento entero. Sin esto, «# Tablero» sale elegido —contiene el id, como todo lo
+  // demás— y el bloque pasa a ser el fichero completo: el titular se reescribe y TODOS los
+  // `estado: pendiente` del documento se ponen en «hecha». Lo cazó su prueba en el sitio.
+  // (Es la misma regla que reader.buscarTareaPorId, y por el mismo motivo.)
+  const b = candidatos.sort((x, y) => (x.fin - x.ini) - (y.fin - y.ini))[0];
+  const titulo = lineas[b.ini].replace(/^#{1,6}\s+/, '')
+    .replace(/^(✅\s*HECHA|⛔\s*APARTADA)\s*\([^)]*\)\s*[—–\-:·|]?\s*/i, '')
+    .replace(/^\s*tareas?\s*[—–\-:·|]\s*/i, '')
+    .replace(/\s*·\s*`[0-9a-f, `]+`\s*$/i, '')
+    .trim();
+  return { ...b, titulo };
+}
+
+/**
+ * Deja la nota de cierre en un bloque que YA no es el que cogimos.
+ *
+ * De dónde sale (1 sep 2026): al cerrar `portal-formato-dinero`, el programador había
+ * reescrito ese mismo bloque durante su trabajo. `marcarEnTablero` hizo bien en no pisarlo
+ * —esa protección existe por algo— pero se rindió del todo, y el bloque se quedó **sin la
+ * nota de cierre**: sin sus commits y sin el enlace a su registro. Los otros tres la tienen.
+ * Rendirse entero era demasiado: el cuerpo no se toca, pero el rastro se deja.
+ */
+function anotarCierreEnBloqueCambiado({ config, tarea, nota, apartada, logger }) {
+  const texto = fs.readFileSync(config.tableroAbs, 'utf8');
+  const lineas = texto.split('\n');
+  const b = bloquePorId(lineas, tarea.id);
+  if (!b) return { escrito: false, motivo: 'bloque-cambiado' };
+
+  // Si la nota ya está (un cierre repetido), no se duplica.
+  const cuerpo = lineas.slice(b.ini, b.fin).join('\n');
+  if (cuerpo.includes(`docs/orquestador/tareas/${tarea.id}.md`)) {
+    logger?.info(`El bloque de «${tarea.titulo}» ya tenía su nota de cierre. Lo dejo como está.`);
+    return { escrito: false, motivo: 'ya-anotado' };
+  }
+
+  const nuevas = [...lineas.slice(b.ini, b.fin)];
+  // El titular y el `estado:` solo se tocan si nadie los puso ya: lo que escribió otro manda.
+  if (!/^#{1,6}\s+(✅\s*HECHA|⛔\s*APARTADA)/i.test(nuevas[0])) {
+    nuevas[0] = `${'#'.repeat(b.nivel)} ${apartada ? '⛔ APARTADA' : '✅ HECHA'} (${hoy()}) — ${b.titulo}`;
+  }
+  for (let k = 1; k < nuevas.length; k++) {
+    nuevas[k] = nuevas[k].replace(
+      /^(\s*(?:[-*+]\s*)?[*_]*\s*estado\s*[*_]*\s*:\s*[*_]*\s*)(pendiente|en-curso|en curso)([*_]*\s*)$/i,
+      `$1${apartada ? 'apartada' : 'hecha'}$3`);
+  }
+
+  const bloque = nuevas.join('\n').replace(/\s*$/, '') + '\n' + nota;
+  escribirAtomico(config.tableroAbs, [...lineas.slice(0, b.ini), bloque, ...lineas.slice(b.fin)].join('\n'));
+  logger?.aviso(`El bloque de «${tarea.titulo}» lo había cambiado otro. No lo piso: solo le dejo la nota de cierre.`);
+  return { escrito: true, motivo: 'bloque-cambiado-nota-anadida' };
 }
 
 /**

@@ -8326,6 +8326,10 @@ trozos.
 > **Los dos rojos siguen rojos, y se declaran precisamente para que se vea:** el barrido los cantará
 > por su nombre hasta que se cierren sus dos cabos de §Deuda técnica.
 
+> **Cerrada por el orquestador el 2026-09-01.**
+> Commits: `bfea8a8`, `d93125e`
+> Registro: `docs/orquestador/tareas/portal-formato-dinero.md`
+
 ## TAREA — Retirar las seis pantallas muertas que siguen en el árbol
 
 - **id:** retirar-pantallas-muertas
