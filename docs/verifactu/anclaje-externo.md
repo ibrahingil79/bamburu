@@ -122,6 +122,13 @@ en `/etc/bamburu.env`.
 - **`/admin/verifactu/anclajes`** — la pantalla del negocio. Dice en palabras si está activo, cuándo
   fue el último sello, y deja comprobar la cadena de sellos ahora mismo (solo lee, no ancla, no llama
   a la TSA por red: `openssl ts -verify` es una comprobación local contra el certificado ya guardado).
+  Ni la carga de la pantalla ni el botón «Comprobar ahora» recorren la sucesión completa: cada anclaje
+  son 3 `SELECT` + un `openssl ts -verify` (~10 ms), y con miles de anclajes eso congelaría el proceso
+  entero (better-sqlite3 es síncrono). La tabla se pinta con los últimos `ANCLAJE_COMPROBAR_LIMITE`
+  anclajes (por defecto **100**, ≈ 1 s) y «Comprobar ahora» audita ese mismo tramo — el resto de la
+  sucesión sigue viva en la base y la audita el gate, o una pasada sin acotar si hiciera falta. Sin
+  certificado raíz (`VERIFACTU_ANCLAJE_TSA_CA`), la comprobación no dice «cuadra»: dice explícitamente
+  que no se ha podido comprobar el sello criptográfico, en ámbar, nunca en verde.
 - **`/superadmin/integridad`** — columna «Sellado» junto al chequeo de la cadena propietaria: la
   fecha del último anclaje de cada negocio, o «sin anclar».
 - **El correo diario** (`BAMBURU_ANCLAJE_MAILTO`, por defecto `ibrahingil@gmail.com`) — raíz, hora del

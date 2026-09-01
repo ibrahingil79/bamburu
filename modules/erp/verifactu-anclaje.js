@@ -32,6 +32,11 @@ import { verifyTenantInvoices } from '../superadmin/integridad.js';
 const sha256Upper = str => createHash('sha256').update(str, 'utf8').digest('hex').toUpperCase();
 
 export const ANCLAJE_LATIDO_H = Number(process.env.ANCLAJE_LATIDO_H) > 0 ? Number(process.env.ANCLAJE_LATIDO_H) : 24;
+// Cuántos anclajes, como máximo, recorre de un tirón el botón «Comprobar ahora» de la pantalla. Cada
+// anclaje son 3 SELECT completos (raizCanonica) + un openssl ts -verify (medido: ~10 ms), y como
+// better-sqlite3 es síncrono y execFileSync bloquea el bucle de eventos, sin acotar el botón congela
+// el proceso entero (todos los negocios, no solo este) mientras recorre la sucesión. 100 ≈ 1 s.
+export const ANCLAJE_COMPROBAR_LIMITE = Number(process.env.ANCLAJE_COMPROBAR_LIMITE) > 0 ? Number(process.env.ANCLAJE_COMPROBAR_LIMITE) : 100;
 const SELLO_TIMEOUT_MS = 15000;
 
 function opensslDisponible() {
@@ -213,14 +218,24 @@ export async function anclar(db, opts = {}) {
 }
 
 // ── El juez: recorre la sucesión de anclajes sellados y dice si cuadra. SOLO LEE. ──
+// opts.limite acota a los ÚLTIMOS N anclajes (lo usa el botón «Comprobar ahora»: sin acotar, recorrer
+// toda la sucesión bloquea el proceso entero — ver ANCLAJE_COMPROBAR_LIMITE). Sin límite (el uso por
+// defecto, y el que usa el gate) recorre la sucesión completa desde el principio.
 export function verificarAnclajes(db, opts = {}) {
-  const filas = db.prepare(`SELECT * FROM verifactu_anclajes WHERE estado='sellado' ORDER BY secuencia ASC`).all();
-  if (!filas.length) return { ok: true, total: 0, ultimo: null, alarma: null };
+  const limite = opts.limite ?? null;
+  const filas = limite
+    ? db.prepare(`SELECT * FROM verifactu_anclajes WHERE estado='sellado' ORDER BY secuencia DESC LIMIT ?`).all(limite).reverse()
+    : db.prepare(`SELECT * FROM verifactu_anclajes WHERE estado='sellado' ORDER BY secuencia ASC`).all();
+  if (!filas.length) return { ok: true, total: 0, comprobados: 0, ultimo: null, alarma: null, sinComprobar: 0 };
 
   const caPath = opts.caPath ?? process.env.VERIFACTU_ANCLAJE_TSA_CA;
-  let raizAnteriorEsperada = '';
-  let secuenciaEsperada = 1;
+  const hayCa = !!caPath;
+  // Cuando se acota a los últimos N, no hay anclaje cargado ANTES del primero del lote contra el que
+  // contrastar su raiz_anterior: se acepta la que trae y solo se exige continuidad DENTRO del lote.
+  let raizAnteriorEsperada = limite ? (filas[0].raiz_anterior || '') : '';
+  let secuenciaEsperada = limite ? filas[0].secuencia : 1;
   let alarma = null;
+  let sinComprobar = 0;
 
   for (const f of filas) {
     const recomp = raizCanonica(db, {
@@ -239,11 +254,17 @@ export function verificarAnclajes(db, opts = {}) {
       alarma = { secuencia: f.secuencia, sellado_at: f.sellado_at, motivo: 'hueco en la numeración: falta el anclaje ' + secuenciaEsperada };
       break;
     }
-    if (caPath && f.token) {
-      const verifica = verificarToken(f.raiz, f.token, caPath);
-      if (!verifica.ok) {
-        alarma = { secuencia: f.secuencia, sellado_at: f.sellado_at, motivo: 'el sello no es válido: ' + verifica.detalle };
-        break;
+    if (f.token) {
+      if (hayCa) {
+        const verifica = verificarToken(f.raiz, f.token, caPath);
+        if (!verifica.ok) {
+          alarma = { secuencia: f.secuencia, sellado_at: f.sellado_at, motivo: 'el sello no es válido: ' + verifica.detalle };
+          break;
+        }
+      } else {
+        // Sin certificado raíz no se puede comprobar la FIRMA de este token. Eso no es "cuadra": es
+        // "no se ha comprobado", y las dos cosas no pueden contestar lo mismo (censo de ventanitas).
+        sinComprobar++;
       }
     }
     raizAnteriorEsperada = f.raiz;
@@ -259,5 +280,10 @@ export function verificarAnclajes(db, opts = {}) {
     }
   }
 
-  return { ok: !alarma, total: filas.length, ultimo: ultimoFila, alarma };
+  const total = limite ? db.prepare(`SELECT COUNT(*) c FROM verifactu_anclajes WHERE estado='sellado'`).get().c : filas.length;
+  if (alarma) return { ok: false, total, comprobados: filas.length, ultimo: ultimoFila, alarma, sinComprobar };
+  // Sin certificado, ningún token de los recorridos se ha comprobado de verdad: no se puede decir
+  // "cuadra". Tercer estado explícito (ok: null) para que la pantalla lo pinte en ámbar, no en verde.
+  if (sinComprobar > 0) return { ok: null, total, comprobados: filas.length, ultimo: ultimoFila, alarma: null, sinComprobar };
+  return { ok: true, total, comprobados: filas.length, ultimo: ultimoFila, alarma: null, sinComprobar: 0 };
 }

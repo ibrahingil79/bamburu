@@ -230,6 +230,15 @@ try {
     ok(!htmlPantalla2.includes('Nunca se ha sellado nada'), 'y ya NO dice "Nunca se ha sellado nada"');
   }
 
+  say('\n=== [2c] Sin certificado raíz, el juez NO dice «cuadra»: estado explícito ok=null ===\n');
+  const caGuardado = process.env.VERIFACTU_ANCLAJE_TSA_CA;
+  delete process.env.VERIFACTU_ANCLAJE_TSA_CA;
+  const veredictoSinCa = verificarAnclajes(neg.db);
+  ok(veredictoSinCa.ok === null && veredictoSinCa.sinComprobar > 0, 'sin VERIFACTU_ANCLAJE_TSA_CA, verificarAnclajes() NO devuelve ok:true — devuelve ok:null con sinComprobar>0', JSON.stringify(veredictoSinCa));
+  process.env.VERIFACTU_ANCLAJE_TSA_CA = caGuardado;
+  const veredictoConCa = verificarAnclajes(neg.db);
+  ok(veredictoConCa.ok === true, 'y con el certificado de vuelta, verificarAnclajes() vuelve a decir ok:true', JSON.stringify(veredictoConCa));
+
   say('\n=== [3] Token corrupto: NO se persiste, estado=fallo ===\n');
   const f3 = createInvoice(neg.db, { client_id: clienteId, issue_date: '2026-03-02', irpf_rate: 0, lines: [{ description: 'Otro servicio', quantity: 1, unit_price: 40, tax_rate: 21 }] });
   tsa.estado.modo = 'corrupto';
@@ -344,6 +353,14 @@ try {
   const r8b = await anclar(neg.db, { ahoraMs: t2 });
   ok(r8b.anclado === false, 'y a las +2 h del nuevo, sin material, NO toca aún', JSON.stringify(r8b));
 
+  say('\n=== [8b] «Comprobar ahora» acotado: verificarAnclajes(db, {limite}) solo recorre los últimos N ===\n');
+  const totalAntesLimite = neg.db.prepare("SELECT COUNT(*) c FROM verifactu_anclajes WHERE estado='sellado'").get().c;
+  ok(totalAntesLimite > 2, 'hay más de 2 anclajes sellados para que el límite tenga sentido', String(totalAntesLimite));
+  const veredictoAcotado = verificarAnclajes(neg.db, { limite: 2 });
+  ok(veredictoAcotado.comprobados === 2, 'con limite:2 solo se recorren (y cuentan) los últimos 2 anclajes, no todos', JSON.stringify(veredictoAcotado));
+  ok(veredictoAcotado.total === totalAntesLimite, 'pero total sigue diciendo cuántos anclajes sellados hay EN TOTAL, no solo los recorridos', String(veredictoAcotado.total));
+  ok(veredictoAcotado.ok === true, 'y en ese tramo final la cadena sigue cuadrando', JSON.stringify(veredictoAcotado));
+
   say('\n=== Criterio final: /superadmin/integridad, columna «Sellado», sobre el servidor real ===\n');
   if (!codigoFresco) {
     noVerificado('/superadmin/integridad (columna Sellado)', 'mismo motivo: código en disco más nuevo que el arranque del proceso');
@@ -379,5 +396,13 @@ try {
 }
 
 say(`\n${'─'.repeat(70)}\nRESULTADO: ${pass} ✓  ·  ${fail} ✗` + (sinVerificar ? `  ·  ${sinVerificar} ⚠ NO VERIFICADO` : ''));
-if (sinVerificar) say('⚠️  Hay criterios NO VERIFICADOS en esta pasada — no cuentan como pasados. Repetir tras "sudo systemctl restart bamburu".');
-process.exit(fail === 0 ? 0 : 1);
+// Un criterio NO VERIFICADO no es un criterio pasado: si el código de salida no lo distingue, quien
+// lo lea (el validador del orquestador, un barrido, el próximo revisor) no puede saber que faltan
+// pasadas por correr. La única forma de admitirlo en verde es una variable EXPLÍCITA, puesta por
+// quien firma esa decisión — no por defecto del propio script.
+const admiteSinVerificar = process.env.ANCLAJE_GATE_ADMITE_SIN_VERIFICAR === '1';
+if (sinVerificar) {
+  say('⚠️  Hay criterios NO VERIFICADOS en esta pasada — no cuentan como pasados. Repetir tras "sudo systemctl restart bamburu".');
+  if (admiteSinVerificar) say('⚠️  ANCLAJE_GATE_ADMITE_SIN_VERIFICAR=1: se admite salir en verde igualmente. Firma quien puso esa variable, no este script.');
+}
+process.exit(fail === 0 && (sinVerificar === 0 || admiteSinVerificar) ? 0 : 1);
