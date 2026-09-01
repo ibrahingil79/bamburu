@@ -8602,6 +8602,11 @@ uno. Y como son DOS copias con la misma pieza, el arreglo vale para las dos a la
 
 - **id:** cifrado-en-reposo-bases
 - **estado:** pendiente
+- **firma:** Ibrahin
+  > **Decisión de Ibrahin (1 sep 2026), con sus palabras:** **si se pierde la llave se pierde el negocio vivo, no solo las copias. Eso es mío.**
+  > Construir el cifrado es técnico. **Custodiar la llave no**: aquí no se pierde una copia, se pierde el negocio en marcha. Es la misma decisión que Ibrahin tomó para las copias el 1 sep —llave en el servidor **y** una copia para él, por pantalla, una sola vez— pero con una consecuencia peor, así que la toma él otra vez y no se hereda por parecido.
+  > El orquestador la construye entera, la prueba entera y la deja **en su rama, fuera de
+  > producción**, hasta que él conteste. Ver §«LAS TAREAS QUE COMPROMETEN A BAMBURU».
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
 
 Las bases de negocio (`data/tenants/<slug>.db`) están **en claro en el disco del servidor**. El
@@ -8845,6 +8850,11 @@ hace **por superficie**, como la CSP, y cada superficie se mide antes y después
 
 - **id:** api-token-ambitos-cuotas
 - **estado:** pendiente
+- **firma:** Ibrahin
+  > **Decisión de Ibrahin (1 sep 2026), con sus palabras:** **las cuotas rozan el precio, y el precio lo decido yo.**
+  > Los **ámbitos** —qué puede tocar un programa de fuera— son técnicos. Las **cuotas** —cuánto puede pedir— no: son lo que separa un plan de otro. `CANON.md` §6 pone el precio del lado del dueño, sin matices.
+  > El orquestador la construye entera, la prueba entera y la deja **en su rama, fuera de
+  > producción**, hasta que él conteste. Ver §«LAS TAREAS QUE COMPROMETEN A BAMBURU».
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · API
 
 Hoy no hay forma de darle acceso a un programa de fuera sin darle una **sesión de persona**. Hace
@@ -8890,6 +8900,11 @@ construirlo tres veces.
 
 - **id:** exportacion-completa-datos
 - **estado:** pendiente
+- **firma:** Ibrahin
+  > **Decisión de Ibrahin (1 sep 2026), con sus palabras:** **la ley obliga a exportar, pero qué entra en «todo lo tuyo» es una promesa al cliente y la hago yo.**
+  > La obligación de exportar la decide alguien de fuera, así que esa mitad no se discute. Pero **qué entra en «todo lo tuyo»** —¿los adjuntos? ¿el historial de cambios? ¿las conversaciones con DISA?— no lo dice la ley: lo dice Bamburu, y eso es una promesa.
+  > El orquestador la construye entera, la prueba entera y la deja **en su rama, fuera de
+  > producción**, hasta que él conteste. Ver §«LAS TAREAS QUE COMPROMETEN A BAMBURU».
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
 
 El dueño no puede llevarse **todo lo suyo** de una vez. Verificado el 1 sep 2026: no existe.
@@ -9294,17 +9309,29 @@ negocio suspendido NO deja escribir— necesitan un negocio suspendido y tienen 
   media plataforma. **Y yo no firmo cambios, yo decido qué promete el producto.**» Con la regla buena
   salen **SEIS**.
 
-  **LAS SEIS** (marcadas con `firma: Ibrahin` en su preámbulo, cada una con su porqué escrito):
+  **LAS NUEVE** (marcadas con `firma: Ibrahin` en su preámbulo, cada una con su porqué escrito):
   `anclar-verifactu-fuera` · `historial-cambios-visible-cliente` ·
   `corregir-errores-documentos-no-fiscales` · `modo-pruebas-por-negocio` · `pagina-estado-publica` ·
-  `acceso-gestoria`. Las **9** que ya esperaban decisión siguen igual: salieron precisamente por
-  inventar promesa, así que la regla nueva las confirma en su sitio.
+  `acceso-gestoria` · **y las tres que se plantearon como dudosas y él se quedó** (1 sep 2026):
+  `cifrado-en-reposo-bases`, `api-token-ambitos-cuotas` y `exportacion-completa-datos`.
 
-  **TRES QUE QUEDAN A MEDIO CAMINO Y LAS MIRA ÉL:** `cifrado-en-reposo-bases` (construir es técnico,
-  pero **si se pierde la llave se pierde el negocio vivo**, no solo las copias) ·
-  `api-token-ambitos-cuotas` («ámbitos» es técnico, **«cuotas» roza precio**) ·
-  `exportacion-completa-datos` (la ley obliga a exportar, pero **qué entra en «todo lo tuyo»** no lo
-  decide la ley).
+  **LAS TRES DUDOSAS, RESUELTAS POR ÉL, con sus palabras** — y las tres del mismo lado, que es lo
+  que confirma que la raya está bien puesta:
+  · *«Cifrado en el servidor: **si se pierde la llave se pierde el negocio vivo, no solo las copias.
+    Eso es mío.**»* — construir es técnico; **custodiar** no.
+  · *«Llaves de acceso desde fuera: **las cuotas rozan el precio, y el precio lo decido yo.**»* — los
+    ámbitos son técnicos; las cuotas separan un plan de otro, y `CANON.md` §6 pone el precio del lado
+    del dueño sin matices.
+  · *«Exportación completa: la ley obliga a exportar, pero **qué entra en “todo lo tuyo” es una
+    promesa al cliente y la hago yo.**»* — la obligación la decide alguien de fuera; el contenido, no.
+
+  Las **9** que ya esperaban decisión siguen igual: salieron precisamente por inventar promesa, así
+  que la regla nueva las confirma en su sitio.
+
+  **EL RECUENTO FINAL: de 45 tareas, 27 se cierran solas, 9 las firma Ibrahin y 9 esperan una
+  decisión suya.** *Sus palabras al verlo: «Quedan 9 de 45. Me parece bien.»* Y ninguna de las 27 se
+  cierra sola por ser pequeña: `retencion-backup-fallo-parcial` toca copias y `permisos-paso-1` toca
+  quién ve qué — se cierran solas porque **construyen una promesa que ya está decidida**.
 
   ---
 
