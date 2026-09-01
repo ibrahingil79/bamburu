@@ -230,3 +230,47 @@ test('una orden nueva DESPIERTA al daemon: no espera al final de la siesta', asy
     assert.ok(tardo < 20000, `tardó ${tardo} ms: se durmió en vez de despertar con la orden`);
   } finally { limpiar(raiz); }
 });
+
+test('una parada buena NO dura tres horas por estar esperando cuota', async () => {
+  // De dónde sale (1 sep 2026): con la tarea esperando a que se reiniciara la ventana, un
+  // `systemctl restart` se quedó colgado. SIGTERM no sacaba al daemon porque «tenía tarea»,
+  // y systemd lo habría matado a los 35 minutos. Esperar no es trabajar.
+  const raiz = repoTemporal({ tablero: TABLERO_DOS });
+  try {
+    const cfg = configDe(raiz);
+    const { arrancar } = await import('../bucle.js');
+    const almacen = new Almacen({ rutaEstado: cfg.rutasAbs.estado, rutaJournal: cfg.rutasAbs.journal, rutaHistorial: cfg.rutasAbs.historial });
+
+    // Estado de partida: tarea en mano, a medio camino, parada esperando cuota.
+    let estado = almacen.recuperar().estado;
+    estado = almacen.transicion(estado, { tipo: 'TAREA_TOMADA', tarea: { id: 'la-primera', titulo: 'La primera' }, cuota: 0 });
+    estado = almacen.transicion(estado, { tipo: 'PASO_INICIADO', paso: 'VALIDAR_CODIGO' });
+    almacen.transicion(estado, { tipo: 'ESPERANDO_CUOTA', motivo: 'no queda' });
+
+    // Se arranca con la cuota agotada, para que se quede esperando de verdad.
+    // Umbral inalcanzable pero válido (79 + 20 = 99), y un binario que no existe: así se
+    // queda esperando cuota de verdad y no llama a ningún modelo.
+    const sinCuota = configDe(raiz, {
+      cuota: { minimoParaCicloPct: 79, margenReservadoPct: 20, esperaSinCuotaMs: 600000 },
+      cli: { binario: 'no-existe-este-binario' },
+    });
+    const daemon = arrancar({ config: sinCuota, entorno: {} });
+    await new Promise((r) => setTimeout(r, 600));
+
+    const t0 = Date.now();
+    process.kill(process.pid, 'SIGTERM');
+    const codigo = await daemon;
+    const tardo = Date.now() - t0;
+
+    assert.equal(codigo, 0, 'la parada tiene que ser limpia');
+    assert.ok(tardo < 15000, `tardó ${tardo} ms en parar: se quedó colgado esperando cuota`);
+
+    // Y la tarea sigue en pie, con su paso guardado, para retomarla al volver.
+    // No se afirma CUÁL es el paso: el daemon pudo avanzar antes de quedarse esperando, y
+    // eso es correcto. Lo que importa es que no se perdió ni se quedó en el limbo.
+    const despues = almacen.leerEstado();
+    assert.equal(despues.tarea?.id, 'la-primera', 'la tarea no se pierde al parar');
+    assert.notEqual(despues.paso, 'OCIOSO', 'y queda guardado por dónde iba');
+    assert.equal(despues.esperandoCuota, true, 'parada esperando cuota, que es de donde se retoma');
+  } finally { limpiar(raiz); }
+});

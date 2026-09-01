@@ -137,6 +137,18 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
     try {
       // Con parada buena pedida y sin tarea entre manos, se acabó.
       if (parando && !estado.tarea) break;
+      // Y TAMBIÉN se acabó si la tarea está parada esperando cuota. Aquí no se está
+      // terminando nada: se está durmiendo, a veces durante horas. La tarea queda intacta en
+      // su paso —está en el journal— y se retoma tal cual al volver.
+      //
+      // De dónde sale (1 sep 2026): con la tarea esperando a que se reiniciara la ventana,
+      // un `systemctl restart` se quedó colgado. SIGTERM no sacaba al daemon porque «tenía
+      // tarea», y systemd habría acabado matándolo a los 35 minutos con un SIGKILL. Esperar
+      // no es trabajar, y una parada buena no puede durar tres horas.
+      if (parando && estado.esperandoCuota) {
+        log.info('Paro aquí: la tarea está esperando cuota, no a medio hacer. Se retoma en su paso.');
+        break;
+      }
       if (emergencia) break;
 
       const r = await ciclo.unPaso(estado);
@@ -168,7 +180,7 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
       try { await mandarParte(); } catch (e) { log.error(`El parte falló: ${e.message}`); }
     }
     if (unaVuelta) break;
-    if (parando && !estado.tarea) break;
+    if (parando && (!estado.tarea || estado.esperandoCuota)) break;
     await dormir(espera);
   }
 
