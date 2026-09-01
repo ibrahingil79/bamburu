@@ -1838,7 +1838,7 @@ de una vez, cuando toque.~~
 > ↪️ **Convertida a formato de orquestador el 31 ago 2026** — id `portal-formato-dinero`,
 > en §«TAREAS EN FORMATO DEL ORQUESTADOR». Esta prosa se conserva tal cual.
 >
-> ✅ **CERRADO EL 1 SEP 2026** — commit `PENDIENTE-HASH`. Las **siete** escrituras a mano de
+> ✅ **CERRADO EL 1 SEP 2026** — commit `bfea8a8`. Las **siete** escrituras a mano de
 > `modules/portal/index.js` pasan por `fmtEur`, el formateador único: la tabla de facturas, la
 > píldora de pendiente, las tres tarjetas de «Tu histórico», la tabla «Por año» y el subtítulo
 > «Pendiente total». Medido sobre el HTML servido con los datos reales del cliente `id=1`:
@@ -8262,7 +8262,7 @@ antes de G1, así que **arreglar solo el bloque nuevo dejaría dos formatos dist
 pantalla**, que es peor que el defecto actual. Se arregla **el portal entero de una vez**, no por
 trozos.
 
-> **Construida el 2026-09-01.** Commit: `PENDIENTE-HASH`
+> **Construida el 2026-09-01.** Commit: `bfea8a8`
 > Análisis: `docs/architecture/task-portal-formato-dinero-analysis.md`
 > Informe: `docs/architecture/task-portal-formato-dinero-informe.md`
 > Las **7** escrituras a mano pasan por `fmtEur` · `grep -c toFixed modules/portal/index.js` = **0**
