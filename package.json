@@ -7,7 +7,7 @@
     "start": "node index.js",
     "orq": "node orchestrator/orq.js",
     "orq:estado": "node orchestrator/orq.js estado",
-    "orq:pruebas": "node --test orchestrator/pruebas/*.test.js",
+    "orq:pruebas": "node --test --test-timeout=180000 orchestrator/pruebas/*.test.js",
     "dev": "node --watch index.js",
     "reset-admin": "node scripts/reset-admin.js"
   },

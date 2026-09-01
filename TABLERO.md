@@ -8382,18 +8382,18 @@ destruir datos*. Aquí son ficheros de código sin montar, no datos de ningún n
 > (cerradas con su commit), 4 no convertibles (les falta un criterio que solo da Ibrahin) y 3 no
 > verificables sin ejecutar.
 
-## SIGUIENTE TAREA — Cifrar las copias de seguridad
+## TAREA — Cifrar las copias de seguridad · CÓDIGO HECHO, OPERACIÓN PENDIENTE DE IBRAHIN
 
 - **id:** cifrado-copias-seguridad
-- **estado:** pendiente
+- **estado:** ⚠️ **código HECHO el 1 sep 2026** · **operación PENDIENTE** (cuatro pasos de terminal)
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
 
 Hoy las copias van **en claro en dos Drive personales**, con **203 clientes y 922 facturas dentro**.
-Cierra a la vez los **vectores 4 y 7** de la auditoría de seguridad
+~~Cierra a la vez los **vectores 4 y 7**~~ de la auditoría de seguridad
 (`docs/seguridad/vectores-de-ataque.md`).
 
-**Es configuración (`rclone crypt`), no programación.** Eso la hace la más barata de todas las de
-esta lista en relación con lo que protege, y por eso va primera.
+~~**Es configuración (`rclone crypt`), no programación.** Eso la hace la más barata de todas las de
+esta lista en relación con lo que protege, y por eso va primera.~~
 
 **Verificado contra el árbol el 1 sep 2026:** `scripts/bamburu-backup.sh` no contiene ni `crypt`, ni
 `encrypt`, ni `gpg`, ni `age`. No hay cifrado de ningún tipo.
@@ -8404,6 +8404,82 @@ esta lista en relación con lo que protege, y por eso va primera.
 `BACKUP_REMOTE`/`LABEL`/`SUFFIX`/`HC_URL`. **No se duplica el script.** Las dos verifican MD5 y hacen
 prueba de restore real: el cifrado tiene que dejar esa verificación en pie, porque si se cifra y
 deja de comprobarse que la copia abre, se cambia un riesgo por otro.
+
+### ⚙️ ENTREGA DEL 1 SEP 2026 — qué se hizo, y qué NO
+
+> **Las dos frases tachadas de arriba se corrigieron al construirlo, y las dos importan:**
+>
+> 1. **NO cierra «el 4 y el 7 a la vez».** Cierra el **vector 4 entero** y **solo la mitad del 7**:
+>    cifrar impide *editar* una copia de forma coherente sin la clave, pero **no** impide *borrarla o
+>    sustituirla por basura*. Esa mitad la cierra `manifiesto-huellas-backups`, que sigue pendiente.
+> 2. **NO era «configuración, no programación».** Cifrar sin tocar el código habría **apagado la
+>    verificación de huellas y dejado los correos en verde**: un remote `crypt` no expone MD5
+>    (`hash unsupported`, stdout vacío), la función que lo pedía se tragaba el error con `2>/dev/null`
+>    y caía en una rama blanda que escribía un aviso y **devolvía 0**. Es *«un censo que dice CERO y
+>    no es cierto»*. Hubo que reconstruir la verificación entera.
+
+**Qué se decidió.** `rclone crypt` sobre los dos destinos, **con los nombres de fichero y de carpeta
+cifrados también** — el listado de Drive publicaba `peluqueria-gil-…`, `helados-ibrahin-…`,
+`inversiones-disan-…`, o sea cuántos negocios hay y cómo se llaman, sin abrir un solo fichero.
+Descartados: `age`/GPG asimétrico (rompe la prueba de restore real, que el TABLERO manda conservar),
+cifrar el artefacto a mano con `gpg -c` (deja los nombres en claro), y cambiar de proveedor
+(decisión de Ibrahin ya tomada, §S6). **La contraseña vive en `~ubuntu/.config/rclone/rclone.conf` y
+NO en `/etc/bamburu.env`**, porque ese fichero entra entero en el `process.env` del proceso web
+expuesto a Internet; así el botón «Lanzar copia ahora» del superadmin sigue funcionando sin tocar
+`modules/superadmin/backups.js` y no se añade ninguna variable de entorno nueva a ninguna unit.
+**Una sola contraseña para los dos destinos**, más una copia **fuera del servidor**: el riesgo
+dominante no es que la clave se filtre, es perderla.
+
+**Qué se tocó** (4 ficheros de código/config + 4 de documentación, ni uno del producto — ni
+`modules/`, ni `core/`, ni una base, ni una migración, ni una pantalla):
+`scripts/bamburu-backup.sh` (destino cifrado por defecto · guardián `type = crypt` que **aborta** ·
+`verify_uploaded()` reconstruida con `cryptcheck` y **sin rama blanda** · `verify_restored()` nueva) ·
+`deploy/systemd/bamburu-backup-secondary.service` · `CLAUDE.md` · `deploy/systemd/README.md` ·
+`docs/seguridad/vectores-de-ataque.md` · este fichero.
+
+**Cómo se verificó** — pasada completa del script real contra un remote `crypt` de usar y tirar
+(backend local, sin red, sin tocar Drive ni el `.conf` de producción; borrado al terminar):
+
+| Qué se probó | Resultado |
+|---|---|
+| Pasada completa a destino cifrado | **exit 0**, los **11 artefactos** «subido, verificado y restore OK» |
+| Nombres en el destino crudo | ni un `.db`, ni un `.tar.gz`, ni un nombre de negocio — solo base32 |
+| Guardián con `BACKUP_REMOTE=gdrive:Bamburu-backup/daily` (el destino en claro de hoy, con el `.conf` de producción) | **exit 1**, «el destino no es un remote cifrado (crypt). Copia ABORTADA», **cero artefactos subidos** |
+| `grep -n "hashsum MD5\|se valida solo por tamaño"` | **no devuelve nada** |
+| Un byte alterado en el **objeto cifrado del destino** | `cryptcheck` lo caza → **exit 1** |
+| Un byte alterado en el fichero **ya descargado** | `verify_restored` lo caza → **exit 1** |
+| El fichero descargado sustituido por **otra base real y válida** | `PRAGMA integrity_check` decía **`ok`**; solo el MD5 lo cazó → **exit 1**. Es exactamente el hueco que `verify_restored` viene a tapar, y antes de este cambio ese cambiazo **habría pasado en verde** |
+
+**⚠️ LO QUE FALTA, Y LO TIENE QUE HACER IBRAHIN.** Son pasos de terminal que el orquestador **no
+puede** ejecutar: `~/.config/rclone` está montado en **solo lectura** por el namespace de
+`orquestador.service` (`ProtectHome=read-only`, `ReadWritePaths=` solo el repo y `~/.claude`) y
+`NoNewPrivileges=yes` cierra `sudo`. Comprobado con y sin el aislamiento de la herramienta. No es un
+descuido del plano: es que un agente que construye solo está deliberadamente apartado de los secretos
+que viven fuera del repo — y `rclone.conf` guarda los tokens de OAuth de las dos cuentas de Drive,
+que son justo el activo que esta tarea protege.
+
+1. **Crear los dos remotes `crypt`** (`gdrive_cif`, `gdrive_gili_cif`).
+2. **Custodiar la contraseña fuera del servidor.** Es una parada de verdad: las copias existen para
+   el día en que el servidor no esté; si la única copia de la clave vive en el servidor, ese día las
+   copias son ruido.
+3. **Instalar la unit de la secundaria** (`sudo cp deploy/systemd/bamburu-backup-secondary.service
+   /etc/systemd/system/ && sudo systemctl daemon-reload`) y lanzar la primera copia real de cada
+   cuenta a mano.
+4. **Migrar el histórico** (250 objetos, 416 MiB) y retirar el texto claro: copiar → `cryptcheck` 0
+   diferencias → simulacro → borrar. **Si `cryptcheck` no da 0, no se borra y se pregunta.** No es
+   opcional dejarlo caducar: la retención **salta los nombres indescifrables** con código 0, así que
+   el histórico en claro se quedaría ahí **para siempre**.
+
+Los cuatro pasos, con sus comandos y sus condiciones de paso, están en `deploy/systemd/README.md`
+§«Cifrado de las copias».
+
+> **🔴 CONSECUENCIA INMEDIATA, DICHA SIN ADORNARLA.** Las units ejecutan el script **directamente del
+> árbol de trabajo**, así que guardar el fichero ya es desplegarlo. **Hasta que exista el paso 1, las
+> copias de las 03:33 y las 03:35 abortan y mandan email de fallo.** No se pierde nada —los 14 días
+> de histórico siguen en Drive y no se ha borrado un solo objeto—, pero **no se genera copia nueva**.
+> Es el guardián haciendo su trabajo, y el email dice qué hacer. Se deja así a propósito: la
+> alternativa era un `BACKUP_REMOTE` en claro que sigue subiendo 203 clientes sin cifrar mientras la
+> documentación dice lo contrario, y eso es justo el fallo silencioso que esta tarea venía a matar.
 
 ## TAREA — Anclar la cadena de VERI*FACTU fuera del servidor
 
@@ -9055,7 +9131,7 @@ que aún no se pueden adjuntar no sirve de nada.
 
 ## Seguridad y datos
 
-- [ ] **Cifrar las copias de seguridad.** Hoy en claro en dos Drive personales, con 203 clientes y 922 facturas dentro. Cierra a la vez los vectores 4 y 7 de la auditoría de seguridad. Es configuración (`rclone crypt`), no programación.
+- [~] **Cifrar las copias de seguridad.** ~~Cierra a la vez los vectores 4 y 7~~ ~~Es configuración (`rclone crypt`), no programación.~~ **⚙️ CÓDIGO HECHO EL 1 SEP 2026 · OPERACIÓN PENDIENTE DE IBRAHIN.** El script exige destino `crypt` y **aborta** si no lo es; la verificación de huellas se reconstruyó con `cryptcheck` + MD5 del fichero restaurado, sin rama blanda. **Las dos frases tachadas eran falsas:** cierra el vector 4 **entero** y **solo la mitad del 7** (falta `manifiesto-huellas-backups`), y **no era configuración**: cifrar sin tocar el código habría apagado la verificación de MD5 dejándola en verde. Faltan 4 pasos de terminal que el orquestador no puede dar (`~/.config/rclone` en solo lectura, sin `sudo`): crear los dos remotes `crypt`, custodiar la contraseña fuera del servidor, instalar la unit de la secundaria + primera copia real, y migrar el histórico. Ficha completa arriba, comandos en `deploy/systemd/README.md` §«Cifrado de las copias».
 - [ ] **Manifiesto de huellas del histórico de backups.** Hoy solo se verifica la copia del día: una copia de hace cinco días se puede editar y nadie vuelve a mirarla. SHA-256 por copia, guardado aparte, comprobado contra las 14 en cada pasada.
 - [ ] **La retención del backup borra aunque la subida haya fallado PARCIALMENTE** (`scripts/bamburu-backup.sh:164`). **⚙️ MATIZ MEDIDO EL 1 SEP 2026, porque la entrada estaba mal escrita:** cuatro líneas ANTES de la retención ya hay un guardián —`[ "$uploaded" -gt 0 ] || fail_exit`— que existe **desde el 19 jun 2026** (`3076f68`). O sea: si NO se subió nada, el script sale y no borra. **El hueco real, que sí es real, es el fallo PARCIAL:** si se subió un fichero y falló otro, `uploaded` es mayor que cero y la retención se ejecuta igual. Condicionar el borrado al éxito **de todos**, no de al menos uno.
 - [ ] **Cifrado en reposo de las bases de negocio.**
@@ -9137,6 +9213,107 @@ que aún no se pueden adjuntar no sirve de nada.
 - **No perseguir amplitud** (multi-moneda, nóminas, fabricación): es donde se pierde contra SAP.
 
 ## Decisiones tomadas el 1 sep 2026
+
+- **LAS TRES AVERÍAS DEL PRIMER USO REAL, Y POR QUÉ NINGUNA SE VIO VENIR (encargo del 1 sep 2026).**
+  `orchestrator/barrido.js` · `orchestrator/cuota/*` · `orchestrator/nucleo/maquina.js` ·
+  `orchestrator/bucle.js` · `orchestrator/pruebas/frontera.test.js` (fichero nuevo) ·
+  `deploy/systemd/orquestador.service`.
+
+  Las tres salieron del trabajo de esa misma mañana, **las tres pasaron sus pruebas y las tres
+  fallaron en el primer uso real**. Eso último no es un comentario: es lo que había que arreglar.
+
+  **AVERÍA 1 — el barrido de los ratos muertos no arrancaba.** A las 07:39:47, con el orquestador
+  parado por cuota, contestó *«no se pudo leer ningún resultado (código 64)»* seguido de la ayuda de
+  `run-gates.mjs`. **Causa:** `barrido.js` lanzaba `spawn(node, [guion])` **sin un solo argumento**, y
+  `run-gates.mjs` exige al menos uno — sin ellos imprime su ayuda y sale **64 (`EX_USAGE`)**. Nunca
+  llegó a correr: tardó 43 milisegundos en morir. **Arreglo:** la invocación (guion + argumentos) vive
+  ahora en `orquestador.config.json → barrido`, a la vista, con `--all`; y **el 64 tiene diagnóstico
+  propio** — «LO HE INVOCADO MAL YO», que es lo que significa, en vez de señalar al barrido.
+
+  **AVERÍA 2 — la cuota se leía bien y se miraba tarde.** A las 08:05 la pantalla de uso marcaba 0 %
+  usado y el orquestador seguía diciendo «queda 12 %», con 43 tareas esperando. **Causa: NO había
+  inversión de usado/restante** —los cinco sitios que usan el porcentaje hacen `100 - usado` y están
+  bien—. Lo que había era esto: a las 07:39 **anunció** *«La ventana se reinicia: Sep 1, 8am (UTC)»* y
+  acto seguido **se durmió 15 minutos planos**, porque `reinicioSesion` era una cadena que **nadie en
+  todo el árbol convertía en una hora**. La ventana se reinició a las 08:00 y él volvió a mirar a las
+  08:09:59: **diez minutos con el depósito lleno**. Del registro, literal: `07:54:55 ESPERAR_CUOTA —
+  queda 12%` → `08:09:59 ▶ Vuelve a haber cuota tras 30 min`. La noche anterior, lo mismo: reinicio
+  anunciado a las 21:49, detectado a las 21:54.
+  **Y sí mezclaba las dos ventanas, en un sitio:** `decidir()` devolvía **siempre** la hora de la
+  ventana de sesión, aunque la que estuviera frenando fuese la **semanal**. Prometer un reinicio a las
+  8 de la mañana cuando el que manda es el del jueves es mentir con precisión.
+  **Arreglo:** `momentoDeReinicio()` convierte «Sep 1, 8am (UTC)» en un instante (con el salto de
+  Nochevieja resuelto); se duerme **hasta el reinicio de la ventana que corta**, nunca más que el
+  sondeo de siempre y **nunca menos si la hora ya pasó** —preguntar `/usage` también gasta cuota—; y
+  `marcarSinCuota()` **conserva** la hora de reinicio en vez de borrarla, que era justo perderla en el
+  momento en que más falta hace.
+  **Tercera pata, la que hizo imposible el diagnóstico: no había forma de preguntarle qué número
+  cree tener.** Solo salía en líneas sueltas del registro y en el parte de cada tres horas; para verlo
+  hubo que matar el daemon. Ahora el vigilante **anota cada lectura en `.orquestador/cuota.json`** y
+  `orq estado` la enseña con su antigüedad, para contrastarla con `/usage` de un vistazo.
+  **Y la de la madrugada — `pantalla-403-ventanita` «no medible: la ventana se reinició a mitad»— es
+  la misma familia:** una medición que cruza un reinicio sin saber cuándo llega no se puede sanear.
+
+  **AVERÍA 3 — la parada limpia se colgaba, y el arreglo de esa mañana cubrió el caso que no era.**
+  Un `systemctl restart` no volvió nunca; hubo que matarlo con SIGKILL. **Había DOS fallos, no uno:**
+  1. **No paraba tras el PASO: paraba tras la TAREA.** La condición era
+     `while (!parando || estado.tarea)`, así que un SIGTERM con tarea entre manos seguía encadenando
+     análisis → construcción → revisión → cierre hasta terminarla. **«Termina el paso en curso» era
+     literalmente falso**: eran hasta tres llamadas más de 30 minutos cada una.
+  2. **No tenía plazo.** `pararBien()` levantaba una bandera y despertaba al `dormir()`, pero la
+     llamada al modelo en vuelo no se enteraba. `TimeoutStopSec=2100` (35 min).
+  A las 08:10:36 el SIGTERM llegó con el arquitecto llevando 37 s de análisis, y `esperandoCuota`
+  valía **`false`** — mientras que el arreglo de la mañana (`7d67409`) solo cubría
+  `parando && esperandoCuota`. **Un caso particular por avería vista deja viva la de debajo.**
+  **Arreglo:** una sola regla arriba del bucle (`if (parando || emergencia) break`) que sustituye a
+  los tres casos particulares; **plazo de cortesía** (`ciclo.plazoParadaMs`, 20 s) tras el cual el
+  daemon corta él mismo lo que tenga en vuelo; **un segundo SIGTERM corta sin plazo**; y
+  `TimeoutStopSec` **baja de 2100 a 120 s** — ya no es el mecanismo de parada, es la red por si el
+  daemon se queda tonto, y así uno colgado se ve en dos minutos y no en treinta y cinco.
+  **Lo que cuesta, dicho claro:** cortar una llamada a mitad tira sus tokens. Se paga a propósito: la
+  tarea queda en su paso, en el journal, y se retoma ahí.
+
+  **AVERÍA 4, que no estaba en el encargo y la destapó la prueba nueva de la parada:** preguntar
+  `/usage` **es** una llamada al modelo, con su propio plazo de 3 minutos, y **nadie podía cortarla**.
+  Un SIGTERM mientras el daemon consultaba la cuota colgaba hasta 3 min — el mismo agujero de la
+  avería 3, por la otra puerta. El vigilante tiene ahora su `cancelarTodo()`.
+
+  ---
+
+  **POR QUÉ NINGUNA SE VIO VENIR. Es lo mismo tres veces, y tiene nombre.**
+
+  > **Cada prueba sustituyó por un doble instantáneo la frontera que estaba rota, y el doble estaba
+  > de acuerdo con la suposición del código.**
+
+  | | Lo que el código suponía | El doble de la prueba | Lo que pasa de verdad |
+  |---|---|---|---|
+  | 1 | `run-gates` corre sin argumentos | un `run-gates.mjs` **falso** que ignora `argv` | exige argumentos y sale 64 |
+  | 2 | mirar cada 15 min llega a tiempo | se cambiaba el número del vigilante falso y se llamaba a `unPaso()` **en el acto** | el tiempo pasa y la ventana se reinicia sola |
+  | 3 | un paso termina pronto | `binario: 'no-existe-este-binario'` → el paso muere en 0 ms | un paso dura hasta 30 min |
+
+  Ocho pruebas del barrido, y **ninguna ejecutaba `scripts/run-gates.mjs`**. La prueba de la parada
+  afirmaba `esperandoCuota === true`: probaba el camino que **ya se había arreglado** esa mañana, no
+  el que rompió. **142 de 142 en verde sobre código roto en tres sitios.**
+
+  Y debajo, un segundo suelo: **el tiempo no era sujeto de prueba en ninguna parte.** Ninguna movía un
+  reloj, así que «llega 15 minutos tarde» y «se cuelga 35 minutos» eran, para esa suite,
+  literalmente inexpresables.
+
+  **LAS TRES REGLAS QUE QUEDAN ESCRITAS** (cabecera de `orchestrator/pruebas/frontera.test.js`):
+  1. **La frontera se toca.** Si lo que puede romperse es el contrato con un programa de fuera, la
+     prueba invoca **ese** programa, no un remedo escrito por quien programó el contrato.
+  2. **El reloj se mueve.** Una avería de «llega tarde» solo se demuestra moviendo las agujas. Por eso
+     `decidir()` y `Ciclo` reciben el reloj por la puerta en vez de llamar a `Date.now()` por dentro.
+  3. **El doble se parece a lo que suple en lo que importa.** Un `claude` falso que muere al instante
+     no sirve para probar una parada: lo que hay que probar es la parada **con algo en vuelo**.
+
+  **Y una cuarta, que salió de tropezar con ella escribiendo la prueba 1:** una prueba nueva **no vale
+  hasta verla roja sobre el código averiado**. La primera versión de la prueba del barrido le añadía
+  `--lista` para abaratarla, y `--lista` es por sí solo un argumento válido: con `argumentos: []` —la
+  avería exacta— **daba verde**. Se arregló contando cuántas comprobaciones selecciona (`--lista` a
+  secas lista **0 gates**), y **las tres averías se repusieron una a una para ver las pruebas
+  ponerse rojas**. La de la cuota reprodujo el número del registro al minuto: *«arranca 10 min después
+  del reinicio»*.
 
 - **EL PANEL DE NOTION, PUESTO AL DÍA Y VUELTO A BAJAR DEL TOPE (bloque 5).** Entrada nueva del
   1 sep 2026 arriba del todo de «DÓNDE LO DEJÉ / DÓNDE SIGO», en español llano, con los ocho puntos

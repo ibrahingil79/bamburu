@@ -9,8 +9,9 @@
 #        sudo journalctl -u orquestador -f
 #        node orchestrator/orq.js estado
 #
-# PARAR BIEN (termina el paso en curso y no coge otra tarea):
+# PARAR BIEN (termina el paso en curso si le da tiempo, y no empieza otro):
 #        sudo systemctl stop orquestador        ← manda SIGTERM
+#        Devuelve el control en menos de medio minuto. Un SEGUNDO SIGTERM corta ya, sin plazo.
 # PARAR DE GOLPE (puede dejar algo a medias):
 #        node orchestrator/orq.js parar-ya      ← manda SIGINT
 
@@ -39,10 +40,19 @@ Environment=PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin
 # Sin ese fichero el ciclo funciona igual: los partes se guardan y se mandan al configurarlo.
 EnvironmentFile=-/etc/orquestador.env
 
-# Parada buena: SIGTERM y tiempo de sobra para que termine el paso en curso.
-# 35 min > los 30 del timeout por llamada, para que nunca lo corte a mitad.
+# ── LA PARADA, Y POR QUÉ ESTE NÚMERO Y NO 2100 (1 sep 2026, avería 3) ────────
+# Aquí ponía 2100 (35 min), elegido para superar los 30 del timeout por llamada «para que nunca
+# lo corte a mitad». La consecuencia real: un `systemctl restart` con el arquitecto trabajando se
+# quedó COLGADO y hubo que matarlo con SIGKILL — que es exactamente lo que estos 35 minutos
+# pretendían evitar, y encima sin plazo ni aviso.
+#
+# Ahora el que corta es el daemon, no systemd: `ciclo.plazoParadaMs` (20 s) le da al paso en
+# curso una cortesía corta y luego lo corta él mismo, dejando la tarea en su paso, en el journal,
+# para retomarla. Este tope queda MUY por encima de esos 20 s a propósito: no es el mecanismo de
+# parada, es la red por si el daemon se queda tonto. Que sean 2 min y no 35 significa que un
+# daemon colgado se ve en dos minutos.
 KillSignal=SIGTERM
-TimeoutStopSec=2100
+TimeoutStopSec=120
 KillMode=mixed
 
 # Que no se muera: si se cae, vuelve.

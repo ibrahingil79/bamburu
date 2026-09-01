@@ -5,6 +5,7 @@
 // intenta mandar, y si no sale se guarda para el próximo intento. Nunca se pierde.
 import { leerLineas, escribirAtomico } from '../nucleo/almacen.js';
 import { enviar, configurado, queFalta } from './telegram.js';
+import { alcanzaParaCiclo } from '../nucleo/maquina.js';
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -86,7 +87,16 @@ export function redactar({ estado, cuota, historialReciente, tareaEnTablero, pen
   if (estado.esperandoCuota) {
     t(`• Parado esperando cuota, ${desdeHace(estado.esperaDesde, ahora)}.`);
     if (estado.tarea) t(`• La tarea «${esc(estado.tarea.titulo)}» queda a medio hacer, en: ${NOMBRE_PASO[estado.paso] || estado.paso}.`);
-    if (cuota?.reinicioSesion) t(`• Calculo volver cuando se reinicie: ${esc(cuota.reinicioSesion)}.`);
+    // La hora que se promete es la de LA VENTANA QUE CORTA. Si el que frena es el límite
+    // semanal, anunciar el reinicio de la sesión es prometer una hora que no desbloquea nada
+    // (1 sep 2026, avería 2).
+    // El parte es lo que avisa de que algo va mal: no puede reventar él. Sin sección de
+    // cuota en la config no se adivina cuál corta, se dice la de sesión y se sigue.
+    const corta = config?.cuota ? alcanzaParaCiclo(cuota, config) : { ventana: null };
+    const cual = corta.ventana === 'semanal'
+      ? { hora: cuota?.reinicioSemana, nombre: 'la ventana semanal' }
+      : { hora: cuota?.reinicioSesion, nombre: 'la ventana de sesión' };
+    if (cual.hora) t(`• Calculo volver cuando se reinicie ${cual.nombre}: ${esc(cual.hora)}.`);
   } else if (estado.tarea) {
     t(`• <b>${esc(estado.tarea.titulo)}</b>`);
     t(`• Va por: ${NOMBRE_PASO[estado.paso] || estado.paso}, ${desdeHace(estado.pasoDesde, ahora)}.`);

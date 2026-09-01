@@ -10,6 +10,7 @@
     "estado": ".orquestador/estado.json",
     "journal": ".orquestador/journal.ndjson",
     "historial": ".orquestador/historial.ndjson",
+    "cuota": ".orquestador/cuota.json",
     "partesPendientes": ".orquestador/partes-pendientes.ndjson",
     "ordenes": ".orquestador/ordenes.ndjson",
     "registroOrdenes": ".orquestador/ordenes-registro.ndjson",
@@ -60,14 +61,16 @@
     "minimoSemanalPct": 10,
     "cacheMs": 300000,
     "timeoutConsultaMs": 180000,
-    "esperaSinCuotaMs": 900000
+    "esperaSinCuotaMs": 900000,
+    "margenTrasReinicioMs": 60000
   },
   "ciclo": {
     "maxIntentosRevision": 3,
     "maxReplanteos": 1,
     "maxFallosTecnicosPorPaso": 3,
     "intervaloVueltaMs": 60000,
-    "esperaTrasFalloTecnicoMs": 30000
+    "esperaTrasFalloTecnicoMs": 30000,
+    "plazoParadaMs": 20000
   },
   "subida": {
     "activa": true,
@@ -90,5 +93,12 @@
       "confirmacionMs": 120000,
       "unidad": "orquestador"
     }
+  },
+  "barrido": {
+    "$porque": "El 1 sep 2026 el barrido llevaba los argumentos DENTRO de barrido.js: ninguno. run-gates.mjs exige al menos uno y sale 64 con la ayuda. Aquí se ven y se pueden cambiar.",
+    "guion": "scripts/run-gates.mjs",
+    "argumentos": [
+      "--all"
+    ]
   }
 }

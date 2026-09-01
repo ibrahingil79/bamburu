@@ -5,8 +5,29 @@
 // acaba en el registro y en la vuelta siguiente.
 //
 // Dos formas de parar, y son distintas a propósito:
-//   SIGTERM → parada BUENA: termina el paso en curso y no coge la siguiente tarea.
+//   SIGTERM → parada BUENA: termina EL PASO en curso si le da tiempo, y no empieza otro.
 //   SIGINT  → parada de EMERGENCIA: corta la llamada en curso. Puede dejar algo a medias.
+//
+// ⚙️ QUÉ SIGNIFICA «PARADA BUENA», DESPUÉS DEL 1 SEP 2026 (avería 3). Ese día un
+// `systemctl restart` se quedó colgado y hubo que matarlo con SIGKILL. Había DOS fallos
+// debajo, no uno, y el arreglo de esa misma mañana no tocó ninguno de los dos:
+//
+//   1. NO PARABA TRAS EL PASO: paraba tras la TAREA. La condición del bucle era
+//      `while (!parando || estado.tarea)`, así que un SIGTERM con una tarea entre manos
+//      seguía dando vueltas —análisis, construcción, revisión, cierre— hasta terminarla.
+//      Tres llamadas más al modelo, de hasta 30 min cada una. «Termina el paso en curso»
+//      era, literalmente, falso.
+//   2. NO TENÍA PLAZO. `pararBien()` levantaba una bandera y despertaba al `dormir()`, pero
+//      la llamada al modelo en vuelo no se enteraba: seguía hasta su timeout de 30 min.
+//      systemd esperaba sus 35 (`TimeoutStopSec=2100`) antes de matar.
+//
+// Ahora: se para tras UN paso, y el paso tiene PLAZO (`ciclo.plazoParadaMs`). Si termina
+// dentro del plazo no se pierde nada; si no, se corta y la tarea se retoma en su paso, que
+// está en el journal. Un segundo SIGTERM corta sin esperar el plazo.
+//
+// LO QUE CUESTA, dicho claro: cortar una llamada a mitad tira los tokens de esa llamada. Se
+// paga a propósito. Una parada que puede durar media hora no es una parada, y el 1 sep costó
+// un SIGKILL, que sí deja cosas a medias de verdad.
 import fs from 'node:fs';
 import path from 'node:path';
 import { cargarConfig } from './nucleo/config.js';
@@ -54,29 +75,62 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
     log.info(`Retomo «${estado.tarea.titulo}» en el paso ${estado.paso} (intento ${estado.intento}).`);
   }
 
-  const vigilante = new Vigilante({ config: cfg });
+  const vigilante = new Vigilante({ config: cfg, ruta: cfg.rutasAbs.cuota });
   const ciclo = new Ciclo({ config: cfg, almacen, vigilante, logger: log });
 
   // ── Parada ────────────────────────────────────────────────────────────────
   let parando = false;
   let emergencia = false;
+  let cortado = false;
+  let plazoParada = null;
   let despertar = null;
+  // Lo único en vuelo que no lleva el ciclo en sus `cancelables`: el barrido de los ratos
+  // muertos, que dura 20-30 min. Sin esta manija, un SIGTERM durante un barrido colgaba
+  // exactamente igual que uno durante una llamada al modelo.
+  let cortarBarrido = null;
   const dormir = (ms) => new Promise((res) => {
     if (ms <= 0) return res();
     const r = setTimeout(() => { despertar = null; res(); }, ms);
     despertar = () => { clearTimeout(r); despertar = null; res(); };
   });
 
-  const pararBien = () => {
-    if (parando) return;
-    parando = true;
-    log.aviso('SIGTERM: termino el paso en curso y no cojo otra tarea.');
+  /**
+   * Corta cuanto esté en vuelo. Es seguro: el paso está en el journal antes de empezar,
+   * así que al arrancar de nuevo se retoma ahí. Lo que se pierde son los tokens de la llamada
+   * a medias, y eso se dice en el registro en vez de disimularlo.
+   */
+  const cortarLoQueHaya = (porque) => {
+    if (cortado) return;
+    cortado = true;
+    log.aviso(`⛔ ${porque}: corto lo que tengo en vuelo.`);
+    if (estado.tarea) log.aviso(`   «${estado.tarea.titulo}» queda en el paso ${estado.paso} y se retoma ahí al arrancar.`);
+    try { ciclo.cancelarTodo(); } catch (e) { log.error(`No pude cortar la llamada: ${e.message}`); }
+    // La consulta de cuota es TAMBIÉN una llamada al modelo, con su propio plazo de 3 minutos.
+    // Se cuelga igual que un análisis si nadie la corta (lo destapó la prueba de la parada).
+    try { vigilante.cancelarTodo(); } catch (e) { log.error(`No pude cortar la consulta de cuota: ${e.message}`); }
+    try { cortarBarrido?.(); } catch (e) { log.error(`No pude cortar el barrido: ${e.message}`); }
     if (despertar) despertar();
+  };
+
+  const pararBien = () => {
+    if (parando) {
+      // Segundo SIGTERM. Ya no hay cortesía: alguien está esperando delante del terminal.
+      cortarLoQueHaya('Me lo has pedido dos veces');
+      return;
+    }
+    parando = true;
+    const segs = Math.round(cfg.ciclo.plazoParadaMs / 1000);
+    log.aviso(`SIGTERM: no empiezo ningún paso más. Al de ahora le doy ${segs} s y luego lo corto.`);
+    if (despertar) despertar();
+    // EL PLAZO. Sin él, «terminar el paso en curso» puede durar los 30 min del timeout de la
+    // llamada, y `systemctl restart` se queda colgado hasta que systemd manda el SIGKILL.
+    plazoParada = setTimeout(() => cortarLoQueHaya(`Se pasó el plazo de ${segs} s`), cfg.ciclo.plazoParadaMs);
+    plazoParada.unref?.();
   };
   const pararYa = () => {
     emergencia = true; parando = true;
     log.error('SIGINT: parada de EMERGENCIA. Corto la llamada en curso; puede quedar algo a medias.');
-    ciclo.cancelarTodo();
+    cortarLoQueHaya('Parada de emergencia');
     if (despertar) despertar();
   };
   process.on('SIGTERM', pararBien);
@@ -140,26 +194,23 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
 
   // ── El bucle ──────────────────────────────────────────────────────────────
   let vueltas = 0;
-  while (!parando || estado.tarea) {
+  while (true) {
+    // NADA NUEVO SI YA SE ESTÁ PARANDO. Una sola regla, arriba del todo, y sustituye a los tres
+    // casos particulares que había aquí (sin tarea / esperando cuota / emergencia).
+    //
+    // De dónde sale (1 sep 2026). Los casos particulares tapaban el fallo de fondo: la
+    // condición del bucle era `while (!parando || estado.tarea)`, así que un SIGTERM con una
+    // tarea entre manos NO paraba — seguía dando vueltas hasta terminarla entera. El arreglo de
+    // esa mañana añadió el caso «esperando cuota», que era el único de los tres que se había
+    // visto fallar, y el que falló de verdad esa tarde fue el otro: SIGTERM con el arquitecto
+    // trabajando. Un caso particular por avería vista deja viva la de debajo.
+    //
+    // La regla vieja «no cojo otra TAREA» se queda corta a propósito: un paso ya cuesta hasta
+    // 30 min, y encadenar los cuatro de una tarea es media mañana. No se empieza otro PASO.
+    if (parando || emergencia) break;
     vueltas++;
     let espera = cfg.ciclo.intervaloVueltaMs;
     try {
-      // Con parada buena pedida y sin tarea entre manos, se acabó.
-      if (parando && !estado.tarea) break;
-      // Y TAMBIÉN se acabó si la tarea está parada esperando cuota. Aquí no se está
-      // terminando nada: se está durmiendo, a veces durante horas. La tarea queda intacta en
-      // su paso —está en el journal— y se retoma tal cual al volver.
-      //
-      // De dónde sale (1 sep 2026): con la tarea esperando a que se reiniciara la ventana,
-      // un `systemctl restart` se quedó colgado. SIGTERM no sacaba al daemon porque «tenía
-      // tarea», y systemd habría acabado matándolo a los 35 minutos con un SIGKILL. Esperar
-      // no es trabajar, y una parada buena no puede durar tres horas.
-      if (parando && estado.esperandoCuota) {
-        log.info('Paro aquí: la tarea está esperando cuota, no a medio hacer. Se retoma en su paso.');
-        break;
-      }
-      if (emergencia) break;
-
       const r = await ciclo.unPaso(estado);
       estado = r.estado;
       espera = r.espera;
@@ -189,7 +240,9 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
       try { await mandarParte(); } catch (e) { log.error(`El parte falló: ${e.message}`); }
     }
     if (unaVuelta) break;
-    if (parando && (!estado.tarea || estado.esperandoCuota)) break;
+    // Y aquí otra vez, porque el SIGTERM ha podido llegar DURANTE el paso que acaba de terminar.
+    // Éste es el que hace verdadera la frase «termina el paso en curso»: uno, no la tarea.
+    if (parando) break;
 
     // ── EL RATO MUERTO SE APROVECHA (bloque 4 del encargo del 1 sep 2026) ────────────────────
     // Si estamos parados esperando a que se reinicie la ventana, se corre UNA pasada del barrido
@@ -205,13 +258,16 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
         log.info('⏳ Parado por cuota: aprovecho para pasar el barrido de comprobaciones.');
         const r = await correrBarrido({
           cfg, log, entorno,
+          // La manija para cortarlo. Sin esto, un SIGTERM durante el barrido colgaba igual que
+          // uno durante una llamada al modelo: 20-30 min de espera con systemd delante.
+          alSalir: (cancelar) => { cortarBarrido = cancelar; },
           hayCuotaYa: async () => {
             try {
               const c = await vigilante.consultar();
               return alcanzaParaCiclo(c, cfg).alcanza;
             } catch { return false; }
           },
-        });
+        }).finally(() => { cortarBarrido = null; });
         barridosDelParte.push(r);
         const resumen = `${r.ejecutados.length} ejecutadas · ${r.rojos.length} en rojo · ${r.segs} s`;
         if (r.estado === 'completo') log.exito(`Barrido terminado: ${resumen}.`);
@@ -229,10 +285,21 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
     await dormir(espera);
   }
 
+  if (plazoParada) clearTimeout(plazoParada);
   ciclo.cancelarTodo();
+  // Los oyentes de señal se quitan al salir. Sin esto, cada `arrancar()` deja los suyos puestos
+  // para siempre: en producción no se nota porque el proceso muere con el daemon, pero en las
+  // pruebas —donde `arrancar()` se llama varias veces en el MISMO proceso— el SIGTERM de una
+  // prueba despertaba también a los daemons de las anteriores. Una prueba que puede contaminar
+  // a la siguiente no puede usarse para juzgar a ninguna de las dos.
+  process.off('SIGTERM', pararBien);
+  process.off('SIGINT', pararYa);
   try { mirón?.close(); } catch { /* ya estaba cerrado */ }
   borrarPid(cfg);
-  log.info(`Parada ${emergencia ? 'de emergencia' : 'limpia'} tras ${vueltas} vuelta(s).`);
+  // CÓMO se paró, no solo que se paró. Una parada que tuvo que cortar algo a mitad no es lo
+  // mismo que una que llegó a tiempo, y el que lea el registro mañana necesita distinguirlas.
+  const como = emergencia ? 'de emergencia' : (cortado ? 'limpia, cortando el paso en curso' : 'limpia');
+  log.info(`Parada ${como} tras ${vueltas} vuelta(s).`);
   return 0;
 }
 

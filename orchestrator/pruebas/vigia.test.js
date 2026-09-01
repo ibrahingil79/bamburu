@@ -10,9 +10,15 @@ import { estadoInicial } from '../nucleo/almacen.js';
 import { leerLineas } from '../nucleo/almacen.js';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orq-vigia-'));
+// ⚙️ ESTE REMEDO LLEVA LOS UMBRALES DE CUOTA DE VERDAD (1 sep 2026). Llevaba solo la sección
+// `vigia`, y el día que el parte necesitó saber CUÁL de las dos ventanas frena —para no prometer
+// una hora de reinicio que no desbloquea nada— reventó con «cannot read margenReservadoPct».
+// Un remedio de configuración que no se parece a la configuración solo prueba el remedio.
 const CONFIG = {
   vigia: { activo: true, intervaloParteMs: 10800000,
            telegram: { tokenEnv: 'TG_TOKEN', chatIdEnv: 'TG_CHAT', timeoutMs: 5000, maxPendientes: 50 } },
+  cuota: { minimoParaCicloPct: 15, margenReservadoPct: 10, minimoSemanalPct: 10,
+           esperaSinCuotaMs: 900000, margenTrasReinicioMs: 60000 },
   rutasAbs: { partesPendientes: path.join(dir, 'pendientes.ndjson') },
 };
 const mudo = { info() {}, aviso() {}, error() {}, exito() {} };

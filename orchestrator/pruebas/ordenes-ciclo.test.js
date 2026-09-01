@@ -250,6 +250,17 @@ test('una parada buena NO dura tres horas por estar esperando cuota', async () =
     // Se arranca con la cuota agotada, para que se quede esperando de verdad.
     // Umbral inalcanzable pero válido (79 + 20 = 99), y un binario que no existe: así se
     // queda esperando cuota de verdad y no llama a ningún modelo.
+    //
+    // ⚠️ LO QUE ESTA PRUEBA NO PRUEBA, Y CONVIENE SABERLO. `binario: 'no-existe-este-binario'`
+    // hace que toda llamada muera en 0 ms, así que cuando llega el SIGTERM NO HAY NADA EN VUELO.
+    // Esta prueba mide un daemon DORMIDO, no uno TRABAJANDO. Estaba en verde el 1 sep 2026 a
+    // las 08:10 mientras un `systemctl restart` con el arquitecto en marcha se quedaba colgado
+    // y había que matarlo con SIGKILL: el camino que se rompió era el otro, el de `esperandoCuota
+    // === false`, y aquí se afirma justamente `=== true`.
+    //
+    // La parada CON ALGO EN VUELO se prueba en `frontera.test.js`, con un `claude` falso que
+    // tarda de verdad. Ésta se queda por lo que sí cubre —que esperar no cuenta como trabajar—,
+    // que es una regla distinta y también hace falta.
     const sinCuota = configDe(raiz, {
       cuota: { minimoParaCicloPct: 79, margenReservadoPct: 20, esperaSinCuotaMs: 600000 },
       cli: { binario: 'no-existe-este-binario' },

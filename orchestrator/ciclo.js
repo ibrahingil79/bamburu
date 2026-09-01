@@ -23,14 +23,19 @@ import { sanear } from './tablero/saneador.js';
 import { confirmar, anadir } from './cierre/git.js';
 
 export class Ciclo {
-  constructor({ config, almacen, vigilante, logger, invocador = invocar }) {
+  constructor({ config, almacen, vigilante, logger, invocador = invocar, reloj = () => Date.now() }) {
     this.config = config;
     this.almacen = almacen;
     this.vigilante = vigilante;
     this.log = logger;
     this.invocador = invocador;
+    // El reloj se inyecta por lo mismo que en `maquina.js`: la avería del 1 sep 2026 fue
+    // llegar tarde, y eso no se prueba sin poder mover las agujas.
+    this.reloj = reloj;
     this.cancelables = new Set();
   }
+
+  ahora() { return this.reloj(); }
 
   /**
    * Arregla el formato del tablero y devuelve el texto ya bueno.
@@ -157,7 +162,7 @@ export class Ciclo {
     // estaríamos mirando siempre una respuesta vieja.
     const cuota = necesitaCuota ? await this.vigilante.consultar({ forzar: estado.esperandoCuota }) : null;
     const obs = this.observar(estado);
-    const accion = decidir({ estado, cuota, tareaDisponible, pendientesEnTablero, obs, config: this.config });
+    const accion = decidir({ estado, cuota, tareaDisponible, pendientesEnTablero, obs, config: this.config, ahora: this.ahora() });
 
     if (estado.esperandoCuota && accion.tipo !== ACCIONES.ESPERAR_CUOTA) {
       const rato = estado.esperaDesde ? Math.round((Date.now() - new Date(estado.esperaDesde).getTime()) / 60000) : 0;
@@ -284,10 +289,13 @@ export class Ciclo {
       case ACCIONES.ESPERAR_CUOTA: {
         if (!estado.esperandoCuota) {
           this.log.aviso(`⏸ Espero: ${accion.porque}`);
-          if (accion.reinicio) this.log.info(`La ventana se reinicia: ${accion.reinicio}`);
           if (estado.tarea) this.log.info(`La tarea queda intacta en el paso ${estado.paso}.`);
           estado = this.almacen.transicion(estado, { tipo: 'ESPERANDO_CUOTA', motivo: accion.porque });
         }
+        // CUÁNTO se va a dormir, en cada vuelta y no solo en la primera. Antes se anunciaba la
+        // hora del reinicio UNA vez, al empezar a esperar, y luego el registro callaba: quien
+        // lo miraba a mitad no tenía forma de saber si el daemon iba a despertarse a tiempo.
+        this.log.info(this.comoEspera(accion));
         return { estado, espera: accion.esperaMs };
       }
 
@@ -342,6 +350,23 @@ export class Ciclo {
     }
   }
 
+  /**
+   * Cómo se cuenta una espera de cuota en el registro. En castellano y con las dos cosas que
+   * hacen falta para juzgarla desde fuera: qué ventana manda y cuándo se vuelve a mirar.
+   */
+  comoEspera(accion) {
+    const min = Math.max(1, Math.round(accion.esperaMs / 60000));
+    const cual = accion.ventana === 'semanal' ? 'la ventana SEMANAL' : 'la ventana de sesión';
+    if (!accion.reinicio) {
+      return `Manda ${cual}. No sé a qué hora se reinicia, así que vuelvo a mirar en ${min} min.`;
+    }
+    const aTiempo = Number.isFinite(accion.reinicioMs) && accion.reinicioMs > this.ahora()
+      && accion.esperaMs < this.config.cuota.esperaSinCuotaMs;
+    return aTiempo
+      ? `Manda ${cual} y se reinicia ${accion.reinicio}: me despierto entonces, en ${min} min.`
+      : `Manda ${cual} y dice reiniciarse ${accion.reinicio}, que ya pasó o no me cuadra: vuelvo a mirar en ${min} min.`;
+  }
+
   /** Lanza un papel y avanza al paso de validación correspondiente. */
   async ejecutarPapel({ estado, accion }) {
     const cfg = this.config.ciclo;
@@ -368,13 +393,17 @@ export class Ciclo {
     escribirAtomico(path.join(this.config.rutasAbs.logs, `prompt-${tarea.id}-${accion.papel}.txt`), prompt);
 
     this.log.paso(accion.paso, `${accion.papel.toUpperCase()} — ${accion.porque}`);
+    // El cancelador se APUNTA al empezar y se BORRA al terminar. Antes solo se apuntaba, así que
+    // el conjunto crecía una entrada por llamada y `cancelarTodo()` acababa mandando SIGTERM al
+    // grupo de procesos de llamadas muertas hace horas — y un pid se reutiliza.
+    let miCancelador = null;
     const r = await this.invocador({
       prompt,
       herramientas: this.config.cli.herramientasPorPapel[accion.papel] || [],
       cwd: this.config.repo.raiz,
       config: this.config,
-      alSalir: (cancelar) => this.cancelables.add(cancelar),
-    });
+      alSalir: (cancelar) => { miCancelador = cancelar; this.cancelables.add(cancelar); },
+    }).finally(() => { if (miCancelador) this.cancelables.delete(miCancelador); });
 
     if (r.ok) {
       this.log.exito(`${accion.papel} terminó en ${Math.round(r.ms / 1000)} s.`);

@@ -69,6 +69,7 @@ function mostrarEstado(cfg) {
   L.push(estado.esperandoCuota
     ? `  Situación:   PARADO esperando cuota ${desdeHace(estado.esperaDesde)} (la tarea sigue en: ${NOMBRE_PASO[estado.paso] || estado.paso})`
     : `  Situación:   ${NOMBRE_PASO[estado.paso] || estado.paso} ${desdeHace(estado.pasoDesde)}`);
+  L.push(...loQueCreeDeLaCuota(cfg));
   L.push('');
   if (estado.tarea) {
     L.push(`  Tarea:       ${estado.tarea.titulo}`);
@@ -98,6 +99,37 @@ function mostrarEstado(cfg) {
   L.push('', `  Registro:    ${path.join(cfg.rutasAbs.logs, 'orquestador.log')}`, '');
   process.stdout.write(L.join('\n') + '\n');
 }
+
+/**
+ * QUÉ CREE EL ORQUESTADOR SOBRE LA CUOTA, con su antigüedad.
+ *
+ * ⚙️ DE DÓNDE SALE (1 sep 2026, avería 2). El daemon decía «queda 12 %» mientras la pantalla de
+ * uso de Ibrahin marcaba 0 % usado, y no había forma de verlo desde fuera: el número solo salía
+ * en líneas sueltas del registro y en el parte de cada tres horas. Para descubrir el desfase hubo
+ * que matar el daemon y arrancarlo de cero.
+ *
+ * Esto NO consulta `/usage`: enseña la ÚLTIMA LECTURA DEL DAEMON, tal cual, con cuándo la tomó.
+ * Es a propósito y es la mitad importante — una consulta nueva diría lo que hay, no lo que él
+ * cree, y el desfase entre las dos cosas era justo la avería. Para el número de verdad,
+ * `/usage` en el chat; comparar los dos es cosa de un vistazo.
+ */
+function loQueCreeDeLaCuota(cfg) {
+  let c;
+  try { c = JSON.parse(fs.readFileSync(cfg.rutasAbs.cuota, 'utf8')); }
+  catch { return ['  Cuota:       (todavía no ha anotado ninguna lectura)']; }
+
+  if (!c.fiable) return [`  Cuota:       NO LA SABE ${desdeHace(c.leidoEn)} — ${c.motivo || 'sin detalle'}`];
+
+  const L = [`  Cuota:       cree que queda ${(100 - c.sesionPct).toFixed(0)}% de sesión`
+           + `${c.semanaPct != null ? ` y ${(100 - c.semanaPct).toFixed(0)}% de la semanal` : ''}`
+           + `  ·  leído ${desdeHace(c.leidoEn)}`];
+  if (c.reinicioSesion) L.push(`               la sesión se reinicia ${c.reinicioSesion}${vencido(c.reinicioSesionMs) ? '  ⚠️ esa hora YA PASÓ' : ''}`);
+  if (c.reinicioSemana) L.push(`               la semanal se reinicia ${c.reinicioSemana}`);
+  L.push('               contrástalo con /usage en el chat: si no cuadran, el desfase es la avería');
+  return L;
+}
+
+const vencido = (ms) => Number.isFinite(ms) && ms < Date.now();
 
 /** Lo que el tablero ofrece, y si hay contradicción entre «ofrece» y «puedo coger». */
 function colaDelTablero(cfg, estado) {

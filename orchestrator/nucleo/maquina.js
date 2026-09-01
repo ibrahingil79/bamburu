@@ -1,7 +1,12 @@
 // maquina.js — Decide QUÉ TOCA AHORA. Función pura.
 //
 // No lee ficheros, no llama a nadie, no mira el reloj y no escribe nada. Se le entrega una
-// situación y devuelve una acción. Ése es todo su contrato.
+// situación —el reloj incluido, por `ahora`— y devuelve una acción. Ése es todo su contrato.
+//
+// ⚙️ EL RELOJ ENTRA POR LA PUERTA (1 sep 2026, avería 2). `ahora` se pasa desde fuera en vez de
+// llamar a `Date.now()` aquí, y no es una manía: la avería de ese día fue LLEGAR TARDE, y una
+// prueba no puede afirmar nada sobre llegar tarde si no puede mover el reloj. Con el reloj
+// dentro, «se despierta cuando se reinicia la ventana» era literalmente indemostrable.
 //
 // El motivo de que sea pura no es estético: es que TODAS las reglas difíciles del encargo
 // —tres rechazos disparan replanteamiento, un replanteo fallido aparta, sin cuota no se
@@ -59,16 +64,47 @@ export function alcanzaParaCiclo(cuota, config) {
   const libreSemana = 100 - cuota.semanaPct;
   const utilizable = libreSesion - c.margenReservadoPct;
 
+  // CUÁL DE LAS DOS VENTANAS CORTA, y se dice, porque cada una se reinicia a su hora.
+  // Hasta el 1 sep 2026 esto no se devolvía y quien esperaba anunciaba SIEMPRE la hora de la
+  // ventana de sesión, aunque la que le estuviera frenando fuese la semanal. Prometer un
+  // reinicio a las 8 de la mañana cuando el que manda es el del jueves es mentir con precisión.
   if (libreSemana < c.minimoSemanalPct) {
-    return { alcanza: false, motivo: `queda ${libreSemana.toFixed(0)}% de la ventana semanal y el mínimo es ${c.minimoSemanalPct}%` };
+    return { alcanza: false, ventana: 'semanal',
+             motivo: `queda ${libreSemana.toFixed(0)}% de la ventana semanal y el mínimo es ${c.minimoSemanalPct}%` };
   }
   if (utilizable < c.minimoParaCicloPct) {
     return {
-      alcanza: false,
+      alcanza: false, ventana: 'sesion',
       motivo: `queda ${libreSesion.toFixed(0)}% de sesión; reservando ${c.margenReservadoPct}% para el chat quedan ${utilizable.toFixed(0)}% y hacen falta ${c.minimoParaCicloPct}%`,
     };
   }
-  return { alcanza: true, motivo: `queda ${libreSesion.toFixed(0)}% de sesión (${utilizable.toFixed(0)}% utilizable)` };
+  return { alcanza: true, ventana: null, motivo: `queda ${libreSesion.toFixed(0)}% de sesión (${utilizable.toFixed(0)}% utilizable)` };
+}
+
+/**
+ * Cuánto se duerme esperando cuota: hasta que se reinicie la ventana que está cortando, y si
+ * no se sabe cuándo, el sondeo de siempre.
+ *
+ * DE DÓNDE SALE (1 sep 2026). `/usage` DICE a qué hora se reinicia. El orquestador lo escribía
+ * en el registro y se dormía igualmente sus 15 minutos planos, así que llegaba tarde hasta un
+ * cuarto de hora a cada reinicio — diez minutos medidos ese día, con 43 tareas esperando.
+ *
+ * Tres reglas, y las tres tienen motivo:
+ *   · NUNCA se duerme MÁS que el sondeo de siempre. La hora del reinicio es una promesa ajena;
+ *     si falla, el sondeo la corrige.
+ *   · Si el reinicio ya pasó y seguimos sin cuota, la promesa era falsa: se vuelve al sondeo
+ *     completo. Sin esto, un reinicio caducado dejaría al daemon preguntando cada minuto, y
+ *     preguntar `/usage` TAMBIÉN gasta cuota.
+ *   · Se le suma un margen. La ventana no se reinicia con el segundero, y la lectura tampoco es
+ *     instantánea: despertarse un pelo antes cuesta una consulta entera para nada.
+ */
+export function esperaHastaLaCuota({ reinicioMs, ahora, config }) {
+  const c = config.cuota;
+  const plano = c.esperaSinCuotaMs;
+  if (!Number.isFinite(reinicioMs) || !Number.isFinite(ahora)) return plano;
+  const falta = reinicioMs - ahora;
+  if (falta <= 0) return plano;
+  return Math.min(plano, falta + (c.margenTrasReinicioMs ?? 60000));
 }
 
 /**
@@ -80,6 +116,8 @@ export function alcanzaParaCiclo(cuota, config) {
  * @param situacion.pendientesEnTablero  todas las tareas que el tablero da por pendientes.
  *                                  Sirve para una sola cosa, y es importante: distinguir
  *                                  «no hay trabajo» de «hay trabajo y no lo veo» (avería).
+ * @param situacion.ahora           el reloj, inyectado. Sirve para UNA cosa: saber cuánto falta
+ *                                  para que se reinicie la ventana y dormir justo eso.
  * @param situacion.obs             observaciones ya calculadas por el ejecutor:
  *                                  { analisis:{existe,valido,motivos,paroArquitecto},
  *                                    codigo:{valido,motivos,hayCommits},
@@ -87,7 +125,7 @@ export function alcanzaParaCiclo(cuota, config) {
  * @param situacion.config
  * @returns { tipo, ...datos, porque }
  */
-export function decidir({ estado, cuota, tareaDisponible, pendientesEnTablero = [], obs = {}, config }) {
+export function decidir({ estado, cuota, tareaDisponible, pendientesEnTablero = [], obs = {}, config, ahora = Date.now() }) {
   // ── 0 · La subida pendiente se reintenta ANTES de coger trabajo nuevo ───────
   // Va aquí y no al final a propósito: si GitHub volvió, lo primero es dejar de
   // deber trabajo aprobado. Y no depende de la cuota: git no gasta modelo.
@@ -105,10 +143,18 @@ export function decidir({ estado, cuota, tareaDisponible, pendientesEnTablero = 
   if (gastaModelo) {
     const v = alcanzaParaCiclo(cuota, config);
     if (!v.alcanza) {
+      // La hora que se anuncia y la que se duerme son la de LA VENTANA QUE CORTA, no siempre
+      // la de sesión. Si corta la semanal, la de sesión se reiniciará esta noche sin cambiar
+      // nada, y despertarse entonces sería despertarse para volver a dormirse.
+      const semanal = v.ventana === 'semanal';
+      const reinicio = (semanal ? cuota?.reinicioSemana : cuota?.reinicioSesion) ?? null;
+      const reinicioMs = (semanal ? cuota?.reinicioSemanaMs : cuota?.reinicioSesionMs) ?? null;
       return {
         tipo: ACCIONES.ESPERAR_CUOTA,
-        esperaMs: config.cuota.esperaSinCuotaMs,
-        reinicio: cuota?.reinicioSesion ?? null,
+        esperaMs: esperaHastaLaCuota({ reinicioMs, ahora, config }),
+        ventana: v.ventana ?? null,
+        reinicio,
+        reinicioMs,
         porque: v.motivo,
         desconocida: !!v.desconocida,
       };
