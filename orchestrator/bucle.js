@@ -35,7 +35,7 @@ import { Almacen } from './nucleo/almacen.js';
 import { crearRegistro } from './nucleo/registro.js';
 import { Vigilante } from './cuota/vigilante.js';
 import { Ciclo } from './ciclo.js';
-import { redactar, redactarApartada, redactarAveria, entregar } from './vigia/parte.js';
+import { redactar, redactarApartada, redactarAveria, redactarFirma, entregar } from './vigia/parte.js';
 import { configurado, queFalta } from './vigia/telegram.js';
 import { leerTablero, buscarSiguienteTarea, tareasPendientes, esRepo, rama } from './reader.js';
 import { correrBarrido } from './barrido.js';
@@ -232,6 +232,11 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
       // mitad que ahorra interrupciones — el 1 sep 2026 dos de dos avisos al móvil eran de esta
       // clase y ninguno era una decisión de Ibrahin.
       if (r.cerradaPorPremisaFalsa) cerradasPorPremisaFalsa.push(r.cerradaPorPremisaFalsa);
+      // Una tarea que espera firma SÍ avisa al momento: está terminada y parada, y cada hora que
+      // Ibrahin no lo sepa es una hora que no entra en producción algo que ya está hecho.
+      if (r.firmaPedida) {
+        await entregar({ texto: redactarFirma(r.firmaPedida), config: cfg, entorno, logger: log });
+      }
       // Lo que contestan las órdenes que llegaron por Telegram mientras trabajaba.
       for (const aviso of r.avisos || []) {
         await entregar({ texto: aviso, config: cfg, entorno, logger: log });

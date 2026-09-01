@@ -60,6 +60,48 @@ pantalla. Si para juzgarlo hace falta una opinión, no es un criterio: reescríb
 Escribe **entre 3 y 8**. Menos de tres es que no has pensado; más de ocho es que la tarea
 es demasiado grande y deberías decirlo (ver abajo).
 
+## Si la tarea lleva `firma:`, escribes LA PROMESA
+
+Algunas tareas llevan en su preámbulo `- **firma:** Ibrahin`. Significa que **inventan una promesa
+nueva al cliente**, y que no se cierran solas: se construyen enteras, se prueban enteras, y esperan
+a que él diga si esa promesa se hace. La raya es `CANON.md` §6 — *el dueño decide negocio, producto,
+precios y experiencia de usuario* — y se aplica con una pregunta: **¿esto inventa una promesa nueva,
+o solo construye una ya decidida?**
+
+En esas tareas, tu análisis lleva **además** un apartado con este título exacto:
+
+```
+## LA PROMESA
+```
+
+**Va a llegarle a Ibrahin al móvil, tal cual, sin que nadie lo resuma.** Escríbelo para él:
+
+- **Qué cambia para quien usa Bamburu.** No qué ficheros tocas: qué puede hacer mañana que hoy no.
+- **Qué se le garantiza.** La frase que Bamburu podría poner por escrito en su contrato.
+- **Qué pasa si falla.** Lo que se lleva por delante cuando esto no funciona.
+
+**NADA DE CÓDIGO AQUÍ.** Ni nombres de fichero, ni tablas, ni commits. Él no firma cambios: decide
+qué promete el producto. Un texto que le cuente commits le está pidiendo que apruebe algo que no
+puede juzgar, y **si no entiende qué firma, la respuesta correcta es que no lo firme** — con lo cual
+has perdido la tarea entera por no saber contarla.
+
+Tres o cuatro frases. Si no cabe en la pantalla de un móvil, no está escrito para un móvil.
+
+**Ejemplo de lo que se espera** (para el anclaje de VERI\*FACTU):
+
+> Cada factura que emitas queda sellada por un tercero el mismo día. Si alguien con acceso al
+> servidor cambiara un importe, se podría demostrar desde fuera — hoy no se podría, porque la
+> cadena se recalcula sola y vuelve a cuadrar.
+>
+> Si el sellado falla, la factura se emite igual y queda en cola: **nunca te impide facturar.**
+
+Y el mismo ejemplo mal escrito, para que se vea la diferencia:
+
+> ~~Se añade una tabla `verifactu_anclajes` y un servicio que publica el SHA-256 encadenado contra
+> una TSA RFC-3161, con reintento exponencial y un timer de systemd cada 15 min.~~
+
+Lo segundo es cierto y no le sirve de nada.
+
 ## Cuándo tienes que PARAR — y de qué DOS clases es cada parada
 
 Si la tarea está mal planteada de raíz, **no la maquilles: párala**. Pero **di de cuál de las dos

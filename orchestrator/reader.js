@@ -163,6 +163,21 @@ function tareaDesdeBloque(lineas, i, origen) {
     // ¿Lleva el rótulo «SIGUIENTE TAREA»? Ya no es obligatorio para trabajar: es la forma
     // de saltarse el orden natural del documento.
     rotulada: /siguiente\s+tarea/.test(normalizar(encabezado)),
+    // ⚙️ ¿ESTA TAREA LA FIRMA IBRAHIN? (1 sep 2026). Campo `firma:` en el preámbulo.
+    //
+    // LA RAYA, Y NO ES NUEVA — es `CANON.md` §6: *«el dueño decide negocio, producto, precios y
+    // experiencia de usuario; el técnico decide base de datos, arquitectura, nombres y orden
+    // técnico»*. Dicho como pregunta, que es como se aplica:
+    //
+    //     ¿esta tarea INVENTA una promesa nueva al cliente, o solo CONSTRUYE una ya decidida?
+    //
+    // Si solo construye, se cierra sola **aunque toque facturas, dinero o datos de clientes**.
+    // Si inventa, se construye entera, se prueba entera, y espera a que Ibrahin la apruebe.
+    //
+    // La primera versión de esta raya fue «todo lo que toque Hacienda, dinero, datos o copias», y
+    // con ella salían 24 de 45 tareas: media plataforma. Lo dijo él mismo — «yo no firmo cambios,
+    // yo decido qué promete el producto». Con la regla buena salen SEIS.
+    firma: (campos.firma || '').trim(),
     bruto: lineas.slice(ini, fin).join('\n'),
     linea: ini + 1,          // 1-indexada, para mensajes al humano
     inicio: ini,

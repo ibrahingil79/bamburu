@@ -15,12 +15,16 @@ import { invocar } from './ejecucion/cli.js';
 import { componer } from './ejecucion/papeles.js';
 import { validarAnalisis, validarRevision, validarCodigo, detectarAnalisisImposible } from './validacion/validador.js';
 import { leerTablero, buscarSiguienteTarea, tareasPendientes, commitsDesde } from './reader.js';
-import { cabeza } from './cierre/git.js';
+import { cabeza, abrirRama, volverA, fundirRama, ramaDeTarea } from './cierre/git.js';
 import { escribirRegistroTarea, marcarEnTablero, desmarcarEnTablero, confirmarCierre, subirTrabajo } from './cierre/cierre.js';
 import { escribirAtomico, leerLineas } from './nucleo/almacen.js';
 import { ORDENES } from './vigia/ordenes.js';
 import { sanear } from './tablero/saneador.js';
 import { confirmar, anadir } from './cierre/git.js';
+
+// Los avisos de este fichero acaban en Telegram como HTML, igual que los de `vigia/parte.js`.
+// Un título de tarea con un `<` dentro rompería el mensaje entero, así que se escapa aquí también.
+const esc = (t) => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 export class Ciclo {
   constructor({ config, almacen, vigilante, logger, invocador = invocar, reloj = () => Date.now() }) {
@@ -105,7 +109,7 @@ export class Ciclo {
     const obs = {};
 
     if (estado.paso === PASOS.VALIDAR_ANALISIS || estado.paso === PASOS.ANALISIS) {
-      const v = validarAnalisis(rutas.analisis);
+      const v = validarAnalisis(rutas.analisis, { firma: estado.tarea?.firma || '' });
       // ⚙️ `clase`, `prueba` y `pregunta` SE COPIAN (1 sep 2026). Sin ellas, la máquina no puede
       // distinguir una premisa falsa de una decisión de Ibrahin y todo acaba en el mismo cajón.
       // Y es el MISMO fallo que el 4.1 de ese encargo, en otro punto de la misma cadena: el dato
@@ -258,9 +262,73 @@ export class Ciclo {
         this.log.exito(`Orden desde Telegram: DESAPARTAR «${o.id}». Vuelve a estar pendiente.`);
         return { estado, aviso: `↩️ «${ap.titulo || o.id}» vuelve a estar pendiente. La cogeré cuando le toque.` };
       }
+      // ── LAS TRES RESPUESTAS A UNA FIRMA (1 sep 2026) ──────────────────────
+      case ORDENES.APROBAR:
+      case ORDENES.RECHAZAR:
+      case ORDENES.HABLAR:
+        return this.responderFirma(estado, o);
+
       default:
         return { estado, aviso: null };
     }
+  }
+
+  /**
+   * Ibrahin contesta a una tarea que esperaba su firma. Tres respuestas y solo tres.
+   *
+   * NINGUNA BLOQUEA NADA: la tarea se soltó al pedir la firma, así que la máquina lleva desde
+   * entonces con la siguiente. Esto solo decide qué pasa con una rama que ya está terminada.
+   */
+  async responderFirma(estado, o) {
+    const pendientes = estado.firmasPendientes || [];
+    if (!pendientes.length) return { estado, aviso: 'No hay ninguna tarea esperando tu firma ahora mismo.' };
+
+    // Sin id, solo vale si hay UNA esperando. Con varias se pregunta: aprobar la que no era es
+    // meter en producción una promesa que no se quería.
+    let f = o.id ? pendientes.find((x) => x.id === o.id) : (pendientes.length === 1 ? pendientes[0] : null);
+    if (!f) {
+      const lista = pendientes.map((x) => `• ${x.titulo}\n  <i>${o.orden.toLowerCase()} ${x.id}</i>`).join('\n');
+      return { estado, aviso: o.id
+        ? `No tengo ninguna tarea esperando firma que se llame «${o.id}». Están esperando:\n\n${lista}`
+        : `Hay ${pendientes.length} esperando tu firma. ¿Cuál?\n\n${lista}` };
+    }
+
+    if (o.orden === ORDENES.HABLAR) {
+      this.log.info(`Ibrahin quiere hablar de «${f.id}» antes de firmarla.`);
+      estado = this.almacen.transicion(estado, { tipo: 'FIRMA_EN_DISCUSION', id: f.id });
+      return { estado, aviso: `💬 Vale, «${esc(f.titulo)}» se queda esperando y hablamos.\n\n`
+        + `Lo que se te propuso:\n<i>${esc((f.promesa || 'el arquitecto no dejó escrita la promesa').slice(0, 600))}</i>\n\n`
+        + `No bloquea nada: sigo con lo siguiente. Cuando lo tengas, dime «apruebo ${f.id}» o «rechazo ${f.id}».` };
+    }
+
+    if (o.orden === ORDENES.RECHAZAR) {
+      const motivo = (o.texto || '').replace(/\s+/g, ' ').trim() || 'sin motivo escrito';
+      this.log.aviso(`Ibrahin RECHAZA «${f.id}»: ${motivo}`);
+      // La rama NO se borra: lo construido sigue ahí para el siguiente intento. Lo que se hace es
+      // devolver la tarea a la cola con el motivo delante, que es como vuelve un rechazo del revisor.
+      const r = desmarcarEnTablero({ config: this.config, id: f.id, logger: this.log });
+      estado = this.almacen.transicion(estado, { tipo: 'FIRMA_RESUELTA', id: f.id });
+      this.almacen.registrarHistorial({ id: f.id, titulo: f.titulo, resultado: 'firma-rechazada', motivo });
+      return { estado, aviso: `↩️ «${esc(f.titulo)}» vuelve a la cola con tu motivo delante.\n\n`
+        + `<i>${esc(motivo)}</i>\n\n`
+        + `Lo construido no se tira: sigue en la rama <code>${esc(f.rama)}</code>${r.ok ? '' : ' (ojo: no pude desmarcarla del tablero)'}. `
+        + `Y NO está en producción — nunca llegó a estarlo.` };
+    }
+
+    // ── APROBAR: es lo ÚNICO que mete algo en producción ──────────────────────
+    this.log.exito(`Ibrahin APRUEBA «${f.id}». Fundo ${f.rama} en ${this.config.repo.ramaPrincipal}.`);
+    const fus = fundirRama({ cwd: this.config.repo.raiz, id: f.id, ramaDestino: this.config.repo.ramaPrincipal });
+    if (!fus.ok) {
+      this.log.error(`No pude fundir «${f.rama}»: ${fus.motivo}`);
+      return { estado, aviso: `⚠️ Dijiste que sí, pero no he podido meterla en producción:\n\n<i>${esc(fus.motivo)}</i>\n\n`
+        + `La tarea sigue esperando y NADA ha cambiado en producción. Hace falta una persona para esto.` };
+    }
+    const sub = subirTrabajo({ config: this.config, logger: this.log });
+    estado = this.almacen.transicion(estado, { tipo: 'FIRMA_RESUELTA', id: f.id });
+    this.almacen.registrarHistorial({ id: f.id, titulo: f.titulo, resultado: 'firmada-y-cerrada', rama: f.rama, subida: sub.ok });
+    if (!sub.ok && !sub.omitida) estado = this.almacen.transicion(estado, { tipo: 'SUBIDA_PENDIENTE', motivo: sub.motivo });
+    return { estado, aviso: `✅ Firmada y en producción: <b>${esc(f.titulo)}</b>.\n\n`
+      + `${sub.ok ? 'Subida a GitHub.' : 'Queda por subir a GitHub, lo reintento solo.'}` };
   }
 
   async ejecutar({ estado, accion, cuota, tareaDisponible }) {
@@ -308,6 +376,23 @@ export class Ciclo {
 
       case ACCIONES.TOMAR_TAREA: {
         this.log.exito(`Tomo «${accion.tarea.titulo}» (${accion.tarea.id}).`);
+        // ⚙️ SI LA FIRMA IBRAHIN, SE TRABAJA EN SU PROPIA RAMA (1 sep 2026). Master no se toca.
+        //
+        // No es una preferencia de git: es lo que impide repetir lo del cifrado. El programador
+        // commitea en CONSTRUCCIÓN, dos pasos antes del cierre, y master **es** el producto — los
+        // tres servicios de copia ejecutan de cero cada noche desde `/home/ubuntu/bamburu/scripts/`.
+        // Aquel día la tarea se apartó y su código se quedó en master igual: las copias de esa
+        // noche iban a abortar. Con la rama, lo que espera firma no está en producción.
+        if (accion.tarea.firma) {
+          try {
+            const r = abrirRama({ cwd: this.config.repo.raiz, id: accion.tarea.id, desde: this.config.repo.ramaPrincipal });
+            this.log.info(`Esta tarea la firma ${accion.tarea.firma}: trabajo en «${r.rama}». ${this.config.repo.ramaPrincipal} no se toca.`);
+          } catch (e) {
+            // Sin rama NO se coge la tarea: trabajarla en master sería justo lo que esto impide.
+            this.log.error(`No pude abrir la rama de «${accion.tarea.id}»: ${e.message}. No la cojo.`);
+            return { estado, espera: this.config.ciclo.intervaloVueltaMs };
+          }
+        }
         estado = this.almacen.transicion(estado, {
           tipo: 'TAREA_TOMADA', tarea: accion.tarea, cuota: cuota?.sesionPct ?? null,
         });
@@ -346,6 +431,9 @@ export class Ciclo {
 
       case ACCIONES.CERRAR:
         return this.cerrar({ estado, cuota });
+
+      case ACCIONES.PEDIR_FIRMA:
+        return this.pedirFirma({ estado, accion, cuota });
 
       case ACCIONES.REINTENTAR_SUBIDA: {
         const r = subirTrabajo({ config: this.config, logger: this.log });
@@ -466,6 +554,98 @@ export class Ciclo {
     }
     this.log.aviso(`Fallo técnico ${n} de ${cfg.maxFallosTecnicosPorPaso}: reintento el mismo paso.`);
     return { estado, espera: cfg.esperaTrasFalloTecnicoMs };
+  }
+
+  /**
+   * La tarea está TERMINADA y PROBADA, y espera a que Ibrahin diga si esa promesa se hace.
+   *
+   * ⚙️ LA REGLA QUE MANDA AQUÍ: **lo que se presenta a firmar está terminado o no está.** Nada de
+   * dejarlo a medias en producción esperando el «sí» — que es exactamente lo que pasó con el
+   * cifrado de las copias el 1 sep 2026 y estuvo a unas horas de dejar a Ibrahin sin copia en las
+   * dos cuentas. Por eso, lo último que hace este paso es **volver a la rama principal**: el árbol
+   * de trabajo ES el producto, y el trabajo sin firmar se queda en su rama.
+   *
+   * Y NO BLOQUEA: suelta la tarea. La máquina coge la siguiente en la vuelta de dentro de nada.
+   */
+  async pedirFirma({ estado, accion, cuota = null }) {
+    const tarea = estado.tarea;
+    const rutas = this.rutasDe(tarea);
+    const rama = ramaDeTarea(tarea.id);
+    this.log.exito(`✍️ «${tarea.titulo}» está terminada y espera la firma de ${accion.quien}.`);
+
+    const commits = estado.base ? commitsDesde(estado.base, this.config.repo.raiz) : [];
+    const criterios = this.criteriosDelAnalisis(rutas.analisis);
+    const promesa = this.promesaDelAnalisis(rutas.analisis);
+
+    // El registro y la marca del tablero se escriben EN LA RAMA, con lo demás. Si Ibrahin aprueba,
+    // vienen con el merge; si rechaza, se van con la rama. No queda rastro suelto en master.
+    const registro = escribirRegistroTarea({
+      config: this.config, tarea, estado, rutas, commits, criterios, consumo: cuota,
+      esperandoFirma: { quien: accion.quien, rama, promesa },
+    });
+    const ficheros = [registro, rutas.analisis, rutas.review].filter((f) => fs.existsSync(f));
+    confirmarCierre({ config: this.config, tarea, ficheros, logger: this.log });
+
+    // ── Y AQUÍ ESTÁ LA LÍNEA QUE IMPIDE EL FALLO DEL CIFRADO ──────────────────
+    let volvio = null;
+    try {
+      volvio = volverA({ cwd: this.config.repo.raiz, rama: this.config.repo.ramaPrincipal });
+      this.log.info(`Vuelvo a ${this.config.repo.ramaPrincipal}: lo de «${tarea.id}» queda en «${rama}», fuera de producción.`);
+    } catch (e) {
+      // ── LO MÁS GRAVE QUE PUEDE PASAR AQUÍ, Y SE PORTA COMO TAL ───────────────
+      // Si no se puede volver, el árbol de trabajo —que ES el producto— se queda con código que
+      // Ibrahin no ha firmado. No basta con escribirlo en un registro que nadie mira: se manda
+      // AVERÍA al momento y **se deja de coger tareas**, porque cada tarea nueva encima de una
+      // rama sin firmar empeora el enredo.
+      //
+      // Esto salió de la propia prueba de punta a punta, que reventó aquí por un motivo tonto
+      // (el repo de usar y tirar no ignoraba lo que ignora el de verdad). El motivo era tonto;
+      // la consecuencia no, y el camino existe.
+      this.log.error(`🚨 NO PUDE VOLVER A ${this.config.repo.ramaPrincipal}: ${e.message}`);
+      this.log.error(`   El árbol se queda en «${rama}» y ESO ES CÓDIGO SIN FIRMAR EN PRODUCCIÓN.`);
+      estado = this.almacen.transicion(estado, { tipo: 'PAUSADO', de: 'rama sin firmar en producción' });
+      return { estado, espera: this.config.ciclo.intervaloVueltaMs,
+        averia: { clase: 'rama-sin-firmar-en-produccion', pendientes: 0, nombres: [tarea.titulo],
+          motivo: `«${tarea.titulo}» está terminada pero NO HE PODIDO sacarla de producción: el árbol `
+            + `se ha quedado en la rama «${rama}» y ahí hay código que no has firmado. `
+            + `Me paro y no cojo más tareas hasta que alguien lo mire. El motivo de git fue: ${e.message}` } };
+    }
+
+    this.almacen.registrarHistorial({
+      id: tarea.id, titulo: tarea.titulo, resultado: 'esperando-firma', rama,
+      intentos: estado.historial.length, replanteos: estado.replanteos,
+      commits: commits.length, cuotaFin: cuota?.sesionPct ?? null, cuotaIni: estado.cuotaInicio,
+    });
+    estado = this.almacen.transicion(estado, {
+      tipo: 'FIRMA_PEDIDA', id: tarea.id, titulo: tarea.titulo, rama, promesa,
+    });
+    return { estado, espera: 0,
+             firmaPedida: { tarea, quien: accion.quien, rama, promesa, criterios, commits: commits.length,
+                            volvioAPrincipal: !!volvio } };
+  }
+
+  /**
+   * La promesa que el arquitecto escribió para Ibrahin. NO describe el código: describe qué cambia
+   * para quien usa Bamburu. Es lo único de todo el análisis que va a leer una persona en un móvil.
+   */
+  promesaDelAnalisis(ruta) {
+    // Se lee por líneas, no con una expresión regular. La primera versión usaba `\Z` para decir
+    // «hasta el final», que es de otro lenguaje: en JavaScript `\Z` es una «Z» literal, así que
+    // la promesa solo se encontraba si detrás había una Z suelta. Lo cazó la prueba de punta a
+    // punta. Por líneas se lee peor y se entiende mejor, y aquí manda entenderlo.
+    try {
+      const lineas = fs.readFileSync(ruta, 'utf8').split('\n');
+      const i = lineas.findIndex((l) => /^#{1,4}[ \t]*LA PROMESA[ \t]*$/i.test(l));
+      if (i === -1) return null;
+      const fuera = [];
+      for (const l of lineas.slice(i + 1)) {
+        // Termina en el siguiente título, o en el bloque de criterios, que suele ir detrás.
+        if (/^#{1,4}[ \t]/.test(l) || /^\s*\*\*criterios/i.test(l)) break;
+        fuera.push(l);
+      }
+      const t = fuera.join('\n').trim();
+      return t || null;
+    } catch { return null; }
   }
 
   async cerrar({ estado, cuota }) {

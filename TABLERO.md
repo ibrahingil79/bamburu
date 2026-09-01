@@ -8528,6 +8528,10 @@ ejecutar el guion al final, cuando le venga bien, y guardar la llave que le ense
 
 - **id:** anclar-verifactu-fuera
 - **estado:** pendiente
+- **firma:** Ibrahin
+  > **Por qué la firma él, y no se cierra sola:** «un tercero puede demostrar que tu factura no se ha tocado». Y el mecanismo —sello de tiempo, publicar huellas, mandarlo a Hacienda— **cambia lo que se promete**, así que elegirlo es decidir el producto.
+  > El orquestador la construye entera, la prueba entera y la deja **en su rama, fuera de
+  > producción**, hasta que Ibrahin conteste. Ver §«LAS TAREAS QUE COMPROMETEN A BAMBURU».
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
 
 **Quien tenga acceso al fichero `.db` puede reescribir importes y recalcular la cadena**, y desde
@@ -8869,6 +8873,10 @@ documento legal.
 
 - **id:** historial-cambios-visible-cliente
 - **estado:** pendiente
+- **firma:** Ibrahin
+  > **Por qué la firma él, y no se cierra sola:** hoy el rastro existe **y solo lo ve Bamburu**. Enseñárselo al cliente es promesa nueva, y es lo que permite vender a una clínica.
+  > El orquestador la construye entera, la prueba entera y la deja **en su rama, fuera de
+  > producción**, hasta que Ibrahin conteste. Ver §«LAS TAREAS QUE COMPROMETEN A BAMBURU».
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
 
 El cliente no puede ver **qué cambió en sus documentos y cuándo**. Verificado el 1 sep 2026: no
@@ -8895,6 +8903,10 @@ cuando llegue.
 
 - **id:** modo-pruebas-por-negocio
 - **estado:** pendiente
+- **firma:** Ibrahin
+  > **Por qué la firma él, y no se cierra sola:** «puedes probar sin ensuciar tus datos» no existe hoy: es una capacidad nueva que el cliente va a esperar que se mantenga.
+  > El orquestador la construye entera, la prueba entera y la deja **en su rama, fuera de
+  > producción**, hasta que Ibrahin conteste. Ver §«LAS TAREAS QUE COMPROMETEN A BAMBURU».
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
 
 No hay forma de que un negocio pruebe sin ensuciar sus datos de verdad. Verificado el 1 sep 2026: no
@@ -8907,6 +8919,10 @@ existe (lo único que aparece buscando es el `--no-sandbox` de Chromium, que no 
 
 - **id:** pagina-estado-publica
 - **estado:** pendiente
+- **firma:** Ibrahin
+  > **Por qué la firma él, y no se cierra sola:** compromete a Bamburu a **publicar sus propias caídas**. Eso no se puede deshacer sin quedar peor que no haberlo prometido.
+  > El orquestador la construye entera, la prueba entera y la deja **en su rama, fuera de
+  > producción**, hasta que Ibrahin conteste. Ver §«LAS TAREAS QUE COMPROMETEN A BAMBURU».
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
 
 Cuando algo falla, el cliente **no tiene dónde mirar**: solo puede escribir y esperar. Verificado el
@@ -8933,6 +8949,10 @@ tardó en descubrir. Un tope que no se ve no solo molesta: **hace que se diagnos
 
 - **id:** corregir-errores-documentos-no-fiscales
 - **estado:** pendiente
+- **firma:** Ibrahin
+  > **Por qué la firma él, y no se cierra sola:** hay que **dibujar la frontera** entre lo que se puede corregir y lo que no. Eso es literalmente lo que Bamburu promete que respeta.
+  > El orquestador la construye entera, la prueba entera y la deja **en su rama, fuera de
+  > producción**, hasta que Ibrahin conteste. Ver §«LAS TAREAS QUE COMPROMETEN A BAMBURU».
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
 
 Un fallo de hace semanas en un documento **que no es fiscal** hoy no se puede arreglar limpiamente.
@@ -8983,6 +9003,10 @@ va antes que aquélla.
 
 - **id:** acceso-gestoria
 - **estado:** pendiente
+- **firma:** Ibrahin
+  > **Por qué la firma él, y no se cierra sola:** «sin consumir un usuario» es **precio**, y el precio lo decide el dueño (CANON §6).
+  > El orquestador la construye entera, la prueba entera y la deja **en su rama, fuera de
+  > producción**, hasta que Ibrahin conteste. Ver §«LAS TAREAS QUE COMPROMETEN A BAMBURU».
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
 
 La gestoría necesita entrar, y hoy **gasta una licencia de usuario** como si fuera un empleado.
@@ -9251,6 +9275,78 @@ negocio suspendido NO deja escribir— necesitan un negocio suspendido y tienen 
 - **No perseguir amplitud** (multi-moneda, nóminas, fabricación): es donde se pierde contra SAP.
 
 ## Decisiones tomadas el 1 sep 2026
+
+- **LAS TAREAS QUE COMPROMETEN A BAMBURU LAS FIRMA IBRAHIN.** Regla nueva, y no se cierra sola
+  ninguna que la cumpla.
+
+  **LA RAYA, Y NO ES NUEVA: es `CANON.md` §6** — *«el dueño decide negocio, producto, prioridades,
+  precios y experiencia de usuario; el técnico decide base de datos, arquitectura, nombres y orden
+  técnico»*. Dicho como pregunta, que es como se aplica:
+
+  > **¿Esta tarea INVENTA una promesa nueva al cliente, o solo CONSTRUYE una ya decidida?**
+
+  **Si solo construye, se cierra sola — aunque toque facturas, dinero o datos de clientes.** Si
+  inventa, se construye entera, se prueba entera, y espera a que Ibrahin conteste.
+
+  **⚙️ LA PRIMERA VERSIÓN DE ESTA RAYA ESTABA MAL, y la corrigió él.** Se propuso «todo lo que toque
+  Hacienda, dinero, datos de clientes o copias». Con esa regla salían **24 de 45**: media plataforma.
+  *Palabras de Ibrahin:* «Bamburu entero toca dinero y datos de clientes, así que con esa regla firmo
+  media plataforma. **Y yo no firmo cambios, yo decido qué promete el producto.**» Con la regla buena
+  salen **SEIS**.
+
+  **LAS SEIS** (marcadas con `firma: Ibrahin` en su preámbulo, cada una con su porqué escrito):
+  `anclar-verifactu-fuera` · `historial-cambios-visible-cliente` ·
+  `corregir-errores-documentos-no-fiscales` · `modo-pruebas-por-negocio` · `pagina-estado-publica` ·
+  `acceso-gestoria`. Las **9** que ya esperaban decisión siguen igual: salieron precisamente por
+  inventar promesa, así que la regla nueva las confirma en su sitio.
+
+  **TRES QUE QUEDAN A MEDIO CAMINO Y LAS MIRA ÉL:** `cifrado-en-reposo-bases` (construir es técnico,
+  pero **si se pierde la llave se pierde el negocio vivo**, no solo las copias) ·
+  `api-token-ambitos-cuotas` («ámbitos» es técnico, **«cuotas» roza precio**) ·
+  `exportacion-completa-datos` (la ley obliga a exportar, pero **qué entra en «todo lo tuyo»** no lo
+  decide la ley).
+
+  ---
+
+  **CÓMO FUNCIONA, Y POR QUÉ NO BASTABA CON RETENER EL CIERRE.**
+
+  Al mirar cómo cierra hoy el orquestador apareció el problema de verdad: **el programador commitea
+  a `master` en CONSTRUCCIÓN, dos pasos antes del cierre.** Y `master` **es** el producto —
+  `bamburu-backup.service`, `bamburu-backup-secondary.service` y el heartbeat ejecutan **de cero cada
+  noche** `/home/ubuntu/bamburu/scripts/…`. No hace falta reiniciar nada ni cerrar la tarea: **en
+  cuanto el fichero cambia, la siguiente ejecución usa el código nuevo.**
+
+  **Eso fue exactamente el cifrado de las copias, y ahora se conoce el mecanismo entero:** el
+  programador commiteó `bamburu-backup.sh`, la tarea se **apartó** después, y el timer de las 03:31
+  iba a ejecutar ese fichero igual. La tarea nunca llegó a cerrarse **y el código estaba en
+  producción de todos modos**. Retener el cierre no lo habría impedido.
+
+  **Por eso la firma va con RAMA:** una tarea con `firma:` se trabaja en `tarea/<id>` desde que se
+  coge. `master` no se toca. Al aprobar el revisor, en vez de cerrar:
+  1. Se escribe el registro **en la rama** y se confirma allí.
+  2. **El árbol vuelve a `master`** — es la línea que impide el fallo del cifrado.
+  3. Sale el aviso al móvil y **se suelta la tarea**: la máquina coge la siguiente. No bloquea nada.
+
+  **EL AVISO NO DESCRIBE EL CÓDIGO, DESCRIBE LA PROMESA.** Lo escribe el arquitecto en un apartado
+  obligatorio `## LA PROMESA`: qué cambia para quien usa Bamburu, qué se le garantiza y qué pasa si
+  falla. **Sin código.** Y el validador lo exige: un análisis sin promesa **no vale**, aunque sea
+  impecable — porque deja a Ibrahin firmando a ciegas, y la respuesta correcta ante eso es no firmar.
+
+  **TRES RESPUESTAS, escritas como se habla** («adelante», «no me convence», «hablemos»):
+  · **apruebo** → funde la rama en `master` y sube. **Es lo ÚNICO que mete algo en producción.**
+  · **rechazo** + motivo → vuelve a la cola con el motivo delante. **La rama se conserva**: lo
+    construido no se tira.
+  · **hablemos** → se queda esperando, con la conversación abierta, sin bloquear nada.
+
+  **LA RED DE SEGURIDAD, que salió de que la propia prueba reventara ahí:** si el árbol **no puede**
+  volver a `master`, hay código sin firmar en producción. Eso no se escribe en un registro y ya: se
+  manda **AVERÍA** al momento y **el orquestador deja de coger tareas**, porque apilar trabajo encima
+  de una rama sin firmar solo empeora el enredo.
+
+  **VERIFICADO PROVOCANDO EL CASO ENTERO**, con una tarea que toca un fichero de producción como
+  hacía el cifrado: se construye, se pide la firma, **producción sigue diciendo la versión buena**, y
+  las tres respuestas hacen lo suyo. **Seis pruebas nuevas, y las tres averías repuestas una a una
+  para verlas ponerse rojas.** 173 pruebas en verde.
 
 - **BLOQUE 5 — LO QUE HACE QUE ESTO SE REPITA. Y una avería seria que salió por el camino.**
 

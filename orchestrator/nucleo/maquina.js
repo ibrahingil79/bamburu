@@ -34,6 +34,7 @@ export const ACCIONES = Object.freeze({
   REPLANTEAR: 'REPLANTEAR',
   APARTAR: 'APARTAR',
   CERRAR: 'CERRAR',
+  PEDIR_FIRMA: 'PEDIR_FIRMA',
   CERRAR_PREMISA_FALSA: 'CERRAR_PREMISA_FALSA',
   REINTENTAR_SUBIDA: 'REINTENTAR_SUBIDA',
   SALTAR: 'SALTAR',
@@ -277,6 +278,19 @@ function decidirSinMirarCuota({ estado, tareaDisponible, pendientesEnTablero = [
     case PASOS.VALIDAR_REVISION: {
       const r = obs.revision || {};
       if (r.veredicto === 'aprobado') {
+        // ⚙️ APROBADO POR EL REVISOR NO ES LO MISMO QUE APROBADO POR IBRAHIN (1 sep 2026).
+        //
+        // El revisor juzga si está BIEN CONSTRUIDO. Eso no le da derecho a decidir qué le promete
+        // Bamburu a quien paga. La raya es `CANON.md` §6 y se aplica con una pregunta:
+        // **¿esta tarea INVENTA una promesa nueva al cliente, o solo CONSTRUYE una ya decidida?**
+        // Si solo construye, se cierra sola aunque toque facturas, dinero o datos. Si inventa,
+        // se para aquí — construida y probada, pero FUERA DE PRODUCCIÓN, en su rama.
+        //
+        // Lo marca la propia tarea con `firma:` en su preámbulo, no lo adivina nadie.
+        if (estado.tarea?.firma) {
+          return { tipo: ACCIONES.PEDIR_FIRMA, quien: estado.tarea.firma,
+                   porque: `el revisor aprobó, pero esta tarea inventa una promesa al cliente y la firma ${estado.tarea.firma}` };
+        }
         return { tipo: ACCIONES.CERRAR, porque: 'el revisor aprobó' };
       }
       if (r.veredicto === 'rechazado') {

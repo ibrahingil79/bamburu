@@ -12,6 +12,11 @@ export function repoTemporal({ tablero = TABLERO_BLOQUE } = {}) {
   git('config', 'user.email', 'prueba@local');
   git('config', 'user.name', 'Prueba');
   git('config', 'commit.gpgsign', 'false');
+  // ⚙️ EL REPO DE PRUEBA IGNORA LO MISMO QUE EL DE VERDAD (1 sep 2026). Sin esto, el estado del
+  // propio daemon (`.orquestador/`) y sus registros quedaban VERSIONADOS aquí y no allí, y un
+  // `git checkout` fallaba en la prueba por un motivo que en producción no existe. Un repo de
+  // usar y tirar que no se parece al de verdad miente en las dos direcciones.
+  fs.writeFileSync(path.join(raiz, '.gitignore'), '.orquestador/\nlogs/\ndata/\nnode_modules/\n', 'utf8');
   fs.writeFileSync(path.join(raiz, 'TABLERO.md'), tablero, 'utf8');
   fs.writeFileSync(path.join(raiz, 'semilla.txt'), 'semilla\n', 'utf8');
   git('add', '-A');

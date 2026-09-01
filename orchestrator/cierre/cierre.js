@@ -13,7 +13,7 @@ const hoy = () => new Date().toISOString().slice(0, 10);
 const ahora = () => new Date().toISOString();
 
 /** El registro de la tarea: qué se pidió, qué se hizo, cuánto costó. Se escribe siempre. */
-export function escribirRegistroTarea({ config, tarea, estado, rutas, commits, criterios, consumo, apartada = null }) {
+export function escribirRegistroTarea({ config, tarea, estado, rutas, commits, criterios, consumo, apartada = null, esperandoFirma = null }) {
   const dir = config.rutasAbs.registrosTarea;
   const ruta = path.join(dir, `${tarea.id}.md`);
   const rel = (p) => path.relative(config.repo.raiz, p);
@@ -26,7 +26,9 @@ export function escribirRegistroTarea({ config, tarea, estado, rutas, commits, c
 
 - **id:** \`${tarea.id}\`
 - **cerrada:** ${hoy()}
-- **resultado:** ${apartada ? `⛔ APARTADA — ${apartada}` : '✅ APROBADA'}
+- **resultado:** ${apartada ? `⛔ APARTADA — ${apartada}` : esperandoFirma ? `✍️ TERMINADA, ESPERANDO LA FIRMA DE ${esperandoFirma.quien.toUpperCase()}` : '✅ APROBADA'}${esperandoFirma ? `
+- **rama:** \`${esperandoFirma.rama}\` — **NO está en ${config.repo.ramaPrincipal}, o sea que NO está en producción**
+- **la promesa que se le presentó:** ${esperandoFirma.promesa ? '\n\n> ' + esperandoFirma.promesa.replace(/\n/g, '\n> ') : '(el arquitecto no escribió «## LA PROMESA» — se le pidió a Ibrahin sin ella)'}` : ''}
 - **intentos:** ${estado.historial.length || 1}
 - **replanteamientos:** ${estado.replanteos}
 

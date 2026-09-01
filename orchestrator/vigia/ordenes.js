@@ -25,6 +25,13 @@ export const ORDENES = Object.freeze({
   PARAR_YA: 'PARAR_YA',
   SALTAR: 'SALTAR',
   DESAPARTAR: 'DESAPARTAR',
+  // ── LAS TRES RESPUESTAS A UNA FIRMA (1 sep 2026) ────────────────────────────
+  // Una tarea que inventa una promesa al cliente se queda terminada y fuera de producción hasta
+  // que Ibrahin conteste una de estas tres. Ninguna bloquea: la máquina sigue con la siguiente
+  // desde el primer momento.
+  APROBAR: 'APROBAR',      // entra en producción
+  RECHAZAR: 'RECHAZAR',    // vuelve a la cola con su motivo
+  HABLAR: 'HABLAR',        // abre conversación y la deja esperando
   AYUDA: 'AYUDA',
   SI: 'SI',
   NO: 'NO',
@@ -40,7 +47,10 @@ export const PIDEN_CONFIRMACION = Object.freeze([ORDENES.PARAR_YA, ORDENES.SALTA
  * Las que necesitan al orquestador para aplicarse: se le dejan anotadas y las recoge cuando
  * termina el paso que tiene entre manos. Las demás las contesta el vigía él solo.
  */
-export const VAN_AL_ORQUESTADOR = Object.freeze([ORDENES.PARAR, ORDENES.ARRANCAR, ORDENES.SALTAR, ORDENES.DESAPARTAR]);
+export const VAN_AL_ORQUESTADOR = Object.freeze([ORDENES.PARAR, ORDENES.ARRANCAR, ORDENES.SALTAR, ORDENES.DESAPARTAR,
+  // Las tres de firma tocan git (fundir una rama, devolver una tarea a la cola): las aplica el
+  // orquestador cuando termina el paso que tenga entre manos, nunca el vigía a mitad de nada.
+  ORDENES.APROBAR, ORDENES.RECHAZAR, ORDENES.HABLAR]);
 
 /**
  * Cada entrada: cómo se dice en castellano y qué significa.
@@ -51,6 +61,14 @@ const VOCABULARIO = [
   { orden: ORDENES.PARAR_YA, es: /\b(parar?|para)\s+(ya|de\s+golpe|en\s+seco)\b|\bparada\s+de\s+emergencia\b|\bcorta\s+ya\b/ },
   { orden: ORDENES.SALTAR, es: /\b(saltar|salta|saltate|saltarse|omitir|omite|deja)\b.*\b(tarea|esta|esa|la)\b|\bsaltar\b|\bsalta\b|\bsaltate\b/ },
   { orden: ORDENES.DESAPARTAR, es: /\bdesapartar?\b|\bdesaparta\b|\brecuperar?\s+(la\s+)?tarea\b|\bvuelve\s+a\s+intentar\b|\breabrir?\b/ },
+  // ── LAS TRES RESPUESTAS A UNA FIRMA ─────────────────────────────────────────
+  // Van ANTES que las demás porque son conversación, no mando: cuando Ibrahin contesta a un
+  // aviso de firma escribe como habla («adelante», «no me convence», «hablemos de eso»), y esas
+  // palabras no deben caer en AYUDA. RECHAZAR va antes que APROBAR: «no lo apruebes» lleva las
+  // dos palabras y significa una sola cosa.
+  { orden: ORDENES.RECHAZAR, es: /\bno\s+(lo\s+)?(apruebo|apruebes|me\s+vale|me\s+convence|lo\s+quiero)\b|\brechaza[rl]?o?\b|\brechazo\b|\bque\s+no\b|\bmarcha\s+atras\b/ },
+  { orden: ORDENES.APROBAR, es: /\bapruebo\b|\baprueba[rl]?o?\b|\baprobad[oa]\b|\badelante\b|\bfirmo\b|\bfirmad[oa]\b|\btira\s+p?a?\s*lante\b|\bque\s+entre\b|\bdale\b/ },
+  { orden: ORDENES.HABLAR, es: /\bhablemos\b|\bhablamos\b|\bdiscut\w*\b|\bexplicame\b|\bcuentame\b|\btengo\s+dudas?\b|\bno\s+lo\s+tengo\s+claro\b|\bespera\b/ },
   // Va antes que TAREAS a propósito: «no cojas más tareas» es una orden de parar, no una
   // pregunta por la cola. Lo cazó la prueba del vocabulario.
   { orden: ORDENES.PARAR, es: /\bno\s+cojas\s+mas\b|\bno\s+empieces\s+mas\b/ },
@@ -89,6 +107,11 @@ export function interpretar(texto) {
   for (const v of VOCABULARIO) {
     if (!v.es.test(limpio)) continue;
     if (v.orden === ORDENES.DESAPARTAR) return { orden: v.orden, id: idEnElMensaje(limpio) };
+    // Las tres de firma llevan el id de la tarea, y el rechazo además el motivo — que es lo que
+    // vuelve con ella a la cola para que el siguiente intento sepa qué corregir.
+    if (v.orden === ORDENES.APROBAR || v.orden === ORDENES.RECHAZAR || v.orden === ORDENES.HABLAR) {
+      return { orden: v.orden, id: idEnElMensaje(limpio), texto: String(texto ?? '').trim().slice(0, 500) };
+    }
     return { orden: v.orden };
   }
   return { orden: ORDENES.AYUDA };

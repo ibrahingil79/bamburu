@@ -79,6 +79,12 @@ export function estadoInicial() {
     esperandoCuota: false,
     esperaDesde: null,
     apartadas: [],        // [{ id, titulo, motivo, cuando, historial }]
+    // ⚙️ LAS QUE ESPERAN LA FIRMA DE IBRAHIN (1 sep 2026).
+    // Están CONSTRUIDAS, PROBADAS Y GUARDADAS EN SU RAMA — y fuera de producción. No bloquean:
+    // la máquina suelta la tarea y coge la siguiente. Cada una guarda su rama para poder fundirla
+    // el día que él conteste, y la promesa que se le presentó, para que el «sí» signifique algo.
+    // [{ id, titulo, rama, promesa, cuando, estado: 'esperando'|'en-discusion' }]
+    firmasPendientes: [],
     // Pausa pedida desde Telegram. NO corta la tarea en curso: solo impide coger otra.
     // Ésa es exactamente la promesa de «para»: termina lo que hace y no coge la siguiente.
     pausado: false,
@@ -218,6 +224,21 @@ export function aplicar(estado, e) {
                { id: s.tarea?.id, titulo: s.tarea?.titulo, motivo: e.motivo, cuando: e.cuando, historial: s.historial }],
                tarea: null, paso: 'OCIOSO', pasoDesde: e.cuando, intento: 0, replanteos: 0, base: null,
                historial: [], fallosTecnicos: {} };
+    // ── LA FIRMA DE IBRAHIN ───────────────────────────────────────────────────
+    case 'FIRMA_PEDIDA':
+      return { ...s, tarea: null, paso: 'OCIOSO', pasoDesde: e.cuando, intento: 0, replanteos: 0,
+               base: null, historial: [], fallosTecnicos: {}, cuotaInicio: null,
+               firmasPendientes: [...s.firmasPendientes.filter((f) => f.id !== e.id),
+                 { id: e.id, titulo: e.titulo, rama: e.rama, promesa: e.promesa,
+                   cuando: e.cuando, estado: 'esperando' }] };
+    case 'FIRMA_EN_DISCUSION':
+      // No la saca de la lista: sigue esperando, pero se sabe que hay conversación abierta. Y no
+      // bloquea nada — la máquina lleva desde el primer momento con la tarea siguiente.
+      return { ...s, firmasPendientes: s.firmasPendientes.map((f) =>
+                 (f.id === e.id ? { ...f, estado: 'en-discusion', desde: e.cuando } : f)) };
+    case 'FIRMA_RESUELTA':
+      return { ...s, firmasPendientes: s.firmasPendientes.filter((f) => f.id !== e.id) };
+
     case 'TAREA_CERRADA':
       return { ...s, tarea: null, paso: 'OCIOSO', pasoDesde: e.cuando, intento: 0, replanteos: 0,
                base: null, historial: [], fallosTecnicos: {},

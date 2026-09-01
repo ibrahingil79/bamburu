@@ -239,6 +239,41 @@ export function redactarApartada({ tarea, motivo, historial, clase = 'sin-clasif
 }
 
 /**
+ * EL AVISO DE UNA TAREA QUE ESPERA TU FIRMA.
+ *
+ * ⚙️ LO QUE HACE DISTINTO A ESTE MENSAJE (1 sep 2026): **no describe el código, describe la
+ * promesa.** Qué cambia para quien usa Bamburu, qué se le garantiza y qué pasa si falla. Ibrahin
+ * no firma cambios —lo dijo con esas palabras—: decide qué promete el producto. Un aviso que
+ * cuente commits y ficheros le está pidiendo que apruebe algo que no puede juzgar.
+ *
+ * La promesa la escribe el ARQUITECTO, en su apartado «## LA PROMESA», y viaja hasta aquí sin que
+ * nadie la resuma. Si no la escribió, se dice — no se inventa una.
+ */
+export function redactarFirma({ tarea, quien, rama, promesa, commits = 0 }) {
+  const L = ['<b>✍️ Terminada y esperando tu firma</b>', ''];
+  L.push(`<b>${esc(tarea.titulo)}</b>`, '');
+
+  if (promesa) {
+    L.push('<b>Qué le prometes al cliente si esto entra:</b>', esc(promesa).slice(0, 1800), '');
+  } else {
+    L.push('⚠️ <b>El arquitecto NO escribió la promesa</b>, así que no te la puedo contar en tus términos.',
+           `Lo que se pidió: ${esc(tarea.descripcion || tarea.titulo).slice(0, 300)}`,
+           'Si no sabes qué estás firmando, <b>no lo firmes</b>: dime «hablemos» y lo miramos.', '');
+  }
+
+  L.push('<b>Está terminada, probada y FUERA DE PRODUCCIÓN.</b>');
+  L.push(`Vive en la rama <code>${esc(rama)}</code> con sus ${commits} commit(s). Nada de esto toca a nadie hasta que digas que sí.`);
+  L.push('');
+  L.push('<b>Puedes contestar tres cosas:</b>');
+  L.push(`• <b>apruebo ${esc(tarea.id)}</b> — entra en producción`);
+  L.push(`• <b>rechazo ${esc(tarea.id)}</b> + por qué — vuelve a la cola con tu motivo`);
+  L.push(`• <b>hablemos de ${esc(tarea.id)}</b> — lo discutimos, sin prisa`);
+  L.push('');
+  L.push('<i>No me bloqueas: ya estoy con la siguiente tarea.</i>');
+  return L.join('\n');
+}
+
+/**
  * La línea del parte para una tarea que se cerró sola por premisa falsa. NO es un aviso suelto: va
  * en el parte de las tres horas, como información. No hay nada que decidir.
  */

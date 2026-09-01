@@ -13,6 +13,7 @@ export const MOTIVOS_RECHAZO = Object.freeze(['CRITERIO-INCUMPLIDO', 'FUERA-DE-A
 const MINIMO_ANALISIS = 800;
 const PALABRAS_ARQUITECTURA = /\b(capa|patr[oó]n|validaci[oó]n|arquitectura|acoplamiento|contrato)\b/i;
 const MARCA_PARADA = /^\s*🛑\s*TAREA MAL PLANTEADA/im;
+const MARCA_PROMESA = /^#{1,4}\s*LA PROMESA\s*$/im;
 
 // ⚙️ LAS DOS CLASES DE PARADA (1 sep 2026). Antes había UNA sola marca y las dos cosas caían en el
 // mismo cajón: el aviso al móvil de Ibrahin decía «No es un error técnico: es una decisión de
@@ -86,7 +87,7 @@ export function extraerCriterios(texto) {
  * ANÁLISIS. Sin criterios de aceptación se rechaza: es la regla que sostiene todo lo demás,
  * porque el revisor no tiene contra qué juzgar.
  */
-export function validarAnalisis(ruta, { minCriterios = 3 } = {}) {
+export function validarAnalisis(ruta, { minCriterios = 3, firma = '' } = {}) {
   if (!fs.existsSync(ruta)) return mal(`No existe el análisis: ${ruta}`, [`el arquitecto no escribió ${ruta}`]);
 
   const texto = fs.readFileSync(ruta, 'utf8');
@@ -113,6 +114,16 @@ export function validarAnalisis(ruta, { minCriterios = 3 } = {}) {
   }
   if (!PALABRAS_ARQUITECTURA.test(propio)) {
     motivos.push('no menciona capa, patrón, validación ni arquitectura: no es un análisis arquitectónico');
+  }
+
+  // ⚙️ SI LA TAREA LA FIRMA IBRAHIN, LA PROMESA ES OBLIGATORIA (1 sep 2026).
+  // Sin ella, el aviso que le llega al móvil no puede contarle qué está firmando, y la respuesta
+  // correcta de una persona ante eso es no firmar. O sea: un análisis sin promesa cuesta la tarea
+  // entera. Se exige aquí, con el mismo peso que los criterios de aceptación.
+  if (firma && !MARCA_PROMESA.test(texto)) {
+    motivos.push('ESTA TAREA LA FIRMA ' + firma.toUpperCase() + ' Y NO TRAE «## LA PROMESA». '
+      + 'Escribe ese apartado con qué cambia para quien usa Bamburu, qué se le garantiza y qué pasa '
+      + 'si falla. Sin código: es lo que le llega al móvil y lo único que puede juzgar.');
   }
 
   const criterios = extraerCriterios(texto);

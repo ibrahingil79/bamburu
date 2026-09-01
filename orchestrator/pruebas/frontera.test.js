@@ -30,7 +30,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { correrBarrido, invocacion } from '../barrido.js';
@@ -630,6 +630,221 @@ test('BLOQUE 5.1 · el parte sale cuando toca, y eso se prueba sin esperar tres 
     await daemon;
     partes.push(1);
     assert.equal(partes.length, 1);
+  } finally { limpiar(raiz); }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════════════════
+//  LA FIRMA DE IBRAHIN — el caso entero, de punta a punta
+// ════════════════════════════════════════════════════════════════════════════════════════════
+//
+// LO QUE ESTO PROTEGE, con el caso real delante: el 1 sep 2026 el programador commiteó
+// `scripts/bamburu-backup.sh` a MASTER durante CONSTRUCCIÓN. La tarea se apartó después. Y los
+// tres servicios de copia ejecutan ese fichero **de cero cada noche desde el árbol**, así que las
+// dos copias de esa madrugada iban a abortar: ni cifraban ni copiaban. La tarea nunca se cerró y
+// el código estaba en producción igual.
+//
+// Aquí se reproduce esa forma exacta —una tarea que toca un fichero de producción— y se exige que
+// **producción NO se entere hasta que Ibrahin apruebe**.
+
+const TABLERO_CON_FIRMA = `# Tablero de pruebas
+
+## TAREA — Cambiar el guion de las copias
+
+- **id:** cambia-el-guion
+- **estado:** pendiente
+- **firma:** Ibrahin
+
+Toca \`produccion.sh\`, que systemd ejecuta de cero cada noche.
+
+**Criterios de aceptación**
+
+- [ ] El guion de produccion hace lo nuevo que pide la tarea
+- [ ] Sigue verificando lo de antes, sin rama blanda ninguna
+- [ ] Hay una prueba que lo ejercita de punta a punta
+`;
+
+const RELLENO = 'Se describe la capa tocada, el patron elegido y la validacion que se aplica en cada paso. '.repeat(10);
+
+const ANALISIS_CON_PROMESA = `# Análisis
+
+Arquitectura: se toca la capa de scripts. Patrón: guardián antes de escribir. Validación incluida.
+${RELLENO}
+
+## LA PROMESA
+
+Tus copias pasan a guardarse cifradas. Si alguien se lleva el disco de Google, no puede abrirlas.
+Si el cifrado fallara, la copia NO se sube y te llega un aviso: nunca te quedas creyendo que hay
+copia cuando no la hay.
+
+**Criterios de aceptación**
+
+- [ ] El guion de produccion hace lo nuevo que pide la tarea
+- [ ] Sigue verificando lo de antes, sin rama blanda ninguna
+- [ ] Hay una prueba que lo ejercita de punta a punta
+`;
+
+async function hastaLaFirma(raiz) {
+  const { Almacen } = await import('../nucleo/almacen.js');
+  const { Ciclo } = await import('../ciclo.js');
+  const { invocadorFalso, vigilanteFalso, registroMudo, configDe: cd } = await import('./ayuda.js');
+  const cfg = cd(raiz);
+  const almacen = new Almacen({ rutaEstado: cfg.rutasAbs.estado, rutaJournal: cfg.rutasAbs.journal,
+                                rutaHistorial: cfg.rutasAbs.historial });
+  const art = (n) => path.join(cfg.rutasAbs.artefactos, n);
+  const ok = (t) => ({ ok: true, texto: t, json: { result: t }, ms: 1, cuotaSospechosa: false });
+  const guion = [
+    () => { fs.mkdirSync(cfg.rutasAbs.artefactos, { recursive: true });
+            fs.writeFileSync(art('task-cambia-el-guion-analysis.md'), ANALISIS_CON_PROMESA); return ok('análisis'); },
+    () => { // el programador toca un fichero DE PRODUCCIÓN y commitea
+            fs.writeFileSync(path.join(raiz, 'produccion.sh'), '#!/bin/sh\necho VERSION NUEVA SIN FIRMAR\n');
+            execFileSync('git', ['add', '-A'], { cwd: raiz });
+            execFileSync('git', ['commit', '-qm', 'toca el guion\n\nTarea: cambia-el-guion'], { cwd: raiz });
+            return ok('construido'); },
+    () => { // El veredicto tiene que juzgar CRITERIO A CRITERIO, no decir «aprobado» a secas: es
+            // lo que exige `validarRevision` y la razón de que exista el revisor.
+            fs.writeFileSync(art('task-cambia-el-guion-review.md'),
+              '✅ APROBADO\n\n| # | Criterio | ¿Cumple? | Prueba |\n|---|---|---|---|\n'
+              + '| 1 | El guion de produccion hace lo nuevo que pide la tarea | SÍ | produccion.sh:2 |\n'
+              + '| 2 | Sigue verificando lo de antes, sin rama blanda ninguna | SÍ | produccion.sh:5 |\n'
+              + '| 3 | Hay una prueba que lo ejercita de punta a punta | SÍ | prueba.sh |\n');
+            return ok('revisado'); },
+  ];
+  const ciclo = new Ciclo({ config: cfg, almacen, vigilante: vigilanteFalso(), logger: registroMudo(),
+                            invocador: invocadorFalso(guion) });
+  let estado = almacen.recuperar().estado;
+  let r = {};
+  for (let i = 0; i < 8 && !r.firmaPedida; i++) { r = await ciclo.unPaso(estado); estado = r.estado; }
+  return { cfg, almacen, ciclo, estado, r };
+}
+
+test('FIRMA · una tarea firmada queda TERMINADA y FUERA DE PRODUCCIÓN', { timeout: 60000 }, async () => {
+  const raiz = repoTemporal({ tablero: TABLERO_CON_FIRMA });
+  try {
+    fs.writeFileSync(path.join(raiz, 'produccion.sh'), '#!/bin/sh\necho VERSION BUENA\n');
+    execFileSync('git', ['add', '-A'], { cwd: raiz });
+    execFileSync('git', ['commit', '-qm', 'produccion buena'], { cwd: raiz });
+
+    const { estado, r } = await hastaLaFirma(raiz);
+
+    assert.ok(r.firmaPedida, 'tiene que pararse a pedir la firma, no cerrarse sola');
+    assert.equal(estado.firmasPendientes.length, 1);
+    assert.match(r.firmaPedida.promesa, /copias pasan a guardarse cifradas/,
+      'la promesa del arquitecto viaja hasta el aviso, sin resumir');
+
+    // ── LO QUE DE VERDAD IMPORTA ──────────────────────────────────────────────
+    const rama = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: raiz, encoding: 'utf8' }).trim();
+    assert.equal(rama, 'master', 'el árbol tiene que haber vuelto a master: el árbol ES el producto');
+    assert.equal(fs.readFileSync(path.join(raiz, 'produccion.sh'), 'utf8').trim().split('\n')[1],
+      'echo VERSION BUENA',
+      'PRODUCCIÓN NO SE HA ENTERADO. Esto es lo que habría salvado las copias del 1 sep 2026.');
+
+    // Y no bloquea: soltó la tarea para coger la siguiente.
+    assert.equal(estado.tarea, null, 'suelta la tarea: la máquina sigue con la siguiente');
+  } finally { limpiar(raiz); }
+});
+
+test('FIRMA · «apruebo» es lo ÚNICO que mete algo en producción', { timeout: 60000 }, async () => {
+  const raiz = repoTemporal({ tablero: TABLERO_CON_FIRMA });
+  try {
+    fs.writeFileSync(path.join(raiz, 'produccion.sh'), '#!/bin/sh\necho VERSION BUENA\n');
+    execFileSync('git', ['add', '-A'], { cwd: raiz });
+    execFileSync('git', ['commit', '-qm', 'produccion buena'], { cwd: raiz });
+    const { ciclo, estado } = await hastaLaFirma(raiz);
+
+    const r = await ciclo.responderFirma(estado, { orden: 'APROBAR', id: 'cambia-el-guion' });
+    assert.match(r.aviso, /Firmada y en producción/);
+    assert.equal(r.estado.firmasPendientes.length, 0, 'deja de esperar');
+    assert.match(fs.readFileSync(path.join(raiz, 'produccion.sh'), 'utf8'), /VERSION NUEVA SIN FIRMAR/,
+      'AHORA sí: aprobar es lo único que funde la rama en producción');
+  } finally { limpiar(raiz); }
+});
+
+test('FIRMA · «rechazo» la devuelve a la cola y NO toca producción', { timeout: 60000 }, async () => {
+  const raiz = repoTemporal({ tablero: TABLERO_CON_FIRMA });
+  try {
+    fs.writeFileSync(path.join(raiz, 'produccion.sh'), '#!/bin/sh\necho VERSION BUENA\n');
+    execFileSync('git', ['add', '-A'], { cwd: raiz });
+    execFileSync('git', ['commit', '-qm', 'produccion buena'], { cwd: raiz });
+    const { ciclo, estado } = await hastaLaFirma(raiz);
+
+    const r = await ciclo.responderFirma(estado,
+      { orden: 'RECHAZAR', id: 'cambia-el-guion', texto: 'no quiero que falle la copia si falla el cifrado' });
+    assert.match(r.aviso, /vuelve a la cola/);
+    assert.match(r.aviso, /no quiero que falle la copia/, 'con tu motivo delante, que es lo que lee el siguiente intento');
+    assert.equal(r.estado.firmasPendientes.length, 0);
+    assert.match(fs.readFileSync(path.join(raiz, 'produccion.sh'), 'utf8'), /VERSION BUENA/,
+      'producción sigue intacta: nunca llegó a estarlo');
+    // Y lo construido NO se tira.
+    const ramas = execFileSync('git', ['branch'], { cwd: raiz, encoding: 'utf8' });
+    assert.match(ramas, /tarea\/cambia-el-guion/, 'la rama se conserva: el trabajo no se tira');
+  } finally { limpiar(raiz); }
+});
+
+test('FIRMA · «hablemos» la deja esperando sin bloquear nada', { timeout: 60000 }, async () => {
+  const raiz = repoTemporal({ tablero: TABLERO_CON_FIRMA });
+  try {
+    fs.writeFileSync(path.join(raiz, 'produccion.sh'), '#!/bin/sh\necho VERSION BUENA\n');
+    execFileSync('git', ['add', '-A'], { cwd: raiz });
+    execFileSync('git', ['commit', '-qm', 'produccion buena'], { cwd: raiz });
+    const { ciclo, estado } = await hastaLaFirma(raiz);
+
+    const r = await ciclo.responderFirma(estado, { orden: 'HABLAR', id: 'cambia-el-guion' });
+    assert.match(r.aviso, /hablamos/);
+    assert.match(r.aviso, /copias pasan a guardarse cifradas/, 'te recuerda qué se te propuso');
+    assert.equal(r.estado.firmasPendientes[0].estado, 'en-discusion', 'sigue esperando, ahora con conversación abierta');
+    assert.match(fs.readFileSync(path.join(raiz, 'produccion.sh'), 'utf8'), /VERSION BUENA/, 'y producción sin tocar');
+  } finally { limpiar(raiz); }
+});
+
+test('FIRMA · sin «## LA PROMESA» el análisis NO vale, aunque esté perfecto', async () => {
+  // Un análisis impecable pero sin la promesa deja a Ibrahin firmando a ciegas, y la respuesta
+  // correcta de una persona ante eso es NO firmar. O sea que cuesta la tarea entera.
+  const { validarAnalisis } = await import('../validacion/validador.js');
+  const raiz = mkdtempSync(path.join(tmpdir(), 'promesa-'));
+  try {
+    const f = path.join(raiz, 'a.md');
+    const bueno = 'Arquitectura, capa, patrón y validación.\n' + RELLENO
+      + '\n\n**Criterios de aceptación**\n\n- [ ] el primero, escrito con su detalle\n'
+      + '- [ ] el segundo, tambien con su detalle\n- [ ] el tercero, igual de concreto\n';
+    writeFileSync(f, bueno);
+    assert.equal(validarAnalisis(f).ok, true, 'sin firma, este análisis vale');
+    const v = validarAnalisis(f, { firma: 'Ibrahin' });
+    assert.equal(v.ok, false, 'con firma, el mismo análisis NO vale');
+    assert.match(v.motivos.join(' '), /LA PROMESA/);
+
+    writeFileSync(f, bueno + '\n## LA PROMESA\n\nTus copias van cifradas.\n');
+    assert.equal(validarAnalisis(f, { firma: 'Ibrahin' }).ok, true, 'con la promesa escrita, vale');
+  } finally { limpiar(raiz); }
+});
+
+test('FIRMA · si NO puede sacar la rama de producción, avisa y SE PARA', { timeout: 60000 }, async () => {
+  // Lo peor que puede pasar en todo esto: que el árbol se quede en la rama sin firmar. El árbol
+  // ES el producto. Salió de que la propia prueba de punta a punta reventara justo ahí por un
+  // motivo tonto — el motivo era tonto, el camino no —. No basta con escribirlo en un registro
+  // que nadie mira: avisa y deja de coger tareas.
+  const raiz = repoTemporal({ tablero: TABLERO_CON_FIRMA });
+  try {
+    fs.writeFileSync(path.join(raiz, 'produccion.sh'), '#!/bin/sh\necho VERSION BUENA\n');
+    execFileSync('git', ['add', '-A'], { cwd: raiz });
+    execFileSync('git', ['commit', '-qm', 'produccion buena'], { cwd: raiz });
+    const { ciclo, almacen } = await hastaLaFirma(raiz);
+
+    // Se rehace el caso a mano: una tarea en su rama y un checkout que no puede volver.
+    let e = almacen.leerEstado();
+    e = almacen.transicion(e, { tipo: 'TAREA_TOMADA', tarea: { id: 'otra', titulo: 'Otra', firma: 'Ibrahin' }, cuota: 0 });
+    execFileSync('git', ['checkout', '-q', '-b', 'tarea/otra'], { cwd: raiz });
+    // El choque de verdad: el fichero tiene que ser DISTINTO en las dos ramas **y** tener un
+    // cambio sin guardar encima. Con un fichero idéntico en ambas, git deja pasar el checkout y
+    // se lleva el cambio consigo — que es justo lo que hacía que esta prueba no probara nada.
+    fs.writeFileSync(path.join(raiz, 'produccion.sh'), '#!/bin/sh\necho DE LA RAMA\n');
+    execFileSync('git', ['add', '-A'], { cwd: raiz });
+    execFileSync('git', ['commit', '-qm', 'version de la rama'], { cwd: raiz });
+    fs.writeFileSync(path.join(raiz, 'produccion.sh'), '#!/bin/sh\necho SIN GUARDAR\n');
+
+    const r = await ciclo.pedirFirma({ estado: e, accion: { quien: 'Ibrahin' } });
+    assert.ok(r.averia, 'tiene que dar AVERÍA, no seguir como si nada');
+    assert.match(r.averia.motivo, /no has firmado/i);
+    assert.equal(r.estado.pausado, true, 'y dejar de coger tareas: encima de una rama sin firmar no se apila más');
   } finally { limpiar(raiz); }
 });
 
