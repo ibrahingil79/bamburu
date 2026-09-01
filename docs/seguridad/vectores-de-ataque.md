@@ -184,8 +184,27 @@ contra las 14. ~~Más el cifrado, que vuelve inútil la manipulación.~~ **El ci
 ~~Si solo se hace una cosa de esta auditoría: **cifrar los backups**. Cierra el vector 4 y el 7 a la
 vez, es configuración y no programación, y hoy es la mayor exposición real del producto.~~
 
-**✅ HECHO EL 1 SEP 2026 — tarea `cifrado-copias-seguridad`.** Y con una corrección al texto tachado,
-porque la auditoría se pasó de optimista en dos cosas:
+~~**✅ HECHO EL 1 SEP 2026 — tarea `cifrado-copias-seguridad`.**~~
+
+> ## ⛔ NO ESTÁ HECHO. LOS VECTORES 4 Y 7 SIGUEN ABIERTOS.
+>
+> **Corregido el 1 sep 2026, unas horas después de escribir el ✅ de arriba.** Se tacha en vez de
+> borrarse. Los hechos, en orden:
+>
+> - La tarea `cifrado-copias-seguridad` **quedó APARTADA**, no cerrada («el arquitecto declaró la
+>   tarea mal planteada»). El mensaje del commit de cierre dice «cierra» porque el gancho usa la
+>   misma palabra para cerrar y para apartar — **ese ✅ salió de leer el commit en vez del historial**.
+> - El código sí se quedó puesto y vivo, pero **los remotes `crypt` nunca se crearon y la contraseña
+>   nunca se generó**. Con el guardián activo, las dos copias de la madrugada siguiente **habrían
+>   abortado**: ni cifraba ni copiaba.
+> - **Decisión de Ibrahin:** devolver el destino al de siempre para no quedarse sin copia. Las copias
+>   van **EN CLARO**, comprobadas a mano ese día (16 archivos en cada una de las dos cuentas, exit 0).
+>
+> **Sigue siendo la mayor exposición real del producto**, y la recomendación única del texto tachado
+> sigue en pie. La tarea se reescribe entera y vuelve a la cola.
+
+Lo que sí queda aprendido de aquel intento, y hay que meterlo en la tarea nueva —la auditoría se
+pasó de optimista en dos cosas:
 
 1. **No cierra «el 4 y el 7 a la vez»: cierra el 4 entero y solo la mitad del 7.** Cifrar impide
    editar una copia de forma coherente sin la clave; no impide borrarla ni sustituirla por basura.

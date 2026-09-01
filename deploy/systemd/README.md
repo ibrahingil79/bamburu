@@ -188,6 +188,13 @@ rclone copy r_cif:daily/desarrollo-bamburu-AAAA-MM-DD.db /tmp/restore/
 
 ## Cifrado de las copias
 
+> ⚠️ **NO ESTÁ PUESTO. REVERTIDO EL 1 SEP 2026 POR DECISIÓN DE IBRAHIN.** Las copias van
+> **EN CLARO**. Esta sección describe cómo se pensó, no lo que corre: los remotes `crypt` nunca
+> llegaron a crearse, la contraseña nunca se generó, y con el guardián puesto las dos copias
+> habrían abortado. Se devolvió el script al estado anterior y las dos copias se comprobaron a
+> mano ese día (16 archivos cada una, exit 0). La tarea se reescribe y vuelve a la cola.
+
+
 > **Es la sección que cita el mensaje de fallo del script.** Si has llegado aquí desde un email
 > «❌ Backup Bamburu FALLÓ … el destino no es un remote cifrado (crypt)», lo que falta es crear los
 > dos remotes `crypt`: el bloque de abajo.

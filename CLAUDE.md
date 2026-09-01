@@ -24,22 +24,34 @@
   es la principal; la unit de la secundaria sobreescribe `BACKUP_REMOTE`/`LABEL`/`SUFFIX`/`HC_URL`.
   **No la dupliques.** El heartbeat avisa si cae UNA (aviso) y es crítico si caen las DOS. Detalle en
   `deploy/systemd/README.md`.
-  ~~Las dos verifican MD5 y hacen prueba de restore real.~~ **⚙️ CORREGIDO EL 1 SEP 2026 (tarea
-  `cifrado-copias-seguridad`).** Esa frase describe el estado anterior y se tacha en vez de borrarse.
-  Ahora: **el destino va CIFRADO y el script ABORTA si no lo es** (`BACKUP_REMOTE` tiene que ser un
-  remote `crypt`; si no, email de fallo y `exit 1` sin subir nada). Un remote `crypt` **no expone
-  huellas**, así que pedírselas y creerse el silencio habría apagado la verificación en verde: la
-  comparación de huellas la hace ahora `rclone cryptcheck` sobre lo subido, **más** el MD5 del
-  fichero ya descargado en la prueba de restore —que además cierra el hueco de que
-  `PRAGMA integrity_check` responde `ok` a una base válida pero DISTINTA—. **No queda ninguna rama
-  blanda:** si una huella no se puede comparar, es un fallo, no un aviso.
-  **La contraseña de cifrado vive SOLO en `~ubuntu/.config/rclone/rclone.conf`, nunca en
-  `/etc/bamburu.env`** (ese fichero entra entero en el `process.env` del proceso web), **más una copia
-  fuera del servidor en custodia de Ibrahin**: sin ella las copias son ruido.
-  **⚠️ Estado al 1 sep 2026: el código está puesto y probado; los remotes `crypt` los crea Ibrahin**
-  (necesita escribir en `~/.config/rclone`, fuera del alcance del orquestador). Hasta que existan,
-  las dos copias abortan con email — a propósito. Cómo crearlos: `deploy/systemd/README.md`
-  §«Cifrado de las copias».
+  **Las dos verifican MD5 y hacen prueba de restore real.**
+  ~~⚙️ CORREGIDO EL 1 SEP 2026: el destino va CIFRADO y el script ABORTA si no lo es.~~
+  **⚙️ REVERTIDO EL 1 SEP 2026, 10:0x, POR DECISIÓN DE IBRAHIN. LAS COPIAS VAN SIN CIFRAR.**
+  Se tacha en vez de borrarse, que es lo que manda este documento.
+
+  **Qué pasó, en orden.** La tarea `cifrado-copias-seguridad` quedó **APARTADA** («el arquitecto
+  declaró la tarea mal planteada»), pero **el código del programador se había quedado puesto y
+  vivo**: el script apuntaba a `gdrive_cif:` / `gdrive_gili_cif:` y abortaba si el destino no era un
+  remote `crypt`. **Esos remotes nunca llegaron a existir** —los tiene que crear Ibrahin, porque hace
+  falta escribir en `~/.config/rclone` y el orquestador tiene el `$HOME` en solo lectura— **y la
+  contraseña de cifrado nunca se generó**. Resultado: las dos copias de esta madrugada habrían
+  abortado. Ni cifraba ni copiaba.
+
+  **La decisión de Ibrahin, en sus palabras:** *«los datos actuales son de prueba y que vayan en claro
+  una noche más no expone nada real; quedarme sin copia sí es riesgo»*. Se devolvieron
+  `scripts/bamburu-backup.sh` y la unit secundaria **al estado exacto anterior al cifrado** (la
+  versión que corrió con éxito a las 03:31 de ese mismo día), no a una reconstrucción.
+
+  **Comprobado el 1 sep 2026 lanzando las DOS copias a mano, sin esperar al reloj:** principal exit 0
+  en 476 s y secundaria exit 0 en 523 s, **16 archivos cada una**, con descarga real e
+  `integrity_check` de cada base, los dos emails `OK`, **16 de 16 en las dos cuentas de Drive** y el
+  heartbeat en `principal: OK · secundaria: OK`.
+
+  **LO QUE SIGUE PENDIENTE, y no es poco:** las copias van **EN CLARO** en dos Drive personales, con
+  203 clientes y 922 facturas dentro. Los vectores 4 y 7 de `docs/seguridad/vectores-de-ataque.md`
+  siguen ABIERTOS. La tarea se reescribe entera —con la llave en el servidor **y** una copia por
+  pantalla para Ibrahin, y con la comprobación nocturna descifrando de verdad— y vuelve a la cola.
+  El trabajo del programador **no se tira**: vive en el commit `5834d79` y de ahí se parte.
 - El Peldaño 9 — Belleza/estética sigue pendiente en el roadmap funcional, pero está aplazado y no es
   la siguiente tarea.
 
