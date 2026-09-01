@@ -27,7 +27,7 @@ const NOMBRE_PASO = {
 /**
  * Redacta el parte. Función pura: se le pasa todo y devuelve texto. Se prueba sin red.
  */
-export function redactar({ estado, cuota, historialReciente, tareaEnTablero, pendientesEnTablero = [], averia = null, desde, ahora = Date.now(), config }) {
+export function redactar({ estado, cuota, historialReciente, tareaEnTablero, pendientesEnTablero = [], averia = null, desde, ahora = Date.now(), config, barridos = [] }) {
   const L = [];
   const t = (s) => L.push(s);
 
@@ -131,6 +131,29 @@ export function redactar({ estado, cuota, historialReciente, tareaEnTablero, pen
     t(`• No he podido leerla: ${esc(cuota?.motivo || 'sin detalle')}.`);
   }
   t('');
+
+  // 6-bis · El barrido de los ratos muertos (bloque 4 del encargo del 1 sep 2026).
+  // Va DESPUÉS de la cuota a propósito: es lo que se hizo PORQUE no había cuota, y así se lee
+  // seguido. Solo aparece si hubo alguno: un parte de una espera sin barrido no dice nada.
+  if (barridos.length) {
+    t('<b>🧪 Comprobaciones en los ratos de espera</b>');
+    for (const b of barridos) {
+      if (b.estado === 'reventado') {
+        t(`• ⚠️ No se pudo pasar: ${esc(b.motivo || 'sin detalle')}`);
+        continue;
+      }
+      const cola = b.estado === 'cortado' ? ' <i>(cortado: volvió la cuota y mandó la tarea)</i>' : '';
+      t(`• ${b.ejecutados.length} ejecutadas en ${Math.round(b.segs / 60)} min${cola}`);
+      if (b.rojos.length) {
+        t(`• ❌ <b>${b.rojos.length} en rojo:</b>`);
+        for (const r of b.rojos.slice(0, 12)) t(`   · ${esc(r.gate)} (${esc(r.estado)})`);
+        if (b.rojos.length > 12) t(`   · …y ${b.rojos.length - 12} más`);
+      } else if (b.ejecutados.length) {
+        t('• ✅ Ninguna en rojo.');
+      }
+    }
+    t('');
+  }
 
   // 7 · Subida
   if (estado.subidaPendiente) {

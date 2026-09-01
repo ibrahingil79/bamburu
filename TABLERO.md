@@ -9138,6 +9138,46 @@ que aún no se pueden adjuntar no sirve de nada.
 
 ## Decisiones tomadas el 1 sep 2026
 
+- **EL BARRIDO VUELVE A EJECUTARSE SOLO, PERO SOLO EN LOS RATOS MUERTOS (bloque 4).**
+  `orchestrator/barrido.js` (pieza nueva) + el gancho en `bucle.js` + la sección del parte.
+
+  **Lo que NO cambia, y conviene decirlo primero:** el barrido nocturno **sigue retirado**
+  (`bff11d0`, 26 ago 2026) y **nada lo dispara después de un encargo**. Esa decisión sigue en pie
+  entera. Lo que se aprovecha es otra cosa: **el tiempo en que el orquestador está PARADO esperando
+  a que se reinicie la ventana de cuota**. La madrugada del 1 sep fueron **3 h 22 min de espera
+  muerta**, y una pasada cuesta **entre 20 y 30 min**.
+
+  **Por qué se puede: no cuesta cuota.** Medido el 1 sep 2026: de las **208** comprobaciones del
+  barrido, **205 no tocan el modelo**. Las **11** que llaman a la IA de verdad están **8 declaradas
+  fuera a propósito** —*«un gate que depende del saldo de una cuenta no puede vivir en un barrido de
+  regresión»*— y las 3 restantes caen en menos de un segundo sin llegar a llamar (cabo abierto, ver
+  abajo). Así que esto gasta **tiempo de máquina, no cuota**.
+
+  **Las cuatro condiciones, y dónde vive cada una:**
+  - **Una sola pasada por espera, no en bucle.** `barridoDeEstaEspera` en `bucle.js`, que vuelve a
+    `false` en cuanto se deja de esperar cuota.
+  - **Manda el trabajo.** Mientras el barrido corre se sondea la cuota **cada minuto**; si vuelve,
+    se corta (`SIGTERM`, y `SIGKILL` a los 10 s si no se muere por las buenas) y se retoma la tarea
+    en su paso. **Construir tiene prioridad sobre comprobar, siempre.**
+  - **El resultado va al parte de Telegram:** cuántas se ejecutaron, en cuántos minutos, si se
+    cortó y **la lista de las que salieron en rojo**.
+  - **No puede tumbar al daemon.** `correrBarrido` **no lanza nunca**: todo desastre sale por
+    `estado: 'reventado'` con su motivo. Hay además un `try` alrededor de la llamada, por si acaso.
+
+  **Un fallo real que cazó su propia prueba, y que se habría ido a producción:** el lector de
+  resultados se anclaba en el icono de cada línea, y `🛑` es un par sustituto y `⚠️` lleva selector
+  de variación — la clase de caracteres **se los comía**. Los `ABORTADO` y `SOSPECHOSO` habrían
+  desaparecido del recuento de rojos: **un parte que dice menos rojos de los que hay es peor que no
+  mandarlo.** Ahora se ancla en el veredicto, que es texto plano. **142 pruebas en verde** (8
+  nuevas).
+
+  **Cabo abierto que sale de aquí:** `verify-d5-create-product`, `verify-llm-migracion` y
+  `verify-albaranes-disa` están DENTRO del barrido, llaman al modelo según su código, y sus tiempos
+  medidos son **1 s, 1 s y 0 s** — imposible para una llamada real. Abortan antes de llamar y **no
+  se sabe por qué sin ejecutarlas**. Sospecha con base: los 7 negocios de esta máquina están en
+  `suspended_admin` y toda escritura recibe 403 inmediato.
+
+
 - **LOS UMBRALES DE CUOTA DEL ORQUESTADOR SE BAJAN, Y AHORA SALEN DE MEDIR.**
   `minimoParaCicloPct` **25 → 15** y `margenReservadoPct` **20 → 10** (`orquestador.config.json`).
   Actúa cuando quedan **25** puntos libres, donde antes hacían falta **45**.

@@ -17,6 +17,8 @@ import { Ciclo } from './ciclo.js';
 import { redactar, redactarApartada, redactarAveria, entregar } from './vigia/parte.js';
 import { configurado, queFalta } from './vigia/telegram.js';
 import { leerTablero, buscarSiguienteTarea, tareasPendientes, esRepo, rama } from './reader.js';
+import { correrBarrido } from './barrido.js';
+import { alcanzaParaCiclo } from './nucleo/maquina.js';
 
 export async function arrancar({ config = null, unaVuelta = false, entorno = process.env } = {}) {
   const cfg = config || cargarConfig({ entorno });
@@ -103,6 +105,12 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
   // La última avería vista. Va al parte además del aviso suelto: el aviso se manda una vez,
   // pero mientras el sistema siga roto tiene que salir en TODOS los partes.
   let averiaViva = null;
+  // Los barridos corridos en los ratos muertos desde el último parte. Van AL PARTE (regla 3 del
+  // bloque 4): qué se ejecutó y qué salió rojo. Se vacía al mandarlo.
+  let barridosDelParte = [];
+  // Una sola pasada por espera (regla 1): esto se pone a true al lanzarla y vuelve a false en
+  // cuanto el orquestador deja de estar esperando cuota. No es un bucle.
+  let barridoDeEstaEspera = false;
 
   const mandarParte = async () => {
     let cuota = null;
@@ -121,12 +129,13 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
     const historialReciente = almacen.leerHistorial().filter((h) => h.cuando >= desdeIso);
     const texto = redactar({
       estado, cuota, historialReciente, tareaEnTablero: enTablero, pendientesEnTablero,
-      averia: averiaViva, desde: cuotaAlUltimoParte, config: cfg,
+      averia: averiaViva, desde: cuotaAlUltimoParte, config: cfg, barridos: barridosDelParte,
     });
     const r = await entregar({ texto, config: cfg, entorno, logger: log });
     log.info(`Parte ${r.ok ? 'entregado' : `guardado (${r.pendientes} pendiente/s)`}.`);
     ultimoParte = Date.now();
     cuotaAlUltimoParte = cuota;
+    barridosDelParte = [];
   };
 
   // ── El bucle ──────────────────────────────────────────────────────────────
@@ -181,6 +190,42 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
     }
     if (unaVuelta) break;
     if (parando && (!estado.tarea || estado.esperandoCuota)) break;
+
+    // ── EL RATO MUERTO SE APROVECHA (bloque 4 del encargo del 1 sep 2026) ────────────────────
+    // Si estamos parados esperando a que se reinicie la ventana, se corre UNA pasada del barrido
+    // en vez de dormir. No cuesta cuota —205 de las 208 comprobaciones no tocan el modelo, y las
+    // que sí están declaradas fuera a propósito—: cuesta tiempo de máquina, y ese tiempo hoy se
+    // tira. La madrugada del 1 sep fueron 3 h 22 min de espera muerta.
+    //
+    // Las cuatro reglas viven aquí y en barrido.js: UNA pasada por espera; la cuota manda y corta;
+    // el resultado va al parte; y NADA de esto puede tumbar el daemon —de ahí el try entero.
+    if (estado.esperandoCuota && !barridoDeEstaEspera && !parando) {
+      barridoDeEstaEspera = true;
+      try {
+        log.info('⏳ Parado por cuota: aprovecho para pasar el barrido de comprobaciones.');
+        const r = await correrBarrido({
+          cfg, log, entorno,
+          hayCuotaYa: async () => {
+            try {
+              const c = await vigilante.consultar();
+              return alcanzaParaCiclo(c, cfg).alcanza;
+            } catch { return false; }
+          },
+        });
+        barridosDelParte.push(r);
+        const resumen = `${r.ejecutados.length} ejecutadas · ${r.rojos.length} en rojo · ${r.segs} s`;
+        if (r.estado === 'completo') log.exito(`Barrido terminado: ${resumen}.`);
+        else if (r.estado === 'cortado') log.info(`Barrido cortado: ${resumen}. ${r.motivo}.`);
+        else log.aviso(`El barrido no se pudo pasar: ${r.motivo}`);
+      } catch (e) {
+        // Aquí NO se llega salvo desastre: correrBarrido no lanza. La red está por si acaso,
+        // porque la regla del fichero es que esto no se muere.
+        log.error(`El barrido de la espera reventó y sigo igual: ${e.message}`);
+      }
+      continue;   // vuelta nueva: lo primero que hará es volver a mirar la cuota.
+    }
+    if (!estado.esperandoCuota) barridoDeEstaEspera = false;
+
     await dormir(espera);
   }
 
