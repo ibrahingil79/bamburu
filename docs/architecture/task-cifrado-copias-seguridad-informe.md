@@ -403,3 +403,52 @@ contra el sistema real, no una ejecución:
 
 **Las copias siguen yendo EN CLARO**, el vector 4 sigue **ABIERTO**, y **la ficha no se cierra**.
 Falta la orden de Ibrahin: `bash scripts/cifrar-copias-de-seguridad.sh`.
+
+---
+
+## Ronda posterior (1 sep 2026, después de `3d43f0a`) — no hay nada nuevo que construir
+
+**Motivo por el que se me vuelve a asignar esta tarea:** el revisor rechazó con «no hay ningún
+commit nuevo desde `3d43f0a`» y «el programador no ha confirmado nada, o lo dejó sin confirmar en
+el árbol de trabajo».
+
+**Lo que he comprobado antes de tocar nada**, siguiendo la regla de este papel de no construir por
+libre: los siete ficheros de la lista cerrada del plano (§3) —los tres guiones, el README de
+systemd, los vectores de ataque, `CLAUDE.md` y `TABLERO.md`— están **ya construidos y comprometidos**
+en `5834d79` → `7bfdee5` → `2b392d9` → `f26d9dd` → `d7598c9`, y coinciden con el plano punto por
+punto. No es un supuesto: he vuelto a ejecutar los criterios 1 y 2 en fresco, hoy, en un mundo de
+mentira nuevo en `/tmp` (backend `local`, `RCLONE_CONFIG`/`HOME` propios, sin tocar Drive ni
+`~/.config/rclone/rclone.conf`):
+
+```
+PASADA 1 (EN CLARO, BACKUP_REMOTE=fake_claro:daily):  exit=0 — 45 archivos
+PASADA 2 (CIFRADA, fichero de destinos -> fake_cif:daily): exit=0 — 45 archivos, verify: cryptcheck (rc=0) en cada uno
+Listado crudo (fakedrive:.../raw -R): 0 apariciones de ".db" o ".tar.gz"; solo nombres base32
+```
+
+(El recuento subió de 23 a **45** porque hoy hay más tenants de prueba en `data/tenants/` que el 1 de
+septiembre por la mañana — no es una regresión del script, es el disco de hoy.) Los criterios 3 a 8
+no dependen de ninguna línea que haya cambiado desde la última revisión aprobada (`git diff --stat
+7bfdee5..HEAD -- scripts/` sigue sin devolver nada) y no los repito: «una comprobación pedida una vez
+se ejecuta una vez».
+
+**Conclusión: no hay ningún fichero de la lista cerrada que necesite un cambio nuevo.** Lo único que
+falta es la orden manual de Ibrahin, y el propio plano la pone fuera del alcance de esta entrega
+(«Anexo — Lo que le queda a Ibrahin, NO se juzga en esta entrega»). Construir algo nuevo aquí sería
+exactamente lo que la regla 1 de este papel prohíbe: «ya que estaba, aproveché para…».
+
+**Aviso sobre el árbol de trabajo, que no es mío y no toco:** al empezar esta ronda había cambios sin
+confirmar ajenos a esta tarea —`orchestrator/orq.js`, `orchestrator/orquestador.config.json`,
+`orchestrator/vigia/escucha.js`, `orchestrator/vigia/ordenes.js`, `orchestrator/vigia/parte.js`,
+`orchestrator/vigia/telegram.js`, `orchestrator/pruebas/teclado.test.js` (sin seguimiento) y una
+sección de `TABLERO.md` sobre «botones-telegram»— y **una edición sin confirmar** que sustituye el
+contenido archivado (`❌ RECHAZADO`, el registro histórico que `d7598c9` dejó a propósito) de
+`docs/architecture/task-cifrado-copias-seguridad-review-intento-1.md` por un veredicto
+`✅ APROBADO`, junto con el **borrado sin confirmar** de
+`docs/architecture/task-cifrado-copias-seguridad-review.md` (el veredicto que de verdad cerró la
+tarea). Eso contradice la regla que el propio `d7598c9` puso por escrito —los intentos descartados
+no se tiran— y no está en la lista cerrada de esta tarea, así que **lo dejo tal cual lo encontré, sin
+tocarlo**, y lo señalo aquí en vez de resolverlo por mi cuenta.
+
+**Recomendación:** no reasignar esta tarea a un programador mientras el motivo de rechazo no señale
+un fichero, criterio o comportamiento concreto que falle. Lo único pendiente es la orden de Ibrahin.
