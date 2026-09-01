@@ -8385,7 +8385,7 @@ destruir datos*. Aquí son ficheros de código sin montar, no datos de ningún n
 ## TAREA — Cifrar las copias de seguridad · CÓDIGO HECHO, OPERACIÓN PENDIENTE DE IBRAHIN
 
 - **id:** cifrado-copias-seguridad
-- **estado:** ⚠️ **código HECHO el 1 sep 2026** · **operación PENDIENTE** (cuatro pasos de terminal)
+- **estado:** ⚠️ **código HECHO el 1 sep 2026** (`08ba041`) · **operación PENDIENTE** (cuatro pasos de terminal)
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
 
 Hoy las copias van **en claro en dos Drive personales**, con **203 clientes y 922 facturas dentro**.
