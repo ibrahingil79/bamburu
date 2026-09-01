@@ -8178,10 +8178,10 @@ descuentos declaradas juntas, que el modelo pida dos en un turno **no es un caso
 > Commits: `d9d5ed7`, `13ef3d8`
 > Registro: `docs/orquestador/tareas/disa-herramientas-en-paralelo.md`
 
-## TAREA — La pantalla de «no tienes permiso» abre una ventanita sobre una página en blanco
+## ✅ HECHA (2026-09-01) — La pantalla de «no tienes permiso» abre una ventanita sobre una página en blanco · `52d4529`
 
 - **id:** pantalla-403-ventanita
-- **estado:** pendiente
+- **estado:** hecha
 - **origen:** `docs/auditorias/diagnostico-arquitectonico.md` §4.3
 
 La respuesta 403 de **todas** las rutas con `requirePerm` (`core/auth.js:28`) devuelve un HTML
@@ -8199,6 +8199,10 @@ una página en blanco y nada más**: ni ventana, ni aviso, ni explicación.
 alcance y `alert` no está en su patrón. Se vuelve a cumplir la frase que ya está escrita en
 `CLAUDE.md`: *un censo que dice cero y no es cierto es peor que no tenerlo, porque cierra la
 pregunta*.
+
+> **Cerrada por el orquestador el 2026-09-01.**
+> Commits: `52d4529`
+> Registro: `docs/orquestador/tareas/pantalla-403-ventanita.md`
 
 ## TAREA — El portal del cliente escribe el dinero a la inglesa
 
