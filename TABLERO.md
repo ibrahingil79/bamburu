@@ -8368,6 +8368,648 @@ destruir datos*. Aquí son ficheros de código sin montar, no datos de ningún n
 > Motivo: el arquitecto declaró la tarea mal planteada
 > Registro: `docs/orquestador/tareas/retirar-pantallas-muertas.md`
 
+# 📌 TAREAS EN FORMATO DEL ORQUESTADOR — volcado del 1 sep 2026 (bloque 3)
+
+> **Las 43 entradas que el contraste del bloque 2 declaró VIVAS, convertidas al formato que lee el
+> orquestador.** Ninguna se ha recortado ni descartado, y **ninguna se ha resumido**: cada una
+> conserva su motivo y su detalle, porque eso es lo que el arquitecto lee para hacer el plano.
+> Donde el contraste corrigió una cifra o una línea, la corrección va escrita dentro de la tarea.
+>
+> **El orden lo fijó Ibrahin:** 1º el cifrado de las copias, 2º el anclaje de VERI\*FACTU. El resto
+> va agrupado por familias, y donde una tarea depende de otra queda dicho en su cuerpo.
+>
+> **Las 11 que NO están aquí** siguen en el backlog de abajo con su veredicto escrito: 4 caducadas
+> (cerradas con su commit), 4 no convertibles (les falta un criterio que solo da Ibrahin) y 3 no
+> verificables sin ejecutar.
+
+## SIGUIENTE TAREA — Cifrar las copias de seguridad
+
+- **id:** cifrado-copias-seguridad
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
+
+Hoy las copias van **en claro en dos Drive personales**, con **203 clientes y 922 facturas dentro**.
+Cierra a la vez los **vectores 4 y 7** de la auditoría de seguridad
+(`docs/seguridad/vectores-de-ataque.md`).
+
+**Es configuración (`rclone crypt`), no programación.** Eso la hace la más barata de todas las de
+esta lista en relación con lo que protege, y por eso va primera.
+
+**Verificado contra el árbol el 1 sep 2026:** `scripts/bamburu-backup.sh` no contiene ni `crypt`, ni
+`encrypt`, ni `gpg`, ni `age`. No hay cifrado de ningún tipo.
+
+**Cuidado con lo que NO se puede romper:** hay DOS copias diarias en dos cuentas distintas
+(principal 03:33 → `ibrahingil`, secundaria 03:35 → `gilibrahin`), **servidas por la MISMA pieza**
+(`CLAUDE.md`): el script sin entorno es la principal, y la unit de la secundaria sobreescribe
+`BACKUP_REMOTE`/`LABEL`/`SUFFIX`/`HC_URL`. **No se duplica el script.** Las dos verifican MD5 y hacen
+prueba de restore real: el cifrado tiene que dejar esa verificación en pie, porque si se cifra y
+deja de comprobarse que la copia abre, se cambia un riesgo por otro.
+
+## TAREA — Anclar la cadena de VERI*FACTU fuera del servidor
+
+- **id:** anclar-verifactu-fuera
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
+
+**Quien tenga acceso al fichero `.db` puede reescribir importes y recalcular la cadena**, y desde
+dentro nadie lo nota: la cadena vuelve a cuadrar consigo misma. Es el agujero de integridad de las
+**922 facturas** emitidas.
+
+**El envío real a la AEAT lo resuelve solo** —una vez enviada, la Agencia tiene su copia y la cadena
+deja de depender solo de esta máquina—, así que esta tarea y ese envío son la misma pregunta mirada
+desde dos sitios.
+
+**Verificado el 1 sep 2026:** no existe ningún anclaje externo en el árbol (ni sellado de tiempo, ni
+TSA, ni publicación de huellas fuera).
+
+**⚠️ AVISO QUE MANDA SOBRE EL PLANO:** el encargo del 1 sep dice **no tocar Verifactu ni la cadena de
+facturas** — está en la cola y se hace cuando toque. Esta tarea queda **convertida y en su sitio del
+orden**, pero **no se empieza sin encargo expreso de Ibrahin**. Y cuando se haga: `toFixed(2)` de
+`modules/erp/routes/invoices.js:156` es **entrada del hash de la cadena**; tocar ese fichero a la
+ligera rompe las 922 facturas emitidas.
+
+## TAREA — Manifiesto de huellas del histórico de copias
+
+- **id:** manifiesto-huellas-backups
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
+
+Hoy **solo se verifica la copia del día**: una copia de hace cinco días se puede editar y **nadie
+vuelve a mirarla nunca**. El histórico es de 14 copias, y 13 de ellas están sin vigilar.
+
+Lo que pide la entrada: **SHA-256 por copia, guardado aparte, comprobado contra las 14 en cada
+pasada.** Guardado *aparte* es la parte que importa: una huella que viva en el mismo sitio que el
+fichero no prueba nada, porque quien edite el fichero edita la huella.
+
+**Verificado el 1 sep 2026:** `scripts/bamburu-backup.sh` no menciona `sha256` ni manifiesto de
+ningún tipo.
+
+## TAREA — La retención del backup borra si la subida falló a medias
+
+- **id:** retencion-backup-fallo-parcial
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
+
+`scripts/bamburu-backup.sh:164` borra lo más viejo que N días **sin exigir que la subida haya salido
+entera**.
+
+**⚙️ LA ENTRADA ORIGINAL ESTABA MAL ESCRITA, y el matiz cambia la tarea.** Decía «borra aunque la
+subida haya fallado». No es cierto del todo: **cuatro líneas antes** hay un guardián,
+`[ "$uploaded" -gt 0 ] || fail_exit "no se subió ningún archivo"`, que existe **desde el 19 jun
+2026** (`3076f68`). Si no se subió NADA, el script sale y no borra.
+
+**El hueco real, que sí lo es:** el guardián exige **al menos uno**. Si se subió un fichero y falló
+otro, `uploaded` vale 1, el guardián pasa y **la retención se ejecuta igual** — borrando copias
+viejas buenas mientras la del día está incompleta.
+
+**Lo que hay que hacer:** condicionar el borrado al éxito **de todos** los ficheros, no de al menos
+uno. Y como son DOS copias con la misma pieza, el arreglo vale para las dos a la vez.
+
+## TAREA — Cifrado en reposo de las bases de cada negocio
+
+- **id:** cifrado-en-reposo-bases
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
+
+Las bases de negocio (`data/tenants/<slug>.db`) están **en claro en el disco del servidor**. El
+aislamiento hoy es *a nivel de fichero* —una base por negocio—, que protege de que un negocio vea a
+otro, pero no de quien tenga el disco.
+
+**Verificado el 1 sep 2026:** no hay SQLCipher ni `PRAGMA key` en el árbol.
+
+**Va DESPUÉS del cifrado de las copias a propósito:** las copias salen de la máquina y acaban en dos
+Drive personales; las bases no se mueven de aquí. El mismo esfuerzo protege más arriba.
+
+## TAREA — Permisos · Paso 1 — dejar escrito qué permiso exige cada ruta
+
+- **id:** permisos-paso-1-censo-rutas
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
+
+Recorrer las rutas y **dejar escrito qué permiso exige cada una**. **Desbloquea el Paso 2**, que es
+DISA administrando permisos: no se puede dejar que la IA reparta permisos sobre un mapa que no
+existe.
+
+**⚙️ LA CIFRA DE LA ENTRADA NO ES REPRODUCIBLE (medido el 1 sep 2026).** Decía «600 de 1.025 rutas
+sin comprobación de permiso visible en la línea». Contando sobre el árbol salen **1.995
+declaraciones de ruta** y **464 guardas visibles** (`requirePerm`, `checkPermission`, `adminAuth`),
+que no da ni 600 ni 1.025 por ningún camino.
+
+**La proporción del problema se sostiene** —la mayoría de rutas no enseña su permiso en la línea—
+**pero la cifra concreta no vale como criterio de HECHO.** Quien construya esto **empieza fijando el
+método de conteo, y ese método es parte de la entrega**: sin él, no hay forma de saber cuándo está
+terminado. Es exactamente la lección de `CLAUDE.md` §«un inventario con "~" y "..." NO es una lista
+cerrada»: solo vale un inventario `fichero:línea` verificado contra el código de HOY.
+
+## TAREA — Roles heredados, en vez de casilla por casilla
+
+- **id:** roles-heredados
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
+
+Hoy los permisos son **casilla por casilla y persona por persona: 55 filas para 9 usuarios**. Cada
+alta de empleado se hace a mano y cada olvido es un agujero o un bloqueo.
+
+**Verificado el 1 sep 2026:** las tablas `roles`, `role_permissions` y `user_roles` **no existen** en
+el árbol. No hay nada empezado.
+
+**Ojo a la regla permanente de `CLAUDE.md`:** cualquier migración que toque datos de un negocio
+**archiva, no borra**. Los 55 permisos actuales no se destruyen al pasar a roles: se conservan.
+
+## TAREA — 2FA obligatoria para dueño y administradores
+
+- **id:** 2fa-obligatoria-owner-admin
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
+
+Hoy la verificación en dos pasos es **opcional**, con un mínimo de 8 caracteres en la contraseña.
+Las cuentas `owner` y `admin` son las que pueden facturar, cobrar y ver todo, y son justo las que
+pueden entrar con solo una contraseña.
+
+**Verificado el 1 sep 2026:** no hay ninguna obligatoriedad en el árbol (ni `totp_required`, ni
+equivalente).
+
+**El TOTP ya está construido** (`core/`, con bcrypt + 2FA TOTP): esto no es construir 2FA, es
+**exigirla** a dos roles. Lo que hace falta pensar es la puerta de entrada: cómo se le exige a un
+dueño que ya está dentro sin dejarlo fuera de su propio negocio.
+
+## TAREA — La sesión dura 24 h fijas y no se renueva por actividad
+
+- **id:** sesion-24h-sin-renovacion
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
+
+La sesión caduca a las 24 h **cuentes lo que cuentes**: ni se renueva porque estés trabajando, ni se
+acorta porque te hayas ido. Quien deja el ordenador abierto sigue dentro; quien está usándolo se
+cae a media tarea.
+
+**⚙️ LÍNEA CORREGIDA EL 1 SEP 2026:** la entrada citaba `core/auth.js:74`, y ahí está `BCRYPT_COST`.
+**El plazo real está en `core/auth.js:107`:** `const expires = now + 24 * 60 * 60`.
+
+La entrada original decía solo «Revisar». **Revisar no es un criterio de HECHO**, así que la tarea
+tiene que empezar decidiendo qué comportamiento se quiere —renovación por actividad, plazo distinto,
+o las dos— y eso queda escrito en la entrega.
+
+## TAREA — La CSP todavía permite `unsafe-inline`
+
+- **id:** csp-unsafe-inline
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
+
+**8 usos** de `unsafe-inline` en `core/security-headers.js` — hallazgo **M8** de la auditoría de
+seguridad, **esfuerzo alto**. **Verificado el 1 sep 2026: son exactamente 8.** La cifra de la entrada
+es correcta, que en este volcado es la excepción y no la regla.
+
+**LA LECCIÓN DE C4b, QUE ESTÁ EN `CLAUDE.md` Y MANDA SOBRE EL PLANO:** la CSP es una cabecera **POR
+RESPUESTA**, así que **se endurece POR SUPERFICIE, no de golpe**. Y en cuanto una respuesta lleva
+nonce, **el navegador IGNORA `unsafe-inline` en esa respuesta**: es todo-o-nada por página.
+
+Y la trampa que ya costó dos fallos reales: **un nonce NO cubre los handlers de atributo**
+(`onclick=""`), solo el bloque `<script>`. Los handlers **no se delatan al cargar: solo al PULSAR**.
+Endurecer una pantalla sin migrar sus botones **deja botones muertos EN SILENCIO**. Por eso esto se
+mide pulsando, no cargando.
+
+## TAREA — Los cuatro temporizadores abren la base en escritura cada hora
+
+- **id:** temporizadores-en-solo-lectura
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Arquitectura
+
+`caducar-reservas`, `avisos`, `propuestas` y `recordatorios-cita` **abren en escritura cada hora**,
+también donde solo leen. Cada apertura en escritura es un candado potencial sobre el negocio.
+
+**Verificado el 1 sep 2026:** los cuatro scripts tienen **cero** `readonly: true`.
+
+Que abran **en solo lectura donde solo leen**. Es la mitad barata del problema de bloqueos de SQLite
+y no exige tocar el modelo de procesos.
+
+## TAREA — Bajar la espera de bloqueo de 5 s a una fracción
+
+- **id:** bajar-espera-de-bloqueo
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Arquitectura
+
+Hoy `busy_timeout` está en **5 segundos**. Eso convierte un choque entre dos escrituras en **el
+producto congelado cinco segundos**, que para quien está delante es una pantalla colgada sin
+explicación.
+
+Bajarlo a una fracción **cambia la avería, no la elimina**: pasa de «producto congelado 5 segundos» a
+«una operación falla rápido». Y eso es mejor, porque un fallo rápido se puede reintentar y se puede
+contar; una congelación no.
+
+**Va con la anterior:** las dos atacan lo mismo desde lados distintos, y juntas son la mitad del
+riesgo de bloqueo del diagnóstico de SQLite.
+
+## TAREA — Un solo escritor: que los temporizadores pidan el trabajo al servidor
+
+- **id:** un-solo-escritor
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Arquitectura
+
+Que los temporizadores **pidan el trabajo al servidor en vez de abrir la base ellos**. Hoy hay varios
+procesos escribiendo en el mismo fichero, y ese es el origen de los bloqueos, no su síntoma.
+
+Es la tarea que **desbloquea** «varios procesos con reparto de negocios», que está apartada como no
+convertible precisamente hasta que ésta y la de la espera de bloqueo estén cerradas.
+
+## TAREA — Integración continua: que las comprobaciones se ejecuten en cada subida
+
+- **id:** integracion-continua
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Observabilidad
+
+**Ningún automatismo dispara las comprobaciones.** El barrido nocturno se retiró a propósito el 26
+ago 2026 (`bff11d0`) y `RITUAL.md` prohíbe lanzarlo por iniciativa propia, así que hoy solo corren
+cuando Ibrahin lo pide.
+
+**⚙️ CIFRA CORREGIDA EL 1 SEP 2026:** la entrada decía «267 gates» y ese número no sale de ningún
+conteo del árbol. Son **89 ficheros `gate-*`** en disco, **178 ficheros de comprobación** en total y
+**208 comprobaciones dentro del barrido**.
+
+**Esto NO lo cierra el bloque 4 del encargo del 1 sep.** Aquél lanza el barrido en las esperas de
+cuota del orquestador, que es aprovechar tiempo muerto; esto es **comprobar en cada subida**, que es
+otra cosa y sigue viva.
+
+**Dato para dimensionarlo:** una pasada entera dura entre **20 y 30 minutos** (suma medida de 50,6
+min en serie, con la aceleración real de esta máquina). Y **205 de las 208 no tocan el modelo**, así
+que no cuesta cuota de IA: cuesta tiempo de máquina.
+
+## TAREA — Registro estructurado en vez de mensajes sueltos
+
+- **id:** registro-estructurado
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Observabilidad
+
+Hoy el registro son **`console.log` sueltos** y el diario del orquestador. No se puede filtrar por
+negocio, ni por gravedad, ni buscar una petición concreta.
+
+**⚙️ CIFRA CORREGIDA EL 1 SEP 2026: son 14**, no 22, contados en `core/` y `modules/`. El defecto es
+cierto; la cifra estaba inflada.
+
+## TAREA — Métricas básicas: cuántas peticiones, cuánto tardan, cuál va lenta
+
+- **id:** metricas-basicas
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Observabilidad
+
+No hay forma de saber **cuántas peticiones entran, cuánto tardan y cuál va lenta** sin mirarlo a
+mano en el momento. Cuando algo va despacio, hoy se descubre porque alguien se queja.
+
+Va después del registro estructurado: sin un registro que se pueda contar, las métricas se
+construyen dos veces.
+
+## TAREA — La API no tiene versión
+
+- **id:** api-versionado
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · API
+
+**`/api/v1` no existe hoy** — verificado el 1 sep 2026, cero coincidencias en el árbol. Toda la API
+cuelga de `/api/...` sin versión, así que **cualquier cambio de forma rompe a quien la esté usando**
+y no hay manera de convivir con dos formas a la vez.
+
+Es la primera de las cuatro de API porque las otras tres se apoyan en ella: no se documenta ni se
+valida un contrato que no tiene nombre.
+
+## TAREA — La API no tiene contrato documentado
+
+- **id:** api-contrato-documentado
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · API
+
+No hay **OpenAPI/Swagger** ni equivalente. Quien quiera integrarse tiene que leer el código, y
+cualquier cambio se entera el que lo sufre.
+
+## TAREA — Validación en todas las entradas de la API
+
+- **id:** api-validacion-entradas
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · API
+
+`zod` está en **5 ficheros** del árbol (verificado el 1 sep 2026; la entrada decía «16 sitios de 611
+rutas», que es otro método de conteo). El resto de entradas **se creen lo que les llega**.
+
+**Ojo al orden:** validar de golpe 611 rutas es la clase de cambio que rompe cosas en silencio. Se
+hace **por superficie**, como la CSP, y cada superficie se mide antes y después.
+
+## TAREA — Autenticación por token con ámbitos y cuotas
+
+- **id:** api-token-ambitos-cuotas
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · API
+
+Hoy no hay forma de darle acceso a un programa de fuera sin darle una **sesión de persona**. Hace
+falta autenticación por token, **con ámbitos** (qué puede tocar) **y cuotas** (cuánto puede pedir).
+
+Depende del versionado y del contrato: un token con ámbitos sobre una API sin forma declarada es un
+permiso sobre algo que cambia solo.
+
+## TAREA — Datos de ejemplo borrables al crear un negocio
+
+- **id:** datos-ejemplo-borrables
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
+
+Un negocio nuevo nace con datos de ejemplo y **no hay forma de quitarlos de una vez**. Verificado el
+1 sep 2026: no existe nada parecido en el árbol.
+
+**Y esto tiene una lección propia que ya costó cara** (`CLAUDE.md` §«Lo que una prueba crea, la
+prueba lo borra»): el 23 ago se descubrió que **200 de los 239 clientes del negocio de desarrollo
+eran restos de gates — el 84 %**. Y 130 de ellos **ya no se podían borrar** porque tenían facturas en
+la cadena de VERI\*FACTU: hubo que archivarlos. **La basura que se deja hoy puede volverse imborrable
+mañana**, así que este borrado tiene que existir ANTES de que los datos de ejemplo se enreden con un
+documento legal.
+
+## TAREA — Que el oficio traiga serie de facturas, IVA y recordatorios
+
+- **id:** oficio-serie-iva-recordatorios
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
+
+Hoy elegir oficio trae **solo el catálogo**. Debería traer también **la serie de facturas, el IVA y
+los recordatorios** que ese oficio necesita: es lo que convierte «elegir oficio» en «el programa ya
+está configurado para lo mío».
+
+Verificado el 1 sep 2026: no existe. **Cuidado con lo fiscal:** la serie y el IVA no son
+preferencias, son datos con consecuencias legales, y el Saneamiento 4 ya dejó la clasificación
+fiscal explícita e inmutable por línea. Esto tiene que apoyarse en ese trabajo, no rodearlo.
+
+## TAREA — Papelera con recuperación por el propio dueño
+
+- **id:** papelera-con-recuperacion
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
+
+Hoy, cuando algo se quita, el dueño **no puede recuperarlo él**. Verificado el 1 sep 2026: no hay
+papelera en el árbol.
+
+**Encaja con la regla permanente de `CLAUDE.md`** —archivar, no destruir—: buena parte de lo que se
+«borra» ya se archiva por dentro. **Lo que falta no es guardar: es enseñarlo y dejar deshacer.**
+
+## TAREA — Historial de cambios visible para el cliente
+
+- **id:** historial-cambios-visible-cliente
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
+
+El cliente no puede ver **qué cambió en sus documentos y cuándo**. Verificado el 1 sep 2026: no
+existe.
+
+**Va con el aviso de dos personas editando lo mismo y con la actividad de empleados**: las tres
+piden el mismo cimiento —dejar rastro de quién cambió qué— y construirlas por separado es
+construirlo tres veces.
+
+## TAREA — Exportación completa de todos sus datos
+
+- **id:** exportacion-completa-datos
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
+
+El dueño no puede llevarse **todo lo suyo** de una vez. Verificado el 1 sep 2026: no existe.
+
+**Es media pata del RGPD** —que está apartado como no convertible porque exige que Ibrahin decida
+antes cómo convive el borrado con la inmutabilidad fiscal—, pero **exportar no borra nada**, así que
+esta mitad **sí se puede construir sin esa decisión**. Y hacerla primero deja el RGPD más pequeño
+cuando llegue.
+
+## TAREA — Modo de pruebas por negocio
+
+- **id:** modo-pruebas-por-negocio
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
+
+No hay forma de que un negocio pruebe sin ensuciar sus datos de verdad. Verificado el 1 sep 2026: no
+existe (lo único que aparece buscando es el `--no-sandbox` de Chromium, que no tiene nada que ver).
+
+**Se apoya en los negocios desechables que los gates ya usan** (`negocioDesechable`,
+`EMPIEZAN_DE_CERO`): la pieza de crear y tirar un negocio entero ya está construida y probada.
+
+## TAREA — Entrada como cliente para soporte, con motivo y registro
+
+- **id:** entrada-como-cliente-soporte
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
+
+Para ayudar a un cliente hoy hay que pedirle la contraseña o mirar por encima de su hombro.
+Verificado el 1 sep 2026: no existe.
+
+**Las dos condiciones no son adorno, son la tarea:** **motivo obligatorio** y **registro**. Una
+entrada de soporte sin rastro es una puerta trasera con buena intención, y este producto guarda datos
+de salud en algunos oficios.
+
+## TAREA — Página de estado pública
+
+- **id:** pagina-estado-publica
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
+
+Cuando algo falla, el cliente **no tiene dónde mirar**: solo puede escribir y esperar. Verificado el
+1 sep 2026: no existe.
+
+Se apoya en las métricas y en el registro estructurado: una página de estado que se escribe a mano
+miente en cuanto nadie la actualiza.
+
+## TAREA — Límites visibles antes de chocar contra ellos
+
+- **id:** limites-visibles
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
+
+Hoy los topes **se descubren chocando**: el de gasto de IA del mes, los envíos de correo, el
+almacenamiento. Verificado el 1 sep 2026: no hay nada que los enseñe antes.
+
+**Y hay un caso medido de lo que cuesta:** en julio de 2026 el negocio agotó su tope de IA (5 € de
+5 €), el freno empezó a cortar con 429 **antes** de llamar a la API, y una comprobación murió
+esperando una pantalla que no se pintaba nunca. **El diagnóstico que quedó escrito era falso** y se
+tardó en descubrir. Un tope que no se ve no solo molesta: **hace que se diagnostique mal**.
+
+## TAREA — Ciclo completo de suscripción
+
+- **id:** ciclo-suscripcion-completo
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
+
+Alta, cobro, **tarjeta caducada**, cancelación y recuperación. Verificado el 1 sep 2026: no existe
+(lo único que aparece es un mensaje de límite de envíos en la tienda, que es **Capa 2 y está
+CONGELADA**).
+
+**El caso que de verdad importa es la tarjeta caducada**, porque es el único del ciclo que ocurre sin
+que nadie lo pida y el que decide si un cliente se pierde solo.
+
+## TAREA — Corregir errores de semanas atrás en documentos no fiscales
+
+- **id:** corregir-errores-documentos-no-fiscales
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
+
+Un fallo de hace semanas en un documento **que no es fiscal** hoy no se puede arreglar limpiamente.
+
+**La frontera es la tarea:** *no fiscal* es la palabra que lo delimita todo. Una factura emitida
+**no se toca jamás** —está en la cadena de VERI\*FACTU—, y esa línea tiene que quedar escrita en el
+plano antes de tocar nada, porque los documentos se parecen entre sí en la pantalla y no en la ley.
+
+## TAREA — Deshacer una importación entera
+
+- **id:** deshacer-importacion-entera
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
+
+Si una importación entra mal, hoy hay que **deshacerla fila a fila**. Verificado el 1 sep 2026: no
+existe.
+
+**El importador ya está construido** (`d55dd8b`, Ficha H) y ya hace la mitad buena: **analizar no
+escribe nada**, así que los fallos se ven antes. Lo que falta es la vuelta atrás **de lo que ya
+entró**, y esa es la que no existe.
+
+## TAREA — Fusionar clientes duplicados
+
+- **id:** fusionar-clientes-duplicados
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
+
+Los duplicados se acumulan y hoy **no hay forma de unirlos**. Verificado el 1 sep 2026: no existe.
+
+**Y aquí hay una trampa medida:** una factura **guarda el nombre del cliente por dentro**. Se
+descubrió el 23 ago al limpiar los restos de gates: se archivaron 130 clientes y **sus nombres
+siguen apareciendo en el área de Ventas**, porque la factura no mira al cliente, lleva su nombre
+copiado. Fusionar dos clientes **no puede reescribir facturas emitidas**, así que el plano tiene que
+decir qué se une y qué se queda como estaba.
+
+## TAREA — Búsqueda global
+
+- **id:** busqueda-global
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
+
+No se puede buscar **en todo el programa a la vez**: hay que saber en qué pantalla mirar. Verificado
+el 1 sep 2026: no existe.
+
+**Va emparejada con «buscar dentro de los adjuntos»**, que es su continuación natural: la auditoría
+las contaba juntas («un índice, dos funciones»), y separarlas obliga a construir el índice dos veces.
+
+## TAREA — Aviso cuando dos personas editan lo mismo
+
+- **id:** aviso-dos-personas-editando
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
+
+Hoy, si dos personas abren el mismo documento, **el último que guarda pisa al primero sin avisar**.
+Verificado el 1 sep 2026: no hay control de versión ni bloqueo optimista en el árbol.
+
+**El diagnóstico arquitectónico ya lo situó:** es una columna `version` en el servicio — **trivial
+una vez esté «un solo escritor»**, e **imposible de aplicar de forma uniforme sin él**. Por eso no
+va antes que aquélla.
+
+## TAREA — Que el dueño vea la actividad de sus empleados
+
+- **id:** actividad-de-empleados
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
+
+El dueño **no puede ver qué han hecho sus empleados** en el programa. Verificado el 1 sep 2026: no
+existe registro de actividad por usuario.
+
+**Comparte cimiento con el historial de cambios del cliente y con el aviso de edición simultánea:**
+las tres necesitan que quede rastro de quién cambió qué. Se decide una vez y sirve a las tres.
+
+## TAREA — Acceso de gestoría sin consumir un usuario
+
+- **id:** acceso-gestoria
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
+
+La gestoría necesita entrar, y hoy **gasta una licencia de usuario** como si fuera un empleado.
+Verificado el 1 sep 2026: no existe (las coincidencias de «asesor» son texto de comentarios en la
+ficha de cliente).
+
+**Lo que la gestoría necesita ver es acotado y conocido** —los libros de IVA/IRPF, el diario, el
+mayor, los modelos—, y todo eso ya está construido y ya tiene sus permisos. Esto es una **puerta de
+entrada con un perfil recortado**, no funciones nuevas.
+
+## TAREA — Canal de aviso desde dentro del programa
+
+- **id:** canal-de-aviso-desde-dentro
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
+
+Cuando algo falla, el dueño **no tiene desde dónde decirlo** sin salirse del programa. Verificado el
+1 sep 2026: no existe (las coincidencias de «soporte» son textos de la página de error).
+
+**Las páginas de error ya están escritas y son el sitio natural**: es donde el usuario está justo
+cuando tiene algo que contar.
+
+## TAREA — Modo mantenimiento
+
+- **id:** modo-mantenimiento
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
+
+No hay forma de **cerrar el programa un rato** avisando, para migrar o arreglar algo. Hoy o está
+abierto o está caído. Verificado el 1 sep 2026: no existe (las coincidencias son «bloquear un rato»
+de la agenda, que es otra cosa).
+
+**Existe algo cercano que NO es esto y conviene no confundir:** `readOnlyGuard`
+(`core/tenant-middleware.js`) pone un negocio en solo lectura cuando está `suspended_admin`, y está
+montado con `app.use('*')` **antes de la autenticación**. Es un castigo administrativo, no un modo
+de mantenimiento — pero **la pieza de «este negocio no escribe ahora» ya existe y funciona**.
+
+## TAREA — Acciones en bloque
+
+- **id:** acciones-en-bloque
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
+
+Todo se hace **de uno en uno**: marcar, borrar, cambiar de estado. Verificado el 1 sep 2026: no
+existe selección múltiple (las coincidencias son `openBloqueo()` de la agenda).
+
+**Va después de la papelera, y el orden importa:** una acción en bloque sin vuelta atrás convierte un
+clic distraído en un desastre de cien filas.
+
+## TAREA — Exportar cualquier lista a Excel
+
+- **id:** exportar-listas-a-excel
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
+
+Hoy **solo se exporta lo fiscal**: los Libros Registro de IVA/IRPF, con la plantilla oficial
+`LSI.xlsx` (`modules/erp/contabilidad-export.js`). **Cualquier otra lista del programa no se puede
+sacar.**
+
+Verificado el 1 sep 2026. Que exista esa exportación fiscal es buena noticia para esta tarea —hay de
+dónde copiar la mecánica— pero **no la cubre**: aquélla es una plantilla oficial cerrada, ésta es
+cualquier lista.
+
+## TAREA — Adjuntar documentos a clientes, pedidos y facturas
+
+- **id:** adjuntar-documentos-cliente-pedido-factura
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
+
+**⚙️ ESTA ESTÁ A MEDIAS, Y SABERLO CAMBIA EL TAMAÑO DE LA TAREA (medido el 1 sep 2026).**
+
+**El mecanismo genérico YA EXISTE:** `modules/erp/attachments.js`, con `entity_type`/`entity_id`,
+`linkAttachment()` y `attachmentsFor()`. Y ya está enganchado en **facturas**, compras, recepciones
+de órdenes de compra, configuración, perfil, migración y DISA.
+
+**Lo que falta son dos de las tres que pide la entrada: CLIENTES y PEDIDOS.** No aparecen entre los
+consumidores del módulo.
+
+O sea: no es construir adjuntos, es **enganchar los que ya hay a dos entidades más**. Mucho más
+pequeña de lo que la entrada sugiere.
+
+## TAREA — Buscar dentro de los documentos adjuntos
+
+- **id:** buscar-dentro-de-adjuntos
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
+
+No se puede buscar **por el contenido** de un documento adjunto. Verificado el 1 sep 2026: no hay
+índice ni OCR en el árbol.
+
+**Va después de la búsqueda global y de enganchar los adjuntos a clientes y pedidos**, por dos
+motivos: la auditoría las contaba juntas («un índice, dos funciones»), y buscar dentro de adjuntos
+que aún no se pueden adjuntar no sirve de nada.
+
 # 🗃️ BACKLOG DE MEJORAS — sesión del 31 ago 2026 (SIN ORDEN DECIDIDO)
 
 > **Esto NO es una cola de trabajo.** Es el volcado de todo lo que salió de las cinco auditorías del
