@@ -77,6 +77,14 @@ export function invocar({ prompt, herramientas = [], cwd, config, señal = null,
       if (errores.length > 65536) errores = errores.slice(-65536);
     });
 
+    // ⚙️ EL EPIPE SE TRAGA AQUÍ (1 sep 2026, salió al inyectar el reloj del bloque 5.1). Si el
+    // binario muere ANTES de leer el prompt —no existe, revienta al arrancar, lo mata el sistema
+    // por memoria—, `stdin` se cierra y la escritura falla de forma ASÍNCRONA: no la caza el
+    // `try` de abajo, llega como un evento `error` del stream. Sin este oyente es una excepción
+    // NO CAPTURADA que se lleva el proceso entero — y la regla de `bucle.js`, escrita en su
+    // primera línea, es que ESTO NO SE MUERE. Quien manda es el `close`, que ya clasifica bien
+    // «el proceso murió sin escribir nada».
+    hijo.stdin.on('error', () => { /* el proceso ya se estaba muriendo: lo dice `close` */ });
     try { hijo.stdin.end(prompt); }
     catch (e) { clearTimeout(reloj); return resolve(fallo(new ErrorOrquestador(CLASES.DESCONOCIDO, `no pude escribir el prompt: ${e.message}`), t0)); }
 

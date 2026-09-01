@@ -159,8 +159,15 @@ export function contestarTareas({ pendientes, siguiente, estado }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export class Escucha {
-  constructor({ config, almacen, vigilante, logger, entorno = process.env }) {
+  constructor({ config, almacen, vigilante, logger, entorno = process.env, reloj = () => Date.now() }) {
     this.config = config;
+    // ⚙️ EL RELOJ ENTRA POR LA PUERTA (1 sep 2026, bloque 5.1). Sin esto, la CADUCIDAD de una
+    // confirmación era indemostrable: `confirmacionViva()` llamaba a `Date.now()` por dentro y no
+    // había forma de adelantar dos minutos en una prueba. Y lo que caduca ahí no es un adorno —son
+    // las TRES órdenes que pueden romper algo: `parar-ya`, `saltar` y `desapartar`—. Si esa
+    // caducidad se rompiera, un «sí» de hace tres horas ejecutaría una parada de emergencia, y
+    // ninguna prueba se enteraría. Cero pruebas la tocaban.
+    this.reloj = reloj;
     this.almacen = almacen;
     this.vigilante = vigilante;
     this.log = logger;
@@ -272,10 +279,10 @@ export class Escucha {
             ? `¿Cuál de éstas quieres recuperar?\n\n${lista}`
             : 'No hay ninguna tarea apartada ahora mismo.';
         }
-        this.pendienteDeConfirmar = { orden, id, hasta: Date.now() + this.config.vigia.escucha.confirmacionMs };
+        this.pendienteDeConfirmar = { orden, id, hasta: this.reloj() + this.config.vigia.escucha.confirmacionMs };
         return pedirConfirmacion(orden, { id, tarea: ap.titulo });
       }
-      this.pendienteDeConfirmar = { orden, id, hasta: Date.now() + this.config.vigia.escucha.confirmacionMs };
+      this.pendienteDeConfirmar = { orden, id, hasta: this.reloj() + this.config.vigia.escucha.confirmacionMs };
       return pedirConfirmacion(orden, { tarea: estado.tarea?.titulo || null });
     }
 
@@ -286,7 +293,7 @@ export class Escucha {
   confirmacionViva() {
     const p = this.pendienteDeConfirmar;
     if (!p) return null;
-    if (Date.now() > p.hasta) { this.pendienteDeConfirmar = null; return null; }
+    if (this.reloj() > p.hasta) { this.pendienteDeConfirmar = null; return null; }
     return p;
   }
 

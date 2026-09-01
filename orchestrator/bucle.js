@@ -41,7 +41,8 @@ import { leerTablero, buscarSiguienteTarea, tareasPendientes, esRepo, rama } fro
 import { correrBarrido } from './barrido.js';
 import { alcanzaParaCiclo } from './nucleo/maquina.js';
 
-export async function arrancar({ config = null, unaVuelta = false, entorno = process.env } = {}) {
+export async function arrancar({ config = null, unaVuelta = false, entorno = process.env,
+                                 reloj = () => Date.now() } = {}) {
   const cfg = config || cargarConfig({ entorno });
   const log = crearRegistro({ dirLogs: cfg.rutasAbs.logs, nombre: 'orquestador.log' });
 
@@ -75,8 +76,8 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
     log.info(`Retomo «${estado.tarea.titulo}» en el paso ${estado.paso} (intento ${estado.intento}).`);
   }
 
-  const vigilante = new Vigilante({ config: cfg, ruta: cfg.rutasAbs.cuota });
-  const ciclo = new Ciclo({ config: cfg, almacen, vigilante, logger: log });
+  const vigilante = new Vigilante({ config: cfg, ruta: cfg.rutasAbs.cuota, reloj });
+  const ciclo = new Ciclo({ config: cfg, almacen, vigilante, logger: log, reloj });
 
   // ── Parada ────────────────────────────────────────────────────────────────
   let parando = false;
@@ -154,7 +155,10 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
   escribirPid(cfg, log);
 
   // ── Vigía ─────────────────────────────────────────────────────────────────
-  let ultimoParte = Date.now();
+  // ⚙️ Con el reloj de fuera (1 sep 2026, bloque 5.1): la cadencia del parte —cada 3 h— no se
+  // podía probar sin esperar tres horas de verdad, así que «el parte deja de salir» era una avería
+  // que habría pasado en verde indefinidamente.
+  let ultimoParte = reloj();
   let cuotaAlUltimoParte = null;
   // La última avería vista. Va al parte además del aviso suelto: el aviso se manda una vez,
   // pero mientras el sistema siga roto tiene que salir en TODOS los partes.
@@ -190,7 +194,7 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
     });
     const r = await entregar({ texto, config: cfg, entorno, logger: log });
     log.info(`Parte ${r.ok ? 'entregado' : `guardado (${r.pendientes} pendiente/s)`}.`);
-    ultimoParte = Date.now();
+    ultimoParte = reloj();
     cuotaAlUltimoParte = cuota;
     barridosDelParte = [];
     cerradasPorPremisaFalsa = [];
@@ -244,7 +248,7 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
       espera = cfg.ciclo.intervaloVueltaMs;
     }
 
-    if (cfg.vigia.activo && Date.now() - ultimoParte >= cfg.vigia.intervaloParteMs) {
+    if (cfg.vigia.activo && reloj() - ultimoParte >= cfg.vigia.intervaloParteMs) {
       try { await mandarParte(); } catch (e) { log.error(`El parte falló: ${e.message}`); }
     }
     if (unaVuelta) break;

@@ -3,6 +3,12 @@
 // (modelo, max_tokens, system, tools) de cada sitio: store builder, registro y DISA.
 import { callClaude, textFromResponse, toolUseBlocks } from '../core/llm.js';
 import { resultadosDeHerramientas } from '../modules/disa/index.js';   // el MISMO emparejador que corre /message, no una copia
+import { requireLlmProvider } from './lib/gate-env.mjs';
+// 1 sep 2026 · Esta comprobación llama al MODELO REAL. Sin saldo en la cuenta del proveedor no
+// prueba NADA, y antes moría con un TypeError que parecía un fallo del producto. Ahora aborta
+// con código 2 diciendo por qué: «no he podido probarlo» NO es «ha fallado».
+await requireLlmProvider();
+
 
 let ok = 0, fail = 0;
 const check = (label, cond, extra = '') => {

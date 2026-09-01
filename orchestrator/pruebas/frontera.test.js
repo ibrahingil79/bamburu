@@ -559,6 +559,80 @@ test('BLOQUE 4 · una DECISIÓN DE IBRAHIN sí sube, con su pregunta y su motivo
   } finally { limpiar(raiz); }
 });
 
+// ════════════════════════════════════════════════════════════════════════════════════════════
+//  BLOQUE 5.1 · LO QUE DECIDE POR EL RELOJ, PROBADO MOVIENDO EL RELOJ
+// ════════════════════════════════════════════════════════════════════════════════════════════
+//
+// Auditado el 1 sep 2026: de los catorce ficheros del orquestador que miran la hora, la mayoría
+// solo la SELLA (el journal, el historial, la marca de un parte guardado) y ésos no deciden nada.
+// Los que DECIDEN quedaban en dos sitios sin reloj inyectable, y el segundo es serio.
+
+test('BLOQUE 5.1 · una confirmación CADUCA, y eso se prueba adelantando el reloj', async () => {
+  // LO QUE PROTEGE ESTO. `parar-ya`, `saltar` y `desapartar` son las tres órdenes que pueden
+  // romper algo, y por eso piden un «sí» antes de ejecutarse. Ese «sí» vale dos minutos.
+  // **No había NI UNA prueba de `confirmacionViva` ni de `confirmacionMs`** —cero coincidencias en
+  // toda la suite— porque `Date.now()` se llamaba por dentro y no se podía adelantar el reloj.
+  // Si la caducidad se rompiera, un «sí» de hace tres horas ejecutaría una parada de emergencia.
+  const { Escucha } = await import('../vigia/escucha.js');
+  const raiz = repoTemporal();
+  try {
+    const cfg = configDe(raiz, { vigia: { escucha: { confirmacionMs: 120000 } } });
+    let ahora = 1_000_000;
+    const e = new Escucha({ config: cfg, almacen: null, vigilante: null,
+                            logger: (await import('./ayuda.js')).registroMudo(),
+                            entorno: {}, reloj: () => ahora });
+
+    e.pendienteDeConfirmar = { orden: 'parar-ya', id: null, hasta: ahora + cfg.vigia.escucha.confirmacionMs };
+    assert.ok(e.confirmacionViva(), 'recién pedida, vale');
+
+    ahora += 119000;                       // 1 min 59 s después
+    assert.ok(e.confirmacionViva(), 'dentro del plazo sigue valiendo');
+
+    ahora += 2000;                         // 2 min 1 s
+    assert.equal(e.confirmacionViva(), null, 'pasado el plazo, el «sí» ya no vale');
+    assert.equal(e.pendienteDeConfirmar, null, 'y se borra: no puede resucitar más tarde');
+  } finally { limpiar(raiz); }
+});
+
+test('BLOQUE 5.1 · el parte sale cuando toca, y eso se prueba sin esperar tres horas', async () => {
+  // «El parte deja de salir» es una avería que no se nota: no rompe nada, solo deja a Ibrahin sin
+  // noticias. Sin reloj inyectable habría pasado en verde indefinidamente — para verla había que
+  // esperar tres horas de reloj real.
+  const raiz = repoTemporal({ tablero: '# Tablero\n\nNada que hacer.\n' });
+  try {
+    const partes = [];
+    let ahora = 2_000_000;
+    const cfg = configDe(raiz, {
+      vigia: { activo: true, intervaloParteMs: 10800000 },
+      cli: { binario: '/bin/false' },
+      ciclo: { intervaloVueltaMs: 5, plazoParadaMs: 1000 },
+    });
+    // Se observa por el fichero de partes pendientes: sin Telegram configurado, `entregar` los
+    // guarda ahí. Es el rastro real, no un espía inventado.
+    const rutaPartes = cfg.rutasAbs.partesPendientes;
+
+    const daemon = arrancar({ config: cfg, entorno: {}, reloj: () => ahora });
+    await hasta(() => fs.existsSync(cfg.rutasAbs.estado), 15000, 'el daemon no arrancó');
+
+    // Tres horas menos un minuto: todavía no toca.
+    ahora += 10800000 - 60000;
+    await new Promise((r) => setTimeout(r, 300));
+    const antes = fs.existsSync(rutaPartes) ? fs.readFileSync(rutaPartes, 'utf8').trim().split('\n').filter(Boolean).length : 0;
+    assert.equal(antes, 0, 'antes de las 3 h no puede haber salido ninguno');
+
+    // Y ahora sí.
+    ahora += 120000;
+    await hasta(() => fs.existsSync(rutaPartes)
+      && fs.readFileSync(rutaPartes, 'utf8').trim().split('\n').filter(Boolean).length >= 1,
+      15000, 'pasadas las 3 h el parte tenía que haber salido, y no salió');
+
+    process.kill(process.pid, 'SIGTERM');
+    await daemon;
+    partes.push(1);
+    assert.equal(partes.length, 1);
+  } finally { limpiar(raiz); }
+});
+
 // ── utilidades ───────────────────────────────────────────────────────────────────────────────
 
 function correr(cmd, args, cwd) {

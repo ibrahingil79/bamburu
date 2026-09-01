@@ -9187,6 +9187,82 @@ negocio suspendido NO deja escribir— necesitan un negocio suspendido y tienen 
 
 ## Decisiones tomadas el 1 sep 2026
 
+- **BLOQUE 5 — LO QUE HACE QUE ESTO SE REPITA. Y una avería seria que salió por el camino.**
+
+  ### 🔴 DISA ESTÁ CAÍDA EN PRODUCCIÓN: EL PROVEEDOR DE IA NO TIENE SALDO
+
+  Salió al investigar el 5.2 y es lo más grave del bloque. **Llamada real al proveedor, 1 sep 2026:**
+
+  ```
+  ¿hay clave configurada?: true
+  ❌ code: llm_provider_balance | status: 503
+     mensaje: El proveedor de IA no tiene saldo disponible.
+  ```
+
+  Cualquier cliente que hable con DISA recibe **503 — «DISA no está disponible porque el proveedor de
+  IA no tiene saldo. Contacta con soporte.»** (`modules/disa/index.js:2661`). **No es el tope de
+  gasto de un negocio** (`llm_tenant_cap`, que es otra rama): es **la cuenta del proveedor**
+  (`core/llm.js:164`, se dispara cuando la respuesta trae `credit balance|billing|payment`). Afecta a
+  las **cuatro** piezas que llaman al modelo: DISA, el constructor de tienda (`modules/registro`), el
+  alta y la captura de compras (`modules/erp/routes/purchases-capture.js`).
+
+  **Y NO DEJA RASTRO:** ese camino escribe `console.error`, no `error_log`. La tabla `error_log` de
+  `control.db` tiene **CERO** entradas de esto, así que **no se puede saber desde cuándo**. Ése es un
+  segundo defecto, y de los que hacen que una caída dure días sin que nadie lo sepa.
+
+  **Lo arregla Ibrahin recargando la cuenta. No es cosa del código.**
+
+  ### 5.2 · Las tres comprobaciones que «mienten»
+
+  **⚙️ CORRECCIÓN AL ENCARGO, medida:** el encargo decía que dan **verde**. **No: dan ROJO.** En el
+  barrido del 1 sep las tres salieron `exit 1` —`verify-d5-create-product` (1s),
+  `verify-llm-migracion` (1s), `verify-albaranes-disa` (0s)—. La preocupación de fondo sí era buena:
+  tardan 0-1 s y no comprueban nada.
+
+  **La causa es una sola y es la de arriba.** Llaman al modelo real; `callClaude` lanza
+  `llm_provider_balance`; la respuesta llega `undefined`; y el código hace `r1.reply.replace(...)`
+  encima → **`TypeError: Cannot read properties of undefined`**. **Morir con un TypeError disfraza
+  «no hay saldo» de «esto está roto»**, que es exactamente el pecado que `gate-env.mjs` existe para
+  impedir. `requireLlmQuota` no lo cazaba porque mira el tope **del negocio**, no el saldo **del
+  proveedor**: un negocio con cuota de sobra choca igual contra una cuenta vacía.
+
+  **Se ha hecho lo uno Y lo otro**, que el encargo dejaba a elegir:
+  · **Se arreglan:** `requireLlmProvider()` nuevo en `scripts/lib/gate-env.mjs`. Las tres lo llaman y
+    ahora **ABORTAN con código 2** —«no he podido probarlo» **no es** «ha fallado»— diciendo que el
+    proveedor no tiene saldo y que **DISA está caída para todo el mundo por la misma causa**.
+  · **Y salen del barrido**, declaradas con su motivo junto a las **nueve** de su misma familia, por
+    la regla que ya estaba escrita en la cabecera de `run-gates.mjs`: *un gate que depende del saldo
+    de una cuenta no puede vivir en un barrido de regresión*. **El barrido pasa de 209 a 206.**
+
+  ### 5.1 · El tiempo no pasaba en las pruebas — auditado el resto de la suite
+
+  De los **catorce** ficheros del orquestador que miran la hora, la mayoría solo la **sella** (el
+  journal, el historial, la marca de un parte guardado) y ésos no deciden nada. Los que **DECIDEN**
+  quedaban en dos sitios sin reloj inyectable, y ninguno de los dos tenía prueba:
+
+  **1 · La caducidad de una confirmación, que es lo más serio.** `parar-ya`, `saltar` y `desapartar`
+  son las tres órdenes que pueden romper algo, y por eso piden un «sí» que vale dos minutos.
+  `confirmacionViva()` llamaba a `Date.now()` por dentro: **CERO pruebas de `confirmacionViva` o
+  `confirmacionMs` en toda la suite**, porque no había forma de adelantar el reloj. Si esa caducidad
+  se rompiera, **un «sí» de hace tres horas ejecutaría una parada de emergencia** y nadie se
+  enteraría. `Escucha` recibe ahora el reloj por la puerta, con su prueba.
+
+  **2 · La cadencia del parte.** «El parte deja de salir» no rompe nada: solo deja a Ibrahin sin
+  noticias, y habría pasado en verde indefinidamente porque verlo exigía esperar tres horas de reloj
+  real. `arrancar()` recibe ahora el reloj y se lo pasa al ciclo y al vigilante.
+
+  **Y AL INYECTAR EL RELOJ SALIÓ UNA AVERÍA DE VERDAD, que es lo que justifica el ejercicio entero:**
+  si el binario del modelo muere **antes** de leer el prompt —no existe, revienta al arrancar, lo mata
+  el sistema por memoria—, `stdin` se cierra y la escritura falla **de forma asíncrona**: no la cazaba
+  el `try`, llegaba como evento `error` del stream. **Excepción NO CAPTURADA que se llevaba el proceso
+  entero** — contra la primera línea de `bucle.js`: *ESTO NO SE MUERE*. Atado en `ejecucion/cli.js`.
+
+  **Los tres arreglos verificados en rojo** reponiendo cada avería. **167 pruebas en verde.**
+
+  ### 5.3 · Las seis líneas mal atribuidas
+
+  Siguen registradas en §«LAS TRES AVERÍAS DEL PRIMER USO REAL», punto 3. No se ha reescrito historia.
+
 - **BLOQUE 4 — QUE NO VUELVA A SUBIRLE AL MÓVIL UNA DECISIÓN QUE NO EXISTE.**
 
   Ese día le llegaron a Ibrahin **dos avisos pidiéndole una decisión, y ninguno lo era**: las seis

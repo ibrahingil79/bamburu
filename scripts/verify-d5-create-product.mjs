@@ -6,6 +6,12 @@
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 import { createProductSvc } from '../modules/erp/routes/products.js';
+import { requireLlmProvider } from './lib/gate-env.mjs';
+// 1 sep 2026 · Esta comprobación llama al MODELO REAL. Sin saldo en la cuenta del proveedor no
+// prueba NADA, y antes moría con un TypeError que parecía un fallo del producto. Ahora aborta
+// con código 2 diciendo por qué: «no he podido probarlo» NO es «ha fallado».
+await requireLlmProvider();
+
 // 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
 // puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
 // del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.

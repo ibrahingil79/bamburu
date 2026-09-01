@@ -163,7 +163,10 @@ export const GRUPOS = {
     // ↓ tres que ABORTABAN por pedir la ruta de la BD por parámetro (24 ago 2026): ya arrancan
     'verify-voz', 'verify-vigia', 'verify-dibujo',
     // ↓ de las 99 invisibles (24 ago 2026), medidas y en verde:
-    'gate-dibujo-pantalla', 'gate-voz-pantalla', 'test-dibujo', 'test-disa-captura-chat', 'test-disa-clientes-t5', 'test-disa-dictar-compra', 'test-disa-stock', 'test-llm-texto-respuesta', 'test-pago-voz-avisos', 'test-vigia', 'test-voz', 'verify-albaranes-disa', 'verify-d5-create-product', 'verify-llm-migracion',
+    'gate-dibujo-pantalla', 'gate-voz-pantalla', 'test-dibujo', 'test-disa-captura-chat', 'test-disa-clientes-t5', 'test-disa-dictar-compra', 'test-disa-stock', 'test-llm-texto-respuesta', 'test-pago-voz-avisos', 'test-vigia', 'test-voz', // ⚙️ 1 sep 2026 · verify-albaranes-disa, verify-d5-create-product y verify-llm-migracion SALEN
+    // de este grupo: llaman al MODELO REAL y dependen del saldo de la cuenta del proveedor, así
+    // que su rojo no dice nada del producto. Declaradas con su motivo en EXCLUIDOS de
+    // run-gates.mjs, con las otras nueve de su misma familia.
     'verify-propuestas-d5',
     'verify-propuestas-recurrentes', 'gate-propuestas-recurrentes',
     'verify-propuestas-dormidos', 'gate-propuestas-dormidos',

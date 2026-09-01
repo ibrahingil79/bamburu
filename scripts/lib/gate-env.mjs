@@ -61,6 +61,51 @@ export function requireLlmQuota(db) {
   }
 }
 
+/**
+ * ¿RESPONDE el proveedor de IA? Distinto del tope del negocio, y por eso hace falta aparte.
+ *
+ * ⚙️ POR QUÉ EXISTE (1 sep 2026). Tres comprobaciones que llaman al modelo real
+ * —`verify-d5-create-product`, `verify-llm-migracion`, `verify-albaranes-disa`— morían en 0-1 s
+ * con `TypeError: Cannot read properties of undefined (reading 'replace')`. Parecía que estaban
+ * rotas. **No lo estaban:** la cuenta del PROVEEDOR de IA se había quedado sin saldo, `callClaude`
+ * lanzaba `llm_provider_balance` (503), la respuesta llegaba `undefined` y el código hacía
+ * `r1.reply.replace(...)` encima.
+ *
+ * `requireLlmQuota` NO lo cazaba: aquél mira el tope de gasto DEL NEGOCIO (`ai_cap_eur`), que es
+ * otra cosa. Un negocio con cuota de sobra choca igual contra una cuenta de proveedor vacía.
+ *
+ * **Morir con un TypeError disfraza «no hay saldo» de «esto está roto»**, que es exactamente el
+ * pecado que este fichero existe para impedir. Aborta con código 2 —«no he podido probarlo»— que
+ * NO es lo mismo que «ha fallado».
+ *
+ * Cuesta prácticamente nada: una llamada de `max_tokens: 1`, y si no hay saldo no llega a cobrarse.
+ */
+export async function requireLlmProvider() {
+  let llm;
+  try { llm = await import('../../core/llm.js'); }
+  catch (e) { abortar('No puedo cargar core/llm.js: ' + e.message, 'Sin él no hay forma de saber si el proveedor responde.'); }
+  if (!llm.hasAnthropicKey()) {
+    abortar('No hay clave del proveedor de IA configurada.',
+            'Esta comprobación llama al modelo de verdad: sin clave no prueba NADA. Mira /etc/bamburu.env.');
+  }
+  try {
+    await llm.callClaude({ model: 'claude-haiku-4-5-20251001', max_tokens: 1,
+                           messages: [{ role: 'user', content: 'ok' }] });
+  } catch (e) {
+    if (e?.code === 'llm_provider_balance') {
+      abortar('El proveedor de IA NO TIENE SALDO (503 llm_provider_balance).',
+              'No es un fallo del producto ni de esta comprobación: DISA está caída para todo el mundo '
+              + 'por la misma causa. Recarga la cuenta del proveedor. Hasta entonces esto no puede probar nada.');
+    }
+    if (e?.code === 'llm_tenant_cap' || e?.code === 'llm_global_cap') {
+      abortar('Se ha alcanzado el tope de gasto de IA: ' + e.message,
+              'Sube el tope o espera al mes que viene. Esta comprobación no puede probar nada mientras tanto.');
+    }
+    abortar('El proveedor de IA no responde: ' + (e?.code || e?.message || 'sin detalle'),
+            'Esta comprobación llama al modelo de verdad, así que sin proveedor no hay veredicto.');
+  }
+}
+
 // EL NAVEGADOR EN ESTE SERVIDOR — la receta, medida el 1 sep 2026.
 //
 // EL VALOR POR DEFECTO DE ABAJO NO ARRANCA AQUÍ, y conviene saberlo antes de perder una tarde:

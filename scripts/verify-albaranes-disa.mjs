@@ -4,6 +4,12 @@
 // (declina y redirige, sin tocar las tablas nuevas). Estado dev: PED-0008 parcial + DEL-0005.
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
+import { requireLlmProvider } from './lib/gate-env.mjs';
+// 1 sep 2026 · Esta comprobación llama al MODELO REAL. Sin saldo en la cuenta del proveedor no
+// prueba NADA, y antes moría con un TypeError que parecía un fallo del producto. Ahora aborta
+// con código 2 diciendo por qué: «no he podido probarlo» NO es «ha fallado».
+await requireLlmProvider();
+
 
 const DB = 'data/tenants/desarrollo-bamburu.db';
 const ORIGIN = 'http://127.0.0.1:3000';

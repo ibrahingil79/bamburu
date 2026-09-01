@@ -209,6 +209,26 @@ const EXCLUIDOS = {
   // 22 ago 2026 · el número estaba rancio: son TRES aserciones en rojo, no una. Se corrige aquí
   // porque una cifra vieja en una declaración hace creer que el agujero es más pequeño de lo que es.
   'gate-avisos-pantalla': 'EN ROJO desde antes (3 aserciones, medidas el 22 ago 2026). Otro tema.',
+  // ── LAS TRES QUE FALTABAN DE ESTA MISMA FAMILIA (1 sep 2026) ──────────────────────────────
+  // Estaban DENTRO del barrido llamando al modelo real, y por eso salían en rojo cada pasada
+  // muriendo en 0-1 s. No estaban rotas: la cuenta del PROVEEDOR de IA se había quedado sin saldo,
+  // `callClaude` lanzaba `llm_provider_balance` (503), la respuesta llegaba `undefined` y el
+  // código hacía `.replace()` encima → `TypeError`. **Un TypeError disfraza «no hay saldo» de
+  // «esto está roto»**, y así es como se diagnostica mal durante días.
+  //
+  // Ahora las tres llaman a `requireLlmProvider()` y ABORTAN con código 2 diciendo por qué —«no he
+  // podido probarlo» no es «ha fallado»—, y salen del barrido por la regla de la cabecera de este
+  // fichero, que ya valía para las otras nueve: **un gate que depende del saldo de una cuenta no
+  // puede vivir en un barrido de regresión.**
+  'verify-d5-create-product':
+    'llama al MODELO REAL (DISA creando un producto y pidiendo la banda de IVA). Depende del saldo '
+    + 'del proveedor de IA, así que su rojo no dice nada del producto. A mano, cuando se toque DISA.',
+  'verify-llm-migracion':
+    'llama al MODELO REAL tres veces (store builder, registro y DISA) con la config exacta de cada '
+    + 'sitio. Es una comprobación buena y cara: a mano, y con saldo en la cuenta del proveedor.',
+  'verify-albaranes-disa':
+    'llama al MODELO REAL (albaranes y entregas por chat). Misma familia y misma dependencia.',
+
   'verify-pieza-c-http': 'gate FRÁGIL preexistente (redondeo de céntimos). Otro tema.',
 };
 
