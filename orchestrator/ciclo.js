@@ -168,6 +168,24 @@ export class Ciclo {
       return { estado, espera: this.config.ciclo.intervaloVueltaMs };
     }
 
+    // ⚙️ LA FIRMA SE REFRESCA DESDE EL TABLERO EN CADA VUELTA (1 sep 2026).
+    //
+    // Sin esto, una tarea que ya estaba en curso cuando se marcó `firma:` **se cerraría sola**: su
+    // copia en el estado se guardó antes de que el campo existiera, y ahí se queda. Se vio en vivo
+    // el día que se puso la regla — el daemon tenía `anclar-verifactu-fuera` a medias, sin firma en
+    // su estado y sin rama, y al aprobarla habría subido a producción sin pasar por Ibrahin.
+    //
+    // **Una regla que se salta por llegar tarde no es una regla.** El tablero manda sobre la copia:
+    // si allí dice que la firma él, la firma él, aunque la tarea se cogiera ayer.
+    if (estado.tarea) {
+      const enTablero = pendientesEnTablero.find((t) => t.id === estado.tarea.id);
+      const firmaAhora = enTablero?.firma || '';
+      if (firmaAhora !== (estado.tarea.firma || '')) {
+        this.log.aviso(`«${estado.tarea.id}»: el tablero dice ahora «firma: ${firmaAhora || '(ninguna)'}». Lo aplico a la tarea en curso.`);
+        estado = { ...estado, tarea: { ...estado.tarea, firma: firmaAhora } };
+      }
+    }
+
     const necesitaCuota = !!estado.tarea || !!tareaDisponible;
     // En espera se fuerza la consulta: si no, la caché y la espera se solaparían y
     // estaríamos mirando siempre una respuesta vieja.

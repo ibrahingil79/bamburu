@@ -848,6 +848,34 @@ test('FIRMA · si NO puede sacar la rama de producción, avisa y SE PARA', { tim
   } finally { limpiar(raiz); }
 });
 
+test('FIRMA · una tarea YA EN CURSO cuando se marca la firma tampoco se cierra sola', { timeout: 60000 }, async () => {
+  // Se vio en vivo el día que se puso la regla: el daemon tenía una tarea a medias, cogida antes
+  // de que el campo `firma:` existiera. Su copia en el estado decía «sin firma» y al aprobarla
+  // habría subido a producción sin pasar por Ibrahin. Una regla que se salta por llegar tarde no
+  // es una regla: el tablero manda sobre la copia guardada.
+  const raiz = repoTemporal({ tablero: TABLERO_CON_FIRMA });
+  try {
+    const { Almacen } = await import('../nucleo/almacen.js');
+    const { Ciclo } = await import('../ciclo.js');
+    const { vigilanteFalso, registroMudo, configDe: cd, invocadorFalso } = await import('./ayuda.js');
+    const cfg = cd(raiz);
+    const almacen = new Almacen({ rutaEstado: cfg.rutasAbs.estado, rutaJournal: cfg.rutasAbs.journal,
+                                  rutaHistorial: cfg.rutasAbs.historial });
+    const ciclo = new Ciclo({ config: cfg, almacen, vigilante: vigilanteFalso(), logger: registroMudo(),
+                              invocador: invocadorFalso([() => ({ ok: true, texto: 'x', json: {}, ms: 1 })]) });
+
+    // La tarea guardada SIN firma, como la tenía el daemon aquel día.
+    let e = almacen.recuperar().estado;
+    e = almacen.transicion(e, { tipo: 'TAREA_TOMADA', tarea: { id: 'cambia-el-guion', titulo: 'Cambiar el guion' }, cuota: 0 });
+    assert.equal(e.tarea.firma, undefined, 'de partida, la copia guardada no sabe de la firma');
+
+    await ciclo.unPaso(e).catch(() => {});           // una vuelta: lee el tablero y refresca
+    const despues = almacen.leerEstado();
+    assert.equal(despues.tarea.firma, 'Ibrahin',
+      'el tablero manda: la tarea en curso pasa a necesitar firma aunque se cogiera antes');
+  } finally { limpiar(raiz); }
+});
+
 // ── utilidades ───────────────────────────────────────────────────────────────────────────────
 
 function correr(cmd, args, cwd) {
