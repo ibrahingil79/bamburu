@@ -165,6 +165,8 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
   // Una sola pasada por espera (regla 1): esto se pone a true al lanzarla y vuelve a false en
   // cuanto el orquestador deja de estar esperando cuota. No es un bucle.
   let barridoDeEstaEspera = false;
+  // Las que se cerraron solas por premisa falsa desde el último parte. Van AL PARTE, no al aviso.
+  let cerradasPorPremisaFalsa = [];
 
   const mandarParte = async () => {
     let cuota = null;
@@ -184,12 +186,14 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
     const texto = redactar({
       estado, cuota, historialReciente, tareaEnTablero: enTablero, pendientesEnTablero,
       averia: averiaViva, desde: cuotaAlUltimoParte, config: cfg, barridos: barridosDelParte,
+      premisasFalsas: cerradasPorPremisaFalsa,
     });
     const r = await entregar({ texto, config: cfg, entorno, logger: log });
     log.info(`Parte ${r.ok ? 'entregado' : `guardado (${r.pendientes} pendiente/s)`}.`);
     ultimoParte = Date.now();
     cuotaAlUltimoParte = cuota;
     barridosDelParte = [];
+    cerradasPorPremisaFalsa = [];
   };
 
   // ── El bucle ──────────────────────────────────────────────────────────────
@@ -220,6 +224,10 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
       if (r.apartada) {
         await entregar({ texto: redactarApartada(r.apartada), config: cfg, entorno, logger: log });
       }
+      // Una premisa falsa NO manda aviso: se cierra sola y se cuenta en el parte de las 3 h. Es la
+      // mitad que ahorra interrupciones — el 1 sep 2026 dos de dos avisos al móvil eran de esta
+      // clase y ninguno era una decisión de Ibrahin.
+      if (r.cerradaPorPremisaFalsa) cerradasPorPremisaFalsa.push(r.cerradaPorPremisaFalsa);
       // Lo que contestan las órdenes que llegaron por Telegram mientras trabajaba.
       for (const aviso of r.avisos || []) {
         await entregar({ texto: aviso, config: cfg, entorno, logger: log });

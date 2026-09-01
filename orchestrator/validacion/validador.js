@@ -13,6 +13,56 @@ export const MOTIVOS_RECHAZO = Object.freeze(['CRITERIO-INCUMPLIDO', 'FUERA-DE-A
 const MINIMO_ANALISIS = 800;
 const PALABRAS_ARQUITECTURA = /\b(capa|patr[oó]n|validaci[oó]n|arquitectura|acoplamiento|contrato)\b/i;
 const MARCA_PARADA = /^\s*🛑\s*TAREA MAL PLANTEADA/im;
+
+// ⚙️ LAS DOS CLASES DE PARADA (1 sep 2026). Antes había UNA sola marca y las dos cosas caían en el
+// mismo cajón: el aviso al móvil de Ibrahin decía «No es un error técnico: es una decisión de
+// producto» tanto si de verdad hacía falta una decisión suya como si la tarea estaba escrita sobre
+// algo que ya no existe. Ese día le llegaron DOS avisos así y NINGUNO era una decisión —las seis
+// pantallas llevaban ocho días borradas, y el cifrado estaba mal redactado—.
+//
+//   · PREMISA FALSA      → la tarea afirma algo que no es cierto. Es basura en el tablero. Se
+//                          cierra sola CON SU PRUEBA y no gasta una interrupción de nadie.
+//   · DECISIÓN DE IBRAHIN → falta algo que solo él decide. ESTO, y solo esto, sube al móvil.
+const MARCA_PREMISA_FALSA = /^\s*🛑\s*PREMISA FALSA/im;
+const MARCA_DECISION_IBRAHIN = /^\s*🛑\s*DECISI[ÓO]N DE IBRAHIN/im;
+
+// La prueba y la pregunta son OBLIGATORIAS, cada una en su clase, y con rótulo literal para que se
+// puedan leer sin adivinar. Sin prueba no se cierra nada: una tarea que se cierra sola sobre una
+// afirmación sin comprobar es peor que dejarla abierta.
+const RE_PRUEBA = /^\s*\*\*Prueba:\*\*\s*([\s\S]*?)(?=\n\s*\n|\n\s*\*\*|$)/im;
+const RE_PREGUNTA = /^\s*\*\*Pregunta:\*\*\s*([\s\S]*?)(?=\n\s*\n|\n\s*\*\*|$)/im;
+
+/**
+ * De qué clase es la parada del arquitecto, y si trae lo que su clase exige.
+ *
+ * @returns { clase, motivo, prueba, pregunta } — `clase` es 'premisa-falsa',
+ *          'decision-de-ibrahin' o 'sin-clasificar'.
+ *
+ * REGLA DE SEGURIDAD: una premisa falsa SIN prueba **no es una premisa falsa**. Se degrada a
+ * 'sin-clasificar' y sube a Ibrahin, que es el camino lento pero el que no destruye nada. Cerrar
+ * una tarea sola es irreversible en la práctica —nadie vuelve a mirar lo que se cerró—, así que el
+ * error seguro es escalar de más, nunca cerrar de más.
+ */
+export function clasificarParada(texto) {
+  const t = String(texto || '');
+  const trozo = (re) => { const m = re.exec(t); return m ? m[1].trim().replace(/\s+/g, ' ') : null; };
+
+  if (MARCA_PREMISA_FALSA.test(t)) {
+    const prueba = trozo(RE_PRUEBA);
+    const motivo = primerParrafoTras(t, MARCA_PREMISA_FALSA) || 'sin motivo escrito';
+    if (!prueba) {
+      return { clase: 'sin-clasificar', motivo,
+               falta: 'dijo PREMISA FALSA pero NO escribió «**Prueba:**». Sin prueba no se cierra nada.' };
+    }
+    return { clase: 'premisa-falsa', motivo, prueba };
+  }
+  if (MARCA_DECISION_IBRAHIN.test(t)) {
+    const motivo = primerParrafoTras(t, MARCA_DECISION_IBRAHIN) || 'sin motivo escrito';
+    return { clase: 'decision-de-ibrahin', motivo, pregunta: trozo(RE_PREGUNTA) };
+  }
+  return { clase: 'sin-clasificar', motivo: primerParrafoTras(t, MARCA_PARADA) || 'sin motivo escrito',
+           falta: 'usó el rótulo antiguo «🛑 TAREA MAL PLANTEADA», que no dice de qué clase es.' };
+}
 const MARCA_REPLANTEO = /^\s*♻️\s*REPLANTEAMIENTO/im;
 const MARCA_IMPOSIBLE = /^\s*🛑\s*AN[ÁA]LISIS IMPOSIBLE/im;
 
@@ -41,10 +91,19 @@ export function validarAnalisis(ruta, { minCriterios = 3 } = {}) {
 
   const texto = fs.readFileSync(ruta, 'utf8');
 
-  // El arquitecto tiene derecho a parar. No es un fallo: es un resultado.
-  if (MARCA_PARADA.test(texto)) {
-    return { ok: false, paroArquitecto: true, resumen: 'El arquitecto declaró la tarea mal planteada.',
-             motivos: [primerParrafoTras(texto, MARCA_PARADA) || 'sin motivo escrito'], texto };
+  // El arquitecto tiene derecho a parar. No es un fallo: es un resultado. Y desde el 1 sep 2026
+  // tiene que decir DE QUÉ CLASE es, porque una premisa falsa y una decisión de producto no van al
+  // mismo sitio.
+  if (MARCA_PARADA.test(texto) || MARCA_PREMISA_FALSA.test(texto) || MARCA_DECISION_IBRAHIN.test(texto)) {
+    const c = clasificarParada(texto);
+    const resumen = {
+      'premisa-falsa': 'El arquitecto demostró que la tarea parte de algo que no es cierto.',
+      'decision-de-ibrahin': 'El arquitecto paró: falta una decisión que solo puede dar Ibrahin.',
+      'sin-clasificar': 'El arquitecto declaró la tarea mal planteada, sin decir de qué clase.',
+    }[c.clase];
+    return { ok: false, paroArquitecto: true, resumen, clase: c.clase,
+             prueba: c.prueba || null, pregunta: c.pregunta || null,
+             motivos: [c.motivo].concat(c.falta ? [c.falta] : []), texto };
   }
 
   const propio = texto.trim();

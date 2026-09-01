@@ -9187,6 +9187,50 @@ negocio suspendido NO deja escribir— necesitan un negocio suspendido y tienen 
 
 ## Decisiones tomadas el 1 sep 2026
 
+- **BLOQUE 4 — QUE NO VUELVA A SUBIRLE AL MÓVIL UNA DECISIÓN QUE NO EXISTE.**
+
+  Ese día le llegaron a Ibrahin **dos avisos pidiéndole una decisión, y ninguno lo era**: las seis
+  pantallas —**ocho días borradas**— y el cifrado, mal redactado. **Los dos decían la misma frase:
+  «No es un error técnico: es una decisión de producto». Las dos veces era falso.**
+
+  **4.1 · EL AVISO YA LLEVA EL MOTIVO ENTERO, Y LA PREGUNTA ARRIBA.** Decía «el arquitecto declaró
+  la tarea mal planteada» y se paraba ahí. Lo que el arquitecto había ENCONTRADO viajaba en
+  `detalle`… **y nadie lo pasaba a `redactarApartada`**. Con eso Ibrahin no podía decidir desde el
+  móvil: tenía que entrar al servidor a leer el análisis para enterarse de qué le preguntaban.
+  Ahora el aviso lleva el motivo completo, lo demás que dejó escrito, y **la pregunta arriba del
+  todo** — en una pantalla de móvil, lo que va al final no se lee.
+
+  **4.2 · DOS CAJONES, NO UNO.** El arquitecto ahora **declara de qué clase es su parada**, con dos
+  rótulos en vez de uno (`orchestrator/roles/arquitecto.md`):
+  · **`🛑 PREMISA FALSA`** — lo que la tarea dice **no es cierto**: el fichero ya no existe, ya está
+    hecho, la cifra está caducada. Es **basura en el tablero**, no una decisión. **Se cierra sola**,
+    con la marca `✅ CERRADA — PREMISA FALSA` y **la prueba escrita en el tablero**, y sale en el
+    parte de las 3 h como información. **No interrumpe a nadie.**
+  · **`🛑 DECISIÓN DE IBRAHIN`** — falta algo que solo él decide. **Solo esto sube al móvil**, y
+    obliga a escribir `**Pregunta:**` en una frase que se pueda contestar sin ser técnico.
+
+  **LA REGLA DE SEGURIDAD, que es la parte que importa: SIN `**Prueba:**` NO SE CIERRA NADA.** Una
+  premisa falsa sin prueba se degrada a «sin clasificar» y **sube**. Cerrar una tarea sola es
+  irreversible en la práctica —nadie vuelve a mirar lo que se cerró—, así que **el error seguro es
+  escalar de más, nunca cerrar de más**. Y una parada sin clasificar ya **no se le vende como
+  decisión suya**: el aviso dice que no se sabe de qué clase es y que puede no ser cosa suya.
+
+  **DOS PRUEBAS AFIRMABAN EL DEFECTO Y HUBO QUE REESCRIBIRLAS.** `maquina.test.js` decía
+  `assert.ok(d.decisionDeProducto)` para **cualquier** parada del arquitecto —o sea, exigía el fallo—
+  y `vigia.test.js` exigía la frase «es una decisión de producto» en el aviso. Las dos verdes sobre
+  el comportamiento equivocado.
+
+  **Y UNA JUNTA ROTA QUE SOLO VIO LA PRUEBA DE PUNTA A PUNTA:** `ciclo.observar()` **no copiaba**
+  `clase` ni `prueba` del validador, así que la máquina nunca las veía y todo seguía cayendo en el
+  mismo cajón. **Es el MISMO fallo que el 4.1, en otro punto de la misma cadena** — el dato existía y
+  quien lo tenía en la mano no lo pasaba al siguiente. Las pruebas de cada mitad daban verde: **lo
+  roto era la junta, y un doble por cada mitad no ve una junta rota.** Las dos pruebas nuevas
+  recorren análisis → validador → máquina → ciclo → TABLERO → git, y **las dos se verificaron en
+  rojo** reponiendo cada avería.
+
+  **4.3 · Las seis líneas mal atribuidas siguen registradas**, en §«LAS TRES AVERÍAS DEL PRIMER USO
+  REAL» punto 3. No se ha reescrito historia, como estaba dicho.
+
 - **BLOQUE 3 — LAS 44 DE LA COLA, UNA A UNA. 35 SE QUEDAN, 9 ESPERAN, 0 SE RECORTAN.**
 
   **La suma cuadra y está comprobada leyendo el tablero con el propio lector del orquestador:

@@ -48,12 +48,51 @@ test('un análisis SIN criterios de aceptación se repite, no pasa', () => {
   assert.match(d.motivos[0], /CRITERIOS/);
 });
 
-test('el arquitecto puede parar la tarea, y eso la aparta sin gastar ciclos', () => {
+test('el arquitecto para SIN decir de qué clase: se aparta, pero NO se llama decisión de producto', () => {
+  // ⚙️ ESTA PRUEBA AFIRMABA EL DEFECTO (corregida el 1 sep 2026). Decía `assert.ok(d.decisionDeProducto)`
+  // para CUALQUIER parada del arquitecto, y ése era exactamente el fallo: el aviso al móvil de
+  // Ibrahin decía «es una decisión de producto» fuese verdad o no. Ese día se mandó dos veces y las
+  // dos fueron falsas. Una parada sin clasificar sube a Ibrahin —por si acaso—, pero NO se le
+  // vende como una decisión suya.
   const e = conEstado({ tarea: TAREA, paso: PASOS.VALIDAR_ANALISIS, intento: 1 });
   const d = decidir({ estado: e, cuota: holgada, config: CONFIG,
-    obs: { analisis: { valido: false, paroArquitecto: true, motivos: ['toca Capa 2, congelada'] } } });
+    obs: { analisis: { valido: false, paroArquitecto: true, clase: 'sin-clasificar',
+                       motivos: ['toca Capa 2, congelada'] } } });
   assert.equal(d.tipo, ACCIONES.APARTAR);
-  assert.ok(d.decisionDeProducto);
+  assert.equal(d.clase, 'sin-clasificar');
+  assert.equal(d.decisionDeProducto, false, 'sin clasificar NO es «decisión de producto»');
+});
+
+test('una PREMISA FALSA con su prueba se cierra sola: no le roba una interrupción a Ibrahin', () => {
+  const e = conEstado({ tarea: TAREA, paso: PASOS.VALIDAR_ANALISIS, intento: 1 });
+  const d = decidir({ estado: e, cuota: holgada, config: CONFIG,
+    obs: { analisis: { valido: false, paroArquitecto: true, clase: 'premisa-falsa',
+                       prueba: 'git ls-files no devuelve ninguno de los seis; tampoco están en HEAD',
+                       motivos: ['los seis ficheros se retiraron el 24 ago 2026'] } } });
+  assert.equal(d.tipo, ACCIONES.CERRAR_PREMISA_FALSA);
+  assert.match(d.prueba, /git ls-files/, 'la prueba viaja con la decisión: se escribe en el tablero');
+});
+
+test('una PREMISA FALSA SIN prueba NO se cierra sola: sube, que es el camino que no destruye nada', () => {
+  // Cerrar una tarea sola es irreversible en la práctica —nadie vuelve a mirar lo que se cerró—,
+  // así que el error seguro es escalar de más, nunca cerrar de más.
+  const e = conEstado({ tarea: TAREA, paso: PASOS.VALIDAR_ANALISIS, intento: 1 });
+  const d = decidir({ estado: e, cuota: holgada, config: CONFIG,
+    obs: { analisis: { valido: false, paroArquitecto: true, clase: 'premisa-falsa', prueba: null,
+                       motivos: ['creo que ya está hecho'] } } });
+  assert.equal(d.tipo, ACCIONES.APARTAR, 'sin prueba no se cierra nada');
+  assert.equal(d.decisionDeProducto, false);
+});
+
+test('una DECISIÓN DE IBRAHIN sí sube, y lleva la pregunta con ella', () => {
+  const e = conEstado({ tarea: TAREA, paso: PASOS.VALIDAR_ANALISIS, intento: 1 });
+  const d = decidir({ estado: e, cuota: holgada, config: CONFIG,
+    obs: { analisis: { valido: false, paroArquitecto: true, clase: 'decision-de-ibrahin',
+                       pregunta: '¿Cuántos días sigue funcionando el programa cuando caduca la tarjeta?',
+                       motivos: ['no está escrito qué pasa al caducar la tarjeta'] } } });
+  assert.equal(d.tipo, ACCIONES.APARTAR);
+  assert.equal(d.decisionDeProducto, true);
+  assert.match(d.pregunta, /cuántos días/i, 'la pregunta llega hasta el aviso: es lo único que hay que contestar');
 });
 
 test('un rechazo vuelve al programador con el motivo', () => {

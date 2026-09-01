@@ -28,7 +28,7 @@ const NOMBRE_PASO = {
 /**
  * Redacta el parte. Función pura: se le pasa todo y devuelve texto. Se prueba sin red.
  */
-export function redactar({ estado, cuota, historialReciente, tareaEnTablero, pendientesEnTablero = [], averia = null, desde, ahora = Date.now(), config, barridos = [] }) {
+export function redactar({ estado, cuota, historialReciente, tareaEnTablero, pendientesEnTablero = [], averia = null, desde, ahora = Date.now(), config, barridos = [], premisasFalsas = [] }) {
   const L = [];
   const t = (s) => L.push(s);
 
@@ -142,6 +142,18 @@ export function redactar({ estado, cuota, historialReciente, tareaEnTablero, pen
   }
   t('');
 
+  // 6-ante · Las que se cerraron solas porque su premisa era falsa (1 sep 2026, bloque 4).
+  // Van AQUÍ y no en un aviso al móvil a propósito: no hay nada que decidir, así que no valen una
+  // interrupción. Pero SÍ se cuentan, porque cada una es una entrada podrida que alguien escribió y
+  // que conviene ver acumularse — si aparecen tres en una semana, el problema es cómo se escribe el
+  // tablero, no las tareas.
+  if (premisasFalsas.length) {
+    t(`<b>🧹 Cerradas solas: su premisa era falsa (${premisasFalsas.length})</b>`);
+    for (const pf of premisasFalsas) t(redactarPremisaFalsa(pf));
+    t('<i>No te avisé de éstas: no eran decisiones tuyas, eran entradas caducadas del tablero.</i>');
+    t('');
+  }
+
   // 6-bis · El barrido de los ratos muertos (bloque 4 del encargo del 1 sep 2026).
   // Va DESPUÉS de la cuota a propósito: es lo que se hizo PORQUE no había cuota, y así se lee
   // seguido. Solo aparece si hubo alguno: un parte de una espera sin barrido no dice nada.
@@ -177,19 +189,65 @@ export function redactar({ estado, cuota, historialReciente, tareaEnTablero, pen
 }
 
 /** Aviso suelto. Solo para una cosa: una tarea apartada que necesita decisión. */
-export function redactarApartada({ tarea, motivo, historial }) {
-  const L = ['<b>⛔ Una tarea necesita tu decisión</b>', ''];
+/**
+ * El aviso de que una tarea se ha apartado. Va al móvil de Ibrahin, y suele leerse de pie.
+ *
+ * ⚙️ DOS ARREGLOS DEL 1 SEP 2026, los dos del mismo encargo:
+ *
+ * 1. **LLEVA EL MOTIVO ENTERO.** Antes decía «el arquitecto declaró la tarea mal planteada» y se
+ *    quedaba ahí: lo que el arquitecto había ENCONTRADO viajaba en `detalle` y **nadie lo pasaba a
+ *    esta función**. Con eso Ibrahin no podía decidir nada desde el móvil — tenía que entrar al
+ *    servidor a leer el análisis para enterarse de qué le estaban preguntando.
+ *
+ * 2. **NO MIENTE SOBRE DE QUÉ CLASE ES.** La última línea decía SIEMPRE «No es un error técnico:
+ *    es una decisión de producto». Ese día se mandó dos veces y **las dos fueron falsas**: las seis
+ *    pantallas llevaban ocho días borradas, y el cifrado estaba mal redactado. Ahora la frase
+ *    depende de la clase, y la clase la declara el arquitecto.
+ */
+export function redactarApartada({ tarea, motivo, historial, clase = 'sin-clasificar', pregunta = null, detalle = [] }) {
+  const decision = clase === 'decision-de-ibrahin';
+  const L = [decision
+    ? '<b>⛔ Una tarea necesita una decisión tuya</b>'
+    : '<b>⚠️ Una tarea se ha parado y no sé de qué clase es</b>', ''];
   L.push(`<b>${esc(tarea.titulo)}</b>`, '');
+
+  // LA PREGUNTA VA ARRIBA DEL TODO. Es lo único que Ibrahin tiene que contestar, y si va al final
+  // compite con el resto del mensaje en una pantalla de móvil.
+  if (decision && pregunta) L.push(`<b>❓ ${esc(pregunta)}</b>`, '');
+
   L.push(`<b>Qué se pidió:</b> ${esc(tarea.descripcion || tarea.titulo).slice(0, 400)}`);
-  L.push(`<b>Por qué no sale:</b> ${esc(motivo)}`);
+  L.push(`<b>Qué encontró el arquitecto:</b> ${esc(motivo).slice(0, 900)}`);
+
+  // El resto de lo que dejó escrito, que es donde suele estar el porqué de verdad.
+  const extra = (detalle || []).filter((d) => d && d !== motivo);
+  if (extra.length) {
+    L.push('', '<b>Y además:</b>');
+    for (const d of extra.slice(0, 4)) L.push(`• ${esc(d).slice(0, 300)}`);
+  }
+
   if (historial?.length) {
     L.push('', '<b>Qué se intentó:</b>');
     for (const h of historial.slice(-4)) {
       L.push(`• Intento ${h.intento}: ${esc((h.motivos || []).join('; ')).slice(0, 200) || esc(h.veredicto)}`);
     }
   }
-  L.push('', '<i>No es un error técnico: es una decisión de producto. El sistema sigue con la siguiente tarea.</i>');
+
+  L.push('', decision
+    ? '<i>No es un error técnico: falta una decisión que solo puedes tomar tú. El sistema sigue con la siguiente tarea.</i>'
+    : '<i>El arquitecto paró SIN decir si es una decisión tuya o una entrada caducada del tablero, así que te lo mando por si acaso. Si resulta que la tarea estaba escrita sobre algo que ya no es cierto, no hacía falta molestarte. El sistema sigue con la siguiente tarea.</i>');
   return L.join('\n');
+}
+
+/**
+ * La línea del parte para una tarea que se cerró sola por premisa falsa. NO es un aviso suelto: va
+ * en el parte de las tres horas, como información. No hay nada que decidir.
+ */
+export function redactarPremisaFalsa({ tarea, motivo, prueba }) {
+  return [
+    `• <b>${esc(tarea.titulo)}</b> — cerrada sola: lo que pedía no era cierto.`,
+    `   ${esc(motivo).slice(0, 300)}`,
+    `   <b>Prueba:</b> ${esc(prueba).slice(0, 300)}`,
+  ].join('\n');
 }
 
 /**

@@ -60,25 +60,84 @@ pantalla. Si para juzgarlo hace falta una opinión, no es un criterio: reescríb
 Escribe **entre 3 y 8**. Menos de tres es que no has pensado; más de ocho es que la tarea
 es demasiado grande y deberías decirlo (ver abajo).
 
-## Cuándo tienes que PARAR
+## Cuándo tienes que PARAR — y de qué DOS clases es cada parada
 
-Si la tarea está mal planteada de raíz, **no la maquilles: párala**. Escribe en el análisis,
-como primera línea:
+Si la tarea está mal planteada de raíz, **no la maquilles: párala**. Pero **di de cuál de las dos
+clases es**, porque van a sitios distintos y confundirlas cuesta caro.
+
+### Clase 1 · PREMISA FALSA — lo que la tarea dice NO ES CIERTO
+
+El fichero que hay que retirar **ya no existe**. Lo que pide **ya está hecho**. La cifra que cita
+**está caducada**. Toca una capa **congelada**, así que no debería estar en la cola. Es **basura en
+el tablero**: no hay nada que decidir, hay algo que corregir.
+
+Escribe como primera línea del análisis:
 
 ```
-🛑 TAREA MAL PLANTEADA
+🛑 PREMISA FALSA
 ```
 
-y explica por qué. Motivos que justifican parar:
+y a continuación **el motivo Y LA PRUEBA**, con este rótulo literal:
 
-- La tarea pide algo que contradice `CANON.md` o el `RITUAL.md`.
-- Toca Capa 2 o Capa 3, que están congeladas.
-- Es tan grande que no se puede aceptar de una vez: propón cómo partirla.
-- Le falta una decisión que no es tuya: qué se le promete al cliente, qué se le cobra, qué
-  exige la ley. Eso lo decide Ibrahin, no tú.
-- Lo que pide ya está hecho.
+```
+**Prueba:** lo que has comprobado, HOY, contra el árbol de verdad.
+```
 
-Parar bien vale más que un plan bonito sobre una tarea equivocada.
+**SIN `**Prueba:**` NO SE CIERRA NADA.** Una tarea que se cierra sola sobre una afirmación tuya sin
+comprobar es peor que dejarla abierta. Si no puedes demostrarlo, no es premisa falsa: usa la clase 2
+o escribe un análisis normal.
+
+**Lo que vale como prueba:** el resultado de mirar, con su comando o su ruta —`git ls-files` no lo
+devuelve, no está en `HEAD`, no está en disco, el fichero X línea N dice otra cosa—. **Lo que NO
+vale:** «parece que», «probablemente», «según el tablero». El tablero es justo lo que estás poniendo
+en duda.
+
+### Clase 2 · DECISIÓN DE IBRAHIN — falta algo que solo él puede decidir
+
+Le falta una decisión que **no es tuya**: qué se le promete al cliente, qué se le cobra, qué exige la
+ley, cuánto dura algo, quién puede ver qué. Escribe como primera línea:
+
+```
+🛑 DECISIÓN DE IBRAHIN
+```
+
+y a continuación el motivo **y la pregunta**, con este rótulo literal:
+
+```
+**Pregunta:** una sola frase que Ibrahin pueda contestar sin ser técnico.
+```
+
+**Esa frase le llega al móvil.** Escríbela para una persona que no va a abrir el código: «¿cuántos
+días sigue funcionando el programa cuando le caduca la tarjeta a un cliente?», no «¿qué política de
+dunning aplicamos?».
+
+**Y NO uses esta clase para dudas de construcción** —qué tabla, qué formato, dónde va un botón, qué
+patrón—: **eso lo decides tú, lo construyes y lo explicas en la entrega.** Traerle a Ibrahin una duda
+de construcción cuesta un día y no mejora el producto (norma del 24 ago 2026).
+
+### Si es demasiado grande
+
+No es ninguna de las dos: es un problema de tamaño. Sigue usando `🛑 DECISIÓN DE IBRAHIN` **y propón
+en la pregunta cómo partirla**, porque decidir qué entra primero es suyo.
+
+### POR QUÉ ESTO IMPORTA (1 sep 2026)
+
+Ese día **le llegaron a Ibrahin dos avisos al móvil pidiéndole una decisión, y ninguno lo era.**
+Las seis pantallas muertas —que llevaban **ocho días borradas**, retiradas el 24 ago el mismo día en
+que se escribió la deuda que decía que seguían ahí— y el cifrado de las copias, que estaba mal
+escrito. **Los dos avisos decían la misma frase: «No es un error técnico: es una decisión de
+producto». Las dos veces era falso.** Las dos eran premisa falsa o tarea mal redactada.
+
+Una premisa falsa **se cierra sola con su prueba y no le roba a nadie una interrupción**. Solo la
+clase 2 sube al móvil.
+
+Parar bien vale más que un plan bonito sobre una tarea equivocada. Parar **diciendo de qué clase
+es** vale más todavía.
+
+### El rótulo antiguo
+
+`🛑 TAREA MAL PLANTEADA` sigue reconociéndose, pero **no clasifica**: la tarea se aparta y sube a
+Ibrahin marcada como «sin clasificar», que es el camino lento. Usa uno de los dos de arriba.
 
 ## Lo que NO haces
 

@@ -34,6 +34,7 @@ export const ACCIONES = Object.freeze({
   REPLANTEAR: 'REPLANTEAR',
   APARTAR: 'APARTAR',
   CERRAR: 'CERRAR',
+  CERRAR_PREMISA_FALSA: 'CERRAR_PREMISA_FALSA',
   REINTENTAR_SUBIDA: 'REINTENTAR_SUBIDA',
   SALTAR: 'SALTAR',
 });
@@ -199,9 +200,29 @@ function decidirSinMirarCuota({ estado, tareaDisponible, pendientesEnTablero = [
       // El arquitecto tiene derecho a decir que la tarea está mal planteada. No es un fallo
       // suyo: es un resultado, y aparta la tarea sin gastar más ciclos.
       if (a.paroArquitecto) {
-        return { tipo: ACCIONES.APARTAR, motivo: 'el arquitecto declaró la tarea mal planteada',
-                 detalle: a.motivos || [], decisionDeProducto: true,
-                 porque: 'el arquitecto paró: no es un fallo técnico' };
+        // ⚙️ DOS CAJONES, NO UNO (1 sep 2026). Hasta hoy toda parada del arquitecto acababa en
+        // APARTAR con `decisionDeProducto: true`, y el aviso al móvil de Ibrahin decía «No es un
+        // error técnico: es una decisión de producto» **fuese verdad o no**. Ese día le llegaron
+        // DOS avisos así y NINGUNO era una decisión suya: las seis pantallas llevaban ocho días
+        // borradas y el cifrado estaba mal redactado. Cada entrada podrida del tablero le costaba
+        // una interrupción y una decisión que no existía.
+        //
+        // Una PREMISA FALSA **con su prueba** se cierra sola: no hay nada que decidir, hay algo
+        // que corregir. Sin prueba NO se cierra —cerrar es irreversible en la práctica— y sube
+        // como «sin clasificar», que es el camino lento pero el que no destruye nada.
+        if (a.clase === 'premisa-falsa' && a.prueba) {
+          return { tipo: ACCIONES.CERRAR_PREMISA_FALSA,
+                   motivo: a.motivos?.[0] || 'la tarea parte de algo que no es cierto',
+                   prueba: a.prueba, detalle: a.motivos || [],
+                   porque: 'premisa falsa demostrada: es basura en el tablero, no una decisión' };
+        }
+        return { tipo: ACCIONES.APARTAR, motivo: a.motivos?.[0] || 'el arquitecto declaró la tarea mal planteada',
+                 detalle: a.motivos || [], clase: a.clase || 'sin-clasificar',
+                 pregunta: a.pregunta || null,
+                 decisionDeProducto: a.clase === 'decision-de-ibrahin',
+                 porque: a.clase === 'decision-de-ibrahin'
+                   ? 'falta una decisión que solo puede dar Ibrahin'
+                   : 'el arquitecto paró sin decir de qué clase: sube a Ibrahin por el camino lento' };
       }
       if (!a.valido) {
         // Un análisis inválido (sin criterios, corto, sin arquitectura) se repite: el

@@ -106,8 +106,15 @@ export class Ciclo {
 
     if (estado.paso === PASOS.VALIDAR_ANALISIS || estado.paso === PASOS.ANALISIS) {
       const v = validarAnalisis(rutas.analisis);
+      // ⚙️ `clase`, `prueba` y `pregunta` SE COPIAN (1 sep 2026). Sin ellas, la máquina no puede
+      // distinguir una premisa falsa de una decisión de Ibrahin y todo acaba en el mismo cajón.
+      // Y es el MISMO fallo que el 4.1 de ese encargo, en otro punto de la misma cadena: el dato
+      // existía —el validador lo devolvía— y quien lo tenía en la mano no lo pasaba al siguiente.
+      // Lo cazó la prueba de punta a punta, no la de la máquina: cada mitad estaba bien por su
+      // lado, y lo que estaba roto era la junta. Un doble por cada mitad no ve una junta rota.
       obs.analisis = { existe: fs.existsSync(rutas.analisis), valido: v.ok, motivos: v.motivos,
-                       paroArquitecto: !!v.paroArquitecto, criterios: v.criterios || [] };
+                       paroArquitecto: !!v.paroArquitecto, criterios: v.criterios || [],
+                       clase: v.clase || null, prueba: v.prueba || null, pregunta: v.pregunta || null };
     }
     if ((estado.paso === PASOS.VALIDAR_CODIGO || estado.paso === PASOS.CONSTRUCCION) && estado.base) {
       const imposible = detectarAnalisisImposible(rutas.informe);
@@ -334,6 +341,9 @@ export class Ciclo {
       case ACCIONES.APARTAR:
         return this.apartar({ estado, accion, cuota });
 
+      case ACCIONES.CERRAR_PREMISA_FALSA:
+        return this.cerrarPorPremisaFalsa({ estado, accion, cuota });
+
       case ACCIONES.CERRAR:
         return this.cerrar({ estado, cuota });
 
@@ -522,9 +532,57 @@ export class Ciclo {
       intentos: estado.historial.length, replanteos: estado.replanteos, decisionDeProducto: !!accion.decisionDeProducto,
     });
 
-    const apartada = { tarea, motivo: accion.motivo, historial: estado.historial };
+    const apartada = { tarea, motivo: accion.motivo, historial: estado.historial,
+                       clase: accion.clase || 'sin-clasificar', pregunta: accion.pregunta || null,
+                       detalle: accion.detalle || [] };
     estado = this.almacen.transicion(estado, { tipo: 'TAREA_APARTADA', motivo: accion.motivo, detalle: accion.detalle || [] });
     return { estado, espera: 0, apartada };
+  }
+
+  /**
+   * Cierra una tarea cuya premisa el arquitecto demostró FALSA. No sube a Ibrahin.
+   *
+   * ⚙️ POR QUÉ EXISTE (1 sep 2026). Ese día le llegaron DOS avisos al móvil pidiéndole una
+   * decisión, y ninguno lo era: las seis pantallas muertas llevaban **ocho días borradas** —se
+   * retiraron el 24 ago, el mismo día en que se escribió la deuda que decía que seguían ahí— y el
+   * cifrado de las copias estaba mal redactado. **Los dos avisos decían la misma frase: «No es un
+   * error técnico: es una decisión de producto». Las dos veces era falso.**
+   *
+   * Una entrada podrida del tablero no es una decisión de nadie: es basura, y cada una le costaba
+   * a Ibrahin una interrupción y una decisión que no existía. Se cierra sola **con la prueba
+   * escrita en el tablero**, y sale en el parte de las tres horas como información, no como alarma.
+   */
+  async cerrarPorPremisaFalsa({ estado, accion, cuota = null }) {
+    const tarea = estado.tarea;
+    const rutas = this.rutasDe(tarea);
+    this.log.exito(`✅ Cierro «${tarea.titulo}» sola: su premisa es falsa y está demostrado.`);
+    this.log.info(`   Motivo: ${accion.motivo}`);
+    this.log.info(`   Prueba: ${accion.prueba}`);
+    this.log.info('   NO sube al móvil: no es una decisión de Ibrahin, es una entrada caducada.');
+
+    const registro = escribirRegistroTarea({
+      config: this.config, tarea, estado, rutas,
+      commits: estado.base ? commitsDesde(estado.base, this.config.repo.raiz) : [],
+      criterios: this.criteriosDelAnalisis(rutas.analisis), consumo: cuota,
+      apartada: `PREMISA FALSA — ${accion.motivo} · Prueba: ${accion.prueba}`,
+    });
+    const tab = marcarEnTablero({
+      config: this.config, tarea, commits: [], registro, logger: this.log,
+      premisaFalsa: { motivo: accion.motivo, prueba: accion.prueba },
+    });
+    const ficheros = [registro].concat(tab.escrito ? [this.config.tableroAbs] : []).concat(tab.destino ? [tab.destino] : []);
+    confirmarCierre({ config: this.config, tarea, ficheros: ficheros.filter((f) => fs.existsSync(f)), logger: this.log });
+
+    this.almacen.registrarHistorial({
+      id: tarea.id, titulo: tarea.titulo, resultado: 'cerrada-premisa-falsa', motivo: accion.motivo,
+      prueba: accion.prueba, intentos: estado.historial.length, replanteos: estado.replanteos,
+      decisionDeProducto: false,
+    });
+    // Se APARTA en el estado (es la transición que suelta la tarea sin darla por construida), pero
+    // NO se devuelve `apartada`: eso es lo que dispara el aviso al móvil, y aquí no hay que avisar.
+    estado = this.almacen.transicion(estado, { tipo: 'TAREA_APARTADA', motivo: `premisa falsa: ${accion.motivo}`, detalle: [accion.prueba] });
+    estado = this.almacen.transicion(estado, { tipo: 'DESAPARTADA', id: tarea.id, de: 'premisa falsa demostrada' });
+    return { estado, espera: 0, cerradaPorPremisaFalsa: { tarea, motivo: accion.motivo, prueba: accion.prueba } };
   }
 
   escribirFeedback(estado, motivos) {

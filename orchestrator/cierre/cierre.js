@@ -69,9 +69,25 @@ ${commits?.length ? commits.map((c) => `- \`${c.corto}\` ${c.asunto}`).join('\n'
  * desde que el lector coge tareas por `estado:` (31 ago 2026), una apartada que siguiera
  * diciendo «pendiente» se volvería a coger en cada vuelta, para siempre.
  */
-export function marcarEnTablero({ config, tarea, commits, registro, logger, apartada = null }) {
+export function marcarEnTablero({ config, tarea, commits, registro, logger, apartada = null, premisaFalsa = null }) {
   const shas = commits?.map((c) => `\`${c.corto}\``).join(', ') || '(ninguno)';
-  const nota = apartada
+  // ⚙️ TRES MARCAS, NO DOS (1 sep 2026). La tercera es la premisa falsa: una tarea escrita sobre
+  // algo que no es cierto NO está «apartada esperando decisión» —no hay nada que decidir— ni está
+  // «hecha» —no se construyó nada—. Está cerrada porque sobraba, y **la prueba se escribe aquí**,
+  // que es donde alguien la va a leer dentro de seis meses preguntándose por qué se cerró.
+  const nota = premisaFalsa
+    ? [
+      '',
+      `> **✅ CERRADA SOLA por el orquestador el ${hoy()}: lo que pedía NO ERA CIERTO.**`,
+      '>',
+      `> Motivo: ${premisaFalsa.motivo}`,
+      `> **Prueba:** ${premisaFalsa.prueba}`,
+      '>',
+      '> No subió al móvil de Ibrahin: no era una decisión suya, era una entrada caducada del tablero.',
+      `> Registro: \`${path.relative(config.repo.raiz, registro)}\``,
+      '',
+    ].join('\n')
+    : apartada
     ? [
       '',
       `> **Apartada por el orquestador el ${hoy()}.** Esperando decisión de Ibrahin.`,
@@ -90,7 +106,7 @@ export function marcarEnTablero({ config, tarea, commits, registro, logger, apar
   if (tarea.origen !== 'bloque') {
     const destino = path.join(config.rutasAbs.registrosTarea, `${tarea.id}-PEGAR-EN-TABLERO.md`);
     fs.mkdirSync(path.dirname(destino), { recursive: true });
-    escribirAtomico(destino, `# ${tarea.titulo} — ${apartada ? 'APARTADA' : 'HECHA'} (${hoy()})\n\nPega esto en ${config.repo.tablero}, línea ${tarea.linea}:\n${nota}\n`);
+    escribirAtomico(destino, `# ${tarea.titulo} — ${premisaFalsa ? 'CERRADA (PREMISA FALSA)' : apartada ? 'APARTADA' : 'HECHA'} (${hoy()})\n\nPega esto en ${config.repo.tablero}, línea ${tarea.linea}:\n${nota}\n`);
     logger?.aviso(`El tablero está en prosa: no lo reescribo. Texto para pegar en ${path.relative(config.repo.raiz, destino)}`);
     return { escrito: false, motivo: 'tablero-en-prosa', destino };
   }
@@ -105,7 +121,9 @@ export function marcarEnTablero({ config, tarea, commits, registro, logger, apar
   }
 
   const lineas = tarea.bruto.split('\n');
-  lineas[0] = lineas[0].replace(/^(#{1,6})\s+.*$/, (_, h) => (apartada
+  lineas[0] = lineas[0].replace(/^(#{1,6})\s+.*$/, (_, h) => (premisaFalsa
+    ? `${h} ✅ CERRADA — PREMISA FALSA (${hoy()}) — ${tarea.titulo}`
+    : apartada
     ? `${h} ⛔ APARTADA (${hoy()}) — ${tarea.titulo}`
     : `${h} ✅ HECHA (${hoy()}) — ${tarea.titulo} · ${shas}`));
   const bloque = lineas

@@ -468,6 +468,97 @@ test('una tarea «esperando» sale de la cola, pero NO se pierde del tablero', a
   assert.match(tablero, /Su cuerpo entero sigue aquí, sin recortar/);
 });
 
+// ════════════════════════════════════════════════════════════════════════════════════════════
+//  BLOQUE 4 · UNA PREMISA FALSA NO ES UNA DECISIÓN DE IBRAHIN — de punta a punta
+// ════════════════════════════════════════════════════════════════════════════════════════════
+//
+// El 1 sep 2026 le llegaron a Ibrahin DOS avisos al móvil pidiéndole una decisión, y ninguno lo
+// era: las seis pantallas muertas llevaban OCHO DÍAS borradas, y el cifrado estaba mal redactado.
+// Los dos avisos decían la misma frase — «No es un error técnico: es una decisión de producto» —
+// y las dos veces era falso. Esto lo recorre entero: análisis → validador → máquina → ciclo →
+// TABLERO → git, con el ciclo de verdad y sin remedar nada por el camino salvo la llamada al modelo.
+
+const ANALISIS_PREMISA_FALSA = `🛑 PREMISA FALSA
+
+Los seis ficheros que esta tarea manda retirar no existen: se retiraron el 24 ago 2026, el MISMO
+día en que se escribió la deuda que dice que siguen ahí.
+
+**Prueba:** \`git ls-files\` no devuelve ninguno de los seis, no están en HEAD y no están en disco.
+Comprobado hoy contra el árbol.
+`;
+
+const ANALISIS_DECISION = `🛑 DECISIÓN DE IBRAHIN
+
+El tablero no dice qué pasa cuando a un cliente le caduca la tarjeta, y sin eso no se puede
+escribir el criterio de HECHO.
+
+**Pregunta:** ¿Cuántos días sigue funcionando el programa cuando le caduca la tarjeta a un cliente?
+`;
+
+async function unCicloQuePara(raiz, analisis) {
+  const { configDe: cd } = await import('./ayuda.js');
+  const { Almacen } = await import('../nucleo/almacen.js');
+  const { Ciclo } = await import('../ciclo.js');
+  const { invocadorFalso, vigilanteFalso, registroMudo } = await import('./ayuda.js');
+  const cfg = cd(raiz);
+  const almacen = new Almacen({ rutaEstado: cfg.rutasAbs.estado, rutaJournal: cfg.rutasAbs.journal,
+                                rutaHistorial: cfg.rutasAbs.historial });
+  const inv = invocadorFalso([() => {
+    fs.mkdirSync(cfg.rutasAbs.artefactos, { recursive: true });
+    fs.writeFileSync(path.join(cfg.rutasAbs.artefactos, 'task-sumar-dos-numeros-analysis.md'), analisis);
+    return { ok: true, texto: 'parado', json: { result: 'parado' }, ms: 1, cuotaSospechosa: false };
+  }]);
+  const ciclo = new Ciclo({ config: cfg, almacen, vigilante: vigilanteFalso(), logger: registroMudo(), invocador: inv });
+  let estado = almacen.recuperar().estado;
+  let r = {};
+  for (let i = 0; i < 4 && !r.apartada && !r.cerradaPorPremisaFalsa; i++) {
+    r = await ciclo.unPaso(estado);
+    estado = r.estado;
+  }
+  return { cfg, estado, r };
+}
+
+test('BLOQUE 4 · una PREMISA FALSA se cierra sola, con la prueba escrita, y NO avisa a Ibrahin', { timeout: 60000 }, async () => {
+  const raiz = repoTemporal();
+  try {
+    const { cfg, estado, r } = await unCicloQuePara(raiz, ANALISIS_PREMISA_FALSA);
+
+    assert.ok(r.cerradaPorPremisaFalsa, 'tiene que cerrarse sola');
+    assert.ok(!r.apartada, 'y NO puede dejar una «apartada», que es lo que dispara el aviso al móvil');
+    assert.deepEqual(estado.apartadas, [], 'no se queda esperando una decisión que no existe');
+    assert.equal(estado.tarea, null, 'suelta la tarea y sigue');
+
+    // LA PRUEBA QUEDA ESCRITA DONDE ALGUIEN LA VA A LEER dentro de seis meses.
+    const tablero = fs.readFileSync(cfg.tableroAbs, 'utf8');
+    assert.match(tablero, /CERRADA — PREMISA FALSA/, 'el tablero lo dice en el encabezado');
+    assert.match(tablero, /git ls-files.*no devuelve ninguno/, 'y con la prueba, no solo la afirmación');
+    assert.match(tablero, /No subió al móvil de Ibrahin/);
+
+    // Y no vuelve a la cola: si volviera, la cogería otra vez en la vuelta siguiente, sin fin.
+    const { tareasPendientes } = await import('../reader.js');
+    assert.equal(tareasPendientes(tablero).length, 0, 'cerrada es cerrada: no reaparece en la cola');
+  } finally { limpiar(raiz); }
+});
+
+test('BLOQUE 4 · una DECISIÓN DE IBRAHIN sí sube, con su pregunta y su motivo entero', { timeout: 60000 }, async () => {
+  const raiz = repoTemporal();
+  try {
+    const { estado, r } = await unCicloQuePara(raiz, ANALISIS_DECISION);
+
+    assert.ok(r.apartada, 'ésta SÍ tiene que subir');
+    assert.ok(!r.cerradaPorPremisaFalsa, 'y desde luego no cerrarse sola');
+    assert.equal(r.apartada.clase, 'decision-de-ibrahin');
+    assert.match(r.apartada.pregunta, /cuántos días/i);
+    assert.equal(estado.apartadas.length, 1, 'queda esperando decisión, que es lo correcto aquí');
+
+    const { redactarApartada } = await import('../vigia/parte.js');
+    const aviso = redactarApartada(r.apartada);
+    assert.match(aviso, /necesita una decisión tuya/);
+    assert.match(aviso, /Cuántos días sigue funcionando/, 'la pregunta llega hasta el móvil');
+    assert.match(aviso, /le caduca la tarjeta/, 'y el motivo entero, no «mal planteada» a secas');
+  } finally { limpiar(raiz); }
+});
+
 // ── utilidades ───────────────────────────────────────────────────────────────────────────────
 
 function correr(cmd, args, cwd) {

@@ -86,16 +86,44 @@ test('si no se pudo leer la cuota, lo dice en vez de inventarse un número', () 
   assert.match(texto, /No he podido leerla/);
 });
 
-test('el aviso de tarea apartada se redacta como decisión, no como error técnico', () => {
+test('el aviso de una DECISIÓN lleva la pregunta arriba y el motivo ENTERO', () => {
+  // ⚙️ 4.1 DEL ENCARGO DEL 1 SEP 2026. El aviso decía «el arquitecto declaró la tarea mal
+  // planteada» y se quedaba ahí: lo que el arquitecto había ENCONTRADO viajaba en `detalle` y
+  // nadie lo pasaba a esta función. Con eso Ibrahin no podía decidir desde el móvil — tenía que
+  // entrar al servidor a leer el análisis para enterarse de qué le preguntaban.
   const texto = redactarApartada({
-    tarea: { titulo: 'Cosa imposible', descripcion: 'hacer que llueva' },
-    motivo: 'tres rechazos y un replanteamiento sin éxito',
+    tarea: { titulo: 'Ciclo de suscripción', descripcion: 'alta, cobro, tarjeta caducada' },
+    motivo: 'el tablero no dice qué pasa cuando a un cliente le caduca la tarjeta',
+    clase: 'decision-de-ibrahin',
+    pregunta: '¿Cuántos días sigue funcionando el programa cuando le caduca la tarjeta a un cliente?',
+    detalle: ['el tablero no dice qué pasa cuando a un cliente le caduca la tarjeta',
+              'sin eso no se puede escribir el criterio de HECHO'],
     historial: [{ intento: 1, veredicto: 'rechazado', motivos: ['falta validar'] }],
   });
-  assert.match(texto, /necesita tu decisión/);
-  assert.match(texto, /Qué se pidió/);
-  assert.match(texto, /Por qué no sale/);
-  assert.match(texto, /no es un error técnico/i);
+  assert.match(texto, /necesita una decisión tuya/);
+  assert.match(texto, /Cuántos días sigue funcionando/, 'la pregunta, que es lo único que hay que contestar');
+  assert.match(texto, /le caduca la tarjeta/, 'y el motivo ENTERO, no solo «mal planteada»');
+  assert.match(texto, /sin eso no se puede escribir el criterio/, 'y lo demás que dejó escrito');
+  assert.match(texto, /solo puedes tomar tú/i);
+
+  // La pregunta va ANTES del cuerpo: en una pantalla de móvil, lo que va al final no se lee.
+  assert.ok(texto.indexOf('Cuántos días') < texto.indexOf('Qué se pidió'));
+});
+
+test('una parada SIN clasificar NO se le vende a Ibrahin como decisión suya', () => {
+  // La frase «No es un error técnico: es una decisión de producto» salía SIEMPRE. El 1 sep 2026 se
+  // mandó dos veces y las dos fueron falsas: las seis pantallas llevaban ocho días borradas y el
+  // cifrado estaba mal redactado. Ahora, si el arquitecto no dijo de qué clase es, el aviso lo dice.
+  const texto = redactarApartada({
+    tarea: { titulo: 'Retirar seis pantallas', descripcion: 'seis ficheros sin montar' },
+    motivo: 'no encuentro los ficheros que dice la tarea',
+    clase: 'sin-clasificar',
+    historial: [],
+  });
+  assert.doesNotMatch(texto, /es una decisión de producto/,
+    'no se puede afirmar que sea una decisión suya cuando nadie lo ha dicho');
+  assert.match(texto, /no sé de qué clase es/);
+  assert.match(texto, /entrada caducada del tablero/, 'y se le avisa de que puede no ser cosa suya');
 });
 
 test.after(() => fs.rmSync(dir, { recursive: true, force: true }));
