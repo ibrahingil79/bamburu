@@ -195,3 +195,38 @@ test('una orden que revienta no se lleva por delante el ciclo', async () => {
     assert.ok(r.estado.tarea, 'y la vuelta sigue: coge tarea igual');
   } finally { limpiar(raiz); }
 });
+
+test('una orden nueva DESPIERTA al daemon: no espera al final de la siesta', async () => {
+  // Sin esto, un «para» pedido durante una espera de cuota (15 min) tardaría los 15 minutos
+  // en aplicarse: el vigía contesta «anotado» y luego no pasa nada durante un cuarto de hora.
+  const raiz = repoTemporal({ tablero: TABLERO_DOS });
+  try {
+    const cfg = configDe(raiz);
+    const { arrancar } = await import('../bucle.js');
+    fs.mkdirSync(path.dirname(cfg.rutasAbs.ordenes), { recursive: true });
+    fs.closeSync(fs.openSync(cfg.rutasAbs.ordenes, 'a'));
+
+    // Se arranca el daemon de verdad, con una espera larguísima entre vueltas.
+    const largo = configDe(raiz, { ciclo: { intervaloVueltaMs: 600000 }, cli: { binario: 'no-existe-este-binario' } });
+    const daemon = arrancar({ config: largo, entorno: {} });
+
+    // Se le deja una orden mientras duerme y se mide cuánto tarda en contestarla.
+    const t0 = Date.now();
+    await new Promise((r) => setTimeout(r, 300));
+    ordenar(largo, ORDENES.PARAR);
+
+    // Si el vigilante funciona, despierta en milisegundos y la aplica.
+    let pausado = false;
+    for (let i = 0; i < 100 && !pausado; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      try { pausado = JSON.parse(fs.readFileSync(cfg.rutasAbs.estado, 'utf8')).pausado === true; } catch { /* aún no */ }
+    }
+    const tardo = Date.now() - t0;
+
+    process.kill(process.pid, 'SIGINT');
+    await daemon;
+
+    assert.ok(pausado, 'no llegó a aplicar la orden');
+    assert.ok(tardo < 20000, `tardó ${tardo} ms: se durmió en vez de despertar con la orden`);
+  } finally { limpiar(raiz); }
+});

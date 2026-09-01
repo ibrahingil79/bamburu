@@ -80,6 +80,20 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
   process.on('SIGTERM', pararBien);
   process.on('SIGINT', pararYa);
 
+  // Una orden nueva DESPIERTA al daemon. Sin esto, un «para» pedido durante una espera de
+  // cuota tardaría los 15 minutos completos de la siguiente vuelta en aplicarse: el vigía
+  // contesta «anotado» al momento y luego no pasa nada durante un cuarto de hora.
+  // Se reaprovecha el mismo `despertar` que usa la parada, que ya existía.
+  let mirón = null;
+  try {
+    fs.mkdirSync(path.dirname(cfg.rutasAbs.ordenes), { recursive: true });
+    fs.closeSync(fs.openSync(cfg.rutasAbs.ordenes, 'a'));   // que exista, para poder vigilarlo
+    mirón = fs.watch(cfg.rutasAbs.ordenes, () => { if (despertar) despertar(); });
+    mirón.on('error', () => { /* si el vigilante se cae, las órdenes se recogen igual, más tarde */ });
+  } catch (e) {
+    log.aviso(`No puedo vigilar la bandeja de órdenes (${e.message}). Las recogeré en cada vuelta, sin prisa.`);
+  }
+
   estado = almacen.transicion(estado, { tipo: 'ARRANCADO', pid: process.pid });
   escribirPid(cfg, log);
 
@@ -159,6 +173,7 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
   }
 
   ciclo.cancelarTodo();
+  try { mirón?.close(); } catch { /* ya estaba cerrado */ }
   borrarPid(cfg);
   log.info(`Parada ${emergencia ? 'de emergencia' : 'limpia'} tras ${vueltas} vuelta(s).`);
   return 0;
