@@ -9138,6 +9138,31 @@ que aún no se pueden adjuntar no sirve de nada.
 
 ## Decisiones tomadas el 1 sep 2026
 
+- **EL PANEL DE NOTION, PUESTO AL DÍA Y VUELTO A BAJAR DEL TOPE (bloque 5).** Entrada nueva del
+  1 sep 2026 arriba del todo de «DÓNDE LO DEJÉ / DÓNDE SIGO», en español llano, con los ocho puntos
+  del encargo: la noche que funcionó, las 3 h 22 de parada y su causa, el backlog podrido y su
+  contraste, las 43 en cola con el cifrado primero, el barrido en los ratos muertos, **las diez
+  órdenes que se le pueden dar por Telegram** —que Ibrahin no sabía que existían—, lo decidido y no
+  hecho, y el menú.
+  **El panel había vuelto a pasar del tope: 55.000 letras contra un máximo medido de 45.000.** Se
+  archivó el inventario del 24 ago (24.439 letras, sus seis apartados) en `📚 Archivo histórico`,
+  con copia íntegra en `docs/historico/panel-secciones-retiradas-2026-09-01.md`. **No se borró nada**,
+  y la sección «MEJORAS DEL 31 AGO» se conserva entera como registro de lo que se propuso, con una
+  cabecera nueva que dice que ya está volcada y qué salió del contraste.
+  **Ni una tabla tocada, ni una tarea duplicada:** el tablero sigue siendo esto, y Notion solo panel.
+
+- **LAS REGLAS DE DISEÑO SÍ ESTÁN ESCRITAS — y ya habían resuelto lo del menú (comprobación final).**
+  `DISEÑO.md` existe desde el 17 jul 2026 (18 KB): principio rector («el iPhone del nicho»), tokens
+  de identidad, navegación, patrón por pantalla. **De las dos piezas del saneamiento visual, la
+  primera —escribir las reglas— está HECHA;** falta la segunda, aplicarlas.
+  **Y hay un hallazgo que cambia la pregunta del menú, no solo la responde:** `DISEÑO.md` §3 registra
+  que el **«lean estricto» (5 entradas, resto solo por URL) se probó y lo DESCARTÓ el dueño al verlo,
+  porque escondía demasiadas funciones**. El modelo vigente desde el 6 jul 2026 es rail de **6 iconos
+  de área + flyout con todas las funciones**: en reposo se ven **seis iconos**, no 67 entradas.
+  **«Reducir el menú» repetiría una decisión ya tomada y ya revertida**, y por eso el bloque 2 la dejó
+  como no convertible. No se ha tocado nada del menú: era mirar y decir.
+
+
 - **EL BARRIDO VUELVE A EJECUTARSE SOLO, PERO SOLO EN LOS RATOS MUERTOS (bloque 4).**
   `orchestrator/barrido.js` (pieza nueva) + el gancho en `bucle.js` + la sección del parte.
 
