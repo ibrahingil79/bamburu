@@ -8738,6 +8738,71 @@ mano en el momento. Cuando algo va despacio, hoy se descubre porque alguien se q
 Va después del registro estructurado: sin un registro que se pueda contar, las métricas se
 construyen dos veces.
 
+## TAREA — Que una caída del proveedor de IA deje rastro
+
+- **id:** caida-ia-deja-rastro
+- **estado:** pendiente
+- **origen:** decisión de Ibrahin del 1 sep 2026 (cierre del encargo, bloque 5)
+
+**Hoy una caída del proveedor de IA no deja rastro en ninguna parte.** Cuando `core/llm.js` lanza
+`llm_provider_balance` o `llm_provider_error`, `modules/disa/index.js:2661` contesta al usuario con
+un 503 correcto y **escribe `console.error`**. Eso es todo: **no llega a `error_log`**
+(`core/control-db.js:612`), que es la tabla que sí se puede consultar después.
+
+**Medido el 1 sep 2026, y es lo que originó esta tarea:** la cuenta del proveedor de IA se quedó sin
+saldo, **DISA estaba caída para todo el mundo** —una llamada real devolvió `code:
+llm_provider_balance, status: 503`— y al buscar desde cuándo, `error_log` tenía **CERO** entradas.
+
+**⚙️ Y AQUÍ ESTÁ LO QUE DE VERDAD JUSTIFICA ESTA TAREA.** Al principio se dijo «no se puede saber
+desde cuándo». **Sí se podía — pero no preguntándole al producto.** El panel de Notion lo tenía
+apuntado **a mano** desde el **24 de agosto de 2026**: *«se ha agotado el saldo de la API de IA.
+«Your credit balance is too low to access the Anthropic API»… las funciones de IA del producto están
+caídas: DISA, el alta por chat y la lectura de facturas»*.
+
+**Ocho días.** Los mismos ocho días que estuvo helados-ibrahin sin recibir un correo. Y en los dos
+casos **el producto no lo sabía**: lo sabía una persona que se molestó en escribirlo. Un rastro que
+depende de que alguien lo teclee en un panel no es un rastro.
+
+**EL PRECEDENTE, QUE NO ES UNA HIPÓTESIS.** En agosto de 2026 el negocio **helados-ibrahin** estuvo
+**ocho días sin recibir un solo correo y nadie se enteró**: su dirección `igilm@gmail.com` no existe,
+Gmail rebotó el 17 de agosto, Resend lo metió en su lista de supresión y **descartó en silencio**
+todos sus resúmenes. Lo que aquello destapó, escrito en `docs/censo-correos.md`, vale palabra por
+palabra aquí: **el producto daba por enviado lo que Resend estaba tirando a la basura.** Con la IA
+pasa lo mismo, en otra puerta: se da por «error puntual» lo que es una caída total.
+
+**Palabras de Ibrahin (1 sep 2026):** *«El día que haya clientes, DISA puede estar muerta una semana
+sin que nadie se entere — como los ocho días de correos de helados-ibrahin en agosto.»*
+
+**Alcance: las CUATRO piezas que llaman al modelo**, no solo DISA — `modules/disa/index.js`,
+`modules/registro/index.js`, `modules/erp/routes/purchases-capture.js` y el propio `core/llm.js`.
+Una caída del proveedor las tumba a las cuatro y hoy solo se nota en una.
+
+**Lo que NO es esta tarea.** No es vigilar el **tope de gasto de un negocio** (`llm_tenant_cap`),
+que es otra rama y ya tiene su mensaje. Es la caída del **proveedor**, que no depende de ningún
+negocio y los afecta a todos. Y **no es recargar la cuenta**: eso es operación, no producto.
+
+**Criterios de aceptación**
+
+- [ ] Un fallo del proveedor (`llm_provider_balance` y `llm_provider_error`) **queda escrito en
+      `error_log`** con su hora, su `tenant_slug` y su ruta, como cualquier otro error de la
+      plataforma. Se demuestra provocándolo, no leyendo el código.
+- [ ] Se puede contestar **«¿desde cuándo?»** con una consulta al PRODUCTO: primera y última vez que
+      falló. Hoy esa pregunta solo la contesta una nota escrita a mano en Notion.
+- [ ] Cubre **las cuatro** piezas que llaman al modelo, no solo DISA.
+- [ ] **No se llena el registro:** un proveedor caído falla en CADA petición, así que se agrupa o se
+      limita (misma idea que el `DELETE ... id <= ? - 1000` que ya tiene `error_log`). Una tabla que
+      se autodestruye por exceso de ruido es tan inútil como una vacía.
+- [ ] El aviso llega **sin que nadie tenga que ir a mirar**: el `heartbeat` de las copias ya resuelve
+      exactamente este problema para otra cosa (`bamburu-backup-heartbeat`, avisa si no hay copia con
+      éxito en +48 h) y **es de donde hay que copiar la mecánica**, no inventarla.
+- [ ] **Distingue una caída de un fallo suelto.** Un 503 aislado no es una caída; **veinte seguidos
+      sí**. Sin esa distinción el aviso se vuelve ruido y se acaba ignorando — que es como se llega a
+      los ocho días.
+
+**Cuidado con lo que NO se puede romper:** el mensaje que hoy ve el usuario está bien y no se toca
+(«DISA no está disponible porque el proveedor de IA no tiene saldo. Contacta con soporte.»). Esta
+tarea añade el rastro por detrás, **no cambia lo que el cliente lee**.
+
 ## TAREA — La API no tiene versión
 
 - **id:** api-versionado
