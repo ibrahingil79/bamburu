@@ -1,0 +1,12 @@
+[Unit]
+Description=Bamburu — barrido periódico del anclaje externo de VERI*FACTU
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+AccuracySec=1min
+# Sin Persistent=true: un barrido perdido no hay que recuperarlo (el siguiente ve el mismo trabajo,
+# y el anclaje no persigue un instante exacto — solo un latido diario y el material acumulado).
+
+[Install]
+WantedBy=timers.target

@@ -16,6 +16,7 @@
 | `bamburu-caducar-reservas` | Caduca las solicitudes de cita por Internet sin responder y **libera el hueco** (cada hora) | abajo |
 | `bamburu-propuestas` | Genera las **Propuestas de DISA** del día (07:45 Europe/Madrid) | abajo |
 | `bamburu-verifactu-cola` | **Red de seguridad** de la cola de envío a la AEAT (cada 2 min) | `docs/verifactu/tarea2-cola-envio-automatico.md` |
+| `bamburu-anclaje-verifactu` | **NO INSTALADA.** Sella la cadena VERI\*FACTU con una TSA externa (RFC-3161), fuera del servidor (cada 15 min) | `docs/verifactu/anclaje-externo.md` |
 | `orquestador` | **INSTALADA (31 ago 2026).** Construye solo las tareas PENDIENTES del TABLERO, una tras otra, sin que nadie mueva ningún rótulo (arquitecto → programador → revisor) | `orquestador.service` y `orchestrator/LEEME.md` |
 | `orquestador-vigia` | **INSTALADA (31 ago 2026).** Atiende las órdenes que Ibrahin manda por Telegram. Va aparte del ciclo para poder contestar mientras el orquestador está ocupado o caído | `orquestador-vigia.service` y `docs/orquestador/mandarle-por-telegram.md` |
 

@@ -50,6 +50,7 @@ import { createSecurityRoutes } from './security.js';
 import { createPerfilRoutes } from './perfil.js';
 import { createContabilidadRoutes } from './contabilidad-routes.js';
 import { createVerifactuEnvioRoutes } from './verifactu-envio-routes.js';
+import { createVerifactuAnclajeRoutes } from './verifactu-anclaje-routes.js';
 import { createConciliacionRoutes } from './conciliacion-routes.js';
 import { createRecurrentesRoutes } from './recurrentes-routes.js';
 import { createPortalAdminRoutes } from '../../portal/admin.js';
@@ -194,6 +195,7 @@ export function mountRoutes(app, db) {
   admin.route('/propuestas', propuestasViews);  // D5 — Propuestas de DISA (recordatorio de impago)
   admin.route('/contabilidad', contabViews);
   admin.route('/verifactu', createVerifactuEnvioRoutes(db).views);
+  admin.route('/verifactu', createVerifactuAnclajeRoutes(db).views);
   admin.route('/conciliacion', createConciliacionRoutes(db).views);
   admin.route('/recurrentes', createRecurrentesRoutes(db).views);
   admin.route('/portal', createPortalAdminRoutes(db).views);

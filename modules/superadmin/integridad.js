@@ -10,6 +10,19 @@ import { listTenants, saveIntegrityResult, listIntegrityResults } from '../../co
 
 const tenantAbs = (t) => path.isAbsolute(t.db_filename) ? t.db_filename : path.join(process.cwd(), t.db_filename);
 
+// Anclaje externo (VERI*FACTU) — el último sello, o null si el negocio nunca ha anclado (o su BD
+// todavía no tiene la tabla: es aditiva y nace con la próxima migración). SOLO LEE, igual que
+// verifyTenantInvoices, y NO la toca: es la comprobación de al lado, no un reemplazo.
+function ultimoAnclajeDe(absPath) {
+  let db;
+  try { db = new Database(absPath, { readonly: true, fileMustExist: true }); }
+  catch { return null; }
+  try {
+    return db.prepare(`SELECT secuencia, sellado_at, created_at FROM verifactu_anclajes WHERE estado='sellado' ORDER BY secuencia DESC LIMIT 1`).get() || null;
+  } catch { return null; }   // tabla aún no migrada en ese negocio
+  finally { try { db.close(); } catch {} }
+}
+
 // Verifica la cadena de UN negocio (SOLO LECTURA). Devuelve { total, ok, alarm }.
 // Cadena por (serie, año), en orden de secuencia: cada factura debe (1) tener un hash que
 // cuadre con sus propios datos y (2) enlazar (prev_hash) con el hash de la anterior.
@@ -47,12 +60,19 @@ export function mountIntegridad(sa) {
     const sess = c.get('sa');
     const results = listIntegrityResults();
     const anyAlarm = results.some(r => !r.ok);
+    const rutaPorSlug = new Map(listTenants().map(t => [t.slug, tenantAbs(t)]));
     const rows = results.map(r => {
       const badge = r.ok ? '<span class="badge b-green">cuadra</span>' : '<span class="badge b-red">ALARMA</span>';
+      const ruta = rutaPorSlug.get(r.tenant_slug);
+      const anclaje = ruta ? ultimoAnclajeDe(ruta) : null;
+      const sellado = anclaje
+        ? escHtml(new Date(anclaje.sellado_at || anclaje.created_at).toLocaleString('es-ES'))
+        : '<span style="color:#94a3b8">sin anclar</span>';
       return `<tr><td><strong>${escHtml(r.tenant_slug)}</strong></td>
         <td>${r.total} factura(s)</td><td>${badge}</td>
         <td style="color:#94a3b8;font-size:.82rem">${escHtml(r.detail || '—')}</td>
-        <td style="color:#64748b;font-size:.8rem">${new Date(r.ts * 1000).toLocaleString('es-ES')}</td></tr>`;
+        <td style="color:#64748b;font-size:.8rem">${new Date(r.ts * 1000).toLocaleString('es-ES')}</td>
+        <td style="font-size:.8rem">${sellado}</td></tr>`;
     }).join('');
     const content = `
       <h1>Integridad de facturas</h1>
@@ -62,7 +82,7 @@ export function mountIntegridad(sa) {
         <button class="btn btn-amber" id="runBtn" id="btnRunCheck">Lanzar chequeo ahora</button>
       </div>
       ${results.length ? `<div class="card" style="padding:0;overflow:hidden"><table>
-        <thead><tr><th>Negocio</th><th>Facturas</th><th>Resultado</th><th>Detalle</th><th>Chequeado</th></tr></thead>
+        <thead><tr><th>Negocio</th><th>Facturas</th><th>Resultado</th><th>Detalle</th><th>Chequeado</th><th>Sellado</th></tr></thead>
         <tbody>${rows}</tbody></table></div>` : ''}
       <script nonce="${c.get('cspNonce')}">
       // C4b-1: enganchado aquí; la CSP estricta bloquea onclick de atributo.

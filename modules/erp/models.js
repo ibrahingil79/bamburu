@@ -1601,6 +1601,36 @@ export function runMigrations(db) {
   addCol(db, 'verifactu_envios', 'next_retry_at', 'DATETIME');
   db.exec('CREATE INDEX IF NOT EXISTS idx_verifactu_envios_retry ON verifactu_envios(next_retry_at)');
 
+  // ── VERI*FACTU · Anclaje externo — cadena de sellos RFC-3161, fuera del servidor (aditiva) ──
+  // Cada anclaje congela, con la firma de una TSA que no somos nosotros, la raíz (SHA-256) de todo
+  // el material fiscal del negocio hasta un corte exacto (los tres MAX(id) de abajo). Numerados y
+  // encadenados entre sí (raiz_anterior): el contador monótono que hace que un hueco se vea. NO toca
+  // ninguna tabla existente, ni añade ninguna columna a ninguna. Solo LEE invoices, invoice_anulaciones
+  // y verifactu_registros. Detalle completo en modules/erp/verifactu-anclaje.js y
+  // docs/verifactu/anclaje-externo.md.
+  db.exec(`CREATE TABLE IF NOT EXISTS verifactu_anclajes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    secuencia INTEGER NOT NULL,              -- 1,2,3… sin huecos. El contador monótono de la TSE alemana.
+    raiz TEXT NOT NULL,                      -- SHA-256 hex MAYÚSCULAS de lo de abajo
+    raiz_anterior TEXT NOT NULL DEFAULT '',  -- raiz del anclaje secuencia-1 ('' en el primero)
+    hasta_invoice_id INTEGER NOT NULL,       -- MAX(id) de invoices en el momento del corte
+    hasta_anulacion_id INTEGER NOT NULL,
+    hasta_registro_id INTEGER NOT NULL,
+    n_facturas INTEGER NOT NULL,
+    n_anulaciones INTEGER NOT NULL,
+    n_registros INTEGER NOT NULL,
+    cadena_ok INTEGER NOT NULL,              -- ¿la cadena cuadraba consigo misma al anclar?
+    cadena_detalle TEXT,                     -- la alarma, si no cuadraba
+    tsa_url TEXT NOT NULL,
+    token BLOB,                              -- el .tsr entero, ~2 KB. NULL si el sello falló.
+    sellado_at TEXT,                         -- hora que dice la TSA (no la nuestra), ISO-8601
+    estado TEXT NOT NULL DEFAULT 'pendiente',-- 'sellado' | 'fallo'
+    error TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );`);
+  // Parcial a propósito: los intentos fallidos se guardan con secuencia = 0 y no compiten entre sí.
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_verifactu_anclajes_sec ON verifactu_anclajes(secuencia) WHERE secuencia > 0');
+
   // ── PORTAL DE CLIENTE · Bloque C — enlaces mágicos temporales (aditiva) ──
   // El cliente accede por /portal/<token> (sin contraseña). El token es temporal y solo da acceso a
   // las facturas de SU client_id. Solo lectura: el portal no toca documentos ni ledger.

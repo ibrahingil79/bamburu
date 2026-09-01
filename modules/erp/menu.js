@@ -50,6 +50,7 @@ export const NAV_PERMS = {
   invoices:         'invoices.read',
   recurrentes:      'recurrentes.read',
   'verifactu-envio': 'invoices.read',
+  'verifactu-anclaje': 'invoices.read',
   conciliacion:     'conciliacion.read',
   cobros:           'invoices.read',
   portal:           'invoices.read',
@@ -258,6 +259,7 @@ export const MENU = [
     { href: '/admin/contabilidad/modelos', label: 'Modelos de Hacienda', key: 'contab-modelos', icon: 'ti-file-certificate' },
     { href: '/admin/conciliacion', label: 'Conciliación bancaria', key: 'conciliacion', icon: 'ti-arrows-exchange' },
     { href: '/admin/verifactu/envios', label: 'Envío Verifactu (AEAT)', key: 'verifactu-envio', icon: 'ti-cloud-upload' },
+    { href: '/admin/verifactu/anclajes', label: 'Sellado externo', key: 'verifactu-anclaje', icon: 'ti-lock-check' },
   ]},
   { id: 'inventario', label: 'Inventario', icon: 'ti-building-warehouse', items: [
     { href: '/admin/inventory', label: 'Stock', key: 'inventory', icon: 'ti-building-warehouse' },

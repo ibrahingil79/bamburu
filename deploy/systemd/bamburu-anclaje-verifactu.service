@@ -1,0 +1,17 @@
+[Unit]
+Description=Bamburu — anclaje externo de la cadena VERI*FACTU (sellado RFC-3161, fuera del servidor)
+Documentation=file:///home/ubuntu/bamburu/deploy/systemd/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/bamburu
+# Sin VERIFACTU_ANCLAJE_TSA + VERIFACTU_ANCLAJE_TSA_CA aquí dentro, el anclaje está inactivo y este
+# barrido no sella nada: instalarlo es inocuo. El mismo EnvironmentFile que la app y que la cola.
+EnvironmentFile=/etc/bamburu.env
+# El .mjs itera TODOS los negocios (data/tenants/*.db) por sí mismo (no hace falta bash).
+ExecStart=/usr/bin/node /home/ubuntu/bamburu/scripts/bamburu-anclaje-verifactu.mjs
+SyslogIdentifier=bamburu-anclaje-verifactu
