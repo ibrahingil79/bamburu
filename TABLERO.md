@@ -8515,3 +8515,10 @@ destruir datos*. Aquí son ficheros de código sin montar, no datos de ningún n
   **Lo que NO se ha tocado:** la lógica del ciclo, la máquina de estados, los papeles, el
   comportamiento de espera, el intervalo de vuelta y el vigía de Telegram. Solo los dos números y el
   texto de `orchestrator/LEEME.md` que los explicaba mal (decía «para el ciclo entero»; es por paso).
+
+  **⚙️ REVERIFICADO EL 1 SEP 2026 con `una-vuelta`, con el daemon parado.** El registro anuncia
+  *«Cuota: empieza si quedan 15% tras reservar 10% para el chat»*. La decisión de esa vuelta salió
+  `OCIOSO` **por la pausa que Ibrahin mandó por Telegram a las 06:29 UTC**, no por cuota: la pausa
+  manda sobre todo lo demás, así que esa vuelta no ejercita la puerta. Ejercitada aparte contra la
+  función real: la frontera cae **exacta en 25 % libre** (25 arranca · 24 espera), y con los tres
+  atascos medidos de esa madrugada —41 %, 39 % y 36 % libres— **arranca en los tres**.
