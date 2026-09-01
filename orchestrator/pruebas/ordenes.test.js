@@ -188,7 +188,7 @@ test('«para» y «arranca» se anotan para el orquestador, sin confirmación', 
   try {
     const { escucha, cfg } = montarVigia(raiz);
     const r = await preguntar(escucha, 'para');
-    assert.match(r, /Anotado/);
+    assert.match(r, /anotad/i, 'tiene que decir que queda anotada, esté el daemon en pie o no');
     assert.equal(escucha.pendienteDeConfirmar, null);
 
     const bandeja = leerLineas(cfg.rutasAbs.ordenes);
@@ -307,7 +307,7 @@ test('el estado dice en qué va y desde cuándo', () => {
 
 test('el estado avisa si el orquestador no está corriendo', () => {
   const t = contestarEstado({ estado: { tarea: null, paso: 'OCIOSO', apartadas: [] }, pid: null });
-  assert.match(t, /no está corriendo/);
+  assert.match(t, /no está corriendo/i);
 });
 
 test('la cuota dice cuánta queda y cuándo se reinicia', () => {
@@ -376,5 +376,55 @@ test('el vigía ve lo que el daemon acaba de escribir en el journal, aunque la i
 
     const r = await preguntar(escucha, 'qué estás haciendo');
     assert.match(r, /Recién cogida/, 'el vigía tiene que reconciliar el journal, no creerse la instantánea vieja');
+  } finally { limpiar(raiz); }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6 · No prometer lo que no va a pasar
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('parado a propósito: NO dice que va a volver solo, y explica qué hace falta', () => {
+  // De dónde sale (1 sep 2026): el vigía contestaba «Systemd debería levantarlo solo en menos
+  // de un minuto» siempre que no encontraba el proceso. Con el servicio parado a propósito con
+  // `systemctl stop`, systemd NO lo levanta — y ese mensaje salió de verdad a Telegram.
+  const t = contestarEstado({
+    estado: { tarea: null, paso: 'OCIOSO', apartadas: [] },
+    pid: null, situacion: { vivo: null, parado: true, unidad: 'orquestador' },
+  });
+  assert.ok(!/debería levantarlo|en menos de un minuto|en cuanto systemd/i.test(t), `sigue prometiéndolo:\n${t}`);
+  assert.match(t, /parado se queda/i);
+  assert.match(t, /systemctl start orquestador/);
+});
+
+test('caído de verdad: sí dice que vuelve solo, porque es cierto', () => {
+  const t = contestarEstado({
+    estado: { tarea: null, paso: 'OCIOSO', apartadas: [] },
+    pid: null, situacion: { vivo: null, volviendo: true },
+  });
+  assert.match(t, /levantando solo/i);
+});
+
+test('sin saber qué le pasa, lo dice en vez de inventárselo', () => {
+  const t = contestarEstado({
+    estado: { tarea: null, paso: 'OCIOSO', apartadas: [] },
+    pid: null, situacion: { vivo: null, desconocido: true },
+  });
+  assert.match(t, /no sé decirte/i);
+  assert.ok(!/systemctl start/.test(t), 'no manda ejecutar nada si no sabe qué pasa');
+});
+
+test('la consulta a systemd no lleva NI UN carácter de ningún mensaje de Telegram', async () => {
+  const raiz = repoTemporal();
+  try {
+    const { escucha, cfg } = montarVigia(raiz);
+    // La unidad sale de la configuración y va filtrada; el texto del mensaje no la toca.
+    for (const t of ['estado', 'estado; rm -rf /', 'qué haces $(id)']) {
+      const r = await preguntar(escucha, t);
+      assert.ok(!/rm -rf|\$\(id\)/.test(r), `arrastró el texto del mensaje: ${r}`);
+    }
+    // Y una unidad con pinta rara no se consulta: se dice que no se sabe.
+    const { situacionDelServicio } = await import('../vigia/escucha.js');
+    const malo = { ...cfg, vigia: { ...cfg.vigia, escucha: { ...cfg.vigia.escucha, unidad: 'orq; rm -rf /' } } };
+    assert.equal(situacionDelServicio(malo).desconocido, true);
   } finally { limpiar(raiz); }
 });

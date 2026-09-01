@@ -18,6 +18,7 @@
 // La única excepción es «parar ya», que es una emergencia y va por señal directa.
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { anadirLinea, leerLineas } from '../nucleo/almacen.js';
 import { tapar } from '../nucleo/secretos.js';
 import { recibir, responderA, configurado, queFalta } from './telegram.js';
@@ -57,14 +58,56 @@ export function daemonVivo(config) {
   } catch { return null; }
 }
 
+/**
+ * Si no está corriendo, ¿va a volver solo o no?
+ *
+ * De dónde sale (1 sep 2026): el vigía contestaba «Systemd debería levantarlo solo en menos de
+ * un minuto» SIEMPRE que no encontraba el proceso. Es cierto cuando se ha caído —hay
+ * `Restart=always`— y es FALSO cuando alguien lo ha parado a propósito con `systemctl stop`,
+ * porque entonces systemd lo deja parado. Ese mensaje salió de verdad a Telegram, con el
+ * servicio parado adrede. Decirle a alguien que espere algo que no va a pasar es peor que no
+ * decirle nada: se queda mirando el móvil.
+ *
+ * Se le pregunta a systemd, que es quien lo sabe. La consulta es de SOLO LECTURA y con el
+ * comando FIJO: aquí no entra ni un carácter de ningún mensaje de Telegram.
+ */
+export function situacionDelServicio(config) {
+  const pid = daemonVivo(config);
+  if (pid) return { vivo: pid };
+
+  const unidad = config.vigia.escucha?.unidad;
+  // Sin unidad configurada no se inventa nada: se dice que no se sabe.
+  if (!unidad || !/^[A-Za-z0-9@._-]{1,64}$/.test(unidad)) return { vivo: null, desconocido: true };
+
+  try {
+    const salida = execFileSync('systemctl', ['show', unidad, '-p', 'ActiveState', '-p', 'SubState', '--value'],
+      { encoding: 'utf8', timeout: 5000 }).trim().split('\n').map((x) => x.trim());
+    const [activo, sub] = salida;
+    if (activo === 'activating' || sub === 'auto-restart') return { vivo: null, volviendo: true };
+    if (activo === 'failed') return { vivo: null, fallado: true };
+    if (activo === 'inactive') return { vivo: null, parado: true, unidad };
+    return { vivo: null, desconocido: true };
+  } catch { return { vivo: null, desconocido: true }; }
+}
+
+/** Cómo se cuenta esa situación, en castellano y sin prometer lo que no va a pasar. */
+export function comoEsta(sit) {
+  if (sit.volviendo) return ['⚠️ <b>No está corriendo ahora mismo.</b>', 'Se está levantando solo; dame unos segundos y vuelve a preguntarme.'];
+  if (sit.parado) return ['⏹ <b>Está parado, y parado se queda.</b>', 'Alguien lo paró desde el servidor, así que no vuelve solo.',
+                          `Para levantarlo hace falta entrar al servidor: <code>sudo systemctl start ${esc(sit.unidad)}</code>.`,
+                          'Desde aquí no puedo: no tengo permiso para arrancar servicios, y es a propósito.'];
+  if (sit.fallado) return ['🚨 <b>Se ha caído y no consigue volver.</b>', 'Esto necesita que alguien lo mire en el servidor.'];
+  return ['⚠️ <b>No está corriendo</b>, y no sé decirte si va a volver solo.'];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Las respuestas. Puras: se les da el mundo y devuelven texto.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function contestarEstado({ estado, pid, ahora = Date.now() }) {
+export function contestarEstado({ estado, pid, situacion = null, ahora = Date.now() }) {
   const L = ['<b>⏳ Ahora mismo</b>', ''];
   if (!pid) {
-    L.push('⚠️ <b>El orquestador no está corriendo.</b>', 'Systemd debería levantarlo solo en menos de un minuto.');
+    L.push(...comoEsta(situacion || { desconocido: true }));
     return L.join('\n');
   }
   if (estado.esperandoCuota) {
@@ -267,7 +310,10 @@ export class Escucha {
   async ejecutar(orden, id, estado) {
     switch (orden) {
       case ORDENES.PARTE: return this.parte(estado);
-      case ORDENES.ESTADO: return contestarEstado({ estado, pid: daemonVivo(this.config) });
+      case ORDENES.ESTADO: {
+        const sit = situacionDelServicio(this.config);
+        return contestarEstado({ estado, pid: sit.vivo, situacion: sit });
+      }
       case ORDENES.CUOTA: return contestarCuota({ cuota: await this.cuota() });
       case ORDENES.TAREAS: {
         const t = this.tablero(estado);
@@ -279,7 +325,11 @@ export class Escucha {
         if (orden === ORDENES.ARRANCAR && !estado.pausado) return '▶️ Ya estaba en marcha.';
         this.anotarParaElOrquestador(orden);
         this.log.info(`Orden anotada para el orquestador: ${orden}.`);
-        if (!daemonVivo(this.config)) return 'Anotado, pero <b>el orquestador no está corriendo ahora mismo</b>. Lo recogerá en cuanto systemd lo levante.';
+        const sit = situacionDelServicio(this.config);
+        if (!sit.vivo) {
+          // Se anota igual —la recogerá cuando vuelva— pero NO se promete que vuelva solo.
+          return ['Lo he anotado y lo hará en cuanto esté en marcha, pero:', '', ...comoEsta(sit)].join('\n');
+        }
         return orden === ORDENES.PARAR
           ? '⏸ Anotado. Termina lo que tiene entre manos y no coge ninguna más. Te aviso cuando lo haga.'
           : '▶️ Anotado. Vuelve a coger tareas en cuanto dé la siguiente vuelta.';
