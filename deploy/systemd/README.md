@@ -117,6 +117,11 @@ de la crisis: nada se asume, todo se verifica y se notifica).
   antes de tocar nada (email de fallo + `exit 1`). Como el cerrojo nace en la **misma escritura**
   que nombra el destino cifrado, **nunca puede haber un momento en que el código exija cifrado y el
   cifrado no exista** — que es exactamente lo que pasó el 1 sep 2026.
+  **El cerrojo es POR COPIA, no por fichero:** cada copia busca su propia línea
+  `DESTINO_<etiqueta>` (`principal` / `secundaria`). Si esa línea falta o está malformada, esa copia
+  —y solo esa— se va **en claro** sin abortar; es a propósito (más vale copia en claro que ninguna
+  copia) y no queda en silencio, porque el correo de esa mañana dice `EN CLARO ⚠️`. El guion escribe
+  las **dos** líneas: quien las edite a mano puede degradar una copia sin darse cuenta.
 - **Verifica la subida de verdad, y sin rama blanda en ninguno de los dos modos**: compara el
   tamaño (`rclone size` sobre un `crypt` devuelve el tamaño **en claro**, así que sigue valiendo) y
   después la huella. Con destino `crypt`, `rclone cryptcheck`, que cifra el fichero local con el
@@ -388,9 +393,15 @@ se para y se pregunta.**
 
 # Segunda copia (S6) — cuenta `gilibrahin@gmail.com`
 
-> **ESTADO: PREPARADA, NO INSTALADA.** Falta un único paso, y es manual: autorizar rclone
+> ~~**ESTADO: PREPARADA, NO INSTALADA.** Falta un único paso, y es manual: autorizar rclone
 > con la segunda cuenta. Hasta que exista el remote `gdrive_gili`, nada de esto está activo
-> y el sistema se comporta exactamente como antes.
+> y el sistema se comporta exactamente como antes.~~
+>
+> **⚙️ CORREGIDO EL 1 SEP 2026 — S6 ESTÁ INSTALADA Y ACTIVA.** Se tacha en vez de borrarse, que es
+> el método de este repo. Medido hoy: `rclone listremotes` devuelve `gdrive:` y `gdrive_gili:`;
+> `/etc/systemd/system/bamburu-backup-secondary.{service,timer}` están instalados; y
+> `systemctl list-timers` dice que la secundaria corrió **hoy a las 03:35** y vuelve mañana.
+> **Lo que sigue en esta sección es historia útil: el «paso que falta» ya se dio.**
 
 ## Por qué una sola pieza y no dos scripts
 
@@ -399,10 +410,22 @@ igual que siempre (copia principal); la unit de la secundaria sobreescribe cuatr
 
 | Variable | Principal (por defecto) | Secundaria |
 |---|---|---|
-| `BACKUP_REMOTE` | `gdrive_cif:daily` | `gdrive_gili_cif:daily` |
+| `BACKUP_REMOTE` | *(no se pone)* → `gdrive:Bamburu-backup/daily` | `gdrive_gili:Bamburu-backup-gili/daily` |
 | `BACKUP_LABEL` | `principal` | `secundaria` |
 | `BACKUP_SUFFIX` | *(vacío)* → `last-success` | `-secondary` → `last-success-secondary` |
 | `BACKUP_HC_URL` | hereda `HEALTHCHECKS_URL` | **vacío a propósito** |
+
+**Y `BACKUP_REMOTE` no es quien manda.** Si existe `~/.config/bamburu/backup-destinos.conf`, manda
+**ese fichero** y `BACKUP_REMOTE` se ignora (`scripts/bamburu-backup.sh:57-64`) — que es justo lo
+que permite cambiar **las dos** copias al destino cifrado con una sola escritura, sin `sudo` y sin
+tocar ninguna unit. Ver §«Qué hace, cada día», el punto de los **DOS MODOS**.
+
+> ~~Esta tabla decía `gdrive_cif:daily` / `gdrive_gili_cif:daily`.~~ **⚙️ CORREGIDO EL 1 SEP 2026:
+> las dos celdas eran falsas** —restos del intento de cifrado que Ibrahin revirtió (`6bd067f`)— y
+> **peligrosas**: esos dos remotes no existen, y quien las copiara a una unit dejaría las copias
+> yendo cada noche contra un destino inexistente. Se tacha en vez de borrarse, que es el método de
+> este repo. Los valores de arriba son los medidos hoy en `scripts/bamburu-backup.sh:64` y en
+> `deploy/systemd/bamburu-backup-secondary.service:15`.
 
 Se parametriza en vez de duplicar porque dos copias de las mismas reglas se separan en cuanto
 alguien arregla una sola.
@@ -463,9 +486,18 @@ sudo systemctl enable --now bamburu-backup-secondary.timer
 # Primera ejecución a mano, para no esperar a las 03:35:
 sudo systemctl start bamburu-backup-secondary.service
 journalctl -u bamburu-backup-secondary -n 60 --no-pager
-rclone ls gdrive_gili_cif:daily/                    # a través de la clave
-rclone lsf gdrive_gili:Bamburu-backup-gili-cif/ -R  # sin la clave: nombres ilegibles
+
+# EN CLARO (lo que corre hoy):
+rclone ls gdrive_gili:Bamburu-backup-gili/daily/
+
+# CIFRADAS (solo después de ejecutar el guion de cifrado):
+rclone ls  gdrive_gili_cif:daily/                    # a través de la clave
+rclone lsf gdrive_gili:Bamburu-backup-gili-cif/ -R   # sin la clave: nombres ilegibles
 ```
+
+> ~~Aquí solo estaban las dos órdenes cifradas, sin condición.~~ **⚙️ CORREGIDO EL 1 SEP 2026:** ese
+> remote y esa carpeta **no existen** todavía, así que quien siguiera el bloque se llevaba un error
+> el día de la instalación. Se separa en los dos estados, igual que §«Comprobaciones».
 
 ## Horario
 

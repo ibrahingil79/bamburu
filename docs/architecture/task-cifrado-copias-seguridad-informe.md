@@ -282,3 +282,124 @@ Los siete ficheros tocados están **dentro de la lista cerrada** de §3 del plan
 `modules/`, ni `core/`, ni `orchestrator/`, ni ninguna base, ni ninguna migración, ni ninguna unit,
 ni `/etc/bamburu.env`. Los cuatro `docs/architecture/task-cifrado-*` que aparecen modificados en
 `git status` **venían así de antes** de empezar esta sesión y **no se incluyen en el commit**.
+
+---
+
+# Ronda 2 — corrección del rechazo (1 sep 2026)
+
+- **veredicto anterior:** ❌ RECHAZADO (`task-cifrado-copias-seguridad-review-intento-1.md`)
+- **motivo:** `[FUERA-DE-ALCANCE]` — quedaban **dos afirmaciones falsas** en
+  `deploy/systemd/README.md` (`:402` y `:466-467`), y el plano mandaba cazarlas con el `grep` de
+  §4.7. **Ese `grep` no se pasó.** Los ocho criterios de aceptación los verificó el revisor
+  ejecutándolos y **ninguno se toca**: esta ronda no modifica ni una línea de código.
+
+## Lo que se ha corregido
+
+### 1. `:402` — la tabla de §«Por qué una sola pieza y no dos scripts» (BLOQUEANTE)
+
+Decía `| BACKUP_REMOTE | gdrive_cif:daily | gdrive_gili_cif:daily |`. **Las dos celdas eran falsas**,
+y no de forma inocente: quien copiara la tabla a una unit dejaría las copias yendo cada noche contra
+un remote inexistente —la avería del 1 de septiembre, invitada por nuestro propio documento— porque
+sin fichero de destinos `EXIGE_CRYPT=0` y el cerrojo no salta.
+
+Medido antes de escribir los valores nuevos:
+
+```
+scripts/bamburu-backup.sh:64 → REMOTE="${BACKUP_REMOTE:-gdrive:Bamburu-backup/daily}"
+deploy/systemd/bamburu-backup-secondary.service:15 → Environment=BACKUP_REMOTE=gdrive_gili:Bamburu-backup-gili/daily
+/etc/systemd/system/bamburu-backup-secondary.service:15 → idéntico
+rclone listremotes → gdrive:  gdrive_gili:      (no hay ningún remote *_cif)
+```
+
+La fila pasa a los valores reales, se añade debajo la línea que dice **quién manda de verdad** (si
+existe `~/.config/bamburu/backup-destinos.conf`, manda ese fichero y `BACKUP_REMOTE` se ignora,
+`scripts/bamburu-backup.sh:57-64`), y lo viejo **se tacha con su fecha y su motivo**, que es el
+método de este repo.
+
+### 2. `:466-467` — el bloque de instalación de la segunda copia (BLOQUEANTE)
+
+Mandaba ejecutar, **sin ninguna condición**, `rclone ls gdrive_gili_cif:daily/` y
+`rclone lsf gdrive_gili:Bamburu-backup-gili-cif/ -R`. Ese remote y esa carpeta no existen: quien
+siguiera el bloque se llevaba un error. Se separa en **EN CLARO (lo que corre hoy)** y **CIFRADAS
+(solo después de ejecutar el guion)**, exactamente el patrón que ya estaba bien resuelto en
+§«Comprobaciones» del mismo fichero.
+
+### 3. El `grep` del plano, pasado de verdad, con cada aparición clasificada
+
+```
+$ grep -rn "gdrive_cif\|gdrive_gili_cif" deploy/systemd/README.md docs/seguridad/ CLAUDE.md TABLERO.md
+```
+
+| Dónde | Estado | Por qué es cierto |
+|---|---|---|
+| `README.md:189` | **condicionada** | dentro de `# CIFRADAS (solo después de ejecutar el guion de cifrado):` |
+| `README.md:200` | **tachada** | `~~ ~~` con su fecha (la vieja «HACE FALTA LA CONTRASEÑA») |
+| `README.md:202` | **cierta** | es el texto que *explica* por qué la anterior era falsa |
+| `README.md:208` | **condicionada** | abre con «**Cuando estén cifradas** (es decir, cuando exista el fichero de destinos)» |
+| `README.md:219` | **condicionada** | dentro de `# --- SI VAN CIFRADAS ---` |
+| `README.md:328` | **tachada** | la receta rota de `config show`, `~~ ~~` con fecha y motivo |
+| `README.md:338` | **cierta** | la receta que sí funciona (`config dump`), verificada en el intento anterior |
+| `README.md:423` | **tachada** | la nota nueva que tacha la fila de la tabla arreglada en el punto 1 |
+| `README.md:494` | **condicionada** | ahora bajo `# CIFRADAS (solo después de ejecutar el guion de cifrado):` — el punto 2 |
+| `CLAUDE.md:34` | **cierta** | narra en pasado la avería del 1 sep («el script **apuntaba a**…») |
+| `TABLERO.md:8424` | **cierta** | igual, en pasado («**apuntaba a**… se quedó puesto y vivo») |
+
+Y el mismo barrido sobre las **carpetas** cifradas, que el patrón del plano no cubría:
+
+```
+$ grep -rn "Bamburu-backup-cif\|Bamburu-backup-gili-cif" deploy/systemd/README.md docs/seguridad/ CLAUDE.md TABLERO.md
+```
+
+7 apariciones: `README.md:190,219→224,232` dentro de bloques `SI VAN CIFRADAS` / `CIFRADAS (solo
+después…)`; `:301-302` describiendo lo que **creará** el guion; `:357` el ensayo de restauración, que
+por definición es del mundo cifrado; y `:495`, la corregida en el punto 2. **Ninguna afirma que
+existan hoy.**
+
+## Las dos observaciones del revisor, también hechas — y por qué
+
+El revisor las marcó **no bloqueantes**. Las hago igualmente porque son la **misma clase de defecto**
+por el que esta entrega fue rechazada —una frase falsa en el fichero que la tarea venía a
+sincerar— y porque las dos caen dentro de `deploy/systemd/README.md`, que sí está en la lista cerrada
+de §3 del plano. **Ninguna toca código.** Van declaradas aquí para que se vean en la revisión.
+
+**Observación 1 — el cerrojo es por copia, no por fichero.** Si el fichero de destinos existe pero
+falta o está malformada la línea `DESTINO_<etiqueta>`, esa copia se va en claro sin abortar. Es el
+diseño del plano (riesgo 5: «preferimos copia en claro a sin copia») y no queda en silencio, pero no
+estaba escrito. Ahora está, junto al cerrojo, con el aviso de que el guion escribe **las dos** líneas
+y quien las edite a mano puede degradar una copia sin darse cuenta.
+
+**Observación 2 — el banner de §S6 llevaba meses caducado.** Decía «**ESTADO: PREPARADA, NO
+INSTALADA** … Hasta que exista el remote `gdrive_gili`, nada de esto está activo». Medido hoy:
+
+```
+rclone listremotes                → gdrive:  gdrive_gili:
+ls /etc/systemd/system/bamburu-backup-secondary.{service,timer} → los dos instalados
+systemctl list-timers 'bamburu-backup*'
+   bamburu-backup-secondary.timer  LAST Tue 2026-09-01 03:35:00 UTC  NEXT Wed 2026-09-02 03:35:00
+```
+
+Se **tacha con fecha y motivo** y se deja dicho que el resto de la sección es historia útil — así el
+titular corregido no entra en contradicción con el cuerpo que sigue (§«Paso que falta»), que es
+justo el error que `CLAUDE.md` §«Un titular de recuento se corrige con el cuerpo que lo desarrolla»
+prohíbe.
+
+## Cómo está probado
+
+Esta ronda es **documentación, no código**, así que la prueba es la **medición de cada afirmación**
+contra el sistema real, no una ejecución:
+
+- Los cuatro valores nuevos de la tabla, leídos del script, de la unit del repo **y** de la unit
+  instalada en `/etc/systemd/system/` (coinciden), más `rclone listremotes`.
+- El estado de S6, leído de `systemctl list-timers` y de `/etc/systemd/system/`.
+- El `grep` del plano, pasado y clasificado aparición por aparición (arriba).
+- `git diff --stat` sobre lo que se commitea: **`deploy/systemd/README.md` y este informe**, nada más.
+- **Cero órdenes contra Drive** (`rclone listremotes` y `rclone config` leen el `.conf` local; ni una
+  llamada de red) y **cero escrituras** en `~/.config/rclone/rclone.conf`.
+- `scripts/bamburu-backup.sh`, `scripts/cifrar-copias-de-seguridad.sh` y
+  `scripts/ensayo-restauracion-cifrada.sh` quedan **byte a byte como en `7bfdee5`**: los ocho
+  criterios que el revisor ejecutó siguen valiendo sin repetirlos.
+
+## Lo que sigue sin cambiar
+
+**Las copias siguen yendo EN CLARO**, el vector 4 sigue **ABIERTO**, y **la ficha no se cierra**.
+Falta la orden de Ibrahin: `bash scripts/cifrar-copias-de-seguridad.sh`.
