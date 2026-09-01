@@ -8330,10 +8330,10 @@ trozos.
 > Commits: `bfea8a8`, `d93125e`
 > Registro: `docs/orquestador/tareas/portal-formato-dinero.md`
 
-## TAREA — Retirar las seis pantallas muertas que siguen en el árbol
+## ⛔ APARTADA (2026-09-01) — Retirar las seis pantallas muertas que siguen en el árbol
 
 - **id:** retirar-pantallas-muertas
-- **estado:** pendiente
+- **estado:** apartada
 - **origen:** TABLERO.md §Deuda técnica (24 ago 2026) y §Backlog 31 ago (Limpieza)
 
 Seis ficheros de pantalla **desmontados siguen en el árbol**: **1.584 líneas** en total, más sus 12
@@ -8345,6 +8345,10 @@ el criterio es el mismo para los seis: **retirar o revivir, no dejarlos a medias
 
 Recordatorio de la regla permanente de `CLAUDE.md`: *eliminar es sacarlo del sistema vivo, no
 destruir datos*. Aquí son ficheros de código sin montar, no datos de ningún negocio.
+
+> **Apartada por el orquestador el 2026-09-01.** Esperando decisión de Ibrahin.
+> Motivo: el arquitecto declaró la tarea mal planteada
+> Registro: `docs/orquestador/tareas/retirar-pantallas-muertas.md`
 
 # 🗃️ BACKLOG DE MEJORAS — sesión del 31 ago 2026 (SIN ORDEN DECIDIDO)
 
