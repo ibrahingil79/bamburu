@@ -428,6 +428,13 @@ export class Ciclo {
       this.log.info(`La tarea queda intacta en el paso ${estado.paso}: se retoma ahí.`);
       return { estado, espera: this.config.cuota.esperaSinCuotaMs };
     }
+    if (err.clase === CLASES.LLAMADA_CORTADA) {
+      // La cortamos nosotros al parar: no es un fallo del papel y NO gasta intento. Mismo
+      // criterio que la cuota. Si contara, tres `systemctl restart` seguidos apartarían una
+      // tarea que nunca falló (1 sep 2026, al verificar la parada).
+      this.log.info(`La llamada se cortó al parar. La tarea sigue en el paso ${estado.paso}, intacta.`);
+      return { estado, espera: 0 };
+    }
     if (!err.reintentable) {
       this.log.error('Esto no se arregla reintentando: es configuración o disco.');
       return { estado, espera: this.config.cuota.esperaSinCuotaMs };

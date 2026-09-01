@@ -47,12 +47,16 @@ export function invocar({ prompt, herramientas = [], cwd, config, señal = null,
       return resolve(fallo(new ErrorOrquestador(clase, `no pude lanzar «${binario}»: ${e.message}`), t0));
     }
 
-    if (alSalir) alSalir(() => matarArbol(hijo));
-
     let salida = '';
     let errores = '';
     let vencido = false;
     let cortado = false;
+
+    // La manija de fuera MARCA la llamada como cortada, no solo mata al hijo. Sin esto, una
+    // llamada que cortamos a propósito volvía clasificada como «la salida no es JSON (código
+    // 143)» —143 es 128+SIGTERM, o sea nuestra propia señal— y el ciclo la apuntaba como fallo
+    // técnico del papel. Medido el 1 sep 2026 verificando la parada.
+    if (alSalir) alSalir(() => { cortado = true; matarArbol(hijo); });
 
     const reloj = setTimeout(() => { vencido = true; matarArbol(hijo); }, timeoutMs);
 
@@ -108,7 +112,7 @@ export function clasificar({ codigo, salida, errores, vencido, cortado, timeoutM
   const ms = Date.now() - t0;
   const todo = `${salida}\n${errores}`;
 
-  if (cortado) return fallo(new ErrorOrquestador(CLASES.DESCONOCIDO, 'la llamada se abortó desde fuera'), t0);
+  if (cortado) return fallo(new ErrorOrquestador(CLASES.LLAMADA_CORTADA, 'la cortamos desde fuera: no llegó a terminar'), t0);
   if (vencido) {
     return fallo(new ErrorOrquestador(CLASES.TIEMPO_AGOTADO,
       `la llamada pasó de ${Math.round(timeoutMs / 60000)} min y se cortó`, { ms }), t0);

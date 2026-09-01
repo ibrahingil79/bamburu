@@ -318,6 +318,13 @@ test('AVERÍA 3 · SIGTERM con una llamada EN VUELO devuelve el control dentro d
     assert.equal(despues.esperandoCuota, false,
       'ESTE es el camino que rompió: parado TRABAJANDO, no esperando cuota');
     assert.equal(despues.paso, 'ANALISIS', 'y se retoma justo donde estaba');
+
+    // Y NO SE LE APUNTA UN FALLO AL ARQUITECTO. Lo enseñó el `systemctl restart` de verdad del
+    // 1 sep 2026: la llamada cortada volvía como «la salida no es JSON (código 143)» —143 es
+    // 128+SIGTERM, nuestra propia señal— y el registro decía «Fallo técnico 1 de 3». Tres
+    // reinicios seguidos habrían apartado una tarea que no falló ni una vez.
+    assert.deepEqual(despues.fallosTecnicos, {},
+      'una llamada que cortamos nosotros no es un fallo del papel: no puede gastar intento');
   } finally { limpiar(raiz); }
 });
 

@@ -11,6 +11,7 @@ export const CLASES = Object.freeze({
   PERMISOS_DENEGADOS: 'PERMISOS_DENEGADOS',
   TIEMPO_AGOTADO: 'TIEMPO_AGOTADO',
   SALIDA_INVALIDA: 'SALIDA_INVALIDA',
+  LLAMADA_CORTADA: 'LLAMADA_CORTADA',
   DISCO: 'DISCO',
   GIT: 'GIT',
   RED: 'RED',
@@ -25,6 +26,12 @@ const RASGOS = {
   [CLASES.PERMISOS_DENEGADOS]:   { reintentable: true,  esperaCuota: false, humano: 'faltaron permisos para una herramienta' },
   [CLASES.TIEMPO_AGOTADO]:       { reintentable: true,  esperaCuota: false, humano: 'la llamada tardó más del plazo' },
   [CLASES.SALIDA_INVALIDA]:      { reintentable: true,  esperaCuota: false, humano: 'la salida no tenía la forma esperada' },
+  // LA CORTAMOS NOSOTROS, y por eso no es culpa de nadie. Se separa de SALIDA_INVALIDA porque
+  // el ciclo la trata distinto: NO cuenta como fallo técnico del papel (1 sep 2026). Al
+  // verificar la parada se vio que un `systemctl restart` dejaba «Fallo técnico 1 de 3» a
+  // nombre del arquitecto: tres reinicios seguidos habrían apartado la tarea sin que nada
+  // fallara. Es el mismo criterio que la cuota: no falló el trabajo, se lo quitamos de las manos.
+  [CLASES.LLAMADA_CORTADA]:      { reintentable: true,  esperaCuota: false, humano: 'la cortamos nosotros al parar' },
   [CLASES.DISCO]:                { reintentable: false, esperaCuota: false, humano: 'problema de disco' },
   [CLASES.GIT]:                  { reintentable: true,  esperaCuota: false, humano: 'git falló' },
   [CLASES.RED]:                  { reintentable: true,  esperaCuota: false, humano: 'problema de red' },
