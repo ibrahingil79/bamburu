@@ -9291,6 +9291,47 @@ negocio suspendido NO deja escribir— necesitan un negocio suspendido y tienen 
 
 ## Decisiones tomadas el 1 sep 2026
 
+- **«VERIFIQUÉ EL CÓDIGO, NO EL DESPLIEGUE» — la orden `preguntas` falló al primer uso real.**
+
+  **Lo que pasó**, del registro del propio bot: `12:56:09 'Preguntas' → AYUDA` y
+  `12:57:38 'Que me falta' → AYUDA`. **Lo que pasaba:** el vigía llevaba **desde las 06:58:49** en
+  marcha y la orden se escribió a las **12:51:12**. Casi seis horas con código viejo en memoria.
+  **Node lee su fichero al arrancar y no lo vuelve a leer nunca.**
+
+  **POR QUÉ LA VERIFICACIÓN NO LO CAZÓ, que es lo que había que diagnosticar.** Se dijo «comprobado
+  por el camino de Telegram entero, no simulando» — y el camino era el bueno: `interpretar` → vigía
+  → escritura en el tablero. Pero se ejecutó **en un proceso nuevo, que lee el código del disco**.
+  El bot de verdad es un proceso largo. **Se verificó el código, no el despliegue**, y desde fuera
+  los dos casos son idénticos: `systemctl` dice `active` en los dos.
+
+  **Y lo peor: ese hecho estaba escrito ESE MISMO DÍA, por la mañana** — *«el daemon en marcha
+  todavía lleva el código viejo en memoria, así que este primer `systemctl restart` me da la
+  medición del antes gratis»*. Se usó a propósito para medir el antes/después de la parada… y no se
+  aplicó al vigía. No fue no saberlo: fue no comprobarlo.
+
+  **UNA CORRECCIÓN AL PROPIO DIAGNÓSTICO, hecha antes de propagarla.** Al medirlo salió que el
+  producto (`bamburu`) llevaba **todo el día con código viejo**. **Era falso**, y lo era por usar la
+  fecha del **commit**: `bfea8a8` es de las 04:03, pero sus ficheros se escribieron a las
+  **03:53-03:55** y el producto arrancó a las **03:56:52** — sí los cargó. El commit se confirma
+  DESPUÉS de escribir. **Lo que Node leyó es el fichero, así que la fecha buena es la del fichero.**
+
+  **EL AGUJERO REAL, ya acotado:** al **producto** sí lo reinicia el programador al terminar una
+  tarea (se lo manda `CLAUDE.md`). **A la propia máquina —orquestador y vigía— no la reinicia
+  nadie**, y ahí es donde un cambio puede quedarse horas sin llegar.
+
+  **LO QUE SE HA CONSTRUIDO** (`orchestrator/nucleo/despliegue.js`): sabe, por cada servicio, si el
+  proceso vivo arrancó **antes** que el fuente más nuevo que sirve. Se mide por **mtime, no por
+  commit**, por el motivo de arriba. Y sale por los dos sitios donde hace falta:
+  · **`orq estado`** lo enseña siempre — «✅ los 3 procesos vivos corren el código que hay escrito»,
+    o cuáles no y con qué comando se arregla.
+  · **El propio bot**, cuando NO te entiende **y además es viejo**, lo dice en vez de soltar la
+    ayuda a secas: *«puede que sí exista lo que me pides y yo no me haya enterado»*. Es el punto
+    exacto donde dolió.
+
+  **ESTADO: los tres procesos al día**, comprobado además por una vía que no depende de git — que no
+  quede **ningún** fichero fuente con fecha posterior al arranque del proceso. Si eso se cumple, el
+  proceso leyó necesariamente lo que hay hoy.
+
 - **IBRAHIN YA PUEDE PREGUNTARLE AL BOT QUÉ ESPERA POR ÉL.**
 
   **El problema, dicho como es:** 9 tareas paradas esperando una decisión suya y 9 más que se la

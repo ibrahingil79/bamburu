@@ -991,6 +991,61 @@ test('«para» dejó de parar la fábrica: es la preposición más común del ca
   assert.equal(interpretar('para ya').orden, 'PARAR_YA');
 });
 
+// ════════════════════════════════════════════════════════════════════════════════════════════
+//  «VERIFIQUÉ EL CÓDIGO, NO EL DESPLIEGUE»
+// ════════════════════════════════════════════════════════════════════════════════════════════
+//
+// El 1 sep 2026 Ibrahin escribió «Preguntas» al bot y le contestó con la ayuda. La orden llevaba
+// dos horas escrita en el disco — y el proceso que la atendía llevaba **casi seis horas** en
+// marcha, de antes de que existiera. Node lee su código al arrancar y no lo vuelve a leer.
+//
+// Y lo que convierte esto en una lección y no en un descuido: **se había verificado «por el camino
+// de Telegram entero»… en un proceso nuevo**, que lee del disco. El camino era el bueno; el proceso
+// no. Desde fuera los dos casos se ven igual: `systemctl` dice `active` en los dos.
+
+test('DESPLIEGUE · un proceso que arrancó ANTES del último cambio sale como viejo', async () => {
+  const { estadoDelDespliegue } = await import('../nucleo/despliegue.js');
+  // Se comprueba contra los servicios de verdad de esta máquina: es la única forma de que esto
+  // signifique algo. Lo que se afirma no es «hay un desfase» —eso depende del momento— sino que
+  // **la pregunta se puede contestar**, que es justo lo que no se podía el 1 sep.
+  const ss = estadoDelDespliegue('/home/ubuntu/bamburu');
+  assert.ok(ss.length >= 2, 'tiene que vigilar al menos el orquestador y su vigía');
+  for (const s of ss) {
+    assert.ok(['orquestador', 'orquestador-vigia', 'bamburu'].includes(s.unidad));
+    assert.ok(s.desfasado === true || s.desfasado === false || s.desfasado === null,
+      'siempre contesta: sí, no, o «no se puede saber» — nunca se lo calla');
+    if (s.desfasado) {
+      assert.ok(s.minutos > 0 && s.fichero, 'y si dice que sí, dice cuánto y por qué fichero');
+    }
+  }
+});
+
+test('DESPLIEGUE · se mide por la fecha del FICHERO, no por la del commit', async () => {
+  // Esto tiene una cicatriz propia del mismo día: al diagnosticarlo se usó la fecha del commit y
+  // salió que el producto llevaba todo el día con código viejo. **Era falso.** Los ficheros se
+  // escribieron a las 03:53-03:55 y el producto arrancó a las 03:56 — sí los cargó. El commit es
+  // de las 04:03 porque se confirma DESPUÉS de escribir. Lo que Node leyó es el fichero.
+  const { estadoDelDespliegue } = await import('../nucleo/despliegue.js');
+  const raiz = mkdtempSync(path.join(tmpdir(), 'desp-'));
+  try {
+    // Un servicio que no existe: no se puede saber, y se dice sin inventar.
+    const ss = estadoDelDespliegue(raiz);
+    const b = ss.find((s) => s.unidad === 'bamburu');
+    assert.ok(b, 'el producto también se vigila');
+    if (!b.activo) assert.equal(b.desfasado, null, 'parado = no se sabe, no «al día»');
+  } finally { limpiar(raiz); }
+});
+
+test('DESPLIEGUE · el bot avisa cuando no te entiende Y además es viejo', async () => {
+  // El punto exacto donde dolió: la respuesta de «no te he entendido». Si además lleva código
+  // viejo, esa respuesta es engañosa — puede que la orden exista y él sea de antes.
+  const { ayuda } = await import('../vigia/ordenes.js');
+  assert.doesNotMatch(ayuda(), /código anterior/, 'la ayuda normal no habla de despliegues');
+  // Y la ayuda menciona lo nuevo, que es lo que Ibrahin va a buscar.
+  assert.match(ayuda(), /preguntas/i);
+  assert.match(ayuda(), /qué me falta/i);
+});
+
 // ── utilidades ───────────────────────────────────────────────────────────────────────────────
 
 function correr(cmd, args, cwd) {

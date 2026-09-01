@@ -22,6 +22,7 @@ import { execFileSync } from 'node:child_process';
 import { anadirLinea, leerLineas } from '../nucleo/almacen.js';
 import { tapar } from '../nucleo/secretos.js';
 import { guardarRespuesta } from '../tablero/respuestas.js';
+import { desfasados } from '../nucleo/despliegue.js';
 import { recibir, responderA, configurado, queFalta } from './telegram.js';
 import { redactar } from './parte.js';
 import {
@@ -457,13 +458,39 @@ export class Escucha {
           ? '⏸ Anotado. Termina lo que tiene entre manos y no coge ninguna más. Te aviso cuando lo haga.'
           : '▶️ Anotado. Vuelve a coger tareas en cuanto dé la siguiente vuelta.';
       }
-      default: return ayuda();
+      default: {
+        // ⚙️ SI NO TE HE ENTENDIDO Y ADEMÁS LLEVO CÓDIGO VIEJO, LO DIGO (1 sep 2026).
+        //
+        // El 1 sep Ibrahin escribió «Preguntas» y le contesté con la ayuda, porque la orden no
+        // existía **en el proceso que estaba corriendo**: llevaba desde las 06:58 en marcha y la
+        // orden se escribió a las 12:51. Desde fuera no hay forma de distinguir «no existe esa
+        // orden» de «existe, pero yo soy de antes». Esto lo distingue, justo donde duele: en la
+        // respuesta de «no te he entendido».
+        const viejo = this.codigoViejo();
+        if (!viejo) return ayuda();
+        return [
+          '⚠️ <b>Puede que sí exista lo que me pides y yo no me haya enterado.</b>',
+          '',
+          `Llevo <b>${viejo.minutos} min</b> corriendo con código anterior al último cambio `
+            + '(soy un programa largo: leo mi código al arrancar y no lo vuelvo a leer).',
+          '',
+          'Dile a quien lleve el servidor: <code>sudo systemctl restart orquestador-vigia</code>',
+          '',
+          ayuda(),
+        ].join('\n');
+      }
     }
   }
 
   async cuota() {
     try { return await this.vigilante.consultar(); }
     catch (e) { return { fiable: false, motivo: tapar(e.message, this.entorno) }; }
+  }
+
+  /** ¿Estoy yo corriendo código de antes del último cambio? `null` si no se puede saber. */
+  codigoViejo() {
+    try { return desfasados(this.config.repo.raiz).find((s) => s.unidad === 'orquestador-vigia') || null; }
+    catch { return null; }
   }
 
   /** Las decisiones que esperan, leídas del tablero. Si no se puede leer, se dice: no se inventa. */

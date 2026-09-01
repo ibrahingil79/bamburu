@@ -8,6 +8,7 @@ import { arrancar } from './bucle.js';
 import { cargarSecretos, FICHERO_SECRETOS } from './nucleo/entorno.js';
 import { tareasPendientes, buscarSiguienteTarea } from './reader.js';
 import { averiaOciosoConTablero } from './nucleo/maquina.js';
+import { estadoDelDespliegue } from './nucleo/despliegue.js';
 
 const AYUDA = `
 Orquestador de Bamburu
@@ -70,6 +71,7 @@ function mostrarEstado(cfg) {
     ? `  Situación:   PARADO esperando cuota ${desdeHace(estado.esperaDesde)} (la tarea sigue en: ${NOMBRE_PASO[estado.paso] || estado.paso})`
     : `  Situación:   ${NOMBRE_PASO[estado.paso] || estado.paso} ${desdeHace(estado.pasoDesde)}`);
   L.push(...loQueCreeDeLaCuota(cfg));
+  L.push(...loQueCorreDeVerdad(cfg));
   L.push('');
   if (estado.tarea) {
     L.push(`  Tarea:       ${estado.tarea.titulo}`);
@@ -137,6 +139,33 @@ function loQueCreeDeLaCuota(cfg) {
 }
 
 const vencido = (ms) => Number.isFinite(ms) && ms < Date.now();
+
+/**
+ * ¿CORRE CADA PROCESO EL CÓDIGO QUE HAY ESCRITO?
+ *
+ * ⚙️ DE DÓNDE SALE (1 sep 2026). Ibrahin escribió «Preguntas» al bot y le contestó con la ayuda:
+ * la orden existía en el disco desde hacía dos horas y **no en el proceso que corría**, arrancado
+ * casi seis horas antes. Desde fuera los dos casos se ven igual — `systemctl` dice `active` en los
+ * dos—, y eso es lo que hace que un despliegue a medias pueda durar horas sin que nadie lo note.
+ *
+ * Al producto SÍ lo reinicia el programador al terminar una tarea (se lo manda `CLAUDE.md`).
+ * **A la propia máquina —orquestador y vigía— no la reinicia nadie**, y ése era el agujero.
+ */
+function loQueCorreDeVerdad(cfg) {
+  let ss;
+  try { ss = estadoDelDespliegue(cfg.repo.raiz); } catch { return []; }
+  const malos = ss.filter((s) => s.desfasado === true);
+  if (!malos.length) {
+    const vivos = ss.filter((s) => s.activo).length;
+    return [`  Despliegue:  ✅ los ${vivos} procesos vivos corren el código que hay escrito`];
+  }
+  const L = [`  Despliegue:  ⚠️  ${malos.length} proceso(s) CORREN CÓDIGO VIEJO`];
+  for (const m of malos) {
+    L.push(`               · ${m.unidad}: ${m.minutos} min por detrás (${m.fichero})`);
+    L.push(`                 arréglalo con: sudo systemctl restart ${m.unidad}`);
+  }
+  return L;
+}
 
 /** Lo que el tablero ofrece, y si hay contradicción entre «ofrece» y «puedo coger». */
 function colaDelTablero(cfg, estado) {
