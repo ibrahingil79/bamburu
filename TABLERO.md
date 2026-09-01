@@ -322,7 +322,7 @@
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-09-01 · `50f821c` · **123/208** · 1389 s
+- **Último barrido completo:** 2026-09-01 · `3d43f0a` · **118/206** · 1104 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -8382,6 +8382,46 @@ trozos.
 > Commits: `bfea8a8`, `d93125e`
 > Registro: `docs/orquestador/tareas/portal-formato-dinero.md`
 
+## ✅ HECHA (2026-09-01) — Botones fijos en el bot de Telegram
+
+- **id:** botones-telegram
+- **estado:** hecha
+- **origen:** encargo de Ibrahin, 1 sep 2026 (tarde)
+
+Ibrahin tenía que acordarse de las palabras exactas para manejar el orquestador desde el móvil.
+Ahora hay **seis botones fijos** bajo el teclado, en dos filas:
+
+|  |  |  |
+|---|---|---|
+| **Parte** | **Qué hace** | **Cuota** |
+| **Preguntas** | **Arranca** | **Para** |
+
+**No hay órdenes nuevas.** Cada botón manda el TEXTO de una orden que ya existía; es otra forma de
+escribir lo mismo. **Escribir sigue funcionando igual**, respuestas largas incluidas.
+
+**Lo que NO tiene botón, a propósito:** «parar ya», «saltar» y «desapartar». Pueden dejar algo a
+medias y ya piden confirmación, así que se siguen escribiendo a mano — un botón se toca sin querer
+con el móvil en el bolsillo.
+
+**Dónde se cambia:** `orchestrator/orquestador.config.json` → `vigia.teclado`. Cada botón declara
+qué orden promete y **el vigía lo comprueba al arrancar contra el mismo intérprete que va a leer el
+mensaje**. Si un botón prometiera una cosa y mandara otra, el teclado **no se monta** y se escribe
+a mano; el bot no se rompe. Eso no es precaución teórica: **de los seis del encargo, «Qué hace» caía
+en AYUDA** porque el vocabulario tenía «qué haces» y no «qué hace». Un botón mudo contesta con la
+ayuda y **parece que ha funcionado**, que es el peor fallo posible aquí.
+
+**Dos cosas medidas contra la API real, que conviene no olvidar:**
+
+- **Telegram NO valida el teclado por nosotros.** Se le mandó un botón con el texto **vacío**
+  esperando un 400 y **lo aceptó**, dejando el chat con un teclado de un botón en blanco (repuesto
+  en el acto). Quien tiene que rechazar eso es nuestra revisión, y lo hace.
+- **El teclado viaja en cada respuesta y en cada parte**, no solo la primera vez: así vuelve solo si
+  se pliega, y un vigía recién arrancado no depende de que alguien lo reponga.
+
+**Sobre la palabra «para»,** que es el fallo más caro que puede repetirse aquí: el botón manda un
+texto fijo que **abre la frase**, así que para de verdad; y una respuesta con «para» en medio —«que
+se le obligue para poder facturar»— **no** para la fábrica. Comprobado con las dos.
+
 ## ✅ CERRADA (2026-09-01) — Retirar las seis pantallas muertas que siguen en el árbol
 
 - **id:** retirar-pantallas-muertas
@@ -8434,10 +8474,10 @@ destruir datos*. Aquí son ficheros de código sin montar, no datos de ningún n
 > (cerradas con su commit), 4 no convertibles (les falta un criterio que solo da Ibrahin) y 3 no
 > verificables sin ejecutar.
 
-## TAREA — Cifrar las copias de seguridad
+## ✅ HECHA (2026-09-01) — Cifrar las copias de seguridad · `a11a729`
 
 - **id:** cifrado-copias-seguridad
-- **estado:** pendiente
+- **estado:** hecha
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos · **REESCRITA el 1 sep 2026**
 
 Hoy las copias van **en claro en dos Drive personales**, con **203 clientes y 922 facturas dentro**.
@@ -8577,6 +8617,10 @@ ejecutar el guion al final, cuando le venga bien, y guardar la llave que le ense
 > conversación que la atascaba.
 > Registro del intento anterior: `docs/orquestador/tareas/cifrado-copias-seguridad.md` · código de
 > partida: `5834d79`
+
+> **Cerrada por el orquestador el 2026-09-01.**
+> Commits: `a11a729`
+> Registro: `docs/orquestador/tareas/cifrado-copias-seguridad.md`
 
 ## TAREA — Anclar la cadena de VERI*FACTU fuera del servidor
 

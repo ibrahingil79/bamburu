@@ -21,7 +21,7 @@
 
 | Intento | Veredicto | Motivos |
 |---------|-----------|---------|
-| 1 | rechazado | [FUERA-DE-ALCANCE] Quedan dos afirmaciones falsas en `deploy/systemd/README.md`, y el plano mandaba cazarlas — **Dónde:** `deploy/systemd/README.md:402` y `deploy/systemd/README.md:466-467` **Qué pasa |
+| 1 | rechazado | No hay ningún commit nuevo desde 3d43f0a.; El programador no ha confirmado nada, o lo dejó sin confirmar en el árbol de trabajo. |
 | 2 | aprobado | — |
 
 ## Artefactos
@@ -31,10 +31,10 @@
 
 ## Commits
 
-- `2b392d9` El README ya no invita a repetir la avería: BACKUP_REMOTE dice la verdad
+- `a11a729` No queda nada por construir: se reverifica en fresco y se deja escrito
 
 ## Consumo de cuota
 
-- Al empezar: 1% de sesión usado
-- Al cerrar: 88% de sesión usado
-- Diferencia: 87 puntos
+- Al empezar: 0% de sesión usado
+- Al cerrar: 10% de sesión usado
+- Diferencia: 10 puntos
