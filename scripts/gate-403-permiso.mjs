@@ -28,11 +28,15 @@
 // prefijo `ZZ `, y se borran en el `finally` POR LA MARCA, no por los ids de esta pasada: si el gate
 // muere a mitad, lo suyo se va igual.
 //
-// EL HISTORIAL CLÍNICO NECESITA SU PROPIO NEGOCIO, y es una decisión de construcción, no del plano:
-// sus rutas dan 404 fuera del oficio de salud (`modules/erp/routes/historial.js`, primera puerta), y
-// `desarrollo-bamburu` es de oficio «otro». Cambiarle el oficio a un negocio que no es mío para poder
-// probar sería tocar la configuración de un negocio ajeno. Se trae uno desechable, como ya hace
-// `gate-historial-clinico`, y se tira entero al final.
+// HAY UN NEGOCIO DESECHABLE, y lo piden DOS bloques por dos motivos distintos:
+//   · EL HISTORIAL CLÍNICO — sus rutas dan 404 fuera del oficio de salud
+//     (`modules/erp/routes/historial.js`, primera puerta) y `desarrollo-bamburu` es de oficio «otro».
+//     Cambiarle el oficio a un negocio que no es mío para poder probar sería tocar la configuración
+//     de un negocio ajeno.
+//   · LA ESCRITURA POR LA API — `readOnlyGuard` (`core/tenant-middleware.js`) corta TODA escritura de
+//     un negocio suspendido ANTES de llegar a `requirePerm`, y los siete negocios de esta máquina
+//     están en `suspended_admin`. El bloque [3] lo explica con lo que se midió.
+// Se trae uno solo, como ya hace `gate-historial-clinico`, y se tira entero al final.
 //
 //   node scripts/gate-403-permiso.mjs
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -101,7 +105,7 @@ function sesion(base, uid) {
   return { token, csrf };
 }
 
-let browser = null, salud = null;
+let browser = null, neg = null;
 try {
   // El navegador se abre ANTES de sembrar nada, y no es casualidad: `launchOpts()` aborta con
   // `process.exit(2)` si falta el Chromium o si el proceso no sirve el código de disco, y un
@@ -182,14 +186,31 @@ try {
   // ════════════════════════════════════════════════════════════════════════════════════════════════
   say('\n[3] EL CANAL DE LA API CONTESTA JSON, NO UNA PÁGINA');
   // ════════════════════════════════════════════════════════════════════════════════════════════════
+  // ESTE BLOQUE NO CORRE EN EL NEGOCIO DE DESARROLLO, y no es un capricho: `readOnlyGuard`
+  // (`core/tenant-middleware.js`) bloquea toda ESCRITURA de un negocio suspendido y contesta ANTES de
+  // que la petición llegue a `requirePerm`. Los siete negocios de esta máquina están en
+  // `suspended_admin`, así que el DELETE nunca alcanzaba la puerta que este gate mide.
+  // MEDIDO el 1 sep 2026: contestaba 403 · `application/json` · con clave `error`… y el motivo era
+  // «Tu cuenta está en modo SOLO LECTURA por regularizar». Las tres primeras aserciones daban verde
+  // sobre la puerta equivocada; la del TEXTO es la única que lo vio. De ahí que se quede, y de ahí
+  // que la escritura se pruebe en un negocio propio y ACTIVO — el mismo que el bloque [5] necesita.
+  neg = await negocioDesechable('ZZ ' + MARCA + ' Desechable');
+  fijarOficio(neg.db, 'salud');
+  const hostNeg = new URL(neg.base).hostname;
+  const empApi = crearEmpleado(neg.db, 'EmpleadoApi', 'employee', ['clients.read']);
+  const sesApi = sesion(neg.db, empApi);
+  const apiTab = await abrir(hostNeg, sesApi.token);
+  // El `fetch` de abajo es RELATIVO: la pestaña tiene que estar ya en ese origen para que salga hacia
+  // él. Se abre la misma pantalla del bloque [1], que en este negocio también deniega.
+  await apiTab.page.goto(neg.base + '/admin/contabilidad', { waitUntil: 'networkidle0' });
   // El CSRF va DELANTE del permiso, así que se manda el token bueno: sin él se mediría el 403 del
   // CSRF y el gate daría verde sobre la puerta equivocada. Por eso además se afirma el TEXTO.
-  const api = await emp.page.evaluate(async (csrf) => {
+  const api = await apiTab.page.evaluate(async (csrf) => {
     const r = await fetch('/api/erp/settings/email-templates/recordatorio/unico', {
       method: 'DELETE', headers: { 'x-csrf-token': csrf },
     });
     return { status: r.status, ct: r.headers.get('content-type') || '', cuerpo: await r.text() };
-  }, ses.csrf);
+  }, sesApi.csrf);
   ok(api.status === 403, 'DELETE /api/erp/settings/email-templates/recordatorio/unico → 403', String(api.status));
   ok(/application\/json/.test(api.ct), 'con content-type de JSON, no de HTML', api.ct);
   let json = null;
@@ -213,19 +234,16 @@ try {
   // ════════════════════════════════════════════════════════════════════════════════════════════════
   say('\n[5] EL HISTORIAL CLÍNICO SIGUE DICIENDO LO SUYO — la unificación no lo aplana');
   // ════════════════════════════════════════════════════════════════════════════════════════════════
-  // Negocio propio, de oficio salud: fuera de ese oficio las rutas del historial dan 404 y no habría
-  // nada que mirar. Se tira entero en el `finally`.
-  salud = await negocioDesechable('ZZ ' + MARCA + ' Salud');
-  fijarOficio(salud.db, 'salud');
-  const paciente = salud.db.prepare("INSERT INTO clients (name, active) VALUES (?,1)")
+  // El negocio propio, de oficio salud, ya nació en el bloque [3]: fuera de ese oficio las rutas del
+  // historial dan 404 y no habría nada que mirar. Se tira entero en el `finally`.
+  const paciente = neg.db.prepare("INSERT INTO clients (name, active) VALUES (?,1)")
     .run('ZZ ' + MARCA + ' Paciente').lastInsertRowid;
   // Un ADMIN, que es el caso que importa: su rol le abre todo lo demás del producto y aquí NO.
-  const adminId = crearEmpleado(salud.db, 'Admin', 'admin', []);
-  const sesSalud = sesion(salud.db, adminId);
-  const hostSalud = new URL(salud.base).hostname;
-  const adm = await abrir(hostSalud, sesSalud.token);
+  const adminId = crearEmpleado(neg.db, 'Admin', 'admin', []);
+  const sesSalud = sesion(neg.db, adminId);
+  const adm = await abrir(hostNeg, sesSalud.token);
 
-  const r5 = await adm.page.goto(salud.base + '/admin/historial/' + paciente, { waitUntil: 'networkidle0' });
+  const r5 = await adm.page.goto(neg.base + '/admin/historial/' + paciente, { waitUntil: 'networkidle0' });
   ok(r5.status() === 403, 'un `admin` SIN `historial.read` recibe 403 (su rol no le vale aquí)', String(r5.status()));
   const t5 = await texto(adm.page);
   ok(/datos de salud/i.test(t5), '  y el texto sigue siendo el de DATOS DE SALUD', JSON.stringify(t5.slice(0, 90)));
@@ -233,6 +251,7 @@ try {
   ok((await intentos(adm.page)).length === 0, '  sin ventanitas');
   ok(adm.errores.length === 0, '  y sin errores de JavaScript', adm.errores.join(' | ') || 'ninguno');
   await adm.page.close();
+  await apiTab.page.close();
   await emp.page.close();
   await emp2.page.close();
 
@@ -254,7 +273,7 @@ try {
                  + db.prepare("SELECT COUNT(*) n FROM admin_sessions WHERE token LIKE '" + TOKEN_PREFIJO + "%'").get().n;
     ok(quedan === 0, 'limpieza: no queda ni un usuario ni una sesión con la marca GATE403-', String(quedan));
   } catch (e) { fail++; console.error('  ✗ limpieza incompleta: ' + e.message); }
-  try { if (salud) salud.tirar(); } catch (_) {}
+  try { if (neg) neg.tirar(); } catch (_) {}
   try { db.close(); } catch (_) {}
 }
 

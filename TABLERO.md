@@ -5968,6 +5968,38 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
   rancia** — la misma regla que `run-gates.mjs` aplica a los rojos conocidos, y por el mismo motivo:
   un puntero caducado manda al siguiente al sitio equivocado con toda la confianza del mundo.
   El censo sale en verde con `SIN DECLARAR: 0`, que es lo único que un cambio nuevo puede empeorar.
+- ⬜ **`/admin/descuentos` TIENE UN BLOQUE DE JAVASCRIPT MUERTO, y lo mata un NOMBRE DE PRODUCTO
+  (1 sep 2026).** Salió al correr `node scripts/lint-js-servido.mjs` al cerrar
+  `pantalla-403-ventanita`: **1 bloque roto de 1.542 mirados en 351 pantallas**, y es el único.
+  Son dos cosas distintas y las dos hacen falta:
+  - **El defecto.** `modules/erp/routes/descuentos.js:163` mete el catálogo dentro de un `<script>`
+    con `JSON.stringify(...)` **sin escapar `</`**. `JSON.stringify` escapa comillas, pero **no
+    `</script>`**: cualquier nombre que lo contenga cierra la etiqueta y **mata el resto del bloque**.
+    Es la avería de `CLAUDE.md` §«El JavaScript de una pantalla se comprueba COMO LLEGA AL NAVEGADOR»,
+    pero por DATOS en vez de por plantilla. **La pantalla no da error: se queda a medias y calla.**
+  - **El disparador, que es residuo de gates viejos.** El producto `2097` se llama
+    `Prod </script><img src=x onerror="window.__xss=1"> (gate 941065)` y nació el **25 ago 2026**; hay
+    además **4 categorías** iguales (`gate 67cb1b`, `941065`, `94ec4a`, `d259eb`). Es exactamente
+    `CLAUDE.md` §«Lo que una prueba crea, la prueba lo borra» — y esta vez el residuo no afea un eje:
+    **rompe una pantalla**.
+  **No se tocó ninguna de las dos con `pantalla-403-ventanita`**: ni `descuentos.js` ni los datos
+  entran en ese plano, y borrar filas de un negocio vivo se para y se pregunta (`CLAUDE.md`).
+- ⬜ **`gate-sin-ventanitas` SALE EN ROJO POR SU BLOQUE [4], Y LA CAUSA NO ES EL PRODUCTO (1 sep
+  2026).** Ejecutado al cerrar `pantalla-403-ventanita`: **24 ✓ · 3 ✗**. Los bloques [0] a [3] pasan;
+  el [4] («ficha de cliente — editar y quitar una nota») no puede crear la nota, y al no existir
+  revienta con `Cannot read properties of undefined` en `gate-sin-ventanitas.mjs:218`, que además
+  **corta la pasada** y deja los bloques [5] y [6] sin ejecutar.
+  **El motivo, medido:** los **7** negocios de esta máquina están en `status='suspended_admin'`
+  (`desarrollo-bamburu` desde el 25 ago 2026), y `readOnlyGuard` (`core/tenant-middleware.js`) está
+  montado en `index.js:1492` con `app.use('*')` — **antes de la autenticación**. Comprobado sin
+  sesión ninguna: `POST https://desarrollo-bamburu.bamburu.com/api/erp/clients/1/notes` → **403
+  `application/json`** con «Tu cuenta está en modo SOLO LECTURA por regularizar». **Toda escritura
+  del negocio de desarrollo está bloqueada**, así que el bloque [4] es el único de ese gate que
+  escribe y es el único que cae.
+  Es la fragilidad que ya avisa la cabecera de `run-gates.mjs`: *un gate que se apoya en datos vivos
+  ajenos se pudre porque no era suyo lo que pisaba*. **El arreglo bueno es que el bloque [4] se traiga
+  su propio negocio** (`negocioDesechable`, como ya hacen los de compras y como se hizo el 1 sep en
+  `gate-403-permiso` por esta misma causa). **Eso es tocar ese gate: tarea aparte, con encargo.**
 - 💡 **CANDIDATA, SIN CONSTRUIR — el registro de denegaciones (estilo `SU53` de SAP).** En SAP GUI, un
   fallo de autorización **queda registrado** y el administrador lo recupera con la transacción `SU53`
   para ver qué objeto faltó y concederlo. Bamburu tiene dónde colgarlo (`logActivity` y la pantalla
