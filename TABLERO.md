@@ -8444,3 +8444,52 @@ destruir datos*. Aquí son ficheros de código sin montar, no datos de ningún n
 - **Todo lo que hay hoy en Bamburu es de PRUEBA** hasta que Ibrahin diga lo contrario.
 - **Postgres no se descarta, pero no va primero.**
 - **No perseguir amplitud** (multi-moneda, nóminas, fabricación): es donde se pierde contra SAP.
+
+## Decisiones tomadas el 1 sep 2026
+
+- **LOS UMBRALES DE CUOTA DEL ORQUESTADOR SE BAJAN, Y AHORA SALEN DE MEDIR.**
+  `minimoParaCicloPct` **25 → 15** y `margenReservadoPct` **20 → 10** (`orquestador.config.json`).
+  Actúa cuando quedan **25** puntos libres, donde antes hacían falta **45**.
+
+  **El motivo, medido.** La madrugada del 1 sep el orquestador estuvo **3 h 22 min parado con un
+  41 % de sesión libre**, sin coger tarea. No era falta de cuota: era un umbral inventado. Lo decía
+  ya la autorrevisión del 31 ago —*«`minimoParaCicloPct: 25` no sale de ninguna medición»*— y ahora
+  sale. El historial guarda `cuotaIni`/`cuotaFin` de cada tarea cerrada, y esto es lo que hay:
+
+  | Tarea cerrada | ini | fin | Gasto |
+  |---|---:|---:|---:|
+  | `disa-informes-permiso-dueno` | 0 | 14 | **14** |
+  | `disa-herramientas-en-paralelo` | 20 | 40 | **20** |
+  | `pantalla-403-ventanita` | 40 | 21 | *no medible* — la ventana se reinició a mitad |
+  | `portal-formato-dinero` | 21 | 61 | **40** |
+
+  **Mínimo 14 · mediana 20 · máximo 40**, sobre las tres medibles de cuatro. Por **paso** con
+  llamada a modelo: **4,7 · 6,7 · 6,7 puntos**. La diferencia entre 14 y 40 no es que una tarea
+  cueste más: es que `portal-formato-dinero` gastó 6 pasos (3 rechazos + replanteo) donde
+  `disa-informes` gastó 3.
+
+  **Por qué 15 y no 40, que es el máximo por tarea.** Porque **la puerta de cuota se aplica por
+  PASO, no por tarea** (`nucleo/maquina.js`: se comprueba sobre la decisión ya calculada, solo en
+  `EJECUTAR` y `TOMAR_TAREA`). El daemon nunca se compromete a una tarea entera de golpe, así que el
+  umbral no tiene que cubrirla: tiene que cubrir **el siguiente paso**, que cuesta de 4,7 a 6,7.
+  Dimensionarlo por tarea habría subido el mínimo a 40 y exigido **50 puntos libres** para actuar
+  —**más restrictivo que antes**—, que es justo lo contrario de lo que se quería.
+
+  **Y por qué eso no deja ninguna tarea a medias.** La falta de cuota **no puede abandonar una
+  tarea**: produce `ESPERAR_CUOTA`, que persiste el paso y reanuda exactamente ahí. `APARTAR` —el
+  único abandono real— tiene cuatro causas y ninguna es la cuota. Quedó demostrado esa misma
+  madrugada: paró a la 01:39 en validación de código, reanudó 3 h 22 después en ese mismo paso y la
+  tarea cerró bien. Los 15 llevan holgura para algo más de dos pasos porque una llamada que muere a
+  mitad da `CUOTA_AGOTADA`, que es reintentable y **repite el paso entero**, tirando lo que quemó.
+
+  **Verificado sobre el servicio real, no en laboratorio.** Al recargar, el registro dice
+  *«Cuota: empieza si quedan 15% tras reservar 10% para el chat»* y la decisión siguiente fue
+  **`TOMAR_TAREA`**, no `ESPERAR_CUOTA`. Arrancó con el **73 % de sesión gastado** — que es
+  literalmente el escenario que `docs/orquestador/autorrevision.md` §4.1 dejó escrito como fallo
+  conocido (*«con la configuración de fábrica el vigilante se negó a arrancar»*). Con los tres
+  atascos reales de esa madrugada (41 %, 39 % y 36 % libres) ahora habría seguido trabajando en los
+  tres.
+
+  **Lo que NO se ha tocado:** la lógica del ciclo, la máquina de estados, los papeles, el
+  comportamiento de espera, el intervalo de vuelta y el vigía de Telegram. Solo los dos números y el
+  texto de `orchestrator/LEEME.md` que los explicaba mal (decía «para el ciclo entero»; es por paso).

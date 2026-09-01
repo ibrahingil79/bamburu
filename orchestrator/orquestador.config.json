@@ -55,8 +55,8 @@
     "maxSalidaBytes": 4194304
   },
   "cuota": {
-    "minimoParaCicloPct": 25,
-    "margenReservadoPct": 20,
+    "minimoParaCicloPct": 15,
+    "margenReservadoPct": 10,
     "minimoSemanalPct": 10,
     "cacheMs": 300000,
     "timeoutConsultaMs": 180000,

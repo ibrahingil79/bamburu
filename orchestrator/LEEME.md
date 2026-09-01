@@ -66,8 +66,21 @@ Los dos umbrales que importan:
 
 | Umbral | Por defecto | Qué hace |
 |---|---|---|
-| `minimoParaCicloPct` | 25 | No empieza una tarea si no queda esto para el ciclo entero |
-| `margenReservadoPct` | 20 | **Nunca toca este trozo de la ventana**: es el de Ibrahin |
+| `minimoParaCicloPct` | 15 | No da un paso que gaste modelo si no queda esto por encima del margen |
+| `margenReservadoPct` | 10 | **Nunca toca este trozo de la ventana**: es el de Ibrahin |
+
+**El mínimo se mide por PASO, no por tarea.** La puerta de cuota está en `nucleo/maquina.js` y se
+aplica a la decisión ya calculada: solo a `EJECUTAR` y `TOMAR_TAREA`, que son las dos que llaman al
+modelo. Es decir, se comprueba **antes de cada paso**, no una sola vez al coger la tarea. Por eso
+una tarea no puede quedarse a medias por cuota: la falta de cuota produce `ESPERAR_CUOTA`, que
+persiste el paso y reanuda exactamente ahí. `APARTAR` —el único abandono— nunca la tiene por causa.
+
+Los dos números salen de medir, no de suponer (1 sep 2026). El historial guarda `cuotaIni`/`cuotaFin`
+de cada tarea cerrada: **un paso con modelo cuesta entre 4,7 y 6,7 puntos**. 15 son algo más de dos
+pasos de holgura, que es lo que hace falta por si una llamada muere a mitad —`CUOTA_AGOTADA` es
+reintentable y repite el paso entero, tirando lo que quemó—. Lo que NO hay que hacer es dimensionarlo
+por el gasto de una tarea completa (14, 20 y 40 puntos en las tres medidas): la máquina nunca se
+compromete a una tarea entera de golpe.
 
 ## Encender el vigía de Telegram
 
