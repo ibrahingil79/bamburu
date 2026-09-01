@@ -25,6 +25,12 @@ al nivel?», sino **en qué ejes su tamaño no da ventaja** — ahí se puede co
   años de blindaje. Todos con cifrado en reposo, RBAC maduro, ISO 27001 / SOC 2.
 - **Veredicto: élite en aislamiento, aficionado en protección de datos.**
 
+> **⚙️ CORRECCIÓN ANOTADA EL 1 SEP 2026 (tarea `cifrado-copias-seguridad`).** Comparativa fechada: no
+> se reescribe, se anota. De la lista de «en contra», **«cero cifrado de backups» ya no es cierto** —
+> las copias van a un remote `rclone crypt`, con los nombres cifrados también, y el script aborta si
+> el destino no es cifrado. Lo demás de esa lista sigue en pie, incluido el **cifrado en reposo**,
+> que es otra tarea.
+
 ## 3 · UX y facilidad de uso
 
 - **Bamburu:** 65 entradas de menú, `DISEÑO.md` con reglas escritas, cero cuadros de diálogo del

@@ -179,8 +179,13 @@ function parar(cfg, señal) {
   const pid = pidVivo(cfg);
   if (!pid) { process.stdout.write('\n  El daemon no está corriendo.\n\n'); return 1; }
   process.kill(pid, señal);
+  // Se dice el PLAZO, no solo «termina el paso». Hasta el 1 sep 2026 esta frase prometía algo
+  // que el daemon no cumplía: no terminaba el paso, terminaba la TAREA entera, y sin tope.
+  const segs = Math.round(cfg.ciclo.plazoParadaMs / 1000);
   process.stdout.write(señal === 'SIGTERM'
-    ? `\n  Parada buena pedida al pid ${pid}. Termina el paso en curso y para.\n  Míralo con: node orchestrator/orq.js estado\n\n`
+    ? `\n  Parada buena pedida al pid ${pid}. Le da ${segs} s al paso en curso y luego lo corta.\n`
+      + `  Si tienes prisa, repite la orden: el segundo aviso corta sin esperar.\n`
+      + `  Míralo con: node orchestrator/orq.js estado\n\n`
     : `\n  ⚠️  Parada de EMERGENCIA enviada al pid ${pid}.\n  Puede haber dejado una llamada a medias. Al arrancar retomará desde el último paso guardado.\n\n`);
   return 0;
 }

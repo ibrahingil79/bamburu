@@ -20,10 +20,26 @@
   §«TAREAS EN FORMATO DEL ORQUESTADOR», y la siguiente es la primera de esa lista. Se tacha en vez
   de borrarse para poder reconstruir qué se creía y cuándo.
 - **Backups: hay DOS copias diarias, en dos cuentas distintas** (principal 03:33 → `ibrahingil`,
-  secundaria 03:35 → `gilibrahin`). Las dos verifican MD5 y hacen prueba de restore real. Una sola
-  pieza las sirve: `scripts/bamburu-backup.sh` sin entorno es la principal; la unit de la secundaria
-  sobreescribe `BACKUP_REMOTE`/`LABEL`/`SUFFIX`/`HC_URL`. **No la dupliques.** El heartbeat avisa si
-  cae UNA (aviso) y es crítico si caen las DOS. Detalle en `deploy/systemd/README.md`.
+  secundaria 03:35 → `gilibrahin`). Una sola pieza las sirve: `scripts/bamburu-backup.sh` sin entorno
+  es la principal; la unit de la secundaria sobreescribe `BACKUP_REMOTE`/`LABEL`/`SUFFIX`/`HC_URL`.
+  **No la dupliques.** El heartbeat avisa si cae UNA (aviso) y es crítico si caen las DOS. Detalle en
+  `deploy/systemd/README.md`.
+  ~~Las dos verifican MD5 y hacen prueba de restore real.~~ **⚙️ CORREGIDO EL 1 SEP 2026 (tarea
+  `cifrado-copias-seguridad`).** Esa frase describe el estado anterior y se tacha en vez de borrarse.
+  Ahora: **el destino va CIFRADO y el script ABORTA si no lo es** (`BACKUP_REMOTE` tiene que ser un
+  remote `crypt`; si no, email de fallo y `exit 1` sin subir nada). Un remote `crypt` **no expone
+  huellas**, así que pedírselas y creerse el silencio habría apagado la verificación en verde: la
+  comparación de huellas la hace ahora `rclone cryptcheck` sobre lo subido, **más** el MD5 del
+  fichero ya descargado en la prueba de restore —que además cierra el hueco de que
+  `PRAGMA integrity_check` responde `ok` a una base válida pero DISTINTA—. **No queda ninguna rama
+  blanda:** si una huella no se puede comparar, es un fallo, no un aviso.
+  **La contraseña de cifrado vive SOLO en `~ubuntu/.config/rclone/rclone.conf`, nunca en
+  `/etc/bamburu.env`** (ese fichero entra entero en el `process.env` del proceso web), **más una copia
+  fuera del servidor en custodia de Ibrahin**: sin ella las copias son ruido.
+  **⚠️ Estado al 1 sep 2026: el código está puesto y probado; los remotes `crypt` los crea Ibrahin**
+  (necesita escribir en `~/.config/rclone`, fuera del alcance del orquestador). Hasta que existan,
+  las dos copias abortan con email — a propósito. Cómo crearlos: `deploy/systemd/README.md`
+  §«Cifrado de las copias».
 - El Peldaño 9 — Belleza/estética sigue pendiente en el roadmap funcional, pero está aplazado y no es
   la siguiente tarea.
 

@@ -12,7 +12,7 @@ WorkingDirectory=/home/ubuntu/bamburu
 EnvironmentFile=/etc/bamburu.env
 # Misma pieza que la copia principal, apuntada a la otra cuenta. Ver el bloque de
 # config de scripts/bamburu-backup.sh: sin estas variables se comporta como la principal.
-Environment=BACKUP_REMOTE=gdrive_gili:Bamburu-backup-gili/daily
+Environment=BACKUP_REMOTE=gdrive_gili_cif:daily
 Environment=BACKUP_LABEL=secundaria
 Environment=BACKUP_SUFFIX=-secondary
 # VACIO A PROPOSITO: la secundaria NO pingea el healthchecks de la principal. Si lo

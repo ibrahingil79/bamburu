@@ -3,19 +3,28 @@
 # bamburu-backup.sh — Copia diaria de las BD SQLite + uploads a Google Drive (rclone),
 # BLINDADA contra fallo silencioso (la lección de la crisis: nada se asume).
 #
+# El destino SIEMPRE va CIFRADO (remote 'crypt' de rclone): contenido y NOMBRES de fichero.
+# Si el destino no es crypt, la copia se ABORTA — cifrar es condición, no opción.
+#
 # Por cada artefacto:
 #   1. Snapshot CONSISTENTE de cada .db con la SQLite Online Backup API (db-snapshot.mjs).
 #      Las uploads se empaquetan en tar.gz. NUNCA se copia un .db en crudo (evita roturas por WAL).
-#   2. Subida a Drive (rclone copy).
-#   3. VERIFICACIÓN REAL de la subida: tamaño + MD5 del archivo YA en Drive vs. el local.
-#   4. PRUEBA DE RESTORE REAL: se descarga de vuelta desde Drive y se comprueba que abre
-#      (sqlite3 PRAGMA integrity_check == ok; el tar con tar -tzf).
+#   2. Subida a Drive CIFRADA (rclone copy a través del remote crypt).
+#   3. VERIFICACIÓN REAL de la subida: tamaño + `rclone cryptcheck`, que compara el MD5 real
+#      del objeto de Drive contra el del fichero local ya cifrado con el nonce de ese objeto.
+#      (Un remote crypt NO expone huellas: pedírselas responde "hash unsupported" y stdout vacío,
+#      así que preguntarle por la huella y creerse el silencio es apagar la verificación.)
+#   4. PRUEBA DE RESTORE REAL: se descarga de vuelta desde Drive, se comprueba que el MD5 del
+#      fichero descifrado coincide con el original, y que abre (sqlite3 PRAGMA integrity_check
+#      == ok; el tar con tar -tzf).
 #   5. Retención: borra en Drive lo más viejo que RETENTION_DAYS.
 #   6. Email (Resend) en OK y en FALLO. Ping a healthchecks.io (dead-man's-switch externo).
 #   7. Graba marca de "último éxito" para el heartbeat.
 #
 # Corre desde un systemd timer como User=ubuntu. Lee RESEND_API_KEY y HEALTHCHECKS_URL
-# de /etc/bamburu.env (vía EnvironmentFile del .service). rclone usa ~ubuntu/.config/rclone.
+# de /etc/bamburu.env (vía EnvironmentFile del .service). rclone usa ~ubuntu/.config/rclone,
+# que es donde vive la CONTRASEÑA DE CIFRADO — nunca en /etc/bamburu.env, porque ese fichero
+# entra entero en el process.env del proceso web expuesto a Internet.
 #
 # A propósito NO usa `set -e`: cada paso se comprueba y se NOTIFICA el fallo, no se muere mudo.
 set -uo pipefail
@@ -29,7 +38,7 @@ DATA_DIR="$APP_DIR/data"
 # personal. La unit de la copia secundaria sobreescribe estas variables por entorno.
 # Se parametriza en vez de duplicar el script: dos copias de las mismas reglas se
 # separan en cuanto alguien arregla una sola.
-REMOTE="${BACKUP_REMOTE:-gdrive:Bamburu-backup/daily}"
+REMOTE="${BACKUP_REMOTE:-gdrive_cif:daily}"
 LABEL="${BACKUP_LABEL:-principal}"          # solo etiqueta emails y resumen
 SUFFIX="${BACKUP_SUFFIX:-}"                 # separa la marca de exito por copia
 RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-14}"
@@ -91,23 +100,41 @@ $LOGBUF"
 [ -x "$RCLONE" ] || RCLONE="$(command -v rclone || true)"
 [ -n "$RCLONE" ] && [ -x "$RCLONE" ] || fail_exit "rclone no encontrado"
 
+# El destino DEBE ser un remote 'crypt'. Sin esto, un BACKUP_REMOTE mal puesto
+# devolvería las copias a texto claro sin que nada fallara y con los emails en verde.
+REMOTE_NAME="${REMOTE%%:*}"
+"$RCLONE" config show "$REMOTE_NAME" 2>/dev/null | grep -q '^type = crypt' \
+  || fail_exit "el destino '$REMOTE' no es un remote cifrado (crypt). Copia ABORTADA. Cómo crear el remote crypt: deploy/systemd/README.md §«Cifrado de las copias»."
+
 hc_ping "/start"
 
 TMPDIR="$(mktemp -d /tmp/bamburu-backup.XXXXXX)"
 trap 'rm -rf "$TMPDIR"' EXIT
 RDIR="$TMPDIR/restore"; mkdir -p "$RDIR"
 
-# Verifica que el archivo subido coincide (tamaño + MD5) con el local. Sin asumir.
+# Verifica lo que hay en Drive SIN descargarlo. Con un remote 'crypt' no hay MD5 que
+# pedir (rclone: "hash unsupported"), así que la comparación de huellas la hace
+# cryptcheck: cifra el fichero local con el nonce del propio objeto remoto y compara
+# su MD5 real contra el de Drive. La segunda mitad —que la copia VUELVA descifrada
+# idéntica— la hace verify_restored(), aprovechando la descarga del restore-test.
+# NO hay rama blanda: si la huella no se puede comparar, es un FALLO, no un aviso.
 verify_uploaded(){  # $1 = ruta local, $2 = nombre remoto
-  local local_path="$1" name="$2" lsize lmd5 rsize rmd5
+  local local_path="$1" name="$2" lsize rsize
   lsize="$(stat -c%s "$local_path")"
-  lmd5="$(md5sum "$local_path" | awk '{print $1}')"
   rsize="$("$RCLONE" size "$REMOTE/$name" --json 2>/dev/null | "$NODE" -e 'try{const a=JSON.parse(require("fs").readFileSync(0));process.stdout.write(String(a.bytes??""))}catch{process.stdout.write("")}')"
-  rmd5="$("$RCLONE" hashsum MD5 "$REMOTE/$name" 2>/dev/null | awk '{print $1}')"
   [ -n "$rsize" ] || { log "  verify: el archivo NO aparece en Drive"; return 1; }
   [ "$lsize" = "$rsize" ] || { log "  verify: tamaño difiere (local $lsize / drive $rsize)"; return 1; }
-  if [ -n "$rmd5" ]; then [ "$lmd5" = "$rmd5" ] || { log "  verify: MD5 difiere"; return 1; }
-  else log "  verify: Drive no devolvió MD5 (se valida solo por tamaño)"; fi
+  "$RCLONE" cryptcheck "$(dirname "$local_path")" "$REMOTE" --include "$name" >/dev/null 2>&1 \
+    || { log "  verify: cryptcheck FALLA para $name (lo que hay en Drive no es el cifrado de este fichero)"; return 1; }
+  return 0
+}
+
+# La copia tiene que VOLVER descifrada byte a byte. integrity_check solo dice que la
+# base es válida — también lo diría de una base válida pero DISTINTA.
+verify_restored(){  # $1 = ruta local original, $2 = ruta del fichero descargado
+  local a b
+  a="$(md5sum "$1" | awk '{print $1}')"; b="$(md5sum "$2" | awk '{print $1}')"
+  [ "$a" = "$b" ] || { log "  restore: el MD5 del fichero descargado NO coincide ($a / $b)"; return 1; }
   return 0
 }
 
@@ -132,6 +159,7 @@ for db in "${DBS[@]}"; do
 
   log "restore-test: descarga + integrity_check de $name"
   "$RCLONE" copy "$REMOTE/$name" "$RDIR/" 2>/dev/null || fail_exit "descarga de restore de $name"
+  verify_restored "$snap" "$RDIR/$name" || fail_exit "el restore de $name no coincide con el original (MD5)"
   ic="$(sqlite3 "$RDIR/$name" 'PRAGMA integrity_check;' 2>&1)"
   [ "$ic" = "ok" ] || fail_exit "integrity_check de $name => $ic"
   rm -f "$RDIR/$name"
@@ -151,6 +179,7 @@ if [ -d "$DATA_DIR/uploads" ]; then
   verify_uploaded "$utar" "$uname" || fail_exit "verificación de subida de $uname"
   log "restore-test: descarga + tar -tzf de $uname"
   "$RCLONE" copy "$REMOTE/$uname" "$RDIR/" 2>/dev/null || fail_exit "descarga de restore de $uname"
+  verify_restored "$utar" "$RDIR/$uname" || fail_exit "el restore de $uname no coincide con el original (MD5)"
   tar -tzf "$RDIR/$uname" >/dev/null 2>&1 || fail_exit "el tar de uploads no es válido tras restore"
   rm -f "$RDIR/$uname"
   SUMMARY+="  • $uname ($(du -h "$utar" | awk '{print $1}')) — subido, verificado y restore OK"$'\n'

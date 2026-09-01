@@ -45,6 +45,13 @@ SQLCipher). Backups **sin cifrar** (0 referencias a GPG o `rclone crypt`). Y des
 están en **dos Google Drive personales**. Dentro: 203 clientes y 922 facturas reales, y la tabla
 `hc_consentimientos` ya creada en cada base, que guardará **datos de salud (RGPD art. 9)**.
 
+> **⚙️ CORRECCIÓN ANOTADA EL 1 SEP 2026 (tarea `cifrado-copias-seguridad`).** Esta auditoría está
+> fechada y no se reescribe; se anota la corrección con su fecha, que es el método del repo.
+> **La mitad de los backups ya no es cierta:** las copias van a un remote `rclone crypt` (contenido y
+> nombres), y `scripts/bamburu-backup.sh` aborta si el destino no es cifrado.
+> **La mitad de las bases en reposo sigue entera:** es otra tarea (`cifrado-en-reposo-bases`), a
+> propósito después — son dos interruptores distintos.
+
 **4 · No hay derecho al olvido ni portabilidad.** Cero código de anonimización, borrado por petición
 o exportación de los datos de un cliente. No son extras: son obligaciones. Y **colisionan con la
 regla de no destruir datos**, así que hay que diseñar cómo conviven — es una decisión, no

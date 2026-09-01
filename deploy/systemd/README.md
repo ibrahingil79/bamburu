@@ -105,11 +105,19 @@ de la crisis: nada se asume, todo se verifica y se notifica).
 - **Snapshot consistente** de cada BD SQLite (`data/control.db` y `data/tenants/*.db`)
   con la *SQLite Online Backup API* (`scripts/db-snapshot.mjs`). Nunca se copia el `.db`
   en crudo (evita roturas por el WAL). Las `data/uploads` se empaquetan en `tar.gz`.
-- Sube cada artefacto a Drive con nombre fechado:
-  `Bamburu-backup/daily/<nombre>-AAAA-MM-DD.db` y `uploads-AAAA-MM-DD.tar.gz`.
-- **Verifica la subida de verdad**: compara tamaño + MD5 del archivo YA en Drive con el local.
-- **Prueba de restore real**: descarga cada artefacto de vuelta y comprueba que abre
-  (`sqlite3 PRAGMA integrity_check == ok`; el tar con `tar -tzf`).
+- Sube cada artefacto a Drive **CIFRADO** (remote `crypt`), con nombre fechado a este lado de la
+  clave: `<nombre>-AAAA-MM-DD.db` y `uploads-AAAA-MM-DD.tar.gz`. En el Drive crudo **no se lee
+  ninguno de esos nombres**: van cifrados el contenido, el nombre del fichero y el de la carpeta.
+- **El destino tiene que ser `crypt` o no hay copia.** Si `BACKUP_REMOTE` apunta a un remote que no
+  es cifrado, el script **aborta antes de subir nada** (email de fallo + `exit 1`). Cifrar es
+  condición, no opción. Ver §«Cifrado de las copias» más abajo.
+- **Verifica la subida de verdad**: compara el tamaño y luego `rclone cryptcheck`, que cifra el
+  fichero local con el nonce del propio objeto de Drive y compara su MD5 real contra el de Drive.
+  **No hay rama blanda**: si la huella no se puede comparar, es un fallo, no un aviso.
+- **Prueba de restore real**: descarga cada artefacto de vuelta, comprueba que **el MD5 del fichero
+  descifrado es idéntico al original** y que abre (`sqlite3 PRAGMA integrity_check == ok`; el tar
+  con `tar -tzf`). El MD5 no sobra: `integrity_check` responde `ok` también a una base válida pero
+  **distinta** — medido.
 - **Retención 14 días**: borra en Drive lo más viejo. Una copia corrupta nunca pisa la buena.
 - **Email (Resend, `noreply@bamburu.com` → `ibrahingil@gmail.com`)** en OK y en FALLO.
 - **Ping a healthchecks.io** (`HEALTHCHECKS_URL`): dead-man's-switch externo que avisa
@@ -128,7 +136,8 @@ email si no hay copia con éxito en +48h (capta "el backup falló siempre" y "el
 | Helper de snapshot | `scripts/db-snapshot.mjs` | sí |
 | Units (backup + heartbeat, service + timer) | `deploy/systemd/bamburu-backup*.{service,timer}` | sí |
 | Binario rclone | `/usr/bin/rclone` | no (instalado) |
-| **Config rclone (token Google Drive)** | `~/.config/rclone/rclone.conf` | **NO (secreto, fuera del repo)** |
+| **Config rclone (token Google Drive + CONTRASEÑA DE CIFRADO)** | `~/.config/rclone/rclone.conf` | **NO (secreto, fuera del repo)** |
+| **Copia de la contraseña de cifrado** | **fuera del servidor**, en custodia de Ibrahin | **NO — y sin ella las copias son ruido** |
 | `RESEND_API_KEY`, `HEALTHCHECKS_URL` | `/etc/bamburu.env` | **NO (secretos)** |
 
 ## Instalación (requiere sudo)
@@ -147,19 +156,155 @@ sudo systemctl enable --now bamburu-backup.timer bamburu-backup-heartbeat.timer
 systemctl list-timers 'bamburu-backup*'       # próximas ejecuciones
 sudo systemctl start bamburu-backup.service   # ejecutar la copia a mano
 journalctl -u bamburu-backup.service -n 80     # logs
-rclone ls gdrive:Bamburu-backup/daily/         # ver copias en Drive
+rclone ls gdrive_cif:daily/                    # ver copias (A TRAVÉS de la clave)
+rclone lsf gdrive:Bamburu-backup-cif/ -R       # lo mismo SIN la clave: nombres ilegibles
 ```
 
 ## Restauración
 
+> **HACE FALTA LA CONTRASEÑA DE CIFRADO.** Las copias van dentro de un contenedor `rclone crypt`.
+> Sin la contraseña no hay restauración posible: lo que hay en Drive es ruido.
+> **Dónde está:** en `~ubuntu/.config/rclone/rclone.conf` de este servidor (campo `password` del
+> remote `gdrive_cif`, recuperable con `rclone reveal`) **y**, para el día en que este servidor no
+> exista, en la custodia de Ibrahin fuera del servidor. Si estás leyendo esto un día malo y el
+> servidor no arranca, la copia de Ibrahin es la que vale.
+
 ```bash
-# Descargar el snapshot más reciente de un tenant
-rclone copy gdrive:Bamburu-backup/daily/desarrollo-bamburu-AAAA-MM-DD.db /tmp/restore/
+# Desde ESTE servidor (usa el rclone.conf de producción, que ya tiene la clave)
+rclone copy gdrive_cif:daily/desarrollo-bamburu-AAAA-MM-DD.db /tmp/restore/
+
+# Desde CUALQUIER OTRA máquina, tecleando la contraseña custodiada:
+export RCLONE_CONFIG=/tmp/restore.conf
+rclone config create r_drive drive                       # autorizar la cuenta de Drive
+rclone config create r_cif crypt remote=r_drive:Bamburu-backup-cif \
+    password=<contraseña custodiada> password2=<sal custodiada> \
+    filename_encryption=standard directory_name_encryption=true
+rclone copy r_cif:daily/desarrollo-bamburu-AAAA-MM-DD.db /tmp/restore/
 
 # El .db descargado ya es autocontenido: con el servicio parado, colócalo en
 # data/tenants/ con el nombre que espera la app (p. ej. desarrollo-bamburu.db).
 # Las uploads:  tar -xzf uploads-AAAA-MM-DD.tar.gz -C data/   (recrea data/uploads)
 ```
+
+## Cifrado de las copias
+
+> **Es la sección que cita el mensaje de fallo del script.** Si has llegado aquí desde un email
+> «❌ Backup Bamburu FALLÓ … el destino no es un remote cifrado (crypt)», lo que falta es crear los
+> dos remotes `crypt`: el bloque de abajo.
+
+**Por qué.** Hasta el 1 sep 2026 las copias iban **en claro** en dos Drive personales: 203 clientes
+y 922 facturas de nueve negocios, y los propios nombres de fichero publicaban cuántos negocios hay y
+cómo se llaman. Es el vector 4 de `docs/seguridad/vectores-de-ataque.md`.
+
+**Dónde vive la contraseña, y por qué NO en `/etc/bamburu.env`.** `bamburu.service` carga ese fichero
+entero con `EnvironmentFile=`, así que todo lo que se meta ahí acaba en el `process.env` del proceso
+web expuesto a Internet —y de ahí en el hijo que lanza el botón «Lanzar copia ahora» del superadmin—.
+La clave de las copias es un secreto que la aplicación web **no necesita para nada**. Viviendo dentro
+de `rclone.conf`, el proceso web nunca la ve, el botón del superadmin sigue funcionando sin tocar
+`modules/superadmin/backups.js` (el hijo corre como `ubuntu` y rclone lee su propio fichero), y no se
+añade **ninguna** variable de entorno nueva a ninguna unit.
+
+Dicho sin adornarlo: el campo `password` de `rclone.conf` está **ofuscado, no cifrado** — `rclone
+reveal` devuelve el original. Y eso no debilita nada: quien pueda leer ese fichero ya tiene `data/`
+entera en claro en el mismo disco **y** los tokens de OAuth de las dos cuentas. El vector que esto
+cierra es **«alguien entra en la cuenta de Google»**, y contra ése la ofuscación local es irrelevante.
+
+**Una sola contraseña para los dos destinos.** Dos claves duplicarían la custodia sin ganar nada: no
+hay ningún escenario en que un atacante tenga una y no la otra, porque viven en el mismo fichero del
+mismo servidor. Y el riesgo dominante aquí **no es que se filtre la clave: es perderla.**
+
+### Crear los dos remotes `crypt` (lo hace Ibrahin, requiere escribir en `~/.config/rclone`)
+
+Todo en **un solo `bash -c`**, para que la contraseña no salga nunca del proceso. Nada de `echo`,
+nada de `sudo` con la clave, `rclone obscure` por **stdin**, y todos los `rclone config` con
+`>/dev/null` porque imprimen la sección creada:
+
+```bash
+set -euo pipefail
+CLAVE="$(openssl rand -base64 32)"
+SAL="$(openssl rand -base64 24)"
+OBS_CLAVE="$(printf '%s' "$CLAVE" | rclone obscure -)"
+OBS_SAL="$(printf '%s' "$SAL" | rclone obscure -)"
+
+rclone config create gdrive_cif crypt \
+  remote=gdrive:Bamburu-backup-cif \
+  password="$OBS_CLAVE" password2="$OBS_SAL" \
+  filename_encryption=standard directory_name_encryption=true >/dev/null
+
+rclone config create gdrive_gili_cif crypt \
+  remote=gdrive_gili:Bamburu-backup-gili-cif \
+  password="$OBS_CLAVE" password2="$OBS_SAL" \
+  filename_encryption=standard directory_name_encryption=true >/dev/null
+
+unset CLAVE SAL OBS_CLAVE OBS_SAL
+```
+
+**Condición de paso, no un detalle:** `rclone config create` puede **imprimir la sección, devolver 0
+y no haber escrito nada** (pasa si el `.conf` está en solo lectura: el error va a stderr y el código
+de salida sigue siendo 0). Medido el 1 sep 2026. Así que no se sigue sin ver esto:
+
+```bash
+rclone config show gdrive_cif      | grep '^type'   # -> type = crypt
+rclone config show gdrive_gili_cif | grep '^type'   # -> type = crypt
+```
+
+**Raíz nueva a propósito** (`Bamburu-backup-cif`, `Bamburu-backup-gili-cif`): lo cifrado y lo antiguo
+no comparten carpeta, así no se puede confundir un listado con otro.
+
+### Custodiar la contraseña — PARADA, y no es un trámite
+
+Las copias existen para el día en que el servidor no esté. Si la única copia de la clave vive en el
+servidor, ese día las copias son ruido. Antes de nada más, guardarla **fuera** (gestor de contraseñas
+o papel en un cajón — cualquier sitio que sobreviva a que este servidor desaparezca):
+
+```bash
+rclone reveal "$(rclone config show gdrive_cif | awk -F'= ' '/^password =/{print $2}')"
+rclone reveal "$(rclone config show gdrive_cif | awk -F'= ' '/^password2 =/{print $2}')"
+```
+
+### Ensayo antes de tocar nada vivo
+
+El patrón de S6: comprobar la credencial **antes** de instalar. La prueba borra lo que crea.
+
+```bash
+head -c 300000 /dev/urandom > /tmp/ensayo-cif.bin
+rclone copy /tmp/ensayo-cif.bin gdrive_cif:ensayo/
+rclone size gdrive_cif:ensayo/ensayo-cif.bin --json                  # tamaño EN CLARO: 300000
+rclone cryptcheck /tmp gdrive_cif:ensayo --include ensayo-cif.bin    # 0 diferencias, exit 0
+rclone lsf gdrive:Bamburu-backup-cif/                                # nombres ILEGIBLES
+rclone purge gdrive_cif:ensayo
+```
+
+Lo mismo con `gdrive_gili_cif`.
+
+### Migrar el histórico en claro — copiar → comprobar → y SOLO entonces retirar
+
+**El orden no es negociable.** Y hay un motivo medido para no dejar que el histórico caduque solo:
+cuando un fichero con nombre sin cifrar convive en el directorio de un remote `crypt`, rclone lo
+**salta** (`Skipping undecryptable file name`) con código de salida 0 — tanto al listar como al
+borrar. La retención de 14 días **no volvería a tocarlo nunca**: se quedaría ahí para siempre,
+legible, mientras los correos dicen que todo va cifrado.
+
+```bash
+# 1) copiar (conserva las fechas de modificación: la retención sigue contando igual)
+rclone copy gdrive:Bamburu-backup/daily/ gdrive_cif:daily/ --progress
+rclone copy gdrive_gili:Bamburu-backup-gili/daily/ gdrive_gili_cif:daily/ --progress
+
+# 2) comprobar: tiene que decir 0 diferencias y salir con 0
+rclone cryptcheck gdrive:Bamburu-backup/daily gdrive_cif:daily; echo "rc=$?"
+rclone cryptcheck gdrive_gili:Bamburu-backup-gili/daily gdrive_gili_cif:daily; echo "rc=$?"
+
+# 3) SOLO si el paso 2 salió 0 en las DOS — primero en simulacro
+rclone delete gdrive:Bamburu-backup/daily/ --dry-run
+rclone delete gdrive:Bamburu-backup/daily/
+rclone delete gdrive_gili:Bamburu-backup-gili/daily/ --dry-run
+rclone delete gdrive_gili:Bamburu-backup-gili/daily/
+```
+
+**Esto no choca con «nunca destruir datos»:** no es una destrucción, es un traslado. Los mismos
+objetos siguen existiendo, en la misma cuenta, verificados uno a uno por `cryptcheck` como idénticos,
+dentro del contenedor cifrado. **Si `cryptcheck` no da 0 en las dos cuentas, el paso 3 no se ejecuta:
+se para y se pregunta.**
 
 
 ---
@@ -177,7 +322,7 @@ igual que siempre (copia principal); la unit de la secundaria sobreescribe cuatr
 
 | Variable | Principal (por defecto) | Secundaria |
 |---|---|---|
-| `BACKUP_REMOTE` | `gdrive:Bamburu-backup/daily` | `gdrive_gili:Bamburu-backup-gili/daily` |
+| `BACKUP_REMOTE` | `gdrive_cif:daily` | `gdrive_gili_cif:daily` |
 | `BACKUP_LABEL` | `principal` | `secundaria` |
 | `BACKUP_SUFFIX` | *(vacío)* → `last-success` | `-secondary` → `last-success-secondary` |
 | `BACKUP_HC_URL` | hereda `HEALTHCHECKS_URL` | **vacío a propósito** |
@@ -241,7 +386,8 @@ sudo systemctl enable --now bamburu-backup-secondary.timer
 # Primera ejecución a mano, para no esperar a las 03:35:
 sudo systemctl start bamburu-backup-secondary.service
 journalctl -u bamburu-backup-secondary -n 60 --no-pager
-rclone ls gdrive_gili:Bamburu-backup-gili/daily/
+rclone ls gdrive_gili_cif:daily/                    # a través de la clave
+rclone lsf gdrive_gili:Bamburu-backup-gili-cif/ -R  # sin la clave: nombres ilegibles
 ```
 
 ## Horario
