@@ -52,6 +52,17 @@
   siguen ABIERTOS. La tarea se reescribe entera —con la llave en el servidor **y** una copia por
   pantalla para Ibrahin, y con la comprobación nocturna descifrando de verdad— y vuelve a la cola.
   El trabajo del programador **no se tira**: vive en el commit `5834d79` y de ahí se parte.
+
+  **⚙️ REPLANTEAMIENTO CONSTRUIDO EL 1 SEP 2026 (tarde) — y sigue SIN ENCENDER, a propósito.** El
+  cifrado ya no es un interruptor en el código que alguien tenga que ir a acompañar a mano: es un
+  **estado del servidor**. `scripts/bamburu-backup.sh` sabe funcionar en claro y cifrado —sin rama
+  blanda en ninguno de los dos, y comparando el restore **byte a byte**— y quien decide cuál es un
+  fichero de estado, `~/.config/bamburu/backup-destinos.conf`, que **solo escribe**
+  `scripts/cifrar-copias-de-seguridad.sh` y **solo después de haber descifrado un fichero de
+  verdad**. Ese fichero es además el cerrojo, así que **el código no puede exigir cifrado antes de
+  que el cifrado exista** — que fue justo la avería de esta mañana. **Las copias siguen yendo EN
+  CLARO** hasta que Ibrahin ejecute `bash scripts/cifrar-copias-de-seguridad.sh`, y el correo diario
+  lo dice en palabras (`EN CLARO ⚠️`). **La ficha NO se cierra** mientras eso siga así.
 - El Peldaño 9 — Belleza/estética sigue pendiente en el roadmap funcional, pero está aplazado y no es
   la siguiente tarea.
 

@@ -1,179 +1,284 @@
-# Informe del programador — `cifrado-copias-seguridad`
+# Informe de entrega — Cifrar las copias de seguridad
 
-**Intento 3.** **Fecha:** 1 sep 2026 · **Veredicto:** ENTREGADO — la parte de código y documentación,
-que es la que me toca. **Cuatro pasos de terminal quedan para Ibrahin**, y están escritos con sus
-comandos y sus condiciones de paso.
+- **id:** `cifrado-copias-seguridad`
+- **intento:** 4 (primero del replanteamiento)
+- **fecha:** 1 sep 2026
+- **plano seguido:** `task-cifrado-copias-seguridad-analysis.md` (♻️ REPLANTEAMIENTO)
 
 ---
 
-## Lo primero: por qué esto no vuelve a ser «ANÁLISIS IMPOSIBLE»
+## Lo primero, porque es lo que más importa
 
-Los intentos 1 y 2 declararon el plano imposible y no tocaron un fichero. **Ese diagnóstico era medio
-cierto, y la mitad falsa es la que costó dos intentos.**
+**Las copias siguen yendo EN CLARO, y eso es a propósito.** Esta entrega **construye** el mecanismo
+de cifrado y lo deja probado; **no lo enciende**. Lo enciende Ibrahin con una orden:
 
-Lo cierto —y lo he vuelto a comprobar hoy, no me he apoyado en el intento anterior— es que el
-**Paso 1** del plano (crear los dos remotes `crypt`) no lo puede ejecutar este agente:
-
-```
-$ touch /home/ubuntu/.config/rclone/_probe3
-touch: cannot touch '...': Read-only file system
-$ systemctl show orquestador -p ReadWritePaths -p ProtectHome -p NoNewPrivileges
-ReadWritePaths=/home/ubuntu/bamburu /home/ubuntu/.claude
-ProtectHome=read-only
-NoNewPrivileges=yes
-$ sudo -n true
-sudo: The "no new privileges" flag is set, which prevents sudo from running as root.
+```bash
+bash scripts/cifrar-copias-de-seguridad.sh
 ```
 
-El convenio (b) del plano decía que un fallo así sería «el aislamiento del entorno de la herramienta,
-no un permiso del sistema». **Eso es falso**, y conviene que quede escrito: el aislamiento viene del
-namespace de `orquestador.service`, y un proceso no se sale de su propio namespace. No lo he
-intentado saltar: `rclone.conf` guarda los tokens de OAuth de las dos cuentas de Drive, que son justo
-el activo que esta tarea protege.
+**El vector 4 sigue ABIERTO** hasta que esa orden se ejecute, y así está escrito en
+`docs/seguridad/vectores-de-ataque.md` y en `TABLERO.md`. **La ficha NO se cierra.** Cerrarla sería
+el verde que miente que esta tarea viene a matar.
 
-**Lo falso era la conclusión.** «No puedo ejecutar el Paso 1» no es «el análisis es imposible»: es
-que esta tarea tiene una parte de operación y una parte de construcción, y el plano ya lo sabía a
-medias —su Paso 2 es una parada explícita de Ibrahin—. Lo que el plano no vio es que la parada es
-más grande de lo que creía. **La parte de construcción es mía, y estaba entera a mi alcance.** Es lo
-que traigo, y va probada de punta a punta.
+Y mientras no la ejecute, **no pasa nada malo**: las copias salen cada noche, en claro, verificadas
+—ahora mejor que antes— y el correo diario dice **`EN CLARO ⚠️`** en el asunto para que no se olvide.
 
 ---
 
-## Qué se ha construido
+## Lo que se ha construido
 
-Cuatro ficheros de código y configuración, cuatro de documentación. **Ni uno del producto**: no se
-toca `modules/`, ni `core/`, ni una base, ni una migración, ni VERI\*FACTU, ni una sola pantalla.
+| Fichero | Qué |
+|---|---|
+| `scripts/bamburu-backup.sh` | modificado: dos modos, cerrojo, verificación sin rama blanda, restore byte a byte |
+| `scripts/cifrar-copias-de-seguridad.sh` | **nuevo**: el guion de un solo uso + `--migrar-historico` |
+| `scripts/ensayo-restauracion-cifrada.sh` | **nuevo**: abrir la copia partiendo solo de la llave |
+| `deploy/systemd/README.md` | sincerado (4 afirmaciones falsas + una receta rota) |
+| `docs/seguridad/vectores-de-ataque.md` | fila 4, fila 7 y cuerpo de §4: estado real |
+| `CLAUDE.md`, `TABLERO.md` | titular y cuerpo, tachando con fecha y motivo |
 
-| Paso del plano | Fichero | Qué |
-|---|---|---|
-| 4 | `scripts/bamburu-backup.sh:32` | destino por defecto → `gdrive_cif:daily` |
-| 5 | `scripts/bamburu-backup.sh` | **guardián**: si `BACKUP_REMOTE` no es un remote `crypt`, `fail_exit` — email + `exit 1` **sin subir nada** |
-| 6a | `scripts/bamburu-backup.sh` | `verify_uploaded()` reconstruida: tamaño + `rclone cryptcheck`. **La rama blanda del `else` desaparece** |
-| 6b/6c | `scripts/bamburu-backup.sh` | `verify_restored()` nueva, enganchada en los dos restore-tests |
-| 6d | `scripts/bamburu-backup.sh:3-25` | cabecera sincerada |
-| 7 | `deploy/systemd/bamburu-backup-secondary.service:15` | `BACKUP_REMOTE=gdrive_gili_cif:daily` |
-| 11 | `CLAUDE.md`, `deploy/systemd/README.md`, `docs/seguridad/vectores-de-ataque.md`, `TABLERO.md`, `docs/auditorias/{arquitectura-y-estandares,comparativa-referentes}.md` | documentación sincerada |
-
-**El núcleo es el Paso 6, y el plano tenía razón en que era el núcleo.** Cifrar sin tocar
-`verify_uploaded()` habría apagado la verificación de huellas **dejándola en verde**: un remote
-`crypt` no expone MD5, la línea se tragaba el error con `2>/dev/null`, `rmd5` quedaba vacío y el
-`else` escribía un aviso en el log y **devolvía 0**. El correo habría seguido diciendo «subido,
-verificado y restore OK». Es *«un censo que dice CERO y no es cierto»*.
+**El cambio de enfoque, en una frase:** el cifrado deja de ser un *interruptor en el código* que
+alguien tiene que ir a acompañar a mano, y pasa a ser un **estado del servidor**. El fichero
+`~/.config/bamburu/backup-destinos.conf` (`600`) dice en qué mundo vive la copia, y **lo escribe el
+mismo guion que crea los destinos cifrados, en la misma pasada y solo después de haber descifrado un
+fichero de verdad**. Como ese fichero es a la vez el cerrojo, el instante peligroso del 1 de
+septiembre —*el código exige cifrado y el cifrado no existe*— **no tiene ninguna línea en la que
+poder ocurrir**.
 
 ---
 
-## Cómo se ha probado
+## Criterios de aceptación, uno a uno
 
-Pasada completa del **script real**, contra un remote `crypt` de usar y tirar sobre un backend local
-—sin red, sin tocar Drive ni el `rclone.conf` de producción—. Comprobado al terminar que el
-`.conf` de producción sigue con sus 2 remotes, modo 600 y **mtime intacto (03:35:00)**, y que no se
-ha escrito ninguna marca de éxito falsa. **Todo lo que crearon las pruebas está borrado.**
+Los ocho se comprobaron **sin red, sin `sudo` y sin tocar `~/.config/rclone/rclone.conf`**, contra el
+mundo de mentira de §4.1 (backend `local`, `RCLONE_CONFIG` y `HOME` propios en `/tmp`).
 
-| # | Qué se probó | Resultado |
-|---|---|---|
-| A | Pasada completa a destino cifrado | **exit 0** · **11 artefactos** «subido, verificado y restore OK» |
-| B | Guardián con `BACKUP_REMOTE=gdrive:Bamburu-backup/daily` (el destino en claro de hoy, con el `.conf` de **producción**) | **exit 1** · «el destino no es un remote cifrado (crypt). Copia ABORTADA» · **cero artefactos subidos** |
-| C | Un byte alterado en el fichero **ya descargado** | `verify_restored` lo caza → **exit 1** |
-| D | Un byte alterado en el **objeto cifrado del destino** | `cryptcheck` lo caza → **exit 1** |
-| E | El descargado sustituido por **otra base real y válida** | **`PRAGMA integrity_check` decía `ok`**; solo el MD5 lo cazó → **exit 1** |
-| F | Nombres en el destino crudo | **0** que contengan `.db`, `.tar.gz` o un nombre de negocio — solo base32 |
-| G | `grep -n "hashsum MD5\|se valida solo por tamaño"` | **0 coincidencias** |
-| H | `bash -n` | OK |
+### 1. ✅ Hoy sigue habiendo copia
 
-**La prueba E es la que más dice**, y es la razón de ser de `verify_restored()`: se sustituyó el
-fichero descargado por otra base de tenant real, íntegra y perfectamente válida. `integrity_check`
-respondió `ok`. **Antes de este cambio, ese cambiazo habría pasado en verde.**
+```
+[bamburu-backup] destino: fake_claro:daily — EN CLARO ⚠️
+[bamburu-backup] backup completado correctamente (23 archivos) — destino EN CLARO ⚠️.
+exit=0        objetos subidos: 23
+```
 
-C, D y E se ejecutaron sobre copias del script en `/var/tmp` con la corrupción inyectada, no sobre el
-fichero del repo.
+23 = 21 `data/tenants/*.db` + `control.db` + `uploads-*.tar.gz`, el número que predice el plano.
+Y `grep -n "se valida solo por tamaño" scripts/bamburu-backup.sh` → **0 líneas**.
+
+### 2. ✅ La pasada cifrada completa funciona
+
+```
+[bamburu-backup] destino: fake_cif:daily — CIFRADO
+[bamburu-backup]   verify: cryptcheck (rc=0) NOTICE: Encrypted drive 'fake_cif:daily': 1 matching files
+[bamburu-backup] backup completado correctamente (23 archivos) — destino CIFRADO.
+exit=0        a través de la llave: 23
+```
+
+Listado **crudo**, sin la llave (los directorios también van cifrados):
+
+```
+f3pei8no6a84kjjoea3pcs9rjk/
+f3pei8no6a84kjjoea3pcs9rjk/9aii1qqrqfja09gvo2cmjv329l780bgsnd0fpmsmave48p87taog
+f3pei8no6a84kjjoea3pcs9rjk/9js075cdjp1n92flr2ovr2cu1g
+```
+
+Contando sobre ese listado: **0** apariciones de `.db`, **0** de `.tar.gz`, y **0** nombres de
+negocio — comprobado recorriendo `data/tenants/*.db` del disco, no una lista escrita a mano.
+
+**Nota de precedencia, medida:** esa pasada se lanzó con `BACKUP_REMOTE=fake_claro:daily` **puesto**,
+y aun así fue al destino cifrado. Es la precedencia que pide el plano (fichero de destinos > unit),
+y es lo que permite que las **dos** copias cambien de destino con **una sola escritura** y sin `sudo`.
+
+### 3. ✅ Las dos verificaciones fallan duro, y se demostró rompiéndolas
+
+**(a) Un byte alterado en el objeto subido.** Para llegar a `cryptcheck` sin que la subida
+sobreescribiera la corrupción, se dejó el destino en solo lectura. **Control primero, sin corromper:**
+la pasada entera da **exit 0** — o sea, el montaje no rompe nada por sí solo. Después, un byte:
+
+```
+tam antes=266352 despues=266352   (idéntico: solo cambia el contenido)
+[bamburu-backup]   verify: cryptcheck (rc=1) NOTICE: Failed to cryptcheck: 1 differences found
+[bamburu-backup]   verify: cryptcheck NO dio 0
+[bamburu-backup] FALLO: verificación de subida de control-2026-09-01.db (tamaño/huella)
+exit=1
+```
+
+La última línea de `cryptcheck` va al log, como pedía el plano: el email de fallo distingue «las
+huellas difieren» de «el remote no respondió».
+
+**(b) El fichero descargado sustituido por otra base real y válida.** Se usaron `duniya.db` y
+`helados-ibrahin.db`, dos bases **reales, distintas y de exactamente 1.261.568 bytes las dos**. La
+sustituta pasa `PRAGMA integrity_check` → `ok` con 282 objetos de esquema: con el código viejo habría
+pasado en verde.
+
+```
+[bamburu-backup]   restore: el fichero descargado NO es idéntico al original (…/restore/duniya-2026-09-01.db)
+[bamburu-backup] FALLO: el restore de duniya-2026-09-01.db no es idéntico al original
+exit=1
+```
+
+Y el tamaño y `cryptcheck` de esa misma pasada dieron **OK**: lo cazó la comparación byte a byte y
+nada más, que es justo lo que había que demostrar.
+
+**(c) Destino en claro que no devuelve MD5.** Como fixture, un remote `alias` sobre un `crypt`: es
+`type = alias` (no es `crypt`) y no puede dar MD5.
+
+```
+[bamburu-backup] destino: fake_sinmd5:daily — EN CLARO ⚠️
+[bamburu-backup]   verify: el destino no devuelve huellas y no es crypt: no se puede verificar
+exit=1
+```
+
+Antes de esta entrega, ese mismo caso escribía un aviso y **devolvía 0**.
+
+### 4. ✅ El guion hace los cinco pasos en orden
+
+Ejecutado entero en `/tmp`. Salida real (la llave, recortada aquí, se imprimió una vez):
+
+```
+Prerrequisitos OK: … y /tmp/cif-guion/conf.conf es escribible.
+Los dos remotes están escritos como crypt, con la MISMA contraseña.
+Ensayo real (subir, bajar, comparar byte a byte, y mirar el destino en crudo)…
+ · cif1   sube, baja, coincide byte a byte, y en crudo no se lee el nombre.
+ · cif2   sube, baja, coincide byte a byte, y en crudo no se lee el nombre.
+Destino cambiado. Las dos copias de esta noche saldrán CIFRADAS:
+   DESTINO_principal=cif1:daily
+   DESTINO_secundaria=cif2:daily
+exit=0
+```
+
+Comprobado después: fichero de destinos en **`600`**; los dos remotes `type = crypt`; los dos
+`reveal` **coinciden** (44 caracteres, comparados sin imprimirlos); **0 objetos** de ensayo y **0**
+directorios `/tmp/cif-ensayo.*` (la prueba borró lo que creó).
+
+**Segunda ejecución:** «El cifrado ya está creado: este guion NO vuelve a generar ninguna clave»,
+imprime el estado, **exit 0**, y se verificó que **la clave no había cambiado**.
+
+### 5. ✅ Si no descifra, no cambia el destino
+
+Rompiendo el ensayo (backend crudo sin permiso de escritura):
+
+```
+ · cif1   no se pudo SUBIR el fichero de ensayo
+EL ENSAYO HA FALLADO en 'cif1'. No se toca el destino de las copias.
+DESHECHO: se han borrado los remotes que este guion había creado.
+El destino de las copias NO se ha cambiado: esta noche saldrán EN CLARO, y en verde.
+exit=1
+```
+
+Después: el fichero de destinos **no existe**, y `rclone listremotes` solo devuelve `fakedrive:` —
+los `crypt` a medias **ya no están**.
+
+### 6. ✅ El cerrojo no puede adelantarse a la llave
+
+Con el fichero de destinos apuntando a un remote que **no** es `crypt`:
+
+```
+[bamburu-backup] FALLO: el destino 'fake_claro:daily' viene de …/destinos.conf pero NO es un remote crypt. Copia ABORTADA.
+exit=1
+temporales vivos: 0 · líneas de snapshot: 0 · objetos en el destino: 0
+```
+
+No llegó a crear el temporal ni a tocar un fichero. **Borrando ese fichero**, la misma copia vuelve a
+**exit 0** con 23 artefactos contra el destino en claro.
+
+### 7. ✅ La copia se abre partiendo solo de la llave
+
+`scripts/ensayo-restauracion-cifrada.sh`, con la contraseña por **stdin**, configuración temporal en
+`/tmp` y **sin leer `~/.config/rclone/rclone.conf`** — se ejecutó con el `HOME` **real** para que la
+prueba fuera exigente:
+
+```
+✅ ENSAYO SUPERADO
+   fichero ............ x-2026-09-01.db (1224704 bytes)
+   integrity_check .... ok
+   objetos del esquema. 276
+```
+
+**La prueba de que la llave viene del stdin y no del servidor:** el `rclone.conf` real tiene **0**
+remotes `crypt` (solo `gdrive:` y `gdrive_gili:`), y con la **contraseña equivocada** el mismo
+ensayo sale con **exit 1** («no se lee ningún .db: o la llave no es la buena…»).
+
+### 8. ✅ Papeles y llave
+
+Las cuatro frases falsas del plano §1.4 ya no afirman nada: «Drive **CIFRADO**» y «o no hay copia»
+**no aparecen**; «HACE FALTA LA CONTRASEÑA» y «CÓDIGO HECHO» solo aparecen **dentro de `~~ ~~`**, con
+su fecha y su motivo. La fila 4 de `docs/seguridad/vectores-de-ataque.md:13` dice **ABIERTO**.
+`git grep` de la contraseña del mundo de mentira **no devuelve nada**, y `git status --porcelain` no
+tiene ningún residuo de las pruebas.
+
+**También se destachó una frase**, que es el caso raro: `vectores-de-ataque.md:19` tenía tachado
+«todo lo que sale de la aplicación está sin proteger» por creerlo resuelto. **No lo estaba**, así que
+vuelve a estar en pie, con la nota de por qué.
+
+**Y la receta de custodia estaba rota** (§1.5 del plano). Se tachó con su motivo y se puso la que
+funciona, **después de ejecutar las dos**: la vieja da `base64 decode failed … is it obscured?`
+porque `rclone config show` **enmascara** el campo; la nueva usa `rclone config dump` y devolvió
+exactamente la llave que el guion había impreso.
 
 ---
 
-## 🔴 Lo que hay que saber hoy, y no lo voy a suavizar
+## Tres cosas que decidí yo, y por qué
 
-**Hasta que Ibrahin cree los dos remotes `crypt`, las copias de las 03:33 y las 03:35 abortan y
-mandan email de fallo.**
+Ninguna cambia lo que el producto le promete a nadie; las tres son de construcción, así que se
+deciden, se construyen y se explican aquí — pero las escribo porque el revisor las verá en el diff.
 
-Las units ejecutan el script **directamente del árbol de trabajo**
-(`ExecStart=/home/ubuntu/bamburu/scripts/bamburu-backup.sh`), así que guardar el fichero ya es
-desplegarlo — ni siquiera hace falta commitear.
+**1. `--include "/$name"` en vez de `--include "$name"`.** El plano escribía el filtro sin anclar.
+**Medido: no vale.** `--include` casa a **cualquier profundidad**, así que `cryptcheck` se llevaba
+también el `restore/$name` de la prueba de restauración y comparaba dos ficheros locales contra uno
+remoto. Lo destapó el propio criterio 3(b), que falló por el sitio equivocado. Con la `/` inicial el
+filtro se ancla a la raíz de cada lado y compara exactamente `<dir>/$name` contra `$REMOTE/$name`.
+En la operación normal las dos formas coinciden (a la hora de verificar, `restore/` está vacío); la
+anclada es la que no depende de eso.
 
-**Y no es evitable entregando menos**, que era la salida que parecía razonable. Lo he comprobado por
-los tres lados:
+**2. `cryptcheck --one-way` en la migración del histórico.** Sin él, la migración **no habría pasado
+nunca en producción**: cuando Ibrahin la ejecute, el destino cifrado ya tendrá las copias de las
+noches anteriores, y `cryptcheck` cuenta esas sobrantes como diferencia. Medido: **23 «errors while
+checking»** por ese motivo exacto, con la orden tal y como estaba escrita a mano en el README. Con
+`--one-way` se exige lo que de verdad hace falta —que **todo lo viejo** esté en el destino y
+coincida— y dio `0 differences found` con `2 matching files`. (El recuento independiente del plano ya
+usaba `>=` y no `==`, lo cual encaja: el plano anticipó que el destino tendría más objetos.)
 
-- Con el guardián puesto y sin remotes `crypt` → aborta (es su trabajo).
-- **Sin tocar el destino por defecto** → el destino de hoy tampoco es `crypt`, así que el guardián
-  aborta igual.
-- **Sin el guardián** → `cryptcheck` contra un remote `drive` puro se niega en seco
-  (`is not a crypt remote`), y falla la verificación de los 11 artefactos.
+**3. `DESTINO_ES_CRYPT` calculado una vez.** El plano llamaba a `es_crypt "$REMOTE"` dentro del
+cerrojo. Es la misma comprobación, hecha una sola vez al arrancar, porque hace falta **dos** veces
+más: para elegir la rama de `verify_uploaded` y para decir el modo en palabras. Se ahorra una llamada
+a `rclone` por artefacto y no hay forma de que las dos decisiones discrepen.
 
-El código y los remotes son **una sola pieza**: o van los dos, o no va ninguno. El plano lo ordenaba
-así (primero los remotes, después el script) y yo solo puedo hacer la segunda mitad.
-
-**Qué se pierde y qué no.** No se pierde nada: los 14 días de histórico siguen en Drive, no se ha
-borrado un solo objeto, `fail_exit` avisa por email y pingea `/fail`, y el heartbeat vigila. Lo que
-no hay es **copia nueva** hasta que existan los remotes.
-
-**Por qué lo dejo así en vez de dejar el destino en claro.** La alternativa era un `BACKUP_REMOTE`
-que sigue subiendo 203 clientes y 922 facturas sin cifrar mientras `CLAUDE.md`, el README y la
-auditoría dicen que va cifrado. Eso es exactamente el fallo silencioso que esta tarea venía a matar,
-y esta vez sería yo escribiéndolo. **Un fallo ruidoso que se arregla en un minuto es mejor que un
-verde que miente.** El mensaje del guardián dice dónde está el remedio, y ese mensaje viaja dentro
-del email de fallo.
-
-*(Decisión de construcción: el plano fijaba el texto del `fail_exit`; le he añadido el puntero a
-`deploy/systemd/README.md` §«Cifrado de las copias» precisamente porque sé que ese email va a llegar.)*
+Además, dos retoques menores dentro de los mismos ficheros: el mensaje de `fail_exit` decía
+`(tamaño/MD5)` y ahora dice `(tamaño/huella)`, porque en el modo cifrado no hay MD5; y los recuentos
+de la migración usan `lsf --files-only`, porque `lsf` a secas cuenta también entradas de directorio y
+el mensaje dice «objetos».
 
 ---
 
-## Los cuatro pasos que quedan para Ibrahin
+## Lo que NO se ha hecho, y hay que saberlo
 
-Todos con sus comandos en `deploy/systemd/README.md` §«Cifrado de las copias».
-
-1. **Crear los dos remotes `crypt`** (`gdrive_cif`, `gdrive_gili_cif`). Un solo `bash -c`.
-   **⚠️ Condición de paso, no un detalle:** `rclone config create` puede **imprimir la sección,
-   devolver 0 y no haber escrito nada** — el error va a stderr y el código de salida sigue siendo 0.
-   Lo he medido hoy. No seguir sin ver `rclone config show gdrive_cif | grep '^type'` → `type = crypt`.
-2. **Custodiar la contraseña fuera del servidor.** Las copias existen para el día en que el servidor
-   no esté; si la única copia de la clave vive en el servidor, ese día las copias son ruido.
-3. **Instalar la unit de la secundaria** (`sudo cp … /etc/systemd/system/` + `daemon-reload`) y
-   lanzar la primera copia real de cada cuenta a mano.
-4. **Migrar el histórico** (250 objetos, 416 MiB): copiar → `cryptcheck` 0 diferencias → simulacro →
-   borrar. **Si `cryptcheck` no da 0, no se borra y se pregunta.** No vale dejarlo caducar: la
-   retención **salta los nombres indescifrables** con código de salida 0, así que el histórico en
-   claro se quedaría ahí **para siempre**, legible, mientras los correos dicen que todo va cifrado.
-
----
-
-## Criterios de aceptación — estado honesto
-
-| # | Criterio | Estado |
-|---|---|---|
-| 1 | Aborta si el destino no es `crypt` | ✅ **verificado** (prueba B, con el `.conf` de producción) |
-| 2 | Ningún camino da una copia por buena sin comparar huellas | ✅ **verificado** (G: 0 coincidencias; C/D/E: exit 1) |
-| 3 | Ejecución real de cada copia + nombres ilegibles | ⏳ **la mitad**: la pasada completa y los nombres ilegibles están verificados contra un `crypt` real (A, F); **contra Drive depende del paso 1** |
-| 4 | Restauración solo con la contraseña | ⏳ **de Ibrahin** (pasos 1 y 2) |
-| 5 | El histórico ya no está en claro | ⏳ **de Ibrahin** (paso 4) |
-| 6 | La contraseña no está en nada versionado | ✅ **verificado**: no se ha añadido ninguna variable de entorno a ninguna unit, no se toca `/etc/bamburu.env`, y la clave vive solo en `rclone.conf` por diseño |
-| 7 | Documentación sincerada | ✅ **hecho**, y **sin dar por hecho lo que no lo está**: los cuatro documentos dicen que el código está puesto y que la operación está pendiente |
-
-**No he marcado la ficha del TABLERO como ✅.** Está como `código HECHO · operación PENDIENTE`, que es
-lo que es. Marcarla cerrada sería escribir el mismo tipo de mentira que esta tarea vino a arreglar.
+1. **Las copias van en claro.** Ver arriba. Es la orden que falta.
+2. **El histórico de Drive sigue en claro** — 250 objetos según la revisión del intento 3. Y hay un
+   detalle medido que lo hace urgente el día que se encienda el cifrado: un fichero con nombre sin
+   cifrar dentro de la raíz de un `crypt` se **salta con código de salida 0**, al listar **y al
+   borrar**. Es decir, **la retención de 14 días no volverá a tocarlo nunca**: no caduca solo. Para
+   eso está `--migrar-historico`, y está dicho en el README y en el vector 4 que **sin ese paso el
+   vector 4 no está cerrado**.
+3. **Nada se ha ejecutado contra Drive ni contra `~/.config/rclone/rclone.conf`.** Ni una orden de
+   lectura. El `$HOME` del orquestador está en solo lectura (`Read-only file system`, comprobado), y
+   el plano no lo pedía.
+4. **La segunda copia no se probó como unit.** Se probó lo que decide su destino —la resolución por
+   `BACKUP_LABEL`— y el guion escribe las dos líneas, `DESTINO_principal` y `DESTINO_secundaria`.
+   Instalar o recargar units necesita `sudo` y está fuera del plano.
+5. **No se ha ejecutado ningún `scripts/run-gates.mjs`**, ni corto ni completo, ni ningún gate de
+   navegador: el plano lo prohíbe explícitamente arriba del todo y ningún criterio los necesita.
 
 ---
 
-## Dos cosas del plano que resultaron ser falsas, y hay que decirlo
+## Higiene de las pruebas
 
-1. **«Cierra a la vez los vectores 4 y 7».** Cierra el **4 entero** y **solo la mitad del 7**: cifrar
-   impide *editar* una copia de forma coherente sin la clave; no impide *borrarla ni sustituirla por
-   basura*. Esa mitad es `manifiesto-huellas-backups`. *(El propio plano ya lo corregía en §1.5; lo
-   repito porque el TABLERO y la auditoría seguían diciendo lo contrario y ya están corregidos.)*
-2. **«Es configuración, no programación».** No lo era, y es la trampa entera de esta tarea: cifrar
-   sin programar habría apagado la verificación de huellas dejándola en verde.
+Todo bajo `/tmp/cif-*` con `HOME` falso, `BACKUP_HC_URL=""` explícito y `RESEND_API_KEY` vacío en el
+entorno (comprobado): **no se envió ningún email, no se hizo ningún ping y no se pisó ninguna marca
+de éxito del heartbeat**. Los temporales del propio script se borran en su `trap`. Al terminar,
+`git status --porcelain` solo contiene los ficheros de esta entrega, y la contraseña del mundo de
+mentira no aparece en el árbol.
 
-## Nota de proceso
+## Alcance
 
-`TABLERO.md` quedó dentro del commit `803ee8e` del propio orquestador, que se estaba ejecutando en
-paralelo y barrió el índice mientras yo editaba. El contenido es mío y está íntegro en el árbol; solo
-viaja en un commit cuyo mensaje no nombra la tarea. Lo dejo dicho para que el revisor no lo busque
-donde no está.
+Los siete ficheros tocados están **dentro de la lista cerrada** de §3 del plano. No se ha tocado
+`modules/`, ni `core/`, ni `orchestrator/`, ni ninguna base, ni ninguna migración, ni ninguna unit,
+ni `/etc/bamburu.env`. Los cuatro `docs/architecture/task-cifrado-*` que aparecen modificados en
+`git status` **venían así de antes** de empezar esta sesión y **no se incluyen en el commit**.

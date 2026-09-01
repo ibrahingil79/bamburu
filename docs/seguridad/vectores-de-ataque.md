@@ -10,24 +10,34 @@
 | 1 | Entrar sin credenciales | Protegido | Sólida | Bajo (2FA obligatoria) |
 | 2 | Acceder a datos de otro negocio | Protegido | **Muy sólida** | Medio (`btenant`) |
 | 3 | Modificar una factura enviada | Protegido | Sólida en producto | Medio (anclaje AEAT) |
-| 4 | Descargar todas las bases | Protegido — ~~expuesto en backups~~ **cifrado (1 sep 2026)** | Sólida | Hecho |
+| 4 | Descargar todas las bases | **ABIERTO** en los backups — ~~«cifrado (1 sep 2026)»~~ (ver §4) | Floja fuera de la app | Bajo — **una orden** |
 | 5 | Inyección SQL | Protegido | Sólida | — |
 | 6 | Robo de sesión | Protegido | Sólida | Alto (CSP) |
-| 7 | Manipular backups | **Parcial** (mejora el 1 sep 2026; sigue parcial) | Floja en el histórico | Bajo |
+| 7 | Manipular backups | **Parcial** — y la mitad que le tocaba a esta tarea sigue sin encender | Floja en el histórico | Bajo |
 
 **Patrón:** dentro de la aplicación la seguridad es seria y varias piezas están por encima de lo
-habitual. ~~**Todo lo que sale de la aplicación —los ficheros de copia— está sin proteger.**~~
+habitual. **Todo lo que sale de la aplicación —los ficheros de copia— está sin proteger.**
+(Esa frase se tachó el 1 sep 2026 por creerla resuelta; **se destacha el mismo día**, porque no lo
+estaba y sigue sin estarlo.)
 
-> **⚙️ CORREGIDO EL 1 SEP 2026 — tarea `cifrado-copias-seguridad`.** Se tacha en vez de borrarse, que
-> es el método de este repo: el registro existe para reconstruir qué se creía y cuándo.
-> Las copias van ahora a un remote **`rclone crypt`** —contenido y **nombres** de fichero y de
-> carpeta—, y `scripts/bamburu-backup.sh` **aborta** si el destino no es cifrado.
-> **El 4 queda cerrado. El 7 sigue PARCIAL, y el motivo importa:** cifrar impide *editar* una copia
-> de forma coherente sin la clave, pero **no** impide *borrarla o sustituirla por basura*. Eso lo
-> cierra el manifiesto de huellas del histórico, que es **otra tarea** (`manifiesto-huellas-backups`).
-> **Estado operativo:** el código está puesto y probado; crear los dos remotes `crypt` y migrar el
-> histórico son pasos de terminal que hace Ibrahin (`deploy/systemd/README.md` §«Cifrado de las
-> copias»). Hasta que existan los remotes, las copias abortan con email — a propósito.
+> ~~**⚙️ CORREGIDO EL 1 SEP 2026.** Las copias van ahora a un remote `rclone crypt` … **El 4 queda
+> cerrado.** … Hasta que existan los remotes, las copias abortan con email — a propósito.~~
+>
+> **⚙️ ESO SE REVIRTIÓ EL MISMO DÍA, Y LA FRASE DE ARRIBA SIGUE SIENDO LA VERDADERA.** Se tacha en
+> vez de borrarse, que es el método de este repo: el registro existe para reconstruir qué se creía y
+> cuándo. **Todo lo que sale de la aplicación —los ficheros de copia— sigue sin proteger**: los
+> remotes `crypt` nunca existieron, la contraseña nunca se generó, y con aquel guardián puesto las
+> dos copias de la madrugada habrían abortado. Ibrahin devolvió el destino a claro porque *quedarse
+> sin copia es un riesgo mayor que una noche más en claro*.
+>
+> **Estado a día de hoy (1 sep 2026, tarde):** el mecanismo está **construido y probado**, y se
+> enciende con **una orden** de Ibrahin —`bash scripts/cifrar-copias-de-seguridad.sh`—, que crea la
+> llave, comprueba que descifra y solo entonces cambia el destino. **Mientras no la ejecute, el
+> vector 4 está ABIERTO** y el correo diario de la copia lo dice en palabras: `EN CLARO ⚠️`.
+>
+> **El 7 sigue PARCIAL, y el motivo importa:** cifrar impide *editar* una copia de forma coherente
+> sin la clave, pero **no** impide *borrarla o sustituirla por basura*. Eso lo cierra el manifiesto
+> de huellas del histórico, que es **otra tarea** (`manifiesto-huellas-backups`).
 
 ---
 
@@ -101,17 +111,37 @@ cifrado en `scripts/bamburu-backup.sh`.~~
 ~~**Coste: bajo.** `rclone crypt` sobre los dos destinos. **Es la corrección con mejor relación
 coste/riesgo de toda la auditoría.**~~
 
-**⚙️ CORREGIDO EL 1 SEP 2026 — tarea `cifrado-copias-seguridad`.** Se hizo lo que decía el párrafo
-tachado: `rclone crypt` sobre los dos destinos. Ahora `scripts/bamburu-backup.sh` **exige** que
-`BACKUP_REMOTE` sea un remote `crypt` y **aborta con email** si no lo es, así que no hay camino por
-el que las copias vuelvan a texto claro en silencio.
+~~**⚙️ CORREGIDO EL 1 SEP 2026.** Se hizo lo que decía el párrafo tachado … `scripts/bamburu-backup.sh`
+**exige** que `BACKUP_REMOTE` sea un remote `crypt` y **aborta con email** si no lo es.~~
 
-**Y los nombres también hablaban.** El listado de Drive decía literalmente
+**⚙️ ESO NO ERA CIERTO, Y SE CORRIGE EL MISMO 1 SEP 2026.** Se tacha en vez de borrarse, que es el
+método de este repo: el registro existe para reconstruir qué se creía y cuándo. Lo que pasó, en
+orden: el guardián se puso en el código, pero **los remotes `crypt` nunca llegaron a existir y la
+contraseña nunca se generó**, así que las dos copias de la madrugada siguiente **habrían abortado**.
+Ibrahin revirtió el guardián —*«los datos actuales son de prueba y que vayan en claro una noche más
+no expone nada real; quedarme sin copia sí es riesgo»*— y **hoy las copias van EN CLARO**.
+
+**ESTADO REAL: el vector 4 sigue ABIERTO.** El mecanismo está **construido y probado** (el script
+sabe funcionar cifrado y en claro, sin rama blanda en ninguno de los dos; hay un guion que genera la
+llave, crea los destinos, **comprueba que descifra** y solo entonces enciende el cifrado; y un
+ensayo que abre la copia partiendo solo de la llave). **Falta la orden que lo enciende**, y la da
+Ibrahin: `bash scripts/cifrar-copias-de-seguridad.sh`. Hasta entonces, 203 clientes y 922 facturas
+siguen viajando en claro a dos Drive personales.
+
+**Y los nombres también hablan.** El listado de Drive dice literalmente
 `peluqueria-gil-AAAA-MM-DD.db`, `helados-ibrahin-…`, `inversiones-disan-…`: sin abrir un fichero, la
-carpeta publicaba cuántos negocios hay y cómo se llaman. Por eso el cifrado va con
+carpeta publica cuántos negocios hay y cómo se llaman. Por eso el cifrado va con
 `filename_encryption=standard` y `directory_name_encryption=true`, no solo sobre el contenido.
-Medido tras el cambio: en el destino crudo no aparece **ningún** nombre de negocio, ni `.db`, ni
-`.tar.gz` — solo cadenas base32.
+**Medido en una pasada completa contra un destino cifrado de laboratorio** (1 sep 2026): en el
+destino crudo no aparece **ningún** nombre de negocio, ni `.db`, ni `.tar.gz` — solo cadenas base32,
+con los directorios también cifrados. En producción eso será cierto **el día que se ejecute el
+guion**, no antes.
+
+**Y el histórico no caduca solo.** Medido: un fichero con nombre sin cifrar dentro de la raíz de un
+remote `crypt` se **salta** con código de salida 0, al listar **y al borrar**. En cuanto el destino
+pase a `crypt`, la retención de 14 días no volverá a tocar nunca los objetos que ya están en claro:
+o se migran (`--migrar-historico`) o se quedan ahí para siempre. Sin ese paso, el vector 4 **no está
+cerrado** aunque las copias nuevas vayan cifradas.
 
 **Dónde vive la clave:** en `~ubuntu/.config/rclone/rclone.conf`, **no** en `/etc/bamburu.env`, porque
 ese fichero entra entero en el `process.env` del proceso web expuesto a Internet y la aplicación no
@@ -202,6 +232,15 @@ vez, es configuración y no programación, y hoy es la mayor exposición real de
 >
 > **Sigue siendo la mayor exposición real del producto**, y la recomendación única del texto tachado
 > sigue en pie. La tarea se reescribe entera y vuelve a la cola.
+>
+> **Actualización del 1 sep 2026 (tarde) — replanteamiento construido, NO encendido.** El mecanismo
+> ya existe y está probado de punta a punta contra un destino cifrado de laboratorio: la copia sabe
+> funcionar en claro y cifrada **sin rama blanda en ninguno de los dos modos**, hay un guion que
+> genera la llave, crea los destinos, **comprueba que descifra** y solo entonces cambia el destino
+> (si el descifrado falla, deshace y esa noche la copia sale en claro y en verde), y hay un ensayo
+> que abre la copia **partiendo solo de la llave custodiada**.
+> **Lo que falta es una orden, y la da Ibrahin:** `bash scripts/cifrar-copias-de-seguridad.sh`.
+> **Hasta que la ejecute, este ⛔ es la verdad: los vectores 4 y 7 siguen abiertos.**
 
 Lo que sí queda aprendido de aquel intento, y hay que meterlo en la tarea nueva —la auditoría se
 pasó de optimista en dos cosas:

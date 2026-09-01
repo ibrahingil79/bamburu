@@ -8500,20 +8500,40 @@ en pie**, porque si se cifra y deja de comprobarse que la copia abre, se cambia 
 
 **Criterios de aceptación**
 
-- [ ] Las dos copias suben **cifradas**, con **contenido y nombres** (de fichero y de carpeta) cifrados.
-- [ ] La llave vive en el servidor con permisos `600`, y **no** en `/etc/bamburu.env` ni en ningún
-      fichero versionado. `git log -p` y el árbol no la contienen.
-- [ ] Existe un guion de un solo uso que **genera, crea, comprueba que descifra, cambia el destino y
+- [~] Las dos copias suben **cifradas**, con **contenido y nombres** (de fichero y de carpeta)
+      cifrados. **Construido y medido** en una pasada completa contra un `crypt` de laboratorio: 23
+      artefactos, y en el destino crudo ni un `.db`, ni un `.tar.gz`, ni un nombre de negocio — solo
+      base32, con los directorios también cifrados. **En producción, el día que se ejecute el guion.**
+- [x] La llave vive en el servidor con permisos `600`, y **no** en `/etc/bamburu.env` ni en ningún
+      fichero versionado. `git log -p` y el árbol no la contienen. *(La llave la genera el guion en
+      `rclone.conf`; el fichero de destinos nace en `600` por `umask 077` y se verifica al escribirlo.)*
+- [x] Existe un guion de un solo uso que **genera, crea, comprueba que descifra, cambia el destino y
       enseña la llave una vez por pantalla**, en ese orden, sin preguntas encadenadas.
-- [ ] **En ningún momento el código exige `crypt` sin que el destino `crypt` exista.** Se demuestra:
-      con la configuración de hoy —sin remotes `crypt`— **las dos copias siguen funcionando**.
-- [ ] La verificación de subida compara huellas **de verdad** (`cryptcheck`), sin rama blanda.
-- [ ] La prueba de restauración **descifra** y compara el fichero **byte a byte**, no solo
-      `integrity_check`.
-- [ ] Una sola pieza sirve las dos copias. El script no se duplica.
-- [ ] **Verificación en real, no en verde de laboratorio:** una pasada completa del script contra un
-      `crypt` de usar y tirar sobre backend local (sin red y sin tocar el `rclone.conf` de
-      producción), y **la comprobación de que la copia se puede ABRIR** partiendo solo de la llave.
+      → `scripts/cifrar-copias-de-seguridad.sh`. Ejecutado dos veces: la segunda **no genera clave
+      nueva**, informa del estado y sale.
+- [x] **En ningún momento el código exige `crypt` sin que el destino `crypt` exista.** Demostrado en
+      los dos sentidos: sin fichero de destinos la copia sale **exit 0** contra el destino en claro;
+      con un fichero de destinos que apunta a un remote no cifrado sale **exit 1 sin crear siquiera
+      el temporal**; y si el ensayo de descifrado falla, el guion **deshace** y el fichero de
+      destinos no llega a existir.
+- [x] La verificación de subida compara huellas **de verdad** (`cryptcheck`), sin rama blanda.
+      Demostrado rompiéndola: **un byte** alterado en el objeto subido → exit 1 con `1 differences
+      found` en el log. Y en claro, un destino que no devuelve MD5 → **exit 1**, no un aviso.
+- [x] La prueba de restauración **descifra** y compara el fichero **byte a byte**, no solo
+      `integrity_check`. Demostrado sustituyendo el descargado por **otra base real y válida del
+      mismo tamaño** (`helados-ibrahin` por `duniya`): `integrity_check` habría dado `ok`, y la
+      comparación lo cazó → exit 1.
+- [x] Una sola pieza sirve las dos copias. El script no se duplica. El fichero de destinos resuelve
+      **por `BACKUP_LABEL`**, que ya existía: ni un `if principal/secundaria` nuevo.
+- [x] **Verificación en real, no en verde de laboratorio:** pasada completa contra un `crypt` de usar
+      y tirar sobre backend local (sin red, sin `sudo`, sin tocar el `rclone.conf` de producción), y
+      la copia **se abrió partiendo solo de la llave** con `scripts/ensayo-restauracion-cifrada.sh`
+      (`integrity_check` → ok, 276 objetos de esquema). Con la llave equivocada, **exit 1**.
+
+**Lo que falta, y es lo único: una orden de Ibrahin** —`bash scripts/cifrar-copias-de-seguridad.sh`—
+porque hay que escribir en `~/.config/rclone` y el orquestador tiene el `$HOME` en solo lectura.
+**Mientras no se ejecute, las copias van EN CLARO y la ficha NO se cierra.** El correo diario lo dice
+en palabras (`EN CLARO ⚠️`) para que no se olvide, y el vector 4 sigue **ABIERTO**.
 
 **No hay ningún paso que exija hablar con una persona a mitad.** La única intervención de Ibrahin es
 ejecutar el guion al final, cuando le venga bien, y guardar la llave que le enseñe.
@@ -9207,7 +9227,7 @@ negocio suspendido NO deja escribir— necesitan un negocio suspendido y tienen 
 
 ## Seguridad y datos
 
-- [~] **Cifrar las copias de seguridad.** ~~Cierra a la vez los vectores 4 y 7~~ ~~Es configuración (`rclone crypt`), no programación.~~ **⚙️ CÓDIGO HECHO EL 1 SEP 2026 · OPERACIÓN PENDIENTE DE IBRAHIN.** El script exige destino `crypt` y **aborta** si no lo es; la verificación de huellas se reconstruyó con `cryptcheck` + MD5 del fichero restaurado, sin rama blanda. **Las dos frases tachadas eran falsas:** cierra el vector 4 **entero** y **solo la mitad del 7** (falta `manifiesto-huellas-backups`), y **no era configuración**: cifrar sin tocar el código habría apagado la verificación de MD5 dejándola en verde. Faltan 4 pasos de terminal que el orquestador no puede dar (`~/.config/rclone` en solo lectura, sin `sudo`): crear los dos remotes `crypt`, custodiar la contraseña fuera del servidor, instalar la unit de la secundaria + primera copia real, y migrar el histórico. Ficha completa arriba, comandos en `deploy/systemd/README.md` §«Cifrado de las copias».
+- [~] **Cifrar las copias de seguridad.** ~~Cierra a la vez los vectores 4 y 7~~ ~~Es configuración (`rclone crypt`), no programación.~~ ~~**⚙️ CÓDIGO HECHO EL 1 SEP 2026 · OPERACIÓN PENDIENTE DE IBRAHIN.** El script exige destino `crypt` y **aborta** si no lo es.~~ **⚙️ ESO ERA FALSO Y SE REVIRTIÓ EL MISMO DÍA (`6bd067f`): el script de hoy NO exige nada, y aquel guardián habría dejado sin copia las dos madrugadas.** Se tacha en vez de borrarse. **REPLANTEADO Y RECONSTRUIDO EL 1 SEP 2026 (tarde), con otro enfoque:** el cifrado deja de ser un interruptor en el código y pasa a ser un **estado del servidor**. El script sabe funcionar en los dos mundos —sin rama blanda en ninguno: `cryptcheck` si el destino es `crypt`, MD5 obligatorio si no lo es— y compara el restore **byte a byte** (`integrity_check` da `ok` a cualquier base sana, aunque sea otra). Quién manda lo dice `~/.config/bamburu/backup-destinos.conf`, que **solo escribe** `scripts/cifrar-copias-de-seguridad.sh` y **solo después de haber subido, bajado y comparado un fichero de prueba**; ese mismo fichero es el cerrojo, así que **el código no puede exigir cifrado antes de que el cifrado exista**. **Las dos frases tachadas eran falsas:** cierra el vector 4 **entero** y **solo la mitad del 7** (falta `manifiesto-huellas-backups`), y **no era configuración**: cifrar sin tocar el código habría apagado la verificación de MD5 dejándola en verde. ~~Faltan 4 pasos de terminal que el orquestador no puede dar: crear los dos remotes `crypt`, custodiar la contraseña, instalar la unit + primera copia real, y migrar el histórico.~~ **⚙️ AHORA FALTA UNA SOLA ORDEN, y sigue siendo de Ibrahin** (`~/.config/rclone` está en solo lectura para el orquestador, sin `sudo`): `bash scripts/cifrar-copias-de-seguridad.sh`. Ella sola genera la llave, crea los dos destinos, **comprueba que descifra**, cambia el destino de las **dos** copias con una sola escritura y enseña la llave para custodiarla; si el descifrado falla, deshace y esa noche la copia sale en claro y en verde. El histórico va aparte, con simulacro por defecto: `--migrar-historico [--hazlo]`. **LAS COPIAS VAN EN CLARO HASTA QUE ESA ORDEN SE EJECUTE**, y el correo diario lo dice (`EN CLARO ⚠️`). **La ficha NO se cierra hasta entonces:** cerrarla sería el verde que miente que esta tarea viene a matar. Ficha completa arriba, detalle en `deploy/systemd/README.md` §«Cifrado de las copias».
 - [ ] **Manifiesto de huellas del histórico de backups.** Hoy solo se verifica la copia del día: una copia de hace cinco días se puede editar y nadie vuelve a mirarla. SHA-256 por copia, guardado aparte, comprobado contra las 14 en cada pasada.
 - [ ] **La retención del backup borra aunque la subida haya fallado PARCIALMENTE** (`scripts/bamburu-backup.sh:164`). **⚙️ MATIZ MEDIDO EL 1 SEP 2026, porque la entrada estaba mal escrita:** cuatro líneas ANTES de la retención ya hay un guardián —`[ "$uploaded" -gt 0 ] || fail_exit`— que existe **desde el 19 jun 2026** (`3076f68`). O sea: si NO se subió nada, el script sale y no borra. **El hueco real, que sí es real, es el fallo PARCIAL:** si se subió un fichero y falló otro, `uploaded` es mayor que cero y la retención se ejecuta igual. Condicionar el borrado al éxito **de todos**, no de al menos uno.
 - [ ] **Cifrado en reposo de las bases de negocio.**
