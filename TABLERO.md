@@ -8348,10 +8348,10 @@ trozos.
 > Commits: `bfea8a8`, `d93125e`
 > Registro: `docs/orquestador/tareas/portal-formato-dinero.md`
 
-## ⛔ APARTADA (2026-09-01) — Retirar las seis pantallas muertas que siguen en el árbol
+## ✅ CERRADA (2026-09-01) — Retirar las seis pantallas muertas que siguen en el árbol
 
 - **id:** retirar-pantallas-muertas
-- **estado:** apartada
+- **estado:** hecha
 - **origen:** TABLERO.md §Deuda técnica (24 ago 2026) y §Backlog 31 ago (Limpieza)
 
 Seis ficheros de pantalla **desmontados siguen en el árbol**: **1.584 líneas** en total, más sus 12
@@ -8364,8 +8364,26 @@ el criterio es el mismo para los seis: **retirar o revivir, no dejarlos a medias
 Recordatorio de la regla permanente de `CLAUDE.md`: *eliminar es sacarlo del sistema vivo, no
 destruir datos*. Aquí son ficheros de código sin montar, no datos de ningún negocio.
 
-> **Apartada por el orquestador el 2026-09-01.** Esperando decisión de Ibrahin.
-> Motivo: el arquitecto declaró la tarea mal planteada
+> ~~**Apartada por el orquestador el 2026-09-01.** Esperando decisión de Ibrahin.
+> Motivo: el arquitecto declaró la tarea mal planteada~~
+>
+> ## ✅ SACADA DE APARTADAS EL 1 SEP 2026. NO HABÍA NADA QUE DECIDIR.
+>
+> **Decisión de Ibrahin (bloque 2.2 del encargo de cierre):** *«Sigue en apartadas. Ya la resolviste
+> a mano esta mañana (`b2ec423`): los seis ficheros no existen desde el 24 de agosto. Sácala: no hay
+> nada que decidir.»*
+>
+> **La tarea nunca fue cierta más de unas horas.** Los seis se retiraron el **24 ago 2026** en
+> `fe6bef0`, **el mismo día** en que se escribió la entrada de deuda que decía que seguían ahí.
+> El arquitecto acertó al declararla mal planteada — lo que falló es que eso subió al móvil de
+> Ibrahin como «decisión de producto», y no lo era: era una **premisa falsa**. Esa confusión es el
+> bloque 4 de este mismo encargo.
+>
+> **Recomprobado el 1 sep 2026 antes de cerrarla, y no fiándose del commit anterior.** Los seis
+> —`orders.js`, `discounts.js`, `shipping.js`, `feedback.js`, `reviews.js`, `newsletter.js`— por
+> tres vías cada uno: **0 en `git ls-files`, 0 en disco, 0 en `HEAD`**, y **0 importaciones** vivas
+> en `modules/` e `index.js`.
+>
 > Registro: `docs/orquestador/tareas/retirar-pantallas-muertas.md`
 
 # 📌 TAREAS EN FORMATO DEL ORQUESTADOR — volcado del 1 sep 2026 (bloque 3)
@@ -8382,150 +8400,129 @@ destruir datos*. Aquí son ficheros de código sin montar, no datos de ningún n
 > (cerradas con su commit), 4 no convertibles (les falta un criterio que solo da Ibrahin) y 3 no
 > verificables sin ejecutar.
 
-## ⛔ APARTADA (2026-09-01) — Cifrar las copias de seguridad · CÓDIGO HECHO, OPERACIÓN PENDIENTE DE IBRAHIN
+## TAREA — Cifrar las copias de seguridad
 
 - **id:** cifrado-copias-seguridad
-- **estado:** ⚠️ **código HECHO el 1 sep 2026** (`5834d79`) · **operación PENDIENTE** (cuatro pasos de terminal)
-- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos · **REESCRITA el 1 sep 2026**
 
 Hoy las copias van **en claro en dos Drive personales**, con **203 clientes y 922 facturas dentro**.
-~~Cierra a la vez los **vectores 4 y 7**~~ de la auditoría de seguridad
-(`docs/seguridad/vectores-de-ataque.md`).
+Cierra el **vector 4** entero y **la mitad del 7** de `docs/seguridad/vectores-de-ataque.md` (la otra
+mitad es `manifiesto-huellas-backups`). Es la mayor exposición real del producto.
 
-~~**Es configuración (`rclone crypt`), no programación.** Eso la hace la más barata de todas las de
-esta lista en relación con lo que protege, y por eso va primera.~~
+---
 
-**Verificado contra el árbol el 1 sep 2026:** `scripts/bamburu-backup.sh` no contiene ni `crypt`, ni
-`encrypt`, ni `gpg`, ni `age`. No hay cifrado de ningún tipo.
+### ⚠️ POR QUÉ ESTA TAREA ESTÁ REESCRITA, Y QUÉ PASÓ EL 1 SEP 2026
 
-**Cuidado con lo que NO se puede romper:** hay DOS copias diarias en dos cuentas distintas
-(principal 03:33 → `ibrahingil`, secundaria 03:35 → `gilibrahin`), **servidas por la MISMA pieza**
-(`CLAUDE.md`): el script sin entorno es la principal, y la unit de la secundaria sobreescribe
-`BACKUP_REMOTE`/`LABEL`/`SUFFIX`/`HC_URL`. **No se duplica el script.** Las dos verifican MD5 y hacen
-prueba de restore real: el cifrado tiene que dejar esa verificación en pie, porque si se cifra y
-deja de comprobarse que la copia abre, se cambia un riesgo por otro.
+**Se intentó y se apartó tras tres intentos.** Los dos primeros del programador no tocaron un solo
+fichero. **La causa no fue técnica**: la tarea se volcó **sin las decisiones que Ibrahin ya había
+tomado**, y con un paso —*«para y dime lo que has encontrado antes de seguir»*— que **solo funciona
+con una persona delante**. El orquestador no tiene con quién parar a preguntar, así que se atascaba
+ahí las veces que hiciera falta.
 
-### ⚙️ ENTREGA DEL 1 SEP 2026 — qué se hizo, y qué NO
+**Y hubo un daño real que esta versión tiene que impedir.** El código del tercer intento (`5834d79`)
+**se quedó puesto y vivo aunque la tarea se apartó**: apuntaba a `gdrive_cif:` / `gdrive_gili_cif:`
+y **abortaba si el destino no era un remote `crypt`**. Esos remotes **nunca llegaron a existir** y la
+contraseña **nunca se generó**, así que **las dos copias de la madrugada siguiente habrían
+abortado**: ni cifraba ni copiaba. Se detectó a tiempo, se devolvió el destino al de siempre y se
+comprobó lanzando las dos copias a mano (16 archivos cada una, exit 0, los dos emails OK).
 
-> **Las dos frases tachadas de arriba se corrigieron al construirlo, y las dos importan:**
->
-> 1. **NO cierra «el 4 y el 7 a la vez».** Cierra el **vector 4 entero** y **solo la mitad del 7**:
->    cifrar impide *editar* una copia de forma coherente sin la clave, pero **no** impide *borrarla o
->    sustituirla por basura*. Esa mitad la cierra `manifiesto-huellas-backups`, que sigue pendiente.
-> 2. **NO era «configuración, no programación».** Cifrar sin tocar el código habría **apagado la
->    verificación de huellas y dejado los correos en verde**: un remote `crypt` no expone MD5
->    (`hash unsupported`, stdout vacío), la función que lo pedía se tragaba el error con `2>/dev/null`
->    y caía en una rama blanda que escribía un aviso y **devolvía 0**. Es *«un censo que dice CERO y
->    no es cierto»*. Hubo que reconstruir la verificación entera.
+**De ahí la regla que manda en esta tarea: nunca puede existir un momento en que el código exija
+cifrado y el destino cifrado no exista.**
 
-**Qué se decidió.** `rclone crypt` sobre los dos destinos, **con los nombres de fichero y de carpeta
-cifrados también** — el listado de Drive publicaba `peluqueria-gil-…`, `helados-ibrahin-…`,
-`inversiones-disan-…`, o sea cuántos negocios hay y cómo se llaman, sin abrir un solo fichero.
-Descartados: `age`/GPG asimétrico (rompe la prueba de restore real, que el TABLERO manda conservar),
-cifrar el artefacto a mano con `gpg -c` (deja los nombres en claro), y cambiar de proveedor
-(decisión de Ibrahin ya tomada, §S6). **La contraseña vive en `~ubuntu/.config/rclone/rclone.conf` y
-NO en `/etc/bamburu.env`**, porque ese fichero entra entero en el `process.env` del proceso web
-expuesto a Internet; así el botón «Lanzar copia ahora» del superadmin sigue funcionando sin tocar
-`modules/superadmin/backups.js` y no se añade ninguna variable de entorno nueva a ninguna unit.
-**Una sola contraseña para los dos destinos**, más una copia **fuera del servidor**: el riesgo
-dominante no es que la clave se filtre, es perderla.
+---
 
-**Qué se tocó** (4 ficheros de código/config + 4 de documentación, ni uno del producto — ni
-`modules/`, ni `core/`, ni una base, ni una migración, ni una pantalla):
-`scripts/bamburu-backup.sh` (destino cifrado por defecto · guardián `type = crypt` que **aborta** ·
-`verify_uploaded()` reconstruida con `cryptcheck` y **sin rama blanda** · `verify_restored()` nueva) ·
-`deploy/systemd/bamburu-backup-secondary.service` · `CLAUDE.md` · `deploy/systemd/README.md` ·
-`docs/seguridad/vectores-de-ataque.md` · este fichero.
+### LO QUE IBRAHIN YA DECIDIÓ. NO SE VUELVE A PREGUNTAR.
 
-**Cómo se verificó** — pasada completa del script real contra un remote `crypt` de usar y tirar
-(backend local, sin red, sin tocar Drive ni el `.conf` de producción; borrado al terminar):
+**1 · Dónde vive la llave: en los DOS sitios, y por qué.** *Palabras de Ibrahin:* «si la llave vive
+solo en el servidor y el servidor desaparece, las copias no se abren. Si vive solo fuera, un
+despiste las pierde todas.»
 
-| Qué se probó | Resultado |
-|---|---|
-| Pasada completa a destino cifrado | **exit 0**, los **11 artefactos** «subido, verificado y restore OK» |
-| Nombres en el destino crudo | ni un `.db`, ni un `.tar.gz`, ni un nombre de negocio — solo base32 |
-| Guardián con `BACKUP_REMOTE=gdrive:Bamburu-backup/daily` (el destino en claro de hoy, con el `.conf` de producción) | **exit 1**, «el destino no es un remote cifrado (crypt). Copia ABORTADA», **cero artefactos subidos** |
-| `grep -n "hashsum MD5\|se valida solo por tamaño"` | **no devuelve nada** |
-| Un byte alterado en el **objeto cifrado del destino** | `cryptcheck` lo caza → **exit 1** |
-| Un byte alterado en el fichero **ya descargado** | `verify_restored` lo caza → **exit 1** |
-| El fichero descargado sustituido por **otra base real y válida** | `PRAGMA integrity_check` decía **`ok`**; solo el MD5 lo cazó → **exit 1**. Es exactamente el hueco que `verify_restored` viene a tapar, y antes de este cambio ese cambiazo **habría pasado en verde** |
+- **En el servidor**, en un fichero con **permisos restringidos**, para que **la copia y la
+  restauración funcionen solas**, sin nadie delante. El sitio natural es la propia configuración de
+  rclone (`~ubuntu/.config/rclone/rclone.conf`, modo `600`).
+- **NUNCA en `/etc/bamburu.env`.** Ese fichero entra **entero** en el `process.env` del proceso web:
+  meter ahí la llave la expone a cualquier cosa que lea el entorno de la aplicación.
+- **Y una copia para Ibrahin, entregada UNA sola vez, POR PANTALLA**, para que la guarde en su gestor
+  de contraseñas. **No va al registro, ni al tablero, ni a ningún fichero que llegue a git.**
 
-**⚠️ LO QUE FALTA, Y LO TIENE QUE HACER IBRAHIN.** Son pasos de terminal que el orquestador **no
-puede** ejecutar: `~/.config/rclone` está montado en **solo lectura** por el namespace de
-`orquestador.service` (`ProtectHome=read-only`, `ReadWritePaths=` solo el repo y `~/.claude`) y
-`NoNewPrivileges=yes` cierra `sudo`. Comprobado con y sin el aislamiento de la herramienta. No es un
-descuido del plano: es que un agente que construye solo está deliberadamente apartado de los secretos
-que viven fuera del repo — y `rclone.conf` guarda los tokens de OAuth de las dos cuentas de Drive,
-que son justo el activo que esta tarea protege.
+**2 · La comprobación nocturna tiene que DESCIFRAR, no comprobar que el fichero está.** Esa prueba
+**abre el contenido cifrado**. Sin eso se pueden pasar meses generando copias inservibles en
+silencio — **que es exactamente lo que costó abandonar Backblaze en junio**.
 
-1. **Crear los dos remotes `crypt`** (`gdrive_cif`, `gdrive_gili_cif`).
-2. **Custodiar la contraseña fuera del servidor.** Es una parada de verdad: las copias existen para
-   el día en que el servidor no esté; si la única copia de la clave vive en el servidor, ese día las
-   copias son ruido.
-3. **Instalar la unit de la secundaria** (`sudo cp deploy/systemd/bamburu-backup-secondary.service
-   /etc/systemd/system/ && sudo systemctl daemon-reload`) y lanzar la primera copia real de cada
-   cuenta a mano.
-4. **Migrar el histórico** (250 objetos, 416 MiB) y retirar el texto claro: copiar → `cryptcheck` 0
-   diferencias → simulacro → borrar. **Si `cryptcheck` no da 0, no se borra y se pregunta.** No es
-   opcional dejarlo caducar: la retención **salta los nombres indescifrables** con código 0, así que
-   el histórico en claro se quedaría ahí **para siempre**.
+---
 
-Los cuatro pasos, con sus comandos y sus condiciones de paso, están en `deploy/systemd/README.md`
-§«Cifrado de las copias».
+### CÓMO SE ENTREGA SIN QUE HAGA FALTA NADIE A MITAD
 
-> **🔴 CONSECUENCIA INMEDIATA, DICHA SIN ADORNARLA.** Las units ejecutan el script **directamente del
-> árbol de trabajo**, así que guardar el fichero ya es desplegarlo. **Hasta que exista el paso 1, las
-> copias de las 03:33 y las 03:35 abortan y mandan email de fallo.** No se pierde nada —los 14 días
-> de histórico siguen en Drive y no se ha borrado un solo objeto—, pero **no se genera copia nueva**.
-> Es el guardián haciendo su trabajo, y el email dice qué hacer. Se deja así a propósito: la
-> alternativa era un `BACKUP_REMOTE` en claro que sigue subiendo 203 clientes sin cifrar mientras la
-> documentación dice lo contrario, y eso es justo el fallo silencioso que esta tarea venía a matar.
+El orquestador **no puede** crear los remotes por su cuenta: hace falta escribir en
+`~/.config/rclone` y su unit tiene el `$HOME` en **solo lectura** (`ProtectHome=read-only`, y está
+bien que lo tenga). **Eso no es una parada a mitad: es el final.** La tarea se construye y se prueba
+entera sola, y **termina dejando un guion de un solo uso** que Ibrahin ejecuta cuando quiera.
 
-> **Apartada por el orquestador el 2026-09-01.** Esperando decisión de Ibrahin.
-> Motivo: el arquitecto declaró la tarea mal planteada
-> Registro: `docs/orquestador/tareas/cifrado-copias-seguridad.md`
+Ese guion, en una sola pasada y sin preguntas encadenadas:
 
-## TAREA — Que cada comprobación se traiga su propio negocio
+1. **Genera** la contraseña de cifrado (aleatoria, del tirón).
+2. **Crea los dos remotes `crypt`**, uno por cuenta, con **nombres de fichero y de carpeta cifrados
+   también** — el listado de Drive publica hoy `peluqueria-gil-…`, `helados-ibrahin-…`,
+   `inversiones-disan-…`: **cuántos negocios hay y cómo se llaman, sin abrir un solo fichero**.
+3. **Comprueba que descifra** antes de tocar nada: sube un fichero de prueba, lo baja y lo compara.
+4. **Solo entonces** cambia el destino de las dos copias.
+5. **Enseña la llave por pantalla una vez**, con el aviso de guardarla, y no la escribe en ningún
+   sitio más.
 
-- **id:** gates-con-negocio-propio
-- **estado:** pendiente
-- **origen:** decisión de Ibrahin del 1 sep 2026 (bloque 0 del encargo de cierre)
+**El punto 3 antes del 4 es la regla de arriba hecha orden de ejecución**, y es lo que impide repetir
+lo del 1 de septiembre.
 
-**Siete de los ocho negocios de esta máquina están `suspended_admin`** —`desarrollo-bamburu` desde
-el **25 ago 2026, 12:07:03**— y `readOnlyGuard` (`core/tenant-middleware.js`, montado en
-`index.js` con `app.use('*')` **antes de la autenticación**) devuelve **403 a todo lo que no sea
-GET/HEAD/OPTIONS**. Medido en el barrido del 1 sep: `✗ cita creada (API) — 403`, `✗ mover a un hueco
-libre → 200 — 403`, `✗ POST /api/erp/avisos/visto responde 200 (got 403)`.
+---
 
-**Cualquier comprobación que ESCRIBA en el negocio de desarrollo falla por esto, no por el
-producto.** Es ruido que tapa los rojos de verdad.
+### LO QUE YA ESTÁ APRENDIDO Y NO SE VUELVE A DESCUBRIR
 
-**LA DECISIÓN DE IBRAHIN, Y SU MOTIVO, EN SUS PALABRAS (1 sep 2026):** *«cada comprobación con su
-propio negocio. A la cola, sin prisa. No levantes el castigo al negocio de desarrollo: ese estado
-puede estar puesto a propósito para probar esa función.»*
+**No se parte de cero: se parte de `5834d79`.** El tercer intento resolvió cosas de verdad y están
+medidas. No se tiran:
 
-**NO SE TOCA `status` DE NINGÚN NEGOCIO VIVO.** Lo prohíbe además el propio `run-gates.mjs`: «no se
-cambia el estado de un negocio vivo para poner un gate en verde». El arreglo es que la comprobación
-se traiga lo suyo.
+- **Un remote `crypt` NO expone huellas.** `verify_uploaded()` pedía el MD5 a Drive, se tragaba el
+  `hash unsupported` con `2>/dev/null` y **caía en una rama blanda que escribía un aviso y devolvía
+  0**. Cifrar sin tocar esa función **habría apagado la verificación DEJÁNDOLA EN VERDE**, con los
+  correos diciendo «subido, verificado y restore OK». Es el patrón que `CLAUDE.md` tiene escrito con
+  nombre propio: *un censo que dice CERO y no es cierto es peor que no tenerlo, porque cierra la
+  pregunta*. La comparación la hace `rclone cryptcheck` sobre lo subido.
+- **`PRAGMA integrity_check` responde `ok` a una base válida pero DISTINTA.** Medido sustituyendo el
+  fichero descargado por otra base real: **el cambiazo pasaba en verde**. Por eso la prueba de
+  restauración tiene que exigir que el fichero baje **descifrado y byte a byte igual**.
+- **No hay ninguna rama blanda:** si una huella no se puede comparar, **es un fallo, no un aviso**.
 
-**El camino ya está abierto y probado:** **23 gates** están en `EMPIEZAN_DE_CERO`
-(`scripts/lib/gates-mapa.mjs`) y se traen su negocio con `provisionTenant()`; `gate-403-permiso` y
-`gate-historial-clinico` se pasaron a `negocioDesechable()` por esta misma causa. Se trata de
-extender eso, no de inventarlo.
+**Y lo que no se puede romper**, que ya venía en la tarea vieja y sigue igual de vigente: hay **DOS
+copias diarias** en dos cuentas distintas (principal 03:33 → `ibrahingil`, secundaria 03:35 →
+`gilibrahin`) **servidas por la MISMA pieza** — el script sin entorno es la principal y la unit de la
+secundaria sobreescribe `BACKUP_REMOTE`/`LABEL`/`SUFFIX`/`HC_URL`. **No se duplica el script.** Y las
+dos verifican MD5 y hacen prueba de restauración real: **el cifrado tiene que dejar esa verificación
+en pie**, porque si se cifra y deja de comprobarse que la copia abre, se cambia un riesgo por otro.
 
 **Criterios de aceptación**
 
-- [ ] Está la lista de qué comprobaciones escriben en `desarrollo-bamburu`, sacada de medir, no de suponer.
-- [ ] Cada una de esas se trae su propio negocio y **borra lo que creó en el `finally`, por su marca**
-      (la regla de `CLAUDE.md`: lo que una prueba crea, la prueba lo borra).
-- [ ] Ninguna comprobación cambia el `status` de un negocio existente.
-- [ ] Se declara en `EMPIEZAN_DE_CERO` cada gate convertido, para que el mapa y el código digan lo mismo
-      (hoy `--lista` avisa de dos que no cuadran).
-- [ ] **Verificación**: barrido completo antes y después, y la diferencia de rojos se explica gate a gate.
-      Vale apoyarse en la línea base con nombres de `docs/barridos/2026-09-01-los-113-rojos.md`.
+- [ ] Las dos copias suben **cifradas**, con **contenido y nombres** (de fichero y de carpeta) cifrados.
+- [ ] La llave vive en el servidor con permisos `600`, y **no** en `/etc/bamburu.env` ni en ningún
+      fichero versionado. `git log -p` y el árbol no la contienen.
+- [ ] Existe un guion de un solo uso que **genera, crea, comprueba que descifra, cambia el destino y
+      enseña la llave una vez por pantalla**, en ese orden, sin preguntas encadenadas.
+- [ ] **En ningún momento el código exige `crypt` sin que el destino `crypt` exista.** Se demuestra:
+      con la configuración de hoy —sin remotes `crypt`— **las dos copias siguen funcionando**.
+- [ ] La verificación de subida compara huellas **de verdad** (`cryptcheck`), sin rama blanda.
+- [ ] La prueba de restauración **descifra** y compara el fichero **byte a byte**, no solo
+      `integrity_check`.
+- [ ] Una sola pieza sirve las dos copias. El script no se duplica.
+- [ ] **Verificación en real, no en verde de laboratorio:** una pasada completa del script contra un
+      `crypt` de usar y tirar sobre backend local (sin red y sin tocar el `rclone.conf` de
+      producción), y **la comprobación de que la copia se puede ABRIR** partiendo solo de la llave.
 
-**Cuidado con lo que NO se puede romper:** las comprobaciones que prueban **el castigo mismo** —que un
-negocio suspendido NO deja escribir— necesitan un negocio suspendido y tienen que seguir teniéndolo.
+**No hay ningún paso que exija hablar con una persona a mitad.** La única intervención de Ibrahin es
+ejecutar el guion al final, cuando le venga bien, y guardar la llave que le enseñe.
+
+> ~~**Apartada por el orquestador el 2026-09-01.**~~ **Devuelta a la cola el 1 sep 2026** (bloque 2.1
+> del encargo de cierre), reescrita con las decisiones de Ibrahin dentro y sin el paso de
+> conversación que la atascaba.
+> Registro del intento anterior: `docs/orquestador/tareas/cifrado-copias-seguridad.md` · código de
+> partida: `5834d79`
 
 ## TAREA — Anclar la cadena de VERI*FACTU fuera del servidor
 
@@ -9175,6 +9172,52 @@ que aún no se pueden adjuntar no sirve de nada.
 > **La regla que queda, y es la lección:** una entrada de deuda que nadie contrasta con el código
 > fabrica trabajo fantasma sola. **Antes de convertir, se mide.**
 
+
+## TAREA — Que cada comprobación se traiga su propio negocio
+
+- **id:** gates-con-negocio-propio
+- **estado:** pendiente
+- **origen:** decisión de Ibrahin del 1 sep 2026 (bloque 0 del encargo de cierre)
+
+**Siete de los ocho negocios de esta máquina están `suspended_admin`** —`desarrollo-bamburu` desde
+el **25 ago 2026, 12:07:03**— y `readOnlyGuard` (`core/tenant-middleware.js`, montado en
+`index.js` con `app.use('*')` **antes de la autenticación**) devuelve **403 a todo lo que no sea
+GET/HEAD/OPTIONS**. Medido en el barrido del 1 sep: `✗ cita creada (API) — 403`, `✗ mover a un hueco
+libre → 200 — 403`, `✗ POST /api/erp/avisos/visto responde 200 (got 403)`.
+
+**Cualquier comprobación que ESCRIBA en el negocio de desarrollo falla por esto, no por el
+producto.** Es ruido que tapa los rojos de verdad.
+
+**LA DECISIÓN DE IBRAHIN, Y SU MOTIVO, EN SUS PALABRAS (1 sep 2026):** *«cada comprobación con su
+propio negocio. A la cola, sin prisa. No levantes el castigo al negocio de desarrollo: ese estado
+puede estar puesto a propósito para probar esa función.»*
+
+**NO SE TOCA `status` DE NINGÚN NEGOCIO VIVO.** Lo prohíbe además el propio `run-gates.mjs`: «no se
+cambia el estado de un negocio vivo para poner un gate en verde». El arreglo es que la comprobación
+se traiga lo suyo.
+
+**El camino ya está abierto y probado:** **23 gates** están en `EMPIEZAN_DE_CERO`
+(`scripts/lib/gates-mapa.mjs`) y se traen su negocio con `provisionTenant()`; `gate-403-permiso` y
+`gate-historial-clinico` se pasaron a `negocioDesechable()` por esta misma causa. Se trata de
+extender eso, no de inventarlo.
+
+**Criterios de aceptación**
+
+- [ ] Está la lista de qué comprobaciones escriben en `desarrollo-bamburu`, sacada de medir, no de suponer.
+- [ ] Cada una de esas se trae su propio negocio y **borra lo que creó en el `finally`, por su marca**
+      (la regla de `CLAUDE.md`: lo que una prueba crea, la prueba lo borra).
+- [ ] Ninguna comprobación cambia el `status` de un negocio existente.
+- [ ] Se declara en `EMPIEZAN_DE_CERO` cada gate convertido, para que el mapa y el código digan lo mismo
+      (hoy `--lista` avisa de dos que no cuadran).
+- [ ] **Verificación**: barrido completo antes y después, y la diferencia de rojos se explica gate a gate.
+      Vale apoyarse en la línea base con nombres de `docs/barridos/2026-09-01-los-113-rojos.md`.
+
+**Cuidado con lo que NO se puede romper:** las comprobaciones que prueban **el castigo mismo** —que un
+negocio suspendido NO deja escribir— necesitan un negocio suspendido y tienen que seguir teniéndolo.
+
+> **Va la ÚLTIMA de la cola a propósito.** Ibrahin lo dijo así: *«a la cola, sin prisa»*.
+> No hay nada roto — hay comprobaciones apoyadas en algo que no es suyo.
+
 ## Seguridad y datos
 
 - [~] **Cifrar las copias de seguridad.** ~~Cierra a la vez los vectores 4 y 7~~ ~~Es configuración (`rclone crypt`), no programación.~~ **⚙️ CÓDIGO HECHO EL 1 SEP 2026 · OPERACIÓN PENDIENTE DE IBRAHIN.** El script exige destino `crypt` y **aborta** si no lo es; la verificación de huellas se reconstruyó con `cryptcheck` + MD5 del fichero restaurado, sin rama blanda. **Las dos frases tachadas eran falsas:** cierra el vector 4 **entero** y **solo la mitad del 7** (falta `manifiesto-huellas-backups`), y **no era configuración**: cifrar sin tocar el código habría apagado la verificación de MD5 dejándola en verde. Faltan 4 pasos de terminal que el orquestador no puede dar (`~/.config/rclone` en solo lectura, sin `sudo`): crear los dos remotes `crypt`, custodiar la contraseña fuera del servidor, instalar la unit de la secundaria + primera copia real, y migrar el histórico. Ficha completa arriba, comandos en `deploy/systemd/README.md` §«Cifrado de las copias».
@@ -9259,6 +9302,59 @@ que aún no se pueden adjuntar no sirve de nada.
 - **No perseguir amplitud** (multi-moneda, nóminas, fabricación): es donde se pierde contra SAP.
 
 ## Decisiones tomadas el 1 sep 2026
+
+- **BLOQUE 2 — LAS DOS APARTADAS SALEN. NINGUNA DE LAS DOS ERA UNA DECISIÓN DE IBRAHIN.**
+  La lista de apartadas queda **VACÍA**.
+
+  **2.1 · «Cifrar las copias de seguridad» — REESCRITA Y DEVUELTA A LA COLA.**
+  Se apartó tras tres intentos, y los dos primeros del programador **no tocaron un solo fichero**.
+  **La causa no fue técnica:** la tarea se volcó **sin las decisiones que Ibrahin ya había tomado** y
+  con un paso —*«para y dime lo que has encontrado antes de seguir»*— que **solo funciona con una
+  persona delante**. El orquestador no tiene con quién parar a preguntar.
+
+  La versión nueva lleva **dentro** lo que Ibrahin decidió, con sus palabras y su motivo: la llave
+  vive **en el servidor** con permisos `600` —para que copia y restauración funcionen solas— **y**
+  se le entrega a él **una sola vez, por pantalla**, para su gestor de contraseñas; nunca al
+  registro, ni al tablero, ni a nada que llegue a git. *«Si la llave vive solo en el servidor y el
+  servidor desaparece, las copias no se abren. Si vive solo fuera, un despiste las pierde todas.»*
+  Y **la comprobación nocturna DESCIFRA**, no mira si el fichero está: *sin eso se pueden pasar meses
+  generando copias inservibles en silencio — lo que costó abandonar Backblaze en junio*.
+
+  **Se le ha quitado el paso de conversación, y no escondiéndolo:** el orquestador **no puede** crear
+  los remotes (hace falta escribir en `~/.config/rclone` y su unit tiene el `$HOME` en solo lectura,
+  y hace bien). Eso **no es una parada a mitad: es el final**. La tarea se construye y se prueba
+  entera sola y **termina dejando un guion de un solo uso** que Ibrahin ejecuta cuando quiera:
+  genera la llave → crea los dos `crypt` (con nombres de fichero **y de carpeta** cifrados, porque
+  hoy el listado de Drive publica cuántos negocios hay y cómo se llaman) → **comprueba que descifra**
+  → **solo entonces** cambia el destino → enseña la llave una vez.
+
+  **Ese orden es la lección del 1 sep hecha regla:** el código del intento 3 (`5834d79`) **se quedó
+  vivo aunque la tarea se apartó**, exigiendo `crypt` con unos remotes que nunca existieron y una
+  contraseña que nunca se generó. Las dos copias de la madrugada siguiente **habrían abortado**.
+  Criterio de aceptación nuevo y explícito: **nunca puede haber un momento en que el código exija
+  cifrado y el destino cifrado no exista** — y se demuestra comprobando que **con la configuración de
+  hoy las dos copias siguen funcionando**.
+
+  **No se parte de cero: se parte de `5834d79`.** Lo que aquel intento resolvió de verdad va escrito
+  en la tarea para no volver a descubrirlo: un remote `crypt` **no expone huellas** y la función que
+  las pedía **caía en una rama blanda que devolvía 0** —cifrar sin tocarla habría **apagado la
+  verificación dejándola en verde**—; y `PRAGMA integrity_check` **responde `ok` a una base válida
+  pero DISTINTA**, medido sustituyendo el fichero descargado, así que la prueba de restauración tiene
+  que exigir el fichero **descifrado y byte a byte igual**.
+
+  **2.2 · «Retirar las seis pantallas muertas» — CERRADA. No había nada que decidir.**
+  *Ibrahin:* «Ya la resolviste a mano esta mañana (`b2ec423`): los seis ficheros no existen desde el
+  24 de agosto. Sácala.» **Recomprobado antes de cerrarla, sin fiarse del commit anterior:** los seis
+  —`orders.js`, `discounts.js`, `shipping.js`, `feedback.js`, `reviews.js`, `newsletter.js`— dan
+  **0 en `git ls-files`, 0 en disco y 0 en `HEAD`**, con **0 importaciones** vivas.
+  La tarea **nunca fue cierta más de unas horas**: los seis se retiraron el 24 ago en `fe6bef0`, **el
+  mismo día** que se escribió la deuda que decía que seguían ahí. El arquitecto acertó al declararla
+  mal planteada; **lo que falló es que eso subió al móvil de Ibrahin como «decisión de producto»**, y
+  era una **premisa falsa**. Esa confusión es el bloque 4 de este encargo.
+
+  **La cola queda en 44**: las 42 del bloque 3, más `gates-con-negocio-propio` (decisión 2 del
+  bloque 0, colocada **la última** porque Ibrahin dijo «sin prisa») y `cifrado-copias-seguridad`, que
+  vuelve. La siguiente que cogería el orquestador es **el cifrado**.
 
 - **LAS DOS DECISIONES DEL BLOQUE 0, TOMADAS POR IBRAHIN (1 sep 2026).**
 
