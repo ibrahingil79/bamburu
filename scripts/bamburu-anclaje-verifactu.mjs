@@ -21,7 +21,7 @@ import { join, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { runMigrations } from '../modules/erp/models.js';
-import { anclar, motivoAnclajeInactivo } from '../modules/erp/verifactu-anclaje.js';
+import { anclar, motivoAnclajeInactivo, verificarAnclajes, textoVeredicto } from '../modules/erp/verifactu-anclaje.js';
 import { hoyLocal } from '../modules/erp/avisos.js';
 import { sendEmail } from '../core/mailer.js';
 import { initControlDb, controlDb } from '../core/control-db.js';
@@ -79,9 +79,13 @@ async function procesar(path) {
 }
 
 // ── Correo diario, UNA vez por fecha (marca en settings de control.db) ──────────────────────────
-// Lee el estado ACTUAL de cada negocio (no solo lo que hizo este barrido: el primer barrido del día
-// puede correr antes de que a un negocio le toque su latido). Los negocios sin ningún dato fiscal
-// (facturas ni registros) no aparecen: nunca los ancla `anclar()`, así que no tienen nada que contar.
+// Antes de componer la fila de cada negocio, recorre la cadena ENTERA (verificarAnclajes sin límite)
+// y guarda el veredicto en verifactu_anclajes_auditorias: es "alguien recorre la cadena entera una vez
+// al día" (docs/verifactu/anclaje-externo.md). Abre cada BD en lectura/escritura —a diferencia de
+// antes, que la abría readonly— porque esa auditoría es la única escritura de este bucle, y es de
+// solo-añadir. Los negocios sin ningún dato fiscal (facturas ni registros) no aparecen: nunca los
+// ancla `anclar()`, así que no tienen nada que contar. Cada negocio va en su propio try/catch: un
+// .db raro no debe dejar sin correo a TODOS los negocios (era justo lo que pasaba antes).
 async function mandarCorreoDiario() {
   initControlDb();
   if (controlDb.prepare('SELECT value FROM settings WHERE key=?').get(MARCA_KEY)) {
@@ -90,38 +94,46 @@ async function mandarCorreoDiario() {
 
   const filas = [];
   const attachments = [];
+  let algunaAlarma = false;
   let algunoSinSellar = false;
 
   for (const path of tenantDbs()) {
     const slug = basename(path, '.db');
-    const db = new Database(path, { readonly: true });
+    let db;
     try {
+      db = new Database(path);
+      runMigrations(db);   // idempotente: garantiza verifactu_anclajes_auditorias en bases antiguas
+
       const nInv = db.prepare('SELECT COUNT(*) c FROM invoices').get().c;
       const nReg = db.prepare('SELECT COUNT(*) c FROM verifactu_registros').get().c;
       if (nInv === 0 && nReg === 0) continue;
 
-      const ultimo = db.prepare(`SELECT * FROM verifactu_anclajes WHERE estado='sellado' ORDER BY secuencia DESC LIMIT 1`).get();
-      if (!ultimo) {
-        algunoSinSellar = true;
-        const motivo = motivoAnclajeInactivo(slug);
-        filas.push({ slug, texto: 'Nunca se ha sellado nada.' + (motivo ? ' (' + motivo + ')' : '') });
-        continue;
-      }
+      const veredicto = verificarAnclajes(db);
+      db.prepare(`INSERT INTO verifactu_anclajes_auditorias
+          (veredicto, total_filas, sellados, verificados, sin_comprobar, fuera_de_ventana, alarmadas, alarma_secuencia, alarma_motivo)
+          VALUES (?,?,?,?,?,?,?,?,?)`)
+        .run(veredicto.veredicto, veredicto.totalFilas, veredicto.sellados, veredicto.verificados,
+          veredicto.sinComprobar, veredicto.fueraDeVentana, veredicto.alarmadas,
+          veredicto.alarma ? veredicto.alarma.secuencia : null, veredicto.alarma ? veredicto.alarma.motivo : null);
 
-      filas.push({
-        slug,
-        texto: nInv + ' factura(s) · sello ' + (ultimo.sellado_at || ultimo.created_at)
-          + ' · raíz ' + ultimo.raiz + ' · TSA ' + ultimo.tsa_url,
-      });
-      if (ultimo.token) attachments.push({ filename: slug + '-anclaje-' + ultimo.secuencia + '.tsr', content: ultimo.token });
+      if (veredicto.veredicto === 'alarma') algunaAlarma = true;
+      if (veredicto.veredicto === 'sin-sellos') algunoSinSellar = true;
+
+      filas.push({ slug, texto: textoVeredicto(veredicto) });
+      const ultimo = veredicto.ultimo;
+      if (ultimo && ultimo.token) attachments.push({ filename: slug + '-anclaje-' + ultimo.secuencia + '.tsr', content: ultimo.token });
+    } catch (e) {
+      log(slug + ': EXCEPCIÓN en la auditoría diaria: ' + (e.stack || e.message));
+      filas.push({ slug, texto: 'no se pudo auditar hoy: ' + (e.message || e) });
     } finally {
-      db.close();
+      if (db) db.close();
     }
   }
 
   if (!filas.length) { log('correo diario: ningún negocio con material fiscal que reportar'); return; }
 
-  const asunto = 'Sellado externo Verifactu — ' + HOY + (algunoSinSellar ? ' · ⚠️ sin sellar' : '');
+  const asunto = 'Sellado externo Verifactu — ' + HOY
+    + (algunaAlarma ? ' · ⚠️ ALARMA' : (algunoSinSellar ? ' · ⚠️ sin sellar' : ''));
   const texto = filas.map(f => '· ' + f.slug + ': ' + f.texto).join('\n');
   const html = '<p>Estado del anclaje externo de VERI*FACTU, ' + escHtml(HOY) + ':</p><ul>'
     + filas.map(f => '<li><strong>' + escHtml(f.slug) + '</strong>: ' + escHtml(f.texto) + '</li>').join('') + '</ul>';
@@ -137,7 +149,8 @@ async function mandarCorreoDiario() {
   if (r && r.error) { log('correo diario: NO enviado: ' + (r.error.message || JSON.stringify(r.error))); return; }
 
   controlDb.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(MARCA_KEY, new Date().toISOString());
-  log('correo diario: enviado a ' + MAILTO + ' · ' + filas.length + ' negocio(s)' + (algunoSinSellar ? ' · ⚠️ sin sellar' : ''));
+  log('correo diario: enviado a ' + MAILTO + ' · ' + filas.length + ' negocio(s)'
+    + (algunaAlarma ? ' · ⚠️ ALARMA' : (algunoSinSellar ? ' · ⚠️ sin sellar' : '')));
 }
 
 let anclados = 0, fallos = 0;

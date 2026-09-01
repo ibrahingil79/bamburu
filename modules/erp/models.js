@@ -1605,13 +1605,13 @@ export function runMigrations(db) {
   // Cada anclaje congela, con la firma de una TSA que no somos nosotros, la raíz (SHA-256) de todo
   // el material fiscal del negocio hasta un corte exacto (los tres MAX(id) de abajo). Numerados y
   // encadenados entre sí (raiz_anterior): el contador monótono que hace que un hueco se vea. NO toca
-  // ninguna tabla existente, ni añade ninguna columna a ninguna. Solo LEE invoices, invoice_anulaciones
-  // y verifactu_registros. Detalle completo en modules/erp/verifactu-anclaje.js y
-  // docs/verifactu/anclaje-externo.md.
+  // ninguna tabla existente. Solo LEE invoices, invoice_anulaciones y verifactu_registros. Detalle
+  // completo en modules/erp/verifactu-anclaje.js y docs/verifactu/anclaje-externo.md.
   db.exec(`CREATE TABLE IF NOT EXISTS verifactu_anclajes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     secuencia INTEGER NOT NULL,              -- 1,2,3… sin huecos. El contador monótono de la TSE alemana.
-    raiz TEXT NOT NULL,                      -- SHA-256 hex MAYÚSCULAS de lo de abajo
+    raiz TEXT NOT NULL,                      -- SHA-256 hex MAYÚSCULAS de la cabecera (barata, O(1)) de esta fila
+    raiz_fiscal TEXT,                        -- SHA-256 hex MAYÚSCULAS del material fiscal hasta el corte (cara, O(facturas))
     raiz_anterior TEXT NOT NULL DEFAULT '',  -- raiz del anclaje secuencia-1 ('' en el primero)
     hasta_invoice_id INTEGER NOT NULL,       -- MAX(id) de invoices en el momento del corte
     hasta_anulacion_id INTEGER NOT NULL,
@@ -1624,12 +1624,34 @@ export function runMigrations(db) {
     tsa_url TEXT NOT NULL,
     token BLOB,                              -- el .tsr entero, ~2 KB. NULL si el sello falló.
     sellado_at TEXT,                         -- hora que dice la TSA (no la nuestra), ISO-8601
-    estado TEXT NOT NULL DEFAULT 'pendiente',-- 'sellado' | 'fallo'
+    estado TEXT NOT NULL,                    -- 'sellado' | 'fallo'. Sin DEFAULT: ningún camino lo deja sin poner,
+                                              -- y así una fila sin estado es una alarma, no un valor por omisión.
     error TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );`);
+  addCol(db, 'verifactu_anclajes', 'raiz_fiscal', 'TEXT');
   // Parcial a propósito: los intentos fallidos se guardan con secuencia = 0 y no compiten entre sí.
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_verifactu_anclajes_sec ON verifactu_anclajes(secuencia) WHERE secuencia > 0');
+
+  // ── VERI*FACTU · Anclaje externo — el veredicto de recorrer la cadena ENTERA, con su fecha (aditiva) ──
+  // De solo-añadir: una fila por pasada diaria del barrido (scripts/bamburu-anclaje-verifactu.mjs),
+  // que es el único escritor. La pantalla y el correo SOLO leen la última fila, y la pantalla caduca
+  // su propio verde cuando `corrida_at` tiene más de 2×ANCLAJE_LATIDO_H — un veredicto guardado sin
+  // fecha de caducidad es un censo que dice CERO (CLAUDE.md, censo de ventanitas). Ningún DROP, ninguna
+  // columna tocada en ninguna tabla existente.
+  db.exec(`CREATE TABLE IF NOT EXISTS verifactu_anclajes_auditorias (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    corrida_at DATETIME DEFAULT CURRENT_TIMESTAMP,  -- cuándo se recorrió la cadena ENTERA
+    veredicto TEXT NOT NULL,                        -- cuadra | parcial | sin-comprobar | alarma | sin-sellos
+    total_filas INTEGER NOT NULL,                   -- COUNT(*) de verifactu_anclajes, TODAS
+    sellados INTEGER NOT NULL,
+    verificados INTEGER NOT NULL,                   -- con prueba criptográfica positiva
+    sin_comprobar INTEGER NOT NULL,
+    fuera_de_ventana INTEGER NOT NULL,
+    alarmadas INTEGER NOT NULL,
+    alarma_secuencia INTEGER,
+    alarma_motivo TEXT
+  );`);
 
   // ── PORTAL DE CLIENTE · Bloque C — enlaces mágicos temporales (aditiva) ──
   // El cliente accede por /portal/<token> (sin contraseña). El token es temporal y solo da acceso a

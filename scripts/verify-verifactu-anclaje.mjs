@@ -1,26 +1,49 @@
 // Verificación VERI*FACTU · ANCLAJE EXTERNO — la cadena, sellada por un tercero (RFC-3161), fuera
-// del servidor. §4.9 del plano (docs/architecture/task-anclar-verifactu-fuera-analysis.md).
+// del servidor. Replanteo nº1 (docs/architecture/task-anclar-verifactu-fuera-analysis.md): el juez
+// dejó de ser una lista de motivos de alarma (el verde era su valor por defecto) y pasó a ser un
+// CLASIFICADOR — cada fila cae en un cubo, y el veredicto se calcula contando. Este gate ya no
+// persigue ataques imaginados: barre TODAS las columnas de verifactu_anclajes contra una tabla
+// declarada, y falla si aparece una que nadie ha clasificado.
 //   node scripts/verify-verifactu-anclaje.mjs
 //
 // Levanta su PROPIA TSA local de usar y tirar (CA + firmante generados con openssl, servidor
 // RFC-3161 servido con `openssl ts -reply`, igual que el simulador SOAP de verify-verifactu-cola.mjs
-// pero para sellado de tiempo). Sin red, sin secretos, sin tocar nada del servidor — salvo los DOS
-// puntos que la propia pantalla necesita comprobar SERVIDA (criterio 1 y el último de §6), que van
-// contra el servidor real (localhost:3000) con un negocio DESECHABLE (negocioDesechable()): nace y
-// se tira entero al final, así que nada de lo que crea puede quedar pegado a una factura de verdad.
+// pero para sellado de tiempo). Sin red, sin secretos, sin tocar nada del servidor — salvo los puntos
+// que la propia pantalla necesita comprobar SERVIDA, que van contra el servidor real (localhost:3000)
+// con un negocio DESECHABLE (negocioDesechable()): nace y se tira entero al final, así que nada de lo
+// que crea puede quedar pegado a una factura de verdad.
 //
-// Bloques, en el orden del plano:
-//   1. Inactivo por defecto (sin VERIFACTU_ANCLAJE_TSA) + la pantalla lo dice sin abrir el código.
-//   2. Ida y vuelta real contra la TSA local: se ancla, se verifica y se guarda.
-//   3. Token corrupto: NO se persiste, estado='fallo'.
-//   4. Manipulación (sobre una COPIA): verifyTenantInvoices da verde, verificarAnclajes da ROJO.
-//   5. Borrado del anclaje del medio: verificarAnclajes da ROJO por hueco.
-//   6. No toca nada: SHA-256 de invoices/invoice_anulaciones/verifactu_registros idéntico antes y
-//      después de una pasada COMPLETA de scripts/bamburu-anclaje-verifactu.mjs; y esos 4 ficheros de
-//      la familia Verifactu no están en el diff de la rama.
-//   7. Solo sale una huella: los bytes que recibe la TSA no llevan NIF, número de factura, cliente
-//      ni importe.
-//   8. Latido: sin material nuevo, +25 h ancla igual; a las +2 h del nuevo, no.
+// Bloques, en el orden del plano (§4 y §6 del análisis):
+//   0.  Estático: el literal 'cuadra' aparece UNA sola vez, el veredicto se inicializa a 'alarma', y
+//       verificarAnclajes() no devuelve ningún campo `ok` (criterio 1).
+//   1.  Inactivo por defecto (sin VERIFACTU_ANCLAJE_TSA) + la pantalla lo dice sin abrir el código.
+//   2.  Ida y vuelta real contra la TSA local: se ancla, se verifica y se guarda.
+//   2c. Sin certificado raíz, el juez no dice que todo está en orden (veredicto 'sin-comprobar').
+//   3.  Token corrupto: NO se persiste, estado='fallo'.
+//   4.  Manipulación de MATERIAL FISCAL (sobre una COPIA), cubierta solo por el anclaje MÁS VIEJO:
+//       verifyTenantInvoices da verde, verificarAnclajes da 'alarma' nombrando el anclaje y su fecha
+//       (criterio 6).
+//   5.  Borrado del anclaje del medio: 'alarma' por hueco.
+//   6.  No toca nada: SHA-256 de invoices/invoice_anulaciones/verifactu_registros idéntico antes y
+//       después de una pasada COMPLETA de scripts/bamburu-anclaje-verifactu.mjs; esa pasada escribe
+//       una fila en verifactu_anclajes_auditorias (criterio 5, parte 1); y esos 4 ficheros de la
+//       familia Verifactu no están en el diff de la rama.
+//   6b. Alguien recorre la cadena entera, y su verde caduca: la pantalla enseña esa auditoría con su
+//       antigüedad, y deja de pintarla en verde en cuanto pasa de 2×ANCLAJE_LATIDO_H (criterio 5).
+//   7.  Solo sale una huella: los bytes que recibe la TSA no llevan NIF, número de factura, cliente
+//       ni importe.
+//   8.  Latido: sin material nuevo, +25 h ancla igual; a las +2 h del nuevo, no.
+//   9.  Barrido por columnas: PRAGMA table_info(verifactu_anclajes) contra una tabla declarada, con
+//       autotest (una columna de mentira SÍ se detecta) y los `motivo` de las exenciones (`id`,
+//       `created_at`) comprobados LITERALES en docs/verifactu/anclaje-externo.md (criterios 2 y 3).
+//   10. Mutaciones de fila y de ventana: borrar el anclaje MÁS VIEJO (recorrido completo), borrar el
+//       ÚLTIMO, estado='fallo' sobre uno con secuencia y sello, comprobar con limite=1 habiendo 3
+//       (criterio 2).
+//   11. El botón no puede decir que todo está en orden: con más anclajes que
+//       ANCLAJE_COMPROBAR_LIMITE, el POST real redirige con v=parcial y ningún «cuadra» en la
+//       respuesta (criterio 4).
+//   12. Estático: el correo diario lleva ⚠️ ALARMA en el asunto si algún negocio sale en alarma.
+//   13. /superadmin/integridad y /admin/verifactu/anclajes responden 200 con su URL final (criterio 8).
 import http from 'http';
 import { execFileSync, spawn } from 'child_process';
 import { mkdtempSync, writeFileSync, readFileSync, unlinkSync, copyFileSync, rmSync, statSync, readdirSync } from 'fs';
@@ -32,7 +55,7 @@ import { negocioDesechable } from './lib/negocio-desechable.mjs';
 import { APP_DIR } from './lib/gate-env.mjs';
 import { createInvoice, anularInvoice } from '../modules/erp/routes/invoices.js';
 import { verifyTenantInvoices } from '../modules/superadmin/integridad.js';
-import { motivoAnclajeInactivo, anclar, verificarAnclajes } from '../modules/erp/verifactu-anclaje.js';
+import { motivoAnclajeInactivo, anclar, verificarAnclajes, textoVeredicto, ANCLAJE_COMPROBAR_LIMITE, ANCLAJE_LATIDO_H } from '../modules/erp/verifactu-anclaje.js';
 import { controlDb } from '../core/control-db.js';
 
 const APEX = 'http://127.0.0.1:3000';
@@ -50,9 +73,9 @@ const noVerificado = (m, det) => { sinVerificar++; say('  ⚠ NO VERIFICADO: ' +
 // Variante NO FATAL de `exigeCodigoServido` (scripts/lib/gate-env.mjs): esta sesión no tiene sudo
 // para reiniciar el servicio (el orquestador tampoco lo tiene — `orchestrator/nucleo/despliegue.js`
 // solo lo DETECTA y le pide a un humano que lo arregle). En vez de abortar el gate ENTERO —que
-// tumbaría también los bloques 2 a 8, que no necesitan el servidor vivo para nada—, los dos puntos
-// que sí lo necesitan se saltan CON AVISO EXPLÍCITO (`noVerificado`, no cuenta como ✓) si el proceso
-// está desfasado. Un ✓ conseguido contra código viejo sería peor que no tenerlo.
+// tumbaría también los bloques que no necesitan el servidor vivo para nada—, los puntos que sí lo
+// necesitan se saltan CON AVISO EXPLÍCITO (`noVerificado`, no cuenta como ✓) si el proceso está
+// desfasado. Un ✓ conseguido contra código viejo sería peor que no tenerlo.
 function servidorSirveCodigoFresco() {
   let arranque;
   try { arranque = Date.parse(execFileSync('systemctl', ['show', 'bamburu', '-p', 'ActiveEnterTimestamp', '--value'], { encoding: 'utf8' }).trim()); }
@@ -154,6 +177,16 @@ const shaTablasFiscales = db => sha256(JSON.stringify({
   reg: db.prepare('SELECT * FROM verifactu_registros ORDER BY id').all(),
 }));
 
+// Copia el .db de trabajo, la registra para que el `finally` la borre SIEMPRE, y devuelve la conexión
+// abierta. Toda mutación de este gate va sobre una copia: una factura tocada no se puede "destocar"
+// si entrara en la cadena.
+function abrirCopia(rutaOrigen, tsaDir, copiasArr, etiqueta) {
+  const ruta = join(tsaDir, 'copia-' + etiqueta.replace(/[^a-z0-9]/gi, '-') + '-' + randomBytes(3).toString('hex') + '.db');
+  copyFileSync(rutaOrigen, ruta);
+  copiasArr.push(ruta);
+  return { ruta, db: new Database(ruta) };
+}
+
 let neg = null;
 let tsa = null;
 let tsaDir = null;
@@ -168,6 +201,24 @@ function restaurarEnv() {
 }
 
 try {
+  say('\n=== [0] Estático: el verde se gana (criterio 1) ===\n');
+  const fuenteJuez = readFileSync(join(APP_DIR, 'modules/erp/verifactu-anclaje.js'), 'utf8');
+  const literalCuadra = fuenteJuez.match(/'cuadra'/g) || [];
+  ok(literalCuadra.length === 1, `el literal 'cuadra' aparece UNA sola vez en verifactu-anclaje.js`, String(literalCuadra.length));
+  ok(/let\s+veredicto\s*=\s*'alarma'/.test(fuenteJuez), `la variable del veredicto se inicializa a 'alarma'`);
+  const funcMatch = fuenteJuez.match(/export function verificarAnclajes\(db, opts = \{\}\) \{[\s\S]*?\n\}\n/);
+  ok(!!funcMatch, 'se localiza el cuerpo completo de verificarAnclajes() para las comprobaciones de abajo');
+  const cuerpoJuez = funcMatch ? funcMatch[0] : '';
+  ok(!/\bok\b/.test(cuerpoJuez), 'verificarAnclajes() no menciona ningún campo `ok` en su propio cuerpo (ni lo devuelve)');
+  const posCuadra = cuerpoJuez.indexOf("veredicto = 'cuadra'");
+  const antesDeCuadra = posCuadra >= 0 ? cuerpoJuez.slice(0, posCuadra) : '';
+  ok(
+    /cuadranLosCubos/.test(antesDeCuadra) && /alarmadas > 0/.test(antesDeCuadra)
+      && /fueraDeVentana > 0/.test(antesDeCuadra) && /sinComprobar > 0/.test(antesDeCuadra)
+      && /verificados === sellados/.test(antesDeCuadra),
+    'la asignación del veredicto verde está precedida por las comprobaciones de cuadranLosCubos, alarmadas, fueraDeVentana, sinComprobar y verificados===sellados',
+  );
+
   say('\n=== Prepara el negocio DESECHABLE y la TSA local ===\n');
   for (const k of ENV_KEYS) delete process.env[k];   // arranca APAGADO, como en producción hoy
 
@@ -215,7 +266,7 @@ try {
   ok(r2.anclado === true && r2.secuencia === 1, 'primer anclaje: sellado, secuencia 1', JSON.stringify(r2));
   ok(r2.cadenaOk === true, 'la cadena propietaria cuadraba en ese momento');
   const fila2 = neg.db.prepare('SELECT * FROM verifactu_anclajes WHERE secuencia=1').get();
-  ok(!!fila2 && fila2.estado === 'sellado' && !!fila2.token, 'la fila queda sellado, con su token guardado');
+  ok(!!fila2 && fila2.estado === 'sellado' && !!fila2.token && !!fila2.raiz_fiscal, 'la fila queda sellado, con su token y su raiz_fiscal guardados');
   writeFileSync(join(tsaDir, 'verifica2.tsr'), fila2.token);
   const salidaVerify2 = execFileSync('openssl', ['ts', '-verify', '-digest', fila2.raiz.toLowerCase(), '-in', join(tsaDir, 'verifica2.tsr'), '-CAfile', tsa.caPem]).toString();
   ok(/Verification: OK/.test(salidaVerify2), 'el token GUARDADO verifica de verdad con openssl ts -verify');
@@ -230,14 +281,14 @@ try {
     ok(!htmlPantalla2.includes('Nunca se ha sellado nada'), 'y ya NO dice "Nunca se ha sellado nada"');
   }
 
-  say('\n=== [2c] Sin certificado raíz, el juez NO dice «cuadra»: estado explícito ok=null ===\n');
+  say('\n=== [2c] Sin certificado raíz, el juez no dice que todo está en orden ===\n');
   const caGuardado = process.env.VERIFACTU_ANCLAJE_TSA_CA;
   delete process.env.VERIFACTU_ANCLAJE_TSA_CA;
   const veredictoSinCa = verificarAnclajes(neg.db);
-  ok(veredictoSinCa.ok === null && veredictoSinCa.sinComprobar > 0, 'sin VERIFACTU_ANCLAJE_TSA_CA, verificarAnclajes() NO devuelve ok:true — devuelve ok:null con sinComprobar>0', JSON.stringify(veredictoSinCa));
+  ok(veredictoSinCa.veredicto === 'sin-comprobar' && veredictoSinCa.sinComprobar > 0, `sin VERIFACTU_ANCLAJE_TSA_CA, verificarAnclajes() da veredicto 'sin-comprobar' (nunca el verde)`, JSON.stringify(veredictoSinCa));
   process.env.VERIFACTU_ANCLAJE_TSA_CA = caGuardado;
   const veredictoConCa = verificarAnclajes(neg.db);
-  ok(veredictoConCa.ok === true, 'y con el certificado de vuelta, verificarAnclajes() vuelve a decir ok:true', JSON.stringify(veredictoConCa));
+  ok(veredictoConCa.veredicto === 'cuadra' && veredictoConCa.verificados === veredictoConCa.sellados, 'y con el certificado de vuelta, el veredicto vuelve a decir que todo está en orden', JSON.stringify(veredictoConCa));
 
   say('\n=== [3] Token corrupto: NO se persiste, estado=fallo ===\n');
   const f3 = createInvoice(neg.db, { client_id: clienteId, issue_date: '2026-03-02', irpf_rate: 0, lines: [{ description: 'Otro servicio', quantity: 1, unit_price: 40, tax_rate: 21 }] });
@@ -261,12 +312,9 @@ try {
   const r3c = await anclar(neg.db);
   ok(r3c.anclado === true && r3c.secuencia === 3, 'un tercer anclaje, secuencia 3 (necesario para el bloque 5: borrar el del MEDIO)', JSON.stringify(r3c));
 
-  say('\n=== [4] Manipulación sobre una COPIA: verifyTenantInvoices da verde, verificarAnclajes da ROJO ===\n');
+  say('\n=== [4] Material fiscal tocado, cubierto SOLO por el anclaje MÁS VIEJO (criterio 6) ===\n');
   neg.db.pragma('wal_checkpoint(TRUNCATE)');
-  const copia4 = join(tsaDir, 'copia-manipulada.db');
-  copyFileSync(neg.abs, copia4);
-  copias.push(copia4);
-  const db4 = new Database(copia4);
+  const { ruta: ruta4, db: db4 } = abrirCopia(neg.abs, tsaDir, copias, 'material-tocado');
   try {
     const facturaTocada = db4.prepare('SELECT * FROM invoices WHERE id=?').get(f1.id);
     db4.prepare('UPDATE invoices SET total = total + 0.01 WHERE id=?').run(f1.id);
@@ -282,23 +330,21 @@ try {
       upd.run(hash, prev, inv.id);
       prev = hash;
     }
-    const chequeoPropio = verifyTenantInvoices(copia4);
+    const chequeoPropio = verifyTenantInvoices(ruta4);
     ok(chequeoPropio.ok === true, 'la cadena PROPIETARIA (recalculada por el atacante) da verde: cuadra consigo misma', JSON.stringify(chequeoPropio));
     const veredicto4 = verificarAnclajes(db4);
-    ok(veredicto4.ok === false, 'y verificarAnclajes() da ROJO: el sello externo NO cuadra con lo tocado', JSON.stringify(veredicto4.alarma));
+    ok(veredicto4.veredicto === 'alarma', 'y verificarAnclajes() da alarma: el sello externo NO demuestra que el material siga intacto', JSON.stringify(veredicto4.alarma));
     ok(!!veredicto4.alarma && veredicto4.alarma.secuencia >= 1 && !!veredicto4.alarma.sellado_at, 'la alarma nombra el anclaje y su fecha de sello', JSON.stringify(veredicto4.alarma));
+    ok(veredicto4.alarma?.secuencia === 1, 'y como f1 SOLO la cubre el anclaje más viejo (secuencia 1), la búsqueda binaria señala justo a ese, no al último', JSON.stringify(veredicto4.alarma));
   } finally { db4.close(); }
 
-  say('\n=== [5] Borrado del anclaje del medio: verificarAnclajes da ROJO por hueco ===\n');
-  const copia5 = join(tsaDir, 'copia-borrado.db');
-  copyFileSync(neg.abs, copia5);
-  copias.push(copia5);
-  const db5 = new Database(copia5);
+  say('\n=== [5] Borrado del anclaje del medio: alarma por hueco ===\n');
+  const { db: db5 } = abrirCopia(neg.abs, tsaDir, copias, 'borrado-medio');
   try {
     ok(db5.prepare("SELECT COUNT(*) c FROM verifactu_anclajes WHERE estado='sellado'").get().c === 3, 'la copia parte de los 3 anclajes sellados');
     db5.prepare('DELETE FROM verifactu_anclajes WHERE secuencia=2').run();
     const veredicto5 = verificarAnclajes(db5);
-    ok(veredicto5.ok === false, 'sin el anclaje 2, verificarAnclajes() da ROJO', JSON.stringify(veredicto5.alarma));
+    ok(veredicto5.veredicto === 'alarma', 'sin el anclaje 2, verificarAnclajes() da alarma', JSON.stringify(veredicto5.alarma));
     ok(/anclaje|hueco|falta/i.test(veredicto5.alarma?.motivo || ''), 'y el motivo habla de la cadena de anclajes rota', veredicto5.alarma?.motivo);
   } finally { db5.close(); }
 
@@ -306,6 +352,7 @@ try {
   const f6 = createInvoice(neg.db, { client_id: clienteId, issue_date: '2026-03-04', irpf_rate: 0, lines: [{ description: 'Cuarto servicio', quantity: 1, unit_price: 60, tax_rate: 21 }] });
   const shaAntes = shaTablasFiscales(neg.db);
   const anclajesAntes = neg.db.prepare('SELECT COUNT(*) c FROM verifactu_anclajes').get().c;
+  const auditoriasAntes = neg.db.prepare('SELECT COUNT(*) c FROM verifactu_anclajes_auditorias').get().c;
   // ASÍNCRONO a propósito (spawn, no execFileSync): la TSA de mentira vive DENTRO de este mismo
   // proceso (http.createServer). Un execFileSync bloquea el bucle de eventos entero mientras el hijo
   // corre, y entonces la TSA no puede contestar sus propias peticiones — el hijo se queda esperando
@@ -335,6 +382,38 @@ try {
   const rotos = intocables.filter(f => tocados.includes(f));
   ok(rotos.length === 0, 'ninguno de los 4 ficheros intocables de la familia Verifactu está en el diff de la rama', rotos.join(', ') || '(ninguno)');
 
+  say('\n=== [6-audit] Alguien recorre la cadena entera: la pasada escribió su veredicto (criterio 5.1) ===\n');
+  const auditoriasDespues = neg.db.prepare('SELECT COUNT(*) c FROM verifactu_anclajes_auditorias').get().c;
+  ok(auditoriasDespues > auditoriasAntes, 'la pasada completa insertó (al menos) una fila en verifactu_anclajes_auditorias', auditoriasAntes + ' → ' + auditoriasDespues);
+  const ultimaAuditoria = neg.db.prepare('SELECT * FROM verifactu_anclajes_auditorias ORDER BY id DESC LIMIT 1').get();
+  const selladosDespues = neg.db.prepare(`SELECT COUNT(*) c FROM verifactu_anclajes WHERE estado='sellado'`).get().c;
+  ok(
+    !!ultimaAuditoria && ultimaAuditoria.veredicto === 'cuadra' && ultimaAuditoria.verificados === ultimaAuditoria.sellados && ultimaAuditoria.sellados === selladosDespues,
+    'y esa auditoría dice que está ENTERO en orden, cubriendo la totalidad de los sellados (no un tramo)',
+    JSON.stringify(ultimaAuditoria),
+  );
+
+  say('\n=== [6b] La pantalla enseña esa auditoría fresca, y deja de pintarla en verde en cuanto caduca (criterio 5.2) ===\n');
+  if (!codigoFresco) {
+    noVerificado('GET /admin/verifactu/anclajes (auditoría)', 'mismo motivo: código en disco más nuevo que el arranque del proceso');
+  } else {
+    const rFresca = await fetch(APEX + '/admin/verifactu/anclajes', { headers: { cookie: cookieNeg } });
+    const htmlFresca = await rFresca.text();
+    ok(rFresca.status === 200 && htmlFresca.includes('Última auditoría completa'), 'con la auditoría reciente, la pantalla muestra el bloque de la auditoría completa');
+    ok(!htmlFresca.includes('ya no vale'), 'y, fresca, NO dice que el resultado ya no vale');
+
+    // Se envejece la fila A MANO (no se espera un día de verdad) para comprobar la caducidad.
+    const horasViejas = ANCLAJE_LATIDO_H * 2 + 1;
+    const fechaVieja = new Date(Date.now() - horasViejas * 3600 * 1000).toISOString();
+    neg.db.prepare('UPDATE verifactu_anclajes_auditorias SET corrida_at=? WHERE id=?').run(fechaVieja, ultimaAuditoria.id);
+    const rVieja = await fetch(APEX + '/admin/verifactu/anclajes', { headers: { cookie: cookieNeg } });
+    const htmlVieja = await rVieja.text();
+    ok(rVieja.status === 200 && htmlVieja.includes('ya no vale'), `con la auditoría de hace ${horasViejas} h (más de 2×${ANCLAJE_LATIDO_H}), la pantalla dice que ya no vale`);
+    // Se devuelve la fecha a como estaba: el resto del gate (y el correo, si algo quedara pendiente)
+    // sigue viendo la auditoría como lo que fue de verdad.
+    neg.db.prepare('UPDATE verifactu_anclajes_auditorias SET corrida_at=? WHERE id=?').run(ultimaAuditoria.corrida_at, ultimaAuditoria.id);
+  }
+
   say('\n=== [7] Solo sale una huella: los bytes que recibe la TSA no llevan datos de negocio ===\n');
   ok(tsa.capturados.length > 0, 'la TSA de mentira recibió al menos una petición', tsa.capturados.length + ' petición(es)');
   const agujas = ['B87654321', 'B12340000', 'Cliente Secreto Anclaje', f1.invoice_number, '1234.56', '1234,56', 'Servicio secreto'];
@@ -353,13 +432,148 @@ try {
   const r8b = await anclar(neg.db, { ahoraMs: t2 });
   ok(r8b.anclado === false, 'y a las +2 h del nuevo, sin material, NO toca aún', JSON.stringify(r8b));
 
-  say('\n=== [8b] «Comprobar ahora» acotado: verificarAnclajes(db, {limite}) solo recorre los últimos N ===\n');
-  const totalAntesLimite = neg.db.prepare("SELECT COUNT(*) c FROM verifactu_anclajes WHERE estado='sellado'").get().c;
-  ok(totalAntesLimite > 2, 'hay más de 2 anclajes sellados para que el límite tenga sentido', String(totalAntesLimite));
-  const veredictoAcotado = verificarAnclajes(neg.db, { limite: 2 });
-  ok(veredictoAcotado.comprobados === 2, 'con limite:2 solo se recorren (y cuentan) los últimos 2 anclajes, no todos', JSON.stringify(veredictoAcotado));
-  ok(veredictoAcotado.total === totalAntesLimite, 'pero total sigue diciendo cuántos anclajes sellados hay EN TOTAL, no solo los recorridos', String(veredictoAcotado.total));
-  ok(veredictoAcotado.ok === true, 'y en ese tramo final la cadena sigue cuadrando', JSON.stringify(veredictoAcotado));
+  say('\n=== [9] Barrido por columnas: cada columna de verifactu_anclajes, clasificada y probada (criterios 2 y 3) ===\n');
+  neg.db.pragma('wal_checkpoint(TRUNCATE)');
+  const columnasReales = neg.db.pragma('table_info(verifactu_anclajes)').map(c => c.name);
+  const docAnclaje = readFileSync(join(APP_DIR, 'docs/verifactu/anclaje-externo.md'), 'utf8');
+  const MOTIVO_ID = 'clave interna de la fila: no entra en lo que firma la TSA ni en nada que se enseñe.';
+  const MOTIVO_CREATED_AT = 'hora de nuestro reloj, solo informativa: la hora que vale es la que va dentro del sello, y esa sí se comprueba.';
+
+  const MUTACIONES = [
+    { col: 'secuencia', sql: "UPDATE verifactu_anclajes SET secuencia=9999 WHERE secuencia=2", caza: true },
+    { col: 'raiz', sql: "UPDATE verifactu_anclajes SET raiz='DEADBEEF' WHERE secuencia=2", caza: true },
+    { col: 'raiz_fiscal', sql: "UPDATE verifactu_anclajes SET raiz_fiscal='DEADBEEF' WHERE secuencia=2", caza: true },
+    { col: 'raiz_anterior', sql: "UPDATE verifactu_anclajes SET raiz_anterior='DEADBEEF' WHERE secuencia=2", caza: true },
+    { col: 'hasta_invoice_id', sql: "UPDATE verifactu_anclajes SET hasta_invoice_id=hasta_invoice_id+1 WHERE secuencia=2", caza: true },
+    { col: 'hasta_anulacion_id', sql: "UPDATE verifactu_anclajes SET hasta_anulacion_id=hasta_anulacion_id+1 WHERE secuencia=2", caza: true },
+    { col: 'hasta_registro_id', sql: "UPDATE verifactu_anclajes SET hasta_registro_id=hasta_registro_id+1 WHERE secuencia=2", caza: true },
+    { col: 'n_facturas', sql: "UPDATE verifactu_anclajes SET n_facturas=n_facturas+1 WHERE secuencia=2", caza: true },
+    { col: 'n_anulaciones', sql: "UPDATE verifactu_anclajes SET n_anulaciones=n_anulaciones+1 WHERE secuencia=2", caza: true },
+    { col: 'n_registros', sql: "UPDATE verifactu_anclajes SET n_registros=n_registros+1 WHERE secuencia=2", caza: true },
+    { col: 'cadena_ok', sql: "UPDATE verifactu_anclajes SET cadena_ok=1-cadena_ok WHERE secuencia=2", caza: true },
+    { col: 'cadena_detalle', sql: "UPDATE verifactu_anclajes SET cadena_detalle='manipulado por el gate' WHERE secuencia=2", caza: true },
+    { col: 'tsa_url', sql: "UPDATE verifactu_anclajes SET tsa_url='http://tsa-falsa.gate.invalid/' WHERE secuencia=2", caza: true },
+    { col: 'token', sql: "UPDATE verifactu_anclajes SET token=NULL WHERE secuencia=2", caza: true, nombre: 'token (a NULL)' },
+    {
+      col: 'token', caza: true, nombre: 'token (corrompido)',
+      aplicar: (dbCopia) => {
+        const fila = dbCopia.prepare('SELECT token FROM verifactu_anclajes WHERE secuencia=2').get();
+        const bytes = Buffer.from(fila.token);
+        bytes[bytes.length - 1] ^= 0xff;   // la firma RSA vive al final: un bit ahí SIEMPRE rompe la verificación
+        dbCopia.prepare('UPDATE verifactu_anclajes SET token=? WHERE secuencia=2').run(bytes);
+      },
+    },
+    { col: 'sellado_at', sql: "UPDATE verifactu_anclajes SET sellado_at='2020-01-01T00:00:00.000Z' WHERE secuencia=2", caza: true },
+    { col: 'estado', sql: "UPDATE verifactu_anclajes SET estado='fallo' WHERE secuencia=2", caza: true },
+    { col: 'error', sql: "UPDATE verifactu_anclajes SET error='manipulado por el gate' WHERE secuencia=2", caza: true },
+    { col: 'id', sql: "UPDATE verifactu_anclajes SET id=id+100000 WHERE secuencia=2", caza: false, motivo: MOTIVO_ID },
+    { col: 'created_at', sql: "UPDATE verifactu_anclajes SET created_at='2000-01-01 00:00:00' WHERE secuencia=2", caza: false, motivo: MOTIVO_CREATED_AT },
+  ];
+
+  const declaradas = new Set(MUTACIONES.map(m => m.col));
+  const noDeclaradas = columnasReales.filter(c => !declaradas.has(c));
+  ok(noDeclaradas.length === 0, 'todas las columnas de verifactu_anclajes están clasificadas en MUTACIONES', columnasReales.join(', '));
+
+  // Autotest del propio censo: si aparece una columna que nadie ha clasificado, esto SÍ debe fallar.
+  // Es la lección del censo de ventanitas — un censo que dice CERO y no lo es, es peor que no tenerlo.
+  const { ruta: rutaMentira, db: dbMentira } = abrirCopia(neg.abs, tsaDir, copias, 'columna-mentira');
+  try {
+    dbMentira.exec('ALTER TABLE verifactu_anclajes ADD COLUMN columna_de_mentira TEXT');
+    const columnasConMentira = dbMentira.pragma('table_info(verifactu_anclajes)').map(c => c.name);
+    const noDeclaradasMentira = columnasConMentira.filter(c => !declaradas.has(c));
+    ok(noDeclaradasMentira.length === 1 && noDeclaradasMentira[0] === 'columna_de_mentira', 'autotest: añadir una columna de mentira SÍ la detecta el barrido como sin clasificar', noDeclaradasMentira.join(', '));
+  } finally { dbMentira.close(); }
+
+  for (const m of MUTACIONES) {
+    const nombre = m.nombre || m.col;
+    const { db: dbCopia } = abrirCopia(neg.abs, tsaDir, copias, 'col-' + nombre);
+    try {
+      if (m.aplicar) m.aplicar(dbCopia); else dbCopia.exec(m.sql);
+      const v = verificarAnclajes(dbCopia, { caPath: tsa.caPem });
+      if (m.caza) {
+        ok(v.veredicto !== 'cuadra', `mutar «${nombre}» se detecta (veredicto=${v.veredicto})`, JSON.stringify(v.alarma));
+      } else {
+        ok(v.veredicto === 'cuadra', `mutar «${nombre}» NO cambia el veredicto: es una exención declarada`, v.veredicto);
+        ok(docAnclaje.includes(m.motivo), `el motivo de la exención de «${nombre}» aparece LITERAL en docs/verifactu/anclaje-externo.md`, m.motivo);
+      }
+    } finally { dbCopia.close(); }
+  }
+
+  say('\n=== [10] Mutaciones de fila y de ventana (criterio 2) ===\n');
+  const { db: db10a } = abrirCopia(neg.abs, tsaDir, copias, 'borrado-mas-viejo');
+  try {
+    db10a.prepare('DELETE FROM verifactu_anclajes WHERE secuencia=1').run();
+    const v10a = verificarAnclajes(db10a, { caPath: tsa.caPem });
+    ok(v10a.veredicto !== 'cuadra', 'borrar el anclaje MÁS VIEJO, en un recorrido SIN límite, se detecta (no hay "primero de la ventana" gratis)', JSON.stringify(v10a.alarma));
+  } finally { db10a.close(); }
+
+  const { db: db10b } = abrirCopia(neg.abs, tsaDir, copias, 'borrado-ultimo');
+  try {
+    const maxSec = db10b.prepare("SELECT MAX(secuencia) m FROM verifactu_anclajes WHERE estado='sellado'").get().m;
+    db10b.prepare('DELETE FROM verifactu_anclajes WHERE secuencia=?').run(maxSec);
+    const v10b = verificarAnclajes(db10b, { caPath: tsa.caPem });
+    ok(v10b.veredicto === 'cuadra', 'borrar el ÚLTIMO anclaje deja una cadena más corta pero íntegra: sigue en orden', JSON.stringify(v10b));
+    ok(v10b.sellados < db10b.prepare("SELECT COUNT(*) c FROM verifactu_anclajes WHERE estado != 'fallo'").get().c + 1, 'y el recuento de sellados bajó de verdad (no finge que el borrado no pasó)');
+  } finally { db10b.close(); }
+
+  const { db: db10c } = abrirCopia(neg.abs, tsaDir, copias, 'fallo-escondido');
+  try {
+    const totalSelladosAntes = db10c.prepare("SELECT COUNT(*) c FROM verifactu_anclajes WHERE estado='sellado'").get().c;
+    ok(totalSelladosAntes >= 2, 'hay al menos 2 anclajes sellados para poder marcar uno como fallo sin vaciar la cadena', String(totalSelladosAntes));
+    db10c.prepare("UPDATE verifactu_anclajes SET estado='fallo' WHERE secuencia=?").run(totalSelladosAntes);
+    const v10c = verificarAnclajes(db10c, { caPath: tsa.caPem });
+    ok(v10c.veredicto === 'alarma', `estado='fallo' sobre un anclaje que YA tenía secuencia y sello se detecta como fila escondida`, JSON.stringify(v10c.alarma));
+    ok(/escond|fallo/i.test(v10c.alarma?.motivo || ''), 'y el motivo habla de una fila de fallo que en realidad llevaba número y sello', v10c.alarma?.motivo);
+  } finally { db10c.close(); }
+
+  const totalSelladosAhora = neg.db.prepare("SELECT COUNT(*) c FROM verifactu_anclajes WHERE estado='sellado'").get().c;
+  ok(totalSelladosAhora >= 3, 'hay al menos 3 anclajes sellados en el negocio para probar limite=1 < total', String(totalSelladosAhora));
+  const v10d = verificarAnclajes(neg.db, { limite: 1, caPath: tsa.caPem });
+  ok(v10d.veredicto === 'parcial' && v10d.fueraDeVentana === totalSelladosAhora - 1, 'con limite=1 habiendo más de uno, el veredicto es SIEMPRE parcial, y fueraDeVentana cuenta el resto', JSON.stringify(v10d));
+
+  say('\n=== [11] El botón no puede decir que todo está en orden (criterio 4) ===\n');
+  // Se crean anclajes de sobra para superar ANCLAJE_COMPROBAR_LIMITE (25 por defecto): cada uno es una
+  // factura mínima + un anclar() real contra la TSA local (sin red externa).
+  const faltan = Math.max(0, ANCLAJE_COMPROBAR_LIMITE + 3 - totalSelladosAhora);
+  for (let i = 0; i < faltan; i++) {
+    createInvoice(neg.db, { client_id: clienteId, issue_date: '2026-03-05', irpf_rate: 0, lines: [{ description: 'Relleno de ventana ' + i, quantity: 1, unit_price: 3, tax_rate: 21 }] });
+    await anclar(neg.db);
+  }
+  const totalSelladosFinal = neg.db.prepare("SELECT COUNT(*) c FROM verifactu_anclajes WHERE estado='sellado'").get().c;
+  ok(totalSelladosFinal > ANCLAJE_COMPROBAR_LIMITE, `hay ${totalSelladosFinal} anclajes sellados, más que ANCLAJE_COMPROBAR_LIMITE (${ANCLAJE_COMPROBAR_LIMITE})`, String(totalSelladosFinal));
+
+  const veredictoAcotadoDirecto = verificarAnclajes(neg.db, { limite: ANCLAJE_COMPROBAR_LIMITE, caPath: tsa.caPem });
+  ok(veredictoAcotadoDirecto.veredicto === 'parcial', 'en directo (sin pasar por el botón), con limite=ANCLAJE_COMPROBAR_LIMITE < total, el veredicto es parcial', JSON.stringify(veredictoAcotadoDirecto));
+
+  if (!codigoFresco) {
+    noVerificado('POST /admin/verifactu/anclajes/comprobar', 'mismo motivo: código en disco más nuevo que el arranque del proceso — el botón en marcha seguiría usando ANCLAJE_COMPROBAR_LIMITE=100 y el límite viejo');
+  } else {
+    // Se pulsa el botón DE VERDAD (regla de la casa: si hay un botón, se pulsa el botón).
+    const rGetCsrf = await fetch(APEX + '/admin/verifactu/anclajes', { headers: { cookie: cookieNeg } });
+    const htmlCsrf = await rGetCsrf.text();
+    const mCsrf = htmlCsrf.match(/name="_csrf" value="([^"]+)"/);
+    ok(!!mCsrf, 'la pantalla trae el token CSRF del formulario «Comprobar los últimos N»');
+    ok(htmlCsrf.includes('Comprobar los últimos ' + ANCLAJE_COMPROBAR_LIMITE), 'y el botón se etiqueta «Comprobar los últimos N», no «Comprobar ahora»');
+    const csrfBoton = mCsrf ? mCsrf[1] : '';
+    const rBoton = await fetch(APEX + '/admin/verifactu/anclajes/comprobar', {
+      method: 'POST', redirect: 'manual', headers: { cookie: cookieNeg, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: '_csrf=' + encodeURIComponent(csrfBoton),
+    });
+    ok(rBoton.status === 302 || rBoton.status === 303, 'POST /admin/verifactu/anclajes/comprobar redirige', 'status=' + rBoton.status);
+    const destino = rBoton.headers.get('location') || '';
+    ok(destino.includes('v=parcial'), 'y el redirect lleva v=parcial (no puede decir que todo está en orden)', destino);
+    const rTrasBoton = await fetch(APEX + destino, { headers: { cookie: cookieNeg } });
+    const htmlTrasBoton = await rTrasBoton.text();
+    ok(rTrasBoton.status === 200, 'la pantalla tras el botón responde 200 con su URL final');
+    ok(!htmlTrasBoton.includes('cuadra'), `la palabra «cuadra» NO aparece en la respuesta`);
+    ok(/de los otros \d+ no se dice nada/.test(htmlTrasBoton), 'y el mensaje dice cuántos de cuántos ha comprobado, con lo que queda fuera');
+  }
+
+  say('\n=== [12] Estático: el correo diario lleva ⚠️ ALARMA en el asunto si algún negocio sale en alarma ===\n');
+  const fuenteBarrido = readFileSync(join(APP_DIR, 'scripts/bamburu-anclaje-verifactu.mjs'), 'utf8');
+  ok(fuenteBarrido.includes('⚠️ ALARMA'), 'el script contiene el literal «⚠️ ALARMA»');
+  ok(/algunaAlarma\s*\?\s*'[^']*⚠️ ALARMA/.test(fuenteBarrido), 'y está condicionado a que algún negocio saliera en veredicto de alarma (algunaAlarma)');
+  ok(/veredicto\.veredicto === 'alarma'/.test(fuenteBarrido), 'y esa bandera se enciende leyendo el veredicto de verificarAnclajes(), no una suposición');
 
   say('\n=== Criterio final: /superadmin/integridad, columna «Sellado», sobre el servidor real ===\n');
   if (!codigoFresco) {
