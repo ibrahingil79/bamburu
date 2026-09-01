@@ -7,7 +7,8 @@ import { printableShell, ROOT_TOKENS } from '../erp/layout.js';
 import { buildInvoicePaper } from '../erp/routes/invoices.js';
 import { validateToken, clientInvoices, transferData, invoiceBelongsToClient,
          analiticaCliente, mensajesDe, escribirMensaje, marcarVisto } from './portal.js';
-import { fechaEs } from '../erp/voz.js';   // la fecha, en cristiano (24/08/2026)
+import { fechaEs, fechaHoraEs } from '../erp/voz.js';   // la fecha, en cristiano (24/08/2026 14:30)
+import { fmtEur } from '../erp/margen.js';   // el dinero, como en España: 6.023,00 €
 
 function shell(title, body) {
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -39,6 +40,14 @@ function shell(title, body) {
 const denied = () => shell('Enlace no válido', `<div class="card"><h1>Enlace no válido o caducado</h1>
   <p class="sub">Este enlace ya no funciona. Pide a tu proveedor uno nuevo.</p></div>`);
 
+// El dinero, como en el resto del producto: `6.023,00 €` — miles con punto, decimales con coma, y
+// el símbolo DETRÁS y separado. NO nace aquí un formateador: se usa el único que hay
+// (`fmtEur`, modules/erp/margen.js:161), igual que `money` en contabilidad-routes.js:33 y `dinero`
+// en avisos.js:432. Antes esto se escribía a mano SIETE veces y salía `€6023.00`.
+// Se escapa el resultado porque el símbolo sale de la BD (`invoices.currency_symbol`): `fmtEur`
+// compone TEXTO, no HTML, y escaparlo aquí quita la asimetría que había entre las líneas 54 y 55.
+const dinero = (n, sym) => escHtml(fmtEur(Number(n || 0), sym || '€'));
+
 export function register(app, db) {
   console.log('🔗 Cargando módulo Portal de cliente...');
 
@@ -51,8 +60,8 @@ export function register(app, db) {
     const token = c.req.param('token');
     const filas = rows.map(r => `<tr>
       <td>${escHtml(r.invoice_number)}</td><td>${fechaEs(r.issue_date)}</td>
-      <td class="r">${escHtml(r.currency_symbol)}${Number(r.total).toFixed(2)}</td>
-      <td>${r.pagada ? '<span class="pill pagada">Pagada</span>' : `<span class="pill pend">Pendiente${r.pendiente < r.total ? ' · ' + r.currency_symbol + r.pendiente.toFixed(2) : ''}</span>`}</td>
+      <td class="r">${dinero(r.total, r.currency_symbol)}</td>
+      <td>${r.pagada ? '<span class="pill pagada">Pagada</span>' : `<span class="pill pend">Pendiente${r.pendiente < r.total ? ' · ' + dinero(r.pendiente, r.currency_symbol) : ''}</span>`}</td>
       <td class="r"><a class="btn" href="/portal/${escHtml(token)}/factura/${r.id}/pdf">PDF</a></td></tr>`).join('')
       || '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:2rem">No tienes facturas pendientes. Estás al día.</td></tr>';
     const pago = t.iban ? `<div class="card"><h3 style="margin:.2rem 0">¿Cómo pagar?</h3>
@@ -65,22 +74,26 @@ export function register(app, db) {
     const A = analiticaCliente(db, v.client_id);
     const dias = n2 => n2 == null ? '—' : (n2 === 0 ? 'hoy mismo' : n2 + (n2 === 1 ? ' día' : ' días'));
     const maxL = A.hay && A.lineas.length ? Math.max(...A.lineas.map(l => Number(l.importe) || 0)) : 0;
+    // OJO CON `A.ultima`: es la TERCERA fecha inglesa de este módulo, y va con `fechaEs` como las
+    // otras dos. `analiticaCliente` la devuelve tal cual se guarda (2026-03-12) y hasta hoy se
+    // pintaba así, dentro del paréntesis de «desde la última». Con ella cruda, el portal seguiría
+    // enseñando una fecha ISO por mucho que se arreglara la del chat.
     const analitica = !A.hay ? '' : `<div class="card"><h3 style="margin:.2rem 0">Tu histórico con ${escHtml(t.company_name)}</h3>
       <p class="sub">Lo que llevas comprado, calculado sobre las mismas facturas de arriba.</p>
       <div class="g">
         <div class="kp"><b>${A.compras}</b><span>${A.compras === 1 ? 'compra' : 'compras'}</span></div>
-        <div class="kp"><b>${escHtml(A.sym)}${A.total.toFixed(2)}</b><span>en total (sin IVA)</span></div>
-        <div class="kp"><b>${escHtml(A.sym)}${A.media.toFixed(2)}</b><span>de media por compra</span></div>
+        <div class="kp"><b>${dinero(A.total, A.sym)}</b><span>en total (sin IVA)</span></div>
+        <div class="kp"><b>${dinero(A.media, A.sym)}</b><span>de media por compra</span></div>
         <div class="kp"><b>${A.cadaDias == null ? '—' : 'cada ' + dias(A.cadaDias)}</b><span>es tu ritmo habitual</span></div>
-        <div class="kp"><b>${dias(A.desdeUltima)}</b><span>desde la última${A.ultima ? ' (' + escHtml(A.ultima) + ')' : ''}</span></div>
+        <div class="kp"><b>${dias(A.desdeUltima)}</b><span>desde la última${A.ultima ? ' (' + escHtml(fechaEs(A.ultima)) + ')' : ''}</span></div>
       </div>
       ${A.lineas.length ? `<h3 style="margin:1rem 0 .3rem;font-size:.95rem">Lo que más compras</h3>
         ${A.lineas.map(l => `<div style="margin:.35rem 0">
           <div style="display:flex;justify-content:space-between;font-size:.85rem"><span>${escHtml(l.d || '—')}</span>
-          <span>${escHtml(A.sym)}${Number(l.importe).toFixed(2)}</span></div>
+          <span>${dinero(l.importe, A.sym)}</span></div>
           <div class="bar"><i style="width:${maxL ? Math.max(3, Math.round(Number(l.importe) / maxL * 100)) : 0}%"></i></div></div>`).join('')}` : ''}
       ${A.porAnio.length > 1 ? `<h3 style="margin:1rem 0 .3rem;font-size:.95rem">Por año</h3><table><tbody>${
-        A.porAnio.map(x => `<tr><td>${escHtml(x.anio)}</td><td class="r">${escHtml(A.sym)}${x.importe.toFixed(2)}</td></tr>`).join('')}</tbody></table>` : ''}
+        A.porAnio.map(x => `<tr><td>${escHtml(x.anio)}</td><td class="r">${dinero(x.importe, A.sym)}</td></tr>`).join('')}</tbody></table>` : ''}
       </div>`;
 
     // ── FICHA G2 · EL CANAL DE COMUNICACIONES ────────────────────────────────────────────────
@@ -95,7 +108,7 @@ export function register(app, db) {
       ${enviado ? '<div class="okmsg">Mensaje enviado. Te contestarán por aquí.</div>' : ''}
       ${errMsg ? `<div class="aviso">${escHtml(errMsg)}</div>` : ''}
       ${hilo.length ? hilo.map(m => `<div class="msg${m.autor === 'cliente' ? ' yo' : ''}">
-        <span class="q">${m.autor === 'cliente' ? 'Tú' : escHtml(t.company_name)} · ${escHtml(String(m.created_at || '').slice(0, 16))}</span>
+        <span class="q">${m.autor === 'cliente' ? 'Tú' : escHtml(t.company_name)} · ${escHtml(fechaHoraEs(m.created_at))}</span>
         ${escHtml(m.texto)}</div>`).join('')
         : '<p class="sub">Todavía no habéis hablado por aquí.</p>'}
       <form method="post" action="/portal/${escHtml(token)}/mensaje" style="margin-top:.6rem">
@@ -103,7 +116,7 @@ export function register(app, db) {
         <div style="margin-top:.4rem"><button class="btn" type="submit">Enviar</button></div>
       </form></div>`;
 
-    const body = `<h1>Tus facturas</h1><div class="sub">${escHtml(t.company_name)} · ${escHtml(client.name || '')}${totalPendiente > 0 ? ` · Pendiente total: ${escHtml(rows[0]?.currency_symbol || '€')}${totalPendiente.toFixed(2)}` : ' · Todo al día'}</div>
+    const body = `<h1>Tus facturas</h1><div class="sub">${escHtml(t.company_name)} · ${escHtml(client.name || '')}${totalPendiente > 0 ? ` · Pendiente total: ${dinero(totalPendiente, rows[0]?.currency_symbol)}` : ' · Todo al día'}</div>
       <div class="card"><table><thead><tr><th>Factura</th><th>Fecha</th><th class="r">Total</th><th>Estado</th><th></th></tr></thead><tbody>${filas}</tbody></table></div>
       ${pago}
       ${analitica}

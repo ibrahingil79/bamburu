@@ -128,6 +128,9 @@ function textoVisible(html) {
 
 const malas = [], conFechaIso = [];
 let miradas = 0;
+// Lo que siembra el bloque del portal. Se declaran AQUÍ, fuera del `try`, para que el `finally` de
+// abajo los vea aunque la pasada muera antes de llegar a sembrarlos.
+let tokP = null, noVistos = [];
 try {
   for (const ruta of lista) {
     let html = '', status = 0;
@@ -163,6 +166,71 @@ try {
      conFechaIso.length ? conFechaIso.map(m => m.ruta + ': ' + m.fechas.join(' ')).join('  ·  ')
                         : miradas + ' pantallas miradas');
 
+  // ── Y EL PORTAL DEL CLIENTE, QUE ESTABA FUERA DE ALCANCE POR CONSTRUCCIÓN ─────────────────────
+  // 1 sep 2026. Todo lo de arriba es `/admin`: la semilla sale del menú y el rastreo solo recoge
+  // `href="/admin…"`. El portal del cliente NO cabe en eso por TRES motivos a la vez, y por eso
+  // llevaba desde antes del 23 ago escribiendo `€6023.00` con esta comprobación verde encima:
+  //   1. vive en `/portal/<token>`, no bajo `/admin`;
+  //   2. no cuelga de ningún enlace — `/admin/portal` manda el suyo POR CORREO, no lo pinta;
+  //   3. no tiene sesión: se entra con un token en la URL, así que la cookie `asess` no abre nada.
+  // Es otra vez la lección de `CLAUDE.md`: «recorrer todas las pantallas y recorrer todo el menú no
+  // es lo mismo». La regla es la misma, el instrumento es este, y lo que se amplía es su alcance.
+  //
+  // SE MIDE CON `fetch`, SIN NAVEGADOR, Y A PROPÓSITO: el `shell()` del portal
+  // (`modules/portal/index.js`) no sirve NI UN `<script>` — decisión de producto, escrita en el
+  // comentario de ese fichero («el portal no lleva JavaScript y no se le va a meter uno solo para
+  // esto»). Lo servido ES lo que lee la persona, así que juzgar el HTML del servidor basta.
+  // ⚠️ EL DÍA QUE EL PORTAL LLEVE JAVASCRIPT, ESTA MEDICIÓN DEJA DE BASTAR: lo que pinte el
+  // navegador después no está en este HTML, y habría que mirarlo como se mira /admin/invoices.
+  const cliPortal = db.prepare(
+    `SELECT i.client_id AS id, MAX(i.total) AS mx
+       FROM invoices i JOIN clients c ON c.id = i.client_id
+      WHERE i.status != 'anulada'
+        AND c.name NOT LIKE 'GG-%' AND c.name NOT LIKE 'GATE %' AND c.name NOT LIKE 'ZZ %'
+      GROUP BY i.client_id ORDER BY mx DESC LIMIT 1`).get();
+  if (!cliPortal) {
+    ok(false, 'hay un cliente con facturas al que abrirle el portal', 'ninguno — esto no ha medido nada');
+  } else {
+    const MARCA_P = 'ZZ dinero portal';                       // el PREFIJO por el que se borra
+    const rid     = randomBytes(3).toString('hex');           // el sufijo de ESTA pasada
+    tokP          = 'zz-dinero-portal-' + randomBytes(24).toString('hex');
+    // Lo que ya estaba sin ver, para devolverlo como estaba: abrir el portal marca como visto
+    // (modules/portal/index.js → marcarVisto). El gate no puede cambiarle el contador al negocio.
+    noVistos = db.prepare('SELECT id FROM portal_mensajes WHERE client_id=? AND visto_cliente=0')
+                 .all(cliPortal.id).map(r => r.id);
+    db.prepare('INSERT INTO portal_tokens (client_id, token, expires_at) VALUES (?,?,?)')
+      .run(cliPortal.id, tokP, ahora + 900);                  // 15 min, como la sesión de arriba
+    db.prepare(`INSERT INTO portal_mensajes (client_id, autor, texto, visto_negocio, visto_cliente)
+                VALUES (?, 'negocio', ?, 1, 0)`)
+      .run(cliPortal.id, MARCA_P + ' ' + rid + ' — comprobación de formato');
+
+    const rP    = await fetch(BASE + '/portal/' + tokP);
+    const htmlP = await rP.text();
+    const txtP  = textoVisible(htmlP);
+    ok(rP.status === 200, 'el portal del cliente responde 200', 'status ' + rP.status);
+
+    // LA GUARDA CONTRA EL VERDE SOBRE NADA: si el portal no tenía ni un importe, esto no ha medido
+    // nada. `CLAUDE.md`: una ruta que no enseña lo que se quiere medir da verde sobre nada.
+    const BIEN = /-?\d{1,3}(?:\.\d{3})*,\d{2}\s[€$£]/g;
+    const importes = [...txtP.matchAll(BIEN)].map(m => m[0]);
+    ok(importes.length > 0, 'el portal medido TENÍA importes que mirar (si no, esto no mide nada)',
+       importes.slice(0, 3).join(' · ') || 'NINGUNO — cliente ' + cliPortal.id);
+
+    const malP = [...[...txtP.matchAll(SIMBOLO_DELANTE)], ...[...txtP.matchAll(PUNTO_DECIMAL)],
+                  ...[...txtP.matchAll(PCT_PUNTO)]].map(m => m[0].trim());
+    ok(malP.length === 0, 'el portal del cliente escribe el dinero como en España',
+       [...new Set(malP)].slice(0, 4).join(' · ') || importes.length + ' importes, todos bien');
+
+    // Y LAS FECHAS DE LA MISMA PANTALLA. Van aquí y no en tarea aparte porque esta comprobación mide
+    // las DOS reglas en la misma pasada: meter el portal dentro y dejarle una fecha inglesa obligaría
+    // a enseñarle a mirar hacia otro lado justo en esta ruta, que es la avería que se está cerrando.
+    const fechasP = [...new Set(txtP.match(/(?<![\w-])\d{4}-\d{2}-\d{2}(?![\w-])/g) || [])];
+    ok(fechasP.length === 0, 'el portal del cliente no enseña ninguna fecha en formato inglés',
+       fechasP.slice(0, 3).join(' · ') || 'ninguna');
+    ok(/\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}/.test(txtP),
+       '  y la marca de tiempo del mensaje sale con su fecha en cristiano');
+  }
+
   // ── LOS CORREOS Y LA VOZ DE DISA ──────────────────────────────────────────────────────────────
   // No se sirven por una URL, así que se prueban llamando a quien los redacta. El mismo criterio:
   // lo que lee una persona.
@@ -170,6 +238,11 @@ try {
   ok(dinero(117087.43) === '117.087,43 €', 'la voz de DISA escribe el dinero como en España', dinero(117087.43));
   ok(dinero(-1461.93) === '-1.461,93 €', '  también en negativo', dinero(-1461.93));
   ok(fechaEs('2026-08-24') === '24/08/2026', '  y la fecha en cristiano', fechaEs('2026-08-24'));
+  // EL CASO DE CUATRO CIFRAS, CLAVADO AQUÍ porque es exactamente la forma del defecto del portal
+  // (`€6023.00`): el es-ES por defecto deja los números de cuatro cifras SIN punto de millar, y por
+  // eso `fmtEur` lleva `useGrouping:'always'`. Si alguien se lo quitara, esto cae.
+  const { fmtEur } = await import('../modules/erp/margen.js');
+  ok(fmtEur(6023) === '6.023,00 €', '  y el separador de miles no se pierde con cuatro cifras', fmtEur(6023));
   const { detalleAviso } = await import('../modules/erp/avisos.js');
   const det = detalleAviso({ tipo: 'cobro_vencido', ref: { importe: 1234.5, dias: 3 } }, '€');
   ok(!/[€$£] ?-?\d/.test(det), 'el detalle de un aviso no pone el símbolo delante', det);
@@ -234,6 +307,14 @@ try {
 
 } finally {
   try { db.prepare('DELETE FROM admin_sessions WHERE token=?').run(tok); } catch {}
+  // Lo del portal se borra POR LA MARCA, no por los ids de esta pasada: si una pasada muere a mitad,
+  // la siguiente se lleva lo suyo. Y el contador de «sin ver» del cliente se devuelve como estaba,
+  // porque abrir el portal lo apaga y ese contador no es del gate.
+  try { db.prepare("DELETE FROM portal_tokens WHERE token LIKE 'zz-dinero-portal-%'").run(); } catch {}
+  try { db.prepare("DELETE FROM portal_mensajes WHERE texto LIKE 'ZZ dinero portal%'").run(); } catch {}
+  try { if (noVistos.length) db.prepare(
+          `UPDATE portal_mensajes SET visto_cliente=0 WHERE id IN (${noVistos.map(() => '?').join(',')})`)
+          .run(...noVistos); } catch {}
   db.close();
 }
 

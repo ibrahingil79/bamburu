@@ -110,7 +110,12 @@ try {
   const vista = await page.evaluate(() => document.body.innerText.replace(/\s+/g, ' '));
   ok(/Tu histórico con/.test(vista), 'el portal enseña el bloque de analíticas');
   ok(/3 compras/.test(vista), '  con sus compras', '3 compras');
-  ok(/600[.,]00/.test(vista), '  su total');
+  // 1 sep 2026 · Antes esto llevaba una clase de caracteres con el punto Y la coma dentro, así que
+  // aceptaba LAS DOS FORMAS: por eso este gate dio 35 ✓ · 0 ✗ con la pantalla escribiendo «€600.00».
+  // Tenía el defecto delante y lo dejó pasar. La coma no es un detalle de estilo: ES la aserción.
+  // (Ese regex viejo no se transcribe aquí a propósito: el criterio de aceptación de la tarea exige
+  //  que no quede ni un rastro suyo en el fichero, y un comentario también es rastro.)
+  ok(/600,00 €/.test(vista), '  su total, escrito como en España (600,00 €)');
   ok(/ritmo habitual/.test(vista), '  y su ritmo');
   ok(/Lo que más compras/.test(vista) && /Mantenimiento mensual/.test(vista), '  y qué compra');
   ok(!/9999/.test(vista), '  y ni rastro de la factura anulada');

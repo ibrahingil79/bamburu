@@ -47,6 +47,18 @@ export function fechaEs(iso) {
   return m ? m[3] + '/' + m[2] + '/' + m[1] : (iso || '—');
 }
 
+// Y UNA MARCA DE TIEMPO ENTERA. `2026-08-24 14:30` es como se guarda; en pantalla va
+// `24/08/2026 14:30`. IGUAL QUE `fechaEs`: SOLO REORDENA. No convierte zona horaria, no suma, no
+// resta — el número que sale es EXACTAMENTE el que entró.
+// ⚠️ OJO, Y ESTO ES DEUDA CONOCIDA, NO UN DESCUIDO: `created_at` se guarda con CURRENT_TIMESTAMP,
+// que es UTC, y quien lo lee está en Europe/Madrid. La hora que se enseña YA venía desfasada 1-2 h
+// y esta función NO lo arregla: solo deja de escribirla en inglés. Apuntado en TABLERO.md.
+export function fechaHoraEs(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(String(iso || ''));
+  if (m) return m[3] + '/' + m[2] + '/' + m[1] + ' ' + m[4] + ':' + m[5];
+  return fechaEs(iso);          // solo fecha, o lo que llegue: se devuelve tal cual, no se inventa
+}
+
 // Y UN MES SUELTO. `2026-07` es una clave de agrupación, no algo que se diga: en una frase va
 // «julio de 2026». Si lo que llega no tiene esa forma, se devuelve tal cual (no se inventa).
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',

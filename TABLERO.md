@@ -1830,13 +1830,22 @@ Acceso por **enlace mágico con token temporal**, solo lectura.
 - **G5 · el «etc» del dueño no se da por cerrado**, por decisión suya. No es un subpunto construible:
   queda abierto a propósito para lo que él quiera añadir.
 
-**CABO MENOR APUNTADO (no tocado):** el portal escribe el dinero a la inglesa —`€6023.00`, sin
+~~**CABO MENOR APUNTADO (no tocado):** el portal escribe el dinero a la inglesa —`€6023.00`, sin
 separador de miles y con punto decimal—. **No es de G1: la tabla de facturas ya lo hacía antes**, y
 cambiar solo el bloque nuevo dejaría dos formatos en la misma pantalla. Se arregla el portal entero
-de una vez, cuando toque.
+de una vez, cuando toque.~~
 >
 > ↪️ **Convertida a formato de orquestador el 31 ago 2026** — id `portal-formato-dinero`,
 > en §«TAREAS EN FORMATO DEL ORQUESTADOR». Esta prosa se conserva tal cual.
+>
+> ✅ **CERRADO EL 1 SEP 2026** — commit `PENDIENTE-HASH`. Las **siete** escrituras a mano de
+> `modules/portal/index.js` pasan por `fmtEur`, el formateador único: la tabla de facturas, la
+> píldora de pendiente, las tres tarjetas de «Tu histórico», la tabla «Por año» y el subtítulo
+> «Pendiente total». Medido sobre el HTML servido con los datos reales del cliente `id=1`:
+> `60.493,95 €` y `84.814,95 €` donde antes salía `€60493.95`. **El portal entero de una vez**, como
+> exigía este cabo. Y la mitad que impide que vuelva: `verify-dinero-espanol.mjs` **ya alcanza el
+> portal** (antes no podía — no cuelga de `/admin`, no lo enlaza nadie y no lleva sesión).
+> Se tacha en vez de borrarse, que es la costumbre de la casa.
 
 ---
 
@@ -6000,6 +6009,41 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
   ajenos se pudre porque no era suyo lo que pisaba*. **El arreglo bueno es que el bloque [4] se traiga
   su propio negocio** (`negocioDesechable`, como ya hacen los de compras y como se hizo el 1 sep en
   `gate-403-permiso` por esta misma causa). **Eso es tocar ese gate: tarea aparte, con encargo.**
+- ⬜ **`created_at` SE GUARDA EN UTC Y SE ENSEÑA SIN CONVERTIR: la hora del chat del portal va
+  desfasada 1-2 h (1 sep 2026).** Salió al cerrar `portal-formato-dinero`. La columna se rellena con
+  `CURRENT_TIMESTAMP`, que en SQLite es **UTC**, y quien la lee está en Europe/Madrid. Esa tarea
+  **dejó de escribirla en inglés** (`2026-09-01 03:57` → `01/09/2026 03:57`, con `fechaHoraEs` de
+  `modules/erp/voz.js`) pero **NO la arregla, y eso está escrito en el código a propósito**: solo
+  reordena los dígitos, no toca el valor. Medido en la entrega: BD `2026-09-01 03:57:42` → pantalla
+  `01/09/2026 03:57`, dígitos idénticos.
+  **Ojo con el efecto secundario:** ahora se lee más creíble sin ser más cierta.
+  Sitios: `modules/portal/index.js` (chat del cliente), `modules/portal/admin.js` (chat del negocio),
+  **y todo lo demás del producto que pinte un `created_at`** — el alcance real es mucho mayor que el
+  portal, y por eso no entró: es tarea aparte, con encargo.
+- ⬜ **`/admin/invoices` PINTA EL DINERO CON JAVASCRIPT Y EN INGLÉS, y `verify-dinero-espanol` NO
+  PUEDE VERLO (1 sep 2026).** `modules/erp/routes/invoices.js:1286`, `:1322` y `:1328` componen
+  `'${sym}'+Number(r.pendiente||0).toFixed(2)`, más una fecha ISO en `:1327`. Esa tabla **la pinta el
+  navegador después de cargar**, así que el barrido —que mide lo SERVIDO, y con razón— pasa por
+  encima. Es **la misma enfermedad que el portal, en otra pantalla y con otro punto ciego**: allí el
+  defecto se veía y no se miraba; aquí no se puede ver desde donde se mira.
+  El propio script conoce el agujero (`verify-dinero-espanol.mjs`, bloque «EL PORCENTAJE Y LAS HORAS
+  EN EL JS QUE DIBUJA EL NAVEGADOR») pero su remedio solo persigue **porcentajes y horas**, no
+  dinero. **No entró en `portal-formato-dinero`**: `invoices.js` no está en ese plano, y su
+  `toFixed(2)` de la línea 156 es **entrada del hash de la cadena de VERI\*FACTU** — tocar ese
+  fichero a la ligera rompe las 919 facturas emitidas.
+- ⬜ **`verify-dinero-espanol` SALE EN ROJO POR `/admin/descuentos`, Y LA CAUSA ES EL `</script>` YA
+  APUNTADO (1 sep 2026).** Ejecutado al cerrar `portal-formato-dinero`: **19 ✓ · 1 ✗** sobre 356
+  pantallas. El único ✗ es *«ninguna pantalla enseña una fecha en formato inglés»*, y señala
+  `/admin/descuentos: 2026-08-23 2026-09-01 2026-09-30 2027-08-23`.
+  **No son fechas de datos: son los MARCADORES de sus formularios** (`descuentos.js:179`, `:180`,
+  `:216`), que viven dentro de un `<script>`. El barrido quita los `<script>` enteros, así que solo
+  pueden llegar a texto visible si **el bloque se cerró antes de tiempo** — que es exactamente el
+  defecto de `descuentos.js:163` ya declarado tres puntos más arriba (`JSON.stringify` no escapa
+  `</script>` y el producto `2097` lleva uno en el nombre). **Un mismo defecto, dos instrumentos
+  distintos cantándolo.**
+  **No lo toca `portal-formato-dinero`** y no puede: arreglarlo es `descuentos.js` (fichero que su
+  plano no nombra) o borrar filas de un negocio vivo (`CLAUDE.md`: se para y se pregunta). Se cierra
+  con esa tarea, no con esta.
 - 💡 **CANDIDATA, SIN CONSTRUIR — el registro de denegaciones (estilo `SU53` de SAP).** En SAP GUI, un
   fallo de autorización **queda registrado** y el administrador lo recupera con la transacción `SU53`
   para ver qué objeto faltó y concederlo. Bamburu tiene dónde colgarlo (`logActivity` y la pantalla
@@ -8204,10 +8248,10 @@ pregunta*.
 > Commits: `52d4529`
 > Registro: `docs/orquestador/tareas/pantalla-403-ventanita.md`
 
-## TAREA — El portal del cliente escribe el dinero a la inglesa
+## ✅ HECHA (2026-09-01) — El portal del cliente escribe el dinero a la inglesa
 
 - **id:** portal-formato-dinero
-- **estado:** pendiente
+- **estado:** hecha
 - **origen:** TABLERO.md §G (cabo menor apuntado el 23 ago 2026)
 
 El portal escribe los importes a la inglesa —`€6023.00`, **sin separador de miles y con punto
@@ -8217,6 +8261,17 @@ decimal**— en lugar del formato español.
 antes de G1, así que **arreglar solo el bloque nuevo dejaría dos formatos distintos en la misma
 pantalla**, que es peor que el defecto actual. Se arregla **el portal entero de una vez**, no por
 trozos.
+
+> **Construida el 2026-09-01.** Commit: `PENDIENTE-HASH`
+> Análisis: `docs/architecture/task-portal-formato-dinero-analysis.md`
+> Informe: `docs/architecture/task-portal-formato-dinero-informe.md`
+> Las **7** escrituras a mano pasan por `fmtEur` · `grep -c toFixed modules/portal/index.js` = **0**
+> (antes 7) · `verify-dinero-espanol.mjs` **llega al portal** y sus 5 aserciones nuevas están en
+> verde (356 pantallas) · la aserción floja de `gate-portal-ampliado.mjs:113` (`/600[.,]00/`, que
+> aceptaba las dos formas) exige ahora `600,00 €`.
+> **Se arregló también una TERCERA fecha inglesa que el análisis no contaba:** `A.ultima` en
+> `modules/portal/index.js` («desde la última (2026-03-12)») se pintaba cruda. Sin ella, el criterio
+> que prohíbe cualquier fecha ISO en esa pantalla no se podía cumplir.
 
 ## TAREA — Retirar las seis pantallas muertas que siguen en el árbol
 

@@ -7,6 +7,7 @@ import { escHtml } from '../../core/escape.js';
 import { sendEmail } from '../../core/mailer.js';
 import { getPortalSetting, setPortalSetting, sendPortalLink,
          mensajesDe, escribirMensaje, marcarVisto, sinLeer } from './portal.js';
+import { fechaHoraEs } from '../erp/voz.js';   // la marca de tiempo, en cristiano (24/08/2026 14:30)
 
 export function createPortalAdminRoutes(db) {
   const views = new Hono();
@@ -60,7 +61,7 @@ export function createPortalAdminRoutes(db) {
     const empresa = db.prepare('SELECT company_name FROM company_config WHERE id=1').get()?.company_name || 'Nosotros';
     const err2 = c.req.query('err') ? `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid var(--danger);background:var(--danger-s);font-size:12px;color:var(--danger)">${escHtml(cleanErrMsg(c.req.query('err')))}</div>` : '';
     const burbujas = hilo.length ? hilo.map(m => `<div style="border:1px solid var(--border);border-radius:10px;padding:.5rem .65rem;margin:.4rem 0;font-size:.88rem${m.autor === 'negocio' ? ';background:var(--accent-soft);margin-left:2.5rem' : ''}">
-        <span style="display:block;font-size:.7rem;color:var(--text2);margin-bottom:.15rem">${m.autor === 'negocio' ? escHtml(empresa) + (m.autor_nombre ? ' · lo contestó ' + escHtml(m.autor_nombre) : '') : escHtml(cli.name)} · ${escHtml(String(m.created_at || '').slice(0, 16))}</span>
+        <span style="display:block;font-size:.7rem;color:var(--text2);margin-bottom:.15rem">${m.autor === 'negocio' ? escHtml(empresa) + (m.autor_nombre ? ' · lo contestó ' + escHtml(m.autor_nombre) : '') : escHtml(cli.name)} · ${escHtml(fechaHoraEs(m.created_at))}</span>
         ${escHtml(m.texto)}</div>`).join('')
       : '<div style="color:var(--text2);font-size:.85rem">Todavía no hay mensajes con este cliente.</div>';
     const content = `<div class="ph"><h2>Mensajes con ${escHtml(cli.name)}</h2>
