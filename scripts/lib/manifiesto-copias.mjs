@@ -632,7 +632,7 @@ function cmdPasada(args) {
         alarmas.push(`"${nombre}": la huella cambió respecto a lo registrado — ¿manipulado?`);
       }
       const desc = `${registro.destino.modo === 'cifrado' ? 'CIFRADO' : 'EN CLARO'}, ${registro.destino.base}`;
-      const clave = `${registro.destino.base} ${desc}`;
+      const clave = `${registro.destino.base}\0${desc}`;
       if (!rezagadosPorBase.has(clave)) rezagadosPorBase.set(clave, { desc, nombres: [] });
       rezagadosPorBase.get(clave).nombres.push(nombre);
       continue;
@@ -642,7 +642,7 @@ function cmdPasada(args) {
       // pero tampoco es silencio: sin rama blanda, "no puedo comprobarlo" no es "está bien".
       if (dentroDeVentana) {
         sinVigilar += 1;
-        const clave = `${registro.destino.base} ${error}`;
+        const clave = `${registro.destino.base}\0${error}`;
         if (!sinVigilarPorBase.has(clave)) sinVigilarPorBase.set(clave, { base: registro.destino.base, motivo: error, nombres: [] });
         sinVigilarPorBase.get(clave).nombres.push(nombre);
       }

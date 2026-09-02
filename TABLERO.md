@@ -9073,10 +9073,10 @@ terminado. Es exactamente la lección de `CLAUDE.md` §«un inventario con "~" y
 cerrada»: solo vale un inventario `fichero:línea` verificado contra el código de HOY.
 
 
-## TAREA — Manifiesto de huellas del histórico de copias
+## ✅ HECHA (2026-09-02) — Manifiesto de huellas del histórico de copias · `920ec83`
 
 - **id:** manifiesto-huellas-backups
-- **estado:** pendiente
+- **estado:** hecha
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
 
 Hoy **solo se verifica la copia del día**: una copia de hace cinco días se puede editar y **nadie
@@ -9123,6 +9123,41 @@ hecho la MISMA noche en que el destino cambia, si además desaparece el remote a
 
 **Verificado el 1 sep 2026:** `scripts/bamburu-backup.sh` no menciona `sha256` ni manifiesto de
 ningún tipo.
+
+> **Cerrada el 2026-09-02, revisando el intento 4 (`920ec83`) contra los tres motivos del rechazo
+> anterior.** Los tres están construidos: (1) el histórico que se queda atrás al cifrar sin
+> `--migrar-historico` cae en la casilla 3 —se comprueba DONDE ESTÁ, con su línea propia y sus
+> nombres, sin la palabra `¿borrado?`, **sin parar la retención** y apagándose sola al salir de la
+> ventana—; (2) el concepto de «mundo» desapareció: `mismoMundoQueRegistro()` ya no existe y la
+> casilla se decide por **dos sitios reales** (`normBase(base) === baseHoy && ruta === hoy.ruta`,
+> `scripts/lib/manifiesto-copias.mjs:569-571`), lo que cierra a la vez el `BACKUP_REMOTE` distinto en
+> claro y la clave rotada; (3) `deploy/systemd/README.md:156-186` **tacha** la frase falsa con su
+> motivo y su fecha —no la borra— y describe los tres caminos con su «lo que NO cubre». Las cinco
+> observaciones del revisor anterior quedan cerradas también, incluida la 4: la excepción de
+> continuidad ya tiene su ✓, en verde y en rojo.
+>
+> **⚠️ UN DEFECTO QUE TRAÍA ESTE MISMO INTENTO, arreglado antes de cerrar.** `920ec83` metió **dos
+> bytes NUL literales** en `scripts/lib/manifiesto-copias.mjs:635` y `:645` (claves compuestas de dos
+> `Map`). Medido: **0** NUL en `6dff180`, **2** en `920ec83`, y era el **único fichero fuente del
+> repo** con NUL. Efecto: `file` lo declaraba «binary data» y **`grep` sin `-a` devolvía CERO sobre el
+> fichero entero** (`grep -c "console.log"` → 0; `grep -ac` → 1). No rompía nada funcional —el `\0`
+> como separador de clave es técnica válida— y **no cegaba al portero del orquestador**, que lee el
+> diff en JS (`orchestrator/validator.js:14`), pero sí a cualquier persona o agente que hiciera
+> `grep` sobre un fichero de producto que corre cada noche. Es *«un censo que dice CERO y no es
+> cierto es peor que no tenerlo»* de `CLAUDE.md`, y se pisó de verdad durante esta revisión: el
+> primer `grep` devolvió silencio. Arreglado escribiendo el escape `\0` en vez del byte crudo —
+> mismo valor (`` `a\0b` ``.charCodeAt(1) === 0), fichero de texto otra vez, `node --check` OK.
+>
+> **Gate ejecutado UNA vez, con autorización expresa de Ibrahin** (`RITUAL.md:13` lo prohíbe por
+> iniciativa propia), ya sobre el código con el NUL arreglado:
+> `node scripts/test-manifiesto-copias.mjs` → **114 OK · 0 fallos · exit 0**. Verdes que corresponden
+> al motivo del rechazo, por su nombre: `(i-2) la salida NO contiene "¿borrado?"`, `(i-3) la retención
+> SÍ se ejecuta en el destino nuevo`, `(i-4) alterar el histórico rezagado sale 1`, `(i-5) quedan SIN
+> VIGILAR`, `(j-2) clave rotada · 0 alarmas`.
+>
+> **Lo que sigue sin cubrir, y no es descuido:** el manifiesto vive en este servidor, así que quien lo
+> controle puede reescribirlo entero; el ancla del correo defiende contra la cuenta de Drive
+> comprometida, no contra el servidor comprometido.
 
 
 ## TAREA — La retención del backup borra si la subida falló a medias
@@ -10520,7 +10555,7 @@ negocio suspendido NO deja escribir— necesitan un negocio suspendido y tienen 
 ## Seguridad y datos
 
 - [~] **Cifrar las copias de seguridad.** ~~Cierra a la vez los vectores 4 y 7~~ ~~Es configuración (`rclone crypt`), no programación.~~ ~~**⚙️ CÓDIGO HECHO EL 1 SEP 2026 · OPERACIÓN PENDIENTE DE IBRAHIN.** El script exige destino `crypt` y **aborta** si no lo es.~~ **⚙️ ESO ERA FALSO Y SE REVIRTIÓ EL MISMO DÍA (`6bd067f`): el script de hoy NO exige nada, y aquel guardián habría dejado sin copia las dos madrugadas.** Se tacha en vez de borrarse. **REPLANTEADO Y RECONSTRUIDO EL 1 SEP 2026 (tarde), con otro enfoque:** el cifrado deja de ser un interruptor en el código y pasa a ser un **estado del servidor**. El script sabe funcionar en los dos mundos —sin rama blanda en ninguno: `cryptcheck` si el destino es `crypt`, MD5 obligatorio si no lo es— y compara el restore **byte a byte** (`integrity_check` da `ok` a cualquier base sana, aunque sea otra). Quién manda lo dice `~/.config/bamburu/backup-destinos.conf`, que **solo escribe** `scripts/cifrar-copias-de-seguridad.sh` y **solo después de haber subido, bajado y comparado un fichero de prueba**; ese mismo fichero es el cerrojo, así que **el código no puede exigir cifrado antes de que el cifrado exista**. **Las dos frases tachadas eran falsas:** cierra el vector 4 **entero** y **solo la mitad del 7** (falta `manifiesto-huellas-backups`), y **no era configuración**: cifrar sin tocar el código habría apagado la verificación de MD5 dejándola en verde. ~~Faltan 4 pasos de terminal que el orquestador no puede dar: crear los dos remotes `crypt`, custodiar la contraseña, instalar la unit + primera copia real, y migrar el histórico.~~ **⚙️ AHORA FALTA UNA SOLA ORDEN, y sigue siendo de Ibrahin** (`~/.config/rclone` está en solo lectura para el orquestador, sin `sudo`): `bash scripts/cifrar-copias-de-seguridad.sh`. Ella sola genera la llave, crea los dos destinos, **comprueba que descifra**, cambia el destino de las **dos** copias con una sola escritura y enseña la llave para custodiarla; si el descifrado falla, deshace y esa noche la copia sale en claro y en verde. El histórico va aparte, con simulacro por defecto: `--migrar-historico [--hazlo]`. **LAS COPIAS VAN EN CLARO HASTA QUE ESA ORDEN SE EJECUTE**, y el correo diario lo dice (`EN CLARO ⚠️`). **La ficha NO se cierra hasta entonces:** cerrarla sería el verde que miente que esta tarea viene a matar. Ficha completa arriba, detalle en `deploy/systemd/README.md` §«Cifrado de las copias».
-- [ ] **Manifiesto de huellas del histórico de backups.** Hoy solo se verifica la copia del día: una copia de hace cinco días se puede editar y nadie vuelve a mirarla. SHA-256 por copia, guardado aparte, comprobado contra las 14 en cada pasada. ~~**⚙️ CONSTRUIDO EL 2 SEP 2026**~~ **⚙️ ESE INTENTO SE RECHAZÓ (destino cambiado ≠ histórico manipulado); REPLANTEADO Y CONSTRUIDO EL 2 SEP 2026 (intento 4)** (`manifiesto-huellas-backups`): no eran «14 copias», eran 14 días / 283 objetos en la cuenta principal y 87 en la secundaria. La pasada ya no clasifica «el mundo» del destino: mira si el objeto sigue en el destino de HOY y si sigue donde dice su PROPIO registro, y el histórico que se queda atrás al cambiar de destino (p. ej. al cifrar sin migrar) se sigue comprobando DONDE ESTÁ en vez de declararse huérfano — 114 ✓ · 0 ✗. Ficha completa en §TAREA — Manifiesto de huellas del histórico de copias.
+- [x] **Manifiesto de huellas del histórico de backups.** ✅ **CERRADA EL 2 SEP 2026** (`920ec83` + el arreglo de los 2 bytes NUL que traía; gate `114 ✓ · 0 ✗` ejecutado con autorización de Ibrahin). Ficha completa y motivo del cierre en §TAREA — Manifiesto de huellas del histórico de copias. Hoy solo se verifica la copia del día: una copia de hace cinco días se puede editar y nadie vuelve a mirarla. SHA-256 por copia, guardado aparte, comprobado contra las 14 en cada pasada. ~~**⚙️ CONSTRUIDO EL 2 SEP 2026**~~ **⚙️ ESE INTENTO SE RECHAZÓ (destino cambiado ≠ histórico manipulado); REPLANTEADO Y CONSTRUIDO EL 2 SEP 2026 (intento 4)** (`manifiesto-huellas-backups`): no eran «14 copias», eran 14 días / 283 objetos en la cuenta principal y 87 en la secundaria. La pasada ya no clasifica «el mundo» del destino: mira si el objeto sigue en el destino de HOY y si sigue donde dice su PROPIO registro, y el histórico que se queda atrás al cambiar de destino (p. ej. al cifrar sin migrar) se sigue comprobando DONDE ESTÁ en vez de declararse huérfano — 114 ✓ · 0 ✗. Ficha completa en §TAREA — Manifiesto de huellas del histórico de copias.
 - [ ] **La retención del backup borra aunque la subida haya fallado PARCIALMENTE** (`scripts/bamburu-backup.sh:164`). **⚙️ MATIZ MEDIDO EL 1 SEP 2026, porque la entrada estaba mal escrita:** cuatro líneas ANTES de la retención ya hay un guardián —`[ "$uploaded" -gt 0 ] || fail_exit`— que existe **desde el 19 jun 2026** (`3076f68`). O sea: si NO se subió nada, el script sale y no borra. **El hueco real, que sí es real, es el fallo PARCIAL:** si se subió un fichero y falló otro, `uploaded` es mayor que cero y la retención se ejecuta igual. Condicionar el borrado al éxito **de todos**, no de al menos uno.
 - [ ] **Cifrado en reposo de las bases de negocio.**
 - [ ] **Permisos Paso 1:** recorrer las rutas y dejar escrito qué permiso exige cada una. Desbloquea el Paso 2 (DISA administrando permisos). **⚙️ CIFRA NO REPRODUCIBLE, 1 sep 2026:** ~~600 de 1.025 rutas~~ — no se ha podido reproducir con ningún conteo sobre el árbol (salen 1.995 declaraciones de ruta y 464 guardas visibles). **La proporción del problema se sostiene —la mayoría de rutas no enseña su permiso en la línea— pero la cifra concreta no vale como criterio de HECHO.** Quien la construya tiene que empezar por fijar el método de conteo, y ese método es parte de la entrega.
