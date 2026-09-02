@@ -9102,20 +9102,106 @@ superadmin por otro motivo**.
 
 **Sigue todo en MODO DE PRUEBA de Stripe.** El cerrojo de `--modo-real` no se ha tocado.
 
-## TAREA — Noventa días para descargar los datos, y luego la bóveda
+## ✅ HECHA (2026-09-02) — Noventa días para descargar los datos, y luego la bóveda
 
 - **id:** suscripcion-datos-tras-el-corte
-- **estado:** pendiente
+- **estado:** hecha
 - **origen:** Decisión de Ibrahin, 2 sep 2026
 
 Cortado el uso, el cliente **sigue teniendo sus datos**. Tiene tres meses para descargárselos él solo. Pasados los tres meses, **no se borra nada**: los datos pasan a una bóveda de la que se pueden rescatar.
 
 **Criterios de aceptación**
 
-- [ ] Tras el corte, el cliente tiene **90 días** para descargar **todos** sus datos, él solo y sin pedir permiso.
-- [ ] Pasados los 90 días los datos van a **una bóveda que NO borra nada**.
-- [ ] **En ningún momento se destruye información de un negocio**, ni tras el corte ni en la bóveda.
-- [ ] El cliente sabe en todo momento cuántos días le quedan y qué pasará después.
+- [x] Tras el corte, el cliente tiene **90 días** para descargar **todos** sus datos, él solo y sin
+      pedir permiso.
+      **SÍ.** El reloj arranca **el día del corte** y **no se reinicia**: llamar otra vez a abrir la
+      ventana no la alarga — medido, porque es la misma trampa que ya se coló con el reloj del corte.
+      La copia es **todo**: las **134 tablas** del negocio en CSV, más **las facturas en PDF**
+      generadas por el mismo camino que el botón del producto. Y **se descarga desde la cuenta
+      cortada**: comprobado pidiendo la ruta con navegador, no leyendo el código —`readOnlyGuard`
+      deja pasar `/admin/suscripcion` entero, que es lo que ya salvó el botón de pagar—.
+- [x] Pasados los 90 días los datos van a **una bóveda que NO borra nada**.
+      **SÍ**, y la bóveda **es un estado, no un sitio**: no se mueve, no se archiva y no se copia a
+      ningún lado. Lo único que pasa es que se escribe una fecha en `control.db` y la ventana de
+      descarga se cierra. Medido: el día 89 la ventana sigue abierta, el 90 se cierra, y **el
+      recuento de TODAS las tablas del negocio es idéntico antes y después**.
+- [x] **En ningún momento se destruye información de un negocio**, ni tras el corte ni en la bóveda.
+      **SÍ.** En el módulo de la bóveda y en el exportador **no hay un solo `DELETE` ni `DROP`**, y el
+      exportador abre la base en **solo lectura**. La bóveda tampoco `rename`, `copyFile` ni `unlink`
+      nada. Hay tres aserciones en el barrido que lo vigilan.
+- [x] El cliente sabe en todo momento cuántos días le quedan y qué pasará después.
+      **SÍ.** En su pantalla: *«Te quedan 80 días para descargar tus datos»* + qué pasa después
+      (la bóveda, sin borrar). Medido en el día 0, el 30 y el 89. Y **en el correo del corte**, que es
+      el que va a leer: los 90 días, la fecha exacta del final y que después **no se borra nada**.
+      Va en ESE correo y no en uno nuevo — el encargo pedía no crear correos.
+
+**Comprobaciones — 274 aserciones, 0 fallos, en siete gates:**
+`test-suscripcion` **109 OK** (en el barrido) · `gate-suscripcion-datos` **32 OK** ·
+`gate-suscripcion-datos-pantallas` **21 OK** · `gate-suscripcion-impago` **39 OK** ·
+`gate-suscripcion-impago-pantallas` **18 OK** · `gate-suscripcion-mensual` **26 OK** ·
+`gate-suscripcion-alta-real` **29 OK**. Los seis últimos van **declarados fuera del barrido** con su
+motivo: necesitan navegador o claves de Stripe vivas.
+
+> ### 🧾 LA COPIA SE COMPRUEBA A SÍ MISMA, Y ES LO QUE MÁS IMPORTA DE ESTA TAREA
+>
+> Una descarga a medias que parece entera es el peor fallo posible aquí: el cliente cree que tiene
+> sus datos. Así que el paquete **no se entrega si no cuadra**, y hay tres capas:
+>
+> 1. **Se contrastan las filas de cada tabla contra la base** antes de comprimir. Si una no cuadra,
+>    no se entrega y se dice cuál.
+> 2. **El ZIP se vuelve a LEER entero, verificando el CRC de cada fichero.** Escribir bytes y dar por
+>    hecho que forman un ZIP válido es justo el verde que miente. Probado rompiéndolo: **un byte**
+>    alterado → *«la huella no cuadra, el fichero está corrupto»*.
+> 3. **Los CSV los lee un programa independiente** —el módulo `csv` de Python, con `utf-8-sig`, que es
+>    lo que hace Excel con el BOM— y se exige que todas las filas tengan las columnas de su cabecera.
+>    Con datos difíciles a propósito: comillas dentro, puntos y coma dentro y saltos de línea dentro.
+>    Comprobarlo con mi propio lector habría sido mirarme al espejo.
+>
+> **Y probado contra el negocio grande de verdad**, no con un laboratorio: 939 facturas →
+> **11,4 minutos, 1.075 ficheros, 229 MB, 0 PDFs fallidos**, y `unzip -t` —una herramienta ajena—
+> dice que el ZIP es válido.
+
+> ### Decisiones de construcción
+>
+> - **Se prepara en segundo plano, y está medido.** 2,2 s por PDF en serie = **34 minutos** para el
+>   negocio más grande. Generando **de tres en tres** baja a ~12. Una petición HTTP que tarda minutos
+>   se corta por el camino y deja al cliente con medio fichero o con nada.
+> - **Una exportación a la vez en todo el servidor.** Sin ese cerrojo, tres negocios pidiendo su copia
+>   el mismo día lanzan nueve Chromium a la vez y tumban el producto para todos.
+> - **ZIP escrito a mano, sin dependencia nueva** (`core/zip.js`, ~100 líneas). No hay ninguna
+>   librería de zip instalada, y meter una arrastra decenas de paquetes a la cadena de suministro para
+>   un formato de 1989. Mismo criterio que con Stripe por `fetch`. **ZIP y no `tar.gz`** porque el
+>   criterio es que se abra **sin ser informático**: doble clic en Windows y en Mac.
+> - **CSV con BOM y punto y coma.** El BOM hace que Excel abra los acentos bien en vez de `AdriÃ¡n`;
+>   el punto y coma es el separador que espera Excel en España. Con coma y sin BOM el fichero «se
+>   abre» y sale ilegible en una columna — que es peor, porque parece que funciona.
+> - **Las credenciales NO viajan en la copia** —sesiones abiertas, códigos de rescate, la contraseña y
+>   el secreto del doble factor—. No es un recorte del criterio: son llaves, no datos del negocio. Y
+>   **se dicen**, nombradas en el LEEME y en el manifiesto con su motivo: una omisión silenciosa es
+>   exactamente la «descarga a medias que parece entera» que esto viene a impedir.
+> - **La bóveda no impide un borrado futuro hecho a propósito.** Como no mueve nada, cuando se escriba
+>   la política de RGPD no habrá que sacar nada de ningún sitio raro antes de poder atender una
+>   petición de borrado. No se ha construido: solo no se ha cerrado la puerta.
+> - **El rescate pagando un mes es la tarea siguiente** y se encontrará el negocio entero, sin nada
+>   que restaurar.
+
+> ### ⚠️ DOS FALLOS QUE APARECIERON, Y CÓMO SE VIERON
+>
+> 1. **El correo del corte reventaba.** Al meterle los 90 días le referencié una variable que no
+>    existe en esa función (`textoDelAviso` es pura y solo sabe lo que se le pasa). **Solo se ve en el
+>    escalón del corte**, que es el único que usa esa frase: lo cazó `gate-suscripcion-impago` y
+>    ninguno de los otros seis llegaba allí. Ahora la fecha se calcula fuera y se pasa hecha.
+> 2. **«1 facturas en PDF» junto a «todavía no hay ninguna factura».** Dos tarjetas seguidas diciendo
+>    lo contrario sobre la misma palabra: una hablaba de las facturas **del negocio** y la otra de las
+>    **de Bamburu**. Correctas por separado, contradictorias juntas — el mismo tipo de fallo que
+>    apareció en las tres tareas anteriores, y otra vez **solo se vio mirando la captura**. Ahora se
+>    llaman por su nombre, y el singular está bien escrito.
+>
+> **Y un residuo, que también cuenta:** el gate del impago dejaba `descarga_hasta` puesto en un
+> negocio real, porque su restauración se escribió antes de que esa columna existiera. Limpiado y
+> arreglado, con el aviso escrito dentro para quien añada la siguiente columna.
+
+**Sigue todo en MODO DE PRUEBA de Stripe.** El cerrojo de `--modo-real` no se ha tocado.
 
 ## TAREA — Sacar algo de la bóveda: paga un mes y elige
 

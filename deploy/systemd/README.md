@@ -127,6 +127,26 @@ cortar nunca si ese evento no llega.
 correr en el acto, porque la de avisos también se sale antes cuando no hay nada que hacer. Son
 independientes y así están escritas.
 
+**⚙️ 2 SEP 2026 — Y UNA CUARTA FASE: CERRAR LAS VENTANAS DE DESCARGA**
+(`suscripcion-datos-tras-el-corte`). A los negocios a los que hoy se les cumplen **90 días desde el
+corte** se les cierra la ventana de descarga y pasan a la **bóveda**.
+
+**LA BÓVEDA ES UN ESTADO, NO UN SITIO.** No se mueve, no se archiva y **no se borra nada**: lo único
+que pasa es que se escribe una fecha en `control.db`. Los datos del negocio siguen exactamente donde
+estaban. Tres consecuencias, y las tres son a propósito: el rescate de la tarea siguiente **se
+encuentra el negocio entero**, un borrado futuro hecho a propósito (RGPD) **sigue siendo posible**, y
+no existe el momento peligroso — mover datos es la operación en la que se pierden.
+
+**La descarga se prepara EN SEGUNDO PLANO, y está medido:** el negocio más grande de este servidor
+tiene **939 facturas** y cada PDF pasa por Chromium — 2,2 s en serie, o sea 34 minutos. Generando de
+tres en tres baja a ~12. Hay **una exportación a la vez en todo el servidor**: sin ese cerrojo, tres
+negocios pidiendo su copia el mismo día lanzan nueve Chromium a la vez y tumban el producto para
+todos.
+
+**El paquete se comprueba a sí mismo antes de entregarse:** se contrastan las filas de cada tabla
+contra la base y **se vuelve a leer el ZIP entero verificando el CRC de cada fichero**. Si algo no
+cuadra, no se entrega. Los ficheros sobrantes viven en `data/exportaciones/` (permisos `700`).
+
 **Los reintentos de Stripe (Smart Retries) NO se pueden activar por API** — medido: `GET /v1/account`
 no expone `settings.billing`. Es una casilla del panel de Stripe (Billing → *Manage failed payments*).
 Por eso el calendario de avisos y el corte son **nuestros** y no dependen de ella: si está encendida,

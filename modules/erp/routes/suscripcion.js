@@ -39,6 +39,9 @@ import { situacion, prorrateo, asegurarSuscripcion, suscripcionDe, guardarSuscri
          hoyISO, fechaEnPalabras, siguienteDiaDeCobro } from '../../../core/suscripcion.js';
 import * as stripe from '../../../core/stripe.js';
 import { facturasDelNegocio, proximoCargo, cambiarTarjeta } from '../../../core/suscripcion-mensual.js';
+import { situacionDeLosDatos, DIAS_DE_DESCARGA } from '../../../core/suscripcion-datos.js';
+import { exportarNegocio } from '../exportacion.js';
+import { createReadStream, existsSync, statSync } from 'fs';
 
 // El dueño y nadie más. Devuelve la respuesta de denegación ya hecha, o `null` si puede pasar.
 function soloDueno(c) {
@@ -73,6 +76,7 @@ export function createSuscripcionRoutes(db) {
     // pantalla caída porque el listado de facturas no cargó sería peor que una sin listado.
     const facturas = await facturasDelNegocio(tenant).catch(() => []);
     const cargo = await proximoCargo(tenant).catch(() => null);
+    const datos = situacionDeLosDatos(tenant.id);
     const P = plan();
     const diag = stripe.diagnostico();
     const msg = c.req.query('msg');
@@ -234,8 +238,32 @@ export function createSuscripcionRoutes(db) {
         </p>
       </div></div>` : ''}
 
+      ${datos.aplica ? `<div class="card"><div class="card-body">
+        <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.35rem">${escHtml(datos.titulo)}</h3>
+        <p class="sus-detalle">${datos.detalle.replace(/\*\*(.+?)\*\*/g, (m, t) => '<strong>' + escHtml(t) + '</strong>')
+                                              .replace(/(?<!>)([^<>]+)(?![^<]*>)/g, (m) => m)}</p>
+        ${datos.puede_descargar ? `
+          <div id="susDescarga" data-estado="${escHtml(datos.descarga.estado || '')}" style="margin-top:1rem">
+            ${datos.descarga.estado === 'lista' && datos.descarga.resumen ? `
+              <p class="sus-detalle"><strong>Tu copia está lista.</strong>
+                ${escHtml(String(datos.descarga.resumen.tablas))} ficheros de datos,
+                ${escHtml(String(datos.descarga.resumen.filas))} filas y
+                ${escHtml(String(datos.descarga.resumen.pdfs))}
+                ${datos.descarga.resumen.pdfs === 1 ? 'factura de tu negocio' : 'facturas de tu negocio'} en PDF.</p>
+              <a class="btn btn-primary" href="/admin/suscripcion/descargar">Descargar mis datos</a>
+              <button type="button" class="btn" id="susRehacer">Volver a prepararla</button>`
+            : datos.descarga.estado === 'preparando' ? `
+              <p class="sus-detalle">Estamos preparando tu copia. Tarda unos minutos si tienes muchas
+                facturas, porque cada una se genera en PDF. <strong>Puedes cerrar esta pantalla</strong>:
+                seguimos aunque te vayas.</p>`
+            : `
+              ${datos.descarga.error ? `<p class="sus-detalle" style="color:var(--danger)">La última vez no salió bien: ${escHtml(datos.descarga.error)}</p>` : ''}
+              <button type="button" class="btn btn-primary" id="susPreparar">Preparar mi descarga</button>`}
+          </div>` : ''}
+      </div></div>` : ''}
+
       <div class="card"><div class="card-body">
-        <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.6rem">Tus facturas</h3>
+        <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.6rem">Tus facturas de Bamburu</h3>
         ${facturas.length ? `<table class="sus-facturas">
           <thead><tr><th>Factura</th><th>Fecha</th><th style="text-align:right">Total</th><th></th></tr></thead>
           <tbody>${facturas.map(f => `<tr>
@@ -246,11 +274,38 @@ export function createSuscripcionRoutes(db) {
               ? `<a class="btn btn-sm" href="${escHtml(f.pdf)}" target="_blank" rel="noopener">Descargar</a>`
               : (f.web ? `<a class="btn btn-sm" href="${escHtml(f.web)}" target="_blank" rel="noopener">Ver</a>` : '—')}</td>
           </tr>`).join('')}</tbody>
-        </table>` : `<p class="sus-detalle">Todavía no hay ninguna factura. La primera saldrá con tu primer cobro.</p>`}
+        </table>` : `<p class="sus-detalle">Todavía no hay ninguna factura <strong>de tu suscripción</strong>. La primera saldrá con tu primer cobro.
+          (Las facturas que emites tú a tus clientes están en <a href="/admin/invoices">Facturas</a>, y van en tu descarga.)</p>`}
       </div></div>
     </div>
 
     <script>
+      // La descarga se PREPARA en segundo plano: el negocio más grande de este servidor tiene 939
+      // facturas y cada PDF pasa por Chromium. Una petición que tarda minutos se corta por el camino
+      // y deja al cliente con medio fichero, o con nada y sin saber por qué.
+      for (const id of ['susPreparar', 'susRehacer']) {
+        document.getElementById(id)?.addEventListener('click', async (ev) => {
+          const b = ev.currentTarget;
+          b.disabled = true; b.textContent = 'Preparando…';
+          try {
+            const r = await fetch('/api/erp/suscripcion/descarga/preparar', { method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || '' }, body: '{}' });
+            const d = await r.json();
+            if (!r.ok) { b.disabled = false; b.textContent = 'Preparar mi descarga'; alertaEnPagina(d.error); return; }
+            location.reload();
+          } catch (e) { b.disabled = false; b.textContent = 'Preparar mi descarga'; }
+        });
+      }
+      function alertaEnPagina(t) {
+        const c = document.getElementById('susDescarga');
+        if (c) c.insertAdjacentHTML('beforeend', '<p class="sus-detalle" style="color:var(--danger)">' + (t || 'No se pudo preparar.') + '</p>');
+      }
+      // Mientras se prepara, la pantalla se refresca sola: así el dueño ve cuándo está lista sin
+      // tener que adivinar. Cada 15 s, y solo si de verdad está preparándose.
+      if (document.getElementById('susDescarga')?.dataset.estado === 'preparando') {
+        setTimeout(() => location.reload(), 15000);
+      }
+
       // CERO ventanitas del navegador: se pregunta DENTRO de la página con el panel compartido
       // (window.confirmarEnPagina, layout.js). Un confirm() aquí sería un botón que deja de
       // funcionar en silencio en cuanto alguien marca "impedir cuadros de diálogo".
@@ -390,6 +445,37 @@ export function createSuscripcionRoutes(db) {
     }
   });
 
+  // ── LA DESCARGA (tarea `suscripcion-datos-tras-el-corte`) ───────────────────────────────────
+  //
+  // Cuelga de `/admin/suscripcion`, y no es casualidad: `readOnlyGuard` deja pasar ese prefijo
+  // entero, así que **la descarga funciona desde una cuenta cortada** igual que el botón de pagar.
+  // Es la misma lección del 2 de septiembre, y aquí importa más todavía: negarle a alguien la copia
+  // de sus datos porque no ha pagado sería justo lo contrario de lo que promete esta tarea.
+  views.get('/descargar', c => {
+    const no = soloDueno(c); if (no) return no;
+    const tenant = c.get('tenant');
+    const d = situacionDeLosDatos(tenant.id);
+
+    if (!d.aplica || !d.puede_descargar) {
+      return c.redirect('/admin/suscripcion?err=' + encodeURIComponent(
+        d.fase === 'boveda'
+          ? 'La ventana de descarga se cerró. Tus datos NO se han borrado: están enteros en la bóveda.'
+          : 'No hay ninguna descarga disponible ahora mismo.'));
+    }
+    if (d.descarga.estado !== 'lista' || !d.descarga.fichero || !existsSync(d.descarga.fichero)) {
+      return c.redirect('/admin/suscripcion?err=' + encodeURIComponent('Tu copia todavía no está lista. Prepárala primero.'));
+    }
+
+    const nombre = `bamburu-${tenant.slug}-${new Date().toISOString().slice(0, 10)}.zip`;
+    return new Response(createReadStream(d.descarga.fichero), {
+      headers: {
+        'Content-Type': 'application/zip',
+        'Content-Length': String(statSync(d.descarga.fichero).size),
+        'Content-Disposition': `attachment; filename="${nombre}"`,
+      },
+    });
+  });
+
   views.get('/cancelado', c => {
     const no = soloDueno(c); if (no) return no;
     return c.redirect('/admin/suscripcion?msg=' + encodeURIComponent('No se ha guardado ninguna tarjeta. No se te ha cobrado nada.'));
@@ -442,13 +528,56 @@ export function createSuscripcionRoutes(db) {
     }
   });
 
+  /**
+   * Prepara la copia EN SEGUNDO PLANO. Contesta en el acto y sigue trabajando.
+   * Medido: 939 facturas en el negocio más grande, y cada PDF pasa por Chromium — minutos.
+   */
+  api.post('/descarga/preparar', async c => {
+    if (!c.get('isOwner')) return c.json({ error: 'Solo el dueño puede descargar los datos.' }, 403);
+    const tenant = c.get('tenant');
+    const d = situacionDeLosDatos(tenant.id);
+    if (!d.aplica || !d.puede_descargar) {
+      return c.json({ error: d.fase === 'boveda'
+        ? 'La ventana de descarga se cerró. Tus datos NO se han borrado: están en la bóveda.'
+        : 'La descarga se abre cuando la cuenta pasa a solo lectura.' }, 400);
+    }
+    if (d.descarga.estado === 'preparando') return c.json({ ok: true, ya: true });
+
+    guardarSuscripcion(tenant.id, { descarga_estado: 'preparando', descarga_error: null });
+
+    // Se lanza SIN esperarla, a propósito: la respuesta sale ya y el trabajo sigue. El `catch` de
+    // arriba del todo es obligatorio — una promesa de fondo que revienta sin recoger tumbaría el
+    // proceso entero de Node y con él el producto de todos los negocios.
+    (async () => {
+      const r = await exportarNegocio(tenant, db, {
+        alProgresar: (t) => console.log(`[exportacion:${tenant.slug}] ${t}`),
+      });
+      if (r.ok) {
+        guardarSuscripcion(tenant.id, {
+          descarga_estado: 'lista', descarga_fichero: r.ruta, descarga_lista_en: new Date().toISOString(),
+          descarga_resumen: JSON.stringify(r.resumen), descarga_error: null,
+        });
+        console.log(`[exportacion:${tenant.slug}] lista: ${r.bytes} bytes · ${JSON.stringify(r.resumen)}`);
+      } else {
+        guardarSuscripcion(tenant.id, { descarga_estado: 'error', descarga_error: r.error });
+        console.error(`[exportacion:${tenant.slug}] FALLÓ: ${r.error}`);
+      }
+    })().catch(e => {
+      guardarSuscripcion(tenant.id, { descarga_estado: 'error', descarga_error: e.message || String(e) });
+      console.error(`[exportacion:${tenant.slug}] excepción: ${e.stack || e.message}`);
+    });
+
+    return c.json({ ok: true });
+  });
+
   // Estado en JSON, para DISA y para el gate. Las dos puertas (CANON §3-bis) con el mismo candado:
   // aquí también manda el rol de dueño.
   api.get('/situacion', c => {
     if (!c.get('isOwner')) return c.json({ error: 'Solo el dueño puede ver la suscripción.' }, 403);
     const tenant = c.get('tenant');
     asegurarSuscripcion(tenant.id);
-    return c.json({ plan: plan(), situacion: situacion(tenant.id), stripe: stripe.diagnostico() });
+    return c.json({ plan: plan(), situacion: situacion(tenant.id), datos: situacionDeLosDatos(tenant.id),
+                    stripe: stripe.diagnostico() });
   });
 
   return { api, views };

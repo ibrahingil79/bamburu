@@ -503,6 +503,16 @@ export const claseDe = g => EMPIEZAN_DE_CERO.has(g) ? 'propio' : (SOLOS.has(g) ?
 // Fuera del barrido A PROPÓSITO, cada uno con su motivo. Declarar no es esconder: esto SALE en el
 // parte, y por eso una excusa floja aquí se lee y se discute.
 export const FUERA_A_PROPOSITO = new Map([
+  ['gate-suscripcion-datos',
+   'los 90 días de descarga y la bóveda: genera la copia completa de un negocio real, la contrasta '
+   + 'fila a fila contra la base, comprueba que el ZIP se abre y que los CSV los lee un programa '
+   + 'independiente, y mide que al día 90 se cierre la ventana sin tocar ni un dato. Genera PDFs con '
+   + 'Chromium, así que es lento y necesita navegador. Se lanza a mano al tocar la suscripción.'],
+  ['gate-suscripcion-datos-pantallas',
+   'la descarga mirada con navegador: que desde una cuenta CORTADA se pueda descargar (pidiendo la '
+   + 'ruta, no leyendo el código), que el fichero que baja se abra de verdad, y que en la bóveda no '
+   + 'se ofrezca un botón que ya no lleva a ninguna parte. Necesita navegador y toca el estado de un '
+   + 'negocio real (lo devuelve en el finally). Se lanza a mano.'],
   ['gate-suscripcion-impago',
    'el impago entero: fallo, los cinco avisos en su día, el corte a los 30 y la vuelta al pagar, más '
    + 'los caminos de vuelta que nadie prueba (pagar tras el primer aviso, pagar la víspera). Usa los '

@@ -30,6 +30,7 @@ import { suscripcionDe, guardarSuscripcion, hoyISO, sumarDias, diasEntre, fechaE
 import { eur } from './plan.js';
 import { correoDelNegocio } from './suscripcion-mensual.js';
 import { sendEmail } from './mailer.js';
+import { abrirVentanaDeDescarga, DIAS_DE_DESCARGA } from './suscripcion-datos.js';
 
 /** Días desde el primer fallo hasta el corte. Es la regla del dueño: 30. */
 export const DIAS_HASTA_EL_CORTE = 30;
@@ -140,7 +141,7 @@ export function escalonQueToca(s, { hoy = null } = {}) {
 }
 
 /** El texto de cada escalón. Cinco mensajes distintos, con su tono y su enlace para pagar. */
-export function textoDelAviso(escalon, { negocio, tarjeta, importe, corteEl, url }) {
+export function textoDelAviso(escalon, { negocio, tarjeta, importe, corteEl, url, descargaHasta = null }) {
   const cuatro = tarjeta ? ` (${tarjeta.marca} ···· ${tarjeta.ultimos4})` : '';
   const pie = [``, `Puedes arreglarlo aquí, en un minuto:`, `    ${url}`, ``, `— Bamburu`].join('\n');
   const corte = fechaEnPalabras(corteEl);
@@ -196,6 +197,14 @@ export function textoDelAviso(escalon, { negocio, tarjeta, importe, corteEl, url
         `  · Puedes descargarte tus facturas.`,
         `  · NO puedes crear ni modificar nada.`,
         `  · **No se ha borrado nada, y no se va a borrar.**`, ``,
+        // El plazo de la descarga va EN ESTE MISMO correo y no en uno nuevo: el criterio dice que el
+        // cliente sepa en todo momento cuántos días le quedan, y este es el correo que va a leer.
+        `**TIENES ${DIAS_DE_DESCARGA} DÍAS PARA LLEVARTE TODO LO TUYO.**`,
+        `  Desde hoy y hasta el ${fechaEnPalabras(descargaHasta)} puedes`,
+        `  descargarte **un solo archivo con TODOS tus datos** —clientes, facturas en PDF, catálogo,`,
+        `  agenda— tú solo, desde «Mi suscripción», sin pedirle permiso a nadie.`,
+        `  Pasado ese plazo **tus datos NO se borran**: pasan a una bóveda de la que se pueden`,
+        `  rescatar. No se destruye nada, nunca.`, ``,
         `**Qué hay que hacer para volver, exactamente:**`,
         `  1. Entra en Bamburu como siempre.`,
         `  2. Ve a «Mi suscripción» (abajo del todo, en el menú de la izquierda).`,
@@ -227,6 +236,11 @@ export async function procesarImpago(fila, { db = controlDb, hoy = null, simulac
     tarjeta: s?.tarjeta_ultimos4 ? { marca: s.tarjeta_marca || 'tarjeta', ultimos4: s.tarjeta_ultimos4 } : null,
     importe: s?.ultimo_cobro_centimos ? eur(s.ultimo_cobro_centimos) : 'tu cuota mensual',
     corteEl: s?.corte_previsto, url,
+    // La fecha del final de la descarga se calcula AQUÍ y se pasa hecha: `textoDelAviso` es una
+    // función pura que solo sabe lo que se le da. La primera versión le leía una variable del
+    // ámbito de fuera —`s`— y reventaba justo en el escalón del corte, que es el único que la usa.
+    // Lo cazó el gate del impago; los otros no llegan a ese escalón.
+    descargaHasta: sumarDias(esc.clave === 'corte' ? dia : (s?.cortado_en || dia), DIAS_DE_DESCARGA),
   });
 
   if (simulacro) return { hizo: 'simulacro', escalon: esc.clave, destino, asunto: msg.asunto };
@@ -239,6 +253,9 @@ export async function procesarImpago(fila, { db = controlDb, hoy = null, simulac
     setTenantStatus(fila.tenant_id ?? fila.id, 'suspended_admin',
       `Sin pago desde el ${fechaEnPalabras(s?.impago_desde)}. Ve a «Mi suscripción» y pon una tarjeta: se reactiva sola.`);
     guardarSuscripcion(fila.tenant_id ?? fila.id, { cortado_en: dia, cortado_por_impago: 1 }, db);
+    // Y con el corte arranca el reloj de los 90 días para llevarse todo
+    // (tarea `suscripcion-datos-tras-el-corte`). Se fija AQUÍ, una vez, y no se vuelve a tocar.
+    abrirVentanaDeDescarga(fila.tenant_id ?? fila.id, { db, desde: dia });
     cortado = true;
   }
 

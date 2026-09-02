@@ -296,6 +296,25 @@ function runMigrations(db) {
     "ALTER TABLE tenant_suscripciones ADD COLUMN cortado_por_impago INTEGER NOT NULL DEFAULT 0",
   ]) { try { db.exec(col); } catch {} }
 
+  // ── LOS 90 DÍAS Y LA BÓVEDA (tarea `suscripcion-datos-tras-el-corte`, 2 sep 2026) ──────────────
+  // `descarga_hasta` se fija EL DÍA DEL CORTE y no se vuelve a tocar nunca. Es la misma trampa del
+  // reloj de la tarea anterior: si se recalculara en cada pasada o en cada aviso, la ventana se
+  // alargaría sola y los 90 días no llegarían jamás.
+  //
+  // `en_boveda_desde` es una MARCA, no una mudanza. Los datos siguen exactamente donde están: en la
+  // base del negocio, intactos. La bóveda es un estado, no un sitio — y por eso el rescate de la
+  // tarea siguiente se va a encontrar el negocio entero, y por eso un borrado futuro hecho a
+  // propósito (RGPD) sigue siendo posible: no hay nada que «traer de vuelta» primero.
+  for (const col of [
+    "ALTER TABLE tenant_suscripciones ADD COLUMN descarga_hasta TEXT",
+    "ALTER TABLE tenant_suscripciones ADD COLUMN en_boveda_desde TEXT",
+    "ALTER TABLE tenant_suscripciones ADD COLUMN descarga_estado TEXT",
+    "ALTER TABLE tenant_suscripciones ADD COLUMN descarga_fichero TEXT",
+    "ALTER TABLE tenant_suscripciones ADD COLUMN descarga_lista_en TEXT",
+    "ALTER TABLE tenant_suscripciones ADD COLUMN descarga_error TEXT",
+    "ALTER TABLE tenant_suscripciones ADD COLUMN descarga_resumen TEXT",
+  ]) { try { db.exec(col); } catch {} }
+
   // SIEMBRA DE LOS NEGOCIOS QUE YA EXISTÍAN. Aditiva y de una sola vez: `INSERT … SELECT … WHERE NOT
   // EXISTS` no toca ninguna fila que ya esté, así que volver a arrancar no reinicia la prueba de
   // nadie ni le borra una tarjeta.

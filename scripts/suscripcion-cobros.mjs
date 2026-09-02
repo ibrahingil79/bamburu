@@ -35,6 +35,7 @@ import { hoyISO, prorrateo, fechaEnPalabras } from '../core/suscripcion.js';
 import { cobrarProrrateo, pendientesDeProrrateo } from '../core/suscripcion-cobro.js';
 import { enviarAvisoPrevio, DIAS_DE_AVISO } from '../core/suscripcion-mensual.js';
 import { conImpagoAbierto, procesarImpago, DIAS_HASTA_EL_CORTE } from '../core/suscripcion-impago.js';
+import { aLosQueSeLesCierraLaVentana, guardarEnLaBoveda, DIAS_DE_DESCARGA } from '../core/suscripcion-datos.js';
 import { diagnostico } from '../core/stripe.js';
 
 const args = process.argv.slice(2);
@@ -71,6 +72,7 @@ async function main() {
     // corriente, que son justo los que no aparecen en esa lista.
     await avisosPrevios();
     await cadenaDeImpago();
+    cerrarVentanasDeDescarga();
     return 0;
   }
 
@@ -94,7 +96,27 @@ async function main() {
 
   await avisosPrevios();
   await cadenaDeImpago();
+  cerrarVentanasDeDescarga();
   return 0;
+}
+
+/**
+ * LA BÓVEDA (tarea `suscripcion-datos-tras-el-corte`). A los negocios a los que hoy se les cumplen
+ * los 90 días desde el corte se les cierra la ventana de descarga.
+ *
+ * ⚠️ NO SE MUEVE, NO SE ARCHIVA Y NO SE BORRA NADA. Lo único que pasa es que se escribe una fecha en
+ * `control.db`. Los datos del negocio siguen exactamente donde estaban, intactos. La bóveda es un
+ * estado, no un sitio — y por eso el rescate de la tarea siguiente se encontrará el negocio entero.
+ */
+function cerrarVentanasDeDescarga() {
+  const filas = aLosQueSeLesCierraLaVentana({ db: controlDb, hoy: HOY });
+  if (!filas.length) { linea(`[suscripcion-boveda] ninguna ventana de descarga se cierra hoy (son ${DIAS_DE_DESCARGA} días).`); return; }
+  for (const f of filas) {
+    if (!DE_VERDAD) { linea(`  · ${f.slug} — se le cerraría la ventana (venció el ${f.descarga_hasta})  [simulacro]`); continue; }
+    guardarEnLaBoveda(f.id, { db: controlDb, hoy: HOY });
+    linea(`  · ${f.slug} — 🔐 a la bóveda (venció el ${f.descarga_hasta}) · NO se ha tocado ni un dato suyo`);
+  }
+  linea(`[suscripcion-boveda] ${DE_VERDAD ? filas.length : 0} ventana(s) cerrada(s)`);
 }
 
 // LAS TRES FASES CUELGAN DE `main`, NO UNA DE OTRA. Colgué la del impago del final de la de avisos y

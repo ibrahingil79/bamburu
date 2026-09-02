@@ -112,6 +112,12 @@ try {
     cd.prepare('SELECT cortado_por_impago FROM tenant_suscripciones WHERE tenant_id=?').get(tenant.id).cortado_por_impago === 1);
   const corteMsg = correos[0]?.text || '';
   check('el aviso del corte dice que NO se ha borrado nada', /no se ha borrado nada/i.test(corteMsg), corteMsg.slice(0, 200));
+  // El correo del corte tiene que llevar los 90 días DENTRO (tarea `suscripcion-datos-tras-el-corte`):
+  // es el correo que el dueño va a leer, y crear uno nuevo para eso sería otro correo más.
+  check('y dice los 90 días para llevarse todo, con su fecha', /90 DÍAS PARA LLEVARTE TODO/i.test(corteMsg)
+    && /hasta el \d+ de \w+ de \d{4}/.test(corteMsg), corteMsg.slice(0, 700));
+  check('y que pasado ese plazo los datos NO se borran, pasan a la bóveda',
+    /bóveda/i.test(corteMsg) && /NO se borran/i.test(corteMsg), corteMsg.slice(0, 900));
   check('y dice EXACTAMENTE qué hacer para volver, paso a paso',
     /1\..*Entra/s.test(corteMsg) && /Mi suscripción/.test(corteMsg) && /se reactiva sola/i.test(corteMsg), corteMsg.slice(-400));
   check('el motivo que ve el dueño en pantalla también lo dice',
@@ -223,12 +229,17 @@ try {
   cd.prepare(`UPDATE tenant_suscripciones SET estado=?, stripe_cliente_id=?, stripe_metodo_pago_id=?,
     stripe_suscripcion_id=?, tarjeta_marca=?, tarjeta_ultimos4=?, tarjeta_caduca=?, proximo_cobro=?,
     ultimo_cobro_centimos=?, ultimo_cobro_en=?, ultimo_error=?, aviso_de_factura=?, aviso_enviado_en=?,
-    impago_desde=?, corte_previsto=?, avisos_impago=?, cortado_en=?, cortado_por_impago=? WHERE tenant_id=?`)
+    impago_desde=?, corte_previsto=?, avisos_impago=?, cortado_en=?, cortado_por_impago=?,
+    descarga_hasta=?, en_boveda_desde=? WHERE tenant_id=?`)
     .run(antes.estado, antes.stripe_cliente_id, antes.stripe_metodo_pago_id, antes.stripe_suscripcion_id,
          antes.tarjeta_marca, antes.tarjeta_ultimos4, antes.tarjeta_caduca, antes.proximo_cobro,
          antes.ultimo_cobro_centimos, antes.ultimo_cobro_en, antes.ultimo_error, antes.aviso_de_factura,
          antes.aviso_enviado_en, antes.impago_desde ?? null, antes.corte_previsto ?? null,
-         antes.avisos_impago ?? null, antes.cortado_en ?? null, antes.cortado_por_impago ?? 0, tenant.id);
+         antes.avisos_impago ?? null, antes.cortado_en ?? null, antes.cortado_por_impago ?? 0,
+         // ⚠️ Estas dos se añadieron DESPUÉS de escribir este gate, y por eso se quedaban puestas en
+         // un negocio real: la restauración solo devuelve las columnas que conoce. Cuando se añade
+         // una columna al episodio, hay que añadirla también aquí.
+         antes.descarga_hasta ?? null, antes.en_boveda_desde ?? null, tenant.id);
   P(`  reloj borrado · negocio devuelto a «${estadoAntes}» y sin impago`);
 }
 process.exit(mal ? 1 : 0);

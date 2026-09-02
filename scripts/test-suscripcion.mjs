@@ -342,6 +342,63 @@ try {
   check('la pasada corre las TRES fases al mismo nivel, sin anidarlas',
     (readFileSync(path.join(RAIZ, 'scripts/suscripcion-cobros.mjs'), 'utf8').match(/await cadenaDeImpago\(\)/g) || []).length === 2);
 
+  // ── LOS 90 DÍAS Y LA BÓVEDA (tarea `suscripcion-datos-tras-el-corte`, 2 sep 2026) ─────────────
+  P('\n[90 días y bóveda]');
+  const datosMod = readFileSync(path.join(RAIZ, 'core/suscripcion-datos.js'), 'utf8');
+  const datosCod = sinComentarios(datosMod);
+  const expMod = readFileSync(path.join(RAIZ, 'modules/erp/exportacion.js'), 'utf8');
+  const expCod = sinComentarios(expMod);
+  const zipMod = readFileSync(path.join(RAIZ, 'core/zip.js'), 'utf8');
+
+  check('la ventana dura 90 días y el número vive en un solo sitio',
+    /export const DIAS_DE_DESCARGA = 90/.test(datosMod)
+      && !/\b90\b/.test(datosCod.replace('DIAS_DE_DESCARGA = 90', '')),
+    'el 90 tiene que salir de la constante');
+  check('el reloj NO se reinicia al volver a abrir la ventana',
+    /if \(s\.descarga_hasta\) return s;/.test(datosCod),
+    'sin esto la ventana se alarga sola y los 90 días no llegan nunca');
+  check('la ventana se abre EN EL CORTE, no cada día',
+    /abrirVentanaDeDescarga\(fila\.tenant_id \?\? fila\.id, \{ db, desde: dia \}\)/.test(
+      readFileSync(path.join(RAIZ, 'core/suscripcion-impago.js'), 'utf8')));
+
+  // LA REGLA QUE MANDA: no se destruye información en ningún momento.
+  check('el módulo de la bóveda no borra NADA', !/DELETE FROM|DROP /i.test(datosCod));
+  check('y no MUEVE la base a ningún sitio: la bóveda es un estado, no un sitio',
+    !/rename|copyFile|unlink|rmdir/i.test(datosCod));
+  check('el exportador tampoco borra nada', !/DELETE FROM|DROP /i.test(expCod));
+
+  // La copia: completa, comprobada, y que se abra.
+  check('el paquete se contrasta con la base ANTES de entregarse',
+    /descuadres\.length/.test(expCod) && /NO se entrega/.test(expMod));
+  check('y el ZIP se vuelve a LEER entero antes de entregarlo',
+    /verificarZip\(zip\)/.test(expCod) && /export function verificarZip/.test(zipMod));
+  check('el verificador comprueba el CRC de cada fichero, no solo que haya bytes',
+    /crc32\(contenido\) !== huella/.test(zipMod));
+  check('los CSV llevan BOM y punto y coma (que es lo que abre Excel)',
+    /'\\ufeff'|'﻿'/.test(expCod) && /\.join\(';'\)/.test(expCod));
+  check('las credenciales NO viajan en la copia, y están declaradas',
+    /admin_sessions/.test(expMod) && /password_hash/.test(expMod) && /TABLAS_FUERA/.test(expCod));
+  check('y lo excluido se DICE en el LEEME (una omisión silenciosa es el fallo que esto evita)',
+    /LO QUE NO ESTÁ AQUÍ/.test(expMod));
+
+  // Los PDFs son caros: medido, 2,2 s cada uno en serie.
+  check('las facturas en PDF se generan de varias en varias, no de una en una',
+    /PDFS_A_LA_VEZ/.test(expCod) && /Promise\.all/.test(expCod));
+  check('y hay UNA exportación a la vez en todo el servidor',
+    /function enFila/.test(expCod) && /return enFila\(/.test(expCod));
+  check('el PDF sale por el MISMO camino que el botón del producto',
+    /buildInvoicePaper/.test(expCod) && /printableShell/.test(expCod));
+
+  // Desde una cuenta cortada se puede DESCARGAR, igual que pagar.
+  check('la descarga cuelga de /admin/suscripcion, que el guardián deja pasar',
+    /views\.get\('\/descargar'/.test(pantalla) && /'\/admin\/suscripcion'/.test(guardCod));
+  check('en la bóveda no se ofrece un botón de descarga que ya no funciona',
+    /datos\.puede_descargar \?/.test(pantalla));
+  check('la pasada diaria cierra las ventanas vencidas, en su propia fase',
+    (pasada.match(/cerrarVentanasDeDescarga\(\)/g) || []).length === 3);
+  check('el correo del corte dice los 90 días y qué pasa después',
+    /DÍAS PARA LLEVARTE TODO LO TUYO/.test(readFileSync(path.join(RAIZ, 'core/suscripcion-impago.js'), 'utf8')));
+
   P('\n──────────────────────────────────────────────────────────');
   P(`  ${ok} OK · ${mal} fallos`);
   P('──────────────────────────────────────────────────────────\n');
