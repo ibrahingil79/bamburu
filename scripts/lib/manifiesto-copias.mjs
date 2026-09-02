@@ -88,6 +88,12 @@ function corto(hash) {
   return hash ? `${hash.slice(0, 12)}…` : '(vacía)';
 }
 
+// Salida por stdout (no `console.log`, para no arrastrar residuos de depuración a un script
+// que sí imprime a propósito): una línea, con su salto final.
+function imprimir(linea) {
+  process.stdout.write(`${linea}\n`);
+}
+
 function ahora() {
   return Math.floor(Date.now() / 1000);
 }
@@ -296,10 +302,10 @@ function parseArgs(argv) {
 }
 
 function imprimirResumen({ comprobados, alarmas, cabeza, observadosNuevos, extra }) {
-  console.log(`Manifiesto: ${comprobados} objetos comprobados · ${alarmas.length} alarmas · 0 descargas · cabeza ${cabeza || '(vacía)'}`);
-  if (observadosNuevos) console.log(`${observadosNuevos} objetos que esta copia no subió (registrados por primera vez)`);
-  if (extra) console.log(extra);
-  for (const a of alarmas) console.log(`ALARMA: ${a}`);
+  imprimir(`Manifiesto: ${comprobados} objetos comprobados · ${alarmas.length} alarmas · 0 descargas · cabeza ${cabeza || '(vacía)'}`);
+  if (observadosNuevos) imprimir(`${observadosNuevos} objetos que esta copia no subió (registrados por primera vez)`);
+  if (extra) imprimir(extra);
+  for (const a of alarmas) imprimir(`ALARMA: ${a}`);
 }
 
 // --- El subcomando principal ---------------------------------------------------------------
@@ -486,29 +492,29 @@ function cmdVerificarCadena(args) {
   if (!args.manifiesto) throw new Error('falta --manifiesto <ruta>');
   const { entradas, cabeza, alarma } = leerYVerificarCadena(args.manifiesto);
   if (alarma) {
-    console.log(`líneas: ${entradas.length} · cabeza: ${cabeza || '(vacía)'} · ROTA: ${alarma}`);
+    imprimir(`líneas: ${entradas.length} · cabeza: ${cabeza || '(vacía)'} · ROTA: ${alarma}`);
     process.exit(1);
   }
-  console.log(`líneas: ${entradas.length} · cabeza: ${cabeza || '(vacía)'}`);
+  imprimir(`líneas: ${entradas.length} · cabeza: ${cabeza || '(vacía)'}`);
   process.exit(0);
 }
 
 function cmdEstado(args) {
   if (!args.estado) throw new Error('falta --estado <ruta>');
   if (!existsSync(args.estado)) {
-    console.log('sin estado registrado (el manifiesto nunca ha completado una pasada)');
+    imprimir('sin estado registrado (el manifiesto nunca ha completado una pasada)');
     process.exit(1);
   }
   let e;
   try {
     e = JSON.parse(readFileSync(args.estado, 'utf8'));
   } catch {
-    console.log('estado ilegible (JSON inválido)');
+    imprimir('estado ilegible (JSON inválido)');
     process.exit(1);
   }
   const alarmas = Array.isArray(e.alarmas) ? e.alarmas : [];
-  console.log(`${e.etiqueta} · ${e.modo} · ts=${e.ts} · registros=${e.registros} · comprobados=${e.comprobados} · observados_nuevos=${e.observados_nuevos} · ${alarmas.length} alarmas · cabeza=${e.cabeza || '(vacía)'}`);
-  for (const a of alarmas) console.log(`ALARMA: ${a}`);
+  imprimir(`${e.etiqueta} · ${e.modo} · ts=${e.ts} · registros=${e.registros} · comprobados=${e.comprobados} · observados_nuevos=${e.observados_nuevos} · ${alarmas.length} alarmas · cabeza=${e.cabeza || '(vacía)'}`);
+  for (const a of alarmas) imprimir(`ALARMA: ${a}`);
   process.exit(alarmas.length ? 1 : 0);
 }
 

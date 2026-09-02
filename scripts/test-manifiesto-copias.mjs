@@ -23,10 +23,16 @@ const BACKUP_SH = join(APP, 'scripts', 'bamburu-backup.sh');
 const HELPER = join(APP, 'scripts', 'lib', 'manifiesto-copias.mjs');
 const RCLONE = '/usr/bin/rclone';
 
+// Salida por stdout (no `console.log`, para no arrastrar residuos de depuración): una línea,
+// con su salto final.
+function imprimir(linea) {
+  process.stdout.write(`${linea}\n`);
+}
+
 let ok = 0, fail = 0;
 const check = (label, cond, extra = '') => {
-  if (cond) { ok++; console.log(`  ✓ ${label}`); }
-  else { fail++; console.log(`  ✗ FALLO: ${label}${extra ? ' — ' + String(extra).slice(0, 250) : ''}`); }
+  if (cond) { ok++; imprimir(`  ✓ ${label}`); }
+  else { fail++; imprimir(`  ✗ FALLO: ${label}${extra ? ' — ' + String(extra).slice(0, 250) : ''}`); }
 };
 
 // --- Laboratorios: se registran al crearse y se borran TODOS al final, pase lo que pase ---
@@ -165,7 +171,7 @@ function borrarObjeto(lab, nombre) {
 //               (g) re-subida el mismo día con contenido distinto.
 // =============================================================================================
 function escenario1(modo) {
-  console.log(`\n[${modo}] Escenario 1 — (a) primera pasada · (b) segunda limpia · (g) re-subida con cambio`);
+  imprimir(`\n[${modo}] Escenario 1 — (a) primera pasada · (b) segunda limpia · (g) re-subida con cambio`);
   const lab = montarLab(modo);
   const nombreViejo = `historico-${fechaHace(6)}.db`;
   sembrarObjetoViejo(lab, nombreViejo, 'contenido-historico-preexistente', 6);
@@ -221,7 +227,7 @@ function escenario1(modo) {
 // Escenario 2 — (c) alterar un objeto reciente, (d) borrarlo, (f) editar el manifiesto.
 // =============================================================================================
 function escenario2(modo) {
-  console.log(`\n[${modo}] Escenario 2 — (c) alterar · (d) borrar (edad<retención) · (f) editar el manifiesto`);
+  imprimir(`\n[${modo}] Escenario 2 — (c) alterar · (d) borrar (edad<retención) · (f) editar el manifiesto`);
   const lab = montarLab(modo);
   const nombreReciente = `reciente-${fechaHace(5)}.db`;
   sembrarObjetoViejo(lab, nombreReciente, 'contenido-original-reciente', 5);
@@ -273,7 +279,7 @@ function escenario2(modo) {
 // Escenario 3 — (e) un objeto caduca de verdad (edad >= retención) y su ausencia NO alarma.
 // =============================================================================================
 function escenario3(modo) {
-  console.log(`\n[${modo}] Escenario 3 — (e) objeto caducado, ausencia sin alarma`);
+  imprimir(`\n[${modo}] Escenario 3 — (e) objeto caducado, ausencia sin alarma`);
   const lab = montarLab(modo);
   const nombreCaduco = `caduco-${fechaHace(15)}.db`;
   sembrarObjetoViejo(lab, nombreCaduco, 'contenido-que-va-a-caducar', 15);
@@ -292,13 +298,13 @@ function escenario3(modo) {
 }
 
 function probarMundo(modo) {
-  console.log(`\n${'═'.repeat(70)}\nMUNDO: ${modo.toUpperCase()}\n${'═'.repeat(70)}`);
+  imprimir(`\n${'═'.repeat(70)}\nMUNDO: ${modo.toUpperCase()}\n${'═'.repeat(70)}`);
   for (const fn of [escenario1, escenario2, escenario3]) {
     try {
       fn(modo);
     } catch (e) {
       fail++;
-      console.log(`  ✗ FALLO: excepción en ${fn.name}(${modo}): ${e.message}`);
+      imprimir(`  ✗ FALLO: excepción en ${fn.name}(${modo}): ${e.message}`);
     }
   }
 }
@@ -309,7 +315,7 @@ function probarMundo(modo) {
 // el cuerpo del correo de éxito interpola $SUMMARY (que ya lleva "sha256 $sha" por artefacto,
 // añadido en esta tarea) y $MANIF_BLOQUE (que lleva la cabeza de la cadena).
 function comprobarCorreoEstatico() {
-  console.log('\n[estático] El correo de éxito lleva el SHA-256 de cada artefacto y la cabeza');
+  imprimir('\n[estático] El correo de éxito lleva el SHA-256 de cada artefacto y la cabeza');
   const src = readFileSync(BACKUP_SH, 'utf8');
   const conSha = (src.match(/— sha256 \$sha"/g) || []).length;
   check('(criterio 7) cada bloque de subida (BD y uploads) anota "sha256 $sha" para el correo', conSha === 2, conSha);
@@ -326,7 +332,7 @@ try {
   for (const l of labs) { try { rmSync(l, { recursive: true, force: true }); } catch {} }
 }
 
-console.log(`\n${'─'.repeat(58)}`);
-console.log(`  ${ok} OK · ${fail} fallos`);
-console.log('─'.repeat(58) + '\n');
+imprimir(`\n${'─'.repeat(58)}`);
+imprimir(`  ${ok} OK · ${fail} fallos`);
+imprimir('─'.repeat(58) + '\n');
 process.exit(fail === 0 ? 0 : 1);
