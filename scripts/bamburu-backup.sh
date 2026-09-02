@@ -292,6 +292,11 @@ MANIF_LINEA="$(printf '%s\n' "$MANIF_SALIDA" | grep '^Manifiesto: ' | head -1)"
 MANIF_BLOQUE="$MANIF_LINEA"
 MANIF_OBS_LINEA="$(printf '%s\n' "$MANIF_SALIDA" | grep 'objetos que esta copia no subió' | head -1)"
 [ -n "$MANIF_OBS_LINEA" ] && MANIF_BLOQUE+=$'\n'"$MANIF_OBS_LINEA"
+# Si el destino cambió de mundo (se encendió/apagó el cifrado) desde la pasada anterior,
+# el ayudante re-ancla en vez de comparar huellas incomparables — y lo dice con su número.
+# Sin esta línea en el correo, el cambio de mundo sería silencioso otra vez.
+MANIF_REANCLADOS="$(printf '%s\n' "$MANIF_SALIDA" | grep 'objetos re-anclados porque el destino cambió de')"
+[ -n "$MANIF_REANCLADOS" ] && MANIF_BLOQUE+=$'\n'"$MANIF_REANCLADOS"
 
 if [ "$MANIF_OK" != 0 ]; then
   # NO se ejecuta la retención: si el histórico está en duda, lo peor que se puede hacer

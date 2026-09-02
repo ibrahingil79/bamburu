@@ -297,6 +297,81 @@ function escenario3(modo) {
   check('(e) "0 alarmas"', /0 alarmas/.test(r.combinado), r.combinado);
 }
 
+// =============================================================================================
+// Escenario 4 — (h) el destino cambia de mundo ENTRE pasadas, sin que nadie edite el
+//               manifiesto a mano: exactamente lo que hace `cifrar-copias-de-seguridad.sh`
+//               la noche que Ibrahin lo ejecute (y su camino inverso, al apagarlo). Las
+//               huellas guardadas de antes son de otro mundo y no deben compararse; el
+//               objeto se re-ancla, sin alarma, y la retención sigue funcionando.
+// =============================================================================================
+function escenario4() {
+  imprimir(`\n[transición] Escenario 4 — (h) el destino cambia de mundo entre pasadas`);
+  const lab = montarLab('claro');
+  const remoteClaro = lab.remote;
+
+  // Noche 1, EN CLARO: un histórico que NO se resube cada noche (a diferencia de las BD),
+  // para que sobreviva a la transición como un registro "viejo" de verdad.
+  const nombreHistorico = `historico-${fechaHace(5)}.db`;
+  sembrarObjetoViejo(lab, nombreHistorico, 'contenido-historico', 5);
+  let r = ejecutarBash(lab);
+  check('(h-1) noche 1 en claro, verde', r.status === 0, r.combinado);
+
+  // --- Se enciende el cifrado: se crea el crypt sobre una raíz NUEVA, se migra el
+  // histórico dentro (copiar y SOLO entonces retirar, como `--migrar-historico --hazlo`) y
+  // se escribe el fichero de destinos — el mismo cerrojo que usa `montarLab('cifrado')`.
+  const raizCifrada = join(lab.tmp, 'base-cifrada'); mkdirSync(raizCifrada, { recursive: true });
+  const pass = execFileSync(RCLONE, ['obscure', 'clave-transicion'], { env: lab.env, encoding: 'utf8' }).trim();
+  const pass2 = execFileSync(RCLONE, ['obscure', 'sal-transicion'], { env: lab.env, encoding: 'utf8' }).trim();
+  execFileSync(RCLONE, ['config', 'create', 'ltrans', 'crypt',
+    `remote=lbase:${raizCifrada}`, `password=${pass}`, `password2=${pass2}`,
+    'filename_encryption=standard', 'directory_name_encryption=true'], { env: lab.env });
+  execFileSync(RCLONE, ['copy', `${remoteClaro}/`, 'ltrans:daily/'], { env: lab.env });
+  execFileSync(RCLONE, ['delete', `${remoteClaro}/`], { env: lab.env });
+  const destinosDir = join(lab.home, '.config', 'bamburu'); mkdirSync(destinosDir, { recursive: true });
+  const destinosConf = join(destinosDir, 'backup-destinos.conf');
+  writeFileSync(destinosConf, 'DESTINO_principal=ltrans:daily\n', { mode: 0o600 });
+  lab.remote = 'ltrans:daily';
+
+  // --- Noche 2, primera pasada CIFRADA tras la transición. ---
+  const lineasAntes = leerLineas(rutaManifiesto(lab)).length;
+  r = ejecutarBash(lab);
+  check('(h-2) primera pasada cifrada tras encender el cifrado sale 0 (sin alarma falsa)', r.status === 0, r.combinado);
+  check('(h-2) "0 alarmas"', /0 alarmas/.test(r.combinado), r.combinado);
+  check('(h-2) el resumen nombra el re-anclaje: EN CLARO a CIFRADO',
+    /\d+ objetos re-anclados porque el destino cambió de EN CLARO a CIFRADO/.test(r.combinado), r.combinado);
+  const regHistoricoCifrado = ultimoRegistro(lab, nombreHistorico);
+  check(`(h-2) "${nombreHistorico}" queda re-anclado, no huérfano`,
+    regHistoricoCifrado?.origen === 'reanclado', JSON.stringify(regHistoricoCifrado));
+  check('(h-2) el manifiesto sigue creciendo (no se quedó clavado)',
+    leerLineas(rutaManifiesto(lab)).length > lineasAntes);
+
+  // La retención tiene que seguir funcionando tras el re-anclaje: se siembra un objeto ya
+  // caducado DESPUÉS de la pasada de arriba (si se sembrara antes, esa misma pasada verde
+  // se lo llevaría por delante y no probaría nada tras la transición).
+  const nombreCaduco = `viejisimo-${fechaHace(20)}.db`;
+  sembrarObjetoViejo(lab, nombreCaduco, 'contenido-viejisimo', 20);
+  r = ejecutarBash(lab);
+  check('(h-3) siguiente pasada ya establecida en cifrado sale 0', r.status === 0, r.combinado);
+  check('(h-3) la retención SÍ se ejecuta tras el re-anclaje: se retira lo caducado',
+    !listarDestino(lab).includes(nombreCaduco));
+
+  // --- Camino inverso: se apaga el cifrado. El histórico se migra de vuelta al remote en
+  // claro original y se borra el fichero de destinos — el cerrojo desaparece con él.
+  execFileSync(RCLONE, ['copy', 'ltrans:daily/', `${remoteClaro}/`], { env: lab.env });
+  execFileSync(RCLONE, ['delete', 'ltrans:daily/'], { env: lab.env });
+  rmSync(destinosConf, { force: true });
+  lab.remote = remoteClaro;
+
+  const lineasAntesVuelta = leerLineas(rutaManifiesto(lab)).length;
+  r = ejecutarBash(lab);
+  check('(h-4) primera pasada en claro tras apagar el cifrado sale 0 (sin alarma falsa)', r.status === 0, r.combinado);
+  check('(h-4) "0 alarmas"', /0 alarmas/.test(r.combinado), r.combinado);
+  check('(h-4) el resumen nombra el re-anclaje: CIFRADO a EN CLARO',
+    /\d+ objetos re-anclados porque el destino cambió de CIFRADO a EN CLARO/.test(r.combinado), r.combinado);
+  check('(h-4) el manifiesto sigue creciendo',
+    leerLineas(rutaManifiesto(lab)).length > lineasAntesVuelta);
+}
+
 function probarMundo(modo) {
   imprimir(`\n${'═'.repeat(70)}\nMUNDO: ${modo.toUpperCase()}\n${'═'.repeat(70)}`);
   for (const fn of [escenario1, escenario2, escenario3]) {
@@ -327,6 +402,12 @@ function comprobarCorreoEstatico() {
 
 try {
   for (const modo of ['claro', 'cifrado']) probarMundo(modo);
+  try {
+    escenario4();
+  } catch (e) {
+    fail++;
+    imprimir(`  ✗ FALLO: excepción en escenario4: ${e.message}`);
+  }
   comprobarCorreoEstatico();
 } finally {
   for (const l of labs) { try { rmSync(l, { recursive: true, force: true }); } catch {} }

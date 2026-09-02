@@ -301,9 +301,14 @@ function parseArgs(argv) {
   return out;
 }
 
-function imprimirResumen({ comprobados, alarmas, cabeza, observadosNuevos, extra }) {
+function imprimirResumen({ comprobados, alarmas, cabeza, observadosNuevos, reanclajesPorMotivo, extra }) {
   imprimir(`Manifiesto: ${comprobados} objetos comprobados · ${alarmas.length} alarmas · 0 descargas · cabeza ${cabeza || '(vacía)'}`);
   if (observadosNuevos) imprimir(`${observadosNuevos} objetos que esta copia no subió (registrados por primera vez)`);
+  if (reanclajesPorMotivo) {
+    for (const [motivo, cuenta] of reanclajesPorMotivo) {
+      imprimir(`${cuenta} objetos re-anclados porque el destino cambió de ${motivo}`);
+    }
+  }
   if (extra) imprimir(extra);
   for (const a of alarmas) imprimir(`ALARMA: ${a}`);
 }
@@ -365,6 +370,19 @@ function cmdPasada(args) {
   let nombresEnDestino = [];
   let mapaCodificado = new Map();
 
+  // Un registro solo sirve para reutilizar su ruta guardada si se escribió en EL MISMO
+  // MUNDO que esta pasada: mismo `modo` y, en cifrado, el MISMO remote base. Si el destino
+  // cambió de mundo desde que se registró (se encendió/apagó el cifrado, o rotó la clave),
+  // esa `destino.ruta` es de otro mundo y su huella guardada no es comparable con la de
+  // hoy — hay que tratar el nombre como si no tuviera ruta conocida, para que se recodifique
+  // (en cifrado) o se re-ancle (§5) en vez de compararse contra algo incomparable.
+  function mismoMundoQueRegistro(reg) {
+    if (!reg) return false;
+    if (reg.destino.modo !== modo) return false;
+    if (modo === 'cifrado' && reg.destino.base !== infoCifrado.base) return false;
+    return true;
+  }
+
   try {
     if (modo === 'claro') {
       mapaDestinoClaro = leerDestinoClaro(remote);
@@ -373,7 +391,9 @@ function cmdPasada(args) {
       infoCifrado = leerDestinoCifrado(remote);
       nombresEnDestino = infoCifrado.nombresEnClaro;
       mapaBase = leerMapaBase(infoCifrado.base);
-      const nuevos = nombresEnDestino.filter((nm) => !nombresYaRegistrados.has(nm));
+      // Se codifica la ruta de un nombre si nunca se registró, O si se registró en OTRO
+      // mundo (esa ruta vieja no sirve — ver mismoMundoQueRegistro de arriba).
+      const nuevos = nombresEnDestino.filter((nm) => !mismoMundoQueRegistro(ultimoPorNombre.get(nm)));
       mapaCodificado = codificarRutas(infoCifrado.nombreCrypt, infoCifrado.subpath, nuevos);
     }
   } catch (e) {
@@ -390,7 +410,7 @@ function cmdPasada(args) {
   function destinoDe(nombre) {
     if (modo === 'claro') return mapaDestinoClaro.get(nombre) || null;
     const previo = ultimoPorNombre.get(nombre);
-    const ruta = previo ? previo.destino.ruta : mapaCodificado.get(nombre);
+    const ruta = mismoMundoQueRegistro(previo) ? previo.destino.ruta : mapaCodificado.get(nombre);
     if (!ruta) return null;
     const info = mapaBase.get(ruta);
     return info ? { ...info, ruta } : null;
@@ -461,6 +481,8 @@ function cmdPasada(args) {
   // fresco (paso 3) y la comparación es consigo mismo — verde, tal y como pide el caso "re-
   // subida el mismo día".
   let comprobados = 0;
+  let reanclados = 0;
+  const reanclajesPorMotivo = new Map(); // "EN CLARO a CIFRADO" -> cuenta
   const hoyMs = epochDeFecha(fechaHoy);
   for (const nombre of nombresYaRegistrados) {
     const registro = ultimoPorNombre.get(nombre);
@@ -474,6 +496,45 @@ function cmdPasada(args) {
       }
       continue;
     }
+    if (!mismoMundoQueRegistro(registro)) {
+      // El destino cambió de mundo desde que se registró este objeto (se encendió o se
+      // apagó el cifrado, o rotó la clave). Su huella guardada NO es comparable con la de
+      // hoy — un SHA-256 de texto en claro y uno de texto cifrado son SIEMPRE distintos, y
+      // tratarlo como manipulación sería una alarma falsa, no una detección.
+      // Excepción real, no un agujero: yendo DE cifrado A claro, si aquel registro se
+      // subió (no "observado"), su `sha256` de nivel superior es la huella del CONTENIDO
+      // (se calcula en local antes de cifrar, sea cual sea el mundo — ver paso 3), así que
+      // SÍ es comparable contra el destino en claro de hoy: es continuidad de contenido
+      // real, y se exige que cuadre.
+      if (modo === 'claro' && registro.sha256 && registro.sha256 !== actual.sha256) {
+        alarmas.push(`"${nombre}": la huella cambió respecto a lo registrado — ¿manipulado?`);
+        continue;
+      }
+      // Sin huella comparable: se re-ancla sin comparar. TOFU de operación, la misma
+      // doctrina que ya rige el objeto desconocido (§4): un cambio de configuración no es
+      // un ataque, y desde esta noche el objeto se verifica igual que todos los demás.
+      const motivo = `${registro.destino.modo === 'cifrado' ? 'CIFRADO' : 'EN CLARO'} a ${modo === 'cifrado' ? 'CIFRADO' : 'EN CLARO'}`;
+      n += 1;
+      const entrada = {
+        n, ts: ahora(), fecha: extraerFecha(nombre) || registro.fecha, etiqueta, remote, nombre,
+        origen: 'reanclado',
+        bytes: modo === 'cifrado' ? null : actual.bytes,
+        sha256: modo === 'cifrado' ? null : actual.sha256,
+        destino: {
+          modo, ruta: modo === 'cifrado' ? actual.ruta : nombre,
+          base: modo === 'cifrado' ? infoCifrado.base : remote,
+          bytes: actual.bytes, sha256: actual.sha256,
+        },
+        prev,
+      };
+      const linea = { ...entrada, hash: hashDe(entrada) };
+      nuevasEntradas.push(linea);
+      ultimoPorNombre.set(nombre, linea);
+      prev = linea.hash;
+      reanclados += 1;
+      reanclajesPorMotivo.set(motivo, (reanclajesPorMotivo.get(motivo) || 0) + 1);
+      continue;
+    }
     if (actual.sha256 !== registro.destino.sha256) {
       alarmas.push(`"${nombre}": la huella cambió respecto a lo registrado — ¿manipulado?`);
     }
@@ -482,9 +543,9 @@ function cmdPasada(args) {
   escribirManifiesto(manifiestoRuta, lectura.lineasCrudas, nuevasEntradas);
   escribirEstado(estadoRuta, {
     ts: ahora(), etiqueta, modo, cabeza: prev, registros: n,
-    comprobados, observados_nuevos: observadosNuevos, alarmas,
+    comprobados, observados_nuevos: observadosNuevos, reanclados, alarmas,
   });
-  imprimirResumen({ comprobados, alarmas, cabeza: prev, observadosNuevos });
+  imprimirResumen({ comprobados, alarmas, cabeza: prev, observadosNuevos, reanclajesPorMotivo });
   process.exit(alarmas.length ? 1 : 0);
 }
 

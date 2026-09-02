@@ -153,6 +153,14 @@ de la crisis: nada se asume, todo se verifica y se notifica).
   que quien lo controle puede reescribirlo entero; el ancla es que su cabeza y el SHA-256 de
   cada artefacto de hoy viajan también en el correo diario, a un buzón que el servidor no
   puede tocar. Detecta manipulación o borrado en Drive; no los impide.
+  **La noche en que el destino cambia de mundo** (se ejecuta
+  `scripts/cifrar-copias-de-seguridad.sh`, o se apaga borrando el fichero de destinos): las
+  huellas guardadas de antes son de otro mundo (texto en claro / texto cifrado) y no son
+  comparables entre sí, así que cada objeto del histórico se **re-ancla** (no se compara, no
+  alarma) y el resumen y el correo lo cuentan con su número: *«N objetos re-anclados porque
+  el destino cambió de EN CLARO a CIFRADO»* (o al revés). Es la única noche en la que el
+  dueño va a estar mirando, y es a propósito la única en la que el manifiesto NO exige que
+  las huellas cuadren — desde la noche siguiente, vuelve a exigirlo con normalidad.
 - **Retención 14 días**: borra en Drive lo más viejo. Una copia corrupta nunca pisa la buena.
 - **Email (Resend, `noreply@bamburu.com` → `ibrahingil@gmail.com`)** en OK y en FALLO.
 - **Ping a healthchecks.io** (`HEALTHCHECKS_URL`): dead-man's-switch externo que avisa
