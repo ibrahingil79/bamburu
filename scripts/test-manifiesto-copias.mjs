@@ -355,6 +355,18 @@ function escenario4() {
   check('(h-3) la retención SÍ se ejecuta tras el re-anclaje: se retira lo caducado',
     !listarDestino(lab).includes(nombreCaduco));
 
+  // --- Excepción de continuidad de contenido, yendo de CIFRADO a CLARO (observación 4 del
+  // revisor: hoy no la ejerce nadie, porque el registro nunca llegaba a esta vuelta con un
+  // sha256 de contenido no nulo). Se borra la BD de este negocio ANTES de la vuelta: así esa
+  // noche NO se re-sube (bash solo empaqueta lo que encuentra en $DATA_DIR/tenants/*.db) y su
+  // único rastro en el destino es el objeto migrado de la etapa cifrada, con la huella de
+  // CONTENIDO que traía su último registro "subido".
+  const nombreDbNegocio = `negocio-prueba-${fechaHace(0)}.db`;
+  const regDbNegocioCifrado = ultimoRegistro(lab, nombreDbNegocio);
+  check('(continuidad, setup) la BD del negocio está registrada "subido" con huella de contenido antes de la vuelta',
+    regDbNegocioCifrado?.origen === 'subido' && !!regDbNegocioCifrado?.sha256, JSON.stringify(regDbNegocioCifrado));
+  rmSync(join(lab.dataDir, 'tenants', 'negocio-prueba.db'), { force: true });
+
   // --- Camino inverso: se apaga el cifrado. El histórico se migra de vuelta al remote en
   // claro original y se borra el fichero de destinos — el cerrojo desaparece con él.
   execFileSync(RCLONE, ['copy', 'ltrans:daily/', `${remoteClaro}/`], { env: lab.env });
@@ -370,6 +382,223 @@ function escenario4() {
     /\d+ objetos re-anclados porque el destino cambió de CIFRADO a EN CLARO/.test(r.combinado), r.combinado);
   check('(h-4) el manifiesto sigue creciendo',
     leerLineas(rutaManifiesto(lab)).length > lineasAntesVuelta);
+
+  const regDbNegocioClaro = ultimoRegistro(lab, nombreDbNegocio);
+  check('(continuidad) la BD que no se resubió esta noche se re-ancla por su CONTENIDO, sin alarma',
+    r.status === 0 && regDbNegocioClaro?.origen === 'reanclado', JSON.stringify(regDbNegocioClaro));
+
+  // --- Y si alguien ALTERA ese objeto que sobrevivió solo por continuidad de contenido, la
+  // pasada siguiente lo detecta y lo nombra: la excepción compara de verdad, no calla.
+  alterarObjeto(lab, nombreDbNegocio, 'CONTENIDO-ALTERADO-TRAS-LA-VUELTA-A-CLARO');
+  r = ejecutarBash(lab);
+  check('(continuidad) alterar esa BD tras la vuelta sale 1', r.status === 1, r.combinado);
+  check(`(continuidad) la alarma nombra "${nombreDbNegocio}"`, r.combinado.includes(nombreDbNegocio), r.combinado);
+}
+
+// =============================================================================================
+// Escenario 5 — (i) el destino cambia de mundo y el histórico SE QUEDA ATRÁS: el caso que
+// tumbó al intento 3. El destino EN CLARO de la "noche 1" vive en su PROPIO remote
+// ("lviejo"), aparte del que sostiene el destino cifrado nuevo, para poder retirarlo DE
+// VERDAD en (i-5) sin tocar nada vivo.
+// =============================================================================================
+function escenario5() {
+  imprimir('\n[transición] Escenario 5 — (i) cifrado sin migrar: el histórico se queda atrás, vigilado donde está');
+  const tmp = nuevoTmp();
+  const home = join(tmp, 'home'); mkdirSync(home, { recursive: true });
+  const dataDir = join(tmp, 'data');
+  crearDb(join(dataDir, 'control.db'));
+  crearDb(join(dataDir, 'tenants', 'negocio-prueba.db'));
+  mkdirSync(join(dataDir, 'uploads'), { recursive: true });
+  writeFileSync(join(dataDir, 'uploads', 'nota.txt'), 'archivo de prueba\n');
+
+  const env = {
+    ...process.env,
+    HOME: home,
+    RCLONE_CONFIG: join(tmp, 'rc.conf'),
+    BACKUP_DATA_DIR: dataDir,
+    BACKUP_RETENTION_DAYS: '14',
+    BACKUP_HC_URL: '',
+  };
+  delete env.RESEND_API_KEY;
+  delete env.HEALTHCHECKS_URL;
+  delete env.BACKUP_LABEL;
+  delete env.BACKUP_SUFFIX;
+
+  // El destino EN CLARO de "esta noche 1" vive en su propio remote, creado con
+  // `rclone config create` para poder retirarlo de verdad en (i-5).
+  execFileSync(RCLONE, ['config', 'create', 'lviejo', 'local'], { env });
+  const destinoViejo = join(tmp, 'destino-viejo'); mkdirSync(destinoViejo, { recursive: true });
+  const remoteViejo = `lviejo:${destinoViejo}`;
+  const lab = { tmp, home, dataDir, env, remote: remoteViejo, modo: 'claro' };
+  lab.env.BACKUP_REMOTE = remoteViejo;
+
+  // --- (i-1) noche 1, en claro, con un histórico preexistente. ---
+  const nombreHistorico = `historico-${fechaHace(5)}.db`;
+  sembrarObjetoViejo(lab, nombreHistorico, 'contenido-historico-que-se-queda-atras', 5);
+  let r = ejecutarBash(lab);
+  check('(i-1) noche 1 en claro, con histórico preexistente, sale 0', r.status === 0, r.combinado);
+
+  // --- (i-2) se enciende el cifrado sobre una raíz NUEVA, sin migrar nada — literalmente lo
+  // que hace `cifrar-copias-de-seguridad.sh` y luego irse a dormir. ---
+  execFileSync(RCLONE, ['config', 'create', 'lbase', 'local'], { env });
+  const raizCifrada = join(tmp, 'base-cifrada'); mkdirSync(raizCifrada, { recursive: true });
+  const pass = execFileSync(RCLONE, ['obscure', 'clave-i'], { env, encoding: 'utf8' }).trim();
+  const pass2 = execFileSync(RCLONE, ['obscure', 'sal-i'], { env, encoding: 'utf8' }).trim();
+  execFileSync(RCLONE, ['config', 'create', 'lnuevocripto', 'crypt',
+    `remote=lbase:${raizCifrada}`, `password=${pass}`, `password2=${pass2}`,
+    'filename_encryption=standard', 'directory_name_encryption=true'], { env });
+  const destinosDir = join(home, '.config', 'bamburu'); mkdirSync(destinosDir, { recursive: true });
+  const destinosConf = join(destinosDir, 'backup-destinos.conf');
+  writeFileSync(destinosConf, 'DESTINO_principal=lnuevocripto:daily\n', { mode: 0o600 });
+  lab.env.BACKUP_DESTINOS_CONF = destinosConf;
+  lab.remote = 'lnuevocripto:daily';
+
+  r = ejecutarBash(lab);
+  check('(i-2) cifrado sin migrar: la pasada de esa noche sale 0', r.status === 0, r.combinado);
+  check('(i-2) la salida NO contiene "¿borrado?"', !r.combinado.includes('¿borrado?'), r.combinado);
+  check('(i-2) la salida dice que el histórico sigue en el destino anterior',
+    /objetos del histórico siguen en el destino anterior/.test(r.combinado), r.combinado);
+  check(`(i-2) nombra "${nombreHistorico}"`, r.combinado.includes(nombreHistorico), r.combinado);
+
+  // --- (i-3) la retención SÍ se ejecuta: un objeto caducado sembrado en el destino NUEVO
+  // desaparece. Se siembra DESPUÉS de (i-2) para que esa pasada verde no se lo lleve por
+  // delante y la prueba demuestre algo tras la transición. ---
+  const nombreCaduco = `viejisimo-${fechaHace(20)}.db`;
+  sembrarObjetoViejo(lab, nombreCaduco, 'contenido-viejisimo', 20);
+  r = ejecutarBash(lab);
+  check('(i-3) siguiente pasada sale 0', r.status === 0, r.combinado);
+  check('(i-3) la retención SÍ se ejecuta en el destino nuevo', !listarDestino(lab).includes(nombreCaduco));
+
+  // --- (i-4) la vigilancia NO se pierde al cambiar de destino: alterar el objeto que se
+  // quedó en el destino anterior hace saltar la alarma con su nombre. ---
+  alterarObjeto({ tmp, remote: remoteViejo, env }, nombreHistorico, 'CONTENIDO-ALTERADO-EN-EL-DESTINO-ANTERIOR');
+  r = ejecutarBash(lab);
+  check('(i-4) alterar el histórico rezagado sale 1', r.status === 1, r.combinado);
+  check(`(i-4) la alarma nombra "${nombreHistorico}"`, r.combinado.includes(nombreHistorico), r.combinado);
+
+  // --- (i-5) se retira el remote viejo: a partir de aquí, SIN VIGILAR, nunca "¿borrado?". ---
+  execFileSync(RCLONE, ['config', 'delete', 'lviejo'], { env });
+  r = ejecutarBash(lab);
+  check('(i-5) retirado el remote anterior, la pasada sale 0', r.status === 0, r.combinado);
+  check('(i-5) la salida dice "quedan SIN VIGILAR"', r.combinado.includes('quedan SIN VIGILAR'), r.combinado);
+  check('(i-5) la salida NO contiene "¿borrado?"', !r.combinado.includes('¿borrado?'), r.combinado);
+
+  comprobarCorreoRezagados();
+}
+
+// (i-6) el correo ✅ del caso "cifrado sin migrar" incluye la línea de los rezagados, sin que
+// bash conozca su texto: con un `curl` falso al principio del PATH del laboratorio (escribe
+// su `--data` a un fichero) y RESEND_API_KEY definida. Repite (i-1)+(i-2) en un lab nuevo,
+// para no arrastrar el estado ya "sin vigilar" que deja (i-5).
+function comprobarCorreoRezagados() {
+  imprimir('\n[transición] (i-6) el correo ✅ del caso "cifrado sin migrar" incluye la línea de los rezagados');
+  const tmp = nuevoTmp();
+  const home = join(tmp, 'home'); mkdirSync(home, { recursive: true });
+  const dataDir = join(tmp, 'data');
+  crearDb(join(dataDir, 'control.db'));
+  crearDb(join(dataDir, 'tenants', 'negocio-prueba.db'));
+  mkdirSync(join(dataDir, 'uploads'), { recursive: true });
+  writeFileSync(join(dataDir, 'uploads', 'nota.txt'), 'archivo de prueba\n');
+
+  const curlLog = join(tmp, 'curl-data.txt');
+  const binDir = join(tmp, 'bin'); mkdirSync(binDir, { recursive: true });
+  const curlFalso = join(binDir, 'curl');
+  writeFileSync(curlFalso, `#!/usr/bin/env bash
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "--data" ]; then printf '%s' "$a" >> "${curlLog}"; fi
+  prev="$a"
+done
+echo '{"id":"fake"}'
+`);
+  chmodSync(curlFalso, 0o755);
+
+  const env = {
+    ...process.env,
+    HOME: home,
+    PATH: `${binDir}:${process.env.PATH}`,
+    RCLONE_CONFIG: join(tmp, 'rc.conf'),
+    BACKUP_DATA_DIR: dataDir,
+    BACKUP_RETENTION_DAYS: '14',
+    BACKUP_HC_URL: '',
+    RESEND_API_KEY: 'clave-de-prueba-no-real',
+  };
+  delete env.HEALTHCHECKS_URL;
+  delete env.BACKUP_LABEL;
+  delete env.BACKUP_SUFFIX;
+
+  execFileSync(RCLONE, ['config', 'create', 'lviejo', 'local'], { env });
+  const destinoViejo = join(tmp, 'destino-viejo'); mkdirSync(destinoViejo, { recursive: true });
+  const remoteViejo = `lviejo:${destinoViejo}`;
+  const lab = { tmp, home, dataDir, env, remote: remoteViejo, modo: 'claro' };
+  lab.env.BACKUP_REMOTE = remoteViejo;
+
+  const nombreHistorico = `historico-${fechaHace(5)}.db`;
+  sembrarObjetoViejo(lab, nombreHistorico, 'contenido-para-el-correo', 5);
+  let r = ejecutarBash(lab);
+  check('(i-6 setup) noche 1 en claro, verde', r.status === 0, r.combinado);
+
+  execFileSync(RCLONE, ['config', 'create', 'lbase', 'local'], { env });
+  const raizCifrada = join(tmp, 'base-cifrada'); mkdirSync(raizCifrada, { recursive: true });
+  const pass = execFileSync(RCLONE, ['obscure', 'clave-i6'], { env, encoding: 'utf8' }).trim();
+  const pass2 = execFileSync(RCLONE, ['obscure', 'sal-i6'], { env, encoding: 'utf8' }).trim();
+  execFileSync(RCLONE, ['config', 'create', 'lnuevocripto', 'crypt',
+    `remote=lbase:${raizCifrada}`, `password=${pass}`, `password2=${pass2}`,
+    'filename_encryption=standard', 'directory_name_encryption=true'], { env });
+  const destinosDir = join(home, '.config', 'bamburu'); mkdirSync(destinosDir, { recursive: true });
+  const destinosConf = join(destinosDir, 'backup-destinos.conf');
+  writeFileSync(destinosConf, 'DESTINO_principal=lnuevocripto:daily\n', { mode: 0o600 });
+  lab.env.BACKUP_DESTINOS_CONF = destinosConf;
+  lab.remote = 'lnuevocripto:daily';
+
+  r = ejecutarBash(lab);
+  check('(i-6) cifrado sin migrar, con RESEND_API_KEY, sale 0', r.status === 0, r.combinado);
+  const cuerpoCorreo = existsSync(curlLog) ? readFileSync(curlLog, 'utf8') : '';
+  check('(i-6) el correo ✅ incluye la línea de los rezagados',
+    /objetos del hist.rico siguen en el destino anterior/.test(cuerpoCorreo), cuerpoCorreo.slice(0, 400));
+}
+
+// =============================================================================================
+// Escenario 6 — (j) rotación de la clave del `crypt`, sobre la MISMA raíz. Es lo que hoy
+// declara "¿borrado?" sobre un fichero subido cinco segundos antes (§1.3 del análisis).
+// =============================================================================================
+function escenario6() {
+  imprimir('\n[cifrado] Escenario 6 — (j) rotación de la clave del crypt, sobre la MISMA raíz');
+  const lab = montarLab('cifrado');
+  const nombreHistorico = `historico-${fechaHace(6)}.db`;
+  sembrarObjetoViejo(lab, nombreHistorico, 'contenido-historico-clave-vieja', 6);
+
+  let r = ejecutarBash(lab);
+  check('(j-1) noche 1 cifrada, con histórico preexistente, sale 0', r.status === 0, r.combinado);
+  const nombreDbHoy = `negocio-prueba-${fechaHace(0)}.db`;
+  const regHoyAntes = ultimoRegistro(lab, nombreDbHoy);
+
+  // Se reescribe el crypt con OTRA password, sobre la MISMA raíz (mismo `remote=lbase:...`,
+  // la base NO cambia) — exactamente lo que tumbaba al intento 3.
+  const pass = execFileSync(RCLONE, ['obscure', 'clave-nueva-tras-rotar'], { env: lab.env, encoding: 'utf8' }).trim();
+  const pass2 = execFileSync(RCLONE, ['obscure', 'sal-nueva-tras-rotar'], { env: lab.env, encoding: 'utf8' }).trim();
+  execFileSync(RCLONE, ['config', 'update', 'lcripto', `password=${pass}`, `password2=${pass2}`], { env: lab.env });
+
+  const lineasAntesRotar = leerLineas(rutaManifiesto(lab)).length;
+  r = ejecutarBash(lab);
+  check('(j-2) noche 2, tras rotar la clave, sale 0', r.status === 0, r.combinado);
+  check('(j-2) "0 alarmas"', /0 alarmas/.test(r.combinado), r.combinado);
+  check('(j-2) NO dice "¿borrado?" de ningún fichero', !r.combinado.includes('¿borrado?'), r.combinado);
+  check('(j-2) el manifiesto sigue creciendo', leerLineas(rutaManifiesto(lab)).length > lineasAntesRotar);
+
+  // El artefacto de HOY (tenant DB, re-subido cada noche) queda registrado con su ruta
+  // cifrada NUEVA — la vieja ya no existe bajo la clave nueva.
+  const regHoyDespues = ultimoRegistro(lab, nombreDbHoy);
+  check(`(j-2) "${nombreDbHoy}" queda registrado con su ruta cifrada nueva`,
+    !!regHoyDespues?.destino?.ruta && regHoyDespues.destino.ruta !== regHoyAntes?.destino?.ruta,
+    JSON.stringify({ antes: regHoyAntes?.destino?.ruta, despues: regHoyDespues?.destino?.ruta }));
+  check(`(j-2) "${nombreDbHoy}" aparece en el destino de hoy`, listarDestino(lab).includes(nombreDbHoy));
+
+  // El histórico de la clave VIEJA sigue ahí (nadie lo tocó): se comprueba DONDE ESTÁ, no se
+  // declara huérfano.
+  const regHistorico = ultimoRegistro(lab, nombreHistorico);
+  check(`(j-2) "${nombreHistorico}" (clave vieja) sale comprobado donde está, no huérfano`,
+    !!regHistorico && !r.combinado.includes(`falta "${nombreHistorico}"`), JSON.stringify(regHistorico));
 }
 
 function probarMundo(modo) {
@@ -407,6 +636,18 @@ try {
   } catch (e) {
     fail++;
     imprimir(`  ✗ FALLO: excepción en escenario4: ${e.message}`);
+  }
+  try {
+    escenario5();
+  } catch (e) {
+    fail++;
+    imprimir(`  ✗ FALLO: excepción en escenario5: ${e.message}`);
+  }
+  try {
+    escenario6();
+  } catch (e) {
+    fail++;
+    imprimir(`  ✗ FALLO: excepción en escenario6: ${e.message}`);
   }
   comprobarCorreoEstatico();
 } finally {

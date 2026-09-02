@@ -88,6 +88,12 @@ function corto(hash) {
   return hash ? `${hash.slice(0, 12)}…` : '(vacía)';
 }
 
+// Una base es "la misma" tenga o no una barra final: quien escribe un remote a mano no
+// siempre la pone igual dos veces. Toda comparación de bases pasa por aquí.
+function normBase(s) {
+  return String(s).replace(/\/+$/, '');
+}
+
 // Salida por stdout (no `console.log`, para no arrastrar residuos de depuración a un script
 // que sí imprime a propósito): una línea, con su salto final.
 function imprimir(linea) {
@@ -166,6 +172,21 @@ function leerEstadoSiExiste(ruta) {
   } catch {
     return null;
   }
+}
+
+// Una sola forma de escribir el estado, para las CUATRO salidas de `cmdPasada`: la misma
+// forma de objeto siempre, con ceros por defecto. Antes, las tres salidas tempranas escribían
+// un JSON sin `reanclados`/`rezagados`/`sin_vigilar`, y quien lo leyera tenía que adivinar.
+function escribirEstadoPasada(ruta, {
+  etiqueta, modo, cabeza, registros,
+  comprobados = 0, observadosNuevos = 0, reanclados = 0, rezagados = 0, sinVigilar = 0,
+  alarmas,
+}) {
+  escribirEstado(ruta, {
+    ts: ahora(), etiqueta, modo, cabeza, registros,
+    comprobados, observados_nuevos: observadosNuevos, reanclados, rezagados, sin_vigilar: sinVigilar,
+    alarmas,
+  });
 }
 
 // --- rclone, siempre por execFileSync (nunca por shell) ------------------------------------
@@ -258,7 +279,7 @@ function leerMapaBase(base) {
 // propio registro, porque cifrar el mismo nombre siempre da la misma ruta.
 function codificarRutas(nombreCrypt, subpath, nombres) {
   if (nombres.length === 0) return new Map();
-  const rutasPedidas = nombres.map((n) => `${subpath}/${n}`);
+  const rutasPedidas = nombres.map((n) => (subpath ? `${subpath}/${n}` : n));
   let salida;
   try {
     salida = rclone(['backend', 'encode', `${nombreCrypt}:`, ...rutasPedidas]);
@@ -301,12 +322,34 @@ function parseArgs(argv) {
   return out;
 }
 
-function imprimirResumen({ comprobados, alarmas, cabeza, observadosNuevos, reanclajesPorMotivo, extra }) {
+// Máximo 5 nombres por línea de grupo: decir "cuáles" ayuda, decir los 284 no.
+function listaAcotada(nombres) {
+  const MAX = 5;
+  if (nombres.length <= MAX) return nombres.join(', ');
+  return `${nombres.slice(0, MAX).join(', ')} (y ${nombres.length - MAX} más)`;
+}
+
+function imprimirResumen({
+  comprobados, alarmas, cabeza, observadosNuevos, reanclajesPorMotivo,
+  rezagadosPorBase, sinVigilarPorBase, extra,
+}) {
   imprimir(`Manifiesto: ${comprobados} objetos comprobados · ${alarmas.length} alarmas · 0 descargas · cabeza ${cabeza || '(vacía)'}`);
   if (observadosNuevos) imprimir(`${observadosNuevos} objetos que esta copia no subió (registrados por primera vez)`);
   if (reanclajesPorMotivo) {
     for (const [motivo, cuenta] of reanclajesPorMotivo) {
-      imprimir(`${cuenta} objetos re-anclados porque el destino cambió de ${motivo}`);
+      imprimir(`${cuenta} objetos re-anclados porque el destino cambió ${motivo}`);
+    }
+  }
+  if (rezagadosPorBase) {
+    for (const { desc, nombres } of rezagadosPorBase.values()) {
+      imprimir(`${nombres.length} objetos del histórico siguen en el destino anterior (${desc}), verificados allí — para retirarlos: bash scripts/cifrar-copias-de-seguridad.sh --migrar-historico`);
+      imprimir(`  · ${listaAcotada(nombres)}`);
+    }
+  }
+  if (sinVigilarPorBase) {
+    for (const { base, motivo, nombres } of sinVigilarPorBase.values()) {
+      imprimir(`${nombres.length} objetos registrados en ${base} no se han podido comprobar allí (${motivo}): quedan SIN VIGILAR`);
+      imprimir(`  · ${listaAcotada(nombres)}`);
     }
   }
   if (extra) imprimir(extra);
@@ -335,9 +378,8 @@ function cmdPasada(args) {
 
   const lectura = leerYVerificarCadena(manifiestoRuta);
   if (lectura.alarma) {
-    escribirEstado(estadoRuta, {
-      ts: ahora(), etiqueta, modo, cabeza: lectura.cabeza,
-      registros: lectura.entradas.length, comprobados: 0, observados_nuevos: 0,
+    escribirEstadoPasada(estadoRuta, {
+      etiqueta, modo, cabeza: lectura.cabeza, registros: lectura.entradas.length,
       alarmas: [lectura.alarma],
     });
     imprimirResumen({ comprobados: 0, alarmas: [lectura.alarma], cabeza: lectura.cabeza, observadosNuevos: 0, extra: 'la cadena del manifiesto no cuadra: no se ha añadido nada.' });
@@ -350,9 +392,8 @@ function cmdPasada(args) {
   const estadoAnterior = leerEstadoSiExiste(estadoRuta);
   if (estadoAnterior && typeof estadoAnterior.cabeza === 'string' && estadoAnterior.cabeza !== lectura.cabeza) {
     const motivo = `el manifiesto no coincide con la cabeza registrada la pasada anterior (antes ${corto(estadoAnterior.cabeza)}, ahora ${corto(lectura.cabeza)}) — ¿truncado o sustituido?`;
-    escribirEstado(estadoRuta, {
-      ts: ahora(), etiqueta, modo, cabeza: lectura.cabeza,
-      registros: lectura.entradas.length, comprobados: 0, observados_nuevos: 0,
+    escribirEstadoPasada(estadoRuta, {
+      etiqueta, modo, cabeza: lectura.cabeza, registros: lectura.entradas.length,
       alarmas: [motivo],
     });
     imprimirResumen({ comprobados: 0, alarmas: [motivo], cabeza: lectura.cabeza, observadosNuevos: 0, extra: 'no se ha añadido nada.' });
@@ -368,52 +409,82 @@ function cmdPasada(args) {
   let mapaBase = null;
   let infoCifrado = null;
   let nombresEnDestino = [];
-  let mapaCodificado = new Map();
-
-  // Un registro solo sirve para reutilizar su ruta guardada si se escribió en EL MISMO
-  // MUNDO que esta pasada: mismo `modo` y, en cifrado, el MISMO remote base. Si el destino
-  // cambió de mundo desde que se registró (se encendió/apagó el cifrado, o rotó la clave),
-  // esa `destino.ruta` es de otro mundo y su huella guardada no es comparable con la de
-  // hoy — hay que tratar el nombre como si no tuviera ruta conocida, para que se recodifique
-  // (en cifrado) o se re-ancle (§5) en vez de compararse contra algo incomparable.
-  function mismoMundoQueRegistro(reg) {
-    if (!reg) return false;
-    if (reg.destino.modo !== modo) return false;
-    if (modo === 'cifrado' && reg.destino.base !== infoCifrado.base) return false;
-    return true;
-  }
+  let baseHoy = '';
+  // `mapaHoyPorNombre`: nombre en claro -> { ruta, bytes, sha256 } en el destino de ESTA
+  // noche. Es la ÚNICA fuente de "dónde está el objeto hoy" — nunca se calcula reutilizando
+  // una ruta registrada (esa reutilización era la causa de §1.3: con la clave del crypt
+  // rotada, la ruta vieja ya no existe y el objeto salía "¿borrado?" recién subido).
+  const mapaHoyPorNombre = new Map();
 
   try {
     if (modo === 'claro') {
       mapaDestinoClaro = leerDestinoClaro(remote);
       nombresEnDestino = Array.from(mapaDestinoClaro.keys());
+      baseHoy = normBase(remote);
+      for (const [nombre, info] of mapaDestinoClaro) {
+        mapaHoyPorNombre.set(nombre, { ruta: nombre, bytes: info.bytes, sha256: info.sha256 });
+      }
     } else {
       infoCifrado = leerDestinoCifrado(remote);
       nombresEnDestino = infoCifrado.nombresEnClaro;
       mapaBase = leerMapaBase(infoCifrado.base);
-      // Se codifica la ruta de un nombre si nunca se registró, O si se registró en OTRO
-      // mundo (esa ruta vieja no sirve — ver mismoMundoQueRegistro de arriba).
-      const nuevos = nombresEnDestino.filter((nm) => !mismoMundoQueRegistro(ultimoPorNombre.get(nm)));
-      mapaCodificado = codificarRutas(infoCifrado.nombreCrypt, infoCifrado.subpath, nuevos);
+      baseHoy = normBase(infoCifrado.base);
+      // Se codifican TODOS los nombres que hay hoy en el destino (no solo los "nuevos"):
+      // reutilizar la ruta que trajera el registro es precisamente lo que rompía la clave
+      // rotada. Sigue siendo una única llamada a "rclone backend encode".
+      const mapaCodificado = codificarRutas(infoCifrado.nombreCrypt, infoCifrado.subpath, nombresEnDestino);
+      for (const nombre of nombresEnDestino) {
+        const ruta = mapaCodificado.get(nombre);
+        const info = ruta ? mapaBase.get(ruta) : null;
+        if (info) mapaHoyPorNombre.set(nombre, { ruta, bytes: info.bytes, sha256: info.sha256 });
+      }
     }
   } catch (e) {
-    // Sin rama blanda: si no se puede hablar con el destino, es un FALLO, no un cero.
-    escribirEstado(estadoRuta, {
-      ts: ahora(), etiqueta, modo, cabeza: lectura.cabeza,
-      registros: lectura.entradas.length, comprobados: 0, observados_nuevos: 0,
+    // Sin rama blanda: si no se puede hablar con el destino de HOY, es un FALLO, no un cero.
+    escribirEstadoPasada(estadoRuta, {
+      etiqueta, modo, cabeza: lectura.cabeza, registros: lectura.entradas.length,
       alarmas: [e.message],
     });
     imprimirResumen({ comprobados: 0, alarmas: [e.message], cabeza: lectura.cabeza, observadosNuevos: 0, extra: 'no se ha podido leer el destino: no se ha añadido nada.' });
     process.exit(1);
   }
 
-  function destinoDe(nombre) {
-    if (modo === 'claro') return mapaDestinoClaro.get(nombre) || null;
-    const previo = ultimoPorNombre.get(nombre);
-    const ruta = mismoMundoQueRegistro(previo) ? previo.destino.ruta : mapaCodificado.get(nombre);
-    if (!ruta) return null;
-    const info = mapaBase.get(ruta);
-    return info ? { ...info, ruta } : null;
+  // `mapaDeBase(base)`: da `{ mapa, error }` para CUALQUIER base del histórico, con memoria
+  // (una base no se relee dos veces en la misma pasada). Asimetría a propósito: el destino de
+  // HOY ya es una precondición (si no se puede leer, se ha abortado arriba); un destino
+  // ANTERIOR que ya no contesta es un final esperado —lo retiró el dueño— y no puede
+  // convertirse en un 🚨 cada noche. No se dice que esté bien: se devuelve el error para que
+  // la casilla 5 lo cuente como "sin vigilar", nunca como "verificado".
+  const mapasPorBase = new Map();
+  function mapaDeBase(base) {
+    const nb = normBase(base);
+    if (mapasPorBase.has(nb)) return mapasPorBase.get(nb);
+    let resultado;
+    if (nb === baseHoy) {
+      resultado = { mapa: modo === 'claro' ? mapaDestinoClaro : mapaBase, error: null };
+    } else {
+      try {
+        resultado = { mapa: leerMapaBase(base), error: null };
+      } catch (e) {
+        resultado = { mapa: null, error: e.message };
+      }
+    }
+    mapasPorBase.set(nb, resultado);
+    return resultado;
+  }
+
+  // La frase que explica POR QUÉ se re-ancla: distingue un cambio real de destino (se
+  // apagó/encendió el cifrado, o cambió la base) de una rotación de clave sobre LA MISMA
+  // base (mismo modo, misma base, pero otra ruta cifrada) — que antes se contaba igual que
+  // un cambio de mundo real y los comentarios de este fichero prometían una cobertura que no
+  // existía.
+  function descripcionDeCasilla(registro) {
+    const modoAntes = registro.destino.modo === 'cifrado' ? 'CIFRADO' : 'EN CLARO';
+    const modoAhora = modo === 'cifrado' ? 'CIFRADO' : 'EN CLARO';
+    if (registro.destino.modo !== modo) return `de ${modoAntes} a ${modoAhora}`;
+    const baseActual = modo === 'cifrado' ? infoCifrado.base : remote;
+    if (normBase(registro.destino.base) !== baseHoy) return `de \`${registro.destino.base}\` a \`${baseActual}\``;
+    return 'de la llave anterior a la actual';
   }
 
   const alarmas = [];
@@ -426,7 +497,7 @@ function cmdPasada(args) {
 
   // 3 · Registrar los artefactos de esta noche ("subido").
   for (const art of artefactos) {
-    const d = destinoDe(art.nombre);
+    const d = mapaHoyPorNombre.get(art.nombre);
     if (!d) { alarmas.push(`"${art.nombre}" se subió esta noche pero no aparece en el destino`); continue; }
     if (!d.sha256) { alarmas.push(`el destino no devuelve huella SHA-256 para "${art.nombre}" recién subido`); continue; }
     if (modo === 'claro' && d.sha256 !== art.sha256) {
@@ -454,7 +525,7 @@ function cmdPasada(args) {
   for (const nombre of nombresEnDestino) {
     if (nombresArtefactos.has(nombre)) continue;
     if (nombresYaRegistrados.has(nombre)) continue;
-    const d = destinoDe(nombre);
+    const d = mapaHoyPorNombre.get(nombre);
     if (!d) { alarmas.push(`"${nombre}" aparece en el destino pero no se pudo leer su huella`); continue; }
     n += 1;
     const entrada = {
@@ -476,54 +547,63 @@ function cmdPasada(args) {
     observadosNuevos += 1;
   }
 
-  // 5 · Verificar el histórico: cada nombre con registro previo a esta pasada, contra el
-  // destino de HOY. Si se re-subió esta misma noche, `ultimoPorNombre` ya trae el registro
-  // fresco (paso 3) y la comparación es consigo mismo — verde, tal y como pide el caso "re-
-  // subida el mismo día".
+  // 5 · Verificar el histórico: cada nombre con registro previo a esta pasada, contra DOS
+  // sitios (§3 del análisis) — nunca contra una "clasificación del mundo", que es lo que
+  // fallaba antes: 1) `hoy` = el objeto en el destino de ESTA noche; 2) `suyo` = el objeto
+  // en el sitio que dice su PROPIO registro (`mapaDeBase`). Si se re-subió esta misma noche,
+  // `ultimoPorNombre` ya trae el registro fresco (paso 3) y la comparación es consigo mismo.
   let comprobados = 0;
   let reanclados = 0;
-  const reanclajesPorMotivo = new Map(); // "EN CLARO a CIFRADO" -> cuenta
+  let rezagados = 0;
+  let sinVigilar = 0;
+  const reanclajesPorMotivo = new Map(); // "de EN CLARO a CIFRADO" -> cuenta
+  const rezagadosPorBase = new Map(); // clave base+desc -> { desc, nombres }
+  const sinVigilarPorBase = new Map(); // clave base+motivo -> { base, motivo, nombres }
   const hoyMs = epochDeFecha(fechaHoy);
   for (const nombre of nombresYaRegistrados) {
     const registro = ultimoPorNombre.get(nombre);
-    const actual = destinoDe(nombre);
-    comprobados += 1;
-    if (!actual) {
-      const fechaArt = extraerFecha(registro.nombre) || registro.fecha;
-      const edadDias = Math.floor((hoyMs - epochDeFecha(fechaArt)) / 86400000);
-      if (edadDias < retencionDias - 1) {
-        alarmas.push(`falta "${nombre}" en el destino (edad ${edadDias}d, retención ${retencionDias}d) — ¿borrado?`);
+    const fechaArt = extraerFecha(nombre) || registro.fecha;
+    const edadDias = Math.floor((hoyMs - epochDeFecha(fechaArt)) / 86400000);
+    const dentroDeVentana = edadDias < retencionDias - 1;
+    const hoy = mapaHoyPorNombre.get(nombre) || null;
+    const mismaCasilla = hoy
+      && normBase(registro.destino.base) === baseHoy
+      && registro.destino.ruta === hoy.ruta;
+
+    if (mismaCasilla) {
+      // Casilla 1: el objeto sigue exactamente donde su propio registro dice, en el
+      // destino de hoy. Es la comprobación de siempre.
+      comprobados += 1;
+      if (hoy.sha256 !== registro.destino.sha256) {
+        alarmas.push(`"${nombre}": la huella cambió respecto a lo registrado — ¿manipulado?`);
       }
       continue;
     }
-    if (!mismoMundoQueRegistro(registro)) {
-      // El destino cambió de mundo desde que se registró este objeto (se encendió o se
-      // apagó el cifrado, o rotó la clave). Su huella guardada NO es comparable con la de
-      // hoy — un SHA-256 de texto en claro y uno de texto cifrado son SIEMPRE distintos, y
-      // tratarlo como manipulación sería una alarma falsa, no una detección.
-      // Excepción real, no un agujero: yendo DE cifrado A claro, si aquel registro se
-      // subió (no "observado"), su `sha256` de nivel superior es la huella del CONTENIDO
-      // (se calcula en local antes de cifrar, sea cual sea el mundo — ver paso 3), así que
-      // SÍ es comparable contra el destino en claro de hoy: es continuidad de contenido
-      // real, y se exige que cuadre.
-      if (modo === 'claro' && registro.sha256 && registro.sha256 !== actual.sha256) {
+
+    if (hoy) {
+      // Casilla 2: el objeto SÍ está en el destino de hoy, pero en otra casilla que la de
+      // su última línea — cambió el destino, se migró el histórico, o rotó la clave y se
+      // volvió a subir con el mismo nombre. Se re-ancla: TOFU de operación, la misma
+      // doctrina que ya rige el objeto desconocido (paso 4): un cambio de configuración no
+      // es un ataque. Excepción real, no un agujero: yendo de cifrado a claro, si aquel
+      // registro se subió (no "observado"), su `sha256` de nivel superior es la huella del
+      // CONTENIDO (se calcula en local antes de cifrar, sea cual sea el mundo), así que SÍ
+      // es comparable contra el destino en claro de hoy — y se exige que cuadre.
+      if (modo === 'claro' && registro.sha256 && registro.sha256 !== hoy.sha256) {
         alarmas.push(`"${nombre}": la huella cambió respecto a lo registrado — ¿manipulado?`);
         continue;
       }
-      // Sin huella comparable: se re-ancla sin comparar. TOFU de operación, la misma
-      // doctrina que ya rige el objeto desconocido (§4): un cambio de configuración no es
-      // un ataque, y desde esta noche el objeto se verifica igual que todos los demás.
-      const motivo = `${registro.destino.modo === 'cifrado' ? 'CIFRADO' : 'EN CLARO'} a ${modo === 'cifrado' ? 'CIFRADO' : 'EN CLARO'}`;
+      const motivo = descripcionDeCasilla(registro);
       n += 1;
       const entrada = {
         n, ts: ahora(), fecha: extraerFecha(nombre) || registro.fecha, etiqueta, remote, nombre,
         origen: 'reanclado',
-        bytes: modo === 'cifrado' ? null : actual.bytes,
-        sha256: modo === 'cifrado' ? null : actual.sha256,
+        bytes: modo === 'cifrado' ? null : hoy.bytes,
+        sha256: modo === 'cifrado' ? (registro.sha256 ?? null) : hoy.sha256,
         destino: {
-          modo, ruta: modo === 'cifrado' ? actual.ruta : nombre,
+          modo, ruta: modo === 'cifrado' ? hoy.ruta : nombre,
           base: modo === 'cifrado' ? infoCifrado.base : remote,
-          bytes: actual.bytes, sha256: actual.sha256,
+          bytes: hoy.bytes, sha256: hoy.sha256,
         },
         prev,
       };
@@ -535,17 +615,54 @@ function cmdPasada(args) {
       reanclajesPorMotivo.set(motivo, (reanclajesPorMotivo.get(motivo) || 0) + 1);
       continue;
     }
-    if (actual.sha256 !== registro.destino.sha256) {
-      alarmas.push(`"${nombre}": la huella cambió respecto a lo registrado — ¿manipulado?`);
+
+    // Ni en la misma casilla ni en el destino de hoy: se busca donde el propio registro
+    // dice que vive.
+    const { mapa, error } = mapaDeBase(registro.destino.base);
+    const suyo = mapa ? mapa.get(registro.destino.ruta) : null;
+    if (suyo) {
+      // Casilla 3: el objeto sigue donde su registro dice, aunque ya no sea el destino de
+      // hoy — se compara DONDE ESTÁ, detección real y no un silencio. Fuera de la ventana
+      // de retención se apaga sola, igual que una ausencia caducada (§3 del análisis): si
+      // no, esta línea sería ruido permanente.
+      if (!dentroDeVentana) continue;
+      comprobados += 1;
+      rezagados += 1;
+      if (suyo.sha256 !== registro.destino.sha256) {
+        alarmas.push(`"${nombre}": la huella cambió respecto a lo registrado — ¿manipulado?`);
+      }
+      const desc = `${registro.destino.modo === 'cifrado' ? 'CIFRADO' : 'EN CLARO'}, ${registro.destino.base}`;
+      const clave = `${registro.destino.base} ${desc}`;
+      if (!rezagadosPorBase.has(clave)) rezagadosPorBase.set(clave, { desc, nombres: [] });
+      rezagadosPorBase.get(clave).nombres.push(nombre);
+      continue;
+    }
+    if (error) {
+      // Casilla 5: el destino anterior ya no contesta. No es alarma —lo retiró el dueño—,
+      // pero tampoco es silencio: sin rama blanda, "no puedo comprobarlo" no es "está bien".
+      if (dentroDeVentana) {
+        sinVigilar += 1;
+        const clave = `${registro.destino.base} ${error}`;
+        if (!sinVigilarPorBase.has(clave)) sinVigilarPorBase.set(clave, { base: registro.destino.base, motivo: error, nombres: [] });
+        sinVigilarPorBase.get(clave).nombres.push(nombre);
+      }
+      continue;
+    }
+    // Casilla 4: ni en el destino de hoy ni en el que dice su registro. Ausencia de verdad.
+    if (dentroDeVentana) {
+      alarmas.push(`falta "${nombre}" en el destino (edad ${edadDias}d, retención ${retencionDias}d) — ¿borrado?`);
     }
   }
 
   escribirManifiesto(manifiestoRuta, lectura.lineasCrudas, nuevasEntradas);
-  escribirEstado(estadoRuta, {
-    ts: ahora(), etiqueta, modo, cabeza: prev, registros: n,
-    comprobados, observados_nuevos: observadosNuevos, reanclados, alarmas,
+  escribirEstadoPasada(estadoRuta, {
+    etiqueta, modo, cabeza: prev, registros: n,
+    comprobados, observadosNuevos, reanclados, rezagados, sinVigilar, alarmas,
   });
-  imprimirResumen({ comprobados, alarmas, cabeza: prev, observadosNuevos, reanclajesPorMotivo });
+  imprimirResumen({
+    comprobados, alarmas, cabeza: prev, observadosNuevos, reanclajesPorMotivo,
+    rezagadosPorBase, sinVigilarPorBase,
+  });
   process.exit(alarmas.length ? 1 : 0);
 }
 
@@ -574,7 +691,7 @@ function cmdEstado(args) {
     process.exit(1);
   }
   const alarmas = Array.isArray(e.alarmas) ? e.alarmas : [];
-  imprimir(`${e.etiqueta} · ${e.modo} · ts=${e.ts} · registros=${e.registros} · comprobados=${e.comprobados} · observados_nuevos=${e.observados_nuevos} · ${alarmas.length} alarmas · cabeza=${e.cabeza || '(vacía)'}`);
+  imprimir(`${e.etiqueta} · ${e.modo} · ts=${e.ts} · registros=${e.registros} · comprobados=${e.comprobados} · observados_nuevos=${e.observados_nuevos} · reanclados=${e.reanclados ?? 0} · rezagados=${e.rezagados ?? 0} · sin_vigilar=${e.sin_vigilar ?? 0} · ${alarmas.length} alarmas · cabeza=${e.cabeza || '(vacía)'}`);
   for (const a of alarmas) imprimir(`ALARMA: ${a}`);
   process.exit(alarmas.length ? 1 : 0);
 }

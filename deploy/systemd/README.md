@@ -153,14 +153,42 @@ de la crisis: nada se asume, todo se verifica y se notifica).
   que quien lo controle puede reescribirlo entero; el ancla es que su cabeza y el SHA-256 de
   cada artefacto de hoy viajan también en el correo diario, a un buzón que el servidor no
   puede tocar. Detecta manipulación o borrado en Drive; no los impide.
-  **La noche en que el destino cambia de mundo** (se ejecuta
+  ~~**La noche en que el destino cambia de mundo** (se ejecuta
   `scripts/cifrar-copias-de-seguridad.sh`, o se apaga borrando el fichero de destinos): las
   huellas guardadas de antes son de otro mundo (texto en claro / texto cifrado) y no son
   comparables entre sí, así que cada objeto del histórico se **re-ancla** (no se compara, no
-  alarma) y el resumen y el correo lo cuentan con su número: *«N objetos re-anclados porque
-  el destino cambió de EN CLARO a CIFRADO»* (o al revés). Es la única noche en la que el
-  dueño va a estar mirando, y es a propósito la única en la que el manifiesto NO exige que
-  las huellas cuadren — desde la noche siguiente, vuelve a exigirlo con normalidad.
+  alarma) y el resumen y el correo lo cuentan con su número: «N objetos re-anclados porque
+  el destino cambió de EN CLARO a CIFRADO» (o al revés).~~ **⚙️ CORREGIDO EL 2 SEP 2026
+  (`manifiesto-huellas-backups`): esa frase solo contaba la mitad — el histórico que VIAJA con
+  el destino nuevo. Se tacha en vez de borrarse.** Hay DOS caminos, no uno, y cada objeto sigue
+  el que le toque según dónde lo encuentre la pasada de esa noche:
+  - **Si el objeto SÍ está en el destino de hoy** (se migró el histórico, o rotó la clave del
+    `crypt` y se volvió a subir con el mismo nombre): se **re-ancla**, sin comparar huellas
+    incomparables entre mundos — salvo yendo de cifrado a claro, donde si aquel registro
+    llevaba la huella del CONTENIDO, esa sí es comparable y se exige que cuadre. El resumen y
+    el correo lo cuentan con su número: *«N objetos re-anclados porque el destino cambió de EN
+    CLARO a CIFRADO»* (o al revés, o «de la llave anterior a la actual» si solo rotó la clave).
+  - **Si el objeto NO está en el destino de hoy pero SIGUE donde dice su propio registro**
+    (el caso típico: se enciende el cifrado sin `--migrar-historico`, y el histórico en claro
+    se queda donde estaba): **no se declara huérfano**. Se sigue comprobando **DONDE ESTÁ**,
+    contra el destino anterior, con la misma exigencia de siempre — y si alguien lo manipula
+    allí, la alarma salta igual, con su nombre. El correo lo dice con su número y sus nombres:
+    *«N objetos del histórico siguen en el destino anterior (EN CLARO, `gdrive:...`),
+    verificados allí — para retirarlos: `bash scripts/cifrar-copias-de-seguridad.sh
+    --migrar-historico`»*. Esa línea **se apaga sola** en cuanto el objeto sale de la ventana
+    de retención (o antes, si se migra) — no es ruido permanente.
+  - **Si el destino anterior ya no contesta** (se retiró el remote, p. ej.): tampoco es
+    alarma —lo decidió el dueño— pero tampoco es silencio: el correo dice *«N objetos
+    registrados en `<base>` no se han podido comprobar allí (`<motivo>`): quedan SIN
+    VIGILAR»*. Es la única casilla que no compara nada, y lo dice con esas palabras.
+
+  Es la única noche en la que el dueño va a estar mirando de cerca, y es a propósito la única
+  en la que el manifiesto NO exige que las huellas del objeto re-anclado cuadren (salvo la
+  excepción de contenido de arriba) — desde la noche siguiente, vuelve a exigirlo con
+  normalidad. **Lo que esto NO cubre:** si alguien borra un objeto del destino anterior **la
+  misma noche** del cambio y además retira el remote antes de que corra la pasada, ese borrado
+  sale como «sin vigilar», no como «borrado» — el registro sigue en la cadena como rastro, pero
+  la pasada de esa noche no llega a comprobarlo en ningún sitio.
 - **Retención 14 días**: borra en Drive lo más viejo. Una copia corrupta nunca pisa la buena.
 - **Email (Resend, `noreply@bamburu.com` → `ibrahingil@gmail.com`)** en OK y en FALLO.
 - **Ping a healthchecks.io** (`HEALTHCHECKS_URL`): dead-man's-switch externo que avisa

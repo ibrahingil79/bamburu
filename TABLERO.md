@@ -8758,20 +8758,37 @@ Lo que pide la entrada: **SHA-256 por copia, guardado aparte, comprobado contra 
 pasada.** Guardado *aparte* es la parte que importa: una huella que viva en el mismo sitio que el
 fichero no prueba nada, porque quien edite el fichero edita la huella.
 
-**⚙️ CONSTRUIDO EL 2 SEP 2026.** Un manifiesto encadenado de huellas
-(`scripts/lib/manifiesto-copias.mjs`), llamado desde `scripts/bamburu-backup.sh` tras subir y
-verificar la copia de hoy y **antes** de la retención: anota cada artefacto (SHA-256 en local y la
-huella que el destino declara), y en cada pasada recorre **toda** la ventana de retención contra lo
-registrado, **sin descargar nada** — funciona igual en claro y en cifrado, sin rama blanda en
-ninguno de los dos. Si algo no cuadra, la retención de esa noche no se ejecuta y el correo pasa a
-🚨; la cabeza de la cadena y el SHA-256 de cada artefacto de hoy viajan también en el correo, como
-ancla fuera del servidor. `node scripts/test-manifiesto-copias.mjs` ejecuta el script de backup real
-contra un destino local en claro y contra un `crypt` local, cubriendo los siete casos de alteración,
-borrado, re-subida y edición del propio manifiesto, en los dos mundos: 75 ✓ · 0 ✗. Detalle en
-`deploy/systemd/README.md` §«Qué hace, cada día» y en `docs/seguridad/vectores-de-ataque.md` §7.
+~~**⚙️ CONSTRUIDO EL 2 SEP 2026.** Un manifiesto encadenado de huellas
+(`scripts/lib/manifiesto-copias.mjs`)… Si algo no cuadra, la retención de esa noche no se ejecuta y
+el correo pasa a 🚨… `node scripts/test-manifiesto-copias.mjs`… 75 ✓ · 0 ✗.~~ **⚙️ ESA VERSIÓN SE
+RECHAZÓ TRES VECES** (intentos 1-3: restos de `console.log`, y luego el fallo real —
+`mismoMundoQueRegistro()` confundía «cambió el destino» con «alguien tocó lo guardado», y un objeto
+que se quedaba atrás al cifrar salía «¿borrado?» trece noches seguidas). Se tacha en vez de
+borrarse, por la regla de este documento.
+
+**⚙️ REPLANTEADO Y CONSTRUIDO EL 2 SEP 2026 (intento 4).** Se borró el concepto de «mundo»: la
+pasada ya no clasifica la configuración, mira DOS sitios por cada objeto — ¿está en el destino de
+HOY? ¿sigue donde dice su PROPIO registro? — y con esas dos respuestas hay cinco casillas, cada una
+con su desagüe: (1) sigue en su sitio de siempre → se compara igual que siempre; (2) está hoy pero en
+otra casilla (cambió el destino, se migró el histórico, o rotó la clave del `crypt`) → se **re-ancla**
+(con la huella de CONTENIDO comparada de verdad si va de cifrado a claro, no tirada); (3) no está hoy
+pero SIGUE donde dice su registro (el caso que tumbaba al intento 3: cifrado sin migrar) → se
+**comprueba donde está**, sin declararlo huérfano, y esa línea se apaga sola al salir de la ventana de
+retención; (4) no está en ningún sitio → ausencia real, alarma si no ha caducado; (5) su destino
+anterior ya no contesta → ni alarma ni silencio, **«sin vigilar»**, con su nombre, en el correo. El
+correo deja de depender de que bash conozca el texto de cada línea (una sola regla `awk`, no un
+`grep` por frase) y el heartbeat deja de leer el `mtime` del fichero de estado (lee el `ts` de dentro:
+un `touch` ya no rejuvenece la vigilancia). `node scripts/test-manifiesto-copias.mjs` ejecuta
+`scripts/bamburu-backup.sh` real contra remotes locales (nunca `gdrive:`), en claro y en cifrado,
+cubriendo además el cambio de destino sin migrar, la rotación de clave y la vuelta de cifrado a
+claro: **114 ✓ · 0 ✗**. Entra en el barrido: `node scripts/run-gates.mjs test-manifiesto-copias`
+(grupo `infra`, ~48 s). Detalle en `deploy/systemd/README.md` §«Manifiesto de huellas del histórico»
+y en `docs/seguridad/vectores-de-ataque.md` §7.
 **Lo que NO cubre, y hay que decirlo:** el manifiesto vive en el servidor, así que quien lo controle
 puede reescribirlo entero; el ancla del correo defiende contra la cuenta de Drive comprometida (el
-vector que cerraba esta tarea), no contra el servidor comprometido.
+vector que cerraba esta tarea), no contra el servidor comprometido. Y una ventana real: un borrado
+hecho la MISMA noche en que el destino cambia, si además desaparece el remote anterior, sale como
+«sin vigilar», no como «borrado».
 
 **Verificado el 1 sep 2026:** `scripts/bamburu-backup.sh` no menciona `sha256` ni manifiesto de
 ningún tipo.
@@ -8946,7 +8963,12 @@ mano en el momento. Cuando algo va despacio, hoy se descubre porque alguien se q
 Va después del registro estructurado: sin un registro que se pueda contar, las métricas se
 construyen dos veces.
 
-## TAREA — Que una caída del proveedor de IA deje rastro
+## SIGUIENTE TAREA — Que una caída del proveedor de IA deje rastro
+
+> **Adelantada al primer puesto por Ibrahin el 2 sep 2026**, y no por prioridad de producto: es la
+> primera de la cola que **trae criterios suyos en el tablero**, y hace falta ver un ciclo entero
+> pasar por las reglas nuevas (los criterios del tablero mandan) con una tarea de verdad. El rótulo
+> se quita cuando se cierre; el orden natural de las demás no se ha tocado.
 
 - **id:** caida-ia-deja-rastro
 - **estado:** pendiente
@@ -9407,7 +9429,7 @@ negocio suspendido NO deja escribir— necesitan un negocio suspendido y tienen 
 ## Seguridad y datos
 
 - [~] **Cifrar las copias de seguridad.** ~~Cierra a la vez los vectores 4 y 7~~ ~~Es configuración (`rclone crypt`), no programación.~~ ~~**⚙️ CÓDIGO HECHO EL 1 SEP 2026 · OPERACIÓN PENDIENTE DE IBRAHIN.** El script exige destino `crypt` y **aborta** si no lo es.~~ **⚙️ ESO ERA FALSO Y SE REVIRTIÓ EL MISMO DÍA (`6bd067f`): el script de hoy NO exige nada, y aquel guardián habría dejado sin copia las dos madrugadas.** Se tacha en vez de borrarse. **REPLANTEADO Y RECONSTRUIDO EL 1 SEP 2026 (tarde), con otro enfoque:** el cifrado deja de ser un interruptor en el código y pasa a ser un **estado del servidor**. El script sabe funcionar en los dos mundos —sin rama blanda en ninguno: `cryptcheck` si el destino es `crypt`, MD5 obligatorio si no lo es— y compara el restore **byte a byte** (`integrity_check` da `ok` a cualquier base sana, aunque sea otra). Quién manda lo dice `~/.config/bamburu/backup-destinos.conf`, que **solo escribe** `scripts/cifrar-copias-de-seguridad.sh` y **solo después de haber subido, bajado y comparado un fichero de prueba**; ese mismo fichero es el cerrojo, así que **el código no puede exigir cifrado antes de que el cifrado exista**. **Las dos frases tachadas eran falsas:** cierra el vector 4 **entero** y **solo la mitad del 7** (falta `manifiesto-huellas-backups`), y **no era configuración**: cifrar sin tocar el código habría apagado la verificación de MD5 dejándola en verde. ~~Faltan 4 pasos de terminal que el orquestador no puede dar: crear los dos remotes `crypt`, custodiar la contraseña, instalar la unit + primera copia real, y migrar el histórico.~~ **⚙️ AHORA FALTA UNA SOLA ORDEN, y sigue siendo de Ibrahin** (`~/.config/rclone` está en solo lectura para el orquestador, sin `sudo`): `bash scripts/cifrar-copias-de-seguridad.sh`. Ella sola genera la llave, crea los dos destinos, **comprueba que descifra**, cambia el destino de las **dos** copias con una sola escritura y enseña la llave para custodiarla; si el descifrado falla, deshace y esa noche la copia sale en claro y en verde. El histórico va aparte, con simulacro por defecto: `--migrar-historico [--hazlo]`. **LAS COPIAS VAN EN CLARO HASTA QUE ESA ORDEN SE EJECUTE**, y el correo diario lo dice (`EN CLARO ⚠️`). **La ficha NO se cierra hasta entonces:** cerrarla sería el verde que miente que esta tarea viene a matar. Ficha completa arriba, detalle en `deploy/systemd/README.md` §«Cifrado de las copias».
-- [ ] **Manifiesto de huellas del histórico de backups.** Hoy solo se verifica la copia del día: una copia de hace cinco días se puede editar y nadie vuelve a mirarla. SHA-256 por copia, guardado aparte, comprobado contra las 14 en cada pasada. **⚙️ CONSTRUIDO EL 2 SEP 2026** (`manifiesto-huellas-backups`): no eran «14 copias», eran 14 días / 283 objetos en la cuenta principal y 87 en la secundaria. Ficha completa en §TAREA — Manifiesto de huellas del histórico de copias.
+- [ ] **Manifiesto de huellas del histórico de backups.** Hoy solo se verifica la copia del día: una copia de hace cinco días se puede editar y nadie vuelve a mirarla. SHA-256 por copia, guardado aparte, comprobado contra las 14 en cada pasada. ~~**⚙️ CONSTRUIDO EL 2 SEP 2026**~~ **⚙️ ESE INTENTO SE RECHAZÓ (destino cambiado ≠ histórico manipulado); REPLANTEADO Y CONSTRUIDO EL 2 SEP 2026 (intento 4)** (`manifiesto-huellas-backups`): no eran «14 copias», eran 14 días / 283 objetos en la cuenta principal y 87 en la secundaria. La pasada ya no clasifica «el mundo» del destino: mira si el objeto sigue en el destino de HOY y si sigue donde dice su PROPIO registro, y el histórico que se queda atrás al cambiar de destino (p. ej. al cifrar sin migrar) se sigue comprobando DONDE ESTÁ en vez de declararse huérfano — 114 ✓ · 0 ✗. Ficha completa en §TAREA — Manifiesto de huellas del histórico de copias.
 - [ ] **La retención del backup borra aunque la subida haya fallado PARCIALMENTE** (`scripts/bamburu-backup.sh:164`). **⚙️ MATIZ MEDIDO EL 1 SEP 2026, porque la entrada estaba mal escrita:** cuatro líneas ANTES de la retención ya hay un guardián —`[ "$uploaded" -gt 0 ] || fail_exit`— que existe **desde el 19 jun 2026** (`3076f68`). O sea: si NO se subió nada, el script sale y no borra. **El hueco real, que sí es real, es el fallo PARCIAL:** si se subió un fichero y falló otro, `uploaded` es mayor que cero y la retención se ejecuta igual. Condicionar el borrado al éxito **de todos**, no de al menos uno.
 - [ ] **Cifrado en reposo de las bases de negocio.**
 - [ ] **Permisos Paso 1:** recorrer las rutas y dejar escrito qué permiso exige cada una. Desbloquea el Paso 2 (DISA administrando permisos). **⚙️ CIFRA NO REPRODUCIBLE, 1 sep 2026:** ~~600 de 1.025 rutas~~ — no se ha podido reproducir con ningún conteo sobre el árbol (salen 1.995 declaraciones de ruta y 464 guardas visibles). **La proporción del problema se sostiene —la mayoría de rutas no enseña su permiso en la línea— pero la cifra concreta no vale como criterio de HECHO.** Quien la construya tiene que empezar por fijar el método de conteo, y ese método es parte de la entrega.

@@ -42,7 +42,12 @@
 #   - recorre TODA la ventana de retención contra lo registrado, SIN DESCARGAR NADA
 #     (pregunta al destino la huella que él mismo calculó: 1 llamada a rclone en claro,
 #     unas pocas más en cifrado, porque un remote crypt no expone huellas del contenido y
-#     hay que pedírselas al remote base a través de la ruta cifrada).
+#     hay que pedírselas al remote base a través de la ruta cifrada);
+#   - si el destino cambia de mundo y un objeto NO viaja con él (p. ej. `cifrar-copias-de-
+#     seguridad.sh` sin `--migrar-historico`), ese objeto NO se declara huérfano: se sigue
+#     comprobando DONDE ESTÁ, contra el sitio que dice su propio registro, mientras siga
+#     dentro de la ventana de retención — y si el destino anterior deja de contestar, queda
+#     dicho como "sin vigilar" en el correo, nunca en silencio.
 # QUÉ NO CUBRE: el manifiesto vive en este servidor, así que quien lo controle puede
 # reescribirlo entero. Por eso su cabeza y el SHA-256 de cada artefacto de hoy van también
 # en el correo diario — un ancla fuera del servidor que la propia copia ya envía.
@@ -288,15 +293,12 @@ MANIF_SALIDA="$("$NODE" "$MANIFHELPER" pasada \
   --fecha "$DATE" --artefactos "$ARTEFACTOS" 2>&1)"
 MANIF_OK=$?
 log "$MANIF_SALIDA"
-MANIF_LINEA="$(printf '%s\n' "$MANIF_SALIDA" | grep '^Manifiesto: ' | head -1)"
-MANIF_BLOQUE="$MANIF_LINEA"
-MANIF_OBS_LINEA="$(printf '%s\n' "$MANIF_SALIDA" | grep 'objetos que esta copia no subió' | head -1)"
-[ -n "$MANIF_OBS_LINEA" ] && MANIF_BLOQUE+=$'\n'"$MANIF_OBS_LINEA"
-# Si el destino cambió de mundo (se encendió/apagó el cifrado) desde la pasada anterior,
-# el ayudante re-ancla en vez de comparar huellas incomparables — y lo dice con su número.
-# Sin esta línea en el correo, el cambio de mundo sería silencioso otra vez.
-MANIF_REANCLADOS="$(printf '%s\n' "$MANIF_SALIDA" | grep 'objetos re-anclados porque el destino cambió de')"
-[ -n "$MANIF_REANCLADOS" ] && MANIF_BLOQUE+=$'\n'"$MANIF_REANCLADOS"
+# Todo lo que el ayudante diga entre el titular y la primera alarma llega al correo, SIN que
+# bash tenga que conocer el texto de cada línea (antes había un `grep` por frase, y una línea
+# nueva del ayudante no llegaba al correo hasta que alguien se acordara de añadir su `grep` —
+# la lista de rezagados y de "sin vigilar" de esta tarea son la prueba). Una sola regla de
+# rango, con `awk`, en vez de una lista a mano.
+MANIF_BLOQUE="$(printf '%s\n' "$MANIF_SALIDA" | awk '/^Manifiesto: /{f=1} /^ALARMA: /{f=0} f')"
 
 if [ "$MANIF_OK" != 0 ]; then
   # NO se ejecuta la retención: si el histórico está en duda, lo peor que se puede hacer

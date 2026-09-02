@@ -284,7 +284,11 @@ export const GRUPOS = {
           // 1 SEP 2026 — que el barrido del DAEMON mida lo mismo que el de mano. Vigila que el
           // navegador siga siendo el ELF de dentro del snap y no el envoltorio, que muere bajo
           // `NoNewPrivileges` y daba 28 rojos falsos por pasada. Barata: no abre navegador.
-          'verify-navegador-en-el-daemon'],
+          'verify-navegador-en-el-daemon',
+          // 2 SEP 2026 (manifiesto-huellas-backups) — el manifiesto de huellas del histórico de
+          // copias. Tarda ~30 s (monta laboratorios rclone y ejecuta bamburu-backup.sh real dos
+          // veces, en claro y en cifrado): no va al RÁPIDO. Existía y nadie lo lanzaba nunca.
+          'test-manifiesto-copias'],
 
   // ── LOS TRES LINT, DENTRO DEL BARRIDO (24 ago 2026) ──────────────────────────────────────────
   // Estaban en `scripts/` y solo corrían si alguien se acordaba, y esa noche eso salió caro DOS veces:

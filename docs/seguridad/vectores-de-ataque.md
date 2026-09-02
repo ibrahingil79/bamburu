@@ -214,6 +214,14 @@ encienda el cifrado esto no se queda ciego). Si un objeto del histórico cambió
 `RETENTION_DAYS-1` días de edad, la pasada de esa noche **no ejecuta la retención** (no se borra la
 evidencia por antigüedad) y el correo pasa a 🚨.
 
+**Y la vigilancia no se pierde cuando el destino cambia** (se enciende el cifrado sin migrar el
+histórico, por ejemplo): un objeto que se queda en el destino ANTERIOR no se declara huérfano ni
+dispara una alarma falsa — se sigue comprobando **donde está**, contra ese mismo destino, mientras
+siga dentro de la ventana de retención, y si alguien lo manipula allí la alarma salta igual, con su
+nombre. Si el destino anterior deja de contestar (se retira el remote), tampoco es alarma ni
+silencio: queda dicho en el correo como «sin vigilar». Detalle en `deploy/systemd/README.md`
+§«Manifiesto de huellas del histórico».
+
 **Y lo que sigue sin cubrir, dicho sin adornarlo:** el manifiesto vive en **este mismo servidor**, así
 que quien controle el servidor puede reescribirlo entero. Contra eso está el ancla del correo diario
 —la cabeza de la cadena y el SHA-256 de cada artefacto de hoy viajan también ahí, a un buzón que el

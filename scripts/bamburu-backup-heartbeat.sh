@@ -104,13 +104,23 @@ for i in "${!NOMBRES[@]}"; do
     MANIF_PROBLEMAS=$((MANIF_PROBLEMAS+1))
     continue
   fi
-  edad_estado=$(( now - $(stat -c%Y "$archivo_estado" 2>/dev/null || echo 0) ))
-  if [ "$edad_estado" -gt "$MAX_AGE" ]; then
-    MANIF_DETALLE+="  · $nombre: la verificación del histórico lleva más de $((MAX_AGE/3600))h sin correr"$'\n'
-    MANIF_PROBLEMAS=$((MANIF_PROBLEMAS+1))
-  fi
   salida_estado="$("$NODE" "$MANIFHELPER" estado --estado "$archivo_estado" 2>&1)"
-  if [ $? -ne 0 ]; then
+  estado_rc=$?
+  # La edad se lee del `ts` DE DENTRO del estado, no del mtime del fichero: un `touch` (o
+  # cualquier cosa que lo toque sin que la pasada haya corrido) rejuvenecía la vigilancia sin
+  # que hubiera corrido nada.
+  ts_estado="$(printf '%s\n' "$salida_estado" | sed -n 's/.*ts=\([0-9]\+\).*/\1/p' | head -1)"
+  if [ -z "$ts_estado" ]; then
+    MANIF_DETALLE+="  · $nombre: no se ha podido leer la fecha del estado"$'\n'
+    MANIF_PROBLEMAS=$((MANIF_PROBLEMAS+1))
+  else
+    edad_estado=$(( now - ts_estado ))
+    if [ "$edad_estado" -gt "$MAX_AGE" ]; then
+      MANIF_DETALLE+="  · $nombre: la verificación del histórico lleva más de $((MAX_AGE/3600))h sin correr"$'\n'
+      MANIF_PROBLEMAS=$((MANIF_PROBLEMAS+1))
+    fi
+  fi
+  if [ "$estado_rc" -ne 0 ]; then
     MANIF_DETALLE+="  · $nombre: $salida_estado"$'\n'
     MANIF_PROBLEMAS=$((MANIF_PROBLEMAS+1))
   fi
