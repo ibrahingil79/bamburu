@@ -21,7 +21,7 @@
 //   · No decide. Calcular cuánto se cobra es de `core/suscripcion.js`; aquí solo se transmite.
 
 import { readFileSync } from 'fs';
-import { createHmac, timingSafeEqual } from 'crypto';
+import { createHmac, createHash, timingSafeEqual } from 'crypto';
 import { controlDb } from './control-db.js';
 
 const API = 'https://api.stripe.com/v1';
@@ -149,10 +149,27 @@ export async function stripeApi(metodo, ruta, params = {}, { idempotencia = null
 
 /** Un cliente en Stripe para este negocio. Se crea una vez y se reutiliza siempre. */
 export async function crearCliente({ nombre, email, tenantId, slug }) {
-  return stripeApi('POST', '/customers', {
+  const params = {
     name: nombre, email: email || undefined,
     metadata: { bamburu_tenant_id: String(tenantId), bamburu_slug: slug || '' },
-  }, { idempotencia: `cliente-tenant-${tenantId}` });
+  };
+
+  // ⚙️ LA LLAVE LLEVA EL CONTENIDO DENTRO, no solo el número del negocio (2 sep 2026).
+  //
+  // Era `cliente-tenant-<id>` a secas, y eso está MAL de una forma que solo se ve al usarlo: una
+  // llave de idempotencia queda atada en Stripe a los parámetros con los que se usó la primera vez,
+  // así que la misma llave con parámetros distintos **no repite la respuesta: da error**. Medido:
+  //   «Keys for idempotent requests can only be used with the same parameters they were first used
+  //    with. Try using a key other than 'cliente-tenant-156'»
+  // Salió al añadir el correo del dueño a la petición: el mismo negocio, un parámetro más, y el alta
+  // dejó de funcionar durante 24 h (que es lo que Stripe recuerda una llave).
+  //
+  // Con el contenido dentro, cada versión de la petición tiene su llave: dos clics seguidos siguen
+  // colapsando en UN cliente —que es para lo que existe la llave—, y cambiar el correo del dueño
+  // deja de ser un error.
+  const huella = createHash('sha256').update(JSON.stringify(params)).digest('hex').slice(0, 12);
+
+  return stripeApi('POST', '/customers', params, { idempotencia: `cliente-tenant-${tenantId}-${huella}` });
 }
 
 /**
@@ -165,7 +182,7 @@ export async function crearCliente({ nombre, email, tenantId, slug }) {
  * cobrar, y la pantalla tampoco.
  */
 export async function crearSesionDeAlta({ clienteId, exitoUrl, cancelUrl, tenantId }) {
-  return stripeApi('POST', '/checkout/sessions', {
+  const base = {
     mode: 'setup',
     customer: clienteId,
     success_url: exitoUrl,
@@ -173,7 +190,39 @@ export async function crearSesionDeAlta({ clienteId, exitoUrl, cancelUrl, tenant
     locale: 'es',
     payment_method_types: ['card'],
     metadata: { bamburu_tenant_id: String(tenantId) },
-  });
+  };
+
+  // ⚙️ MANAGED PAYMENTS (2 sep 2026) — por qué esto no es una línea de más.
+  //
+  // Stripe activa «Managed Payments» POR DEFECTO en las cuentas nuevas, y una cuenta con eso puesto
+  // **rechaza `mode: setup`**: solo admite `subscription` o `payment`. Medido en la cuenta de
+  // Ibrahin, con el mensaje entero de Stripe:
+  //   «Invalid mode: setup. Managed Payments, which is enabled by default on your account, only
+  //    supports mode: subscription or mode: payment. […] or pass managed_payments[enabled]=false»
+  //
+  // Se apaga **por petición**, no en el panel de Stripe. Es deliberado: el dueño no tiene por qué
+  // ir a un ajuste de un panel ajeno para que su programa funcione, y un producto que depende de
+  // una casilla marcada a mano en otra web se rompe en la primera cuenta nueva que se dé de alta.
+  //
+  // Y NO se puede resolver cambiando a `mode: subscription`, que es lo que sugiere el mensaje: ese
+  // modo cobra (o abre una suscripción) en el mismo acto, y aquí hace falta justo lo contrario —
+  // guardar la tarjeta SIN cobrar, porque al cliente le pueden quedar días de prueba. El criterio 3
+  // dice «al TERMINAR la prueba».
+  const r = await stripeApi('POST', '/checkout/sessions', { ...base, managed_payments: { enabled: false } });
+  if (r.ok) return r;
+
+  // La otra mitad, para que funcione en CUALQUIER cuenta: una que no conozca ese parámetro —versión
+  // de API vieja, o cuenta sin Managed Payments— lo rechaza con `parameter_unknown`. Medido: Stripe
+  // NO ignora los parámetros que no conoce, devuelve `code=parameter_unknown` con `param` diciendo
+  // cuál es. En ese caso, y SOLO en ese, se repite sin él.
+  //
+  // No es una rama blanda: los dos caminos terminan en un éxito real o en el error de verdad. Lo que
+  // se evita es que un producto que funciona en la cuenta de hoy deje de funcionar en la de mañana.
+  const desconocido = r.codigo === 'parameter_unknown'
+    && String(r.datos?.error?.param || '').startsWith('managed_payments');
+  if (!desconocido) return r;
+
+  return stripeApi('POST', '/checkout/sessions', base);
 }
 
 export async function recuperarSesion(sesionId) {

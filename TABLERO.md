@@ -8765,10 +8765,10 @@ ejecutar el guion al final, cuando le venga bien, y guardar la llave que le ense
 > están dentro de los criterios: no hay que volver a preguntárselas.
 
 
-## 🟡 CONSTRUIDA Y ESPERANDO UNA ORDEN DE IBRAHIN (2026-09-02) — El plan de 9,90 € y el alta, con prueba de 15 días
+## ✅ HECHA (2026-09-02) — El plan de 9,90 € y el alta, con prueba de 15 días
 
 - **id:** suscripcion-plan-y-alta
-- **estado:** esperando
+- **estado:** hecha
 - **origen:** Decisión de Ibrahin, 2 sep 2026 · diagnóstico de la peluquería (no existe nada para cobrar)
 
 Hoy **no hay ninguna forma de cobrarle a un cliente**. Ni pasarela, ni suscripciones, ni domiciliación: se buscó en el núcleo y en el panel de administración y no hay nada. Lo único de Stripe que aparece está en la tienda, que es capa congelada y no sirve para esto. Sin esto Bamburu es una demostración, no un producto.
@@ -8790,22 +8790,25 @@ Esta tarea es solo el plan y la puerta de entrada. El cobro mensual, el impago y
       y comprobado que **las dos vías dan la misma fila** y que volver a sembrar **no reinicia la
       prueba de nadie**. Visto en la pantalla real: *«Estás de prueba: te quedan 15 días · No te
       hemos pedido ninguna tarjeta»*.
-- [~] Al terminar la prueba, o al darse de alta a mitad de mes, se cobra **la parte proporcional**
+- [x] Al terminar la prueba, o al darse de alta a mitad de mes, se cobra **la parte proporcional**
       hasta el día 5 siguiente.
-      **El cálculo y los dos caminos están construidos y medidos**; lo que no ha pasado nunca es un
-      euro, porque no hay claves de Stripe en el servidor. Se prorratea sobre el **ciclo real**
-      (día 5 → día 5), no sobre «30 días fijos»: medido que en febrero el ciclo son 28 días y en
-      julio 31, y que medio ciclo cuesta siempre medio plan. El IVA se calcula **sobre la base ya
-      prorrateada**. Los dos caminos: en el acto al dejar la tarjeta con la prueba vencida
-      (`routes/suscripcion.js`), y la pasada diaria de las 06:10 cuando la prueba vence sola
-      (`scripts/suscripcion-cobros.mjs`, simulacro por defecto). **En producción, el día que se
-      ejecute el guion.**
-- [~] El alta se hace **con Stripe**, operando **como autónomo**: no se exige ni se menciona ninguna
+      **Cobrado de verdad contra Stripe** (modo prueba) el 2 sep 2026: prueba vencida el día 1,
+      pasada `node scripts/suscripcion-cobros.mjs --cobrar` → **3/31 días → 1,16 €**, y el cargo
+      existe en Stripe (`pi_3UBCLPI8mN67R2ZO0kOQczlF`, `succeeded`, `1,16 EUR`) con el concepto
+      *«Bamburu · suscripción 2026-09-02 a 2026-09-05 (0,96 € + IVA 0,20 €)»* — el desglose viaja
+      hasta el extracto del cliente. El estado quedó `al_corriente` con `proximo_cobro = 2026-10-05`.
+      **Y no cobra dos veces:** la segunda pasada dijo *«no hay ninguna prueba vencida con tarjeta
+      puesta»*. El simulacro (sin `--cobrar`) no movió nada. Se prorratea sobre el **ciclo real**
+      (día 5 → día 5): en febrero son 28 días y en julio 31, y medio ciclo cuesta siempre medio plan.
+      El IVA se calcula **sobre la base ya prorrateada**.
+- [x] El alta se hace **con Stripe**, operando **como autónomo**: no se exige ni se menciona ninguna
       sociedad.
-      Checkout alojado en modo `setup` — la tarjeta se teclea **en Stripe, nunca en Bamburu**, así que
-      el producto se queda fuera del alcance de PCI-DSS. El gate comprueba que en toda la pantalla
-      **no aparece «sociedad», «S.L.» ni «razón social»**. No se ha podido recorrer de punta a punta
-      sin claves. **En producción, el día que se ejecute el guion.**
+      **Recorrido de punta a punta con navegador y la tarjeta 4242** (`gate-suscripcion-alta-real`,
+      **18 OK · 0 fallos**): se pulsa el botón de verdad, sale la ventanita en página, se llega al
+      Checkout, se teclea la tarjeta y al volver queda guardada **visa ···· 4242**, sin cobrar nada
+      porque la prueba seguía viva. Checkout **alojado por Stripe**: el número no pasa por Bamburu, y
+      el producto se queda fuera del alcance de PCI-DSS. El gate comprueba que en toda la pantalla no
+      aparece «sociedad», «S.L.» ni «razón social».
 - [x] El negocio ve en su pantalla en qué situación está: en prueba, al corriente, o con un pago
       pendiente.
       → `/admin/suscripcion`, **SOLO el dueño** (candado en el menú **y** en la ruta: un menú que
@@ -8813,7 +8816,7 @@ Esta tarea es solo el plan y la puerta de entrada. El cobro mensual, el impago y
       inventado. Comprobado **mirando la pantalla servida**, con la URL final exigida — un 302 a
       `/admin/login` también responde 200.
 
-**Comprobación:** `node scripts/test-suscripcion.mjs` → **53 OK · 0 fallos**. Trabaja contra una
+**Comprobación:** `node scripts/test-suscripcion.mjs` → **60 OK · 0 fallos**. Trabaja contra una
 `control.db` de usar y tirar (nunca la de producción, verificado) y **no llama a Stripe**. Entra en el
 barrido: grupo `infra`, ~1 s.
 
@@ -8822,7 +8825,51 @@ suscripciones** sembradas (`prueba`, 2026-09-02 → 2026-09-17). Los 5 bloques `
 validados **como llegan al navegador**. La sesión temporal que se creó para mirarla, borrada
 (0 restos).
 
-> ### ⏳ LO QUE FALTA, Y ES UNA SOLA ORDEN DE IBRAHIN
+> ### ⚙️ TRES FALLOS QUE SOLO APARECIERON AL PULSAR EL BOTÓN (2 sep 2026)
+>
+> Los tres dejaban el alta **muerta**, y **ninguno lo vio ninguna aserción** de las 53 que había: las
+> tres medían lo que el producto DECIDE, y esto era lo que el producto HACE. Los destapó Ibrahin
+> pulsando, y el tercero salió al arreglar el segundo.
+>
+> 1. **Managed Payments.** Stripe lo activa **por defecto en las cuentas nuevas**, y una cuenta con
+>    eso puesto **rechaza `mode: setup`**. Se apaga **por petición** (`managed_payments[enabled]=false`),
+>    no en el panel de Stripe: el dueño no tiene por qué ir a marcar una casilla en otra web para que
+>    su programa funcione. Y se reintenta **sin** el parámetro si la cuenta no lo conoce
+>    (`parameter_unknown`), para que funcione en cualquier cuenta. **No** se resolvió pasando a
+>    `mode: subscription`, que es lo que sugiere el mensaje de Stripe: ese modo cobra en el acto, y
+>    aquí hace falta justo lo contrario.
+> 2. **El negocio al que se le pedía regularizar era el único que NO podía regularizar.**
+>    `readOnlyGuard` bloqueaba el POST que abre el Checkout, así que un negocio en SOLO LECTURA leía
+>    *«no puedes hacer nada hasta reactivarla»* y **no tenía forma de reactivarla**. Es EL caso, no un
+>    caso raro: `suspended_admin` es el estado al que lleva el impago, y el criterio de
+>    `suscripcion-impago-y-corte` dice que en la pantalla del corte se ha de decir «exactamente qué
+>    hay que hacer para volver». Sin esto, lo que hubiera que hacer era imposible. Se abre **solo** la
+>    suscripción; el resto del guardián sigue igual de cerrado.
+> 3. **Una llave de idempotencia atada solo al negocio.** `cliente-tenant-<id>` queda atada en Stripe
+>    a los parámetros de la primera vez: al añadir el correo del dueño, la misma llave con un
+>    parámetro más **da error 24 h**. Ahora lleva una huella del contenido dentro. De paso se arregló
+>    que el correo se leía de `session.email`, que **no existe** (`core/auth.js:112` no lo devuelve):
+>    el cliente de Stripe nacía sin correo y el Checkout **se lo pedía al dueño**.
+>
+> Los tres quedan fijados en `scripts/test-suscripcion.mjs` §«los tres fallos del 2 sep». Y la
+> comprobación que los habría cazado existe ahora: **`node scripts/gate-suscripcion-alta-real.mjs`**,
+> declarada **fuera del barrido** con su motivo (necesita claves vivas y navegador; en un servidor sin
+> claves sería un rojo permanente, y un rojo permanente se acaba ignorando).
+
+> ### ⏳ LO QUE FALTA PARA COBRAR DINERO DE VERDAD — y es decisión de Ibrahin, no técnica
+>
+> **Todo lo anterior está medido EN MODO DE PRUEBA de Stripe**, que es lo que pidió el encargo. Para
+> cobrar de verdad hace falta, a propósito, un gesto deliberado:
+>
+> ```
+> bash scripts/configurar-stripe.sh --modo-real
+> ```
+>
+> Pide escribir `COBRAR DE VERDAD` por teclado y escribe el ajuste `stripe_modo_real` en control.db.
+> **Sin ese ajuste, `core/stripe.js` se niega a usar una clave `sk_live_`**, aunque alguien la ponga
+> en `/etc/bamburu.env` por su cuenta. Una clave de producción puesta por descuido **no cobra a nadie**.
+>
+> El guion de la primera vez, para una cuenta nueva:
 >
 > ```
 > bash scripts/configurar-stripe.sh
@@ -9470,6 +9517,32 @@ de mantenimiento — pero **la pieza de «este negocio no escribe ahora» ya exi
 
 > Aquí entra el **peldaño 9**, parado desde el 26 de agosto. **Las reglas de diseño ya están
 > escritas** en `DISEÑO.md` desde el 17 de julio: lo que falta es aplicarlas.
+
+
+## TAREA — El `<h1>` se pega a la franja roja de «SOLO LECTURA»
+
+- **id:** h1-pegado-a-la-franja-de-solo-lectura
+- **estado:** pendiente
+- **origen:** Ibrahin, 2 sep 2026 · visto en la captura de `gate-suscripcion-alta-real`
+
+Cuando un negocio está suspendido, la franja roja de «Tu cuenta está en SOLO LECTURA» queda **pegada
+al `<h1>` de la pantalla**, sin aire entre las dos. Se ve en cualquier pantalla con
+`page-header`, no solo en la suscripción: es del `layout`, no de una ruta.
+
+No rompe nada y no corre prisa. Va aquí porque es acabado.
+
+> **⚙️ LA OTRA MITAD DE ESTA ENTRADA YA ESTÁ ARREGLADA (2 sep 2026), y se deja escrito el porqué.**
+> Ibrahin apuntó también que la ventanita «Vas a dejar una tarjeta» **salía vacía**: título y dos
+> botones, sin cuerpo. Se apuntó como acabado, pero al medirlo resultó **no ser diseño sino un fallo
+> de una palabra en la entrega del mismo día**: la llamada pasaba `mensaje:` y
+> `window.confirmarEnPagina` (`modules/erp/layout.js`) reenvía **`o.texto`** — un campo con otro
+> nombre lo descarta **en silencio**. De las **67** llamadas del producto, **66 usaban `texto`** y la
+> única que no era la nueva: **el panel compartido estaba bien**. Arreglado en el acto, con la frase
+> que pidió Ibrahin, y `gate-suscripcion-alta-real` exige ahora que ese cuerpo **no esté vacío**.
+>
+> La lección, que es la de siempre en este repo: **el panel abría, los dos botones funcionaban y el
+> alta se completaba**, así que ninguna aserción falló. Lo vio una persona mirando la pantalla.
+
 
 
 ## TAREA — El acabado de las pantallas — el peldaño 9

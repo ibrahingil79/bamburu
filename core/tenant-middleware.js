@@ -117,7 +117,24 @@ export async function readOnlyGuard(c, next) {
   const method = c.req.method;
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return next();
   const p = c.req.path;
-  const allow = ['/admin/login', '/admin/verify-2fa', '/admin/logout', '/admin/forgot-password', '/admin/reset-password', '/admin/change-password'];
+  // ⚙️ 2 SEP 2026 (suscripcion-plan-y-alta) — LA PUERTA DE SALIDA TIENE QUE ESTAR ABIERTA.
+  //
+  // Encontrado probando el alta de tarjeta de punta a punta: la pantalla de suscripción abría
+  // (es un GET), pero el POST que crea el Checkout de Stripe caía aquí con
+  // «Tu cuenta está en modo SOLO LECTURA por regularizar […] hasta reactivarla».
+  //
+  // O sea: **el negocio al que se le pide que regularice era justo el que no podía regularizar.**
+  // El mensaje dice «hasta reactivarla» y el guardián le quitaba la única forma de hacerlo. Y no es
+  // un caso raro: es EL caso: `suspended_admin` es precisamente el estado al que lleva el impago
+  // (tarea `suscripcion-impago-y-corte`), cuyo criterio dice que en la pantalla del corte se ha de
+  // decir «exactamente qué hay que hacer para volver». Sin esto, lo que hubiera que hacer sería
+  // imposible.
+  //
+  // Se abre SOLO la suscripción, y no afloja nada más: esas rutas son de dueño (`soloDueno`), no
+  // tocan ni un dato del negocio —escriben en `tenant_suscripciones`, que vive en control.db— y su
+  // único efecto es hablar con Stripe. Todo lo demás sigue exactamente igual de cerrado.
+  const allow = ['/admin/login', '/admin/verify-2fa', '/admin/logout', '/admin/forgot-password', '/admin/reset-password', '/admin/change-password',
+                 '/admin/suscripcion', '/api/erp/suscripcion'];
   if (allow.some(a => p === a || p.startsWith(a + '/'))) return next();
   const msg = 'Tu cuenta está en modo SOLO LECTURA por regularizar. No puedes crear ni modificar nada hasta reactivarla. Tus datos están intactos.';
   if (p.startsWith('/api/')) return c.json({ error: msg }, 403);

@@ -209,8 +209,17 @@ export function createSuscripcionRoutes(db) {
 
         const sigue = await window.confirmarEnPagina({
           titulo: 'Vas a dejar una tarjeta',
-          mensaje: 'La tarjeta la tecleas en la pantalla segura de Stripe, no aquí. Se te cobrará '
-                 + total + ' ' + cuando + '. Puedes cambiarla o quitarla cuando quieras.',
+          // OJO: el campo se llama texto, NO mensaje. window.confirmarEnPagina (layout.js) reenvia
+          // o.texto a pedirDatos, y un nombre que no conoce lo descarta EN SILENCIO: el panel salia
+          // con su titulo y sus dos botones, y el cuerpo en blanco. Ninguna asercion lo vio —el
+          // panel abria, los botones funcionaban y el alta se completaba—; lo vio Ibrahin mirandolo.
+          // De las 67 llamadas del producto, 66 usaban texto y esta era la unica que no: el panel
+          // compartido estaba bien.
+          // (Sin acentos graves en este comentario a proposito: va DENTRO de un template literal y
+          //  uno solo lo cierra. Es la trampa que ya mato pantallas enteras en este repo.)
+          texto: 'Te llevamos a la página segura de Stripe para guardar tu tarjeta. El número no '
+               + 'pasa por Bamburu en ningún momento. Se te cobrará ' + total + ' ' + cuando
+               + '. Puedes cambiarla o quitarla cuando quieras.',
           aceptar: 'Continuar a Stripe',
           cancelar: 'Ahora no',
         });
@@ -318,8 +327,19 @@ export function createSuscripcionRoutes(db) {
 
       let clienteId = s?.stripe_cliente_id || null;
       if (!clienteId) {
+        // El correo del DUEÑO, leído de la base del negocio. `c.get('session')` NO lo trae
+        // (`core/auth.js:112` devuelve token, userId, userName, role, expiresAt y csrfToken — email
+        // no), así que `session.email` era siempre `undefined` y el cliente de Stripe nacía sin
+        // correo. Consecuencia medida probando el alta con navegador: **el Checkout le pedía el
+        // correo al dueño**, un campo más que teclear para algo que Bamburu ya sabe. Y sin correo en
+        // el cliente, los recibos de Stripe no tienen a dónde ir.
+        // Falla en blando a propósito: sin correo el alta sigue funcionando, solo que Stripe lo pide.
+        let correo = null;
+        try { correo = db.prepare('SELECT email FROM admin_users WHERE id = ?').get(c.get('session')?.userId)?.email || null; }
+        catch { correo = null; }
+
         const cli = await stripe.crearCliente({
-          nombre: tenant.name, email: c.get('session')?.email || null,
+          nombre: tenant.name, email: correo,
           tenantId: tenant.id, slug: tenant.slug,
         });
         if (!cli.ok) return c.json({ error: cli.error }, 502);

@@ -503,6 +503,12 @@ export const claseDe = g => EMPIEZAN_DE_CERO.has(g) ? 'propio' : (SOLOS.has(g) ?
 // Fuera del barrido A PROPÓSITO, cada uno con su motivo. Declarar no es esconder: esto SALE en el
 // parte, y por eso una excusa floja aquí se lee y se discute.
 export const FUERA_A_PROPOSITO = new Map([
+  ['gate-suscripcion-alta-real',
+   'el alta de tarjeta de punta a punta: abre un navegador, va al Checkout de Stripe y teclea la '
+   + 'tarjeta de prueba. Necesita CLAVES DE STRIPE VIVAS y un negocio real, así que en cualquier '
+   + 'servidor sin claves sería un rojo permanente — y un rojo permanente se acaba ignorando. Se '
+   + 'lanza a mano al tocar la suscripción. Lo que decide el producto (precio, IVA, prorrateo, '
+   + 'estados) sí va en el barrido: es `test-suscripcion`, que no toca la red.'],
   ['gate-cupones-desmontados',
    'familia VERI*FACTU: comprueba que 19 facturas de prueba se fueron y que la cadena legal no se '
    + 'movió (SHA de los 1050 registros). Se corre a mano al tocar facturación, nunca en un barrido '

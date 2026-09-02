@@ -67,7 +67,15 @@ try {
       const st = statSync(f);
       if (st.isDirectory()) { barrer(f); continue; }
       if (!/\.(js|mjs)$/.test(e)) continue;
-      if (f.endsWith('core/plan.js') || f.endsWith('scripts/test-suscripcion.mjs')) continue;
+      // El precio vive en `core/plan.js`. Y los GUIONES DE COMPROBACIÓN quedan fuera, con la misma
+      // distinción —y por el mismo motivo— que ya hace `cli.guionesDeComprobacion` del orquestador
+      // con los `console.log`: un gate tiene que afirmar contra el literal esperado. Si comprobara
+      // contra `textoPrecio()` se volvería tautológico y dejaría de cazar el día en que alguien
+      // cambie el precio por defecto sin querer, que es exactamente lo que viene a cazar.
+      // En el PRODUCTO la regla se queda igual de dura: aquí no se exime ni un fichero de `modules/`
+      // ni de `core/`, y `scripts/` solo se exime si el NOMBRE dice que es una comprobación.
+      if (f.endsWith('core/plan.js')) continue;
+      if (/(^|\/)(gate|verify|test|censo|lint)-[^/]*\.(mjs|js)$/.test(f)) continue;
       const txt = readFileSync(f, 'utf8');
       txt.split('\n').forEach((l, i) => {
         if (l.trim().startsWith('//') || l.trim().startsWith('*')) return;
@@ -154,6 +162,15 @@ try {
   check('sin autorización, una clave sk_live_ NO se considera de prueba', !st.esClaveDePrueba('sk_live_abc'));
   check('el modo real NO está autorizado por defecto', st.modoRealAutorizado() === false);
   check('la firma del webhook se rechaza sin secreto', st.verificarFirmaWebhook('{}', 't=1,v1=x', null).ok === false);
+  // 2 SEP 2026 — Managed Payments. Stripe lo activa POR DEFECTO en las cuentas nuevas y eso hace que
+  // `mode: setup` sea RECHAZADO. Se apaga por petición, no en el panel: el dueño no tiene que ir a
+  // marcar una casilla en otra web para que su programa funcione. Las dos mitades tienen que estar:
+  // el interruptor, y el reintento sin él para una cuenta que no conozca el parámetro.
+  check('el alta apaga Managed Payments en la propia petición', /managed_payments:\s*\{\s*enabled:\s*false\s*\}/.test(stripeMod));
+  check('y reintenta sin el parámetro si la cuenta no lo conoce',
+    /parameter_unknown/.test(stripeMod) && /startsWith\('managed_payments'\)/.test(stripeMod));
+  check('el alta NO usa mode subscription (cobraría en el acto, con prueba viva)',
+    !/mode:\s*'subscription'/.test(stripeMod));
   check('una firma con hora vieja se rechaza',
     st.verificarFirmaWebhook('{}', 't=1000,v1=deadbeef', 'secreto', { ahora: 9_999_999_000 }).ok === false);
 
@@ -179,6 +196,29 @@ try {
     /prorrateo-\$\{tenant\.id\}-\$\{pr\.desde\}-\$\{pr\.hasta\}/.test(readFileSync(path.join(RAIZ, 'core/suscripcion-cobro.js'), 'utf8')));
   check('la migración de control.db es aditiva (ni DROP ni DELETE de datos de tenant)',
     !/DROP TABLE|DROP COLUMN/i.test(readFileSync(path.join(RAIZ, 'core/control-db.js'), 'utf8')));
+
+  // ── LOS TRES FALLOS QUE DESTAPÓ PULSAR EL BOTÓN (2 sep 2026) ──────────────────────────────────
+  // Ninguno de los tres lo vio ninguna aserción de las de arriba, y los tres dejaban el alta MUERTA.
+  // Van aquí para que no vuelvan sin que nadie se entere; la comprobación viva es
+  // `gate-suscripcion-alta-real`, que necesita claves y se lanza a mano.
+  P('\n[los tres fallos del 2 sep, para que no vuelvan]');
+  const guard = readFileSync(path.join(RAIZ, 'core/tenant-middleware.js'), 'utf8');
+  // 1 · El negocio al que se le pide regularizar era el único que NO podía regularizar: el
+  //     readOnlyGuard bloqueaba el POST que abre el Checkout. La puerta de salida tiene que estar
+  //     abierta, o el criterio del corte («se dice qué hay que hacer para volver») es imposible.
+  check('un negocio en SOLO LECTURA puede llegar a pagar (la puerta de salida está abierta)',
+    /'\/admin\/suscripcion'/.test(guard) && /'\/api\/erp\/suscripcion'/.test(guard),
+    'readOnlyGuard no deja pasar las rutas de suscripción');
+  check('y no se ha aflojado nada más del guardián',
+    /'\/admin\/login'/.test(guard) && /method === 'GET'/.test(guard));
+  // 2 · Una llave de idempotencia atada solo al negocio revienta en cuanto cambia un parámetro:
+  //     «Keys for idempotent requests can only be used with the same parameters…», 24 h caído.
+  check('la llave de idempotencia del cliente lleva el CONTENIDO dentro, no solo el negocio',
+    /createHash\('sha256'\)/.test(stripeMod) && /cliente-tenant-\$\{tenantId\}-\$\{huella\}/.test(stripeMod));
+  // 3 · `c.get('session').email` NO existe (core/auth.js no lo devuelve), así que el cliente de
+  //     Stripe nacía sin correo y el Checkout se lo pedía al dueño.
+  check('el correo del dueño se lee de la BD, no de un campo que la sesión no tiene',
+    /SELECT email FROM admin_users WHERE id = \?/.test(pantalla) && !/session\)\?\.email/.test(pantalla));
 
   P('\n──────────────────────────────────────────────────────────');
   P(`  ${ok} OK · ${mal} fallos`);
