@@ -9203,20 +9203,96 @@ motivo: necesitan navegador o claves de Stripe vivas.
 
 **Sigue todo en MODO DE PRUEBA de Stripe.** El cerrojo de `--modo-real` no se ha tocado.
 
-## TAREA — Sacar algo de la bóveda: paga un mes y elige
+## ✅ HECHA (2026-09-02) — Sacar algo de la bóveda: paga un mes y elige
 
 - **id:** suscripcion-rescate-de-la-boveda
-- **estado:** pendiente
+- **estado:** hecha
 - **origen:** Decisión de Ibrahin, 2 sep 2026
 
 De la bóveda se puede sacar lo que hay dentro pagando **el equivalente a un mes**. Y al pagar **se le pregunta qué quiere**: solo sus datos, o volver a tener la cuenta en marcha.
 
 **Criterios de aceptación**
 
-- [ ] Para rescatar algo de la bóveda se paga **el equivalente a un mes** de suscripción.
-- [ ] **Al pagar se le pregunta** si quiere solo sus datos o reactivar la cuenta.
-- [ ] Si elige los datos, se le entregan **completos** y la cuenta sigue en la bóveda.
-- [ ] Si elige reactivar, el negocio **vuelve exactamente como estaba**, sin haber perdido nada.
+- [x] Para rescatar algo de la bóveda se paga **el equivalente a un mes** de suscripción.
+      **SÍ.** **11,98 €** — un mes completo, base 9,90 € + IVA 2,08 €, desde su único sitio
+      (`core/plan.js`). **No se prorratea**: la proporcionalidad existe solo en el alta, y el rescate
+      no es un alta. **Y no se calcula ni un euro de atrasos**: en Bamburu se paga por adelantado, así
+      que el que no pagó no compró el periodo — no hay nada viejo que saldar. Medido rescatando a los
+      20 días del corte y a los 200: **cuesta lo mismo**.
+- [x] **Al pagar se le pregunta** si quiere solo sus datos o reactivar la cuenta.
+      **SÍ.** Dos botones en la pantalla —«Recuperar mi cuenta en marcha» y «Solo quiero mis datos»—
+      y **las dos cuestan lo mismo**, porque lo que se compra es sacar el negocio de la bóveda. El
+      código exige elegir: un valor que no sea uno de los dos se rechaza.
+- [x] Si elige los datos, se le entregan **completos** y la cuenta sigue en la bóveda.
+      **SÍ.** Medido: tras pagar «solo datos», el negocio **sigue en `suspended_admin` y marcado como
+      cortado**, y se le reabre la ventana de descarga con **los 90 días de siempre** — no se inventa
+      un plazo nuevo. La copia que se lleva es la de la tarea anterior, que se contrasta a sí misma.
+- [x] Si elige reactivar, el negocio **vuelve exactamente como estaba**, sin haber perdido nada.
+      **SÍ**, y medido de la única forma honesta: **el recuento de TODAS las tablas del negocio es
+      idéntico al de antes del corte**, en los dos escenarios. No hay nada que restaurar porque la
+      bóveda nunca movió nada: reactivar es cambiar un estado.
+
+**Comprobaciones — 320 aserciones, 0 fallos, en diez gates:**
+`test-suscripcion` **130 OK** (en el barrido) · `gate-suscripcion-rescate` **48 OK** (los dos
+escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
+`gate-suscripcion-rescate-pantallas` **26 OK** (navegador, con la tarjeta vieja fallando) ·
+`gate-suscripcion-datos` **32** · `gate-suscripcion-datos-pantallas` **21** ·
+`gate-descarga-sin-parpadeo` **11** · `gate-suscripcion-impago` **40** ·
+`gate-suscripcion-impago-pantallas` **18** · `gate-suscripcion-mensual` **26** ·
+`gate-suscripcion-alta-real` **29**.
+
+> ### 💶 LAS REGLAS DEL DINERO, TAL Y COMO LAS DIJO IBRAHIN Y MEDIDAS UNA A UNA
+>
+> - **Pago por adelantado: se compra el derecho al periodo.** No existe deuda ni morosidad. El gate
+>   comprueba que en el módulo **no aparece la palabra «atraso», «deuda» ni «moros»**: no hay nada
+>   viejo que saldar ni que perdonar.
+> - **Ese pago compra el periodo en curso** (día 5 → día 5). El siguiente cobro es el día 5 de
+>   siempre, **con su aviso 7 días antes**, como cualquier cliente. Medido: tras rescatar, el próximo
+>   cargo cae en el día 5 correcto, por **11,98 €**, y el aviso sale a 7 días y no antes.
+> - **Si rescata cerca del día 5, paga el mes y el día 5 vuelve a pagar.** Es la regla asumida por
+>   Ibrahin y **se mide a propósito para que nadie la «arregle»**: rescatando un día 2, el próximo
+>   cobro es tres días después. Y el caso contrario: rescatando un día 6, hay 29 días de margen.
+> - **Sin descuentos, sin ofertas, sin excepciones.** Vigilado por el barrido.
+> - **La bóveda no caduca para rescatar:** funciona igual a los 20 días que a los 200.
+
+> ### ⚠️ CUATRO FALLOS, Y UNO HABRÍA COBRADO DOS VECES AL CLIENTE
+>
+> 1. **La próxima cuota salía a 23,96 € en vez de 11,98 €.** La línea de factura del rescate se creaba
+>    **suelta**, y Stripe barre las líneas pendientes hacia la factura siguiente: el cliente habría
+>    pagado el rescate **dos veces, la segunda sin enterarse**. Ahora la línea se crea **dentro de su
+>    factura** (`pending_invoice_items_behavior: 'exclude'`), así que no existe el momento en que hay
+>    una línea flotando. Lo cazó la aserción del importe del siguiente cobro.
+> 2. **El dinero salía y el estado no cambiaba.** Cerrar la factura **ya la cobra** cuando hay tarjeta
+>    por defecto; el cobro posterior devolvía «Invoice is already paid» y ese error abortaba el
+>    rescate **después de haber cobrado**. Ahora se mira el estado en vez de suponerlo.
+> 3. **La llave de idempotencia, por CUARTA vez el mismo día.** La escribí a mano en vez de usar
+>    `llaveIdempotente`, que existe justo para esto, y chocó en cuanto cambió un parámetro — que es
+>    exactamente el caso del encargo: *rescatar con la tarjeta vieja fallando y luego con otra*.
+> 4. **Una línea de factura no admite un precio recurrente** (*«only accepts prices with
+>    type=one_time»*). El importe va suelto, desde `core/plan.js`, con el IVA como `tax_rate` aparte
+>    para que la factura lo siga desglosando.
+>
+> **Y el de siempre, quinta tarea seguida: dos frases correctas por separado que juntas mentían.**
+> Encima del rescate salía *«en cuanto el cobro salga bien, tu cuenta se reactiva sola»* — y en una
+> cuenta **cortada no va a salir ningún cobro solo**: el único camino es rescatar. Alguien podía
+> quedarse esperando un cargo que no iba a llegar. Al buscarlo aparecieron **cuatro textos más** con
+> la misma promesa caducada —la franja de SOLO LECTURA, la tarjeta de estado, el correo del corte y
+> el motivo de suspensión—, todos escritos **antes** de que el rescate existiera. Los cinco alineados.
+>
+> **Y una del oficio:** el navegador seguía dando el fallo viejo porque **el servidor corría el módulo
+> de antes**. Node carga los módulos al arrancar — la regla que este repo tiene escrita y que hoy
+> volvió a morder.
+
+**Sigue todo en MODO DE PRUEBA de Stripe.** El cerrojo de `--modo-real` no se ha tocado.
+
+> ### 🎉 CON ESTA TAREA SE CIERRA EL BLOQUE 1 ENTERO — «QUE BAMBURU PUEDA COBRAR»
+>
+> Las **cinco** están hechas y probadas: el plan de 9,90 € + IVA con 15 días de prueba sin tarjeta ·
+> el cobro del día 5 con su aviso una semana antes · el impago con cinco avisos y corte a los 30 días ·
+> los 90 días de descarga y la bóveda que no borra nada · y el rescate pagando un mes.
+>
+> **La siguiente tarea de la cola es la primera del BLOQUE 2 — «QUE SEA SEGURO DE VERDAD»:**
+> `disa-borrado-global-conversaciones`.
 
 
 ---

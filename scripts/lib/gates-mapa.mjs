@@ -503,6 +503,15 @@ export const claseDe = g => EMPIEZAN_DE_CERO.has(g) ? 'propio' : (SOLOS.has(g) ?
 // Fuera del barrido A PROPÓSITO, cada uno con su motivo. Declarar no es esconder: esto SALE en el
 // parte, y por eso una excusa floja aquí se lee y se discute.
 export const FUERA_A_PROPOSITO = new Map([
+  ['gate-suscripcion-rescate',
+   'el camino de vuelta: paga un mes y elige. Recorre los dos escenarios con relojes de prueba de '
+   + 'Stripe —dentro de los 90 días y desde la bóveda— y los dos casos incómodos (rescatar la '
+   + 'víspera del día 5 y el día 6). Necesita claves de Stripe vivas. Se lanza a mano.'],
+  ['gate-suscripcion-rescate-pantallas',
+   'el rescate mirado con navegador: que la pantalla diga qué compra con el importe y la fecha del '
+   + 'próximo cobro DELANTE, que con la tarjeta vieja fallando ofrezca cambiarla y salga con la '
+   + 'nueva, y la caza de frases que juntas se contradicen. Necesita navegador y claves vivas, y '
+   + 'toca el estado de un negocio real (lo devuelve en el finally). Se lanza a mano.'],
   ['gate-descarga-sin-parpadeo',
    'que la espera de la copia NO recargue la pantalla. Lo demuestra dejando una marca en `window` '
    + '—una recarga se la llevaría— y contando las navegaciones del documento, que tienen que ser '

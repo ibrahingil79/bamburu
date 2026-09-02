@@ -189,7 +189,10 @@ export function situacion(tenantId, { hoy = null, db = controlDb } = {}) {
              titulo: 'Tu cuenta está en SOLO LECTURA',
              detalle: `No pudimos cobrar tu suscripción en 30 días, desde el ${fechaEnPalabras(s.impago_desde)}. `
                     + 'Puedes ver y descargar todo; no puedes crear ni modificar. No se ha borrado nada. '
-                    + 'Pon una tarjeta que funcione aquí abajo y tu cuenta se reactiva sola.',
+                    // ⚙️ 2 SEP 2026: decía «pon una tarjeta y se reactiva sola», y con el rescate
+                    // construido eso YA NO ES CIERTO: hace falta pagar el mes y elegir. Prometer una
+                    // reactivación automática dejaría al dueño esperando un cobro que no va a salir.
+                    + 'Para volver: pon una tarjeta que funcione y pulsa «Recuperar mi cuenta» aquí abajo.',
              puede_dar_tarjeta: true, cortado_en: s.cortado_en || null };
   }
 

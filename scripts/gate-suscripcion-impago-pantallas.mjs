@@ -98,8 +98,9 @@ try {
   const t2 = await pg.evaluate(() => document.body.innerText);
   check('sale la franja de SOLO LECTURA', /SOLO LECTURA/.test(t2), t2.slice(0, 250));
   check('dice que no se ha borrado nada', /no se ha borrado nada/i.test(t2), t2.slice(0, 300));
+  // ⚙️ 2 SEP 2026 (cierre 3): «se reactiva sola» dejó de ser cierto al construirse el rescate.
   check('y dice CÓMO volver, no solo que hay que volver',
-    /pon una tarjeta que funcione/i.test(t2) && /se reactiva sola/i.test(t2), t2.slice(0, 400));
+    /pon una tarjeta que funcione/i.test(t2) && /Recuperar mi cuenta/i.test(t2), t2.slice(0, 400));
   check('con su botón', /arreglar mi pago/i.test(t2));
   check('y NO sale además la franja de «hay un problema», que diría dos cosas a la vez',
     !/hay un problema con tu pago/i.test(t2), 'las dos franjas juntas se contradicen');
@@ -114,8 +115,12 @@ try {
   // aserción de arriba cazó porque cada frase era correcta por separado:
   check('la tarjeta de estado dice que está CORTADO, no «vuelve a intentarlo»',
     /SOLO LECTURA/i.test(t3) && !/vuelve a intentarlo/i.test(t3), t3.slice(0, 500));
+  // ⚙️ 2 SEP 2026 (cierre 3): la caja «Qué hay que pagar» ya NO sale en una cuenta cortada —decía
+  // que se reactivaría sola, y en una cuenta cortada no sale ningún cobro solo—. Quien enseña el
+  // importe ahora es la tarjeta del rescate. Lo que se mide sigue siendo lo mismo: que no se le
+  // enseñe un prorrateo, y que la cifra que ve quien va a pagar sea la cuota entera.
   check('y NO enseña un prorrateo de 1,16 € cuando lo que se debe es la cuota entera',
-    !/lo que se te cobrar[áa] ahora/i.test(t3) && /qué hay que pagar/i.test(t3), t3.slice(0, 600));
+    !/lo que se te cobrar[áa] ahora/i.test(t3) && /Recuperar mi negocio/i.test(t3), t3.slice(0, 600));
   check('la cifra que ve quien va a pagar es la cuota mensual', /11,98 €/.test(t3), t3.slice(0, 600));
   const alta = await pg.evaluate(async () => {
     const r = await fetch('/api/erp/suscripcion/alta', { method: 'POST',

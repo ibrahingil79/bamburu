@@ -350,7 +350,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   const _imp = c?.get?.('impago') || null;
   const _btn = `<a href="/admin/suscripcion" style="display:inline-block;margin-left:10px;background:#fff;color:#7c2d12;padding:3px 12px;border-radius:6px;font-weight:600;text-decoration:none">Arreglar mi pago</a>`;
   const roBanner = readOnly
-    ? `<div style="background:#7c2d12;color:#fed7aa;padding:11px 18px;font-size:13px;font-weight:500;text-align:center">⚠️ Tu cuenta está en <strong>SOLO LECTURA</strong>: no hemos podido cobrar tu suscripción. Puedes ver y descargar todo; no puedes crear ni modificar. <strong>No se ha borrado nada.</strong> Para volver, pon una tarjeta que funcione en «Mi suscripción»: se reactiva sola.${_btn}</div>`
+    ? `<div style="background:#7c2d12;color:#fed7aa;padding:11px 18px;font-size:13px;font-weight:500;text-align:center">⚠️ Tu cuenta está en <strong>SOLO LECTURA</strong>: no hemos podido cobrar tu suscripción. Puedes ver y descargar todo; no puedes crear ni modificar. <strong>No se ha borrado nada.</strong> Para volver, entra en «Mi suscripción», pon una tarjeta que funcione y pulsa «Recuperar mi cuenta».${_btn}</div>`
     : (_imp
       ? `<div style="background:#9a3412;color:#ffedd5;padding:11px 18px;font-size:13px;font-weight:500;text-align:center">⚠️ <strong>Hay un problema con tu pago.</strong> No hemos podido cobrar tu suscripción${_imp.corteEl ? ` y, si no se arregla, el <strong>${_imp.corteEl.split('-').reverse().join('/')}</strong> tu cuenta pasará a solo lectura` : ''}. Se arregla en un minuto.${_btn}</div>`
       : '');

@@ -315,6 +315,16 @@ function runMigrations(db) {
     "ALTER TABLE tenant_suscripciones ADD COLUMN descarga_resumen TEXT",
   ]) { try { db.exec(col); } catch {} }
 
+  // ── EL RESCATE DE LA BÓVEDA (tarea `suscripcion-rescate-de-la-boveda`, 2 sep 2026) ─────────────
+  // `rescate_eleccion` guarda QUÉ eligió el cliente al pagar —'cuenta' o 'datos'—, porque son dos
+  // resultados distintos y hay que poder decir cuál se le dio. `rescate_factura` es la factura de
+  // Stripe de ese pago: el rescate deja su factura, como todo cobro.
+  for (const col of [
+    "ALTER TABLE tenant_suscripciones ADD COLUMN rescate_en TEXT",
+    "ALTER TABLE tenant_suscripciones ADD COLUMN rescate_eleccion TEXT",
+    "ALTER TABLE tenant_suscripciones ADD COLUMN rescate_factura TEXT",
+  ]) { try { db.exec(col); } catch {} }
+
   // SIEMBRA DE LOS NEGOCIOS QUE YA EXISTÍAN. Aditiva y de una sola vez: `INSERT … SELECT … WHERE NOT
   // EXISTS` no toca ninguna fila que ya esté, así que volver a arrancar no reinicia la prueba de
   // nadie ni le borra una tarjeta.

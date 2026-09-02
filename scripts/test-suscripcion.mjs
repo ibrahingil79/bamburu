@@ -409,6 +409,57 @@ try {
   check('el correo del corte dice los 90 días y qué pasa después',
     /DÍAS PARA LLEVARTE TODO LO TUYO/.test(readFileSync(path.join(RAIZ, 'core/suscripcion-impago.js'), 'utf8')));
 
+  // ── EL RESCATE DE LA BÓVEDA (tarea `suscripcion-rescate-de-la-boveda`, 2 sep 2026) ───────────
+  P('\n[rescate de la bóveda]');
+  const resc = readFileSync(path.join(RAIZ, 'core/suscripcion-rescate.js'), 'utf8');
+  const rescCod = sinComentarios(resc);
+  const layoutCod = sinComentarios(layoutMod);
+  const impagoTxt = readFileSync(path.join(RAIZ, 'core/suscripcion-impago.js'), 'utf8');
+
+  check('el rescate cuesta UN MES completo, no un prorrateo',
+    /precioBaseCentimos/.test(rescCod) && !/prorrateo/i.test(rescCod));
+  check('el importe sale de core/plan.js, su único sitio',
+    /from '\.\/plan\.js'/.test(rescCod) && !/\b990\b|9,90/.test(rescCod));
+  check('NO se calcula ninguna deuda ni atraso: se paga por adelantado',
+    !/atras|deuda|moros/i.test(rescCod), 'el que no pagó no compró el periodo, y punto');
+  check('sin descuentos ni ofertas', !/descuento|oferta|rebaja|promoci[óo]n/i.test(rescCod));
+  check('el rescate deja SU FACTURA (no un cargo suelto)',
+    /\/invoices/.test(rescCod) && /finalize/.test(rescCod));
+  check('la línea se crea DENTRO de su factura, no suelta',
+    /invoice: fac\.datos\.id/.test(rescCod) && /pending_invoice_items_behavior: 'exclude'/.test(rescCod),
+    'una línea suelta se barre a la factura siguiente y el cliente paga dos veces');
+  check('cerrar la factura ya la cobra: no se cobra dos veces',
+    /status === 'paid'\) return cerrada/.test(rescCod));
+  check('las llaves de idempotencia pasan por llaveIdempotente',
+    (rescCod.match(/llaveIdempotente\(/g) || []).length === 2
+      && !/idempotencia: referencia/.test(rescCod));
+  check('el cobro va ANTES de reactivar',
+    (() => { const c = rescCod.slice(rescCod.indexOf('export async function rescatar'));
+             return c.indexOf('await cobrarUnMes') < c.indexOf('volverALaNormalidad(tenant.id'); })());
+  check('hay DOS elecciones, que es el criterio del dueño',
+    /ELECCIONES = \['cuenta', 'datos'\]/.test(resc));
+  // Escrito por posiciones y no recortando el fichero a ojo: la primera versión partía por un
+  // comentario que ya no estaba en el código sin comentarios, y medía otra cosa.
+  check('con «datos» la cuenta SIGUE cortada: se reactiva DESPUÉS de esa rama',
+    rescCod.indexOf("eleccion: 'datos'") < rescCod.indexOf('volverALaNormalidad(tenant.id')
+      && (rescCod.match(/volverALaNormalidad\(tenant\.id/g) || []).length === 1,
+    'la reactivación solo puede estar en la rama de la cuenta');
+  check('y se le reabre la ventana con los días de siempre, sin inventar plazo',
+    /DIAS_DE_DESCARGA/.test(rescCod) && !/\b90\b/.test(rescCod));
+  check('el rescate no borra NADA', !/DELETE FROM|DROP /i.test(rescCod));
+  check('la bóveda NO caduca para rescatar: no se mira en_boveda para permitirlo',
+    !/en_boveda_desde[^\n]*return \{ aplica: false/.test(rescCod));
+
+  // Las cuatro frases que prometían una reactivación automática que ya no existe.
+  check('la franja de SOLO LECTURA manda a «Recuperar mi cuenta», no a esperar',
+    /Recuperar mi cuenta/.test(layoutCod) && !/se reactiva sola/.test(layoutCod));
+  check('la tarjeta de estado cortado también', !/se reactiva sola/.test(sinComentarios(situacionMod)));
+  check('y el correo del corte explica el paso de pagar el mes',
+    /Recuperar mi cuenta/.test(impagoTxt) && !/se reactiva sola/.test(sinComentarios(impagoTxt)));
+  check('la pantalla no ofrece dos caminos de vuelta a la vez',
+    /s\.situacion === 'pago_pendiente' \? `<div class="card">/.test(pantalla),
+    'la caja «Qué hay que pagar» no puede salir en una cuenta ya cortada');
+
   P('\n──────────────────────────────────────────────────────────');
   P(`  ${ok} OK · ${mal} fallos`);
   P('──────────────────────────────────────────────────────────\n');

@@ -40,6 +40,7 @@ import { situacion, prorrateo, asegurarSuscripcion, suscripcionDe, guardarSuscri
 import * as stripe from '../../../core/stripe.js';
 import { facturasDelNegocio, proximoCargo, cambiarTarjeta } from '../../../core/suscripcion-mensual.js';
 import { situacionDeLosDatos, DIAS_DE_DESCARGA } from '../../../core/suscripcion-datos.js';
+import { situacionDeRescate, rescatar } from '../../../core/suscripcion-rescate.js';
 import { exportarNegocio } from '../exportacion.js';
 import { createReadStream, existsSync, statSync } from 'fs';
 
@@ -77,6 +78,7 @@ export function createSuscripcionRoutes(db) {
     const facturas = await facturasDelNegocio(tenant).catch(() => []);
     const cargo = await proximoCargo(tenant).catch(() => null);
     const datos = situacionDeLosDatos(tenant.id);
+    const rescate = situacionDeRescate(tenant.id);
     const P = plan();
     const diag = stripe.diagnostico();
     const msg = c.req.query('msg');
@@ -229,13 +231,63 @@ export function createSuscripcionRoutes(db) {
         </table>
       </div></div>` : ''}
 
-      ${(s.situacion === 'pago_pendiente' || s.situacion === 'cortado') ? `<div class="card"><div class="card-body">
+      ${/* SOLO con impago abierto y SIN cortar. En una cuenta ya CORTADA esta caja mentía: decía
+             «en cuanto el cobro salga bien, tu cuenta se reactiva sola», y en una cuenta cortada NO
+             va a salir ningún cobro solo — el único camino de vuelta es el rescate, que está en la
+             tarjeta de al lado. Alguien podía quedarse esperando un cargo que no iba a llegar.
+             Es la quinta tarea seguida en que dos frases correctas por separado se contradicen
+             juntas, y esta vez la contradicción costaba tiempo de espera al cliente. */
+        s.situacion === 'pago_pendiente' ? `<div class="card"><div class="card-body">
         <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.35rem">Qué hay que pagar</h3>
         <p class="sus-detalle">
           Tu cuota mensual: <strong>${escHtml(P.desglose_mes.total)}</strong>
           (${escHtml(P.desglose_mes.base)} + ${escHtml(String(P.desglose_mes.iva_porcentaje))} % de IVA).
-          En cuanto el cobro salga bien, ${s.situacion === 'cortado' ? 'tu cuenta se reactiva sola' : 'no volveremos a escribirte'}.
+          En cuanto el cobro salga bien, no volveremos a escribirte.
         </p>
+      </div></div>` : ''}
+
+      ${rescate.aplica ? `<div class="card"><div class="card-body">
+        <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.35rem">Recuperar mi negocio</h3>
+        <p class="sus-detalle">
+          Tu negocio está entero: ${rescate.en_boveda ? 'en la bóveda, ' : ''}tal y como lo dejaste el
+          ${escHtml(fechaEnPalabras(rescate.cortado_en))}. <strong>No se ha borrado nada.</strong>
+        </p>
+        <div class="sus-nota" style="margin-top:.7rem">
+          <strong>Qué compras, exactamente:</strong> recuperas tu negocio hoy, pagas
+          <strong>el mes completo</strong> (${escHtml(rescate.precio.total)} =
+          ${escHtml(rescate.precio.base)} + ${escHtml(String(rescate.precio.iva_porcentaje))} % de IVA:
+          ${escHtml(rescate.precio.iva)}), y tu <strong>próximo cobro es el
+          ${escHtml(rescate.proximo_cobro_en_palabras)}</strong>, el día 5 como siempre y con su aviso
+          una semana antes.
+          <br><br>No hay nada atrasado que pagar: en Bamburu se paga por adelantado, así que los meses
+          que has estado fuera <strong>no se te cobran</strong>.
+        </div>
+        <table class="sus-tabla">
+          <tr><td>Base</td><td>${escHtml(rescate.precio.base)}</td></tr>
+          <tr><td>IVA (${escHtml(String(rescate.precio.iva_porcentaje))} %)</td><td>${escHtml(rescate.precio.iva)}</td></tr>
+          <tr class="sus-total"><td>Total hoy</td><td>${escHtml(rescate.precio.total)}</td></tr>
+        </table>
+        <p class="sus-detalle" style="margin-top:.9rem"><strong>¿Qué prefieres?</strong></p>
+        <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.4rem">
+          <button type="button" class="btn btn-primary" id="susRescateCuenta"
+                  data-total="${escHtml(rescate.precio.total)}"
+                  data-cuando="${escHtml(rescate.proximo_cobro_en_palabras)}">
+            Recuperar mi cuenta en marcha
+          </button>
+          <button type="button" class="btn" id="susRescateDatos"
+                  data-total="${escHtml(rescate.precio.total)}">
+            Solo quiero mis datos
+          </button>
+        </div>
+        <p class="sus-detalle" style="margin-top:.5rem;font-size:.8rem">
+          Las dos cuestan lo mismo: lo que se paga es sacar tu negocio de la bóveda. Si eliges solo
+          los datos, te los llevas completos y <strong>tu cuenta se queda en la bóveda</strong>, sin
+          borrar nada.
+        </p>
+        ${rescate.tarjeta
+          ? `<p class="sus-detalle" style="margin-top:.5rem">Se cobrará en tu ${escHtml(rescate.tarjeta.marca)} terminada en ${escHtml(rescate.tarjeta.ultimos4)}. Si ya no vale, cámbiala aquí arriba primero.</p>`
+          : `<p class="sus-detalle" style="margin-top:.5rem;color:var(--danger)">No hay ninguna tarjeta guardada: pon una aquí arriba antes de rescatar.</p>`}
+        <p id="susRescateAviso" class="sus-detalle" style="margin-top:.6rem"></p>
       </div></div>` : ''}
 
       ${datos.aplica ? `<div class="card"><div class="card-body">
@@ -381,6 +433,55 @@ export function createSuscripcionRoutes(db) {
         enganchar();
         if (caja.dataset.estado === 'preparando') vigilar();
       })();
+
+      // EL RESCATE. Dos botones, dos resultados, el mismo precio. Se confirma DENTRO de la página con
+      // el importe y la fecha delante: nunca se cobra por sorpresa, tampoco aquí.
+      [['susRescateCuenta', 'cuenta'], ['susRescateDatos', 'datos']].forEach(function (par) {
+        var b = document.getElementById(par[0]);
+        if (!b) return;
+        b.addEventListener('click', async function () {
+          var aviso = document.getElementById('susRescateAviso');
+          var total = b.dataset.total || '';
+          var cuando = b.dataset.cuando || '';
+          var esCuenta = par[1] === 'cuenta';
+          var sigue = await window.confirmarEnPagina({
+            titulo: esCuenta ? 'Vas a recuperar tu cuenta' : 'Vas a llevarte solo tus datos',
+            texto: esCuenta
+              ? 'Se te cobrarán ' + total + ' ahora, el mes completo. Tu negocio vuelve a estar en '
+                + 'marcha con todo como lo dejaste, y tu proximo cobro sera el ' + cuando + ', el dia '
+                + '5 como siempre. No se te cobra nada de los meses que has estado fuera.'
+              : 'Se te cobraran ' + total + ' ahora. Te llevas TODOS tus datos, y tu cuenta se queda '
+                + 'en la boveda: no se borra nada, y podras recuperarla mas adelante si quieres.',
+            aceptar: esCuenta ? 'Sí, recuperar mi cuenta' : 'Sí, quiero mis datos',
+            cancelar: 'Ahora no',
+          });
+          if (!sigue) { aviso.textContent = 'No se ha hecho nada.'; return; }
+
+          b.disabled = true;
+          aviso.textContent = 'Cobrando y preparando tu cuenta…';
+          try {
+            var r = await fetch('/api/erp/suscripcion/rescatar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || '' },
+              body: JSON.stringify({ eleccion: par[1] }),
+            });
+            var d = await r.json();
+            if (!r.ok) {
+              b.disabled = false;
+              aviso.textContent = d.error || 'No se pudo completar el rescate.';
+              aviso.style.color = 'var(--danger)';
+              return;
+            }
+            // Aquí SÍ se recarga, y a propósito: al recuperar la cuenta cambia la pantalla ENTERA
+            // —se va la franja roja, se va el solo-lectura, vuelve el menú completo—. Repintar una
+            // tarjeta no bastaría, y el cliente tiene que ver su negocio otra vez en marcha.
+            window.location.href = '/admin/suscripcion?msg=' + encodeURIComponent(d.mensaje || 'Listo.');
+          } catch (e) {
+            b.disabled = false;
+            aviso.textContent = 'No se pudo contactar con el servidor. Inténtalo de nuevo.';
+          }
+        });
+      });
 
       // CERO ventanitas del navegador: se pregunta DENTRO de la página con el panel compartido
       // (window.confirmarEnPagina, layout.js). Un confirm() aquí sería un botón que deja de
@@ -646,6 +747,26 @@ export function createSuscripcionRoutes(db) {
     return c.json({ ok: true });
   });
 
+  /**
+   * EL RESCATE. Cobra el mes y aplica lo que el cliente eligió.
+   * Cuelga de `/api/erp/suscripcion`, que `readOnlyGuard` deja pasar: desde una cuenta cortada
+   * SIEMPRE se puede pagar, y el rescate es exactamente eso.
+   */
+  api.post('/rescatar', async c => {
+    if (!c.get('isOwner')) return c.json({ error: 'Solo el dueño puede rescatar la cuenta.' }, 403);
+    const tenant = c.get('tenant');
+    let eleccion = null;
+    try { eleccion = (await c.req.json())?.eleccion || null; } catch { eleccion = null; }
+
+    try {
+      const r = await rescatar(tenant, eleccion);
+      if (!r.ok) return c.json({ error: r.error, motivo: r.motivo || null }, r.motivo === 'sin_tarjeta' ? 400 : 502);
+      return c.json({ ok: true, mensaje: r.mensaje, eleccion: r.eleccion, importe: r.importe, factura: r.factura });
+    } catch (e) {
+      return c.json({ error: safeError(e, 'No se pudo completar el rescate.') }, 500);
+    }
+  });
+
   // Estado en JSON, para DISA y para el gate. Las dos puertas (CANON §3-bis) con el mismo candado:
   // aquí también manda el rol de dueño.
   api.get('/situacion', c => {
@@ -653,7 +774,7 @@ export function createSuscripcionRoutes(db) {
     const tenant = c.get('tenant');
     asegurarSuscripcion(tenant.id);
     return c.json({ plan: plan(), situacion: situacion(tenant.id), datos: situacionDeLosDatos(tenant.id),
-                    stripe: stripe.diagnostico() });
+                    rescate: situacionDeRescate(tenant.id), stripe: stripe.diagnostico() });
   });
 
   return { api, views };

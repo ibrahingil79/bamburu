@@ -118,8 +118,14 @@ try {
     && /hasta el \d+ de \w+ de \d{4}/.test(corteMsg), corteMsg.slice(0, 700));
   check('y que pasado ese plazo los datos NO se borran, pasan a la bóveda',
     /bóveda/i.test(corteMsg) && /NO se borran/i.test(corteMsg), corteMsg.slice(0, 900));
+  // ⚙️ 2 SEP 2026 (cierre 3): decía «se reactiva sola», y con el rescate construido eso dejó de ser
+  // cierto — hace falta pagar el mes y pulsar «Recuperar mi cuenta». La aserción sigue midiendo lo
+  // mismo (que se diga EXACTAMENTE qué hacer), contra el texto que ahora es verdad.
   check('y dice EXACTAMENTE qué hacer para volver, paso a paso',
-    /1\..*Entra/s.test(corteMsg) && /Mi suscripción/.test(corteMsg) && /se reactiva sola/i.test(corteMsg), corteMsg.slice(-400));
+    /1\..*Entra/s.test(corteMsg) && /Mi suscripción/.test(corteMsg)
+      && /Recuperar mi cuenta/.test(corteMsg) && /pagas el mes/i.test(corteMsg), corteMsg.slice(-500));
+  check('y que no se le cobran los meses que estuvo fuera',
+    /no se te cobra ning[úu]n mes/i.test(corteMsg), corteMsg.slice(-400));
   check('el motivo que ve el dueño en pantalla también lo dice',
     /Mi suscripción/.test(getTenantById(tenant.id).suspend_note || ''), getTenantById(tenant.id).suspend_note);
   // Nada de borrado: el corte solo toca `tenants.status`.

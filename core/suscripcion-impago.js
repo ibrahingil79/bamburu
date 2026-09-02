@@ -209,7 +209,8 @@ export function textoDelAviso(escalon, { negocio, tarjeta, importe, corteEl, url
         `  1. Entra en Bamburu como siempre.`,
         `  2. Ve a «Mi suscripción» (abajo del todo, en el menú de la izquierda).`,
         `  3. Pon una tarjeta que funcione.`,
-        `Tu cuenta se reactiva sola en el momento en que el pago salga bien.`,
+        `  4. Pulsa «Recuperar mi cuenta»: pagas el mes en curso y tu negocio vuelve al momento,`,
+        `     con todo como lo dejaste. No se te cobra ningún mes de los que has estado fuera.`,
       ].join('\n') + pie };
 
     default: return null;
@@ -251,7 +252,7 @@ export async function procesarImpago(fila, { db = controlDb, hoy = null, simulac
   let cortado = false;
   if (esc.clave === 'corte') {
     setTenantStatus(fila.tenant_id ?? fila.id, 'suspended_admin',
-      `Sin pago desde el ${fechaEnPalabras(s?.impago_desde)}. Ve a «Mi suscripción» y pon una tarjeta: se reactiva sola.`);
+      `Sin pago desde el ${fechaEnPalabras(s?.impago_desde)}. Ve a «Mi suscripción», pon una tarjeta y pulsa «Recuperar mi cuenta».`);
     guardarSuscripcion(fila.tenant_id ?? fila.id, { cortado_en: dia, cortado_por_impago: 1 }, db);
     // Y con el corte arranca el reloj de los 90 días para llevarse todo
     // (tarea `suscripcion-datos-tras-el-corte`). Se fija AQUÍ, una vez, y no se vuelve a tocar.
