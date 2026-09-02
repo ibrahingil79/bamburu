@@ -38,6 +38,7 @@ import { plan, textoPrecio, eur } from '../../../core/plan.js';
 import { situacion, prorrateo, asegurarSuscripcion, suscripcionDe, guardarSuscripcion,
          hoyISO, fechaEnPalabras, siguienteDiaDeCobro } from '../../../core/suscripcion.js';
 import * as stripe from '../../../core/stripe.js';
+import { facturasDelNegocio, proximoCargo, cambiarTarjeta } from '../../../core/suscripcion-mensual.js';
 
 // El dueño y nadie más. Devuelve la respuesta de denegación ya hecha, o `null` si puede pasar.
 function soloDueno(c) {
@@ -60,13 +61,18 @@ export function createSuscripcionRoutes(db) {
   const api = new Hono();
 
   // ── La pantalla (criterio 5) ────────────────────────────────────────────────
-  views.get('/', c => {
+  views.get('/', async c => {
     const no = soloDueno(c); if (no) return no;
     const tenant = c.get('tenant');
     if (!tenant) return c.redirect('/admin');
 
     asegurarSuscripcion(tenant.id);
     const s = situacion(tenant.id);
+    // Las facturas y el próximo cargo se piden a Stripe, que es quien los tiene. Fallan en blando a
+    // propósito: si Stripe no contesta, la pantalla se pinta igual y el dueño ve su situación — una
+    // pantalla caída porque el listado de facturas no cargó sería peor que una sin listado.
+    const facturas = await facturasDelNegocio(tenant).catch(() => []);
+    const cargo = await proximoCargo(tenant).catch(() => null);
     const P = plan();
     const diag = stripe.diagnostico();
     const msg = c.req.query('msg');
@@ -121,6 +127,10 @@ export function createSuscripcionRoutes(db) {
       .sus-tabla td{padding:.35rem 0;color:var(--text3)}
       .sus-tabla td:last-child{text-align:right;color:var(--text);font-variant-numeric:tabular-nums}
       .sus-tabla tr.sus-total td{border-top:1px solid var(--border);padding-top:.5rem;font-weight:600;color:var(--text)}
+      .sus-facturas{width:100%;font-size:.85rem;border-collapse:collapse}
+      .sus-facturas th{text-align:left;font-weight:500;color:var(--text3);font-size:.78rem;padding:.3rem 0;border-bottom:1px solid var(--border)}
+      .sus-facturas td{padding:.5rem 0;border-bottom:1px solid var(--border);color:var(--text2);vertical-align:middle}
+      .sus-facturas tr:last-child td{border-bottom:none}
     </style>
 
     <div class="page-header"><h1>Mi suscripción</h1></div>
@@ -160,6 +170,7 @@ export function createSuscripcionRoutes(db) {
         <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.6rem">Tu tarjeta</h3>
         ${tarjetaHtml}
 
+        ${cargo ? '' : `
         <h3 style="font-size:.9rem;font-weight:600;margin:1.25rem 0 .3rem">
           ${s.situacion === 'prueba' ? 'Tu primer cobro' : 'Lo que se te cobrará ahora'}
         </h3>
@@ -176,12 +187,15 @@ export function createSuscripcionRoutes(db) {
           <tr><td>Base</td><td>${escHtml(pr.base)}</td></tr>
           <tr><td>IVA (${escHtml(String(pr.iva_porcentaje))} %)</td><td>${escHtml(pr.iva)}</td></tr>
           <tr class="sus-total"><td>Total</td><td>${escHtml(pr.total)}</td></tr>
-        </table>
+        </table>`}
 
         <div style="margin-top:1.1rem;display:flex;gap:.6rem;flex-wrap:wrap">
           <button type="button" class="btn btn-primary" id="susAlta"
-                  data-total="${escHtml(pr.total)}"
-                  data-cuando="${escHtml(s.situacion === 'prueba' ? 'al terminar tu prueba, el ' + fechaEnPalabras(s.prueba_fin) : 'ahora mismo')}">
+                  data-total="${escHtml(cargo ? cargo.total : pr.total)}"
+                  data-cuando="${escHtml(cargo
+                      ? 'en tu próximo cobro, el ' + fechaEnPalabras(cargo.fecha)
+                      : (s.situacion === 'prueba' ? 'al terminar tu prueba, el ' + fechaEnPalabras(s.prueba_fin) : 'ahora mismo'))}"
+                  data-cambio="${cargo ? '1' : ''}">
             ${s.tarjeta ? 'Cambiar de tarjeta' : 'Dejar una tarjeta'}
           </button>
           <a href="/admin" class="btn">Volver</a>
@@ -194,6 +208,35 @@ export function createSuscripcionRoutes(db) {
             ? 'Hay una clave de Stripe de producción y el modo real no está autorizado.'
             : 'Falta configurar Stripe: <code>bash scripts/configurar-stripe.sh</code>.'}
         </div>` : ''}
+      </div></div>
+
+      ${cargo ? `<div class="card"><div class="card-body">
+        <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.35rem">Tu próximo cobro automático</h3>
+        <p class="sus-detalle">
+          El <strong>${escHtml(fechaEnPalabras(cargo.fecha))}</strong> se cargará
+          <strong>${escHtml(cargo.total)}</strong>${s.tarjeta ? ` en tu ${escHtml(s.tarjeta.marca)} terminada en ${escHtml(s.tarjeta.ultimos4)}` : ''}.
+          Te avisaremos por correo <strong>una semana antes</strong>: nunca cobramos por sorpresa.
+        </p>
+        <table class="sus-tabla">
+          <tr><td>Base</td><td>${escHtml(cargo.base)}</td></tr>
+          <tr><td>IVA (${escHtml(String(P.desglose_mes.iva_porcentaje))} %)</td><td>${escHtml(cargo.iva)}</td></tr>
+          <tr class="sus-total"><td>Total</td><td>${escHtml(cargo.total)}</td></tr>
+        </table>
+      </div></div>` : ''}
+
+      <div class="card"><div class="card-body">
+        <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.6rem">Tus facturas</h3>
+        ${facturas.length ? `<table class="sus-facturas">
+          <thead><tr><th>Factura</th><th>Fecha</th><th style="text-align:right">Total</th><th></th></tr></thead>
+          <tbody>${facturas.map(f => `<tr>
+            <td>${escHtml(f.numero)}</td>
+            <td>${escHtml(fechaEnPalabras(f.fecha))}</td>
+            <td style="text-align:right">${escHtml(f.total)} <span class="sus-cad">(${escHtml(f.base)} + IVA ${escHtml(f.iva)})</span></td>
+            <td style="text-align:right">${f.pdf
+              ? `<a class="btn btn-sm" href="${escHtml(f.pdf)}" target="_blank" rel="noopener">Descargar</a>`
+              : (f.web ? `<a class="btn btn-sm" href="${escHtml(f.web)}" target="_blank" rel="noopener">Ver</a>` : '—')}</td>
+          </tr>`).join('')}</tbody>
+        </table>` : `<p class="sus-detalle">Todavía no hay ninguna factura. La primera saldrá con tu primer cobro.</p>`}
       </div></div>
     </div>
 
@@ -217,9 +260,15 @@ export function createSuscripcionRoutes(db) {
           // compartido estaba bien.
           // (Sin acentos graves en este comentario a proposito: va DENTRO de un template literal y
           //  uno solo lo cierra. Es la trampa que ya mato pantallas enteras en este repo.)
-          texto: 'Te llevamos a la página segura de Stripe para guardar tu tarjeta. El número no '
-               + 'pasa por Bamburu en ningún momento. Se te cobrará ' + total + ' ' + cuando
-               + '. Puedes cambiarla o quitarla cuando quieras.',
+          // Cambiar de tarjeta NO cobra nada, y decir «se te cobrará X ahora» al cambiarla sería
+          // asustar al dueño con un cargo que no existe. Dos textos, uno por cada caso.
+          texto: boton.dataset.cambio
+            ? 'Te llevamos a la página segura de Stripe para guardar la tarjeta nueva. El número no '
+              + 'pasa por Bamburu en ningún momento. No se te cobra nada por cambiarla: la nueva se '
+              + 'usará ' + cuando + ', por ' + total + '. La anterior se retira.'
+            : 'Te llevamos a la página segura de Stripe para guardar tu tarjeta. El número no '
+              + 'pasa por Bamburu en ningún momento. Se te cobrará ' + total + ' ' + cuando
+              + '. Puedes cambiarla o quitarla cuando quieras.',
           aceptar: 'Continuar a Stripe',
           cancelar: 'Ahora no',
         });
@@ -283,6 +332,19 @@ export function createSuscripcionRoutes(db) {
 
       await stripe.fijarMetodoPorDefecto(ses.datos.customer, metodoId);
 
+      // ── CAMBIO DE TARJETA (criterio 5) ────────────────────────────────────
+      // Va ANTES de guardar la nueva en nuestra base, y el orden no es casual: `cambiarTarjeta` lee
+      // de ahí cuál era la anterior para retirarla de Stripe. Guardando primero, la vieja quedaría
+      // olvidada en la cuenta del cliente y él vería dos tarjetas suyas sin saber cuál se le cobra.
+      // Si no hay suscripción abierta todavía, esto no hace nada y el alta sigue su camino normal.
+      const anterior = suscripcionDe(tenant.id)?.stripe_metodo_pago_id || null;
+      let cambiada = false;
+      if (anterior && anterior !== metodoId) {
+        const cam = await cambiarTarjeta(tenant, metodoId);
+        if (!cam.ok) return volver('err=' + encodeURIComponent(`No se pudo cambiar la tarjeta: ${cam.error}`));
+        cambiada = true;
+      }
+
       guardarSuscripcion(tenant.id, {
         stripe_cliente_id: ses.datos.customer,
         stripe_metodo_pago_id: metodoId,
@@ -295,6 +357,14 @@ export function createSuscripcionRoutes(db) {
       // ¿Toca cobrar ya? SOLO si la prueba terminó. Con prueba viva se guarda la tarjeta y punto:
       // el criterio dice «al terminar la prueba», y quitarle días pagados sería incumplirlo.
       const est = situacion(tenant.id);
+
+      // Cambiar de tarjeta NO cobra nada: solo pasa a ser la que se usará en el próximo día 5.
+      if (cambiada) {
+        const prox = await proximoCargo(tenant).catch(() => null);
+        return volver('msg=' + encodeURIComponent(
+          `Tarjeta cambiada. A partir de ahora se cobra en la nueva${prox ? `, la próxima vez el ${fechaEnPalabras(prox.fecha)} por ${prox.total}` : ''}. No se te ha cobrado nada ahora.`));
+      }
+
       if (est.situacion === 'prueba') {
         return volver('msg=' + encodeURIComponent(
           `Tarjeta guardada. No se te ha cobrado nada: tu prueba sigue hasta el ${fechaEnPalabras(est.prueba_fin)}.`));

@@ -8907,21 +8907,105 @@ validados **como llegan al navegador**. La sesión temporal que se creó para mi
 > - **Solo el dueño**, ni siquiera un `admin`. No es una pantalla del negocio: es su contrato con
 >   Bamburu.
 
-## TAREA — El cobro del día 5, con aviso una semana antes
+## ✅ HECHA (2026-09-02) — El cobro del día 5, con aviso una semana antes
 
 - **id:** suscripcion-cobro-mensual
-- **estado:** pendiente
+- **estado:** hecha
 - **origen:** Decisión de Ibrahin, 2 sep 2026
 
 Una vez el negocio tiene plan y tarjeta, el cobro sale solo. **Nunca se cobra por sorpresa**: una semana antes se avisa de que va a salir el cargo, cuánto y de qué tarjeta.
 
 **Criterios de aceptación**
 
-- [ ] El cargo se hace **el día 5 de cada mes**, con la tarjeta guardada en Stripe.
-- [ ] **Una semana antes de cada cobro** llega un aviso con el importe y los cuatro últimos dígitos de la tarjeta.
-- [ ] Cada cobro deja **su factura**, descargable por el cliente desde su cuenta.
-- [ ] Si el cobro sale bien, no se le molesta con nada más.
-- [ ] El cliente puede **cambiar la tarjeta** sin que nadie tenga que tocarle la cuenta por dentro.
+- [x] El cargo se hace **el día 5 de cada mes**, con la tarjeta guardada en Stripe.
+      **SÍ.** La suscripción va anclada con `billing_cycle_anchor`, el mecanismo nativo de Stripe, que
+      **resuelve solo los meses cortos** — un calendario escrito a mano falla una vez al año y siempre
+      en producción. Medido con un **reloj de prueba de Stripe**, avanzando el tiempo de verdad: la
+      suscripción nace `active` con el primer periodo terminando el **5 de octubre**, se avanza el
+      reloj y **se cobra ese día 5**, con la tarjeta guardada.
+- [x] **Una semana antes de cada cobro** llega un aviso con el importe y los cuatro últimos dígitos
+      de la tarjeta.
+      **SÍ.** Medido con el reloj: **no** avisa a 14, 8 ni 6 días, y **sí** a 7 exactos. El aviso lleva
+      el **total** (11,98 €) **desglosado en base + IVA**, los **cuatro últimos dígitos** («terminada
+      en 4242») y la **fecha exacta**; el asunto ya dice cuándo y cuánto sin abrir el correo. Y **un
+      solo aviso por cobro**, aunque lo disparen los dos caminos.
+- [x] Cada cobro deja **su factura**, descargable por el cliente desde su cuenta.
+      **SÍ.** La factura la emite **Stripe**, con su numeración. Medido sobre la factura real del
+      reloj: total **1198**, `subtotal` **990** y `tax` **208** — **base e IVA desglosados**, que es lo
+      que exige la ley y lo que no se conseguiría con un precio «con IVA incluido». Tiene número y
+      **PDF**, y aparece en `/admin/suscripcion` con su enlace de descarga.
+- [x] Si el cobro sale bien, no se le molesta con nada más.
+      **SÍ.** Medido con un espía en el envío: el día del cobro salen **0 correos** nuestros, y al día
+      siguiente también 0. El webhook de `invoice.paid` **no manda nada**: solo apunta. Y se comprueba
+      lo contrario para que no sea un silencio falso: **sí** vuelve a avisar del cobro siguiente, 7
+      días antes.
+- [x] El cliente puede **cambiar la tarjeta** sin que nadie tenga que tocarle la cuenta por dentro.
+      **SÍ.** Comprobado **con navegador y mirando la pantalla**: se pulsa «Cambiar de tarjeta», se
+      teclea una **mastercard** distinta en el Checkout y al volver la pantalla dice *«Tarjeta
+      cambiada… No se te ha cobrado nada ahora»*, enseña **mastercard ···· 4444**, la **suscripción de
+      Stripe pasa a cobrarse con la nueva** y **la anterior queda retirada** de la cuenta del cliente.
+
+**Comprobaciones:**
+`node scripts/test-suscripcion.mjs` → **77 OK · 0 fallos** (en el barrido, no toca la red) ·
+`node scripts/gate-suscripcion-mensual.mjs` → **26 OK · 0 fallos** (relojes de prueba de Stripe) ·
+`node scripts/gate-suscripcion-alta-real.mjs` → **29 OK · 0 fallos** (navegador y tarjeta de prueba).
+Los dos últimos van **declarados fuera del barrido** con su motivo: necesitan claves vivas, y en un
+servidor sin ellas serían un rojo permanente.
+
+**El camino real del correo, probado una vez:** aviso enviado de verdad a `ibrahingil+prueba@gmail.com`
+(Resend, id `9570d419-95ec-4e22-a011-38b951c1d05f`, sin error). El resto de la comprobación **no manda
+ni un correo**: el envío se inyecta y se captura, para poder afirmar sobre el texto sin llenar el buzón.
+
+> ### ⚠️ CINCO FALLOS QUE APARECIERON CONSTRUYENDO, Y NINGUNO SE HABRÍA VISTO SIN AVANZAR EL RELOJ
+>
+> 1. **Un mes entero sin facturar.** El prorrateo entrega `pr.hasta`, que **ya es** el día 5 del
+>    ancla; pasarlo por `siguienteDiaDeCobro`, que es estricto, anclaba **al 5 del mes siguiente**.
+>    El negocio habría pasado un mes sin que se le cobrara nada. Ahora hay dos entradas: `ancla` para
+>    quien ya sabe la fecha y `desde` para quien solo sabe el día.
+> 2. **La llave de idempotencia, otra vez.** El mismo fallo de por la mañana reapareció en la
+>    suscripción. La regla ya no vive en quien llama: está en **`llaveIdempotente`**, y la usan las
+>    cuatro creaciones. La del cobro es la única excepción —su identidad es el PERIODO— y queda dicho.
+> 3. **Leer un correo migraba una base.** `correoDelNegocio` usaba `getTenantDb`, que abre para
+>    escribir y corre migraciones; con un tenant sin `db_filename`, `new Database(undefined)` **abrió
+>    una base anónima, la migró, le sembró una cuenta y la metió en la caché bajo el slug del negocio
+>    real**. Ahora se abre a mano, `readonly` y con **`fileMustExist`** — la lección ya escrita de las
+>    bases fantasma.
+> 4. **Un fallo de correo mataba la pasada.** El SDK de Resend no lanza al enviar, pero **su
+>    constructor sí** si falta la clave. Sin `try/catch`, un servidor sin `RESEND_API_KEY` no se
+>    quedaba sin avisos: se quedaba con la pasada **muerta a mitad de la lista**.
+> 5. **La pasada no avisaba casi ningún día.** Un `return` seco cuando no había prorrateos pendientes
+>    —el caso normal— se saltaba la fase de avisos entera. Los avisos son de los negocios que **ya
+>    están al corriente**, que son justo los que no salen en esa lista.
+>
+> **Y uno que solo se vio MIRANDO LA CAPTURA:** con la suscripción abierta, la pantalla seguía
+> enseñando «Lo que se te cobrará ahora — la parte proporcional, 0,96 €» **al lado** de «Tu próximo
+> cobro automático, 11,98 €». Ninguna aserción falló: las dos cajas eran correctas por separado y se
+> contradecían juntas. El bloque del prorrateo solo se pinta **mientras no hay suscripción**.
+>
+> Los cinco quedan fijados en `scripts/test-suscripcion.mjs`.
+
+> ### Decisiones de construcción, dichas porque afectan al dinero de un cliente
+>
+> - **Cobra Stripe, no nosotros.** El día 5, la factura y los reintentos son suyos. Aquí no se
+>   construye ni una línea de reintentos: eso es `suscripcion-impago-y-corte`.
+> - **`proration_behavior: 'none'` no es opcional.** El tramo hasta el día 5 ya lo cobró el prorrateo
+>   de la tarea anterior; sin ese parámetro Stripe lo factura otra vez. Medido: al abrir la
+>   suscripción emite **0 facturas cobradas**.
+> - **El IVA va como `tax_rate` aparte**, no metido en el precio: es lo que hace que la factura salga
+>   con base e IVA desglosados. Con un precio «11,98 € con IVA incluido», la factura diría 11,98 € y
+>   punto.
+> - **El plan se crea solo en Stripe** (producto, precio y tipo de IVA), de forma idempotente por
+>   `lookup_key`. Una cuenta de Stripe recién hecha funciona sin que el dueño entre en el panel — la
+>   misma regla que obligó a apagar Managed Payments por petición.
+> - **El aviso tiene dos disparadores.** El webhook `invoice.upcoming` que pedía el encargo, y una
+>   pasada diaria propia. El motivo, medido: **el plazo de ese evento NO se puede fijar por API**
+>   (`GET /v1/account` devuelve `settings.billing` vacío), es una casilla del panel de Stripe — y el
+>   criterio del dueño no puede depender de eso. Los dos entran por la misma puerta: **un aviso por
+>   cobro**.
+> - **Un cobro fallido solo se apunta.** Ni corta, ni avisa de deuda, ni suspende. Eso es la tarea
+>   siguiente, con sus 30 días de avisos.
+
+**Sigue todo en MODO DE PRUEBA de Stripe.** El cerrojo de `--modo-real` no se ha tocado.
 
 ## TAREA — El impago: avisos desde 30 días antes, y corte al llegar la fecha
 

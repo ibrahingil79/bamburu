@@ -98,6 +98,22 @@ Si saliera roja por cada tarjeta rechazada, el rojo dejaría de significar algo.
 **Se instala sola** con `bash scripts/configurar-stripe.sh`, junto con las claves. No hace falta
 copiar nada a mano.
 
+**⚙️ 2 SEP 2026 — LA MISMA PASADA MANDA AHORA EL AVISO DE LA SEMANA ANTES** (`suscripcion-cobro-mensual`).
+El cobro mensual del día 5 lo hace **Stripe**, no esta pasada: la suscripción va anclada con
+`billing_cycle_anchor`, que resuelve solo los meses cortos. Lo que hace la pasada es mirar a quién le
+falta **exactamente una semana** para el cargo y mandarle el aviso con el importe (base + IVA) y los
+cuatro últimos dígitos de su tarjeta.
+
+**Por qué el aviso no lo dispara solo el webhook de Stripe.** El evento `invoice.upcoming` existe y
+está enganchado, pero **su plazo no se puede fijar por API**: `GET /v1/account` devuelve
+`settings.billing` vacío — es un ajuste del panel de Stripe. El criterio del dueño dice «una semana
+antes», y no puede depender de una casilla que alguien tenga que ir a marcar en otra web. Los dos
+disparadores entran por la **misma** puerta, que apunta la factura por la que ya avisó: **un aviso por
+cobro**, venga por donde venga.
+
+**El simulacro tampoco manda correos.** Sin `--cobrar`, la pasada dice a quién avisaría y por cuánto,
+y no envía nada.
+
 ## Cola de envío Verifactu — instalación
 
 El camino normal es la cola **en proceso**: al emitir una factura, su registro sale hacia la AEAT en

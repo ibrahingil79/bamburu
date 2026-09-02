@@ -263,6 +263,20 @@ function runMigrations(db) {
     )
   `);
 
+  // ── EL COBRO MENSUAL (tarea `suscripcion-cobro-mensual`, 2 sep 2026) ───────────────────────────
+  // Aditivo sobre la tabla anterior: `ALTER TABLE … ADD COLUMN` dentro de un try, que es el patrón
+  // que ya usa el resto de este fichero. Ninguna columna se quita ni se reescribe.
+  //
+  // `aviso_de_factura` guarda el identificador de la factura de Stripe por la que YA se avisó. Es lo
+  // que impide que el dueño reciba el mismo aviso dos veces cuando el aviso lo pueden disparar dos
+  // sitios distintos (el webhook de Stripe y la pasada diaria). Guardar «sí/no» no valdría: al mes
+  // siguiente hay que volver a avisar, y de una factura DISTINTA.
+  for (const col of [
+    "ALTER TABLE tenant_suscripciones ADD COLUMN stripe_suscripcion_id TEXT",
+    "ALTER TABLE tenant_suscripciones ADD COLUMN aviso_de_factura TEXT",
+    "ALTER TABLE tenant_suscripciones ADD COLUMN aviso_enviado_en TEXT",
+  ]) { try { db.exec(col); } catch {} }
+
   // SIEMBRA DE LOS NEGOCIOS QUE YA EXISTÍAN. Aditiva y de una sola vez: `INSERT … SELECT … WHERE NOT
   // EXISTS` no toca ninguna fila que ya esté, así que volver a arrancar no reinicia la prueba de
   // nadie ni le borra una tarjeta.

@@ -503,6 +503,12 @@ export const claseDe = g => EMPIEZAN_DE_CERO.has(g) ? 'propio' : (SOLOS.has(g) ?
 // Fuera del barrido A PROPÓSITO, cada uno con su motivo. Declarar no es esconder: esto SALE en el
 // parte, y por eso una excusa floja aquí se lee y se discute.
 export const FUERA_A_PROPOSITO = new Map([
+  ['gate-suscripcion-mensual',
+   'el cobro del día 5 y el aviso de la semana antes, con el TIEMPO AVANZADO de verdad (test clocks '
+   + 'de Stripe). Necesita claves de Stripe vivas, así que en un servidor sin ellas sería un rojo '
+   + 'permanente. No manda ningún correo: el envío se inyecta y se captura para poder afirmar sobre '
+   + 'el texto del aviso. Con `--correo-de-verdad` manda UNO al dueño, para probar el camino real. '
+   + 'Se lanza a mano al tocar la suscripción.'],
   ['gate-suscripcion-alta-real',
    'el alta de tarjeta de punta a punta: abre un navegador, va al Checkout de Stripe y teclea la '
    + 'tarjeta de prueba. Necesita CLAVES DE STRIPE VIVAS y un negocio real, así que en cualquier '

@@ -213,12 +213,89 @@ try {
     /'\/admin\/login'/.test(guard) && /method === 'GET'/.test(guard));
   // 2 · Una llave de idempotencia atada solo al negocio revienta en cuanto cambia un parámetro:
   //     «Keys for idempotent requests can only be used with the same parameters…», 24 h caído.
+  // ⚙️ 2 SEP 2026 (noche): esta aserción exigía la forma literal `cliente-tenant-<id>-<huella>`. El
+  // mismo fallo volvió a aparecer en la suscripción, así que la regla se sacó a `llaveIdempotente` y
+  // la comprueba el bloque del cobro mensual, más abajo. Aquí queda lo que sigue importando: que la
+  // llave del cliente NO sea solo el número del negocio.
   check('la llave de idempotencia del cliente lleva el CONTENIDO dentro, no solo el negocio',
-    /createHash\('sha256'\)/.test(stripeMod) && /cliente-tenant-\$\{tenantId\}-\$\{huella\}/.test(stripeMod));
+    /llaveIdempotente\(`cliente-tenant-\$\{tenantId\}`, params\)/.test(stripeMod)
+      && !/idempotencia: `cliente-tenant-\$\{tenantId\}`/.test(stripeMod));
   // 3 · `c.get('session').email` NO existe (core/auth.js no lo devuelve), así que el cliente de
   //     Stripe nacía sin correo y el Checkout se lo pedía al dueño.
   check('el correo del dueño se lee de la BD, no de un campo que la sesión no tiene',
     /SELECT email FROM admin_users WHERE id = \?/.test(pantalla) && !/session\)\?\.email/.test(pantalla));
+
+  // ── EL COBRO MENSUAL (tarea `suscripcion-cobro-mensual`, 2 sep 2026) ─────────────────────────
+  P('\n[cobro mensual] Lo que decide el producto, sin tocar Stripe');
+  // ⚠️ LAS ASERCIONES EN NEGATIVO SE MIDEN SOBRE EL CÓDIGO, NO SOBRE LOS COMENTARIOS. Cuatro de las
+  // de aquí abajo dieron rojo la primera vez porque casaban con el comentario que EXPLICA por qué
+  // algo no se usa — «no se usa getTenantDb porque…» contiene `getTenantDb`. Un gate que se cree sus
+  // propios comentarios mide la prosa, no el producto.
+  const sinComentarios = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').split('\n')
+    .filter(l => !l.trim().startsWith('//')).join('\n');
+  const mensual = readFileSync(path.join(RAIZ, 'core/suscripcion-mensual.js'), 'utf8');
+  const mensualCod = sinComentarios(mensual);
+  const cobroMod = readFileSync(path.join(RAIZ, 'core/suscripcion-cobro.js'), 'utf8');
+  const idx2 = readFileSync(path.join(RAIZ, 'index.js'), 'utf8');
+
+  // El fallo de UN MES: `pr.hasta` YA es el día 5, y pasarlo por `siguienteDiaDeCobro` (que es
+  // estricto) anclaba al mes siguiente. El negocio habría pasado un mes sin que se le facturara.
+  check('el ancla se pasa YA RESUELTA, no recalculada desde el día de hoy',
+    /ancla: pr\.hasta/.test(cobroMod) && /const fechaAncla = ancla \|\|/.test(mensual),
+    'si se recalcula, el primer cobro se va un mes');
+  check('la suscripción se abre con proration_behavior none (no cobra dos veces)',
+    /proration_behavior: 'none'/.test(stripeMod));
+  check('y anclada con billing_cycle_anchor, no con un calendario de meses a mano',
+    /billing_cycle_anchor/.test(stripeMod) && !/febrero|dias_del_mes\[/.test(sinComentarios(stripeMod)));
+  check('el IVA va como tax_rate aparte, para que la factura lo desglose',
+    /tax_behavior: 'exclusive'/.test(stripeMod) && /default_tax_rates/.test(stripeMod));
+
+  // La llave de idempotencia: el mismo fallo apareció DOS veces el mismo día (cliente y
+  // suscripción). Ahora la regla vive en una función y se usa en todas menos en la del cobro, que
+  // es la excepción legítima y está dicha.
+  check('la regla de la llave de idempotencia vive en UNA función',
+    /export function llaveIdempotente/.test(stripeMod));
+  check('y la usan todas las creaciones menos la del cobro, que es la excepción dicha',
+    (stripeMod.match(/llaveIdempotente\(/g) || []).length >= 5
+      && /ÚNICA LLAVE DEL FICHERO QUE \*\*NO\*\* PASA POR/.test(stripeMod),
+    (stripeMod.match(/llaveIdempotente\(/g) || []).length + ' usos');
+
+  // Leer un correo no puede migrar la base de un negocio ni fabricar una vacía.
+  check('el correo del dueño se lee SIN getTenantDb (que abre para escribir y migra)',
+    !/getTenantDb/.test(mensualCod), 'getTenantDb en el CÓDIGO de suscripcion-mensual.js');
+  check('y con fileMustExist, para no CREAR la base que no encuentre',
+    /fileMustExist: true/.test(mensual) && /readonly: true/.test(mensual));
+
+  // Un guion que mueve algo no lo mueve por defecto — y mandar un correo a un cliente es moverlo.
+  check('en simulacro NO se manda ningún correo', /if \(simulacro\) return \{ enviado: false/.test(mensual));
+  check('un fallo del correo no mata la pasada (el constructor de Resend SÍ lanza)',
+    /catch \(e\) \{\s*return \{ enviado: false, motivo: 'fallo_al_enviar'/.test(mensual));
+  check('no se avisa dos veces del mismo cobro', /aviso_de_factura === cargo\.factura_id/.test(mensual));
+  check('se avisa 7 días antes, y el número vive en un solo sitio',
+    /export const DIAS_DE_AVISO = 7/.test(mensual)
+      && !/faltan !== 7|=== 7\b/.test(mensualCod.replace('DIAS_DE_AVISO = 7', '')),
+    'el 7 tiene que salir de DIAS_DE_AVISO, no escrito otra vez');
+
+  // El webhook: los tres eventos de suscripción, y el impago SIN adelantar la tarea siguiente.
+  check('el webhook escucha invoice.upcoming, invoice.paid e invoice.payment_failed',
+    /invoice\.upcoming/.test(idx2) && /invoice\.paid/.test(idx2) && /invoice\.payment_failed/.test(idx2));
+  check('un cobro correcto NO manda ningún correo', !/sendEmail|enviarAviso/.test(
+    idx2.slice(idx2.indexOf("evento.type === 'invoice.paid'"), idx2.indexOf("evento.type === 'invoice.payment_failed'"))));
+  const tramoFallido = sinComentarios(
+    idx2.slice(idx2.indexOf("evento.type === 'invoice.payment_failed'"), idx2.indexOf("evento.type === 'payment_intent.succeeded'")));
+  check('un cobro fallido solo se APUNTA: el corte es la tarea siguiente',
+    /pago_pendiente/.test(tramoFallido) && !/suspended|readOnly|UPDATE tenants/i.test(tramoFallido), tramoFallido.slice(0, 200));
+
+  // Cambiar de tarjeta: la nueva primero, la vieja después.
+  // El aviso NO puede depender de que haya prorrateos pendientes: los avisos son de los negocios
+  // que YA están al corriente, que son justo los que no salen en esa lista. Había un `return` seco.
+  const pasada = readFileSync(path.join(RAIZ, 'scripts/suscripcion-cobros.mjs'), 'utf8');
+  check('la pasada avisa aunque no haya ningún prorrateo pendiente',
+    (pasada.match(/await avisosPrevios\(\)/g) || []).length === 2,
+    (pasada.match(/await avisosPrevios\(\)/g) || []).length + ' llamada(s): hace falta también en la salida temprana');
+
+  check('al cambiar de tarjeta se pone la nueva ANTES de retirar la vieja',
+    mensual.indexOf('cambiarMetodoDeSuscripcion') < mensual.indexOf('desasociarMetodo'));
 
   P('\n──────────────────────────────────────────────────────────');
   P(`  ${ok} OK · ${mal} fallos`);

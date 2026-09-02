@@ -17,6 +17,7 @@
 // LO QUE CREA, LO BORRA: la sesión temporal y la fila de suscripción se devuelven a su estado
 // anterior en el `finally`, pase, falle o reviente.
 import puppeteer from 'puppeteer';
+import * as stripeMod from '../core/stripe.js';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 import { CHROMIUM, entornoDelNavegador } from './lib/gate-env.mjs';
@@ -136,12 +137,80 @@ try {
   check('la pantalla enseña la tarjeta por sus 4 últimos', /4242/.test(despues));
 
   await pg.screenshot({ path: '/home/ubuntu/susc-e2e.png', fullPage: false });
-  P('\n  captura: /home/ubuntu/susc-e2e.png');
+  P('\n  captura del alta: /home/ubuntu/susc-e2e.png');
+
+  // ── CAMBIAR DE TARJETA (criterio 5 de `suscripcion-cobro-mensual`) ─────────────────────────────
+  // «El cliente puede cambiar la tarjeta sin que nadie tenga que tocarle la cuenta por dentro»: se
+  // hace por el MISMO botón, con el mismo flujo, y desde la pantalla. Aquí se comprueba pulsándolo.
+  P('\n[cambio de tarjeta] Se abre una suscripción y se cambia la visa por una mastercard');
+  const { asegurarSuscripcionEnStripe } = await import('../core/suscripcion-mensual.js');
+  const abierta = await asegurarSuscripcionEnStripe({ id: tenant.id, name: 'peluqueria', slug: SLUG });
+  check('se abre la suscripción mensual con la tarjeta recién guardada', abierta.ok, abierta.error);
+  const filaAntes = cd.prepare('SELECT * FROM tenant_suscripciones WHERE tenant_id=?').get(tenant.id);
+  const viejaPm = filaAntes.stripe_metodo_pago_id;
+
+  await pg.goto(`${HOST}/admin/suscripcion`, { waitUntil: 'networkidle2', timeout: 45000 });
+  const conSub = await pg.evaluate(() => document.body.innerText);
+  check('la pantalla ya anuncia el próximo cobro automático', /próximo cobro automático/i.test(conSub), conSub.slice(0, 300));
+  check('y dice que avisará una semana antes', /una semana antes/i.test(conSub));
+  check('el botón pasa a decir «Cambiar de tarjeta»',
+    await pg.evaluate(() => /cambiar de tarjeta/i.test(document.getElementById('susAlta')?.textContent || '')));
+
+  await pg.click('#susAlta');
+  await new Promise(r => setTimeout(r, 900));
+  await pg.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find(x => /Continuar a Stripe/i.test(x.textContent));
+    b?.click();
+  });
+  await pg.waitForFunction(() => location.hostname.includes('stripe.com'), { timeout: 45000 });
+  await new Promise(r => setTimeout(r, 3500));
+  // Una tarjeta DISTINTA, para que el cambio se note: mastercard de prueba de Stripe.
+  await escribir('#cardNumber', '5555555555554444');
+  await escribir('#cardExpiry', '11' + String(new Date().getFullYear() + 3).slice(2));
+  await escribir('#cardCvc', '123');
+  try { await escribir('#billingName', 'Peluqueria Gil Prueba'); } catch {}
+  await new Promise(r => setTimeout(r, 800));
+  await pg.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find(x => /^guardar/i.test(x.textContent.trim()))
+           || document.querySelector('button[type="submit"]');
+    b?.click();
+  });
+  await pg.waitForFunction(() => location.hostname.includes('bamburu.com'), { timeout: 90000 });
+  await new Promise(r => setTimeout(r, 1500));
+
+  const trasCambio = await pg.evaluate(() => document.body.innerText);
+  check('la pantalla dice que la tarjeta se ha CAMBIADO', /tarjeta cambiada/i.test(trasCambio), trasCambio.slice(0, 300));
+  check('y deja claro que NO se ha cobrado nada por cambiarla', /no se te ha cobrado nada ahora/i.test(trasCambio));
+  const filaTras = cd.prepare('SELECT * FROM tenant_suscripciones WHERE tenant_id=?').get(tenant.id);
+  check('la tarjeta guardada es la nueva', filaTras.tarjeta_ultimos4 === '4444', filaTras.tarjeta_ultimos4);
+  check('y la marca también', filaTras.tarjeta_marca === 'mastercard', filaTras.tarjeta_marca);
+  check('la pantalla la enseña por sus 4 últimos', /4444/.test(trasCambio));
+
+  const subTras = await stripeMod.recuperarSuscripcion(filaTras.stripe_suscripcion_id);
+  check('la SUSCRIPCIÓN pasa a cobrarse con la tarjeta nueva',
+    subTras.ok && subTras.datos.default_payment_method === filaTras.stripe_metodo_pago_id,
+    subTras.ok ? subTras.datos.default_payment_method + ' vs ' + filaTras.stripe_metodo_pago_id : subTras.error);
+  const vieja = await stripeMod.recuperarMetodoPago(viejaPm);
+  check('y la anterior queda RETIRADA de la cuenta del cliente',
+    vieja.ok && !vieja.datos.customer, vieja.ok ? 'sigue en ' + vieja.datos.customer : vieja.error);
+
+  await pg.screenshot({ path: '/home/ubuntu/susc-cambio.png', fullPage: false });
+  P('  captura del cambio: /home/ubuntu/susc-cambio.png');
 } finally {
   if (navegador) await navegador.close().catch(()=>{});
   td.prepare("DELETE FROM admin_sessions WHERE token LIKE 'zze2e%'").run();
   cd.prepare("DELETE FROM tenant_sessions WHERE session_token LIKE 'zze2e%'").run();
   // La fila se devuelve a como estaba, para que Ibrahin pueda repetirlo desde cero en la pantalla.
+  // La suscripción que abrió la prueba se cancela: no puede quedarse viva cobrando cada día 5.
+  try {
+    const viva = cd.prepare('SELECT stripe_suscripcion_id FROM tenant_suscripciones WHERE tenant_id=?').get(tenant.id);
+    if (viva?.stripe_suscripcion_id && viva.stripe_suscripcion_id !== antes.stripe_suscripcion_id) {
+      await stripeMod.cancelarSuscripcion(viva.stripe_suscripcion_id);
+      P('  suscripción de prueba cancelada: ' + viva.stripe_suscripcion_id);
+    }
+  } catch (e) { P('  ⚠️ no se pudo cancelar la suscripción de prueba: ' + e.message); }
+  cd.prepare('UPDATE tenant_suscripciones SET stripe_suscripcion_id=?, proximo_cobro=?, aviso_de_factura=?, aviso_enviado_en=? WHERE tenant_id=?')
+    .run(antes.stripe_suscripcion_id, antes.proximo_cobro, antes.aviso_de_factura, antes.aviso_enviado_en, tenant.id);
   cd.prepare(`UPDATE tenant_suscripciones SET estado=?, stripe_cliente_id=?, stripe_metodo_pago_id=?,
               tarjeta_marca=?, tarjeta_ultimos4=?, tarjeta_caduca=?, ultimo_error=? WHERE tenant_id=?`)
     .run(antes.estado, antes.stripe_cliente_id, antes.stripe_metodo_pago_id, antes.tarjeta_marca,

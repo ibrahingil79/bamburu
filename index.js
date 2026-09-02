@@ -1510,7 +1510,7 @@ app.post('/stripe/webhook', async (c) => {
   try { evento = JSON.parse(crudo); } catch { return c.json({ error: 'cuerpo ilegible' }, 400); }
 
   try {
-    const { controlDb } = await import('./core/control-db.js');
+    const { controlDb, getTenantById } = await import('./core/control-db.js');
     const clienteId = evento?.data?.object?.customer || null;
     const fila = clienteId
       ? controlDb.prepare('SELECT tenant_id FROM tenant_suscripciones WHERE stripe_cliente_id = ?').get(clienteId)
@@ -1524,6 +1524,44 @@ app.post('/stripe/webhook', async (c) => {
           SET estado = 'pago_pendiente', ultimo_error = ?, actualizado_en = CURRENT_TIMESTAMP
           WHERE tenant_id = ?`)
           .run(evento?.data?.object?.last_payment_error?.message || 'El pago fue rechazado.', fila.tenant_id);
+      } else if (evento.type === 'invoice.upcoming') {
+        // EL AVISO DE LA SEMANA ANTES (tarea `suscripcion-cobro-mensual`), disparador 1 de 2.
+        // Stripe manda este evento a los días que tenga configurada la cuenta. El otro disparador
+        // es la pasada diaria, que sí controla el plazo exacto — porque ese ajuste NO se puede fijar
+        // por API (`GET /v1/account` devuelve `settings.billing` vacío, medido el 2 sep 2026) y el
+        // criterio del dueño no puede depender de una casilla del panel de Stripe.
+        // Los dos entran por la MISMA puerta, que apunta la factura por la que ya avisó: el dueño
+        // recibe UN aviso por cobro, venga por donde venga.
+        const { enviarAvisoPrevio } = await import('./core/suscripcion-mensual.js');
+        const t = getTenantById(fila.tenant_id);
+        if (t) {
+          const r = await enviarAvisoPrevio(t, { forzar: true });
+          console.log('[stripe:webhook] aviso previo de', t.slug, '→', r.motivo);
+        }
+      } else if (evento.type === 'invoice.paid') {
+        // Un cobro que sale bien NO genera ningún correo nuestro: es el criterio del dueño, «si el
+        // cobro sale bien, no se le molesta con nada más». Solo se apunta, y se adelanta el próximo
+        // cobro al que diga Stripe, que es quien lleva el calendario.
+        const inv = evento.data.object;
+        const fin = inv?.lines?.data?.[0]?.period?.end || null;
+        controlDb.prepare(`UPDATE tenant_suscripciones
+          SET estado = 'al_corriente', ultimo_error = NULL,
+              ultimo_cobro_centimos = ?, ultimo_cobro_en = ?,
+              proximo_cobro = COALESCE(?, proximo_cobro), actualizado_en = CURRENT_TIMESTAMP
+          WHERE tenant_id = ?`)
+          .run(inv?.amount_paid ?? null,
+               new Date((inv?.status_transitions?.paid_at || Math.floor(Date.now() / 1000)) * 1000).toISOString().slice(0, 10),
+               fin ? new Date(fin * 1000).toISOString().slice(0, 10) : null,
+               fila.tenant_id);
+      } else if (evento.type === 'invoice.payment_failed') {
+        // Solo se APUNTA. Los avisos de deuda y el corte son `suscripcion-impago-y-corte`, la tarea
+        // siguiente, y no se adelantan aquí: cortarle el uso a alguien por un cobro fallido sin sus
+        // 30 días de avisos es exactamente lo que el dueño pidió no hacer.
+        controlDb.prepare(`UPDATE tenant_suscripciones
+          SET estado = 'pago_pendiente', ultimo_error = ?, actualizado_en = CURRENT_TIMESTAMP
+          WHERE tenant_id = ?`)
+          .run(evento?.data?.object?.last_finalization_error?.message
+               || 'El cobro mensual no salió adelante.', fila.tenant_id);
       } else if (evento.type === 'payment_intent.succeeded') {
         // Solo se levanta el estado si estaba caído. Un `succeeded` NO adelanta `proximo_cobro`: eso
         // lo escribe quien cobró, que es el único que sabe qué periodo pagó ese cargo.

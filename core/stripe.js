@@ -147,6 +147,27 @@ export async function stripeApi(metodo, ruta, params = {}, { idempotencia = null
 
 // ── Las cuatro cosas que Bamburu necesita ─────────────────────────────────────────────────────────
 
+/**
+ * LA LLAVE DE IDEMPOTENCIA, EN UN SOLO SITIO — y existe porque el fallo se repitió.
+ *
+ * Una llave de idempotencia queda atada EN STRIPE a los parámetros con los que se usó la primera
+ * vez. La misma llave con parámetros distintos **no repite la respuesta: da error**, durante las 24 h
+ * que Stripe la recuerda:
+ *   «Keys for idempotent requests can only be used with the same parameters they were first used with»
+ *
+ * Pasó con `cliente-tenant-<id>` al añadir el correo del dueño, se arregló allí… y volvió a pasar
+ * con `suscripcion-tenant-<id>-<ancla>` el mismo día. Arreglarlo en un punto de llamada y no en la
+ * regla es exactamente el patrón que este repo tiene escrito con nombre: la regla no puede vivir en
+ * quien llama, porque quien llama se olvida.
+ *
+ * Con el contenido dentro: dos clics seguidos siguen colapsando en UNA sola creación —que es para lo
+ * que existe la llave— y cambiar cualquier parámetro deja de ser un error.
+ */
+export function llaveIdempotente(prefijo, params) {
+  const huella = createHash('sha256').update(JSON.stringify(params)).digest('hex').slice(0, 12);
+  return `${prefijo}-${huella}`;
+}
+
 /** Un cliente en Stripe para este negocio. Se crea una vez y se reutiliza siempre. */
 export async function crearCliente({ nombre, email, tenantId, slug }) {
   const params = {
@@ -164,12 +185,10 @@ export async function crearCliente({ nombre, email, tenantId, slug }) {
   // Salió al añadir el correo del dueño a la petición: el mismo negocio, un parámetro más, y el alta
   // dejó de funcionar durante 24 h (que es lo que Stripe recuerda una llave).
   //
-  // Con el contenido dentro, cada versión de la petición tiene su llave: dos clics seguidos siguen
-  // colapsando en UN cliente —que es para lo que existe la llave—, y cambiar el correo del dueño
-  // deja de ser un error.
-  const huella = createHash('sha256').update(JSON.stringify(params)).digest('hex').slice(0, 12);
-
-  return stripeApi('POST', '/customers', params, { idempotencia: `cliente-tenant-${tenantId}-${huella}` });
+  // Con el contenido dentro, cada versión de la petición tiene su llave. La compone
+  // `llaveIdempotente`, que es donde vive ahora la regla — ver su comentario.
+  return stripeApi('POST', '/customers', params,
+                   { idempotencia: llaveIdempotente(`cliente-tenant-${tenantId}`, params) });
 }
 
 /**
@@ -247,6 +266,11 @@ export async function fijarMetodoPorDefecto(clienteId, metodoId) {
  * `descripcion` sale en el extracto del banco del cliente, así que dice qué es.
  * La `referencia` es la llave de idempotencia y tiene que ser ESTABLE para el mismo cobro: si un
  * reintento genera otra, Stripe lo trata como un cargo nuevo y el cliente paga dos veces.
+ *
+ * ⚠️ ES LA ÚNICA LLAVE DEL FICHERO QUE **NO** PASA POR `llaveIdempotente`, y es a propósito. Allí la
+ * huella del contenido evita el choque cuando los parámetros cambian; aquí ese choque es justo lo
+ * que se quiere: la identidad de este cobro es SU PERIODO, y si el importe cambiara por un error de
+ * cálculo, meterlo en la llave haría que el segundo intento cobrara otra vez en vez de chocar.
  */
 export async function cobrar({ clienteId, metodoId, centimos, descripcion, referencia }) {
   return stripeApi('POST', '/payment_intents', {
@@ -258,6 +282,132 @@ export async function cobrar({ clienteId, metodoId, centimos, descripcion, refer
     confirm: true,
     description: descripcion,
   }, { idempotencia: referencia });
+}
+
+// ── EL PLAN MENSUAL EN STRIPE (tarea `suscripcion-cobro-mensual`) ────────────────────────────────
+//
+// SE CREA SOLO, DESDE EL CÓDIGO. El dueño no entra en el panel de Stripe a crear un producto ni un
+// tipo de IVA: es la misma regla que obligó a apagar Managed Payments por petición en vez de por
+// una casilla del panel. Una cuenta de Stripe recién hecha tiene que funcionar sin que nadie toque
+// nada, y este servidor arranca con una cuenta vacía (comprobado: 0 productos, 0 precios, 0 IVA).
+//
+// EL IVA VA COMO `tax_rate` APARTE, NO METIDO EN EL PRECIO. Es lo que hace que la factura de Stripe
+// salga con **base e IVA desglosados**, que es el criterio del dueño y lo que exige la ley. Si el
+// precio fuera 11,98 € «con IVA incluido», la factura diría 11,98 € y punto.
+//
+// IDEMPOTENTE POR `lookup_key`: la clave lleva los céntimos dentro
+// (`bamburu_plan_mensual_990`), así que llamar mil veces devuelve el mismo precio, y **cambiar el
+// precio del plan crea uno nuevo en vez de mentir sobre el viejo** — los precios de Stripe son
+// inmutables a propósito, porque hay suscripciones vivas colgando de ellos.
+export async function asegurarPlanEnStripe({ centimos, ivaPorcentaje, nombre = 'Bamburu' }) {
+  const clave = `bamburu_plan_mensual_${centimos}`;
+
+  const yaHay = await stripeApi('GET', `/prices?lookup_keys[]=${encodeURIComponent(clave)}&active=true&limit=1`);
+  if (!yaHay.ok) return yaHay;
+  let precio = yaHay.datos?.data?.[0] || null;
+
+  if (!precio) {
+    const prods = await stripeApi('GET', '/products?active=true&limit=100');
+    if (!prods.ok) return prods;
+    let prod = (prods.datos?.data || []).find(p => p.metadata?.bamburu_plan === 'mensual') || null;
+    if (!prod) {
+      const pProd = {
+        name: `${nombre} — suscripción mensual`,
+        description: 'Acceso a Bamburu. Un plan único, sin permanencia.',
+        metadata: { bamburu_plan: 'mensual' },
+      };
+      const nuevo = await stripeApi('POST', '/products', pProd,
+                                    { idempotencia: llaveIdempotente('producto-plan-mensual', pProd) });
+      if (!nuevo.ok) return nuevo;
+      prod = nuevo.datos;
+    }
+    const pPrecio = {
+      product: prod.id,
+      unit_amount: centimos,
+      currency: 'eur',
+      recurring: { interval: 'month' },
+      // El precio es la BASE. El IVA se suma aparte, con su tipo, para que la factura lo desglose.
+      tax_behavior: 'exclusive',
+      lookup_key: clave,
+      nickname: `Bamburu mensual ${(centimos / 100).toFixed(2)} € + IVA`,
+    };
+    const creado = await stripeApi('POST', '/prices', pPrecio,
+                                   { idempotencia: llaveIdempotente(`precio-${clave}`, pPrecio) });
+    if (!creado.ok) return creado;
+    precio = creado.datos;
+  }
+
+  const tipos = await stripeApi('GET', '/tax_rates?active=true&limit=100');
+  if (!tipos.ok) return tipos;
+  let iva = (tipos.datos?.data || []).find(t => t.metadata?.bamburu_iva === 'general'
+                                             && Number(t.percentage) === Number(ivaPorcentaje)) || null;
+  if (!iva) {
+    const pIva = {
+      display_name: 'IVA', description: `IVA ${ivaPorcentaje} % (España)`,
+      percentage: ivaPorcentaje, inclusive: false, country: 'ES', jurisdiction: 'ES',
+      metadata: { bamburu_iva: 'general' },
+    };
+    const nuevo = await stripeApi('POST', '/tax_rates', pIva,
+                                  { idempotencia: llaveIdempotente(`iva-es-${ivaPorcentaje}`, pIva) });
+    if (!nuevo.ok) return nuevo;
+    iva = nuevo.datos;
+  }
+
+  return { ok: true, error: null, datos: { precioId: precio.id, ivaId: iva.id, productoId: precio.product } };
+}
+
+/**
+ * La suscripción mensual, ANCLADA AL DÍA 5 con el mecanismo nativo de Stripe.
+ *
+ * `billing_cycle_anchor` es lo que hace que el cargo caiga el día 5 **y que los meses cortos los
+ * resuelva Stripe solo**: en febrero factura el 5, no el 3 ni el 7, sin que nadie escriba un
+ * calendario. Escribirlo a mano es la clase de código que falla una vez al año y siempre en
+ * producción.
+ *
+ * `proration_behavior: 'none'` NO ES OPCIONAL, y es lo que impide COBRAR DOS VECES: el tramo desde
+ * hoy hasta el día 5 **ya se ha cobrado** con el prorrateo de `suscripcion-plan-y-alta`. Sin este
+ * parámetro, Stripe factura ese mismo tramo por su cuenta al crear la suscripción.
+ */
+export async function crearSuscripcion({ clienteId, precioId, ivaId, metodoId, anclaTimestamp, tenantId }) {
+  const params = {
+    customer: clienteId,
+    items: [{ price: precioId }],
+    default_tax_rates: [ivaId],
+    default_payment_method: metodoId,
+    billing_cycle_anchor: anclaTimestamp,
+    proration_behavior: 'none',
+    collection_method: 'charge_automatically',
+    metadata: { bamburu_tenant_id: String(tenantId) },
+  };
+  return stripeApi('POST', '/subscriptions', params,
+                   { idempotencia: llaveIdempotente(`suscripcion-tenant-${tenantId}`, params) });
+}
+
+export async function recuperarSuscripcion(id) {
+  return stripeApi('GET', `/subscriptions/${encodeURIComponent(id)}`);
+}
+export async function cancelarSuscripcion(id) {
+  return stripeApi('DELETE', `/subscriptions/${encodeURIComponent(id)}`);
+}
+
+/** La factura que viene: importe, IVA y fecha. Es de donde sale el aviso de la semana antes. */
+export async function proximaFactura(suscripcionId) {
+  return stripeApi('GET', `/invoices/upcoming?subscription=${encodeURIComponent(suscripcionId)}`);
+}
+
+/** Las facturas ya emitidas de este cliente, con su PDF y su número. */
+export async function facturasDe(clienteId, limite = 24) {
+  return stripeApi('GET', `/invoices?customer=${encodeURIComponent(clienteId)}&limit=${limite}`);
+}
+
+/** Cambia la tarjeta con la que se cobra la suscripción, y retira la anterior. */
+export async function cambiarMetodoDeSuscripcion(suscripcionId, metodoId) {
+  return stripeApi('POST', `/subscriptions/${encodeURIComponent(suscripcionId)}`, {
+    default_payment_method: metodoId,
+  });
+}
+export async function desasociarMetodo(metodoId) {
+  return stripeApi('POST', `/payment_methods/${encodeURIComponent(metodoId)}/detach`);
 }
 
 /**

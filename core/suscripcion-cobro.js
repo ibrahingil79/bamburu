@@ -85,8 +85,28 @@ export async function cobrarProrrateo(tenant, { db = controlDb, hoy = null } = {
     ultimo_error: null,
   }, db);
 
+  // ── Y AQUÍ EMPIEZA EL COBRO MENSUAL (tarea `suscripcion-cobro-mensual`) ───────────────────────
+  // El prorrateo acaba de cubrir de hoy hasta `pr.hasta`, que ES un día 5. Así que la suscripción
+  // de Stripe se abre anclada a ESE día: a partir de ahí factura sola, cada mes, el día 5.
+  //
+  // Va DESPUÉS del cobro y no antes, a propósito: si se abriera primero y el prorrateo fallara, el
+  // negocio quedaría con una suscripción viva sin haber pagado su primer tramo.
+  //
+  // Y un fallo aquí NO deshace el cobro que acaba de salir bien. Se apunta y se sigue: la pasada
+  // diaria vuelve a intentarlo, y mientras tanto el dinero cobrado sigue estando cobrado. Devolver
+  // `ok: false` aquí haría creer a quien llama que no se cobró, que es peor que lo que pasa.
+  let suscripcion = null;
+  try {
+    const { asegurarSuscripcionEnStripe } = await import('./suscripcion-mensual.js');
+    const r = await asegurarSuscripcionEnStripe(tenant, { db, ancla: pr.hasta });   // `pr.hasta` YA es el día 5
+    if (r.ok) suscripcion = r.datos?.id || null;
+    else console.error('[suscripcion] cobrado el prorrateo pero no se pudo abrir la mensual:', r.error);
+  } catch (e) {
+    console.error('[suscripcion] cobrado el prorrateo pero no se pudo abrir la mensual:', e.message);
+  }
+
   return { ok: true, motivo: 'cobrado', error: null, importe: pr.total, periodo: pr,
-           stripe_id: res.datos?.id || null };
+           stripe_id: res.datos?.id || null, suscripcion };
 }
 
 /**
