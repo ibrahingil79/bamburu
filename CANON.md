@@ -96,10 +96,23 @@ mira a la competencia directa.)
   mirar sus números por su cuenta también es el dueño. "El software trabaja, no el humano" no significa
   "el humano no mira".*
 
-## 4. Fase actual: SANEAMIENTO TÉCNICO (la escalera queda aplazada)
+## 4. Fase actual: ~~SANEAMIENTO TÉCNICO (la escalera queda aplazada)~~ → **LA COLA DE 97 TAREAS**
 
-La auditoría integral de agosto de 2026 abre una fase de saneamiento antes de continuar el roadmap
-funcional. **No se añaden más funciones nuevas hasta cerrarla.** Su finalidad es elevar seguridad,
+> ⚙️⚙️ **DEROGADA. DECISIÓN DE IBRAHIN, 2 SEP 2026.** La fase de saneamiento técnico **ya no existe**.
+> Manda la lista de 97 tareas del 2 de septiembre (`TABLERO.md` §LA COLA), en el orden que decidió
+> Ibrahin: **la siguiente tarea es la primera `estado: pendiente` en orden de documento**. Lo que
+> quedara de saneamiento **no se descarta — vive dentro de esa lista**, en su sitio y sin prioridad
+> especial.
+>
+> **Y con ella cae la regla que colgaba de ella:** *«no se añaden más funciones nuevas hasta
+> cerrarla»* **ya NO está vigente**. Que la primera de la cola sea una función nueva
+> (`suscripcion-plan-y-alta`) es lo correcto, no una excepción.
+>
+> Lo de abajo es redacción del 26 ago 2026. Se tacha en vez de borrarse —regla del repo— para poder
+> reconstruir qué se creía y cuándo, pero **no concede ni deniega permiso**.
+
+~~La auditoría integral de agosto de 2026 abre una fase de saneamiento antes de continuar el roadmap
+funcional. **No se añaden más funciones nuevas hasta cerrarla.**~~ Su finalidad es elevar seguridad,
 robustez, calidad de código, coherencia operativa, recuperación, escalabilidad y mantenibilidad al
 nivel de un producto profesional comparable con los líderes del mercado. Se trabaja **una tarea cada
 vez**. Saneamientos 1, 2 y 3 están cerrados; **Saneamiento 4 — Semántica fiscal de operaciones
@@ -146,8 +159,11 @@ dibuja, y por eso DISA predictiva (5) puede analizar sin construirse su propio d
 el usuario tiene gráficos guardados (4) tiene sentido dejarle componer su Inicio (6). Los oficios (7-9)
 van después porque un oficio sin números no es una cara, es un formulario.
 
-La escalera conserva el orden funcional para cuando termine el saneamiento; no autoriza a iniciar
-ningún peldaño durante la fase activa.
+~~La escalera conserva el orden funcional para cuando termine el saneamiento; no autoriza a iniciar
+ningún peldaño durante la fase activa.~~ **⚙️ CORREGIDO EL 2 SEP 2026 POR DECISIÓN DE IBRAHIN, al
+derogarse la fase (§4).** La escalera conserva su orden funcional, y lo que autoriza o no a iniciar
+un peldaño es **su posición en §LA COLA de `TABLERO.md`**, no ninguna fase. Se tacha en vez de
+borrarse.
 
 Decisión de mercado: cuándo sale Bamburu al mercado lo decide el dueño. El asistente y Codex no recomiendan el momento de lanzar ni lo usan como argumento; solo ejecutan lo que el dueño prioriza.
 

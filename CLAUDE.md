@@ -23,9 +23,8 @@
 > Todo lo que sigue en esta sección es **anterior al 2 sep 2026**. Se conserva tachado, no borrado,
 > para poder reconstruir qué se creía y cuándo — pero **no concede ni deniega permiso**.
 >
-> 🔎 **Cabo conocido:** `CANON.md` §4 (`:101` y `:149`) todavía redacta la fase como abierta. Es
-> redacción del 26 ago 2026, **anterior a esta decisión**, y queda pendiente de que Ibrahin la lleve
-> también allí. Mientras tanto manda esto, que es posterior y explícito.
+> ✅ **`CANON.md` §4 corregido también el 2 sep 2026**, por la misma decisión y con el mismo método
+> (tachado con motivo y fecha). **CANON, TABLERO y CLAUDE dicen ya lo mismo.**
 
 
 - ~~La auditoría integral está realizada y la fase de saneamiento general está **ACTIVA**. No se añaden

@@ -12,10 +12,11 @@
 > anterior al 2 sep 2026 y **no manda**. Se tacha en vez de borrarse, que es lo que manda este
 > documento, para poder reconstruir qué se creía y cuándo.
 >
-> 🔎 **Cabo conocido, dicho para que nadie tropiece:** `CANON.md` §4 (`:101` y `:149`) todavía redacta
-> la fase como abierta («abre una fase de saneamiento antes de continuar el roadmap», «no autoriza a
-> iniciar»). Esa redacción es del 26 ago 2026 y **es anterior a esta decisión**; queda pendiente de
-> que Ibrahin la lleve también allí. Mientras tanto manda lo de aquí, que es posterior y explícito.
+> ✅ **`CANON.md` §4 CORREGIDO TAMBIÉN, el 2 sep 2026 y por la misma decisión de Ibrahin.** Sus dos
+> líneas —«abre una fase de saneamiento antes de continuar el roadmap» y «no autoriza a iniciar ningún
+> peldaño durante la fase activa»— quedan tachadas con su motivo y su fecha. **Los tres documentos que
+> lee una sesión al arrancar (CANON, TABLERO, CLAUDE) dicen ya lo mismo**, que era el objetivo: que
+> ninguna sesión futura tropiece.
 >
 > ~~**ORDEN VIGENTE — DECISIÓN DE IBRAHIN (26 ago 2026).** La auditoría integral está realizada y,
 > antes de continuar el roadmap funcional, Bamburu entra en una fase de saneamiento técnico. **No se
