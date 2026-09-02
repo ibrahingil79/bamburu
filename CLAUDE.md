@@ -7,18 +7,44 @@
 
 ---
 
-## Fase actual: SANEAMIENTO TÉCNICO (CANON §4)
+## Fase actual: ~~SANEAMIENTO TÉCNICO (CANON §4)~~ → **LA COLA DE 97 TAREAS (TABLERO.md §LA COLA)**
 
-- La auditoría integral está realizada y la fase de saneamiento general está **ACTIVA**. No se añaden
-  funciones nuevas hasta cerrarla; una tarea cada vez. **Saneamientos 1 a 6 están cerrados:**
+> ⚙️⚙️ **DEROGACIÓN — DECISIÓN DE IBRAHIN, 2 SEP 2026.** **La fase de saneamiento técnico queda
+> derogada.** La manda la lista de 97 tareas del 2 de septiembre (`TABLERO.md` §LA COLA): lo que
+> quedara de saneamiento **no se descarta — vive dentro de esa lista, en su orden**, sin prioridad
+> especial sobre lo demás.
+>
+> **Consecuencia directa, y es la que hace tropezar:** la regla *«no se añaden funciones nuevas hasta
+> cerrar el saneamiento»* **YA NO ESTÁ VIGENTE**. La primera tarea de la cola es una función nueva
+> (`suscripcion-plan-y-alta`, el plan de 9,90 €), y eso es lo correcto, no una excepción que haya que
+> justificar. **Lo único que decide qué se hace es el orden de §LA COLA y el campo `estado:`**: la
+> siguiente tarea es la primera `pendiente` en orden de documento.
+>
+> Todo lo que sigue en esta sección es **anterior al 2 sep 2026**. Se conserva tachado, no borrado,
+> para poder reconstruir qué se creía y cuándo — pero **no concede ni deniega permiso**.
+>
+> 🔎 **Cabo conocido:** `CANON.md` §4 (`:101` y `:149`) todavía redacta la fase como abierta. Es
+> redacción del 26 ago 2026, **anterior a esta decisión**, y queda pendiente de que Ibrahin la lleve
+> también allí. Mientras tanto manda esto, que es posterior y explícito.
+
+
+- ~~La auditoría integral está realizada y la fase de saneamiento general está **ACTIVA**. No se añaden
+  funciones nuevas hasta cerrarla~~ **⚙️ DEROGADO EL 2 SEP 2026 (ver arriba)**; **una tarea cada vez
+  sigue vigente.** **Saneamientos 1 a 6 están cerrados:**
   S1 barrido nocturno retirado · S2 blindaje de DISA · S3 antiavalancha del rate limiting ·
   S4 clasificación fiscal por línea (`feb90b3`) · S5 los servicios sanitarios nacen `pending` y no
   `taxable` (`f13594e`) · S6 segunda copia de seguridad a la cuenta `gilibrahin` de Drive.
   ~~**La siguiente tarea oficial es el aislamiento de bloqueos SQLite**~~ — **⚙️ CORREGIDO EL
   31 ago 2026 POR DECISIÓN DE IBRAHIN.** El aislamiento de bloqueos SQLite **sigue pendiente y sin
-  delimitar**, pero **ya no es la siguiente**: manda la lista de cinco tareas de `TABLERO.md`
-  §«TAREAS EN FORMATO DEL ORQUESTADOR», y la siguiente es la primera de esa lista. Se tacha en vez
+  delimitar**, pero **ya no es la siguiente**: ~~manda la lista de cinco tareas de `TABLERO.md`
+  §«TAREAS EN FORMATO DEL ORQUESTADOR», y la siguiente es la primera de esa lista.~~ Se tacha en vez
   de borrarse para poder reconstruir qué se creía y cuándo.
+  **⚙️ CORREGIDO EL 2 SEP 2026: ESAS CINCO ESTÁN LAS CINCO HECHAS, y ese puntero ya hizo tropezar a
+  una sesión.** **Manda `TABLERO.md` §LA COLA (97 tareas, orden decidido por Ibrahin el 2 sep):
+  la siguiente tarea es la PRIMERA `estado: pendiente` en orden de documento** — no hay rótulo que
+  buscar. Se comprueba en un segundo con `node orchestrator/orq.js estado`, que lo dice con una
+  flecha; el rótulo «SIGUIENTE TAREA» solo existe para SALTARSE el orden cuando Ibrahin quiera otra
+  antes.
 - **Backups: hay DOS copias diarias, en dos cuentas distintas** (principal 03:33 → `ibrahingil`,
   secundaria 03:35 → `gilibrahin`). Una sola pieza las sirve: `scripts/bamburu-backup.sh` sin entorno
   es la principal; la unit de la secundaria sobreescribe `BACKUP_REMOTE`/`LABEL`/`SUFFIX`/`HC_URL`.

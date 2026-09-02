@@ -1,11 +1,29 @@
-# TABLERO — Fase activa de saneamiento técnico
+# TABLERO — ~~Fase activa de saneamiento técnico~~ · **LA COLA DE 97, EN EL ORDEN DE IBRAHIN**
 
-> **ORDEN VIGENTE — DECISIÓN DE IBRAHIN (26 ago 2026).** La auditoría integral está realizada y,
+> ⚙️⚙️ **LA FASE DE SANEAMIENTO QUEDA DEROGADA. DECISIÓN DE IBRAHIN, 2 SEP 2026.** **La lista de 97
+> tareas del 2 de septiembre (§LA COLA) deroga esta fase.** Lo que quedara de saneamiento **no
+> desaparece: vive DENTRO de la lista, en su orden**, mezclado con lo demás y sin prioridad especial.
+> Por lo tanto: **«no se añaden funciones nuevas» ya NO está vigente** — la primera tarea de la cola
+> es precisamente una función nueva (`suscripcion-plan-y-alta`), y eso es lo correcto, no una
+> excepción.
+>
+> **Lo único que decide qué se hace es el orden de §LA COLA y el campo `estado:`.** Si un texto de
+> este documento o de `CLAUDE.md` dice que hay una fase que impide construir funciones, ese texto es
+> anterior al 2 sep 2026 y **no manda**. Se tacha en vez de borrarse, que es lo que manda este
+> documento, para poder reconstruir qué se creía y cuándo.
+>
+> 🔎 **Cabo conocido, dicho para que nadie tropiece:** `CANON.md` §4 (`:101` y `:149`) todavía redacta
+> la fase como abierta («abre una fase de saneamiento antes de continuar el roadmap», «no autoriza a
+> iniciar»). Esa redacción es del 26 ago 2026 y **es anterior a esta decisión**; queda pendiente de
+> que Ibrahin la lleve también allí. Mientras tanto manda lo de aquí, que es posterior y explícito.
+>
+> ~~**ORDEN VIGENTE — DECISIÓN DE IBRAHIN (26 ago 2026).** La auditoría integral está realizada y,
 > antes de continuar el roadmap funcional, Bamburu entra en una fase de saneamiento técnico. **No se
-> añaden funciones nuevas hasta cerrarla.** La finalidad es elevar seguridad, robustez, calidad de
+> añaden funciones nuevas hasta cerrarla.**~~ La finalidad es elevar seguridad, robustez, calidad de
 > código, coherencia operativa, recuperación, escalabilidad y mantenibilidad hasta el nivel de un
 > producto profesional comparable con los líderes del mercado. Se mantiene una sola tarea activa cada
-> vez. **Saneamientos 1, 2, 3, 4, 5 y 6 están cerrados. Fase de saneamiento general: ACTIVA.
+> vez. **Saneamientos 1, 2, 3, 4, 5 y 6 están cerrados. ~~Fase de saneamiento general: ACTIVA.~~
+> ⚙️ DEROGADA EL 2 SEP 2026 POR DECISIÓN DE IBRAHIN (ver arriba).
 > El aislamiento de bloqueos SQLite sigue PENDIENTE y SIN DELIMITAR: hay que acotarlo antes de
 > iniciarlo.**
 >
@@ -194,8 +212,9 @@
 > regresión, prueba de carga ni comprobación funcional.
 >
 > Servicio reiniciado y activo. No se lanzó `scripts/desplegar.mjs` porque incluye una comprobación
-> HTTPS funcional no autorizada. Fase de saneamiento general aún ACTIVA. **SIGUIENTE TAREA OFICIAL: A
-> LA ESPERA DE ENCARGO para delimitar el siguiente saneamiento.** Peldaño 9 permanece aplazado.
+> HTTPS funcional no autorizada. ~~Fase de saneamiento general aún ACTIVA. **SIGUIENTE TAREA OFICIAL: A
+> LA ESPERA DE ENCARGO para delimitar el siguiente saneamiento.**~~ **⚙️ HISTÓRICO — la fase se derogó
+> el 2 sep 2026 y este rótulo de «siguiente tarea» NO manda: manda §LA COLA.** Peldaño 9 permanece aplazado.
 
 > **SANEAMIENTO 2 ✅ HECHO (26 ago 2026): BLINDAJE DE DISA.** Se retiró la vía genérica
 > `insert_record`/`update_record`/`delete_record`, que escribía tablas directamente y podía eludir
@@ -2237,7 +2256,7 @@ miraba `admin_users`**.
 - **No se corrió** ningún barrido ni ningún gate: el encargo lo dijo arriba del todo.
 
 
-## 🧭 ORDEN DE TRABAJO ACORDADO (20 ago 2026) — subordinado al saneamiento activo desde el 26 ago
+## 🧭 ORDEN DE TRABAJO ACORDADO (20 ago 2026) — ~~subordinado al saneamiento activo desde el 26 ago~~ · **⚙️ HISTÓRICO: la fase se derogó el 2 sep 2026 y manda §LA COLA**
 
 > **Sesión de decisión: cero código, cero commits de producto.** Aquí queda el orden que se acordó y
 > el detalle de cada tarea. Ninguna se inicia sin encargo. **En la sesión del 20 ago el puntero del
@@ -2247,7 +2266,7 @@ miraba `admin_users`**.
 **EL ORDEN:** (1) sanear las comprobaciones automáticas ✅ · (2) cerrar los cabos sueltos de la Agenda,
 como **UNA sola tarea entera** ✅ · (3) funciones nuevas ✅ **(las siete, 23 ago 2026)** ·
 (4) **Peldaño 8 — Salud/bienestar ✅ HECHO (24 ago 2026)** ·
-(5) **Peldaño 9 — Belleza/estética** — pendiente en la escalera, **APLAZADO hasta cerrar la fase de saneamiento**.
+(5) **Peldaño 9 — Belleza/estética** — pendiente en la escalera, ~~**APLAZADO hasta cerrar la fase de saneamiento**~~ **⚙️ 2 SEP 2026: la fase se derogó; el Peldaño 9 sigue pendiente y no es la siguiente, pero ahora por su POSICIÓN en §LA COLA, no por ninguna fase.**
 > ⚙️ *El puntero «← AQUÍ» estaba en la (3) y se corrigió el 24 ago 2026 al cerrarse la (3): el siguiente paso era entonces el Peldaño 8.*
 > ⚙️ *Actualización 25 ago 2026, ya histórica: al cerrar el Peldaño 8, el siguiente era el Peldaño 9.*
 > **Actualización vigente 26 ago 2026:** Ibrahin aplaza el roadmap funcional hasta cerrar la fase de
@@ -6142,8 +6161,9 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
   `pantalla-403-ventanita` a propósito**: un `logActivity` en `requirePerm` escribe una fila **por
   petición denegada**, sin control de volumen —un rastreador o un bucle de `fetch` llena
   `activity_logs` del negocio—, así que hacerlo bien exige agregar por (usuario, permiso, día) y
-  decidir qué se le enseña al dueño. Eso es **función nueva**, y la fase de saneamiento no las admite
-  (CANON §4). Queda apuntada, no empezada.
+  decidir qué se le enseña al dueño. Eso es **función nueva**, ~~y la fase de saneamiento no las admite
+  (CANON §4)~~ **⚙️ 2 SEP 2026: la fase se derogó y las funciones nuevas SÍ se admiten; lo que coloca a
+  ésta es su sitio en §LA COLA.** Queda apuntada, no empezada.
 - 💡 **CANDIDATA, SIN CONSTRUIR — las otras dos páginas de 403 maquetadas a mano.** `core/csrf.js:38` y
   `core/tenant-middleware.js:124` siguen escribiendo su propio HTML de error. No son de permisos y
   quedaron fuera de `pantalla-403-ventanita` a propósito; pero desde esa tarea `errorShell` **es
@@ -7087,8 +7107,9 @@ Aquí aterrizan, de las listas viejas:
 Agenda presencial. **Se apoya en el peldaño 7, que quedó cerrado el 28 jul 2026**: el motor de citas, la
 agenda interna y la puerta pública de reserva ya existen y son de USO GENERAL, no de un oficio. Lo que
 este peldaño añade es la cara propia del sector, no otro motor. **Cerrado por el PUNTO 15 de esta misma
-ficha. El Peldaño 9 permanece pendiente, pero está aplazado por la fase de saneamiento activa y no es
-la siguiente tarea.**
+ficha. El Peldaño 9 permanece pendiente, ~~pero está aplazado por la fase de saneamiento activa~~ y no es
+la siguiente tarea.** **⚙️ 2 SEP 2026: la fase se derogó (decisión de Ibrahin); lo que lo coloca es su
+posición en §LA COLA.**
 
 - **PIEZA 1 — PERFIL DE OFICIO EN LA AGENDA · ✅ ENTREGADA y verificada (15 ago 2026).** Al crear el
   negocio se ELIGE a qué se dedica, y la agenda habla su idioma desde el primer minuto sin configurar
