@@ -22,6 +22,8 @@ MAILFROM="Bamburu <noreply@bamburu.com>"
 NODE="/usr/bin/node"
 MAX_AGE=$((48*3600))
 UNIT_SECUNDARIA="/etc/systemd/system/bamburu-backup-secondary.timer"
+APP_DIR="/home/ubuntu/bamburu"
+MANIFHELPER="$APP_DIR/scripts/lib/manifiesto-copias.mjs"
 
 send_email(){
   local subject="$1" body="$2"
@@ -81,4 +83,51 @@ la que queda tambien falle.
 
 $DETALLE
 $REVISAR"
+fi
+
+# --- Manifiesto de huellas del histórico (manifiesto-huellas-backups) -------
+# Pregunta DISTINTA de la de arriba: arriba es "¿hubo copia con éxito HOY?"; esto es "¿se
+# sigue vigilando que el HISTÓRICO no se haya manipulado o borrado?". Si el bloque del
+# manifiesto se dejara de correr en bamburu-backup.sh —o alguien lo comentara— el heartbeat
+# de arriba seguiría en verde (last-success no sabe nada del histórico) y el sistema
+# volvería al silencio de antes de esta tarea. Este es quien vigila al vigilante: es
+# literalmente la lección de CLAUDE.md, "un censo que dice CERO y no es cierto es peor que
+# no tenerlo, porque cierra la pregunta".
+SUFIJOS=(""); [ -f "$UNIT_SECUNDARIA" ] && SUFIJOS+=("-secondary")
+MANIF_PROBLEMAS=0
+MANIF_DETALLE=""
+for i in "${!NOMBRES[@]}"; do
+  nombre="${NOMBRES[$i]}"; sufijo="${SUFIJOS[$i]}"
+  archivo_estado="$STATE_DIR/manifiesto${sufijo}.estado.json"
+  if [ ! -f "$archivo_estado" ]; then
+    MANIF_DETALLE+="  · $nombre: el manifiesto de huellas nunca ha registrado un estado"$'\n'
+    MANIF_PROBLEMAS=$((MANIF_PROBLEMAS+1))
+    continue
+  fi
+  edad_estado=$(( now - $(stat -c%Y "$archivo_estado" 2>/dev/null || echo 0) ))
+  if [ "$edad_estado" -gt "$MAX_AGE" ]; then
+    MANIF_DETALLE+="  · $nombre: la verificación del histórico lleva más de $((MAX_AGE/3600))h sin correr"$'\n'
+    MANIF_PROBLEMAS=$((MANIF_PROBLEMAS+1))
+  fi
+  salida_estado="$("$NODE" "$MANIFHELPER" estado --estado "$archivo_estado" 2>&1)"
+  if [ $? -ne 0 ]; then
+    MANIF_DETALLE+="  · $nombre: $salida_estado"$'\n'
+    MANIF_PROBLEMAS=$((MANIF_PROBLEMAS+1))
+  fi
+done
+
+if [ "$MANIF_PROBLEMAS" -gt 0 ]; then
+  echo "[heartbeat] MANIFIESTO: $MANIF_PROBLEMAS aviso(s) en el histórico de copias"
+  send_email "⚠️ Bamburu: el manifiesto de huellas del histórico tiene algo que revisar" \
+"El manifiesto de huellas detecta manipulación o borrado en el HISTÓRICO de copias. Esta
+comprobación es distinta de la de arriba: aquella dice si hubo copia con éxito hoy: esta
+dice si el histórico sigue intacto y se sigue vigilando.
+
+$MANIF_DETALLE
+Revisa en el servidor:
+  cat ~/.local/state/bamburu-backup/manifiesto.estado.json
+  cat ~/.local/state/bamburu-backup/manifiesto-secondary.estado.json
+  journalctl -u bamburu-backup.service -n 80"
+else
+  echo "[heartbeat] MANIFIESTO: histórico vigilado, sin alarmas, en ${#NOMBRES[@]} copia(s)"
 fi

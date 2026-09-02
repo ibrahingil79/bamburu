@@ -135,6 +135,24 @@ de la crisis: nada se asume, todo se verifica y se notifica).
   `Destino: <remote> — CIFRADO` o `Destino: <remote> — EN CLARO ⚠️`. Si un día el fichero de
   destinos desapareciera, el correo de esa misma mañana lo diría: el cifrado no se puede apagar
   en silencio.
+- **Manifiesto de huellas del histórico (`manifiesto-huellas-backups`).** Todo lo de arriba
+  verifica lo que se sube ESA noche; en cuanto el bucle termina, sin esto nadie vuelve a mirar
+  una copia de hace cinco días. Tras subir y verificar todo lo de hoy, y **antes** de la
+  retención, `scripts/lib/manifiesto-copias.mjs pasada` anota cada artefacto en un fichero
+  JSON Lines encadenado por hash (`~/.local/state/bamburu-backup/manifiesto$SUFFIX.jsonl`,
+  solo se añade, nunca se reescribe) y **recorre TODA la ventana de retención contra lo
+  registrado, sin descargar nada**: le pregunta al destino la huella que él mismo calculó (1
+  llamada `rclone lsjson --hash sha256` en claro; en cifrado, como un remote `crypt` no
+  expone huellas del contenido, se piden al remote base a través de la ruta cifrada, que
+  `rclone backend encode` da de forma determinista). **Si algo no cuadra —una huella cambió,
+  o falta un objeto con menos de `RETENTION_DAYS-1` días—, la retención de esa noche NO se
+  ejecuta** (no hay que borrar la evidencia por antigüedad) y el correo pasa a 🚨, aunque la
+  copia de HOY sí quedó hecha y verificada (`last-success` se escribe igual). Un objeto del
+  destino que el manifiesto no conocía se registra como `observado`, nunca como alarma (la
+  primera noche todo es nuevo). **Qué NO cubre:** el manifiesto vive en este servidor, así
+  que quien lo controle puede reescribirlo entero; el ancla es que su cabeza y el SHA-256 de
+  cada artefacto de hoy viajan también en el correo diario, a un buzón que el servidor no
+  puede tocar. Detecta manipulación o borrado en Drive; no los impide.
 - **Retención 14 días**: borra en Drive lo más viejo. Una copia corrupta nunca pisa la buena.
 - **Email (Resend, `noreply@bamburu.com` → `ibrahingil@gmail.com`)** en OK y en FALLO.
 - **Ping a healthchecks.io** (`HEALTHCHECKS_URL`): dead-man's-switch externo que avisa
@@ -151,6 +169,9 @@ email si no hay copia con éxito en +48h (capta "el backup falló siempre" y "el
 | Script de backup | `scripts/bamburu-backup.sh` | sí |
 | Script de heartbeat | `scripts/bamburu-backup-heartbeat.sh` | sí |
 | Helper de snapshot | `scripts/db-snapshot.mjs` | sí |
+| Helper del manifiesto de huellas | `scripts/lib/manifiesto-copias.mjs` | sí |
+| **Manifiesto de huellas** (cadena append-only) | `~/.local/state/bamburu-backup/manifiesto$SUFFIX.jsonl` | **NO (estado de la máquina)** |
+| **Último resultado del manifiesto** (lo lee el heartbeat) | `~/.local/state/bamburu-backup/manifiesto$SUFFIX.estado.json` | **NO (estado de la máquina)** |
 | Units (backup + heartbeat, service + timer) | `deploy/systemd/bamburu-backup*.{service,timer}` | sí |
 | Binario rclone | `/usr/bin/rclone` | no (instalado) |
 | Guion de un solo uso que enciende el cifrado | `scripts/cifrar-copias-de-seguridad.sh` | sí |

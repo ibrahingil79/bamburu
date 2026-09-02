@@ -30,12 +30,29 @@
 # Corre desde un systemd timer como User=ubuntu. Lee RESEND_API_KEY y HEALTHCHECKS_URL
 # de /etc/bamburu.env (vía EnvironmentFile del .service). rclone usa ~ubuntu/.config/rclone.
 #
+# MANIFIESTO DE HUELLAS DEL HISTÓRICO (manifiesto-huellas-backups). Todo lo de arriba
+# verifica MUY bien lo que se sube ESTA noche, pero en cuanto el bucle termina, el archivo
+# ya no se vuelve a mirar: una copia de hace cinco días se puede editar o borrar en Drive y
+# nada lo nota hasta el día en que haga falta restaurar. Por eso, tras subir y verificar
+# todo lo de hoy (nunca antes: ver el bloque tras la retención más abajo), se llama a
+# `scripts/lib/manifiesto-copias.mjs pasada`, que:
+#   - anota cada artefacto de hoy en un fichero JSON Lines encadenado por hash (append-only,
+#     igual patrón que `verifyTenantInvoices` en modules/superadmin/integridad.js pero
+#     aplicado a ficheros en vez de a filas);
+#   - recorre TODA la ventana de retención contra lo registrado, SIN DESCARGAR NADA
+#     (pregunta al destino la huella que él mismo calculó: 1 llamada a rclone en claro,
+#     unas pocas más en cifrado, porque un remote crypt no expone huellas del contenido y
+#     hay que pedírselas al remote base a través de la ruta cifrada).
+# QUÉ NO CUBRE: el manifiesto vive en este servidor, así que quien lo controle puede
+# reescribirlo entero. Por eso su cabeza y el SHA-256 de cada artefacto de hoy van también
+# en el correo diario — un ancla fuera del servidor que la propia copia ya envía.
+#
 # A propósito NO usa `set -e`: cada paso se comprueba y se NOTIFICA el fallo, no se muere mudo.
 set -uo pipefail
 
 # --- Config -----------------------------------------------------------------
 APP_DIR="/home/ubuntu/bamburu"
-DATA_DIR="$APP_DIR/data"
+DATA_DIR="${BACKUP_DATA_DIR:-$APP_DIR/data}"
 
 # --- Una sola pieza sirve a las DOS copias (S6, 31 ago 2026) -----------------
 # Sin argumentos se comporta EXACTAMENTE como antes: copia principal a la cuenta
@@ -72,6 +89,9 @@ NODE="/usr/bin/node"
 SNAPSHOT="$APP_DIR/scripts/db-snapshot.mjs"
 STATE_DIR="$HOME/.local/state/bamburu-backup"
 LAST_OK="$STATE_DIR/last-success$SUFFIX"
+MANIFIESTO="$STATE_DIR/manifiesto$SUFFIX.jsonl"
+MANIF_ESTADO="$STATE_DIR/manifiesto$SUFFIX.estado.json"
+MANIFHELPER="$APP_DIR/scripts/lib/manifiesto-copias.mjs"
 MAILTO="ibrahingil@gmail.com"
 MAILFROM="Bamburu <noreply@bamburu.com>"
 
@@ -199,6 +219,8 @@ verify_restored(){  # $1 = original local, $2 = descargado
 
 uploaded=0
 SUMMARY=""
+ARTEFACTOS="$TMPDIR/artefactos.txt"
+: > "$ARTEFACTOS"
 
 # --- Snapshots de las BD ----------------------------------------------------
 shopt -s nullglob
@@ -223,7 +245,9 @@ for db in "${DBS[@]}"; do
   [ "$ic" = "ok" ] || fail_exit "integrity_check de $name => $ic"
   rm -f "$RDIR/$name"
 
-  SUMMARY+="  • $name ($(du -h "$snap" | awk '{print $1}')) — subido, verificado y restore OK"$'\n'
+  sha="$(sha256sum "$snap" | awk '{print $1}')"
+  printf '%s %s %s\n' "$name" "$sha" "$(stat -c%s "$snap")" >> "$ARTEFACTOS"
+  SUMMARY+="  • $name ($(du -h "$snap" | awk '{print $1}')) — subido, verificado y restore OK — sha256 $sha"$'\n'
   uploaded=$((uploaded+1))
 done
 
@@ -241,11 +265,53 @@ if [ -d "$DATA_DIR/uploads" ]; then
   verify_restored "$utar" "$RDIR/$uname" || fail_exit "el restore de $uname no es idéntico al original"
   tar -tzf "$RDIR/$uname" >/dev/null 2>&1 || fail_exit "el tar de uploads no es válido tras restore"
   rm -f "$RDIR/$uname"
-  SUMMARY+="  • $uname ($(du -h "$utar" | awk '{print $1}')) — subido, verificado y restore OK"$'\n'
+  sha="$(sha256sum "$utar" | awk '{print $1}')"
+  printf '%s %s %s\n' "$uname" "$sha" "$(stat -c%s "$utar")" >> "$ARTEFACTOS"
+  SUMMARY+="  • $uname ($(du -h "$utar" | awk '{print $1}')) — subido, verificado y restore OK — sha256 $sha"$'\n'
   uploaded=$((uploaded+1))
 fi
 
 [ "$uploaded" -gt 0 ] || fail_exit "no se subió ningún archivo"
+
+# --- Manifiesto de huellas del histórico (manifiesto-huellas-backups) -------
+# Va DESPUÉS de que todo esté subido y verificado, y ANTES de la retención — ese orden es
+# el producto: si el histórico tiene una alarma, la retención NO debe borrar nada esta
+# noche (borraría la evidencia por antigüedad), pero un fallo aquí NUNCA debe impedir que
+# la copia de hoy se marque como hecha (ver riesgo 1 del análisis: el 1 sep un guardián
+# nuevo habría dejado dos noches sin copia). Por eso no hay ningún `fail_exit` en este
+# bloque: se decide en variables y se actúa después.
+log "manifiesto: registrando $uploaded artefactos y verificando el histórico"
+MODO_MANIF="claro"; [ "$DESTINO_ES_CRYPT" = 1 ] && MODO_MANIF="cifrado"
+MANIF_SALIDA="$("$NODE" "$MANIFHELPER" pasada \
+  --manifiesto "$MANIFIESTO" --estado "$MANIF_ESTADO" \
+  --remote "$REMOTE" --modo "$MODO_MANIF" --retencion "$RETENTION_DAYS" \
+  --fecha "$DATE" --artefactos "$ARTEFACTOS" 2>&1)"
+MANIF_OK=$?
+log "$MANIF_SALIDA"
+MANIF_LINEA="$(printf '%s\n' "$MANIF_SALIDA" | grep '^Manifiesto: ' | head -1)"
+MANIF_BLOQUE="$MANIF_LINEA"
+MANIF_OBS_LINEA="$(printf '%s\n' "$MANIF_SALIDA" | grep 'objetos que esta copia no subió' | head -1)"
+[ -n "$MANIF_OBS_LINEA" ] && MANIF_BLOQUE+=$'\n'"$MANIF_OBS_LINEA"
+
+if [ "$MANIF_OK" != 0 ]; then
+  # NO se ejecuta la retención: si el histórico está en duda, lo peor que se puede hacer
+  # es borrar por antigüedad esa misma noche. La copia de HOY sí está hecha y verificada,
+  # así que last-success y el ping siguen reflejando la verdad ("¿tengo copia de hoy?" es
+  # una pregunta distinta de "¿el histórico sigue intacto?" — ver riesgo 8 del análisis).
+  date +%s > "$LAST_OK"
+  hc_ping ""
+  send_email "🚨 Backup Bamburu [$LABEL] — ALARMA en el histórico ($DATE)" "La copia de HOY se subió y se verificó bien, pero el manifiesto de huellas del
+histórico detectó algo raro y la retención de esta noche NO se ha ejecutado.
+
+Destino: $REMOTE — $MODO
+
+$SUMMARY
+$MANIF_SALIDA
+
+Revisa el destino antes de que la retención vuelva a intentarlo mañana."
+  log "ALARMA del manifiesto: retención saltada, copia de hoy marcada como hecha."
+  exit 1
+fi
 
 # --- Retención --------------------------------------------------------------
 log "retención: borrando en Drive lo más viejo que ${RETENTION_DAYS} días"
@@ -260,6 +326,10 @@ Destino: $REMOTE — $MODO
 $SUMMARY
 Retención: ${RETENTION_DAYS} días.
 Cada archivo se descargó de vuelta, se comparó BYTE A BYTE con el original y se comprobó
-que abre (restore real)."
+que abre (restore real).
+
+$MANIF_BLOQUE
+El manifiesto detecta manipulación o borrado en el histórico; no lo impide. Detalle en
+deploy/systemd/README.md §«Manifiesto de huellas del histórico»."
 hc_ping ""
 log "backup completado correctamente ($uploaded archivos) — destino $MODO."

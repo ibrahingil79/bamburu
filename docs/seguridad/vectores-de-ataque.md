@@ -13,7 +13,7 @@
 | 4 | Descargar todas las bases | **ABIERTO** en los backups — ~~«cifrado (1 sep 2026)»~~ (ver §4) | Floja fuera de la app | Bajo — **una orden** |
 | 5 | Inyección SQL | Protegido | Sólida | — |
 | 6 | Robo de sesión | Protegido | Sólida | Alto (CSP) |
-| 7 | Manipular backups | **Parcial** — y la mitad que le tocaba a esta tarea sigue sin encender | Floja en el histórico | Bajo |
+| 7 | Manipular backups | ~~**Parcial** — y la mitad que le tocaba a esta tarea sigue sin encender~~ **⚙️ CERRADO EL 2 SEP 2026 (`manifiesto-huellas-backups`): Protegido — detecta, no impide** | Sólida en el histórico (ver §7) | — (hecho) |
 
 **Patrón:** dentro de la aplicación la seguridad es seria y varias piezas están por encima de lo
 habitual. **Todo lo que sale de la aplicación —los ficheros de copia— está sin proteger.**
@@ -177,7 +177,7 @@ GET/HEAD/OPTIONS y **exige token en todo lo demás** (`:34`, contra `session.csr
 mantiene `unsafe-inline` (8 usos en `core/security-headers.js`). Un XSS almacenado podría actuar en
 nombre del usuario aunque no lea la cookie. **Coste de la CSP: alto** (hallazgo M8, abierto).
 
-## 7 · Manipular el backup — PARCIALMENTE VULNERABLE
+## 7 · Manipular el backup — ~~PARCIALMENTE VULNERABLE~~ HISTÓRICO VIGILADO (2 sep 2026); el cifrado (§4) sigue sin encender
 
 **Sí detecta**, en `scripts/bamburu-backup.sh`: ~~`verify_uploaded()` (`:101`) compara **tamaño y MD5**
 del fichero ya en Drive contra el local~~; prueba de restore real (`:133`) con `PRAGMA
@@ -192,20 +192,44 @@ integrity_check`; ante fallo, email + `exit 1` + heartbeat.
 > `ok` también a una base válida pero **distinta** —comprobado sustituyendo el fichero descargado por
 > otra base real: `integrity_check` decía `ok` y solo el MD5 lo cazó—.
 
-**No detecta:** esas comprobaciones **solo miran la copia de HOY**. Si alguien edita la copia de hace
-cinco días, **nadie vuelve a mirarla**. No hay manifiesto de huellas históricas ni verificación
-periódica de las 14 copias. ~~Y como los backups **no están cifrados**, editarlas no exige romper
-nada: basta con entrar en la cuenta de Google.~~ **Desde el 1 sep 2026 sí están cifradas**, así que
-editar una copia de forma coherente exige la clave. **Pero el vector sigue PARCIAL**, y hay que
-decirlo así: cifrar no impide **borrar** una copia ni **sustituirla por basura**, y eso seguiría sin
-detectarse. Lo cierra el manifiesto de huellas (`manifiesto-huellas-backups`), que sigue pendiente.
+~~**No detecta:** esas comprobaciones **solo miran la copia de HOY**. Si alguien edita la copia de
+hace cinco días, **nadie vuelve a mirarla**. No hay manifiesto de huellas históricas ni verificación
+periódica de las 14 copias. Y como los backups **no están cifrados**, editarlas no exige romper nada:
+basta con entrar en la cuenta de Google.~~
+
+~~**Desde el 1 sep 2026 sí están cifradas**, así que editar una copia de forma coherente exige la
+clave.~~ **⚙️ CORREGIDO EL 2 SEP 2026: esa frase era falsa el día en que se escribió.** Se tacha en
+vez de borrarse, que es el método de este repo. No hay remotes `crypt` (comprobado el 2 sep 2026:
+`rclone listremotes` sigue devolviendo exactamente `gdrive:` y `gdrive_gili:`) y **las copias siguen
+yendo EN CLARO** — el correo diario lo dice en palabras (`EN CLARO ⚠️`). El §4 de este mismo documento
+ya lo tenía bien; esta frase del §7 se había quedado desincronizada con él.
+
+**⚙️ CERRADO EL 2 SEP 2026 (`manifiesto-huellas-backups`) — SÍ DETECTA, en el histórico entero, no
+solo hoy.** `scripts/lib/manifiesto-copias.mjs`, llamado desde `scripts/bamburu-backup.sh` tras subir
+y verificar y **antes** de la retención, anota cada artefacto en un fichero de huellas SHA-256
+encadenado por hash —guardado aparte, en `~/.local/state/bamburu-backup/`, no dentro de la copia— y
+**recorre TODA la ventana de retención en cada pasada, sin descargar nada**: pregunta al destino la
+huella que él mismo calculó (funciona igual en claro y en cifrado, así que el día en que Ibrahin
+encienda el cifrado esto no se queda ciego). Si un objeto del histórico cambió, o falta con menos de
+`RETENTION_DAYS-1` días de edad, la pasada de esa noche **no ejecuta la retención** (no se borra la
+evidencia por antigüedad) y el correo pasa a 🚨.
+
+**Y lo que sigue sin cubrir, dicho sin adornarlo:** el manifiesto vive en **este mismo servidor**, así
+que quien controle el servidor puede reescribirlo entero. Contra eso está el ancla del correo diario
+—la cabeza de la cadena y el SHA-256 de cada artefacto de hoy viajan también ahí, a un buzón que el
+servidor no puede reescribir—, que es defensa **contra la cuenta de Drive comprometida** (el vector
+que este apartado audita) y prueba forense contra el servidor comprometido, pero no impide una
+reescritura hecha con acceso al servidor. **El manifiesto detecta manipulación y borrado; no los
+impide.** Y sigue sin cubrir lo que nunca fue su trabajo: un servidor comprometido puede seguir
+borrando `data/` entera sin que esto avise (eso es lo que vigilan las copias en sí, no este fichero).
 
 Detalle adicional: la retención (`:164`) borra por antigüedad **pase lo que pase**, incluso si la
-subida del día falló.
+subida del día falló. Sigue sin arreglarse aquí — es la tarea `retencion-backup-fallo-parcial`.
 
-**Coste: bajo.** Un fichero de huellas SHA-256 por copia, guardado aparte y comprobado en cada pasada
-contra las 14. ~~Más el cifrado, que vuelve inútil la manipulación.~~ **El cifrado ya está (1 sep
-2026); lo que falta de este vector es exactamente el manifiesto.**
+~~**Coste: bajo.** Un fichero de huellas SHA-256 por copia, guardado aparte y comprobado en cada
+pasada contra las 14. Más el cifrado, que vuelve inútil la manipulación.~~ **Hecho el 2 sep 2026.** Lo
+que queda de este vector, y no es poco, es el cifrado (§4): sin él, manipular o vaciar una copia
+reciente ya se detecta, pero **leerla** sigue sin exigir nada más que la cuenta de Google.
 
 ---
 

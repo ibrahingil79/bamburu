@@ -8666,11 +8666,29 @@ entera: **la factura emitida es inmutable** — solo anular y rectificar.
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
 
 Hoy **solo se verifica la copia del día**: una copia de hace cinco días se puede editar y **nadie
-vuelve a mirarla nunca**. El histórico es de 14 copias, y 13 de ellas están sin vigilar.
+vuelve a mirarla nunca**. ~~El histórico es de 14 copias, y 13 de ellas están sin vigilar.~~
+**⚙️ CORREGIDO EL 2 SEP 2026: la cifra se quedaba corta, y en la dirección peligrosa.** Medido contra
+Drive: son **14 días, no 14 copias** — **283 objetos** sin vigilar en la cuenta principal y **87** en
+la secundaria (370 entre las dos). Se tacha en vez de borrarse, por la regla de este documento.
 
 Lo que pide la entrada: **SHA-256 por copia, guardado aparte, comprobado contra las 14 en cada
 pasada.** Guardado *aparte* es la parte que importa: una huella que viva en el mismo sitio que el
 fichero no prueba nada, porque quien edite el fichero edita la huella.
+
+**⚙️ CONSTRUIDO EL 2 SEP 2026.** Un manifiesto encadenado de huellas
+(`scripts/lib/manifiesto-copias.mjs`), llamado desde `scripts/bamburu-backup.sh` tras subir y
+verificar la copia de hoy y **antes** de la retención: anota cada artefacto (SHA-256 en local y la
+huella que el destino declara), y en cada pasada recorre **toda** la ventana de retención contra lo
+registrado, **sin descargar nada** — funciona igual en claro y en cifrado, sin rama blanda en
+ninguno de los dos. Si algo no cuadra, la retención de esa noche no se ejecuta y el correo pasa a
+🚨; la cabeza de la cadena y el SHA-256 de cada artefacto de hoy viajan también en el correo, como
+ancla fuera del servidor. `node scripts/test-manifiesto-copias.mjs` ejecuta el script de backup real
+contra un destino local en claro y contra un `crypt` local, cubriendo los siete casos de alteración,
+borrado, re-subida y edición del propio manifiesto, en los dos mundos: 75 ✓ · 0 ✗. Detalle en
+`deploy/systemd/README.md` §«Qué hace, cada día» y en `docs/seguridad/vectores-de-ataque.md` §7.
+**Lo que NO cubre, y hay que decirlo:** el manifiesto vive en el servidor, así que quien lo controle
+puede reescribirlo entero; el ancla del correo defiende contra la cuenta de Drive comprometida (el
+vector que cerraba esta tarea), no contra el servidor comprometido.
 
 **Verificado el 1 sep 2026:** `scripts/bamburu-backup.sh` no menciona `sha256` ni manifiesto de
 ningún tipo.
@@ -9306,7 +9324,7 @@ negocio suspendido NO deja escribir— necesitan un negocio suspendido y tienen 
 ## Seguridad y datos
 
 - [~] **Cifrar las copias de seguridad.** ~~Cierra a la vez los vectores 4 y 7~~ ~~Es configuración (`rclone crypt`), no programación.~~ ~~**⚙️ CÓDIGO HECHO EL 1 SEP 2026 · OPERACIÓN PENDIENTE DE IBRAHIN.** El script exige destino `crypt` y **aborta** si no lo es.~~ **⚙️ ESO ERA FALSO Y SE REVIRTIÓ EL MISMO DÍA (`6bd067f`): el script de hoy NO exige nada, y aquel guardián habría dejado sin copia las dos madrugadas.** Se tacha en vez de borrarse. **REPLANTEADO Y RECONSTRUIDO EL 1 SEP 2026 (tarde), con otro enfoque:** el cifrado deja de ser un interruptor en el código y pasa a ser un **estado del servidor**. El script sabe funcionar en los dos mundos —sin rama blanda en ninguno: `cryptcheck` si el destino es `crypt`, MD5 obligatorio si no lo es— y compara el restore **byte a byte** (`integrity_check` da `ok` a cualquier base sana, aunque sea otra). Quién manda lo dice `~/.config/bamburu/backup-destinos.conf`, que **solo escribe** `scripts/cifrar-copias-de-seguridad.sh` y **solo después de haber subido, bajado y comparado un fichero de prueba**; ese mismo fichero es el cerrojo, así que **el código no puede exigir cifrado antes de que el cifrado exista**. **Las dos frases tachadas eran falsas:** cierra el vector 4 **entero** y **solo la mitad del 7** (falta `manifiesto-huellas-backups`), y **no era configuración**: cifrar sin tocar el código habría apagado la verificación de MD5 dejándola en verde. ~~Faltan 4 pasos de terminal que el orquestador no puede dar: crear los dos remotes `crypt`, custodiar la contraseña, instalar la unit + primera copia real, y migrar el histórico.~~ **⚙️ AHORA FALTA UNA SOLA ORDEN, y sigue siendo de Ibrahin** (`~/.config/rclone` está en solo lectura para el orquestador, sin `sudo`): `bash scripts/cifrar-copias-de-seguridad.sh`. Ella sola genera la llave, crea los dos destinos, **comprueba que descifra**, cambia el destino de las **dos** copias con una sola escritura y enseña la llave para custodiarla; si el descifrado falla, deshace y esa noche la copia sale en claro y en verde. El histórico va aparte, con simulacro por defecto: `--migrar-historico [--hazlo]`. **LAS COPIAS VAN EN CLARO HASTA QUE ESA ORDEN SE EJECUTE**, y el correo diario lo dice (`EN CLARO ⚠️`). **La ficha NO se cierra hasta entonces:** cerrarla sería el verde que miente que esta tarea viene a matar. Ficha completa arriba, detalle en `deploy/systemd/README.md` §«Cifrado de las copias».
-- [ ] **Manifiesto de huellas del histórico de backups.** Hoy solo se verifica la copia del día: una copia de hace cinco días se puede editar y nadie vuelve a mirarla. SHA-256 por copia, guardado aparte, comprobado contra las 14 en cada pasada.
+- [ ] **Manifiesto de huellas del histórico de backups.** Hoy solo se verifica la copia del día: una copia de hace cinco días se puede editar y nadie vuelve a mirarla. SHA-256 por copia, guardado aparte, comprobado contra las 14 en cada pasada. **⚙️ CONSTRUIDO EL 2 SEP 2026** (`manifiesto-huellas-backups`): no eran «14 copias», eran 14 días / 283 objetos en la cuenta principal y 87 en la secundaria. Ficha completa en §TAREA — Manifiesto de huellas del histórico de copias.
 - [ ] **La retención del backup borra aunque la subida haya fallado PARCIALMENTE** (`scripts/bamburu-backup.sh:164`). **⚙️ MATIZ MEDIDO EL 1 SEP 2026, porque la entrada estaba mal escrita:** cuatro líneas ANTES de la retención ya hay un guardián —`[ "$uploaded" -gt 0 ] || fail_exit`— que existe **desde el 19 jun 2026** (`3076f68`). O sea: si NO se subió nada, el script sale y no borra. **El hueco real, que sí es real, es el fallo PARCIAL:** si se subió un fichero y falló otro, `uploaded` es mayor que cero y la retención se ejecuta igual. Condicionar el borrado al éxito **de todos**, no de al menos uno.
 - [ ] **Cifrado en reposo de las bases de negocio.**
 - [ ] **Permisos Paso 1:** recorrer las rutas y dejar escrito qué permiso exige cada una. Desbloquea el Paso 2 (DISA administrando permisos). **⚙️ CIFRA NO REPRODUCIBLE, 1 sep 2026:** ~~600 de 1.025 rutas~~ — no se ha podido reproducir con ningún conteo sobre el árbol (salen 1.995 declaraciones de ruta y 464 guardas visibles). **La proporción del problema se sostiene —la mayoría de rutas no enseña su permiso en la línea— pero la cifra concreta no vale como criterio de HECHO.** Quien la construya tiene que empezar por fijar el método de conteo, y ese método es parte de la entrega.
