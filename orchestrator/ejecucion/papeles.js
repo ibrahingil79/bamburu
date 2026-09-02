@@ -24,8 +24,12 @@ function rellenar(plantilla, valores) {
 }
 
 function bloqueTarea(tarea) {
+  // ⚙️ ESTOS CRITERIOS SON DE IBRAHIN, Y SE DICE (2 sep 2026). Antes iban bajo el rótulo
+  // «Criterios que ya trae el tablero», que suena a sugerencia. No lo son: son el encargo, y
+  // el arquitecto los reproduce LITERALMENTE o el análisis no pasa. Un criterio a medias `[~]`
+  // se marca como tal, porque un criterio a medias FRENA el cierre.
   const criterios = tarea.criterios?.length
-    ? tarea.criterios.map((c) => `- [${c.hecho ? 'x' : ' '}] ${c.texto}`).join('\n')
+    ? tarea.criterios.map((c) => `- [${c.aMedias ? '~' : c.hecho ? 'x' : ' '}] ${c.texto}`).join('\n')
     : '(el tablero no trae criterios: los escribes tú, es tu trabajo)';
   return [
     '## La tarea',
@@ -37,9 +41,15 @@ function bloqueTarea(tarea) {
     '',
     tarea.descripcion || '(sin descripción)',
     '',
-    '**Criterios que ya trae el tablero**',
+    '**LOS CRITERIOS DE IBRAHIN — mandan sobre todo lo demás**',
     '',
     criterios,
+    '',
+    '> Éstos **no se tocan**. El arquitecto los copia TAL CUAL en su apartado de criterios de',
+    '> aceptación y añade los suyos debajo; el revisor tiene que decir qué pasa con **cada uno**,',
+    '> con SÍ o NO y su prueba. Quitar, sustituir o rebajar uno invalida el análisis — y si uno',
+    '> te parece mal planteado, **paras y lo dices**, no lo reescribes.',
+    '> Un criterio marcado `[~]` está A MEDIAS: mientras siga así, la tarea **no se puede cerrar**.',
   ].join('\n');
 }
 

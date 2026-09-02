@@ -87,7 +87,33 @@ export function extraerCriterios(texto) {
  * ANÁLISIS. Sin criterios de aceptación se rechaza: es la regla que sostiene todo lo demás,
  * porque el revisor no tiene contra qué juzgar.
  */
-export function validarAnalisis(ruta, { minCriterios = 3, firma = '' } = {}) {
+/**
+ * PASOS QUE EXIGEN HABLAR CON UNA PERSONA A MITAD. La máquina no tiene con quién parar.
+ *
+ * ⚙️ DE DÓNDE SALE (2 sep 2026). «Cifrar las copias de seguridad» llevaba dentro un *«para y
+ * dime lo que has encontrado antes de seguir»*. El programador se atascó ahí **dos veces
+ * seguidas, con seis minutos de diferencia**, sin tocar un solo fichero. No es un fallo suyo:
+ * es un plano escrito para una conversación metido en una cadena automática.
+ *
+ * Los patrones son IMPERATIVOS y de mitad de camino, a propósito. Un análisis puede —y debe—
+ * hablar de la firma de Ibrahin al final sin que eso sea una parada: «esta tarea la firma
+ * Ibrahin» no es lo mismo que «pregúntale a Ibrahin y espera». La lista se queda corta antes
+ * que ancha: un rojo falso aquí cuesta una vuelta entera, que es justo lo que se está quitando.
+ */
+const PIDEN_PERSONA = [
+  { que: 'para y pregunta a mitad',        re: /\bpara\s+y\s+(dime|preg[uú]nta\w*|consulta|espera)\b/i },
+  { que: 'no sigue sin respuesta',         re: /\bno\s+(sigas|contin[uú]es|avances)\s+hasta\s+que\s+(te\s+)?(responda|conteste|confirme|diga)\b/i },
+  { que: 'antes de seguir, pregunta',      re: /\bantes\s+de\s+seguir[,:]?\s*(dime|preg[uú]nta\w*|consulta|confirma)\b/i },
+  { que: 'espera confirmación a mitad',    re: /\bespera\s+(su|mi|la)\s+(respuesta|confirmaci[oó]n|visto\s+bueno)\s+antes\s+de\b/i },
+];
+
+export function pasosQuePidenPersona(texto) {
+  const t = String(texto || '');
+  return PIDEN_PERSONA.filter((p) => p.re.test(t)).map((p) => p.que);
+}
+
+export function validarAnalisis(ruta, { minCriterios = 3, firma = '', criteriosTablero = [],
+                                        maxCriteriosPropios = Infinity } = {}) {
   if (!fs.existsSync(ruta)) return mal(`No existe el análisis: ${ruta}`, [`el arquitecto no escribió ${ruta}`]);
 
   const texto = fs.readFileSync(ruta, 'utf8');
@@ -133,6 +159,43 @@ export function validarAnalisis(ruta, { minCriterios = 3, firma = '' } = {}) {
     motivos.push(`solo trae ${criterios.length} criterio(s) de aceptación y hacen falta al menos ${minCriterios}`);
   }
 
+  // ── EL PLANO SE COMPRUEBA CONTRA SÍ MISMO, antes de dárselo al programador ──
+  const persona = pasosQuePidenPersona(texto);
+  if (persona.length) {
+    motivos.push('EL PLANO EXIGE HABLAR CON UNA PERSONA A MITAD, y aquí no hay nadie con quien parar: '
+      + persona.join(', ') + '. Si de verdad falta una decisión, PARA la tarea y dilo con «premisa falsa» '
+      + 'o «decisión de Ibrahin»; lo que no puede es quedarse escrito dentro de un paso.');
+  }
+
+  // Y que no pida trabajo FUERA del cambio. El dato: la única tarea que salió a la primera fue
+  // la única cuyo plano pedía una cosa y nada más; el formato del dinero, que es lo más sencillo
+  // que se ha hecho, costó cuatro intentos y un replanteamiento por lo que el plano exigía
+  // alrededor. Los de Ibrahin no cuentan aquí: son el encargo. Se cuentan los AÑADIDOS.
+  //
+  // ⚠️ Y SOLO CUANDO EL TABLERO TRAE CRITERIOS. Si no trae ninguno, escribirlos ES el trabajo del
+  // arquitecto —lo dice su propio encargo— y contarlos como «añadidos» tumbaría cualquier
+  // análisis honesto con más de tres. Estuvo a punto de pasar con el manifiesto de huellas.
+  const esDelTablero = (c) => criteriosTablero.some((t) => {
+    const a = aplanar(c.texto); const b = aplanar(t.texto);
+    return b.length >= 12 && (a.includes(b) || b.includes(a));
+  });
+  const propios = criterios.filter((c) => !esDelTablero(c));
+  if (criteriosTablero.length && Number.isFinite(maxCriteriosPropios) && propios.length > maxCriteriosPropios) {
+    motivos.push(`AÑADES ${propios.length} criterios tuyos sobre los ${criteriosTablero.length} del tablero, y el tope son `
+      + `${maxCriteriosPropios}. Cada criterio de más es trabajo fuera del cambio que se pidió, y es lo que `
+      + 'hace que una tarea dé cuatro vueltas. Deja lo que hace falta para que el cambio esté bien hecho.');
+  }
+
+  // Y AQUÍ SE PARA EL CAMBIAZO, antes de gastar una construcción. Si falta uno de los de
+  // Ibrahin, el análisis no vale por bueno que sea el resto.
+  const sinReproducir = criteriosDelTableroQueFaltan(texto, criteriosTablero);
+  if (sinReproducir.length) {
+    motivos.push(`FALTAN ${sinReproducir.length} CRITERIO(S) DEL TABLERO. Los de Ibrahin se copian TAL CUAL `
+      + 'en «Criterios de aceptación» y los tuyos van debajo. No se quitan, no se sustituyen y no se '
+      + 'rebajan: si crees que uno está mal planteado, para y dilo, no lo reescribas.');
+    for (const c of sinReproducir) motivos.push(`  falta, literal: «${c}»`);
+  }
+
   if (motivos.length) return mal(`El análisis no vale (${motivos.length} motivo/s).`, motivos, { criterios, texto });
   return ok(`Análisis válido: ${propio.length} caracteres, ${criterios.length} criterios de aceptación.`,
             { criterios, texto, replanteo: MARCA_REPLANTEO.test(texto) });
@@ -150,7 +213,7 @@ export function detectarAnalisisImposible(ruta) {
  * REVISIÓN. Tiene que pronunciarse, una sola vez, y si rechaza tiene que decir por qué
  * con una etiqueta de la lista cerrada.
  */
-export function validarRevision(ruta, { criterios = [] } = {}) {
+export function validarRevision(ruta, { criterios = [], criteriosTablero = [] } = {}) {
   if (!fs.existsSync(ruta)) return mal(`No existe la revisión: ${ruta}`, [`el revisor no escribió ${ruta}`]);
 
   const texto = fs.readFileSync(ruta, 'utf8');
@@ -182,6 +245,18 @@ export function validarRevision(ruta, { criterios = [] } = {}) {
              motivos: extraerPuntosDeRechazo(texto, etiquetas) };
   }
 
+  // ⚙️ Y LOS DE IBRAHIN SE JUZGAN UNO A UNO, SIEMPRE (2 sep 2026). Van aparte de los del
+  // arquitecto y con su propio motivo de rechazo, porque son los que de verdad deciden si la
+  // tarea está hecha. Un aprobado que no se pronuncia sobre uno de ellos no es un aprobado:
+  // es un aprobado sobre otra tarea. Los del arquitecto son un añadido; éstos son el encargo.
+  const deIbrahin = criteriosCubiertos(texto, criteriosTablero);
+  if (criteriosTablero.length && deIbrahin.faltan.length) {
+    return mal('Aprueba sin decir qué pasa con cada criterio DEL TABLERO.',
+      [`no se pronuncia sobre ${deIbrahin.faltan.length} de los ${criteriosTablero.length} criterios que puso Ibrahin`,
+       ...deIbrahin.faltan.map((c) => `  sin juzgar: «${String(c).slice(0, 160)}»`),
+       'la tabla de la revisión tiene que llevarlos, uno por fila, con SÍ o NO y su prueba']);
+  }
+
   // Un aprobado sin la tabla de criterios no vale: es justo la constancia de que miró.
   if (criterios.length && cubiertos.faltan.length) {
     return mal('Aprueba sin pronunciarse sobre todos los criterios de aceptación.',
@@ -191,6 +266,45 @@ export function validarRevision(ruta, { criterios = [] } = {}) {
   return { ok: true, veredicto: 'aprobado', etiquetas: [], texto, cubiertos,
            resumen: `Revisión: ✅ APROBADO (${criterios.length} criterio/s revisados).`, motivos: [] };
 }
+
+/**
+ * LA LISTA DEL TABLERO MANDA. Devuelve los criterios de Ibrahin que el texto NO reproduce.
+ *
+ * ⚙️ DE DÓNDE SALE (2 sep 2026, el peor fallo que ha tenido la fábrica). El revisor juzgaba la
+ * lista de criterios que escribe el ARQUITECTO, no la del tablero, y nadie comparaba las dos.
+ * En «Cifrar las copias de seguridad» el criterio 1 de Ibrahin era **«las dos copias suben
+ * cifradas»** y el que se juzgó fue **«hoy sigue habiendo copia»**. No son variantes del mismo
+ * requisito: son requisitos OPUESTOS —uno exige que salga cifrada, el otro que siga funcionando
+ * sin cifrar—. El revisor comprobó bien, con pruebas de verdad, y aprobó otra cosa. La tarea
+ * consta hecha, se subió dos veces, y las copias siguen en claro.
+ *
+ * SE EXIGE REPRODUCCIÓN LITERAL, y es a propósito. Comparar «parecidos» es lo que permitió el
+ * cambiazo: cualquier medida de parecido tiene un umbral, y por debajo del umbral cabe un
+ * requisito contrario. Copiar una línea no cuesta nada y no admite interpretación. El arquitecto
+ * puede AÑADIR los criterios técnicos que quiera debajo; lo que no puede es quitar ni rebajar.
+ *
+ * La comparación se hace sobre texto aplanado —sin acentos, sin énfasis de markdown y con los
+ * espacios colapsados— para no rechazar por un asterisco de más. Y por SUBCADENA, porque el
+ * tablero corta los criterios largos por la primera línea: el fragmento tiene que estar dentro.
+ */
+export function criteriosDelTableroQueFaltan(texto, criteriosTablero = []) {
+  const t = aplanar(texto);
+  const faltan = [];
+  for (const c of criteriosTablero) {
+    const n = aplanar(c.texto);
+    // Un criterio de tres palabras no se puede exigir literal sin provocar falsos rojos.
+    if (n.length < 12) continue;
+    if (!t.includes(n)) faltan.push(c.texto);
+  }
+  return faltan;
+}
+
+const aplanar = (s) => String(s ?? '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[`*_~]/g, '')
+  .replace(/\s+/g, ' ')
+  .trim();
 
 /**
  * ¿Se pronuncia sobre cada criterio? Se comprueba por solapamiento de palabras largas, no por

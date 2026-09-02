@@ -109,7 +109,9 @@ export class Ciclo {
     const obs = {};
 
     if (estado.paso === PASOS.VALIDAR_ANALISIS || estado.paso === PASOS.ANALISIS) {
-      const v = validarAnalisis(rutas.analisis, { firma: estado.tarea?.firma || '' });
+      const v = validarAnalisis(rutas.analisis, { firma: estado.tarea?.firma || '',
+                                                  criteriosTablero: estado.tarea?.criterios || [],
+                                                  maxCriteriosPropios: this.config.ciclo.maxCriteriosPropiosDelArquitecto ?? Infinity });
       // ⚙️ `clase`, `prueba` y `pregunta` SE COPIAN (1 sep 2026). Sin ellas, la máquina no puede
       // distinguir una premisa falsa de una decisión de Ibrahin y todo acaba en el mismo cajón.
       // Y es el MISMO fallo que el 4.1 de ese encargo, en otro punto de la misma cadena: el dato
@@ -123,15 +125,24 @@ export class Ciclo {
     if ((estado.paso === PASOS.VALIDAR_CODIGO || estado.paso === PASOS.CONSTRUCCION) && estado.base) {
       const imposible = detectarAnalisisImposible(rutas.informe);
       if (imposible) {
-        obs.codigo = { valido: false, motivos: [`el programador dice que el análisis es imposible: ${imposible.motivo}`] };
+        // ⚙️ ESTO NO ES UN FALLO DEL PROGRAMADOR (2 sep 2026). Se marca APARTE para que la
+        // máquina lo mande al ARQUITECTO en vez de al programador otra vez. Tres de los catorce
+        // rechazos del 31 ago-1 sep fueron el programador negándose a construir, y en los tres
+        // TENÍA RAZÓN: un plano cuyos criterios se contradecían con el criterio 8 de sí mismo,
+        // y una tarea con un «para y dime lo que has encontrado antes de seguir» dentro. Iban
+        // apuntados como fallo suyo, y el sistema volvía a meterse en el mismo callejón seis
+        // minutos después. Ahora el motivo sube al replanteamiento con el plano en la mano.
+        obs.codigo = { valido: false, planoImposible: true,
+                       motivos: [`el programador dice que el análisis es imposible: ${imposible.motivo}`] };
       } else {
-        const v = validarCodigo({ base: estado.base, taskId: estado.tarea.id, cwd: this.config.repo.raiz });
+        const v = validarCodigo({ base: estado.base, taskId: estado.tarea.id, cwd: this.config.repo.raiz,
+                                  guionesDeComprobacion: this.config.cli.guionesDeComprobacion || [] });
         obs.codigo = { valido: v.ok, motivos: v.ok ? [] : [v.resumen, ...(v.detalles || [])] };
       }
     }
     if (estado.paso === PASOS.VALIDAR_REVISION || estado.paso === PASOS.REVISION) {
       const criterios = this.criteriosDelAnalisis(rutas.analisis);
-      const v = validarRevision(rutas.review, { criterios });
+      const v = validarRevision(rutas.review, { criterios, criteriosTablero: estado.tarea?.criterios || [] });
       obs.revision = { existe: fs.existsSync(rutas.review), veredicto: v.veredicto || null,
                        motivos: v.motivos || [], resumen: v.resumen };
     }
@@ -192,6 +203,19 @@ export class Ciclo {
       if (firmaAhora !== (estado.tarea.firma || '')) {
         this.log.aviso(`«${estado.tarea.id}»: el tablero dice ahora «firma: ${firmaAhora || '(ninguna)'}». Lo aplico a la tarea en curso.`);
         estado = { ...estado, tarea: { ...estado.tarea, firma: firmaAhora } };
+      }
+      // Y LOS CRITERIOS TAMBIÉN SE REFRESCAN, por el mismo motivo que la firma: el tablero manda
+      // sobre la copia. Si Ibrahin marca un criterio `[~]` a mitad de la tarea, tiene que frenar
+      // el cierre de ESA tarea, no de la siguiente.
+      if (enTablero?.criterios?.length) {
+        const antes = JSON.stringify(estado.tarea.criterios || []);
+        const ahora = JSON.stringify(enTablero.criterios);
+        if (antes !== ahora) {
+          const medias = enTablero.criterios.filter((c) => c.aMedias).length;
+          this.log.aviso(`«${estado.tarea.id}»: los criterios del tablero han cambiado`
+            + `${medias ? ` (${medias} a medias)` : ''}. Mandan los de ahora.`);
+          estado = { ...estado, tarea: { ...estado.tarea, criterios: enTablero.criterios } };
+        }
       }
     }
 
@@ -444,7 +468,7 @@ export class Ciclo {
       }
 
       case ACCIONES.REPLANTEAR: {
-        this.log.aviso('Tres rechazos: no repito. Mando replantear la tarea desde cero.');
+        this.log.aviso(accion.porque ? `Replanteo: ${accion.porque}` : 'Tres rechazos: no repito. Mando replantear la tarea desde cero.');
         estado = this.almacen.transicion(estado, { tipo: 'VEREDICTO', veredicto: 'rechazado', motivos: accion.motivos, resumen: accion.resumen });
         this.escribirFeedback(estado, accion.motivos);
         // El análisis anterior se aparta: si se queda, el arquitecto lo daría por bueno y
@@ -539,14 +563,22 @@ export class Ciclo {
       if (Number.isFinite(antes) && despues?.fiable) puntos = despues.sesionPct - antes;
     } catch { /* medir no puede tumbar un paso: el desglose se queda sin ese dato y ya está */ }
 
+    // ⚙️ CERO Y «NO LO SÉ» NO SON LO MISMO (2 sep 2026). El coste viene DENTRO de la respuesta,
+    // así que una llamada que muere por tiempo agotado no trae ninguno — y aquí se apuntaba 0,00 $.
+    // Eso falsea el gasto hacia abajo justo en las llamadas más largas, que son las más caras:
+    // el 1 sep a las 19:04 el programador estuvo 30 minutos, se le cortó al vencer el plazo y
+    // quedó registrado en cero. Ahora se apunta como desconocido y se cuenta aparte, para que
+    // cualquier total diga en voz alta cuánto le falta.
+    const coste = Number.isFinite(r.coste) ? r.coste : null;
     const g = this.almacen.transicion(estado, {
-      tipo: 'PAPEL_MEDIDO', papel, modelo, ms: r.ms || 0,
-      costeUsd: Number.isFinite(r.coste) ? r.coste : 0, puntos,
+      tipo: 'PAPEL_MEDIDO', papel, modelo, ms: r.ms || 0, costeUsd: coste, puntos,
     });
     const t = g.gastoPorPapel[papel];
     this.log.info(`Gasto de ${papel} (${modelo}): ${puntos == null ? 'puntos ?' : `${puntos.toFixed(0)} pts`}`
-      + ` · ${(r.coste ?? 0).toFixed(4)} $ · ${Math.round((r.ms || 0) / 1000)} s`
-      + `  ‹acumulado de la tarea: ${t.puntos.toFixed(0)} pts · ${t.costeUsd.toFixed(4)} $ en ${t.llamadas} llamada(s)›`);
+      + ` · ${coste == null ? 'coste DESCONOCIDO (la llamada no llegó a contestar)' : coste.toFixed(4) + ' $'}`
+      + ` · ${Math.round((r.ms || 0) / 1000)} s`
+      + `  ‹acumulado de la tarea: ${t.puntos.toFixed(0)} pts · ${t.costeUsd.toFixed(4)} $ en ${t.llamadas} llamada(s)`
+      + `${t.sinCoste ? `, ${t.sinCoste} SIN coste conocido` : ''}›`);
     return g;
   }
 
@@ -674,7 +706,7 @@ export class Ciclo {
       esperandoFirma: { quien: accion.quien, rama, promesa },
     });
     const ficheros = [registro, rutas.analisis, rutas.review].filter((f) => fs.existsSync(f));
-    confirmarCierre({ config: this.config, tarea, ficheros, logger: this.log });
+    confirmarCierre({ config: this.config, tarea, ficheros, logger: this.log, verbo: 'deja lista para firmar' });
 
     // ── Y AQUÍ ESTÁ LA LÍNEA QUE IMPIDE EL FALLO DEL CIFRADO ──────────────────
     let volvio = null;
@@ -797,7 +829,7 @@ export class Ciclo {
       config: this.config, tarea, commits: [], registro, logger: this.log, apartada: accion.motivo,
     });
     const ficheros = [registro].concat(tab.escrito ? [this.config.tableroAbs] : []).concat(tab.destino ? [tab.destino] : []);
-    confirmarCierre({ config: this.config, tarea, ficheros: ficheros.filter((f) => fs.existsSync(f)), logger: this.log });
+    confirmarCierre({ config: this.config, tarea, ficheros: ficheros.filter((f) => fs.existsSync(f)), logger: this.log, verbo: 'aparta' });
 
     this.almacen.registrarHistorial({
       id: tarea.id, titulo: tarea.titulo, resultado: 'apartada', motivo: accion.motivo,
@@ -847,7 +879,7 @@ export class Ciclo {
       premisaFalsa: { motivo: accion.motivo, prueba: accion.prueba },
     });
     const ficheros = [registro].concat(tab.escrito ? [this.config.tableroAbs] : []).concat(tab.destino ? [tab.destino] : []);
-    confirmarCierre({ config: this.config, tarea, ficheros: ficheros.filter((f) => fs.existsSync(f)), logger: this.log });
+    confirmarCierre({ config: this.config, tarea, ficheros: ficheros.filter((f) => fs.existsSync(f)), logger: this.log, verbo: 'cierra por premisa falsa' });
 
     this.almacen.registrarHistorial({
       id: tarea.id, titulo: tarea.titulo, resultado: 'cerrada-premisa-falsa', motivo: accion.motivo,

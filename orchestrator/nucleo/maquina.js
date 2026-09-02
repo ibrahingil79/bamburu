@@ -325,6 +325,21 @@ function decidirSinMirarCuota({ estado, tareaDisponible, pendientesEnTablero = [
 
     case PASOS.VALIDAR_CODIGO: {
       const c = obs.codigo || {};
+      // EL PLANO IMPOSIBLE VA AL ARQUITECTO, Y NO GASTA INTENTO DEL PROGRAMADOR. Repetir el
+      // mismo plano con el mismo programador es pedirle que construya dos veces lo que ya
+      // demostró que no se puede: es exactamente lo que pasó el 1 sep a las 08:33 y a las 08:39.
+      // Lo que cambia entre un intento y el siguiente tiene que ser EL PLANO.
+      if (!c.valido && c.planoImposible) {
+        if (estado.replanteos >= cfg.maxReplanteos) {
+          return { tipo: ACCIONES.APARTAR, motivos: c.motivos || [],
+                   motivo: 'el programador demostró que el plano no se puede construir, y ya se replanteó una vez',
+                   decisionDeProducto: false,
+                   porque: 'plano imposible y sin replanteamientos disponibles' };
+        }
+        return { tipo: ACCIONES.REPLANTEAR, motivos: c.motivos || [],
+                 resumen: 'el programador demostró que el plano no se puede construir',
+                 porque: 'el plano no se puede construir: lo replantea el arquitecto, no lo repite el programador' };
+      }
       if (!c.valido) {
         // Sin commits válidos no hay nada que revisar. Cuenta como intento del ciclo,
         // porque el programador ya tuvo su oportunidad con el análisis delante.
@@ -347,6 +362,21 @@ function decidirSinMirarCuota({ estado, tareaDisponible, pendientesEnTablero = [
     case PASOS.VALIDAR_REVISION: {
       const r = obs.revision || {};
       if (r.veredicto === 'aprobado') {
+        // ⚙️ UN CRITERIO DEL TABLERO A MEDIAS FRENA EL CIERRE, DIGA LO QUE DIGA EL REVISOR
+        // (2 sep 2026). El `[~]` lo pone una persona para decir «esto NO está terminado», y
+        // hasta hoy convivía tan tranquilo con una ficha que decía `estado: hecha` — eso es
+        // exactamente lo que pasó con el cifrado de las copias. El revisor puede haber juzgado
+        // impecablemente lo que le pusieron delante; esto es de otra cosa: de que el encargo
+        // sigue sin cumplirse. Vuelve al programador con el criterio por delante, y si tampoco
+        // sale, la escalera de siempre lo acaba subiendo a Ibrahin, que es donde debe llegar.
+        const aMedias = (estado.tarea?.criterios || []).filter((c) => c.aMedias);
+        if (aMedias.length) {
+          return decidirTrasRechazo(estado, cfg, {
+            motivos: aMedias.map((c) => `[CRITERIO A MEDIAS EN EL TABLERO] «${c.texto}» sigue marcado `
+              + '`[~]`. Mientras esté así la tarea NO se cierra: o se termina, o alguien cambia esa marca a mano.'),
+            resumen: `No se cierra: ${aMedias.length} criterio(s) del tablero siguen a medias.`,
+          });
+        }
         // ⚙️ APROBADO POR EL REVISOR NO ES LO MISMO QUE APROBADO POR IBRAHIN (1 sep 2026).
         //
         // El revisor juzga si está BIEN CONSTRUIDO. Eso no le da derecho a decidir qué le promete

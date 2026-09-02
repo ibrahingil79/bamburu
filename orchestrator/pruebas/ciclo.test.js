@@ -10,8 +10,26 @@ import { PASOS } from '../nucleo/maquina.js';
 import { repoTemporal, limpiar, configDe, registroMudo, vigilanteFalso, invocadorFalso, respuestaOk, TABLERO_BLOQUE } from './ayuda.js';
 
 const RELLENO = 'Se toca la capa de rutas siguiendo el patrón de validación que ya existe. '.repeat(20);
-const ANALISIS_BUENO = `# Análisis\n\n${RELLENO}\n\n## Criterios de aceptación\n\n- [ ] Existe la funcion suma y devuelve el total correcto\n- [ ] Con entrada no numerica lanza un error claro\n- [ ] Hay una prueba que cubre los dos casos\n`;
-const REVISION_OK = `✅ APROBADO\n\n| # | Criterio | ¿Cumple? | Prueba |\n|---|---|---|---|\n| 1 | Existe la funcion suma y devuelve el total correcto | SÍ | suma.js:1 |\n| 2 | Con entrada no numerica lanza un error claro | SÍ | suma.js:3 |\n| 3 | Hay una prueba que cubre los dos casos | SÍ | suma.test.js |\n`;
+const ANALISIS_BUENO = `# Análisis
+
+${RELLENO}
+
+## Criterios de aceptación
+
+- [ ] Existe una funcion suma que devuelve la suma de dos numeros
+- [ ] Con una entrada que no sea numero lanza un error claro
+- [ ] Hay una prueba que ejercita los dos casos
+- [ ] La funcion vive en su modulo y no en la capa de rutas
+`;
+const REVISION_OK = `✅ APROBADO
+
+| # | Criterio | ¿Cumple? | Prueba |
+|---|---|---|---|
+| 1 | Existe una funcion suma que devuelve la suma de dos numeros | SÍ | suma.js |
+| 2 | Con una entrada que no sea numero lanza un error claro | SÍ | suma.js |
+| 3 | Hay una prueba que ejercita los dos casos | SÍ | suma.js |
+| 4 | La funcion vive en su modulo y no en la capa de rutas | SÍ | suma.js:1 |
+`;
 const REVISION_NO = `❌ RECHAZADO\n\n### CRITERIO-INCUMPLIDO Falta la validacion\n\n**Dónde:** suma.js:3\n**Qué pasa:** no comprueba el tipo.\n`;
 
 function montar(raiz, guion, encima = {}) {

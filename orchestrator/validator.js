@@ -57,7 +57,26 @@ export function validarAnalisis(ruta) {
  * CÓDIGO: al menos un commit nuevo, el taskId citado en algún mensaje,
  * y ningún console.log ni marca de pendiente en las líneas añadidas de código.
  */
-export function validarCodigo({ base, taskId, cwd }) {
+/**
+ * ¿Es esto un guion de comprobación, o es el producto?
+ *
+ * ⚙️ POR QUÉ HACE FALTA DISTINGUIRLO (2 sep 2026). La regla de abajo prohíbe `console.log` en
+ * las líneas añadidas, y está bien para el producto: ahí un `console.log` es basura de depurar
+ * que se quedó. Pero se aplicaba a TODO, y **un guion de comprobación existe para imprimir su
+ * resultado**. Pasó tres veces: el verificador de DISA en paralelo (11 líneas), el del anclaje
+ * de facturas (19) y el manifiesto de huellas (21). El segundo costó una reconstrucción entera
+ * del programador —2,00 $— para borrar los `console.log` de un guion que los necesita. Y el
+ * propio repositorio tiene gates con ocho dentro, así que la regla se contradecía con la casa.
+ *
+ * Se casa por principio o por final de la ruta, sin comodines: es predecible y se lee de un
+ * vistazo en la configuración, que es donde vive la lista.
+ */
+export function esGuionDeComprobacion(fichero, patrones = []) {
+  const f = String(fichero || '').replace(/^\.\//, '');
+  return patrones.some((p) => f.startsWith(p) || f.endsWith(p));
+}
+
+export function validarCodigo({ base, taskId, cwd, guionesDeComprobacion = [] }) {
   const commits = commitsDesde(base, cwd);
 
   if (commits.length === 0) {
@@ -76,6 +95,9 @@ export function validarCodigo({ base, taskId, cwd }) {
 
   const sucias = [];
   for (const linea of lineasAnadidas(base, cwd)) {
+    // En el producto la regla se queda como estaba. En un guion de comprobación, imprimir ES
+    // el trabajo.
+    if (esGuionDeComprobacion(linea.fichero, guionesDeComprobacion)) continue;
     for (const p of PROHIBIDOS) {
       if (p.regex.test(linea.texto)) {
         sucias.push(`  ${linea.fichero}:${linea.numero}  [${p.nombre}]  ${linea.texto.trim().slice(0, 100)}`);

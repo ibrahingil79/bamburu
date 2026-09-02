@@ -75,12 +75,24 @@ function extraerCampos(lineas) {
   return campos;
 }
 
-/** Criterios: casillas "- [ ]" / "- [x]", y si no hay, los bullets bajo una línea que hable de criterios. */
+/**
+ * Criterios: casillas "- [ ]" / "- [x]" / "- [~]", y si no hay, los bullets bajo una línea que
+ * hable de criterios.
+ *
+ * ⚙️ «A MEDIAS» EXISTE Y HAY QUE VERLO (2 sep 2026). El patrón era `[( |x|X)]`, así que una
+ * casilla `- [~]` **no encajaba con nada y el criterio desaparecía de la lista entera**. Es
+ * justo lo contrario de lo que tiene que pasar: alguien marca un criterio a medias PARA QUE
+ * FRENE, y el sistema lo hacía invisible. Medido en el cifrado de las copias: su criterio 1
+ * —«las dos copias suben cifradas»— estaba en `[~]` mientras la ficha decía `estado: hecha`,
+ * y las dos cosas convivían tan tranquilas porque nadie leía la primera.
+ */
 function extraerCriterios(lineas) {
   const casillas = [];
   for (const linea of lineas) {
-    const m = /^\s*[-*+]\s*\[( |x|X)\]\s*(.+?)\s*$/.exec(linea);
-    if (m) casillas.push({ hecho: m[1].toLowerCase() === 'x', texto: m[2].trim() });
+    const m = /^\s*[-*+]\s*\[( |x|X|~|-)\]\s*(.+?)\s*$/.exec(linea);
+    if (!m) continue;
+    const marca = m[1].toLowerCase();
+    casillas.push({ hecho: marca === 'x', aMedias: marca === '~' || marca === '-', texto: m[2].trim() });
   }
   if (casillas.length) return casillas;
 
@@ -90,7 +102,7 @@ function extraerCriterios(lineas) {
     if (/criterio/i.test(normalizar(linea)) && !/^\s*[-*+]\s/.test(linea)) { dentro = true; continue; }
     if (!dentro) continue;
     const m = /^\s*[-*+]\s+(.+?)\s*$/.exec(linea);
-    if (m) { sueltos.push({ hecho: false, texto: m[1].trim() }); continue; }
+    if (m) { sueltos.push({ hecho: false, aMedias: false, texto: m[1].trim() }); continue; }
     if (linea.trim() === '') continue;
     if (nivelEncabezado(linea) > 0) break;
   }

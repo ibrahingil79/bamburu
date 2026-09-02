@@ -60,7 +60,18 @@
         "Bash"
       ]
     },
-    "maxSalidaBytes": 4194304
+    "maxSalidaBytes": 4194304,
+    "$porqueGuiones": "2 sep 2026. El portero rechazaba una entrega por llevar console.log en las lineas anadidas, SIN distinguir producto de guion de comprobacion. Un guion de comprobacion existe para imprimir su resultado: paso TRES veces, y una de ellas costo una reconstruccion entera para borrar lineas que el guion necesitaba. En el PRODUCTO la regla se queda igual, y eso incluye scripts/lib/: decision de Ibrahin del 2 sep 2026 sobre manifiesto-copias.mjs, «dejalo estricto, es producto y corre cada noche». No se anada scripts/lib/ ni scripts/ a secas a esta lista. Un patron casa si la ruta empieza por el o termina en el.",
+    "guionesDeComprobacion": [
+      "scripts/verify-",
+      "scripts/gate-",
+      "scripts/test-",
+      "scripts/censo-",
+      "scripts/lint-",
+      "orchestrator/pruebas/",
+      ".test.js",
+      ".test.mjs"
+    ]
   },
   "cuota": {
     "minimoParaCicloPct": 15,
@@ -81,6 +92,8 @@
     "maxIntentosRevision": 3,
     "maxReplanteos": 1,
     "maxFallosTecnicosPorPaso": 3,
+    "$porqueCriteriosPropios": "2 sep 2026. Lo que hace que una tarea de cuatro vueltas no es su tamano: es cuanto exige el plano ADEMAS del cambio. La unica tarea que salio a la primera fue la unica cuyo plano pedia una cosa y nada mas. Los criterios de Ibrahin no cuentan contra este tope; solo los que anade el arquitecto.",
+    "maxCriteriosPropiosDelArquitecto": 3,
     "intervaloVueltaMs": 60000,
     "esperaTrasFalloTecnicoMs": 30000,
     "plazoParadaMs": 20000,

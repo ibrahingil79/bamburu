@@ -8382,6 +8382,89 @@ trozos.
 > Commits: `bfea8a8`, `d93125e`
 > Registro: `docs/orquestador/tareas/portal-formato-dinero.md`
 
+## ✅ HECHA (2026-09-02) — La lista de criterios de Ibrahin manda, y el plano deja de pedir imposibles
+
+- **id:** criterios-del-tablero-mandan
+- **estado:** hecha
+- **origen:** encargo de Ibrahin, 2 sep 2026, salido del diagnóstico de los 14 rechazos
+
+### BLOQUE 1 — El revisor juzga lo que pidió Ibrahin
+
+**El fallo, dicho como es:** el revisor juzgaba la lista de criterios que escribe el **arquitecto**,
+no la del tablero, y nadie comparaba las dos. En «Cifrar las copias de seguridad» el criterio 1 de
+Ibrahin era **«las dos copias suben cifradas»** y el que se juzgó fue **«hoy sigue habiendo
+copia»**. No son variantes: son requisitos **opuestos**. El revisor comprobó bien, con pruebas de
+verdad, y aprobó otra cosa. La tarea consta hecha, se subió dos veces, y las copias siguen en claro.
+
+**Lo que hay ahora:**
+
+- **La lista del tablero se reproduce LITERAL** en el análisis. El arquitecto añade los suyos
+  debajo; quitar, sustituir o rebajar uno **invalida el análisis**, y se para ahí — antes de gastar
+  una construcción. Se exige literalidad a propósito: comparar «parecidos» tiene un umbral, y por
+  debajo del umbral cabe un requisito contrario.
+- **El revisor recibe siempre los del tablero** y tiene que decir qué pasa con **cada uno**, con SÍ
+  o NO y su prueba. Un aprobado que se salta uno no vale.
+- **Un criterio marcado `[~]` frena el cierre**, diga lo que diga el revisor. Antes ese `[~]` ni
+  siquiera se leía: el patrón del lector era `[( |x|X)]`, así que **un criterio a medias
+  desaparecía de la lista entera** — justo lo contrario de lo que tiene que pasar.
+- Los criterios se **refrescan del tablero en cada vuelta**, como ya hacía la firma: si Ibrahin
+  marca uno a medias a mitad de la tarea, frena ESA tarea.
+
+**Comprobado con los ficheros reales de aquel día, no con pruebas de laboratorio:** el análisis que
+se aprobó el 1 de septiembre **hoy se rechaza** —le faltan los 8 criterios del tablero, y los nombra
+uno a uno—, y el cierre se frena por el `[~]`, cargando el estado de producción del disco.
+
+### BLOQUE 2 — El portero deja de tirar trabajo bueno
+
+Rechazaba entregas por llevar `console.log` en las líneas añadidas **sin distinguir producto de
+guion de comprobación**. Pasó **tres veces**, y una costó una reconstrucción entera —2,00 $— para
+borrar las líneas que el guion necesita para imprimir su resultado. El propio repositorio tiene
+gates con ocho dentro.
+
+Ahora hay una lista de patrones en `cli.guionesDeComprobacion` (verify-, gate-, test-, censo-,
+lint-, `orchestrator/pruebas/`, `*.test.js`). **En el producto la regla se queda exactamente como
+estaba.** Nota honesta: `scripts/lib/manifiesto-copias.mjs` **sigue sujeto a la regla**, porque
+corre en la copia de cada noche y es producto.
+
+### BLOQUE 3 — El arquitecto no escribe planos imposibles
+
+- **El plano se comprueba contra sí mismo:** un análisis con un *«para y dime lo que has encontrado
+  antes de seguir»* dentro **no pasa**. Es la frase literal que tenía el cifrado, y con la que el
+  programador se atascó **dos veces con seis minutos de diferencia** sin tocar un fichero.
+- **«El programador se negó con razón» ya no cuenta como fallo suyo.** Va al **arquitecto** como
+  replanteamiento, con el motivo dentro, y **no gasta intento del programador**. Repetir el mismo
+  plano con el mismo programador es pedirle que construya dos veces lo que ya demostró que no se
+  puede — que es exactamente lo que pasó.
+- **Un plano no puede pedir trabajo fuera del cambio:** tope de **3 criterios propios** del
+  arquitecto sobre los del tablero (`ciclo.maxCriteriosPropiosDelArquitecto`). El dato que lo
+  justifica: lo que hace que una tarea dé cuatro vueltas **no es su tamaño**, es cuánto exige el
+  plano además del cambio. La única que salió a la primera fue la única cuyo plano pedía una cosa y
+  nada más.
+
+> **Lo que NO se ha podido automatizar, y se dice en vez de fingirlo:** detectar que dos criterios
+> **se contradicen entre sí** no se puede hacer con un patrón sin fabricar rojos falsos — que es
+> justo lo que arregla el Bloque 2. Lo que sí se ha hecho es que, cuando el programador lo detecta,
+> **su motivo llegue al plano nuevo** en vez de tirarse a la basura.
+
+### Y los cuatro cabos de la auditoría
+
+1. **Un cierre podía no marcar el tablero y nadie se enteraba.** El intento **abortado** del cifrado
+   dejó una nota de cierre falsa; el cierre bueno la vio, dijo «ya tenía su nota» y **no tocó el
+   `estado:`**. La tarea siguió `pendiente` y se rehízo entera: **5,91 $ y veinte minutos**. Ahora
+   la nota no se duplica pero el `estado:` se comprueba igual, porque es lo único que la cola lee.
+2. **El mensaje de guardado decía «cierra» sobre una tarea que se apartó.** Mismo texto para dos
+   cosas contrarias. Ahora el verbo dice lo que pasó: cierra · aparta · deja lista para firmar ·
+   cierra por premisa falsa.
+3. **Una llamada que vence apuntaba 0,00 $.** Falseaba el gasto hacia abajo justo en las más largas.
+   Ahora se apunta como **desconocido** y se cuenta aparte, para que cualquier total diga cuánto le
+   falta.
+4. **El historial tenía 337 filas de basura** del bucle. Se filtran **al leer** —el fichero no se
+   toca, es el registro honesto de lo que pasó—: 347 → 10 filas, y **los dos cierres reales del
+   cifrado se conservan**, que son la prueba del trabajo repetido.
+
+**236 pruebas en verde**, 18 nuevas. Lo que manda no son ellas: es que el análisis real de aquel día
+se rechaza y el cierre real se frena.
+
 ## ✅ HECHA (2026-09-01) — Botones fijos en el bot de Telegram
 
 - **id:** botones-telegram

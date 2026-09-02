@@ -14,6 +14,9 @@ import { ErrorOrquestador, claseDesdeErrno } from './errores.js';
 
 export const VERSION_ESTADO = 1;
 
+/** Dos filas iguales más juntas que esto son un bucle, no dos sucesos. Medido: el bucle del 1-2 sep repetía cada 60 s. */
+const RACHA_DE_BUCLE_MS = 5 * 60 * 1000;
+
 /**
  * Escritura atómica: temporal en el MISMO directorio (para que rename no cruce sistemas de
  * ficheros), fsync del fichero, rename, y fsync del directorio para que el rename también
@@ -217,7 +220,36 @@ export class Almacen {
     anadirLinea(this.rutaHistorial, { cuando: new Date().toISOString(), ...entrada });
   }
 
-  leerHistorial() { return leerLineas(this.rutaHistorial); }
+  /**
+   * El historial, SIN las repeticiones seguidas de un bucle.
+   *
+   * ⚙️ POR QUÉ SE FILTRA AL LEER Y NO SE BORRA EL FICHERO (2 sep 2026). La avería del bucle dejó
+   * **337 filas idénticas** de 347: la misma tarea, el mismo resultado, una por minuto durante
+   * seis horas. Cualquier media calculada sobre eso sale mal. Pero el fichero es el registro
+   * honesto de lo que pasó y no se toca: se colapsa cada RACHA de filas iguales seguidas —misma
+   * tarea, mismo resultado— y se queda la primera. Dos cierres de verdad separados en el tiempo
+   * NO se colapsan, porque entre medias hay otras filas; y si no las hubiera, siguen siendo dos
+   * sucesos reales y se conserva el primero con su hora.
+   */
+  leerHistorial({ enBruto = false } = {}) {
+    const filas = leerLineas(this.rutaHistorial);
+    if (enBruto) return filas;
+    const limpias = [];
+    let anterior = null;   // la fila ANTERIOR LEÍDA, no la última conservada: si no, la racha se
+    for (const f of filas) {          // mide contra la primera y vuelve a colar una cada 5 min.
+      const ult = anterior;
+      anterior = f;
+      const igual = ult && ult.id === f.id && ult.resultado === f.resultado;
+      // Y EL TIEMPO MANDA, que si no se pierden sucesos de verdad. «Cifrar las copias» se cerró
+      // dos veces, a las 14:18 y a las 18:21 — cuatro horas de diferencia y las dos reales: la
+      // segunda es justo la que costó 5,91 $ de trabajo repetido, y taparla sería borrar la
+      // prueba de la avería. Un bucle repite cada minuto; un suceso repetido, no.
+      const seguidas = igual && Math.abs(Date.parse(f.cuando) - Date.parse(ult.cuando)) < RACHA_DE_BUCLE_MS;
+      if (seguidas) continue;
+      limpias.push(f);
+    }
+    return limpias;
+  }
 }
 
 /**
@@ -242,11 +274,14 @@ export function aplicar(estado, e) {
     // Una llamada de un papel, ya terminada y medida. Se acumula; no pisa.
     case 'PAPEL_MEDIDO': {
       const g = s.gastoPorPapel || {};
-      const a = g[e.papel] || { llamadas: 0, ms: 0, costeUsd: 0, puntos: 0, modelos: [] };
+      const a = g[e.papel] || { llamadas: 0, ms: 0, costeUsd: 0, puntos: 0, sinCoste: 0, modelos: [] };
       return { ...s, gastoPorPapel: { ...g, [e.papel]: {
         llamadas: a.llamadas + 1,
         ms: a.ms + (e.ms || 0),
         costeUsd: Number((a.costeUsd + (e.costeUsd || 0)).toFixed(6)),
+        // Las que no trajeron coste se cuentan aparte: el total sigue siendo un MÍNIMO y hay
+        // que poder decirlo. Sumar cero sería afirmar que no costaron nada, y costaron.
+        sinCoste: (a.sinCoste || 0) + (e.costeUsd == null ? 1 : 0),
         // Los puntos de ventana pueden salir negativos: la ventana es DESLIZANTE y al gasto viejo
         // le llega su hora de caducar mientras el papel trabaja. Se suman tal cual, sin recortar a
         // cero: recortarlos inflaría el total y convertiría la medición en propaganda.

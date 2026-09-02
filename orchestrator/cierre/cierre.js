@@ -196,14 +196,29 @@ function anotarCierreEnBloqueCambiado({ config, tarea, nota, apartada, logger })
   const b = bloquePorId(lineas, tarea.id);
   if (!b) return { escrito: false, motivo: 'bloque-cambiado' };
 
-  // Si la nota ya está (un cierre repetido), no se duplica.
+  // ⚙️ QUE LA NOTA ESTÉ NO SIGNIFICA QUE LA TAREA ESTÉ MARCADA (2 sep 2026). Aquí se salía en
+  // seco al ver la nota, y eso costó rehacer una tarea entera: el intento ABORTADO del cifrado
+  // (1 sep 09:17) dejó su nota de cierre en el bloque, y cuando llegó el cierre BUENO de las
+  // 14:18 esta línea lo vio, dijo «ya tenía su nota, lo dejo como está» y **no tocó el
+  // `estado:`**. La tarea siguió `pendiente`, la cola volvió a ofrecerla a las 18:01 y se
+  // construyó y revisó por segunda vez. 5,91 $ y veinte minutos, por una nota que mentía.
+  //
+  // Ahora la nota no se duplica —eso estaba bien— pero el `estado:` se comprueba igual, porque
+  // es lo único que la cola lee. Una nota es prosa; el `estado:` es el dato.
   const cuerpo = lineas.slice(b.ini, b.fin).join('\n');
-  if (cuerpo.includes(`docs/orquestador/tareas/${tarea.id}.md`)) {
-    logger?.info(`El bloque de «${tarea.titulo}» ya tenía su nota de cierre. Lo dejo como está.`);
+  const yaTieneNota = cuerpo.includes(`docs/orquestador/tareas/${tarea.id}.md`);
+  const sigueAbierta = /^\s*(?:[-*+]\s*)?[*_]*\s*estado\s*[*_]*\s*:\s*[*_]*\s*(pendiente|en-curso|en curso)/im.test(cuerpo);
+  if (yaTieneNota && !sigueAbierta) {
+    logger?.info(`El bloque de «${tarea.titulo}» ya está marcado y con su nota. Lo dejo como está.`);
     return { escrito: false, motivo: 'ya-anotado' };
+  }
+  if (yaTieneNota && sigueAbierta) {
+    logger?.aviso(`⚠️ «${tarea.titulo}» tenía nota de cierre pero su «estado:» seguía ABIERTO. `
+      + 'Lo marco: esto es lo que hizo que la tarea se rehiciera entera el 1 sep.');
   }
 
   const nuevas = [...lineas.slice(b.ini, b.fin)];
+  const soloEstado = yaTieneNota;   // la nota ya está: se viene solo a arreglar el `estado:`
   // El titular y el `estado:` solo se tocan si nadie los puso ya: lo que escribió otro manda.
   if (!/^#{1,6}\s+(✅\s*HECHA|⛔\s*APARTADA)/i.test(nuevas[0])) {
     nuevas[0] = `${'#'.repeat(b.nivel)} ${apartada ? '⛔ APARTADA' : '✅ HECHA'} (${hoy()}) — ${b.titulo}`;
@@ -214,10 +229,13 @@ function anotarCierreEnBloqueCambiado({ config, tarea, nota, apartada, logger })
       `$1${apartada ? 'apartada' : 'hecha'}$3`);
   }
 
-  const bloque = nuevas.join('\n').replace(/\s*$/, '') + '\n' + nota;
+  // La nota NO se duplica: si ya estaba, esta pasada viene solo a arreglar el `estado:`.
+  const bloque = nuevas.join('\n').replace(/\s*$/, '') + (soloEstado ? '\n' : '\n' + nota);
   escribirAtomico(config.tableroAbs, [...lineas.slice(0, b.ini), bloque, ...lineas.slice(b.fin)].join('\n'));
-  logger?.aviso(`El bloque de «${tarea.titulo}» lo había cambiado otro. No lo piso: solo le dejo la nota de cierre.`);
-  return { escrito: true, motivo: 'bloque-cambiado-nota-anadida' };
+  logger?.aviso(soloEstado
+    ? `El bloque de «${tarea.titulo}» ya tenía nota pero seguía abierto: le arreglo el «estado:» y nada más.`
+    : `El bloque de «${tarea.titulo}» lo había cambiado otro. No lo piso: solo le dejo la nota de cierre.`);
+  return { escrito: true, motivo: soloEstado ? 'estado-corregido' : 'bloque-cambiado-nota-anadida' };
 }
 
 /**
@@ -275,13 +293,18 @@ export function desmarcarEnTablero({ config, id, logger }) {
  * El commit del cierre. Un solo commit con todo lo del cierre: registro + tablero.
  * El código del programador ya está confirmado por él; esto cierra el expediente.
  */
-export function confirmarCierre({ config, tarea, ficheros, logger }) {
+export function confirmarCierre({ config, tarea, ficheros, logger, verbo = 'cierra' }) {
   const rel = ficheros.map((f) => path.relative(config.repo.raiz, f));
   try {
     anadir({ cwd: config.repo.raiz, ficheros: rel });
     const sha = confirmar({
       cwd: config.repo.raiz,
-      mensaje: `Orquestador — cierra «${tarea.titulo}» (${tarea.id})\n\nTarea: ${tarea.id}`,
+      // ⚙️ EL VERBO DICE LO QUE PASÓ (2 sep 2026). Decía «cierra» siempre — también cuando la
+      // tarea se APARTABA. Mismo texto para dos cosas contrarias, y en el historial de git no
+      // hay forma de distinguirlas: el commit `c1b1d3c` dice «cierra «Cifrar las copias»» y esa
+      // tarea se apartó. Y esa mentira no se quedó en el texto: dejó la nota de cierre falsa que
+      // hizo que la tarea se construyera dos veces.
+      mensaje: `Orquestador — ${verbo} «${tarea.titulo}» (${tarea.id})\n\nTarea: ${tarea.id}`,
       ficheros: rel,
     });
     logger?.exito(`Cierre confirmado: ${sha}`);
