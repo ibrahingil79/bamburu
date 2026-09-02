@@ -65,6 +65,20 @@ export function clasificarParada(texto) {
            falta: 'usó el rótulo antiguo «🛑 TAREA MAL PLANTEADA», que no dice de qué clase es.' };
 }
 const MARCA_REPLANTEO = /^\s*♻️\s*REPLANTEAMIENTO/im;
+/**
+ * ⚙️ LA PREGUNTA QUE LA REVISIÓN DEL CIFRADO NUNCA TUVO QUE CONTESTAR (2 sep 2026).
+ *
+ * Una lista de criterios se puede cumplir entera y no arreglar nada: es literalmente lo que pasó
+ * —el revisor comprobó ocho criterios con pruebas de verdad y aprobó una tarea cuyo enunciado,
+ * «las copias van en claro en dos Drive personales», seguía siendo cierto palabra por palabra—.
+ * Los criterios miden si se hizo LO ESCRITO; esto mide si se arregló LO ROTO, que es de lo que
+ * va la tarea. Va como apartado con nombre, igual que «LA PROMESA» del arquitecto: una marca no
+ * se puede cumplir a medias ni interpretar, o está o no está.
+ *
+ * Y vale para las 33 tareas de la cola que NO traen criterios de Ibrahin: ahí no hay lista suya
+ * contra la que comparar, pero SIEMPRE hay un enunciado que dice qué está roto.
+ */
+const MARCA_ARREGLA = /^#{1,4}\s*¿?ARREGLA LO QUE LA TAREA DEC[ÍI]A\??\s*$/im;
 const MARCA_IMPOSIBLE = /^\s*🛑\s*AN[ÁA]LISIS IMPOSIBLE/im;
 
 const ok = (resumen, extra = {}) => ({ ok: true, resumen, motivos: [], ...extra });
@@ -113,7 +127,7 @@ export function pasosQuePidenPersona(texto) {
 }
 
 export function validarAnalisis(ruta, { minCriterios = 3, firma = '', criteriosTablero = [],
-                                        maxCriteriosPropios = Infinity } = {}) {
+                                        criteriosFijados = [], maxCriteriosPropios = Infinity } = {}) {
   if (!fs.existsSync(ruta)) return mal(`No existe el análisis: ${ruta}`, [`el arquitecto no escribió ${ruta}`]);
 
   const texto = fs.readFileSync(ruta, 'utf8');
@@ -186,6 +200,19 @@ export function validarAnalisis(ruta, { minCriterios = 3, firma = '', criteriosT
       + 'hace que una tarea dé cuatro vueltas. Deja lo que hace falta para que el cambio esté bien hecho.');
   }
 
+  // ⚙️ Y LO QUE YA SE ACEPTÓ UNA VEZ NO SE REESCRIBE (2 sep 2026). Un replanteamiento cambia el
+  // ENFOQUE, no lo que significa «hecho»: hasta hoy el arquitecto reescribía la lista entera en
+  // cada vuelta, y ahí es donde se movió el listón del cifrado —los criterios de la vuelta
+  // abortada de las 09:17 no son los que se juzgaron a las 18:21—. Si de verdad la lista estaba
+  // mal, se para la tarea y se dice; lo que no se hace es cambiarla calladamente entre intentos.
+  const fijadosQueFaltan = criteriosDelTableroQueFaltan(texto, criteriosFijados);
+  if (fijadosQueFaltan.length) {
+    motivos.push(`CAMBIAS ${fijadosQueFaltan.length} CRITERIO(S) QUE YA SE ACEPTARON. Un replanteamiento `
+      + 'cambia el ENFOQUE, no lo que significa «hecho». Cópialos tal cual y replantea el CÓMO; si '
+      + 'crees que uno estaba mal planteado, para la tarea y dilo.');
+    for (const c of fijadosQueFaltan) motivos.push(`  se aceptó, y ahora falta: «${String(c).slice(0, 150)}»`);
+  }
+
   // Y AQUÍ SE PARA EL CAMBIAZO, antes de gastar una construcción. Si falta uno de los de
   // Ibrahin, el análisis no vale por bueno que sea el resto.
   const sinReproducir = criteriosDelTableroQueFaltan(texto, criteriosTablero);
@@ -213,7 +240,7 @@ export function detectarAnalisisImposible(ruta) {
  * REVISIÓN. Tiene que pronunciarse, una sola vez, y si rechaza tiene que decir por qué
  * con una etiqueta de la lista cerrada.
  */
-export function validarRevision(ruta, { criterios = [], criteriosTablero = [] } = {}) {
+export function validarRevision(ruta, { criterios = [], criteriosTablero = [], exigeArregla = false } = {}) {
   if (!fs.existsSync(ruta)) return mal(`No existe la revisión: ${ruta}`, [`el revisor no escribió ${ruta}`]);
 
   const texto = fs.readFileSync(ruta, 'utf8');
@@ -243,6 +270,15 @@ export function validarRevision(ruta, { criterios = [], criteriosTablero = [] } 
     return { ok: true, veredicto: 'rechazado', etiquetas, texto, cubiertos,
              resumen: `Revisión: ❌ RECHAZADO (${etiquetas.join(', ')}).`,
              motivos: extraerPuntosDeRechazo(texto, etiquetas) };
+  }
+
+  // ── ¿ARREGLA LO QUE LA TAREA DECÍA QUE ESTABA ROTO? ──────────────────────
+  // Solo se exige para APROBAR. Un rechazo ya dice que no, y pedírselo también ahí sería papeleo.
+  if (exigeArregla && !MARCA_ARREGLA.test(texto)) {
+    return mal('Aprueba sin decir si arregla lo que la tarea decía que estaba roto.',
+      ['falta el apartado «## ¿ARREGLA LO QUE LA TAREA DECÍA?»',
+       'ahí va: qué decía la tarea que estaba mal, si HOY sigue siendo cierto, y con qué prueba',
+       'una lista de criterios se puede cumplir entera y no arreglar nada — pasó con el cifrado de las copias']);
   }
 
   // ⚙️ Y LOS DE IBRAHIN SE JUZGAN UNO A UNO, SIEMPRE (2 sep 2026). Van aparte de los del

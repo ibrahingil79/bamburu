@@ -40,7 +40,7 @@ test('el arquitecto puede parar y eso NO es un fallo suyo', () => {
 });
 
 test('una revisión con los dos veredictos es ambigua y se tira', () => {
-  const p = escribir('r1.md', '✅ APROBADO\n\nPero en realidad ❌ RECHAZADO\n');
+  const p = escribir('r1.md', '✅ APROBADO\n\n## ¿ARREGLA LO QUE LA TAREA DECÍA?\n\n**Lo que decía la tarea que estaba mal:** lo que el enunciado daba por roto.\n**¿Sigue siendo cierto hoy?:** NO — comprobado sobre el árbol.\n\nPero en realidad ❌ RECHAZADO\n');
   const v = validarRevision(p);
   assert.equal(v.ok, false);
   assert.match(v.resumen, /ambigua/);
@@ -78,7 +78,7 @@ test('un rechazo con etiqueta vale y extrae los puntos', () => {
 test('un aprobado que se salta criterios NO pasa', () => {
   const criterios = [{ texto: 'Con una entrada que no sea numero lanza un error claro' },
                      { texto: 'Existe documentacion actualizada del modulo nuevo' }];
-  const p = escribir('r5.md', '✅ APROBADO\n\n| 1 | entrada que no sea numero lanza error claro | SÍ | suma.js:12 |\n');
+  const p = escribir('r5.md', '✅ APROBADO\n\n## ¿ARREGLA LO QUE LA TAREA DECÍA?\n\n**Lo que decía la tarea que estaba mal:** lo que el enunciado daba por roto.\n**¿Sigue siendo cierto hoy?:** NO — comprobado sobre el árbol.\n\n| 1 | entrada que no sea numero lanza error claro | SÍ | suma.js:12 |\n');
   const v = validarRevision(p, { criterios });
   assert.equal(v.ok, false);
   assert.match(v.motivos[0], /no se pronuncia sobre 1 criterio/);

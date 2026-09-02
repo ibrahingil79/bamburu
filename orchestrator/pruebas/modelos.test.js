@@ -27,6 +27,11 @@ ${RELLENO}
 `;
 const REVISION = `✅ APROBADO
 
+## ¿ARREGLA LO QUE LA TAREA DECÍA?
+
+**Lo que decía la tarea que estaba mal:** lo que el enunciado daba por roto.
+**¿Sigue siendo cierto hoy?:** NO — comprobado sobre el árbol.
+
 | # | Criterio | ¿Cumple? | Prueba |
 |---|---|---|---|
 | 1 | Existe una funcion suma que devuelve la suma de dos numeros | SÍ | suma.js |

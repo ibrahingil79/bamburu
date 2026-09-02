@@ -64,7 +64,7 @@ test('el énfasis de markdown no provoca un rojo falso, pero cambiar lo que se p
 
 // ── El revisor se pronuncia sobre los de Ibrahin, uno a uno ──────────────────
 test('un APROBADO que no dice nada de un criterio de Ibrahin no vale', () => {
-  const r = revisionCon('✅ APROBADO\n\n| # | Criterio | ¿Cumple? | Prueba |\n|---|---|---|---|\n'
+  const r = revisionCon('✅ APROBADO\n\n## ¿ARREGLA LO QUE LA TAREA DECÍA?\n\n**Lo que decía la tarea que estaba mal:** lo que el enunciado daba por roto.\n**¿Sigue siendo cierto hoy?:** NO — comprobado sobre el árbol.\n\n| # | Criterio | ¿Cumple? | Prueba |\n|---|---|---|---|\n'
     + '| 1 | La llave vive en el servidor con permisos 600 | SÍ | rclone.conf |\n');
   const v = validarRevision(r, { criterios: [], criteriosTablero: TABLERO });
   assert.equal(v.ok, false);
@@ -73,7 +73,7 @@ test('un APROBADO que no dice nada de un criterio de Ibrahin no vale', () => {
 });
 
 test('si los juzga todos, el aprobado vale', () => {
-  const r = revisionCon('✅ APROBADO\n\n| # | Criterio | ¿Cumple? | Prueba |\n|---|---|---|---|\n'
+  const r = revisionCon('✅ APROBADO\n\n## ¿ARREGLA LO QUE LA TAREA DECÍA?\n\n**Lo que decía la tarea que estaba mal:** lo que el enunciado daba por roto.\n**¿Sigue siendo cierto hoy?:** NO — comprobado sobre el árbol.\n\n| # | Criterio | ¿Cumple? | Prueba |\n|---|---|---|---|\n'
     + `| 1 | ${CRITERIO_IBRAHIN} | SÍ | cryptcheck |\n`
     + '| 2 | La llave vive en el servidor con permisos `600`. | SÍ | ls -l |\n');
   const v = validarRevision(r, { criterios: [], criteriosTablero: TABLERO });

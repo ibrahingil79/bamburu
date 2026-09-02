@@ -45,7 +45,7 @@ function guionDe(raiz, cfg, id, n) {
       return respuestaOk('construido');
     },
     () => {
-      fs.writeFileSync(art('review'), `✅ APROBADO\n\n| # | Criterio | ¿Cumple? | Prueba |\n|---|---|---|---|\n${CRIT.map((c, i) => `| ${i + 1} | ${c} | SÍ | f${n}.js:1 |`).join('\n')}\n`);
+      fs.writeFileSync(art('review'), `✅ APROBADO\n\n## ¿ARREGLA LO QUE LA TAREA DECÍA?\n\n**Lo que decía la tarea que estaba mal:** lo que el enunciado daba por roto.\n**¿Sigue siendo cierto hoy?:** NO — comprobado sobre el árbol.\n\n| # | Criterio | ¿Cumple? | Prueba |\n|---|---|---|---|\n${CRIT.map((c, i) => `| ${i + 1} | ${c} | SÍ | f${n}.js:1 |`).join('\n')}\n`);
       return respuestaOk('revisado');
     },
   ];

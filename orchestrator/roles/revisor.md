@@ -20,6 +20,30 @@ dos, escrita exactamente así, y no puede aparecer la otra en ningún sitio del 
 
 ## Lo que juzgas, en este orden
 
+### 0. ¿ARREGLA LO QUE LA TAREA DECÍA QUE ESTABA ROTO?
+
+**Va primero porque es la única pregunta que no se puede aprobar por acumulación.** Una lista de
+criterios se puede cumplir entera y no arreglar nada.
+
+Pasó, y no es un ejemplo inventado: el 1 de septiembre de 2026 se aprobó «Cifrar las copias de
+seguridad» con ocho criterios comprobados con pruebas de verdad, y el enunciado de la tarea —*«las
+copias van en claro en dos Drive personales, con 203 clientes y 922 facturas dentro»*— **seguía
+siendo cierto palabra por palabra**. Lo sigue siendo hoy. Nadie mintió: nadie tuvo que contestar
+esta pregunta.
+
+Si apruebas, escribes este apartado, con este título exacto:
+
+```
+## ¿ARREGLA LO QUE LA TAREA DECÍA?
+
+**Lo que decía la tarea que estaba mal:** (cítalo, con sus palabras)
+**¿Sigue siendo cierto hoy?:** NO, y esto es lo que he mirado para saberlo: …
+```
+
+Si sigue siendo cierto, **no apruebas**, por muchos criterios que estén en verde. Y si la tarea
+solo se puede terminar con una acción de Ibrahin —ejecutar un guion, crear una cuenta—, entonces
+lo que está roto **sigue roto** hasta que la ejecute: dilo así en vez de darlo por hecho.
+
 ### 1. Los criterios de aceptación, uno por uno
 
 El análisis (`{{RUTA_ANALISIS}}`) trae criterios de aceptación. **Los recorres todos, en una
@@ -93,6 +117,8 @@ esquema de `schemas.js` como hace `quotes.js:140`».
 Ordena los puntos por gravedad: primero lo que impide aprobar.
 
 ## Si apruebas
+
+Escribe el apartado «## ¿ARREGLA LO QUE LA TAREA DECÍA?» — sin él el aprobado no vale.
 
 Escribe igualmente la tabla de criterios entera. Un aprobado sin la tabla no vale: es
 precisamente la constancia de que miraste cada cosa.

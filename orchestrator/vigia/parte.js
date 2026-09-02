@@ -250,7 +250,7 @@ export function redactarApartada({ tarea, motivo, historial, clase = 'sin-clasif
  * La promesa la escribe el ARQUITECTO, en su apartado «## LA PROMESA», y viaja hasta aquí sin que
  * nadie la resuma. Si no la escribió, se dice — no se inventa una.
  */
-export function redactarFirma({ tarea, quien, rama, promesa, commits = 0 }) {
+export function redactarFirma({ tarea, quien, rama, promesa, commits = 0, criterios = [] }) {
   const L = ['<b>✍️ Terminada y esperando tu firma</b>', ''];
   L.push(`<b>${esc(tarea.titulo)}</b>`, '');
 
@@ -260,6 +260,17 @@ export function redactarFirma({ tarea, quien, rama, promesa, commits = 0 }) {
     L.push('⚠️ <b>El arquitecto NO escribió la promesa</b>, así que no te la puedo contar en tus términos.',
            `Lo que se pidió: ${esc(tarea.descripcion || tarea.titulo).slice(0, 300)}`,
            'Si no sabes qué estás firmando, <b>no lo firmes</b>: dime «hablemos» y lo miramos.', '');
+  }
+
+  // ⚙️ LA LISTA CONTRA LA QUE SE JUZGÓ VA DENTRO (2 sep 2026, decisión de Ibrahin). Él ya recibe
+  // este aviso en las 9 tareas que firma, así que enseñarle aquí el listón no le cuesta una
+  // interrupción más — y es lo único que le permite ver si el arquitecto midió lo que él quería.
+  // Es justo lo que faltaba en el cifrado: se aprobó contra una lista que nadie le enseñó.
+  if (criterios?.length) {
+    L.push('<b>Contra qué se ha juzgado</b> — si esto no es lo que tú pedías, dilo:');
+    for (const c of criterios.slice(0, 10)) L.push(`• ${esc(String(c.texto || c)).slice(0, 220)}`);
+    if (criterios.length > 10) L.push(`<i>…y ${criterios.length - 10} más, en la revisión.</i>`);
+    L.push('');
   }
 
   L.push('<b>Está terminada, probada y FUERA DE PRODUCCIÓN.</b>');

@@ -111,6 +111,7 @@ export class Ciclo {
     if (estado.paso === PASOS.VALIDAR_ANALISIS || estado.paso === PASOS.ANALISIS) {
       const v = validarAnalisis(rutas.analisis, { firma: estado.tarea?.firma || '',
                                                   criteriosTablero: estado.tarea?.criterios || [],
+                                                  criteriosFijados: estado.criteriosAceptados || [],
                                                   maxCriteriosPropios: this.config.ciclo.maxCriteriosPropiosDelArquitecto ?? Infinity });
       // ⚙️ `clase`, `prueba` y `pregunta` SE COPIAN (1 sep 2026). Sin ellas, la máquina no puede
       // distinguir una premisa falsa de una decisión de Ibrahin y todo acaba en el mismo cajón.
@@ -142,7 +143,11 @@ export class Ciclo {
     }
     if (estado.paso === PASOS.VALIDAR_REVISION || estado.paso === PASOS.REVISION) {
       const criterios = this.criteriosDelAnalisis(rutas.analisis);
-      const v = validarRevision(rutas.review, { criterios, criteriosTablero: estado.tarea?.criterios || [] });
+      // Se juzga contra la lista CONGELADA si la hay: es la que se aceptó, no la de esta vuelta.
+      const deJuzgar = (estado.criteriosAceptados || []).length ? estado.criteriosAceptados : criterios;
+      const v = validarRevision(rutas.review, { criterios: deJuzgar,
+                                                criteriosTablero: estado.tarea?.criterios || [],
+                                                exigeArregla: true });
       obs.revision = { existe: fs.existsSync(rutas.review), veredicto: v.veredicto || null,
                        motivos: v.motivos || [], resumen: v.resumen };
     }
@@ -224,6 +229,15 @@ export class Ciclo {
     // estaríamos mirando siempre una respuesta vieja.
     const cuota = necesitaCuota ? await this.vigilante.consultar({ forzar: estado.esperandoCuota }) : null;
     const obs = this.observar(estado);
+    // EN CUANTO UN ANÁLISIS SE ACEPTA, SU LISTA SE CONGELA. Aquí y no más tarde: es el único
+    // momento en que se sabe que ESTA lista es la buena, y a partir de aquí el arquitecto ya no
+    // puede reescribirla en un replanteamiento sin que se note.
+    if (estado.tarea && obs.analisis?.valido && obs.analisis.criterios?.length
+        && !(estado.criteriosAceptados || []).length) {
+      estado = this.almacen.transicion(estado, { tipo: 'CRITERIOS_FIJADOS', criterios: obs.analisis.criterios });
+      this.log.info(`Criterios fijados para «${estado.tarea.id}»: ${estado.criteriosAceptados.length}. `
+        + 'Un replanteamiento podrá cambiar el enfoque, no lo que significa «hecho».');
+    }
     const accion = decidir({ estado, cuota, tareaDisponible, pendientesEnTablero, obs, config: this.config, ahora: this.ahora() });
 
     if (estado.esperandoCuota && accion.tipo !== ACCIONES.ESPERAR_CUOTA) {

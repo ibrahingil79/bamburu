@@ -86,6 +86,12 @@ export function estadoInicial() {
     // un total contra otro total y se atribuye la diferencia a lo que a uno le parezca.
     // { [papel]: { llamadas, ms, costeUsd, puntos, modelos[] } }
     gastoPorPapel: {},
+    // ⚙️ LA LISTA QUE YA SE ACEPTÓ, CONGELADA (2 sep 2026). Un replanteamiento cambia el enfoque,
+    // no lo que significa «hecho». Hasta hoy el arquitecto reescribía los criterios enteros en
+    // cada vuelta y nadie lo notaba: así se movió el listón del cifrado entre el intento abortado
+    // de las 09:17 y el cierre de las 18:21. Se fija en el PRIMER análisis aceptado de la tarea
+    // y se suelta con ella.
+    criteriosAceptados: [],
     esperandoCuota: false,
     esperaDesde: null,
     apartadas: [],        // [{ id, titulo, motivo, cuando, historial }]
@@ -264,7 +270,7 @@ export function aplicar(estado, e) {
     case 'TAREA_TOMADA':
       return { ...s, esperandoCuota: false, esperaDesde: null, tarea: e.tarea, paso: 'ANALISIS', pasoDesde: e.cuando,
                intento: 1, replanteos: 0, base: null, historial: [], fallosTecnicos: {},
-               cuotaInicio: e.cuota ?? null, gastoPorPapel: {} };
+               cuotaInicio: e.cuota ?? null, gastoPorPapel: {}, criteriosAceptados: [] };
     case 'PASO_INICIADO':
       return { ...s, paso: e.paso, pasoDesde: e.cuando };
     case 'BASE_FIJADA':
@@ -289,6 +295,9 @@ export function aplicar(estado, e) {
         modelos: a.modelos.includes(e.modelo) ? a.modelos : [...a.modelos, e.modelo].filter(Boolean),
       } } };
     }
+    // La lista aceptada se fija UNA vez por tarea. Si ya hay una, no se pisa: ése es el punto.
+    case 'CRITERIOS_FIJADOS':
+      return (s.criteriosAceptados || []).length ? s : { ...s, criteriosAceptados: e.criterios || [] };
     case 'FALLOS_TECNICOS_LIMPIADOS':
       return { ...s, fallosTecnicos: { ...s.fallosTecnicos, [e.paso]: 0 } };
     case 'VEREDICTO':
@@ -306,11 +315,11 @@ export function aplicar(estado, e) {
       return { ...s, apartadas: [...(s.apartadas || []),
                { id: s.tarea?.id, titulo: s.tarea?.titulo, motivo: e.motivo, cuando: e.cuando, historial: s.historial }],
                tarea: null, paso: 'OCIOSO', pasoDesde: e.cuando, intento: 0, replanteos: 0, base: null,
-               historial: [], fallosTecnicos: {}, gastoPorPapel: {} };
+               historial: [], fallosTecnicos: {}, gastoPorPapel: {}, criteriosAceptados: [] };
     // ── LA FIRMA DE IBRAHIN ───────────────────────────────────────────────────
     case 'FIRMA_PEDIDA':
       return { ...s, tarea: null, paso: 'OCIOSO', pasoDesde: e.cuando, intento: 0, replanteos: 0,
-               base: null, historial: [], fallosTecnicos: {}, cuotaInicio: null, gastoPorPapel: {},
+               base: null, historial: [], fallosTecnicos: {}, cuotaInicio: null, gastoPorPapel: {}, criteriosAceptados: [],
                firmasPendientes: [...(s.firmasPendientes || []).filter((f) => f.id !== e.id),
                  { id: e.id, titulo: e.titulo, rama: e.rama, promesa: e.promesa,
                    cuando: e.cuando, estado: 'esperando' }] };
@@ -324,7 +333,7 @@ export function aplicar(estado, e) {
 
     case 'TAREA_CERRADA':
       return { ...s, tarea: null, paso: 'OCIOSO', pasoDesde: e.cuando, intento: 0, replanteos: 0,
-               base: null, historial: [], fallosTecnicos: {}, gastoPorPapel: {},
+               base: null, historial: [], fallosTecnicos: {}, gastoPorPapel: {}, criteriosAceptados: [],
                subidaPendiente: e.subidaPendiente ?? s.subidaPendiente };
     // ── Órdenes desde Telegram ──────────────────────────────────────────────
     case 'PAUSADO':

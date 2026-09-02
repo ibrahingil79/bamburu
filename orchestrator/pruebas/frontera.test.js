@@ -703,7 +703,7 @@ async function hastaLaFirma(raiz) {
     () => { // El veredicto tiene que juzgar CRITERIO A CRITERIO, no decir «aprobado» a secas: es
             // lo que exige `validarRevision` y la razón de que exista el revisor.
             fs.writeFileSync(art('task-cambia-el-guion-review.md'),
-              '✅ APROBADO\n\n| # | Criterio | ¿Cumple? | Prueba |\n|---|---|---|---|\n'
+              '✅ APROBADO\n\n## ¿ARREGLA LO QUE LA TAREA DECÍA?\n\n**Lo que decía la tarea que estaba mal:** lo que el enunciado daba por roto.\n**¿Sigue siendo cierto hoy?:** NO — comprobado sobre el árbol.\n\n| # | Criterio | ¿Cumple? | Prueba |\n|---|---|---|---|\n'
               + '| 1 | El guion de produccion hace lo nuevo que pide la tarea | SÍ | produccion.sh:2 |\n'
               + '| 2 | Sigue verificando lo de antes, sin rama blanda ninguna | SÍ | produccion.sh:5 |\n'
               + '| 3 | Hay una prueba que lo ejercita de punta a punta | SÍ | prueba.sh |\n');
