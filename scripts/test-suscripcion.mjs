@@ -396,6 +396,16 @@ try {
     /datos\.puede_descargar \?/.test(pantalla));
   check('la pasada diaria cierra las ventanas vencidas, en su propia fase',
     (pasada.match(/cerrarVentanasDeDescarga\(\)/g) || []).length === 3);
+  // REMATE 2 SEP 2026: la espera de la copia recargaba la pantalla entera cada 15 s — once minutos
+  // de parpadeo con el cliente delante. Ahora se pregunta por el estado y se repinta SOLO la tarjeta.
+  const pantallaCod = sinComentarios(pantalla);
+  check('la espera de la copia NO recarga la pantalla',
+    !/location\.reload/.test(pantallaCod), (pantallaCod.match(/.*location\.reload.*/) || [''])[0]);
+  check('se pregunta por el estado y se repinta solo la tarjeta',
+    /suscripcion\/situacion/.test(pantallaCod) && /caja\.innerHTML/.test(pantallaCod));
+  check('y solo se repinta cuando el estado CAMBIA (repintar siempre también parpadea)',
+    /nuevo !== caja\.dataset\.estado/.test(pantallaCod));
+
   check('el correo del corte dice los 90 días y qué pasa después',
     /DÍAS PARA LLEVARTE TODO LO TUYO/.test(readFileSync(path.join(RAIZ, 'core/suscripcion-impago.js'), 'utf8')));
 

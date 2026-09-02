@@ -503,6 +503,11 @@ export const claseDe = g => EMPIEZAN_DE_CERO.has(g) ? 'propio' : (SOLOS.has(g) ?
 // Fuera del barrido A PROPÓSITO, cada uno con su motivo. Declarar no es esconder: esto SALE en el
 // parte, y por eso una excusa floja aquí se lee y se discute.
 export const FUERA_A_PROPOSITO = new Map([
+  ['gate-descarga-sin-parpadeo',
+   'que la espera de la copia NO recargue la pantalla. Lo demuestra dejando una marca en `window` '
+   + '—una recarga se la llevaría— y contando las navegaciones del documento, que tienen que ser '
+   + 'cero. Necesita navegador y prepara una copia de verdad, así que toca el estado de un negocio '
+   + 'real (lo devuelve en el finally). Se lanza a mano.'],
   ['gate-suscripcion-datos',
    'los 90 días de descarga y la bóveda: genera la copia completa de un negocio real, la contrasta '
    + 'fila a fila contra la base, comprueba que el ZIP se abre y que los CSV los lee un programa '

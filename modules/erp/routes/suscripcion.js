@@ -283,28 +283,104 @@ export function createSuscripcionRoutes(db) {
       // La descarga se PREPARA en segundo plano: el negocio más grande de este servidor tiene 939
       // facturas y cada PDF pasa por Chromium. Una petición que tarda minutos se corta por el camino
       // y deja al cliente con medio fichero, o con nada y sin saber por qué.
-      for (const id of ['susPreparar', 'susRehacer']) {
-        document.getElementById(id)?.addEventListener('click', async (ev) => {
-          const b = ev.currentTarget;
-          b.disabled = true; b.textContent = 'Preparando…';
-          try {
-            const r = await fetch('/api/erp/suscripcion/descarga/preparar', { method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || '' }, body: '{}' });
-            const d = await r.json();
-            if (!r.ok) { b.disabled = false; b.textContent = 'Preparar mi descarga'; alertaEnPagina(d.error); return; }
-            location.reload();
-          } catch (e) { b.disabled = false; b.textContent = 'Preparar mi descarga'; }
-        });
-      }
-      function alertaEnPagina(t) {
-        const c = document.getElementById('susDescarga');
-        if (c) c.insertAdjacentHTML('beforeend', '<p class="sus-detalle" style="color:var(--danger)">' + (t || 'No se pudo preparar.') + '</p>');
-      }
-      // Mientras se prepara, la pantalla se refresca sola: así el dueño ve cuándo está lista sin
-      // tener que adivinar. Cada 15 s, y solo si de verdad está preparándose.
-      if (document.getElementById('susDescarga')?.dataset.estado === 'preparando') {
-        setTimeout(() => location.reload(), 15000);
-      }
+      //
+      // ⚙️ REMATE 2 SEP 2026 (Ibrahin, probándolo con sus ojos): LA PANTALLA YA NO SE RECARGA
+      // MIENTRAS ESPERA. Antes hacía location.reload() cada 15 s para ver si la copia estaba lista, y
+      // eso son once minutos de la página ENTERA parpadeando con el cliente delante — pierde el
+      // sitio donde estaba mirando y parece que algo va mal. Ahora se pregunta solo por el estado y
+      // se repinta ÚNICAMENTE esta tarjeta. El resto de la pantalla no se entera.
+      (function () {
+        var caja = document.getElementById('susDescarga');
+        if (!caja) return;
+        var esc = window.escHtmlCli || function (x) { return String(x == null ? '' : x); };
+        var parado = false;
+
+        function boton(id, clase, texto) {
+          return '<button type="button" class="' + clase + '" id="' + id + '">' + texto + '</button>';
+        }
+
+        // Los mismos tres estados que pinta el servidor, para que lo que se ve al recargar a mano y
+        // lo que se ve sin recargar sean lo MISMO. Si un día cambia uno, tiene que cambiar el otro.
+        function pinta(d) {
+          var e = (d && d.descarga && d.descarga.estado) || null;
+          var r = (d && d.descarga && d.descarga.resumen) || null;
+          caja.dataset.estado = e || '';
+          if (e === 'lista' && r) {
+            caja.innerHTML =
+              '<p class="sus-detalle"><strong>Tu copia está lista.</strong> ' +
+              esc(r.tablas) + ' ficheros de datos, ' + esc(r.filas) + ' filas y ' + esc(r.pdfs) + ' ' +
+              (r.pdfs === 1 ? 'factura de tu negocio' : 'facturas de tu negocio') + ' en PDF.</p>' +
+              '<a class="btn btn-primary" href="/admin/suscripcion/descargar">Descargar mis datos</a> ' +
+              boton('susRehacer', 'btn', 'Volver a prepararla');
+            enganchar();
+            return true;
+          }
+          if (e === 'preparando') {
+            caja.innerHTML =
+              '<p class="sus-detalle">Estamos preparando tu copia. Tarda unos minutos si tienes muchas ' +
+              'facturas, porque cada una se genera en PDF. <strong>Puedes cerrar esta pantalla</strong>: ' +
+              'seguimos aunque te vayas.</p>';
+            return false;
+          }
+          caja.innerHTML =
+            ((d && d.descarga && d.descarga.error)
+              ? '<p class="sus-detalle" style="color:var(--danger)">La última vez no salió bien: ' + esc(d.descarga.error) + '</p>'
+              : '') +
+            boton('susPreparar', 'btn btn-primary', 'Preparar mi descarga');
+          enganchar();
+          return true;
+        }
+
+        function enganchar() {
+          ['susPreparar', 'susRehacer'].forEach(function (id) {
+            var b = document.getElementById(id);
+            if (!b) return;
+            b.addEventListener('click', function () {
+              b.disabled = true;
+              b.textContent = 'Preparando…';
+              fetch('/api/erp/suscripcion/descarga/preparar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || '' },
+                body: '{}',
+              }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+                .then(function (x) {
+                  if (!x.ok) {
+                    b.disabled = false; b.textContent = 'Preparar mi descarga';
+                    caja.insertAdjacentHTML('beforeend',
+                      '<p class="sus-detalle" style="color:var(--danger)">' + esc(x.d.error || 'No se pudo preparar.') + '</p>');
+                    return;
+                  }
+                  pinta({ descarga: { estado: 'preparando' } });
+                  parado = false;
+                  vigilar();
+                })
+                .catch(function () { b.disabled = false; b.textContent = 'Preparar mi descarga'; });
+            });
+          });
+        }
+
+        // Se pregunta cada 4 s, con setTimeout encadenado y NO con setInterval: si una respuesta
+        // tarda, las peticiones no se apilan unas sobre otras.
+        // (Sin acentos graves en este comentario: va DENTRO de un template literal y uno solo lo
+        //  cierra. Es la trampa que ya mato pantallas enteras en este repo, y hoy dos veces.)
+        function vigilar() {
+          if (parado) return;
+          fetch('/api/erp/suscripcion/situacion', { headers: { Accept: 'application/json' } })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (j) {
+              if (!j || !j.datos) { setTimeout(vigilar, 8000); return; }
+              // Solo se repinta cuando el estado CAMBIA. Repintar cada cuatro segundos con lo mismo
+              // haría parpadear la tarjeta, que es justo lo que este remate viene a quitar.
+              var nuevo = (j.datos.descarga && j.datos.descarga.estado) || '';
+              if (nuevo !== caja.dataset.estado) parado = pinta(j.datos);
+              if (!parado) setTimeout(vigilar, 4000);
+            })
+            .catch(function () { setTimeout(vigilar, 8000); });
+        }
+
+        enganchar();
+        if (caja.dataset.estado === 'preparando') vigilar();
+      })();
 
       // CERO ventanitas del navegador: se pregunta DENTRO de la página con el panel compartido
       // (window.confirmarEnPagina, layout.js). Un confirm() aquí sería un botón que deja de
