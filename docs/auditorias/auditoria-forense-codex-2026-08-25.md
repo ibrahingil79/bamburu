@@ -12,19 +12,59 @@
 > **íntegro y literal**: 43.028 caracteres, 590 líneas, 22 hallazgos numerados. **Ni una palabra
 > corregida, resumida ni actualizada.**
 >
-> **LÉELO CON SU FECHA DELANTE.** Es del 25 de agosto, y desde entonces han pasado cosas:
+> **LÉELO CON SU FECHA DELANTE.** Es del 25 de agosto. El **2 de septiembre de 2026** se
+> contrastaron **los 22 hallazgos, uno a uno, contra el código de ese día**, para que quien lo abra
+> dentro de un mes no tenga que repetirlo. Ese contraste es lo que sigue, y **caduca igual que el
+> informe**: si lo lees mucho después del 2 de septiembre, vuelve a comprobarlo.
 >
-> - **AUD-001** (barrido nocturno automático) — **cerrado** el 26 ago, commit `bff11d0`.
-> - **AUD-017** (rate limiting no persistente) — **cerrado** el 27 ago, commit `2d258c8`.
-> - **AUD-008** (copias sin cifrado propio) — **SIGUE ABIERTO** a 2 sep 2026. Comprobado ese día en
->   el servidor: no existen los remotes `crypt` ni el fichero de destinos, y las copias salen en
->   claro. Es el mismo hallazgo que volvió a salir en la auditoría del orquestador nueve días
->   después.
+> **De los ocho hallazgos críticos o altos, se cerraron dos.**
 >
-> El resto **no se ha contrastado uno a uno**: quien lo use tiene que comprobar cada hallazgo contra
-> el código de hoy antes de darlo por vigente o por cerrado. Un informe de hace nueve días leído como
-> si fuera de hoy es exactamente la clase de afirmación falsa que este proyecto lleva dos días
-> quitando de en medio.
+> ### ✅ CERRADOS — 6
+>
+> | | Hallazgo | Prueba del 2 sep 2026 |
+> |---|---|---|
+> | AUD-001 | Barrido nocturno automático | El timer `bamburu-barrido-nocturno` ya no existe en systemd (commit `bff11d0`, 26 ago) |
+> | AUD-003 | DISA con escritura y borrado genéricos | `insert_record` / `update_record` / `delete_record`: **0 apariciones** (commit `71b135a`, 26 ago) |
+> | AUD-010 | Abrir el portal cambiaba el estado de los mensajes | El GET de `/portal/:token` ya no escribe nada |
+> | AUD-014 | Llamadas a la IA sin timeout | `AbortSignal.timeout` en `core/llm.js:146`, 30 s por defecto y tope de 120 |
+> | AUD-017 | Rate limiting local y no persistente | Se apoya en base de datos (commit `2d258c8`, 27 ago) |
+> | AUD-021 | Documentación activa contradictoria | `docs/contexto/flujo-de-trabajo.md` ya **cita** a `RITUAL.md` en vez de contradecirlo |
+>
+> ### 🔴 SIGUEN VIVOS — 12
+>
+> | | Hallazgo | Prueba del 2 sep 2026 |
+> |---|---|---|
+> | AUD-002 | DISA borra la conversación de **todo** el negocio | `DELETE FROM disa_conversations` sin filtro, `modules/disa/index.js:2828` |
+> | AUD-004 | DISA escribe `stock` saltándose el libro de movimientos | `UPDATE products SET name=?, price=?, stock=?`, `modules/disa/index.js:574` |
+> | AUD-006 | Las rutas de DISA no pasan por CSRF | `csrfProtect` solo se monta en el router del ERP |
+> | AUD-007 | El cargador se traga el fallo de un módulo entero | `catch { console.warn(...) }` y sigue arrancando, `core/loader.js` |
+> | AUD-008 | Copias sin cifrado propio, sin entorno ni certificados | 0 remotes `crypt`; el backup no incluye `/etc/bamburu.env`. **Volvió a salir el 2 sep en la auditoría del orquestador, nueve días después** |
+> | AUD-009 | Token del portal en la URL | Sigue siendo `/portal/:token` |
+> | AUD-011 | Adjuntos validados por el MIME **declarado** | `ALLOWED_MIME[mime]`, sin mirar los bytes reales del fichero |
+> | AUD-012 | La ruta de adjunto acepta rutas absolutas | `isAbsolute(att.path) ? att.path : …`, `modules/erp/attachments.js` |
+> | AUD-013 | CSP débil en la superficie autenticada | 8 apariciones de `unsafe-inline` en `core/security-headers.js` |
+> | AUD-018 | Conexiones SQLite de negocio que nunca se cierran | Sin expulsión ni tope: la caché solo crece |
+> | AUD-019 | Esquema y ficheros de negocio descuadrados | 1 negocio declarado sin fichero, 2 ficheros sin negocio (residuo de pruebas) |
+> | AUD-022 | Los automatismos recorren todos los negocios en fila | 7 units instaladas, todas lineales |
+>
+> ### 🟡 A MEDIAS — 2
+>
+> - **AUD-005** — La mitad grave está tapada: `evaluateQueryAccess` decide por permisos qué tablas
+>   puede tocar la consulta. Pero sigue ejecutando `db.prepare(sql).all()` **sin LIMIT y sin
+>   timeout**: el riesgo de exposición está acotado, el de traerse una tabla entera no.
+> - **AUD-020** — La prueba de restauración es hoy **mejor de lo que Codex vio**: descarga de vuelta,
+>   compara **byte a byte** y comprueba que las bases abren. Lo que sigue sin probarse es levantar el
+>   sistema completo —entorno y certificados—, que es lo que él señalaba.
+>
+> ### ⚪ NO COMPROBADOS — 2
+>
+> - **AUD-015** (confirmación textual demasiado permisiva) — exige leer el flujo de confirmación
+>   entero y no se hizo.
+> - **AUD-016** (prompt injection) — no es una casilla que se cierre, es un riesgo permanente.
+>
+> **Están en su propia columna a propósito.** Meterlos en «vivos» o en «cerrados» sin haberlos
+> mirado sería justo la clase de afirmación falsa que este proyecto lleva dos días quitando de en
+> medio — y de la que el propio Codex avisa en AUD-021.
 
 ---
 
