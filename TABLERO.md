@@ -322,7 +322,7 @@
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-09-01 · `76517c8` · **95/206** · 389 s
+- **Último barrido completo:** 2026-09-02 · `d2318c6` · **92/207** · 387 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -8704,43 +8704,374 @@ ejecutar el guion al final, cuando le venga bien, y guardar la llave que le ense
 > **Cerrada por el orquestador el 2026-09-01.**
 > Commits: `a11a729`
 > Registro: `docs/orquestador/tareas/cifrado-copias-seguridad.md`
+<!-- LISTA-UNICA:INICIO — 98 tareas, 2 sep 2026. Orden decidido por Ibrahin. NO reordenar. -->
 
-## TAREA — Anclar la cadena de VERI*FACTU fuera del servidor
+# 🎯 LA COLA — 98 TAREAS, EN EL ORDEN QUE DECIDIÓ IBRAHIN
 
-- **id:** anclar-verifactu-fuera
+> **De dónde sale.** El 2 de septiembre de 2026 se juntó todo lo pendiente de **cuatro fuentes** que
+> hasta entonces vivían separadas: la **auditoría forense de Codex** del 25 de agosto, el
+> **diagnóstico de la peluquería** del 2 de septiembre, las **35 tareas** que ya estaban aquí, y el
+> **inventario del 24 de agosto** que estaba archivado en el panel.
+>
+> **114 entradas brutas → 98 tareas.** Se quitaron **10 caducadas**, comprobadas una a una contra el
+> código —las seis pantallas muertas ya no están, el portal ya escribe el dinero en español, las
+> catorce pantallas sin enlace llevan enlazadas desde el 24 de agosto— y se fundieron **17 entradas
+> duplicadas** en 10 tareas: las copias sin cifrar, por ejemplo, salían en **cuatro sitios a la vez**.
+>
+> **NADA SE HA RECORTADO.** Lo que no está arriba es por ORDEN, nunca porque el cliente sea pequeño.
+>
+> ⚠️ **EL ORDEN LO DECIDIÓ IBRAHIN Y NO SE CAMBIA.** Los seis bloques van en su orden, y dentro de
+> cada uno las tareas también. Si algo parece que debería ir antes, se pregunta; no se mueve.
+>
+> **De dónde salen los criterios.** Los del bloque 1 son **palabras de Ibrahin** del 2 de septiembre.
+> El resto salen de la fuente que descubrió cada cosa —el hallazgo de Codex, la medición del salón, el
+> «cuando esté» del inventario—, no de lo que se le ocurra al arquitecto. **Las 35 tareas que ya
+> estaban se conservan LITERALES**, sin añadirles criterios: Ibrahin decidió el 2 de septiembre no
+> escribir 33 listas, y para ésas manda la pregunta obligatoria del revisor —*¿arregla lo que la
+> tarea decía que estaba roto?*— y la lista congelada del arquitecto.
+
+
+---
+
+## BLOQUE 1 — QUE BAMBURU PUEDA COBRAR
+
+> **Sin esto es una demostración, no un producto.** Hoy no existe ninguna forma de cobrarle a un
+> cliente: ni pasarela, ni suscripciones, ni domiciliación.
+>
+> **La pasarela es Stripe**, y **no hay nada que bloquear**: se opera **como autónomo**, sin
+> necesidad de constituir sociedad. Las decisiones de producto ya están tomadas por Ibrahin y
+> están dentro de los criterios: no hay que volver a preguntárselas.
+
+
+## TAREA — El plan de 9,90 € y el alta, con prueba de 15 días
+
+- **id:** suscripcion-plan-y-alta
 - **estado:** pendiente
-- **firma:** Ibrahin
-  > **Por qué la firma él, y no se cierra sola:** «un tercero puede demostrar que tu factura no se ha tocado». Y el mecanismo —sello de tiempo, publicar huellas, mandarlo a Hacienda— **cambia lo que se promete**, así que elegirlo es decidir el producto.
-  > El orquestador la construye entera, la prueba entera y la deja **en su rama, fuera de
-  > producción**, hasta que Ibrahin conteste. Ver §«LAS TAREAS QUE COMPROMETEN A BAMBURU».
+- **origen:** Decisión de Ibrahin, 2 sep 2026 · diagnóstico de la peluquería (no existe nada para cobrar)
+
+Hoy **no hay ninguna forma de cobrarle a un cliente**. Ni pasarela, ni suscripciones, ni domiciliación: se buscó en el núcleo y en el panel de administración y no hay nada. Lo único de Stripe que aparece está en la tienda, que es capa congelada y no sirve para esto. Sin esto Bamburu es una demostración, no un producto.
+
+**La pasarela es Stripe**, y **no hay nada que bloquear**: se opera **como autónomo**, no hace falta constituir sociedad para empezar a cobrar.
+
+Esta tarea es solo el plan y la puerta de entrada. El cobro mensual, el impago y la bóveda van en las tres siguientes.
+
+**Criterios de aceptación**
+
+- [ ] Existe un plan único de **9,90 € al mes**, y el precio vive en un solo sitio configurable, no repetido por el código.
+- [ ] Un negocio nuevo entra con **15 días de prueba gratis SIN pedirle tarjeta**.
+- [ ] Al terminar la prueba, o al darse de alta a mitad de mes, se cobra **la parte proporcional** hasta el día 5 siguiente.
+- [ ] El alta se hace **con Stripe**, operando **como autónomo**: no se exige ni se menciona ninguna sociedad.
+- [ ] El negocio ve en su pantalla en qué situación está: en prueba, al corriente, o con un pago pendiente.
+
+## TAREA — El cobro del día 5, con aviso una semana antes
+
+- **id:** suscripcion-cobro-mensual
+- **estado:** pendiente
+- **origen:** Decisión de Ibrahin, 2 sep 2026
+
+Una vez el negocio tiene plan y tarjeta, el cobro sale solo. **Nunca se cobra por sorpresa**: una semana antes se avisa de que va a salir el cargo, cuánto y de qué tarjeta.
+
+**Criterios de aceptación**
+
+- [ ] El cargo se hace **el día 5 de cada mes**, con la tarjeta guardada en Stripe.
+- [ ] **Una semana antes de cada cobro** llega un aviso con el importe y los cuatro últimos dígitos de la tarjeta.
+- [ ] Cada cobro deja **su factura**, descargable por el cliente desde su cuenta.
+- [ ] Si el cobro sale bien, no se le molesta con nada más.
+- [ ] El cliente puede **cambiar la tarjeta** sin que nadie tenga que tocarle la cuenta por dentro.
+
+## TAREA — El impago: avisos desde 30 días antes, y corte al llegar la fecha
+
+- **id:** suscripcion-impago-y-corte
+- **estado:** pendiente
+- **origen:** Decisión de Ibrahin, 2 sep 2026
+
+Si un pago falla, **no se corta de golpe ni en silencio**. Se avisa con antelación y cada vez más claro según se acerca la fecha, para que a nadie le pille de sorpresa. Al llegar la fecha, se corta el uso.
+
+**Criterios de aceptación**
+
+- [ ] Ante un pago fallido empiezan los avisos **30 días antes** del corte.
+- [ ] Los avisos son **más insistentes según se acerca la fecha**: no es el mismo mensaje repetido.
+- [ ] **Al llegar la fecha se corta el uso** del programa, sin excepciones automáticas.
+- [ ] El corte **no borra ni un dato**: solo cierra la puerta.
+- [ ] En cada aviso y en la propia pantalla del corte se dice **exactamente qué hay que hacer** para volver.
+
+## TAREA — Noventa días para descargar los datos, y luego la bóveda
+
+- **id:** suscripcion-datos-tras-el-corte
+- **estado:** pendiente
+- **origen:** Decisión de Ibrahin, 2 sep 2026
+
+Cortado el uso, el cliente **sigue teniendo sus datos**. Tiene tres meses para descargárselos él solo. Pasados los tres meses, **no se borra nada**: los datos pasan a una bóveda de la que se pueden rescatar.
+
+**Criterios de aceptación**
+
+- [ ] Tras el corte, el cliente tiene **90 días** para descargar **todos** sus datos, él solo y sin pedir permiso.
+- [ ] Pasados los 90 días los datos van a **una bóveda que NO borra nada**.
+- [ ] **En ningún momento se destruye información de un negocio**, ni tras el corte ni en la bóveda.
+- [ ] El cliente sabe en todo momento cuántos días le quedan y qué pasará después.
+
+## TAREA — Sacar algo de la bóveda: paga un mes y elige
+
+- **id:** suscripcion-rescate-de-la-boveda
+- **estado:** pendiente
+- **origen:** Decisión de Ibrahin, 2 sep 2026
+
+De la bóveda se puede sacar lo que hay dentro pagando **el equivalente a un mes**. Y al pagar **se le pregunta qué quiere**: solo sus datos, o volver a tener la cuenta en marcha.
+
+**Criterios de aceptación**
+
+- [ ] Para rescatar algo de la bóveda se paga **el equivalente a un mes** de suscripción.
+- [ ] **Al pagar se le pregunta** si quiere solo sus datos o reactivar la cuenta.
+- [ ] Si elige los datos, se le entregan **completos** y la cuenta sigue en la bóveda.
+- [ ] Si elige reactivar, el negocio **vuelve exactamente como estaba**, sin haber perdido nada.
+
+
+---
+
+## BLOQUE 2 — QUE SEA SEGURO DE VERDAD
+
+> Los cuatro de DISA, las copias con la configuración y los certificados dentro y cifradas, los
+> archivos que sube la gente, el enlace del portal, y que Bamburu no arranque si le falta una parte.
+>
+> **De los ocho hallazgos críticos o altos de Codex, solo se han cerrado dos.** Los seis que
+> quedan están aquí.
+
+
+## TAREA — DISA puede borrar la conversación de todo el negocio
+
+- **id:** disa-borrado-global-conversaciones
+- **estado:** pendiente
+- **origen:** Auditoría de Codex, 25 ago 2026 · AUD-002 — comprobado vivo el 2 sep
+
+`POST /api/disa/clear` ejecuta `DELETE FROM disa_conversations` **sin filtrar por usuario ni por hilo**: una sola llamada borra el historial de conversación del negocio entero, incluida la constancia de decisiones que se tomaron hablando con DISA. Comprobado el 2 sep 2026 en `modules/disa/index.js:2828`.
+
+**Criterios de aceptación**
+
+- [ ] Borrar una conversación **solo afecta a la del usuario que la pide**, nunca a la del negocio entero.
+- [ ] No queda ninguna ruta capaz de vaciar `disa_conversations` de golpe.
+- [ ] Existe una comprobación que **falla en rojo** si alguien vuelve a dejar un borrado sin filtro.
+
+## TAREA — DISA cambia el stock saltándose el libro de movimientos
+
+- **id:** disa-stock-fuera-del-libro
+- **estado:** pendiente
+- **origen:** Auditoría de Codex, 25 ago 2026 · AUD-004 — comprobado vivo el 2 sep
+
+`edit_product` escribe directamente en `products.stock`, y el propio fichero afirma tres líneas más arriba que el stock debe moverse por servicios validados y dejar rastro en `stock_movements`. El resultado son existencias y coste incorrectos, ventas sobre stock que no existe y analítica que no cuadra. Comprobado el 2 sep en `modules/disa/index.js:574`.
+
+**Criterios de aceptación**
+
+- [ ] DISA **no escribe `products.stock` directamente** en ningún camino.
+- [ ] Todo movimiento de stock hecho por DISA **queda anotado en `stock_movements`**, igual que si lo hiciera una persona.
+- [ ] El coste medio del producto sigue cuadrando después de que DISA toque existencias.
+- [ ] Una comprobación demuestra que un cambio de stock por DISA deja su apunte.
+
+## TAREA — La consulta de DISA no tiene tope de filas ni plazo
+
+- **id:** disa-sql-sin-limite-ni-timeout
+- **estado:** pendiente
+- **origen:** Auditoría de Codex, 25 ago 2026 · AUD-005 — a medias el 2 sep
+
+La mitad grave ya está tapada: `evaluateQueryAccess` decide por permisos qué tablas puede tocar la consulta. Lo que sigue abierto es que se ejecuta `db.prepare(sql).all()` **sin LIMIT y sin plazo**: una consulta puede traerse una tabla entera del negocio a la memoria y al proveedor de IA, y tardar lo que quiera.
+
+**Criterios de aceptación**
+
+- [ ] Toda consulta de DISA lleva **un tope de filas impuesto por el servidor**, no pedido al modelo.
+- [ ] Toda consulta tiene **un plazo máximo**, y al vencer se corta y se dice.
+- [ ] Si la consulta llega al tope, **se avisa de que la respuesta está recortada** en vez de darla por completa.
+- [ ] La lista de permisos que ya existe sigue funcionando igual.
+
+## TAREA — Las rutas de DISA no pasan por la protección común
+
+- **id:** disa-rutas-sin-csrf
+- **estado:** pendiente
+- **origen:** Auditoría de Codex, 25 ago 2026 · AUD-006 — comprobado vivo el 2 sep
+
+El router de DISA se monta directo en `/admin/disa` y `/api/disa`, y **no hereda** el `csrfProtect()` que sí llevan los routers del ERP. Con la sesión de una víctima abierta, una página ajena puede ejecutar acciones de DISA en su nombre. Comprobado el 2 sep: `csrfProtect` solo aparece en el router del ERP.
+
+**Criterios de aceptación**
+
+- [ ] Todas las rutas de DISA que **escriben** pasan por la misma protección CSRF que el resto del producto.
+- [ ] Una petición sin la prueba correspondiente **se rechaza**, y se demuestra con una comprobación.
+- [ ] Las rutas de solo lectura siguen funcionando sin fricción añadida.
+
+## TAREA — La confirmación de DISA acepta demasiadas cosas por un «sí»
+
+- **id:** disa-confirmacion-textual-estricta
+- **estado:** pendiente
+- **origen:** Auditoría de Codex, 25 ago 2026 · AUD-015 — NO comprobado el 2 sep
+
+Codex encontró que la confirmación previa a una acción de DISA se da por buena con un texto demasiado permisivo. **No se ha comprobado si sigue vivo**: exige leer el flujo de confirmación entero, y se dijo así en vez de colocarlo en una columna sin mirarlo.
+
+La tarea empieza por comprobarlo. Si ya está bien, se cierra con la prueba escrita.
+
+**Criterios de aceptación**
+
+- [ ] Se comprueba primero si el hallazgo **sigue vivo hoy**, y se deja escrito con su prueba.
+- [ ] Si lo está: una acción que cambia datos **solo se ejecuta con una confirmación inequívoca**, no con cualquier texto que se parezca a un sí.
+- [ ] Un «no», un silencio o una frase ambigua **nunca** ejecutan la acción.
+- [ ] Si el hallazgo ya no existe, se cierra con la prueba y no se toca nada.
+
+## TAREA — Prompt injection: qué defensas hay y cuáles faltan
+
+- **id:** disa-prompt-injection-defensas
+- **estado:** pendiente
+- **origen:** Auditoría de Codex, 25 ago 2026 · AUD-016 — NO comprobado el 2 sep
+
+Texto que viene de fuera —una factura adjunta, el nombre de un producto, un mensaje del portal— llega al modelo mezclado con sus instrucciones. **No es una casilla que se cierre**: es un riesgo permanente que se acota. Se dejó sin comprobar a propósito en vez de darlo por vivo o por cerrado.
+
+**Criterios de aceptación**
+
+- [ ] Queda escrito **qué defensas hay hoy** contra la inyección de instrucciones y cuáles faltan, con su prueba.
+- [ ] El contenido que viene de fuera va **separado y marcado** de las instrucciones del sistema.
+- [ ] Ninguna acción que cambie datos se dispara **solo** porque el texto de un documento lo pida.
+- [ ] Se deja una comprobación que ejercite al menos un intento de inyección conocido.
+
+## TAREA — Bamburu arranca aunque se le caiga un módulo entero
+
+- **id:** arranque-no-tolera-modulo-ausente
+- **estado:** pendiente
+- **origen:** Auditoría de Codex, 25 ago 2026 · AUD-007 — comprobado vivo el 2 sep
+
+Si falla la importación del ERP, la tienda, DISA o el portal, el cargador solo escribe un aviso en la consola **y sigue arrancando**. El servicio queda a medias y el primero en enterarse es un cliente, no quien opera. Comprobado el 2 sep en `core/loader.js`.
+
+**Criterios de aceptación**
+
+- [ ] Si un módulo **esencial** no carga, **Bamburu no arranca**: se para y lo dice con el motivo.
+- [ ] El fallo llega al aviso de Telegram, no solo a la consola.
+- [ ] Queda escrito **cuáles son esenciales** y cuáles pueden faltar sin impedir el arranque.
+- [ ] Una comprobación provoca el fallo de un módulo y demuestra que no arranca.
+
+## TAREA — Las copias, cifradas y con todo lo que hace falta para volver
+
+- **id:** copias-cifradas-con-entorno-y-certificados
+- **estado:** pendiente
+- **origen:** Codex AUD-008 · diagnóstico de la peluquería · inventario 24 ago · tablero — la misma cosa en cuatro sitios
+
+Las copias **siguen saliendo en claro** a dos cuentas de Drive personales. Comprobado el 2 sep en el servidor: no existe `~/.config/bamburu/backup-destinos.conf`, `rclone listremotes` da solo `gdrive:` y `gdrive_gili:`, y sin ese fichero el script usa el destino en claro.
+
+Y además **la copia no basta para volver**: no incluye `/etc/bamburu.env` ni los certificados, así que tras una pérdida total habría datos pero no con qué levantarlos.
+
+Hoy los datos son de prueba y no expone nada real. **Con un cliente dentro, expone sus clientes.**
+
+**El trabajo está hecho y sin encender:** existe `scripts/cifrar-copias-de-seguridad.sh`, que genera la contraseña, crea los destinos cifrados, comprueba que descifra y solo entonces cambia el destino.
+
+**Criterios de aceptación**
+
+- [ ] Las dos copias suben **cifradas**, con **contenido y nombres** de fichero y de carpeta cifrados.
+- [ ] La copia incluye **`/etc/bamburu.env` y los certificados**, de modo que se puede levantar el sistema entero desde ella.
+- [ ] La llave vive en el servidor con permisos `600` y **una copia se le enseña a Ibrahin por pantalla, una sola vez**.
+- [ ] **En ningún momento el código exige cifrado sin que el destino cifrado exista.**
+- [ ] La comprobación nocturna **descifra de verdad** y compara byte a byte; no vale con mirar que el fichero está.
+- [ ] Una sola pieza sirve las dos copias: el script no se duplica.
+
+## TAREA — La prueba de restauración no levanta el sistema, solo abre las bases
+
+- **id:** restauracion-prueba-el-sistema-entero
+- **estado:** pendiente
+- **origen:** Auditoría de Codex, 25 ago 2026 · AUD-020 — a medias el 2 sep
+
+La prueba de hoy es **mejor de lo que Codex vio**: descarga la copia, la compara byte a byte y comprueba que las bases abren. Lo que sigue sin probarse es **levantar el sistema completo** desde cero: el entorno, los certificados y el servicio arrancando.
+
+**Criterios de aceptación**
+
+- [ ] Existe una prueba que **levanta Bamburu entero** partiendo solo de una copia, en una máquina limpia.
+- [ ] La prueba dice **cuánto tarda** la recuperación completa, medido, no estimado.
+- [ ] Si falta cualquier pieza para levantarlo, la prueba **falla en rojo** y dice cuál.
+- [ ] La prueba se puede repetir sin tocar producción.
+
+## TAREA — El enlace del portal lleva la llave en la dirección
+
+- **id:** portal-token-fuera-de-la-url
+- **estado:** pendiente
+- **origen:** Auditoría de Codex, 25 ago 2026 · AUD-009 — comprobado vivo el 2 sep
+
+El portal del cliente se abre con `/portal/:token`: la llave va **en la dirección**, así que queda en el historial del navegador, en los registros de cualquier intermediario y en el «referer» si el cliente pincha un enlace desde ahí. Comprobado el 2 sep.
+
+**Criterios de aceptación**
+
+- [ ] La llave del portal **deja de viajar en la dirección** visible.
+- [ ] El enlace que se le manda al cliente **sigue siendo de un solo uso y sencillo de abrir**: no se le complica la vida.
+- [ ] La llave **caduca**, y se dice cuándo.
+- [ ] Un enlace viejo copiado de un historial **ya no abre nada**.
+
+## TAREA — Los ficheros que sube la gente se validan por lo que dicen ser
+
+- **id:** adjuntos-validados-por-contenido
+- **estado:** pendiente
+- **origen:** Auditoría de Codex, 25 ago 2026 · AUD-011 y AUD-012 — comprobados vivos el 2 sep
+
+Dos cosas de la misma familia. La primera: el tipo de un fichero subido se decide por **el tipo que declara quien lo sube** (`ALLOWED_MIME[mime]`), sin mirar sus bytes. La segunda: la ruta que sirve un adjunto **acepta rutas absolutas** guardadas en la base (`isAbsolute(att.path) ? att.path : …`), así que un valor manipulado apunta fuera de la carpeta de adjuntos.
+
+**Criterios de aceptación**
+
+- [ ] El tipo de un fichero subido se decide **mirando su contenido**, no lo que declara quien lo sube.
+- [ ] Un fichero cuyo contenido no coincide con lo que dice ser **se rechaza**.
+- [ ] La ruta de un adjunto **nunca sale de la carpeta de adjuntos**, aunque en la base haya una ruta absoluta.
+- [ ] Hay una comprobación que intenta las dos cosas y demuestra que fallan.
+
+## TAREA — La CSP todavía permite `unsafe-inline`
+
+- **id:** csp-unsafe-inline
+- **estado:** pendiente
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
 
-**Quien tenga acceso al fichero `.db` puede reescribir importes y recalcular la cadena**, y desde
-dentro nadie lo nota: la cadena vuelve a cuadrar consigo misma. Es el agujero de integridad de las
-**922 facturas** emitidas.
+**8 usos** de `unsafe-inline` en `core/security-headers.js` — hallazgo **M8** de la auditoría de
+seguridad, **esfuerzo alto**. **Verificado el 1 sep 2026: son exactamente 8.** La cifra de la entrada
+es correcta, que en este volcado es la excepción y no la regla.
 
-**El envío real a la AEAT lo resuelve solo** —una vez enviada, la Agencia tiene su copia y la cadena
-deja de depender solo de esta máquina—, así que esta tarea y ese envío son la misma pregunta mirada
-desde dos sitios.
+**LA LECCIÓN DE C4b, QUE ESTÁ EN `CLAUDE.md` Y MANDA SOBRE EL PLANO:** la CSP es una cabecera **POR
+RESPUESTA**, así que **se endurece POR SUPERFICIE, no de golpe**. Y en cuanto una respuesta lleva
+nonce, **el navegador IGNORA `unsafe-inline` en esa respuesta**: es todo-o-nada por página.
 
-**Verificado el 1 sep 2026:** no existe ningún anclaje externo en el árbol (ni sellado de tiempo, ni
-TSA, ni publicación de huellas fuera).
+Y la trampa que ya costó dos fallos reales: **un nonce NO cubre los handlers de atributo**
+(`onclick=""`), solo el bloque `<script>`. Los handlers **no se delatan al cargar: solo al PULSAR**.
+Endurecer una pantalla sin migrar sus botones **deja botones muertos EN SILENCIO**. Por eso esto se
+mide pulsando, no cargando.
 
-**✅ DESCONGELADA EL 1 SEP 2026. EL ENCARGO EXPRESO ESTÁ DADO.** *Ibrahin:* «Descongelo el anclaje
-de VERI\*FACTU. Que lo construya.» ~~No se empieza sin encargo expreso de Ibrahin.~~ Se tacha en vez
-de borrarse: durante unas horas de ese día la máquina la tuvo entre manos **mientras la propia tarea
-decía que no se empezara**, y conviene que se vea por qué ya no lo dice.
 
-**Y POR QUÉ PASÓ ESO, que es la lección y no el trámite:** la máquina cogió esta tarea al apartarse
-el cifrado, siguiendo el orden que este mismo tablero le fija («1º el cifrado, 2º el anclaje»). El
-aviso de «no empezar» **estaba en la prosa**, y de un bloque de tarea la máquina solo lee
-`estado:`. **Un freno escrito en prosa no frena.** Si algo no debe cogerse, va en el estado — que es
-para lo que existe `esperando` desde hoy.
+## TAREA — Cifrado en reposo de las bases de cada negocio
 
-**⚠️ LO QUE SÍ MANDA SOBRE EL PLANO, y esto no se toca:** `toFixed(2)` de
-`modules/erp/routes/invoices.js:156` es **entrada del hash de la cadena**; tocar ese fichero a la
-ligera **rompe las 922 facturas emitidas**. Y la regla de `docs/contexto/decisiones.md` sigue
-entera: **la factura emitida es inmutable** — solo anular y rectificar.
+- **id:** cifrado-en-reposo-bases
+- **estado:** pendiente
+- **firma:** Ibrahin
+  > **Decisión de Ibrahin (1 sep 2026), con sus palabras:** **si se pierde la llave se pierde el negocio vivo, no solo las copias. Eso es mío.**
+  > Construir el cifrado es técnico. **Custodiar la llave no**: aquí no se pierde una copia, se pierde el negocio en marcha. Es la misma decisión que Ibrahin tomó para las copias el 1 sep —llave en el servidor **y** una copia para él, por pantalla, una sola vez— pero con una consecuencia peor, así que la toma él otra vez y no se hereda por parecido.
+  > El orquestador la construye entera, la prueba entera y la deja **en su rama, fuera de
+  > producción**, hasta que él conteste. Ver §«LAS TAREAS QUE COMPROMETEN A BAMBURU».
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
+
+Las bases de negocio (`data/tenants/<slug>.db`) están **en claro en el disco del servidor**. El
+aislamiento hoy es *a nivel de fichero* —una base por negocio—, que protege de que un negocio vea a
+otro, pero no de quien tenga el disco.
+
+**Verificado el 1 sep 2026:** no hay SQLCipher ni `PRAGMA key` en el árbol.
+
+**Va DESPUÉS del cifrado de las copias a propósito:** las copias salen de la máquina y acaban en dos
+Drive personales; las bases no se mueven de aquí. El mismo esfuerzo protege más arriba.
+
+
+## TAREA — Permisos · Paso 1 — dejar escrito qué permiso exige cada ruta
+
+- **id:** permisos-paso-1-censo-rutas
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
+
+Recorrer las rutas y **dejar escrito qué permiso exige cada una**. **Desbloquea el Paso 2**, que es
+DISA administrando permisos: no se puede dejar que la IA reparta permisos sobre un mapa que no
+existe.
+
+**⚙️ LA CIFRA DE LA ENTRADA NO ES REPRODUCIBLE (medido el 1 sep 2026).** Decía «600 de 1.025 rutas
+sin comprobación de permiso visible en la línea». Contando sobre el árbol salen **1.995
+declaraciones de ruta** y **464 guardas visibles** (`requirePerm`, `checkPermission`, `adminAuth`),
+que no da ni 600 ni 1.025 por ningún camino.
+
+**La proporción del problema se sostiene** —la mayoría de rutas no enseña su permiso en la línea—
+**pero la cifra concreta no vale como criterio de HECHO.** Quien construya esto **empieza fijando el
+método de conteo, y ese método es parte de la entrega**: sin él, no hay forma de saber cuándo está
+terminado. Es exactamente la lección de `CLAUDE.md` §«un inventario con "~" y "..." NO es una lista
+cerrada»: solo vale un inventario `fichero:línea` verificado contra el código de HOY.
+
 
 ## TAREA — Manifiesto de huellas del histórico de copias
 
@@ -8793,6 +9124,7 @@ hecho la MISMA noche en que el destino cambia, si además desaparece el remote a
 **Verificado el 1 sep 2026:** `scripts/bamburu-backup.sh` no menciona `sha256` ni manifiesto de
 ningún tipo.
 
+
 ## TAREA — La retención del backup borra si la subida falló a medias
 
 - **id:** retencion-backup-fallo-parcial
@@ -8814,79 +9146,75 @@ viejas buenas mientras la del día está incompleta.
 **Lo que hay que hacer:** condicionar el borrado al éxito **de todos** los ficheros, no de al menos
 uno. Y como son DOS copias con la misma pieza, el arreglo vale para las dos a la vez.
 
-## TAREA — Cifrado en reposo de las bases de cada negocio
 
-- **id:** cifrado-en-reposo-bases
+
+---
+
+## BLOQUE 3 — QUE NO VIVA EN UN SOLO SERVIDOR
+
+> Si esta máquina se cae, se cae Bamburu entero. Es uno de los cuatro motivos por los que Codex no
+> lo considera todavía un producto comercial maduro.
+
+
+## TAREA — Todo Bamburu vive en un solo servidor
+
+- **id:** servidor-unico-alta-disponibilidad
 - **estado:** pendiente
-- **firma:** Ibrahin
-  > **Decisión de Ibrahin (1 sep 2026), con sus palabras:** **si se pierde la llave se pierde el negocio vivo, no solo las copias. Eso es mío.**
-  > Construir el cifrado es técnico. **Custodiar la llave no**: aquí no se pierde una copia, se pierde el negocio en marcha. Es la misma decisión que Ibrahin tomó para las copias el 1 sep —llave en el servidor **y** una copia para él, por pantalla, una sola vez— pero con una consecuencia peor, así que la toma él otra vez y no se hereda por parecido.
-  > El orquestador la construye entera, la prueba entera y la deja **en su rama, fuera de
-  > producción**, hasta que él conteste. Ver §«LAS TAREAS QUE COMPROMETEN A BAMBURU».
-- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
+- **origen:** Auditoría de Codex, 25 ago 2026 · madurez · inventario 24 ago C9
 
-Las bases de negocio (`data/tenants/<slug>.db`) están **en claro en el disco del servidor**. El
-aislamiento hoy es *a nivel de fichero* —una base por negocio—, que protege de que un negocio vea a
-otro, pero no de quien tenga el disco.
+Si esta máquina se cae, se cae Bamburu entero: el programa, las bases de todos los negocios y los automatismos. Es el motivo por el que Codex no considera a Bamburu un producto comercial maduro, junto con la seguridad sin validar.
 
-**Verificado el 1 sep 2026:** no hay SQLCipher ni `PRAGMA key` en el árbol.
+Esta tarea **no es migrar a la nube**: es dejar escrito y probado qué hace falta para que una caída del servidor no sea una caída del producto.
 
-**Va DESPUÉS del cifrado de las copias a propósito:** las copias salen de la máquina y acaban en dos
-Drive personales; las bases no se mueven de aquí. El mismo esfuerzo protege más arriba.
+**Criterios de aceptación**
 
-## TAREA — Permisos · Paso 1 — dejar escrito qué permiso exige cada ruta
+- [ ] Queda escrito **qué pasa hoy exactamente** si esta máquina desaparece, y cuánto se tarda en volver.
+- [ ] Existe un camino probado para levantar Bamburu en **otra máquina** sin depender de ésta.
+- [ ] Se dice con números qué se pierde en el peor caso, y **no se adorna**.
+- [ ] Lo que haga falta contratar o decidir sube a Ibrahin, no se decide aquí.
 
-- **id:** permisos-paso-1-censo-rutas
+## TAREA — Las conexiones a las bases de los negocios no se cierran nunca
+
+- **id:** conexiones-sqlite-con-expulsion
 - **estado:** pendiente
-- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
+- **origen:** Auditoría de Codex, 25 ago 2026 · AUD-018 — comprobado vivo el 2 sep
 
-Recorrer las rutas y **dejar escrito qué permiso exige cada una**. **Desbloquea el Paso 2**, que es
-DISA administrando permisos: no se puede dejar que la IA reparta permisos sobre un mapa que no
-existe.
+Cada negocio que entra abre su conexión SQLite y **esa conexión se queda abierta para siempre**: no hay expulsión, ni tope, ni cierre. Con ocho negocios no se nota; con cientos, el servidor se queda sin descriptores de fichero y sin memoria. Comprobado el 2 sep en `core/tenant-middleware.js`.
 
-**⚙️ LA CIFRA DE LA ENTRADA NO ES REPRODUCIBLE (medido el 1 sep 2026).** Decía «600 de 1.025 rutas
-sin comprobación de permiso visible en la línea». Contando sobre el árbol salen **1.995
-declaraciones de ruta** y **464 guardas visibles** (`requirePerm`, `checkPermission`, `adminAuth`),
-que no da ni 600 ni 1.025 por ningún camino.
+**Criterios de aceptación**
 
-**La proporción del problema se sostiene** —la mayoría de rutas no enseña su permiso en la línea—
-**pero la cifra concreta no vale como criterio de HECHO.** Quien construya esto **empieza fijando el
-método de conteo, y ese método es parte de la entrega**: sin él, no hay forma de saber cuándo está
-terminado. Es exactamente la lección de `CLAUDE.md` §«un inventario con "~" y "..." NO es una lista
-cerrada»: solo vale un inventario `fichero:línea` verificado contra el código de HOY.
+- [ ] La caché de conexiones tiene **un tope**, y al pasarlo **cierra las que llevan más tiempo sin usarse**.
+- [ ] El tope vive en la configuración, no repartido por el código.
+- [ ] Se demuestra con una prueba que abre más negocios que el tope y que el número de conexiones **no crece sin fin**.
+- [ ] Cerrar una conexión **nunca** corrompe una escritura en curso.
 
-## TAREA — La CSP todavía permite `unsafe-inline`
+## TAREA — Los automatismos recorren todos los negocios en fila
 
-- **id:** csp-unsafe-inline
+- **id:** automatismos-no-lineales-por-negocio
 - **estado:** pendiente
-- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
+- **origen:** Auditoría de Codex, 25 ago 2026 · AUD-022 — comprobado vivo el 2 sep
 
-**8 usos** de `unsafe-inline` en `core/security-headers.js` — hallazgo **M8** de la auditoría de
-seguridad, **esfuerzo alto**. **Verificado el 1 sep 2026: son exactamente 8.** La cifra de la entrada
-es correcta, que en este volcado es la excepción y no la regla.
+Los siete temporizadores instalados —copias, avisos, recordatorios, propuestas, caducar reservas— recorren **todos los negocios uno detrás de otro**. Con ocho tarda minutos; con cientos, el aviso de la mañana llega por la tarde y las copias se solapan con el día siguiente.
 
-**LA LECCIÓN DE C4b, QUE ESTÁ EN `CLAUDE.md` Y MANDA SOBRE EL PLANO:** la CSP es una cabecera **POR
-RESPUESTA**, así que **se endurece POR SUPERFICIE, no de golpe**. Y en cuanto una respuesta lleva
-nonce, **el navegador IGNORA `unsafe-inline` en esa respuesta**: es todo-o-nada por página.
+**Criterios de aceptación**
 
-Y la trampa que ya costó dos fallos reales: **un nonce NO cubre los handlers de atributo**
-(`onclick=""`), solo el bloque `<script>`. Los handlers **no se delatan al cargar: solo al PULSAR**.
-Endurecer una pantalla sin migrar sus botones **deja botones muertos EN SILENCIO**. Por eso esto se
-mide pulsando, no cargando.
+- [ ] Los automatismos dejan de recorrer los negocios **estrictamente en fila**.
+- [ ] Un negocio que falla o tarda **no retrasa a los demás**.
+- [ ] Queda medido cuánto tarda hoy una pasada completa y cuánto después.
+- [ ] Si una pasada no termina antes de la siguiente, **se avisa** en vez de solaparse en silencio.
 
-## TAREA — Los cuatro temporizadores abren la base en escritura cada hora
+## TAREA — Un solo escritor: que los temporizadores pidan el trabajo al servidor
 
-- **id:** temporizadores-en-solo-lectura
+- **id:** un-solo-escritor
 - **estado:** pendiente
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Arquitectura
 
-`caducar-reservas`, `avisos`, `propuestas` y `recordatorios-cita` **abren en escritura cada hora**,
-también donde solo leen. Cada apertura en escritura es un candado potencial sobre el negocio.
+Que los temporizadores **pidan el trabajo al servidor en vez de abrir la base ellos**. Hoy hay varios
+procesos escribiendo en el mismo fichero, y ese es el origen de los bloqueos, no su síntoma.
 
-**Verificado el 1 sep 2026:** los cuatro scripts tienen **cero** `readonly: true`.
+Es la tarea que **desbloquea** «varios procesos con reparto de negocios», que está apartada como no
+convertible precisamente hasta que ésta y la de la espera de bloqueo estén cerradas.
 
-Que abran **en solo lectura donde solo leen**. Es la mitad barata del problema de bloqueos de SQLite
-y no exige tocar el modelo de procesos.
 
 ## TAREA — Bajar la espera de bloqueo de 5 s a una fracción
 
@@ -8905,17 +9233,21 @@ contar; una congelación no.
 **Va con la anterior:** las dos atacan lo mismo desde lados distintos, y juntas son la mitad del
 riesgo de bloqueo del diagnóstico de SQLite.
 
-## TAREA — Un solo escritor: que los temporizadores pidan el trabajo al servidor
 
-- **id:** un-solo-escritor
+## TAREA — Los cuatro temporizadores abren la base en escritura cada hora
+
+- **id:** temporizadores-en-solo-lectura
 - **estado:** pendiente
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Arquitectura
 
-Que los temporizadores **pidan el trabajo al servidor en vez de abrir la base ellos**. Hoy hay varios
-procesos escribiendo en el mismo fichero, y ese es el origen de los bloqueos, no su síntoma.
+`caducar-reservas`, `avisos`, `propuestas` y `recordatorios-cita` **abren en escritura cada hora**,
+también donde solo leen. Cada apertura en escritura es un candado potencial sobre el negocio.
 
-Es la tarea que **desbloquea** «varios procesos con reparto de negocios», que está apartada como no
-convertible precisamente hasta que ésta y la de la espera de bloqueo estén cerradas.
+**Verificado el 1 sep 2026:** los cuatro scripts tienen **cero** `readonly: true`.
+
+Que abran **en solo lectura donde solo leen**. Es la mitad barata del problema de bloqueos de SQLite
+y no exige tocar el modelo de procesos.
+
 
 ## TAREA — Integración continua: que las comprobaciones se ejecuten en cada subida
 
@@ -8939,6 +9271,7 @@ otra cosa y sigue viva.
 min en serie, con la aceleración real de esta máquina). Y **205 de las 208 no tocan el modelo**, así
 que no cuesta cuota de IA: cuesta tiempo de máquina.
 
+
 ## TAREA — Registro estructurado en vez de mensajes sueltos
 
 - **id:** registro-estructurado
@@ -8950,6 +9283,7 @@ negocio, ni por gravedad, ni buscar una petición concreta.
 
 **⚙️ CIFRA CORREGIDA EL 1 SEP 2026: son 14**, no 22, contados en `core/` y `modules/`. El defecto es
 cierto; la cifra estaba inflada.
+
 
 ## TAREA — Métricas básicas: cuántas peticiones, cuánto tardan, cuál va lenta
 
@@ -8963,12 +9297,863 @@ mano en el momento. Cuando algo va despacio, hoy se descubre porque alguien se q
 Va después del registro estructurado: sin un registro que se pueda contar, las métricas se
 construyen dos veces.
 
-## SIGUIENTE TAREA — Que una caída del proveedor de IA deje rastro
 
-> **Adelantada al primer puesto por Ibrahin el 2 sep 2026**, y no por prioridad de producto: es la
-> primera de la cola que **trae criterios suyos en el tablero**, y hace falta ver un ciclo entero
-> pasar por las reglas nuevas (los criterios del tablero mandan) con una tarea de verdad. El rótulo
-> se quita cuando se cierre; el orden natural de las demás no se ha tocado.
+## TAREA — Página de estado pública
+
+- **id:** pagina-estado-publica
+- **estado:** pendiente
+- **firma:** Ibrahin
+  > **Por qué la firma él, y no se cierra sola:** compromete a Bamburu a **publicar sus propias caídas**. Eso no se puede deshacer sin quedar peor que no haberlo prometido.
+  > El orquestador la construye entera, la prueba entera y la deja **en su rama, fuera de
+  > producción**, hasta que Ibrahin conteste. Ver §«LAS TAREAS QUE COMPROMETEN A BAMBURU».
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
+
+Cuando algo falla, el cliente **no tiene dónde mirar**: solo puede escribir y esperar. Verificado el
+1 sep 2026: no existe.
+
+Se apoya en las métricas y en el registro estructurado: una página de estado que se escribe a mano
+miente en cuanto nadie la actualiza.
+
+
+## TAREA — Modo mantenimiento
+
+- **id:** modo-mantenimiento
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
+
+No hay forma de **cerrar el programa un rato** avisando, para migrar o arreglar algo. Hoy o está
+abierto o está caído. Verificado el 1 sep 2026: no existe (las coincidencias son «bloquear un rato»
+de la agenda, que es otra cosa).
+
+**Existe algo cercano que NO es esto y conviene no confundir:** `readOnlyGuard`
+(`core/tenant-middleware.js`) pone un negocio en solo lectura cuando está `suspended_admin`, y está
+montado con `app.use('*')` **antes de la autenticación**. Es un castigo administrativo, no un modo
+de mantenimiento — pero **la pieza de «este negocio no escribe ahora» ya existe y funciona**.
+
+
+
+---
+
+## BLOQUE 4 — EL ACABADO DE LAS PANTALLAS
+
+> Aquí entra el **peldaño 9**, parado desde el 26 de agosto. **Las reglas de diseño ya están
+> escritas** en `DISEÑO.md` desde el 17 de julio: lo que falta es aplicarlas.
+
+
+## TAREA — El acabado de las pantallas — el peldaño 9
+
+- **id:** acabado-pantallas-peldano-9
+- **estado:** pendiente
+- **origen:** Peldaño 9, parado desde el 26 ago 2026 · Codex (acabado UX) · DISEÑO.md desde el 17 jul
+
+La interfaz ha crecido metiendo cada función donde cabía. Codex lo resume como *«coherente pero legado inline»* y lo pone entre los cuatro motivos por los que Bamburu no transmite todavía producto comercial maduro.
+
+**Las reglas ya están escritas**: `DISEÑO.md`, del 17 de julio, con su principio rector —el iPhone del nicho—, sus colores, su tipografía y su modelo de menú. Lo que falta es **aplicarlas**, empezando por las pantallas más recargadas.
+
+No se toca lógica, ni datos, ni rutas: **solo presentación**.
+
+**Criterios de aceptación**
+
+- [ ] Se aplican las reglas de `DISEÑO.md` **tal como están escritas**, sin reinventarlas.
+- [ ] Se empieza por las pantallas más recargadas, y queda dicho **cuáles y por qué**.
+- [ ] **No se toca lógica, ni datos, ni rutas.** Solo presentación.
+- [ ] De cada pantalla tocada se **mira la captura terminada**, no solo que no falle.
+- [ ] Un botón primario por pantalla, y lo secundario agrupado o escondido.
+
+## TAREA — Un menú de 70 entradas que asusta a quien no es una empresa entera
+
+- **id:** menu-por-oficio
+- **estado:** pendiente
+- **origen:** Diagnóstico de la peluquería, 2 sep 2026 · Codex (acabado UX)
+
+El menú tiene **70 entradas**. Una peluquería lo abre y ve albaranes, proveedores, almacenes, traslados, pedidos, presupuestos, proyectos, rentabilidad y siete apartados de contabilidad. Nada de eso es suyo, y el efecto es que el programa parece de otro.
+
+No se trata de borrar funciones —están construidas y sirven a otros—, sino de que **cada oficio vea lo suyo**.
+
+**Criterios de aceptación**
+
+- [ ] Un negocio ve **solo lo que su oficio usa**, y lo demás sigue existiendo y alcanzable.
+- [ ] **No se borra ninguna función** ni se recorta ninguna pantalla.
+- [ ] Se demuestra con una peluquería: qué ve antes y qué ve después, con la cuenta de entradas.
+- [ ] Quien quiera verlo todo puede, con un gesto explícito.
+
+## TAREA — Los textos que aún dicen cosas que no son
+
+- **id:** sincerar-textos-obsoletos
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 · escalera, peldaño 1 (Sincerar)
+
+De catorce textos obsoletos detectados en julio se corrigieron tres. Los otros once **siguen prometiendo o describiendo cosas que el producto no hace**, y los lee el cliente en pantalla.
+
+Es de la misma familia que todo lo demás de esta semana: un texto que afirma en falso cierra la pregunta.
+
+**Criterios de aceptación**
+
+- [ ] Se repasan **los once** que quedan, uno a uno, contra lo que el código hace hoy.
+- [ ] Cada texto o **dice la verdad**, o **desaparece**: no se deja ninguno a medias.
+- [ ] Lo corregido queda con su fecha, y lo que se retira se tacha con su motivo en vez de borrarse.
+- [ ] Se comprueba mirando la pantalla, no solo el fichero.
+
+
+---
+
+## BLOQUE 5 — QUE SE CONECTE CON OTROS PROGRAMAS
+
+> Codex lo marca como una de las mayores distancias frente a Odoo y Zoho: *«ecosistema/API: muy
+> limitado»*. La puerta primero; el contrato, la validación y los permisos después.
+
+
+## TAREA — Una puerta para que otros programas se conecten
+
+- **id:** puerta-para-otros-programas
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 A9 · Codex (ecosistema/API muy limitado)
+
+Hoy no hay forma de que otro programa lea o escriba en Bamburu. Codex lo marca como una de las distancias más grandes contra Odoo y Zoho: *«ecosistema/API: muy limitado»*.
+
+Esta tarea es **la puerta**: que exista y esté abierta. Su versionado, su contrato escrito, la validación de lo que entra y los permisos por testigo van en las cuatro tareas siguientes, que ya estaban en el tablero.
+
+**Criterios de aceptación**
+
+- [ ] Existe una puerta por la que otro programa puede **leer** los datos de un negocio con permiso.
+- [ ] La gestoría o la tienda del cliente pueden leer sus datos **sin que él los exporte a mano**.
+- [ ] Lo que se puede leer y lo que no **está decidido y escrito**, no queda al criterio de quien llame.
+- [ ] Nada de esto abre una puerta que no exija identificarse.
+
+## TAREA — Catálogo de conectores con otros programas
+
+- **id:** catalogo-de-conectores
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 A10 · Codex (ecosistema)
+
+Una vez existe la puerta, hace falta que se pueda **enchufar algo a ella** sin programar: un catálogo de conexiones listas con los programas que un negocio ya usa.
+
+**Aviso del propio inventario:** una parte de esto se descartó a propósito el 9 de julio —el escaparate de asesorías—, y ese descarte sigue en pie.
+
+**Criterios de aceptación**
+
+- [ ] Existe un sitio donde el negocio ve **con qué se puede conectar** y lo activa él solo.
+- [ ] Cada conector dice **qué datos mueve y en qué dirección**, en castellano.
+- [ ] El escaparate de asesorías **sigue descartado**: no vuelve por esta puerta.
+- [ ] Activar o quitar un conector **no toca los datos** del negocio.
+
+## TAREA — La API no tiene versión
+
+- **id:** api-versionado
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · API
+
+**`/api/v1` no existe hoy** — verificado el 1 sep 2026, cero coincidencias en el árbol. Toda la API
+cuelga de `/api/...` sin versión, así que **cualquier cambio de forma rompe a quien la esté usando**
+y no hay manera de convivir con dos formas a la vez.
+
+Es la primera de las cuatro de API porque las otras tres se apoyan en ella: no se documenta ni se
+valida un contrato que no tiene nombre.
+
+
+## TAREA — La API no tiene contrato documentado
+
+- **id:** api-contrato-documentado
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · API
+
+No hay **OpenAPI/Swagger** ni equivalente. Quien quiera integrarse tiene que leer el código, y
+cualquier cambio se entera el que lo sufre.
+
+
+## TAREA — Validación en todas las entradas de la API
+
+- **id:** api-validacion-entradas
+- **estado:** pendiente
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · API
+
+`zod` está en **5 ficheros** del árbol (verificado el 1 sep 2026; la entrada decía «16 sitios de 611
+rutas», que es otro método de conteo). El resto de entradas **se creen lo que les llega**.
+
+**Ojo al orden:** validar de golpe 611 rutas es la clase de cambio que rompe cosas en silencio. Se
+hace **por superficie**, como la CSP, y cada superficie se mide antes y después.
+
+
+## TAREA — Autenticación por token con ámbitos y cuotas
+
+- **id:** api-token-ambitos-cuotas
+- **estado:** pendiente
+- **firma:** Ibrahin
+  > **Decisión de Ibrahin (1 sep 2026), con sus palabras:** **las cuotas rozan el precio, y el precio lo decido yo.**
+  > Los **ámbitos** —qué puede tocar un programa de fuera— son técnicos. Las **cuotas** —cuánto puede pedir— no: son lo que separa un plan de otro. `CANON.md` §6 pone el precio del lado del dueño, sin matices.
+  > El orquestador la construye entera, la prueba entera y la deja **en su rama, fuera de
+  > producción**, hasta que él conteste. Ver §«LAS TAREAS QUE COMPROMETEN A BAMBURU».
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · API
+
+Hoy no hay forma de darle acceso a un programa de fuera sin darle una **sesión de persona**. Hace
+falta autenticación por token, **con ámbitos** (qué puede tocar) **y cuotas** (cuánto puede pedir).
+
+Depende del versionado y del contrato: un token con ámbitos sobre una API sin forma declarada es un
+permiso sobre algo que cambia solo.
+
+
+
+---
+
+## BLOQUE 6 — MÓVIL
+
+> Hoy Bamburu se ve en el móvil porque la web se adapta, y nada más. Todos los competidores tienen
+> aplicación.
+
+
+## TAREA — Una aplicación de móvil de verdad
+
+- **id:** app-movil
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 A8 · Codex (movilidad: solo web responsive)
+
+Hoy Bamburu se ve en el móvil porque la web se adapta, y nada más. Codex lo marca en ámbar frente a todos los competidores: *«movilidad: web responsive»* contra aplicaciones nativas en Holded, Odoo, Zoho y los del sector de la belleza.
+
+Para una peluquería esto no es un adorno: la agenda se mira de pie, entre clienta y clienta.
+
+**Criterios de aceptación**
+
+- [ ] Bamburu **se instala en el móvil** y se abre sin navegador.
+- [ ] Funciona **sin cobertura** para lo que se consulta a diario, y sincroniza al volver.
+- [ ] Avisa al móvil de lo que hace falta saber en el momento, sin abrir el programa.
+- [ ] Lo que se puede hacer desde el móvil **está decidido y escrito**: no es el programa entero encogido.
+
+
+---
+
+## EL RESTO — LO QUE NO ENTRA EN NINGÚN BLOQUE
+
+> **No es un cajón de sastre: es orden.** Aquí está el resto del tablero y los hallazgos menores.
+> Nada de esto se ha recortado ni simplificado.
+
+
+## TAREA — Hay 90 facturas esperando y nunca ha salido ninguna a Hacienda
+
+- **id:** verifactu-remitir-la-cola
+- **estado:** pendiente
+- **firma:** Ibrahin
+- **origen:** Diagnóstico de la peluquería, 2 sep 2026 · inventario 24 ago B1 y D3
+
+La cadena de facturas se calcula y se guarda bien: hay **1.245 registros encadenados** en seis negocios. Lo que no funciona es el envío. Medido el 2 sep: **90 envíos en «pendiente»**, ningún certificado en disco, ninguna variable `VERIFACTU_CERT` en el entorno y **el temporizador de la cola NO está instalado**.
+
+Los tres únicos envíos reales fueron en julio, contra el entorno de pruebas de la Agencia, con el certificado personal de Ibrahin —borrado después— y **solo uno salió limpio**.
+
+Con un cliente real dentro, esas 90 son un incumplimiento acumulándose en silencio.
+
+**Criterios de aceptación**
+
+- [ ] El temporizador de la cola **está instalado y corriendo**, y se demuestra.
+- [ ] Existe un certificado válido y **su sitio está documentado**, fuera de lo que va a git.
+- [ ] Las facturas pendientes **salen**, y cada una queda con la respuesta de la Agencia.
+- [ ] Si un envío falla, **se ve** en pantalla y llega el aviso: nunca se queda en una cola que nadie mira.
+- [ ] Queda escrito qué trámite hace falta y quién lo tiene que hacer.
+
+## TAREA — Cerrar la caja al final del día
+
+- **id:** cierre-de-caja-del-dia
+- **estado:** pendiente
+- **origen:** Diagnóstico de la peluquería, 2 sep 2026 · inventario 24 ago A2 y A4
+
+No existe ni arqueo, ni cuadre, ni cierre de caja. Se buscó por todo el producto el 2 sep y no aparece.
+
+Cuadrar el cajón al cerrar es el último gesto de cada día en un salón, en un bar y en cualquier mostrador. Sin eso, lo que hay en el cajón y lo que dice el programa no se pueden comparar, y a la semana se deja de confiar en el programa.
+
+**Criterios de aceptación**
+
+- [ ] Al cerrar el día se ve **lo que ha entrado**, separado por efectivo y por tarjeta.
+- [ ] Se puede **contar el cajón** y anotar la diferencia si la hay, sin que el programa la esconda.
+- [ ] El cierre queda guardado con su fecha, quién lo hizo y la diferencia.
+- [ ] Se puede consultar el cierre de un día pasado.
+- [ ] **Nunca se cuadra solo**: una diferencia se enseña, no se ajusta por detrás.
+
+## TAREA — Una clienta que no viene: ni se puede anotar
+
+- **id:** citas-no-presentada-y-senal
+- **estado:** pendiente
+- **origen:** Diagnóstico de la peluquería, 2 sep 2026 · comparativa con Fresha y Phorest
+
+Los estados de una cita son pendiente, confirmada, atendida y anulada. **No existe «no presentada»**: no se puede ni anotar que alguien no vino, y menos cobrarle.
+
+Es el mayor dolor del sector y **lo que venden los líderes mundiales**: guardar la tarjeta al reservar y cobrar señal o penalización, con reglas puestas una vez.
+
+**Criterios de aceptación**
+
+- [ ] Una cita se puede marcar **«no presentada»**, y cuenta como tal en la ficha de la clienta.
+- [ ] Se ve **cuántas veces** ha faltado una clienta, sin sacar cuentas aparte.
+- [ ] Se puede pedir **señal** al reservar, y la regla se pone una vez.
+- [ ] Si no viene, la señal se aplica según la regla, **sin que nadie tenga que perseguir a nadie**.
+- [ ] Anular con antelación suficiente **no penaliza**, y el plazo lo decide el negocio.
+
+## TAREA — Comisiones por profesional
+
+- **id:** comisiones-por-profesional
+- **estado:** pendiente
+- **origen:** Diagnóstico de la peluquería, 2 sep 2026
+
+No hay ni una línea de comisiones en todo el producto. Es **como se paga la nómina en un salón**: un porcentaje de lo que cada profesional factura, a veces distinto por servicio o por producto vendido.
+
+Sin esto, la peluquería sigue con su Excel — y si sigue con el Excel, no ha cambiado de sistema.
+
+**Criterios de aceptación**
+
+- [ ] Cada profesional tiene su **porcentaje**, y puede ser distinto para servicios y para productos.
+- [ ] Al cerrar el mes se ve **lo que le toca a cada uno**, con el detalle de dónde sale.
+- [ ] Lo que se cobra en el mostrador **se atribuye a quien lo hizo**, no al que cobró.
+- [ ] Se puede **exportar** para pasárselo a la gestoría.
+
+## TAREA — El recordatorio por WhatsApp hay que pulsarlo, clienta por clienta
+
+- **id:** recordatorio-whatsapp-automatico
+- **estado:** pendiente
+- **origen:** Diagnóstico de la peluquería, 2 sep 2026
+
+El recordatorio por **email sale solo** —comprobado: el temporizador corrió el 2 sep a las 07:00—. Pero WhatsApp y SMS son **un enlace que alguien tiene que pulsar**, uno por uno. Con veinte citas al día eso es peor que la libreta.
+
+**Está escrito así a propósito**, para no usar librerías no oficiales de WhatsApp, y esa decisión sigue siendo la correcta. Lo que hace falta es la vía oficial.
+
+**Criterios de aceptación**
+
+- [ ] El recordatorio por WhatsApp **sale solo**, sin que nadie pulse nada.
+- [ ] **No se usan librerías no oficiales ni WhatsApp Web**: solo la vía oficial.
+- [ ] Queda escrito **qué cuesta** y qué hay que dar de alta, para que Ibrahin decida.
+- [ ] Si no se puede mandar, **se dice**: nunca se da por enviado lo que no salió.
+- [ ] El enlace manual sigue existiendo como respaldo.
+
+## TAREA — Ninguna peluquería ha pasado nunca un día entero por Bamburu
+
+- **id:** salon-montado-y-reserva-encendida
+- **estado:** pendiente
+- **origen:** Diagnóstico de la peluquería, 2 sep 2026
+
+El salón de pruebas existe y está **vacío y apagado**. Medido el 2 sep: 8 servicios cargados, **0 clientas, 0 facturas, 0 horarios**, la reserva online sin configurar —responde 404— y el negocio **suspendido**.
+
+Todo lo que se sabe del producto para un salón está comprobado **en el código, no en el uso**. La primera vez que una peluquería lo use va a ser la primera vez.
+
+**Criterios de aceptación**
+
+- [ ] Hay un salón **montado de verdad**: horarios, servicios con duración y precio, profesionales y la reserva online encendida.
+- [ ] Se pasa **un día entero simulado**: citas, atender, cobrar, ticket y cierre.
+- [ ] Queda escrito **todo lo que se rompió o costó** por el camino, sin adornar.
+- [ ] La reserva online **responde y reserva**, comprobado desde fuera.
+- [ ] El negocio queda **activo**, no suspendido.
+
+## TAREA — Negocios declarados sin fichero y ficheros sin negocio
+
+- **id:** esquema-y-ficheros-descuadrados
+- **estado:** pendiente
+- **origen:** Auditoría de Codex, 25 ago 2026 · AUD-019 — comprobado vivo el 2 sep
+
+Medido el 2 sep: **1 negocio declarado en la base de control sin su fichero** en disco, y **2 ficheros sin negocio que los reclame**. Son residuos de comprobaciones, pero mientras estén, cualquier recuento de negocios sale mal y una restauración puede dejar huérfanos.
+
+**Criterios de aceptación**
+
+- [ ] No queda ningún negocio declarado sin su fichero.
+- [ ] No queda ningún fichero sin negocio, o **queda dicho por qué se conserva**.
+- [ ] Existe una comprobación que **falla en rojo** si vuelve a descuadrar.
+- [ ] **No se borra ningún dato de un negocio real** para cuadrar la cuenta.
+
+## TAREA — Salud y bienestar, el oficio entero
+
+- **id:** oficio-salud-completo
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 A1 · escalera peldaño 8
+
+Hoy solo está la cara: la agenda habla su idioma y trae el catálogo de servicios cargado. Falta lo propio del oficio, empezando por el historial clínico con sus consentimientos, que ya tiene tablas pero no recorrido completo.
+
+**Criterios de aceptación**
+
+- [ ] El profesional lleva la **historia** de cada paciente y la consulta en la ficha.
+- [ ] Los **consentimientos** se piden, se firman y quedan guardados con su fecha.
+- [ ] Quién ha visto qué **queda registrado**.
+- [ ] Se demuestra con un caso completo de principio a fin.
+
+## TAREA — Belleza y estética, el oficio entero
+
+- **id:** oficio-belleza-completo
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 A2 · diagnóstico de la peluquería
+
+La agenda y las fichas están. Lo que falta del oficio son las piezas que van en tareas propias —caja del día, no-shows, comisiones— más lo específico: fotos del antes y el después, fórmulas de color y su historial.
+
+**Criterios de aceptación**
+
+- [ ] La ficha guarda **fotos** de la clienta y se ven en orden.
+- [ ] Se guarda la **fórmula** de lo que se le hizo, para repetirla o cambiarla.
+- [ ] Se ve de un vistazo **qué se le hizo la última vez y cuándo**.
+- [ ] Nada de esto obliga a rellenar campos para trabajar deprisa.
+
+## TAREA — Proyectos con tablero, partes de horas y servicio de campo
+
+- **id:** proyectos-servicio-de-campo
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 A3 · Codex (servicio de campo: no desarrollado)
+
+Incluye el parte de obra. Es distinto del CRM: son **tareas internas**, no oportunidades de venta. Codex lo marca como la mayor distancia frente a Odoo y a los verticales de servicio.
+
+**Criterios de aceptación**
+
+- [ ] Un proyecto se lleva en un **tablero** con sus tareas y su estado.
+- [ ] Se imputan **horas** y se ve lo que lleva consumido.
+- [ ] Existe el **parte de obra**: qué se hizo, con qué materiales y con la firma de quien lo recibe.
+- [ ] Lo hecho se puede **facturar** sin volver a teclearlo.
+
+## TAREA — Terminal de punto de venta completo
+
+- **id:** tpv-completo-con-cajon
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 A4
+
+El mostrador emite ticket con QR al momento, y eso ya está. Falta el resto de un TPV de verdad: cajón, impresora y el cierre —que va en su propia tarea.
+
+**Criterios de aceptación**
+
+- [ ] Se cobra en mostrador con **cajón** e **impresora** de tickets.
+- [ ] La pantalla se puede usar **con el dedo**, de pie y deprisa.
+- [ ] Funciona **sin ratón** y con teclado si hace falta.
+- [ ] Lo que se cobra sigue emitiendo su factura simplificada con QR, como ahora.
+
+## TAREA — Cobro recurrente y domiciliación bancaria del cliente
+
+- **id:** cobro-recurrente-domiciliacion
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 A5
+
+Que un negocio pueda cobrarle **a sus clientes** una cuota mensual sola, del banco, sin perseguir a nadie. No confundir con el cobro de la suscripción de Bamburu, que va en el bloque 1.
+
+**Criterios de aceptación**
+
+- [ ] Una cuota mensual **se cobra sola** del banco del cliente del negocio.
+- [ ] Los recibos devueltos **se ven** y se pueden reintentar.
+- [ ] El cliente final recibe su aviso antes del cargo.
+- [ ] Queda escrito qué hace falta dar de alta para que funcione.
+
+## TAREA — Hablar con DISA desde Telegram
+
+- **id:** disa-por-telegram
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 A6
+
+Preguntarle a DISA desde el móvil sin abrir el programa. La tubería de Telegram **ya existe** —la usa el vigía del orquestador— así que esto es conectar dos cosas que ya están.
+
+**Criterios de aceptación**
+
+- [ ] Se le pregunta a DISA por Telegram y **contesta**.
+- [ ] Solo contesta a quien tiene permiso, y se demuestra con alguien que no lo tiene.
+- [ ] Lo que DISA no puede hacer por chat **lo dice**, no lo intenta a medias.
+- [ ] Lo que se hable queda en el historial del negocio, como en la web.
+
+## TAREA — Llevar el mapa a donde tenga sentido
+
+- **id:** mapas-donde-tengan-sentido
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 A7
+
+El mapa de la ficha de cliente **ya está** desde el 23 de agosto. Falta llevarlo a donde sirva: rutas de reparto, clientes por zona, dónde se vende más.
+
+**Criterios de aceptación**
+
+- [ ] Queda decidido y escrito **en qué pantallas** aporta y en cuáles no.
+- [ ] Donde se ponga, **sirve para decidir algo**, no es un adorno.
+- [ ] Ninguna pantalla se ralentiza por cargar un mapa que nadie mira.
+
+## TAREA — Redactar documentos largos dentro de Bamburu
+
+- **id:** suite-ofimatica-ligera
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 A11
+
+Un presupuesto largo o un contrato hoy se redactan fuera y se pegan. Una suite ofimática ligera dentro del producto.
+
+**Criterios de aceptación**
+
+- [ ] Se redacta un documento largo **dentro** de Bamburu y se guarda con el cliente.
+- [ ] Sale en PDF con la imagen del negocio.
+- [ ] Se puede partir de una **plantilla** y reutilizarla.
+
+## TAREA — Varias empresas, varias monedas, fabricación, firma digital y personal
+
+- **id:** multiempresa-multimoneda-fabricacion
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 A12
+
+El bloque grande que el inventario dejó junto a propósito: varias empresas bajo un mismo dueño, varias monedas, fabricación, firma digital, atención al cliente y **personal** (nóminas y ausencias).
+
+**No se recorta**: si no cabe ahora es por orden, nunca porque el cliente sea pequeño. Se parte cuando le toque.
+
+**Criterios de aceptación**
+
+- [ ] Queda escrito **en qué piezas se parte** y en qué orden, antes de tocar nada.
+- [ ] Cada pieza sale con su propia tarea y sus propios criterios.
+- [ ] Nada de esto se descarta por tamaño de cliente.
+
+## TAREA — Ver y copiar el enlace del portal desde el panel
+
+- **id:** enlace-del-portal-desde-el-panel
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 A13
+
+Hoy el enlace del portal solo sale por correo. Si el cliente lo pierde, no hay forma cómoda de dárselo otra vez.
+
+**Criterios de aceptación**
+
+- [ ] El enlace del portal de un cliente **se ve y se copia** desde su ficha.
+- [ ] Se puede **renovar** si se ha filtrado, y el viejo deja de valer.
+- [ ] Se ve **cuándo caduca**.
+
+## TAREA — Que el cliente apruebe presupuestos y haga pedidos desde el portal
+
+- **id:** portal-aprueba-presupuestos-y-pide
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 A14
+
+Hoy el portal enseña facturas y mensajes. Que el cliente **apruebe un presupuesto él solo** y pueda pedir, con carrito.
+
+**Criterios de aceptación**
+
+- [ ] El cliente **aprueba o rechaza** un presupuesto desde el portal, y queda constancia con fecha.
+- [ ] Puede hacer un pedido, y entra en el negocio como cualquier otro.
+- [ ] Lo aprobado **no se puede cambiar** por detrás sin que se vea.
+
+## TAREA — Emitir una factura recurrente sin tener que revisarla
+
+- **id:** factura-recurrente-sin-revisar
+- **estado:** pendiente
+- **firma:** Ibrahin
+- **origen:** Inventario 24 ago 2026 A16
+
+Hoy la facturación recurrente **siempre deja un borrador** para que alguien lo mire y lo emita con un clic. Que pueda emitirse sola.
+
+**Necesita decisión:** una factura emitida sola entra en la cadena legal sin que nadie la mire. Eso cambia lo que Bamburu le promete al cliente.
+
+**Criterios de aceptación**
+
+- [ ] Se puede elegir, **por plantilla**, si se emite sola o deja borrador.
+- [ ] Lo que se emite solo **queda avisado** al dueño el mismo día.
+- [ ] Si algo impide emitirla, **se avisa** en vez de emitir algo mal.
+- [ ] Lo que se emite solo entra en la cadena legal igual que lo demás.
+
+## TAREA — Mandar por correo el PDF de cualquier documento
+
+- **id:** pdf-por-correo-de-cualquier-documento
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 A17
+
+Hoy solo el presupuesto se manda por correo. Facturas, albaranes y pedidos hay que descargarlos y adjuntarlos a mano.
+
+**Criterios de aceptación**
+
+- [ ] **Cualquier** documento se manda por correo desde su pantalla.
+- [ ] El correo lleva el PDF y un texto que el negocio puede cambiar.
+- [ ] Queda registrado **a quién y cuándo** se mandó.
+- [ ] Si el correo no sale, **se dice**.
+
+## TAREA — Plantillas de documento a tu gusto
+
+- **id:** plantillas-de-documento
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 A18 · Pilar 4
+
+Cambiar cómo se ve una factura sin pedírselo a nadie: logotipo, colores, qué columnas salen, el pie.
+
+**Criterios de aceptación**
+
+- [ ] El negocio cambia el aspecto de sus documentos **sin tocar código**.
+- [ ] Lo que la ley obliga a que salga **no se puede quitar**.
+- [ ] Se ve una vista previa antes de guardar.
+
+## TAREA — La interfaz en otro idioma
+
+- **id:** interfaz-en-otro-idioma
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 A19
+
+Hoy el usuario elige idioma, se le guarda **y todo sigue en español**. La pantalla promete algo que no hace: es de la misma familia que los textos que mienten.
+
+**Criterios de aceptación**
+
+- [ ] O el idioma **funciona**, o la opción **desaparece** de la pantalla.
+- [ ] Si se hace, se hace para toda la interfaz, no a medias.
+- [ ] Lo que la ley exige en español **sigue en español**.
+
+## TAREA — Las cuatro piezas del catálogo de analítica sin habilitar
+
+- **id:** catalogo-analitica-cuatro-piezas
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 A21
+
+Cuatro medidas del constructor de analíticas están escritas y no habilitadas: el usuario que teclea, el producto en un gasto suelto, y las otras dos que el inventario nombra.
+
+**Criterios de aceptación**
+
+- [ ] Las cuatro **se habilitan o se retiran**, con su motivo escrito.
+- [ ] Lo que se habilite **da un número correcto**, comprobado contra los datos.
+- [ ] Ninguna medida queda a medias en la pantalla.
+
+## TAREA — Sincronizar con Shopify, Woo y Prestashop
+
+- **id:** sincronizar-tiendas-online
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 A23 — capa de comercio, congelada
+
+Que lo que se venda en la tienda del cliente entre solo en Bamburu. **Es de la capa de comercio, que está congelada**: no se toca hasta que se descongele.
+
+**Criterios de aceptación**
+
+- [ ] **No se empieza** mientras la capa de comercio siga congelada.
+- [ ] Cuando se descongele, se decide primero con cuál de las tres se empieza.
+- [ ] Lo que entre por ahí es indistinguible de una venta hecha a mano.
+
+## TAREA — Que DISA administre los permisos hablando
+
+- **id:** disa-administra-permisos
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 A24 · Paso 2, depende del Paso 1
+
+El dueño gestiona usuarios y accesos por conversación —*«el usuario B solo ve stock y compras»*— y DISA lo traduce a la configuración real.
+
+**Va en orden estricto: el Paso 1 primero.** Si las rutas no comprueban permisos, DISA repartiría accesos que el sistema no respeta: control aparente, no real.
+
+**Criterios de aceptación**
+
+- [ ] **No se empieza sin el Paso 1 cerrado.**
+- [ ] DISA **nunca escribe permisos directamente**: pasa por un servicio validado.
+- [ ] Un cambio de permisos por chat **queda registrado** con quién lo pidió.
+- [ ] Se demuestra que el permiso repartido **se respeta de verdad** en las rutas.
+
+## TAREA — Facturae: firmar y enviar el otro formato legal
+
+- **id:** facturae-firmar-y-enviar
+- **estado:** pendiente
+- **firma:** Ibrahin
+- **origen:** Inventario 24 ago 2026 B2 y D4
+
+El motor de Facturae 3.2.2 **ya está construido**. Lo que falta es firmar y enviar, y eso **lo bloquea un certificado** que hay que obtener.
+
+Hace falta para quien no use la vía pública, y la ley lo exige.
+
+**Criterios de aceptación**
+
+- [ ] Se firma y se envía una factura en el otro formato legal, **comprobado con una real**.
+- [ ] El certificado **no vive en git** y su sitio está documentado.
+- [ ] Si falla la firma, **se dice** y no se da por enviada.
+- [ ] Queda escrito qué trámite hace falta y quién lo hace.
+
+## TAREA — El balance de situación
+
+- **id:** balance-de-situacion
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 B3
+
+Necesita antes una pieza que hoy no existe: **los saldos con los que arranca el negocio** y el valor de lo que tiene. Sin eso, el balance no cuadra.
+
+**Criterios de aceptación**
+
+- [ ] Se pueden meter los **saldos de apertura** del negocio.
+- [ ] El balance **cuadra**, y si no cuadra dice por qué.
+- [ ] La gestoría lo reconoce sin traducirlo.
+
+## TAREA — Cuentas anuales y legalización de libros
+
+- **id:** cuentas-anuales-y-libros
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 B4
+
+Sacar del programa lo que hay que presentar al cierre del año.
+
+**Criterios de aceptación**
+
+- [ ] Sale lo que se presenta al cierre, en el formato que se pide.
+- [ ] Los libros se pueden legalizar sin rehacerlos a mano.
+- [ ] Depende del balance: **no se empieza sin él**.
+
+## TAREA — Plan de cuentas con subcuentas
+
+- **id:** plan-de-cuentas-con-subcuentas
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 B5
+
+Que la gestoría reconozca la contabilidad sin traducirla.
+
+**Criterios de aceptación**
+
+- [ ] Existen subcuentas y se pueden crear.
+- [ ] Un asiento va a **su** subcuenta, no a una cuenta general.
+- [ ] Lo que ya hay **se migra** sin perder nada.
+
+## TAREA — Llevar la amortización al diario
+
+- **id:** amortizacion-al-diario
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 B6
+
+Hoy la amortización **se calcula al mirarla**, pero no queda escrita como apunte. El desgaste de lo que se compra no aparece en la contabilidad.
+
+**Criterios de aceptación**
+
+- [ ] La amortización **queda como apunte** en el diario, con su fecha.
+- [ ] Lo que ya está calculado se puede pasar al diario sin recalcularlo mal.
+- [ ] El resultado del ejercicio cambia en consecuencia, y se ve.
+
+## TAREA — Los modelos de Hacienda que faltan
+
+- **id:** modelos-de-hacienda-que-faltan
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 B7
+
+Retenciones, operaciones intracomunitarias, operaciones con terceros y el resumen anual de IVA.
+
+**Criterios de aceptación**
+
+- [ ] Cada modelo sale **con los datos del negocio**, no en blanco.
+- [ ] Los números **cuadran** con la contabilidad, comprobado.
+- [ ] Se dice **cuáles** están y cuáles no: nada se da por hecho.
+
+## TAREA — El IRPF de lo que compras
+
+- **id:** irpf-de-compras
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 B8
+
+Hoy el IRPF solo se contempla en lo que se vende. La retención de la factura de un abogado o un profesional **no se recoge**.
+
+**Criterios de aceptación**
+
+- [ ] Una factura de compra con retención **se registra con su IRPF**.
+- [ ] Sale en el modelo de retenciones que corresponda.
+- [ ] Lo que ya está registrado sin retención se puede corregir.
+
+## TAREA — Que la pantalla de libros se pueda usar de verdad
+
+- **id:** libros-usables-y-buscables
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 B10
+
+Pinchar una línea y llegar al documento, buscar por número o por NIF, y que la pantalla no sea una lista muerta.
+
+**Criterios de aceptación**
+
+- [ ] Se **pincha una línea y se llega** al documento.
+- [ ] Se busca por número y por NIF.
+- [ ] La pantalla aguanta un negocio con miles de apuntes sin arrastrarse.
+
+## TAREA — Importar el extracto del banco desde un fichero
+
+- **id:** importar-extracto-del-banco
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 B11
+
+Subir lo que descarga el banco y que Bamburu lo cruce con los cobros. La conciliación ya existe; falta la puerta de entrada.
+
+**Criterios de aceptación**
+
+- [ ] Se sube el fichero del banco y **entra**, en los formatos que dan los bancos españoles.
+- [ ] Lo que se cruza solo **se cruza**, y lo que no se marca para mirarlo.
+- [ ] Subir dos veces el mismo extracto **no duplica** movimientos.
+
+## TAREA — Conexión automática con el banco
+
+- **id:** conexion-automatica-con-el-banco
+- **estado:** pendiente
+- **firma:** Ibrahin
+- **origen:** Inventario 24 ago 2026 B12
+
+Que los movimientos entren solos cada mañana, sin descargar nada.
+
+**Necesita decisión:** hace falta contratar un servicio de agregación bancaria, con su coste y su alta.
+
+**Criterios de aceptación**
+
+- [ ] Los movimientos **entran solos** cada mañana.
+- [ ] Si la conexión se cae, **se avisa**: nunca se da por vacío un día que no se pudo leer.
+- [ ] Queda escrito el coste y qué hay que dar de alta.
+- [ ] Las credenciales del banco **no se guardan en Bamburu**.
+
+## TAREA — DISA no sabe crear un pedido de varias líneas
+
+- **id:** disa-pedido-multilinea
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 C8 — comprobado vivo el 2 sep
+
+Limitación heredada del e-commerce: `create_order` admite un solo producto. El camino humano sí hace pedidos de varias líneas.
+
+**Criterios de aceptación**
+
+- [ ] DISA crea un pedido con **varias líneas**.
+- [ ] El pedido resultante es **indistinguible** de uno hecho a mano.
+- [ ] Se demuestra con un pedido de tres líneas de principio a fin.
+
+## TAREA — Que el cliente pague su factura desde el portal, con tarjeta
+
+- **id:** pagar-factura-desde-el-portal
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 D1 — la pasarela es Stripe y se opera como autónomo
+
+Que el cliente de un negocio pague su factura con tarjeta desde el portal. **Ya no está bloqueado**: la pasarela es Stripe y se opera como autónomo, sin sociedad. Depende de que el bloque 1 deje Stripe montado.
+
+**Criterios de aceptación**
+
+- [ ] El cliente paga su factura **desde el portal, con tarjeta**.
+- [ ] El cobro queda registrado contra la factura, sin teclearlo a mano.
+- [ ] Si el pago falla, el cliente ve **por qué** y puede reintentarlo.
+- [ ] **No se empieza** hasta que el bloque 1 deje Stripe funcionando.
+
+## TAREA — Traer los datos desde Holded y desde Quipu
+
+- **id:** importar-de-holded-y-quipu
+- **estado:** pendiente
+- **origen:** Inventario 24 ago 2026 D2 — lo bloquean ellos
+
+Que un negocio que viene de otro programa **no tenga que teclearlo todo otra vez**. Es de lo que más pesa a la hora de cambiarse.
+
+**Lo bloquean ellos**: hace falta acceso a sus datos. Mientras tanto, queda la vía del fichero.
+
+**Criterios de aceptación**
+
+- [ ] Se puede traer clientes, productos y facturas **desde un fichero** exportado de Holded o Quipu.
+- [ ] Lo importado se puede **deshacer entero** si sale mal.
+- [ ] Queda escrito qué haría falta de ellos para hacerlo automático.
+- [ ] Nada de lo importado entra en la cadena legal sin que alguien lo mire.
+
+## TAREA — Anclar la cadena de VERI*FACTU fuera del servidor
+
+- **id:** anclar-verifactu-fuera
+- **estado:** pendiente
+- **firma:** Ibrahin
+  > **Por qué la firma él, y no se cierra sola:** «un tercero puede demostrar que tu factura no se ha tocado». Y el mecanismo —sello de tiempo, publicar huellas, mandarlo a Hacienda— **cambia lo que se promete**, así que elegirlo es decidir el producto.
+  > El orquestador la construye entera, la prueba entera y la deja **en su rama, fuera de
+  > producción**, hasta que Ibrahin conteste. Ver §«LAS TAREAS QUE COMPROMETEN A BAMBURU».
+- **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
+
+**Quien tenga acceso al fichero `.db` puede reescribir importes y recalcular la cadena**, y desde
+dentro nadie lo nota: la cadena vuelve a cuadrar consigo misma. Es el agujero de integridad de las
+**922 facturas** emitidas.
+
+**El envío real a la AEAT lo resuelve solo** —una vez enviada, la Agencia tiene su copia y la cadena
+deja de depender solo de esta máquina—, así que esta tarea y ese envío son la misma pregunta mirada
+desde dos sitios.
+
+**Verificado el 1 sep 2026:** no existe ningún anclaje externo en el árbol (ni sellado de tiempo, ni
+TSA, ni publicación de huellas fuera).
+
+**✅ DESCONGELADA EL 1 SEP 2026. EL ENCARGO EXPRESO ESTÁ DADO.** *Ibrahin:* «Descongelo el anclaje
+de VERI\*FACTU. Que lo construya.» ~~No se empieza sin encargo expreso de Ibrahin.~~ Se tacha en vez
+de borrarse: durante unas horas de ese día la máquina la tuvo entre manos **mientras la propia tarea
+decía que no se empezara**, y conviene que se vea por qué ya no lo dice.
+
+**Y POR QUÉ PASÓ ESO, que es la lección y no el trámite:** la máquina cogió esta tarea al apartarse
+el cifrado, siguiendo el orden que este mismo tablero le fija («1º el cifrado, 2º el anclaje»). El
+aviso de «no empezar» **estaba en la prosa**, y de un bloque de tarea la máquina solo lee
+`estado:`. **Un freno escrito en prosa no frena.** Si algo no debe cogerse, va en el estado — que es
+para lo que existe `esperando` desde hoy.
+
+**⚠️ LO QUE SÍ MANDA SOBRE EL PLANO, y esto no se toca:** `toFixed(2)` de
+`modules/erp/routes/invoices.js:156` es **entrada del hash de la cadena**; tocar ese fichero a la
+ligera **rompe las 922 facturas emitidas**. Y la regla de `docs/contexto/decisiones.md` sigue
+entera: **la factura emitida es inmutable** — solo anular y rectificar.
+
+
+## TAREA — Que una caída del proveedor de IA deje rastro
+
 
 - **id:** caida-ia-deja-rastro
 - **estado:** pendiente
@@ -9033,56 +10218,6 @@ negocio y los afecta a todos. Y **no es recargar la cuenta**: eso es operación,
 («DISA no está disponible porque el proveedor de IA no tiene saldo. Contacta con soporte.»). Esta
 tarea añade el rastro por detrás, **no cambia lo que el cliente lee**.
 
-## TAREA — La API no tiene versión
-
-- **id:** api-versionado
-- **estado:** pendiente
-- **origen:** TABLERO.md §Backlog 31 ago 2026 · API
-
-**`/api/v1` no existe hoy** — verificado el 1 sep 2026, cero coincidencias en el árbol. Toda la API
-cuelga de `/api/...` sin versión, así que **cualquier cambio de forma rompe a quien la esté usando**
-y no hay manera de convivir con dos formas a la vez.
-
-Es la primera de las cuatro de API porque las otras tres se apoyan en ella: no se documenta ni se
-valida un contrato que no tiene nombre.
-
-## TAREA — La API no tiene contrato documentado
-
-- **id:** api-contrato-documentado
-- **estado:** pendiente
-- **origen:** TABLERO.md §Backlog 31 ago 2026 · API
-
-No hay **OpenAPI/Swagger** ni equivalente. Quien quiera integrarse tiene que leer el código, y
-cualquier cambio se entera el que lo sufre.
-
-## TAREA — Validación en todas las entradas de la API
-
-- **id:** api-validacion-entradas
-- **estado:** pendiente
-- **origen:** TABLERO.md §Backlog 31 ago 2026 · API
-
-`zod` está en **5 ficheros** del árbol (verificado el 1 sep 2026; la entrada decía «16 sitios de 611
-rutas», que es otro método de conteo). El resto de entradas **se creen lo que les llega**.
-
-**Ojo al orden:** validar de golpe 611 rutas es la clase de cambio que rompe cosas en silencio. Se
-hace **por superficie**, como la CSP, y cada superficie se mide antes y después.
-
-## TAREA — Autenticación por token con ámbitos y cuotas
-
-- **id:** api-token-ambitos-cuotas
-- **estado:** pendiente
-- **firma:** Ibrahin
-  > **Decisión de Ibrahin (1 sep 2026), con sus palabras:** **las cuotas rozan el precio, y el precio lo decido yo.**
-  > Los **ámbitos** —qué puede tocar un programa de fuera— son técnicos. Las **cuotas** —cuánto puede pedir— no: son lo que separa un plan de otro. `CANON.md` §6 pone el precio del lado del dueño, sin matices.
-  > El orquestador la construye entera, la prueba entera y la deja **en su rama, fuera de
-  > producción**, hasta que él conteste. Ver §«LAS TAREAS QUE COMPROMETEN A BAMBURU».
-- **origen:** TABLERO.md §Backlog 31 ago 2026 · API
-
-Hoy no hay forma de darle acceso a un programa de fuera sin darle una **sesión de persona**. Hace
-falta autenticación por token, **con ámbitos** (qué puede tocar) **y cuotas** (cuánto puede pedir).
-
-Depende del versionado y del contrato: un token con ámbitos sobre una API sin forma declarada es un
-permiso sobre algo que cambia solo.
 
 ## TAREA — Datos de ejemplo borrables al crear un negocio
 
@@ -9100,6 +10235,7 @@ la cadena de VERI\*FACTU: hubo que archivarlos. **La basura que se deja hoy pued
 mañana**, así que este borrado tiene que existir ANTES de que los datos de ejemplo se enreden con un
 documento legal.
 
+
 ## TAREA — Historial de cambios visible para el cliente
 
 - **id:** historial-cambios-visible-cliente
@@ -9116,6 +10252,7 @@ existe.
 **Va con el aviso de dos personas editando lo mismo y con la actividad de empleados**: las tres
 piden el mismo cimiento —dejar rastro de quién cambió qué— y construirlas por separado es
 construirlo tres veces.
+
 
 ## TAREA — Exportación completa de todos sus datos
 
@@ -9135,6 +10272,7 @@ antes cómo convive el borrado con la inmutabilidad fiscal—, pero **exportar n
 esta mitad **sí se puede construir sin esa decisión**. Y hacerla primero deja el RGPD más pequeño
 cuando llegue.
 
+
 ## TAREA — Modo de pruebas por negocio
 
 - **id:** modo-pruebas-por-negocio
@@ -9151,21 +10289,6 @@ existe (lo único que aparece buscando es el `--no-sandbox` de Chromium, que no 
 **Se apoya en los negocios desechables que los gates ya usan** (`negocioDesechable`,
 `EMPIEZAN_DE_CERO`): la pieza de crear y tirar un negocio entero ya está construida y probada.
 
-## TAREA — Página de estado pública
-
-- **id:** pagina-estado-publica
-- **estado:** pendiente
-- **firma:** Ibrahin
-  > **Por qué la firma él, y no se cierra sola:** compromete a Bamburu a **publicar sus propias caídas**. Eso no se puede deshacer sin quedar peor que no haberlo prometido.
-  > El orquestador la construye entera, la prueba entera y la deja **en su rama, fuera de
-  > producción**, hasta que Ibrahin conteste. Ver §«LAS TAREAS QUE COMPROMETEN A BAMBURU».
-- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — de la comparativa con los grandes
-
-Cuando algo falla, el cliente **no tiene dónde mirar**: solo puede escribir y esperar. Verificado el
-1 sep 2026: no existe.
-
-Se apoya en las métricas y en el registro estructurado: una página de estado que se escribe a mano
-miente en cuanto nadie la actualiza.
 
 ## TAREA — Límites visibles antes de chocar contra ellos
 
@@ -9180,6 +10303,7 @@ almacenamiento. Verificado el 1 sep 2026: no hay nada que los enseñe antes.
 5 €), el freno empezó a cortar con 429 **antes** de llamar a la API, y una comprobación murió
 esperando una pantalla que no se pintaba nunca. **El diagnóstico que quedó escrito era falso** y se
 tardó en descubrir. Un tope que no se ve no solo molesta: **hace que se diagnostique mal**.
+
 
 ## TAREA — Corregir errores de semanas atrás en documentos no fiscales
 
@@ -9197,6 +10321,7 @@ Un fallo de hace semanas en un documento **que no es fiscal** hoy no se puede ar
 **no se toca jamás** —está en la cadena de VERI\*FACTU—, y esa línea tiene que quedar escrita en el
 plano antes de tocar nada, porque los documentos se parecen entre sí en la pantalla y no en la ley.
 
+
 ## TAREA — Deshacer una importación entera
 
 - **id:** deshacer-importacion-entera
@@ -9210,6 +10335,7 @@ existe.
 escribe nada**, así que los fallos se ven antes. Lo que falta es la vuelta atrás **de lo que ya
 entró**, y esa es la que no existe.
 
+
 ## TAREA — Búsqueda global
 
 - **id:** busqueda-global
@@ -9221,6 +10347,7 @@ el 1 sep 2026: no existe.
 
 **Va emparejada con «buscar dentro de los adjuntos»**, que es su continuación natural: la auditoría
 las contaba juntas («un índice, dos funciones»), y separarlas obliga a construir el índice dos veces.
+
 
 ## TAREA — Aviso cuando dos personas editan lo mismo
 
@@ -9234,6 +10361,7 @@ Verificado el 1 sep 2026: no hay control de versión ni bloqueo optimista en el 
 **El diagnóstico arquitectónico ya lo situó:** es una columna `version` en el servicio — **trivial
 una vez esté «un solo escritor»**, e **imposible de aplicar de forma uniforme sin él**. Por eso no
 va antes que aquélla.
+
 
 ## TAREA — Acceso de gestoría sin consumir un usuario
 
@@ -9253,6 +10381,7 @@ ficha de cliente).
 mayor, los modelos—, y todo eso ya está construido y ya tiene sus permisos. Esto es una **puerta de
 entrada con un perfil recortado**, no funciones nuevas.
 
+
 ## TAREA — Canal de aviso desde dentro del programa
 
 - **id:** canal-de-aviso-desde-dentro
@@ -9265,20 +10394,6 @@ Cuando algo falla, el dueño **no tiene desde dónde decirlo** sin salirse del p
 **Las páginas de error ya están escritas y son el sitio natural**: es donde el usuario está justo
 cuando tiene algo que contar.
 
-## TAREA — Modo mantenimiento
-
-- **id:** modo-mantenimiento
-- **estado:** pendiente
-- **origen:** TABLERO.md §Backlog 31 ago 2026 · Producto — operativo
-
-No hay forma de **cerrar el programa un rato** avisando, para migrar o arreglar algo. Hoy o está
-abierto o está caído. Verificado el 1 sep 2026: no existe (las coincidencias son «bloquear un rato»
-de la agenda, que es otra cosa).
-
-**Existe algo cercano que NO es esto y conviene no confundir:** `readOnlyGuard`
-(`core/tenant-middleware.js`) pone un negocio en solo lectura cuando está `suspended_admin`, y está
-montado con `app.use('*')` **antes de la autenticación**. Es un castigo administrativo, no un modo
-de mantenimiento — pero **la pieza de «este negocio no escribe ahora» ya existe y funciona**.
 
 ## TAREA — Acciones en bloque
 
@@ -9291,6 +10406,7 @@ existe selección múltiple (las coincidencias son `openBloqueo()` de la agenda)
 
 **Va después de la papelera, y el orden importa:** una acción en bloque sin vuelta atrás convierte un
 clic distraído en un desastre de cien filas.
+
 
 ## TAREA — Exportar cualquier lista a Excel
 
@@ -9305,6 +10421,7 @@ sacar.**
 Verificado el 1 sep 2026. Que exista esa exportación fiscal es buena noticia para esta tarea —hay de
 dónde copiar la mecánica— pero **no la cubre**: aquélla es una plantilla oficial cerrada, ésta es
 cualquier lista.
+
 
 ## TAREA — Adjuntar documentos a clientes, pedidos y facturas
 
@@ -9324,6 +10441,7 @@ consumidores del módulo.
 O sea: no es construir adjuntos, es **enganchar los que ya hay a dos entidades más**. Mucho más
 pequeña de lo que la entrada sugiere.
 
+
 ## TAREA — Buscar dentro de los documentos adjuntos
 
 - **id:** buscar-dentro-de-adjuntos
@@ -9336,49 +10454,6 @@ No se puede buscar **por el contenido** de un documento adjunto. Verificado el 1
 **Va después de la búsqueda global y de enganchar los adjuntos a clientes y pedidos**, por dos
 motivos: la auditoría las contaba juntas («un índice, dos funciones»), y buscar dentro de adjuntos
 que aún no se pueden adjuntar no sirve de nada.
-
-# 🗃️ BACKLOG DE MEJORAS — sesión del 31 ago 2026 (SIN ORDEN DECIDIDO)
-
-> **Esto NO es una cola de trabajo.** Es el volcado de todo lo que salió de las cinco auditorías del
-> 31 ago. **El orden lo decide Ibrahin** (CANON §6); nada de aquí se inicia sin encargo. Los informes
-> íntegros están en el repo, no aquí:
->
-> - `docs/rendimiento/diagnostico-bloqueos-sqlite.md`
-> - `docs/rendimiento/analisis-migracion-postgres.md`
-> - `docs/auditorias/arquitectura-y-estandares.md`
-> - `docs/auditorias/comparativa-referentes.md`
-> - `docs/seguridad/vectores-de-ataque.md`
->
-> **Orden propuesto (31 ago 2026):** `docs/auditorias/diagnostico-arquitectonico.md` reagrupa estos
-> 54 puntos en 12 capacidades y las ordena **por impacto arquitectónico**. Es una PROPUESTA del
-> architect: el orden lo sigue decidiendo Ibrahin (CANON §6) y no mueve nada de esta lista.
-
-> ## ⚖️ CONTRASTE CONTRA EL CÓDIGO — 1 SEP 2026 (bloque 2 del encargo)
->
-> **Las 54 entradas de este volcado se han contrastado UNA A UNA contra el árbol real, no contra lo
-> que dice el tablero.** Resultado:
->
-> | Veredicto | Cuántas |
-> |---|---:|
-> | **Vive** — el problema sigue ahí | **43** |
-> | **Caducada** — ya resuelta, con su commit | **4** |
-> | **No convertible** — le falta un criterio que solo da Ibrahin | **4** |
-> | **No verificable sin ejecutar** | **3** |
->
-> **Por qué hizo falta:** el volcado del 31 ago **heredó las cifras del tablero en vez de medirlas**.
-> De las cuatro entradas de §Limpieza, **tres estaban podridas**: dos caducadas el 24 ago (`9d114d2`,
-> `edb5a9c`) y una con la cifra mal contada. Y las seis pantallas muertas llevaban **ocho días
-> borradas** (`fe6bef0`) cuando se convirtieron en tarea: le costaron al orquestador una tarea entera
-> y una interrupción a Ibrahin por una decisión que no existía.
->
-> **Además de los cuatro veredictos, cinco cifras de entradas VIVAS estaban mal** y quedan corregidas
-> en su sitio, tachadas y con el motivo: los «267 gates» (son 89 ficheros `gate-*` y 208
-> comprobaciones en el barrido), los «22 `console.log`» (son 14), la línea `core/auth.js:74` (el
-> plazo está en la `:107`), la retención del backup (el guardián existe desde junio; el hueco real es
-> el fallo PARCIAL) y las «600 de 1.025 rutas» (no reproducible con ningún conteo).
->
-> **La regla que queda, y es la lección:** una entrada de deuda que nadie contrasta con el código
-> fabrica trabajo fantasma sola. **Antes de convertir, se mide.**
 
 
 ## TAREA — Que cada comprobación se traiga su propio negocio
@@ -9425,6 +10500,22 @@ negocio suspendido NO deja escribir— necesitan un negocio suspendido y tienen 
 
 > **Va la ÚLTIMA de la cola a propósito.** Ibrahin lo dijo así: *«a la cola, sin prisa»*.
 > No hay nada roto — hay comprobaciones apoyadas en algo que no es suyo.
+
+
+
+<!-- LISTA-UNICA:FIN -->
+
+---
+
+> ## ⚠️ LO QUE SIGUE ES HISTORIA, NO LA COLA
+>
+> Estos 54 apuntes son el backlog en prosa del 31 de agosto. **Están todos dentro de las 98 tareas
+> de arriba**, que es la única cola que la máquina lee y la única que hay que mirar.
+>
+> **Se conservan y no se borran** —es la regla de esta casa: se tacha con su motivo, no se
+> destruye— pero **no se trabajan desde aquí**. Si un apunte de abajo y una tarea de arriba no
+> cuadran, **manda la de arriba**: se contrastó contra el código el 2 de septiembre de 2026 y éstos
+> no. Diez apuntes de esta clase resultaron ser mentira ese día.
 
 ## Seguridad y datos
 
