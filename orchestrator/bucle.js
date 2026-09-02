@@ -41,6 +41,20 @@ import { leerTablero, buscarSiguienteTarea, tareasPendientes, esRepo, rama } fro
 import { correrBarrido } from './barrido.js';
 import { alcanzaParaCiclo } from './nucleo/maquina.js';
 
+/**
+ * ¿ES MALA SUERTE O ES QUE ESTÁ ROTO? Función pura, para poder probarla sin un daemon.
+ *
+ * La huella lleva EL PASO además del mensaje: dos fallos distintos en sitios distintos son dos
+ * incidencias, y aguantarlas es correcto. Lo que no lo es —y costó seis horas de fábrica parada
+ * la noche del 1 al 2 de septiembre— es repetir la MISMA decisión con el MISMO error cada minuto
+ * y seguir pareciendo que se trabaja.
+ */
+export function frenoDeVueltasRotas({ paso, mensaje, huellaPrevia, seguidas = 0, tope = 3 }) {
+  const huella = `${paso}·${mensaje}`;
+  const n = huella === huellaPrevia ? seguidas + 1 : 1;
+  return { huella, seguidas: n, plantarse: n >= Math.max(1, tope) };
+}
+
 export async function arrancar({ config = null, unaVuelta = false, entorno = process.env,
                                  reloj = () => Date.now() } = {}) {
   const cfg = config || cargarConfig({ entorno });
@@ -206,6 +220,12 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
 
   // ── El bucle ──────────────────────────────────────────────────────────────
   let vueltas = 0;
+  // El freno de las vueltas rotas: cuántas seguidas y con qué huella. `paradoPorRoto` guarda la
+  // avería que ya se avisó, para no repetir el aviso una vez por minuto (que sería el mismo
+  // pecado por la otra punta).
+  let rotasSeguidas = 0;
+  let huellaRota = null;
+  let paradoPorRoto = null;
   while (true) {
     // NADA NUEVO SI YA SE ESTÁ PARANDO. Una sola regla, arriba del todo, y sustituye a los tres
     // casos particulares que había aquí (sin tarea / esperando cuota / emergencia).
@@ -222,6 +242,12 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
     if (parando || emergencia) break;
     vueltas++;
     let espera = cfg.ciclo.intervaloVueltaMs;
+    if (paradoPorRoto) {
+      // Plantado. NO se da la vuelta: se sigue vivo para contestar por Telegram y mandar el
+      // parte, pero no se toca nada. Sale del bucle quien lo arregle y reinicie.
+      if (vueltas % 30 === 0) log.aviso('Sigo plantado por la avería de arriba. Nadie la ha mirado todavía.');
+      espera = cfg.ciclo.intervaloVueltaMs;
+    } else
     try {
       const r = await ciclo.unPaso(estado);
       estado = r.estado;
@@ -250,11 +276,42 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
         averiaViva = r.averia;
         await entregar({ texto: redactarAveria(r.averia), config: cfg, entorno, logger: log });
       }
+      rotasSeguidas = 0; huellaRota = null;   // la vuelta salió: se olvida lo anterior
     } catch (e) {
       // La red de seguridad. Que una vuelta reviente no puede llevarse el daemon.
       log.error(`La vuelta ${vueltas} reventó: ${e.message}`);
       if (entorno.ORQ_DEBUG) log.detalle(String(e.stack));
       espera = cfg.ciclo.intervaloVueltaMs;
+
+      // ⚙️ UN FALLO REPETIDO EN EL MISMO SITIO NO GIRA EN EL VACÍO (2 sep 2026).
+      //
+      // La noche del 1 al 2 de septiembre esta red de seguridad se portó como una trampa. El
+      // paso de la firma reventaba SIEMPRE en el mismo punto, y como el `catch` solo apuntaba y
+      // seguía, el daemon repitió la misma decisión **381 veces en seis horas**: un commit por
+      // vuelta, la fábrica sin coger nada, y **el aviso de firma sin salir ni una sola vez**.
+      // Ibrahin no se enteró de nada porque el proceso seguía «vivo».
+      //
+      // Aguantar un fallo suelto es correcto —una lectura de git que falla, un fichero a medio
+      // escribir— y eso no cambia. Lo que no puede pasar es que un fallo QUE NO SE ARREGLA SOLO
+      // se disfrace de sistema funcionando. La huella incluye el paso: fallar tres veces en el
+      // mismo punto y por el mismo motivo no es mala suerte, es que está roto.
+      const f = frenoDeVueltasRotas({ paso: estado.paso, mensaje: e.message,
+        huellaPrevia: huellaRota, seguidas: rotasSeguidas, tope: cfg.ciclo.maxVueltasRotasSeguidas });
+      rotasSeguidas = f.seguidas;
+      huellaRota = f.huella;
+      if (f.plantarse && !paradoPorRoto) {
+        paradoPorRoto = {
+          clase: 'vuelta-rota-repetida', pendientes: 0, nombres: [],
+          motivo: `Me he roto ${rotasSeguidas} veces seguidas en el mismo punto (paso `
+            + `${estado.paso}) y siempre por lo mismo: «${e.message}». **Dejo de dar vueltas**: `
+            + `repetirlo cada minuto no lo arregla y hace creer que estoy trabajando. `
+            + `${estado.tarea ? `«${estado.tarea.titulo}» queda intacta donde está. ` : ''}`
+            + `No voy a coger nada más hasta que alguien mire esto.`,
+        };
+        log.error(`🚨 ${rotasSeguidas} vueltas rotas seguidas en ${estado.paso}. ME PLANTO y aviso.`);
+        averiaViva = paradoPorRoto;
+        await entregar({ texto: redactarAveria(paradoPorRoto), config: cfg, entorno, logger: log });
+      }
     }
 
     if (cfg.vigia.activo && reloj() - ultimoParte >= cfg.vigia.intervaloParteMs) {

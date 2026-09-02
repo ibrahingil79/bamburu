@@ -6,6 +6,7 @@
 
 ## Qué hay que corregir
 
-- [FUERA-DE-ALCANCE] Quedan dos afirmaciones falsas en `deploy/systemd/README.md`, y el plano mandaba cazarlas — **Dónde:** `deploy/systemd/README.md:402` y `deploy/systemd/README.md:466-467` **Qué pasa:** `:402`, en la tabla de §«Por qué una sola pieza y no dos scripts», dice hoy: ``` | `BACKUP_REMOTE` | `gdrive_cif:daily` | `gdrive_gili_cif:daily` | ```
+- No hay ningún commit nuevo desde 3d43f0a.
+- El programador no ha confirmado nada, o lo dejó sin confirmar en el árbol de trabajo.
 
 El texto completo del revisor está en `task-cifrado-copias-seguridad-review.md`.

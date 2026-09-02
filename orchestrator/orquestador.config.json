@@ -83,7 +83,9 @@
     "maxFallosTecnicosPorPaso": 3,
     "intervaloVueltaMs": 60000,
     "esperaTrasFalloTecnicoMs": 30000,
-    "plazoParadaMs": 20000
+    "plazoParadaMs": 20000,
+    "$porqueVueltasRotas": "2 sep 2026. El paso de la firma reventaba siempre en el mismo punto y el catch del bucle solo apuntaba y seguia: 381 vueltas en 6 horas, un commit por vuelta, la fabrica parada y el aviso de firma sin salir ni una vez. Aguantar un fallo suelto sigue estando bien; fallar N veces seguidas EN EL MISMO PASO y por lo mismo no es mala suerte, es que esta roto: se planta y avisa.",
+    "maxVueltasRotasSeguidas": 3
   },
   "subida": {
     "activa": true,

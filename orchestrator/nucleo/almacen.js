@@ -125,7 +125,20 @@ export class Almacen {
     if (fs.existsSync(this.rutaEstado)) {
       try {
         const leido = JSON.parse(fs.readFileSync(this.rutaEstado, 'utf8'));
-        if (leido && leido.version === VERSION_ESTADO) { estado = leido; desdeInstantanea = true; }
+        // ⚙️ LA INSTANTÁNEA SE MONTA SOBRE LOS VALORES POR DEFECTO (2 sep 2026, la avería del bucle).
+        // Antes se usaba `leido` TAL CUAL, y eso convierte cada campo NUEVO de `estadoInicial()` en
+        // una bomba de relojería: el fichero de estado se escribió antes de que el campo existiera,
+        // no lo tiene, y `version` sigue siendo 1 —porque la forma no cambió, solo se añadió algo—,
+        // así que nadie lo rellena. El campo solo aparece si alguna transición lo escribe, de modo
+        // que el estado se queda sin él HASTA EL DÍA EN QUE UN EVENTO LO LEE. Puede tardar semanas.
+        //
+        // Eso fue exactamente esto: `firmasPendientes` nació en «Las tareas que comprometen a
+        // Bamburu las firma Ibrahin» y el estado que corría venía de antes. Aguantó sin enterarse
+        // hasta las 23:13 del 1 sep, cuando la PRIMERA tarea que necesitaba firma llegó al final y
+        // `s.firmasPendientes.filter(...)` se encontró un `undefined`.
+        //
+        // Se arregla aquí, y vale para el campo de ayer y para el que se añada mañana.
+        if (leido && leido.version === VERSION_ESTADO) { estado = { ...estadoInicial(), ...leido }; desdeInstantanea = true; }
       } catch { /* instantánea corrupta: se reconstruye entera desde el journal */ }
     }
 
@@ -160,7 +173,20 @@ export class Almacen {
     if (fs.existsSync(this.rutaEstado)) {
       try {
         const leido = JSON.parse(fs.readFileSync(this.rutaEstado, 'utf8'));
-        if (leido && leido.version === VERSION_ESTADO) { estado = leido; desdeInstantanea = true; }
+        // ⚙️ LA INSTANTÁNEA SE MONTA SOBRE LOS VALORES POR DEFECTO (2 sep 2026, la avería del bucle).
+        // Antes se usaba `leido` TAL CUAL, y eso convierte cada campo NUEVO de `estadoInicial()` en
+        // una bomba de relojería: el fichero de estado se escribió antes de que el campo existiera,
+        // no lo tiene, y `version` sigue siendo 1 —porque la forma no cambió, solo se añadió algo—,
+        // así que nadie lo rellena. El campo solo aparece si alguna transición lo escribe, de modo
+        // que el estado se queda sin él HASTA EL DÍA EN QUE UN EVENTO LO LEE. Puede tardar semanas.
+        //
+        // Eso fue exactamente esto: `firmasPendientes` nació en «Las tareas que comprometen a
+        // Bamburu las firma Ibrahin» y el estado que corría venía de antes. Aguantó sin enterarse
+        // hasta las 23:13 del 1 sep, cuando la PRIMERA tarea que necesitaba firma llegó al final y
+        // `s.firmasPendientes.filter(...)` se encontró un `undefined`.
+        //
+        // Se arregla aquí, y vale para el campo de ayer y para el que se añada mañana.
+        if (leido && leido.version === VERSION_ESTADO) { estado = { ...estadoInicial(), ...leido }; desdeInstantanea = true; }
       } catch { /* a medio escribir: se reconstruye desde el journal */ }
     }
     const eventos = leerLineas(this.rutaJournal);
@@ -231,7 +257,7 @@ export function aplicar(estado, e) {
     case 'FALLOS_TECNICOS_LIMPIADOS':
       return { ...s, fallosTecnicos: { ...s.fallosTecnicos, [e.paso]: 0 } };
     case 'VEREDICTO':
-      return { ...s, historial: [...s.historial,
+      return { ...s, historial: [...(s.historial || []),
                { intento: s.intento, veredicto: e.veredicto, motivos: e.motivos || [], resumen: e.resumen || '', cuando: e.cuando }] };
     // base a null a propósito: el intento nuevo se mide desde HEAD, así que los commits del
     // intento anterior dejan de contar y el programador tiene que entregar algo nuevo.
@@ -242,7 +268,7 @@ export function aplicar(estado, e) {
       return { ...s, replanteos: s.replanteos + 1, intento: 1, paso: 'ANALISIS',
                pasoDesde: e.cuando, base: null, fallosTecnicos: {} };
     case 'TAREA_APARTADA':
-      return { ...s, apartadas: [...s.apartadas,
+      return { ...s, apartadas: [...(s.apartadas || []),
                { id: s.tarea?.id, titulo: s.tarea?.titulo, motivo: e.motivo, cuando: e.cuando, historial: s.historial }],
                tarea: null, paso: 'OCIOSO', pasoDesde: e.cuando, intento: 0, replanteos: 0, base: null,
                historial: [], fallosTecnicos: {}, gastoPorPapel: {} };
@@ -250,16 +276,16 @@ export function aplicar(estado, e) {
     case 'FIRMA_PEDIDA':
       return { ...s, tarea: null, paso: 'OCIOSO', pasoDesde: e.cuando, intento: 0, replanteos: 0,
                base: null, historial: [], fallosTecnicos: {}, cuotaInicio: null, gastoPorPapel: {},
-               firmasPendientes: [...s.firmasPendientes.filter((f) => f.id !== e.id),
+               firmasPendientes: [...(s.firmasPendientes || []).filter((f) => f.id !== e.id),
                  { id: e.id, titulo: e.titulo, rama: e.rama, promesa: e.promesa,
                    cuando: e.cuando, estado: 'esperando' }] };
     case 'FIRMA_EN_DISCUSION':
       // No la saca de la lista: sigue esperando, pero se sabe que hay conversación abierta. Y no
       // bloquea nada — la máquina lleva desde el primer momento con la tarea siguiente.
-      return { ...s, firmasPendientes: s.firmasPendientes.map((f) =>
+      return { ...s, firmasPendientes: (s.firmasPendientes || []).map((f) =>
                  (f.id === e.id ? { ...f, estado: 'en-discusion', desde: e.cuando } : f)) };
     case 'FIRMA_RESUELTA':
-      return { ...s, firmasPendientes: s.firmasPendientes.filter((f) => f.id !== e.id) };
+      return { ...s, firmasPendientes: (s.firmasPendientes || []).filter((f) => f.id !== e.id) };
 
     case 'TAREA_CERRADA':
       return { ...s, tarea: null, paso: 'OCIOSO', pasoDesde: e.cuando, intento: 0, replanteos: 0,

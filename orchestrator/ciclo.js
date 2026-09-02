@@ -160,7 +160,16 @@ export class Ciclo {
       const texto = this.sanearTablero();
       // Una tarea apartada NO se vuelve a coger: está esperando decisión de Ibrahin. En el
       // tablero queda marcada (ver `apartar`), y esto es el cinturón por si esa marca falló.
-      const vetadas = (estado.apartadas || []).map((a) => a.id).filter(Boolean);
+      // ⚙️ Y LAS QUE ESPERAN FIRMA TAMBIÉN SE VETAN (2 sep 2026). No estaban, y eso es un
+      // agujero caro: `pedirFirma` NO marca el tablero —a diferencia de `cerrar`, `apartar` y
+      // `cerrarPremisaFalsa`, que sí llaman a `marcarEnTablero`—, así que la tarea se queda
+      // «pendiente» y vuelve a ser la primera de la cola. Medido con `anclar-verifactu-fuera`:
+      // terminada, esperando la firma de Ibrahin, y el tablero seguía ofreciéndola la primera.
+      // La habría vuelto a hacer entera —4 intentos y un replanteamiento— para acabar pidiendo
+      // la misma firma. Se veta por el estado, que es lo único que no depende de que una marca
+      // en un fichero se haya escrito bien.
+      const vetadas = [...(estado.apartadas || []).map((a) => a.id),
+                       ...(estado.firmasPendientes || []).map((f) => f.id)].filter(Boolean);
       pendientesEnTablero = tareasPendientes(texto);
       tareaDisponible = buscarSiguienteTarea(texto, { excluir: vetadas });
     } catch (e) {

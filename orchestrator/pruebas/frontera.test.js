@@ -717,6 +717,29 @@ async function hastaLaFirma(raiz) {
   return { cfg, almacen, ciclo, estado, r };
 }
 
+test('FIRMA · la que espera firma NO vuelve a la cola', { timeout: 60000 }, async () => {
+  // ⚙️ 2 sep 2026. `pedirFirma` NO llama a `marcarEnTablero` —a diferencia de `cerrar`,
+  // `apartar` y `cerrarPremisaFalsa`—, así que la tarea se queda «pendiente» en el tablero y
+  // vuelve a ser la primera de la cola. Medido en producción con `anclar-verifactu-fuera`:
+  // terminada, esperando la firma de Ibrahin, y la cola seguía ofreciéndola la primera. La
+  // habría rehecho entera —4 intentos y un replanteamiento— para pedir la misma firma.
+  const raiz = repoTemporal({ tablero: TABLERO_CON_FIRMA });
+  try {
+    fs.writeFileSync(path.join(raiz, 'produccion.sh'), '#!/bin/sh\necho VERSION BUENA\n');
+    execFileSync('git', ['add', '-A'], { cwd: raiz });
+    execFileSync('git', ['commit', '-qm', 'produccion buena'], { cwd: raiz });
+
+    const { ciclo, estado, r } = await hastaLaFirma(raiz);
+    assert.ok(r.firmaPedida, 'primero tiene que pedir la firma');
+    assert.equal(estado.firmasPendientes.length, 1);
+
+    // La vuelta siguiente NO puede volver a cogerla.
+    const d = await ciclo.unPaso(estado);
+    assert.equal(d.estado.tarea, null, 'no coge la que está esperando su firma');
+    assert.ok(!d.estado.historial?.length, 'y no ha empezado ningún intento nuevo');
+  } finally { limpiar(raiz); }
+});
+
 test('FIRMA · una tarea firmada queda TERMINADA y FUERA DE PRODUCCIÓN', { timeout: 60000 }, async () => {
   const raiz = repoTemporal({ tablero: TABLERO_CON_FIRMA });
   try {
