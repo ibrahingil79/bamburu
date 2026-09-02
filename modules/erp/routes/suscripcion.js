@@ -88,6 +88,7 @@ export function createSuscripcionRoutes(db) {
       prueba_terminada:  ['Prueba terminada', 'sus-chip-aviso'],
       al_corriente:      ['Al corriente', 'sus-chip-ok'],
       pago_pendiente:    ['Pago pendiente', 'sus-chip-mal'],
+      cortado:           ['Solo lectura', 'sus-chip-mal'],
       sin_suscripcion:   ['Sin suscripción', 'sus-chip-aviso'],
     }[s.situacion] || ['—', 'sus-chip-aviso'];
 
@@ -170,7 +171,7 @@ export function createSuscripcionRoutes(db) {
         <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.6rem">Tu tarjeta</h3>
         ${tarjetaHtml}
 
-        ${cargo ? '' : `
+        ${(cargo || s.situacion === 'pago_pendiente' || s.situacion === 'cortado') ? '' : `
         <h3 style="font-size:.9rem;font-weight:600;margin:1.25rem 0 .3rem">
           ${s.situacion === 'prueba' ? 'Tu primer cobro' : 'Lo que se te cobrará ahora'}
         </h3>
@@ -222,6 +223,15 @@ export function createSuscripcionRoutes(db) {
           <tr><td>IVA (${escHtml(String(P.desglose_mes.iva_porcentaje))} %)</td><td>${escHtml(cargo.iva)}</td></tr>
           <tr class="sus-total"><td>Total</td><td>${escHtml(cargo.total)}</td></tr>
         </table>
+      </div></div>` : ''}
+
+      ${(s.situacion === 'pago_pendiente' || s.situacion === 'cortado') ? `<div class="card"><div class="card-body">
+        <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.35rem">Qué hay que pagar</h3>
+        <p class="sus-detalle">
+          Tu cuota mensual: <strong>${escHtml(P.desglose_mes.total)}</strong>
+          (${escHtml(P.desglose_mes.base)} + ${escHtml(String(P.desglose_mes.iva_porcentaje))} % de IVA).
+          En cuanto el cobro salga bien, ${s.situacion === 'cortado' ? 'tu cuenta se reactiva sola' : 'no volveremos a escribirte'}.
+        </p>
       </div></div>` : ''}
 
       <div class="card"><div class="card-body">

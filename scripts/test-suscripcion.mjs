@@ -281,10 +281,15 @@ try {
     /invoice\.upcoming/.test(idx2) && /invoice\.paid/.test(idx2) && /invoice\.payment_failed/.test(idx2));
   check('un cobro correcto NO manda ningún correo', !/sendEmail|enviarAviso/.test(
     idx2.slice(idx2.indexOf("evento.type === 'invoice.paid'"), idx2.indexOf("evento.type === 'invoice.payment_failed'"))));
+  // ⚙️ 2 SEP 2026 (noche): esta aserción decía «el corte es la tarea siguiente». Ya no lo es: es
+  // ESTA. Lo que sigue siendo cierto —y es lo que ahora se comprueba— es que el webhook **abre el
+  // episodio y no corta**: cortar en el acto, sin los 30 días de avisos, es justo lo que el dueño
+  // pidió no hacer. El corte lo decide la pasada diaria, por calendario.
   const tramoFallido = sinComentarios(
-    idx2.slice(idx2.indexOf("evento.type === 'invoice.payment_failed'"), idx2.indexOf("evento.type === 'payment_intent.succeeded'")));
-  check('un cobro fallido solo se APUNTA: el corte es la tarea siguiente',
-    /pago_pendiente/.test(tramoFallido) && !/suspended|readOnly|UPDATE tenants/i.test(tramoFallido), tramoFallido.slice(0, 200));
+    idx2.slice(idx2.indexOf("evento.type === 'invoice.payment_failed'"), idx2.indexOf("evento.type === 'customer.subscription.deleted'")));
+  check('un cobro fallido abre el episodio y NO corta en el acto',
+    /registrarFalloDeCobro/.test(tramoFallido) && !/setTenantStatus|suspended_admin/i.test(tramoFallido),
+    tramoFallido.slice(0, 250));
 
   // Cambiar de tarjeta: la nueva primero, la vieja después.
   // El aviso NO puede depender de que haya prorrateos pendientes: los avisos son de los negocios
@@ -296,6 +301,46 @@ try {
 
   check('al cambiar de tarjeta se pone la nueva ANTES de retirar la vieja',
     mensual.indexOf('cambiarMetodoDeSuscripcion') < mensual.indexOf('desasociarMetodo'));
+
+  // ── EL IMPAGO Y EL CORTE (tarea `suscripcion-impago-y-corte`, 2 sep 2026) ────────────────────
+  P('\n[impago y corte]');
+  const impago = readFileSync(path.join(RAIZ, 'core/suscripcion-impago.js'), 'utf8');
+  const impagoCod = sinComentarios(impago);
+  const guardCod = sinComentarios(guard);
+  const situacionMod = readFileSync(path.join(RAIZ, 'core/suscripcion.js'), 'utf8');
+  const layoutMod = readFileSync(path.join(RAIZ, 'modules/erp/layout.js'), 'utf8');
+
+  check('el corte es a los 30 días y el número vive en un solo sitio',
+    /export const DIAS_HASTA_EL_CORTE = 30/.test(impago) && !/\b30\b/.test(impagoCod.replace('DIAS_HASTA_EL_CORTE = 30', '')),
+    'el 30 tiene que salir de la constante');
+  check('hay CINCO escalones distintos, no un mensaje repetido',
+    (impago.match(/clave: '/g) || []).length === 5);
+  check('un reintento fallido NO reinicia el reloj del corte',
+    /if \(s\.impago_desde\) \{/.test(impagoCod), 'sin esto el corte se aleja solo y no llega nunca');
+  check('EL CORTE NO BORRA NADA: ni DELETE ni DROP en todo el módulo',
+    !/DELETE FROM|DROP /i.test(impagoCod));
+  check('el corte va ANTES del correo (si falla el correo, la cuenta ya está cortada)',
+    impagoCod.indexOf("esc.clave === 'corte'") < impagoCod.indexOf('await enviar('));
+  check('pagar NO levanta una suspensión que puso otro',
+    /cortado_por_impago/.test(impagoCod) && /estabaCortado/.test(impagoCod));
+  check('los avisos no ofrecen descuento ni negocian el precio',
+    !/descuento|oferta|rebaja|promoci[óo]n/i.test(impagoCod));
+
+  // El corazón de la tarea: desde cortado SIEMPRE se puede pagar.
+  check('desde una cuenta CORTADA se puede llegar a pagar (la puerta sigue abierta)',
+    /'\/admin\/suscripcion'/.test(guardCod) && /'\/api\/erp\/suscripcion'/.test(guardCod),
+    'readOnlyGuard tiene que dejar pasar la suscripción, o el corte no tiene salida');
+
+  // Las dos contradicciones que solo se vieron mirando la pantalla.
+  check('un negocio cortado NO se describe como «vuelve a intentarlo»',
+    /situacion: 'cortado'/.test(situacionMod) && /cortado_por_impago === 1/.test(situacionMod));
+  check('y no se le enseña un prorrateo cuando lo que debe es la cuota',
+    /situacion === 'pago_pendiente' \|\| s\.situacion === 'cortado'/.test(pantalla));
+  check('la franja de impago y la de corte son EXCLUYENTES, no salen las dos',
+    /readOnly\s*\n?\s*\? `<div[^]*?: \(_imp/.test(layoutMod) || /readOnly[^]{0,400}: \(_imp/.test(layoutMod));
+  check('las dos franjas llevan botón para arreglarlo', (layoutMod.match(/Arreglar mi pago/g) || []).length >= 1);
+  check('la pasada corre las TRES fases al mismo nivel, sin anidarlas',
+    (readFileSync(path.join(RAIZ, 'scripts/suscripcion-cobros.mjs'), 'utf8').match(/await cadenaDeImpago\(\)/g) || []).length === 2);
 
   P('\n──────────────────────────────────────────────────────────');
   P(`  ${ok} OK · ${mal} fallos`);

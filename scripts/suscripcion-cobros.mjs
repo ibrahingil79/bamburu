@@ -34,6 +34,7 @@ import { plan } from '../core/plan.js';
 import { hoyISO, prorrateo, fechaEnPalabras } from '../core/suscripcion.js';
 import { cobrarProrrateo, pendientesDeProrrateo } from '../core/suscripcion-cobro.js';
 import { enviarAvisoPrevio, DIAS_DE_AVISO } from '../core/suscripcion-mensual.js';
+import { conImpagoAbierto, procesarImpago, DIAS_HASTA_EL_CORTE } from '../core/suscripcion-impago.js';
 import { diagnostico } from '../core/stripe.js';
 
 const args = process.argv.slice(2);
@@ -69,6 +70,7 @@ async function main() {
     // ni un aviso**. Los avisos no dependen del prorrateo: son de los negocios que ya están al
     // corriente, que son justo los que no aparecen en esa lista.
     await avisosPrevios();
+    await cadenaDeImpago();
     return 0;
   }
 
@@ -91,8 +93,15 @@ async function main() {
   linea(`[suscripcion-cobros] ${cobrados} cobrado(s) · ${rechazados} rechazado(s) · ${saltados} sin cobrar`);
 
   await avisosPrevios();
+  await cadenaDeImpago();
   return 0;
 }
+
+// LAS TRES FASES CUELGAN DE `main`, NO UNA DE OTRA. Colgué la del impago del final de la de avisos y
+// dejó de correr en el acto: `avisosPrevios` también se sale antes cuando no hay suscripciones. Es la
+// MISMA salida temprana que ya se comió los avisos hace una hora, dos ficheros más allá. Anidar fases
+// hace que la de abajo dependa de que la de arriba tenga trabajo, y no lo depende: son
+// independientes, y aquí se ve que lo son.
 
 /**
  * EL AVISO DE LA SEMANA ANTES. Recorre los negocios con suscripción abierta en Stripe y le manda el
@@ -135,6 +144,31 @@ async function avisosPrevios() {
     }
   }
   linea(`[suscripcion-avisos] ${avisados} avisado(s) · ${nada} sin aviso · ${fallos} fallo(s) · se avisa ${DIAS_DE_AVISO} días antes`);
+}
+
+/**
+ * LA CADENA DEL IMPAGO (tarea `suscripcion-impago-y-corte`). Para cada negocio con un impago
+ * abierto, manda el aviso que le toque hoy y, si le toca el escalón del corte, corta.
+ *
+ * El corte lo hace ESTA pasada y no un webhook, a propósito: el corte depende del CALENDARIO —30
+ * días desde el primer fallo— y no de que Stripe mande un evento ese día. Colgarlo de un evento
+ * externo sería no cortar nunca si ese evento no llega.
+ */
+async function cadenaDeImpago() {
+  const filas = conImpagoAbierto({ db: controlDb });
+  if (!filas.length) { linea('[suscripcion-impago] no hay ningún impago abierto.'); return; }
+
+  let avisos = 0, cortes = 0, quietos = 0, fallos = 0;
+  for (const f of filas) {
+    try {
+      const r = await procesarImpago(f, { db: controlDb, hoy: HOY, simulacro: !DE_VERDAD });
+      if (r.hizo === 'simulacro') { linea(`  · ${f.slug} — tocaría «${r.escalon}» → ${r.asunto}  [simulacro]`); quietos += 1; }
+      else if (r.hizo === 'cortado') { linea(`  · ${f.slug} — ✂️ CORTADO (solo lectura) · aviso ${r.enviado ? 'enviado' : 'NO enviado: ' + r.errorCorreo}`); cortes += 1; }
+      else if (r.hizo === 'avisado') { linea(`  · ${f.slug} — ✉️ «${r.escalon}» ${r.enviado ? 'enviado a ' + r.destino : 'NO enviado: ' + r.errorCorreo}`); r.enviado ? avisos += 1 : fallos += 1; }
+      else { linea(`  · ${f.slug} — ${r.motivo}`); quietos += 1; }
+    } catch (e) { linea(`  · ${f.slug} — ✗ excepción: ${e.message}`); fallos += 1; }
+  }
+  linea(`[suscripcion-impago] ${avisos} aviso(s) · ${cortes} corte(s) · ${quietos} sin cambios · ${fallos} fallo(s) · se corta a los ${DIAS_HASTA_EL_CORTE} días`);
 }
 
 main().then(c => process.exit(c)).catch(e => {

@@ -277,6 +277,25 @@ function runMigrations(db) {
     "ALTER TABLE tenant_suscripciones ADD COLUMN aviso_enviado_en TEXT",
   ]) { try { db.exec(col); } catch {} }
 
+  // ── EL IMPAGO Y EL CORTE (tarea `suscripcion-impago-y-corte`, 2 sep 2026) ──────────────────────
+  // `impago_desde` es la fecha del PRIMER cobro fallido del episodio actual, y de ella cuelga todo:
+  // los avisos y el corte se cuentan desde ahí, no desde «la última vez que falló». Si se reiniciara
+  // en cada reintento fallido, el corte se alejaría solo y no llegaría nunca.
+  //
+  // `avisos_impago` guarda los días de los que YA se avisó ("0,7,20,27"). Igual que el aviso previo
+  // del cobro mensual: guardar «sí/no» no vale, porque la cadena manda varios y cada uno una vez.
+  //
+  // `cortado_por_impago` existe para no deshacer lo que no hicimos: el superadmin puede suspender un
+  // negocio por otro motivo, y un pago no puede levantar ESA suspensión. Solo se reactiva lo que
+  // cortó el impago.
+  for (const col of [
+    "ALTER TABLE tenant_suscripciones ADD COLUMN impago_desde TEXT",
+    "ALTER TABLE tenant_suscripciones ADD COLUMN corte_previsto TEXT",
+    "ALTER TABLE tenant_suscripciones ADD COLUMN avisos_impago TEXT",
+    "ALTER TABLE tenant_suscripciones ADD COLUMN cortado_en TEXT",
+    "ALTER TABLE tenant_suscripciones ADD COLUMN cortado_por_impago INTEGER NOT NULL DEFAULT 0",
+  ]) { try { db.exec(col); } catch {} }
+
   // SIEMBRA DE LOS NEGOCIOS QUE YA EXISTÍAN. Aditiva y de una sola vez: `INSERT … SELECT … WHERE NOT
   // EXISTS` no toca ninguna fila que ya esté, así que volver a arrancar no reinicia la prueba de
   // nadie ni le borra una tarjeta.

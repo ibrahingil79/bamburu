@@ -9007,21 +9007,100 @@ ni un correo**: el envío se inyecta y se captura, para poder afirmar sobre el t
 
 **Sigue todo en MODO DE PRUEBA de Stripe.** El cerrojo de `--modo-real` no se ha tocado.
 
-## TAREA — El impago: avisos desde 30 días antes, y corte al llegar la fecha
+## ✅ HECHA (2026-09-02) — El impago: avisos desde 30 días antes, y corte al llegar la fecha
 
 - **id:** suscripcion-impago-y-corte
-- **estado:** pendiente
+- **estado:** hecha
 - **origen:** Decisión de Ibrahin, 2 sep 2026
 
 Si un pago falla, **no se corta de golpe ni en silencio**. Se avisa con antelación y cada vez más claro según se acerca la fecha, para que a nadie le pille de sorpresa. Al llegar la fecha, se corta el uso.
 
 **Criterios de aceptación**
 
-- [ ] Ante un pago fallido empiezan los avisos **30 días antes** del corte.
-- [ ] Los avisos son **más insistentes según se acerca la fecha**: no es el mismo mensaje repetido.
-- [ ] **Al llegar la fecha se corta el uso** del programa, sin excepciones automáticas.
-- [ ] El corte **no borra ni un dato**: solo cierra la puerta.
-- [ ] En cada aviso y en la propia pantalla del corte se dice **exactamente qué hay que hacer** para volver.
+- [x] Ante un pago fallido empiezan los avisos **30 días antes** del corte.
+      **SÍ.** El episodio se abre el día del fallo y el corte queda fijado a 30 días. Y lo que de
+      verdad importa: **un reintento fallido NO reinicia el reloj.** Stripe reintenta varias veces y
+      cada reintento vuelve a pasar por aquí; si la fecha se moviera, **el corte se alejaría solo y no
+      llegaría nunca**. Medido con tres fallos seguidos: `impago_desde` y `corte_previsto` no se mueven.
+- [x] Los avisos son **más insistentes según se acerca la fecha**: no es el mismo mensaje repetido.
+      **SÍ.** **Cinco escalones con cinco textos y cinco asuntos distintos** (comprobado: 4 asuntos
+      únicos entre los 4 avisos previos, más el del corte). Día 0 *«no hemos podido cobrar — lo
+      intentaremos otra vez»*, sin alarmar, porque lo normal es que el reintento lo resuelva. Día 7
+      *«seguimos sin poder cobrar»*, ya con la fecha del corte. Día 20 *«quedan 10 días»*. Día 27
+      *«quedan 3 días»*. Día 30, el corte. **Todos llevan enlace directo a la pantalla de pago**, y
+      **ninguno ofrece descuento ni negocia el precio**: un solo precio, sin excepciones.
+- [x] **Al llegar la fecha se corta el uso** del programa, sin excepciones automáticas.
+      **SÍ.** El día 30 el negocio pasa a `suspended_admin` (SOLO LECTURA). El corte lo hace **la
+      pasada diaria y no un webhook**, a propósito: depende del calendario, no de que Stripe mande un
+      evento ese día — colgarlo de un evento externo sería no cortar nunca si ese evento no llega.
+      Y el corte va **antes** del correo: si fallara el correo, la cuenta ya está cortada; al revés,
+      el dueño tendría un correo diciendo que está cortado y una cuenta que funciona.
+- [x] El corte **no borra ni un dato**: solo cierra la puerta.
+      **SÍ**, y medido de la única forma honesta: **contando TODAS las tablas del negocio antes y
+      después del corte** y exigiendo que no cambie ni una. (La primera versión exigía «los clientes
+      siguen ahí» con `> 0` y dio rojo porque ese negocio de pruebas tiene la tabla vacía desde antes:
+      medía el contenido, no el efecto del corte.) En el módulo entero **no hay un solo `DELETE` ni
+      `DROP`**, y estando cortado se sigue entrando y viendo todo.
+- [x] En cada aviso y en la propia pantalla del corte se dice **exactamente qué hay que hacer** para
+      volver.
+      **SÍ.** El aviso del corte lleva los pasos numerados —entra, ve a «Mi suscripción», pon una
+      tarjeta— y dice que **se reactiva sola**. La franja de la pantalla dice lo mismo y **lleva
+      botón**. Y el motivo que ve el dueño en su propia pantalla también.
+
+> ### 🫀 LO QUE ES EL CORAZÓN DE ESTA TAREA: DESDE CORTADO SIEMPRE SE PUEDE PAGAR
+>
+> El 2 de septiembre por la mañana se descubrió que **ese mismo estado bloqueaba el botón de pagar**:
+> al negocio al que se le pedía regularizar se le quitaba la única forma de hacerlo. Verificado que
+> sigue arreglado, y **no leyendo el código: pidiendo la ruta desde una cuenta cortada** con un
+> navegador. `POST /api/erp/suscripcion/alta` → **HTTP 200 con la URL de pago**. Hay además una
+> aserción en el barrido que vigila que `readOnlyGuard` siga dejando pasar la suscripción.
+
+**Comprobaciones — 200 aserciones, 0 fallos:**
+`test-suscripcion` **90 OK** (en el barrido, no toca la red) · `gate-suscripcion-impago` **37 OK**
+(la cadena entera + el ciclo real con relojes de prueba de Stripe) · `gate-suscripcion-impago-pantallas`
+**18 OK** (las dos franjas con navegador, y el pago desde cortado) · `gate-suscripcion-mensual` **26 OK**
+· `gate-suscripcion-alta-real` **29 OK**. Los cuatro últimos van **declarados fuera del barrido** con
+su motivo: necesitan claves de Stripe vivas o navegador.
+
+**Los caminos de vuelta, que son los que nadie prueba, todos medidos:** paga tras el primer aviso →
+**no llega ninguno más y no se corta** · paga la víspera → **no se corta** · el reintento cobra solo →
+**episodio cerrado y ningún aviso de más** · el servidor estuvo apagado un día → **sale el aviso
+vencido más reciente y SOLO uno**, no tres de golpe · y **pagar NO levanta una suspensión que puso el
+superadmin por otro motivo**.
+
+> ### ⚠️ DOS CONTRADICCIONES QUE SOLO SE VIERON MIRANDO LA CAPTURA
+>
+> Las mismas dos tareas anteriores dejaron fallos así, y se buscaron a propósito. Aparecieron:
+>
+> 1. **La cuenta estaba CORTADA y la tarjeta de estado decía *«Tienes un pago pendiente… vuelve a
+>    intentarlo»***, como si aún funcionara. La franja de arriba decía una cosa y la tarjeta de
+>    debajo otra. Ahora hay un estado `cortado` con su propio texto: qué es, desde cuándo, que no se
+>    ha borrado nada y cómo volver.
+> 2. **Decía *«Lo que se te cobrará ahora: 1,16 €»* cuando lo que se debía era la cuota de 11,98 €.**
+>    Un importe equivocado en la pantalla de quien va a pagar. El bloque del prorrateo ya no sale con
+>    un impago abierto; en su lugar va **«Qué hay que pagar»** con la cuota de verdad.
+>
+> **Ninguna aserción falló con ninguna de las dos**: cada frase era correcta por separado. Las dos
+> quedan fijadas ahora.
+
+> ### Decisiones de construcción
+>
+> - **Los reintentos inteligentes de Stripe NO se pueden activar por API.** Medido: `GET /v1/account`
+>   no expone `settings.billing`. Es una casilla de su panel (Billing → *Manage failed payments*).
+>   Por eso **el calendario de avisos y el corte son NUESTROS** y no dependen de ella: con Smart
+>   Retries encendido se recuperan cobros y la cadena se corta sola al pagar; apagado, funciona igual.
+>   **Queda como la única cosa que Ibrahin puede querer encender a mano.**
+> - **Si Stripe cancela la suscripción** por su cuenta al agotar sus reintentos, no pasa nada: se
+>   apunta y, al pagar, se vuelve a abrir (`asegurarSuscripcionEnStripe` es idempotente).
+> - **Solo se levanta la suspensión que puso el impago.** Un pago no puede abrirle la puerta a un
+>   negocio que el superadmin suspendió por seguridad.
+> - **El día del corte sale de `DIAS_HASTA_EL_CORTE`**, también en el escalón y en el texto del
+>   correo. Estaban escritos a mano: cambiar los 30 por 45 habría dejado el corte donde estaba y la
+>   cuenta atrás mintiendo.
+> - **La descarga de 90 días, la bóveda y el rescate son las dos tareas siguientes.** No se han
+>   construido, y nada de lo hecho las estorba: el corte no borra, no archiva y no mueve un dato.
+
+**Sigue todo en MODO DE PRUEBA de Stripe.** El cerrojo de `--modo-real` no se ha tocado.
 
 ## TAREA — Noventa días para descargar los datos, y luego la bóveda
 

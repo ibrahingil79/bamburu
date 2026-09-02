@@ -335,9 +335,25 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   const readOnly = !!c?.get?.('tenantReadOnly');
   const _noteRaw = c?.get?.('tenant')?.suspend_note || '';
   const _note = _noteRaw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // ── LAS DOS FRANJAS DEL IMPAGO (tarea `suscripcion-impago-y-corte`, 2 sep 2026) ─────────────────
+  //
+  // Son DOS estados distintos y por eso son dos franjas, no una con el texto cambiado:
+  //   · **Impago sin cortar** (quedan días): la cuenta funciona. Se avisa y se ofrece arreglarlo.
+  //   · **Cortado** (solo lectura): la cuenta no deja escribir. Hay que decir **exactamente qué
+  //     hacer para volver**, que es el criterio 5 del dueño — la franja de antes decía «hasta
+  //     reactivarla» y no decía cómo, que es justo lo que no vale.
+  //
+  // Las dos llevan **botón**, y el botón va a `/admin/suscripcion`, que `readOnlyGuard` deja pasar
+  // aunque la cuenta esté cortada. Ese detalle es el corazón de la tarea: el 2 de septiembre ese
+  // mismo estado bloqueaba el botón de pagar, y al negocio al que se le pedía regularizar se le
+  // quitaba la única forma de hacerlo.
+  const _imp = c?.get?.('impago') || null;
+  const _btn = `<a href="/admin/suscripcion" style="display:inline-block;margin-left:10px;background:#fff;color:#7c2d12;padding:3px 12px;border-radius:6px;font-weight:600;text-decoration:none">Arreglar mi pago</a>`;
   const roBanner = readOnly
-    ? `<div style="background:#7c2d12;color:#fed7aa;padding:11px 18px;font-size:13px;font-weight:500;text-align:center">⚠️ Tu cuenta está en <strong>SOLO LECTURA</strong> por regularizar. Puedes ver tus datos y facturas, pero no crear ni modificar nada hasta reactivarla.${_note ? ' · ' + _note : ''}</div>`
-    : '';
+    ? `<div style="background:#7c2d12;color:#fed7aa;padding:11px 18px;font-size:13px;font-weight:500;text-align:center">⚠️ Tu cuenta está en <strong>SOLO LECTURA</strong>: no hemos podido cobrar tu suscripción. Puedes ver y descargar todo; no puedes crear ni modificar. <strong>No se ha borrado nada.</strong> Para volver, pon una tarjeta que funcione en «Mi suscripción»: se reactiva sola.${_btn}</div>`
+    : (_imp
+      ? `<div style="background:#9a3412;color:#ffedd5;padding:11px 18px;font-size:13px;font-weight:500;text-align:center">⚠️ <strong>Hay un problema con tu pago.</strong> No hemos podido cobrar tu suscripción${_imp.corteEl ? ` y, si no se arregla, el <strong>${_imp.corteEl.split('-').reverse().join('/')}</strong> tu cuenta pasará a solo lectura` : ''}. Se arregla en un minuto.${_btn}</div>`
+      : '');
 
   // ── EL MENÚ DE ESTE USUARIO ───────────────────────────────────────────────────────────────────
   // La definición ya NO vive aquí: está en `menu.js`, en UN solo sitio, y de ahí comen las TRES caras

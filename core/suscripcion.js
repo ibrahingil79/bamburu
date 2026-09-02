@@ -179,6 +179,20 @@ export function situacion(tenantId, { hoy = null, db = controlDb } = {}) {
              puede_dar_tarjeta: true };
   }
 
+  // ── CORTADO POR IMPAGO ──────────────────────────────────────────────────────────────────────
+  // Va ANTES que los demás: un negocio cortado sigue teniendo `estado = 'pago_pendiente'`, y sin
+  // esto la pantalla le decía «tienes un pago pendiente, vuelve a intentarlo» **con la cuenta ya en
+  // solo lectura**. La franja de arriba decía una cosa y la tarjeta de debajo otra. Ninguna
+  // aserción lo vio: las dos frases eran correctas por separado.
+  if (s.cortado_por_impago === 1) {
+    return { ...base, situacion: 'cortado', dias_restantes: null,
+             titulo: 'Tu cuenta está en SOLO LECTURA',
+             detalle: `No pudimos cobrar tu suscripción en 30 días, desde el ${fechaEnPalabras(s.impago_desde)}. `
+                    + 'Puedes ver y descargar todo; no puedes crear ni modificar. No se ha borrado nada. '
+                    + 'Pon una tarjeta que funcione aquí abajo y tu cuenta se reactiva sola.',
+             puede_dar_tarjeta: true, cortado_en: s.cortado_en || null };
+  }
+
   if (s.estado === 'al_corriente') {
     return { ...base, situacion: 'al_corriente', dias_restantes: null,
              titulo: 'Al corriente de pago',
@@ -190,8 +204,14 @@ export function situacion(tenantId, { hoy = null, db = controlDb } = {}) {
 
   return { ...base, situacion: 'pago_pendiente', dias_restantes: null,
            titulo: 'Tienes un pago pendiente',
-           detalle: s.ultimo_error || 'El último cobro no salió adelante. Revisa la tarjeta y vuelve a intentarlo.',
-           puede_dar_tarjeta: true };
+           // Con un impago abierto se dice la FECHA DEL CORTE, que es lo que el dueño necesita saber
+           // para decidir si le corre prisa. «Vuelve a intentarlo» a secas no informa de nada.
+           detalle: s.corte_previsto
+             ? `No hemos podido cobrar tu suscripción. Si no se arregla, el ${fechaEnPalabras(s.corte_previsto)} `
+               + 'tu cuenta pasará a solo lectura: seguirás viéndolo todo, pero no podrás crear ni modificar. '
+               + 'No se borra nada. Pon una tarjeta que funcione y se arregla al momento.'
+             : (s.ultimo_error || 'El último cobro no salió adelante. Revisa la tarjeta y vuelve a intentarlo.'),
+           puede_dar_tarjeta: true, corte_previsto: s.corte_previsto || null };
 }
 
 /** '2026-09-20' → '20 de septiembre de 2026'. Las fechas se le enseñan al dueño en español. */

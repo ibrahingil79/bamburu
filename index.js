@@ -1539,6 +1539,12 @@ app.post('/stripe/webhook', async (c) => {
           console.log('[stripe:webhook] aviso previo de', t.slug, '→', r.motivo);
         }
       } else if (evento.type === 'invoice.paid') {
+        // HA PAGADO: todo vuelve a la normalidad SOLO. Cesan los avisos, desaparece la franja y, si
+        // estaba cortado, se reactiva — pero solo si lo cortó el impago: una suspensión que puso el
+        // superadmin por otro motivo no la levanta un pago.
+        const { volverALaNormalidad } = await import('./core/suscripcion-impago.js');
+        const v = volverALaNormalidad(fila.tenant_id);
+        if (v.reactivado) console.log('[stripe:webhook] reactivado tras pagar: tenant', fila.tenant_id);
         // Un cobro que sale bien NO genera ningún correo nuestro: es el criterio del dueño, «si el
         // cobro sale bien, no se le molesta con nada más». Solo se apunta, y se adelanta el próximo
         // cobro al que diga Stripe, que es quien lleva el calendario.
@@ -1554,14 +1560,22 @@ app.post('/stripe/webhook', async (c) => {
                fin ? new Date(fin * 1000).toISOString().slice(0, 10) : null,
                fila.tenant_id);
       } else if (evento.type === 'invoice.payment_failed') {
-        // Solo se APUNTA. Los avisos de deuda y el corte son `suscripcion-impago-y-corte`, la tarea
-        // siguiente, y no se adelantan aquí: cortarle el uso a alguien por un cobro fallido sin sus
-        // 30 días de avisos es exactamente lo que el dueño pidió no hacer.
-        controlDb.prepare(`UPDATE tenant_suscripciones
-          SET estado = 'pago_pendiente', ultimo_error = ?, actualizado_en = CURRENT_TIMESTAMP
-          WHERE tenant_id = ?`)
-          .run(evento?.data?.object?.last_finalization_error?.message
-               || 'El cobro mensual no salió adelante.', fila.tenant_id);
+        // ABRE EL EPISODIO DE IMPAGO (tarea `suscripcion-impago-y-corte`). No corta nada aquí: el
+        // corte llega a los 30 días, después de la cadena de avisos, y lo decide la pasada diaria.
+        // Y NO reinicia el reloj si el episodio ya estaba abierto — Stripe reintenta varias veces y
+        // cada reintento fallido vuelve a pasar por aquí; si la fecha se moviera, el corte se
+        // alejaría solo y no llegaría nunca.
+        const { registrarFalloDeCobro } = await import('./core/suscripcion-impago.js');
+        registrarFalloDeCobro(fila.tenant_id,
+          evento?.data?.object?.last_finalization_error?.message || 'El cobro mensual no salió adelante.');
+      } else if (evento.type === 'customer.subscription.deleted') {
+        // Stripe puede cancelar la suscripción por su cuenta cuando se le agotan los reintentos —su
+        // política es una casilla de su panel, no algo que podamos fijar por API—. No es el corte:
+        // el corte es NUESTRO, a los 30 días. Se apunta que ya no hay suscripción viva; al pagar,
+        // `asegurarSuscripcionEnStripe` abre otra (es idempotente), así que esto aguanta cualquier
+        // configuración de la cuenta.
+        controlDb.prepare(`UPDATE tenant_suscripciones SET stripe_suscripcion_id = NULL,
+          actualizado_en = CURRENT_TIMESTAMP WHERE tenant_id = ?`).run(fila.tenant_id);
       } else if (evento.type === 'payment_intent.succeeded') {
         // Solo se levanta el estado si estaba caído. Un `succeeded` NO adelanta `proximo_cobro`: eso
         // lo escribe quien cobró, que es el único que sabe qué periodo pagó ese cargo.

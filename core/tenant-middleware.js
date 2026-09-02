@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'path';
-import { getTenantBySlug, getSessionByToken, WAL_SIZE_LIMIT } from './control-db.js';
+import { getTenantBySlug, getSessionByToken, WAL_SIZE_LIMIT, controlDb as controlDbRef } from './control-db.js';
 import { restringirBd } from './db-file-perms.js';
 import { tenantStorage } from './db.js';
 import { runMigrations } from '../modules/erp/models.js';
@@ -94,6 +94,20 @@ export async function tenantMiddleware(c, next) {
   c.set('db', tenantDb);
   c.set('tenant', tenant);
   c.set('tenantReadOnly', tenant.status === 'suspended_admin');
+
+  // ── LA FRANJA DE IMPAGO (tarea `suscripcion-impago-y-corte`) ────────────────────────────────────
+  // El cliente que entra a trabajar tiene que VERLO, sin depender de que abra el correo. Una consulta
+  // por clave primaria, y tolerante a fallo: si esto peta, la franja no sale y el producto entra
+  // igual — un negocio caído porque no se pudo leer su estado de pago sería mucho peor que una
+  // franja que falta.
+  try {
+    const imp = controlDbRef.prepare(
+      'SELECT estado, corte_previsto, cortado_por_impago FROM tenant_suscripciones WHERE tenant_id = ?'
+    ).get(tenant.id);
+    c.set('impago', imp && imp.estado === 'pago_pendiente'
+      ? { corteEl: imp.corte_previsto || null, cortado: imp.cortado_por_impago === 1 }
+      : null);
+  } catch { c.set('impago', null); }
 
   return tenantStorage.run(tenantDb, () => next());
 }

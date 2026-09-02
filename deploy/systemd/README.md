@@ -114,6 +114,24 @@ cobro**, venga por donde venga.
 **El simulacro tampoco manda correos.** Sin `--cobrar`, la pasada dice a quién avisaría y por cuánto,
 y no envía nada.
 
+**⚙️ 2 SEP 2026 — Y UNA TERCERA FASE: LA CADENA DEL IMPAGO** (`suscripcion-impago-y-corte`).
+Para cada negocio con un impago abierto, la pasada manda el aviso que le toque —**cinco escalones
+distintos**, en los días 0, 7, 20, 27 y 30— y, al llegar el 30, **corta**: el negocio pasa a
+`suspended_admin` (SOLO LECTURA). **No borra nada.**
+
+**El corte lo hace esta pasada y no un webhook, a propósito:** depende del CALENDARIO —30 días desde
+el primer fallo—, no de que Stripe mande un evento ese día. Colgarlo de un evento externo sería no
+cortar nunca si ese evento no llega.
+
+**Las TRES fases cuelgan de `main`, no una de otra.** Anidarlas hizo que la del impago dejara de
+correr en el acto, porque la de avisos también se sale antes cuando no hay nada que hacer. Son
+independientes y así están escritas.
+
+**Los reintentos de Stripe (Smart Retries) NO se pueden activar por API** — medido: `GET /v1/account`
+no expone `settings.billing`. Es una casilla del panel de Stripe (Billing → *Manage failed payments*).
+Por eso el calendario de avisos y el corte son **nuestros** y no dependen de ella: si está encendida,
+recupera cobros y los avisos se cortan solos al pagar; si no lo está, la cadena funciona igual.
+
 ## Cola de envío Verifactu — instalación
 
 El camino normal es la cola **en proceso**: al emitir una factura, su registro sale hacia la AEAT en
