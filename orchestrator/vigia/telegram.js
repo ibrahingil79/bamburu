@@ -28,8 +28,36 @@ export function queFalta(config, entorno = process.env) {
   return falta;
 }
 
-/** @returns { ok, motivo?, reintentable } — nunca lanza: un Telegram caído no puede tumbar nada. */
-export function enviar({ texto, config, entorno = process.env }) {
+/**
+ * El teclado fijo, en el formato de Telegram.
+ *
+ * ⚙️ NI `one_time_keyboard` NI NADA QUE LO ESCONDA (1 sep 2026). El encargo dice «el teclado se
+ * queda fijo, no desaparece al usarlo», y eso es exactamente lo contrario de `one_time_keyboard`,
+ * que lo pliega en cuanto tocas un botón. `is_persistent` pide que siga ahí aunque Telegram
+ * enseñe el teclado normal, y `resize_keyboard` lo deja de la altura de dos filas en vez de
+ * comerse media pantalla del móvil.
+ *
+ * Y NO se pone `selective`: el chat es de una sola persona y ese campo solo complica.
+ */
+export const marcaTeclado = (filas) => ({ keyboard: filas.map((f) => f.map((texto) => ({ text: texto }))),
+                                   resize_keyboard: true, is_persistent: true });
+
+/**
+ * @param teclado filas de textos YA COMPROBADAS por `ordenes.revisarTeclado`, o `null`.
+ *                Aquí no se valida nada: este fichero es tubería y no sabe qué es una orden.
+ * @param poster  quién hace el POST. Se inyecta SOLO para poder probar el respaldo de abajo.
+ *
+ * ⚙️ POR QUÉ EL RESPALDO SE PRUEBA CON UN DOBLE Y NO CONTRA TELEGRAM (1 sep 2026). Se intentó
+ * provocarlo de verdad, mandando un botón con el texto vacío para que Telegram devolviera 400.
+ * **No lo devolvió: lo aceptó**, y dejó el chat de Ibrahin con un teclado de un solo botón en
+ * blanco (se repuso en el acto). O sea que no hay forma fiable de provocar ese 400 desde fuera
+ * sin estropearle el móvil, y un respaldo que no se puede ejercitar es un respaldo que no se
+ * sabe si existe. Se inyecta el transporte y se prueba el camino entero, que es lo único
+ * honesto que queda. Lo que sí quedó medido: **Telegram no valida el teclado por nosotros**,
+ * así que quien tiene que rechazar un botón vacío es `revisarTeclado`, y lo hace.
+ * @returns { ok, motivo?, reintentable } — nunca lanza: un Telegram caído no puede tumbar nada.
+ */
+export function enviar({ texto, config, entorno = process.env, teclado = null, poster = postear }) {
   const t = config.vigia.telegram;
   const token = entorno[t.tokenEnv];
   const chatId = entorno[t.chatIdEnv];
@@ -39,19 +67,41 @@ export function enviar({ texto, config, entorno = process.env }) {
       motivo: `sin configurar: falta ${queFalta(config, entorno).join(' y ')}` });
   }
 
-  const cuerpo = JSON.stringify({
+  const base = {
     chat_id: chatId,
     text: texto.slice(0, 4096),
     parse_mode: 'HTML',
     disable_web_page_preview: true,
+  };
+
+  // ⚙️ SI EL TECLADO NO ENTRA, EL MENSAJE SÍ (1 sep 2026). Lo pide el encargo con estas
+  // palabras: «si el teclado no se puede montar por lo que sea, el bot sigue funcionando
+  // escribiendo. Esto no puede romper nada». Y no es teórico: `reply_markup` va DENTRO del
+  // mismo envío, así que un teclado que Telegram no acepte devuelve 400 y se lleva por delante
+  // **el mensaje entero** — el parte, la respuesta a «cuota», todo. Ante un 400 habiendo mandado
+  // teclado, se reintenta UNA vez sin él: se pierde el adorno, no la conversación.
+  const enviarCuerpo = (conTeclado) => poster({
+    token, cuerpo: JSON.stringify(conTeclado ? { ...base, reply_markup: marcaTeclado(teclado) } : base),
+    timeoutMs: t.timeoutMs,
   });
 
+  const hayTeclado = Array.isArray(teclado) && teclado.length > 0;
+  if (!hayTeclado) return enviarCuerpo(false);
+  return enviarCuerpo(true).then((r) => {
+    if (r.ok || r.codigo !== 400) return r;
+    return enviarCuerpo(false).then((r2) => (r2.ok
+      ? { ...r2, sinTeclado: true, motivo: `el teclado no entró (${r.motivo}); el mensaje salió sin él` }
+      : r2));
+  });
+}
+
+function postear({ token, cuerpo, timeoutMs }) {
   return new Promise((resolve) => {
     const req = https.request({
       hostname: 'api.telegram.org',
       path: `/bot${token}/sendMessage`,
       method: 'POST',
-      timeout: t.timeoutMs,
+      timeout: timeoutMs,
       headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(cuerpo) },
     }, (res) => {
       let datos = '';
@@ -64,7 +114,7 @@ export function enviar({ texto, config, entorno = process.env }) {
         desc = tapar(desc);   // la respuesta viene de fuera: no se escribe sin tapar
         // 4xx que no sea 429 es configuración: reintentarlo no arregla un token malo.
         const reintentable = res.statusCode === 429 || res.statusCode >= 500;
-        resolve({ ok: false, reintentable, motivo: `Telegram respondió ${res.statusCode}: ${desc}` });
+        resolve({ ok: false, reintentable, codigo: res.statusCode, motivo: `Telegram respondió ${res.statusCode}: ${desc}` });
       });
     });
     req.on('timeout', () => { req.destroy(new Error('tiempo agotado')); });
@@ -154,6 +204,6 @@ export function recibir({ config, entorno = process.env, offset = 0, esperaS = 5
 }
 
 /** Envía a UN chat concreto (el que preguntó), no al chat del parte. */
-export function responderA({ chatId, texto, config, entorno = process.env }) {
-  return enviar({ texto, config, entorno: { ...entorno, [config.vigia.telegram.chatIdEnv]: chatId } });
+export function responderA({ chatId, texto, config, entorno = process.env, teclado = null }) {
+  return enviar({ texto, config, teclado, entorno: { ...entorno, [config.vigia.telegram.chatIdEnv]: chatId } });
 }

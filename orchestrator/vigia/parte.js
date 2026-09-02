@@ -4,6 +4,7 @@
 // caído o sin configurar el ciclo NO se detiene. Así que el parte se escribe siempre, se
 // intenta mandar, y si no sale se guarda para el próximo intento. Nunca se pierde.
 import { leerLineas, escribirAtomico } from '../nucleo/almacen.js';
+import { revisarTeclado } from './ordenes.js';
 import { enviar, configurado, queFalta } from './telegram.js';
 import { alcanzaParaCiclo } from '../nucleo/maquina.js';
 
@@ -325,7 +326,10 @@ export async function entregar({ texto, config, entorno = process.env, logger })
 
   for (const p of cola) {
     if (quedan.length) { quedan.push(p); continue; }   // si uno falla, el resto espera: se mantiene el orden
-    const r = await enviar({ texto: p.texto, config, entorno });
+    // El parte llega cada tres horas y a veces es lo ÚNICO que Ibrahin recibe en todo el día:
+    // si no llevara el teclado, quien solo lea partes no lo vería aparecer nunca. Si la revisión
+    // no pasa va `null`, y `enviar` manda el parte igual.
+    const r = await enviar({ texto: p.texto, config, entorno, teclado: tecladoDe(config) });
     if (r.ok) { enviados++; continue; }
     if (!r.reintentable) {
       logger?.error(`Telegram rechaza y no tiene arreglo solo: ${r.motivo}. Descarto ese parte.`);
@@ -343,4 +347,10 @@ function guardar(ruta, pendientes, nuevo, config) {
   const max = config.vigia.telegram.maxPendientes;
   const cola = [...pendientes, nuevo].slice(-max);
   escribirAtomico(ruta, cola.map((p) => JSON.stringify(p)).join('\n') + '\n');
+}
+
+/** El teclado fijo, si pasa la revisión. `null` si no: el parte sale igual. */
+function tecladoDe(config) {
+  const r = revisarTeclado(config.vigia?.teclado);
+  return r.ok ? r.filas : null;
 }

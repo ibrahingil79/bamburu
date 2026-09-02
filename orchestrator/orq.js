@@ -9,6 +9,7 @@ import { cargarSecretos, FICHERO_SECRETOS } from './nucleo/entorno.js';
 import { tareasPendientes, buscarSiguienteTarea } from './reader.js';
 import { averiaOciosoConTablero } from './nucleo/maquina.js';
 import { estadoDelDespliegue } from './nucleo/despliegue.js';
+import { revisarTeclado } from './vigia/ordenes.js';
 
 const AYUDA = `
 Orquestador de Bamburu
@@ -410,10 +411,18 @@ async function probarTelegram(cfg) {
   decir('  Mandando un mensaje de prueba…');
 
   const cuando = new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid' });
+  // La prueba manda TAMBIÉN el teclado, y por eso sirve de algo: es la forma de ver con los ojos
+  // que los seis botones llegan al móvil, y de reponerlos si alguna vez se pliegan. Si la
+  // revisión no pasa se avisa aquí mismo, en vez de dejar a Ibrahin descubriéndolo a tientas.
+  const rev = revisarTeclado(cfg.vigia?.teclado);
+  if (!rev.ok) decir(`  ⚠️  El teclado NO se monta: ${rev.fallos.join(' · ')}`);
   const env = await enviar({
-    texto: `✅ <b>Prueba del orquestador</b>\n\nSi lees esto, el aviso está bien puesto.\n\n<i>${cuando}</i>`,
+    texto: `✅ <b>Prueba del orquestador</b>\n\nSi lees esto, el aviso está bien puesto.`
+      + `${rev.ok ? '\n\nY abajo tienes los botones: toca uno.' : ''}\n\n<i>${cuando}</i>`,
     config: cfg,
+    teclado: rev.ok ? rev.filas : null,
   });
+  if (env.sinTeclado) decir(`  ⚠️  El mensaje salió SIN teclado: ${env.motivo}`);
 
   decir('');
   if (env.ok) {

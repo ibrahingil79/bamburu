@@ -322,7 +322,7 @@
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-09-01 · `3d43f0a` · **118/206** · 1104 s
+- **Último barrido completo:** 2026-09-01 · `76517c8` · **95/206** · 389 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->

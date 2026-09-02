@@ -27,7 +27,7 @@ import { recibir, responderA, configurado, queFalta } from './telegram.js';
 import { redactar } from './parte.js';
 import {
   ORDENES, PIDEN_CONFIRMACION, VAN_AL_ORQUESTADOR,
-  interpretar, ayuda, pedirConfirmacion, NO_ERES_QUIEN,
+  interpretar, ayuda, pedirConfirmacion, revisarTeclado, NO_ERES_QUIEN,
 } from './ordenes.js';
 import { leerTablero, buscarSiguienteTarea, tareasPendientes, decisionesEsperando, normalizar } from '../reader.js';
 import { averiaOciosoConTablero } from '../nucleo/maquina.js';
@@ -261,6 +261,18 @@ export class Escucha {
     // La orden que espera un «sí». Vive en memoria a propósito: si el vigía se reinicia, la
     // confirmación caduca, que es exactamente lo que debe pasar con algo que puede romper.
     this.pendienteDeConfirmar = null;
+
+    // ⚙️ EL TECLADO SE COMPRUEBA UNA VEZ, AL ARRANCAR (1 sep 2026). Y si no pasa la revisión NO
+    // SE MONTA, en vez de montarse a medias: un botón mudo entre cinco que van es peor que no
+    // tener botones, porque el de al lado sí contesta y uno se cree entendido. Sin teclado el
+    // bot funciona igual escribiendo, que es la promesa del encargo: esto no puede romper nada.
+    const rev = revisarTeclado(config.vigia?.teclado);
+    this.teclado = rev.ok ? rev.filas : null;
+    if (!rev.ok) {
+      this.log.error(`Teclado NO montado, se sigue escribiendo a mano: ${rev.fallos.join(' · ')}`);
+    } else {
+      this.log.info(`Teclado: ${rev.filas.map((f) => f.join(' | ')).join('  //  ')}`);
+    }
   }
 
   /** El chat de Ibrahin. Es el ÚNICO que manda aquí. */
@@ -325,6 +337,7 @@ export class Escucha {
       this.log.aviso(`⛔ Mensaje de un chat NO autorizado (${m.chatId}, «${m.de}»). Ignorado.`);
       this.registrar({ chatId: m.chatId, de: m.de, texto: m.texto, autorizado: false,
                        orden: null, respuesta: NO_ERES_QUIEN });
+      // A un desconocido NO se le manda el teclado: sería enseñarle el mando entero.
       await responderA({ chatId: m.chatId, texto: NO_ERES_QUIEN, config: this.config, entorno: this.entorno });
       return;
     }
@@ -337,7 +350,10 @@ export class Escucha {
     const respuesta = await this.resolver(orden, id, m, o);
 
     this.registrar({ chatId: m.chatId, de: m.de, texto: m.texto, autorizado: true, orden, id, respuesta });
-    await responderA({ chatId: m.chatId, texto: respuesta, config: this.config, entorno: this.entorno });
+    // El teclado viaja en CADA respuesta, no solo en la primera: así vuelve solo si Ibrahin lo
+    // pliega desde el móvil, y un vigía recién arrancado no depende de que alguien lo reponga.
+    await responderA({ chatId: m.chatId, texto: respuesta, config: this.config, entorno: this.entorno,
+                       teclado: this.teclado });
   }
 
   async resolver(orden, id, m, o = {}) {

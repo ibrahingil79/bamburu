@@ -104,7 +104,11 @@ const VOCABULARIO = [
   { orden: ORDENES.PARTE, es: /\bparte\b|\binforme\b|\bresumen\b|\bcomo\s+va\s+todo\b/ },
   { orden: ORDENES.CUOTA, es: /\bcuota\b|\bsaldo\b|\bcuanto\s+queda\b|\bse\s+reinicia\b/ },
   { orden: ORDENES.TAREAS, es: /\btareas?\b|\bcola\b|\bpendientes?\b|\bque\s+queda\b|\bque\s+falta\b/ },
-  { orden: ORDENES.ESTADO, es: /\bestado\b|\bque\s+(estas\s+)?haciendo\b|\bque\s+haces\b|\ben\s+que\s+vas\b|\bcomo\s+vas\b/ },
+  // `^que hace$` va ANCLADO Y EXACTO, y es el texto del botón «Qué hace» (1 sep 2026). Suelto
+  // sería `\bque\s+hace\b`, y entonces «¿qué hace falta para cerrar esto?» —que es una pregunta
+  // por la COLA, no por el paso en curso— caería aquí. Un botón manda un texto fijo: no necesita
+  // un patrón generoso, necesita uno que no se lleve por delante nada más.
+  { orden: ORDENES.ESTADO, es: /\bestado\b|\bque\s+(estas\s+)?haciendo\b|\bque\s+haces\b|^que\s+hace$|\ben\s+que\s+vas\b|\bcomo\s+vas\b/ },
   { orden: ORDENES.ARRANCAR, es: /\barrancar?\b|\barranca\b|\bsigue\b|\bseguir\b|\bcontinua\b|\bcontinuar\b|\breanudar?\b|\bvuelve\s+a\s+empezar\b/ },
   // ⚙️ «para» Y «parar» VAN ANCLADOS AL PRINCIPIO (1 sep 2026), y el resto no hace falta.
   //
@@ -233,3 +237,50 @@ export function pedirConfirmacion(orden, { id = null, tarea = null } = {}) {
 
 /** Lo que se contesta a quien no es Ibrahin: nada útil. */
 export const NO_ERES_QUIEN = 'No te conozco.';
+
+/**
+ * ¿PROMETE CADA BOTÓN LO QUE DE VERDAD MANDA?
+ *
+ * ⚙️ POR QUÉ ESTO EXISTE (1 sep 2026, al montar los botones). Un botón manda un TEXTO, y ese
+ * texto pasa por `interpretar()` como cualquier otro mensaje. Así que un botón que ponga
+ * «Qué hace» y un intérprete que no reconozca esa frase dan un botón que **no hace nada** y
+ * que además parece que funciona, porque contesta con la ayuda. Pasó a la primera: de los
+ * seis del encargo, cinco caían bien y «Qué hace» se iba a AYUDA, porque el vocabulario tenía
+ * «qué haces» y no «qué hace». Un botón mudo es peor que no tener botón: el de al lado sí va,
+ * así que uno se cree que el bot le ha entendido.
+ *
+ * Es exactamente el fallo del que Ibrahin avisó en el encargo —«preguntas» se dio por
+ * verificada y no funcionaba—, y por eso no se comprueba mirando: se comprueba con el mismo
+ * intérprete que va a leer el mensaje de verdad.
+ *
+ * Y NO deja pasar las que piden confirmación: «parar ya», «saltar» y «desapartar» pueden dejar
+ * algo a medias, y un botón se toca sin querer con el móvil en el bolsillo.
+ *
+ * @returns { ok, filas, fallos } — `filas` son los textos, listos para el transporte.
+ */
+export function revisarTeclado(teclado) {
+  const fallos = [];
+  if (!Array.isArray(teclado) || !teclado.length) {
+    return { ok: false, filas: [], fallos: ['no hay teclado definido en vigia.teclado'] };
+  }
+  const filas = [];
+  for (const fila of teclado) {
+    if (!Array.isArray(fila) || !fila.length) { fallos.push('hay una fila vacía'); continue; }
+    const textos = [];
+    for (const b of fila) {
+      const texto = String(b?.texto ?? '').trim();
+      const prometida = String(b?.orden ?? '').trim();
+      if (!texto || !prometida) { fallos.push(`botón sin texto o sin orden: ${JSON.stringify(b)}`); continue; }
+      if (!(prometida in ORDENES)) { fallos.push(`«${texto}» dice mandar «${prometida}», que no es ninguna orden`); continue; }
+      if (PIDEN_CONFIRMACION.includes(prometida)) {
+        fallos.push(`«${texto}» manda «${prometida}», que pide confirmación: ésas se escriben a mano, no van en un botón`);
+        continue;
+      }
+      const real = interpretar(texto).orden;
+      if (real !== prometida) { fallos.push(`«${texto}» promete «${prometida}» pero el intérprete lo lee como «${real}»`); continue; }
+      textos.push(texto);
+    }
+    if (textos.length) filas.push(textos);
+  }
+  return { ok: !fallos.length && filas.length > 0, filas, fallos };
+}
