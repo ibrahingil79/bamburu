@@ -288,7 +288,11 @@ export const GRUPOS = {
           // 2 SEP 2026 (manifiesto-huellas-backups) — el manifiesto de huellas del histórico de
           // copias. Tarda ~30 s (monta laboratorios rclone y ejecuta bamburu-backup.sh real dos
           // veces, en claro y en cifrado): no va al RÁPIDO. Existía y nadie lo lanzaba nunca.
-          'test-manifiesto-copias'],
+          'test-manifiesto-copias',
+          // 2 SEP 2026 (suscripcion-plan-y-alta) — el plan de 9,90 € + IVA, la prueba de 15 días,
+          // el prorrateo hasta el día 5 y los tres estados. Barato (~1 s): no abre navegador, no
+          // llama a Stripe y trabaja contra una control.db de usar y tirar, nunca la de producción.
+          'test-suscripcion'],
 
   // ── LOS TRES LINT, DENTRO DEL BARRIDO (24 ago 2026) ──────────────────────────────────────────
   // Estaban en `scripts/` y solo corrían si alguien se acordaba, y esa noche eso salió caro DOS veces:

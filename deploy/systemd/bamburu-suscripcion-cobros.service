@@ -1,0 +1,17 @@
+[Unit]
+Description=Bamburu — cobra el prorrateo cuando vence una prueba de 15 días
+Documentation=file:///home/ubuntu/bamburu/deploy/systemd/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/bamburu
+# Secretos (STRIPE_SECRET_KEY) — el mismo EnvironmentFile que la app.
+EnvironmentFile=/etc/bamburu.env
+# --cobrar es OBLIGATORIO: sin él el guion hace simulacro. Se escribe aquí, visible, para que quien
+# lea la unit sepa que esta pasada mueve dinero de verdad.
+ExecStart=/usr/bin/node /home/ubuntu/bamburu/scripts/suscripcion-cobros.mjs --cobrar
+SyslogIdentifier=bamburu-suscripcion-cobros

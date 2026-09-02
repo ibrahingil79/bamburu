@@ -48,6 +48,7 @@ import { createAvisosRoutes } from './avisos.js';
 import { createPropuestasRoutes } from './propuestas.js';   // D5 — Propuestas de DISA (recordatorio de impago)
 import { createSecurityRoutes } from './security.js';
 import { createPerfilRoutes } from './perfil.js';
+import { createSuscripcionRoutes } from './suscripcion.js';   // suscripcion-plan-y-alta — lo que el negocio paga por usar Bamburu
 import { createContabilidadRoutes } from './contabilidad-routes.js';
 import { createVerifactuEnvioRoutes } from './verifactu-envio-routes.js';
 import { createConciliacionRoutes } from './conciliacion-routes.js';
@@ -95,6 +96,7 @@ export function mountRoutes(app, db) {
   const changePasswordRoutes = createChangePasswordRoutes(db);
   const securityRoutes = createSecurityRoutes(db);
   const { api: perfilApi, views: perfilViews } = createPerfilRoutes(db);
+  const { api: suscApi, views: suscViews } = createSuscripcionRoutes(db);   // ← plan, prueba de 15 días y alta con Stripe
   const { api: supplierApi, views: supplierViews } = createSupplierRoutes(db);
   const { api: purchaseApi, views: purchaseViews } = createPurchaseRoutes(db);
   const { api: captureApi, views: captureViews } = createPurchaseCaptureRoutes(db);
@@ -166,6 +168,7 @@ export function mountRoutes(app, db) {
   // admin.route('/newsletter', nlViews);
   // admin.route('/reviews', revViews);
   admin.route('/perfil', perfilViews);          // ← Perfil de usuario: datos + contraseña + 2FA
+  admin.route('/suscripcion', suscViews);       // ← Mi suscripción: plan, prueba y tarjeta (SOLO el dueño)
   admin.route('/change-password', changePasswordRoutes);   // pantalla-cerrojo (core/auth.js), fuera del menú
   admin.route('/security', securityRoutes);     // solo redirige a /admin/perfil (2FA consolidado)
   admin.route('/suppliers', supplierViews);
@@ -235,6 +238,7 @@ export function mountRoutes(app, db) {
   apiApp.route('/listados', listApi);        // ← POST /api/erp/listados/<clave>/enviar
   apiApp.route('/menu', menuApi);       // ← anclas del menú de CADA usuario (solo colocación, sin datos)
   apiApp.route('/perfil', perfilApi);   // ← datos personales del usuario logueado (+ su foto)
+  apiApp.route('/suscripcion', suscApi);   // ← abrir el Checkout de Stripe y consultar la situación (SOLO el dueño)
   apiApp.route('/settings', settApi);   // ← /api/erp/settings SE QUEDA (config de empresa); solo /settings/store se neutraliza en settings.js
   apiApp.route('/users', userApi);
   // D2 — API de newsletter y reseñas DESMONTADAS: comentadas, no borradas. → 404.

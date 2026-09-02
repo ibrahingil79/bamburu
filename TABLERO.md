@@ -8765,10 +8765,10 @@ ejecutar el guion al final, cuando le venga bien, y guardar la llave que le ense
 > están dentro de los criterios: no hay que volver a preguntárselas.
 
 
-## TAREA — El plan de 9,90 € y el alta, con prueba de 15 días
+## 🟡 CONSTRUIDA Y ESPERANDO UNA ORDEN DE IBRAHIN (2026-09-02) — El plan de 9,90 € y el alta, con prueba de 15 días
 
 - **id:** suscripcion-plan-y-alta
-- **estado:** pendiente
+- **estado:** esperando
 - **origen:** Decisión de Ibrahin, 2 sep 2026 · diagnóstico de la peluquería (no existe nada para cobrar)
 
 Hoy **no hay ninguna forma de cobrarle a un cliente**. Ni pasarela, ni suscripciones, ni domiciliación: se buscó en el núcleo y en el panel de administración y no hay nada. Lo único de Stripe que aparece está en la tienda, que es capa congelada y no sirve para esto. Sin esto Bamburu es una demostración, no un producto.
@@ -8779,11 +8779,86 @@ Esta tarea es solo el plan y la puerta de entrada. El cobro mensual, el impago y
 
 **Criterios de aceptación**
 
-- [ ] Existe un plan único de **9,90 € al mes**, y el precio vive en un solo sitio configurable, no repetido por el código.
-- [ ] Un negocio nuevo entra con **15 días de prueba gratis SIN pedirle tarjeta**.
-- [ ] Al terminar la prueba, o al darse de alta a mitad de mes, se cobra **la parte proporcional** hasta el día 5 siguiente.
-- [ ] El alta se hace **con Stripe**, operando **como autónomo**: no se exige ni se menciona ninguna sociedad.
-- [ ] El negocio ve en su pantalla en qué situación está: en prueba, al corriente, o con un pago pendiente.
+- [x] Existe un plan único de **9,90 € al mes**, y el precio vive en un solo sitio configurable, no repetido por el código.
+      → `core/plan.js`. Configurable en caliente por `settings` de control.db (probado: se cambia a
+      15,00 € y se mueve todo sin reiniciar; un ajuste corrupto NO deja al producto sin precio). Y la
+      mitad que se olvida: **el gate barre el árbol y falla si alguien escribe «9,90» a mano** en
+      cualquier otro fichero. **Decisión de Ibrahin del 2 sep: 9,90 €/mes + IVA (21 %).** Se anuncia
+      «9,90 €/mes + IVA» y se cobran **11,98 €**, con la base y el IVA desglosados.
+- [x] Un negocio nuevo entra con **15 días de prueba gratis SIN pedirle tarjeta**.
+      → Sembrado en `createTenant` (el único sitio del repo donde nace un negocio) y en la migración,
+      y comprobado que **las dos vías dan la misma fila** y que volver a sembrar **no reinicia la
+      prueba de nadie**. Visto en la pantalla real: *«Estás de prueba: te quedan 15 días · No te
+      hemos pedido ninguna tarjeta»*.
+- [~] Al terminar la prueba, o al darse de alta a mitad de mes, se cobra **la parte proporcional**
+      hasta el día 5 siguiente.
+      **El cálculo y los dos caminos están construidos y medidos**; lo que no ha pasado nunca es un
+      euro, porque no hay claves de Stripe en el servidor. Se prorratea sobre el **ciclo real**
+      (día 5 → día 5), no sobre «30 días fijos»: medido que en febrero el ciclo son 28 días y en
+      julio 31, y que medio ciclo cuesta siempre medio plan. El IVA se calcula **sobre la base ya
+      prorrateada**. Los dos caminos: en el acto al dejar la tarjeta con la prueba vencida
+      (`routes/suscripcion.js`), y la pasada diaria de las 06:10 cuando la prueba vence sola
+      (`scripts/suscripcion-cobros.mjs`, simulacro por defecto). **En producción, el día que se
+      ejecute el guion.**
+- [~] El alta se hace **con Stripe**, operando **como autónomo**: no se exige ni se menciona ninguna
+      sociedad.
+      Checkout alojado en modo `setup` — la tarjeta se teclea **en Stripe, nunca en Bamburu**, así que
+      el producto se queda fuera del alcance de PCI-DSS. El gate comprueba que en toda la pantalla
+      **no aparece «sociedad», «S.L.» ni «razón social»**. No se ha podido recorrer de punta a punta
+      sin claves. **En producción, el día que se ejecute el guion.**
+- [x] El negocio ve en su pantalla en qué situación está: en prueba, al corriente, o con un pago
+      pendiente.
+      → `/admin/suscripcion`, **SOLO el dueño** (candado en el menú **y** en la ruta: un menú que
+      esconde una puerta sin cerrarla deja la puerta abierta). Los tres estados del criterio y ni uno
+      inventado. Comprobado **mirando la pantalla servida**, con la URL final exigida — un 302 a
+      `/admin/login` también responde 200.
+
+**Comprobación:** `node scripts/test-suscripcion.mjs` → **53 OK · 0 fallos**. Trabaja contra una
+`control.db` de usar y tirar (nunca la de producción, verificado) y **no llama a Stripe**. Entra en el
+barrido: grupo `infra`, ~1 s.
+
+**Desplegado el 2 sep 2026.** Arranque limpio, migración aditiva aplicada: **84 negocios → 84
+suscripciones** sembradas (`prueba`, 2026-09-02 → 2026-09-17). Los 5 bloques `<script>` de la pantalla
+validados **como llegan al navegador**. La sesión temporal que se creó para mirarla, borrada
+(0 restos).
+
+> ### ⏳ LO QUE FALTA, Y ES UNA SOLA ORDEN DE IBRAHIN
+>
+> ```
+> bash scripts/configurar-stripe.sh
+> ```
+>
+> Pide las claves de prueba de Stripe, **las comprueba contra Stripe ANTES de escribir nada**, da de
+> alta el webhook, guarda las claves, instala el temporizador del prorrateo y reinicia. Si la
+> comprobación falla, **no toca ni un fichero**. Es la misma regla que se aprendió con el cifrado de
+> las copias el 1 de septiembre: *nunca puede existir un momento en que el código exija algo que
+> todavía no existe*.
+>
+> **El secreto no pasa nunca por la línea de comandos** (`read -s`, y `curl -H @-` por entrada
+> estándar): `sudo` registra la línea entera en `auth.log` y en el journal, que es persistente y no
+> admite borrado selectivo. Es la lección que costó rotar una clave el 16 jul 2026.
+>
+> **Cerrojo del modo de prueba, y no es buena intención: es código.** `core/stripe.js` **rechaza**
+> cualquier clave que no empiece por `sk_test_` mientras no exista el ajuste `stripe_modo_real` en
+> control.db. Una clave de producción puesta por descuido **no cobra a nadie**.
+>
+> **Mientras tanto no se cobra nada y no se corta nada.** La pantalla lo dice en palabras: *«Los pagos
+> todavía no están conectados en este servidor»*. **La ficha NO se cierra** hasta que esa orden se
+> ejecute y los dos `[~]` se puedan medir en producción.
+
+> ### Decisiones de construcción que van dichas porque afectan a negocios reales
+>
+> - **Los 84 negocios que ya existían arrancan su prueba HOY**, no en su fecha de alta. Contándola
+>   desde su alta, los 84 nacerían con la prueba ya vencida — y ninguno ha tenido nunca la
+>   oportunidad de dar una tarjeta, porque hasta hoy no había dónde. Que un negocio que ya usa
+>   Bamburu quede en peor situación que uno que se dé de alta esta tarde no lo puede decidir una
+>   migración. **No corta a nadie:** el corte es `suscripcion-impago-y-corte` y todavía no existe.
+> - **Dar la tarjeta durante la prueba NO cobra nada.** El criterio dice «al TERMINAR la prueba»;
+>   cobrar al guardarla le quitaría al cliente los días que le quedan.
+> - **El estado de la suscripción vive en `control.db`, no en la base del negocio.** Restaurar la
+>   copia de seguridad de un negocio no puede devolverle una suscripción pagada.
+> - **Solo el dueño**, ni siquiera un `admin`. No es una pantalla del negocio: es su contrato con
+>   Bamburu.
 
 ## TAREA — El cobro del día 5, con aviso una semana antes
 

@@ -131,6 +131,11 @@ export const NAV_PERMS = {
 export const ROLE_FILTERS = {
   users:            r => r === 'owner' || r === 'admin',
   settings:         r => r === 'owner',
+  // La suscripción es el contrato del negocio con Bamburu, no una pantalla del negocio: la ve y la
+  // gestiona SOLO el dueño. Mismo candado que `settings`, y el mismo que aplica la ruta por su
+  // cuenta (`routes/suscripcion.js` → `soloDueno`). Los dos, a propósito: un menú que esconde una
+  // puerta sin cerrarla deja la puerta abierta a quien teclee la dirección.
+  suscripcion:      r => r === 'owner',
   'store-settings': r => r === 'owner' || r === 'admin',
   security:         r => r === 'owner' || r === 'admin',
 };
@@ -444,6 +449,13 @@ export const FIJAS = [
   // no se puede buscar ni anclar, y eso sí faltaba.
   { href: '/admin/avisos', label: 'Avisos', key: 'avisos', icon: 'ti-bell', sitio: 'pie',
     alias: ['Notificaciones', 'Pendientes', 'Alertas'] },
+  // MI SUSCRIPCIÓN (2 sep 2026, tarea `suscripcion-plan-y-alta`). Al pie del rail y no dentro de un
+  // área porque no es del día a día de ninguna: no es una venta, ni una compra, ni un cliente — es lo
+  // que el negocio paga por usar el programa. Los `alias` son las palabras con las que un dueño lo
+  // busca de verdad: nadie teclea «suscripción», teclea «cuánto pago» o «factura de Bamburu».
+  { href: '/admin/suscripcion', label: 'Mi suscripción', key: 'suscripcion', icon: 'ti-credit-card', sitio: 'pie',
+    alias: ['Suscripción', 'Pago', 'Mi plan', 'Plan', 'Tarjeta', 'Cuánto pago', 'Cuota',
+            'Facturación de Bamburu', 'Factura de Bamburu', 'Cobro', 'Prueba gratis'] },
   { href: '/docs', label: 'Ayuda y soporte', key: 'ayuda', icon: 'ti-lifebuoy', sitio: 'pie', target: '_blank' },
 ];
 

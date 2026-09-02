@@ -229,6 +229,56 @@ function runMigrations(db) {
       detail      TEXT
     )
   `);
+
+  // ── LO QUE EL NEGOCIO LE DEBE A BAMBURU (tarea `suscripcion-plan-y-alta`, 2 sep 2026) ───────────
+  // Una fila por negocio. Vive AQUÍ y no en la base del tenant a propósito; el porqué, con sus tres
+  // motivos, está escrito en `core/suscripcion.js`. El de peso: restaurar la copia de un negocio no
+  // puede devolverle una suscripción pagada.
+  //
+  // `estado` en ESPAÑOL y con los TRES valores del criterio 5, ni uno más: prueba · al_corriente ·
+  // pago_pendiente. El corte, la bóveda y el rescate son de las tres tareas siguientes y se añadirán
+  // cuando se construyan — una máquina de estados a medias es peor que una corta.
+  //
+  // Ningún dato de dinero se guarda aquí: ni número de tarjeta, ni CVV, ni nada que obligue a
+  // cumplir PCI. Solo el identificador que da Stripe y los CUATRO ÚLTIMOS dígitos, que es lo que
+  // hace falta para que el dueño reconozca su tarjeta.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tenant_suscripciones (
+      tenant_id                INTEGER PRIMARY KEY,
+      estado                   TEXT NOT NULL DEFAULT 'prueba',
+      prueba_inicio            TEXT,
+      prueba_fin               TEXT,
+      stripe_cliente_id        TEXT,
+      stripe_metodo_pago_id    TEXT,
+      tarjeta_marca            TEXT,
+      tarjeta_ultimos4         TEXT,
+      tarjeta_caduca           TEXT,
+      proximo_cobro            TEXT,
+      ultimo_cobro_centimos    INTEGER,
+      ultimo_cobro_en          TEXT,
+      ultimo_error             TEXT,
+      creado_en                DATETIME DEFAULT CURRENT_TIMESTAMP,
+      actualizado_en           DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    )
+  `);
+
+  // SIEMBRA DE LOS NEGOCIOS QUE YA EXISTÍAN. Aditiva y de una sola vez: `INSERT … SELECT … WHERE NOT
+  // EXISTS` no toca ninguna fila que ya esté, así que volver a arrancar no reinicia la prueba de
+  // nadie ni le borra una tarjeta.
+  //
+  // ⚠️ DECISIÓN DE CONSTRUCCIÓN, y va dicha porque afecta a negocios reales: los que ya existían
+  // arrancan su prueba HOY, no en su fecha de alta. Si se contara desde su alta, los 84 negocios de
+  // hoy nacerían con la prueba ya vencida — y ninguno ha tenido nunca la oportunidad de dar una
+  // tarjeta, porque hasta hoy no había dónde. Que un negocio que ya usa Bamburu quede en peor
+  // situación que uno que se da de alta esta tarde no lo puede decidir una migración.
+  // No corta nada: el corte por impago es la tarea `suscripcion-impago-y-corte` y todavía no existe.
+  db.exec(`
+    INSERT INTO tenant_suscripciones (tenant_id, estado, prueba_inicio, prueba_fin)
+    SELECT t.id, 'prueba', date('now'), date('now', '+15 day')
+      FROM tenants t
+     WHERE NOT EXISTS (SELECT 1 FROM tenant_suscripciones s WHERE s.tenant_id = t.id)
+  `);
 }
 
 // ---------------------------------------------------------------------------
@@ -281,6 +331,28 @@ export function createTenant({ name, slug, db_filename, plan = 'starter', countr
   const result = controlDb
     .prepare(`INSERT INTO tenants (name, slug, db_filename, plan, country) VALUES (?, ?, ?, ?, ?)`)
     .run(name, slug, db_filename, plan, country);
+
+  // LA PRUEBA DE 15 DÍAS EMPIEZA AQUÍ, en el único sitio de todo el repo donde nace un negocio
+  // (`grep -rn "INSERT INTO tenants"` da esta línea y ninguna más). Si se sembrara en la ruta de
+  // registro, el negocio creado por un guion o por el superadmin nacería sin suscripción y nadie se
+  // enteraría hasta el día del primer cobro.
+  //
+  // Va en SQL directo y no llamando a `core/suscripcion.js` para no crear un import circular
+  // (aquel importa de aquí). Los 15 días y el estado inicial son los mismos que allí; el gate
+  // `scripts/test-suscripcion.mjs` comprueba que las dos vías dan la misma fila.
+  try {
+    controlDb.prepare(`
+      INSERT INTO tenant_suscripciones (tenant_id, estado, prueba_inicio, prueba_fin)
+      VALUES (?, 'prueba', date('now'), date('now', '+15 day'))
+      ON CONFLICT(tenant_id) DO NOTHING
+    `).run(result.lastInsertRowid);
+  } catch (e) {
+    // Un fallo aquí NO puede tumbar un alta: el negocio queda creado y sin suscripción, que es
+    // recuperable (la siembra de `runMigrations` lo coge al siguiente arranque). Lo contrario —un
+    // alta abortada a medias— deja un tenant con base creada y sin fila en `tenants`.
+    console.error('[suscripcion] no se pudo sembrar la suscripción del tenant', result.lastInsertRowid, e.message);
+  }
+
   return getTenantById(result.lastInsertRowid);
 }
 

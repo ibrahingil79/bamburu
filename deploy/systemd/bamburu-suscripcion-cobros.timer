@@ -1,0 +1,19 @@
+[Unit]
+Description=Bamburu — disparador diario del cobro del prorrateo
+
+[Timer]
+# UNA VEZ AL DÍA, por la mañana y en hora de ESPAÑA. La zona va explícita porque el servidor corre en
+# UTC: sin ella, "las 6" serían las 8 en España en verano.
+#
+# A las 06:10 a propósito: DESPUÉS de las copias de seguridad (03:33 y 03:35) para no pelearse con
+# ellas por el disco, y ANTES de que abra ningún negocio — si un cobro falla, el dueño se encuentra
+# el aviso al entrar, no a media mañana con clientes delante.
+OnCalendar=*-*-* 06:10:00 Europe/Madrid
+# Si el servidor estuvo apagado, systemd ejecuta UNA pasada de recuperación al arrancar. El guion es
+# idempotente por diseño (la llave de idempotencia de Stripe es la del PERIODO, no la de la pasada),
+# así que una pasada tardía no cobra dos veces.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

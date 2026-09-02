@@ -70,6 +70,34 @@ journalctl -u bamburu-propuestas -n 40 --no-pager
 
 ---
 
+## Cobro del prorrateo de la suscripción — ESCRITA, NO INSTALADA
+
+`bamburu-suscripcion-cobros.timer` · **todos los días a las 06:10, hora de España.**
+
+**Qué hace.** Busca los negocios cuya **prueba de 15 días ya venció** y que **tienen tarjeta
+guardada**, y les cobra **la parte proporcional hasta el día 5 siguiente** — el criterio 3 de la
+tarea `suscripcion-plan-y-alta`. Nada más. **No es el cobro mensual del día 5**: eso es
+`suscripcion-cobro-mensual`, la tarea siguiente, y todavía no existe.
+
+**Por qué a las 06:10.** Después de las dos copias de seguridad (03:33 y 03:35), para no pelearse con
+ellas por el disco, y antes de que abra ningún negocio: si un cobro falla, el dueño se encuentra el
+aviso al entrar, no a media mañana con clientes delante.
+
+**Simulacro por defecto.** `node scripts/suscripcion-cobros.mjs` **sin argumentos NO cobra**: dice a
+quién cobraría y cuánto. La unit pasa `--cobrar`, y eso está escrito en la propia unit para que quien
+la lea sepa que esa pasada mueve dinero.
+
+**No cobra dos veces.** La llave de idempotencia que se le da a Stripe es la del **periodo**
+(`prorrateo-<tenant>-<desde>-<hasta>`), no la de la pasada. Una pasada de recuperación tras un
+apagón, o un reintento por timeout, devuelven el cargo original en vez de crear otro.
+
+**Un cobro rechazado NO es un fallo de la unit.** La pasada sale con 0 aunque haya rechazos —una
+tarjeta caducada es una respuesta, no una avería— y con 1 solo si la pasada misma no pudo funcionar.
+Si saliera roja por cada tarjeta rechazada, el rojo dejaría de significar algo.
+
+**Se instala sola** con `bash scripts/configurar-stripe.sh`, junto con las claves. No hace falta
+copiar nada a mano.
+
 ## Cola de envío Verifactu — instalación
 
 El camino normal es la cola **en proceso**: al emitir una factura, su registro sale hacia la AEAT en

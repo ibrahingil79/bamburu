@@ -1488,6 +1488,59 @@ app.get('/admin/autologin', c => {
   return new Response(null, { status: 302, headers });
 });
 
+// ── WEBHOOK DE STRIPE (tarea `suscripcion-plan-y-alta`) ──────────────────────────────────────────
+// VA AQUÍ, ANTES de `tenantMiddleware`, y no es un capricho de orden: Stripe llama a una dirección
+// fija, no al subdominio de ningún negocio. Puesto después, el middleware buscaría un tenant por un
+// host que no es de nadie y respondería 404 a todos los avisos de pago — en silencio, porque Stripe
+// reintenta durante días sin que nadie mire.
+//
+// LA FIRMA SE COMPRUEBA SIEMPRE Y ANTES DE MIRAR NADA. Sin eso, esta URL sería un botón público para
+// que cualquiera dijese «este cliente ya ha pagado». Se lee el cuerpo CRUDO (`c.req.text()`): la
+// firma se calcula sobre los bytes tal y como llegaron, así que volver a serializar un JSON ya
+// parseado la rompe aunque el contenido sea idéntico.
+app.post('/stripe/webhook', async (c) => {
+  const { verificarFirmaWebhook } = await import('./core/stripe.js');
+  const crudo = await c.req.text();
+  const firma = c.req.header('stripe-signature');
+
+  const v = verificarFirmaWebhook(crudo, firma);
+  if (!v.ok) return c.json({ error: v.error }, 400);
+
+  let evento;
+  try { evento = JSON.parse(crudo); } catch { return c.json({ error: 'cuerpo ilegible' }, 400); }
+
+  try {
+    const { controlDb } = await import('./core/control-db.js');
+    const clienteId = evento?.data?.object?.customer || null;
+    const fila = clienteId
+      ? controlDb.prepare('SELECT tenant_id FROM tenant_suscripciones WHERE stripe_cliente_id = ?').get(clienteId)
+      : null;
+
+    // Un evento de un cliente que no es nuestro se acepta y se ignora. Devolver error haría que
+    // Stripe lo reintentara para siempre.
+    if (fila) {
+      if (evento.type === 'payment_intent.payment_failed') {
+        controlDb.prepare(`UPDATE tenant_suscripciones
+          SET estado = 'pago_pendiente', ultimo_error = ?, actualizado_en = CURRENT_TIMESTAMP
+          WHERE tenant_id = ?`)
+          .run(evento?.data?.object?.last_payment_error?.message || 'El pago fue rechazado.', fila.tenant_id);
+      } else if (evento.type === 'payment_intent.succeeded') {
+        // Solo se levanta el estado si estaba caído. Un `succeeded` NO adelanta `proximo_cobro`: eso
+        // lo escribe quien cobró, que es el único que sabe qué periodo pagó ese cargo.
+        controlDb.prepare(`UPDATE tenant_suscripciones
+          SET estado = 'al_corriente', ultimo_error = NULL, actualizado_en = CURRENT_TIMESTAMP
+          WHERE tenant_id = ? AND estado = 'pago_pendiente'`).run(fila.tenant_id);
+      }
+    }
+  } catch (e) {
+    // Se responde 200 igualmente: el aviso llegó y está firmado. Si contestáramos 500, Stripe lo
+    // reintentaría en bucle por un fallo nuestro de base de datos.
+    console.error('[stripe:webhook] fallo procesando', evento?.type, e.message);
+  }
+
+  return c.json({ recibido: true });
+});
+
 app.use('*', tenantMiddleware);
 app.use('*', readOnlyGuard);   // bloqueo de escritura para negocios en SOLO LECTURA (impago)
 
