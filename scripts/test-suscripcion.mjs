@@ -409,6 +409,61 @@ try {
   check('el correo del corte dice los 90 días y qué pasa después',
     /DÍAS PARA LLEVARTE TODO LO TUYO/.test(readFileSync(path.join(RAIZ, 'core/suscripcion-impago.js'), 'utf8')));
 
+  // ── LA LLAVE ANTI-COBROS-DUPLICADOS SE CONSTRUYE EN UN SOLO SITIO ────────────────────────────
+  //
+  // REMATE DEL BLOQUE 1 (2 sep 2026, a petición de Ibrahin). Este fallo salió CUATRO VECES el mismo
+  // día, siempre igual: alguien —yo— escribe la llave de idempotencia a mano, y en cuanto cambia un
+  // parámetro Stripe la rechaza 24 h con «Keys for idempotent requests can only be used with the
+  // same parameters they were first used with». Cada vez se arreglaba en el punto de llamada, y cada
+  // vez volvía en el siguiente. La regla no puede vivir en quien llama, porque quien llama se
+  // olvida: vive en `llaveIdempotente`, y esto lo vigila.
+  //
+  // Mismo patrón que la comprobación del precio de más arriba: se barre el árbol y se exige que
+  // TODA `idempotencia:` salga de esa función. Las excepciones se declaran aquí, con su motivo — no
+  // se permiten en silencio.
+  P('\n[la llave de idempotencia, en un solo sitio]');
+  const IDEMPOTENCIA_A_MANO_DECLARADA = {
+    // La identidad de este cobro ES su periodo, y por eso su llave NO lleva el contenido: si el
+    // importe cambiara por un error de cálculo, meterlo en la llave haría que el segundo intento
+    // cobrara OTRA VEZ en vez de chocar. Es la única, y está dicha también en `core/stripe.js`.
+    "core/stripe.js|}, { idempotencia: referencia });":
+      'el cobro del prorrateo: su identidad es el PERIODO, no el contenido',
+  };
+
+  const aMano = [];
+  (function barrerLlaves(dir) {
+    for (const e of readdirSync(dir)) {
+      if (['node_modules', '.git', 'data', 'public', 'docs', 'logs', '.orquestador'].includes(e)) continue;
+      const f = path.join(dir, e);
+      const st = statSync(f);
+      if (st.isDirectory()) { barrerLlaves(f); continue; }
+      if (!/\.(js|mjs)$/.test(e)) continue;
+      // Los guiones de comprobación quedan fuera, igual que en el barrido del precio y por el mismo
+      // motivo: un gate NOMBRA la forma prohibida para poder exigirla, y cazarse a sí mismo sería
+      // medir la prosa. En el producto la regla se queda igual de dura.
+      if (/(^|\/)(gate|verify|test|censo|lint)-[^/]*\.(mjs|js)$/.test(f)) continue;
+      const rel = path.relative(RAIZ, f);
+      sinComentarios(readFileSync(f, 'utf8')).split('\n').forEach((l, i) => {
+        if (!/\bidempotencia\s*:/.test(l)) return;
+        // Vale con o sin prefijo de módulo: `llaveIdempotente(...)` y `stripe.llaveIdempotente(...)`
+        // son la misma puerta. Sin esto, la forma correcta del rescate salía marcada como fallo.
+        if (/idempotencia\s*:\s*(?:[A-Za-z_$][\w$]*\.)?llaveIdempotente\(/.test(l)) return;
+        if (/idempotencia\s*:\s*string|@param/.test(l)) return;            // firmas y documentación
+        const clave = `${rel}|${l.trim()}`;
+        if (IDEMPOTENCIA_A_MANO_DECLARADA[clave]) return;                  // excepción con su motivo
+        aMano.push(`${rel}:${i + 1}  ${l.trim().slice(0, 90)}`);
+      });
+    }
+  })(RAIZ);
+  check('ninguna llave de idempotencia se construye a mano fuera de llaveIdempotente',
+    aMano.length === 0,
+    aMano.join('\n      ') + '\n      → pásala por llaveIdempotente(prefijo, params), o decláralá arriba con su motivo');
+  check('y la función central sigue metiendo el contenido en la llave',
+    /export function llaveIdempotente/.test(stripeMod) && /createHash\('sha256'\)/.test(stripeMod));
+  check('la única excepción declarada sigue existiendo y sigue dicha en el código',
+    /\u00daNICA LLAVE DEL FICHERO QUE \*\*NO\*\* PASA POR/.test(stripeMod),
+    'si se quita la excepción, hay que quitarla también de la lista de esta comprobación');
+
   // ── EL RESCATE DE LA BÓVEDA (tarea `suscripcion-rescate-de-la-boveda`, 2 sep 2026) ───────────
   P('\n[rescate de la bóveda]');
   const resc = readFileSync(path.join(RAIZ, 'core/suscripcion-rescate.js'), 'utf8');
